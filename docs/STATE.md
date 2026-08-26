@@ -28,7 +28,12 @@ Chưa xong:
 
 ## Công việc đang làm
 
-Chuyển từ giai đoạn thiết kế sang lập kế hoạch triển khai.
+Kế hoạch triển khai S0 đã viết xong: 11 task, 92 bước, tại
+`docs/superpowers/plans/2026-08-27-s0-foundation.md`. Chưa bắt đầu thực thi task nào.
+
+S0 phủ 13 trong 34 bất biến (B3, B4, D1, D3, D5, E3, F1, F2, F3, G1, G2, G3, G4).
+21 bất biến còn lại thuộc S1 vì chúng đòi hỏi RFQ, lời mời, phong bì niêm phong và
+luồng mở thầu.
 
 ## Điểm chặn
 
@@ -72,10 +77,13 @@ hạng mục S0.4).
 
 ## Hành động tiếp theo
 
-1. Người dùng rà soát bộ tài liệu thiết kế trong `docs/`.
-2. Chạy skill `writing-plans` để lập kế hoạch triển khai chi tiết cho S0.
-3. Bắt đầu S0.1 — trong đó việc đầu tiên là **sửa hai hook và viết test chứng minh chúng
-   chặn thật**. Không hạng mục nghiệp vụ nào bắt đầu trước khi việc này xong.
+1. Chọn cách thực thi kế hoạch S0: giao từng task cho subagent riêng, hay chạy tuần tự
+   trong phiên hiện tại.
+2. Bắt đầu Task 1 — **sửa hai hook và viết test chứng minh chúng chặn thật**. Đây là cổng
+   chặn: không task nào khác bắt đầu trước khi việc này xong và được kiểm chứng trong một
+   phiên Claude Code thật.
+3. Ba quyết định cần chốt trước khi sang S1: xử lý thư mục `Vibe Coding/`, chọn nhà cung
+   cấp KMS, chọn hạ tầng triển khai. Chi tiết ở cuối kế hoạch S0.
 
 ## Tham chiếu
 
@@ -86,4 +94,5 @@ hạng mục S0.4).
 | `docs/DECISIONS.md` | Bảy ADR |
 | `docs/TEST-PLAN.md` | 34 bất biến, bảy tầng kiểm thử, evidence pack |
 | `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |
+| `docs/superpowers/plans/2026-08-27-s0-foundation.md` | Kế hoạch triển khai S0 — 11 task, 92 bước |
 | `Vibe Coding/CLAUDE.md` | Phương pháp làm việc (bản copy thủ công — xem Vấn đề đã biết 3) |
