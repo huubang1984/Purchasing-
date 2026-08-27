@@ -19,7 +19,7 @@
 - Hai DB role tách biệt: `app_api`, `app_unseal`. Không role nào bao trùm role kia. Không role nào có `UPDATE`/`DELETE`/`TRUNCATE` trên `audit_events`.
 - Không module nào ngoài `apps/unseal-worker/**` được import entrypoint `@trustprocure/crypto-keys/unwrap`.
 - Không bao giờ ghi log: giá, mật khẩu, token, mã OTP, khóa, bí mật TOTP.
-- Tên hàm/biến/kiểu bằng tiếng Anh. Bình luận, thông báo lỗi hướng người dùng, và commit message bằng tiếng Việt.
+- **Ngôn ngữ đặt tên.** Mặt tiền công khai của mỗi package — tên hàm export, tên kiểu, tên trường trong interface, mã quyền, tên cột và tên bảng SQL — bằng **tiếng Anh**. Biến cục bộ, tham số nội bộ, tên biến trong hàm SQL, và tên test được dùng **tiếng Việt không dấu hoặc có dấu**, đúng như mã nguồn mẫu trong kế hoạch này. Bình luận, thông báo lỗi hướng người dùng, và commit message bằng tiếng Việt. Đây là ràng buộc đã chốt ngày 2026-08-27 — người review không được coi tên biến cục bộ tiếng Việt là lỗi.
 - Mỗi test kiểm chứng một bất biến phải có mã bất biến trong tên test theo dạng `[INV-A1]`. Đây là đầu vào của bộ sinh `evidence/INV-matrix.md` (Task 11).
 - Commit sau mỗi task. Không gộp nhiều task vào một commit.
 
@@ -537,7 +537,7 @@ packages:
     "depcruise": "depcruise packages apps tools tests --config .dependency-cruiser.cjs",
     "t0": "pnpm typecheck && pnpm lint && pnpm depcruise",
     "test": "vitest run --exclude \"**/*.int.test.ts\"",
-    "test:int": "vitest run --dir . --testTimeout 120000 --include \"**/*.int.test.ts\"",
+    "test:int": "vitest run int.test",
     "test:all": "vitest run"
   },
   "devDependencies": {
@@ -578,6 +578,12 @@ export default defineConfig({
 ```
 
 Alias trỏ vào thư mục `packages`, nên `@trustprocure/tenancy` giải về `packages/tenancy`. Mỗi package phải khai `"main": "src/index.ts"` trong `package.json` của nó — các task sau đều làm vậy.
+
+Về ba script test, dùng đúng dạng đã viết ở trên, đừng "sửa lại cho gọn":
+
+- `test` dùng `--exclude`, là cờ CLI hợp lệ của Vitest và **cộng thêm** vào danh sách loại trừ mặc định chứ không thay thế nó.
+- `test:int` dùng `int.test` ở dạng tham số vị trí. Vitest coi tham số vị trí là bộ lọc theo đường dẫn file, nên nó chọn đúng các file `*.int.test.ts`. **Vitest không có cờ `--include`** — viết `--include` sẽ lỗi "unknown option".
+- `test:all` chạy tất cả, và là dạng mà `test:report` ở Task 11 dùng để sinh evidence pack.
 
 Chạy: `pnpm install`
 
