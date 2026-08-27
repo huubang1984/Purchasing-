@@ -48,4 +48,29 @@ describe("bộ chạy migration", () => {
     );
     expect(rowCount).toBe(0);
   });
+
+  // [fix S7 — checksum] Trước bản vá, sửa nội dung một file migration ĐÃ áp dụng thì lần
+  // chạy sau âm thầm bỏ qua vĩnh viễn (chỉ so version, không so nội dung). Với hệ thống mà
+  // mọi bảo đảm an ninh nằm trong file .sql để "đọc được nguyên văn khi kiểm toán", việc
+  // file kiểm toán viên đọc khác hẳn cái đang chạy trong DB là lỗ hổng toàn vẹn bằng chứng.
+  it("[fix S7] sửa nội dung migration đã áp dụng thì lần chạy sau báo lỗi rõ file nào lệch", async () => {
+    const dir = migrationDir({ "040_ban_dau.sql": "CREATE TABLE mig_g (id int);" });
+    expect(await migrate(db.pool, dir)).toEqual(["040_ban_dau.sql"]);
+
+    writeFileSync(join(dir, "040_ban_dau.sql"), "CREATE TABLE mig_g (id int, ten text);");
+
+    await expect(migrate(db.pool, dir)).rejects.toThrow(/040_ban_dau\.sql/);
+  });
+
+  // [fix S7 — advisory lock] Hai tiến trình migrate() song song trên cùng thư mục (blue/
+  // green deploy, hai pod cùng khởi động) không được giẫm lên nhau: đúng một trong hai áp
+  // dụng migration, cái còn lại thấy đã áp dụng rồi và trả về mảng rỗng — không lỗi, không
+  // áp dụng trùng, không đua vào cùng một CREATE TABLE.
+  it("[fix S7] hai lượt migrate() đồng thời trên cùng thư mục không lỗi và không áp dụng trùng", async () => {
+    const dir = migrationDir({ "050_dong_thoi.sql": "CREATE TABLE mig_h (id int);" });
+
+    const [ketQua1, ketQua2] = await Promise.all([migrate(db.pool, dir), migrate(db.pool, dir)]);
+
+    expect([...ketQua1, ...ketQua2]).toEqual(["050_dong_thoi.sql"]);
+  });
 });
