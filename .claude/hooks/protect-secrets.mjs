@@ -3,6 +3,12 @@
 // Khớp theo phần mở rộng và tên file thay vì khớp chuỗi con, để tránh chặn nhầm
 // (ví dụ "monkey.ts" từng bị bộ pattern chuỗi con của bản .sh cũ đe dọa chặn).
 // Nguyên tắc fail-closed: mọi lỗi đọc/phân tích đầu vào đều CHẶN.
+//
+// Fix round 1 (review sau Task 1, Finding 2 — [INV-H8]): so khớp basename/fragment
+// trước đây phân biệt hoa thường, nên ".ENV" hay "ID_RSA" lọt qua trên hệ thống tệp
+// không phân biệt hoa thường của Windows (và macOS mặc định) dù đụng đúng file thật
+// ".env" / "id_rsa". Hạ chữ thường TOÀN BỘ trước khi so khớp — kể cả phần đường dẫn
+// dùng cho SECRET_FRAGMENTS — không chỉ phần đuôi mở rộng như bản trước.
 
 import { basename, extname } from "node:path";
 
@@ -31,12 +37,14 @@ function chan(lyDo) {
 
 function laFileBiMat(rawPath) {
   const p = rawPath.replaceAll("\\", "/");
+  const pThuong = p.toLowerCase();
   const base = basename(p);
+  const baseThuong = base.toLowerCase();
 
-  if (base === ".env" || (base.startsWith(".env.") && !ENV_ALLOWED.has(base))) return true;
-  if (SECRET_BASENAMES.has(base)) return true;
+  if (baseThuong === ".env" || (baseThuong.startsWith(".env.") && !ENV_ALLOWED.has(baseThuong))) return true;
+  if (SECRET_BASENAMES.has(baseThuong)) return true;
   if (SECRET_EXTS.has(extname(base).toLowerCase())) return true;
-  if (SECRET_FRAGMENTS.some((fragment) => p.includes(fragment))) return true;
+  if (SECRET_FRAGMENTS.some((fragment) => pThuong.includes(fragment))) return true;
 
   return false;
 }
