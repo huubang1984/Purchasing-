@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function depcruise(targets: string[]): { status: number; output: string } {
@@ -98,6 +98,55 @@ describe("ranh giới kiến trúc", () => {
       expect(output).toContain("khong-giai-ma-ngoai-unseal-worker");
     } finally {
       rmSync(path, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] chặn file .mjs import sai hoa-thường vào local-dev-shared.ts", () => {
+    // Fix round 2 (N1): Windows/macOS resolve file KHÔNG phân biệt hoa thường, nhưng regex
+    // của quy tắc từng phân biệt hoa thường — "Local-Dev-Shared.ts" (sai hoa/thường) resolve
+    // thành công (trường "resolved" của depcruise giữ nguyên hoa/thường viết trong specifier)
+    // nhưng không khớp regex, nên lọt qua. File .mjs (không phải .ts) được chọn cố ý vì nó
+    // cũng vô hình với tsc (tsconfig chỉ include **/*.ts) và với eslint trước khi thu hẹp
+    // ignore — kết hợp cả ba lỗ cùng lúc, đúng như phát hiện gốc của reviewer.
+    const dir = "apps/tmp-probe-case/src";
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      `${dir}/leak.mjs`,
+      [
+        'import { deriveOrgKey } from "../../../packages/crypto-keys/src/Local-Dev-Shared.ts";',
+        "export { deriveOrgKey };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-case"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker");
+    } finally {
+      rmSync("apps/tmp-probe-case", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] chặn cầu bắc từ local-dev-wrapper.ts (mặt bọc an toàn) sang local-dev-unwrapper.ts", () => {
+    // Fix round 2 (N2): fix round 1 miễn trừ local-dev-wrapper.ts khỏi TOÀN BỘ quy tắc
+    // (vì nó cần import local-dev-shared.ts) — nhưng điều đó cũng vô tình miễn trừ nó khỏi
+    // việc import local-dev-unwrapper.ts, thứ nó KHÔNG BAO GIỜ được phép chạm tới. Hai dòng
+    // re-export biến local-dev-wrapper.ts thành cầu nối đưa khả năng giải mã ra thẳng
+    // entrypoint AN TOÀN (index.ts, thứ mọi service được phép import) mà không một tiếng
+    // động. Test này chỉnh sửa TẠM THỜI file thật rồi phục hồi nguyên trạng ở finally —
+    // không được để lộ ra ngoài phạm vi của chính test này.
+    const duongDanWrapper = "packages/crypto-keys/src/local-dev-wrapper.ts";
+    const noiDungGoc = readFileSync(duongDanWrapper, "utf8");
+    writeFileSync(
+      duongDanWrapper,
+      `${noiDungGoc}\nexport { createLocalDevUnwrapper } from "./local-dev-unwrapper.js";\n`,
+    );
+    try {
+      const { status, output } = depcruise(["packages", "apps", "tools", "tests"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts");
+    } finally {
+      writeFileSync(duongDanWrapper, noiDungGoc);
     }
   }, 60000);
 

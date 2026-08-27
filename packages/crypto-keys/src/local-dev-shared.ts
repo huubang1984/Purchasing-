@@ -33,7 +33,12 @@ export function assertValidOrgId(orgId: string): void {
  * ở fix round 1).
  */
 export function assertLocalDevAllowed(): void {
-  const laProduction = process.env["NODE_ENV"] === "production";
+  // Chuẩn hóa .trim().toLowerCase() và chấp nhận cả "prod" (fix round 2, phát hiện N3):
+  // so khớp === "production" đúng ký tự bị người vận hành gõ "Production"/"PRODUCTION"/"prod"
+  // lúc deploy làm im lặng tắt — một hàng rào fail-closed thua một biến môi trường viết hoa
+  // không đáng có.
+  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
+  const laProduction = moiTruong === "production" || moiTruong === "prod";
   const choPhepGhiDe = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] === "1";
   if (laProduction && !choPhepGhiDe) {
     throw new KeyError(

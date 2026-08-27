@@ -32,7 +32,7 @@ describe("vòng đời khóa", () => {
   // thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi" (docs/TEST-PLAN.md:36), một
   // bất biến kiến trúc ở tầng service api, đo bằng bộ quét rò rỉ (T2/T5). Test dưới đây chỉ
   // kiểm tra một tính chất hẹp hơn nhiều của AES-GCM (ciphertext không chứa chuỗi con của bản
-  // rõ) — một phép kiểm tra hạ tầng hữu ích nhưng không phải bằng chứng cho A2. Gắn nhãu A2 ở
+  // rõ) — một phép kiểm tra hạ tầng hữu ích nhưng không phải bằng chứng cho A2. Gắn nhãn A2 ở
   // đây sẽ tạo bằng chứng giả trong ma trận kiểm thử (phát hiện I3, fix round 1).
   it("ciphertext không chứa chuỗi con của bản rõ", async () => {
     const r = ring();
@@ -244,6 +244,35 @@ describe("rào chắn production cho adapter local-dev (bất biến G1)", () =>
 
   it("cho phép cả hai factory khi NODE_ENV không phải production", () => {
     process.env["NODE_ENV"] = "test";
+    delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+    try {
+      expect(() => createLocalDevWrapper(ring())).not.toThrow();
+      expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
+    } finally {
+      datLai();
+    }
+  });
+
+  // Fix round 2, phát hiện N3: so khớp === "production" đúng ký tự làm rào chắn thua một
+  // biến môi trường viết "Production"/"PRODUCTION"/"prod" lúc deploy. Bốn biến thể dưới đây
+  // đều phải bị chặn giống hệt "production".
+  it.each(["Production", "PRODUCTION", "prod", "  production  ", "PROD"])(
+    'chặn cả hai factory khi NODE_ENV="%s" (biến thể hoa/thường/khoảng trắng/viết tắt)',
+    (bienThe) => {
+      process.env["NODE_ENV"] = bienThe;
+      delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+      try {
+        expect(() => createLocalDevWrapper(ring())).toThrow(/production/i);
+        expect(() => createLocalDevUnwrapper(ring())).toThrow(/production/i);
+      } finally {
+        datLai();
+      }
+    },
+  );
+
+  it("không chặn khi NODE_ENV là một chuỗi vô hại chứa 'prod' như tiền tố khác nghĩa", () => {
+    // "producthunt" không phải "production" hay "prod" sau chuẩn hóa — không được chặn nhầm.
+    process.env["NODE_ENV"] = "producthunt";
     delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
     try {
       expect(() => createLocalDevWrapper(ring())).not.toThrow();

@@ -8,7 +8,14 @@ export default tseslint.config(
       "**/.next/**",
       "evidence/**",
       "**/*.cjs",
-      "**/*.mjs",
+      // Thu hẹp tối đa (fix round 2, phát hiện N1): trước đây "**/*.mjs" loại TOÀN BỘ lớp
+      // file .mjs khỏi eslint trên toàn repo — một file .mjs độc hại đặt ở BẤT KỲ đâu (vd.
+      // apps/zprobe/src/leak.mjs) sẽ vô hình với eslint. Giờ chỉ hai file .mjs THẬT SỰ cần
+      // (hook resolve module cho tools/bench-keyprovider, không thể parse bằng typescript-eslint
+      // vì nằm ngoài "include" của tsconfig.json) được loại; mọi file .mjs khác trong repo phải
+      // đi qua eslint như bình thường (sẽ lỗi "not found by project service" nếu không nằm
+      // trong tsconfig — một lỗi ồn ào, không phải một khoảng trống im lặng).
+      "tools/bench-keyprovider/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

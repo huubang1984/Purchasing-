@@ -1,55 +1,106 @@
+// Regex khong phan biet hoa thuong bang character-class thu cong.
+//
+// LY DO: depcruise tu choi nhan RegExp object cho path/pathNot (schema chi cho string
+// hoac string[]) va khong co option "caseSensitive" o muc rule. Nhung tren Windows/macOS,
+// he thong file resolve KHONG phan biet hoa thuong, va truong "resolved" cua depcruise
+// GIU NGUYEN hoa thuong nguoi viet go trong specifier (khong chuan hoa ve ten that tren
+// dia). Mot file .mjs/.cjs import "Local-Dev-Shared.ts" (sai hoa thuong) van resolve
+// thanh cong tren Windows, nhung regex phan biet hoa thuong khop "local-dev-shared.ts"
+// se KHONG khop voi "Local-Dev-Shared.ts" - hang rao im lang bo qua.
+// Day la CUNG MOT LOP LOI da lam thung hook o Task 1 (.ENV, ID_RSA lot qua so khop phan
+// biet hoa thuong tren Windows) - tai dien o tang depcruise (fix round 2, phat hien N1).
+//
+// Chi can xu ly dau "." (dau cham trong ten file) vi day la ky tu regex dac biet duy nhat
+// xuat hien trong cac chuoi literal duong dan cua du an nay (con lai chi co chu cai,
+// so, dau gach ngang, dau gach cheo - khong co ky tu regex dac biet nao khac).
+function ciChar(pKyTu) {
+  if (pKyTu === ".") {
+    return "\\.";
+  }
+  if (/[a-zA-Z]/.test(pKyTu)) {
+    const chuThuong = pKyTu.toLowerCase();
+    const chuHoa = pKyTu.toUpperCase();
+    return chuThuong === chuHoa ? pKyTu : "[" + chuThuong + chuHoa + "]";
+  }
+  return pKyTu;
+}
+
+/** Chuyen mot chuoi literal (duong dan) thanh fragment regex khop moi cach viet hoa/thuong. */
+function ci(pLiteral) {
+  return pLiteral.split("").map(ciChar).join("");
+}
+
+/** Fragment regex khop chinh xac MOT file, bat ky hoa thuong. */
+function ciFile(pLiteralPath) {
+  return "^" + ci(pLiteralPath) + "$";
+}
+
+/** Fragment regex khop MOT tien to thu muc, bat ky hoa thuong (khong neo cuoi chuoi). */
+function ciPrefix(pLiteralPrefix) {
+  return "^" + ci(pLiteralPrefix);
+}
+
+const APPS_UNSEAL_WORKER = ciPrefix("apps/unseal-worker/");
+const UNWRAP_TS = ciFile("packages/crypto-keys/src/unwrap.ts");
+const LOCAL_DEV_WRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-wrapper.ts");
+const LOCAL_DEV_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-unwrapper.ts");
+const LOCAL_DEV_SHARED_TS = ciFile("packages/crypto-keys/src/local-dev-shared.ts");
+const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
+const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
+
 module.exports = {
   forbidden: [
+    // Ba quy tac rieng, MOI quy tac dung MOT dich (`to`) va danh sach `from` mien tru
+    // rieng cho DICH DO. Fix round 1 dung MOT quy tac voi `to.path` la mang ba file va
+    // MOT danh sach `from.pathNot` dung chung cho ca ba - nghia la mot file duoc mien tru
+    // se mien tru voi CA BA dich, ke ca nhung dich no khong he can (phat hien N2). Vi du:
+    // local-dev-wrapper.ts chi can mien tru de goi local-dev-shared.ts, nhung duoc mien tru
+    // "ngam" luon ca voi local-dev-unwrapper.ts va unwrap.ts - neu ai do them
+    // `export { createLocalDevUnwrapper } from "./local-dev-unwrapper.js"` vao
+    // local-dev-wrapper.ts, canh do lot qua khong mot tieng dong. Tach rieng tung quy tac
+    // dam bao moi mien tru chi co hieu luc DUNG cho canh no thuc su can.
     {
-      name: "khong-giai-ma-ngoai-unseal-worker",
+      name: "khong-giai-ma-ngoai-unseal-worker-unwrap-ts",
       comment:
-        "Chỉ apps/unseal-worker được chạm khả năng mở khóa. Ranh giới bảo mật quan trọng " +
-        "nhất của hệ thống (ADR-006, bất biến G1) — cưỡng chế bằng máy, không bằng trí nhớ. " +
-        "Phủ cả entrypoint công khai (unwrap.ts) LẪN cài đặt bên trong (local-dev-unwrapper.ts, " +
-        "local-dev-shared.ts) — chặn cả đường vòng import tương đối thẳng vào file cài đặt, " +
-        "bỏ qua entrypoint (sự cố phát hiện ở fix round 1, xem tests/architecture/boundaries.test.ts).",
+        "Chi apps/unseal-worker, test vong doi khoa cua chinh package, va cong cu benchmark " +
+        "dev-only duoc import unwrap.ts (ADR-006, bat bien G1).",
       severity: "error",
-      from: {
-        pathNot: [
-          "^apps/unseal-worker/",
-          // Đồ thị nội bộ hợp lệ của chính package crypto-keys: ba file này tạo thành cài đặt
-          // của hai mặt tiền công khai (index.ts an toàn, unwrap.ts hạn chế) và BẮT BUỘC phải
-          // import lẫn nhau. Không file nào trong số này export khả năng giải mã ra ngoài
-          // package theo đường nào khác ngoài unwrap.ts.
-          "^packages/crypto-keys/src/unwrap\\.ts$",
-          "^packages/crypto-keys/src/local-dev-wrapper\\.ts$",
-          "^packages/crypto-keys/src/local-dev-unwrapper\\.ts$",
-          // Ngoại lệ hẹp nhất có thể, đúng MỘT file: test vòng đời khóa của chính package này
-          // cần import unwrap.ts để kiểm chứng bọc-rồi-mở end-to-end. Không mở rộng cho các
-          // file *.test.ts khác trong cùng thư mục (vd. wrapper.test.ts không cần và không có).
-          "^packages/crypto-keys/src/roundtrip\\.test\\.ts$",
-          // Ngoại lệ dev-only tường minh, đúng MỘT file: công cụ đo hiệu năng cần gọi cả hai
-          // entrypoint để đo trọn vòng bọc+mở (xem tools/bench-keyprovider/src/index.ts). Đây
-          // là công cụ dev, không phải service chạy production — khai báo rõ ràng ở đây thay vì
-          // để lọt qua bằng lỗi resolve module như đã xảy ra ở fix round 1.
-          "^tools/bench-keyprovider/src/index\\.ts$",
-        ],
-      },
-      to: {
-        path: [
-          "^packages/crypto-keys/src/unwrap\\.ts$",
-          "^packages/crypto-keys/src/local-dev-unwrapper\\.ts$",
-          "^packages/crypto-keys/src/local-dev-shared\\.ts$",
-        ],
-      },
+      from: { pathNot: [APPS_UNSEAL_WORKER, ROUNDTRIP_TEST_TS, BENCH_INDEX_TS] },
+      to: { path: UNWRAP_TS },
+    },
+    {
+      name: "khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts",
+      comment:
+        "Chi apps/unseal-worker VA unwrap.ts (mat tien cong khai cua chinh no) duoc import " +
+        "local-dev-unwrapper.ts. local-dev-wrapper.ts (mat boc, an toan) KHONG duoc liet ke o " +
+        "day - neu no import file nay, do la mot cau noi bac cau khoi mat boc an toan sang kha " +
+        "nang giai ma, phai bi chan (fix round 2, phat hien N2).",
+      severity: "error",
+      from: { pathNot: [APPS_UNSEAL_WORKER, UNWRAP_TS] },
+      to: { path: LOCAL_DEV_UNWRAPPER_TS },
+    },
+    {
+      name: "khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts",
+      comment:
+        "Chi apps/unseal-worker va hai file cai dat (wrap + unwrap) duoc import " +
+        "local-dev-shared.ts - deriveOrgKey cong node:crypto la du de tu giai ma, khong can " +
+        "dung toi unwrap.ts (bat bien G1, phat hien C2 o fix round 1).",
+      severity: "error",
+      from: { pathNot: [APPS_UNSEAL_WORKER, LOCAL_DEV_WRAPPER_TS, LOCAL_DEV_UNWRAPPER_TS] },
+      to: { path: LOCAL_DEV_SHARED_TS },
     },
     {
       name: "khong-import-trustprocure-khong-resolve-duoc",
       comment:
-        "Import dạng @trustprocure/* không resolve được ra file thật là dấu hiệu lỗi cấu hình " +
-        "(subpath export sai, typo, thiếu entry trong package.json 'exports') — KHÔNG được để " +
-        "âm thầm lọt qua mọi quy tắc khác. Đây chính xác là cách mà " +
-        "@trustprocure/crypto-keys/unwrap từng lọt qua quy tắc khong-giai-ma-ngoai-unseal-worker " +
-        "ở bản trước fix round 1: specifier không resolve được nên không khớp `to.path`, quy tắc " +
-        "coi như không có gì để chặn. Quy tắc này là lớp phòng thủ chống lại chính lớp lỗi đó.",
+        "Import dang @trustprocure/* khong resolve duoc ra file that la dau hieu loi cau hinh " +
+        "(subpath export sai, typo, thieu entry trong package.json 'exports') - KHONG duoc de " +
+        "am tham lot qua moi quy tac khac. Day chinh xac la cach ma " +
+        "@trustprocure/crypto-keys/unwrap tung lot qua quy tac giai-ma-ngoai-unseal-worker " +
+        "o ban truoc fix round 1: specifier khong resolve duoc nen khong khop `to.path`, quy tac " +
+        "coi nhu khong co gi de chan. Quy tac nay la lop phong thu chong lai chinh lop loi do.",
       severity: "error",
       from: {},
-      to: { path: "^@trustprocure/", couldNotResolve: true },
+      to: { path: "^" + ci("@trustprocure/"), couldNotResolve: true },
     },
     {
       name: "khong-phu-thuoc-vong",
@@ -70,11 +121,11 @@ module.exports = {
     exclude: { path: "(node_modules|dist|\\.next)" },
     tsConfig: { fileName: "tsconfig.json" },
     tsPreCompilationDeps: true,
-    // Bắt buộc để depcruise tự resolve subpath export (vd. "@trustprocure/crypto-keys/unwrap")
-    // qua package.json "exports", giống hệt cách Node/bundler thật resolve lúc chạy. Thiếu dòng
-    // này, subpath không map đúng qua tsconfig "paths" (một wildcard không xử lý được subpath
-    // lồng) và depcruise coi module là "couldNotResolve" — bỏ qua toàn bộ quy tắc "to.path" một
-    // cách âm thầm. Đây là nguyên nhân gốc của lỗ hổng C1 phát hiện ở fix round 1.
+    // Bat buoc de depcruise tu resolve subpath export (vd. "@trustprocure/crypto-keys/unwrap")
+    // qua package.json "exports", giong het cach Node/bundler that resolve luc chay. Thieu dong
+    // nay, subpath khong map dung qua tsconfig "paths" (mot wildcard khong xu ly duoc subpath
+    // long) va depcruise coi module la "couldNotResolve" - bo qua toan bo quy tac "to.path" mot
+    // cach am tham. Day la nguyen nhan goc cua lo hong C1 phat hien o fix round 1.
     enhancedResolveOptions: { exportsFields: ["exports"] },
   },
 };
