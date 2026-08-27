@@ -91,7 +91,7 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     if (daDonDep) return null;
     daDonDep = true;
     try {
-      await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+      await lockClient.query("SELECT pg_catalog.pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
       // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI
       // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
       lockClient.off("error", boQuaLoiKetNoi);
@@ -145,13 +145,36 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     //
     // Phạm vi: PHIÊN, không phải transaction — nó phải sống qua mọi BEGIN/COMMIT của vòng lặp
     // migration. Client này được release() về pool khi xong; giá trị SET còn dính trên kết
-    // nối đó, và đó là hành vi có chủ đích của một pool dành cho migrate(). Người gọi dùng
-    // pool ứng dụng riêng (packages/tenancy) nên không chia sẻ kết nối này.
+    // nối đó.
+    //
+    // [vòng fix 3 — nói quá] Bản trước viết vô điều kiện "Người gọi dùng pool ứng dụng riêng
+    // (packages/tenancy) nên không chia sẻ kết nối này". SAI về phạm vi: migrate(pool, dir)
+    // nhận BẤT KỲ pool nào người gọi đưa vào — kể cả pool ứng dụng, và đúng là các test tích
+    // hợp của dự án đang gọi migrate(db.pool, ...) rồi dùng lại chính pool đó. Phát biểu đúng
+    // mức: khuôn dùng ĐƯỢC KHUYẾN NGHỊ là một pool riêng cho migrate(); nếu người gọi chia sẻ
+    // pool ứng dụng thì một kết nối trong pool đó mang theo "search_path = public" cho tới
+    // khi bị đóng. Hệ quả đã cân nhắc và chấp nhận: 'public' cũng chính là search_path mặc
+    // định của PostgreSQL, và pg_catalog vẫn được tìm ngầm TRƯỚC (xem ghi chú dưới), nên đây
+    // là một trạng thái phiên VÔ HẠI — khác hẳn app.org_id, thứ mà packages/tenancy huỷ hẳn
+    // kết nối để không rò.
+    //
+    // [vòng fix 3 — I1] DÒNG NÀY LÀ TIỀN ĐỀ NGẦM CỦA NHỮNG DÒNG KHÁC TRONG FILE — ai xoá nó
+    // phải biết mình đang phá gì. Đã đo trên PostgreSQL 16.15 quy tắc chính xác: pg_catalog
+    // được tìm NGẦM TRƯỚC MỌI THỨ *chỉ khi* nó KHÔNG được nêu tên; nêu tên nó ở vị trí sau
+    // ("gia, pg_catalog, public") thì schema đứng trước cướp được cả current_setting lẫn
+    // set_config. 'public' không nêu pg_catalog, nên dưới dòng này mọi tên hàm/kiểu/toán tử
+    // trần trong file này VÀ trong 001/002 đều phân giải về pg_catalog trước.
+    //   - Lời gọi hàm của CHÍNH file này nay viết đủ "pg_catalog." nên chúng KHÔNG còn phụ
+    //     thuộc dòng này (trước vòng fix 3 thì có, và không ghi chú nào nói ra).
+    //   - VẪN phụ thuộc dòng này: "CREATE TABLE IF NOT EXISTS schema_migrations" và mọi
+    //     SELECT/INSERT trên schema_migrations bên dưới (tên bảng KHÔNG ghi schema, nên nó
+    //     rơi vào schema ĐẦU TIÊN của search_path), toàn bộ DDL không ghi schema trong
+    //     001/002, và tính ổn định của pg_get_expr mà hardening.always.sql phán xét.
     await lockClient.query("SET search_path = public");
 
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
-    await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    await lockClient.query("SELECT pg_catalog.pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
 
     // [fix round 4 — Minor] CREATE TABLE này phải nằm TRONG advisory lock. Bản trước gọi
     // pool.query(...) TRƯỚC khi lấy khoá: hai migrate() đồng thời trên một CSDL TRỐNG (hai
@@ -175,7 +198,9 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
           await lockClient.query("BEGIN");
           // set_config(..., true) = phạm vi transaction, nên GUC tự biến mất khi COMMIT/
           // ROLLBACK và không rò sang migration đánh số hay sang lần dùng kết nối kế tiếp.
-          await lockClient.query("SELECT set_config('app.hardening_che_do', $1, true)", [cheDo]);
+          await lockClient.query("SELECT pg_catalog.set_config('app.hardening_che_do', $1, true)", [
+            cheDo,
+          ]);
           await lockClient.query(sql);
           await lockClient.query("COMMIT");
         } catch (error) {

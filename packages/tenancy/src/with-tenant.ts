@@ -43,6 +43,26 @@ export class TenantError extends Error {
  * Mọi truy cập dữ liệu có org_id BẮT BUỘC đi qua hàm này. Đây là điểm duy nhất gắn tenant
  * context, để không có đường vòng nào bỏ qua RLS (bất biến F1).
  *
+ * [vòng fix 3 — I1] GHIM TÊN HÀM: mọi lời gọi hàm hệ thống trong hàm này viết đủ
+ * `pg_catalog.`. Quy tắc "pg_catalog được tìm NGẦM trước" PHÁ ĐƯỢC — nó chỉ đúng khi
+ * pg_catalog KHÔNG được nêu tên; nêu tên nó ở vị trí SAU thì mọi schema đứng trước được tìm
+ * trước. Đã đo trên PostgreSQL 16.15, cả hai biến thể cho ra DỮ LIỆU CỦA TỔ CHỨC KHÁC:
+ *     ALTER ROLE <role đăng nhập> SET search_path = doc, pg_catalog, public
+ *     chuỗi kết nối ?options=-c search_path=doc,pg_catalog,public
+ * cộng một `doc.set_config(text, text, boolean)` chuyển hướng giá trị -> withTenant(orgA)
+ * đọc ra người dùng của tổ chức B. Biến thể thứ hai KHÔNG BAO GIỜ bị hardening phát hiện
+ * (rolconfig sạch, pg_db_role_setting sạch).
+ *
+ * Vì sao lỗ này chỉ tồn tại Ở ĐÂY và không ở packages/db/src/migrate.ts: migrate() GHIM
+ * `SET search_path = public` làm câu lệnh đầu tiên trên kết nối của nó. Hàm này chạy trên
+ * pool ỨNG DỤNG, dùng chung với mã nghiệp vụ, nên nó KHÔNG được phép đặt search_path của
+ * người gọi — ghim tên hàm là cách duy nhất còn lại.
+ *
+ * Phạm vi của việc ghim, nói đúng mức: nó bảo vệ ba câu lệnh của CHÍNH hàm này. Truy vấn do
+ * `fn` viết vẫn chạy dưới search_path của người gọi — nhưng biểu thức của policy RLS thì
+ * KHÔNG: PostgreSQL lưu policy dưới dạng OID đã phân giải, nên search_path lúc chạy không
+ * đổi được hàm mà policy gọi (đã đo ở db/migrations.int.test.ts "[fix S3] ...").
+ *
  * Phạm vi bảo đảm — nói rõ để không ai trích dẫn quá lời: hàm này gắn ĐÚNG một tổ chức khi mở
  * transaction. Nó KHÔNG ngăn được `fn` tự gọi set_config('app.org_id', ...) lần nữa để đổi
  * sang tổ chức khác; app.org_id là GUC tuỳ biến thông thường, mọi phiên đều đặt được. Lớp
@@ -81,7 +101,11 @@ export async function withTenant<T>(
   let loiLamHongClient: Error | undefined;
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
+    // [vòng fix 3 — I1] pg_catalog.set_config, KHÔNG phải set_config trần. Xem khối
+    // "GHIM TÊN HÀM" ở docstring: đây là đường DUY NHẤT trong repo chạy dưới một
+    // search_path mà dự án không kiểm soát, nên nó là chỗ DUY NHẤT lời gọi trần thật sự
+    // cướp được.
+    await client.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgId]);
     const ketQua = await fn(client);
 
     // Đã đo trên PostgreSQL 16.15 (pg@8.23.0): COMMIT trên một transaction ĐANG HỎNG không ném
@@ -111,7 +135,10 @@ export async function withTenant<T>(
     // bình thường và ném lỗi) vì `fn` để lại trạng thái phiên được ở cả hai.
     try {
       const { rows } = await client.query<{ con_sot: string | null }>(
-        "SELECT current_setting('app.org_id', true) AS con_sot",
+        // [vòng fix 3 — I1] pg_catalog.current_setting: một doc.current_setting(text, boolean)
+        // trả '' luôn luôn sẽ làm phép kiểm này MÙ, và kết nối còn sót app.org_id được trả
+        // về pool như thể sạch. Đây là nửa "âm tính giả" của cùng một lỗ.
+        "SELECT pg_catalog.current_setting('app.org_id', true) AS con_sot",
       );
       // Cố ý KHÔNG nội suy giá trị còn sót vào thông báo — cùng lý do với nhánh UUID ở trên.
       if (rows[0]?.con_sot) {

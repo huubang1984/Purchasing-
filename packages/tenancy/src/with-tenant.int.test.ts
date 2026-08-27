@@ -87,9 +87,24 @@ describe("cô lập tổ chức", () => {
   // [vòng fix 2 — Minor] Nay CÓ HAI lớp chặn độc lập, và test đo RIÊNG từng lớp thay vì gộp:
   //   lớp 1 — QUYỀN CỘT: 002 không cấp `UPDATE (org_id)` cho app_api (bản vá oracle users_pkey
   //           cấp quyền theo cột, và `org_id` cố ý nằm ngoài vế UPDATE). Chặn ngay ở quyền.
-  //   lớp 2 — RLS WITH CHECK: kể cả khi ai đó cấp lại `UPDATE (org_id)`, policy vẫn chặn.
+  //   lớp 2 — RLS: kể cả khi ai đó cấp lại `UPDATE (org_id)`, policy vẫn chặn.
   // Gộp hai lớp vào một khẳng định "rejects" là cách nhanh nhất để lớp 2 âm thầm chết mà không
   // ai biết: sau bản vá quyền cột, thông báo lỗi đến từ lớp 1 nên một policy hỏng vẫn xanh.
+  //
+  // [vòng fix 3 — Minor] LỚP 2 KHÔNG ĐO CÁI NÓ TỪNG NÓI LÀ ĐANG ĐO. Bản vòng 2 gắn nhãn
+  // "RLS WITH CHECK" và bình luận "vế WITH CHECK của policy đã mất tác dụng". SAI: với policy
+  // FOR ALL trên bảng đang FORCE RLS, PostgreSQL kiểm HÀNG MỚI của UPDATE bằng cả policy
+  // SELECT, mà policy đó sinh ra từ vế USING. Đã đo trên PostgreSQL 16.15, trong một
+  // transaction rồi ROLLBACK:
+  //     WITH CHECK đổi thành (true) -> UPDATE org_id sang tổ chức khác VẪN "new row violates
+  //                                    row-level security policy"     (chặn bởi USING)
+  //     WITH CHECK đổi thành (true) -> INSERT org_id của tổ chức khác THÀNH CÔNG
+  //                                                                   (chặn bởi WITH CHECK)
+  //     bỏ luôn vế USING            -> UPDATE 1                       (rò thật)
+  // Đây là lỗi HỒ SƠ KIỂM TOÁN chứ không phải lỗ hổng — bảo vệ thật vẫn còn. Nhưng nó là LẦN
+  // TÁI PHÁT của chính bài học "test xanh vì lý do sai", nằm BÊN TRONG bản vá cho bài học đó.
+  // Nay test ĐO từng cơ chế và GỌI ĐÚNG TÊN nó, thay vì đổi fixture sang policy tách lệnh —
+  // đã đo là cách ấy KHÔNG làm WITH CHECK load-bearing (policy SELECT vẫn bắt trước).
   it("[INV-F2] không chuyển được hàng của mình sang org_id của tổ chức khác", async () => {
     // Lớp 1 — quyền cột.
     await expect(
@@ -101,8 +116,8 @@ describe("cô lập tổ chức", () => {
       }),
     ).rejects.toThrow(/permission denied/i);
 
-    // Lớp 2 — RLS WITH CHECK, đo TÁCH KHỎI lớp 1: cấp tạm `UPDATE (org_id)` trong một
-    // transaction rồi ROLLBACK, nên phép đo không để lại quyền nào trên cụm test.
+    // Lớp 2 — RLS, đo TÁCH KHỎI lớp 1: cấp tạm `UPDATE (org_id)` trong một transaction rồi
+    // ROLLBACK, nên phép đo không để lại quyền nào trên cụm test.
     const client = await db.pool.connect();
     try {
       await client.query("BEGIN");
@@ -111,11 +126,47 @@ describe("cô lập tổ chức", () => {
       await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
       await expect(
         client.query("UPDATE users SET org_id = $1 WHERE email = $2", [orgB, "a@example.com"]),
-        "có quyền cột rồi mà RLS không chặn — vế WITH CHECK của policy đã mất tác dụng",
+        "có quyền cột rồi mà RLS không chặn — chính sách cách ly đã mất tác dụng",
       ).rejects.toThrow(/row-level security/i);
     } finally {
       await client.query("ROLLBACK");
       client.release();
+    }
+
+    // Lớp 2, NỬA CÒN LẠI: vế nào của policy đang gánh việc gì. Hai phép đo dưới đây là thứ
+    // biến nhãn "WITH CHECK" từ một lời khai thành một con số.
+    const client2 = await db.pool.connect();
+    try {
+      await client2.query("BEGIN");
+      await client2.query("GRANT UPDATE (org_id) ON users TO app_api");
+      await client2.query("ALTER POLICY users_tenant_isolation ON users WITH CHECK (true)");
+      await client2.query("SET LOCAL ROLE app_api");
+      await client2.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+
+      // (i) UPDATE vẫn bị chặn dù WITH CHECK đã vô hiệu -> vế chặn ở đây là USING.
+      //     SAVEPOINT vì một câu lệnh lỗi làm hỏng cả transaction, mà (ii) còn phải chạy tiếp.
+      await client2.query("SAVEPOINT truoc_update");
+      await expect(
+        client2.query("UPDATE users SET org_id = $1 WHERE email = $2", [orgB, "a@example.com"]),
+        "WITH CHECK vô hiệu mà UPDATE lọt -> USING không còn kiểm hàng mới; đọc lại ghi chú",
+      ).rejects.toThrow(/row-level security/i);
+      await client2.query("ROLLBACK TO SAVEPOINT truoc_update");
+
+      // (ii) INSERT thì LỌT -> vế WITH CHECK mới là vế load-bearing ở đường ghi mới, và đó
+      //      là điều mà test "[INV-F1] không ghi được hàng mang org_id của tổ chức khác" ở
+      //      trên thật sự đang đo.
+      const chen = await client2.query(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $3)",
+        [orgB, "do-luong@example.com", "Do luong"],
+      );
+      expect(
+        chen.rowCount,
+        "WITH CHECK vô hiệu mà INSERT vẫn bị chặn -> nó không load-bearing ở đâu cả, và test " +
+          "INSERT ở trên đang xanh vì lý do khác",
+      ).toBe(1);
+    } finally {
+      await client2.query("ROLLBACK");
+      client2.release();
     }
 
     const { rows } = await db.pool.query<{ org_id: string }>(
@@ -340,4 +391,134 @@ describe("[CR2-T3] cô lập tổ chức dưới role đăng nhập thật, khô
       await poolDangNhap.end();
     }
   });
+});
+
+// ============================================================================================
+// [vòng fix 3 — I1] withTenant() DƯỚI MỘT search_path MÀ DỰ ÁN KHÔNG KIỂM SOÁT
+// ============================================================================================
+// Vòng 2 phát hiện quy tắc "pg_catalog được tìm NGẦM trước" PHÁ ĐƯỢC, ghi đủ "pg_catalog." cho
+// hardening.always.sql, tự đánh dấu "MANG VÀO FINAL REVIEW" — rồi bỏ sót file bên cạnh.
+// packages/db/src/migrate.ts tự GHIM search_path nên nó miễn nhiễm; withTenant() thì KHÔNG ghim
+// được (nó chạy trên pool ứng dụng, dùng chung với mã nghiệp vụ) nên nó là đường DUY NHẤT trong
+// repo chạy dưới search_path do người khác chọn.
+//
+// Dùng "?options=-c search_path=..." chứ không "ALTER ROLE ... SET search_path": đó là biến thể
+// mà hardening KHÔNG BAO GIỜ phát hiện được (rolconfig sạch, pg_db_role_setting sạch), tức chặn
+// 0% vĩnh viễn — khác với biến thể ALTER ROLE, vốn tự chữa ở lần deploy kế.
+// ============================================================================================
+describe("[I1] withTenant dưới search_path thù địch", () => {
+  it("[INV-F1] hàm hệ thống bị che ở schema đứng trước không đổi được tổ chức đang gắn", async () => {
+    const dbRieng = await startPostgres();
+    try {
+      await migrate(dbRieng.pool, MIGRATIONS);
+      const themToChuc = async (ten: string, slug: string): Promise<string> =>
+        (
+          await dbRieng.pool.query<{ id: string }>(
+            "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+            [ten, slug],
+          )
+        ).rows[0]!.id;
+      const a = await themToChuc("Cong ty A", "cong-ty-a");
+      const b = await themToChuc("Cong ty B", "cong-ty-b");
+      await dbRieng.pool.query(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1,'a@a.com','A'), ($2,'vip@b.com','B')",
+        [a, b],
+      );
+
+      // Schema thù địch: hai hàm CÙNG CHỮ KÝ với bản trong pg_catalog.
+      //   doc.set_config      -> luôn ghi tổ chức B, bất kể tham số
+      //   doc.current_setting -> luôn trả '' (làm phép kiểm "còn sót" ở finally MÙ)
+      await dbRieng.pool.query("CREATE SCHEMA doc; GRANT USAGE ON SCHEMA doc TO PUBLIC");
+      // Hàm cướp phải GHI ĐÈ, không được "ghi giá trị lạ rồi vẫn chuyển tiếp tham số thật":
+      // bản đầu tôi viết nó chuyển tiếp $1/$2 SAU khi ghi giá trị lạ, nên giá trị thật ghi
+      // đè lại và ĐỘT BIẾN Y1 (bỏ "pg_catalog." ở dòng 84) SỐNG SÓT — fixture tự vô hiệu hoá
+      // chính phép đo. Nay nó bỏ qua hẳn $1/$2.
+      await dbRieng.pool.query(
+        "CREATE FUNCTION doc.set_config(text, text, boolean) RETURNS text LANGUAGE sql AS " +
+          "$f$SELECT pg_catalog.set_config('app.org_id', '" +
+          b +
+          "', $3)$f$",
+      );
+      await dbRieng.pool.query(
+        "CREATE FUNCTION doc.current_setting(text, boolean) RETURNS text LANGUAGE sql AS " +
+          "$f$SELECT ''::text$f$",
+      );
+      await dbRieng.pool.query(
+        "CREATE ROLE app_api_login LOGIN PASSWORD 'mk-api' IN ROLE app_api",
+      );
+      // Dựng search_path thù địch bằng ALTER ROLE. Đã thử biến thể "?options=-c search_path=..."
+      // TRƯỚC và đo được nó KHÔNG tới được Postgres qua createPool(): hàm đó cố ý chỉ chuyển
+      // host/port/user/password/database/ssl RỜI RẠC cho pg.Pool và VỨT phần query string còn
+      // lại (xem packages/db/src/pool.ts). Đó là một lớp giảm nhẹ có THẬT nhưng KHÔNG PHẢI thứ
+      // test này canh — mọi mã dựng pg.Pool trực tiếp vẫn nhận `options`, và cả hai biến thể
+      // đổ vào CÙNG một thứ: search_path của phiên. Nên canh ở đúng chỗ đó.
+      await dbRieng.pool.query(
+        "ALTER ROLE app_api_login SET search_path = doc, pg_catalog, public",
+      );
+
+      const url = new URL(dbRieng.connectionString);
+      url.username = "app_api_login";
+      url.password = "mk-api";
+      const poolThuDich = createPool(url.toString(), 1);
+      try {
+        // Chốt tiền đề, nếu không cả test rỗng ruột: search_path THẬT SỰ thù địch, VÀ lời gọi
+        // TRẦN thật sự bị cướp trong khi lời gọi ĐỦ TÊN thì không.
+        expect(
+          (await poolThuDich.query<{ search_path: string }>("SHOW search_path")).rows[0]!
+            .search_path,
+        ).toBe("doc, pg_catalog, public");
+        // doc.set_config ghi app.org_id = tổ chức B như một TÁC DỤNG PHỤ, bất kể tham số.
+        await poolThuDich.query("SELECT set_config('app.thu_nghiem', 'X', false)");
+        const bicuop = await poolThuDich.query<{ that: string | null; tran: string | null }>(
+          "SELECT pg_catalog.current_setting('app.org_id', true) AS that, " +
+            "       current_setting('app.org_id', true) AS tran",
+        );
+        expect(
+          bicuop.rows[0]!.that,
+          "set_config TRẦN không bị cướp — quy tắc 'pg_catalog tìm ngầm trước' vẫn đúng ở cấu " +
+            "hình này, nên phép đo dưới đây không chứng minh gì",
+        ).toBe(b);
+        expect(
+          bicuop.rows[0]!.tran,
+          "current_setting TRẦN không bị cướp — nửa thứ hai của phép đo sẽ rỗng ruột",
+        ).toBe("");
+        // Dọn lại trước phép đo chính: pool max=1 nên đây đúng là client sẽ được dùng tiếp.
+        await poolThuDich.query("SELECT pg_catalog.set_config('app.org_id', '', false)");
+
+        // PHÉP ĐO CHÍNH: withTenant gắn tổ chức A. Trước bản vá, đo được ["vip@b.com"].
+        const emails = await withTenant(poolThuDich, a, async (client) => {
+          const { rows } = await client.query<{ email: string }>("SELECT email FROM users");
+          return rows.map((r) => r.email);
+        });
+        expect(
+          emails,
+          "withTenant(orgA) đọc ra dữ liệu của tổ chức khác — set_config trần bị cướp",
+        ).toEqual(["a@a.com"]);
+
+        // NỬA THỨ HAI — current_setting: doc.current_setting trả '' luôn, nên nếu withTenant
+        // gọi current_setting TRẦN thì phép kiểm "còn sót" ở finally MÙ và kết nối bẩn quay
+        // lại pool. pool max=1 nên lần connect() kế tiếp là cùng backend nếu client không bị huỷ.
+        const truoc = await poolThuDich.query<{ pid: number }>(
+          "SELECT pg_catalog.pg_backend_pid()::int AS pid",
+        );
+        await withTenant(poolThuDich, a, async (client) => {
+          await client.query("COMMIT");
+          await client.query("SELECT pg_catalog.set_config('app.org_id', $1, false)", [b]);
+        });
+        const sau = await poolThuDich.query<{ org: string | null; pid: number }>(
+          "SELECT public.app_current_org_id() AS org, pg_catalog.pg_backend_pid()::int AS pid",
+        );
+        expect(
+          sau.rows[0]!.org,
+          "app.org_id còn sót trên kết nối trả về pool — current_setting trần bị che nên " +
+            "phép kiểm ở finally không thấy gì",
+        ).toBeNull();
+        expect(sau.rows[0]!.pid).not.toBe(truoc.rows[0]!.pid);
+      } finally {
+        await poolThuDich.end();
+      }
+    } finally {
+      await dbRieng.stop();
+    }
+  }, 180_000);
 });

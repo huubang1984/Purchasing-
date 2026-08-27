@@ -226,8 +226,14 @@
 --       [vòng fix 1 — CR2/I6] Vòng trước viết ở đây "bảng của MỌI task sau được phủ tự động,
 --       không ai phải nhớ thêm dòng nào". SAI, và đã đo: vị từ khoá relkind = 'r', nên BẢNG
 --       CHA PHÂN MẢNH (relkind = 'p') VÔ HÌNH với cả (A), (B) lẫn test phủ. Nay là
---       relkind IN ('r','p'). Vẫn CÓ bậc tự do còn lại, nói ra thay vì hứa suông: bảng NGOÀI
---       (relkind='f'), và bảng tenant đặt ở schema KHÁC 'public'. Cả hai không bị phủ.
+--       relkind IN ('r','p').
+--       [vòng fix 3 — Minor] Mục (A) nay còn phủ CON CHÁU (phân mảnh hoặc INHERITS) của một
+--       bảng tenant KỂ CẢ khi con nằm ở schema khác 'public' — xem VI_TU_CAN_CO_RLS. Trước bản
+--       vá, "khac.con_khac INHERITS public.bao_gia" đo được là rò thật: hardening PASS mà
+--       app_api gắn tổ chức A đọc thẳng con thấy hàng của tổ chức B.
+--       Vẫn CÓ bậc tự do còn lại, nói ra thay vì hứa suông: bảng NGOÀI (relkind='f'), và bảng
+--       có org_id đặt ở schema KHÁC 'public' mà KHÔNG treo dưới bảng tenant nào. Cả hai không
+--       bị phủ.
 --       [vòng fix 2 — I6] BẬC TỰ DO THỨ BA, và là bậc tự do về THỜI GIAN chứ không về hình
 --       dạng: mục (A) đúng TẠI THỜI ĐIỂM migrate() chạy. Một "ALTER TABLE bao_gia ATTACH
 --       PARTITION bao_gia_b ..." chạy SAU đó gắn vào một lá KHÔNG bật RLS, và đã đo:
@@ -406,25 +412,61 @@ DECLARE
   --   của app_unseal — rồi "USING (true)" trên CHÍNH bảng users cũng LỌT (hardening PASS, đọc
   --   được cả hai tổ chức). Mở một hình dạng cho MỘT bảng pre-approve nó cho MỌI bảng tenant
   --   hiện tại và tương lai. Cửa thoát mà càng dùng đúng thì hàng rào càng thủng không phải
-  --   cửa thoát, là lỗ. Nay khoá theo (bang, polname, pham_vi, bieu_thuc): một ngoại lệ chỉ
-  --   có hiệu lực ĐÚNG NƠI nó được cấp.
+  --   cửa thoát, là lỗ.
   --
-  --   [vòng fix 2 — I4] Bốn hình dạng mà re-reviewer đo là "sản phẩm sẽ cần" đi qua ĐÂY, không
+  --   [vòng fix 3 — I2] Vòng 2 khoá theo (bang, polname, pham_vi, bieu_thuc) rồi viết ngay
+  --   bên dưới rằng "một ngoại lệ chỉ có hiệu lực ĐÚNG NƠI nó được cấp" và mô tả cửa bằng
+  --   "policy riêng FOR SELECT TO app_unseal". CẢ HAI CHIỀU ẤY — LỆNH và ROLE — KHÔNG NẰM
+  --   TRONG KHOÁ. Đã đo trên PostgreSQL 16.15:
+  --     cửa cấp cho (bao_gia, bg_unseal), policy dạng TO app_unseal -> PASS, app_api đọc [100]
+  --     ALTER POLICY bg_unseal ON bao_gia TO app_api                -> PASS, CỬA VẪN DUYỆT
+  --        app_api gắn tổ chức A đọc bao_gia -> [100, 999]   <- 999 là GIÁ CỦA TỔ CHỨC B
+  --   Đúng khuôn CR2-v2, hẹp đi một trục. Và vì danh sách RỖNG ở S0, nó chỉ nổ khi Task 6 cấp
+  --   dòng đầu tiên — tức khi không ai còn nhìn. Nay khoá SÁU cột:
+  --   (bang, polname, lenh, vai_tro, pham_vi, bieu_thuc).
+  --     lenh    = pg_policy.polcmd nguyên văn: '*' = ALL, 'r' = SELECT, 'a' = INSERT,
+  --               'w' = UPDATE, 'd' = DELETE.
+  --     vai_tro = tên các role của policy, sắp xếp và nối bằng ','. Policy áp cho PUBLIC có
+  --               polroles = {0}, và OID 0 KHÔNG có hàng trong pg_roles — đã đo. Viết
+  --               "array_to_string(ARRAY(SELECT rolname FROM pg_roles WHERE oid = ANY(...)))"
+  --               thì PUBLIC cho ra CHUỖI RỖNG, tức chỗ RỘNG NHẤT lại trùng với giá trị giữ
+  --               chỗ của dòng rỗng bên dưới. Nên kết xuất PUBLIC TƯỜNG MINH. Sắp xếp bằng
+  --               COLLATE "C" để thứ tự không phụ thuộc collation của database.
+  --
+  --   [vòng fix 2 — I4] Ba hình dạng mà re-reviewer đo là "sản phẩm sẽ cần" đi qua ĐÂY, không
   --   qua HINH_DANG_CHUAN — đây là câu trả lời cho "hình dạng nào nên nằm sẵn trong danh sách
   --   gốc": chỉ hình dạng TỰ NÓ ràng buộc tenant mới được toàn cục.
   --     org_id = app_current_org_id() AND trang_thai <> 'NIEM_PHONG'  (đấu thầu kín)
   --       -> deparse: ((org_id = app_current_org_id()) AND (trang_thai <> 'NIEM_PHONG'::text))
   --     policy riêng FOR SELECT TO app_unseal USING (true)  -> deparse: true
+  --       (dòng ngoại lệ khi ấy phải ghi lenh='r' và vai_tro='app_unseal': đổi policy đó sang
+  --        FOR ALL hay sang TO app_api làm dòng này HẾT khớp và hardening chặn — đó chính là
+  --        điều vòng 2 mô tả mà chưa thực hiện được)
   --     org_id kiểu DOMAIN trên uuid                        -> deparse: ((org_id)::uuid = ...)
   --   Cố ý KHÔNG khớp theo KHUÔN ("bắt đầu bằng hình dạng chuẩn rồi AND ..."): khớp khuôn là
   --   một phép so khớp chuỗi có cấu trúc, và bốn vòng liên tiếp trong dự án này cho thấy đó
   --   đúng là chỗ thứ tiếp theo lọt qua. Một dòng đủ-đối-tượng trong diff rẻ hơn nhiều.
   --   HÌNH DẠNG THỨ TƯ — policy AS RESTRICTIVE — KHÔNG cần dòng nào: xem CAU_POLICY_SAI.
   --
+  --   BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: khoá vẫn KHÔNG phân biệt vế USING với vế
+  --   WITH CHECK (một dòng duyệt biểu thức X duyệt nó ở CẢ HAI vế của đúng policy đó), và
+  --   không xuống tới mức CỘT. Mỗi lần thu hẹp thêm một trục là một vòng nữa; đó là lý do
+  --   file này nằm trong .github/CODEOWNERS với yêu cầu review bắt buộc — xem ghi chú ở đó.
+  --
   --   Cả hai danh sách có meta-test khoá ở db/rls-coverage.int.test.ts — sửa một bên mà quên
   --   bên kia là ĐỎ.
   NGOAI_LE_HINH_DANG constant text :=
-    $q$(VALUES ('', '', '', '')) AS g(bang, polname, pham_vi, bieu_thuc)$q$;
+    $q$(VALUES ('', '', '', '', '', ''))
+         AS g(bang, polname, lenh, vai_tro, pham_vi, bieu_thuc)$q$;
+
+  -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
+  -- nó xuất hiện ở cả vế so khớp lẫn (tương lai) thông báo lỗi.
+  BIEU_THUC_VAI_TRO constant text :=
+    $q$array_to_string(ARRAY(
+         SELECT coalesce(r.rolname::text, 'PUBLIC')
+           FROM unnest(p.polroles) AS o(oid)
+           LEFT JOIN pg_roles r ON r.oid = o.oid
+          ORDER BY coalesce(r.rolname::text, 'PUBLIC') COLLATE "C"), ',')$q$;
 
   -- [vòng fix 1 — I2] Ngoại lệ viết tay cho hai thứ KHÔNG có cửa kỹ thuật: MATERIALIZED VIEW
   -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. Tên viết đủ schema
@@ -462,29 +504,63 @@ DECLARE
           WHERE ke.inhrelid = c.oid AND $q$
        || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'pn', 'pc') || $q$)$q$;
 
+  -- [vòng fix 3 — Minor] Tập bảng mà mục (A) phải bật ENABLE + FORCE. RỘNG HƠN "bảng tenant"
+  -- ĐÚNG MỘT VẾ: con cháu (phân mảnh hoặc INHERITS) của một bảng tenant KỂ CẢ KHI NÓ NẰM Ở
+  -- SCHEMA KHÁC 'public'. Vòng 2 gỡ bộ lọc nspname cho view/matview/SECDEF (I3-v2) nhưng GIỮ
+  -- NGUYÊN cho bảng, và bất đối xứng đó đo được là một lỗ thật trên PostgreSQL 16.15:
+  --     CREATE SCHEMA khac; CREATE TABLE khac.con_khac () INHERITS (public.bao_gia);
+  --     GRANT SELECT ON khac.con_khac TO app_api; GRANT USAGE ON SCHEMA khac TO app_api;
+  --       -> migrate() PASS, khac.con_khac có {relrowsecurity=false, relforcerowsecurity=false}
+  --       -> app_api gắn tổ chức A đọc THẲNG khac.con_khac thấy 777, hàng của TỔ CHỨC B.
+  -- Vế mở rộng cố ý CHỈ nằm ở mục (A) (bật cờ), KHÔNG ở VI_TU_BANG_TENANT: đổi định nghĩa
+  -- "bảng tenant" kéo theo nguồn (i)/(ii) và mục (C), tức đòi mọi bảng có org_id ở MỌI schema
+  -- phải có policy — một thay đổi thiết kế với bán kính nổ toàn repo, không thuộc vòng này.
+  -- Vế hẹp này đủ để đóng đường rò: con vẫn được LA_CUA_BANG_TENANT miễn policy riêng (đúng
+  -- khuôn PostgreSQL), còn đọc THẲNG con thì fail-closed vì RLS bật mà không policy nào cho
+  -- phép. Đọc QUA CHA vẫn đúng.
+  -- BẬC TỰ DO CÒN LẠI: bảng có org_id ở schema khác mà KHÔNG treo dưới một bảng tenant nào
+  -- vẫn không được nhận diện. Tiền điều kiện của nó là DDL + GRANT tường minh do người của dự
+  -- án viết; nói ra thay vì hứa suông.
+  VI_TU_CAN_CO_RLS constant text :=
+    $q$(( $q$ || VI_TU_BANG_TENANT || $q$ )
+        OR (c.relkind IN ('r', 'p') AND $q$ || LA_CUA_BANG_TENANT || $q$))$q$;
+
   -- Mọi chỗ SAI KHUÔN về policy trên bảng tenant, mỗi hàng một mô tả đọc được. Hai nguồn:
   --   (i)  bảng tenant KHÔNG có policy PERMISSIVE nào — RLS bật mà không policy nào cho phép
   --        gì là "từ chối tất cả": fail-closed, an toàn về dữ liệu nhưng là sự cố sẵn sàng, và
   --        thường là dấu vết của một DROP POLICY (hoặc DROP FUNCTION ... CASCADE) sau triển khai.
   --        Lá phân mảnh được miễn — xem LA_CUA_BANG_TENANT ở trên.
   --   (ii) policy PERMISSIVE có mặt nhưng biểu thức KHÔNG nằm trong HINH_DANG_CHUAN lẫn
-  --        NGOAI_LE_HINH_DANG của ĐÚNG (bảng, policy) đó, hoặc thiếu vế bắt buộc.
+  --        NGOAI_LE_HINH_DANG của ĐÚNG (bảng, policy, lệnh, role) đó, hoặc thiếu vế bắt buộc.
   --
-  -- [vòng fix 2 — I4] Policy AS RESTRICTIVE KHÔNG còn bị coi là sai, và hình dạng biểu thức
-  -- của nó KHÔNG bị soi. Vòng 1 chặn nó, và đó là phản tác dụng rõ ràng: cấm một lớp phòng
-  -- thủ CHẶT HƠN. Lập luận, không phải khẩu vị: policy RESTRICTIVE được tổ hợp bằng AND với
-  -- (OR của các policy PERMISSIVE), nên nó chỉ THU HẸP tập hàng nhìn thấy được — không biểu
-  -- thức nào đặt vào đó mở thêm được một hàng nào. Và vế bảo vệ vẫn còn nguyên: nguồn (i) đòi
-  -- PHẢI có ít nhất một policy PERMISSIVE, còn MỌI policy PERMISSIVE vẫn phải khớp danh sách.
-  -- Đổi policy cách ly sang RESTRICTIVE để né phép kiểm sẽ làm bảng KHÔNG còn policy PERMISSIVE
-  -- nào và bị nguồn (i) bắt.
+  -- [vòng fix 2 — I4 / vòng fix 3 — I4] Policy AS RESTRICTIVE KHÔNG bị soi ở nguồn (ii), KỂ CẢ
+  -- vế "thiếu USING"/"thiếu WITH CHECK". Vòng 2 tuyên bố điều đó nhưng CHỈ thực hiện được cho
+  -- nhánh thứ ba: hai nhánh "thiếu vế" không có `p.polpermissive`, nên bốn hình dạng
+  -- RESTRICTIVE THƯỜNG GẶP NHẤT vẫn bị chặn. Đã đo trên PostgreSQL 16.15, TRƯỚC bản vá:
+  --     AS RESTRICTIVE FOR ALL    USING (...)                  -> BLOCKED 'thiếu vế WITH CHECK'
+  --     AS RESTRICTIVE FOR UPDATE USING (...)                  -> BLOCKED 'thiếu vế WITH CHECK'
+  --     AS RESTRICTIVE FOR ALL    WITH CHECK (...)             -> BLOCKED 'thiếu vế USING'
+  --     AS RESTRICTIVE FOR UPDATE WITH CHECK (...)             -> BLOCKED 'thiếu vế USING'
+  --     (có ĐỦ hai vế, hoặc FOR INSERT, hoặc FOR SELECT        -> PASS)
+  -- Nay `p.polpermissive` được NÂNG LÊN vế WHERE chung, nên cả ba nhánh cùng chỉ soi policy
+  -- PERMISSIVE — một dòng thay vì ba, và nguồn (ii) ở trên nay MÔ TẢ ĐÚNG cái mã làm.
+  -- Vì sao ĐÒI WITH CHECK ở policy PERMISSIVE mà KHÔNG đòi ở RESTRICTIVE: với policy
+  -- PERMISSIVE, thiếu vế kiểm hàng mới nghĩa là dựa vào hành vi mặc định "dùng lại USING" —
+  -- đúng nhưng ngầm, và biến mất ngay khi ai đó tách policy theo lệnh. Với RESTRICTIVE, thiếu
+  -- một vế nghĩa là nó KHÔNG thu hẹp ở phía ấy: mất một lớp phòng thủ tuỳ chọn, không mở thêm
+  -- một hàng nào.
+  -- Lập luận nền, không phải khẩu vị: policy RESTRICTIVE được tổ hợp bằng AND với (OR của các
+  -- policy PERMISSIVE), nên nó chỉ THU HẸP tập hàng nhìn thấy được. Và vế bảo vệ vẫn còn
+  -- nguyên: nguồn (i) đòi PHẢI có ít nhất một policy PERMISSIVE, còn MỌI policy PERMISSIVE vẫn
+  -- phải khớp danh sách. Đổi policy cách ly sang RESTRICTIVE để né phép kiểm sẽ làm bảng KHÔNG
+  -- còn policy PERMISSIVE nào và bị nguồn (i) bắt — có test đo đường lách đó.
   -- BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: một policy RESTRICTIVE có thể là no-op
   -- (USING (true)) — không phải lỗ hổng nhưng cũng không phải phòng thủ; và biểu thức của nó
   -- gọi được hàm do người khác viết. Cả hai đòi quyền DDL trên bảng, tức tác nhân đã ở mức
   -- làm được việc tệ hơn.
   --
-  -- [vòng fix 2 — CR2] Vế "biểu thức có được duyệt không" nay hỏi HAI danh sách và danh sách
-  -- thứ hai khoá theo ĐÚNG (bang, polname) — xem NGOAI_LE_HINH_DANG.
+  -- [vòng fix 2 — CR2 / vòng fix 3 — I2] Vế "biểu thức có được duyệt không" hỏi HAI danh sách,
+  -- và danh sách thứ hai khoá theo ĐÚNG (bang, polname, lenh, vai_tro) — xem NGOAI_LE_HINH_DANG.
   CAU_POLICY_SAI constant text :=
     $q$SELECT c.relname || ': không có policy PERMISSIVE nào (RLS đang từ chối tất cả)' AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -507,9 +583,10 @@ DECLARE
          JOIN pg_class c ON c.oid = p.polrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE $q$ || VI_TU_BANG_TENANT || $q$
+          AND p.polpermissive
           AND ((p.polcmd <> 'a' AND p.polqual IS NULL)
                OR (p.polcmd IN ('*', 'a', 'w') AND p.polwithcheck IS NULL)
-               OR (p.polpermissive AND EXISTS (
+               OR (EXISTS (
                     SELECT 1
                       FROM (VALUES (pg_get_expr(p.polqual, p.polrelid)),
                                    (pg_get_expr(p.polwithcheck, p.polrelid))) AS e(bieu_thuc)
@@ -527,6 +604,8 @@ DECLARE
                              SELECT 1 FROM $q$ || NGOAI_LE_HINH_DANG || $q$
                               WHERE g.bang = c.relname
                                 AND g.polname = p.polname
+                                AND g.lenh = p.polcmd::text
+                                AND g.vai_tro = $q$ || BIEU_THUC_VAI_TRO || $q$
                                 AND g.bieu_thuc = e.bieu_thuc
                                 AND g.pham_vi = CASE
                                       WHEN EXISTS (SELECT 1 FROM pg_attribute a
@@ -951,7 +1030,7 @@ $ham$$q$,
            FOR ten_bang IN
              SELECT c.oid::regclass FROM pg_class c
                JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE $q$ || VI_TU_BANG_TENANT || $q$
+              WHERE $q$ || VI_TU_CAN_CO_RLS || $q$
                 AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)
            LOOP
              EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', ten_bang);
@@ -960,12 +1039,12 @@ $ham$$q$,
          END
          $rls$$q$,
       $q$NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                      WHERE $q$ || VI_TU_BANG_TENANT || $q$
+                      WHERE $q$ || VI_TU_CAN_CO_RLS || $q$
                         AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity))$q$,
-      $q$(SELECT string_agg(c.relname || ' (enable=' || c.relrowsecurity::text
+      $q$(SELECT string_agg(n.nspname || '.' || c.relname || ' (enable=' || c.relrowsecurity::text
                             || ', force=' || c.relforcerowsecurity::text || ')', ', ')
             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-           WHERE $q$ || VI_TU_BANG_TENANT || $q$
+           WHERE $q$ || VI_TU_CAN_CO_RLS || $q$
              AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity))$q$,
       $q$quyền sở hữu các bảng đó hoặc SUPERUSER$q$
     ],
@@ -982,7 +1061,7 @@ $ham$$q$,
       -- [vòng fix 1 — I3] Hướng dẫn cũ ("chép định nghĩa từ migration đã tạo bảng đó") sai ở
       -- chỗ nó ngụ ý phải sửa TAY trên cụm. Nhờ khuôn ba lượt, cả hai đường sửa đều là "sửa
       -- file rồi deploy lại".
-      $q$viết một migration mới sửa policy (lượt 1 không phán xét nên migrate() luôn chạy tới được nó), HOẶC — nếu hình dạng đó là hợp lệ cho ĐÚNG bảng và policy này — thêm một dòng (bang, polname, pham_vi, bieu_thuc) vào NGOAI_LE_HINH_DANG trong chính file này kèm cập nhật meta-test khoá danh sách đó$q$
+      $q$viết một migration mới sửa policy (lượt 1 không phán xét nên migrate() luôn chạy tới được nó), HOẶC — nếu hình dạng đó là hợp lệ cho ĐÚNG bảng, policy, LỆNH và ROLE này — thêm một dòng (bang, polname, lenh, vai_tro, pham_vi, bieu_thuc) vào NGOAI_LE_HINH_DANG trong chính file này kèm cập nhật meta-test khoá danh sách đó. Mỗi dòng thêm vào cửa là một quyết định an ninh không máy nào phán xử hộ được — file này nằm trong .github/CODEOWNERS và đòi review bắt buộc$q$
     ],
 
     -- ---- (C) Đường đọc vòng qua RLS: VIEW · MATVIEW · SECURITY DEFINER ------------------
@@ -1082,6 +1161,56 @@ BEGIN
   -- current_setting/format/current_database. Từ đây trở xuống search_path đã ghim nên các
   -- lời gọi trần còn lại trong thân khối là an toàn.
   PERFORM pg_catalog.set_config('search_path', 'pg_catalog, public', true);
+
+  -- ===== GHIM PHẦN CÒN LẠI CỦA MÔI TRƯỜNG LEX/SO KHỚP ==================================
+  -- [vòng fix 3 — I3] Vòng 2 ghim search_path rồi DỪNG LẠI — không hỏi "còn cấu hình HÀNG
+  -- XÓM nào mà một phép kiểm ở đây phụ thuộc vào?". Hậu quả đo được trên PostgreSQL 16.15:
+  --     ALTER DATABASE d SET standard_conforming_strings = off
+  --       -> migrate() BLOCKED lần 1, lần 2, lần 3... và thông báo ĐỔ LỖI CHO HÀM:
+  --          'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại:
+  --           SELECT NULLIF(pg_catalog.current_ etting(...' trong khi hàm HOÀN TOÀN ĐÚNG.
+  --       Cơ chế: '\s+' dưới scs=off lex thành 's+', nên regexp_replace ĂN MẤT chữ 's'
+  --       trong thân hàm rồi so sánh với bản chuẩn. Đường sửa duy nhất khi ấy là SỬA TAY
+  --       TRÊN CỤM — vi phạm thẳng quy tắc "nếu câu trả lời là 'phải sửa tay trên cụm
+  --       production' thì thiết kế lại".
+  --     Cùng gốc, 5 literal khác đổi nghĩa: '\m...\M' (view security_invoker -> regex không
+  --       bao giờ khớp, MỌI view hợp lệ bị báo thiếu) và 'pg\_toast%' / 'row\_security=%' /
+  --       'search\_path=%' (escape LIKE biến mất -> '_' thành ký tự đại diện, bộ lọc TỰ LÀM
+  --       MÙ MÌNH RỘNG RA).
+  --
+  -- CÁCH SỬA CHỌN: ghim MỘT LẦN CHO TẤT CẢ thay vì vá từng literal. Lý do là lý do tổng
+  -- quát, không phải khẩu vị: vá literal đóng đúng 7 chỗ ĐANG có, còn ghim đóng cả những
+  -- chỗ mà Task 5-10 sẽ viết. Vá từng literal cũng chính là "nới bảo đảm ra để chấp nhận
+  -- mọi giá trị của một cấu hình" — khuôn đã sinh ra CR1-v2.
+  --
+  -- Vì sao ĐỦ để đặt ở đây: cả 7 literal nói trên nằm trong hằng $q$...$q$ của khối DECLARE,
+  -- tức chúng chỉ TRỞ THÀNH literal SQL khi được EXECUTE — sau dòng này. Đã đo: cùng khối DO
+  -- dưới scs=off, EXECUTE trước dòng ghim cho regexp_replace ăn chữ 's', EXECUTE sau dòng
+  -- ghim thì đúng. Hai literal E'' ở cuối file (RAISE EXCEPTION) vốn đã miễn nhiễm.
+  --
+  -- HAI LỚP GUC, mỗi lớp một lý do:
+  --   (1) standard_conforming_strings — đổi cách lex CHÍNH văn bản SQL của file này.
+  --       backslash_quote cùng lớp nhưng CHỈ có nghĩa khi scs=off, nên ghim (1) làm nó vô
+  --       hại; cố ý không thêm một dòng không test nào giết được.
+  --   (2) DateStyle / IntervalStyle / TimeZone / bytea_output — đổi cách pg_get_expr KẾT XUẤT
+  --       hằng bên trong biểu thức policy, tức đổi CHUỖI mà danh sách trắng so khớp. Đã đo
+  --       trên cùng một policy:
+  --         German,DMY + Asia/Tokyo + sql_standard + escape
+  --           -> (ngay > '02.01.2020'::date) AND (gio > '02.01.2020 12:04:05 JST'::...)
+  --              AND (b <> '\\001'::bytea) AND (iv > '1 2:00:00'::interval)
+  --         đã ghim -> (ngay > '2020-01-02'::date) ... '2020-01-02 03:04:05+00' ... '\\x01'
+  --              ... '1 day 02:00:00'
+  --       S0 chưa có policy nào chứa hằng như thế; Task 6 (hạn nộp thầu) gần như chắc chắn
+  --       có. Ghim TRƯỚC khi hình dạng đầu tiên xuất hiện, vì lúc đó cửa NGOAI_LE_HINH_DANG
+  --       sẽ khoá theo đúng chuỗi này.
+  --   ĐÃ ĐO VÀ CỐ Ý KHÔNG GHIM: extra_float_digits (0/3/-3 đều cho cùng một deparse — hằng
+  --   số học trong policy được lưu ở dạng numeric), client_encoding (LATIN1 -> PASS: so
+  --   khớp diễn ra phía SERVER), row_security ở mức DB (đã có mục riêng RESET nó).
+  PERFORM pg_catalog.set_config('standard_conforming_strings', 'on', true);
+  PERFORM pg_catalog.set_config('DateStyle', 'ISO, MDY', true);
+  PERFORM pg_catalog.set_config('IntervalStyle', 'postgres', true);
+  PERFORM pg_catalog.set_config('TimeZone', 'UTC', true);
+  PERFORM pg_catalog.set_config('bytea_output', 'hex', true);
 
   -- [vòng fix 1 — I3] Chế độ lạ là LỖI, không phải "coi như mặc định". Một lỗi chính tả trong
   -- packages/db/src/migrate.ts sẽ làm lượt phán xét im lặng biến mất nếu ở đây khoan dung.

@@ -47,18 +47,59 @@ const HINH_DANG_CHUAN: readonly (readonly [string, string])[] = [
 ];
 
 /**
- * [vòng fix 2 — CR2] Bản sao TypeScript của NGOAI_LE_HINH_DANG — CỬA THEO ĐỐI TƯỢNG, khoá theo
- * (bảng, policy, phạm vi, biểu thức).
+ * [vòng fix 2 — CR2 / vòng fix 3 — I2] Bản sao TypeScript của NGOAI_LE_HINH_DANG — CỬA THEO
+ * ĐỐI TƯỢNG, khoá theo SÁU cột: (bảng, policy, lệnh, vai trò, phạm vi, biểu thức).
  *
- * Vòng 1 chỉ có MỘT danh sách khoá theo (pham_vi, bieu_thuc), tức TOÀN CỤC. Đo được: mô phỏng
- * đúng việc Task 6 sẽ phải làm — thêm một dòng cho policy riêng của app_unseal — rồi
- * "USING (true)" trên CHÍNH bảng users cũng lọt. Mở một hình dạng cho MỘT bảng pre-approve nó
- * cho MỌI bảng tenant hiện tại và tương lai. Nay một ngoại lệ chỉ có hiệu lực ĐÚNG NƠI được cấp.
+ * Vòng 1 chỉ có MỘT danh sách khoá theo (pham_vi, bieu_thuc), tức TOÀN CỤC. Vòng 2 thu về
+ * (bảng, policy) — nhưng vẫn KHÔNG theo LỆNH và ROLE, trong khi chính ghi chú của nó mô tả cửa
+ * bằng "policy riêng FOR SELECT TO app_unseal". Đo được trên PostgreSQL 16.15: cửa cấp cho
+ * (bao_gia, bg_unseal) rồi "ALTER POLICY bg_unseal ON bao_gia TO app_api" -> hardening VẪN
+ * DUYỆT, và app_api gắn tổ chức A đọc bao_gia ra giá của tổ chức B. Nay đổi lệnh HAY đổi role
+ * đều làm dòng ngoại lệ hết khớp.
+ *
+ * `lenh` là pg_policy.polcmd nguyên văn ('*' ALL, 'r' SELECT, 'a' INSERT, 'w' UPDATE,
+ * 'd' DELETE). `vai_tro` là tên role sắp xếp nối bằng ','; policy áp cho PUBLIC ghi 'PUBLIC'
+ * (polroles = {0}, OID 0 không có hàng trong pg_roles — nếu để nó thành chuỗi rỗng thì chỗ
+ * RỘNG NHẤT lại trùng giá trị giữ chỗ của dòng rỗng trong file SQL).
  *
  * RỖNG là trạng thái đúng ở S0, và có test bên dưới đòi mỗi dòng ở đây phải ứng với một policy
  * CÓ THẬT — ngoại lệ chết (bảng/policy đã bị xoá) là ĐỎ, không phải rác im lặng.
  */
-const NGOAI_LE_HINH_DANG: readonly (readonly [string, string, string, string])[] = [];
+type DongNgoaiLe = readonly [
+  bang: string,
+  polname: string,
+  lenh: string,
+  vaiTro: string,
+  phamVi: string,
+  bieuThuc: string,
+];
+const NGOAI_LE_HINH_DANG: readonly DongNgoaiLe[] = [];
+
+/** Danh tính của một policy đủ để so với một dòng ngoại lệ. */
+type DanhTinhPolicy = { ten_bang: string; ten_policy: string; lenh: string; vai_tro: string };
+
+/** MỘT dòng ngoại lệ có khớp MỘT policy đang chạy không — SÁU cột, không phải bốn. */
+function dongKhopPolicy(
+  dong: DongNgoaiLe,
+  hang: DanhTinhPolicy,
+  phamVi: string,
+  bieuThuc: string,
+): boolean {
+  const [bang, pol, lenh, vaiTro, pv, bt] = dong;
+  return (
+    bang === hang.ten_bang &&
+    pol === hang.ten_policy &&
+    lenh === hang.lenh &&
+    vaiTro === hang.vai_tro &&
+    pv === phamVi &&
+    bt === bieuThuc
+  );
+}
+
+/** Có dòng ngoại lệ nào duyệt biểu thức này cho đúng policy này không. */
+function ngoaiLeKhop(hang: DanhTinhPolicy, phamVi: string, bieuThuc: string): boolean {
+  return NGOAI_LE_HINH_DANG.some((dong) => dongKhopPolicy(dong, hang, phamVi, bieuThuc));
+}
 
 /**
  * [S7b-T3] Truy vấn phủ RLS. Cố ý dùng pg_attribute chứ KHÔNG dùng information_schema.columns.
@@ -96,10 +137,23 @@ interface HangPhuRls {
   cuong_che: boolean;
 }
 
+/**
+ * [vòng fix 3 — I2] Bản sao TypeScript của BIEU_THUC_VAI_TRO trong hardening.always.sql.
+ * COLLATE "C" để thứ tự không phụ thuộc collation của database.
+ */
+const CAU_VAI_TRO =
+  "       array_to_string(ARRAY(SELECT coalesce(r.rolname::text, 'PUBLIC') " +
+  "                               FROM unnest(p.polroles) AS o(oid) " +
+  "                               LEFT JOIN pg_roles r ON r.oid = o.oid " +
+  "                              ORDER BY coalesce(r.rolname::text, 'PUBLIC') COLLATE \"C\"), ',') " +
+  "         AS vai_tro, ";
+
 interface HangPolicy {
   ten_bang: string;
   ten_policy: string;
   lenh: string;
+  /** [vòng fix 3 — I2] Tên role của policy, sắp xếp nối ','; PUBLIC ghi 'PUBLIC'. */
+  vai_tro: string;
   cho_phep: boolean;
   bieu_thuc_using: string | null;
   bieu_thuc_with_check: string | null;
@@ -263,22 +317,75 @@ describe("phủ RLS", () => {
     expect(tuSql).toEqual(HINH_DANG_CHUAN);
   });
 
-  // [vòng fix 2 — CR2] Meta-test của CỬA THEO ĐỐI TƯỢNG. Cùng khuôn, bốn cột thay vì hai — nên
-  // Task 6 mở một hình dạng riêng cho app_unseal buộc phải sửa CẢ HAI file, và dòng đó ghi rõ
-  // nó có hiệu lực ở BẢNG NÀO, POLICY NÀO.
+  // [vòng fix 2 — CR2 / vòng fix 3 — I2] Meta-test của CỬA THEO ĐỐI TƯỢNG. Cùng khuôn, SÁU cột
+  // thay vì hai — nên Task 6 mở một hình dạng riêng cho app_unseal buộc phải sửa CẢ HAI file,
+  // và dòng đó ghi rõ nó có hiệu lực ở BẢNG NÀO, POLICY NÀO, LỆNH NÀO, CHO ROLE NÀO.
   it("[CR2] danh sách ngoại lệ theo đối tượng trong hardening.always.sql khớp bản trong test", () => {
     const sql = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
-    const khoi = /NGOAI_LE_HINH_DANG constant text :=\s*\$q\$\(VALUES([\s\S]*?)\)\s*AS g\(/.exec(sql);
+    const khoi =
+      /NGOAI_LE_HINH_DANG constant text :=\s*\$q\$\(VALUES([\s\S]*?)\)\s*AS g\(([^)]*)\)/.exec(sql);
     expect(khoi, "không tìm thấy NGOAI_LE_HINH_DANG trong hardening.always.sql").not.toBeNull();
 
+    // [vòng fix 3 — I2] KHOÁ CHÍNH DANH SÁCH CỘT, không chỉ nội dung. Ở S0 danh sách RỖNG,
+    // nên nếu chỉ so nội dung thì bỏ bớt một cột khỏi khoá vẫn cho ra [] === [] và đi lọt im
+    // lặng — đúng lớp "phép kiểm không thể đo vì lược đồ chưa có ca đó". Sáu tên cột này LÀ
+    // các trục mà một ngoại lệ bị giới hạn vào; mất một trục là nới hàng rào.
+    expect(
+      khoi![2]!.split(",").map((t) => t.trim()),
+      "cột khoá của NGOAI_LE_HINH_DANG đã đổi — mỗi cột là một trục thu hẹp ngoại lệ",
+    ).toEqual(["bang", "polname", "lenh", "vai_tro", "pham_vi", "bieu_thuc"]);
+
+    // [vòng fix 3 — I2] SÁU cột. Meta-test này là thứ buộc Task 6 sửa CẢ HAI file khi mở một
+    // hình dạng, và là thứ sẽ ĐỎ nếu ai đó lặng lẽ bỏ bớt một cột khỏi khoá ở một bên.
     const tuSql = [
-      ...khoi![1]!.matchAll(/\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/g),
+      ...khoi![1]!.matchAll(
+        /\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/g,
+      ),
     ]
       // Dòng RỖNG là chỗ giữ chỗ của danh sách trống trong SQL (VALUES không cho phép 0 hàng),
       // không phải một ngoại lệ. polname không bao giờ rỗng nên nó không khớp policy nào.
       .filter((m) => m[2] !== "")
-      .map((m) => [m[1]!, m[2]!, m[3]!, m[4]!] as const);
+      .map((m) => [m[1]!, m[2]!, m[3]!, m[4]!, m[5]!, m[6]!] as const);
     expect(tuSql).toEqual(NGOAI_LE_HINH_DANG);
+  });
+
+  // [vòng fix 3 — I2] Ở S0 NGOAI_LE_HINH_DANG RỖNG, nên toàn bộ logic so khớp sáu cột là MÃ
+  // CHẾT với mọi test chạy trên lược đồ thật: bỏ vế "lenh" hay vế "vai_tro" khỏi hàm khớp
+  // không làm test nào đỏ. Đó đúng là lớp đột biến sống sót mà vòng này phải đóng, nên đóng
+  // bằng một phép đo TRỰC TIẾP trên hàm khớp thay vì chờ Task 6 tạo ra ca dùng đầu tiên.
+  it("[I2] khớp ngoại lệ đòi ĐỦ SÁU cột — lệch một cột là hết khớp", () => {
+    const dong = [
+      "bao_gia",
+      "bg_unseal",
+      "r",
+      "app_unseal",
+      "co_org_id",
+      "true",
+    ] as const satisfies DongNgoaiLe;
+    const policy = {
+      ten_bang: "bao_gia",
+      ten_policy: "bg_unseal",
+      lenh: "r",
+      vai_tro: "app_unseal",
+    };
+    expect(
+      dongKhopPolicy(dong, policy, "co_org_id", "true"),
+      "khớp đúng sáu cột mà vẫn trượt — cửa đang chặt tới mức vô dụng",
+    ).toBe(true);
+
+    const lech: [string, () => boolean][] = [
+      ["bảng", () => dongKhopPolicy(dong, { ...policy, ten_bang: "users" }, "co_org_id", "true")],
+      ["policy", () => dongKhopPolicy(dong, { ...policy, ten_policy: "khac" }, "co_org_id", "true")],
+      ["lệnh", () => dongKhopPolicy(dong, { ...policy, lenh: "*" }, "co_org_id", "true")],
+      ["role", () => dongKhopPolicy(dong, { ...policy, vai_tro: "app_api" }, "co_org_id", "true")],
+      ["phạm vi", () => dongKhopPolicy(dong, policy, "bang_goc", "true")],
+      ["biểu thức", () => dongKhopPolicy(dong, policy, "co_org_id", "(1 = 1)")],
+    ];
+    for (const [nhan, do_] of lech) {
+      expect(do_(), `lệch cột "${nhan}" mà ngoại lệ VẪN khớp — trục đó không nằm trong khoá`).toBe(
+        false,
+      );
+    }
   });
 
   // [vòng fix 1 — CR1] Hình dạng biểu thức policy, khoá bằng DANH SÁCH TRẮNG. Đọc pg_policy chứ
@@ -303,6 +410,7 @@ describe("phủ RLS", () => {
         await client.query<HangPolicy>(
           "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
             "       p.polpermissive AS cho_phep, " +
+            CAU_VAI_TRO +
             "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
             "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
             "  FROM pg_policy p " +
@@ -321,6 +429,15 @@ describe("phủ RLS", () => {
       await client.query("ROLLBACK");
       client.release();
     }
+
+    // [vòng fix 3 — I2] Cột `vai_tro` phải ĐỌC RA ĐƯỢC, nếu không cả khoá sáu cột chỉ là
+    // trang trí. Mọi policy ở S0 đều áp cho PUBLIC (polroles = {0}), và OID 0 KHÔNG có hàng
+    // trong pg_roles — viết truy vấn theo kiểu JOIN thẳng sẽ cho ra chuỗi RỖNG, tức chỗ RỘNG
+    // NHẤT lại trùng giá trị giữ chỗ của dòng rỗng trong file SQL.
+    expect(
+      [...new Set(rows.map((r) => r.vai_tro))],
+      "vai_tro không kết xuất được PUBLIC — khoá sáu cột đang so bằng chuỗi rỗng",
+    ).toEqual(["PUBLIC"]);
 
     // Không có policy nào thì mọi khẳng định dưới đây rỗng ruột — chốt trước.
     const bangCoPolicy = new Set(rows.map((r) => r.ten_bang));
@@ -368,10 +485,7 @@ describe("phủ RLS", () => {
         // thứ khác là sai, không cần biết nó viết ra sao.
         const duocDuyet =
           HINH_DANG_CHUAN.some(([pv, bt]) => pv === phamVi && bt === bieuThuc) ||
-          NGOAI_LE_HINH_DANG.some(
-            ([bang, pol, pv, bt]) =>
-              bang === hang.ten_bang && pol === hang.ten_policy && pv === phamVi && bt === bieuThuc,
-          );
+          ngoaiLeKhop(hang, phamVi, bieuThuc);
         if (!duocDuyet) {
           viPham.push(
             `${nhan}: ${ten} = ${bieuThuc} — hình dạng không nằm ` +
@@ -400,17 +514,41 @@ describe("phủ RLS", () => {
   //   thừa  -> một dòng trong danh sách trắng không ai dùng: nó chỉ mở rộng bề mặt tấn công.
   //   thiếu -> một hình dạng đang chạy mà không được duyệt (trùng với test trên, cố ý).
   it("[I5] danh sách trắng hình dạng đúng bằng tập hình dạng ĐANG được dùng — không dòng thừa", async () => {
-    const { rows } = await db.pool.query<HangPolicy>(
-      "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
-        "       p.polpermissive AS cho_phep, " +
-        "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
-        "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
-        "  FROM pg_policy p " +
-        "  JOIN pg_class c ON c.oid = p.polrelid " +
-        "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
-        " WHERE n.nspname = 'public' AND c.relname = ANY($1)",
-      [bangTenant],
-    );
+    // [vòng fix 3 — đột biến X2] Bản sao của nhánh miễn trừ RESTRICTIVE nằm CÁCH bản trong
+    // "[INV-F1] mọi biểu thức policy..." đúng 66 dòng, và vòng 2 chỉ dựng fixture cho bản kia.
+    // Đo được: xoá "if (!hang.cho_phep) continue" Ở ĐÂY thì 19/19 test VẪN XANH — mã chết ở S0.
+    // Nay chính test này cũng chạy trong một transaction có sẵn một policy RESTRICTIVE với biểu
+    // thức NGOÀI danh sách trắng, nên bỏ nhánh miễn trừ là ĐỎ ở CẢ HAI chỗ.
+    const client = await db.pool.connect();
+    let rows: HangPolicy[];
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "CREATE POLICY users_chan_bi_khoa ON users AS RESTRICTIVE " +
+          "USING (status <> 'DISABLED') WITH CHECK (status <> 'DISABLED')",
+      );
+      rows = (
+        await client.query<HangPolicy>(
+          "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
+            "       p.polpermissive AS cho_phep, " +
+            CAU_VAI_TRO +
+            "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
+            "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
+            "  FROM pg_policy p " +
+            "  JOIN pg_class c ON c.oid = p.polrelid " +
+            "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+            " WHERE n.nspname = 'public' AND c.relname = ANY($1)",
+          [bangTenant],
+        )
+      ).rows;
+      expect(
+        rows.filter((r) => !r.cho_phep).length,
+        "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
+      ).toBe(1);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
     expect(rows.length, "không có policy nào thì phép kiểm này rỗng ruột").toBeGreaterThan(0);
 
     const coOrgId = new Set(
@@ -425,11 +563,7 @@ describe("phủ RLS", () => {
       const phamVi = coOrgId.has(hang.ten_bang) ? "co_org_id" : "bang_goc";
       for (const bieuThuc of [hang.bieu_thuc_using, hang.bieu_thuc_with_check]) {
         if (bieuThuc === null) continue;
-        const daCoNgoaiLe = NGOAI_LE_HINH_DANG.some(
-          ([bang, pol, pv, bt]) =>
-            bang === hang.ten_bang && pol === hang.ten_policy && pv === phamVi && bt === bieuThuc,
-        );
-        if (!daCoNgoaiLe) dangDung.add(`${phamVi}|${bieuThuc}`);
+        if (!ngoaiLeKhop(hang, phamVi, bieuThuc)) dangDung.add(`${phamVi}|${bieuThuc}`);
       }
     }
 
@@ -444,21 +578,26 @@ describe("phủ RLS", () => {
   // đã bị đổi/xoá) phải ĐỎ, không được nằm lại im lặng. Ở S0 danh sách RỖNG nên phép kiểm này
   // chỉ khoá khuôn; nó có nội dung ngay khi Task 6 thêm dòng đầu tiên.
   it("[CR2] mỗi ngoại lệ hình dạng ứng với một policy CÓ THẬT — không có ngoại lệ chết", async () => {
-    const { rows } = await db.pool.query<{ khoa: string }>(
-      "SELECT c.relname || '|' || p.polname || '|' || " +
-        "       coalesce(pg_get_expr(p.polqual, p.polrelid), '') || '|' || " +
-        "       coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') AS khoa " +
+    const { rows } = await db.pool.query<HangPolicy>(
+      "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
+        "       p.polpermissive AS cho_phep, " +
+        CAU_VAI_TRO +
+        "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
+        "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
         "  FROM pg_policy p " +
         "  JOIN pg_class c ON c.oid = p.polrelid " +
         "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
         " WHERE n.nspname = 'public'",
     );
+    // [vòng fix 3 — I2] Khớp đủ SÁU cột: một ngoại lệ cấp cho FOR SELECT TO app_unseal mà
+    // policy đã bị ALTER sang TO app_api cũng là ngoại lệ CHẾT, không chỉ khi bảng/policy mất.
     const chet = NGOAI_LE_HINH_DANG.filter(
-      ([bang, pol, , bt]) =>
-        !rows.some((r) => {
-          const [rBang, rPol, rUsing, rCheck] = r.khoa.split("|");
-          return rBang === bang && rPol === pol && (rUsing === bt || rCheck === bt);
-        }),
+      (dong) =>
+        !rows.some((r) =>
+          [r.bieu_thuc_using, r.bieu_thuc_with_check].some(
+            (bt) => bt !== null && dongKhopPolicy(dong, r, dong[4], bt),
+          ),
+        ),
     );
     expect(chet, "ngoại lệ hình dạng không ứng với policy nào đang tồn tại").toEqual([]);
   });
