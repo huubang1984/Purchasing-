@@ -4,6 +4,7 @@ import {
   withMigratedDatabase,
   type TestDatabase,
 } from "@trustprocure/test-support";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -536,5 +537,279 @@ describe("migration của dự án", () => {
         unseal_create: false,
       });
     });
+  });
+
+  // ==========================================================================
+  // [fix round 5] Vòng 4 fail-closed đúng chỗ nhưng sai thời điểm: nó xen kẽ "sửa" và
+  // "phán xét", nên vài trôi TỰ CHỮA ĐƯỢC thành KẸT VĨNH VIỄN. Bảy test dưới đây khoá từng
+  // ca một; tất cả đều có dạng "dựng trôi -> migrate() QUA -> trạng thái đã được phục hồi".
+  // ==========================================================================
+
+  // [fix round 5 — R1] Trôi qua NHÓM: app_api không được cấp trực tiếp gì trên app_private,
+  // nó thừa hưởng USAGE từ nhom_xau. Vòng 4 chạy khối cưỡng chế TRƯỚC khối gỡ membership
+  // nên hậu điều kiện bắt được quyền kế thừa trước khi nhóm kịp bị gỡ, rồi cả transaction
+  // rollback — đo thật: "migrate -> GÃY, sau: {u:true, mem:true}", và thông báo bảo người
+  // vận hành cần SUPERUSER trong khi họ ĐANG là superuser.
+  it("[fix round 5 — R1] trôi qua nhóm tự chữa được: gỡ membership TRƯỚC rồi mới kiểm hậu điều kiện", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE ROLE nhom_xau NOLOGIN");
+      await db.pool.query("GRANT USAGE ON SCHEMA app_private TO nhom_xau");
+      await db.pool.query("GRANT nhom_xau TO app_api");
+
+      const truoc = await db.pool.query<{ u: boolean }>(
+        "SELECT has_schema_privilege('app_api','app_private','USAGE') AS u",
+      );
+      expect(truoc.rows[0]?.u).toBe(true); // lỗ hổng có thật, đo trực tiếp
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<{ u: boolean; mem: boolean }>(
+        "SELECT has_schema_privilege('app_api','app_private','USAGE') AS u, " +
+          "EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles b ON b.oid = m.member " +
+          "WHERE b.rolname = 'app_api') AS mem",
+      );
+      expect(sau.rows[0]).toEqual({ u: false, mem: false });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — R2] has_schema_privilege TÍNH CẢ quyền đến qua PUBLIC, nhưng vòng 4
+  // REVOKE chỉ nhắm hai role. Kết quả là một ngõ cụt: đo thật, migrate GÃY NGAY CẢ DƯỚI
+  // SUPERUSER và không bao giờ qua được, vì không câu lệnh nào thu hồi khỏi PUBLIC. Đây
+  // chính là MẶC ĐỊNH của schema public trên PostgreSQL < 15 — một dump cũ khôi phục vào là
+  // kẹt ngay.
+  it("[fix round 5 — R2] trôi cấp cho PUBLIC cũng thu hồi được, không thành ngõ cụt", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("GRANT CREATE ON SCHEMA public TO PUBLIC");
+      await db.pool.query("GRANT USAGE ON SCHEMA app_private TO PUBLIC");
+
+      const truoc = await db.pool.query<{ c: boolean; a: boolean }>(
+        "SELECT has_schema_privilege('app_api','public','CREATE') AS c, " +
+          "has_schema_privilege('app_api','app_private','USAGE') AS a",
+      );
+      expect(truoc.rows[0]).toEqual({ c: true, a: true });
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<{ c: boolean; a: boolean }>(
+        "SELECT has_schema_privilege('app_api','public','CREATE') AS c, " +
+          "has_schema_privilege('app_api','app_private','USAGE') AS a",
+      );
+      expect(sau.rows[0]).toEqual({ c: false, a: false });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — R3] Phát hiện nặng nhất của vòng review này. Vòng 4 chỉ kiểm ACL của hàm,
+  // không kiểm THÂN hàm — đo thật: sau "CREATE OR REPLACE" thay thân, migrate() báo QUA và
+  // app_current_org_id() trả 00000000-0000-4000-8000-000000000001 cho MỌI phiên. Nghĩa là
+  // vô hiệu hoá IM LẶNG toàn bộ RLS mà Task 4–10 sẽ dựng lên: mọi policy
+  // "USING (org_id = app_current_org_id())" khớp đúng một tổ chức cố định cho tất cả.
+  //
+  // Thân hàm đối kháng ở đây cố ý BỌC bản gốc bằng COALESCE thay vì thay hẳn: nó vẫn chứa
+  // đủ mọi chuỗi con của bản chuẩn (NULLIF, pg_catalog.current_setting, app.org_id) nên một
+  // phép kiểm dạng "danh sách chuỗi con" sẽ cho lọt — trong khi nó biến hành vi fail-closed
+  // thành fail-open, đúng thứ nguy hiểm nhất.
+  it("[fix round 5 — R3] thân hàm app_current_org_id() bị thay (kể cả kiểu bọc fail-open) được cưỡng chế lại", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid " +
+          "LANGUAGE sql STABLE AS $ac$ SELECT COALESCE(" +
+          "NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid, " +
+          "'00000000-0000-4000-8000-000000000001'::uuid) $ac$",
+      );
+
+      const truoc = await db.pool.query<{ org: string | null }>(
+        "SELECT app_current_org_id() AS org",
+      );
+      expect(truoc.rows[0]?.org).toBe("00000000-0000-4000-8000-000000000001"); // fail-open
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // Fail-closed trở lại: chưa gắn tổ chức thì KHÔNG hàng nào khớp, không phải "khớp hết".
+      const sau = await db.pool.query<{ org: string | null }>(
+        "SELECT app_current_org_id() AS org",
+      );
+      expect(sau.rows[0]?.org).toBeNull();
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — R3] Ba biến thể khác cùng một họ, mỗi cái tấn công một thuộc tính riêng
+  // mà hậu điều kiện phải canh — hàm biến mất, hàm mất tính STABLE và thành SECURITY
+  // DEFINER, và hàm bị gắn "SET search_path" (mệnh đề chặn inlining: mất inlining là mất
+  // chỉ mục trên mọi bảng có RLS).
+  it("[fix round 5 — R3] DROP FUNCTION / SECURITY DEFINER / SET search_path đều được cưỡng chế lại", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      await db.pool.query("DROP FUNCTION public.app_current_org_id()");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const sauDrop = await db.pool.query<{ t: string | null }>(
+        "SELECT to_regprocedure('public.app_current_org_id()')::text AS t",
+      );
+      expect(sauDrop.rows[0]?.t).toBe("app_current_org_id()");
+
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid " +
+          "LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public, pg_catalog AS $ac$ " +
+          "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid $ac$",
+      );
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{
+        provolatile: string;
+        prosecdef: boolean;
+        proconfig: string[] | null;
+      }>(
+        "SELECT provolatile, prosecdef, proconfig FROM pg_proc " +
+          "WHERE oid = to_regprocedure('public.app_current_org_id()')",
+      );
+      expect(rows[0]).toEqual({ provolatile: "s", prosecdef: false, proconfig: null });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — R3] Đánh đổi của bản vá R3: định nghĩa hàm nay nằm ở HAI file. Test này
+  // là thứ giữ cho đánh đổi đó an toàn — sửa một bên mà quên bên kia thì đỏ ngay, thay vì
+  // để hardening âm thầm ghi đè bản trong 001 bằng một bản khác ở mỗi lần deploy.
+  // Không cần container: chỉ đọc file.
+  it("[fix round 5 — R3] định nghĩa app_current_org_id() trong 001 và trong hardening.always.sql khớp nhau", () => {
+    const docThanHam = (tenFile: string): string => {
+      const duongDan = fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url));
+      const noiDung = readFileSync(duongDan, "utf8");
+      const khop = [...noiDung.matchAll(/LANGUAGE sql STABLE AS \$(\w*)\$([\s\S]*?)\$\1\$/g)];
+      expect(khop).toHaveLength(1); // đúng một định nghĩa mỗi file, không hơn không kém
+      return khop[0]![2]!.replace(/\s+/g, " ").trim();
+    };
+
+    const than001 = docThanHam("001_roles_and_functions.sql");
+    expect(than001).toBe(
+      "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid",
+    );
+    expect(docThanHam("hardening.always.sql")).toBe(than001);
+  });
+
+  // [fix round 5 — R4] Vòng 4 dùng tiền điều kiện "schema tồn tại" cho dòng REVOKE, nên
+  // schema mất là bỏ qua luôn — đo thật: migrate QUA, app_private không bao giờ trở lại (001
+  // đã nằm trong schema_migrations). Test mới của vòng 4 dùng withMigratedDatabase trên DB
+  // mới tinh nên chỉ phủ bootstrap, không phủ ca trôi này.
+  it("[fix round 5 — R4] DROP SCHEMA app_private được tạo lại ở lần migrate() sau", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("DROP SCHEMA app_private CASCADE");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{ e: boolean; u: boolean }>(
+        "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='app_private') AS e, " +
+          "has_schema_privilege('app_api','app_private','USAGE') AS u",
+      );
+      expect(rows[0]).toEqual({ e: true, u: false });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — Minor] pg_db_role_setting còn hàng setrole = 0 — "ALTER DATABASE d SET"
+  // áp cho MỌI role. Vòng 4 join r.rolname IN ('app_api','app_unseal') nên bỏ sót hẳn: đo
+  // thật, migrate QUA và setconfig còn ["row_security=off"].
+  it("[fix round 5] cấu hình đặt ở MỨC DATABASE (setrole = 0) cũng được reset", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: d } = await db.pool.query<{ ten: string }>(
+        "SELECT current_database() AS ten",
+      );
+      const tenDb = d[0]!.ten;
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET row_security = off`);
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET search_path = ke_gian, public`);
+
+      const truoc = await db.pool.query<{ s: string[] | null }>(
+        "SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0",
+      );
+      expect(truoc.rows[0]?.s).toEqual(["row_security=off", "search_path=ke_gian, public"]);
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<{ s: string[] | null }>(
+        "SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0",
+      );
+      expect(sau.rows[0]?.s ?? null).toBeNull();
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 5 — R3] Test PHÁT HIỆN, tách khỏi test PHỤC HỒI ở trên. Cần cả hai vì hai
+  // test đó canh hai nửa khác nhau của bản vá và một nửa không suy ra nửa kia:
+  //   - test phục hồi canh CÂU LỆNH (CREATE OR REPLACE chạy vô điều kiện ở BƯỚC 2);
+  //   - test này canh HẬU ĐIỀU KIỆN (biểu thức "kiem_tra").
+  // Tự kiểm chứng bằng đột biến trước khi viết test này: xoá hẳn phép so thân hàm khỏi
+  // kiem_tra, hoặc xoá các kiểm provolatile/prosecdef/proconfig, thì test phục hồi VẪN XANH
+  // — vì câu lệnh cưỡng chế sửa lại bất kể phép kiểm nói gì. Phép kiểm chỉ trở thành thứ
+  // duy nhất còn tác dụng khi role deploy KHÔNG sửa nổi (không sở hữu hàm), và đó chính là
+  // kịch bản dựng ở đây: bootstrap bằng superuser (hàm thuộc sở hữu postgres), deploy sau
+  // chạy dưới role thường.
+  it("[fix round 5 — R3] role deploy không sửa nổi thì thân/thuộc tính hàm sai phải GÃY, không đi tiếp im lặng", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Không trôi: deploy thường vẫn phải QUA (đối chứng cho hai phần dưới).
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        // (a) THÂN hàm sai — bọc fail-open, giữ nguyên mọi thuộc tính. Chỉ phép so thân hàm
+        //     bắt được ca này.
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid " +
+            "LANGUAGE sql STABLE AS $ac$ SELECT COALESCE(" +
+            "NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid, " +
+            "'00000000-0000-4000-8000-000000000001'::uuid) $ac$",
+        );
+        const loiThan = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loiThan).not.toBeNull();
+        expect(loiThan!.message).toContain("định nghĩa hàm app_current_org_id()");
+        expect(loiThan!.message).toContain("Cần quyền");
+
+        // (b) THUỘC TÍNH sai — thân hàm ĐÚNG nguyên văn bản chuẩn, chỉ đổi VOLATILE +
+        //     SECURITY DEFINER + SET search_path. Chỉ các kiểm provolatile/prosecdef/
+        //     proconfig bắt được ca này; phép so thân hàm thì không.
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid " +
+            "LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public, pg_catalog AS $ac$\n" +
+            "  SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid\n" +
+            "$ac$",
+        );
+        const loiThuocTinh = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loiThuocTinh).not.toBeNull();
+        expect(loiThuocTinh!.message).toContain("định nghĩa hàm app_current_org_id()");
+        expect(loiThuocTinh!.message).toContain("secdef=true");
+      } finally {
+        await poolTrienKhai.end();
+      }
+    } finally {
+      await db.stop();
+    }
   });
 });

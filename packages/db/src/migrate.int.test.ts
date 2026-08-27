@@ -258,4 +258,63 @@ describe("bộ chạy migration", () => {
       await db.pool.query(`DROP DATABASE IF EXISTS ${TEN_DB} WITH (FORCE)`);
     }
   });
+
+  // [fix round 5 — M10 + Minor] Vòng 4 khai rằng không dựng được ca xác định phân biệt
+  // release(err) với release() trần; reviewer chỉ ra ca đó chỉ cần một câu SQL: thu hồi
+  // EXECUTE trên chính pg_advisory_unlock rồi chạy migrate() dưới role không phải superuser.
+  // Khi ấy unlock ném 42501 TRONG KHI KẾT NỐI VẪN SỐNG — khác hẳn ca cũ (backend bị giết),
+  // nơi socket đã đứt trước lúc release() nên pg-pool huỷ client theo cả hai đường.
+  //
+  // Hai đại lượng được khẳng định, đại lượng thứ hai mới là đại lượng nghiêm trọng:
+  //   release(err): total=0 idle=0, 0 advisory lock còn giữ
+  //   release()   : total=1 idle=1, 1 advisory lock CÒN GIỮ  <- client hỏng nằm trong pool
+  //                 vẫn đang giữ khoá migration, nên mọi migrate() sau đó trên pool ấy chờ
+  //                 vĩnh viễn một khoá không ai nhả.
+  // Đồng thời khoá luôn Minor "nhánh catch của unlock không log, không rethrow": trước bản
+  // vá, migrate() ở đây trả QUA bình thường và lỗi 42501 biến mất hoàn toàn.
+  it("[fix round 5 — M10] unlock bị từ chối quyền khi kết nối còn sống: không rò rỉ client, không kẹt advisory lock, lỗi không biến mất", async () => {
+    // Database riêng: test này phải TỰ ĐỦ, không mượn schema_migrations do test trước tạo.
+    // (Bản đầu của chính test này mượn, và khi chạy một mình bằng "vitest -t" thì đỏ vì
+    // "relation schema_migrations does not exist" — tức là nó ĐỎ vì lý do sai, làm hỏng
+    // luôn giá trị kiểm chứng bằng đột biến.)
+    const TEN_DB = "tp_kiem_tra_mo_khoa";
+    const TEN_ROLE = "khong_sieu_quyen";
+    await db.pool.query(`CREATE DATABASE ${TEN_DB}`);
+    await db.pool.query(`CREATE ROLE ${TEN_ROLE} LOGIN PASSWORD 'mat-khau-kiem-thu'`);
+
+    const urlSieuQuyen = new URL(db.connectionString);
+    urlSieuQuyen.pathname = `/${TEN_DB}`;
+    const urlThuong = new URL(urlSieuQuyen.toString());
+    urlThuong.username = TEN_ROLE;
+    urlThuong.password = "mat-khau-kiem-thu";
+
+    const poolSieuQuyen = new pg.Pool({ connectionString: urlSieuQuyen.toString(), max: 1 });
+    const poolThuong = new pg.Pool({ connectionString: urlThuong.toString(), max: 2 });
+    try {
+      await poolSieuQuyen.query(`GRANT CREATE, USAGE ON SCHEMA public TO ${TEN_ROLE}`);
+      // Đây là toàn bộ mẹo dựng ca: lock vẫn chạy được, unlock thì không.
+      await poolSieuQuyen.query(
+        "REVOKE EXECUTE ON FUNCTION pg_advisory_unlock(bigint) FROM PUBLIC",
+      );
+
+      const dir = migrationDir({ "110_mo_khoa.sql": "CREATE TABLE mig_m (id int);" });
+
+      // Lỗi KHÔNG được biến mất: migrate() phải ném, và nói rõ là chuyện advisory lock.
+      await expect(migrate(poolThuong, dir)).rejects.toThrow(/advisory lock/);
+
+      expect(poolThuong.totalCount).toBe(0);
+      expect(poolThuong.idleCount).toBe(0);
+
+      const { rows } = await poolSieuQuyen.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' " +
+          "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
+      );
+      expect(rows[0]?.n).toBe(0);
+    } finally {
+      await poolThuong.end();
+      await poolSieuQuyen.end();
+      await db.pool.query(`DROP DATABASE IF EXISTS ${TEN_DB} WITH (FORCE)`);
+      await db.pool.query(`DROP ROLE IF EXISTS ${TEN_ROLE}`);
+    }
+  });
 });

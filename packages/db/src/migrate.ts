@@ -63,6 +63,44 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
   const boQuaLoiKetNoi = (): void => {};
   lockClient.on("error", boQuaLoiKetNoi);
 
+  // [fix round 5 — Minor] Nhả khoá + trả client về pool. Trả về lỗi thay vì ném, để người
+  // gọi quyết định: lỗi dọn dẹp KHÔNG được che lỗi gốc của migration (xem [fix I1] về
+  // ROLLBACK — cùng một nguyên tắc), nhưng cũng KHÔNG được biến mất khi migration thành
+  // công. Bản trước nuốt trọn nhánh catch này: đã đo thật, "REVOKE EXECUTE ON FUNCTION
+  // pg_advisory_unlock(bigint) FROM PUBLIC" rồi chạy migrate() dưới role non-superuser cho
+  // ra "migrate -> QUA" trong khi unlock đã ném 42501 — lỗi biến mất hoàn toàn.
+  let daDonDep = false;
+  const nhaKhoaVaTraClient = async (): Promise<Error | null> => {
+    // Chốt chạy-một-lần: nhánh catch bên dưới gọi lại hàm này sau khi nhánh thành công đã
+    // gọi rồi (lỗi "không nhả được khoá" ném ra TỪ TRONG try). Gọi release() hai lần trên
+    // cùng một client là lỗi của pg-pool, nên chặn ở đây thay vì nhân đôi luồng điều khiển.
+    if (daDonDep) return null;
+    daDonDep = true;
+    try {
+      await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+      // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI
+      // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
+      lockClient.off("error", boQuaLoiKetNoi);
+      lockClient.release();
+      return null;
+    } catch (loiKhiMoKhoa) {
+      // [fix I1] Bản trước: "await lockClient.query(unlock); lockClient.release();" — nếu
+      // unlock ném lỗi, release() KHÔNG BAO GIỜ CHẠY, client rò rỉ vĩnh viễn trong sổ sách
+      // của pool (vẫn tính là "checked out"): pool.query()/pool.end() sau đó TREO VĨNH VIỄN
+      // trên pool max:1.
+      //
+      // [fix round 5 — M10] release(err) chứ không release() trần, và đây là chỗ khác biệt
+      // ĐO ĐƯỢC giữa hai biến thể — trong ca unlock ném 42501 mà KẾT NỐI VẪN SỐNG:
+      //   release(err): pg-pool huỷ client        -> total=0 idle=0, 0 advisory lock còn giữ
+      //   release()   : client hỏng quay lại pool -> total=1 idle=1, 1 advisory lock CÒN GIỮ
+      // Vế thứ hai mới là vế nghiêm trọng: client nằm trong pool VẪN ĐANG GIỮ khoá migration,
+      // nên mọi migrate() sau đó trên pool ấy chờ vĩnh viễn một khoá không ai nhả.
+      lockClient.off("error", boQuaLoiKetNoi);
+      lockClient.release(loiKhiMoKhoa as Error);
+      return loiKhiMoKhoa as Error;
+    }
+  };
+
   try {
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
@@ -153,25 +191,20 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
       }
     }
 
-    return applied;
-  } finally {
-    // [fix I1] Bản trước: "await lockClient.query(unlock); lockClient.release();" — nếu
-    // unlock ném lỗi (kết nối đã chết), release() KHÔNG BAO GIỜ CHẠY, client rò rỉ vĩnh viễn
-    // trong sổ sách của pool (vẫn tính là "checked out"). Đã tự đo: pool.query()/pool.end()
-    // sau đó TREO VĨNH VIỄN, không timeout, trên pool max:1. Sửa bằng cách bọc riêng: nếu
-    // unlock thất bại, gọi release(err) để pg-pool LOẠI BỎ client hỏng khỏi sổ sách thay vì
-    // để nó kẹt ở trạng thái lấp lửng. Không cần lo khoá advisory bị kẹt — Postgres tự nhả
-    // nó khi backend giữ khoá chết, không phụ thuộc client Node có gọi unlock được hay không.
-    //
-    // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI nhánh
-    // — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
-    try {
-      await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
-      lockClient.off("error", boQuaLoiKetNoi);
-      lockClient.release();
-    } catch (loiKhiMoKhoa) {
-      lockClient.off("error", boQuaLoiKetNoi);
-      lockClient.release(loiKhiMoKhoa as Error);
+    const loiKhiMoKhoa = await nhaKhoaVaTraClient();
+    if (loiKhiMoKhoa !== null) {
+      throw new Error(
+        `Không nhả được advisory lock của migrate() sau khi áp dụng xong: ` +
+          `${loiKhiMoKhoa.message}`,
+        { cause: loiKhiMoKhoa },
+      );
     }
+    return applied;
+  } catch (loiGoc) {
+    // Lỗi GỐC luôn thắng: nếu thân hàm đã hỏng thì lỗi dọn dẹp không được che nó. Kết quả
+    // của nhaKhoaVaTraClient() ở đây cố ý bỏ qua — nhưng client vẫn được trả về pool đúng
+    // cách trên cả hai nhánh của nó, nên không rò rỉ.
+    await nhaKhoaVaTraClient();
+    throw loiGoc;
   }
 }

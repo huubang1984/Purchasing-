@@ -77,6 +77,13 @@ CREATE SCHEMA IF NOT EXISTS app_private;
 -- kế hoạch) gọi hàm này KHÔNG qualify trong USING/WITH CHECK của RLS policy — chuyển schema
 -- sẽ đòi hỏi đổi search_path hệ thống, ảnh hưởng diện rộng ngoài phạm vi task này. Vì vậy
 -- dùng đúng lớp REVOKE/GRANT theo hàm (không phải lớp schema) để khoá hàm này.
+-- [fix round 5 — R3] ĐỊNH NGHĨA NÀY ĐƯỢC NHÂN BẢN trong db/migrations/hardening.always.sql
+-- và hai bản BẮT BUỘC phải giống nhau. Lý do nhân bản: chỉ kiểm ACL của hàm là không đủ —
+-- một "CREATE OR REPLACE FUNCTION" thay thân hàm đi lọt qua migrate() mà không bị phát hiện,
+-- và hậu quả là vô hiệu hoá IM LẶNG toàn bộ RLS của Task 4–10 (mọi policy khớp đúng một tổ
+-- chức cố định cho mọi người). hardening.always.sql cưỡng chế lại thân hàm ở MỌI lần gọi
+-- migrate(), nên nó phải mang bản chuẩn. Có test đọc CẢ HAI file và so sánh thân hàm đã
+-- chuẩn hoá khoảng trắng — sửa một bên mà quên bên kia là ĐỎ ngay.
 CREATE OR REPLACE FUNCTION app_current_org_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid
