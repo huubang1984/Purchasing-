@@ -20,7 +20,7 @@
 - Không module nào ngoài `apps/unseal-worker/**` được import entrypoint `@trustprocure/crypto-keys/unwrap`.
 - Không bao giờ ghi log: giá, mật khẩu, token, mã OTP, khóa, bí mật TOTP.
 - **Ngôn ngữ đặt tên.** Mặt tiền công khai của mỗi package — tên hàm export, tên kiểu, tên trường trong interface, mã quyền, tên cột và tên bảng SQL — bằng **tiếng Anh**. Biến cục bộ, tham số nội bộ, tên biến trong hàm SQL, và tên test được dùng **tiếng Việt không dấu hoặc có dấu**, đúng như mã nguồn mẫu trong kế hoạch này. Bình luận, thông báo lỗi hướng người dùng, và commit message bằng tiếng Việt. Đây là ràng buộc đã chốt ngày 2026-08-27 — người review không được coi tên biến cục bộ tiếng Việt là lỗi.
-- Mỗi test kiểm chứng một bất biến phải có mã bất biến trong tên test theo dạng `[INV-A1]`. Đây là đầu vào của bộ sinh `evidence/INV-matrix.md` (Task 11).
+- Mỗi test kiểm chứng một bất biến phải có mã bất biến trong tên test theo dạng `[INV-A1]`. Phạm vi: 34 bất biến nghiệp vụ nhóm A–G (`docs/TEST-PLAN.md` §2) **và** 10 bất biến hàng rào nhóm H (§5). Test hạ tầng thuần tuý, không kiểm chứng bất biến nào, thì không cần tag. Đây là đầu vào của bộ sinh `evidence/INV-matrix.md` (Task 11).
 - Commit sau mỗi task. Không gộp nhiều task vào một commit.
 
 ## Bản đồ file
@@ -4216,7 +4216,7 @@ va che mat van de."
 
 ## Task 11: Bộ sinh ma trận bất biến và evidence pack
 
-**Bất biến liên quan:** cơ chế bảo vệ **toàn bộ 34 bất biến** khỏi bị bỏ quên khi hệ thống lớn lên.
+**Bất biến liên quan:** cơ chế bảo vệ **toàn bộ 44 mã bất biến (34 nghiệp vụ nhóm A–G + 10 hàng rào nhóm H)** khỏi bị bỏ quên khi hệ thống lớn lên.
 
 > Đây là hạng mục biến kỷ luật kỹ thuật thành tài sản thương mại. Khi kiểm toán viên của khách hàng hỏi *"làm sao chứng minh nhân viên mua hàng không xem được giá trước giờ mở?"*, câu trả lời là bảng này kèm lịch sử chạy, thay vì một lời hứa. Mục 37 của đặc tả đặt North Star Metric là *Verified Competitive Spend*; chữ **Verified** chính là bảng này.
 
@@ -4343,8 +4343,8 @@ export interface TestOutcome {
   readonly status: "passed" | "failed" | "skipped";
 }
 
-const HANG_BAT_BIEN = /^\|\s*\*\*([A-G]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
-const NHAN_BAT_BIEN = /\[INV-([A-G]\d+)\]/g;
+const HANG_BAT_BIEN = /^\|\s*\*\*([A-H]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
+const NHAN_BAT_BIEN = /\[INV-([A-H]\d+)\]/g;
 
 function lamSach(cell: string): string {
   return cell.trim().replace(/^\*\*(.*)\*\*$/, "$1").trim();
@@ -4541,7 +4541,7 @@ Thêm job vào `.github/workflows/ci.yml`:
 
 Chạy: `pnpm evidence`
 
-Kỳ vọng: **THẤT BẠI có chủ đích.** Ở cuối S0, nhóm A (bí mật giá), phần lớn nhóm B, C, E chưa có test nào vì chúng thuộc S1. Ma trận sẽ báo khoảng 20 trong 34 bất biến ở trạng thái `CHƯA PHỦ`.
+Kỳ vọng: **THẤT BẠI có chủ đích.** Ở cuối S0, nhóm A (bí mật giá), phần lớn nhóm B, C, E chưa có test nào vì chúng thuộc S1. Ma trận sẽ báo khoảng 21 trong 44 mã ở trạng thái `CHƯA PHỦ`.
 
 Đây là kết quả **đúng** và là điều cần thấy: nó liệt kê chính xác phần việc còn lại của S1, và ngăn bất kỳ ai tuyên bố hệ thống đã sẵn sàng khi chưa có bằng chứng.
 
@@ -4607,7 +4607,7 @@ S0 xong khi **tất cả** đúng:
 2. `pnpm t0 && pnpm test && pnpm test:int` xanh tại máy và trên CI.
 3. Hai hook đã được kiểm chứng **bằng cách thật sự bị chặn** trong một phiên Claude Code, không chỉ bằng unit test.
 4. Quy tắc `khong-giai-ma-ngoai-unseal-worker` đã được chứng minh chặn thật bằng test đối kháng ở task 2.
-5. `pnpm evidence` sinh được `evidence/INV-matrix.md`, và báo đúng 13/34 bất biến đã phủ.
+5. `pnpm evidence` sinh được `evidence/INV-matrix.md`, và báo đúng 23/44 mã đã phủ (13 nghiệp vụ nhóm A–G + 10 hàng rào nhóm H).
 6. `pnpm bench:keys` đã chạy, con số thông lượng đã ghi vào `docs/STATE.md`.
 7. `docs/STATE.md` phản ánh đúng trạng thái thật, đã đối chiếu với mã nguồn.
 8. `security-reviewer` đã chạy trên task 4, 5, 6, 7, 8, 9 và mọi phát hiện CRITICAL/HIGH đã xử lý.

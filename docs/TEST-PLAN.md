@@ -101,7 +101,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến.**
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 10 bất biến hàng rào (nhóm H, §5) là 44 mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
@@ -228,18 +228,28 @@ lời là bảng này kèm lịch sử chạy, thay vì một lời hứa.
 Hai hook của `ai-eng-os` cũng là mã cần kiểm chứng, không phải cấu hình được tin tưởng
 mặc nhiên. Chúng đã từng fail-open trên máy phát triển (spec §8.1).
 
-| # | Test | Kỳ vọng |
-|---|---|---|
-| 1 | `git reset --hard HEAD~1` | CHẶN, mã thoát 2 |
-| 2 | `git clean -fd` | CHẶN |
-| 3 | `git push --force origin main` | CHẶN |
-| 4 | `git checkout -- .` | CHẶN |
-| 5 | `git branch -D feature` | CHẶN |
-| 6 | `git status` | CHO QUA |
-| 7 | Ghi vào `.env`, `.pem`, `.key`, `id_rsa`, `id_ed25519`, `.p12`, `.pfx`, `.jks`, `.npmrc`, `.pgpass` | CHẶN |
-| 8 | Ghi vào `src/index.ts` | CHO QUA |
-| 9 | **Đầu vào JSON hỏng hoặc rỗng** | **CHẶN** — fail-closed |
-| 10 | **Thiếu phụ thuộc runtime** | **CHẶN** — fail-closed |
+Hàng rào cũng là một biện pháp kiểm soát, nên nó cũng có mã và cũng nằm trong evidence
+pack. Nhóm **H** dùng chung cơ chế với 34 bất biến nghiệp vụ: test phải mang mã trong tên
+theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 
-Mục 9 và 10 là bài học rút ra từ sự cố `jq`: một biện pháp kiểm soát thất bại phải thất
-bại theo hướng an toàn. Đúng bài học mà chính TrustProcure bán cho khách hàng.
+| ID | Bất biến | Cưỡng chế | Tầng test |
+|---|---|---|---|
+| **H1** | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 |
+| **H2** | `git clean -f*` bị chặn | Hook `git-safety` | T1 |
+| **H3** | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 |
+| **H4** | Lệnh xoá bỏ thay đổi cục bộ (`checkout -- .`, `restore .`) bị chặn | Hook `git-safety` | T1 |
+| **H5** | Lệnh viết lại lịch sử (`branch -D`, `filter-branch`, `stash clear/drop`, `reflog expire`, `update-ref -d`) bị chặn | Hook `git-safety` | T1 |
+| **H6** | **Tuỳ chọn toàn cục của git không được vô hiệu hoá quy tắc nào** — `git -C <dir>`, `git -c k=v`, `git --no-pager`, cờ bị bọc nháy | Hook `git-safety` | T1 |
+| **H7** | Lệnh git vô hại được cho qua — hàng rào không được cản trở công việc bình thường | Hook `git-safety` | T1 |
+| **H8** | Ghi vào file bí mật bị chặn, **không phân biệt hoa thường**: `.env`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `id_rsa`, `id_ed25519`, `credentials.json`, `secrets.y*ml`, `.npmrc`, `.pgpass`, `.netrc`, `.claude/settings*.json` | Hook `protect-secrets` | T1 |
+| **H9** | File nguồn thường và `.env.example` được cho qua — khớp theo tên và phần mở rộng, không khớp chuỗi con | Hook `protect-secrets` | T1 |
+| **H10** | **Đầu vào rỗng, JSON hỏng, thiếu trường, sai kiểu, hoặc thiếu phụ thuộc runtime đều CHẶN** — fail-closed | Cả hai hook | T1 |
+
+**H10 là bài học rút ra từ sự cố `jq`**: một biện pháp kiểm soát thất bại phải thất bại
+theo hướng an toàn. Không có hàng rào thì người ta còn cẩn thận; có hàng rào hỏng thì
+người ta thôi cẩn thận. Đúng bài học mà chính TrustProcure bán cho khách hàng.
+
+**H6 và H8 được bổ sung ngày 2026-08-27** sau khi vòng review Task 1 tìm ra hai lỗ hổng
+đã kiểm chứng: `git -C . reset --hard` lọt qua cả mười quy tắc, và `.ENV` / `ID_RSA` lọt
+qua trên hệ thống tệp không phân biệt hoa thường của Windows. Cả hai đều là "hàng rào
+tồn tại trên giấy" — đúng loại lỗi mà chính nhóm H này sinh ra để bắt.
