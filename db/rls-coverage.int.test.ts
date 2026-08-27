@@ -649,9 +649,18 @@ describe("phủ RLS", () => {
     // [vòng fix 2 — Minor] users chỉ còn SELECT ở MỨC BẢNG: INSERT/UPDATE nay là quyền CỘT
     // (đóng oracle users_pkey — xem 002). Chính vì thế khẳng định này KHÔNG đủ một mình, và
     // test [M5] ngay dưới là lớp bắt buộc chứ không phải lớp trang trí.
+    // [Task 5] Hai bảng sổ kiểm toán chỉ có SELECT ở MỨC BẢNG — INSERT của chúng cũng là quyền
+    // CỘT (đóng oracle audit_events_pkey, cùng khuôn users). Bất biến B4 ("không role nào có
+    // UPDATE/DELETE/TRUNCATE trên bảng sổ") KHÔNG được khẳng định ở đây: view này lọc theo
+    // grantee nên nó mù với PUBLIC, và nó mù hẳn với quyền cột. Phép kiểm có thẩm quyền cho B4
+    // đọc pg_class.relacl + pg_attribute.attacl ở db/audit-append-only.int.test.ts.
     expect(rows).toEqual([
+      { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
+      { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
     ]);
   });
@@ -678,7 +687,31 @@ describe("phủ RLS", () => {
     //                                    không ai dùng nay trả CÙNG một "permission denied").
     //   `org_id`     KHÔNG có UPDATE  -> không chuyển được một hàng sang tổ chức khác.
     //   `created_at` KHÔNG có gì      -> đã có DEFAULT; quyền không dùng tới thì không cấp.
+    // [Task 5] Bốn vắng mặt nữa trên hai bảng sổ, mỗi cái đóng một đường đi:
+    //   `id`          KHÔNG có INSERT -> audit_events_pkey/audit_chain_anchors_pkey không dùng
+    //                                    làm oracle xuyên tổ chức được (đã đo: INSERT mang id
+    //                                    CÓ THẬT của tổ chức khác và id không ai dùng trả về
+    //                                    CÙNG một "permission denied for table audit_events").
+    //   `occurred_at` KHÔNG có gì      -> dấu thời gian do CSDL đóng; bên ghi chọn được
+    //   `anchored_at` KHÔNG có gì         occurred_at là một sổ sắp xếp lại được theo ý mình.
+    //   Và KHÔNG có UPDATE trên bất kỳ cột nào của hai bảng đó — đó chính là bất biến B4.
     expect(rows).toEqual([
+      { grantee: "app_api", bang: "audit_chain_anchors", cot: "hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_chain_anchors", cot: "seq", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "action", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "ip", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "payload", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "prev_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "request_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "seq", quyen: "INSERT" },
+      { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "UPDATE" },
@@ -687,6 +720,22 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "users", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "hash", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "seq", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "action", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "hash", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "ip", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "payload", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "prev_hash", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "request_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "seq", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
     ]);
   });
 
@@ -726,6 +775,15 @@ describe("phủ RLS", () => {
     const cuaUnseal = rows.filter((r) => r.grantee === "app_unseal").map((r) => r.khoa);
 
     expect(cuaUnseal.length).toBeGreaterThan(0); // chống rỗng ruột
+    // [Task 5] Chống rỗng ruột lớp hai, và đây là lý do nó được thêm: Task 5 cấp cho app_unseal
+    // quyền trên hai bảng MỚI, GIỐNG HỆT quyền của app_api. Nếu câu truy vấn ở trên vì lý do
+    // nào đó không nhìn thấy hai bảng đó (nó gộp role_table_grants với role_column_grants, và
+    // quyền INSERT của bảng sổ CHỈ tồn tại ở vế thứ hai), khẳng định "bao trùm" vẫn xanh —
+    // nhưng xanh vì phép đo bỏ sót, không vì trạng thái đúng. Neo nó vào một khoá cụ thể.
+    expect(
+      cuaUnseal,
+      "phép đo bỏ sót quyền CỘT trên bảng sổ — khoản nợ này sẽ xanh vì lý do sai",
+    ).toContain("audit_events.hash:INSERT");
     const baoTrum = cuaUnseal.every((k) => cuaApi.has(k));
     expect(
       baoTrum,

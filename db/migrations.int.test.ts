@@ -711,10 +711,21 @@ describe("migration của dự án", () => {
         "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid LANGUAGE sql STABLE " +
           "AS $ac$ SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid $ac$",
       );
-      for (const bang of ["organizations", "users"]) {
-        const cot = bang === "organizations" ? "id" : "org_id";
+      // [Task 5] Danh sách này KHÔNG viết tay: từ khi 003 thêm hai bảng sổ, một danh sách cứng
+      // sẽ khôi phục thiếu và test đỏ vì lý do không liên quan tới thứ nó đang đo. Đọc thẳng
+      // tập bảng tenant từ catalog cho nó tự lớn theo lược đồ.
+      const { rows: bangTenant } = await db.pool.query<{ ten: string; cot: string }>(
+        "SELECT c.relname AS ten, " +
+          "       CASE WHEN EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid " +
+          "                          AND a.attname = 'org_id' AND a.attnum > 0 " +
+          "                          AND NOT a.attisdropped) THEN 'org_id' ELSE 'id' END AS cot " +
+          "  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+          " WHERE n.nspname = 'public' AND c.relrowsecurity ORDER BY 1",
+      );
+      expect(bangTenant.length, "không có bảng tenant nào để khôi phục").toBeGreaterThan(1);
+      for (const { ten, cot } of bangTenant) {
         await db.pool.query(
-          `CREATE POLICY ${bang}_tenant_isolation ON ${bang} ` +
+          `CREATE POLICY ${ten}_tenant_isolation ON ${ten} ` +
             `USING (${cot} = app_current_org_id()) WITH CHECK (${cot} = app_current_org_id())`,
         );
       }
@@ -1679,7 +1690,11 @@ describe("migration của dự án", () => {
       const poolThuDich = createPool(db.connectionString, 2);
       try {
         const lan1 = await migrate(poolThuDich, MIGRATIONS_DIR);
-        expect(lan1).toEqual(["001_roles_and_functions.sql", "002_organizations_and_users.sql"]);
+        expect(lan1).toEqual([
+          "001_roles_and_functions.sql",
+          "002_organizations_and_users.sql",
+          "003_audit_events.sql",
+        ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
 
@@ -2386,6 +2401,268 @@ describe("migration của dự án", () => {
       await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([
         "003_policy_cho_bang_tach.sql",
       ]);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 120_000);
+  // ==========================================================================================
+  // [T5] SỔ KIỂM TOÁN CHỈ-GHI-THÊM — ba đường trôi im lặng, cả ba tự chữa
+  // ==========================================================================================
+  // Bất biến B4 nằm ở một hàm và sáu trigger do 003_audit_events.sql tạo ĐÚNG MỘT LẦN. Task 3
+  // đã trả giá đúng lớp lỗi này hai lần (R3 với thân hàm, I3 với cờ RLS): thứ chỉ chạy một lần
+  // thì trôi vĩnh viễn, vì file đã nằm trong schema_migrations.
+  it("[T5] thân hàm chan_sua_xoa() bị thay bằng RETURN NEW được cưỡng chế lại ở lần migrate() sau", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: org } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
+      );
+      await db.pool.query(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+          "VALUES ($1, 1, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256('x'::bytea))",
+        [org[0]!.id],
+      );
+
+      // Đột biến: thân hàm thành đúng "RETURN NEW;". Một phép kiểm dạng "hàm còn tồn tại
+      // không" hay "trigger còn đó không" xanh hết — hàm vẫn tên đó, sáu trigger vẫn nguyên.
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.chan_sua_xoa() RETURNS trigger " +
+          "LANGUAGE plpgsql AS $ac$ BEGIN RETURN NEW; END $ac$",
+      );
+
+      // Đo hậu quả TRƯỚC khi vá, để không ai nghi ngờ đột biến này là vô hại.
+      await expect(
+        db.pool.query("UPDATE audit_events SET action = 'SUA_TROM'"),
+      ).resolves.toMatchObject({ rowCount: 1 });
+      await expect(db.pool.query("TRUNCATE audit_events")).resolves.toBeTruthy();
+      const trong = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events",
+      );
+      expect(trong.rows[0]!.n, "sổ kiểm toán đã bị xoá sạch mà không một lỗi nào").toBe("0");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      await db.pool.query(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+          "VALUES ($1, 1, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256('x'::bytea))",
+        [org[0]!.id],
+      );
+      for (const cau of [
+        "UPDATE audit_events SET action = 'SUA_TROM'",
+        "DELETE FROM audit_events",
+        "TRUNCATE audit_events",
+      ]) {
+        await expect(db.pool.query(cau), cau).rejects.toThrow(/chỉ-ghi-thêm|append-only/i);
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // Năm cách vô hiệu hoá trigger, bốn trong số đó GIỮ NGUYÊN TÊN trigger nên chúng đi lọt mọi
+  // phép kiểm dạng "trigger còn đó không". Tất cả đã đo là chạy trên PostgreSQL 16.15.
+  it("[T5] đổi hàm, DROP TRIGGER, DISABLE, ENABLE REPLICA, WHEN (false) và UPDATE OF đều được phục hồi", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: org } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
+      );
+      const ghi = async (seq: number): Promise<void> => {
+        await db.pool.query(
+          "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+            "VALUES ($1, $2, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256($3::bytea))",
+          [org[0]!.id, seq, `e${seq}`],
+        );
+      };
+      await ghi(1);
+
+      // Hàm trigger "hiền lành" dùng cho đột biến đổi tgfoid bên dưới. Nó KHÔNG phải
+      // SECURITY DEFINER nên nó không kích hoạt mục (C) của hardening — đúng ý: đột biến này
+      // phải đi lọt mọi lớp KHÁC để chứng minh chính vế tgfoid là thứ bắt được nó.
+      await db.pool.query(
+        "CREATE FUNCTION nop_tg() RETURNS trigger LANGUAGE plpgsql AS $n$ BEGIN RETURN NEW; END $n$",
+      );
+
+      // [đột biến M11-M13] Ba đột biến ĐẦU dùng "CREATE OR REPLACE TRIGGER", và câu lệnh đó
+      // RESET tgenabled về 'O'. Bản đầu của test này dừng ở đó, và hậu quả đo được là ba vế
+      // riêng của hardening (tgfoid, tgqual, tgattr) trở thành MÃ CHẾT: xoá vế nào cũng vẫn
+      // xanh, vì vế tgenabled bắt hộ. Kẻ tấn công cẩn thận thì đặt lại ENABLE ALWAYS — nên
+      // fixture phải làm đúng thế, nếu không nó tự vô hiệu hoá chính phép đo.
+      const datLaiAlways =
+        "; ALTER TABLE audit_events ENABLE ALWAYS TRIGGER audit_events_chan_update";
+      const cacDotBien: [string, string, string][] = [
+        [
+          "đổi trigger sang gọi hàm khác (và đặt lại ENABLE ALWAYS)",
+          "CREATE OR REPLACE TRIGGER audit_events_chan_update BEFORE UPDATE ON audit_events " +
+            "FOR EACH ROW EXECUTE FUNCTION nop_tg()" + datLaiAlways,
+          "UPDATE audit_events SET action = 'SUA_TROM'",
+        ],
+        [
+          "DROP TRIGGER",
+          "DROP TRIGGER audit_events_chan_update ON audit_events",
+          "UPDATE audit_events SET action = 'SUA_TROM'",
+        ],
+        [
+          "DISABLE TRIGGER",
+          "ALTER TABLE audit_events DISABLE TRIGGER audit_events_chan_delete",
+          "DELETE FROM audit_events",
+        ],
+        [
+          "ENABLE REPLICA TRIGGER",
+          "ALTER TABLE audit_events ENABLE REPLICA TRIGGER audit_events_chan_truncate",
+          "TRUNCATE audit_events",
+        ],
+        [
+          "WHEN (false) (và đặt lại ENABLE ALWAYS)",
+          "CREATE OR REPLACE TRIGGER audit_events_chan_update BEFORE UPDATE ON audit_events " +
+            "FOR EACH ROW WHEN (false) EXECUTE FUNCTION public.chan_sua_xoa()" + datLaiAlways,
+          "UPDATE audit_events SET action = 'SUA_TROM'",
+        ],
+        [
+          "UPDATE OF <cột> (và đặt lại ENABLE ALWAYS)",
+          "CREATE OR REPLACE TRIGGER audit_events_chan_update BEFORE UPDATE OF payload " +
+            "ON audit_events FOR EACH ROW EXECUTE FUNCTION public.chan_sua_xoa()" + datLaiAlways,
+          "UPDATE audit_events SET action = 'SUA_TROM'",
+        ],
+      ];
+
+      for (const [nhan, cauDotBien, cauTanCong] of cacDotBien) {
+        await db.pool.query("TRUNCATE audit_events").catch(() => undefined);
+        const con = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM audit_events",
+        );
+        if (con.rows[0]!.n === "0") await ghi(1);
+
+        await db.pool.query(cauDotBien);
+        // Chứng minh đột biến THẬT SỰ mở được đường — không có nửa này thì "migrate() phục hồi"
+        // chỉ chứng minh migrate() không làm hỏng gì.
+        const truoc = await db.pool
+          .query(cauTanCong)
+          .then(() => "THÀNH CÔNG", (e: Error) => e.message);
+        expect(truoc, `${nhan}: đột biến không mở được đường nào — fixture tự vô hiệu hoá`).toBe(
+          "THÀNH CÔNG",
+        );
+
+        await expect(migrate(db.pool, MIGRATIONS_DIR), nhan).resolves.toEqual([]);
+
+        const con2 = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM audit_events",
+        );
+        if (con2.rows[0]!.n === "0") await ghi(1);
+        const sau = await db.pool
+          .query(cauTanCong)
+          .then(() => "THÀNH CÔNG", (e: Error) => e.message);
+        expect(sau, nhan).toMatch(/chỉ-ghi-thêm|append-only/i);
+      }
+
+      // Và trạng thái cuối là ENABLE ALWAYS trên cả sáu trigger — không phải chỉ "tồn tại".
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
+          " WHERE NOT t.tgisinternal AND c.relname IN ('audit_events','audit_chain_anchors') " +
+          "   AND t.tgenabled = 'A' AND t.tgqual IS NULL AND t.tgattr::text = ''",
+      );
+      expect(rows[0]!.n).toBe("6");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // [T5] Vế thứ HAI của `bang_al`: bảng được nhận diện QUA CHÍNH TRIGGER nó đang mang, chứ
+  // không qua danh sách viết tay. Đây là đường phủ cho một task sau tạo bảng chỉ-ghi-thêm mới
+  // rồi quên thêm tên vào BANG_CHI_GHI_THEM — hardening vẫn canh được hình dạng trigger của nó.
+  // Không có test này thì vế đó là MÃ CHẾT: đã đo, xoá nó khỏi hardening vẫn xanh 3/3.
+  it("[T5] bảng chỉ-ghi-thêm KHÔNG có trong danh sách vẫn được canh, nhờ chính trigger nó mang", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      // Cố ý KHÔNG có cột org_id: bảng này đang thử vế "chỉ-ghi-thêm", không phải vế tenant,
+      // và thêm org_id sẽ kéo theo đòi hỏi RLS/policy của mục (A)/(B) — nhiễu cho phép đo.
+      await db.pool.query("CREATE TABLE so_ngoai (id bigserial PRIMARY KEY, noi_dung text)");
+      for (const [hauTo, sk, pv] of [
+        ["update", "UPDATE", "FOR EACH ROW"],
+        ["delete", "DELETE", "FOR EACH ROW"],
+        ["truncate", "TRUNCATE", "FOR EACH STATEMENT"],
+      ] as const) {
+        await db.pool.query(
+          `CREATE TRIGGER so_ngoai_chan_${hauTo} BEFORE ${sk} ON so_ngoai ${pv} ` +
+            "EXECUTE FUNCTION public.chan_sua_xoa()",
+        );
+        await db.pool.query(`ALTER TABLE so_ngoai ENABLE ALWAYS TRIGGER so_ngoai_chan_${hauTo}`);
+      }
+      await db.pool.query("INSERT INTO so_ngoai (noi_dung) VALUES ('x')");
+
+      await db.pool.query("ALTER TABLE so_ngoai DISABLE TRIGGER so_ngoai_chan_update");
+      await expect(
+        db.pool.query("UPDATE so_ngoai SET noi_dung = 'y'"),
+        "đột biến không mở được đường nào — fixture tự vô hiệu hoá",
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      await expect(db.pool.query("UPDATE so_ngoai SET noi_dung = 'z'")).rejects.toThrow(
+        /chỉ-ghi-thêm|append-only/i,
+      );
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // [T5] Vế UNION cuối của CAU_TRIGGER_CHAN_SAI: "một bảng sổ còn, bảng kia biến mất". Và câu
+  // trả lời QT1 cho nó — ai sửa được, bằng cách nào, trong bao lâu: một migration MỚI, không
+  // phải sửa tay trên cụm, vì lượt SỬA không phán xét nên vòng migration đánh số luôn tới đích.
+  it("[T5] mất MỘT bảng sổ làm migrate() GÃY, và vá được bằng một migration mới", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-t5-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+        "003_audit_events.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      await migrate(db.pool, thuMucTam);
+
+      await db.pool.query("DROP TABLE audit_chain_anchors CASCADE");
+      const loi = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "mất một nửa lược đồ sổ kiểm toán mà migrate() vẫn QUA").not.toBeNull();
+      expect(loi!.message).toContain("audit_chain_anchors");
+      expect(loi!.message).toContain("KHÔNG TỒN TẠI");
+
+      await writeFile(
+        join(thuMucTam, "004_dung_lai_moc_neo.sql"),
+        "CREATE TABLE audit_chain_anchors (\n" +
+          "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n" +
+          "  org_id uuid NOT NULL REFERENCES organizations(id),\n" +
+          "  seq bigint NOT NULL CHECK (seq > 0),\n" +
+          "  hash bytea NOT NULL CHECK (octet_length(hash) = 32),\n" +
+          "  anchored_at timestamptz NOT NULL DEFAULT now(),\n" +
+          "  UNIQUE (org_id, seq));\n" +
+          "ALTER TABLE audit_chain_anchors ENABLE ROW LEVEL SECURITY;\n" +
+          "ALTER TABLE audit_chain_anchors FORCE ROW LEVEL SECURITY;\n" +
+          "CREATE POLICY audit_anchors_tenant_isolation ON audit_chain_anchors\n" +
+          "  USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());\n" +
+          "GRANT SELECT ON audit_chain_anchors TO app_api, app_unseal;\n",
+        "utf8",
+      );
+      // Cố ý KHÔNG viết CREATE TRIGGER trong 004: lớp C phải tự dựng lại ba trigger cho bảng
+      // vừa xuất hiện. Nếu nó không làm, lượt PHÁN XÉT của CHÍNH lần chạy này sẽ gãy.
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual(["004_dung_lai_moc_neo.sql"]);
+
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
+          " WHERE NOT t.tgisinternal AND c.relname = 'audit_chain_anchors' AND t.tgenabled = 'A'",
+      );
+      expect(rows[0]!.n).toBe("3");
+      await expect(db.pool.query("TRUNCATE audit_chain_anchors")).rejects.toThrow(
+        /chỉ-ghi-thêm|append-only/i,
+      );
     } finally {
       await rm(thuMucTam, { recursive: true, force: true });
       await db.stop();

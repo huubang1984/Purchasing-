@@ -687,6 +687,109 @@ DECLARE
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
                              AND d.deptype = 'e')$q$;
 
+  -- ---- [T5] (D) SỔ KIỂM TOÁN CHỈ-GHI-THÊM — bất biến B4, nền cho B3 -------------------
+  -- Task 5 dựng hai bảng sổ mà bảo đảm "không đường code nào xoá/sửa audit" nằm ở BA thứ chỉ
+  -- được tạo MỘT LẦN trong 003_audit_events.sql: một hàm plpgsql, sáu trigger, và trạng thái
+  -- ENABLE ALWAYS của sáu trigger đó. Cả ba đều là lớp trôi đã biết của dự án:
+  --     CREATE OR REPLACE FUNCTION public.chan_sua_xoa() ... RETURN NEW;
+  --       -> đã đo trên PostgreSQL 16.15: UPDATE 1 và TRUNCATE TABLE đi lọt, DELETE bị huỷ
+  --          IM LẶNG (DELETE 0, không lỗi). Đúng khuôn R3 của app_current_org_id().
+  --     DROP TRIGGER / ALTER TABLE ... DISABLE TRIGGER / ENABLE REPLICA TRIGGER
+  --     CREATE OR REPLACE TRIGGER ... WHEN (false)  hoặc  BEFORE UPDATE OF <cột>
+  --       -> cả bốn đã đo là chạy, và cả bốn giữ nguyên TÊN trigger nên một phép kiểm chỉ hỏi
+  --          "trigger còn đó không" xanh hết.
+  -- 003 đã nằm trong schema_migrations sau lần deploy đầu nên không có gì trở lại. Hai mục
+  -- dưới đây tự chữa cả ba, đúng khuôn bốn bước chung.
+  --
+  -- BANG_CHI_GHI_THEM — danh sách ĐÓNG, viết tay, nhân bản sang db/audit-append-only.int.test.ts
+  -- (có meta-test canh sự đồng bộ, cùng khuôn BANG_GOC_TENANT).
+  -- Vì sao KHÔNG suy ra tự động như mục (A) suy ra bảng tenant từ cột org_id — ba cách đã cân
+  -- nhắc và loại:
+  --   * "bảng có cột hash/prev_hash": Task 6-10 sẽ có bảng báo giá mang hash mà VẪN cần UPDATE.
+  --     Suy sai theo hướng đó là CHẶN DEPLOY trên một lược đồ hợp lệ — đúng cái bẫy mà QT1 cấm.
+  --   * "bảng mang COMMENT có nhãn": nhãn do chính tác nhân đang bị canh sửa được -> fail-open.
+  --   * "bảng đang có trigger chan_sua_xoa()": CÓ dùng (vế thứ hai của bang_al bên dưới) nhưng
+  --     không đủ một mình, vì nó chính là thứ đang bị canh. Hợp hai nguồn thì mất MỘT trigger
+  --     vẫn còn hai trigger kia lộ ra bảng, mà mất CẢ SÁU thì danh sách viết tay lộ ra.
+  -- BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: DROP CẢ HAI bảng sổ cùng lúc thì mục này im —
+  -- vế UNION cuối chỉ bắt được ca "một bảng còn, bảng kia mất". Cố ý không đòi "hai bảng phải
+  -- tồn tại" vô điều kiện: nhiều test của dự án chạy migrate() trên thư mục migration chỉ có
+  -- 001/002, và một hậu điều kiện vô điều kiện sẽ biến hardening thành thứ đòi 003 phải có mặt
+  -- ở mọi lược đồ. Mất cả hai bảng cũng là sự cố ồn ào nhất có thể (mọi truy vấn sổ đều gãy),
+  -- khác hẳn ba đường trôi im lặng ở trên.
+  BANG_CHI_GHI_THEM constant text :=
+    $q$(VALUES ('audit_events'), ('audit_chain_anchors')) AS b(ten)$q$;
+
+  HAM_CHAN constant text := $q$to_regprocedure('public.chan_sua_xoa()')$q$;
+
+  -- Tập trigger PHẢI CÓ, và chỗ nào đang sai. `kieu` là pg_trigger.tgtype — bitmask
+  -- (ROW=1, BEFORE=2, DELETE=8, UPDATE=16, TRUNCATE=32) đã ĐO trên PostgreSQL 16.15:
+  --   BEFORE UPDATE FOR EACH ROW = 19 · BEFORE DELETE FOR EACH ROW = 11 ·
+  --   BEFORE TRUNCATE FOR EACH STATEMENT = 34.
+  -- So khớp tgtype NGUYÊN VĂN (không phải "có bit UPDATE") vì mọi bit đều load-bearing: mất
+  -- bit BEFORE là trigger chạy SAU khi hàng đã đổi, mất bit ROW là trigger không thấy hàng.
+  -- tgattr và tgqual phải trống: cả hai là đường vô hiệu hoá giữ nguyên tên trigger.
+  CTE_TRIGGER_CHAN constant text :=
+    $q$WITH bang_al AS (
+         SELECT c.oid AS bang_oid, c.relname
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+            AND (c.relname IN (SELECT ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)
+                 OR EXISTS (SELECT 1 FROM pg_trigger tg
+                             WHERE tg.tgrelid = c.oid AND NOT tg.tgisinternal
+                               AND tg.tgfoid = $q$ || HAM_CHAN || $q$))
+       ),
+       can_co AS (
+         SELECT b.bang_oid, b.relname,
+                b.relname || '_chan_' || v.hau_to AS ten_trigger,
+                v.su_kien, v.pham_vi, v.kieu
+           FROM bang_al b
+           CROSS JOIN (VALUES ('update',   'UPDATE',   'FOR EACH ROW',       19),
+                              ('delete',   'DELETE',   'FOR EACH ROW',       11),
+                              ('truncate', 'TRUNCATE', 'FOR EACH STATEMENT', 34))
+                        AS v(hau_to, su_kien, pham_vi, kieu)
+       ),
+       sai AS (
+         SELECT k.*,
+                CASE
+                  WHEN t.oid IS NULL THEN 'trigger KHÔNG TỒN TẠI'
+                  WHEN t.tgfoid <> $q$ || HAM_CHAN || $q$
+                    THEN 'gọi hàm khác: ' || t.tgfoid::regprocedure::text
+                  WHEN t.tgtype <> k.kieu::smallint
+                    THEN 'sai thời điểm/sự kiện/phạm vi (tgtype=' || t.tgtype::text
+                         || ', cần ' || k.kieu::text || ')'
+                  WHEN t.tgqual IS NOT NULL
+                    THEN 'có mệnh đề WHEN — trigger chỉ chạy có điều kiện'
+                  WHEN t.tgattr::text <> ''
+                    THEN 'có UPDATE OF <cột> — chỉ chạy khi cột đó nằm trong mệnh đề SET'
+                  WHEN t.tgenabled <> 'A'
+                    -- ::text bắt buộc: tgenabled có kiểu "char", và 'chuỗi' || "char" là
+                    -- toán tử KHÔNG duy nhất ("operator is not unique: unknown || \"char\"").
+                    THEN 'tgenabled=' || t.tgenabled::text
+                         || ' (cần A = ENABLE ALWAYS; O bị bỏ qua khi '
+                         || 'session_replication_role = replica, D và R thì không chạy)'
+                  ELSE NULL
+                END AS ly_do
+           FROM can_co k
+           LEFT JOIN pg_trigger t
+                  ON t.tgrelid = k.bang_oid AND t.tgname = k.ten_trigger
+                 AND NOT t.tgisinternal
+       )$q$;
+
+  CAU_TRIGGER_CHAN_SAI constant text :=
+    CTE_TRIGGER_CHAN || $q$
+     SELECT relname || '.' || ten_trigger || ': ' || ly_do AS mo_ta
+       FROM sai WHERE ly_do IS NOT NULL
+     UNION ALL
+     -- Vế "một bảng sổ còn, bảng kia biến mất". EXISTS lồng bên trong dùng LẠI cùng danh sách
+     -- với alias b — alias trong cùng che alias ngoài, nên nó hỏi "có bảng sổ NÀO còn không".
+     SELECT b.ten || ': bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI trong schema public, trong khi bảng '
+            'sổ kia thì có — một nửa lược đồ sổ kiểm toán đã biến mất' AS mo_ta
+       FROM $q$ || BANG_CHI_GHI_THEM || $q$
+      WHERE to_regclass('public.' || quote_ident(b.ten)) IS NULL
+        AND EXISTS (SELECT 1 FROM $q$ || BANG_CHI_GHI_THEM || $q$
+                     WHERE to_regclass('public.' || quote_ident(b.ten)) IS NOT NULL)$q$;
+
   -- Mỗi hàng: [1] tên mục, [2] tiền điều kiện, [3] câu lệnh cưỡng chế, [4] hậu điều kiện
   -- ("trạng thái đã đúng"), [5] biểu thức mô tả chỗ sai, [6] quyền cần có để sửa.
   -- [2], [4], [5] là biểu thức SQL chạy qua EXECUTE 'SELECT ' || ...
@@ -1082,6 +1185,68 @@ $ham$$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_DOC_VONG || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_DOC_VONG || $q$) t)$q$,
       $q$viết một migration mới (ALTER VIEW ... SET (security_invoker = true), DROP MATERIALIZED VIEW, hoặc bỏ SECURITY DEFINER), HOẶC thêm tên đối tượng vào NGOAI_LE_DOC_VONG kèm lý do$q$
+    ],
+
+    -- ---- [T5] (D) Sổ kiểm toán chỉ-ghi-thêm: thân hàm + sáu trigger ---------------------
+    -- Thân hàm PHẢI khớp bản trong 003_audit_events.sql. Sửa một bên thì sửa cả hai; có test
+    -- canh việc đó (db/audit-append-only.int.test.ts), đúng khuôn §R3.
+    ARRAY[
+      $q$định nghĩa hàm public.chan_sua_xoa()$q$,
+      $q$true$q$,
+      $q$CREATE OR REPLACE FUNCTION public.chan_sua_xoa() RETURNS trigger
+         LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
+BEGIN
+  RAISE EXCEPTION 'Bảng % là bảng chỉ-ghi-thêm (append-only): thao tác % bị từ chối',
+    TG_TABLE_NAME, TG_OP
+    USING ERRCODE = 'insufficient_privilege';
+END
+$ham$$q$,
+      -- proconfig được canh vì mệnh đề "SET search_path = pg_catalog" là bản vá QT3 của hàm
+      -- này: gỡ nó ra thì thân hàm lại chạy dưới search_path của phiên gọi.
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN RAISE EXCEPTION 'Bảng % là bảng chỉ-ghi-thêm (append-only): thao tác % bị từ chối', TG_TABLE_NAME, TG_OP USING ERRCODE = 'insufficient_privilege'; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.chan_sua_xoa()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.chan_sua_xoa()')),
+                  'hàm public.chan_sua_xoa() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.chan_sua_xoa() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- Sáu trigger (hai bảng × ba sự kiện). TỰ CHỮA, và cố ý chữa bằng "CREATE OR REPLACE
+    -- TRIGGER" + "ENABLE ALWAYS" chứ không chỉ tạo lại cái thiếu: đã đo trên PostgreSQL 16.15
+    -- rằng CREATE OR REPLACE TRIGGER RESET tgenabled về 'O', nên hai câu phải đi liền nhau —
+    -- chỉ chạy câu đầu là tự tay hạ ENABLE ALWAYS xuống ORIGIN ở mỗi lần deploy.
+    -- Mục này chạy TRÊN VÔ ĐIỀU KIỆN nhưng chỉ đụng tới những trigger ĐANG SAI (vòng lặp đọc
+    -- CTE `sai`), nên deploy bình thường không lấy khoá DDL nào trên bảng sổ.
+    ARRAY[
+      $q$trigger chỉ-ghi-thêm trên bảng sổ kiểm toán$q$,
+      $q$true$q$,
+      $q$DO $tg$
+         DECLARE r RECORD;
+         BEGIN
+           FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$
+             SELECT bang_oid, ten_trigger, su_kien, pham_vi FROM sai WHERE ly_do IS NOT NULL
+           LOOP
+             EXECUTE format(
+               'CREATE OR REPLACE TRIGGER %I BEFORE %s ON %s %s '
+               'EXECUTE FUNCTION public.chan_sua_xoa()',
+               r.ten_trigger, r.su_kien, r.bang_oid::regclass, r.pham_vi);
+             EXECUTE format('ALTER TABLE %s ENABLE ALWAYS TRIGGER %I',
+                            r.bang_oid::regclass, r.ten_trigger);
+           END LOOP;
+         END
+         $tg$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
+      $q$quyền sở hữu các bảng sổ đó (để CREATE TRIGGER và ALTER TABLE) hoặc SUPERUSER$q$
     ]
   ];
 

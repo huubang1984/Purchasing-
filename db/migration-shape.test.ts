@@ -289,6 +289,8 @@ describe("hình dạng file migration", () => {
 
   it("có ít nhất một bảng chịu ràng buộc tenant để kiểm — không rỗng ruột", () => {
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
+      "audit_chain_anchors",
+      "audit_events",
       "organizations",
       "users",
     ]);
