@@ -3123,7 +3123,10 @@ describe("migration của dự án", () => {
   // bảng, câu cưỡng chế nhận 42501 và bị nuốt, nên hậu điều kiện là lớp DUY NHẤT còn lại — đây
   // là chỗ đo được nó, và cũng là câu trả lời QT1: migrate() GÃY ỒN ÀO kèm quyền cần có, thay vì
   // đi tiếp im lặng.
-  it("[vòng fix 1 — QT1] role deploy không sở hữu bảng sổ: trigger lạ, RULE, UNLOGGED và GRANT lạ đều làm migrate() GÃY kèm quyền cần có", async () => {
+  // [vòng fix 2 — diện phủ] Mở rộng sang ba hậu điều kiện còn lại của các mục Task 5 thêm vào:
+  // thân hàm chặn (D1), hình dạng sáu trigger (D2), và ràng buộc UNIQUE (D3). Xem chú thích trong
+  // thân test.
+  it("[vòng fix 1+2 — QT1] role deploy không sở hữu bảng sổ: cả BẢY đường trôi của nhóm (D) đều làm migrate() GÃY kèm quyền cần có", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -3148,12 +3151,30 @@ describe("migration của dự án", () => {
         await db.pool.query("ALTER TABLE audit_events SET UNLOGGED");
         await db.pool.query("GRANT DELETE ON audit_events TO app_api");
 
+        // [vòng fix 2 — diện phủ] Quy tắc mới: MỖI hậu điều kiện hardening mới phải có ĐÚNG MỘT
+        // test chạy dưới role deploy mà câu cưỡng chế tương ứng nhận 42501. Vòng 1 chỉ phủ được
+        // bốn vế (trigger lạ, rule, relpersistence, ACL); ba vế còn lại của các mục Task 5 thêm
+        // vào chỉ được đo dưới SUPERUSER, nơi câu cưỡng chế sửa xong trước khi hậu điều kiện kịp
+        // nói gì. Ba mũi dưới đây đóng nốt: (D1) thân hàm chặn — CREATE OR REPLACE FUNCTION trên
+        // hàm đã tồn tại đòi QUYỀN SỞ HỮU; (D2) HÌNH DẠNG sáu trigger; (D3) UNIQUE (org_id, seq).
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.chan_sua_xoa() RETURNS trigger LANGUAGE plpgsql " +
+            "SET search_path = pg_catalog AS $ham$ BEGIN RETURN NEW; END $ham$",
+        );
+        await db.pool.query("ALTER TABLE audit_events DISABLE TRIGGER audit_events_chan_update");
+        await db.pool.query(
+          "ALTER TABLE audit_events DROP CONSTRAINT audit_events_org_id_seq_key",
+        );
+
         const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
-        expect(loi, "bốn đường trôi trên bảng sổ mà migrate() vẫn QUA").not.toBeNull();
+        expect(loi, "bảy đường trôi trên bảng sổ mà migrate() vẫn QUA").not.toBeNull();
         expect(loi!.message).toContain("TRIGGER LẠ trên bảng sổ");
         expect(loi!.message).toContain("RULE trên bảng sổ");
         expect(loi!.message).toContain("UNLOGGED");
         expect(loi!.message).toContain("quyền DELETE cấp cho app_api");
+        expect(loi!.message).toContain("định nghĩa hàm public.chan_sua_xoa()");
+        expect(loi!.message).toContain("audit_events.audit_events_chan_update: tgenabled=D");
+        expect(loi!.message).toContain("thiếu ràng buộc UNIQUE (org_id, seq)");
         expect(loi!.message).toContain("Cần quyền");
 
         // Và trôi vẫn còn NGUYÊN: migrate() gãy chứ không "sửa được một nửa" rồi im.
@@ -3319,4 +3340,293 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   }, 120_000);
+
+  // ==========================================================================================
+  // VÒNG FIX 2
+  // ==========================================================================================
+
+  // [vòng fix 2 — CR1] Vòng 1 tuyên bố bất biến "lượt SỬA không gãy" ở PHẠM VI TỆP nhưng chỉ cài
+  // đặt nó ở BƯỚC 2; BƯỚC 0/1/1b vẫn chỉ nuốt 42501 và nằm trong CÙNG transaction, nên chúng tái
+  // tạo NGUYÊN VẸN ngõ cụt CR3. Mũi này nhắm thẳng vào BƯỚC 1: "REVOKE <nhóm> FROM <thành viên>"
+  // ném 2BP01 (dependent privileges exist) khi thành viên đã CẤP TIẾP nhóm đó. Trước vá, đo được
+  // migrate() chết ở LƯỢT SỬA và 004_*.sql không bao giờ chạy tới (count = 0).
+  it("[vòng fix 2 — CR1] lỗi 2BP01 ở BƯỚC 1 vẫn để migration đánh số chạy tới đích", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-f2cr1-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+        "003_audit_events.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      await migrate(db.pool, thuMucTam);
+
+      await db.pool.query("CREATE ROLE nhom_la NOLOGIN");
+      await db.pool.query("CREATE ROLE ke_ba NOLOGIN");
+      await db.pool.query("GRANT nhom_la TO app_api WITH ADMIN OPTION");
+      await db.pool.query("SET ROLE app_api; GRANT nhom_la TO ke_ba; RESET ROLE");
+
+      // Nửa "fixture cũng phải chịu đột biến": nếu app_api KHÔNG cấp tiếp được thì câu REVOKE của
+      // BƯỚC 1 chẳng ném gì và cả test này chỉ chứng minh một đường không tồn tại.
+      const { rows: phuThuoc } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_auth_members am " +
+          "  JOIN pg_roles g ON g.oid = am.grantor JOIN pg_roles m ON m.oid = am.member " +
+          " WHERE g.rolname = 'app_api' AND m.rolname = 'ke_ba'",
+      );
+      expect(
+        phuThuoc[0]!.n,
+        "fixture tự vô hiệu hoá: app_api chưa cấp tiếp nhóm nào nên REVOKE không thể ném 2BP01",
+      ).toBe("1");
+
+      await writeFile(
+        join(thuMucTam, "004_moc_buoc1.sql"),
+        "CREATE TABLE moc_buoc1 (id int PRIMARY KEY);\n",
+        "utf8",
+      );
+      const loi = await migrate(db.pool, thuMucTam).then(() => null, (e: Error) => e);
+      expect(loi, "membership lạ còn nguyên mà migrate() vẫn QUA").not.toBeNull();
+      expect(loi!.message).toContain("phan_xet");
+      expect(loi!.message).toContain("tư cách thành viên LẠ");
+
+      const { rows: moc } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_class WHERE relname = 'moc_buoc1'",
+      );
+      expect(
+        moc[0]!.n,
+        "một lỗi KHÁC 42501 ở BƯỚC 1 đã kéo migrate() chết TRƯỚC vòng migration đánh số — " +
+          "đường vá bằng migration mới không tới được",
+      ).toBe("1");
+
+      // Đường thoát QT1, đo chứ không suy: chỉ CASCADE gỡ được nút. "REVOKE ... FROM ke_ba" chạy
+      // dưới role deploy là no-op im lặng (grantor là app_api), và "GRANTED BY app_api" bị từ chối
+      // ("permission denied to revoke privileges granted by role").
+      await writeFile(
+        join(thuMucTam, "005_go_nhom_la.sql"),
+        "REVOKE nhom_la FROM app_api CASCADE;\n",
+        "utf8",
+      );
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual(["005_go_nhom_la.sql"]);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 180_000);
+
+  // [vòng fix 2 — I1] Mặc định-ĐÓNG của CR1 gỡ trigger lạ khỏi bảng sổ, và trước vòng này nó làm
+  // thế trong IM LẶNG: một 004_*.sql tạo trigger hợp lệ cho Task 6 sẽ bị lượt sửa kế tiếp gỡ mất,
+  // migrate() báo MIGRATE OK, và vì 004 đã nằm trong schema_migrations nên migration đó bốc hơi
+  // VĨNH VIỄN. Đúng chế độ hỏng mà CR4 vừa bị xử, theo chiều ngược lại — gỡ một trigger khỏi sổ
+  // kiểm toán vừa là bản vá vừa là SỰ KIỆN AN NINH.
+  // Nửa thứ hai canh bộ lọc `tgparentid = 0`: bản sao trigger trên PHÂN MẢNH phải được để yên, vì
+  // DROP TRIGGER trên nó ném 2BP01 — tức bỏ bộ lọc là tự tái tạo bẫy CR3. Trước vòng này chính bộ
+  // lọc ấy KHÔNG có test nào canh (đột biến X2 sống sót).
+  it("[vòng fix 2 — I1] gỡ trigger/rule lạ khỏi bảng sổ luôn ỒN ÀO, và bản sao trigger phân mảnh được để yên", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      // (a) đúng hình dạng một migration hợp lệ của Task 6.
+      await db.pool.query(
+        "CREATE FUNCTION public.neo_chuoi() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$f$ BEGIN RETURN NEW; END $f$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER audit_events_neo_chuoi BEFORE INSERT ON audit_events FOR EACH ROW " +
+          "EXECUTE FUNCTION public.neo_chuoi()",
+      );
+      await db.pool.query("CREATE RULE r_la AS ON UPDATE TO audit_chain_anchors DO INSTEAD NOTHING");
+
+      // (b) một bảng TRÙNG TÊN là PHÂN MẢNH của bảng khác: bản sao trigger mang tgparentid <> 0.
+      await db.pool.query(
+        "CREATE FUNCTION public.nuot_la() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$f$ BEGIN RETURN NULL; END $f$",
+      );
+      await db.pool.query("CREATE SCHEMA kho");
+      await db.pool.query(
+        "CREATE TABLE kho.cha (org_id uuid NOT NULL, seq bigint NOT NULL) PARTITION BY RANGE (seq)",
+      );
+      await db.pool.query(
+        "CREATE TABLE kho.audit_events PARTITION OF kho.cha FOR VALUES FROM (1) TO (1000)",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER cha_nuot BEFORE INSERT ON kho.cha FOR EACH ROW " +
+          "EXECUTE FUNCTION public.nuot_la()",
+      );
+      // Nửa đối chứng: một trigger lạ THẬT (tgparentid = 0) trên chính bảng phân mảnh đó — nếu nó
+      // cũng sống sót thì test chỉ chứng minh vế trigger lạ đã tắt, không chứng minh gì khác.
+      await db.pool.query(
+        "CREATE TRIGGER la_that BEFORE INSERT ON kho.audit_events FOR EACH ROW " +
+          "EXECUTE FUNCTION public.nuot_la()",
+      );
+
+      const poolBat = createPool(db.connectionString, 2);
+      const canhBao: string[] = [];
+      poolBat.on("connect", (client) => {
+        client.on("notice", (thongBao) => {
+          if (thongBao.message !== undefined) canhBao.push(thongBao.message);
+        });
+      });
+      try {
+        await expect(migrate(poolBat, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolBat.end();
+      }
+
+      const gop = canhBao.join("\n");
+      expect(gop, "gỡ một trigger khỏi sổ kiểm toán mà không nói gì").toContain(
+        "đã GỠ trigger lạ audit_events_neo_chuoi trên audit_events",
+      );
+      expect(gop).toContain("đã GỠ rule lạ r_la trên audit_chain_anchors");
+      expect(gop).toContain("đã GỠ trigger lạ la_that trên kho.audit_events");
+
+      const { rows: conLaiPm } = await db.pool.query<{ ten: string; cha: string }>(
+        "SELECT t.tgname AS ten, t.tgparentid::text AS cha FROM pg_trigger t " +
+          " WHERE t.tgrelid = 'kho.audit_events'::regclass AND NOT t.tgisinternal ORDER BY 1",
+      );
+      expect(
+        conLaiPm.map((r) => r.ten),
+        "bản sao trigger phân mảnh phải được để yên: DROP TRIGGER trên nó ném 2BP01",
+      ).toEqual([
+        "audit_events_chan_delete",
+        "audit_events_chan_truncate",
+        "audit_events_chan_update",
+        "cha_nuot",
+      ]);
+      expect(conLaiPm.find((r) => r.ten === "cha_nuot")!.cha).not.toBe("0");
+
+      const { rows: daGo } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_trigger t " +
+          " WHERE t.tgrelid = 'audit_events'::regclass AND t.tgname = 'audit_events_neo_chuoi'",
+      );
+      expect(daGo[0]!.n).toBe("0");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // [vòng fix 2 — I2] Mục (D4) — thứ vừa sinh ra ở vòng 1 để canh ACL — mang vào đúng cái lớp
+  // "lớp C tự khoá mình lại" mà CR3 vừa phải gỡ: thiếu CASCADE thì một tác nhân TRONG mô hình
+  // khoá được deploy bằng MỘT câu lệnh, và vòng lặp không bao giờ tháo được nút vì "REVOKE ...
+  // FROM ben_thu_ba" chạy dưới role deploy là NO-OP IM LẶNG (grantor là app_api).
+  it("[vòng fix 2 — I2] GRANT OPTION rồi cấp tiếp vẫn được mục (D4) tự chữa", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE ROLE ben_thu_ba NOLOGIN");
+      await db.pool.query("GRANT UPDATE ON audit_events TO app_api WITH GRANT OPTION");
+      await db.pool.query("SET ROLE app_api; GRANT UPDATE ON audit_events TO ben_thu_ba; RESET ROLE");
+      // Nhánh MỨC CỘT phải đi qua một role KHÔNG có quyền mức bảng, nếu không nó không đo được
+      // gì: đo được rằng "REVOKE UPDATE ... ON <bảng> FROM app_api CASCADE" ở mức BẢNG cuốn theo
+      // luôn cả quyền UPDATE mức CỘT của app_api lẫn dòng cấp tiếp dẫn xuất từ nó — tức nhánh cột
+      // bị nhánh bảng che. app_unseal chỉ được cấp ở mức cột nên nó tách hai nhánh ra.
+      await db.pool.query("GRANT UPDATE (action) ON audit_events TO app_unseal WITH GRANT OPTION");
+      await db.pool.query(
+        "SET ROLE app_unseal; GRANT UPDATE (action) ON audit_events TO ben_thu_ba; RESET ROLE",
+      );
+
+      // Fixture phải THẬT SỰ dựng được thế bí: phải tồn tại dòng ACL do app_api/app_unseal cấp
+      // tiếp, ở CẢ HAI mức.
+      const { rows: truoc } = await db.pool.query<{ muc: string; n: string }>(
+        "SELECT 'bang' AS muc, count(*)::text AS n FROM pg_class c " +
+          "  CROSS JOIN LATERAL aclexplode(c.relacl) a JOIN pg_roles g ON g.oid = a.grantor " +
+          " WHERE c.oid = 'audit_events'::regclass AND g.rolname = 'app_api' " +
+          "UNION ALL " +
+          "SELECT 'cot', count(*)::text FROM pg_attribute att " +
+          "  CROSS JOIN LATERAL aclexplode(att.attacl) a JOIN pg_roles g ON g.oid = a.grantor " +
+          " WHERE att.attrelid = 'audit_events'::regclass AND att.attname = 'action' " +
+          "   AND g.rolname = 'app_unseal'",
+      );
+      expect(
+        truoc,
+        "fixture tự vô hiệu hoá: không có quyền nào được cấp tiếp nên REVOKE không ném 2BP01",
+      ).toEqual([
+        { muc: "bang", n: "1" },
+        { muc: "cot", n: "1" },
+      ]);
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows: quyenConSai } = await db.pool.query<{ ai: string; quyen: string }>(
+        "SELECT coalesce(vai.rolname::text, 'PUBLIC') AS ai, a.privilege_type AS quyen " +
+          "  FROM pg_class c " +
+          "  CROSS JOIN LATERAL aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a " +
+          "  LEFT JOIN pg_roles vai ON vai.oid = a.grantee " +
+          " WHERE c.oid = 'audit_events'::regclass AND a.grantee <> c.relowner " +
+          "   AND a.privilege_type IN ('UPDATE','DELETE','TRUNCATE') " +
+          "UNION ALL " +
+          "SELECT coalesce(vai.rolname::text, 'PUBLIC'), a.privilege_type FROM pg_attribute att " +
+          "  CROSS JOIN LATERAL aclexplode(att.attacl) a " +
+          "  LEFT JOIN pg_roles vai ON vai.oid = a.grantee " +
+          " WHERE att.attrelid = 'audit_events'::regclass AND att.attnum > 0 " +
+          "   AND a.privilege_type = 'UPDATE'",
+      );
+      expect(
+        quyenConSai,
+        "quyền cấp tiếp cho bên thứ ba vẫn còn — vòng lặp (D4) không tháo được nút",
+      ).toEqual([]);
+
+      // Không thu hồi quá tay, và lần chạy kế tiếp vẫn sạch (idempotent).
+      const { rows: insConLai } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_attribute att " +
+          "  CROSS JOIN LATERAL aclexplode(att.attacl) a JOIN pg_roles vai ON vai.oid = a.grantee " +
+          " WHERE att.attrelid = 'audit_events'::regclass AND att.attname = 'payload' " +
+          "   AND vai.rolname = 'app_api' AND a.privilege_type = 'INSERT'",
+      );
+      expect(insConLai[0]!.n).toBe("1");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // [vòng fix 2 — I3] Bỏ khoá cứng nspname='public' (CR2a) làm `bang_so` nhận bảng ở MỌI schema,
+  // nên một thông báo gọi bảng bằng relname trần trở thành CÂU ĐỐ: người trực đêm đọc
+  // "audit_events.audit_events_chan_update: trigger KHÔNG TỒN TẠI" trong khi bảng đang sai nằm ở
+  // một schema khác. Đây là thông báo của một deploy ĐANG BỊ CHẶN, nên nó phải nói đúng bảng nào.
+  it("[vòng fix 2 — I3] thông báo của lớp C gọi bảng sổ bằng tên ĐỦ SCHEMA", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        await db.pool.query("CREATE ROLE nguoi_khac NOLOGIN");
+        await db.pool.query("CREATE SCHEMA bao_cao AUTHORIZATION nguoi_khac");
+        await db.pool.query(
+          "CREATE TABLE bao_cao.audit_events (id int PRIMARY KEY, org_id uuid, seq bigint)",
+        );
+        await db.pool.query("ALTER TABLE bao_cao.audit_events OWNER TO nguoi_khac");
+
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+        expect(loi, "một bảng tên audit_events ở schema lạ mà migrate() vẫn QUA").not.toBeNull();
+        expect(
+          loi!.message,
+          "thông báo không nói bảng nào — chữ bao_cao không xuất hiện ở đâu cả",
+        ).toContain("bao_cao.audit_events.audit_events_chan_update");
+        expect(loi!.message).toContain("bao_cao.audit_events: thiếu ràng buộc UNIQUE");
+        // Bảng sổ THẬT trong public vẫn được gọi bằng tên trần (search_path đã ghim), nên thông
+        // báo không dài thêm cho ca thường.
+        expect(loi!.message).not.toContain("public.audit_events");
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // QT1 cho ca này, đo chứ không suy: role deploy KHÔNG sở hữu bao_cao nên không có đường sửa
+      // nào từ trong database — cần một chủ thể sở hữu schema đó (hoặc superuser) gỡ bảng đi.
+      await db.pool.query("DROP TABLE bao_cao.audit_events");
+      const poolSauSua = createPool(csTrienKhai, 2);
+      try {
+        await expect(migrate(poolSauSua, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolSauSua.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
 });

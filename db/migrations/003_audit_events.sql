@@ -58,13 +58,42 @@
 --     trong khi bản cài đặt chỉ canh sáu cái tên trigger nó biết, trong schema public, trên
 --     relkind r/p — và bốn đường trôi đo được KHÔNG phải "cửa sổ" mà là VĨNH VIỄN + KHÔNG DẤU
 --     VẾT: ALTER TABLE ... SET SCHEMA, trigger/rule lạ nuốt sự kiện, CONSTRAINT TRIGGER trùng
---     tên (lớp C tự khoá deploy của chính nó), SET UNLOGGED. Cả bốn nay đã đóng, và phát biểu
---     đúng mức của lớp C là:
---       lớp C đóng những đường trôi làm SAI trạng thái của HAI BẢNG SỔ theo TÊN (ở bất kỳ
---       schema nào), gồm: hình dạng sáu trigger, sự có mặt của trigger/rule lạ, thân hàm chặn,
---       relpersistence, ràng buộc UNIQUE (org_id, seq), ACL, và việc bảng sổ còn là một BẢNG
---       THẬT trong public. Mọi trục KHÁC nằm ngoài tầm nhìn của nó — xem "TRỤC CHƯA QUÉT"
---       trong task-5-report.md, và §"bậc tự do còn lại" ở đó.
+--     tên (lớp C tự khoá deploy của chính nó), SET UNLOGGED.
+--     [vòng fix 2 — phát biểu] Vòng 1 kết thúc bằng "CẢ BỐN NAY ĐÃ ĐÓNG". ĐÓ LÀ CHỖ NÓI QUÁ THỨ
+--     TÁM, và nó sinh ra bởi chính vòng sửa chỗ nói quá. Bốn ĐƯỜNG kia đóng thật (có test),
+--     nhưng câu đó đọc thành "lớp C nay canh được trạng thái của bảng sổ", và điều ấy SAI. Ba
+--     đường đo được ở vòng này đi lọt HOÀN TOÀN — đều `MIGRATE OK` và KHÔNG một WARNING nào:
+--       (a) THAY BẢNG BẰNG BẢN SAO RỖNG, một câu lệnh, không cần schema khác, không đụng
+--           schema_migrations: ALTER TABLE audit_events RENAME TO au_cu;
+--           CREATE TABLE audit_events (LIKE au_cu INCLUDING ALL) + RLS + policy + GRANT;
+--           DROP TABLE au_cu.  -> 4 hàng thành 0 hàng, và sáu trigger SẠCH BONG vì chính lớp C
+--           dựng lại chúng. Rẻ hơn cả SET SCHEMA.
+--       (b) SET SCHEMA -> sửa -> TRẢ VỀ: 2/4 hàng biến mất, pg_trigger sạch bong. Bản vá [CR2a]
+--           chỉ mua được phát hiện NẾU migrate() tình cờ chạy trong lúc bảng còn ở schema khác,
+--           mà cửa sổ đó do KẺ TẤN CÔNG chọn.
+--       (c) DROP cả hai bảng + DELETE FROM schema_migrations WHERE version LIKE '003%': 003
+--           chạy lại, sổ rỗng. Neo của [CR2c] nằm trong một bảng mà chính tác nhân sở hữu.
+--     Đây KHÔNG phải lỗ do bản vá mở ra: đó là GIỚI HẠN CẤU TRÚC không đóng được ở tầng này —
+--     đóng thật cần event trigger cấp cụm (đòi SUPERUSER) hoặc một NEO NGOÀI DATABASE. Cố ý
+--     KHÔNG vá; Task 6 là chỗ mang neo ngoài vào.
+--     PHÁT BIỂU ĐÚNG MỨC của lớp C, và đây là câu Task 6 phải đọc:
+--       lớp C phát hiện các TRẠNG THÁI SAI ĐANG TỒN TẠI tại đúng lúc migrate() chạy — trên hai
+--       bảng sổ nhận theo TÊN, ở bất kỳ schema nào: hình dạng sáu trigger, sự có mặt của
+--       trigger/rule lạ, thân hàm chặn, relpersistence, ràng buộc UNIQUE (org_id, seq), ACL, và
+--       việc bảng sổ còn là một BẢNG THẬT trong public.
+--       Nó KHÔNG phát hiện một CHUỖI THAO TÁC đã khôi phục hình dạng đúng — đo được:
+--       SET SCHEMA -> sửa -> trả về, và RENAME + CREATE TABLE LIKE, đều cho MIGRATE OK không
+--       dấu vết. Nói cách khác lớp C chứng thực HÌNH DẠNG, không chứng thực LỊCH SỬ, và cũng
+--       không chứng thực rằng đây vẫn là CÁI BẢNG CŨ.
+--       Mọi trục KHÁC nằm ngoài tầm nhìn của nó — xem "TRỤC CHƯA QUÉT" trong task-5-report.md,
+--       và §"bậc tự do còn lại" ở đó.
+--     RÀNG BUỘC BÀN GIAO CHO TASK 6 (do [vòng fix 2 — I1]): trên hai bảng sổ, CHỈ SÁU TRIGGER
+--     chỉ-ghi-thêm được phép tồn tại và KHÔNG rule nào được phép tồn tại. Đó là mặc định-ĐÓNG,
+--     nên một CREATE TRIGGER hợp lệ trong 004_*.sql SẼ BỊ hardening gỡ ở lượt sửa kế tiếp (nay
+--     có RAISE WARNING khi việc gỡ thành công — trước vòng này nó im lặng, và vì 004 đã nằm
+--     trong schema_migrations nên migration đó bốc hơi vĩnh viễn). Task 6 muốn thêm trigger
+--     trên bảng sổ thì chỗ sửa là DANH SÁCH `can_co` trong hardening.always.sql, không phải
+--     một migration đánh số.
 --   * Chống tamper trước kẻ tấn công có quyền superuser DB vẫn NGOÀI mô hình đe doạ đã chọn
 --     (ADR-004, phần rủi ro) — mặc dù lớp A đo được là chặn được superuser ở đường SQL thường,
 --     nó không chặn được sửa file dữ liệu, pg_upgrade, hay khôi phục từ bản sao lưu bị sửa.

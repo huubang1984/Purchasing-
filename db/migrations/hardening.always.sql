@@ -37,18 +37,28 @@
 --   BƯỚC 0: tạo role nếu thiếu.
 --   BƯỚC 1: gỡ tư cách thành viên hai chiều — làm TRƯỚC mọi phép kiểm, vì membership là
 --           nguồn quyền GIÁN TIẾP mà các phép kiểm phía sau đọc thấy.
+--   BƯỚC 1b: thu hồi ADMIN OPTION trên chính cặp membership hợp lệ.
 --   BƯỚC 2: chạy TOÀN BỘ câu lệnh cưỡng chế. Không kiểm gì, không gãy ở đây.
---           [vòng fix 1 — CR3] Nuốt MỌI lỗi, không riêng insufficient_privilege (42501). Vòng
---           trước viết "nuốt riêng 42501" và bất biến "không gãy ở đây" khi đó chỉ đúng chừng
---           nào mọi câu lệnh trong bảng có ĐÚNG MỘT chế độ hỏng là thiếu quyền. Task 5 đưa vào
---           bảng những câu lệnh có chế độ hỏng khác (42710 khi một tên trigger đang thuộc một
---           CONSTRAINT TRIGGER; "cannot change return type" khi hàm bị thay kiểu trả về) và đo
---           được hậu quả: lỗi thoát khỏi khối DO -> cả transaction hardening rollback -> và vì
---           lượt SỬA chạy TRƯỚC vòng migration đánh số, migrate() chết trước khi tới 004_*.sql
---           nên KHÔNG vá được bằng một migration mới. Nay lỗi được nuốt + phát WARNING + ghi
---           lại, và hậu điều kiện ở BƯỚC 3 mới là chỗ phán xét. Có test riêng cho bất biến này
---           ("[vòng fix 1 — CR3] câu lệnh cưỡng chế ném lỗi KHÁC 42501..." ở
---           db/migrations.int.test.ts) vì nó là nền của cả đường thoát QT1 của dự án.
+--   >>> BẤT BIẾN CHUNG CỦA BƯỚC 0/1/1b/2 — "LƯỢT SỬA KHÔNG GÃY":
+--           mọi câu lệnh có tác dụng phụ trong bốn bước này bắt MỌI lỗi (không riêng
+--           insufficient_privilege 42501), phát WARNING, và để BƯỚC 3 phán xét trạng thái thật.
+--           [vòng fix 1 — CR3] dựng bất biến này nhưng CHỈ ÁP CHO BƯỚC 2. Đó là một tuyên bố ở
+--           PHẠM VI TỆP được cài đặt ở MỘT trong BỐN chỗ, và [vòng fix 2 — CR1] đo được hậu quả:
+--           "REVOKE <nhóm> FROM <thành viên>" của BƯỚC 1 ném 2BP01 (dependent privileges exist)
+--           khi thành viên đã cấp tiếp nhóm đó, lỗi thoát ra ngoài khối DO ở LƯỢT SỬA và
+--           004_*.sql không bao giờ chạy tới (đo trên cả hai hồ sơ vai deploy: count = 0).
+--           BƯỚC 0/1/1b nằm trong CÙNG transaction với BƯỚC 2 nên chúng nằm trong cùng bất biến.
+--           Bài học đi kèm, đắt hơn bản vá: khi tuyên bố một bất biến ở phạm vi TỆP thì phải
+--           QUÉT TOÀN TỆP, không chỉ những dòng vừa thêm vào.
+--           Vì sao bất biến này đáng giá: lỗi thoát khỏi khối DO -> cả transaction hardening
+--           rollback -> và vì lượt SỬA chạy TRƯỚC vòng migration đánh số, migrate() chết trước
+--           khi tới 004_*.sql nên KHÔNG vá được bằng một migration mới. Có test riêng cho cả hai
+--           tầng ("[vòng fix 1 — CR3] câu lệnh cưỡng chế ném lỗi KHÁC 42501..." và
+--           "[vòng fix 2 — CR1] lỗi 2BP01 ở BƯỚC 1..." ở db/migrations.int.test.ts) vì nó là nền
+--           của cả đường thoát QT1 của dự án.
+--           Nuốt KHÔNG phải là bỏ qua, và cũng KHÔNG phải là "ghi lại để nói ra sau": chỗ nói ra
+--           là WARNING NGAY TẠI CHỖ cộng hậu điều kiện ở BƯỚC 3. [vòng fix 2 — I4] đã bỏ mảng
+--           `loi_cuong_che` của vòng trước vì nó là mã chết — xem giải thích ở khai báo biến.
 --   BƯỚC 3: chỉ tới lúc này mới đọc catalog và kiểm HẬU ĐIỀU KIỆN của mọi mục, GOM hết chỗ
 --           sai lại.
 --   BƯỚC 4: nếu có mục sai -> RAISE EXCEPTION MỘT LẦN, liệt kê TẤT CẢ, mỗi mục kèm quyền
@@ -209,11 +219,19 @@
 -- không RAISE của riêng nó; nó KHÔNG bảo đảm lượt 1 chạy xong, vì lượt 1 CÓ chạy câu lệnh cưỡng
 -- chế và một câu lệnh cưỡng chế cũng ném lỗi được. Đo được: một CONSTRAINT TRIGGER trùng tên
 -- làm CREATE OR REPLACE TRIGGER ném 42710 ở LƯỢT 1 -> migrate() chết trước vòng migration đánh
--- số -> 004_*.sql KHÔNG BAO GIỜ chạy tới -> đường sửa duy nhất là sửa tay trên cụm. Nay BƯỚC 2
--- nuốt MỌI lỗi (xem [vòng fix 1 — CR3] ở BƯỚC 2), nên phát biểu trên mới thành tính chất chứ
--- không còn là ý định. Nếu chỗ sai nằm ở
--- danh sách hình dạng được duyệt (bên dưới) thì sửa CHÍNH FILE NÀY: nó là ".always.sql", chạy
--- lại ở mọi lần migrate(), nên bản sửa có hiệu lực ngay ở lần deploy kế tiếp.
+-- số -> 004_*.sql KHÔNG BAO GIỜ chạy tới -> đường sửa duy nhất là sửa tay trên cụm.
+-- [vòng fix 2 — CR1] VÀ VÒNG 1 ĐÃ NÓI QUÁ NGAY TRONG CHÍNH CÂU SỬA CHỖ NÓI QUÁ. Nó viết
+-- "phát biểu trên mới thành TÍNH CHẤT chứ không còn là Ý ĐỊNH" trong khi chỉ vá BƯỚC 2, còn
+-- BƯỚC 0/1/1b vẫn chỉ nuốt 42501 và vẫn ném ra ngoài từ CÙNG transaction — đo được: một
+-- membership lạ đã được cấp tiếp làm "REVOKE <nhóm> FROM <thành viên>" ném 2BP01 ở LƯỢT 1,
+-- 004 = 0. "Lượt 1 chạy được hết" là tính chất của CẢ LƯỢT SỬA, không phải của riêng BƯỚC 2.
+-- PHÁT BIỂU ĐÚNG MỨC, sau khi cả bốn chỗ đã được vá và có test cho hai chỗ nặng nhất:
+--   lượt 1 chạy hết mọi câu lệnh có tác dụng phụ của BƯỚC 0/1/1b/2 dù bất kỳ câu nào trong số
+--   đó ném lỗi, vì tất cả đều nằm trong khối con bắt MỌI lỗi. Nó KHÔNG bảo đảm gì về những
+--   câu lệnh nằm NGOÀI bốn bước đó — mọi bổ sung sau này phải tự đặt lại câu hỏi
+--   "câu lệnh này ném được lỗi gì ngoài 42501?" và tự bọc.
+-- Nếu chỗ sai nằm ở danh sách hình dạng được duyệt (bên dưới) thì sửa CHÍNH FILE NÀY: nó là
+-- ".always.sql", chạy lại ở mọi lần migrate(), nên bản sửa có hiệu lực ngay ở lần deploy kế.
 --
 -- ĐÃ CÂN NHẮC VÀ LOẠI BỎ: "chế độ cảnh báo cho bảng chưa có trong schema_migrations". Với
 -- khuôn ba lượt, mọi bảng do migration vừa chạy tạo ra ĐỀU đã nằm trong schema_migrations khi
@@ -917,9 +935,20 @@ DECLARE
          FROM bang_so b JOIN pg_rewrite rw ON rw.ev_class = b.bang_oid
         WHERE rw.rulename <> '_RETURN'$q$;
 
+  -- [vòng fix 2 — I3] Mọi thông báo dưới đây gọi bảng bằng bang_oid::regclass, KHÔNG bằng
+  -- relname. Bỏ khoá cứng nspname='public' ([CR2a]) làm `bang_so` nhận bảng ở MỌI schema, nên
+  -- relname trần biến một thông báo thành CÂU ĐỐ: đo được với
+  -- "CREATE SCHEMA bao_cao AUTHORIZATION nguoi_khac; CREATE TABLE bao_cao.audit_events (...)"
+  -- -> migrate() gãy với "(audit_events.audit_events_chan_update: ...)" mà KHÔNG có chữ
+  -- "bao_cao" ở đâu cả, trong khi WARNING đi kèm lại nói "permission denied for schema
+  -- bao_cao". regclass in ra tên đủ điều kiện khi schema không nằm trong search_path, và
+  -- search_path của khối này được ghim là 'pg_catalog, public' nên bảng trong public vẫn in
+  -- ra tên trần. Việc CÓ NÊN tự chữa trên một bảng không thuộc sở hữu hay không là một quyết
+  -- định THIẾT KẾ (nó chặn deploy vĩnh viễn với đúng hồ sơ vai deploy) — ghi vào sổ nợ, KHÔNG
+  -- vá ở đây; xem câu trả lời QT1 cho ca này trong task-5-report.md §"Vòng fix 2".
   CAU_TRIGGER_CHAN_SAI constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT relname || '.' || ten_trigger || ': ' || ly_do
+     SELECT bang_oid::regclass::text || '.' || ten_trigger || ': ' || ly_do
             || CASE WHEN trong_ds THEN ''
                     ELSE ' [bảng này KHÔNG có trong BANG_CHI_GHI_THEM nên hardening CHỈ PHÁN '
                          'XÉT, KHÔNG tự tạo trigger cho nó — xem [CR4]. Đường sửa: thêm tên bảng '
@@ -930,18 +959,21 @@ DECLARE
        FROM sai WHERE ly_do IS NOT NULL
      UNION ALL
      -- [CR1] Trigger LẠ trên bảng sổ: mặc định-ĐÓNG, không phải danh sách sáu tên.
-     SELECT t.relname || '.' || t.ten || ': TRIGGER LẠ trên bảng sổ — một trigger BEFORE INSERT '
+     SELECT t.bang_oid::regclass::text || '.' || t.ten || ': TRIGGER LẠ trên bảng sổ — một trigger BEFORE INSERT '
             'trả NULL nuốt sự kiện audit trong IM LẶNG và để lại một chuỗi hash LIỀN MẠCH MÀ '
             'THIẾU SỰ KIỆN. Chỉ sáu trigger chỉ-ghi-thêm được phép tồn tại trên bảng sổ.' AS mo_ta
        FROM ($q$ || CAU_TRIGGER_LA || $q$) t
      UNION ALL
      -- [CR1] RULE trên bảng sổ. '_RETURN' là rule của VIEW; bang_so chỉ nhận relkind r/p nên nó
      -- không xuất hiện ở đây, vẫn loại tường minh để vế này không bao giờ tự bắn vào chân.
-     SELECT rl.relname || '.' || rl.ten || ': RULE trên bảng sổ — "DO INSTEAD NOTHING" trên INSERT '
+     SELECT rl.bang_oid::regclass::text || '.' || rl.ten || ': RULE trên bảng sổ — "DO INSTEAD NOTHING" trên INSERT '
             'nuốt sự kiện audit trong IM LẶNG (đo: INSERT 0 0, không lỗi).' AS mo_ta
        FROM ($q$ || CAU_RULE_LA || $q$) rl
      UNION ALL
      -- [CR2] MỘT vị từ cho ba ca: mất một bảng, mất cả hai, và bị thay bằng VIEW.
+     -- [vòng fix 2 — I3] Vế NÀY là vế DUY NHẤT không đổi sang regclass, và không đổi được:
+     -- nó nói về một bảng KHÔNG TỒN TẠI trong public nên không có oid nào để in ra. Thông báo
+     -- đã nêu tường minh "trong schema public" nên nó vẫn không mơ hồ.
      SELECT b.ten || ': bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI như một BẢNG THẬT (relkind r/p) trong '
             'schema public — nó đã bị DROP, bị ALTER TABLE ... SET SCHEMA đẩy đi, hoặc bị thay '
             'bằng một VIEW cùng tên. Sửa bằng một migration mới.' AS mo_ta
@@ -953,12 +985,12 @@ DECLARE
   -- [CR5 + IM5] Trạng thái VẬT LÝ của bảng sổ: LOGGED, và ràng buộc UNIQUE (org_id, seq).
   CAU_BANG_SO_VAT_LY constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT b.relname || ': bảng sổ đang UNLOGGED (relpersistence=' || b.relpersistence::text
+     SELECT b.bang_oid::regclass::text || ': bảng sổ đang UNLOGGED (relpersistence=' || b.relpersistence::text
             || ') — MỌI hàng audit biến mất sau lần crash kế tiếp. Đã đo bằng SIGKILL postgres '
             'thật: trước-crash 4 hàng, sau-crash 0 hàng.' AS mo_ta
        FROM bang_so b WHERE b.relpersistence <> 'p'
      UNION ALL
-     SELECT b.relname || ': thiếu ràng buộc UNIQUE (org_id, seq) — không có nó thì hai hàng cùng '
+     SELECT b.bang_oid::regclass::text || ': thiếu ràng buộc UNIQUE (org_id, seq) — không có nó thì hai hàng cùng '
             '(org_id, seq) cùng tồn tại được và chuỗi hash RẼ NHÁNH trong im lặng (nền của B3).'
             AS mo_ta
        FROM bang_so b
@@ -1005,7 +1037,7 @@ DECLARE
 
   CAU_QUYEN_BANG_SO_MO_TA constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT q.relname || ': quyền ' || q.quyen || ' cấp cho ' || q.ai
+     SELECT q.bang_oid::regclass::text || ': quyền ' || q.quyen || ' cấp cho ' || q.ai
             || coalesce(' trên cột ' || q.cot, '')
             || ' — bảng sổ chỉ được cấp SELECT và INSERT' AS mo_ta
        FROM ($q$ || CAU_QUYEN_BANG_SO_SAI || $q$) q$q$;
@@ -1518,6 +1550,20 @@ $ham$;
            LOOP
              BEGIN
                EXECUTE format('DROP TRIGGER %I ON %s', r.ten, r.bang_oid::regclass);
+               -- [vòng fix 2 — I1] GỠ ĐƯỢC thì phải ỒN ÀO. Mặc định-ĐÓNG của [CR1] xoá cả
+               -- những trigger HỢP LỆ mà một migration vừa tạo: đo được với một
+               -- 004_task6_neo.sql cắm audit_events_neo_chuoi -> migrate() = MIGRATE OK,
+               -- KHÔNG một thông báo nào, trigger bị gỡ, và 004 ĐÃ nằm trong
+               -- schema_migrations nên không bao giờ chạy lại — người vận hành nhận
+               -- "MIGRATE OK" và một migration đã bốc hơi. Đó đúng bằng chế độ hỏng mà [CR4]
+               -- vừa bị xử ("migrate() tự đổi ngữ nghĩa một bảng trong im lặng"), theo chiều
+               -- ngược lại. Gỡ một trigger khỏi SỔ KIỂM TOÁN vừa là bản vá vừa là SỰ KIỆN AN
+               -- NINH, nên nó không được đi qua trong im lặng ở cả hai chiều.
+               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (chỉ sáu trigger chỉ-ghi-thêm '
+                             'được phép tồn tại trên bảng sổ). Nếu đây là trigger HỢP LỆ của một '
+                             'migration mới thì migration đó vừa bị vô hiệu hoá: bản vá phải nằm '
+                             'trong chính hardening.always.sql, không phải trong migration.',
+                             r.ten, r.bang_oid::regclass;
              EXCEPTION WHEN OTHERS THEN
                RAISE WARNING 'Hardening: không gỡ được trigger lạ % trên %: % (%)',
                              r.ten, r.bang_oid::regclass, SQLERRM, SQLSTATE;
@@ -1527,6 +1573,8 @@ $ham$;
            LOOP
              BEGIN
                EXECUTE format('DROP RULE %I ON %s', r.ten, r.bang_oid::regclass);
+               RAISE WARNING 'Hardening: đã GỠ rule lạ % trên % (không rule nào được phép tồn '
+                             'tại trên bảng sổ).', r.ten, r.bang_oid::regclass;
              EXCEPTION WHEN OTHERS THEN
                RAISE WARNING 'Hardening: không gỡ được rule % trên %: % (%)',
                              r.ten, r.bang_oid::regclass, SQLERRM, SQLSTATE;
@@ -1595,11 +1643,24 @@ $ham$;
            FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$ $q$ || CAU_QUYEN_BANG_SO_SAI || $q$
            LOOP
              BEGIN
+               -- [vòng fix 2 — I2] CASCADE là BẮT BUỘC, không phải phòng xa. Thiếu nó thì một
+               -- tác nhân TRONG mô hình khoá được deploy VĨNH VIỄN bằng một câu lệnh, và mục
+               -- (D4) — thứ vừa sinh ra để canh ACL — trở thành đúng cái lớp "lớp C tự khoá
+               -- mình lại" mà [CR3] vừa phải gỡ. Đo trên PostgreSQL 16.15:
+               --     GRANT UPDATE ON audit_events TO app_api WITH GRANT OPTION;  -- chủ sở hữu
+               --     SET ROLE app_api; GRANT UPDATE ON audit_events TO ben_thu_ba;
+               --     -> "REVOKE UPDATE ... FROM app_api" ném 2BP01 (dependent privileges exist)
+               --     -> migrate() GÃY lần 1, GÃY y hệt lần 2, relacl KHÔNG ĐỔI.
+               -- Và vòng lặp KHÔNG tự tháo được nút: "REVOKE ... FROM ben_thu_ba" chạy dưới
+               -- role deploy là NO-OP IM LẶNG vì grantor là app_api chứ không phải deploy.
+               -- CASCADE ở đây chỉ lan trên ĐÚNG cái quyền đang bị cấm (UPDATE/DELETE/TRUNCATE
+               -- trên bảng sổ) — nó không thu hồi thêm quyền nào khác, và mọi quyền nó gỡ đều
+               -- là quyền dẫn xuất từ chính dòng ACL vi phạm.
                IF r.cot IS NULL THEN
-                 EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON %s FROM %s',
+                 EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON %s FROM %s CASCADE',
                                 r.bang_oid::regclass, r.ai);
                ELSE
-                 EXECUTE format('REVOKE UPDATE (%I) ON %s FROM %s',
+                 EXECUTE format('REVOKE UPDATE (%I) ON %s FROM %s CASCADE',
                                 r.cot, r.bang_oid::regclass, r.ai);
                END IF;
              EXCEPTION WHEN OTHERS THEN
@@ -1657,9 +1718,15 @@ $ham$;
   hang RECORD;
   con_sot text;
   loi_gom text[] := ARRAY[]::text[];
-  -- [vòng fix 1 — CR3] Lỗi mà câu lệnh cưỡng chế của mục i ném ra ở BƯỚC 2, giữ lại để BƯỚC 4
-  -- nói được VÌ SAO tự chữa không thành thay vì chỉ nói trạng thái vẫn sai.
-  loi_cuong_che text[] := ARRAY[]::text[];
+  -- [vòng fix 2 — I4] ĐÃ BỎ mảng `loi_cuong_che`. Vòng 1 dựng nó để BƯỚC 4 nói được VÌ SAO tự
+  -- chữa không thành, nhưng nó là MÃ CHẾT dưới mọi lần migrate(): packages/db/src/migrate.ts
+  -- chỉ sinh hai chế độ 'sua' và 'phan_xet'; BƯỚC 2 (chỗ GHI mảng) chỉ chạy ở 'sua' rồi RETURN
+  -- ngay, còn BƯỚC 4 (chỗ ĐỌC mảng) chỉ chạy ở 'phan_xet' nơi mảng luôn rỗng. Hai nhánh không
+  -- bao giờ gặp nhau trừ chế độ 'day_du' — chỉ tồn tại khi chạy tay bằng psql -f. ĐÃ ĐO: cắm
+  -- kịch bản (D1) ném 2BP01 rồi chạy đủ ba lượt, thông báo của lượt phán xét KHÔNG chứa chuỗi
+  -- "Câu lệnh cưỡng chế đã ném". Truyền lỗi qua lượt đòi một chỗ chứa sống qua COMMIT (bảng
+  -- tạm ON COMMIT DROP thì không), tức THÊM BỀ MẶT trong chính vùng đang bị canh — không đáng.
+  -- WARNING tại chỗ ở BƯỚC 2 vẫn còn và vẫn có ích: nó ra ngay ở lượt sửa, kèm SQLSTATE.
 BEGIN
   -- ===== [vòng fix 2 — CR1] GHIM search_path CỦA PHIÊN PHÁN XÉT ========================
   -- Vòng 1 TỰ PHÁT HIỆN rằng pg_get_expr deparse THEO search_path của phiên đang đọc, rồi
@@ -1759,19 +1826,42 @@ BEGIN
   END IF;
 
   IF che_do IN ('sua', 'day_du') THEN
+  -- [vòng fix 2 — CR1] BƯỚC 0/1/1b NẰM TRONG CÙNG BẢO ĐẢM VỚI BƯỚC 2, và vòng trước bỏ sót
+  -- điều đó. Vòng 1 tuyên bố bất biến "lượt SỬA chạy được hết" ở PHẠM VI TỆP nhưng chỉ sửa
+  -- MỘT trong BỐN chỗ: ba bước này vẫn chỉ nuốt insufficient_privilege (42501), nên chúng tái
+  -- tạo NGUYÊN VẸN ngõ cụt [CR3]. Đo được trên PostgreSQL 16.15, trên CẢ HAI hồ sơ vai deploy
+  -- (superuser, và tp_deploy tự tạo nhóm nên có ADMIN OPTION):
+  --     GRANT nhom_x TO app_api WITH ADMIN OPTION;  SET ROLE app_api; GRANT nhom_x TO ke_ba;
+  --     -> "REVOKE nhom_x FROM app_api" ném 2BP01 (dependent privileges exist)
+  --     -> lỗi thoát khỏi khối DO ở LƯỢT SỬA -> migrate() chết TRƯỚC vòng migration đánh số
+  --     -> 004_*.sql không bao giờ chạy tới (đo: count = 0).
+  -- Nay cả bốn handler bắt MỌI lỗi và phát WARNING đúng khuôn BƯỚC 2. Không mất phát hiện:
+  -- hậu điều kiện membership/ADMIN OPTION ở BƯỚC 3 vẫn phán xét trạng thái THẬT, và ở lượt
+  -- phán xét thì 004 đã tới đích nên vá được bằng một migration mới. QT1 cho ca 2BP01:
+  -- role có ADMIN OPTION chạy "REVOKE <nhóm> FROM <thành viên> CASCADE" trong một migration
+  -- mới (đo: CASCADE chạy được dưới tp_deploy; "GRANTED BY <thành viên>" thì KHÔNG —
+  -- "permission denied to revoke privileges granted by role"). CỐ Ý KHÔNG tự thêm CASCADE vào
+  -- câu cưỡng chế ở đây: nó thu hồi quyền của một CHỦ THỂ THỨ BA nằm ngoài vùng canh, và làm
+  -- thế trong im lặng đúng bằng chế độ hỏng mà [vòng fix 2 — I1] vừa phải sửa. Ghi vào sổ nợ.
   -- ===== BƯỚC 0: role phải tồn tại =====================================================
-  -- Nuốt riêng lỗi thiếu quyền ở đây để thông báo có ích hơn phát ra từ bước 3
-  -- ("role app_api không tồn tại" kèm quyền cần có), thay vì "permission denied to create role".
+  -- Thông báo có ích hơn phát ra từ bước 3 ("role app_api không tồn tại" kèm quyền cần có),
+  -- thay vì "permission denied to create role".
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_api') THEN
     BEGIN
       CREATE ROLE app_api NOLOGIN;
     EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        RAISE WARNING 'Hardening: không tạo được role app_api: % (%). BƯỚC 3 sẽ phán xét.',
+                      SQLERRM, SQLSTATE;
     END;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_unseal') THEN
     BEGIN
       CREATE ROLE app_unseal NOLOGIN;
     EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        RAISE WARNING 'Hardening: không tạo được role app_unseal: % (%). BƯỚC 3 sẽ phán xét.',
+                      SQLERRM, SQLSTATE;
     END;
   END IF;
 
@@ -1783,6 +1873,14 @@ BEGIN
     BEGIN
       EXECUTE format('REVOKE %I FROM %I', hang.ten_nhom, hang.ten_thanh_vien);
     EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        -- Chỉ dùng % làm chỗ thế: RAISE KHÔNG hiểu %I/%s của format(), nó sẽ ăn một tham số
+        -- rồi in ra chữ "I". Định danh vì thế được quote_ident() TRƯỚC khi truyền vào.
+        RAISE WARNING 'Hardening: không gỡ được tư cách thành viên % -> %: % (%). BƯỚC 3 sẽ '
+                      'phán xét; với 2BP01 hãy chạy "REVOKE % FROM % CASCADE" trong một '
+                      'migration mới.',
+                      hang.ten_nhom, hang.ten_thanh_vien, SQLERRM, SQLSTATE,
+                      quote_ident(hang.ten_nhom), quote_ident(hang.ten_thanh_vien);
     END;
   END LOOP;
 
@@ -1791,6 +1889,10 @@ BEGIN
     BEGIN
       EXECUTE format('REVOKE ADMIN OPTION FOR %I FROM %I', hang.ten_nhom, hang.ten_thanh_vien);
     EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        RAISE WARNING 'Hardening: không thu hồi được ADMIN OPTION % -> %: % (%). BƯỚC 3 sẽ '
+                      'phán xét.',
+                      hang.ten_nhom, hang.ten_thanh_vien, SQLERRM, SQLSTATE;
     END;
   END LOOP;
 
@@ -1808,17 +1910,14 @@ BEGIN
   -- lệnh cưỡng chế hỏng vẫn thành lỗi ồn ào — chỉ là ở lượt PHÁN XÉT (nơi 004 tới đích được)
   -- thay vì ở lượt SỬA (nơi nó không tới được). Lỗi bắt được vừa phát ra WARNING ngay tại chỗ,
   -- vừa được giữ lại để BƯỚC 4 nói ra trong cùng một thông báo.
-  loi_cuong_che := array_fill(NULL::text, ARRAY[array_length(bang, 1)]);
   FOR i IN 1 .. array_length(bang, 1) LOOP
     EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
     CONTINUE WHEN NOT coalesce(du_dieu_kien, false);
     BEGIN
       EXECUTE bang[i][3];
     EXCEPTION
-      WHEN insufficient_privilege THEN
-        loi_cuong_che[i] := 'insufficient_privilege (42501): ' || SQLERRM;
+      WHEN insufficient_privilege THEN NULL;
       WHEN OTHERS THEN
-        loi_cuong_che[i] := SQLSTATE || ': ' || SQLERRM;
         RAISE WARNING 'Hardening: câu lệnh cưỡng chế của mục "%" ném % (%). BƯỚC 2 nuốt lỗi này '
                       'để không kéo sập cả lượt sửa; hậu điều kiện ở BƯỚC 3 sẽ phán xét.',
                       bang[i][1], SQLSTATE, SQLERRM;
@@ -1858,9 +1957,8 @@ BEGIN
     IF NOT coalesce(dung_roi, false) THEN
       EXECUTE 'SELECT ' || bang[i][5] INTO chi_tiet;
       loi_gom := loi_gom || format(
-        '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.%s',
-        bang[i][1], chi_tiet, bang[i][6],
-        coalesce(' Câu lệnh cưỡng chế đã ném: ' || loi_cuong_che[i], ''));
+        '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.',
+        bang[i][1], chi_tiet, bang[i][6]);
     END IF;
   END LOOP;
 
