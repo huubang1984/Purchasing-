@@ -37,9 +37,18 @@
 --   BƯỚC 0: tạo role nếu thiếu.
 --   BƯỚC 1: gỡ tư cách thành viên hai chiều — làm TRƯỚC mọi phép kiểm, vì membership là
 --           nguồn quyền GIÁN TIẾP mà các phép kiểm phía sau đọc thấy.
---   BƯỚC 2: chạy TOÀN BỘ câu lệnh cưỡng chế. Không kiểm gì, không gãy ở đây. Nuốt riêng
---           lỗi insufficient_privilege (42501) — thiếu quyền không phải lý do dừng khi có
---           thể còn sửa được những mục khác.
+--   BƯỚC 2: chạy TOÀN BỘ câu lệnh cưỡng chế. Không kiểm gì, không gãy ở đây.
+--           [vòng fix 1 — CR3] Nuốt MỌI lỗi, không riêng insufficient_privilege (42501). Vòng
+--           trước viết "nuốt riêng 42501" và bất biến "không gãy ở đây" khi đó chỉ đúng chừng
+--           nào mọi câu lệnh trong bảng có ĐÚNG MỘT chế độ hỏng là thiếu quyền. Task 5 đưa vào
+--           bảng những câu lệnh có chế độ hỏng khác (42710 khi một tên trigger đang thuộc một
+--           CONSTRAINT TRIGGER; "cannot change return type" khi hàm bị thay kiểu trả về) và đo
+--           được hậu quả: lỗi thoát khỏi khối DO -> cả transaction hardening rollback -> và vì
+--           lượt SỬA chạy TRƯỚC vòng migration đánh số, migrate() chết trước khi tới 004_*.sql
+--           nên KHÔNG vá được bằng một migration mới. Nay lỗi được nuốt + phát WARNING + ghi
+--           lại, và hậu điều kiện ở BƯỚC 3 mới là chỗ phán xét. Có test riêng cho bất biến này
+--           ("[vòng fix 1 — CR3] câu lệnh cưỡng chế ném lỗi KHÁC 42501..." ở
+--           db/migrations.int.test.ts) vì nó là nền của cả đường thoát QT1 của dự án.
 --   BƯỚC 3: chỉ tới lúc này mới đọc catalog và kiểm HẬU ĐIỀU KIỆN của mọi mục, GOM hết chỗ
 --           sai lại.
 --   BƯỚC 4: nếu có mục sai -> RAISE EXCEPTION MỘT LẦN, liệt kê TẤT CẢ, mỗi mục kèm quyền
@@ -193,8 +202,16 @@
 --                               theo bất kỳ sửa chữa nào của lượt 1/lượt 2.
 --
 -- Đường thoát khi (B) bắt được lỗi thật, nói rõ để không ai phải đoán: vì lượt 1 KHÔNG phán
--- xét, migrate() luôn chạy được hết vòng migration đánh số. Người vận hành viết một migration
--- mới (vd. 004_sua_policy.sql) rồi deploy — không cần đụng tay vào cụm. Nếu chỗ sai nằm ở
+-- xét, migrate() chạy được hết vòng migration đánh số. Người vận hành viết một migration
+-- mới (vd. 004_sua_policy.sql) rồi deploy — không cần đụng tay vào cụm.
+-- [vòng fix 1 — CR3] PHÁT BIỂU NÀY TỪNG QUÁ RỘNG, và đó là chỗ đắt nhất để nói quá vì lời hứa
+-- ở đây là NỀN của cả đường thoát QT1 của dự án. "Lượt 1 không phán xét" chỉ bảo đảm lượt 1
+-- không RAISE của riêng nó; nó KHÔNG bảo đảm lượt 1 chạy xong, vì lượt 1 CÓ chạy câu lệnh cưỡng
+-- chế và một câu lệnh cưỡng chế cũng ném lỗi được. Đo được: một CONSTRAINT TRIGGER trùng tên
+-- làm CREATE OR REPLACE TRIGGER ném 42710 ở LƯỢT 1 -> migrate() chết trước vòng migration đánh
+-- số -> 004_*.sql KHÔNG BAO GIỜ chạy tới -> đường sửa duy nhất là sửa tay trên cụm. Nay BƯỚC 2
+-- nuốt MỌI lỗi (xem [vòng fix 1 — CR3] ở BƯỚC 2), nên phát biểu trên mới thành tính chất chứ
+-- không còn là ý định. Nếu chỗ sai nằm ở
 -- danh sách hình dạng được duyệt (bên dưới) thì sửa CHÍNH FILE NÀY: nó là ".always.sql", chạy
 -- lại ở mọi lần migrate(), nên bản sửa có hiệu lực ngay ở lần deploy kế tiếp.
 --
@@ -698,8 +715,74 @@ DECLARE
   --     CREATE OR REPLACE TRIGGER ... WHEN (false)  hoặc  BEFORE UPDATE OF <cột>
   --       -> cả bốn đã đo là chạy, và cả bốn giữ nguyên TÊN trigger nên một phép kiểm chỉ hỏi
   --          "trigger còn đó không" xanh hết.
-  -- 003 đã nằm trong schema_migrations sau lần deploy đầu nên không có gì trở lại. Hai mục
-  -- dưới đây tự chữa cả ba, đúng khuôn bốn bước chung.
+  -- 003 đã nằm trong schema_migrations sau lần deploy đầu nên không có gì trở lại.
+  --
+  -- [vòng fix 1 — CR1/CR2/CR4/CR5] BỐN GIỚI HẠN TẦM NHÌN CỦA VÒNG TRƯỚC, VÀ CHÚNG LÀ MỘT LỖI
+  -- ============================================================================
+  -- Vòng trước canh SÁU CÁI TÊN TRIGGER NÓ BIẾT, trong SCHEMA public, trên relkind IN ('r','p'),
+  -- và chỉ nổ khi MỘT bảng sổ mất. Mọi thứ ngoài bốn giới hạn đó nằm ngoài tầm nhìn của nó, trong
+  -- khi 003 phát biểu BAO TRÙM rằng lớp C đưa trạng thái về đúng ở lần deploy kế tiếp. Bốn lỗ
+  -- dưới đây là cùng một lỗ hổng nhận thức nhìn từ bốn phía, tất cả đã ĐO trên PostgreSQL 16.15:
+  --
+  --   [CR1] TRIGGER hoặc RULE **lạ** (tên khác sáu tên đã biết) NUỐT SỰ KIỆN AUDIT trong im lặng.
+  --     CREATE TRIGGER aaa_nuot BEFORE INSERT ON audit_events FOR EACH ROW
+  --       WHEN (NEW.action = 'MO_NIEM_PHONG') EXECUTE FUNCTION public.nuot_co_chon();  -- RETURN NULL
+  --     -> app_api ghi sổ: sự kiện MO_NIEM_PHONG cho "INSERT 0 0" (BIẾN MẤT, KHÔNG LỖI), sự kiện
+  --        kế cho "INSERT 0 1". seq liên tục 1,2,3 và prev_hash NỐI ĐÚNG đầu chuỗi.
+  --     -> Bộ kiểm chứng chuỗi hash của Task 6 sẽ báo chuỗi HỢP LỆ trên một sổ ĐÃ BỊ KIỂM DUYỆT.
+  --        Đây là cách XOÁ AUDIT VỀ TƯƠNG LAI, hiệu quả hơn xoá hàng vì nó không để lại lỗ hổng
+  --        nào trong chuỗi. Khác hẳn ca "trigger tên đứng trước huỷ UPDATE/DELETE" (dữ liệu vẫn
+  --        an toàn): đường BEFORE INSERT đạt đúng mục tiêu của kẻ tấn công mà không vi phạm chữ
+  --        nghĩa của B4. "CREATE RULE r_ins AS ON INSERT TO audit_events DO INSTEAD NOTHING" cùng
+  --        kết quả; đo được cả hai SỐNG SÓT qua nhiều lượt migrate() với "MIGRATE OK".
+  --     Vì sao vòng trước mù: CTE `sai` là LEFT JOIN pg_trigger ON tgname = <một trong sáu tên>.
+  --     Nó chỉ hỏi sáu cái tên nó biết, không bao giờ nhìn phần còn lại của bảng, và không ai hỏi
+  --     pg_rewrite. Nay đảo sang MẶC ĐỊNH-ĐÓNG: trên bảng sổ, MỌI trigger không phải một trong
+  --     sáu trigger bắt buộc là SAI, và MỌI rule khác '_RETURN' là SAI. Cùng khuôn "danh sách
+  --     trắng thay danh sách đen" đã dùng cho hình dạng policy ở mục (B).
+  --
+  --   [CR2] Ba mặt của cùng một lỗ "bảng sổ không còn là bảng sổ", nay đóng bằng MỘT vị từ:
+  --     (a) ALTER TABLE ... SET SCHEMA kho_toi cho CẢ HAI bảng -> hai to_regclass('public....')
+  --         cùng NULL nên vế "một bảng còn, bảng kia mất" IM. Trigger đi theo bảng nên ở schema
+  --         mới chủ sở hữu tự gỡ chúng rồi làm gì cũng được; trả bảng về public thì migrate() kế
+  --         tiếp KHÔNG phát hiện gì và còn PHỤC HỒI VẺ NGOÀI NGUYÊN VẸN (pg_trigger sạch bong,
+  --         tgenabled='A') cho một bảng ĐÃ BỊ VIẾT LẠI. Đo: DELETE 4 hàng + UPDATE seq -> MIGRATE OK.
+  --     (b) DROP TABLE audit_events CASCADE; CREATE VIEW audit_events WITH (security_invoker=true)
+  --         AS SELECT ... FROM audit_chain_anchors -> `bang_al` bỏ qua relkind='v' nên không phép
+  --         kiểm trigger nào chạy, và to_regclass(...) IS NOT NULL nên vế "bảng mất" cũng im.
+  --         Đo: sửa exit 0, phán xét exit 0, "SELECT count(*) FROM audit_events" -> 0, KHÔNG LỖI.
+  --         BÁC BỎ lập luận của vòng trước ("mất cả hai bảng là sự cố ồn ào nhất có thể, mọi truy
+  --         vấn sổ đều gãy"): chỉ cần mất MỘT bảng, và MỌI TRUY VẤN VẪN CHẠY — sổ chỉ TRÔNG NHƯ RỖNG.
+  --     (c) DROP CẢ HAI bảng: vòng trước cố ý bỏ ngỏ với lý do "hậu điều kiện vô điều kiện sẽ đòi
+  --         003 có mặt ở MỌI lược đồ và làm vỡ các test dùng thư mục migration rút gọn". Lý do đó
+  --         chỉ đúng cho MỘT cách hiện thực. NEO VÀO schema_migrations thì không: migrate.ts tạo
+  --         schema_migrations TRƯỚC lượt hardening đầu tiên nên vế canh đọc được nó, còn ở thư mục
+  --         rút gọn (chỉ 001/002) không có dòng '003_*' nên vế canh NẰM IM. Đo lại: đúng như vậy.
+  --     Vị từ mới đóng cả ba: bảng sổ phải tồn tại NHƯ MỘT BẢNG THẬT (relkind IN ('r','p')) TRONG
+  --     schema public, và vế canh chỉ hoạt động khi CÒN một bảng sổ khác HOẶC 003 đã nằm trong
+  --     schema_migrations.
+  --
+  --   [CR4] SUY BẢNG QUA TRIGGER KHÔNG ĐƯỢC PHÉP TỰ CHỮA. Vòng trước nhận diện bảng chỉ-ghi-thêm
+  --     bằng "OR EXISTS (pg_trigger ... tgfoid = chan_sua_xoa)" rồi CROSS JOIN đủ BA sự kiện và
+  --     tạo nốt những cái thiếu — nghĩa là MỘT trigger đủ để migrate() TỰ TAY ÁP ĐẶT CẢ BA. Kịch
+  --     bản Task 7 hoàn toàn hợp lệ (bảng báo giá chống XOÁ nhưng vẫn cần UPDATE: nháp -> đã nộp)
+  --     đo được là hỏng IM LẶNG: tạo bao_gia + CHỈ bao_gia_chan_delete -> migrate() MIGRATE OK,
+  --     KHÔNG một NOTICE nào, nhưng migrate() TỰ THÊM bao_gia_chan_update -> UPDATE sau đó bị từ
+  --     chối; DROP trigger đó rồi migrate() thì nó QUAY LẠI. Không có cửa NGOẠI_LỆ nào cho mục này.
+  --     Điều đáng nói nhất: khối chú thích ngay dưới đây LOẠI BỎ cách suy "bảng có cột hash" với
+  --     ĐÚNG lý do này, rồi chọn một cách suy có CÙNG chế độ hỏng, chỉ khác là IM LẶNG thay vì ỒN
+  --     ÀO. Ồn ào còn sửa được; im lặng thì hỏng ở runtime production.
+  --     Nay vế trigger CHỈ DÙNG ĐỂ PHÁN XÉT: vòng lặp sửa chỉ chạy trên bảng thuộc
+  --     BANG_CHI_GHI_THEM, còn bảng lọt vào qua vế trigger thì BÁO LỖI kèm hướng dẫn. Mất một
+  --     trigger vẫn bị bắt, mà không có chuyện migrate() TỰ ĐỔI NGỮ NGHĨA một bảng.
+  --
+  --   [CR5] ALTER TABLE ... SET UNLOGGED chạy được và KHÔNG lớp nào canh. Đo bằng SIGKILL postgres
+  --     thật: trước-crash 4 hàng -> sau-crash 0 hàng (đối chứng bảng vẫn LOGGED: 4). Ba lớp đều
+  --     trượt — lớp A vô can (không có DML), lớp B vô can (SET UNLOGGED đòi QUYỀN SỞ HỮU chứ không
+  --     phải quyền ghi), lớp C không canh relpersistence. Hậu quả là MẤT DỮ LIỆU, không phải mất
+  --     bảo vệ, và cửa sổ phơi là VĨNH VIỄN. Cùng lớp: DROP CONSTRAINT audit_events_org_id_seq_key
+  --     làm chuỗi hash RẼ NHÁNH (đo: DROP OK -> INSERT trùng (org_id, seq=1) -> INSERT 0 1 ->
+  --     hardening im lặng -> count = 2 cho cùng (org_id, seq)). Cả hai nay nằm trong mục (D3).
   --
   -- BANG_CHI_GHI_THEM — danh sách ĐÓNG, viết tay, nhân bản sang db/audit-append-only.int.test.ts
   -- (có meta-test canh sự đồng bộ, cùng khuôn BANG_GOC_TENANT).
@@ -708,19 +791,37 @@ DECLARE
   --   * "bảng có cột hash/prev_hash": Task 6-10 sẽ có bảng báo giá mang hash mà VẪN cần UPDATE.
   --     Suy sai theo hướng đó là CHẶN DEPLOY trên một lược đồ hợp lệ — đúng cái bẫy mà QT1 cấm.
   --   * "bảng mang COMMENT có nhãn": nhãn do chính tác nhân đang bị canh sửa được -> fail-open.
-  --   * "bảng đang có trigger chan_sua_xoa()": CÓ dùng (vế thứ hai của bang_al bên dưới) nhưng
-  --     không đủ một mình, vì nó chính là thứ đang bị canh. Hợp hai nguồn thì mất MỘT trigger
-  --     vẫn còn hai trigger kia lộ ra bảng, mà mất CẢ SÁU thì danh sách viết tay lộ ra.
-  -- BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: DROP CẢ HAI bảng sổ cùng lúc thì mục này im —
-  -- vế UNION cuối chỉ bắt được ca "một bảng còn, bảng kia mất". Cố ý không đòi "hai bảng phải
-  -- tồn tại" vô điều kiện: nhiều test của dự án chạy migrate() trên thư mục migration chỉ có
-  -- 001/002, và một hậu điều kiện vô điều kiện sẽ biến hardening thành thứ đòi 003 phải có mặt
-  -- ở mọi lược đồ. Mất cả hai bảng cũng là sự cố ồn ào nhất có thể (mọi truy vấn sổ đều gãy),
-  -- khác hẳn ba đường trôi im lặng ở trên.
+  --   * "bảng đang có trigger chan_sua_xoa()": CÓ dùng (nhánh trong_ds = false của bang_al bên
+  --     dưới) nhưng CHỈ ĐỂ PHÁN XÉT, không để tự chữa — xem [CR4]. Hợp hai nguồn thì mất MỘT
+  --     trigger vẫn còn hai trigger kia lộ ra bảng, mà mất CẢ SÁU thì danh sách viết tay lộ ra.
+  -- ĐÁNH ĐỔI CỦA VIỆC BỎ KHOÁ CỨNG nspname = 'public', nói ra thay vì để người đọc tự phát hiện:
+  -- một bảng tên 'audit_events' ở BẤT KỲ schema nào cũng bị nhận là bảng sổ và bị cưỡng chế sáu
+  -- trigger. Đó là cái giá phải trả để nhìn thấy SET SCHEMA (CR2a) — không có cách nào canh được
+  -- một bảng vừa bị đẩy đi mà lại chỉ nhìn schema cũ. Hai cái tên trong danh sách là tên riêng
+  -- của dự án, nên va chạm là chuyện có thể sống chung; nếu một task sau cần một bảng khác trùng
+  -- tên ở schema khác thì đó là một quyết định phải nhìn thấy được, và chỗ sửa là danh sách này.
   BANG_CHI_GHI_THEM constant text :=
     $q$(VALUES ('audit_events'), ('audit_chain_anchors')) AS b(ten)$q$;
 
   HAM_CHAN constant text := $q$to_regprocedure('public.chan_sua_xoa()')$q$;
+
+  -- Bộ lọc "schema do dự án quản" — DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.
+  -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
+  MAU_SCHEMA_DU_AN constant text :=
+    $q$%1$s.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND %1$s.nspname NOT LIKE 'pg\_toast%%' AND %1$s.nspname NOT LIKE 'pg\_temp%%'$q$;
+
+  -- [CR2c] NEO cho vế "bảng sổ biến mất": 003 đã từng chạy trên lược đồ này chưa.
+  -- Phải quyết định Ở ĐÂY (lúc DECLARE) chứ không phải trong câu SQL: PostgreSQL PHÂN TÍCH cả
+  -- câu lệnh trước khi chạy, nên một tham chiếu tĩnh tới public.schema_migrations sẽ ném 42P01
+  -- trên lược đồ chưa có bảng đó — "bọc bằng to_regclass(...) IS NOT NULL" KHÔNG cứu được, vì
+  -- lỗi xảy ra ở thì phân tích chứ không ở thì chạy. Đã đo. Ghi đủ pg_catalog. theo QT3 vì dòng
+  -- này chạy TRƯỚC khối ghim search_path trong thân DO.
+  NEO_003 constant text :=
+    CASE WHEN pg_catalog.to_regclass('public.schema_migrations') IS NULL THEN $q$false$q$
+         ELSE $q$EXISTS (SELECT 1 FROM public.schema_migrations sm
+                          WHERE sm.version LIKE '003\_audit\_events%')$q$
+    END;
 
   -- Tập trigger PHẢI CÓ, và chỗ nào đang sai. `kieu` là pg_trigger.tgtype — bitmask
   -- (ROW=1, BEFORE=2, DELETE=8, UPDATE=16, TRUNCATE=32) đã ĐO trên PostgreSQL 16.15:
@@ -729,18 +830,31 @@ DECLARE
   -- So khớp tgtype NGUYÊN VĂN (không phải "có bit UPDATE") vì mọi bit đều load-bearing: mất
   -- bit BEFORE là trigger chạy SAU khi hàng đã đổi, mất bit ROW là trigger không thấy hàng.
   -- tgattr và tgqual phải trống: cả hai là đường vô hiệu hoá giữ nguyên tên trigger.
+  --
+  -- `bang_so` (bảng sổ THẬT, nhận theo tên, ở MỌI schema của dự án) tách khỏi `bang_al` (bang_so
+  -- HỢP bảng lạ đang mang trigger chan_sua_xoa()). Chỉ `bang_so` được TỰ CHỮA — xem [CR4].
   CTE_TRIGGER_CHAN constant text :=
-    $q$WITH bang_al AS (
-         SELECT c.oid AS bang_oid, c.relname
+    $q$WITH bang_so AS (
+         SELECT c.oid AS bang_oid, n.nspname, c.relname, c.relpersistence, c.relowner
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
-            AND (c.relname IN (SELECT ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)
-                 OR EXISTS (SELECT 1 FROM pg_trigger tg
-                             WHERE tg.tgrelid = c.oid AND NOT tg.tgisinternal
-                               AND tg.tgfoid = $q$ || HAM_CHAN || $q$))
+          WHERE c.relkind IN ('r', 'p')
+            AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+            AND c.relname IN (SELECT ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)
+       ),
+       bang_al AS (
+         SELECT bang_oid, relname, true AS trong_ds FROM bang_so
+         UNION ALL
+         SELECT c.oid, c.relname, false
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind IN ('r', 'p')
+            AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+            AND c.relname NOT IN (SELECT ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)
+            AND EXISTS (SELECT 1 FROM pg_trigger tg
+                         WHERE tg.tgrelid = c.oid AND NOT tg.tgisinternal
+                           AND tg.tgfoid = $q$ || HAM_CHAN || $q$)
        ),
        can_co AS (
-         SELECT b.bang_oid, b.relname,
+         SELECT b.bang_oid, b.relname, b.trong_ds,
                 b.relname || '_chan_' || v.hau_to AS ten_trigger,
                 v.su_kien, v.pham_vi, v.kieu
            FROM bang_al b
@@ -755,6 +869,16 @@ DECLARE
                   WHEN t.oid IS NULL THEN 'trigger KHÔNG TỒN TẠI'
                   WHEN t.tgfoid <> $q$ || HAM_CHAN || $q$
                     THEN 'gọi hàm khác: ' || t.tgfoid::regprocedure::text
+                  -- [vòng fix 1 — CR3] tgconstraint <> 0 phải có TÊN GỌI RIÊNG, và phải đứng
+                  -- TRƯỚC vế tgtype: một constraint trigger cũng sai tgtype (nó chỉ có AFTER —
+                  -- "CREATE CONSTRAINT TRIGGER ... BEFORE" là syntax error, đã đo) nên nếu không
+                  -- có vế này thì trạng thái nguy hiểm nhất của mục (D2) lại bị báo dưới một cái
+                  -- tên sai. Nó nguy hiểm vì chính CÂU LỆNH TỰ CHỮA đụng vào nó: CREATE OR REPLACE
+                  -- TRIGGER trên một cái tên đang thuộc constraint trigger ném 42710.
+                  WHEN t.tgconstraint <> 0
+                    THEN 'là CONSTRAINT TRIGGER (tgconstraint=' || t.tgconstraint::text
+                         || ') — constraint trigger CHỈ CÓ AFTER nên nó không chặn được gì, và '
+                         || 'nó chặn luôn CREATE OR REPLACE TRIGGER cùng tên'
                   WHEN t.tgtype <> k.kieu::smallint
                     THEN 'sai thời điểm/sự kiện/phạm vi (tgtype=' || t.tgtype::text
                          || ', cần ' || k.kieu::text || ')'
@@ -776,19 +900,115 @@ DECLARE
                  AND NOT t.tgisinternal
        )$q$;
 
+  -- Trigger LẠ / RULE trên bảng sổ, dùng chung cho hậu điều kiện và cho vòng lặp cưỡng chế.
+  -- tgparentid = 0 loại BẢN SAO trigger trên phân mảnh: bản sao mang tên của trigger CHA nên nó
+  -- không khớp can_co của LÁ, mà "DROP TRIGGER" trên nó bị PostgreSQL từ chối ("cannot drop
+  -- trigger ... because it is a child") — tức một câu lệnh cưỡng chế ném lỗi KHÁC 42501, đúng
+  -- lớp lỗi mà [CR3] vừa phải đóng. Trigger cha thì vẫn bị soi bình thường.
+  CAU_TRIGGER_LA constant text :=
+    $q$SELECT b.bang_oid, b.relname, t.tgname AS ten
+         FROM bang_so b JOIN pg_trigger t ON t.tgrelid = b.bang_oid
+        WHERE NOT t.tgisinternal AND t.tgparentid = 0
+          AND t.tgname NOT IN (SELECT k.ten_trigger FROM can_co k
+                                WHERE k.bang_oid = b.bang_oid)$q$;
+
+  CAU_RULE_LA constant text :=
+    $q$SELECT b.bang_oid, b.relname, rw.rulename::text AS ten
+         FROM bang_so b JOIN pg_rewrite rw ON rw.ev_class = b.bang_oid
+        WHERE rw.rulename <> '_RETURN'$q$;
+
   CAU_TRIGGER_CHAN_SAI constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT relname || '.' || ten_trigger || ': ' || ly_do AS mo_ta
+     SELECT relname || '.' || ten_trigger || ': ' || ly_do
+            || CASE WHEN trong_ds THEN ''
+                    ELSE ' [bảng này KHÔNG có trong BANG_CHI_GHI_THEM nên hardening CHỈ PHÁN '
+                         'XÉT, KHÔNG tự tạo trigger cho nó — xem [CR4]. Đường sửa: thêm tên bảng '
+                         'vào BANG_CHI_GHI_THEM nếu nó thật sự chỉ-ghi-thêm, hoặc gỡ trigger gọi '
+                         'public.chan_sua_xoa() khỏi nó nếu không. Một bảng muốn chống XOÁ mà vẫn '
+                         'cần UPDATE phải dùng một hàm trigger KHÁC chan_sua_xoa()]'
+               END AS mo_ta
        FROM sai WHERE ly_do IS NOT NULL
      UNION ALL
-     -- Vế "một bảng sổ còn, bảng kia biến mất". EXISTS lồng bên trong dùng LẠI cùng danh sách
-     -- với alias b — alias trong cùng che alias ngoài, nên nó hỏi "có bảng sổ NÀO còn không".
-     SELECT b.ten || ': bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI trong schema public, trong khi bảng '
-            'sổ kia thì có — một nửa lược đồ sổ kiểm toán đã biến mất' AS mo_ta
+     -- [CR1] Trigger LẠ trên bảng sổ: mặc định-ĐÓNG, không phải danh sách sáu tên.
+     SELECT t.relname || '.' || t.ten || ': TRIGGER LẠ trên bảng sổ — một trigger BEFORE INSERT '
+            'trả NULL nuốt sự kiện audit trong IM LẶNG và để lại một chuỗi hash LIỀN MẠCH MÀ '
+            'THIẾU SỰ KIỆN. Chỉ sáu trigger chỉ-ghi-thêm được phép tồn tại trên bảng sổ.' AS mo_ta
+       FROM ($q$ || CAU_TRIGGER_LA || $q$) t
+     UNION ALL
+     -- [CR1] RULE trên bảng sổ. '_RETURN' là rule của VIEW; bang_so chỉ nhận relkind r/p nên nó
+     -- không xuất hiện ở đây, vẫn loại tường minh để vế này không bao giờ tự bắn vào chân.
+     SELECT rl.relname || '.' || rl.ten || ': RULE trên bảng sổ — "DO INSTEAD NOTHING" trên INSERT '
+            'nuốt sự kiện audit trong IM LẶNG (đo: INSERT 0 0, không lỗi).' AS mo_ta
+       FROM ($q$ || CAU_RULE_LA || $q$) rl
+     UNION ALL
+     -- [CR2] MỘT vị từ cho ba ca: mất một bảng, mất cả hai, và bị thay bằng VIEW.
+     SELECT b.ten || ': bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI như một BẢNG THẬT (relkind r/p) trong '
+            'schema public — nó đã bị DROP, bị ALTER TABLE ... SET SCHEMA đẩy đi, hoặc bị thay '
+            'bằng một VIEW cùng tên. Sửa bằng một migration mới.' AS mo_ta
        FROM $q$ || BANG_CHI_GHI_THEM || $q$
-      WHERE to_regclass('public.' || quote_ident(b.ten)) IS NULL
-        AND EXISTS (SELECT 1 FROM $q$ || BANG_CHI_GHI_THEM || $q$
-                     WHERE to_regclass('public.' || quote_ident(b.ten)) IS NOT NULL)$q$;
+      WHERE NOT EXISTS (SELECT 1 FROM bang_so bs
+                         WHERE bs.relname = b.ten AND bs.nspname = 'public')
+        AND (EXISTS (SELECT 1 FROM bang_so) OR $q$ || NEO_003 || $q$)$q$;
+
+  -- [CR5 + IM5] Trạng thái VẬT LÝ của bảng sổ: LOGGED, và ràng buộc UNIQUE (org_id, seq).
+  CAU_BANG_SO_VAT_LY constant text :=
+    CTE_TRIGGER_CHAN || $q$
+     SELECT b.relname || ': bảng sổ đang UNLOGGED (relpersistence=' || b.relpersistence::text
+            || ') — MỌI hàng audit biến mất sau lần crash kế tiếp. Đã đo bằng SIGKILL postgres '
+            'thật: trước-crash 4 hàng, sau-crash 0 hàng.' AS mo_ta
+       FROM bang_so b WHERE b.relpersistence <> 'p'
+     UNION ALL
+     SELECT b.relname || ': thiếu ràng buộc UNIQUE (org_id, seq) — không có nó thì hai hàng cùng '
+            '(org_id, seq) cùng tồn tại được và chuỗi hash RẼ NHÁNH trong im lặng (nền của B3).'
+            AS mo_ta
+       FROM bang_so b
+      WHERE NOT EXISTS (
+              SELECT 1 FROM pg_constraint con
+               WHERE con.conrelid = b.bang_oid AND con.contype = 'u'
+                 AND con.conkey = ARRAY[
+                       (SELECT a.attnum FROM pg_attribute a
+                         WHERE a.attrelid = b.bang_oid AND a.attname = 'org_id'
+                           AND a.attnum > 0 AND NOT a.attisdropped),
+                       (SELECT a.attnum FROM pg_attribute a
+                         WHERE a.attrelid = b.bang_oid AND a.attname = 'seq'
+                           AND a.attnum > 0 AND NOT a.attisdropped)])$q$;
+
+  -- [IM2] ACL của bảng sổ. Vòng trước CỐ Ý không canh lớp này, với lý do "lớp REVOKE chỉ mua một
+  -- câu lệnh dừng sớm hơn". Lý do đó đo được là SAI: trong đúng cửa sổ phơi mà 003 thừa nhận
+  -- (DISABLE TRIGGER audit_events_chan_delete), lớp B là lớp DUY NHẤT còn đứng —
+  -- "app_api_login DELETE -> permission denied for table audit_events". Và hậu quả của việc không
+  -- canh cũng đo được: "GRANT DELETE, UPDATE ON audit_events TO app_api" -> app_api_login xoá
+  -- được ba hàng audit -> migrate() báo MIGRATE OK -> GRANT của kẻ tấn công SỐNG QUA MỌI DEPLOY.
+  -- Quyền cần để tự chữa đúng bằng mục (D2) đã đòi (sở hữu bảng), nên nó không thêm hàng rào
+  -- deploy nào. Cột: attacl chỉ lưu được SELECT/INSERT/UPDATE/REFERENCES nên mức cột chỉ cấm UPDATE.
+  -- Bí danh pg_roles viết là `vai`, KHÔNG phải `r`: câu này được nhúng vào một khối plpgsql có
+  -- biến vòng lặp tên `r`, và plpgsql thay tên biến vào TRƯỚC khi PostgreSQL phân giải bí danh
+  -- SQL. Đã tự vấp: bí danh `r` cho ra "record \"r\" is not assigned yet" (55000) — và chính
+  -- WHEN OTHERS của BƯỚC 2 (bản vá CR3) là thứ giữ cho lỗi đó không kéo sập cả lượt sửa.
+  CAU_QUYEN_BANG_SO_SAI constant text :=
+    $q$SELECT b.bang_oid, b.relname, a.privilege_type AS quyen, NULL::text AS cot,
+              CASE WHEN vai.rolname IS NULL THEN 'PUBLIC' ELSE quote_ident(vai.rolname) END AS ai
+         FROM bang_so b JOIN pg_class c ON c.oid = b.bang_oid
+         CROSS JOIN LATERAL aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+         LEFT JOIN pg_roles vai ON vai.oid = a.grantee
+        WHERE a.grantee <> c.relowner
+          AND a.privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
+       UNION ALL
+       SELECT b.bang_oid, b.relname, a.privilege_type, att.attname::text,
+              CASE WHEN vai.rolname IS NULL THEN 'PUBLIC' ELSE quote_ident(vai.rolname) END
+         FROM bang_so b JOIN pg_class c ON c.oid = b.bang_oid
+         JOIN pg_attribute att ON att.attrelid = b.bang_oid AND att.attnum > 0
+                              AND NOT att.attisdropped
+         CROSS JOIN LATERAL aclexplode(att.attacl) a
+         LEFT JOIN pg_roles vai ON vai.oid = a.grantee
+        WHERE a.grantee <> c.relowner AND a.privilege_type = 'UPDATE'$q$;
+
+  CAU_QUYEN_BANG_SO_MO_TA constant text :=
+    CTE_TRIGGER_CHAN || $q$
+     SELECT q.relname || ': quyền ' || q.quyen || ' cấp cho ' || q.ai
+            || coalesce(' trên cột ' || q.cot, '')
+            || ' — bảng sổ chỉ được cấp SELECT và INSERT' AS mo_ta
+       FROM ($q$ || CAU_QUYEN_BANG_SO_SAI || $q$) q$q$;
 
   -- Mỗi hàng: [1] tên mục, [2] tiền điều kiện, [3] câu lệnh cưỡng chế, [4] hậu điều kiện
   -- ("trạng thái đã đúng"), [5] biểu thức mô tả chỗ sai, [6] quyền cần có để sửa.
@@ -1187,20 +1407,44 @@ $ham$$q$,
       $q$viết một migration mới (ALTER VIEW ... SET (security_invoker = true), DROP MATERIALIZED VIEW, hoặc bỏ SECURITY DEFINER), HOẶC thêm tên đối tượng vào NGOAI_LE_DOC_VONG kèm lý do$q$
     ],
 
-    -- ---- [T5] (D) Sổ kiểm toán chỉ-ghi-thêm: thân hàm + sáu trigger ---------------------
+    -- ---- [T5] (D) Sổ kiểm toán chỉ-ghi-thêm: thân hàm + trigger + vật lý + quyền ---------
     -- Thân hàm PHẢI khớp bản trong 003_audit_events.sql. Sửa một bên thì sửa cả hai; có test
     -- canh việc đó (db/audit-append-only.int.test.ts), đúng khuôn §R3.
+    --
+    -- [vòng fix 1 — CR3] Câu lệnh cưỡng chế bọc trong một khối DO để DROP FUNCTION CÓ ĐIỀU KIỆN
+    -- trước khi CREATE OR REPLACE. Lý do đo được: "DROP FUNCTION + CREATE FUNCTION
+    -- public.chan_sua_xoa() RETURNS void" làm câu CREATE OR REPLACE ở đây ném "cannot change
+    -- return type of existing function" — một lỗi KHÁC 42501 ở BƯỚC 2. Vế điều kiện
+    -- (prorettype <> trigger) là bắt buộc: DROP vô điều kiện sẽ ném khi sáu trigger đang phụ
+    -- thuộc vào hàm, tức đổi một chế độ hỏng lấy một chế độ hỏng khác.
+    -- [vòng fix 1 — IM3] Ai sửa được: đo dưới ĐÚNG hồ sơ vai deploy (CREATEROLE + chủ sở hữu
+    -- database, KHÔNG superuser), proowner của hàm này là CHÍNH role deploy — nó do lượt SỬA của
+    -- file này tạo ra, không phải do "lần bootstrap bằng superuser" như 003 từng viết. Nên mục
+    -- này TỰ CHỮA trong kịch bản vận hành thật. NGOẠI LỆ đã đo: nếu ai đó chạy
+    -- "ALTER FUNCTION public.chan_sua_xoa() OWNER TO postgres", CREATE OR REPLACE dưới role
+    -- deploy trả "must be owner of function" (42501, bị BƯỚC 2 nuốt) và mục này KHÔNG còn tự
+    -- chữa — CREATE OR REPLACE trên một hàm ĐÃ TỒN TẠI đòi QUYỀN SỞ HỮU, không phải CREATE trên
+    -- schema. Khi đó đường sửa là ALTER FUNCTION ... OWNER TO <role deploy> bằng superuser.
     ARRAY[
       $q$định nghĩa hàm public.chan_sua_xoa()$q$,
       $q$true$q$,
-      $q$CREATE OR REPLACE FUNCTION public.chan_sua_xoa() RETURNS trigger
-         LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
+      $q$DO $fn$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.chan_sua_xoa()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.chan_sua_xoa();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.chan_sua_xoa() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
 BEGIN
   RAISE EXCEPTION 'Bảng % là bảng chỉ-ghi-thêm (append-only): thao tác % bị từ chối',
     TG_TABLE_NAME, TG_OP
     USING ERRCODE = 'insufficient_privilege';
 END
-$ham$$q$,
+$ham$;
+         END
+         $fn$$q$,
       -- proconfig được canh vì mệnh đề "SET search_path = pg_catalog" là bản vá QT3 của hàm
       -- này: gỡ nó ra thì thân hàm lại chạy dưới search_path của phiên gọi.
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -1226,6 +1470,26 @@ $ham$$q$,
     -- chỉ chạy câu đầu là tự tay hạ ENABLE ALWAYS xuống ORIGIN ở mỗi lần deploy.
     -- Mục này chạy TRÊN VÔ ĐIỀU KIỆN nhưng chỉ đụng tới những trigger ĐANG SAI (vòng lặp đọc
     -- CTE `sai`), nên deploy bình thường không lấy khoá DDL nào trên bảng sổ.
+    --
+    -- [vòng fix 1 — CR3] "DROP TRIGGER IF EXISTS" đi TRƯỚC "CREATE OR REPLACE TRIGGER". Đo được
+    -- kịch bản liền, và nó là cái bẫy nặng nhất của mục này: DISABLE audit_events_chan_update
+    -- rồi cắm một CONSTRAINT TRIGGER trùng tên audit_events_chan_delete -> câu CREATE OR REPLACE
+    -- ném 42710 ("... is a constraint trigger") ở LƯỢT 1 (chế độ 'sua'), tức TRƯỚC vòng migration
+    -- đánh số -> migrate() chết trước khi tới được 004_*.sql -> "cửa sổ phơi tới lần deploy kế"
+    -- thành VĨNH VIỄN, LỚP C TỰ KHOÁ MÌNH LẠI. Hai câu ENABLE ALWAYS phía sau vốn đã có nên
+    -- DROP+CREATE không đổi ngữ nghĩa của deploy bình thường (vòng lặp chỉ chạy trên trigger SAI).
+    -- [vòng fix 1 — CR4] Vòng lặp chỉ chạy trên `trong_ds` — bảng lọt vào qua vế trigger được
+    -- PHÁN XÉT chứ không bị migrate() tự tay áp đặt ngữ nghĩa chỉ-ghi-thêm.
+    -- [vòng fix 1 — CR1] Hai vòng lặp cuối gỡ trigger LẠ và RULE khỏi bảng sổ. Cùng mức quyền
+    -- (sở hữu bảng) mà vòng lặp đầu đã đòi, nên không mở thêm yêu cầu deploy nào.
+    -- [vòng fix 1 — CR3, hạt mịn] MỖI đơn vị sửa chữa nằm trong khối con BEGIN/EXCEPTION riêng.
+    -- Bản vá CR3 ở BƯỚC 2 mới chỉ giữ cho một mục hỏng không kéo sập CÁC MỤC KHÁC; nó không giữ
+    -- cho một ĐƠN VỊ hỏng bên trong cùng một mục khỏi kéo theo những đơn vị đã sửa được của
+    -- chính mục đó. Đã tự vấp và đo: trong mục (D3), "ALTER TABLE ... SET LOGGED" chạy THÀNH
+    -- CÔNG rồi "ADD CONSTRAINT UNIQUE" ném 23505 trên bảng đang có hàng trùng — cả hai cùng
+    -- khối nên SET LOGGED bị rollback theo, và bảng sổ ở lại UNLOGGED (mất dữ liệu sau crash)
+    -- chỉ vì một chế độ hỏng KHÁC HẲN không liên quan. Đây đúng là lớp lỗi mà [fix round 5 — R1]
+    -- đã phải gỡ một lần ở mức MỤC; nay nó được đóng ở mức ĐƠN VỊ.
     ARRAY[
       $q$trigger chỉ-ghi-thêm trên bảng sổ kiểm toán$q$,
       $q$true$q$,
@@ -1233,20 +1497,121 @@ $ham$$q$,
          DECLARE r RECORD;
          BEGIN
            FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$
-             SELECT bang_oid, ten_trigger, su_kien, pham_vi FROM sai WHERE ly_do IS NOT NULL
+             SELECT bang_oid, ten_trigger, su_kien, pham_vi FROM sai
+              WHERE ly_do IS NOT NULL AND trong_ds
            LOOP
-             EXECUTE format(
-               'CREATE OR REPLACE TRIGGER %I BEFORE %s ON %s %s '
-               'EXECUTE FUNCTION public.chan_sua_xoa()',
-               r.ten_trigger, r.su_kien, r.bang_oid::regclass, r.pham_vi);
-             EXECUTE format('ALTER TABLE %s ENABLE ALWAYS TRIGGER %I',
-                            r.bang_oid::regclass, r.ten_trigger);
+             BEGIN
+               EXECUTE format('DROP TRIGGER IF EXISTS %I ON %s',
+                              r.ten_trigger, r.bang_oid::regclass);
+               EXECUTE format(
+                 'CREATE OR REPLACE TRIGGER %I BEFORE %s ON %s %s '
+                 'EXECUTE FUNCTION public.chan_sua_xoa()',
+                 r.ten_trigger, r.su_kien, r.bang_oid::regclass, r.pham_vi);
+               EXECUTE format('ALTER TABLE %s ENABLE ALWAYS TRIGGER %I',
+                              r.bang_oid::regclass, r.ten_trigger);
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: không dựng lại được trigger % trên %: % (%)',
+                             r.ten_trigger, r.bang_oid::regclass, SQLERRM, SQLSTATE;
+             END;
+           END LOOP;
+           FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$ $q$ || CAU_TRIGGER_LA || $q$
+           LOOP
+             BEGIN
+               EXECUTE format('DROP TRIGGER %I ON %s', r.ten, r.bang_oid::regclass);
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: không gỡ được trigger lạ % trên %: % (%)',
+                             r.ten, r.bang_oid::regclass, SQLERRM, SQLSTATE;
+             END;
+           END LOOP;
+           FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$ $q$ || CAU_RULE_LA || $q$
+           LOOP
+             BEGIN
+               EXECUTE format('DROP RULE %I ON %s', r.ten, r.bang_oid::regclass);
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: không gỡ được rule % trên %: % (%)',
+                             r.ten, r.bang_oid::regclass, SQLERRM, SQLSTATE;
+             END;
            END LOOP;
          END
          $tg$$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
-      $q$quyền sở hữu các bảng sổ đó (để CREATE TRIGGER và ALTER TABLE) hoặc SUPERUSER$q$
+      $q$quyền sở hữu các bảng sổ đó (để CREATE/DROP TRIGGER, DROP RULE và ALTER TABLE) hoặc SUPERUSER$q$
+    ],
+
+    -- [vòng fix 1 — CR5 + IM5] Trạng thái VẬT LÝ của bảng sổ. Tách khỏi mục trigger để một đột
+    -- biến vào đây không bị mục kia bắt hộ, và để thông báo lỗi nói đúng thứ đang sai.
+    -- "SET LOGGED" viết lại toàn bộ bảng nên nó KHÔNG chạy ở deploy bình thường: vòng lặp chỉ
+    -- đụng tới bảng đang có relpersistence <> 'p'.
+    ARRAY[
+      $q$bảng sổ kiểm toán: LOGGED và UNIQUE (org_id, seq)$q$,
+      $q$true$q$,
+      $q$DO $vl$
+         DECLARE r RECORD;
+         BEGIN
+           FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$
+             SELECT bang_oid, relname, relpersistence FROM bang_so
+           LOOP
+             IF r.relpersistence <> 'p' THEN
+               BEGIN
+                 EXECUTE format('ALTER TABLE %s SET LOGGED', r.bang_oid::regclass);
+               EXCEPTION WHEN OTHERS THEN
+                 RAISE WARNING 'Hardening: không đặt lại LOGGED cho %: % (%)',
+                               r.bang_oid::regclass, SQLERRM, SQLSTATE;
+               END;
+             END IF;
+             IF NOT EXISTS (SELECT 1 FROM pg_constraint con
+                             WHERE con.conrelid = r.bang_oid AND con.contype = 'u'
+                               AND con.conkey = ARRAY[
+                                     (SELECT a.attnum FROM pg_attribute a
+                                       WHERE a.attrelid = r.bang_oid AND a.attname = 'org_id'
+                                         AND a.attnum > 0 AND NOT a.attisdropped),
+                                     (SELECT a.attnum FROM pg_attribute a
+                                       WHERE a.attrelid = r.bang_oid AND a.attname = 'seq'
+                                         AND a.attnum > 0 AND NOT a.attisdropped)]) THEN
+               BEGIN
+                 EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I UNIQUE (org_id, seq)',
+                                r.bang_oid::regclass, r.relname || '_org_id_seq_key');
+               EXCEPTION WHEN OTHERS THEN
+                 RAISE WARNING 'Hardening: không dựng lại được UNIQUE (org_id, seq) trên %: % (%)',
+                               r.bang_oid::regclass, SQLERRM, SQLSTATE;
+               END;
+             END IF;
+           END LOOP;
+         END
+         $vl$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_BANG_SO_VAT_LY || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_BANG_SO_VAT_LY || $q$) t)$q$,
+      $q$quyền sở hữu các bảng sổ đó (để ALTER TABLE SET LOGGED / ADD CONSTRAINT) hoặc SUPERUSER$q$
+    ],
+
+    -- [vòng fix 1 — IM2] ACL của bảng sổ — xem lập luận đo được ở CAU_QUYEN_BANG_SO_SAI.
+    ARRAY[
+      $q$quyền GHI trên bảng sổ kiểm toán$q$,
+      $q$true$q$,
+      $q$DO $ac$
+         DECLARE r RECORD;
+         BEGIN
+           FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$ $q$ || CAU_QUYEN_BANG_SO_SAI || $q$
+           LOOP
+             BEGIN
+               IF r.cot IS NULL THEN
+                 EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON %s FROM %s',
+                                r.bang_oid::regclass, r.ai);
+               ELSE
+                 EXECUTE format('REVOKE UPDATE (%I) ON %s FROM %s',
+                                r.cot, r.bang_oid::regclass, r.ai);
+               END IF;
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: không thu hồi được quyền % của % trên %: % (%)',
+                             r.quyen, r.ai, r.bang_oid::regclass, SQLERRM, SQLSTATE;
+             END;
+           END LOOP;
+         END
+         $ac$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
+      $q$quyền sở hữu các bảng sổ đó (hoặc là grantor của chính quyền cần thu hồi) hoặc SUPERUSER$q$
     ]
   ];
 
@@ -1292,6 +1657,9 @@ $ham$$q$,
   hang RECORD;
   con_sot text;
   loi_gom text[] := ARRAY[]::text[];
+  -- [vòng fix 1 — CR3] Lỗi mà câu lệnh cưỡng chế của mục i ném ra ở BƯỚC 2, giữ lại để BƯỚC 4
+  -- nói được VÌ SAO tự chữa không thành thay vì chỉ nói trạng thái vẫn sai.
+  loi_cuong_che text[] := ARRAY[]::text[];
 BEGIN
   -- ===== [vòng fix 2 — CR1] GHIM search_path CỦA PHIÊN PHÁN XÉT ========================
   -- Vòng 1 TỰ PHÁT HIỆN rằng pg_get_expr deparse THEO search_path của phiên đang đọc, rồi
@@ -1427,12 +1795,33 @@ BEGIN
   END LOOP;
 
   -- ===== BƯỚC 2: chạy TOÀN BỘ câu lệnh cưỡng chế, không phán xét gì =====================
+  -- [vòng fix 1 — CR3] BẮT MỌI LỖI, không riêng insufficient_privilege. Bất biến ở đầu file
+  -- ("BƯỚC 2 ... KHÔNG GÃY Ở ĐÂY") trước vòng này là một Ý ĐỊNH chứ không phải một tính chất:
+  -- nó chỉ đúng chừng nào mọi câu lệnh trong bảng có ĐÚNG MỘT chế độ hỏng là thiếu quyền. Task 5
+  -- là task đầu tiên đưa vào bảng những câu lệnh có chế độ hỏng KHÁC, và hậu quả đo được là KÉP:
+  --   (a) lỗi thoát khỏi khối DO -> CẢ transaction hardening ROLLBACK -> mọi sửa chữa khác trong
+  --       cùng lượt đều mất (một mục không sửa được kéo theo những mục sửa được);
+  --   (b) migrate.ts chạy lượt 'sua' TRƯỚC vòng migration đánh số, nên gãy ở đó nghĩa là
+  --       migrate() chết TRƯỚC khi tới được 004_*.sql — đường vá bằng một migration mới KHÔNG
+  --       TỚI ĐƯỢC, chỉ còn sửa tay trên cụm. Đúng cái ngõ cụt QT1 mà cả file này sinh ra để gỡ.
+  -- Nuốt KHÔNG phải là bỏ qua: hậu điều kiện ở BƯỚC 3 vẫn phán xét trạng thái THẬT, nên một câu
+  -- lệnh cưỡng chế hỏng vẫn thành lỗi ồn ào — chỉ là ở lượt PHÁN XÉT (nơi 004 tới đích được)
+  -- thay vì ở lượt SỬA (nơi nó không tới được). Lỗi bắt được vừa phát ra WARNING ngay tại chỗ,
+  -- vừa được giữ lại để BƯỚC 4 nói ra trong cùng một thông báo.
+  loi_cuong_che := array_fill(NULL::text, ARRAY[array_length(bang, 1)]);
   FOR i IN 1 .. array_length(bang, 1) LOOP
     EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
     CONTINUE WHEN NOT coalesce(du_dieu_kien, false);
     BEGIN
       EXECUTE bang[i][3];
-    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        loi_cuong_che[i] := 'insufficient_privilege (42501): ' || SQLERRM;
+      WHEN OTHERS THEN
+        loi_cuong_che[i] := SQLSTATE || ': ' || SQLERRM;
+        RAISE WARNING 'Hardening: câu lệnh cưỡng chế của mục "%" ném % (%). BƯỚC 2 nuốt lỗi này '
+                      'để không kéo sập cả lượt sửa; hậu điều kiện ở BƯỚC 3 sẽ phán xét.',
+                      bang[i][1], SQLSTATE, SQLERRM;
     END;
   END LOOP;
   END IF; -- che_do IN ('sua','day_du')
@@ -1469,8 +1858,9 @@ BEGIN
     IF NOT coalesce(dung_roi, false) THEN
       EXECUTE 'SELECT ' || bang[i][5] INTO chi_tiet;
       loi_gom := loi_gom || format(
-        '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.',
-        bang[i][1], chi_tiet, bang[i][6]);
+        '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.%s',
+        bang[i][1], chi_tiet, bang[i][6],
+        coalesce(' Câu lệnh cưỡng chế đã ném: ' || loi_cuong_che[i], ''));
     END IF;
   END LOOP;
 

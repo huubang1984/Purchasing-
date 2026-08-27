@@ -42,6 +42,76 @@ const TRIGGER_BAT_BUOC: readonly [string, number][] = [
 /** Quyền GHI trên bảng: ba quyền không role nào (ngoài chủ sở hữu) được có trên bảng sổ. */
 const QUYEN_GHI_BI_CAM = ["UPDATE", "DELETE", "TRUNCATE"];
 
+/**
+ * [vòng fix 1 — IM1] GÓC MÙ THỨ BA: vai trò ĐỊNH SẴN của PostgreSQL.
+ *
+ * Task 4 học rằng `information_schema.role_table_grants` mù với quyền CỘT, và Task 5 thay nó
+ * bằng `relacl` + `attacl`. Đo lại trên PostgreSQL 16.15 thì bản thay thế cũng có một góc mù,
+ * chỉ là góc khác:
+ *   has_table_privilege('pg_write_all_data', 'audit_events', 'UPDATE')       -> true
+ *   has_table_privilege('pg_write_all_data', 'audit_events', 'DELETE')       -> true
+ *   has_any_column_privilege('pg_write_all_data','audit_events','UPDATE')    -> true (15/15 cột)
+ *   has_table_privilege('pg_write_all_data', 'audit_events', 'TRUNCATE')     -> FALSE
+ *   aclexplode(relacl) UNION aclexplode(attacl)                              -> 0 DÒNG
+ * Quyền của vai trò định sẵn KHÔNG được lưu trong ACL, nên MỌI phép đọc ACL đều mù với nó.
+ *
+ * Cách xử: KHÔNG thu hẹp tên test, mà mở rộng phép kiểm sang has_table_privilege /
+ * has_any_column_privilege trên toàn bộ pg_roles, và giữ ĐÚNG MỘT ngoại lệ có tên. Hệ quả có
+ * ích ngay: "GRANT pg_write_all_data TO app_api" nay làm phép kiểm này ĐỎ (app_api không nằm
+ * trong danh sách ngoại lệ), tức nó phủ cả đường leo quyền qua tư cách thành viên.
+ *
+ * Vì sao KHÔNG thu hồi được: quyền của vai trò định sẵn là mã cứng trong PostgreSQL, không có
+ * ACL để REVOKE. Vì sao KHÔNG đưa vào hardening: một cụm có role khác được cấp
+ * pg_write_all_data (chuyện của quản trị cụm, không của database này) sẽ bị chặn deploy VĨNH
+ * VIỄN mà không có đường sửa từ trong database — đúng cái bẫy QT1. Bất biến B4 KHÔNG vỡ vì
+ * lớp A vẫn chặn: xem test "thành viên pg_write_all_data ... vẫn bị lớp A chặn" bên dưới.
+ */
+const VAI_TRO_DINH_SAN_DUOC_MIEN = ["pg_write_all_data"];
+
+/**
+ * Quyền HIỆU DỤNG (has_*_privilege) thay vì quyền ĐƯỢC GHI TRONG ACL. Nó tính cả quyền đến qua
+ * PUBLIC, qua tư cách thành viên, và qua vai trò định sẵn — ba đường mà đọc ACL không thấy.
+ * Loại chủ sở hữu bảng và mọi superuser: cả hai có tất cả theo định nghĩa, không phải phát hiện.
+ */
+const CAU_QUYEN_HIEU_DUNG =
+  "SELECT c.relname AS bang, r.rolname AS grantee, NULL::text AS cot, q.quyen " +
+  "  FROM pg_class c " +
+  "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+  "  CROSS JOIN pg_roles r " +
+  "  CROSS JOIN LATERAL (VALUES ('UPDATE'), ('DELETE'), ('TRUNCATE')) q(quyen) " +
+  " WHERE n.nspname = 'public' AND c.relname = ANY($1) " +
+  "   AND r.oid <> c.relowner AND NOT r.rolsuper " +
+  "   AND has_table_privilege(r.oid, c.oid, q.quyen) " +
+  "UNION ALL " +
+  "SELECT c.relname, r.rolname, '<một cột bất kỳ>', 'UPDATE' " +
+  "  FROM pg_class c " +
+  "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+  "  CROSS JOIN pg_roles r " +
+  " WHERE n.nspname = 'public' AND c.relname = ANY($1) " +
+  "   AND r.oid <> c.relowner AND NOT r.rolsuper " +
+  "   AND has_any_column_privilege(r.oid, c.oid, 'UPDATE') " +
+  "   AND NOT has_table_privilege(r.oid, c.oid, 'UPDATE') " +
+  " ORDER BY 1, 2, 3, 4";
+
+/**
+ * [vòng fix 1 — CR1] Trigger và RULE LẠ trên bảng sổ. Không có phép kiểm nào ở vòng trước hỏi
+ * "bảng sổ có trigger nào NGOÀI sáu cái đã biết không" hay "có pg_rewrite nào không" — và đó là
+ * đường xoá audit VỀ TƯƠNG LAI: một "BEFORE INSERT ... RETURN NULL" nuốt đúng sự kiện nó chọn
+ * và để lại chuỗi hash LIỀN MẠCH MÀ THIẾU SỰ KIỆN, nên bộ kiểm chứng của Task 6 sẽ báo HỢP LỆ.
+ */
+const CAU_TRIGGER_RULE_LA =
+  "SELECT c.relname || '.' || t.tgname AS ten FROM pg_trigger t " +
+  "  JOIN pg_class c ON c.oid = t.tgrelid " +
+  "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+  " WHERE n.nspname = 'public' AND c.relname = ANY($1) AND NOT t.tgisinternal " +
+  "   AND t.tgname <> ALL($2) " +
+  "UNION ALL " +
+  "SELECT c.relname || '.' || rw.rulename FROM pg_rewrite rw " +
+  "  JOIN pg_class c ON c.oid = rw.ev_class " +
+  "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+  " WHERE n.nspname = 'public' AND c.relname = ANY($1) AND rw.rulename <> '_RETURN' " +
+  " ORDER BY 1";
+
 interface HangQuyen {
   bang: string;
   grantee: string;
@@ -314,7 +384,10 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // ==========================================================================================
   // [cạm bẫy 1] LỚP 2 — QUYỀN. Phủ MỌI role, PUBLIC, và quyền CỘT.
   // ==========================================================================================
-  it("[INV-B4] không role nào ngoài chủ sở hữu bảng có UPDATE, DELETE hay TRUNCATE trên bảng sổ", async () => {
+  // Vế HẸP nhưng CHÍNH XÁC HƠN về NGUỒN: quyền được ghi trong ACL (relacl + attacl), tức thứ
+  // mà một câu GRANT sau triển khai để lại. Giữ nguyên từ vòng trước — nó nói được ĐÚNG BẰNG
+  // những gì 003 quyết định, điều mà has_*_privilege không nói được.
+  async function kiemQuyenAcl(): Promise<void> {
     const { rows } = await db.pool.query<HangQuyen>(CAU_QUYEN_BANG_SO, [BANG_CHI_GHI_THEM]);
     expect(rows.length, "không có dòng quyền nào thì phép kiểm này rỗng ruột").toBeGreaterThan(0);
 
@@ -355,7 +428,108 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       "audit_events.seq:INSERT",
       "audit_events.user_agent:INSERT",
     ]);
+  }
+
+  it("[INV-B4] ngoài chủ sở hữu bảng và superuser, chỉ vai trò định sẵn pg_write_all_data có UPDATE/DELETE trên bảng sổ", async () => {
+    // [vòng fix 1 — IM1] Vế RỘNG: quyền HIỆU DỤNG trên toàn bộ pg_roles, không phải quyền ghi
+    // trong ACL. Nó phủ ba đường mà đọc ACL mù: PUBLIC, tư cách thành viên, vai trò định sẵn.
+    const hieuDung = await db.pool.query<HangQuyen>(CAU_QUYEN_HIEU_DUNG, [BANG_CHI_GHI_THEM]);
+    const ngoaiMien = hieuDung.rows.filter(
+      (r) => !VAI_TRO_DINH_SAN_DUOC_MIEN.includes(r.grantee),
+    );
+    expect(
+      ngoaiMien,
+      "Ngoài chủ sở hữu bảng, superuser và đúng những vai trò ĐỊNH SẴN được liệt kê, không role " +
+        "nào được có UPDATE/DELETE/TRUNCATE trên bảng sổ — kể cả qua PUBLIC, qua tư cách thành " +
+        "viên, hay qua quyền CỘT.",
+    ).toEqual([]);
+
+    // Chống rỗng ruột theo hai chiều. (i) Danh sách miễn trừ phải THẬT SỰ cần: nếu một phiên bản
+    // PostgreSQL sau bỏ quyền ghi của pg_write_all_data thì dòng miễn trừ thành mã chết và phải
+    // ĐỎ chứ không im lặng. (ii) TRUNCATE thì pg_write_all_data KHÔNG có — đã đo, và nếu nó có
+    // thì đây là thông tin phải biết.
+    const cuaDinhSan = hieuDung.rows
+      .filter((r) => r.grantee === "pg_write_all_data" && r.cot === null)
+      .map((r) => `${r.bang}:${r.quyen}`)
+      .sort();
+    expect(cuaDinhSan).toEqual([
+      "audit_chain_anchors:DELETE",
+      "audit_chain_anchors:UPDATE",
+      "audit_events:DELETE",
+      "audit_events:UPDATE",
+    ]);
+
+    await kiemQuyenAcl();
   });
+
+  // [vòng fix 1 — IM1] B4 KHÔNG vỡ vì góc mù trên: lớp A chặn thật, và đây là phép đo chứ không
+  // phải lý luận. Nửa (a) chứng minh vũ khí THẬT SỰ sắc (cùng role, cùng phiên, xoá được hàng
+  // của một bảng đối chứng); nửa (b) nhắm đúng vũ khí ấy vào bảng sổ.
+  it("[INV-B4] thành viên pg_write_all_data có quyền ghi trên sổ nhưng vẫn bị lớp A chặn", async () => {
+    const con = await db.pool.connect();
+    try {
+      await con.query("BEGIN");
+      await con.query("CREATE ROLE ke_ghi_du_lieu NOLOGIN");
+      await con.query("GRANT pg_write_all_data TO ke_ghi_du_lieu");
+      // pg_read_all_data cũng cần, và lý do là một chi tiết phải ĐO chứ không suy: "DELETE ...
+      // WHERE" và vế USING của policy RLS đều đọc cột, nên pg_write_all_data MỘT MÌNH dừng ở
+      // "permission denied" trước khi tới được trigger — tức fixture sẽ tự cho ra "đỏ = an toàn"
+      // giả. Kịch bản thật của góc mù này là một role được quản trị cụm cấp cả hai.
+      await con.query("GRANT pg_read_all_data TO ke_ghi_du_lieu");
+      await con.query("GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO ke_ghi_du_lieu");
+      await con.query("CREATE TABLE doi_chung_ghi (id int PRIMARY KEY)");
+      await con.query("INSERT INTO doi_chung_ghi VALUES (1)");
+      await con.query("SET LOCAL ROLE ke_ghi_du_lieu");
+      await con.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+
+      const xoaDoiChung = await con
+        .query("DELETE FROM doi_chung_ghi WHERE id = 1")
+        .then((r) => `DELETE ${r.rowCount}`, (e: Error) => e.message);
+      expect(
+        xoaDoiChung,
+        "fixture tự vô hiệu hoá: role này không xoá nổi cả một bảng thường thì phần dưới không " +
+          "chứng minh được lớp A làm gì",
+      ).toBe("DELETE 1");
+
+      // SAVEPOINT cho từng mũi: câu đầu bị RAISE làm hỏng transaction, và không có savepoint thì
+      // câu thứ hai chỉ nhận "current transaction is aborted" — một phép đo tự rỗng ruột.
+      const thuMui = async (cau: string): Promise<string> => {
+        await con.query("SAVEPOINT mui");
+        const kq = await con.query(cau).then(() => "THÀNH CÔNG", (e: Error) => e.message);
+        await con.query("ROLLBACK TO SAVEPOINT mui");
+        return kq;
+      };
+      for (const cau of [
+        "UPDATE audit_events SET action = 'SUA_TROM'",
+        "DELETE FROM audit_events",
+      ]) {
+        expect(await thuMui(cau), cau).toMatch(/chỉ-ghi-thêm|append-only/i);
+      }
+      // TRUNCATE không nằm trong pg_write_all_data (đã đo) — lớp B dừng trước lớp A. Cả hai
+      // đều fail-closed, nên phép kiểm nhận cả hai thông báo.
+      expect(await thuMui("TRUNCATE audit_events")).toMatch(
+        /permission denied|chỉ-ghi-thêm|append-only/i,
+      );
+    } finally {
+      await con.query("ROLLBACK");
+      con.release();
+    }
+  });
+
+  // [vòng fix 1 — CR1] Mặc định-ĐÓNG: trên bảng sổ chỉ sáu trigger chỉ-ghi-thêm được phép tồn
+  // tại, và không rule nào. Phép kiểm trạng thái; đường trôi tương ứng có test đối kháng riêng
+  // ở db/migrations.int.test.ts.
+  it("[INV-B4] không trigger LẠ và không RULE nào trên bảng sổ", async () => {
+    const tenHopLe = BANG_CHI_GHI_THEM.flatMap((bang) =>
+      TRIGGER_BAT_BUOC.map(([hauTo]) => `${bang}_chan_${hauTo}`),
+    );
+    const { rows } = await db.pool.query<{ ten: string }>(CAU_TRIGGER_RULE_LA, [
+      BANG_CHI_GHI_THEM,
+      tenHopLe,
+    ]);
+    expect(rows).toEqual([]);
+  });
+
 
   // Phép đo giữ cho phép kiểm trên khỏi bị "đơn giản hoá" về information_schema ở một vòng sau.
   it("[INV-B4] information_schema.role_table_grants MÙ với quyền CỘT — nên phép kiểm quyền phải đọc attacl", async () => {
@@ -527,14 +701,52 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
     ).resolves.toBeTruthy();
   });
 
+  // [vòng fix 1 — IM4] Toán tử "?|" của vòng trước CHỈ XÉT KHOÁ CẤP MỘT, nên ba payload dưới đây
+  // đi lọt hoàn toàn — và payload LỒNG là cách viết mặc định, không phải cách né tránh. Đo trên
+  // bản chưa vá: {"chi_tiet":{"gia":12000}} -> INSERT 0 1, {"ds":[{"don_gia":12000}]} -> INSERT 0 1.
+  // Nay ràng buộc dùng jsonb_path_exists với '$.**' (IMMUTABLE, đo được provolatile='i').
+  it("[INV-B4] payload không nhận khoá mang giá ở BẤT KỲ ĐỘ SÂU NÀO — lồng, trong mảng, sâu ba tầng", async () => {
+    const cacCa: [string, unknown][] = [
+      ["phẳng", { don_gia: 12_000 }],
+      ["lồng một tầng", { chi_tiet: { gia: 12_000 } }],
+      ["trong mảng", { ds: [{ don_gia: 12_000 }] }],
+      ["sâu ba tầng", { a: { b: { c: { totp_secret: "x" } } } }],
+      ["bí mật lồng", { auth: { password: "x" } }],
+    ];
+    let seq = 910;
+    for (const [nhan, payload] of cacCa) {
+      seq += 1;
+      const loi = await thu(
+        db.pool,
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash, payload) " +
+          `VALUES ($1, $2, 'SYSTEM', 'RO_GIA', 'TEST', ${BAM_0}, sha256($3::bytea), $4::jsonb)`,
+        [orgA, seq, `ro-${seq}`, JSON.stringify(payload)],
+      );
+      expect(loi, nhan).toMatch(/audit_events_payload_khong_mang_gia|violates check constraint/i);
+    }
+
+    // Chống rỗng ruột: một payload lồng KHÔNG mang khoá cấm vẫn phải ghi được, nếu không thì
+    // ràng buộc mới chỉ đơn giản là cấm mọi payload lồng.
+    await expect(
+      db.pool.query(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash, payload) " +
+          `VALUES ($1, 999, 'SYSTEM', 'BINH_THUONG', 'TEST', ${BAM_0}, sha256('long'::bytea), $2::jsonb)`,
+        [orgA, JSON.stringify({ rfq: { id: "abc", dong: [{ ma: "A1", so_luong: 5 }] } })],
+      ),
+    ).resolves.toBeTruthy();
+  });
+
   // ==========================================================================================
   // [cạm bẫy 6] "Ba lớp bảo vệ ĐỘC LẬP" là một phát biểu quá lời — đo lại cho đúng mức
   // ==========================================================================================
   // Lớp REVOKE và lớp trigger KHÔNG độc lập theo hướng người ta hay nghĩ: lớp REVOKE thua chủ
-  // sở hữu bảng và superuser, còn lớp trigger ràng buộc được CẢ HAI (đã đo ở các test trên).
-  // Nghĩa là lớp trigger BAO TRÙM lớp REVOKE về sức mạnh, và lớp REVOKE chỉ thêm một thứ:
-  // thông báo lỗi dừng sớm hơn. Hệ quả trực tiếp — cũng là lý do hardening KHÔNG tự chữa ACL
-  // của bảng sổ: một "GRANT UPDATE ... TO app_api" sau triển khai KHÔNG mở được đường nào.
+  // sở hữu bảng và superuser, còn lớp trigger ràng buộc được CẢ HAI ở đường DML (đã đo ở các
+  // test trên). Nghĩa là ở đường DML lớp trigger BAO TRÙM lớp REVOKE về sức mạnh.
+  // [vòng fix 1 — IM2] Vòng trước rút ra từ đó rằng "lớp REVOKE chỉ thêm thông báo lỗi dừng sớm
+  // hơn", và DÙNG kết luận ấy để biện minh cho việc hardening KHÔNG tự chữa ACL của bảng sổ. Vế
+  // đó VƯỢT QUÁ: khi một trigger bị DISABLE — đúng cửa sổ phơi mà 003 thừa nhận — lớp B là lớp
+  // DUY NHẤT còn đứng (đo: app_api_login DELETE -> "permission denied for table audit_events").
+  // Nay hardening CÓ tự chữa ACL; test đối kháng cho đường đó ở db/migrations.int.test.ts.
   it("[INV-B4] GRANT UPDATE cho app_api sau triển khai vẫn không sửa được hàng — trigger là lớp có thẩm quyền", async () => {
     await db.pool.query("GRANT UPDATE ON audit_events TO app_api");
     try {
