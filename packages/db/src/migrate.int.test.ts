@@ -99,4 +99,56 @@ describe("bộ chạy migration", () => {
       await poolMotKetNoi.end();
     }
   });
+
+  // [fix I1] Bản trước: "await lockClient.query(unlock); lockClient.release();" trong
+  // finally — nếu unlock ném lỗi (kết nối chết giữa chừng), release() không bao giờ chạy,
+  // client rò rỉ vĩnh viễn trong sổ sách của pool. Mô phỏng mất kết nối giữa chừng bằng
+  // chính nội dung migration: "pg_terminate_backend(pg_backend_pid())" tự ngắt kết nối của
+  // chính nó đang chạy — xác định, không cần một kết nối thứ hai canh thời điểm để giết.
+  it("[fix I1] mất kết nối giữa chừng không rò rỉ client — pool vẫn dùng được ngay sau, lỗi thật nổi lên", async () => {
+    const poolMotKetNoi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "070_tu_ngat_ket_noi.sql": "SELECT pg_terminate_backend(pg_backend_pid());",
+      });
+
+      await expect(migrate(poolMotKetNoi, dir)).rejects.toThrow();
+
+      const hetGio = new Promise<never>((_resolve, reject) => {
+        setTimeout(
+          () => reject(new Error("timeout: pool.query() treo sau khi mất kết nối")),
+          5000,
+        );
+      });
+      await expect(
+        Promise.race([poolMotKetNoi.query("SELECT 1"), hetGio]),
+      ).resolves.toBeTruthy();
+    } finally {
+      await poolMotKetNoi.end();
+    }
+  });
+
+  // [fix I3 — cơ chế chung] File "*.always.sql" chạy lại ở MỌI lần gọi migrate(), không qua
+  // schema_migrations, và không xuất hiện trong mảng "applied" trả về (nó không phải một
+  // migration một-lần). Test bằng cách đếm số lần thực thi qua một bảng đếm — nếu chạy lại
+  // đúng như thiết kế, số đếm tăng ở mỗi lần gọi migrate(), kể cả khi không có migration đánh
+  // số mới nào để áp dụng.
+  it("[fix I3 — cơ chế chung] file *.always.sql chạy lại mỗi lần migrate(), không ghi vào schema_migrations", async () => {
+    const dir = migrationDir({
+      "080_binh_thuong.sql": "CREATE TABLE mig_j (id int);",
+      "hardening_gia_lap.always.sql":
+        "CREATE TABLE IF NOT EXISTS mig_j_dem (danh_dau int); INSERT INTO mig_j_dem VALUES (1);",
+    });
+
+    const ketQua1 = await migrate(db.pool, dir);
+    expect(ketQua1).toEqual(["080_binh_thuong.sql"]); // always.sql KHÔNG có trong applied
+
+    const ketQua2 = await migrate(db.pool, dir);
+    expect(ketQua2).toEqual([]); // 080 đã áp dụng — nhưng always.sql vẫn chạy lại
+
+    const { rows } = await db.pool.query<{ dem: string }>(
+      "SELECT count(*) AS dem FROM mig_j_dem",
+    );
+    expect(Number(rows[0]?.dem)).toBe(2);
+  });
 });

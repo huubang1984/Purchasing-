@@ -149,6 +149,61 @@ describe("migration của dự án", () => {
     }
   });
 
+  // [fix I2] Bản vá I5 vòng trước chỉ REVOKE khi app_api/app_unseal là THÀNH VIÊN của nhóm
+  // khác (chiều "vào"). Chiều ngược sống sót: một role KHÁC được cấp membership VÀO app_api/
+  // app_unseal ("GRANT app_api TO ke_tan_cong") thì kế thừa mọi quyền của app_api/app_unseal.
+  // Test [fix S1] đã khẳng định pg_auth_members = 0 hàng cho CẢ HAI chiều (WHERE ... OR ...)
+  // nhưng fixture của nó chỉ dựng chiều "vào" — nửa khẳng định kia rỗng ruột. Test riêng này
+  // dựng ĐÚNG chiều "ra" để không còn góc mù đó.
+  it("[fix I2] gỡ tư cách thành viên CHIỀU NGƯỢC — role khác được cấp membership vào app_api/app_unseal", async () => {
+    const db = await startPostgres();
+    try {
+      await db.pool.query("CREATE ROLE app_api NOLOGIN");
+      await db.pool.query("CREATE ROLE app_unseal NOLOGIN");
+      await db.pool.query("CREATE ROLE ke_tan_cong NOLOGIN");
+      await db.pool.query("GRANT app_api TO ke_tan_cong");
+      await db.pool.query("GRANT app_unseal TO ke_tan_cong");
+
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      const { rowCount } = await db.pool.query(
+        "SELECT 1 FROM pg_auth_members m " +
+          "JOIN pg_roles a ON a.oid = m.roleid " +
+          "JOIN pg_roles b ON b.oid = m.member " +
+          "WHERE a.rolname IN ('app_api', 'app_unseal') OR b.rolname IN ('app_api', 'app_unseal')",
+      );
+      expect(rowCount).toBe(0);
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix I3] Mọi cưỡng chế S1/I2/I5 trước đây chỉ đúng TẠI THỜI ĐIỂM migration chạy lần đầu
+  // — sau triển khai, một ALTER ROLE thủ công để gỡ lỗi (rồi quên gỡ lại) không bị phát hiện
+  // hay tự sửa vì 001 đã ghi trong schema_migrations, không chạy lại. Test này gọi migrate()
+  // HAI LẦN: lần đầu bootstrap sạch, sau đó dựng trôi thủ công (mô phỏng đúng kịch bản nêu
+  // trên), rồi gọi migrate() LẦN HAI (không có migration đánh số mới nào để áp dụng) và
+  // khẳng định trôi đã bị hardening.always.sql tự sửa lại.
+  it("[fix I3] hardening tự sửa trôi cấu hình role ở lần gọi migrate() sau, không chỉ lúc bootstrap", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      // Mô phỏng ai đó "gỡ lỗi" bằng BYPASSRLS sau triển khai rồi quên tắt lại.
+      await db.pool.query("ALTER ROLE app_api BYPASSRLS");
+
+      const ketQuaLan2 = await migrate(db.pool, MIGRATIONS_DIR);
+      expect(ketQuaLan2).toEqual([]); // không có migration đánh số mới — 001 đã áp dụng rồi
+
+      const { rows } = await db.pool.query<{ rolbypassrls: boolean }>(
+        "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'app_api'",
+      );
+      expect(rows[0]?.rolbypassrls).toBe(false);
+    } finally {
+      await db.stop();
+    }
+  });
+
   // [fix S2] Lớp REVOKE/GRANT theo hàm: PUBLIC mặc định có EXECUTE trên MỌI hàm mới, kể cả
   // app_current_org_id() vừa tạo — thu hồi tường minh rồi chỉ cấp lại cho hai role cần dùng.
   // Khẳng định bằng cách thử với một role KHÔNG PHẢI app_api/app_unseal.

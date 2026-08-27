@@ -1,3 +1,4 @@
+import pg from "pg";
 import { describe, expect, it } from "vitest";
 import { startPostgres, withMigratedDatabase } from "./postgres.js";
 
@@ -83,5 +84,33 @@ describe("poolAs — pool chạy dưới role khác", () => {
       const { rows } = await apiPool.query<{ vai_tro: string }>("SELECT current_user AS vai_tro");
       expect(rows[0]?.vai_tro).toBe("app_api");
     });
+  });
+});
+
+// [fix Minor] stop() dùng "Promise.all" + "await pool.end()" trần trước đây: nếu người gọi
+// đã tự end() một rolePool trả về từ poolAs() TRƯỚC KHI gọi stop(), pool.end() ném "Called
+// end on pool more than once", Promise.all reject ngay, và "container.stop()" không bao giờ
+// chạy — rò rỉ container Testcontainers thật. Vấp phải đúng lỗi này khi tự dựng ca kiểm cho
+// nó, y như review độc lập mô tả.
+describe("stop() — dọn dẹp bền vững dù một pool con đã tự end() trước", () => {
+  it("[fix Minor] stop() vẫn dừng container dù apiPool đã tự end() trước khi gọi stop()", async () => {
+    const db = await startPostgres();
+    const apiPool = db.poolAs("app_api");
+    await apiPool.end(); // người gọi tự ý end() trước — đúng kịch bản gây lỗi
+
+    await expect(db.stop()).resolves.toBeUndefined(); // KHÔNG được ném lỗi
+
+    // Xác nhận container THẬT đã dừng, không chỉ "không ném lỗi": kết nối mới tới đúng
+    // connectionString phải thất bại vì không còn gì đang lắng nghe ở đó.
+    const poolThuNoiLai = new pg.Pool({
+      connectionString: db.connectionString,
+      max: 1,
+      connectionTimeoutMillis: 2000,
+    });
+    try {
+      await expect(poolThuNoiLai.query("SELECT 1")).rejects.toThrow();
+    } finally {
+      await poolThuNoiLai.end().catch(() => {});
+    }
   });
 });

@@ -9,6 +9,10 @@ import type pg from "pg";
 // tránh trùng ngẫu nhiên với khoá advisory khác mà hệ thống có thể dùng sau này.
 const MIGRATION_LOCK_KEY = 727_100_003;
 
+// [fix I3] Tên file cưỡng chế chạy LẠI mỗi lần migrate() được gọi (vd. thuộc tính role),
+// không qua schema_migrations. Xem db/migrations/hardening.always.sql để biết lý do.
+const HAU_TO_LUON_CHAY = ".always.sql";
+
 function tinhChecksum(sql: string): string {
   return createHash("sha256").update(sql, "utf8").digest("hex");
 }
@@ -18,6 +22,10 @@ function tinhChecksum(sql: string): string {
  * Migration đã áp dụng được ghi vào schema_migrations kèm checksum nội dung và không chạy
  * lại. Toàn bộ vòng lặp được bọc trong một advisory lock để hai tiến trình migrate() chạy
  * đồng thời trên cùng CSDL không giẫm lên nhau.
+ *
+ * File có hậu tố ".always.sql" chạy LẠI ở MỌI lần gọi, trước các migration đánh số, và
+ * không được ghi vào `applied` trả về — dùng cho cưỡng chế cấu hình cần tự sửa lại nếu bị
+ * trôi sau triển khai (vd. thuộc tính role), khác với thay đổi lược đồ một-lần.
  *
  * Cố ý dùng SQL thuần thay vì thư viện migration: lược đồ này phụ thuộc nặng vào RLS,
  * trigger và GRANT/REVOKE — những thứ cần đọc được nguyên văn khi kiểm toán.
@@ -34,15 +42,48 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
   // createPool(cs, max) cho phép người gọi tự chọn), không còn client nào để cấp — migrate()
   // treo VĨNH VIỄN, không timeout (tự kiểm chứng: treo qua mốc 5s trong test, không tự thoát).
   const lockClient = await pool.connect();
+
+  // [fix I1] Trong lúc client đang CHECKED-OUT, pg-pool KHÔNG gắn listener 'error' nào lên nó
+  // (chỉ gắn khi client rảnh nằm trong pool — xem pg-pool/index.js makeIdleListener/
+  // _acquireClient). Nếu kết nối chết giữa chừng (backend bị terminate, mất mạng...), sự
+  // kiện 'error' không ai nghe sẽ ném ra và GIẾT CẢ TIẾN TRÌNH Node — đã tự đo bằng pg.Pool
+  // thật: "Emitted 'error' event on Client instance" -> unhandled, crash. Gắn listener rỗng
+  // ở đây để sự kiện có nơi tiêu thụ; lỗi thật vẫn nổi lên qua promise reject của câu lệnh
+  // đang chạy, không bị nuốt bởi việc này.
+  lockClient.on("error", () => {});
+
   try {
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
     await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
 
-    const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
+    const tatCaFile = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
+    const fileLuonChay = tatCaFile.filter((f) => f.endsWith(HAU_TO_LUON_CHAY));
+    const fileDanhSo = tatCaFile.filter((f) => !f.endsWith(HAU_TO_LUON_CHAY));
+
+    for (const file of fileLuonChay) {
+      const sql = await readFile(join(dir, file), "utf8");
+      try {
+        await lockClient.query("BEGIN");
+        await lockClient.query(sql);
+        await lockClient.query("COMMIT");
+      } catch (error) {
+        try {
+          await lockClient.query("ROLLBACK");
+        } catch {
+          // Kết nối có thể đã chết ngay trong lúc chạy (xem [fix I1]) — không còn gì để
+          // rollback trên một kết nối đã đứt. Ưu tiên ném lỗi GỐC kèm tên file bên dưới,
+          // không phải lỗi thất bại của chính ROLLBACK.
+        }
+        throw new Error(`Hardening ${file} thất bại: ${(error as Error).message}`, {
+          cause: error,
+        });
+      }
+    }
+
     const applied: string[] = [];
 
-    for (const file of files) {
+    for (const file of fileDanhSo) {
       const sql = await readFile(join(dir, file), "utf8");
       const checksum = tinhChecksum(sql);
 
@@ -74,7 +115,16 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
         await lockClient.query("COMMIT");
         applied.push(file);
       } catch (error) {
-        await lockClient.query("ROLLBACK");
+        try {
+          await lockClient.query("ROLLBACK");
+        } catch {
+          // [fix I1] Kết nối có thể đã chết ngay trong lúc chạy migration này (backend bị
+          // terminate, mất mạng...) — không còn gì để rollback trên một kết nối đã đứt. Ưu
+          // tiên ném lỗi GỐC kèm tên file bên dưới, không phải lỗi thất bại của chính
+          // ROLLBACK (đã tự đo: nếu không bọc try/catch riêng ở đây, lỗi "Client has
+          // encountered a connection error" của ROLLBACK sẽ thay thế lỗi gốc, che mất tên
+          // migration thật sự gây lỗi).
+        }
         throw new Error(`Migration ${file} thất bại: ${(error as Error).message}`, {
           cause: error,
         });
@@ -83,7 +133,18 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
 
     return applied;
   } finally {
-    await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
-    lockClient.release();
+    // [fix I1] Bản trước: "await lockClient.query(unlock); lockClient.release();" — nếu
+    // unlock ném lỗi (kết nối đã chết), release() KHÔNG BAO GIỜ CHẠY, client rò rỉ vĩnh viễn
+    // trong sổ sách của pool (vẫn tính là "checked out"). Đã tự đo: pool.query()/pool.end()
+    // sau đó TREO VĨNH VIỄN, không timeout, trên pool max:1. Sửa bằng cách bọc riêng: nếu
+    // unlock thất bại, gọi release(err) để pg-pool LOẠI BỎ client hỏng khỏi sổ sách thay vì
+    // để nó kẹt ở trạng thái lấp lửng. Không cần lo khoá advisory bị kẹt — Postgres tự nhả
+    // nó khi backend giữ khoá chết, không phụ thuộc client Node có gọi unlock được hay không.
+    try {
+      await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+      lockClient.release();
+    } catch (loiKhiMoKhoa) {
+      lockClient.release(loiKhiMoKhoa as Error);
+    }
   }
 }

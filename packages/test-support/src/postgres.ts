@@ -119,8 +119,14 @@ export async function startPostgres(): Promise<TestDatabase> {
       return rolePool;
     },
     async stop(): Promise<void> {
-      await Promise.all(rolePools.map((p) => p.end()));
-      await pool.end();
+      // [fix Minor] "Promise.all" + "await pool.end()" trần: nếu người gọi đã tự end() một
+      // rolePool trước đó (hợp lệ, không cấm), p.end() ở đây ném "Called end on pool more
+      // than once" — Promise.all reject NGAY, và "container.stop()" phía dưới KHÔNG BAO GIỜ
+      // CHẠY, rò rỉ container Testcontainers thật. Đã tự vấp phải khi viết test cho chính lỗi
+      // này. Dùng allSettled/catch để một pool lỗi khi đóng không cản các bước dọn dẹp còn
+      // lại — container luôn phải dừng dù bước nào trước đó thất bại.
+      await Promise.allSettled(rolePools.map((p) => p.end()));
+      await pool.end().catch(() => {});
       await container.stop();
     },
   };

@@ -31,7 +31,7 @@ const CAC_THAM_SO_SSL_BI_CAM_LUON = new Set([
  */
 function timThamSoNguyHiem(url: URL): string | null {
   for (const [ten, giaTri] of url.searchParams) {
-    const tenThuong = ten.toLowerCase();
+    const tenThuong = ten.trim().toLowerCase(); // [fix Minor] phong ten tham so co khoang trang thua
     if (CAC_THAM_SO_SSL_BI_CAM_LUON.has(tenThuong)) return ten;
     if ((tenThuong === "host" || tenThuong === "hostaddr") && !giaTri.startsWith("/")) {
       return ten;
