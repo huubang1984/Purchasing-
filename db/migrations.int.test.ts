@@ -29,6 +29,34 @@ async function dungRoleTrienKhaiThuong(db: TestDatabase): Promise<string> {
   return url.toString();
 }
 
+/** Đổi user/password của một connection string, giữ nguyên host/port/database. */
+function doiNguoiDung(pChuoiKetNoi: string, pTenRole: string, pMatKhau: string): string {
+  const url = new URL(pChuoiKetNoi);
+  url.username = pTenRole;
+  url.password = pMatKhau;
+  return url.toString();
+}
+
+interface MembershipConLai {
+  nhom: string;
+  thanh_vien: string;
+  admin_option: boolean;
+}
+
+/**
+ * [CR2-T3] Mọi tư cách thành viên còn sót chạm tới BỐN role được canh — hai role ứng dụng và
+ * hai role đăng nhập được đưa vào danh sách trắng. Đọc cả `admin_option` vì một membership
+ * hợp lệ kèm ADMIN OPTION vẫn là bàn đạp: chủ thể đó tự cấp được app_api cho bất kỳ ai.
+ */
+const CAU_MEMBERSHIP_CON_LAI =
+  "SELECT nhom.rolname AS nhom, thanh_vien.rolname AS thanh_vien, am.admin_option " +
+  "  FROM pg_auth_members am " +
+  "  JOIN pg_roles nhom ON nhom.oid = am.roleid " +
+  "  JOIN pg_roles thanh_vien ON thanh_vien.oid = am.member " +
+  " WHERE nhom.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login') " +
+  "    OR thanh_vien.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login') " +
+  " ORDER BY 1, 2";
+
 /**
  * [fix round 4] Ba đường trôi GRANT mà vòng 3 để hở, đọc thẳng từ catalog:
  *   a — app_api có USAGE trên schema app_private (tháo hàng rào của mọi hàm nhạy cảm sau này)
@@ -653,7 +681,40 @@ describe("migration của dự án", () => {
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
 
-      await db.pool.query("DROP FUNCTION public.app_current_org_id()");
+      // [Task 4] Từ khi 002 tạo policy RLS gọi hàm này, chính Postgres từ chối DROP thường:
+      // "cannot drop function app_current_org_id() because other objects depend on it".
+      // Đây là một lớp bảo vệ MỚI, có được miễn phí nhờ phụ thuộc catalog — không phải do
+      // hardening. Khẳng định nó ở đây để nếu ai đó gỡ policy đi (làm hàm lại DROP được),
+      // test này đỏ và bắt người sửa phải nhìn lại.
+      await expect(db.pool.query("DROP FUNCTION public.app_current_org_id()")).rejects.toThrow(
+        /other objects depend on it/i,
+      );
+
+      // Đường đi lọt là CASCADE — và nó kéo theo TOÀN BỘ policy. Hàm được hardening dựng lại,
+      // nhưng policy thì KHÔNG (002 đã nằm trong schema_migrations). Xem test riêng bên dưới
+      // về hình dạng policy: migrate() phải GÃY ỒN ÀO chứ không đi tiếp im lặng.
+      await db.pool.query("DROP FUNCTION public.app_current_org_id() CASCADE");
+      const loiCascade = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiCascade).not.toBeNull();
+      expect(loiCascade!.message).toContain("hình dạng policy RLS của bảng tenant");
+
+      // Hàm vẫn được dựng lại trong chính lần chạy đó (câu lệnh cưỡng chế ở BƯỚC 2 chạy trước
+      // khi BƯỚC 4 ném lỗi) — nhưng cả transaction bị rollback theo, nên phải khôi phục policy
+      // rồi mới migrate lại được. Đây chính là đánh đổi đã công bố ở hardening.always.sql.
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.app_current_org_id() RETURNS uuid LANGUAGE sql STABLE " +
+          "AS $ac$ SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid $ac$",
+      );
+      for (const bang of ["organizations", "users"]) {
+        const cot = bang === "organizations" ? "id" : "org_id";
+        await db.pool.query(
+          `CREATE POLICY ${bang}_tenant_isolation ON ${bang} ` +
+            `USING (${cot} = app_current_org_id()) WITH CHECK (${cot} = app_current_org_id())`,
+        );
+      }
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
       const sauDrop = await db.pool.query<{ t: string | null }>(
         "SELECT to_regprocedure('public.app_current_org_id()')::text AS t",
@@ -808,6 +869,318 @@ describe("migration của dự án", () => {
       } finally {
         await poolTrienKhai.end();
       }
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // ==========================================================================
+  // [CR2-T3] BƯỚC 1 của hardening trước đây gỡ MỌI membership chạm tới app_api/app_unseal,
+  // kể cả membership HỢP LỆ. Vì cả 001 lẫn hardening đều cưỡng chế hai role đó là NOLOGIN,
+  // cách DUY NHẤT để ứng dụng hành động dưới danh nghĩa app_api là một role ĐĂNG NHẬP là
+  // thành viên của nó — đúng thứ bị BƯỚC 1 xoá ở MỌI lần migrate(). Nghĩa là kiến trúc role
+  // mà chính 001 mô tả không dựng được.
+  //
+  // Bản vá: BƯỚC 1 phân biệt bằng một DANH SÁCH TRẮNG CẶP ĐÓNG viết thẳng trong SQL —
+  // (app_api, app_api_login) và (app_unseal, app_unseal_login), và chỉ khi membership đó
+  // KHÔNG kèm ADMIN OPTION. Mọi membership khác chạm tới bốn role được canh đều bị gỡ.
+  //
+  // Rủi ro đã biết của mọi danh sách trắng: viết rộng quá thì một membership độc lọt qua.
+  // Test này là mặt đối kháng của rủi ro đó — nó dựng NĂM biến thể membership lạ, mỗi biến
+  // thể tấn công một cách nới lỏng khác nhau mà một bản vá ẩu sẽ mắc phải:
+  //   (1) tên bắt chước giao ước "*_login" nhưng không có trong danh sách — bản vá dựa vào
+  //       HẬU TỐ thay vì danh sách cặp sẽ cho lọt;
+  //   (2) đúng hai role trong danh sách nhưng SAI CẶP (app_api_login vào app_unseal) — bản
+  //       vá miễn trừ theo TẬP ROLE thay vì theo CẶP sẽ cho lọt;
+  //   (3) bắc cầu VÀO: app_api_login là thành viên của một nhóm bất kỳ — bản vá chỉ canh
+  //       app_api/app_unseal (không mở rộng vùng canh sang chính role đăng nhập) sẽ cho lọt,
+  //       và nhóm đó cho app_api_login mọi quyền của nó;
+  //   (4) bắc cầu RA: một role khác là thành viên của app_api_login — kế thừa bắc cầu toàn
+  //       bộ quyền của app_api;
+  //   (5) đúng cặp hợp lệ nhưng kèm ADMIN OPTION — app_api_login tự cấp được app_api cho
+  //       bất kỳ ai, biến một miễn trừ hẹp thành bàn đạp.
+  // Cả năm phải bị gỡ; đúng hai cặp hợp lệ phải còn nguyên. Đó là hai chiều của cùng một
+  // phép đo, cố ý gộp vào MỘT khẳng định về TẬP membership còn lại để không có góc mù.
+  it("[CR2-T3] giữ membership hợp lệ của role đăng nhập dự án và gỡ mọi membership lạ", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      // Hợp lệ — đây chính là cách duy nhất ứng dụng chạy được dưới danh nghĩa app_api.
+      await db.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'mk-api' IN ROLE app_api");
+      await db.pool.query(
+        "CREATE ROLE app_unseal_login LOGIN PASSWORD 'mk-unseal' IN ROLE app_unseal",
+      );
+
+      // (1) bắt chước giao ước đặt tên
+      await db.pool.query("CREATE ROLE ke_gian_login NOLOGIN");
+      await db.pool.query("GRANT app_api TO ke_gian_login");
+      // (2) sai cặp
+      await db.pool.query("GRANT app_unseal TO app_api_login");
+      // (3) bắc cầu vào
+      await db.pool.query("CREATE ROLE nhom_xau NOLOGIN");
+      await db.pool.query("GRANT nhom_xau TO app_api_login");
+      // (4) bắc cầu ra
+      await db.pool.query("CREATE ROLE ke_tan_cong NOLOGIN");
+      await db.pool.query("GRANT app_api_login TO ke_tan_cong");
+      // (5) đúng cặp nhưng kèm ADMIN OPTION
+      await db.pool.query("GRANT app_api TO app_api_login WITH ADMIN OPTION");
+
+      const truoc = await db.pool.query<MembershipConLai>(CAU_MEMBERSHIP_CON_LAI);
+      expect(truoc.rows).toHaveLength(6); // 2 hợp lệ + 4 lạ (cặp (5) trùng cặp hợp lệ)
+      expect(
+        truoc.rows.find((r) => r.thanh_vien === "app_api_login" && r.nhom === "app_api")
+          ?.admin_option,
+      ).toBe(true);
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<MembershipConLai>(CAU_MEMBERSHIP_CON_LAI);
+      expect(sau.rows).toEqual([
+        { nhom: "app_api", thanh_vien: "app_api_login", admin_option: false },
+        { nhom: "app_unseal", thanh_vien: "app_unseal_login", admin_option: false },
+      ]);
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [CR2-T3] Đưa hai role đăng nhập vào danh sách trắng là đưa thêm HAI CHỦ THỂ TIN CẬY vào
+  // hệ thống: từ giờ ai chiếm được app_api_login là có mọi quyền của app_api. Vì vậy hardening
+  // phải canh luôn thuộc tính của chúng — "ALTER ROLE app_api_login BYPASSRLS" vô hiệu hoá
+  // TOÀN BỘ RLS mà Task 4 dựng lên, và một danh sách trắng không kèm phép canh này chỉ dời
+  // lỗ hổng sang một cái tên khác.
+  //
+  // Cố ý KHÔNG cưỡng chế LOGIN/NOLOGIN và KHÔNG đụng tới mật khẩu: hardening không được biến
+  // thành thứ làm rớt đăng nhập của ứng dụng đang chạy. Test khẳng định cả hai vế — đặc quyền
+  // bị tước VÀ role vẫn đăng nhập được bằng đúng mật khẩu cũ.
+  it("[CR2-T3] tước SUPERUSER/BYPASSRLS khỏi role đăng nhập dự án mà không làm mất khả năng đăng nhập", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE ROLE app_api_login LOGIN BYPASSRLS SUPERUSER CREATEDB CREATEROLE NOINHERIT " +
+          "PASSWORD 'mk-api' IN ROLE app_api",
+      );
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{
+        rolsuper: boolean;
+        rolbypassrls: boolean;
+        rolcreatedb: boolean;
+        rolcreaterole: boolean;
+        rolinherit: boolean;
+        rolcanlogin: boolean;
+      }>(
+        "SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin " +
+          "FROM pg_roles WHERE rolname = 'app_api_login'",
+      );
+      expect(rows[0]).toEqual({
+        rolsuper: false,
+        rolbypassrls: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolinherit: true,
+        rolcanlogin: true,
+      });
+
+      // Đăng nhập thật, không chỉ đúng trên giấy catalog.
+      const poolDangNhap = createPool(doiNguoiDung(db.connectionString, "app_api_login", "mk-api"), 2);
+      try {
+        const { rows: r } = await poolDangNhap.query<{ u: string }>(
+          "SELECT current_user AS u",
+        );
+        expect(r[0]?.u).toBe("app_api_login");
+      } finally {
+        await poolDangNhap.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [CR2-T3] Cùng lớp trôi với [fix I5] nhưng trên hai chủ thể mới: cấu hình phiên gắn vào
+  // role đăng nhập (toàn cụm qua pg_roles.rolconfig, và riêng database qua
+  // pg_db_role_setting). Hai bảng catalog KHÁC NHAU, "RESET ALL" trần chỉ chạm bảng thứ nhất.
+  it("[CR2-T3] xoá rolconfig toàn cụm và cấu hình IN DATABASE của role đăng nhập dự án", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: d } = await db.pool.query<{ ten: string }>("SELECT current_database() AS ten");
+      const tenDb = d[0]!.ten;
+
+      await db.pool.query("CREATE ROLE app_unseal_login LOGIN PASSWORD 'mk' IN ROLE app_unseal");
+      await db.pool.query("ALTER ROLE app_unseal_login SET search_path = ke_gian, public");
+      await db.pool.query(
+        `ALTER ROLE app_unseal_login IN DATABASE "${tenDb}" SET row_security = off`,
+      );
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{ toan_cum: string[] | null; trong_db: string[] | null }>(
+        "SELECT r.rolconfig AS toan_cum, " +
+          "(SELECT s.setconfig FROM pg_db_role_setting s " +
+          "  WHERE s.setrole = r.oid " +
+          "    AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())" +
+          ") AS trong_db " +
+          "FROM pg_roles r WHERE r.rolname = 'app_unseal_login'",
+      );
+      expect(rows[0]).toEqual({ toan_cum: null, trong_db: null });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // ==========================================================================
+  // [S7b/S11-T3] Trôi ở tầng RLS. Policy và cờ RLS nằm trong migration ĐÁNH SỐ nên chỉ chạy
+  // một lần; mọi thay đổi sau triển khai trước đây tồn tại vĩnh viễn và không gì phát hiện.
+  // ==========================================================================
+
+  // (A) Cờ RLS: TỰ CHỮA, và cố ý viết TỔNG QUÁT theo pg_attribute nên bảng của mọi task sau
+  // được phủ mà không ai phải thêm dòng nào. Test dựng cả hai nửa của cùng lớp trôi — tắt hẳn
+  // RLS, và bỏ riêng FORCE — trên cả bảng có org_id lẫn bảng gốc của cây tenant.
+  it("[INV-F1] hardening bật lại ENABLE/FORCE ROW LEVEL SECURITY bị tắt sau triển khai", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("ALTER TABLE users DISABLE ROW LEVEL SECURITY");
+      await db.pool.query("ALTER TABLE organizations NO FORCE ROW LEVEL SECURITY");
+
+      const truoc = await db.pool.query<{ ten: string; bat: boolean; cuong_che: boolean }>(
+        "SELECT relname AS ten, relrowsecurity AS bat, relforcerowsecurity AS cuong_che " +
+          "FROM pg_class WHERE relname IN ('users','organizations') ORDER BY 1",
+      );
+      expect(truoc.rows).toEqual([
+        { ten: "organizations", bat: true, cuong_che: false },
+        { ten: "users", bat: false, cuong_che: true },
+      ]);
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<{ ten: string; bat: boolean; cuong_che: boolean }>(
+        "SELECT relname AS ten, relrowsecurity AS bat, relforcerowsecurity AS cuong_che " +
+          "FROM pg_class WHERE relname IN ('users','organizations') ORDER BY 1",
+      );
+      expect(sau.rows).toEqual([
+        { ten: "organizations", bat: true, cuong_che: true },
+        { ten: "users", bat: true, cuong_che: true },
+      ]);
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // (A) tiếp: vị từ nhận diện bảng tenant đọc pg_attribute nên nó phủ CẢ BẢNG CHƯA TỒN TẠI ở
+  // thời điểm viết file này — đây là nửa "tổng quát" mà một danh sách bảng viết tay sẽ bỏ sót
+  // ở mọi task sau. Một bảng mới có org_id, không RLS, không policy phải bị BẮT, không đi lọt.
+  //
+  // Kết quả ĐO ĐƯỢC (khác với kỳ vọng ban đầu khi viết test này, giữ lại nguyên văn phép đo):
+  // migrate() GÃY chứ không "âm thầm bật hộ rồi đi tiếp". Lý do là tương tác giữa hai mục mới:
+  // mục (A) bật cờ ở BƯỚC 2, nhưng bảng vẫn chưa có policy nào nên mục (B) báo sai ở BƯỚC 3 và
+  // BƯỚC 4 ném lỗi — cả file nằm trong MỘT transaction nên phần (A) đã sửa cũng rollback theo.
+  // Đó là hành vi ĐÚNG: một bảng có org_id mà không có policy là bảng từ chối tất cả, tức một
+  // lược đồ hỏng, và nó chỉ phát sinh khi ai đó tạo bảng bằng tay hoặc viết một migration vi
+  // phạm S7b — cả hai đều phải dừng deploy. Ghi lại ở đây để không ai đọc mục (A) như một lời
+  // hứa "mọi trôi RLS đều tự chữa": nó tự chữa khi policy còn nguyên, và chỉ khi đó.
+  it("[INV-F1] bảng MỚI có org_id mà không RLS, không policy làm migrate() GÃY, không đi lọt", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE TABLE bang_moi_quen_rls (id int, org_id uuid NOT NULL)");
+
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain("hình dạng policy RLS của bảng tenant");
+      expect(loi!.message).toContain("bang_moi_quen_rls");
+
+      // Và sau khi bảng có policy đúng khuôn, mục (A) tự bật cờ RLS hộ — nửa "tự chữa" thật sự.
+      await db.pool.query(
+        "CREATE POLICY bang_moi_quen_rls_tenant_isolation ON bang_moi_quen_rls " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+      );
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+        "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
+          "WHERE relname = 'bang_moi_quen_rls'",
+      );
+      expect(rows[0]).toEqual({ bat: true, cuong_che: true });
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // (B) Hình dạng policy: CHỈ PHÁT HIỆN. Ba đột biến, mỗi cái là một dạng bị cấm ở S11-T3 hoặc
+  // một cách xoá sạch phòng thủ. Cả ba trước bản vá đều đi qua migrate() mà không ai biết.
+  it("[INV-F1] migrate() GÃY khi policy RLS bị sửa sang dạng fail-open hoặc bị xoá", async () => {
+    const kichBan: [string, string[]][] = [
+      // USING (true): RLS còn bật, còn policy, mà không chặn gì cả.
+      ["USING (true)", ["ALTER POLICY users_tenant_isolation ON users USING (true)"]],
+      // Dạng bị cấm số (1) của S11-T3 — mở toang đúng lúc chưa gắn tổ chức.
+      [
+        "app_current_org_id() IS NULL OR ...",
+        [
+          "ALTER POLICY users_tenant_isolation ON users " +
+            "USING (app_current_org_id() IS NULL OR org_id = app_current_org_id())",
+        ],
+      ],
+      // Dạng bị cấm số (2) — cùng lỗ hổng, viết bằng coalesce.
+      [
+        "coalesce(...)",
+        [
+          "ALTER POLICY users_tenant_isolation ON users " +
+            "USING (org_id = coalesce(app_current_org_id(), org_id))",
+        ],
+      ],
+      // Xoá sạch: bảng còn RLS, không còn policy -> từ chối tất cả, và không bao giờ trở lại.
+      ["DROP POLICY", ["DROP POLICY users_tenant_isolation ON users"]],
+    ];
+
+    for (const [nhan, cauLenh] of kichBan) {
+      const db = await startPostgres();
+      try {
+        await migrate(db.pool, MIGRATIONS_DIR);
+        for (const cau of cauLenh) await db.pool.query(cau);
+
+        const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, `đột biến "${nhan}" đi lọt qua migrate()`).not.toBeNull();
+        expect(loi!.message).toContain("hình dạng policy RLS của bảng tenant");
+      } finally {
+        await db.stop();
+      }
+    }
+  }, 180_000);
+
+  // (B) Mặt còn lại — không được BÁO NHẦM. Một phép kiểm quá tay biến hardening thành thứ cản
+  // trở deploy trên một lược đồ hoàn toàn đúng, và đó là cách nhanh nhất để người vận hành gỡ
+  // bỏ nó. Ba biểu thức hợp lệ dưới đây, đã đo riêng trên PostgreSQL 16.15 để chọn đúng:
+  //   - "deleted_at IS NOT NULL": không dạng nào bắt nhầm (nhờ '\s+', không phải nhờ neo từ);
+  //   - tên cột "coalesced_at":   'coalesce' TRẦN bắt nhầm, '\mcoalesce\M' thì không;
+  //   - tên cột "analysis_nullifier": 'is\s+null' TRẦN bắt nhầm, dạng có neo thì không.
+  // Hai ca sau là thứ duy nhất khiến việc neo biên từ không phải trang trí.
+  it("[INV-F1] policy hợp lệ chứa IS NOT NULL / tên cột giống coalesce, is null không bị báo nhầm", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "ALTER TABLE users ADD COLUMN deleted_at timestamptz, " +
+          "ADD COLUMN coalesced_at timestamptz, ADD COLUMN analysis_nullifier int",
+      );
+      await db.pool.query(
+        "ALTER POLICY users_tenant_isolation ON users " +
+          "USING (org_id = app_current_org_id() AND deleted_at IS NOT NULL " +
+          "       AND coalesced_at IS NOT NULL AND analysis_nullifier > 0) " +
+          "WITH CHECK (org_id = app_current_org_id())",
+      );
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
     } finally {
       await db.stop();
     }
