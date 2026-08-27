@@ -246,7 +246,7 @@ process.stdin.on("end", () => {
 - [ ] **Step 5: Chạy test để xác nhận đạt**
 
 Chạy: `pnpm vitest run tests/hooks/git-safety.test.ts`
-Kỳ vọng: PASS — 21 test.
+Kỳ vọng: PASS — 26 test (15 lệnh bị chặn, 7 cho qua, 4 fail-closed).
 
 - [ ] **Step 6: Viết test thất bại cho `protect-secrets`**
 
@@ -409,7 +409,7 @@ process.stdin.on("end", () => {
 - [ ] **Step 9: Chạy test để xác nhận đạt**
 
 Chạy: `pnpm vitest run tests/hooks/protect-secrets.test.ts`
-Kỳ vọng: PASS — 29 test.
+Kỳ vọng: PASS — 31 test (21 đường dẫn bị chặn, 7 cho qua, 3 fail-closed).
 
 - [ ] **Step 10: Đăng ký hook ở cấp project**
 
@@ -455,7 +455,7 @@ Ba lỗi đã sửa:
   id_ed25519/.npmrc/.pgpass/.netrc và .claude/settings.json.
 
 Khớp theo phần mở rộng và tên file thay vì chuỗi con để tránh chặn nhầm.
-50 test chứng minh chặn thật, cho qua đúng, và fail-closed."
+57 test chứng minh chặn thật, cho qua đúng, và fail-closed."
 ```
 
 ---
