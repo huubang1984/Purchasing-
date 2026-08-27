@@ -50,6 +50,7 @@ luồng mở thầu.
 | 2 | `~/.claude/settings.json` chứa `ANTHROPIC_AUTH_TOKEN` dạng rõ và không nằm trong danh sách bảo vệ của `protect-secrets` | TRUNG BÌNH | Thêm vào pattern khi viết lại hook ở S0.1 |
 | 3 | Thư mục `Vibe Coding/` là bản copy-paste thủ công của CLAUDE.md + 5 file SKILL, trùng lặp với plugin đã cài | THẤP | README của plugin cảnh báo sẽ gây nhầm lẫn giữa `/feature` và `/ai-eng-os:feature`. Xử lý ở S0.1 |
 | 4 | Rủi ro `crypto.subtle` không khả dụng trong webview Zalo/Messenger | CAO (rủi ro sản phẩm) | Chưa đo. Cần dò tìm khả năng và hướng dẫn người dùng — xem ADR-007 |
+| 5 | Hiệu năng bọc/mở khóa `local-dev` (rủi ro §8.4 của spec) | THAM KHẢO | Đo bằng `pnpm bench:keys` (Task 7, `tools/bench-keyprovider`) trên máy dev: 10.000 lần bọc ≈ 475ms (~21.000 thao tác/giây), 10.000 lần mở ≈ 422ms (~23.700 thao tác/giây). Tham chiếu: RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khóa/lượt mở thầu — với tốc độ này, một lượt mở thầu tốn dưới nửa giây CPU thuần túy. Đây là mốc so sánh cho `local-dev` (mã hóa nội bộ, không qua mạng); khi có adapter KMS/Vault thật (S1.6), số liệu sẽ chậm hơn nhiều bậc vì mỗi lần bọc/mở là một lời gọi mạng — phải đo lại trước khi bắt đầu S1.6. |
 
 ## Nợ kỹ thuật
 

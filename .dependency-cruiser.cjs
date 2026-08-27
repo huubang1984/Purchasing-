@@ -6,7 +6,16 @@ module.exports = {
         "Chỉ apps/unseal-worker được chạm entrypoint mở khóa. Ranh giới bảo mật quan trọng " +
         "nhất của hệ thống (ADR-006, bất biến G1) — cưỡng chế bằng máy, không bằng trí nhớ.",
       severity: "error",
-      from: { pathNot: "^apps/unseal-worker/" },
+      // Ngoại lệ hẹp: test nội bộ của chính package crypto-keys được phép import
+      // unwrap.ts để kiểm chứng vòng đời khóa (bọc rồi mở) — đây không phải đường
+      // chạy runtime sản xuất nên không phá vỡ bất biến G1. Mọi module khác, kể cả
+      // test ở package/app khác, vẫn bị chặn.
+      from: {
+        pathNot: [
+          "^apps/unseal-worker/",
+          "^packages/crypto-keys/src/.*\\.test\\.ts$",
+        ],
+      },
       to: { path: "^packages/crypto-keys/src/unwrap\\.ts$" },
     },
     {

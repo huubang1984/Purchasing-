@@ -8,6 +8,7 @@ export default tseslint.config(
       "**/.next/**",
       "evidence/**",
       "**/*.cjs",
+      "**/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",
