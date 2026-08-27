@@ -1,0 +1,17 @@
+export {
+  appendAuditEvent,
+  exportChainHead,
+  recordChainAnchor,
+  type ActorType,
+  type AuditEventInput,
+  type AuditEventRecord,
+  type ChainAnchor,
+  type ExternalAnchor,
+} from "./writer.js";
+export {
+  verifyAuditChain,
+  type ChainProblem,
+  type ChainProblemKind,
+  type VerificationResult,
+  type VerifyOptions,
+} from "./verifier.js";

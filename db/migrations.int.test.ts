@@ -1694,6 +1694,7 @@ describe("migration của dự án", () => {
           "001_roles_and_functions.sql",
           "002_organizations_and_users.sql",
           "003_audit_events.sql",
+          "004_audit_chain_functions.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -2558,13 +2559,14 @@ describe("migration của dự án", () => {
         expect(sau, nhan).toMatch(/chỉ-ghi-thêm|append-only/i);
       }
 
-      // Và trạng thái cuối là ENABLE ALWAYS trên cả sáu trigger — không phải chỉ "tồn tại".
+      // Và trạng thái cuối là ENABLE ALWAYS trên cả BẢY trigger — không phải chỉ "tồn tại".
+      // [Task 6] Bảy chứ không sáu: 004 thêm audit_events_noi_chuoi vào `can_co` của lớp C.
       const { rows } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
           " WHERE NOT t.tgisinternal AND c.relname IN ('audit_events','audit_chain_anchors') " +
           "   AND t.tgenabled = 'A' AND t.tgqual IS NULL AND t.tgattr::text = ''",
       );
-      expect(rows[0]!.n).toBe("6");
+      expect(rows[0]!.n).toBe("7");
     } finally {
       await db.stop();
     }
@@ -2745,12 +2747,13 @@ describe("migration của dự án", () => {
       expect(loi!.message).toContain("audit_chain_anchors");
 
       // Và lớp C vẫn với tới được bảng ở schema mới: trigger bị gỡ đã được dựng lại.
+      // [Task 6] Bảy: ba trigger chỉ-ghi-thêm cho mỗi bảng, cộng audit_events_noi_chuoi.
       const { rows } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
           " JOIN pg_namespace n ON n.oid = c.relnamespace " +
           " WHERE n.nspname = 'kho_toi' AND NOT t.tgisinternal AND t.tgenabled = 'A'",
       );
-      expect(rows[0]!.n).toBe("6");
+      expect(rows[0]!.n).toBe("7");
     } finally {
       await db.stop();
     }
@@ -2871,7 +2874,8 @@ describe("migration của dự án", () => {
           " WHERE c.relname = 'audit_events' AND NOT t.tgisinternal " +
           "   AND t.tgenabled = 'A' AND t.tgconstraint = 0",
       );
-      expect(rows[0]!.n).toBe("3");
+      // [Task 6] Bốn: ba trigger chỉ-ghi-thêm + audit_events_noi_chuoi.
+      expect(rows[0]!.n).toBe("4");
     } finally {
       await db.stop();
     }
@@ -2905,6 +2909,11 @@ describe("migration của dự án", () => {
       // tạo hai hàng trùng (org_id, seq) — "ALTER TABLE ... ADD CONSTRAINT UNIQUE" khi đó ném
       // 23505 (unique_violation), không phải 42501.
       await db.pool.query("ALTER TABLE audit_events DROP CONSTRAINT audit_events_org_id_seq_key");
+      // [Task 6] Phải gỡ trigger nối chuỗi trước: nó GHI ĐÈ seq vô điều kiện (kể cả với
+      // superuser), nên nếu để nguyên thì hai câu dưới cho seq 1 và 2 và fixture không dựng nổi
+      // trạng thái "hai hàng cùng (org_id, seq)" mà test này cần. Lượt 'sua' của migrate() phía
+      // sau tự bật lại nó — đó chính là điều mục (D2) hứa.
+      await db.pool.query("ALTER TABLE audit_events DISABLE TRIGGER audit_events_noi_chuoi");
       for (const nhan of ["a", "b"]) {
         await db.pool.query(
           "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
@@ -2912,6 +2921,12 @@ describe("migration của dự án", () => {
           [orgId, nhan],
         );
       }
+      await db.pool.query("ALTER TABLE audit_events ENABLE ALWAYS TRIGGER audit_events_noi_chuoi");
+      const { rows: demTrung } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND seq = 1",
+        [orgId],
+      );
+      expect(demTrung[0]!.n, "fixture tự vô hiệu hoá: không dựng nổi hai hàng cùng seq").toBe("2");
 
       await writeFile(
         join(thuMucTam, "004_danh_dau.sql"),
@@ -3194,6 +3209,118 @@ describe("migration của dự án", () => {
     }
   }, 180_000);
 
+  // ==========================================================================================
+  // [Task 6] HAI MỤC MỚI CỦA NHÓM (D): định nghĩa audit_compute_hash và noi_chuoi_kiem_toan
+  // ==========================================================================================
+  // Vì sao (D1a) là mục quan trọng nhất mà Task 6 thêm vào lớp C, đo chứ không suy: bộ kiểm chứng
+  // chuỗi TÍNH LẠI băm bằng CHÍNH hàm audit_compute_hash. Thay thân hàm đó là làm cho mọi hàng
+  // băm ra cùng một giá trị — chuỗi vẫn "khớp" ở mọi mắt xích và bộ kiểm chứng báo HỢP LỆ, trong
+  // khi nội dung không còn bị ràng buộc bởi băm nào. Không lớp nào khác bắt được: trigger vẫn
+  // đúng tên, đúng hàm, đúng tgtype, đúng tgenabled.
+  it("[Task 6] thay thân audit_compute_hash làm chuỗi mất ý nghĩa, và lớp C phục hồi ở lần migrate() kế", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const vaCham = async (): Promise<boolean> => {
+        const { rows } = await db.pool.query<{ trung: boolean }>(
+          "SELECT audit_compute_hash(decode(repeat('00',32),'hex'), " +
+            "'11111111-1111-1111-1111-111111111111'::uuid, 1::bigint, now(), 'USER', NULL, " +
+            "'A', 'T', NULL, '{}'::jsonb, NULL) " +
+            "= audit_compute_hash(decode(repeat('00',32),'hex'), " +
+            "'11111111-1111-1111-1111-111111111111'::uuid, 2::bigint, now(), 'USER', NULL, " +
+            "'B', 'T', NULL, '{}'::jsonb, NULL) AS trung",
+        );
+        return rows[0]!.trung;
+      };
+      expect(await vaCham(), "hai sự kiện khác nhau không được cho cùng một băm").toBe(false);
+
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_org_id uuid, " +
+          "p_seq bigint, p_occurred_at timestamptz, p_actor_type text, p_actor_id uuid, " +
+          "p_action text, p_resource_type text, p_resource_id uuid, p_payload jsonb, " +
+          "p_request_id uuid) RETURNS bytea LANGUAGE sql IMMUTABLE AS " +
+          "$f$ SELECT sha256(''::bytea) $f$",
+      );
+      expect(
+        await vaCham(),
+        "fixture tự vô hiệu hoá: thay thân hàm mà băm vẫn phân biệt được hai sự kiện",
+      ).toBe(true);
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await vaCham(), "lớp C phải phục hồi thân hàm băm").toBe(false);
+
+      // Và mệnh đề SET (bản vá QT2) cũng phải quay lại — nó nằm trong hậu điều kiện, không phải
+      // trong thân hàm, nên một đột biến chỉ so prosrc sẽ bỏ sót nó.
+      const { rows: cauHinh } = await db.pool.query<{ proconfig: string[] }>(
+        "SELECT p.proconfig FROM pg_proc p WHERE p.proname = 'audit_compute_hash'",
+      );
+      expect(cauHinh[0]!.proconfig).toEqual([
+        "search_path=pg_catalog",
+        "DateStyle=ISO, YMD",
+        "TimeZone=UTC",
+        "lc_time=C",
+      ]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // [cạm bẫy 6 / quy tắc bắt buộc] MỖI hậu điều kiện hardening mới phải có ĐÚNG MỘT test chạy
+  // dưới role deploy mà câu cưỡng chế tương ứng nhận 42501 — nếu không, một đột biến xoá hậu
+  // điều kiện vẫn sống sót vì câu cưỡng chế (chạy dưới superuser trong mọi test khác) sửa xong
+  // trước khi hậu điều kiện kịp nói gì. Hai mục MỚI của Task 6 được đóng ở đây.
+  it("[Task 6 — QT1] role deploy không sở hữu hai hàm chuỗi: cả hai đường trôi làm migrate() GÃY kèm quyền cần có", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Đối chứng: không trôi thì deploy thường vẫn QUA.
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        // Hai hàm do superuser tạo ra ở lần migrate() đầu, nên role deploy KHÔNG sở hữu chúng và
+        // "CREATE OR REPLACE FUNCTION" của lượt sửa nhận 42501 — hậu điều kiện là lớp duy nhất
+        // còn lại.
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_org_id uuid, " +
+            "p_seq bigint, p_occurred_at timestamptz, p_actor_type text, p_actor_id uuid, " +
+            "p_action text, p_resource_type text, p_resource_id uuid, p_payload jsonb, " +
+            "p_request_id uuid) RETURNS bytea LANGUAGE sql IMMUTABLE AS " +
+            "$f$ SELECT sha256(''::bytea) $f$",
+        );
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.noi_chuoi_kiem_toan() RETURNS trigger " +
+            "LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$",
+        );
+
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+        expect(loi, "hai hàm chuỗi bị thay thân mà migrate() vẫn QUA").not.toBeNull();
+        expect(loi!.message).toContain("định nghĩa hàm public.audit_compute_hash(...)");
+        expect(loi!.message).toContain("định nghĩa hàm public.noi_chuoi_kiem_toan()");
+        expect(loi!.message).toContain("Cần quyền");
+
+        // Và trôi vẫn còn NGUYÊN: migrate() gãy chứ không sửa được một nửa rồi im.
+        const { rows } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM pg_proc p WHERE p.proname = 'noi_chuoi_kiem_toan' " +
+            "  AND p.proconfig IS NULL",
+        );
+        expect(rows[0]!.n).toBe("1");
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // Đường sửa: một chủ thể CÓ quyền sở hữu chạy migrate() -> tự chữa hết trong một lần.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: sau } = await db.pool.query<{ proconfig: string[] }>(
+        "SELECT p.proconfig FROM pg_proc p WHERE p.proname = 'noi_chuoi_kiem_toan'",
+      );
+      expect(sau[0]!.proconfig).toEqual(["search_path=pg_catalog"]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
   // [CR5 + IM5] Trạng thái VẬT LÝ. Cả hai đường đều tự chữa; cả hai đều không đi qua một trigger
   // nào nên vòng trước hoàn toàn không thấy.
   it("[vòng fix 1 — CR5/IM5] SET UNLOGGED và DROP CONSTRAINT UNIQUE (org_id, seq) đều được phục hồi", async () => {
@@ -3204,14 +3331,24 @@ describe("migration của dự án", () => {
         "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
       );
       const orgId = org[0]!.id;
-      const chen = async (seq: number, nhan: string): Promise<string> =>
-        db.pool
-          .query(
-            "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
-              "VALUES ($1, $2, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256($3::bytea))",
-            [orgId, seq, nhan],
-          )
-          .then(() => "THÀNH CÔNG", (e: Error) => e.message);
+      // [Task 6] `chen` tạm gỡ trigger nối chuỗi: nó ghi đè seq vô điều kiện, nên không có nó
+      // thì fixture không dựng nổi trạng thái "hai hàng cùng (org_id, seq)" mà test này cần —
+      // và cũng không đo được rằng ràng buộc duy nhất đã BIẾN MẤT. Trạng thái trigger được trả
+      // lại NGUYÊN VẸN (ENABLE ALWAYS, không phải ENABLE trần) sau mỗi lần chèn.
+      const chen = async (seq: number, nhan: string): Promise<string> => {
+        await db.pool.query("ALTER TABLE audit_events DISABLE TRIGGER audit_events_noi_chuoi");
+        try {
+          return await db.pool
+            .query(
+              "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+                "VALUES ($1, $2, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256($3::bytea))",
+              [orgId, seq, nhan],
+            )
+            .then(() => "THÀNH CÔNG", (e: Error) => e.message);
+        } finally {
+          await db.pool.query("ALTER TABLE audit_events ENABLE ALWAYS TRIGGER audit_events_noi_chuoi");
+        }
+      };
 
       await db.pool.query("ALTER TABLE audit_events SET UNLOGGED");
       await db.pool.query("ALTER TABLE audit_events DROP CONSTRAINT audit_events_org_id_seq_key");
@@ -3493,6 +3630,9 @@ describe("migration của dự án", () => {
         "audit_events_chan_delete",
         "audit_events_chan_truncate",
         "audit_events_chan_update",
+        // [Task 6] Lớp C dựng cả trigger nối chuỗi cho MỌI bảng tên 'audit_events' ở MỌI schema —
+        // đúng cái đánh đổi mà BANG_CHI_GHI_THEM đã ghi ra khi bỏ khoá cứng nspname = 'public'.
+        "audit_events_noi_chuoi",
         "cha_nuot",
       ]);
       expect(conLaiPm.find((r) => r.ten === "cha_nuot")!.cha).not.toBe("0");

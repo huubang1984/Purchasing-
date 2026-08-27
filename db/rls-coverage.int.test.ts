@@ -695,6 +695,11 @@ describe("phủ RLS", () => {
     //   `occurred_at` KHÔNG có gì      -> dấu thời gian do CSDL đóng; bên ghi chọn được
     //   `anchored_at` KHÔNG có gì         occurred_at là một sổ sắp xếp lại được theo ý mình.
     //   Và KHÔNG có UPDATE trên bất kỳ cột nào của hai bảng đó — đó chính là bất biến B4.
+    // [Task 6] Ba vắng mặt MỚI trên audit_events — `seq`, `prev_hash`, `hash`: 004 thu hồi
+    //   INSERT trên đúng ba cột đó. Đường đi mà chúng đóng: một app_api bị chiếm CHIẾM TRƯỚC
+    //   giá trị seq kế tiếp và chặn việc ghi sổ. Ca nặng nhất đã đo là seq = 2^63-1 — mọi lần
+    //   ghi sau vỡ với "bigint out of range" VĨNH VIỄN, mà B4 lại cấm DELETE nên không ai gỡ
+    //   được hàng đó ở đường DML thường. Ba cột nay do trigger audit_events_noi_chuoi đặt.
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", cot: "hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
@@ -702,15 +707,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },
-      { grantee: "app_api", bang: "audit_events", cot: "hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "ip", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "payload", quyen: "INSERT" },
-      { grantee: "app_api", bang: "audit_events", cot: "prev_hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "request_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
-      { grantee: "app_api", bang: "audit_events", cot: "seq", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "INSERT" },
@@ -726,15 +728,12 @@ describe("phủ RLS", () => {
       { grantee: "app_unseal", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },
-      { grantee: "app_unseal", bang: "audit_events", cot: "hash", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "ip", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "payload", quyen: "INSERT" },
-      { grantee: "app_unseal", bang: "audit_events", cot: "prev_hash", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "request_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
-      { grantee: "app_unseal", bang: "audit_events", cot: "seq", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
     ]);
   });
@@ -780,10 +779,14 @@ describe("phủ RLS", () => {
     // nào đó không nhìn thấy hai bảng đó (nó gộp role_table_grants với role_column_grants, và
     // quyền INSERT của bảng sổ CHỈ tồn tại ở vế thứ hai), khẳng định "bao trùm" vẫn xanh —
     // nhưng xanh vì phép đo bỏ sót, không vì trạng thái đúng. Neo nó vào một khoá cụ thể.
+    // [Task 6] Neo đổi từ "audit_events.hash:INSERT" sang "audit_events.action:INSERT": 004 thu
+    // hồi INSERT trên `hash` của CẢ HAI role, nên khoá cũ không còn tồn tại và phép chống-rỗng-
+    // ruột này sẽ đỏ vì một lý do KHÔNG liên quan tới thứ nó canh. `action` là cột ghi được của
+    // bảng sổ mà cả hai role còn giữ, nên nó tiếp tục làm đúng việc cũ.
     expect(
       cuaUnseal,
       "phép đo bỏ sót quyền CỘT trên bảng sổ — khoản nợ này sẽ xanh vì lý do sai",
-    ).toContain("audit_events.hash:INSERT");
+    ).toContain("audit_events.action:INSERT");
     const baoTrum = cuaUnseal.every((k) => cuaApi.has(k));
     expect(
       baoTrum,

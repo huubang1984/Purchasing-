@@ -823,6 +823,94 @@ DECLARE
 
   HAM_CHAN constant text := $q$to_regprocedure('public.chan_sua_xoa()')$q$;
 
+  -- [Task 6] Trigger NỐI CHUỖI của 004_audit_chain_functions.sql. Nó là trigger THỨ BẢY trên
+  -- bảng sổ, và mặc định-ĐÓNG của [CR1] gỡ MỌI trigger không nằm trong `can_co` — nên nếu danh
+  -- sách này không được mở rộng ở đây thì lượt 'sua' sẽ gỡ nó ở lần migrate() kế, trong khi 004
+  -- đã nằm trong schema_migrations nên không bao giờ chạy lại: migration bốc hơi VĨNH VIỄN. Đó
+  -- chính là chế độ hỏng mà WARNING "đã GỠ trigger lạ" ở mục (D2) mô tả.
+  -- Nó CHỈ áp cho `audit_events`, không áp cho `audit_chain_anchors`: bảng neo không mang chuỗi
+  -- hash nào để nối. Vì thế nó là một nhánh RIÊNG chứ không phải một dòng thêm vào CROSS JOIN
+  -- ba-sự-kiện — CROSS JOIN sẽ đòi cả `audit_chain_anchors_noi_chuoi` lẫn
+  -- `<bảng lạ>_noi_chuoi` cho mọi bảng lọt vào qua vế trigger, tức chặn deploy trên lược đồ đúng.
+  HAM_NOI_CHUOI constant text := $q$to_regprocedure('public.noi_chuoi_kiem_toan()')$q$;
+  BANG_NOI_CHUOI constant text := $q$('audit_events')$q$;
+
+  -- Thân hàm băm. Bản NGUỒN nằm ở db/migrations/004_audit_chain_functions.sql.
+  -- Vì sao nó PHẢI được cưỡng chế, và vì sao nó là mục quan trọng nhất mà Task 6 thêm vào file
+  -- này: bộ kiểm chứng chuỗi TÍNH LẠI băm BẰNG CHÍNH HÀM NÀY (đó là điều loại bỏ lớp lỗi lệch
+  -- tuần tự hoá giữa hai tầng). Hệ quả là nếu ai đó thay thân hàm — ví dụ
+  --     CREATE OR REPLACE FUNCTION public.audit_compute_hash(...) ... SELECT sha256(''::bytea);
+  -- thì MỌI hàng cũ lẫn mới đều băm ra cùng một giá trị, chuỗi vẫn "khớp" ở mọi mắt xích, và bộ
+  -- kiểm chứng báo HỢP LỆ trên một sổ mà nội dung không còn bị ràng buộc bởi băm nào cả. KHÔNG
+  -- lớp nào khác trong dự án bắt được ca đó: trigger vẫn đúng tên, đúng hàm, đúng tgtype.
+  THAN_BAM constant text := $tbm$
+  SELECT pg_catalog.sha256(
+    p_prev_hash OPERATOR(pg_catalog.||) pg_catalog.convert_to(
+      (pg_catalog.jsonb_build_object(
+        'v',             'trustprocure.audit.v1',
+        'org_id',        p_org_id,
+        'seq',           p_seq,
+        'occurred_at',   pg_catalog.to_char(p_occurred_at AT TIME ZONE 'UTC',
+                                            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'actor_type',    p_actor_type,
+        'actor_id',      p_actor_id,
+        'action',        p_action,
+        'resource_type', p_resource_type,
+        'resource_id',   p_resource_id,
+        'payload',       p_payload,
+        'request_id',    p_request_id
+      ))::pg_catalog.text,
+      'UTF8'
+    )
+  )
+$tbm$;
+
+  -- Chữ ký đầy đủ, dùng lại ở cả câu cưỡng chế lẫn hậu điều kiện. Viết một lần để hai bên không
+  -- trôi khỏi nhau.
+  CHU_KY_BAM constant text :=
+    $q$public.audit_compute_hash(bytea, uuid, bigint, timestamptz, text, uuid, text, text, uuid, jsonb, uuid)$q$;
+  THAM_SO_BAM constant text :=
+    $q$(p_prev_hash bytea, p_org_id uuid, p_seq bigint, p_occurred_at timestamptz,
+        p_actor_type text, p_actor_id uuid, p_action text, p_resource_type text,
+        p_resource_id uuid, p_payload jsonb, p_request_id uuid)$q$;
+
+  -- Thân hàm nối chuỗi. Bản NGUỒN nằm ở db/migrations/004_audit_chain_functions.sql; hai bản
+  -- phải khớp nhau sau khi chuẩn hoá khoảng trắng, và db/than-ham-trigger.test.ts canh việc đó
+  -- (cùng khuôn §R3 đã dùng cho public.chan_sua_xoa()). Thân hàm cố ý KHÔNG mang chú thích: hậu
+  -- điều kiện so prosrc theo văn bản, nên mọi chú thích phải nằm NGOÀI $tnc$ ở cả hai file.
+  THAN_NOI_CHUOI constant text := $tnc$
+DECLARE
+  bam_truoc bytea;
+  so_thu_tu bigint;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 0));
+
+  SELECT ae.seq, ae.hash INTO so_thu_tu, bam_truoc
+    FROM public.audit_events ae
+   WHERE ae.org_id = NEW.org_id
+   ORDER BY ae.seq DESC
+   LIMIT 1;
+
+  IF so_thu_tu IS NULL THEN
+    so_thu_tu := 1;
+    bam_truoc := pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex');
+  ELSE
+    so_thu_tu := so_thu_tu + 1;
+  END IF;
+
+  NEW.occurred_at := pg_catalog.clock_timestamp();
+  NEW.payload     := coalesce(NEW.payload, '{}'::pg_catalog.jsonb);
+  NEW.seq         := so_thu_tu;
+  NEW.prev_hash   := bam_truoc;
+  NEW.hash        := public.audit_compute_hash(
+                       NEW.prev_hash, NEW.org_id, NEW.seq, NEW.occurred_at, NEW.actor_type,
+                       NEW.actor_id, NEW.action, NEW.resource_type, NEW.resource_id,
+                       NEW.payload, NEW.request_id);
+  RETURN NEW;
+END
+$tnc$;
+
   -- Bộ lọc "schema do dự án quản" — DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.
   -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
   MAU_SCHEMA_DU_AN constant text :=
@@ -874,19 +962,32 @@ DECLARE
        can_co AS (
          SELECT b.bang_oid, b.relname, b.trong_ds,
                 b.relname || '_chan_' || v.hau_to AS ten_trigger,
-                v.su_kien, v.pham_vi, v.kieu
+                v.su_kien, v.pham_vi, v.kieu,
+                $q$ || HAM_CHAN || $q$ AS ham_oid,
+                'public.chan_sua_xoa()' AS ten_ham
            FROM bang_al b
            CROSS JOIN (VALUES ('update',   'UPDATE',   'FOR EACH ROW',       19),
                               ('delete',   'DELETE',   'FOR EACH ROW',       11),
                               ('truncate', 'TRUNCATE', 'FOR EACH STATEMENT', 34))
                         AS v(hau_to, su_kien, pham_vi, kieu)
+         UNION ALL
+         -- [Task 6] Trigger nối chuỗi, CHỈ trên audit_events. tgtype = 7 đã ĐO trên PostgreSQL
+         -- 16.15 cho BEFORE INSERT FOR EACH ROW (ROW=1 | BEFORE=2 | INSERT=4), cùng khuôn
+         -- "so tgtype NGUYÊN VĂN" của ba trigger trên: mất bit BEFORE là trigger chạy SAU khi
+         -- hàng đã vào bảng nên nó không đặt được seq/hash nữa.
+         SELECT b.bang_oid, b.relname, b.trong_ds,
+                b.relname || '_noi_chuoi', 'INSERT', 'FOR EACH ROW', 7,
+                $q$ || HAM_NOI_CHUOI || $q$, 'public.noi_chuoi_kiem_toan()'
+           FROM bang_al b
+          WHERE b.relname IN $q$ || BANG_NOI_CHUOI || $q$
        ),
        sai AS (
          SELECT k.*,
                 CASE
                   WHEN t.oid IS NULL THEN 'trigger KHÔNG TỒN TẠI'
-                  WHEN t.tgfoid <> $q$ || HAM_CHAN || $q$
+                  WHEN t.tgfoid <> k.ham_oid
                     THEN 'gọi hàm khác: ' || t.tgfoid::regprocedure::text
+                         || ' (cần ' || k.ten_ham || ')'
                   -- [vòng fix 1 — CR3] tgconstraint <> 0 phải có TÊN GỌI RIÊNG, và phải đứng
                   -- TRƯỚC vế tgtype: một constraint trigger cũng sai tgtype (nó chỉ có AFTER —
                   -- "CREATE CONSTRAINT TRIGGER ... BEFORE" là syntax error, đã đo) nên nếu không
@@ -961,7 +1062,8 @@ DECLARE
      -- [CR1] Trigger LẠ trên bảng sổ: mặc định-ĐÓNG, không phải danh sách sáu tên.
      SELECT t.bang_oid::regclass::text || '.' || t.ten || ': TRIGGER LẠ trên bảng sổ — một trigger BEFORE INSERT '
             'trả NULL nuốt sự kiện audit trong IM LẶNG và để lại một chuỗi hash LIỀN MẠCH MÀ '
-            'THIẾU SỰ KIỆN. Chỉ sáu trigger chỉ-ghi-thêm được phép tồn tại trên bảng sổ.' AS mo_ta
+            'THIẾU SỰ KIỆN. Chỉ những trigger trong danh sách can_co (sáu trigger chỉ-ghi-thêm, cộng '
+            'audit_events_noi_chuoi của 004) được phép tồn tại trên bảng sổ.' AS mo_ta
        FROM ($q$ || CAU_TRIGGER_LA || $q$) t
      UNION ALL
      -- [CR1] RULE trên bảng sổ. '_RETURN' là rule của VIEW; bang_so chỉ nhận relkind r/p nên nó
@@ -1496,7 +1598,122 @@ $ham$;
       $q$quyền sở hữu hàm public.chan_sua_xoa() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- Sáu trigger (hai bảng × ba sự kiện). TỰ CHỮA, và cố ý chữa bằng "CREATE OR REPLACE
+    -- ---- [Task 6] (D1a) Định nghĩa public.audit_compute_hash(...) -----------------------
+    -- Xem lập luận đo được ở khối chú thích của hằng THAN_BAM: đây là mục DUY NHẤT ràng buộc
+    -- được ý nghĩa của chuỗi hash. Nó phải đứng TRƯỚC (D1b) và (D2) trong bảng vì hàm nối chuỗi
+    -- gọi nó, và trên một database đã có 003 mà chưa có 004, lượt 'sua' dựng cả ba theo đúng thứ
+    -- tự này.
+    -- [QT1 — ai sửa được] Giống (D1): proowner là role deploy, tự chữa ở lần deploy kế; ngoại lệ
+    -- duy nhất là hàm bị đổi chủ sang một role khác (42501, phải dùng superuser để ALTER OWNER).
+    -- [QT1 — ném được lỗi gì ngoài 42501] (a) 42P13 "cannot change return type" nếu ai đó thay
+    -- bằng hàm CÙNG CHỮ KÝ mà khác kiểu trả về — đóng bằng DROP có điều kiện đứng trước;
+    -- (b) 2BP01 nếu DROP chạy khi trigger còn phụ thuộc — không xảy ra, vế điều kiện loại đúng
+    -- ca đó; (c) 42883 không xảy ra vì DROP đi kèm to_regprocedure(...) IS NOT NULL. Một hàm
+    -- TRÙNG TÊN nhưng KHÁC chữ ký là một hàm khác hẳn với PostgreSQL, nên nó rơi vào vế
+    -- "trigger lạ"/"hàm lạ" chứ không vào đây — hạn chế này được ghi vào báo cáo, không vá ở đây.
+    ARRAY[
+      $q$định nghĩa hàm public.audit_compute_hash(...)$q$,
+      $q$true$q$,
+      $q$DO $fn$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure($ck$$q$ || CHU_KY_BAM || $q$$ck$)
+                         AND p.prorettype <> 'pg_catalog.bytea'::regtype) THEN
+             DROP FUNCTION $q$ || CHU_KY_BAM || $q$;
+           END IF;
+           CREATE OR REPLACE FUNCTION public.audit_compute_hash$q$ || THAM_SO_BAM || $q$
+           RETURNS bytea
+           LANGUAGE sql
+           IMMUTABLE
+           SET search_path = pg_catalog
+           SET DateStyle = 'ISO, YMD'
+           SET TimeZone = 'UTC'
+           SET lc_time = 'C'
+           AS $tbm$$q$ || THAN_BAM || $q$$tbm$;
+         END
+         $fn$$q$,
+      -- provolatile = 'i' và proconfig được canh NGUYÊN VĂN: ba mệnh đề SET là bản vá QT2 của hàm
+      -- này (to_char/convert_to/jsonb_build_object đều STABLE — đã đo provolatile), nên gỡ một
+      -- mệnh đề ra là biến một hàm tất định thành một hàm phụ thuộc GUC của phiên gọi.
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = btrim(regexp_replace($q$ || pg_catalog.quote_literal(THAN_BAM) || $q$, '\s+', ' ', 'g'))
+            AND p.prosecdef IS FALSE
+            AND p.provolatile = 'i'
+            AND p.proconfig = ARRAY['search_path=pg_catalog', 'DateStyle=ISO, YMD',
+                                    'TimeZone=UTC', 'lc_time=C']
+            AND p.pronargs = 11
+            AND p.prorettype = 'pg_catalog.bytea'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure($ck$$q$ || CHU_KY_BAM || $q$$ck$))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure($ck$$q$ || CHU_KY_BAM || $q$$ck$)),
+                  'hàm public.audit_compute_hash(...) không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.audit_compute_hash(...) (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [Task 6] (D1b) Thân hàm public.noi_chuoi_kiem_toan() ---------------------------
+    -- Vì sao mục này BẮT BUỘC phải có, chứ không phải "canh trigger tồn tại là đủ": mục (D2) chỉ
+    -- kiểm tgfoid/tgtype/tgenabled, nên nó xanh với một hàm cùng tên mà THÂN đã bị thay. Và
+    -- đường thay thân là ĐÚNG cái lỗ [CR1] mà Task 5 vừa đóng, chỉ khác là nó núp dưới một cái
+    -- tên HỢP LỆ:
+    --     CREATE OR REPLACE FUNCTION public.noi_chuoi_kiem_toan() ... RETURN NULL;  (có điều kiện)
+    --   -> sự kiện bị NUỐT CÓ CHỌN LỌC, seq và prev_hash vẫn liền mạch, và bộ kiểm chứng chuỗi
+    --      hash của Task 6 báo HỢP LỆ trên một sổ ĐÃ BỊ KIỂM DUYỆT.
+    -- Chế độ hỏng theo chiều còn lại thì FAIL-CLOSED và không cần canh: một thân "RETURN NEW"
+    -- trần để prev_hash/hash ở NULL, mà 003 đặt NOT NULL trên cả hai và 004 đã thu hồi quyền ghi
+    -- chúng — nên app_api không ghi nổi sự kiện nào nữa (ồn ào), chứ không ghi được sự kiện giả.
+    --
+    -- [QT1 — ai sửa được, bằng cách nào, trong bao lâu] Giống hệt mục (D1): proowner là role
+    -- deploy vì chính lượt SỬA của file này tạo ra hàm, nên mục TỰ CHỮA ở lần deploy kế. Ngoại
+    -- lệ đã biết và giống hệt (D1): nếu ai đó ALTER FUNCTION ... OWNER TO postgres thì
+    -- CREATE OR REPLACE dưới role deploy trả 42501 và mục không tự chữa nữa; đường sửa là
+    -- ALTER FUNCTION ... OWNER TO <role deploy> bằng superuser.
+    -- [QT1 — ném được lỗi gì ngoài 42501] Đã rà: (a) 42P13 "cannot change return type" nếu ai đó
+    -- thay hàm bằng một hàm cùng tên khác kiểu trả về — đóng bằng DROP có điều kiện đứng trước,
+    -- đúng khuôn [CR3] của mục (D1); (b) 2BP01 nếu DROP chạy trong khi trigger còn phụ thuộc —
+    -- không xảy ra vì vế điều kiện (prorettype <> trigger) loại đúng ca đó; (c) 42883 nếu
+    -- public.audit_compute_hash chưa tồn tại — KHÔNG xảy ra: plpgsql chỉ kiểm cú pháp lúc tạo,
+    -- không phân giải tên bảng/hàm trong thân (đã đo). Mọi lỗi khác vẫn bị BƯỚC 2 nuốt và BƯỚC 3
+    -- phán xét.
+    ARRAY[
+      $q$định nghĩa hàm public.noi_chuoi_kiem_toan()$q$,
+      $q$true$q$,
+      $q$DO $fn$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.noi_chuoi_kiem_toan()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.noi_chuoi_kiem_toan();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.noi_chuoi_kiem_toan() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $tnc$$q$ || THAN_NOI_CHUOI || $q$$tnc$;
+         END
+         $fn$$q$,
+      -- Hai vế so sánh cùng đi qua một phép chuẩn hoá khoảng trắng, nên không ai phải viết tay
+      -- bản "đã gập một dòng" của thân hàm — thứ mà mục (D1) phải làm và là một nguồn trôi thật.
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = btrim(regexp_replace($q$ || pg_catalog.quote_literal(THAN_NOI_CHUOI) || $q$, '\s+', ' ', 'g'))
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.noi_chuoi_kiem_toan()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.noi_chuoi_kiem_toan()')),
+                  'hàm public.noi_chuoi_kiem_toan() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.noi_chuoi_kiem_toan() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- Bảy trigger (hai bảng × ba sự kiện chỉ-ghi-thêm, cộng trigger nối chuỗi trên
+    -- audit_events). TỰ CHỮA, và cố ý chữa bằng "CREATE OR REPLACE
     -- TRIGGER" + "ENABLE ALWAYS" chứ không chỉ tạo lại cái thiếu: đã đo trên PostgreSQL 16.15
     -- rằng CREATE OR REPLACE TRIGGER RESET tgenabled về 'O', nên hai câu phải đi liền nhau —
     -- chỉ chạy câu đầu là tự tay hạ ENABLE ALWAYS xuống ORIGIN ở mỗi lần deploy.
@@ -1529,7 +1746,7 @@ $ham$;
          DECLARE r RECORD;
          BEGIN
            FOR r IN $q$ || CTE_TRIGGER_CHAN || $q$
-             SELECT bang_oid, ten_trigger, su_kien, pham_vi FROM sai
+             SELECT bang_oid, ten_trigger, su_kien, pham_vi, ten_ham FROM sai
               WHERE ly_do IS NOT NULL AND trong_ds
            LOOP
              BEGIN
@@ -1537,8 +1754,8 @@ $ham$;
                               r.ten_trigger, r.bang_oid::regclass);
                EXECUTE format(
                  'CREATE OR REPLACE TRIGGER %I BEFORE %s ON %s %s '
-                 'EXECUTE FUNCTION public.chan_sua_xoa()',
-                 r.ten_trigger, r.su_kien, r.bang_oid::regclass, r.pham_vi);
+                 'EXECUTE FUNCTION %s',
+                 r.ten_trigger, r.su_kien, r.bang_oid::regclass, r.pham_vi, r.ten_ham);
                EXECUTE format('ALTER TABLE %s ENABLE ALWAYS TRIGGER %I',
                               r.bang_oid::regclass, r.ten_trigger);
              EXCEPTION WHEN OTHERS THEN
@@ -1559,7 +1776,7 @@ $ham$;
                -- vừa bị xử ("migrate() tự đổi ngữ nghĩa một bảng trong im lặng"), theo chiều
                -- ngược lại. Gỡ một trigger khỏi SỔ KIỂM TOÁN vừa là bản vá vừa là SỰ KIỆN AN
                -- NINH, nên nó không được đi qua trong im lặng ở cả hai chiều.
-               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (chỉ sáu trigger chỉ-ghi-thêm '
+               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (chỉ những trigger trong can_co '
                              'được phép tồn tại trên bảng sổ). Nếu đây là trigger HỢP LỆ của một '
                              'migration mới thì migration đó vừa bị vô hiệu hoá: bản vá phải nằm '
                              'trong chính hardening.always.sql, không phải trong migration.',

@@ -39,6 +39,18 @@ const TRIGGER_BAT_BUOC: readonly [string, number][] = [
   ["truncate", 34],
 ];
 
+/**
+ * [Task 6] Trigger THỨ BẢY: `audit_events_noi_chuoi` của 004_audit_chain_functions.sql, CHỈ trên
+ * `audit_events`. tgtype = 7 = 1|2|4 (ROW | BEFORE | INSERT) — đo trên PostgreSQL 16.15.
+ *
+ * Nó nằm trong `can_co` của hardening.always.sql, nên nó KHÔNG phải "trigger lạ": nếu danh sách
+ * này và danh sách bên hardening lệch nhau thì lượt 'sua' sẽ GỠ trigger và migration 004 bốc hơi
+ * trong im lặng (004 đã nằm trong schema_migrations nên không bao giờ chạy lại).
+ */
+const TRIGGER_NOI_CHUOI: readonly [string, string, number, string][] = [
+  ["audit_events", "audit_events_noi_chuoi", 7, "public.noi_chuoi_kiem_toan()"],
+];
+
 /** Quyền GHI trên bảng: ba quyền không role nào (ngoài chủ sở hữu) được có trên bảng sổ. */
 const QUYEN_GHI_BI_CAM = ["UPDATE", "DELETE", "TRUNCATE"];
 
@@ -188,14 +200,50 @@ let unsealPool: pg.Pool;
 let orgA: string;
 let orgB: string;
 
-/** Ghi một sự kiện bằng quyền chủ sở hữu (bỏ qua RLS) — dùng để dựng dữ liệu nền. */
-async function ghiSuKien(pOrgId: string, pSeq: number): Promise<string> {
-  const { rows } = await db.pool.query<{ id: string }>(
-    "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
-      `VALUES ($1, $2, 'SYSTEM', 'TEST', 'TEST', ${BAM_0}, sha256($3::bytea)) RETURNING id`,
-    [pOrgId, pSeq, `su-kien-${pOrgId}-${pSeq}`],
+/**
+ * Ghi một sự kiện bằng quyền chủ sở hữu (bỏ qua RLS) — dùng để dựng dữ liệu nền.
+ *
+ * [Task 6] Không nhận `seq` nữa: trigger `audit_events_noi_chuoi` GHI ĐÈ seq/prev_hash/hash vô
+ * điều kiện, kể cả với superuser, nên một tham số seq ở đây sẽ là lời nói dối im lặng.
+ */
+async function ghiSuKien(pOrgId: string): Promise<{ id: string; seq: number }> {
+  const { rows } = await db.pool.query<{ id: string; seq: string }>(
+    "INSERT INTO audit_events (org_id, actor_type, action, resource_type) " +
+      "VALUES ($1, 'SYSTEM', 'TEST', 'TEST') RETURNING id, seq",
+    [pOrgId],
   );
-  return rows[0]!.id;
+  return { id: rows[0]!.id, seq: Number(rows[0]!.seq) };
+}
+
+/**
+ * Tạm gỡ một trigger của bảng sổ, làm việc, rồi gắn lại NGUYÊN TRẠNG.
+ *
+ * [cạm bẫy 1] Gắn lại bằng ENABLE ALWAYS chứ không phải ENABLE TRIGGER trần: câu trần đặt
+ * tgenabled về 'O', và 'O' bị bỏ qua khi session_replication_role = 'replica' — tức nó âm thầm
+ * hạ cấp bất biến B4 cho phần còn lại của suite. Hàm này đọc lại trạng thái và ném lỗi nếu khôi
+ * phục không nguyên trạng.
+ */
+async function voHieuHoaTrigger<T>(tenTrigger: string, viec: () => Promise<T>): Promise<T> {
+  const doc = async (): Promise<string> => {
+    const { rows } = await db.pool.query<{ tgenabled: string }>(
+      "SELECT t.tgenabled FROM pg_trigger t " +
+        " WHERE t.tgrelid = 'audit_events'::regclass AND t.tgname = $1",
+      [tenTrigger],
+    );
+    if (rows[0] === undefined) throw new Error(`không thấy trigger ${tenTrigger}`);
+    return rows[0].tgenabled;
+  };
+
+  const truoc = await doc();
+  expect(truoc, `${tenTrigger} phải là ENABLE ALWAYS trước khi mô phỏng tấn công`).toBe("A");
+  await db.pool.query(`ALTER TABLE audit_events DISABLE TRIGGER ${tenTrigger}`);
+  try {
+    return await viec();
+  } finally {
+    await db.pool.query(`ALTER TABLE audit_events ENABLE ALWAYS TRIGGER ${tenTrigger}`);
+    const sau = await doc();
+    if (sau !== truoc) throw new Error(`khôi phục ${tenTrigger} không nguyên trạng: ${truoc} -> ${sau}`);
+  }
 }
 
 /** Chạy một câu lệnh và trả về thông báo lỗi, hoặc chuỗi "THÀNH CÔNG" khi nó chạy lọt. */
@@ -218,9 +266,9 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
     orgA = rows[0]!.id;
     orgB = rows[1]!.id;
 
-    await ghiSuKien(orgA, 1);
-    await ghiSuKien(orgB, 1);
-    await ghiSuKien(orgB, 7);
+    await ghiSuKien(orgA);
+    await ghiSuKien(orgB);
+    await ghiSuKien(orgB);
     await db.pool.query(
       `INSERT INTO audit_chain_anchors (org_id, seq, hash) VALUES ($1, 1, sha256('neo'::bytea))`,
       [orgA],
@@ -365,19 +413,30 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   //                                                           nằm trong SET
   // Và một cái nữa không ai ngờ, cũng đã đo: CREATE OR REPLACE TRIGGER RESET tgenabled về 'O'.
   // Nên "đã từng ENABLE ALWAYS" không phải một trạng thái ổn định — nó phải được canh.
-  it("[INV-B4] ba trigger của mỗi bảng sổ đúng hình dạng: BEFORE, đúng sự kiện, ENABLE ALWAYS, không WHEN, không UPDATE OF", async () => {
+  it("[INV-B4] bảy trigger của bảng sổ đúng hình dạng: BEFORE, đúng sự kiện, ENABLE ALWAYS, không WHEN, không UPDATE OF", async () => {
     const { rows } = await db.pool.query<HangTrigger>(CAU_TRIGGER, [BANG_CHI_GHI_THEM]);
-    const mong = BANG_CHI_GHI_THEM.flatMap((bang) =>
-      TRIGGER_BAT_BUOC.map(([hauTo, tgtype]) => ({
+    const mong: HangTrigger[] = [
+      ...BANG_CHI_GHI_THEM.flatMap((bang) =>
+        TRIGGER_BAT_BUOC.map(([hauTo, tgtype]) => ({
+          bang,
+          ten_trigger: `${bang}_chan_${hauTo}`,
+          tgtype,
+          tgenabled: "A",
+          co_when: false,
+          cot_giam: "",
+          ham: "public.chan_sua_xoa()",
+        })),
+      ),
+      ...TRIGGER_NOI_CHUOI.map(([bang, ten_trigger, tgtype, ham]) => ({
         bang,
-        ten_trigger: `${bang}_chan_${hauTo}`,
+        ten_trigger,
         tgtype,
         tgenabled: "A",
         co_when: false,
         cot_giam: "",
-        ham: "public.chan_sua_xoa()",
+        ham,
       })),
-    ).sort((x, y) => (x.bang + x.ten_trigger).localeCompare(y.bang + y.ten_trigger));
+    ].sort((x, y) => (x.bang + x.ten_trigger).localeCompare(y.bang + y.ten_trigger));
     expect(rows).toEqual(mong);
   });
 
@@ -414,18 +473,19 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       "audit_chain_anchors.hash:INSERT",
       "audit_chain_anchors.org_id:INSERT",
       "audit_chain_anchors.seq:INSERT",
+      // [Task 6] `hash`, `prev_hash` và `seq` KHÔNG còn ở đây: 004 thu hồi INSERT trên đúng ba
+      // cột đó. Trước bản vá, một app_api bị chiếm chiếm trước được seq kế tiếp và CHẶN việc ghi
+      // sổ vĩnh viễn (ca nặng nhất: seq = 2^63-1 -> mọi lần ghi sau vỡ với "bigint out of range",
+      // mà B4 lại cấm DELETE nên không ai gỡ được hàng đó ở đường DML thường).
       "audit_events.action:INSERT",
       "audit_events.actor_id:INSERT",
       "audit_events.actor_type:INSERT",
-      "audit_events.hash:INSERT",
       "audit_events.ip:INSERT",
       "audit_events.org_id:INSERT",
       "audit_events.payload:INSERT",
-      "audit_events.prev_hash:INSERT",
       "audit_events.request_id:INSERT",
       "audit_events.resource_id:INSERT",
       "audit_events.resource_type:INSERT",
-      "audit_events.seq:INSERT",
       "audit_events.user_agent:INSERT",
     ]);
   }
@@ -520,9 +580,12 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // tại, và không rule nào. Phép kiểm trạng thái; đường trôi tương ứng có test đối kháng riêng
   // ở db/migrations.int.test.ts.
   it("[INV-B4] không trigger LẠ và không RULE nào trên bảng sổ", async () => {
-    const tenHopLe = BANG_CHI_GHI_THEM.flatMap((bang) =>
-      TRIGGER_BAT_BUOC.map(([hauTo]) => `${bang}_chan_${hauTo}`),
-    );
+    const tenHopLe = [
+      ...BANG_CHI_GHI_THEM.flatMap((bang) =>
+        TRIGGER_BAT_BUOC.map(([hauTo]) => `${bang}_chan_${hauTo}`),
+      ),
+      ...TRIGGER_NOI_CHUOI.map(([, ten]) => ten),
+    ];
     const { rows } = await db.pool.query<{ ten: string }>(CAU_TRIGGER_RULE_LA, [
       BANG_CHI_GHI_THEM,
       tenHopLe,
@@ -583,11 +646,13 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       const client = await pool.connect();
       try {
         await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
-        const seq = tenRole === "app_api" ? 100 : 200;
+        // [Task 6] Không nêu seq/prev_hash/hash: 004 đã thu hồi quyền ghi ba cột đó, và trigger
+        // nối chuỗi điền chúng. Đường ghi HỢP LỆ vẫn phải mở — đó là nửa "không rỗng ruột" của
+        // phép kiểm này.
         await client.query(
-          "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
-            `VALUES ($1, $2, 'SERVICE', 'GHI_THEM', 'TEST', ${BAM_0}, sha256($3::bytea))`,
-          [orgA, seq, tenRole],
+          "INSERT INTO audit_events (org_id, actor_type, action, resource_type, payload) " +
+            "VALUES ($1, 'SERVICE', 'GHI_THEM', 'TEST', $2::jsonb)",
+          [orgA, JSON.stringify({ vai: tenRole })],
         );
 
         for (const cau of [
@@ -613,29 +678,50 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // ==========================================================================================
   // Task 4 tìm ra `organizations.slug UNIQUE` toàn cục LÀ oracle thật. Ở đây phải ĐO chứ không
   // suy: kết quả phụ thuộc THỨ TỰ mà PostgreSQL kiểm RLS WITH CHECK so với chỉ mục duy nhất.
+  // [Task 6 — MỘT TEST ĐÃ BỊ BẢN VÁ AN NINH KHÁC LÀM RỖNG RUỘT, VÀ ĐÂY LÀ BẢN THAY]
+  // Bản trước của test này đo: app_api dưới orgA chèn (orgB, seq=7) so với (orgB, seq=4242) —
+  // nếu hai thông báo lỗi khác nhau thì chỉ mục duy nhất (org_id, seq) rò ra "org khác có hàng
+  // seq=7 hay không". Bản trước kết luận ĐÚNG (RLS WITH CHECK được kiểm TRƯỚC chỉ mục duy nhất).
+  // Sau 004 thì CHÍNH CÂU LỆNH ĐÓ không còn viết được: quyền INSERT trên cột `seq` đã bị thu
+  // hồi, nên cả hai mũi dừng ở "permission denied" và test cũ sẽ XANH mà KHÔNG ĐO GÌ về thứ tự
+  // giữa RLS và chỉ mục duy nhất. Nó phải được viết lại chứ không phải được để xanh.
+  //
+  // Bản này giữ nguyên CÂU HỎI (chỉ mục duy nhất có làm oracle xuyên tổ chức không?) và đổi vũ
+  // khí sang câu INSERT mà app_api CÒN viết được: seq do trigger đặt, và trigger đọc đuôi chuỗi
+  // QUA RLS nên nó luôn tính ra seq = 1 cho một tổ chức mà phiên hiện tại không thấy. Vì thế mũi
+  // nhắm vào một tổ chức ĐÃ CÓ seq = 1 va vào chỉ mục duy nhất, còn mũi nhắm vào tổ chức RỖNG
+  // thì không — nếu RLS không được kiểm trước thì hai thông báo sẽ KHÁC NHAU và đó là oracle.
   it("[INV-B4] UNIQUE (org_id, seq) không dùng làm oracle xuyên tổ chức được", async () => {
+    const { rows: orgMoi } = await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ('Cong ty rong', 'cong-ty-rong') RETURNING id",
+    );
+    const orgRong = orgMoi[0]!.id;
+
+    // Chống rỗng ruột theo cả hai chiều: orgB PHẢI có hàng seq = 1, orgRong PHẢI không có hàng nào.
+    const dem = async (org: string, dieuKien: string): Promise<string> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND ${dieuKien}`,
+        [org],
+      );
+      return rows[0]!.n;
+    };
+    expect(await dem(orgB, "seq = 1")).toBe("1");
+    expect(await dem(orgRong, "true")).toBe("0");
+
     const client = await apiPool.connect();
     try {
       await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
-      const chen = async (seq: number): Promise<string> =>
+      const chen = async (org: string): Promise<string> =>
         client
           .query(
-            "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
-              `VALUES ($1, $2, 'SYSTEM', 'DO', 'TEST', ${BAM_0}, sha256('x'::bytea))`,
-            [orgB, seq],
+            "INSERT INTO audit_events (org_id, actor_type, action, resource_type) " +
+              "VALUES ($1, 'SYSTEM', 'DO', 'TEST')",
+            [org],
           )
           .then(() => "THÀNH CÔNG", (loi: Error) => loi.message);
 
-      // Chống rỗng ruột: (orgB, 7) PHẢI tồn tại thật, nếu không hai vế so sánh đều là "không
-      // tồn tại" và phép đo không nói gì.
-      const coThat = await db.pool.query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND seq = 7",
-        [orgB],
-      );
-      expect(coThat.rows[0]!.n).toBe("1");
-
-      const coTon = await chen(7);
-      const khongTon = await chen(4242);
+      const coTon = await chen(orgB);
+      const khongTon = await chen(orgRong);
       expect(coTon, "hai thông báo khác nhau = một bit rò ra ngoài tổ chức").toBe(khongTon);
       expect(coTon).toMatch(/row-level security/i);
     } finally {
@@ -669,14 +755,32 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
     }
   });
 
+  // [Task 6 — TEST THỨ HAI BỊ LÀM RỖNG RUỘT, VÀ ĐÂY LÀ BẢN THAY]
+  // Bản trước chèn thẳng (orgA, seq = 1) và chờ "duplicate key". Sau 004 câu đó KHÔNG còn vỡ:
+  // trigger nối chuỗi ghi đè seq nên nó thành một hàng hợp lệ ở cuối chuỗi. Bản trước sẽ ĐỎ chứ
+  // không xanh giả — nhưng nếu ai đó "sửa" nó bằng cách nới regex thì phép đo mất sạch nội dung.
+  // Bản này tách rõ HAI khẳng định, mỗi khẳng định một lớp:
+  //   (b) lớp trigger: cùng câu lệnh đó, seq bị GHI ĐÈ nên KHÔNG có va chạm nào — đây là lý do
+  //       thật khiến "hai sự kiện cùng seq" là không viết ra được;
+  //   (a) lớp ràng buộc: gỡ trigger đi thì UNIQUE (org_id, seq) vẫn đứng và vẫn từ chối.
   it("[INV-B4] không cho phép hai sự kiện cùng seq trong một tổ chức", async () => {
-    await expect(
-      db.pool.query(
-        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
-          `VALUES ($1, 1, 'SYSTEM', 'TRUNG_SEQ', 'TEST', sha256('a'::bytea), sha256('b'::bytea))`,
-        [orgA],
-      ),
-    ).rejects.toThrow(/duplicate key|unique/i);
+    const { rows } = await db.pool.query<{ seq: string }>(
+      "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+        "VALUES ($1, 1, 'SYSTEM', 'TRUNG_SEQ', 'TEST', sha256('a'::bytea), sha256('b'::bytea)) " +
+        "RETURNING seq",
+      [orgA],
+    );
+    expect(Number(rows[0]!.seq), "trigger nối chuỗi phải ghi đè seq đã chọn").toBeGreaterThan(1);
+
+    await voHieuHoaTrigger("audit_events_noi_chuoi", async () => {
+      await expect(
+        db.pool.query(
+          "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+            "VALUES ($1, 1, 'SYSTEM', 'TRUNG_SEQ', 'TEST', sha256('a'::bytea), sha256('b'::bytea))",
+          [orgA],
+        ),
+      ).rejects.toThrow(/duplicate key|unique/i);
+    });
   });
 
   // ==========================================================================================
@@ -777,22 +881,45 @@ describe("hồ sơ kiểm toán của bảng sổ khớp nhau giữa các file",
   // đầu, hardening.always.sql cưỡng chế lại ở mọi lần migrate()), nên sửa một bên mà quên bên
   // kia phải ĐỎ — nếu không hardening âm thầm ghi đè bản trong 003 ở mỗi lần deploy.
   it("[INV-B4] định nghĩa chan_sua_xoa() trong 003 và trong hardening.always.sql khớp nhau", () => {
-    const thanHam = (tenFile: string): string => {
+    // [Task 6] Biểu thức khớp nay NEO VÀO TÊN HÀM. Bản trước neo vào chuỗi "LANGUAGE plpgsql SET
+    // search_path = pg_catalog AS $x$" và đòi ĐÚNG MỘT khớp mỗi file — nên ngay khi 004 thêm hàm
+    // trigger thứ hai với cùng khuôn ấy, phép kiểm gãy vì lý do KHÔNG liên quan tới thứ nó canh.
+    const thanHam = (tenFile: string, tenHam: string): string => {
       const khop = [
         ...doc(tenFile).matchAll(
-          /LANGUAGE plpgsql SET search_path = pg_catalog AS \$(\w*)\$([\s\S]*?)\$\1\$/g,
+          new RegExp(
+            String.raw`CREATE OR REPLACE FUNCTION public\.${tenHam}\(\) RETURNS trigger\s+` +
+              String.raw`LANGUAGE plpgsql SET search_path = pg_catalog AS \$(\w*)\$([\s\S]*?)\$\1\$`,
+            "g",
+          ),
         ),
       ];
-      expect(khop, `${tenFile}: đúng một định nghĩa chan_sua_xoa()`).toHaveLength(1);
+      expect(khop, `${tenFile}: đúng một định nghĩa ${tenHam}()`).toHaveLength(1);
       return khop[0]![2]!.replace(/\s+/g, " ").trim();
     };
 
-    const than003 = thanHam("003_audit_events.sql");
+    const than003 = thanHam("003_audit_events.sql", "chan_sua_xoa");
     expect(than003).toBe(
       "BEGIN RAISE EXCEPTION 'Bảng % là bảng chỉ-ghi-thêm (append-only): thao tác % bị từ chối', " +
         "TG_TABLE_NAME, TG_OP USING ERRCODE = 'insufficient_privilege'; END",
     );
-    expect(thanHam("hardening.always.sql")).toBe(than003);
+    expect(thanHam("hardening.always.sql", "chan_sua_xoa")).toBe(than003);
+
+    // [Task 6] Cùng khuôn §R3 cho hàm trigger nối chuỗi. Bản nguồn nằm ở 004; bản cưỡng chế nằm
+    // trong hằng THAN_NOI_CHUOI của hardening. Lệch nhau thì bản của hardening THẮNG ở mọi lần
+    // deploy (nó chạy lại mỗi lượt, còn 004 đã nằm trong schema_migrations), tức file .sql mà
+    // kiểm toán viên đọc KHÁC cái đang chạy — đúng lớp lỗi mà [fix S7] checksum sinh ra để đóng.
+    const than004 = thanHam("004_audit_chain_functions.sql", "noi_chuoi_kiem_toan");
+    const khoiHardening = /THAN_NOI_CHUOI constant text := \$tnc\$([\s\S]*?)\$tnc\$;/.exec(
+      doc("hardening.always.sql"),
+    );
+    expect(khoiHardening, "hardening.always.sql: không tìm thấy hằng THAN_NOI_CHUOI").not.toBeNull();
+    expect(khoiHardening![1]!.replace(/\s+/g, " ").trim()).toBe(than004);
+    expect(than004).toContain("public.audit_compute_hash(");
+    expect(
+      than004,
+      "thân hàm cưỡng chế không được mang chú thích — hậu điều kiện so theo văn bản",
+    ).not.toContain("--");
   });
 
   it("[INV-B4] danh sách bảng chỉ-ghi-thêm khớp nhau ở hardening.always.sql và ở test này", () => {
