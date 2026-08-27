@@ -4,4 +4,9 @@ packages:
   - "tools/*"
 
 allowBuilds:
+  # cpu-features/ssh2 chỉ cần cho kết nối Docker qua SSH; dự án luôn nối Docker cục bộ
+  # qua named pipe/socket nên không cần script build native của chúng.
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false
