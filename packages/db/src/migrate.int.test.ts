@@ -163,7 +163,13 @@ describe("bộ chạy migration", () => {
   // migration một-lần). Test bằng cách đếm số lần thực thi qua một bảng đếm — nếu chạy lại
   // đúng như thiết kế, số đếm tăng ở mỗi lần gọi migrate(), kể cả khi không có migration đánh
   // số mới nào để áp dụng.
-  it("[fix I3 — cơ chế chung] file *.always.sql chạy lại mỗi lần migrate(), không ghi vào schema_migrations", async () => {
+  //
+  // [vòng fix 1 — I3] Số lần mỗi lời gọi là BA, không phải một: 'sua' trước vòng migration đánh
+  // số, rồi 'sua' và 'phan_xet' sau vòng đó (lý do đầy đủ ở khối "BA LƯỢT" đầu
+  // db/migrations/hardening.always.sql). Con số đó được khoá ở đây có chủ đích — nó là thứ
+  // biến "always.sql phải idempotent" từ một lời khuyên thành một ràng buộc đo được: fixture
+  // dưới đây cố ý KHÔNG idempotent (INSERT trần) nên nó đếm được đúng số lượt.
+  it("[fix I3 — cơ chế chung] file *.always.sql chạy lại BA lượt mỗi lần migrate(), không ghi vào schema_migrations", async () => {
     const dir = migrationDir({
       "080_binh_thuong.sql": "CREATE TABLE mig_j (id int);",
       "hardening_gia_lap.always.sql":
@@ -173,13 +179,39 @@ describe("bộ chạy migration", () => {
     const ketQua1 = await migrate(db.pool, dir);
     expect(ketQua1).toEqual(["080_binh_thuong.sql"]); // always.sql KHÔNG có trong applied
 
+    const demSauLan1 = await db.pool.query<{ dem: string }>(
+      "SELECT count(*) AS dem FROM mig_j_dem",
+    );
+    expect(Number(demSauLan1.rows[0]?.dem), "một lần migrate() = ba lượt always.sql").toBe(3);
+
     const ketQua2 = await migrate(db.pool, dir);
     expect(ketQua2).toEqual([]); // 080 đã áp dụng — nhưng always.sql vẫn chạy lại
 
     const { rows } = await db.pool.query<{ dem: string }>(
       "SELECT count(*) AS dem FROM mig_j_dem",
     );
-    expect(Number(rows[0]?.dem)).toBe(2);
+    expect(Number(rows[0]?.dem)).toBe(6);
+  });
+
+  // [vòng fix 1 — I3] Lượt 'sua' phải chạy TRƯỚC vòng migration đánh số, và lượt 'phan_xet'
+  // SAU. Không có khẳng định này thì hai lượt có thể bị đảo hoặc gộp mà không test nào đỏ —
+  // trong khi toàn bộ giá trị của thiết kế nằm ở đúng thứ tự đó: 001 GRANT cho app_api nên
+  // lượt trước-vòng phải tồn tại, và chỉ lượt sau-vòng mới NHÌN THẤY migration vừa đưa vào.
+  it("[vòng fix 1 — I3] always.sql chạy quanh vòng migration đánh số theo đúng thứ tự sua → (đánh số) → sua → phan_xet", async () => {
+    const dir = migrationDir({
+      "081_ghi_dau.sql": "INSERT INTO mig_k_nhat_ky (buoc) VALUES ('danh_so');",
+      "nhat_ky.always.sql":
+        "CREATE TABLE IF NOT EXISTS mig_k_nhat_ky (thu_tu serial, buoc text);\n" +
+        "INSERT INTO mig_k_nhat_ky (buoc) VALUES " +
+        "(coalesce(nullif(current_setting('app.hardening_che_do', true), ''), 'day_du'));",
+    });
+
+    await migrate(db.pool, dir);
+
+    const { rows } = await db.pool.query<{ buoc: string }>(
+      "SELECT buoc FROM mig_k_nhat_ky ORDER BY thu_tu",
+    );
+    expect(rows.map((r) => r.buoc)).toEqual(["sua", "danh_so", "sua", "phan_xet"]);
   });
 
   // [fix round 4 — N1] pool.connect() trả về CÙNG MỘT đối tượng Client khi client đó được

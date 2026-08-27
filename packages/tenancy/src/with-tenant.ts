@@ -18,9 +18,27 @@ export class TenantError extends Error {
 /**
  * Chạy `fn` trong một transaction đã gắn tổ chức.
  *
- * `set_config(..., true)` giới hạn biến trong phạm vi transaction, nên giá trị tự biến mất khi
- * commit hoặc rollback. Điều này quan trọng với connection pool: kết nối trả về pool không mang
- * theo tổ chức của lần dùng trước.
+ * `set_config(..., true)` giới hạn biến trong phạm vi transaction, nên giá trị do CHÍNH hàm này
+ * đặt tự biến mất khi commit hoặc rollback.
+ *
+ * [vòng fix 1 — I1] Bản trước tuyên bố VÔ ĐIỀU KIỆN "kết nối trả về pool không mang theo tổ
+ * chức của lần dùng trước". Đo được ca mang theo, và cơ chế đáng ghi lại vì phép kiểm command
+ * tag ở dưới KHÔNG bắt được nó: `COMMIT` chạy NGOÀI transaction cũng trả về tag "COMMIT" (chỉ
+ * kèm một warning). Nên nếu `fn` tự kết thúc transaction rồi gọi
+ * `set_config('app.org_id', ..., false)` (phạm vi PHIÊN), withTenant() báo thành công và giá
+ * trị SỐNG SÓT trên client trả về pool. Đo trên PostgreSQL 16.15 / pg@8.23.0:
+ *     COMMIT trong tx -> "COMMIT" · COMMIT NGOÀI tx -> "COMMIT" (không ném lỗi)
+ *     sau withTenant "bình thường": current_setting('app.org_id') = <tổ chức của fn>
+ *     lần dùng kết nối kế tiếp (không qua withTenant): CÙNG giá trị đó
+ * Từ đó mọi `pool.query()` trên kết nối ấy chạy dưới tổ chức sai, VĨNH VIỄN cho tới khi client
+ * bị huỷ. Nay khối `finally` đọc lại GUC và HUỶ kết nối nếu còn sót — biến một rò rỉ im lặng
+ * thành một kết nối bị bỏ đi. Huỷ cả kết nối chứ không chỉ RESET đúng `app.org_id`: `fn` đã
+ * chứng minh nó để lại trạng thái phiên, và những thứ khác nó có thể để lại (`SET ROLE`,
+ * `search_path`, `statement_timeout`) cũng đi theo kết nối. Giá phải trả, nói rõ: một lượt
+ * round-trip thêm cho MỌI lời gọi withTenant().
+ *
+ * Bảo đảm hiện tại, phát biểu đúng phạm vi: kết nối trả về pool KHÔNG mang theo `app.org_id`
+ * — hoặc vì nó chưa bao giờ vượt ra khỏi transaction, hoặc vì kết nối đã bị huỷ thay vì trả về.
  *
  * Mọi truy cập dữ liệu có org_id BẮT BUỘC đi qua hàm này. Đây là điểm duy nhất gắn tenant
  * context, để không có đường vòng nào bỏ qua RLS (bất biến F1).
@@ -89,6 +107,22 @@ export async function withTenant<T>(
     }
     throw loi;
   } finally {
+    // [vòng fix 1 — I1] Xem giải thích dài ở docstring. Chạy trên CẢ HAI đường ra (trả về
+    // bình thường và ném lỗi) vì `fn` để lại trạng thái phiên được ở cả hai.
+    try {
+      const { rows } = await client.query<{ con_sot: string | null }>(
+        "SELECT current_setting('app.org_id', true) AS con_sot",
+      );
+      // Cố ý KHÔNG nội suy giá trị còn sót vào thông báo — cùng lý do với nhánh UUID ở trên.
+      if (rows[0]?.con_sot) {
+        loiLamHongClient ??= new TenantError(
+          "app.org_id còn sót sau transaction — `fn` đã đặt biến ở phạm vi PHIÊN. Kết nối bị " +
+            "huỷ thay vì trả về pool.",
+        );
+      }
+    } catch {
+      // Kết nối đã chết — release(loiLamHongClient) bên dưới xử lý nốt.
+    }
     client.off("error", boQuaLoiKetNoi);
     client.release(loiLamHongClient);
   }

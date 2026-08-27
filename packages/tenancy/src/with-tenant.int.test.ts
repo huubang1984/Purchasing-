@@ -127,6 +127,48 @@ describe("cô lập tổ chức", () => {
     }
   });
 
+  // [vòng fix 1 — I1] Đường rò mà phép kiểm command tag KHÔNG bắt được: `COMMIT` chạy NGOÀI
+  // transaction cũng trả về tag "COMMIT" (chỉ kèm warning). Nên nếu `fn` tự kết thúc transaction
+  // rồi đặt app.org_id ở phạm vi PHIÊN, withTenant() trả về BÌNH THƯỜNG và giá trị sống sót
+  // trên client trả về pool — từ đó mọi truy vấn không qua withTenant() trên kết nối ấy chạy
+  // dưới tổ chức sai, VĨNH VIỄN cho tới khi client bị huỷ.
+  //
+  // Phép đo phải SẮC: pool `max: 1` để lần connect() kế tiếp CHẮC CHẮN là cùng backend nếu
+  // client không bị huỷ. Khẳng định là "lần dùng kế tiếp KHÔNG mang theo tổ chức của lần trước"
+  // — bất kể điều đó đạt được bằng cách nào — vì đó mới là bất biến, không phải cơ chế.
+  it("[I1] fn tự commit rồi đặt app.org_id phạm vi PHIÊN không rò sang lần dùng kết nối kế tiếp", async () => {
+    const poolMotClient = createPool(db.connectionString, 1);
+    try {
+      const truoc = await poolMotClient.query<{ pid: number }>(
+        "SELECT pg_backend_pid()::int AS pid",
+      );
+
+      await withTenant(poolMotClient, orgA, async (client) => {
+        await client.query("COMMIT"); // fn tự kết thúc transaction của withTenant
+        await client.query("SELECT set_config('app.org_id', $1, false)", [orgB]); // PHẠM VI PHIÊN
+      });
+
+      const client = await poolMotClient.connect();
+      try {
+        const { rows } = await client.query<{ org: string | null; pid: number }>(
+          "SELECT app_current_org_id() AS org, pg_backend_pid()::int AS pid",
+        );
+        expect(
+          rows[0]?.org,
+          "tổ chức của lần dùng trước còn sống trên kết nối trả về pool — mọi pool.query() " +
+            "không qua withTenant() sau đó chạy dưới tổ chức SAI.",
+        ).toBeNull();
+        // Chứng minh phép đo không rỗng ruột: kết nối phải THẬT SỰ bị thay, không phải GUC
+        // ngẫu nhiên trống trên cùng backend.
+        expect(rows[0]?.pid).not.toBe(truoc.rows[0]!.pid);
+      } finally {
+        client.release();
+      }
+    } finally {
+      await poolMotClient.end();
+    }
+  });
+
   it("biến app.org_id không rò sang lần dùng kết nối kế tiếp", async () => {
     await withTenant(apiPool, orgA, async (client) => {
       await client.query("SELECT 1");

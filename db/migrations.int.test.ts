@@ -5,6 +5,9 @@ import {
   type TestDatabase,
 } from "@trustprocure/test-support";
 import { readFileSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -1075,14 +1078,17 @@ describe("migration của dự án", () => {
   // thời điểm viết file này — đây là nửa "tổng quát" mà một danh sách bảng viết tay sẽ bỏ sót
   // ở mọi task sau. Một bảng mới có org_id, không RLS, không policy phải bị BẮT, không đi lọt.
   //
-  // Kết quả ĐO ĐƯỢC (khác với kỳ vọng ban đầu khi viết test này, giữ lại nguyên văn phép đo):
-  // migrate() GÃY chứ không "âm thầm bật hộ rồi đi tiếp". Lý do là tương tác giữa hai mục mới:
-  // mục (A) bật cờ ở BƯỚC 2, nhưng bảng vẫn chưa có policy nào nên mục (B) báo sai ở BƯỚC 3 và
-  // BƯỚC 4 ném lỗi — cả file nằm trong MỘT transaction nên phần (A) đã sửa cũng rollback theo.
-  // Đó là hành vi ĐÚNG: một bảng có org_id mà không có policy là bảng từ chối tất cả, tức một
-  // lược đồ hỏng, và nó chỉ phát sinh khi ai đó tạo bảng bằng tay hoặc viết một migration vi
-  // phạm S7b — cả hai đều phải dừng deploy. Ghi lại ở đây để không ai đọc mục (A) như một lời
-  // hứa "mọi trôi RLS đều tự chữa": nó tự chữa khi policy còn nguyên, và chỉ khi đó.
+  // Kết quả ĐO ĐƯỢC: migrate() GÃY chứ không "âm thầm bật hộ rồi đi tiếp". Đó là hành vi ĐÚNG:
+  // một bảng có org_id mà không có policy là bảng từ chối tất cả, tức một lược đồ hỏng, và nó
+  // chỉ phát sinh khi ai đó tạo bảng bằng tay hoặc viết một migration vi phạm S7b — cả hai đều
+  // phải dừng deploy. Ghi lại ở đây để không ai đọc mục (A) như một lời hứa "mọi trôi RLS đều
+  // tự chữa": nó tự chữa khi policy còn nguyên, và chỉ khi đó.
+  //
+  // [vòng fix 1 — I3] Vòng trước ghi thêm ở đây rằng "cả file nằm trong MỘT transaction nên
+  // phần (A) đã sửa cũng rollback theo". Điều đó ĐÃ HẾT ĐÚNG và test nay đo ngược lại: lượt SỬA
+  // commit trong transaction riêng TRƯỚC lượt PHÁN XÉT, nên cờ RLS mà (A) bật SỐNG SÓT qua lần
+  // migrate() gãy. Đây là khẳng định về triệu chứng "fail-closed kéo theo cả sửa chữa thành
+  // công" của bẫy Task 3.
   it("[INV-F1] bảng MỚI có org_id mà không RLS, không policy làm migrate() GÃY, không đi lọt", async () => {
     const db = await startPostgres();
     try {
@@ -1096,6 +1102,17 @@ describe("migration của dự án", () => {
       expect(loi).not.toBeNull();
       expect(loi!.message).toContain("hình dạng policy RLS của bảng tenant");
       expect(loi!.message).toContain("bang_moi_quen_rls");
+
+      // [vòng fix 1 — I3] Sửa chữa của lượt SỬA không bị phán xét kéo theo.
+      const coSua = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+        "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
+          "WHERE relname = 'bang_moi_quen_rls'",
+      );
+      expect(
+        coSua.rows[0],
+        "phán xét hỏng đã rollback luôn phần (A) đã sửa — đúng bẫy 'fail-closed biến trôi tự " +
+          "lành thành deploy chặn' của Task 3.",
+      ).toEqual({ bat: true, cuong_che: true });
 
       // Và sau khi bảng có policy đúng khuôn, mục (A) tự bật cờ RLS hộ — nửa "tự chữa" thật sự.
       await db.pool.query(
@@ -1158,29 +1175,329 @@ describe("migration của dự án", () => {
     }
   }, 180_000);
 
+  // ==========================================================================================
+  // [vòng fix 1 — CR1] DANH SÁCH ĐEN -> DANH SÁCH TRẮNG
+  // ==========================================================================================
+  // Bốn payload dưới đây ĐI LỌT hoàn toàn im lặng (HARDENING_EXIT=0) trên bản trước, và hai
+  // reviewer độc lập tìm ra chúng bằng những payload khác nhau. Chẩn đoán đo được và quan
+  // trọng: vấn đề KHÔNG phải "regex trên chuỗi thì yếu" — pg_get_expr CHUẨN HOÁ lại cây phân
+  // tích, nên "IS NOT DISTINCT FROM NULL" bị deparse thành "IS NULL" và bị bắt, "USING (true)"
+  // cũng bị bắt. Vấn đề là LIỆT KÊ CÁI XẤU: phép kiểm cũ chỉ đòi biểu thức NHẮC TỚI
+  // app_current_org_id(), nó không đòi biểu thức RÀNG BUỘC gì cả.
+  it("[CR1] bốn cách viết lại tương đương ngữ nghĩa của fail-open đều làm migrate() GÃY", async () => {
+    const kichBan: [string, string][] = [
+      // (1) Hằng true nối bằng OR — vô hiệu hoá toàn bộ vế bên trái.
+      ["OR true", "org_id = app_current_org_id() OR true"],
+      // (2) ĐÚNG dạng bị cấm số (1) của S11-T3, viết bằng IS DISTINCT FROM. PostgreSQL deparse
+      //     nó thành "NOT (... IS NOT NULL)" nên chuỗi "is null" không xuất hiện.
+      [
+        "IS DISTINCT FROM NULL",
+        "org_id = app_current_org_id() OR NOT (app_current_org_id() IS DISTINCT FROM NULL)",
+      ],
+      // (3) fail-OPEN qua nhánh ELSE của CASE.
+      [
+        "CASE ... ELSE true",
+        "CASE WHEN app_current_org_id()::text > '' THEN org_id = app_current_org_id() ELSE true END",
+      ],
+      // (4) Cửa hậu tinh vi nhất: fail-CLOSED khi CHƯA gắn tổ chức (nên nó QUA LUÔN mọi test
+      //     hành vi hiện có), mở toang khi ĐÃ gắn — tổ chức A đọc được dữ liệu của B.
+      [
+        "x = x OR ...",
+        "app_current_org_id() = app_current_org_id() OR org_id = app_current_org_id()",
+      ],
+    ];
+
+    for (const [nhan, bieuThuc] of kichBan) {
+      const db = await startPostgres();
+      try {
+        await migrate(db.pool, MIGRATIONS_DIR);
+        await db.pool.query(
+          `ALTER POLICY users_tenant_isolation ON users USING (${bieuThuc})`,
+        );
+
+        const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, `payload "${nhan}" đi lọt qua migrate()`).not.toBeNull();
+        expect(loi!.message).toContain("hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt");
+      } finally {
+        await db.stop();
+      }
+    }
+  }, 180_000);
+
   // (B) Mặt còn lại — không được BÁO NHẦM. Một phép kiểm quá tay biến hardening thành thứ cản
   // trở deploy trên một lược đồ hoàn toàn đúng, và đó là cách nhanh nhất để người vận hành gỡ
-  // bỏ nó. Ba biểu thức hợp lệ dưới đây, đã đo riêng trên PostgreSQL 16.15 để chọn đúng:
-  //   - "deleted_at IS NOT NULL": không dạng nào bắt nhầm (nhờ '\s+', không phải nhờ neo từ);
-  //   - tên cột "coalesced_at":   'coalesce' TRẦN bắt nhầm, '\mcoalesce\M' thì không;
-  //   - tên cột "analysis_nullifier": 'is\s+null' TRẦN bắt nhầm, dạng có neo thì không.
-  // Hai ca sau là thứ duy nhất khiến việc neo biên từ không phải trang trí.
-  it("[INV-F1] policy hợp lệ chứa IS NOT NULL / tên cột giống coalesce, is null không bị báo nhầm", async () => {
+  // bỏ nó.
+  //
+  // [vòng fix 1 — CR1] Rủi ro báo nhầm của khuôn DANH SÁCH TRẮNG khác hẳn khuôn cũ: nó không
+  // nằm ở tên cột chứa chuỗi con nữa (không còn regex nào), mà ở chỗ pg_get_expr có deparse ổn
+  // định hay không. Ba cách viết dưới đây có CÙNG cây phân tích với policy chuẩn nhưng khác
+  // hẳn về mặt văn bản; đã đo trên PostgreSQL 16.15 rằng cả ba deparse ra ĐÚNG MỘT chuỗi.
+  // Nếu một phiên bản PostgreSQL sau này đổi cách deparse, test này đỏ TRƯỚC khi production
+  // gãy — đó là công việc của nó.
+  it("[CR1] các cách viết khác nhau của CÙNG một cây phân tích không bị báo nhầm", async () => {
+    const cachViet = [
+      "(  org_id   =   app_current_org_id()  )", // khoảng trắng thừa
+      "((org_id = app_current_org_id()))", // ngoặc thừa
+      "org_id = public.app_current_org_id()", // hàm ghi đủ schema
+      "users.org_id = app_current_org_id()", // cột ghi đủ tên bảng
+    ];
+
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
+      for (const bieuThuc of cachViet) {
+        await db.pool.query(
+          `ALTER POLICY users_tenant_isolation ON users USING (${bieuThuc}) ` +
+            "WITH CHECK (org_id = app_current_org_id())",
+        );
+        const { rows } = await db.pool.query<{ e: string }>(
+          "SELECT pg_get_expr(polqual, polrelid) AS e FROM pg_policy WHERE polname = 'users_tenant_isolation'",
+        );
+        expect(rows[0]!.e, `deparse của "${bieuThuc}" không còn ổn định`).toBe(
+          "(org_id = app_current_org_id())",
+        );
+        await expect(
+          migrate(db.pool, MIGRATIONS_DIR),
+          `cách viết "${bieuThuc}" bị báo nhầm`,
+        ).resolves.toEqual([]);
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // ==========================================================================================
+  // [vòng fix 1 — CR2] BẢNG CHA PHÂN MẢNH (relkind = 'p')
+  // ==========================================================================================
+  // Bảng báo giá phân mảnh theo org_id là thiết kế gần như chắc chắn của task sau, nên lỗ này
+  // phải đóng TRƯỚC task đó. Test đo HAI nửa, cố ý tách bạch:
+  //   (a) LỖ HỔNG CÓ THẬT — với lược đồ viết ĐÚNG KHUÔN PostgreSQL (RLS + policy trên CHA, lá
+  //       thừa hưởng), một role đã gắn tổ chức A đọc THẲNG lá của tổ chức B thấy nguyên dữ
+  //       liệu của B. Đây là phát hiện MỚI của vòng này: "viết đúng khuôn" vẫn hở, vì lá là
+  //       một bảng có tên gọi được.
+  //   (b) HARDENING ĐÓNG ĐƯỢC — mục (A) bật ENABLE + FORCE trên CHA lẫn mọi LÁ, và mục (B)
+  //       KHÔNG báo nhầm lá vì lá không có policy riêng (đó là khuôn đúng của PostgreSQL).
+  it("[CR2] bảng phân mảnh: lá đọc thẳng bỏ qua RLS trước khi vá, hardening bật RLS cho cả cha lẫn lá", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
       await db.pool.query(
-        "ALTER TABLE users ADD COLUMN deleted_at timestamptz, " +
-          "ADD COLUMN coalesced_at timestamptz, ADD COLUMN analysis_nullifier int",
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
       );
+      // Khuôn PostgreSQL chuẩn: RLS + policy đặt trên CHA, không đặt gì trên lá.
       await db.pool.query(
-        "ALTER POLICY users_tenant_isolation ON users " +
-          "USING (org_id = app_current_org_id() AND deleted_at IS NOT NULL " +
-          "       AND coalesced_at IS NOT NULL AND analysis_nullifier > 0) " +
-          "WITH CHECK (org_id = app_current_org_id())",
+        "CREATE TABLE bao_gia (id int, org_id uuid NOT NULL, gia int) PARTITION BY LIST (org_id)",
+      );
+      await db.pool.query(`CREATE TABLE bao_gia_a PARTITION OF bao_gia FOR VALUES IN ('${orgA}')`);
+      await db.pool.query(`CREATE TABLE bao_gia_b PARTITION OF bao_gia FOR VALUES IN ('${orgB}')`);
+      await db.pool.query("ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY");
+      await db.pool.query("ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY");
+      await db.pool.query(
+        "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+      );
+      await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a, bao_gia_b TO app_api");
+      await db.pool.query(
+        `INSERT INTO bao_gia VALUES (1,'${orgA}',100), (2,'${orgB}',999)`,
       );
 
+      // (a) Trạng thái TRƯỚC khi hardening chạm vào: lá không có RLS.
+      const truoc = await db.pool.query<{ ten: string; loai: string; bat: boolean }>(
+        "SELECT relname AS ten, relkind AS loai, relrowsecurity AS bat FROM pg_class " +
+          "WHERE relname LIKE 'bao_gia%' ORDER BY 1",
+      );
+      expect(truoc.rows).toEqual([
+        { ten: "bao_gia", loai: "p", bat: true },
+        { ten: "bao_gia_a", loai: "r", bat: false },
+        { ten: "bao_gia_b", loai: "r", bat: false },
+      ]);
+
+      const apiPool = db.poolAs("app_api");
+      const doc = async (bang: string): Promise<number[]> => {
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          const { rows } = await client.query<{ gia: number }>(`SELECT gia FROM ${bang} ORDER BY 1`);
+          return rows.map((r) => r.gia);
+        } finally {
+          client.release();
+        }
+      };
+      expect(await doc("bao_gia"), "đọc qua CHA phải chỉ thấy hàng của tổ chức A").toEqual([100]);
+      expect(
+        await doc("bao_gia_b"),
+        "nếu phép đo này rỗng nghĩa là lá đã tự chịu RLS — lỗ hổng CR2 không còn tồn tại và " +
+          "cả nửa (b) của test này là thừa. Đo lại trước khi kết luận.",
+      ).toEqual([999]);
+
+      // (b) hardening: PHẢI qua (lá không policy riêng là khuôn ĐÚNG) và PHẢI bật RLS cho lá.
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const sau = await db.pool.query<{ ten: string; bat: boolean; cuong_che: boolean }>(
+        "SELECT relname AS ten, relrowsecurity AS bat, relforcerowsecurity AS cuong_che " +
+          "FROM pg_class WHERE relname LIKE 'bao_gia%' ORDER BY 1",
+      );
+      expect(sau.rows).toEqual([
+        { ten: "bao_gia", bat: true, cuong_che: true },
+        { ten: "bao_gia_a", bat: true, cuong_che: true },
+        { ten: "bao_gia_b", bat: true, cuong_che: true },
+      ]);
+      expect(await doc("bao_gia_b"), "đọc thẳng lá của tổ chức khác phải trả 0 hàng").toEqual([]);
+      expect(await doc("bao_gia"), "đường đọc thật (qua CHA) không được hỏng").toEqual([100]);
+      await apiPool.end();
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // ==========================================================================================
+  // [vòng fix 1 — I2] BA ĐƯỜNG ĐỌC VÒNG QUA RLS
+  // ==========================================================================================
+  // Đo với chủ sở hữu superuser — ĐÚNG kịch bản CI của chính repo này, vì migrate() chạy bằng
+  // superuser. Cả ba đường đều EXIT=0 im lặng trên bản trước. Test đi qua migrate() THẬT chứ
+  // không viết lại truy vấn phát hiện: viết lại là tự chấm bài mình.
+  it("[I2] VIEW/MATVIEW/SECURITY DEFINER trên bảng tenant đều làm migrate() GÃY, cửa security_invoker thì không", async () => {
+    const kichBan: [string, string, string | null][] = [
+      // [nhãn, câu lệnh dựng, câu lệnh MỞ CỬA hợp lệ (null = không có cửa kỹ thuật)]
+      [
+        "VIEW mặc định (PG15+ security_invoker = false)",
+        "CREATE VIEW moi_nguoi AS SELECT * FROM users",
+        "ALTER VIEW moi_nguoi SET (security_invoker = true)",
+      ],
+      ["MATERIALIZED VIEW", "CREATE MATERIALIZED VIEW mv_nguoi AS SELECT * FROM users", null],
+      [
+        "hàm SECURITY DEFINER",
+        "CREATE FUNCTION doc_het() RETURNS SETOF users LANGUAGE sql SECURITY DEFINER " +
+          "AS 'SELECT * FROM users'",
+        null,
+      ],
+    ];
+
+    for (const [nhan, dung, moCua] of kichBan) {
+      const db = await startPostgres();
+      try {
+        await migrate(db.pool, MIGRATIONS_DIR);
+        await db.pool.query(dung);
+
+        const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, `"${nhan}" đi lọt qua migrate()`).not.toBeNull();
+        expect(loi!.message).toContain("đọc vòng qua RLS");
+
+        if (moCua !== null) {
+          await db.pool.query(moCua);
+          await expect(
+            migrate(db.pool, MIGRATIONS_DIR),
+            `cửa "${moCua}" phải làm hardening im lặng trở lại`,
+          ).resolves.toEqual([]);
+        }
+      } finally {
+        await db.stop();
+      }
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [vòng fix 1 — I3] BA LƯỢT: mỗi triệu chứng một khẳng định
+  // ==========================================================================================
+  it("[I3] hardening phán xét CHÍNH migration vừa được đưa vào, không chỉ lần deploy sau", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-i3-"));
+    try {
+      for (const f of ["hardening.always.sql", "001_roles_and_functions.sql", "002_organizations_and_users.sql"]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      // 003 tạo một bảng có org_id với policy fail-open — đúng thứ (B) sinh ra để bắt — và
+      // CỐ Ý quên ENABLE/FORCE, để có một thứ cho lượt SỬA sửa được. Không có nửa "quên" đó thì
+      // triệu chứng (3) không phân biệt được: bảng chỉ xuất hiện SAU lượt 1, nên chỉ lượt 2 mới
+      // có gì để sửa, và chỉ khi lượt 2 COMMIT tách khỏi lượt 3 thì sửa chữa mới sống sót.
+      await writeFile(
+        join(thuMucTam, "003_bang_hong.sql"),
+        "CREATE TABLE bang_hong (id int, org_id uuid NOT NULL);\n" +
+          "CREATE POLICY bang_hong_p ON bang_hong USING (org_id = app_current_org_id() OR true) " +
+          "WITH CHECK (org_id = app_current_org_id());\n" +
+          "GRANT SELECT ON bang_hong TO app_api;\n",
+        "utf8",
+      );
+
+      // Triệu chứng (1): LẦN CHẠY ĐẦU phải gãy. Trên bản trước, lần này QUA im lặng vì hardening
+      // chạy TRƯỚC 003 nên nó chưa hề thấy bảng đó tồn tại.
+      const loi = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "migration hỏng đi lọt ngay ở lần deploy đưa nó vào").not.toBeNull();
+      expect(loi!.message).toContain("bang_hong");
+
+      // Triệu chứng (3): phán xét hỏng KHÔNG rollback các sửa chữa của lượt SỬA. 003 đã commit
+      // trong transaction riêng của nó, và cờ RLS do lượt 2 bật vẫn còn.
+      const daGhi = await db.pool.query<{ version: string }>(
+        "SELECT version FROM schema_migrations ORDER BY version",
+      );
+      expect(daGhi.rows.map((r) => r.version)).toContain("003_bang_hong.sql");
+
+      const co = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+        "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
+          "WHERE relname = 'bang_hong'",
+      );
+      expect(
+        co.rows[0],
+        "cờ RLS mà lượt SỬA bật đã bị lượt PHÁN XÉT kéo rollback theo — hai lượt vẫn đang nằm " +
+          "chung một transaction.",
+      ).toEqual({ bat: true, cuong_che: true });
+      // Nhãn lượt trong thông báo: người trực đêm phải đọc được lỗi đến từ lượt nào.
+      expect(loi!.message).toContain("(phan_xet)");
+
+      // Triệu chứng (2): vá được bằng một migration MỚI, không phải sửa tay trên cụm.
+      await writeFile(
+        join(thuMucTam, "004_sua_policy.sql"),
+        "ALTER POLICY bang_hong_p ON bang_hong USING (org_id = app_current_org_id()) " +
+          "WITH CHECK (org_id = app_current_org_id());\n",
+        "utf8",
+      );
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual(["004_sua_policy.sql"]);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 120_000);
+
+  it("[I3] lượt SỬA không phán xét, và chế độ lạ thì GÃY thay vì im lặng thành no-op", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const sql = await readFile(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      await db.pool.query("ALTER POLICY users_tenant_isolation ON users USING (true)");
+
+      const chay = async (cheDo: string): Promise<string | null> => {
+        const client = await db.pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query("SELECT set_config('app.hardening_che_do', $1, true)", [cheDo]);
+          await client.query(sql);
+          await client.query("COMMIT");
+          return null;
+        } catch (e) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          return (e as Error).message;
+        } finally {
+          client.release();
+        }
+      };
+
+      // Lược đồ ĐANG hỏng, nhưng lượt 'sua' phải đi qua — đó là thứ cho phép một migration vá
+      // lỗi tới được đích thay vì kẹt sau một hàng rào chạy quá sớm.
+      expect(await chay("sua"), "lượt SỬA không được phán xét").toBeNull();
+      expect(await chay("phan_xet")).toContain("hình dạng biểu thức KHÔNG nằm trong danh sách");
+      // Một lỗi chính tả trong migrate.ts không được âm thầm biến phán xét thành no-op.
+      expect(await chay("day_du_typo")).toContain("không hợp lệ");
     } finally {
       await db.stop();
     }

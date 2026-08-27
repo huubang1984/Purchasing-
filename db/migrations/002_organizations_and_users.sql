@@ -51,6 +51,30 @@
 --     một tiến trình API đã bị chiếm quyền. Bí mật giá thầu KHÔNG dựa vào RLS — nó dựa vào
 --     phong bì mã hoá và ADR-006 (app_api không có khả năng giải mã).
 
+-- ============================================================================
+-- [CR3 — vòng fix 1] RÀNG BUỘC DUY NHẤT TOÀN CỤC LÀ MỘT ORACLE XUYÊN TỔ CHỨC
+-- ============================================================================
+-- `slug` là UNIQUE TOÀN CỤC — đúng thứ mà bình luận ở bảng users bên dưới (dòng "Duy nhất
+-- theo (org_id, email), KHÔNG phải theo email toàn cục") tuyên bố dự án đã tránh. Bản đầu
+-- của file này viết đúng nguyên lý ở một bảng rồi không áp cho bảng kia, cách nhau 30 dòng.
+--
+-- Vì sao KHÔNG bỏ UNIQUE: slug là định danh trong URL, phải duy nhất toàn cục để phân giải
+-- được. Bỏ ràng buộc là làm hỏng tính năng, không phải vá lỗ hổng.
+-- Vì sao lỗ hổng vẫn thật: app_api có UPDATE nên nó DÙNG được ràng buộc đó làm oracle nhị
+-- phân trên một không gian tên ĐOÁN ĐƯỢC (slug sinh từ tên công ty). Đã đo trên PostgreSQL
+-- 16.15 bằng role đăng nhập thật app_api_login, RLS bật đầy đủ, tenant context đúng:
+--     UPDATE organizations SET slug='cong-ty-b'          WHERE id=app_current_org_id();
+--       -> ERROR: duplicate key value violates unique constraint "organizations_slug_key"
+--     UPDATE organizations SET slug='khong-ai-dung-slug' WHERE id=app_current_org_id();
+--       -> UPDATE 1
+-- Hai thông báo khác nhau = "đối thủ X có mặt trên sàn không". Trên sàn thầu kín đó là tin
+-- có giá. RLS không che được: kiểm tra unique chạy dưới quyền hệ thống trên TOÀN bảng.
+--
+-- Bản vá: THU HẸP QUYỀN, không đụng ràng buộc. app_api chỉ được UPDATE đúng cột `name`.
+-- Đã đo lại sau vá, cùng kịch bản: cả hai câu UPDATE slug đều trả ĐÚNG MỘT thông báo
+-- "permission denied for table organizations" (không phân biệt được slug tồn tại hay không),
+-- còn "UPDATE ... SET name=..." vẫn "UPDATE 1" và SELECT vẫn đọc được hàng của mình.
+-- Đổi slug thuộc đường VẬN HÀNH, không thuộc app_api — cùng lý do với INSERT bên dưới.
 CREATE TABLE organizations (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name       text NOT NULL,
@@ -71,7 +95,13 @@ CREATE POLICY organizations_tenant_isolation ON organizations
 -- áp cho MỌI role không được miễn trừ — kể cả role đăng nhập của ứng dụng (app_api_login) và
 -- mọi role sẽ được thêm về sau. Liệt kê role trong TO là danh sách phải nhớ cập nhật; bỏ TO
 -- là mặc định đóng. Đây là cùng một hướng bất biến với hàng rào depcruise của Task 7.
-GRANT SELECT, UPDATE ON organizations TO app_api;
+GRANT SELECT ON organizations TO app_api;
+-- [CR3] UPDATE giới hạn theo CỘT — xem khối giải thích trên CREATE TABLE organizations.
+-- Cảnh báo cho người đọc test về sau: quyền CỘT KHÔNG hiện trong
+-- information_schema.role_table_grants (đã đo: sau bản vá này view đó chỉ còn dòng SELECT).
+-- Nó chỉ hiện ở information_schema.role_column_grants. Khẳng định quyền ở
+-- db/rls-coverage.int.test.ts phải đọc CẢ HAI view, nếu không nó xanh vì lý do sai.
+GRANT UPDATE (name) ON organizations TO app_api;
 -- Cố ý KHÔNG cấp INSERT trên organizations cho app_api: với WITH CHECK ở trên, một hàng mới
 -- phải mang id BẰNG tổ chức đang gắn — mà tổ chức đó đã tồn tại (id là PRIMARY KEY). Quyền
 -- này không thể dùng được trong bất kỳ đường đi nào, và một quyền không dùng được chỉ làm

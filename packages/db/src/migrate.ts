@@ -13,6 +13,13 @@ const MIGRATION_LOCK_KEY = 727_100_003;
 // không qua schema_migrations. Xem db/migrations/hardening.always.sql để biết lý do.
 const HAU_TO_LUON_CHAY = ".always.sql";
 
+/**
+ * [fix vòng 1 — I3] Chế độ chạy của file ".always.sql", truyền qua GUC `app.hardening_che_do`.
+ * Giá trị lạ làm chính file SQL đó RAISE — cố ý, để một lỗi chính tả ở đây không âm thầm biến
+ * lượt phán xét thành no-op. Xem khối "BA LƯỢT" ở đầu db/migrations/hardening.always.sql.
+ */
+type CheDoHardening = "sua" | "phan_xet";
+
 function tinhChecksum(sql: string): string {
   return createHash("sha256").update(sql, "utf8").digest("hex");
 }
@@ -23,9 +30,16 @@ function tinhChecksum(sql: string): string {
  * lại. Toàn bộ vòng lặp được bọc trong một advisory lock để hai tiến trình migrate() chạy
  * đồng thời trên cùng CSDL không giẫm lên nhau.
  *
- * File có hậu tố ".always.sql" chạy LẠI ở MỌI lần gọi, trước các migration đánh số, và
- * không được ghi vào `applied` trả về — dùng cho cưỡng chế cấu hình cần tự sửa lại nếu bị
- * trôi sau triển khai (vd. thuộc tính role), khác với thay đổi lược đồ một-lần.
+ * File có hậu tố ".always.sql" chạy LẠI ở MỌI lần gọi và không được ghi vào `applied` trả về
+ * — dùng cho cưỡng chế cấu hình cần tự sửa lại nếu bị trôi sau triển khai (vd. thuộc tính
+ * role), khác với thay đổi lược đồ một-lần.
+ *
+ * [fix vòng 1 — I3] Nó chạy BA lượt trong một lần migrate(), mỗi lượt một transaction riêng:
+ * `sua` trước vòng migration đánh số, rồi `sua` và `phan_xet` sau vòng đó. Lý do đầy đủ ở
+ * khối "BA LƯỢT" đầu db/migrations/hardening.always.sql; tóm tắt: lượt trước-vòng phải tồn
+ * tại (001 GRANT cho các role), lượt sau-vòng là lượt DUY NHẤT nhìn thấy migration vừa được
+ * đưa vào, và tách phán xét sang transaction riêng để một phán xét hỏng không rollback các
+ * sửa chữa đã thành công.
  *
  * [fix round 4 — Minor] RÀNG BUỘC của ".always.sql": giống mọi migration đánh số, nội dung
  * file được chạy TRONG một BEGIN/COMMIT tường minh, nên KHÔNG dùng được lệnh không chạy
@@ -121,25 +135,34 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     const fileLuonChay = tatCaFile.filter((f) => f.endsWith(HAU_TO_LUON_CHAY));
     const fileDanhSo = tatCaFile.filter((f) => !f.endsWith(HAU_TO_LUON_CHAY));
 
-    for (const file of fileLuonChay) {
-      const sql = await readFile(join(dir, file), "utf8");
-      try {
-        await lockClient.query("BEGIN");
-        await lockClient.query(sql);
-        await lockClient.query("COMMIT");
-      } catch (error) {
+    const chayFileLuonChay = async (cheDo: CheDoHardening): Promise<void> => {
+      for (const file of fileLuonChay) {
+        const sql = await readFile(join(dir, file), "utf8");
         try {
-          await lockClient.query("ROLLBACK");
-        } catch {
-          // Kết nối có thể đã chết ngay trong lúc chạy (xem [fix I1]) — không còn gì để
-          // rollback trên một kết nối đã đứt. Ưu tiên ném lỗi GỐC kèm tên file bên dưới,
-          // không phải lỗi thất bại của chính ROLLBACK.
+          await lockClient.query("BEGIN");
+          // set_config(..., true) = phạm vi transaction, nên GUC tự biến mất khi COMMIT/
+          // ROLLBACK và không rò sang migration đánh số hay sang lần dùng kết nối kế tiếp.
+          await lockClient.query("SELECT set_config('app.hardening_che_do', $1, true)", [cheDo]);
+          await lockClient.query(sql);
+          await lockClient.query("COMMIT");
+        } catch (error) {
+          try {
+            await lockClient.query("ROLLBACK");
+          } catch {
+            // Kết nối có thể đã chết ngay trong lúc chạy (xem [fix I1]) — không còn gì để
+            // rollback trên một kết nối đã đứt. Ưu tiên ném lỗi GỐC kèm tên file bên dưới,
+            // không phải lỗi thất bại của chính ROLLBACK.
+          }
+          throw new Error(`Hardening ${file} (${cheDo}) thất bại: ${(error as Error).message}`, {
+            cause: error,
+          });
         }
-        throw new Error(`Hardening ${file} thất bại: ${(error as Error).message}`, {
-          cause: error,
-        });
       }
-    }
+    };
+
+    // [fix vòng 1 — I3] LƯỢT 1: chỉ SỬA, không phán xét. Bắt buộc chạy TRƯỚC migration đánh
+    // số vì 001 GRANT cho app_api/app_unseal nên hai role đó phải tồn tại trước.
+    await chayFileLuonChay("sua");
 
     const applied: string[] = [];
 
@@ -190,6 +213,19 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
         });
       }
     }
+
+    // [fix vòng 1 — I3] LƯỢT 2 (SỬA) rồi LƯỢT 3 (PHÁN XÉT), mỗi lượt một transaction RIÊNG.
+    // Ba triệu chứng đo được của khuôn "một lượt, chạy trước" mà thứ tự này đóng:
+    //   (1) khối phán xét KHÔNG BAO GIỜ kiểm chính migration đang được đưa vào — nó chỉ thấy
+    //       trạng thái TRƯỚC khi 00N chạy, nên lỗi chỉ lộ ở lần deploy SAU, khi file đã nằm
+    //       trong schema_migrations và không chạy lại được;
+    //   (2) vì phán xét chạy TRƯỚC, một lược đồ hỏng KHÔNG vá được bằng migration mới:
+    //       migrate() gãy trước khi tới được 004. Nay lượt 1 chỉ sửa, nên vòng migration đánh
+    //       số LUÔN chạy được hết và một migration vá lỗi tới được đích;
+    //   (3) phán xét hỏng KHÔNG còn rollback các sửa chữa đã thành công: lượt 2 đã COMMIT
+    //       xong trước khi lượt 3 bắt đầu, và lượt 3 không sửa gì nên transaction của nó rỗng.
+    await chayFileLuonChay("sua");
+    await chayFileLuonChay("phan_xet");
 
     const loiKhiMoKhoa = await nhaKhoaVaTraClient();
     if (loiKhiMoKhoa !== null) {
