@@ -48,11 +48,11 @@ const H5_VIET_LAI_LICH_SU = [
   "git update-ref -d refs/heads/main",
 ];
 
-// Finding 1 (review sau Task 1): tuỳ chọn toàn cục của git (-C, -c, --no-pager, ...)
-// chen giữa "git" và subcommand từng vô hiệu hoá TOÀN BỘ 10 quy tắc cùng lúc. Cờ bọc
-// nháy đơn và nhóm tiền tố restore không đủ rộng là cùng một lớp lỗi (khớp theo vị trí
-// liền kề trên chuỗi thô). Mọi case dưới đây đã kiểm chứng bằng thực nghiệm: exit 0
-// trên hook trước fix, exit 2 sau fix (xem task-1-report.md, mục "Fix round 1").
+// Finding 1 (review sau Task 1, round 1): tuỳ chọn toàn cục của git (-C, -c,
+// --no-pager, ...) chen giữa "git" và subcommand từng vô hiệu hoá TOÀN BỘ 10 quy tắc
+// cùng lúc. Cờ bọc nháy đơn và nhóm tiền tố restore không đủ rộng là cùng một lớp lỗi
+// (khớp theo vị trí liền kề trên chuỗi thô). Mọi case dưới đây đã kiểm chứng bằng thực
+// nghiệm: exit 0 trên hook trước fix, exit 2 sau fix (xem task-1-report.md, "Fix round 1").
 const H6_TUY_CHON_TOAN_CUC_BYPASS = [
   "git -C . reset --hard HEAD~1",
   "git -c core.pager=cat reset --hard HEAD~1",
@@ -64,6 +64,36 @@ const H6_TUY_CHON_TOAN_CUC_BYPASS = [
   // cục (đó là nghĩa riêng của subcommand, vd "git commit -c <ref>") — nếu bóc nhầm,
   // "--hard" phía sau sẽ bị nuốt theo và quy tắc lại bị vô hiệu hoá kiểu mới.
   "git reset -c --hard HEAD~1",
+];
+
+// Finding round 2: bản vá round 1 (giữ ranh giới lời gọi bằng toán tử shell rồi bóc
+// tuỳ chọn toàn cục) bị bắn nhầm bởi cú pháp nhân bản mô tả tệp — ký tự "&" trần trong
+// "2>&1"/"&>"/">&2" bị hiểu nhầm là toán tử chạy nền, cắt đứt việc thu thập token của
+// lời gọi git giữa chừng. Đã kiểm chứng bằng thực nghiệm trên chính hook round 1
+// (commit 71066b6): "git 2>&1 reset --hard HEAD~1" và "git &>/dev/null reset --hard
+// HEAD~1" exit 0 sai — chuyển hướng đặt TRƯỚC các token phá huỷ mới bắn nhầm; đặt sau
+// vẫn bị chặn đúng (giữ lại 3 case đó để làm regression, chứng minh không hồi quy dù
+// hook đã đổi hẳn thiết kế ở round 2). Xem task-1-report.md, "Fix round 2".
+const H6_CHUYEN_HUONG_BYPASS = [
+  "git 2>&1 reset --hard HEAD~1",
+  "git &>/dev/null reset --hard HEAD~1",
+  "git >&2 clean -fd",
+  // Ba case này vốn đã đúng ngay ở round 1 (chuyển hướng đặt SAU token phá huỷ) — giữ
+  // lại làm regression cho round 2, chứng minh thiết kế mới không làm hỏng cái đang đúng.
+  "git reset --hard HEAD~1 2>&1",
+  "git push --force origin main 2>&1",
+  "git reset --hard HEAD~1 >&2",
+];
+
+// Round 2, kiểm tra thêm ngoài yêu cầu tối thiểu (heredoc, ";;", nháy ghép liền không
+// khoảng trắng) — coordinator nêu đây là những thứ "có thể mở lỗ khác" nếu còn cố mô
+// hình hoá ngữ pháp shell. Thiết kế thiên về chặn (dò token bất kỳ đâu, không phân
+// biệt toán tử) miễn nhiễm với cả ba theo cấu trúc, không cần biết riêng từng cú pháp.
+const H6_CU_PHAP_SHELL_KHAC = [
+  "cat <<'EOF'\ngit reset --hard\nEOF",
+  "case $x in a) git reset --hard HEAD~1 ;; esac",
+  // Nháy đơn ghép liền nhau không khoảng trắng nối lại thành --hard.
+  "git reset --h'a'r'd' HEAD~1",
 ];
 
 const H7_CHO_QUA = [
@@ -81,10 +111,27 @@ const H7_CHO_QUA = [
   "git -C . push origin feature/foo",
   "git restore --staged package.json",
   "git branch -d merged-branch",
-  // Regression cho phần bóc "-C <dir>": giá trị đi kèm -C không được lẫn vào đối số
-  // thật của subcommand — nếu lẫn, "." (giá trị của -C) sẽ bị hiểu nhầm là target
-  // của "restore .", chặn oan một lệnh hoàn toàn vô hại.
+  // -C dùng với thư mục KHÔNG trùng "." — không đụng đánh đổi đã biết ở dưới.
+  "git -C repo restore foo.txt",
+  // Round 2: chuyển hướng thông thường không được cản trở việc bình thường.
+  "git status 2>&1",
+  "git log --oneline 2>&1",
+  "npm run build 2>&1",
+];
+
+// Round 2 (fix H6): đổi thiết kế thiên về chặn — dò tín hiệu phá huỷ trên TOÀN BỘ
+// token của dòng lệnh, không còn xác định "token nào thuộc lời gọi git nào" hay "đâu
+// là subcommand". Đánh đổi CHỦ ĐỘNG chấp nhận, không phải bug: hai lệnh dưới đây vốn vô
+// hại nhưng giờ bị chặn, vì lý do nêu ở từng dòng. Xem task-1-report.md, "Fix round 2",
+// mục "Đánh đổi đã biết" để có lý giải đầy đủ vì sao được chấp nhận thay vì sửa tiếp.
+const H6_DANH_DOI_DA_BIET = [
+  // Giá trị "." của "-C" (nghĩa là "chạy như đang ở thư mục hiện tại" — vốn là no-op,
+  // luôn có thể bỏ hẳn "-C .") trùng với dấu hiệu "restore ." dù không liên quan.
   "git -C . restore foo.txt",
+  // Hai lời gọi git tách biệt trong một chuỗi lệnh ghép: tín hiệu "checkout" ở lời gọi
+  // đầu và "--" ở lời gọi sau (không liên quan tới checkout) cộng lại thành dương tính
+  // giả. Có thể tách thành hai lệnh Bash riêng nếu Claude Code bị chặn nhầm kiểu này.
+  "git checkout main && git log -- file.txt",
 ];
 
 describe("git-safety hook", () => {
@@ -112,8 +159,24 @@ describe("git-safety hook", () => {
     it.each(H6_TUY_CHON_TOAN_CUC_BYPASS)("chặn: %s", chanDungMongDoi);
   });
 
+  describe("[INV-H6] chuyển hướng (2>&1, &>, >&2) không được vô hiệu hoá quy tắc nào", () => {
+    it.each(H6_CHUYEN_HUONG_BYPASS)("chặn: %s", chanDungMongDoi);
+  });
+
+  describe("[INV-H6] cú pháp shell khác (heredoc, ;;, nháy ghép liền) không vô hiệu hoá quy tắc", () => {
+    it.each(H6_CU_PHAP_SHELL_KHAC)("chặn: %s", chanDungMongDoi);
+  });
+
   describe("[INV-H7] lệnh git vô hại được cho qua", () => {
     it.each(H7_CHO_QUA)("cho qua: %s", choQuaMongDoi);
+
+    it("cho qua: git commit -m với message nhắc tới \"git reset --hard\" trong nháy kép", () => {
+      choQuaMongDoi('git commit -m "note: dont run git reset --hard"');
+    });
+  });
+
+  describe("[INV-H6] đánh đổi đã biết của thiết kế thiên về chặn — CHẶN chủ đích, không phải bug", () => {
+    it.each(H6_DANH_DOI_DA_BIET)("chặn (đánh đổi chấp nhận được): %s", chanDungMongDoi);
   });
 
   describe("[INV-H10] fail-closed", () => {

@@ -3,30 +3,39 @@
 // Nguyên tắc fail-closed: mọi lỗi đọc/phân tích đầu vào đều CHẶN, không cho qua.
 // Bài học từ sự cố jq (spec §8.1): biện pháp kiểm soát thất bại phải thất bại theo hướng an toàn.
 //
-// Fix round 1 (review sau Task 1 — [INV-H6]): bản đầu neo pattern theo \bgit\s+<subcommand>,
-// tức đòi subcommand đứng ngay sau "git" trên chuỗi thô. Bốn lớp bypass đã kiểm chứng
-// bằng thực nghiệm:
-//   1) tuỳ chọn toàn cục của git chen vào giữa — "git -C . reset --hard" — vô hiệu hoá
-//      TOÀN BỘ 10 quy tắc cùng lúc, không riêng một quy tắc.
-//   2) cờ bị bọc trong dấu nháy đơn — "git reset '--hard' HEAD~1".
-//   3) tổ hợp cờ ngắn gộp chung — "git push -uf origin main".
-//   4) nhóm tiền tố cờ không đủ rộng — "git restore --source=<rev> -- .".
-// Sửa bằng cách tokenize dòng lệnh theo ngữ nghĩa shell tối giản (tách theo && || ; |
-// và xuống dòng làm ranh giới lời gọi; bóc dấu nháy đơn/kép), rồi với MỖI lời gọi
-// "git ...": bóc các tuỳ chọn toàn cục đứng TRƯỚC subcommand (chỉ -C/-c cần bóc kèm
-// giá trị đi theo — các cờ toàn cục khác như --no-pager, --bare không ăn thêm token
-// nên không cần liệt kê hết), xác định subcommand, rồi tìm token liên quan bất kỳ đâu
-// trong phần đối số còn lại — không còn đòi vị trí liền kề với "git" hay với nhau.
+// Fix round 2 (review sau round 1 — [INV-H6]): round 1 tokenize dòng lệnh rồi tách
+// thành TỪNG lời gọi git theo ranh giới toán tử shell (&&, ||, ;, |, &, xuống dòng),
+// sau đó bóc tuỳ chọn toàn cục (-C/-c) đứng trước subcommand. Thiết kế đó bắn nhầm vào
+// cú pháp nhân bản mô tả tệp kiểu N>&M: ký tự "&" trần trong "2>&1" bị tokenizer coi là
+// toán tử chạy nền, cắt đứt việc thu thập token của lời gọi git ngay giữa chừng — vd
+// "git 2>&1 reset --hard HEAD~1" bị tách thành hai mảnh, "reset --hard" không bao giờ
+// được gắn lại vào lời gọi git nào, không quy tắc nào nhìn thấy nó → exit 0 sai.
 //
-// Giới hạn đã biết (ngoài phạm vi các bypass đã kiểm chứng ở vòng review này): không
-// phát hiện lệnh git phá hủy giấu trong command substitution, ví dụ
-// `git commit -m "$(git reset --hard)"` hay dùng backtick. Ghi nhận trong task-1-report.md.
+// Sau hai vòng vá liên tiếp (Finding 1 vòng review đầu, rồi đúng bug tương tự ở vòng
+// này) mô hình hoá chính xác ngữ pháp shell (toán tử nào là ranh giới, cờ nào ăn thêm
+// token) đã chứng minh là một trò chơi vá lỗ liên tục — sửa bốn lỗ vòng 1, mở lỗ thứ
+// năm. Đổi hẳn triết lý: bỏ việc xác định "token nào thuộc lời gọi git nào" và "đâu là
+// subcommand", chỉ hỏi câu dễ trả lời hơn — dòng lệnh này có chứa đồng thời các dấu
+// hiệu của MỘT thao tác git phá huỷ hay không, bất kể chúng nằm ở đâu, thuộc lời gọi
+// nào, hay bị chuyển hướng/toán tử gì xen vào. Token hoá tối giản (chỉ tách theo
+// khoảng trắng, bóc dấu nháy đơn/kép) — không còn khái niệm "toán tử" hay "ranh giới
+// lời gọi" nữa, nên không còn gì để tách nhầm.
+//
+// Đánh đổi CHỦ ĐỘNG chấp nhận (thiên về chặn, đúng bản chất một hàng rào an toàn: chặn
+// nhầm mất mười giây, cho qua sai mất việc — xem "Đánh đổi đã biết" trong
+// task-1-report.md, mục Fix round 2, để biết danh sách đầy đủ và lý do từng cái):
+//   - "git -C . restore foo.txt" bị chặn oan: giá trị "." của -C trùng với dấu hiệu
+//     "restore ." dù không liên quan. -C . vốn là no-op (mặc định đã là thư mục hiện
+//     tại), tổ hợp này hiếm và luôn có thể thay bằng bỏ hẳn "-C .".
+//   - Hai lời gọi git tách biệt trong cùng một chuỗi lệnh ghép (vd "git checkout main
+//     && git log -- file") có thể bị chặn nếu tín hiệu của một quy tắc nằm rải ở lời
+//     gọi này còn tín hiệu khác nằm ở lời gọi kia — chấp nhận được vì Claude Code có
+//     thể tách thành hai lệnh Bash riêng nếu bị chặn nhầm.
+// Không phát hiện lệnh phá hủy giấu trong command substitution (`$(...)`, backtick) —
+// giới hạn đã ghi nhận từ round 1, vẫn ngoài phạm vi các vòng review đã có tới nay.
 
-// --- Tokenizer shell tối giản: đủ dùng để phát hiện bypass, không phải shell đầy đủ. ---
-const KY_TU_TOAN_TU_DON = new Set(["&", "|", ";", "\n"]);
-
-function tachTokenDongLenh(cmd) {
-  const tokens = [];
+function tachTuDongLenh(cmd) {
+  const tuList = [];
   let i = 0;
   const n = cmd.length;
   let dang = "";
@@ -34,7 +43,7 @@ function tachTokenDongLenh(cmd) {
 
   const day = () => {
     if (coDang) {
-      tokens.push({ loai: "tu", giaTri: dang });
+      tuList.push(dang);
       dang = "";
       coDang = false;
     }
@@ -83,137 +92,77 @@ function tachTokenDongLenh(cmd) {
       continue;
     }
 
-    if (c === "&" && cmd[i + 1] === "&") {
-      day();
-      tokens.push({ loai: "toan_tu", giaTri: "&&" });
-      i += 2;
-      continue;
-    }
-    if (c === "|" && cmd[i + 1] === "|") {
-      day();
-      tokens.push({ loai: "toan_tu", giaTri: "||" });
-      i += 2;
-      continue;
-    }
-    if (KY_TU_TOAN_TU_DON.has(c)) {
-      day();
-      tokens.push({ loai: "toan_tu", giaTri: c });
-      i++;
-      continue;
-    }
-
+    // Không còn phân loại "toán tử" — mọi ký tự khác (kể cả &, |, ;, >, <) cứ gộp vào
+    // từ hiện tại. Nhờ vậy "2>&1", "&>", ">&2" luôn là MỘT token duy nhất, vô hại,
+    // không còn khả năng bị hiểu nhầm thành ranh giới cắt đứt lời gọi git.
     coDang = true;
     dang += c;
     i++;
   }
   day();
-  return tokens;
+  return tuList;
 }
 
-// Với mỗi token "git" đứng riêng, lấy các token kiểu "tu" theo sau cho tới token
-// "toan_tu" tiếp theo (hoặc hết chuỗi) — đó là toàn bộ đối số của MỘT lời gọi git.
-function layCacDoanGoiGit(tokens) {
-  const doans = [];
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].loai === "tu" && tokens[i].giaTri === "git") {
-      const doan = [];
-      let j = i + 1;
-      while (j < tokens.length && tokens[j].loai === "tu") {
-        doan.push(tokens[j].giaTri);
-        j++;
-      }
-      doans.push(doan);
-    }
-  }
-  return doans;
+function coTu(danhSachTu, tu) {
+  return danhSachTu.includes(tu);
 }
 
-// Bóc tuỳ chọn toàn cục đứng TRƯỚC subcommand. -C và -c ăn thêm một token giá trị
-// (vd "-C <dir>", "-c <key>=<value>") nên phải bóc cả hai; các cờ toàn cục khác
-// (--no-pager, --bare, --paginate, ...) không ăn thêm token nên chỉ cần bóc một.
-// Dừng ngay khi gặp token đầu tiên KHÔNG bắt đầu bằng "-" — đó là subcommand, và mọi
-// thứ từ đó trở đi giữ nguyên (kể cả cờ "-c" mang nghĩa riêng của subcommand, như
-// "git commit -c <ref>", không bị bóc nhầm vì vòng lặp đã dừng trước khi tới đó).
-function boTuyChonToanCucGit(doan) {
-  let i = 0;
-  while (i < doan.length && doan[i].startsWith("-")) {
-    if ((doan[i] === "-C" || doan[i] === "-c") && i + 1 < doan.length) {
-      i += 2;
-    } else {
-      i += 1;
-    }
-  }
-  return doan.slice(i);
-}
-
-function coToken(phan, tok) {
-  return phan.includes(tok);
-}
-
-function coTokenBatDauBang(phan, tienTo) {
-  return phan.some((t) => t.startsWith(tienTo));
+function coTuBatDauBang(danhSachTu, tienTo) {
+  return danhSachTu.some((t) => t.startsWith(tienTo));
 }
 
 // Tổ hợp cờ ngắn gộp chung kiểu "-uf", "-fd", "-xdf": một dấu gạch ngang, nhiều chữ
 // cái, gộp lại vẫn có nghĩa như từng cờ đứng riêng (chuẩn getopt mà git dùng).
-function coFlagNganGomChu(phan, chuCai) {
-  return phan.some((t) => /^-[a-zA-Z]+$/.test(t) && t.includes(chuCai));
+function coFlagNganGomChu(danhSachTu, chuCai) {
+  return danhSachTu.some((t) => /^-[a-zA-Z]+$/.test(t) && t.includes(chuCai));
 }
 
 const RULES = [
   {
     ten: "git reset --hard",
-    khop: (phanConLai) => phanConLai[0] === "reset" && coToken(phanConLai, "--hard"),
+    khop: (t) => coTu(t, "git") && coTu(t, "reset") && coTu(t, "--hard"),
   },
   {
     ten: "git clean -f",
-    khop: (phanConLai) =>
-      phanConLai[0] === "clean" &&
-      (coToken(phanConLai, "--force") || coFlagNganGomChu(phanConLai, "f")),
+    khop: (t) => coTu(t, "git") && coTu(t, "clean") && (coTu(t, "--force") || coFlagNganGomChu(t, "f")),
   },
   {
     ten: "git push --force",
-    khop: (phanConLai) =>
-      phanConLai[0] === "push" &&
-      (coToken(phanConLai, "--force") ||
-        coTokenBatDauBang(phanConLai, "--force") ||
-        coFlagNganGomChu(phanConLai, "f")),
+    khop: (t) =>
+      coTu(t, "git") &&
+      coTu(t, "push") &&
+      (coTu(t, "--force") || coTuBatDauBang(t, "--force") || coFlagNganGomChu(t, "f")),
   },
   {
     ten: "git checkout -- <path>",
-    khop: (phanConLai) => {
-      if (phanConLai[0] !== "checkout") return false;
-      const idx = phanConLai.indexOf("--");
-      return idx !== -1 && idx < phanConLai.length - 1;
-    },
+    khop: (t) => coTu(t, "git") && coTu(t, "checkout") && coTu(t, "--"),
   },
   {
     ten: "git restore .",
-    khop: (phanConLai) => phanConLai[0] === "restore" && coToken(phanConLai, "."),
+    khop: (t) => coTu(t, "git") && coTu(t, "restore") && coTu(t, "."),
   },
   {
     ten: "git branch -D",
-    khop: (phanConLai) =>
-      phanConLai[0] === "branch" &&
-      (coToken(phanConLai, "-D") ||
-        (coToken(phanConLai, "--delete") && coToken(phanConLai, "--force"))),
+    khop: (t) =>
+      coTu(t, "git") &&
+      coTu(t, "branch") &&
+      (coTu(t, "-D") || (coTu(t, "--delete") && coTu(t, "--force"))),
   },
   {
     ten: "git filter-branch",
-    khop: (phanConLai) => phanConLai[0] === "filter-branch",
+    khop: (t) => coTu(t, "git") && coTu(t, "filter-branch"),
   },
   {
     ten: "git stash clear/drop",
-    khop: (phanConLai) =>
-      phanConLai[0] === "stash" && (coToken(phanConLai, "clear") || coToken(phanConLai, "drop")),
+    khop: (t) => coTu(t, "git") && coTu(t, "stash") && (coTu(t, "clear") || coTu(t, "drop")),
   },
   {
     ten: "git reflog expire",
-    khop: (phanConLai) => phanConLai[0] === "reflog" && coToken(phanConLai, "expire"),
+    khop: (t) => coTu(t, "git") && coTu(t, "reflog") && coTu(t, "expire"),
   },
   {
     ten: "git update-ref -d",
-    khop: (phanConLai) => phanConLai[0] === "update-ref" && coToken(phanConLai, "-d"),
+    khop: (t) => coTu(t, "git") && coTu(t, "update-ref") && coTu(t, "-d"),
   },
 ];
 
@@ -241,16 +190,13 @@ process.stdin.on("end", () => {
     chan("không tìm thấy tool_input.command dạng chuỗi — chặn theo nguyên tắc fail-closed.");
   }
 
-  const doans = layCacDoanGoiGit(tachTokenDongLenh(command));
-  for (const doan of doans) {
-    const phanConLai = boTuyChonToanCucGit(doan);
-    const hit = RULES.find((rule) => rule.khop(phanConLai));
-    if (hit) {
-      chan(
-        `chặn lệnh git phá hủy (${hit.ten}). Nếu thực sự cần, hãy tự chạy thủ công ` +
-          `— xem CLAUDE.md, Core Engineering Rules > Git safety.`,
-      );
-    }
+  const danhSachTu = tachTuDongLenh(command);
+  const hit = RULES.find((rule) => rule.khop(danhSachTu));
+  if (hit) {
+    chan(
+      `chặn lệnh git phá hủy (${hit.ten}). Nếu thực sự cần, hãy tự chạy thủ công ` +
+        `— xem CLAUDE.md, Core Engineering Rules > Git safety.`,
+    );
   }
 
   process.exit(0);

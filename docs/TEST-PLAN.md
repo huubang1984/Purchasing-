@@ -239,7 +239,7 @@ theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 | **H3** | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 |
 | **H4** | Lệnh xoá bỏ thay đổi cục bộ (`checkout -- .`, `restore .`) bị chặn | Hook `git-safety` | T1 |
 | **H5** | Lệnh viết lại lịch sử (`branch -D`, `filter-branch`, `stash clear/drop`, `reflog expire`, `update-ref -d`) bị chặn | Hook `git-safety` | T1 |
-| **H6** | **Tuỳ chọn toàn cục của git không được vô hiệu hoá quy tắc nào** — `git -C <dir>`, `git -c k=v`, `git --no-pager`, cờ bị bọc nháy | Hook `git-safety` | T1 |
+| **H6** | **Không lời gọi git phá huỷ nào lọt qua bất kể toán tử shell, chuyển hướng, hay tuỳ chọn toàn cục xen giữa** (`git -C <dir>`, `git -c k=v`, `git --no-pager`, cờ bị bọc nháy, `2>&1`/`&>`/`>&2`, ...) — hook dò tín hiệu phá huỷ trên toàn bộ token của dòng lệnh, thiên về chặn, không dựa vào việc xác định đúng ranh giới lời gọi hay vị trí subcommand | Hook `git-safety` | T1 |
 | **H7** | Lệnh git vô hại được cho qua — hàng rào không được cản trở công việc bình thường | Hook `git-safety` | T1 |
 | **H8** | Ghi vào file bí mật bị chặn, **không phân biệt hoa thường**: `.env`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `id_rsa`, `id_ed25519`, `credentials.json`, `secrets.y*ml`, `.npmrc`, `.pgpass`, `.netrc`, `.claude/settings*.json` | Hook `protect-secrets` | T1 |
 | **H9** | File nguồn thường và `.env.example` được cho qua — khớp theo tên và phần mở rộng, không khớp chuỗi con | Hook `protect-secrets` | T1 |
@@ -253,3 +253,20 @@ người ta thôi cẩn thận. Đúng bài học mà chính TrustProcure bán c
 đã kiểm chứng: `git -C . reset --hard` lọt qua cả mười quy tắc, và `.ENV` / `ID_RSA` lọt
 qua trên hệ thống tệp không phân biệt hoa thường của Windows. Cả hai đều là "hàng rào
 tồn tại trên giấy" — đúng loại lỗi mà chính nhóm H này sinh ra để bắt.
+
+**H6 đổi thiết kế ngày 2026-08-27 (vòng review thứ hai, cùng ngày)**: bản vá đầu cho H6
+vẫn giữ khái niệm "ranh giới lời gọi git" (tách theo toán tử shell `&& || ; | &` và
+xuống dòng) rồi bóc tuỳ chọn toàn cục `-C`/`-c` đứng trước subcommand. Chính bản vá đó
+lại bị bắn nhầm bởi cú pháp nhân bản mô tả tệp — `2>&1`, `&>`, `>&2`: ký tự `&` trần
+trong các cú pháp này bị hiểu nhầm là toán tử chạy nền, cắt đứt việc thu thập token của
+lời gọi git ngay giữa chừng, khiến `git 2>&1 reset --hard HEAD~1` lọt qua. Sau hai vòng
+vá liên tiếp, mô hình hoá chính xác ngữ pháp shell (toán tử nào là ranh giới, cờ nào ăn
+thêm token) chứng minh là một trò chơi vá lỗ không hồi kết. Hook đổi hẳn triết lý: bỏ
+việc xác định "token nào thuộc lời gọi git nào" và "đâu là subcommand", chỉ hỏi dòng
+lệnh có chứa đồng thời các dấu hiệu của MỘT thao tác git phá huỷ hay không, bất kể
+chúng nằm ở đâu, thuộc lời gọi nào, hay bị chuyển hướng/toán tử gì xen vào — thiên về
+chặn, đúng bản chất một hàng rào an toàn (chặn nhầm mất mười giây; cho qua sai mất
+việc). Đánh đổi chủ động chấp nhận: `git -C . restore foo.txt` (giá trị `.` của `-C`
+trùng dấu hiệu `restore .`) và một số lệnh ghép hiếm gặp có tín hiệu rải trên hai lời
+gọi git tách biệt trong cùng chuỗi có thể bị chặn oan — xem `task-1-report.md`, mục
+"Fix round 2", để biết danh sách đầy đủ và lý do từng trường hợp được chấp nhận.
