@@ -14,6 +14,19 @@ function depcruise(targets: string[]): { status: number; output: string } {
   return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
 }
 
+/**
+ * Chạy ĐÚNG script `pnpm depcruise` khai trong package.json thay vì một danh sách target tự
+ * chọn. Fix round 4 (I1): hàng rào chỉ bảo vệ những thư mục thực sự nằm trong danh sách
+ * cruise của script đó — `db/` từng bị bỏ sót trong khi tsconfig.json có include `db/**\/*.ts`
+ * và `db/migrations.int.test.ts` tồn tại thật. Một probe gọi `depcruise(["db", ...])` trực
+ * tiếp sẽ XANH ngay cả khi script vẫn thiếu `db`, tức là test trang trí. Chỉ khi chạy qua
+ * chính script thì việc ai đó thu hẹp danh sách target mới làm test đỏ.
+ */
+function depcruiseTheoScript(): { status: number; output: string } {
+  const proc = spawnSync("pnpm", ["run", "depcruise"], { encoding: "utf8", shell: true });
+  return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+}
+
 describe("ranh giới kiến trúc", () => {
   it("[INV-G1] chặn module ngoài unseal-worker import đường mở khóa", () => {
     const dir = "apps/tmp-probe/src";
@@ -31,7 +44,7 @@ describe("ranh giới kiến trúc", () => {
       expect(status).not.toBe(0);
       // Fix round 3 (N8): dùng tên rule ĐẦY ĐỦ, không dùng tiền tố dùng chung cho ba rule.
       // Tiền tố lỏng sẽ pass ngay cả khi rule SAI bắn (rule khác trong cùng họ tên bắn nhầm).
-      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
     } finally {
       rmSync("apps/tmp-probe", { recursive: true, force: true });
     }
@@ -53,7 +66,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps/tmp-probe-unwrapper"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts");
     } finally {
       rmSync("apps/tmp-probe-unwrapper", { recursive: true, force: true });
     }
@@ -75,7 +88,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps/tmp-probe-shared"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");
     } finally {
       rmSync("apps/tmp-probe-shared", { recursive: true, force: true });
     }
@@ -100,7 +113,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["tools/bench-keyprovider"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
     } finally {
       rmSync(path, { force: true });
     }
@@ -126,7 +139,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps/tmp-probe-case"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");
     } finally {
       rmSync("apps/tmp-probe-case", { recursive: true, force: true });
     }
@@ -160,11 +173,11 @@ describe("ranh giới kiến trúc", () => {
     }
     const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
     const rule = config.forbidden.find(
-      (r) => r.name === "khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts",
+      (r) => r.name === "g1-khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts",
     );
     if (!rule) {
       throw new Error(
-        "Không tìm thấy rule khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts trong .dependency-cruiser.cjs",
+        "Không tìm thấy rule g1-khong-giai-ma-ngoai-unseal-worker-local-dev-unwrapper-ts trong .dependency-cruiser.cjs",
       );
     }
     const danhSachMienTru = Array.isArray(rule.from.pathNot)
@@ -207,7 +220,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-import-nguoc-tu-apps-unseal-worker");
+      expect(output).toContain("g1-khong-import-nguoc-tu-apps-unseal-worker");
     } finally {
       rmSync("apps/unseal-worker", { recursive: true, force: true });
       rmSync("apps/tmp-probe-uw-bridge", { recursive: true, force: true });
@@ -232,7 +245,7 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps/tmp-probe-bench-bridge", "tools/bench-keyprovider"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-import-nguoc-tu-bench-keyprovider");
+      expect(output).toContain("g1-khong-import-nguoc-tu-bench-keyprovider");
     } finally {
       rmSync("tools/bench-keyprovider/src/zprobe-plain.ts", { force: true });
       rmSync("apps/tmp-probe-bench-bridge", { recursive: true, force: true });
@@ -258,13 +271,239 @@ describe("ranh giới kiến trúc", () => {
     try {
       const { status, output } = depcruise(["apps/tmp-probe-roundtrip-bridge", "packages/crypto-keys"]);
       expect(status).not.toBe(0);
-      expect(output).toContain("khong-import-nguoc-tu-roundtrip-test");
+      expect(output).toContain("g1-khong-import-nguoc-tu-roundtrip-test");
     } finally {
       rmSync("apps/tmp-probe-roundtrip-bridge", { recursive: true, force: true });
     }
   }, 60000);
 
-  it("mã nguồn hiện tại không vi phạm quy tắc nào", () => {
-    expect(depcruise(["packages", "apps", "tools", "tests"]).status).toBe(0);
+  // ======================================================================================
+  // Fix round 4 — ba probe thường trực cho CR1, CR2, I1 + hai bất biến chống tái diễn
+  // ======================================================================================
+
+  it("[INV-G1] chặn import thẳng vào local-dev-wrapper.ts từ ngoài package (CR1)", () => {
+    // CR1: local-dev-wrapper.ts được miễn trừ vai trò `from` ở rule
+    // g1-...-local-dev-shared-ts (nó cần deriveOrgKey để bọc khóa) nhưng qua ba vòng fix nó
+    // vẫn KHÔNG phải đích hạn chế — module thứ tư bị sót. Hệ quả: thêm đúng một dòng
+    // `export { deriveOrgKey } from "./local-dev-shared.js";` vào nó là mọi app import thẳng
+    // được deriveOrgKey, và vì index.ts vốn đã re-export từ nó, cây cầu còn đi qua được cả
+    // barrel công khai @trustprocure/crypto-keys.
+    //
+    // Probe này KHÔNG sửa nội dung local-dev-wrapper.ts (tránh đúng rủi ro N9): chỉ cần một
+    // module NGOÀI package trỏ vào nó là quy tắc cửa công khai phải bắn — depcruise ghi nhận
+    // cạnh ở tầng cú pháp nên tên import không cần tồn tại thật.
+    const dir = "apps/tmp-probe-wrapper-door/src";
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      `${dir}/leak.ts`,
+      [
+        'import { deriveOrgKey } from "../../../packages/crypto-keys/src/local-dev-wrapper.js";',
+        "export { deriveOrgKey };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-wrapper-door", "packages/crypto-keys"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("g1-crypto-keys-chi-index-va-unwrap-la-cua-cong-khai");
+    } finally {
+      rmSync("apps/tmp-probe-wrapper-door", { recursive: true, force: true });
+    }
   }, 60000);
+
+  it("[INV-G1] module MỚI thêm vào packages/crypto-keys/src mặc định không với tới được từ ngoài", () => {
+    // Đây là probe chống-tái-diễn quan trọng nhất của fix round 4. Ba vòng trước đều vá theo
+    // ca cụ thể, nên mỗi module mới trong thư mục nhạy cảm lại mặc định HỞ cho tới khi ai đó
+    // nhớ ra phải thêm quy tắc. Probe này dựng một file HOÀN TOÀN MỚI (không xuất hiện trong
+    // bất kỳ quy tắc nào, không ai nghĩ trước tới) và xác nhận nó vẫn bị chặn — tức bất biến
+    // đã đổi chiều từ "mặc định mở" sang "mặc định đóng".
+    //
+    // File probe trung tính (không dính gì tới mật mã) và mang tên riêng không module nào
+    // import, nên không có rủi ro worker vitest khác đọc phải nội dung sửa dở như N9.
+    const moduleMoi = "packages/crypto-keys/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-module-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-module-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/crypto-keys/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-module-moi", "packages/crypto-keys"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("g1-crypto-keys-chi-index-va-unwrap-la-cua-cong-khai");
+      expect(output).toContain("zzprobe-module-moi");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-module-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] đường dẫn hợp lệ chứa chuỗi con 'dist' vẫn được quét (CR2)", () => {
+    // CR2: options.exclude từng là regex KHÔNG NEO "(node_modules|dist|\\.next)", khớp chuỗi
+    // con ở bất kỳ đâu — mọi module dưới apps/distribution/, district/, redistribute.ts…
+    // bị loại khỏi cruise HOÀN TOÀN, hàng rào G1 tắt im lặng cho cả lớp đường dẫn hợp lệ đó.
+    //
+    // Probe cố ý dùng tên thư mục hợp lệ "apps/distribution" (KHÔNG phải "dist/") để kiểm
+    // đúng bản chất lỗi: neo đoạn đường dẫn, chứ không phải "có loại trừ dist hay không".
+    const dir = "apps/distribution/src";
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      `${dir}/leak.ts`,
+      [
+        'import { deriveOrgKey } from "../../../packages/crypto-keys/src/local-dev-shared.js";',
+        "export { deriveOrgKey };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/distribution", "packages/crypto-keys"]);
+      expect(status).not.toBe(0);
+      // Khẳng định chính module đó ĐÃ được quét — nếu exclude lại nới ra, nó biến mất khỏi
+      // đồ thị và không tên rule nào nhắc tới nó nữa.
+      expect(output).toContain("apps/distribution/src/leak.ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");
+    } finally {
+      rmSync("apps/distribution", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] thư mục db/ nằm trong danh sách cruise của script pnpm depcruise (I1)", () => {
+    // I1: script depcruise từng là "depcruise packages apps tools tests" trong khi
+    // tsconfig.json include db/**/*.ts và db/migrations.int.test.ts tồn tại thật — một file
+    // db/*.ts import thẳng unwrap.ts cho EXIT=0 vì chưa từng được quét.
+    //
+    // Probe chạy qua CHÍNH script package.json (xem depcruiseTheoScript) nên nếu ai đó thu
+    // hẹp danh sách target trở lại, test này đỏ. File probe đặt ở db/ gốc, KHÔNG đụng
+    // db/migrations (lãnh thổ Task 3).
+    const probe = "db/zzprobe-leak.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { createLocalDevUnwrapper } from "../packages/crypto-keys/src/unwrap.js";',
+        "export { createLocalDevUnwrapper };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruiseTheoScript();
+      expect(status).not.toBe(0);
+      expect(output).toContain("db/zzprobe-leak.ts");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 120000);
+
+  it("[INV-G1] mọi module được miễn trừ vai trò `from` đều đồng thời là đích hạn chế", () => {
+    // BẤT BIẾN CHỐNG TÁI DIỄN (fix round 4). Ba vòng fix trước đều đóng đúng những lỗ được
+    // reviewer chỉ ra rồi tự mở một lỗ cùng lớp, vì cơ chế là "nhớ mà làm": mỗi lần miễn trừ
+    // một module khỏi vai trò `from`, người viết phải TỰ NHỚ biến module đó thành đích hạn
+    // chế, nếu không nó vẫn re-export được và không quy tắc nào cấm import VÀO nó. CR1 chính
+    // là lần thứ tư quên.
+    //
+    // Test này biến việc đó thành CƯỠNG CHẾ BẰNG MÁY: quét trực tiếp .dependency-cruiser.cjs,
+    // lấy mọi quy tắc thuộc họ "g1-", giải mã ngược từng mục `from.pathNot` về đường dẫn
+    // literal bằng unCi(), rồi kiểm chứng đường dẫn đó bị MỘT quy tắc "g1-" nào đó chặn
+    // đường vào. Không cần ai nghĩ ra ca cụ thể; thêm miễn trừ mà quên đóng đường ra là đỏ.
+    interface DepCruiseRule {
+      name: string;
+      from: { pathNot?: string | string[] };
+      to: { path?: string | string[]; pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ci, unCi } = require("../../dependency-cruiser-ci.cjs") as {
+      ci: (s: string) => string;
+      unCi: (s: string) => string;
+    };
+
+    const quyTacG1 = config.forbidden.filter((r) => r.name.startsWith("g1-"));
+    // Đối chứng dương: nếu đổi giao ước đặt tên mà quên cập nhật test, danh sách rỗng sẽ làm
+    // toàn bộ vòng lặp dưới thành vô nghĩa (test trang trí). Chặn trước khả năng đó.
+    expect(quyTacG1.length).toBeGreaterThanOrEqual(8);
+
+    const nhuMang = (v: string | string[] | undefined): string[] =>
+      v === undefined ? [] : Array.isArray(v) ? v : [v];
+
+    /** Dựng một đường dẫn ĐẠI DIỆN cho fragment regex do ciFile()/ciPrefix() sinh ra. */
+    function duongDanDaiDien(pRegex: string): string {
+      const coNeoCuoi = pRegex.endsWith("$");
+      let than = pRegex;
+      if (than.startsWith("^")) {
+        than = than.slice(1);
+      }
+      if (coNeoCuoi) {
+        than = than.slice(0, -1);
+      }
+      const literal = unCi(than);
+      // Kiểm chứng round-trip: bắt buộc fragment phải do ci() sinh ra. Một regex viết tay
+      // trong `from.pathNot` của quy tắc "g1-" sẽ làm assertion này đỏ — đúng ý đồ, vì
+      // không giải mã ngược được thì cũng không kiểm chứng được nó có bị chặn đường vào hay
+      // không, và một miễn trừ không kiểm chứng được là một miễn trừ không được phép tồn tại.
+      expect("^" + ci(literal) + (coNeoCuoi ? "$" : "")).toBe(pRegex);
+      return coNeoCuoi ? literal : literal + "zz-mau-dai-dien.ts";
+    }
+
+    /** Có quy tắc "g1-" nào biến đường dẫn này thành đích hạn chế không? */
+    function laDichHanChe(pDuongDan: string): boolean {
+      return quyTacG1.some((r) => {
+        const dsPath = nhuMang(r.to.path);
+        if (dsPath.length === 0 || !dsPath.some((p) => new RegExp(p).test(pDuongDan))) {
+          return false;
+        }
+        return !nhuMang(r.to.pathNot).some((p) => new RegExp(p).test(pDuongDan));
+      });
+    }
+
+    const thieuDichHanChe: string[] = [];
+    for (const quyTac of quyTacG1) {
+      for (const mienTru of nhuMang(quyTac.from.pathNot)) {
+        const daiDien = duongDanDaiDien(mienTru);
+        if (!laDichHanChe(daiDien)) {
+          thieuDichHanChe.push(`${quyTac.name} miễn trừ ${daiDien} nhưng không ai chặn đường vào`);
+        }
+      }
+    }
+    expect(thieuDichHanChe).toEqual([]);
+
+    // Đối chứng âm: hàm laDichHanChe() phải biết trả false, không phải hàm luôn-true.
+    expect(laDichHanChe("apps/mot-app-binh-thuong/src/index.ts")).toBe(false);
+    // Đối chứng dương cho ĐÚNG lỗ CR1: local-dev-wrapper.ts phải là đích hạn chế.
+    expect(laDichHanChe("packages/crypto-keys/src/local-dev-wrapper.ts")).toBe(true);
+  });
+
+  it("[INV-G1] cửa công khai của packages/crypto-keys/src đúng bằng index.ts và unwrap.ts", () => {
+    // Canary cho chính sách tối giản không thể suy ra bằng máy: quy tắc cửa công khai chỉ có
+    // giá trị khi tập cửa được mở là NHỎ NHẤT có thể. Nếu ai đó nới `to.pathNot` để "cho qua"
+    // một module nữa, đó là quyết định phải được nhìn thấy, không phải một dòng lặng lẽ.
+    interface DepCruiseRule {
+      name: string;
+      to: { pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ciFile } = require("../../dependency-cruiser-ci.cjs") as {
+      ciFile: (s: string) => string;
+    };
+    const rule = config.forbidden.find(
+      (r) => r.name === "g1-crypto-keys-chi-index-va-unwrap-la-cua-cong-khai",
+    );
+    if (!rule) {
+      throw new Error(
+        "Không tìm thấy rule g1-crypto-keys-chi-index-va-unwrap-la-cua-cong-khai trong .dependency-cruiser.cjs",
+      );
+    }
+    expect(rule.to.pathNot).toEqual([
+      ciFile("packages/crypto-keys/src/index.ts"),
+      ciFile("packages/crypto-keys/src/unwrap.ts"),
+    ]);
+  });
+
+  it("mã nguồn hiện tại không vi phạm quy tắc nào", () => {
+    // Fix round 4 (I1): chạy qua chính script package.json thay vì danh sách target tự chọn,
+    // để phạm vi kiểm luôn khớp phạm vi hàng rào thực sự bảo vệ trong CI.
+    expect(depcruiseTheoScript().status).toBe(0);
+  }, 120000);
 });

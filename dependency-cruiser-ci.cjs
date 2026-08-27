@@ -52,4 +52,44 @@ function ciPrefix(pLiteralPrefix) {
   return "^" + ci(pLiteralPrefix);
 }
 
-module.exports = { ciChar, ci, ciFile, ciPrefix };
+// Fix round 4: `unCi()` la phep NGHICH DAO cua `ci()`. No ton tai de mot test BAT BIEN co the
+// quet chinh cau hinh depcruise: doc `from.pathNot` cua moi quy tac ho "g1-", giai ma nguoc ra
+// duong dan literal, roi doi chieu xem module duoc mien tru do co dong thoi la DICH HAN CHE cua
+// mot quy tac "g1-" nao khong. Khong co phep nghich dao nay, test bat bien buoc phai liet ke tay
+// tung module - dung cai co che "nho ma lam" da lam sot local-dev-wrapper.ts qua ba vong fix.
+//
+// Cach dung an toan: LUON kiem chung round-trip `ci(unCi(x)) === x` truoc khi tin ket qua. Neu
+// mot ai do viet regex tay (khong qua ci/ciFile/ciPrefix) vao `from.pathNot` cua quy tac "g1-",
+// round-trip se sai va test bat bien do - dung y do: quy tac ho "g1-" chi duoc dung ham sinh.
+function unCi(pFragment) {
+  let ketQua = "";
+  let viTri = 0;
+  while (viTri < pFragment.length) {
+    const kyTu = pFragment[viTri];
+    // Nhanh chu cai do ciChar() sinh ra: "[aA]" (dung 4 ky tu, cap thuong/hoa cua cung chu).
+    if (kyTu === "[" && pFragment[viTri + 3] === "]") {
+      const chuThuong = pFragment[viTri + 1];
+      const chuHoa = pFragment[viTri + 2];
+      if (
+        chuThuong !== chuHoa &&
+        chuThuong === chuHoa.toLowerCase() &&
+        chuHoa === chuThuong.toUpperCase()
+      ) {
+        ketQua += chuThuong;
+        viTri += 4;
+        continue;
+      }
+    }
+    // Nhanh escape do ciChar() sinh ra: "\<metachar>".
+    if (kyTu === "\\" && viTri + 1 < pFragment.length) {
+      ketQua += pFragment[viTri + 1];
+      viTri += 2;
+      continue;
+    }
+    ketQua += kyTu;
+    viTri += 1;
+  }
+  return ketQua;
+}
+
+module.exports = { ciChar, ci, ciFile, ciPrefix, unCi };

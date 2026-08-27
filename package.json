@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "depcruise": "depcruise packages apps tools tests --config .dependency-cruiser.cjs",
+    "depcruise": "depcruise packages apps tools tests db --config .dependency-cruiser.cjs",
     "t0": "pnpm typecheck && pnpm lint && pnpm depcruise",
     "test": "vitest run --exclude \"**/*.int.test.ts\"",
     "test:int": "vitest run int.test",
