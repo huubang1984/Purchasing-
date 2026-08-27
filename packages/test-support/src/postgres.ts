@@ -23,6 +23,25 @@ export interface TestDatabase {
   stop(): Promise<void>;
 }
 
+/**
+ * Tái khẳng định role trên MỘT client cụ thể ngay trước khi giao cho người gọi, và ném lỗi
+ * rõ ràng nếu SET ROLE không có hiệu lực thật.
+ */
+async function ganLaiRoleChoClient(client: pg.PoolClient, role: AppRole): Promise<void> {
+  await client.query(`SET ROLE ${role}`);
+  // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết sẵn chữ
+  // thường — viết hoa ở đây sẽ đọc ra "undefined" một cách âm thầm.
+  const { rows } = await client.query<{ current_role_name: string }>(
+    "SELECT current_user AS current_role_name",
+  );
+  if (rows[0]?.current_role_name !== role) {
+    throw new Error(
+      `poolAs("${role}"): SET ROLE không có hiệu lực — current_user vẫn là ` +
+        `"${rows[0]?.current_role_name}". Không giao client này cho bất kỳ ai dùng.`,
+    );
+  }
+}
+
 export async function startPostgres(): Promise<TestDatabase> {
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer("postgres:16-alpine")
     .withDatabase("trustprocure_test")
@@ -44,39 +63,58 @@ export async function startPostgres(): Promise<TestDatabase> {
         );
       }
 
-      const rolePool = new pg.Pool({
-        connectionString,
-        max: 3,
-        // pg-pool CHỜ hook này (await _promiseTry) trước khi giao client cho bất kỳ ai gọi
-        // pool.connect()/pool.query() — xem pg-pool/index.js _afterConnect. Nếu hook ném lỗi,
-        // pg-pool tự đóng client và trả lỗi đó về đúng lời gọi connect()/query() đang chờ.
-        // Vì vậy KHÔNG được dùng "void client.query(...)" kiểu bắn-rồi-quên như bản trước:
-        // nó vừa nuốt lỗi (unhandled rejection làm crash tiến trình), vừa để câu SET ROLE
-        // chạy chồng lấn với câu lệnh thật của người gọi trên cùng một client.
-        //
-        // @types/pg khai onConnect là (client) => void vì nó không hỗ trợ TypeScript hoá
-        // phần trả về bất đồng bộ, nhưng cài đặt runtime của pg-pool THẬT SỰ await hàm này
-        // qua _promiseTry trước khi giao client cho ai (đã đọc source pg-pool@3.14.0 và đã
-        // tự kiểm chứng bằng test packages/test-support/src/postgres.int.test.ts: lỗi ném
-        // ra từ đây làm đúng connect()/query() đang chờ reject, không rơi thành unhandled
-        // rejection). Vô hiệu hoá quy tắc lint đúng một dòng cho trường hợp đã kiểm chứng
-        // an toàn này, không nới cho toàn file.
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
-        async onConnect(client: pg.ClientBase): Promise<void> {
-          await client.query(`SET ROLE ${role}`);
-          // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết
-          // sẵn chữ thường — viết hoa ở đây sẽ đọc ra "undefined" một cách âm thầm.
-          const { rows } = await client.query<{ current_role_name: string }>(
-            "SELECT current_user AS current_role_name",
-          );
-          if (rows[0]?.current_role_name !== role) {
-            throw new Error(
-              `poolAs("${role}"): SET ROLE không có hiệu lực — current_user vẫn là ` +
-                `"${rows[0]?.current_role_name}". Không giao client này cho bất kỳ ai dùng.`,
-            );
+      // Gán vào một const mới ngay sau khi type guard xác thực: TypeScript không giữ
+      // narrowing của tham số hàm xuyên vào một function declaration lồng bên trong (khác với
+      // arrow function/closure thường), nên phải "chốt" kiểu AppRole vào một binding mới.
+      const vaiTroDaXacThuc: AppRole = role;
+      const rolePool = new pg.Pool({ connectionString, max: 3 });
+
+      // [fix C1 + I3] Không dùng "onConnect"/'connect' event của pg-pool: cả hai chỉ chạy
+      // đúng MỘT LẦN khi mở kết nối VẬT LÝ mới (đã đọc source pg-pool@3.14.0:
+      // "_afterConnect" chỉ gọi khi isNew=true), không chạy lại khi pool TÁI SỬ DỤNG một
+      // client rảnh đã có sẵn. Hệ quả: một RESET ROLE/DISCARD ALL bất kỳ chạy trên client đó
+      // (bởi bất kỳ ai, kể cả code khác dùng chung pool) sẽ đầu độc VĨNH VIỄN client đó trong
+      // pool — lần lấy client sau sẽ âm thầm chạy dưới quyền cũ (postgres), khiến mọi khẳng
+      // định "RLS chặn thật" phía sau chạy dưới quyền superuser và có thể xanh giả.
+      //
+      // Sửa bằng cách bọc connect() để MỌI lần lấy client — dù là kết nối mới hay client rảnh
+      // được tái dùng — đều tái khẳng định role ngay trước khi giao cho người gọi. pool.query()
+      // gọi connect() nội bộ (đã đọc source pg-pool: query() -> this.connect(...)), nên bọc
+      // đúng một chỗ này là đủ cho cả hai cách dùng.
+      const connectGoc = rolePool.connect.bind(rolePool);
+
+      // pool.query() TỰ GỌI connect() ở dạng CALLBACK bên trong (đã đọc source pg-pool:
+      // "query(text, values, cb) { ... this.connect((err, client) => {...}) }"), không phải
+      // dạng Promise — nên bản bọc này PHẢI hỗ trợ cả hai kiểu gọi, nếu không mọi
+      // pool.query() trên pool trả về từ poolAs() sẽ vỡ ngay (đã tự bắt được lỗi này khi
+      // chạy test thật: ban đầu tôi chặn thẳng kiểu callback, làm chính pool.query() lỗi).
+      function layVaGanLaiRole(): Promise<pg.PoolClient> {
+        return connectGoc().then(async (client) => {
+          try {
+            await ganLaiRoleChoClient(client, vaiTroDaXacThuc);
+          } catch (loi) {
+            client.release(loi as Error);
+            throw loi;
           }
-        },
-      });
+          return client;
+        });
+      }
+
+      rolePool.connect = ((
+        goiLai?: (
+          loi: Error | undefined,
+          client: pg.PoolClient | undefined,
+          xongViec: (giaiPhong?: Error | boolean) => void,
+        ) => void,
+      ) => {
+        if (!goiLai) return layVaGanLaiRole();
+        layVaGanLaiRole().then(
+          (client) => goiLai(undefined, client, client.release.bind(client)),
+          (loi: Error) => goiLai(loi, undefined, () => {}),
+        );
+        return undefined;
+      }) as typeof rolePool.connect;
+
       rolePools.push(rolePool);
       return rolePool;
     },

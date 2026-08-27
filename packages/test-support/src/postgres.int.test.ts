@@ -21,15 +21,20 @@ describe("poolAs — pool chạy dưới role khác", () => {
     }
   });
 
-  it("role hợp lệ: mọi câu lệnh trên pool đều thấy current_user đúng bằng role đó", async () => {
+  // [fix round 2] Bản trước dùng Promise.all(5 câu đồng thời) trên MỘT pool RỖNG (max: 3) —
+  // vì pool chưa có client rảnh nào, mọi lời gọi đều mở KẾT NỐI MỚI, nên test này không phân
+  // biệt được bản có lỗi I3 (chỉ gán role đúng cho kết nối mới) với bản đã sửa (gán lại role
+  // ở MỌI lần lấy client). Đã tự đột biến kiểm chứng: cách viết cũ sống sót khi bỏ cơ chế
+  // tái khẳng định role cho client tái sử dụng. Sửa bằng cách chạy TUẦN TỰ (không Promise.all)
+  // để ép pool tái dùng ĐÚNG MỘT client rảnh cho cả 5 câu — đây mới là điều kiện thật sự cần
+  // đúng role trên client được tái sử dụng.
+  it("role hợp lệ: 5 câu lệnh tuần tự trên cùng một client rảnh được tái dùng đều thấy đúng role", async () => {
     await withMigratedDatabase(async (db) => {
       const apiPool = db.poolAs("app_api");
-      const ketQua = await Promise.all(
-        Array.from({ length: 5 }, () =>
-          apiPool.query<{ vai_tro: string }>("SELECT current_user AS vai_tro"),
-        ),
-      );
-      for (const { rows } of ketQua) {
+      for (let lan = 0; lan < 5; lan += 1) {
+        const { rows } = await apiPool.query<{ vai_tro: string }>(
+          "SELECT current_user AS vai_tro",
+        );
         expect(rows[0]?.vai_tro).toBe("app_api");
       }
     });
@@ -54,6 +59,29 @@ describe("poolAs — pool chạy dưới role khác", () => {
         "SELECT app_current_org_id() AS org",
       );
       expect(rows[0]?.org).toBeNull();
+    });
+  });
+
+  // [fix I3] onConnect/'connect' của pg-pool chỉ chạy cho kết nối VẬT LÝ MỚI, không chạy lại
+  // khi pool tái dùng một client rảnh. Mô phỏng đúng kịch bản đầu độc: lấy client, tự RESET
+  // ROLE trên đó (mô phỏng bất kỳ ai/đoạn code nào lỡ chạy RESET ROLE hoặc DISCARD ALL), trả
+  // lại pool, rồi lấy lại — pg-pool ưu tiên trả CHÍNH client rảnh đó cho lần connect() kế tiếp
+  // (không có ai khác tranh chấp pool trong test này), nên đây là phép thử xác định, không
+  // phải xác suất.
+  it("[fix I3] RESET ROLE trên client rồi trả lại pool không đầu độc lần lấy client kế tiếp", async () => {
+    await withMigratedDatabase(async (db) => {
+      const apiPool = db.poolAs("app_api");
+
+      const client1 = await apiPool.connect();
+      await client1.query("RESET ROLE");
+      const { rows: kiemTraDaBiReset } = await client1.query<{ vai_tro: string }>(
+        "SELECT current_user AS vai_tro",
+      );
+      expect(kiemTraDaBiReset[0]?.vai_tro).not.toBe("app_api"); // xác nhận RESET ROLE có hiệu lực
+      client1.release();
+
+      const { rows } = await apiPool.query<{ vai_tro: string }>("SELECT current_user AS vai_tro");
+      expect(rows[0]?.vai_tro).toBe("app_api");
     });
   });
 });

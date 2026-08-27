@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { migrate } from "./migrate.js";
@@ -72,5 +73,30 @@ describe("bộ chạy migration", () => {
     const [ketQua1, ketQua2] = await Promise.all([migrate(db.pool, dir), migrate(db.pool, dir)]);
 
     expect([...ketQua1, ...ketQua2]).toEqual(["050_dong_thoi.sql"]);
+  });
+
+  // [fix I4] Bản trước giữ lockClient checked-out rồi vẫn xin thêm client khác từ pool
+  // (pool.query()/pool.connect() cho từng file) trong lúc giữ khoá — với pool chỉ có
+  // max: 1 (mà createPool(cs, max) cho phép người gọi tự chọn), không còn client nào để
+  // cấp, migrate() treo VĨNH VIỄN, không tự thoát (đã tự đo: treo qua mốc 5s). Test này
+  // dùng Promise.race với một timeout ngắn để biến "treo mãi" thành một lần FAIL rõ ràng
+  // thay vì chờ hết 30s timeout mặc định của vitest.
+  it("[fix I4] migrate() không deadlock khi pool chỉ có max: 1", async () => {
+    const poolMotKetNoi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({ "060_mot_ket_noi.sql": "CREATE TABLE mig_i (id int);" });
+
+      const hoanThanh = migrate(poolMotKetNoi, dir);
+      const hetGio = new Promise<never>((_resolve, reject) => {
+        setTimeout(
+          () => reject(new Error("timeout: migrate() treo qua 5s với pool max: 1")),
+          5000,
+        );
+      });
+
+      await expect(Promise.race([hoanThanh, hetGio])).resolves.toEqual(["060_mot_ket_noi.sql"]);
+    } finally {
+      await poolMotKetNoi.end();
+    }
   });
 });

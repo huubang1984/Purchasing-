@@ -28,6 +28,11 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
       "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
   );
 
+  // [fix I4] TOÀN BỘ vòng lặp chạy trên đúng MỘT client (lockClient) — không xin thêm
+  // client nào khác từ pool trong lúc giữ khoá. Bản trước dùng pool.query()/pool.connect()
+  // NGOÀI lockClient trong lúc vẫn giữ lockClient checked-out; với pool có max: 1 (mà
+  // createPool(cs, max) cho phép người gọi tự chọn), không còn client nào để cấp — migrate()
+  // treo VĨNH VIỄN, không timeout (tự kiểm chứng: treo qua mốc 5s trong test, không tự thoát).
   const lockClient = await pool.connect();
   try {
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
@@ -41,7 +46,7 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
       const sql = await readFile(join(dir, file), "utf8");
       const checksum = tinhChecksum(sql);
 
-      const existing = await pool.query<{ checksum: string }>(
+      const existing = await lockClient.query<{ checksum: string }>(
         "SELECT checksum FROM schema_migrations WHERE version = $1",
         [file],
       );
@@ -59,23 +64,20 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
         continue; // đã áp dụng, nội dung không đổi — bỏ qua
       }
 
-      const client = await pool.connect();
       try {
-        await client.query("BEGIN");
-        await client.query(sql);
-        await client.query("INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)", [
-          file,
-          checksum,
-        ]);
-        await client.query("COMMIT");
+        await lockClient.query("BEGIN");
+        await lockClient.query(sql);
+        await lockClient.query(
+          "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
+          [file, checksum],
+        );
+        await lockClient.query("COMMIT");
         applied.push(file);
       } catch (error) {
-        await client.query("ROLLBACK");
+        await lockClient.query("ROLLBACK");
         throw new Error(`Migration ${file} thất bại: ${(error as Error).message}`, {
           cause: error,
         });
-      } finally {
-        client.release();
       }
     }
 
