@@ -1,7 +1,10 @@
 import { createDecipheriv } from "node:crypto";
 import {
-  ENVELOPE_VERSION,
+  assertLocalDevAllowed,
+  assertValidOrgId,
+  buildAad,
   deriveOrgKey,
+  ENVELOPE_VERSION,
   HEADER_LENGTH,
   IV_LENGTH,
 } from "./local-dev-shared.js";
@@ -13,7 +16,12 @@ export interface KeyUnwrapper {
   unwrap(orgId: string, wrapped: WrappedKey): Promise<Uint8Array>;
 }
 
+/**
+ * Kiểm tra fail-closed chạy ngay khi tạo — xem local-dev-wrapper.ts để biết lý do
+ * (bất biến G1, phát hiện I6 ở fix round 1).
+ */
 export function createLocalDevUnwrapper(ring: MasterKeyRing): KeyUnwrapper {
+  assertLocalDevAllowed();
   return {
     name: "local-dev",
     // async bắt buộc để throw đồng bộ tự trở thành promise bị reject; không có async,
@@ -21,7 +29,18 @@ export function createLocalDevUnwrapper(ring: MasterKeyRing): KeyUnwrapper {
     // `expect(...).rejects` không bao giờ bắt được lỗi.
     // eslint-disable-next-line @typescript-eslint/require-await
     async unwrap(orgId: string, wrapped: WrappedKey): Promise<Uint8Array> {
-      const envelope = Buffer.from(wrapped.ciphertext);
+      assertValidOrgId(orgId);
+
+      let envelope: Buffer;
+      try {
+        envelope = Buffer.from(wrapped.ciphertext);
+      } catch (error) {
+        // Dữ liệu DB hỏng (ciphertext null/undefined/không phải mảng byte) phải báo lỗi
+        // đúng hợp đồng KeyError của package này, không được ném TypeError trần ra ngoài
+        // (việc nhỏ phát hiện ở fix round 1).
+        throw new KeyError("Mở phong bì thất bại: dữ liệu ciphertext không hợp lệ.", { cause: error });
+      }
+
       if (envelope.length < HEADER_LENGTH) {
         throw new KeyError("Mở phong bì thất bại: dữ liệu ngắn hơn phần đầu bắt buộc.");
       }
@@ -39,6 +58,7 @@ export function createLocalDevUnwrapper(ring: MasterKeyRing): KeyUnwrapper {
 
       try {
         const decipher = createDecipheriv("aes-256-gcm", orgKey, iv);
+        decipher.setAAD(buildAad(wrapped.keyVersion, orgId));
         decipher.setAuthTag(tag);
         const opened = Buffer.concat([decipher.update(body), decipher.final()]);
         return opened;
