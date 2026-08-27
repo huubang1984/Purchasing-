@@ -83,7 +83,15 @@ describe("cô lập tổ chức", () => {
   // không chặn được "chuyển nhà" một hàng của MÌNH sang tổ chức khác thì kẻ tấn công vẫn tiêm
   // được dữ liệu vào tổ chức khác, chỉ mất thêm một bước. Đây chính là nửa mà một policy
   // thiếu vế kiểm hàng-mới sẽ bỏ sót.
+  //
+  // [vòng fix 2 — Minor] Nay CÓ HAI lớp chặn độc lập, và test đo RIÊNG từng lớp thay vì gộp:
+  //   lớp 1 — QUYỀN CỘT: 002 không cấp `UPDATE (org_id)` cho app_api (bản vá oracle users_pkey
+  //           cấp quyền theo cột, và `org_id` cố ý nằm ngoài vế UPDATE). Chặn ngay ở quyền.
+  //   lớp 2 — RLS WITH CHECK: kể cả khi ai đó cấp lại `UPDATE (org_id)`, policy vẫn chặn.
+  // Gộp hai lớp vào một khẳng định "rejects" là cách nhanh nhất để lớp 2 âm thầm chết mà không
+  // ai biết: sau bản vá quyền cột, thông báo lỗi đến từ lớp 1 nên một policy hỏng vẫn xanh.
   it("[INV-F2] không chuyển được hàng của mình sang org_id của tổ chức khác", async () => {
+    // Lớp 1 — quyền cột.
     await expect(
       withTenant(apiPool, orgA, async (client) => {
         await client.query("UPDATE users SET org_id = $1 WHERE email = $2", [
@@ -91,7 +99,24 @@ describe("cô lập tổ chức", () => {
           "a@example.com",
         ]);
       }),
-    ).rejects.toThrow(/row-level security/i);
+    ).rejects.toThrow(/permission denied/i);
+
+    // Lớp 2 — RLS WITH CHECK, đo TÁCH KHỎI lớp 1: cấp tạm `UPDATE (org_id)` trong một
+    // transaction rồi ROLLBACK, nên phép đo không để lại quyền nào trên cụm test.
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("GRANT UPDATE (org_id) ON users TO app_api");
+      await client.query("SET LOCAL ROLE app_api");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await expect(
+        client.query("UPDATE users SET org_id = $1 WHERE email = $2", [orgB, "a@example.com"]),
+        "có quyền cột rồi mà RLS không chặn — vế WITH CHECK của policy đã mất tác dụng",
+      ).rejects.toThrow(/row-level security/i);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
 
     const { rows } = await db.pool.query<{ org_id: string }>(
       "SELECT org_id FROM users WHERE email = 'a@example.com'",

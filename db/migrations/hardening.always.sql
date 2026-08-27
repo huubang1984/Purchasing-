@@ -228,6 +228,22 @@
 --       CHA PHÂN MẢNH (relkind = 'p') VÔ HÌNH với cả (A), (B) lẫn test phủ. Nay là
 --       relkind IN ('r','p'). Vẫn CÓ bậc tự do còn lại, nói ra thay vì hứa suông: bảng NGOÀI
 --       (relkind='f'), và bảng tenant đặt ở schema KHÁC 'public'. Cả hai không bị phủ.
+--       [vòng fix 2 — I6] BẬC TỰ DO THỨ BA, và là bậc tự do về THỜI GIAN chứ không về hình
+--       dạng: mục (A) đúng TẠI THỜI ĐIỂM migrate() chạy. Một "ALTER TABLE bao_gia ATTACH
+--       PARTITION bao_gia_b ..." chạy SAU đó gắn vào một lá KHÔNG bật RLS, và đã đo:
+--         hardening=PASS | bao_gia(rls=t,fr=t,np=1) bao_gia_a(rls=t,fr=t) bao_gia_b(rls=f,fr=f)
+--         gắn A: qua CHA=[100] | đọc THẲNG bao_gia_b=[999]   <- giá của tổ chức B
+--       Xoay vòng phân mảnh thường do JOB VẬN HÀNH làm, không do migration, nên cửa sổ phơi
+--       kéo tới lần deploy kế tiếp.
+--       ĐÃ CÂN NHẮC VÀ LOẠI BỎ event trigger (ddl_command_end trên ALTER TABLE) để bật RLS
+--       ngay lúc ATTACH: CREATE EVENT TRIGGER đòi SUPERUSER, mà kịch bản deploy thật của dự án
+--       (role trien_khai — CREATEROLE + chủ sở hữu database, KHÔNG superuser) không có. Thêm
+--       nó kèm hậu điều kiện sẽ CHẶN DEPLOY VĨNH VIỄN đúng trên môi trường production — đúng
+--       cái bẫy "fail-closed biến trôi tự lành thành deploy chặn vĩnh viễn" mà file này đã phải
+--       gỡ hai lần. Thêm nó KHÔNG kèm hậu điều kiện thì nó là một lời hứa không ai kiểm.
+--       NÊN NÓI THẲNG: trục này CHỈ PHÁT HIỆN ĐƯỢC (và tự chữa được) Ở LẦN DEPLOY KẾ TIẾP,
+--       không đóng được ở tầng lược đồ. Tính chất tự chữa đó CÓ test đo:
+--       "[I6] ATTACH PARTITION sau migrate()..." ở db/migrations.int.test.ts.
 --
 --   (B) HÌNH DẠNG POLICY — CHỈ PHÁT HIỆN, KHÔNG TỰ CHỮA. Không tự chữa được vì không có nguồn
 --       nào trong file này biết policy ĐÚNG phải viết ra sao; nhân bản định nghĩa policy sang
@@ -249,8 +265,9 @@
 --       Đây là lần thứ năm trong dự án một hàng rào kiểu đó bị vượt; hàng rào G1 ở Task 7 chỉ
 --       hết tái phát khi đảo sang MẶC ĐỊNH-ĐÓNG + CỬA TƯỜNG MINH. Làm đúng như vậy ở đây.
 --
---       Nay biểu thức đã deparse phải NẰM TRONG danh sách hình dạng được duyệt
---       (HINH_DANG_DUOC_DUYET bên dưới) — mọi thứ khác là sai, không cần biết nó viết ra sao.
+--       Nay biểu thức đã deparse của mọi policy PERMISSIVE phải NẰM TRONG một trong hai danh
+--       sách (HINH_DANG_CHUAN toàn cục, hoặc NGOAI_LE_HINH_DANG của đúng bảng+policy đó) —
+--       mọi thứ khác là sai, không cần biết nó viết ra sao.
 --       Đã đo tính ổn định của pg_get_expr trước khi dựa vào nó, trên PostgreSQL 16.15: năm
 --       cách viết khác nhau của CÙNG một cây phân tích
 --         (org_id = app_current_org_id()) · thêm khoảng trắng · thêm ngoặc ·
@@ -258,27 +275,45 @@
 --       đều deparse ra ĐÚNG MỘT chuỗi "(org_id = app_current_org_id())". Cây phân tích KHÁC
 --       thì deparse khác ("(app_current_org_id() = org_id)" — hoán vị hai vế — không khớp, và
 --       đó là hành vi ĐÚNG: danh sách trắng không suy diễn ngữ nghĩa).
---       MỘT PHỤ THUỘC ĐÃ ĐO, PHẢI NÓI RÕ: deparse phụ thuộc search_path CỦA PHIÊN ĐANG ĐỌC.
---       Đo thật: cùng policy đó, dưới "SET search_path TO pg_catalog" cho ra
---       "(org_id = public.app_current_org_id())". Vì vậy danh sách trắng liệt kê CẢ HAI dạng
---       thay vì chuẩn hoá bằng một phép cắt chuỗi (cắt chuỗi là chỗ để lọt thứ tiếp theo).
+--       MỘT PHỤ THUỘC ĐÃ ĐO: deparse phụ thuộc search_path CỦA PHIÊN ĐANG ĐỌC.
+--       [vòng fix 2 — CR1] Vòng 1 xử lý phụ thuộc đó bằng cách NỚI danh sách trắng ra để chứa
+--       cả dạng trần lẫn dạng 'public.'-đủ-tên. ĐÓ CHÍNH LÀ CƠ CHẾ CỦA LỖ HỔNG VÒNG 2 (rò
+--       xuyên tổ chức thật — xem khối "GHIM search_path" trong thân DO). Nay search_path của
+--       phiên phán xét được GHIM, và danh sách thu về ĐÚNG MỘT dạng mỗi pham_vi.
+--       Quy tắc rút ra, áp cho cả file: GHIM cấu hình mà bảo đảm phụ thuộc vào, đừng NỚI bảo
+--       đảm ra để chấp nhận mọi giá trị của cấu hình đó.
 --
---       CỬA TƯỜNG MINH: task 5-10 sẽ cần hình dạng khác (policy kiểm thêm `status`, policy
---       FOR SELECT riêng cho app_unseal). Đường đi là THÊM MỘT DÒNG vào
---       HINH_DANG_DUOC_DUYET — một quyết định đọc thấy được trong diff, và có meta-test khoá
---       danh sách đó (db/rls-coverage.int.test.ts) nên thêm hình dạng mới bắt buộc phải sửa
---       CẢ file SQL này LẪN test. Đúng khuôn đã dùng cho hàng rào G1 của Task 7.
+--       CỬA TƯỜNG MINH: task 5-10 sẽ cần hình dạng khác (policy kiểm thêm trạng thái, policy
+--       FOR SELECT riêng cho app_unseal). Đường đi là THÊM MỘT DÒNG vào NGOAI_LE_HINH_DANG,
+--       và dòng đó ghi rõ BẢNG NÀO, POLICY NÀO.
+--       [vòng fix 2 — CR2] Vòng 1 để cửa đó khoá theo (pham_vi, bieu_thuc) — tức TOÀN CỤC. Đã
+--       đo: mở "USING (true)" cho policy riêng của app_unseal trên MỘT bảng thì "USING (true)"
+--       trên CHÍNH bảng users cũng lọt. Cách hợp lệ để dùng hệ thống chính là cách làm nó yếu
+--       đi trên toàn cục — đó là lỗi thiết kế, không phải sự bất tiện. Nay cửa khoá theo
+--       (bang, polname, pham_vi, bieu_thuc): mỗi ngoại lệ chỉ có hiệu lực ĐÚNG NƠI được cấp.
+--       Cả hai danh sách có meta-test khoá (db/rls-coverage.int.test.ts) nên mở một hình dạng
+--       mới bắt buộc phải sửa CẢ file SQL này LẪN test. Đúng khuôn hàng rào G1 của Task 7.
 --
 --       [vòng fix 1 — I6] Vòng trước viết "hai DẠNG fail-open bị cấm". Sai chữ: nó cấm được
 --       hai CÁCH VIẾT. Danh sách trắng mới thì cấm mọi thứ ngoài danh sách, nên phát biểu nay
---       đúng phạm vi — nhưng phạm vi ấy là "hình dạng biểu thức", KHÔNG phải "ngữ nghĩa".
+--       đúng phạm vi — nhưng phạm vi ấy là "hình dạng biểu thức của policy PERMISSIVE trên
+--       bảng tenant trong public", KHÔNG phải "ngữ nghĩa" và KHÔNG phải mọi policy: policy
+--       AS RESTRICTIVE cố ý KHÔNG bị soi hình dạng (xem CAU_POLICY_SAI để biết lập luận).
 --
 --       ĐÁNH ĐỔI PHẢI NÓI RÕ: vì không tự chữa, một policy bị DROP hay bị ALTER hỏng sẽ chặn
 --       deploy. Nhờ khuôn ba lượt ở trên, đường sửa là một migration mới hoặc một dòng thêm
 --       vào file này rồi deploy lại — KHÔNG phải sửa tay trên cụm.
 --
 --   (C) [vòng fix 1 — I2] BA ĐƯỜNG ĐỌC VÒNG QUA RLS: VIEW · MATERIALIZED VIEW · SECURITY
---       DEFINER. Không lớp nào trước đây canh relkind IN ('v','m') hay prosecdef. Đo với chủ
+--       DEFINER — ở MỌI schema do dự án tạo, không riêng 'public'/'app_private'.
+--       [vòng fix 2 — I6] Phát biểu này ở vòng 1 KHÔNG nêu giới hạn schema trong khi bản cài
+--       đặt CÓ giới hạn ('public' cho view/matview, 'public'+'app_private' cho prosecdef) —
+--       một lời khai quá phạm vi trong hồ sơ kiểm toán, và re-reviewer đo được rò rỉ thật qua
+--       đúng khe đó. Nay bản cài đặt quét mọi schema trừ pg_catalog/information_schema/
+--       pg_toast*/pg_temp*, nên phát biểu và phép đo khớp nhau. Bậc tự do CÒN LẠI: đối tượng
+--       thuộc EXTENSION được loại trừ, và bảng NGOÀI (relkind='f') không bao giờ là bảng
+--       tenant nên một view đọc bảng ngoài chỉ bị bắt qua đường cột org_id.
+--       Không lớp nào trước đây canh relkind IN ('v','m') hay prosecdef. Đo với chủ
 --       sở hữu superuser — ĐÚNG kịch bản CI của chính repo này, vì migrate() chạy bằng
 --       superuser — trên PostgreSQL 16.15:
 --         bảng gốc users              | 1 hàng  <- RLS đúng
@@ -295,7 +330,8 @@
 --       CỬA cho MATVIEW và cho hàm SECURITY DEFINER: không có cửa kỹ thuật nào (matview không
 --       có RLS, SECURITY DEFINER là leo quyền theo định nghĩa), nên cửa là DANH SÁCH NGOẠI LỆ
 --       viết tay NGOAI_LE_DOC_VONG — hiện RỖNG. Thêm một tên vào đó là một quyết định phải
---       nhìn thấy, y như HINH_DANG_DUOC_DUYET.
+--       nhìn thấy, y như NGOAI_LE_HINH_DANG. Tên viết ĐỦ SCHEMA nên nó đã sẵn sàng cho việc
+--       bỏ giới hạn schema ở vòng fix 2.
 --       Hàm thuộc EXTENSION (pg_depend deptype='e') được loại trừ: chúng không do dự án viết
 --       và danh sách ngoại lệ không nên phình theo extension. Đã đo trên PG16.15: pgcrypto
 --       KHÔNG cài hàm prosecdef nào vào public, nên loại trừ này hiện chưa che giấu gì.
@@ -308,7 +344,7 @@ DECLARE
   --   'day_du'   : cả hai — mặc định khi GUC không được đặt, để chạy file này bằng tay
   --                (psql -f) vẫn giữ đúng ngữ nghĩa cũ.
   che_do constant text :=
-    coalesce(nullif(current_setting('app.hardening_che_do', true), ''), 'day_du');
+    coalesce(nullif(pg_catalog.current_setting('app.hardening_che_do', true), ''), 'day_du');
 
   -- Vị từ "bảng này chịu ràng buộc tenant". Viết dưới dạng KHUÔN có tham số bí danh vì nó
   -- được nhúng vào các truy vấn dùng bí danh khác nhau (bảng cha phân mảnh, bảng gốc của
@@ -335,53 +371,120 @@ DECLARE
                      WHERE a.attrelid = %2$s.oid AND a.attname = 'org_id'
                        AND a.attnum > 0 AND NOT a.attisdropped)
             OR %2$s.relname IN ('organizations'))$q$;
-  VI_TU_BANG_TENANT constant text := format(MAU_VI_TU_BANG_TENANT, 'n', 'c');
+  VI_TU_BANG_TENANT constant text := pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'n', 'c');
 
-  -- ---- [vòng fix 1 — CR1] DANH SÁCH TRẮNG HÌNH DẠNG BIỂU THỨC POLICY -------------------
-  -- Mọi biểu thức USING/WITH CHECK của mọi policy trên bảng tenant phải khớp NGUYÊN VĂN một
-  -- dòng ở đây (so sánh sau khi pg_get_expr đã chuẩn hoá — xem giải thích (B) ở đầu file).
+  -- ---- [vòng fix 1 — CR1 / vòng fix 2 — CR1+CR2+I4] HAI DANH SÁCH, KHÔNG PHẢI MỘT -----
+  -- Mọi biểu thức USING/WITH CHECK của mọi policy PERMISSIVE trên bảng tenant phải khớp
+  -- NGUYÊN VĂN một dòng ở MỘT trong hai danh sách dưới đây (so sánh sau khi pg_get_expr đã
+  -- chuẩn hoá — xem giải thích (B) ở đầu file).
+  --
+  -- (1) HINH_DANG_CHUAN — KHUÔN CỦA DỰ ÁN, có hiệu lực TOÀN CỤC.
   --   pham_vi = 'co_org_id' : bảng có cột org_id.
   --   pham_vi = 'bang_goc'  : bảng gốc của cây tenant (chính id của nó LÀ tổ chức).
-  -- Hai biến thể mỗi hình dạng vì deparse phụ thuộc search_path của phiên đang đọc (đã đo).
+  --   Chỉ hai dòng, và đó là điều kiện để danh sách này AN TOÀN khi áp toàn cục: mỗi dòng
+  --   RÀNG BUỘC hàng về đúng tổ chức đang gắn, nên nới nó ra mọi bảng không cho thêm quyền
+  --   đọc nào. Không thêm dòng nào khác vào đây trừ khi nó cũng có tính chất ấy.
   --
-  -- THÊM MỘT DÒNG VÀO ĐÂY LÀ CÁCH DUY NHẤT hợp lệ để mở một hình dạng mới, và có meta-test
-  -- khoá đúng danh sách này ở db/rls-coverage.int.test.ts — sửa một bên mà quên bên kia là ĐỎ.
-  HINH_DANG_DUOC_DUYET constant text :=
+  --   [vòng fix 2 — CR1] Vòng 1 có BỐN dòng: mỗi hình dạng hai biến thể (trần và
+  --   'public.'-đủ-tên) để hứng việc deparse phụ thuộc search_path. Hai dòng 'public.' nay bị
+  --   XOÁ, vì search_path của phiên phán xét đã được GHIM (xem khối ở đầu thân DO). Đó là
+  --   NGUYÊN NHÂN chứ không phải triệu chứng: chừng nào dạng TRẦN còn được duyệt VÔ ĐIỀU KIỆN
+  --   dưới một search_path mà kẻ khác chọn, một hàm app_current_org_id() ở schema khác cũng
+  --   deparse ra dạng trần. Đo được (xem khối CR1 trong thân DO): rò xuyên tổ chức thật.
+  --   [vòng fix 2 — I5] Hai dòng bị xoá KHÔNG có test nào phủ — xoá cả hai vẫn 86/86. Nay có
+  --   test "danh sách trắng đúng bằng tập hình dạng ĐANG được dùng" ở db/rls-coverage.int.
+  --   test.ts, nên mọi dòng ở đây là load-bearing và một dòng thừa là ĐỎ.
+  HINH_DANG_CHUAN constant text :=
     $q$(VALUES
          ('co_org_id', '(org_id = app_current_org_id())'),
-         ('co_org_id', '(org_id = public.app_current_org_id())'),
-         ('bang_goc',  '(id = app_current_org_id())'),
-         ('bang_goc',  '(id = public.app_current_org_id())')
+         ('bang_goc',  '(id = app_current_org_id())')
        ) AS h(pham_vi, bieu_thuc)$q$;
+
+  -- (2) NGOAI_LE_HINH_DANG — CỬA THEO ĐỐI TƯỢNG. RỖNG là trạng thái đúng ở S0.
+  --   [vòng fix 2 — CR2] Vòng 1 chỉ có MỘT danh sách khoá theo (pham_vi, bieu_thuc), tức là
+  --   TOÀN CỤC. Đã đo: mô phỏng đúng việc Task 6 sẽ phải làm — thêm một dòng cho policy riêng
+  --   của app_unseal — rồi "USING (true)" trên CHÍNH bảng users cũng LỌT (hardening PASS, đọc
+  --   được cả hai tổ chức). Mở một hình dạng cho MỘT bảng pre-approve nó cho MỌI bảng tenant
+  --   hiện tại và tương lai. Cửa thoát mà càng dùng đúng thì hàng rào càng thủng không phải
+  --   cửa thoát, là lỗ. Nay khoá theo (bang, polname, pham_vi, bieu_thuc): một ngoại lệ chỉ
+  --   có hiệu lực ĐÚNG NƠI nó được cấp.
+  --
+  --   [vòng fix 2 — I4] Bốn hình dạng mà re-reviewer đo là "sản phẩm sẽ cần" đi qua ĐÂY, không
+  --   qua HINH_DANG_CHUAN — đây là câu trả lời cho "hình dạng nào nên nằm sẵn trong danh sách
+  --   gốc": chỉ hình dạng TỰ NÓ ràng buộc tenant mới được toàn cục.
+  --     org_id = app_current_org_id() AND trang_thai <> 'NIEM_PHONG'  (đấu thầu kín)
+  --       -> deparse: ((org_id = app_current_org_id()) AND (trang_thai <> 'NIEM_PHONG'::text))
+  --     policy riêng FOR SELECT TO app_unseal USING (true)  -> deparse: true
+  --     org_id kiểu DOMAIN trên uuid                        -> deparse: ((org_id)::uuid = ...)
+  --   Cố ý KHÔNG khớp theo KHUÔN ("bắt đầu bằng hình dạng chuẩn rồi AND ..."): khớp khuôn là
+  --   một phép so khớp chuỗi có cấu trúc, và bốn vòng liên tiếp trong dự án này cho thấy đó
+  --   đúng là chỗ thứ tiếp theo lọt qua. Một dòng đủ-đối-tượng trong diff rẻ hơn nhiều.
+  --   HÌNH DẠNG THỨ TƯ — policy AS RESTRICTIVE — KHÔNG cần dòng nào: xem CAU_POLICY_SAI.
+  --
+  --   Cả hai danh sách có meta-test khoá ở db/rls-coverage.int.test.ts — sửa một bên mà quên
+  --   bên kia là ĐỎ.
+  NGOAI_LE_HINH_DANG constant text :=
+    $q$(VALUES ('', '', '', '')) AS g(bang, polname, pham_vi, bieu_thuc)$q$;
 
   -- [vòng fix 1 — I2] Ngoại lệ viết tay cho hai thứ KHÔNG có cửa kỹ thuật: MATERIALIZED VIEW
   -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. Tên viết đủ schema
   -- ('public.ten_doi_tuong'). RỖNG là trạng thái đúng ở S0 — mỗi dòng thêm vào phải kèm lý do.
   NGOAI_LE_DOC_VONG constant text := $q$(VALUES ('')) AS x(ten)$q$;
 
-  -- Vị từ "bảng này là LÁ phân mảnh của một bảng tenant". Lá thừa hưởng policy của cha khi
-  -- truy vấn đi qua cha, và PostgreSQL KHÔNG cho tạo policy riêng theo kiểu thừa kế — nên đòi
-  -- lá phải có policy của chính nó là đòi một thứ khuôn PostgreSQL không sinh ra. Vòng trước
+  -- Vị từ "bảng này là CON của một bảng tenant" — lá phân mảnh HOẶC con cháu INHERITS. Con
+  -- thừa hưởng policy của cha khi truy vấn đi qua cha, và PostgreSQL KHÔNG cho tạo policy riêng
+  -- theo kiểu thừa kế — nên đòi
+  -- con phải có policy của chính nó là đòi một thứ khuôn PostgreSQL không sinh ra. Vòng trước
   -- không có vế này nên một lược đồ phân mảnh viết ĐÚNG KHUÔN làm hardening gãy MỌI LẦN.
   -- Vẫn an toàn: mục (A) bật RLS trên lá, và lá bật RLS không policy = từ chối tất cả khi đọc
   -- THẲNG lá (đã đo: 0 hàng), trong khi đường đọc thật (qua cha) vẫn đúng.
   -- Điều kiện "cha CŨNG là bảng tenant trong public" là có chủ đích: không có nó thì một lá
   -- trong public treo dưới một cha ở schema khác sẽ được tha mà chẳng ai kiểm cha.
+  --
+  -- [vòng fix 2 — Minor] BỎ "c.relispartition": vế này nay phủ CẢ CON CHÁU "INHERITS" cổ điển,
+  -- không riêng lá phân mảnh. Vòng 1 đòi relispartition, nên một "CREATE TABLE con () INHERITS
+  -- (bang_tenant)" làm hardening GÃY MỌI LẦN — đúng triệu chứng (3) của I3 mà vòng 1 vừa sửa
+  -- cho phân mảnh, lặp lại ở nhánh kế thừa.
+  -- Đã đo trên PostgreSQL 16.15 rằng miễn trừ này AN TOÀN, và đo cả hai đường đọc:
+  --   * đọc QUA CHA dưới app_api gắn tổ chức A -> chỉ thấy hàng của A (100), KHÔNG thấy hàng
+  --     999 mà con đang giữ. Policy của CHA có hiệu lực với hàng của con khi đi qua cha —
+  --     khác hẳn ca phân mảnh trước khi vá, và là lý do không cần policy riêng cho con.
+  --   * đọc THẲNG con sau khi mục (A) bật ENABLE + FORCE: 0 hàng (fail-closed).
+  -- Trạng thái KHÔNG được miễn, và đó là đúng: một bảng đã DETACH PARTITION không còn hàng nào
+  -- trong pg_inherits nên nó trở lại là bảng tenant độc lập và PHẢI có policy của chính nó.
+  -- Đường sửa là một migration mới (lượt 1 không phán xét nên nó luôn tới được đích) —
+  -- có test đo: "[Minor] DETACH PARTITION..." ở db/migrations.int.test.ts.
   LA_CUA_BANG_TENANT constant text :=
-    $q$c.relispartition AND EXISTS (
+    $q$EXISTS (
          SELECT 1 FROM pg_inherits ke
            JOIN pg_class pc ON pc.oid = ke.inhparent
            JOIN pg_namespace pn ON pn.oid = pc.relnamespace
           WHERE ke.inhrelid = c.oid AND $q$
-       || format(MAU_VI_TU_BANG_TENANT, 'pn', 'pc') || $q$)$q$;
+       || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'pn', 'pc') || $q$)$q$;
 
   -- Mọi chỗ SAI KHUÔN về policy trên bảng tenant, mỗi hàng một mô tả đọc được. Hai nguồn:
   --   (i)  bảng tenant KHÔNG có policy PERMISSIVE nào — RLS bật mà không policy nào cho phép
   --        gì là "từ chối tất cả": fail-closed, an toàn về dữ liệu nhưng là sự cố sẵn sàng, và
   --        thường là dấu vết của một DROP POLICY (hoặc DROP FUNCTION ... CASCADE) sau triển khai.
   --        Lá phân mảnh được miễn — xem LA_CUA_BANG_TENANT ở trên.
-  --   (ii) policy có mặt nhưng biểu thức KHÔNG nằm trong HINH_DANG_DUOC_DUYET (CR1), hoặc
-  --        thiếu vế bắt buộc, hoặc là RESTRICTIVE.
+  --   (ii) policy PERMISSIVE có mặt nhưng biểu thức KHÔNG nằm trong HINH_DANG_CHUAN lẫn
+  --        NGOAI_LE_HINH_DANG của ĐÚNG (bảng, policy) đó, hoặc thiếu vế bắt buộc.
+  --
+  -- [vòng fix 2 — I4] Policy AS RESTRICTIVE KHÔNG còn bị coi là sai, và hình dạng biểu thức
+  -- của nó KHÔNG bị soi. Vòng 1 chặn nó, và đó là phản tác dụng rõ ràng: cấm một lớp phòng
+  -- thủ CHẶT HƠN. Lập luận, không phải khẩu vị: policy RESTRICTIVE được tổ hợp bằng AND với
+  -- (OR của các policy PERMISSIVE), nên nó chỉ THU HẸP tập hàng nhìn thấy được — không biểu
+  -- thức nào đặt vào đó mở thêm được một hàng nào. Và vế bảo vệ vẫn còn nguyên: nguồn (i) đòi
+  -- PHẢI có ít nhất một policy PERMISSIVE, còn MỌI policy PERMISSIVE vẫn phải khớp danh sách.
+  -- Đổi policy cách ly sang RESTRICTIVE để né phép kiểm sẽ làm bảng KHÔNG còn policy PERMISSIVE
+  -- nào và bị nguồn (i) bắt.
+  -- BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: một policy RESTRICTIVE có thể là no-op
+  -- (USING (true)) — không phải lỗ hổng nhưng cũng không phải phòng thủ; và biểu thức của nó
+  -- gọi được hàm do người khác viết. Cả hai đòi quyền DDL trên bảng, tức tác nhân đã ở mức
+  -- làm được việc tệ hơn.
+  --
+  -- [vòng fix 2 — CR2] Vế "biểu thức có được duyệt không" nay hỏi HAI danh sách và danh sách
+  -- thứ hai khoá theo ĐÚNG (bang, polname) — xem NGOAI_LE_HINH_DANG.
   CAU_POLICY_SAI constant text :=
     $q$SELECT c.relname || ': không có policy PERMISSIVE nào (RLS đang từ chối tất cả)' AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -392,7 +495,6 @@ DECLARE
        UNION ALL
        SELECT c.relname || '.' || p.polname || ': ' ||
               CASE
-                WHEN NOT p.polpermissive THEN 'policy RESTRICTIVE nằm ngoài khuôn của dự án'
                 WHEN p.polcmd <> 'a' AND p.polqual IS NULL THEN 'thiếu vế USING'
                 WHEN p.polcmd IN ('*', 'a', 'w') AND p.polwithcheck IS NULL
                   THEN 'thiếu vế WITH CHECK'
@@ -405,28 +507,55 @@ DECLARE
          JOIN pg_class c ON c.oid = p.polrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE $q$ || VI_TU_BANG_TENANT || $q$
-          AND (NOT p.polpermissive
-               OR (p.polcmd <> 'a' AND p.polqual IS NULL)
+          AND ((p.polcmd <> 'a' AND p.polqual IS NULL)
                OR (p.polcmd IN ('*', 'a', 'w') AND p.polwithcheck IS NULL)
-               OR EXISTS (
+               OR (p.polpermissive AND EXISTS (
                     SELECT 1
                       FROM (VALUES (pg_get_expr(p.polqual, p.polrelid)),
                                    (pg_get_expr(p.polwithcheck, p.polrelid))) AS e(bieu_thuc)
                      WHERE e.bieu_thuc IS NOT NULL
                        AND NOT EXISTS (
-                             SELECT 1 FROM $q$ || HINH_DANG_DUOC_DUYET || $q$
+                             SELECT 1 FROM $q$ || HINH_DANG_CHUAN || $q$
                               WHERE h.bieu_thuc = e.bieu_thuc
                                 AND h.pham_vi = CASE
                                       WHEN EXISTS (SELECT 1 FROM pg_attribute a
                                                     WHERE a.attrelid = c.oid
                                                       AND a.attname = 'org_id'
                                                       AND a.attnum > 0 AND NOT a.attisdropped)
-                                      THEN 'co_org_id' ELSE 'bang_goc' END)))$q$;
+                                      THEN 'co_org_id' ELSE 'bang_goc' END)
+                       AND NOT EXISTS (
+                             SELECT 1 FROM $q$ || NGOAI_LE_HINH_DANG || $q$
+                              WHERE g.bang = c.relname
+                                AND g.polname = p.polname
+                                AND g.bieu_thuc = e.bieu_thuc
+                                AND g.pham_vi = CASE
+                                      WHEN EXISTS (SELECT 1 FROM pg_attribute a
+                                                    WHERE a.attrelid = c.oid
+                                                      AND a.attname = 'org_id'
+                                                      AND a.attnum > 0 AND NOT a.attisdropped)
+                                      THEN 'co_org_id' ELSE 'bang_goc' END))))$q$;
 
-  -- [vòng fix 1 — I2] VIEW / MATERIALIZED VIEW trong public đọc vòng qua RLS.
+  -- [vòng fix 1 — I2] VIEW / MATERIALIZED VIEW / hàm SECURITY DEFINER đọc vòng qua RLS.
   -- "Chạm dữ liệu tenant" nhận diện theo HAI đường độc lập, cố ý không chỉ một: phụ thuộc
   -- catalog (pg_depend qua pg_rewrite — bắt cả view không hiện org_id ra đầu ra), và cột
   -- org_id trong chính đầu ra (bắt cả view dựng qua hàm/FDW mà pg_depend không nối tới bảng).
+  --
+  -- [vòng fix 2 — I3] BỎ RÀNG BUỘC SCHEMA CỦA CHÍNH ĐỐI TƯỢNG. Vòng 1 sinh ra mục (C) KÈM SẴN
+  -- một bộ lọc tự làm mù mình: view/matview phải nằm trong 'public', hàm SECURITY DEFINER phải
+  -- nằm trong 'public'/'app_private'. Đo được trên PostgreSQL 16.15 (app_api gắn tổ chức A,
+  -- dữ liệu hai tổ chức):
+  --     [SECDEF ở schema khác] hardening=PASS | tien_ich.doc_het()  -> a@a.com, vip@b.com  RÒ
+  --     [VIEW  ở schema khác ] hardening=PASS | bao_cao.moi_nguoi   -> a@a.com, vip@b.com  RÒ
+  --     [đối chứng trong public]                                    -> BLOCK
+  -- Nay chỉ loại pg_catalog / information_schema / pg_toast* / pg_temp* — những schema mà dự
+  -- án không đặt gì vào và PostgreSQL tự quản. Đối tượng thuộc EXTENSION cũng được loại (cùng
+  -- lý do đã dùng cho pg_proc: không do dự án viết, và danh sách ngoại lệ không nên phình theo
+  -- extension).
+  -- Vì sao nới phạm vi QUÉT không làm phình báo nhầm: việc nhận diện "chạm dữ liệu tenant" vẫn
+  -- NEO vào bảng tenant trong 'public' (MAU_VI_TU_BANG_TENANT) hoặc vào cột org_id của chính
+  -- đầu ra. Một view trong schema khác KHÔNG chạm bảng tenant vẫn không bị nhắc tới.
+  -- BẬC TỰ DO CÒN LẠI: bảng tenant đặt ở schema KHÁC 'public' vẫn không được nhận là bảng
+  -- tenant (xem ghi chú (A)), nên một view đọc bảng đó chỉ bị bắt qua đường cột org_id.
   CAU_DOC_VONG constant text :=
     $q$SELECT n.nspname || '.' || c.relname || ': ' ||
               CASE WHEN c.relkind = 'm'
@@ -438,8 +567,13 @@ DECLARE
                         'bằng migration mới: ALTER VIEW ... SET (security_invoker = true).'
               END AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
+        WHERE c.relkind IN ('v', 'm')
+          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
           AND n.nspname || '.' || c.relname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
+          AND NOT EXISTS (SELECT 1 FROM pg_depend dx
+                           WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
+                             AND dx.deptype = 'e')
           AND (EXISTS (SELECT 1 FROM pg_depend d
                          JOIN pg_rewrite rw ON rw.oid = d.objid
                          JOIN pg_class tc ON tc.oid = d.refobjid
@@ -447,7 +581,7 @@ DECLARE
                         WHERE d.classid = 'pg_rewrite'::regclass
                           AND d.refclassid = 'pg_class'::regclass
                           AND rw.ev_class = c.oid AND tc.oid <> c.oid
-                          AND $q$ || format(MAU_VI_TU_BANG_TENANT, 'tn', 'tc') || $q$)
+                          AND $q$ || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'tn', 'tc') || $q$)
                OR EXISTS (SELECT 1 FROM pg_attribute a
                            WHERE a.attrelid = c.oid AND a.attname = 'org_id'
                              AND a.attnum > 0 AND NOT a.attisdropped))
@@ -459,7 +593,9 @@ DECLARE
               'CHỦ SỞ HỮU nên mọi RLS bên trong được kiểm theo chủ sở hữu, không theo người '
               'gọi. Bỏ SECURITY DEFINER, hoặc thêm tên này vào NGOAI_LE_DOC_VONG kèm lý do.'
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname IN ('public', 'app_private') AND p.prosecdef
+        WHERE p.prosecdef
+          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
           AND n.nspname || '.' || p.proname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
           AND NOT EXISTS (SELECT 1 FROM pg_depend d
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
@@ -628,27 +764,27 @@ $ham$$q$,
     ARRAY[
       $q$cấu hình IN DATABASE của app_api$q$,
       $q$true$q$,
-      format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_api', current_database()),
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_api', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_api'
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()))$q$,
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                     JOIN pg_roles r ON r.oid = s.setrole
                    WHERE r.rolname = 'app_api'
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api$q$
     ],
     ARRAY[
       $q$cấu hình IN DATABASE của app_unseal$q$,
       $q$true$q$,
-      format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_unseal', current_database()),
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_unseal', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_unseal'
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()))$q$,
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                     JOIN pg_roles r ON r.oid = s.setrole
                    WHERE r.rolname = 'app_unseal'
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
     ],
 
@@ -674,27 +810,27 @@ $ham$$q$,
     ARRAY[
       $q$cấu hình IN DATABASE của app_api_login$q$,
       $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_api_login')$q$,
-      format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_api_login', current_database()),
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_api_login', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_api_login'
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()))$q$,
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                     JOIN pg_roles r ON r.oid = s.setrole
                    WHERE r.rolname = 'app_api_login'
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api_login$q$
     ],
     ARRAY[
       $q$cấu hình IN DATABASE của app_unseal_login$q$,
       $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_unseal_login')$q$,
-      format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_unseal_login', current_database()),
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_unseal_login', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_unseal_login'
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()))$q$,
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                     JOIN pg_roles r ON r.oid = s.setrole
                    WHERE r.rolname = 'app_unseal_login'
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
     ],
 
@@ -703,27 +839,27 @@ $ham$$q$,
     ARRAY[
       $q$row_security đặt ở mức database$q$,
       $q$true$q$,
-      format('ALTER DATABASE %I RESET row_security', current_database()),
+      pg_catalog.format('ALTER DATABASE %I RESET row_security', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
                      WHERE s.setrole = 0
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
                        AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'row\_security=%'))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                    WHERE s.setrole = 0
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
     ],
     ARRAY[
       $q$search_path đặt ở mức database$q$,
       $q$true$q$,
-      format('ALTER DATABASE %I RESET search_path', current_database()),
+      pg_catalog.format('ALTER DATABASE %I RESET search_path', pg_catalog.current_database()),
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
                      WHERE s.setrole = 0
-                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
                        AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'search\_path=%'))$q$,
       $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
                    WHERE s.setrole = 0
-                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())), '?')$q$,
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
     ],
 
@@ -846,7 +982,7 @@ $ham$$q$,
       -- [vòng fix 1 — I3] Hướng dẫn cũ ("chép định nghĩa từ migration đã tạo bảng đó") sai ở
       -- chỗ nó ngụ ý phải sửa TAY trên cụm. Nhờ khuôn ba lượt, cả hai đường sửa đều là "sửa
       -- file rồi deploy lại".
-      $q$viết một migration mới sửa policy (lượt 1 không phán xét nên migrate() luôn chạy tới được nó), HOẶC — nếu hình dạng đó là hợp lệ — thêm một dòng vào HINH_DANG_DUOC_DUYET trong chính file này kèm cập nhật meta-test khoá danh sách đó$q$
+      $q$viết một migration mới sửa policy (lượt 1 không phán xét nên migrate() luôn chạy tới được nó), HOẶC — nếu hình dạng đó là hợp lệ cho ĐÚNG bảng và policy này — thêm một dòng (bang, polname, pham_vi, bieu_thuc) vào NGOAI_LE_HINH_DANG trong chính file này kèm cập nhật meta-test khoá danh sách đó$q$
     ],
 
     -- ---- (C) Đường đọc vòng qua RLS: VIEW · MATVIEW · SECURITY DEFINER ------------------
@@ -906,6 +1042,47 @@ $ham$$q$,
   con_sot text;
   loi_gom text[] := ARRAY[]::text[];
 BEGIN
+  -- ===== [vòng fix 2 — CR1] GHIM search_path CỦA PHIÊN PHÁN XÉT ========================
+  -- Vòng 1 TỰ PHÁT HIỆN rằng pg_get_expr deparse THEO search_path của phiên đang đọc, rồi
+  -- xử lý bằng cách NỚI danh sách trắng ra để chứa cả hai dạng. Nới ra chính là cơ chế của
+  -- lỗ hổng vòng 2 — đã đo, đây là rò rỉ XUYÊN TỔ CHỨC thật trên PostgreSQL 16.15:
+  --     CREATE SCHEMA gia;
+  --     CREATE FUNCTION gia.app_current_org_id() ... AS 'SELECT ''<org B>''::uuid';
+  --     SET search_path TO gia, public;  ALTER POLICY users_tenant_isolation ON public.users
+  --       USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());
+  --     ALTER ROLE <role_deploy> SET search_path = gia, public;
+  --   -> policy THẬT SỰ gọi gia.app_current_org_id (đọc pg_depend), nhưng dưới search_path
+  --      của phiên deploy nó deparse ra ĐÚNG chuỗi trần "(org_id = app_current_org_id())"
+  --      nên lọt danh sách trắng: migrate() lần 1 VÀ lần 2 đều PASS, và app_api_login đã gắn
+  --      TỔ CHỨC A đọc public.users ra "vip@b.com" — người của TỔ CHỨC B.
+  --   "ALTER ROLE ... SET search_path" KHÔNG nằm trong vùng canh của file này (nó chỉ reset
+  --   rolconfig của BỐN role đã biết và search_path ở mức DATABASE), nên đó là chặn 0%, vĩnh
+  --   viễn — không phải một cửa sổ.
+  --
+  -- QUY TẮC RÚT RA, áp cho mọi phép kiểm trong file này: khi một bảo đảm phụ thuộc một cấu
+  -- hình, GHIM cấu hình đó; đừng nới bảo đảm ra để chấp nhận mọi giá trị của nó. Nới ra thì
+  -- bậc tự do vừa phát hiện trở thành bậc tự do của KẺ TẤN CÔNG.
+  --
+  -- Phạm vi ghim là TRANSACTION (is_local = true), không phải phiên: file này chạy trong một
+  -- BEGIN/COMMIT tường minh do migrate.ts mở, nên ghim tự biến mất khi transaction kết thúc
+  -- và không rò sang migration đánh số hay sang lần dùng kết nối kế tiếp. Chạy bằng tay
+  -- (psql -f) cũng đúng ngữ nghĩa: khối DO này TỰ NÓ là một transaction.
+  --
+  -- Vì sao 'pg_catalog, public' chứ không phải 'public': viết pg_catalog TƯỜNG MINH thay vì
+  -- dựa vào quy tắc "pg_catalog được tìm ngầm trước". Đã đo là quy tắc ngầm ấy PHÁ ĐƯỢC:
+  -- "SET search_path = gia, pg_catalog, public" + "CREATE FUNCTION gia.current_setting(text,
+  -- boolean)" làm current_setting() trả 'BI_CUOP'. Khối này KHÔNG tạo đối tượng nào không
+  -- ghi đủ tên schema nên đặt pg_catalog trước là an toàn — ngược lại, packages/db/src/
+  -- migrate.ts phải dùng 'public' vì CREATE TABLE không ghi schema sẽ rơi vào pg_catalog và
+  -- bị từ chối ("permission denied to create ... System catalog modifications are currently
+  -- disallowed" — đã đo).
+  --
+  -- Phải gọi pg_catalog.set_config chứ không set_config trần: chính hàm đó cũng cướp được.
+  -- Cùng lý do, khối DECLARE ở trên (chạy TRƯỚC dòng này) ghi đủ pg_catalog. cho
+  -- current_setting/format/current_database. Từ đây trở xuống search_path đã ghim nên các
+  -- lời gọi trần còn lại trong thân khối là an toàn.
+  PERFORM pg_catalog.set_config('search_path', 'pg_catalog, public', true);
+
   -- [vòng fix 1 — I3] Chế độ lạ là LỖI, không phải "coi như mặc định". Một lỗi chính tả trong
   -- packages/db/src/migrate.ts sẽ làm lượt phán xét im lặng biến mất nếu ở đây khoan dung.
   IF che_do NOT IN ('sua', 'phan_xet', 'day_du') THEN

@@ -20,25 +20,45 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 const BANG_GOC_TENANT = ["organizations"];
 
 /**
- * [vòng fix 1 — CR1] Bản sao TypeScript của HINH_DANG_DUOC_DUYET trong hardening.always.sql.
+ * [vòng fix 1 — CR1] Bản sao TypeScript của HINH_DANG_CHUAN trong hardening.always.sql — KHUÔN
+ * CỦA DỰ ÁN, có hiệu lực TOÀN CỤC trên mọi bảng tenant.
  *
  * Vì sao là DANH SÁCH TRẮNG chứ không phải danh sách các dạng bị cấm: bản trước chỉ đòi biểu
  * thức NHẮC TỚI app_current_org_id() và không chứa chuỗi "IS NULL"/"coalesce" — nó không đòi
  * biểu thức RÀNG BUỘC gì cả. Bốn payload đo được đi lọt cả ba lớp, xem test đối kháng
  * "[CR1] bốn cách viết lại tương đương ngữ nghĩa..." ở db/migrations.int.test.ts.
  *
- * Hai biến thể mỗi hình dạng vì pg_get_expr deparse THEO search_path của phiên đang đọc — đã
- * đo: cùng policy đó, dưới "SET search_path TO pg_catalog" cho ra "public.app_current_org_id()".
+ * [vòng fix 2 — CR1] Vòng 1 có BỐN dòng: mỗi hình dạng hai biến thể (trần và 'public.'-đủ-tên)
+ * để hứng việc pg_get_expr deparse THEO search_path của phiên đang đọc. Hai dòng 'public.' nay
+ * bị XOÁ vì search_path của phiên phán xét đã được GHIM (packages/db/src/migrate.ts +
+ * hardening.always.sql). Nới danh sách ra để chấp nhận mọi giá trị của một cấu hình chính là
+ * cơ chế của lỗ hổng vòng 2: dạng TRẦN được duyệt vô điều kiện, mà dạng trần đúng là thứ một
+ * hàm app_current_org_id() ở SCHEMA KHÁC sinh ra khi schema đó đứng trước trong search_path.
+ *
+ * Chỉ hai dòng, và đó là điều kiện để danh sách này AN TOÀN khi áp toàn cục: mỗi dòng RÀNG BUỘC
+ * hàng về đúng tổ chức đang gắn. Hình dạng KHÔNG có tính chất đó đi qua NGOAI_LE_HINH_DANG.
  *
  * Có meta-test bên dưới đọc hardening.always.sql và đòi hai danh sách KHỚP NHAU, nên mở một
  * hình dạng mới bắt buộc phải sửa CẢ file SQL LẪN file này.
  */
-const HINH_DANG_DUOC_DUYET: readonly (readonly [string, string])[] = [
+const HINH_DANG_CHUAN: readonly (readonly [string, string])[] = [
   ["co_org_id", "(org_id = app_current_org_id())"],
-  ["co_org_id", "(org_id = public.app_current_org_id())"],
   ["bang_goc", "(id = app_current_org_id())"],
-  ["bang_goc", "(id = public.app_current_org_id())"],
 ];
+
+/**
+ * [vòng fix 2 — CR2] Bản sao TypeScript của NGOAI_LE_HINH_DANG — CỬA THEO ĐỐI TƯỢNG, khoá theo
+ * (bảng, policy, phạm vi, biểu thức).
+ *
+ * Vòng 1 chỉ có MỘT danh sách khoá theo (pham_vi, bieu_thuc), tức TOÀN CỤC. Đo được: mô phỏng
+ * đúng việc Task 6 sẽ phải làm — thêm một dòng cho policy riêng của app_unseal — rồi
+ * "USING (true)" trên CHÍNH bảng users cũng lọt. Mở một hình dạng cho MỘT bảng pre-approve nó
+ * cho MỌI bảng tenant hiện tại và tương lai. Nay một ngoại lệ chỉ có hiệu lực ĐÚNG NƠI được cấp.
+ *
+ * RỖNG là trạng thái đúng ở S0, và có test bên dưới đòi mỗi dòng ở đây phải ứng với một policy
+ * CÓ THẬT — ngoại lệ chết (bảng/policy đã bị xoá) là ĐỎ, không phải rác im lặng.
+ */
+const NGOAI_LE_HINH_DANG: readonly (readonly [string, string, string, string])[] = [];
 
 /**
  * [S7b-T3] Truy vấn phủ RLS. Cố ý dùng pg_attribute chứ KHÔNG dùng information_schema.columns.
@@ -234,31 +254,73 @@ describe("phủ RLS", () => {
   // phải xuất hiện trong diff của CẢ HAI file, không thể lọt qua bằng một dòng SQL lặng lẽ.
   it("[CR1] danh sách trắng hình dạng policy trong hardening.always.sql khớp bản trong test", () => {
     const sql = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
-    const khoi = /HINH_DANG_DUOC_DUYET constant text :=\s*\$q\$\(VALUES([\s\S]*?)\)\s*AS h\(/.exec(sql);
-    expect(khoi, "không tìm thấy HINH_DANG_DUOC_DUYET trong hardening.always.sql").not.toBeNull();
+    const khoi = /HINH_DANG_CHUAN constant text :=\s*\$q\$\(VALUES([\s\S]*?)\)\s*AS h\(/.exec(sql);
+    expect(khoi, "không tìm thấy HINH_DANG_CHUAN trong hardening.always.sql").not.toBeNull();
 
     const tuSql = [...khoi![1]!.matchAll(/\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/g)].map(
       (m) => [m[1]!, m[2]!] as const,
     );
-    expect(tuSql).toEqual(HINH_DANG_DUOC_DUYET);
+    expect(tuSql).toEqual(HINH_DANG_CHUAN);
+  });
+
+  // [vòng fix 2 — CR2] Meta-test của CỬA THEO ĐỐI TƯỢNG. Cùng khuôn, bốn cột thay vì hai — nên
+  // Task 6 mở một hình dạng riêng cho app_unseal buộc phải sửa CẢ HAI file, và dòng đó ghi rõ
+  // nó có hiệu lực ở BẢNG NÀO, POLICY NÀO.
+  it("[CR2] danh sách ngoại lệ theo đối tượng trong hardening.always.sql khớp bản trong test", () => {
+    const sql = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
+    const khoi = /NGOAI_LE_HINH_DANG constant text :=\s*\$q\$\(VALUES([\s\S]*?)\)\s*AS g\(/.exec(sql);
+    expect(khoi, "không tìm thấy NGOAI_LE_HINH_DANG trong hardening.always.sql").not.toBeNull();
+
+    const tuSql = [
+      ...khoi![1]!.matchAll(/\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/g),
+    ]
+      // Dòng RỖNG là chỗ giữ chỗ của danh sách trống trong SQL (VALUES không cho phép 0 hàng),
+      // không phải một ngoại lệ. polname không bao giờ rỗng nên nó không khớp policy nào.
+      .filter((m) => m[2] !== "")
+      .map((m) => [m[1]!, m[2]!, m[3]!, m[4]!] as const);
+    expect(tuSql).toEqual(NGOAI_LE_HINH_DANG);
   });
 
   // [vòng fix 1 — CR1] Hình dạng biểu thức policy, khoá bằng DANH SÁCH TRẮNG. Đọc pg_policy chứ
   // không đọc file .sql: thứ có hiệu lực là cái đang nằm trong catalog, và một policy tạo tay
   // sau triển khai cũng phải chịu cùng ràng buộc.
+  //
+  // [vòng fix 2 — I4] Test chạy TRONG một transaction có dựng sẵn một policy AS RESTRICTIVE
+  // với biểu thức NGOÀI danh sách trắng, rồi ROLLBACK. Không có nó, nhánh "bỏ qua RESTRICTIVE"
+  // là mã chết ở S0 (lược đồ hiện tại không có policy restrictive nào) — đúng dạng đột biến
+  // "không test nào thấy vì lược đồ chưa có ca đó" mà vòng 1 đã bị hai lần. Đã đo: bỏ nhánh
+  // miễn trừ mà không có fixture này thì KHÔNG test nào đỏ.
   it("[INV-F1] mọi biểu thức policy của bảng tenant nằm trong danh sách trắng hình dạng", async () => {
-    const { rows } = await db.pool.query<HangPolicy>(
-      "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
-        "       p.polpermissive AS cho_phep, " +
-        "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
-        "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
-        "  FROM pg_policy p " +
-        "  JOIN pg_class c ON c.oid = p.polrelid " +
-        "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
-        " WHERE n.nspname = 'public' AND c.relname = ANY($1) " +
-        " ORDER BY 1, 2",
-      [bangTenant],
-    );
+    const client = await db.pool.connect();
+    await client.query("BEGIN");
+    let rows: HangPolicy[];
+    try {
+      await client.query(
+        "CREATE POLICY users_chan_bi_khoa ON users AS RESTRICTIVE " +
+          "USING (status <> 'DISABLED') WITH CHECK (status <> 'DISABLED')",
+      );
+      rows = (
+        await client.query<HangPolicy>(
+          "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
+            "       p.polpermissive AS cho_phep, " +
+            "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
+            "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
+            "  FROM pg_policy p " +
+            "  JOIN pg_class c ON c.oid = p.polrelid " +
+            "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+            " WHERE n.nspname = 'public' AND c.relname = ANY($1) " +
+            " ORDER BY 1, 2",
+          [bangTenant],
+        )
+      ).rows;
+      expect(
+        rows.filter((r) => !r.cho_phep).length,
+        "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
+      ).toBe(1);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
 
     // Không có policy nào thì mọi khẳng định dưới đây rỗng ruột — chốt trước.
     const bangCoPolicy = new Set(rows.map((r) => r.ten_bang));
@@ -288,35 +350,117 @@ describe("phủ RLS", () => {
         viPham.push(`${nhan}: policy cho lệnh "${hang.lenh}" thiếu WITH CHECK tường minh`);
       }
 
+      // [vòng fix 2 — I4] Policy AS RESTRICTIVE KHÔNG bị soi hình dạng. Nó chỉ THU HẸP tập
+      // hàng (AND với OR của các policy PERMISSIVE) nên không biểu thức nào đặt vào đó mở thêm
+      // được một hàng. Vòng 1 chặn nó, tức cấm một lớp phòng thủ CHẶT HƠN. Vế bảo vệ vẫn còn:
+      // khẳng định "mọi bảng tenant phải có policy" bên trên và mục (i) của hardening đòi ít
+      // nhất một policy PERMISSIVE, còn mọi policy PERMISSIVE vẫn phải khớp danh sách.
+      if (!hang.cho_phep) continue;
+
       for (const [ten, bieuThuc] of [
         ["USING", hang.bieu_thuc_using],
         ["WITH CHECK", hang.bieu_thuc_with_check],
       ] as const) {
         if (bieuThuc === null) continue;
 
-        // DANH SÁCH TRẮNG: biểu thức đã deparse phải khớp NGUYÊN VĂN một hình dạng được duyệt.
-        // Mọi thứ khác là sai, không cần biết nó viết ra sao — đó chính là điểm khác biệt với
-        // bản danh sách đen mà bốn payload đã vượt qua.
-        const duocDuyet = HINH_DANG_DUOC_DUYET.some(
-          ([pv, bt]) => pv === phamVi && bt === bieuThuc,
-        );
+        // DANH SÁCH TRẮNG: biểu thức đã deparse phải khớp NGUYÊN VĂN một hình dạng được duyệt —
+        // hoặc khuôn chuẩn (toàn cục), hoặc một ngoại lệ cấp cho ĐÚNG bảng và policy này. Mọi
+        // thứ khác là sai, không cần biết nó viết ra sao.
+        const duocDuyet =
+          HINH_DANG_CHUAN.some(([pv, bt]) => pv === phamVi && bt === bieuThuc) ||
+          NGOAI_LE_HINH_DANG.some(
+            ([bang, pol, pv, bt]) =>
+              bang === hang.ten_bang && pol === hang.ten_policy && pv === phamVi && bt === bieuThuc,
+          );
         if (!duocDuyet) {
           viPham.push(
-            `${nhan}: ${ten} = ${bieuThuc} — hình dạng không nằm trong danh sách được duyệt ` +
-              `cho phạm vi "${phamVi}". Mở hình dạng mới bằng cách thêm một dòng vào ` +
-              "HINH_DANG_DUOC_DUYET ở CẢ hardening.always.sql LẪN file test này.",
+            `${nhan}: ${ten} = ${bieuThuc} — hình dạng không nằm ` +
+              `trong danh sách được duyệt cho phạm vi "${phamVi}". Mở hình dạng mới bằng cách ` +
+              "thêm một dòng vào HINH_DANG_CHUAN (nếu nó tự ràng buộc tenant và đúng cho MỌI " +
+              "bảng) hoặc NGOAI_LE_HINH_DANG (nếu chỉ đúng cho bảng+policy này), ở CẢ " +
+              "hardening.always.sql LẪN file test này.",
           );
         }
-      }
-
-      // Policy PERMISSIVE là mặc định và là thứ khuôn này dùng; một policy RESTRICTIVE lẫn vào
-      // sẽ đổi hẳn ngữ nghĩa tổ hợp (AND thay vì OR) và phải là quyết định tường minh.
-      if (!hang.cho_phep) {
-        viPham.push(`${nhan}: policy RESTRICTIVE chưa được khuôn này xét tới`);
       }
     }
 
     expect(viPham).toEqual([]);
+  });
+
+  // [vòng fix 2 — I5] MỌI DÒNG TRONG DANH SÁCH TRẮNG PHẢI LOAD-BEARING.
+  //
+  // Đây là góc mù mà re-reviewer tìm ra và bảng 23 đột biến §15 KHÔNG có: hai dòng
+  // 'public.'-đủ-tên của vòng 1 KHÔNG có test nào phủ — xoá cả hai khỏi hardening.always.sql
+  // VÀ khỏi file này (meta-test vẫn khớp) thì pnpm test:int VẪN 86/86. Một đột biến SỐNG SÓT
+  // im lặng. Và chính hai dòng đó là thứ làm lỗ hổng CR1-v2 chạy được.
+  //
+  // Phép kiểm: tập hình dạng ĐANG ĐƯỢC DÙNG bởi các policy PERMISSIVE thật trên bảng tenant
+  // (sau khi trừ đi những gì cửa theo-đối-tượng đã phủ) phải BẰNG ĐÚNG HINH_DANG_CHUAN. Hai
+  // chiều đều có ý nghĩa:
+  //   thừa  -> một dòng trong danh sách trắng không ai dùng: nó chỉ mở rộng bề mặt tấn công.
+  //   thiếu -> một hình dạng đang chạy mà không được duyệt (trùng với test trên, cố ý).
+  it("[I5] danh sách trắng hình dạng đúng bằng tập hình dạng ĐANG được dùng — không dòng thừa", async () => {
+    const { rows } = await db.pool.query<HangPolicy>(
+      "SELECT c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
+        "       p.polpermissive AS cho_phep, " +
+        "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
+        "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
+        "  FROM pg_policy p " +
+        "  JOIN pg_class c ON c.oid = p.polrelid " +
+        "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+        " WHERE n.nspname = 'public' AND c.relname = ANY($1)",
+      [bangTenant],
+    );
+    expect(rows.length, "không có policy nào thì phép kiểm này rỗng ruột").toBeGreaterThan(0);
+
+    const coOrgId = new Set(
+      (await db.pool.query<{ ten_bang: string }>(`SELECT ten_bang FROM (${CAU_PHU_RLS}) t`)).rows.map(
+        (r) => r.ten_bang,
+      ),
+    );
+
+    const dangDung = new Set<string>();
+    for (const hang of rows) {
+      if (!hang.cho_phep) continue; // RESTRICTIVE không bị soi hình dạng — xem test trên.
+      const phamVi = coOrgId.has(hang.ten_bang) ? "co_org_id" : "bang_goc";
+      for (const bieuThuc of [hang.bieu_thuc_using, hang.bieu_thuc_with_check]) {
+        if (bieuThuc === null) continue;
+        const daCoNgoaiLe = NGOAI_LE_HINH_DANG.some(
+          ([bang, pol, pv, bt]) =>
+            bang === hang.ten_bang && pol === hang.ten_policy && pv === phamVi && bt === bieuThuc,
+        );
+        if (!daCoNgoaiLe) dangDung.add(`${phamVi}|${bieuThuc}`);
+      }
+    }
+
+    expect(
+      [...dangDung].sort(),
+      "Danh sách trắng toàn cục KHÔNG bằng tập hình dạng đang chạy. Một dòng thừa là bề mặt " +
+        "tấn công mở sẵn mà không ai dùng; một dòng thiếu là policy đang chạy ngoài khuôn.",
+    ).toEqual(HINH_DANG_CHUAN.map(([pv, bt]) => `${pv}|${bt}`).sort());
+  });
+
+  // [vòng fix 2 — CR2] Mặt còn lại của cửa theo-đối-tượng: một ngoại lệ CHẾT (bảng hoặc policy
+  // đã bị đổi/xoá) phải ĐỎ, không được nằm lại im lặng. Ở S0 danh sách RỖNG nên phép kiểm này
+  // chỉ khoá khuôn; nó có nội dung ngay khi Task 6 thêm dòng đầu tiên.
+  it("[CR2] mỗi ngoại lệ hình dạng ứng với một policy CÓ THẬT — không có ngoại lệ chết", async () => {
+    const { rows } = await db.pool.query<{ khoa: string }>(
+      "SELECT c.relname || '|' || p.polname || '|' || " +
+        "       coalesce(pg_get_expr(p.polqual, p.polrelid), '') || '|' || " +
+        "       coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') AS khoa " +
+        "  FROM pg_policy p " +
+        "  JOIN pg_class c ON c.oid = p.polrelid " +
+        "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+        " WHERE n.nspname = 'public'",
+    );
+    const chet = NGOAI_LE_HINH_DANG.filter(
+      ([bang, pol, , bt]) =>
+        !rows.some((r) => {
+          const [rBang, rPol, rUsing, rCheck] = r.khoa.split("|");
+          return rBang === bang && rPol === pol && (rUsing === bt || rCheck === bt);
+        }),
+    );
+    expect(chet, "ngoại lệ hình dạng không ứng với policy nào đang tồn tại").toEqual([]);
   });
 
   // [S11-T3] Mặt HÀNH VI của cùng ràng buộc, và là mặt không thể lách bằng cách viết lại biểu
@@ -363,9 +507,12 @@ describe("phủ RLS", () => {
         " WHERE table_schema = 'public' AND grantee IN ('app_api', 'app_unseal') " +
         " GROUP BY 1, 2 ORDER BY 1, 2",
     );
+    // [vòng fix 2 — Minor] users chỉ còn SELECT ở MỨC BẢNG: INSERT/UPDATE nay là quyền CỘT
+    // (đóng oracle users_pkey — xem 002). Chính vì thế khẳng định này KHÔNG đủ một mình, và
+    // test [M5] ngay dưới là lớp bắt buộc chứ không phải lớp trang trí.
     expect(rows).toEqual([
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
-      { grantee: "app_api", bang: "users", quyen: "INSERT,SELECT,UPDATE" },
+      { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
     ]);
   });
@@ -385,18 +532,20 @@ describe("phủ RLS", () => {
     );
     // Chỉ liệt kê quyền GHI: SELECT theo cột là hệ quả cơ học của GRANT SELECT cả bảng (một
     // dòng cho MỖI cột) nên khoá nó ở đây chỉ nhân bản khẳng định trên và vỡ ở mọi lần thêm cột.
+    // [vòng fix 2 — Minor] users nay cũng cấp theo CỘT. Ba vắng mặt là load-bearing, không
+    // phải sự tình cờ, và mỗi cái đóng một đường đi:
+    //   `id`         KHÔNG có INSERT  -> users_pkey không dùng làm oracle xuyên tổ chức được
+    //                                    (INSERT với id CÓ THẬT của tổ chức khác và với id
+    //                                    không ai dùng nay trả CÙNG một "permission denied").
+    //   `org_id`     KHÔNG có UPDATE  -> không chuyển được một hàng sang tổ chức khác.
+    //   `created_at` KHÔNG có gì      -> đã có DEFAULT; quyền không dùng tới thì không cấp.
     expect(rows).toEqual([
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
-      { grantee: "app_api", bang: "users", cot: "created_at", quyen: "INSERT" },
-      { grantee: "app_api", bang: "users", cot: "created_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "full_name", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "full_name", quyen: "UPDATE" },
-      { grantee: "app_api", bang: "users", cot: "id", quyen: "INSERT" },
-      { grantee: "app_api", bang: "users", cot: "id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "org_id", quyen: "INSERT" },
-      { grantee: "app_api", bang: "users", cot: "org_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "UPDATE" },
     ]);
@@ -495,6 +644,86 @@ describe("phủ RLS", () => {
     } finally {
       // Trả lại tên cũ để các test khác không phụ thuộc thứ tự chạy.
       await db.pool.query("UPDATE organizations SET name = 'Cong ty A' WHERE id = $1", [orgA.id]);
+      client.release();
+    }
+  });
+
+  // [vòng fix 2 — Minor] CÙNG LỚP VỚI CR3, trên users_pkey. Nguyên lý "ràng buộc duy nhất toàn
+  // cục rò rỉ xuyên tổ chức qua chính thông báo lỗi" được viết ngay trong khối CREATE TABLE
+  // users (002:119-122) rồi KHÔNG áp cho `id` của chính bảng đó — đúng khuôn "viết nguyên lý ở
+  // đây, quên áp cách đó 50 dòng" mà CR3 vừa sửa cho organizations.slug.
+  //
+  // Khai thác thực tế ≈ 0 (id sinh bằng gen_random_uuid, 122 bit — không đoán được như slug),
+  // nên phép đo này khoá KHUÔN chứ không phải một lỗ đang cháy. Vẫn phải SẮC như CR3: chứng
+  // minh hai truy vấn — một nhắm id CÓ THẬT của tổ chức khác, một nhắm id không ai dùng — trả
+  // về CÙNG MỘT thông báo, tức kênh phụ có băng thông bằng không.
+  it("[Minor] app_api không dùng được ràng buộc users_pkey làm oracle xuyên tổ chức", async () => {
+    const { rows: toChuc } = await db.pool.query<{ id: string }>(
+      "SELECT id FROM organizations ORDER BY slug",
+    );
+    const orgA = toChuc[0]!.id;
+    const { rows: nguoiCuaB } = await db.pool.query<{ id: string }>(
+      "SELECT u.id FROM users u WHERE u.org_id = $1",
+      [toChuc[1]!.id],
+    );
+    expect(nguoiCuaB.length, "chống rỗng ruột: tổ chức B phải có người").toBeGreaterThan(0);
+
+    const client = await apiPool.connect();
+    try {
+      await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+
+      const thu = async (id: string, email: string): Promise<string> =>
+        client
+          .query(
+            "INSERT INTO users (id, org_id, email, full_name) VALUES ($1, app_current_org_id(), $2, 'X')",
+            [id, email],
+          )
+          .then(() => "THÀNH CÔNG")
+          .catch((loi: Error) => loi.message);
+
+      const idTonTai = await thu(nguoiCuaB[0]!.id, "do-1@example.com");
+      const idKhongAiDung = await thu(
+        "00000000-0000-4000-8000-0000000000ff",
+        "do-2@example.com",
+      );
+
+      expect(
+        idTonTai,
+        "INSERT ghi thẳng `id` thành công hoặc báo trùng khoá — cả hai đều là oracle. app_api " +
+          "chỉ được INSERT các cột (org_id, email, full_name, status), xem 002.",
+      ).toMatch(/permission denied/i);
+      expect(
+        idKhongAiDung,
+        `Hai truy vấn trả về thông báo KHÁC NHAU — đó chính là oracle nhị phân: ` +
+          `[${idTonTai}] vs [${idKhongAiDung}]`,
+      ).toBe(idTonTai);
+
+      // Mặt còn lại: bản vá không được làm hỏng đường đi hợp lệ của ứng dụng.
+      await expect(
+        client.query(
+          "INSERT INTO users (org_id, email, full_name) VALUES (app_current_org_id(), $1, 'X')",
+          ["duong-hop-le@example.com"],
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+      await expect(
+        client.query("UPDATE users SET status = 'SUSPENDED' WHERE email = $1", [
+          "duong-hop-le@example.com",
+        ]),
+      ).resolves.toMatchObject({ rowCount: 1 });
+      // Và `org_id` KHÔNG được UPDATE: chuyển một hàng sang tổ chức khác không phải đường đi
+      // hợp lệ nào của app_api.
+      await expect(
+        client.query("UPDATE users SET org_id = $1 WHERE email = $2", [
+          toChuc[1]!.id,
+          "duong-hop-le@example.com",
+        ]),
+      ).rejects.toThrow(/permission denied/i);
+    } finally {
+      // Dọn CẢ hai email dò: nếu bản vá bị gỡ, một trong hai INSERT dò SẼ thành công và để lại
+      // hàng thừa làm các test đếm hàng phía sau đỏ vì lý do sai.
+      await db.pool.query(
+        "DELETE FROM users WHERE email IN ('duong-hop-le@example.com', 'do-1@example.com', 'do-2@example.com')",
+      );
       client.release();
     }
   });

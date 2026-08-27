@@ -1502,4 +1502,581 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   });
+
+  // ==========================================================================================
+  // [vòng fix 2 — CR1] DANH SÁCH TRẮNG BỊ VƯỢT BẰNG search_path
+  // ==========================================================================================
+  // Vòng 1 tự phát hiện rằng pg_get_expr deparse THEO search_path của phiên đang đọc, rồi xử lý
+  // bằng cách NỚI danh sách trắng ra để chứa cả hai dạng. Nới ra chính là cơ chế của lỗ hổng
+  // này: dạng TRẦN được duyệt VÔ ĐIỀU KIỆN, mà dạng trần đúng là thứ một hàm
+  // app_current_org_id() ở SCHEMA KHÁC sinh ra khi schema đó đứng trước trong search_path của
+  // phiên đọc. Đây là rò rỉ XUYÊN TỔ CHỨC thật, ổn định qua mọi lần migrate().
+  //
+  // Test đo BA nửa, cố ý tách bạch:
+  //   (a) LỖ HỔNG CÓ THẬT — dưới search_path thù địch, chính policy đó deparse ra ĐÚNG chuỗi
+  //       mà danh sách trắng duyệt, trong khi nó THẬT SỰ gọi hàm của schema lạ, và app_api gắn
+  //       tổ chức A đọc được người dùng của tổ chức B.
+  //   (b) GHIM ĐÓNG ĐƯỢC — migrate() chạy trên một kết nối MỚI (nên nó THỪA HƯỞNG rolconfig thù
+  //       địch, không được cứu nhờ một client cũ trong pool) vẫn CHẶN, vì nó tự ghim search_path.
+  //   (d) KHÔNG BÁO NHẦM — lược đồ sạch dưới cùng rolconfig thù địch vẫn đi qua.
+  it("[CR1] danh sách trắng không bị vượt bằng search_path của phiên phán xét", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query(
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
+      );
+      await db.pool.query(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1,'a@a.com','A'), ($2,'vip@b.com','B')",
+        [orgA, orgB],
+      );
+
+      // Đúng payload của re-reviewer: một app_current_org_id() GIẢ ở schema khác, trả về tổ
+      // chức B bất kể phiên gắn tổ chức nào.
+      await db.pool.query("CREATE SCHEMA gia");
+      await db.pool.query(
+        "CREATE FUNCTION gia.app_current_org_id() RETURNS uuid LANGUAGE sql STABLE AS " +
+          `'SELECT ''${orgB}''::uuid'`,
+      );
+      await db.pool.query("GRANT USAGE ON SCHEMA gia TO PUBLIC");
+
+      const khach = await db.pool.connect();
+      try {
+        await khach.query("SET search_path TO gia, public");
+        await khach.query(
+          "ALTER POLICY users_tenant_isolation ON public.users " +
+            "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+        );
+      } finally {
+        khach.release();
+      }
+      // rolconfig của role deploy — KHÔNG nằm trong vùng canh của hardening (nó chỉ reset
+      // rolconfig của BỐN role ứng dụng và search_path ở mức DATABASE), nên đây là chặn 0%.
+      const { rows: ai } = await db.pool.query<{ u: string }>("SELECT current_user AS u");
+      await db.pool.query(`ALTER ROLE ${ai[0]!.u} SET search_path = gia, public`);
+
+      // (a) Lỗ hổng có thật. Kết nối MỚI mới thừa hưởng rolconfig, nên đo trên pool mới.
+      const poolThuDich = createPool(db.connectionString, 2);
+      try {
+        const { rows } = await poolThuDich.query<{ sp: string; e: string }>(
+          "SELECT current_setting('search_path') AS sp, " +
+            "       pg_get_expr(polqual, polrelid) AS e " +
+            "  FROM pg_policy WHERE polname = 'users_tenant_isolation'",
+        );
+        expect(rows[0]!.sp).toContain("gia");
+        expect(
+          rows[0]!.e,
+          "nếu phép đo này KHÔNG ra chuỗi trần thì payload đã hỏng và cả test này rỗng ruột",
+        ).toBe("(org_id = app_current_org_id())");
+
+        const apiPool = db.poolAs("app_api");
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          const { rows: doc } = await client.query<{ email: string }>(
+            "SELECT email FROM public.users ORDER BY 1",
+          );
+          expect(
+            doc.map((r) => r.email),
+            "policy đang gọi gia.app_current_org_id — nếu phép đo này chỉ thấy a@a.com thì lỗ " +
+              "hổng không tồn tại và nửa (b) là thừa. Đo lại trước khi kết luận.",
+          ).toEqual(["vip@b.com"]);
+        } finally {
+          client.release();
+        }
+
+        // (b) migrate() trên kết nối THỪA HƯỞNG rolconfig thù địch vẫn phải CHẶN.
+        const loi = await migrate(poolThuDich, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, "policy gọi hàm của schema lạ đi lọt qua migrate()").not.toBeNull();
+        expect(loi!.message).toContain("gia.app_current_org_id()");
+
+        // (c) LỚP GHIM THỨ HAI, đo riêng: chạy hardening.always.sql BẰNG TAY (psql -f) trên
+        // một phiên có search_path thù địch — đường đi KHÔNG qua migrate.ts nên nó không được
+        // hưởng dòng "SET search_path" ở đó. Chỉ lần ghim trong CHÍNH file SQL cứu được ca này.
+        // Không có nửa này thì việc gỡ lần ghim trong SQL là một đột biến SỐNG SÓT (đã đo).
+        // Pool RIÊNG, chưa từng đi qua migrate(): kết nối trong poolThuDich đã bị migrate() đặt
+        // "SET search_path = public" và giữ nguyên giá trị đó khi quay lại pool (hành vi có chủ
+        // đích, ghi ở migrate.ts) — dùng lại nó ở đây sẽ làm phép đo rỗng ruột.
+        //
+        // Kịch bản thù địch ở đây MẠNH HƠN ở (a)/(b) một bậc, và cố ý: 'gia' đặt TRƯỚC
+        // pg_catalog, cộng một pg_catalog.current_setting GIẢ. Đã đo là quy tắc "pg_catalog
+        // được tìm ngầm trước" PHÁ ĐƯỢC đúng bằng cách này (current_setting trả 'BI_CUOP').
+        // Nó tấn công khối DECLARE của hardening.always.sql — khối chạy TRƯỚC lần ghim trong
+        // chính file đó, nên chỉ việc ghi đủ "pg_catalog." trong DECLARE mới cứu được.
+        await db.pool.query(
+          "CREATE FUNCTION gia.current_setting(text, boolean) RETURNS text LANGUAGE sql " +
+            "IMMUTABLE AS 'SELECT ''BI_CUOP'''",
+        );
+        await db.pool.query(`ALTER ROLE ${ai[0]!.u} SET search_path = gia, pg_catalog, public`);
+
+        const sqlHardening = await readFile(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+        const poolTay = createPool(db.connectionString, 1);
+        const bangTay = await poolTay.connect();
+        let loiBangTay: string | null = null;
+        try {
+          await bangTay.query("BEGIN");
+          await bangTay.query("SELECT pg_catalog.set_config('app.hardening_che_do', 'phan_xet', true)");
+          const { rows: sp } = await bangTay.query<{ sp: string; cuop: string }>(
+            "SELECT pg_catalog.current_setting('search_path') AS sp, " +
+              "       current_setting('bat_ky', true) AS cuop",
+          );
+          expect(sp[0]!.sp, "phiên chạy tay phải đang mang search_path thù địch").toContain("gia");
+          expect(
+            sp[0]!.cuop,
+            "pg_catalog.current_setting chưa bị cướp — kịch bản thù địch hỏng, phép đo rỗng ruột",
+          ).toBe("BI_CUOP");
+          await bangTay.query(sqlHardening);
+          await bangTay.query("COMMIT");
+        } catch (e) {
+          await bangTay.query("ROLLBACK").catch(() => undefined);
+          loiBangTay = (e as Error).message;
+        } finally {
+          bangTay.release();
+          await poolTay.end();
+        }
+        expect(
+          loiBangTay,
+          "chạy hardening.always.sql bằng tay dưới search_path thù địch KHÔNG bắt được policy " +
+            "gọi hàm của schema lạ — lần ghim trong chính file SQL, hoặc phần ghi đủ " +
+            '"pg_catalog." trong khối DECLARE, đã mất tác dụng.',
+        ).toContain("gia.app_current_org_id()");
+
+        await db.pool.query("DROP FUNCTION gia.current_setting(text, boolean)");
+        await db.pool.query(`ALTER ROLE ${ai[0]!.u} SET search_path = gia, public`);
+
+        // (d) Không báo nhầm: chữa policy về khuôn chuẩn thì cùng rolconfig đó vẫn đi qua.
+        await db.pool.query(
+          "ALTER POLICY users_tenant_isolation ON public.users " +
+            "USING (org_id = public.app_current_org_id()) " +
+            "WITH CHECK (org_id = public.app_current_org_id())",
+        );
+        await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolThuDich.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // [vòng fix 2 — Minor] Cùng nghiệm với CR1, triệu chứng khác: "CREATE TABLE IF NOT EXISTS
+  // schema_migrations" tạo bảng ở schema ĐẦU TIÊN của search_path. Dưới rolconfig thù địch, bản
+  // trước tạo gia.schema_migrations, thấy bảng rỗng, rồi ÁP LẠI TOÀN BỘ 001/002 vào schema lạ —
+  // idempotency của migrate() tự vỡ mà không ai báo.
+  it("[Minor] migrate() dưới search_path thù địch vẫn đặt lược đồ vào public và vẫn idempotent", async () => {
+    const db = await startPostgres();
+    try {
+      const { rows: ai } = await db.pool.query<{ u: string }>("SELECT current_user AS u");
+      await db.pool.query("CREATE SCHEMA gia");
+      await db.pool.query(`ALTER ROLE ${ai[0]!.u} SET search_path = gia, public`);
+
+      const poolThuDich = createPool(db.connectionString, 2);
+      try {
+        const lan1 = await migrate(poolThuDich, MIGRATIONS_DIR);
+        expect(lan1).toEqual(["001_roles_and_functions.sql", "002_organizations_and_users.sql"]);
+        // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
+        await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        const { rows } = await db.pool.query<{ nsp: string; rel: string }>(
+          "SELECT n.nspname AS nsp, c.relname AS rel FROM pg_class c " +
+            "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
+            " WHERE c.relname IN ('schema_migrations','users','organizations') AND c.relkind = 'r' " +
+            " ORDER BY 2, 1",
+        );
+        expect(rows).toEqual([
+          { nsp: "public", rel: "organizations" },
+          { nsp: "public", rel: "schema_migrations" },
+          { nsp: "public", rel: "users" },
+        ]);
+      } finally {
+        await poolThuDich.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // ==========================================================================================
+  // [vòng fix 2 — CR2] CỬA CỦA DANH SÁCH TRẮNG PHẢI THEO ĐỐI TƯỢNG, KHÔNG TOÀN CỤC
+  // ==========================================================================================
+  // Mô phỏng ĐÚNG việc Task 6 sẽ phải làm — mở một hình dạng riêng cho một bảng — rồi đo rằng
+  // việc đó KHÔNG pre-approve cùng hình dạng ấy cho bảng khác. Trên bản vòng 1 (khoá theo
+  // (pham_vi, bieu_thuc)) nửa (b) dưới đây ĐI LỌT: "USING (true)" trên CHÍNH bảng users cũng
+  // được duyệt. Cách hợp lệ để dùng hệ thống chính là cách làm nó yếu đi trên toàn cục.
+  //
+  // Test sửa hardening.always.sql trong một THƯ MỤC TẠM (không đụng cây làm việc) vì thứ đang
+  // được kiểm là chính cơ chế cửa, không phải nội dung danh sách hiện tại.
+  it("[CR2] mở một hình dạng cho MỘT bảng không mở nó cho bảng khác", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-cr2-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      // 003 dựng đúng thứ Task 6 cần: một bảng tenant có policy riêng cho app_unseal.
+      await writeFile(
+        join(thuMucTam, "003_bang_rieng.sql"),
+        "CREATE TABLE bao_gia (id int, org_id uuid NOT NULL);\n" +
+          "ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY;\n" +
+          "ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY;\n" +
+          "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());\n" +
+          "CREATE POLICY bao_gia_unseal ON bao_gia FOR SELECT TO app_unseal USING (true);\n" +
+          "GRANT SELECT ON bao_gia TO app_api, app_unseal;\n",
+        "utf8",
+      );
+
+      // Chưa mở cửa: hình dạng "true" phải BỊ CHẶN.
+      const loiTruoc = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiTruoc, "USING (true) chưa được cấp ngoại lệ mà vẫn đi lọt").not.toBeNull();
+      expect(loiTruoc!.message).toContain("bao_gia.bao_gia_unseal");
+
+      // Mở cửa cho ĐÚNG (bao_gia, bao_gia_unseal).
+      const duongDanHardening = join(thuMucTam, "hardening.always.sql");
+      const sqlGoc = await readFile(duongDanHardening, "utf8");
+      const sqlDaMo = sqlGoc.replace(
+        "$q$(VALUES ('', '', '', '')) AS g(bang, polname, pham_vi, bieu_thuc)$q$",
+        "$q$(VALUES ('', '', '', ''),\n" +
+          "         ('bao_gia', 'bao_gia_unseal', 'co_org_id', 'true')\n" +
+          "       ) AS g(bang, polname, pham_vi, bieu_thuc)$q$",
+      );
+      expect(sqlDaMo, "không tìm thấy NGOAI_LE_HINH_DANG để mở cửa trong bản sao tạm").not.toBe(
+        sqlGoc,
+      );
+      await writeFile(duongDanHardening, sqlDaMo, "utf8");
+
+      // (a) Cửa hoạt động: đúng bảng + đúng policy đó nay đi qua. 003 đã được ghi vào
+      // schema_migrations ngay ở lần chạy hỏng bên trên (lượt 1 không phán xét — khuôn ba
+      // lượt), nên lần này không có migration nào mới được áp.
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([]);
+
+      // (b) VÀ nó KHÔNG lan sang bảng khác. Đây là nửa mà bản vòng 1 để lọt.
+      await db.pool.query("ALTER POLICY users_tenant_isolation ON users USING (true)");
+      const loiSau = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(
+        loiSau,
+        "USING (true) trên users đi lọt vì một ngoại lệ cấp cho bảng KHÁC — cửa vẫn đang là " +
+          "toàn cục chứ không theo đối tượng.",
+      ).not.toBeNull();
+      expect(loiSau!.message).toContain("users.users_tenant_isolation");
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [vòng fix 2 — I3] MỤC (C) KHÔNG ĐƯỢC TỰ GIỚI HẠN VÀO 'public'
+  // ==========================================================================================
+  // Vòng 1 sinh ra mục (C) kèm sẵn bộ lọc tự làm mù mình. Test đo cả HAI nửa cho mỗi đường:
+  // lỗ hổng HÀNH VI có thật (app_api gắn tổ chức A đọc được dữ liệu của B qua đối tượng ở
+  // schema khác), và migrate() nay CHẶN nó.
+  it("[I3] VIEW/hàm SECURITY DEFINER ở schema KHÁC public cũng bị bắt", async () => {
+    const kichBan: [string, string, string][] = [
+      // [nhãn, câu lệnh dựng, câu đọc vòng]
+      [
+        "VIEW ở schema khác",
+        "CREATE SCHEMA bao_cao; CREATE VIEW bao_cao.moi_nguoi AS SELECT * FROM public.users; " +
+          "GRANT USAGE ON SCHEMA bao_cao TO app_api; GRANT SELECT ON bao_cao.moi_nguoi TO app_api",
+        "SELECT email FROM bao_cao.moi_nguoi ORDER BY 1",
+      ],
+      [
+        "hàm SECURITY DEFINER ở schema khác",
+        "CREATE SCHEMA tien_ich; CREATE FUNCTION tien_ich.doc_het() RETURNS SETOF public.users " +
+          "LANGUAGE sql SECURITY DEFINER AS 'SELECT * FROM public.users'; " +
+          "GRANT USAGE ON SCHEMA tien_ich TO app_api; " +
+          "GRANT EXECUTE ON FUNCTION tien_ich.doc_het() TO app_api",
+        "SELECT email FROM tien_ich.doc_het() ORDER BY 1",
+      ],
+    ];
+
+    for (const [nhan, dung, doc] of kichBan) {
+      const db = await startPostgres();
+      try {
+        await migrate(db.pool, MIGRATIONS_DIR);
+        const orgA = "00000000-0000-4000-8000-00000000000a";
+        const orgB = "00000000-0000-4000-8000-00000000000b";
+        await db.pool.query(
+          "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+          [orgA, orgB],
+        );
+        await db.pool.query(
+          "INSERT INTO users (org_id, email, full_name) VALUES ($1,'a@a.com','A'), ($2,'vip@b.com','B')",
+          [orgA, orgB],
+        );
+        await db.pool.query(dung);
+
+        // (a) Lỗ hổng HÀNH VI có thật: tổ chức A đọc được cả hai tổ chức.
+        const apiPool = db.poolAs("app_api");
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          const { rows } = await client.query<{ email: string }>(doc);
+          expect(
+            rows.map((r) => r.email),
+            `"${nhan}": nếu phép đo này chỉ thấy a@a.com thì đường đọc vòng không tồn tại và ` +
+              "cả nửa (b) là thừa. Đo lại trước khi kết luận.",
+          ).toEqual(["a@a.com", "vip@b.com"]);
+        } finally {
+          client.release();
+        }
+
+        // (b) migrate() CHẶN.
+        const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, `"${nhan}" đi lọt qua migrate()`).not.toBeNull();
+        expect(loi!.message).toContain("đọc vòng qua RLS");
+      } finally {
+        await db.stop();
+      }
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [vòng fix 2 — I4] POLICY "AS RESTRICTIVE" LÀ PHÒNG THỦ CHẶT HƠN, KHÔNG PHẢI VI PHẠM
+  // ==========================================================================================
+  // Vòng 1 chặn nó — cấm một lớp phòng thủ chặt hơn là phản tác dụng rõ ràng. Test đo cả hai
+  // chiều: nó đi qua được, VÀ đường lách hiển nhiên (đổi chính policy cách ly sang RESTRICTIVE
+  // để né phép soi hình dạng) vẫn bị chặn bởi "phải có ít nhất một policy PERMISSIVE".
+  it("[I4] policy AS RESTRICTIVE đi qua, nhưng không dùng được để né phép soi hình dạng", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      // (a) Phòng thủ chiều sâu: thêm một RESTRICTIVE bên cạnh policy cách ly.
+      await db.pool.query(
+        "CREATE POLICY users_chan_bi_khoa ON users AS RESTRICTIVE " +
+          "USING (org_id = app_current_org_id() AND status <> 'DISABLED') " +
+          "WITH CHECK (org_id = app_current_org_id())",
+      );
+      await expect(
+        migrate(db.pool, MIGRATIONS_DIR),
+        "policy RESTRICTIVE hợp lệ bị chặn — hàng rào đang cấm một lớp phòng thủ CHẶT HƠN",
+      ).resolves.toEqual([]);
+
+      // (b) Đường lách: biến chính policy cách ly thành RESTRICTIVE để biểu thức khỏi bị soi.
+      await db.pool.query("DROP POLICY users_chan_bi_khoa ON users");
+      await db.pool.query("DROP POLICY users_tenant_isolation ON users");
+      await db.pool.query(
+        "CREATE POLICY users_tenant_isolation ON users AS RESTRICTIVE " +
+          "USING (true) WITH CHECK (true)",
+      );
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "bảng không còn policy PERMISSIVE nào mà vẫn đi lọt").not.toBeNull();
+      expect(loi!.message).toContain("không có policy PERMISSIVE nào");
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // ==========================================================================================
+  // [vòng fix 2 — I6] "ĐÚNG TẠI MỘT THỜI ĐIỂM": ATTACH PARTITION SAU migrate()
+  // ==========================================================================================
+  // Mục (A) của hardening đúng TẠI THỜI ĐIỂM migrate() chạy. Một job VẬN HÀNH xoay vòng phân
+  // mảnh gắn thêm lá SAU đó, và lá mới không có RLS. Test này KHÔNG khẳng định lỗ đã đóng —
+  // nó ĐO cửa sổ phơi và khẳng định đúng tính chất giảm nhẹ mà dự án thật sự có: lần deploy KẾ
+  // TIẾP tự chữa. Đóng ở tầng lược đồ đã cân nhắc và LOẠI BỎ (event trigger đòi SUPERUSER, mà
+  // role deploy thật của dự án không có — thêm hậu điều kiện cho nó là chặn deploy vĩnh viễn
+  // trên production). Xem ghi chú (A) ở đầu hardening.always.sql.
+  it("[I6] ATTACH PARTITION sau migrate() để hở tới lần deploy kế — và lần đó tự chữa", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query(
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
+      );
+      await db.pool.query(
+        "CREATE TABLE bao_gia (id int, org_id uuid NOT NULL, gia int) PARTITION BY LIST (org_id)",
+      );
+      await db.pool.query(`CREATE TABLE bao_gia_a PARTITION OF bao_gia FOR VALUES IN ('${orgA}')`);
+      await db.pool.query("ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY");
+      await db.pool.query("ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY");
+      await db.pool.query(
+        "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+      );
+      await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a TO app_api");
+      await db.pool.query(`INSERT INTO bao_gia VALUES (1,'${orgA}',100)`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // Job vận hành xoay vòng phân mảnh: tạo lá RỜI rồi ATTACH — SAU khi migrate() đã xong.
+      await db.pool.query("CREATE TABLE bao_gia_b (id int, org_id uuid NOT NULL, gia int)");
+      await db.pool.query(`INSERT INTO bao_gia_b VALUES (2,'${orgB}',999)`);
+      await db.pool.query(
+        `ALTER TABLE bao_gia ATTACH PARTITION bao_gia_b FOR VALUES IN ('${orgB}')`,
+      );
+      await db.pool.query("GRANT SELECT ON bao_gia_b TO app_api");
+
+      const apiPool = db.poolAs("app_api");
+      const doc = async (bang: string): Promise<number[]> => {
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          const { rows } = await client.query<{ gia: number }>(`SELECT gia FROM ${bang} ORDER BY 1`);
+          return rows.map((r) => r.gia);
+        } finally {
+          client.release();
+        }
+      };
+
+      // (a) CỬA SỔ PHƠI, đo chứ không giấu: lá vừa gắn chưa có RLS.
+      const truoc = await db.pool.query<{ bat: boolean }>(
+        "SELECT relrowsecurity AS bat FROM pg_class WHERE relname = 'bao_gia_b'",
+      );
+      expect(truoc.rows[0]!.bat).toBe(false);
+      expect(await doc("bao_gia"), "đường đọc qua CHA vẫn đúng").toEqual([100]);
+      expect(
+        await doc("bao_gia_b"),
+        "nếu phép đo này rỗng thì ATTACH đã tự kế thừa RLS — cửa sổ phơi không tồn tại và cả " +
+          "ghi chú (A) về trục thời gian phải viết lại. Đo lại trước khi kết luận.",
+      ).toEqual([999]);
+
+      // (b) TÍNH CHẤT GIẢM NHẸ THẬT SỰ CÓ: lần deploy kế tiếp tự chữa, không cần ai nhớ gì.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const sau = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+        "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
+          "WHERE relname = 'bao_gia_b'",
+      );
+      expect(sau.rows[0]).toEqual({ bat: true, cuong_che: true });
+      expect(await doc("bao_gia_b"), "đọc thẳng lá của tổ chức khác phải trả 0 hàng").toEqual([]);
+      expect(await doc("bao_gia"), "đường đọc thật (qua CHA) không được hỏng").toEqual([100]);
+    } finally {
+      await db.stop();
+    }
+  }, 120_000);
+
+  // ==========================================================================================
+  // [vòng fix 2 — Minor] HAI QUAN HỆ CHA-CON CÒN LẠI: INHERITS và DETACH PARTITION
+  // ==========================================================================================
+  // Vòng 1 miễn trừ "phải có policy riêng" theo đúng một tiêu chí: c.relispartition. Hai hệ quả
+  // đo được, ngược chiều nhau, và test này khoá cả hai:
+  //   (a) CON CHÁU "INHERITS" cổ điển KHÔNG có relispartition -> vòng 1 chặn deploy MỌI LẦN
+  //       trên một lược đồ PostgreSQL coi là hợp lệ. Đã đo rằng miễn trừ là AN TOÀN: policy của
+  //       CHA có hiệu lực với hàng của con khi đọc QUA CHA, và đọc THẲNG con sau khi mục (A)
+  //       bật RLS + FORCE cho 0 hàng.
+  //   (b) DETACH PARTITION lấy relispartition đi -> bảng tách ra KHÔNG còn được miễn, và đó là
+  //       ĐÚNG: nó đã là một bảng tenant độc lập. Nhưng phải chứng minh nó không thành ngõ cụt
+  //       "sửa tay trên cụm" — đường ra là một migration MỚI, đúng như khuôn ba lượt hứa.
+  it("[Minor] con cháu INHERITS được miễn policy riêng; DETACH PARTITION thì không, và vá được bằng migration mới", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-ke-thua-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      await migrate(db.pool, thuMucTam);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query(
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
+      );
+
+      // ---- (a) INHERITS ------------------------------------------------------------------
+      await db.pool.query("CREATE TABLE cha_tt (id int, org_id uuid NOT NULL, gia int)");
+      await db.pool.query("ALTER TABLE cha_tt ENABLE ROW LEVEL SECURITY");
+      await db.pool.query("ALTER TABLE cha_tt FORCE ROW LEVEL SECURITY");
+      await db.pool.query(
+        "CREATE POLICY cha_tt_tenant_isolation ON cha_tt " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+      );
+      await db.pool.query("CREATE TABLE con_tt () INHERITS (cha_tt)");
+      await db.pool.query("GRANT SELECT ON cha_tt, con_tt TO app_api");
+      await db.pool.query(`INSERT INTO cha_tt VALUES (1,'${orgA}',100)`);
+      await db.pool.query(`INSERT INTO con_tt VALUES (2,'${orgB}',999)`);
+
+      const apiPool = db.poolAs("app_api");
+      const doc = async (bang: string): Promise<number[]> => {
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          const { rows } = await client.query<{ gia: number }>(`SELECT gia FROM ${bang} ORDER BY 1`);
+          return rows.map((r) => r.gia);
+        } finally {
+          client.release();
+        }
+      };
+
+      await expect(
+        migrate(db.pool, thuMucTam),
+        "con cháu INHERITS làm hardening GÃY — một lược đồ PostgreSQL coi là hợp lệ đang chặn " +
+          "deploy vĩnh viễn, đúng triệu chứng (3) của I3 lặp lại ở nhánh kế thừa",
+      ).resolves.toEqual([]);
+      const co = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+        "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
+          "WHERE relname = 'con_tt'",
+      );
+      expect(co.rows[0], "miễn trừ chỉ an toàn khi mục (A) vẫn bật RLS + FORCE cho con").toEqual({
+        bat: true,
+        cuong_che: true,
+      });
+      expect(await doc("cha_tt"), "đọc QUA CHA phải chỉ thấy hàng của tổ chức A").toEqual([100]);
+      expect(await doc("con_tt"), "đọc THẲNG con phải fail-closed").toEqual([]);
+
+      // ---- (b) DETACH PARTITION ------------------------------------------------------------
+      await db.pool.query(
+        "CREATE TABLE bao_gia (id int, org_id uuid NOT NULL, gia int) PARTITION BY LIST (org_id)",
+      );
+      await db.pool.query(`CREATE TABLE bao_gia_a PARTITION OF bao_gia FOR VALUES IN ('${orgA}')`);
+      await db.pool.query("ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY");
+      await db.pool.query("ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY");
+      await db.pool.query(
+        "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
+      );
+      await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a TO app_api");
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([]);
+
+      await db.pool.query("ALTER TABLE bao_gia DETACH PARTITION bao_gia_a");
+      const loi = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "bảng vừa DETACH là bảng tenant độc lập không policy mà vẫn đi lọt").not.toBeNull();
+      expect(loi!.message).toContain("bao_gia_a: không có policy PERMISSIVE nào");
+
+      // Đường ra KHÔNG phải sửa tay trên cụm: một migration mới tới được đích vì lượt 1 không
+      // phán xét. Đây chính là điều phải chứng minh để phép kiểm này không thành ngõ cụt.
+      await writeFile(
+        join(thuMucTam, "003_policy_cho_bang_tach.sql"),
+        "CREATE POLICY bao_gia_a_tenant_isolation ON bao_gia_a " +
+          "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());\n",
+        "utf8",
+      );
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([
+        "003_policy_cho_bang_tach.sql",
+      ]);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 120_000);
 });

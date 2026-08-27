@@ -146,7 +146,32 @@ CREATE POLICY users_tenant_isolation ON users
   USING (org_id = app_current_org_id())
   WITH CHECK (org_id = app_current_org_id());
 
-GRANT SELECT, INSERT, UPDATE ON users TO app_api;
+-- [vòng fix 2 — Minor] users_pkey là ORACLE XUYÊN TỔ CHỨC CÙNG LỚP VỚI CR3, và nguyên lý viết
+-- ngay trong khối CREATE TABLE ở trên ("ràng buộc duy nhất TOÀN CỤC sẽ rò rỉ xuyên tổ chức qua
+-- chính thông báo lỗi") lại KHÔNG được áp cho `id` — đúng khuôn "viết nguyên lý ở đây, quên áp
+-- cách đó 50 dòng" mà CR3 vừa sửa cho organizations.slug.
+-- Đo trên PostgreSQL 16.15, role đăng nhập thật app_api_login đã gắn tổ chức A:
+--     INSERT INTO users (id, org_id, email, full_name) VALUES (<id CÓ THẬT của tổ chức B>, ...)
+--       -> ERROR: duplicate key value violates unique constraint "users_pkey"
+--     cùng câu với một id không ai dùng -> INSERT 0 1
+-- Khác CR3 ở chỗ khai thác thực tế ≈ 0: id sinh bằng gen_random_uuid() (122 bit ngẫu nhiên),
+-- không đoán được như slug sinh từ tên công ty. Nhưng KHUÔN thì phải đóng, và cách đóng giống
+-- hệt CR3: THU HẸP QUYỀN THEO CỘT, không đụng ràng buộc.
+--   `id`         : không cấp -> app_api không viết được nó, DEFAULT gen_random_uuid() lo phần đó.
+--   `org_id`     : cấp cho INSERT (ứng dụng phải ghi tổ chức của hàng mới; WITH CHECK ở trên ép
+--                  nó bằng tổ chức đang gắn) nhưng KHÔNG cấp cho UPDATE — chuyển một hàng sang
+--                  tổ chức khác không thuộc bất kỳ đường đi hợp lệ nào của app_api.
+--   `status`     : cấp cho cả hai — đình chỉ/khôi phục người dùng là việc của ứng dụng, và giá
+--                  trị bị CHECK gói trong ba hằng nên nó không làm oracle được.
+--   `created_at` : không cấp, đã có DEFAULT.
+-- Đã đo lại sau vá, cùng kịch bản: cả hai câu INSERT có cột `id` trả ĐÚNG MỘT thông báo
+-- "permission denied for table users" (không phân biệt được id tồn tại hay không), còn INSERT
+-- không ghi `id` vẫn "INSERT 0 1" và UPDATE email/full_name/status vẫn chạy.
+-- Cùng cảnh báo như CR3: quyền CỘT KHÔNG hiện trong information_schema.role_table_grants, chỉ
+-- hiện ở role_column_grants — khẳng định quyền ở db/rls-coverage.int.test.ts đọc CẢ HAI view.
+GRANT SELECT ON users TO app_api;
+GRANT INSERT (org_id, email, full_name, status) ON users TO app_api;
+GRANT UPDATE (email, full_name, status) ON users TO app_api;
 -- Cố ý KHÔNG cấp gì trên users cho app_unseal. Vai trò đó là runtime mở thầu; nó không có
 -- việc gì với họ tên và email — dữ liệu cá nhân — của người dùng. Không có consumer nào ở S0
 -- cần quyền này, và một GRANT thêm vào "cho chắc" là thứ không ai gỡ ra nữa. Task sau thật sự

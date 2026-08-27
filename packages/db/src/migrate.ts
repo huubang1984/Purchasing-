@@ -116,6 +116,39 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
   };
 
   try {
+    // [fix vòng 2 — CR1] GHIM search_path CHO CẢ LẦN migrate() NÀY, câu lệnh đầu tiên chạy
+    // trên kết nối, trước cả advisory lock.
+    //
+    // Hai lỗ ĐO ĐƯỢC trên PostgreSQL 16.15 mà một dòng này đóng, cả hai cùng một lớp lỗi
+    // ("bảo đảm chỉ đúng ở một cấu hình"):
+    //   (1) pg_get_expr deparse THEO search_path của phiên đang đọc. Với
+    //       "ALTER ROLE <role_deploy> SET search_path = gia, public" và một hàm
+    //       gia.app_current_org_id() trả về tổ chức B, policy của users deparse ra đúng chuỗi
+    //       trần mà danh sách trắng của hardening duyệt -> migrate() PASS ở MỌI lần chạy, và
+    //       app_api_login đã gắn TỔ CHỨC A đọc được người dùng của TỔ CHỨC B. Dưới path đã
+    //       ghim, cùng policy đó deparse thành "(org_id = gia.app_current_org_id())" và BỊ
+    //       CHẶN. hardening.always.sql còn tự ghim lại ở phạm vi transaction (phòng khi chạy
+    //       bằng psql -f), nhưng khối DECLARE của nó chạy TRƯỚC lần ghim đó — chỉ dòng này
+    //       che được khối ấy.
+    //   (2) "CREATE TABLE IF NOT EXISTS schema_migrations" bên dưới tạo bảng ở schema ĐẦU
+    //       TIÊN của search_path. Dưới search_path không có public đứng đầu, nó tạo
+    //       gia.schema_migrations, thấy bảng rỗng, rồi ÁP LẠI TOÀN BỘ 001/002 vào schema lạ
+    //       (đo được: gia.schema_migrations, gia.users, gia.organizations). Idempotency của
+    //       migrate() tự vỡ mà không ai báo.
+    //
+    // Vì sao 'public' chứ không phải 'pg_catalog, public': pg_catalog được tìm NGẦM trước khi
+    // nó không được nêu tên, nên hai cách tra cứu như nhau — nhưng CREATE không ghi schema thì
+    // rơi vào schema ĐẦU TIÊN ĐƯỢC NÊU. Đã đo: với 'pg_catalog, public', CREATE TABLE báo
+    // "permission denied to create pg_catalog.… System catalog modifications are currently
+    // disallowed" ngay cả dưới superuser. hardening.always.sql thì dùng 'pg_catalog, public'
+    // được vì nó không tạo đối tượng nào thiếu tên schema.
+    //
+    // Phạm vi: PHIÊN, không phải transaction — nó phải sống qua mọi BEGIN/COMMIT của vòng lặp
+    // migration. Client này được release() về pool khi xong; giá trị SET còn dính trên kết
+    // nối đó, và đó là hành vi có chủ đích của một pool dành cho migrate(). Người gọi dùng
+    // pool ứng dụng riêng (packages/tenancy) nên không chia sẻ kết nối này.
+    await lockClient.query("SET search_path = public");
+
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
     await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
