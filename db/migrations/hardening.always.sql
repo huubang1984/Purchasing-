@@ -430,8 +430,15 @@ DECLARE
   --               polroles = {0}, và OID 0 KHÔNG có hàng trong pg_roles — đã đo. Viết
   --               "array_to_string(ARRAY(SELECT rolname FROM pg_roles WHERE oid = ANY(...)))"
   --               thì PUBLIC cho ra CHUỖI RỖNG, tức chỗ RỘNG NHẤT lại trùng với giá trị giữ
-  --               chỗ của dòng rỗng bên dưới. Nên kết xuất PUBLIC TƯỜNG MINH. Sắp xếp bằng
-  --               COLLATE "C" để thứ tự không phụ thuộc collation của database.
+  --               chỗ của dòng rỗng bên dưới. Nên kết xuất PUBLIC TƯỜNG MINH.
+  --               [sửa sau xác minh] Bản trước ghi "COLLATE \"C\" để thứ tự không phụ thuộc
+  --               collation của database", hàm ý ORDER BY trần vốn đã không ổn định. NGƯỢC:
+  --               pg_roles.rolname có kiểu `name`, mà `name` mang typcollation = 950 = "C"
+  --               CỨNG theo kiểu, nên "ORDER BY rolname" trần LÀ tất định. Chính cái cast
+  --               `rolname::text` — cast ta buộc phải thêm để coalesce(...,'PUBLIC') — mới kéo
+  --               thứ tự sang collation mặc định của database. COLLATE "C" ở đây CHỮA hệ quả
+  --               của cast đó, không chữa một khiếm khuyết có sẵn. (Cách khác cùng hiệu lực:
+  --               coalesce(r.rolname, 'PUBLIC'::name) — giữ nguyên kiểu `name`, khỏi cần COLLATE.)
   --
   --   [vòng fix 2 — I4] Ba hình dạng mà re-reviewer đo là "sản phẩm sẽ cần" đi qua ĐÂY, không
   --   qua HINH_DANG_CHUAN — đây là câu trả lời cho "hình dạng nào nên nằm sẵn trong danh sách

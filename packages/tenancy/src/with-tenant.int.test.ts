@@ -101,6 +101,17 @@ describe("cô lập tổ chức", () => {
   //     WITH CHECK đổi thành (true) -> INSERT org_id của tổ chức khác THÀNH CÔNG
   //                                                                   (chặn bởi WITH CHECK)
   //     bỏ luôn vế USING            -> UPDATE 1                       (rò thật)
+  // [sửa sau xác minh] Câu "PostgreSQL kiểm HÀNG MỚI của UPDATE bằng cả policy SELECT" ở trên
+  // là VÔ ĐIỀU KIỆN, và như thế thì RỘNG HƠN cái đo được. Quy tắc thật CÓ ĐIỀU KIỆN: vế
+  // USING/SELECT chỉ áp lên hàng mới khi câu UPDATE có ĐỌC hàng cũ — tức có WHERE, có
+  // RETURNING, hoặc SET tham chiếu một cột. Đã đo trên PostgreSQL 16.15:
+  //     FOR ALL, WITH CHECK (true), UPDATE ... WHERE ...   -> new row violates RLS
+  //     FOR ALL, WITH CHECK (true), UPDATE ... RETURNING   -> new row violates RLS
+  //     FOR ALL, WITH CHECK (true), UPDATE ... KHÔNG WHERE -> UPDATE 1        <== LỌT
+  // Nghĩa là với "UPDATE t SET org_id = <hằng>" không WHERE, WITH CHECK là vế DUY NHẤT chặn
+  // việc chuyển nhà xuyên tổ chức. Không phải lỗ hổng ở đây: policy thật có WITH CHECK đúng,
+  // và danh sách trắng BẮT BUỘC WITH CHECK cho mọi policy PERMISSIVE có polcmd IN ('*','a','w'),
+  // nên một policy thiếu vế ấy bị chặn ngay lúc deploy chứ không sống tới lúc chạy.
   // Đây là lỗi HỒ SƠ KIỂM TOÁN chứ không phải lỗ hổng — bảo vệ thật vẫn còn. Nhưng nó là LẦN
   // TÁI PHÁT của chính bài học "test xanh vì lý do sai", nằm BÊN TRONG bản vá cho bài học đó.
   // Nay test ĐO từng cơ chế và GỌI ĐÚNG TÊN nó, thay vì đổi fixture sang policy tách lệnh —
