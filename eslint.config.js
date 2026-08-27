@@ -7,7 +7,18 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.next/**",
       "evidence/**",
-      "**/*.cjs",
+      // Thu hep tu "**/*.cjs" xuong dung nhung gi that su can (fix round 3, phat hien
+      // N7): cung ly do da dung de thu hep "**/*.mjs" o fix round 2 - mot file .cjs la
+      // vo hinh voi eslint tren toan repo neu dung blanket glob, va tsconfig.json cung
+      // khong include "**/*.cjs" nen tsc cung khong thay. Chi hai file .cjs THAT SU can
+      // (cau hinh dependency-cruiser va helper regex khong phan biet hoa thuong cua no,
+      // ca hai deu thuan JS khong co kieu, khong the parse bang typescript-eslint vi nam
+      // ngoai "include" cua tsconfig.json) duoc loai. File .cjs khac trong tuong lai co
+      // ten dang "*.config.cjs" cung duoc loai theo quy uoc, nhung MOI file .cjs khac
+      // deu phai qua eslint binh thuong.
+      "**/*.config.cjs",
+      ".dependency-cruiser.cjs",
+      "dependency-cruiser-ci.cjs",
       // Thu hẹp tối đa (fix round 2, phát hiện N1): trước đây "**/*.mjs" loại TOÀN BỘ lớp
       // file .mjs khỏi eslint trên toàn repo — một file .mjs độc hại đặt ở BẤT KỲ đâu (vd.
       // apps/zprobe/src/leak.mjs) sẽ vô hình với eslint. Giờ chỉ hai file .mjs THẬT SỰ cần

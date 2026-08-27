@@ -1,46 +1,12 @@
-// Regex khong phan biet hoa thuong bang character-class thu cong.
-//
-// LY DO: depcruise tu choi nhan RegExp object cho path/pathNot (schema chi cho string
-// hoac string[]) va khong co option "caseSensitive" o muc rule. Nhung tren Windows/macOS,
-// he thong file resolve KHONG phan biet hoa thuong, va truong "resolved" cua depcruise
-// GIU NGUYEN hoa thuong nguoi viet go trong specifier (khong chuan hoa ve ten that tren
-// dia). Mot file .mjs/.cjs import "Local-Dev-Shared.ts" (sai hoa thuong) van resolve
-// thanh cong tren Windows, nhung regex phan biet hoa thuong khop "local-dev-shared.ts"
-// se KHONG khop voi "Local-Dev-Shared.ts" - hang rao im lang bo qua.
-// Day la CUNG MOT LOP LOI da lam thung hook o Task 1 (.ENV, ID_RSA lot qua so khop phan
-// biet hoa thuong tren Windows) - tai dien o tang depcruise (fix round 2, phat hien N1).
-//
-// Chi can xu ly dau "." (dau cham trong ten file) vi day la ky tu regex dac biet duy nhat
-// xuat hien trong cac chuoi literal duong dan cua du an nay (con lai chi co chu cai,
-// so, dau gach ngang, dau gach cheo - khong co ky tu regex dac biet nao khac).
-function ciChar(pKyTu) {
-  if (pKyTu === ".") {
-    return "\\.";
-  }
-  if (/[a-zA-Z]/.test(pKyTu)) {
-    const chuThuong = pKyTu.toLowerCase();
-    const chuHoa = pKyTu.toUpperCase();
-    return chuThuong === chuHoa ? pKyTu : "[" + chuThuong + chuHoa + "]";
-  }
-  return pKyTu;
-}
+// Ham dung khong phan biet hoa thuong (ci/ciFile/ciPrefix) tach rieng sang
+// dependency-cruiser-ci.cjs de co the unit-test truc tiep (xem
+// tests/architecture/ci-helpers.test.ts) - depcruise clone toan bo module.exports cua file
+// nay va validate bang AJV schema "additionalProperties: false", nen khong the gan them ham
+// vao day de test (fix round 3, N6).
+const { ci, ciFile, ciPrefix } = require("./dependency-cruiser-ci.cjs");
 
-/** Chuyen mot chuoi literal (duong dan) thanh fragment regex khop moi cach viet hoa/thuong. */
-function ci(pLiteral) {
-  return pLiteral.split("").map(ciChar).join("");
-}
-
-/** Fragment regex khop chinh xac MOT file, bat ky hoa thuong. */
-function ciFile(pLiteralPath) {
-  return "^" + ci(pLiteralPath) + "$";
-}
-
-/** Fragment regex khop MOT tien to thu muc, bat ky hoa thuong (khong neo cuoi chuoi). */
-function ciPrefix(pLiteralPrefix) {
-  return "^" + ci(pLiteralPrefix);
-}
-
-const APPS_UNSEAL_WORKER = ciPrefix("apps/unseal-worker/");
+const APPS_UNSEAL_WORKER_PREFIX = ciPrefix("apps/unseal-worker/");
+const BENCH_KEYPROVIDER_SRC_PREFIX = ciPrefix("tools/bench-keyprovider/src/");
 const UNWRAP_TS = ciFile("packages/crypto-keys/src/unwrap.ts");
 const LOCAL_DEV_WRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-wrapper.ts");
 const LOCAL_DEV_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-unwrapper.ts");
@@ -51,21 +17,16 @@ const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 module.exports = {
   forbidden: [
     // Ba quy tac rieng, MOI quy tac dung MOT dich (`to`) va danh sach `from` mien tru
-    // rieng cho DICH DO. Fix round 1 dung MOT quy tac voi `to.path` la mang ba file va
-    // MOT danh sach `from.pathNot` dung chung cho ca ba - nghia la mot file duoc mien tru
-    // se mien tru voi CA BA dich, ke ca nhung dich no khong he can (phat hien N2). Vi du:
-    // local-dev-wrapper.ts chi can mien tru de goi local-dev-shared.ts, nhung duoc mien tru
-    // "ngam" luon ca voi local-dev-unwrapper.ts va unwrap.ts - neu ai do them
-    // `export { createLocalDevUnwrapper } from "./local-dev-unwrapper.js"` vao
-    // local-dev-wrapper.ts, canh do lot qua khong mot tieng dong. Tach rieng tung quy tac
-    // dam bao moi mien tru chi co hieu luc DUNG cho canh no thuc su can.
+    // rieng cho DICH DO. Mot quy tac voi `to.path` la mang nhieu file va MOT danh sach
+    // `from.pathNot` dung chung cho ca dam se mien tru mot file "ke" cho ca nhung dich no
+    // khong he can (phat hien N2, fix round 2) - vi vay moi dich co quy tac rieng.
     {
       name: "khong-giai-ma-ngoai-unseal-worker-unwrap-ts",
       comment:
         "Chi apps/unseal-worker, test vong doi khoa cua chinh package, va cong cu benchmark " +
         "dev-only duoc import unwrap.ts (ADR-006, bat bien G1).",
       severity: "error",
-      from: { pathNot: [APPS_UNSEAL_WORKER, ROUNDTRIP_TEST_TS, BENCH_INDEX_TS] },
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, ROUNDTRIP_TEST_TS, BENCH_INDEX_TS] },
       to: { path: UNWRAP_TS },
     },
     {
@@ -76,7 +37,7 @@ module.exports = {
         "day - neu no import file nay, do la mot cau noi bac cau khoi mat boc an toan sang kha " +
         "nang giai ma, phai bi chan (fix round 2, phat hien N2).",
       severity: "error",
-      from: { pathNot: [APPS_UNSEAL_WORKER, UNWRAP_TS] },
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS] },
       to: { path: LOCAL_DEV_UNWRAPPER_TS },
     },
     {
@@ -86,8 +47,49 @@ module.exports = {
         "local-dev-shared.ts - deriveOrgKey cong node:crypto la du de tu giai ma, khong can " +
         "dung toi unwrap.ts (bat bien G1, phat hien C2 o fix round 1).",
       severity: "error",
-      from: { pathNot: [APPS_UNSEAL_WORKER, LOCAL_DEV_WRAPPER_TS, LOCAL_DEV_UNWRAPPER_TS] },
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, LOCAL_DEV_WRAPPER_TS, LOCAL_DEV_UNWRAPPER_TS] },
       to: { path: LOCAL_DEV_SHARED_TS },
+    },
+    // Ba quy tac duoi day dong "duong ra" (fix round 3, phat hien N5): ba quy tac tren mien
+    // tru roundtrip.test.ts, tools/bench-keyprovider/src/**, va apps/unseal-worker/** khoi vai
+    // tro `from` de chung duoc phep goi vao unwrap.ts/local-dev-unwrapper.ts/local-dev-shared.ts
+    // - nhung khong quy tac nao cam import NGUOC LAI vao chinh ba noi do. Mot module bat ky co
+    // the import lai tu roundtrip.test.ts, tu bat ky file nao trong tools/bench-keyprovider/src,
+    // hoac tu bat ky file nao trong apps/unseal-worker (kho nguy hiem nhat vi thu muc nay CHUA
+    // TON TAI - khi no ra doi, moi symbol no export se voi toi duoc tu moi noi neu khong co ba
+    // quy tac nay). Bien ca ba thanh DICH HAN CHE: khong module nao ngoai chinh cay cua chung
+    // duoc phep import bat cu thu gi ben trong.
+    {
+      name: "khong-import-nguoc-tu-apps-unseal-worker",
+      comment:
+        "apps/unseal-worker la noi DUY NHAT duoc giu kha nang giai ma - khong module nao ben " +
+        "ngoai no duoc phep import bat cu thu gi no export, ke ca khi thu do chi la mot cau " +
+        "noi/re-export. Neu khong co quy tac nay, mot module ben trong unseal-worker co the " +
+        "re-export createLocalDevUnwrapper va bat ky app nao khac import lai duoc ma khong " +
+        "cham quy tac nao khac (fix round 3, phat hien N5).",
+      severity: "error",
+      from: { pathNot: APPS_UNSEAL_WORKER_PREFIX },
+      to: { path: APPS_UNSEAL_WORKER_PREFIX },
+    },
+    {
+      name: "khong-import-nguoc-tu-bench-keyprovider",
+      comment:
+        "tools/bench-keyprovider la cong cu dev-only duoc mien tru goi unwrap.ts de do hieu " +
+        "nang - nhung khong gi ngoai chinh no duoc phep import LAI tu no, tranh no tro thanh " +
+        "cau noi thu hai dua kha nang giai ma ra ngoai (fix round 3, phat hien N5).",
+      severity: "error",
+      from: { pathNot: BENCH_KEYPROVIDER_SRC_PREFIX },
+      to: { path: BENCH_KEYPROVIDER_SRC_PREFIX },
+    },
+    {
+      name: "khong-import-nguoc-tu-roundtrip-test",
+      comment:
+        "roundtrip.test.ts la file test, khong phai module san xuat - khong co ly do hop phap " +
+        "nao de bat ky module nao import no. Khong mien tru module nao (fix round 3, phat " +
+        "hien N5): day la cau noi thu ba co the dua kha nang giai ma ra ngoai neu bi bo qua.",
+      severity: "error",
+      from: {},
+      to: { path: ROUNDTRIP_TEST_TS },
     },
     {
       name: "khong-import-trustprocure-khong-resolve-duoc",
