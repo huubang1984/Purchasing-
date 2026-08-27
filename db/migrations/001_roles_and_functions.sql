@@ -48,9 +48,11 @@ CREATE SCHEMA IF NOT EXISTS app_private;
 -- Cố ý KHÔNG GRANT USAGE ON SCHEMA app_private TO app_api, app_unseal — đây chính là hàng
 -- rào. Migration sau đặt bất kỳ hàm nào không muốn app_api/app_unseal gọi trực tiếp vào đây.
 --
--- Không lặp lại "REVOKE USAGE ON SCHEMA app_private FROM ..." trong hardening.always.sql:
--- xem giải thích ở đầu file đó (schema này chưa tồn tại ở lần bootstrap đầu tiên, trước khi
--- migration này chạy).
+-- [fix round 4] hardening.always.sql NAY có lặp lại "REVOKE ALL ON SCHEMA app_private FROM
+-- app_api, app_unseal" ở mọi lần migrate(), với tiền điều kiện bỏ qua khi schema chưa tồn
+-- tại (lần bootstrap đầu tiên, khi file đó chạy TRƯỚC migration này). Không có việc đó thì
+-- một "GRANT USAGE ON SCHEMA app_private TO app_api" sau triển khai sẽ sống mãi: 001 đã nằm
+-- trong schema_migrations nên không bao giờ chạy lại để thu hồi.
 
 -- Lấy tổ chức hiện tại từ biến phiên do withTenant() gắn.
 -- Trả NULL khi chưa gắn: mọi policy RLS so sánh với NULL sẽ không khớp hàng nào.
@@ -82,5 +84,9 @@ $$;
 
 -- PUBLIC mặc định có EXECUTE trên hàm vừa tạo (hành vi cứng của Postgres, không phải do
 -- migration này cấp) — thu hồi tường minh rồi cấp lại đúng hai role cần dùng nó cho RLS.
+-- [fix round 4] Hai câu này cũng được lặp lại trong hardening.always.sql ở mọi lần
+-- migrate() (có tiền điều kiện "hàm đã tồn tại"): một "GRANT EXECUTE ... TO PUBLIC" sau
+-- triển khai lật ngược đúng bản vá S2 này, và nếu app_api bị DROP rồi tạo lại thì GRANT
+-- dưới đây không bao giờ trở lại vì 001 đã nằm trong schema_migrations.
 REVOKE EXECUTE ON FUNCTION app_current_org_id() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_current_org_id() TO app_api, app_unseal;

@@ -1,9 +1,47 @@
-import { migrate } from "@trustprocure/db";
-import { startPostgres, withMigratedDatabase } from "@trustprocure/test-support";
+import { createPool, migrate } from "@trustprocure/db";
+import {
+  startPostgres,
+  withMigratedDatabase,
+  type TestDatabase,
+} from "@trustprocure/test-support";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
+
+/**
+ * [fix round 4 — N2] Dựng đúng kịch bản vận hành mà vòng 3 làm gãy: cụm được bootstrap bằng
+ * SUPERUSER một lần, sau đó MỌI deploy chạy dưới một role thường — có CREATEROLE và sở hữu
+ * database, nhưng KHÔNG phải superuser và KHÔNG tạo ra app_api/app_unseal nên không có
+ * ADMIN OPTION trên chúng. Trả về connection string của role đó.
+ */
+async function dungRoleTrienKhaiThuong(db: TestDatabase): Promise<string> {
+  const { rows } = await db.pool.query<{ ten_db: string }>("SELECT current_database() AS ten_db");
+  const tenDb = rows[0]!.ten_db;
+  await db.pool.query("CREATE ROLE trien_khai LOGIN CREATEROLE PASSWORD 'mat-khau-trien-khai'");
+  await db.pool.query(`ALTER DATABASE "${tenDb}" OWNER TO trien_khai`);
+  await db.pool.query("GRANT ALL ON TABLE schema_migrations TO trien_khai");
+
+  const url = new URL(db.connectionString);
+  url.username = "trien_khai";
+  url.password = "mat-khau-trien-khai";
+  return url.toString();
+}
+
+/**
+ * [fix round 4] Ba đường trôi GRANT mà vòng 3 để hở, đọc thẳng từ catalog:
+ *   a — app_api có USAGE trên schema app_private (tháo hàng rào của mọi hàm nhạy cảm sau này)
+ *   b — PUBLIC có EXECUTE trên app_current_org_id() (lật ngược bản vá S2 của vòng 2)
+ *   c — app_api có CREATE trên schema public
+ * proacl IS NULL nghĩa là ACL mặc định, trong đó PUBLIC CÓ EXECUTE — nên NULL phải đọc ra
+ * true ở cột b, không phải "không có dòng cấp nào nên coi như đã thu hồi".
+ */
+const CAU_TRUY_VAN_TROI =
+  "SELECT has_schema_privilege('app_api','app_private','USAGE') AS a, " +
+  "(SELECT p.proacl IS NULL OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) x " +
+  "   WHERE x.grantee = 0 AND x.privilege_type = 'EXECUTE') " +
+  " FROM pg_proc p WHERE p.oid = to_regprocedure('public.app_current_org_id()')) AS b, " +
+  "has_schema_privilege('app_api','public','CREATE') AS c";
 
 // Không gắn mã [INV-*] cho các test dưới đây: TEST-PLAN §2 nhóm F (F1: ràng buộc org_id
 // qua RLS) và nhóm B (B4: REVOKE UPDATE/DELETE trên audit_events) là bất biến mà migration
@@ -125,8 +163,15 @@ describe("migration của dự án", () => {
 
   // [fix I5] "ALTER ROLE ... RESET ALL" (không IN DATABASE) KHÔNG đụng tới cấu hình đặt
   // riêng cho một database cụ thể qua "ALTER ROLE ... IN DATABASE d SET ..." — lưu ở
-  // pg_db_role_setting, một bảng khác hẳn pg_roles.rolconfig. row_security=off tắt hẳn RLS
-  // cho phiên đó, nên đây không phải chuyện nhỏ.
+  // pg_db_role_setting, một bảng khác hẳn pg_roles.rolconfig.
+  //
+  // [fix round 4] Sửa phát biểu SAI của vòng trước ở đây: row_security=off KHÔNG "tắt hẳn
+  // RLS cho phiên đó". Đã đo thật với app_api (không sở hữu bảng, không BYPASSRLS): truy
+  // vấn bảng có RLS BÁO LỖI "query would be affected by row-level security policy for table
+  // \"bi_mat\"", không đọc lọt hàng nào. Nó chỉ thật sự bỏ qua RLS cho ai vốn đã được miễn
+  // (chủ sở hữu bảng, role BYPASSRLS). Vẫn phải RESET — một cấu hình an ninh trôi vào role
+  // ứng dụng không ai cố ý đặt, và hậu quả là sự cố sẵn sàng ở mọi truy vấn chạm bảng có
+  // RLS — nhưng lý do là VẬY, không phải "bypass RLS".
   it("[fix I5] xoá cấu hình IN DATABASE (vd. row_security=off) đặt sẵn trước migration", async () => {
     const db = await startPostgres();
     try {
@@ -318,6 +363,178 @@ describe("migration của dự án", () => {
         "SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto'",
       );
       expect(rowCount).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // [fix round 4 — N2] Ba nhánh của khuôn "khoan dung với quyền, nghiêm khắc với trôi".
+  // Vòng 3 biến migrate() thành thao tác ĐÒI SUPERUSER ở mọi lần gọi mà không công bố ở
+  // đâu. Ba test dưới đây khoá cả ba nhánh; nếu biểu thức "trạng thái đã đúng" bị viết lỏng
+  // thì nhánh 2 đỏ, nếu khoan dung quá tay thì nhánh 3 đỏ, nếu bỏ khoan dung thì nhánh 1 đỏ.
+  // ==========================================================================
+
+  it("[fix round 4 — N2] nhánh 1: KHÔNG trôi + role deploy không phải superuser → migrate() QUA", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR); // bootstrap bằng superuser, đúng một lần
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Không có migration đánh số mới nào — nhưng hardening.always.sql vẫn chạy. Trước
+        // bản vá vòng 4 chỗ này ném "permission denied to alter role".
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolTrienKhai.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  });
+
+  it("[fix round 4 — N2] nhánh 2: CÓ trôi + role deploy không phải superuser → migrate() GÃY, nêu rõ cờ sai và quyền cần", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+
+      // Trôi thật, đúng kịch bản S1: ai đó bật BYPASSRLS để gỡ lỗi rồi quên tắt.
+      await db.pool.query("ALTER ROLE app_api BYPASSRLS");
+
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Không được im lặng đi tiếp: trôi có thật và role deploy không sửa nổi.
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi).not.toBeNull();
+        expect(loi!.message).toContain("thuộc tính role app_api");
+        expect(loi!.message).toContain("BYPASSRLS"); // cờ nào đang sai
+        expect(loi!.message).toContain("Cần quyền"); // cần quyền gì để sửa
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // Và trôi vẫn còn nguyên — migrate() gãy chứ không âm thầm "sửa được một nửa".
+      const { rows } = await db.pool.query<{ rolbypassrls: boolean }>(
+        "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'app_api'",
+      );
+      expect(rows[0]?.rolbypassrls).toBe(true);
+    } finally {
+      await db.stop();
+    }
+  });
+
+  it("[fix round 4 — N2] nhánh 3: CÓ trôi + role deploy là superuser → migrate() SỬA ĐƯỢC", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("ALTER ROLE app_api BYPASSRLS");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{ rolbypassrls: boolean }>(
+        "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'app_api'",
+      );
+      expect(rows[0]?.rolbypassrls).toBe(false);
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 4] Ba đường trôi mà vòng 3 để hở. Đo trước khi vá: cả ba đều SỐNG SÓT qua
+  // migrate() lần hai. Gộp vào một test vì chúng là cùng một lớp lỗ hổng (GRANT sau triển
+  // khai không bị thu hồi lại) và cùng một bản vá (các dòng mới trong hardening.always.sql).
+  it("[fix round 4] thu hồi lại ba đường trôi GRANT ở lần migrate() sau: app_private, EXECUTE cho PUBLIC, CREATE trên public", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      await db.pool.query("GRANT USAGE ON SCHEMA app_private TO app_api");
+      await db.pool.query("GRANT EXECUTE ON FUNCTION app_current_org_id() TO PUBLIC");
+      await db.pool.query("GRANT ALL ON SCHEMA public TO app_api");
+
+      // Xác nhận trôi có thật TRƯỚC khi migrate lần hai — không giả định, đo trực tiếp.
+      const truoc = await db.pool.query<{ a: boolean; b: boolean; c: boolean }>(CAU_TRUY_VAN_TROI);
+      expect(truoc.rows[0]).toEqual({ a: true, b: true, c: true });
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const sau = await db.pool.query<{ a: boolean; b: boolean; c: boolean }>(CAU_TRUY_VAN_TROI);
+      expect(sau.rows[0]).toEqual({ a: false, b: false, c: false });
+
+      // Thu hồi rồi thì hai role vẫn phải dùng được hàm — không "sửa" thành gãy ứng dụng.
+      const apiPool = db.poolAs("app_api");
+      const { rows } = await apiPool.query<{ org: string | null }>(
+        "SELECT app_current_org_id() AS org",
+      );
+      expect(rows[0]?.org).toBeNull();
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 4 — N3] Role bị DROP rồi tạo lại giữa hai lần migrate(): hardening vòng 3
+  // chữa được các CỜ của role mới, nhưng mọi GRANT do 001 cấp thì không bao giờ trở lại vì
+  // 001 đã nằm trong schema_migrations. Kết quả là app_api tồn tại, đúng cờ, mà
+  // has_function_privilege(...) = false — ứng dụng gãy im lặng ở mọi policy RLS.
+  it("[fix round 4 — N3] app_api bị DROP rồi tạo lại vẫn lấy lại được USAGE public và EXECUTE app_current_org_id()", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      // DROP OWNED BY thu hồi mọi quyền đã cấp cho role trong database này — đúng thứ xảy ra
+      // khi ops xoá rồi tạo lại role.
+      await db.pool.query("DROP OWNED BY app_api");
+      await db.pool.query("DROP ROLE app_api");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      const { rows } = await db.pool.query<{ e: boolean; u: boolean }>(
+        "SELECT has_function_privilege('app_api','public.app_current_org_id()','EXECUTE') AS e, " +
+          "has_schema_privilege('app_api','public','USAGE') AS u",
+      );
+      expect(rows[0]).toEqual({ e: true, u: true });
+
+      // Và dùng được thật, không chỉ đúng trên giấy catalog.
+      const apiPool = db.poolAs("app_api");
+      const ketQua = await apiPool.query<{ org: string | null }>(
+        "SELECT app_current_org_id() AS org",
+      );
+      expect(ketQua.rows[0]?.org).toBeNull();
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [fix round 4 — Minor] "CREATE SCHEMA IF NOT EXISTS app_private" có trong 001 nhưng
+  // không test nào phủ nó: xoá dòng đó đi thì không test nào đỏ (đột biến M6 sống sót).
+  // Test [fix S2] về app_private tự tạo hàm trong schema đó nên nó đỏ vì lý do khác — lỗi
+  // dựng fixture, không phải khẳng định về hàng rào. Test này khẳng định thẳng: schema tồn
+  // tại VÀ hai role không có quyền gì trên nó.
+  it("[fix round 4] schema app_private tồn tại và app_api/app_unseal không có USAGE lẫn CREATE trên nó", async () => {
+    await withMigratedDatabase(async (db) => {
+      const { rows } = await db.pool.query<{
+        co_schema: boolean;
+        api_usage: boolean;
+        api_create: boolean;
+        unseal_usage: boolean;
+        unseal_create: boolean;
+      }>(
+        "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app_private') AS co_schema, " +
+          "has_schema_privilege('app_api','app_private','USAGE') AS api_usage, " +
+          "has_schema_privilege('app_api','app_private','CREATE') AS api_create, " +
+          "has_schema_privilege('app_unseal','app_private','USAGE') AS unseal_usage, " +
+          "has_schema_privilege('app_unseal','app_private','CREATE') AS unseal_create",
+      );
+      expect(rows[0]).toEqual({
+        co_schema: true,
+        api_usage: false,
+        api_create: false,
+        unseal_usage: false,
+        unseal_create: false,
+      });
     });
   });
 });

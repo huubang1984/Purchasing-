@@ -106,13 +106,37 @@ describe("bộ chạy migration", () => {
   // chính nội dung migration: "pg_terminate_backend(pg_backend_pid())" tự ngắt kết nối của
   // chính nó đang chạy — xác định, không cần một kết nối thứ hai canh thời điểm để giết.
   it("[fix I1] mất kết nối giữa chừng không rò rỉ client — pool vẫn dùng được ngay sau, lỗi thật nổi lên", async () => {
+    // [fix round 4] Bắt mọi lỗi thoát ra MỨC TIẾN TRÌNH trong suốt test này. Listener rỗng
+    // lockClient.on("error", ...) trong migrate() tồn tại chính vì điều này: đã đo thật —
+    // kết nối chết giữa chừng làm pg phát 'error' trên Client ĐÚNG MỘT lần; có listener thì
+    // "so listener luc do = 1" và không có gì thoát ra, bỏ listener đi thì
+    // "so listener luc do = 0" và Node ném ra ngoài ("Connection terminated unexpectedly"),
+    // trong một tiến trình Node thường là uncaughtException giết cả tiến trình. Khẳng định
+    // dưới đây biến đột biến "bỏ listener" thành một lần FAIL của ĐÚNG test này, thay vì một
+    // dòng "Unhandled Errors" mà bộ chạy test dễ bỏ qua.
+    const loiThoatRaTienTrinh: unknown[] = [];
+    const batLoi = (loi: unknown): void => {
+      loiThoatRaTienTrinh.push(loi);
+    };
+    process.on("uncaughtException", batLoi);
+    process.on("unhandledRejection", batLoi);
+
     const poolMotKetNoi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
     try {
       const dir = migrationDir({
         "070_tu_ngat_ket_noi.sql": "SELECT pg_terminate_backend(pg_backend_pid());",
       });
 
-      await expect(migrate(poolMotKetNoi, dir)).rejects.toThrow();
+      // [fix round 4] Bản trước dùng "rejects.toThrow()" KHÔNG tham số — nó sống sót ba đột
+      // biến khác nhau của chính bản vá nó canh (bỏ listener 'error'; đổi release(err) thành
+      // release(); bỏ try/catch quanh ROLLBACK). Hai khẳng định dưới đây khoá hai trong ba:
+      //  - regex tên file: nếu bỏ try/catch quanh ROLLBACK, lỗi của chính ROLLBACK thay thế
+      //    lỗi gốc và thông báo tụt xuống "Connection terminated unexpectedly" — mất tên
+      //    migration thật sự gây lỗi, đúng thứ người trực đêm cần đọc đầu tiên;
+      //  - totalCount === 0: release(err) yêu cầu pg-pool HUỶ client hỏng khỏi sổ sách;
+      //    release() trần để nó nằm lại pool ở trạng thái hỏng (totalCount vẫn 1).
+      await expect(migrate(poolMotKetNoi, dir)).rejects.toThrow(/070_tu_ngat_ket_noi\.sql/);
+      expect(poolMotKetNoi.totalCount).toBe(0);
 
       const hetGio = new Promise<never>((_resolve, reject) => {
         setTimeout(
@@ -123,7 +147,13 @@ describe("bộ chạy migration", () => {
       await expect(
         Promise.race([poolMotKetNoi.query("SELECT 1"), hetGio]),
       ).resolves.toBeTruthy();
+
+      // pg phát 'error' trên Client một nhịp sau khi socket đứt — chờ nó lắng rồi mới đọc.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(loiThoatRaTienTrinh.map((e) => (e as Error).message)).toEqual([]);
     } finally {
+      process.off("uncaughtException", batLoi);
+      process.off("unhandledRejection", batLoi);
       await poolMotKetNoi.end();
     }
   });
@@ -150,5 +180,82 @@ describe("bộ chạy migration", () => {
       "SELECT count(*) AS dem FROM mig_j_dem",
     );
     expect(Number(rows[0]?.dem)).toBe(2);
+  });
+
+  // [fix round 4 — N1] pool.connect() trả về CÙNG MỘT đối tượng Client khi client đó được
+  // tái sử dụng. Bản trước gắn lockClient.on("error", ...) ở mỗi lần gọi mà không bao giờ
+  // gỡ, nên số listener bằng đúng số lần gọi migrate() — đã đo trên bản trước bản vá:
+  // "sau 1 lan = 1, sau 15 lan = 15", kèm "MaxListenersExceededWarning: ... 11 error
+  // listeners added to [Client]". Tiến trình gọi migrate() định kỳ (health-check, retry
+  // blue/green) tích tụ vô hạn. So sánh số listener sau 1 lần với sau 15 lần: rò rỉ thì
+  // chênh lệch đúng bằng 14.
+  it("[fix round 4 — N1] gọi migrate() nhiều lần không tích luỹ listener 'error' trên client tái dùng", async () => {
+    const poolMotKetNoi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({ "090_dem_listener.sql": "CREATE TABLE mig_k (id int);" });
+
+      await migrate(poolMotKetNoi, dir);
+      const clientDau = await poolMotKetNoi.connect();
+      const demSauMotLan = clientDau.listenerCount("error");
+      clientDau.release();
+
+      for (let i = 0; i < 14; i++) await migrate(poolMotKetNoi, dir);
+      const clientSau = await poolMotKetNoi.connect();
+      const demSauMuoiLamLan = clientSau.listenerCount("error");
+      clientSau.release();
+
+      expect(demSauMuoiLamLan).toBe(demSauMotLan);
+    } finally {
+      await poolMotKetNoi.end();
+    }
+  });
+
+  // [fix round 4 — Minor] "CREATE TABLE IF NOT EXISTS schema_migrations" phải nằm TRONG
+  // advisory lock. Bản trước chạy nó bằng pool.query() TRƯỚC khi lấy khoá: hai migrate()
+  // đồng thời trên một CSDL TRỐNG (hai pod cùng khởi động lần đầu) đua nhau và một bên vỡ
+  // với "duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"" —
+  // mâu thuẫn trực tiếp với docstring của migrate() nói hai tiến trình "không giẫm lên
+  // nhau". IF NOT EXISTS không chống được đua này.
+  //
+  // Test XÁC ĐỊNH thay vì đua thật: giữ sẵn advisory lock từ một kết nối khác, gọi migrate()
+  // trên một database HOÀN TOÀN trống, rồi khẳng định schema_migrations VẪN CHƯA tồn tại
+  // trong lúc migrate() còn đang chờ khoá. Nếu CREATE TABLE nằm ngoài khoá, bảng đã có mặt.
+  it("[fix round 4] CREATE TABLE schema_migrations nằm trong advisory lock, không chạy trước khi có khoá", async () => {
+    // Trùng với MIGRATION_LOCK_KEY trong packages/db/src/migrate.ts — cố ý không export ra
+    // mặt tiền công khai chỉ để phục vụ test.
+    const KHOA_MIGRATION = 727_100_003;
+    const TEN_DB = "tp_kiem_tra_khoa";
+
+    await db.pool.query(`CREATE DATABASE ${TEN_DB}`);
+    const urlDbTrong = new URL(db.connectionString);
+    urlDbTrong.pathname = `/${TEN_DB}`;
+    const csDbTrong = urlDbTrong.toString();
+
+    const poolGiuKhoa = new pg.Pool({ connectionString: csDbTrong, max: 1 });
+    const poolMigrate = new pg.Pool({ connectionString: csDbTrong, max: 2 });
+    try {
+      const clientGiuKhoa = await poolGiuKhoa.connect();
+      await clientGiuKhoa.query("SELECT pg_advisory_lock($1)", [KHOA_MIGRATION]);
+
+      const dir = migrationDir({ "100_sau_khoa.sql": "CREATE TABLE mig_l (id int);" });
+      const dangChay = migrate(poolMigrate, dir);
+
+      // Cho migrate() đủ thời gian chạy tới chỗ chờ khoá.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const { rows } = await poolMigrate.query<{ bang: string | null }>(
+        "SELECT to_regclass('public.schema_migrations')::text AS bang",
+      );
+      expect(rows[0]?.bang).toBeNull();
+
+      await clientGiuKhoa.query("SELECT pg_advisory_unlock($1)", [KHOA_MIGRATION]);
+      clientGiuKhoa.release();
+
+      await expect(dangChay).resolves.toEqual(["100_sau_khoa.sql"]);
+    } finally {
+      await poolGiuKhoa.end();
+      await poolMigrate.end();
+      await db.pool.query(`DROP DATABASE IF EXISTS ${TEN_DB} WITH (FORCE)`);
+    }
   });
 });

@@ -27,15 +27,18 @@ function tinhChecksum(sql: string): string {
  * không được ghi vào `applied` trả về — dùng cho cưỡng chế cấu hình cần tự sửa lại nếu bị
  * trôi sau triển khai (vd. thuộc tính role), khác với thay đổi lược đồ một-lần.
  *
+ * [fix round 4 — Minor] RÀNG BUỘC của ".always.sql": giống mọi migration đánh số, nội dung
+ * file được chạy TRONG một BEGIN/COMMIT tường minh, nên KHÔNG dùng được lệnh không chạy
+ * trong transaction: CREATE DATABASE, DROP DATABASE, CREATE TABLESPACE, VACUUM,
+ * CREATE INDEX CONCURRENTLY, ALTER TYPE ... ADD VALUE (trước PG12)... Postgres sẽ báo
+ * "CREATE DATABASE cannot run inside a transaction block". Đây là đánh đổi có chủ đích:
+ * một hardening chạy nửa chừng rồi lỗi sẽ để lại cấu hình an ninh ở trạng thái lai — tính
+ * nguyên tử quan trọng hơn khả năng chạy lệnh phi-transaction ở đây.
+ *
  * Cố ý dùng SQL thuần thay vì thư viện migration: lược đồ này phụ thuộc nặng vào RLS,
  * trigger và GRANT/REVOKE — những thứ cần đọc được nguyên văn khi kiểm toán.
  */
 export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
-  await pool.query(
-    "CREATE TABLE IF NOT EXISTS schema_migrations (" +
-      "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
-  );
-
   // [fix I4] TOÀN BỘ vòng lặp chạy trên đúng MỘT client (lockClient) — không xin thêm
   // client nào khác từ pool trong lúc giữ khoá. Bản trước dùng pool.query()/pool.connect()
   // NGOÀI lockClient trong lúc vẫn giữ lockClient checked-out; với pool có max: 1 (mà
@@ -50,12 +53,31 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
   // thật: "Emitted 'error' event on Client instance" -> unhandled, crash. Gắn listener rỗng
   // ở đây để sự kiện có nơi tiêu thụ; lỗi thật vẫn nổi lên qua promise reject của câu lệnh
   // đang chạy, không bị nuốt bởi việc này.
-  lockClient.on("error", () => {});
+  //
+  // [fix round 4 — N1] Listener PHẢI được gỡ trong finally. pool.connect() trả về CÙNG MỘT
+  // đối tượng Client mỗi lần khi client đó được tái sử dụng, nên một listener gắn mà không
+  // gỡ sẽ tích luỹ theo số lần gọi migrate(): đã tự đo trên pg.Pool thật —
+  // "sau 1 lan = 1, sau 15 lan = 15" kèm "MaxListenersExceededWarning: ... 11 error
+  // listeners added to [Client]". Tiến trình gọi migrate() định kỳ (health-check, retry
+  // blue/green) sẽ tích tụ vô hạn. Giữ tham chiếu tới đúng hàm đã gắn để off() được.
+  const boQuaLoiKetNoi = (): void => {};
+  lockClient.on("error", boQuaLoiKetNoi);
 
   try {
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
     await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+
+    // [fix round 4 — Minor] CREATE TABLE này phải nằm TRONG advisory lock. Bản trước gọi
+    // pool.query(...) TRƯỚC khi lấy khoá: hai migrate() đồng thời trên một CSDL TRỐNG (hai
+    // pod cùng khởi động lần đầu) đua nhau tạo cùng một bảng và một bên vỡ với
+    // "duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"" —
+    // mâu thuẫn trực tiếp với lời hứa "không giẫm lên nhau" ở docstring trên. IF NOT EXISTS
+    // KHÔNG chống được đua này: nó chỉ kiểm tra tại thời điểm bắt đầu, không khoá tên kiểu.
+    await lockClient.query(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (" +
+        "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+    );
 
     const tatCaFile = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
     const fileLuonChay = tatCaFile.filter((f) => f.endsWith(HAU_TO_LUON_CHAY));
@@ -140,10 +162,15 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     // unlock thất bại, gọi release(err) để pg-pool LOẠI BỎ client hỏng khỏi sổ sách thay vì
     // để nó kẹt ở trạng thái lấp lửng. Không cần lo khoá advisory bị kẹt — Postgres tự nhả
     // nó khi backend giữ khoá chết, không phụ thuộc client Node có gọi unlock được hay không.
+    //
+    // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI nhánh
+    // — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
     try {
       await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+      lockClient.off("error", boQuaLoiKetNoi);
       lockClient.release();
     } catch (loiKhiMoKhoa) {
+      lockClient.off("error", boQuaLoiKetNoi);
       lockClient.release(loiKhiMoKhoa as Error);
     }
   }
