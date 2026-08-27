@@ -700,10 +700,14 @@ describe("phủ RLS", () => {
     //   giá trị seq kế tiếp và chặn việc ghi sổ. Ca nặng nhất đã đo là seq = 2^63-1 — mọi lần
     //   ghi sau vỡ với "bigint out of range" VĨNH VIỄN, mà B4 lại cấm DELETE nên không ai gỡ
     //   được hàng đó ở đường DML thường. Ba cột nay do trigger audit_events_noi_chuoi đặt.
+    // [vòng fix 1 — IM4] HAI vắng mặt MỚI trên audit_chain_anchors — `seq` và `hash`: 004 §(5)
+    //   thu hồi INSERT trên chúng và cắm trigger audit_chain_anchors_moc_neo dẫn xuất hai giá
+    //   trị đó từ đầu chuỗi hiện tại. Đường đi mà chúng đóng: app_api chèn được một MỐC NEO GIẢ
+    //   vào chính bộ kiểm chứng — VĨNH VIỄN, vì trigger append-only của B4 chặn gỡ bỏ kể cả bởi
+    //   chủ sở hữu bảng trên đường DML — và việc chiếm trước (org, seq) làm recordChainAnchor
+    //   trả null mãi mãi, tức việc NEO THẬT âm thầm thành no-op.
     expect(rows).toEqual([
-      { grantee: "app_api", bang: "audit_chain_anchors", cot: "hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
-      { grantee: "app_api", bang: "audit_chain_anchors", cot: "seq", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },
@@ -722,9 +726,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "users", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "UPDATE" },
-      { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "hash", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
-      { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "seq", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_type", quyen: "INSERT" },

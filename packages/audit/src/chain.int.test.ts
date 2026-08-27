@@ -108,9 +108,9 @@ describe("chuỗi hash kiểm toán", () => {
     expect(banGhi[0]!.occurredAt.toISOString()).not.toBe(banGhi[1]!.occurredAt.toISOString());
   });
 
-  it("[INV-B3] chuỗi nguyên vẹn thì kiểm chứng đạt", async () => {
+  it("[INV-B3] chuỗi nguyên vẹn CÓ mốc neo ngoài thì kiểm chứng đạt", async () => {
     const org = await orgMoi("chuoi-nguyen-ven");
-    await withTenant(apiPool, org, async (client) => {
+    const neo = await withTenant(apiPool, org, async (client) => {
       for (let i = 0; i < 25; i += 1) {
         await appendAuditEvent(client, org, {
           actorType: "USER",
@@ -119,12 +119,137 @@ describe("chuỗi hash kiểm toán", () => {
           payload: { chiSo: i, ghiChu: "giá trị có dấu tiếng Việt" },
         });
       }
+      return exportChainHead(client, org);
     });
+    if (neo === null) throw new Error("không xuất được mốc chuỗi");
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [neo] }),
+    );
     expect(ketQua.problems).toEqual([]);
     expect(ketQua.ok).toBe(true);
     expect(ketQua.checked).toBe(25);
+  });
+
+  /**
+   * [vòng fix 1 — CR2] Bản trước của test ngay trên gọi verifyAuditChain KHÔNG NEO và khẳng
+   * định ok:true. Test này là lý do phát biểu đó phải đổi, và nó dựng lại ĐÚNG payload mà
+   * reviewer đo được: sửa một hàng rồi TÍNH LẠI ĐUÔI bằng CHÍNH hàm băm thật.
+   *
+   * Vế (a) là phát hiện: không neo thì chuỗi "tự nhất quán" trên một sổ ĐÃ BỊ SỬA — mọi phép
+   * kiểm nội tại đều xanh, chỉ còn NOT_ANCHORED nói rằng kết luận này không có giá trị.
+   * Vế (b) là bảo đảm còn lại: CÓ neo thì đúng cú tấn công đó bị bắt.
+   */
+  it("[INV-B3] sửa một hàng RỒI TÍNH LẠI ĐUÔI: chuỗi tự nhất quán, chỉ mốc neo ngoài bắt được", async () => {
+    const org = await orgMoi("chuoi-tinh-lai-duoi");
+    const neo = await withTenant(apiPool, org, async (client) => {
+      for (let i = 0; i < 6; i += 1) {
+        await appendAuditEvent(client, org, {
+          actorType: "USER",
+          action: `T${i}`,
+          resourceType: "TEST",
+        });
+      }
+      return exportChainHead(client, org);
+    });
+    if (neo === null) throw new Error("không xuất được mốc chuỗi");
+
+    // Tác nhân: chủ sở hữu bảng đã qua lớp trigger. Nó sửa seq 3 rồi đi từ seq 3 tính lại
+    // prev_hash/hash cho toàn bộ đuôi bằng chính public.audit_compute_hash.
+    await voHieuHoaTrigger("audit_events", "audit_events_chan_update", async () => {
+      await db.pool.query(
+        "UPDATE audit_events SET action = 'DA_BI_SUA' WHERE org_id = $1 AND seq = 3",
+        [org],
+      );
+      await db.pool.query(
+        `DO $$
+         DECLARE r RECORD; truoc bytea;
+         BEGIN
+           SELECT ae.hash INTO truoc FROM audit_events ae
+            WHERE ae.org_id = '${org}'::uuid AND ae.seq = 2;
+           FOR r IN SELECT * FROM audit_events ae
+                     WHERE ae.org_id = '${org}'::uuid AND ae.seq >= 3 ORDER BY ae.seq LOOP
+             UPDATE audit_events SET prev_hash = truoc,
+                    hash = public.audit_compute_hash(truoc, r.id, r.org_id, r.seq, r.occurred_at,
+                             r.actor_type, r.actor_id,
+                             CASE WHEN r.seq = 3 THEN 'DA_BI_SUA' ELSE r.action END,
+                             r.resource_type, r.resource_id, r.payload, r.request_id, r.ip,
+                             r.user_agent)
+              WHERE id = r.id
+              RETURNING hash INTO truoc;
+           END LOOP;
+         END $$`,
+      );
+    });
+
+    // Fixture phải thật sự tấn công được.
+    const { rows } = await db.pool.query<{ action: string }>(
+      "SELECT action FROM audit_events WHERE org_id = $1 AND seq = 3",
+      [org],
+    );
+    expect(rows[0]!.action).toBe("DA_BI_SUA");
+
+    // (a) KHÔNG neo: mọi phép kiểm NỘI TẠI của chuỗi đều xanh trên một sổ đã bị sửa.
+    const khongNeo = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
+    expect(khongNeo.checked).toBe(6);
+    expect(khongNeo.problems.map((p) => p.kind)).toEqual(["NOT_ANCHORED"]);
+    expect(khongNeo.ok, "một lời gọi KHÔNG NEO không được cho ra kết luận màu xanh").toBe(false);
+
+    // (b) CÓ neo: đúng cú tấn công đó bị bắt, tại đúng đầu chuỗi.
+    const coNeo = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [neo] }),
+    );
+    expect(coNeo.ok).toBe(false);
+    expect(coNeo.problems.some((p) => p.seq === 6 && p.kind === "ANCHOR_MISSING")).toBe(true);
+  });
+
+  /**
+   * [vòng fix 1 — CR1] `ip` và `user_agent` là HAI TRƯỜNG PHÁP Y, và trước bản vá này chúng
+   * nằm NGOÀI tiền ảnh băm: kẻ đã qua lớp trigger viết lại được địa chỉ của chính mình mà
+   * kiểm chứng vẫn xanh và đầu chuỗi KHÔNG ĐỔI (nên cả neo ngoài cũng khớp). Mọi test
+   * "[INV-B3] sửa nội dung..." đều dựng đúng khuôn này — chúng chỉ tình cờ chọn cột `action`.
+   * `id` cũng được thêm vào cùng vòng: đo được là NEW.id CÓ giá trị trong BEFORE-trigger.
+   */
+  it("[INV-B3] sửa ip/user_agent/id trên hàng ĐANG CÓ thì kiểm chứng thất bại", async () => {
+    for (const [cot, giaTri] of [
+      ["ip", "'9.9.9.9'::inet"],
+      ["user_agent", "'DA_BI_SUA'"],
+      ["id", "'deadbeef-0000-4000-8000-000000000001'::uuid"],
+    ] as const) {
+      const org = await orgMoi(`chuoi-phap-y-${cot}`);
+      const neo = await withTenant(apiPool, org, async (client) => {
+        for (let i = 0; i < 3; i += 1) {
+          await appendAuditEvent(client, org, {
+            actorType: "USER",
+            action: `P${i}`,
+            resourceType: "TEST",
+            ip: "10.0.0.1",
+            userAgent: "trustprocure-test/1.0",
+          });
+        }
+        return exportChainHead(client, org);
+      });
+      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+
+      await voHieuHoaTrigger("audit_events", "audit_events_chan_update", async () => {
+        const { rowCount } = await db.pool.query(
+          `UPDATE audit_events SET ${cot} = ${giaTri} WHERE org_id = $1 AND seq = 2`,
+          [org],
+        );
+        expect(rowCount, `fixture không sửa được cột ${cot} thì phép đo rỗng ruột`).toBe(1);
+      });
+
+      const ketQua = await withTenant(apiPool, org, (client) =>
+        verifyAuditChain(client, org, { externalAnchors: [neo] }),
+      );
+      expect(ketQua.ok, `sửa ${cot} mà kiểm chứng vẫn QUA`).toBe(false);
+      expect(
+        ketQua.problems.some((p) => p.seq === 2 && p.kind === "HASH_MISMATCH"),
+        `sửa ${cot} phải cho HASH_MISMATCH tại seq 2`,
+      ).toBe(true);
+    }
   });
 
   it("[INV-B3] sửa nội dung một hàng ĐANG CÓ thì kiểm chứng thất bại", async () => {
@@ -153,7 +278,9 @@ describe("chuỗi hash kiểm toán", () => {
     );
     expect(rows[0]!.action).toBe("DA_BI_SUA");
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
     expect(ketQua.ok).toBe(false);
     expect(ketQua.problems.some((p) => p.seq === 3 && p.kind === "HASH_MISMATCH")).toBe(true);
   });
@@ -178,7 +305,9 @@ describe("chuỗi hash kiểm toán", () => {
       expect(rowCount, "fixture không xoá được hàng nào thì phép đo rỗng ruột").toBe(1);
     });
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
     expect(ketQua.ok).toBe(false);
     expect(ketQua.problems.some((p) => p.kind === "SEQ_GAP")).toBe(true);
     expect(ketQua.problems.some((p) => p.kind === "LINK_BROKEN")).toBe(true);
@@ -207,7 +336,9 @@ describe("chuỗi hash kiểm toán", () => {
       );
     });
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
     expect(ketQua.ok).toBe(false);
     expect(ketQua.checked).toBe(4);
     expect(ketQua.problems.some((p) => p.seq === 4 && p.kind === "LINK_BROKEN")).toBe(true);
@@ -236,7 +367,9 @@ describe("chuỗi hash kiểm toán", () => {
       expect(rowCount).toBe(2);
     });
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
     expect(ketQua.ok).toBe(false);
     expect(ketQua.checked).toBe(4);
     expect(ketQua.problems.some((p) => p.seq === 6 && p.kind === "ANCHOR_MISSING")).toBe(true);
@@ -276,10 +409,25 @@ describe("chuỗi hash kiểm toán", () => {
       });
     });
 
-    // Không có neo ngoài: sổ RỖNG trông "hợp lệ" — đúng đúng cái mà bàn giao Task 5 cảnh báo.
-    const khongNeo = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
-    expect(khongNeo.ok).toBe(true);
+    // Không có neo ngoài: MỌI phép kiểm NỘI TẠI của chuỗi đều xanh trên một sổ đã bị xoá sạch —
+    // đúng cái mà bàn giao Task 5 cảnh báo. [vòng fix 1 — CR2/IM3] Nay hai vấn đề mức-kết-luận
+    // giữ cho kết quả đó không được đọc thành "sổ khoẻ mạnh".
+    const khongNeo = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [] }),
+    );
     expect(khongNeo.checked).toBe(0);
+    expect(khongNeo.problems.map((p) => p.kind).sort()).toEqual([
+      "EMPTY_LEDGER",
+      "NOT_ANCHORED",
+    ]);
+    expect(khongNeo.ok).toBe(false);
+    // Và vế quan trọng: KHÔNG phép kiểm nội tại nào (SEQ_GAP/LINK_BROKEN/HASH_MISMATCH/
+    // ANCHOR_MISSING) nói được gì ở đây — đó là lý do neo ngoài tồn tại.
+    expect(
+      khongNeo.problems.filter(
+        (p) => p.kind !== "EMPTY_LEDGER" && p.kind !== "NOT_ANCHORED",
+      ),
+    ).toEqual([]);
 
     const coNeo = await withTenant(apiPool, org, (client) =>
       verifyAuditChain(client, org, { externalAnchors: [quaJson] }),
@@ -368,7 +516,11 @@ describe("chuỗi hash kiểm toán", () => {
       ),
     );
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const neo = await withTenant(apiPool, org, (client) => exportChainHead(client, org));
+    if (neo === null) throw new Error("không xuất được mốc chuỗi");
+    const ketQua = await withTenant(apiPool, org, (client) =>
+      verifyAuditChain(client, org, { externalAnchors: [neo] }),
+    );
     expect(ketQua.problems).toEqual([]);
     expect(ketQua.ok).toBe(true);
     expect(ketQua.checked).toBe(20);
@@ -416,7 +568,9 @@ describe("chuỗi hash kiểm toán", () => {
           "VALUES ($1, 'SYSTEM', 'GHI_THANG', 'T')",
         [org],
       );
-      return verifyAuditChain(client, org);
+      const neo = await exportChainHead(client, org);
+      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.ok).toBe(true);
     expect(ketQua.checked).toBe(2);
@@ -437,7 +591,11 @@ describe("chuỗi hash kiểm toán", () => {
     );
     expect(Number(rows[0]!.seq)).toBe(2);
 
-    const ketQua = await withTenant(apiPool, org, (client) => verifyAuditChain(client, org));
+    const ketQua = await withTenant(apiPool, org, async (client) => {
+      const neo = await exportChainHead(client, org);
+      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      return verifyAuditChain(client, org, { externalAnchors: [neo] });
+    });
     expect(ketQua.problems).toEqual([]);
     expect(ketQua.ok).toBe(true);
   });
@@ -463,6 +621,9 @@ describe("chuỗi hash kiểm toán", () => {
       }
     });
 
+    const neo = await withTenant(apiPool, org, (client) => exportChainHead(client, org));
+    if (neo === null) throw new Error("không xuất được mốc chuỗi");
+
     const ketQua = await withTenant(apiPool, org, async (client) => {
       for (const cau of [
         "SET LOCAL DateStyle = 'German, DMY'",
@@ -473,7 +634,7 @@ describe("chuỗi hash kiểm toán", () => {
       ]) {
         await client.query(cau);
       }
-      return verifyAuditChain(client, org);
+      return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.problems).toEqual([]);
     expect(ketQua.ok).toBe(true);
@@ -494,15 +655,44 @@ describe("chuỗi hash kiểm toán", () => {
   it("[INV-B3] không chèn được ký tự phân cách để hai sự kiện khác nhau trùng băm", async () => {
     const { rows } = await db.pool.query<{ trung: boolean }>(
       `SELECT audit_compute_hash(decode(repeat('00',32),'hex'),
+                '22222222-2222-2222-2222-222222222222'::uuid,
                 '11111111-1111-1111-1111-111111111111'::uuid, 1::bigint,
                 '2026-08-27 10:11:12.123456+00'::timestamptz, 'USER', NULL,
-                'A', 'B' || chr(31) || 'C', NULL, '{}'::jsonb, NULL)
+                'A', 'B' || chr(31) || 'C', NULL, '{}'::jsonb, NULL, NULL, NULL)
             = audit_compute_hash(decode(repeat('00',32),'hex'),
+                '22222222-2222-2222-2222-222222222222'::uuid,
                 '11111111-1111-1111-1111-111111111111'::uuid, 1::bigint,
                 '2026-08-27 10:11:12.123456+00'::timestamptz, 'USER', NULL,
-                'A' || chr(31) || 'B', 'C', NULL, '{}'::jsonb, NULL) AS trung`,
+                'A' || chr(31) || 'B', 'C', NULL, '{}'::jsonb, NULL, NULL, NULL) AS trung`,
     );
     expect(rows[0]!.trung).toBe(false);
+  });
+
+  /**
+   * [vòng fix 1 — CR1] Hai trường PHÁP Y mới cũng phải chịu đúng phép đo va chạm đó: bên ghi
+   * kiểm soát `user_agent`, và `ip` thì không (kiểu `inet` không chứa được ký tự phân cách),
+   * nên mũi đáng đo là cặp (action, user_agent) và cặp (resource_type, user_agent).
+   */
+  it("[INV-B3] hai trường pháp y mới không dời được ranh giới để trùng băm", async () => {
+    const { rows } = await db.pool.query<{ ua_action: boolean; ua_res: boolean }>(
+      `WITH b AS (
+         SELECT decode(repeat('00',32),'hex') AS p,
+                '22222222-2222-2222-2222-222222222222'::uuid AS i,
+                '11111111-1111-1111-1111-111111111111'::uuid AS o,
+                '2026-08-27 10:11:12.123456+00'::timestamptz AS t
+       )
+       SELECT audit_compute_hash(p, i, o, 1::bigint, t, 'USER', NULL, 'A', 'R', NULL,
+                '{}'::jsonb, NULL, NULL, 'B' || chr(31) || 'C')
+            = audit_compute_hash(p, i, o, 1::bigint, t, 'USER', NULL,
+                'A' || chr(31) || 'B', 'R', NULL, '{}'::jsonb, NULL, NULL, 'C') AS ua_action,
+              audit_compute_hash(p, i, o, 1::bigint, t, 'USER', NULL, 'A', 'R', NULL,
+                '{}'::jsonb, NULL, NULL, 'B' || chr(31) || 'C')
+            = audit_compute_hash(p, i, o, 1::bigint, t, 'USER', NULL, 'A',
+                'R' || chr(31) || 'B', NULL, '{}'::jsonb, NULL, NULL, 'C') AS ua_res
+         FROM b`,
+    );
+    expect(rows[0]!.ua_action).toBe(false);
+    expect(rows[0]!.ua_res).toBe(false);
   });
 
   /**
@@ -527,7 +717,131 @@ describe("chuỗi hash kiểm toán", () => {
     await db.pool.query("DROP TABLE nhap_tgenabled");
   });
 
-  it("[INV-B4] sau mọi mô phỏng tấn công, bảy trigger trên bảng sổ vẫn ENABLE ALWAYS", async () => {
+  /**
+   * [vòng fix 1 — IM3] Bộ kiểm chứng KHÔNG được trả lời "không có vấn đề" ở chỗ phải trả lời
+   * "không kiểm được". Đây là phép đo TRÊN DB THẬT (bản mô phỏng nằm ở verifier.test.ts): sổ
+   * của P có 5 hàng, nhưng phiên đang gắn Q — trước bản vá, kết quả là
+   * {"ok":true,"checked":0,"problems":[]}, tức một giấy chứng nhận sức khoẻ tốt cho một tổ
+   * chức mà phiên này không nhìn thấy hàng nào.
+   */
+  it("[INV-F1] verifyAuditChain/exportChainHead NÉM khi phiên gắn sai tổ chức", async () => {
+    const orgP = await orgMoi("chuoi-tenant-p");
+    const orgQ = await orgMoi("chuoi-tenant-q");
+    await withTenant(apiPool, orgP, async (client) => {
+      for (let i = 0; i < 5; i += 1) {
+        await appendAuditEvent(client, orgP, {
+          actorType: "USER",
+          action: `Q${i}`,
+          resourceType: "TEST",
+        });
+      }
+    });
+
+    // Vế chống rỗng ruột: sổ của P thật sự có 5 hàng.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1",
+      [orgP],
+    );
+    expect(rows[0]!.n).toBe("5");
+
+    const cacHam: readonly [string, (c: pg.PoolClient) => Promise<unknown>][] = [
+      ["verifyAuditChain", (c) => verifyAuditChain(c, orgP, { externalAnchors: [] })],
+      ["exportChainHead", (c) => exportChainHead(c, orgP)],
+      ["recordChainAnchor", (c) => recordChainAnchor(c, orgP)],
+    ];
+    for (const [ten, chay] of cacHam) {
+      const loi = await withTenant(apiPool, orgQ, (client) => chay(client)).then(
+        () => "THÀNH CÔNG",
+        (e: Error) => e.message,
+      );
+      expect(loi, `${ten} chạy sai tenant mà không ném`).toContain(orgQ);
+      expect(loi).toContain("withTenant");
+    }
+  });
+
+  /**
+   * [vòng fix 1 — IM4] `audit_chain_anchors` là BỘ KIỂM CHỨNG chứ không phải dữ liệu nghiệp vụ,
+   * và trước bản vá này `app_api` chèn được một mốc neo GIẢ vào đó — VĨNH VIỄN, vì trigger
+   * append-only của chính B4 chặn gỡ bỏ kể cả bởi chủ sở hữu bảng trên đường DML.
+   *
+   * Ba vế, đúng ba hệ quả mà báo cáo vòng trước bỏ qua:
+   *   (a) app_api không nêu được `seq`/`hash` (lớp REVOKE, 42501);
+   *   (b) kể cả superuser cũng không CHỌN được (lớp trigger ghi đè);
+   *   (c) đường neo HỢP LỆ vẫn mở, và neo chiếm chỗ không còn làm recordChainAnchor thành
+   *       no-op vĩnh viễn.
+   */
+  it("[INV-B3] không ai chèn được mốc neo GIẢ vào audit_chain_anchors", async () => {
+    const org = await orgMoi("neo-gia");
+    await withTenant(apiPool, org, async (client) => {
+      for (let i = 0; i < 3; i += 1) {
+        await appendAuditEvent(client, org, {
+          actorType: "USER",
+          action: `N${i}`,
+          resourceType: "TEST",
+        });
+      }
+    });
+
+    // (a) app_api nêu tên seq/hash -> 42501.
+    for (const [cot, cacCot, giaTri] of [
+      ["seq", "(org_id, seq)", "$1, 999999"],
+      ["hash", "(org_id, hash)", "$1, sha256('gia'::bytea)"],
+    ] as const) {
+      const loi = await withTenant(apiPool, org, (client) =>
+        client.query(`INSERT INTO audit_chain_anchors ${cacCot} VALUES (${giaTri})`, [org]),
+      ).then(
+        () => "THÀNH CÔNG",
+        (e: Error) => e.message,
+      );
+      expect(loi, `neo giả qua cột ${cot}`).toMatch(/permission denied/i);
+    }
+
+    // (b) superuser + chủ sở hữu bảng cũng bị trigger ghi đè về đúng đầu chuỗi.
+    const { rows: chiem } = await db.pool.query<{ seq: string; hash: Buffer }>(
+      "INSERT INTO audit_chain_anchors (org_id, seq, hash) " +
+        "VALUES ($1, 999999, sha256('gia'::bytea)) RETURNING seq, hash",
+      [org],
+    );
+    expect(Number(chiem[0]!.seq)).toBe(3);
+    const { rows: dau } = await db.pool.query<{ hash: Buffer }>(
+      "SELECT hash FROM audit_events WHERE org_id = $1 AND seq = 3",
+      [org],
+    );
+    expect(chiem[0]!.hash.equals(dau[0]!.hash)).toBe(true);
+
+    // (c) và kiểm chứng vẫn sạch — không có ANCHOR_MISSING giả nào.
+    const ketQua = await withTenant(apiPool, org, async (client) => {
+      const neo = await exportChainHead(client, org);
+      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      return verifyAuditChain(client, org, { externalAnchors: [neo] });
+    });
+    expect(ketQua.problems).toEqual([]);
+    expect(ketQua.ok).toBe(true);
+  });
+
+  it("[INV-B3] recordChainAnchor vẫn neo được đúng đầu chuỗi, và trả null trên sổ rỗng", async () => {
+    const org = await orgMoi("neo-hop-le");
+    const rong = await withTenant(apiPool, org, (client) => recordChainAnchor(client, org));
+    expect(rong, "sổ rỗng thì không có gì để neo").toBeNull();
+
+    const neo = await withTenant(apiPool, org, async (client) => {
+      for (let i = 0; i < 4; i += 1) {
+        await appendAuditEvent(client, org, {
+          actorType: "USER",
+          action: `M${i}`,
+          resourceType: "TEST",
+        });
+      }
+      return recordChainAnchor(client, org);
+    });
+    expect(neo?.seq).toBe(4);
+
+    // Neo lại cùng đầu chuỗi -> ON CONFLICT DO NOTHING -> null. Đó là hành vi cũ, giữ nguyên.
+    const lai = await withTenant(apiPool, org, (client) => recordChainAnchor(client, org));
+    expect(lai).toBeNull();
+  });
+
+  it("[INV-B4] sau mọi mô phỏng tấn công, tám trigger trên bảng sổ vẫn ENABLE ALWAYS", async () => {
     const { rows } = await db.pool.query<{ tgname: string; tgenabled: string }>(
       "SELECT t.tgname, t.tgenabled FROM pg_trigger t " +
         " JOIN pg_class c ON c.oid = t.tgrelid " +
@@ -538,6 +852,7 @@ describe("chuỗi hash kiểm toán", () => {
       "audit_chain_anchors_chan_delete",
       "audit_chain_anchors_chan_truncate",
       "audit_chain_anchors_chan_update",
+      "audit_chain_anchors_moc_neo",
       "audit_events_chan_delete",
       "audit_events_chan_truncate",
       "audit_events_chan_update",

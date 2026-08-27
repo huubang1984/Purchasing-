@@ -4,26 +4,53 @@
 -- ============================================================================================
 -- B3 PHÁT BIỂU ĐÚNG MỨC — ĐỌC TRƯỚC KHI TRÍCH DẪN FILE NÀY
 -- ============================================================================================
--- Chuỗi hash trong file này chứng minh ĐÚNG MỘT điều, và bàn giao đo được của Task 5 đã đóng
--- khung nó rất chặt:
+-- [vòng fix 1 — CR2] Bản trước của khối này mở đầu bằng "CHỨNG MINH: không ai SỬA, XOÁ, CHÈN
+-- hay CẮT ĐUÔI các hàng ĐANG CÓ mà không bị phát hiện." Phát biểu đó ĐO ĐƯỢC LÀ SAI, và nó sai
+-- theo đúng lớp lỗi mà chính khối này cảnh báo ở ba đoạn dưới: nó tự đóng khung rất chặt rồi
+-- vẫn phát biểu rộng hơn thứ đo được. Reviewer dựng lại bằng CHÍNH hàm audit_compute_hash thật,
+-- dưới role deploy KHÔNG superuser:
+--     UPDATE audit_events SET action='DA_BI_SUA' WHERE seq=3;  -- rồi tính lại prev_hash/hash
+--     đi từ seq >= 3 bằng chính hàm băm thật
+--   -> không neo ngoài: {"ok":true,"checked":6,"problems":[]}   <-- kiểm chứng QUA
+--   -> có neo ngoài:    ok=false, ANCHOR_MISSING tại seq 6      <-- chỉ neo ngoài bắt được
+--   -> MIGRATE OK ở cả hai
+-- Một chuỗi hash mà ĐẦU CHUỖI nằm trong bán kính sửa đổi của tác nhân không chứng minh gì
+-- trước một tác nhân UPDATE được: nó chỉ bắt kẻ tấn công LƯỜI (sửa mà quên tính lại đuôi).
 --
---   CHỨNG MINH: không ai SỬA, XOÁ, CHÈN hay CẮT ĐUÔI các hàng ĐANG CÓ mà không bị phát hiện.
---   KHÔNG chứng minh (a) "mọi sự kiện đã xảy ra đều có mặt trong bảng": một trigger
---       BEFORE INSERT ... RETURN NULL có điều kiện nuốt sự kiện CÓ CHỌN LỌC trong khi seq và
---       prev_hash vẫn liền mạch — một bộ kiểm chứng đúng chuẩn sẽ báo HỢP LỆ trên một sổ đã bị
---       kiểm duyệt. (Lớp phòng thủ tương ứng là "chỉ bảy trigger được phép tồn tại trên bảng
---       sổ" trong hardening.always.sql, KHÔNG phải chuỗi hash.)
---   KHÔNG chứng minh (b) "đây vẫn là cái sổ cũ": chủ sở hữu bảng không-superuser đo được ba
---       đường dựng lại bảng (RENAME + CREATE TABLE LIKE + DROP; SET SCHEMA; DROP cả hai bảng +
---       xoá dòng 003 khỏi schema_migrations) — cả ba cho MIGRATE OK và một cái sổ khác.
+-- PHÁT BIỂU ĐÚNG MỨC — bản này là bản chuẩn, ba chỗ khác (packages/audit/src/verifier.ts và
+-- task-6-report.md §2) nhân bản đúng nó:
+--
+--   Với sổ của một tổ chức MÀ PHIÊN HIỆN TẠI ĐỌC ĐƯỢC, `verifyAuditChain()` phát hiện mọi thao
+--   tác XOÁ, CHÈN, CẮT ĐUÔI, và mọi thao tác SỬA trên các trường đi vào băm. `checked` là SỐ
+--   HÀNG ĐỌC ĐƯỢC DƯỚI RLS, không phải số hàng tồn tại.
+--
+--   Trước `app_api`/`app_unseal`/SQL injection, phát biểu này mạnh — nhưng công việc do TRIGGER
+--   và REVOKE THEO CỘT của B4 làm, chúng ngăn việc sửa đổi ngay từ đầu.
+--
+--   Trước CHỦ SỞ HỮU BẢNG KHÔNG-SUPERUSER, chuỗi KHÔNG CÓ NEO NGOÀI chứng minh về cơ bản là
+--   KHÔNG GÌ CẢ: tác nhân đó sửa một hàng rồi tính lại đuôi bằng chính hàm thật.
+--
+--   NẾU VÀ CHỈ NẾU người kiểm truyền vào một `ExternalAnchor` giữ ở nơi role deploy KHÔNG GHI
+--   ĐƯỢC, chuỗi còn phát hiện việc sổ bị THAY THẾ / DỰNG LẠI / LÀM RỖNG — cho TIỀN TỐ TỚI LẦN
+--   XUẤT CUỐI. Nó vẫn không nói gì về sự kiện bị NUỐT TRƯỚC KHI GHI, về mọi thứ SAU lần xuất
+--   cuối (nhịp neo CHÍNH LÀ cửa sổ giả mạo), hay về các cột ngoài tiền ảnh.
+--
+-- Hai điều KHÔNG chứng minh, giữ nguyên từ bàn giao Task 5 vì cả hai vẫn đo được:
+--   (a) "mọi sự kiện đã xảy ra đều có mặt trong bảng": một trigger BEFORE INSERT ... RETURN NULL
+--       có điều kiện nuốt sự kiện CÓ CHỌN LỌC trong khi seq và prev_hash vẫn liền mạch — một bộ
+--       kiểm chứng đúng chuẩn sẽ báo HỢP LỆ trên một sổ đã bị kiểm duyệt. (Lớp phòng thủ tương
+--       ứng là "chỉ tám trigger được phép tồn tại trên bảng sổ" trong hardening.always.sql,
+--       KHÔNG phải chuỗi hash.)
+--   (b) "đây vẫn là cái sổ cũ" khi KHÔNG có neo ngoài: chủ sở hữu bảng không-superuser đo được
+--       ba đường dựng lại bảng (RENAME + CREATE TABLE LIKE + DROP; SET SCHEMA; DROP cả hai bảng
+--       + xoá dòng 003 khỏi schema_migrations) — cả ba cho MIGRATE OK và một cái sổ khác.
 --
 -- Vì `audit_events`, `audit_chain_anchors` VÀ `schema_migrations` đều nằm CÙNG VÙNG TIN CẬY với
 -- tác nhân, KHÔNG cái nào trong ba được dùng làm gốc tin cậy cho một phát biểu chống giả mạo.
 -- Gốc tin cậy duy nhất mà S0 có được nằm NGOÀI database: mốc chuỗi xuất ra một artefact do CI
 -- hoặc quy trình vận hành giữ (`exportChainHead` / `verifyAuditChain(..., externalAnchors)` ở
--- packages/audit). Với artefact đó, ca (b) BỊ PHÁT HIỆN; không có nó thì không.
--- Nói gọn: viết "sổ không bị giả mạo" là NÓI QUÁ. Phát biểu đúng là "không ai cắt ghép các hàng
--- đang có, và — nếu và chỉ nếu có mốc neo ngoài DB — sổ không bị thay thế bằng một sổ khác".
+-- packages/audit). CƠ CHẾ đó ĐÃ CÓ; ARTEFACT thì CHƯA — không exporter, không lịch, không nơi
+-- cất, không chữ ký. Đó là NỢ VẬN HÀNH, không phải một bảo đảm đã mua được.
 --
 -- ============================================================================================
 -- VÌ SAO BĂM TRONG POSTGRESQL, KHÔNG TRONG TYPESCRIPT
@@ -70,11 +97,49 @@
 -- chúng thành `null` — phân biệt được với chuỗi rỗng. STRICT sẽ khiến cả hàm trả NULL khi gặp
 -- NULL, làm ràng buộc octet_length(hash) = 32 thất bại, tức phá chuỗi trong im lặng.
 --
+-- [vòng fix 1 — CR1] TIỀN ẢNH NAY PHỦ ĐỦ MỌI CỘT CỦA `audit_events`. Bản trước gồm ĐÚNG 11
+-- trường trong khi bảng có 15 cột: `id`, `ip` và `user_agent` KHÔNG đi vào băm và KHÔNG đi vào
+-- bất kỳ phép kiểm nào của bộ kiểm chứng. Hai reviewer độc lập đo cùng một kết quả:
+--     DISABLE TRIGGER -> UPDATE audit_events SET ip='9.9.9.9', user_agent='DA_BI_SUA'
+--                     -> ENABLE ALWAYS
+--     -> bam_khop = t ; verifyAuditChain ok = true ; HEAD hash KHÔNG ĐỔI (neo ngoài vẫn khớp)
+--     -> MIGRATE OK
+-- `ip` và `user_agent` là HAI TRƯỜNG PHÁP Y — ai kết nối từ đâu, bằng client gì. Kẻ đã qua lớp
+-- trigger viết lại được địa chỉ của chính mình mà mọi lớp phát hiện đều xanh. Đây là một SỬA
+-- HÀNG ĐANG CÓ thuần tuý, đúng cái mà B3 tuyên bố bắt được.
+--
+-- `id` CŨNG được đưa vào, và đây là một LỆCH KHỎI ĐƠN THUỐC có đo: đơn thuốc nói `id` không đưa
+-- vào được vì nó là `DEFAULT gen_random_uuid()` "sinh SAU BEFORE-trigger". Đo trên PostgreSQL
+-- 16.15 thì khẳng định đó SAI — giá trị DEFAULT được điền ở thì VIẾT LẠI CÂU LỆNH, tức TRƯỚC
+-- khi trigger BEFORE ROW chạy:
+--     CREATE TABLE t (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), a text);
+--     BEFORE INSERT trigger -> RAISE NOTICE 'NEW.id = %', NEW.id
+--     INSERT INTO t (a) VALUES ('x') RETURNING id
+--     -> NOTICE: NEW.id = 4cc41fe8-9935-41c6-a964-6103abb7c3c5
+--     -> RETURNING id = 4cc41fe8-9935-41c6-a964-6103abb7c3c5   (CÙNG giá trị)
+-- Nên `id` quan sát được trong trigger VÀ bằng đúng giá trị nằm lại trong bảng. Hệ quả: tiền ảnh
+-- v2 phủ 13/15 cột, hai cột còn lại là `prev_hash` (đi vào sha256 ở dạng byte, ngay trước tiền
+-- ảnh) và `hash` (chính là đầu ra). Nói cách khác: KHÔNG CÒN cột nào của bảng sổ nằm ngoài băm.
+--
+-- Nhãn phiên bản khuôn tiền ảnh lên `trustprocure.audit.v2`: đổi khuôn thì đổi nhãn, để hai
+-- khuôn không bao giờ va nhau. Hệ quả vận hành phải nói ra: hàng ghi bằng v1 KHÔNG kiểm chứng
+-- được bằng hàm v2. Trong phạm vi S0 điều đó vô hại (chưa có dữ liệu production), nhưng nó là
+-- một MIGRATION DỮ LIỆU thật nếu 004 đã chạy ở đâu đó — không có đường nâng cấp tại chỗ, vì
+-- tính lại băm chính là thao tác mà B3 tồn tại để phát hiện.
+--
+-- Đã đo tính tất định của hai kiểu MỚI thêm vào tiền ảnh (không suy từ tài liệu):
+--   inet_out = 'i', uuid_out = 'i' (provolatile), và cùng một tiền ảnh cho ra CÙNG digest dưới
+--   DateStyle='German, DMY' + TimeZone='Asia/Tokyo' + bytea_output='escape' +
+--   client_encoding='LATIN1' + lc_monetary='C' + extra_float_digits=3.
+--   Giá trị NULL của `inet` vào jsonb thành `null` (phân biệt được với chuỗi rỗng), giống
+--   actor_id/resource_id/request_id.
+--
 -- Thân hàm cố ý KHÔNG mang chú thích: hardening.always.sql cưỡng chế lại định nghĩa này ở MỌI
 -- lần migrate() và hậu điều kiện của nó so `prosrc` theo văn bản, nên chú thích trong thân sẽ
 -- phải nhân bản y hệt sang đó. Meta-test trong db/audit-append-only.int.test.ts canh hai bản.
 CREATE OR REPLACE FUNCTION public.audit_compute_hash(
   p_prev_hash     bytea,
+  p_id            uuid,
   p_org_id        uuid,
   p_seq           bigint,
   p_occurred_at   timestamptz,
@@ -84,7 +149,9 @@ CREATE OR REPLACE FUNCTION public.audit_compute_hash(
   p_resource_type text,
   p_resource_id   uuid,
   p_payload       jsonb,
-  p_request_id    uuid
+  p_request_id    uuid,
+  p_ip            inet,
+  p_user_agent    text
 ) RETURNS bytea
 LANGUAGE sql
 IMMUTABLE
@@ -96,7 +163,8 @@ AS $tbm$
   SELECT pg_catalog.sha256(
     p_prev_hash OPERATOR(pg_catalog.||) pg_catalog.convert_to(
       (pg_catalog.jsonb_build_object(
-        'v',             'trustprocure.audit.v1',
+        'v',             'trustprocure.audit.v2',
+        'id',            p_id,
         'org_id',        p_org_id,
         'seq',           p_seq,
         'occurred_at',   pg_catalog.to_char(p_occurred_at AT TIME ZONE 'UTC',
@@ -107,7 +175,9 @@ AS $tbm$
         'resource_type', p_resource_type,
         'resource_id',   p_resource_id,
         'payload',       p_payload,
-        'request_id',    p_request_id
+        'request_id',    p_request_id,
+        'ip',            p_ip,
+        'user_agent',    p_user_agent
       ))::pg_catalog.text,
       'UTF8'
     )
@@ -143,6 +213,20 @@ $tbm$;
 --     duy nhất (org_id, seq) không vỡ. Hai tổ chức khác nhau vẫn ghi song song hoàn toàn. Đánh
 --     đổi nói rõ: một transaction ghi sự kiện cho HAI tổ chức theo hai thứ tự khác nhau ở hai
 --     phiên có thể deadlock (40P01 — PostgreSQL tự phát hiện và huỷ một bên).
+--     [vòng fix 1 — IM7] HỆ QUẢ VẬN HÀNH, phải nói ra vì Task 7 sẽ nối MỌI thao tác khoá vào
+--     audit_append(): khoá giữ TỚI COMMIT, nên một `app_api` BỊ CHIẾM mở transaction, ghi một
+--     sự kiện, rồi GIỮ transaction đó là MẤT KHẢ NĂNG GHI AUDIT của cả tổ chức. Đã đo:
+--         nạn nhân cùng tổ chức (lock_timeout 5s) -> "canceling statement due to lock timeout",
+--             CONTEXT trỏ đúng dòng PERFORM pg_advisory_xact_lock(...)
+--         tổ chức KHÁC -> seq 4 bình thường (cô lập xuyên tổ chức GIỮ ĐƯỢC, đúng thiết kế)
+--     Dưới G4 ("mọi thao tác khoá sinh audit"), không ghi được audit = KHÔNG LÀM ĐƯỢC thao tác
+--     khoá. Biện pháp giảm nhẹ hiển nhiên `ALTER ROLE app_api SET
+--     idle_in_transaction_session_timeout` BỊ HARDENING XOÁ MỖI DEPLOY (mục "rolconfig toàn cụm
+--     của app_api": ALTER ROLE ... RESET ALL, hậu điều kiện rolconfig IS NULL). Nên biện pháp
+--     giảm nhẹ nằm ở TUỲ CHỌN KẾT NỐI của pool ứng dụng — packages/db/src/pool.ts đặt
+--     `idle_in_transaction_session_timeout` và `lock_timeout` qua tham số `options`, NGOÀI tầm
+--     với của hardening. Đó là một biện pháp GIẢM NHẸ, không phải một bản vá: nó bó cửa sổ lại
+--     chứ không lấy khoá đi.
 --   * Câu SELECT đọc đuôi chuỗi vẫn CHỊU RLS vì trigger chạy dưới quyền NGƯỜI GỌI. Ghi cho một
 --     tổ chức khác thì nó không thấy hàng nào -> so_thu_tu = 1 -> policy WITH CHECK từ chối cả
 --     câu INSERT. Không có đường nào đọc đuôi chuỗi của tổ chức khác qua đây.
@@ -177,9 +261,9 @@ BEGIN
   NEW.seq         := so_thu_tu;
   NEW.prev_hash   := bam_truoc;
   NEW.hash        := public.audit_compute_hash(
-                       NEW.prev_hash, NEW.org_id, NEW.seq, NEW.occurred_at, NEW.actor_type,
-                       NEW.actor_id, NEW.action, NEW.resource_type, NEW.resource_id,
-                       NEW.payload, NEW.request_id);
+                       NEW.prev_hash, NEW.id, NEW.org_id, NEW.seq, NEW.occurred_at,
+                       NEW.actor_type, NEW.actor_id, NEW.action, NEW.resource_type,
+                       NEW.resource_id, NEW.payload, NEW.request_id, NEW.ip, NEW.user_agent);
   RETURN NEW;
 END
 $tnc$;
@@ -188,6 +272,7 @@ $tnc$;
 -- tồn tại" trong db/migrations/hardening.always.sql (CTE `can_co`) đã được sửa TRONG CÙNG vòng
 -- này để nhận nó — nếu không, lượt 'sua' của hardening sẽ GỠ nó ngay ở lần migrate() kế, mà
 -- 004 thì đã nằm trong schema_migrations nên không bao giờ chạy lại: migration bốc hơi vĩnh viễn.
+-- (Trigger THỨ TÁM là `audit_chain_anchors_moc_neo` ở §(5) bên dưới, cùng ràng buộc.)
 --
 -- CREATE OR REPLACE TRIGGER, không phải CREATE TRIGGER: trên một database đã áp dụng 003 nhưng
 -- CHƯA áp dụng 004, lượt 'sua' của hardening chạy TRƯỚC vòng migration đánh số và tự dựng trigger
@@ -239,8 +324,67 @@ LANGUAGE sql SET search_path = pg_catalog AS $ham$
             audit_events.hash, audit_events.occurred_at;
 $ham$;
 
-GRANT EXECUTE ON FUNCTION public.audit_compute_hash(bytea, uuid, bigint, timestamptz, text,
-                                                    uuid, text, text, uuid, jsonb, uuid)
+-- ============================================================================================
+-- (5) [vòng fix 1 — IM4] MỐC NEO TRONG DB CŨNG PHẢI DO DATABASE DẪN XUẤT
+-- ============================================================================================
+-- 003 cấp `INSERT (org_id, seq, hash)` trên `audit_chain_anchors` cho app_api và KHÔNG trigger
+-- nào dẫn xuất giá trị từ sổ — NGƯỢC HẲN cái §(2)+(3) vừa làm cho `audit_events`. Đo được:
+--     app_api INSERT mốc neo seq=999999 hash giả -> INSERT 0 1
+--     app_api DELETE -> permission denied ; tp_deploy DELETE -> trigger chỉ-ghi-thêm TỪ CHỐI
+--     verifyAuditChain -> ok=false, ANCHOR_MISSING seq 999999
+-- Báo cáo vòng trước xếp đây là "DoS fail-closed (báo động giả)". Ba điều khung đó bỏ qua, đều
+-- đo được:
+--   (1) nó VĨNH VIỄN — trigger append-only của chính B4 chặn gỡ bỏ KỂ CẢ bởi chủ sở hữu bảng
+--       trên đường DML; dọn dẹp đòi đúng cái DDL tắt trigger mà dự án coi là SỰ CỐ AN NINH;
+--   (2) nó PHÁ CHẤT LƯỢNG TÍN HIỆU — một ANCHOR_MISSING THẬT thành không phân biệt được với
+--       nhiễu, và giả mạo với HASH SAI TẠI MỘT SEQ CÓ THẬT làm công cụ BUỘC TỘI một hàng không
+--       hề bị đụng;
+--   (3) chiếm trước (org, seq) làm `ON CONFLICT DO NOTHING` của recordChainAnchor trả `null`
+--       VĨNH VIỄN, nên việc NEO THẬT âm thầm thành no-op.
+-- Đóng bằng ĐÚNG hai lớp của §(2)+(3): REVOKE INSERT (seq, hash) chặn app_api ở mức quyền, và
+-- một trigger BEFORE INSERT ghi đè hai cột đó từ đầu chuỗi hiện tại — ràng buộc cả chủ sở hữu
+-- bảng lẫn superuser.
+--
+-- [QT3] Cùng lý do với `noi_chuoi_kiem_toan`: ghim search_path + viết đủ `pg_catalog.`.
+-- Câu SELECT chịu RLS vì trigger chạy dưới quyền NGƯỜI GỌI — neo cho tổ chức khác thì nó không
+-- thấy hàng nào và RAISE, chứ không đọc trộm được đầu chuỗi của tổ chức đó.
+--
+-- Vì sao RAISE chứ không RETURN NULL khi tổ chức chưa có sự kiện nào: RETURN NULL trong một
+-- BEFORE INSERT là ĐÚNG khuôn "nuốt có chọn lọc" mà cả file này lẫn hardening tồn tại để chặn —
+-- không dựng lại nó ở đây kể cả với ngữ nghĩa lành. Đường gọi hợp lệ (`recordChainAnchor`) dùng
+-- INSERT ... SELECT nên trên sổ rỗng nó chèn 0 hàng và trigger không bao giờ chạy tới.
+-- Thân hàm cố ý KHÔNG mang chú thích — cùng lý do với hai hàm trên.
+CREATE OR REPLACE FUNCTION public.chot_moc_neo() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog AS $tmn$
+DECLARE
+  dau_seq bigint;
+  dau_bam bytea;
+BEGIN
+  SELECT ae.seq, ae.hash INTO dau_seq, dau_bam
+    FROM public.audit_events ae
+   WHERE ae.org_id = NEW.org_id
+   ORDER BY ae.seq DESC
+   LIMIT 1;
+
+  IF dau_seq IS NULL THEN
+    RAISE EXCEPTION 'Không neo được: tổ chức % chưa có sự kiện kiểm toán nào đọc được', NEW.org_id;
+  END IF;
+
+  NEW.seq  := dau_seq;
+  NEW.hash := dau_bam;
+  RETURN NEW;
+END
+$tmn$;
+
+CREATE OR REPLACE TRIGGER audit_chain_anchors_moc_neo BEFORE INSERT ON audit_chain_anchors
+  FOR EACH ROW EXECUTE FUNCTION public.chot_moc_neo();
+ALTER TABLE audit_chain_anchors ENABLE ALWAYS TRIGGER audit_chain_anchors_moc_neo;
+
+REVOKE INSERT (seq, hash) ON audit_chain_anchors FROM app_api, app_unseal;
+
+GRANT EXECUTE ON FUNCTION public.audit_compute_hash(bytea, uuid, uuid, bigint, timestamptz,
+                                                    text, uuid, text, text, uuid, jsonb, uuid,
+                                                    inet, text)
   TO app_api, app_unseal;
 GRANT EXECUTE ON FUNCTION public.audit_append(uuid, text, uuid, text, text, uuid, jsonb, uuid,
                                               inet, text)

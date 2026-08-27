@@ -63,7 +63,49 @@ function laKetNoiCucBo(host: string | null | undefined): boolean {
  * password/database/ssl RỜI RẠC — không kèm connectionString — để pg không còn gì để tự parse
  * lại và ghi đè.
  */
-export function createPool(connectionString: string, max = 10): pg.Pool {
+/**
+ * [vòng fix 1 — IM7] HAI GUC ĐẶT TRÊN TUỲ CHỌN KẾT NỐI, ngoài tầm với của hardening.
+ *
+ * Task 6 đưa vào `noi_chuoi_kiem_toan()` một `pg_advisory_xact_lock` khoá theo TỔ CHỨC, phạm vi
+ * TRANSACTION. Bề mặt mới, đo được: một `app_api` bị chiếm mở transaction, ghi một sự kiện, rồi
+ * GIỮ transaction đó —
+ *     nạn nhân CÙNG tổ chức -> "canceling statement due to lock timeout", CONTEXT trỏ đúng
+ *         dòng PERFORM pg_advisory_xact_lock(...)   (chỉ khi nạn nhân CÓ lock_timeout)
+ *     tổ chức KHÁC -> ghi bình thường (cô lập xuyên tổ chức giữ được, đúng thiết kế)
+ * Dưới G4 ("mọi thao tác khoá sinh audit"), không ghi được audit = KHÔNG LÀM ĐƯỢC thao tác
+ * khoá. Không có lock_timeout thì nạn nhân treo VÔ HẠN thay vì lỗi.
+ *
+ * Vì sao ĐẶT Ở ĐÂY chứ không bằng `ALTER ROLE app_api SET ...`: hardening.always.sql phát
+ * "ALTER ROLE app_api RESET ALL" MỖI DEPLOY với hậu điều kiện `rolconfig IS NULL`, nên biện
+ * pháp giảm nhẹ đó bị XOÁ ở mọi lần migrate(). `options` đi trong gói khởi tạo kết nối (biến
+ * thành PGOPTIONS `-c ...`), tức nó thuộc về TIẾN TRÌNH ỨNG DỤNG chứ không thuộc catalog —
+ * hardening không chạm tới được, và không cần mở một ngoại lệ nào trong danh sách trắng
+ * rolconfig (mở ngoại lệ ở đó là nới một bảo đảm ra, đúng khuôn đã sinh ra CR1-v2).
+ *
+ * Đây là GIẢM NHẸ, không phải bản vá: nó bó cửa sổ lại chứ không lấy khoá đi.
+ *
+ * Giá trị mặc định và lý do:
+ *   - lock_timeout 15s: dài hơn mọi lần ghi audit hợp lệ (đo: ghi 20 sự kiện song song cùng tổ
+ *     chức xong dưới 1s) nhưng đủ ngắn để một transaction bị treo không kéo theo cả tổ chức.
+ *   - idle_in_transaction_session_timeout 60s: giết chính transaction ĐANG GIỮ khoá, tức đóng
+ *     nguyên nhân chứ không chỉ nạn nhân.
+ * `migrate()` CỐ Ý vô hiệu hoá cả hai trên kết nối của nó — xem packages/db/src/migrate.ts.
+ */
+export interface TuyChonPool {
+  /** ms; 0 = không giới hạn. */
+  readonly lockTimeoutMs?: number;
+  /** ms; 0 = không giới hạn. */
+  readonly idleInTransactionTimeoutMs?: number;
+}
+
+const LOCK_TIMEOUT_MS_MAC_DINH = 15_000;
+const IDLE_IN_TX_TIMEOUT_MS_MAC_DINH = 60_000;
+
+export function createPool(
+  connectionString: string,
+  max = 10,
+  tuyChon: TuyChonPool = {},
+): pg.Pool {
   let url: URL;
   try {
     url = new URL(connectionString);
@@ -86,6 +128,19 @@ export function createPool(connectionString: string, max = 10): pg.Pool {
   const host = daPhanTich.host ?? undefined;
   const canBoQuaTls = laKetNoiCucBo(host);
 
+  // Số nguyên không âm, ép ở đây chứ không tin người gọi: chuỗi này đi thẳng vào PGOPTIONS.
+  const soMs = (giaTri: number | undefined, macDinh: number): number => {
+    if (giaTri === undefined) return macDinh;
+    if (!Number.isInteger(giaTri) || giaTri < 0) {
+      throw new Error(
+        `createPool: timeout phải là số nguyên không âm (ms), nhận được ${String(giaTri)}.`,
+      );
+    }
+    return giaTri;
+  };
+  const lockMs = soMs(tuyChon.lockTimeoutMs, LOCK_TIMEOUT_MS_MAC_DINH);
+  const idleTxMs = soMs(tuyChon.idleInTransactionTimeoutMs, IDLE_IN_TX_TIMEOUT_MS_MAC_DINH);
+
   return new pg.Pool({
     host,
     port: daPhanTich.port ? Number(daPhanTich.port) : undefined,
@@ -94,6 +149,9 @@ export function createPool(connectionString: string, max = 10): pg.Pool {
     database: daPhanTich.database ?? undefined,
     max,
     application_name: "trustprocure",
+    // [vòng fix 1 — IM7] Xem khối chú thích của TuyChonPool. Chỉ chứa chữ số nên không có
+    // đường tiêm tham số nào qua PGOPTIONS.
+    options: `-c lock_timeout=${lockMs} -c idle_in_transaction_session_timeout=${idleTxMs}`,
     // Không có tham số nào của createPool cho phép truyền rejectUnauthorized: false — cấm
     // tuyệt đối bằng cách không mở đường thoát đó ra API công khai. Đặt tường minh false cho
     // nhánh loopback (không để undefined) để không phụ thuộc biến môi trường PGSSLMODE có thể

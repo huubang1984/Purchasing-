@@ -91,6 +91,13 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     if (daDonDep) return null;
     daDonDep = true;
     try {
+      // [vòng fix 1 — IM7] Trả hai timeout về giá trị của kết nối trước khi client quay lại
+      // pool: người gọi ĐƯỢC PHÉP chia sẻ pool ứng dụng với migrate() (các test tích hợp của
+      // dự án đang làm thế), và một client mang lock_timeout=0 nằm lại trong pool ứng dụng là
+      // chính bậc tự do mà [IM7] vừa đóng. RESET chứ không SET giá trị mặc định: giá trị đúng
+      // đến từ PGOPTIONS lúc mở kết nối, nên RESET khôi phục đúng nó.
+      await lockClient.query("RESET lock_timeout");
+      await lockClient.query("RESET idle_in_transaction_session_timeout");
       await lockClient.query("SELECT pg_catalog.pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
       // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI
       // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
@@ -171,6 +178,21 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
     //     rơi vào schema ĐẦU TIÊN của search_path), toàn bộ DDL không ghi schema trong
     //     001/002, và tính ổn định của pg_get_expr mà hardening.always.sql phán xét.
     await lockClient.query("SET search_path = public");
+
+    // [vòng fix 1 — IM7] VÔ HIỆU HOÁ hai timeout mà createPool đặt cho POOL ỨNG DỤNG. Chúng
+    // tồn tại để một transaction bị treo không khoá cả tổ chức khỏi việc ghi audit (xem
+    // packages/db/src/pool.ts), nhưng migrate() có ĐÚNG hai tính chất mà chúng cấm:
+    //   * nó CHỜ VÔ HẠN trên pg_advisory_lock ngay dưới đây — đó là toàn bộ cơ chế chống hai
+    //     tiến trình migrate() đồng thời, và lock_timeout áp cả cho khoá tư vấn (đã đo);
+    //   * lượt hardening + vòng migration là một transaction DDL có thể dài hơn 60 giây trên
+    //     một lược đồ lớn.
+    // Phạm vi PHIÊN (không SET LOCAL): nó phải sống qua mọi BEGIN/COMMIT của vòng lặp. Cùng
+    // đánh đổi đã ghi cho `SET search_path = public` ngay trên: nếu người gọi chia sẻ pool ứng
+    // dụng, kết nối đó mang hai giá trị 0 cho tới khi bị đóng. Khác với search_path, đây KHÔNG
+    // vô hại — nên khuôn dùng được khuyến nghị (pool riêng cho migrate) nay là load-bearing,
+    // và dòng RESET ở finally bên dưới đóng ca chia sẻ pool.
+    await lockClient.query("SET lock_timeout = 0");
+    await lockClient.query("SET idle_in_transaction_session_timeout = 0");
 
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.

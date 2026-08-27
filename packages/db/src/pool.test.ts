@@ -71,3 +71,44 @@ describe("createPool — bắt buộc TLS hiệu lực thật, trừ kết nối
     );
   });
 });
+
+/**
+ * [vòng fix 1 — IM7] Hai GUC giảm nhẹ đi qua `options`, tức PGOPTIONS trong gói khởi tạo kết
+ * nối. Đọc HIỆU LỰC THẬT (qua ConnectionParameters của pg) chứ không đọc pool.options — cùng
+ * lý do đã ghi ở docCauHinhHieuLuc.
+ */
+function docOptionsHieuLuc(pool: pg.Pool): unknown {
+  const client = new pg.Client(pool.options);
+  const noiBo = client as unknown as { connectionParameters: { options: unknown } };
+  return noiBo.connectionParameters.options;
+}
+
+describe("createPool — hai GUC giảm nhẹ của khoá tư vấn (IM7)", () => {
+  it("mặc định đặt lock_timeout và idle_in_transaction_session_timeout qua PGOPTIONS", () => {
+    const pool = createPool("postgres://u:p@127.0.0.1:5432/db");
+    expect(docOptionsHieuLuc(pool)).toBe(
+      "-c lock_timeout=15000 -c idle_in_transaction_session_timeout=60000",
+    );
+  });
+
+  it("người gọi ghi đè được, và 0 nghĩa là KHÔNG giới hạn", () => {
+    const pool = createPool("postgres://u:p@127.0.0.1:5432/db", 5, {
+      lockTimeoutMs: 0,
+      idleInTransactionTimeoutMs: 1_000,
+    });
+    expect(docOptionsHieuLuc(pool)).toBe(
+      "-c lock_timeout=0 -c idle_in_transaction_session_timeout=1000",
+    );
+  });
+
+  // Chuỗi này đi thẳng vào PGOPTIONS nên nó không được nhận bất cứ thứ gì ngoài chữ số.
+  it.each([
+    ["số âm", -1],
+    ["số thực", 1.5],
+    ["NaN", Number.NaN],
+  ])("từ chối %s thay vì nội suy vào PGOPTIONS", (_mo_ta, giaTri) => {
+    expect(() =>
+      createPool("postgres://u:p@127.0.0.1:5432/db", 5, { lockTimeoutMs: giaTri }),
+    ).toThrow(/số nguyên không âm/);
+  });
+});

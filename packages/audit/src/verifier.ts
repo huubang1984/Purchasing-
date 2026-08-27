@@ -1,7 +1,14 @@
 import type pg from "pg";
 import type { ExternalAnchor } from "./writer.js";
+import { khangDinhDungTenant } from "./tenant-guard.js";
 
-export type ChainProblemKind = "HASH_MISMATCH" | "LINK_BROKEN" | "SEQ_GAP" | "ANCHOR_MISSING";
+export type ChainProblemKind =
+  | "HASH_MISMATCH"
+  | "LINK_BROKEN"
+  | "SEQ_GAP"
+  | "ANCHOR_MISSING"
+  | "NOT_ANCHORED"
+  | "EMPTY_LEDGER";
 
 export interface ChainProblem {
   readonly seq: number;
@@ -20,8 +27,19 @@ export interface VerifyOptions {
    * Mốc chuỗi đã xuất ra ngoài database (xem `exportChainHead`). Chỉ những mốc thuộc đúng tổ
    * chức đang kiểm mới được xét; mốc của tổ chức khác bị bỏ qua trong im lặng vì RLS làm cho
    * chúng không kiểm được từ phiên này.
+   *
+   * [vòng fix 1 — CR2] BẮT BUỘC, và mảng RỖNG là một câu trả lời hợp lệ nhưng KHÔNG MIỄN PHÍ:
+   * nó sinh một `NOT_ANCHORED` và `ok = false`. Lý do đo được nằm ở docstring của
+   * `verifyAuditChain`; tóm tắt: không có neo ngoài thì `ok = true` không phân biệt được với
+   * một sổ đã bị sửa VÀ tính lại đuôi, nên một lời gọi không neo KHÔNG ĐƯỢC âm thầm cho ra một
+   * kết luận kiểm toán màu xanh.
    */
-  readonly externalAnchors?: readonly ExternalAnchor[];
+  readonly externalAnchors: readonly ExternalAnchor[];
+  /**
+   * Người gọi TUYÊN BỐ rằng sổ rỗng là kết quả mong đợi (ví dụ: một tổ chức vừa được tạo).
+   * Không có cờ này, `checked === 0` sinh một `EMPTY_LEDGER` — xem [vòng fix 1 — IM3].
+   */
+  readonly expectEmpty?: boolean;
 }
 
 /** prev_hash của sự kiện đầu chuỗi. 32 byte 0 — khớp CHECK octet_length(prev_hash) = 32. */
@@ -37,38 +55,62 @@ interface HangChuoi {
 /**
  * Kiểm chứng chuỗi kiểm toán của một tổ chức.
  *
- * PHÁT BIỂU ĐÚNG MỨC — đọc trước khi trích dẫn kết quả của hàm này:
+ * ==========================================================================================
+ * PHÁT BIỂU ĐÚNG MỨC — đọc trước khi trích dẫn kết quả của hàm này
+ * ==========================================================================================
+ * [vòng fix 1 — CR2] Bản trước viết "`ok === true` chứng minh: không ai SỬA ... các hàng ĐANG
+ * CÓ trong bảng". ĐO ĐƯỢC LÀ SAI. Reviewer dựng lại bằng CHÍNH hàm SQL thật, dưới role deploy
+ * KHÔNG superuser: sửa `action` của seq 3 rồi tính lại prev_hash/hash từ seq 3 trở đi —
+ *   không neo ngoài: {"ok":true,"checked":6,"problems":[]}
+ *   có neo ngoài:    ok=false, ANCHOR_MISSING tại seq 6
+ * Đầu chuỗi nằm TRONG bán kính sửa đổi của tác nhân, nên chuỗi tự nó không ràng buộc gì trước
+ * một tác nhân UPDATE được; nó chỉ bắt kẻ tấn công LƯỜI.
  *
- *   `ok === true` chứng minh: không ai SỬA (HASH_MISMATCH), CHÈN hay ĐỨT LIÊN KẾT
- *   (LINK_BROKEN), XOÁ HÀNG Ở GIỮA (SEQ_GAP) hay CẮT ĐUÔI (ANCHOR_MISSING, so với những mốc neo
- *   mà hàm này nhìn thấy được) các hàng ĐANG CÓ trong bảng.
+ * Phát biểu đúng, bốn đoạn, nhân bản y hệt ở db/migrations/004_audit_chain_functions.sql và
+ * task-6-report.md §2:
  *
- *   `ok === true` KHÔNG chứng minh "sổ không bị giả mạo". Hai lỗ đã được ĐO ở bàn giao Task 5,
- *   cả hai nằm trong tay chủ sở hữu bảng không-superuser, cả hai cho MIGRATE OK:
- *     (a) một trigger BEFORE INSERT ... RETURN NULL có điều kiện nuốt sự kiện CÓ CHỌN LỌC trong
- *         khi seq và prev_hash vẫn liền mạch — hàm này sẽ báo HỢP LỆ trên một sổ đã bị kiểm
- *         duyệt. Lớp phòng thủ tương ứng là danh sách trắng trigger trong hardening.always.sql;
- *     (b) sổ bị dựng lại (RENAME + CREATE TABLE LIKE + DROP, hoặc SET SCHEMA, hoặc DROP hai bảng
- *         + xoá dòng 003 khỏi schema_migrations). Với một sổ RỖNG, hàm này trả ok = true,
- *         checked = 0 — và đó là câu trả lời ĐÚNG cho câu hỏi mà nó đặt ra.
+ *   Với sổ của một tổ chức MÀ PHIÊN HIỆN TẠI ĐỌC ĐƯỢC, hàm này phát hiện mọi thao tác XOÁ,
+ *   CHÈN, CẮT ĐUÔI, và mọi thao tác SỬA trên các trường đi vào băm. Từ vòng fix 1, tiền ảnh
+ *   phủ ĐỦ 13 cột dữ liệu của `audit_events` (`prev_hash` đi vào băm ở dạng byte, `hash` là
+ *   đầu ra) — không còn cột nào nằm ngoài. `checked` là SỐ HÀNG ĐỌC ĐƯỢC DƯỚI RLS, không phải
+ *   số hàng tồn tại.
  *
- * Cách duy nhất trong phạm vi S0 để đóng (b) là truyền `externalAnchors`: mốc chuỗi giữ NGOÀI
- * database. Không có nó, `audit_chain_anchors` không phải gốc tin cậy — nó nằm cùng vùng tin cậy
- * với `audit_events`.
+ *   Trước `app_api`/`app_unseal`/SQL injection, phát biểu này mạnh — nhưng công việc do TRIGGER
+ *   và REVOKE THEO CỘT của B4 làm, chúng ngăn việc sửa đổi ngay từ đầu.
  *
- * Băm được tính lại bằng CHÍNH hàm SQL đã dùng lúc ghi (`audit_compute_hash`), nên không có nguy
- * cơ lệch do tuần tự hoá giữa hai tầng.
+ *   Trước CHỦ SỞ HỮU BẢNG KHÔNG-SUPERUSER, chuỗi KHÔNG CÓ NEO NGOÀI chứng minh về cơ bản là
+ *   KHÔNG GÌ CẢ: tác nhân đó sửa một hàng rồi tính lại đuôi bằng chính hàm thật.
+ *
+ *   NẾU VÀ CHỈ NẾU người kiểm truyền vào một `ExternalAnchor` giữ ở nơi role deploy KHÔNG GHI
+ *   ĐƯỢC, chuỗi còn phát hiện việc sổ bị THAY THẾ / DỰNG LẠI / LÀM RỖNG — cho TIỀN TỐ TỚI LẦN
+ *   XUẤT CUỐI. Nó vẫn không nói gì về sự kiện bị NUỐT TRƯỚC KHI GHI, về mọi thứ SAU lần xuất
+ *   cuối (nhịp neo CHÍNH LÀ cửa sổ giả mạo), hay về các cột ngoài tiền ảnh.
+ *
+ * Lỗ còn lại, đã đo ở bàn giao Task 5 và KHÔNG đóng được bằng chuỗi hash: một trigger
+ * BEFORE INSERT ... RETURN NULL có điều kiện nuốt sự kiện CÓ CHỌN LỌC trong khi seq và
+ * prev_hash vẫn liền mạch. Lớp phòng thủ tương ứng là danh sách trắng trigger trong
+ * hardening.always.sql.
+ *
+ * Băm được tính lại bằng CHÍNH hàm SQL đã dùng lúc ghi (`audit_compute_hash`), nên không có
+ * nguy cơ lệch do tuần tự hoá giữa hai tầng — và chính vì thế thân hàm đó được hardening cưỡng
+ * chế ở mọi lần migrate() (mục D1a).
+ *
+ * NÉM (không trả về kết quả) khi phiên đang gắn một tổ chức KHÁC `orgId` — xem
+ * `khangDinhDungTenant`.
  */
 export async function verifyAuditChain(
   client: pg.PoolClient,
   orgId: string,
-  options: VerifyOptions = {},
+  options: VerifyOptions,
 ): Promise<VerificationResult> {
+  await khangDinhDungTenant(client, orgId, "verifyAuditChain");
+
   const { rows } = await client.query<HangChuoi>(
     `SELECT ae.seq, ae.prev_hash, ae.hash,
-            public.audit_compute_hash(ae.prev_hash, ae.org_id, ae.seq, ae.occurred_at,
+            public.audit_compute_hash(ae.prev_hash, ae.id, ae.org_id, ae.seq, ae.occurred_at,
                                       ae.actor_type, ae.actor_id, ae.action, ae.resource_type,
-                                      ae.resource_id, ae.payload, ae.request_id) AS bam_lai
+                                      ae.resource_id, ae.payload, ae.request_id, ae.ip,
+                                      ae.user_agent) AS bam_lai
        FROM public.audit_events ae
       WHERE ae.org_id = $1
       ORDER BY ae.seq`,
@@ -138,8 +180,10 @@ export async function verifyAuditChain(
     });
   }
 
-  for (const neo of options.externalAnchors ?? []) {
+  let coNeoDungToChuc = false;
+  for (const neo of options.externalAnchors) {
     if (neo.orgId !== orgId) continue;
+    coNeoDungToChuc = true;
     const bamThucTe = bamTheoSeq.get(neo.seq);
     if (bamThucTe === neo.hashHex) continue;
     problems.push({
@@ -149,6 +193,35 @@ export async function verifyAuditChain(
         `Mốc neo NGOÀI DB (xuất lúc ${neo.exportedAt}) tại seq ${neo.seq} kỳ vọng băm ` +
         `${neo.hashHex} nhưng bảng ${bamThucTe === undefined ? "không còn hàng nào ở seq đó" : `có ${bamThucTe}`}` +
         " — sổ đã bị cắt đuôi, bị thay thế, hoặc bị dựng lại.",
+    });
+  }
+
+  // [vòng fix 1 — CR2] Không có mốc neo NÀO của đúng tổ chức này thì kết luận không thể xanh.
+  // seq 0 vì vấn đề thuộc về TOÀN chuỗi, không thuộc một mắt xích nào.
+  if (!coNeoDungToChuc) {
+    problems.push({
+      seq: 0,
+      kind: "NOT_ANCHORED",
+      detail:
+        "Không có mốc neo NGOÀI DB nào của tổ chức này được truyền vào. Chuỗi hash tự nó nằm " +
+        "cùng vùng tin cậy với tác nhân: một chủ sở hữu bảng không-superuser sửa một hàng rồi " +
+        "tính lại đuôi bằng chính hàm băm thật thì mọi phép kiểm còn lại đều XANH (đã đo). " +
+        "Kết quả này chỉ nói 'chuỗi tự nhất quán', KHÔNG nói 'sổ không bị giả mạo'.",
+    });
+  }
+
+  // [vòng fix 1 — IM3] "Không có vấn đề" và "không kiểm được" phải phân biệt được. Khẳng định
+  // tenant ở đầu hàm đã loại ca "đọc nhầm tổ chức", nên `checked === 0` ở đây thật sự là sổ
+  // rỗng — nhưng một sổ rỗng vẫn KHÔNG chứng minh gì (nó cũng là hình dạng của một sổ vừa bị
+  // dựng lại). Người gọi phải nói ra rằng mình mong đợi điều đó.
+  if (rows.length === 0 && options.expectEmpty !== true) {
+    problems.push({
+      seq: 0,
+      kind: "EMPTY_LEDGER",
+      detail:
+        "Sổ của tổ chức này không có hàng nào đọc được. Đó cũng chính là hình dạng của một sổ " +
+        "vừa bị DỰNG LẠI hoặc LÀM RỖNG, nên nó không được tính là 'hợp lệ'. Truyền " +
+        "expectEmpty: true nếu sổ rỗng đúng là điều bạn mong đợi.",
     });
   }
 

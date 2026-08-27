@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { khangDinhDungTenant } from "./tenant-guard.js";
 
 export type ActorType = "USER" | "SUPPLIER" | "SYSTEM" | "SERVICE";
 
@@ -49,6 +50,20 @@ export interface ChainAnchor {
  * Phạm vi bảo đảm, nói đúng mức: giá trị này chứng minh "tại thời điểm xuất, chuỗi của tổ chức
  * này dài `seq` và đầu chuỗi là `hashHex`". Nó KHÔNG chứng minh những sự kiện đã bị nuốt trước
  * lúc ghi từng tồn tại.
+ *
+ * [vòng fix 1 — IM6] TRẠNG THÁI THẬT, viết ra thay vì để "đã làm" che đi: CƠ CHẾ đã có (kiểu
+ * này + `exportChainHead` + nhánh `externalAnchors` của bộ kiểm chứng). ARTEFACT thì CHƯA CÓ —
+ * không exporter, không lịch, không nơi cất, không chữ ký, không entry point; `grep` ngoài
+ * packages/audit không ra gì và ci.yml không bao giờ kiểm chứng một chuỗi nào. Đó là NỢ VẬN
+ * HÀNH, không phải một bảo đảm đã mua được.
+ *
+ * [vòng fix 1 — M5] HAI YÊU CẦU BẮT BUỘC cho nơi cất, cả hai đều đo được là load-bearing:
+ *   (1) NƠI CẤT PHẢI CHỈ-GHI-THÊM, không được GHI ĐÈ. Đo dưới một policy cắt đuôi:
+ *       `exportChainHead` trả HEAD {"seq":3} trên một sổ 6 hàng. Nếu nơi cất ghi đè, một lần
+ *       cắt đuôi được RỬA THÀNH GỐC TIN CẬY mới. Và việc kiểm chứng phải xét MỌI neo còn giữ,
+ *       không chỉ neo mới nhất — `verifyAuditChain` nhận cả MẢNG chính vì lý do này.
+ *   (2) ARTEFACT HIỆN KHÔNG ĐƯỢC KÝ, nên "nằm ngoài vùng ghi của role deploy" là bảo đảm DUY
+ *       NHẤT. Mất tính chất đó thì neo MẤT SẠCH giá trị, không suy giảm dần.
  */
 export interface ExternalAnchor {
   readonly orgId: string;
@@ -120,14 +135,22 @@ export async function appendAuditEvent(
  *
  * Mốc neo trong DB chỉ bắt được kẻ cắt đuôi mà QUÊN dọn bảng neo — nó nằm cùng vùng tin cậy với
  * sổ. Đường bảo đảm thật là `exportChainHead`.
+ *
+ * [vòng fix 1 — IM4] Câu INSERT CỐ Ý chỉ nêu `org_id`. 004 §(5) thu hồi INSERT trên `seq` và
+ * `hash` của bảng neo và cắm một trigger BEFORE INSERT dẫn xuất hai cột đó từ đầu chuỗi, đúng
+ * khuôn §(2)+(3) của `audit_events` — nên một câu nêu tên `seq`/`hash` ở đây sẽ nhận 42501.
+ * Vẫn giữ dạng INSERT ... SELECT (thay vì VALUES) để trên sổ RỖNG nó chèn 0 hàng và trả `null`,
+ * chứ không đẩy trigger vào nhánh RAISE.
  */
 export async function recordChainAnchor(
   client: pg.PoolClient,
   orgId: string,
 ): Promise<ChainAnchor | null> {
+  await khangDinhDungTenant(client, orgId, "recordChainAnchor");
+
   const { rows } = await client.query<{ seq: string; hash: Buffer }>(
-    `INSERT INTO public.audit_chain_anchors (org_id, seq, hash)
-     SELECT ae.org_id, ae.seq, ae.hash
+    `INSERT INTO public.audit_chain_anchors (org_id)
+     SELECT ae.org_id
        FROM public.audit_events ae
       WHERE ae.org_id = $1
       ORDER BY ae.seq DESC
@@ -146,11 +169,18 @@ export async function recordChainAnchor(
  *
  * Không ghi gì vào database — chủ ý: một artefact mà database ghi được thì không phải gốc tin
  * cậy. Trả `null` khi tổ chức chưa có sự kiện nào.
+ *
+ * [vòng fix 1 — IM3/M5] Hàm này đọc DƯỚI RLS, nên nó PHẢI tự kiểm tenant: một job xuất neo chạy
+ * sai tenant lặng lẽ không xuất gì (và cửa sổ F-3 mở vô hạn mà không ai biết), còn dưới một
+ * policy cắt đuôi nó xuất một đầu chuỗi NGẮN HƠN sự thật và rửa lần cắt đuôi đó thành gốc tin
+ * cậy. Xem `khangDinhDungTenant`.
  */
 export async function exportChainHead(
   client: pg.PoolClient,
   orgId: string,
 ): Promise<ExternalAnchor | null> {
+  await khangDinhDungTenant(client, orgId, "exportChainHead");
+
   const { rows } = await client.query<{ seq: string; hash_hex: string }>(
     `SELECT ae.seq, pg_catalog.encode(ae.hash, 'hex') AS hash_hex
        FROM public.audit_events ae

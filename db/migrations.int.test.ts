@@ -2559,14 +2559,15 @@ describe("migration của dự án", () => {
         expect(sau, nhan).toMatch(/chỉ-ghi-thêm|append-only/i);
       }
 
-      // Và trạng thái cuối là ENABLE ALWAYS trên cả BẢY trigger — không phải chỉ "tồn tại".
-      // [Task 6] Bảy chứ không sáu: 004 thêm audit_events_noi_chuoi vào `can_co` của lớp C.
+      // Và trạng thái cuối là ENABLE ALWAYS trên cả TÁM trigger — không phải chỉ "tồn tại".
+      // [Task 6] Tám chứ không sáu: 004 thêm audit_events_noi_chuoi và (vòng fix 1 — IM4)
+      // audit_chain_anchors_moc_neo vào `can_co` của lớp C.
       const { rows } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
           " WHERE NOT t.tgisinternal AND c.relname IN ('audit_events','audit_chain_anchors') " +
           "   AND t.tgenabled = 'A' AND t.tgqual IS NULL AND t.tgattr::text = ''",
       );
-      expect(rows[0]!.n).toBe("7");
+      expect(rows[0]!.n).toBe("8");
     } finally {
       await db.stop();
     }
@@ -2624,7 +2625,11 @@ describe("migration của dự án", () => {
         "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
           " WHERE NOT t.tgisinternal AND c.relname = 'audit_chain_anchors' AND t.tgenabled = 'A'",
       );
-      expect(rows[0]!.n).toBe("3");
+      // [vòng fix 1 — IM4] BỐN chứ không ba: bảng vừa dựng lại mang ĐÚNG hình dạng bảng neo
+      // (org_id, seq, hash, anchored_at và KHÔNG có prev_hash/occurred_at/payload/action), nên
+      // lớp C dựng cho nó cả `audit_chain_anchors_moc_neo`. Đó chính là vế "vị từ hình dạng"
+      // của [IM2] làm việc theo chiều THUẬN.
+      expect(rows[0]!.n).toBe("4");
       await expect(db.pool.query("TRUNCATE audit_chain_anchors")).rejects.toThrow(
         /chỉ-ghi-thêm|append-only/i,
       );
@@ -2747,13 +2752,15 @@ describe("migration của dự án", () => {
       expect(loi!.message).toContain("audit_chain_anchors");
 
       // Và lớp C vẫn với tới được bảng ở schema mới: trigger bị gỡ đã được dựng lại.
-      // [Task 6] Bảy: ba trigger chỉ-ghi-thêm cho mỗi bảng, cộng audit_events_noi_chuoi.
+      // [Task 6] Tám: ba trigger chỉ-ghi-thêm cho mỗi bảng, cộng audit_events_noi_chuoi và
+      // audit_chain_anchors_moc_neo. Vế lọc theo HÌNH DẠNG ([vòng fix 1 — IM2]) vẫn nhận cả hai
+      // bảng ở schema mới — đó là điều mà một vế lọc theo `nspname='public'` sẽ đánh mất.
       const { rows } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
           " JOIN pg_namespace n ON n.oid = c.relnamespace " +
           " WHERE n.nspname = 'kho_toi' AND NOT t.tgisinternal AND t.tgenabled = 'A'",
       );
-      expect(rows[0]!.n).toBe("7");
+      expect(rows[0]!.n).toBe("8");
     } finally {
       await db.stop();
     }
@@ -3224,22 +3231,24 @@ describe("migration của dự án", () => {
       const vaCham = async (): Promise<boolean> => {
         const { rows } = await db.pool.query<{ trung: boolean }>(
           "SELECT audit_compute_hash(decode(repeat('00',32),'hex'), " +
+            "'33333333-3333-3333-3333-333333333333'::uuid, " +
             "'11111111-1111-1111-1111-111111111111'::uuid, 1::bigint, now(), 'USER', NULL, " +
-            "'A', 'T', NULL, '{}'::jsonb, NULL) " +
+            "'A', 'T', NULL, '{}'::jsonb, NULL, NULL, NULL) " +
             "= audit_compute_hash(decode(repeat('00',32),'hex'), " +
+            "'33333333-3333-3333-3333-333333333333'::uuid, " +
             "'11111111-1111-1111-1111-111111111111'::uuid, 2::bigint, now(), 'USER', NULL, " +
-            "'B', 'T', NULL, '{}'::jsonb, NULL) AS trung",
+            "'B', 'T', NULL, '{}'::jsonb, NULL, NULL, NULL) AS trung",
         );
         return rows[0]!.trung;
       };
       expect(await vaCham(), "hai sự kiện khác nhau không được cho cùng một băm").toBe(false);
 
       await db.pool.query(
-        "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_org_id uuid, " +
-          "p_seq bigint, p_occurred_at timestamptz, p_actor_type text, p_actor_id uuid, " +
-          "p_action text, p_resource_type text, p_resource_id uuid, p_payload jsonb, " +
-          "p_request_id uuid) RETURNS bytea LANGUAGE sql IMMUTABLE AS " +
-          "$f$ SELECT sha256(''::bytea) $f$",
+        "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_id uuid, " +
+          "p_org_id uuid, p_seq bigint, p_occurred_at timestamptz, p_actor_type text, " +
+          "p_actor_id uuid, p_action text, p_resource_type text, p_resource_id uuid, " +
+          "p_payload jsonb, p_request_id uuid, p_ip inet, p_user_agent text) RETURNS bytea " +
+          "LANGUAGE sql IMMUTABLE AS $f$ SELECT sha256(''::bytea) $f$",
       );
       expect(
         await vaCham(),
@@ -3283,11 +3292,11 @@ describe("migration của dự án", () => {
         // "CREATE OR REPLACE FUNCTION" của lượt sửa nhận 42501 — hậu điều kiện là lớp duy nhất
         // còn lại.
         await db.pool.query(
-          "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_org_id uuid, " +
-            "p_seq bigint, p_occurred_at timestamptz, p_actor_type text, p_actor_id uuid, " +
-            "p_action text, p_resource_type text, p_resource_id uuid, p_payload jsonb, " +
-            "p_request_id uuid) RETURNS bytea LANGUAGE sql IMMUTABLE AS " +
-            "$f$ SELECT sha256(''::bytea) $f$",
+          "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_id uuid, " +
+            "p_org_id uuid, p_seq bigint, p_occurred_at timestamptz, p_actor_type text, " +
+            "p_actor_id uuid, p_action text, p_resource_type text, p_resource_id uuid, " +
+            "p_payload jsonb, p_request_id uuid, p_ip inet, p_user_agent text) RETURNS bytea " +
+            "LANGUAGE sql IMMUTABLE AS $f$ SELECT sha256(''::bytea) $f$",
         );
         await db.pool.query(
           "CREATE OR REPLACE FUNCTION public.noi_chuoi_kiem_toan() RETURNS trigger " +
@@ -3316,6 +3325,543 @@ describe("migration của dự án", () => {
         "SELECT p.proconfig FROM pg_proc p WHERE p.proname = 'noi_chuoi_kiem_toan'",
       );
       expect(sau[0]!.proconfig).toEqual(["search_path=pg_catalog"]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [vòng fix 1] BỐN MỤC MỚI: (D1c) audit_append, (D1d) chot_moc_neo, đếm overload, ACL INSERT
+  // ==========================================================================================
+
+  /**
+   * [vòng fix 1 — CR3] `public.audit_append` là ĐƯỜNG GHI DUY NHẤT của sổ và vòng trước KHÔNG
+   * canh nó chút nào. Test dựng lại ĐÚNG payload reviewer đo được: thay hàm bằng một bản
+   * plpgsql NUỐT CÓ CHỌN LỌC và trả seq/hash GIẢ nhìn rất thật.
+   *
+   * Ba vế: (a) fixture thật sự tấn công được; (b) không lớp nào khác của dự án bắt được —
+   * verifyAuditChain vẫn xanh trên sổ thiếu sự kiện; (c) lớp C phục hồi ở lần migrate() kế.
+   */
+  it("[vòng fix 1 — CR3] thay thân audit_append nuốt sự kiện CÓ CHỌN LỌC, và lớp C phục hồi", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: org } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
+      );
+      const orgId = org[0]!.id;
+      const ghi = async (hanhDong: string): Promise<void> => {
+        await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+        await db.pool.query(
+          "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'T', NULL, '{}'::jsonb, " +
+            "NULL, NULL, NULL)",
+          [orgId, hanhDong],
+        );
+      };
+      await ghi("BINH_THUONG_1");
+
+      // Kẻ tấn công: cùng chữ ký, ĐỔI NGÔN NGỮ sang plpgsql để có chỗ đặt mệnh đề nuốt.
+      await db.pool.query(
+        `CREATE OR REPLACE FUNCTION public.audit_append(
+           p_org_id uuid, p_actor_type text, p_actor_id uuid, p_action text,
+           p_resource_type text, p_resource_id uuid, p_payload jsonb, p_request_id uuid,
+           p_ip inet, p_user_agent text)
+         RETURNS TABLE (id uuid, seq bigint, prev_hash bytea, hash bytea,
+                        occurred_at timestamptz)
+         LANGUAGE plpgsql AS $f$
+         BEGIN
+           IF p_action LIKE 'BI_MAT%' THEN
+             -- nuot su kien, tra ve mot ban ghi GIA nhin rat that
+             RETURN QUERY SELECT gen_random_uuid(), 999::bigint,
+                                 sha256('a'::bytea), sha256('b'::bytea), now();
+             RETURN;
+           END IF;
+           RETURN QUERY
+             INSERT INTO public.audit_events (org_id, actor_type, actor_id, action,
+                        resource_type, resource_id, payload, request_id, ip, user_agent)
+             VALUES (p_org_id, p_actor_type, p_actor_id, p_action, p_resource_type,
+                     p_resource_id, coalesce(p_payload, '{}'::jsonb), p_request_id, p_ip,
+                     p_user_agent)
+             RETURNING audit_events.id, audit_events.seq, audit_events.prev_hash,
+                       audit_events.hash, audit_events.occurred_at;
+         END $f$`,
+      );
+
+      // (a) fixture thật sự tấn công được: người gọi THẤY một lần ghi audit thành công...
+      await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+      const { rows: nuot } = await db.pool.query<{ seq: string }>(
+        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'BI_MAT_XOA_THAU', 'T', NULL, " +
+          "'{}'::jsonb, NULL, NULL, NULL)",
+        [orgId],
+      );
+      expect(nuot[0]!.seq).toBe("999");
+      // ...trong khi KHÔNG có gì được ghi.
+      const { rows: dem } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1",
+        [orgId],
+      );
+      expect(dem[0]!.n).toBe("1");
+
+      // (b) và ngôn ngữ đã đổi — vế mà một hậu điều kiện chỉ so prosrc sẽ bỏ sót.
+      const { rows: ngonNgu } = await db.pool.query<{ lanname: string }>(
+        "SELECT l.lanname FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang " +
+          " WHERE p.oid = to_regprocedure('public.audit_append(uuid, text, uuid, text, text, " +
+          "uuid, jsonb, uuid, inet, text)')",
+      );
+      expect(ngonNgu[0]!.lanname).toBe("plpgsql");
+
+      // (c) lớp C phục hồi trong một lần migrate().
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: sau } = await db.pool.query<{ lanname: string; prosrc: string }>(
+        "SELECT l.lanname, p.prosrc FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang " +
+          " WHERE p.oid = to_regprocedure('public.audit_append(uuid, text, uuid, text, text, " +
+          "uuid, jsonb, uuid, inet, text)')",
+      );
+      expect(sau[0]!.lanname).toBe("sql");
+      expect(sau[0]!.prosrc).not.toContain("nuot su kien");
+      await ghi("BI_MAT_XOA_THAU");
+      const { rows: demSau } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1",
+        [orgId],
+      );
+      expect(demSau[0]!.n).toBe("2");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — CR3, QT1 (a)] Đường 42P13 của (D1c). Hàm này RETURNS TABLE, nên prorettype
+   * LUÔN là `record` — một vế điều kiện chỉ so prorettype sẽ MÙ với "đổi tên/kiểu cột trả về",
+   * và câu CREATE OR REPLACE khi đó ném 42P13. Vế điều kiện thật so cả proargnames.
+   */
+  it("[vòng fix 1 — CR3] đổi HÌNH DẠNG TRẢ VỀ của audit_append vẫn tự chữa được (không 42P13 kẹt)", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "DROP FUNCTION public.audit_append(uuid, text, uuid, text, text, uuid, jsonb, uuid, " +
+          "inet, text)",
+      );
+      await db.pool.query(
+        `CREATE FUNCTION public.audit_append(
+           p_org_id uuid, p_actor_type text, p_actor_id uuid, p_action text,
+           p_resource_type text, p_resource_id uuid, p_payload jsonb, p_request_id uuid,
+           p_ip inet, p_user_agent text)
+         RETURNS TABLE (khac_han uuid, so bigint)
+         LANGUAGE sql AS $f$ SELECT gen_random_uuid(), 1::bigint $f$`,
+      );
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows } = await db.pool.query<{ proargnames: string[] }>(
+        "SELECT p.proargnames FROM pg_proc p " +
+          " WHERE p.oid = to_regprocedure('public.audit_append(uuid, text, uuid, text, text, " +
+          "uuid, jsonb, uuid, inet, text)')",
+      );
+      expect(rows[0]!.proargnames.slice(-5)).toEqual([
+        "id",
+        "seq",
+        "prev_hash",
+        "hash",
+        "occurred_at",
+      ]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — IM4] (D1d): thân `chot_moc_neo` bị thay bằng "RETURN NEW" trần trả lại đúng
+   * bậc tự do mà IM4 vừa đóng — bên ghi chọn được seq/hash của mốc neo.
+   */
+  it("[vòng fix 1 — IM4] thay thân chot_moc_neo mở lại đường neo giả, và lớp C phục hồi", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: org } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
+      );
+      const orgId = org[0]!.id;
+      await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+      await db.pool.query(
+        "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'X', 'T', NULL, '{}'::jsonb, " +
+          "NULL, NULL, NULL)",
+        [orgId],
+      );
+
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.chot_moc_neo() RETURNS trigger " +
+          "LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$",
+      );
+      const { rows: gia } = await db.pool.query<{ seq: string }>(
+        "INSERT INTO audit_chain_anchors (org_id, seq, hash) VALUES ($1, 999999, " +
+          "sha256('gia'::bytea)) RETURNING seq",
+        [orgId],
+      );
+      expect(gia[0]!.seq, "fixture tự vô hiệu hoá: neo giả không vào được").toBe("999999");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: sau } = await db.pool.query<{ proconfig: string[]; prosrc: string }>(
+        "SELECT p.proconfig, p.prosrc FROM pg_proc p " +
+          " WHERE p.oid = to_regprocedure('public.chot_moc_neo()')",
+      );
+      expect(sau[0]!.proconfig).toEqual(["search_path=pg_catalog"]);
+      expect(sau[0]!.prosrc).toContain("dau_seq");
+
+      // Và đường neo giả đã đóng lại.
+      const { rows: lai } = await db.pool.query<{ seq: string }>(
+        "INSERT INTO audit_chain_anchors (org_id, seq, hash) VALUES ($1, 888888, " +
+          "sha256('gia'::bytea)) RETURNING seq",
+        [orgId],
+      );
+      expect(lai[0]!.seq).toBe("1");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — M4] F-4 nói đúng điều kiện. Payload là ĐÚNG cái reviewer đo được: một overload
+   * CÙNG SỐ THAM SỐ đổi ĐÚNG MỘT KIỂU (text -> varchar) rồi DROP bản chuẩn — hết khớp chính xác
+   * nên overload thắng phân giải bằng ép kiểu ngầm.
+   */
+  it("[vòng fix 1 — M4] overload của audit_compute_hash làm migrate() GÃY ỒN ÀO, và migration mới gỡ được", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_id uuid, " +
+          "p_org_id uuid, p_seq bigint, p_occurred_at timestamptz, p_actor_type varchar, " +
+          "p_actor_id uuid, p_action text, p_resource_type text, p_resource_id uuid, " +
+          "p_payload jsonb, p_request_id uuid, p_ip inet, p_user_agent text) RETURNS bytea " +
+          "LANGUAGE sql IMMUTABLE AS $f$ SELECT sha256('gia'::bytea) $f$",
+      );
+
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi, "một overload ép kiểu được sống sót qua deploy trong im lặng").not.toBeNull();
+      expect(loi!.message).toContain("không có overload lạ của bốn hàm chuỗi kiểm toán");
+      expect(loi!.message).toContain("ĐÚNG 4 hàm");
+
+      // [QT1] Không chặn deploy vĩnh viễn: đường sửa đi được, và nó KHÔNG phải "sửa tay trên
+      // cụm" — bản chuẩn vẫn còn nguyên (mục này CỐ Ý không tự chữa, xem [CR4]).
+      await db.pool.query(
+        "DROP FUNCTION public.audit_compute_hash(bytea, uuid, uuid, bigint, timestamptz, " +
+          "varchar, uuid, text, text, uuid, jsonb, uuid, inet, text)",
+      );
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — M1] Lớp (A) của Task 6 — "REVOKE INSERT trên ba cột chuỗi" — nay được canh.
+   * Trước bản vá, một "GRANT INSERT (seq, prev_hash, hash) TO app_api" SỐNG SÓT MỌI DEPLOY.
+   */
+  it("[vòng fix 1 — M1] GRANT INSERT trên cột chuỗi bị thu hồi lại ở lần migrate() kế", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "GRANT INSERT (seq, prev_hash, hash) ON audit_events TO app_api",
+      );
+      await db.pool.query("GRANT INSERT (seq, hash) ON audit_chain_anchors TO app_unseal");
+
+      const demCot = async (): Promise<string> => {
+        const { rows } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM pg_class c " +
+            " JOIN pg_attribute att ON att.attrelid = c.oid AND att.attnum > 0 " +
+            " CROSS JOIN LATERAL aclexplode(att.attacl) a " +
+            " WHERE c.relname IN ('audit_events','audit_chain_anchors') " +
+            "   AND att.attname IN ('seq','prev_hash','hash') AND a.privilege_type = 'INSERT'",
+        );
+        return rows[0]!.n;
+      };
+      expect(await demCot(), "fixture tự vô hiệu hoá: GRANT không tạo dòng ACL nào").toBe("5");
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await demCot(), "lớp C phải thu hồi lại quyền INSERT trên ba cột chuỗi").toBe("0");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — IM5] Sửa chữa không được IM LẶNG. Đòn tấn công nặng nhất vào hệ thống kiểm
+   * toán (thay thân hàm băm + ghi lại mọi hash cho khớp) trước bản vá này không để lại tín hiệu
+   * ở ĐÂU: migrate() báo MIGRATE OK, không một warning nào, và báo động duy nhất
+   * (verifyAuditChain) thì không được gọi ở đâu ngoài test.
+   */
+  it("[vòng fix 1 — IM5] lượt SỬA phát WARNING nêu ĐÚNG mục đang trôi trước khi tự chữa", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.audit_compute_hash(p_prev_hash bytea, p_id uuid, " +
+          "p_org_id uuid, p_seq bigint, p_occurred_at timestamptz, p_actor_type text, " +
+          "p_actor_id uuid, p_action text, p_resource_type text, p_resource_id uuid, " +
+          "p_payload jsonb, p_request_id uuid, p_ip inet, p_user_agent text) RETURNS bytea " +
+          "LANGUAGE sql IMMUTABLE AS $f$ SELECT sha256(''::bytea) $f$",
+      );
+
+      const poolBat = createPool(db.connectionString, 2);
+      const canhBao: string[] = [];
+      poolBat.on("connect", (client) => {
+        client.on("notice", (thongBao) => {
+          if (thongBao.message !== undefined) canhBao.push(thongBao.message);
+        });
+      });
+      try {
+        await expect(migrate(poolBat, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolBat.end();
+      }
+
+      const gop = canhBao.join("\n");
+      expect(gop, "trôi trên hàm băm mà lượt sửa không nói gì").toContain(
+        'mục "định nghĩa hàm public.audit_compute_hash(...)" ở trạng thái SAI TRƯỚC khi sửa',
+      );
+      // Và thông báo mang CHẨN ĐOÁN thật, không chỉ tên mục — đó là thứ người vận hành cần.
+      expect(gop).toContain("prosrc hiện tại");
+      // Vế chống rỗng ruột: một mục KHÔNG trôi thì KHÔNG được có warning (nếu không, tín hiệu
+      // này chìm trong nhiễu và trở thành vô dụng — đúng chế độ hỏng mà nó sinh ra để đóng).
+      expect(gop).not.toContain('mục "định nghĩa hàm public.chot_moc_neo()" ở trạng thái SAI');
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — IM2] BIẾN THỂ IM LẶNG: một bảng trùng tên QUA ĐƯỢC MỌI PHÉP KIỂM của Task 5
+   * (có org_id, seq, UNIQUE (org_id, seq), LOGGED). Trước bản vá, migrate() THÀNH CÔNG — không
+   * lỗi không warning — rồi mọi INSERT vào bảng đó ném 'record "new" has no field "occurred_at"'
+   * VĨNH VIỄN. Đây là chiều hỏng mà [CR4] cấm: migrate() tự tay đổi ngữ nghĩa một bảng.
+   */
+  it("[vòng fix 1 — IM2] bảng trùng tên QUA MỌI PHÉP KIỂM Task 5 vẫn GHI ĐƯỢC sau migrate()", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE SCHEMA bao_cao");
+      await db.pool.query(
+        "CREATE TABLE bao_cao.audit_events (id bigserial PRIMARY KEY, " +
+          "org_id uuid NOT NULL, seq bigint NOT NULL, UNIQUE (org_id, seq))",
+      );
+
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // Lớp C VẪN cưỡng chế ba trigger chỉ-ghi-thêm cho bảng trùng tên (đó là đánh đổi CÓ CHỦ Ý
+      // của việc bỏ khoá cứng nspname='public' — xem BANG_CHI_GHI_THEM)...
+      const { rows } = await db.pool.query<{ ten: string }>(
+        "SELECT t.tgname AS ten FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid " +
+          " JOIN pg_namespace n ON n.oid = c.relnamespace " +
+          " WHERE n.nspname = 'bao_cao' AND NOT t.tgisinternal ORDER BY 1",
+      );
+      expect(rows.map((r) => r.ten)).toEqual([
+        "audit_events_chan_delete",
+        "audit_events_chan_truncate",
+        "audit_events_chan_update",
+      ]);
+
+      // ...nhưng nó KHÔNG cắm trigger nối chuỗi, nên đường GHI của bảng đó vẫn mở. Trước Task 6
+      // bảng này ghi được; sau Task 6 (bản chưa vá) thì không. Bất biến ấy được mua lại ở đây.
+      await expect(
+        db.pool.query(
+          "INSERT INTO bao_cao.audit_events (org_id, seq) VALUES " +
+            "('11111111-1111-1111-1111-111111111111'::uuid, 1)",
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [cạm bẫy 6 / quy tắc bắt buộc] MỖI hậu điều kiện mới phải có ĐÚNG MỘT test chạy dưới role
+   * deploy mà câu cưỡng chế tương ứng nhận 42501. BỐN mục mới của vòng fix 1 được đóng ở đây:
+   * (D1c) audit_append, (D1d) chot_moc_neo, đếm overload, và ACL INSERT theo cột.
+   */
+  it("[vòng fix 1 — QT1] role deploy không sở hữu: bốn mục MỚI đều làm migrate() GÃY kèm quyền cần có", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Đối chứng: không trôi thì deploy thường vẫn QUA.
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        // Bốn đường trôi, mỗi đường một mục. Cả ba hàm do superuser tạo ở lần migrate() đầu nên
+        // role deploy không sở hữu chúng -> CREATE OR REPLACE nhận 42501 và hậu điều kiện là
+        // lớp DUY NHẤT còn lại. Mục đếm overload thì vốn KHÔNG tự chữa.
+        await db.pool.query(
+          `CREATE OR REPLACE FUNCTION public.audit_append(
+             p_org_id uuid, p_actor_type text, p_actor_id uuid, p_action text,
+             p_resource_type text, p_resource_id uuid, p_payload jsonb, p_request_id uuid,
+             p_ip inet, p_user_agent text)
+           RETURNS TABLE (id uuid, seq bigint, prev_hash bytea, hash bytea,
+                          occurred_at timestamptz)
+           LANGUAGE plpgsql AS $f$ BEGIN RETURN; END $f$`,
+        );
+        await db.pool.query(
+          "CREATE OR REPLACE FUNCTION public.chot_moc_neo() RETURNS trigger " +
+            "LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$",
+        );
+        // Overload: hàm trigger KHÔNG khai tham số được ("trigger functions cannot have
+        // declared arguments" — đã đo), nên mũi này dùng `audit_append`, cùng nằm trong bốn tên
+        // mà mục đếm canh.
+        await db.pool.query(
+          "CREATE FUNCTION public.audit_append(uuid) RETURNS int LANGUAGE sql AS $f$ SELECT 1 $f$",
+        );
+        // ACL: role deploy KHÔNG sở hữu bảng sổ (postgres tạo), nên REVOKE nhận 42501.
+        await db.pool.query("GRANT INSERT (seq) ON audit_events TO app_api");
+
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, "bốn đường trôi mà migrate() vẫn QUA").not.toBeNull();
+        for (const phan of [
+          "định nghĩa hàm public.audit_append(...)",
+          "định nghĩa hàm public.chot_moc_neo()",
+          "không có overload lạ của bốn hàm chuỗi kiểm toán",
+          "quyền GHI trên bảng sổ kiểm toán",
+          "Cần quyền",
+        ]) {
+          expect(loi!.message, `thiếu phần "${phan}"`).toContain(phan);
+        }
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // Đường sửa: một chủ thể CÓ quyền chạy migrate() -> tự chữa hết, trừ overload (cố ý
+      // không tự chữa: DROP tự động một hàm không biết là đúng bẫy [CR4]).
+      await db.pool.query("DROP FUNCTION public.audit_append(uuid)");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — IM7] BỀ MẶT MỚI CỦA TASK 6: `noi_chuoi_kiem_toan()` lấy một
+   * `pg_advisory_xact_lock` khoá theo TỔ CHỨC, phạm vi TRANSACTION. Một phiên bị chiếm mở
+   * transaction, ghi một sự kiện, rồi GIỮ — cả tổ chức mất khả năng ghi audit, và dưới G4
+   * ("mọi thao tác khoá sinh audit") mất luôn khả năng làm thao tác khoá.
+   *
+   * Bốn vế:
+   *   (a) khoá THẬT SỰ nối tiếp hoá: nạn nhân CÙNG tổ chức bị chặn;
+   *   (b) lock_timeout của createPool biến "treo vô hạn" thành một lỗi ồn ào ở đúng dòng khoá;
+   *   (c) cô lập xuyên tổ chức GIỮ ĐƯỢC — tổ chức khác ghi bình thường (đúng thiết kế);
+   *   (d) migrate() vô hiệu hoá hai timeout cho kết nối của nó rồi TRẢ LẠI trước khi nhả client
+   *       — không có vế (d) thì một client mang lock_timeout=0 nằm lại trong pool ứng dụng.
+   */
+  it("[vòng fix 1 — IM7] khoá tư vấn theo tổ chức: lock_timeout của pool biến treo vô hạn thành lỗi ồn ào", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows: org } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('A','a'), ('B','b') RETURNING id",
+      );
+      const orgA = org[0]!.id;
+      const orgB = org[1]!.id;
+
+      // (d) nửa đầu: pool ứng dụng mang hai GUC, và migrate() vừa chạy trên chính pool đó
+      // KHÔNG được để lại lock_timeout = 0.
+      const poolUngDung = createPool(db.connectionString, 4, { lockTimeoutMs: 2_000 });
+      try {
+        await expect(migrate(poolUngDung, MIGRATIONS_DIR)).resolves.toEqual([]);
+        const { rows: guc } = await poolUngDung.query<{ lock_timeout: string }>(
+          "SHOW lock_timeout",
+        );
+        expect(guc[0]!.lock_timeout, "migrate() để lại lock_timeout=0 trên client của pool").toBe(
+          "2s",
+        );
+
+        // (a) + (b): kẻ chiếm giữ khoá của orgA.
+        const keChiem = await poolUngDung.connect();
+        try {
+          await keChiem.query("BEGIN");
+          await keChiem.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+          await keChiem.query(
+            "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'CHIEM', 'T', NULL, " +
+              "'{}'::jsonb, NULL, NULL, NULL)",
+            [orgA],
+          );
+
+          const nanNhan = await poolUngDung.connect();
+          try {
+            await nanNhan.query("BEGIN");
+            await nanNhan.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+            const loi = await nanNhan
+              .query(
+                "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'NAN_NHAN', 'T', NULL, " +
+                  "'{}'::jsonb, NULL, NULL, NULL)",
+                [orgA],
+              )
+              .then(() => "THÀNH CÔNG", (e: Error) => e.message);
+            expect(loi, "khoá tư vấn không nối tiếp hoá được hai lần ghi cùng tổ chức").toMatch(
+              /lock timeout/i,
+            );
+            await nanNhan.query("ROLLBACK");
+          } finally {
+            nanNhan.release();
+          }
+
+          // (c) tổ chức KHÁC không bị chạm tới.
+          const khacToChuc = await poolUngDung.connect();
+          try {
+            await khacToChuc.query("BEGIN");
+            await khacToChuc.query("SELECT set_config('app.org_id', $1, true)", [orgB]);
+            const { rows: ok } = await khacToChuc.query<{ seq: string }>(
+              "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'KHAC', 'T', NULL, " +
+                "'{}'::jsonb, NULL, NULL, NULL)",
+              [orgB],
+            );
+            expect(ok[0]!.seq).toBe("1");
+            await khacToChuc.query("COMMIT");
+          } finally {
+            khacToChuc.release();
+          }
+
+          await keChiem.query("ROLLBACK");
+        } finally {
+          keChiem.release();
+        }
+      } finally {
+        await poolUngDung.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [vòng fix 1 — IM7, nửa còn lại] `migrate()` PHẢI tự vô hiệu hoá `lock_timeout` trên kết nối
+   * của chính nó. Không có dòng đó, hai `migrate()` đồng thời trên một pool mang `lock_timeout`
+   * ngắn làm tiến trình thứ hai **huỷ ngay tại `pg_advisory_lock`** — tức bản vá IM7 vừa phá
+   * đúng cơ chế chống-đua mà `migrate()` dựa vào từ Task 1.
+   *
+   * Đo chứ không suy: `lock_timeout` áp CẢ CHO KHOÁ TƯ VẤN (tài liệu nói "table, index, row, or
+   * other database object" — "other" ở đây bao gồm advisory lock; test này là phép đo).
+   */
+  it("[vòng fix 1 — IM7] hai migrate() đồng thời trên pool có lock_timeout ngắn vẫn nối tiếp nhau, không huỷ", async () => {
+    const db = await startPostgres();
+    try {
+      // 200ms: ngắn hơn HẲN một lượt migrate() đầy đủ, nên nếu migrate() không tự vô hiệu hoá
+      // nó thì tiến trình thua cuộc CHẮC CHẮN bị huỷ ở pg_advisory_lock.
+      const poolA = createPool(db.connectionString, 2, { lockTimeoutMs: 200 });
+      const poolB = createPool(db.connectionString, 2, { lockTimeoutMs: 200 });
+      try {
+        const [a, b] = await Promise.all([
+          migrate(poolA, MIGRATIONS_DIR),
+          migrate(poolB, MIGRATIONS_DIR),
+        ]);
+        // Đúng một bên áp dụng bộ migration đánh số; bên kia thấy chúng đã có.
+        expect([a.length, b.length].sort((x, y) => x - y)).toEqual([0, 4]);
+      } finally {
+        await poolA.end();
+        await poolB.end();
+      }
     } finally {
       await db.stop();
     }
@@ -3630,11 +4176,27 @@ describe("migration của dự án", () => {
         "audit_events_chan_delete",
         "audit_events_chan_truncate",
         "audit_events_chan_update",
-        // [Task 6] Lớp C dựng cả trigger nối chuỗi cho MỌI bảng tên 'audit_events' ở MỌI schema —
-        // đúng cái đánh đổi mà BANG_CHI_GHI_THEM đã ghi ra khi bỏ khoá cứng nspname = 'public'.
-        "audit_events_noi_chuoi",
+        // [vòng fix 1 — IM2] `audit_events_noi_chuoi` KHÔNG còn ở đây, và đó là bản vá.
+        // Bản trước khoá vế lọc theo `relname IN ('audit_events')` trong khi `bang_al` CỐ Ý
+        // nhận bảng ở MỌI schema, nên lớp C tự cắm trigger nối chuỗi lên bảng này — một bảng
+        // chỉ có (org_id, seq). Hệ quả đo được: INSERT vào nó ném 'record "new" has no field
+        // "prev_hash"' VĨNH VIỄN, trong khi migrate() báo OK. Trước Task 6 bảng trùng tên chỉ
+        // bị chặn UPDATE/DELETE/TRUNCATE — INSERT vẫn chạy. Nay vế lọc là VỊ TỪ HÌNH DẠNG
+        // (đủ 15 cột của sổ), nên bảng này không lọt.
         "cha_nuot",
       ]);
+
+      // Vế ĐO, không phải vế suy: câu INSERT vào bảng trùng tên khác hình dạng KHÔNG còn ném
+      // lỗi hình dạng sau migrate(). (rowCount là 0 vì chính fixture cắm `cha_nuot` RETURN NULL
+      // lên bảng cha — đó là thứ test này đang bảo toàn, không phải thứ nó đang đo. Điều đang
+      // đo là KHÔNG CÓ 'record "new" has no field ...'.)
+      const loiChen = await db.pool
+        .query(
+          "INSERT INTO kho.audit_events (org_id, seq) VALUES " +
+            "('11111111-1111-1111-1111-111111111111'::uuid, 1)",
+        )
+        .then(() => null, (e: Error) => e.message);
+      expect(loiChen, "bảng trùng tên KHÁC hình dạng bị lớp C khoá ghi vĩnh viễn").toBeNull();
       expect(conLaiPm.find((r) => r.ten === "cha_nuot")!.cha).not.toBe("0");
 
       const { rows: daGo } = await db.pool.query<{ n: string }>(

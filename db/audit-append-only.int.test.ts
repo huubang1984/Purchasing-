@@ -40,15 +40,17 @@ const TRIGGER_BAT_BUOC: readonly [string, number][] = [
 ];
 
 /**
- * [Task 6] Trigger THỨ BẢY: `audit_events_noi_chuoi` của 004_audit_chain_functions.sql, CHỈ trên
- * `audit_events`. tgtype = 7 = 1|2|4 (ROW | BEFORE | INSERT) — đo trên PostgreSQL 16.15.
+ * [Task 6] Trigger THỨ BẢY và THỨ TÁM: `audit_events_noi_chuoi` và (từ vòng fix 1 — IM4)
+ * `audit_chain_anchors_moc_neo`, cả hai của 004_audit_chain_functions.sql.
+ * tgtype = 7 = 1|2|4 (ROW | BEFORE | INSERT) — đo trên PostgreSQL 16.15.
  *
- * Nó nằm trong `can_co` của hardening.always.sql, nên nó KHÔNG phải "trigger lạ": nếu danh sách
- * này và danh sách bên hardening lệch nhau thì lượt 'sua' sẽ GỠ trigger và migration 004 bốc hơi
- * trong im lặng (004 đã nằm trong schema_migrations nên không bao giờ chạy lại).
+ * Chúng nằm trong `can_co` của hardening.always.sql, nên chúng KHÔNG phải "trigger lạ": nếu danh
+ * sách này và danh sách bên hardening lệch nhau thì lượt 'sua' sẽ GỠ trigger và migration 004
+ * bốc hơi trong im lặng (004 đã nằm trong schema_migrations nên không bao giờ chạy lại).
  */
 const TRIGGER_NOI_CHUOI: readonly [string, string, number, string][] = [
   ["audit_events", "audit_events_noi_chuoi", 7, "public.noi_chuoi_kiem_toan()"],
+  ["audit_chain_anchors", "audit_chain_anchors_moc_neo", 7, "public.chot_moc_neo()"],
 ];
 
 /** Quyền GHI trên bảng: ba quyền không role nào (ngoài chủ sở hữu) được có trên bảng sổ. */
@@ -111,12 +113,17 @@ const CAU_QUYEN_HIEU_DUNG =
  * đường xoá audit VỀ TƯƠNG LAI: một "BEFORE INSERT ... RETURN NULL" nuốt đúng sự kiện nó chọn
  * và để lại chuỗi hash LIỀN MẠCH MÀ THIẾU SỰ KIỆN, nên bộ kiểm chứng của Task 6 sẽ báo HỢP LỆ.
  */
+// [vòng fix 1 — M2] So khớp theo CẶP `bảng.trigger`, không theo tên trigger trần. Bản trước
+// truyền $2 là một danh sách PHẲNG các tên hợp lệ, nên một trigger tên `audit_events_noi_chuoi`
+// đặt trên `audit_chain_anchors` LỌT qua test này. (Lớp cưỡng chế trong hardening thì ghép đúng
+// theo bang_oid — `can_co k WHERE k.bang_oid = b.bang_oid` — nên BẤT BIẾN THẬT vẫn đứng; chỉ
+// PHÉP ĐO ở đây yếu đi. Sửa vì một phép đo yếu là một phép đo sẽ được tin nhầm.)
 const CAU_TRIGGER_RULE_LA =
   "SELECT c.relname || '.' || t.tgname AS ten FROM pg_trigger t " +
   "  JOIN pg_class c ON c.oid = t.tgrelid " +
   "  JOIN pg_namespace n ON n.oid = c.relnamespace " +
   " WHERE n.nspname = 'public' AND c.relname = ANY($1) AND NOT t.tgisinternal " +
-  "   AND t.tgname <> ALL($2) " +
+  "   AND (c.relname || '.' || t.tgname) <> ALL($2) " +
   "UNION ALL " +
   "SELECT c.relname || '.' || rw.rulename FROM pg_rewrite rw " +
   "  JOIN pg_class c ON c.oid = rw.ev_class " +
@@ -470,9 +477,11 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       ...new Set(rows.filter((r) => r.cot !== null).map((r) => `${r.bang}.${r.cot}:${r.quyen}`)),
     ].sort();
     expect(cotDuocGhi).toEqual([
-      "audit_chain_anchors.hash:INSERT",
+      // [vòng fix 1 — IM4] `audit_chain_anchors.seq` và `.hash` KHÔNG còn ở đây: 004 §(5) thu
+      // hồi chúng và cắm trigger dẫn xuất từ đầu chuỗi. Trước bản vá, app_api chèn được một mốc
+      // neo GIẢ vào chính bộ kiểm chứng, VĨNH VIỄN (trigger append-only chặn gỡ bỏ), và việc
+      // chiếm trước (org, seq) làm recordChainAnchor trả null mãi mãi.
       "audit_chain_anchors.org_id:INSERT",
-      "audit_chain_anchors.seq:INSERT",
       // [Task 6] `hash`, `prev_hash` và `seq` KHÔNG còn ở đây: 004 thu hồi INSERT trên đúng ba
       // cột đó. Trước bản vá, một app_api bị chiếm chiếm trước được seq kế tiếp và CHẶN việc ghi
       // sổ vĩnh viễn (ca nặng nhất: seq = 2^63-1 -> mọi lần ghi sau vỡ với "bigint out of range",
@@ -580,17 +589,37 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // tại, và không rule nào. Phép kiểm trạng thái; đường trôi tương ứng có test đối kháng riêng
   // ở db/migrations.int.test.ts.
   it("[INV-B4] không trigger LẠ và không RULE nào trên bảng sổ", async () => {
-    const tenHopLe = [
+    // [vòng fix 1 — M2] Danh sách là CẶP `bảng.trigger`, không phải tên trần — xem
+    // CAU_TRIGGER_RULE_LA.
+    const capHopLe = [
       ...BANG_CHI_GHI_THEM.flatMap((bang) =>
-        TRIGGER_BAT_BUOC.map(([hauTo]) => `${bang}_chan_${hauTo}`),
+        TRIGGER_BAT_BUOC.map(([hauTo]) => `${bang}.${bang}_chan_${hauTo}`),
       ),
-      ...TRIGGER_NOI_CHUOI.map(([, ten]) => ten),
+      ...TRIGGER_NOI_CHUOI.map(([bang, ten]) => `${bang}.${ten}`),
     ];
     const { rows } = await db.pool.query<{ ten: string }>(CAU_TRIGGER_RULE_LA, [
       BANG_CHI_GHI_THEM,
-      tenHopLe,
+      capHopLe,
     ]);
     expect(rows).toEqual([]);
+
+    // Chống rỗng ruột, và đây là ĐÚNG mũi mà bản trước LỌT: một trigger mang tên HỢP LỆ CỦA
+    // BẢNG KIA. Trước [M2] nó đi qua vì $2 là danh sách phẳng.
+    await db.pool.query(
+      "CREATE OR REPLACE TRIGGER audit_events_noi_chuoi BEFORE INSERT ON audit_chain_anchors " +
+        "FOR EACH ROW EXECUTE FUNCTION public.chot_moc_neo()",
+    );
+    try {
+      const { rows: lot } = await db.pool.query<{ ten: string }>(CAU_TRIGGER_RULE_LA, [
+        BANG_CHI_GHI_THEM,
+        capHopLe,
+      ]);
+      expect(lot.map((r) => r.ten)).toEqual(["audit_chain_anchors.audit_events_noi_chuoi"]);
+    } finally {
+      await db.pool.query(
+        "DROP TRIGGER audit_events_noi_chuoi ON audit_chain_anchors",
+      );
+    }
   });
 
 
@@ -691,6 +720,13 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // QUA RLS nên nó luôn tính ra seq = 1 cho một tổ chức mà phiên hiện tại không thấy. Vì thế mũi
   // nhắm vào một tổ chức ĐÃ CÓ seq = 1 va vào chỉ mục duy nhất, còn mũi nhắm vào tổ chức RỖNG
   // thì không — nếu RLS không được kiểm trước thì hai thông báo sẽ KHÁC NHAU và đó là oracle.
+  //
+  // [vòng fix 1 — M3] MẤT ĐỘ PHÂN GIẢI, nói ra thay vì để người đọc tự phát hiện: bản trước dò
+  // được "org khác có hàng ở SEQ N hay không" (kẻ tấn công chọn được N); bản này chỉ dò được
+  // "org khác có ÍT NHẤT MỘT hàng hay không", vì seq do trigger đặt và nó luôn tính ra 1 cho
+  // một tổ chức mà phiên hiện tại không thấy. Câu hỏi vẫn là câu hỏi cũ và cơ chế đo vẫn thật —
+  // nhưng nếu một vòng sau mở lại quyền ghi cột `seq` thì phải KHÔI PHỤC bản đo cũ, không phải
+  // dựa vào bản này.
   it("[INV-B4] UNIQUE (org_id, seq) không dùng làm oracle xuyên tổ chức được", async () => {
     const { rows: orgMoi } = await db.pool.query<{ id: string }>(
       "INSERT INTO organizations (name, slug) VALUES ('Cong ty rong', 'cong-ty-rong') RETURNING id",
@@ -920,6 +956,103 @@ describe("hồ sơ kiểm toán của bảng sổ khớp nhau giữa các file",
       than004,
       "thân hàm cưỡng chế không được mang chú thích — hậu điều kiện so theo văn bản",
     ).not.toContain("--");
+
+    // [vòng fix 1 — IM4] Hàm trigger THỨ BA, cùng khuôn.
+    const thanNeo = thanHam("004_audit_chain_functions.sql", "chot_moc_neo");
+    const khoiNeo = /THAN_MOC_NEO constant text := \$tmn\$([\s\S]*?)\$tmn\$;/.exec(
+      doc("hardening.always.sql"),
+    );
+    expect(khoiNeo, "hardening.always.sql: không tìm thấy hằng THAN_MOC_NEO").not.toBeNull();
+    expect(khoiNeo![1]!.replace(/\s+/g, " ").trim()).toBe(thanNeo);
+    expect(thanNeo).not.toContain("--");
+  });
+
+  /**
+   * [vòng fix 1 — IM1] §R3 CHO HÀM BĂM VÀ HÀM GHI — hai chỗ mà commit trước BỎ TRỐNG.
+   *
+   * Commit Task 6 áp §R3 cho `noi_chuoi_kiem_toan` (test ngay trên) nhưng KHÔNG áp cho
+   * `audit_compute_hash` — đúng cái hàm mà chính báo cáo gọi là "điểm hỏng đơn lẻ của toàn bộ
+   * B3" — và cũng không áp cho `audit_append`. Đo được hậu quả trên DB sạch: sửa CHỈ 004
+   * ('trustprocure.audit.v1' -> '...TROI') và giữ nguyên hằng THAN_BAM của hardening ->
+   * migrate() APPLIED đầy đủ, KHÔNG lỗi KHÔNG warning, và `prosrc` đang chạy VẪN LÀ bản của
+   * hardening. Tức FILE .sql MÀ KIỂM TOÁN VIÊN ĐỌC KHÁC CÁI ĐANG CHẠY — đúng lớp lỗi mà
+   * [fix S7] (checksum migration) và §R3 sinh ra để đóng.
+   *
+   * Test này canh CẢ BA thứ cho mỗi hàm, vì cả ba đều trôi độc lập được:
+   *   (a) THÂN hàm;  (b) DANH SÁCH THAM SỐ;  (c) CHỮ KÝ dùng trong to_regprocedure/DROP.
+   * Lệch (b) hoặc (c) mà không lệch (a) là ca nguy hiểm nhất: hardening tự chữa một hàm KHÁC
+   * với hàm mà 004 tạo ra, và cả hai cùng tồn tại.
+   */
+  it("[INV-B3] định nghĩa audit_compute_hash/audit_append trong 004 và trong hardening khớp nhau", () => {
+    const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
+    const doc004 = doc("004_audit_chain_functions.sql");
+    const docHardening = doc("hardening.always.sql");
+
+    const hangSo = (ten: string, mo: string): string => {
+      const khop = new RegExp(
+        String.raw`${ten} constant text :=\s*\$${mo}\$([\s\S]*?)\$${mo}\$;`,
+      ).exec(docHardening);
+      expect(khop, `hardening.always.sql: không tìm thấy hằng ${ten}`).not.toBeNull();
+      return chuanHoa(khop![1]!);
+    };
+
+    // ---- audit_compute_hash: thân + tham số + chữ ký -------------------------------------
+    const bam004 = /CREATE OR REPLACE FUNCTION public\.audit_compute_hash\(([\s\S]*?)\) RETURNS bytea[\s\S]*?AS \$tbm\$([\s\S]*?)\$tbm\$;/.exec(
+      doc004,
+    );
+    expect(bam004, "004: không tìm thấy định nghĩa audit_compute_hash").not.toBeNull();
+    expect(hangSo("THAN_BAM", "tbm")).toBe(chuanHoa(bam004![2]!));
+    expect(chuanHoa(bam004![2]!)).not.toContain("--");
+    // Nhãn phiên bản khuôn tiền ảnh phải khớp ở cả hai bản — đổi khuôn mà quên nhãn là hai
+    // khuôn va nhau trong im lặng.
+    expect(chuanHoa(bam004![2]!)).toContain("'trustprocure.audit.v2'");
+
+    // Tham số: so sau khi bỏ khoảng trắng và xuống dòng. THAM_SO_BAM mang thêm dấu ngoặc.
+    const thamSoBam = hangSo("THAM_SO_BAM", "q").replace(/^\(|\)$/g, "");
+    expect(thamSoBam.replace(/\s*,\s*/g, ",")).toBe(
+      chuanHoa(bam004![1]!).replace(/\s*,\s*/g, ","),
+    );
+    // Chữ ký: danh sách KIỂU, suy ra từ chính danh sách tham số ở 004.
+    const kieuTuThamSo = (ts: string): string =>
+      ts
+        .split(",")
+        .map((p) => p.trim().split(/\s+/).slice(1).join(" "))
+        .join(", ");
+    expect(hangSo("CHU_KY_BAM", "q")).toBe(
+      `public.audit_compute_hash(${kieuTuThamSo(chuanHoa(bam004![1]!))})`,
+    );
+
+    // ---- audit_append: thân + tham số + chữ ký -------------------------------------------
+    const ghi004 = /CREATE OR REPLACE FUNCTION public\.audit_append\(([\s\S]*?)\) RETURNS TABLE \(([\s\S]*?)\)\s*\nLANGUAGE sql SET search_path = pg_catalog AS \$ham\$([\s\S]*?)\$ham\$;/.exec(
+      doc004,
+    );
+    expect(ghi004, "004: không tìm thấy định nghĩa audit_append").not.toBeNull();
+    expect(hangSo("THAN_GHI", "ham")).toBe(chuanHoa(ghi004![3]!));
+    expect(chuanHoa(ghi004![3]!)).not.toContain("--");
+
+    const thamSoGhi = hangSo("THAM_SO_GHI", "q").replace(/^\(|\)$/g, "");
+    expect(thamSoGhi.replace(/\s*,\s*/g, ",")).toBe(
+      chuanHoa(ghi004![1]!).replace(/\s*,\s*/g, ","),
+    );
+    expect(hangSo("CHU_KY_GHI", "q")).toBe(
+      `public.audit_append(${kieuTuThamSo(chuanHoa(ghi004![1]!))})`,
+    );
+    expect(hangSo("TRA_VE_GHI", "q").replace(/\s*,\s*/g, ",")).toBe(
+      `TABLE (${chuanHoa(ghi004![2]!)})`.replace(/\s*,\s*/g, ","),
+    );
+
+    // TEN_COT_GHI = tên 10 tham số VÀO rồi tới 5 cột RA, đúng thứ tự pg_proc.proargnames.
+    const tenTuKhai = (khai: string): string[] =>
+      chuanHoa(khai)
+        .split(",")
+        .map((p) => p.trim().split(/\s+/)[0]!);
+    const tenTrongHardening = [
+      ...hangSo("TEN_COT_GHI", "q").matchAll(/'([^']+)'/g),
+    ].map((m) => m[1]!);
+    expect(tenTrongHardening).toEqual([
+      ...tenTuKhai(ghi004![1]!),
+      ...tenTuKhai(ghi004![2]!),
+    ]);
   });
 
   it("[INV-B4] danh sách bảng chỉ-ghi-thêm khớp nhau ở hardening.always.sql và ở test này", () => {
