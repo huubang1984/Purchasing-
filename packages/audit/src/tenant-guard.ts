@@ -72,22 +72,57 @@ interface HangGan {
  * nó. Cả hai đều tái lập CHÍNH XÁC ngữ nghĩa cũ: GUC chưa gắn -> NULL -> false -> ném, và vế
  * `dang_gan` vẫn giữ thông tin "chưa gắn" (đo: `{"khop":false,"dang_gan":null}`).
  *
- * TRỤC TÊN KIỂU — GHIM, KHÔNG PHẢI VÁ, và nói đúng mức đó. Tên KIỂU cũng phân giải qua
- * `search_path`, nên `$1::uuid` / `::text` trần là một bậc tự do. Đã đo trục này riêng: với
- * `CREATE DOMAIN doc.uuid AS pg_catalog.uuid` và `CREATE DOMAIN doc.text AS pg_catalog.text`
- * đứng trước `pg_catalog`, câu đã ghim toán tử cho ra `{"khop":false}` với CẢ tên kiểu ghim LẪN
- * tên kiểu trần — miền trị (domain) không biến đổi được giá trị, và `OPERATOR(pg_catalog.=)`
- * vẫn áp được cho miền trị trên `uuid` vì nó khả ép nhị phân. Tức trục tên kiểu KHÔNG cho ra
- * dương tính giả trong cấu hình đo được; chỗ xấu nhất nó với tới được là một lỗi phân giải
- * (`42883`), tức fail-CLOSED. Viết `::pg_catalog.uuid` ở đây là bỏ đi một bậc tự do theo QT2,
- * KHÔNG phải sửa một lỗ đã đo — và chú thích này nói đúng thứ đó thay vì gộp chung.
+ * ============================================================================
+ * [vòng fix 3 — MỤC 1] TRỤC TÊN KIỂU: `::pg_catalog.uuid` LÀ MỘT BẢN VÁ ĐO ĐƯỢC.
+ * ============================================================================
+ * CÂU CỦA VÒNG FIX 2, GIỮ NGUYÊN VĂN ĐỂ NGƯỜI ĐỌC SAU THẤY NÓ SAI Ở ĐÂU (đừng khôi phục):
+ *   ┌ "TRỤC TÊN KIỂU — GHIM, KHÔNG PHẢI VÁ [...] trục tên kiểu KHÔNG cho ra dương tính giả
+ *   │  trong cấu hình đo được; chỗ xấu nhất nó với tới được là một lỗi phân giải (`42883`),
+ *   │  tức fail-CLOSED. Viết `::pg_catalog.uuid` ở đây là bỏ đi một bậc tự do theo QT2,
+ *   └  KHÔNG phải sửa một lỗ đã đo."
+ * CÂU ĐÓ SAI, VÀ NÓ SAI VÌ NÓ TỔNG QUÁT HOÁ TỪ MỘT MẪU. Vòng fix 2 đo đúng MỘT hình dạng
+ * (`CREATE DOMAIN doc.uuid AS pg_catalog.uuid`) rồi kết luận cho CẢ trục. Đo lại NĂM hình dạng
+ * trên PostgreSQL 16 (bốn cái đầu đúng là fail-closed, cái thứ năm KHÔNG):
+ *     DOMAIN AS pg_catalog.uuid                          -> khớp = false      (fail-closed)
+ *     DOMAIN ... CHECK (VALUE = app_current_org_id())    -> 23514             (fail-closed)
+ *     DOMAIN AS pg_catalog.text + CREATE CAST            -> 42883             (fail-closed)
+ *     TYPE ... AS (v text)  composite                    -> 22P02             (fail-closed)
+ *     TYPE ... AS ENUM (<org đích>)
+ *       + CREATE CAST (<gia>.uuid AS pg_catalog.uuid)
+ *         WITH FUNCTION <gia>.ep AS IMPLICIT             -> LẬT ĐƯỢC PHÁN XÉT
+ * Cơ chế của hình dạng thứ năm: `$1::uuid` trần phân giải thành KIỂU ENUM bóng, rồi
+ * `OPERATOR(pg_catalog.=)` (đúng toán tử của `uuid`, KHÔNG bị cướp) phải ép vế phải về
+ * `pg_catalog.uuid` — và phép ép đó chạy HÀM CỦA KẺ TẤN CÔNG, hàm này trả thẳng
+ * `app_current_org_id()`. Hai vế thành ra bằng nhau với MỌI `$1`. ĐO ĐƯỢC, trên chính câu SQL
+ * ở dưới, KHÔNG cướp một toán tử nào:
+ *     `=` trần của uuid bị cướp        = false   <- không hề đụng tới toán tử
+ *     tên kiểu TRẦN   (`$1::uuid`)     = true    <<< HÀNG RÀO BỊ VƯỢT
+ *     tên kiểu GHIM   (`::pg_catalog.uuid`) = false
+ * Tiền đề khai thác GIỐNG HỆT mô hình đe doạ mà dự án đã chấp nhận cho `CREATE OPERATOR`: cần
+ * `CREATE` trên một schema nằm trên `search_path`. `CREATE CAST` chỉ đòi SỞ HỮU kiểu nguồn, mà
+ * kẻ tấn công tự tạo ra kiểu đó. ENUM KHÔNG cần superuser (base type thì cần) — đã đo dưới một
+ * role `LOGIN` không superuser, không `CREATEROLE`: `CREATE TYPE`/`CREATE CAST` đều thành công.
+ * `app_current_org_id()` VẪN ĐÚNG suốt (thân hàm nó đã ghim `::pg_catalog.uuid` từ 001), nên
+ * lớp phòng thủ TÌNH CỜ "hàm sập về NULL" lại KHÔNG kích hoạt ở đây nữa.
+ *
+ * ⇒ `::pg_catalog.uuid` ở câu dưới là VÁ MỘT LỖ ĐO ĐƯỢC, ngang hàng với `OPERATOR(pg_catalog.=)`,
+ *   KHÔNG phải trang trí theo QT2. Ai bỏ `pg_catalog.` đi sẽ mở lại đúng kịch bản `[M5]`: đã tái
+ *   lập end-to-end trên mã sản phẩm — gỡ ghim ở đây thì hàng rào KHÔNG ném, và gỡ thêm ở
+ *   `exportChainHead` thì nó xuất `{"orgId":<orgQ>,"seq":3}` từ sổ 3 hàng của P.
+ * Mốc chết: test `TRỤC TÊN KIỂU (2): ENUM + CAST IMPLICIT` trong `tenant-guard.int.test.ts` —
+ * fixture ở đó TỰ CHỨNG MINH nó tấn công được trước khi kết luận bất cứ điều gì.
+ *
+ * DƯ LƯỢNG NÓI THẲNG: hôm nay KHÔNG lớp nào cưỡng chế quy ước này (không lint, không AST-check).
+ * Chú thích + test là tất cả những gì đang giữ nó. Xem sổ nợ trong `task-8-report.md` §V3.5.
  *
  * `IS TRUE`: MỘT MŨI ĐỘT BIẾN TƯƠNG ĐƯƠNG, ghi ra thay vì để nó trông như một hàng rào. Gỡ
  * `IS TRUE` (giữ nguyên `OPERATOR(pg_catalog.=)`) SỐNG SÓT cả bộ test — đúng như phải thế:
  * `hang?.khop === true` ở dưới đã gộp `false` và `NULL` về cùng một nhánh ném. Nó ở đây vì lý
  * do KIỂU chứ không vì lý do an ninh: không có nó, `khop` là `boolean | null` và khai báo
- * `HangGan.khop: boolean` sẽ là một lời nói dối. Thứ CHỊU LỰC ở câu này là
- * `OPERATOR(pg_catalog.=)` — gỡ nó thì ba test [INV-M5] đỏ ngay.
+ * `HangGan.khop: boolean` sẽ là một lời nói dối. Thứ CHỊU LỰC ở câu này là HAI thứ, không phải
+ * một: `OPERATOR(pg_catalog.=)` (gỡ -> ba test [INV-M5] đỏ ngay) VÀ `::pg_catalog.uuid` (gỡ ->
+ * test ENUM+CAST đỏ ngay). Vế `::pg_catalog.text` của `dang_gan` thì đúng là GHIM: nó chỉ vào
+ * thông báo lỗi, không vào phán xét — nói đúng mức đó.
  */
 export async function assertTenantBound(
   client: pg.PoolClient,

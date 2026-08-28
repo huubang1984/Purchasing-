@@ -182,6 +182,15 @@ export async function recordChainAnchor(
   await assertTenantBound(client, orgId, "recordChainAnchor");
 
   const { rows } = await client.query<{ seq: string; hash: Buffer }>(
+    // [vòng fix 3 — MỤC 2] Vế `WHERE` dưới đây CHỊU LỰC, không phải ghim phòng xa, và trước
+    // vòng này chỗ đó KHÔNG có một dòng nào nói ra. Dưới phiên `rolsuper`/`rolbypassrls` (không
+    // chịu RLS) nó là lớp duy nhất giới hạn tập hàng. Đo được, sổ P = 3 hàng / sổ Q = 7 hàng,
+    // phiên SUPERUSER gắn P xin neo sổ của P, `=` của `uuid` bị cướp:
+    //     mã NGUYÊN BẢN (đã ghim) -> {"seq":3}
+    //     gỡ ghim                 -> hàng thắng `ORDER BY ae.seq DESC LIMIT 1` là hàng của Q,
+    //                                nên `SELECT ae.org_id` CHÈN org_id = <orgQ> và trả seq 7:
+    //                                một mốc neo GHI VÀO SỔ dưới nhãn sai tổ chức.
+    // Mốc chết: test `[INV-M5] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`.
     `INSERT INTO public.audit_chain_anchors (org_id)
      SELECT ae.org_id
        FROM public.audit_events ae
@@ -219,9 +228,22 @@ export async function exportChainHead(
   await assertTenantBound(client, orgId, "exportChainHead");
 
   const { rows } = await client.query<{ seq: string; hash_hex: string }>(
-    // [vòng fix 2 — MỤC A] Ghim toán tử: bỏ đi một bậc tự do. RLS đã giới hạn tập hàng về đúng
-    // tổ chức đang gắn nên một `=` bị cướp ở đây KHÔNG mở rộng ra ngoài tổ chức — nói đúng mức
-    // đó, đừng gộp với vế NOT EXISTS của verifier.ts (chỗ duy nhất việc ghim vá lỗ đo được).
+    // [vòng fix 3 — MỤC 2] CÂU CŨ Ở ĐÂY LÀ MỘT PHÁT BIỂU VÔ ĐIỀU KIỆN VÀ NÓ SAI; giữ nguyên
+    // văn để không ai khôi phục nó:
+    //   ┌ "[vòng fix 2 — MỤC A] Ghim toán tử: bỏ đi một bậc tự do. RLS đã giới hạn tập hàng về
+    //   │  đúng tổ chức đang gắn nên một `=` bị cướp ở đây KHÔNG mở rộng ra ngoài tổ chức —
+    //   │  nói đúng mức đó, đừng gộp với vế NOT EXISTS của verifier.ts (chỗ duy nhất việc ghim
+    //   └  vá lỗ đo được)."
+    // "RLS đã giới hạn tập hàng" chỉ đúng VỚI PHIÊN CHỊU RLS. Với phiên `rolsuper`/`rolbypassrls`
+    // — phiên của người vận hành chạy công cụ này bằng tay — vế `WHERE` dưới đây là LỚP DUY
+    // NHẤT giới hạn tập hàng, nên ghim ở đây là VÁ. Đo được, sổ P = 3 hàng / sổ Q = 7 hàng,
+    // phiên SUPERUSER gắn P xin xuất neo của P, `=` của `uuid` bị cướp:
+    //     mã NGUYÊN BẢN (đã ghim)  -> {"orgId":<orgP>,"seq":3}   (đúng)
+    //     gỡ ghim                  -> {"orgId":<orgP>,"seq":7}   <<< ĐẦU CHUỖI CỦA Q, DÁN NHÃN P
+    // Tức một mốc neo "chính thức" của P mang băm của một sự kiện KHÔNG THUỘC P — sổ của P sẽ
+    // không bao giờ kiểm chứng được với nó nữa, và một lần cắt đuôi của P đi lọt. Mốc chết:
+    // test `[INV-M5] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`. Vì sao KHÔNG thêm phép
+    // kiểm `rolsuper` vào `assertTenantBound` — xem lập luận đã đo ở `verifier.ts`.
     `SELECT ae.seq, pg_catalog.encode(ae.hash, 'hex') AS hash_hex
        FROM public.audit_events ae
       WHERE ae.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid

@@ -170,9 +170,21 @@ export async function verifyAuditChain(
   // Mốc neo TRONG DB trỏ tới một sự kiện không còn tồn tại (hoặc đã đổi băm) nghĩa là chuỗi đã
   // bị cắt đuôi. Phép so đặt trong SQL để nó chạy dưới đúng RLS của phiên đang kiểm.
   //
-  // [vòng fix 2 — MỤC A, quét toàn repo] MỌI TOÁN TỬ Ở ĐÂY GHI ĐỦ `OPERATOR(pg_catalog.=)`, và
-  // ĐÂY LÀ VẾ DUY NHẤT TRONG GÓI NÀY MÀ VIỆC ĐÓ VÁ MỘT LỖ ĐO ĐƯỢC chứ chỉ là ghim. Vế
-  // `NOT EXISTS` này là bộ phát hiện CẮT ĐUÔI. Dưới một `search_path` thù địch cướp `=` cho
+  // [vòng fix 2 — MỤC A, quét toàn repo] MỌI TOÁN TỬ Ở ĐÂY GHI ĐỦ `OPERATOR(pg_catalog.=)`.
+  //
+  // [vòng fix 3 — MỤC 3] CÂU CŨ Ở ĐÂY SAI, giữ nguyên văn để không ai khôi phục nó:
+  //     ┌ "và ĐÂY LÀ VẾ DUY NHẤT TRONG GÓI NÀY MÀ VIỆC ĐÓ VÁ MỘT LỖ ĐO ĐƯỢC chứ chỉ là ghim"
+  //     └
+  // Nó mâu thuẫn với `tenant-guard.ts` NGAY TRONG CÙNG MỘT COMMIT: docblock ở đó gọi
+  // `OPERATOR(pg_catalog.=)` của `assertTenantBound` là "thứ CHỊU LỰC", và đo được — gỡ ghim ở
+  // đó thì ba test `[INV-M5]` đỏ (hàng rào tenant bị vượt, `exportChainHead` đúc mốc neo mang
+  // nhãn tổ chức khác). Vòng fix 3 đo thêm HAI chỗ nữa trong chính gói này (xem dưới và
+  // `writer.ts`). Phát biểu ĐÚNG: trong gói `audit`, việc ghim toán tử/tên kiểu vá một lỗ ĐO
+  // ĐƯỢC ở BỐN chỗ — `assertTenantBound` (cả toán tử lẫn tên kiểu), vế `NOT EXISTS` dưới đây,
+  // vế `WHERE ae.org_id` của truy vấn chuỗi ở trên, và `exportChainHead`/`recordChainAnchor`
+  // của `writer.ts`. Ba chỗ sau chỉ lộ ra dưới phiên KHÔNG chịu RLS — xem ngay dưới.
+  //
+  // Vế `NOT EXISTS` này là bộ phát hiện CẮT ĐUÔI. Dưới một `search_path` thù địch cướp `=` cho
   // `uuid`, `bigint` và `bytea` — cả ba đều là kiểu của chính ba cột được so — đã đo trên
   // PostgreSQL 16.15, trong một phiên gắn ĐÚNG tổ chức, trên một mốc neo trỏ tới hàng KHÔNG
   // tồn tại:
@@ -182,9 +194,31 @@ export async function verifyAuditChain(
   //     EXISTS(cả ba vế)                                 -> true   => NOT EXISTS = false
   // Tức `ANCHOR_MISSING` KHÔNG BAO GIỜ được báo: bộ kiểm chứng trả `ok:true` trên một sổ ĐÃ BỊ
   // CẮT ĐUÔI. Một công cụ kiểm toán fail-OPEN, im lặng — đúng lớp hỏng nặng nhất của gói này.
-  // Vế `WHERE ae.org_id` của truy vấn chuỗi ở trên cũng ghim, nhưng ở đó việc ghim chỉ bỏ đi
-  // một bậc tự do: RLS đã giới hạn tập hàng về đúng tổ chức đang gắn, nên một `=` bị cướp ở
-  // đó KHÔNG mở rộng tập hàng ra ngoài tổ chức. Nói đúng hai mức đó thay vì gộp chung.
+  //
+  // [vòng fix 3 — MỤC 2] VẾ `WHERE ae.org_id` CỦA TRUY VẤN CHUỖI Ở TRÊN CŨNG CHỊU LỰC. Câu cũ
+  // ở đây là một PHÁT BIỂU VÔ ĐIỀU KIỆN và nó SAI với một lớp phiên có thật; giữ nguyên văn:
+  //     ┌ "nhưng ở đó việc ghim chỉ bỏ đi một bậc tự do: RLS đã giới hạn tập hàng về đúng tổ
+  //     └  chức đang gắn, nên một `=` bị cướp ở đó KHÔNG mở rộng tập hàng ra ngoài tổ chức."
+  // Mệnh đề "RLS đã giới hạn tập hàng" chỉ đúng VỚI PHIÊN CHỊU RLS. Một phiên `rolsuper` hoặc
+  // `rolbypassrls` KHÔNG chịu RLS — và đó đúng là phiên mà một người vận hành chạy công cụ kiểm
+  // toán bằng tay sẽ có (cũng là phiên `db.pool` mà `packages/test-support` cấp). Đo được, sổ
+  // của P có 3 hàng và sổ của Q có 7 hàng, phiên SUPERUSER gắn P, `=` của `uuid` bị cướp:
+  //     mã NGUYÊN BẢN (đã ghim)            -> checked = 3          (đúng)
+  //     gỡ ghim ở vế `WHERE ae.org_id` này -> checked = 3 + 7 = 10 <<< TẬP HÀNG TRÀN RA NGOÀI
+  //                                                                    TỔ CHỨC
+  // ⇒ dưới phiên không chịu RLS, vế `WHERE` này là LỚP DUY NHẤT giới hạn tập hàng, nên ghim ở
+  //   đây là VÁ chứ không phải trang trí. Mốc chết: test `[INV-M5] phiên BYPASSRLS` trong
+  //   `tenant-guard.int.test.ts`.
+  //
+  // VÌ SAO KHÔNG THÊM MỘT PHÉP KIỂM `rolsuper`/`rolbypassrls` VÀO `assertTenantBound` theo
+  // khuôn `khangDinhAuditPoolDungQuyen` của `[F9]`: hai đường KHÁC NHAU về kết cục. `[F9]` canh
+  // đường GHI, ở đó một phiên bỏ qua RLS làm `WITH CHECK (org_id = app_current_org_id())` mất
+  // hiệu lực và KHÔNG có vế nào khác thay thế được — từ chối là đường đóng duy nhất. Ở đường
+  // ĐỌC này, vế `WHERE ... OPERATOR(pg_catalog.=) $1::pg_catalog.uuid` ĐÃ giới hạn tập hàng
+  // đúng bằng phép đo ngay trên (checked = 3 dưới superuser + toán tử bị cướp), nên một phép
+  // kiểm role mua thêm 0 bảo đảm; đổi lại nó sẽ CẤM chính người vận hành chạy `verifyAuditChain`
+  // trong tình huống mà công cụ này sinh ra để phục vụ (điều tra sự cố dưới quyền DBA). Chọn
+  // hạ phát biểu xuống đúng mức + đặt mốc chết, thay vì thêm một cổng chặn sai tầng.
   //
   // KIỂM THỬ ĐỘT BIẾN NÓI CHÍNH XÁC HƠN, và ghi ra vì nó hiệu chỉnh câu trên. Gỡ
   // `OPERATOR(pg_catalog.=)` khỏi TỪNG vế một:
@@ -195,6 +229,17 @@ export async function verifyAuditChain(
   // là khoá phân biệt hàng trên thực tế, nên một `seq` bị cướp vẫn bị `hash` (đang ghim) chặn
   // lại ở mọi trạng thái mà S0 với tới được. Nó được giữ để cả ba vế cùng một quy ước — không
   // phải vì có một khai thác đã đo cho riêng nó. `ae.org_id` cũng vậy.
+  //
+  // [vòng fix 3] DƯ LƯỢNG NÓI THẲNG, KHÔNG CÓ MỐC CHẾT: gỡ ghim ở `WHERE a.org_id` (vế lọc
+  // bảng NEO) và ở `ae.org_id OPERATOR(pg_catalog.=) a.org_id` (trong `NOT EXISTS`) SỐNG SÓT cả
+  // bộ test. Cơ chế đã hiểu, không phải "chưa có test":
+  //   - `ae.org_id = a.org_id`: `hash` (đang ghim) là khoá phân biệt hàng, y hệt lập luận của
+  //     `ae.seq` ở trên. Dư thừa về logic.
+  //   - `WHERE a.org_id`: dưới phiên KHÔNG chịu RLS nó KHÔNG dư thừa — nó sẽ kéo mốc neo của
+  //     tổ chức KHÁC vào báo cáo của tổ chức này. Ca phân biệt được cần một tổ chức thứ hai có
+  //     mốc neo TREO LƠ LỬNG (đã neo rồi bị cắt đuôi) trong cùng CSDL; fixture đó chưa dựng.
+  //     Đây là một lỗ RÒ RỈ BÁO CÁO xuyên tổ chức, không phải lỗ fail-open — nhưng nó là dư
+  //     lượng thật, ghi vào sổ nợ `task-8-report.md` §V3.5 chứ không giấu.
   const { rows: hangNeo } = await client.query<{ seq: string }>(
     `SELECT a.seq
        FROM public.audit_chain_anchors a
