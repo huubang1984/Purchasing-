@@ -185,7 +185,7 @@ export async function recordChainAnchor(
     `INSERT INTO public.audit_chain_anchors (org_id)
      SELECT ae.org_id
        FROM public.audit_events ae
-      WHERE ae.org_id = $1
+      WHERE ae.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
       ORDER BY ae.seq DESC
       LIMIT 1
      ON CONFLICT (org_id, seq) DO NOTHING
@@ -219,9 +219,12 @@ export async function exportChainHead(
   await assertTenantBound(client, orgId, "exportChainHead");
 
   const { rows } = await client.query<{ seq: string; hash_hex: string }>(
+    // [vòng fix 2 — MỤC A] Ghim toán tử: bỏ đi một bậc tự do. RLS đã giới hạn tập hàng về đúng
+    // tổ chức đang gắn nên một `=` bị cướp ở đây KHÔNG mở rộng ra ngoài tổ chức — nói đúng mức
+    // đó, đừng gộp với vế NOT EXISTS của verifier.ts (chỗ duy nhất việc ghim vá lỗ đo được).
     `SELECT ae.seq, pg_catalog.encode(ae.hash, 'hex') AS hash_hex
        FROM public.audit_events ae
-      WHERE ae.org_id = $1
+      WHERE ae.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
       ORDER BY ae.seq DESC
       LIMIT 1`,
     [orgId],

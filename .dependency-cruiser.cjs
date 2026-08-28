@@ -51,8 +51,41 @@ const LOCAL_DEV_SHARED_TS = ciFile("packages/crypto-keys/src/local-dev-shared.ts
 const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
 const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 
+// ==========================================================================================
+// VONG FIX 2 (MUC D) - CUNG KHUON "MAC DINH DONG", AP CHO packages/identity/src/
+//
+// Bat doi xung do duoc tai HEAD 33985b8, ba duong toi CUNG mot symbol `hasPermission`:
+//   @trustprocure/identity              (barrel)  -> khong co symbol (da rut o vong fix 1)
+//   @trustprocure/identity/src/rbac.js            -> depcruise CHAN + tsc CHAN (TS2307)
+//   ../../identity/src/rbac.js tu packages/audit  -> CHAY DUOC, depcruise IM, tsc IM, eslint IM
+// Tuc lop cuong che duy nhat cua vong fix 1 (test bare-exports canh TAP EXPORT cua barrel)
+// KHONG canh duong tuong doi xuyen goi. crypto-keys DA co quy tac cua-cong-khai dong dung lop
+// nay tu fix round 4; identity thi khong. Quy tac duoi day la BAN SAO CHINH XAC cua khuon do,
+// mang tien to "g2-" de test bat bien "[INV-G2]" (tests/architecture/boundaries.test.ts) quet
+// duoc theo ho ten - cung co che CUONG CHE BANG MAY, khong phu thuoc vao viec ai do nghi ra ca
+// cu the. `index.ts` la CUA DUY NHAT vi tap export cua no da bi mot lop khac canh
+// (tests/architecture/barrel-exports.test.ts, danh sach trang [INV-D5]); hai lop nay bo tuc
+// cho nhau: mot lop canh SYMBOL di qua cua, lop kia canh viec KHONG AI DI VONG QUA CUA.
+// ==========================================================================================
+const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
+const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
+
 module.exports = {
   forbidden: [
+    {
+      name: "g2-identity-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/identity/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Ly do KHONG phai kien truc chung chung ma la mot bat bien co ten: " +
+        "`hasPermission` tra boolean va KHONG ghi kiem toan, nen mot cong gac viet bang no vi " +
+        "pham D5 TRONG IM LANG (do duoc: do 11 ma quyen -> 0 ban ghi moi). Vong fix 1 rut no " +
+        "khoi barrel, nhung mot import TUONG DOI `../../identity/src/rbac.js` van cham toi no " +
+        "va KHONG lop nao keu. Moi file khac - ke ca file CHUA TON TAI - mac dinh khong voi toi " +
+        "duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: IDENTITY_SRC_PREFIX },
+      to: { path: IDENTITY_SRC_PREFIX, pathNot: [IDENTITY_INDEX_TS] },
+    },
     {
       name: "g1-crypto-keys-chi-index-va-unwrap-la-cua-cong-khai",
       comment:

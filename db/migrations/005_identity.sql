@@ -203,11 +203,19 @@ GRANT SELECT ON roles TO app_api;
 --      tối tiểu nào). Cả [FO2] lẫn [MR] đều SINH RA MỘT CẶP MỚI nên cả hai làm lớp này đỏ.
 --      Cùng test còn quét TOÀN BỘ db/migrations/*.sql và đỏ nếu có file nào NGOÀI 005 ghi vào
 --      `role_permissions` — vì một file như thế nằm ngoài tầm đọc của phép ghim.
---   2. DEPLOY, trên DỮ LIỆU THẬT: mục (E3) của hardening.always.sql chạy đúng phép kiểm CẶP ấy
---      trên `role_permissions` (bảng KHÔNG có RLS, nên KHÔNG có ca mù như trên) và phát
---      WARNING. CỐ Ý KHÔNG CHẶN DEPLOY: ma trận quyền là DỮ LIỆU CỦA KHÁCH HÀNG, và chặn deploy
---      trên dữ liệu khách hàng biến một cấu hình sai thành một cụm không deploy được — đúng cái
---      bẫy QT1 mà cả kiến trúc này sinh ra để tránh.
+--   2. DEPLOY, trên DỮ LIỆU THẬT **KHI ROLE DEPLOY ĐỌC ĐƯỢC BẢNG**: mục (E3) của
+--      hardening.always.sql chạy đúng phép kiểm CẶP ấy trên `role_permissions` (bảng KHÔNG có
+--      RLS, nên KHÔNG có ca mù như trên) và phát WARNING. CỐ Ý KHÔNG CHẶN DEPLOY: ma trận quyền
+--      là DỮ LIỆU CỦA KHÁCH HÀNG, và chặn deploy trên dữ liệu khách hàng biến một cấu hình sai
+--      thành một cụm không deploy được — đúng cái bẫy QT1 mà cả kiến trúc này sinh ra để tránh.
+--      [vòng fix 2 — MỤC C] BẢN TRƯỚC VIẾT DÒNG NÀY LÀ "DEPLOY, trên DỮ LIỆU THẬT" TRỐNG KHÔNG,
+--      VÀ ĐÓ LÀ MỘT PHÁT BIỂU RỘNG HƠN THỰC TẾ. Trên chính khuôn deploy mà bộ test của dự án
+--      ghim làm khuôn production (superuser bootstrap một lần rồi deploy dưới role KHÔNG sở hữu
+--      bảng, KHÔNG GRANT nào), role deploy KHÔNG có SELECT trên `roles`/`role_permissions`, nên
+--      guard `has_table_privilege` của (E3) cho nó BỎ QUA: đo được, migrate() KHÔNG NÉM, trả về
+--      [] và phát WARNING "BỎ QUA phép kiểm ma trận quyền". Tức trên khuôn đó lớp 2 KHÔNG PHÁN
+--      XÉT GÌ, và bảo đảm còn lại đúng bằng lớp 1. Xem mục (E3) của hardening.always.sql cho cả
+--      ba nhánh và phép đo; test [C1-E3-BO-QUA] khoá đúng phát biểu này.
 --   3. GHI, mức NGƯỜI DÙNG: trigger trên `user_roles` (§(4)) — nó vẫn bắt mọi lần GÁN VAI TRÒ
 --      làm một người ôm trọn chuỗi.
 --

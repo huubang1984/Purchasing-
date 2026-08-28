@@ -4718,4 +4718,97 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   }, 180_000);
+  // ==========================================================================
+  // [vòng fix 2 — MỤC C] (E3) DƯỚI ROLE DEPLOY: BỎ QUA, VÀ BỎ QUA CÓ CÔNG BỐ.
+  //
+  // (E3) là lớp deploy-time DUY NHẤT của bản vá C1 (bất biến D3, trục (b) — định nghĩa vai trò
+  // đổi mà không ai ghi vào `user_roles`). Trên chính khuôn deploy mà bộ test này ghim làm
+  // khuôn production ("[fix round 4 — N2] nhánh 1"), role deploy KHÔNG có SELECT trên
+  // `roles`/`role_permissions`, nên guard `has_table_privilege` cho (E3) BỎ QUA HOÀN TOÀN.
+  // Trước vòng fix 2, KHÔNG một dòng nào trong commit nói ra điều đó và KHÔNG test nào chạy
+  // (E3) dưới role deploy. Test này khoá ĐỦ BỐN điều, và ba trong bốn là ÂM TÍNH:
+  //   (a) hồ sơ quyền của role deploy đúng như mô tả (fixture tự chứng minh);
+  //   (b) migrate() KHÔNG NÉM — bẫy QT1 (42501 giết deploy trên lược đồ đúng) VẪN được tránh;
+  //   (c) nó CÓ CÔNG BỐ việc bỏ qua, và lời công bố đó TỚI ĐƯỢC người gọi qua `onThongBao`;
+  //   (d) lớp phán xét thật KHÔNG chạy — không có WARNING "PHÂN TÁCH NHIỆM VỤ (D3)" nào, DÙ
+  //       vi phạm [FO2] đang nằm sẵn trong bảng. Đây là vế nói ra sự thật khó chịu.
+  // Đối chứng dương ở cuối: CÙNG cơ sở dữ liệu đó, CÙNG vi phạm đó, migrate() bằng role ĐỌC
+  // ĐƯỢC bảng thì (E3) bắn đúng cảnh báo — nên (d) không phải vì (E3) rỗng ruột.
+  // ==========================================================================
+  it("[C1-E3-BO-QUA] (E3) dưới role deploy: bỏ qua, KHÔNG ném, và bỏ qua CÓ CÔNG BỐ", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR); // bootstrap bằng superuser, đúng một lần
+
+      // Vi phạm [FO2] THẬT: FINANCE nhận thêm `rfq.unseal`. Trigger mức VAI TRÒ không bắn (một
+      // mình FINANCE vẫn không ôm trọn chuỗi) — đó chính là trục (b) mà (E3) sinh ra để thấy.
+      await expect(
+        db.pool.query(
+          "INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE','rfq.unseal')",
+        ),
+      ).resolves.toBeDefined();
+
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // (a) HỒ SƠ ROLE DEPLOY — fixture phải chứng minh tiền đề trước khi kết luận.
+        const { rows: hoSo } = await poolTrienKhai.query<{
+          rp: boolean;
+          r: boolean;
+          su: boolean;
+          ten: string;
+        }>(
+          "SELECT has_table_privilege(current_user,'public.role_permissions','SELECT') AS rp, " +
+            "       has_table_privilege(current_user,'public.roles','SELECT') AS r, " +
+            "       (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS su, " +
+            "       current_user::text AS ten",
+        );
+        expect(hoSo[0]!.ten).toBe("trien_khai");
+        expect(hoSo[0]!.su, "role deploy KHÔNG được là superuser — nếu là, phép đo rỗng ruột").toBe(
+          false,
+        );
+        expect(hoSo[0]!.rp, "role deploy KHÔNG được có SELECT trên role_permissions").toBe(false);
+        expect(hoSo[0]!.r, "role deploy KHÔNG được có SELECT trên roles").toBe(false);
+
+        // (b) + (c): migrate() KHÔNG ném, và lời "tôi đang bỏ qua" tới được người gọi.
+        const thongBao: string[] = [];
+        await expect(
+          migrate(poolTrienKhai, MIGRATIONS_DIR, {
+            onThongBao: (tb) => thongBao.push(`${tb.severity}|${tb.message}`),
+          }),
+        ).resolves.toEqual([]);
+        expect(
+          thongBao.some((d) => d.includes("(E3): BỎ QUA phép kiểm ma trận quyền")),
+          `(E3) bỏ qua TRONG IM LẶNG. Đã nhận: ${JSON.stringify(thongBao)}`,
+        ).toBe(true);
+
+        // (d) VÀ ĐÂY LÀ SỰ THẬT KHÓ CHỊU: lớp phán xét thật KHÔNG chạy, dù vi phạm nằm sẵn.
+        expect(
+          thongBao.some((d) => d.includes("PHÂN TÁCH NHIỆM VỤ (D3)")),
+          "trên khuôn deploy chuẩn, (E3) KHÔNG phán xét — nếu vế này đổi, phải sửa cả 005 §(3)",
+        ).toBe(false);
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // ĐỐI CHỨNG DƯƠNG: cùng CSDL, cùng vi phạm, role ĐỌC ĐƯỢC bảng -> (E3) bắn thật.
+      const thongBaoSuper: string[] = [];
+      await expect(
+        migrate(db.pool, MIGRATIONS_DIR, {
+          onThongBao: (tb) => thongBaoSuper.push(`${tb.severity}|${tb.message}`),
+        }),
+      ).resolves.toEqual([]);
+      expect(
+        thongBaoSuper.some((d) => d.includes("PHÂN TÁCH NHIỆM VỤ (D3)")),
+        `(E3) KHÔNG bắn dù đọc được bảng và vi phạm nằm sẵn — phép đo (d) ở trên rỗng ruột. ` +
+          `Đã nhận: ${JSON.stringify(thongBaoSuper)}`,
+      ).toBe(true);
+      expect(
+        thongBaoSuper.some((d) => d.includes("(E3): BỎ QUA phép kiểm ma trận quyền")),
+        "role đọc được bảng thì KHÔNG được đi vào nhánh bỏ qua",
+      ).toBe(false);
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
 });

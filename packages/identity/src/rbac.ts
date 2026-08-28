@@ -127,9 +127,20 @@ export interface PermissionCheck {
  * là hàm DUY NHẤT trong repo trả lời câu hỏi CÓ/KHÔNG về quyền dưới một `search_path` không kiểm
  * soát. Nó khác về LOẠI, không phải khác về MỨC ĐỘ, so với một truy vấn nghiệp vụ thường —
  * một truy vấn thường bị cướp toán tử thì trả sai dữ liệu; hàm này bị cướp thì trả `true` cho
- * MỌI quyền của MỌI người. `assertTenantBound` KHÔNG cần bản vá tương ứng: nó dùng
- * `IS NOT DISTINCT FROM`, thứ phân giải qua opclass mặc định của kiểu chứ không qua `search_path`
- * (đo: dưới đúng search_path thù địch ở trên, nó vẫn phán xét ĐÚNG).
+ * MỌI quyền của MỌI người.
+ *
+ * [vòng fix 2 — MỤC A] BẢN TRƯỚC CỦA ĐÚNG ĐOẠN NÀY LÀ MỘT KHẲNG ĐỊNH SAI KÈM LỜI KHAI "ĐÃ ĐO",
+ * và nó phải được nêu ra chứ không lặng lẽ thay thế. Nguyên văn câu bị gỡ: «`assertTenantBound`
+ * KHÔNG cần bản vá tương ứng: nó dùng `IS NOT DISTINCT FROM`, thứ phân giải qua opclass mặc
+ * định của kiểu chứ không qua `search_path` (đo: dưới đúng search_path thù địch ở trên, nó vẫn
+ * phán xét ĐÚNG)». SAI ở tiền đề: PostgreSQL phân giải `IS [NOT] DISTINCT FROM` bằng cách TRA
+ * CỨU TOÁN TỬ `=` THEO TÊN qua `search_path` (`make_distinct_op` -> `make_op`), không qua
+ * opclass. Phép đo đã được chạy lại và cho ngược lại: `assertTenantBound` BỊ VÔ HIỆU HOÀN TOÀN
+ * dưới một `search_path` cướp `=` của `uuid`, và `exportChainHead` khi đó đúc được một mốc neo
+ * mang nhãn tổ chức Q từ sổ của tổ chức P. Toàn bộ phép đo và bản vá nằm ở docblock của
+ * packages/audit/src/tenant-guard.ts; đây chỉ là con trỏ tới nó, để câu sai không sống lại.
+ * Bài học ghi cho chính chỗ này: một câu "đã đo" mà KHÔNG kèm số đo cụ thể trong văn bản là một
+ * câu chưa được kiểm — cả ba khối "đã đo" khác trong file này đều dán số vào.
  *
  * TIỀN ĐỀ CỦA PostgreSQL mà bảo đảm này dựa vào, viết ra vì nó vô hình: `pg_temp` KHÔNG BAO GIỜ
  * được tìm cho HÀM và TOÁN TỬ, kể cả khi được nêu tên tường minh trong `search_path`. Đó là thứ
@@ -397,9 +408,21 @@ export async function requirePermission(
     // sao một lần từ chối không ghi được sổ. `pg` không ném giá trị nguyên thuỷ hôm nay, nhưng
     // đường này đi qua cả `withTenant` lẫn `appendAuditEvent` lẫn mã người gọi truyền vào, và
     // một khẳng định về thứ MÃ NGƯỜI KHÁC ném ra không phải là thứ file này bảo đảm được.
+    //
+    // [vòng fix 2 — MỤC E] `String(loi)` ĐÃ BỊ GỠ. Bản vá M4 nội suy chính giá trị lạ vào một
+    // thông báo đi vào log, mâu thuẫn với kỷ luật F7 viết cách đây ~40 dòng ("cố ý KHÔNG nội
+    // suy giá trị nhận được: nó có thể chính là thứ không được phép ghi ra"). Bán kính nhỏ
+    // (chỉ giá trị do `pg`/`withTenant`/mã người gọi ném) nhưng đúng lý do đã cấm ở chỗ kia:
+    // một `throw { token }` ở tầng dưới là đủ. Giữ nguyên thứ M4 THẬT SỰ mua được — chẩn đoán
+    // không còn là "undefined" — bằng cách nêu KIỂU chứ không nêu GIÁ TRỊ. Giá trị gốc vẫn tới
+    // được người điều tra qua `cause` của Error này.
     throw new PermissionAuditFailedError(
       tuChoi,
-      loi instanceof Error ? loi : new Error(`giá trị không phải Error: ${String(loi)}`),
+      loi instanceof Error
+        ? loi
+        : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, {
+            cause: loi,
+          }),
     );
   }
 

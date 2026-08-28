@@ -592,22 +592,48 @@ describe("[QT3] hasPermission dưới search_path thù địch", () => {
       );
       const org = o[0]!.id;
       const { rows: u } = await dbRieng.pool.query<{ id: string }>(
-        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'buyer@a.com', 'Buyer') RETURNING id",
+        "INSERT INTO users (org_id, email, full_name, status) VALUES " +
+          "($1, 'buyer@a.com', 'Buyer', 'ACTIVE'), " +
+          "($1, 'dinhchi@a.com', 'Dinh chi', 'SUSPENDED') RETURNING id",
         [org],
       );
       const buyer = u[0]!.id;
+      const nguoiDinhChi = u[1]!.id;
       await dbRieng.pool.query(
-        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')",
-        [org, buyer],
+        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER'), ($1, $3, 'DIRECTOR')",
+        [org, buyer, nguoiDinhChi],
       );
 
-      // Schema thù địch: một `role_permissions` CÙNG TÊN cấp cho BUYER quyền mở thầu.
+      // Schema thù địch. [vòng fix 2 — MỤC E] Bản trước chỉ che `role_permissions`, nên hai
+      // trong ba tên bảng của `hasPermission` KHÔNG được đo và mũi đột biến "bỏ `public.` khỏi
+      // `user_roles`" SỐNG SÓT. Nay che CẢ BA tên bảng mà truy vấn nhắc tới, mỗi bảng bóng mang
+      // một đường leo thang KHÁC NHAU, để mỗi tên bảng có mốc chết riêng.
       await dbRieng.pool.query("CREATE SCHEMA doc; GRANT USAGE ON SCHEMA doc TO PUBLIC");
       await dbRieng.pool.query(
         "CREATE TABLE doc.role_permissions (role_code text, permission_code text); " +
           "INSERT INTO doc.role_permissions VALUES ('BUYER', 'rfq.unseal'); " +
           "GRANT SELECT ON doc.role_permissions TO PUBLIC",
       );
+      // `doc.user_roles` KHÔNG có RLS: nó cấp thẳng DIRECTOR cho BUYER, tức mở đúng đường mà
+      // vế nối `public.user_roles` chịu lực (cô lập tổ chức + tập vai trò thật).
+      // Tham số + nhiều câu lệnh trong MỘT query() là "cannot insert multiple commands into a
+      // prepared statement" — tách ra, đừng nội suy chuỗi.
+      await dbRieng.pool.query(
+        "CREATE TABLE doc.user_roles (org_id uuid, user_id uuid, role_code text)",
+      );
+      await dbRieng.pool.query("INSERT INTO doc.user_roles VALUES ($1, $2, 'DIRECTOR')", [
+        org,
+        buyer,
+      ]);
+      await dbRieng.pool.query("GRANT SELECT ON doc.user_roles TO PUBLIC");
+      // `doc.users` khai người ĐANG BỊ ĐÌNH CHỈ là ACTIVE — đường leo thang riêng của vế
+      // `JOIN public.users`, thứ mà một bảng bóng `user_roles`/`role_permissions` không chạm tới.
+      await dbRieng.pool.query("CREATE TABLE doc.users (id uuid, org_id uuid, status text)");
+      await dbRieng.pool.query(
+        "INSERT INTO doc.users VALUES ($1, $2, 'ACTIVE'), ($3, $2, 'ACTIVE')",
+        [buyer, org, nguoiDinhChi],
+      );
+      await dbRieng.pool.query("GRANT SELECT ON doc.users TO PUBLIC");
       await dbRieng.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'mk' IN ROLE app_api");
       await dbRieng.pool.query(
         "ALTER ROLE app_api_login SET search_path = doc, pg_catalog, public",
@@ -624,20 +650,52 @@ describe("[QT3] hasPermission dưới search_path thù địch", () => {
           (await poolThuDich.query<{ search_path: string }>("SHOW search_path")).rows[0]!
             .search_path,
         ).toBe("doc, pg_catalog, public");
-        const bicuop = await poolThuDich.query<{ tran: number; du: number }>(
+        const bicuop = await poolThuDich.query<{
+          tran: number;
+          du: number;
+          ur_tran: number;
+          ur_du: number;
+          us_tran: number;
+          us_du: number;
+        }>(
           "SELECT (SELECT count(*)::int FROM role_permissions WHERE role_code = 'BUYER' " +
             "          AND permission_code = 'rfq.unseal') AS tran, " +
             "       (SELECT count(*)::int FROM public.role_permissions WHERE role_code = 'BUYER' " +
-            "          AND permission_code = 'rfq.unseal') AS du",
+            "          AND permission_code = 'rfq.unseal') AS du, " +
+            "       (SELECT count(*)::int FROM user_roles WHERE role_code = 'DIRECTOR' " +
+            "          AND user_id = $1) AS ur_tran, " +
+            "       (SELECT count(*)::int FROM public.user_roles WHERE role_code = 'DIRECTOR' " +
+            "          AND user_id = $1) AS ur_du, " +
+            "       (SELECT count(*)::int FROM users WHERE id = $2 AND status = 'ACTIVE') AS us_tran, " +
+            "       (SELECT count(*)::int FROM public.users WHERE id = $2 AND status = 'ACTIVE') AS us_du",
+          [buyer, nguoiDinhChi],
         );
-        expect(bicuop.rows[0]!.tran, "tên TRẦN không bị cướp — phép đo rỗng ruột").toBe(1);
-        expect(bicuop.rows[0]!.du, "tên ĐỦ SCHEMA lại bị cướp — phép đo rỗng ruột").toBe(0);
+        expect(bicuop.rows[0]!.tran, "role_permissions TRẦN không bị cướp — phép đo rỗng ruột").toBe(1);
+        expect(bicuop.rows[0]!.du, "role_permissions ĐỦ SCHEMA lại bị cướp — phép đo rỗng ruột").toBe(0);
+        expect(bicuop.rows[0]!.ur_tran, "user_roles TRẦN không bị cướp — phép đo rỗng ruột").toBe(1);
+        expect(bicuop.rows[0]!.ur_du, "user_roles ĐỦ SCHEMA lại bị cướp — phép đo rỗng ruột").toBe(0);
+        expect(bicuop.rows[0]!.us_tran, "users TRẦN không bị cướp — phép đo rỗng ruột").toBe(1);
+        expect(bicuop.rows[0]!.us_du, "users ĐỦ SCHEMA lại bị cướp — phép đo rỗng ruột").toBe(0);
 
         // Và đây là điều phải đúng: hasPermission viết tên ĐỦ SCHEMA nên nó KHÔNG bị cướp.
+        // Vế này chết nếu `role_permissions` HOẶC `user_roles` mất `public.`.
         expect(
           await withTenant(poolThuDich, org, (c) =>
             hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.RFQ_UNSEAL }),
           ),
+        ).toBe(false);
+        // [vòng fix 2 — MỤC E] Mốc chết riêng của vế `JOIN public.users`: `doc.users` khai người
+        // bị đình chỉ là ACTIVE, nên bỏ `public.` khỏi ĐÚNG vế đó là người SUSPENDED duyệt được
+        // PO. Không có vế này, mũi đột biến đó sống sót.
+        expect(
+          await withTenant(poolThuDich, org, (c) =>
+            hasPermission(c, {
+              userId: nguoiDinhChi,
+              orgId: org,
+              permission: PERMISSIONS.PO_APPROVE,
+            }),
+          ),
+          "người SUSPENDED duyệt được PO nhờ một bảng `users` bóng",
         ).toBe(false);
         // Đối chứng: quyền THẬT của BUYER vẫn đọc đúng, nên "false" ở trên không phải vì truy
         // vấn hỏng hoàn toàn dưới search_path này.
@@ -810,6 +868,52 @@ describe("[vòng fix 1] mặt tiền requirePermission", () => {
         ),
       ),
     ).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("[MỤC E] tầng dưới ném thứ KHÔNG phải Error: nêu KIỂU, KHÔNG nội suy GIÁ TRỊ", async () => {
+    // Bản vá M4 của vòng fix 1 đóng một lỗ thật ("cause.message === undefined" làm thông báo
+    // thành "...: undefined") nhưng đóng nó bằng `String(loi)`, tức nội suy chính giá trị lạ
+    // vào một thông báo ĐI VÀO LOG — mâu thuẫn với kỷ luật F7 viết cách đó ~40 dòng trong cùng
+    // file ("cố ý KHÔNG nội suy giá trị nhận được: nó có thể chính là thứ không được phép ghi
+    // ra"). Bán kính nhỏ (chỉ giá trị do pg/withTenant/mã người gọi ném) nhưng cùng một lớp.
+    //
+    // Fixture: một `auditPool` GIẢ ném một chuỗi nguyên thuỷ mang đúng thứ bị cấm log. Nó phải
+    // đi lọt qua `khangDinhGhiDuocDocLap` (không cạn chỗ) rồi ném ở `khangDinhAuditPoolDungQuyen`.
+    const biMat = "OTP 448120 token abc gia 1500000";
+    const poolGia = {
+      idleCount: 1,
+      totalCount: 0,
+      options: { max: 5 },
+      waitingCount: 0,
+      query: (): never => {
+        // CỐ Ý ném thứ KHÔNG phải Error — đó chính là ca đang được đo, nên quy tắc lint
+        // only-throw-error phải được tắt ĐÚNG một dòng ở đây chứ không nới ở cấu hình.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw biMat;
+      },
+    } as unknown as pg.Pool;
+
+    const loi = await withTenant(apiPool, orgId, (c) =>
+      requirePermission(
+        c,
+        { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ" },
+        poolGia,
+      ),
+    ).catch((e: unknown) => e);
+
+    expect(loi).toBeInstanceOf(PermissionAuditFailedError);
+    const thongDiep = (loi as Error).message;
+    // (a) Thứ M4 THẬT SỰ mua được vẫn còn: chẩn đoán KHÔNG phải "undefined".
+    expect(thongDiep).not.toMatch(/undefined/);
+    expect(thongDiep).toMatch(/typeof = string/);
+    // (b) Và giá trị lạ KHÔNG nằm trong thông báo — kể cả từng mảnh của nó.
+    expect(thongDiep).not.toContain(biMat);
+    for (const manh of ["448120", "1500000", "token abc"]) {
+      expect(thongDiep, `mảnh "${manh}" lọt vào thông báo đi log`).not.toContain(manh);
+    }
+    // (c) Fail-CLOSED không đổi, và giá trị gốc vẫn tới được người điều tra qua chuỗi `cause`.
+    expect((loi as PermissionAuditFailedError).denial).toBeInstanceOf(PermissionDeniedError);
+    expect(((loi as Error).cause as Error | undefined)?.cause).toBe(biMat);
   });
 });
 
@@ -1004,6 +1108,22 @@ describe("[C1-KHE-HỞ] trục thứ hai của D3", () => {
 // của MỌI người. Test này dựng đúng kịch bản phản chứng mà reviewer an ninh đo được — GHIM
 // `search_path` cho `app_current_org_id()`, đúng thứ QT3 khuyến khích — và khẳng định rằng nhờ
 // `OPERATOR(pg_catalog.=)`, D1 KHÔNG còn phụ thuộc vào tính chất tình cờ `proconfig IS NULL`.
+//
+// [vòng fix 2 — MỤC B] FIXTURE CŨ CHỈ CHỊU ĐƯỢC 2/5 MŨI ĐỘT BIẾN, VÀ ĐÓ LÀ LỖI CỦA FIXTURE
+// CHỨ KHÔNG PHẢI CỦA PHÉP KHẲNG ĐỊNH. Bản trước có ĐÚNG một tổ chức, MỘT người dùng, MỘT vai
+// trò. `hasPermission` có NĂM vế `=`; ba trong năm vế đó chỉ phân biệt được khi có NHIỀU HƠN
+// một người và NHIỀU HƠN một trạng thái, nên gỡ `OPERATOR(pg_catalog.=)` khỏi chúng vẫn cho
+// kết quả y hệt và mũi đột biến SỐNG SÓT. Đo lại trên fixture ba người ở dưới, mỗi vế một mũi:
+//     nguyên bản (HEAD):          A/po.approve=false  S/po.approve=false  B/po.approve=true
+//     `WHERE ur.user_id` trần:    A/po.approve=TRUE   S/po.approve=TRUE      <- D1 SỤP
+//     `u.status` trần:            S/po.approve=TRUE                 <- người ĐÌNH CHỈ có quyền
+//     `JOIN users.id` trần:       S/po.approve=TRUE
+//     `rp.role_code` trần:        A/po.approve=TRUE
+//     `rp.permission_code` trần:  A/po.approve=TRUE
+// Ba trục mà fixture phải mang, vì mỗi trục khoá một vế khác nhau:
+//     A = REQUESTER, ACTIVE     — người YẾU: bắt mọi vế làm rò quyền của người khác sang A
+//     B = DIRECTOR,  ACTIVE     — người MẠNH: đối chứng dương, giữ phép đo khỏi rỗng ruột
+//     S = DIRECTOR,  SUSPENDED  — người BỊ ĐÌNH CHỈ: khoá riêng vế `u.status`
 // ==============================================================================================
 describe("[QT3] hasPermission dưới TOÁN TỬ thù địch", () => {
   it("[INV-D1] `=` bị cướp KHÔNG cấp thêm quyền nào, kể cả khi app_current_org_id() đã ghim search_path", async () => {
@@ -1015,14 +1135,42 @@ describe("[QT3] hasPermission dưới TOÁN TỬ thù địch", () => {
       );
       const org = o[0]!.id;
       const { rows: u } = await dbRieng.pool.query<{ id: string }>(
-        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'f3@a.com', 'F3') RETURNING id",
+        "INSERT INTO users (org_id, email, full_name, status) VALUES " +
+          "($1, 'f3@a.com', 'F3 buyer', 'ACTIVE'), " +
+          "($1, 'yeu@a.com', 'A yeu', 'ACTIVE'), " +
+          "($1, 'manh@a.com', 'B manh', 'ACTIVE'), " +
+          "($1, 'dinhchi@a.com', 'S dinh chi', 'SUSPENDED') RETURNING id",
         [org],
       );
       const buyer = u[0]!.id;
-      await dbRieng.pool.query(
-        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')",
-        [org, buyer],
+      const nguoiYeu = u[1]!.id;
+      const nguoiManh = u[2]!.id;
+      const nguoiDinhChi = u[3]!.id;
+      for (const [nguoi, vai] of [
+        [buyer, "BUYER"],
+        [nguoiYeu, "REQUESTER"],
+        [nguoiManh, "DIRECTOR"],
+        [nguoiDinhChi, "DIRECTOR"],
+      ] as const) {
+        await dbRieng.pool.query(
+          "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)",
+          [org, nguoi, vai],
+        );
+      }
+      // Tiền đề của cả ba trục, khẳng định thay vì giả định: DIRECTOR giữ `po.approve`,
+      // REQUESTER thì KHÔNG. Nếu ma trận quyền đổi, test này phải đỏ ở đây chứ không ở dưới.
+      const { rows: tienDe } = await dbRieng.pool.query<{ director: number; requester: number }>(
+        "SELECT count(*) FILTER (WHERE role_code = 'DIRECTOR')::int AS director, " +
+          "       count(*) FILTER (WHERE role_code = 'REQUESTER')::int AS requester " +
+          "  FROM role_permissions WHERE permission_code = 'po.approve'",
       );
+      expect(tienDe[0]!.director, "DIRECTOR phải giữ po.approve").toBe(1);
+      expect(tienDe[0]!.requester, "REQUESTER KHÔNG được giữ po.approve").toBe(0);
+      const { rows: tt } = await dbRieng.pool.query<{ status: string }>(
+        "SELECT status FROM users WHERE id = $1",
+        [nguoiDinhChi],
+      );
+      expect(tt[0]!.status, "người bị đình chỉ phải THẬT SỰ mang SUSPENDED").toBe("SUSPENDED");
 
       await dbRieng.pool.query("CREATE SCHEMA doc; GRANT USAGE ON SCHEMA doc TO PUBLIC");
       for (const kieu of ["uuid", "text"]) {
@@ -1091,6 +1239,40 @@ describe("[QT3] hasPermission dưới TOÁN TỬ thù địch", () => {
             await withTenant(poolThuDich, org, (c) =>
               hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.RFQ_CREATE }),
             ),
+          ).toBe(true);
+
+          // ============================================================================
+          // [vòng fix 2 — MỤC B] BA TRỤC MÀ FIXTURE MỘT-NGƯỜI KHÔNG PHÂN BIỆT ĐƯỢC.
+          // Mỗi khẳng định dưới đây là mốc chết của ÍT NHẤT một mũi đột biến "gỡ
+          // OPERATOR(pg_catalog.=) khỏi đúng một vế"; cả năm vế đều có mốc chết.
+          // ============================================================================
+          const quyen = async (nguoi: string, ma: (typeof PERMISSIONS)[keyof typeof PERMISSIONS]) =>
+            withTenant(poolThuDich, org, (c) =>
+              hasPermission(c, { userId: nguoi, orgId: org, permission: ma }),
+            );
+
+          // TRỤC 1 — người YẾU không mượn được quyền của người khác. Khoá `WHERE ur.user_id`,
+          // `rp.role_code` và `rp.permission_code`.
+          expect(
+            await quyen(nguoiYeu, PERMISSIONS.PO_APPROVE),
+            "REQUESTER mượn được po.approve của DIRECTOR trong cùng tổ chức",
+          ).toBe(false);
+          expect(
+            await quyen(nguoiYeu, PERMISSIONS.RFQ_UNSEAL),
+            "REQUESTER mượn được rfq.unseal của DIRECTOR trong cùng tổ chức",
+          ).toBe(false);
+
+          // TRỤC 2 — người BỊ ĐÌNH CHỈ mất quyền ngay. Khoá `u.status` và `JOIN users.id`.
+          expect(
+            await quyen(nguoiDinhChi, PERMISSIONS.PO_APPROVE),
+            "người SUSPENDED vẫn duyệt được PO",
+          ).toBe(false);
+
+          // TRỤC 3 — ĐỐI CHỨNG DƯƠNG. Không có vế này, cả khối trên xanh kể cả khi truy vấn
+          // hỏng hoàn toàn và trả `false` cho mọi thứ.
+          expect(
+            await quyen(nguoiManh, PERMISSIONS.PO_APPROVE),
+            "DIRECTOR ĐANG HOẠT ĐỘNG phải duyệt được PO — nếu vế này đỏ thì phép đo rỗng ruột",
           ).toBe(true);
         } finally {
           await dbRieng.pool.query("ALTER FUNCTION public.app_current_org_id() RESET search_path");

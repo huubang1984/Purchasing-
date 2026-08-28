@@ -501,6 +501,166 @@ describe("ranh giới kiến trúc", () => {
     ]);
   });
 
+  // ======================================================================================
+  // Vòng fix 2 (MỤC D) — CÙNG KHUÔN, ÁP CHO packages/identity/src/
+  //
+  // Bất đối xứng đo được tại HEAD 33985b8, ba đường tới CÙNG một symbol `hasPermission`:
+  //     @trustprocure/identity              (barrel)  -> không có symbol
+  //     @trustprocure/identity/src/rbac.js            -> depcruise CHẶN + tsc CHẶN (TS2307)
+  //     ../../identity/src/rbac.js từ packages/audit  -> CHẠY ĐƯỢC, depcruise IM, tsc IM,
+  //                                                      eslint IM
+  // Tức lớp cưỡng chế duy nhất của vòng fix 1 (barrel-exports.test.ts canh TẬP EXPORT của cửa)
+  // KHÔNG canh đường tương đối xuyên gói. Năm test dưới đây đóng đúng lớp đó, cùng khuôn
+  // "mặc định đóng" mà crypto-keys đã dùng từ fix round 4.
+  // ======================================================================================
+
+  it("[INV-G2] chặn import TƯƠNG ĐỐI xuyên gói vào packages/identity/src/rbac.ts", () => {
+    // ĐÚNG đường đi mà reviewer đo được là im lặng ở cả ba lớp.
+    const probe = "packages/audit/src/zzprobe-duong-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { hasPermission } from "../../identity/src/rbac.js";',
+        "export { hasPermission };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/identity"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-duong-tuong-doi.ts");
+      expect(output).toContain("g2-identity-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G2] module MỚI thêm vào packages/identity/src mặc định không với tới được từ ngoài", () => {
+    // Probe chống-tái-diễn: file HOÀN TOÀN MỚI, không xuất hiện trong bất kỳ quy tắc nào. Nếu
+    // ai đó sau này diễn đạt lại quy tắc theo kiểu "cấm từng cạnh", test này đỏ.
+    const moduleMoi = "packages/identity/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-identity-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-identity-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/identity/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-identity-moi", "packages/identity"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g2-identity-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-identity-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-G2] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    // Không có vế này, hai test trên xanh kể cả khi quy tắc chặn LUÔN CẢ cửa hợp pháp, và bất
+    // biến thu được sẽ là "không ai dùng được gói identity" chứ không phải thứ định canh.
+    mkdirSync("apps/tmp-probe-identity-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-identity-cua/src/dung.ts",
+      [
+        'import { requirePermission } from "../../../packages/identity/src/index.js";',
+        "export { requirePermission };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-identity-cua", "packages/identity"]);
+      expect(output).not.toContain("g2-identity-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-identity-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-G2] mọi module được miễn trừ vai trò `from` ở họ g2- đều đồng thời là đích hạn chế", () => {
+    // Bản sao chính xác của bất biến chống-tái-diễn ở họ "g1-", áp cho họ "g2-". Cùng lý do:
+    // mỗi lần miễn trừ một module khỏi vai trò `from`, người viết phải TỰ NHỚ biến module đó
+    // thành đích hạn chế — CR1 là lần thứ tư quên ở họ g1. Cưỡng chế bằng máy ngay từ quy tắc
+    // g2- ĐẦU TIÊN, thay vì đợi tới lần quên đầu tiên.
+    interface DepCruiseRule {
+      name: string;
+      from: { pathNot?: string | string[] };
+      to: { path?: string | string[]; pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ci, unCi } = require("../../dependency-cruiser-ci.cjs") as {
+      ci: (s: string) => string;
+      unCi: (s: string) => string;
+    };
+
+    const quyTacG2 = config.forbidden.filter((r) => r.name.startsWith("g2-"));
+    // Đối chứng dương: danh sách rỗng sẽ làm cả vòng lặp dưới thành trang trí.
+    expect(quyTacG2.length).toBeGreaterThanOrEqual(1);
+
+    const nhuMang = (v: string | string[] | undefined): string[] =>
+      v === undefined ? [] : Array.isArray(v) ? v : [v];
+
+    function duongDanDaiDien(pRegex: string): string {
+      const coNeoCuoi = pRegex.endsWith("$");
+      let than = pRegex;
+      if (than.startsWith("^")) than = than.slice(1);
+      if (coNeoCuoi) than = than.slice(0, -1);
+      const literal = unCi(than);
+      expect("^" + ci(literal) + (coNeoCuoi ? "$" : "")).toBe(pRegex);
+      return coNeoCuoi ? literal : literal + "zz-mau-dai-dien.ts";
+    }
+
+    function laDichHanChe(pDuongDan: string): boolean {
+      return quyTacG2.some((r) => {
+        const dsPath = nhuMang(r.to.path);
+        if (dsPath.length === 0 || !dsPath.some((p) => new RegExp(p).test(pDuongDan))) return false;
+        return !nhuMang(r.to.pathNot).some((p) => new RegExp(p).test(pDuongDan));
+      });
+    }
+
+    const thieuDichHanChe: string[] = [];
+    for (const quyTac of quyTacG2) {
+      for (const mienTru of nhuMang(quyTac.from.pathNot)) {
+        const daiDien = duongDanDaiDien(mienTru);
+        if (!laDichHanChe(daiDien)) {
+          thieuDichHanChe.push(`${quyTac.name} miễn trừ ${daiDien} nhưng không ai chặn đường vào`);
+        }
+      }
+    }
+    expect(thieuDichHanChe).toEqual([]);
+
+    // Đối chứng âm: hàm laDichHanChe() phải biết trả false.
+    expect(laDichHanChe("apps/mot-app-binh-thuong/src/index.ts")).toBe(false);
+    // Đối chứng dương: đúng module nội bộ mà MỤC D sinh ra để canh.
+    expect(laDichHanChe("packages/identity/src/rbac.ts")).toBe(true);
+    // Và cửa công khai KHÔNG được là đích hạn chế.
+    expect(laDichHanChe("packages/identity/src/index.ts")).toBe(false);
+  });
+
+  it("[INV-G2] cửa công khai của packages/identity/src đúng bằng index.ts", () => {
+    // Canary cho chính sách tối giản, cùng khuôn với canary của crypto-keys: nới `to.pathNot`
+    // để "cho qua" một module nữa là một quyết định phải được nhìn thấy.
+    interface DepCruiseRule {
+      name: string;
+      to: { pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ciFile } = require("../../dependency-cruiser-ci.cjs") as {
+      ciFile: (s: string) => string;
+    };
+    const rule = config.forbidden.find((r) => r.name === "g2-identity-chi-index-la-cua-cong-khai");
+    if (!rule) {
+      throw new Error(
+        "Không tìm thấy rule g2-identity-chi-index-la-cua-cong-khai trong .dependency-cruiser.cjs",
+      );
+    }
+    expect(rule.to.pathNot).toEqual([ciFile("packages/identity/src/index.ts")]);
+  });
+
   it("mã nguồn hiện tại không vi phạm quy tắc nào", () => {
     // Fix round 4 (I1): chạy qua chính script package.json thay vì danh sách target tự chọn,
     // để phạm vi kiểm luôn khớp phạm vi hàng rào thực sự bảo vệ trong CI.

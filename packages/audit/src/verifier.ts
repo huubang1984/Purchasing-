@@ -123,7 +123,7 @@ export async function verifyAuditChain(
                                       ae.resource_id, ae.payload, ae.request_id, ae.ip,
                                       ae.user_agent) AS bam_lai
        FROM public.audit_events ae
-      WHERE ae.org_id = $1
+      WHERE ae.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
       ORDER BY ae.seq`,
     [orgId],
   );
@@ -169,13 +169,41 @@ export async function verifyAuditChain(
 
   // Mốc neo TRONG DB trỏ tới một sự kiện không còn tồn tại (hoặc đã đổi băm) nghĩa là chuỗi đã
   // bị cắt đuôi. Phép so đặt trong SQL để nó chạy dưới đúng RLS của phiên đang kiểm.
+  //
+  // [vòng fix 2 — MỤC A, quét toàn repo] MỌI TOÁN TỬ Ở ĐÂY GHI ĐỦ `OPERATOR(pg_catalog.=)`, và
+  // ĐÂY LÀ VẾ DUY NHẤT TRONG GÓI NÀY MÀ VIỆC ĐÓ VÁ MỘT LỖ ĐO ĐƯỢC chứ chỉ là ghim. Vế
+  // `NOT EXISTS` này là bộ phát hiện CẮT ĐUÔI. Dưới một `search_path` thù địch cướp `=` cho
+  // `uuid`, `bigint` và `bytea` — cả ba đều là kiểu của chính ba cột được so — đã đo trên
+  // PostgreSQL 16.15, trong một phiên gắn ĐÚNG tổ chức, trên một mốc neo trỏ tới hàng KHÔNG
+  // tồn tại:
+  //     EXISTS(... org_id = $1)                          -> true
+  //     EXISTS(... seq = 999999)                         -> true
+  //     EXISTS(... hash = decode('00','hex'))            -> true
+  //     EXISTS(cả ba vế)                                 -> true   => NOT EXISTS = false
+  // Tức `ANCHOR_MISSING` KHÔNG BAO GIỜ được báo: bộ kiểm chứng trả `ok:true` trên một sổ ĐÃ BỊ
+  // CẮT ĐUÔI. Một công cụ kiểm toán fail-OPEN, im lặng — đúng lớp hỏng nặng nhất của gói này.
+  // Vế `WHERE ae.org_id` của truy vấn chuỗi ở trên cũng ghim, nhưng ở đó việc ghim chỉ bỏ đi
+  // một bậc tự do: RLS đã giới hạn tập hàng về đúng tổ chức đang gắn, nên một `=` bị cướp ở
+  // đó KHÔNG mở rộng tập hàng ra ngoài tổ chức. Nói đúng hai mức đó thay vì gộp chung.
+  //
+  // KIỂM THỬ ĐỘT BIẾN NÓI CHÍNH XÁC HƠN, và ghi ra vì nó hiệu chỉnh câu trên. Gỡ
+  // `OPERATOR(pg_catalog.=)` khỏi TỪNG vế một:
+  //     `ae.hash` một mình  -> GIẾT (test [INV-B2]: sửa nội dung hàng ĐANG ĐƯỢC NEO)
+  //     `ae.seq`  một mình  -> SỐNG SÓT
+  //     CẢ HAI cùng lúc     -> GIẾT hai lần ([INV-B3] cắt đuôi + [INV-B2] sửa nội dung)
+  // `ae.seq` một mình sống sót KHÔNG phải vì thiếu test mà vì nó DƯ THỪA về mặt logic: `hash`
+  // là khoá phân biệt hàng trên thực tế, nên một `seq` bị cướp vẫn bị `hash` (đang ghim) chặn
+  // lại ở mọi trạng thái mà S0 với tới được. Nó được giữ để cả ba vế cùng một quy ước — không
+  // phải vì có một khai thác đã đo cho riêng nó. `ae.org_id` cũng vậy.
   const { rows: hangNeo } = await client.query<{ seq: string }>(
     `SELECT a.seq
        FROM public.audit_chain_anchors a
-      WHERE a.org_id = $1
+      WHERE a.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND NOT EXISTS (
           SELECT 1 FROM public.audit_events ae
-           WHERE ae.org_id = a.org_id AND ae.seq = a.seq AND ae.hash = a.hash
+           WHERE ae.org_id OPERATOR(pg_catalog.=) a.org_id
+             AND ae.seq OPERATOR(pg_catalog.=) a.seq
+             AND ae.hash OPERATOR(pg_catalog.=) a.hash
         )
       ORDER BY a.seq`,
     [orgId],

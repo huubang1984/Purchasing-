@@ -3004,10 +3004,13 @@ BEGIN
   --     ra để gỡ, và nặng hơn ở chỗ nó chặn cả những bản vá không liên quan. Tự sửa thì càng
   --     không: gỡ hộ một dòng `role_permissions` là migrate() tự tay đổi chính sách an ninh của
   --     khách hàng, đúng thứ [CR4] cấm.
-  --     GIÁ PHẢI TRẢ, nói thẳng: `migrate()` KHÔNG chuyển WARNING này lên người gọi. Nó tới
-  --     PostgreSQL server log và tới đầu ra của `psql`, KHÔNG tới đâu khác. Nên đây là lớp
-  --     YẾU NHẤT trong ba lớp, và nó được đặt ở đây vì nó là lớp DUY NHẤT có mặt ở chỗ này,
-  --     không phải vì nó đủ.
+  --     GIÁ PHẢI TRẢ, nói thẳng: WARNING này tới PostgreSQL server log và tới đầu ra của
+  --     `psql`. Nó tới người gọi `migrate()` CHỈ KHI người gọi truyền `onThongBao`
+  --     (packages/db/src/migrate.ts, `TuyChonMigrate`) — vòng fix 2 mở kênh đó vì trước đó
+  --     KHÔNG có kênh nào cả: đo được, `migrate()` không gắn listener `notice` nên đầu ra là
+  --     0 dòng, gắn rồi thì có 4 thông báo. MẶC ĐỊNH VẪN LÀ IM LẶNG; kênh chỉ làm cho việc
+  --     nghe trở nên KHẢ THI. Nên đây là lớp YẾU NHẤT trong ba lớp, và nó được đặt ở đây vì
+  --     nó là lớp DUY NHẤT có mặt ở chỗ này, không phải vì nó đủ.
   --
   -- (2) GUARD `has_table_privilege` — không có nó, mục này lặp lại ĐÚNG lỗi mà bản đầu của (E2)
   --     đã mắc: đọc một BẢNG NGHIỆP VỤ ở thời điểm deploy, gặp khuôn "superuser bootstrap một
@@ -3016,12 +3019,34 @@ BEGIN
   --     Khi bỏ qua, mục này NÓI RA việc mình bỏ qua — một phép kiểm im lặng không chạy là một
   --     phép kiểm tệ hơn không có.
   --
+  --     [vòng fix 2 — MỤC C] BA NHÁNH, KHÔNG PHẢI HAI, VÀ NHÁNH ĐANG CHẠY TRÊN KHUÔN DEPLOY
+  --     CHUẨN LÀ NHÁNH THỨ BA. Bản trước kết thúc mục này bằng câu «nó hoặc đọc được đủ, hoặc
+  --     bị 42501 và NÓI RA». Câu đó SAI, và chính đoạn mã 15 dòng dưới nó cài nhánh thứ ba:
+  --       (i)   đọc được đủ  -> phán xét thật;
+  --       (ii)  42501        -> khối EXCEPTION bắt, WARNING, KHÔNG chặn deploy;
+  --       (iii) KHÔNG có SELECT -> guard bắt TRƯỚC khi chạm bảng -> BỎ QUA, WARNING.
+  --     Và (iii) là nhánh chạy trên chính khuôn mà bộ test của dự án ghim làm khuôn production
+  --     (db/migrations.int.test.ts "[fix round 4 — N2] nhánh 1": superuser bootstrap một lần,
+  --     rồi deploy dưới role KHÔNG sở hữu bảng, KHÔNG GRANT nào). Đo được trên khuôn đó, có
+  --     cài sẵn một vi phạm [FO2] thật:
+  --         HỒ SƠ ROLE DEPLOY: role_permissions=false roles=false superuser=false
+  --         migrate() -> KHÔNG NÉM, trả về []
+  --         WARNING 'Hardening (E3): BỎ QUA phép kiểm ma trận quyền — role deploy ...'
+  --     ÂM TÍNH ĐO ĐƯỢC, QUAN TRỌNG, ĐỪNG PHÁ: (E3) KHÔNG gãy 42501 ở đó — bẫy QT1 mà dự án đã
+  --     sập một lần đã được tránh THẬT, guard `has_table_privilege` làm đúng việc của nó.
+  --     PHÁT BIỂU ĐÚNG MỨC, thay cho câu bị gỡ: trên khuôn deploy chuẩn của dự án hôm nay, (E3)
+  --     KHÔNG PHÁN XÉT GÌ. Nó chỉ phán xét khi role deploy có SELECT trên hai bảng đó (vd.
+  --     deploy bằng chính chủ sở hữu bảng, hoặc superuser — khuôn của test tích hợp khác). Có
+  --     test mang nhãn [C1-E3-BO-QUA] chạy (E3) DƯỚI ROLE DEPLOY và khẳng định đúng ba điều:
+  --     không ném, có công bố, và lớp phán xét thật KHÔNG chạy.
+  --
   -- (3) KHÔNG ĐỌC `user_roles`, và đó là điểm khác biệt sinh tử với phương án đã bị LOẠI. Một
   --     phép kiểm mức NGƯỜI DÙNG ở đây là FAIL-OPEN đo được: phiên deploy chưa gắn `app.org_id`
   --     nên dưới FORCE RLS nó thấy ĐÚNG 0 hàng `user_roles` và kết luận "không vi phạm". Toàn
   --     bộ phép đo ở khối "[vòng fix 1 — C1]" của 005_identity.sql §(3). `role_permissions`
   --     KHÔNG có RLS (danh mục toàn cục — xem "LỆCH KHỎI BRIEF (1/3)"), nên mục này không có ca
-  --     mù tương ứng: nó hoặc đọc được đủ, hoặc bị 42501 và NÓI RA.
+  --     mù tương ứng: nếu nó CHẠY thì nó thấy đủ. Nhưng "nếu nó chạy" là một điều kiện thật —
+  --     xem ba nhánh ở (2).
   IF to_regclass('public.role_permissions') IS NOT NULL
      AND to_regclass('public.roles') IS NOT NULL THEN
     BEGIN

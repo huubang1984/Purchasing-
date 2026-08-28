@@ -20,6 +20,47 @@ const HAU_TO_LUON_CHAY = ".always.sql";
  */
 type CheDoHardening = "sua" | "phan_xet";
 
+/**
+ * [vòng fix 2 — MỤC C] Một thông báo do PostgreSQL phát ra trong lúc `migrate()` chạy.
+ *
+ * `severity` là chuỗi PostgreSQL gửi kèm (`NOTICE`, `WARNING`, `INFO`, …). Nó BỊ BẢN ĐỊA HOÁ
+ * theo `lc_messages` của server, nên đừng dùng nó làm điều kiện an ninh — nó ở đây để người
+ * gọi phân loại khi ghi log, không phải để phán xét.
+ */
+export interface ThongBaoTuDatabase {
+  readonly severity: string;
+  readonly message: string;
+}
+
+/** Tuỳ chọn của `migrate()`. Mọi trường đều tuỳ chọn — hợp đồng cũ `migrate(pool, dir)` giữ nguyên. */
+export interface TuyChonMigrate {
+  /**
+   * [vòng fix 2 — MỤC C] KÊNH DUY NHẤT ĐƯA THÔNG BÁO CỦA POSTGRESQL RA KHỎI `migrate()`.
+   *
+   * VÌ SAO NÓ TỒN TẠI, bằng phép đo chứ không bằng nguyên tắc. Mục (E3) của
+   * `db/migrations/hardening.always.sql` là lớp deploy-time DUY NHẤT phán xét DỮ LIỆU của
+   * `role_permissions` (bất biến D3, trục (b)). Trên chính khuôn deploy mà bộ test của dự án
+   * ghim làm khuôn production — superuser bootstrap một lần, rồi deploy dưới role KHÔNG sở hữu
+   * bảng và KHÔNG có GRANT nào — nó BỎ QUA hoàn toàn, và trước bản vá này lời "tôi đang bỏ
+   * qua" của nó KHÔNG TỚI ĐƯỢC AI: đo được, `migrate()` không gắn listener nào nên đầu ra là
+   * 0 dòng; gắn listener thì có 4 thông báo. Một phép kiểm bỏ qua trong im lặng là một phép
+   * kiểm tệ hơn không có, nên hoặc phải có kênh này, hoặc phải thôi gọi (E3) là một lớp.
+   *
+   * CỐ Ý KHÔNG LỌC theo severity. Lọc ở đây sẽ là một quyết định chính sách chôn trong thư
+   * viện, và nó vừa mất `NOTICE` mà hardening dùng để tường thuật lượt `sua`, vừa dựa vào một
+   * trường BỊ BẢN ĐỊA HOÁ. Người gọi lọc.
+   *
+   * CỐ Ý KHÔNG `console.log` mặc định: một thư viện tự ghi ra stdout là thứ không tắt được và
+   * không định tuyến được. Không truyền `onThongBao` thì hành vi y hệt trước — và đó là một
+   * điều phải nói ra chứ không giấu: mặc định VẪN LÀ IM LẶNG, kênh này chỉ làm cho việc "nghe"
+   * trở nên KHẢ THI. Người vận hành nào không nối kênh này thì với người đó (E3) vẫn vô hình.
+   *
+   * Hàm được gọi ĐỒNG BỘ từ trong listener `notice` của `pg`; ném lỗi trong đây sẽ nổi lên
+   * dưới dạng sự kiện `error` không ai bắt. Giữ nó nhỏ và không ném.
+   */
+  readonly onThongBao?: (thongBao: ThongBaoTuDatabase) => void;
+}
+
 // ============================================================================================
 // [PHẦN 0 — lỗi tiền tồn từ Task 1] CHUẨN HOÁ XUỐNG DÒNG TRƯỚC KHI BĂM
 // ============================================================================================
@@ -132,7 +173,11 @@ export function migrationChecksum(sql: string): string {
  * Cố ý dùng SQL thuần thay vì thư viện migration: lược đồ này phụ thuộc nặng vào RLS,
  * trigger và GRANT/REVOKE — những thứ cần đọc được nguyên văn khi kiểm toán.
  */
-export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
+export async function migrate(
+  pool: pg.Pool,
+  dir: string,
+  tuyChon: TuyChonMigrate = {},
+): Promise<string[]> {
   // [fix I4] TOÀN BỘ vòng lặp chạy trên đúng MỘT client (lockClient) — không xin thêm
   // client nào khác từ pool trong lúc giữ khoá. Bản trước dùng pool.query()/pool.connect()
   // NGOÀI lockClient trong lúc vẫn giữ lockClient checked-out; với pool có max: 1 (mà
@@ -156,6 +201,19 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
   // blue/green) sẽ tích tụ vô hạn. Giữ tham chiếu tới đúng hàm đã gắn để off() được.
   const boQuaLoiKetNoi = (): void => {};
   lockClient.on("error", boQuaLoiKetNoi);
+
+  // [vòng fix 2 — MỤC C] Listener 'notice'. Gắn/gỡ theo ĐÚNG khuôn của listener 'error' ngay
+  // trên — cùng lý do [fix round 4 — N1]: pool.connect() trả về CÙNG một đối tượng Client khi
+  // client được tái sử dụng, nên một listener gắn mà không gỡ tích luỹ theo số lần gọi
+  // migrate() và cuối cùng cho MaxListenersExceededWarning. Chỉ gắn khi người gọi thật sự
+  // muốn nghe, để không đổi hành vi của mọi đường gọi cũ.
+  const nghenThongBao =
+    tuyChon.onThongBao === undefined
+      ? undefined
+      : (tb: { severity?: string; message?: string }): void => {
+          tuyChon.onThongBao?.({ severity: tb.severity ?? "", message: tb.message ?? "" });
+        };
+  if (nghenThongBao !== undefined) lockClient.on("notice", nghenThongBao);
 
   // [fix round 5 — Minor] Nhả khoá + trả client về pool. Trả về lỗi thay vì ném, để người
   // gọi quyết định: lỗi dọn dẹp KHÔNG được che lỗi gốc của migration (xem [fix I1] về
@@ -182,6 +240,7 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
       // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI
       // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
       lockClient.off("error", boQuaLoiKetNoi);
+      if (nghenThongBao !== undefined) lockClient.off("notice", nghenThongBao);
       lockClient.release();
       return null;
     } catch (loiKhiMoKhoa) {
@@ -197,6 +256,7 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
       // Vế thứ hai mới là vế nghiêm trọng: client nằm trong pool VẪN ĐANG GIỮ khoá migration,
       // nên mọi migrate() sau đó trên pool ấy chờ vĩnh viễn một khoá không ai nhả.
       lockClient.off("error", boQuaLoiKetNoi);
+      if (nghenThongBao !== undefined) lockClient.off("notice", nghenThongBao);
       lockClient.release(loiKhiMoKhoa as Error);
       return loiKhiMoKhoa as Error;
     }
