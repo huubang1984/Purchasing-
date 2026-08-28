@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { describe, expect, it } from "vitest";
 import { verifyAuditChain, type ChainProblem } from "./verifier.js";
-import type { ExternalAnchor } from "./writer.js";
+import type { ChainHeadExport, ExternalAnchor } from "./writer.js";
 
 /**
  * Kiểm chứng LOGIC ghép chuỗi, không cần container.
@@ -82,6 +82,9 @@ function neoKhop(seq: number): ExternalAnchor {
     seq,
     hashHex: bam(`h${seq}`).toString("hex"),
     exportedAt: "2026-08-27T00:00:00.000Z",
+    // [vòng fix 2 — I2] `source` là BẮT BUỘC từ vòng này. Nó không được xác thực ở đâu cả —
+    // giá trị của nó là bắt xuất xứ phải viết ra thành chữ, và fixture cũng không được miễn.
+    source: "kho-artefact-gia-lap-cua-test",
   };
 }
 
@@ -114,12 +117,49 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
     expect(kq.problems.map((p) => p.kind)).toEqual(["NOT_ANCHORED"]);
   });
 
+  /**
+   * [vòng fix 2 — I2] NEO TỰ ĐÚC TỪ CHÍNH CÁI SỔ ĐANG KIỂM.
+   *
+   * `[CR2]` của vòng fix 1 mua "không xanh khi KHÔNG neo" bằng cách đánh đổi "xanh khi có BẤT
+   * KỲ neo nào". Đường dễ viết nhất khi ấy là lấy đầu chuỗi bằng `exportChainHead` rồi nộp
+   * ngay lại cho bộ kiểm chứng — cùng bảng, cùng phiên, cùng vùng tin cậy — và kết quả
+   * `{"ok":true,"problems":[]}` KHÔNG PHÂN BIỆT ĐƯỢC với một kết luận kiểm toán thật. Trước
+   * vòng fix 1, `ok:true` ít nhất đi kèm một mảng neo RỖNG mà ai đọc mã cũng thấy; sau nó,
+   * `ok:true` luôn đi kèm một mảng neo, nên nó TRÔNG NHƯ đã được neo.
+   *
+   * Bản vá đặt sự thật vào KIỂU: `exportChainHead` trả `ChainHeadExport`, thiếu `source`, nên
+   * lời gọi đó không còn biên dịch được. `@ts-expect-error` bên dưới LÀ phép đo — nếu ai gỡ
+   * `source` khỏi `ExternalAnchor` thì lỗi biến mất và `pnpm typecheck` (cổng t0) ĐỎ.
+   *
+   * Và vế thứ hai của test này quan trọng không kém: ở THÌ CHẠY, lớp kiểu không tồn tại. Một
+   * object thiếu `source` vẫn làm `NOT_ANCHORED` im đi. Bản vá mua đúng MỘT thứ — đường tắt
+   * không còn viết được một cách TÌNH CỜ — và nói rộng hơn thế là nói quá.
+   */
+  it("[vòng fix 2 — I2] neo tự đúc từ exportChainHead bị KIỂU chặn, còn thì chạy thì KHÔNG", async () => {
+    const xuat: ChainHeadExport = {
+      orgId: ORG,
+      seq: 4,
+      hashHex: bam("h4").toString("hex"),
+      exportedAt: "2026-08-27T00:00:00.000Z",
+    };
+    const kq = await verifyAuditChain(clientGia(chuoiTot(4), []), ORG, {
+      // @ts-expect-error `ChainHeadExport` thiếu `source` nên nó KHÔNG phải một `ExternalAnchor`.
+      externalAnchors: [xuat],
+    });
+    expect(
+      kq.ok,
+      "ở thì chạy KHÔNG có lớp nào chặn — bản vá là lớp KIỂU, và chỉ là lớp kiểu",
+    ).toBe(true);
+    expect(kq.problems).toEqual([]);
+  });
+
   it("[INV-F1] mốc neo CHỈ của tổ chức khác không tính là đã neo -> NOT_ANCHORED", async () => {
     const neoNgoai: ExternalAnchor = {
       orgId: "22222222-2222-2222-2222-222222222222",
       seq: 99,
       hashHex: bam("khac").toString("hex"),
       exportedAt: "2026-08-27T00:00:00.000Z",
+      source: "kho-artefact-gia-lap-cua-test",
     };
     const kq = await verifyAuditChain(clientGia(chuoiTot(2), []), ORG, {
       externalAnchors: [neoNgoai],
@@ -229,6 +269,7 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
       seq: 5,
       hashHex: bam("h5").toString("hex"),
       exportedAt: "2026-08-27T00:00:00.000Z",
+      source: "kho-artefact-gia-lap-cua-test",
     };
     const kq = await verifyAuditChain(clientGia([], []), ORG, {
       externalAnchors: [neoNgoai],
@@ -251,12 +292,17 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
       seq: 2,
       hashHex: bam("bam-cu").toString("hex"),
       exportedAt: "2026-08-27T00:00:00.000Z",
+      source: "kho-artefact-gia-lap-cua-test",
     };
     const kq = await verifyAuditChain(clientGia(chuoiTot(3), []), ORG, {
       externalAnchors: [neoNgoai],
     });
     expect(chiVanDeChuoi(kq.problems).map((p) => p[1])).toEqual(["ANCHOR_MISSING"]);
     expect(kq.problems[0]!.detail).toContain("có ");
+    // [vòng fix 2 — I2] Xuất xứ phải ĐI VÀO KẾT LUẬN. Không có vế này thì `source` là một
+    // trường trang trí mà chỉ trình biên dịch nhìn thấy, và một kết luận kiểm toán vẫn không
+    // nói được nó dựa vào gốc tin cậy nào.
+    expect(kq.problems[0]!.detail).toContain('nguồn "kho-artefact-gia-lap-cua-test"');
   });
 
   it("[INV-F1] mốc neo của tổ chức KHÁC bị bỏ qua, không sinh báo động giả", async () => {
@@ -265,6 +311,7 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
       seq: 99,
       hashHex: bam("khac").toString("hex"),
       exportedAt: "2026-08-27T00:00:00.000Z",
+      source: "kho-artefact-gia-lap-cua-test",
     };
     const kq = await verifyAuditChain(clientGia(chuoiTot(2), []), ORG, {
       externalAnchors: [neoNgoai, neoKhop(2)],

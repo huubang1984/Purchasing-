@@ -64,12 +64,45 @@ export interface ChainAnchor {
  *       không chỉ neo mới nhất — `verifyAuditChain` nhận cả MẢNG chính vì lý do này.
  *   (2) ARTEFACT HIỆN KHÔNG ĐƯỢC KÝ, nên "nằm ngoài vùng ghi của role deploy" là bảo đảm DUY
  *       NHẤT. Mất tính chất đó thì neo MẤT SẠCH giá trị, không suy giảm dần.
+ *
+ * [vòng fix 2 — I2] KIỂU NÀY TÁCH LÀM HAI, và đó là toàn bộ nội dung bản vá. Trước vòng này,
+ * `exportChainHead` trả thẳng một `ExternalAnchor`, nên đường DỄ VIẾT NHẤT là:
+ *
+ *     const neo = await exportChainHead(client, org);      // đọc CHÍNH cái sổ đang kiểm
+ *     verifyAuditChain(client, org, { externalAnchors: [neo] })
+ *     -> {"ok":true,"checked":1,"problems":[]}
+ *
+ * Kết quả đó KHÔNG PHÂN BIỆT ĐƯỢC với một kết luận kiểm toán thật, trong khi nó chẳng chứng
+ * minh gì: cả hai vế đọc cùng một bảng, trong cùng một phiên, cùng một vùng tin cậy. `[CR2]`
+ * của vòng fix 1 mua "không xanh khi KHÔNG neo" bằng cách đánh đổi "xanh khi có BẤT KỲ neo
+ * nào" — và vì `ok:true` nay LUÔN kèm một mảng neo, kết luận TRÔNG NHƯ đã được neo. Chất lượng
+ * tín hiệu bị HẠ, không nâng, ở đúng ca dễ viết nhất.
+ *
+ * Nên `exportChainHead` nay trả `ChainHeadExport` — thứ ĐI RA kho — và `ExternalAnchor` đòi
+ * thêm `source`, thứ chỉ điền được khi giá trị ĐÃ ĐI QUA kho và QUAY VỀ. Người gọi vẫn tự tay
+ * đúc được một neo giả (`{ ...xuat, source: "bịa" }`) — không lớp kiểu nào chặn được điều đó,
+ * và nói ngược lại là nói quá. Cái mua được là: việc đó không còn VIẾT ĐƯỢC MỘT CÁCH TÌNH CỜ,
+ * nó phải viết ra thành chữ, tại chỗ, nơi review nhìn thấy.
+ *
+ * `source` KHÔNG được `verifyAuditChain` xác thực và KHÔNG THỂ được xác thực trong phạm vi S0
+ * (artefact chưa được ký — xem (2) ở trên). Nó là một NHÃN XUẤT XỨ: nó đi vào chẩn đoán của
+ * `ANCHOR_MISSING` để một kết luận kiểm toán tự nói ra gốc tin cậy mà nó dựa vào.
  */
-export interface ExternalAnchor {
+export interface ChainHeadExport {
   readonly orgId: string;
   readonly seq: number;
   readonly hashHex: string;
   readonly exportedAt: string;
+}
+
+/**
+ * Một `ChainHeadExport` đã LẤY VỀ TỪ NƠI CẤT NGOÀI DATABASE. Xem khối chú thích trên.
+ *
+ * `source` mô tả nơi cất đã trả giá trị này về (kho artefact của CI, sổ của bên thứ ba, ...).
+ * Nó là chữ của người gọi, không phải một chứng cứ mật mã.
+ */
+export interface ExternalAnchor extends ChainHeadExport {
+  readonly source: string;
 }
 
 interface HangGhi {
@@ -174,11 +207,15 @@ export async function recordChainAnchor(
  * sai tenant lặng lẽ không xuất gì (và cửa sổ F-3 mở vô hạn mà không ai biết), còn dưới một
  * policy cắt đuôi nó xuất một đầu chuỗi NGẮN HƠN sự thật và rửa lần cắt đuôi đó thành gốc tin
  * cậy. Xem `khangDinhDungTenant`.
+ *
+ * [vòng fix 2 — I2] Trả `ChainHeadExport`, KHÔNG phải `ExternalAnchor`, và đó là chủ ý: giá trị
+ * vừa đọc ra từ CHÍNH cái sổ đang kiểm không chứng minh được gì về cái sổ đó. Muốn nó thành một
+ * `ExternalAnchor` thì phải đi qua nơi cất và quay về, và người lấy nó về phải khai `source`.
  */
 export async function exportChainHead(
   client: pg.PoolClient,
   orgId: string,
-): Promise<ExternalAnchor | null> {
+): Promise<ChainHeadExport | null> {
   await khangDinhDungTenant(client, orgId, "exportChainHead");
 
   const { rows } = await client.query<{ seq: string; hash_hex: string }>(

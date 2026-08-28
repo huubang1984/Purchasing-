@@ -17,8 +17,10 @@
 -- Một chuỗi hash mà ĐẦU CHUỖI nằm trong bán kính sửa đổi của tác nhân không chứng minh gì
 -- trước một tác nhân UPDATE được: nó chỉ bắt kẻ tấn công LƯỜI (sửa mà quên tính lại đuôi).
 --
--- PHÁT BIỂU ĐÚNG MỨC — bản này là bản chuẩn, ba chỗ khác (packages/audit/src/verifier.ts và
--- task-6-report.md §2) nhân bản đúng nó:
+-- PHÁT BIỂU ĐÚNG MỨC — bản này là bản chuẩn. Hai chỗ còn lại (packages/audit/src/verifier.ts
+-- và task-6-report.md §11.2) TƯƠNG ĐƯƠNG VỀ NỘI DUNG nhưng KHÔNG y hệt về văn bản: cả hai gộp
+-- câu về tiền ảnh v2 vào đoạn 1, còn bản này để nó ở khối §(1) bên dưới. [vòng fix 2 — M3]
+-- Không có meta-test nào canh trục này — đừng đọc "ba nơi" thành "khớp từng chữ".
 --
 --   Với sổ của một tổ chức MÀ PHIÊN HIỆN TẠI ĐỌC ĐƯỢC, `verifyAuditChain()` phát hiện mọi thao
 --   tác XOÁ, CHÈN, CẮT ĐUÔI, và mọi thao tác SỬA trên các trường đi vào băm. `checked` là SỐ

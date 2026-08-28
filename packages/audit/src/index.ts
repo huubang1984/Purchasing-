@@ -6,6 +6,7 @@ export {
   type AuditEventInput,
   type AuditEventRecord,
   type ChainAnchor,
+  type ChainHeadExport,
   type ExternalAnchor,
 } from "./writer.js";
 export {

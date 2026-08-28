@@ -33,6 +33,14 @@ export interface VerifyOptions {
    * `verifyAuditChain`; tóm tắt: không có neo ngoài thì `ok = true` không phân biệt được với
    * một sổ đã bị sửa VÀ tính lại đuôi, nên một lời gọi không neo KHÔNG ĐƯỢC âm thầm cho ra một
    * kết luận kiểm toán màu xanh.
+   *
+   * [vòng fix 2 — I2] MỘT NEO LẤY TỪ `exportChainHead` TRONG CÙNG PHIÊN KHÔNG CHỨNG MINH GÌ —
+   * nó chỉ làm `NOT_ANCHORED` im đi. Cả hai vế khi ấy đọc cùng một bảng, dưới cùng một RLS,
+   * trong cùng một vùng tin cậy với tác nhân; `ok:true` thu được KHÔNG PHÂN BIỆT ĐƯỢC với một
+   * kết luận kiểm toán thật. Vì thế `exportChainHead` trả `ChainHeadExport` chứ không trả kiểu
+   * này, và kiểu này đòi thêm `source` — giá trị chỉ điền được khi neo ĐÃ ĐI QUA nơi cất ngoài
+   * database và QUAY VỀ. `source` KHÔNG được xác thực ở đây (không thể — artefact chưa được
+   * ký); nó chỉ bắt xuất xứ phải viết ra thành chữ và đưa xuất xứ đó vào chẩn đoán.
    */
   readonly externalAnchors: readonly ExternalAnchor[];
   /**
@@ -66,8 +74,11 @@ interface HangChuoi {
  * Đầu chuỗi nằm TRONG bán kính sửa đổi của tác nhân, nên chuỗi tự nó không ràng buộc gì trước
  * một tác nhân UPDATE được; nó chỉ bắt kẻ tấn công LƯỜI.
  *
- * Phát biểu đúng, bốn đoạn, nhân bản y hệt ở db/migrations/004_audit_chain_functions.sql và
- * task-6-report.md §2:
+ * Phát biểu đúng, bốn đoạn. Nó có mặt ở ba nơi — db/migrations/004_audit_chain_functions.sql,
+ * chỗ này, và task-6-report.md §11.2 — TƯƠNG ĐƯƠNG VỀ NỘI DUNG, KHÔNG y hệt về văn bản: 004 đặt
+ * câu về tiền ảnh v2 ở khối §(1) riêng của nó thay vì trong đoạn 1. [vòng fix 2 — M3] Bản trước
+ * viết "nhân bản y hệt"; không có meta-test nào canh trục này, nên chữ đó là một lời hứa không
+ * ai giữ. Đừng đọc "ba nơi" thành "khớp từng chữ".
  *
  *   Với sổ của một tổ chức MÀ PHIÊN HIỆN TẠI ĐỌC ĐƯỢC, hàm này phát hiện mọi thao tác XOÁ,
  *   CHÈN, CẮT ĐUÔI, và mọi thao tác SỬA trên các trường đi vào băm. Từ vòng fix 1, tiền ảnh
@@ -190,7 +201,7 @@ export async function verifyAuditChain(
       seq: neo.seq,
       kind: "ANCHOR_MISSING",
       detail:
-        `Mốc neo NGOÀI DB (xuất lúc ${neo.exportedAt}) tại seq ${neo.seq} kỳ vọng băm ` +
+        `Mốc neo NGOÀI DB (nguồn "${neo.source}", xuất lúc ${neo.exportedAt}) tại seq ${neo.seq} kỳ vọng băm ` +
         `${neo.hashHex} nhưng bảng ${bamThucTe === undefined ? "không còn hàng nào ở seq đó" : `có ${bamThucTe}`}` +
         " — sổ đã bị cắt đuôi, bị thay thế, hoặc bị dựng lại.",
     });

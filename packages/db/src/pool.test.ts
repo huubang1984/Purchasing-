@@ -48,6 +48,14 @@ describe("createPool — bắt buộc TLS hiệu lực thật, trừ kết nối
     ["sslmode=prefer — ngữ nghĩa phụ thuộc phiên bản thư viện, không đáng tin", "sslmode=prefer"],
     ["sslmode=allow — vẫn cho phép rơi về không mã hoá", "sslmode=allow"],
     ["sslmode=verify-ca — không xác thực hostname", "sslmode=verify-ca"],
+    // [vòng fix 2 — M2] KHÔNG phải hồi quy TLS: giá trị này chưa bao giờ tới được server (đã
+    // đo — createPool chỉ chuyển tham số RỜI RẠC). Nó bị cấm vì "bỏ qua im lặng" vi phạm bất
+    // biến "từ chối thẳng" của chính file này: người vận hành đặt row_security=off, thấy kết
+    // nối THÀNH CÔNG, và tin rằng nó có hiệu lực. Hai biến thể để tên hằng không bị đọc hẹp
+    // thành "chỉ chặn đúng chuỗi row_security".
+    ["options=-c row_security=off — bị bỏ qua im lặng thì người vận hành tin nhầm", "options=-c%20row_security%3Doff"],
+    ["options ghi đè hai GUC giảm nhẹ của IM7", "options=-c%20lock_timeout%3D0"],
+    ["OPTIONS viết hoa — so sánh không được phân biệt hoa thường", "OPTIONS=-c%20lock_timeout%3D0"],
   ])("%s", (_mo_ta, querystring) => {
     expect(() => createPool(`postgres://u:p@db.example.com:5432/db?${querystring}`)).toThrow(
       /bị cấm/,

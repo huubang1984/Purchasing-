@@ -866,24 +866,99 @@ DECLARE
   -- dạng nữa — nó nối vào một chuỗi SAI. Đó là một quyết định phải nhìn thấy được, và chỗ sửa
   -- là thân hàm (dùng TG_RELID thay vì tên ghi cứng), không phải vế lọc này. Ghi vào sổ nợ.
   --
+  -- [vòng fix 2 — I1] MỘT NGUỒN DUY NHẤT cho tên cột của hai bảng sổ. Vị từ hình dạng (gác
+  -- `can_co`) VÀ mục cưỡng chế (D5) đọc CÙNG ba hằng này. Hai danh sách song song sẽ trôi khỏi
+  -- nhau và tái tạo đúng cái "hàng rào tự làm mù mình bằng SỐ CỘT" mà (D5) sinh ra để đóng —
+  -- nên chúng KHÔNG được nhân bản.
+  -- Con số `= 15` / `= 4` / `= 0` bên dưới CỐ Ý viết cứng chứ không dẫn xuất từ độ dài mảng:
+  -- lệch giữa danh sách và con số là fail-CLOSED (vị từ thành bất khả thoả, mọi test đỏ) chứ
+  -- không phải fail-open.
+  COT_SO constant text :=
+    $q$'id', 'org_id', 'seq', 'prev_hash', 'hash', 'occurred_at', 'actor_type', 'actor_id',
+       'action', 'resource_type', 'resource_id', 'payload', 'request_id', 'ip', 'user_agent'$q$;
+  COT_NEO     constant text := $q$'org_id', 'seq', 'hash', 'anchored_at'$q$;
+  COT_NEO_CAM constant text := $q$'prev_hash', 'occurred_at', 'payload', 'action'$q$;
+
   -- %1$s = bí danh của bảng đang xét (phải có cột bang_oid). "%%" là dấu % thật sau format().
   MAU_HINH_DANG_SO constant text :=
     $q$(SELECT pg_catalog.count(*) FROM pg_attribute a
          WHERE a.attrelid = %1$s.bang_oid AND a.attnum > 0 AND NOT a.attisdropped
-           AND a.attname IN ('id', 'org_id', 'seq', 'prev_hash', 'hash', 'occurred_at',
-                             'actor_type', 'actor_id', 'action', 'resource_type',
-                             'resource_id', 'payload', 'request_id', 'ip', 'user_agent')) = 15$q$;
+           AND a.attname IN ($q$ || COT_SO || $q$)) = 15$q$;
 
-  -- [vòng fix 1 — IM4] Hình dạng bảng MỐC NEO. Vế phủ định là bắt buộc: không có nó thì
-  -- `audit_events` (có org_id/seq/hash) cũng lọt vào đây và bị đòi thêm một trigger thứ hai
-  -- trên INSERT.
+  -- [vòng fix 1 — IM4] Hình dạng bảng MỐC NEO.
+  --
+  -- [vòng fix 2 — đột biến S32, SỬA MỘT LỜI NÓI QUÁ] Bản trước của dòng này viết "vế phủ định
+  -- là BẮT BUỘC: không có nó thì `audit_events` (có org_id/seq/hash) cũng lọt vào đây". Đo lại
+  -- thì SAI: vế dương đòi ĐỦ BỐN tên, và `audit_events` KHÔNG có `anchored_at` (15 cột của nó:
+  -- id, org_id, seq, occurred_at, actor_type, actor_id, action, resource_type, resource_id,
+  -- payload, request_id, ip, user_agent, prev_hash, hash) nên nó đếm được 3, không phải 4 —
+  -- vế dương MỘT MÌNH đã loại nó. Đột biến "gỡ vế phủ định" SỐNG SÓT, và đó là phép đo chứng
+  -- minh điều đó. Vế phủ định vẫn giữ, nhưng phải gọi đúng tên: nó là PHÒNG XA cho một bảng
+  -- TƯƠNG LAI mang cả bốn cột neo LẪN cột chuỗi (khi ấy nó sẽ bị đòi hai trigger INSERT mâu
+  -- thuẫn nhau), KHÔNG phải thứ đang gánh bảng sổ hôm nay.
+  --
+  -- [vòng fix 2 — M1] DƯ LƯỢNG Y HỆT vế lọc trên, và sổ nợ #1 của vòng trước bỏ sót nó:
+  -- `chot_moc_neo()` đọc `FROM public.audit_events` GHI CỨNG (004:365-366) rồi ghi đè
+  -- NEW.seq/NEW.hash của bảng ĐANG BỊ CẮM TRIGGER. Đo được: một `kho_neo.audit_chain_anchors`
+  -- đúng hình dạng này bị cắm trigger, và INSERT vào nó trả về đầu chuỗi của
+  -- `public.audit_events` — tức migrate() TỰ TAY ĐỔI NGỮ NGHĨA MỘT BẢNG, đúng bẫy [CR4]. Chỗ
+  -- sửa là TG_RELID trong thân hàm, KHÔNG phải vế lọc này. Ghi vào sổ nợ #1 cùng
+  -- `noi_chuoi_kiem_toan()`; cố ý KHÔNG vá ở vòng fix 2.
   MAU_HINH_DANG_NEO constant text :=
     $q$(SELECT pg_catalog.count(*) FROM pg_attribute a
          WHERE a.attrelid = %1$s.bang_oid AND a.attnum > 0 AND NOT a.attisdropped
-           AND a.attname IN ('org_id', 'seq', 'hash', 'anchored_at')) = 4
+           AND a.attname IN ($q$ || COT_NEO || $q$)) = 4
        AND (SELECT pg_catalog.count(*) FROM pg_attribute a
              WHERE a.attrelid = %1$s.bang_oid AND a.attnum > 0 AND NOT a.attisdropped
-               AND a.attname IN ('prev_hash', 'occurred_at', 'payload', 'action')) = 0$q$;
+               AND a.attname IN ($q$ || COT_NEO_CAM || $q$)) = 0$q$;
+
+  -- [vòng fix 2 — I1] HÌNH DẠNG CỘT CỦA BẢNG SỔ CHÍNH TẮC — hậu điều kiện của mục (D5).
+  -- Chỉ soi HAI cái tên đủ điều kiện `public.audit_events` và `public.audit_chain_anchors`, và
+  -- chỉ khi chúng TỒN TẠI. Đây KHÔNG phải việc tái lập khoá cứng nspname='public' trong VẾ LỌC
+  -- của `can_co` ([CR2a] gỡ nó để nhìn thấy SET SCHEMA, lý do đó vẫn đứng): mục này không cắm,
+  -- không gỡ, không phán xét trigger của bảng nào — nó chỉ khẳng định rằng BẢNG CHÍNH TẮC còn
+  -- khớp chính cái vị từ đang gác trigger của nó.
+  CAU_HINH_DANG_CHINH_TAC constant text :=
+    $q$SELECT 'public.audit_events: hình dạng cột đã TRÔI — thiếu {'
+              || coalesce((SELECT pg_catalog.string_agg(pg_catalog.quote_ident(t.ten), ', '
+                                                        ORDER BY t.ten)
+                             FROM pg_catalog.unnest(ARRAY[$q$ || COT_SO || $q$]) AS t(ten)
+                            WHERE NOT EXISTS (SELECT 1 FROM pg_attribute a
+                                               WHERE a.attrelid = b.bang_oid AND a.attnum > 0
+                                                 AND NOT a.attisdropped AND a.attname = t.ten)),
+                          '')
+              || '}. Vị từ hình dạng gác `can_co` đòi ĐỦ 15 tên cột, nên bảng sổ này KHÔNG CÒN '
+                 'khớp và lớp C MẤT khả năng dựng lại audit_events_noi_chuoi: từ lúc đó bên ghi '
+                 'tự chọn được seq/prev_hash/hash. THÊM cột thì an toàn; ĐỔI TÊN hoặc XOÁ một '
+                 'trong 15 cột thì không. Sửa bằng một migration đánh số MỚI trả tên cột về bản '
+                 'chuẩn — vòng migration đánh số chạy TRƯỚC lượt phán xét nên vá được trong CÙNG '
+                 'một lần deploy. Mục này CỐ Ý không tự sửa lược đồ (xem [CR4]).' AS mo_ta
+         FROM (SELECT to_regclass('public.audit_events')::oid AS bang_oid) b
+        WHERE b.bang_oid IS NOT NULL
+          AND NOT ($q$ || pg_catalog.format(MAU_HINH_DANG_SO, 'b') || $q$)
+     UNION ALL
+     SELECT 'public.audit_chain_anchors: hình dạng cột đã TRÔI — thiếu {'
+              || coalesce((SELECT pg_catalog.string_agg(pg_catalog.quote_ident(t.ten), ', '
+                                                        ORDER BY t.ten)
+                             FROM pg_catalog.unnest(ARRAY[$q$ || COT_NEO || $q$]) AS t(ten)
+                            WHERE NOT EXISTS (SELECT 1 FROM pg_attribute a
+                                               WHERE a.attrelid = b.bang_oid AND a.attnum > 0
+                                                 AND NOT a.attisdropped AND a.attname = t.ten)),
+                          '')
+              || '}, thừa {'
+              || coalesce((SELECT pg_catalog.string_agg(pg_catalog.quote_ident(t.ten), ', '
+                                                        ORDER BY t.ten)
+                             FROM pg_catalog.unnest(ARRAY[$q$ || COT_NEO_CAM || $q$]) AS t(ten)
+                            WHERE EXISTS (SELECT 1 FROM pg_attribute a
+                                           WHERE a.attrelid = b.bang_oid AND a.attnum > 0
+                                             AND NOT a.attisdropped AND a.attname = t.ten)),
+                          '')
+              || '}. Cùng chế độ hỏng: lớp C MẤT khả năng dựng lại audit_chain_anchors_moc_neo, '
+                 'và mốc neo lại do BÊN GHI chọn — đúng lỗ [I3] mà vòng fix 1 vừa đóng. Sửa bằng '
+                 'một migration đánh số MỚI.' AS mo_ta
+         FROM (SELECT to_regclass('public.audit_chain_anchors')::oid AS bang_oid) b
+        WHERE b.bang_oid IS NOT NULL
+          AND NOT ($q$ || pg_catalog.format(MAU_HINH_DANG_NEO, 'b') || $q$)$q$;
 
   -- Thân hàm băm. Bản NGUỒN nằm ở db/migrations/004_audit_chain_functions.sql.
   -- Vì sao nó PHẢI được cưỡng chế, và vì sao nó là mục quan trọng nhất mà Task 6 thêm vào file
@@ -1999,6 +2074,47 @@ $ham$;
              AND p.proname IN ('audit_compute_hash', 'noi_chuoi_kiem_toan', 'audit_append',
                                'chot_moc_neo'))$q$,
       $q$quyền sở hữu hàm thừa (DROP FUNCTION trong một migration đánh số mới) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [Task 6 — vòng fix 2, I1] (D5) HÌNH DẠNG CỘT CỦA BẢNG SỔ CHÍNH TẮC -----------
+    -- Vì sao mục này tồn tại, đo được. Vế lọc của `can_co` là HÌNH DẠNG (bản vá IM2 của vòng
+    -- fix 1 — xem MAU_HINH_DANG_SO) và nó đòi ĐỦ 15 tên cột. Điều đó đóng bẫy [CR4] theo một
+    -- chiều và MỞ nó theo chiều kia: THÊM cột thì an toàn, còn ĐỔI TÊN hoặc XOÁ một trong 15
+    -- cột thì `public.audit_events` RỚT KHỎI `can_co` và lớp C mất khả năng tự chữa trigger
+    -- nối chuỗi — trong IM LẶNG, VĨNH VIỄN. Tái lập dưới role deploy KHÔNG superuser trên một
+    -- DB đã migrate sạch:
+    --     ALTER TABLE audit_events RENAME COLUMN user_agent TO ua;
+    --     DROP TRIGGER audit_events_noi_chuoi ON audit_events;
+    --     migrate() -> "MIGRATE OK []"  (KHÔNG lỗi, KHÔNG warning)
+    --     pg_trigger -> chỉ còn _chan_delete / _chan_truncate / _chan_update
+    --     INSERT (seq=500, prev_hash=sha256('bia'), hash=sha256('dat')) -> INSERT 0 1
+    -- Phép đo một biến: cùng DB, chỉ đổi vế lọc của `can_co` về bản khoá theo relname thì
+    -- trigger ĐƯỢC dựng lại. Tức đây đúng là cái giá của bản vá IM2, không phải một lỗi khác.
+    -- Trước vòng fix 1, đổi tên cột làm INSERT vỡ ỒN ÀO (record "new" has no field ...); sau
+    -- vòng fix 1 nó làm bảng sổ IM LẶNG mất lớp nối chuỗi. fail-closed -> fail-open.
+    --
+    -- CÂU LỆNH CƯỠNG CHẾ LÀ NO-OP, CÓ CHỦ Ý — mục này chỉ PHÁN XÉT. Một câu tự động
+    -- "ALTER TABLE ... RENAME COLUMN ua TO user_agent" là migrate() TỰ TAY ĐỔI LƯỢC ĐỒ một
+    -- bảng, đúng thứ [CR4] cấm; và trên một bảng mà `ua` là cột hợp lệ của một task sau, nó
+    -- phá dữ liệu. (D5) gãy ỒN ÀO và nói ra đường sửa thay vì tự đoán ý định.
+    --
+    -- [QT1 — ai sửa được, bằng cách nào, trong bao lâu] Một migration đánh số MỚI chạy
+    -- ALTER TABLE ... RENAME COLUMN: quyền sở hữu bảng sổ, ĐÚNG BẰNG thứ mục (D2) đã đòi nên
+    -- không thêm hàng rào deploy nào. Vòng migration đánh số chạy TRƯỚC lượt PHÁN XÉT trong
+    -- CÙNG một lần migrate(), nên vá được trong MỘT lần deploy — không có ngõ cụt khoá-chết.
+    -- [QT1 — ném được lỗi gì ngoài 42501] Không có. Câu cưỡng chế là một khối DO RỖNG. Hậu
+    -- điều kiện chỉ đọc `pg_attribute` (mọi role đọc được) và `to_regclass` trên một tên GHI
+    -- SẴN: to_regclass trả NULL cho tên không tồn tại chứ không ném, và chỉ ném 42601 với tên
+    -- sai cú pháp — tên ở đây là hằng trong chính file này. Trên lược đồ chỉ có 001/002 (chưa
+    -- có bảng sổ) cả hai vế đều RỖNG nên mục QUA; đã đo cả hai đường nâng cấp 001/002 và
+    -- 001/002/003.
+    ARRAY[
+      $q$hình dạng cột của bảng sổ chính tắc$q$,
+      $q$true$q$,
+      $q$DO $hd$ BEGIN END $hd$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_HINH_DANG_CHINH_TAC || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_HINH_DANG_CHINH_TAC || $q$) t)$q$,
+      $q$quyền sở hữu bảng sổ để chạy ALTER TABLE ... RENAME COLUMN trong một migration đánh số MỚI — mục này CỐ Ý KHÔNG tự sửa lược đồ$q$
     ],
 
     -- Tám trigger (hai bảng × ba sự kiện chỉ-ghi-thêm, cộng trigger nối chuỗi trên

@@ -588,6 +588,51 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
   // [vòng fix 1 — CR1] Mặc định-ĐÓNG: trên bảng sổ chỉ sáu trigger chỉ-ghi-thêm được phép tồn
   // tại, và không rule nào. Phép kiểm trạng thái; đường trôi tương ứng có test đối kháng riêng
   // ở db/migrations.int.test.ts.
+  /**
+   * [Task 6 — vòng fix 2 — I1] Ba hằng tên cột trong hardening.always.sql PHẢI là hình dạng
+   * THẬT của hai bảng sổ. Vì sao phép kiểm này tồn tại: §11.14 của báo cáo vòng trước viết
+   * rằng "đổi hình dạng bảng sổ đã bị [CR5]/(D3) và các test cột canh riêng" — đo lại thì KHÔNG
+   * CÓ GÌ canh: mục (D3) chỉ soi `org_id` và `seq`, 13 cột còn lại không được canh ở đâu cả.
+   *
+   * Mục (D5) nay canh chiều "bảng trôi khỏi danh sách". Phép kiểm này canh chiều NGƯỢC LẠI —
+   * "danh sách trôi khỏi bảng" — thứ mà (D5) một mình mù: xoá một tên khỏi `COT_SO` và hạ `15`
+   * xuống `14` cho khớp thì (D5) vẫn xanh trên một bảng sổ đã mất cột. Không có phép kiểm nào
+   * khác đứng trên trục đó.
+   */
+  it("[INV-B4] ba hằng tên cột trong hardening.always.sql khớp ĐÚNG hình dạng thật của hai bảng sổ", async () => {
+    const vanBan = readFileSync(
+      fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)),
+      "utf8",
+    );
+    const hangTen = (ten: string): string[] => {
+      const khop = new RegExp(String.raw`${ten}\s+constant text :=\s*\$q\$([\s\S]*?)\$q\$`).exec(
+        vanBan,
+      );
+      expect(khop, `không tìm thấy hằng ${ten} trong hardening.always.sql`).not.toBeNull();
+      return [...khop![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!).sort();
+    };
+    const cotThat = async (bang: string): Promise<string[]> => {
+      const { rows } = await db.pool.query<{ attname: string }>(
+        "SELECT a.attname FROM pg_attribute a WHERE a.attrelid = $1::regclass " +
+          "  AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attname",
+        [bang],
+      );
+      return rows.map((r) => r.attname);
+    };
+
+    expect(hangTen("COT_SO")).toEqual(await cotThat("public.audit_events"));
+    // Bảng neo mang thêm `id`, cố ý KHÔNG nằm trong vị từ hình dạng (nó không phân biệt được
+    // bảng neo với bất kỳ bảng nào khác), nên đây là quan hệ CON THẬT SỰ, không phải bằng nhau.
+    const cotNeoThat = await cotThat("public.audit_chain_anchors");
+    expect(hangTen("COT_NEO").every((t) => cotNeoThat.includes(t))).toBe(true);
+    expect(hangTen("COT_NEO")).toEqual(cotNeoThat.filter((t) => t !== "id"));
+    // Vế phủ định phải thật sự VẮNG MẶT, nếu không nó cấm chính bảng neo.
+    expect(hangTen("COT_NEO_CAM").filter((t) => cotNeoThat.includes(t))).toEqual([]);
+    // Và vế phủ định phải CẮT được audit_events, nếu không bảng sổ cũng lọt vào nhánh mốc neo.
+    const cotSoThat = await cotThat("public.audit_events");
+    expect(hangTen("COT_NEO_CAM").some((t) => cotSoThat.includes(t))).toBe(true);
+  });
+
   it("[INV-B4] không trigger LẠ và không RULE nào trên bảng sổ", async () => {
     // [vòng fix 1 — M2] Danh sách là CẶP `bảng.trigger`, không phải tên trần — xem
     // CAU_TRIGGER_RULE_LA.

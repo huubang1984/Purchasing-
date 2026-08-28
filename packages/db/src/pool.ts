@@ -8,7 +8,17 @@ const CAC_HOST_LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
 // prefer/require/verify-ca SẼ đổi ở bản major sau (hiện là alias của verify-full, sau sẽ yếu
 // hơn). Khoá an ninh của dự án vào hành vi phiên bản cụ thể của thư viện bên thứ ba là rủi ro
 // tự thân — deny-list theo TÊN tham số không phụ thuộc điều đó.
-const CAC_THAM_SO_SSL_BI_CAM_LUON = new Set([
+//
+// [vòng fix 2 — M2] `options` nằm trong danh sách này dù nó KHÔNG phải một hồi quy TLS. Lý do
+// đo được: createPool chỉ chuyển host/port/user/password/database/ssl RỜI RẠC cho pg.Pool và
+// tự đặt `options` của riêng nó (hai GUC của IM7), nên `?options=-c row_security=off` trong
+// chuỗi kết nối KHÔNG BAO GIỜ tới server — nó bị BỎ QUA IM LẶNG. Bất biến mà chính file này
+// tuyên bố là "TỪ CHỐI THẲNG, không cố sửa giá trị", và bỏ qua im lặng vi phạm đúng bất biến
+// đó theo chiều nguy hiểm nhất: người vận hành đặt một tham số an ninh vào chuỗi kết nối, thấy
+// kết nối THÀNH CÔNG, và tin rằng nó có hiệu lực. Nếu một bản pg sau này lại tôn trọng query
+// string thì cùng tham số ấy GHI ĐÈ hai GUC giảm nhẹ của IM7 — nên tên này bị cấm ở CẢ hai
+// trạng thái thế giới. Tên hằng cố ý KHÔNG còn chữ "SSL": danh sách đã rộng hơn TLS.
+const CAC_THAM_SO_BI_CAM_LUON = new Set([
   "ssl",
   "sslmode",
   "sslcert",
@@ -17,6 +27,7 @@ const CAC_THAM_SO_SSL_BI_CAM_LUON = new Set([
   "sslpassword",
   "sslnegotiation",
   "uselibpqcompat",
+  "options",
 ]);
 
 /**
@@ -32,7 +43,7 @@ const CAC_THAM_SO_SSL_BI_CAM_LUON = new Set([
 function timThamSoNguyHiem(url: URL): string | null {
   for (const [ten, giaTri] of url.searchParams) {
     const tenThuong = ten.trim().toLowerCase(); // [fix Minor] phong ten tham so co khoang trang thua
-    if (CAC_THAM_SO_SSL_BI_CAM_LUON.has(tenThuong)) return ten;
+    if (CAC_THAM_SO_BI_CAM_LUON.has(tenThuong)) return ten;
     if ((tenThuong === "host" || tenThuong === "hostaddr") && !giaTri.startsWith("/")) {
       return ten;
     }
@@ -120,7 +131,9 @@ export function createPool(
   if (thamSoNguyHiem !== null) {
     throw new Error(
       `createPool: tham số "${thamSoNguyHiem}" trong connection string bị cấm — nó có thể ` +
-        "ghi đè host hoặc tắt/làm yếu xác thực TLS ngoài tầm kiểm soát của createPool.",
+        "ghi đè host, tắt/làm yếu xác thực TLS, hoặc (với `options`) đặt GUC của phiên ngoài " +
+        "tầm kiểm soát của createPool. createPool KHÔNG bỏ qua tham số như vậy: nó từ chối " +
+        "thẳng, vì bỏ qua im lặng để lại người vận hành tin rằng tham số đã có hiệu lực.",
     );
   }
 

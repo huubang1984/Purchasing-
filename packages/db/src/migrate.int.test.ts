@@ -5,6 +5,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { migrate } from "./migrate.js";
+import { createPool } from "./pool.js";
 
 let db: TestDatabase;
 
@@ -212,6 +213,48 @@ describe("bộ chạy migration", () => {
       "SELECT buoc FROM mig_k_nhat_ky ORDER BY thu_tu",
     );
     expect(rows.map((r) => r.buoc)).toEqual(["sua", "danh_so", "sua", "phan_xet"]);
+  });
+
+  /**
+   * [Task 6 — vòng fix 2 — M4] `SET lock_timeout = 0` trên kết nối của migrate() KHÔNG được
+   * thay bằng một giá trị hữu hạn "đủ dài".
+   *
+   * Test S22 của vòng fix 1 chỉ chứng minh "đủ dài": đột biến `0` -> `60000` SỐNG SÓT qua toàn
+   * bộ suite. Trên một lược đồ lớn, một lượt DDL dài hơn giá trị hữu hạn ấy tái sinh đúng chế
+   * độ hỏng mà [IM7] mở ra — `lock_timeout` của pool ứng dụng áp CẢ cho khoá tư vấn (đã đo),
+   * nên nó huỷ chính cơ chế chống-đua mà migrate() dựa vào từ Task 1.
+   *
+   * Đo TRỰC TIẾP trên kết nối của migrate(), không phải bằng một khẳng định văn bản: một file
+   * `.always.sql` chạy trên đúng `lockClient`, nên nó đọc được GUC hiệu lực thật ở đó. Phép đo
+   * này vẫn đỏ nếu ai đó chuyển hai câu SET đi nơi khác rồi quên.
+   */
+  it("[Task 6 — vòng fix 2 — M4] kết nối của migrate() mang lock_timeout/idle_in_tx = 0, không phải giá trị hữu hạn", async () => {
+    const dir = migrationDir({
+      "082_khong_lam_gi.sql": "SELECT 1;",
+      "do_guc.always.sql":
+        "CREATE TABLE IF NOT EXISTS mig_l_guc (thu_tu serial, lock_timeout text, idle_tx text);\n" +
+        "INSERT INTO mig_l_guc (lock_timeout, idle_tx) VALUES (current_setting('lock_timeout'), " +
+        "current_setting('idle_in_transaction_session_timeout'));",
+    });
+
+    // Pool ỨNG DỤNG: createPool đặt hai GUC qua PGOPTIONS. Nếu migrate() không vô hiệu hoá
+    // chúng thì chính giá trị này sẽ đọc được bên trong.
+    const poolUngDung = createPool(db.connectionString, 2, {
+      lockTimeoutMs: 200,
+      idleInTransactionTimeoutMs: 300,
+    });
+    try {
+      await migrate(poolUngDung, dir);
+    } finally {
+      await poolUngDung.end();
+    }
+
+    const { rows } = await db.pool.query<{ lock_timeout: string; idle_tx: string }>(
+      "SELECT lock_timeout, idle_tx FROM mig_l_guc ORDER BY thu_tu",
+    );
+    expect(rows.length, "một lần migrate() = ba lượt always.sql").toBe(3);
+    expect(rows.map((r) => r.lock_timeout)).toEqual(["0", "0", "0"]);
+    expect(rows.map((r) => r.idle_tx)).toEqual(["0", "0", "0"]);
   });
 
   // [fix round 4 — N1] pool.connect() trả về CÙNG MỘT đối tượng Client khi client đó được

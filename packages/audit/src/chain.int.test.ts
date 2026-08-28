@@ -9,6 +9,7 @@ import {
   exportChainHead,
   recordChainAnchor,
   verifyAuditChain,
+  type ChainHeadExport,
   type ExternalAnchor,
 } from "./index.js";
 
@@ -23,6 +24,27 @@ async function orgMoi(slug: string): Promise<string> {
     [slug],
   );
   return rows[0]!.id;
+}
+
+/**
+ * [vòng fix 2 — I2] Mô phỏng VÒNG ĐỜI THẬT của một mốc neo, và lý do nó tồn tại là phát hiện
+ * của re-review: trước vòng này `exportChainHead` trả thẳng `ExternalAnchor`, nên MỌI test
+ * trong file này (10 chỗ) làm đúng một việc — đọc đầu chuỗi từ CHÍNH cái sổ đang kiểm rồi nộp
+ * lại cho bộ kiểm chứng. `ok:true` thu được không phân biệt được với một kết luận kiểm toán
+ * thật, trong khi nó không chứng minh gì.
+ *
+ * Nay đường đó không viết được nữa: `ChainHeadExport` thiếu `source`. Hàm này dựng lại vòng
+ * đời đúng — artefact ĐI RA (JSON.stringify, đúng phép thử "sống được qua JSON" mà [M5] đòi),
+ * nằm ở nơi cất, rồi ĐƯỢC LẤY VỀ kèm nhãn xuất xứ.
+ *
+ * Nó cố ý nằm TRONG file test chứ không trong packages/audit: nơi cất là thứ S0 CHƯA CÓ (sổ nợ
+ * #4), và đặt một hàm "biến export thành anchor" vào mã sản phẩm sẽ dựng lại đúng đường tắt mà
+ * [I2] vừa đóng. Ở đây nó là FIXTURE, và tên của nó nói ra điều đó.
+ */
+function layNeoTuKhoGiaLap(xuat: ChainHeadExport | null): ExternalAnchor {
+  if (xuat === null) throw new Error("không xuất được mốc chuỗi");
+  const quaJson = JSON.parse(JSON.stringify(xuat)) as ChainHeadExport;
+  return { ...quaJson, source: "kho-artefact-gia-lap-cua-test" };
 }
 
 async function docTgenabled(bang: string, tenTrigger: string): Promise<string> {
@@ -119,9 +141,8 @@ describe("chuỗi hash kiểm toán", () => {
           payload: { chiSo: i, ghiChu: "giá trị có dấu tiếng Việt" },
         });
       }
-      return exportChainHead(client, org);
+      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
     });
-    if (neo === null) throw new Error("không xuất được mốc chuỗi");
 
     const ketQua = await withTenant(apiPool, org, (client) =>
       verifyAuditChain(client, org, { externalAnchors: [neo] }),
@@ -150,9 +171,8 @@ describe("chuỗi hash kiểm toán", () => {
           resourceType: "TEST",
         });
       }
-      return exportChainHead(client, org);
+      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
     });
-    if (neo === null) throw new Error("không xuất được mốc chuỗi");
 
     // Tác nhân: chủ sở hữu bảng đã qua lớp trigger. Nó sửa seq 3 rồi đi từ seq 3 tính lại
     // prev_hash/hash cho toàn bộ đuôi bằng chính public.audit_compute_hash.
@@ -229,9 +249,8 @@ describe("chuỗi hash kiểm toán", () => {
             userAgent: "trustprocure-test/1.0",
           });
         }
-        return exportChainHead(client, org);
+        return layNeoTuKhoGiaLap(await exportChainHead(client, org));
       });
-      if (neo === null) throw new Error("không xuất được mốc chuỗi");
 
       await voHieuHoaTrigger("audit_events", "audit_events_chan_update", async () => {
         const { rowCount } = await db.pool.query(
@@ -392,9 +411,7 @@ describe("chuỗi hash kiểm toán", () => {
         });
       }
       await recordChainAnchor(client, org);
-      const xuat = await exportChainHead(client, org);
-      if (xuat === null) throw new Error("không xuất được mốc chuỗi");
-      return xuat;
+      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
     });
 
     // Artefact phải sống được qua JSON — nó nằm NGOÀI database, trong kho của CI.
@@ -446,9 +463,8 @@ describe("chuỗi hash kiểm toán", () => {
           resourceType: "TEST",
         });
       }
-      return exportChainHead(client, org);
+      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
     });
-    if (neoNgoai === null) throw new Error("không xuất được mốc chuỗi");
 
     await withTenant(apiPool, org, (client) =>
       appendAuditEvent(client, org, { actorType: "SYSTEM", action: "F4", resourceType: "TEST" }),
@@ -516,8 +532,9 @@ describe("chuỗi hash kiểm toán", () => {
       ),
     );
 
-    const neo = await withTenant(apiPool, org, (client) => exportChainHead(client, org));
-    if (neo === null) throw new Error("không xuất được mốc chuỗi");
+    const neo = await withTenant(apiPool, org, async (client) =>
+      layNeoTuKhoGiaLap(await exportChainHead(client, org)),
+    );
     const ketQua = await withTenant(apiPool, org, (client) =>
       verifyAuditChain(client, org, { externalAnchors: [neo] }),
     );
@@ -568,8 +585,7 @@ describe("chuỗi hash kiểm toán", () => {
           "VALUES ($1, 'SYSTEM', 'GHI_THANG', 'T')",
         [org],
       );
-      const neo = await exportChainHead(client, org);
-      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.ok).toBe(true);
@@ -592,8 +608,7 @@ describe("chuỗi hash kiểm toán", () => {
     expect(Number(rows[0]!.seq)).toBe(2);
 
     const ketQua = await withTenant(apiPool, org, async (client) => {
-      const neo = await exportChainHead(client, org);
-      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.problems).toEqual([]);
@@ -621,8 +636,9 @@ describe("chuỗi hash kiểm toán", () => {
       }
     });
 
-    const neo = await withTenant(apiPool, org, (client) => exportChainHead(client, org));
-    if (neo === null) throw new Error("không xuất được mốc chuỗi");
+    const neo = await withTenant(apiPool, org, async (client) =>
+      layNeoTuKhoGiaLap(await exportChainHead(client, org)),
+    );
 
     const ketQua = await withTenant(apiPool, org, async (client) => {
       for (const cau of [
@@ -811,8 +827,7 @@ describe("chuỗi hash kiểm toán", () => {
 
     // (c) và kiểm chứng vẫn sạch — không có ANCHOR_MISSING giả nào.
     const ketQua = await withTenant(apiPool, org, async (client) => {
-      const neo = await exportChainHead(client, org);
-      if (neo === null) throw new Error("không xuất được mốc chuỗi");
+      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.problems).toEqual([]);

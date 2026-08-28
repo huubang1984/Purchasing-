@@ -4331,4 +4331,172 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   }, 180_000);
+
+  /**
+   * [Task 6 — vòng fix 2 — I1] VỊ TỪ HÌNH DẠNG BIẾN TRÔI FAIL-CLOSED THÀNH FAIL-OPEN.
+   *
+   * Bản vá IM2 của vòng fix 1 đổi vế lọc của `can_co` từ TÊN BẢNG sang HÌNH DẠNG (đủ 15 tên
+   * cột). Điều đó đóng bẫy [CR4] theo một chiều và mở nó theo chiều kia: đổi tên hoặc xoá MỘT
+   * trong 15 cột làm `public.audit_events` rớt khỏi `can_co`, nên lớp C không dựng lại trigger
+   * nối chuỗi nữa — và migrate() báo "MIGRATE OK []", không lỗi không warning.
+   *
+   * Test này đo BA điều, và điều thứ hai là điều dễ nói quá nhất nên nó được đo tường minh:
+   *   (a) migrate() nay GÃY ỒN ÀO, nêu đúng cột nào thiếu;
+   *   (b) mục (D5) KHÔNG đóng cửa sổ phơi — trong cửa sổ đó bên ghi VẪN tự chọn được
+   *       seq/prev_hash/hash. Nó chỉ biến "im lặng vĩnh viễn" thành "ồn ào ngay lần deploy này";
+   *   (c) và nó KHÔNG tự sửa lược đồ (bẫy [CR4]) — đường sửa là một migration đánh số MỚI, thứ
+   *       chạy TRƯỚC lượt phán xét nên vá xong trong CÙNG một lần deploy.
+   */
+  it("[Task 6 — vòng fix 2 — I1] đổi tên cột bảng sổ làm migrate() GÃY ỒN ÀO, và migration mới vá trong CÙNG lần deploy", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-t6-hinhdang-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+        "003_audit_events.sql",
+        "004_audit_chain_functions.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      await migrate(db.pool, thuMucTam);
+      const { rows: toChuc } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('T6', 't6') RETURNING id",
+      );
+      const org = toChuc[0]!.id;
+
+      // Tác nhân: chủ sở hữu bảng. Hai câu này là toàn bộ cú tấn công.
+      await db.pool.query("ALTER TABLE audit_events RENAME COLUMN user_agent TO ua");
+      await db.pool.query("DROP TRIGGER audit_events_noi_chuoi ON audit_events");
+
+      const loi = await migrate(db.pool, thuMucTam).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(
+        loi,
+        "đổi tên MỘT cột làm bảng sổ mất lớp nối chuỗi mà migrate() vẫn báo OK",
+      ).not.toBeNull();
+      expect(loi!.message).toContain("hình dạng cột của bảng sổ chính tắc");
+      expect(loi!.message).toContain(
+        "public.audit_events: hình dạng cột đã TRÔI — thiếu {user_agent}",
+      );
+
+      // (b) Cửa sổ phơi CÓ THẬT và (D5) không đóng nó — nói ra thay vì để người đọc suy.
+      const { rows: hangGia } = await db.pool.query<{ seq: string }>(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+          "VALUES ($1, 500, 'SYSTEM', 'KHONG_NOI_CHUOI', 'T', sha256('bia'::bytea), " +
+          "sha256('dat'::bytea)) RETURNING seq",
+        [org],
+      );
+      expect(
+        Number(hangGia[0]!.seq),
+        "trigger đã bị gỡ nên bên ghi tự chọn seq — (D5) là PHÁT HIỆN, không phải ngăn chặn",
+      ).toBe(500);
+
+      // (c) KHÔNG tự sửa lược đồ.
+      const { rows: conUa } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_attribute " +
+          " WHERE attrelid = 'public.audit_events'::regclass AND attname = 'ua' " +
+          "   AND attnum > 0 AND NOT attisdropped",
+      );
+      expect(conUa[0]!.n, "mục (D5) TỰ SỬA lược đồ — đúng bẫy [CR4]").toBe("1");
+
+      // QT1: migration đánh số mới, vá trong CÙNG một lần migrate().
+      await writeFile(
+        join(thuMucTam, "005_tra_lai_ten_cot.sql"),
+        "ALTER TABLE audit_events RENAME COLUMN ua TO user_agent;\n",
+        "utf8",
+      );
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual(["005_tra_lai_ten_cot.sql"]);
+
+      const { rows: tg } = await db.pool.query<{ tgname: string; tgenabled: string }>(
+        "SELECT t.tgname, t.tgenabled FROM pg_trigger t " +
+          " WHERE t.tgrelid = 'public.audit_events'::regclass AND NOT t.tgisinternal " +
+          " ORDER BY 1",
+      );
+      expect(tg.map((r) => r.tgname)).toContain("audit_events_noi_chuoi");
+      expect(tg.every((r) => r.tgenabled === "A")).toBe(true);
+
+      // Và đường ghi đóng lại: bên ghi không chọn được seq nữa.
+      const { rows: sauVa } = await db.pool.query<{ seq: string }>(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+          "VALUES ($1, 9000, 'SYSTEM', 'DA_NOI_LAI', 'T', sha256('x'::bytea), " +
+          "sha256('y'::bytea)) RETURNING seq",
+        [org],
+      );
+      expect(Number(sauVa[0]!.seq)).toBe(501);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 180_000);
+
+  /**
+   * [Task 6 — vòng fix 2 — I1] Ba vế còn lại của mục (D5), gộp một container:
+   *   (a) bảng MỐC NEO cùng khuôn — đổi tên `anchored_at` cũng gãy ồn ào;
+   *   (b) THÊM cột thì AN TOÀN (vị từ đếm sự CÓ MẶT của 15 tên, không đếm tổng số cột) — đây là
+   *       ranh giới của bảo đảm, viết ra để không ai đọc rộng hơn;
+   *   (c) hai đường nâng cấp 001/002 và 001/002/003 vẫn QUA — hậu điều kiện mới có tiền điều
+   *       kiện `to_regclass(...) IS NOT NULL`, và đó đúng là chỗ mục (D1c) của vòng trước đã vấp.
+   */
+  it("[Task 6 — vòng fix 2 — I1] (D5): bảng neo cùng khuôn, THÊM cột thì an toàn, hai đường nâng cấp vẫn QUA", async () => {
+    const db = await startPostgres();
+    const d12 = await mkdtemp(join(tmpdir(), "tp-t6-d12-"));
+    const d123 = await mkdtemp(join(tmpdir(), "tp-t6-d123-"));
+    try {
+      // (c) hai đường nâng cấp
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(d12, f));
+        await copyFile(join(MIGRATIONS_DIR, f), join(d123, f));
+      }
+      await copyFile(
+        join(MIGRATIONS_DIR, "003_audit_events.sql"),
+        join(d123, "003_audit_events.sql"),
+      );
+      await expect(migrate(db.pool, d12), "chưa có bảng sổ mà (D5) đã phán xét").resolves.toEqual([
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]);
+      await expect(migrate(db.pool, d123), "có 003 chưa có 004 mà (D5) gãy").resolves.toEqual([
+        "003_audit_events.sql",
+      ]);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([
+        "004_audit_chain_functions.sql",
+      ]);
+
+      // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
+      await db.pool.query("ALTER TABLE audit_events ADD COLUMN ghi_chu text");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: tg } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_trigger t " +
+          " WHERE t.tgrelid = 'public.audit_events'::regclass AND NOT t.tgisinternal " +
+          "   AND t.tgname = 'audit_events_noi_chuoi'",
+      );
+      expect(tg[0]!.n).toBe("1");
+      await db.pool.query("ALTER TABLE audit_events DROP COLUMN ghi_chu");
+
+      // (a) bảng MỐC NEO cùng khuôn.
+      await db.pool.query("ALTER TABLE audit_chain_anchors RENAME COLUMN anchored_at TO neo_luc");
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "đổi tên cột bảng neo mà migrate() vẫn QUA").not.toBeNull();
+      expect(loi!.message).toContain(
+        "public.audit_chain_anchors: hình dạng cột đã TRÔI — thiếu {anchored_at}",
+      );
+      await db.pool.query("ALTER TABLE audit_chain_anchors RENAME COLUMN neo_luc TO anchored_at");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    } finally {
+      await rm(d12, { recursive: true, force: true });
+      await rm(d123, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 180_000);
 });
