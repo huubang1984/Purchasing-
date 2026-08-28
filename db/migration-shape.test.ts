@@ -288,10 +288,18 @@ describe("hình dạng file migration", () => {
   const cacBang = timCacBang(cacFile);
 
   it("có ít nhất một bảng chịu ràng buộc tenant để kiểm — không rỗng ruột", () => {
+    // [Task 8] `user_roles` là bảng DUY NHẤT của 005 có org_id. `permissions`, `roles` và
+    // `role_permissions` là DANH MỤC TOÀN CỤC — không org_id, không phải bảng gốc của cây
+    // tenant, nên chúng không thuộc CẢ HAI loại mà hạ tầng Task 3–6 phân biệt, và cả lớp tĩnh
+    // này lẫn hardening.always.sql đều KHÔNG đụng tới chúng. Đó là hành vi ĐÚNG, không phải một
+    // lỗ: một bảng danh mục toàn cục không mang dữ liệu của tổ chức nào để mà cách ly. Vì thế
+    // KHÔNG có dòng nào được thêm vào NGOAI_LE_HINH_DANG (danh sách đó vẫn RỖNG ở S0) — xem
+    // db/migrations/005_identity.sql khối "LỆCH KHỎI BRIEF (1/3)".
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
       "organizations",
+      "user_roles",
       "users",
     ]);
   });

@@ -1,6 +1,6 @@
 import type pg from "pg";
 import type { ExternalAnchor } from "./writer.js";
-import { khangDinhDungTenant } from "./tenant-guard.js";
+import { assertTenantBound } from "./tenant-guard.js";
 
 export type ChainProblemKind =
   | "HASH_MISMATCH"
@@ -107,14 +107,14 @@ interface HangChuoi {
  * chế ở mọi lần migrate() (mục D1a).
  *
  * NÉM (không trả về kết quả) khi phiên đang gắn một tổ chức KHÁC `orgId` — xem
- * `khangDinhDungTenant`.
+ * `assertTenantBound`.
  */
 export async function verifyAuditChain(
   client: pg.PoolClient,
   orgId: string,
   options: VerifyOptions,
 ): Promise<VerificationResult> {
-  await khangDinhDungTenant(client, orgId, "verifyAuditChain");
+  await assertTenantBound(client, orgId, "verifyAuditChain");
 
   const { rows } = await client.query<HangChuoi>(
     `SELECT ae.seq, ae.prev_hash, ae.hash,

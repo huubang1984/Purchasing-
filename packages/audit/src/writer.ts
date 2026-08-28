@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { khangDinhDungTenant } from "./tenant-guard.js";
+import { assertTenantBound } from "./tenant-guard.js";
 
 export type ActorType = "USER" | "SUPPLIER" | "SYSTEM" | "SERVICE";
 
@@ -179,7 +179,7 @@ export async function recordChainAnchor(
   client: pg.PoolClient,
   orgId: string,
 ): Promise<ChainAnchor | null> {
-  await khangDinhDungTenant(client, orgId, "recordChainAnchor");
+  await assertTenantBound(client, orgId, "recordChainAnchor");
 
   const { rows } = await client.query<{ seq: string; hash: Buffer }>(
     `INSERT INTO public.audit_chain_anchors (org_id)
@@ -206,7 +206,7 @@ export async function recordChainAnchor(
  * [vòng fix 1 — IM3/M5] Hàm này đọc DƯỚI RLS, nên nó PHẢI tự kiểm tenant: một job xuất neo chạy
  * sai tenant lặng lẽ không xuất gì (và cửa sổ F-3 mở vô hạn mà không ai biết), còn dưới một
  * policy cắt đuôi nó xuất một đầu chuỗi NGẮN HƠN sự thật và rửa lần cắt đuôi đó thành gốc tin
- * cậy. Xem `khangDinhDungTenant`.
+ * cậy. Xem `assertTenantBound`.
  *
  * [vòng fix 2 — I2] Trả `ChainHeadExport`, KHÔNG phải `ExternalAnchor`, và đó là chủ ý: giá trị
  * vừa đọc ra từ CHÍNH cái sổ đang kiểm không chứng minh được gì về cái sổ đó. Muốn nó thành một
@@ -216,7 +216,7 @@ export async function exportChainHead(
   client: pg.PoolClient,
   orgId: string,
 ): Promise<ChainHeadExport | null> {
-  await khangDinhDungTenant(client, orgId, "exportChainHead");
+  await assertTenantBound(client, orgId, "exportChainHead");
 
   const { rows } = await client.query<{ seq: string; hash_hex: string }>(
     `SELECT ae.seq, pg_catalog.encode(ae.hash, 'hex') AS hash_hex

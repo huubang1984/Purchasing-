@@ -654,10 +654,25 @@ describe("phủ RLS", () => {
     // UPDATE/DELETE/TRUNCATE trên bảng sổ") KHÔNG được khẳng định ở đây: view này lọc theo
     // grantee nên nó mù với PUBLIC, và nó mù hẳn với quyền cột. Phép kiểm có thẩm quyền cho B4
     // đọc pg_class.relacl + pg_attribute.attacl ở db/audit-append-only.int.test.ts.
+    // [Task 8] Bốn bảng mới của 005. Ba vắng mặt là load-bearing và mỗi cái trả lời câu hỏi
+    // "ai sửa được ma trận quyền, bằng đường nào?":
+    //   `permissions`, `roles`, `role_permissions` chỉ SELECT -> một app_api BỊ CHIẾM không tự
+    //     cấp quyền cho vai trò của mình được; đường sửa DUY NHẤT là một migration đánh số mới.
+    //     Đó là bất biến D3 nhìn từ phía quyền, và nó là lệch có chủ đích khỏi bản kế hoạch
+    //     (bản đó cấp SELECT/INSERT/UPDATE/DELETE trên cả ba).
+    //   `user_roles` có SELECT + DELETE ở mức bảng, INSERT là quyền CỘT (xem test [M5] dưới) —
+    //     gán/thu hồi vai trò LÀ việc của ứng dụng, sửa MA TRẬN thì không.
+    //   Không cấp gì cho app_unseal trên cả bốn: `hasPermission` nối qua `users`, mà app_unseal
+    //     không có quyền đọc `users` (quyết định của 002), nên một GRANT ở đây sẽ là quyền
+    //     không dùng được — đúng thứ 002 đã từ chối cấp "cho chắc".
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "roles", quyen: "SELECT" },
+      { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
@@ -719,6 +734,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
+      // [Task 8] `user_roles` cấp INSERT theo CỘT, và `granted_at` vắng mặt là load-bearing:
+      // dấu thời gian do CSDL đóng, bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được
+      // theo ý mình (cùng khuôn `occurred_at` ở 003 và `created_at` ở 002). KHÔNG có UPDATE trên
+      // bất kỳ cột nào: mọi thay đổi biểu diễn được bằng DELETE + INSERT, và một UPDATE
+      // `role_code` là đường đi mà trigger D3 khó soi nhất trong khi không mua thêm năng lực nào.
+      { grantee: "app_api", bang: "user_roles", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_roles", cot: "role_code", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_roles", cot: "user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "email", quyen: "UPDATE" },
       { grantee: "app_api", bang: "users", cot: "full_name", quyen: "INSERT" },

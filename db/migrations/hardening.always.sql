@@ -960,6 +960,100 @@ DECLARE
         WHERE b.bang_oid IS NOT NULL
           AND NOT ($q$ || pg_catalog.format(MAU_HINH_DANG_NEO, 'b') || $q$)$q$;
 
+  -- ---- [Task 8] BẤT BIẾN D3 (PHÂN TÁCH NHIỆM VỤ) — HAI TẦNG, HAI THỜI ĐIỂM ---------------
+  -- D3 (docs/TEST-PLAN.md): "Chuỗi tạo RFQ -> chọn nhà cung cấp -> mở thầu -> award -> duyệt
+  -- không nằm trọn trong tay một người (ma trận mục 25)". Nó là một bất biến về DỮ LIỆU, không
+  -- về mã: một câu UPDATE trên `role_permissions` hoặc một dòng thừa trong `user_roles` phá nó
+  -- mà không một test hành vi nào đỏ.
+  --
+  -- HAI TẦNG, HAI THỜI ĐIỂM, HAI TRIGGER — và cả hai đều là TRIGGER chứ không phải một phép
+  -- phán xét ở thời điểm deploy. Xem khối chú thích của THAN_MA_TRAN bên dưới để biết phép đo
+  -- đã loại bỏ hướng "phán xét ở thời điểm deploy":
+  --   * mức NGƯỜI DÙNG (THAN_PHAN_TACH, trên `user_roles`): bảng app_api GHI ĐƯỢC, nên gán cho
+  --     một người cả PROCUREMENT_MANAGER lẫn DIRECTOR là đủ để một người nắm trọn chuỗi;
+  --   * mức VAI TRÒ (THAN_MA_TRAN, trên `role_permissions`): danh mục toàn cục, chỉ chủ sở hữu
+  --     ghi được, nhưng một migration sau (hoặc một lần can thiệp tay) vẫn tạo được vai trò ôm
+  --     trọn chuỗi.
+  --
+  -- Năm mã quyền ấy xuất hiện trong BỐN thân hàm (hai ở đây, hai ở 005_identity.sql) và trong
+  -- hằng `SEPARATION_OF_DUTIES_CHAIN` của packages/identity/src/permissions.ts. Meta-test
+  -- packages/identity/src/ma-tran-quyen.test.ts đọc tất cả và so sánh, đúng khuôn §R3 đã dùng
+  -- cho thân app_current_org_id() và thân noi_chuoi_kiem_toan(). Các bản khớp nhau là điều kiện
+  -- để các lớp nói về CÙNG MỘT bất biến; một bản trôi đi là kiểu hỏng mà không test hành vi nào
+  -- bắt được.
+
+  -- Thân hàm canh phân tách nhiệm vụ. Bản NGUỒN ở db/migrations/005_identity.sql §(4); hai bản
+  -- phải khớp sau khi chuẩn hoá khoảng trắng. Thân hàm cố ý KHÔNG mang chú thích: hậu điều kiện
+  -- so prosrc theo văn bản, nên mọi chú thích phải nằm NGOÀI $tpt$ ở cả hai file.
+  --
+  -- Vì sao mục này PHẢI cưỡng chế cả THÂN, không chỉ "trigger còn đó không": đúng bài học [CR1]
+  -- của Task 5 và (D1b) của Task 6 — "CREATE OR REPLACE FUNCTION ... BEGIN RETURN NULL; END"
+  -- giữ nguyên tên hàm, tên trigger, tgfoid và tgenabled, nhưng biến phép canh D3 thành no-op.
+  THAN_PHAN_TACH constant text := $tpt$
+DECLARE
+  con_thieu bigint;
+BEGIN
+  SELECT count(*) INTO con_thieu
+    FROM unnest(ARRAY['rfq.create', 'rfq.invite', 'rfq.unseal',
+                      'award.recommend', 'po.approve']) AS chuoi(ma)
+   WHERE NOT EXISTS (
+           SELECT 1
+             FROM public.user_roles ur
+             JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+            WHERE ur.org_id = NEW.org_id
+              AND ur.user_id = NEW.user_id
+              AND rp.permission_code = chuoi.ma);
+
+  IF con_thieu = 0 THEN
+    RAISE EXCEPTION 'Phân tách nhiệm vụ (D3): người dùng % sẽ nắm trọn chuỗi tạo RFQ -> chọn nhà cung cấp -> mở thầu -> award -> duyệt', NEW.user_id
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
+  RETURN NULL;
+END
+$tpt$;
+
+  -- Thân hàm canh D3 Ở MỨC VAI TRÒ. Bản NGUỒN ở db/migrations/005_identity.sql §(3).
+  --
+  -- LỆCH KHỎI ĐƠN THUỐC, CÓ ĐO — và đây là phép đo đáng ghi lại nhất của Task 8. Bản đầu của
+  -- mục (E2) là một câu PHÁN XÉT đọc thẳng `public.role_permissions` ở thời điểm deploy. Nó gãy
+  -- trên khuôn triển khai mà CHÍNH dự án này kiểm thử — superuser bootstrap một lần rồi mọi
+  -- deploy sau chạy dưới role KHÔNG sở hữu bảng và KHÔNG có GRANT nào (db/migrations.int.test.ts
+  -- "[fix round 4 — N2] nhánh 1"):
+  --     Hardening hardening.always.sql (phan_xet) thất bại:
+  --     permission denied for table role_permissions        (SQLSTATE 42501)
+  -- migrate() chết trên một lược đồ HOÀN TOÀN ĐÚNG — đúng cái bẫy QT1 cấm. Nguyên nhân gốc là
+  -- một tiền đề ngầm của cả file này mà không dòng nào nói ra: MỌI mục phán xét khác chỉ đọc
+  -- pg_catalog, thứ mọi role đọc được. Mục đầu tiên đọc một BẢNG NGHIỆP VỤ là mục đầu tiên gãy.
+  -- Ai thêm mục mới vào file này phải biết ràng buộc đó.
+  --
+  -- Bản vá KHÔNG phải "cấp thêm quyền cho role deploy" (nới một bảo đảm ra để mua một phép
+  -- kiểm — đúng thứ QT2 cấm) mà là ĐỔI TẦNG: phép kiểm chuyển thành một trigger chạy trong
+  -- phiên của NGƯỜI GHI, tức người duy nhất tạo ra được vi phạm. Nó không đòi thêm quyền deploy
+  -- nào, và nó canh LIÊN TỤC thay vì mỗi lần deploy. File này chỉ còn canh SỰ TỒN TẠI và THÂN
+  -- của hàm + trigger đó, và việc ấy đọc thuần pg_catalog.
+  THAN_MA_TRAN constant text := $tmt$
+DECLARE
+  con_thieu bigint;
+BEGIN
+  SELECT count(*) INTO con_thieu
+    FROM unnest(ARRAY['rfq.create', 'rfq.invite', 'rfq.unseal',
+                      'award.recommend', 'po.approve']) AS chuoi(ma)
+   WHERE NOT EXISTS (
+           SELECT 1
+             FROM public.role_permissions rp
+            WHERE rp.role_code = NEW.role_code
+              AND rp.permission_code = chuoi.ma);
+
+  IF con_thieu = 0 THEN
+    RAISE EXCEPTION 'Phân tách nhiệm vụ (D3): vai trò % ôm TRỌN chuỗi tạo RFQ -> chọn nhà cung cấp -> mở thầu -> award -> duyệt', NEW.role_code
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
+  RETURN NULL;
+END
+$tmt$;
+
   -- Thân hàm băm. Bản NGUỒN nằm ở db/migrations/004_audit_chain_functions.sql.
   -- Vì sao nó PHẢI được cưỡng chế, và vì sao nó là mục quan trọng nhất mà Task 6 thêm vào file
   -- này: bộ kiểm chứng chuỗi TÍNH LẠI băm BẰNG CHÍNH HÀM NÀY (đó là điều loại bỏ lớp lỗi lệch
@@ -2115,6 +2209,187 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_HINH_DANG_CHINH_TAC || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_HINH_DANG_CHINH_TAC || $q$) t)$q$,
       $q$quyền sở hữu bảng sổ để chạy ALTER TABLE ... RENAME COLUMN trong một migration đánh số MỚI — mục này CỐ Ý KHÔNG tự sửa lược đồ$q$
+    ],
+
+    -- ---- [Task 8] (E1) Hàm + trigger PHÂN TÁCH NHIỆM VỤ trên public.user_roles ----------
+    -- Vì sao mục này tồn tại: `user_roles_phan_tach_nhiem_vu` và
+    -- `public.kiem_tra_phan_tach_nhiem_vu()` được tạo MỘT LẦN trong 005_identity.sql, nên chúng
+    -- là đúng lớp trôi mà Task 5 đã mô tả cho sáu trigger sổ — 005 nằm trong schema_migrations
+    -- sau lần deploy đầu và không bao giờ chạy lại. Bốn đường trôi đã biết, cùng danh sách với
+    -- [CR1] của Task 5, và mục này đóng cả bốn:
+    --   DROP TRIGGER · ALTER TABLE ... DISABLE TRIGGER · ENABLE REPLICA TRIGGER (bỏ ENABLE
+    --   ALWAYS) · CREATE OR REPLACE FUNCTION giữ nguyên tên nhưng thân "BEGIN RETURN NULL; END".
+    -- Đường thứ tư là đường nguy hiểm nhất và là lý do hậu điều kiện phải so THÂN hàm: tên
+    -- trigger, tgfoid, tgenabled đều KHÔNG đổi, nên một phép kiểm chỉ hỏi "trigger còn đó không"
+    -- xanh hết.
+    --
+    -- VÌ SAO CHỈ DỰNG LẠI TRIGGER KHI NÓ ĐANG SAI: DROP + CREATE TRIGGER lấy ACCESS EXCLUSIVE
+    -- trên `user_roles`. Chạy vô điều kiện thì MỌI lần deploy khoá bảng gán vai trò — cùng lý do
+    -- mục (D2) chỉ đụng tới trigger nằm trong CTE `sai`. CREATE OR REPLACE FUNCTION thì chạy vô
+    -- điều kiện (không khoá bảng nào), đúng khuôn (D1a)/(D1b).
+    --
+    -- [QT1 — ai sửa được, bằng cách nào, trong bao lâu] proowner/relowner là chính role deploy
+    -- (005 và lượt SỬA của file này đều chạy dưới nó), nên mục TỰ CHỮA ở lần deploy kế — không
+    -- ai phải sửa tay trên cụm. Ngoại lệ đã biết, giống hệt (D1a)/(D1b): sau một
+    -- "ALTER FUNCTION ... OWNER TO postgres" hoặc "ALTER TABLE public.user_roles OWNER TO
+    -- postgres", câu cưỡng chế dưới role deploy trả 42501 và mục hết tự chữa; đường sửa là
+    -- ALTER ... OWNER TO <role deploy> bằng superuser. Có test đo đúng ca đó, và nó phải là ca
+    -- KẾT HỢP (đổi chủ sở hữu + hỏng thân hàm): chỉ đổi chủ sở hữu thôi thì hậu điều kiện vẫn
+    -- ĐÚNG và mục vẫn qua — đột biến đơn lớp "sống sót mà không có nghĩa gì".
+    -- [QT1 — ném được lỗi gì ngoài 42501] Đã rà: (a) 42P13 "cannot change return type" nếu ai đó
+    -- thay hàm bằng hàm cùng tên khác kiểu trả về — đóng bằng DROP CÓ ĐIỀU KIỆN đứng trước, đúng
+    -- khuôn [CR3] của (D1a); (b) 2BP01 nếu DROP chạy khi trigger còn phụ thuộc — không xảy ra vì
+    -- vế điều kiện (prorettype <> trigger) loại đúng ca đó; (c) 42710 "... is a constraint
+    -- trigger" nếu ai đó cắm một CONSTRAINT TRIGGER trùng tên — đóng bằng "DROP TRIGGER IF
+    -- EXISTS" đứng TRƯỚC "CREATE OR REPLACE TRIGGER", đúng khuôn [CR3] của (D2); (d) 42P01 nếu
+    -- `public.user_roles` không tồn tại — loại bằng chính vế điều kiện của mục này, và đó là lý
+    -- do vế điều kiện KHÔNG phải `true`: trên lược đồ rút gọn chỉ có 001/002 (các test tích hợp
+    -- của dự án dùng thư mục như thế) mục này phải NẰM IM hoàn toàn. Mọi lỗi khác vẫn bị BƯỚC 2
+    -- nuốt và BƯỚC 3 phán xét.
+    ARRAY[
+      $q$hàm + trigger phân tách nhiệm vụ (D3) trên public.user_roles$q$,
+      $q$to_regclass('public.user_roles') IS NOT NULL$q$,
+      $q$DO $fnpt$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.kiem_tra_phan_tach_nhiem_vu()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.kiem_tra_phan_tach_nhiem_vu();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.kiem_tra_phan_tach_nhiem_vu() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $tpt$$q$ || THAN_PHAN_TACH || $q$$tpt$;
+
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.user_roles')
+                             AND t.tgname = 'user_roles_phan_tach_nhiem_vu'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.kiem_tra_phan_tach_nhiem_vu()')
+                             AND t.tgenabled = 'A'
+                             AND t.tgtype = 21) THEN
+             DROP TRIGGER IF EXISTS user_roles_phan_tach_nhiem_vu ON public.user_roles;
+             CREATE OR REPLACE TRIGGER user_roles_phan_tach_nhiem_vu
+               AFTER INSERT OR UPDATE ON public.user_roles
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_tra_phan_tach_nhiem_vu();
+             ALTER TABLE public.user_roles ENABLE ALWAYS TRIGGER user_roles_phan_tach_nhiem_vu;
+           END IF;
+         END
+         $fnpt$$q$,
+      -- tgtype = 21 = ROW(1) + INSERT(4) + UPDATE(16), và KHÔNG có bit BEFORE(2). AFTER là bắt
+      -- buộc chứ không phải khẩu vị: trigger AFTER ROW được xếp hàng và bắn ở CUỐI câu lệnh, nên
+      -- một INSERT nhiều hàng được xét khi TẤT CẢ hàng của câu đó đã hiện diện. Một BEFORE ROW
+      -- bỏ lọt đúng ca "gán hai vai trò trong MỘT câu INSERT" — tức đúng đường đi rẻ nhất.
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = btrim(regexp_replace($q$ || pg_catalog.quote_literal(THAN_PHAN_TACH) || $q$, '\s+', ' ', 'g'))
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.user_roles')
+                           AND t.tgname = 'user_roles_phan_tach_nhiem_vu'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND t.tgtype = 21)
+           FROM pg_proc p
+          WHERE p.oid = to_regprocedure('public.kiem_tra_phan_tach_nhiem_vu()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT t.tgname || ':enabled=' || t.tgenabled::text
+                                                          || ':type=' || t.tgtype::text
+                                                          || ':fn=' || t.tgfoid::regprocedure::text
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgrelid = to_regclass('public.user_roles')
+                                                           AND t.tgname = 'user_roles_phan_tach_nhiem_vu'
+                                                           AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.kiem_tra_phan_tach_nhiem_vu()')),
+                  'hàm public.kiem_tra_phan_tach_nhiem_vu() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.kiem_tra_phan_tach_nhiem_vu() và bảng public.user_roles (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [Task 8] (E2) Hàm + trigger MA TRẬN QUYỀN trên public.role_permissions ---------
+    -- Song sinh của (E1) ở tầng VAI TRÒ. Cùng bốn đường trôi, cùng lập luận "phải so THÂN chứ
+    -- không chỉ hỏi trigger còn đó không", cùng khuôn DROP-có-điều-kiện + DROP TRIGGER IF EXISTS.
+    -- Vì sao nó là TRIGGER chứ không phải một câu phán xét đọc bảng ở thời điểm deploy: xem khối
+    -- chú thích của hằng THAN_MA_TRAN — bản phán xét đã ĐO ĐƯỢC là gãy với 42501 trên khuôn
+    -- triển khai mà chính dự án này kiểm thử.
+    --
+    -- [QT1 — ai sửa được, bằng cách nào, trong bao lâu] Giống hệt (E1): proowner/relowner là
+    -- role deploy nên mục TỰ CHỮA ở lần deploy kế. Nếu chính DỮ LIỆU vi phạm (một vai trò ôm
+    -- trọn chuỗi đã nằm sẵn trong bảng), trigger này KHÔNG gỡ nó — nó chỉ chặn hàng MỚI. Đó là
+    -- chủ ý: gỡ hộ một dòng role_permissions là migrate() tự tay đổi chính sách an ninh của
+    -- khách hàng, đúng thứ [CR4] cấm. Lớp bắt ca đó là phép kiểm tĩnh trên văn bản migration
+    -- (packages/identity/src/ma-tran-quyen.test.ts, chạy không cần Docker), và đường sửa là một
+    -- migration đánh số MỚI chạy DELETE.
+    -- [QT1 — ném được lỗi gì ngoài 42501] Cùng danh sách với (E1): 42P13 (đóng bằng DROP có
+    -- điều kiện), 2BP01 (không xảy ra vì vế điều kiện loại đúng ca đó), 42710 (đóng bằng DROP
+    -- TRIGGER IF EXISTS), 42P01 (loại bằng vế điều kiện `to_regclass(...) IS NOT NULL`).
+    -- KHÔNG có ca 42501 vì đọc bảng nghiệp vụ: hậu điều kiện của mục này đọc THUẦN pg_catalog.
+    ARRAY[
+      $q$hàm + trigger ma trận quyền (D3) trên public.role_permissions$q$,
+      $q$to_regclass('public.role_permissions') IS NOT NULL$q$,
+      $q$DO $fnmt$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.kiem_tra_ma_tran_quyen()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.kiem_tra_ma_tran_quyen();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.kiem_tra_ma_tran_quyen() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $tmt$$q$ || THAN_MA_TRAN || $q$$tmt$;
+
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.role_permissions')
+                             AND t.tgname = 'role_permissions_ma_tran_quyen'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.kiem_tra_ma_tran_quyen()')
+                             AND t.tgenabled = 'A'
+                             AND t.tgtype = 21) THEN
+             DROP TRIGGER IF EXISTS role_permissions_ma_tran_quyen ON public.role_permissions;
+             CREATE OR REPLACE TRIGGER role_permissions_ma_tran_quyen
+               AFTER INSERT OR UPDATE ON public.role_permissions
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_tra_ma_tran_quyen();
+             ALTER TABLE public.role_permissions ENABLE ALWAYS TRIGGER role_permissions_ma_tran_quyen;
+           END IF;
+         END
+         $fnmt$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = btrim(regexp_replace($q$ || pg_catalog.quote_literal(THAN_MA_TRAN) || $q$, '\s+', ' ', 'g'))
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.role_permissions')
+                           AND t.tgname = 'role_permissions_ma_tran_quyen'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND t.tgtype = 21)
+           FROM pg_proc p
+          WHERE p.oid = to_regprocedure('public.kiem_tra_ma_tran_quyen()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT t.tgname || ':enabled=' || t.tgenabled::text
+                                                          || ':type=' || t.tgtype::text
+                                                          || ':fn=' || t.tgfoid::regprocedure::text
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgrelid = to_regclass('public.role_permissions')
+                                                           AND t.tgname = 'role_permissions_ma_tran_quyen'
+                                                           AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.kiem_tra_ma_tran_quyen()')),
+                  'hàm public.kiem_tra_ma_tran_quyen() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.kiem_tra_ma_tran_quyen() và bảng public.role_permissions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- Tám trigger (hai bảng × ba sự kiện chỉ-ghi-thêm, cộng trigger nối chuỗi trên

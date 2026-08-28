@@ -5,13 +5,46 @@ import {
   type TestDatabase,
 } from "@trustprocure/test-support";
 import { readFileSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
+
+/**
+ * [Task 8] Trạng thái CHUẨN của hai mục (E1)/(E2): cả hai hàm D3 còn nguyên thân + proconfig, và
+ * cả hai trigger còn đó ở đúng hình dạng (FOR EACH ROW, AFTER INSERT OR UPDATE = tgtype 21) với
+ * `tgenabled = 'A'` (ENABLE ALWAYS).
+ *
+ * Cố ý viết ĐỘC LẬP với hậu điều kiện trong hardening.always.sql thay vì trích lại nó: một phép
+ * kiểm sao chép nguyên văn thứ nó đang kiểm sẽ xanh cùng lúc với thứ đó, kể cả khi cả hai sai.
+ * `prosrc LIKE '%award.recommend%'` là vế bắt đường trôi nguy hiểm nhất — thân bị thay bằng
+ * "BEGIN RETURN NULL; END" giữ nguyên tên hàm, tên trigger, tgfoid và tgenabled.
+ */
+async function trangThaiD3DungChuan(db: TestDatabase): Promise<boolean> {
+  const { rows } = await db.pool.query<{ ok: boolean | null }>(
+    "SELECT bool_and(t.ok) AS ok FROM (" +
+      "  SELECT (p.proconfig = ARRAY['search_path=pg_catalog']" +
+      "          AND p.prosrc LIKE '%award.recommend%'" +
+      "          AND p.prosecdef IS FALSE" +
+      "          AND EXISTS (SELECT 1 FROM pg_trigger tg" +
+      "                       WHERE tg.tgrelid = to_regclass(x.bang)" +
+      "                         AND tg.tgname = x.ten_trigger" +
+      "                         AND NOT tg.tgisinternal" +
+      "                         AND tg.tgfoid = p.oid" +
+      "                         AND tg.tgenabled = 'A'" +
+      "                         AND tg.tgtype = 21)) AS ok" +
+      "    FROM (VALUES ('public.kiem_tra_phan_tach_nhiem_vu()', 'public.user_roles'," +
+      "                  'user_roles_phan_tach_nhiem_vu')," +
+      "                 ('public.kiem_tra_ma_tran_quyen()', 'public.role_permissions'," +
+      "                  'role_permissions_ma_tran_quyen')) AS x(ham, bang, ten_trigger)" +
+      "    LEFT JOIN pg_proc p ON p.oid = to_regprocedure(x.ham)" +
+      ") t",
+  );
+  return rows[0]?.ok === true;
+}
 
 /**
  * [fix round 4 — N2] Dựng đúng kịch bản vận hành mà vòng 3 làm gãy: cụm được bootstrap bằng
@@ -1695,6 +1728,7 @@ describe("migration của dự án", () => {
           "002_organizations_and_users.sql",
           "003_audit_events.sql",
           "004_audit_chain_functions.sql",
+          "005_identity.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -3857,7 +3891,13 @@ describe("migration của dự án", () => {
           migrate(poolB, MIGRATIONS_DIR),
         ]);
         // Đúng một bên áp dụng bộ migration đánh số; bên kia thấy chúng đã có.
-        expect([a.length, b.length].sort((x, y) => x - y)).toEqual([0, 4]);
+        // [Task 8] 5 = số migration đánh số hiện có. Đọc từ thư mục thay vì ghi cứng: con số
+        // này không phải thứ test đang canh (nó canh "đúng MỘT trong hai lượt áp dụng"), nên
+        // ghi cứng chỉ làm nó đỏ ở mọi task thêm migration.
+        const soMigration = (await readdir(MIGRATIONS_DIR)).filter(
+          (f) => f.endsWith(".sql") && !f.endsWith(".always.sql"),
+        ).length;
+        expect([a.length, b.length].sort((x, y) => x - y)).toEqual([0, soMigration]);
       } finally {
         await poolA.end();
         await poolB.end();
@@ -4468,6 +4508,7 @@ describe("migration của dự án", () => {
       ]);
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([
         "004_audit_chain_functions.sql",
+        "005_identity.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4496,6 +4537,184 @@ describe("migration của dự án", () => {
     } finally {
       await rm(d12, { recursive: true, force: true });
       await rm(d123, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [Task 8] HAI MỤC MỚI CỦA NHÓM (E): hàm + trigger phân tách nhiệm vụ (D3).
+  //
+  // Cả hai mục canh CÙNG MỘT bất biến ở hai tầng, và cả hai đều là "trigger được tạo MỘT LẦN
+  // trong một migration đánh số" — đúng lớp trôi mà nhóm (D) của Task 5/6 đã mô tả. Bốn đường
+  // trôi đã biết, và test dưới đây đi hết cả bốn cho từng tầng.
+  // ==========================================================================================
+
+  it("[Task 8 — (E1)/(E2)] bốn đường trôi của trigger D3 đều được lượt SỬA dựng lại", async () => {
+    await withMigratedDatabase(async (db) => {
+      const cacCa: [string, string][] = [
+        ["DROP TRIGGER", "DROP TRIGGER user_roles_phan_tach_nhiem_vu ON public.user_roles"],
+        [
+          "DISABLE TRIGGER",
+          "ALTER TABLE public.user_roles DISABLE TRIGGER user_roles_phan_tach_nhiem_vu",
+        ],
+        [
+          "hạ ENABLE ALWAYS xuống ORIGIN",
+          "ALTER TABLE public.user_roles ENABLE TRIGGER user_roles_phan_tach_nhiem_vu",
+        ],
+        [
+          "thay THÂN hàm thành no-op",
+          "CREATE OR REPLACE FUNCTION public.kiem_tra_phan_tach_nhiem_vu() RETURNS trigger " +
+            "LANGUAGE plpgsql AS $f$ BEGIN RETURN NULL; END $f$",
+        ],
+        [
+          "thay THÂN hàm ma trận thành no-op",
+          "CREATE OR REPLACE FUNCTION public.kiem_tra_ma_tran_quyen() RETURNS trigger " +
+            "LANGUAGE plpgsql AS $f$ BEGIN RETURN NULL; END $f$",
+        ],
+        [
+          "DROP TRIGGER ma trận",
+          "DROP TRIGGER role_permissions_ma_tran_quyen ON public.role_permissions",
+        ],
+      ];
+
+      for (const [nhan, cauTroi] of cacCa) {
+        await db.pool.query(cauTroi);
+        // Chống rỗng ruột: câu gây trôi phải THẬT SỰ làm hậu điều kiện sai. Không có vế này,
+        // một câu viết sai (vd. sai tên trigger) sẽ cho test xanh mà chẳng chứng minh gì.
+        expect(await trangThaiD3DungChuan(db), `${nhan}: câu gây trôi không đổi được gì`).toBe(
+          false,
+        );
+        await expect(migrate(db.pool, MIGRATIONS_DIR), nhan).resolves.toEqual([]);
+        expect(await trangThaiD3DungChuan(db), `${nhan}: lượt SỬA không dựng lại được`).toBe(true);
+      }
+    });
+  }, 180_000);
+
+  it("[Task 8 — QT1] role deploy không sở hữu: THÂN hàm và TRIGGER D3 sai đều làm migrate() GÃY", async () => {
+    // Đây là mũi ĐỘT BIẾN KẾT HỢP mà bài học S10 của Task 6 đòi: chỉ đổi chủ sở hữu thì hậu
+    // điều kiện VẪN ĐÚNG và mục vẫn qua (một mũi đơn lớp "sống sót mà không có nghĩa gì"); chỉ
+    // làm hỏng thân thì lượt SỬA tự chữa và mục cũng qua. Phải làm CẢ HAI thì hậu điều kiện mới
+    // là lớp duy nhất còn lại.
+    //
+    // [FIXTURE CŨNG PHẢI CHỊU ĐỘT BIẾN] Bản đầu của test này thay hàm bằng
+    //     CREATE OR REPLACE FUNCTION ... LANGUAGE plpgsql AS $f$ BEGIN RETURN NULL; END $f$
+    // tức MẤT LUÔN "SET search_path = pg_catalog". Đo được: đột biến "gỡ vế so THÂN hàm khỏi
+    // hậu điều kiện (E1)" khi ấy SỐNG SÓT — vì vế `proconfig` một mình đã đủ bắt fixture. Fixture
+    // tấn công HAI tính chất cùng lúc nên nó không đo được tính chất nào. Nay nó GIỮ NGUYÊN
+    // proconfig/prosecdef/prolang/prorettype và CHỈ đổi thân — đúng cách một kẻ tấn công muốn
+    // núp dưới một hàm "trông vẫn đúng" sẽ làm, và là cách duy nhất để vế so THÂN là vế DUY NHẤT
+    // còn lại.
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        // Đối chứng: không trôi thì deploy thường vẫn QUA (nếu vế này đỏ, mục mới đang đòi một
+        // quyền deploy mà lược đồ đúng không có — đúng cái bẫy QT1 cấm).
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        // ---- ĐƯỜNG TRÔI 1: THÂN hàm bị thay, MỌI thuộc tính khác giữ nguyên -----------------
+        for (const ten of ["kiem_tra_phan_tach_nhiem_vu", "kiem_tra_ma_tran_quyen"]) {
+          await db.pool.query(
+            `CREATE OR REPLACE FUNCTION public.${ten}() RETURNS trigger ` +
+              "LANGUAGE plpgsql SET search_path = pg_catalog AS $f$ BEGIN RETURN NULL; END $f$",
+          );
+        }
+        // Chống rỗng ruột: hàm phải TRÔNG VẪN ĐÚNG ở mọi thuộc tính ngoài thân.
+        const { rows: thuocTinh } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM pg_proc p " +
+            " WHERE p.proname IN ('kiem_tra_phan_tach_nhiem_vu', 'kiem_tra_ma_tran_quyen') " +
+            "   AND p.proconfig = ARRAY['search_path=pg_catalog'] AND p.prosecdef IS FALSE",
+        );
+        expect(thuocTinh[0]!.n, "fixture đổi cả thuộc tính -> nó đo vế khác").toBe("2");
+
+        const loi1 = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi1, "hai hàm D3 bị thay THÂN mà migrate() vẫn QUA").not.toBeNull();
+        expect(loi1!.message).toContain(
+          "hàm + trigger phân tách nhiệm vụ (D3) trên public.user_roles",
+        );
+        expect(loi1!.message).toContain(
+          "hàm + trigger ma trận quyền (D3) trên public.role_permissions",
+        );
+        expect(loi1!.message).toContain("Cần quyền");
+        // Trôi vẫn còn NGUYÊN: migrate() gãy chứ không sửa một nửa rồi im.
+        expect(await trangThaiD3DungChuan(db)).toBe(false);
+
+        // Chủ thể CÓ quyền sở hữu chạy migrate() -> tự chữa hết trong một lần.
+        await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+        expect(await trangThaiD3DungChuan(db)).toBe(true);
+
+        // ---- ĐƯỜNG TRÔI 2: TRIGGER bị gỡ, hàm còn nguyên ------------------------------------
+        // Hai bảng do superuser tạo nên role deploy KHÔNG sở hữu chúng: câu CREATE TRIGGER của
+        // lượt SỬA nhận 42501 ("must be owner of relation"), và vế TRIGGER trong hậu điều kiện
+        // là lớp DUY NHẤT còn lại. Không có đường trôi này, vế đó là mã chết — đã đo: gỡ nó khỏi
+        // (E1) thì toàn bộ test "[Task 8]" vẫn XANH.
+        await db.pool.query(
+          "DROP TRIGGER user_roles_phan_tach_nhiem_vu ON public.user_roles; " +
+            "DROP TRIGGER role_permissions_ma_tran_quyen ON public.role_permissions",
+        );
+        const loi2 = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi2, "hai trigger D3 bị gỡ mà migrate() vẫn QUA").not.toBeNull();
+        expect(loi2!.message).toContain(
+          "hàm + trigger phân tách nhiệm vụ (D3) trên public.user_roles",
+        );
+        expect(loi2!.message).toContain(
+          "hàm + trigger ma trận quyền (D3) trên public.role_permissions",
+        );
+        expect(loi2!.message).toContain("(KHÔNG CÓ)");
+        expect(await trangThaiD3DungChuan(db)).toBe(false);
+      } finally {
+        await poolTrienKhai.end();
+      }
+
+      // Đường sửa cuối: chủ sở hữu chạy migrate() -> tự chữa hết.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await trangThaiD3DungChuan(db)).toBe(true);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  it("[Task 8 — (E1)/(E2)] trên lược đồ chỉ có 001/002, hai mục MỚI nằm im", async () => {
+    // Vế điều kiện `to_regclass(...) IS NOT NULL` không phải trang trí: các test tích hợp của
+    // dự án dùng thư mục migration rút gọn, và một mục đòi `public.user_roles` tồn tại sẽ ném
+    // 42P01 ở BƯỚC 3 — tức migrate() chết trên một lược đồ hoàn toàn hợp lệ.
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-t8-rutgon-"));
+    try {
+      for (const f of [
+        "hardening.always.sql",
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]) {
+        await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+      }
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([
+        "001_roles_and_functions.sql",
+        "002_organizations_and_users.sql",
+      ]);
+      // Và hardening KHÔNG được tự tạo ra hàm nào cho một bảng chưa tồn tại.
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_proc p " +
+          " WHERE p.proname IN ('kiem_tra_phan_tach_nhiem_vu', 'kiem_tra_ma_tran_quyen')",
+      );
+      expect(rows[0]!.n).toBe("0");
+      // Nâng cấp lên đủ bộ trong CÙNG một cụm vẫn chạy được và dựng đủ hai mục.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([
+        "003_audit_events.sql",
+        "004_audit_chain_functions.sql",
+        "005_identity.sql",
+      ]);
+      expect(await trangThaiD3DungChuan(db)).toBe(true);
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
       await db.stop();
     }
   }, 180_000);

@@ -32,7 +32,7 @@ interface HangGan {
  * và `NULL = $1` cho ra NULL, tức một `if (!khop)` ngây thơ vẫn ném — nhưng thông báo sẽ mất
  * thông tin "phiên chưa gắn tổ chức nào". Vế `dang_gan` giữ lại thông tin đó.
  */
-export async function khangDinhDungTenant(
+export async function assertTenantBound(
   client: pg.PoolClient,
   orgId: string,
   tenHam: string,

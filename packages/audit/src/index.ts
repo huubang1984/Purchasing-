@@ -1,3 +1,4 @@
+export { assertTenantBound } from "./tenant-guard.js";
 export {
   appendAuditEvent,
   exportChainHead,
