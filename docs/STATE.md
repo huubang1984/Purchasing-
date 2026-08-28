@@ -30,13 +30,13 @@ Chưa xong:
 
 Kế hoạch triển khai S0 đã viết xong: 11 task, 92 bước, tại
 `docs/superpowers/plans/2026-08-27-s0-foundation.md`. **Task 1–9 đã xong** (Task 9 đang ở
-vòng fix 1); còn Task 10 và Task 11.
+vòng fix 2); còn Task 10 và Task 11.
 
 S0 **nhắm tới** 13 trong 34 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3, G1,
 G2, G3, G4). 21 bất biến còn lại thuộc S1 vì chúng đòi hỏi RFQ, lời mời, phong bì niêm
 phong và luồng mở thầu.
 
-**"Nhắm tới" KHÔNG phải "đã phủ", và ba chỗ dưới đây phải đọc kèm — dòng này là thứ người
+**"Nhắm tới" KHÔNG phải "đã phủ", và năm chỗ dưới đây phải đọc kèm — dòng này là thứ người
 vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được rộng hơn thực tế:**
 
 - **E3** — sổ đăng ký (`docs/TEST-PLAN.md:82`) định nghĩa E3 bằng **năm** vế. Vế *giới hạn
@@ -49,6 +49,18 @@ vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được r�
 - **D5** — được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng
   CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi
   sổ (ADR-008).
+- **G2** ("mỗi RFQ một cặp khoá; lộ một RFQ không lan sang RFQ khác") — **CHƯA PHỦ**, và đó
+  là câu trả lời đúng chứ không phải một hồi quy. Khoá **theo RFQ** đòi RFQ, thứ thuộc S1;
+  `packages/crypto-keys/src/roundtrip.test.ts:47` đã **tự ghi ra** rằng nó cố ý không gắn
+  `[INV-G2]` vì lý do ấy. Số test mang `[INV-G2]` trong toàn repo hôm nay là **0** — trước
+  vòng fix 1 của Task 9 có năm test mang nhãn đó, nhưng chúng đo **quy tắc biên giới
+  depcruise** (nay là `[INV-H11]`), không đo G2. Cái S0 thật sự có là bọc khoá **theo tổ
+  chức** có phiên bản, thứ nuôi G1/G3.
+- **G4** ("mọi thao tác khoá — sinh, bọc, mở bọc, huỷ — đều sinh audit") — **CHƯA PHỦ**.
+  Đo: `grep "\[INV-G4\]"` trên toàn repo (`*.ts` + `*.md`) → **0 hit**; `grep audit` trên
+  `packages/crypto-keys/src/*.ts` trừ test → **0 hit**. Thứ đã có là **hạ tầng ghi**
+  (`004_audit_chain_functions.sql`, nhóm B3) — không một thao tác khoá nào GỌI nó. Hàng G4
+  của `evidence/INV-matrix.md` sẽ trống; nó trống vì chưa có lớp, không vì thiếu nhãn.
 
 **LỆCH SỐ CẦN TASK 11 HOÀ GIẢI, ghi ra thay vì để nó tự lộ:** dòng trên đếm 34 bất biến
 nghiệp vụ, còn sổ tay tiến trình có chỗ ghi ngưỡng "23/44". Hai con số đếm hai thứ khác

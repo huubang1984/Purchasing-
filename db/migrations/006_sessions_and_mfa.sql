@@ -318,12 +318,21 @@ GRANT SELECT (id, org_id, user_id, mfa_verified_at, expires_at, revoked_at)
 -- packages/identity/src/mfa-credentials.ts); "khối đó là ciphertext" là một hợp đồng của NGƯỜI
 -- GHI, cưỡng chế ở tầng ứng dụng, không ở đây.
 -- BẢN VÁ ĐÃ CÂN NHẮC VÀ TỪ CHỐI, kèm lý do: `CHECK (octet_length(secret_wrapped) >= 28)`
--- (iv 12 + tag 16) rẻ, nhưng (a) nó chặn đúng MỘT ca ngây thơ — một bí mật 20 byte rõ — và
--- KHÔNG chặn ca dễ xảy ra hơn là một chuỗi base32 32 ký tự, nên nó mua rất ít; (b) nó không
--- viết được vào file này (một migration đã có thể ĐÃ ÁP DỤNG ở một môi trường khác; checksum
--- nằm trong `schema_migrations` của CSDL, không trong repo) mà phải là một migration 007 mới,
--- tức một file mới cho một bảo đảm gần bằng không. Vào sổ nợ thay vì làm nửa vời: lớp đúng cho
--- trục này là một phép kiểm ở đường GHI DANH khi composition root ra đời.
+-- (iv 12 + tag 16) rẻ, nhưng nó chặn đúng MỘT ca ngây thơ — một bí mật 20 byte rõ — và KHÔNG
+-- chặn ca dễ xảy ra hơn là một chuỗi base32 32 ký tự (32 byte, lọt qua `>= 28`), nên bảo đảm nó
+-- mua được gần bằng KHÔNG. Lý do đó đứng MỘT MÌNH và đủ.
+-- [vòng fix 2 — MỤC 2] BẢN TRƯỚC CÒN MỘT CHÂN THỨ HAI — "không viết được vào file này, phải là
+-- một migration 007 mới" — và CHÂN ĐÓ ĐÃ BỊ GỠ, vì nó MÂU THUẪN với tiền đề mà chính commit này
+-- dùng để CHO PHÉP sửa file này (xem task-9-report §7.0: checksum migration nằm trong
+-- `schema_migrations` của CSDL chứ không trong repo, VÀ S0 chưa có môi trường nào đã áp dụng
+-- 006). Hai câu ấy loại trừ nhau về cùng một file: một cái cho phép một sửa đổi, một cái cấm
+-- một sửa đổi. Phát biểu ĐÚNG: cửa sổ sửa `006` HÔM NAY CÒN MỞ — `migrate.ts` băm NỘI DUNG ĐỌC
+-- TỪ ĐĨA và so với `schema_migrations`, nên cửa sổ ấy đóng lại đúng từ lần deploy ĐẦU TIÊN, và
+-- từ đó trở đi file này rơi vào cùng chế độ "không sửa" như 001–005. KỂ CẢ KHI cửa sổ còn mở,
+-- CHECK này vẫn không đáng làm, vì lý do ở trên. Ghi ra để Task 10 không mang niềm tin sai rằng
+-- "một migration đánh số thì không sửa được kể cả khi chưa deploy" — đó là một bậc tự do CÓ THẬT.
+-- Vào sổ nợ thay vì làm nửa vời: lớp đúng cho trục này là một phép kiểm ở đường GHI DANH khi
+-- composition root ra đời.
 -- Cột phiên bản cho phép xoay khoá chính mà vẫn mở được bí mật cũ (cùng lập luận với `keyVersion`
 -- của `WrappedKey` ở Task 7).
 --

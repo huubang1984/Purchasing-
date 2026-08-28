@@ -161,6 +161,22 @@ export const MFA_LOCKOUT_SECONDS = 900;
  * không gian mã 10^6 và cửa sổ khoá 900 giây, 20 lần đoán mỗi cửa sổ cho xác suất trúng
  * ~2·10^-5 mỗi cửa sổ. Ai cần cao hơn phải sửa dòng này — tức phải viết ra thành một quyết
  * định nhìn thấy được, không phải một tham số truyền vào ở một call site.
+ *
+ * [vòng fix 2 — MỤC 3] CON SỐ ~2·10^-5 Ở TRÊN GIẢ ĐỊNH ĐÚNG MỘT MÃ HỢP LỆ TẠI MỖI THỜI ĐIỂM,
+ * VÀ MẶT TIỀN NÀY KHÔNG BẢO ĐẢM ĐIỀU ĐÓ. `window` (xem `MAX_TOTP_WINDOW` ở totp.ts) làm số mã
+ * hợp lệ đồng thời bằng `2*window + 1`. HAI TRẦN NÀY PHỤ THUỘC NHAU và trước vòng này chúng
+ * được biện minh RỜI RẠC, mỗi cái ở một file, nên TÍCH của chúng không được viết ra ở đâu cả.
+ * CA XẤU NHẤT MÀ MẶT TIỀN CHO PHÉP NGƯỜI GỌI CHỌN, viết ra bằng số:
+ *     maxFailedAttempts = 20  và  window = MAX_TOTP_WINDOW = 10  (tức 21 mã hợp lệ)
+ *     -> 20 * 21 / 10^6 = 4,2·10^-4 mỗi cửa sổ  (≈ 21 LẦN con số ~2·10^-5 ghi ở trên)
+ *     -> qua 96 cửa sổ khoá 900 giây trong một ngày: ≈ 4 % mỗi tài khoản mỗi ngày.
+ * Cộng thêm khuếch đại LOẠT ĐẦU dưới đồng thời (xem khối `CAU_GHI_THAT_BAI`) thì cao hơn nữa.
+ * MẶC ĐỊNH (`window` = 1, `maxFailedAttempts` = 5) cho 5 * 3 / 10^6 = 1,5·10^-5 — LÀNH. Cái
+ * được nói ra ở đây là RỘNG CỦA MẶT TIỀN, không phải hành vi mặc định.
+ * ĐÃ CÂN NHẮC VÀ KHÔNG LÀM Ở VÒNG NÀY, kèm lý do: hạ một trong hai trần, hoặc thêm một phép
+ * kiểm HỢP THÀNH `(2*window + 1) * maxFailedAttempts <= K`, đều là ĐỔI HÀNH VI CỦA MẶT TIỀN
+ * CÔNG KHAI (một `RangeError` mới cho những cặp tham số hôm nay hợp lệ) — tức một quyết định
+ * thiết kế, thuộc phạm vi một ADR chứ không phải một vòng sửa chú thích. Vào sổ nợ.
  */
 export const MFA_MAX_ALLOWED_FAILED_ATTEMPTS = 20;
 
@@ -314,10 +330,34 @@ const CAU_GHI_THANH_CONG = `
  *   * ngược lại: `failed_attempts + 1`.
  * Ngưỡng so trên giá trị MỚI (`so_lan >= max`), nên lần thất bại thứ `max` là lần ĐẶT khoá.
  *
- * PHÁT BIỂU ĐÚNG MỨC VỀ THỨ CÂU NÀY MUA ĐƯỢC — hẹp hơn bản trước một cách CÓ CHỦ ĐÍCH:
- * mỗi cửa sổ cho phép đúng `maxFailedAttempts` lần đoán ĐƯỢC PHÁN XÉT trên MỘT hồ sơ, kể cả khi
- * các lần đoán tới ĐỒNG THỜI. Nó KHÔNG mua: một hạn mức theo NGƯỜI GỌI (vế "giới hạn tần suất"
- * của E3 trong docs/TEST-PLAN.md — xem khối đầu file, vế đó vẫn CHƯA CÓ LỚP NÀO).
+ * PHÁT BIỂU ĐÚNG MỨC VỀ THỨ CÂU NÀY MUA ĐƯỢC — VÀ BẢN VÒNG TRƯỚC CỦA CHÍNH ĐOẠN NÀY ĐÃ BỊ ĐO
+ * LÀ RỘNG HƠN THỨ ĐO ĐƯỢC.
+ *
+ * *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ ***
+ * >>> "mỗi cửa sổ cho phép đúng `maxFailedAttempts` lần đoán ĐƯỢC PHÁN XÉT trên MỘT hồ sơ,
+ * >>>  kể cả khi các lần đoán tới ĐỒNG THỜI."
+ * Vế "kể cả khi ĐỒNG THỜI" SAI, và cơ chế nằm ngay trong `verifyTotpAttempt`: `dang_khoa` được
+ * đọc từ câu SELECT chạy TRƯỚC khi bất kỳ request nào ghi, nên N request chồng nhau đều thấy
+ * `locked_until IS NULL` và đều đi TRỌN tới `verifyTotpCode`. Câu UPDATE này chạy SAU đó.
+ * ĐO trên PostgreSQL 16, app_api, ngưỡng 5 — hai phép đo độc lập:
+ *   * đồng thời TỰ NHIÊN (vòng xác minh): N=2 -> 2 mã được phán xét, đếm 2; N=8 -> 8, đếm 8;
+ *     N=16 -> 8 phán xét + 8 LOCKED_OUT, đếm 8; N=24 -> 16 + 8, đếm 16.
+ *   * đồng thời ÉP TẤT ĐỊNH bằng một khoá hàng giữ ngoài (test "[INV-E3] LOẠT ĐẦU dưới đồng
+ *     thời 24"): 24 mã được phán xét, 0 LOCKED_OUT, đếm 24, và hồ sơ BỊ KHOÁ sau loạt.
+ *
+ * PHÁT BIỂU ĐÚNG. Nó MUA:
+ *   * MỖI mã được phán xét làm bộ đếm tăng ĐÚNG MỘT. Biên độ (số mã được phán xét ÷ mức tăng bộ
+ *     đếm) = 1 ở MỌI mức đồng thời đã đo (2, 8, 16, 24). Bản CTE cho biên độ VÔ HẠN: 24 lần đoán
+ *     mỗi đơn vị bộ đếm, LẶP MÃI vì hồ sơ không bao giờ khoá.
+ *   * SAU loạt đầu, hồ sơ BỊ KHOÁ. Nên thứ mua được là "C lần đoán MỘT LẦN, rồi khoá", không
+ *     phải "C lần đoán mỗi cửa sổ, lặp mãi". Đó là khác biệt đóng lỗ fail-OPEN.
+ * Nó KHÔNG mua:
+ *   * một trần cho LOẠT ĐẦU. Với độ đồng thời C, loạt đầu cho tới C mã được phán xét thay vì
+ *     `maxFailedAttempts` (mặc định 5, C = 24 -> 4,8x). Đóng nó đòi LẤY KHOÁ HÀNG TRƯỚC lời gọi
+ *     cổng mở bí mật, tức giữ một khoá hàng qua trọn một round trip mật mã — một đánh đổi DoS
+ *     RIÊNG, phải quyết bằng một quyết định nhìn thấy được chứ không trôi. Sổ nợ, chưa quyết.
+ *   * một hạn mức theo NGƯỜI GỌI (vế "giới hạn tần suất" của E3 trong docs/TEST-PLAN.md — xem
+ *     khối đầu file, vế đó vẫn CHƯA CÓ LỚP NÀO).
  *
  * `locked_until` được ĐẶT LẠI VỀ NULL ở nhánh chưa vượt ngưỡng: nếu giữ giá trị cũ, một hồ sơ
  * đã hết khoá vẫn mang một mốc quá khứ và mọi phép đọc sau đó phải tự nhớ so nó với hiện tại.

@@ -56,6 +56,12 @@ const DEFAULT_WINDOW = 1;
  * Con số 10 là một CHÍNH SÁCH: RFC 6238 §5.2 khuyến nghị "at most one time step", và 10 bước
  * (±5 phút) là biên rộng rãi cho lệch đồng hồ thiết bị mà vẫn giữ không gian mã ở 21/10^6. Ai
  * cần rộng hơn phải sửa dòng này, tức phải viết ra thành một quyết định nhìn thấy được.
+ *
+ * [vòng fix 2 — MỤC 3] TRẦN NÀY KHÔNG ĐỘC LẬP VỚI `MFA_MAX_ALLOWED_FAILED_ATTEMPTS`. "21/10^6"
+ * ở trên là không gian mã cho MỘT lần đoán; số lần đoán mỗi cửa sổ là trần KIA, và hai con số
+ * NHÂN với nhau. Ca xấu nhất hợp thành mà mặt tiền cho phép người gọi chọn được viết ra bằng số
+ * ở docblock của `MFA_MAX_ALLOWED_FAILED_ATTEMPTS` (mfa-credentials.ts) — đọc kèm, đừng biện
+ * minh con số này một mình.
  */
 export const MAX_TOTP_WINDOW = 10;
 
