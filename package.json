@@ -11,6 +11,10 @@
     "test": "vitest run --exclude \"**/*.int.test.ts\"",
     "test:int": "vitest run int.test",
     "test:all": "vitest run",
+    "test:report": "vitest run --reporter=json --outputFile=evidence/vitest-report.json",
+    "evidence": "node tools/inv-matrix/chay-evidence.mjs",
+    "evidence:matrix": "node --experimental-transform-types --import ./tools/inv-matrix/register-ts-resolve.mjs tools/inv-matrix/src/index.ts",
+    "evidence:check": "pnpm evidence && git diff --exit-code -- evidence/INV-matrix.md",
     "bench:keys": "node --experimental-transform-types --import ./tools/bench-keyprovider/register-ts-resolve.mjs tools/bench-keyprovider/src/index.ts"
   },
   "devDependencies": {

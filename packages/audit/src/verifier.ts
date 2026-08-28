@@ -177,7 +177,7 @@ export async function verifyAuditChain(
   //     └
   // Nó mâu thuẫn với `tenant-guard.ts` NGAY TRONG CÙNG MỘT COMMIT: docblock ở đó gọi
   // `OPERATOR(pg_catalog.=)` của `assertTenantBound` là "thứ CHỊU LỰC", và đo được — gỡ ghim ở
-  // đó thì ba test `[INV-M5]` đỏ (hàng rào tenant bị vượt, `exportChainHead` đúc mốc neo mang
+  // đó thì ba test `[INV-F1]` đỏ (hàng rào tenant bị vượt, `exportChainHead` đúc mốc neo mang
   // nhãn tổ chức khác). Vòng fix 3 đo thêm HAI chỗ nữa trong chính gói này (xem dưới và
   // `writer.ts`). Phát biểu ĐÚNG: trong gói `audit`, việc ghim toán tử/tên kiểu vá một lỗ ĐO
   // ĐƯỢC ở BỐN chỗ — `assertTenantBound` (cả toán tử lẫn tên kiểu), vế `NOT EXISTS` dưới đây,
@@ -207,7 +207,7 @@ export async function verifyAuditChain(
   //     gỡ ghim ở vế `WHERE ae.org_id` này -> checked = 3 + 7 = 10 <<< TẬP HÀNG TRÀN RA NGOÀI
   //                                                                    TỔ CHỨC
   // ⇒ dưới phiên không chịu RLS, vế `WHERE` này là LỚP DUY NHẤT giới hạn tập hàng, nên ghim ở
-  //   đây là VÁ chứ không phải trang trí. Mốc chết: test `[INV-M5] phiên BYPASSRLS` trong
+  //   đây là VÁ chứ không phải trang trí. Mốc chết: test `[INV-F1] phiên BYPASSRLS` trong
   //   `tenant-guard.int.test.ts`.
   //
   // VÌ SAO KHÔNG THÊM MỘT PHÉP KIỂM `rolsuper`/`rolbypassrls` VÀO `assertTenantBound` theo
@@ -222,9 +222,12 @@ export async function verifyAuditChain(
   //
   // KIỂM THỬ ĐỘT BIẾN NÓI CHÍNH XÁC HƠN, và ghi ra vì nó hiệu chỉnh câu trên. Gỡ
   // `OPERATOR(pg_catalog.=)` khỏi TỪNG vế một:
-  //     `ae.hash` một mình  -> GIẾT (test [INV-B2]: sửa nội dung hàng ĐANG ĐƯỢC NEO)
+  //     `ae.hash` một mình  -> GIẾT (test `[INV-B3] vế ae.hash của mốc neo`: sửa nội dung
+  //                             hàng ĐANG ĐƯỢC NEO)
   //     `ae.seq`  một mình  -> SỐNG SÓT
-  //     CẢ HAI cùng lúc     -> GIẾT hai lần ([INV-B3] cắt đuôi + [INV-B2] sửa nội dung)
+  //     CẢ HAI cùng lúc     -> GIẾT hai lần (test cắt đuôi + test sửa nội dung, cả hai
+  //                             nay cùng mang `[INV-B3]` — xem ghi chú nhãn ở đầu
+  //                             `tenant-guard.int.test.ts`)
   // `ae.seq` một mình sống sót KHÔNG phải vì thiếu test mà vì nó DƯ THỪA về mặt logic: `hash`
   // là khoá phân biệt hàng trên thực tế, nên một `seq` bị cướp vẫn bị `hash` (đang ghim) chặn
   // lại ở mọi trạng thái mà S0 với tới được. Nó được giữ để cả ba vế cùng một quy ước — không

@@ -120,7 +120,7 @@ interface HangGan {
  * `hang?.khop === true` ở dưới đã gộp `false` và `NULL` về cùng một nhánh ném. Nó ở đây vì lý
  * do KIỂU chứ không vì lý do an ninh: không có nó, `khop` là `boolean | null` và khai báo
  * `HangGan.khop: boolean` sẽ là một lời nói dối. Thứ CHỊU LỰC ở câu này là HAI thứ, không phải
- * một: `OPERATOR(pg_catalog.=)` (gỡ -> ba test [INV-M5] đỏ ngay) VÀ `::pg_catalog.uuid` (gỡ ->
+ * một: `OPERATOR(pg_catalog.=)` (gỡ -> ba test [INV-F1] đỏ ngay) VÀ `::pg_catalog.uuid` (gỡ ->
  * test ENUM+CAST đỏ ngay). Vế `::pg_catalog.text` của `dang_gan` thì đúng là GHIM: nó chỉ vào
  * thông báo lỗi, không vào phán xét — nói đúng mức đó.
  */

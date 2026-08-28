@@ -150,6 +150,32 @@ afterAll(async () => {
   await db?.stop();
 });
 
+// =============================================================================================
+// [Task 11] HAI NHÃN Ở FILE NÀY ĐÃ ĐƯỢC SỬA VỀ ĐÚNG MÃ CHÚNG ĐO. Ghi ra vì đây là bằng chứng
+// kiểm toán, không phải một lần đổi tên cho gọn.
+//
+// (1) BỐN test dưới đây mang `[INV-M5]`. `M` KHÔNG thuộc dải `[A-H]` và `M5` KHÔNG có trong sổ
+//     đăng ký `docs/TEST-PLAN.md`. Đo được: `[M5]` là số hiệu MỘT MŨI ĐỘT BIẾN của vòng review
+//     Task 4/6 (xem `task-4-report.md` §M5, `task-6-report.md` §11.6) — hai không gian tên bị
+//     lẫn vào nhau khi Task 8 viết các test này. Hệ quả đo được ở Task 11: bộ sinh ma trận gom
+//     theo MÃ, nên bốn test này KHÔNG rơi vào hàng nào và bị bỏ qua trong IM LẶNG — đúng lớp
+//     khiếm khuyết "nhãn sai che một bất biến" mà vòng fix 1 của Task 9 đã phải trả giá để
+//     phát hiện. Mã đúng là `F1`, theo TIỀN LỆ ĐÃ CÓ chứ không theo suy đoán: Task 6 đã gắn
+//     `[INV-F1]` cho CÙNG tính chất ở `chain.int.test.ts` — test "[INV-F1] verifyAuditChain/
+//     exportChainHead NÉM khi phiên gắn sai tổ chức".
+//
+// (2) Test "vế `ae.hash` của mốc neo vẫn bắt được SỬA NỘI DUNG" mang `[INV-B2]`. B2 phát biểu
+//     "mỗi lần nộp sinh biên nhận: sha256(ciphertext) + thời gian DB + số version + mã RFQ, có
+//     chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được". Test này không có nhà cung cấp,
+//     không có báo giá, không có biên nhận và không có chữ ký — chủ ngữ của B2 chưa tồn tại ở
+//     S0. Thứ nó thật sự đo là "bộ kiểm chứng phát hiện được SỬA", tức `B3`. Đây là một hàng
+//     LẼ RA TRỐNG bị lấp bằng NHÃN thay vì bằng LỚP; để nguyên thì `evidence/INV-matrix.md` sẽ
+//     nói với kiểm toán viên rằng nhà cung cấp kiểm chứng biên nhận độc lập được — một câu
+//     KHÔNG có gì chống lưng.
+//
+// Cả hai lần sửa đều làm HẸP LẠI hoặc GIỮ NGUYÊN bảo đảm được tuyên bố, không nới thứ gì:
+// F1 đã ✅ từ trước nên số hàng ✅ không đổi, còn B2 chuyển từ ✅ về ⏳ CHƯA PHỦ — đúng trạng thái.
+// =============================================================================================
 describe("[MỤC A] assertTenantBound dưới toán tử `=` bị cướp", () => {
   it("FIXTURE tự chứng minh nó tấn công được, và app_current_org_id() vẫn ĐÚNG", async () => {
     const { rows } = await poolThuDich.query<{
@@ -187,19 +213,19 @@ describe("[MỤC A] assertTenantBound dưới toán tử `=` bị cướp", () =
     expect(trongPhien, "app_current_org_id() phải VẪN trả đúng tổ chức đang gắn").toBe(orgP);
   }, 120_000);
 
-  it("[INV-M5] exportChainHead KHÔNG đúc được mốc neo mang nhãn tổ chức khác", async () => {
+  it("[INV-F1] exportChainHead KHÔNG đúc được mốc neo mang nhãn tổ chức khác", async () => {
     await expect(
       withTenant(poolThuDich, orgP, (c) => exportChainHead(c, orgQ)),
     ).rejects.toThrow(/exportChainHead: phiên đang gắn tổ chức/);
   }, 120_000);
 
-  it("[INV-M5] verifyAuditChain KHÔNG phán xét được sổ của tổ chức khác", async () => {
+  it("[INV-F1] verifyAuditChain KHÔNG phán xét được sổ của tổ chức khác", async () => {
     await expect(
       withTenant(poolThuDich, orgP, (c) => verifyAuditChain(c, orgQ, { externalAnchors: [] })),
     ).rejects.toThrow(/verifyAuditChain: phiên đang gắn tổ chức/);
   }, 120_000);
 
-  it("[INV-M5] recordChainAnchor KHÔNG neo được sổ của tổ chức khác", async () => {
+  it("[INV-F1] recordChainAnchor KHÔNG neo được sổ của tổ chức khác", async () => {
     await expect(
       withTenant(poolThuDich, orgP, (c) => recordChainAnchor(c, orgQ)),
     ).rejects.toThrow(/recordChainAnchor: phiên đang gắn tổ chức/);
@@ -323,7 +349,7 @@ describe("[MỤC A] assertTenantBound dưới toán tử `=` bị cướp", () =
     expect(xuat?.seq, "sổ của P có ĐÚNG 3 hàng").toBe(3);
   }, 180_000);
 
-  it("[INV-M5] phiên BYPASSRLS: vế `WHERE` là lớp DUY NHẤT giới hạn tập hàng", async () => {
+  it("[INV-F1] phiên BYPASSRLS: vế `WHERE` là lớp DUY NHẤT giới hạn tập hàng", async () => {
     // [vòng fix 3 — MỤC 2] Ba chỗ trong gói này từng viết "RLS đã giới hạn tập hàng về đúng tổ
     // chức đang gắn, nên một `=` bị cướp ở đó KHÔNG mở rộng tập hàng ra ngoài tổ chức" — một
     // PHÁT BIỂU VÔ ĐIỀU KIỆN, và nó SAI với phiên `rolsuper`/`rolbypassrls`: phiên của người
@@ -467,7 +493,7 @@ describe("[MỤC A] assertTenantBound dưới toán tử `=` bị cướp", () =
     expect(ketQua.ok).toBe(false);
   }, 180_000);
 
-  it("[INV-B2] vế `ae.hash` của mốc neo vẫn bắt được SỬA NỘI DUNG dưới `=` bị cướp", async () => {
+  it("[INV-B3] vế `ae.hash` của mốc neo vẫn bắt được SỬA NỘI DUNG dưới `=` bị cướp", async () => {
     // Mốc chết RIÊNG của vế `ae.hash OPERATOR(pg_catalog.=) a.hash`. Test cắt đuôi ở trên KHÔNG
     // giết được mũi "bỏ OPERATOR khỏi ae.hash": ở đó vế `ae.seq` (còn ghim) đã đủ phán xét, vì
     // hàng seq=6 KHÔNG CÒN. Ca phân biệt được hai vế là ca hàng VẪN CÒN nhưng NỘI DUNG ĐÃ ĐỔI —

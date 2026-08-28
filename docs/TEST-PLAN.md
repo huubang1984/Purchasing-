@@ -17,7 +17,15 @@ và có ít nhất một test cố tình tấn công nó.
 Ba quy tắc vận hành:
 
 1. **Thêm tính năng chạm vào một nhóm bất biến ⇒ phải bổ sung test đối kháng cho nhóm đó.**
-2. **Bất biến không có test phủ ⇒ CI đỏ.** Không có ngoại lệ tạm thời.
+2. **Bất biến không có test phủ ⇒ CI đỏ — trừ khi mã đó nằm trong một DANH SÁCH ĐƯỢC GHIM,
+   kèm lý do đọc được.** Câu cũ ở đây là *"không có ngoại lệ tạm thời"*, và tới cuối S0 nó
+   RỘNG HƠN thứ hệ thống làm: 23 trong 47 mã chưa phủ vì chủ ngữ của chúng (RFQ, phong bì
+   niêm phong, luồng mở thầu) thuộc S1. Một quy tắc mà thực tế vi phạm 23 lần không phải một
+   quy tắc; nó là một dòng chữ. Cách diễn đạt hiện tại giữ nguyên độ chặt và bỏ chỗ cho sự
+   mơ hồ: danh sách nằm ở `MA_DUOC_PHEP_CHUA_PHU` trong `tools/inv-matrix/src/danh-gia.ts`,
+   nó là **ràng buộc hai chiều** (một mã trong danh sách mà ĐÃ được phủ cũng làm CI đỏ, kèm
+   lời nhắc gỡ ra), nên nó chỉ co lại. Thêm một mã vào đó là một thay đổi mã nguồn, đi qua
+   review — khác hẳn một `continue-on-error` không ai nhìn thấy.
 3. **Không bao giờ nới lỏng một assertion để test xanh.** Nếu test sai thì nói rõ tại sao
    và sửa test; nếu bất biến sai thì sửa bất biến ở đây trước, kèm lý do.
 
@@ -206,16 +214,29 @@ Mỗi mục là một cuộc tấn công, không phải kiểm tra tính năng c
 
 ## 4. Evidence Pack
 
-Mỗi lần CI chạy sinh `evidence/INV-matrix.md`:
+Mỗi lần CI chạy sinh `evidence/INV-matrix.md` bằng `pnpm evidence` (Task 11,
+`tools/inv-matrix`). Bộ sinh đọc **chính bảng §2 và §5 của file này** làm nguồn sự thật duy
+nhất, rồi đối chiếu với nhãn `[INV-<mã>]` trong tên test của báo cáo `vitest --reporter=json`.
 
-```text
-| INV | Mệnh đề | Cưỡng chế | Test phủ | Kết quả | Commit | Thời điểm |
-|-----|---------|-----------|----------|---------|--------|-----------|
-| A1  | ...     | Kiến trúc | 4 test   | PASS    | a1b2c3 | ...       |
-| A4  | ...     | Máy quét  | 1 test   | PASS    | a1b2c3 | ...       |
-```
+Hai file, hai bản chất — và sự tách đôi này là điều kiện để phép kiểm chống-sửa-tay tồn tại:
 
-Bất biến ở trạng thái `CHƯA PHỦ` làm CI đỏ.
+| File | Tính chất | Vào git? |
+|---|---|---|
+| `evidence/INV-matrix.md` | **Tất định** — không SHA, không dấu thời gian | **Có.** Lịch sử của nó là bằng chứng theo thời gian |
+| `evidence/run-metadata.md` | Xuất xứ một lượt chạy: commit SHA, thời điểm, tổng số khẳng định | Không. Tải lên như artefact CI |
+
+Nếu ma trận mang dấu thời gian thì nó đổi mỗi lần chạy, và bước CI *"ma trận đã commit phải
+khớp bộ sinh"* (`git diff --exit-code` sau khi sinh lại) là bất khả — trong khi `.gitignore`
+lại GIỮ file này, nên một lần sửa tay sẽ không lớp nào bắt.
+
+Bộ sinh làm CI đỏ khi: một mã chưa phủ mà **không** nằm trong danh sách được ghim ở §1 quy tắc
+2; một mã trong danh sách mà **đã** được phủ; một test mang nhãn bất biến đang đỏ hoặc bị bỏ
+qua; một nhãn `[INV-…]` trỏ tới mã **không có trong sổ đăng ký này**; hoặc số hàng đọc được từ
+§2/§5 **lệch với một phép đếm độc lập** — hàng biến mất trong im lặng là fail-open ở đúng nơi
+không được phép fail-open.
+
+Nhãn dạng `[INV-E3(3)]` (chỉ MỘT VẾ của một bất biến nhiều vế) **cố ý không** được tính là độ
+phủ của `E3`: E3 có năm vế và vế *giới hạn tần suất* không có một dòng mã nào trong toàn S0.
 
 Đây vừa là kỷ luật kỹ thuật vừa là tài sản thương mại: khi kiểm toán viên của khách hàng
 hỏi *"làm sao chứng minh nhân viên mua hàng không xem được giá trước giờ mở?"*, câu trả

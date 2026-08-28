@@ -190,7 +190,7 @@ export async function recordChainAnchor(
     //     gỡ ghim                 -> hàng thắng `ORDER BY ae.seq DESC LIMIT 1` là hàng của Q,
     //                                nên `SELECT ae.org_id` CHÈN org_id = <orgQ> và trả seq 7:
     //                                một mốc neo GHI VÀO SỔ dưới nhãn sai tổ chức.
-    // Mốc chết: test `[INV-M5] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`.
+    // Mốc chết: test `[INV-F1] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`.
     `INSERT INTO public.audit_chain_anchors (org_id)
      SELECT ae.org_id
        FROM public.audit_events ae
@@ -242,7 +242,7 @@ export async function exportChainHead(
     //     gỡ ghim                  -> {"orgId":<orgP>,"seq":7}   <<< ĐẦU CHUỖI CỦA Q, DÁN NHÃN P
     // Tức một mốc neo "chính thức" của P mang băm của một sự kiện KHÔNG THUỘC P — sổ của P sẽ
     // không bao giờ kiểm chứng được với nó nữa, và một lần cắt đuôi của P đi lọt. Mốc chết:
-    // test `[INV-M5] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`. Vì sao KHÔNG thêm phép
+    // test `[INV-F1] phiên BYPASSRLS` trong `tenant-guard.int.test.ts`. Vì sao KHÔNG thêm phép
     // kiểm `rolsuper` vào `assertTenantBound` — xem lập luận đã đo ở `verifier.ts`.
     `SELECT ae.seq, pg_catalog.encode(ae.hash, 'hex') AS hash_hex
        FROM public.audit_events ae

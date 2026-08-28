@@ -26,7 +26,12 @@ export default tseslint.config(
       // vì nằm ngoài "include" của tsconfig.json) được loại; mọi file .mjs khác trong repo phải
       // đi qua eslint như bình thường (sẽ lỗi "not found by project service" nếu không nằm
       // trong tsconfig — một lỗi ồn ào, không phải một khoảng trống im lặng).
+      // [Task 11] `tools/inv-matrix/*.mjs` là BẢN SAO CÓ CHỦ Ý của hai file trên (lý do ghi ở
+      // đầu `tools/inv-matrix/ts-resolve-hook.mjs`: để hai tool dev không sinh ra một cạnh phụ
+      // thuộc lẫn nhau mà depcruise phải bless). Vẫn liệt kê TỪNG THƯ MỤC, không gộp thành
+      // "tools/*/*.mjs" — giữ nguyên tính chất "mọi file .mjs khác đều ồn ào".
       "tools/bench-keyprovider/*.mjs",
+      "tools/inv-matrix/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

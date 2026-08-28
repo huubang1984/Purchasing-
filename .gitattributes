@@ -35,3 +35,11 @@
 # CỐ Ý KHÔNG dùng `* text=auto`: bán kính nổ toàn repo cho một lợi ích mà chỉ .sql cần (không
 # file nào khác được băm và so lại). Một quy tắc rộng hơn là một lần renormalize rộng hơn.
 *.sql text eol=lf
+
+# [Task 11] `evidence/INV-matrix.md` la ARTEFACT DUOC SINH LAI ROI SO BYTE: cong
+# `pnpm evidence:check` chay bo sinh roi `git diff --exit-code` tren chinh file nay. Neu byte
+# xuong dong cua cay lam viec khac blob (core.autocrlf=true la mac dinh cua Git for Windows),
+# phep so do do vi ly do KHONG lien quan gi den do phu bat bien — mot cong bao dong gia.
+# GHIM HEP DUNG MOT FILE, khong phai `*.md`: ban kinh no cua mot quy tac rong hon la mot lan
+# renormalize rong hon, va khong file .md nao khac duoc so byte.
+evidence/INV-matrix.md text eol=lf

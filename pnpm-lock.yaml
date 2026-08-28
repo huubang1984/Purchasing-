@@ -95,6 +95,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/crypto-keys
 
+  tools/inv-matrix: {}
+
 packages:
 
   '@balena/dockerignore@1.0.2':
