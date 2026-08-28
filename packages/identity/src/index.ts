@@ -40,21 +40,49 @@ export {
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";
-// [Task 9] Nguyên thuỷ TOTP. `isWellFormedTotpCode` CỐ Ý không ở đây: nó là hợp đồng nội bộ
-// giữa totp.ts và mfa-credentials.ts (một biểu thức hình dạng, không phải một năng lực), và
-// mỗi symbol ở cửa này là một thứ mọi gói khác gọi được.
+// ============================================================================================
+// [vòng fix 1 — MỤC 4] `verifyTotpCode` ĐÃ ĐƯỢC RÚT KHỎI CỬA NÀY — CÙNG TIÊU CHÍ VỚI
+// `hasPermission`, ÁP CHO E3 THAY VÌ D5
+//
+// Khối trên tự viết ra tiêu chí phân loại: `assertFreshMfa` được ở lại vì nó NÉM khi không
+// thoả (fail-closed) chứ không trả boolean, "nên nó không dựng ra được một cổng gác im lặng".
+// Tiêu chí đó đã KHÔNG được áp cho `verifyTotpCode`, thứ trả `{ ok: false, reason }` — đúng
+// hình dạng "trả giá trị, không ném, không để lại trạng thái" mà tiêu chí ấy loại ra.
+//
+// LỖ ĐO ĐƯỢC: `tools/zzprobe/cong-gac-im-lang.ts` với thân `return verifyTotpCode(biMatRo,
+// code).ok` cho `pnpm typecheck` exit 0, `pnpm lint` exit 0, `pnpm depcruise` exit 0 (no
+// violations). Cổng gác ấy KHÔNG đọc `mfa_credentials`, KHÔNG ghi `last_used_counter`, KHÔNG
+// đếm `failed_attempts`, KHÔNG tôn trọng `locked_until` — tức nó bỏ qua CẢ E3(1) LẪN E3(4) và
+// bỏ qua chúng trong im lặng. Và bên dựng được nó chính là COMPOSITION ROOT: nơi được tiêm
+// `TotpSecretUnsealer`, tức nơi DUY NHẤT trong hệ thống có bí mật TOTP ở dạng rõ.
+//
+// ĐƯỜNG SẢN PHẨM LÀ `verifyTotpAttempt`. Ba symbol còn lại của totp.ts (`generateTotpSecret`,
+// `deriveTotpCode`, `counterForTime`) Ở LẠI vì đường GHI DANH cần chúng và không cái nào phán
+// xét một lần đăng nhập: hai cái sau là hàm dẫn xuất thuần không đọc trạng thái nào, cái đầu
+// SINH một bí mật mới.
+//
+// `TotpResult`/`TotpVerifyOptions` cũng rút theo: chúng là chữ ký của một hàm không còn ở cửa
+// này. `TotpFailureReason` thì Ở LẠI — nó là thành phần của `MfaDenialReason`, tức một phần
+// hợp đồng của `verifyTotpAttempt`.
+//
+// GIỚI HẠN ĐÃ BIẾT của lớp cưỡng chế, viết ra vì Task 8 mua nó cho D5 và nó KHÔNG tự động áp
+// cho E3: `tests/architecture/barrel-exports.test.ts` khoá DANH SÁCH export, không khoá HÌNH
+// DẠNG từng symbol. Một hàm MỚI có hình dạng "trả boolean/kết quả, không ghi gì" mà được thêm
+// vào danh sách trắng kèm một dòng lý do sẽ đi lọt — lớp cuối cùng vẫn là người đọc.
+// ============================================================================================
+// `isWellFormedTotpCode` và `khangDinhCuaSo` CỐ Ý không ở đây: hợp đồng nội bộ giữa totp.ts và
+// mfa-credentials.ts (một biểu thức hình dạng và một phép kiểm biên), không phải năng lực.
 export {
+  MAX_TOTP_WINDOW,
   counterForTime,
   deriveTotpCode,
   generateTotpSecret,
-  verifyTotpCode,
   type TotpFailureReason,
-  type TotpResult,
-  type TotpVerifyOptions,
 } from "./totp.js";
 export { MfaRequiredError, assertFreshMfa, type MfaFreshnessCheck } from "./mfa.js";
 export {
   MFA_LOCKOUT_SECONDS,
+  MFA_MAX_ALLOWED_FAILED_ATTEMPTS,
   MFA_MAX_FAILED_ATTEMPTS,
   enrollTotpCredential,
   verifyTotpAttempt,

@@ -101,7 +101,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 10 bất biến hàng rào (nhóm H, §5) là 44 mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 12 bất biến hàng rào (nhóm H, §5) là 46 mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
@@ -232,6 +232,12 @@ Hàng rào cũng là một biện pháp kiểm soát, nên nó cũng có mã và
 pack. Nhóm **H** dùng chung cơ chế với 34 bất biến nghiệp vụ: test phải mang mã trong tên
 theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 
+Nhóm H KHÔNG chỉ là hai hook: **mọi hàng rào tự động của dự án đều thuộc nhóm này**, kể cả
+các quy tắc biên giới module của dependency-cruiser (H11, H12). Tiêu chí phân nhóm là "cái
+này canh CÁI GÌ": một bất biến nghiệp vụ (A–G) nói về hành vi của sản phẩm với dữ liệu của
+khách hàng; một bất biến hàng rào (H) nói về việc một biện pháp kiểm soát của chính dự án có
+còn răng hay không.
+
 | ID | Bất biến | Cưỡng chế | Tầng test |
 |---|---|---|---|
 | **H1** | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 |
@@ -244,6 +250,21 @@ theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 | **H8** | Ghi vào file bí mật bị chặn, **không phân biệt hoa thường**: `.env`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `id_rsa`, `id_ed25519`, `credentials.json`, `secrets.y*ml`, `.npmrc`, `.pgpass`, `.netrc`, `.claude/settings*.json` | Hook `protect-secrets` | T1 |
 | **H9** | File nguồn thường và `.env.example` được cho qua — khớp theo tên và phần mở rộng, không khớp chuỗi con | Hook `protect-secrets` | T1 |
 | **H10** | **Đầu vào rỗng, JSON hỏng, thiếu trường, sai kiểu, hoặc thiếu phụ thuộc runtime đều CHẶN** — fail-closed | Cả hai hook | T1 |
+| **H11** | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | **T0** |
+| **H12** | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | **T0** |
+
+**H11 và H12 được bổ sung ngày 2026-08-28** (vòng fix 1 của Task 9), và lý do là một lớp
+khiếm khuyết chứ không phải một chỗ trống: `tests/architecture/boundaries.test.ts` đang gán
+`[INV-G2]` cho năm test và `[INV-G3]` cho bốn test đo QUY TẮC BIÊN GIỚI MODULE — trong khi sổ
+đăng ký §2 định nghĩa G2 = "mỗi RFQ một cặp khoá" và G3 = "xoay master key không làm mất khả
+năng giải mã báo giá cũ". Bộ sinh ma trận gom theo MÃ, nên chín dòng "passed" sẽ rơi vào hai
+hàng nghiệp vụ mà chúng không đo — và vì test G2/G3 đúng nghĩa VẪN tồn tại song song, va chạm
+đó là vô hình nếu không đọc tên. Đây là "mốc chết giả đã dịch chỗ: nó không còn ở TEST, nó ở
+NHÃN". Một quy tắc biên giới depcruise LÀ một hàng rào, đúng hạng với hai hook ở trên, nên nó
+thuộc nhóm H — và nhóm H đã khớp sẵn regex `[A-H]\d+` của bộ sinh, không cần đụng bộ sinh.
+Mười test `[INV-G1]` trong cùng file thì GIỮ NGUYÊN: quy tắc `g1-` cưỡng chế đúng bất biến G1
+("private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`"), tức ở đó nhãn khớp thứ được
+đo. Tên các quy tắc depcruise (`g1-`/`g2-`/`g3-`) không đổi — vấn đề nằm ở nhãn test.
 
 **H10 là bài học rút ra từ sự cố `jq`**: một biện pháp kiểm soát thất bại phải thất bại
 theo hướng an toàn. Không có hàng rào thì người ta còn cẩn thận; có hàng rào hỏng thì

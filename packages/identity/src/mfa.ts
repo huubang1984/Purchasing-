@@ -104,7 +104,11 @@ function khangDinhThamSo({ sessionId, userId, orgId, maxAgeSeconds }: MfaFreshne
  *     nếu một task sau nới ràng buộc kia. Hai lớp, phát biểu riêng.
  *
  * MỘT MŨI ĐỘT BIẾN SỐNG SÓT, ghi ra đúng mức: gỡ RIÊNG vế `AND u.org_id = s.org_id` của phép
- * nối (giữ nguyên `u.id = s.user_id` và `u.status`) SỐNG SÓT — 43/43 test xanh. Đó là DƯ THỪA
+ * nối (giữ nguyên `u.id = s.user_id` và `u.status`) SỐNG SÓT — toàn bộ bộ test xanh. ([vòng fix
+ * 1 — MỤC 8/M2] Bản trước ghi "43/43"; con số đó đã thiu ngay trong chính Task 9 và một con số
+ * thiu làm người đọc sau không tái lập được phép đo. Ở những chỗ mà con số cụ thể KHÔNG phải
+ * bằng chứng — như ở đây, nơi điều được nói là "không test nào đỏ" — nó bị bỏ hẳn thay vì cập
+ * nhật, vì nó sẽ thiu lại ở task sau.) Đó là DƯ THỪA
  * LOGIC có cơ chế nói được, không phải một lỗ: khoá ngoại TỔ HỢP của 006 làm mọi hàng `sessions`
  * đã có `org_id` khớp `users.org_id` của cùng `user_id`, nên vế ấy không loại thêm hàng nào. Nó
  * được GIỮ vì hai lý do: (a) nó là thứ giữ phép kiểm đứng vững nếu một task sau nới khoá ngoại
@@ -137,14 +141,31 @@ function khangDinhThamSo({ sessionId, userId, orgId, maxAgeSeconds }: MfaFreshne
  *   toán tử  : CÓ mốc chết. Gỡ `OPERATOR(pg_catalog.=)` ở `s.id` -> test [QT3] ĐỎ.
  *   tên hàm  : CÓ mốc chết. Gỡ `pg_catalog.` khỏi `make_interval` -> test [QT3] ĐỎ.
  *   tên BẢNG : CÓ mốc chết. Gỡ `public.` khỏi `sessions` hoặc `users` -> test [QT3] ĐỎ.
- *   tên KIỂU : *** KHÔNG CÓ MỐC CHẾT ***. Mũi đột biến đổi cả bốn `::pg_catalog.uuid` thành
- *              `::uuid` SỐNG SÓT — đã đo, 45/45 test xanh. Và trục này KHÔNG phải trang trí:
- *              Task 8 vòng fix 2 đã tái lập END-TO-END trên mã sản phẩm rằng
- *              `CREATE TYPE ... AS ENUM` + `CREATE CAST ... AS IMPLICIT` LẬT ĐƯỢC phán xét mà
- *              không cần cướp một toán tử nào. Dựng fixture ấy cho hàm này khó hơn cho
- *              `assertTenantBound` vì ở đây có BA tham số uuid khác nhau, còn ENUM bóng chỉ
- *              mang được một giá trị. Nên hôm nay `::pg_catalog.uuid` ở đây là GHIM THEO KỶ
- *              LUẬT trên một trục ĐÃ BIẾT LÀ KHAI THÁC ĐƯỢC — vào sổ nợ, xem task-9-report.md.
+ *   tên KIỂU : CÓ mốc chết — [vòng fix 1] TỪ VÒNG NÀY. Xem khối kế tiếp; trước đó đây là trục
+ *              DUY NHẤT không được canh, và LÝ DO GHI RA CHO VIỆC KHÔNG CANH NÓ THÌ SAI.
+ *
+ * ============================================================================================
+ * [vòng fix 1] TRỤC TÊN KIỂU: LÝ DO HOÃN CŨ ĐÃ BỊ BÁC BỎ BẰNG PHÉP ĐO — NÓI RÕ CẢ HAI VẾ
+ * ============================================================================================
+ * Bản trước viết: trục tên kiểu KHÔNG CÓ MỐC CHẾT, và lý do là "dựng fixture ấy cho hàm này khó
+ * hơn cho `assertTenantBound` vì ở đây có BA tham số uuid khác nhau, còn ENUM bóng chỉ mang
+ * được một giá trị". LÝ DO ĐÓ SAI: hàm cast ÁNH XẠ THEO NHÃN được, nên MỘT enum NHIỀU NHÃN
+ * phục vụ trọn cả ba tham số. Đo được, và đo trên đúng hàm này:
+ *     CREATE TYPE ke9.uuid AS ENUM ('<sidCu>', '<sidTuoi>', '<nguoiA>', '<orgA>');
+ *     CREATE FUNCTION ke9.doi(ke9.uuid) RETURNS pg_catalog.uuid ...   -- sidCu |-> sidTuoi
+ *     CREATE CAST (ke9.uuid AS pg_catalog.uuid) WITH FUNCTION ke9.doi AS IMPLICIT;
+ *     SET search_path = ke9, pg_catalog, public
+ *       bản KHÔNG GHIM (`::uuid`)          => { tuoi: true }   <- PHÁN XÉT BỊ LẬT
+ *       bản CÓ GHIM (`::pg_catalog.uuid`)  => { tuoi: false }
+ *       assertFreshMfa SẢN PHẨM            => NÉM MfaRequiredError
+ * KẾT LUẬN HAI VẾ, cả hai phải nói: (1) mã sản phẩm ĐỨNG VỮNG — trục đã đóng. (2) Nó đứng vững
+ * nhờ BỐN KÝ TỰ mà cho tới vòng này KHÔNG TEST NÀO CANH, trên một trục đã được tái lập
+ * end-to-end trên CHÍNH hàm này (không còn là "Task 8 đã đo trên hàm khác"). Kẻ tấn công A2/A3
+ * có `CREATE` trên bất kỳ schema nào cộng quyền kiểm soát `search_path` là mở thầu được với một
+ * lần MFA CŨ TUỲ Ý, tức lật thẳng D1.
+ * MỐC CHẾT NAY CÓ THẬT: mfa.int.test.ts, "[INV-D1] trục TÊN KIỂU ... ENUM + CAST IMPLICIT",
+ * kèm vế đối chứng dương (`'uuid'::regtype` phải thuộc schema thù địch) để fixture không rỗng
+ * ruột.
  *
  * DƯ LƯỢNG NÓI THẲNG: không lớp nào (lint, depcruise, AST-check) cưỡng chế quy ước này — nó là
  * kỷ luật cộng test, đúng như khoản nợ số 1 trong task-8-report.md §V3.5. Bảng đột biến đầy đủ

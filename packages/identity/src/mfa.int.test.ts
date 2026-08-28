@@ -6,7 +6,9 @@ import { createPool, migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
+  MAX_TOTP_WINDOW,
   MFA_LOCKOUT_SECONDS,
+  MFA_MAX_ALLOWED_FAILED_ATTEMPTS,
   MFA_MAX_FAILED_ATTEMPTS,
   MfaRequiredError,
   assertFreshMfa,
@@ -16,6 +18,7 @@ import {
   generateTotpSecret,
   verifyTotpAttempt,
   type MfaAttemptResult,
+  type TotpAttempt,
   type TotpSecretUnsealer,
   type WrappedTotpSecret,
 } from "./index.js";
@@ -745,6 +748,100 @@ describe("xác thực TOTP bền vững", () => {
     expect(rows[0]!.f).toBe(MFA_MAX_FAILED_ATTEMPTS);
   });
 
+  it("[INV-E3] GIỚI HẠN SỐ LẦN THỬ DƯỚI ĐỒNG THỜI: hai lần THẤT BẠI chồng nhau đếm thành HAI", async () => {
+    // ==========================================================================================
+    // [vòng fix 1 — MỤC 1] MỐC CHẾT CHO TRỤC ĐẾM, ĐẶT NGANG KỶ LUẬT VỚI TRỤC "DÙNG MỘT LẦN".
+    //
+    // Bộ test của Task 9 đo khoá TUẦN TỰ và đo việc đặt lại bộ đếm sau cửa sổ, nhưng KHÔNG một
+    // test nào đặt HAI lần THẤT BẠI chồng nhau — trong khi trục "dùng một lần", nằm trên CÙNG
+    // một hàng và CÙNG một bất biến, thì được ép đua rất kỹ (test TOCTOU ở trên). Khoảng trống
+    // đó che một lỗ fail-OPEN đã đo được: bản đầu tính số lần thất bại mới trong một CTE, thứ
+    // KHÔNG được EvalPlanQual tính lại trên tuple đã cập nhật, nên N request chồng nhau chỉ làm
+    // bộ đếm tăng ĐÚNG MỘT (đo: 24 request song song, ngưỡng 5 -> 24 mã được phán xét,
+    // LOCKED_OUT = 0, failed_attempts cuối = 3).
+    //
+    // CỬA SỔ ĐUA ĐƯỢC ÉP TẤT ĐỊNH, KHÔNG NHỜ LỊCH BIỂU — đây là điều kiện để mốc chết này thật:
+    //   A: BEGIN, `SELECT ... FOR UPDATE` -> giữ KHOÁ HÀNG mà KHÔNG đổi `failed_attempts`
+    //   B: chạy verifyTotpAttempt với mã sai; câu UPDATE của nó CHỤP ẢNH (failed_attempts = 0)
+    //      rồi KẸT ở khoá hàng của A. Việc B thật sự kẹt được QUAN SÁT qua pg_stat_activity,
+    //      không phải giả định.
+    //   A: chạy verifyTotpAttempt của chính mình (cùng transaction nên không tự kẹt), COMMIT
+    //   B: được thả, EvalPlanQual đánh giá lại trên tuple ĐÃ cập nhật
+    // Với biểu thức TỰ THAM CHIẾU HÀNG ĐÍCH, B ghi 2. Với CTE, B ghi 1.
+    // ==========================================================================================
+    await datLai(nguoiA);
+    const buoc = counterForTime(NGAY);
+    const maSai = deriveTotpCode(biMatA, buoc) === "000000" ? "111111" : "000000";
+
+    const demKetKhoa = async (): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND state = 'active'
+            AND wait_event_type = 'Lock'`,
+      );
+      return Number(rows[0]!.n);
+    };
+
+    let ketQuaB: MfaAttemptResult | null = null;
+    let loiB: unknown = null;
+    const ketQuaA = await withTenant(apiPool, orgA, async (cA) => {
+      await cA.query(
+        "SELECT id FROM mfa_credentials WHERE user_id = $1 FOR UPDATE",
+        [nguoiA],
+      );
+
+      // Hai nhánh của `.then` được truyền NGAY, không để một lần từ chối trở thành unhandled
+      // rejection trong khoảng thời gian A còn đang giữ khoá.
+      const chayB = withTenant(apiPool, orgA, (cB) =>
+        verifyTotpAttempt(cB, { orgId: orgA, userId: nguoiA, code: maSai, now: NGAY }, congMoBiMat),
+      ).then(
+        (r) => {
+          ketQuaB = r;
+        },
+        (e: unknown) => {
+          loiB = e;
+        },
+      );
+
+      // Chờ B THẬT SỰ kẹt ở khoá hàng. Nếu nó không bao giờ kẹt thì cửa sổ đua chưa được ép và
+      // mọi khẳng định dưới đây vô nghĩa — nên hết thời gian là ĐỎ, không phải "đi tiếp".
+      const hetHan = Date.now() + 20_000;
+      while ((await demKetKhoa()) === 0) {
+        if (Date.now() > hetHan) {
+          throw new Error(
+            "Request B không bao giờ kẹt ở khoá hàng — cửa sổ đua KHÔNG được ép, mốc chết này rỗng ruột.",
+          );
+        }
+        await new Promise((r) => setTimeout(r, 25));
+      }
+
+      const a = await verifyTotpAttempt(
+        cA,
+        { orgId: orgA, userId: nguoiA, code: maSai, now: NGAY },
+        congMoBiMat,
+      );
+      // `withTenant` COMMIT khi callback trả về; B được thả ngay sau đó.
+      return { a, chayB };
+    });
+
+    await ketQuaA.chayB;
+    expect(loiB, `request B ném thay vì trả kết quả: ${String(loiB)}`).toBeNull();
+    expect(ketQuaA.a).toMatchObject({ ok: false, reason: "WRONG_CODE" });
+    expect(ketQuaB).toMatchObject({ ok: false, reason: "WRONG_CODE" });
+
+    const { rows } = await db.pool.query<{ f: number }>(
+      "SELECT failed_attempts AS f FROM mfa_credentials WHERE user_id = $1",
+      [nguoiA],
+    );
+    expect(
+      rows[0]!.f,
+      "HAI lần thất bại CHỒNG NHAU chỉ làm bộ đếm tăng 1 — đây là MẤT CẬP NHẬT, và nó cho kẻ " +
+        "tấn công đổi mỗi đơn vị bộ đếm lấy số lần đoán tuỳ ý (biên độ do chính nó chọn, không " +
+        "có cận trên trong thiết kế). Xem khối CAU_GHI_THAT_BAI ở mfa-credentials.ts.",
+    ).toBe(2);
+    await datLai(nguoiA);
+  }, 60_000);
+
   it("[INV-E3] khoá HẾT HẠN thì bộ đếm ĐẶT LẠI — mỗi cửa sổ cho đúng N lần đoán", async () => {
     // Không có nhánh đặt lại, sau lần khoá đầu tiên MỖI lần sai tiếp theo đều vượt ngưỡng và
     // khoá ngay, tức người dùng thật chỉ còn ĐÚNG MỘT lần thử mỗi cửa sổ — vĩnh viễn. Phát biểu
@@ -832,7 +929,144 @@ describe("xác thực TOTP bền vững", () => {
     ).rejects.toThrow(/phiên đang gắn tổ chức/);
   });
 
-  it("[INV-D5] một lần thử MFA THẤT BẠI KHÔNG ghi sổ kiểm toán — quyết định, có đo", async () => {
+  it("[INV-E3] `window` và `maxFailedAttempts` bị GHIM CẢ HAI CẬN ở mặt tiền — và bị chặn TRƯỚC cổng", async () => {
+    // ==========================================================================================
+    // [vòng fix 1 — MỤC 5] Hai tham số chính sách này do NGƯỜI GỌI truyền và trước vòng này chỉ
+    // có cận DƯỚI. Hệ quả đo được: `maxFailedAttempts: 1e9` vô hiệu hoá vế E3(1) trong im lặng;
+    // `window: 60` làm một mã 30 PHÚT TUỔI được chấp nhận (vế E3(3) do người gọi định đoạt);
+    // `window: 200000` tốn 8745 ms CPU trong MỘT lời gọi đồng bộ.
+    // VỊ TRÍ của phép chặn cũng chịu lực, nên nó được ĐO chứ không suy: `window` xấu phải bị từ
+    // chối TRƯỚC khi cổng mở bí mật được gọi lần nào — nếu không, cần gạt DoS vẫn còn và một bí
+    // mật rõ đã kịp tồn tại trong tiến trình.
+    // ==========================================================================================
+    await datLai(nguoiA);
+    const ma = deriveTotpCode(biMatA, counterForTime(NGAY));
+
+    let soLanMoCong = 0;
+    const congDem: TotpSecretUnsealer = {
+      kind: "TOTP_SECRET_UNSEALER",
+      name: "dem",
+      async openTotpSecret(orgId: string, wrapped: WrappedTotpSecret): Promise<Uint8Array> {
+        soLanMoCong += 1;
+        return await congMoBiMat.openTotpSecret(orgId, wrapped);
+      },
+    };
+    const goi = (them: Partial<TotpAttempt>): Promise<MfaAttemptResult> =>
+      withTenant(apiPool, orgA, (c) =>
+        verifyTotpAttempt(
+          c,
+          { orgId: orgA, userId: nguoiA, code: ma, now: NGAY, ...them },
+          congDem,
+        ),
+      );
+
+    // CẬN TRÊN của `maxFailedAttempts`.
+    await expect(goi({ maxFailedAttempts: 1e9 })).rejects.toThrow(RangeError);
+    await expect(goi({ maxFailedAttempts: MFA_MAX_ALLOWED_FAILED_ATTEMPTS + 1 })).rejects.toThrow(
+      /vượt trần/,
+    );
+    // CẬN DƯỚI (đã có từ trước; giữ ở đây để một mũi gỡ hẳn khối kiểm bị bắt bởi MỘT test).
+    await expect(goi({ maxFailedAttempts: 0 })).rejects.toThrow(RangeError);
+
+    // CẬN TRÊN của `window`, và nó phải chặn TRƯỚC cổng.
+    await expect(goi({ window: MAX_TOTP_WINDOW + 1 })).rejects.toThrow(/MAX_TOTP_WINDOW/);
+    await expect(goi({ window: 200_000 })).rejects.toThrow(RangeError);
+    await expect(goi({ window: -1 })).rejects.toThrow(RangeError);
+    expect(
+      soLanMoCong,
+      "một `window` vượt trần vẫn đi tới cổng mở bí mật — cần gạt DoS CPU còn nguyên, và một " +
+        "bí mật rõ đã tồn tại trong tiến trình cho một lời gọi chắc chắn bị từ chối.",
+    ).toBe(0);
+
+    // KHÔNG lời gọi nào ở trên được tính là một lần thất bại: đó là lỗi THAM SỐ của người gọi,
+    // không phải một lần đoán sai. Nếu chúng bị tính, một client hỏng tự khoá tài khoản.
+    const { rows } = await db.pool.query<{ f: number }>(
+      "SELECT failed_attempts AS f FROM mfa_credentials WHERE user_id = $1",
+      [nguoiA],
+    );
+    expect(rows[0]!.f).toBe(0);
+
+    // ĐỐI CHỨNG DƯƠNG — chống "chặn tất cả": ĐÚNG hai trần thì lời gọi đi trọn vẹn và QUA.
+    const ok = await goi({
+      window: MAX_TOTP_WINDOW,
+      maxFailedAttempts: MFA_MAX_ALLOWED_FAILED_ATTEMPTS,
+    });
+    expect(ok).toMatchObject({ ok: true });
+    expect(soLanMoCong).toBe(1);
+    await datLai(nguoiA);
+  });
+
+  it("[CẤM LOG] lỗi của CỔNG được BỌC — bí mật rõ không đi vào `message`, chỉ đi tiếp qua `cause`", async () => {
+    // ==========================================================================================
+    // [vòng fix 1 — MỤC 7] mfa-credentials.ts từng HỨA điều này trong chú thích ("lỗi do cổng
+    // ném được bọc lại KHÔNG nội suy giá trị nào ... nguyên nhân gốc chỉ đi tiếp qua `cause`")
+    // trong khi thân hàm chỉ có `try/finally`: không `catch`, không `cause`, không bọc. ĐO:
+    // tiêm adapter ném lỗi mang bí mật RÕ -> bí mật CÓ trong `message` = true. Và hai test
+    // [CẤM LOG] hôm ấy chỉ quét bốn lỗi của totp.ts, KHÔNG test nào chạm đường lỗi của
+    // `verifyTotpAttempt` — chỗ DUY NHẤT của toàn S0 cầm bí mật TOTP ở dạng rõ.
+    // Test này bơm ĐÚNG adapter của phép đo đó.
+    // ==========================================================================================
+    await datLai(nguoiA);
+    const biMatHex = biMatA.toString("hex");
+    const biMatB64 = biMatA.toString("base64");
+    const congRo: TotpSecretUnsealer = {
+      kind: "TOTP_SECRET_UNSEALER",
+      name: "adapter-viet-au",
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async openTotpSecret(): Promise<Uint8Array> {
+        // Đúng thứ một adapter viết ẩu làm: ném lỗi có nội suy giá trị đang xử lý.
+        throw new Error(`giai ma that bai cho secret=${biMatHex} (b64 ${biMatB64})`);
+      },
+    };
+
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      verifyTotpAttempt(
+        c,
+        { orgId: orgA, userId: nguoiA, code: deriveTotpCode(biMatA, counterForTime(NGAY)), now: NGAY },
+        congRo,
+      ),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    expect(loi, "lời gọi phải NÉM — fail-closed, không nuốt lỗi của cổng").toBeInstanceOf(Error);
+    const boc = loi as Error & { cause?: unknown };
+
+    // ĐỐI CHỨNG CHỐNG RỖNG RUỘT, đặt TRƯỚC: fixture phải THẬT SỰ rò, nếu không mọi khẳng định
+    // dưới đây xanh vì lỗi gốc vô hại chứ không vì lớp bọc chịu lực.
+    expect(boc.cause, "nguyên nhân gốc phải đi tiếp qua `cause`").toBeInstanceOf(Error);
+    expect((boc.cause as Error).message).toContain(biMatHex);
+
+    // VẾ CHỊU LỰC: chuỗi mà lớp trên ghi log được KHÔNG mang bí mật, kể cả một mảnh.
+    expect(boc.message).not.toContain(biMatHex);
+    expect(boc.message).not.toContain(biMatB64);
+    expect(boc.message).not.toContain(biMatHex.slice(0, 8));
+    // `stack` của chính lỗi bọc cũng vậy — nó là thứ đi vào một dòng log trong thực tế.
+    expect(boc.stack ?? "").not.toContain(biMatHex.slice(0, 8));
+    // Và nó phải nói được cổng NÀO hỏng, nếu không lớp bọc mua sự im lặng bằng khả năng điều tra.
+    expect(boc.message).toContain("adapter-viet-au");
+
+    // Một lần lỗi CỔNG không được tính là một lần đoán sai: đó là sự cố hạ tầng, không phải một
+    // lần thử của người dùng.
+    const { rows } = await db.pool.query<{ f: number }>(
+      "SELECT failed_attempts AS f FROM mfa_credentials WHERE user_id = $1",
+      [nguoiA],
+    );
+    expect(rows[0]!.f).toBe(0);
+    await datLai(nguoiA);
+  });
+
+  it("[T9-J] một lần thử MFA THẤT BẠI KHÔNG ghi sổ kiểm toán — quyết định, có đo", async () => {
+    // [vòng fix 1 — MỤC 3/I2] TEST NÀY TỪNG MANG THẺ `[INV-D5]`, VÀ ĐÓ LÀ BẰNG CHỨNG ĐẢO CHIỀU.
+    // D5 (docs/TEST-PLAN.md) = "lần từ chối vì thiếu quyền CŨNG PHẢI audit". Test này khẳng định
+    // điều NGƯỢC LẠI trên một đường đi khác, tức nó chứng minh một NGOẠI LỆ của D5 — và bộ sinh
+    // của Task 11 gom theo mã, nên hàng D5 của `evidence/INV-matrix.md` sẽ mang một dòng
+    // "passed" mà TÊN của nó đọc như phủ định chính bất biến ấy. NỘI DUNG quyết định thì đúng và
+    // được giữ nguyên; chỉ cái NHÃN sai. Thẻ `[T9-J]` cố ý KHÔNG khớp regex `\[INV-([A-H]\d+)\]`
+    // của bộ sinh: đây là một QUYẾT ĐỊNH có ADR (docs/DECISIONS.md, ADR-008), không phải một bất
+    // biến được phủ.
+    //
     // D5 nói về TỪ CHỐI QUYỀN, không về một phép thử chứng thực. Ghi sổ ở đây nghĩa là MỖI lần
     // đoán sai của MỖI người lạ đều lấy khoá tư vấn ghi sổ THEO TỔ CHỨC (Task 8 ĐO-5a/5b: một
     // phiên khác cùng tổ chức kẹt tới lock_timeout) — trên một đường đi kẻ tấn công KHÔNG CẦN
@@ -1499,6 +1733,139 @@ describe("[QT3] MFA dưới search_path thù địch", () => {
             verifyTotpAttempt(c, { orgId: org, userId: nguoiOk, code: maDung }, congMoBiMat),
           ),
         ).toMatchObject({ ok: false, reason: "LOCKED_OUT" });
+      } finally {
+        await poolThuDich.end();
+      }
+    } finally {
+      await dbRieng.stop();
+    }
+  }, 240_000);
+
+  // ==========================================================================================
+  // [vòng fix 1 — VIỆC ĐƯỢC NÂNG MỨC] TRỤC TÊN KIỂU, MỐC CHẾT MÀ TASK 9 KHAI LÀ "KHÓ DỰNG"
+  //
+  // Task 9 ghi lý do bỏ trống trục này: "dựng fixture ấy cho `assertFreshMfa` khó hơn vì có BA
+  // tham số uuid khác nhau, còn ENUM bóng chỉ mang được MỘT giá trị." LÝ DO ĐÓ SAI — hàm cast
+  // ÁNH XẠ THEO NHÃN được, nên một ENUM NHIỀU NHÃN phục vụ trọn cả ba tham số. Fixture dưới
+  // đây ~40 dòng và nó ĐO trên đúng hàm sản phẩm.
+  //
+  // VÌ SAO TRỤC NÀY KHÔNG PHẢI TRANG TRÍ: Task 8 vòng fix 2 đã tái lập END-TO-END rằng
+  // `CREATE TYPE ... AS ENUM` + `CREATE CAST ... AS IMPLICIT` LẬT ĐƯỢC một phán xét mà KHÔNG
+  // cần cướp một toán tử nào. Kẻ tấn công cần `CREATE` trên một schema bất kỳ cộng quyền điều
+  // khiển `search_path` — và cái nó mua là mở thầu với một lần MFA CŨ TUỲ Ý, tức lật thẳng D1.
+  //
+  // CONTAINER RIÊNG, KHÔNG GHÉP VÀO KHỐI TRÊN: fixture này định nghĩa `ke9.uuid`, và với
+  // `search_path = ke9, pg_catalog, public` thì MỌI chữ `uuid` trần trong container đó phân
+  // giải về enum — kể cả các vế probe của khối trên. Ghép lại là tự làm mù phép đo kia.
+  // ==========================================================================================
+  it("[INV-D1] trục TÊN KIỂU có MỐC CHẾT — ENUM + CAST IMPLICIT lật được bản KHÔNG ghim", async () => {
+    const dbRieng = await startPostgres();
+    try {
+      await migrate(dbRieng.pool, MIGRATIONS);
+      const { rows: o } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Cong ty A', 'a') RETURNING id",
+      );
+      const org = o[0]!.id;
+      const { rows: u } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, 'ok@a.com', 'OK', 'ACTIVE') RETURNING id",
+        [org],
+      );
+      const nguoi = u[0]!.id;
+
+      const themPhien = async (mfaLuc: string): Promise<string> => {
+        const { rows } = await dbRieng.pool.query<{ id: string }>(
+          "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+            `VALUES ($1, $2, $3, clock_timestamp() + interval '8 hours', ${mfaLuc}) RETURNING id`,
+          [org, nguoi, randomBytes(32)],
+        );
+        return rows[0]!.id;
+      };
+      const sidTuoi = await themPhien("clock_timestamp()");
+      const sidCu = await themPhien("clock_timestamp() - interval '2 hours'");
+
+      // ------------------------- KIỂU `uuid` THÙ ĐỊCH -------------------------
+      // Bốn NHÃN, không phải một: đây chính là điều mà lý do hoãn cũ nói là không làm được.
+      await dbRieng.pool.query("CREATE SCHEMA ke9");
+      await dbRieng.pool.query("GRANT USAGE ON SCHEMA ke9 TO PUBLIC");
+      await dbRieng.pool.query(
+        `CREATE TYPE ke9.uuid AS ENUM ('${sidCu}', '${sidTuoi}', '${nguoi}', '${org}')`,
+      );
+      // Ánh xạ THEO NHÃN: chỉ `sidCu` bị đổi, ba nhãn kia đi qua nguyên vẹn. Nhờ vậy phán xét
+      // bị lật ĐÚNG một trục (định danh phiên) thay vì hỏng toàn bộ truy vấn.
+      await dbRieng.pool.query(
+        `CREATE FUNCTION ke9.doi(v ke9.uuid) RETURNS pg_catalog.uuid
+           LANGUAGE sql IMMUTABLE AS $$
+             SELECT (CASE v::pg_catalog.text
+                       WHEN '${sidCu}' THEN '${sidTuoi}'
+                       ELSE v::pg_catalog.text
+                     END)::pg_catalog.uuid $$`,
+      );
+      await dbRieng.pool.query("GRANT EXECUTE ON FUNCTION ke9.doi(ke9.uuid) TO PUBLIC");
+      await dbRieng.pool.query(
+        "CREATE CAST (ke9.uuid AS pg_catalog.uuid) WITH FUNCTION ke9.doi AS IMPLICIT",
+      );
+
+      await dbRieng.pool.query("CREATE ROLE app_api_ke9 LOGIN PASSWORD 'mk' IN ROLE app_api");
+      await dbRieng.pool.query("ALTER ROLE app_api_ke9 SET search_path = ke9, pg_catalog, public");
+
+      const url = new URL(dbRieng.connectionString);
+      url.username = "app_api_ke9";
+      url.password = "mk";
+      const poolThuDich = createPool(url.toString(), 3);
+      try {
+        // ============== FIXTURE TỰ CHỨNG MINH NÓ TẤN CÔNG ĐƯỢC ==============
+        // Nếu `uuid` trần vẫn phân giải về pg_catalog, mọi khẳng định dưới đây xanh VÌ LÝ DO
+        // SAI. Đối chứng dương: chữ `uuid` trần phải thuộc schema THÙ ĐỊCH, còn
+        // `pg_catalog.uuid` thì không.
+        const { rows: ns } = await poolThuDich.query<{ tran: string; ghim: string }>(
+          `SELECT (SELECT n.nspname FROM pg_catalog.pg_type t
+                     JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) t.typnamespace
+                    WHERE t.oid OPERATOR(pg_catalog.=) pg_catalog.to_regtype('uuid')) AS tran,
+                  (SELECT n.nspname FROM pg_catalog.pg_type t
+                     JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) t.typnamespace
+                    WHERE t.oid OPERATOR(pg_catalog.=) pg_catalog.to_regtype('pg_catalog.uuid')) AS ghim`,
+        );
+        expect(ns[0]!.tran, "`uuid` trần KHÔNG bị cướp — fixture rỗng ruột").toBe("ke9");
+        expect(ns[0]!.ghim, "`pg_catalog.uuid` lại bị cướp — phép đo rỗng ruột").toBe("pg_catalog");
+
+        // ============== HAI BẢN CỦA CÙNG MỘT VỊ TỪ, ĐO RIÊNG ==============
+        // HAI LỜI GỌI RIÊNG, KHÔNG DÙNG CHUNG THAM SỐ: PostgreSQL suy kiểu tham số từ lần dùng
+        // ĐẦU TIÊN, nên gộp hai vế vào một câu sẽ biến `$1::pg_catalog.uuid` thành một phép ép
+        // TƯỜNG MINH từ `ke9.uuid` — tức đo một hình dạng mà mã sản phẩm không có. Đây đúng cạm
+        // bẫy đã suýt cho một kết luận sai NGƯỢC CHIỀU ở Task 8 vòng fix 3.
+        const viTu = (kieu: string): string =>
+          `SELECT (s.mfa_verified_at OPERATOR(pg_catalog.>)
+                   (pg_catalog.clock_timestamp() OPERATOR(pg_catalog.-)
+                    pg_catalog.make_interval(secs => 300::pg_catalog.float8))) IS TRUE AS tuoi
+             FROM public.sessions s
+            WHERE s.id OPERATOR(pg_catalog.=) $1::${kieu}`;
+        const doVe = async (kieu: string): Promise<boolean> => {
+          const { rows } = await withTenant(poolThuDich, org, (c) =>
+            c.query<{ tuoi: boolean }>(viTu(kieu), [sidCu]),
+          );
+          return rows[0]?.tuoi === true;
+        };
+        expect(
+          await doVe("uuid"),
+          "bản KHÔNG GHIM phải BỊ LẬT — nếu không, trục này không khai thác được và mốc chết " +
+            "dưới đây không đo gì cả.",
+        ).toBe(true);
+        expect(await doVe("pg_catalog.uuid"), "bản CÓ GHIM bị lật theo").toBe(false);
+
+        // ==================== MÃ SẢN PHẨM PHẢI ĐỨNG VỮNG ====================
+        await expect(
+          withTenant(poolThuDich, org, (c) =>
+            assertFreshMfa(c, { sessionId: sidCu, userId: nguoi, orgId: org, maxAgeSeconds: 300 }),
+          ),
+        ).rejects.toBeInstanceOf(MfaRequiredError);
+
+        // ĐỐI CHỨNG DƯƠNG: phiên THẬT SỰ tươi vẫn qua dưới cùng search_path — nên khẳng định
+        // trên không phải "truy vấn hỏng hoàn toàn dưới path này".
+        await expect(
+          withTenant(poolThuDich, org, (c) =>
+            assertFreshMfa(c, { sessionId: sidTuoi, userId: nguoi, orgId: org, maxAgeSeconds: 300 }),
+          ),
+        ).resolves.toBeUndefined();
       } finally {
         await poolThuDich.end();
       }

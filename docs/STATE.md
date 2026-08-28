@@ -29,11 +29,32 @@ Chưa xong:
 ## Công việc đang làm
 
 Kế hoạch triển khai S0 đã viết xong: 11 task, 92 bước, tại
-`docs/superpowers/plans/2026-08-27-s0-foundation.md`. Chưa bắt đầu thực thi task nào.
+`docs/superpowers/plans/2026-08-27-s0-foundation.md`. **Task 1–9 đã xong** (Task 9 đang ở
+vòng fix 1); còn Task 10 và Task 11.
 
-S0 phủ 13 trong 34 bất biến (B3, B4, D1, D3, D5, E3, F1, F2, F3, G1, G2, G3, G4).
-21 bất biến còn lại thuộc S1 vì chúng đòi hỏi RFQ, lời mời, phong bì niêm phong và
-luồng mở thầu.
+S0 **nhắm tới** 13 trong 34 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3, G1,
+G2, G3, G4). 21 bất biến còn lại thuộc S1 vì chúng đòi hỏi RFQ, lời mời, phong bì niêm
+phong và luồng mở thầu.
+
+**"Nhắm tới" KHÔNG phải "đã phủ", và ba chỗ dưới đây phải đọc kèm — dòng này là thứ người
+vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được rộng hơn thực tế:**
+
+- **E3** — sổ đăng ký (`docs/TEST-PLAN.md:82`) định nghĩa E3 bằng **năm** vế. Vế *giới hạn
+  tần suất* **không có một dòng mã nào** trong toàn S0. Bốn vế còn lại có lớp và có mốc
+  chết. Xem khối đầu `packages/identity/src/mfa-credentials.ts`.
+- **D1** — phép **kiểm** độ tươi (`assertFreshMfa`) đã có và đã được đo, nhưng **toàn bộ
+  đường đời của `sessions` chưa tồn tại trong mã sản phẩm**: không hàm nào phát token,
+  tra token, hay đặt `mfa_verified_at` (`grep token_hash` trên `packages/**/*.ts` trừ
+  test → rỗng). D1 là một phép kiểm ĐÚNG chưa có ai gọi.
+- **D5** — được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng
+  CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi
+  sổ (ADR-008).
+
+**LỆCH SỐ CẦN TASK 11 HOÀ GIẢI, ghi ra thay vì để nó tự lộ:** dòng trên đếm 34 bất biến
+nghiệp vụ, còn sổ tay tiến trình có chỗ ghi ngưỡng "23/44". Hai con số đếm hai thứ khác
+nhau (34 = nhóm A–G; 46 = A–G cộng 12 bất biến hàng rào nhóm H sau khi H11/H12 được đăng
+ký ở `docs/TEST-PLAN.md` §5). `evidence/INV-matrix.md` của Task 11 phải nói rõ con số nào
+là thật và đếm cái gì — đó đúng là việc evidence pack sinh ra để làm.
 
 ## Điểm chặn
 

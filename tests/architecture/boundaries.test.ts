@@ -502,6 +502,50 @@ describe("ranh giới kiến trúc", () => {
   });
 
   // ======================================================================================
+  // [vòng fix 1 Task 9 — MỤC 3] VÌ SAO NĂM TEST DƯỚI ĐÂY MANG `[INV-H11]` CHỨ KHÔNG PHẢI
+  // `[INV-G2]`, VÀ MƯỜI TEST `[INV-G1]` Ở TRÊN THÌ GIỮ NGUYÊN
+  //
+  // Sổ đăng ký là docs/TEST-PLAN.md §2, không phải trực giác. Ở đó:
+  //     G2 = "Mỗi RFQ một cặp khoá; lộ một RFQ không lan sang RFQ khác"
+  //     G3 = "Xoay master key không làm mất khả năng giải mã báo giá cũ"
+  // Năm test dưới đây (và bốn test `g3-` ở cuối file) đo QUY TẮC BIÊN GIỚI MODULE của
+  // dependency-cruiser. Chúng không chạm một cặp khoá RFQ nào và không xoay một khoá nào. Bộ
+  // sinh của Task 11 gom test theo MÃ (`/\[INV-([A-H]\d+)\]/g`), nên để nguyên là nộp cho
+  // `evidence/INV-matrix.md` sáu dòng "passed" dưới hàng G3 mà bốn dòng không liên quan gì tới
+  // xoay khoá — nặng hơn ca G2 của Task 7 vì test G2/G3 ĐÚNG NGHĨA vẫn tồn tại song song, nên
+  // va chạm là VÔ HÌNH nếu không đọc tên. Lớp khiếm khuyết: "mốc chết giả đã dịch chỗ — nó
+  // không còn ở TEST, nó ở NHÃN."
+  //
+  // MÃ MỚI, KHÔNG PHẢI MÃ MƯỢN: docs/TEST-PLAN.md §5 đã có sẵn nhóm H — "bất biến hàng rào" —
+  // và một quy tắc biên giới depcruise LÀ một hàng rào, cùng hạng với hai hook `git-safety` /
+  // `protect-secrets`. H11 và H12 được ĐĂNG KÝ ở §5 (không phải bịa ra ở đây), và chúng khớp
+  // sẵn regex `[A-H]\d+` nên bộ sinh của Task 11 không phải đổi một dòng nào.
+  //     H11 = biên giới module của packages/identity (họ quy tắc `g2-`)
+  //     H12 = packages/identity KHÔNG có năng lực mật mã (họ quy tắc `g3-`)
+  //
+  // MƯỜI TEST `[INV-G1]` Ở TRÊN THÌ ĐÚNG và được giữ: G1 = "Private key RFQ không bao giờ ở
+  // dạng rõ ngoài unseal-worker", và quy tắc `g1-` cưỡng chế CHÍNH bất biến đó — nhãn khớp thứ
+  // được đo. Ở đây trục nghiệp vụ và trục hàng rào TRÙNG nhau; ở H11/H12 thì không.
+  //
+  // TÊN QUY TẮC depcruise (`g1-`/`g2-`/`g3-`) GIỮ NGUYÊN. Vấn đề nằm ở NHÃN TEST, không ở tên
+  // quy tắc; đổi tên quy tắc sẽ chạm `.dependency-cruiser.cjs`, ba canary tự canh cấu hình, và
+  // mọi thông báo lỗi đã được viện dẫn trong sổ tiến trình — tức trả một cái giá thật cho đúng
+  // 0 bảo đảm.
+  //
+  // `[INV-G2]` LÀ LỖI TIỀN TỒN CỦA TASK 8, VÀ NÓ ĐƯỢC SỬA Ở ĐÂY chứ không để lại: Task 11 là
+  // bên TIÊU THỤ ma trận này; để lại nghĩa là bắt Task 11 hoà giải một đầu vào đã biết là sai.
+  //
+  // *** HỆ QUẢ PHẢI NÓI RA, VÀ NÓ LÀ ĐIỂM QUAN TRỌNG NHẤT CỦA VIỆC ĐỔI NHÃN NÀY ***
+  // Sau khi năm nhãn `[INV-G2]` rời khỏi file này, số test mang `[INV-G2]` trong TOÀN REPO là
+  // **KHÔNG**. Đó KHÔNG phải một hồi quy — đó là sự thật hiện ra. G2 = "mỗi RFQ một cặp khoá; lộ
+  // một RFQ không lan sang RFQ khác", và `packages/crypto-keys/src/roundtrip.test.ts:47` đã TỰ
+  // GHI RA rằng nó cố ý KHÔNG gắn `[INV-G2]` vì "khoá theo RFQ" chưa tồn tại (thuộc S1). Tức
+  // hàng G2 lẽ ra đã trống từ đầu, và năm test biên giới module đang LẤP nó bằng bằng chứng của
+  // một bất biến khác. `evidence/INV-matrix.md` của Task 11 nay sẽ báo G2 = CHƯA PHỦ. Đó là câu
+  // trả lời ĐÚNG, và nó chỉ nói được sau khi nhãn được sửa.
+  // (Hai test `[INV-G3]` THẬT vẫn còn — `roundtrip.test.ts`, xoay master key — nên hàng G3 KHÔNG
+  // trống, chỉ hết bốn dòng không liên quan.)
+  // ======================================================================================
   // Vòng fix 2 (MỤC D) — CÙNG KHUÔN, ÁP CHO packages/identity/src/
   //
   // Bất đối xứng đo được tại HEAD 33985b8, ba đường tới CÙNG một symbol `hasPermission`:
@@ -514,7 +558,7 @@ describe("ranh giới kiến trúc", () => {
   // "mặc định đóng" mà crypto-keys đã dùng từ fix round 4.
   // ======================================================================================
 
-  it("[INV-G2] chặn import TƯƠNG ĐỐI xuyên gói vào packages/identity/src/rbac.ts", () => {
+  it("[INV-H11] chặn import TƯƠNG ĐỐI xuyên gói vào packages/identity/src/rbac.ts", () => {
     // ĐÚNG đường đi mà reviewer đo được là im lặng ở cả ba lớp.
     const probe = "packages/audit/src/zzprobe-duong-tuong-doi.ts";
     writeFileSync(
@@ -535,7 +579,7 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G2] module MỚI thêm vào packages/identity/src mặc định không với tới được từ ngoài", () => {
+  it("[INV-H11] module MỚI thêm vào packages/identity/src mặc định không với tới được từ ngoài", () => {
     // Probe chống-tái-diễn: file HOÀN TOÀN MỚI, không xuất hiện trong bất kỳ quy tắc nào. Nếu
     // ai đó sau này diễn đạt lại quy tắc theo kiểu "cấm từng cạnh", test này đỏ.
     const moduleMoi = "packages/identity/src/zzprobe-module-moi.ts";
@@ -560,7 +604,7 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G2] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+  it("[INV-H11] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
     // Không có vế này, hai test trên xanh kể cả khi quy tắc chặn LUÔN CẢ cửa hợp pháp, và bất
     // biến thu được sẽ là "không ai dùng được gói identity" chứ không phải thứ định canh.
     mkdirSync("apps/tmp-probe-identity-cua/src", { recursive: true });
@@ -581,7 +625,7 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G2] mọi module được miễn trừ vai trò `from` ở họ g2- đều đồng thời là đích hạn chế", () => {
+  it("[INV-H11] mọi module được miễn trừ vai trò `from` ở họ g2- đều đồng thời là đích hạn chế", () => {
     // Bản sao chính xác của bất biến chống-tái-diễn ở họ "g1-", áp cho họ "g2-". Cùng lý do:
     // mỗi lần miễn trừ một module khỏi vai trò `from`, người viết phải TỰ NHỚ biến module đó
     // thành đích hạn chế — CR1 là lần thứ tư quên ở họ g1. Cưỡng chế bằng máy ngay từ quy tắc
@@ -641,7 +685,7 @@ describe("ranh giới kiến trúc", () => {
     expect(laDichHanChe("packages/identity/src/index.ts")).toBe(false);
   });
 
-  it("[INV-G2] cửa công khai của packages/identity/src đúng bằng index.ts", () => {
+  it("[INV-H11] cửa công khai của packages/identity/src đúng bằng index.ts", () => {
     // Canary cho chính sách tối giản, cùng khuôn với canary của crypto-keys: nới `to.pathNot`
     // để "cho qua" một module nữa là một quyết định phải được nhìn thấy.
     interface DepCruiseRule {
@@ -670,7 +714,7 @@ describe("ranh giới kiến trúc", () => {
   // một hàng rào thay vì nới hàng rào cũ), và bốn test dưới đây là lớp cưỡng chế của nó.
   // ======================================================================================
 
-  it("[INV-G3] chặn packages/identity import mặt tiền BỌC của crypto-keys", () => {
+  it("[INV-H12] chặn packages/identity import mặt tiền BỌC của crypto-keys", () => {
     // Chặn cả đường BỌC — không chỉ đường MỞ — là toàn bộ nội dung của quy tắc: chính sự có
     // mặt của một cạnh identity -> crypto-keys là thứ biến việc nới G1 thành một dòng sửa nhỏ
     // trông vô hại. Probe dùng đường TƯƠNG ĐỐI để cạnh luôn resolve được bất kể package.json
@@ -694,7 +738,7 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G3] chặn packages/identity import đường MỞ khoá, và g1 vẫn bắn cùng lúc", () => {
+  it("[INV-H12] chặn packages/identity import đường MỞ khoá, và g1 vẫn bắn cùng lúc", () => {
     // Hai lớp phải cùng bắn ở đây, và điều đó phải được ĐO chứ không suy: nếu chỉ g3 bắn thì
     // gỡ g3 là đủ để mở đường; nếu chỉ g1 bắn thì g3 là trang trí trên đúng ca nguy hiểm nhất.
     const probe = "packages/identity/src/zzprobe-mo-khoa.ts";
@@ -716,10 +760,10 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G3] gói KHÁC vẫn import được mặt tiền bọc — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+  it("[INV-H12] gói KHÁC vẫn import được mặt tiền bọc — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
     // Không có vế này, hai test trên xanh kể cả khi quy tắc chặn MỌI đường tới crypto-keys, và
     // bất biến thu được sẽ là "không ai bọc khoá được" chứ không phải thứ định canh. Cùng khuôn
-    // đối chứng dương của [INV-G2] cho cửa index.ts.
+    // đối chứng dương của [INV-H11] cho cửa index.ts.
     const probe = "packages/audit/src/zzprobe-boc-khoa.ts";
     writeFileSync(
       probe,
@@ -738,7 +782,7 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G3] quy tắc g3- KHÔNG có miễn trừ nào, và đích của nó là CẢ gói crypto-keys", () => {
+  it("[INV-H12] quy tắc g3- KHÔNG có miễn trừ nào, và đích của nó là CẢ gói crypto-keys", () => {
     // Canary cho chính sách, cùng khuôn hai canary của g1-/g2-. Ở họ g1-/g2- thứ nguy hiểm là
     // "miễn trừ một module khỏi vai trò `from` mà quên biến nó thành đích hạn chế"; ở đây thứ
     // nguy hiểm KHÁC HẲN và ngược chiều — một dòng `from.pathNot` hay một `to.pathNot` thêm vào

@@ -2,6 +2,7 @@ import type pg from "pg";
 import { assertTenantBound } from "@trustprocure/audit";
 import {
   isWellFormedTotpCode,
+  khangDinhCuaSo,
   verifyTotpCode,
   type TotpFailureReason,
   type TotpResult,
@@ -10,14 +11,46 @@ import {
 // ============================================================================================
 // BẤT BIẾN E3 Ở DẠNG BỀN VỮNG — VÀ VÌ SAO FILE NÀY TỒN TẠI
 //
+// [vòng fix 1 — MỤC 6] SỔ ĐĂNG KÝ LÀ docs/TEST-PLAN.md, KHÔNG PHẢI TRÍ NHỚ. E3 ở đó có NĂM vế,
+// không phải ba như bản trước của khối này (và của totp.ts, và của 006) viết:
+//     E3(1) giới hạn số lần thử            — FILE NÀY, trên `failed_attempts`/`locked_until`.
+//     E3(2) GIỚI HẠN TẦN SUẤT              — *** KHÔNG CÓ LỚP NÀO TRONG S0 ***. Xem dưới.
+//     E3(3) hết hạn                        — cửa sổ trượt của `verifyTotpCode` (totp.ts).
+//     E3(4) dùng một lần                   — `last_used_counter`, FILE NÀY (vế bền vững) +
+//                                            totp.ts (vế hàm thuần).
+//     E3(5) so sánh chống tấn công thời gian — totp.ts, và KHÔNG có mốc chết (nói rõ ở đó).
+// Con số "ba" của bản trước hẹp hơn sổ đăng ký, và hệ quả KHÔNG vô hại: bộ sinh của Task 11 gom
+// test theo mã `[INV-E3]`, nên `evidence/INV-matrix.md` sẽ đọc E3 = ĐÃ PHỦ trong khi một trong
+// năm vế ĐƯỢC ĐẶT TÊN TRONG SỔ ĐĂNG KÝ không có một dòng mã nào. Đó đúng là lớp "bằng chứng
+// giả" mà chính khối này được viết ra để chống.
+//
+// E3(2) — GIỚI HẠN TẦN SUẤT — LÀ MỘT KHOẢN NỢ MỞ, KHÔNG PHẢI MỘT LỚP BÙ TUỲ CHỌN. Chỗ khác của
+// file này gọi hạn mức theo NGƯỜI GỌI là "lớp bù" cho đánh đổi "khoá được tài khoản người
+// khác"; điều đó đúng NHƯNG không đầy đủ: nó CŨNG là một vế E3 chưa cài. Hai cái tên cho cùng
+// một thứ chưa có, và chỉ một trong hai nằm trong sổ đăng ký bất biến. Vào sổ nợ Task 11.
+//
 // Brief tạo hai cột `mfa_credentials.failed_attempts` và `locked_until` rồi KHÔNG có một dòng
-// mã nào đọc hay ghi chúng. Hệ quả đo được nếu để nguyên: vế (1) của E3 (giới hạn số lần thử)
-// KHÔNG ĐƯỢC CÀI ĐẶT, và vế (2) (dùng một lần) chỉ tồn tại trong một hàm THUẦN — tức nó biến
+// mã nào đọc hay ghi chúng. Hệ quả đo được nếu để nguyên: vế E3(1) (giới hạn số lần thử)
+// KHÔNG ĐƯỢC CÀI ĐẶT, và vế E3(4) (dùng một lần) chỉ tồn tại trong một hàm THUẦN — tức nó biến
 // mất giữa hai request. Sáu test mang thẻ [INV-E3] của brief khi đó đều chỉ đo hàm thuần, tức
 // một BẰNG CHỨNG GIẢ cho evidence pack.
 //
-// File này cài đặt cả ba vế trên chính hai cột đó, và các GRANT ở 006 được cắt đúng theo những
-// cột file này ghi — không hơn.
+// File này cài đặt E3(1) và vế bền vững của E3(4) trên chính hai cột đó, và các GRANT ở 006
+// được cắt đúng theo những cột file này ghi — không hơn.
+//
+// ============================================================================================
+// [vòng fix 1 — MỤC 8 / M-1] TẦNG CSDL KHÔNG CƯỠNG CHẾ ĐƯỢC E3, VÀ ĐÓ LÀ MỘT LỰA CHỌN
+// ============================================================================================
+// 006 cấp `GRANT UPDATE (last_used_counter, failed_attempts, locked_until, confirmed_at)` cho
+// `app_api`, tức một app_api BỊ CHIẾM (A1) tắt được CẢ E3(1) LẪN E3(4) bằng MỘT câu `UPDATE` —
+// đo được, cả hai vế:
+//     `UPDATE mfa_credentials SET locked_until = NULL`     -> LOCKED_OUT trở lại WRONG_CODE
+//     `UPDATE mfa_credentials SET last_used_counter = NULL` -> chơi lại được ĐÚNG mã cũ
+// Không tránh được nếu giữ E3 ở tầng ứng dụng: bỏ GRANT là bỏ luôn cơ chế, và thu hẹp nó xuống
+// một hàm SECURITY DEFINER là thứ mục (C) của hardening.always.sql CẤM. Đây là HẠN CHẾ CHẤP
+// NHẬN ĐƯỢC, cùng hình dạng và cùng mức chi tiết với ca `sessions.mfa_verified_at` đã ghi ở
+// 006 §(2) — và nó được ghi ở CẢ HAI nơi thay vì một, vì người đọc mã ứng dụng và người đọc
+// lược đồ là hai người khác nhau.
 //
 // ============================================================================================
 // T9-A: VÌ SAO GÓI NÀY KHÔNG MỞ PHONG BÌ, VÀ CỔNG `TotpSecretUnsealer` LÀ CÂU TRẢ LỜI
@@ -113,6 +146,24 @@ export const MFA_MAX_FAILED_ATTEMPTS = 5;
 /** Độ dài cửa sổ khoá, tính bằng giây. */
 export const MFA_LOCKOUT_SECONDS = 900;
 
+/**
+ * [vòng fix 1 — MỤC 5] TRẦN CỦA `maxFailedAttempts`, và vì sao một tham số chính sách phải có
+ * cận TRÊN chứ không chỉ cận DƯỚI.
+ *
+ * `maxFailedAttempts` do NGƯỜI GỌI truyền, và bản trước chỉ kiểm `>= 1`. Một người gọi truyền
+ * `1e9` (hoặc một cấu hình đọc từ biến môi trường bị đặt sai) làm vế E3(1) BIẾN MẤT trong im
+ * lặng: hồ sơ không bao giờ khoá, và `verifyTotpAttempt` vẫn trả về những giá trị trông hoàn
+ * toàn bình thường. Đó là một cần gạt fail-OPEN nằm ở MẶT TIỀN CÔNG KHAI — đúng lớp mà QT2
+ * cấm, và LỆCH PHA với chính 006, nơi `user_agent` bị chặn CẤU TRÚC ở 512 byte với lý do "một
+ * cột text không giới hạn nhận chuỗi tuỳ ý".
+ *
+ * Con số 20 là một CHÍNH SÁCH, không phải một hằng số toán học, nên nói thẳng nó mua gì: với
+ * không gian mã 10^6 và cửa sổ khoá 900 giây, 20 lần đoán mỗi cửa sổ cho xác suất trúng
+ * ~2·10^-5 mỗi cửa sổ. Ai cần cao hơn phải sửa dòng này — tức phải viết ra thành một quyết
+ * định nhìn thấy được, không phải một tham số truyền vào ở một call site.
+ */
+export const MFA_MAX_ALLOWED_FAILED_ATTEMPTS = 20;
+
 export type MfaDenialReason =
   | "NO_CREDENTIAL"
   | "LOCKED_OUT"
@@ -195,7 +246,7 @@ const CAU_DOC_HO_SO = `
      AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'::pg_catalog.text`;
 
 /**
- * [INV-E3(2)] GHI NHẬN MỘT LẦN THÀNH CÔNG — NGUYÊN TỬ, KHÔNG CÓ CỬA SỔ ĐUA.
+ * [INV-E3(4)] GHI NHẬN MỘT LẦN THÀNH CÔNG — NGUYÊN TỬ, KHÔNG CÓ CỬA SỔ ĐUA.
  *
  * Đường ĐỌC-RỒI-GHI ngây thơ ("đọc last_used_counter, so, rồi UPDATE") có một cửa sổ TOCTOU
  * thật: hai request đồng thời mang CÙNG một mã đều đọc `last_used_counter = NULL`, cả hai
@@ -231,40 +282,66 @@ const CAU_GHI_THANH_CONG = `
 /**
  * [INV-E3(1)] GHI NHẬN MỘT LẦN THẤT BẠI VÀ ĐẶT KHOÁ KHI VƯỢT NGƯỠNG.
  *
- * CTE `truoc` tính số lần thất bại MỚI trước khi ghi, và nó có hai nhánh chứ không phải một —
- * đây là chỗ dễ kể sai nhất nên viết ra bằng số:
+ * ============================================================================================
+ * VÌ SAO BIỂU THỨC ĐẾM TỰ THAM CHIẾU HÀNG ĐÍCH, VÀ VÌ SAO MỘT CTE Ở ĐÂY LÀ MỘT LỖ AN NINH
+ * ============================================================================================
+ * Bản đầu của câu này tính số lần thất bại mới trong một CTE (`WITH truoc AS (SELECT ...)`) rồi
+ * `SET failed_attempts = t.so_lan`. Nó SAI, và sai theo hướng fail-OPEN. Cơ chế, viết ra vì nó
+ * là một cạm bẫy chung của mọi bộ đếm dưới READ COMMITTED:
+ *   * mỗi câu lệnh chụp một ảnh riêng. Hai request thất bại chồng nhau đều thấy
+ *     `failed_attempts = 0` và CTE của cả hai vật chất hoá `so_lan = 1`;
+ *   * request thứ hai chờ khoá hàng, rồi EvalPlanQual đánh giá LẠI vị từ `WHERE` trên tuple ĐÃ
+ *     cập nhật — nhưng KHÔNG tính lại CTE, vì CTE đã được tính xong trước đó;
+ *   * nên nó ghi đè 1 lên 1. N request chồng nhau chỉ làm bộ đếm tăng ĐÚNG MỘT.
+ * Kẻ tấn công (CHƯA đăng nhập — đây là đường A6 chạm tới được) đổi mỗi đơn vị bộ đếm lấy một số
+ * lần đoán do CHÍNH NÓ chọn, và biên độ KHÔNG có cận trên trong thiết kế. ĐO trên PostgreSQL 16,
+ * ngưỡng 5, app_api (rolsuper=f, rolbypassrls=f), 24 request song song:
+ *     bản CTE  -> 24 mã được phán xét, LOCKED_OUT = 0, failed_attempts cuối = 3
+ *     bản này  -> failed_attempts cuối = 24
+ *
+ * Bản này đưa biểu thức về TỰ THAM CHIẾU HÀNG ĐÍCH (`c.failed_attempts`). Đó chính là thứ
+ * EvalPlanQual tính lại trên tuple đã cập nhật — cùng cơ chế làm `SET n = n + 1` đúng dưới đồng
+ * thời. Giá phải trả là biểu thức CASE bị viết HAI LẦN (PostgreSQL không cho một cột `SET` đọc
+ * giá trị mới của cột `SET` khác trong cùng câu lệnh); nhân bản một biểu thức là thứ dự án này
+ * thường đóng bằng meta-test, nhưng ở đây nó là cái giá của tính đúng đắn dưới đồng thời và cả
+ * hai bản sao nằm cách nhau bảy dòng trong cùng một chuỗi.
+ *
+ * HAI NHÁNH CỦA PHÉP ĐẾM, chỗ dễ kể sai nhất nên viết ra bằng số:
  *   * hồ sơ vừa HẾT một cửa sổ khoá (`locked_until` đã qua): bộ đếm ĐẶT LẠI VỀ 1. Không có
  *     nhánh này thì sau lần khoá đầu tiên, MỖI lần thất bại tiếp theo (5 -> 6, 6 -> 7, ...) đều
  *     vượt ngưỡng và khoá lại ngay lập tức — nghĩa là người dùng thật chỉ còn ĐÚNG MỘT lần thử
- *     mỗi cửa sổ, vĩnh viễn, cho tới khi có một lần đúng. Bảo đảm mà bản này phát biểu được là
- *     "MỖI cửa sổ cho phép đúng `maxFailedAttempts` lần đoán", và nó chỉ đúng nhờ nhánh này.
+ *     mỗi cửa sổ, vĩnh viễn, cho tới khi có một lần đúng.
  *   * ngược lại: `failed_attempts + 1`.
  * Ngưỡng so trên giá trị MỚI (`so_lan >= max`), nên lần thất bại thứ `max` là lần ĐẶT khoá.
+ *
+ * PHÁT BIỂU ĐÚNG MỨC VỀ THỨ CÂU NÀY MUA ĐƯỢC — hẹp hơn bản trước một cách CÓ CHỦ ĐÍCH:
+ * mỗi cửa sổ cho phép đúng `maxFailedAttempts` lần đoán ĐƯỢC PHÁN XÉT trên MỘT hồ sơ, kể cả khi
+ * các lần đoán tới ĐỒNG THỜI. Nó KHÔNG mua: một hạn mức theo NGƯỜI GỌI (vế "giới hạn tần suất"
+ * của E3 trong docs/TEST-PLAN.md — xem khối đầu file, vế đó vẫn CHƯA CÓ LỚP NÀO).
  *
  * `locked_until` được ĐẶT LẠI VỀ NULL ở nhánh chưa vượt ngưỡng: nếu giữ giá trị cũ, một hồ sơ
  * đã hết khoá vẫn mang một mốc quá khứ và mọi phép đọc sau đó phải tự nhớ so nó với hiện tại.
  */
 const CAU_GHI_THAT_BAI = `
-  WITH truoc AS (
-    SELECT c.id,
-           (CASE WHEN c.locked_until IS NOT NULL
-                  AND c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
-                 THEN 1
-                 ELSE c.failed_attempts OPERATOR(pg_catalog.+) 1
-            END) AS so_lan
-      FROM public.mfa_credentials c
-     WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-       AND c.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
-  )
   UPDATE public.mfa_credentials c
-     SET failed_attempts = t.so_lan,
+     SET failed_attempts = CASE
+             WHEN c.locked_until IS NOT NULL
+              AND c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
+             THEN 1
+             ELSE c.failed_attempts OPERATOR(pg_catalog.+) 1
+           END,
          locked_until = CASE
-             WHEN t.so_lan OPERATOR(pg_catalog.>=) $3::pg_catalog.int4
+             WHEN (CASE
+                     WHEN c.locked_until IS NOT NULL
+                      AND c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
+                     THEN 1
+                     ELSE c.failed_attempts OPERATOR(pg_catalog.+) 1
+                   END) OPERATOR(pg_catalog.>=) $3::pg_catalog.int4
              THEN pg_catalog.clock_timestamp() OPERATOR(pg_catalog.+)
                   pg_catalog.make_interval(secs => $4::pg_catalog.float8)
              ELSE NULL END
-    FROM truoc t
-   WHERE c.id OPERATOR(pg_catalog.=) t.id
+   WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+     AND c.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
   RETURNING c.locked_until AS khoa_toi`;
 
 /**
@@ -321,15 +398,33 @@ function docBoDem(tho: string | null, hoSo: string): number | null {
  * NGOÀI `try`, nên một lần ném giữa chừng để lại khoá dẫn xuất còn nguyên trong bộ nhớ).
  *
  * MŨI ĐỘT BIẾN SỐNG SÓT, ghi ra thay vì để dòng này trông như có mốc chết: thay `biMat?.fill(0)`
- * bằng `void biMat` SỐNG SÓT — 43/43 test xanh. Đúng như phải thế: không một khẳng định nào ở
+ * bằng `void biMat` SỐNG SÓT — toàn bộ bộ test xanh. Đúng như phải thế: không một khẳng định nào ở
  * tầng ứng dụng quan sát được nội dung heap sau khi hàm trả về. Nó KHÔNG phải dư thừa logic (gỡ
  * đi là để bí mật 20 byte nằm lại trong bộ nhớ tiến trình cho tới lần GC sau, nơi một core dump
  * hay một heap snapshot đọc được nó), cũng KHÔNG phải fail-open. Nó là PHÒNG THỦ CHIỀU SÂU
  * KHÔNG CÓ MỐC CHẾT — cùng hạng với `orgKey.fill(0)` của crypto-keys, và cùng cách xử lý: nói ra.
  *
- * [CẤM LOG] Lỗi do cổng ném được bọc lại KHÔNG nội suy giá trị nào: một adapter viết ẩu có thể
- * đưa chính bí mật vào `message` của nó, nên nguyên nhân gốc chỉ đi tiếp qua `cause` (đường
- * dành cho người điều tra), không đi vào chuỗi mà lớp trên có thể ghi log.
+ * [CẤM LOG] LỖI CỦA CỔNG ĐƯỢC BỌC LẠI — VÀ [vòng fix 1 — MỤC 7] TRƯỚC ĐÓ CÂU NÀY LÀ MỘT LỜI HỨA
+ * KHÔNG TỒN TẠI TRONG MÃ. Bản trước của khối này tuyên bố rằng lỗi do cổng ném "được bọc lại
+ * KHÔNG nội suy giá trị nào" và "nguyên nhân gốc chỉ đi tiếp qua `cause`", trong khi thân hàm
+ * chỉ có `try/finally`: không `catch`, không `cause`, không bọc. ĐO: tiêm một adapter ném lỗi
+ * mang bí mật RÕ -> bí mật CÓ trong `message` = true, CÓ trong `stack` = true. Đây là chỗ DUY
+ * NHẤT của toàn S0 cầm bí mật TOTP ở dạng rõ.
+ *
+ * Bản này bọc thật. Ba quyết định trong lớp bọc, mỗi cái đóng một đường:
+ *   * `message` KHÔNG nội suy `cause`, không nội suy `hoSo`, không nội suy `code`. Nó là chuỗi
+ *     mà lớp trên ghi log được, nên nó phải không mang gì.
+ *   * `unsealer.name` THÌ được nội suy, và bất đối xứng đó có lý do đo được: `name` là một
+ *     hằng do COMPOSITION ROOT viết ra (hợp đồng của `TotpSecretUnsealer` ghi rõ "KHÔNG được
+ *     chứa bí mật"), còn `message` của một adapter đến từ một thư viện và mang giá trị nó đang
+ *     xử lý. Không có `name`, một người điều tra không biết cổng NÀO hỏng.
+ *   * nguyên nhân gốc đi tiếp qua `cause` — đường dành cho người điều tra, không phải đường đi
+ *     vào một dòng log. Và một test [CẤM LOG] bơm ĐÚNG adapter của phép đo trên để khẳng định
+ *     điều đó thay vì tin nó.
+ *
+ * VẾ THỨ HAI CỦA BẢN TRƯỚC CŨNG RỘNG HƠN THỰC TẾ, sửa tại chỗ: nó viết "có test quét đúng điều
+ * đó". Hai test [CẤM LOG] hôm ấy chỉ quét bốn lỗi của totp.ts; KHÔNG test nào chạm đường lỗi
+ * của `verifyTotpAttempt`. Nay có.
  */
 async function moPhongBiVaSo(
   unsealer: TotpSecretUnsealer,
@@ -339,13 +434,20 @@ async function moPhongBiVaSo(
   tuyChon: { now?: number; window?: number; lastUsedCounter: number | null },
 ): Promise<TotpResult> {
   let biMat: Buffer | null = null;
+  let tho: Uint8Array | null = null;
   try {
-    biMat = Buffer.from(
-      await unsealer.openTotpSecret(orgId, {
+    try {
+      tho = await unsealer.openTotpSecret(orgId, {
         ciphertext: hoSo.secret_wrapped,
         keyVersion: hoSo.secret_key_version,
-      }),
-    );
+      });
+    } catch (nguyenNhan) {
+      throw new Error(
+        `verifyTotpAttempt: cổng mở bí mật "${unsealer.name}" thất bại.`,
+        { cause: nguyenNhan },
+      );
+    }
+    biMat = Buffer.from(tho);
     if (biMat.length === 0) {
       // Fail-closed trước một cổng cài đặt sai: HMAC với khoá RỖNG vẫn tính ra một mã hợp lệ,
       // nên "bí mật rỗng" là một lỗ fail-OPEN im lặng chứ không phải một ca vô hại.
@@ -354,6 +456,11 @@ async function moPhongBiVaSo(
     return verifyTotpCode(biMat, code, tuyChon);
   } finally {
     biMat?.fill(0);
+    // `Buffer.from(tho)` SAO CHÉP, nên bản do cổng trả về là một BẢN THỨ HAI của bí mật rõ nằm
+    // lại trong heap. Bản trước chỉ xoá `biMat`, tức câu "xoá bí mật rõ khỏi heap trên MỌI
+    // đường ra" ở trên rộng hơn thứ mã làm — cùng lớp khiếm khuyết với chính MỤC 7. Nay xoá cả
+    // hai. Vẫn là PHÒNG THỦ CHIỀU SÂU KHÔNG CÓ MỐC CHẾT, đúng như ghi ở đầu khối.
+    tho?.fill(0);
   }
 }
 
@@ -367,7 +474,7 @@ async function moPhongBiVaSo(
  *      chỉ trả về đúng một câu trả lời, bất kể mã gửi lên trông thế nào.
  *   3. mã sai hình dạng -> `MALFORMED_CODE`, KHÔNG tính là một lần thất bại. Phát biểu đúng
  *      mức: một kẻ đang đoán mã gửi mã ĐÚNG HÌNH DẠNG, nên không tính nhánh này không nới lỏng
- *      vế (1) của E3; đổi lại, một client hỏng không tự khoá tài khoản người dùng thật.
+ *      vế E3(1); đổi lại, một client hỏng không tự khoá tài khoản người dùng thật.
  *   4. mở bí mật, so mã (hằng-thời-gian), rồi ghi kết quả bằng MỘT câu lệnh nguyên tử.
  *
  * ============================================================================
@@ -391,14 +498,21 @@ async function moPhongBiVaSo(
  *   * DƯ LƯỢNG, nói thẳng: hôm nay KHÔNG có người gọi nào trong repo, nên `justLocked` là một
  *     KHẢ NĂNG chứ không phải một lớp đang chạy — cùng hạng với khoản nợ số 2 của Task 8.
  *
- * ĐÁNH ĐỔI ĐÃ BIẾT của vế (1) E3: khoá theo hồ sơ nghĩa là ai gửi được `maxFailedAttempts` mã
+ * ĐÁNH ĐỔI ĐÃ BIẾT của vế E3(1): khoá theo hồ sơ nghĩa là ai gửi được `maxFailedAttempts` mã
  * sai cũng khoá được tài khoản của người khác trong một cửa sổ. Đó là tính chất cố hữu của mọi
- * cơ chế giới hạn số lần thử theo tài khoản; lớp bù là hạn mức theo NGƯỜI GỌI ở tầng API, thứ
- * không thuộc S0 (cùng khoản nợ đã ghi ở rbac.ts).
+ * cơ chế giới hạn số lần thử theo tài khoản; thứ bù được là hạn mức theo NGƯỜI GỌI ở tầng API,
+ * không thuộc S0 (cùng khoản nợ đã ghi ở rbac.ts). NÓI CHÍNH XÁC HƠN BẢN TRƯỚC: thứ đó KHÔNG
+ * chỉ là "lớp bù" cho đánh đổi này — nó CHÍNH LÀ vế E3(2) ("giới hạn tần suất") của sổ đăng ký,
+ * và hôm nay nó không có một dòng mã nào. Xem khối đầu file.
  *
- * [CẤM LOG] Bí mật rõ chỉ tồn tại trong biến `biMat` và bị `fill(0)` trong `finally`. Không
- * nhánh nào của hàm này đưa bí mật, mã đã gửi, hay một mảnh của chúng vào một thông báo lỗi
- * hoặc một giá trị trả về — có test quét đúng điều đó.
+ * [CẤM LOG] Bí mật rõ chỉ tồn tại trong `biMat` và trong mảng do cổng trả về; cả hai bị
+ * `fill(0)` trong `finally`. Không nhánh nào của hàm này đưa bí mật, mã đã gửi, hay một mảnh
+ * của chúng vào một thông báo lỗi hoặc một giá trị trả về.
+ * PHẠM VI CỦA PHÉP ĐO, nói đúng mức (bản trước viết "có test quét đúng điều đó" — rộng hơn thực
+ * tế, vì hai test [CẤM LOG] hôm ấy chỉ quét bốn lỗi của totp.ts): nay CÓ một test bơm một
+ * adapter ném lỗi mang bí mật RÕ và khẳng định bí mật không có trong `message` của lỗi mà hàm
+ * này ném ra — mfa.int.test.ts, "[CẤM LOG] lỗi của CỔNG được bọc". Nó KHÔNG quét mọi đường lỗi
+ * của hàm này; nó quét ĐÚNG đường đã được đo là rò.
  */
 export async function verifyTotpAttempt(
   client: pg.PoolClient,
@@ -412,10 +526,25 @@ export async function verifyTotpAttempt(
   const nguong = attempt.maxFailedAttempts ?? MFA_MAX_FAILED_ATTEMPTS;
   const giaySauKhiKhoa = attempt.lockoutSeconds ?? MFA_LOCKOUT_SECONDS;
   if (!Number.isSafeInteger(nguong) || nguong < 1) {
-    throw new Error("verifyTotpAttempt: maxFailedAttempts phải là số nguyên >= 1.");
+    throw new RangeError("verifyTotpAttempt: maxFailedAttempts phải là số nguyên >= 1.");
   }
+  if (nguong > MFA_MAX_ALLOWED_FAILED_ATTEMPTS) {
+    throw new RangeError(
+      `verifyTotpAttempt: maxFailedAttempts vượt trần ${MFA_MAX_ALLOWED_FAILED_ATTEMPTS}. ` +
+        "Một ngưỡng đủ lớn làm vế E3(1) biến mất trong im lặng.",
+    );
+  }
+  // [MỤC 5] `window` được kiểm Ở ĐÂY chứ không chỉ trong `verifyTotpCode`, và vị trí là chịu
+  // lực: `verifyTotpCode` chỉ chạy SAU `assertTenantBound`, câu SELECT và một lần MỞ PHONG BÌ.
+  // Một `window` khổng lồ (đo: 200000 -> 8745 ms CPU cho 400001 lần HMAC-SHA1 trong MỘT lời
+  // gọi) là một cần gạt DoS ĐỒNG BỘ, nên nó phải bị từ chối TRƯỚC khi tốn một round trip nào và
+  // trước khi một bí mật rõ tồn tại trong tiến trình.
+  if (attempt.window !== undefined) khangDinhCuaSo(attempt.window, "verifyTotpAttempt");
   if (!Number.isFinite(giaySauKhiKhoa) || giaySauKhiKhoa <= 0) {
-    throw new Error("verifyTotpAttempt: lockoutSeconds phải là một số dương hữu hạn.");
+    // Cố ý KHÔNG có cận TRÊN cho `lockoutSeconds`: nới nó là hướng AN TOÀN (khoá lâu hơn), nên
+    // một trần ở đây chặn một thứ không nguy hiểm. Bất đối xứng có lý do, viết ra để lần sau
+    // không ai "cho nhất quán".
+    throw new RangeError("verifyTotpAttempt: lockoutSeconds phải là một số dương hữu hạn.");
   }
 
   await assertTenantBound(client, orgId, "verifyTotpAttempt");

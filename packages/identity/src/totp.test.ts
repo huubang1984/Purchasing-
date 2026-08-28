@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_TOTP_WINDOW,
   counterForTime,
   deriveTotpCode,
   generateTotpSecret,
   isWellFormedTotpCode,
+  khangDinhCuaSo,
   verifyTotpCode,
 } from "./totp.js";
 
@@ -54,7 +56,7 @@ describe("TOTP", () => {
     expect(() => deriveTotpCode(RFC_SECRET, -1)).toThrow(/không âm/);
   });
 
-  it("[INV-E3(2)] chấp nhận mã đúng ở bước hiện tại", () => {
+  it("[INV-E3(4)] chấp nhận mã đúng ở bước hiện tại", () => {
     const now = 1_700_000_000_000;
     const code = deriveTotpCode(RFC_SECRET, counterForTime(now));
     expect(verifyTotpCode(RFC_SECRET, code, { now })).toEqual({
@@ -63,7 +65,7 @@ describe("TOTP", () => {
     });
   });
 
-  it("[INV-E3(2)] chấp nhận lệch một bước để bù trễ mạng, từ chối lệch hai bước", () => {
+  it("[INV-E3(4)] chấp nhận lệch một bước để bù trễ mạng, từ chối lệch hai bước", () => {
     const now = 1_700_000_000_000;
     const counter = counterForTime(now);
 
@@ -73,7 +75,7 @@ describe("TOTP", () => {
     expect(verifyTotpCode(RFC_SECRET, deriveTotpCode(RFC_SECRET, counter + 2), { now }).ok).toBe(false);
   });
 
-  it("[INV-E3(2)] bước khớp được TRẢ VỀ đúng, không phải luôn là bước hiện tại", () => {
+  it("[INV-E3(4)] bước khớp được TRẢ VỀ đúng, không phải luôn là bước hiện tại", () => {
     // Chống rỗng ruột cho test trên: một cài đặt trả về `counterForTime(now)` bất kể bước nào
     // khớp vẫn làm mọi khẳng định `.ok` xanh — và nó phá vế "dùng một lần", vì bộ đếm ghi vào
     // `last_used_counter` sẽ sai.
@@ -89,7 +91,7 @@ describe("TOTP", () => {
     });
   });
 
-  it("[INV-E3(2)] mã đã dùng không dùng lại được — VÀ mọi bước KHÔNG LỚN HƠN cũng vậy", () => {
+  it("[INV-E3(4)] mã đã dùng không dùng lại được — VÀ mọi bước KHÔNG LỚN HƠN cũng vậy", () => {
     const now = 1_700_000_000_000;
     const counter = counterForTime(now);
     const code = deriveTotpCode(RFC_SECRET, counter);
@@ -116,7 +118,7 @@ describe("TOTP", () => {
     ).toEqual({ ok: true, counter: counter + 1 });
   });
 
-  it("[INV-E3(2)] lastUsedCounter = null hoặc vắng mặt KHÔNG chặn gì", () => {
+  it("[INV-E3(4)] lastUsedCounter = null hoặc vắng mặt KHÔNG chặn gì", () => {
     // `typeof daDung === "number"` là vế chịu lực: `null <= counter` trong JS là `true` (null ép
     // về 0), nên một phép kiểm ngây thơ sẽ từ chối MỌI mã của một hồ sơ chưa từng dùng.
     const now = 1_700_000_000_000;
@@ -126,7 +128,13 @@ describe("TOTP", () => {
     expect(verifyTotpCode(RFC_SECRET, code, { now }).ok).toBe(true);
   });
 
-  it("[INV-E3(3)] từ chối mã sai định dạng mà không rò rỉ thông tin khác", () => {
+  // [vòng fix 1 — MỤC 3/M1] HAI TEST DƯỚI ĐÂY MẤT THẺ `[INV-E3(3)]`, CÓ LÝ DO.
+  // Chúng đo tính đúng đắn CƠ BẢN của nguyên thuỷ (một chuỗi sai hình dạng bị từ chối; một mã
+  // sai bị từ chối). Không vế nào trong NĂM vế E3 của docs/TEST-PLAN.md:82 nói về điều đó —
+  // "hết hạn" là cửa sổ trượt, "dùng một lần" là bộ đếm, "chống tấn công thời gian" là
+  // `timingSafeEqual`. Một thẻ bất biến gắn lên một test không đo bất biến đó là bằng chứng
+  // giả, kể cả khi test tự nó tốt. Hai test dưới GIỮ NGUYÊN nội dung và mất đúng cái nhãn.
+  it("từ chối mã sai định dạng mà không rò rỉ thông tin khác", () => {
     const now = 1_700_000_000_000;
     for (const xau of ["", "12345", "1234567", "abcdef", "12 34 56", "١٢٣٤٥٦", "12345\n", "+12345"]) {
       expect(verifyTotpCode(RFC_SECRET, xau, { now })).toEqual({
@@ -150,7 +158,7 @@ describe("TOTP", () => {
     }
   });
 
-  it("[INV-E3(3)] mã sai bị từ chối", () => {
+  it("mã sai bị từ chối", () => {
     const now = 1_700_000_000_000;
     const dung = deriveTotpCode(RFC_SECRET, counterForTime(now));
     const sai = dung === "000000" ? "111111" : "000000";
@@ -167,6 +175,59 @@ describe("TOTP", () => {
       verifyTotpCode(RFC_SECRET, deriveTotpCode(RFC_SECRET, counter - 1), { now, window: 0 }).ok,
     ).toBe(false);
     expect(() => verifyTotpCode(RFC_SECRET, "000000", { now, window: -1 })).toThrow(/không âm/);
+  });
+
+  it("[INV-E3(3)] `window` bị GHIM CẢ HAI CẬN — vế 'hết hạn' không do người gọi định đoạt", () => {
+    // ========================================================================================
+    // [vòng fix 1 — MỤC 5] `window` là tham số CÔNG KHAI, và trước vòng này nó chỉ có cận DƯỚI.
+    // Ba thứ đo được khi không có cận trên:
+    //   (a) một mã của 30 PHÚT TRƯỚC được chấp nhận với `window = 60`, trong khi mặc định (1)
+    //       trả `WRONG_CODE` — tức chính người gọi định đoạt vế "hết hạn" của E3;
+    //   (b) không gian mã hợp lệ tại mỗi thời điểm là `2*window+1`;
+    //   (c) `window = 200000` -> 8745 ms CPU (400001 lần HMAC-SHA1) trong MỘT lời gọi đồng bộ.
+    // Test này khoá CẢ HAI cận: dưới (đã có từ trước, giữ lại ở đây để một mũi đột biến gỡ hẳn
+    // `khangDinhCuaSo` bị bắt bởi MỘT test thay vì hai), và trên (mới).
+    // ========================================================================================
+    const now = 1_700_000_000_000;
+    const counter = counterForTime(now);
+
+    // CẬN DƯỚI.
+    expect(() => verifyTotpCode(RFC_SECRET, "000000", { now, window: -1 })).toThrow(/không âm/);
+    expect(() => verifyTotpCode(RFC_SECRET, "000000", { now, window: 1.5 })).toThrow(/không âm/);
+
+    // CẬN TRÊN — và nó phải là RangeError, không phải một Error chung: nhánh xử lý của người
+    // gọi phân biệt "tham số sai" với "MFA không qua".
+    expect(() => verifyTotpCode(RFC_SECRET, "000000", { now, window: MAX_TOTP_WINDOW + 1 })).toThrow(
+      RangeError,
+    );
+    expect(() => verifyTotpCode(RFC_SECRET, "000000", { now, window: 200_000 })).toThrow(
+      /MAX_TOTP_WINDOW/,
+    );
+    expect(() => khangDinhCuaSo(MAX_TOTP_WINDOW + 1, "probe")).toThrow(/vượt trần/);
+
+    // ĐỐI CHỨNG DƯƠNG — chống "chặn tất cả": ĐÚNG trần thì vẫn qua, và nó thật sự nới cửa sổ.
+    expect(() => khangDinhCuaSo(MAX_TOTP_WINDOW, "probe")).not.toThrow();
+    expect(
+      verifyTotpCode(RFC_SECRET, deriveTotpCode(RFC_SECRET, counter - MAX_TOTP_WINDOW), {
+        now,
+        window: MAX_TOTP_WINDOW,
+      }).ok,
+      "trần phải là một giá trị DÙNG ĐƯỢC, không phải một giá trị bị chặn",
+    ).toBe(true);
+    // Và ngay ngoài trần thì mã đó KHÔNG còn được nhận nếu cửa sổ nhỏ hơn — tức con số này
+    // thật sự điều khiển vế "hết hạn", không phải một hằng trang trí.
+    expect(
+      verifyTotpCode(RFC_SECRET, deriveTotpCode(RFC_SECRET, counter - MAX_TOTP_WINDOW), {
+        now,
+        window: MAX_TOTP_WINDOW - 1,
+      }).ok,
+    ).toBe(false);
+
+    // Trần phải là một số nguyên dương hữu hạn — nếu ai đó đặt nó thành Infinity, mọi khẳng
+    // định trên vẫn xanh mà bảo đảm biến mất.
+    expect(Number.isSafeInteger(MAX_TOTP_WINDOW)).toBe(true);
+    expect(MAX_TOTP_WINDOW).toBeGreaterThan(0);
+    expect(MAX_TOTP_WINDOW).toBeLessThanOrEqual(60);
   });
 
   it("[INV-E3(3)] bộ đếm âm trong cửa sổ trượt không làm hàm ném — sát epoch vẫn phán xét được", () => {
@@ -201,8 +262,9 @@ describe("TOTP", () => {
     bat(() => deriveTotpCode(biMat, -1));
     bat(() => verifyTotpCode(biMat, ma, { window: -1 }));
     bat(() => verifyTotpCode(biMat, ma, { window: 1.5 }));
+    bat(() => verifyTotpCode(biMat, ma, { window: MAX_TOTP_WINDOW + 1 }));
     // Chống rỗng ruột: phải THẬT SỰ có lỗi để mà quét.
-    expect(cacLoi.length).toBe(4);
+    expect(cacLoi.length).toBe(5);
 
     const gop = cacLoi.join("\n");
     expect(gop).not.toContain(biMatHex);

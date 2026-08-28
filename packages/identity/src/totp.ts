@@ -6,21 +6,84 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 // File này CỐ Ý không chạm cơ sở dữ liệu và không chạm khoá bọc. Nó trả lời đúng một câu hỏi:
 // "chuỗi sáu chữ số này có phải mã TOTP của bí mật này, trong cửa sổ thời gian này không".
 //
-// PHÁT BIỂU ĐÚNG MỨC VỀ BẤT BIẾN E3, vì đây là chỗ dễ nói quá nhất. E3 gồm BA vế:
+// PHÁT BIỂU ĐÚNG MỨC VỀ BẤT BIẾN E3, vì đây là chỗ dễ nói quá nhất.
+//
+// [vòng fix 1 — MỤC 6] BẢN TRƯỚC VIẾT "E3 GỒM BA VẾ". SAI, VÀ SAI THEO HƯỚNG HẸP HƠN SỔ ĐĂNG
+// KÝ. docs/TEST-PLAN.md:82 định nghĩa E3 bằng NĂM vế; đánh số dưới đây bám ĐÚNG thứ tự đó, và
+// mọi thẻ `[INV-E3(n)]` trong repo đã được đánh số lại theo nó:
 //   (1) giới hạn số lần thử  — KHÔNG nằm ở file này. Một hàm thuần không đếm được gì qua hai
 //       request. Vế đó nằm ở `packages/identity/src/mfa-credentials.ts`, trên hai cột
 //       `failed_attempts`/`locked_until` của `mfa_credentials`.
-//   (2) dùng một lần        — file này chỉ cưỡng chế được nó KHI người gọi truyền
+//   (2) GIỚI HẠN TẦN SUẤT    — *** KHÔNG CÓ LỚP NÀO TRONG TOÀN S0 ***. Không ở file này, không
+//       ở mfa-credentials.ts, không ở tầng CSDL. Nó là một KHOẢN NỢ MỞ mang tên một vế bất
+//       biến, không phải một "lớp bù tuỳ chọn" — xem khối đầu mfa-credentials.ts.
+//   (3) hết hạn              — cửa sổ trượt của `verifyTotpCode`: một mã chỉ hợp lệ trong
+//       `2*window+1` bước 30 giây quanh hiện tại. Trần `MAX_TOTP_WINDOW` giữ cho vế này không
+//       bị chính người gọi vô hiệu hoá.
+//   (4) dùng một lần         — file này chỉ cưỡng chế được nó KHI người gọi truyền
 //       `lastUsedCounter` vào; bản thân nó không nhớ gì. Vế BỀN VỮNG (và vế chống đua giữa hai
 //       request đồng thời) nằm ở `mfa-credentials.ts`.
-//   (3) so sánh chống tấn công thời gian — vế DUY NHẤT được cưỡng chế trọn vẹn ở đây.
-// Vì vậy các test của file này mang thẻ [INV-E3(3)] chứ không phải [INV-E3]: một thẻ rộng hơn
-// thứ được đo là bằng chứng giả cho evidence pack.
+//   (5) so sánh chống tấn công thời gian — vế DUY NHẤT được cưỡng chế trọn vẹn ở đây, VÀ là vế
+//       DUY NHẤT không có mốc chết (nói rõ ở docblock của `verifyTotpCode`).
+//
+// VÌ SAO THẺ Ở ĐÂY LÀ `[INV-E3(n)]` CHỨ KHÔNG PHẢI `[INV-E3]`, và một lưu ý BẮT BUỘC cho Task
+// 11: một thẻ rộng hơn thứ được đo là bằng chứng giả cho evidence pack, nên các test của file
+// này nói rõ chúng đo vế NÀO. Hệ quả phụ, ĐÃ ĐƯỢC KIỂM CHỦ ĐÍCH: cú pháp `(n)` làm nhãn KHÔNG
+// khớp regex `\[INV-([A-H]\d+)\]` của bộ sinh ma trận, nên các test này KHÔNG được đếm vào hàng
+// E3. Đó là kết cục ĐÚNG (chúng đo hàm thuần, không đo bất biến bền vững) — nhưng nó ĐÚNG DO
+// MAY, không do thiết kế, và bây giờ thì do thiết kế vì câu này tồn tại. TASK 11 KHÔNG ĐƯỢC nới
+// regex để nhận `(n)`: làm thế sẽ đổ 9 test hàm thuần vào hàng E3 và biến E3 thành "đã phủ" khi
+// vế (2) không có một dòng mã nào. Hàng E3 của ma trận phải được nuôi bằng các test `[INV-E3]`
+// trong mfa.int.test.ts, thứ chạy trên CSDL thật.
 // ============================================================================================
 
 const STEP_SECONDS = 30;
 const DIGITS = 6;
 const DEFAULT_WINDOW = 1;
+
+/**
+ * [vòng fix 1 — MỤC 5] TRẦN CỦA `window`, tính bằng bước 30 giây.
+ *
+ * `window` do NGƯỜI GỌI truyền và bản trước chỉ kiểm `>= 0`. Ba hệ quả đo được của việc không
+ * có cận trên, cả ba đều ở MẶT TIỀN CÔNG KHAI:
+ *   (a) vế E3(3) ("hết hạn") do chính người gọi định đoạt — đo: `window = 60` làm một mã của
+ *       30 PHÚT TRƯỚC trả `{ ok: true }`, trong khi mặc định (1) trả `WRONG_CODE`;
+ *   (b) không gian mã hợp lệ tại mỗi thời điểm là `2*window+1`, nên với `window` đủ lớn MỌI
+ *       chuỗi sáu chữ số đều hợp lệ — tức MFA biến thành trang trí mà không một lỗi nào nổ;
+ *   (c) một cần gạt DoS CPU ĐỒNG BỘ — đo: `window = 200000` tốn 8745 ms CPU (400001 lần
+ *       HMAC-SHA1) trong MỘT lời gọi, trên luồng sự kiện của Node.
+ *
+ * Con số 10 là một CHÍNH SÁCH: RFC 6238 §5.2 khuyến nghị "at most one time step", và 10 bước
+ * (±5 phút) là biên rộng rãi cho lệch đồng hồ thiết bị mà vẫn giữ không gian mã ở 21/10^6. Ai
+ * cần rộng hơn phải sửa dòng này, tức phải viết ra thành một quyết định nhìn thấy được.
+ */
+export const MAX_TOTP_WINDOW = 10;
+
+/**
+ * Phán xét `window`, CÙNG một phép kiểm mà `verifyTotpCode` dùng.
+ *
+ * Tồn tại vì `verifyTotpAttempt` phải từ chối một `window` xấu TRƯỚC khi tốn một round trip và
+ * trước khi một bí mật rõ tồn tại trong tiến trình (xem hệ quả (c) ở trên) — và nhân bản phép
+ * kiểm sang file kia là đúng lớp "hai bản lệch nhau trong im lặng" mà dự án này đã phải đóng
+ * nhiều lần. Một hàm, một phép kiểm; cùng khuôn `isWellFormedTotpCode`.
+ *
+ * CỐ Ý KHÔNG nằm ở barrel công khai: hợp đồng NỘI BỘ của gói.
+ *
+ * [CẤM LOG] `window` là một hằng CHÍNH SÁCH do mã gọi chọn, không phải dữ liệu người dùng và
+ * không phải bí mật, nên nội suy nó vào message là an toàn — cùng lập luận đã ghi cho
+ * `maxAgeSeconds` của `MfaRequiredError`. Bí mật và mã KHÔNG bao giờ đi vào một message nào.
+ */
+export function khangDinhCuaSo(window: number, tenHam: string): void {
+  if (!Number.isSafeInteger(window) || window < 0) {
+    throw new RangeError(`${tenHam}: window phải là số nguyên không âm.`);
+  }
+  if (window > MAX_TOTP_WINDOW) {
+    throw new RangeError(
+      `${tenHam}: window = ${window} vượt trần MAX_TOTP_WINDOW = ${MAX_TOTP_WINDOW}. ` +
+        "Một cửa sổ đủ rộng làm vế 'hết hạn' của E3 biến mất và mở một cần gạt DoS CPU.",
+    );
+  }
+}
 
 /**
  * Sáu chữ số ASCII, KHÔNG hơn không kém.
@@ -49,7 +112,10 @@ export function isWellFormedTotpCode(code: string): boolean {
 export interface TotpVerifyOptions {
   /** Thời điểm tính theo mili-giây epoch. Cho phép truyền vào để test tất định. */
   readonly now?: number;
-  /** Số bước 30 giây được chấp nhận lệch về mỗi phía. Mặc định 1. */
+  /**
+   * Số bước 30 giây được chấp nhận lệch về mỗi phía. Mặc định 1, trần `MAX_TOTP_WINDOW`.
+   * Vượt trần thì NÉM `RangeError` — xem khối tài liệu của `MAX_TOTP_WINDOW`.
+   */
   readonly window?: number;
   /** Bộ đếm của lần xác thực thành công gần nhất — nền tảng chống dùng lại mã. */
   readonly lastUsedCounter?: number | null;
@@ -124,7 +190,7 @@ export function deriveTotpCode(secret: Buffer, counter: number): string {
 /**
  * Kiểm tra mã TOTP.
  *
- * [INV-E3(3)] SO SÁNH BẰNG `timingSafeEqual`, VÀ DUYỆT HẾT CỬA SỔ TRƯỢT. So sánh chuỗi thông
+ * [INV-E3(5)] SO SÁNH BẰNG `timingSafeEqual`, VÀ DUYỆT HẾT CỬA SỔ TRƯỢT. So sánh chuỗi thông
  * thường (`===`) thoát sớm ở ký tự đầu khác nhau, và độ chênh thời gian đó đủ để dò từng chữ số
  * một khi kẻ tấn công gửi đủ nhiều yêu cầu. Vòng lặp KHÔNG `break` khi khớp, cũng vì lý do đó:
  * dừng sớm làm thời gian chạy phụ thuộc VỊ TRÍ bước khớp, tức rò rỉ độ lệch đồng hồ của thiết
@@ -139,9 +205,9 @@ export function deriveTotpCode(secret: Buffer, counter: number): string {
  *   * Ở tầng trên (`mfa-credentials.ts`) mỗi nhánh làm một lượng việc CSDL khác nhau; tổng thời
  *     gian một request KHÔNG hằng số và file này không mua được điều đó.
  *
- * `lastUsedCounter` là vế (2) của E3 ở dạng KHÔNG BỀN VỮNG: hàm này không nhớ gì giữa hai lời
- * gọi. Người gọi phải lấy giá trị đó từ `mfa_credentials.last_used_counter` và ghi lại giá trị
- * mới một cách NGUYÊN TỬ — xem `verifyTotpAttempt`.
+ * `lastUsedCounter` là vế E3(4) ở dạng KHÔNG BỀN VỮNG: hàm này không nhớ gì giữa hai lời gọi.
+ * Người gọi phải lấy giá trị đó từ `mfa_credentials.last_used_counter` và ghi lại giá trị mới
+ * một cách NGUYÊN TỬ — xem `verifyTotpAttempt`.
  *
  * HAI MŨI ĐỘT BIẾN SỐNG SÓT Ở ĐÂY, ghi ra thay vì để chúng trông như hàng rào có mốc chết:
  *   * `timingSafeEqual(mong, daNhap)` -> `mong.equals(daNhap)`  : SỐNG SÓT (22/22 test xanh).
@@ -162,9 +228,7 @@ export function verifyTotpCode(
 
   const now = options.now ?? Date.now();
   const window = options.window ?? DEFAULT_WINDOW;
-  if (!Number.isSafeInteger(window) || window < 0) {
-    throw new RangeError("verifyTotpCode: window phải là số nguyên không âm.");
-  }
+  khangDinhCuaSo(window, "verifyTotpCode");
 
   const hienTai = counterForTime(now);
   const daNhap = Buffer.from(code, "ascii");

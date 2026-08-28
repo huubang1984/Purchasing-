@@ -22,12 +22,42 @@
 --       Tức trục bị đóng bằng HÌNH DẠNG search_path, không bằng thời điểm DDL. Chính việc NÊU
 --       TÊN `pg_catalog` ở vị trí sau mới là thứ phá quy tắc tìm ngầm. ~71 chỗ `::text`/`::oid`
 --       trong hardening.always.sql đang đứng bằng đúng tính chất này.
---   (2) BIỂU THỨC POLICY BỊ SO KHỚP NGUYÊN VĂN. `hardening.always.sql` mục (B) so
---       `pg_get_expr(p.polqual, ...)` với danh sách trắng `HINH_DANG_CHUAN`, và dòng duy nhất
---       cho bảng có org_id là chuỗi `'(org_id = app_current_org_id())'`. Viết
---       `(org_id OPERATOR(pg_catalog.=) public.app_current_org_id())` deparse ra một chuỗi
---       KHÁC HẲN, không nằm trong danh sách trắng, và `migrate()` sẽ CHẶN chính file này ở
---       lượt `phan_xet`. Ghim toán tử ở đây KHÔNG phải "chặt hơn", nó là KHÔNG DEPLOY ĐƯỢC.
+--   (2) *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+--       >>> "BIỂU THỨC POLICY BỊ SO KHỚP NGUYÊN VĂN. `hardening.always.sql` mục (B) so
+--       >>>  `pg_get_expr(p.polqual, ...)` với danh sách trắng `HINH_DANG_CHUAN`, và dòng duy
+--       >>>  nhất cho bảng có org_id là chuỗi `'(org_id = app_current_org_id())'`. Viết
+--       >>>  `(org_id OPERATOR(pg_catalog.=) public.app_current_org_id())` deparse ra một chuỗi
+--       >>>  KHÁC HẲN, không nằm trong danh sách trắng, và `migrate()` sẽ CHẶN chính file này ở
+--       >>>  lượt `phan_xet`. Ghim toán tử ở đây KHÔNG phải 'chặt hơn', nó là KHÔNG DEPLOY
+--       >>>  ĐƯỢC."
+--
+--       VÌ SAO NÓ SAI — HAI PHÉP ĐO ĐỘC LẬP, HAI TẦNG KHÁC NHAU, CÙNG KẾT LUẬN:
+--         Ở TẦNG CƠ CHẾ, `pg_get_expr` CHUẨN HOÁ cây phân tích chứ không in lại văn bản nguồn:
+--           USING (org_id = app_current_org_id())                              -> "(org_id = app_current_org_id())"
+--           USING (org_id OPERATOR(pg_catalog.=) public.app_current_org_id())  -> CÙNG chuỗi đó
+--           USING (org_id OPERATOR(pg_catalog.=) app_current_org_id())         -> CÙNG chuỗi đó
+--         cả ba khớp `HINH_DANG_CHUAN`.
+--         Ở TẦNG END-TO-END: thay CẢ HAI policy của file này thành dạng ghim đầy đủ rồi chạy
+--         `migrate()` trên một cụm sạch -> THÀNH CÔNG. Đối chứng dương `USING (true)` -> BỊ
+--         GIẾT ("Hardening không sửa được 1 mục"), nên mục (B) THẬT SỰ đang canh hai policy này.
+--
+--       VÀ CÂU SAI ĐÓ MÂU THUẪN VỚI CHÍNH FILE CÓ THẨM QUYỀN MÀ NÓ VIỆN DẪN:
+--       `hardening.always.sql:312-318` TỰ GHI RA rằng "năm cách viết khác nhau của CÙNG một
+--       cây phân tích ... đều deparse ra ĐÚNG MỘT chuỗi". Tiền đề (1) ở trên được viết đúng
+--       sau khi đọc file đó; tiền đề (2) thì viết ngược lại chính nó.
+--
+--       PHÁT BIỂU ĐÚNG, HẸP, THAY CHO CÂU TRÊN: ghim toán tử trong hai policy dưới đây KHÔNG
+--       MUA GÌ, vì biểu thức policy được PostgreSQL phân giải sang OID NGAY LÚC DDL — cùng
+--       tính chất đã đo ở db/migrations.int.test.ts "[fix S3]" và đã nói ở đoạn "Phần CÒN LẠI
+--       của trục" bên dưới. Đo thẳng: dựng một toán tử `=` thù địch trong một schema đứng
+--       trước trong `search_path` lúc CHẠY -> `app_api` gắn tổ chức A vẫn đọc đúng 5/6 hàng,
+--       tức đúng số hàng của A; RLS KHÔNG BỊ LẬT. Đây là "KHÔNG CẦN GHIM", KHÔNG phải "KHÔNG
+--       GHIM ĐƯỢC" — và một mình tiền đề (1) đã đủ biện minh cho việc viết trần trong file này.
+--
+--       VÌ SAO GIỮ NGUYÊN VĂN CÂU SAI thay vì xoá: một ràng buộc cứng ("KHÔNG DEPLOY ĐƯỢC")
+--       từng được phát biểu, đưa vào commit, và dán nhãn "REJECTED CÓ ĐO". Task 10 có policy
+--       mới và có sẵn một cạm bẫy về QT3; nếu niềm tin đó được mang theo, cạm bẫy ấy bị gạt đi
+--       miễn phí. Một câu sai bị gạch bỏ TẠI CHỖ dạy được điều đó; một câu bị xoá thì không.
 --
 -- Ngược lại, mọi câu SQL của tầng ứng dụng (packages/identity/src/mfa.ts,
 -- mfa-credentials.ts) chạy trên pool ỨNG DỤNG dưới `search_path` mà dự án KHÔNG kiểm soát —
@@ -79,6 +109,16 @@
 -- mật (slug của tổ chức đã nằm trong URL từ 002). Đường đi KHÔNG được phép tồn tại: một hàm
 -- SECURITY DEFINER tra cứu xuyên tổ chức — mục (C) của hardening.always.sql CẤM.
 --
+-- [vòng fix 1 — MỤC 8/M6 + M-2] GIAO THỨC NÀY LÀ VĂN BẢN, KHÔNG PHẢI MỘT LỚP CƯỠNG CHẾ, và
+-- toàn bộ ĐƯỜNG ĐỜI của `sessions` CHƯA TỒN TẠI trong mã sản phẩm. Đo: `grep token_hash` và
+-- `grep "INSERT INTO sessions"` trên `packages/**/*.ts` trừ file test -> RỖNG. Không có hàm
+-- nào phát token, không có hàm nào tra cứu token, không có hàm nào đặt `mfa_verified_at`. Hàng
+-- duy nhất mà `assertFreshMfa` từng đọc hôm nay là hàng do một fixture superuser ghi ra.
+-- HỆ QUẢ PHẢI NÓI RA để không ai đọc nhầm evidence pack: sự tồn tại của `assertFreshMfa` và
+-- 12 test `[INV-D1]` xanh KHÔNG có nghĩa là "D1 đã chạy". Nó có nghĩa là phép KIỂM của D1 đã
+-- đúng và đã được đo; đường ĐI TỚI phép kiểm đó thì chưa có ai viết. Khoản nợ này phải đóng
+-- TRƯỚC KHI có endpoint đăng nhập, không phải sau.
+--
 -- ============================================================================================
 -- LỆCH KHỎI BRIEF (3/6): KHOÁ NGOẠI TỔ HỢP — VÀ MỘT PHÁT BIỂU CỦA 005 ĐƯỢC HIỆU CHỈNH
 -- ============================================================================================
@@ -120,6 +160,12 @@
 -- CẢNH BÁO ĐÃ GHI Ở 002 VÀ VẪN ĐÚNG: quyền CỘT KHÔNG hiện trong
 -- `information_schema.role_table_grants`, chỉ hiện ở `role_column_grants`. Khẳng định quyền ở
 -- db/rls-coverage.int.test.ts đọc CẢ HAI view.
+-- [vòng fix 1 — MỤC 8/M4] VÀ MỘT VẾ NỮA, ghi để Task 10/11 biết canary nào canh cái gì: canary
+-- GRANT TOÀN CỤC của db/ (thứ canh "không role nào được cấp quá phần của mình") đọc ở mức
+-- BẢNG, nên nó MÙ với mọi quyền CỘT thêm vào ở file này. Sáu cột SELECT mới của `app_unseal`
+-- CÓ được đo — nhưng bằng các test nằm trong packages/identity/src/mfa.int.test.ts (đọc
+-- `pg_attribute.attacl` qua `aclexplode`), KHÔNG bằng canary toàn cục. Hai lớp, hai phạm vi;
+-- ai nới một GRANT cột ở một file sau mà chỉ nhìn canary toàn cục sẽ không thấy gì đỏ.
 --
 -- KIỂM LẠI VỚI "KHÔNG ROLE NÀO BAO ROLE KIA" (ADR-006) và [NỢ ADR-006]: mọi thứ cấp cho
 -- app_unseal ở file này là TẬP CON của quyền app_api (app_api có SELECT mức bảng trên cùng hai
@@ -142,21 +188,43 @@
 -- ============================================================================================
 -- LỆCH KHỎI BRIEF (6/6): HAI CỘT `failed_attempts`/`locked_until` PHẢI CÓ MÃ DÙNG CHÚNG
 -- ============================================================================================
--- Bất biến E3 gồm BA vế: (1) giới hạn số lần thử, (2) dùng một lần, (3) so sánh chống tấn công
--- thời gian. Brief tạo hai cột này và KHÔNG có một dòng mã nào đọc hay ghi chúng, nên vế (1)
--- KHÔNG được cài đặt, còn vế (2) chỉ tồn tại trong một HÀM THUẦN (`verifyTotpCode`) tức không
--- bền vững qua hai request. Cột không ai dùng là TRANG TRÍ, và trang trí mang thẻ bất biến là
--- BẰNG CHỨNG GIẢ cho evidence pack.
--- `packages/identity/src/mfa-credentials.ts` cài đặt cả ba vế trên chính hai cột này, và các
--- GRANT bên dưới được cắt đúng theo những cột mà mã đó ghi — không hơn.
+-- [vòng fix 1 — MỤC 6] BẢN TRƯỚC VIẾT "Bất biến E3 gồm BA vế: (1) giới hạn số lần thử,
+-- (2) dùng một lần, (3) so sánh chống tấn công thời gian." CÂU ĐÓ HẸP HƠN SỔ ĐĂNG KÝ.
+-- docs/TEST-PLAN.md:82 định nghĩa E3 bằng NĂM vế, và bản dưới đây bám đúng thứ tự đó:
+--   E3(1) giới hạn số lần thử              -> packages/identity/src/mfa-credentials.ts, trên
+--                                             `failed_attempts` + `locked_until` của bảng này.
+--   E3(2) GIỚI HẠN TẦN SUẤT                -> *** KHÔNG CÓ LỚP NÀO TRONG TOÀN S0 ***. Không ở
+--                                             tầng này, không ở tầng ứng dụng. Khoản nợ MỞ
+--                                             mang tên một vế bất biến, không phải một lớp bù
+--                                             tuỳ chọn.
+--   E3(3) hết hạn                          -> cửa sổ trượt của `verifyTotpCode` (totp.ts),
+--                                             có trần `MAX_TOTP_WINDOW`.
+--   E3(4) dùng một lần                     -> `last_used_counter` của bảng này (vế BỀN VỮNG).
+--   E3(5) so sánh chống tấn công thời gian -> totp.ts, và KHÔNG có mốc chết (nói rõ ở đó).
+-- Hệ quả của con số sai KHÔNG vô hại: bộ sinh của Task 11 gom test theo mã `[INV-E3]`, nên
+-- `evidence/INV-matrix.md` sẽ đọc E3 = ĐÃ PHỦ trong khi một trong năm vế ĐƯỢC ĐẶT TÊN TRONG SỔ
+-- ĐĂNG KÝ không có một dòng mã nào — đúng thứ "bằng chứng giả" mà đoạn dưới đây cảnh báo.
+--
+-- Brief tạo hai cột này và KHÔNG có một dòng mã nào đọc hay ghi chúng, nên vế E3(1) KHÔNG được
+-- cài đặt, còn vế E3(4) chỉ tồn tại trong một HÀM THUẦN (`verifyTotpCode`) tức không bền vững
+-- qua hai request. Cột không ai dùng là TRANG TRÍ, và trang trí mang thẻ bất biến là BẰNG
+-- CHỨNG GIẢ cho evidence pack.
+-- `packages/identity/src/mfa-credentials.ts` cài đặt E3(1) và vế bền vững của E3(4) trên chính
+-- hai cột này, và các GRANT bên dưới được cắt đúng theo những cột mà mã đó ghi — không hơn.
 
 -- ------------------------------------------------------------------------------------------
 -- (1) TIỀN ĐỀ CHO KHOÁ NGOẠI TỔ HỢP.
 --
 -- `id` đã là PRIMARY KEY của `users` nên `(org_id, id)` đã duy nhất về mặt logic: ràng buộc này
--- KHÔNG thu hẹp tập giá trị hợp lệ và KHÔNG tạo thêm oracle nào (một hàng vi phạm nó đã vi phạm
--- `users_pkey` trước). Nó tồn tại vì PostgreSQL đòi một ràng buộc DUY NHẤT khớp đúng bộ cột
--- được tham chiếu trước khi cho tạo khoá ngoại tổ hợp.
+-- KHÔNG thu hẹp tập giá trị hợp lệ và KHÔNG tạo thêm oracle nào. [vòng fix 1 — MỤC 8/M5] Bản
+-- trước biện minh bằng "một hàng vi phạm nó đã vi phạm `users_pkey` TRƯỚC" — CÁCH NÓI ĐÓ SAI:
+-- PostgreSQL KHÔNG bảo đảm thứ tự kiểm giữa hai chỉ mục duy nhất, nên "trước" không phải một
+-- tính chất dựa được. Kết luận thì VẪN ĐÚNG, và lý do đúng không cần tới thứ tự: tập hàng vi
+-- phạm `(org_id, id)` là TẬP CON của tập hàng vi phạm `users_pkey` (hai hàng trùng `(org_id,
+-- id)` thì trùng luôn `id`), nên ràng buộc này không từ chối được một hàng nào mà `users_pkey`
+-- lại nhận — dù chỉ mục nào nổ trước. Không có hàng mới nào bị từ chối thì không có oracle mới.
+-- Nó tồn tại vì PostgreSQL đòi một ràng buộc DUY NHẤT khớp đúng bộ cột được tham chiếu trước
+-- khi cho tạo khoá ngoại tổ hợp.
 -- ------------------------------------------------------------------------------------------
 ALTER TABLE users ADD CONSTRAINT users_org_id_id_key UNIQUE (org_id, id);
 
@@ -239,15 +307,29 @@ GRANT SELECT (id, org_id, user_id, mfa_verified_at, expires_at, revoked_at)
 -- ------------------------------------------------------------------------------------------
 -- (3) HỒ SƠ XÁC THỰC HAI LỚP.
 --
--- `secret_wrapped` + `secret_key_version`: bí mật TOTP KHÔNG BAO GIỜ nằm ở dạng rõ trong bảng.
+-- `secret_wrapped` + `secret_key_version`: bí mật TOTP được lưu dưới dạng ĐÃ BỌC.
+-- [vòng fix 1 — MỤC 8/M3] Bản trước viết câu này ở dạng VÔ ĐIỀU KIỆN ("bí mật TOTP KHÔNG BAO
+-- GIỜ nằm ở dạng rõ trong bảng"). Hạ xuống đúng mức, vì tầng CSDL KHÔNG cưỡng chế được nó:
+-- ràng buộc duy nhất trên cột là `octet_length(secret_wrapped) > 0`, nên một người ghi có
+-- `INSERT` hoàn toàn ghi được 20 byte bí mật rõ vào đây. Và test "lưu KHỐI ĐỤC" ở
+-- mfa.int.test.ts đo FIXTURE (cổng AES-GCM của chính test) chứ không đo bất biến này. Phát
+-- biểu ĐÚNG: bảng này lưu một khối mà không migration nào và không mã nào trong
+-- packages/identity diễn giải được — việc mở là của một cổng (`TotpSecretUnsealer`, xem
+-- packages/identity/src/mfa-credentials.ts); "khối đó là ciphertext" là một hợp đồng của NGƯỜI
+-- GHI, cưỡng chế ở tầng ứng dụng, không ở đây.
+-- BẢN VÁ ĐÃ CÂN NHẮC VÀ TỪ CHỐI, kèm lý do: `CHECK (octet_length(secret_wrapped) >= 28)`
+-- (iv 12 + tag 16) rẻ, nhưng (a) nó chặn đúng MỘT ca ngây thơ — một bí mật 20 byte rõ — và
+-- KHÔNG chặn ca dễ xảy ra hơn là một chuỗi base32 32 ký tự, nên nó mua rất ít; (b) nó không
+-- viết được vào file này (một migration đã có thể ĐÃ ÁP DỤNG ở một môi trường khác; checksum
+-- nằm trong `schema_migrations` của CSDL, không trong repo) mà phải là một migration 007 mới,
+-- tức một file mới cho một bảo đảm gần bằng không. Vào sổ nợ thay vì làm nửa vời: lớp đúng cho
+-- trục này là một phép kiểm ở đường GHI DANH khi composition root ra đời.
 -- Cột phiên bản cho phép xoay khoá chính mà vẫn mở được bí mật cũ (cùng lập luận với `keyVersion`
--- của `WrappedKey` ở Task 7). Bảng này lưu một KHỐI ĐỤC: không migration nào và không mã nào
--- trong packages/identity diễn giải được nó — việc mở là của một cổng
--- (`TotpSecretUnsealer`, xem packages/identity/src/mfa-credentials.ts).
+-- của `WrappedKey` ở Task 7).
 --
--- `last_used_counter` là vế (2) của E3 (dùng một lần) ở dạng BỀN VỮNG: mỗi mã TOTP chỉ có giá
--- trị đúng một lần, kể cả trong 30 giây nó còn hiệu lực và kể cả khi hai request tới đồng thời.
--- `failed_attempts` + `locked_until` là vế (1) (giới hạn số lần thử).
+-- `last_used_counter` là vế E3(4) (dùng một lần) ở dạng BỀN VỮNG: mỗi mã TOTP chỉ có giá trị
+-- đúng một lần, kể cả trong 30 giây nó còn hiệu lực và kể cả khi hai request tới đồng thời.
+-- `failed_attempts` + `locked_until` là vế E3(1) (giới hạn số lần thử).
 --
 -- KHÔNG cấp UPDATE trên `secret_wrapped`/`secret_key_version`, và KHÔNG cấp DELETE. Hệ quả đã
 -- cân nhắc và nói thẳng: ở tầng CSDL, một app_api BỊ CHIẾM không thay được bí mật MFA của một
@@ -289,11 +371,31 @@ CREATE POLICY mfa_credentials_tenant_isolation ON mfa_credentials
 GRANT SELECT ON mfa_credentials TO app_api;
 -- INSERT theo CỘT: đăng ký một hồ sơ mới. `last_used_counter`/`failed_attempts`/`locked_until`/
 -- `confirmed_at` KHÔNG được cấp cho INSERT — một hồ sơ không được RA ĐỜI đã mang sẵn một bộ đếm
--- dùng-một-lần do bên ghi chọn (chọn một giá trị lớn là vô hiệu hoá vế (2) của E3 vĩnh viễn),
+-- dùng-một-lần do bên ghi chọn (chọn một giá trị lớn là vô hiệu hoá vế E3(4) vĩnh viễn),
 -- cũng không được ra đời đã ở trạng thái "đã xác nhận".
 GRANT INSERT (org_id, user_id, kind, secret_wrapped, secret_key_version)
   ON mfa_credentials TO app_api;
 -- UPDATE đúng bốn cột mà `verifyTotpAttempt` ghi.
+--
+-- [vòng fix 1 — MỤC 8/M-1] NÓI THẲNG TẦNG CSDL HÔM NAY CHO PHÉP GÌ — cùng khuôn và CÙNG MỨC
+-- CHI TIẾT với khối `mfa_verified_at` ở §(2), vì bản trước chỉ ghi 1 trong 3 cột chịu lực và
+-- một dư lượng ghi một phần đọc như một dư lượng đã đóng.
+-- Câu lệnh này cho một `app_api` BỊ CHIẾM (kẻ tấn công A1) TẮT CẢ HAI vế E3 mà tầng ứng dụng
+-- cưỡng chế, mỗi vế bằng MỘT câu `UPDATE`. Cả hai đã được ĐO trên PostgreSQL 16 dưới đúng hồ
+-- sơ vai trò (`app_api`: rolsuper = f, rolbypassrls = f):
+--   * `UPDATE mfa_credentials SET locked_until = NULL WHERE ...`
+--       -> hồ sơ đang bị khoá trở lại nhận mã: `LOCKED_OUT` biến thành `WRONG_CODE`. E3(1) tắt.
+--   * `UPDATE mfa_credentials SET last_used_counter = NULL WHERE ...`
+--       -> chơi lại được ĐÚNG mã cũ (lần 1 ok ở bộ đếm X; lần 2 `CODE_ALREADY_USED`; xoá bộ
+--          đếm; lần 3 ok LẠI ở bộ đếm X). E3(4) tắt.
+-- KHÔNG TRÁNH ĐƯỢC nếu giữ E3 ở tầng ứng dụng: bỏ GRANT là bỏ luôn cơ chế; và thu hẹp nó xuống
+-- một hàm SECURITY DEFINER là thứ mục (C) của hardening.always.sql CẤM. Đây là một HẠN CHẾ
+-- CHẤP NHẬN ĐƯỢC, cùng hình dạng với ca `mfa_verified_at` ở §(2) và với 005 §(5) — nhưng nó
+-- phải được ghi ra để không ai đọc "E3 đã cài" thành "E3 chịu được một app_api bị chiếm".
+-- CÁI TẦNG NÀY VẪN MUA ĐƯỢC, và nó không tầm thường: bốn cột này KHÔNG được cấp cho INSERT
+-- (xem ngay trên), nên một hồ sơ không thể RA ĐỜI đã mang sẵn bộ đếm hay trạng thái "đã xác
+-- nhận"; và `secret_wrapped`/`secret_key_version` KHÔNG có UPDATE, nên bí mật của một người đã
+-- đăng ký không thay được.
 GRANT UPDATE (last_used_counter, failed_attempts, locked_until, confirmed_at)
   ON mfa_credentials TO app_api;
 -- Cố ý KHÔNG cấp gì trên `mfa_credentials` cho app_unseal — kể cả SELECT. Runtime mở thầu không

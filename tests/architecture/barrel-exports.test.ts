@@ -142,9 +142,30 @@ describe("bề mặt export công khai của crypto-keys", () => {
 //   * `MfaRequiredError`/`assertFreshMfa` thì CÓ ở đây, và đó là đúng: khác `hasPermission`,
 //     `assertFreshMfa` NÉM khi không thoả (fail-closed) chứ không trả boolean, nên nó không
 //     dựng ra được một cổng gác im lặng — đúng lý do đã rút `hasPermission` khỏi cửa này.
+//
+// [vòng fix 1 — MỤC 4] VẮNG MẶT THỨ BA, VÀ NÓ LÀ MỘT LỖ ĐÃ ĐO CHỨ KHÔNG PHẢI MỘT SỰ GỌN GÀNG:
+// `verifyTotpCode` từng nằm trong danh sách này. Tiêu chí ngay trên ("không trả boolean nên
+// không dựng ra được cổng gác im lặng") ĐÃ KHÔNG được áp cho nó — nó trả `{ok:false, reason}`.
+// ĐO: `tools/zzprobe/cong-gac-im-lang.ts` thân `return verifyTotpCode(biMatRo, code).ok` cho
+// typecheck/lint/depcruise ĐỀU exit 0. Cổng gác ấy bỏ qua `failed_attempts` và `locked_until`,
+// tức bỏ qua E3(1) và E3(4) trong im lặng — và bên dựng được nó là composition root, nơi DUY
+// NHẤT có bí mật TOTP rõ. Đường sản phẩm là `verifyTotpAttempt`. Xem khối lý do ở
+// packages/identity/src/index.ts.
+//
+// GIỚI HẠN CỦA CHÍNH LỚP NÀY, viết ra để lần sau không ai tưởng nó rộng hơn thực tế: file này
+// khoá DANH SÁCH export, KHÔNG khoá HÌNH DẠNG từng symbol. Lớp mà Task 8 mua được cho D5 vì
+// vậy KHÔNG tự động áp cho E3 — nó chỉ bắt được symbol MỚI xuất hiện, không bắt được một
+// symbol đã nằm trong danh sách trắng nhưng có hình dạng "cổng gác im lặng".
+//
+// SỔ NỢ (QT1 quét toàn thư mục packages/): hôm nay CHỈ `crypto-keys` và `identity` có danh
+// sách trắng barrel. `audit`, `tenancy`, `db`, `test-support` KHÔNG CÓ — nên một symbol mọc ra
+// ở mặt tiền của một trong bốn gói đó ngày mai KHÔNG được canh bởi lớp nào. Xem
+// task-9-report.md §V3.5.
 const DANH_SACH_TRANG_IDENTITY = [
   "CHAIN_COVERING_ROLE_PAIRS",
+  "MAX_TOTP_WINDOW",
   "MFA_LOCKOUT_SECONDS",
+  "MFA_MAX_ALLOWED_FAILED_ATTEMPTS",
   "MFA_MAX_FAILED_ATTEMPTS",
   "MfaRequiredError",
   "PERMISSIONS",
@@ -158,7 +179,6 @@ const DANH_SACH_TRANG_IDENTITY = [
   "generateTotpSecret",
   "requirePermission",
   "verifyTotpAttempt",
-  "verifyTotpCode",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);
@@ -202,5 +222,26 @@ describe("bề mặt export công khai của identity", () => {
       /* @vite-ignore */ new URL("./src/rbac.ts", IDENTITY_PACKAGE_JSON_URL).href
     )) as Record<string, unknown>;
     expect(typeof noiBo["hasPermission"]).toBe("function");
+  });
+
+  it("[INV-E3] `verifyTotpCode` KHÔNG có mặt ở cửa công khai — cổng gác MFA im lặng không dựng được", async () => {
+    // Cùng khuôn với test `hasPermission` ngay trên, và cùng lý do ở một bất biến KHÁC: một hàm
+    // trả `{ok:false, reason}` mà KHÔNG đọc `mfa_credentials`, KHÔNG ghi `last_used_counter`,
+    // KHÔNG đếm `failed_attempts` và KHÔNG tôn trọng `locked_until` là một cổng gác bỏ qua
+    // E3(1) và E3(4) trong im lặng. Đường sản phẩm là `verifyTotpAttempt`.
+    // Test này nêu ĐÍCH DANH symbol đang được canh, nên nếu ai đó thêm lại nó, thông báo lỗi nói
+    // đúng thứ bị vi phạm thay vì "có một symbol lạ".
+    const urlCua = new URL("./src/index.ts", IDENTITY_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    expect(Object.keys(moduleThat)).not.toContain("verifyTotpCode");
+    // Đối chứng chống rỗng ruột, HAI vế:
+    //   (a) hàm PHẢI còn tồn tại ở module nội bộ — nếu không, test này xanh vì nó đã bị xoá.
+    const noiBo = (await import(
+      /* @vite-ignore */ new URL("./src/totp.ts", IDENTITY_PACKAGE_JSON_URL).href
+    )) as Record<string, unknown>;
+    expect(typeof noiBo["verifyTotpCode"]).toBe("function");
+    //   (b) đường SẢN PHẨM phải VẪN ở cửa — nếu không, "không dựng được cổng gác im lặng" xanh
+    //       vì gói không còn xác thực được gì cả.
+    expect(typeof moduleThat["verifyTotpAttempt"]).toBe("function");
   });
 });

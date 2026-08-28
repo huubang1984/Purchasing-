@@ -194,3 +194,54 @@ thứ mà mục 10 coi là ràng buộc sản phẩm then chốt.
 bằng tiếng Việt kèm nút mở bằng trình duyệt ngoài; đo tỷ lệ gặp phải trong pilot. Phương
 án dự phòng mã hóa phía máy chủ **chỉ** được cân nhắc sau khi có số liệu thật, vì nó làm
 suy yếu chính bất biến A2.
+
+---
+
+## ADR-008 — Một lần thử MFA thất bại KHÔNG ghi vào sổ kiểm toán chuỗi-hash
+
+**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, **có nợ bắt buộc trả trước khi có
+endpoint đăng nhập**
+
+**Bối cảnh.** `verifyTotpAttempt` (`packages/identity/src/mfa-credentials.ts`) phán xét một
+mã TOTP trên một đường đi mà **kẻ tấn công chưa đăng nhập vẫn chạm tới được**. Task 8 lập
+tiền lệ "mỗi lần từ chối quyền để lại một bản ghi kiểm toán" (bất biến D5) cho
+`requirePermission`. Câu hỏi: có áp tiền lệ đó cho một lần thử MFA thất bại không?
+
+Chi phí đã được Task 8 **đo** trên đúng đường này: `appendAuditEvent` đi qua
+`noi_chuoi_kiem_toan()`, thứ mở đầu bằng `pg_advisory_xact_lock` **theo tổ chức** (ĐO-5a/5b:
+một phiên khác cùng tổ chức kẹt tới `lock_timeout`). Ghi sổ ở đây nghĩa là mỗi lần đoán sai
+của mỗi người lạ đều nối tiếp hoá sổ kiểm toán của **cả tổ chức**.
+
+**Quyết định.** Không ghi sổ kiểm toán trên đường thất bại MFA. Có test khoá quyết định lại
+(`[T9-J]` trong `packages/identity/src/mfa.int.test.ts`), nên ai đổi ý phải sửa test và trả
+lời câu hỏi về chi phí.
+
+**Lựa chọn thật KHÔNG phải "audit hay DoS" — nó là "audit QUA CHUỖI HASH hay DoS".** Bản
+đầu của lập luận gộp hai thứ đó làm một, và đó là một luồng phân giả. Ít nhất ba đường
+**không** lấy khoá chuỗi kiểm toán, và cả ba đều bị bỏ:
+
+- **(i) một bảng riêng ngoài chuỗi kiểm toán** (`mfa_attempt_log`), RLS cùng khuôn,
+  `app_api` chỉ `INSERT`. Task 9 **đã có sẵn mọi khuôn** để làm và đã không làm.
+- **(ii) chỉ ghi CHUYỂN TRẠNG THÁI** (`justLocked`), tần suất chặn trên
+  `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ — lập luận DoS **không áp dụng** cho một sự kiện có
+  trần tần suất. Trường `justLocked` **đã tồn tại** trong `MfaAttemptResult` nhưng **không
+  có người gọi nào**.
+- **(iii) ghi theo lô hoặc ra ngoài bảng.**
+
+**Hệ quả — dấu vết còn lại KHÔNG trung thực về khối lượng.** `failed_attempts` là một dạng
+dấu vết, nhưng ba tính chất làm nó không thay được sổ, cả ba đo được:
+
+1. nó là **trạng thái**, không phải nhật ký — một lần thành công đặt nó về 0, nên kẻ đoán
+   trúng ở lần cuối **tự xoá dấu vết của chính chiến dịch**;
+2. `app_api` **xoá được trực tiếp** (`GRANT UPDATE (failed_attempts, ...)` ở
+   `006_sessions_and_mfa.sql`; xem khối MỤC 8/M-1 ở đó);
+3. nó không mang chiều thời gian, IP, hay tương quan — 500 tài khoản bị rải để lại 500 con
+   số ≤ 5, không phân biệt được với 500 người gõ nhầm.
+
+**Nợ phải trả TRƯỚC KHI có endpoint đăng nhập.** Chọn (i) hoặc (ii) và cài đặt. Trạng thái
+hôm nay — "không ghi gì, và có một trường `justLocked` không ai gọi" — là một quyết định
+đúng về chuỗi hash cộng một khoảng trống chưa lấp, không phải một thiết kế đã xong.
+
+**Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
+chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`
+một dòng "passed" dưới hàng D5 mà tên của nó đọc như phủ định chính bất biến ấy.
