@@ -95,7 +95,11 @@ INSERT INTO permissions (code, description) VALUES
   ('award.recommend',     'Lập đề xuất trao thầu'),
   ('po.approve',          'Phê duyệt đơn mua hàng'),
   ('supplier.manage',     'Quản lý hồ sơ nhà cung cấp'),
-  ('audit.read',          'Đọc và xuất sổ kiểm toán');
+  ('audit.read',          'Đọc và xuất sổ kiểm toán'),
+  -- [vòng fix 1 — A3] Xem khối "[A3b]" ở §(5): mã này tồn tại vì câu requirePermission() mà màn
+  -- hình gán vai trò phải gọi trước đây KHÔNG VIẾT ĐƯỢC. Cố ý KHÔNG gán cho vai trò nào —
+  -- fail-CLOSED cho tới khi một migration đánh số MỚI quyết định ai được quản trị vai trò.
+  ('role.grant',          'Gán và thu hồi vai trò của người dùng trong tổ chức');
 
 -- Không có INSERT/UPDATE/DELETE cho bất kỳ role ứng dụng nào — xem "LỆCH KHỎI BRIEF (2/3)".
 GRANT SELECT ON permissions TO app_api;
@@ -138,6 +142,82 @@ GRANT SELECT ON roles TO app_api;
 --     thay nhau — tức chính D2 mới là thứ không thực hiện được.
 --   * DIRECTOR và FINANCE có cả `award.recommend` lẫn `po.approve`. Cùng lập luận: D3 cấm
 --     MỘT NGƯỜI ôm TRỌN chuỗi năm bước, không cấm chồng lấn hai bước liền kề.
+--
+-- [vòng fix 1 — NỢ D2] HỆ QUẢ CỦA HAI CẶP TRÊN MÀ BẢN TRƯỚC KHÔNG NÓI RA. Hai lập luận ấy vẫn
+-- đứng vững và hai cặp quyền được GIỮ NGUYÊN. Nhưng chúng biến D2 ("mở thầu cần hai người khác
+-- nhau ở hai phiên khác nhau") thành một bất biến KHÔNG CƯỠNG CHẾ ĐƯỢC Ở TẦNG MA TRẬN — vĩnh
+-- viễn, không phải tạm thời: chừng nào một vai trò còn giữ cả `rfq.unseal` lẫn
+-- `rfq.unseal.approve` thì không truy vấn nào trên `role_permissions` phân biệt được "hai giám
+-- đốc thay nhau" với "một giám đốc tự duyệt". Nói thẳng trạng thái hôm nay: ở S0 KHÔNG LỚP NÀO
+-- cưỡng chế D2 — không phải "yếu", là KHÔNG CÓ. D2 chỉ cưỡng chế được ở mức HÀNG (yêu cầu mở
+-- thầu phải mang `requested_by` và người duyệt phải khác), tức ở task máy trạng thái mở thầu.
+-- Khoản nợ này CHƯA CÓ NEO: task đó chưa tồn tại, nên nếu nó không bao giờ được viết thì không
+-- test nào đỏ. Neo tạm thời và ĐO ĐƯỢC mà S0 có thể có là một truy vấn cảnh báo — một tổ chức
+-- có ĐÚNG MỘT người giữ `rfq.unseal.approve` thì D2 không thực hiện được trong tổ chức đó, và
+-- đó là một tiền đề ngầm ("phải có >= 2 người giữ mã ấy") mà hôm nay không gì cưỡng chế. Truy
+-- vấn ấy thuộc tầng báo cáo/vận hành, không thuộc file này.
+--
+-- ==========================================================================================
+-- [vòng fix 1 — C1] DƯ LƯỢNG ĐANG MỞ: TRỤC (b) KHÔNG ĐƯỢC CANH Ở TẦNG CƠ SỞ DỮ LIỆU
+-- ==========================================================================================
+-- Tập quyền HỢP của một người đổi theo HAI biến: (a) các hàng `user_roles` của người đó,
+-- (b) ĐỊNH NGHĨA của các vai trò đó trong bảng này. Trigger ngay dưới chỉ hỏi "vai trò VỪA GHI
+-- có TỰ MÌNH ôm trọn 5 bước không"; trigger trên `user_roles` chỉ bắn khi có ghi vào
+-- `user_roles`. Trục (b) KHÔNG CÓ TRIGGER NÀO CANH. Hai phép đo độc lập, hai đường khác nhau:
+--     [FO2] người giữ BUYER+FINANCE = 4/5 (hợp lệ hôm nay)
+--           INSERT (FINANCE, 'rfq.unseal') -> KHÔNG NÉM; người đó thành 5/5
+--           migrate() đầy đủ -> KHÔNG NÉM; sau migrate VẪN 5/5
+--           đối chứng: gán thêm TECHNICAL cho người đó BÂY GIỜ -> 42501 (trigger (a) vẫn sống)
+--     [MR]  người giữ TECHNICAL+DIRECTOR = 3/5; thêm rfq.create+rfq.invite cho TECHNICAL
+--           -> KHÔNG NÉM; người đó thành 5/5, mà TECHNICAL riêng lẻ vẫn chỉ 2/5
+-- Kẻ tấn công KHÔNG cần ác ý: một migration S1/S2 hoàn toàn hợp lý ("cho TECHNICAL tự tạo yêu
+-- cầu mua") là đủ.
+--
+-- VÌ SAO KHÔNG ĐÓNG ĐƯỢC BẰNG MỘT TRIGGER THỨ BA Ở ĐÂY — ĐÃ ĐO, KHÔNG PHẢI SUY LUẬN. Phương án
+-- hiển nhiên là một trigger trên bảng này hỏi câu hỏi mức NGƯỜI DÙNG
+-- (`user_roles JOIN role_permissions GROUP BY (org_id,user_id) HAVING count(DISTINCT ...) = 5`).
+-- Nó là FAIL-OPEN, và cơ chế đã được đo trực tiếp bằng một RAISE WARNING đặt trong chính thân
+-- trigger đó, trên hồ sơ vai trò deploy THẬT (role thường, SỞ HỮU bảng, KHÔNG superuser):
+--     >> current_user=trien_khai  org=(null)  user_roles NHÌN THẤY = 0
+--     INSERT (FINANCE,'rfq.unseal') -> OK, KHÔNG NÉM;  người đó sau đó: 5/5
+--     đối chứng, CÙNG trigger, cùng phiên, sau set_config('app.org_id', <tổ chức>):
+--     >> current_user=trien_khai  org=cfd4a7c3-…  user_roles NHÌN THẤY = 2
+--     INSERT (DIRECTOR,'rfq.create') -> 42501 "D3: người … ôm trọn chuỗi"
+-- Tức phép kiểm KHÔNG sai; nó MÙ. Phiên ghi `role_permissions` là chủ sở hữu bảng CHƯA gắn
+-- `app.org_id`; dưới FORCE ROW LEVEL SECURITY nó thấy ĐÚNG 0 hàng `user_roles` (chính ĐO-1d ở
+-- đầu file), nên phép kiểm kết luận "không vi phạm". Một lỗ FAIL-OPEN TRÔNG NHƯ FAIL-CLOSED —
+-- lớp hỏng nguy hiểm nhất, vì nó có test xanh và có tên. Ba đường vòng đều bị chặn từ trước:
+--   * SECURITY DEFINER — mục (C) của hardening.always.sql CẤM mọi hàm SECURITY DEFINER ngoài
+--     pg_catalog/information_schema;
+--   * nới policy `user_roles` để phiên deploy đọc được — nới một bảo đảm ra để mua một phép
+--     kiểm, đúng thứ QT2 cấm, và nó nới đúng bức tường cô lập tổ chức;
+--   * bắt deploy gắn `app.org_id` — vô nghĩa: một migration sửa danh mục TOÀN CỤC không thuộc
+--     tổ chức nào, và "gắn lần lượt từng tổ chức" là một vòng lặp đọc `organizations`, thứ
+--     ĐO-1a đã chứng minh trả 0 hàng dưới role deploy.
+--
+-- BA LỚP THẬT SỰ CÓ, và mỗi lớp được phát biểu ĐÚNG bằng thứ nó đo:
+--   1. TĨNH, trên VĂN BẢN migration (packages/identity/src/ma-tran-quyen.test.ts, không cần
+--      Docker): tập CẶP vai trò phủ trọn chuỗi được GHIM bằng hằng `CHAIN_COVERING_ROLE_PAIRS`.
+--      Hôm nay tập đó có ĐÚNG BA cặp (BUYER+DIRECTOR, FINANCE+PROCUREMENT_MANAGER,
+--      DIRECTOR+PROCUREMENT_MANAGER — đo bằng cách liệt kê cả 63 tổ hợp con, và KHÔNG có bộ ba
+--      tối tiểu nào). Cả [FO2] lẫn [MR] đều SINH RA MỘT CẶP MỚI nên cả hai làm lớp này đỏ.
+--      Cùng test còn quét TOÀN BỘ db/migrations/*.sql và đỏ nếu có file nào NGOÀI 005 ghi vào
+--      `role_permissions` — vì một file như thế nằm ngoài tầm đọc của phép ghim.
+--   2. DEPLOY, trên DỮ LIỆU THẬT: mục (E3) của hardening.always.sql chạy đúng phép kiểm CẶP ấy
+--      trên `role_permissions` (bảng KHÔNG có RLS, nên KHÔNG có ca mù như trên) và phát
+--      WARNING. CỐ Ý KHÔNG CHẶN DEPLOY: ma trận quyền là DỮ LIỆU CỦA KHÁCH HÀNG, và chặn deploy
+--      trên dữ liệu khách hàng biến một cấu hình sai thành một cụm không deploy được — đúng cái
+--      bẫy QT1 mà cả kiến trúc này sinh ra để tránh.
+--   3. GHI, mức NGƯỜI DÙNG: trigger trên `user_roles` (§(4)) — nó vẫn bắt mọi lần GÁN VAI TRÒ
+--      làm một người ôm trọn chuỗi.
+--
+-- DƯ LƯỢNG SAU CẢ BA LỚP, nói thẳng: (i) lớp 1 là quy tắc về CẶP, MÙ với BỘ BA nếu ma trận
+-- tương lai sinh ra bộ ba tối tiểu; (ii) lớp 2 chỉ phát WARNING, và `migrate()` KHÔNG chuyển
+-- WARNING đó lên người gọi — nó nằm trong log của PostgreSQL và trong đầu ra psql, không ở đâu
+-- khác; (iii) KHÔNG lớp nào chặn ĐƯỢC ở thời điểm ghi vào bảng này, nên giữa lúc một hàng vi
+-- phạm được chèn và lúc CI/deploy kế tiếp chạy, những người đang giữ cặp vai trò ấy ĐANG nắm
+-- trọn chuỗi. Có test mang nhãn [C1-KHE-HỞ] khẳng định ĐÚNG khe hở này còn tồn tại, để không ai
+-- sau này im lặng tuyên bố nó đã đóng.
 -- ------------------------------------------------------------------------------------------
 CREATE TABLE role_permissions (
   role_code       text NOT NULL REFERENCES roles(code) ON DELETE CASCADE,
@@ -157,10 +237,16 @@ CREATE TABLE role_permissions (
 -- role_permissions" (SQLSTATE 42501) — migrate() chết trên một lược đồ HOÀN TOÀN ĐÚNG, tức
 -- đúng cái bẫy QT1 cấm. Mọi mục phán xét khác của hardening chỉ đọc pg_catalog (mọi role đọc
 -- được); mục đó là mục đầu tiên đọc một BẢNG NGHIỆP VỤ, và đó là lý do nó là mục đầu tiên gãy.
--- Đổi sang trigger thì phép kiểm chạy trong phiên của NGƯỜI GHI — người duy nhất có thể tạo ra
--- vi phạm — nên nó không đòi thêm bất kỳ quyền deploy nào, và nó canh LIÊN TỤC chứ không chỉ ở
--- thời điểm deploy. hardening.always.sql mục (E2) chỉ còn canh SỰ TỒN TẠI và THÂN của hàm này,
--- và việc đó đọc thuần pg_catalog.
+-- Đổi sang trigger thì phép kiểm chạy trong phiên của NGƯỜI GHI VÀO CHÍNH BẢNG NÀY, nên nó
+-- không đòi thêm bất kỳ quyền deploy nào, và nó canh liên tục các hàng MỚI của bảng này thay vì
+-- chỉ ở thời điểm deploy. hardening.always.sql mục (E2) chỉ còn canh SỰ TỒN TẠI và THÂN của hàm
+-- này, và việc đó đọc thuần pg_catalog.
+--
+-- [vòng fix 1 — I3] TIỀN ĐỀ SAI ĐÃ ĐƯỢC SỬA Ở ĐÂY, VÀ NÓ LÀ GỐC CỦA KHE HỞ DƯỚI ĐÂY. Bản trước
+-- viết "phiên của NGƯỜI GHI — NGƯỜI DUY NHẤT CÓ THỂ TẠO RA VI PHẠM". Câu đó SAI, và cả kiến
+-- trúc hai tầng dựa vào nó: có HAI người ghi tạo ra được vi phạm D3 — người ghi vào `user_roles`
+-- và người ghi vào `role_permissions` — và MỖI TRIGGER CHỈ THẤY MỘT NỬA. Xem khối "DƯ LƯỢNG
+-- ĐANG MỞ" ngay dưới đây.
 CREATE OR REPLACE FUNCTION public.kiem_tra_ma_tran_quyen() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog AS $tmt$
 DECLARE
@@ -287,10 +373,34 @@ $tpt$;
 -- `users.org_id` của cùng `user_id` (ép được thì cần UNIQUE (org_id, id) trên `users`, tức
 -- sửa 002 — một migration ĐÃ ÁP DỤNG). Một app_api bị chiếm chèn được (tổ_chức_A,
 -- người_của_B, DIRECTOR): vế WITH CHECK cho qua vì org_id đúng là tổ chức đang gắn, và khoá
--- ngoại `users(id)` chạy dưới quyền hệ thống nên cũng cho qua. Hàng đó VÔ HIỆU và đã đo được
--- vì sao: `hasPermission` nối `public.users u ON u.id = ur.user_id` dưới RLS của tổ chức A,
--- nơi người của B không tồn tại — truy vấn trả 0 hàng. Vế nối qua `users` vì thế KHÔNG phải
--- một tiện nghi để lọc `status`; nó là vế chịu lực của bất biến này. Có test đối kháng.
+-- ngoại `users(id)` chạy dưới quyền hệ thống nên cũng cho qua.
+--
+-- [vòng fix 1 — F8] PHÁT BIỂU ĐÚNG MỨC. Bản trước viết "Hàng đó VÔ HIỆU" trần trụi. Đúng là:
+-- hàng đó vô hiệu Ở MỌI ĐƯỜNG ĐI QUA `hasPermission` — đã đo: `hasPermission` nối
+-- `public.users u ON u.id = ur.user_id` dưới RLS của tổ chức A, nơi người của B không tồn tại,
+-- nên truy vấn trả 0 hàng và câu trả lời là `false`. Vế nối qua `users` vì thế KHÔNG phải một
+-- tiện nghi để lọc `status`; nó là vế chịu lực của bất biến này. Có test đối kháng.
+-- NHƯNG một đường đọc `user_roles` TRỰC TIẾP thì KHÔNG vô hiệu, và trong chính file này đã có
+-- một đường như thế: hàm `kiem_tra_phan_tach_nhiem_vu()` ở §(4) đếm `user_roles` mà KHÔNG nối
+-- `users`. Đo được: gán PROCUREMENT_MANAGER rồi DIRECTOR cho một người-của-B trong tổ chức A
+-- -> câu thứ hai ném 42501, tức hàng "vô hiệu" ấy VẪN được tính vào phép kiểm D3. Ở đây nó
+-- lệch về phía FAIL-CLOSED (chặt hơn cần thiết) nên vô hại, và cố ý giữ nguyên: cho hàm trigger
+-- nối `users` là thêm một bảng vào đường ghi nóng để mua đúng 0 an toàn. Nhưng phát biểu
+-- "hàng đó vô hiệu" phải mang đúng phạm vi của nó, vì tác giả sau sẽ dựa vào nó ở đường khác.
+--
+-- ORACLE ĐÃ BIẾT, xếp MINOR có lý do: khoá ngoại `user_id REFERENCES users(id)` là TOÀN CỤC và
+-- kiểm tra toàn vẹn tham chiếu BỎ QUA RLS, nên `23503` (uuid không tồn tại ở đâu cả) phân biệt
+-- được với thành công (uuid tồn tại ở MỘT tổ chức nào đó) — đúng khuôn `organizations.slug` mà
+-- Task 4 đã phán là khai thác được. Vì sao MINOR ở đây mà MAJOR ở đó: `slug` do con người chọn
+-- và đoán được; `users.id` là UUIDv4 với 122 bit ngẫu nhiên, nên oracle này chỉ XÁC NHẬN một
+-- uuid đã biết, KHÔNG LIỆT KÊ được. Đóng nó cần `UNIQUE (org_id, id)` trên `users`, tức sửa
+-- 002 — một migration ĐÃ ÁP DỤNG.
+--
+-- [vòng fix 1 — NỢ M1] CHI PHÍ S3 CHƯA NÓI RA: `role_code REFERENCES roles(code)` là khoá ngoại
+-- vào một danh mục TOÀN CỤC. Khi S3 làm vai trò riêng theo tổ chức, đường đi bắt buộc hoặc BỎ
+-- khoá ngoại đó, hoặc nhét mã có TIỀN TỐ TỔ CHỨC vào `roles` toàn cục — và cách sau tái lập
+-- ĐÚNG oracle xuyên tổ chức qua ràng buộc DUY NHẤT TOÀN CỤC mà chính khoá chính (org_id, ...)
+-- ở ngay trên vừa bỏ công tránh. Ghi ra để S3 không phát hiện lại từ đầu.
 -- ------------------------------------------------------------------------------------------
 CREATE TABLE user_roles (
   org_id     uuid NOT NULL REFERENCES organizations(id),
@@ -323,6 +433,30 @@ ALTER TABLE user_roles ENABLE ALWAYS TRIGGER user_roles_phan_tach_nhiem_vu;
 
 -- Gán và thu hồi vai trò LÀ việc của ứng dụng (màn hình quản trị người dùng của từng tổ chức),
 -- khác hẳn việc sửa MA TRẬN QUYỀN — xem "LỆCH KHỎI BRIEF (2/3)".
+--
+-- ==========================================================================================
+-- [vòng fix 1 — A3b] NÓI THẲNG TẦNG CSDL HÔM NAY CHO PHÉP GÌ, VÌ CÂU TRÊN NGỤ Ý MỘT PHÉP KIỂM
+-- ==========================================================================================
+-- "Là việc của ứng dụng" đọc như thể có một câu `requirePermission(...)` đứng chắn ở màn hình
+-- đó. Sự thật đo được trên PostgreSQL 16.15 (test cùng nhãn ở packages/identity/src/rbac.int.test.ts):
+--     [A3]  một người giữ BUYER tự gán DIRECTOR cho chính mình -> 42501
+--           (đối chứng: trigger D3 ở trên KHÔNG rỗng ruột)
+--     [A3b] cùng người đó tự gán FINANCE          -> OK, KHÔNG NÉM
+--           quyền MỚI vừa tự cấp: po.approve, audit.read, bid.view
+-- Tức một người dùng thường vừa tự cấp cho mình quyền DUYỆT ĐƠN MUA HÀNG, XEM BÁO GIÁ SAU MỞ
+-- THẦU và ĐỌC/XUẤT SỔ KIỂM TOÁN. Ở tầng CSDL, MỌI phiên `app_api` đã gắn tổ chức O đều gán
+-- được BẤT KỲ vai trò nào cho BẤT KỲ người dùng nào của O; lớp duy nhất còn lại là trigger D3,
+-- thứ chỉ chặn khi tổ hợp làm TRỌN chuỗi.
+--
+-- ĐÓ LÀ MỘT LỰA CHỌN, KHÔNG PHẢI MỘT SƠ SUẤT, và lựa chọn ấy hôm nay là: quyền GHI ở tầng CSDL
+-- được giữ nguyên (thu hẹp nó xuống một hàm SECURITY DEFINER là thứ mục (C) của hardening cấm;
+-- bỏ hẳn nó là bỏ luôn màn hình quản trị người dùng), còn phép kiểm quyền nằm ở TẦNG ỨNG DỤNG.
+-- Cái vòng trước THIẾU là TỪ VỰNG để viết phép kiểm ấy: danh mục `permissions` không có mã nào
+-- về quản trị vai trò, nên câu `requirePermission` kia KHÔNG VIẾT ĐƯỢC. Nay có mã `role.grant`
+-- (§(1)), và nó CỐ Ý chưa thuộc vai trò nào — `hasPermission` trả `false` cho tất cả, nên cổng
+-- gác đầu tiên viết bằng nó TỪ CHỐI TẤT CẢ cho tới khi một migration đánh số MỚI quyết định.
+-- Dư lượng còn lại, nói thẳng: cho tới khi màn hình đó tồn tại VÀ gọi requirePermission('role.grant'),
+-- [A3b] VẪN ĐÚNG. Có test khẳng định đúng điều đó, để nó không im lặng biến mất khỏi hồ sơ.
 GRANT SELECT ON user_roles TO app_api;
 -- INSERT theo CỘT, không theo bảng: `granted_at` đã có DEFAULT và là dấu thời gian do CSDL
 -- đóng — bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được theo ý mình. Cùng khuôn

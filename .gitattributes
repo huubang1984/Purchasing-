@@ -20,9 +20,17 @@
 #   (2) chính lần renormalize ấy ĐỔI BYTE của file, tức nó LÀ một sự kiện checksum: một môi
 #       trường đã ghi checksum CRLF sẽ gãy ở lần checkout đầu tiên sau khi file này có hiệu lực.
 # Bản vá thật nằm ở `migrationChecksum()` (chuẩn hoá xuống dòng TRƯỚC khi băm); file này là lớp
-# thứ hai, và nó đóng đúng một dư lượng mà lớp kia không đóng được: một `\r\n` nằm TRONG một
-# chuỗi ký tự SQL mang ngữ nghĩa khác `\n` nhưng băm ra cùng giá trị. Dòng này làm những byte
-# đó biểu diễn được ổn định trong kho mã.
+# thứ hai, đóng đúng một thứ: byte của cây làm việc trở nên TẤT ĐỊNH giữa các nền tảng.
+#
+# [vòng fix 1 — I4] NÓ KHÔNG ĐÓNG DƯ LƯỢNG "CR TRONG MỘT CHUỖI KÝ TỰ SQL", và bản trước nói
+# ngược lại ("làm những byte đó biểu diễn được ổn định"). Đo trong một kho Git sạch chỉ có đúng
+# dòng dưới đây, trên một file chứa cả `a\rb` lẫn `c\r\nd`:
+#   ca `\r\n`    : Git XOÁ CR — blob và mọi checkout mới thành `c\nd`. Không "ổn định"; ngữ
+#                  nghĩa SQL bị đổi ÂM THẦM.
+#   ca CR ĐƠN LẺ : Git GIỮ NGUYÊN BYTE qua cả blob lẫn clone mới (`ls-files --eol`: i/-text
+#                  w/-text) — mà `migrationChecksum()` lại băm `a\rb` và `a\nb` ra CÙNG giá trị.
+# Lớp thật sự đóng dư lượng đó là một khẳng định TĨNH ở packages/db/src/migrate.test.ts: không
+# file db/migrations/*.sql nào được chứa byte CR. Ba lớp, mỗi lớp đóng một thứ khác nhau.
 #
 # CỐ Ý KHÔNG dùng `* text=auto`: bán kính nổ toàn repo cho một lợi ích mà chỉ .sql cần (không
 # file nào khác được băm và so lại). Một quy tắc rộng hơn là một lần renormalize rộng hơn.

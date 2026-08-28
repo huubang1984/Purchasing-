@@ -8,9 +8,13 @@ import {
   PERMISSIONS,
   PermissionAuditFailedError,
   PermissionDeniedError,
-  hasPermission,
+  SEPARATION_OF_DUTIES_CHAIN,
   requirePermission,
 } from "./index.js";
+// [vòng fix 1 — F6] `hasPermission` CỐ Ý không còn ở barrel công khai (xem khối chú thích ở
+// ./index.ts). Nó vẫn là hợp đồng nội bộ của gói và vẫn phải có test, nên import THẲNG từ
+// module — đúng thứ mà mã ngoài gói không làm được.
+import { hasPermission } from "./rbac.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -387,11 +391,78 @@ describe("ai sửa được ma trận quyền", () => {
         await expect(
           c.query(`UPDATE public.${bang} SET ${bang === "permissions" ? "description" : bang === "roles" ? "name" : "permission_code"} = 'x'`),
         ).rejects.toMatchObject({ code: "42501" });
+
+        // [vòng fix 1 — M2] INSERT cũng phải bị chặn, và trước vòng này chỉ `role_permissions`
+        // được đo. Phủ không đều là một lỗ ĐO ĐƯỢC ở tầng đột biến: một
+        // `GRANT INSERT ON roles TO app_api` cắm vào 005 SỐNG SÓT qua toàn bộ bộ test. Và nó
+        // không vô hại — chèn được vào `roles` là tạo được một vai trò mà `role_permissions`
+        // sau đó tham chiếu tới, tức mở đúng trục (b) của D3 từ một hướng khác.
+        const cauChen: Record<string, string> = {
+          permissions: "INSERT INTO public.permissions (code, description) VALUES ('x.y', 'z')",
+          roles: "INSERT INTO public.roles (code, name) VALUES ('KE_GIAN', 'ke gian')",
+          role_permissions:
+            "INSERT INTO public.role_permissions (role_code, permission_code) VALUES ('BUYER', 'audit.read')",
+        };
+        await expect(c.query(cauChen[bang]!)).rejects.toMatchObject({ code: "42501" });
       } finally {
         c.release();
       }
     });
   }
+
+  // [vòng fix 1 — V1-M14] LỖ PHỦ ĐO ĐƯỢC BẰNG ĐỘT BIẾN KẾT HỢP. Trước test này, vô hiệu hoá
+  // THÂN trigger mức VAI TRÒ ở CẢ HAI lớp cùng lúc (005_identity.sql `$tmt$` và hằng
+  // THAN_MA_TRAN của hardening.always.sql) SỐNG SÓT qua toàn bộ 215 test tích hợp: meta-test
+  // §R3 chỉ so hai bản với NHAU nên một đột biến ĐỐI XỨNG đi lọt, và không test HÀNH VI nào
+  // từng bắt trigger ấy phải NÉM. Mọi test D3 hiện có đo trigger mức NGƯỜI DÙNG, hoặc đo GRANT
+  // (42501 vì thiếu quyền bảng) — hai thứ khác hẳn.
+  //
+  // Chạy dưới SUPERUSER là CỐ Ý và cần thiết: app_api không có INSERT trên bảng này (đúng thiết
+  // kế), nên mọi lời gọi của app_api dừng ở tầng GRANT và KHÔNG BAO GIỜ chạm tới trigger. Muốn
+  // đo trigger thì phải qua được lớp quyền trước.
+  it("[INV-D3] trigger mức VAI TRÒ NÉM khi một vai trò sắp ôm trọn chuỗi", async () => {
+    const chuoi = [...SEPARATION_OF_DUTIES_CHAIN];
+    const bonBuoc = chuoi.slice(0, 4);
+    const buocCuoi = chuoi[4]!;
+    const { rows: truoc } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM role_permissions",
+    );
+    try {
+      // (a) CHỐNG RỖNG RUỘT: bốn bước đầu đi lọt, nên "ném" ở (b) là do TRỌN CHUỖI chứ không
+      //     phải vì mọi INSERT vào bảng này đều hỏng.
+      await expect(
+        db.pool.query(
+          `INSERT INTO role_permissions (role_code, permission_code)
+           SELECT 'TECHNICAL', t.ma FROM unnest($1::text[]) AS t(ma)`,
+          [bonBuoc],
+        ),
+      ).resolves.toBeDefined();
+
+      // (b) Bước thứ NĂM làm TECHNICAL ôm trọn chuỗi -> trigger phải ném.
+      const loi = await db.pool
+        .query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('TECHNICAL', $1)", [
+          buocCuoi,
+        ])
+        .then(
+          () => null,
+          (e: unknown) => e as { code?: string; message?: string },
+        );
+      expect(loi, "trigger mức vai trò KHÔNG ném — thân hàm đã bị vô hiệu hoá").not.toBeNull();
+      expect(loi?.code).toBe("42501");
+      expect(loi?.message).toContain("Phân tách nhiệm vụ (D3)");
+      expect(loi?.message).toContain("TECHNICAL");
+    } finally {
+      await db.pool.query(
+        "DELETE FROM role_permissions WHERE role_code = 'TECHNICAL' AND permission_code = ANY($1::text[])",
+        [chuoi],
+      );
+    }
+    // Ma trận phải trở lại NGUYÊN TRẠNG — test này dùng chung CSDL với cả file.
+    const { rows: sau } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM role_permissions",
+    );
+    expect(sau[0]!.n).toBe(truoc[0]!.n);
+  });
 
   it("[INV-D3] app_api không tự cấp thêm quyền cho vai trò của mình được", async () => {
     const c = await apiPool.connect();
@@ -582,4 +653,453 @@ describe("[QT3] hasPermission dưới search_path thù địch", () => {
       await dbRieng.stop();
     }
   }, 240_000);
+});
+
+// ==============================================================================================
+// [vòng fix 1 — A3b] TẦNG CSDL HÔM NAY CHO PHÉP MỘT NGƯỜI DÙNG TỰ GÁN VAI TRÒ CHO CHÍNH MÌNH
+//
+// 005_identity.sql cấp app_api `INSERT (org_id, user_id, role_code)` + `DELETE` trên `user_roles`
+// với lý do "là việc của ứng dụng" — một câu đọc như thể có phép kiểm quyền chắn ở đó. Test này
+// ĐO trạng thái thật, và nó CỐ Ý khẳng định rằng khe hở CÒN MỞ: nếu ai đó sau này đóng nó (thêm
+// một trigger, hoặc thu hồi GRANT), test này đỏ và người đó phải cập nhật cả khối [A3b] ở 005.
+// Đó là mục đích — một khe hở có tên không được phép biến mất khỏi hồ sơ trong im lặng.
+// ==============================================================================================
+describe("[A3b] tự nâng quyền qua user_roles", () => {
+  it("một người dùng thường TỰ GÁN được vai trò cho mình — khe hở CÒN MỞ, có chủ ý ghi ra", async () => {
+    const { rows: u } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'a3b@a.com', 'A3b') RETURNING id",
+      [orgId],
+    );
+    const nan = u[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [
+      orgId,
+      nan,
+    ]);
+
+    // ĐỐI CHỨNG TRƯỚC: trigger D3 KHÔNG rỗng ruột — tổ hợp làm trọn chuỗi vẫn bị chặn.
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'DIRECTOR')", [
+          orgId,
+          nan,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    // VÀ ĐÂY LÀ KHE HỞ: một tổ hợp KHÔNG trọn chuỗi đi lọt, và nó mua đúng những quyền nặng nhất.
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'FINANCE')", [
+          orgId,
+          nan,
+        ]),
+      ),
+    ).resolves.toBeDefined();
+
+    for (const quyen of [PERMISSIONS.PO_APPROVE, PERMISSIONS.AUDIT_READ, PERMISSIONS.BID_VIEW]) {
+      expect(
+        await withTenant(apiPool, orgId, (c) => hasPermission(c, { userId: nan, orgId, permission: quyen })),
+        `sau khi tự gán FINANCE, người dùng vừa tự cấp cho mình quyền ${quyen}`,
+      ).toBe(true);
+    }
+
+    // Và từ vựng để VIẾT được cổng gác nay đã có, mặc định fail-CLOSED (chưa vai trò nào giữ nó).
+    expect(
+      await withTenant(apiPool, orgId, (c) =>
+        hasPermission(c, { userId: nan, orgId, permission: PERMISSIONS.ROLE_GRANT }),
+      ),
+    ).toBe(false);
+    expect(
+      await withTenant(apiPool, orgId, (c) =>
+        hasPermission(c, { userId: uid("DIRECTOR"), orgId, permission: PERMISSIONS.ROLE_GRANT }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("[vòng fix 1] mặt tiền requirePermission", () => {
+  it("[F7] resourceType KHÔNG phải mã định danh viết hoa thì bị TỪ CHỐI trước khi chạm CSDL", async () => {
+    // Cột `resource_type` đi thẳng vào sổ chỉ-ghi-thêm và nằm vĩnh viễn trong chuỗi băm. Trước
+    // vòng này nó là chuỗi TỰ DO: một chuỗi mang giá chào thầu và một mã OTP đi lọt trọn vẹn.
+    for (const xau of [
+      "Bao gia 1.500.000 VND cua NCC A",
+      "OTP 448120 cho phien mo thau",
+      "rfq",
+      "RFQ; DROP TABLE",
+      "",
+      "A".repeat(65),
+    ]) {
+      await expect(
+        withTenant(apiPool, orgId, (c) =>
+          requirePermission(
+            c,
+            { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: xau },
+            auditPool,
+          ),
+        ),
+      ).rejects.toThrow(/resourceType phải là MÃ ĐỊNH DANH/);
+    }
+
+    // Đối chứng: hình dạng hợp lệ vẫn đi tới đúng lớp lỗi cũ (từ chối quyền), không bị chặn oan.
+    for (const tot of ["RFQ", "PURCHASE_ORDER", "A", "A".repeat(64)]) {
+      await expect(
+        withTenant(apiPool, orgId, (c) =>
+          requirePermission(
+            c,
+            { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: tot },
+            auditPool,
+          ),
+        ),
+      ).rejects.toBeInstanceOf(PermissionDeniedError);
+    }
+
+    // Và phép kiểm phải chạy CẢ trên đường CHO QUA — nếu chỉ kiểm ở nhánh từ chối thì một lời
+    // gọi sai hình dạng chỉ lộ ra khi tình cờ có người thiếu quyền.
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        requirePermission(
+          c,
+          {
+            userId: uid("DIRECTOR"),
+            orgId,
+            permission: PERMISSIONS.RFQ_UNSEAL,
+            resourceType: "gia 1500000",
+          },
+          auditPool,
+        ),
+      ),
+    ).rejects.toThrow(/resourceType phải là MÃ ĐỊNH DANH/);
+  });
+
+  it("[F7] thông báo lỗi KHÔNG nội suy giá trị bị từ chối — cấm log giá/OTP", async () => {
+    const bimat = "OTP 448120 gia 1500000";
+    const loi = await withTenant(apiPool, orgId, (c) =>
+      requirePermission(
+        c,
+        { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: bimat },
+        auditPool,
+      ),
+    ).catch((e: Error) => e);
+    expect(loi).toBeInstanceOf(Error);
+    expect((loi as Error).message).not.toContain("448120");
+    expect((loi as Error).message).not.toContain("1500000");
+  });
+
+  it("[F9] auditPool chạy dưới role SUPERUSER bị TỪ CHỐI, không nhận im lặng", async () => {
+    // db.pool là pool superuser của Testcontainers. Trước vòng này nó được nhận không một tiếng
+    // động, và một kết nối superuser BỎ QUA cả RLS lẫn FORCE RLS — tức vế WITH CHECK trên
+    // audit_events không còn cưỡng chế gì trên đúng đường ghi sổ.
+    const loi = await withTenant(apiPool, orgId, (c) =>
+      requirePermission(
+        c,
+        { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ" },
+        db.pool,
+      ),
+    ).catch((e: Error) => e);
+    expect(loi).toBeInstanceOf(PermissionAuditFailedError);
+    expect((loi as Error).message).toMatch(/SUPERUSER|BYPASSRLS/);
+    // Fail-CLOSED: lần từ chối gốc vẫn được giữ nguyên bên trong.
+    expect((loi as PermissionAuditFailedError).denial).toBeInstanceOf(PermissionDeniedError);
+    // Đối chứng: cùng lời gọi với auditPool ĐÚNG quyền vẫn cho ra PermissionDeniedError.
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        requirePermission(
+          c,
+          { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ" },
+          auditPool,
+        ),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+});
+
+// ==============================================================================================
+// [vòng fix 1 — C1] KHE HỞ TRỤC (b): SỬA `role_permissions` LÀM MỘT NGƯỜI ĐANG CÓ SẴN NẮM TRỌN
+// CHUỖI, VÀ KHÔNG TRIGGER NÀO BẮN
+//
+// Test này CỐ Ý khẳng định rằng khe hở CÒN TỒN TẠI ở tầng CSDL. Nó không phải một test hồi quy
+// cho một bản vá — nó là HỒ SƠ ĐO ĐƯỢC của một dư lượng có tên, để không ai sau này im lặng
+// tuyên bố D3 đã được cưỡng chế đầy đủ. Nếu ai đó đóng được khe hở này (một trigger nhìn thấy
+// dữ liệu, một lớp mới), test này đỏ và người đó phải cập nhật khối "[vòng fix 1 — C1]" ở
+// 005_identity.sql §(3), hằng THAN_MA_TRAN và mục (E2)/(E3) của hardening.always.sql.
+//
+// Đồng thời nó đo lớp DUY NHẤT có mặt ở thời điểm deploy — mục (E3) — và đo cả hai mặt của nó:
+// im lặng trên ma trận đúng, và phát WARNING trên ma trận đã bị sửa.
+// ==============================================================================================
+describe("[C1-KHE-HỞ] trục thứ hai của D3", () => {
+  /** Số bước của chuỗi D3 mà `userId` với tới được, đếm bằng SUPERUSER. */
+  async function demBuoc(dbRieng: TestDatabase, userId: string): Promise<number> {
+    const { rows } = await dbRieng.pool.query<{ n: string }>(
+      `SELECT count(DISTINCT rp.permission_code)::text AS n
+         FROM user_roles ur JOIN role_permissions rp ON rp.role_code = ur.role_code
+        WHERE ur.user_id = $1 AND rp.permission_code = ANY($2::text[])`,
+      [userId, [...SEPARATION_OF_DUTIES_CHAIN]],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  /** Chạy lượt PHÁN XÉT của hardening.always.sql và gom mọi WARNING nó phát ra. */
+  async function warningCuaLuotPhanXet(dbRieng: TestDatabase): Promise<string[]> {
+    const { readFile } = await import("node:fs/promises");
+    const sql = await readFile(`${MIGRATIONS}/hardening.always.sql`, "utf8");
+    const c = await dbRieng.pool.connect();
+    const canhBao: string[] = [];
+    const nghe = (n: { message?: string }): void => {
+      canhBao.push(n.message ?? "");
+    };
+    c.on("notice", nghe);
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT pg_catalog.set_config('app.hardening_che_do', 'phan_xet', true)");
+      await c.query(sql);
+      await c.query("COMMIT");
+    } finally {
+      c.off("notice", nghe);
+      c.release();
+    }
+    return canhBao;
+  }
+
+  it("thêm MỘT quyền cho MỘT vai trò làm một người sẵn có nắm trọn chuỗi — không lớp CSDL nào chặn", async () => {
+    const dbRieng = await startPostgres();
+    try {
+      await migrate(dbRieng.pool, MIGRATIONS);
+      const { rows: o } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('C1', 'c1') RETURNING id",
+      );
+      const org = o[0]!.id;
+      const { rows: u } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'c1@a.com', 'C1') RETURNING id",
+        [org],
+      );
+      const nan = u[0]!.id;
+
+      // BUYER + FINANCE = 4/5. Hợp lệ hôm nay, và trigger mức người dùng CHO QUA — đúng thiết kế.
+      await dbRieng.pool.query(
+        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1,$2,'BUYER'),($1,$2,'FINANCE')",
+        [org, nan],
+      );
+      expect(await demBuoc(dbRieng, nan), "tiền đề: người này CHƯA trọn chuỗi").toBe(4);
+
+      // Lượt phán xét trên ma trận ĐÚNG phải IM LẶNG về D3 — chống rỗng ruột cho khẳng định sau.
+      expect(
+        (await warningCuaLuotPhanXet(dbRieng)).filter((m) => m.includes("(E3)")),
+        "trên ma trận mặc định, mục (E3) không được kêu — nếu kêu thì mốc ghim đã sai",
+      ).toEqual([]);
+
+      // TRỤC (b): thêm ĐÚNG MỘT hàng vào role_permissions. Đây là đường "sửa bằng một migration
+      // đánh số MỚI" mà chính 005 tuyên bố là đường an toàn duy nhất.
+      await expect(
+        dbRieng.pool.query(
+          "INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE', 'rfq.unseal')",
+        ),
+        "trigger mức VAI TRÒ không bắn: FINANCE riêng lẻ vẫn chưa ôm trọn chuỗi",
+      ).resolves.toBeDefined();
+
+      // Đối chứng chống rỗng ruột cho câu trên: FINANCE riêng lẻ THẬT SỰ chưa trọn chuỗi.
+      const { rows: rieng } = await dbRieng.pool.query<{ n: string }>(
+        `SELECT count(DISTINCT permission_code)::text AS n FROM role_permissions
+          WHERE role_code = 'FINANCE' AND permission_code = ANY($1::text[])`,
+        [[...SEPARATION_OF_DUTIES_CHAIN]],
+      );
+      expect(Number(rieng[0]!.n)).toBeLessThan(SEPARATION_OF_DUTIES_CHAIN.length);
+
+      // VÀ NGƯỜI KIA GIỜ NẮM TRỌN CHUỖI.
+      expect(await demBuoc(dbRieng, nan), "D3 đã bị phá").toBe(SEPARATION_OF_DUTIES_CHAIN.length);
+
+      const poolRieng = dbRieng.poolAs("app_api");
+      try {
+        for (const quyen of SEPARATION_OF_DUTIES_CHAIN) {
+          expect(
+            await withTenant(poolRieng, org, (c) =>
+              hasPermission(c, { userId: nan, orgId: org, permission: quyen }),
+            ),
+            `tầng ứng dụng cũng trả lời "có" cho ${quyen}`,
+          ).toBe(true);
+        }
+      } finally {
+        await poolRieng.end();
+      }
+
+      // migrate() ĐẦY ĐỦ chạy lại: KHÔNG NÉM, và vi phạm VẪN CÒN. Đây là mặt fail-open của (E2).
+      await expect(migrate(dbRieng.pool, MIGRATIONS)).resolves.toBeDefined();
+      expect(await demBuoc(dbRieng, nan), "sau migrate() đầy đủ vẫn còn nguyên").toBe(
+        SEPARATION_OF_DUTIES_CHAIN.length,
+      );
+
+      // LỚP DUY NHẤT NHÌN THẤY: mục (E3) — và nó CHỈ phát WARNING, đúng như đã ghi.
+      const canhBao = (await warningCuaLuotPhanXet(dbRieng)).filter((m) => m.includes("(E3)"));
+      expect(canhBao.length, "mục (E3) phải kêu lên").toBe(1);
+      expect(canhBao[0]).toContain("BUYER+FINANCE");
+      expect(canhBao[0]).toContain("PHÂN TÁCH NHIỆM VỤ (D3)");
+
+      // ĐỐI CHỨNG: trigger mức NGƯỜI DÙNG vẫn sống và vẫn có răng trên đường THẲNG.
+      const { rows: u2 } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'c1b@a.com', 'C1b') RETURNING id",
+        [org],
+      );
+      await dbRieng.pool.query(
+        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1,$2,'PROCUREMENT_MANAGER')",
+        [org, u2[0]!.id],
+      );
+      await expect(
+        dbRieng.pool.query(
+          "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1,$2,'DIRECTOR')",
+          [org, u2[0]!.id],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await dbRieng.stop();
+    }
+  }, 300_000);
+
+  it("[F2] MỘT VAI TRÒ ôm trọn chuỗi NẰM SẴN đi qua migrate() im lặng — chỉ (E3) thấy", async () => {
+    const dbRieng = await startPostgres();
+    try {
+      await migrate(dbRieng.pool, MIGRATIONS);
+      // Gỡ trigger để mô phỏng "vi phạm đã nằm sẵn từ trước khi lớp canh tồn tại", rồi để
+      // migrate() dựng lại trigger. Đây đúng là khuôn nâng cấp một cụm đang chạy.
+      await dbRieng.pool.query("DROP TRIGGER role_permissions_ma_tran_quyen ON role_permissions");
+      await dbRieng.pool.query(
+        `INSERT INTO role_permissions (role_code, permission_code)
+         SELECT 'TECHNICAL', t.ma FROM unnest($1::text[]) AS t(ma)
+          WHERE NOT EXISTS (SELECT 1 FROM role_permissions rp
+                             WHERE rp.role_code = 'TECHNICAL' AND rp.permission_code = t.ma)`,
+        [[...SEPARATION_OF_DUTIES_CHAIN]],
+      );
+
+      await expect(migrate(dbRieng.pool, MIGRATIONS)).resolves.toBeDefined();
+
+      // Trigger được dựng lại ĐÚNG CHUẨN...
+      const { rows: tg } = await dbRieng.pool.query<{ tgenabled: string }>(
+        `SELECT tgenabled FROM pg_trigger
+          WHERE tgrelid = 'public.role_permissions'::regclass
+            AND tgname = 'role_permissions_ma_tran_quyen'`,
+      );
+      expect(tg[0]?.tgenabled, "ENABLE ALWAYS được dựng lại").toBe("A");
+
+      // ...mà vi phạm VẪN NGUYÊN. Đó là phạm vi thật của (E2): hàng MỚI, không phải hàng cũ.
+      const { rows: con } = await dbRieng.pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM role_permissions
+          WHERE role_code = 'TECHNICAL' AND permission_code = ANY($1::text[])`,
+        [[...SEPARATION_OF_DUTIES_CHAIN]],
+      );
+      expect(Number(con[0]!.n)).toBe(SEPARATION_OF_DUTIES_CHAIN.length);
+
+      const canhBao = (await warningCuaLuotPhanXet(dbRieng)).filter((m) => m.includes("(E3)"));
+      expect(canhBao.length, "mục (E3) là lớp deploy-time DUY NHẤT thấy hàng cũ").toBe(1);
+      // Phủ ĐƠN LẺ hiện ra dưới dạng cặp (X, X) — xem lập luận `r1.code <= r2.code` ở (E3).
+      expect(canhBao[0]).toContain("TECHNICAL+TECHNICAL");
+    } finally {
+      await dbRieng.stop();
+    }
+  }, 300_000);
+});
+
+// ==============================================================================================
+// [vòng fix 1 — F3] TOÁN TỬ `=` CƯỚP ĐƯỢC, VÀ THỨ ĐANG CHẶN KHÔNG PHẢI THỨ §7.5 CŨ NÓI
+//
+// Test "[QT3] bảng bị che" ở trên đo trục TÊN BẢNG. Trục TOÁN TỬ là một trục KHÁC và nặng hơn:
+// một `=` bị cướp làm MỌI vế so sánh trả `true`, tức `hasPermission` trả `true` cho MỌI quyền
+// của MỌI người. Test này dựng đúng kịch bản phản chứng mà reviewer an ninh đo được — GHIM
+// `search_path` cho `app_current_org_id()`, đúng thứ QT3 khuyến khích — và khẳng định rằng nhờ
+// `OPERATOR(pg_catalog.=)`, D1 KHÔNG còn phụ thuộc vào tính chất tình cờ `proconfig IS NULL`.
+// ==============================================================================================
+describe("[QT3] hasPermission dưới TOÁN TỬ thù địch", () => {
+  it("[INV-D1] `=` bị cướp KHÔNG cấp thêm quyền nào, kể cả khi app_current_org_id() đã ghim search_path", async () => {
+    const dbRieng = await startPostgres();
+    try {
+      await migrate(dbRieng.pool, MIGRATIONS);
+      const { rows: o } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('F3', 'f3') RETURNING id",
+      );
+      const org = o[0]!.id;
+      const { rows: u } = await dbRieng.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'f3@a.com', 'F3') RETURNING id",
+        [org],
+      );
+      const buyer = u[0]!.id;
+      await dbRieng.pool.query(
+        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')",
+        [org, buyer],
+      );
+
+      await dbRieng.pool.query("CREATE SCHEMA doc; GRANT USAGE ON SCHEMA doc TO PUBLIC");
+      for (const kieu of ["uuid", "text"]) {
+        await dbRieng.pool.query(
+          `CREATE FUNCTION doc.luon_dung_${kieu}(${kieu}, ${kieu}) RETURNS boolean
+             LANGUAGE sql IMMUTABLE AS 'SELECT true'`,
+        );
+        await dbRieng.pool.query(
+          `CREATE OPERATOR doc.= (LEFTARG=${kieu}, RIGHTARG=${kieu}, FUNCTION=doc.luon_dung_${kieu})`,
+        );
+      }
+      await dbRieng.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'mk' IN ROLE app_api");
+      // `pg_catalog` NÊU TÊN ở vị trí SAU. Nếu không nêu, nó được tìm NGẦM TRƯỚC và toán tử
+      // KHÔNG cướp được (đã đo) — vế `bicuop` dưới đây khoá đúng tiền đề đó.
+      await dbRieng.pool.query(
+        "ALTER ROLE app_api_login SET search_path = doc, pg_catalog, public",
+      );
+
+      const url = new URL(dbRieng.connectionString);
+      url.username = "app_api_login";
+      url.password = "mk";
+      const poolThuDich = createPool(url.toString(), 2);
+      try {
+        // FIXTURE PHẢI CHỨNG MINH NÓ TẤN CÔNG ĐƯỢC. Không có vế này, mọi khẳng định dưới đây
+        // xanh kể cả khi schema `doc` hoàn toàn vô hại.
+        const bicuop = await poolThuDich.query<{ cuop: boolean; du: boolean }>(
+          "SELECT ('11111111-1111-1111-1111-111111111111'::uuid " +
+            "        = '22222222-2222-2222-2222-222222222222'::uuid) AS cuop, " +
+            "       ('11111111-1111-1111-1111-111111111111'::uuid " +
+            "        OPERATOR(pg_catalog.=) '22222222-2222-2222-2222-222222222222'::uuid) AS du",
+        );
+        expect(bicuop.rows[0]!.cuop, "toán tử TRẦN không bị cướp — phép đo rỗng ruột").toBe(true);
+        expect(bicuop.rows[0]!.du, "toán tử ĐỦ SCHEMA lại bị cướp — phép đo rỗng ruột").toBe(false);
+
+        const doBaQuyen = async (): Promise<boolean[]> =>
+          withTenant(poolThuDich, org, async (c) => [
+            await hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.PO_APPROVE }),
+            await hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.RFQ_UNSEAL }),
+            await hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.AUDIT_READ }),
+          ]);
+
+        // (a) Trạng thái HÔM NAY: `app_current_org_id()` KHÔNG ghim search_path, nên `NULLIF`
+        //     bên trong nó phân giải `=` dưới search_path NGƯỜI GỌI; toán tử thù địch làm nó
+        //     sập về NULL, RLS không thấy hàng nào, và `assertTenantBound` NÉM TRƯỚC khi truy
+        //     vấn quyền chạy. Fail-CLOSED — nhưng là TÌNH CỜ, và đó chính là điều phải nói ra:
+        //     lớp đang chịu lực ở nhánh này KHÔNG phải `hasPermission`.
+        await expect(doBaQuyen()).rejects.toThrow(/phiên đang gắn tổ chức \(chưa gắn/);
+
+        // (b) PHÉP ĐO PHẢN CHỨNG: ghim search_path cho app_current_org_id() — đúng thứ QT3
+        //     khuyến khích và đúng thứ 005 đã làm cho hai hàm trigger D3. Trước bản vá
+        //     `OPERATOR(pg_catalog.=)`, ba giá trị này là [true, true, true] và D1 sụp hoàn toàn.
+        await dbRieng.pool.query(
+          "ALTER FUNCTION public.app_current_org_id() SET search_path = pg_catalog",
+        );
+        try {
+          const { rows: pc } = await dbRieng.pool.query<{ p: string | null }>(
+            "SELECT array_to_string(proconfig, ',') AS p FROM pg_proc " +
+              "WHERE oid = 'public.app_current_org_id()'::regprocedure",
+          );
+          expect(pc[0]?.p, "tiền đề của phép đo phản chứng phải THẬT SỰ được đặt").toBe(
+            "search_path=pg_catalog",
+          );
+          expect(await doBaQuyen()).toEqual([false, false, false]);
+          // Đối chứng: quyền THẬT vẫn đọc đúng, nên "false" ở trên không phải vì truy vấn hỏng.
+          expect(
+            await withTenant(poolThuDich, org, (c) =>
+              hasPermission(c, { userId: buyer, orgId: org, permission: PERMISSIONS.RFQ_CREATE }),
+            ),
+          ).toBe(true);
+        } finally {
+          await dbRieng.pool.query("ALTER FUNCTION public.app_current_org_id() RESET search_path");
+        }
+      } finally {
+        await poolThuDich.end();
+      }
+    } finally {
+      await dbRieng.stop();
+    }
+  }, 300_000);
 });

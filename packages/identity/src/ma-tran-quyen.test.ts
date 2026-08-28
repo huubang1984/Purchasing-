@@ -1,7 +1,12 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { PERMISSIONS, SEPARATION_OF_DUTIES_CHAIN, type Permission } from "./permissions.js";
+import {
+  CHAIN_COVERING_ROLE_PAIRS,
+  PERMISSIONS,
+  SEPARATION_OF_DUTIES_CHAIN,
+  type Permission,
+} from "./permissions.js";
 
 // ============================================================================================
 // §R3 — NĂM BẢN CỦA MỘT BẤT BIẾN PHẢI KHỚP NHAU
@@ -85,12 +90,22 @@ describe("§R3 — các bản của chuỗi phân tách nhiệm vụ (D3)", () =
   const banHardeningNguoiDung = catHangThan("THAN_PHAN_TACH", "tpt");
   const banHardeningVaiTro = catHangThan("THAN_MA_TRAN", "tmt");
 
-  it("[INV-D3] chuỗi khớp NGUYÊN VĂN ở cả năm bản", () => {
+  it("[INV-D3] chuỗi khớp NGUYÊN VĂN ở cả sáu bản", () => {
+    // [vòng fix 1 — C1] Bản THỨ SÁU: hằng CHUOI_D3 của hardening.always.sql, thứ mục (E3) dùng
+    // để phán xét DỮ LIỆU ma trận quyền ở thời điểm deploy. Nó không nằm trong thân hàm nào nên
+    // hai hàm cắt ở trên không với tới — phải cắt riêng, và phải cắt CHÍNH nó chứ không phải
+    // một chuỗi na ná ở chỗ khác trong cùng file.
+    const khopChuoiD3 = /CHUOI_D3 constant text :=\s*\$q\$([\s\S]*?)\$q\$;/.exec(SQL_HARDENING);
+    if (khopChuoiD3 === null) {
+      throw new Error("Không tìm thấy hằng CHUOI_D3 trong hardening.always.sql");
+    }
+
     const cacBan: [string, string[]][] = [
       ["005 · mức người dùng", chuoiTrongThan(banTrong005NguoiDung, "005 $tpt$")],
       ["005 · mức vai trò", chuoiTrongThan(banTrong005VaiTro, "005 $tmt$")],
       ["hardening · THAN_PHAN_TACH", chuoiTrongThan(banHardeningNguoiDung, "THAN_PHAN_TACH")],
       ["hardening · THAN_MA_TRAN", chuoiTrongThan(banHardeningVaiTro, "THAN_MA_TRAN")],
+      ["hardening · CHUOI_D3 (mục E3)", cacChuoi(khopChuoiD3[1]!)],
     ];
     for (const [nhan, danhSach] of cacBan) {
       expect(danhSach.length, `${nhan}: chống rỗng ruột, chuỗi phải có 5 bước`).toBe(5);
@@ -169,8 +184,127 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     expect(
       omTron,
       "Một vai trò ôm trọn chuỗi nghĩa là một người mang vai trò đó nắm trọn quy trình. " +
-        "hardening.always.sql mục (E2) cũng chặn việc này ở thời điểm deploy; test này bắt nó " +
-        "sớm hơn, không cần Docker.",
+        // [vòng fix 1 — I2] CHỈ ĐÚNG LỚP BẮT. Bản trước viết "(E2) cũng chặn việc này ở THỜI
+        // ĐIỂM DEPLOY". SAI: chính commit của Task 8 đã ĐỔI TẦNG mục (E2) thành một trigger,
+        // và ở thời điểm deploy nó chỉ cưỡng chế SỰ TỒN TẠI và THÂN của hàm/trigger — nó KHÔNG
+        // ĐỌC MỘT HÀNG NÀO. Đo được: `role_permissions` chứa một vai trò ôm trọn chuỗi ->
+        // `migrate()` KHÔNG NÉM -> sau migrate vẫn còn nguyên.
+        "Ở tầng CSDL, thứ chặn việc này là TRIGGER `role_permissions_ma_tran_quyen` vào thời " +
+        "điểm GHI (không phải lúc deploy, và không với hàng đã nằm sẵn); mục (E3) của " +
+        "hardening.always.sql phán xét dữ liệu lúc deploy nhưng chỉ phát WARNING. Test này bắt " +
+        "sớm hơn cả hai, không cần Docker, và chỉ thấy ma trận VIẾT TRONG migration.",
+    ).toEqual([]);
+  });
+
+  // ==========================================================================================
+  // [vòng fix 1 — C1] TRỤC THỨ HAI CỦA D3: TẬP CẶP VAI TRÒ PHỦ TRỌN CHUỖI, ĐƯỢC GHIM
+  //
+  // Tập quyền HỢP của một người đổi theo HAI biến: (a) các hàng `user_roles` của người đó,
+  // (b) ĐỊNH NGHĨA của các vai trò đó trong `role_permissions`. Hai trigger của 005 canh (a) và
+  // canh "một vai trò TỰ MÌNH ôm trọn chuỗi" — trục (b) KHÔNG có lớp nào ở tầng CSDL, và không
+  // đóng được bằng một trigger thứ ba (FAIL-OPEN đo được dưới FORCE RLS; xem khối "[vòng fix
+  // 1 — C1]" ở 005_identity.sql §(3)).
+  //
+  // Đây là lớp TĨNH thay thế. Nó GHIM (QT2) thay vì NỚI: quy tắc phổ quát "không cặp nào được
+  // phủ trọn chuỗi" KHÔNG THOẢ ĐƯỢC — ma trận mục 25 hôm nay đã có ba cặp phủ trọn, và
+  // PROCUREMENT_MANAGER+DIRECTOR là ĐÚNG ca mà trigger mức người dùng sinh ra để chặn. Cái đáng
+  // canh là tập ấy LỚN LÊN: một cặp mới nghĩa là những người ĐANG giữ sẵn cặp đó vừa lặng lẽ
+  // nắm trọn chuỗi mà không trigger nào bắn.
+  //
+  // GIỚI HẠN, nói ra thay vì hứa suông: đây là quy tắc về CẶP. Hôm nay nó chặt bằng quy tắc về
+  // tổ hợp bất kỳ (đo: không có bộ ba tối tiểu nào — mọi tổ hợp phủ trọn đều CHỨA một trong ba
+  // cặp), nhưng một ma trận tương lai có bộ ba tối tiểu sẽ đi lọt lớp này.
+  // ==========================================================================================
+  /** Mọi cặp (a <= b) mà HỢP quyền của hai vai trò phủ trọn chuỗi. a === b = phủ ĐƠN LẺ. */
+  function capPhuChuoi(pMaTran: ReadonlyMap<string, ReadonlySet<string>>): string[][] {
+    const ten = [...pMaTran.keys()].sort();
+    const kq: string[][] = [];
+    for (let i = 0; i < ten.length; i += 1) {
+      for (let j = i; j < ten.length; j += 1) {
+        const hop = new Set([...(pMaTran.get(ten[i]!) ?? []), ...(pMaTran.get(ten[j]!) ?? [])]);
+        if (SEPARATION_OF_DUTIES_CHAIN.every((ma) => hop.has(ma))) kq.push([ten[i]!, ten[j]!]);
+      }
+    }
+    return kq;
+  }
+
+  it("[INV-D3] tập CẶP vai trò phủ trọn chuỗi đúng bằng mốc đã GHIM", () => {
+    const doDuoc = capPhuChuoi(maTran).map((c) => c.join("+")).sort();
+    const daGhim = CHAIN_COVERING_ROLE_PAIRS.map((c) => [...c].sort().join("+")).sort();
+
+    expect(daGhim.length, "chống rỗng ruột: mốc ghim phải có ít nhất một cặp").toBeGreaterThan(0);
+    expect(
+      doDuoc,
+      "Tập cặp vai trò phủ TRỌN chuỗi D3 đã đổi so với mốc ghim. Một cặp MỚI nghĩa là những " +
+        "người đang giữ sẵn cả hai vai trò trong cặp đó VỪA NẮM TRỌN chuỗi tạo RFQ -> chọn nhà " +
+        "cung cấp -> mở thầu -> award -> duyệt, mà KHÔNG trigger nào bắn (trigger mức vai trò " +
+        "chỉ hỏi về vai trò vừa ghi; trigger mức người dùng chỉ bắn khi ghi vào user_roles). " +
+        "Nếu thay đổi này là CÓ CHỦ Ý: cập nhật CHAIN_COVERING_ROLE_PAIRS (permissions.ts) VÀ " +
+        "CAP_PHU_CHUOI (hardening.always.sql), rồi RÀ những người đang giữ tổ hợp mới đó.",
+    ).toEqual(daGhim);
+  });
+
+  it("[INV-D3] mốc ghim của TypeScript và của hardening.always.sql khớp nhau", () => {
+    // Bản thứ hai của mốc ghim sống trong SQL để mục (E3) dùng được ở thời điểm deploy. Hai bản
+    // trôi khỏi nhau nghĩa là hai lớp nói về hai bất biến khác nhau — đúng khuôn §R3.
+    const khop = /CAP_PHU_CHUOI constant text :=\s*\$q\$([\s\S]*?)\$q\$;/.exec(SQL_HARDENING);
+    if (khop === null) throw new Error("Không tìm thấy hằng CAP_PHU_CHUOI trong hardening");
+    const banSql = [...khop[1]!.matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)]
+      .map(([, a, b]) => [a!, b!].sort().join("+"))
+      .sort();
+    const banTs = CHAIN_COVERING_ROLE_PAIRS.map((c) => [...c].sort().join("+")).sort();
+    expect(banSql.length, "chống rỗng ruột: cắt được ít nhất một cặp từ SQL").toBeGreaterThan(0);
+    expect(banSql).toEqual(banTs);
+  });
+
+  it("phép kiểm CẶP KHÔNG rỗng ruột — hai khai thác đã đo phải bị bắt", () => {
+    // Fixture cũng phải chịu đột biến. Hai ca dưới đây là ĐÚNG hai mũi mà hai reviewer độc lập
+    // đo được trên CSDL thật; nếu `capPhuChuoi` viết sai (vd. `some` thay `every`) thì khẳng
+    // định ở test trên vẫn có thể xanh trong khi lớp này không bắt được gì.
+    const goc = new Map([...maTran].map(([k, v]) => [k, new Set(v)] as const));
+
+    // [FO2] thêm rfq.unseal cho FINANCE -> BUYER+FINANCE thành 5/5.
+    const fo2 = new Map([...goc].map(([k, v]) => [k, new Set(v)] as const));
+    fo2.get("FINANCE")!.add(PERMISSIONS.RFQ_UNSEAL);
+    expect(capPhuChuoi(fo2).map((c) => c.join("+"))).toContain("BUYER+FINANCE");
+
+    // [MR] thêm rfq.create + rfq.invite cho TECHNICAL -> TECHNICAL+DIRECTOR thành 5/5.
+    const mr = new Map([...goc].map(([k, v]) => [k, new Set(v)] as const));
+    mr.get("TECHNICAL")!.add(PERMISSIONS.RFQ_CREATE);
+    mr.get("TECHNICAL")!.add(PERMISSIONS.RFQ_INVITE);
+    expect(capPhuChuoi(mr).map((c) => c.join("+"))).toContain("DIRECTOR+TECHNICAL");
+
+    // Và một vai trò ĐƠN LẺ ôm trọn chuỗi phải hiện ra dưới dạng cặp (X, X) — đó là ca "vi phạm
+    // NẰM SẴN" mà trigger của (E2) không bao giờ bắn tới.
+    const donLe = new Map([...goc].map(([k, v]) => [k, new Set(v)] as const));
+    for (const ma of SEPARATION_OF_DUTIES_CHAIN) donLe.get("TECHNICAL")!.add(ma);
+    expect(capPhuChuoi(donLe).map((c) => c.join("+"))).toContain("TECHNICAL+TECHNICAL");
+  });
+
+  it("[INV-D3] CHỈ 005 được ghi vào role_permissions — mọi migration khác làm mốc ghim mù", () => {
+    // [QT1 — bất biến ở phạm vi TỆP đòi quét TOÀN BỘ thư mục, không chỉ file vừa thêm]. Mốc
+    // ghim ở trên đọc DUY NHẤT văn bản của 005. Một migration `006_...sql` chèn thêm quyền cho
+    // một vai trò sẽ đổi ma trận THẬT mà không đổi thứ mốc ghim nhìn thấy — đúng khe hở [MR]/
+    // [FO2], chỉ khác là đi qua đường "sửa bằng một migration đánh số MỚI" mà 005 tuyên bố là
+    // an toàn. Test này biến việc đó thành một lần ĐỎ Ở CI, buộc tác giả tính lại mốc ghim.
+    const thuMuc = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+    const viPham: string[] = [];
+    for (const ten of readdirSync(thuMuc).filter((f) => f.endsWith(".sql")).sort()) {
+      if (ten === "005_identity.sql") continue;
+      const noiDung = readFileSync(`${thuMuc}/${ten}`, "utf8");
+      // Chỉ soi câu GHI (INSERT/UPDATE/DELETE/COPY/TRUNCATE) nhắm vào bảng, không soi mọi lần
+      // NHẮC TỚI tên bảng: hardening.always.sql đọc `role_permissions` ở hàng chục chỗ và đó là
+      // việc hợp lệ của nó.
+      const cauGhi =
+        /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM|COPY|TRUNCATE(?:\s+TABLE)?)\s+(?:public\.)?role_permissions\b/i;
+      if (cauGhi.test(noiDung)) viPham.push(ten);
+    }
+    expect(
+      viPham,
+      "Một migration ngoài 005 ghi vào `role_permissions`. Mốc ghim CHAIN_COVERING_ROLE_PAIRS " +
+        "chỉ đọc văn bản 005 nên nó KHÔNG thấy thay đổi này — tính lại tập cặp phủ trọn chuỗi " +
+        "trên ma trận SAU khi áp file đó, cập nhật cả hai bản mốc ghim, và rà những người đang " +
+        "giữ tổ hợp mới. Sau đó mở rộng chính test này để nó đọc được file mới.",
     ).toEqual([]);
   });
 

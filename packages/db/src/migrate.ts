@@ -57,14 +57,34 @@ type CheDoHardening = "sua" | "phan_xet";
 //   (1) sửa NỘI DUNG (kể cả CHÚ THÍCH) của một migration đã áp dụng VẪN gãy — có test hồi quy
 //       ở cả migrate.test.ts lẫn migrate.int.test.ts;
 //   (2) khoảng trắng KHÁC xuống dòng (thụt lề, dấu cách cuối dòng) VẪN tính;
-//   (3) DƯ LƯỢNG: một `\r\n` nằm TRONG một chuỗi ký tự SQL (`'a' || E'\r\n'` viết dạng byte
-//       thật) mang ngữ nghĩa khác `\n`, và bản vá này băm hai bản ấy như nhau. Không phải một
-//       bậc tự do mới do bản vá tạo ra: với core.autocrlf, Git ĐÃ KHÔNG biểu diễn ổn định
-//       được những byte đó từ trước. `.gitattributes` (`*.sql text eol=lf`) là thứ đóng dư
-//       lượng này ở lớp kho mã, và đó là lý do thứ hai để có nó.
+//   (3) DƯ LƯỢNG: một byte CR nằm TRONG một chuỗi ký tự SQL mang ngữ nghĩa khác `\n`, và bản
+//       vá này băm hai bản ấy như nhau.
 //
 // `\r\n?` chứ không `\r\n`: một file toàn `\r` (quy ước Mac cổ điển, và là thứ một bộ chuyển
 // đổi hỏng có thể sinh ra) sẽ băm ra GIÁ TRỊ THỨ BA nếu chỉ xử lý CRLF. Có test riêng.
+//
+// ============================================================================================
+// [vòng fix 1 — I4] HIỆU CHUẨN LẠI DƯ LƯỢNG (3): NÓ LÀ **CR ĐƠN LẺ**, VÀ .gitattributes KHÔNG
+// ĐÓNG ĐƯỢC NÓ
+// ============================================================================================
+// Bản trước phát biểu dư lượng là "một `\r\n` nằm trong một chuỗi ký tự SQL" và nói
+// `.gitattributes` đóng nó. CẢ HAI VẾ SAI, và sai theo HAI HƯỚNG NGƯỢC NHAU. Đo trong một kho
+// Git sạch có đúng dòng `*.sql text eol=lf`:
+//   ca `\r\n`   : Git XOÁ CR (cảnh báo "CRLF will be replaced by LF") — blob và mọi checkout
+//                 mới đều mất byte đó. Tức nó KHÔNG được "biểu diễn ổn định"; nó bị ÂM THẦM
+//                 ĐỔI NGỮ NGHĨA. Một tác giả viết `E'...\r\n...'` dạng byte thật MẤT byte CR.
+//   ca CR ĐƠN LẺ: Git GIỮ NGUYÊN BYTE qua cả blob lẫn `git clone` mới
+//                 (`git ls-files --eol` -> `i/-text w/-text`).
+// Cộng với việc `migrationChecksum('a\rb') = migrationChecksum('a\nb')`, kết cục là: hai văn
+// bản migration KHÁC BYTE, cùng commit được, cùng checkout ổn định được, CÙNG CHECKSUM. Trớ
+// trêu là chính nhánh `\r\n?` ở ngay trên — được biện minh như một điểm mạnh — mới là thứ mở
+// trục này ra. Đúng khuôn QT2: một bảo đảm bị NỚI để mua một phép kiểm, và bậc tự do mới không
+// vào sổ.
+// Bản vá là GHIM, không phải NỚI, và nó nằm ở lớp TRƯỚC KHI COMMIT chứ không ở đây: một khẳng
+// định tĩnh trong packages/db/src/migrate.test.ts cấm hẳn byte CR trong db/migrations/*.sql
+// (chạy trong `pnpm test`, không cần Docker). Vì sao KHÔNG đặt phép kiểm ấy vào chính
+// `migrate()`: nó sẽ biến một byte thừa thành một cụm KHÔNG DEPLOY ĐƯỢC — đúng cái bẫy QT1 mà
+// dự án này liên tục tránh. Xem khối chú thích ở test đó để biết toàn bộ phép đo.
 function chuanHoaXuongDong(sql: string): string {
   return sql.replace(/\r\n?/g, "\n");
 }

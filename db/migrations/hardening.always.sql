@@ -1029,9 +1029,17 @@ $tpt$;
   --
   -- Bản vá KHÔNG phải "cấp thêm quyền cho role deploy" (nới một bảo đảm ra để mua một phép
   -- kiểm — đúng thứ QT2 cấm) mà là ĐỔI TẦNG: phép kiểm chuyển thành một trigger chạy trong
-  -- phiên của NGƯỜI GHI, tức người duy nhất tạo ra được vi phạm. Nó không đòi thêm quyền deploy
-  -- nào, và nó canh LIÊN TỤC thay vì mỗi lần deploy. File này chỉ còn canh SỰ TỒN TẠI và THÂN
-  -- của hàm + trigger đó, và việc ấy đọc thuần pg_catalog.
+  -- phiên của NGƯỜI GHI VÀO CHÍNH BẢNG NÀY. Nó không đòi thêm quyền deploy nào. File này chỉ
+  -- còn canh SỰ TỒN TẠI và THÂN của hàm + trigger đó, và việc ấy đọc thuần pg_catalog.
+  --
+  -- [vòng fix 1 — I3] TIỀN ĐỀ SAI ĐÃ SỬA. Bản trước viết "...tức NGƯỜI DUY NHẤT TẠO RA ĐƯỢC VI
+  -- PHẠM." Câu đó SAI, và cả kiến trúc hai tầng dựa vào nó: D3 bị phá được bởi HAI người ghi
+  -- KHÁC NHAU — người ghi `user_roles` (thêm vai trò cho một người) và người ghi
+  -- `role_permissions` (thêm quyền cho một vai trò) — và MỖI TRIGGER CHỈ THẤY MỘT NỬA. Trục
+  -- thứ hai KHÔNG có trigger nào canh, và không đóng được bằng một trigger thứ ba ở đây (đo
+  -- được: FAIL-OPEN dưới FORCE RLS). Toàn bộ phép đo, ba đường vòng bị loại, và ba lớp thay thế
+  -- nằm ở khối "[vòng fix 1 — C1] DƯ LƯỢNG ĐANG MỞ" của db/migrations/005_identity.sql §(3);
+  -- lớp deploy-time là mục (E3) của chính file này.
   THAN_MA_TRAN constant text := $tmt$
 DECLARE
   con_thieu bigint;
@@ -1053,6 +1061,46 @@ BEGIN
   RETURN NULL;
 END
 $tmt$;
+
+  -- ---- [vòng fix 1 — C1] (E3) DỮ LIỆU, KHÔNG PHẢI HÌNH DẠNG ------------------------------
+  -- Bài phê bình đắt nhất của vòng review: file này cưỡng chế HÌNH DẠNG tới từng byte thân hàm
+  -- nhưng KHÔNG cưỡng chế MỘT HÀNG DỮ LIỆU NÀO — và ma trận quyền LÀ dữ liệu. Hai mục (E1)/(E2)
+  -- dựng lại trigger hoàn hảo rồi để nguyên một vi phạm nằm sẵn đi qua migrate() không tiếng
+  -- động. Mục (E3) là lớp deploy-time DUY NHẤT đọc dữ liệu thật của bảng đó.
+  --
+  -- Năm mã quyền của chuỗi D3, bản THỨ SÁU. Năm bản kia: SEPARATION_OF_DUTIES_CHAIN
+  -- (packages/identity/src/permissions.ts) và bốn thân hàm (hai ở 005_identity.sql, hai ở file
+  -- này). Meta-test packages/identity/src/ma-tran-quyen.test.ts khoá cả sáu.
+  CHUOI_D3 constant text :=
+    $q$'rfq.create', 'rfq.invite', 'rfq.unseal', 'award.recommend', 'po.approve'$q$;
+
+  -- MỐC GHIM (QT2 — ghim cấu hình, đừng nới bảo đảm): những CẶP vai trò mà HỢP của hai vai trò
+  -- phủ trọn chuỗi trong ma trận mặc định của 005. Đo bằng cách liệt kê cả 63 tổ hợp con khác
+  -- rỗng của sáu vai trò: 32 tổ hợp phủ trọn, và tập TỐI TIỂU gồm đúng ba cặp này (không có bộ
+  -- ba tối tiểu nào). Bản song sinh: `CHAIN_COVERING_ROLE_PAIRS` ở
+  -- packages/identity/src/permissions.ts, cùng thứ tự, meta-test khoá cả hai.
+  --
+  -- Vì sao GHIM chứ không đòi "không cặp nào được phủ trọn": quy tắc đó KHÔNG THOẢ ĐƯỢC —
+  -- PROCUREMENT_MANAGER+DIRECTOR phủ trọn chuỗi là điều 005 đã nói ra và là ĐÚNG CA mà trigger
+  -- mức người dùng sinh ra để chặn. Cái đáng canh là tập ấy LỚN LÊN, vì một cặp mới nghĩa là
+  -- những người đang giữ sẵn cặp đó vừa lặng lẽ nắm trọn chuỗi.
+  CAP_PHU_CHUOI constant text :=
+    $q$(('BUYER','DIRECTOR'),('FINANCE','PROCUREMENT_MANAGER'),('DIRECTOR','PROCUREMENT_MANAGER'))$q$;
+
+  -- `r1.code <= r2.code` (KHÔNG phải `<`): vế bằng cho ra cặp (X, X), tức phủ đơn lẻ — đúng ca
+  -- "một vai trò ôm trọn chuỗi ĐÃ NẰM SẴN trong bảng", thứ trigger của (E2) không bao giờ thấy
+  -- vì nó chỉ bắn trên hàng MỚI. Không cặp (X, X) nào nằm trong mốc ghim, nên mọi ca như thế
+  -- đều được báo.
+  CAU_CAP_PHU_CHUOI constant text :=
+    $q$SELECT r1.code AS vai_1, r2.code AS vai_2
+         FROM public.roles r1
+         JOIN public.roles r2 ON r1.code <= r2.code
+        WHERE NOT EXISTS (
+                SELECT 1 FROM unnest(ARRAY[$q$ || CHUOI_D3 || $q$]) AS chuoi(ma)
+                 WHERE NOT EXISTS (SELECT 1 FROM public.role_permissions rp
+                                    WHERE rp.role_code IN (r1.code, r2.code)
+                                      AND rp.permission_code = chuoi.ma))
+          AND (r1.code, r2.code) NOT IN $q$ || CAP_PHU_CHUOI;
 
   -- Thân hàm băm. Bản NGUỒN nằm ở db/migrations/004_audit_chain_functions.sql.
   -- Vì sao nó PHẢI được cưỡng chế, và vì sao nó là mục quan trọng nhất mà Task 6 thêm vào file
@@ -1479,6 +1527,32 @@ $ham$;
 
     -- Thân hàm PHẢI khớp bản trong 001_roles_and_functions.sql. Sửa một bên thì sửa cả hai;
     -- có test canh việc đó.
+    --
+    -- =========================================================================================
+    -- [vòng fix 1 — F3] CẢNH BÁO: VẾ `proconfig IS NULL` CỦA MỤC NÀY ĐANG CHỊU LỰC AN NINH
+    -- =========================================================================================
+    -- Vế ấy được viết ra vì lý do VỆ SINH ("thân và thuộc tính hàm phải khớp bản chuẩn" — mệnh
+    -- đề SET chặn inlining, xem [fix round 5 — R3] ở đầu file). Nhưng nó ĐANG là thứ chặn một
+    -- đường leo thang thật, và ai "cải thiện" nó theo QT3 — tức thêm
+    -- `ALTER FUNCTION public.app_current_org_id() SET search_path = pg_catalog`, đúng thứ QT3
+    -- khuyến khích và đúng thứ 005_identity.sql đã làm cho HAI hàm trigger D3 — sẽ MỞ ĐÚNG LỖ
+    -- ĐÓ nếu tầng ứng dụng chưa được vá.
+    --
+    -- Cơ chế, đo trên PostgreSQL 16.15 với một schema `doc` mang `CREATE OPERATOR doc.=` trả
+    -- `true` và `SET search_path = doc, pg_catalog, public` do chính phiên ứng dụng phát ra:
+    --   proconfig = null (hôm nay): `NULLIF(...)` bên trong hàm này phân giải `=` dưới
+    --     search_path NGƯỜI GỌI, toán tử thù địch làm hàm sập về NULL, RLS không thấy hàng nào,
+    --     `assertTenantBound` ném TRƯỚC khi truy vấn dễ tổn thương chạy. FAIL-CLOSED, NHƯNG LÀ
+    --     TÌNH CỜ.
+    --   proconfig = search_path=pg_catalog: hàm chạy đúng, `assertTenantBound` qua, và khi ấy
+    --     `hasPermission` (nếu viết `=` trần) trả TRUE cho po.approve, rfq.unseal, audit.read
+    --     của một người chỉ có BUYER — sự thật cả ba là false. D1 SỤP HOÀN TOÀN.
+    -- Tầng ứng dụng NAY ĐÃ ĐƯỢC VÁ (packages/identity/src/rbac.ts viết đủ `OPERATOR(pg_catalog.=)`
+    -- — đo lại cùng kịch bản: false, false, false trong khi toán tử VẪN bị cướp), nên vế này
+    -- không còn là lớp duy nhất. Nó vẫn được GIỮ NGUYÊN, và bất đối xứng với hai hàm trigger D3
+    -- (được ghim) là CÓ CHỦ Ý: hàm này phải INLINE được vì mọi policy RLS gọi nó trên mọi hàng.
+    -- Ai muốn đổi nó phải đọc khối này trước và kiểm rằng mọi truy vấn hỏi câu hỏi CÓ/KHÔNG về
+    -- quyền đều đã viết đủ schema cho TOÁN TỬ, không chỉ cho tên bảng và tên hàm.
     ARRAY[
       $q$định nghĩa hàm app_current_org_id()$q$,
       $q$true$q$,
@@ -2323,9 +2397,20 @@ $ham$;
     -- role deploy nên mục TỰ CHỮA ở lần deploy kế. Nếu chính DỮ LIỆU vi phạm (một vai trò ôm
     -- trọn chuỗi đã nằm sẵn trong bảng), trigger này KHÔNG gỡ nó — nó chỉ chặn hàng MỚI. Đó là
     -- chủ ý: gỡ hộ một dòng role_permissions là migrate() tự tay đổi chính sách an ninh của
-    -- khách hàng, đúng thứ [CR4] cấm. Lớp bắt ca đó là phép kiểm tĩnh trên văn bản migration
-    -- (packages/identity/src/ma-tran-quyen.test.ts, chạy không cần Docker), và đường sửa là một
-    -- migration đánh số MỚI chạy DELETE.
+    -- khách hàng, đúng thứ [CR4] cấm; đường sửa là một migration đánh số MỚI chạy DELETE.
+    --
+    -- [vòng fix 1 — F2/I5] HIỆU CHUẨN LẠI HAI PHÁT BIỂU RỘNG HƠN THỰC TẾ:
+    --   (a) Bản trước nói mục này "canh LIÊN TỤC thay vì mỗi lần deploy". Đúng phạm vi là: nó
+    --       canh liên tục các hàng MỚI, và KHÔNG CANH GÌ với hàng đã nằm sẵn. Đo được: một vi
+    --       phạm nằm sẵn (một vai trò ôm trọn chuỗi) đi qua `migrate()` ĐẦY ĐỦ không một tiếng
+    --       động — trước migrate 5/5, sau migrate vẫn 5/5, và trigger được dựng lại đúng chuẩn
+    --       `tgenabled='A'`. Tức mục này fail-OPEN với TRẠNG THÁI BAN ĐẦU, theo thiết kế.
+    --   (b) Bản trước nói "Lớp bắt ca đó là phép kiểm tĩnh trên văn bản migration". SAI cho vi
+    --       phạm CHÈN LÚC CHẠY: lớp tĩnh đọc `readFileSync(005)` và KHÔNG kết nối CSDL nào —
+    --       reviewer chạy riêng và thấy 9 test XANH trong khi CSDL đang chứa đúng vi phạm ấy.
+    --       Phạm vi đúng của lớp tĩnh: nó bắt ma trận sai được VIẾT VÀO một migration. Với một
+    --       hàng chèn NGOÀI migration, lớp duy nhất nhìn thấy là mục (E3) ngay dưới đây, và nó
+    --       chỉ phát WARNING.
     -- [QT1 — ném được lỗi gì ngoài 42501] Cùng danh sách với (E1): 42P13 (đóng bằng DROP có
     -- điều kiện), 2BP01 (không xảy ra vì vế điều kiện loại đúng ca đó), 42710 (đóng bằng DROP
     -- TRIGGER IF EXISTS), 42P01 (loại bằng vế điều kiện `to_regclass(...) IS NOT NULL`).
@@ -2904,6 +2989,70 @@ BEGIN
         bang[i][1], chi_tiet, bang[i][6]);
     END IF;
   END LOOP;
+
+  -- ===== [vòng fix 1 — C1] (E3) PHÁN XÉT DỮ LIỆU MA TRẬN QUYỀN — CHỈ WARNING ==============
+  -- Lớp deploy-time DUY NHẤT đọc DỮ LIỆU của `role_permissions`, và là lớp duy nhất nhìn thấy
+  -- (a) một vi phạm NẰM SẴN từ trước (thứ trigger của (E2) không bao giờ bắn tới) và (b) một
+  -- hàng chèn NGOÀI mọi văn bản migration (thứ lớp tĩnh của ma-tran-quyen.test.ts không đọc).
+  --
+  -- BA QUYẾT ĐỊNH, cả ba đều load-bearing:
+  --
+  -- (1) WARNING, KHÔNG PHẢI RAISE EXCEPTION — mục này CỐ Ý không vào `loi_gom`. Ma trận quyền
+  --     là DỮ LIỆU CỦA KHÁCH HÀNG (đặc tả xếp "ma trận phê duyệt cấu hình được" vào S3). Chặn
+  --     deploy trên dữ liệu khách hàng biến một cấu hình đáng ngờ thành một cụm KHÔNG DEPLOY
+  --     ĐƯỢC cho tới khi ai đó viết một migration DELETE — đúng cái bẫy QT1 mà cả file này sinh
+  --     ra để gỡ, và nặng hơn ở chỗ nó chặn cả những bản vá không liên quan. Tự sửa thì càng
+  --     không: gỡ hộ một dòng `role_permissions` là migrate() tự tay đổi chính sách an ninh của
+  --     khách hàng, đúng thứ [CR4] cấm.
+  --     GIÁ PHẢI TRẢ, nói thẳng: `migrate()` KHÔNG chuyển WARNING này lên người gọi. Nó tới
+  --     PostgreSQL server log và tới đầu ra của `psql`, KHÔNG tới đâu khác. Nên đây là lớp
+  --     YẾU NHẤT trong ba lớp, và nó được đặt ở đây vì nó là lớp DUY NHẤT có mặt ở chỗ này,
+  --     không phải vì nó đủ.
+  --
+  -- (2) GUARD `has_table_privilege` — không có nó, mục này lặp lại ĐÚNG lỗi mà bản đầu của (E2)
+  --     đã mắc: đọc một BẢNG NGHIỆP VỤ ở thời điểm deploy, gặp khuôn "superuser bootstrap một
+  --     lần rồi deploy dưới role không sở hữu bảng", ném 42501 và giết migrate() trên một lược
+  --     đồ hoàn toàn đúng. Khối EXCEPTION bọc ngoài là lớp thứ hai cho mọi chế độ hỏng khác.
+  --     Khi bỏ qua, mục này NÓI RA việc mình bỏ qua — một phép kiểm im lặng không chạy là một
+  --     phép kiểm tệ hơn không có.
+  --
+  -- (3) KHÔNG ĐỌC `user_roles`, và đó là điểm khác biệt sinh tử với phương án đã bị LOẠI. Một
+  --     phép kiểm mức NGƯỜI DÙNG ở đây là FAIL-OPEN đo được: phiên deploy chưa gắn `app.org_id`
+  --     nên dưới FORCE RLS nó thấy ĐÚNG 0 hàng `user_roles` và kết luận "không vi phạm". Toàn
+  --     bộ phép đo ở khối "[vòng fix 1 — C1]" của 005_identity.sql §(3). `role_permissions`
+  --     KHÔNG có RLS (danh mục toàn cục — xem "LỆCH KHỎI BRIEF (1/3)"), nên mục này không có ca
+  --     mù tương ứng: nó hoặc đọc được đủ, hoặc bị 42501 và NÓI RA.
+  IF to_regclass('public.role_permissions') IS NOT NULL
+     AND to_regclass('public.roles') IS NOT NULL THEN
+    BEGIN
+      IF NOT has_table_privilege(current_user, 'public.role_permissions', 'SELECT')
+         OR NOT has_table_privilege(current_user, 'public.roles', 'SELECT') THEN
+        RAISE WARNING 'Hardening (E3): BỎ QUA phép kiểm ma trận quyền — role deploy % không có '
+                      'SELECT trên public.roles/public.role_permissions. Bất biến D3 KHÔNG được '
+                      'phán xét trên dữ liệu ở lần deploy này; lớp còn lại là phép kiểm tĩnh '
+                      'trên văn bản migration (chỉ thấy ma trận VIẾT TRONG migration).',
+                      current_user;
+      ELSE
+        EXECUTE 'SELECT string_agg(format(''%s+%s'', vai_1, vai_2), ''; '') FROM ('
+                || CAU_CAP_PHU_CHUOI || ') t'
+          INTO con_sot;
+        IF con_sot IS NOT NULL THEN
+          RAISE WARNING 'Hardening (E3): PHÂN TÁCH NHIỆM VỤ (D3) — có tổ hợp vai trò phủ TRỌN '
+                        'chuỗi ngoài mốc ghim: %. Một người giữ cả hai vai trò trong một tổ hợp '
+                        'như thế nắm trọn chuỗi tạo RFQ -> chọn nhà cung cấp -> mở thầu -> '
+                        'award -> duyệt. Mục này CỐ Ý KHÔNG chặn deploy và KHÔNG tự sửa (ma '
+                        'trận quyền là dữ liệu của khách hàng): rà những người đang giữ tổ hợp '
+                        'đó, rồi hoặc thu hồi bớt vai trò, hoặc sửa ma trận bằng một migration '
+                        'đánh số MỚI, hoặc — nếu đây là thay đổi CÓ CHỦ Ý — cập nhật cả '
+                        'CAP_PHU_CHUOI ở file này lẫn CHAIN_COVERING_ROLE_PAIRS ở '
+                        'packages/identity/src/permissions.ts.', con_sot;
+        END IF;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Hardening (E3): không phán xét được ma trận quyền: % (%). Không chặn '
+                    'deploy — xem lập luận (1) ở mục này.', SQLERRM, SQLSTATE;
+    END;
+  END IF;
 
   -- ===== BƯỚC 4: một lần gãy, liệt kê tất cả ============================================
   IF array_length(loi_gom, 1) > 0 THEN

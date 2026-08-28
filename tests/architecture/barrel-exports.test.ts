@@ -116,3 +116,74 @@ describe("bề mặt export công khai của crypto-keys", () => {
     expect(Object.keys(docExportsCuaPackage()).sort()).toEqual([...TAP_CUA_HOP_LE].sort());
   });
 });
+
+// ============================================================================================
+// [vòng fix 1 — F6] CÙNG CÔNG CỤ, MỘT MẶT TIỀN KHÁC: @trustprocure/identity
+//
+// `hasPermission` trả `boolean` và KHÔNG ghi kiểm toán. Một cổng gác viết bằng nó hợp lệ về
+// kiểu, đọc rất tự nhiên, và vi phạm bất biến D5 ("mỗi lần TỪ CHỐI quyền để lại bản ghi kiểm
+// toán") TRONG IM LẶNG — đo trên PostgreSQL 16.15: dò 11 mã quyền qua `hasPermission` cho ra
+// 0 bản ghi mới trong sổ. Thân `requirePermission` thì vững (ba đường làm một lần từ chối biến
+// mất đều thất bại); lỗ nằm ở MẶT TIỀN GÓI.
+//
+// depcruise KHÔNG bắt được: mọi cạnh trên đường `rbac.ts -> index.ts -> gói khác` đều hợp
+// pháp — đúng giới hạn nguyên lý đã mô tả ở đầu file này cho `deriveOrgKey`. Nên lớp cưỡng chế
+// là khẳng định TẬP EXPORT THẬT, cùng công cụ, cùng lập luận.
+//
+// PHÁT BIỂU ĐÚNG MỨC: việc này đóng ĐÚNG MỘT đường — một gói KHÁC vô tình dựng cổng gác bằng
+// `hasPermission`. Mã bên trong chính gói identity vẫn gọi nó trực tiếp được (và test tích hợp
+// của gói đó đang làm thế, có chủ ý), còn một lần từ chối ở TẦNG CSDL (RLS/GRANT) vẫn không
+// sinh bản ghi nào. D5 được cưỡng chế cho ĐƯỜNG ĐI QUA `requirePermission`, không hơn.
+// ============================================================================================
+const DANH_SACH_TRANG_IDENTITY = [
+  "CHAIN_COVERING_ROLE_PAIRS",
+  "PERMISSIONS",
+  "PermissionAuditFailedError",
+  "PermissionDeniedError",
+  "SEPARATION_OF_DUTIES_CHAIN",
+  "requirePermission",
+];
+
+const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);
+
+describe("bề mặt export công khai của identity", () => {
+  it("[INV-D5] cửa @trustprocure/identity chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(IDENTITY_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/identity/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, IDENTITY_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_IDENTITY.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/identity. Nếu đó là một hàm trả lời " +
+        "câu hỏi quyền mà KHÔNG ghi kiểm toán, nó là một cổng gác vi phạm D5 trong im lặng — " +
+        "giữ nó ở trong gói. Xem khối chú thích ở packages/identity/src/index.ts.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_IDENTITY.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/identity.",
+    ).toEqual([]);
+  });
+
+  it("[INV-D5] `hasPermission` KHÔNG có mặt ở cửa công khai — đối chứng chống rỗng ruột", async () => {
+    // Vế đối chứng: nếu ai đó thêm lại `hasPermission` vào barrel, khẳng định "danh sách trắng"
+    // ở trên đã đỏ — nhưng test này nêu ĐÍCH DANH symbol đang được canh, nên thông báo lỗi nói
+    // đúng thứ bị vi phạm thay vì "có một symbol lạ".
+    const urlCua = new URL("./src/index.ts", IDENTITY_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    expect(Object.keys(moduleThat)).not.toContain("hasPermission");
+    // Và nó PHẢI còn tồn tại ở module nội bộ — nếu không, test này xanh vì hàm đã bị xoá chứ
+    // không vì nó được giữ đúng chỗ.
+    const noiBo = (await import(
+      /* @vite-ignore */ new URL("./src/rbac.ts", IDENTITY_PACKAGE_JSON_URL).href
+    )) as Record<string, unknown>;
+    expect(typeof noiBo["hasPermission"]).toBe("function");
+  });
+});
