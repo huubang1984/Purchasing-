@@ -295,10 +295,18 @@ describe("hình dạng file migration", () => {
     // lỗ: một bảng danh mục toàn cục không mang dữ liệu của tổ chức nào để mà cách ly. Vì thế
     // KHÔNG có dòng nào được thêm vào NGOAI_LE_HINH_DANG (danh sách đó vẫn RỖNG ở S0) — xem
     // db/migrations/005_identity.sql khối "LỆCH KHỎI BRIEF (1/3)".
+    // [Task 9] Hai bảng mới của 006 — `sessions` và `mfa_credentials` — đều có org_id, nên cả
+    // hai phải lọt vào danh sách này VÀ phải đi qua hình dạng CHUẨN của mục (B) trong
+    // hardening.always.sql. Hệ quả cố ý: `NGOAI_LE_HINH_DANG` VẪN RỖNG sau Task 9 (policy của
+    // chúng là `(org_id = app_current_org_id())` nguyên văn, đúng dòng `co_org_id` của danh
+    // sách trắng). Nếu một task sau phải thêm dòng đầu tiên vào cửa đó, đấy là một quyết định
+    // an ninh có review bắt buộc, không phải một dòng lặng lẽ.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
+      "mfa_credentials",
       "organizations",
+      "sessions",
       "user_roles",
       "users",
     ]);

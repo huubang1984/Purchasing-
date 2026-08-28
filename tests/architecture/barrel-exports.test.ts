@@ -135,13 +135,30 @@ describe("bề mặt export công khai của crypto-keys", () => {
 // của gói đó đang làm thế, có chủ ý), còn một lần từ chối ở TẦNG CSDL (RLS/GRANT) vẫn không
 // sinh bản ghi nào. D5 được cưỡng chế cho ĐƯỜNG ĐI QUA `requirePermission`, không hơn.
 // ============================================================================================
+// [Task 9] Bốn nhóm mới, và HAI vắng mặt là load-bearing:
+//   * `isWellFormedTotpCode` (totp.ts) — hợp đồng NỘI BỘ giữa totp.ts và mfa-credentials.ts.
+//     Nó là một biểu thức hình dạng, không phải một năng lực; đưa ra cửa chỉ mời gọi một tầng
+//     khác tự viết phép kiểm mã TOTP bằng nó.
+//   * `MfaRequiredError`/`assertFreshMfa` thì CÓ ở đây, và đó là đúng: khác `hasPermission`,
+//     `assertFreshMfa` NÉM khi không thoả (fail-closed) chứ không trả boolean, nên nó không
+//     dựng ra được một cổng gác im lặng — đúng lý do đã rút `hasPermission` khỏi cửa này.
 const DANH_SACH_TRANG_IDENTITY = [
   "CHAIN_COVERING_ROLE_PAIRS",
+  "MFA_LOCKOUT_SECONDS",
+  "MFA_MAX_FAILED_ATTEMPTS",
+  "MfaRequiredError",
   "PERMISSIONS",
   "PermissionAuditFailedError",
   "PermissionDeniedError",
   "SEPARATION_OF_DUTIES_CHAIN",
+  "assertFreshMfa",
+  "counterForTime",
+  "deriveTotpCode",
+  "enrollTotpCredential",
+  "generateTotpSecret",
   "requirePermission",
+  "verifyTotpAttempt",
+  "verifyTotpCode",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);

@@ -661,6 +661,118 @@ describe("ranh giới kiến trúc", () => {
     expect(rule.to.pathNot).toEqual([ciFile("packages/identity/src/index.ts")]);
   });
 
+  // ======================================================================================
+  // TASK 9 (T9-A) — HỌ "g3-": packages/identity KHÔNG CÓ NĂNG LỰC MẬT MÃ
+  //
+  // Task 9 cần xác thực TOTP, mà xác thực TOTP đòi bí mật RÕ. Đường đi hiển nhiên là miễn trừ
+  // packages/identity khỏi g1-...-unwrap-ts — đúng thứ QT2 cấm: nó biến một API server bị
+  // chiếm thành một tiến trình GIẢI MÃ ĐƯỢC HỒ SƠ THẦU. Quy tắc g3- đi NGƯỢC LẠI (ghim thêm
+  // một hàng rào thay vì nới hàng rào cũ), và bốn test dưới đây là lớp cưỡng chế của nó.
+  // ======================================================================================
+
+  it("[INV-G3] chặn packages/identity import mặt tiền BỌC của crypto-keys", () => {
+    // Chặn cả đường BỌC — không chỉ đường MỞ — là toàn bộ nội dung của quy tắc: chính sự có
+    // mặt của một cạnh identity -> crypto-keys là thứ biến việc nới G1 thành một dòng sửa nhỏ
+    // trông vô hại. Probe dùng đường TƯƠNG ĐỐI để cạnh luôn resolve được bất kể package.json
+    // của identity có khai dependency hay không.
+    const probe = "packages/identity/src/zzprobe-mat-ma.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { MasterKeyRing } from "../../crypto-keys/src/index.js";',
+        "export { MasterKeyRing };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/identity", "packages/crypto-keys"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-mat-ma.ts");
+      expect(output).toContain("g3-identity-khong-co-nang-luc-mat-ma");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G3] chặn packages/identity import đường MỞ khoá, và g1 vẫn bắn cùng lúc", () => {
+    // Hai lớp phải cùng bắn ở đây, và điều đó phải được ĐO chứ không suy: nếu chỉ g3 bắn thì
+    // gỡ g3 là đủ để mở đường; nếu chỉ g1 bắn thì g3 là trang trí trên đúng ca nguy hiểm nhất.
+    const probe = "packages/identity/src/zzprobe-mo-khoa.ts";
+    writeFileSync(
+      probe,
+      [
+        'import type { KeyUnwrapper } from "../../crypto-keys/src/unwrap.js";',
+        "export type Leaked = KeyUnwrapper;",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/identity", "packages/crypto-keys"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("g3-identity-khong-co-nang-luc-mat-ma");
+      expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-unwrap-ts");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G3] gói KHÁC vẫn import được mặt tiền bọc — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    // Không có vế này, hai test trên xanh kể cả khi quy tắc chặn MỌI đường tới crypto-keys, và
+    // bất biến thu được sẽ là "không ai bọc khoá được" chứ không phải thứ định canh. Cùng khuôn
+    // đối chứng dương của [INV-G2] cho cửa index.ts.
+    const probe = "packages/audit/src/zzprobe-boc-khoa.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { MasterKeyRing } from "../../crypto-keys/src/index.js";',
+        "export { MasterKeyRing };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/crypto-keys"]);
+      expect(output).not.toContain("g3-identity-khong-co-nang-luc-mat-ma");
+      expect(status, `đường bọc khoá hợp lệ của một gói khác bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G3] quy tắc g3- KHÔNG có miễn trừ nào, và đích của nó là CẢ gói crypto-keys", () => {
+    // Canary cho chính sách, cùng khuôn hai canary của g1-/g2-. Ở họ g1-/g2- thứ nguy hiểm là
+    // "miễn trừ một module khỏi vai trò `from` mà quên biến nó thành đích hạn chế"; ở đây thứ
+    // nguy hiểm KHÁC HẲN và ngược chiều — một dòng `from.pathNot` hay một `to.pathNot` thêm vào
+    // CHÍNH LÀ hành động nới hàng rào mà quy tắc này sinh ra để ngăn. Nên bất biến máy-đọc-được
+    // là: họ g3- không được có bậc tự do nào.
+    interface DepCruiseRule {
+      name: string;
+      from: { path?: string | string[]; pathNot?: string | string[] };
+      to: { path?: string | string[]; pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ciPrefix } = require("../../dependency-cruiser-ci.cjs") as {
+      ciPrefix: (s: string) => string;
+    };
+
+    const quyTacG3 = config.forbidden.filter((r) => r.name.startsWith("g3-"));
+    // Đối chứng dương: danh sách rỗng làm mọi khẳng định dưới thành trang trí.
+    expect(quyTacG3.length).toBe(1);
+
+    for (const quyTac of quyTacG3) {
+      expect(
+        quyTac.from.pathNot,
+        `${quyTac.name} có miễn trừ — mỗi dòng miễn trừ ở họ g3- là một bước tới đúng kịch bản ` +
+          "mà quy tắc này sinh ra để chặn (một API server giải mã được hồ sơ thầu).",
+      ).toBeUndefined();
+      expect(quyTac.to.pathNot, `${quyTac.name} mở một cửa vào crypto-keys`).toBeUndefined();
+    }
+
+    expect(quyTacG3[0]!.from.path).toBe(ciPrefix("packages/identity/src/"));
+    // ĐÍCH là CẢ gói, không phải riêng thư mục src: một file crypto-keys nằm ngoài src (script,
+    // cấu hình sinh mã) cũng không được là cây cầu.
+    expect(quyTacG3[0]!.to.path).toBe(ciPrefix("packages/crypto-keys/"));
+  });
+
   it("mã nguồn hiện tại không vi phạm quy tắc nào", () => {
     // Fix round 4 (I1): chạy qua chính script package.json thay vì danh sách target tự chọn,
     // để phạm vi kiểm luôn khớp phạm vi hàng rào thực sự bảo vệ trong CI.

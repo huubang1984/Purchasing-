@@ -1729,6 +1729,7 @@ describe("migration của dự án", () => {
           "003_audit_events.sql",
           "004_audit_chain_functions.sql",
           "005_identity.sql",
+          "006_sessions_and_mfa.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4509,6 +4510,7 @@ describe("migration của dự án", () => {
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([
         "004_audit_chain_functions.sql",
         "005_identity.sql",
+        "006_sessions_and_mfa.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4711,6 +4713,7 @@ describe("migration của dự án", () => {
         "003_audit_events.sql",
         "004_audit_chain_functions.sql",
         "005_identity.sql",
+        "006_sessions_and_mfa.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -665,13 +665,19 @@ describe("phủ RLS", () => {
     //   Không cấp gì cho app_unseal trên cả bốn: `hasPermission` nối qua `users`, mà app_unseal
     //     không có quyền đọc `users` (quyết định của 002), nên một GRANT ở đây sẽ là quyền
     //     không dùng được — đúng thứ 002 đã từ chối cấp "cho chắc".
+    // [Task 9] Hai bảng mới của 006 chỉ hiện SELECT ở MỨC BẢNG: INSERT/UPDATE của chúng đều là
+    // quyền CỘT (xem test [M5] dưới). Và app_unseal KHÔNG có dòng nào mới ở đây dù nó ĐƯỢC cấp
+    // quyền trên `sessions` và `users` — vì quyền đó cấp theo CỘT, thứ view này MÙ hoàn toàn.
+    // Đó chính là lý do khẳng định này một mình KHÔNG đủ.
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
+      { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
+      { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
@@ -733,7 +739,41 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [Task 9] `mfa_credentials` — bốn vắng mặt là load-bearing, mỗi cái đóng một đường đi:
+      //   `id`                 KHÔNG INSERT -> mfa_credentials_pkey không làm oracle xuyên tổ
+      //                                        chức được (khuôn users_pkey ở 002).
+      //   `last_used_counter`  KHÔNG INSERT -> hồ sơ không ra đời với một bộ đếm dùng-một-lần
+      //                                        do bên ghi chọn; chọn một giá trị lớn là vô hiệu
+      //                                        hoá vế (2) của E3 VĨNH VIỄN.
+      //   `confirmed_at`       KHÔNG INSERT -> trạng thái "đã xác nhận" chỉ tới bằng một mã đúng.
+      //   `secret_wrapped`/`secret_key_version` KHÔNG có UPDATE (và bảng không có DELETE ở
+      //                                        role_table_grants) -> một app_api bị chiếm không
+      //                                        thay được bí mật MFA của người đã đăng ký.
+      { grantee: "app_api", bang: "mfa_credentials", cot: "confirmed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "failed_attempts", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "kind", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "last_used_counter", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "locked_until", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
+      // [Task 9] `sessions` — ba vắng mặt là load-bearing:
+      //   `id`              KHÔNG INSERT -> sessions_pkey không làm oracle được.
+      //   `created_at`      KHÔNG có gì   -> dấu thời gian do CSDL đóng (khuôn occurred_at/003).
+      //   `mfa_verified_at` KHÔNG INSERT (chỉ UPDATE) -> một phiên không RA ĐỜI ở trạng thái
+      //                                    "đã xác thực hai lớp"; trạng thái đó phải tới bằng
+      //                                    một câu lệnh riêng, viết ra thành chữ.
+      //   `expires_at`      KHÔNG có UPDATE -> không gia hạn phiên trượt vô hạn.
+      { grantee: "app_api", bang: "sessions", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "sessions", cot: "ip", quyen: "INSERT" },
+      { grantee: "app_api", bang: "sessions", cot: "mfa_verified_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "sessions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "sessions", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "sessions", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "sessions", cot: "user_agent", quyen: "INSERT" },
+      { grantee: "app_api", bang: "sessions", cot: "user_id", quyen: "INSERT" },
       // [Task 8] `user_roles` cấp INSERT theo CỘT, và `granted_at` vắng mặt là load-bearing:
       // dấu thời gian do CSDL đóng, bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được
       // theo ý mình (cùng khuôn `occurred_at` ở 003 và `created_at` ở 002). KHÔNG có UPDATE trên

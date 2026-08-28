@@ -70,8 +70,46 @@ const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
+// ==========================================================================================
+// TASK 9 (T9-A) - HUONG NGUOC VOI "NOI G1": GHIM THEM MOT HANG RAO, KHONG NOI HANG RAO CU
+//
+// Task 9 can xac thuc TOTP, ma xac thuc TOTP doi BI MAT RO. Duong di HIEN NHIEN la mien tru
+// packages/identity khoi g1-...-unwrap-ts. Do dung thu QT2 cam: G1 giam kha nang GIAI MA HO SO
+// THAU vao MOT app, nen mot dong mien tru o do bien mot API server bi chiem thanh mot tien
+// trinh GIAI MA DUOC HO SO THAU. Doi mot tinh nang dang nhap lay ban kinh no cua ca san.
+//
+// Quy tac duoi day di nguoc lai: no CAM packages/identity cham vao crypto-keys BANG MOI DUONG
+// (bare specifier, subpath export, duong tuong doi xuyen goi, va ca `import type` - depcruise
+// thay canh chi-kieu vi tsPreCompilationDeps: true). Nho vay phat bieu "goi identity KHONG CO
+// NANG LUC MAT MA" tro thanh mot thu do duoc bang may, khong phai mot loi hua trong chu thich.
+//
+// Cai gia phai tra, noi thang: bi mat TOTP van phai mo duoc boi AI DO. Duong da chon la mot
+// CONG (`TotpSecretUnsealer` trong packages/identity/src/mfa-credentials.ts) — identity khai
+// hop dong, composition root tiem cai dat. Du luong: hom nay KHONG lop nao cuong che duoc rang
+// cai dat duoc tiem KHONG PHAI la bo mo phong bi ho so thau; lop do chi viet duoc khi `apps/`
+// ra doi, va no se la mot quy tac cung khuon voi ba ho g1-/g2-/g3- nay. Xem task-9-report.md.
+//
+// TIEN TO "g3-" LA MOT GIAO UOC MAY DOC DUOC, giong g1-/g2-: test "[INV-G3]" o
+// tests/architecture/boundaries.test.ts loc theo tien to nay.
+// ==========================================================================================
+const CRYPTO_KEYS_PKG_PREFIX = ciPrefix("packages/crypto-keys/");
+
 module.exports = {
   forbidden: [
+    {
+      name: "g3-identity-khong-co-nang-luc-mat-ma",
+      comment:
+        "packages/identity KHONG duoc import bat cu thu gi tu packages/crypto-keys - ke ca mat " +
+        "tien BOC an toan (index.ts). Ly do la mot bat bien co ten (G1/ADR-006): xac thuc TOTP " +
+        "doi bi mat RO, nen ngay khi identity co MOT canh toi crypto-keys, duong di de nhat de " +
+        "lam no chay duoc la mien tru identity khoi quy tac chan unwrap.ts - va khi do mot " +
+        "app_api bi chiem GIAI MA DUOC HO SO THAU. Chan CA duong boc chu khong chi duong mo, vi " +
+        "chinh su co mat cua canh do la thu bien viec noi G1 thanh mot dong sua nho. Bi mat MFA " +
+        "duoc mo qua cong TotpSecretUnsealer, do composition root tiem vao.",
+      severity: "error",
+      from: { path: IDENTITY_SRC_PREFIX },
+      to: { path: CRYPTO_KEYS_PKG_PREFIX },
+    },
     {
       name: "g2-identity-chi-index-la-cua-cong-khai",
       comment:

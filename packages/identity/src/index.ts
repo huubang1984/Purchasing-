@@ -40,3 +40,28 @@ export {
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";
+// [Task 9] Nguyên thuỷ TOTP. `isWellFormedTotpCode` CỐ Ý không ở đây: nó là hợp đồng nội bộ
+// giữa totp.ts và mfa-credentials.ts (một biểu thức hình dạng, không phải một năng lực), và
+// mỗi symbol ở cửa này là một thứ mọi gói khác gọi được.
+export {
+  counterForTime,
+  deriveTotpCode,
+  generateTotpSecret,
+  verifyTotpCode,
+  type TotpFailureReason,
+  type TotpResult,
+  type TotpVerifyOptions,
+} from "./totp.js";
+export { MfaRequiredError, assertFreshMfa, type MfaFreshnessCheck } from "./mfa.js";
+export {
+  MFA_LOCKOUT_SECONDS,
+  MFA_MAX_FAILED_ATTEMPTS,
+  enrollTotpCredential,
+  verifyTotpAttempt,
+  type MfaAttemptResult,
+  type MfaDenialReason,
+  type TotpAttempt,
+  type TotpEnrollment,
+  type TotpSecretUnsealer,
+  type WrappedTotpSecret,
+} from "./mfa-credentials.js";
