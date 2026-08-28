@@ -62,6 +62,15 @@ importers:
         specifier: ^8.13.0
         version: 8.23.0
 
+  packages/outbox:
+    dependencies:
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/tenancy:
     dependencies:
       pg:

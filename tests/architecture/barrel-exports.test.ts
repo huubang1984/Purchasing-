@@ -245,3 +245,77 @@ describe("bề mặt export công khai của identity", () => {
     expect(typeof moduleThat["verifyTotpAttempt"]).toBe("function");
   });
 });
+
+// ============================================================================================
+// [Task 10] GÓI THỨ BA CÓ DANH SÁCH TRẮNG BARREL: @trustprocure/outbox
+//
+// Cùng công cụ, cùng lập luận, một mặt tiền khác. Sổ nợ mà Task 9 để lại ("bốn gói KHÔNG có
+// danh sách trắng barrel — audit, tenancy, db, test-support") nay còn ĐÚNG BỐN gói đó; gói
+// outbox ra đời KÈM lớp này thay vì thêm một khoản nợ thứ năm.
+//
+// PHÁT BIỂU ĐÚNG MỨC, để không ai trích quá lời: lớp này khoá DANH SÁCH export, KHÔNG khoá
+// HÌNH DẠNG từng symbol — đúng giới hạn đã ghi cho identity ở khối trên. Nó bắt được một symbol
+// MỚI mọc ra ở cửa (kể cả khi tới qua re-export bắc cầu), không bắt được một symbol đã nằm
+// trong danh sách trắng nhưng đổi hành vi.
+//
+// MỘT VẮNG MẶT LÀ LOAD-BEARING: `LeaseLostError` KHÔNG ở cửa. Nó là tín hiệu nội bộ giữa
+// `runOnceForOrg` và khối bắt lỗi của chính nó; đưa ra cửa chỉ mời gọi một tầng khác tự phán xử
+// vòng đời hạn thuê bằng tay, và đó là đúng thứ hàng rào `attempts = <giá trị đã claim>` sinh ra
+// để không ai phải làm.
+const DANH_SACH_TRANG_OUTBOX = [
+  "JobRunner",
+  "MAX_ATTEMPTS_LIMIT",
+  "MAX_BATCH_SIZE",
+  "MAX_LEASE_SECONDS",
+  "MAX_POLL_INTERVAL_MS",
+  "MAX_RETRY_DELAY_SECONDS",
+  "MIN_POLL_INTERVAL_MS",
+  "OutboxError",
+  "enqueueJob",
+];
+
+const OUTBOX_PACKAGE_JSON_URL = new URL("../../packages/outbox/package.json", import.meta.url);
+
+describe("bề mặt export công khai của outbox", () => {
+  it("cửa @trustprocure/outbox chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(OUTBOX_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/outbox/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, OUTBOX_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_OUTBOX.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/outbox. Mỗi symbol ở đây là một năng " +
+        "lực mọi service gọi được; thêm nó vào danh sách trắng phải là một quyết định nhìn " +
+        "thấy được, không phải một dòng re-export lặng lẽ.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_OUTBOX.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/outbox — hợp đồng hai " +
+        "chiều: thiếu cũng sai như thừa.",
+    ).toEqual([]);
+  });
+
+  it("`LeaseLostError` KHÔNG có mặt ở cửa công khai — đối chứng chống rỗng ruột", async () => {
+    const urlCua = new URL("./src/index.ts", OUTBOX_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    expect(Object.keys(moduleThat)).not.toContain("LeaseLostError");
+    // Và đường SẢN PHẨM phải VẪN ở cửa — nếu không, test này xanh vì gói không còn chạy job nào.
+    expect(typeof moduleThat["JobRunner"]).toBe("function");
+    expect(typeof moduleThat["enqueueJob"]).toBe("function");
+  });
+
+  it("package outbox chỉ khai đúng MỘT cửa subpath export", () => {
+    const noiDung = JSON.parse(readFileSync(OUTBOX_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    expect(Object.keys(noiDung.exports ?? {})).toEqual(["."]);
+  });
+});

@@ -674,6 +674,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
+      // [Task 10] `outbox_jobs` của 007 chỉ hiện SELECT ở MỨC BẢNG: INSERT/UPDATE của nó đều là
+      // quyền CỘT (xem test [M5] dưới). Và app_unseal KHÔNG có dòng nào — cố ý, và đó là một
+      // LỆCH khỏi brief (brief cấp SELECT/INSERT/UPDATE mức bảng cho CẢ HAI role). Hôm nay
+      // `apps/` rỗng nên runtime mở thầu không có dòng mã nào đọc hay ghi outbox; một quyền cấp
+      // "cho chắc" là một quyền không ai gỡ ra nữa (khuôn 002 với `organizations`, 006 với
+      // `sessions.expires_at`). Vì KHÔNG cấp gì, file 007 cũng KHÔNG làm khoản [NỢ ADR-006] xanh
+      // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
+      { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
@@ -759,6 +767,32 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
+      // [Task 10] `outbox_jobs` — bốn nhóm vắng mặt, mỗi nhóm đóng một đường đi:
+      //   `id`/`created_at`          KHÔNG có gì -> `outbox_jobs_pkey` không dùng làm oracle
+      //                                            xuyên tổ chức được (khuôn `users_pkey` ở
+      //                                            002), và dấu thời gian TẠO do CSDL đóng
+      //                                            (khuôn `occurred_at` ở 003).
+      //   `status`/`attempts`/`last_failure_reason` KHÔNG có INSERT -> một job không RA ĐỜI đã
+      //                                            `DONE`, đã mang sẵn số lần thử, hay đã mang
+      //                                            sẵn một lý do thất bại.
+      //   `lease_expires_at`/`finished_at` KHÔNG có INSERT -> hai CHECK của 007 buộc chúng NULL
+      //                                            ở trạng thái PENDING, nên cấp chúng chỉ mở
+      //                                            một đường ghi không dùng được.
+      //   `org_id`/`kind`/`payload`/`dedupe_key` KHÔNG có UPDATE -> không đường nào chuyển một
+      //                                            job sang tổ chức khác, đổi loại việc, hay
+      //                                            sửa nội dung một job đã nằm trong hàng đợi.
+      //   Và KHÔNG có DELETE ở mức bảng: một job đi tới trạng thái cuối, không biến mất.
+      { grantee: "app_api", bang: "outbox_jobs", cot: "attempts", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "dedupe_key", quyen: "INSERT" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "finished_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "kind", quyen: "INSERT" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "last_failure_reason", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "lease_expires_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "payload", quyen: "INSERT" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
       // [Task 9] `sessions` — ba vắng mặt là load-bearing:
       //   `id`              KHÔNG INSERT -> sessions_pkey không làm oracle được.
       //   `created_at`      KHÔNG có gì   -> dấu thời gian do CSDL đóng (khuôn occurred_at/003).

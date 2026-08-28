@@ -301,11 +301,18 @@ describe("hình dạng file migration", () => {
     // chúng là `(org_id = app_current_org_id())` nguyên văn, đúng dòng `co_org_id` của danh
     // sách trắng). Nếu một task sau phải thêm dòng đầu tiên vào cửa đó, đấy là một quyết định
     // an ninh có review bắt buộc, không phải một dòng lặng lẽ.
+    // [Task 10] `outbox_jobs` của 007 cũng có org_id, nên nó chịu ĐÚNG cùng bộ ràng buộc — và
+    // hệ quả vẫn giữ nguyên: `NGOAI_LE_HINH_DANG` VẪN RỖNG sau Task 10. Chi tiết đáng ghi vì
+    // brief mời gọi hướng ngược lại: một runner "vượt RLS" sẽ đòi hoặc một policy hình dạng
+    // khác (tức một dòng đầu tiên trong cửa ngoại lệ), hoặc một role có BYPASSRLS. 007 không
+    // làm cái nào — nó chạy runner TRONG ngữ cảnh tenant. Xem "LỆCH KHỎI BRIEF (4/9)" ở
+    // db/migrations/007_outbox.sql.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
       "mfa_credentials",
       "organizations",
+      "outbox_jobs",
       "sessions",
       "user_roles",
       "users",

@@ -29,14 +29,13 @@ Chưa xong:
 ## Công việc đang làm
 
 Kế hoạch triển khai S0 đã viết xong: 11 task, 92 bước, tại
-`docs/superpowers/plans/2026-08-27-s0-foundation.md`. **Task 1–9 đã xong** (Task 9 đang ở
-vòng fix 2); còn Task 10 và Task 11.
+`docs/superpowers/plans/2026-08-27-s0-foundation.md`. **Task 1–10 đã xong**; còn Task 11.
 
 S0 **nhắm tới** 13 trong 34 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3, G1,
 G2, G3, G4). 21 bất biến còn lại thuộc S1 vì chúng đòi hỏi RFQ, lời mời, phong bì niêm
 phong và luồng mở thầu.
 
-**"Nhắm tới" KHÔNG phải "đã phủ", và năm chỗ dưới đây phải đọc kèm — dòng này là thứ người
+**"Nhắm tới" KHÔNG phải "đã phủ", và sáu chỗ dưới đây phải đọc kèm — dòng này là thứ người
 vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được rộng hơn thực tế:**
 
 - **E3** — sổ đăng ký (`docs/TEST-PLAN.md:82`) định nghĩa E3 bằng **năm** vế. Vế *giới hạn
@@ -61,6 +60,21 @@ vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được r�
   `packages/crypto-keys/src/*.ts` trừ test → **0 hit**. Thứ đã có là **hạ tầng ghi**
   (`004_audit_chain_functions.sql`, nhóm B3) — không một thao tác khoá nào GỌI nó. Hàng G4
   của `evidence/INV-matrix.md` sẽ trống; nó trống vì chưa có lớp, không vì thiếu nhãn.
+
+- **C2 / D4** — **CHƯA PHỦ**, và Task 10 (outbox) **cố ý không** làm chúng trông như đã phủ.
+  Brief của task đó liệt kê C2, D4 (và B3) là "bất biến liên quan" và gắn `[INV-C2]` cho một
+  test; cả ba thẻ đều bị bỏ, mỗi thẻ một phép đo. **C2**: chủ ngữ của nó — RFQ, `deadline_at`,
+  báo giá muộn — chưa tồn tại trong 001–007, nên test "kind lạ chuyển sang FAILED chứ không
+  treo" đo một tính chất THẬT của runner nhưng không đo C2. **D4** đòi cảnh báo *tức thì* còn
+  outbox là POLL, độ trễ của nó bị chặn dưới bởi `pollIntervalMs`; đường đúng là
+  `NOTIFY`/`LISTEN` hoặc một đường đồng bộ. **B3** thuộc chuỗi hash của `audit_events` và đã
+  được Task 6 phủ thật; Task 10 chỉ làm cho một job neo chuỗi TƯƠNG LAI không tự khoá mình
+  vĩnh viễn. Số **test** mang `[INV-C2]` và `[INV-D4]` trong toàn repo vẫn là **0** (chuỗi thẻ
+  có xuất hiện trong chú thích và trong chính lớp canh — thứ được đo là thẻ nằm trên tên một
+  `it(...)`, đúng thứ bộ sinh của Task 11 gom). Lớp cưỡng chế cho câu này:
+  `packages/outbox/src/nhan-bat-bien.test.ts`. Bất biến DUY NHẤT mà Task 10 mở rộng là **F1** —
+  `outbox_jobs` là một bảng tenant mới, cách ly bằng RLS + FORCE ở tầng CSDL, và runner của nó
+  chạy dưới `app_api` chứ KHÔNG dưới một role vượt RLS.
 
 **LỆCH SỐ CẦN TASK 11 HOÀ GIẢI, ghi ra thay vì để nó tự lộ:** dòng trên đếm 34 bất biến
 nghiệp vụ, còn sổ tay tiến trình có chỗ ghi ngưỡng "23/44". Hai con số đếm hai thứ khác
