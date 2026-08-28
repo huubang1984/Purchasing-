@@ -4,6 +4,7 @@ import {
   JobRunner,
   MAX_ATTEMPTS_LIMIT,
   MAX_BATCH_SIZE,
+  MAX_HANDLER_TIMEOUT_MS,
   MAX_LEASE_SECONDS,
   MAX_POLL_INTERVAL_MS,
   MAX_RETRY_DELAY_SECONDS,
@@ -62,6 +63,34 @@ describe("trần tham số của JobRunner", () => {
       () => new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { leaseSeconds: MAX_LEASE_SECONDS + 1 }),
     ).toThrow(RangeError);
     expect(() => new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { leaseSeconds: 0 })).toThrow(RangeError);
+  });
+
+  it("[vòng fix 1 — MỤC 3] handlerTimeoutMs bị CHẶN TRÊN bởi chính leaseSeconds", () => {
+    // Trần này KHÔNG phải một con số chính sách như các trần khác: nó là hệ quả ngữ nghĩa. Một
+    // handler chạy quá hạn thuê sẽ thấy job của mình đã bị runner khác claim lại, nên câu ghi
+    // kết cục của nó chạm 0 hàng — kết cục ấy đằng nào cũng bị từ chối. Cho phép trần lớn hơn
+    // hạn thuê chỉ mua thêm thời gian chờ một kết quả không ai công nhận.
+    expect(
+      () => new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { leaseSeconds: 2, handlerTimeoutMs: 2001 }),
+    ).toThrow(RangeError);
+    // Vế chống rỗng ruột: ĐÚNG trần thì PHẢI qua.
+    expect(
+      () => new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { leaseSeconds: 2, handlerTimeoutMs: 2000 }),
+    ).not.toThrow();
+    expect(
+      () => new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { handlerTimeoutMs: 0 }),
+    ).toThrow(RangeError);
+    // Và trần TUYỆT ĐỐI công bố ở mặt tiền phải khớp với trần thật khi leaseSeconds lớn nhất —
+    // nếu không, hằng xuất ra cửa là một con số nói dối.
+    expect(MAX_HANDLER_TIMEOUT_MS).toBe(MAX_LEASE_SECONDS * 1000);
+    expect(
+      () =>
+        new JobRunner(
+          POOL_KHONG_DUOC_DUNG,
+          {},
+          { leaseSeconds: MAX_LEASE_SECONDS, handlerTimeoutMs: MAX_HANDLER_TIMEOUT_MS },
+        ),
+    ).not.toThrow();
   });
 
   it("pollIntervalMs có cận DƯỚI — một vòng poll 0ms là một vòng bận", () => {

@@ -78,9 +78,20 @@ vận hành và evidence pack đọc TRƯỚC TIÊN, nên nó không được r�
 
 **LỆCH SỐ CẦN TASK 11 HOÀ GIẢI, ghi ra thay vì để nó tự lộ:** dòng trên đếm 34 bất biến
 nghiệp vụ, còn sổ tay tiến trình có chỗ ghi ngưỡng "23/44". Hai con số đếm hai thứ khác
-nhau (34 = nhóm A–G; 46 = A–G cộng 12 bất biến hàng rào nhóm H sau khi H11/H12 được đăng
-ký ở `docs/TEST-PLAN.md` §5). `evidence/INV-matrix.md` của Task 11 phải nói rõ con số nào
-là thật và đếm cái gì — đó đúng là việc evidence pack sinh ra để làm.
+nhau (34 = nhóm A–G; **47** = A–G cộng **13** bất biến hàng rào nhóm H sau khi H11/H12 rồi
+H13 được đăng ký ở `docs/TEST-PLAN.md` §5). `evidence/INV-matrix.md` của Task 11 phải nói rõ
+con số nào là thật và đếm cái gì — đó đúng là việc evidence pack sinh ra để làm.
+**H13 (vòng fix 1 của Task 10)** đăng ký họ quy tắc `g4-` cho `packages/outbox`: một import
+TƯƠNG ĐỐI xuyên gói vào `packages/outbox/src/runner.js` đi lọt cả `depcruise`, `tsc` lẫn
+`eslint` — lần thứ BA cùng một lớp lỗ. Việc con số 12→13 / 46→47 đổi thêm một lần nữa KHÔNG
+làm việc hoà giải khó hơn: thứ Task 11 phải quyết là CÁCH ĐẾM, còn hai con số này chỉ cần
+ĐÚNG với thực tế tại thời điểm đọc.
+
+**BA HÀNG SẼ TRỐNG TRONG `evidence/INV-matrix.md`, VÀ ĐÓ LÀ TRẠNG THÁI ĐÚNG:** `C2`, `D4`
+(xem khối trên) — cộng `G2` và `G4` vẫn không có một thẻ nào. Nguy hiểm KHÔNG nằm ở chỗ chúng
+trống; nó đến khi ai đó LẤP CHÚNG BẰNG NHÃN THAY VÌ BẰNG LỚP. Và lớp canh nhãn mà Task 10
+dựng (`packages/outbox/src/nhan-bat-bien.test.ts`) chỉ phủ `packages/outbox/src/` — nó KHÔNG
+ngăn được một task sau gắn `[INV-D4]` hay `[INV-G2]` ở một gói khác.
 
 ## Điểm chặn
 

@@ -101,7 +101,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 12 bất biến hàng rào (nhóm H, §5) là 46 mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 13 bất biến hàng rào (nhóm H, §5) là 47 mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
@@ -233,7 +233,7 @@ pack. Nhóm **H** dùng chung cơ chế với 34 bất biến nghiệp vụ: tes
 theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 
 Nhóm H KHÔNG chỉ là hai hook: **mọi hàng rào tự động của dự án đều thuộc nhóm này**, kể cả
-các quy tắc biên giới module của dependency-cruiser (H11, H12). Tiêu chí phân nhóm là "cái
+các quy tắc biên giới module của dependency-cruiser (H11, H12, H13). Tiêu chí phân nhóm là "cái
 này canh CÁI GÌ": một bất biến nghiệp vụ (A–G) nói về hành vi của sản phẩm với dữ liệu của
 khách hàng; một bất biến hàng rào (H) nói về việc một biện pháp kiểm soát của chính dự án có
 còn răng hay không.
@@ -252,6 +252,18 @@ còn răng hay không.
 | **H10** | **Đầu vào rỗng, JSON hỏng, thiếu trường, sai kiểu, hoặc thiếu phụ thuộc runtime đều CHẶN** — fail-closed | Cả hai hook | T1 |
 | **H11** | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | **T0** |
 | **H12** | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | **T0** |
+| **H13** | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | **T0** |
+
+**H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
+chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
+identity → `g2-`/H11, nay outbox → `g4-`). Phép đo, tái lập được ở worktree review: một file
+`packages/audit/src/zz-probe-outbox-leak.ts` với `import "../../outbox/src/runner.js"` đi lọt
+CẢ BA cổng — `depcruise` 0 vi phạm, `tsc` exit 0, `eslint` exit 0 — trong khi bản bare
+specifier bị chặn ở cả hai lớp. Danh sách trắng barrel khoá DANH SÁCH export Ở CỬA; nó không
+dựng BỨC TƯỜNG, nên nó không thay thế được hàng rào này.
+Hai con số ở §2 (12 → 13 và 46 → 47) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
+("34 vs 46", nay "34 vs 47") vẫn là việc của Task 11 và KHÔNG được làm ở đây — sửa cho hai con
+số ĐÚNG với thực tế là một việc khác hẳn với việc chọn cách đếm.
 
 **H11 và H12 được bổ sung ngày 2026-08-28** (vòng fix 1 của Task 9), và lý do là một lớp
 khiếm khuyết chứ không phải một chỗ trống: `tests/architecture/boundaries.test.ts` đang gán

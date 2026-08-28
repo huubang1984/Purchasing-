@@ -258,14 +258,17 @@ describe("bề mặt export công khai của identity", () => {
 // MỚI mọc ra ở cửa (kể cả khi tới qua re-export bắc cầu), không bắt được một symbol đã nằm
 // trong danh sách trắng nhưng đổi hành vi.
 //
-// MỘT VẮNG MẶT LÀ LOAD-BEARING: `LeaseLostError` KHÔNG ở cửa. Nó là tín hiệu nội bộ giữa
-// `runOnceForOrg` và khối bắt lỗi của chính nó; đưa ra cửa chỉ mời gọi một tầng khác tự phán xử
-// vòng đời hạn thuê bằng tay, và đó là đúng thứ hàng rào `attempts = <giá trị đã claim>` sinh ra
-// để không ai phải làm.
+// HAI VẮNG MẶT LÀ LOAD-BEARING: `KetCucKhongGhiDuocError` và `HetGioHandlerError` KHÔNG ở cửa.
+// Cả hai là tín hiệu nội bộ giữa `runOnceForOrg` và khối bắt lỗi của chính nó; đưa ra cửa chỉ
+// mời gọi một tầng khác tự phán xử vòng đời hạn thuê bằng tay, và đó là đúng thứ hàng rào
+// `attempts = <giá trị đã claim>` sinh ra để không ai phải làm.
+// (`LeaseLostError` là TÊN CŨ của lớp thứ nhất — xem `JobFailureReason` ở runner.ts để biết vì
+// sao cái tên đó gộp ba nguyên nhân khác hẳn nhau và đã bị đổi ở vòng fix 1.)
 const DANH_SACH_TRANG_OUTBOX = [
   "JobRunner",
   "MAX_ATTEMPTS_LIMIT",
   "MAX_BATCH_SIZE",
+  "MAX_HANDLER_TIMEOUT_MS",
   "MAX_LEASE_SECONDS",
   "MAX_POLL_INTERVAL_MS",
   "MAX_RETRY_DELAY_SECONDS",
@@ -303,10 +306,12 @@ describe("bề mặt export công khai của outbox", () => {
     ).toEqual([]);
   });
 
-  it("`LeaseLostError` KHÔNG có mặt ở cửa công khai — đối chứng chống rỗng ruột", async () => {
+  it("tín hiệu nội bộ của runner KHÔNG có mặt ở cửa công khai — đối chứng chống rỗng ruột", async () => {
     const urlCua = new URL("./src/index.ts", OUTBOX_PACKAGE_JSON_URL);
     const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
     expect(Object.keys(moduleThat)).not.toContain("LeaseLostError");
+    expect(Object.keys(moduleThat)).not.toContain("KetCucKhongGhiDuocError");
+    expect(Object.keys(moduleThat)).not.toContain("HetGioHandlerError");
     // Và đường SẢN PHẨM phải VẪN ở cửa — nếu không, test này xanh vì gói không còn chạy job nào.
     expect(typeof moduleThat["JobRunner"]).toBe("function");
     expect(typeof moduleThat["enqueueJob"]).toBe("function");

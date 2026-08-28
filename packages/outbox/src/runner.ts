@@ -16,20 +16,99 @@ export interface OutboxJob {
   readonly attempts: number;
 }
 
+/**
+ * Việc mà runner giao cho mã nghiệp vụ.
+ *
+ * ==========================================================================================
+ * HỢP ĐỒNG VỀ `client` — ĐỌC TRƯỚC KHI VIẾT HANDLER ĐẦU TIÊN
+ * ==========================================================================================
+ * `client` đã được gắn ĐÚNG tổ chức của `job` và đang ở GIỮA một transaction. Ba giới hạn,
+ * cả ba đều là hệ quả ĐO ĐƯỢC chứ không phải lời khuyên:
+ *
+ *   1. [vòng fix 1 Task 10 — MỤC 2] ĐỪNG dùng `SET` phạm vi PHIÊN. Dùng `SET LOCAL` (hoặc
+ *      `set_config(..., true)`). `SET search_path`/`SET statement_timeout` không kèm `LOCAL`
+ *      sống sót qua commit và đi theo kết nối — đo được: một handler đặt
+ *      `SET statement_timeout = 1` làm job của TỔ CHỨC KHÁC trên cùng kết nối vào `FAILED`.
+ *      Runner nay bật `destroyConnectionWhenDone` cho đúng transaction này, nên hậu quả bị
+ *      chặn ở một kết nối bị vứt; nhưng thứ chặn nó là hàng rào, không phải handler.
+ *   2. `client` mang TOÀN QUYỀN của `app_api` trên MỌI tổ chức, không riêng tổ chức của job.
+ *      `app.org_id` là một GUC tuỳ biến thông thường: `set_config('app.org_id', <org khác>,
+ *      true)` đổi được ngữ cảnh ngay giữa handler, đọc dữ liệu của tổ chức khác, rồi đặt lại
+ *      — job vẫn `DONE` và KHÔNG để lại dấu vết nào. Giới hạn gốc có ghi ở
+ *      packages/tenancy/src/with-tenant.ts; nó được NHẮC LẠI ở đây vì Task 10 là thứ biến nó
+ *      từ một tai nạn thành một ĐIỂM MỞ RỘNG CÓ THIẾT KẾ. Lớp phòng thủ là code review và
+ *      bất biến F, KHÔNG phải hàm nào trong gói này.
+ *   3. Handler PHẢI idempotent (AT-LEAST-ONCE — xem docstring `JobRunner`), và phải chạy
+ *      xong trong `handlerTimeoutMs`; quá hạn thì lượt chạy bị bỏ dở và job được hẹn lại.
+ */
 export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void>;
 
-/** Nguồn danh sách tổ chức mà runner phục vụ — xem docstring của `JobRunner`. */
+/**
+ * Nguồn danh sách tổ chức mà runner phục vụ.
+ *
+ * ==========================================================================================
+ * [vòng fix 1 Task 10 — MỤC 5] TÍNH CHẤT PHẢI CƯỠNG CHẾ Ở ĐÂY LÀ **ĐẦY ĐỦ + SỐNG**, KHÔNG
+ * PHẢI **BÍ MẬT**
+ * ==========================================================================================
+ * Câu hỏi mà bản trước ghi vào sổ nợ ("ai được phép liệt kê mọi tổ chức, và bằng quyền gì?")
+ * đúng nhưng THIẾU NỬA NGUY HIỂM HƠN. Nửa bí mật đã được đo là hẹp: `runOnceForOrg(orgId)`
+ * chạy TRONG ngữ cảnh của chính tổ chức đó, nên một danh sách rò rỉ không mở đường đọc dữ
+ * liệu nào — RLS vẫn cắt tập hàng ở tầng CSDL.
+ *
+ * Mối nguy thật đi theo CHIỀU NGƯỢC LẠI: một cổng BỎ SÓT một tổ chức làm job của tổ chức ấy
+ * nằm im MÃI MÃI, IM LẶNG. Với B3 (job neo chuỗi kiểm toán) đó đúng là hình dạng "việc neo
+ * chuỗi ngừng chạy mà không ai thấy gì đỏ" — cùng lớp hỏng hóc mà "LỆCH KHỎI BRIEF (1/9)"
+ * của db/migrations/007_outbox.sql sinh ra để chống.
+ *
+ * HỢP ĐỒNG, nói thẳng để cài đặt sản phẩm không phải đoán:
+ *   ĐẦY ĐỦ — trả về MỌI tổ chức có thể có job, không được lọc theo "tổ chức đang hoạt động",
+ *            theo cache, hay theo ngữ cảnh tenant của người gọi;
+ *   SỐNG   — một tổ chức MỚI tạo phải xuất hiện trong một số hữu hạn lượt poll; một danh
+ *            sách tĩnh nạp lúc khởi động VI PHẠM vế này;
+ *   BÍ MẬT — KHÔNG phải yêu cầu. Đừng đánh đổi hai vế trên để lấy nó.
+ * Cài đặt nào không giữ được ĐẦY ĐỦ + SỐNG phải KÊU (ném), không được trả về danh sách cụt:
+ * `runOnce()` báo lỗi của lister về `onPollError`, còn một danh sách cụt thì không ai thấy.
+ *
+ * Hôm nay CHƯA CÓ cài đặt sản phẩm nào (`apps/` còn rỗng). Đường cài đặt đã được đo là KHÔNG
+ * cần role vượt RLS: một hàm `SECURITY DEFINER` do chủ sở hữu bảng sở hữu, `REVOKE FROM
+ * PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là `SELECT id FROM organizations` —
+ * bán kính đúng bằng MỘT truy vấn trả về MỘT danh sách id, thay vì một THUỘC TÍNH ROLE có
+ * bán kính "mọi bảng role này có hoặc SẼ CÓ quyền". CẢNH BÁO BẮT BUỘC nếu ai làm đường đó:
+ * `hardening.always.sql` ghim THÂN hàm plpgsql theo một DANH SÁCH TÊN VIẾT TAY, nên hàm mới
+ * KHÔNG được ghim và một `CREATE OR REPLACE` sau deploy sống sót qua `migrate()` (đo
+ * end-to-end ở test `[T10-I]`). Hàm phải vào danh sách cưỡng chế thân hàm CÙNG LÚC với khi
+ * nó ra đời, không phải sau.
+ */
 export type OrganizationLister = () => Promise<readonly string[]> | readonly string[];
 
 /**
  * Lý do một lần chạy job không thành công.
- *   `HANDLER_ERROR` handler đã chạy và ném.
- *   `NO_HANDLER`    không có handler cho `kind` này — lỗi CẤU HÌNH, bỏ cuộc ngay.
- *   `LEASE_LOST`    hạn thuê đã hết và một runner khác đã nhặt job này; runner cũ KHÔNG ghi
- *                   gì vào hàng đó. Mã này chỉ tới quan sát viên, KHÔNG BAO GIỜ vào CSDL —
- *                   `outbox_jobs.last_failure_reason` cố ý không có giá trị tương ứng.
+ *   `HANDLER_ERROR`        handler đã chạy và ném.
+ *   `HANDLER_TIMEOUT`      handler chưa xong khi hết `handlerTimeoutMs`; lượt chạy bị bỏ dở.
+ *   `NO_HANDLER`           không có handler cho `kind` này — lỗi CẤU HÌNH, bỏ cuộc ngay.
+ *   `OUTCOME_NOT_WRITTEN`  câu ghi kết cục chạm 0 hàng, nên runner này KHÔNG ghi gì vào hàng
+ *                          đó. Mã này chỉ tới quan sát viên, KHÔNG BAO GIỜ vào CSDL —
+ *                          `outbox_jobs.last_failure_reason` cố ý không có giá trị tương ứng
+ *                          (không có hàng nào để ghi thì không có giá trị nào ghi được).
+ *
+ * [vòng fix 1 Task 10 — MỤC 6/M1] Mã này TỪNG tên là `LEASE_LOST`, và cái tên ấy SAI: nó gộp
+ * BA nguyên nhân khác hẳn nhau dưới một chẩn đoán chỉ đúng cho MỘT trong ba, nên người vận
+ * hành đi tìm một cuộc đua không tồn tại. Vị từ của câu ghi kết cục là
+ * `(id, org_id, status = 'RUNNING', attempts = <giá trị đã claim>)`; nó chạm 0 hàng khi:
+ *   (a) hạn thuê ĐÃ mất thật và runner khác đã claim lại (`attempts` đã tăng) — ca duy nhất
+ *       mà cái tên cũ mô tả đúng;
+ *   (b) chính handler đã đổi hàng đó trong transaction của nó (nó có `UPDATE` mức cột);
+ *   (c) một người ghi khác của CÙNG tổ chức đã đổi `status`/`attempts` — xem khối
+ *       "HỆ QUẢ ĐÃ BIẾT VÀ ĐƯỢC CHẤP NHẬN" ở db/migrations/007_outbox.sql: `app_api` sửa
+ *       được hàng đợi của chính tổ chức mình.
+ * Đo: cả ba ca đều báo `LEASE_LOST` trong khi hạn thuê CHƯA hề mất. Tên mới phát biểu đúng
+ * thứ QUAN SÁT ĐƯỢC (kết cục không ghi được), không phát biểu một nguyên nhân đoán ra.
  */
-export type JobFailureReason = "HANDLER_ERROR" | "NO_HANDLER" | "LEASE_LOST";
+export type JobFailureReason =
+  | "HANDLER_ERROR"
+  | "HANDLER_TIMEOUT"
+  | "NO_HANDLER"
+  | "OUTCOME_NOT_WRITTEN";
 
 /**
  * Báo cáo gửi tới `onJobFailure`.
@@ -60,6 +139,11 @@ export interface JobRunnerOptions {
    * được — xem "LỆCH KHỎI BRIEF (3/9)" ở db/migrations/007_outbox.sql.
    */
   readonly leaseSeconds?: number;
+  /**
+   * Trần thời gian cho MỘT lần chạy handler. Mặc định `leaseSeconds * 1000`, và trần cứng
+   * cũng là `leaseSeconds * 1000` — xem "[vòng fix 1 Task 10 — MỤC 3]" ở `runOnceForOrg`.
+   */
+  readonly handlerTimeoutMs?: number;
   /** Nguồn danh sách tổ chức. BẮT BUỘC nếu gọi `runOnce()` hoặc `start()`. */
   readonly listOrganizations?: OrganizationLister;
   /** Quan sát viên. MẶC ĐỊNH IM LẶNG — gói này không tự ghi log bao giờ. */
@@ -77,13 +161,26 @@ interface HangDaClaim {
 }
 
 /**
- * Ném khi câu ghi kết cục chạm 0 hàng: hạn thuê đã mất. KHÔNG xuất ra khỏi gói — nó là một
- * tín hiệu nội bộ giữa `runOnceForOrg` và khối bắt lỗi của chính nó.
+ * Ném khi câu ghi kết cục chạm 0 hàng. KHÔNG xuất ra khỏi gói — nó là một tín hiệu nội bộ
+ * giữa `runOnceForOrg` và khối bắt lỗi của chính nó. Xem `JobFailureReason` để biết vì sao
+ * tên này KHÔNG còn là `LeaseLostError`.
  */
-class LeaseLostError extends Error {
+class KetCucKhongGhiDuocError extends Error {
   constructor() {
-    super("hạn thuê đã mất");
-    this.name = "LeaseLostError";
+    super("câu ghi kết cục chạm 0 hàng");
+    this.name = "KetCucKhongGhiDuocError";
+  }
+}
+
+/**
+ * Ném khi handler chưa xong lúc hết `handlerTimeoutMs`. Cũng KHÔNG xuất ra khỏi gói.
+ */
+class HetGioHandlerError extends Error {
+  constructor(pMs: number) {
+    // Nội suy đúng MỘT con số do CHÍNH mã này giữ (một tuỳ chọn đã qua `khangDinhTrong`),
+    // không phải dữ liệu người dùng — cùng khuôn với RangeError của `khangDinhTrong`.
+    super(`handler chưa xong sau ${String(pMs)} ms`);
+    this.name = "HetGioHandlerError";
   }
 }
 
@@ -167,6 +264,12 @@ export const MAX_RETRY_DELAY_SECONDS = 86_400;
 export const MIN_POLL_INTERVAL_MS = 10;
 export const MAX_POLL_INTERVAL_MS = 3_600_000;
 export const MAX_LEASE_SECONDS = 3_600;
+/**
+ * Trần TUYỆT ĐỐI của `handlerTimeoutMs`. Trần THẬT còn hẹp hơn — `leaseSeconds * 1000` — và
+ * hằng này chỉ tồn tại để phép kiểm tham số có một cận trên viết ra được khi `leaseSeconds`
+ * ở giá trị lớn nhất.
+ */
+export const MAX_HANDLER_TIMEOUT_MS = MAX_LEASE_SECONDS * 1000;
 
 function khangDinhTrong(pTen: string, pGiaTri: number, pMin: number, pMax: number): number {
   if (!Number.isInteger(pGiaTri) || pGiaTri < pMin || pGiaTri > pMax) {
@@ -221,11 +324,17 @@ export class JobRunner {
   readonly #retryDelaySeconds: number;
   readonly #pollIntervalMs: number;
   readonly #leaseSeconds: number;
+  readonly #handlerTimeoutMs: number;
   readonly #listOrganizations: OrganizationLister | undefined;
   readonly #onJobFailure: ((report: JobFailureReport) => void) | undefined;
   readonly #onPollError: ((error: unknown) => void) | undefined;
   #timer: NodeJS.Timeout | null = null;
   #dangChay = false;
+  /**
+   * Điểm bắt đầu của lượt duyệt tổ chức KẾ TIẾP — xem vế (c) của "[vòng fix 1 Task 10 —
+   * MỤC 3]" ở `runOnce()`.
+   */
+  #diemXoayVong = 0;
 
   constructor(
     pool: pg.Pool,
@@ -254,6 +363,17 @@ export class JobRunner {
       MAX_POLL_INTERVAL_MS,
     );
     this.#leaseSeconds = khangDinhTrong("leaseSeconds", options.leaseSeconds ?? 60, 1, MAX_LEASE_SECONDS);
+    // [vòng fix 1 Task 10 — MỤC 3] Trần của handler bị CHẶN TRÊN bởi chính hạn thuê, và điều
+    // đó MIỄN PHÍ VỀ NGỮ NGHĨA: một handler chạy quá hạn thuê sẽ thấy job của mình đã bị runner
+    // khác claim lại, nên câu ghi kết cục của nó chạm 0 hàng — kết cục của lượt ấy đằng nào
+    // cũng bị từ chối. Cho phép một trần lớn hơn hạn thuê chỉ mua thêm thời gian chờ một kết
+    // quả không ai công nhận.
+    this.#handlerTimeoutMs = khangDinhTrong(
+      "handlerTimeoutMs",
+      options.handlerTimeoutMs ?? this.#leaseSeconds * 1000,
+      1,
+      this.#leaseSeconds * 1000,
+    );
     this.#listOrganizations = options.listOrganizations;
     this.#onJobFailure = options.onJobFailure;
     this.#onPollError = options.onPollError;
@@ -264,7 +384,32 @@ export class JobRunner {
    * lặp trên nó.
    *
    * Trả về số job mà LẦN CHẠY NÀY đã ghi được kết cục — thành công, hẹn thử lại, hoặc bỏ cuộc.
-   * Job bị mất hạn thuê giữa chừng KHÔNG được tính, vì kết cục của nó do runner khác ghi.
+   * Job mà câu ghi kết cục chạm 0 hàng KHÔNG được tính, vì kết cục của nó do người khác ghi.
+   *
+   * [vòng fix 1 Task 10 — MỤC 6/M4] `orgId` là THAM SỐ TUỲ Ý và phương thức này CÔNG KHAI: nó
+   * KHÔNG đối chiếu với `listOrganizations`, và cố ý thế — `runOnce()` là vòng lặp trên nó chứ
+   * không phải cổng gác của nó. Vì sao điều đó không mở đường rò: mọi câu lệnh chạy trong
+   * `withTenant(pool, orgId, ...)` dưới `app_api`, nên RLS + FORCE RLS + GRANT mức cột quyết
+   * định thấy được gì; một `orgId` không tồn tại hoặc không phải của người gọi cho ra 0 hàng,
+   * không phải dữ liệu của người khác. Hệ quả còn lại là VẬN HÀNH: gọi thẳng phương thức này
+   * cho một tập tổ chức CỤT làm những tổ chức còn lại không được phục vụ — xem hợp đồng ĐẦY
+   * ĐỦ + SỐNG ở `OrganizationLister`.
+   *
+   * ==========================================================================================
+   * [vòng fix 1 Task 10 — MỤC 3] HÀNG RÀO THỜI GIAN CỦA HANDLER — HAI NỬA, VÀ MỘT CA NGOÀI TẦM
+   * ==========================================================================================
+   * Bản trước `await handler(...)` KHÔNG có trần nào. Đo: một handler treo làm tổ chức đứng
+   * SAU trong danh sách KHÔNG được phục vụ chút nào sau 3 giây; `stop()` tự tài liệu là không
+   * huỷ lượt đang chạy. Nay có hai nửa, và chúng chặn hai lớp hỏng hóc KHÁC NHAU:
+   *   * nửa CSDL — `statement_timeout` phạm vi LOCAL đặt trên chính transaction của handler:
+   *     một câu lệnh treo (khoá, truy vấn nặng, `pg_sleep`) bị PostgreSQL huỷ, và kết nối được
+   *     trả lại. Đây là nửa DUY NHẤT gỡ được một kết nối đang bận.
+   *   * nửa JS — `Promise.race`: một handler treo NGOÀI CSDL (gọi HTTP quên timeout, một
+   *     `await` không bao giờ giải quyết) không sinh câu lệnh nào để `statement_timeout` huỷ.
+   * CA NGOÀI TẦM, nói ra thay vì để người đọc tưởng đã kín: một handler CỐ Ý phát câu lệnh
+   * ngắn liên tục trong vòng lặp vô hạn ĐI QUA cả hai nửa (mỗi câu đều dưới trần, và hàng đợi
+   * câu lệnh của client không bao giờ rỗng để `ROLLBACK` chen vào). Handler là mã NỘI BỘ, nên
+   * đường phòng thủ ở đó là code review; hàng rào này nhắm những cách hỏng THẬT SỰ HAY GẶP.
    */
   async runOnceForOrg(orgId: string): Promise<number> {
     const daClaim = await withTenant(this.#pool, orgId, async (client) => {
@@ -296,32 +441,86 @@ export class JobRunner {
       }
 
       try {
-        await withTenant(this.#pool, job.orgId, async (client) => {
-          await handler(job, client);
-          // Đánh dấu DONE trong CÙNG transaction với công việc của handler: hoặc cả hai cùng
-          // được ghi, hoặc không cái nào. Không có cửa sổ nào mà handler đã ghi xong còn job
-          // vẫn ở RUNNING.
-          const ketQua = await client.query(CAU_XONG, [job.id, job.orgId, job.attempts]);
-          if (ketQua.rowCount !== 1) throw new LeaseLostError();
-        });
+        await withTenant(
+          this.#pool,
+          job.orgId,
+          async (client) => {
+            // Nửa CSDL của hàng rào thời gian. `set_config(..., true)` = `SET LOCAL`, nên nó
+            // biến mất cùng transaction và KHÔNG đi theo kết nối. Ghim `pg_catalog.` cùng lý do
+            // với mọi câu khác của gói này (khối [QT3]).
+            await client.query("SELECT pg_catalog.set_config('statement_timeout', $1, true)", [
+              String(this.#handlerTimeoutMs),
+            ]);
+            await this.#chayCoHanGio(handler(job, client));
+            // Đánh dấu DONE trong CÙNG transaction với công việc của handler: hoặc cả hai cùng
+            // được ghi, hoặc không cái nào. Không có cửa sổ nào mà handler đã ghi xong còn job
+            // vẫn ở RUNNING.
+            const ketQua = await client.query(CAU_XONG, [job.id, job.orgId, job.attempts]);
+            if (ketQua.rowCount !== 1) throw new KetCucKhongGhiDuocError();
+          },
+          // [vòng fix 1 Task 10 — MỤC 2] ĐÂY là transaction DUY NHẤT của gói giao `client` cho
+          // mã của người khác, nên nó là chỗ DUY NHẤT bật cờ huỷ kết nối. Hai transaction kia
+          // (claim, ghi kết cục) chỉ chạy SQL của chính runner.
+          { destroyConnectionWhenDone: true },
+        );
         xong += 1;
       } catch (loi) {
-        if (loi instanceof LeaseLostError) {
-          this.#baoLoi(job, "LEASE_LOST", false, loi);
+        if (loi instanceof KetCucKhongGhiDuocError) {
+          this.#baoLoi(job, "OUTCOME_NOT_WRITTEN", false, loi);
           continue;
         }
         // [CẤM LOG] `loi` KHÔNG được nội suy vào SQL, không vào CSDL, không vào console. Chỉ
         // MÃ LÝ DO thuộc tập đóng đi vào `last_failure_reason` (ép bằng CHECK ở 007), còn lỗi
         // gốc đi tới `onJobFailure`. Xem "LỆCH KHỎI BRIEF (5/9)" ở 007_outbox.sql.
+        //
+        // [vòng fix 1 Task 10 — MỤC 6/M5] KHỐI NÀY RỘNG, VÀ ĐIỀU ĐÓ ĐƯỢC NÓI RA THAY VÌ ĐỂ
+        // NGƯỜI ĐỌC TƯỞNG NGƯỢC LẠI: nó bắt MỌI lỗi của `withTenant` — mất kết nối, lỗi RLS,
+        // lỗi cú pháp trong SQL của chính runner — và ghi tất cả thành `HANDLER_ERROR`, đốt
+        // một lượt thử. Sau `maxAttempts` job vào `FAILED` và KHÔNG có đường tự động nào đưa nó
+        // về `PENDING`; đường sửa hôm nay là một `UPDATE` tay (và phải đặt lại CẢ `status` lẫn
+        // `finished_at` vì hai CHECK khoá chúng với nhau). Vì sao chưa đóng: phân loại "lỗi hạ
+        // tầng" với "lỗi nghiệp vụ" phải dựa trên một DANH SÁCH mã lỗi PostgreSQL, và một danh
+        // sách như thế tự nó là một hàng rào tự làm mù mình bằng danh sách tên — đúng lớp
+        // khiếm khuyết mà `[T10-D]` vế (c) vừa đo trên hardening. Nó cần một quyết định riêng,
+        // không phải một dòng thêm ở đây. Sổ nợ §5.
+        const lyDo = loi instanceof HetGioHandlerError ? "HANDLER_TIMEOUT" : "HANDLER_ERROR";
         const boCuoc = job.attempts >= this.#maxAttempts;
-        if (await this.#ghiKetCuc(job, "HANDLER_ERROR", boCuoc, loi)) xong += 1;
+        if (await this.#ghiKetCuc(job, lyDo, boCuoc, loi)) xong += 1;
       }
     }
 
     return xong;
   }
 
-  /** Một lượt trên MỌI tổ chức mà `listOrganizations` trả về. */
+  /**
+   * Một lượt trên MỌI tổ chức mà `listOrganizations` trả về.
+   *
+   * ==========================================================================================
+   * [vòng fix 1 Task 10 — MỤC 3] MỘT TỔ CHỨC KHÔNG ĐƯỢC LÀM ĐỨNG CẢ DANH SÁCH
+   * ==========================================================================================
+   * Bản trước KHÔNG có `try/catch` quanh `runOnceForOrg`, nên lỗi của tổ chức ĐẦU TIÊN dừng
+   * cả lượt. Đo: với một lỗi thường trực ("permission denied for table outbox_jobs" trên tổ
+   * chức đầu), danh sách ĐÃ PHỤC VỤ = []. Trong `start()` lỗi ấy đi tới `onPollError` — MẶC
+   * ĐỊNH IM LẶNG — rồi lượt sau lặp lại y hệt: runner chết MÃI MÃI ở tổ chức đầu tiên và
+   * KHÔNG BAO GIỜ phục vụ các tổ chức phía sau, không một tiếng động. Với B3 (job neo chuỗi
+   * kiểm toán) đó là "việc neo chuỗi của MỌI tổ chức ngừng chạy vì MỘT tổ chức" — đúng hình
+   * dạng fail-OPEN, IM LẶNG mà "LỆCH KHỎI BRIEF (1/9)" của 007_outbox.sql viết ra để chống,
+   * chỉ ở một tầng khác.
+   *
+   * Ba vế của bản vá:
+   *   (a) trần thời gian cho handler — xem `runOnceForOrg`;
+   *   (b) `try/catch` TỪNG tổ chức rồi ĐI TIẾP, báo về `onPollError`. Lỗi của CHÍNH lister
+   *       vẫn ném ra ngoài: không có danh sách thì không có gì để đi tiếp, và nuốt nó đúng là
+   *       lớp "im lặng" đang bị vá;
+   *   (c) XOAY VÒNG điểm bắt đầu giữa các lượt. Không có nó, (b) mới chỉ sửa được ca "tổ chức
+   *       đầu NÉM"; ca "tổ chức đầu CHẬM" vẫn ăn hết ngân sách thời gian của mọi lượt và các
+   *       tổ chức cuối danh sách vẫn đói. Xoay vòng biến một sự đói VĨNH VIỄN thành một độ trễ
+   *       CÓ CẬN.
+   * Cái này KHÔNG mua được, nói ra thay vì hứa suông: nó vẫn là một lượt TUẦN TỰ. Tổng thời
+   * gian một lượt vẫn là tổng của mọi tổ chức, nên `handlerTimeoutMs * batchSize * số tổ chức`
+   * là cận trên thật của một chu kỳ. Chạy song song là một quyết định khác (bán kính pool,
+   * thứ tự khoá) và nó KHÔNG được ra ở đây.
+   */
   async runOnce(): Promise<number> {
     const nguon = this.#listOrganizations;
     if (!nguon) {
@@ -331,9 +530,26 @@ export class JobRunner {
           "không dùng role vượt RLS. Dùng runOnceForOrg(orgId) nếu bên gọi đã biết tổ chức.",
       );
     }
+    const danhSach = await nguon();
+    if (danhSach.length === 0) return 0;
+
+    const batDau = this.#diemXoayVong % danhSach.length;
+    this.#diemXoayVong = (batDau + 1) % danhSach.length;
+
     let tong = 0;
-    for (const orgId of await nguon()) {
-      tong += await this.runOnceForOrg(orgId);
+    for (let i = 0; i < danhSach.length; i += 1) {
+      const orgId = danhSach[(batDau + i) % danhSach.length]!;
+      try {
+        tong += await this.runOnceForOrg(orgId);
+      } catch (loi) {
+        // Quan sát viên là mã của người khác — nó ném thì lượt này KHÔNG được đổ theo, y hệt
+        // khuôn `#baoLoi`. Nuốt có chủ đích, và nói ra.
+        try {
+          this.#onPollError?.(loi);
+        } catch {
+          /* quan sát viên hỏng không được làm hỏng hàng đợi */
+        }
+      }
     }
     return tong;
   }
@@ -374,7 +590,7 @@ export class JobRunner {
    */
   async #ghiKetCuc(
     job: OutboxJob,
-    lyDo: Exclude<JobFailureReason, "LEASE_LOST">,
+    lyDo: Exclude<JobFailureReason, "OUTCOME_NOT_WRITTEN">,
     boCuoc: boolean,
     nguyenNhan: unknown,
   ): Promise<boolean> {
@@ -389,11 +605,35 @@ export class JobRunner {
       ]),
     );
     if (ketQua.rowCount !== 1) {
-      this.#baoLoi(job, "LEASE_LOST", false, nguyenNhan);
+      this.#baoLoi(job, "OUTCOME_NOT_WRITTEN", false, nguyenNhan);
       return false;
     }
     this.#baoLoi(job, lyDo, boCuoc, nguyenNhan);
     return true;
+  }
+
+  /**
+   * Nửa JS của hàng rào thời gian — xem `runOnceForOrg`. Bộ đếm giờ LUÔN được dọn, kể cả trên
+   * đường thành công: một `setTimeout` còn sống giữ tiến trình Node không thoát được, và một
+   * runner để lại một bộ đếm cho MỖI job là một rò rỉ đo được ngay trên đường đi bình thường.
+   */
+  async #chayCoHanGio(viec: Promise<void>): Promise<void> {
+    let dongHo: NodeJS.Timeout | undefined;
+    const hetGio = new Promise<never>((_, reject) => {
+      dongHo = setTimeout(() => {
+        reject(new HetGioHandlerError(this.#handlerTimeoutMs));
+      }, this.#handlerTimeoutMs);
+    });
+    try {
+      await Promise.race([viec, hetGio]);
+    } finally {
+      if (dongHo) clearTimeout(dongHo);
+      // Lời hứa THUA cuộc đua vẫn còn sống và vẫn có thể ném về sau. Một `rejection` không ai
+      // bắt sẽ giết cả tiến trình Node (cùng lớp lỗ với listener 'error' của pg-pool đã đóng ở
+      // packages/tenancy/src/with-tenant.ts). Gắn một người nghe rỗng, KHÔNG phải để bỏ qua —
+      // nguyên nhân thật đã đi tới `onJobFailure` qua `HetGioHandlerError`.
+      void viec.catch(() => undefined);
+    }
   }
 
   #baoLoi(job: OutboxJob, lyDo: JobFailureReason, boCuoc: boolean, nguyenNhan: unknown): void {

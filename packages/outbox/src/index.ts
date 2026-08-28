@@ -10,15 +10,17 @@
 // chưa có (khoản nợ Task 9 §V3.5, nay còn BỐN gói thay vì bốn gói cộng gói này).
 //
 // TIÊU CHÍ dùng để quyết định cái gì được ra cửa, viết ra để lần sau không phải đoán: mỗi
-// symbol ở đây là một NĂNG LỰC mọi service gọi được. `LeaseLostError` cố ý ở lại trong gói —
-// nó là tín hiệu nội bộ giữa `runOnceForOrg` và khối bắt lỗi của chính nó, và đưa nó ra cửa chỉ
-// mời gọi một tầng khác tự phân xử vòng đời hạn thuê bằng tay.
+// symbol ở đây là một NĂNG LỰC mọi service gọi được. `KetCucKhongGhiDuocError` và
+// `HetGioHandlerError` cố ý ở lại trong gói — chúng là tín hiệu nội bộ giữa `runOnceForOrg` và
+// khối bắt lỗi của chính nó, và đưa chúng ra cửa chỉ mời gọi một tầng khác tự phân xử vòng đời
+// hạn thuê bằng tay.
 // ============================================================================================
 export { OutboxError, enqueueJob, type JobInput } from "./enqueue.js";
 export {
   JobRunner,
   MAX_ATTEMPTS_LIMIT,
   MAX_BATCH_SIZE,
+  MAX_HANDLER_TIMEOUT_MS,
   MAX_LEASE_SECONDS,
   MAX_POLL_INTERVAL_MS,
   MAX_RETRY_DELAY_SECONDS,

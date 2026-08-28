@@ -149,14 +149,79 @@
 -- đi lọt qua nó.
 --
 -- Ở đây lớp cưỡng chế đặt tại TẦNG CSDL chứ không phải một lời hứa ở tầng ứng dụng:
--- `last_failure_reason` nhận ĐÚNG một tập đóng ba giá trị, ép bằng CHECK. Một câu `UPDATE ...
--- SET last_failure_reason = '<giá thầu>'` do bất kỳ ai phát ra — kể cả chủ sở hữu bảng, kể cả
--- một tác giả tương lai không đọc chú thích này — bị 23514 chặn. Không có văn bản tự do nào để
--- rò.
+-- `last_failure_reason` nhận ĐÚNG một tập đóng ba giá trị, ép bằng CHECK.
+--   *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+--   >>> "Một câu `UPDATE ... SET last_failure_reason = '<giá thầu>'` do bất kỳ ai phát ra — kể
+--   >>>  cả chủ sở hữu bảng, kể cả một tác giả tương lai không đọc chú thích này — bị 23514
+--   >>>  chặn. Không có văn bản tự do nào để rò."
+--
+--   VÌ SAO NÓ SAI, VÀ NÓ SAI Ở ĐÂU: câu đó ĐÚNG về chặn **GHI** và SAI về chặn **RÒ**. Chính
+--   hành vi cưỡng chế ném ra một lỗi mang NGUYÊN CẢ HÀNG — gồm `payload` — vào log máy chủ.
+--   Đo thẳng trên đúng câu lệnh mà test `[T10-F]` thứ hai phát ra, với `payload` mang giá:
+--       chủ sở hữu bảng -> SQLSTATE 23514, và
+--       detail = 'Failing row contains (…, NOTIFY, {"bimat": 1284500000}, …, gia 1284500000, …).'
+--   Tức chuỗi bị TỪ CHỐI GHI vẫn đi vào log, kèm theo cả nội dung `payload` của hàng.
+--
+--   PHÁT BIỂU ĐÚNG, HẸP, THAY CHO CÂU TRÊN: `CHECK` chặn GHI một cách vô điều kiện. Nó KHÔNG
+--   chặn RÒ QUA THÔNG BÁO LỖI. Sự im lặng mà đường `app_api` đang hưởng KHÔNG do `CHECK` mua,
+--   mà do hai điều kiện KHÁC, cả hai đều tắt được — xem khối "[vòng fix 1 — MỤC 1]" ngay dưới.
+--
 -- Cái nó mất, nói thẳng: chẩn đoán. Thông điệp lỗi thật KHÔNG vào CSDL và KHÔNG vào log của
 -- thư viện; nó đi tới một quan sát viên `onFailure` do người gọi tiêm vào, mặc định IM LẶNG —
 -- cùng khuôn `migrate({ onThongBao })` của Task 8 vòng fix 2, và cùng lý do: chính sách khử
 -- nhạy cảm của log thuộc về composition root, không thuộc về một thư viện hàng đợi.
+--
+-- ============================================================================================
+-- [vòng fix 1 — MỤC 1] CẤM LOG: `payload` ĐI VÀO LOG PostgreSQL. BA PHÉP ĐO, VÀ MỘT HỢP ĐỒNG
+-- ============================================================================================
+-- ĐO 1 — ĐƯỜNG CHỦ SỞ HỮU. Xem đoạn gạch bỏ ở trên: 23514 mang `detail` = cả hàng, gồm
+--   `payload`. Test `[T10-F]` thứ hai KHÔNG BAO GIỜ nhìn `error.detail`, và `payload` trong
+--   test đó là `{}` — nên khẳng định của nó xanh VÌ DỮ LIỆU THỬ NGHÈO, KHÔNG VÌ MỘT LỚP BẢO VỆ.
+--   Nay test đó khẳng định cả `detail`, dưới CẢ HAI hồ sơ vai trò, với `payload` MANG GIÁ.
+--
+-- ĐO 2 — CƠ CHẾ NÀO ĐANG CHE ĐƯỜNG `app_api`, VÀ NÓ TẮT LÚC NÀO:
+--       app_api + RLS BẬT           -> KHÔNG có detail
+--       app_api + bảng KHÔNG RLS    -> CÓ detail (kèm payload)
+--       app_api + RLS bị TẮT        -> CÓ detail
+--       chủ sở hữu NON-super, KHÔNG FORCE -> CÓ detail
+--       role có BYPASSRLS           -> CÓ detail
+--   Cơ chế: `ExecBuildSlotValueDescription` trả NULL khi `check_enable_rls(...) == RLS_ENABLED`.
+--   HỆ QUẢ PHẢI NÓI RA, vì nó SỬA MỘT PHÂN LOẠI ĐÃ CÔNG BỐ: `FORCE ROW LEVEL SECURITY` chính là
+--   thứ MUA ĐƯỢC sự im lặng này. Mũi đột biến L1a ("bỏ FORCE — sống sót ở lớp CSDL vì app_api
+--   không sở hữu bảng") vì thế được PHÂN LOẠI THIẾU: gỡ `FORCE` không chỉ mở lại đường ghi của
+--   chủ sở hữu, nó còn MỞ LẠI ĐƯỜNG RÒ `payload` trên đường lỗi của chủ sở hữu.
+--
+-- ĐO 3 — VẾ NẶNG NHẤT, VÀ NÓ CHẠM ĐƯỜNG `app_api` BÌNH THƯỜNG. Hai GUC ghi tham số bind vào log:
+--       log_parameter_max_length_on_error <> 0
+--         -> enqueueJob KHI LỖI ghi 'CONTEXT: … $3 = ''{"gia":…,"otp":"…"}'''
+--       log_min_duration_statement >= 0  VÀ  log_parameter_max_length <> 0
+--         -> enqueueJob KHI THÀNH CÔNG ghi 'DETAIL: parameters: … $3 = ''{"otp":…,"token":…}'''
+--   KHÔNG CẦN KẺ TẤN CÔNG NÀO: đây là giá thầu chảy vào log vận hành, trên đường đi BÌNH
+--   THƯỜNG, dưới một cấu hình quan sát BÌNH THƯỜNG (`log_min_duration_statement = 0` là cấu
+--   hình staging rất thường gặp, và `log_parameter_max_length` MẶC ĐỊNH là -1 = ghi ĐẦY ĐỦ).
+--
+-- HỢP ĐỒNG CHO `payload` — LỚP DUY NHẤT KHÔNG PHỤ THUỘC CẤU HÌNH:
+--   `payload` mang **THAM CHIẾU** (`rfq_id`, `bid_id`, `user_id`), KHÔNG mang **GIÁ TRỊ** (giá,
+--   token, mã OTP, email). Handler đọc lại giá trị thật bằng chính `client` đã gắn tổ chức.
+--   Hợp đồng này được ghi lại ở docstring của `JobInput.payload`
+--   (packages/outbox/src/enqueue.ts). Nó KHÔNG được cưỡng chế bằng máy, và nói ra thay vì hứa
+--   suông: `payload` là `jsonb` tuỳ ý THEO THIẾT KẾ (cột NHÃN bị chặn, cột NỘI DUNG thì không),
+--   nên không lớp nào phân biệt được một `rfq_id` với một giá thầu.
+--
+-- VÌ SAO KHÔNG CÓ MỤC HARDENING TỰ SỬA CHO HAI GUC ĐÓ — QT1, VÀ MỘT PHÉP ĐO:
+--   `log_parameter_max_length` có `pg_settings.context = 'superuser'`. Đo dưới ĐÚNG khuôn deploy
+--   mà dự án ghim làm khuôn production (role deploy = DB owner + CREATEROLE, KHÔNG superuser):
+--       ALTER DATABASE … SET log_parameter_max_length = 0  -> 42501 permission denied to set
+--                                                             parameter "log_parameter_max_length"
+--       ALTER DATABASE … SET log_parameter_max_length_on_error = 0 -> OK (context = 'user')
+--   Một mục hardening TỰ SỬA cho GUC thứ nhất vì thế sẽ có hậu điều kiện KHÔNG BAO GIỜ đúng lại
+--   được dưới role deploy chuẩn -> "Hardening không sửa được 1 mục" -> CHẶN DEPLOY VĨNH VIỄN,
+--   đúng cái bẫy QT1 mà dự án đã sập một lần. Và một mục chỉ sửa GUC thứ hai là BẢO ĐẢM GIẢ:
+--   nó có `context = 'user'`, tức một câu `SET` trong phiên gỡ được ngay, và nó không chạm vế
+--   NẶNG NHẤT (Đo 3, nhánh THÀNH CÔNG).
+--   ĐÃ CHỌN: một mục CẢNH BÁO (E4) trong hardening.always.sql, đi qua `onThongBao`, KHÔNG chặn
+--   deploy và KHÔNG tự sửa — cùng khuôn (E3) đã dựng cho D3. Vế mức MÁY CHỦ nằm ngoài tầm với
+--   của `migrate()`; thứ duy nhất `migrate()` làm được ở đó là NÓI RA.
 --
 -- ============================================================================================
 -- LỆCH KHỎI BRIEF (6/9): `app_unseal` KHÔNG ĐƯỢC CẤP GÌ TRÊN BẢNG NÀY
@@ -227,6 +292,74 @@
 -- gắn thẻ vào gói này thì thẻ đó phải là một quyết định NHÌN THẤY ĐƯỢC.
 -- Thẻ DUY NHẤT được dùng ở đây là `[INV-F1]`, và nó đúng nghĩa đen: `outbox_jobs` là một bảng
 -- tenant mới, cách ly bằng RLS ở tầng CSDL.
+--
+-- ============================================================================================
+-- [vòng fix 1 — MỤC 4] HỆ QUẢ ĐÃ BIẾT VÀ ĐƯỢC CHẤP NHẬN: `app_api` ĐIỀU KHIỂN ĐƯỢC HÀNG ĐỢI
+-- CỦA CHÍNH TỔ CHỨC MÌNH
+-- ============================================================================================
+-- Các khối GRANT ở cuối file liệt kê rất kỹ những cột VẮNG MẶT mua được gì. Không chỗ nào nói
+-- những cột CÓ MẶT cho phép làm gì — và đó là một khoảng trống, không phải một sự gọn gàng.
+-- Nói ra, kèm phép đo (chạy trong `withTenant` dưới `app_api` THẬT):
+--     huỷ job:              UPDATE … SET status='DONE', finished_at=now()  -> 1 hàng
+--                           kết quả: status=DONE, attempts=0 — DONE mà handler CHƯA BAO GIỜ chạy
+--     hoãn 100 năm:         UPDATE … SET run_after = now() + '100 years'   -> OK
+--     hồi sinh job DONE:    UPDATE … SET status='PENDING', finished_at=NULL -> 1 hàng, attempts=0
+--     từ tổ chức Q sửa job của P:                                           -> RLS chặn, 0 hàng
+-- Vế cuối là điều quan trọng nhất: CÁCH LY TỔ CHỨC NGUYÊN VẸN. Bán kính của việc này đúng bằng
+-- hàng đợi của CHÍNH tổ chức người gọi.
+--
+-- Hai `CHECK` cuối bảng chấp nhận `status='DONE', attempts=0`, nên lược đồ KHÔNG phân biệt được
+-- "job đã chạy xong" với "job bị người trong tổ chức huỷ". Đó là ba tính chất mà LỆCH 1/9 gọi
+-- là lớp hỏng hóc tệ nhất — fail-OPEN, IM LẶNG, VĨNH VIỄN — mở lại bằng một cửa khác, chỉ trong
+-- một bán kính hẹp hơn.
+--
+-- ĐƯỜNG ĐÓNG ĐÃ ĐƯỢC CÂN NHẮC VÀ TỪ CHỐI CÓ LÝ DO (không lật quyết định trung tâm — nó KHÔNG
+-- đòi role vượt RLS): tách một role `app_worker` NOSUPERUSER NOBYPASSRLS giữ đúng năm quyền
+-- `UPDATE` mức cột, `app_api` chỉ còn `SELECT` + `INSERT`, runner nhận pool `app_worker` và VẪN
+-- chạy trong `withTenant`. Ba lý do từ chối, mỗi lý do một phép đo hoặc một mốc đã có:
+--   (i)  `app_worker` cần `SELECT` để `UPDATE … RETURNING` chạy được, nên trên bảng này nó BAO
+--        TRỌN `app_api`. "Không role nào bao role kia" là ADR-006, và có một test đảo chiều
+--        `[NỢ ADR-006]` đang canh đúng tính chất đó. Đóng lỗ này bằng cách vi phạm một ADR có
+--        tên là một đánh đổi phải được QUYẾT ở tầng ADR, không phải trong một vòng fix;
+--   (ii) `hardening.always.sql` cưỡng chế `NOBYPASSRLS` cho ĐÚNG BỐN TÊN ROLE VIẾT CỨNG (đo:
+--        dòng 1587/1606/1632/1649). Một role THỨ NĂM đi qua `migrate()` KHÔNG MỘT TIẾNG ĐỘNG —
+--        tức `app_worker` ra đời sẽ thừa hưởng NGUYÊN khoản nợ đó, và bịt nó đòi sửa chính lớp
+--        có thẩm quyền, thứ nằm ngoài phạm vi vòng này;
+--   (iii) `apps/` còn RỖNG: không có composition root nào để cầm pool thứ hai, nên role mới sẽ
+--        ra đời TRƯỚC tiến trình dùng nó — đúng khuôn mà LỆCH 4/9 đã từ chối một lần.
+-- ĐÃ CHỌN: ghi hệ quả này ra ở đây và ở sổ nợ, kèm một test `[T10-K]` ghim nó lại để lần sau
+-- ai đó tưởng mình đã đóng thì test đó phải ĐỎ. Một hệ quả được chấp nhận có tên khác hẳn một
+-- hệ quả không ai biết.
+--
+-- ============================================================================================
+-- [vòng fix 1 — MỤC 5] `listOrganizations`: TÍNH CHẤT PHẢI CƯỠNG CHẾ LÀ **ĐẦY ĐỦ + SỐNG**
+-- ============================================================================================
+-- LỆCH 4/9 ở trên gọi việc runner không tự đọc được `organizations` là "CÁI GIÁ" và trả nó bằng
+-- một cổng tiêm vào. Phát biểu ấy đúng nhưng THIẾU MỘT NỬA, và nửa thiếu nguy hiểm hơn:
+--   nửa BÍ MẬT (đã đo, và nó hẹp): `runOnceForOrg(orgId)` chạy TRONG ngữ cảnh của chính tổ chức
+--     đó, nên một danh sách id rò rỉ không mở đường đọc dữ liệu nào — RLS vẫn cắt tập hàng;
+--   nửa ĐẦY ĐỦ (thứ chưa ai viết ra): một cổng BỎ SÓT một tổ chức làm job của tổ chức ấy nằm im
+--     MÃI MÃI, IM LẶNG. Với B3 (job neo chuỗi kiểm toán) đó chính là "việc neo chuỗi ngừng chạy
+--     mà không ai thấy gì đỏ" — cùng lớp hỏng hóc mà LỆCH 1/9 sinh ra để chống.
+-- Hợp đồng đầy đủ (ĐẦY ĐỦ + SỐNG, và BÍ MẬT KHÔNG phải yêu cầu) nằm ở docstring của
+-- `OrganizationLister` trong packages/outbox/src/runner.ts. Đường cài đặt KHÔNG cần role vượt
+-- RLS cũng ghi ở đó, kèm cảnh báo bắt buộc: một hàm `SECURITY DEFINER` mới KHÔNG được
+-- `hardening.always.sql` ghim theo tên, nên nó phải vào danh sách cưỡng chế thân hàm CÙNG LÚC
+-- với khi nó ra đời (đo end-to-end ở test `[T10-I]`).
+--
+-- ============================================================================================
+-- [vòng fix 1 — MỤC 6/M2] KHÔNG CÓ HẠN LƯU, KHÔNG CÓ HẠN MỨC, KHÔNG ROLE NÀO CÓ `DELETE`
+-- ============================================================================================
+-- Bảng này chỉ lớn lên. Mọi `payload` nghiệp vụ nằm lại vĩnh viễn, và đường dọn DUY NHẤT hôm nay
+-- là chủ sở hữu bảng chạy `DELETE` tay — đúng câu trả lời QT1 mà LỆCH 3/9 gọi là thiết kế sai,
+-- tái xuất ở một trục khác. Vì sao KHÔNG đóng trong vòng này thay vì ghi nợ:
+--   * cấp `DELETE` cho `app_api` MỞ RỘNG đúng bề mặt mà MỤC 4 vừa ghi ra (nay `app_api` chỉ
+--     SỬA được hàng đợi của mình; có `DELETE` thì nó XOÁ được, kể cả hàng đã DONE làm bằng chứng);
+--   * một hạn lưu đúng nghĩa là một job THEO CHU KỲ, tức nó cần chính `listOrganizations` và
+--     một handler sản phẩm — cả hai chưa tồn tại;
+--   * "bao lâu thì xoá" là một quyết định LƯU TRỮ có ràng buộc pháp lý (hồ sơ thầu), không phải
+--     một con số kỹ thuật chọn được ở đây.
+-- Ghi vào sổ nợ §5 để Task 11/S1 quyết, không để nó trôi.
 
 -- ------------------------------------------------------------------------------------------
 -- (1) BẢNG OUTBOX.
@@ -259,13 +392,19 @@ CREATE TABLE outbox_jobs (
                        CHECK (status IN ('PENDING', 'RUNNING', 'DONE', 'FAILED')),
   attempts             integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   -- Xem LỆCH KHỎI BRIEF (5/9). TẬP ĐÓNG, ép ở tầng CSDL. Không phải nơi chứa thông điệp lỗi.
-  --   HANDLER_ERROR — handler đã chạy và ném.
-  --   NO_HANDLER    — không có handler cho `kind` này (lỗi cấu hình, bỏ cuộc ngay).
-  -- Cố ý KHÔNG có mã cho "mất hạn thuê": runner mất hạn thuê KHÔNG ĐƯỢC PHÉP ghi gì vào hàng đó
-  -- nữa (vế `attempts = <giá trị đã claim>` làm câu UPDATE chạm 0 hàng), nên một mã như thế sẽ
-  -- là một giá trị không đường nào ghi được. Ca đó chỉ tới quan sát viên `onFailure`.
+  --   HANDLER_ERROR   — handler đã chạy và ném.
+  --   HANDLER_TIMEOUT — handler chưa xong khi hết `handlerTimeoutMs` ([vòng fix 1 — MỤC 3]).
+  --                     Tách khỏi HANDLER_ERROR vì hai mã dẫn tới hai việc KHÁC HẲN: một cái
+  --                     đi đọc lỗi của handler, cái kia đi xem trần thời gian và hạn thuê.
+  --   NO_HANDLER      — không có handler cho `kind` này (lỗi cấu hình, bỏ cuộc ngay).
+  -- Cố ý KHÔNG có mã cho "kết cục không ghi được": khi câu ghi kết cục chạm 0 hàng thì KHÔNG CÓ
+  -- HÀNG NÀO để ghi, nên một mã như thế sẽ là một giá trị không đường nào ghi được. Ca đó chỉ
+  -- tới quan sát viên `onJobFailure` dưới tên `OUTCOME_NOT_WRITTEN` — xem `JobFailureReason` ở
+  -- packages/outbox/src/runner.ts để biết vì sao tên cũ (`LEASE_LOST`) gộp ba nguyên nhân khác
+  -- hẳn nhau và đã bị đổi.
   last_failure_reason  text CHECK (last_failure_reason IS NULL
-                                   OR last_failure_reason IN ('HANDLER_ERROR', 'NO_HANDLER')),
+                                   OR last_failure_reason IN ('HANDLER_ERROR', 'HANDLER_TIMEOUT',
+                                                              'NO_HANDLER')),
   run_after            timestamptz NOT NULL DEFAULT now(),
   lease_expires_at     timestamptz,
   created_at           timestamptz NOT NULL DEFAULT now(),

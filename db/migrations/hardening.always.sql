@@ -3079,6 +3079,67 @@ BEGIN
     END;
   END IF;
 
+  -- ===== (E4) CẤM LOG: THAM SỐ BIND ĐI VÀO LOG MÁY CHỦ ==================================
+  -- [vòng fix 1 Task 10 — MỤC 1] Cùng KHUÔN với (E3) ở trên và VÌ ĐÚNG LÝ DO ĐÓ: cảnh báo,
+  -- KHÔNG chặn deploy, KHÔNG tự sửa. Ở đây lý do còn cứng hơn (E3) — nó là một phép đo:
+  --
+  --   `log_parameter_max_length` có pg_settings.context = 'superuser'. Dưới ĐÚNG khuôn deploy
+  --   mà dự án ghim làm khuôn production (role deploy = DB owner + CREATEROLE, KHÔNG
+  --   superuser), `ALTER DATABASE … SET log_parameter_max_length = 0` ném
+  --   «42501 permission denied to set parameter "log_parameter_max_length"». Một mục TỰ SỬA
+  --   cho GUC ấy vì thế có hậu điều kiện KHÔNG BAO GIỜ đúng lại được trên khuôn deploy chuẩn
+  --   -> "Hardening không sửa được 1 mục" ở BƯỚC 4 -> CHẶN DEPLOY VĨNH VIỄN vì một cấu hình
+  --   nằm NGOÀI TẦM VỚI của migrate(). Đó đúng là cái bẫy QT1 mà [fix round 5 — R2] đã phải
+  --   gỡ một lần rồi, chỉ ở một trục khác.
+  --   `log_parameter_max_length_on_error` thì context = 'user', tức DB owner đặt được — nhưng
+  --   cũng vì thế MỘT CÂU `SET` TRONG PHIÊN gỡ lại được ngay. Tự sửa nó là bảo đảm GIẢ.
+  --
+  -- Cái nó canh, nói đúng mức: `payload` của `outbox_jobs` mang dữ liệu nghiệp vụ (giá thầu,
+  -- và trong một bản cẩu thả là cả token/mã OTP). `enqueueJob` truyền nó qua tham số bind $3,
+  -- nên hai GUC dưới đây quyết định `payload` có được PostgreSQL tự ghi vào log máy chủ hay
+  -- không — trên ĐƯỜNG ĐI BÌNH THƯỜNG, không cần kẻ tấn công nào. Lớp không phụ thuộc cấu hình
+  -- là hợp đồng "payload mang THAM CHIẾU, không mang GIÁ TRỊ" (db/migrations/007_outbox.sql,
+  -- khối "[vòng fix 1 — MỤC 1]"); mục này chỉ là con mắt thứ hai.
+  BEGIN
+    IF coalesce((SELECT s.setting::pg_catalog.int8 FROM pg_catalog.pg_settings s
+                  WHERE s.name = 'log_parameter_max_length_on_error'), 0) <> 0 THEN
+      RAISE WARNING 'Hardening (E4): CẤM LOG — log_parameter_max_length_on_error = %, nên mọi '
+                    'câu lệnh LỖI ghi cả tham số bind vào log máy chủ. `outbox_jobs.payload` đi '
+                    'qua $3 của enqueueJob, nên giá thầu / mã OTP trong payload nằm trong log. '
+                    'Mục này CỐ Ý KHÔNG chặn deploy và KHÔNG tự sửa: GUC này đặt được ở '
+                    'postgresql.conf, nơi migrate() không với tới, và tự sửa ở mức database là '
+                    'bảo đảm giả (context = ''user'': một câu SET trong phiên gỡ lại được). Đặt '
+                    'log_parameter_max_length_on_error = 0 ở mức máy chủ.',
+                    coalesce((SELECT s.setting FROM pg_catalog.pg_settings s
+                               WHERE s.name = 'log_parameter_max_length_on_error'), '?');
+    END IF;
+
+    IF coalesce((SELECT s.setting::pg_catalog.int8 FROM pg_catalog.pg_settings s
+                  WHERE s.name = 'log_parameter_max_length'), -1) <> 0
+       AND (coalesce((SELECT s.setting::pg_catalog.int8 FROM pg_catalog.pg_settings s
+                       WHERE s.name = 'log_min_duration_statement'), -1) >= 0
+            OR coalesce((SELECT s.setting FROM pg_catalog.pg_settings s
+                          WHERE s.name = 'log_statement'), 'none') <> 'none') THEN
+      RAISE WARNING 'Hardening (E4): CẤM LOG — log_parameter_max_length = % CỘNG VỚI '
+                    'log_min_duration_statement = % / log_statement = %, nên câu lệnh THÀNH '
+                    'CÔNG cũng ghi tham số bind vào log máy chủ. Đây là vế nặng nhất: nó chạm '
+                    'đường app_api BÌNH THƯỜNG. Lưu ý mặc định của log_parameter_max_length là '
+                    '-1 = GHI ĐẦY ĐỦ. Mục này KHÔNG chặn deploy và KHÔNG tự sửa — GUC này có '
+                    'context = ''superuser'', nên một mục tự sửa sẽ CHẶN DEPLOY VĨNH VIỄN dưới '
+                    'role deploy chuẩn (đo: 42501). Đặt log_parameter_max_length = 0 ở mức máy '
+                    'chủ, hoặc tắt log câu lệnh.',
+                    coalesce((SELECT s.setting FROM pg_catalog.pg_settings s
+                               WHERE s.name = 'log_parameter_max_length'), '?'),
+                    coalesce((SELECT s.setting FROM pg_catalog.pg_settings s
+                               WHERE s.name = 'log_min_duration_statement'), '?'),
+                    coalesce((SELECT s.setting FROM pg_catalog.pg_settings s
+                               WHERE s.name = 'log_statement'), '?');
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Hardening (E4): không đọc được cấu hình log: % (%). Không chặn deploy — '
+                  'cùng lập luận với (E3).', SQLERRM, SQLSTATE;
+  END;
+
   -- ===== BƯỚC 4: một lần gãy, liệt kê tất cả ============================================
   IF array_length(loi_gom, 1) > 0 THEN
     RAISE EXCEPTION E'Hardening không sửa được % mục:\n%\nChạy migrate() bằng role có quyền tương ứng, hoặc sửa tay rồi chạy lại.',

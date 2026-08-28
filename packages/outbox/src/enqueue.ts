@@ -19,7 +19,32 @@ export interface JobInput {
    * Đây là một NHÃN mà `app_api` đọc lại được, không phải chỗ chứa dữ liệu.
    */
   readonly kind: string;
-  /** Nội dung của việc. Dữ liệu nghiệp vụ tuỳ ý, nằm trong tổ chức, được RLS che. */
+  /**
+   * Nội dung của việc.
+   *
+   * ==========================================================================================
+   * [vòng fix 1 Task 10 — MỤC 1] HỢP ĐỒNG: `payload` MANG **THAM CHIẾU**, KHÔNG MANG **GIÁ TRỊ**
+   * ==========================================================================================
+   * Viết `{ rfqId, bidId, recipientUserId }`. KHÔNG viết `{ gia, otp, token, email }`. Handler
+   * đọc lại giá trị thật bằng chính `client` đã gắn tổ chức mà nó nhận được.
+   *
+   * Đây KHÔNG phải sự gọn gàng, và nó là lớp DUY NHẤT không phụ thuộc cấu hình. Bản trước
+   * tuyên bố ở db/migrations/007_outbox.sql §LỆCH 5/9 rằng "không có văn bản tự do nào để rò";
+   * câu đó đúng về chặn GHI và SAI về RÒ. Ba phép đo (chi tiết ở khối "[vòng fix 1 — MỤC 1]"
+   * của 007_outbox.sql):
+   *   * một lỗi cưỡng chế 23514 do CHỦ SỞ HỮU bảng phát ra mang `detail` = NGUYÊN CẢ HÀNG,
+   *     gồm `payload`, vào log máy chủ;
+   *   * `log_parameter_max_length_on_error <> 0` làm `enqueueJob` KHI LỖI ghi `$3` — tức cả
+   *     `payload` — vào log;
+   *   * `log_min_duration_statement >= 0` cộng `log_parameter_max_length <> 0` (mặc định của
+   *     GUC thứ hai là -1 = GHI ĐẦY ĐỦ) làm `enqueueJob` KHI THÀNH CÔNG ghi `payload` vào log.
+   * Hai GUC ấy đặt được ở `postgresql.conf`, nơi `migrate()` KHÔNG với tới. Nên hàng rào duy
+   * nhất còn lại là NỘI DUNG của chính `payload`.
+   *
+   * Điều này KHÔNG được cưỡng chế bằng máy, và nói ra thay vì hứa suông: `payload` là `jsonb`
+   * tuỳ ý theo thiết kế (cột NHÃN `kind` bị chặn, cột NỘI DUNG thì không), nên không lớp nào
+   * trong dự án hôm nay phân biệt được một `rfq_id` với một giá thầu.
+   */
   readonly payload?: Record<string, unknown>;
   /**
    * Khoá chống trùng theo nghiệp vụ. Job cùng `(org, kind, dedupeKey)` chỉ tồn tại MỘT bản
@@ -128,10 +153,17 @@ export async function enqueueJob(
   const trung = dangCho[0];
   if (!trung) {
     // Cố ý KHÔNG nội suy `kind`, `dedupeKey` hay `orgId` vào thông báo — xem OutboxError.
+    //
+    // [vòng fix 1 Task 10 — MỤC 6/M3] Bản trước nêu thêm một nguyên nhân KHÔNG THỂ XẢY RA
+    // ("hàng trùng thuộc một tổ chức khác nên RLS che nó khỏi phiên này"). Chỉ mục trọng tài
+    // là `(org_id, kind, dedupe_key)`, nên một xung đột BẮT BUỘC cùng `org_id` — và cùng
+    // `org_id` thì RLS không che gì cả. Một chẩn đoán sai trong thông điệp lỗi tệ hơn một
+    // thông điệp ngắn: nó gửi người trực đêm đi tìm một vấn đề cách ly tổ chức không tồn tại.
     throw new OutboxError(
       "Không ghi được job và cũng không tìm thấy bản trùng đang chờ. Nguyên nhân khả dĩ: " +
-        "hàng trùng thuộc một tổ chức khác nên RLS che nó khỏi phiên này, hoặc nó vừa " +
-        "chuyển sang trạng thái cuối giữa hai câu lệnh.",
+        "bản trùng vừa chuyển sang trạng thái cuối giữa hai câu lệnh (khoá chống trùng được " +
+        "TRẢ LẠI ở DONE/FAILED), hoặc vế `status` của chỉ mục riêng phần và của câu tìm bản " +
+        "trùng đã lệch nhau.",
     );
   }
   return trung.id;

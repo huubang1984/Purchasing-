@@ -16,6 +16,35 @@ export class TenantError extends Error {
 }
 
 /**
+ * Tuỳ chọn của `withTenant()`.
+ *
+ * [vòng fix 1 Task 10 — MỤC 2] `destroyConnectionWhenDone` tồn tại vì một phép đo, không vì sự cẩn
+ * thận chung chung. Khối `finally` của hàm này chỉ đọc lại MỘT trục (`app.org_id`), trong khi
+ * chính docstring dưới đây TỰ LIỆT KÊ `SET ROLE`, `search_path`, `statement_timeout` là những
+ * thứ "cũng đi theo kết nối". Đo được trên PostgreSQL 16 / pg@8.23.0:
+ *     withTenant(pool, P, fn) với fn chạy `SET search_path = doc, pg_catalog, public`
+ *       -> TRONG transaction: "doc, pg_catalog, public"
+ *       -> SAU khi withTenant trả về, truy vấn thẳng trên CÙNG pool: "doc, pg_catalog, public"
+ * tức trạng thái phiên do `fn` để lại SỐNG SÓT trên kết nối và đi tới người dùng kế tiếp — kể
+ * cả khi người dùng kế tiếp là một TỔ CHỨC KHÁC. `SET statement_timeout = 1` (phạm vi PHIÊN)
+ * do handler của tổ chức P để lại làm job của tổ chức Q trên cùng kết nối chết vì
+ * "canceling statement due to statement timeout".
+ *
+ * Ai phải bật cờ này: MỌI người gọi giao `client` cho MÃ KHÔNG THUỘC QUYỀN KIỂM SOÁT CỦA MÌNH
+ * (điểm mở rộng công khai). Trước Task 10 điều đó là một tai nạn; từ `JobHandler` nó là một
+ * HỢP ĐỒNG CÔNG KHAI, nên hàng rào phải là một tuỳ chọn nhìn thấy được chứ không phải một
+ * lời hứa. QT1: tự chữa, KHÔNG chặn deploy — hậu quả tệ nhất là vứt thêm một kết nối mỗi lần
+ * chạy handler.
+ */
+export interface WithTenantOptions {
+  /**
+   * Huỷ kết nối thay vì trả về pool, KỂ CẢ khi mọi thứ thành công. Mặc định `false` (giữ
+   * nguyên hành vi của Task 7/8 cho mọi người gọi cũ).
+   */
+  readonly destroyConnectionWhenDone?: boolean;
+}
+
+/**
  * Chạy `fn` trong một transaction đã gắn tổ chức.
  *
  * `set_config(..., true)` giới hạn biến trong phạm vi transaction, nên giá trị do CHÍNH hàm này
@@ -67,11 +96,18 @@ export class TenantError extends Error {
  * transaction. Nó KHÔNG ngăn được `fn` tự gọi set_config('app.org_id', ...) lần nữa để đổi
  * sang tổ chức khác; app.org_id là GUC tuỳ biến thông thường, mọi phiên đều đặt được. Lớp
  * phòng thủ đó là code review và bất biến F, không phải hàm này.
+ *
+ * [vòng fix 1 Task 10 — MỤC 2] VÀ MỘT VẾ NỮA CỦA CÙNG CÂU TRÊN, nay đã ĐO: phép kiểm ở
+ * `finally` chỉ có MỘT TRỤC (`app.org_id`). Trạng thái phiên KHÁC mà `fn` để lại — `search_path`,
+ * `statement_timeout`, `SET ROLE` — đi theo kết nối tới người dùng kế tiếp, kể cả sang tổ chức
+ * khác. Người gọi giao `client` cho mã của người khác PHẢI bật `destroyConnectionWhenDone`. Xem
+ * docstring của `WithTenantOptions`.
  */
 export async function withTenant<T>(
   pool: pg.Pool,
   orgId: string,
   fn: (client: pg.PoolClient) => Promise<T>,
+  tuyChon: WithTenantOptions = {},
 ): Promise<T> {
   if (!UUID_RE.test(orgId)) {
     // Cố ý KHÔNG nội suy giá trị bị từ chối vào thông báo: thông báo lỗi đi vào log, và khuôn
@@ -151,6 +187,9 @@ export async function withTenant<T>(
       // Kết nối đã chết — release(loiLamHongClient) bên dưới xử lý nốt.
     }
     client.off("error", boQuaLoiKetNoi);
-    client.release(loiLamHongClient);
+    // [vòng fix 1 Task 10 — MỤC 2] `true` huỷ kết nối mà KHÔNG dán nhãn "lỗi" lên nó: pg-pool
+    // đọc mọi đối số truthy là "đừng trả client này về pool". Ưu tiên `loiLamHongClient` khi có,
+    // vì nó mang thêm chẩn đoán cho người gọi.
+    client.release(loiLamHongClient ?? (tuyChon.destroyConnectionWhenDone === true ? true : undefined));
   }
 }

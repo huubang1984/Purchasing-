@@ -4,7 +4,13 @@ import type pg from "pg";
 import { createPool, migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { JobRunner, enqueueJob, type JobFailureReport, type OutboxJob } from "./index.js";
+import {
+  JobRunner,
+  enqueueJob,
+  type JobFailureReport,
+  type JobHandler,
+  type OutboxJob,
+} from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -106,7 +112,7 @@ async function xepHang(pOrg: string, pJob: Parameters<typeof enqueueJob>[2]): Pr
 
 /** Runner phục vụ ĐÚNG một tổ chức, dùng cho các test gọi `runOnce()` theo khuôn brief. */
 function runnerChoMotToChuc(
-  handlers: Readonly<Record<string, (job: OutboxJob) => Promise<void>>>,
+  handlers: Readonly<Record<string, JobHandler>>,
   options: ConstructorParameters<typeof JobRunner>[2] = {},
   pOrg?: string,
 ): JobRunner {
@@ -432,6 +438,118 @@ describe("job runner", () => {
     expect(Number(rows[0]!.n)).toBe(12);
   });
 
+  // ------------------------------------------------------------------------------------------
+  // [vòng fix 1 — MỤC 6 / đặc tả IMPORTANT 2] `SKIP LOCKED` NAY CÓ MỐC CHẾT
+  //
+  // Test ngay trên KHÔNG canh được `SKIP LOCKED`, và điều đó đã được ĐO: gỡ `SKIP LOCKED` khỏi
+  // `CAU_CLAIM` để lại `FOR UPDATE` trần và cả bộ test VẪN XANH. Cơ chế: runner B CHẶN tới khi
+  // transaction claim của A commit, rồi EvalPlanQual đánh giá lại vị từ, thấy `status='RUNNING'`
+  // còn hạn thuê, và trả 0 hàng. `x + y` VẪN bằng 12. Tức test trên chứng minh "không xử lý
+  // TRÙNG" (vế đó đã được mua bằng `attempts`), KHÔNG chứng minh "nhặt các lô RỜI NHAU".
+  //
+  // Test này ép đúng cái vế còn thiếu, và ép TẤT ĐỊNH bằng một CỔNG do chính test giữ — cùng
+  // khuôn nhóm `[T10-C]`, và cố ý KHÔNG dựa vào `Promise.all` cầu may:
+  //   * một transaction NGOÀI (phiên siêu người dùng) giữ khoá hàng trên ĐÚNG SÁU job;
+  //   * runner chạy với `batchSize: 12`.
+  // Với `SKIP LOCKED`: nó bỏ qua sáu hàng bị khoá và xử lý ĐÚNG sáu hàng còn lại, NGAY.
+  // Với `FOR UPDATE` trần: nó CHẶN cho tới khi transaction ngoài kết thúc.
+  // Mốc chết là một KHẲNG ĐỊNH, không phải một timeout của harness: cuộc đua với đồng hồ được
+  // giải bằng `expect(ketQua).not.toBe("TREO")`.
+  // ------------------------------------------------------------------------------------------
+  it("[T10-N] FOR UPDATE SKIP LOCKED: runner BỎ QUA hàng đang bị khoá thay vì CHẶN sau nó", async () => {
+    const kind = "SKIP_LOCKED";
+    const ids: string[] = [];
+    await withTenant(apiPool, orgId, async (client) => {
+      for (let i = 0; i < 12; i += 1) {
+        ids.push(await enqueueJob(client, orgId, { kind, payload: { i } }));
+      }
+    });
+    const biKhoa = ids.slice(0, 6);
+    const conLai = ids.slice(6);
+
+    const nguoiGiuKhoa = await db.pool.connect();
+    const daXuLy: string[] = [];
+    try {
+      await nguoiGiuKhoa.query("BEGIN");
+      const { rows: daKhoa } = await nguoiGiuKhoa.query<{ id: string }>(
+        "SELECT id FROM outbox_jobs WHERE id = ANY($1::uuid[]) FOR UPDATE",
+        [biKhoa],
+      );
+      // Vế chống rỗng ruột: cổng phải THẬT SỰ đang giữ sáu hàng, nếu không mọi thứ dưới đây đo
+      // một cửa sổ không tồn tại.
+      expect(daKhoa).toHaveLength(6);
+
+      const runner = runnerChoMotToChuc(
+        {
+          [kind]: (job: OutboxJob) => {
+            daXuLy.push(job.id);
+            return Promise.resolve();
+          },
+        },
+        { batchSize: 12 },
+      );
+      let dongHo: NodeJS.Timeout | undefined;
+      const canhBaoTreo = new Promise<string>((resolve) => {
+        dongHo = setTimeout(() => {
+          resolve("TREO");
+        }, 5_000);
+      });
+      const ketQua = await Promise.race([theoDoi(runner.runOnce()), canhBaoTreo]);
+      if (dongHo) clearTimeout(dongHo);
+
+      expect(ketQua).not.toBe("TREO");
+      expect(ketQua).toBe(6);
+      expect([...daXuLy].sort()).toEqual([...conLai].sort());
+    } finally {
+      await nguoiGiuKhoa.query("ROLLBACK").catch(() => undefined);
+      nguoiGiuKhoa.release();
+    }
+  }, 60_000);
+
+  // ------------------------------------------------------------------------------------------
+  // [vòng fix 1 — MỤC 6 / đặc tả MINOR 3] MỐC CHẾT CHO `ORDER BY` CỦA `#claim`
+  //
+  // Mũi "bỏ `ORDER BY s.run_after, s.id`" SỐNG SÓT ở vòng trước, tức "job đến hạn TRƯỚC được
+  // chạy TRƯỚC" là một tính chất được viết ra mà không ai đo. Nó không phải trang trí: thiếu nó,
+  // một hàng đợi đang tồn đọng phục vụ theo thứ tự VẬT LÝ, nên job cũ nhất có thể bị bỏ đói tuỳ
+  // theo kế hoạch truy vấn.
+  // Thứ tự CHÈN ở đây cố ý NGƯỢC với thứ tự `run_after`, nếu không thì "thứ tự vật lý" và "thứ
+  // tự FIFO" trùng nhau và test đo một mệnh đề rỗng.
+  // ------------------------------------------------------------------------------------------
+  it("[T10-O] job đến hạn SỚM NHẤT được nhặt trước, kể cả khi nó được chèn SAU", async () => {
+    const kind = "THU_TU";
+    const bay = new Date(Date.now() - 3_600_000);
+    const nhan: { nhan: string; tre: number }[] = [
+      { nhan: "moi-nhat", tre: 10_000 },
+      { nhan: "cu-nhat", tre: 600_000 },
+      { nhan: "o-giua", tre: 60_000 },
+    ];
+    await withTenant(apiPool, orgId, async (client) => {
+      for (const m of nhan) {
+        await enqueueJob(client, orgId, {
+          kind,
+          payload: { nhan: m.nhan },
+          runAfter: new Date(bay.getTime() - m.tre),
+        });
+      }
+    });
+
+    const daChay: string[] = [];
+    const runner = runnerChoMotToChuc(
+      {
+        [kind]: (job: OutboxJob) => {
+          daChay.push(String(job.payload["nhan"]));
+          return Promise.resolve();
+        },
+      },
+      { batchSize: 1 },
+    );
+    await runner.runOnce();
+    await runner.runOnce();
+    await runner.runOnce();
+    expect(daChay).toEqual(["cu-nhat", "o-giua", "moi-nhat"]);
+  }, 60_000);
+
   it("kind lạ chuyển sang FAILED chứ không treo — job không phải cơ chế quyết định", async () => {
     // KHÔNG mang thẻ [INV-C2]: xem LỆCH KHỎI BRIEF (9/9) ở db/migrations/007_outbox.sql và
     // packages/outbox/src/nhan-bat-bien.test.ts. Test này đo một tính chất THẬT của runner —
@@ -572,8 +690,10 @@ describe("[T10-C] hạn thuê", () => {
     const hang = await docHang(id);
     expect(hang.status).toBe("DONE");
     expect(hang.attempts, "kết cục thuộc về B, không phải A").toBe(2);
-    expect(baoCaoA.map((r) => r.reason)).toEqual(["LEASE_LOST"]);
-    // Và mã LEASE_LOST KHÔNG BAO GIỜ vào CSDL — CHECK của 007 cố ý không có giá trị đó.
+    expect(baoCaoA.map((r) => r.reason)).toEqual(["OUTCOME_NOT_WRITTEN"]);
+    // Và mã OUTCOME_NOT_WRITTEN KHÔNG BAO GIỜ vào CSDL — CHECK của 007 cố ý không có giá trị
+    // đó. [vòng fix 1 — MỤC 6/M1] Đây LÀ ca (a) của mã ấy: hạn thuê mất THẬT. Cái tên cũ
+    // (`LEASE_LOST`) sai vì nó phát biểu ca (a) cho CẢ ba ca — xem `JobFailureReason`.
     expect(hang.last_failure_reason).toBeNull();
   }, 60_000);
 
@@ -612,7 +732,7 @@ describe("[T10-C] hạn thuê", () => {
     // A thất bại và cố ghi kết cục — nhưng job không còn của nó.
     moA();
     expect(await chayA).toBe(0);
-    expect(baoCaoA.map((r) => r.reason)).toEqual(["LEASE_LOST"]);
+    expect(baoCaoA.map((r) => r.reason)).toEqual(["OUTCOME_NOT_WRITTEN"]);
     const giua = await docHang(id);
     expect(giua.status, "job vẫn thuộc về B, KHÔNG bị A đẩy về PENDING/FAILED").toBe("RUNNING");
     expect(giua.attempts).toBe(2);
@@ -666,7 +786,7 @@ describe("[T10-C] hạn thuê", () => {
     // A "làm xong" — nhưng job không còn của nó.
     moA();
     expect(await chayA).toBe(0);
-    expect(baoCaoA.map((r) => r.reason)).toEqual(["LEASE_LOST"]);
+    expect(baoCaoA.map((r) => r.reason)).toEqual(["OUTCOME_NOT_WRITTEN"]);
     const giua = await docHang(id);
     expect(giua.status, "A KHÔNG được đóng job của B").toBe("RUNNING");
     expect(giua.attempts).toBe(2);
@@ -724,13 +844,50 @@ describe("[T10-F] thông điệp lỗi không rò vào CSDL", () => {
   it("cột last_failure_reason TỪ CHỐI văn bản tự do — lớp ở tầng CSDL, không phải lời hứa", async () => {
     // Đây là điểm khác biệt với "runner cẩn thận": ràng buộc chặn MỌI người ghi, kể cả chủ sở
     // hữu bảng, kể cả một tác giả tương lai không đọc chú thích nào.
-    const id = await xepHang(orgId, { kind: "CHAN_VAN_BAN" });
-    await expect(
-      db.pool.query("UPDATE outbox_jobs SET last_failure_reason = $2 WHERE id = $1::uuid", [
+    //
+    // [vòng fix 1 — MỤC 1] `payload` NAY MANG GIÁ, và test NHÌN `error.detail`. Bản trước để
+    // payload là `{}` và chỉ khẳng định `code`, nên nó xanh VÌ DỮ LIỆU THỬ NGHÈO chứ không vì
+    // một lớp bảo vệ: chính lỗi cưỡng chế 23514 mang `detail` = NGUYÊN CẢ HÀNG — gồm payload —
+    // vào log máy chủ. Xem khối "[vòng fix 1 — MỤC 1]" ở db/migrations/007_outbox.sql.
+    const id = await xepHang(orgId, {
+      kind: "CHAN_VAN_BAN",
+      payload: { bimat: Number(GIA_THAU) },
+    });
+    const VAN_BAN_TU_DO = `gia ${GIA_THAU}`;
+
+    // (a) ĐƯỜNG `app_api`, RLS còn hiệu lực cho phiên: 23514, và KHÔNG có `detail`.
+    let loiApi: { code?: string; detail?: string } | undefined;
+    try {
+      await withTenant(apiPool, orgId, (client) =>
+        client.query("UPDATE outbox_jobs SET last_failure_reason = $2 WHERE id = $1::uuid", [
+          id,
+          VAN_BAN_TU_DO,
+        ]),
+      );
+    } catch (loi) {
+      loiApi = loi as { code?: string; detail?: string };
+    }
+    expect(loiApi?.code).toBe("23514");
+    expect(loiApi?.detail ?? "").toBe("");
+
+    // (b) ĐƯỜNG CHỦ SỞ HỮU. VẾ CHỐNG RỖNG RUỘT CỦA (a), và đồng thời là PHÉP ĐO của lệnh CẤM
+    // LOG: `detail` KHÔNG rỗng, và nó mang CẢ payload LẪN văn bản tự do vừa bị từ chối ghi.
+    // Sự im lặng ở (a) do `check_enable_rls(...) == RLS_ENABLED` mua — nó KHÔNG do CHECK mua,
+    // và nó TẮT khi RLS/FORCE tắt hoặc khi phiên là superuser/BYPASSRLS.
+    let loiChuSoHuu: { code?: string; detail?: string } | undefined;
+    try {
+      await db.pool.query("UPDATE outbox_jobs SET last_failure_reason = $2 WHERE id = $1::uuid", [
         id,
-        `gia ${GIA_THAU}`,
-      ]),
-    ).rejects.toMatchObject({ code: "23514" });
+        VAN_BAN_TU_DO,
+      ]);
+    } catch (loi) {
+      loiChuSoHuu = loi as { code?: string; detail?: string };
+    }
+    expect(loiChuSoHuu?.code).toBe("23514");
+    expect(loiChuSoHuu?.detail ?? "").not.toBe("");
+    expect(loiChuSoHuu?.detail ?? "").toContain(GIA_THAU);
+    expect(loiChuSoHuu?.detail ?? "").toContain(VAN_BAN_TU_DO);
+
     // Đối chứng dương: một mã thuộc tập đóng vẫn ghi được, nên "23514" ở trên không phải vì cột
     // bị khoá hoàn toàn.
     await expect(
@@ -739,6 +896,22 @@ describe("[T10-F] thông điệp lỗi không rò vào CSDL", () => {
         [id],
       ),
     ).resolves.toMatchObject({ rowCount: 1 });
+    // Và mã MỚI của vòng fix 1 cũng thuộc tập đóng — nếu không, "HANDLER_TIMEOUT" sẽ là một
+    // giá trị runner ghi được ở tầng ứng dụng mà CHECK từ chối, tức một 23514 GIỮA transaction.
+    await expect(
+      db.pool.query(
+        "UPDATE outbox_jobs SET last_failure_reason = 'HANDLER_TIMEOUT' WHERE id = $1::uuid",
+        [id],
+      ),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    // Và `OUTCOME_NOT_WRITTEN` cố ý KHÔNG thuộc tập đóng: không có hàng nào để ghi thì không có
+    // giá trị nào ghi được. Đây là vế chống rỗng ruột cho câu đó ở 007.
+    await expect(
+      db.pool.query(
+        "UPDATE outbox_jobs SET last_failure_reason = 'OUTCOME_NOT_WRITTEN' WHERE id = $1::uuid",
+        [id],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
   });
 });
 
@@ -1207,12 +1380,298 @@ describe("[QT3] ghim toán tử dưới một search_path thù địch", () => {
     //     `app_current_org_id()` sập và cả bảng biến mất trước khi câu của runner kịp chạy;
     //   * trục TÊN KIỂU (`CREATE TYPE ... AS ENUM` + `CREATE CAST ... AS IMPLICIT`, đã tái lập
     //     end-to-end ở Task 9 §I-3) — mọi `::pg_catalog.<kiểu>` ở đây là phòng thủ chiều sâu
-    //     CHƯA ĐƯỢC ĐO;
+    //     CHƯA ĐƯỢC ĐO. [vòng fix 1 — NÂNG CẤP PHÂN LOẠI] Mũi K3 (gỡ `::pg_catalog.uuid`) sống
+    //     sót KHÔNG PHẢI vì trục ấy vô hại, mà vì trục TOÁN TỬ ĐÃ GHIM làm nó FAIL-CLOSED. Đo
+    //     trên mã sản phẩm, bốn tổ hợp:
+    //         trần cả hai               -> thấy 2 hàng   (LẬT ĐƯỢC)
+    //         ghim TOÁN TỬ thôi         -> "operator does not exist: pg_catalog.uuid
+    //                                       pg_catalog.= uuid"   (FAIL-CLOSED)
+    //         ghim TÊN KIỂU thôi        -> thấy 2 hàng   (LẬT ĐƯỢC)
+    //         ghim CẢ HAI (mã hiện tại) -> thấy 1 hàng
+    //     Tức rủi ro CÒN LẠI của K3 là DoS (một câu fail-closed giữa transaction nghiệp vụ),
+    //     KHÔNG phải fail-open. Hai vế ghim BỔ TÚC cho nhau, không vế nào thừa;
     //   * trục HÌNH DẠNG search_path ở tầng migration (`migrate()` đặt `SET search_path =
     //     public`) — nếu ai đó viết `pg_catalog` tường minh vào giữa chuỗi đó, ~71 chỗ trong
     //     hardening.always.sql cộng cả file 007 mở ra CÙNG MỘT LÚC. Khoản nợ số 6 của Task 8.
     // Khẳng định này cố ý là một khẳng định về TÀI LIỆU, không phải về hành vi — nó tồn tại để
     // câu trên không bị trích quá lời, đúng khuôn test "[C1-KHE-HO]" của Task 8.
     expect(true).toBe(true);
+  });
+});
+// ============================================================================================
+// 8. [T10-L] [vòng fix 1 — MỤC 2] TRẠNG THÁI PHIÊN DO HANDLER ĐỂ LẠI KHÔNG ĐI XUYÊN TỔ CHỨC
+// ============================================================================================
+describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
+  it("ĐỐI CHỨNG: KHÔNG bật cờ thì `SET` phạm vi PHIÊN của tổ chức P LÀM HỎNG việc của tổ chức Q", async () => {
+    // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng
+    // định dưới xanh vì không có gì để chặn. Đây là phép đo end-to-end của lỗ mà `withTenant`
+    // để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).
+    const poolDoiChung = db.poolAs("app_api");
+    try {
+      await withTenant(poolDoiChung, orgId, (client) => client.query("SET statement_timeout = 1"));
+      let loi: { code?: string } | undefined;
+      try {
+        await withTenant(poolDoiChung, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)"));
+      } catch (e) {
+        loi = e as { code?: string };
+      }
+      // 57014 = canceling statement due to statement timeout. Việc của tổ chức Q chết vì một
+      // câu lệnh mà mã của tổ chức P viết.
+      expect(loi?.code).toBe("57014");
+    } finally {
+      await poolDoiChung.end();
+    }
+  }, 60_000);
+
+  it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+    const pool = db.poolAs("app_api");
+    try {
+      await withTenant(pool, orgId, (client) => client.query("SET statement_timeout = 1"), {
+        destroyConnectionWhenDone: true,
+      });
+      await expect(
+        withTenant(pool, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)")),
+      ).resolves.toBeDefined();
+      // Trục THỨ HAI của cùng lỗ, đo riêng: `search_path` cũng không đi theo kết nối.
+      await withTenant(
+        pool,
+        orgId,
+        (client) => client.query("SET search_path = pg_catalog, public"),
+        { destroyConnectionWhenDone: true },
+      );
+      const { rows } = await pool.query<{ v: string }>("SELECT current_setting('search_path') AS v");
+      expect(rows[0]!.v).not.toContain("pg_catalog,");
+    } finally {
+      await pool.end();
+    }
+  }, 60_000);
+
+  it("ĐƯỜNG SẢN PHẨM: handler của tổ chức P không làm hỏng job của tổ chức Q trên cùng pool", async () => {
+    const pool = db.poolAs("app_api");
+    try {
+      const idP = await withTenant(pool, orgId, (client) =>
+        enqueueJob(client, orgId, { kind: "GAY_O_NHIEM" }),
+      );
+      const idQ = await withTenant(pool, orgKhac, (client) =>
+        enqueueJob(client, orgKhac, { kind: "NAN_NHAN" }),
+      );
+      const runner = new JobRunner(
+        pool,
+        {
+          // `SET` KHÔNG kèm `LOCAL` — cách viết sai phổ biến nhất trong mã job, và cố ý dùng ở
+          // đây vì hàng rào phải chặn được cách viết SAI, không chỉ cách viết đúng.
+          GAY_O_NHIEM: async (_job, client) => {
+            await client.query("SET search_path = pg_catalog, public");
+          },
+          NAN_NHAN: async (_job, client) => {
+            await client.query("SELECT pg_sleep(0.05)");
+          },
+        },
+        { listOrganizations: () => [orgId, orgKhac], batchSize: 5 },
+      );
+      await theoDoi(runner.runOnce());
+      expect((await docHang(idP)).status).toBe("DONE");
+      expect((await docHang(idQ)).status).toBe("DONE");
+      const { rows } = await pool.query<{ v: string }>("SELECT current_setting('search_path') AS v");
+      expect(rows[0]!.v).not.toContain("pg_catalog,");
+    } finally {
+      await pool.end();
+    }
+  }, 60_000);
+});
+
+// ============================================================================================
+// 9. [T10-M] [vòng fix 1 — MỤC 3] HÀNG RÀO THỜI GIAN, VÀ MỘT TỔ CHỨC KHÔNG LÀM ĐỨNG CẢ DANH SÁCH
+// ============================================================================================
+describe("[T10-M] hàng rào thời gian và tính sống của vòng duyệt", () => {
+  it("nửa JS: handler treo NGOÀI CSDL bị cắt đúng hạn và job mang mã HANDLER_TIMEOUT", async () => {
+    const id = await xepHang(orgId, { kind: "TREO_JS" });
+    const baoCao: JobFailureReport[] = [];
+    const runner = runnerChoMotToChuc(
+      // Handler KHÔNG phát câu lệnh nào, nên `statement_timeout` không có gì để huỷ — chỉ nửa
+      // JS bắt được ca này. Đó là điểm của việc có HAI nửa chứ không phải một.
+      { TREO_JS: () => new Promise<void>(() => undefined) },
+      {
+        leaseSeconds: 30,
+        handlerTimeoutMs: 300,
+        maxAttempts: 1,
+        retryDelaySeconds: 0,
+        onJobFailure: (r) => baoCao.push(r),
+      },
+    );
+    const batDau = Date.now();
+    await theoDoi(runner.runOnce());
+    expect(Date.now() - batDau).toBeLessThan(10_000);
+    expect(baoCao).toHaveLength(1);
+    expect(baoCao[0]?.reason).toBe("HANDLER_TIMEOUT");
+    expect(baoCao[0]?.gaveUp).toBe(true);
+    const hang = await docHang(id);
+    expect(hang.status).toBe("FAILED");
+    expect(hang.last_failure_reason).toBe("HANDLER_TIMEOUT");
+  }, 60_000);
+
+  it("nửa CSDL: một câu lệnh treo TRONG CSDL không giữ kết nối tới hết đời câu lệnh", async () => {
+    // KHÔNG có `SET LOCAL statement_timeout` thì `Promise.race` một mình KHÔNG cứu được: khối
+    // `catch` của withTenant phát `ROLLBACK`, và `ROLLBACK` XẾP HÀNG SAU câu đang chạy. Với
+    // `pg_sleep(30)` thì `runOnce()` chỉ trả về sau 30 giây dù đồng hồ JS đã kêu từ giây thứ
+    // 0,5. Khẳng định dưới đây là một khẳng định VỀ BẤT BIẾN ("lượt chạy có cận thời gian"),
+    // không phải một timeout của harness.
+    const id = await xepHang(orgId, { kind: "TREO_CSDL" });
+    const baoCao: JobFailureReport[] = [];
+    const runner = runnerChoMotToChuc(
+      { TREO_CSDL: (_job, client) => client.query("SELECT pg_sleep(30)").then(() => undefined) },
+      {
+        leaseSeconds: 30,
+        handlerTimeoutMs: 500,
+        maxAttempts: 1,
+        retryDelaySeconds: 0,
+        onJobFailure: (r) => baoCao.push(r),
+      },
+    );
+    const batDau = Date.now();
+    await theoDoi(runner.runOnce());
+    expect(Date.now() - batDau).toBeLessThan(15_000);
+    expect(baoCao).toHaveLength(1);
+    // NÓI RÕ MỘT CUỘC ĐUA THẬT: hai nửa của hàng rào có CÙNG hạn, nên nửa nào kêu trước là
+    // không tất định. Cả hai đều là kết cục ĐÚNG; thứ được ghim ở đây là "job có kết cục" và
+    // "lượt chạy có cận thời gian", không phải "nửa nào thắng".
+    expect(["HANDLER_ERROR", "HANDLER_TIMEOUT"]).toContain(baoCao[0]?.reason);
+    expect((await docHang(id)).status).toBe("FAILED");
+  }, 60_000);
+
+  it("một tổ chức NÉM không làm các tổ chức phía sau mất lượt", async () => {
+    const id = await xepHang(orgId, { kind: "VAN_CHAY" });
+    const loiPoll: unknown[] = [];
+    const runner = new JobRunner(
+      apiPool,
+      { VAN_CHAY: () => Promise.resolve() },
+      {
+        // Tổ chức đầu tiên làm `withTenant` ném NGAY (không phải UUID) — một lỗi THƯỜNG TRỰC,
+        // đúng hình dạng "permission denied for table outbox_jobs" của phép đo gốc: nó lặp lại
+        // y hệt ở mọi lượt, nên nếu nó dừng cả vòng thì tổ chức phía sau chết đói VĨNH VIỄN.
+        listOrganizations: () => ["khong-phai-uuid", orgId],
+        onPollError: (e) => loiPoll.push(e),
+      },
+    );
+    expect(await theoDoi(runner.runOnce())).toBe(1);
+    expect(loiPoll).toHaveLength(1);
+    expect((await docHang(id)).status).toBe("DONE");
+  }, 60_000);
+
+  it("thứ tự phục vụ XOAY VÒNG giữa các lượt — một tổ chức chậm không bỏ đói tổ chức cuối", async () => {
+    await xepHang(orgId, { kind: "XOAY" });
+    await xepHang(orgId, { kind: "XOAY" });
+    await xepHang(orgKhac, { kind: "XOAY" });
+    await xepHang(orgKhac, { kind: "XOAY" });
+    const thuTu: string[] = [];
+    const runner = new JobRunner(
+      apiPool,
+      {
+        XOAY: (job: OutboxJob) => {
+          thuTu.push(job.orgId === orgId ? "A" : "B");
+          return Promise.resolve();
+        },
+      },
+      { listOrganizations: () => [orgId, orgKhac], batchSize: 1 },
+    );
+    await theoDoi(runner.runOnce());
+    await theoDoi(runner.runOnce());
+    expect(thuTu).toEqual(["A", "B", "B", "A"]);
+  }, 60_000);
+});
+
+// ============================================================================================
+// 10. [T10-K] [vòng fix 1 — MỤC 4] HỆ QUẢ ĐÃ BIẾT VÀ ĐƯỢC CHẤP NHẬN
+//
+// Test này GHIM một hệ quả KHÔNG được đóng trong vòng này, kèm lý do đã ghi ở
+// db/migrations/007_outbox.sql. Nó tồn tại để lần sau ai đó TƯỞNG mình đã đóng thì thấy một mốc
+// ĐỎ thay vì một sự im lặng — cùng lý do với các test đảo chiều `[NỢ ADR-006]`.
+// ============================================================================================
+describe("[T10-K] `app_api` điều khiển được hàng đợi của CHÍNH tổ chức mình", () => {
+  it("huỷ, hồi sinh và hoãn đều làm được — và CÁCH LY TỔ CHỨC VẪN NGUYÊN VẸN", async () => {
+    const id = await xepHang(orgId, { kind: "TU_HUY" });
+
+    // (a) HUỶ: đánh dấu DONE mà handler CHƯA BAO GIỜ chạy. Hai CHECK của bảng chấp nhận
+    //     `status='DONE', attempts=0`, nên lược đồ không phân biệt được ca này với "đã xong".
+    await withTenant(apiPool, orgId, (client) =>
+      client.query(
+        "UPDATE outbox_jobs SET status='DONE', finished_at=clock_timestamp() WHERE id=$1::uuid",
+        [id],
+      ),
+    );
+    expect(await docHang(id)).toMatchObject({ status: "DONE", attempts: 0 });
+
+    // (b) HỒI SINH một job đã ở trạng thái cuối.
+    await withTenant(apiPool, orgId, (client) =>
+      client.query("UPDATE outbox_jobs SET status='PENDING', finished_at=NULL WHERE id=$1::uuid", [
+        id,
+      ]),
+    );
+    expect(await docHang(id)).toMatchObject({ status: "PENDING", attempts: 0 });
+
+    // (c) HOÃN 100 năm.
+    await withTenant(apiPool, orgId, (client) =>
+      client.query(
+        "UPDATE outbox_jobs SET run_after = clock_timestamp() + interval '100 years' " +
+          "WHERE id=$1::uuid",
+        [id],
+      ),
+    );
+    expect((await docHang(id)).run_after.getUTCFullYear()).toBeGreaterThan(2100);
+
+    // (d) VẾ QUYẾT ĐỊNH — BÁN KÍNH. Tổ chức Q KHÔNG chạm được job của tổ chức P. Nếu vế này
+    //     hỏng thì ba khẳng định trên đổi hạng từ "hệ quả được chấp nhận" thành CRITICAL.
+    const ketQua = await withTenant(apiPool, orgKhac, (client) =>
+      client.query("UPDATE outbox_jobs SET status='DONE' WHERE id=$1::uuid", [id]),
+    );
+    expect(ketQua.rowCount).toBe(0);
+  }, 60_000);
+});
+
+// ============================================================================================
+// 11. [T10-P] [vòng fix 1 — MỤC 6 / đặc tả MINOR 3] MỐC CHẾT CHO BA RÀNG BUỘC ĐƯỢC LẬP LUẬN DÀI
+//
+// Ba `CHECK` dưới đây đều có một đoạn lập luận trong 007_outbox.sql và KHÔNG cái nào có mốc
+// chết trước vòng này (mũi bỏ `CHECK` độ dài `dedupe_key`, mũi bỏ `CHECK (attempts >= 0)`, và
+// mũi nới trần `kind` từ 64 lên 200 đều SỐNG SÓT). Mỗi test có CẢ HAI cận: giá trị ở BIÊN phải
+// QUA, giá trị vượt biên MỘT ĐƠN VỊ phải bị chặn — không có vế thứ nhất thì một `CHECK` chặn
+// TẤT CẢ cũng làm test xanh.
+// ============================================================================================
+describe("[T10-P] biên của các ràng buộc cấu trúc", () => {
+  const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  it("`dedupe_key`: 200 byte QUA, 201 byte bị 23514, rỗng cũng bị chặn", async () => {
+    await expect(
+      xepHang(orgId, { kind: "BIEN_DEDUPE", dedupeKey: "x".repeat(200) }),
+    ).resolves.toMatch(LA_UUID);
+    await expect(
+      xepHang(orgId, { kind: "BIEN_DEDUPE", dedupeKey: "y".repeat(201) }),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(xepHang(orgId, { kind: "BIEN_DEDUPE", dedupeKey: "" })).rejects.toMatchObject({
+      code: "23514",
+    });
+  });
+
+  it("`kind`: 64 ký tự QUA, 65 ký tự bị 23514", async () => {
+    const kind64 = "A" + "B".repeat(63);
+    expect(kind64).toHaveLength(64);
+    await expect(xepHang(orgId, { kind: kind64 })).resolves.toMatch(LA_UUID);
+    await expect(xepHang(orgId, { kind: `${kind64}C` })).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("`attempts` không âm — kể cả khi chính `app_api` viết câu UPDATE", async () => {
+    const id = await xepHang(orgId, { kind: "BIEN_ATTEMPTS" });
+    await expect(
+      withTenant(apiPool, orgId, (client) =>
+        client.query("UPDATE outbox_jobs SET attempts = -1 WHERE id = $1::uuid", [id]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    // Đối chứng dương: một giá trị hợp lệ vẫn ghi được, nên 23514 ở trên không phải vì cột bị
+    // khoá hoàn toàn (`app_api` CÓ quyền UPDATE trên `attempts` — xem GRANT ở 007).
+    await expect(
+      withTenant(apiPool, orgId, (client) =>
+        client.query("UPDATE outbox_jobs SET attempts = 0 WHERE id = $1::uuid", [id]),
+      ),
+    ).resolves.toMatchObject({ rowCount: 1 });
   });
 });

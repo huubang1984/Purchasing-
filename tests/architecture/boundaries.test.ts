@@ -817,6 +817,108 @@ describe("ranh giới kiến trúc", () => {
     expect(quyTacG3[0]!.to.path).toBe(ciPrefix("packages/crypto-keys/"));
   });
 
+  // ======================================================================================
+  // TASK 10 vòng fix 1 (đặc tả IMPORTANT 1) — HỌ "g4-": packages/outbox CHỈ MỞ ĐÚNG index.ts
+  //
+  // LẦN THỨ BA cùng một lớp lỗ, và lần này nó được ĐO TRƯỚC khi bị khai thác. Phép đo của
+  // reviewer đặc tả, tái lập được: một file `packages/audit/src/zz-probe-outbox-leak.ts` với
+  // `import "../../outbox/src/runner.js"` đi lọt CẢ BA cổng — depcruise 0 vi phạm, `tsc` exit 0,
+  // `eslint` exit 0 — trong khi bản bare specifier `@trustprocure/outbox/src/runner.js` bị chặn
+  // ở CẢ HAI lớp. Danh sách trắng barrel khoá DANH SÁCH ở CỬA; nó không dựng BỨC TƯỜNG.
+  // ======================================================================================
+
+  it("[INV-H13] chặn import TƯƠNG ĐỐI xuyên gói vào packages/outbox/src/runner.ts", () => {
+    // ĐÚNG probe mà reviewer đo được là im lặng ở cả ba lớp.
+    const probe = "packages/audit/src/zzprobe-outbox-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { JobRunner } from "../../outbox/src/runner.js";',
+        "export { JobRunner };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/outbox"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-outbox-tuong-doi.ts");
+      expect(output).toContain("g4-outbox-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H13] module MỚI thêm vào packages/outbox/src mặc định không với tới được từ ngoài", () => {
+    // Tính chất mà `identity` có nhờ [INV-H11] và `outbox` KHÔNG có trước vòng fix này: một
+    // module CHƯA TỒN TẠI cũng đã bị chặn, nên không ai phải nhớ thêm quy tắc khi viết file mới.
+    const moduleMoi = "packages/outbox/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-outbox-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-outbox-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/outbox/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-outbox-moi", "packages/outbox"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g4-outbox-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-outbox-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H13] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    // Không có vế này, hai test trên xanh kể cả khi quy tắc chặn LUÔN CẢ cửa hợp pháp, và bất
+    // biến thu được sẽ là "không ai dùng được gói outbox".
+    mkdirSync("apps/tmp-probe-outbox-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-outbox-cua/src/dung.ts",
+      [
+        'import { enqueueJob } from "../../../packages/outbox/src/index.js";',
+        "export { enqueueJob };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-outbox-cua", "packages/outbox"]);
+      expect(output).not.toContain("g4-outbox-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-outbox-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H13] cửa công khai của packages/outbox/src đúng bằng index.ts", () => {
+    // Canary cho chính sách tối giản, cùng khuôn với canary của crypto-keys và identity: nới
+    // `to.pathNot` để "cho qua" một module nữa là một quyết định phải được NHÌN THẤY.
+    interface DepCruiseRule {
+      name: string;
+      from: { pathNot?: string | string[] };
+      to: { pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ciFile, ciPrefix } = require("../../dependency-cruiser-ci.cjs") as {
+      ciFile: (s: string) => string;
+      ciPrefix: (s: string) => string;
+    };
+    const hoG4 = config.forbidden.filter((r) => r.name.startsWith("g4-"));
+    // Chống rỗng ruột: họ g4- phải TỒN TẠI. Nếu ai đó xoá quy tắc, ba test trên đỏ vì probe đi
+    // lọt, còn test này đỏ vì danh sách rỗng — hai tín hiệu khác nhau cho hai cách hỏng.
+    expect(hoG4.map((r) => r.name)).toEqual(["g4-outbox-chi-index-la-cua-cong-khai"]);
+    expect(hoG4[0]!.to.pathNot).toEqual([ciFile("packages/outbox/src/index.ts")]);
+    // VÀ: họ g4- KHÔNG có miễn trừ `from` nào ngoài chính thư mục được bảo vệ — bài học đã trả
+    // giá bốn lần ở họ g1- (một module được miễn trừ vai trò `from` mà quên biến thành đích
+    // hạn chế thì nó re-export được cả gói). Ở đây bất biến ấy được giữ bằng cách KHÔNG có bậc
+    // tự do nào để quên.
+    expect(hoG4[0]!.from.pathNot).toBe(ciPrefix("packages/outbox/src/"));
+  });
+
   it("mã nguồn hiện tại không vi phạm quy tắc nào", () => {
     // Fix round 4 (I1): chạy qua chính script package.json thay vì danh sách target tự chọn,
     // để phạm vi kiểm luôn khớp phạm vi hàng rào thực sự bảo vệ trong CI.

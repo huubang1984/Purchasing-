@@ -71,6 +71,31 @@ const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
 // ==========================================================================================
+// VONG FIX 1 TASK 10 (dac ta IMPORTANT 1) - HO "g4-", CUNG KHUON "MAC DINH DONG", AP CHO
+// packages/outbox/src/
+//
+// LAN THU BA CUNG MOT LOP LO, va lan nay no duoc do TRUOC khi bi khai thac:
+//   crypto-keys -> g1 (fix round 4) · identity -> g2/H11 (Task 9 vong fix 1) · outbox -> DAY.
+// Phep do cua reviewer dac ta, tai lap duoc: mot file
+//   packages/audit/src/zz-probe-outbox-leak.ts  voi  import "../../outbox/src/runner.js"
+// di lot CA BA CONG - depcruise 0 vi pham, tsc exit 0, eslint exit 0. Doi chung: ban dung bare
+// specifier "@trustprocure/outbox/src/runner.js" bi chan CA HAI lop
+// (g1-khong-import-trustprocure-khong-resolve-duoc + TS2307). Tuc danh sach trang barrel
+// (tests/architecture/barrel-exports.test.ts) khoa DANH SACH o CUA, no khong dung BUC TUONG.
+//
+// Vi sao lam BAY GIO thay vi ghi thanh dieu kien vao cua Task 11: bao cao vong truoc tu khai
+// khoan nay kem ly do (mot ma bat bien hang rao moi va mot sua doi docs/TEST-PLAN.md §5 va
+// thang vao viec hoa giai "34 vs 46"). Ly do do dung ve CHI PHI va sai ve THU TU: hai con so
+// 12/46 phai duoc SUA cho DUNG khi mot hang rao moi ra doi, con viec HOA GIAI cach dem la mot
+// viec khac han. De ho mot lo da do duoc chi de mot con so khoi doi la nguoc thu tu uu tien.
+//
+// TIEN TO "g4-" LA MOT GIAO UOC MAY DOC DUOC, giong g1-/g2-/g3-: test "[INV-H13]" o
+// tests/architecture/boundaries.test.ts loc theo tien to nay.
+// ==========================================================================================
+const OUTBOX_SRC_PREFIX = ciPrefix("packages/outbox/src/");
+const OUTBOX_INDEX_TS = ciFile("packages/outbox/src/index.ts");
+
+// ==========================================================================================
 // TASK 9 (T9-A) - HUONG NGUOC VOI "NOI G1": GHIM THEM MOT HANG RAO, KHONG NOI HANG RAO CU
 //
 // Task 9 can xac thuc TOTP, ma xac thuc TOTP doi BI MAT RO. Duong di HIEN NHIEN la mien tru
@@ -109,6 +134,20 @@ module.exports = {
       severity: "error",
       from: { path: IDENTITY_SRC_PREFIX },
       to: { path: CRYPTO_KEYS_PKG_PREFIX },
+    },
+    {
+      name: "g4-outbox-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/outbox/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Ly do khong phai kien truc chung chung: mot import TUONG DOI " +
+        "'../../outbox/src/runner.js' tu mot goi khac di lot CA BA cong (depcruise, tsc, " +
+        "eslint) - do duoc o vong fix 1 Task 10. Danh sach trang barrel khoa DANH SACH export " +
+        "o CUA, no KHONG ngan viec di vong qua cua. Moi file khac - ke ca file CHUA TON TAI - " +
+        "mac dinh khong voi toi duoc tu ben ngoai, nen mot module moi trong thu muc nay khong " +
+        "doi ai phai nho lam gi ca.",
+      severity: "error",
+      from: { pathNot: OUTBOX_SRC_PREFIX },
+      to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
     },
     {
       name: "g2-identity-chi-index-la-cua-cong-khai",

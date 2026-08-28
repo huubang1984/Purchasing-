@@ -4817,4 +4817,110 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   }, 300_000);
+  // ==========================================================================
+  // [vòng fix 1 Task 10 — MỤC 1] (E4) CẤM LOG: MỘT MỤC CẢNH BÁO, KHÔNG PHẢI MỘT MỤC TỰ SỬA
+  //
+  // Ba vế, và vế thứ ba là vế QUYẾT ĐỊNH:
+  //   (a) cấu hình MẶC ĐỊNH -> KHÔNG có cảnh báo (E4) nào — chống rỗng ruột theo chiều ngược;
+  //   (b) bật đúng một GUC -> (E4) bắn, và migrate() KHÔNG NÉM (không chặn deploy);
+  //   (c) phép đo biện minh cho việc KHÔNG viết mục tự sửa: dưới role deploy chuẩn của dự án
+  //       (DB owner + CREATEROLE, KHÔNG superuser), `ALTER DATABASE ... SET
+  //       log_parameter_max_length` ném 42501. Một mục TỰ SỬA cho GUC ấy sẽ có hậu điều kiện
+  //       không bao giờ đúng lại được -> "Hardening không sửa được 1 mục" -> CHẶN DEPLOY VĨNH
+  //       VIỄN vì một cấu hình NGOÀI TẦM VỚI của migrate().
+  // ==========================================================================
+  it("[T10-E4] (E4) CẤM LOG cảnh báo mà KHÔNG chặn deploy, và tự sửa là bất khả — có phép đo", async () => {
+    const db = await startPostgres();
+    try {
+      // (a) MẶC ĐỊNH: log_parameter_max_length_on_error = 0, log_min_duration_statement = -1.
+      const mangA: string[] = [];
+      await expect(
+        migrate(db.pool, MIGRATIONS_DIR, {
+          onThongBao: (tb) => mangA.push(`${tb.severity}|${tb.message}`),
+        }),
+      ).resolves.toBeDefined();
+      expect(
+        mangA.some((d) => d.includes("(E4)")),
+        `cấu hình mặc định KHÔNG được sinh cảnh báo (E4). Đã nhận: ${JSON.stringify(mangA)}`,
+      ).toBe(false);
+
+      const tenDb = (
+        await db.pool.query<{ d: string }>("SELECT current_database() AS d")
+      ).rows[0]!.d;
+
+      // (b) BẬT nhánh LỖI: một câu lệnh lỗi bất kỳ sẽ ghi cả tham số bind vào log máy chủ, và
+      //     `outbox_jobs.payload` đi qua đúng một tham số bind của enqueueJob.
+      await db.pool.query(
+        `ALTER DATABASE "${tenDb}" SET log_parameter_max_length_on_error = -1`,
+      );
+      // `ALTER DATABASE ... SET` chỉ áp cho phiên MỞ SAU nó, nên phải mở một pool MỚI —
+      // `db.pool` đang giữ những kết nối có từ trước. Đây cũng là lý do một mục hardening ở mức
+      // database KHÔNG bảo vệ được phiên đang chạy, chỉ phiên kế tiếp.
+      const poolMoiB = createPool(db.connectionString, 2);
+      try {
+        const mangB: string[] = [];
+        await expect(
+          migrate(poolMoiB, MIGRATIONS_DIR, {
+            onThongBao: (tb) => mangB.push(`${tb.severity}|${tb.message}`),
+          }),
+        ).resolves.toEqual([]);
+        expect(
+          mangB.some((d) => d.includes("(E4): CẤM LOG — log_parameter_max_length_on_error")),
+          `(E4) KHÔNG bắn dù GUC đã bật. Đã nhận: ${JSON.stringify(mangB)}`,
+        ).toBe(true);
+      } finally {
+        await poolMoiB.end();
+        await db.pool.query(
+          `ALTER DATABASE "${tenDb}" RESET log_parameter_max_length_on_error`,
+        );
+      }
+
+      // (b2) NHÁNH NẶNG NHẤT — câu lệnh THÀNH CÔNG cũng ghi tham số. Nó cần HAI GUC cùng lúc,
+      //      và mặc định của `log_parameter_max_length` đã là -1 (= GHI ĐẦY ĐỦ), nên chỉ cần
+      //      bật log theo thời lượng là đủ. Đây là vế chạm đường app_api BÌNH THƯỜNG.
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET log_min_duration_statement = 0`);
+      const poolMoiC = createPool(db.connectionString, 2);
+      try {
+        const mangC: string[] = [];
+        await expect(
+          migrate(poolMoiC, MIGRATIONS_DIR, {
+            onThongBao: (tb) => mangC.push(`${tb.severity}|${tb.message}`),
+          }),
+        ).resolves.toEqual([]);
+        expect(
+          mangC.some((d) => d.includes("(E4): CẤM LOG — log_parameter_max_length =")),
+          `(E4) KHÔNG bắn ở nhánh câu lệnh THÀNH CÔNG. Đã nhận: ${JSON.stringify(mangC)}`,
+        ).toBe(true);
+      } finally {
+        await poolMoiC.end();
+        await db.pool.query(`ALTER DATABASE "${tenDb}" RESET log_min_duration_statement`);
+      }
+
+      // (c) PHÉP ĐO BIỆN MINH. `log_parameter_max_length` có pg_settings.context = 'superuser'.
+      const { rows: boiCanh } = await db.pool.query<{ c: string }>(
+        "SELECT context AS c FROM pg_settings WHERE name = 'log_parameter_max_length'",
+      );
+      expect(boiCanh[0]!.c).toBe("superuser");
+
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        await expect(
+          poolTrienKhai.query(`ALTER DATABASE "${tenDb}" SET log_parameter_max_length = 0`),
+        ).rejects.toMatchObject({ code: "42501" });
+        // ĐỐI CHỨNG DƯƠNG: cùng role đó ĐẶT ĐƯỢC GUC có context = 'user', nên 42501 ở trên
+        // không phải vì role không sở hữu database.
+        await expect(
+          poolTrienKhai.query(
+            `ALTER DATABASE "${tenDb}" SET log_parameter_max_length_on_error = 0`,
+          ),
+        ).resolves.toBeDefined();
+      } finally {
+        await poolTrienKhai.end();
+        await db.pool.query(`ALTER DATABASE "${tenDb}" RESET log_parameter_max_length_on_error`);
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
 });
