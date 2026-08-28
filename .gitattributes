@@ -1,0 +1,29 @@
+# =============================================================================================
+# [PHẦN 0 — lỗi tiền tồn từ Task 1] BYTE CỦA FILE .sql PHẢI TẤT ĐỊNH TRONG CÂY LÀM VIỆC
+# =============================================================================================
+# `packages/db/src/migrate.ts` băm NỘI DUNG ĐỌC TỪ ĐĨA của mỗi migration và so với checksum đã
+# ghi trong `schema_migrations`. Với `core.autocrlf=true` (mặc định của Git for Windows) và
+# KHÔNG có file này, cùng một commit cho ra byte khác nhau giữa checkout Windows và Linux —
+# đo tại HEAD 8927cc4:
+#
+#   $ git ls-files --eol db/migrations/
+#   i/lf  w/crlf  001_roles_and_functions.sql       <- blob LF, cây làm việc CRLF
+#   i/lf  w/crlf  002_organizations_and_users.sql   <- blob LF, cây làm việc CRLF
+#   i/lf  w/lf    003_audit_events.sql
+#   i/lf  w/lf    004_audit_chain_functions.sql
+#
+# Dòng dưới đây làm cây làm việc luôn là LF, khớp blob.
+#
+# NÓ KHÔNG PHẢI BẢN VÁ, VÀ MỘT MÌNH NÓ KHÔNG ĐỦ — hai lý do đo được:
+#   (1) nó chỉ có hiệu lực từ lần CHECKOUT kế tiếp: sau khi thêm file này, `git status
+#       --porcelain` RỖNG mà 001/002 trong worktree vẫn còn nguyên 99/178 ký tự CR trên đĩa;
+#   (2) chính lần renormalize ấy ĐỔI BYTE của file, tức nó LÀ một sự kiện checksum: một môi
+#       trường đã ghi checksum CRLF sẽ gãy ở lần checkout đầu tiên sau khi file này có hiệu lực.
+# Bản vá thật nằm ở `migrationChecksum()` (chuẩn hoá xuống dòng TRƯỚC khi băm); file này là lớp
+# thứ hai, và nó đóng đúng một dư lượng mà lớp kia không đóng được: một `\r\n` nằm TRONG một
+# chuỗi ký tự SQL mang ngữ nghĩa khác `\n` nhưng băm ra cùng giá trị. Dòng này làm những byte
+# đó biểu diễn được ổn định trong kho mã.
+#
+# CỐ Ý KHÔNG dùng `* text=auto`: bán kính nổ toàn repo cho một lợi ích mà chỉ .sql cần (không
+# file nào khác được băm và so lại). Một quy tắc rộng hơn là một lần renormalize rộng hơn.
+*.sql text eol=lf

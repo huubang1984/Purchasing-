@@ -20,8 +20,68 @@ const HAU_TO_LUON_CHAY = ".always.sql";
  */
 type CheDoHardening = "sua" | "phan_xet";
 
-function tinhChecksum(sql: string): string {
-  return createHash("sha256").update(sql, "utf8").digest("hex");
+// ============================================================================================
+// [PHẦN 0 — lỗi tiền tồn từ Task 1] CHUẨN HOÁ XUỐNG DÒNG TRƯỚC KHI BĂM
+// ============================================================================================
+// `migrate()` băm NỘI DUNG ĐỌC TỪ ĐĨA, và nội dung đó phụ thuộc NỀN TẢNG. Đo tại HEAD 8927cc4
+// trong worktree này (Git for Windows, core.autocrlf=true từ
+// "file:C:/Program Files/Git/etc/gitconfig", repo KHÔNG có .gitattributes lúc đó):
+//
+//   $ git ls-files --eol db/migrations/
+//   i/lf  w/crlf  001_roles_and_functions.sql      <- blob LF, CÂY LÀM VIỆC CRLF
+//   i/lf  w/crlf  002_organizations_and_users.sql  <- blob LF, CÂY LÀM VIỆC CRLF
+//   i/lf  w/lf    003_audit_events.sql
+//   i/lf  w/lf    004_audit_chain_functions.sql
+//
+//   sha256 (24 ký tự đầu):
+//     001  CRLF 471fac22d8e55d741f21cd59   LF f4f638210c0291098f96a7a4
+//     002  CRLF cf83769ef418fdc018339c7b   LF d7c58c8c0e612293f4bccf97
+//
+// Cùng MỘT commit, hai checksum. Một CI Linux (LF) deploy vào CSDL từng migrate từ máy Windows
+// (CRLF) — hoặc ngược lại — gãy với "Migration ... đã bị sửa nội dung sau khi áp dụng". `[fix
+// S7]` chạy ĐÚNG thiết kế; thứ sai là ĐẦU VÀO của nó.
+//
+// VÌ SAO VÁ Ở ĐÂY, KHÔNG CHỈ BẰNG .gitattributes — hai lý do đo được, không phải khẩu vị:
+//   (1) .gitattributes CHỈ có hiệu lực từ lần CHECKOUT kế tiếp. Một máy đã có checkout CRLF
+//       giữ nguyên CRLF trên đĩa cho tới khi file được ghi lại; đo trong worktree này sau khi
+//       thêm .gitattributes: "git status --porcelain" RỖNG mà 001/002 vẫn còn 99/178 ký tự CR.
+//       Nghĩa là chỉ có (b) thì lỗ vẫn mở đúng ở ca đang tồn tại.
+//   (2) Chính việc renormalize LÀ MỘT SỰ KIỆN CHECKSUM: nó ĐỔI BYTE của file trong cây làm
+//       việc. Một môi trường đã ghi checksum CRLF vào schema_migrations sẽ gãy ở lần checkout
+//       đầu tiên sau khi .gitattributes có hiệu lực. Bản vá phải đóng lỗ TRƯỚC chứ không tạo
+//       thêm một lần chuyển trạng thái.
+// .gitattributes VẪN được thêm (xem file đó): nó làm byte của cây làm việc tất định, đóng nốt
+// dư lượng ở (3) dưới đây. Hai lớp, không phải một lớp thay lớp kia.
+//
+// PHẠM VI CỦA VIỆC NỚI LỎNG, nói đúng mức — bản vá này nới `[fix S7]` ra ĐÚNG MỘT TRỤC:
+//   (1) sửa NỘI DUNG (kể cả CHÚ THÍCH) của một migration đã áp dụng VẪN gãy — có test hồi quy
+//       ở cả migrate.test.ts lẫn migrate.int.test.ts;
+//   (2) khoảng trắng KHÁC xuống dòng (thụt lề, dấu cách cuối dòng) VẪN tính;
+//   (3) DƯ LƯỢNG: một `\r\n` nằm TRONG một chuỗi ký tự SQL (`'a' || E'\r\n'` viết dạng byte
+//       thật) mang ngữ nghĩa khác `\n`, và bản vá này băm hai bản ấy như nhau. Không phải một
+//       bậc tự do mới do bản vá tạo ra: với core.autocrlf, Git ĐÃ KHÔNG biểu diễn ổn định
+//       được những byte đó từ trước. `.gitattributes` (`*.sql text eol=lf`) là thứ đóng dư
+//       lượng này ở lớp kho mã, và đó là lý do thứ hai để có nó.
+//
+// `\r\n?` chứ không `\r\n`: một file toàn `\r` (quy ước Mac cổ điển, và là thứ một bộ chuyển
+// đổi hỏng có thể sinh ra) sẽ băm ra GIÁ TRỊ THỨ BA nếu chỉ xử lý CRLF. Có test riêng.
+function chuanHoaXuongDong(sql: string): string {
+  return sql.replace(/\r\n?/g, "\n");
+}
+
+/**
+ * Checksum nội dung một file migration — ĐỘC LẬP NỀN TẢNG.
+ *
+ * Xuất khẩu (thay vì để nội bộ) để test khoá được chính hợp đồng này mà không phải dựng
+ * database: xem packages/db/src/migrate.test.ts. KHÔNG nằm trong barrel `@trustprocure/db` —
+ * nó là hợp đồng nội bộ của bộ chạy migration, không phải mặt tiền của gói.
+ *
+ * Thuật toán KHÔNG đổi so với bản trước: với đầu vào LF thuần, giá trị trả về vẫn đúng bằng
+ * sha256 của chính byte đó. Đó là điều kiện để mọi môi trường đã migrate từ một checkout LF
+ * (tức mọi CI Linux) không gãy ở lần deploy kế tiếp — có test neo giá trị.
+ */
+export function migrationChecksum(sql: string): string {
+  return createHash("sha256").update(chuanHoaXuongDong(sql), "utf8").digest("hex");
 }
 
 /**
@@ -248,7 +308,7 @@ export async function migrate(pool: pg.Pool, dir: string): Promise<string[]> {
 
     for (const file of fileDanhSo) {
       const sql = await readFile(join(dir, file), "utf8");
-      const checksum = tinhChecksum(sql);
+      const checksum = migrationChecksum(sql);
 
       const existing = await lockClient.query<{ checksum: string }>(
         "SELECT checksum FROM schema_migrations WHERE version = $1",

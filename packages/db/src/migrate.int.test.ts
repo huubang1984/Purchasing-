@@ -64,6 +64,48 @@ describe("bộ chạy migration", () => {
     await expect(migrate(db.pool, dir)).rejects.toThrow(/040_ban_dau\.sql/);
   });
 
+  // [PHẦN 0 — lỗi tiền tồn từ Task 1] Đây là ca THẬT sẽ xảy ra ở CI: cùng một commit được
+  // checkout ra CRLF trên máy Windows (core.autocrlf=true, không .gitattributes) và ra LF trên
+  // Linux. Trước bản vá, lần thứ hai ném "checksum không khớp" và deploy chết cứng.
+  // Xem khối "CHUẨN HOÁ XUỐNG DÒNG" ở packages/db/src/migrate.ts để biết số đo trên HEAD.
+  it("[PHẦN 0] cùng một migration checkout ra CRLF rồi ra LF KHÔNG làm migrate() gãy", async () => {
+    const noiDungLf = "-- bảng của phần 0\nCREATE TABLE mig_eol (id int);\n";
+    const noiDungCrlf = noiDungLf.replace(/\n/g, "\r\n");
+    expect(noiDungCrlf).not.toBe(noiDungLf); // chống rỗng ruột
+
+    const dir = migrationDir({ "041_eol.sql": noiDungCrlf });
+    expect(await migrate(db.pool, dir)).toEqual(["041_eol.sql"]);
+
+    // Cùng thư mục, file được ghi lại bằng LF — mô phỏng đúng một checkout trên nền tảng khác.
+    writeFileSync(join(dir, "041_eol.sql"), noiDungLf);
+    expect(await migrate(db.pool, dir)).toEqual([]);
+
+    // Và chiều ngược lại (Linux trước, Windows sau) cũng phải qua.
+    writeFileSync(join(dir, "041_eol.sql"), noiDungCrlf);
+    expect(await migrate(db.pool, dir)).toEqual([]);
+  });
+
+  // [PHẦN 0 — hồi quy] Bản vá nới `[fix S7]` ra ĐÚNG MỘT trục. Ca đo được của Task 6 ("sửa
+  // CHÚ THÍCH của một migration ĐÃ ÁP DỤNG = sửa migration đã áp dụng") PHẢI vẫn gãy — nếu
+  // không, bản vá an ninh này đã làm một phép kiểm an ninh khác mất tác dụng mà vẫn xanh.
+  it("[PHẦN 0] hồi quy — sửa CHÚ THÍCH của migration đã áp dụng VẪN làm migrate() gãy", async () => {
+    const banDau = "-- ghi chú gốc\nCREATE TABLE mig_eol_ct (id int);\n";
+    const dir = migrationDir({ "042_chu_thich.sql": banDau });
+    expect(await migrate(db.pool, dir)).toEqual(["042_chu_thich.sql"]);
+
+    // CHỈ đổi chú thích, giữ nguyên xuống dòng.
+    writeFileSync(join(dir, "042_chu_thich.sql"), banDau.replace("gốc", "đã bị sửa"));
+    await expect(migrate(db.pool, dir)).rejects.toThrow(/042_chu_thich\.sql/);
+
+    // Và đổi chú thích ĐỒNG THỜI đổi xuống dòng cũng phải gãy — chuẩn hoá không được che một
+    // thay đổi nội dung thật chỉ vì nó đi kèm một lần đổi quy ước xuống dòng.
+    writeFileSync(
+      join(dir, "042_chu_thich.sql"),
+      banDau.replace("gốc", "đã bị sửa").replace(/\n/g, "\r\n"),
+    );
+    await expect(migrate(db.pool, dir)).rejects.toThrow(/042_chu_thich\.sql/);
+  });
+
   // [fix S7 — advisory lock] Hai tiến trình migrate() song song trên cùng thư mục (blue/
   // green deploy, hai pod cùng khởi động) không được giẫm lên nhau: đúng một trong hai áp
   // dụng migration, cái còn lại thấy đã áp dụng rồi và trả về mảng rỗng — không lỗi, không
