@@ -4549,6 +4549,23 @@ Ghi vào `docs/STATE.md` mục *Trạng thái kiểm thử*: số bất biến �
 
 - [ ] **Step 8: Cho phép CI đỏ có kiểm soát trong giai đoạn S0**
 
+> *** BƯỚC DƯỚI ĐÂY ĐÃ BỊ TỪ CHỐI KHI THỰC THI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+>
+> Task 11 **REJECTED có phép đo** đề nghị này. Trả lời QT1 cho `continue-on-error` — *ai nhìn
+> thấy nó đỏ, bằng cách nào, trong bao lâu?* — cho ra **không ai / không cách nào / không bao
+> giờ**: nó không sinh chú thích nào trên PR, và không lượt review nào bắt buộc mở log của một
+> job đã xanh. Thay vào đó là **ghim danh sách 23 mã được phép chưa phủ**, mỗi mã một lý do đọc
+> được, cộng **`MOC_GHIM`** (hai con số: tử số không được tụt, danh sách không được nở) ở
+> `tools/inv-matrix/src/danh-gia.ts`.
+>
+> **Trạng thái thật hôm nay, kiểm được:** `.github/workflows/ci.yml` **KHÔNG có
+> `continue-on-error` ở job `evidence`** — dòng `continue-on-error: true` duy nhất trong file ấy
+> nằm ở **bước báo cáo `pnpm audit` không chặn** của job `t0`, một chỗ khác hẳn. Job `evidence`
+> **xanh thật** hôm nay và **đỏ thật** khi một mã ngoài danh sách chưa phủ. Không còn hạn chót
+> phải nhớ ở S1.8. Hai chỗ khác trong chính file này còn nhắc `continue-on-error` như một sự
+> thật (dòng ~4600 và thông điệp commit mẫu ngay dưới) — cả hai cũng đã thiu, và cũng được giữ
+> nguyên văn.
+
 Job `evidence` sẽ đỏ tới hết S1. Đặt `continue-on-error: true` cho job này **và ghi rõ hạn chót gỡ bỏ**:
 
 ```yaml
@@ -4597,7 +4614,18 @@ continue-on-error, co ghi han chot go bo o hang muc S1.8."
 
 **Bất biến còn lại thuộc S1:** toàn bộ nhóm A (bí mật giá), B1/B2/B5, C1–C5, D2, D4, E1, E2, E4–E6 — chúng đòi hỏi RFQ, lời mời, phong bì niêm phong và luồng mở thầu, tức là Sealed Bid Core.
 
-Đây là lý do job `evidence` được đặt `continue-on-error` ở task 11 và phải gỡ ở hạng mục S1.8.
+> *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+>
+> >>> "Đây là lý do job `evidence` được đặt `continue-on-error` ở task 11 và phải gỡ ở hạng
+> >>>  mục S1.8."
+>
+> Task 11 **từ chối** `continue-on-error` (xem khối gạch bỏ ở Step 8). `ci.yml` không có nó ở
+> job `evidence`, và **không còn hạn chót nào phải nhớ ở S1.8** — danh sách 23 mã được ghim
+> trong mã nguồn và đi qua review, cộng `MOC_GHIM` đo được cả chiều tụt lẫn chiều nở.
+>
+> Con số **13 trong 34** ở hai dòng ngay trên cũng đã thiu: `G2` và `G4` **không có lớp**, và
+> một hàng thứ ba (`B2`) từng trông như đã phủ **chỉ vì một nhãn sai**. Số thật:
+> **11/34 nghiệp vụ + 13/13 hàng rào = 24/47** — xem `evidence/INV-matrix.md`.
 
 ## Điều kiện hoàn thành S0
 
@@ -4615,5 +4643,12 @@ S0 xong khi **tất cả** đúng:
 ## Việc cần quyết định trước khi sang S1
 
 1. **Thư mục `Vibe Coding/`.** Hiện là bản copy thủ công của CLAUDE.md và năm file SKILL, trùng với plugin `ai-eng-os` đã cài. README của plugin cảnh báo sẽ gây nhầm lẫn giữa `/feature` và `/ai-eng-os:feature`. Xóa hay chuyển thành `.claude/CLAUDE.md` là quyết định của bạn — kế hoạch này cố ý không tự làm vì đó là thao tác xóa file.
-2. **Nhà cung cấp KMS.** ADR-004 để mở giữa AWS KMS, Azure Key Vault và HashiCorp Vault. Cần chốt trước task 7 nếu muốn viết adapter thật ngay, hoặc chốt trước S1.4 nếu chấp nhận dùng local-dev tới lúc đó.
+2. **Nhà cung cấp KMS.** ~~ADR-004 để mở giữa AWS KMS, Azure Key Vault và HashiCorp Vault.~~ Cần chốt trước task 7 nếu muốn viết adapter thật ngay, hoặc chốt trước S1.4 nếu chấp nhận dùng local-dev tới lúc đó.
+
+   > *** VẾ GẠCH BỎ Ở TRÊN SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+   > `docs/DECISIONS.md:93` — **ADR-004 là "Sổ kiểm toán chuỗi hash, chỉ ghi thêm, cưỡng chế ở
+   > tầng DB"**, trạng thái **Đã chấp nhận**. Quyết định về khoá thuộc **ADR-002**, cũng **Đã
+   > chấp nhận**, và nó **không** để mở nhà cung cấp. Chính file này dùng ADR-004 **đúng nghĩa**
+   > ở các dòng ~1630 / ~1740 / ~1743 rồi **sai nghĩa** ở đây — hai tiền đề loại trừ nhau trong
+   > cùng một file. Quyết định KMS nay có chỗ của nó: **ADR-009, trạng thái "Đang mở"**.
 3. **Nơi triển khai.** Chưa chọn hạ tầng đích. Ảnh hưởng tới cấu hình IAM tách quyền giải mã ở ADR-006 — mô hình đó cần một nhà cung cấp có IAM đủ chi tiết để cấp `kms:Decrypt` cho đúng một service.

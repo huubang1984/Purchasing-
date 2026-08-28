@@ -6,11 +6,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   MA_DUOC_PHEP_CHUA_PHU,
+  MA_PHAI_CO_CO_HEP,
+  MOC_GHIM,
   PHAM_VI_HEP,
   TRICH_BAN_GIAO,
   assertFullSha,
+  demVeMenhDe,
   ketQua,
   kiemTraCong,
+  kiemTraMocGhim,
 } from "./danh-gia.js";
 import { parseInvariants, type Invariant, type TestOutcome } from "./parse.js";
 
@@ -18,8 +22,8 @@ const dat: TestOutcome = { name: "x", status: "passed" };
 const do_: TestOutcome = { name: "x", status: "failed" };
 const boQua: TestOutcome = { name: "x", status: "skipped" };
 
-function inv(id: string): Invariant {
-  return { id, statement: "s", enforcement: "e", testLayer: "T1" };
+function inv(id: string, statement = "s"): Invariant {
+  return { id, statement, enforcement: "e", testLayer: "T1" };
 }
 
 describe("phán xét một hàng ma trận", () => {
@@ -176,6 +180,193 @@ describe("cổng evidence: ghim cấu hình thay vì nới bảo đảm", () => 
 });
 
 // ---------------------------------------------------------------------------------------------
+// VÒNG FIX CUỐI / C2 — MỐC GHIM. Hai mũi ĐO ĐƯỢC đã đi lọt qua `kiemTraCong` phải chết ở đây.
+// ---------------------------------------------------------------------------------------------
+describe("mốc ghim: 'độ phủ chỉ đi lên' là một PHÉP ĐO, không phải một câu văn", () => {
+  const so = [inv("A1"), inv("B3"), inv("F3")];
+  const moc = { soPhuToiThieu: 3, coDanhSachToiDa: 0 };
+  const phuHet = new Map([["A1", [dat]], ["B3", [dat]], ["F3", [dat]]]);
+
+  it("đúng mốc thì im lặng", () => {
+    expect(kiemTraMocGhim(so, phuHet, new Map(), new Map(), moc, new Set())).toEqual([]);
+  });
+
+  it("MŨI 1 — XOÁ test của F3 VÀ thêm F3 vào danh sách, cùng một lượt: CHẶN", () => {
+    // Đây là mũi đo được của review cuối: `kiemTraCong` cho exit=0 cho đúng tổ hợp này.
+    const van = kiemTraMocGhim(
+      so,
+      new Map([["A1", [dat]], ["B3", [dat]]]),
+      new Map([["F3", "một lý do nghe có thẩm quyền"]]),
+      new Map(),
+      moc,
+      new Set(),
+    );
+    expect(van.some((v) => v.includes("HỒI QUY ĐỘ PHỦ"))).toBe(true);
+    expect(
+      van.find((v) => v.includes("HỒI QUY ĐỘ PHỦ")),
+      "thông điệp phải nói thẳng rằng thêm vào danh sách KHÔNG chữa được",
+    ).toContain("KHÔNG");
+  });
+
+  it("MŨI 1 sống sót nếu chỉ có `kiemTraCong` — đối chứng cho thấy mốc ghim là lớp DUY NHẤT", () => {
+    const van = kiemTraCong(
+      so,
+      new Map([["A1", [dat]], ["B3", [dat]]]),
+      new Map([["F3", "một lý do nghe có thẩm quyền"]]),
+      new Map(),
+    );
+    expect(van, "cổng cũ IM LẶNG cho đúng tổ hợp này — đó là khe hở").toEqual([]);
+  });
+
+  it("MŨI 2 — thêm một mã MỚI vào sổ đăng ký VÀ vào danh sách: danh sách NỞ RA, CHẶN", () => {
+    const van = kiemTraMocGhim(
+      [...so, inv("G9")],
+      phuHet,
+      new Map([["G9", "S1 — mã mới toanh"]]),
+      new Map(),
+      moc,
+      new Set(),
+    );
+    expect(van.some((v) => v.includes("NỞ RA"))).toBe(true);
+  });
+
+  it("MŨI 2 cũng sống sót nếu chỉ có `kiemTraCong`", () => {
+    const van = kiemTraCong(
+      [...so, inv("G9")],
+      phuHet,
+      new Map([["G9", "S1 — mã mới toanh"]]),
+      new Map(),
+    );
+    expect(van).toEqual([]);
+  });
+
+  it("ĐỘ PHỦ TĂNG cũng CHẶN — mốc một chiều sẽ tự trôi và mua sẵn chỗ cho một lần tụt", () => {
+    const van = kiemTraMocGhim(
+      so,
+      phuHet,
+      new Map(),
+      new Map(),
+      { soPhuToiThieu: 2, coDanhSachToiDa: 0 },
+      new Set(),
+    );
+    expect(van.some((v) => v.includes("ĐỘ PHỦ TĂNG"))).toBe(true);
+    expect(van.join(" ")).toContain("soPhuToiThieu = 3");
+  });
+
+  it("danh sách CO LẠI cũng CHẶN — trần không được giữ chỗ trống", () => {
+    const van = kiemTraMocGhim(
+      so,
+      phuHet,
+      new Map(),
+      new Map(),
+      { soPhuToiThieu: 3, coDanhSachToiDa: 1 },
+      new Set(),
+    );
+    expect(van.some((v) => v.includes("CO LẠI"))).toBe(true);
+  });
+
+  it("I1 — GỠ một cờ §4 của mã được ghim thì CHẶN", () => {
+    const van = kiemTraMocGhim(so, phuHet, new Map(), new Map(), moc, new Set(["B3"]));
+    expect(van).toHaveLength(1);
+    expect(van[0]).toContain("B3");
+    expect(van[0]).toContain("PHAM_VI_HEP");
+  });
+
+  it("cờ §4 CÒN thì không chặn", () => {
+    const van = kiemTraMocGhim(
+      so,
+      phuHet,
+      new Map(),
+      new Map([["B3", "phạm vi hẹp có thật"]]),
+      moc,
+      new Set(["B3"]),
+    );
+    expect(van).toEqual([]);
+  });
+
+  it("mã được ghim phải-có-cờ mà KHÔNG có trong sổ đăng ký cũng CHẶN", () => {
+    const van = kiemTraMocGhim(so, phuHet, new Map(), new Map(), moc, new Set(["Z9"]));
+    expect(van).toHaveLength(1);
+    expect(van[0]).toContain("KHÔNG có trong sổ đăng ký");
+  });
+});
+
+describe("mệnh đề HỘI: một test đo MỘT vế cũng thắp ✅ cho CẢ mệnh đề", () => {
+  const hoi = "vế một **và** vế hai **và** vế ba **và** vế bốn";
+  const moc = { soPhuToiThieu: 1, coDanhSachToiDa: 0 };
+
+  it("đếm vế dẫn xuất từ chính câu chữ của sổ đăng ký", () => {
+    expect(demVeMenhDe("một mệnh đề đơn")).toBe(1);
+    expect(demVeMenhDe(hoi)).toBe(4);
+    // `và` KHÔNG đậm là văn xuôi, không phải phép hội — nới ở đây là nới một bảo đảm.
+    expect(demVeMenhDe("A và B")).toBe(1);
+  });
+
+  it("mệnh đề HỘI mang ô ✅ mà KHÔNG có ghi chú §4 thì CHẶN", () => {
+    const van = kiemTraMocGhim(
+      [inv("D1", hoi)],
+      new Map([["D1", [dat]]]),
+      new Map(),
+      new Map(),
+      moc,
+      new Set(),
+    );
+    expect(van).toHaveLength(1);
+    expect(van[0]).toContain("MỆNH ĐỀ HỘI 4 VẾ");
+  });
+
+  it("có ghi chú §4 thì thôi — §4 là chỗ ghi phần chênh", () => {
+    const van = kiemTraMocGhim(
+      [inv("D1", hoi)],
+      new Map([["D1", [dat]]]),
+      new Map(),
+      new Map([["D1", "vế nào đo, vế nào không"]]),
+      moc,
+      new Set(),
+    );
+    expect(van).toEqual([]);
+  });
+
+  it("mệnh đề HỘI CHƯA PHỦ thì KHÔNG chặn — một hàng ⏳ không phát biểu gì cả", () => {
+    const van = kiemTraMocGhim(
+      [inv("D1", hoi)],
+      new Map(),
+      new Map(),
+      new Map(),
+      { soPhuToiThieu: 0, coDanhSachToiDa: 0 },
+      new Set(),
+    );
+    expect(van).toEqual([]);
+  });
+
+  it("mệnh đề ĐƠN mang ô ✅ mà không có §4 thì KHÔNG chặn", () => {
+    const van = kiemTraMocGhim(
+      [inv("F3", "một mệnh đề đơn")],
+      new Map([["F3", [dat]]]),
+      new Map(),
+      new Map(),
+      moc,
+      new Set(),
+    );
+    expect(van).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// LỚP CANH ĐIỂM NỐI. `kiemTraMocGhim` là hàm THUẦN nên mọi vế của nó kiểm thử đột biến được —
+// nhưng một mũi XOÁ LỜI GỌI ở `index.ts` (vỏ I/O, không test đơn vị nào chạm tới) sẽ SỐNG SÓT
+// qua toàn bộ các test trên. Đọc thẳng mã nguồn là lớp rẻ nhất đóng đúng mũi đó.
+// ---------------------------------------------------------------------------------------------
+describe("bộ sinh phải THẬT SỰ gọi cổng mốc ghim", () => {
+  it("index.ts gộp kết quả của kiemTraMocGhim vào danh sách vấn đề chặn merge", () => {
+    const nguon = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(nguon, "xoá lời gọi này làm cả cổng thứ hai bốc hơi trong im lặng").toMatch(
+      /van\.push\(\s*\.\.\.kiemTraMocGhim\(/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // CẤU HÌNH GHIM PHẢI KHỚP SỔ ĐĂNG KÝ THẬT. Chạy ở tầng đơn vị nên nó đỏ NGAY, không phải đợi
 // một lượt `pnpm evidence` dài năm phút. Đây cũng là lớp bắt ca "một hàng biến mất khỏi
 // docs/TEST-PLAN.md": mọi mã được ghim đều phải còn tồn tại ở đó.
@@ -221,6 +412,36 @@ describe("cấu hình ghim đối chiếu với docs/TEST-PLAN.md thật", () =>
 
   it("một mã KHÔNG được vừa nằm trong danh sách chưa phủ vừa có ghi chú phạm vi hẹp", () => {
     expect([...MA_DUOC_PHEP_CHUA_PHU.keys()].filter((m) => PHAM_VI_HEP.has(m))).toEqual([]);
+  });
+
+  it("trần ghim KHỚP cỡ thật của danh sách được phép chưa phủ", () => {
+    expect(MA_DUOC_PHEP_CHUA_PHU.size).toBe(MOC_GHIM.coDanhSachToiDa);
+  });
+
+  it("mọi mã bắt buộc phải có cờ §4 đều CÓ cờ, và đều tồn tại trong sổ đăng ký", () => {
+    const co = maCoThat();
+    expect([...MA_PHAI_CO_CO_HEP].filter((m) => !co.has(m))).toEqual([]);
+    expect([...MA_PHAI_CO_CO_HEP].filter((m) => !PHAM_VI_HEP.has(m))).toEqual([]);
+  });
+
+  it("MỌI mệnh đề HỘI trong sổ đăng ký thật đều nằm trong danh sách bắt buộc có cờ §4", () => {
+    // Chưa phủ thì chưa phát biểu gì, nên chỉ những mã KHÔNG nằm trong danh sách được phép
+    // chưa phủ mới bị đòi. Hôm nay đúng một hàng thoả: D1.
+    const hoi = soDangKy()
+      .filter((i) => demVeMenhDe(i.statement) > 1 && !MA_DUOC_PHEP_CHUA_PHU.has(i.id))
+      .map((i) => i.id);
+    expect(hoi).toEqual(["D1"]);
+    expect(hoi.filter((m) => !MA_PHAI_CO_CO_HEP.has(m))).toEqual([]);
+  });
+
+  it("ghi chú §4 của D1 phải nêu ĐÍCH DANH hàng C3 — hai hàng nói về cùng một vế", () => {
+    // Khiếm khuyết đã đo: D1 ✅ và C3 ⏳ mâu thuẫn số học, cách nhau tám dòng trong cùng bảng.
+    // Nếu ghi chú không trỏ sang C3 thì kiểm toán viên phải tự bắc cầu.
+    const d1 = PHAM_VI_HEP.get("D1") ?? "";
+    expect(d1).toContain("C3");
+    expect(d1, "phải nói rõ phép HỘI chưa được đo, không chỉ nói một khoảng trống").toContain(
+      "HỘI",
+    );
   });
 
   it("hai phát biểu bàn giao trích nguyên văn đều trỏ tới mã có thật và không bị rút gọn", () => {

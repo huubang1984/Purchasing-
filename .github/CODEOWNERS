@@ -69,3 +69,28 @@
 # Hook chạy trên máy người phát triển với quyền của người đó: git-safety.mjs chặn các lệnh git
 # huỷ dữ liệu, protect-secrets.mjs chặn bí mật lọt vào commit.
 /.claude/hooks/                              @trustprocure/bao-mat
+
+# --- Bộ máy evidence: thứ QUYẾT ĐỊNH KIỂM TOÁN VIÊN ĐƯỢC KỂ CHUYỆN GÌ ------------------------
+# Ba tài sản quyết định "hàng rào có răng không" đã nằm trên. Bốn đường dẫn dưới đây quyết định
+# một chuyện khác và không nhỏ hơn: NGƯỜI NHẬN REPO ĐƯỢC KỂ RẰNG HÀNG RÀO CÓ RĂNG TỚI ĐÂU.
+# Chúng vắng mặt cho tới hết S0, và phép đo cho thấy hậu quả là thật, không lý thuyết:
+#   * `MA_DUOC_PHEP_CHUA_PHU` là một CỬA cùng lớp với `NGOAI_LE_HINH_DANG` ở
+#     hardening.always.sql — lập luận biện minh cho cửa kia áp NGUYÊN XI cho cửa này: mỗi dòng
+#     thêm vào là một QUYẾT ĐỊNH AN NINH mà không máy nào phán xử hộ được. Thêm một mã vào đó
+#     là tuyên bố "bất biến này được phép không có bằng chứng", và lý do đi kèm được IN THẲNG
+#     vào evidence pack như thể nó có thẩm quyền.
+#   * `MOC_GHIM` (hai con số) là thứ DUY NHẤT biến câu "độ phủ chỉ đi lên" thành một phép đo.
+#     Sửa một con số ở đó vô hiệu hoá đúng lớp vừa được dựng để chặn một hồi quy im lặng.
+#   * `PHAM_VI_HEP` / `MA_PHAI_CO_CO_HEP` là thứ DUY NHẤT đứng giữa một ô ✅ và một câu rộng
+#     hơn thứ được đo. Gỡ một dòng làm cờ và mục §4 cùng biến mất, ma trận sinh lại vẫn KHỚP
+#     BYTE, và `git diff --exit-code` vẫn xanh — đo được.
+/tools/inv-matrix/                           @trustprocure/bao-mat
+# Sổ đăng ký bất biến. Xoá một HÀNG ở đây làm một bất biến biến mất khỏi mẫu số mà không lớp
+# nào kêu; §3 của TEST-PLAN cũng là nơi phát biểu tầng nào CHẶN MERGE.
+/docs/TEST-PLAN.md                           @trustprocure/bao-mat
+# Tài liệu trạng thái mang SỔ NỢ ĐƯỢC COMMIT — 12+ khoản đã đo. Xoá một dòng nợ ở đây là cách
+# rẻ nhất để một khoảng trống đã biết biến mất khỏi hồ sơ bàn giao.
+/docs/STATE.md                               @trustprocure/bao-mat
+# Evidence pack. `INV-matrix.md` sinh tự động và có phép kiểm chống-sửa-tay, nhưng `.gitignore`
+# GIỮ file này nên một lần sửa tay kèm một lần sửa bộ sinh sẽ khớp lại — cần mắt người.
+/evidence/                                   @trustprocure/bao-mat

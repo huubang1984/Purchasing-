@@ -57,7 +57,7 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 17 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 17 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 26 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
@@ -94,7 +94,31 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 Mỗi mã dưới đây được **ghim** trong `tools/inv-matrix/src/danh-gia.ts`
 (`MA_DUOC_PHEP_CHUA_PHU`). Danh sách này là **ràng buộc hai chiều**: một mã ngoài danh sách mà
 chưa phủ làm CI **đỏ thật**, và một mã trong danh sách mà **đã được phủ** cũng làm CI đỏ, kèm
-lời nhắc gỡ nó ra. Nhờ chiều thứ hai, danh sách chỉ co lại — nó không bao giờ nở ra trong im lặng.
+lời nhắc gỡ nó ra.
+
+> **Bản trước của dòng này viết tiếp:** *"Nhờ chiều thứ hai, danh sách chỉ co lại — nó không
+> bao giờ nở ra trong im lặng."* **Câu đó rộng hơn cơ chế, và đã được đo là sai.** Chiều thứ
+> hai chỉ kích hoạt khi một mã **vừa có test vừa ở trong danh sách**, nên hai thay đổi bù trừ
+> nhau trong cùng một PR đi lọt: xoá test của một mã *và* thêm mã đó vào danh sách cho cổng
+> **xanh**; thêm một mã mới vào sổ đăng ký *và* vào danh sách cũng cho cổng **xanh**, danh sách
+> nở ra một dòng. Giữ nguyên văn ở đây để đối chiếu, không xoá.
+
+### 3.1 Mốc ghim — thứ THẬT SỰ giữ cho độ phủ chỉ đi lên
+
+Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
+**bất kỳ chiều nào**:
+
+- `MOC_GHIM.soPhuToiThieu = 24` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+  lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
+- `MOC_GHIM.coDanhSachToiDa = 23` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+
+Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
+và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
+chữ ở sổ đăng ký, nên một mệnh đề hội mới của S1 tự rơi vào phạm vi ngay hôm nó được viết ra.
+
+**Điều này vẫn KHÔNG đóng được:** một PR sửa mã, sửa danh sách, *và* sửa cả hai con số cùng
+lúc vẫn xanh. Không phép đo nào chặn được điều đó. Khác biệt là lúc ấy nó là một **dòng phải
+sửa, có tên, trong một file có chủ sở hữu** (`.github/CODEOWNERS`) — không phải một sự im lặng.
 
 **Nguy hiểm không nằm ở chỗ các hàng này trống.** Nó đến khi ai đó **lấp chúng bằng nhãn thay vì
 bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đó đã xảy ra một lần: năm test mang
@@ -131,7 +155,12 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 Một ô ✅ cạnh một mệnh đề rộng **là** một phát biểu rộng hơn thứ được đo, trừ khi phần chênh
 được ghi ra. Đây là phần đó.
 
-- **D1** — Phép **kiểm** độ tươi (`assertFreshMfa`) đã có và đã được đo, nhưng TOÀN BỘ đường đời của `sessions` chưa tồn tại trong mã sản phẩm: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi.
+Những mệnh đề viết bằng **phép HỘI** được đánh dấu riêng ở cột *Ghi chú* (`mệnh đề HỘI n vế`),
+vì chúng hỏng theo một cách khác: bộ sinh gom theo **nhãn** và **không hề biết** mệnh đề là
+phép hội, nên một test đo **một** vế cũng thắp ✅ cho **cả** mệnh đề. Với những hàng đó, mục
+dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa có chủ ngữ**.
+
+- **D1** — **MỆNH ĐỀ HỘI BỐN VẾ, VÀ PHÉP HỘI CHƯA TỪNG ĐƯỢC ĐO MỘT LẦN NÀO.** 17 test mang nhãn tách làm ĐÚNG HAI cụm rời nhau, đếm từ chính báo cáo `vitest --reporter=json`: **12** test ở `packages/identity/src/mfa.int.test.ts` chỉ đo vế **(2) MFA còn hiệu lực trong cửa sổ ngắn** qua `assertFreshMfa`; **5** test ở `packages/identity/src/rbac.int.test.ts` chỉ đo vế **(1) quyền hợp lệ** qua `hasPermission`. KHÔNG test nào đo hai vế cùng lúc, và không có một hàm nào hợp hai vế lại. Vế **(3) RFQ đã CLOSED** và vế **(4) cổng chính sách thông qua** KHÔNG CÓ MỘT DÒNG MÃ NÀO: `grep` toàn repo cho `rfqs`, `wrapped_private_key`, `policyGate` cho **0 hit**, và `git ls-files apps/` cho đúng `apps/.gitkeep`. Vế (3) **CHÍNH LÀ hàng `C3`** trong bảng này, và C3 là **⏳ CHƯA PHỦ** — hai hàng cách nhau tám dòng, một hàng ✅, một hàng ⏳, cùng nói về một điều. Cuối cùng, cả hai phép kiểm ĐÃ CÓ đều **chưa có người gọi sản phẩm**: `assertFreshMfa` và `requirePermission` chỉ xuất hiện ở barrel export, ở chú thích, và ở test — toàn bộ đường đời của `sessions` (phát token, tra token, đặt `mfa_verified_at`) chưa tồn tại. Ô ✅ này chứng minh *hai vế được đo RIÊNG RẼ trên hai phép kiểm chưa có ai gọi*; nó **không** chứng minh mệnh đề ở cột kế bên.
 
 - **D5** — Được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi sổ (ADR-008).
 
@@ -139,7 +168,7 @@ Một ô ✅ cạnh một mệnh đề rộng **là** một phát biểu rộng 
 
 - **F1** — RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim.
 
-- **G1** — Cưỡng chế bằng quy tắc CẠNH của dependency-cruiser cộng danh sách trắng barrel. Bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào.
+- **G1** — **TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.** 18 test đo **quy tắc biên giới** của dependency-cruiser cộng danh sách trắng barrel — đó là một lớp phòng ngừa THẬT, đã được chứng minh có răng bằng test đối kháng (Task 2 và Task 7 đều vô hiệu hoá quy tắc rồi chạy lại để lấy RED thật). Nhưng mệnh đề nói về `private key RFQ`, và ở S0 **không có private key RFQ nào**: `grep wrapped_private_key` toàn repo cho **0 hit**, `git ls-files apps/` cho đúng `apps/.gitkeep` nên **không có `apps/unseal-worker`**. Ô ✅ này chứng minh *cánh cửa đã khoá*; nó chưa chứng minh gì về căn phòng, vì căn phòng chưa được xây. Khoảng trống thứ hai, độc lập: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào.
 
 ### 4.1 B3 và B4 — phát biểu bàn giao, trích nguyên văn
 
@@ -214,7 +243,9 @@ trong lượt này (không bị bỏ qua) và **đã đạt**; và mã đó có 
 1. **rằng test ấy đo đúng mệnh đề ở cột kế bên.** Bộ sinh gom theo **nhãn**, và nhãn do người
    viết đặt. Lớp phòng thủ duy nhất chống nhãn sai là đọc tên test — bộ sinh chỉ đóng được
    trường hợp nhãn trỏ vào một mã **không tồn tại**, và nó đóng chặt.
-2. **rằng mệnh đề được phủ trọn vẹn.** Xem §4: một mệnh đề năm vế có thể ✅ với bốn vế.
+2. **rằng mệnh đề được phủ trọn vẹn.** Xem §4: một mệnh đề năm vế có thể ✅ với bốn vế (E3),
+   và một mệnh đề **hội** bốn vế có thể ✅ khi chỉ hai vế được đo — **riêng rẽ, chưa từng
+   cùng lúc** — còn hai vế kia không có một dòng mã nào (D1).
 3. **rằng lớp cưỡng chế ở cột *Cưỡng chế* là thứ đang chặn.** Cột đó chép từ sổ đăng ký, không
    được bộ sinh kiểm chứng. Test chỉ **phát hiện**; cưỡng chế mới **ngăn chặn**.
 4. **bất cứ điều gì về mã chưa phủ.** Một hàng ⏳ không nói sản phẩm sai — nó nói *chưa có bằng chứng*.

@@ -12,9 +12,23 @@
 // người mở PR nhìn thấy, ngay trên cổng CI bắt buộc, trong một lượt chạy.
 //
 // Danh sách này là RÀNH BUỘC HAI CHIỀU, và chiều thứ hai mới là chiều quan trọng: một mã trong
-// danh sách mà ĐÃ ĐƯỢC PHỦ cũng làm bộ sinh ĐỎ, kèm lời nhắc gỡ nó ra. Nhờ vậy danh sách chỉ
-// co lại, không bao giờ nở ra trong im lặng — nếu thiếu chiều đó thì nó lại đúng là một
-// `continue-on-error` viết dài hơn.
+// danh sách mà ĐÃ ĐƯỢC PHỦ cũng làm bộ sinh ĐỎ, kèm lời nhắc gỡ nó ra.
+//
+// *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ. ***
+//   >>> "Nhờ vậy danh sách chỉ co lại, không bao giờ nở ra trong im lặng — nếu thiếu chiều đó
+//   >>>  thì nó lại đúng là một `continue-on-error` viết dài hơn."
+//
+// VÌ SAO NÓ SAI — HAI MŨI, ĐO TRÊN CHÍNH BỘ SINH NÀY, CẢ HAI CHO exit=0 + "Cổng evidence: XANH":
+//   (1) XOÁ mọi khẳng định `[INV-F3]` khỏi `evidence/vitest-report.json` (F3 tụt về CHƯA PHỦ)
+//       VÀ thêm `F3` vào danh sách, TRONG CÙNG MỘT LƯỢT -> 23/47, không một dòng đỏ nào, và §3
+//       in ra một LÝ DO như thể nó là một quyết định có thẩm quyền. Một HỒI QUY ĐỘ PHỦ đi lọt.
+//   (2) Thêm một mã mới (`G9`) vào SỔ ĐĂNG KÝ *và* vào danh sách -> 24/48: danh sách NỞ RA,
+//       mẫu số nở ra, tử số đứng yên.
+// Chiều thứ hai chỉ kích hoạt khi `coTest && trongDs`, nên nó KHÔNG bắt được hai thay đổi BÙ
+// TRỪ NHAU trong cùng một PR. Câu ĐÚNG với cơ chế ấy chỉ là: *một mã ĐÃ PHỦ mà còn nằm trong
+// danh sách thì đỏ*. "Danh sách chỉ co lại" KHÔNG phải hệ quả của nó — muốn có thì phải ĐO,
+// và đó là việc của `MOC_GHIM` / `kiemTraMocGhim` bên dưới: hai con số nằm trong repo, đi qua
+// CODEOWNERS, biến một CÂU VĂN thành một PHÉP ĐO.
 // =============================================================================================
 
 import type { Invariant, TestOutcome } from "./parse.js";
@@ -80,12 +94,143 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
  * viên hỏi tới thứ hai: một ô ✅ cạnh một mệnh đề rộng LÀ một phát biểu rộng hơn thứ được đo.
  */
 export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
-  ["D1", "Phép **kiểm** độ tươi (`assertFreshMfa`) đã có và đã được đo, nhưng TOÀN BỘ đường đời của `sessions` chưa tồn tại trong mã sản phẩm: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi."],
+  ["D1", "**MỆNH ĐỀ HỘI BỐN VẾ, VÀ PHÉP HỘI CHƯA TỪNG ĐƯỢC ĐO MỘT LẦN NÀO.** 17 test mang nhãn tách làm ĐÚNG HAI cụm rời nhau, đếm từ chính báo cáo `vitest --reporter=json`: **12** test ở `packages/identity/src/mfa.int.test.ts` chỉ đo vế **(2) MFA còn hiệu lực trong cửa sổ ngắn** qua `assertFreshMfa`; **5** test ở `packages/identity/src/rbac.int.test.ts` chỉ đo vế **(1) quyền hợp lệ** qua `hasPermission`. KHÔNG test nào đo hai vế cùng lúc, và không có một hàm nào hợp hai vế lại. Vế **(3) RFQ đã CLOSED** và vế **(4) cổng chính sách thông qua** KHÔNG CÓ MỘT DÒNG MÃ NÀO: `grep` toàn repo cho `rfqs`, `wrapped_private_key`, `policyGate` cho **0 hit**, và `git ls-files apps/` cho đúng `apps/.gitkeep`. Vế (3) **CHÍNH LÀ hàng `C3`** trong bảng này, và C3 là **⏳ CHƯA PHỦ** — hai hàng cách nhau tám dòng, một hàng ✅, một hàng ⏳, cùng nói về một điều. Cuối cùng, cả hai phép kiểm ĐÃ CÓ đều **chưa có người gọi sản phẩm**: `assertFreshMfa` và `requirePermission` chỉ xuất hiện ở barrel export, ở chú thích, và ở test — toàn bộ đường đời của `sessions` (phát token, tra token, đặt `mfa_verified_at`) chưa tồn tại. Ô ✅ này chứng minh *hai vế được đo RIÊNG RẼ trên hai phép kiểm chưa có ai gọi*; nó **không** chứng minh mệnh đề ở cột kế bên."],
   ["D5", "Được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi sổ (ADR-008)."],
   ["E3", "Sổ đăng ký định nghĩa E3 bằng **năm** vế. Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0. Bốn vế còn lại có lớp và có mốc chết. Trần loạt đầu của vế *giới hạn số lần thử* là độ đồng thời của kẻ tấn công, không phải hằng số cấu hình."],
   ["F1", "RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim."],
-  ["G1", "Cưỡng chế bằng quy tắc CẠNH của dependency-cruiser cộng danh sách trắng barrel. Bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào."],
+  ["G1", "**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.** 18 test đo **quy tắc biên giới** của dependency-cruiser cộng danh sách trắng barrel — đó là một lớp phòng ngừa THẬT, đã được chứng minh có răng bằng test đối kháng (Task 2 và Task 7 đều vô hiệu hoá quy tắc rồi chạy lại để lấy RED thật). Nhưng mệnh đề nói về `private key RFQ`, và ở S0 **không có private key RFQ nào**: `grep wrapped_private_key` toàn repo cho **0 hit**, `git ls-files apps/` cho đúng `apps/.gitkeep` nên **không có `apps/unseal-worker`**. Ô ✅ này chứng minh *cánh cửa đã khoá*; nó chưa chứng minh gì về căn phòng, vì căn phòng chưa được xây. Khoảng trống thứ hai, độc lập: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào."],
 ]);
+
+/**
+ * NĂM MÃ PHẢI CÓ CỜ "PHẠM VI HẸP" — GHIM DANH SÁCH, KHÔNG PHẢI GHI CHÚ SUÔNG.
+ *
+ * Khiếm khuyết đã đo (I1 của review cuối): xoá MỘT DÒNG khỏi `PHAM_VI_HEP` làm biến mất CẢ cờ
+ * trên hàng LẪN mục §4 của nó; ma trận tự sinh lại KHỚP BYTE nên `git diff --exit-code` vẫn
+ * xanh, và cổng vẫn XANH. §4 là THỨ DUY NHẤT đứng giữa một ô ✅ và một câu rộng hơn thứ được
+ * đo — mà không lớp máy nào canh nó.
+ *
+ * Ghim ở đây đảo chiều ấy: gỡ một cờ là một QUYẾT ĐỊNH phải sửa hai chỗ và đi qua CODEOWNERS,
+ * chứ không phải một dòng biến mất trong im lặng. Cùng lập luận đã biện minh cho
+ * `NGOAI_LE_HINH_DANG`: mỗi lần thu hẹp phần "được khai báo là hẹp" là một quyết định an ninh
+ * mà không máy nào phán xử hộ được.
+ */
+export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set(["D1", "D5", "E3", "F1", "G1"]);
+
+/**
+ * MỐC GHIM CỦA ĐỘ PHỦ — BIẾN MỘT CÂU VĂN THÀNH MỘT PHÉP ĐO.
+ *
+ * Xem khối đầu file: câu *"danh sách chỉ co lại, không bao giờ nở ra trong im lặng"* đã bị đo
+ * là SAI. Ràng buộc hai chiều của `MA_DUOC_PHEP_CHUA_PHU` chỉ kích hoạt khi `coTest && trongDs`,
+ * nên hai thay đổi BÙ TRỪ NHAU trong cùng một PR đi lọt.
+ *
+ * Hai con số dưới đây đóng đúng hai mũi đã đo, và chúng là RÀNG BUỘC HAI CHIỀU THẬT — lệch về
+ * BÊN NÀO cũng đỏ:
+ *   `soPhuToiThieu`   tử số không được TỤT. Mũi (1) — xoá test + thêm mã vào danh sách — làm
+ *                     tử số 24 -> 23 và chết ở đây, bất kể danh sách nói gì.
+ *   `coDanhSachToiDa` danh sách không được NỞ. Mũi (2) — thêm `G9` vào sổ đăng ký và vào danh
+ *                     sách — làm cỡ danh sách 23 -> 24 và chết ở đây, dù tử số đứng yên.
+ *
+ * VÌ SAO LỆCH LÊN CŨNG ĐỎ, chứ không chỉ lệch xuống: một mốc chỉ chặn một chiều sẽ TỰ TRÔI —
+ * phủ thêm một mã hôm nay nâng trần cho một lần tụt ngày mai mà không ai thấy. Đỏ cả hai chiều
+ * biến mỗi lần đổi độ phủ thành MỘT DÒNG SỬA trong repo, nằm dưới `.github/CODEOWNERS`, đọc
+ * được trong diff của PR. Đó đúng là QT2: GHIM CẤU HÌNH thay vì NỚI BẢO ĐẢM.
+ *
+ * ĐIỀU NÀY KHÔNG ĐÓNG ĐƯỢC: một PR đổi cả mã, cả danh sách, VÀ cả hai con số này cùng lúc vẫn
+ * xanh. Không có phép đo nào chặn được điều đó — chỉ có mắt người đọc diff. Khác biệt là ở chỗ
+ * lúc ấy nó là một DÒNG PHẢI SỬA CÓ TÊN trong một file có chủ sở hữu, không phải một sự im lặng.
+ */
+export interface MocGhim {
+  /** Tổng số mã ĐÃ PHỦ (nghiệp vụ + hàng rào) mà lượt chạy phải đạt ĐÚNG BẰNG. */
+  readonly soPhuToiThieu: number;
+  /** Số phần tử của `MA_DUOC_PHEP_CHUA_PHU` mà cấu hình phải giữ ĐÚNG BẰNG. */
+  readonly coDanhSachToiDa: number;
+}
+
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 24, coDanhSachToiDa: 23 };
+
+/**
+ * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —
+ * quy ước có sẵn, không phải một danh sách mới phải nuôi.
+ *
+ * Vì sao DẪN XUẤT thay vì ghim một danh sách "mã nào là phép hội": một danh sách như thế lại
+ * đúng lớp khiếm khuyết I1 (gỡ một dòng là xong). Đọc thẳng từ mệnh đề thì mã mới của S1 tự
+ * rơi vào phạm vi ngay hôm nó được viết vào `docs/TEST-PLAN.md`.
+ */
+export function demVeMenhDe(statement: string): number {
+  return (statement.match(/\*\*và\*\*/g) ?? []).length + 1;
+}
+
+/**
+ * MỌI LÝ DO CHẶN MERGE ĐẾN TỪ MỐC GHIM. Hàm THUẦN, tách khỏi `kiemTraCong` để mỗi vế kiểm thử
+ * đột biến được riêng. `index.ts` gọi CẢ HAI và gộp kết quả.
+ */
+export function kiemTraMocGhim(
+  invariants: readonly Invariant[],
+  coverage: ReadonlyMap<string, readonly TestOutcome[]>,
+  duocPhep: ReadonlyMap<string, string> = MA_DUOC_PHEP_CHUA_PHU,
+  phamViHep: ReadonlyMap<string, string> = PHAM_VI_HEP,
+  moc: MocGhim = MOC_GHIM,
+  phaiCoCoHep: ReadonlySet<string> = MA_PHAI_CO_CO_HEP,
+): string[] {
+  const van: string[] = [];
+  const trongSo = new Set(invariants.map((i) => i.id));
+  const soPhu = invariants.filter((i) => ketQua(coverage.get(i.id)).coTest).length;
+
+  if (soPhu < moc.soPhuToiThieu) {
+    van.push(
+      `HỒI QUY ĐỘ PHỦ: lượt này phủ ${soPhu} mã, mốc ghim là ${moc.soPhuToiThieu}. Một mã đã ` +
+        `từng có test mang nhãn nay KHÔNG còn. Thêm một dòng vào MA_DUOC_PHEP_CHUA_PHU KHÔNG ` +
+        `sửa được điều này — đó chính là mũi mà mốc này sinh ra để chặn.`,
+    );
+  } else if (soPhu > moc.soPhuToiThieu) {
+    van.push(
+      `ĐỘ PHỦ TĂNG (${soPhu} > ${moc.soPhuToiThieu}) — tin tốt, nhưng mốc phải được NÂNG TAY: ` +
+        `đặt \`MOC_GHIM.soPhuToiThieu = ${soPhu}\` trong \`tools/inv-matrix/src/danh-gia.ts\`. ` +
+        `Một mốc chỉ chặn một chiều sẽ tự trôi và mua sẵn chỗ cho một lần tụt sau này.`,
+    );
+  }
+
+  if (duocPhep.size > moc.coDanhSachToiDa) {
+    van.push(
+      `DANH SÁCH ĐƯỢC PHÉP CHƯA PHỦ NỞ RA: ${duocPhep.size} mã, trần ghim là ` +
+        `${moc.coDanhSachToiDa}. Danh sách này chỉ được CO LẠI. Nếu một bất biến MỚI thật sự ` +
+        `thuộc S1, nó phải được thêm vào cùng một lần nâng trần có chữ ký trong diff.`,
+    );
+  } else if (duocPhep.size < moc.coDanhSachToiDa) {
+    van.push(
+      `Danh sách được phép chưa phủ đã CO LẠI (${duocPhep.size} < ${moc.coDanhSachToiDa}) — ` +
+        `hạ \`MOC_GHIM.coDanhSachToiDa\` xuống ${duocPhep.size} để trần không giữ chỗ trống.`,
+    );
+  }
+
+  for (const ma of phaiCoCoHep) {
+    if (!trongSo.has(ma)) {
+      van.push(`MA_PHAI_CO_CO_HEP nhắc mã \`${ma}\` KHÔNG có trong sổ đăng ký.`);
+      continue;
+    }
+    if (!phamViHep.has(ma)) {
+      van.push(
+        `\`${ma}\` được ghim là PHẢI CÓ ghi chú "phạm vi hẹp" nhưng ghi chú đã biến mất khỏi ` +
+          `PHAM_VI_HEP. Gỡ một cờ §4 làm ô ✅ của nó tự nhận trọn mệnh đề — mà ma trận sinh ` +
+          `lại vẫn khớp byte, nên KHÔNG lớp nào khác bắt được.`,
+      );
+    }
+  }
+
+  for (const inv of invariants) {
+    const soVe = demVeMenhDe(inv.statement);
+    if (soVe < 2) continue;
+    if (!ketQua(coverage.get(inv.id)).coTest) continue;
+    if (phamViHep.has(inv.id)) continue;
+    van.push(
+      `\`${inv.id}\` là một MỆNH ĐỀ HỘI ${soVe} VẾ đang mang ô ✅ mà KHÔNG có ghi chú §4. ` +
+        `Bộ sinh gom theo NHÃN và không hề biết mệnh đề là phép hội: một test đo một vế cũng ` +
+        `thắp ✅ cho cả bốn. Ghi ra vế nào được đo và vế nào không, vào PHAM_VI_HEP.`,
+    );
+  }
+
+  return van;
+}
 
 /**
  * TRÍCH NGUYÊN VĂN hai phát biểu bàn giao đã chốt ở Task 6 (`progress.md`, mục *PHAT BIEU BAN
@@ -226,7 +371,9 @@ export function kiemTraCong(
     if (kq.coTest && trongDs) {
       van.push(
         `\`${inv.id}\` ĐÃ ĐƯỢC PHỦ nhưng vẫn nằm trong danh sách được phép chưa phủ. ` +
-          `GỠ nó khỏi MA_DUOC_PHEP_CHUA_PHU để mã này không bao giờ tụt lại trong im lặng.`,
+          `GỠ nó khỏi MA_DUOC_PHEP_CHUA_PHU: một lý do "chưa phủ" đứng dưới một hàng đã phủ ` +
+          `là một dòng SAI trong evidence pack. (Vế "tụt lại trong im lặng" KHÔNG do phép ` +
+          `kiểm này mua — nó do MOC_GHIM đo; xem khối đầu file.)`,
       );
     }
   }

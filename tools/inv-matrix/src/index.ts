@@ -3,8 +3,11 @@
 //
 // `evidence/INV-matrix.md` KHÔNG phải một báo cáo tiện tay: nó là BẰNG CHỨNG KIỂM TOÁN, cùng
 // hạng với một file `.sql` hay tên một test. Mọi ô trong nó phải đúng nghĩa đen. Dự án này đã
-// bắt MƯỜI LĂM câu phát biểu rộng hơn thứ được đo; một ô ✅ cạnh một mệnh đề rộng là câu thứ
-// mười sáu, chỉ khác là nó nằm trong chính tài sản đem đi trình cho kiểm toán viên.
+// bắt MƯỜI TÁM câu phát biểu rộng hơn thứ được đo, và BA CÂU CUỐI CÙNG nằm trong chính tài sản
+// đem đi trình cho kiểm toán viên: câu thứ mười sáu là một nhãn `[INV-B2]` gắn lên một test đo
+// B3; câu thứ mười bảy là ô ✅ của `D1` (mệnh đề HỘI bốn vế, hai vế chưa có một dòng mã nào);
+// câu thứ mười tám là dòng §3 dưới đây tự nói rằng danh sách "không bao giờ nở ra trong im
+// lặng" trong khi hai mũi đo được cho thấy nó nở ra được. Cả ba đã bị sửa, không bị xoá dấu.
 //
 // HAI FILE, HAI BẢN CHẤT KHÁC NHAU — ĐÂY LÀ MỘT QUYẾT ĐỊNH, KHÔNG PHẢI TIỆN TAY:
 //   evidence/INV-matrix.md    TẤT ĐỊNH, vào git. Không SHA, không dấu thời gian. Nhờ vậy
@@ -21,11 +24,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   MA_DUOC_PHEP_CHUA_PHU,
+  MOC_GHIM,
   PHAM_VI_HEP,
   TRICH_BAN_GIAO,
   assertFullSha,
+  demVeMenhDe,
   ketQua,
   kiemTraCong,
+  kiemTraMocGhim,
 } from "./danh-gia.js";
 import {
   collectCoverage,
@@ -75,6 +81,9 @@ function main(): void {
   const ids = invariants.map((i) => i.id);
   const nhanLa = findUnregisteredLabels(uses, ids);
   const van = kiemTraCong(invariants, coverage);
+  // MỐC GHIM — cổng thứ hai, và nó đo thứ `kiemTraCong` KHÔNG đo được: một hồi quy độ phủ và
+  // một lần danh sách nở ra. Hai mũi đã đo đi lọt qua `kiemTraCong` chết ở đây.
+  van.push(...kiemTraMocGhim(invariants, coverage));
 
   // Một nhãn `[INV-…]` không rơi vào hàng nào là đúng lớp khiếm khuyết "nhãn sai che một bất
   // biến" mà Task 9 đã phải trả giá để phát hiện. Nó KHÔNG được bỏ qua trong im lặng.
@@ -104,10 +113,16 @@ function main(): void {
   const dong = invariants.map((inv) => {
     const kq = ketQua(coverage.get(inv.id));
     const so = coverage.get(inv.id)?.length ?? 0;
+    // Một MỆNH ĐỀ HỘI được gắn cờ KHÁC một mệnh đề đơn, và cờ ấy DẪN XUẤT từ chính câu chữ ở
+    // sổ đăng ký (`**và**`) chứ không từ một danh sách phải nuôi tay. Lý do: bộ sinh gom theo
+    // NHÃN, nên một test đo MỘT vế cũng thắp ✅ cho CẢ mệnh đề — đúng chuyện đã xảy ra với D1.
+    const soVe = demVeMenhDe(inv.statement);
     const ghiChu = MA_DUOC_PHEP_CHUA_PHU.has(inv.id)
       ? "xem §3"
       : PHAM_VI_HEP.has(inv.id)
-        ? "**phạm vi hẹp hơn mệnh đề — xem §4**"
+        ? soVe > 1
+          ? `**mệnh đề HỘI ${soVe} vế — phạm vi hẹp hơn, xem §4**`
+          : "**phạm vi hẹp hơn mệnh đề — xem §4**"
         : "";
     return `| ${inv.id} | ${inv.statement} | ${inv.enforcement} | ${inv.testLayer} | ${so} | ${kq.nhan} | ${ghiChu} |`;
   });
@@ -163,7 +178,31 @@ function main(): void {
     "Mỗi mã dưới đây được **ghim** trong `tools/inv-matrix/src/danh-gia.ts`",
     "(`MA_DUOC_PHEP_CHUA_PHU`). Danh sách này là **ràng buộc hai chiều**: một mã ngoài danh sách mà",
     "chưa phủ làm CI **đỏ thật**, và một mã trong danh sách mà **đã được phủ** cũng làm CI đỏ, kèm",
-    "lời nhắc gỡ nó ra. Nhờ chiều thứ hai, danh sách chỉ co lại — nó không bao giờ nở ra trong im lặng.",
+    "lời nhắc gỡ nó ra.",
+    "",
+    "> **Bản trước của dòng này viết tiếp:** *\"Nhờ chiều thứ hai, danh sách chỉ co lại — nó không",
+    "> bao giờ nở ra trong im lặng.\"* **Câu đó rộng hơn cơ chế, và đã được đo là sai.** Chiều thứ",
+    "> hai chỉ kích hoạt khi một mã **vừa có test vừa ở trong danh sách**, nên hai thay đổi bù trừ",
+    "> nhau trong cùng một PR đi lọt: xoá test của một mã *và* thêm mã đó vào danh sách cho cổng",
+    "> **xanh**; thêm một mã mới vào sổ đăng ký *và* vào danh sách cũng cho cổng **xanh**, danh sách",
+    "> nở ra một dòng. Giữ nguyên văn ở đây để đối chiếu, không xoá.",
+    "",
+    "### 3.1 Mốc ghim — thứ THẬT SỰ giữ cho độ phủ chỉ đi lên",
+    "",
+    "Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về",
+    "**bất kỳ chiều nào**:",
+    "",
+    `- \`MOC_GHIM.soPhuToiThieu = ${MOC_GHIM.soPhuToiThieu}\` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;`,
+    "  lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.",
+    `- \`MOC_GHIM.coDanhSachToiDa = ${MOC_GHIM.coDanhSachToiDa}\` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.`,
+    "",
+    "Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),",
+    "và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu",
+    "chữ ở sổ đăng ký, nên một mệnh đề hội mới của S1 tự rơi vào phạm vi ngay hôm nó được viết ra.",
+    "",
+    "**Điều này vẫn KHÔNG đóng được:** một PR sửa mã, sửa danh sách, *và* sửa cả hai con số cùng",
+    "lúc vẫn xanh. Không phép đo nào chặn được điều đó. Khác biệt là lúc ấy nó là một **dòng phải",
+    "sửa, có tên, trong một file có chủ sở hữu** (`.github/CODEOWNERS`) — không phải một sự im lặng.",
     "",
     "**Nguy hiểm không nằm ở chỗ các hàng này trống.** Nó đến khi ai đó **lấp chúng bằng nhãn thay vì",
     "bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đó đã xảy ra một lần: năm test mang",
@@ -179,6 +218,11 @@ function main(): void {
     "",
     "Một ô ✅ cạnh một mệnh đề rộng **là** một phát biểu rộng hơn thứ được đo, trừ khi phần chênh",
     "được ghi ra. Đây là phần đó.",
+    "",
+    "Những mệnh đề viết bằng **phép HỘI** được đánh dấu riêng ở cột *Ghi chú* (`mệnh đề HỘI n vế`),",
+    "vì chúng hỏng theo một cách khác: bộ sinh gom theo **nhãn** và **không hề biết** mệnh đề là",
+    "phép hội, nên một test đo **một** vế cũng thắp ✅ cho **cả** mệnh đề. Với những hàng đó, mục",
+    "dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa có chủ ngữ**.",
     "",
     ...invariants
       .filter((i) => PHAM_VI_HEP.has(i.id))
@@ -212,7 +256,9 @@ function main(): void {
     "1. **rằng test ấy đo đúng mệnh đề ở cột kế bên.** Bộ sinh gom theo **nhãn**, và nhãn do người",
     "   viết đặt. Lớp phòng thủ duy nhất chống nhãn sai là đọc tên test — bộ sinh chỉ đóng được",
     "   trường hợp nhãn trỏ vào một mã **không tồn tại**, và nó đóng chặt.",
-    "2. **rằng mệnh đề được phủ trọn vẹn.** Xem §4: một mệnh đề năm vế có thể ✅ với bốn vế.",
+    "2. **rằng mệnh đề được phủ trọn vẹn.** Xem §4: một mệnh đề năm vế có thể ✅ với bốn vế (E3),",
+    "   và một mệnh đề **hội** bốn vế có thể ✅ khi chỉ hai vế được đo — **riêng rẽ, chưa từng",
+    "   cùng lúc** — còn hai vế kia không có một dòng mã nào (D1).",
     "3. **rằng lớp cưỡng chế ở cột *Cưỡng chế* là thứ đang chặn.** Cột đó chép từ sổ đăng ký, không",
     "   được bộ sinh kiểm chứng. Test chỉ **phát hiện**; cưỡng chế mới **ngăn chặn**.",
     "4. **bất cứ điều gì về mã chưa phủ.** Một hàng ⏳ không nói sản phẩm sai — nó nói *chưa có bằng chứng*.",

@@ -245,3 +245,43 @@ hôm nay — "không ghi gì, và có một trường `justLocked` không ai g�
 **Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
 chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`
 một dòng "passed" dưới hàng D5 mà tên của nó đọc như phủ định chính bất biến ấy.
+
+---
+
+## ADR-009 — Nhà cung cấp KMS/Vault: **CHƯA CHỐT**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đang mở** — chặn S1.6
+
+**Vì sao ADR này tồn tại, và vì sao nó ra đời muộn.** Tới hết S0, ba tài liệu (`docs/STATE.md`
+hai chỗ, bản kế hoạch S0 một chỗ) đều trích **ADR-004** như *"quyết định KMS để mở"*. Trích sai:
+ADR-004 là **Sổ kiểm toán chuỗi hash, chỉ ghi thêm** và đã **Đã chấp nhận**. Quyết định về khoá
+thuộc **ADR-002**, cũng **Đã chấp nhận**, và ADR-002 **không** để mở nhà cung cấp — nó chốt *tầng
+1+2* và nói "KMS/Vault" như một loại hạ tầng, không như một lựa chọn còn treo.
+
+Hệ quả là một trạng thái kỳ lạ đo được: **8/8 ADR đều "Đã chấp nhận" — không một ADR nào ở trạng
+thái mở — trong khi một quyết định đang thật sự chặn S1.6.** Cái treo là có thật; cái thiếu là
+một chỗ để nó treo. ADR này là chỗ đó.
+
+**Bối cảnh.** ADR-002 đòi private key mỗi RFQ được bọc bằng data key của tổ chức trong KMS/Vault.
+S0 giao `KeyProvider` + adapter `local-dev` (mã hoá nội bộ, không qua mạng). S1.6 cần adapter thật.
+
+**Phương án đã cân nhắc.** AWS KMS · Azure Key Vault · HashiCorp Vault.
+
+**Chưa quyết định.** Ba trục còn để mở, và trục thứ ba là trục ít được nói tới nhất:
+
+1. **Nhà cung cấp** — kéo theo mô hình IAM, và ADR-006 (tách quyền giải mã cho `unseal-worker`)
+   chỉ cưỡng chế được bằng IAM của hạ tầng đích. Hai quyết định treo này **không độc lập**.
+2. **Chủ quyền dữ liệu** — khách hàng FDI có thể đòi vùng lưu trữ khoá cụ thể.
+3. **Hiệu năng.** Số đo `local-dev` hôm nay (10.000 lần bọc ≈ 447 ms) là **mốc của mã hoá nội
+   bộ**. Adapter thật chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng, và kịch bản mở thầu
+   RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá **một lượt**. Phải đo lại **trước** khi bắt đầu
+   S1.6, không phải sau.
+
+**Hệ quả của việc để mở.** `KeyProvider` giữ một mặt tiền hẹp và mọi lời gọi đi qua nó, nên việc
+chốt muộn **không** đòi viết lại — đó là ý đồ của Task 7. Nhưng nó vẫn chặn S1.6, và chừng nào
+ADR này còn "Đang mở" thì mọi con số hiệu năng của đường khoá trong hồ sơ đều là số của
+`local-dev`, không phải số của sản phẩm.
+
+**Rủi ro.** Chốt muộn dưới áp lực tiến độ dễ dẫn tới chọn theo thứ đang có sẵn thay vì theo yêu
+cầu chủ quyền dữ liệu của khách hàng đầu tiên — và đổi nhà cung cấp KMS sau khi đã có khoá thật
+của khách hàng là một cuộc di trú, không phải một lần sửa cấu hình.

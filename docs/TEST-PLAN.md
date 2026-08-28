@@ -115,15 +115,22 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 
 ## 3. Bảy tầng kiểm thử
 
-| Tầng | Nội dung | Công cụ | Chạy khi | Chặn merge |
-|---|---|---|---|---|
-| **T0** | Cổng tĩnh: typecheck, lint, quét bí mật, audit phụ thuộc, kiểm tra ranh giới module | tsc, eslint, gitleaks, osv-scanner, dependency-cruiser | Mọi commit | Có |
-| **T1** | Unit & property-based | Vitest, fast-check | Mọi commit | Có |
-| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có |
-| **T3** | Integration với Postgres thật | Testcontainers, Vitest | Mọi PR | Có |
-| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có |
-| **T5** | Bộ test đối kháng | Vitest + Playwright | Mọi PR | Có |
-| **T6** | Phi chức năng | k6, kịch bản DR | Hằng đêm | Không (cảnh báo) |
+> **ĐỌC CỘT *Trạng thái S0* TRƯỚC CỘT *Chặn merge*.** Cột *Chặn merge* nói tầng ấy **sẽ** chặn
+> khi nó tồn tại; nó **không** nói tầng ấy đang chạy hôm nay. Ba tầng dưới đây **chưa được
+> dựng**, và điều đó đo được: `grep -E 'playwright|k6|osv-scanner'` trên `package.json` cùng mọi
+> `*.yml` cho **0 hit**, và `.github/workflows/ci.yml` chỉ có bốn job — `t0`, `t1-t2`, `t3`,
+> `evidence`. Cho tới khi cột *Trạng thái S0* của một hàng ghi **ĐÃ DỰNG**, mọi thứ mô tả dưới
+> hàng đó là **kế hoạch**, kể cả bảng 15 kịch bản tấn công có tên ở mục T5.
+
+| Tầng | Nội dung | Công cụ | Chạy khi | Chặn merge | **Trạng thái S0** |
+|---|---|---|---|---|---|
+| **T0** | Cổng tĩnh: typecheck, lint, quét bí mật, audit phụ thuộc, kiểm tra ranh giới module | tsc, eslint, gitleaks, osv-scanner, dependency-cruiser | Mọi commit | Có | **ĐÃ DỰNG một phần** — job `t0` có tsc + eslint + depcruise + gitleaks + `pnpm audit`; **`osv-scanner` chưa có** |
+| **T1** | Unit & property-based | Vitest, fast-check | Mọi commit | Có | **ĐÃ DỰNG** — job `t1-t2` chạy `pnpm test` |
+| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có | **CHƯA DỰNG — S1.** Không có OpenAPI, không có endpoint, nên **không có bộ quét rò rỉ**. Job `t1-t2` hôm nay chỉ là T1 |
+| **T3** | Integration với Postgres thật | Testcontainers, Vitest | Mọi PR | Có | **ĐÃ DỰNG** — job `t3` chạy `pnpm test:int` trên Postgres thật |
+| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có | **CHƯA DỰNG — S1.** Playwright **không có trong `package.json`**; `apps/` rỗng |
+| **T5** | Bộ test đối kháng | Vitest + Playwright | Mọi PR | Có | **CHƯA DỰNG NHƯ MỘT TẦNG RIÊNG.** Test đối kháng của S0 **có thật** nhưng sống lẫn trong T1/T3 (xem cột *Số test* của `evidence/INV-matrix.md`); **bảng 15 kịch bản dưới đây chưa có kịch bản nào chạy** |
+| **T6** | Phi chức năng | k6, kịch bản DR | Hằng đêm | Không (cảnh báo) | **CHƯA DỰNG — S1+.** `k6` không có; chưa có kịch bản DR. Ngoại lệ duy nhất đã đo: `pnpm bench:keys` (hiệu năng bọc/mở khoá `local-dev`) |
 
 ### T0 — Cổng tĩnh
 
@@ -183,6 +190,14 @@ Chạy trên Postgres thật qua Testcontainers, không dùng bản giả lập:
 ### T5 — Bộ test đối kháng
 
 Mỗi mục là một cuộc tấn công, không phải kiểm tra tính năng chạy đúng.
+
+> ⚠️ **BẢNG DƯỚI ĐÂY LÀ KẾ HOẠCH, KHÔNG PHẢI MỘT BỘ TEST ĐANG CHẠY.** 15 kịch bản có tên đọc
+> rất giống một danh mục đã cài đặt; **không kịch bản nào trong số đó tồn tại ở S0**. Chủ ngữ của
+> hầu hết chúng (RFQ, báo giá, magic link, endpoint, trình duyệt) chưa có một dòng mã nào — đối
+> chiếu §3 của `evidence/INV-matrix.md`, nơi 23/47 mã còn trống kèm lý do từng mã. Ba kịch bản
+> **có** lớp đối kháng thật ở S0, chỉ là chúng sống trong T1/T3 chứ không trong một tầng T5 riêng:
+> **#7** (sửa `audit_events` bằng SQL trực tiếp → B4), **#8** (cắt đuôi chuỗi audit → B3), và
+> **#11** phần *cô lập tổ chức* (→ F1, F2).
 
 | # | Tấn công | Bất biến bảo vệ |
 |---|---|---|
