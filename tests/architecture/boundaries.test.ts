@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -25,6 +25,28 @@ function depcruise(targets: string[]): { status: number; output: string } {
 function depcruiseTheoScript(): { status: number; output: string } {
   const proc = spawnSync("pnpm", ["run", "depcruise"], { encoding: "utf8", shell: true });
   return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+}
+
+/**
+ * ĐO TẠI CHỖ xem hệ thống file có phân biệt hoa-thường không, thay vì suy từ `process.platform`.
+ * Viết một file rồi thử nhìn lại nó bằng một cách viết hoa/thường khác: nhìn thấy nghĩa là
+ * KHÔNG phân biệt.
+ *
+ * Vì sao ĐO chứ không SUY: cặp "hệ điều hành ↔ tính phân biệt hoa thường" không phải song ánh.
+ * macOS mặc định APFS không phân biệt nhưng định dạng được thành phân biệt; Windows có thể bật
+ * phân biệt hoa-thường cho từng thư mục (`fsutil file setCaseSensitiveInfo`) và mọi thư mục dưới
+ * WSL đều phân biệt; Linux trên một ổ exFAT/NTFS gắn ngoài thì không. Suy từ `process.platform`
+ * là ghim một bảo đảm vào một tiên đề chưa đo — đúng lớp lỗi mà lượt chạy CI đầu tiên bắt được.
+ */
+function heThongFilePhanBietHoaThuong(pThuMuc: string): boolean {
+  const ten = "ZzDoPhanBietHoaThuong.tmp";
+  const duongDan = `${pThuMuc}/${ten}`;
+  writeFileSync(duongDan, "");
+  try {
+    return !existsSync(`${pThuMuc}/${ten.toLowerCase()}`);
+  } finally {
+    rmSync(duongDan, { force: true });
+  }
 }
 
 describe("ranh giới kiến trúc", () => {
@@ -119,24 +141,87 @@ describe("ranh giới kiến trúc", () => {
     }
   }, 60000);
 
-  it("[INV-G1] chặn file .mjs import sai hoa-thường vào local-dev-shared.ts", () => {
+  it("[INV-G1] quy tắc chặn local-dev-shared.ts không phân biệt hoa-thường", () => {
     // Fix round 2 (N1): Windows/macOS resolve file KHÔNG phân biệt hoa thường, nhưng regex
     // của quy tắc từng phân biệt hoa thường — "Local-Dev-Shared.ts" (sai hoa/thường) resolve
     // thành công (trường "resolved" của depcruise giữ nguyên hoa/thường viết trong specifier)
     // nhưng không khớp regex, nên lọt qua. File .mjs (không phải .ts) được chọn cố ý vì nó
     // cũng vô hình với tsc (tsconfig chỉ include **/*.ts) và với eslint trước khi thu hẹp
     // ignore — kết hợp cả ba lỗ cùng lúc, đúng như phát hiện gốc của reviewer.
+    //
+    // ===================================================================================
+    // LẦN CHẠY CI ĐẦU TIÊN (run 33218397033, 2026-08-28) — LỚP KHIẾM KHUYẾT MỚI:
+    // "MỘT BẢO ĐẢM CHỈ ĐÚNG TRÊN MỘT HỆ ĐIỀU HÀNH."
+    //
+    // Bản trước khẳng định VÔ ĐIỀU KIỆN rằng depcruise phải bắn. Trên `ubuntu-latest`, hệ
+    // thống file PHÂN BIỆT hoa thường: import "Local-Dev-Shared.ts" KHÔNG resolve được, nên
+    // không có cạnh phụ thuộc nào, nên không có vi phạm nào — `expected +0 not to be +0`.
+    // Chú thích của chính test này (và docs/TEST-PLAN.md §... hàng G1) đã NÓI RA tính chất ấy,
+    // nhưng khẳng định thì viết không điều kiện. Hiểm hoạ KHÔNG tồn tại trên Linux; chỉ có
+    // khẳng định là sai. Đây là họ hàng của QT2 ("ghim cấu hình, đừng nới bảo đảm") ở trục
+    // NỀN TẢNG: bảo đảm phụ thuộc một tính chất của môi trường thì phải ĐO tính chất đó.
+    //
+    // TEST NÀY TÁCH LÀM HAI VẾ, VÀ VẾ ĐẦU MỚI LÀ VẾ MANG BẢO ĐẢM:
+    //   (1) TÍNH CHẤT CỦA CHÍNH QUY TẮC — regex `to.path` khớp cả cách viết sai hoa-thường.
+    //       Đúng trên MỌI hệ điều hành, đo được ở mọi nơi, và nó CHÍNH LÀ thứ fix round 2 đã
+    //       thêm (`ci()`/`ciFile()` trong dependency-cruiser-ci.cjs). Gỡ `ciFile()` khỏi
+    //       LOCAL_DEV_SHARED_TS là vế này đỏ ở CẢ Linux LẪN Windows — tức bảo đảm chống hồi
+    //       quy nay không còn treo vào hệ điều hành của người chạy.
+    //   (2) VẾ ĐẦU-CUỐI qua depcruise CLI thật — chỉ chạy khi hệ thống file ĐO ĐƯỢC là KHÔNG
+    //       phân biệt hoa thường, và khi bỏ qua thì CÔNG BỐ ra log chứ không im lặng.
+    //
+    // VÌ SAO KHÔNG DÙNG `ctx.skip()`: một test mang nhãn `[INV-XX]` bị bỏ qua làm cổng evidence
+    // ĐỎ khi nó là test duy nhất của mã đó (tools/inv-matrix/src/danh-gia.ts: nhánh
+    // `every(status === "skipped")` trả `chan: true`). Quan trọng hơn: vế (1) VẪN là một phép
+    // đo thật trên Linux, nên bỏ qua CẢ test cũng là nói sai — theo chiều ngược lại.
+    // ===================================================================================
+    interface DepCruiseRule {
+      name: string;
+      to: { path?: string };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const rule = config.forbidden.find(
+      (r) => r.name === "g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts",
+    );
+    if (!rule?.to.path) {
+      throw new Error(
+        "Không tìm thấy rule g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts (hoặc " +
+          "nó không còn `to.path`) trong .dependency-cruiser.cjs",
+      );
+    }
+    const dichHanChe = new RegExp(rule.to.path);
+
+    // VẾ (1) — ĐỘC LẬP HỆ ĐIỀU HÀNH.
+    expect(dichHanChe.test("packages/crypto-keys/src/Local-Dev-Shared.ts")).toBe(true);
+    // Đối chứng dương: cách viết ĐÚNG vẫn khớp — nếu không, quy tắc đã hỏng theo chiều khác.
+    expect(dichHanChe.test("packages/crypto-keys/src/local-dev-shared.ts")).toBe(true);
+    // Đối chứng âm: KHÔNG phải một regex khớp-tất-cả. Không có vế này, `new RegExp("")` cũng
+    // làm hai khẳng định trên xanh.
+    expect(dichHanChe.test("packages/crypto-keys/src/local-dev-wrapper.ts")).toBe(false);
+
+    // VẾ (2) — ĐẦU-CUỐI, có điều kiện, và điều kiện được ĐO chứ không SUY.
     const dir = "apps/tmp-probe-case/src";
     mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      `${dir}/leak.mjs`,
-      [
-        'import { deriveOrgKey } from "../../../packages/crypto-keys/src/Local-Dev-Shared.ts";',
-        "export { deriveOrgKey };",
-        "",
-      ].join("\n"),
-    );
     try {
+      if (heThongFilePhanBietHoaThuong(dir)) {
+        console.warn(
+          "[INV-G1] vế ĐẦU-CUỐI KHÔNG chạy: hệ thống file ĐO ĐƯỢC là PHÂN BIỆT hoa-thường " +
+            `(platform=${process.platform}). Import sai hoa-thường không resolve được ở đây, ` +
+            "nên không sinh cạnh phụ thuộc nào để quy tắc bắn — 'không có vi phạm' là kết quả " +
+            "ĐÚNG, không phải hàng rào thủng. Hiểm hoạ chỉ tồn tại trên hệ thống file KHÔNG " +
+            "phân biệt hoa-thường (máy phát triển Windows/macOS mặc định), và vế (1) ở trên — " +
+            "regex quy tắc không phân biệt hoa-thường — đã chạy thật ở lượt này.",
+        );
+        return;
+      }
+      writeFileSync(
+        `${dir}/leak.mjs`,
+        [
+          'import { deriveOrgKey } from "../../../packages/crypto-keys/src/Local-Dev-Shared.ts";',
+          "export { deriveOrgKey };",
+          "",
+        ].join("\n"),
+      );
       const { status, output } = depcruise(["apps/tmp-probe-case"]);
       expect(status).not.toBe(0);
       expect(output).toContain("g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts");

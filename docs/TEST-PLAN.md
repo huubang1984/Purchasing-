@@ -314,6 +314,19 @@ Mười test `[INV-G1]` trong cùng file thì GIỮ NGUYÊN: quy tắc `g1-` cư
 ("private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`"), tức ở đó nhãn khớp thứ được
 đo. Tên các quy tắc depcruise (`g1-`/`g2-`/`g3-`) không đổi — vấn đề nằm ở nhãn test.
 
+**Một test `[INV-G1]` có VẾ PHỤ THUỘC HỆ THỐNG FILE, và điều đó phải nói ra ở đây** (lần chạy CI
+đầu tiên, 2026-08-28). Test *"quy tắc chặn `local-dev-shared.ts` không phân biệt hoa-thường"*
+mang **hai** vế: vế **regex của chính quy tắc khớp cả cách viết sai hoa-thường** chạy trên **mọi**
+hệ điều hành; vế **đầu-cuối qua depcruise CLI** chỉ chạy khi hệ thống file **đo được** là không
+phân biệt hoa-thường, và khi không chạy thì **công bố ra log**. Lý do: trên hệ thống file phân
+biệt hoa-thường (Linux của CI), một import sai hoa-thường **không resolve được**, nên không có
+cạnh phụ thuộc nào để quy tắc bắn — *"không có vi phạm"* ở đó là kết quả **đúng**, và hiểm hoạ
+chỉ tồn tại trên máy phát triển Windows/macOS. Vì vậy ô ✅ của **G1** phải đọc là: bảo đảm
+*"regex không phân biệt hoa-thường"* được đo ở **mọi** lượt chạy; bảo đảm *"đường đi thật bị
+chặn"* được đo ở lượt chạy **trên máy không phân biệt hoa-thường**. Cùng tinh thần với ghi chú
+"phạm vi hẹp hơn mệnh đề" ở §4 của ma trận: ô xanh **không** có nghĩa mọi vế đều được đo ở mọi
+môi trường.
+
 **H10 là bài học rút ra từ sự cố `jq`**: một biện pháp kiểm soát thất bại phải thất bại
 theo hướng an toàn. Không có hàng rào thì người ta còn cẩn thận; có hàng rào hỏng thì
 người ta thôi cẩn thận. Đúng bài học mà chính TrustProcure bán cho khách hàng.

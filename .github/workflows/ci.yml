@@ -32,8 +32,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Audit phu thuoc (cong chan)
-        # Chi xet prod dependencies. Hien S0 chua co prod dependency nao nen buoc nay
-        # luon sach; se co rang that tu Task 3 tro di khi `pg` duoc them vao.
+        # Chi xet prod dependencies. Pham vi that, DO MOT LAN bang `pnpm list -r --prod --depth 0`:
+        # `pg@8.23.0` va `pg-connection-string@2.14.0`, cong cac link workspace. Tuc dung MOT thu
+        # vien ngoai, va no la thu vien cham toi CSDL - cong nay co rang.
+        #
+        # *** HAI CAU DUOI DAY SAI. LAN CHAY CI DAU TIEN DA CHUNG MINH. GIU NGUYEN VAN DE DOI CHIEU. ***
+        #   >>> "Hien S0 chua co prod dependency nao nen buoc nay luon sach; se co rang that tu
+        #    >>> Task 3 tro di khi `pg` duoc them vao."
+        #
+        # Rang den SOM HON du doan va tu MOT NGUON KHAC HAN. Lan chay dau tien (run 33218397033)
+        # do buoc nay voi HAI advisory HIGH tren `undici@5.29.0`, qua duong:
+        #   packages/test-support > @testcontainers/postgresql@10.28.0 > testcontainers@10.28.0 > undici
+        # Nguyen nhan goc KHONG phai advisory ma la mot KHIEM KHUYET DONG GOI:
+        # `packages/test-support` khai ha tang KIEM THU trong `dependencies` thay vi
+        # `devDependencies`, keo ca cay testcontainers vao pham vi SAN XUAT. Goi do khong duoc
+        # bat ky package.json nao khai lam phu thuoc (chi `*.int.test.ts` import qua alias cua
+        # vitest), nen ca ba muc cua no da duoc chuyen sang `devDependencies`.
+        #
+        # Cong nay da chay DUNG nhu thiet ke: no bat mot thu that. Chi cau chu thich la sai.
         run: pnpm audit --prod --audit-level high
       - name: Audit phu thuoc (bao cao, khong chan)
         # Hai advisory chan o day (vitest critical, vite high) deu thuoc devDependency

@@ -23,6 +23,108 @@ function migrationDir(files: Record<string, string>): string {
   return dir;
 }
 
+// =====================================================================================
+// DỌN DẸP TẤT ĐỊNH CHO HAI TEST DỰNG DATABASE RIÊNG — sửa sau LẦN CHẠY CI ĐẦU TIÊN
+// (run 33218397033, 2026-08-28).
+//
+// Ở lượt đó **326/326 test XANH, 11/11 file XANH, mà job vẫn ĐỎ**: "Vitest caught 2 unhandled
+// errors", cả hai là SQLSTATE `57P01` (`admin_shutdown`, postgres.c:3286, ProcessInterrupts)
+// trên `tp_kiem_tra_khoa` và `tp_kiem_tra_mo_khoa`. Đây là vế thứ hai của bài học ràng buộc
+// (11) trong sổ tiến trình: **"mọi test xanh" KHÔNG đủ để kết luận job xanh** — lỗi nằm NGOÀI
+// vòng đời của test.
+//
+// CƠ CHẾ, đọc thẳng từ đối tượng lỗi được vitest tuần tự hoá trong log CI:
+//   - `await pool.end()` chỉ bảo đảm phía CLIENT đã gửi Terminate và đóng socket. Nó KHÔNG bảo
+//     đảm backend phía MÁY CHỦ đã thoát: backend còn nằm trong `pg_stat_activity` thêm một
+//     khoảng ngắn.
+//   - `DROP DATABASE ... WITH (FORCE)` gửi SIGTERM cho mọi backend còn bám vào database đó.
+//     Backend ấy trả về FATAL 57P01 trên socket mà client vẫn còn đang đọc.
+//   - Client emit `error`; pg-pool bắt bằng `idleListener`, gắn `err.client = client` (đúng
+//     trường `client` thấy trong log) rồi `pool.emit("error", err)`. Pool không có listener
+//     `error` nào ⇒ Node ném ⇒ vitest ghi "unhandled error" ⇒ job đỏ, trong khi mọi khẳng
+//     định của test đã xanh từ trước.
+//
+// HAI LỚP SỬA, và lớp đầu là lớp xoá HẲN nguồn phát:
+//   (a) `xoaDatabaseSauKhiHetKetNoi()` CHỜ tới khi `pg_stat_activity` không còn backend nào
+//       trên database đó rồi mới `DROP DATABASE` **không FORCE**. Không backend nào bị SIGTERM
+//       ⇒ không FATAL 57P01 nào được sinh ra. `WITH (FORCE)` chỉ còn là đường lui khi hết hạn
+//       chờ — để việc dọn dẹp không bao giờ bỏ lại một database rác, VÀ để ca rò rỉ được báo
+//       bằng KHẲNG ĐỊNH ở người gọi chứ không bằng một lần treo.
+//   (b) `theoDoiLoiPool()` biến một `pool.emit("error")` từ "sập tiến trình, thông điệp mù"
+//       thành một mảng người gọi KHẲNG ĐỊNH là rỗng. Nếu cuộc đua này quay lại dưới một hình
+//       dạng khác, test ĐỎ với tên nó, thay vì job đỏ với "unhandled errors".
+//
+// ĐO TỪNG LỚP VÀ ĐO KẾT HỢP (mũi đột biến: bỏ `await poolSieuQuyen.end()` để rò rỉ ĐÚNG một
+// kết nối vào đúng thời điểm dọn dẹp). Năm nhánh, đo thật, kết quả nguyên văn:
+//   B0 bản đã sửa, không mũi          → 15 passed, 0 lần 57P01, không unhandled
+//   B1 + rò rỉ                        → 15 passed, 0 lần 57P01 (test đó 10.2s thay vì 0.2s)
+//   B2 + rò rỉ, TẮT lớp (b)           → 15 passed, 0 lần 57P01  ⟵ lớp (a) một mình là đủ
+//   B3 + rò rỉ, TẮT CẢ HAI (= mã cũ)  → **15 passed, exit 1, "Unhandled Errors", 1 lần 57P01**
+//   B4 + rò rỉ, TẮT (a), GIỮ (b)      → **1 failed**: `expected [Array(1)] to deeply equal []`
+//                                        với "terminating connection due to administrator command"
+//
+// B3 TÁI LẬP CHÍNH XÁC CHỮ KÝ CỦA LẦN CHẠY CI: mọi test xanh, job đỏ. Tức chẩn đoán được kiểm
+// chứng đầu-cuối, không phải suy diễn từ log.
+//
+// MỘT DỰ ĐOÁN CỦA TÔI ĐÃ BỊ CHÍNH PHÉP ĐO BÁC BỎ, và nó đổi cách phát biểu bảo đảm:
+// tôi chờ B1 ĐỎ vì `ketNoiConLai > 0`. Nó XANH, và lý do đọc được ngay ở con số 10.2s:
+// `pg.Pool` có `idleTimeoutMillis` mặc định **10 giây**, nên một pool bị bỏ quên TỰ đóng client
+// rảnh của nó. Vòng chờ nhìn thấy 0 rồi `DROP` sạch. Vậy nên nói cho đúng:
+//   - thứ mua được sự tất định là **VÒNG CHỜ**, không phải khẳng định `ketNoiConLai`;
+//   - `expect(ketNoiConLai).toBe(0)` chỉ bắt được rò rỉ SỐNG LÂU HƠN hạn 30s — tức một rò rỉ
+//     THẬT, không phải cửa sổ vài trăm mili-giây giữa `pool.end()` và lúc backend thoát.
+// Viết "khẳng định này bắt rò rỉ kết nối" là nói rộng hơn thứ đo được.
+//
+// Vì sao (a) mà vẫn cần (b): B2 cho thấy (a) một mình đủ cho nguồn phát ĐÃ BIẾT; B4 cho thấy (b)
+// một mình biến đúng lỗi ấy thành một khẳng định có tên. (b) không giả định (a) đã đóng hết mọi
+// nguồn — và nó là lớp duy nhất còn tác dụng trên đường lui `WITH (FORCE)`.
+// =====================================================================================
+
+/** Số backend còn bám vào `pTenDb`, không tính chính kết nối đang hỏi. */
+async function demKetNoi(pQuanTri: pg.Pool, pTenDb: string): Promise<number> {
+  const { rows } = await pQuanTri.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM pg_stat_activity " +
+      "WHERE datname = $1 AND pid <> pg_backend_pid()",
+    [pTenDb],
+  );
+  return rows[0]?.n ?? 0;
+}
+
+/**
+ * Chờ hết kết nối rồi xoá database. Trả về **số kết nối còn sót tại thời điểm xoá** — người
+ * gọi phải khẳng định nó bằng 0. Trả về thay vì tự `expect()` là có chủ đích: hàm này chạy
+ * trong `finally`, và một `expect()` ném ở đó sẽ NUỐT MẤT lỗi gốc của test.
+ */
+async function xoaDatabaseSauKhiHetKetNoi(
+  pQuanTri: pg.Pool,
+  pTenDb: string,
+  pHanMs = 30_000,
+): Promise<number> {
+  const hetHan = Date.now() + pHanMs;
+  let conLai = await demKetNoi(pQuanTri, pTenDb);
+  while (conLai > 0 && Date.now() < hetHan) {
+    await new Promise((giaiQuyet) => setTimeout(giaiQuyet, 25));
+    conLai = await demKetNoi(pQuanTri, pTenDb);
+  }
+  // Đường lui: còn kết nối thì vẫn phải xoá cho sạch, và người gọi sẽ làm test đỏ vì `conLai`.
+  await pQuanTri.query(
+    conLai === 0
+      ? `DROP DATABASE IF EXISTS ${pTenDb}`
+      : `DROP DATABASE IF EXISTS ${pTenDb} WITH (FORCE)`,
+  );
+  return conLai;
+}
+
+/**
+ * Ghi lại mọi sự kiện `error` của pool thay vì để nó thành "unhandled error" của tiến trình.
+ * Trả về chính mảng ghi — người gọi khẳng định nó rỗng SAU khi đã dọn dẹp xong.
+ */
+function theoDoiLoiPool(...pDsPool: readonly pg.Pool[]): string[] {
+  const loi: string[] = [];
+  for (const pool of pDsPool) pool.on("error", (e: Error) => loi.push(e.message));
+  return loi;
+}
+
 describe("bộ chạy migration", () => {
   it("áp dụng migration theo thứ tự tên file", async () => {
     const dir = migrationDir({
@@ -350,6 +452,8 @@ describe("bộ chạy migration", () => {
 
     const poolGiuKhoa = new pg.Pool({ connectionString: csDbTrong, max: 1 });
     const poolMigrate = new pg.Pool({ connectionString: csDbTrong, max: 2 });
+    const loiPool = theoDoiLoiPool(poolGiuKhoa, poolMigrate);
+    let ketNoiConLai = -1;
     try {
       const clientGiuKhoa = await poolGiuKhoa.connect();
       await clientGiuKhoa.query("SELECT pg_advisory_lock($1)", [KHOA_MIGRATION]);
@@ -372,8 +476,13 @@ describe("bộ chạy migration", () => {
     } finally {
       await poolGiuKhoa.end();
       await poolMigrate.end();
-      await db.pool.query(`DROP DATABASE IF EXISTS ${TEN_DB} WITH (FORCE)`);
+      ketNoiConLai = await xoaDatabaseSauKhiHetKetNoi(db.pool, TEN_DB);
     }
+
+    // Ngoài `finally` một cách CÓ CHỦ ĐÍCH: nếu thân test đã đỏ, lỗi gốc phải là lỗi được báo,
+    // và hai khẳng định dọn dẹp này không được chen vào che nó.
+    expect(ketNoiConLai, `còn ${ketNoiConLai} kết nối bám vào ${TEN_DB} sau khi đã end() cả hai pool`).toBe(0);
+    expect(loiPool).toEqual([]);
   });
 
   // [fix round 5 — M10 + Minor] Vòng 4 khai rằng không dựng được ca xác định phân biệt
@@ -407,6 +516,8 @@ describe("bộ chạy migration", () => {
 
     const poolSieuQuyen = new pg.Pool({ connectionString: urlSieuQuyen.toString(), max: 1 });
     const poolThuong = new pg.Pool({ connectionString: urlThuong.toString(), max: 2 });
+    const loiPool = theoDoiLoiPool(poolSieuQuyen, poolThuong);
+    let ketNoiConLai = -1;
     try {
       await poolSieuQuyen.query(`GRANT CREATE, USAGE ON SCHEMA public TO ${TEN_ROLE}`);
       // Đây là toàn bộ mẹo dựng ca: lock vẫn chạy được, unlock thì không.
@@ -430,8 +541,12 @@ describe("bộ chạy migration", () => {
     } finally {
       await poolThuong.end();
       await poolSieuQuyen.end();
-      await db.pool.query(`DROP DATABASE IF EXISTS ${TEN_DB} WITH (FORCE)`);
+      ketNoiConLai = await xoaDatabaseSauKhiHetKetNoi(db.pool, TEN_DB);
       await db.pool.query(`DROP ROLE IF EXISTS ${TEN_ROLE}`);
     }
+
+    // Cùng lý do như test trên: đặt NGOÀI `finally` để không nuốt lỗi gốc.
+    expect(ketNoiConLai, `còn ${ketNoiConLai} kết nối bám vào ${TEN_DB} sau khi đã end() cả hai pool`).toBe(0);
+    expect(loiPool).toEqual([]);
   });
 });
