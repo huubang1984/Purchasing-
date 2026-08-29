@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { SUPPLIER_LEVELS, TAX_CODE_PATTERN } from "./suppliers.js";
+import { EMAIL_PATTERN, PHONE_PATTERN, SUPPLIER_LEVELS, TAX_CODE_PATTERN } from "./suppliers.js";
 
 // =============================================================================================
 // HAI BẢN SAO CỦA MỘT LUẬT — VÀ MỘT LỚP CANH SỰ ĐỒNG BỘ CỦA CHÚNG
@@ -66,6 +66,29 @@ describe("hình dạng MST", () => {
     ]) {
       expect(TAX_CODE_PATTERN.test(xau), `phải từ chối: ${JSON.stringify(xau)}`).toBe(false);
     }
+  });
+
+  it("email từ chối ký tự điều khiển và khoảng trắng bên trong — [HIGH-2]", () => {
+    expect(EMAIL_PATTERN.test("ncc@doitac.vn")).toBe(true);
+
+    // Ca này là ca đã ĐO là lưu được ở bản S1.1: `.trim()` chỉ cắt hai đầu nên ký tự xuống dòng
+    // ở GIỮA sống sót, và cột này là địa chỉ nhận magic link ở S1.3.
+    const xuongDong = String.fromCharCode(10);
+    expect(EMAIL_PATTERN.test("ncc@doitac.vn" + xuongDong + "Bcc: x@y.vn")).toBe(false);
+    expect(EMAIL_PATTERN.test("ncc@doitac.vn" + String.fromCharCode(13))).toBe(false);
+    expect(EMAIL_PATTERN.test("ncc @doitac.vn")).toBe(false);
+    expect(EMAIL_PATTERN.test("ncc@doitac")).toBe(false);
+    expect(EMAIL_PATTERN.test("ncc@@doitac.vn")).toBe(false);
+    expect(EMAIL_PATTERN.test("@doitac.vn")).toBe(false);
+  });
+
+  it("phone nhận đúng hình dạng của CHECK ở 008 — [HIGH-1 của chú thích, MEDIUM]", () => {
+    expect(PHONE_PATTERN.test("0900000001")).toBe(true);
+    expect(PHONE_PATTERN.test("+84900000001")).toBe(true);
+    // Cách viết phổ biến nhất ở Việt Nam, và là cách CSDL từ chối bằng một mã 23514 nếu tầng
+    // ứng dụng không chặn trước.
+    expect(PHONE_PATTERN.test("0900 000 001")).toBe(false);
+    expect(PHONE_PATTERN.test("090-000-0001")).toBe(false);
   });
 
   it("Level 2 KHÔNG nằm trong tập hợp lệ — ADR-013 mục 4 đòi một ADR mới cho nó", () => {

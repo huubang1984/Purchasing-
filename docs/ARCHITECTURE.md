@@ -57,7 +57,14 @@
 giải mã. Ranh giới được cưỡng chế bởi hai cơ chế độc lập: IAM ở tầng hạ tầng, quyền role
 ở tầng cơ sở dữ liệu. Chi tiết lý do: ADR-006.
 
-**Xác thực nhà cung cấp — ràng buộc kênh.** Từ 2026-08-29 đây là một **trigger**, không phải một
+**Xác thực nhà cung cấp — nguyên tắc sau vòng sửa an ninh.** Không hàm nào của
+`packages/invitation` được phép **KHAI** một sự thật an ninh; nó chỉ được phép **CHỨNG MINH**
+một cái đã có rồi ĐỌC hệ quả ra khỏi dữ liệu. Cụ thể: đích nhận OTP đọc từ `supplier_contacts`
+(không nhận tham số), quyền phát OTP đòi **token dạng rõ** (không phải `invitation_id`), và danh
+tính đã xác thực sao chép từ chính hàng thách thức đã đối chiếu. Ba CRITICAL của review S1.3 đều
+là một biến thể của cùng lỗi: một sự thật an ninh đi vào hệ thống dưới dạng tham số.
+
+**Ràng buộc kênh.** Từ 2026-08-29 đây là một **trigger**, không phải một
 quy ước: `otp_kiem_kenh_khac_link` ở `010_invitations.sql` so kênh của thách thức OTP với
 `rfq_invitations.link_channel` và từ chối khi hai kênh trùng nhau. Cố ý KHÔNG viết thành
 `CHECK (channel <> 'EMAIL')`: cách ấy giữ bất biến bằng một **sự trùng hợp** về việc hôm nay link
@@ -136,7 +143,10 @@ ADR-013.
 | `rfq_invitation_tokens` | Lưu **hash**, không lưu token; `purpose` là tập đóng; `expires_at`; `revoked_at` | Đọc được DB là chiếm được lời mời (E1) |
 | `invitation_otp_challenges` | Trigger `otp_kiem_kenh_khac_link` so kênh OTP với `rfq_invitations.link_channel` | OTP đi cùng kênh với magic link — hai yếu tố trên một hộp thư không phải hai yếu tố (ADR-015) |
 | `otp_rate_limits` | Bộ đếm theo cửa sổ, hai loại bucket | E3 vế *giới hạn tần suất* — vế không có một dòng mã nào trong toàn S0 |
-| `guest_sessions` | `verified_contact_id` TÁCH khỏi `rfq_invitations.contact_id` | Ghi danh tính người được MỜI thay vì danh tính đã XÁC THỰC (E5) |
+| `guest_sessions` | `challenge_id` + trigger `guest_session_kiem_danh_tinh` | Danh tính đã xác thực bị **KHAI** thay vì **DẪN XUẤT** từ thách thức OTP đã đối chiếu (E5) |
+| `invitation_otp_challenges` | `token_id` + `contact_id` + trigger | Phát OTP chỉ bằng một `invitation_id` (một UUIDv4 làm credential — F2); gửi OTP tới một đích do người gọi chọn |
+| `rfq_packages` | Trigger `rfq_kiem_nguoi_tao` (`created_by_session_id`) | `created_by` là một LỜI KHAI, làm vế *người tạo không được duyệt* của D2 mất hiệu lực |
+| `rfq_approvals` | `approved_content_hash` do trigger đặt | Hai chữ ký phê duyệt một nội dung, rồi nội dung bị thay trước khi mở (D2) |
 
 Hai role tách biệt: `app_api` và `app_unseal`. Không role nào bao trùm role kia.
 

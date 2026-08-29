@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -9,8 +9,6 @@ import {
   InvitationError,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_MAX_FAILED_ATTEMPTS,
-  OTP_MAX_PER_CALLER,
-  OTP_MAX_PER_DEST,
   createInvitation,
   issueMagicLinkToken,
   issueOtpChallenge,
@@ -20,6 +18,15 @@ import {
   type Channel,
 } from "./invitation.js";
 
+// =============================================================================================
+// S1.3 SAU REVIEW AN NINH — CHUỖI TẤN CÔNG CŨ NAY LÀ MỘT BỘ TEST
+//
+// Ba CRITICAL của bản trước đã được dựng lại thành phép đo và chúng chạy TRỌN. Bộ test này giữ
+// NGUYÊN từng bước của chuỗi ấy và đảo chiều khẳng định: mỗi bước từng THÀNH CÔNG nay phải BỊ
+// CHẶN, và mỗi phép chặn phải kèm một vế ĐỐI CHỨNG DƯƠNG — không có vế đó thì "chặn tất cả" cũng
+// làm test xanh.
+// =============================================================================================
+
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const ACTOR = { type: "SYSTEM" } as const;
 
@@ -27,28 +34,42 @@ let db: TestDatabase;
 let apiPool: pg.Pool;
 let orgA: string;
 let orgB: string;
-let supplierA: string;
-/** `lienHe1` là người ĐƯỢC MỜI; `lienHe2` là đồng nghiệp — dùng cho phép đo E5. */
-let lienHe1: string;
-let lienHe2: string;
+let supplierKhac: string;
+/** Người liên hệ thuộc MỘT NHÀ CUNG CẤP KHÁC — dùng cho phép đo đối chứng của C2. */
+let lienHeKhac: string;
 let rfqA: string;
 
-/** Tạo một lời mời mới với kênh link cho trước. Mỗi test cần lời mời riêng (UNIQUE theo RFQ+NCC). */
-async function moiMoi(linkChannel: Channel = "EMAIL"): Promise<string> {
-  const { rows } = await db.pool.query<{ id: string }>(
+interface LoiMoiDaPhat {
+  readonly invitationId: string;
+  readonly token: string;
+  readonly contactId: string;
+}
+
+/** Một nhà cung cấp mới, một người liên hệ mới, một lời mời, một token. */
+async function moiMoi(linkChannel: Channel = "EMAIL"): Promise<LoiMoiDaPhat> {
+  const ncc = await db.pool.query<{ id: string }>(
     "INSERT INTO suppliers (org_id, legal_name) VALUES ($1, 'NCC tam') RETURNING id",
     [orgA],
   );
-  const ncc = rows[0]?.id ?? "";
+  const nccId = ncc.rows[0]?.id ?? "";
+  const duoi = randomBytes(6).toString("hex");
+  const lh = await db.pool.query<{ id: string }>(
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone) " +
+      "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4) RETURNING id",
+    [orgA, nccId, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1")],
+  );
+  const contactId = lh.rows[0]?.id ?? "";
+
   return withTenant(apiPool, orgA, async (c) => {
     const loi = await createInvitation(c, orgA, {
       rfqId: rfqA,
-      supplierId: ncc,
-      contactId: lienHe1,
+      supplierId: nccId,
+      contactId,
       linkChannel,
       actor: ACTOR,
     });
-    return loi.id;
+    const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actor: ACTOR });
+    return { invitationId: loi.id, token: t.token, contactId };
   });
 }
 
@@ -71,29 +92,33 @@ beforeAll(async () => {
   const buyer = nguoi.rows[0]?.id ?? "";
 
   const ncc = await db.pool.query<{ id: string }>(
-    "INSERT INTO suppliers (org_id, legal_name, tax_code) VALUES ($1, 'NCC chinh', '0101010101') " +
+    "INSERT INTO suppliers (org_id, legal_name, tax_code) VALUES ($1, 'NCC khac', '0202020202') " +
       "RETURNING id",
     [orgA],
   );
-  supplierA = ncc.rows[0]?.id ?? "";
+  supplierKhac = ncc.rows[0]?.id ?? "";
 
   const lh = await db.pool.query<{ id: string }>(
-    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone) VALUES " +
-      "($1, $2, 'Nguoi duoc moi', 'a@vidu.vn', '0900000001'), " +
-      "($1, $2, 'Dong nghiep', 'b@vidu.vn', '0900000002') RETURNING id",
-    [orgA, supplierA],
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone) " +
+      "VALUES ($1, $2, 'Nguoi cua NCC khac', 'b@vidu.vn', '0900000002') RETURNING id",
+    [orgA, supplierKhac],
   );
-  lienHe1 = lh.rows[0]?.id ?? "";
-  lienHe2 = lh.rows[1]?.id ?? "";
+  lienHeKhac = lh.rows[0]?.id ?? "";
 
+  // [H-1, 011] RFQ mang phiên của chính người tạo.
+  const phien = await db.pool.query<{ id: string }>(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+      "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+    [orgA, buyer, randomBytes(32)],
+  );
   const rfq = await db.pool.query<{ id: string }>(
-    "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by) " +
-      "VALUES ($1, 'RFQ de moi', now() + interval '7 days', $2) RETURNING id",
-    [orgA, buyer],
+    "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+      "VALUES ($1, 'RFQ de moi', now() + interval '7 days', $2, $3) RETURNING id",
+    [orgA, buyer, phien.rows[0]?.id ?? ""],
   );
   rfqA = rfq.rows[0]?.id ?? "";
 
-  expect([orgA, orgB, supplierA, lienHe1, lienHe2, rfqA].filter((x) => x === "")).toEqual([]);
+  expect([orgA, orgB, supplierKhac, lienHeKhac, rfqA].filter((x) => x === "")).toEqual([]);
   apiPool = db.poolAs("app_api");
 }, 180000);
 
@@ -101,492 +126,557 @@ afterAll(async () => {
   await db?.stop();
 });
 
+// =============================================================================================
+// CHUỖI TẤN CÔNG CŨ — TỪNG BƯỚC, ĐẢO CHIỀU
+// =============================================================================================
+describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng bước", () => {
+  it("[C1] đích nhận OTP ĐỌC TỪ CSDL — chữ ký hàm không còn chỗ để khai", async () => {
+    const { token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const { rows } = await db.pool.query<{ phone: string }>(
+      "SELECT phone FROM supplier_contacts WHERE id = $1",
+      [contactId],
+    );
+    expect(kq.contactId).toBe(contactId);
+    expect(kq.destination).toBe(rows[0]?.phone);
+
+    // Hàng thách thức GHI LẠI đích đã dùng — thứ bản trước không lưu, nên "không lớp nào, ở bất
+    // kỳ thời điểm nào, biết mã đã đi tới đâu".
+    const { rows: tt } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM invitation_otp_challenges " +
+        " WHERE id = $1 AND destination_hash IS NOT NULL AND contact_id IS NOT NULL " +
+        "   AND token_id IS NOT NULL",
+      [kq.challengeId],
+    );
+    expect(tt[0]?.n).toBe("1");
+  });
+
+  it("[C1] ĐỐI CHỨNG: thách thức trỏ tới người liên hệ của NHÀ CUNG CẤP KHÁC bị CSDL từ chối", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1b", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    // Câu INSERT viết tay: khoá ngoại một mình chỉ đòi "có trong tổ chức", nên nó cho phép gửi
+    // OTP tới người liên hệ của một nhà cung cấp KHÁC. Trigger ở 012 mới là lớp chặn.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO invitation_otp_challenges (org_id, invitation_id, token_id, contact_id," +
+            " channel, code_hash, expires_at) " +
+            "VALUES ($1, $2, (SELECT token_id FROM invitation_otp_challenges WHERE id = $3), $4," +
+            " 'SMS', decode(repeat('ab', 32), 'hex'), now() + interval '5 minutes')",
+          [orgA, invitationId, kq.challengeId, lienHeKhac],
+        ),
+      ),
+    ).rejects.toThrow(/Nguoi lien he khong thuoc nha cung cap duoc moi/);
+  });
+
+  it("[H1] token của MỘT lời mời khác không mở được thách thức này", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h1", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const khac = await moiMoi();
+    const nham = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token: khac.token, code: kq.code, actor: ACTOR }),
+    );
+    expect(nham).toEqual({ ok: false, reason: "NO_CHALLENGE" });
+
+    // Đối chứng dương: đúng token thì vào được.
+    const dung = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    expect(dung.ok).toBe(true);
+  });
+
+  it("[C2] danh tính đã xác thực là DẪN XUẤT từ chính thách thức", async () => {
+    const { invitationId, token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const r = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    if (!r.ok) throw new Error("phải mở được phiên");
+    expect(r.verifiedContactId).toBe(contactId);
+
+    const { rows } = await db.pool.query<{ vc: string; cid: string; ch: string }>(
+      "SELECT g.verified_contact_id AS vc, c.contact_id AS cid, g.verified_channel AS ch " +
+        "  FROM guest_sessions g JOIN invitation_otp_challenges c ON c.id = g.challenge_id " +
+        " WHERE g.invitation_id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.vc).toBe(rows[0]?.cid);
+    expect(rows[0]?.ch).toBe("SMS");
+  });
+
+  it("[C2] ĐỐI CHỨNG: phiên KHAI một danh tính khác bị CSDL từ chối, kể cả đi thẳng bằng SQL", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2b", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO guest_sessions (org_id, invitation_id, challenge_id, token_hash," +
+            " verified_contact_id, verified_channel, expires_at) " +
+            "VALUES ($1, $2, $3, decode(repeat('ef', 32), 'hex'), $4, 'SMS'," +
+            " now() + interval '1 hour')",
+          [orgA, invitationId, kq.challengeId, lienHeKhac],
+        ),
+      ),
+    ).rejects.toThrow(/Danh tinh da xac thuc phai DAN XUAT tu thach thuc OTP/);
+  });
+
+  it("[C3] sau THU HỒI: token chết, và phiên đang sống bị thu hồi theo", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c3", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const phien = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    expect(phien.ok).toBe(true);
+
+    const daThuHoi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actor: ACTOR }),
+    );
+    expect(daThuHoi).toBe(true);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: "ip-c3b",
+          actor: ACTOR,
+        }),
+      ),
+    ).rejects.toThrow(InvitationError);
+
+    // Phiên ĐANG SỐNG bị thu hồi theo — thứ bản trước hoàn toàn không chạm tới.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM guest_sessions " +
+        " WHERE invitation_id = $1 AND revoked_at IS NULL",
+      [invitationId],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("[C3] thu hồi hai lần: lần sau trả `false` và KHÔNG ghi thêm sự kiện kiểm toán", async () => {
+    const { invitationId } = await moiMoi();
+    const lan1 = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actor: ACTOR }),
+    );
+    const lan2 = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actor: ACTOR }),
+    );
+    expect([lan1, lan2]).toEqual([true, false]);
+
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events " +
+        " WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.n).toBe("1");
+  });
+
+  it("[H3] khoá 5-lần-sai KHÔNG reset được bằng cách phát lại thách thức", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h3", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const maSai = kq.code === "000000" ? "111111" : "000000";
+
+    for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, actor: ACTOR }),
+      );
+    }
+    const biKhoa = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    expect(biKhoa).toEqual({ ok: false, reason: "LOCKED_OUT" });
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: "ip-h3b",
+          actor: ACTOR,
+        }),
+      ),
+    ).rejects.toThrow(/dang bi khoa vi qua nhieu lan thu sai/);
+  });
+
+  it("[H5] magic link BỊ TIÊU THỤ khi phiên ra đời — không chơi lại được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h5", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const truoc = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
+    expect(truoc.invitationId).not.toBe("");
+
+    await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("[H5] thu hồi ĐƠN ĐIỆU — cờ đã bật không tắt lại được, kể cả bằng SQL", async () => {
+    const { invitationId, token } = await moiMoi();
+    await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actor: ACTOR }),
+    );
+    const bam = createHash("sha256").update(token, "utf8").digest();
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_invitation_tokens SET revoked_at = NULL WHERE token_hash = $1", [bam]),
+      ),
+    ).rejects.toThrow(/revoked_at da bat thi khong duoc tat lai/);
+  });
+});
+
+// =============================================================================================
+// NHÓM E — NAY CÓ ĐỦ LỚP ĐỂ MANG NHÃN
+// =============================================================================================
 describe("[INV-E1] token của magic link", () => {
   it("entropy ≥ 128 bit từ CSPRNG, và hai lần phát KHÔNG trùng nhau", async () => {
     expect(MAGIC_LINK_TOKEN_BYTES * 8).toBeGreaterThanOrEqual(128);
-
     const a = await moiMoi();
     const b = await moiMoi();
-    const [t1, t2] = await withTenant(apiPool, orgA, async (c) => [
-      await issueMagicLinkToken(c, orgA, { invitationId: a }),
-      await issueMagicLinkToken(c, orgA, { invitationId: b }),
-    ]);
-
-    expect(Buffer.from(t1.token, "base64url").length).toBe(MAGIC_LINK_TOKEN_BYTES);
-    expect(t1.token).not.toBe(t2.token);
+    expect(Buffer.from(a.token, "base64url").length).toBe(MAGIC_LINK_TOKEN_BYTES);
+    expect(a.token).not.toBe(b.token);
   });
 
   it("lưu dạng HASH — token dạng rõ KHÔNG xuất hiện ở BẤT KỲ cột nào của hàng", async () => {
-    const inv = await moiMoi();
-    const { token } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
-
-    // Không kiểm một cột đã biết tên: `to_jsonb(hàng)` biến TOÀN BỘ hàng thành văn bản, nên một
-    // cột MỚI thêm vào sau này mà lỡ chứa token dạng rõ cũng bị bắt. Kiểm theo tính chất, không
-    // theo danh sách tên — khuôn đã hỏng ba lần ở S0.
+    const { token } = await moiMoi();
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM rfq_invitation_tokens t " +
         " WHERE to_jsonb(t)::text LIKE '%' || $1 || '%'",
       [token],
     );
     expect(rows[0]?.n).toBe("0");
-
-    // ... và dấu hiệu TÍCH CỰC rằng hàng có thật và hash đúng — không có vế này, "0" ở trên cũng
-    // đúng với một bảng rỗng.
-    const bam = createHash("sha256").update(token, "utf8").digest();
     const { rows: khop } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM rfq_invitation_tokens WHERE token_hash = $1",
-      [bam],
+      [createHash("sha256").update(token, "utf8").digest()],
     );
     expect(khop[0]?.n).toBe("1");
   });
 
   it("ĐƠN MỤC ĐÍCH — lược đồ từ chối một `purpose` ngoài tập đóng", async () => {
-    const inv = await moiMoi();
+    const { invitationId } = await moiMoi();
     await expect(
       db.pool.query(
         "INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at)" +
           " VALUES ($1, $2, decode(repeat('ab', 32), 'hex'), 'DOC_MOI_THU', now() + interval '1 day')",
-        [orgA, inv],
+        [orgA, invitationId],
       ),
     ).rejects.toThrow(/purpose/);
   });
 
-  it("CÓ HẠN — token hết hạn không đổi được nữa", async () => {
-    const inv = await moiMoi();
-    const { token, tokenId } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
+  it("CÓ HẠN — token hết hạn thì chết, và TTL có TRẦN TRÊN", async () => {
+    const { invitationId, token } = await moiMoi();
     await db.pool.query(
       "UPDATE rfq_invitation_tokens SET created_at = now() - interval '1 hour', " +
-        "       expires_at = now() - interval '1 minute' WHERE id = $1",
-      [tokenId],
+        "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
+      [invitationId],
     );
-
     await expect(
       withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
     ).rejects.toThrow(InvitationError);
+
+    // `CHECK (expires_at > created_at)` chỉ chặn cận DƯỚI: một cấu hình sai đặt TTL = 10^9 làm vế
+    // "có hạn" của E1 biến mất trong im lặng. Cùng bài học với `MFA_MAX_ALLOWED_FAILED_ATTEMPTS`.
+    const khac = await moiMoi();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueMagicLinkToken(c, orgA, {
+          invitationId: khac.invitationId,
+          ttlSeconds: 1_000_000_000,
+          actor: ACTOR,
+        }),
+      ),
+    ).rejects.toThrow(InvitationError);
   });
 
-  it("THU HỒI ĐƯỢC — sau khi thu hồi lời mời, token chết", async () => {
-    const inv = await moiMoi();
-    const { token } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
-    // Dấu hiệu tích cực: nó SỐNG trước khi bị thu hồi.
+  it("THU HỒI ĐƯỢC — và thu hồi chạm CẢ token, thách thức, LẪN phiên", async () => {
+    const { invitationId, token } = await moiMoi();
     const truoc = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
-    expect(truoc.invitationId).toBe(inv);
+    expect(truoc.invitationId).toBe(invitationId);
 
     await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId: inv, actor: ACTOR }),
+      revokeInvitation(c, orgA, { invitationId, actor: ACTOR }),
     );
     await expect(
       withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
     ).rejects.toThrow(InvitationError);
   });
 
-  it("ba ca hỏng — không tồn tại, hết hạn, đã thu hồi — trả CÙNG một thông báo", async () => {
-    // Phân biệt được ba ca là một oracle trên chính tập token: "chuỗi này từng là token thật".
-    const inv = await moiMoi();
-    const { token, tokenId } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
+  it("bốn ca hỏng trả CÙNG một thông báo — không phân biệt được là không có oracle", async () => {
+    const { invitationId, token } = await moiMoi();
     await db.pool.query(
       "UPDATE rfq_invitation_tokens SET created_at = now() - interval '1 hour', " +
-        "       expires_at = now() - interval '1 minute' WHERE id = $1",
-      [tokenId],
+        "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
+      [invitationId],
     );
-
     const bat = async (t: string): Promise<string> =>
       withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, t)).then(
         () => "KHONG NEM",
         (e: unknown) => (e as Error).message,
       );
-
     expect(await bat(token)).toBe(await bat("khong-phai-token-nao-ca"));
   });
 });
 
-// =============================================================================================
-// NHÃN `[INV-E2]` ĐÃ ĐƯỢC GỠ KHỎI HAI TEST DƯỚI ĐÂY (review an ninh S1.3, 2026-08-29).
-//
-// Chúng đo một tính chất THẬT — *đổi link xong thì chưa có phiên nào*, và *mã sai thì không sinh
-// phiên* — nhưng cả hai HẸP HƠN HẲN mệnh đề chúng từng mang nhãn. E2 nói *"token một mình không
-// đủ"*; đo được là **không cần token nào cả**: `issueOtpChallenge` và `verifyOtpAndStartSession`
-// chỉ đòi một `invitationId`. Và E2 nói *"trên kênh đã đăng ký"*; đo được là đích nhận OTP do
-// NGƯỜI GỌI khai, không đọc từ `supplier_contacts`.
-//
-// Đây đúng lớp lỗi đã xảy ra hai lần ở S0 và bị bắt cả hai lần (`[INV-G2]` ở Task 9,
-// `[INV-B2]` ở Task 11): một test đo thứ khác nằm dưới một nhãn bất biến. Nhãn được gỡ TRƯỚC
-// khi lớp được sửa, vì một ô ✅ sai trong `evidence/INV-matrix.md` là thứ nguy hiểm hơn một ô ⏳.
-// =============================================================================================
-describe("token và phiên báo giá — hai tính chất hẹp hơn E2", () => {
+describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh ĐÃ ĐĂNG KÝ", () => {
   it("đổi được magic link nhưng KHÔNG có phiên nào ra đời", async () => {
-    const inv = await moiMoi();
-    const { token } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
-
+    const { invitationId, token } = await moiMoi();
     const doi = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
-    expect(doi.invitationId).toBe(inv);
+    expect(doi.invitationId).toBe(invitationId);
 
-    // Vế thứ hai của phép hội, và nó là vế mà một hệ thống viết ẩu sẽ bỏ: SAU khi đổi link thành
-    // công, số phiên khách vẫn là 0. Không có đường nào từ "có token" tới "có phiên".
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM guest_sessions WHERE invitation_id = $1",
-      [inv],
+      [invitationId],
     );
     expect(rows[0]?.n).toBe("0");
   });
 
-  it("mã OTP SAI cũng không sinh phiên; mã ĐÚNG thì có — hai vế của cùng một phép đo", async () => {
-    const inv = await moiMoi();
+  it("mã OTP SAI không sinh phiên; mã ĐÚNG thì có — phép hội, hai vế", async () => {
+    const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "SMS",
-        destination: "0900001001",
-        callerFingerprint: "ip-1",
-      }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e2", actor: ACTOR }),
     );
-    if (!kq.ok) throw new Error("thách thức OTP phải phát được");
+    if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const sai = await withTenant(apiPool, orgA, (c) =>
       verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
+        token,
         code: kq.code === "000000" ? "111111" : "000000",
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
         actor: ACTOR,
       }),
     );
     expect(sai.ok).toBe(false);
 
     const dung = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    expect(dung.ok).toBe(true);
+  });
+
+  it("kênh quyết định CỘT nào được đọc — nhãn và sự thật là một thứ", async () => {
+    const { token, contactId } = await moiMoi("SMS"); // link đi SMS ⇒ OTP phải đi EMAIL
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "EMAIL",
+        callerFingerprint: "ip-kenh",
         actor: ACTOR,
       }),
     );
-    expect(dung.ok).toBe(true);
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const { rows } = await db.pool.query<{ email: string }>(
+      "SELECT email FROM supplier_contacts WHERE id = $1",
+      [contactId],
+    );
+    expect(kq.destination).toBe(rows[0]?.email);
+  });
+
+  it("người liên hệ chưa có kênh đã đăng ký thì BỊ TỪ CHỐI, không rơi về kênh khác", async () => {
+    const lh = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email) " +
+        "VALUES ($1, $2, 'Khong co so', 'khongso@vidu.vn') RETURNING id",
+      [orgA, supplierKhac],
+    );
+    const t = await withTenant(apiPool, orgA, async (c) => {
+      const l = await createInvitation(c, orgA, {
+        rfqId: rfqA,
+        supplierId: supplierKhac,
+        contactId: lh.rows[0]?.id ?? "",
+        actor: ACTOR,
+      });
+      return issueMagicLinkToken(c, orgA, { invitationId: l.id, actor: ACTOR });
+    });
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: t.token,
+          channel: "SMS",
+          callerFingerprint: "ip-thieu-kenh",
+          actor: ACTOR,
+        }),
+      ),
+    ).rejects.toThrow(/chưa có kênh đã đăng ký/);
   });
 });
 
 describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic link", () => {
   it("link EMAIL + OTP EMAIL bị CSDL từ chối", async () => {
-    const inv = await moiMoi("EMAIL");
+    const { token } = await moiMoi("EMAIL");
     await expect(
       withTenant(apiPool, orgA, (c) =>
         issueOtpChallenge(c, orgA, {
-          invitationId: inv,
+          token,
           channel: "EMAIL",
-          destination: "a@vidu.vn",
-          callerFingerprint: "ip-kenh-1",
+          callerFingerprint: "ip-k1",
+          actor: ACTOR,
         }),
       ),
     ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
   });
 
   it("link SMS + OTP SMS CŨNG bị từ chối — lớp này so HAI KÊNH, không cấm cứng EMAIL", async () => {
-    // Đây là phép đo phân biệt hai thiết kế. Một `CHECK (channel <> 'EMAIL')` sẽ CHO QUA ca này
-    // trong khi bất biến đã vỡ — nó giữ mệnh đề bằng một sự trùng hợp về việc hôm nay link đi
-    // bằng email.
-    const inv = await moiMoi("SMS");
+    const { token } = await moiMoi("SMS");
     await expect(
       withTenant(apiPool, orgA, (c) =>
         issueOtpChallenge(c, orgA, {
-          invitationId: inv,
+          token,
           channel: "SMS",
-          destination: "0900001005",
-          callerFingerprint: "ip-kenh-2",
+          callerFingerprint: "ip-k2",
+          actor: ACTOR,
         }),
       ),
     ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
   });
-
-  it("link SMS + OTP EMAIL thì ĐƯỢC — đối chứng dương, chống quy tắc chặn-tất-cả", async () => {
-    const inv = await moiMoi("SMS");
-    const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "EMAIL",
-        destination: "a@vidu.vn",
-        callerFingerprint: "ip-kenh-3",
-      }),
-    );
-    expect(kq.ok).toBe(true);
-  });
 });
 
 describe("[INV-E3] OTP — năm vế", () => {
-  it("giới hạn SỐ LẦN THỬ: sau 5 lần sai thì khoá, và mã ĐÚNG cũng không vào được", async () => {
-    const inv = await moiMoi();
-    const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "SMS",
-        destination: "0900001002",
-        callerFingerprint: "ip-thu",
-      }),
-    );
-    if (!kq.ok) throw new Error("thách thức OTP phải phát được");
-    const maSai = kq.code === "000000" ? "111111" : "000000";
-
-    for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
-      await withTenant(apiPool, orgA, (c) =>
-        verifyOtpAndStartSession(c, orgA, {
-          invitationId: inv,
-          code: maSai,
-          verifiedContactId: lienHe1,
-          verifiedChannel: "SMS",
-          actor: ACTOR,
-        }),
-      );
-    }
-
-    const sauKhiKhoa = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
-        actor: ACTOR,
-      }),
-    );
-    expect(sauKhiKhoa).toEqual({ ok: false, reason: "LOCKED_OUT" });
-  });
-
   it("HẾT HẠN: thách thức quá hạn bị từ chối dù mã đúng", async () => {
-    const inv = await moiMoi();
+    const { invitationId, token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "SMS",
-        destination: "0900001003",
-        callerFingerprint: "ip-hethan",
-      }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-hh", actor: ACTOR }),
     );
-    if (!kq.ok) throw new Error("thách thức OTP phải phát được");
+    if (!kq.ok) throw new Error("thách thức phải phát được");
 
     await db.pool.query(
       "UPDATE invitation_otp_challenges SET created_at = now() - interval '1 hour', " +
         "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
-      [inv],
+      [invitationId],
     );
-
     const r = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
-        actor: ACTOR,
-      }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
     );
     expect(r).toEqual({ ok: false, reason: "EXPIRED" });
   });
 
-  it("DÙNG MỘT LẦN: mã đúng lần thứ hai bị từ chối", async () => {
-    const inv = await moiMoi();
+  it("DÙNG MỘT LẦN: mã đúng lần thứ hai không vào được nữa", async () => {
+    const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "SMS",
-        destination: "0900001004",
-        callerFingerprint: "ip-motlan",
-      }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-ml", actor: ACTOR }),
     );
-    if (!kq.ok) throw new Error("thách thức OTP phải phát được");
+    if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const lan1 = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
-        actor: ACTOR,
-      }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
     );
     expect(lan1.ok).toBe(true);
 
-    const lan2 = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        verifiedContactId: lienHe1,
-        verifiedChannel: "SMS",
-        actor: ACTOR,
-      }),
-    );
-    expect(lan2).toEqual({ ok: false, reason: "ALREADY_USED" });
-  });
-
-  it("GIỚI HẠN TẦN SUẤT theo ĐÍCH: chạm trần thì LÀM CHẬM, KHÔNG khoá và KHÔNG ném", async () => {
-    const dich = "0900009999";
-    const invs: string[] = [];
-    for (let i = 0; i <= OTP_MAX_PER_DEST; i++) invs.push(await moiMoi());
-
-    const kq = [];
-    for (let i = 0; i <= OTP_MAX_PER_DEST; i++) {
-      kq.push(
-        await withTenant(apiPool, orgA, (c) =>
-          issueOtpChallenge(c, orgA, {
-            invitationId: invs[i] as string,
-            channel: "SMS",
-            destination: dich,
-            callerFingerprint: `ip-dich-${String(i)}`,
-          }),
-        ),
-      );
-    }
-
-    expect(kq.slice(0, OTP_MAX_PER_DEST).every((r) => r.ok)).toBe(true);
-    const cuoi = kq[OTP_MAX_PER_DEST];
-    expect(cuoi?.ok).toBe(false);
-    expect(cuoi?.ok === false ? cuoi.reason : null).toBe("DEST_RATE_LIMITED");
-  });
-
-  it("ĐỐI CHỨNG: xoá bộ đếm đi thì chính lời gọi ấy ĐI QUA — bộ đếm là thứ đang chặn", async () => {
-    const dich = "0900008888";
-    const invs: string[] = [];
-    for (let i = 0; i <= OTP_MAX_PER_DEST; i++) invs.push(await moiMoi());
-
-    for (let i = 0; i < OTP_MAX_PER_DEST; i++) {
-      await withTenant(apiPool, orgA, (c) =>
-        issueOtpChallenge(c, orgA, {
-          invitationId: invs[i] as string,
-          channel: "SMS",
-          destination: dich,
-          callerFingerprint: `ip-dc-${String(i)}`,
-        }),
-      );
-    }
-
-    const biChan = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: invs[OTP_MAX_PER_DEST] as string,
-        channel: "SMS",
-        destination: dich,
-        callerFingerprint: "ip-dc-cuoi",
-      }),
-    );
-    expect(biChan.ok).toBe(false);
-
-    // Vô hiệu hoá lớp: xoá bộ đếm. Không có phép đo này, test trên xanh kể cả khi thứ chặn là một
-    // thứ khác — E3(2) là vế CHƯA TỪNG CÓ một dòng mã nào trong toàn S0, nên nó là vế cần bằng
-    // chứng nhất.
-    await db.pool.query("DELETE FROM otp_rate_limits WHERE org_id = $1", [orgA]);
-    const saiKhiXoa = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: invs[OTP_MAX_PER_DEST] as string,
-        channel: "SMS",
-        destination: dich,
-        callerFingerprint: "ip-dc-cuoi-2",
-      }),
-    );
-    expect(saiKhiXoa.ok).toBe(true);
-  });
-
-  it("GIỚI HẠN TẦN SUẤT theo NGƯỜI GỌI: chạm trần thì KHOÁ — ném, không trả nhánh", async () => {
-    const nguoiGoi = "ip-ke-tan-cong";
-    const invs: string[] = [];
-    for (let i = 0; i <= OTP_MAX_PER_CALLER; i++) invs.push(await moiMoi());
-
-    for (let i = 0; i < OTP_MAX_PER_CALLER; i++) {
-      await withTenant(apiPool, orgA, (c) =>
-        issueOtpChallenge(c, orgA, {
-          invitationId: invs[i] as string,
-          channel: "SMS",
-          // Mỗi lần một đích khác nhau: nếu dùng chung đích thì hạn mức ĐÍCH sẽ chạm trước và
-          // phép đo này sẽ đo nhầm lớp.
-          destination: `09000${String(70000 + i)}`,
-          callerFingerprint: nguoiGoi,
-        }),
-      );
-    }
-
+    // Token cũng đã bị tiêu thụ (H5), nên lần hai chết ngay ở lớp token — sớm hơn một bậc.
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        issueOtpChallenge(c, orgA, {
-          invitationId: invs[OTP_MAX_PER_CALLER] as string,
-          channel: "SMS",
-          destination: "0900079999",
-          callerFingerprint: nguoiGoi,
-        }),
+        verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
       ),
-    ).rejects.toThrow(/gioi han tan suat theo nguoi goi|giới hạn tần suất theo người gọi/);
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("GIỚI HẠN SỐ LẦN THỬ: sau 5 lần sai thì khoá, và mã ĐÚNG cũng không vào được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-lt", actor: ACTOR }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const maSai = kq.code === "000000" ? "111111" : "000000";
+
+    for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, actor: ACTOR }),
+      );
+    }
+    const sau = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
+    );
+    expect(sau).toEqual({ ok: false, reason: "LOCKED_OUT" });
+  });
+
+  it("GIỚI HẠN TẦN SUẤT theo LỜI MỜI: bucket kẻ tấn công KHÔNG xoay được", async () => {
+    // `callerFingerprint` đổi mỗi lần — bản trước sẽ không bao giờ chạm trần vì bucket theo người
+    // gọi là chuỗi do người gọi chọn. Bucket theo LỜI MỜI thì không xoay được.
+    const { token } = await moiMoi();
+    let biChan = false;
+    for (let i = 0; i < 12; i++) {
+      const r = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: `ip-xoay-${String(i)}`,
+          actor: ACTOR,
+        }),
+      ).catch((e: unknown) => e as Error);
+      if (r instanceof Error) {
+        expect(r.message).toMatch(/vượt giới hạn tần suất/);
+        biChan = true;
+        break;
+      }
+    }
+    expect(biChan, "xoay callerFingerprint phải chạm một trần nào đó").toBe(true);
   });
 });
 
-// NHÃN `[INV-E5]` ĐÃ ĐƯỢC GỠ (review an ninh S1.3, 2026-08-29). Test dưới đây khẳng định
-// `verified_contact_id === lienHe2` — nhưng `lienHe2` là giá trị mà CHÍNH TEST truyền vào, và
-// không lớp nào nối nó với thách thức OTP vừa đối chiếu. Nó đo rằng *giá trị truyền vào được ghi
-// lại đúng*, không đo rằng *giá trị ấy đã được xác thực*. Một test tautology dưới một nhãn bất
-// biến là bằng chứng giả, và nó nguy hiểm hơn không có test: nó bơm một khẳng định sai vào chuỗi
-// hash bất biến — đúng thứ dự án bán cho kiểm toán viên của khách hàng.
-describe("phiên khách ghi lại contact được truyền vào — hẹp hơn E5", () => {
-  it("người nhận link chuyển tiếp vẫn vào được; phiên ghi contact được truyền vào", async () => {
-    const inv = await moiMoi();
-    const { token } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
-
-    // Link được chuyển tiếp: người khác cầm token và đổi được nó. Đây là hành vi ĐƯỢC THIẾT KẾ.
+describe("[INV-E5] link chuyển tiếp, và danh tính THỰC TẾ đã xác thực", () => {
+  it("người nhận link chuyển tiếp vẫn vào được, và phiên ghi NGƯỜI GIỮ KÊNH đã nhận mã", async () => {
+    const { invitationId, token, contactId } = await moiMoi();
+    // Link được chuyển tiếp: một người khác cầm token và đổi được nó. Hành vi ĐƯỢC THIẾT KẾ.
     const doi = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
-    expect(doi.contactId).toBe(lienHe1);
+    expect(doi.invitationId).toBe(invitationId);
 
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, {
-        invitationId: inv,
-        channel: "SMS",
-        destination: "0900000002",
-        callerFingerprint: "ip-e5",
-      }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e5", actor: ACTOR }),
     );
-    if (!kq.ok) throw new Error("thách thức OTP phải phát được");
+    if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const r = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, {
-        invitationId: inv,
-        code: kq.code,
-        // Người THỰC TẾ giữ kênh và nhận mã là `lienHe2`, KHÁC với người được mời `lienHe1`.
-        verifiedContactId: lienHe2,
-        verifiedChannel: "SMS",
-        actor: ACTOR,
-      }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, actor: ACTOR }),
     );
-    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("phải mở được phiên");
+    expect(r.verifiedContactId).toBe(contactId);
 
-    const { rows } = await db.pool.query<{ verified_contact_id: string; contact_id: string }>(
-      "SELECT g.verified_contact_id, i.contact_id FROM guest_sessions g " +
-        "  JOIN rfq_invitations i ON i.id = g.invitation_id WHERE g.invitation_id = $1",
-      [inv],
-    );
-    // Hai cột KHÁC nhau, và đó chính là mệnh đề: hệ thống ghi danh tính đã xác thực, không ghi
-    // danh tính người được mời.
-    expect(rows[0]?.verified_contact_id).toBe(lienHe2);
-    expect(rows[0]?.contact_id).toBe(lienHe1);
-    expect(rows[0]?.verified_contact_id).not.toBe(rows[0]?.contact_id);
-
-    const { rows: so } = await db.pool.query<{ payload: { verifiedContactId?: string } }>(
+    const { rows } = await db.pool.query<{ payload: { verifiedContactId?: string } }>(
       "SELECT payload FROM audit_events WHERE action = 'GUEST_SESSION_STARTED' " +
         "  AND org_id = $1 ORDER BY seq DESC LIMIT 1",
       [orgA],
     );
-    expect(so[0]?.payload.verifiedContactId).toBe(lienHe2);
+    expect(rows[0]?.payload.verifiedContactId).toBe(contactId);
   });
 });
 
 describe("cô lập tổ chức", () => {
   it("[INV-F1] token của tổ chức A không đổi được từ phiên của tổ chức B", async () => {
-    const inv = await moiMoi();
-    const { token } = await withTenant(apiPool, orgA, (c) =>
-      issueMagicLinkToken(c, orgA, { invitationId: inv }),
-    );
+    const { token } = await moiMoi();
     await expect(
       withTenant(apiPool, orgB, (c) => redeemMagicLink(c, orgB, token)),
     ).rejects.toThrow(InvitationError);

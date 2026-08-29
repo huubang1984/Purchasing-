@@ -51,6 +51,33 @@ export type SupplierStatus = (typeof SUPPLIER_STATUSES)[number];
  */
 export const TAX_CODE_PATTERN = /^[0-9]{10}(-[0-9]{3})?$/;
 
+/**
+ * [HIGH-2, review an ninh S1.1] `email` KHÔNG được kiểm định dạng ở BẤT KỲ tầng nào ở bản S1.1.
+ *
+ * `batBuoc` gọi `.trim()`, thứ chỉ cắt HAI ĐẦU — ký tự xuống dòng ở GIỮA sống sót. Đã ĐO: một
+ * chuỗi mang một ký tự xuống dòng ở giữa **lưu được sạch sẽ**, không CHECK nào chặn. Và cột này
+ * là địa chỉ nhận magic link ở S1.3 (ADR-015). Đây là CHÈN HEADER ĐÃ ĐƯỢC LƯU TRỮ, không phải
+ * nhất thời: mọi
+ * consumer về sau — bộ gửi thư, bộ xuất CSV cho kiểm toán, log dòng-đơn — kế thừa nó, và lớp
+ * phòng thủ duy nhất trở thành "mọi consumer tương lai đều nhớ escape".
+ *
+ * Vị từ này từ chối MỌI khoảng trắng và ký tự điều khiển, đòi đúng một `@`, và đòi domain có dấu
+ * chấm. Nó là phép kiểm HÌNH DẠNG, KHÔNG phải phép kiểm "địa chỉ này có thật" — đừng trích nó
+ * rộng hơn thế. Bản sao ở CSDL: `supplier_contacts_email_hinh_dang` (011).
+ */
+export const EMAIL_PATTERN =
+  /^[^\s\u0000-\u001f\u007f@]+@[^\s\u0000-\u001f\u007f@]+\.[^\s\u0000-\u001f\u007f@]+$/;
+
+/**
+ * Hình dạng số điện thoại — bản sao của `CHECK` ở 008. Lý do nhân bản NẶNG HƠN ở đây so với
+ * `TAX_CODE_PATTERN`: `supplier_contacts.phone` là **kênh đã đăng ký** của E2, và `0900 000 001`
+ * — cách viết phổ biến nhất ở Việt Nam — bị CSDL từ chối bằng một mã 23514 thay vì một thông báo
+ * đọc được. Bản S1.1 áp nguyên tắc ấy cho `tax_code` và KHÔNG áp cho `phone`.
+ */
+export const PHONE_PATTERN = /^\+?[0-9]{8,15}$/;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface SupplierActor {
   readonly type: ActorType;
   /** Phải là UUID hoặc null — `audit_events.actor_id` là cột `uuid`. */
@@ -157,6 +184,20 @@ function batBuoc(giaTri: string, ten: string, gioiHan: number): string {
   return cat;
 }
 
+/**
+ * [MEDIUM-4, review an ninh S1.1] Một tham số không phải UUID đi thẳng xuống Postgres cho một lỗi
+ * `22P02` mang **NGUYÊN VĂN** chuỗi trong `message`. Đã ĐO: một chuỗi chứa một ký tự xuống dòng
+ * cộng một dòng giống hệt log của Postgres đi trọn vào `message`, rồi vào log máy chủ — nơi nó
+ * là một dòng log
+ * GIẢ MẠO hoàn chỉnh. Quy ước *không nội suy đầu vào vào thông báo lỗi* được file này áp cho
+ * `tax_code` và bỏ qua cho mọi tham số còn lại — đúng khuôn "viết nguyên lý ở một nơi, quên áp ở
+ * nơi kia" mà 002 đã vấp hai lần.
+ */
+function batBuocUuid(giaTri: string, ten: string): string {
+  if (!UUID_PATTERN.test(giaTri)) throw new SupplierError(`${ten} không phải UUID hợp lệ`);
+  return giaTri;
+}
+
 function chuanHoaMst(taxCode: string | null | undefined): string | null {
   if (taxCode === null || taxCode === undefined) return null;
   const cat = taxCode.trim();
@@ -188,6 +229,7 @@ export async function createSupplier(
 ): Promise<SupplierRecord> {
   await assertTenantBound(client, orgId, "createSupplier");
 
+  if (input.actor.id != null) batBuocUuid(input.actor.id, "actor.id");
   const legalName = batBuoc(input.legalName, "legal_name", 500);
   const taxCode = chuanHoaMst(input.taxCode);
   const level: SupplierLevel = input.level ?? 0;
@@ -222,6 +264,7 @@ export async function getSupplier(
   supplierId: string,
 ): Promise<SupplierRecord | null> {
   await assertTenantBound(client, orgId, "getSupplier");
+  batBuocUuid(supplierId, "supplierId");
 
   const { rows } = await client.query<HangSupplier>(
     `SELECT ${COT_SUPPLIER} FROM suppliers WHERE id = $1`,
@@ -285,11 +328,24 @@ export async function addSupplierContact(
   input: AddSupplierContactInput,
 ): Promise<SupplierContactRecord> {
   await assertTenantBound(client, orgId, "addSupplierContact");
+  batBuocUuid(input.supplierId, "supplierId");
+  if (input.actor.id != null) batBuocUuid(input.actor.id, "actor.id");
 
   const fullName = batBuoc(input.fullName, "full_name", 200);
-  const email = batBuoc(input.email, "email", 320);
+
+  // Hạ về chữ thường TRƯỚC khi ghi. Không có bước này, `A@x.vn` và `a@x.vn` là HAI hàng khác
+  // nhau dưới `UNIQUE (org_id, supplier_id, email)` — ràng buộc mang tên "một email một người
+  // liên hệ" không làm được việc đó, và hệ quả ở S1.3 là hai magic link hợp lệ tới cùng hộp thư.
+  const email = batBuoc(input.email, "email", 320).toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) {
+    throw new SupplierError("email sai định dạng, hoặc chứa khoảng trắng / ký tự điều khiển");
+  }
+
   const phoneCat = input.phone?.trim() ?? "";
   const phone = phoneCat.length === 0 ? null : phoneCat;
+  if (phone !== null && !PHONE_PATTERN.test(phone)) {
+    throw new SupplierError("phone sai định dạng — chờ 8–15 chữ số, có thể có '+' ở đầu");
+  }
 
   const { rows } = await client.query<HangContact>(
     `INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone)
@@ -322,6 +378,7 @@ export async function listSupplierContacts(
   supplierId: string,
 ): Promise<SupplierContactRecord[]> {
   await assertTenantBound(client, orgId, "listSupplierContacts");
+  batBuocUuid(supplierId, "supplierId");
 
   const { rows } = await client.query<HangContact>(
     `SELECT ${COT_CONTACT} FROM supplier_contacts WHERE supplier_id = $1 ORDER BY created_at, id`,

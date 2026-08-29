@@ -42,12 +42,18 @@ let orgB: string;
 /** u1 tạo RFQ; u2 và u3 là hai người duyệt. */
 let u1: string, u2: string, u3: string;
 /** s2/s3 là phiên của u2/u3; s2b là phiên THỨ HAI của u2. */
-let s2: string, s3: string, s2b: string;
+let s1: string, s2: string, s3: string, s2b: string;
 
+/**
+ * [H-2, vòng sửa sau review an ninh] Phiên phải mang `mfa_verified_at`: trigger `rfq_kiem_nguoi_duyet`
+ * (011) nay từ chối phiên hết hạn, bị thu hồi, hoặc chưa qua MFA. Bản 009 chỉ đọc `user_id`, nên
+ * một phiên ĐÃ BỊ THU HỒI vì nghi ngờ chiếm đoạt vẫn ký được một phê duyệt — quy trình ứng phó sự
+ * cố "thu hồi hết phiên của người này" không đóng được đường phê duyệt.
+ */
 async function taoPhien(orgId: string, userId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
-    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
-      "VALUES ($1, $2, $3, now() + interval '1 day') RETURNING id",
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+      "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
     [orgId, userId, randomBytes(32)],
   );
   return rows[0]?.id ?? "";
@@ -61,6 +67,7 @@ async function rfqNhap(orgId = orgA, requiresDualApproval = false): Promise<stri
       deadlineAt: MAI_SAU,
       requiresDualApproval,
       createdBy: u1,
+      createdBySessionId: s1,
       actor: ACTOR,
     });
     await addRfqItem(c, orgId, {
@@ -96,11 +103,12 @@ beforeAll(async () => {
   u2 = users.rows[1]?.id ?? "";
   u3 = users.rows[2]?.id ?? "";
 
+  s1 = await taoPhien(orgA, u1);
   s2 = await taoPhien(orgA, u2);
   s3 = await taoPhien(orgA, u3);
   s2b = await taoPhien(orgA, u2);
 
-  expect([orgA, orgB, u1, u2, u3, s2, s3, s2b].filter((x) => x === "")).toEqual([]);
+  expect([orgA, orgB, u1, u2, u3, s1, s2, s3, s2b].filter((x) => x === "")).toEqual([]);
   apiPool = db.poolAs("app_api");
 }, 180000);
 
@@ -140,21 +148,43 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
 
     await db.pool.query("DROP TRIGGER rfq_packages_kiem_chuyen_trang_thai ON rfq_packages");
     try {
-      const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+      // [Vòng sửa sau review an ninh] Lượt đo này ĐÃ ĐỔI KẾT QUẢ, và đổi theo hướng tốt. Trước
+      // 011, gỡ trigger đi thì câu UPDATE ĐI LỌT (rowCount = 1) — đó là bằng chứng trigger là
+      // lớp duy nhất. Sau 011 nó vẫn đỏ, nhưng bằng một lớp KHÁC có tên:
+      // rfq_chua_dong_thi_khong_co_moc_dong, một CHECK đóng chiều ngược mà 009 để trống (status
+      // quay về OPEN trong khi closed_at vẫn NOT NULL).
+      //
+      // Giữ nguyên phép đo thay vì xoá, và khẳng định ĐÚNG thứ đang chặn: hai lớp độc lập cùng
+      // canh một cạnh là kết quả mong muốn, nhưng nó phải được NÓI RA — không được để một test
+      // cũ xanh vì một lý do khác với lý do nó được viết.
+      const loi = await withTenant(apiPool, orgA, (c) =>
         c.query("UPDATE rfq_packages SET status = 'OPEN' WHERE id = $1", [rfqId]),
+      ).then(
+        () => null,
+        (e: unknown) => e as { constraint?: string },
       );
-      expect(
-        rowCount,
-        "Nếu câu này VẪN bị chặn sau khi gỡ trigger thì thứ đang chặn KHÔNG phải trigger, và " +
-          "test ở trên đang đo nhầm đối tượng.",
-      ).toBe(1);
+      expect(loi?.constraint).toBe("rfq_chua_dong_thi_khong_co_moc_dong");
+
+      // ... và khi CẢ HAI lớp bị vô hiệu (gỡ trigger + xoá mốc đóng), câu ấy ĐI LỌT. Đây mới là
+      // vế chứng minh không có lớp thứ ba nào đang âm thầm gánh.
+      const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'OPEN', closed_at = NULL WHERE id = $1", [
+          rfqId,
+        ]),
+      );
+      expect(rowCount).toBe(1);
     } finally {
       await db.pool.query(
         "CREATE TRIGGER rfq_packages_kiem_chuyen_trang_thai BEFORE UPDATE ON rfq_packages " +
           "FOR EACH ROW EXECUTE FUNCTION public.rfq_kiem_chuyen_trang_thai()",
       );
       // Trả RFQ về CLOSED để không rò trạng thái sang test khác.
-      await db.pool.query("UPDATE rfq_packages SET status = 'CLOSED' WHERE id = $1", [rfqId]);
+      // Dọn: trả cả trạng thái LẪN mốc đóng, vì lượt đo trên đã xoá mốc. Không có vế thứ hai,
+      // chính câu dọn này đỏ vì `rfq_da_dong_thi_co_moc_dong` — đã vấp phải khi chạy lại.
+      await db.pool.query(
+        "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now() WHERE id = $1",
+        [rfqId],
+      );
     }
   });
 
@@ -190,6 +220,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
         deadlineAt: MAI_SAU,
         requiresDualApproval: false,
         createdBy: u1,
+        createdBySessionId: s1,
         actor: ACTOR,
       });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actor: ACTOR });
@@ -212,7 +243,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
 
     await expect(
       withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actor: ACTOR })),
-    ).rejects.toThrow(/can 2 phe duyet, moi co 1/);
+    ).rejects.toThrow(/can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1/);
 
     // ... và mở được ngay khi có người thứ hai. Vế dương là bắt buộc: không có nó, một trigger
     // luôn từ chối cũng làm test trên xanh.
@@ -290,7 +321,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
           actor: ACTOR,
         }),
       ),
-    ).rejects.toThrow(/Khong duoc rut ngan deadline/);
+    ).rejects.toThrow(/Khong duoc rut ngan hay xoa deadline/);
   });
 
   it("gia hạn khi đang OPEN thì được, và nó để lại lý do trong sổ kiểm toán", async () => {
@@ -332,7 +363,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
           actor: ACTOR,
         }),
       ),
-    ).rejects.toThrow(/Chi doi duoc deadline khi RFQ dang DRAFT, PENDING_APPROVAL hoac OPEN/);
+    ).rejects.toThrow(/Chi doi duoc deadline khi RFQ dang DRAFT hoac OPEN/);
   });
 
   it("gia hạn KHÔNG có lý do bị từ chối ở tầng ứng dụng", async () => {
@@ -369,13 +400,16 @@ describe("hạng mục chỉ sửa được khi RFQ còn soạn", () => {
           actor: ACTOR,
         }),
       ),
-    ).rejects.toThrow(/Khong sua duoc hang muc cua RFQ dang o trang thai OPEN/);
+    ).rejects.toThrow(/Chi sua duoc hang muc khi RFQ con o DRAFT/);
 
+    // [011] Quyền DELETE trên `rfq_items` ĐÃ BỊ THU HỒI: trong toàn kho mã không có một câu
+    // DELETE nào, và một quyền cấp "cho chắc" là một quyền không ai gỡ ra nữa. Nay câu này chết ở
+    // TẦNG QUYỀN, sớm hơn trigger một bậc — và đó là lớp mạnh hơn, không phải lớp khác.
     await expect(
       withTenant(apiPool, orgA, (c) =>
         c.query("DELETE FROM rfq_items WHERE rfq_id = $1", [rfqId]),
       ),
-    ).rejects.toThrow(/Khong sua duoc hang muc cua RFQ dang o trang thai OPEN/);
+    ).rejects.toThrow(/permission denied/);
 
     const conNguyen = await withTenant(apiPool, orgA, (c) => listRfqItems(c, orgA, rfqId));
     expect(conNguyen.length).toBe(1);
@@ -411,7 +445,7 @@ describe("huỷ RFQ", () => {
 
     await expect(
       withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actor: ACTOR })),
-    ).rejects.toThrow(/CANCELLED -> PENDING_APPROVAL/);
+    ).rejects.toThrow(/không ở trạng thái nguồn hợp lệ/);
   });
 
   it("KHÔNG huỷ được RFQ đã CLOSED — cạnh đó không có trong bảng cạnh", async () => {
@@ -429,6 +463,9 @@ describe("huỷ RFQ", () => {
       withTenant(apiPool, orgA, (c) =>
         cancelRfq(c, orgA, { rfqId, reason: "doi y", actor: ACTOR }),
       ),
-    ).rejects.toThrow(/CLOSED -> CANCELLED/);
+    // [H-3] Câu UPDATE nay ghim trạng thái nguồn, nên nó chạm 0 hàng và hàm ném TRƯỚC khi trigger
+    // kịp nói gì. Cạnh `CLOSED->CANCELLED` vẫn không có trong bảng cạnh — test "đi vòng qua ứng
+    // dụng" ở trên mới là chỗ đo trigger.
+    ).rejects.toThrow(/không ở trạng thái nguồn hợp lệ/);
   });
 });

@@ -59,11 +59,23 @@ Chưa xong:
 
 ## Công việc đang làm
 
-> *** BA HẠNG MỤC ĐẦU KHÔNG ĐƯỢC COI LÀ XONG. *** Ba lượt `security-reviewer` chạy ngày
+> *** VÒNG SỬA ĐÃ XONG: 4/4 CRITICAL và 10/11 HIGH đã đóng; HIGH còn lại đã bị PHÉP ĐO BÁC BỎ. ***
+> Hai migration mới — `011_rfq_hardening.sql` và `012_invitation_hardening.sql` — cộng bản viết
+> lại của `packages/invitation`. Chuỗi tấn công đã đo được nay là một bộ test: từng bước từng
+> THÀNH CÔNG nay bị chặn, mỗi phép chặn kèm một vế đối chứng dương, và hai phép chặn được đo bằng
+> câu SQL VIẾT TAY vì đó là chỗ duy nhất chứng minh lớp nằm ở CSDL. Chi tiết:
+> `evidence/security-reviews.md` §*Vòng sửa sau review*.
+>
+> **Ba phát hiện MEDIUM cố ý KHÔNG sửa**, vì đóng chúng là một quyết định kiến trúc chứ không
+> phải một dòng mã: cổng quyền của `packages/supplier` nằm ở gói hay ở tầng API; chính sách nào
+> tính `requires_dual_approval`; và pepper cho băm đích của bộ đếm hạn mức. Cả ba cần một ADR.
+
+> ~~*** BA HẠNG MỤC ĐẦU KHÔNG ĐƯỢC COI LÀ XONG. ***~~ Ba lượt `security-reviewer` chạy ngày
 > 2026-08-29 tìm ra **4 CRITICAL + 11 HIGH**, và điều kiện hoàn thành S1 mục 6 đòi *mọi phát
 > hiện CRITICAL/HIGH đã được xử lý*. **Chưa một phát hiện nào được sửa.** Việc duy nhất đã làm
-> là gỡ một lời khai sai khỏi `evidence/INV-matrix.md`: E2 và E5 từng bị khai là ĐÃ PHỦ, và
-> chuỗi tấn công chứng minh điều đó sai đã được dựng lại thành phép đo. Độ phủ **30/50 → 28/50**.
+> ~~là gỡ một lời khai sai~~ **đã gỡ một lời khai sai** khỏi `evidence/INV-matrix.md`: E2 và E5 từng bị khai là ĐÃ PHỦ, và
+> chuỗi tấn công chứng minh điều đó sai đã được dựng lại thành phép đo. Độ phủ **30/50 → 28/50**,
+> và sau vòng sửa **28/50 → 30/50** — lần này kèm một chuỗi đối chứng, và cả hai mã mang cờ §4.
 > Chi tiết từng phát hiện: `evidence/security-reviews.md` §S1.
 
 ~~**S1 — ba hạng mục đầu ĐÃ XONG và đã commit (S1.1, S1.2, S1.3).**~~ Ba hạng mục đã có MÃ và
@@ -217,7 +229,7 @@ ADR.
 | 2 | Thư mục `Vibe Coding/` là bản copy-paste thủ công của CLAUDE.md + 5 file SKILL, trùng với plugin `ai-eng-os` đã cài | THẤP | README của plugin cảnh báo gây nhầm lẫn giữa `/feature` và `/ai-eng-os:feature`. Là thao tác **xoá file** nên kế hoạch cố ý không tự làm |
 | 3 | Rủi ro `crypto.subtle` không khả dụng trong webview Zalo/Messenger | CAO (rủi ro sản phẩm) | ~~**Chưa đo.**~~ **Vẫn CHƯA ĐO TRÊN THIẾT BỊ THẬT**, nhưng nay đã có **máy dò**: `tools/do-webcrypto/index.html` chạy thật từng phép mật mã của đường nộp thầu và cho ra một trong **bốn** phán quyết. Máy dò đã được chứng minh có răng bằng ba đột biến (`?dot=x25519\|aes\|rnd` qua `phuc-vu-va-dot-bien.mjs`) — bốn phán quyết phân biệt được, đo trên Chrome 148 ngày 2026-08-29. **ĐÃ CÓ PHÉP ĐO TRÊN WEBVIEW THẬT (2026-08-29): Zalo iOS, WKWebView, iOS 18.7 — ĐẠT TOÀN BỘ, kể cả X25519.** Giả thuyết xấu nhất (*"webview Zalo không có `crypto.subtle`"*) **đã bị bác trên đường iOS**. Rủi ro **hẹp lại nhưng CHƯA ĐÓNG**: phía **Android vẫn trống hoàn toàn**, và kết quả iOS chỉ đúng cho **iOS 18.7** — `X25519` vào WebCrypto muộn hơn nhiều so với AES-GCM nên một WebKit cũ là chỗ nó có thể vắng. Phép đo này cũng làm lộ ra rằng trục phân loại đúng là **engine**, không phải tên ứng dụng: trên iOS, Zalo và Messenger dùng **cùng một `WKWebView`**, nên một phép đo phủ cả hai. Nhật ký: `tools/do-webcrypto/ket-qua-do.md`. Xem ADR-007 và §10 của kế hoạch S1 |
 | 4 | Hiệu năng bọc/mở khoá `local-dev` (rủi ro §8.4 của spec) | THAM KHẢO | `pnpm bench:keys` trên máy dev, **đo lại 2026-08-29**: 10.000 lần **bọc** 447 ms (**≈22.400 thao tác/giây**), 10.000 lần **mở** 392 ms (**≈25.500 thao tác/giây**). Lần đo trước (sau fix round 1 của Task 7): 512 ms / 440 ms — cùng bậc. Đây là mốc của `local-dev` (mã hoá nội bộ, không qua mạng). ~~Tham chiếu: RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá/lượt mở thầu ⇒ dưới nửa giây CPU thuần. Adapter KMS/Vault thật (S1.6) sẽ chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng~~ — **hai câu vừa gạch đã được ĐO là sai** (2026-08-29, `tools/bench-kms/dem-loi-goi-kms.mjs`): 200 hạng mục nằm trong **cùng một phong bì** nên số phong bì là **50** chứ không phải 10.000; và một lượt mở thầu tốn **đúng 1 lời gọi KMS** bất kể số nhà cung cấp, vì chỉ data key của tổ chức đi qua KMS. Giữ nguyên văn để đối chiếu. **Câu "phải đo lại trước khi bắt đầu S1.6" thì vẫn đúng và vẫn còn hiệu lực** — phép đo trên là mô phỏng, chưa chạy qua `packages/crypto-keys`; xem ADR-009 |
-| 5 | `[M10]` flaky tiền tồn | THẤP | Ghi nhận từ vòng review trước, chưa truy nguyên |
+| 5 | `[M10]` flaky tiền tồn | THẤP | ~~Ghi nhận từ vòng review trước, chưa truy nguyên~~ **QUAN SÁT LẦN THỨ HAI (2026-08-29, vòng sửa sau review an ninh), và lần này có CHỮ KÝ.** Test `[fix round 5 — M10]` ở `packages/db/src/migrate.int.test.ts:540` đỏ trong một lượt `pnpm evidence` toàn bộ, **xanh khi chạy riêng file ấy**. Khẳng định đỏ là `expect(rows[0]?.n).toBe(0)` trên `SELECT count(*) FROM pg_locks WHERE locktype='advisory'` — thu được **1**, chờ **0**. Hai khẳng định ngay trước (`poolThuong.totalCount`/`idleCount` = 0) thì QUA, tức client phía Node đã bị huỷ. **GIẢ THUYẾT, chưa kiểm chứng:** đây là cùng cơ chế mà lần chạy CI đầu tiên đã đo và ghi ở mục 2 — *`await pool.end()` chỉ bảo đảm phía CLIENT*; backend phía server chưa kịp thoát nên advisory lock của nó chưa được nhả tại đúng khoảnh khắc câu đếm chạy. Nếu giả thuyết đúng thì bản vá cùng hình dạng với bản vá T3 của S0: **chờ `pg_stat_activity` hết backend rồi mới đếm**, thay vì đếm ngay. **Điểm dữ liệu thứ hai, cùng ngày:** lượt `pnpm evidence` chạy lại NGAY SAU đó, cùng cây mã, **XANH TOÀN BỘ** — 758 test, 0 file đỏ, vitest thoát mã 0. Hai lượt liên tiếp cho hai kết quả khác nhau trên cùng một cây: đây là bằng chứng FLAKY, không phải hồi quy. **Cố ý KHÔNG sửa trong vòng này**: nó là một test tiền tồn, không thuộc phạm vi review an ninh, và sửa một flake bằng một giả thuyết chưa đo là đúng thứ dự án phạt |
 
 ## Nợ kỹ thuật
 

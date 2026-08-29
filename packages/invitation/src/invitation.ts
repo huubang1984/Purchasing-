@@ -3,48 +3,47 @@ import type pg from "pg";
 import { appendAuditEvent, assertTenantBound, type ActorType } from "@trustprocure/audit";
 
 // =============================================================================================
-// LỜI MỜI, MAGIC LINK, OTP, PHIÊN KHÁCH (S1.3)
+// LỜI MỜI, MAGIC LINK, OTP, PHIÊN KHÁCH (S1.3) — BẢN SAU REVIEW AN NINH
 //
 // ---------------------------------------------------------------------------------------------
-// E2 LÀ MỘT MỆNH ĐỀ HỘI, VÀ HÌNH DẠNG CỦA GÓI NÀY LÀ CÁCH NÓ ĐƯỢC GIỮ
+// BẢN TRƯỚC CỦA FILE NÀY CÓ BA CRITICAL, VÀ CẢ BA CÙNG MỘT HÌNH DẠNG
 // ---------------------------------------------------------------------------------------------
-// *"Token một mình KHÔNG đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký."*
+// Chuỗi tấn công đã được dựng lại thành phép đo trên Postgres thật và nó chạy TRỌN, với kẻ tấn
+// công chỉ có `invitationId`:
 //
-// Cách vi phạm mệnh đề này mà không ai thấy: viết MỘT hàm `login(token)` trả về một phiên, rồi
-// gọi OTP ở tầng trên "khi cần". Lúc đó bất biến nằm trong TRÍ NHỚ của người viết cổng gác.
+//   C1  phat OTP toi so tu chon ......................... THANH CONG
+//   H1  mo phien chi bang invitationId .................. THANH CONG
+//   C2  so kiem toan ghi danh tinh ...................... NGUOI THAT (sai su that)
+//   C3  sau THU HOI van mo duoc PHIEN MOI ............... CO
 //
-// Ở đây nó nằm trong KIỂU DỮ LIỆU: `redeemMagicLink` trả về `RedeemedLink` — một thứ KHÔNG phải
-// phiên và không mở được gì. Hàm DUY NHẤT sinh ra `guest_sessions` là `verifyOtpAndStartSession`,
-// và nó KHÔNG nhận `RedeemedLink` làm bằng chứng: nó tự đọc lại thách thức OTP từ CSDL. Không có
-// đường nào đi từ "có token" tới "có phiên" mà không đi qua một mã OTP đã đối chiếu.
+// Hình dạng chung: **một sự thật an ninh được NHẬN VÀO dưới dạng tham số thay vì được ĐỌC RA từ
+// dữ liệu.** Đích nhận OTP là tham số. Danh tính đã xác thực là tham số. Quyền yêu cầu OTP chỉ
+// cần một UUID.
+//
+// Nguyên tắc của bản này, và nó là thứ duy nhất cần nhớ khi sửa file này về sau:
+//
+//     KHÔNG HÀM NÀO Ở ĐÂY ĐƯỢC PHÉP *KHAI* MỘT SỰ THẬT AN NINH.
+//     Nó chỉ được phép *CHỨNG MINH* một cái đã có, rồi ĐỌC hệ quả ra khỏi dữ liệu.
+//
+// Vì vậy `destination`, `verifiedContactId` và `verifiedChannel` ĐÃ BỊ GỠ khỏi mọi chữ ký. Thứ
+// duy nhất người gọi đưa vào là **token dạng rõ** — một thứ họ chỉ có nếu họ nhận được magic
+// link — và **mã OTP** — một thứ họ chỉ có nếu họ giữ kênh đã đăng ký.
 //
 // ---------------------------------------------------------------------------------------------
-// E3(5) — SO SÁNH CHỐNG TẤN CÔNG THỜI GIAN, VÀ MỘT ĐIỀU KIỆN DỄ BỊ BỎ QUA
+// E2 NẰM TRONG KIỂU DỮ LIỆU, VÀ NAY CẢ HAI CHIỀU ĐỀU ĐÓNG
 // ---------------------------------------------------------------------------------------------
-// `timingSafeEqual` NÉM nếu hai buffer khác độ dài, và cú ném ấy tự nó là một kênh phụ. Ở đây cả
-// hai vế luôn là 32 byte vì chúng là đầu ra của SHA-256, nên điều kiện được thoả BỞI CẤU TRÚC chứ
-// không bởi một phép kiểm phải nhớ. Đó là lý do so sánh chạy trên HASH chứ không trên mã.
-//
-// NÓI ĐÚNG MỨC, không rộng hơn: lớp này che vế "so mã đúng hay sai". Nó KHÔNG che thời gian của
-// các nhánh KHÁC — một thách thức không tồn tại trả lời nhanh hơn một thách thức tồn tại nhưng
-// sai mã, vì nhánh sau còn ghi `failed_attempts`. Không có mốc chết cho điều đó, cùng tình trạng
-// đã ghi cho `totp.ts` ở S0.
+// Bản trước đóng đúng một chiều — `redeemMagicLink` trả `RedeemedLink`, một thứ không mở được gì
+// — và để mở toang chiều còn lại: **không có đường nào BẮT PHẢI có token cả**. Nay hai hàm chạm
+// phiên đều nhận token và trigger ở 012 đòi thách thức mang `token_id` của đúng lời mời.
 //
 // ---------------------------------------------------------------------------------------------
-// E3(2) — GIỚI HẠN TẦN SUẤT: VẾ KHÔNG CÓ MỘT DÒNG MÃ NÀO TRONG TOÀN S0
+// E3(5) — SO SÁNH CHỐNG TẤN CÔNG THỜI GIAN
 // ---------------------------------------------------------------------------------------------
-// ADR-015 mục 5: hai hạn mức, HAI LOẠI PHẢN ỨNG khác nhau.
-//   * theo ĐÍCH (số điện thoại): chỉ được LÀM CHẬM. Khoá theo đích cho phép một người khoá lối
-//     vào của người khác chỉ bằng cách bấm "gửi lại" đủ nhiều — đúng đánh đổi đã ghi cho E3(1) ở
-//     `packages/identity/src/mfa-credentials.ts`.
-//   * theo NGƯỜI GỌI (phiên/IP): được KHOÁ.
-// Hàm `issueOtpChallenge` vì vậy TRẢ VỀ một kết quả có nhánh cho ca đích-bị-hạn-mức, và NÉM cho
-// ca người-gọi-bị-khoá. Hai hình dạng khác nhau là cố ý: một cái là "chưa gửi được, thử lại sau",
-// cái kia là "dừng lại".
-//
-// KHOẢN NỢ CÒN LẠI, ghi ra thay vì để nó trông như đã đóng: lớp này phủ đường OTP CỦA LỜI MỜI.
-// Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất — §4 của ma trận cho E3 phải
-// nói đúng điều đó chứ không được xoá.
+// `timingSafeEqual` NÉM nếu hai buffer khác độ dài, và cú ném ấy tự nó là một kênh phụ. Cả hai vế
+// luôn 32 byte (đầu ra SHA-256), nên điều kiện được thoả BỞI CẤU TRÚC. Nói đúng mức: lớp này che
+// vế "so mã đúng hay sai", KHÔNG che thời gian của các nhánh KHÁC — một thách thức không tồn tại
+// trả lời nhanh hơn một thách thức tồn tại nhưng sai mã. Không có mốc chết cho điều đó, cùng tình
+// trạng đã ghi cho `totp.ts` ở S0.
 // =============================================================================================
 
 export class InvitationError extends Error {
@@ -54,7 +53,6 @@ export class InvitationError extends Error {
   }
 }
 
-/** Kênh gửi. Cùng tập đóng với `CHECK` ở 010. */
 export const CHANNELS = ["EMAIL", "SMS", "ZALO_ZNS"] as const;
 export type Channel = (typeof CHANNELS)[number];
 
@@ -65,12 +63,26 @@ export const GUEST_SESSION_TOKEN_BYTES = 32;
 export const OTP_TTL_SECONDS = 300;
 export const OTP_MAX_FAILED_ATTEMPTS = 5;
 export const OTP_LOCKOUT_SECONDS = 900;
-/** Cửa sổ của cả hai hạn mức. */
 export const OTP_RATE_WINDOW_SECONDS = 900;
 /** Theo ĐÍCH — chạm trần thì LÀM CHẬM, không khoá. */
 export const OTP_MAX_PER_DEST = 3;
 /** Theo NGƯỜI GỌI — chạm trần thì KHOÁ. */
 export const OTP_MAX_PER_CALLER = 10;
+/**
+ * [H3] Theo LỜI MỜI — bucket DUY NHẤT kẻ tấn công không xoay được, vì `invitation_id` chính là
+ * thứ nó đang nhắm. Hai bucket kia khoá trên chuỗi do người gọi truyền vào (`callerFingerprint`,
+ * và trước vòng sửa này là cả `destination`), nên đổi chuỗi là có bucket mới.
+ */
+export const OTP_MAX_PER_INVITATION = 5;
+
+/**
+ * [H5] Trần TRÊN của TTL. `CHECK (expires_at > created_at)` chỉ chặn cận DƯỚI; một cấu hình sai
+ * đặt TTL = 10^9 làm vế *"có hạn"* của E1 biến mất trong im lặng. Đây là bài học dự án đã trả
+ * tiền một lần ở `MFA_MAX_ALLOWED_FAILED_ATTEMPTS`: *một tham số chính sách phải có cận TRÊN chứ
+ * không chỉ cận DƯỚI*.
+ */
+export const MAGIC_LINK_MAX_TTL_SECONDS = 7 * 24 * 3600;
+export const GUEST_SESSION_MAX_TTL_SECONDS = 12 * 3600;
 
 export interface InvitationActor {
   readonly type: ActorType;
@@ -84,21 +96,25 @@ function bam(...phan: string[]): Buffer {
 }
 
 /**
- * Mã OTP sáu chữ số từ `randomInt` — CSPRNG và KHÔNG lệch phân phối.
- *
- * `Math.random()` sai theo HAI hướng ở đây và cả hai đều nghiêm trọng; `randomBytes(3) % 1000000`
- * thì sai theo hướng thứ hai: 2^24 không chia hết cho 10^6 nên các giá trị nhỏ hơi nặng hơn.
- * `randomInt` loại bỏ phần dư bằng lấy mẫu lại.
+ * Mã OTP sáu chữ số từ `randomInt` — CSPRNG và KHÔNG lệch phân phối. `randomBytes(3) % 1000000`
+ * thì lệch: 2^24 không chia hết cho 10^6.
  */
 function sinhMaOtp(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+function tranTtl(giaTri: number | undefined, macDinh: number, tran: number, ten: string): number {
+  const ttl = giaTri ?? macDinh;
+  if (!Number.isInteger(ttl) || ttl <= 0 || ttl > tran) {
+    throw new InvitationError(`${ten} phải là số giây dương và không vượt ${tran}`);
+  }
+  return ttl;
 }
 
 export interface CreateInvitationInput {
   readonly rfqId: string;
   readonly supplierId: string;
   readonly contactId: string;
-  /** Mặc định EMAIL. Kênh này KHÔNG được trùng kênh OTP — trigger ở 010 cưỡng chế. */
   readonly linkChannel?: Channel;
   readonly actor: InvitationActor;
 }
@@ -163,23 +179,29 @@ export async function createInvitation(
 export interface IssuedToken {
   readonly tokenId: string;
   /**
-   * Token DẠNG RÕ, và đây là lần DUY NHẤT nó tồn tại. CSDL chỉ giữ SHA-256 của nó (E1), nên không
-   * đường nào lấy lại được giá trị này. KHÔNG ghi log, KHÔNG đưa vào `outbox_jobs.payload` — hợp
-   * đồng của `enqueueJob` nói payload mang THAM CHIẾU, không mang GIÁ TRỊ.
+   * Token DẠNG RÕ, và đây là lần DUY NHẤT nó tồn tại. CSDL chỉ giữ SHA-256 của nó (E1). KHÔNG ghi
+   * log, KHÔNG đưa vào `outbox_jobs.payload` — hợp đồng của `enqueueJob` nói payload mang THAM
+   * CHIẾU, không mang GIÁ TRỊ.
    */
   readonly token: string;
   readonly expiresAt: Date;
 }
 
+/**
+ * [M4] Phát token nay CÓ ghi kiểm toán. Đúc một credential bearer là thao tác đáng ghi sổ nhất
+ * trong cả gói, và bản trước không để lại dấu vết nào trong khi `createInvitation` thì có — một
+ * bất đối xứng không có lý do nào được viết ra. Lập luận DoS của ADR-008 không áp dụng: đường này
+ * đã có trần tần suất ở phía trên.
+ */
 export async function issueMagicLinkToken(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly invitationId: string; readonly ttlSeconds?: number },
+  input: { readonly invitationId: string; readonly ttlSeconds?: number; readonly actor: InvitationActor },
 ): Promise<IssuedToken> {
   await assertTenantBound(client, orgId, "issueMagicLinkToken");
 
+  const ttl = tranTtl(input.ttlSeconds, MAGIC_LINK_MAX_TTL_SECONDS, MAGIC_LINK_MAX_TTL_SECONDS, "ttlSeconds");
   const token = randomBytes(MAGIC_LINK_TOKEN_BYTES).toString("base64url");
-  const ttl = input.ttlSeconds ?? 7 * 24 * 3600;
 
   const { rows } = await client.query<{ id: string; expires_at: Date }>(
     `INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at)
@@ -190,17 +212,64 @@ export async function issueMagicLinkToken(
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("INSERT token không trả về hàng nào");
 
+  await appendAuditEvent(client, orgId, {
+    actorType: input.actor.type,
+    actorId: input.actor.id ?? null,
+    action: "MAGIC_LINK_TOKEN_ISSUED",
+    resourceType: "rfq_invitation_token",
+    resourceId: hang.id,
+    payload: { invitationId: input.invitationId },
+  });
+
   return { tokenId: hang.id, token, expiresAt: hang.expires_at };
 }
 
 /**
- * Kết quả của việc đổi một magic link. **KHÔNG PHẢI MỘT PHIÊN** và không mở được gì — xem khối E2
- * ở đầu file. Nó chỉ nói "token này hợp lệ và trỏ tới lời mời nào".
+ * Kết quả của việc đổi một magic link. **KHÔNG PHẢI MỘT PHIÊN** và không mở được gì.
  */
 export interface RedeemedLink {
   readonly invitationId: string;
   readonly contactId: string;
   readonly linkChannel: Channel;
+}
+
+interface HangToken {
+  token_id: string;
+  invitation_id: string;
+  contact_id: string;
+  supplier_id: string;
+  link_channel: Channel;
+}
+
+/**
+ * Đối chiếu một token dạng rõ và trả về ngữ cảnh của nó — hoặc ném.
+ *
+ * Bốn ca hỏng (không tồn tại, hết hạn, đã thu hồi, ĐÃ TIÊU THỤ) cố ý ném CÙNG MỘT thông báo:
+ * phân biệt được chúng là một oracle trên chính tập token.
+ *
+ * [H5] `consumed_at IS NULL` là vế MỚI. Bản trước không bao giờ GHI `consumed_at` và cũng không
+ * ĐỌC nó, nên magic link là một bearer token chơi lại được cho tới khi hết hạn — và tệ hơn, ngày
+ * ai đó viết mã đặt `consumed_at` thì `redeemMagicLink` vẫn cho qua: một bẫy fail-open đã cài sẵn.
+ */
+async function docToken(client: pg.PoolClient, orgId: string, token: string): Promise<HangToken> {
+  const { rows } = await client.query<HangToken>(
+    `SELECT t.id AS token_id, i.id AS invitation_id, i.contact_id, i.supplier_id, i.link_channel
+       FROM rfq_invitation_tokens t
+       JOIN rfq_invitations i ON i.id = t.invitation_id AND i.org_id = t.org_id
+      WHERE t.token_hash = $1
+        AND t.purpose = 'BID_SUBMISSION'
+        AND t.expires_at > now()
+        AND t.revoked_at IS NULL
+        AND t.consumed_at IS NULL
+        AND i.status <> 'REVOKED'
+        AND i.revoked_at IS NULL`,
+    [bam(token)],
+  );
+  const hang = rows[0];
+  if (hang === undefined) {
+    throw new InvitationError("magic link không hợp lệ, đã hết hạn, đã dùng, hoặc đã bị thu hồi");
+  }
+  return hang;
 }
 
 export async function redeemMagicLink(
@@ -209,50 +278,50 @@ export async function redeemMagicLink(
   token: string,
 ): Promise<RedeemedLink> {
   await assertTenantBound(client, orgId, "redeemMagicLink");
-
-  const { rows } = await client.query<HangInvitation & { het_han: boolean; thu_hoi: boolean }>(
-    `SELECT i.id, i.rfq_id, i.supplier_id, i.contact_id, i.link_channel, i.status,
-            (t.expires_at <= now()) AS het_han,
-            (t.revoked_at IS NOT NULL OR i.status = 'REVOKED') AS thu_hoi
-       FROM rfq_invitation_tokens t
-       JOIN rfq_invitations i ON i.id = t.invitation_id
-      WHERE t.token_hash = $1 AND t.purpose = 'BID_SUBMISSION'`,
-    [bam(token)],
-  );
-
-  const hang = rows[0];
-  // Ba ca — không tìm thấy, hết hạn, đã thu hồi — cố ý ném CÙNG MỘT thông báo. Phân biệt được
-  // chúng là một oracle trên chính tập token: "chuỗi này từng là một token thật".
-  if (hang === undefined || hang.het_han || hang.thu_hoi) {
-    throw new InvitationError("magic link không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
-  }
-
-  return { invitationId: hang.id, contactId: hang.contact_id, linkChannel: hang.link_channel };
+  const t = await docToken(client, orgId, token);
+  return { invitationId: t.invitation_id, contactId: t.contact_id, linkChannel: t.link_channel };
 }
 
 export type OtpIssueOutcome =
-  | { readonly ok: true; readonly challengeId: string; readonly code: string }
+  | {
+      readonly ok: true;
+      readonly challengeId: string;
+      readonly code: string;
+      /** Đích ĐỌC TỪ CSDL. Người gọi (handler gửi) cần nó để gửi — nó KHÔNG do người gọi chọn. */
+      readonly destination: string;
+      readonly contactId: string;
+    }
   | { readonly ok: false; readonly reason: "DEST_RATE_LIMITED"; readonly retryAfterSeconds: number };
 
 export interface IssueOtpInput {
-  readonly invitationId: string;
+  /** [H1] Token dạng rõ — bằng chứng người gọi đã nhận magic link. KHÔNG phải `invitationId`. */
+  readonly token: string;
   readonly channel: Channel;
-  /** Đích nhận dạng rõ (số điện thoại). CHỈ dùng để băm — không bao giờ được ghi xuống. */
-  readonly destination: string;
-  /** Dấu vân của người gọi: IP, hoặc id phiên trình duyệt. CHỈ dùng để băm. */
+  /**
+   * Dấu vân của người gọi. **HỢP ĐỒNG:** nó PHẢI được dẫn xuất ở tầng ngoài cùng từ một nguồn
+   * KHÔNG GIẢ MẠO ĐƯỢC — IP tầng vận chuyển sau một proxy tin cậy, không phải `X-Forwarded-By`
+   * do client gửi. Không có ràng buộc ấy, hạn mức theo người gọi bị vô hiệu bằng cách xoay chuỗi.
+   * Không lớp máy nào cưỡng chế được điều này; lớp duy nhất là dòng chữ này cộng code review, và
+   * đó là lý do bucket theo LỜI MỜI tồn tại.
+   */
   readonly callerFingerprint: string;
+  readonly actor: InvitationActor;
 }
 
 async function demVaTang(
   client: pg.PoolClient,
   orgId: string,
-  kind: "DEST" | "CALLER",
+  kind: "DEST" | "CALLER" | "INVITATION",
   khoa: string,
 ): Promise<number> {
-  // Cửa sổ RỜI RẠC (`date_trunc` theo bội của cửa sổ) chứ không phải cửa sổ TRƯỢT. Nói đúng mức:
-  // một kẻ tấn công canh đúng ranh giới hai cửa sổ gửi được GẤP ĐÔI hạn mức trong một khoảnh
-  // khắc. Cửa sổ trượt cần lưu từng dấu thời gian, tức một bảng lớn hơn nhiều cho một lớp mà
-  // mục tiêu là chặn lạm dụng ồ ạt, không phải chặn đúng một lần thừa.
+  // Cửa sổ RỜI RẠC, không phải cửa sổ trượt: một kẻ tấn công canh đúng ranh giới hai cửa sổ gửi
+  // được GẤP ĐÔI hạn mức trong một khoảnh khắc. Cửa sổ trượt cần lưu từng dấu thời gian.
+  //
+  // [M1, phần đóng được không cần pepper] `orgId` đi vào phép băm: không có nó, cùng một số điện
+  // thoại cho cùng một `bucket_hash` ở MỌI tổ chức, và một bản sao lưu cho phép JOIN giữa hai tổ
+  // chức để trả lời "hai bên mua này có cùng nhà cung cấp không" — đúng tài sản mà ADR-013 dành
+  // trọn một ADR để bảo vệ. Phần CÒN LẠI của M1 (SHA-256 trần trên không gian ~10^9 số di động là
+  // đảo ngược được) đòi một pepper giữ ngoài CSDL và vẫn là khoản nợ mở.
   const { rows } = await client.query<{ hits: number }>(
     `INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits)
      VALUES ($1, $2, $3,
@@ -260,18 +329,19 @@ async function demVaTang(
      ON CONFLICT (org_id, bucket_kind, bucket_hash, window_start)
        DO UPDATE SET hits = otp_rate_limits.hits + 1
      RETURNING hits`,
-    [orgId, kind, bam(kind, khoa), OTP_RATE_WINDOW_SECONDS],
+    [orgId, kind, bam(orgId, kind, khoa), OTP_RATE_WINDOW_SECONDS],
   );
   return rows[0]?.hits ?? 0;
 }
 
 /**
- * Sinh một thách thức OTP và TRẢ VỀ mã dạng rõ cho người gọi.
+ * Sinh một thách thức OTP. **NGƯỜI GỌI PHẢI LÀ HANDLER GỬI** (ADR-015 mục 3): mã không được sinh
+ * ở nơi xếp hàng rồi truyền qua `outbox_jobs.payload`, vì payload mang THAM CHIẾU chứ không mang
+ * GIÁ TRỊ. Không lớp máy nào cưỡng chế điều đó.
  *
- * NGƯỜI GỌI PHẢI LÀ HANDLER GỬI, và đó là một ràng buộc của ADR-015 mục 3 chứ không phải một lời
- * khuyên: `outbox_jobs.payload` mang THAM CHIẾU, không mang GIÁ TRỊ, nên mã KHÔNG được sinh ở nơi
- * xếp hàng rồi truyền qua payload. Nó phải sinh ở đây, đi thẳng sang nhà cung cấp kênh, rồi biến
- * mất. Không lớp máy nào cưỡng chế điều đó — lớp duy nhất là dòng chữ này cộng code review.
+ * [C1] Đích nhận **ĐỌC TỪ `supplier_contacts`**, không nhận từ tham số. Bản trước nhận `destination`
+ * tự do và không lưu lại nó, nên "không lớp nào, ở bất kỳ thời điểm nào, biết mã đã đi tới đâu" —
+ * và một kẻ có `invitationId` cho gửi OTP về số của chính nó.
  */
 export async function issueOtpChallenge(
   client: pg.PoolClient,
@@ -280,33 +350,68 @@ export async function issueOtpChallenge(
 ): Promise<OtpIssueOutcome> {
   await assertTenantBound(client, orgId, "issueOtpChallenge");
 
+  const t = await docToken(client, orgId, input.token);
+
+  // Kênh quyết định CỘT NÀO được đọc. Nhờ vậy nhãn `channel` và sự thật là MỘT thứ — bản trước
+  // để chúng rời nhau, nên `channel='SMS'` với một địa chỉ email đi qua trigger sạch sẽ và OTP về
+  // đúng hộp thư đã nhận magic link (H2).
+  const cot = input.channel === "EMAIL" ? "email" : "phone";
+  const { rows: lh } = await client.query<{ dich: string | null }>(
+    `SELECT ${cot} AS dich FROM supplier_contacts WHERE id = $1`,
+    [t.contact_id],
+  );
+  const dich = lh[0]?.dich ?? null;
+  if (dich === null || dich.length === 0) {
+    // ADR-015 và 008 đã ghim hệ quả này: lời mời phải BỊ TỪ CHỐI khi thiếu kênh, KHÔNG được lặng
+    // lẽ rơi về email — rơi về email là đúng thứ ADR-015 mục 1 cấm.
+    throw new InvitationError("người liên hệ chưa có kênh đã đăng ký cho loại kênh này");
+  }
+
   const soLanNguoiGoi = await demVaTang(client, orgId, "CALLER", input.callerFingerprint);
   if (soLanNguoiGoi > OTP_MAX_PER_CALLER) {
-    // KHOÁ — ADR-015 mục 5. Ném, không trả nhánh: đây là "dừng lại".
     throw new InvitationError("vượt giới hạn tần suất theo người gọi");
   }
 
-  const soLanDich = await demVaTang(client, orgId, "DEST", input.destination);
+  const soLanLoiMoi = await demVaTang(client, orgId, "INVITATION", t.invitation_id);
+  if (soLanLoiMoi > OTP_MAX_PER_INVITATION) {
+    throw new InvitationError("vượt giới hạn tần suất theo lời mời");
+  }
+
+  const soLanDich = await demVaTang(client, orgId, "DEST", dich);
   if (soLanDich > OTP_MAX_PER_DEST) {
-    // LÀM CHẬM — không khoá, không ném. Khoá theo đích cho phép một người chặn lối vào của người
-    // khác chỉ bằng cách bấm "gửi lại" đủ nhiều.
-    return {
-      ok: false,
-      reason: "DEST_RATE_LIMITED",
-      retryAfterSeconds: OTP_RATE_WINDOW_SECONDS,
-    };
+    return { ok: false, reason: "DEST_RATE_LIMITED", retryAfterSeconds: OTP_RATE_WINDOW_SECONDS };
   }
 
   const code = sinhMaOtp();
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO invitation_otp_challenges (org_id, invitation_id, channel, code_hash, expires_at)
-     VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5)) RETURNING id`,
-    [orgId, input.invitationId, input.channel, bam(input.invitationId, code), OTP_TTL_SECONDS],
+    `INSERT INTO invitation_otp_challenges
+       (org_id, invitation_id, token_id, contact_id, channel, code_hash, destination_hash, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8)) RETURNING id`,
+    [
+      orgId,
+      t.invitation_id,
+      t.token_id,
+      t.contact_id,
+      input.channel,
+      bam(t.invitation_id, code),
+      bam(orgId, "DEST", dich),
+      OTP_TTL_SECONDS,
+    ],
   );
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("INSERT thách thức OTP không trả về hàng nào");
 
-  return { ok: true, challengeId: hang.id, code };
+  // [M4] `payload` mang challengeId và kênh — KHÔNG mang đích, KHÔNG mang mã.
+  await appendAuditEvent(client, orgId, {
+    actorType: input.actor.type,
+    actorId: input.actor.id ?? null,
+    action: "OTP_CHALLENGE_ISSUED",
+    resourceType: "invitation_otp_challenge",
+    resourceId: hang.id,
+    payload: { invitationId: t.invitation_id, channel: input.channel },
+  });
+
+  return { ok: true, challengeId: hang.id, code, destination: dich, contactId: t.contact_id };
 }
 
 export type OtpDenialReason =
@@ -317,19 +422,20 @@ export type OtpDenialReason =
   | "WRONG_CODE";
 
 export type OtpVerifyResult =
-  | { readonly ok: true; readonly sessionId: string; readonly sessionToken: string }
+  | {
+      readonly ok: true;
+      readonly sessionId: string;
+      readonly sessionToken: string;
+      /** DẪN XUẤT từ thách thức, không phải một tham số. Xem C2. */
+      readonly verifiedContactId: string;
+      readonly verifiedChannel: Channel;
+    }
   | { readonly ok: false; readonly reason: OtpDenialReason };
 
 export interface VerifyOtpInput {
-  readonly invitationId: string;
+  /** [H1] Token dạng rõ. Cùng token đã dùng để phát thách thức — trigger ở 012 đòi trùng khớp. */
+  readonly token: string;
   readonly code: string;
-  /**
-   * Danh tính THỰC TẾ ĐÃ XÁC THỰC (E5) — người liên hệ GIỮ KÊNH đã nhận mã, KHÔNG nhất thiết là
-   * người được ghi ở `rfq_invitations.contact_id`. Hai giá trị có thể khác nhau và đó là hành vi
-   * được thiết kế: link chuyển tiếp vẫn dùng được.
-   */
-  readonly verifiedContactId: string;
-  readonly verifiedChannel: Channel;
   readonly ttlSeconds?: number;
   readonly actor: InvitationActor;
 }
@@ -337,16 +443,24 @@ export interface VerifyOtpInput {
 interface HangThachThuc {
   id: string;
   code_hash: Buffer;
+  contact_id: string;
+  channel: Channel;
   het_han: boolean;
   da_dung: boolean;
   dang_khoa: boolean;
-  failed_attempts: number;
 }
 
 /**
- * Đối chiếu OTP và — CHỈ KHI ĐÚNG — mở một phiên khách.
+ * Đối chiếu OTP và — CHỈ KHI ĐÚNG — mở một phiên khách. Hàm DUY NHẤT sinh `guest_sessions`.
  *
- * Đây là hàm DUY NHẤT trong hệ thống sinh ra một hàng `guest_sessions`. Xem khối E2 ở đầu file.
+ * [C2] `verified_contact_id` và `verified_channel` được SAO CHÉP từ hàng thách thức, và trigger
+ * `guest_sessions_kiem_danh_tinh` (012) đòi chúng khớp. Bản trước nhận chúng làm tham số, nên sổ
+ * kiểm toán — bằng chứng pháp lý duy nhất của hệ thống — ghi được một danh tính chưa từng xác thực.
+ *
+ * [H5] Token bị TIÊU THỤ khi phiên ra đời. Hệ quả về sản phẩm phải nói ra: một magic link mở được
+ * ĐÚNG MỘT phiên; muốn vào lại sau khi phiên hết hạn thì phải phát link mới. Đó là đánh đổi có
+ * chủ đích — một bearer token 7 ngày chơi lại vô hạn là thứ nằm trong URL, trong lịch sử duyệt,
+ * và trong log của mọi proxy.
  */
 export async function verifyOtpAndStartSession(
   client: pg.PoolClient,
@@ -355,20 +469,27 @@ export async function verifyOtpAndStartSession(
 ): Promise<OtpVerifyResult> {
   await assertTenantBound(client, orgId, "verifyOtpAndStartSession");
 
-  // `FOR UPDATE` trên thách thức mới nhất: hai lần thử song song cùng đọc `failed_attempts = 4`
-  // rồi cùng ghi `5` sẽ làm trần loạt đầu bằng ĐỘ ĐỒNG THỜI CỦA KẺ TẤN CÔNG thay vì bằng hằng số
-  // cấu hình — đúng khoản nợ 2 của S0, và ở đây nó được đóng thay vì lặp lại.
+  const ttl = tranTtl(
+    input.ttlSeconds,
+    4 * 3600,
+    GUEST_SESSION_MAX_TTL_SECONDS,
+    "ttlSeconds",
+  );
+  const t = await docToken(client, orgId, input.token);
+
+  // `FOR UPDATE` giữ hàng cho tới hết transaction. Nó là lớp THỨ HAI: lớp thứ nhất là biểu thức
+  // TỰ THAM CHIẾU ở câu ghi thất bại bên dưới, thứ đúng kể cả khi không có khoá.
   const { rows } = await client.query<HangThachThuc>(
-    `SELECT id, code_hash, failed_attempts,
+    `SELECT id, code_hash, contact_id, channel,
             (expires_at <= now()) AS het_han,
             (consumed_at IS NOT NULL) AS da_dung,
             (locked_until IS NOT NULL AND locked_until > now()) AS dang_khoa
        FROM invitation_otp_challenges
-      WHERE invitation_id = $1
+      WHERE invitation_id = $1 AND token_id = $2
       ORDER BY created_at DESC
       LIMIT 1
         FOR UPDATE`,
-    [input.invitationId],
+    [t.invitation_id, t.token_id],
   );
 
   const tt = rows[0];
@@ -377,53 +498,51 @@ export async function verifyOtpAndStartSession(
   if (tt.da_dung) return { ok: false, reason: "ALREADY_USED" };
   if (tt.het_han) return { ok: false, reason: "EXPIRED" };
 
-  // Cả hai vế luôn 32 byte (đầu ra SHA-256), nên `timingSafeEqual` không bao giờ ném vì lệch độ
-  // dài — điều kiện được thoả BỞI CẤU TRÚC. Xem khối E3(5) ở đầu file.
-  const dung = timingSafeEqual(tt.code_hash, bam(input.invitationId, input.code));
+  const dung = timingSafeEqual(tt.code_hash, bam(t.invitation_id, input.code));
 
   if (!dung) {
-    const lanThu = tt.failed_attempts + 1;
-    await client.query(
-      // `$2::int` ở CẢ HAI chỗ: không có ép kiểu, Postgres suy ra hai kiểu khác nhau cho cùng
-      // một tham số (một vế là `integer` của cột, vế kia là toán hạng của `>=`) và trả
-      // "inconsistent types deduced for parameter $2". Đã vấp phải khi chạy test lần đầu.
-      `UPDATE invitation_otp_challenges
-          SET failed_attempts = $2::int,
-              locked_until = CASE WHEN $2::int >= $3::int
-                                  THEN now() + make_interval(secs => $4) ELSE NULL END
-        WHERE id = $1`,
-      [tt.id, lanThu, OTP_MAX_FAILED_ATTEMPTS, OTP_LOCKOUT_SECONDS],
+    // [H4] BIỂU THỨC TỰ THAM CHIẾU, không phải một giá trị tuyệt đối tính ở Node. Bản trước tính
+    // `failed_attempts + 1` trong JavaScript rồi ghi đè — đúng hình dạng fail-OPEN mà dự án đã ĐO
+    // và đã bác ở `packages/identity/src/mfa-credentials.ts` (24 mã được phán xét, LOCKED_OUT = 0).
+    // Ở dạng đó, tính đúng đắn phụ thuộc HOÀN TOÀN vào `FOR UPDATE` giữ khoá tới hết lượt ghi,
+    // tức phụ thuộc vào một điều kiện tiên quyết không được viết ra: người gọi phải đang ở trong
+    // một transaction. `assertTenantBound` KHÔNG đòi điều đó.
+    const { rows: sau } = await client.query<{ locked_until: Date | null }>(
+      `UPDATE invitation_otp_challenges c
+          SET failed_attempts = c.failed_attempts + 1,
+              locked_until = CASE WHEN c.failed_attempts + 1 >= $2::int
+                                  THEN now() + make_interval(secs => $3) ELSE c.locked_until END
+        WHERE c.id = $1
+        RETURNING c.locked_until`,
+      [tt.id, OTP_MAX_FAILED_ATTEMPTS, OTP_LOCKOUT_SECONDS],
     );
-    return { ok: false, reason: lanThu >= OTP_MAX_FAILED_ATTEMPTS ? "LOCKED_OUT" : "WRONG_CODE" };
+    const bikhoa = sau[0]?.locked_until != null;
+    return { ok: false, reason: bikhoa ? "LOCKED_OUT" : "WRONG_CODE" };
   }
 
-  // DÙNG MỘT LẦN — vế bền vững, không phải một cờ trong bộ nhớ. Câu này có `consumed_at IS NULL`
-  // trong `WHERE` nên hai lần dùng song song chỉ có một lần chạm được hàng.
   const danhDau = await client.query(
     "UPDATE invitation_otp_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL",
     [tt.id],
   );
   if (danhDau.rowCount !== 1) return { ok: false, reason: "ALREADY_USED" };
 
+  // [H5] Tiêu thụ token cùng lượt.
+  await client.query(
+    "UPDATE rfq_invitation_tokens SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL",
+    [t.token_id],
+  );
+
   const sessionToken = randomBytes(GUEST_SESSION_TOKEN_BYTES).toString("base64url");
   const phien = await client.query<{ id: string }>(
     `INSERT INTO guest_sessions
-       (org_id, invitation_id, token_hash, verified_contact_id, verified_channel, expires_at)
-     VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6)) RETURNING id`,
-    [
-      orgId,
-      input.invitationId,
-      bam(sessionToken),
-      input.verifiedContactId,
-      input.verifiedChannel,
-      input.ttlSeconds ?? 4 * 3600,
-    ],
+       (org_id, invitation_id, challenge_id, token_hash, verified_contact_id, verified_channel,
+        expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7)) RETURNING id`,
+    [orgId, t.invitation_id, tt.id, bam(sessionToken), tt.contact_id, tt.channel, ttl],
   );
   const hangPhien = phien.rows[0];
   if (hangPhien === undefined) throw new InvitationError("INSERT guest_sessions không trả về hàng");
 
-  // E5: sổ kiểm toán ghi danh tính THỰC TẾ ĐÃ XÁC THỰC. `payload` KHÔNG mang mã OTP, không mang
-  // token, không mang số điện thoại — chỉ tham chiếu.
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,
     actorId: input.actor.id ?? null,
@@ -431,28 +550,59 @@ export async function verifyOtpAndStartSession(
     resourceType: "guest_session",
     resourceId: hangPhien.id,
     payload: {
-      invitationId: input.invitationId,
-      verifiedContactId: input.verifiedContactId,
-      verifiedChannel: input.verifiedChannel,
+      invitationId: t.invitation_id,
+      challengeId: tt.id,
+      verifiedContactId: tt.contact_id,
+      verifiedChannel: tt.channel,
     },
   });
 
-  return { ok: true, sessionId: hangPhien.id, sessionToken };
+  return {
+    ok: true,
+    sessionId: hangPhien.id,
+    sessionToken,
+    verifiedContactId: tt.contact_id,
+    verifiedChannel: tt.channel,
+  };
 }
 
+/**
+ * [C3] Thu hồi nay chạm CẢ BA đường: token, thách thức OTP đang mở, và phiên khách đang sống.
+ *
+ * Bản trước chỉ chạm token, và `verifyOtpAndStartSession` không đọc trạng thái lời mời — nên sau
+ * khi người mua phát hiện link bị rò và thu hồi, kẻ tấn công vẫn phát được OTP và vẫn mở được một
+ * phiên mới. Đo được: `sau THU HOI van mo duoc PHIEN MOI: CO`.
+ *
+ * [M4] Sự kiện kiểm toán chỉ được ghi khi THẬT SỰ có hàng đổi. Bản trước ghi `INVITATION_REVOKED`
+ * kể cả khi hai câu UPDATE chạm 0 hàng (id không tồn tại, hoặc thuộc tổ chức khác và bị RLS lọc)
+ * — tức sổ kiểm toán chứa một sự kiện thu hồi chưa từng xảy ra.
+ */
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,
   input: { readonly invitationId: string; readonly actor: InvitationActor },
-): Promise<void> {
+): Promise<boolean> {
   await assertTenantBound(client, orgId, "revokeInvitation");
 
+  const loiMoi = await client.query(
+    "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now() " +
+      " WHERE id = $1 AND revoked_at IS NULL",
+    [input.invitationId],
+  );
+  if (loiMoi.rowCount !== 1) return false;
+
   await client.query(
-    "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now() WHERE id = $1",
+    "UPDATE rfq_invitation_tokens SET revoked_at = now() " +
+      " WHERE invitation_id = $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
   await client.query(
-    "UPDATE rfq_invitation_tokens SET revoked_at = now() " +
+    "UPDATE invitation_otp_challenges SET consumed_at = now() " +
+      " WHERE invitation_id = $1 AND consumed_at IS NULL",
+    [input.invitationId],
+  );
+  await client.query(
+    "UPDATE guest_sessions SET revoked_at = now() " +
       " WHERE invitation_id = $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
@@ -464,4 +614,5 @@ export async function revokeInvitation(
     resourceType: "rfq_invitation",
     resourceId: input.invitationId,
   });
+  return true;
 }

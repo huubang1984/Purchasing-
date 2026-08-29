@@ -13,13 +13,16 @@
 // ============================================================================================
 export {
   CHANNELS,
+  GUEST_SESSION_MAX_TTL_SECONDS,
   GUEST_SESSION_TOKEN_BYTES,
   InvitationError,
+  MAGIC_LINK_MAX_TTL_SECONDS,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_LOCKOUT_SECONDS,
   OTP_MAX_FAILED_ATTEMPTS,
   OTP_MAX_PER_CALLER,
   OTP_MAX_PER_DEST,
+  OTP_MAX_PER_INVITATION,
   OTP_RATE_WINDOW_SECONDS,
   OTP_TTL_SECONDS,
   createInvitation,

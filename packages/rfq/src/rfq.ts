@@ -57,6 +57,8 @@ export type RfqStatus = (typeof RFQ_STATUSES)[number];
  */
 export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["DRAFT", "PENDING_APPROVAL"],
+  // [C-1, 011] Cạnh MỚI: sau khi hạng mục chỉ sửa được ở DRAFT, phải có đường quay lại.
+  ["PENDING_APPROVAL", "DRAFT"],
   ["PENDING_APPROVAL", "OPEN"],
   ["OPEN", "CLOSED"],
   ["CLOSED", "UNSEALED"],
@@ -77,6 +79,14 @@ export interface CreateRfqInput {
   /** Mặc định `true` — mặc định ĐÓNG, cùng giá trị với DEFAULT của cột ở 009. */
   readonly requiresDualApproval?: boolean;
   readonly createdBy: string;
+  /**
+   * [H-1, review an ninh S1.2] Phiên của CHÍNH người tạo. Không có nó, `createdBy` là một LỜI KHAI:
+   * Mallory gọi `createRfq({ createdBy: idCuaBob, actor: Mallory })` rồi tự duyệt được, vì trigger
+   * so `Bob = Mallory` -> sai -> cho qua. D2 tụt từ "hai người khác người tạo" xuống "một người".
+   * Trigger `rfq_packages_kiem_nguoi_tao` (011) đòi `sessions.user_id = created_by`, nên cột ấy
+   * nay là DẪN XUẤT chứ không phải lời khai.
+   */
+  readonly createdBySessionId: string;
   readonly actor: RfqActor;
 }
 
@@ -200,9 +210,10 @@ export async function createRfq(
   const requiresDual = input.requiresDualApproval ?? true;
 
   const { rows } = await client.query<HangRfq>(
-    `INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by)
-     VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_RFQ}`,
-    [orgId, title, input.deadlineAt ?? null, requiresDual, input.createdBy],
+    `INSERT INTO rfq_packages
+       (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_RFQ}`,
+    [orgId, title, input.deadlineAt ?? null, requiresDual, input.createdBy, input.createdBySessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("INSERT rfq_packages không trả về hàng nào");
@@ -239,6 +250,19 @@ export async function addRfqItem(
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("INSERT rfq_items không trả về hàng nào");
+
+  // [C-1 mục 5] Bản S1.2 KHÔNG ghi kiểm toán cho hạng mục, nên bước "thêm 20 dòng sau khi đã có
+  // hai phê duyệt" không nhìn thấy được kể cả khi có người đọc sổ. Băm nội dung (011) nay chặn
+  // hẳn đường ấy, nhưng dấu vết vẫn phải có: sổ kiểm toán là thứ trả lời "đã có gì xảy ra".
+  await appendAuditEvent(client, orgId, {
+    actorType: input.actor.type,
+    actorId: input.actor.id ?? null,
+    action: "RFQ_ITEM_ADDED",
+    resourceType: "rfq_item",
+    resourceId: hang.id,
+    payload: { rfqId: hang.rfq_id, lineNo: hang.line_no },
+  });
+
   return doiItem(hang);
 }
 
@@ -277,11 +301,18 @@ export async function submitRfqForApproval(
   await assertTenantBound(client, orgId, "submitRfqForApproval");
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'PENDING_APPROVAL' WHERE id = $1 RETURNING ${COT_RFQ}`,
+    // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái
+    // đích là một lần ghi đè IM LẶNG — kiểm (a) của trigger bỏ qua vì status không đổi.
+    `UPDATE rfq_packages SET status = 'PENDING_APPROVAL'
+      WHERE id = $1 AND status = 'DRAFT' RETURNING ${COT_RFQ}`,
     [input.rfqId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn");
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,
@@ -345,11 +376,15 @@ export async function openRfq(
 
   const { rows } = await client.query<HangRfq>(
     `UPDATE rfq_packages SET status = 'OPEN', opened_at = now()
-      WHERE id = $1 RETURNING ${COT_RFQ}`,
+      WHERE id = $1 AND status = 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
     [input.rfqId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn");
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,
@@ -377,12 +412,21 @@ export async function closeRfq(
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'CLOSED', closed_at = now()
-      WHERE id = $1 RETURNING ${COT_RFQ}`,
-    [input.rfqId],
+    // [H-4] `early_close_reason` được đặt CHỈ khi đóng trước hạn — trigger (h) của 011 đòi nó
+    // tường minh ở đúng ca ấy. Đóng đúng hạn không đòi gì thêm, và hai ca có mức rủi ro khác hẳn
+    // nhau nên chúng không được gộp vào một tham số như bản S1.2 đã làm.
+    `UPDATE rfq_packages
+        SET status = 'CLOSED', closed_at = now(),
+            early_close_reason = CASE WHEN now() < deadline_at THEN $2::text ELSE NULL END
+      WHERE id = $1 AND status = 'OPEN' RETURNING ${COT_RFQ}`,
+    [input.rfqId, reason],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn");
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,
@@ -433,7 +477,11 @@ export async function extendRfqDeadline(
     [input.rfqId, input.newDeadlineAt],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn");
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,
@@ -460,11 +508,15 @@ export async function cancelRfq(
 
   const { rows } = await client.query<HangRfq>(
     `UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now()
-      WHERE id = $1 RETURNING ${COT_RFQ}`,
+      WHERE id = $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
     [input.rfqId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn");
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: input.actor.type,

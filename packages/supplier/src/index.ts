@@ -13,6 +13,8 @@
 export {
   SUPPLIER_LEVELS,
   SUPPLIER_STATUSES,
+  EMAIL_PATTERN,
+  PHONE_PATTERN,
   SupplierError,
   TAX_CODE_PATTERN,
   addSupplierContact,
