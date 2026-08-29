@@ -32,6 +32,15 @@ export default tseslint.config(
       // "tools/*/*.mjs" — giữ nguyên tính chất "mọi file .mjs khác đều ồn ào".
       "tools/bench-keyprovider/*.mjs",
       "tools/inv-matrix/*.mjs",
+      // [2026-08-29] Hai thư mục đo phục vụ QUYẾT ĐỊNH, không phải mã sản phẩm, và cùng
+      // lý do kỹ thuật với hai dòng trên: thuần JS không kiểu, nằm ngoài "include" của
+      // tsconfig.json (chỉ có "**/*.ts"), nên typescript-eslint không parse được.
+      //   `bench-kms`     — đếm số lời gọi KMS một lượt mở thầu (ADR-009, trục 3).
+      //   `do-webcrypto`  — trang dò khả năng WebCrypto, cộng server đột biến của nó.
+      // Vẫn liệt kê TỪNG THƯ MỤC, KHÔNG gộp thành "tools/*/*.mjs": giữ nguyên tính chất
+      // "mọi file .mjs khác trong repo đều ồn ào" mà fix round 2 đã mua bằng một lần đo.
+      "tools/bench-kms/*.mjs",
+      "tools/do-webcrypto/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

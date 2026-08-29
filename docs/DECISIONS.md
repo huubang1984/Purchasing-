@@ -248,9 +248,9 @@ một dòng "passed" dưới hàng D5 mà tên của nó đọc như phủ đị
 
 ---
 
-## ADR-009 — Nhà cung cấp KMS/Vault: **CHƯA CHỐT**
+## ADR-009 — Nhà cung cấp KMS/Vault: **AWS KMS**
 
-**Ngày:** 2026-08-29 · **Trạng thái:** **Đang mở** — chặn S1.6
+**Ngày mở:** 2026-08-29 · **Ngày chốt:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận**
 
 **Vì sao ADR này tồn tại, và vì sao nó ra đời muộn.** Tới hết S0, ba tài liệu (`docs/STATE.md`
 hai chỗ, bản kế hoạch S0 một chỗ) đều trích **ADR-004** như *"quyết định KMS để mở"*. Trích sai:
@@ -265,23 +265,149 @@ một chỗ để nó treo. ADR này là chỗ đó.
 **Bối cảnh.** ADR-002 đòi private key mỗi RFQ được bọc bằng data key của tổ chức trong KMS/Vault.
 S0 giao `KeyProvider` + adapter `local-dev` (mã hoá nội bộ, không qua mạng). S1.6 cần adapter thật.
 
-**Phương án đã cân nhắc.** AWS KMS · Azure Key Vault · HashiCorp Vault.
+---
 
-**Chưa quyết định.** Ba trục còn để mở, và trục thứ ba là trục ít được nói tới nhất:
+### Quyết định
 
-1. **Nhà cung cấp** — kéo theo mô hình IAM, và ADR-006 (tách quyền giải mã cho `unseal-worker`)
-   chỉ cưỡng chế được bằng IAM của hạ tầng đích. Hai quyết định treo này **không độc lập**.
-2. **Chủ quyền dữ liệu** — khách hàng FDI có thể đòi vùng lưu trữ khoá cụ thể.
-3. **Hiệu năng.** Số đo `local-dev` hôm nay (10.000 lần bọc ≈ 447 ms) là **mốc của mã hoá nội
-   bộ**. Adapter thật chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng, và kịch bản mở thầu
-   RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá **một lượt**. Phải đo lại **trước** khi bắt đầu
-   S1.6, không phải sau.
+**AWS KMS, vùng `ap-southeast-1` (Singapore), theo mô hình envelope encryption ghim ở phần
+"Ràng buộc kiến trúc" bên dưới.**
 
-**Hệ quả của việc để mở.** `KeyProvider` giữ một mặt tiền hẹp và mọi lời gọi đi qua nó, nên việc
-chốt muộn **không** đòi viết lại — đó là ý đồ của Task 7. Nhưng nó vẫn chặn S1.6, và chừng nào
-ADR này còn "Đang mở" thì mọi con số hiệu năng của đường khoá trong hồ sơ đều là số của
-`local-dev`, không phải số của sản phẩm.
+Quyết định này **kéo theo hạ tầng đích là AWS**, và đó là chiều phụ thuộc đúng — không phải
+chiều ngược lại. Xem "Vì sao câu hỏi đúng không phải *chọn KMS nào*".
 
-**Rủi ro.** Chốt muộn dưới áp lực tiến độ dễ dẫn tới chọn theo thứ đang có sẵn thay vì theo yêu
-cầu chủ quyền dữ liệu của khách hàng đầu tiên — và đổi nhà cung cấp KMS sau khi đã có khoá thật
-của khách hàng là một cuộc di trú, không phải một lần sửa cấu hình.
+### Vì sao câu hỏi đúng không phải "chọn KMS nào"
+
+ADR bản đầu liệt kê ba phương án (AWS KMS · Azure Key Vault · HashiCorp Vault) như thể chọn
+nhà cung cấp khoá là một câu hỏi đứng riêng. Nó không đứng riêng. **ADR-006** đòi tách quyền
+giải mã cho `unseal-worker`, và sự tách đó **chỉ cưỡng chế được bằng IAM của nơi compute chạy**.
+Một KMS ở nhà cung cấp A trong khi worker chạy ở nhà cung cấp B thì lớp cưỡng chế mạnh nhất —
+"chỉ danh tính này mới được gọi `Decrypt` trên khoá này" — phải thay bằng một secret dài hạn
+được chuyền tay, tức là đúng thứ ADR-002 nói là không được có.
+
+Nên thứ tự đúng là: **chọn hạ tầng đích trước, KMS gần như là hệ quả.** Ba trục để mở ở bản đầu
+được giải quyết như sau.
+
+| Trục | Trạng thái | Kết luận |
+|---|---|---|
+| 1. Nhà cung cấp / IAM | **Đã chốt** | AWS. `kms:Decrypt` trên CMK của RFQ được ghim bằng key policy cộng IAM condition, chỉ cho role của `unseal-worker`. Đây là cách cưỡng chế ADR-006 mạnh nhất trong ba phương án, vì nó không cần một credential nào nằm trong `api`. |
+| 2. Chủ quyền dữ liệu | **Đã chốt có điều kiện** | `ap-southeast-1`. Chưa có khách hàng pilot nên chưa có yêu cầu chủ quyền cụ thể nào để thoả. Điều kiện bật lại ADR: xem "Khi nào phải mở lại". |
+| 3. Hiệu năng | **Đã ĐO và đã ĐÓNG** | Không còn là trục quyết định. Xem phần đo bên dưới. |
+
+**Vì sao không HashiCorp Vault.** Vault chỉ thắng khi có yêu cầu chủ quyền *đặt tại Việt Nam*,
+hoặc khi phải chạy đa đám mây. Không điều nào đang đúng. Đổi lại, nó bắt đội tự vận hành HA
+và auto-unseal của chính Vault — một gánh nặng vận hành thật, cho một đội chưa có khách hàng
+pilot, để đổi lấy một tính linh hoạt chưa ai đòi. **Không** loại vĩnh viễn: `KeyProvider` giữ
+mặt tiền hẹp chính là để lựa chọn này còn mở.
+
+**Vì sao không Azure Key Vault.** Không có gì sai với nó; RBAC cộng Managed Identity cưỡng chế
+ADR-006 tương đương. Nó thua ở một điểm hoàn cảnh: chưa có ràng buộc nào đẩy về Azure. Nếu
+khách hàng FDI đầu tiên đã chuẩn hoá trên Azure/M365, đây là ứng viên thay thế đầu tiên.
+
+---
+
+### Trục 3 — hiệu năng: phép đo, và câu bị nó chứng minh là sai
+
+Bản đầu của ADR này viết, ở mục 3 của phần "Chưa quyết định":
+
+> ~~"Adapter thật chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng, và kịch bản mở thầu
+> RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá **một lượt**."~~
+
+**Hai câu này SAI, và đã được đo là sai. Giữ nguyên văn ở đây để đối chiếu, không xoá.**
+
+Sai ở đâu:
+
+1. **"mỗi lần là một lời gọi mạng"** — đúng dưới một mô hình adapter, sai dưới mô hình còn
+   lại, và bản đầu trình bày nó như một **tất yếu của adapter thật** chứ không như **hệ quả
+   của một lựa chọn**. Đó chính là lỗi QT2 mà dự án này đã gặp trước đây: khi một bảo đảm phụ
+   thuộc một cấu hình, phải **GHIM cấu hình**, không được **NỚI bảo đảm**.
+2. **"50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá"** — nhân số hạng mục vào số thao tác. Theo
+   §3.2 của spec thiết kế, **200 hạng mục nằm trong CÙNG một phong bì** của một nhà cung cấp:
+   `ciphertext ← AES-256-GCM(content_key, {giá, điều khoản, tệp đính kèm})`. Số phong bì là
+   **50**, không phải 10.000.
+
+**Phép đo.** `tools/bench-kms/dem-loi-goi-kms.mjs`, chạy lại được bằng `node`, không thêm phụ
+thuộc nào. Nó **đếm** số lời gọi KMS tại một điểm đếm duy nhất, dưới hai mô hình:
+
+- **Mô hình B** — envelope encryption: một lời gọi `Decrypt` lấy data key của tổ chức, mọi thao
+  tác sau đó cục bộ.
+- **Mô hình A** — đối chứng, **cố ý sai**: gọi KMS lại cho từng phong bì.
+
+| Kịch bản | Phong bì | Mô hình | **Lời gọi KMS** | Mật mã cục bộ |
+|---|---|---|---|---|
+| 50 NCC, 1 phong bì/NCC (đúng §3.2) | 50 | **B (ghim)** | **1** | 5,3 ms |
+| 50 NCC, 1 phong bì/NCC | 50 | A (đối chứng) | **50** | 11,0 ms |
+| 10.000 phong bì RIÊNG (xấu nhất, **không** phải thiết kế) | 10.000 | **B (ghim)** | **1** | 711,4 ms |
+| 10.000 phong bì RIÊNG | 10.000 | A (đối chứng) | **10.000** | 1.881,5 ms |
+
+Nhánh đối chứng tồn tại vì **một bộ đếm hỏng cũng trả về 1**. Nó ra đúng 50 và đúng 10.000, nên
+con số 1 của mô hình B là một phép đo, không phải một hằng số bị kẹt. Script ném lỗi thay vì in
+bảng nếu bất kỳ chiều nào lệch, và nó cũng kiểm tra mọi byte đã giải mã đúng.
+
+**Quy ra độ trễ mạng.** Với một lời gọi KMS trong cùng vùng ở mức ~20 ms:
+
+| Mô hình | 50 phong bì | 10.000 phong bì |
+|---|---|---|
+| **B (ghim)** | ~20 ms mạng + 5 ms cục bộ | ~20 ms mạng + 711 ms cục bộ |
+| A (đối chứng) | ~1 giây | **~200 giây**, cộng rủi ro chạm hạn mức request của KMS |
+
+**Kết luận:** hiệu năng KMS **không phải tiêu chí chọn nhà cung cấp**. Tần suất gọi là **một
+lần mỗi lượt mở thầu**, không phụ thuộc số nhà cung cấp. Trục 3 đóng.
+
+**Giới hạn của phép đo này — đọc trước khi trích dẫn nó:**
+
+1. Đây là **mô phỏng**. Nó dùng đúng các primitive thiết kế đòi (AES-256-GCM, HKDF-SHA256,
+   X25519) nhưng **không đi qua `packages/crypto-keys`**, vì gói đó chưa có phần khoá theo RFQ
+   — đó chính là mã **G2**, còn trống.
+2. `kmsDecrypt` là hàm giả lập. Nó đo **số lần gọi**, **không** đo độ trễ AWS thật. Con số 20 ms
+   ở bảng trên là giả định quy đổi, không phải số đo.
+3. Kết luận "1 lời gọi" đúng **dưới mô hình B và chỉ dưới mô hình B**. Nó là một phát biểu về
+   **kiến trúc adapter**, không phải về AWS.
+4. **Phải đo lại bằng adapter thật trong S1.4**, trên đường đi thật của `packages/sealed-envelope`.
+   Câu "phải đo lại trước khi bắt đầu S1.6" ở bản đầu **vẫn đúng và vẫn còn hiệu lực** — phép đo
+   này đóng trục *chọn nhà cung cấp*, nó không đóng trục *xác nhận trên mã thật*.
+
+---
+
+### Ràng buộc kiến trúc mà quyết định này GHIM
+
+Con số "1 lời gọi" chỉ đúng chừng nào adapter được viết theo mô hình B. Nên mô hình B trở thành
+một **ràng buộc**, không phải một gợi ý:
+
+1. **KMS chỉ bọc/mở data key của TỔ CHỨC.** Nó **không bao giờ** được gọi cho từng phong bì,
+   từng content key, hay từng nhà cung cấp.
+2. **Private key RFQ được bọc bằng data key của tổ chức**, không bọc trực tiếp bằng CMK.
+3. **Content key được bọc bằng public key RFQ** (X25519), hoàn toàn cục bộ, không chạm KMS.
+4. Data key của tổ chức, sau khi mở, **chỉ sống trong bộ nhớ của `unseal-worker`** và bị xoá
+   sau lượt mở thầu — cùng đường đời với private key RFQ theo §3.2.
+5. `kms:Decrypt` trên CMK **chỉ** được cấp cho role của `unseal-worker`. Role của `api`
+   **không** có quyền đó. Đây là hình thức cưỡng chế ADR-006 ở tầng hạ tầng, và nó phải được
+   kiểm chứng như một bất biến trong S1.6, không phải như một mục cấu hình.
+
+**Một PR làm hỏng ràng buộc 1 hoặc 3 sẽ không làm test đỏ hôm nay** — chưa có lớp nào đo nó.
+Đó là một việc của S1.4: biến bốn ràng buộc trên thành thứ đo được, không phải thành thứ được
+nhớ.
+
+### Hệ quả
+
+`KeyProvider` giữ một mặt tiền hẹp và mọi lời gọi đi qua nó, nên việc chốt muộn **không** đòi
+viết lại — đó là ý đồ của Task 7 và nó đã trả cổ tức đúng ở đây. Việc còn lại trong S1.4 là
+thêm một adapter cạnh `local-dev`, không phải sửa lớp gọi.
+
+Từ nay, **mọi con số hiệu năng của đường khoá trong hồ sơ phải nói rõ nó là số của `local-dev`
+hay của AWS KMS.** Số `local-dev` hôm nay (10.000 lần bọc ≈ 447 ms) là **mốc của mã hoá nội bộ**
+và câu đó vẫn đúng nguyên vẹn.
+
+### Khi nào phải MỞ LẠI ADR này
+
+Không phải "khi thấy bất tiện". Đúng ba điều kiện, mỗi điều kiện là một sự kiện quan sát được:
+
+1. **Một khách hàng đòi khoá đặt tại Việt Nam**, bằng văn bản. AWS chưa có vùng ở VN;
+   `ap-southeast-1` là Singapore. Đây là điều kiện có thật với khách hàng nhà nước hoặc
+   ngân hàng, và nó đẩy về HashiCorp Vault self-host.
+2. **Khách hàng FDI đầu tiên đã chuẩn hoá trên Azure** và đòi khoá nằm trong tenant của họ.
+   Đẩy về Azure Key Vault.
+3. **Yêu cầu đa đám mây** từ một hợp đồng doanh nghiệp.
+
+**Rủi ro còn lại, giữ nguyên từ bản đầu:** đổi nhà cung cấp KMS sau khi đã có khoá thật của
+khách hàng là một **cuộc di trú**, không phải một lần sửa cấu hình. Vì vậy ba điều kiện trên
+nên được hỏi thẳng khách hàng pilot **trước** S1.6, chứ không đợi họ nêu.
