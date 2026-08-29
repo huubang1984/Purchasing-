@@ -11,8 +11,12 @@
 
 ## 1. Một câu
 
-**Dự án đang ở cuối giai đoạn S0 (Nền móng). Mã đã viết xong, đã xanh trên CI, và đang nằm ở
-một PR CHƯA MERGE. S1 (Sealed Bid Core) chưa bắt đầu một dòng nào.**
+~~**Dự án đang ở cuối giai đoạn S0 (Nền móng). Mã đã viết xong, đã xanh trên CI, và đang nằm ở
+một PR CHƯA MERGE. S1 (Sealed Bid Core) chưa bắt đầu một dòng nào.**~~
+
+**Cập nhật 2026-08-29 · S0 ĐÃ HỢP NHẤT VÀO `master` (merge commit `30d1972`). S1 đã có KẾ HOẠCH
+ĐẦY ĐỦ nhưng chưa viết một dòng mã nào.** Ba quyết định đã chốt trong lượt này (AWS + AWS KMS
+qua ADR-009, và cách merge); ba ADR mới được nêu tên và còn treo (010, 011, 012).
 
 TrustProcure là sàn đấu thầu kín (sealed-bid procurement): nhà cung cấp nộp báo giá được mã
 hoá, không ai — kể cả nhân viên mua hàng — xem được giá trước giờ mở thầu. S0 dựng **nền tảng
@@ -24,12 +28,12 @@ và mặt phẳng điều khiển** cho việc đó, chưa dựng chính luồng
 
 | | |
 |---|---|
-| Nhánh | `worktree-s0-foundation` |
-| HEAD | `c4fde9c` (2026-08-29) |
+| Nhánh | ~~`worktree-s0-foundation`~~ → **đã hợp nhất**; công việc mới đi từ `master` |
+| HEAD của `master` | **`30d1972`** (merge commit, 2026-08-29) — 49 commit |
 | Nhánh gốc | `master` |
-| Số commit trên nhánh | **45** |
-| Thay đổi so với `master` | 105 file, +36 375 / −88 |
-| Pull request | [#1](https://github.com/huubang1984/Purchasing-/pull/1) — **OPEN**, `MERGEABLE`, **chưa merge** |
+| Số commit trên nhánh S0 | **46** (giữ nguyên trong lịch sử, **không** squash) |
+| Thay đổi so với `master` trước merge | 105 file, +36 375 / −88 |
+| Pull request | [#1](https://github.com/huubang1984/Purchasing-/pull/1) — **MERGED** 2026-08-29, merge commit `30d1972`. Nhánh `worktree-s0-foundation` **không xoá** |
 | Kho | `https://github.com/huubang1984/Purchasing-` |
 | Thư mục làm việc | `D:\Claude\TrustProcure\.claude\worktrees\s0-foundation` (git worktree, **cố ý giữ lại**) |
 
@@ -40,8 +44,10 @@ và mặt phẳng điều khiển** cho việc đó, chưa dựng chính luồng
 | `33218397033` | `5e76a7f` | **ĐỎ cả ba job**, `evidence` bị bỏ qua |
 | `33221142361` | `885e58f` | **XANH cả bốn job** |
 | `33221919239` | `c4fde9c` | **XANH cả bốn job** |
+| `33230092811` | `5b72143` | **XANH cả bốn job** |
 
-Hai lượt xanh liên tiếp. Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự án — xem §7.
+~~Hai lượt xanh liên tiếp.~~ **Ba lượt xanh liên tiếp** — lượt thứ ba là điều kiện để merge.
+Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự án — xem §7.
 
 ---
 
@@ -168,12 +174,25 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 ## 9. Điểm chặn và quyết định treo
 
 1. **Chưa có khách hàng pilot** — rủi ro xây đúng thứ theo sai thứ tự, lớn hơn mọi rủi ro kỹ thuật.
-2. **Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`; **chọn nhà cung cấp KMS**
+2. ~~**Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`; **chọn nhà cung cấp KMS**
    (**ADR-009**, trạng thái *Đang mở*, giữa AWS KMS / Azure Key Vault / HashiCorp Vault);
-   chọn hạ tầng triển khai. **KMS và hạ tầng KHÔNG độc lập** — ADR-006 (tách quyền giải mã)
-   chỉ cưỡng chế được bằng IAM của hạ tầng đích. **KMS phải chốt trước S1.6.**
-3. **`crypto.subtle` trong webview Zalo/Messenger chưa có một phép đo nào** — rủi ro sản phẩm
-   CAO, vì mã hoá lai được thực hiện phía trình duyệt nhà cung cấp.
+   chọn hạ tầng triển khai.~~ **KMS và hạ tầng KHÔNG độc lập** — ADR-006 (tách quyền giải mã)
+   chỉ cưỡng chế được bằng IAM của hạ tầng đích. ~~**KMS phải chốt trước S1.6.**~~
+
+   **Đã chốt 2026-08-29 (ADR-009): AWS KMS, `ap-southeast-1`, theo mô hình envelope encryption.**
+   Còn treo **một** quyết định: xử lý thư mục `Vibe Coding/`. Trục hiệu năng — thứ ADR-009 bản
+   đầu nêu như một trục chặn — **đã được đo và đã đóng**: một lượt mở thầu tốn **đúng 1 lời gọi
+   KMS**, không phụ thuộc số nhà cung cấp (`tools/bench-kms/dem-loi-goi-kms.mjs`). Trong lúc đo,
+   một câu của chính ADR-009 bị chứng minh là sai và đã bị gạch bỏ tại chỗ, giữ nguyên văn.
+3. ~~**`crypto.subtle` trong webview Zalo/Messenger chưa có một phép đo nào**~~ — rủi ro sản phẩm
+   CAO, vì mã hoá được thực hiện phía trình duyệt nhà cung cấp.
+
+   **Cập nhật 2026-08-29: đã có MÁY DÒ, chưa có PHÉP ĐO.** `tools/do-webcrypto/index.html` chạy
+   thật từng phép mật mã của đường nộp thầu và cho ra một trong bốn phán quyết; nó đã được chứng
+   minh có răng bằng ba đột biến. Nhưng nó mới chỉ chạy trên **Chrome 148 desktop** — điều đó
+   chứng minh **máy dò hoạt động**, không chứng minh gì về webview Việt Nam. **Rủi ro vẫn CAO và
+   vẫn MỞ.** Chỗ đáng ngờ nhất là **X25519**: nó chỉ có trên Chrome 133+ và Safari 17+, mới hơn
+   nhiều so với AES-GCM, và nếu nó thiếu thì ADR-011 phải đổi sang P-256 **trước** S1.4.
 
 ---
 
@@ -201,15 +220,24 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
 
 ## 11. Việc kế tiếp
 
-1. **Quyết định merge PR #1.** Nhánh xanh, `MERGEABLE`, chưa merge. Worktree đang được **giữ
-   lại có chủ đích** để sửa phản hồi review.
-2. **Lập kế hoạch S1 (Sealed Bid Core).** **23 mã chưa phủ ở §3 của `evidence/INV-matrix.md`
-   chính là danh sách công việc S1 đã sắp sẵn** — mỗi mã một lý do, và mỗi lý do là một hạng mục.
-3. **Chốt ba quyết định treo** — KMS trước S1.6.
-4. **Đo `crypto.subtle` trong webview Zalo/Messenger.**
-5. **Tiếp cận khách hàng pilot** song song với S1.
+> **Bốn việc đầu đã được xử lý ngày 2026-08-29. Giữ nguyên văn, đánh dấu tại chỗ.**
+
+1. ~~**Quyết định merge PR #1.** Nhánh xanh, `MERGEABLE`, chưa merge.~~ **ĐÃ MERGE** —
+   merge commit `30d1972`, giữ nguyên 46 commit (**không** squash: `evidence/security-reviews.md`
+   trỏ tới từng SHA, squash sẽ làm mọi con trỏ đó chết). Nhánh `worktree-s0-foundation`
+   **không xoá**; worktree vẫn được giữ lại có chủ đích.
+2. ~~**Lập kế hoạch S1 (Sealed Bid Core).**~~ **XONG** —
+   `docs/superpowers/plans/2026-08-29-s1-sealed-bid-core.md`, 10 mục.
+3. ~~**Chốt ba quyết định treo** — KMS trước S1.6.~~ **XONG HAI TRONG BA** — AWS + AWS KMS
+   `ap-southeast-1` (ADR-009). Còn treo: xử lý thư mục `Vibe Coding/`.
+4. ~~**Đo `crypto.subtle` trong webview Zalo/Messenger.**~~ **CÔNG CỤ XONG, PHÉP ĐO CHƯA** —
+   `tools/do-webcrypto/`. Rủi ro **vẫn CAO và vẫn mở** cho tới khi có kết quả từ điện thoại thật.
+5. **Tiếp cận khách hàng pilot** song song với S1. — **chưa làm**, và vẫn là rủi ro lớn nhất.
 6. Hai việc cấu hình nhỏ, không chặn: **tạo team `@trustprocure/bao-mat`** trên GitHub để
    CODEOWNERS có răng; cân nhắc **thêm `windows-latest`** vào ma trận job T1+T2 (khoản nợ 20).
+7. **Mới:** chốt **ADR-010** trước S1.6, **ADR-011** trong S1.4, **ADR-012** trong S1.1 — xem §6
+   của kế hoạch S1.
+8. **Mới:** bắt đầu **S1.1** và **S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.
 
 ---
 
