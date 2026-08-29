@@ -59,7 +59,15 @@ Chưa xong:
 
 ## Công việc đang làm
 
-**S1 — ba hạng mục đầu ĐÃ XONG và đã commit (S1.1, S1.2, S1.3).** Hạng mục kế tiếp là **S1.4**
+> *** BA HẠNG MỤC ĐẦU KHÔNG ĐƯỢC COI LÀ XONG. *** Ba lượt `security-reviewer` chạy ngày
+> 2026-08-29 tìm ra **4 CRITICAL + 11 HIGH**, và điều kiện hoàn thành S1 mục 6 đòi *mọi phát
+> hiện CRITICAL/HIGH đã được xử lý*. **Chưa một phát hiện nào được sửa.** Việc duy nhất đã làm
+> là gỡ một lời khai sai khỏi `evidence/INV-matrix.md`: E2 và E5 từng bị khai là ĐÃ PHỦ, và
+> chuỗi tấn công chứng minh điều đó sai đã được dựng lại thành phép đo. Độ phủ **30/50 → 28/50**.
+> Chi tiết từng phát hiện: `evidence/security-reviews.md` §S1.
+
+~~**S1 — ba hạng mục đầu ĐÃ XONG và đã commit (S1.1, S1.2, S1.3).**~~ Ba hạng mục đã có MÃ và
+đã commit, nhưng chưa đạt điều kiện hoàn thành. Hạng mục kế tiếp là **S1.4**
 (phong bì niêm phong), và nó **BỊ CHẶN**: ADR-011 vẫn *Đang mở*, và ADR-011 chỉ được chốt sau khi
 có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Đây không phải một điều kiện hình
 thức — sau khi đã có phong bì thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một
@@ -275,7 +283,9 @@ tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` 
 
 ~~**Sau S1.2: 27/50 — 11/34 nghiệp vụ + 16/16 hàng rào.**~~
 
-**Sau S1.3: 30/50 — 14/34 nghiệp vụ + 16/16 hàng rào.** Đây là lần đầu trong S1 con số NGHIỆP VỤ
+~~**Sau S1.3: 30/50 — 14/34 nghiệp vụ + 16/16 hàng rào.**~~ **SAU REVIEW AN NINH: 28/50 —
+12/34 nghiệp vụ + 16/16 hàng rào.** Câu dưới đây giữ nguyên văn để đối chiếu, và nó đã sai ở
+vế E2/E5. Đây là lần đầu trong S1 con số NGHIỆP VỤ
 nhúc nhích: **E1**, **E2**, **E5**. Cả ba nằm trong MỘT hạng mục, và đó là hệ quả của việc chủ ngữ
 của chúng — lời mời, token, phiên khách — cuối cùng cũng tồn tại. `MOC_GHIM`: `soPhuToiThieu` 27 →
 **30**, `coDanhSachToiDa` 23 → **20** (danh sách được-phép-chưa-phủ CO LẠI đúng ba dòng).

@@ -27,14 +27,14 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **14** | 34 |
+| Nghiệp vụ (A–G) | **12** | 34 |
 | Hàng rào (H) | **16** | 16 |
-| **Cộng** | **30** | **50** |
+| **Cộng** | **28** | **50** |
 
-**20 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**22 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
-G1, G2, G3, G4). S0 **giao được 14**: G2 và G4 không có lớp. `docs/TEST-PLAN.md` là
+G1, G2, G3, G4). S0 **giao được 12**: G2 và G4 không có lớp. `docs/TEST-PLAN.md` là
 nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống *có lý do*, không phải vì quên.
 
 ## 2. Ma trận
@@ -62,11 +62,11 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 26 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 6 | ✅ ĐẠT |  |
-| E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 2 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 22 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 42 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
@@ -111,9 +111,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 30` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 28` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 20` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 22` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -145,7 +145,9 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 | **C5** | S1 — khoá theo RFQ chưa tồn tại (xem G2). |
 | **D2** | S1 — ngưỡng RFQ và luồng phê duyệt kép chưa tồn tại. |
 | **D4** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-D4]`: D4 đòi cảnh báo *tức thì*, còn outbox là POLL và độ trễ của nó bị chặn dưới bởi `pollIntervalMs`; đường đúng là `NOTIFY`/`LISTEN` hoặc một đường đồng bộ. |
+| **E2** | *** ĐÃ TỪNG BỊ KHAI LÀ PHỦ, VÀ ĐÃ ĐƯỢC ĐO LÀ SAI (review an ninh S1.3). *** Mệnh đề có hai vế và cả hai đều hở. Vế *token một mình không đủ*: đo được là **không cần token nào cả** — `issueOtpChallenge` và `verifyOtpAndStartSession` chỉ đòi một `invitationId`, tức một UUIDv4 đang làm credential, đúng thứ ADR-012 §*Điều ADR này KHÔNG cho phép suy ra* và F2 cấm. Vế *trên kênh đã đăng ký*: đích nhận OTP là một tham số do NGƯỜI GỌI khai, không đọc từ `supplier_contacts`, và bảng thách thức không lưu lại đích đã dùng — nên không lớp nào, ở bất kỳ thời điểm nào, biết mã đã đi tới đâu. Phép đo: phát OTP tới một số tự chọn -> THÀNH CÔNG; mở phiên chỉ bằng `invitationId` -> THÀNH CÔNG. |
 | **E4** | S1 — MST nay đã có (008) và mã RFQ nay đã có (009), nhưng E4 là một mệnh đề PHỦ ĐỊNH về ĐƯỜNG XÁC THỰC ('không bao giờ là credential'), và đường xác thực của người mua chưa có endpoint nào để đối kháng. Tầng test của nó là T5. Phần cưỡng chế được ĐÃ có: không hàm nào ở cửa `@trustprocure/supplier` hay `@trustprocure/invitation` nhận MST hay mã RFQ làm bằng chứng danh tính. |
+| **E5** | *** ĐÃ TỪNG BỊ KHAI LÀ PHỦ, VÀ ĐÃ ĐƯỢC ĐO LÀ SAI (review an ninh S1.3). *** `verified_contact_id` là một LỜI KHAI của người gọi: không có một cạnh dữ liệu nào nối nó với thách thức OTP vừa được đối chiếu, và khoá ngoại duy nhất không đòi người liên hệ đó thuộc nhà cung cấp được mời. Phép đo: kẻ tấn công cho gửi OTP tới số của mình, đọc mã, rồi khai `verifiedContactId = <người liên hệ chính danh>` -> sổ kiểm toán ghi rằng chính người đó đã xác thực. Hậu quả nặng hơn một ô ✅ sai: một khẳng định sai được bơm vào chuỗi hash bất biến, tức vào đúng thứ dự án bán cho kiểm toán viên. |
 | **E6** | S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian. |
 | **G2** | S1 — khoá THEO RFQ đòi RFQ. `packages/crypto-keys/src/roundtrip.test.ts:47` tự ghi ra rằng nó CỐ Ý không gắn `[INV-G2]` vì lý do ấy. Trước vòng fix 1 của Task 9, năm test mang nhãn này thật ra đo quy tắc biên giới depcruise — nay là `[INV-H11]`. Cái S0 có là bọc khoá theo TỔ CHỨC có phiên bản, thứ nuôi G1/G3. |
 | **G4** | CHƯA CÓ LỚP, không phải chưa có nhãn — `grep audit` trên `packages/crypto-keys/src/*.ts` trừ test = 0 hit. Hạ tầng ghi (`004_audit_chain_functions.sql`, nhóm B3) đã có; không một thao tác khoá nào GỌI nó. |
@@ -164,11 +166,9 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 
 - **D5** — Được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi sổ (ADR-008).
 
-- **E2** — **"Kênh đã đăng ký" ở S1 là kênh do NGƯỜI MUA KHAI khi mời**, không phải kênh nhà cung cấp tự xác nhận (`supplier_contacts.phone`, do người mua nhập). Ô ✅ chứng minh: không có đường nào từ *có token* tới *có phiên* mà không đi qua một mã OTP đã đối chiếu, và OTP không bao giờ đi cùng kênh với magic link (trigger so hai kênh ở 010). Nó **không** chứng minh người nhận mã là đúng người — chống được *link bị chuyển tiếp*, không chống được *người mua khai sai số*. Xem ADR-015.
+- **E1** — **Vế *thu hồi được* đúng cho TOKEN, và chỉ cho token.** `revokeInvitation` giết được `redeemMagicLink`, nhưng nó KHÔNG chạm tới thách thức OTP đang mở và KHÔNG thu hồi phiên khách; đo được: sau khi thu hồi vẫn phát được OTP và vẫn mở được PHIÊN MỚI. Thêm một phần chênh thứ hai: `consumed_at` của token **không bao giờ được ghi** và `redeemMagicLink` cũng không đọc nó, nên magic link là một bearer token **chơi lại được cho tới khi hết hạn** — sổ đăng ký không đòi *dùng một lần* nên ô ✅ vẫn đứng, nhưng kịch bản T5 #9 (*dùng lại magic link đã dùng*) thì chưa có lớp nào.
 
 - **E3** — Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công.
-
-- **E5** — Phiên khách ghi `verified_contact_id` — **NGƯỜI GIỮ KÊNH đã nhận OTP**, KHÔNG phải con người đang ngồi trước màn hình. Một người chuyển tiếp cả link LẪN mã OTP vừa đọc được cho đồng nghiệp thì hệ thống ghi nhận người giữ kênh, và không cơ chế nào trong S1 phân biệt được hai ca đó. Ô ✅ chứng minh *danh tính được ghi là danh tính đã qua OTP*, không chứng minh *danh tính đó là người đang thao tác*.
 
 - **F1** — RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim.
 

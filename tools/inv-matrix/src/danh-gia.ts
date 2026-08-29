@@ -81,6 +81,14 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
   // dựng đủ lớp cho cả ba. E2 và E5 đi kèm ghi chú §4 (xem PHAM_VI_HEP) — ô ✅ của chúng HẸP hơn
   // câu chữ ở sổ đăng ký, và phần chênh được nói ra thay vì nuốt vào.
   // E4 và E6 Ở LẠI, mỗi mã một lý do KHÁC nhau và cả hai đều KHÔNG phải "chưa kịp làm".
+  //
+  // *** [REVIEW AN NINH S1.3 — 2026-08-29] E2 VÀ E5 ĐÃ ĐƯỢC ĐƯA TRỞ LẠI DANH SÁCH NÀY. ***
+  // Hai mã ấy được gỡ khỏi đây ở commit bca870f và điều đó SAI. Chuỗi tấn công đã được dựng lại
+  // thành phép đo trên Postgres thật, và nó chạy trọn. Đây là lần đầu trong dự án `coDanhSachToiDa`
+  // NỞ RA thay vì co lại — cơ chế `MOC_GHIM` được dựng để chặn đúng chiều đó, nên việc nới nó ở
+  // đây là một quyết định phải nhìn thấy được, không phải một dòng lặng lẽ.
+  ["E2", "*** ĐÃ TỪNG BỊ KHAI LÀ PHỦ, VÀ ĐÃ ĐƯỢC ĐO LÀ SAI (review an ninh S1.3). *** Mệnh đề có hai vế và cả hai đều hở. Vế *token một mình không đủ*: đo được là **không cần token nào cả** — `issueOtpChallenge` và `verifyOtpAndStartSession` chỉ đòi một `invitationId`, tức một UUIDv4 đang làm credential, đúng thứ ADR-012 §*Điều ADR này KHÔNG cho phép suy ra* và F2 cấm. Vế *trên kênh đã đăng ký*: đích nhận OTP là một tham số do NGƯỜI GỌI khai, không đọc từ `supplier_contacts`, và bảng thách thức không lưu lại đích đã dùng — nên không lớp nào, ở bất kỳ thời điểm nào, biết mã đã đi tới đâu. Phép đo: phát OTP tới một số tự chọn -> THÀNH CÔNG; mở phiên chỉ bằng `invitationId` -> THÀNH CÔNG."],
+  ["E5", "*** ĐÃ TỪNG BỊ KHAI LÀ PHỦ, VÀ ĐÃ ĐƯỢC ĐO LÀ SAI (review an ninh S1.3). *** `verified_contact_id` là một LỜI KHAI của người gọi: không có một cạnh dữ liệu nào nối nó với thách thức OTP vừa được đối chiếu, và khoá ngoại duy nhất không đòi người liên hệ đó thuộc nhà cung cấp được mời. Phép đo: kẻ tấn công cho gửi OTP tới số của mình, đọc mã, rồi khai `verifiedContactId = <người liên hệ chính danh>` -> sổ kiểm toán ghi rằng chính người đó đã xác thực. Hậu quả nặng hơn một ô ✅ sai: một khẳng định sai được bơm vào chuỗi hash bất biến, tức vào đúng thứ dự án bán cho kiểm toán viên."],
   ["E4", "S1 — MST nay đã có (008) và mã RFQ nay đã có (009), nhưng E4 là một mệnh đề PHỦ ĐỊNH về ĐƯỜNG XÁC THỰC ('không bao giờ là credential'), và đường xác thực của người mua chưa có endpoint nào để đối kháng. Tầng test của nó là T5. Phần cưỡng chế được ĐÃ có: không hàm nào ở cửa `@trustprocure/supplier` hay `@trustprocure/invitation` nhận MST hay mã RFQ làm bằng chứng danh tính."],
   ["E6", "S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian."],
 
@@ -97,9 +105,8 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
 export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
   ["D1", "**MỆNH ĐỀ HỘI BỐN VẾ, VÀ PHÉP HỘI CHƯA TỪNG ĐƯỢC ĐO MỘT LẦN NÀO.** 17 test mang nhãn tách làm ĐÚNG HAI cụm rời nhau, đếm từ chính báo cáo `vitest --reporter=json`: **12** test ở `packages/identity/src/mfa.int.test.ts` chỉ đo vế **(2) MFA còn hiệu lực trong cửa sổ ngắn** qua `assertFreshMfa`; **5** test ở `packages/identity/src/rbac.int.test.ts` chỉ đo vế **(1) quyền hợp lệ** qua `hasPermission`. KHÔNG test nào đo hai vế cùng lúc, và không có một hàm nào hợp hai vế lại. Vế **(3) RFQ đã CLOSED** và vế **(4) cổng chính sách thông qua** KHÔNG CÓ MỘT DÒNG MÃ NÀO: `grep` toàn repo cho `rfqs`, `wrapped_private_key`, `policyGate` cho **0 hit**, và `git ls-files apps/` cho đúng `apps/.gitkeep`. Vế (3) **CHÍNH LÀ hàng `C3`** trong bảng này, và C3 là **⏳ CHƯA PHỦ** — hai hàng cách nhau tám dòng, một hàng ✅, một hàng ⏳, cùng nói về một điều. Cuối cùng, cả hai phép kiểm ĐÃ CÓ đều **chưa có người gọi sản phẩm**: `assertFreshMfa` và `requirePermission` chỉ xuất hiện ở barrel export, ở chú thích, và ở test — toàn bộ đường đời của `sessions` (phát token, tra token, đặt `mfa_verified_at`) chưa tồn tại. Ô ✅ này chứng minh *hai vế được đo RIÊNG RẼ trên hai phép kiểm chưa có ai gọi*; nó **không** chứng minh mệnh đề ở cột kế bên."],
   ["D5", "Được cưỡng chế cho đường đi **qua `requirePermission`**. Một lần từ chối ở tầng CSDL (RLS/GRANT) không sinh bản ghi nào, và một lần thử MFA thất bại **cố ý** không ghi sổ (ADR-008)."],
-  ["E2", "**\"Kênh đã đăng ký\" ở S1 là kênh do NGƯỜI MUA KHAI khi mời**, không phải kênh nhà cung cấp tự xác nhận (`supplier_contacts.phone`, do người mua nhập). Ô ✅ chứng minh: không có đường nào từ *có token* tới *có phiên* mà không đi qua một mã OTP đã đối chiếu, và OTP không bao giờ đi cùng kênh với magic link (trigger so hai kênh ở 010). Nó **không** chứng minh người nhận mã là đúng người — chống được *link bị chuyển tiếp*, không chống được *người mua khai sai số*. Xem ADR-015."],
+  ["E1", "**Vế *thu hồi được* đúng cho TOKEN, và chỉ cho token.** `revokeInvitation` giết được `redeemMagicLink`, nhưng nó KHÔNG chạm tới thách thức OTP đang mở và KHÔNG thu hồi phiên khách; đo được: sau khi thu hồi vẫn phát được OTP và vẫn mở được PHIÊN MỚI. Thêm một phần chênh thứ hai: `consumed_at` của token **không bao giờ được ghi** và `redeemMagicLink` cũng không đọc nó, nên magic link là một bearer token **chơi lại được cho tới khi hết hạn** — sổ đăng ký không đòi *dùng một lần* nên ô ✅ vẫn đứng, nhưng kịch bản T5 #9 (*dùng lại magic link đã dùng*) thì chưa có lớp nào."],
   ["E3", "Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công."],
-  ["E5", "Phiên khách ghi `verified_contact_id` — **NGƯỜI GIỮ KÊNH đã nhận OTP**, KHÔNG phải con người đang ngồi trước màn hình. Một người chuyển tiếp cả link LẪN mã OTP vừa đọc được cho đồng nghiệp thì hệ thống ghi nhận người giữ kênh, và không cơ chế nào trong S1 phân biệt được hai ca đó. Ô ✅ chứng minh *danh tính được ghi là danh tính đã qua OTP*, không chứng minh *danh tính đó là người đang thao tác*."],
   ["F1", "RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim."],
   ["G1", "**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.** 18 test đo **quy tắc biên giới** của dependency-cruiser cộng danh sách trắng barrel — đó là một lớp phòng ngừa THẬT, đã được chứng minh có răng bằng test đối kháng (Task 2 và Task 7 đều vô hiệu hoá quy tắc rồi chạy lại để lấy RED thật). Nhưng mệnh đề nói về `private key RFQ`, và ở S0 **không có private key RFQ nào**: `grep wrapped_private_key` toàn repo cho **0 hit**, `git ls-files apps/` cho đúng `apps/.gitkeep` nên **không có `apps/unseal-worker`**. Ô ✅ này chứng minh *cánh cửa đã khoá*; nó chưa chứng minh gì về căn phòng, vì căn phòng chưa được xây. Khoảng trống thứ hai, độc lập: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào."],
 ]);
@@ -117,7 +124,7 @@ export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
  * `NGOAI_LE_HINH_DANG`: mỗi lần thu hẹp phần "được khai báo là hẹp" là một quyết định an ninh
  * mà không máy nào phán xử hộ được.
  */
-export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set(["D1", "D5", "E2", "E3", "E5", "F1", "G1"]);
+export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set(["D1", "D5", "E1", "E3", "F1", "G1"]);
 
 /**
  * MỐC GHIM CỦA ĐỘ PHỦ — BIẾN MỘT CÂU VĂN THÀNH MỘT PHÉP ĐO.
@@ -170,7 +177,13 @@ export interface MocGhim {
 // `coDanhSachToiDa` 23 -> 20: danh sach duoc-phep-chua-phu CO LAI dung ba dong, khong nhieu hon.
 // KHONG co ma HANG RAO moi nao o S1.3 - H16 (S1.2) da phu san goi thu sau, dung nhu no duoc
 // dung ra de lam.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 30, coDanhSachToiDa: 20 };
+// [REVIEW AN NINH S1.3 — 2026-08-29] 30 -> 28, va danh sach 20 -> 22.
+// Day la lan DAU TIEN hai con so nay di NGUOC chieu du kien, va do la ly do chung ton tai: mot
+// luot review co phep do da chung minh hai o xanh (E2, E5) rong hon co che. Sua o day la mot
+// dong PHAI SUA BANG TAY, co ten, trong mot file co chu so huu (.github/CODEOWNERS) - dung nhu
+// thiet ke, thay vi mot su im lang.
+// E1 O LAI nhung nay MANG CO PHAM VI HEP: ve 'thu hoi duoc' chi dung cho token.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 28, coDanhSachToiDa: 22 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

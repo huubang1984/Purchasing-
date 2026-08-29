@@ -208,8 +208,21 @@ describe("[INV-E1] token của magic link", () => {
   });
 });
 
-describe("[INV-E2] token một mình KHÔNG đủ vào phiên báo giá", () => {
-  it("đổi được magic link nhưng KHÔNG có phiên nào ra đời — phép đo của mệnh đề HỘI", async () => {
+// =============================================================================================
+// NHÃN `[INV-E2]` ĐÃ ĐƯỢC GỠ KHỎI HAI TEST DƯỚI ĐÂY (review an ninh S1.3, 2026-08-29).
+//
+// Chúng đo một tính chất THẬT — *đổi link xong thì chưa có phiên nào*, và *mã sai thì không sinh
+// phiên* — nhưng cả hai HẸP HƠN HẲN mệnh đề chúng từng mang nhãn. E2 nói *"token một mình không
+// đủ"*; đo được là **không cần token nào cả**: `issueOtpChallenge` và `verifyOtpAndStartSession`
+// chỉ đòi một `invitationId`. Và E2 nói *"trên kênh đã đăng ký"*; đo được là đích nhận OTP do
+// NGƯỜI GỌI khai, không đọc từ `supplier_contacts`.
+//
+// Đây đúng lớp lỗi đã xảy ra hai lần ở S0 và bị bắt cả hai lần (`[INV-G2]` ở Task 9,
+// `[INV-B2]` ở Task 11): một test đo thứ khác nằm dưới một nhãn bất biến. Nhãn được gỡ TRƯỚC
+// khi lớp được sửa, vì một ô ✅ sai trong `evidence/INV-matrix.md` là thứ nguy hiểm hơn một ô ⏳.
+// =============================================================================================
+describe("token và phiên báo giá — hai tính chất hẹp hơn E2", () => {
+  it("đổi được magic link nhưng KHÔNG có phiên nào ra đời", async () => {
     const inv = await moiMoi();
     const { token } = await withTenant(apiPool, orgA, (c) =>
       issueMagicLinkToken(c, orgA, { invitationId: inv }),
@@ -509,8 +522,14 @@ describe("[INV-E3] OTP — năm vế", () => {
   });
 });
 
-describe("[INV-E5] link chuyển tiếp, và danh tính THỰC TẾ đã xác thực", () => {
-  it("người nhận link chuyển tiếp vẫn vào được, nhưng phiên ghi người GIỮ KÊNH đã xác thực", async () => {
+// NHÃN `[INV-E5]` ĐÃ ĐƯỢC GỠ (review an ninh S1.3, 2026-08-29). Test dưới đây khẳng định
+// `verified_contact_id === lienHe2` — nhưng `lienHe2` là giá trị mà CHÍNH TEST truyền vào, và
+// không lớp nào nối nó với thách thức OTP vừa đối chiếu. Nó đo rằng *giá trị truyền vào được ghi
+// lại đúng*, không đo rằng *giá trị ấy đã được xác thực*. Một test tautology dưới một nhãn bất
+// biến là bằng chứng giả, và nó nguy hiểm hơn không có test: nó bơm một khẳng định sai vào chuỗi
+// hash bất biến — đúng thứ dự án bán cho kiểm toán viên của khách hàng.
+describe("phiên khách ghi lại contact được truyền vào — hẹp hơn E5", () => {
+  it("người nhận link chuyển tiếp vẫn vào được; phiên ghi contact được truyền vào", async () => {
     const inv = await moiMoi();
     const { token } = await withTenant(apiPool, orgA, (c) =>
       issueMagicLinkToken(c, orgA, { invitationId: inv }),
