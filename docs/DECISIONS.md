@@ -570,3 +570,240 @@ Một test đọc lược đồ và khẳng định **mọi cột định danh c
 nhà cung cấp** đều mặc định `gen_random_uuid()` — kiểu danh sách phải **suy từ tính chất**, không
 từ một danh sách tên viết cứng. Khuôn danh-sách-tên đã hỏng ba lần trong S0 (khoản nợ 16, 17), và
 S1 thêm 13 bảng là đúng lúc nó hỏng lần thứ tư nếu lặp lại.
+
+---
+
+## ADR-013 — Phạm vi sổ nhà cung cấp: **một sổ cho mỗi tổ chức mua; MST là dữ liệu, không phải khoá**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **S1.1** · Liên quan: **A5**, **E4**, **F1**, **F2**
+
+**Bối cảnh.** S1.1 tạo hai bảng đầu tiên của S1 (`suppliers`, `supplier_contacts`). Câu hỏi chặn
+không phải "cột nào" mà là **phạm vi**: một nhà cung cấp là thực thể **thuộc một tổ chức mua**,
+hay một thực thể **dùng chung toàn hệ thống** mà nhiều tổ chức cùng trỏ tới? Định hướng sản phẩm
+kéo về hướng dùng chung (Level 2 — Supplier Passport, ràng buộc 2 của `docs/PRODUCT.md`); cô lập
+tổ chức kéo ngược lại. Phải chốt **trước** migration `008`: đổi phạm vi sau khi đã có dữ liệu là
+một cuộc di trú xuyên tổ chức, không phải một cột thêm vào.
+
+**Lớp lỗi này ĐÃ ĐƯỢC ĐO ở S0, hai lần, trên chính lược đồ đang chạy** — PostgreSQL 16.15, role
+đăng nhập thật `app_api_login`, RLS bật đầy đủ, tenant context đúng:
+
+- `organizations.slug` UNIQUE **toàn cục**: `UPDATE ... SET slug='cong-ty-b'` trả `duplicate key`,
+  cùng câu với một slug không ai dùng trả `UPDATE 1`. Hai thông báo khác nhau = **một oracle nhị
+  phân** trả lời *"đối thủ X có trên sàn không"*. (`db/migrations/002_organizations_and_users.sql`,
+  khối `[CR3 — vòng fix 1]`.)
+- `users_pkey` cùng khuôn, khai thác thực tế ≈ 0 vì `id` là 122 bit ngẫu nhiên — nhưng **khuôn**
+  vẫn bị đóng, và cách đóng là **thu hẹp quyền theo cột**, không đụng ràng buộc. (Cùng file, khối
+  `[vòng fix 2 — Minor]`.)
+
+Nguyên lý đã nằm sẵn trong file đó: *"ràng buộc duy nhất TOÀN CỤC sẽ rò rỉ xuyên tổ chức qua
+chính thông báo lỗi — RLS không che được lỗi ràng buộc, vì kiểm tra unique chạy dưới quyền hệ
+thống trên toàn bảng."*
+
+**MST làm khuôn ấy TỆ HƠN hai ca trên, không nhẹ hơn.** `slug` phải đoán từ tên công ty; `id` là
+122 bit ngẫu nhiên. **Mã số thuế thì công khai và liệt kê được** — không gian tên hữu hạn, tra cứu
+tự do. Một `UNIQUE (tax_code)` toàn cục biến *"tổ chức mua nào đang làm việc với nhà cung cấp
+nào"* thành một câu hỏi **tra được bằng INSERT**, trên đúng tập dữ liệu có giá thương mại nhất của
+một sàn thầu kín.
+
+**Phương án đã cân nhắc.**
+
+| Phương án | Vấn đề đo được |
+|---|---|
+| Sổ dùng chung toàn cục (`suppliers` không có `org_id`, `UNIQUE (tax_code)`) + bảng nối | ⑴ Oracle MST như trên. ⑵ Bảng không có `org_id` **nằm ngoài** `VI_TU_BANG_TENANT` của `hardening.always.sql`, và vị từ ấy giấu `OR relname IN ('organizations')` bên trong ⇒ **bảng gốc tenant thứ hai không bị kiểm RLS/FORCE và `rls-coverage.int.test.ts` cũng mù** (khoản nợ 16, ghi trước khi có ADR này). ⑶ Level 0 là *Guest Bidder*: hồ sơ do chính người mua tạo lúc mời ⇒ phân giải danh tính ở **đúng chỗ danh tính yếu nhất**. |
+| Lai: sổ chung chứa dữ liệu công khai, sổ riêng chứa quan hệ | Vẫn phải trả lời *"hàng công khai này tồn tại chưa"* ⇒ **cùng một oracle, dời sang bảng khác**. Hoãn được chi phí, không hoãn được câu hỏi. |
+| **Một sổ cho mỗi tổ chức mua** (`org_id NOT NULL`, `UNIQUE (org_id, tax_code)`) | Cùng một nhà cung cấp tồn tại nhiều bản, mỗi tổ chức một bản. **Chi phí có thật**, và nó rơi vào S3+ chứ không vào S1. |
+
+### Quyết định
+
+1. **`suppliers` và `supplier_contacts` là bảng tenant**: `org_id uuid NOT NULL REFERENCES
+   organizations(id)`, `ENABLE` **và** `FORCE ROW LEVEL SECURITY`, policy có **cả** `USING` lẫn
+   `WITH CHECK` tường minh, không mệnh đề `TO` — đúng khuôn 002, không phát minh khuôn mới.
+2. **Mọi ràng buộc UNIQUE trên hai bảng này phải có `org_id` đứng ĐẦU.** `UNIQUE (org_id,
+   tax_code)`, không `UNIQUE (tax_code)`. Đây là hệ quả trực tiếp của hai phép đo trên.
+3. **MST là dữ liệu — không phải khoá, không phải credential.** `id` vẫn là `uuid DEFAULT
+   gen_random_uuid()` theo **ADR-012**; **E4** giữ nguyên hiệu lực: biết MST không mở được gì.
+4. **Trùng lặp xuyên tổ chức được CHẤP NHẬN ở S1.** Gộp hồ sơ / Supplier Passport (Level 2) thuộc
+   S3+ và **phải mở một ADR mới** — ADR đó sẽ phải trả lời đúng câu hỏi oracle mà quyết định này
+   đang tránh, chỉ khác là khi ấy có dữ liệu thật để đo.
+5. **`app_unseal` không được cấp gì trên hai bảng này.** Chúng chứa dữ liệu cá nhân (tên, email,
+   điện thoại người liên hệ) và runtime mở thầu không có việc gì với chúng — cùng lý do đã ghi
+   cho `users` ở 002.
+
+### Điều ADR này KHÔNG cho phép suy ra
+
+**Sổ riêng theo tổ chức KHÔNG mua được A5.** A5 nói về thứ **nhà cung cấp** nhìn thấy; ADR này nói
+về thứ **tổ chức mua** nhìn thấy. Hai bề mặt khác nhau. A5 vẫn phải cưỡng chế ở ứng dụng cộng
+ADR-012 (S1.1 + S1.9 theo kế hoạch S1 §1).
+
+Và RLS ở đây chặn đúng những gì 002 đã liệt kê — quên `WHERE org_id = ?`, IDOR tầng ứng dụng —
+**không** chặn SQL injection hay một tiến trình `api` đã bị chiếm.
+
+### Đo bằng gì
+
+Một lớp **suy từ TÍNH CHẤT, không từ danh sách tên** — khuôn danh-sách-tên đã hỏng ba lần ở S0
+(nợ 3, 16, 17). Vị từ đúng không phải *"mọi UNIQUE phải có org_id đứng đầu"* (nó sẽ đỏ oan trên
+`users_pkey` và `organizations_slug_key`), mà là:
+
+> **một ràng buộc UNIQUE/PK chỉ làm oracle được khi `app_api` GHI ĐƯỢC ĐỦ MỌI CỘT của nó.**
+> Vậy: mọi ràng buộc UNIQUE/PK trên bảng có `org_id`, **mà `app_api` ghi được đủ mọi cột**, phải
+> có `org_id` là cột đầu tiên.
+
+Vị từ này phân loại đúng cả ba ca đang có: `organizations_slug_key` **đạt** (app_api không ghi
+được `slug`), `users_pkey` **đạt** (không ghi được `id`), `users (org_id, email)` **đạt**
+(org_id đứng đầu) — và một `UNIQUE (tax_code)` toàn cục có `GRANT INSERT (tax_code)` thì **đỏ**.
+Một test đọc `pg_constraint` cộng `information_schema.role_column_grants` (phải đọc **cả** view
+cột, vì quyền cột không hiện ở `role_table_grants` — đã đo ở 002) đóng lớp này cho **cả 13 bảng
+mới của S1 cùng lúc**, không riêng `suppliers`.
+
+**Phép đối kháng bắt buộc:** thêm một `UNIQUE (tax_code)` toàn cục ghi được → test phải **ĐỎ
+THẬT**. Không có lượt RED đó thì đây chỉ là một câu văn.
+
+---
+
+## ADR-014 — Nơi cưỡng chế máy trạng thái RFQ: **CSDL giữ các cạnh và bất biến trên dữ liệu, ứng dụng giữ điều kiện cần ngữ cảnh**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **S1.2** · Liên quan: **C1**, **C2**, **C4**, **C5**, **D2**, **A6**
+
+**Bối cảnh.** Các trạng thái và điều kiện chuyển **đã chốt** ở `docs/ARCHITECTURE.md` §6 — ADR này
+**không** mở lại chúng. Cái còn treo, và nó chặn migration `008`, là **cưỡng chế ở đâu**. `app_api`
+sẽ có `GRANT UPDATE` trên `rfq_packages` để làm việc của nó; kể từ giây đó, một câu
+`UPDATE ... SET status='OPEN'` sai chỗ là **một dòng SQL**, không phải một cuộc tấn công.
+
+**Tiêu chí chọn, và S0 đã trả tiền để học nó:** *cái gì hỏng **im lặng** thì xuống CSDL; cái gì
+hỏng **ồn ào** thì ở ứng dụng.* Cùng tiêu chí đã đưa `audit_events` (trigger + REVOKE) và RLS
+xuống tầng CSDL, và đã để E3 ở tầng ứng dụng **kèm một khối chú thích nói thẳng cái giá**
+(`packages/identity/src/mfa-credentials.ts`, khối `[vòng fix 1 — MỤC 8 / M-1]`).
+
+**Phương án đã cân nhắc.**
+
+| Phương án | Vấn đề đo được |
+|---|---|
+| Toàn bộ ở ứng dụng — một hàm `transitionRfqStatus` | Một cạnh cấm đi lọt là **một thay đổi im lặng trên dữ liệu**: RFQ quay `CLOSED → OPEN` thì phong bì đã nộp vẫn nằm đó, không có gì đỏ, và dấu vết duy nhất là sổ kiểm toán *nếu* có ai đọc. Cùng họ với "quên `WHERE org_id`" mà ADR-003 đã chọn không tin. |
+| Toàn bộ ở CSDL — trigger kiểm mọi cạnh + bảng cạnh hợp lệ | ⑴ Một phần điều kiện chuyển **CSDL không thấy được**: "phê duyệt hợp lệ" của D2 gắn với phiên và MFA (D1), "đủ số nhà cung cấp theo chính sách" là cấu hình. ⑵ Mỗi hàm plpgsql mới rơi thẳng vào **khoản nợ 3**: `assertTenantBound` ghim hàm theo **danh sách tên**, hàm ngoài danh sách **không được ghim**. Đẩy nhiều logic xuống plpgsql là nới rộng đúng lỗ đã đo. |
+| **Lai theo tiêu chí trên** | Ranh giới **phải được ghim tường minh**, nếu không nó trôi về phía rẻ hơn. Phần dưới ghim nó. |
+
+### Quyết định
+
+**Ở tầng CSDL — bốn thứ, không hơn**, mỗi thứ vì một lý do có tên:
+
+1. **`status` bị `CHECK` trên một tập đóng** — cùng khuôn `outbox_jobs.status` của 007.
+2. **Trigger cấm mọi cạnh không có trong bảng cạnh hợp lệ.** Cạnh quan trọng nhất là cạnh **không
+   tồn tại**: `CLOSED → OPEN`. ARCHITECTURE §6 đã viết *"Không tồn tại"*; ADR này biến câu đó
+   thành một `RAISE EXCEPTION`.
+3. **C4 — không rút ngắn deadline khi đã có báo giá:** trigger `BEFORE UPDATE` từ chối
+   `NEW.deadline_at < OLD.deadline_at` khi RFQ đã có ≥ 1 báo giá. Đây là bất biến **trên dữ
+   liệu**: nó đúng bất kể đường gọi nào. (Vế *lý do + audit + thông báo* của C4 thì ở ứng dụng.)
+4. **C1 — phán quyết deadline trong CHÍNH transaction ghi báo giá**, đọc `rfq_packages` có khoá
+   hàng, dùng `now()` của Postgres (**ADR-005**). Đây cũng là thứ làm **C2** đúng: job đóng RFQ
+   chỉ đổi trạng thái hiển thị, nên **giết scheduler không làm bid muộn được nhận**.
+
+**Ở tầng ứng dụng — và mỗi mục kèm cái giá của nó:**
+
+5. Điều kiện chuyển cần ngữ cảnh: phê duyệt kép (**D2**), ngưỡng chính sách, số nhà cung cấp tối
+   thiểu. Ràng buộc DB `UNIQUE (unseal_request_id, approver_user_id)` +
+   `CHECK (approver_user_id <> requester_user_id)` chặn được *"hai người khác nhau"*, **không**
+   chặn *"hai phiên khác nhau"* — đó là thuộc tính của phiên, không của hàng.
+6. **A6 — chế độ nghiêm** (ẩn số báo giá đã nhận khỏi Buyer trước CLOSED) là **chính sách theo tổ
+   chức**, ở ứng dụng.
+7. **C5 — cặp khoá RFQ sinh đúng lúc chuyển sang OPEN:** hành vi sinh khoá ở ứng dụng, nhưng phần
+   **cưỡng chế được** thì xuống CSDL — `rfq_key_material` chỉ tồn tại được cho RFQ **không còn ở**
+   `DRAFT`/`PENDING_APPROVAL`. Nói hẹp và đúng: lược đồ chặn được *"có khoá quá sớm"*, **không**
+   chặn được *"tới OPEN mà quên sinh khoá"*.
+
+### Cái này KHÔNG đóng, và phải vào §4 của ma trận
+
+- Vế *"hai phiên khác nhau"* của **D2** (kế hoạch S1 §3 đã ghi; không được nuốt vào ô ✅).
+- Vế *"tới OPEN mà quên sinh khoá"* của **C5** — cưỡng chế ở ứng dụng, đo bằng test.
+- **Cùng hạn chế cấu trúc đã ghi cho E3:** `app_api` có `GRANT UPDATE` trên `rfq_packages`, nên
+  một `api` **bị chiếm** đi được mọi cạnh mà trigger cho phép và tắt được mọi phép kiểm ở mục
+  5–7. Trigger chặn **lỗi lập trình**, không chặn **kẻ đã ở trong tiến trình**. Bí mật giá không
+  dựa vào lớp này — nó dựa vào ADR-006 và phong bì.
+- Mỗi trigger mới là **một hàm plpgsql mới** ⇒ **khoản nợ 3 nở ra** trừ khi `assertTenantBound`
+  chuyển sang ghim theo **tính chất**. Ghi ra ở đây để nó không lặng lẽ lớn thêm.
+
+### Đo bằng gì
+
+Ba phép, cả ba phải có lượt **RED thật**:
+
+1. **Đi vòng qua ứng dụng:** dùng `app_api_login` chạy
+   `UPDATE rfq_packages SET status='OPEN' WHERE status='CLOSED'` → phải bị trigger chặn. Đây là
+   phép đo **duy nhất** chứng minh lớp nằm ở CSDL chứ không ở một hàm TypeScript.
+2. **Đột biến:** `DROP TRIGGER` → bộ test phải ĐỎ. Không đỏ nghĩa là trigger chưa từng được đo.
+3. **C2:** dừng job runner **thật** (Testcontainers, hạ tầng đã có từ S0), đẩy đồng hồ DB qua
+   deadline, nộp → phải bị từ chối. Không mock scheduler.
+
+---
+
+## ADR-015 — Kênh OTP cho phiên khách, và nền cưỡng chế giới hạn tần suất
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **S1.3** · Liên quan: **E1**, **E2**, **E3**, **E5**, **E6**
+
+**Bối cảnh.** **E2** đòi: *"Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh
+đã đăng ký."* Hai chỗ trống chặn S1.3: **kênh nào**, và **giới hạn tần suất chạy trên nền gì** —
+vế **E3(2)** hôm nay **không có một dòng mã nào trong toàn S0** (khoản nợ 1;
+`packages/identity/src/mfa-credentials.ts` ghi thẳng điều đó ở khối đầu file). Hai câu hỏi này
+**không độc lập**: một kênh mất tiền mỗi tin làm giới hạn tần suất **đồng thời là một trần chi
+phí**, không chỉ một biện pháp an ninh.
+
+**Lập luận quyết định, và nó loại thẳng một phương án.** Magic link đi bằng email **và** OTP cũng
+đi bằng email thì hai yếu tố nằm trên **cùng một kênh** — ai đọc được hộp thư đó có cả hai. **E5**
+làm điều này cụ thể hơn chứ không nhẹ đi: *"link chuyển tiếp vẫn dùng được"* là hành vi **được
+thiết kế**, và ở doanh nghiệp Việt Nam hộp thư nhận yêu cầu báo giá thường là hộp thư **chung của
+phòng kinh doanh**. Một OTP về đúng hộp thư ấy **không thêm yếu tố nào**; nó chỉ thêm một bước bấm.
+
+| Kênh | Đánh giá |
+|---|---|
+| Email | Rẻ nhất, không phụ thuộc nhà cung cấp dịch vụ VN nào. **Loại làm kênh OTP chừng nào magic link còn đi bằng email** — lý do ngay trên. |
+| **SMS** tới số điện thoại người liên hệ | Khác kênh với email ⇒ E2 thật sự là **hai** yếu tố. Danh tính gắn với một cá nhân, không với một hộp thư chung. Giá: mỗi tin mất tiền, cần brandname, và SIM swap là rủi ro thật — nhưng nằm **dưới** mức rủi ro "hộp thư chung của cả phòng". |
+| Zalo ZNS | Phổ biến nhất VN, rẻ hơn SMS. Nhưng cần Official Account và **template duyệt trước** ⇒ đưa một **bước phê duyệt của bên thứ ba vào đường găng S1.3**, và buộc một bước bắt buộc của luồng xác thực vào một nền tảng duy nhất. |
+
+> **Một tiền đề của lập luận trên CHƯA ĐƯỢC ĐO, và nó phải được nói ra thay vì đi lẫn vào kết
+> luận:** câu *"hộp thư nhận yêu cầu báo giá thường là hộp thư chung của phòng kinh doanh"* là một
+> **giả định về thị trường**, không phải một phép đo — dự án chưa có khách hàng pilot (điểm chặn 1),
+> nên chưa ai nhìn thấy một hộp thư thật. Giả định này **không** làm hỏng quyết định nếu sai: khi
+> hộp thư là của một cá nhân, tách kênh vẫn đúng vì E5 cho phép chuyển tiếp link. Nhưng nó **phải**
+> là một câu hỏi trong buổi làm việc đầu tiên với khách hàng pilot, và nếu sai theo hướng ngược lại
+> — nhà cung cấp không sẵn lòng cho số điện thoại — thì mục 2 dưới đây phải mở lại.
+
+### Quyết định
+
+1. **Bất biến — đây mới là phần không được đổi: OTP KHÔNG BAO GIỜ đi cùng kênh với magic link.**
+   Tên nhà cung cấp dịch vụ là chi tiết triển khai; câu này là quyết định.
+2. **Kênh mặc định của S1: SMS** tới số điện thoại đã đăng ký của người liên hệ. **Zalo ZNS là
+   kênh thay thế cấu hình được**, không nằm trên đường găng của S1.3.
+3. **Gửi đi qua outbox** (**ADR-010**: bền + `NOTIFY` đánh thức), và một hệ quả **bắt buộc** từ hợp
+   đồng của `enqueueJob` — *payload mang **tham chiếu**, không mang **giá trị***
+   (`packages/outbox/src/enqueue.ts`): **mã OTP không bao giờ nằm trong `outbox_jobs.payload`**.
+   Kéo theo một ràng buộc thiết kế có lý do kỹ thuật, không phải sở thích: **mã được sinh TRONG
+   handler gửi**, ghi hash xuống bảng (**E1**), trao mã cho nhà cung cấp kênh, rồi bỏ khỏi bộ nhớ.
+   Sinh trước rồi chỉ lưu hash thì handler **không đọc lại được** mã để gửi.
+4. **Giới hạn tần suất (E3(2)) chạy trên Postgres**, không thêm thành phần hạ tầng. Không có một
+   phép đo nào ở S1 đòi Redis, và mỗi thành phần mới kéo theo một bề mặt IAM phải cưỡng chế — đúng
+   bài học ADR-006 → ADR-009 (*quyền chỉ cưỡng chế được bằng IAM của nơi compute chạy*). Đổi ý
+   phải mở ADR mới **và phải kèm số đo**.
+5. **Hai hạn mức, hai loại phản ứng khác nhau** — cùng đánh đổi đã ghi cho E3(1) ở
+   `mfa-credentials.ts`: hạn mức theo **đích** (số điện thoại) chỉ được **làm chậm**, không được
+   **khoá**, vì khoá theo đích cho phép một người khoá lối vào của người khác; hạn mức theo
+   **người gọi** (phiên/IP) mới được khoá.
+
+### Cái này KHÔNG đóng, và phải vào §4 của ma trận
+
+- **"Kênh đã đăng ký" ở S1 là kênh do NGƯỜI MUA khai khi mời**, không phải kênh nhà cung cấp tự
+  xác nhận. Nó chống được *"link bị chuyển tiếp"* (**E5**) và **không** chống được *"người mua khai
+  sai số"*. Câu này phải nằm ở §4 khi `[INV-E2]` được gắn thẻ, nếu không ô ✅ sẽ rộng hơn cơ chế.
+- **Chặng cuối** — tin nhắn thật sự tới tay ai đó — nằm ngoài Postgres, đúng như ADR-010 đã ghi cho
+  D4. `SENT` trong outbox **không** là bằng chứng đã nhận.
+- **Cùng hạn chế cấu trúc với E3(1):** bộ đếm nằm ở bảng mà `app_api` ghi được, nên một `api` bị
+  chiếm tắt được nó bằng một câu `UPDATE`. Không tránh được nếu giữ E3 ở tầng ứng dụng — bỏ GRANT
+  là bỏ luôn cơ chế, và thu hẹp xuống một hàm SECURITY DEFINER là thứ mục (C) của
+  `hardening.always.sql` **cấm**.
+
+### Đo bằng gì
+
+1. **Đối kháng cho E3(2)** — vế chưa từng có một dòng mã nào: vô hiệu hoá bảng đếm → test phải
+   **ĐỎ THẬT**. Đây là điều kiện để **gỡ** phần chênh của E3 khỏi §4, không phải để gắn thêm nhãn.
+2. **Một phép quét khẳng định mã OTP không xuất hiện trong `outbox_jobs.payload`** — chạy trên dữ
+   liệu thật của test, không đọc mã nguồn.
+3. **E2 phải được đo như một phép HỘI**, không phải hai phép rời: có token hợp lệ **và không** qua
+   OTP → phải bị từ chối. Đây đúng cái bẫy **D1** đang mắc ở §4 (bốn vế đo riêng ở hai file, phép
+   hội chưa từng được đo một lần). S1.3 là chỗ không được lặp lại nó.

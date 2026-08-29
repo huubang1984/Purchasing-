@@ -209,6 +209,9 @@ dựng để làm lộ ra.
 | **ADR-010** | Đường thông báo cho break-glass | S1.6, S1.8 (D4) | ✅ **Đã chốt 2026-08-29: outbox bền cộng `NOTIFY` đánh thức.** `NOTIFY` **không bền** nên nó là *bộ tăng tốc*, không phải cơ chế — mất nó thì cảnh báo **chậm**, không **mất** |
 | **ADR-011** | Định dạng phong bì niêm phong cộng thuật toán chữ ký biên nhận mà NCC **kiểm chứng độc lập được** (B2). **Phải ghim: phong bì mang một mã thuật toán thoả thuận khoá tường minh** | S1.4, S1.5 | ⏳ Phải chốt trong S1.4 — **và chỉ được chốt sau khi có kết quả đo Zalo/Android** (khoản nợ 23) |
 | **ADR-012** | Định danh mà NCC nhìn thấy (A5) | S1.1, S1.3 | ✅ **Đã chốt 2026-08-29: UUIDv4, CẤM UUIDv7/ULID.** UUIDv7 chứa timestamp và sắp theo thứ tự nên rò *"gián tiếp qua số thứ tự"*, đúng thứ A5 cấm |
+| **ADR-013** | Phạm vi sổ nhà cung cấp — sổ riêng từng tổ chức hay sổ dùng chung toàn hệ thống | **S1.1** | ✅ **Đã chốt 2026-08-29: bảng tenant, `UNIQUE (org_id, tax_code)`.** Một `UNIQUE (tax_code)` toàn cục là **oracle xuyên tổ chức** — cùng lớp lỗi đã ĐO hai lần ở S0 (`organizations.slug`, `users_pkey`), và MST tệ hơn cả hai vì nó **công khai và liệt kê được** |
+| **ADR-014** | Nơi cưỡng chế máy trạng thái RFQ + ngữ nghĩa deadline/gia hạn | **S1.2** | ✅ **Đã chốt 2026-08-29: lai, ranh giới ghim tường minh.** CSDL giữ cạnh + bất biến trên dữ liệu (C1, C4, `CLOSED → OPEN` là `RAISE EXCEPTION`); ứng dụng giữ điều kiện cần ngữ cảnh (D2, A6). Tiêu chí: *hỏng im lặng thì xuống CSDL* |
+| **ADR-015** | Kênh OTP cho phiên khách + nền cưỡng chế giới hạn tần suất (E3(2)) | **S1.3** | ✅ **Đã chốt 2026-08-29: OTP không bao giờ cùng kênh với magic link**; mặc định SMS, ZNS là kênh thay thế; giới hạn tần suất trên Postgres, không thêm Redis. **Mã OTP không bao giờ vào `outbox_jobs.payload`** ⇒ mã phải sinh TRONG chính handler gửi |
 
 > **Ràng buộc bắt buộc của ADR-011, đến từ khoản nợ 23.** Phong bì phải **mang một mã thuật
 > toán thoả thuận khoá tường minh**, cùng khuôn với `ENVELOPE_VERSION` đã có trong
@@ -217,6 +220,11 @@ dựng để làm lộ ra.
 > làm là **thêm một nhánh P-256** — phong bì cũ vẫn mở được, đúng cơ chế mà `MasterKeyRing`
 > dùng để giữ khả năng giải mã qua các lần xoay khoá (G3). Không có nó, cùng tình huống ấy là
 > một cuộc di trú. Đây là cách biến một rủi ro **chưa đo** thành một rủi ro **rẻ**.
+
+> **Ba ADR của các hạng mục sớm nhất (013/014/015) đóng đúng ba chỗ kế hoạch này để trống:** §2
+> đặt tên bảng mới nhưng không nói **phạm vi** của `suppliers`; §3 liệt kê cưỡng chế tầng CSDL
+> nhưng không nói **máy trạng thái** nằm ở đâu; §1 ánh xạ E1–E6 vào S1.3 nhưng E2 không dùng được
+> chừng nào chưa biết **kênh**. Cả ba phải chốt **trước** migration `008`.
 
 > **ADR-011 là cái dễ bị làm ẩu nhất.** "Chữ ký hệ thống" mà NCC *kiểm chứng độc lập được*
 > nghĩa là khóa công khai của hệ thống phải **công bố được** và biên nhận phải **tự mô tả**.

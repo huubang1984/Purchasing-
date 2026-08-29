@@ -257,7 +257,14 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
 7. ~~**Mới:** chốt **ADR-010** trước S1.6, **ADR-011** trong S1.4, **ADR-012** trong S1.1~~ —
    **ADR-010 và ADR-012 đã chốt** ngày 2026-08-29. **ADR-011** để ***Đang mở*** có chủ đích:
    nó bị khoản nợ 23 chặn, và phần ghim được thì đã ghim.
-8. **Mới:** bắt đầu **S1.1** và **S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.
+8. ~~**Mới:** bắt đầu **S1.1** và **S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.~~
+   **Câu vừa gạch hẹp hơn thực tế:** không bị ADR *đang mở* chặn không có nghĩa là không có quyết
+   định phải ra. S1.1 mang câu hỏi **phạm vi sổ nhà cung cấp**, S1.2 mang câu hỏi **máy trạng thái
+   cưỡng chế ở đâu**, S1.3 mang câu hỏi **kênh OTP** — cả ba phải chốt trước migration `008`.
+   **Đã chốt 2026-08-29: ADR-013, ADR-014, ADR-015.**
+9. **Mới:** bắt đầu **S1.1**, **S1.2**, **S1.3**. Mỗi ADR mới để lại một **phép đối kháng bắt
+   buộc** ở mục *Đo bằng gì*; lớp nào chưa có lượt RED thật thì chưa được coi là đã đo — đúng bài
+   học đắt nhất của S0.
 
 ---
 
@@ -289,7 +296,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 | `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
-| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → **Mười hai ADR**: 001–010 và 012 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5 |
+| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ **Mười lăm ADR**: 001–010 và 012–015 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
 | `evidence/INV-matrix.md` | Ma trận bất biến; **§3 = danh sách việc của S1**, §4 = phạm vi hẹp |
 | `evidence/security-reviews.md` | Dấu vết review an ninh, kèm giới hạn của chính nó |

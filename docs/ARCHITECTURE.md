@@ -57,6 +57,11 @@
 giải mã. Ranh giới được cưỡng chế bởi hai cơ chế độc lập: IAM ở tầng hạ tầng, quyền role
 ở tầng cơ sở dữ liệu. Chi tiết lý do: ADR-006.
 
+**Xác thực nhà cung cấp — ràng buộc kênh.** OTP **không bao giờ** đi cùng kênh với magic link:
+hai yếu tố trên một hộp thư chung không phải hai yếu tố. Kênh mặc định của S1 là SMS, Zalo ZNS là
+kênh thay thế cấu hình được, và giới hạn tần suất chạy trên Postgres — không thêm thành phần hạ
+tầng. Chi tiết: ADR-015.
+
 ## 3. Cấu trúc thư mục
 
 ```text
@@ -103,6 +108,11 @@ S1  suppliers · supplier_contacts
 
 Tập con của mục 26 trong đặc tả. Bảng thuộc S3/S4 chưa tạo.
 
+`suppliers` và `supplier_contacts` là **bảng tenant**, không phải sổ dùng chung toàn hệ thống: một
+sổ cho mỗi tổ chức mua, MST là dữ liệu chứ không phải khoá. Trùng lặp xuyên tổ chức được chấp nhận
+ở S1; gộp hồ sơ (Level 2) thuộc S3+ và phải mở ADR mới. Chi tiết và hai phép đo chống lưng:
+ADR-013.
+
 ### 4.1. Cưỡng chế ở tầng cơ sở dữ liệu
 
 | Bảng | Cưỡng chế | Chống điều gì |
@@ -112,6 +122,8 @@ Tập con của mục 26 trong đặc tả. Bảng thuộc S3/S4 chưa tạo.
 | `audit_events` | Trigger tương tự + `REVOKE UPDATE, DELETE` | Xóa dấu vết |
 | `rfq_key_material` | Quyền theo cột: `app_api` chỉ SELECT `public_key` | `api` tự giải mã |
 | `rfq_packages.deadline_at` | Kiểm tra trong transaction ghi báo giá, có khóa hàng | Tranh chấp quanh giờ đóng |
+| `rfq_packages.status` | Trigger cấm mọi cạnh ngoài bảng cạnh hợp lệ; `CLOSED → OPEN` không tồn tại | Mở lại RFQ đã đóng (ADR-014) |
+| `suppliers`, `supplier_contacts` | `org_id` + `UNIQUE (org_id, tax_code)`; mọi UNIQUE mà `app_api` ghi được đủ cột phải có `org_id` đứng đầu | Oracle xuyên tổ chức qua thông báo lỗi ràng buộc (ADR-013) |
 
 Hai role tách biệt: `app_api` và `app_unseal`. Không role nào bao trùm role kia.
 
@@ -151,7 +163,13 @@ DRAFT ──► PENDING_APPROVAL ──► OPEN ──► CLOSED ──► UNSEA
 | `PENDING_APPROVAL → OPEN` | Phê duyệt hợp lệ; **cặp khóa RFQ sinh tại đúng thời điểm này** |
 | `OPEN → CLOSED` | Tự động theo deadline, hoặc đóng sớm có lý do và audit |
 | `CLOSED → UNSEALED` | Chỉ qua `unseal-worker` sau khi cổng chính sách thông qua |
-| `CLOSED → OPEN` | **Không tồn tại** |
+| `CLOSED → OPEN` | **Không tồn tại** — và ADR-014 buộc câu này phải trở thành một `RAISE EXCEPTION` ở migration `008`. **Migration đó chưa viết**; hôm nay đây vẫn chỉ là một câu văn |
+
+**Cưỡng chế ở đâu (ADR-014).** CSDL giữ bốn thứ: `CHECK` trên tập trạng thái, trigger cấm mọi
+cạnh ngoài bảng cạnh hợp lệ, trigger cấm rút ngắn `deadline_at` khi đã có báo giá (C4), và phán
+quyết deadline **trong chính transaction ghi báo giá** (C1, và nó là thứ làm C2 đúng). Ứng dụng
+giữ những điều kiện CSDL không thấy được: phê duyệt kép (D2), ngưỡng chính sách, chế độ nghiêm
+của A6. Trigger chặn **lỗi lập trình**, không chặn một tiến trình `api` đã bị chiếm.
 
 ## 7. Ngữ nghĩa thời gian
 
