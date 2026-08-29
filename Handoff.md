@@ -187,12 +187,22 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 3. ~~**`crypto.subtle` trong webview Zalo/Messenger chưa có một phép đo nào**~~ — rủi ro sản phẩm
    CAO, vì mã hoá được thực hiện phía trình duyệt nhà cung cấp.
 
-   **Cập nhật 2026-08-29: đã có MÁY DÒ, chưa có PHÉP ĐO.** `tools/do-webcrypto/index.html` chạy
-   thật từng phép mật mã của đường nộp thầu và cho ra một trong bốn phán quyết; nó đã được chứng
-   minh có răng bằng ba đột biến. Nhưng nó mới chỉ chạy trên **Chrome 148 desktop** — điều đó
-   chứng minh **máy dò hoạt động**, không chứng minh gì về webview Việt Nam. **Rủi ro vẫn CAO và
-   vẫn MỞ.** Chỗ đáng ngờ nhất là **X25519**: nó chỉ có trên Chrome 133+ và Safari 17+, mới hơn
-   nhiều so với AES-GCM, và nếu nó thiếu thì ADR-011 phải đổi sang P-256 **trước** S1.4.
+   **Cập nhật 2026-08-29 — ĐÃ CÓ PHÉP ĐO TRÊN WEBVIEW THẬT.** `tools/do-webcrypto/` (máy dò đã
+   chứng minh có răng bằng ba đột biến) chạy trong **Zalo iOS, WKWebView, iOS 18.7**: **ĐẠT
+   toàn bộ, kể cả X25519.** Giả thuyết xấu nhất — *"webview Zalo không có `crypto.subtle`, toàn
+   bộ đường nộp thầu của thị trường VN gãy"* — **đã bị bác trên đường iOS**.
+
+   **Rủi ro hẹp lại, nhưng CHƯA ĐÓNG**, và hai lý do đều cụ thể: **(a)** toàn bộ phía **Android
+   còn trống** — Android System WebView cập nhật rời qua Play Store và trên máy tầm trung cũ hay
+   tụt lại nhiều phiên bản; **(b)** kết quả iOS chỉ đúng cho **iOS 18.7**, không cho iPhone chạy
+   iOS cũ. Chưa được ghi ở đâu rằng *"đã đo trên webview Zalo"* mà không kèm hai chữ **iOS 18.7**.
+
+   Phép đo này còn sửa một lỗi phân loại trong chính tài liệu trước đó: trục đúng là **engine**,
+   không phải tên ứng dụng. Trên iOS, Zalo và Messenger mượn **cùng một `WKWebView`** — nên một
+   phép đo phủ cả hai, và hai ô đó chưa bao giờ độc lập. Nhật ký: `tools/do-webcrypto/ket-qua-do.md`.
+
+   **Ảnh hưởng tới S1.4:** chưa có gì buộc đổi — `X25519` chạy trên webview thật, nên ADR-011 và
+   §3.2 giữ nguyên hướng. Nhưng chỉ nên **chốt** sau khi có kết quả Zalo/Android.
 
 ---
 
