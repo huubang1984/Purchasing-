@@ -4,18 +4,22 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-08-29 (vòng fix CI, sau lần chạy CI đầu tiên của nhánh S0)
+**Cập nhật lần cuối:** 2026-08-29 (sau khi hợp nhất S0 vào `master` và lập kế hoạch S1)
 
 ---
 
 ## Cột mốc hiện tại
 
-**Giai đoạn: S0 (Nền móng) — MÃ NGUỒN ĐÃ CÓ, mười một task đã commit. S1 chưa bắt đầu.**
+~~**Giai đoạn: S0 (Nền móng) — MÃ NGUỒN ĐÃ CÓ, mười một task đã commit. S1 chưa bắt đầu.**~~
+
+**Giai đoạn: S0 ĐÃ HỢP NHẤT VÀO `master`** (merge commit `30d1972`, giữ nguyên 46 commit).
+**S1 đã có KẾ HOẠCH ĐẦY ĐỦ, chưa viết một dòng mã nào.** Hai hạng mục đầu (S1.1, S1.2) không
+bị quyết định nào chặn và có thể bắt đầu ngay.
 
 Đã xong:
 
-- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, **chín ADR** (bảy ở giai đoạn thiết kế, ADR-008 ở Task 9,
-  ADR-009 ở vòng fix cuối), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
+- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ **mười hai ADR** (bảy ở giai đoạn thiết kế,
+  ADR-008 ở Task 9, ADR-009 ở vòng fix cuối, **ADR-010/011/012 ngày 2026-08-29 khi lập kế hoạch S1**), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
@@ -333,8 +337,11 @@ CMK, chưa có role nào được tạo.
 
 5. **Mở `tools/do-webcrypto/index.html` qua một URL https, từ bên trong Zalo và Messenger, trên
    vài điện thoại thật** — Android WebView cũ, iOS WKWebView. Phải xong **trước S1.4**.
-6. **Chốt ADR-010** (đường thông báo tức thì cho break-glass) trước S1.6; **ADR-011** (định dạng
-   phong bì cộng chữ ký biên nhận) trong S1.4; **ADR-012** (ID không tuần tự) trong S1.1.
+6. ~~**Chốt ADR-010**, **ADR-011**, **ADR-012**.~~ **XONG HAI TRONG BA (2026-08-29):**
+   **ADR-010** chốt *outbox bền cộng `NOTIFY` đánh thức* — `NOTIFY` là **bộ tăng tốc, không phải
+   cơ chế**, vì nó không bền; **ADR-012** chốt *UUIDv4, cấm UUIDv7/ULID* — UUIDv7 chứa timestamp
+   và sắp theo thứ tự nên **vi phạm A5**. **ADR-011** cố ý để ***Đang mở***: nó bị khoản nợ 23
+   chặn, nhưng phần ghim được thì đã ghim (phong bì mang mã thuật toán thoả thuận khoá).
 7. **Bắt đầu S1.1 và S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
@@ -348,7 +355,7 @@ CMK, chưa có role nào được tạo.
 |---|---|
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | **Chín ADR, cả chín *Đã chấp nhận*** — 009 (nhà cung cấp KMS) chốt **AWS KMS** ngày 2026-08-29, gỡ chặn S1.6 |
+| `docs/DECISIONS.md` | **Mười hai ADR** — 001–010 và 012 *Đã chấp nhận*; **011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23) |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |

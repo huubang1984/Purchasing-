@@ -130,7 +130,9 @@ identity, `g3-` identity-không-có-năng-lực-mật-mã, `g4-` outbox), tất 
     mệnh đề đã được phủ trọn vẹn. §4 của ma trận nói rõ hẹp ở đâu.
   - Cổng evidence **đỏ theo cả hai chiều**: một mã tụt về "chưa phủ" không đi lọt được bằng
     cách thêm nó vào danh sách miễn trừ, và một mã đã phủ mà còn nằm trong danh sách cũng đỏ.
-- **Chưa triển khai.** Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS.
+- **Chưa triển khai.** ~~Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS.~~ Hạ tầng và KMS
+  **đã chốt** (AWS, AWS KMS `ap-southeast-1` — ADR-009), nhưng **chưa có tài khoản, chưa có CMK,
+  chưa có role nào được tạo**. Chốt trên giấy không phải triển khai.
 - **Chưa có khách hàng pilot.**
 
 ---
@@ -252,8 +254,9 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
 5. **Tiếp cận khách hàng pilot** song song với S1. — **chưa làm**, và vẫn là rủi ro lớn nhất.
 6. Hai việc cấu hình nhỏ, không chặn: **tạo team `@trustprocure/bao-mat`** trên GitHub để
    CODEOWNERS có răng; cân nhắc **thêm `windows-latest`** vào ma trận job T1+T2 (khoản nợ 20).
-7. **Mới:** chốt **ADR-010** trước S1.6, **ADR-011** trong S1.4, **ADR-012** trong S1.1 — xem §6
-   của kế hoạch S1.
+7. ~~**Mới:** chốt **ADR-010** trước S1.6, **ADR-011** trong S1.4, **ADR-012** trong S1.1~~ —
+   **ADR-010 và ADR-012 đã chốt** ngày 2026-08-29. **ADR-011** để ***Đang mở*** có chủ đích:
+   nó bị khoản nợ 23 chặn, và phần ghim được thì đã ghim.
 8. **Mới:** bắt đầu **S1.1** và **S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.
 
 ---
@@ -286,7 +289,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 | `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
-| `docs/DECISIONS.md` | **Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6** |
+| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → **Mười hai ADR**: 001–010 và 012 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5 |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
 | `evidence/INV-matrix.md` | Ma trận bất biến; **§3 = danh sách việc của S1**, §4 = phạm vi hẹp |
 | `evidence/security-reviews.md` | Dấu vết review an ninh, kèm giới hạn của chính nó |

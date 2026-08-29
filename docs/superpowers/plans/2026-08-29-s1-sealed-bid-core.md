@@ -195,7 +195,7 @@ dựng để làm lộ ra.
 
 | Mã | Vì sao có rủi ro | Điều kiện để đóng trong S1 |
 |---|---|---|
-| **D4** | Mệnh đề đòi cảnh báo **tức thì**. Outbox hiện tại là **POLL**, và độ trễ của nó bị **chặn dưới** bởi `pollIntervalMs` — không phải chuyện chỉnh tham số, mà là chuyện cơ chế. | Cần **ADR-010**: `NOTIFY`/`LISTEN` của Postgres, hay một đường đồng bộ riêng cho break-glass. Nên chốt **trước S1.6**, cùng lúc S1.6 dựng `unseal-worker`. |
+| **D4** | Mệnh đề đòi cảnh báo **tức thì**. Outbox hiện tại là **POLL**, và độ trễ của nó bị **chặn dưới** bởi `pollIntervalMs` — không phải chuyện chỉnh tham số, mà là chuyện cơ chế. | ~~Cần **ADR-010**~~ **Đã gỡ chặn: ADR-010 chốt outbox bền cộng `NOTIFY` đánh thức.** Lưu ý khi gắn thẻ: bảo đảm đúng là *cảnh báo được đảm bảo **gửi**; độ trễ xấu nhất là một chu kỳ poll* — **không** được viết là tức thì, và chặng cuối (email/SMS thật sự tới tay ai đó) **phải vào §4**. |
 | **B5** | Đòi ciphertext khớp hash **tại mọi thời điểm về sau** — tức một job định kỳ cộng một phép đo T6, không phải một assertion trong test. Ma trận ghi phạm vi **"S1/S6"**. | Làm được trong S1.8 nếu chấp nhận phạm vi hẹp: job chạy trên tập bid của một RFQ, đo bằng T3. Phần *"mọi thời điểm về sau"* ở quy mô production thuộc S6 — và **phần chênh đó phải vào §4**. |
 | **C2** | Đòi chứng minh một **tính chất phủ định**: scheduler chết mà bid muộn vẫn bị từ chối. Phải **giết scheduler thật** rồi nộp, không phải mock. | S1.8 với Testcontainers: dừng job runner, đẩy đồng hồ DB qua deadline, nộp, đòi RED. Khả thi — S0 đã có hạ tầng Testcontainers cộng `pg` thật. |
 
@@ -206,9 +206,9 @@ dựng để làm lộ ra.
 | ADR | Nội dung | Chặn hạng mục | Trạng thái |
 |---|---|---|---|
 | **ADR-009** | Nhà cung cấp KMS | S1.6 | ✅ **Đã chốt 2026-08-29: AWS KMS** — xem `docs/DECISIONS.md` |
-| **ADR-010** | Đường thông báo tức thì cho break-glass (`NOTIFY`/`LISTEN` so với đường đồng bộ) | S1.6, S1.8 (D4) | ⏳ Phải chốt trước S1.6 |
+| **ADR-010** | Đường thông báo cho break-glass | S1.6, S1.8 (D4) | ✅ **Đã chốt 2026-08-29: outbox bền cộng `NOTIFY` đánh thức.** `NOTIFY` **không bền** nên nó là *bộ tăng tốc*, không phải cơ chế — mất nó thì cảnh báo **chậm**, không **mất** |
 | **ADR-011** | Định dạng phong bì niêm phong cộng thuật toán chữ ký biên nhận mà NCC **kiểm chứng độc lập được** (B2). **Phải ghim: phong bì mang một mã thuật toán thoả thuận khoá tường minh** | S1.4, S1.5 | ⏳ Phải chốt trong S1.4 — **và chỉ được chốt sau khi có kết quả đo Zalo/Android** (khoản nợ 23) |
-| **ADR-012** | Chiến lược ID không tuần tự cho mọi thực thể NCC nhìn thấy được (A5) | S1.1, S1.3 | ⏳ Phải chốt trong S1.1 |
+| **ADR-012** | Định danh mà NCC nhìn thấy (A5) | S1.1, S1.3 | ✅ **Đã chốt 2026-08-29: UUIDv4, CẤM UUIDv7/ULID.** UUIDv7 chứa timestamp và sắp theo thứ tự nên rò *"gián tiếp qua số thứ tự"*, đúng thứ A5 cấm |
 
 > **Ràng buộc bắt buộc của ADR-011, đến từ khoản nợ 23.** Phong bì phải **mang một mã thuật
 > toán thoả thuận khoá tường minh**, cùng khuôn với `ENVELOPE_VERSION` đã có trong

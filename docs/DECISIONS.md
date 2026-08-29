@@ -411,3 +411,162 @@ Không phải "khi thấy bất tiện". Đúng ba điều kiện, mỗi điều
 **Rủi ro còn lại, giữ nguyên từ bản đầu:** đổi nhà cung cấp KMS sau khi đã có khoá thật của
 khách hàng là một **cuộc di trú**, không phải một lần sửa cấu hình. Vì vậy ba điều kiện trên
 nên được hỏi thẳng khách hàng pilot **trước** S1.6, chứ không đợi họ nêu.
+
+---
+
+## ADR-010 — Đường thông báo cho break-glass: **outbox bền + `NOTIFY` đánh thức**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **D4**, S1.6, S1.8
+
+**Bối cảnh.** Bất biến **D4** đòi break-glass *"sinh cảnh báo mức cao **tức thì**, không bao giờ
+im lặng"*. Outbox của S0 là **POLL**, và độ trễ của nó bị **chặn dưới** bởi `pollIntervalMs` —
+đây là chuyện **cơ chế**, không phải chuyện chỉnh tham số. Vì vậy Task 10 **cố ý** không gắn thẻ
+`[INV-D4]`: gắn thẻ lên một lớp không thể thoả mệnh đề là lấp mã bằng nhãn.
+
+**Mệnh đề D4 có hai vế, và chúng kéo về hai hướng ngược nhau:**
+
+| Vế | Đòi hỏi | Cơ chế phù hợp |
+|---|---|---|
+| *"không bao giờ im lặng"* | **BỀN**. Cảnh báo phải sống sót qua mất kết nối, restart, worker chết. | Ghi vào bảng, trong **cùng transaction** với hành vi break-glass. |
+| *"tức thì"* | **NHANH**. Không được chờ hết một chu kỳ poll. | Một tín hiệu đẩy. |
+
+**Phương án đã cân nhắc.**
+
+1. **Giảm `pollIntervalMs` xuống rất nhỏ.** Loại. Nó không đổi bản chất: độ trễ vẫn bị chặn
+   dưới, chỉ là chặn ở một số nhỏ hơn, và cái giá là tải truy vấn thường trực. "Tức thì" đạt
+   được bằng cách làm cho khoảng chờ nhỏ đi thì vẫn là một khoảng chờ.
+2. **`LISTEN`/`NOTIFY` thay cho outbox.** **Loại, và đây là phương án nguy hiểm nhất vì nó trông
+   đúng.** `NOTIFY` của Postgres **không bền**: thông điệp chỉ tới những phiên **đang** `LISTEN`
+   tại thời điểm commit. Worker mất kết nối một giây, restart, hay chưa kịp `LISTEN` — thông điệp
+   **biến mất không dấu vết**. Một cơ chế như vậy **trực tiếp phá vế *"không bao giờ im lặng"***,
+   tức là phá đúng nửa quan trọng hơn của D4.
+3. **Đường đồng bộ: gọi thẳng dịch vụ thông báo trong request.** Loại. Nó buộc tính đúng đắn của
+   một hành vi kiểm toán vào **tính sẵn sàng của một hệ thống bên ngoài**: nhà cung cấp thông báo
+   sập thì hoặc break-glass thất bại, hoặc cảnh báo im lặng. Cùng họ lỗi với việc để tính đúng
+   đắn phụ thuộc scheduler mà ADR-005 đã bác.
+
+### Quyết định
+
+**Cả hai, mỗi cái làm đúng việc của nó:**
+
+1. **Bền:** hành vi break-glass ghi một hàng outbox **trong cùng transaction** với chính hành vi
+   đó. Commit được thì cảnh báo **đã tồn tại**; rollback thì không có gì để cảnh báo. Đây là
+   thứ giữ vế *"không bao giờ im lặng"*.
+2. **Nhanh:** cùng transaction phát một `NOTIFY` trên một kênh riêng. Worker đang `LISTEN` bị
+   đánh thức ngay thay vì chờ hết chu kỳ.
+3. **Poll vẫn chạy, và đó là điểm mấu chốt.** `NOTIFY` là **bộ tăng tốc, không phải cơ chế**.
+   Mất `NOTIFY` thì cảnh báo **chậm**, không **mất** — nó sẽ được vòng poll kế tiếp nhặt lên.
+
+**Cách phát biểu đúng cho bảo đảm này, và nó hẹp hơn chữ "tức thì":** *cảnh báo được đảm bảo
+**gửi**; độ trễ **thường** là thời gian đánh thức, và **xấu nhất** là một chu kỳ poll.* Không
+được viết là "tức thì" trong bất kỳ tài liệu nào — đó sẽ là một câu rộng hơn cơ chế.
+
+### Cái này KHÔNG đóng, và phải ghi vào §4 của ma trận
+
+`NOTIFY` chỉ đảm bảo *đánh thức*, không đảm bảo *đã gửi tới người nhận*. Chặng cuối — email/SMS/
+webhook thật sự tới tay ai đó — nằm ngoài Postgres và **không** được coi là đã đo chỉ vì hàng
+outbox đã chuyển sang `SENT`. Khi `[INV-D4]` được gắn thẻ ở S1.8, phần chênh này **phải** có một
+mục ở §4.
+
+### Đo bằng gì
+
+Test phải **giết đường nhanh** rồi đòi cảnh báo vẫn tới: chạy break-glass **khi không có phiên
+nào `LISTEN`**, rồi khẳng định vòng poll vẫn nhặt được hàng đó. Không có phép đo ấy thì đây chỉ
+là một câu văn — đúng bài học đắt nhất của S0.
+
+---
+
+## ADR-011 — Định dạng phong bì và chữ ký biên nhận: **CHƯA CHỐT**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đang mở** — chặn **S1.4**, **S1.5** · Liên quan: **B2**, **G2**, **A2**
+
+**Vì sao ADR này ra đời ngay cả khi chưa quyết được.** Đây là bài học trực tiếp từ ADR-009: tới
+hết S0, tám ADR đều "Đã chấp nhận" trong khi một quyết định đang thật sự chặn S1.6 — *cái treo là
+có thật; cái thiếu là một chỗ để nó treo*. ADR này là chỗ đó, mở sẵn **trước** khi S1.4 bắt đầu.
+
+### Phần ĐÃ ghim, không đợi phần còn lại
+
+**Phong bì phải mang một mã thuật toán thoả thuận khoá tường minh**, cùng khuôn với
+`ENVELOPE_VERSION` đã có trong `packages/crypto-keys`.
+
+Lý do là một khoảng trống đo được: **phía Android chưa từng được đo** và việc đo đã được **hoãn
+có chủ đích** (khoản nợ 23, `tools/do-webcrypto/ket-qua-do.md` §3b). Ba engine đã đo đều có
+`X25519`, nhưng cả ba là Chromium desktop mới và WKWebView iOS 18.7 — Android System WebView
+trên máy tầm trung cũ chưa có mặt trong dữ liệu.
+
+Với mã thuật toán nằm trong phong bì, nếu Android hoá ra thiếu `X25519` thì việc phải làm là
+**thêm một nhánh P-256**; phong bì cũ vẫn mở được, đúng cơ chế `MasterKeyRing` dùng để sống sót
+qua các lần xoay khoá (**G3**). Không có nó, cùng tình huống ấy là một **cuộc di trú**. Đây là
+cách biến một rủi ro *chưa đo* thành một rủi ro *rẻ* — và nó ghim được **ngay hôm nay**, không
+cần đợi phép đo.
+
+### Còn để mở
+
+1. **Thoả thuận khoá: `X25519` hay `ECDH P-256`, hay cả hai.** Chỉ được chốt **sau** khi có kết
+   quả đo Zalo/Android. Đây là ràng buộc thứ tự, không phải sở thích.
+2. **Thuật toán chữ ký biên nhận.** B2 đòi nhà cung cấp **kiểm chứng độc lập được**. Điều đó
+   loại thẳng một họ giải pháp: **HMAC bằng secret nội bộ KHÔNG thoả B2** — nhà cung cấp không
+   kiểm chứng được thứ họ không có khoá. Cần **chữ ký khoá công khai** (Ed25519 là ứng viên đầu),
+   khoá công khai của hệ thống phải **công bố được**, và biên nhận phải **tự mô tả**: mang thuật
+   toán, định danh khoá, và mọi trường được ký.
+3. **Xoay khoá ký.** Biên nhận có giá trị pháp lý lâu hơn vòng đời một khoá. Cần định danh khoá
+   trong biên nhận và một chỗ công bố các khoá cũ — cùng bài toán G3, khác đối tượng.
+
+### Rủi ro của việc để mở
+
+Nhỏ hơn ADR-009 nhiều, vì phần **đã ghim** ở trên chính là phần hấp thụ hầu hết chi phí đổi ý.
+Rủi ro thật còn lại là **chốt mục 2 dưới áp lực tiến độ** bằng một HMAC "cho nhanh" — nó chạy,
+test xanh, và **B2 bị vi phạm trong im lặng** vì không ai thử đóng vai nhà cung cấp đi kiểm
+chứng. Cách chặn: test của B2 phải **kiểm chứng bằng khoá công khai một mình**, không được chạm
+vào bất cứ thứ gì chỉ máy chủ mới có.
+
+---
+
+## ADR-012 — Định danh mà nhà cung cấp nhìn thấy: **UUIDv4 ngẫu nhiên, cấm UUIDv7/ULID**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **A5**, S1.1, S1.3
+
+**Bối cảnh.** **A5** đòi nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của
+nhà cung cấp khác — ***"kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi"***.
+Vế "kể cả gián tiếp" là vế làm bất biến này khó, và nó biến việc chọn kiểu ID từ một chi tiết
+kỹ thuật thành một quyết định bảo mật.
+
+**Phương án đã cân nhắc.**
+
+| Kiểu | Vấn đề với A5 |
+|---|---|
+| `bigserial` | Rò trực tiếp: `id=41` cho biết có 40 thứ trước nó. Loại ngay. |
+| **UUIDv7** | **Chứa timestamp mili-giây ở 48 bit đầu và SẮP THEO THỨ TỰ.** Hai ID cho biết cái nào tạo trước và **cách nhau bao lâu**. Một nhà cung cấp có hai lời mời từ hai RFQ suy ra được nhịp phát hành; một nhà cung cấp giữ ID của chính mình đọc được **thời điểm nó được thêm vào hệ thống**. Đây đúng là *"gián tiếp qua số thứ tự"*. |
+| **ULID** | Cùng một lỗi: sắp theo thời gian, có timestamp. |
+| **UUIDv4** | 122 bit ngẫu nhiên, **không thứ tự, không timestamp**. Không rò gì. |
+
+**Điểm dễ bị bỏ sót:** UUIDv7 đang là mặc định được khuyến nghị rộng rãi ở nơi khác vì nó thân
+thiện với B-tree và giảm phân mảnh chỉ mục. Lời khuyên ấy đúng — **cho khoá nội bộ**. Áp nó cho
+ID lộ ra ngoài là đổi một bất biến bảo mật lấy một cải thiện hiệu năng, và ở dự án này đó là
+một cuộc đổi chác sai.
+
+### Quyết định
+
+1. **Mọi định danh mà nhà cung cấp nhìn thấy được — trong URL, trong payload API, trong email,
+   trong biên nhận — là UUIDv4 ngẫu nhiên** (`gen_random_uuid()`).
+2. **UUIDv7 chỉ được dùng cho khoá của bảng thuần nội bộ chưa từng lộ ra ngoài.** Một cột như
+   vậy về sau bị lộ ra là **một thay đổi phải qua review**, không phải một dòng thêm vào response.
+3. **Không mã tuần tự có thể đọc ở bất kỳ đâu nhà cung cấp thấy được** — không "RFQ-2026-0041",
+   không số thứ tự lời mời. Mã dễ đọc cho **người mua** thì được, miễn nó không đi ra ngoài.
+
+### Điều ADR này KHÔNG cho phép suy ra — và đây là phần dễ hiểu sai nhất
+
+**ID không đoán được KHÔNG phải là kiểm soát truy cập.** **F2** nói thẳng: *"không IDOR — và
+quyền truy cập không bao giờ dựa vào việc ID khó đoán"*. UUIDv4 mua đúng một thứ: **không suy
+luận được từ chính con số**. Nó **không** mua quyền bỏ kiểm tra quyền. Mọi endpoint vẫn phải hỏi
+*"actor này có được xem thực thể này không"*, và RLS ở tầng DB vẫn là lớp cuối.
+
+Tương tự, **E4** nói mã RFQ không bao giờ là credential. ADR này **không** mâu thuẫn với E4 và
+cũng **không** làm nhẹ nó: một UUIDv4 khó đoán vẫn **không phải** credential.
+
+### Đo bằng gì
+
+Một test đọc lược đồ và khẳng định **mọi cột định danh của các bảng có mặt trong response cho
+nhà cung cấp** đều mặc định `gen_random_uuid()` — kiểu danh sách phải **suy từ tính chất**, không
+từ một danh sách tên viết cứng. Khuôn danh-sách-tên đã hỏng ba lần trong S0 (khoản nợ 16, 17), và
+S1 thêm 13 bảng là đúng lúc nó hỏng lần thứ tư nếu lặp lại.
