@@ -207,8 +207,16 @@ dựng để làm lộ ra.
 |---|---|---|---|
 | **ADR-009** | Nhà cung cấp KMS | S1.6 | ✅ **Đã chốt 2026-08-29: AWS KMS** — xem `docs/DECISIONS.md` |
 | **ADR-010** | Đường thông báo tức thì cho break-glass (`NOTIFY`/`LISTEN` so với đường đồng bộ) | S1.6, S1.8 (D4) | ⏳ Phải chốt trước S1.6 |
-| **ADR-011** | Định dạng phong bì niêm phong cộng thuật toán chữ ký biên nhận mà NCC **kiểm chứng độc lập được** (B2) | S1.4, S1.5 | ⏳ Phải chốt trong S1.4 |
+| **ADR-011** | Định dạng phong bì niêm phong cộng thuật toán chữ ký biên nhận mà NCC **kiểm chứng độc lập được** (B2). **Phải ghim: phong bì mang một mã thuật toán thoả thuận khoá tường minh** | S1.4, S1.5 | ⏳ Phải chốt trong S1.4 — **và chỉ được chốt sau khi có kết quả đo Zalo/Android** (khoản nợ 23) |
 | **ADR-012** | Chiến lược ID không tuần tự cho mọi thực thể NCC nhìn thấy được (A5) | S1.1, S1.3 | ⏳ Phải chốt trong S1.1 |
+
+> **Ràng buộc bắt buộc của ADR-011, đến từ khoản nợ 23.** Phong bì phải **mang một mã thuật
+> toán thoả thuận khoá tường minh**, cùng khuôn với `ENVELOPE_VERSION` đã có trong
+> `packages/crypto-keys`. Lý do: phía **Android chưa từng được đo** và việc đo đã được hoãn có
+> chủ đích. Với mã thuật toán trong phong bì, nếu Android hoá ra thiếu `X25519` thì việc phải
+> làm là **thêm một nhánh P-256** — phong bì cũ vẫn mở được, đúng cơ chế mà `MasterKeyRing`
+> dùng để giữ khả năng giải mã qua các lần xoay khoá (G3). Không có nó, cùng tình huống ấy là
+> một cuộc di trú. Đây là cách biến một rủi ro **chưa đo** thành một rủi ro **rẻ**.
 
 > **ADR-011 là cái dễ bị làm ẩu nhất.** "Chữ ký hệ thống" mà NCC *kiểm chứng độc lập được*
 > nghĩa là khóa công khai của hệ thống phải **công bố được** và biên nhận phải **tự mô tả**.

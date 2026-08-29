@@ -65,6 +65,39 @@ Vì vậy §3 dưới đây được viết lại theo trục **engine**, không
 
 ---
 
+## 3b. QUYẾT ĐỊNH HOÃN — 2026-08-29
+
+**Ba ô ưu tiên 1–3 ở §3 được HOÃN CÓ CHỦ ĐÍCH.** Lý do: trong tay không có máy Android tầm
+trung/cũ, cũng không có iPhone chạy iOS cũ. Hoãn để chuyển sang bước tiếp theo của S1.
+
+Đây là trường hợp thứ hai mà §5 của chính tài liệu này đã dự liệu: *"hoặc khi có một quyết định
+tường minh rằng phần còn lại được chấp nhận bỏ qua, và quyết định ấy được ghi ở chỗ có chữ ký."*
+Ghi ở đây, và ghi thành **khoản nợ số 23** trong `docs/STATE.md`.
+
+**Cái đang được chấp nhận, nói thẳng:** chúng ta đang xây S1.1–S1.3 trên một giả định **chưa
+đo** rằng webview Android cũng có `X25519`. Giả định đó có cơ sở — nó đúng trên ba engine đã
+đo — nhưng cơ sở không phải phép đo.
+
+**Hai điều kiện của việc hoãn, và chúng là ràng buộc chứ không phải lời nhắc:**
+
+1. **Phải đo trước khi CHỐT ADR-011** (hạng mục S1.4). Trước mốc đó, đổi thoả thuận khoá là sửa
+   một dòng trong một ADR. Sau mốc đó, khi đã có phong bì thật của khách hàng thật, nó là một
+   **cuộc di trú**. Mốc này cách hiện tại khoảng **10 ngày công** (S1.1 + S1.2 + S1.3), nên hoãn
+   **không chặn gì** trong quãng đó — đó chính là lý do hoãn được.
+2. Chừng nào ô ấy còn trống, **không tài liệu nào được viết *"đã đo `crypto.subtle` trên
+   webview"* mà không kèm `iOS 18.7`**. Một câu như vậy sẽ rộng hơn phép đo.
+
+**Giảm nhẹ — và đây là phần làm việc hoãn này trở nên RẺ, không chỉ được ghi lại.** ADR-011 phải
+ghim: **phong bì mang một mã thuật toán thoả thuận khoá tường minh**, giống như `ENVELOPE_VERSION`
+đã có sẵn trong `packages/crypto-keys`. Với ràng buộc ấy, nếu Android hoá ra thiếu `X25519` thì
+việc phải làm là **thêm một nhánh P-256**, không phải viết lại định dạng — và phong bì cũ vẫn mở
+được, đúng cùng cơ chế mà `MasterKeyRing` dùng để giữ khả năng giải mã qua các lần xoay khoá (G3).
+
+**Cách kích hoạt lại:** hễ mượn được một máy Android tầm trung, chạy §5 và điền một dòng vào §1.
+Việc này mất hai phút và không cần chuẩn bị gì.
+
+---
+
 ## 4. Rủi ro số 2 đứng ở đâu sau ba phép đo
 
 **Đã hẹp lại, chưa đóng.**
@@ -76,9 +109,13 @@ Vì vậy §3 dưới đây được viết lại theo trục **engine**, không
   không kèm hai chữ **iOS 18.7**.
 
 **Ảnh hưởng tới S1.4:** chưa có gì buộc phải đổi. `X25519` chạy trên webview thật, nên **ADR-011
-và §3.2 giữ nguyên hướng hiện tại** — nhưng quyết định đó chỉ nên được **chốt** sau khi ô ưu
-tiên 1 (Zalo Android) có kết quả. Nếu ô đó cho *"Nộp được, nhưng phải đổi sang P-256"*, chi phí
-đổi lúc ấy vẫn là sửa một ADR; đổi sau khi đã có phong bì thật thì là một cuộc di trú.
+và §3.2 giữ nguyên hướng hiện tại** — nhưng quyết định đó chỉ được **chốt** sau khi ô ưu tiên 1
+(Zalo Android) có kết quả; xem quyết định hoãn ở §3b. Nếu ô đó cho *"Nộp được, nhưng phải đổi
+sang P-256"*, chi phí đổi lúc ấy vẫn là sửa một ADR; đổi sau khi đã có phong bì thật thì là một
+cuộc di trú.
+
+**Trạng thái hiện tại, một dòng:** rủi ro **CHƯA ĐÓNG**, **đã hoãn có điều kiện** (§3b), **không
+chặn** S1.1–S1.3, và **chặn việc CHỐT** ADR-011 ở S1.4.
 
 ---
 

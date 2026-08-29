@@ -201,8 +201,15 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
    không phải tên ứng dụng. Trên iOS, Zalo và Messenger mượn **cùng một `WKWebView`** — nên một
    phép đo phủ cả hai, và hai ô đó chưa bao giờ độc lập. Nhật ký: `tools/do-webcrypto/ket-qua-do.md`.
 
-   **Ảnh hưởng tới S1.4:** chưa có gì buộc đổi — `X25519` chạy trên webview thật, nên ADR-011 và
-   §3.2 giữ nguyên hướng. Nhưng chỉ nên **chốt** sau khi có kết quả Zalo/Android.
+   **HOÃN CÓ CHỦ ĐÍCH 2026-08-29** (khoản nợ 23): không có máy Android tầm trung/cũ và không có
+   iPhone iOS cũ trong tay, nên phần còn lại được **chấp nhận tạm** để đi tiếp S1. Hoãn này
+   **không chặn** S1.1–S1.3 (~10 ngày công), nhưng **chặn việc CHỐT ADR-011** ở S1.4 — trước
+   mốc đó đổi thoả thuận khoá là sửa một ADR, sau mốc đó là một cuộc di trú.
+
+   **Giảm nhẹ đã ghim, và đây là phần làm việc hoãn trở nên rẻ:** ADR-011 buộc phong bì **mang
+   một mã thuật toán thoả thuận khoá tường minh**, cùng khuôn với `ENVELOPE_VERSION` đã có. Nếu
+   Android hoá ra thiếu `X25519`, việc phải làm là **thêm một nhánh P-256** và phong bì cũ vẫn
+   mở được — đúng cơ chế `MasterKeyRing` dùng để sống sót qua các lần xoay khoá (G3).
 
 ---
 
