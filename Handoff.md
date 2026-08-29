@@ -266,7 +266,16 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
    ba migration (`008`, `009`, `010`), ba gói (`supplier`, `rfq`, `invitation`), độ phủ
    24/47 → **30/50**. Chi tiết ở `docs/STATE.md`.
 
-10. **MỘT BƯỚC BẮT BUỘC CỦA VÒNG LẶP ĐÃ KHÔNG CHẠY, và nó phải được chạy trước khi hợp nhất.**
+10. ~~**MỘT BƯỚC BẮT BUỘC CỦA VÒNG LẶP ĐÃ KHÔNG CHẠY.**~~ **ĐÃ CHẠY (2026-08-29)** — ba lượt,
+    một cho mỗi hạng mục, kết quả ở `evidence/security-reviews.md` §S1. Tổng **4 CRITICAL +
+    11 HIGH**; **4/4 CRITICAL và 10/11 HIGH đã đóng** ở `011_rfq_hardening.sql`,
+    `012_invitation_hardening.sql` và ba gói. HIGH còn lại **bị phép đo bác bỏ**.
+
+    **Ba MEDIUM cố ý không sửa** vì mỗi cái là một quyết định kiến trúc: cổng quyền của
+    `packages/supplier` nằm ở gói hay ở tầng API; chính sách nào tính `requires_dual_approval`;
+    pepper cho băm đích của bộ đếm hạn mức. Cả ba cần một ADR — đây là việc kế tiếp có tên.
+
+10b. **Nguyên văn cũ, giữ để đối chiếu:**
     §9 của kế hoạch S1 đòi **`security-reviewer`** cho mọi hạng mục có dấu ⭐, và **S1.3 có dấu
     đó** (lời mời, magic link, OTP, phiên khách — chạm xác thực và PII). Lượt review ấy **chưa
     xảy ra**: phiên làm việc này chạy dưới một ràng buộc không cho gọi subagent trừ khi người
