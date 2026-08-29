@@ -62,6 +62,15 @@ importers:
         specifier: ^8.13.0
         version: 8.23.0
 
+  packages/invitation:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/outbox:
     dependencies:
       '@trustprocure/tenancy':

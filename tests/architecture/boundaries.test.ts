@@ -1156,3 +1156,76 @@ describe("biên giới module của packages/rfq", () => {
     }
   }, 60000);
 });
+
+// ==============================================================================================
+// [INV-H16] BIÊN GIỚI MODULE CỦA packages/invitation — HỌ QUY TẮC `g7-`
+// ==============================================================================================
+describe("biên giới module của packages/invitation", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/invitation/src", () => {
+    const probe = "packages/audit/src/zzprobe-invitation-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { redeemMagicLink } from "../../invitation/src/invitation.js";',
+        "export { redeemMagicLink };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/invitation"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-invitation-tuong-doi.ts");
+      expect(output).toContain("g7-invitation-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI trong packages/invitation/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/invitation/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-invitation-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-invitation-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/invitation/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise([
+        "apps/tmp-probe-invitation-moi",
+        "packages/invitation",
+      ]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g7-invitation-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-invitation-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-invitation-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-invitation-cua/src/dung.ts",
+      [
+        'import { redeemMagicLink } from "../../../packages/invitation/src/index.js";',
+        "export { redeemMagicLink };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise([
+        "apps/tmp-probe-invitation-cua",
+        "packages/invitation",
+      ]);
+      expect(output).not.toContain("g7-invitation-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-invitation-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});

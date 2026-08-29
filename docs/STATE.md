@@ -30,12 +30,18 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- ~~Bảy~~ ~~Tám~~ **Chín** migration `001`–~~`007`~~~~`008`~~**`009`** + `hardening.always.sql`: role, tổ chức, người dùng, sổ
-  kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**, **RFQ +
-  hạng mục + phê duyệt + máy trạng thái (S1.2)**.
+- ~~Bảy~~ ~~Tám~~ ~~Chín~~ **Mười** migration `001`–**`010`** + `hardening.always.sql`: role, tổ chức, người
+  dùng, sổ kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**,
+  **RFQ + hạng mục + phê duyệt + máy trạng thái (S1.2)**, **lời mời + magic link + OTP + phiên
+  khách (S1.3)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.3 — lời mời, magic link, OTP, phiên khách (2026-08-29):** migration `010` (`rfq_invitations`,
+  `rfq_invitation_tokens`, `invitation_otp_challenges`, `otp_rate_limits`, `guest_sessions`), gói
+  `packages/invitation`. **Ba mã NGHIỆP VỤ đầu tiên của S1 được lấp: E1, E2, E5.** Vế *giới hạn
+  tần suất* của **E3** — vế không có một dòng mã nào trong toàn S0 — nay CÓ LỚP, nhưng chỉ trên
+  đường OTP của lời mời; đường TOTP vẫn trống, và ghi chú §4 nói đúng điều đó.
 - **S1.2 — RFQ, hạng mục, máy trạng thái (2026-08-29):** migration `009` (`rfq_packages`,
   `rfq_items`, `rfq_approvals`), gói `packages/rfq`, và **H16** — biên giới module SUY TỪ TÍNH
   CHẤT cho mọi gói trong `packages/`. Máy trạng thái nằm ở tầng CSDL đúng như ADR-014 chốt, và
@@ -47,13 +53,17 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Chưa xong:
 
-- ~~Toàn bộ S1 (Sealed Bid Core)~~ ~~**S1.2–S1.9**~~ **S1.3–S1.9**: lời mời, phong bì niêm phong, luồng mở thầu.
+- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ **S1.4–S1.9**: phong bì niêm phong, nộp báo giá, mở thầu, so sánh, T5, E2E.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
 ## Công việc đang làm
 
-**S1 — đang ở hạng mục S1.3.** S1.1 và S1.2 đã commit; S1.3 (lời mời, magic link, OTP) chưa bắt đầu.
+**S1 — ba hạng mục đầu ĐÃ XONG và đã commit (S1.1, S1.2, S1.3).** Hạng mục kế tiếp là **S1.4**
+(phong bì niêm phong), và nó **BỊ CHẶN**: ADR-011 vẫn *Đang mở*, và ADR-011 chỉ được chốt sau khi
+có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Đây không phải một điều kiện hình
+thức — sau khi đã có phong bì thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một
+ADR.
 
 > **Một khoảng trống của S1.1 đã được ghi ra thay vì lấp bằng nhãn:** test *"người liên hệ của tổ
 > chức A KHÔNG treo được vào nhà cung cấp của tổ chức B"* (`packages/supplier/src/suppliers.int.test.ts`)
@@ -252,16 +262,27 @@ qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
 
 ~~**Sau S1.1 (2026-08-29): 694 test** — 353 `pnpm test` / 341 `pnpm test:int`; t0 86 module / 206 phụ thuộc.~~
 
-**Sau S1.2 (2026-08-29): 724 test, xanh toàn bộ** — 363 ở `pnpm test` (20 file) và 361 ở
-`pnpm test:int` (14 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **91 module /
-224 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
+~~**Sau S1.2: 724 test** — 363 / 361; t0 91 module / 224 phụ thuộc.~~
+
+**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ** — 367 ở `pnpm test` (20 file) và 380 ở
+`pnpm test:int` (15 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **94 module /
+234 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
 
 ~~**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**~~
 
 ~~**Sau S1.1: 26/49 — 11/34 nghiệp vụ + 15/15 hàng rào.**~~
 
-**Sau S1.2: 27/50 — 11/34 nghiệp vụ + 16/16 hàng rào.** Hai mã mới (**H14**, **H15**) đều thuộc
+~~**Sau S1.2: 27/50 — 11/34 nghiệp vụ + 16/16 hàng rào.**~~
+
+**Sau S1.3: 30/50 — 14/34 nghiệp vụ + 16/16 hàng rào.** Đây là lần đầu trong S1 con số NGHIỆP VỤ
+nhúc nhích: **E1**, **E2**, **E5**. Cả ba nằm trong MỘT hạng mục, và đó là hệ quả của việc chủ ngữ
+của chúng — lời mời, token, phiên khách — cuối cùng cũng tồn tại. `MOC_GHIM`: `soPhuToiThieu` 27 →
+**30**, `coDanhSachToiDa` 23 → **20** (danh sách được-phép-chưa-phủ CO LẠI đúng ba dòng).
+
+**E2 và E5 vào sổ KÈM ghi chú §4**, và `MA_PHAI_CO_CO_HEP` đi từ năm mã lên **bảy**. Hai phần chênh:
+*"kênh đã đăng ký" là kênh do NGƯỜI MUA khai*, và *`verified_contact_id` là NGƯỜI GIỮ KÊNH, không
+phải con người đang ngồi trước màn hình*. Không ô ✅ nào ở đây rộng hơn thứ được đo. Hai mã mới (**H14**, **H15**) đều thuộc
 nhóm HÀNG RÀO, nên **tử số và mẫu số cùng tăng 2 và số mã NGHIỆP VỤ được phủ ĐỨNG YÊN ở 11**.
 Đây là điều đáng đọc kỹ hơn con số tổng: S1.1 dựng thêm hai lớp canh, nó **không** đóng thêm một
 mệnh đề nghiệp vụ nào — E4 cần chủ ngữ *"mã RFQ"* của S1.2, A5 cần cả S1.9. `MOC_GHIM`:

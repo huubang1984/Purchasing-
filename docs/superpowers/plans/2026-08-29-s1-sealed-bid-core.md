@@ -181,6 +181,8 @@ Quỹ đạo dự kiến nếu S1 chạy đúng kế hoạch:
 |---|---|---|---|
 | Hôm nay (`30d1972`) | 24 | 23 | 24/47 |
 | **Sau S1.1 (thực đo)** | **26** | **23** | **26/49** |
+| **Sau S1.2 (thực đo)** | **27** | **23** | **27/50** |
+| **Sau S1.3 (thực đo)** | **30** | **20** | **30/50** |
 | Sau S1.3 | 30 | 17 | 30/47 |
 | Sau S1.5 | 37 | 10 | 37/47 |
 | Sau S1.7 | 42 | 5 | 42/47 |
@@ -196,6 +198,14 @@ Quỹ đạo dự kiến nếu S1 chạy đúng kế hoạch:
 > **một hạng mục dựng thêm hàng rào thì nó cũng dựng thêm mẫu số.** Cách đọc đúng của bảng này
 > là "bao nhiêu mã NGHIỆP VỤ được lấp", và theo cách đọc đó S1.1 đóng góp **0** — đúng như §1 ánh
 > xạ: **E4** cần chủ ngữ "mã RFQ" của S1.2, **A5** cần cả S1.9.
+>
+> **Cập nhật sau S1.3: con số TỔNG của bảng này hoá ra ĐÚNG — 30 — nhưng nó đúng vì hai sai số
+> triệt tiêu nhau.** Bảng dự báo 30/47 với mẫu số đứng yên; thực tế là **30/50**, mẫu số nở ba
+> (H14, H15, H16 — toàn hàng rào) và tử số nghiệp vụ đi 11 → **14** thay vì 11 → 17. Ba mã nghiệp
+> vụ được lấp ở S1.3 là **E1**, **E2**, **E5**; ba mã KHÔNG được lấp dù cùng nhóm là **E3** (đã ✅
+> từ S0, nay ghi chú §4 được thu hẹp), **E4** và **E6**. Nếu ai đó chỉ đọc cột "Tổng" thì bảng này
+> trông như một dự báo chính xác; nó không phải vậy, và ghi chú này ở đây để không ai trích nó
+> như vậy.
 
 **Không đặt mục tiêu 47/47 một cách vô điều kiện.** Ba mã có rủi ro trôi thật, có lý do đo
 được, ghi ở §5. Một kế hoạch hứa 47/47 rồi cuối kỳ hạ mốc xuống là đúng thứ mà `MOC_GHIM` được

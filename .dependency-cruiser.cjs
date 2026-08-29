@@ -93,6 +93,12 @@ const SUPPLIER_INDEX_TS = ciFile("packages/supplier/src/index.ts");
 const RFQ_SRC_PREFIX = ciPrefix("packages/rfq/src/");
 const RFQ_INDEX_TS = ciFile("packages/rfq/src/index.ts");
 
+// S1.3 - ho "g7-", ap cho packages/invitation/src/. Lan thu SAU, va la lan DAU TIEN quy tac
+// nay khong ra doi vi ai do nho: [INV-H16] (tests/architecture/bien-gioi-goi.test.ts) DO NGAY
+// khi goi moi xuat hien ma khong co ho quy tac nao dong src/ cua no.
+const INVITATION_SRC_PREFIX = ciPrefix("packages/invitation/src/");
+const INVITATION_INDEX_TS = ciFile("packages/invitation/src/index.ts");
+
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
@@ -174,6 +180,18 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g7-invitation-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/invitation/src/ la vung han che doi voi module ben ngoai package. " +
+        "Chi index.ts duoc mo. Bat bien co ten dang duoc giu la E2: khong ham nao o cua nay tra " +
+        "ve mot PHIEN tu mot TOKEN - redeemMagicLink tra ve mot thu khong mo duoc gi, va ham duy " +
+        "nhat sinh phien doi mot ma OTP. Mot import tuong doi vao suppliers/invitation.js tu goi " +
+        "khac se lay duoc ca cac ham noi bo va dung duoc mot duong di vong qua OTP.",
+      severity: "error",
+      from: { pathNot: INVITATION_SRC_PREFIX },
+      to: { path: INVITATION_SRC_PREFIX, pathNot: [INVITATION_INDEX_TS] },
     },
     {
       name: "g6-rfq-chi-index-la-cua-cong-khai",

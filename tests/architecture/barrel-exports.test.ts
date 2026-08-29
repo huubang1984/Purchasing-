@@ -432,3 +432,62 @@ describe("bề mặt export công khai của rfq", () => {
     ).toEqual([]);
   });
 });
+
+// ============================================================================================
+// MẶT TIỀN THỨ NĂM: @trustprocure/invitation (S1.3)
+//
+// Danh sách này được đọc bằng một câu hỏi khác với bốn danh sách trên, và câu hỏi đó là E2:
+// **có symbol nào ở đây trả về một PHIÊN từ một TOKEN không?** `redeemMagicLink` trả
+// `RedeemedLink` (không mở được gì); `verifyOtpAndStartSession` trả phiên nhưng đòi một mã OTP.
+// Một hàm mới tên kiểu `startSessionFromToken` lọt vào cửa này sẽ phá E2 trong im lặng — và lớp
+// duy nhất bắt được nó là danh sách trắng cộng người đọc, đúng như giới hạn đã ghi cho identity.
+// ============================================================================================
+const DANH_SACH_TRANG_INVITATION = [
+  "CHANNELS",
+  "GUEST_SESSION_TOKEN_BYTES",
+  "InvitationError",
+  "MAGIC_LINK_TOKEN_BYTES",
+  "OTP_LOCKOUT_SECONDS",
+  "OTP_MAX_FAILED_ATTEMPTS",
+  "OTP_MAX_PER_CALLER",
+  "OTP_MAX_PER_DEST",
+  "OTP_RATE_WINDOW_SECONDS",
+  "OTP_TTL_SECONDS",
+  "createInvitation",
+  "issueMagicLinkToken",
+  "issueOtpChallenge",
+  "redeemMagicLink",
+  "revokeInvitation",
+  "verifyOtpAndStartSession",
+];
+
+const INVITATION_PACKAGE_JSON_URL = new URL(
+  "../../packages/invitation/package.json",
+  import.meta.url,
+);
+
+describe("bề mặt export công khai của invitation", () => {
+  it("[INV-H16] cửa @trustprocure/invitation chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(INVITATION_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/invitation/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, INVITATION_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_INVITATION.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/invitation. Nếu nó nhận một token và trả " +
+        "về một phiên, nó phá E2 trong im lặng — giữ nó ở trong gói.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_INVITATION.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/invitation.",
+    ).toEqual([]);
+  });
+});

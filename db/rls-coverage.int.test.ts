@@ -672,8 +672,16 @@ describe("phủ RLS", () => {
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
+      // [S1.3] Nam bang moi cua 010. `otp_rate_limits` la bang DUY NHAT co DELETE o muc bang,
+      // va do la mot quyen THAT SU nguy hiem duoc cap CO Y THUC: mot api BI CHIEM xoa sach bang
+      // nay la tat duoc E3(2). Khong tranh duoc neu giu E3 o tang ung dung - bo GRANT la bo luon
+      // co che (dung han muc phai xoa duoc cua so cu), va thu hep xuong mot ham SECURITY DEFINER
+      // la thu muc (C) cua hardening.always.sql CAM. Cung han che cau truc da ghi cho E3(1).
+      { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_api", bang: "otp_rate_limits", quyen: "DELETE,SELECT" },
       // [Task 10] `outbox_jobs` của 007 chỉ hiện SELECT ở MỨC BẢNG: INSERT/UPDATE của nó đều là
       // quyền CỘT (xem test [M5] dưới). Và app_unseal KHÔNG có dòng nào — cố ý, và đó là một
       // LỆCH khỏi brief (brief cấp SELECT/INSERT/UPDATE mức bảng cho CẢ HAI role). Hôm nay
@@ -691,6 +699,8 @@ describe("phủ RLS", () => {
       // `rfq_approvals` KHONG co UPDATE lan DELETE cho bat ky role nao: mot chu ky phe duyet sua
       // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
       { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_items", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
@@ -805,6 +815,29 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [S1.3] `guest_sessions` - CHI `revoked_at` co UPDATE. `otp_verified_at` KHONG sua duoc:
+      // no la moc tra loi "phien nay qua OTP luc nao", va mot moc sua duoc la mot moc khong
+      // dung de phan xet duoc. `verified_contact_id` cung khong - viet lai danh tinh da xac thuc
+      // chinh la thu E5 sinh ra de chan.
+      { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "verified_channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "verified_contact_id", quyen: "INSERT" },
+      // [S1.3] `invitation_otp_challenges` - `code_hash` chi INSERT: mot ma OTP sua duoc sau khi
+      // phat la mot ma khong dung mot lan duoc. `channel` cung chi INSERT: trigger so kenh OTP
+      // voi kenh magic link chay o BEFORE INSERT, nen mot cot `channel` sua duoc sau do se lam
+      // phep kiem ay chi dung tai thoi diem chen (ADR-015 muc 1).
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "code_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "failed_attempts", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "locked_until", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "org_id", quyen: "INSERT" },
       // [Task 9] `mfa_credentials` — bốn vắng mặt là load-bearing, mỗi cái đóng một đường đi:
       //   `id`                 KHÔNG INSERT -> mfa_credentials_pkey không làm oracle xuyên tổ
       //                                        chức được (khuôn users_pkey ở 002).
@@ -825,6 +858,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_kind", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "hits", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "hits", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "window_start", quyen: "INSERT" },
       // [Task 10] `outbox_jobs` — bốn nhóm vắng mặt, mỗi nhóm đóng một đường đi:
       //   `id`/`created_at`          KHÔNG có gì -> `outbox_jobs_pkey` không dùng làm oracle
       //                                            xuyên tổ chức được (khuôn `users_pkey` ở
@@ -856,6 +895,26 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
+      // [S1.3] `rfq_invitation_tokens` - `token_hash` chi INSERT. Mot token doi duoc gia tri la
+      // mot token khong thu hoi duoc that (E1).
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "purpose", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "token_hash", quyen: "INSERT" },
+      // [S1.3] `rfq_invitations` - `contact_id` va `link_channel` KHONG co UPDATE. Doi nguoi nhan
+      // hay doi kenh cua mot loi moi DA GUI la gui mot loi moi KHAC; va mot `link_channel` sua
+      // duoc sau khi OTP da phat lam trigger so hai kenh tro thanh mot phep kiem chi dung tai
+      // thoi diem chen.
+      { grantee: "app_api", bang: "rfq_invitations", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "link_channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
       // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
       // muc sang RFQ khac hay sang to chuc khac.
       { grantee: "app_api", bang: "rfq_items", cot: "description", quyen: "INSERT" },

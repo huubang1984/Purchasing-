@@ -57,7 +57,12 @@
 giải mã. Ranh giới được cưỡng chế bởi hai cơ chế độc lập: IAM ở tầng hạ tầng, quyền role
 ở tầng cơ sở dữ liệu. Chi tiết lý do: ADR-006.
 
-**Xác thực nhà cung cấp — ràng buộc kênh.** OTP **không bao giờ** đi cùng kênh với magic link:
+**Xác thực nhà cung cấp — ràng buộc kênh.** Từ 2026-08-29 đây là một **trigger**, không phải một
+quy ước: `otp_kiem_kenh_khac_link` ở `010_invitations.sql` so kênh của thách thức OTP với
+`rfq_invitations.link_channel` và từ chối khi hai kênh trùng nhau. Cố ý KHÔNG viết thành
+`CHECK (channel <> 'EMAIL')`: cách ấy giữ bất biến bằng một **sự trùng hợp** về việc hôm nay link
+đi bằng email, và sẽ vẫn xanh vào ngày ai đó cho phép gửi link qua SMS. OTP **không bao giờ** đi
+cùng kênh với magic link:
 hai yếu tố trên một hộp thư chung không phải hai yếu tố. Kênh mặc định của S1 là SMS, Zalo ZNS là
 kênh thay thế cấu hình được, và giới hạn tần suất chạy trên Postgres — không thêm thành phần hạ
 tầng. Chi tiết: ADR-015.
@@ -101,6 +106,7 @@ S0  organizations · users · roles · permissions · role_permissions · user_r
 
 S1  suppliers · supplier_contacts
     rfq_packages · rfq_items · rfq_approvals · rfq_invitations · rfq_invitation_tokens
+    invitation_otp_challenges · otp_rate_limits · guest_sessions
     rfq_key_material
     vendor_bids · vendor_bid_versions · bid_receipts
     unseal_requests · unseal_approvals
@@ -127,6 +133,10 @@ ADR-013.
 | `supplier_contacts`, `rfq_items`, `rfq_approvals` | Khoá ngoại **HỢP THÀNH** `(org_id, <cha>_id)` | Một hàng con của tổ chức A treo vào hàng cha của tổ chức B — RLS `WITH CHECK` không nhìn thấy ca này, và nó đã được ĐO là đi lọt với khoá ngoại đơn cột |
 | `rfq_items` | Trigger `rfq_items_chi_sua_khi_soan` | Đổi đề bài sau khi nhà cung cấp đã đọc danh sách hạng mục |
 | `rfq_approvals` | `UNIQUE (org_id, rfq_id, approver_user_id)` + `UNIQUE (org_id, rfq_id, session_id)` + trigger | Một người tự duyệt hai lần; người tạo tự duyệt; mượn phiên của người khác (D2) |
+| `rfq_invitation_tokens` | Lưu **hash**, không lưu token; `purpose` là tập đóng; `expires_at`; `revoked_at` | Đọc được DB là chiếm được lời mời (E1) |
+| `invitation_otp_challenges` | Trigger `otp_kiem_kenh_khac_link` so kênh OTP với `rfq_invitations.link_channel` | OTP đi cùng kênh với magic link — hai yếu tố trên một hộp thư không phải hai yếu tố (ADR-015) |
+| `otp_rate_limits` | Bộ đếm theo cửa sổ, hai loại bucket | E3 vế *giới hạn tần suất* — vế không có một dòng mã nào trong toàn S0 |
+| `guest_sessions` | `verified_contact_id` TÁCH khỏi `rfq_invitations.contact_id` | Ghi danh tính người được MỜI thay vì danh tính đã XÁC THỰC (E5) |
 
 Hai role tách biệt: `app_api` và `app_unseal`. Không role nào bao trùm role kia.
 
