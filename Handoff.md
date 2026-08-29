@@ -262,9 +262,22 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
    định phải ra. S1.1 mang câu hỏi **phạm vi sổ nhà cung cấp**, S1.2 mang câu hỏi **máy trạng thái
    cưỡng chế ở đâu**, S1.3 mang câu hỏi **kênh OTP** — cả ba phải chốt trước migration `008`.
    **Đã chốt 2026-08-29: ADR-013, ADR-014, ADR-015.**
-9. **Mới:** bắt đầu **S1.1**, **S1.2**, **S1.3**. Mỗi ADR mới để lại một **phép đối kháng bắt
-   buộc** ở mục *Đo bằng gì*; lớp nào chưa có lượt RED thật thì chưa được coi là đã đo — đúng bài
-   học đắt nhất của S0.
+9. ~~**Mới:** bắt đầu **S1.1**, **S1.2**, **S1.3**.~~ **XONG CẢ BA (2026-08-29)** — ba commit,
+   ba migration (`008`, `009`, `010`), ba gói (`supplier`, `rfq`, `invitation`), độ phủ
+   24/47 → **30/50**. Chi tiết ở `docs/STATE.md`.
+
+10. **MỘT BƯỚC BẮT BUỘC CỦA VÒNG LẶP ĐÃ KHÔNG CHẠY, và nó phải được chạy trước khi hợp nhất.**
+    §9 của kế hoạch S1 đòi **`security-reviewer`** cho mọi hạng mục có dấu ⭐, và **S1.3 có dấu
+    đó** (lời mời, magic link, OTP, phiên khách — chạm xác thực và PII). Lượt review ấy **chưa
+    xảy ra**: phiên làm việc này chạy dưới một ràng buộc không cho gọi subagent trừ khi người
+    dùng yêu cầu. Đây **không** phải một khoản nợ kỹ thuật; nó là một **điều kiện hoàn thành S1
+    chưa đạt** (mục 6 của §7 kế hoạch S1), và `evidence/security-reviews.md` chưa có dòng nào cho
+    S1.1–S1.3. Ai tiếp tục việc này phải chạy `security-reviewer` cho S1.3 (và nên chạy cho cả
+    S1.1/S1.2) rồi ghi vào file đó theo đúng định dạng đã có.
+
+11. **Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.** ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
+    khi có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Sau khi đã có phong bì
+    thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một ADR.
 
 ---
 
