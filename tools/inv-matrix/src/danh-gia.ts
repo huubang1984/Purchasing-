@@ -153,7 +153,14 @@ export interface MocGhim {
 // "được phép chưa phủ" không nở ra một dòng nào, nên hai mã mới không mua được chỗ trốn nào cho
 // 23 mã nghiệp vụ đang trống. S1.1 KHÔNG phủ thêm một mã nghiệp vụ nào — E4 và A5 vẫn ⏳, đúng
 // như kế hoạch S1 §1 ánh xạ (A5 cần cả S1.9; E4 cần chủ ngữ "mã RFQ" của S1.2).
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 26, coDanhSachToiDa: 23 };
+// [S1.2] 26 -> 27. Mot ma MOI, lai thuoc nhom HANG RAO va lai da phu ngay khi vao so:
+//   H16 - bien gioi module SUY TU TINH CHAT cho moi goi trong packages/.
+// Mau so 49 -> 50. `coDanhSachToiDa` VAN KHONG DOI (23) qua ca S1.1 lan S1.2, va do la con so
+// dang doc nhat trong ba con so nay: sau HAI hang muc, KHONG mot ma NGHIEP VU nao duoc lap.
+// Dung nhu §1 cua ke hoach S1 anh xa - C4 con thieu ve "thong bao toan bo NCC da moi" (can loi
+// moi, S1.3); C5 chua co chu ngu (`rfq_key_material` la S1.4); C3/D2 can cong chinh sach cua
+// S1.6. Do phu nghiep vu se nhay o S1.3, khong som hon.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 27, coDanhSachToiDa: 23 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

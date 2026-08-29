@@ -83,6 +83,16 @@ const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 const SUPPLIER_SRC_PREFIX = ciPrefix("packages/supplier/src/");
 const SUPPLIER_INDEX_TS = ciFile("packages/supplier/src/index.ts");
 
+// S1.2 - ho "g6-", ap cho packages/rfq/src/. Lan thu NAM cung mot khuon.
+// Den lan thu nam thi viec them tay tung ho quy tac chinh la KHUON DANH-SACH-TEN ma du an da
+// phat hien hong ba lan (khoan no 3, 16, 17) - chi khac la danh sach nam trong dau nguoi viet
+// thay vi trong mot bien. Vi vay S1.2 them mot lop SUY TU TINH CHAT:
+// tests/architecture/bien-gioi-goi.test.ts [INV-H16] doi MOI goi trong packages/ phai co mot
+// ho quy tac dong src/ cua no, voi mot danh sach mien tru DONG gom dung bon goi cua S0 va CHI
+// DUOC CO LAI. Goi thu sau khong can ai nho gi ca - test do khi quy tac vang mat.
+const RFQ_SRC_PREFIX = ciPrefix("packages/rfq/src/");
+const RFQ_INDEX_TS = ciFile("packages/rfq/src/index.ts");
+
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
@@ -164,6 +174,19 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g6-rfq-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/rfq/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: moi ham cua goi nay goi " +
+        "assertTenantBound TRUOC MOI THU, va RFQ_TRANSITIONS la ban sao DE DOC cua bang canh " +
+        "trong 009 chu khong phai lop cuong che - mot cong gac dung no se canh dung duong di " +
+        "qua no, trong khi trigger canh MOI duong. Mot module moi trong thu muc nay mac dinh " +
+        "khong voi toi duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: RFQ_SRC_PREFIX },
+      to: { path: RFQ_SRC_PREFIX, pathNot: [RFQ_INDEX_TS] },
     },
     {
       name: "g5-supplier-chi-index-la-cua-cong-khai",

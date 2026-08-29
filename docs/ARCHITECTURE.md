@@ -100,7 +100,7 @@ S0  organizations · users · roles · permissions · role_permissions · user_r
     audit_events · outbox_events
 
 S1  suppliers · supplier_contacts
-    rfq_packages · rfq_items · rfq_invitations · rfq_invitation_tokens
+    rfq_packages · rfq_items · rfq_approvals · rfq_invitations · rfq_invitation_tokens
     rfq_key_material
     vendor_bids · vendor_bid_versions · bid_receipts
     unseal_requests · unseal_approvals
@@ -124,6 +124,9 @@ ADR-013.
 | `rfq_packages.deadline_at` | Kiểm tra trong transaction ghi báo giá, có khóa hàng | Tranh chấp quanh giờ đóng |
 | `rfq_packages.status` | Trigger cấm mọi cạnh ngoài bảng cạnh hợp lệ; `CLOSED → OPEN` không tồn tại | Mở lại RFQ đã đóng (ADR-014) |
 | `suppliers`, `supplier_contacts` | `org_id` + `UNIQUE (org_id, tax_code)`; mọi UNIQUE mà `app_api` ghi được đủ cột phải có `org_id` đứng đầu | Oracle xuyên tổ chức qua thông báo lỗi ràng buộc (ADR-013) |
+| `supplier_contacts`, `rfq_items`, `rfq_approvals` | Khoá ngoại **HỢP THÀNH** `(org_id, <cha>_id)` | Một hàng con của tổ chức A treo vào hàng cha của tổ chức B — RLS `WITH CHECK` không nhìn thấy ca này, và nó đã được ĐO là đi lọt với khoá ngoại đơn cột |
+| `rfq_items` | Trigger `rfq_items_chi_sua_khi_soan` | Đổi đề bài sau khi nhà cung cấp đã đọc danh sách hạng mục |
+| `rfq_approvals` | `UNIQUE (org_id, rfq_id, approver_user_id)` + `UNIQUE (org_id, rfq_id, session_id)` + trigger | Một người tự duyệt hai lần; người tạo tự duyệt; mượn phiên của người khác (D2) |
 
 Hai role tách biệt: `app_api` và `app_unseal`. Không role nào bao trùm role kia.
 
@@ -163,7 +166,7 @@ DRAFT ──► PENDING_APPROVAL ──► OPEN ──► CLOSED ──► UNSEA
 | `PENDING_APPROVAL → OPEN` | Phê duyệt hợp lệ; **cặp khóa RFQ sinh tại đúng thời điểm này** |
 | `OPEN → CLOSED` | Tự động theo deadline, hoặc đóng sớm có lý do và audit |
 | `CLOSED → UNSEALED` | Chỉ qua `unseal-worker` sau khi cổng chính sách thông qua |
-| `CLOSED → OPEN` | **Không tồn tại** — và ADR-014 buộc câu này phải trở thành một `RAISE EXCEPTION` ở migration `008`. **Migration đó chưa viết**; hôm nay đây vẫn chỉ là một câu văn |
+| `CLOSED → OPEN` | **Không tồn tại**, và từ 2026-08-29 đây **không còn là một câu văn**: `009_rfq.sql` biến nó thành một `RAISE EXCEPTION` trong `rfq_kiem_chuyen_trang_thai()`, đo bằng `UPDATE` trực tiếp qua `app_api` (bị chặn) cộng một lượt gỡ trigger (cùng câu ấy ĐI LỌT) |
 
 **Cưỡng chế ở đâu (ADR-014).** CSDL giữ bốn thứ: `CHECK` trên tập trạng thái, trigger cấm mọi
 cạnh ngoài bảng cạnh hợp lệ, trigger cấm rút ngắn `deadline_at` khi đã có báo giá (C4), và phán

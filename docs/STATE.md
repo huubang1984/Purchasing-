@@ -30,11 +30,16 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- ~~Bảy~~ **Tám** migration `001`–~~`007`~~**`008`** + `hardening.always.sql`: role, tổ chức, người dùng, sổ kiểm toán
-  chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**.
+- ~~Bảy~~ ~~Tám~~ **Chín** migration `001`–~~`007`~~~~`008`~~**`009`** + `hardening.always.sql`: role, tổ chức, người dùng, sổ
+  kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**, **RFQ +
+  hạng mục + phê duyệt + máy trạng thái (S1.2)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.2 — RFQ, hạng mục, máy trạng thái (2026-08-29):** migration `009` (`rfq_packages`,
+  `rfq_items`, `rfq_approvals`), gói `packages/rfq`, và **H16** — biên giới module SUY TỪ TÍNH
+  CHẤT cho mọi gói trong `packages/`. Máy trạng thái nằm ở tầng CSDL đúng như ADR-014 chốt, và
+  điều đó đã được ĐO bằng một `UPDATE` đi vòng qua ứng dụng cộng một lượt gỡ trigger.
 - **S1.1 — sổ nhà cung cấp Level 0/1 (2026-08-29):** migration `008` (`suppliers`,
   `supplier_contacts`), gói `packages/supplier`, và **hai hàng rào mới vào sổ đăng ký** —
   **H14** (bộ dò oracle xuyên tổ chức qua ràng buộc duy nhất) và **H15** (biên giới module của
@@ -42,14 +47,13 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Chưa xong:
 
-- ~~Toàn bộ S1 (Sealed Bid Core)~~ **S1.2–S1.9**: RFQ, lời mời, phong bì niêm phong, luồng mở thầu.
+- ~~Toàn bộ S1 (Sealed Bid Core)~~ ~~**S1.2–S1.9**~~ **S1.3–S1.9**: lời mời, phong bì niêm phong, luồng mở thầu.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
 ## Công việc đang làm
 
-**S1 — đang ở hạng mục S1.2.** S1.1 đã commit; S1.2 (RFQ + máy trạng thái) và S1.3 (lời mời,
-magic link, OTP) chưa bắt đầu.
+**S1 — đang ở hạng mục S1.3.** S1.1 và S1.2 đã commit; S1.3 (lời mời, magic link, OTP) chưa bắt đầu.
 
 > **Một khoảng trống của S1.1 đã được ghi ra thay vì lấp bằng nhãn:** test *"người liên hệ của tổ
 > chức A KHÔNG treo được vào nhà cung cấp của tổ chức B"* (`packages/supplier/src/suppliers.int.test.ts`)
@@ -58,6 +62,14 @@ magic link, OTP) chưa bắt đầu.
 > về TRUY VẤN bị ràng buộc `org_id`, F2 nói về IDOR, F3 nói về khoá. Gắn một trong ba nhãn ấy lên
 > đây là lấp mã bằng NHÃN thay vì bằng LỚP. Nếu mệnh đề này đáng vào sổ, nó phải vào sổ tường minh
 > — và đó là một quyết định, không phải một dòng thêm vào lặng lẽ.
+>
+> **S1.2 thêm mệnh đề thứ hai cùng loại:** *hạng mục của một RFQ chỉ sửa được khi RFQ còn ở
+> DRAFT/PENDING_APPROVAL* (trigger `rfq_items_chi_sua_khi_soan` ở 009). Nó chống một thứ thật —
+> đổi đề bài sau khi nhà cung cấp đã đọc danh sách hạng mục — và sổ đăng ký 50 mã không có mệnh
+> đề nào nói điều đó. C4 nói về DEADLINE, không về NỘI DUNG. Test của nó cũng không mang nhãn.
+>
+> **Hai mệnh đề này nên được đưa vào sổ đăng ký hay không là một quyết định cần người chốt.**
+> Ghi ở đây thay vì tự quyết vì thêm một mã vào sổ làm đổi mẫu số của mọi con số độ phủ.
 
 ~~Không có.~~ Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
 
@@ -238,19 +250,29 @@ và toàn bộ tầng HTTP/giao diện.
 ~~**672 test, xanh toàn bộ:** 346 ở `pnpm test` (T0–T2) và 326 ở `pnpm test:int` (T3, Postgres thật
 qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
 
-**Sau S1.1 (2026-08-29): 694 test, xanh toàn bộ** — 353 ở `pnpm test` (18 file) và 341 ở
-`pnpm test:int` (13 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **86 module /
-206 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
+~~**Sau S1.1 (2026-08-29): 694 test** — 353 `pnpm test` / 341 `pnpm test:int`; t0 86 module / 206 phụ thuộc.~~
+
+**Sau S1.2 (2026-08-29): 724 test, xanh toàn bộ** — 363 ở `pnpm test` (20 file) và 361 ở
+`pnpm test:int` (14 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **91 module /
+224 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
 
 ~~**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**~~
 
-**Sau S1.1: 26/49 — 11/34 nghiệp vụ + 15/15 hàng rào.** Hai mã mới (**H14**, **H15**) đều thuộc
+~~**Sau S1.1: 26/49 — 11/34 nghiệp vụ + 15/15 hàng rào.**~~
+
+**Sau S1.2: 27/50 — 11/34 nghiệp vụ + 16/16 hàng rào.** Hai mã mới (**H14**, **H15**) đều thuộc
 nhóm HÀNG RÀO, nên **tử số và mẫu số cùng tăng 2 và số mã NGHIỆP VỤ được phủ ĐỨNG YÊN ở 11**.
 Đây là điều đáng đọc kỹ hơn con số tổng: S1.1 dựng thêm hai lớp canh, nó **không** đóng thêm một
 mệnh đề nghiệp vụ nào — E4 cần chủ ngữ *"mã RFQ"* của S1.2, A5 cần cả S1.9. `MOC_GHIM`:
-`soPhuToiThieu` 24 → **26**, `coDanhSachToiDa` giữ nguyên **23** (danh sách được-phép-chưa-phủ
-không nở ra một dòng nào).
+`soPhuToiThieu` 24 → **26** → **27**, `coDanhSachToiDa` giữ nguyên **23** qua CẢ HAI hạng mục.
+
+**Con số đáng đọc nhất là con số KHÔNG đổi: 11/34 nghiệp vụ, sau hai hạng mục và ba bảng… năm
+bảng.** Đó không phải dấu hiệu công việc chưa tới nơi — nó là hệ quả đã được §1 của kế hoạch S1
+ánh xạ trước: **C4** còn thiếu vế *"có thông báo toàn bộ nhà cung cấp đã mời"* (cần lời mời,
+S1.3); **C5** chưa có chủ ngữ (`rfq_key_material` là S1.4); **C3**/**D2** cần cổng chính sách của
+S1.6; **E4** cần cả MST lẫn mã RFQ đi qua một đường xác thực chưa tồn tại. Độ phủ nghiệp vụ sẽ
+nhảy ở S1.3, không sớm hơn — và một lần nhảy sớm hơn thế sẽ là dấu hiệu ai đó lấp mã bằng NHÃN.
 
 ### Hoà giải hai cách đếm (việc Task 11 sinh ra để làm)
 

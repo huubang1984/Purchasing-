@@ -683,6 +683,16 @@ describe("phủ RLS", () => {
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
+      // [S1.2] Ba bang moi cua 009. `rfq_items` co DELETE o MUC BANG va do la lech co chu dinh
+      // so voi hai bang kia: sua danh sach hang muc luc con DRAFT la viec binh thuong va no chi
+      // bieu dien duoc bang DELETE. Thu gioi han NO theo trang thai cua RFQ cha la trigger
+      // `rfq_items_chi_sua_khi_soan`, khong phai quyen — quyen khong biet trang thai.
+      //
+      // `rfq_approvals` KHONG co UPDATE lan DELETE cho bat ky role nao: mot chu ky phe duyet sua
+      // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
+      { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_items", quyen: "DELETE,SELECT" },
+      { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
@@ -707,6 +717,46 @@ describe("phủ RLS", () => {
   // UPDATE nào trong role_table_grants — quyền cột chỉ hiện ở role_column_grants. Nghĩa là nếu
   // chỉ giữ khẳng định trên thì nó xanh VÌ LÝ DO SAI, và một "GRANT UPDATE (slug)" thêm vào sau
   // này sẽ đi qua im lặng. Đây là lớp khoá đúng chỗ đó.
+  // [S1.2] MỘT KHE HỞ CỦA HAI KHẲNG ĐỊNH TRÊN, VÀ 009 VỪA MỞ RỘNG NÓ.
+  //
+  // `role_table_grants` mù với quyền CỘT (đã đo, xem [M5] ngay dưới); còn [M5] thì lọc
+  // `privilege_type <> 'SELECT'` vì SELECT theo cột là hệ quả cơ học của GRANT SELECT cả bảng.
+  // Giao của hai vế ấy là một VÙNG MÙ: **một GRANT SELECT THEO CỘT không xuất hiện ở khẳng định
+  // nào.** `users` (006) đã nằm trong vùng đó, và 009 đưa `rfq_packages` vào cùng chỗ.
+  //
+  // Vì sao nó đáng đóng ngay chứ không ghi vào sổ nợ: cột được cấp cho `app_unseal` chính là
+  // thứ trả lời câu hỏi của cổng chính sách S1.6 ("RFQ này đã CLOSED chưa" — C3, D1 vế 3).
+  // Một `GRANT SELECT (title)` thêm vào sau này sẽ đi qua HOÀN TOÀN im lặng.
+  it("[S1.2] quyền SELECT theo CỘT của app_unseal đúng bằng danh sách đã quyết định", async () => {
+    const { rows } = await db.pool.query<{ bang: string; cot: string }>(
+      "SELECT table_name AS bang, column_name AS cot " +
+        "  FROM information_schema.role_column_grants " +
+        " WHERE table_schema = 'public' AND grantee = 'app_unseal' " +
+        "   AND privilege_type = 'SELECT' " +
+        "   AND table_name NOT IN (SELECT table_name FROM information_schema.role_table_grants " +
+        "                           WHERE table_schema = 'public' AND grantee = 'app_unseal' " +
+        "                             AND privilege_type = 'SELECT') " +
+        " ORDER BY 1, 2",
+    );
+    // Loại các bảng mà app_unseal có SELECT ở MỨC BẢNG (audit_events, ...): ở đó một dòng cho
+    // mỗi cột là hệ quả cơ học, khoá chúng ở đây sẽ vỡ mỗi lần thêm cột. Còn lại đúng những
+    // bảng mà quyền đọc được cắt THEO CỘT — và đó là những quyết định phải nhìn thấy được.
+    expect(rows).toEqual([
+      { bang: "rfq_packages", cot: "id" },
+      { bang: "rfq_packages", cot: "org_id" },
+      { bang: "rfq_packages", cot: "status" },
+      { bang: "sessions", cot: "expires_at" },
+      { bang: "sessions", cot: "id" },
+      { bang: "sessions", cot: "mfa_verified_at" },
+      { bang: "sessions", cot: "org_id" },
+      { bang: "sessions", cot: "revoked_at" },
+      { bang: "sessions", cot: "user_id" },
+      { bang: "users", cot: "id" },
+      { bang: "users", cot: "org_id" },
+      { bang: "users", cot: "status" },
+    ]);
+  });
+
   it("[M5] quyền CỘT của app_api/app_unseal đúng bằng những gì đã quyết định", async () => {
     const { rows } = await db.pool.query<{ grantee: string; bang: string; cot: string; quyen: string }>(
       "SELECT grantee, table_name AS bang, column_name AS cot, privilege_type AS quyen " +
@@ -801,6 +851,40 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
+      // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
+      { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
+      // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
+      // muc sang RFQ khac hay sang to chuc khac.
+      { grantee: "app_api", bang: "rfq_items", cot: "description", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "description", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_items", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "line_no", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_items", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "quantity", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "quantity", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_items", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "unit", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "unit", quyen: "UPDATE" },
+      // [S1.2] `rfq_packages` — `status` co UPDATE va no BUOC phai co de ung dung lam viec.
+      // Ke tu giay do, `UPDATE ... SET status='OPEN'` tren mot RFQ da CLOSED la MOT DONG SQL,
+      // khong phai mot cuoc tan cong; trigger `rfq_packages_kiem_chuyen_trang_thai` la thu duy
+      // nhat dung giua. Do la toan bo lap luan cua ADR-014, doc tu phia quyen.
+      // `created_by` chi INSERT, `created_at` khong co gi, `org_id` chi INSERT.
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
       // [Task 9] `sessions` — ba vắng mặt là load-bearing:
       //   `id`              KHÔNG INSERT -> sessions_pkey không làm oracle được.
       //   `created_at`      KHÔNG có gì   -> dấu thời gian do CSDL đóng (khuôn occurred_at/003).

@@ -1089,3 +1089,70 @@ describe("biên giới module của packages/supplier", () => {
     }
   }, 60000);
 });
+
+// ==============================================================================================
+// [INV-H16] BIÊN GIỚI MODULE CỦA packages/rfq — HỌ QUY TẮC `g6-`
+//
+// Ba ca dưới đây là phần mà `tests/architecture/bien-gioi-goi.test.ts` KHÔNG mua được: lớp kia
+// đòi quy tắc TỒN TẠI và có HÌNH DẠNG đúng, nó không chạy depcruise nên không chứng minh quy tắc
+// CHẶN THẬT. Hai lớp bổ túc nhau, và cả hai là bắt buộc cho mỗi gói mới.
+// ==============================================================================================
+describe("biên giới module của packages/rfq", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/rfq/src", () => {
+    const probe = "packages/audit/src/zzprobe-rfq-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      ['import { createRfq } from "../../rfq/src/rfq.js";', "export { createRfq };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/rfq"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-rfq-tuong-doi.ts");
+      expect(output).toContain("g6-rfq-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/rfq/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/rfq/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-rfq-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-rfq-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/rfq/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-rfq-moi", "packages/rfq"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g6-rfq-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-rfq-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-rfq-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-rfq-cua/src/dung.ts",
+      [
+        'import { createRfq } from "../../../packages/rfq/src/index.js";',
+        "export { createRfq };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-rfq-cua", "packages/rfq"]);
+      expect(output).not.toContain("g6-rfq-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-rfq-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});

@@ -381,3 +381,54 @@ describe("bề mặt export công khai của supplier", () => {
     ).toEqual([]);
   });
 });
+
+// ============================================================================================
+// MẶT TIỀN THỨ TƯ: @trustprocure/rfq (S1.2)
+//
+// `RFQ_TRANSITIONS` ở trong danh sách này là symbol đáng chú ý nhất, và lý do nó ĐƯỢC ở lại đáng
+// ghi: nó là DỮ LIỆU (bản sao để đọc của bảng cạnh trong 009), không phải một hàm phán xét. Tiêu
+// chí đã dùng cho `hasPermission` và `verifyTotpCode` — "thứ dựng được một cổng gác im lặng thì
+// giữ trong gói" — vẫn áp: ai dựng cổng gác bằng mảng này sẽ canh đúng đường đi qua nó, trong khi
+// trigger canh mọi đường. Nhưng khác hai ca kia ở một điểm quyết định: cổng gác ấy KHÔNG làm hàng
+// rào thật biến mất, nó chỉ thừa. Có test đọc thẳng 009 và đòi hai bên khớp byte-với-cạnh.
+// ============================================================================================
+const DANH_SACH_TRANG_RFQ = [
+  "RFQ_STATUSES",
+  "RFQ_TRANSITIONS",
+  "RfqError",
+  "addRfqItem",
+  "approveRfq",
+  "cancelRfq",
+  "closeRfq",
+  "createRfq",
+  "extendRfqDeadline",
+  "getRfq",
+  "listRfqItems",
+  "openRfq",
+  "submitRfqForApproval",
+];
+
+const RFQ_PACKAGE_JSON_URL = new URL("../../packages/rfq/package.json", import.meta.url);
+
+describe("bề mặt export công khai của rfq", () => {
+  it("[INV-H16] cửa @trustprocure/rfq chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(RFQ_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) throw new Error("packages/rfq/package.json không khai cửa '.'");
+    const urlCua = new URL(duongDan, RFQ_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_RFQ.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/rfq.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_RFQ.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/rfq.",
+    ).toEqual([]);
+  });
+});
