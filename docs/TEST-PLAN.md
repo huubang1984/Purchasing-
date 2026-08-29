@@ -17,7 +17,15 @@ và có ít nhất một test cố tình tấn công nó.
 Ba quy tắc vận hành:
 
 1. **Thêm tính năng chạm vào một nhóm bất biến ⇒ phải bổ sung test đối kháng cho nhóm đó.**
-2. **Bất biến không có test phủ ⇒ CI đỏ.** Không có ngoại lệ tạm thời.
+2. **Bất biến không có test phủ ⇒ CI đỏ — trừ khi mã đó nằm trong một DANH SÁCH ĐƯỢC GHIM,
+   kèm lý do đọc được.** Câu cũ ở đây là *"không có ngoại lệ tạm thời"*, và tới cuối S0 nó
+   RỘNG HƠN thứ hệ thống làm: 23 trong 47 mã chưa phủ vì chủ ngữ của chúng (RFQ, phong bì
+   niêm phong, luồng mở thầu) thuộc S1. Một quy tắc mà thực tế vi phạm 23 lần không phải một
+   quy tắc; nó là một dòng chữ. Cách diễn đạt hiện tại giữ nguyên độ chặt và bỏ chỗ cho sự
+   mơ hồ: danh sách nằm ở `MA_DUOC_PHEP_CHUA_PHU` trong `tools/inv-matrix/src/danh-gia.ts`,
+   nó là **ràng buộc hai chiều** (một mã trong danh sách mà ĐÃ được phủ cũng làm CI đỏ, kèm
+   lời nhắc gỡ ra), nên nó chỉ co lại. Thêm một mã vào đó là một thay đổi mã nguồn, đi qua
+   review — khác hẳn một `continue-on-error` không ai nhìn thấy.
 3. **Không bao giờ nới lỏng một assertion để test xanh.** Nếu test sai thì nói rõ tại sao
    và sửa test; nếu bất biến sai thì sửa bất biến ở đây trước, kèm lý do.
 
@@ -101,21 +109,28 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến.**
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 13 bất biến hàng rào (nhóm H, §5) là 47 mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
 ## 3. Bảy tầng kiểm thử
 
-| Tầng | Nội dung | Công cụ | Chạy khi | Chặn merge |
-|---|---|---|---|---|
-| **T0** | Cổng tĩnh: typecheck, lint, quét bí mật, audit phụ thuộc, kiểm tra ranh giới module | tsc, eslint, gitleaks, osv-scanner, dependency-cruiser | Mọi commit | Có |
-| **T1** | Unit & property-based | Vitest, fast-check | Mọi commit | Có |
-| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có |
-| **T3** | Integration với Postgres thật | Testcontainers, Vitest | Mọi PR | Có |
-| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có |
-| **T5** | Bộ test đối kháng | Vitest + Playwright | Mọi PR | Có |
-| **T6** | Phi chức năng | k6, kịch bản DR | Hằng đêm | Không (cảnh báo) |
+> **ĐỌC CỘT *Trạng thái S0* TRƯỚC CỘT *Chặn merge*.** Cột *Chặn merge* nói tầng ấy **sẽ** chặn
+> khi nó tồn tại; nó **không** nói tầng ấy đang chạy hôm nay. Ba tầng dưới đây **chưa được
+> dựng**, và điều đó đo được: `grep -E 'playwright|k6|osv-scanner'` trên `package.json` cùng mọi
+> `*.yml` cho **0 hit**, và `.github/workflows/ci.yml` chỉ có bốn job — `t0`, `t1-t2`, `t3`,
+> `evidence`. Cho tới khi cột *Trạng thái S0* của một hàng ghi **ĐÃ DỰNG**, mọi thứ mô tả dưới
+> hàng đó là **kế hoạch**, kể cả bảng 15 kịch bản tấn công có tên ở mục T5.
+
+| Tầng | Nội dung | Công cụ | Chạy khi | Chặn merge | **Trạng thái S0** |
+|---|---|---|---|---|---|
+| **T0** | Cổng tĩnh: typecheck, lint, quét bí mật, audit phụ thuộc, kiểm tra ranh giới module | tsc, eslint, gitleaks, osv-scanner, dependency-cruiser | Mọi commit | Có | **ĐÃ DỰNG một phần** — job `t0` có tsc + eslint + depcruise + gitleaks + `pnpm audit`; **`osv-scanner` chưa có** |
+| **T1** | Unit & property-based | Vitest, fast-check | Mọi commit | Có | **ĐÃ DỰNG** — job `t1-t2` chạy `pnpm test` |
+| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có | **CHƯA DỰNG — S1.** Không có OpenAPI, không có endpoint, nên **không có bộ quét rò rỉ**. Job `t1-t2` hôm nay chỉ là T1 |
+| **T3** | Integration với Postgres thật | Testcontainers, Vitest | Mọi PR | Có | **ĐÃ DỰNG** — job `t3` chạy `pnpm test:int` trên Postgres thật |
+| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có | **CHƯA DỰNG — S1.** Playwright **không có trong `package.json`**; `apps/` rỗng |
+| **T5** | Bộ test đối kháng | Vitest + Playwright | Mọi PR | Có | **CHƯA DỰNG NHƯ MỘT TẦNG RIÊNG.** Test đối kháng của S0 **có thật** nhưng sống lẫn trong T1/T3 (xem cột *Số test* của `evidence/INV-matrix.md`); **bảng 15 kịch bản dưới đây chưa có kịch bản nào chạy** |
+| **T6** | Phi chức năng | k6, kịch bản DR | Hằng đêm | Không (cảnh báo) | **CHƯA DỰNG — S1+.** `k6` không có; chưa có kịch bản DR. Ngoại lệ duy nhất đã đo: `pnpm bench:keys` (hiệu năng bọc/mở khoá `local-dev`) |
 
 ### T0 — Cổng tĩnh
 
@@ -176,6 +191,14 @@ Chạy trên Postgres thật qua Testcontainers, không dùng bản giả lập:
 
 Mỗi mục là một cuộc tấn công, không phải kiểm tra tính năng chạy đúng.
 
+> ⚠️ **BẢNG DƯỚI ĐÂY LÀ KẾ HOẠCH, KHÔNG PHẢI MỘT BỘ TEST ĐANG CHẠY.** 15 kịch bản có tên đọc
+> rất giống một danh mục đã cài đặt; **không kịch bản nào trong số đó tồn tại ở S0**. Chủ ngữ của
+> hầu hết chúng (RFQ, báo giá, magic link, endpoint, trình duyệt) chưa có một dòng mã nào — đối
+> chiếu §3 của `evidence/INV-matrix.md`, nơi 23/47 mã còn trống kèm lý do từng mã. Ba kịch bản
+> **có** lớp đối kháng thật ở S0, chỉ là chúng sống trong T1/T3 chứ không trong một tầng T5 riêng:
+> **#7** (sửa `audit_events` bằng SQL trực tiếp → B4), **#8** (cắt đuôi chuỗi audit → B3), và
+> **#11** phần *cô lập tổ chức* (→ F1, F2).
+
 | # | Tấn công | Bất biến bảo vệ |
 |---|---|---|
 | 1 | Buyer gọi thẳng API chi tiết báo giá trước mở thầu | A1 |
@@ -206,16 +229,29 @@ Mỗi mục là một cuộc tấn công, không phải kiểm tra tính năng c
 
 ## 4. Evidence Pack
 
-Mỗi lần CI chạy sinh `evidence/INV-matrix.md`:
+Mỗi lần CI chạy sinh `evidence/INV-matrix.md` bằng `pnpm evidence` (Task 11,
+`tools/inv-matrix`). Bộ sinh đọc **chính bảng §2 và §5 của file này** làm nguồn sự thật duy
+nhất, rồi đối chiếu với nhãn `[INV-<mã>]` trong tên test của báo cáo `vitest --reporter=json`.
 
-```text
-| INV | Mệnh đề | Cưỡng chế | Test phủ | Kết quả | Commit | Thời điểm |
-|-----|---------|-----------|----------|---------|--------|-----------|
-| A1  | ...     | Kiến trúc | 4 test   | PASS    | a1b2c3 | ...       |
-| A4  | ...     | Máy quét  | 1 test   | PASS    | a1b2c3 | ...       |
-```
+Hai file, hai bản chất — và sự tách đôi này là điều kiện để phép kiểm chống-sửa-tay tồn tại:
 
-Bất biến ở trạng thái `CHƯA PHỦ` làm CI đỏ.
+| File | Tính chất | Vào git? |
+|---|---|---|
+| `evidence/INV-matrix.md` | **Tất định** — không SHA, không dấu thời gian | **Có.** Lịch sử của nó là bằng chứng theo thời gian |
+| `evidence/run-metadata.md` | Xuất xứ một lượt chạy: commit SHA, thời điểm, tổng số khẳng định | Không. Tải lên như artefact CI |
+
+Nếu ma trận mang dấu thời gian thì nó đổi mỗi lần chạy, và bước CI *"ma trận đã commit phải
+khớp bộ sinh"* (`git diff --exit-code` sau khi sinh lại) là bất khả — trong khi `.gitignore`
+lại GIỮ file này, nên một lần sửa tay sẽ không lớp nào bắt.
+
+Bộ sinh làm CI đỏ khi: một mã chưa phủ mà **không** nằm trong danh sách được ghim ở §1 quy tắc
+2; một mã trong danh sách mà **đã** được phủ; một test mang nhãn bất biến đang đỏ hoặc bị bỏ
+qua; một nhãn `[INV-…]` trỏ tới mã **không có trong sổ đăng ký này**; hoặc số hàng đọc được từ
+§2/§5 **lệch với một phép đếm độc lập** — hàng biến mất trong im lặng là fail-open ở đúng nơi
+không được phép fail-open.
+
+Nhãn dạng `[INV-E3(3)]` (chỉ MỘT VẾ của một bất biến nhiều vế) **cố ý không** được tính là độ
+phủ của `E3`: E3 có năm vế và vế *giới hạn tần suất* không có một dòng mã nào trong toàn S0.
 
 Đây vừa là kỷ luật kỹ thuật vừa là tài sản thương mại: khi kiểm toán viên của khách hàng
 hỏi *"làm sao chứng minh nhân viên mua hàng không xem được giá trước giờ mở?"*, câu trả
@@ -228,18 +264,91 @@ lời là bảng này kèm lịch sử chạy, thay vì một lời hứa.
 Hai hook của `ai-eng-os` cũng là mã cần kiểm chứng, không phải cấu hình được tin tưởng
 mặc nhiên. Chúng đã từng fail-open trên máy phát triển (spec §8.1).
 
-| # | Test | Kỳ vọng |
-|---|---|---|
-| 1 | `git reset --hard HEAD~1` | CHẶN, mã thoát 2 |
-| 2 | `git clean -fd` | CHẶN |
-| 3 | `git push --force origin main` | CHẶN |
-| 4 | `git checkout -- .` | CHẶN |
-| 5 | `git branch -D feature` | CHẶN |
-| 6 | `git status` | CHO QUA |
-| 7 | Ghi vào `.env`, `.pem`, `.key`, `id_rsa`, `id_ed25519`, `.p12`, `.pfx`, `.jks`, `.npmrc`, `.pgpass` | CHẶN |
-| 8 | Ghi vào `src/index.ts` | CHO QUA |
-| 9 | **Đầu vào JSON hỏng hoặc rỗng** | **CHẶN** — fail-closed |
-| 10 | **Thiếu phụ thuộc runtime** | **CHẶN** — fail-closed |
+Hàng rào cũng là một biện pháp kiểm soát, nên nó cũng có mã và cũng nằm trong evidence
+pack. Nhóm **H** dùng chung cơ chế với 34 bất biến nghiệp vụ: test phải mang mã trong tên
+theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 
-Mục 9 và 10 là bài học rút ra từ sự cố `jq`: một biện pháp kiểm soát thất bại phải thất
-bại theo hướng an toàn. Đúng bài học mà chính TrustProcure bán cho khách hàng.
+Nhóm H KHÔNG chỉ là hai hook: **mọi hàng rào tự động của dự án đều thuộc nhóm này**, kể cả
+các quy tắc biên giới module của dependency-cruiser (H11, H12, H13). Tiêu chí phân nhóm là "cái
+này canh CÁI GÌ": một bất biến nghiệp vụ (A–G) nói về hành vi của sản phẩm với dữ liệu của
+khách hàng; một bất biến hàng rào (H) nói về việc một biện pháp kiểm soát của chính dự án có
+còn răng hay không.
+
+| ID | Bất biến | Cưỡng chế | Tầng test |
+|---|---|---|---|
+| **H1** | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 |
+| **H2** | `git clean -f*` bị chặn | Hook `git-safety` | T1 |
+| **H3** | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 |
+| **H4** | Lệnh xoá bỏ thay đổi cục bộ (`checkout -- .`, `restore .`) bị chặn | Hook `git-safety` | T1 |
+| **H5** | Lệnh viết lại lịch sử (`branch -D`, `filter-branch`, `stash clear/drop`, `reflog expire`, `update-ref -d`) bị chặn | Hook `git-safety` | T1 |
+| **H6** | **Không lời gọi git phá huỷ nào lọt qua bất kể toán tử shell, chuyển hướng, hay tuỳ chọn toàn cục xen giữa** (`git -C <dir>`, `git -c k=v`, `git --no-pager`, cờ bị bọc nháy, `2>&1`/`&>`/`>&2`, ...) — hook dò tín hiệu phá huỷ trên toàn bộ token của dòng lệnh, thiên về chặn, không dựa vào việc xác định đúng ranh giới lời gọi hay vị trí subcommand | Hook `git-safety` | T1 |
+| **H7** | Lệnh git vô hại được cho qua — hàng rào không được cản trở công việc bình thường | Hook `git-safety` | T1 |
+| **H8** | Ghi vào file bí mật bị chặn, **không phân biệt hoa thường**: `.env`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `id_rsa`, `id_ed25519`, `credentials.json`, `secrets.y*ml`, `.npmrc`, `.pgpass`, `.netrc`, `.claude/settings*.json` | Hook `protect-secrets` | T1 |
+| **H9** | File nguồn thường và `.env.example` được cho qua — khớp theo tên và phần mở rộng, không khớp chuỗi con | Hook `protect-secrets` | T1 |
+| **H10** | **Đầu vào rỗng, JSON hỏng, thiếu trường, sai kiểu, hoặc thiếu phụ thuộc runtime đều CHẶN** — fail-closed | Cả hai hook | T1 |
+| **H11** | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | **T0** |
+| **H12** | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | **T0** |
+| **H13** | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | **T0** |
+
+**H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
+chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
+identity → `g2-`/H11, nay outbox → `g4-`). Phép đo, tái lập được ở worktree review: một file
+`packages/audit/src/zz-probe-outbox-leak.ts` với `import "../../outbox/src/runner.js"` đi lọt
+CẢ BA cổng — `depcruise` 0 vi phạm, `tsc` exit 0, `eslint` exit 0 — trong khi bản bare
+specifier bị chặn ở cả hai lớp. Danh sách trắng barrel khoá DANH SÁCH export Ở CỬA; nó không
+dựng BỨC TƯỜNG, nên nó không thay thế được hàng rào này.
+Hai con số ở §2 (12 → 13 và 46 → 47) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
+("34 vs 46", nay "34 vs 47") vẫn là việc của Task 11 và KHÔNG được làm ở đây — sửa cho hai con
+số ĐÚNG với thực tế là một việc khác hẳn với việc chọn cách đếm.
+
+**H11 và H12 được bổ sung ngày 2026-08-28** (vòng fix 1 của Task 9), và lý do là một lớp
+khiếm khuyết chứ không phải một chỗ trống: `tests/architecture/boundaries.test.ts` đang gán
+`[INV-G2]` cho năm test và `[INV-G3]` cho bốn test đo QUY TẮC BIÊN GIỚI MODULE — trong khi sổ
+đăng ký §2 định nghĩa G2 = "mỗi RFQ một cặp khoá" và G3 = "xoay master key không làm mất khả
+năng giải mã báo giá cũ". Bộ sinh ma trận gom theo MÃ, nên chín dòng "passed" sẽ rơi vào hai
+hàng nghiệp vụ mà chúng không đo — và vì test G2/G3 đúng nghĩa VẪN tồn tại song song, va chạm
+đó là vô hình nếu không đọc tên. Đây là "mốc chết giả đã dịch chỗ: nó không còn ở TEST, nó ở
+NHÃN". Một quy tắc biên giới depcruise LÀ một hàng rào, đúng hạng với hai hook ở trên, nên nó
+thuộc nhóm H — và nhóm H đã khớp sẵn regex `[A-H]\d+` của bộ sinh, không cần đụng bộ sinh.
+Mười test `[INV-G1]` trong cùng file thì GIỮ NGUYÊN: quy tắc `g1-` cưỡng chế đúng bất biến G1
+("private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`"), tức ở đó nhãn khớp thứ được
+đo. Tên các quy tắc depcruise (`g1-`/`g2-`/`g3-`) không đổi — vấn đề nằm ở nhãn test.
+
+**Một test `[INV-G1]` có VẾ PHỤ THUỘC HỆ THỐNG FILE, và điều đó phải nói ra ở đây** (lần chạy CI
+đầu tiên, 2026-08-28). Test *"quy tắc chặn `local-dev-shared.ts` không phân biệt hoa-thường"*
+mang **hai** vế: vế **regex của chính quy tắc khớp cả cách viết sai hoa-thường** chạy trên **mọi**
+hệ điều hành; vế **đầu-cuối qua depcruise CLI** chỉ chạy khi hệ thống file **đo được** là không
+phân biệt hoa-thường, và khi không chạy thì **công bố ra log**. Lý do: trên hệ thống file phân
+biệt hoa-thường (Linux của CI), một import sai hoa-thường **không resolve được**, nên không có
+cạnh phụ thuộc nào để quy tắc bắn — *"không có vi phạm"* ở đó là kết quả **đúng**, và hiểm hoạ
+chỉ tồn tại trên máy phát triển Windows/macOS. Vì vậy ô ✅ của **G1** phải đọc là: bảo đảm
+*"regex không phân biệt hoa-thường"* được đo ở **mọi** lượt chạy; bảo đảm *"đường đi thật bị
+chặn"* được đo ở lượt chạy **trên máy không phân biệt hoa-thường**. Cùng tinh thần với ghi chú
+"phạm vi hẹp hơn mệnh đề" ở §4 của ma trận: ô xanh **không** có nghĩa mọi vế đều được đo ở mọi
+môi trường.
+
+**H10 là bài học rút ra từ sự cố `jq`**: một biện pháp kiểm soát thất bại phải thất bại
+theo hướng an toàn. Không có hàng rào thì người ta còn cẩn thận; có hàng rào hỏng thì
+người ta thôi cẩn thận. Đúng bài học mà chính TrustProcure bán cho khách hàng.
+
+**H6 và H8 được bổ sung ngày 2026-08-27** sau khi vòng review Task 1 tìm ra hai lỗ hổng
+đã kiểm chứng: `git -C . reset --hard` lọt qua cả mười quy tắc, và `.ENV` / `ID_RSA` lọt
+qua trên hệ thống tệp không phân biệt hoa thường của Windows. Cả hai đều là "hàng rào
+tồn tại trên giấy" — đúng loại lỗi mà chính nhóm H này sinh ra để bắt.
+
+**H6 đổi thiết kế ngày 2026-08-27 (vòng review thứ hai, cùng ngày)**: bản vá đầu cho H6
+vẫn giữ khái niệm "ranh giới lời gọi git" (tách theo toán tử shell `&& || ; | &` và
+xuống dòng) rồi bóc tuỳ chọn toàn cục `-C`/`-c` đứng trước subcommand. Chính bản vá đó
+lại bị bắn nhầm bởi cú pháp nhân bản mô tả tệp — `2>&1`, `&>`, `>&2`: ký tự `&` trần
+trong các cú pháp này bị hiểu nhầm là toán tử chạy nền, cắt đứt việc thu thập token của
+lời gọi git ngay giữa chừng, khiến `git 2>&1 reset --hard HEAD~1` lọt qua. Sau hai vòng
+vá liên tiếp, mô hình hoá chính xác ngữ pháp shell (toán tử nào là ranh giới, cờ nào ăn
+thêm token) chứng minh là một trò chơi vá lỗ không hồi kết. Hook đổi hẳn triết lý: bỏ
+việc xác định "token nào thuộc lời gọi git nào" và "đâu là subcommand", chỉ hỏi dòng
+lệnh có chứa đồng thời các dấu hiệu của MỘT thao tác git phá huỷ hay không, bất kể
+chúng nằm ở đâu, thuộc lời gọi nào, hay bị chuyển hướng/toán tử gì xen vào — thiên về
+chặn, đúng bản chất một hàng rào an toàn (chặn nhầm mất mười giây; cho qua sai mất
+việc). Đánh đổi chủ động chấp nhận: `git -C . restore foo.txt` (giá trị `.` của `-C`
+trùng dấu hiệu `restore .`) và một số lệnh ghép hiếm gặp có tín hiệu rải trên hai lời
+gọi git tách biệt trong cùng chuỗi có thể bị chặn oan — xem `task-1-report.md`, mục
+"Fix round 2", để biết danh sách đầy đủ và lý do từng trường hợp được chấp nhận.

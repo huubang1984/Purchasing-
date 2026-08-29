@@ -1,0 +1,96 @@
+# ============================================================================================
+# CODEOWNERS — REVIEW BẮT BUỘC CHO CÁC HÀNG RÀO AN NINH
+# ============================================================================================
+#
+# ⚠️  CHỦ SỞ HỮU DƯỚI ĐÂY LÀ PLACEHOLDER, CHƯA TỒN TẠI.
+#     `@trustprocure/bao-mat` là một team GitHub CHƯA ĐƯỢC TẠO. Chừng nào nó chưa tồn tại,
+#     GitHub bỏ qua các dòng trỏ tới nó và file này KHÔNG cưỡng chế được gì.
+#     Việc phải làm (bước cấu hình THỦ CÔNG, không tự động hoá được từ repo):
+#       1. Tạo team `bao-mat` trong tổ chức `trustprocure`, thêm ít nhất HAI người.
+#       2. Settings → Branches → nhánh mặc định: bật "Require a pull request before merging",
+#          "Require review from Code Owners", và "Required approvals" >= 2.
+#       3. Thay `@trustprocure/bao-mat` bằng tên team thật ở mọi dòng dưới đây.
+#     Yêu cầu HAI NGƯỜI review KHÔNG cưỡng chế được từ trong `.github/workflows/`: một job
+#     CI đọc được số approval qua API, nhưng nó chạy dưới quyền của chính PR và người mở PR
+#     sửa được workflow trong cùng PR đó. Chỉ branch protection phía GitHub mới cưỡng chế được.
+#
+# VÌ SAO CÓ FILE NÀY, nói bằng kết luận đo được chứ không bằng khẩu hiệu:
+#   Hai reviewer độc lập, ở hai hàng rào khác nhau (hàng rào G1 của Task 7 và hàng rào RLS của
+#   Task 4), đi tới cùng một kết luận: kiểm tra bề mặt có LỢI ÍCH GIẢM DẦN, và phần dư còn lại
+#   là bài toán QUY TRÌNH, không phải bài toán thêm một lớp kiểm nữa.
+#   Bằng chứng cụ thể: `NGOAI_LE_HINH_DANG` trong db/migrations/hardening.always.sql là một
+#   CỬA mà càng dùng đúng thì hàng rào càng thủng —
+#       vòng 1: khoá TOÀN CỤC (pham_vi, bieu_thuc)  -> mở cho một bảng là mở cho MỌI bảng
+#       vòng 2: thu về (bang, polname)              -> vẫn không theo role, không theo lệnh
+#       vòng 3: thêm (lenh, vai_tro)                -> vẫn không tách USING/WITH CHECK, chưa tới cột
+#   Trục kế tiếp sẽ là polqual vs polwithcheck riêng, rồi cột. Mỗi dòng thêm vào cửa là một
+#   QUYẾT ĐỊNH AN NINH mà không máy nào phán xử hộ được. Đó là lý do những đường dẫn dưới đây
+#   cần MẮT NGƯỜI, không cần thêm một assertion.
+#
+# Cú pháp: người khớp SAU CÙNG thắng. Dòng đầu (*) cố ý KHÔNG có, để file này chỉ nói về những
+# đường dẫn thật sự cần review bắt buộc — thêm `*` sẽ làm mọi PR đều cần team bảo mật và biến
+# hàng rào thành thứ người ta tìm cách đi vòng.
+
+# --- Hàng rào RLS / cô lập tổ chức (Task 4) -------------------------------------------------
+# hardening.always.sql chứa HINH_DANG_CHUAN (danh sách trắng TOÀN CỤC), NGOAI_LE_HINH_DANG
+# (cửa theo đối tượng) và NGOAI_LE_DOC_VONG (miễn trừ view/matview/SECDEF). Ba danh sách này
+# là toàn bộ bề mặt "được phép" của cô lập tổ chức: thêm một dòng vào bất kỳ danh sách nào
+# cũng là nới hàng rào, và ba vòng liên tiếp cho thấy mỗi lần nới đều mở kèm một trục mới.
+/db/migrations/hardening.always.sql          @trustprocure/bao-mat
+# Bản sao TypeScript của hai danh sách trên + toàn bộ khẳng định quyền bảng/cột. Meta-test ở
+# đây bắt buộc hai bản phải khớp, nên sửa một bên mà không sửa bên kia là ĐỎ — nhưng "sửa cả
+# hai bên cho khớp" thì test im lặng, và đúng chỗ đó cần người đọc.
+/db/rls-coverage.int.test.ts                 @trustprocure/bao-mat
+# Mọi migration: CREATE POLICY / GRANT / ENABLE ROW LEVEL SECURITY sống ở đây, và migration
+# đánh số chỉ chạy MỘT LẦN nên một dòng sai đi vào production là trạng thái vĩnh viễn cho tới
+# khi có migration vá.
+/db/migrations/                              @trustprocure/bao-mat
+
+# --- Hàng rào ranh giới module G1 (Task 7) --------------------------------------------------
+# Cấu hình dependency-cruiser là hàng rào duy nhất chặn tầng nghiệp vụ gọi thẳng tầng hạ tầng
+# (và ngược lại). Nó dùng khuôn "mặc định ĐÓNG + cửa tường minh" — cùng lớp bài toán với
+# NGOAI_LE_HINH_DANG: mỗi cửa thêm vào là một quyết định kiến trúc.
+/.dependency-cruiser.cjs                     @trustprocure/bao-mat
+
+# --- Vật liệu mật mã và tenancy -------------------------------------------------------------
+# Bọc/mở khoá, sinh khoá, vòng đời khoá. Một thay đổi im lặng ở đây không làm test nào đỏ mà
+# vẫn làm mọi bản mã trở nên đọc được.
+/packages/crypto-keys/                       @trustprocure/bao-mat
+# withTenant() là ĐIỂM DUY NHẤT gắn tenant context; mọi truy cập dữ liệu có org_id đi qua nó.
+# Nó cũng là đường DUY NHẤT trong repo chạy dưới một search_path mà dự án không kiểm soát.
+/packages/tenancy/                           @trustprocure/bao-mat
+
+# --- Đường ống và móc tự động ---------------------------------------------------------------
+# Workflow CI là thứ quyết định phép kiểm nào THẬT SỰ chạy trước khi merge. Sửa được workflow
+# là vô hiệu hoá được mọi hàng rào phía trên mà không chạm vào chúng.
+/.github/workflows/                          @trustprocure/bao-mat
+# Chính file này cũng phải nằm trong danh sách, nếu không nó tự gỡ được.
+/.github/CODEOWNERS                          @trustprocure/bao-mat
+# Hook chạy trên máy người phát triển với quyền của người đó: git-safety.mjs chặn các lệnh git
+# huỷ dữ liệu, protect-secrets.mjs chặn bí mật lọt vào commit.
+/.claude/hooks/                              @trustprocure/bao-mat
+
+# --- Bộ máy evidence: thứ QUYẾT ĐỊNH KIỂM TOÁN VIÊN ĐƯỢC KỂ CHUYỆN GÌ ------------------------
+# Ba tài sản quyết định "hàng rào có răng không" đã nằm trên. Bốn đường dẫn dưới đây quyết định
+# một chuyện khác và không nhỏ hơn: NGƯỜI NHẬN REPO ĐƯỢC KỂ RẰNG HÀNG RÀO CÓ RĂNG TỚI ĐÂU.
+# Chúng vắng mặt cho tới hết S0, và phép đo cho thấy hậu quả là thật, không lý thuyết:
+#   * `MA_DUOC_PHEP_CHUA_PHU` là một CỬA cùng lớp với `NGOAI_LE_HINH_DANG` ở
+#     hardening.always.sql — lập luận biện minh cho cửa kia áp NGUYÊN XI cho cửa này: mỗi dòng
+#     thêm vào là một QUYẾT ĐỊNH AN NINH mà không máy nào phán xử hộ được. Thêm một mã vào đó
+#     là tuyên bố "bất biến này được phép không có bằng chứng", và lý do đi kèm được IN THẲNG
+#     vào evidence pack như thể nó có thẩm quyền.
+#   * `MOC_GHIM` (hai con số) là thứ DUY NHẤT biến câu "độ phủ chỉ đi lên" thành một phép đo.
+#     Sửa một con số ở đó vô hiệu hoá đúng lớp vừa được dựng để chặn một hồi quy im lặng.
+#   * `PHAM_VI_HEP` / `MA_PHAI_CO_CO_HEP` là thứ DUY NHẤT đứng giữa một ô ✅ và một câu rộng
+#     hơn thứ được đo. Gỡ một dòng làm cờ và mục §4 cùng biến mất, ma trận sinh lại vẫn KHỚP
+#     BYTE, và `git diff --exit-code` vẫn xanh — đo được.
+/tools/inv-matrix/                           @trustprocure/bao-mat
+# Sổ đăng ký bất biến. Xoá một HÀNG ở đây làm một bất biến biến mất khỏi mẫu số mà không lớp
+# nào kêu; §3 của TEST-PLAN cũng là nơi phát biểu tầng nào CHẶN MERGE.
+/docs/TEST-PLAN.md                           @trustprocure/bao-mat
+# Tài liệu trạng thái mang SỔ NỢ ĐƯỢC COMMIT — 12+ khoản đã đo. Xoá một dòng nợ ở đây là cách
+# rẻ nhất để một khoảng trống đã biết biến mất khỏi hồ sơ bàn giao.
+/docs/STATE.md                               @trustprocure/bao-mat
+# Evidence pack. `INV-matrix.md` sinh tự động và có phép kiểm chống-sửa-tay, nhưng `.gitignore`
+# GIỮ file này nên một lần sửa tay kèm một lần sửa bộ sinh sẽ khớp lại — cần mắt người.
+/evidence/                                   @trustprocure/bao-mat

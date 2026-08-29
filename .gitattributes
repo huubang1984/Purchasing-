@@ -1,0 +1,45 @@
+# =============================================================================================
+# [PHẦN 0 — lỗi tiền tồn từ Task 1] BYTE CỦA FILE .sql PHẢI TẤT ĐỊNH TRONG CÂY LÀM VIỆC
+# =============================================================================================
+# `packages/db/src/migrate.ts` băm NỘI DUNG ĐỌC TỪ ĐĨA của mỗi migration và so với checksum đã
+# ghi trong `schema_migrations`. Với `core.autocrlf=true` (mặc định của Git for Windows) và
+# KHÔNG có file này, cùng một commit cho ra byte khác nhau giữa checkout Windows và Linux —
+# đo tại HEAD 8927cc4:
+#
+#   $ git ls-files --eol db/migrations/
+#   i/lf  w/crlf  001_roles_and_functions.sql       <- blob LF, cây làm việc CRLF
+#   i/lf  w/crlf  002_organizations_and_users.sql   <- blob LF, cây làm việc CRLF
+#   i/lf  w/lf    003_audit_events.sql
+#   i/lf  w/lf    004_audit_chain_functions.sql
+#
+# Dòng dưới đây làm cây làm việc luôn là LF, khớp blob.
+#
+# NÓ KHÔNG PHẢI BẢN VÁ, VÀ MỘT MÌNH NÓ KHÔNG ĐỦ — hai lý do đo được:
+#   (1) nó chỉ có hiệu lực từ lần CHECKOUT kế tiếp: sau khi thêm file này, `git status
+#       --porcelain` RỖNG mà 001/002 trong worktree vẫn còn nguyên 99/178 ký tự CR trên đĩa;
+#   (2) chính lần renormalize ấy ĐỔI BYTE của file, tức nó LÀ một sự kiện checksum: một môi
+#       trường đã ghi checksum CRLF sẽ gãy ở lần checkout đầu tiên sau khi file này có hiệu lực.
+# Bản vá thật nằm ở `migrationChecksum()` (chuẩn hoá xuống dòng TRƯỚC khi băm); file này là lớp
+# thứ hai, đóng đúng một thứ: byte của cây làm việc trở nên TẤT ĐỊNH giữa các nền tảng.
+#
+# [vòng fix 1 — I4] NÓ KHÔNG ĐÓNG DƯ LƯỢNG "CR TRONG MỘT CHUỖI KÝ TỰ SQL", và bản trước nói
+# ngược lại ("làm những byte đó biểu diễn được ổn định"). Đo trong một kho Git sạch chỉ có đúng
+# dòng dưới đây, trên một file chứa cả `a\rb` lẫn `c\r\nd`:
+#   ca `\r\n`    : Git XOÁ CR — blob và mọi checkout mới thành `c\nd`. Không "ổn định"; ngữ
+#                  nghĩa SQL bị đổi ÂM THẦM.
+#   ca CR ĐƠN LẺ : Git GIỮ NGUYÊN BYTE qua cả blob lẫn clone mới (`ls-files --eol`: i/-text
+#                  w/-text) — mà `migrationChecksum()` lại băm `a\rb` và `a\nb` ra CÙNG giá trị.
+# Lớp thật sự đóng dư lượng đó là một khẳng định TĨNH ở packages/db/src/migrate.test.ts: không
+# file db/migrations/*.sql nào được chứa byte CR. Ba lớp, mỗi lớp đóng một thứ khác nhau.
+#
+# CỐ Ý KHÔNG dùng `* text=auto`: bán kính nổ toàn repo cho một lợi ích mà chỉ .sql cần (không
+# file nào khác được băm và so lại). Một quy tắc rộng hơn là một lần renormalize rộng hơn.
+*.sql text eol=lf
+
+# [Task 11] `evidence/INV-matrix.md` la ARTEFACT DUOC SINH LAI ROI SO BYTE: cong
+# `pnpm evidence:check` chay bo sinh roi `git diff --exit-code` tren chinh file nay. Neu byte
+# xuong dong cua cay lam viec khac blob (core.autocrlf=true la mac dinh cua Git for Windows),
+# phep so do do vi ly do KHONG lien quan gi den do phu bat bien — mot cong bao dong gia.
+# GHIM HEP DUNG MOT FILE, khong phai `*.md`: ban kinh no cua mot quy tac rong hon la mot lan
+# renormalize rong hon, va khong file .md nao khac duoc so byte.
+evidence/INV-matrix.md text eol=lf

@@ -1,0 +1,11 @@
+{
+  "name": "@trustprocure/crypto-keys",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./unwrap": "./src/unwrap.ts"
+  }
+}

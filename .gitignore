@@ -45,3 +45,9 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Evidence pack — bao cao tho va xuat xu moi luot chay khong vao git; MA TRAN thi CO.
+# Liet ke TUNG FILE chu khong dung `evidence/*` + phu dinh: mot file bang chung MOI them vao
+# thu muc nay phai duoc quyet dinh mot cach co y thuc, khong duoc bien mat trong im lang.
+evidence/vitest-report.json
+evidence/run-metadata.md

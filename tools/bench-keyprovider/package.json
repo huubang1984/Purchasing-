@@ -1,0 +1,7 @@
+{
+  "name": "@trustprocure/bench-keyprovider",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@trustprocure/crypto-keys": "workspace:*" }
+}

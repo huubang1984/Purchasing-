@@ -194,3 +194,94 @@ thứ mà mục 10 coi là ràng buộc sản phẩm then chốt.
 bằng tiếng Việt kèm nút mở bằng trình duyệt ngoài; đo tỷ lệ gặp phải trong pilot. Phương
 án dự phòng mã hóa phía máy chủ **chỉ** được cân nhắc sau khi có số liệu thật, vì nó làm
 suy yếu chính bất biến A2.
+
+---
+
+## ADR-008 — Một lần thử MFA thất bại KHÔNG ghi vào sổ kiểm toán chuỗi-hash
+
+**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, **có nợ bắt buộc trả trước khi có
+endpoint đăng nhập**
+
+**Bối cảnh.** `verifyTotpAttempt` (`packages/identity/src/mfa-credentials.ts`) phán xét một
+mã TOTP trên một đường đi mà **kẻ tấn công chưa đăng nhập vẫn chạm tới được**. Task 8 lập
+tiền lệ "mỗi lần từ chối quyền để lại một bản ghi kiểm toán" (bất biến D5) cho
+`requirePermission`. Câu hỏi: có áp tiền lệ đó cho một lần thử MFA thất bại không?
+
+Chi phí đã được Task 8 **đo** trên đúng đường này: `appendAuditEvent` đi qua
+`noi_chuoi_kiem_toan()`, thứ mở đầu bằng `pg_advisory_xact_lock` **theo tổ chức** (ĐO-5a/5b:
+một phiên khác cùng tổ chức kẹt tới `lock_timeout`). Ghi sổ ở đây nghĩa là mỗi lần đoán sai
+của mỗi người lạ đều nối tiếp hoá sổ kiểm toán của **cả tổ chức**.
+
+**Quyết định.** Không ghi sổ kiểm toán trên đường thất bại MFA. Có test khoá quyết định lại
+(`[T9-J]` trong `packages/identity/src/mfa.int.test.ts`), nên ai đổi ý phải sửa test và trả
+lời câu hỏi về chi phí.
+
+**Lựa chọn thật KHÔNG phải "audit hay DoS" — nó là "audit QUA CHUỖI HASH hay DoS".** Bản
+đầu của lập luận gộp hai thứ đó làm một, và đó là một luồng phân giả. Ít nhất ba đường
+**không** lấy khoá chuỗi kiểm toán, và cả ba đều bị bỏ:
+
+- **(i) một bảng riêng ngoài chuỗi kiểm toán** (`mfa_attempt_log`), RLS cùng khuôn,
+  `app_api` chỉ `INSERT`. Task 9 **đã có sẵn mọi khuôn** để làm và đã không làm.
+- **(ii) chỉ ghi CHUYỂN TRẠNG THÁI** (`justLocked`), tần suất chặn trên
+  `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ — lập luận DoS **không áp dụng** cho một sự kiện có
+  trần tần suất. Trường `justLocked` **đã tồn tại** trong `MfaAttemptResult` nhưng **không
+  có người gọi nào**.
+- **(iii) ghi theo lô hoặc ra ngoài bảng.**
+
+**Hệ quả — dấu vết còn lại KHÔNG trung thực về khối lượng.** `failed_attempts` là một dạng
+dấu vết, nhưng ba tính chất làm nó không thay được sổ, cả ba đo được:
+
+1. nó là **trạng thái**, không phải nhật ký — một lần thành công đặt nó về 0, nên kẻ đoán
+   trúng ở lần cuối **tự xoá dấu vết của chính chiến dịch**;
+2. `app_api` **xoá được trực tiếp** (`GRANT UPDATE (failed_attempts, ...)` ở
+   `006_sessions_and_mfa.sql`; xem khối MỤC 8/M-1 ở đó);
+3. nó không mang chiều thời gian, IP, hay tương quan — 500 tài khoản bị rải để lại 500 con
+   số ≤ 5, không phân biệt được với 500 người gõ nhầm.
+
+**Nợ phải trả TRƯỚC KHI có endpoint đăng nhập.** Chọn (i) hoặc (ii) và cài đặt. Trạng thái
+hôm nay — "không ghi gì, và có một trường `justLocked` không ai gọi" — là một quyết định
+đúng về chuỗi hash cộng một khoảng trống chưa lấp, không phải một thiết kế đã xong.
+
+**Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
+chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`
+một dòng "passed" dưới hàng D5 mà tên của nó đọc như phủ định chính bất biến ấy.
+
+---
+
+## ADR-009 — Nhà cung cấp KMS/Vault: **CHƯA CHỐT**
+
+**Ngày:** 2026-08-29 · **Trạng thái:** **Đang mở** — chặn S1.6
+
+**Vì sao ADR này tồn tại, và vì sao nó ra đời muộn.** Tới hết S0, ba tài liệu (`docs/STATE.md`
+hai chỗ, bản kế hoạch S0 một chỗ) đều trích **ADR-004** như *"quyết định KMS để mở"*. Trích sai:
+ADR-004 là **Sổ kiểm toán chuỗi hash, chỉ ghi thêm** và đã **Đã chấp nhận**. Quyết định về khoá
+thuộc **ADR-002**, cũng **Đã chấp nhận**, và ADR-002 **không** để mở nhà cung cấp — nó chốt *tầng
+1+2* và nói "KMS/Vault" như một loại hạ tầng, không như một lựa chọn còn treo.
+
+Hệ quả là một trạng thái kỳ lạ đo được: **8/8 ADR đều "Đã chấp nhận" — không một ADR nào ở trạng
+thái mở — trong khi một quyết định đang thật sự chặn S1.6.** Cái treo là có thật; cái thiếu là
+một chỗ để nó treo. ADR này là chỗ đó.
+
+**Bối cảnh.** ADR-002 đòi private key mỗi RFQ được bọc bằng data key của tổ chức trong KMS/Vault.
+S0 giao `KeyProvider` + adapter `local-dev` (mã hoá nội bộ, không qua mạng). S1.6 cần adapter thật.
+
+**Phương án đã cân nhắc.** AWS KMS · Azure Key Vault · HashiCorp Vault.
+
+**Chưa quyết định.** Ba trục còn để mở, và trục thứ ba là trục ít được nói tới nhất:
+
+1. **Nhà cung cấp** — kéo theo mô hình IAM, và ADR-006 (tách quyền giải mã cho `unseal-worker`)
+   chỉ cưỡng chế được bằng IAM của hạ tầng đích. Hai quyết định treo này **không độc lập**.
+2. **Chủ quyền dữ liệu** — khách hàng FDI có thể đòi vùng lưu trữ khoá cụ thể.
+3. **Hiệu năng.** Số đo `local-dev` hôm nay (10.000 lần bọc ≈ 447 ms) là **mốc của mã hoá nội
+   bộ**. Adapter thật chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng, và kịch bản mở thầu
+   RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá **một lượt**. Phải đo lại **trước** khi bắt đầu
+   S1.6, không phải sau.
+
+**Hệ quả của việc để mở.** `KeyProvider` giữ một mặt tiền hẹp và mọi lời gọi đi qua nó, nên việc
+chốt muộn **không** đòi viết lại — đó là ý đồ của Task 7. Nhưng nó vẫn chặn S1.6, và chừng nào
+ADR này còn "Đang mở" thì mọi con số hiệu năng của đường khoá trong hồ sơ đều là số của
+`local-dev`, không phải số của sản phẩm.
+
+**Rủi ro.** Chốt muộn dưới áp lực tiến độ dễ dẫn tới chọn theo thứ đang có sẵn thay vì theo yêu
+cầu chủ quyền dữ liệu của khách hàng đầu tiên — và đổi nhà cung cấp KMS sau khi đã có khoá thật
+của khách hàng là một cuộc di trú, không phải một lần sửa cấu hình.

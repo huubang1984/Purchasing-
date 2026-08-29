@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  t0:
+    name: T0 — cổng tĩnh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Ranh gioi kien truc
+        run: pnpm depcruise
+      - name: Quet bi mat
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Audit phu thuoc (cong chan)
+        # Chi xet prod dependencies. Pham vi that, DO MOT LAN bang `pnpm list -r --prod --depth 0`:
+        # `pg@8.23.0` va `pg-connection-string@2.14.0`, cong cac link workspace. Tuc dung MOT thu
+        # vien ngoai, va no la thu vien cham toi CSDL - cong nay co rang.
+        #
+        # *** HAI CAU DUOI DAY SAI. LAN CHAY CI DAU TIEN DA CHUNG MINH. GIU NGUYEN VAN DE DOI CHIEU. ***
+        #   >>> "Hien S0 chua co prod dependency nao nen buoc nay luon sach; se co rang that tu
+        #    >>> Task 3 tro di khi `pg` duoc them vao."
+        #
+        # Rang den SOM HON du doan va tu MOT NGUON KHAC HAN. Lan chay dau tien (run 33218397033)
+        # do buoc nay voi HAI advisory HIGH tren `undici@5.29.0`, qua duong:
+        #   packages/test-support > @testcontainers/postgresql@10.28.0 > testcontainers@10.28.0 > undici
+        # Nguyen nhan goc KHONG phai advisory ma la mot KHIEM KHUYET DONG GOI:
+        # `packages/test-support` khai ha tang KIEM THU trong `dependencies` thay vi
+        # `devDependencies`, keo ca cay testcontainers vao pham vi SAN XUAT. Goi do khong duoc
+        # bat ky package.json nao khai lam phu thuoc (chi `*.int.test.ts` import qua alias cua
+        # vitest), nen ca ba muc cua no da duoc chuyen sang `devDependencies`.
+        #
+        # Cong nay da chay DUNG nhu thiet ke: no bat mot thu that. Chi cau chu thich la sai.
+        run: pnpm audit --prod --audit-level high
+      - name: Audit phu thuoc (bao cao, khong chan)
+        # Hai advisory chan o day (vitest critical, vite high) deu thuoc devDependency
+        # va chi khai thac duoc qua mot may chu ma du an nay khong bao gio khoi dong
+        # (`vitest --ui`, may chu dev cua vite). Buoc nay khong chan CI, chi de log
+        # lai advisory chu khong giau di. Neu ve sau du an that su chay mot trong hai
+        # may chu do thi phai nang vitest len >=3.2.6 va gop lai thanh mot cong chan
+        # duy nhat.
+        run: pnpm audit --audit-level high
+        continue-on-error: true
+
+  t1-t2:
+    name: T1+T2 — unit va contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  t3:
+    name: T3 — integration voi Postgres that
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:int
+
+  evidence:
+    name: Evidence pack — ma tran bat bien
+    runs-on: ubuntu-latest
+    needs: [t1-t2, t3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # KHONG `continue-on-error`, VA DAY LA MOT QUYET DINH CO PHEP DO.
+      #
+      # Ke hoach goc dat `continue-on-error: true` cho job nay kem ghi chu "go o hang muc S1.8",
+      # voi ly do chinh dang: ma tran con do toi het S1 vi nhom A/B/C/E phu thuoc Sealed Bid Core.
+      # Nhung `continue-on-error` la fail-open VA IM LANG. Tra loi QT1 cho no — ai nhin thay no
+      # do, bang cach nao, trong bao lau? — cho ra: KHONG AI, KHONG BANG CACH NAO, KHONG BAO GIO.
+      # Mot job xanh-nhung-thuc-ra-do khong sinh chu thich nao tren PR, va khong luot review nao
+      # bat buoc phai mo log cua mot job da xanh.
+      #
+      # Thay vao do, bo sinh GHIM DANH SACH 23 ma duoc phep chua phu o cuoi S0
+      # (`MA_DUOC_PHEP_CHUA_PHU` trong tools/inv-matrix/src/danh-gia.ts), moi ma mot ly do doc
+      # duoc. Job nay XANH THAT hom nay, va DO THAT khi:
+      #   - mot ma NGOAI danh sach chua phu (them bat bien vao TEST-PLAN ma quen lop cuong che);
+      #   - mot ma TRONG danh sach da duoc phu (danh sach thiu => phai go, de ma do khong bao gio
+      #     tut lai trong im lang);
+      #   - mot test mang nhan `[INV-XX]` dang do hoac bi bo qua;
+      #   - mot nhan `[INV-...]` tro toi mot ma KHONG co trong so dang ky;
+      #   - so hang doc duoc tu TEST-PLAN lech voi mot phep dem doc lap.
+      # Tuc: GHIM CAU HINH thay vi NOI BAO DAM (QT2). Khong con han chot nao phai nho o S1.8;
+      # danh sach tu no co lai theo tung bat bien duoc giao.
+      - name: Sinh evidence pack (chay ca hai tang test)
+        run: pnpm evidence
+
+      # Ma tran la ARTEFACT DUOC COMMIT, va khong lop nao khac canh no khop bo sinh. Buoc nay
+      # dong dung lo do: sinh lai roi so BYTE voi ban trong git. Mot lan sua tay
+      # `evidence/INV-matrix.md` — vi du go mot hang ⏳ cho bang bao cao dep hon — chet o day.
+      - name: Ma tran da commit phai khop bo sinh
+        run: git diff --exit-code -- evidence/INV-matrix.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inv-matrix
+          path: |
+            evidence/INV-matrix.md
+            evidence/run-metadata.md
