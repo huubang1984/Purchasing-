@@ -686,6 +686,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
+      // [S1.1] Hai bảng mới của 008 cũng chỉ hiện SELECT ở MỨC BẢNG — INSERT/UPDATE của chúng
+      // đều là quyền CỘT. Và app_unseal KHÔNG có dòng nào ở đây, cũng không có dòng nào ở test
+      // [M5] bên dưới: đó là ADR-013 mục 5 (hai bảng này chứa DỮ LIỆU CÁ NHÂN của người liên hệ,
+      // và runtime mở thầu không có việc gì với sổ nhà cung cấp). Khác với `sessions`/`users`,
+      // ở đây "không có dòng nào" là KẾT LUẬN ĐẦY ĐỦ chứ không phải hệ quả của việc view này mù
+      // với quyền cột.
+      { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
+      { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
@@ -808,6 +816,36 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "sessions", cot: "token_hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_id", quyen: "INSERT" },
+      // [S1.1] `supplier_contacts` (008). Ba vắng mặt, mỗi cái đóng một đường đi:
+      //   `id`/`created_at` KHÔNG có gì  -> khuôn `users_pkey` ở 002 và `occurred_at` ở 003.
+      //   `org_id`          chỉ INSERT   -> không đường nào chuyển một người liên hệ sang tổ
+      //                                     chức khác.
+      //   `supplier_id`     chỉ INSERT   -> chuyển một người liên hệ sang nhà cung cấp khác
+      //                                     không phải sửa hồ sơ; đó là xoá một người và tạo
+      //                                     một người khác.
+      { grantee: "app_api", bang: "supplier_contacts", cot: "email", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "email", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "full_name", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "full_name", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
+      // [S1.1] `suppliers` (008). `tax_code` CÓ cả INSERT lẫn UPDATE, và điều đó AN TOÀN đúng
+      // vì ràng buộc duy nhất mà nó tham gia đã dẫn đầu bằng `org_id` — nếu ai đó đổi ràng buộc
+      // ấy thành `UNIQUE (tax_code)` toàn cục thì chính hai dòng này biến nó thành một oracle
+      // xuyên tổ chức. Lớp canh cho mối nối đó: db/unique-oracle.int.test.ts [INV-H14].
+      { grantee: "app_api", bang: "suppliers", cot: "legal_name", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "legal_name", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "suppliers", cot: "level", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "level", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "suppliers", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "status", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "suppliers", cot: "tax_code", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "tax_code", quyen: "UPDATE" },
       // [Task 8] `user_roles` cấp INSERT theo CỘT, và `granted_at` vắng mặt là load-bearing:
       // dấu thời gian do CSDL đóng, bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được
       // theo ý mình (cùng khuôn `occurred_at` ở 003 và `created_at` ở 002). KHÔNG có UPDATE trên

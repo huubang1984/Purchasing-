@@ -67,6 +67,22 @@ const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 // (tests/architecture/barrel-exports.test.ts, danh sach trang [INV-D5]); hai lop nay bo tuc
 // cho nhau: mot lop canh SYMBOL di qua cua, lop kia canh viec KHONG AI DI VONG QUA CUA.
 // ==========================================================================================
+// ==========================================================================================
+// S1.1 - HO "g5-", CUNG KHUON "MAC DINH DONG", AP CHO packages/supplier/src/
+//
+// LAN THU TU cung mot khuon, va lan nay no duoc dung TRUOC khi goi co file thu hai:
+//   crypto-keys -> g1 (fix round 4) - identity -> g2/H11 (Task 9) - outbox -> g4/H13 (Task 10)
+//   - supplier -> DAY.
+//
+// Khac biet duy nhat, va no dang ghi ra: ba lan truoc deu la VA XONG ROI SUA - lo duoc do bang
+// mot probe import tuong doi xuyen goi di lot ca ba cong (depcruise, tsc, eslint), roi quy tac
+// moi duoc them vao. Lan nay quy tac ra doi CUNG LUC voi goi, nen khoan no 17 ("bon goi con lai
+// khong co quy tac bien gioi") khong lon them. No KHONG duoc dong boi dong nay: audit, db,
+// tenancy, test-support van chua co gi.
+// ==========================================================================================
+const SUPPLIER_SRC_PREFIX = ciPrefix("packages/supplier/src/");
+const SUPPLIER_INDEX_TS = ciFile("packages/supplier/src/index.ts");
+
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
@@ -148,6 +164,20 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g5-supplier-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/supplier/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Ly do khong phai kien truc chung chung: mot import TUONG DOI " +
+        "'../../supplier/src/suppliers.js' tu mot goi khac di lot CA BA cong (depcruise, tsc, " +
+        "eslint) - do duoc ba lan o crypto-keys, identity va outbox. Bat bien co ten dang duoc " +
+        "giu o day: moi ham cua goi nay goi assertTenantBound TRUOC MOI THU, va mot module moi " +
+        "trong thu muc nay khong doi ai phai nho lam gi ca - mac dinh no khong voi toi duoc tu " +
+        "ben ngoai. Danh sach trang barrel khoa DANH SACH export o CUA; no khong dung BUC TUONG.",
+      severity: "error",
+      from: { pathNot: SUPPLIER_SRC_PREFIX },
+      to: { path: SUPPLIER_SRC_PREFIX, pathNot: [SUPPLIER_INDEX_TS] },
     },
     {
       name: "g2-identity-chi-index-la-cua-cong-khai",

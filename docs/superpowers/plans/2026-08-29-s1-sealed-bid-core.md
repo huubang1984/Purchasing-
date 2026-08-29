@@ -180,10 +180,22 @@ Quỹ đạo dự kiến nếu S1 chạy đúng kế hoạch:
 | Mốc | `soPhuToiThieu` | `coDanhSachToiDa` | Tổng |
 |---|---|---|---|
 | Hôm nay (`30d1972`) | 24 | 23 | 24/47 |
+| **Sau S1.1 (thực đo)** | **26** | **23** | **26/49** |
 | Sau S1.3 | 30 | 17 | 30/47 |
 | Sau S1.5 | 37 | 10 | 37/47 |
 | Sau S1.7 | 42 | 5 | 42/47 |
 | **Mục tiêu cuối S1.8** | **45–47** | **0–2** | xem §5 |
+
+> **QUỸ ĐẠO TRÊN ĐÃ SAI NGAY Ở MỐC ĐẦU TIÊN, và sai theo hướng KHÔNG ai đoán trước.** Bảng này
+> ngầm giả định mẫu số đứng yên ở 47 và mọi mã được lấp đều là mã NGHIỆP VỤ. Thực tế sau S1.1:
+> tử số 24 → **26**, mẫu số 47 → **49**, và **không một mã nghiệp vụ nào được lấp** — cả hai mã
+> mới (**H14** bộ dò oracle ràng buộc duy nhất, **H15** biên giới module của `packages/supplier`)
+> đều thuộc nhóm HÀNG RÀO, tức là lớp canh của chính dự án.
+>
+> Đây là cùng khuôn đã làm con số 44 của kế hoạch S0 thiu (H11/H12 thêm ở Task 9, H13 ở Task 10):
+> **một hạng mục dựng thêm hàng rào thì nó cũng dựng thêm mẫu số.** Cách đọc đúng của bảng này
+> là "bao nhiêu mã NGHIỆP VỤ được lấp", và theo cách đọc đó S1.1 đóng góp **0** — đúng như §1 ánh
+> xạ: **E4** cần chủ ngữ "mã RFQ" của S1.2, **A5** cần cả S1.9.
 
 **Không đặt mục tiêu 47/47 một cách vô điều kiện.** Ba mã có rủi ro trôi thật, có lý do đo
 được, ghi ở §5. Một kế hoạch hứa 47/47 rồi cuối kỳ hạ mốc xuống là đúng thứ mà `MOC_GHIM` được

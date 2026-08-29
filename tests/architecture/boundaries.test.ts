@@ -1010,3 +1010,82 @@ describe("ranh giới kiến trúc", () => {
     expect(depcruiseTheoScript().status).toBe(0);
   }, 120000);
 });
+
+// ==============================================================================================
+// [INV-H15] BIÊN GIỚI MODULE CỦA packages/supplier — HỌ QUY TẮC `g5-`
+//
+// LẦN THỨ TƯ cùng một khuôn, và khác biệt đáng ghi: ba lần trước đều là VÁ XONG RỒI SỬA — lỗ
+// được đo bằng một probe import tương đối xuyên gói đi lọt CẢ BA cổng (depcruise, tsc, eslint),
+// rồi quy tắc mới mới được thêm. Lần này quy tắc ra đời CÙNG LÚC với gói.
+//
+// Hệ quả phải nói đúng mức: khoản nợ 17 ("bốn gói còn lại không có quy tắc biên giới") KHÔNG
+// được đóng — `audit`, `db`, `tenancy`, `test-support` vẫn chưa có gì. Nó chỉ không lớn thêm.
+//
+// CỐ Ý KHÔNG có bản sao của test "[INV-H11] mọi module được miễn trừ vai trò `from` ... đều đồng
+// thời là đích hạn chế" cho họ `g5-`: quy tắc này có ĐÚNG MỘT miễn trừ `from.pathNot`, và nó
+// chính là thư mục đang được bảo vệ. Một test như vậy hôm nay sẽ XANH VÔ ĐIỀU KIỆN — tức là
+// trang trí. Ngày họ `g5-` có miễn trừ thứ hai, test đó phải được viết CÙNG LÚC.
+// ==============================================================================================
+describe("biên giới module của packages/supplier", () => {
+  it("[INV-H15] chặn import TƯƠNG ĐỐI xuyên gói vào packages/supplier/src", () => {
+    const probe = "packages/audit/src/zzprobe-supplier-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { createSupplier } from "../../supplier/src/suppliers.js";',
+        "export { createSupplier };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/supplier"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-supplier-tuong-doi.ts");
+      expect(output).toContain("g5-supplier-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H15] module MỚI thêm vào packages/supplier/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/supplier/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-supplier-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-supplier-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/supplier/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-supplier-moi", "packages/supplier"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g5-supplier-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-supplier-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H15] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-supplier-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-supplier-cua/src/dung.ts",
+      [
+        'import { createSupplier } from "../../../packages/supplier/src/index.js";',
+        "export { createSupplier };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-supplier-cua", "packages/supplier"]);
+      expect(output).not.toContain("g5-supplier-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-supplier-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});

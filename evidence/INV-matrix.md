@@ -15,9 +15,9 @@ chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này ch�
 
 - **34 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
-- **13 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
+- **15 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 47 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 49 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -28,8 +28,8 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
 | Nghiệp vụ (A–G) | **11** | 34 |
-| Hàng rào (H) | **13** | 13 |
-| **Cộng** | **24** | **47** |
+| Hàng rào (H) | **15** | 15 |
+| **Cộng** | **26** | **49** |
 
 **23 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -68,7 +68,7 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 37 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 39 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
 | F3 | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 | 1 | ✅ ĐẠT |  |
 | G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 18 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -88,6 +88,8 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | H11 | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | T0 | 5 | ✅ ĐẠT |  |
 | H12 | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | T0 | 4 | ✅ ĐẠT |  |
 | H13 | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | T0 | 4 | ✅ ĐẠT |  |
+| H14 | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | T3 | 3 | ✅ ĐẠT |  |
+| H15 | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | T0 | 4 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -108,7 +110,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 24` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 26` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 23` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 

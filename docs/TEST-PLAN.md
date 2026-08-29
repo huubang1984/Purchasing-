@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 13 bất biến hàng rào (nhóm H, §5) là 47 mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ **15** bất biến hàng rào (nhóm H, §5) là ~~47~~ **49** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
@@ -289,6 +289,8 @@ còn răng hay không.
 | **H11** | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | **T0** |
 | **H12** | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | **T0** |
 | **H13** | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | **T0** |
+| **H14** | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | **T3** |
+| **H15** | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | **T0** |
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
@@ -297,7 +299,22 @@ identity → `g2-`/H11, nay outbox → `g4-`). Phép đo, tái lập được �
 CẢ BA cổng — `depcruise` 0 vi phạm, `tsc` exit 0, `eslint` exit 0 — trong khi bản bare
 specifier bị chặn ở cả hai lớp. Danh sách trắng barrel khoá DANH SÁCH export Ở CỬA; nó không
 dựng BỨC TƯỜNG, nên nó không thay thế được hàng rào này.
-Hai con số ở §2 (12 → 13 và 46 → 47) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
+**H14 và H15 được bổ sung ngày 2026-08-29** (S1.1), và hai lý do khác hẳn nhau:
+
+**H14** ra đời từ ADR-013 và từ hai phép đo ĐÃ CÓ SẴN trong kho mã — `organizations.slug` và
+`users_pkey` ở 002 — chứ không từ một lỗ mới. Cái mới là NHẬN RA rằng chúng cùng MỘT lớp, và
+rằng S1 thêm 13 bảng là 13 lần rút thăm lại. Bộ dò tự chứng minh có răng bằng hai bảng dò trong
+cùng một lượt chạy (chiều dương và chiều âm), và nó ĐÃ tìm ra một khiếm khuyết của chính nó ở
+lượt đột biến đầu tiên: `array_agg` trên `pg_attribute.attname` trả kiểu `name[]` mà node-pg
+không phân tích được, nên bộ dò NÉM thay vì BÁO. Xem khối chú thích ở đầu `db/unique-oracle.int.test.ts`.
+
+**H15** là LẦN THỨ TƯ cùng một khuôn biên giới module (crypto-keys → `g1-`, identity → `g2-`/H11,
+outbox → `g4-`/H13, nay supplier → `g5-`), và khác biệt đáng ghi: ba lần trước đều là VÁ XONG RỒI
+SỬA — quy tắc được thêm SAU khi một probe import tương đối xuyên gói đã đo được là đi lọt cả ba
+cổng. Lần này quy tắc ra đời CÙNG LÚC với gói. Khoản nợ 17 KHÔNG được đóng: `audit`, `db`,
+`tenancy`, `test-support` vẫn chưa có gì — nó chỉ không lớn thêm.
+
+Hai con số ở §2 (12 → 13 và 46 → 47, nay 13 → 15 và 47 → 49) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
 ("34 vs 46", nay "34 vs 47") vẫn là việc của Task 11 và KHÔNG được làm ở đây — sửa cho hai con
 số ĐÚNG với thực tế là một việc khác hẳn với việc chọn cách đếm.
 

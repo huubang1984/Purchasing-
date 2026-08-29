@@ -307,6 +307,11 @@ describe("hình dạng file migration", () => {
     // khác (tức một dòng đầu tiên trong cửa ngoại lệ), hoặc một role có BYPASSRLS. 007 không
     // làm cái nào — nó chạy runner TRONG ngữ cảnh tenant. Xem "LỆCH KHỎI BRIEF (4/9)" ở
     // db/migrations/007_outbox.sql.
+    // [S1.1] Hai bảng mới của 008 — `suppliers` và `supplier_contacts` — đều có org_id, nên cả
+    // hai chịu ĐÚNG cùng bộ ràng buộc và đi qua hình dạng CHUẨN của mục (B) trong
+    // hardening.always.sql. Hệ quả cố ý, giữ nguyên qua Task 8/9/10 và nay qua S1.1:
+    // `NGOAI_LE_HINH_DANG` VẪN RỖNG. Policy của chúng là `(org_id = app_current_org_id())`
+    // nguyên văn, đúng dòng `co_org_id` của danh sách trắng — không một bậc tự do nào được mở.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
@@ -314,6 +319,8 @@ describe("hình dạng file migration", () => {
       "organizations",
       "outbox_jobs",
       "sessions",
+      "supplier_contacts",
+      "suppliers",
       "user_roles",
       "users",
     ]);

@@ -146,7 +146,14 @@ export interface MocGhim {
   readonly coDanhSachToiDa: number;
 }
 
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 24, coDanhSachToiDa: 23 };
+// [S1.1] 24 -> 26. Hai mã MỚI, cả hai thuộc nhóm HÀNG RÀO và cả hai ĐÃ PHỦ ngay khi vào sổ:
+//   H14 — bộ dò oracle xuyên tổ chức qua ràng buộc duy nhất (db/unique-oracle.int.test.ts);
+//   H15 — biên giới module của packages/supplier (họ quy tắc `g5-` + danh sách trắng barrel).
+// Mẫu số đi 47 -> 49 cùng lúc. `coDanhSachToiDa` KHÔNG đổi và đó là điểm mấu chốt: danh sách
+// "được phép chưa phủ" không nở ra một dòng nào, nên hai mã mới không mua được chỗ trốn nào cho
+// 23 mã nghiệp vụ đang trống. S1.1 KHÔNG phủ thêm một mã nghiệp vụ nào — E4 và A5 vẫn ⏳, đúng
+// như kế hoạch S1 §1 ánh xạ (A5 cần cả S1.9; E4 cần chủ ngữ "mã RFQ" của S1.2).
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 26, coDanhSachToiDa: 23 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

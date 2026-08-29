@@ -324,3 +324,60 @@ describe("bề mặt export công khai của outbox", () => {
     expect(Object.keys(noiDung.exports ?? {})).toEqual(["."]);
   });
 });
+
+// ============================================================================================
+// [INV-H15] CÙNG CÔNG CỤ, MẶT TIỀN THỨ BA: @trustprocure/supplier
+//
+// Khối "SỔ NỢ" ở trên viết: hôm nay CHỈ `crypto-keys` và `identity` có danh sách trắng barrel.
+// Câu đó nay HẸP HƠN thực tế — `supplier` là gói thứ ba, và nó có danh sách trắng NGAY TỪ KHI
+// RA ĐỜI thay vì mua bằng một vòng fix sau khi lỗ đã đo được. Bốn gói còn lại (`audit`,
+// `tenancy`, `db`, `test-support`) VẪN không có gì; khoản nợ 9 không được đóng bởi khối này.
+//
+// Bất biến đang được canh ở đây KHÔNG phải "danh sách export cho gọn". Mọi hàm của gói supplier
+// gọi `assertTenantBound` TRƯỚC MỌI THỨ; một symbol mọc ra ở cửa này mà bỏ bước đó sẽ là một
+// đường đọc/ghi sổ nhà cung cấp KHÔNG có phép kiểm "phiên đang gắn đúng tổ chức chưa" — và hậu
+// quả không phải một lỗi, mà là một MẢNG RỖNG đọc như "không có gì".
+//
+// GIỚI HẠN, cùng giới hạn đã ghi cho identity: lớp này khoá DANH SÁCH, không khoá HÌNH DẠNG.
+// Một hàm mới được thêm vào danh sách trắng kèm một dòng lý do vẫn đi lọt; lớp cuối là người đọc.
+// ============================================================================================
+const DANH_SACH_TRANG_SUPPLIER = [
+  "SUPPLIER_LEVELS",
+  "SUPPLIER_STATUSES",
+  "SupplierError",
+  "TAX_CODE_PATTERN",
+  "addSupplierContact",
+  "createSupplier",
+  "findSupplierByTaxCode",
+  "getSupplier",
+  "listSupplierContacts",
+  "listSuppliers",
+];
+
+const SUPPLIER_PACKAGE_JSON_URL = new URL("../../packages/supplier/package.json", import.meta.url);
+
+describe("bề mặt export công khai của supplier", () => {
+  it("[INV-H15] cửa @trustprocure/supplier chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(SUPPLIER_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/supplier/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, SUPPLIER_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_SUPPLIER.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/supplier. Mọi hàm ở cửa này phải gọi " +
+        "assertTenantBound trước mọi thứ — xem khối chú thích ở packages/supplier/src/index.ts.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_SUPPLIER.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/supplier.",
+    ).toEqual([]);
+  });
+});

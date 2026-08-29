@@ -30,20 +30,36 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- Bảy migration `001`–`007` + `hardening.always.sql`: role, tổ chức, người dùng, sổ kiểm toán
-  chuỗi hash, vai trò/quyền, phiên + MFA, outbox.
+- ~~Bảy~~ **Tám** migration `001`–~~`007`~~**`008`** + `hardening.always.sql`: role, tổ chức, người dùng, sổ kiểm toán
+  chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.1 — sổ nhà cung cấp Level 0/1 (2026-08-29):** migration `008` (`suppliers`,
+  `supplier_contacts`), gói `packages/supplier`, và **hai hàng rào mới vào sổ đăng ký** —
+  **H14** (bộ dò oracle xuyên tổ chức qua ràng buộc duy nhất) và **H15** (biên giới module của
+  `packages/supplier`, họ quy tắc `g5-` cộng danh sách trắng barrel).
+
 Chưa xong:
 
-- Toàn bộ S1 (Sealed Bid Core): RFQ, lời mời, phong bì niêm phong, luồng mở thầu.
+- ~~Toàn bộ S1 (Sealed Bid Core)~~ **S1.2–S1.9**: RFQ, lời mời, phong bì niêm phong, luồng mở thầu.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
 ## Công việc đang làm
 
-Không có. Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
+**S1 — đang ở hạng mục S1.2.** S1.1 đã commit; S1.2 (RFQ + máy trạng thái) và S1.3 (lời mời,
+magic link, OTP) chưa bắt đầu.
+
+> **Một khoảng trống của S1.1 đã được ghi ra thay vì lấp bằng nhãn:** test *"người liên hệ của tổ
+> chức A KHÔNG treo được vào nhà cung cấp của tổ chức B"* (`packages/supplier/src/suppliers.int.test.ts`)
+> **cố ý không mang nhãn `[INV-...]`**. Nó đo một tính chất thật — ràng buộc tham chiếu phải nằm
+> TRONG một tổ chức — nhưng sổ đăng ký 49 mã **không có mệnh đề nào phát biểu điều đó**: F1 nói
+> về TRUY VẤN bị ràng buộc `org_id`, F2 nói về IDOR, F3 nói về khoá. Gắn một trong ba nhãn ấy lên
+> đây là lấp mã bằng NHÃN thay vì bằng LỚP. Nếu mệnh đề này đáng vào sổ, nó phải vào sổ tường minh
+> — và đó là một quyết định, không phải một dòng thêm vào lặng lẽ.
+
+~~Không có.~~ Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
 
 ### Điều kiện hoàn thành S0 — đối chiếu từng mục
 
@@ -219,11 +235,22 @@ và toàn bộ tầng HTTP/giao diện.
 
 ## Trạng thái kiểm thử
 
-**672 test, xanh toàn bộ:** 346 ở `pnpm test` (T0–T2) và 326 ở `pnpm test:int` (T3, Postgres thật
-qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc. Vòng fix cuối thêm **20 test**,
+~~**672 test, xanh toàn bộ:** 346 ở `pnpm test` (T0–T2) và 326 ở `pnpm test:int` (T3, Postgres thật
+qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
+
+**Sau S1.1 (2026-08-29): 694 test, xanh toàn bộ** — 353 ở `pnpm test` (18 file) và 341 ở
+`pnpm test:int` (13 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **86 module /
+206 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
 
-**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**
+~~**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**~~
+
+**Sau S1.1: 26/49 — 11/34 nghiệp vụ + 15/15 hàng rào.** Hai mã mới (**H14**, **H15**) đều thuộc
+nhóm HÀNG RÀO, nên **tử số và mẫu số cùng tăng 2 và số mã NGHIỆP VỤ được phủ ĐỨNG YÊN ở 11**.
+Đây là điều đáng đọc kỹ hơn con số tổng: S1.1 dựng thêm hai lớp canh, nó **không** đóng thêm một
+mệnh đề nghiệp vụ nào — E4 cần chủ ngữ *"mã RFQ"* của S1.2, A5 cần cả S1.9. `MOC_GHIM`:
+`soPhuToiThieu` 24 → **26**, `coDanhSachToiDa` giữ nguyên **23** (danh sách được-phép-chưa-phủ
+không nở ra một dòng nào).
 
 ### Hoà giải hai cách đếm (việc Task 11 sinh ra để làm)
 
@@ -370,7 +397,7 @@ CMK, chưa có role nào được tạo.
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
 | `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ **Mười lăm ADR** — 001–010 và 012–015 *Đã chấp nhận*; **011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3) |
-| `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào), bảy tầng kiểm thử, evidence pack |
+| `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |
 | `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |
