@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { resolveSessionActor } from "@trustprocure/identity";
+import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
 // LỜI MỜI, MAGIC LINK, OTP, PHIÊN KHÁCH (S1.3) — BẢN SAU REVIEW AN NINH
@@ -104,6 +105,13 @@ export const GUEST_SESSION_MAX_TTL_SECONDS = 12 * 3600;
 // những dữ liệu ấy. Viết `actorSessionId` cho đường khách sẽ là dựng lại đúng lời khai vừa gỡ.
 // =============================================================================================
 
+/**
+ * SHA-256 TRAN. [ADR-018] Chi dung cho thu co tien anh 32 BYTE NGAU NHIEN — token magic link va
+ * token phien khach. Voi chung, liet ke la vo nghia va pepper khong mua them gi.
+ *
+ * KHONG dung ham nay cho so dien thoai, email hay ma OTP: khong gian tien anh cua chung la 10^9
+ * va 10^6, va phep dao nguoc DA DUOC DO — xem khoi dau `pepper.ts`.
+ */
 function bam(...phan: string[]): Buffer {
   const h = createHash("sha256");
   for (const p of phan) h.update(p, "utf8");
@@ -330,6 +338,13 @@ export interface IssueOtpInput {
    * đó là lý do bucket theo LỜI MỜI tồn tại.
    */
   readonly callerFingerprint: string;
+  /**
+   * [ADR-018] Vòng pepper, TIÊM ở composition root — cùng khuôn `TotpSecretUnsealer` của
+   * `packages/identity`. Nó là một KHOÁ, không phải một lời khai danh tính: ADR-016 cấm nhận
+   * sự thật an ninh làm tham số, và một khoá bí mật thì ngược lại — nó KHÔNG được nằm trong
+   * CSDL, nên nó phải đi vào từ ngoài.
+   */
+  readonly pepper: PepperRing;
 }
 
 async function demVaTang(
@@ -337,15 +352,20 @@ async function demVaTang(
   orgId: string,
   kind: "DEST" | "CALLER" | "INVITATION",
   khoa: string,
+  pepper: PepperRing,
 ): Promise<number> {
   // Cửa sổ RỜI RẠC, không phải cửa sổ trượt: một kẻ tấn công canh đúng ranh giới hai cửa sổ gửi
   // được GẤP ĐÔI hạn mức trong một khoảnh khắc. Cửa sổ trượt cần lưu từng dấu thời gian.
   //
-  // [M1, phần đóng được không cần pepper] `orgId` đi vào phép băm: không có nó, cùng một số điện
+  // [M1] `orgId` đi vào phép băm: không có nó, cùng một số điện
   // thoại cho cùng một `bucket_hash` ở MỌI tổ chức, và một bản sao lưu cho phép JOIN giữa hai tổ
   // chức để trả lời "hai bên mua này có cùng nhà cung cấp không" — đúng tài sản mà ADR-013 dành
-  // trọn một ADR để bảo vệ. Phần CÒN LẠI của M1 (SHA-256 trần trên không gian ~10^9 số di động là
-  // đảo ngược được) đòi một pepper giữ ngoài CSDL và vẫn là khoản nợ mở.
+  // trọn một ADR để bảo vệ.
+  //
+  // [ADR-018] Phần CÒN LẠI của M1 nay đã đóng: phép băm là HMAC với một pepper giữ NGOÀI CSDL.
+  // Bảng này KHÔNG mang cột phiên bản, và đó là một quyết định có hệ quả phải nói ra: xoay pepper
+  // làm bộ đếm bắt đầu lại: trong đúng cửa sổ xoay, hạn mức của mọi đích được đặt lại. Cửa sổ
+  // ngắn nên hàng cũ tự già đi, nhưng xoay pepper vì vậy là một thao tác có thời điểm.
   const { rows } = await client.query<{ hits: number }>(
     `INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits)
      VALUES ($1, $2, $3,
@@ -353,7 +373,7 @@ async function demVaTang(
      ON CONFLICT (org_id, bucket_kind, bucket_hash, window_start)
        DO UPDATE SET hits = otp_rate_limits.hits + 1
      RETURNING hits`,
-    [orgId, kind, bam(orgId, kind, khoa), OTP_RATE_WINDOW_SECONDS],
+    [orgId, kind, pepper.bam(orgId, kind, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
   return rows[0]?.hits ?? 0;
 }
@@ -391,34 +411,42 @@ export async function issueOtpChallenge(
     throw new InvitationError("người liên hệ chưa có kênh đã đăng ký cho loại kênh này");
   }
 
-  const soLanNguoiGoi = await demVaTang(client, orgId, "CALLER", input.callerFingerprint);
+  const soLanNguoiGoi = await demVaTang(client, orgId, "CALLER", input.callerFingerprint, input.pepper);
   if (soLanNguoiGoi > OTP_MAX_PER_CALLER) {
     throw new InvitationError("vượt giới hạn tần suất theo người gọi");
   }
 
-  const soLanLoiMoi = await demVaTang(client, orgId, "INVITATION", t.invitation_id);
+  const soLanLoiMoi = await demVaTang(client, orgId, "INVITATION", t.invitation_id, input.pepper);
   if (soLanLoiMoi > OTP_MAX_PER_INVITATION) {
     throw new InvitationError("vượt giới hạn tần suất theo lời mời");
   }
 
-  const soLanDich = await demVaTang(client, orgId, "DEST", dich);
+  const soLanDich = await demVaTang(client, orgId, "DEST", dich, input.pepper);
   if (soLanDich > OTP_MAX_PER_DEST) {
     return { ok: false, reason: "DEST_RATE_LIMITED", retryAfterSeconds: OTP_RATE_WINDOW_SECONDS };
   }
 
   const code = sinhMaOtp();
+  // [ADR-018] `code_hash` CŨNG có pepper, và mục này KHÔNG nằm trong ADR — nó được tìm ra khi
+  // cài. Mã OTP là SÁU CHỮ SỐ, tức 10^6 tiền ảnh, và `invitation_id` nằm ngay trong cùng bản sao
+  // lưu. Kẻ có bản sao lưu đọc ra mã của MỌI thách thức chưa tiêu thụ trong vài giây. E1 nói CSDL
+  // chỉ giữ BĂM của mã; khi băm đảo ngược được, "chỉ giữ băm" và "giữ mã" là một.
+  const bamMa = input.pepper.bam(t.invitation_id, code);
+  const bamDich = input.pepper.bam(orgId, "DEST", dich);
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO invitation_otp_challenges
-       (org_id, invitation_id, token_id, contact_id, channel, code_hash, destination_hash, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8)) RETURNING id`,
+       (org_id, invitation_id, token_id, contact_id, channel, code_hash, destination_hash,
+        pepper_version, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + make_interval(secs => $9)) RETURNING id`,
     [
       orgId,
       t.invitation_id,
       t.token_id,
       t.contact_id,
       input.channel,
-      bam(t.invitation_id, code),
-      bam(orgId, "DEST", dich),
+      bamMa.hash,
+      bamDich.hash,
+      bamMa.version,
       OTP_TTL_SECONDS,
     ],
   );
@@ -465,11 +493,14 @@ export interface VerifyOtpInput {
   readonly token: string;
   readonly code: string;
   readonly ttlSeconds?: number;
+  /** [ADR-018] Cùng vòng pepper đã dùng lúc phát. Xem `IssueOtpInput.pepper`. */
+  readonly pepper: PepperRing;
 }
 
 interface HangThachThuc {
   id: string;
   code_hash: Buffer;
+  pepper_version: string;
   contact_id: string;
   channel: Channel;
   het_han: boolean;
@@ -507,7 +538,7 @@ export async function verifyOtpAndStartSession(
   // `FOR UPDATE` giữ hàng cho tới hết transaction. Nó là lớp THỨ HAI: lớp thứ nhất là biểu thức
   // TỰ THAM CHIẾU ở câu ghi thất bại bên dưới, thứ đúng kể cả khi không có khoá.
   const { rows } = await client.query<HangThachThuc>(
-    `SELECT id, code_hash, contact_id, channel,
+    `SELECT id, code_hash, pepper_version, contact_id, channel,
             (expires_at <= now()) AS het_han,
             (consumed_at IS NOT NULL) AS da_dung,
             (locked_until IS NOT NULL AND locked_until > now()) AS dang_khoa
@@ -525,7 +556,12 @@ export async function verifyOtpAndStartSession(
   if (tt.da_dung) return { ok: false, reason: "ALREADY_USED" };
   if (tt.het_han) return { ok: false, reason: "EXPIRED" };
 
-  const dung = timingSafeEqual(tt.code_hash, bam(t.invitation_id, input.code));
+  // [ADR-018] Băm lại theo ĐÚNG phiên bản pepper của hàng, không theo phiên bản đang dùng: một
+  // thách thức phát trước lần xoay gần nhất vẫn phải đối chiếu được cho tới khi nó hết hạn.
+  const dung = timingSafeEqual(
+    tt.code_hash,
+    input.pepper.bamTheoPhienBan(tt.pepper_version, t.invitation_id, input.code),
+  );
 
   if (!dung) {
     // [H4] BIỂU THỨC TỰ THAM CHIẾU, không phải một giá trị tuyệt đối tính ở Node. Bản trước tính

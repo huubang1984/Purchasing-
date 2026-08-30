@@ -1025,7 +1025,18 @@ số"*), nên để nó ở dạng đảo ngược được là **giữ hình th
 
 ### Quyết định
 
-1. **Cả hai phép băm chuyển sang HMAC-SHA256 với một pepper**, không phải SHA-256 trần.
+1. ~~**Cả hai phép băm**~~ **BA phép băm chuyển sang HMAC-SHA256 với một pepper**, không phải
+   SHA-256 trần.
+
+   > **Phép băm thứ ba được tìm ra KHI CÀI, không phải khi viết ADR này (2026-08-30):**
+   > `invitation_otp_challenges.code_hash` là `sha256(invitation_id ‖ code)`, mà **mã OTP chỉ có
+   > SÁU CHỮ SỐ** — 10⁶ tiền ảnh — và `invitation_id` nằm ngay trong cùng bản sao lưu. Kẻ có bản
+   > sao lưu đọc ra mã của **mọi thách thức chưa tiêu thụ** trong vài giây. **E1** nói CSDL chỉ
+   > giữ *băm* của mã; khi băm đảo ngược được, *"chỉ giữ băm"* và *"giữ mã"* là một câu.
+   >
+   > Ba phép băm KHÔNG được pepper, và sự vắng mặt ấy cũng là một quyết định: `token_hash` của
+   > magic link, của phiên khách và của `sessions` có tiền ảnh **32 byte ngẫu nhiên**, nên liệt kê
+   > là vô nghĩa. Mỗi chỗ dùng pepper là một chỗ phải xoay đúng; thêm ở đó không mua được gì.
 2. **Pepper nằm ở kho bí mật của hạ tầng đích** (AWS — ADR-009), nạp lúc khởi động tiến trình.
    **Không bao giờ vào CSDL** — để nó cạnh dữ liệu là xoá sạch lý do nó tồn tại — **không vào
    repo, không vào log** (quy ước bắt buộc: không bao giờ ghi log khoá, bí mật).
@@ -1049,6 +1060,12 @@ số"*), nên để nó ở dạng đảo ngược được là **giữ hình th
   của cột là ghim giá trị **tại thời điểm gửi**, phòng một migration tương lai cấp lại `UPDATE`.
   Đó là một giá trị thật nhưng **hẹp**. Nếu ai đó thấy pepper là đắt, câu trả lời đúng là **bỏ
   cột** (phương án D) — **không** phải giữ cột với một phép băm đảo ngược được.
+
+  > **Lượt cài KHÔNG chọn phương án D, và lý do làm câu hỏi biến mất chứ không phải cân đo lại
+  > (2026-08-30):** `otp_rate_limits.bucket_hash` **bắt buộc** phải có pepper — nó là khoá bộ đếm,
+  > không dư chút nào — và `code_hash` cũng vậy sau phát hiện ở mục 1. Khi cơ chế đã phải tồn tại
+  > cho hai cột, chi phí biên của cột thứ ba là **một dòng**. Bỏ cột vẫn là một lựa chọn hợp lệ về
+  > sau; nó chỉ không còn tiết kiệm được gì.
 - **`callerFingerprint` vẫn là một hợp đồng không cưỡng chế được bằng máy**: docstring của nó đòi
   dẫn xuất từ một nguồn không giả mạo được, *"không lớp máy nào cưỡng chế được điều này"*. Pepper
   không đụng tới điều đó. Đây là lý do bucket theo **lời mời** tồn tại.
@@ -1059,6 +1076,20 @@ số"*), nên để nó ở dạng đảo ngược được là **giữ hình th
    (10⁴ số), một vòng liệt kê phải **TÌM RA** số từ băm khi **không** có pepper — bằng chứng rằng
    phép đảo ngược là thật chứ không phải một lo ngại trên giấy — và phải **THẤT BẠI** khi có
    pepper. Không có vế dương, "không tìm ra" cũng làm test xanh.
+
+   > **ĐÃ ĐO 2026-08-30, Node 22, một luồng — và phép đo này chạy TRƯỚC khi viết một dòng mã nào
+   > của lượt cài:**
+   >
+   > ```text
+   > khong gian gia lap        : 10000 so
+   > KHONG pepper -> tim duoc  : 0900007321 (11 ms)
+   > CO pepper    -> tim duoc  : null       (12 ms)
+   > chi phi ~1 bam            : 0.0011 ms
+   > ngoai suy 10^9 (1 luong)  : 18.3 phut
+   > ```
+   >
+   > **18 phút** là con số biến M1 từ một lo ngại thành một việc phải làm. Cả hai vế nay là test
+   > thường trực trong `packages/invitation/src/invitation.int.test.ts`.
 2. **Phiên bản:** cùng một đích, hai phiên bản pepper → hai băm **khác nhau**; và một hàng mang
    phiên bản cũ vẫn đối chiếu được sau khi đã xoay.
 3. **Quét trên dữ liệu thật của test**, không đọc mã nguồn: pepper không xuất hiện trong

@@ -468,6 +468,8 @@ const DANH_SACH_TRANG_INVITATION = [
   "OTP_MAX_PER_INVITATION",
   "OTP_RATE_WINDOW_SECONDS",
   "OTP_TTL_SECONDS",
+  "PepperError",
+  "PepperRing",
   "createInvitation",
   "issueMagicLinkToken",
   "issueOtpChallenge",

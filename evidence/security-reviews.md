@@ -168,3 +168,30 @@ Một phát hiện phụ của lượt viết ADR-018, ghi ở đây vì nó đ�
 `supplier_contacts` (C1) và 011 đã `REVOKE UPDATE ON supplier_contacts FROM app_api`, nên
 `contact_id` + `channel` đã xác định đích. Giá trị còn lại của cột hẹp hơn nhiều so với lúc nó được
 thêm, nên **bỏ cột** là một cách đóng M1 hợp lệ ngang với việc cài pepper.
+
+### Vòng cài ba ADR — 2026-08-30
+
+Ba phát hiện MEDIUM ở trên **nay đã có lớp, và mỗi lớp có một lượt RED thật**. Bảng dưới đây là
+mối nối *"phát hiện ↔ commit đóng"* mà §*Giới hạn của bộ bằng chứng* nói là thứ file này thường
+KHÔNG chứng minh được — ở đây nó có, vì cả ba lớp đều đo được từ ngoài.
+
+| Phát hiện | ADR | Migration | Commit đóng | Lượt RED thật |
+|---|---|---|---|---|
+| **MEDIUM-3** (S1.1) — `actor` là lời khai | ADR-016 | `013` | `91473ea` | gỡ `suppliers_kiem_danh_tinh` → `INSERT` khai man **đi lọt**; gỡ `rfq_invitations_kiem_nguoi_thu_hoi` → `UPDATE` không ký tên **đi lọt** |
+| **M-6** (S1.2) — `requires_dual_approval` không chính sách nào tính | ADR-017 | `014` | `52fc53a` | gỡ `rfq_packages_kiem_nguong_phe_duyet_kep` → cờ hạ bằng tay **đi lọt** vào `PENDING_APPROVAL` |
+| **M1** (S1.3) — băm đích không có pepper | ADR-018 | `015` | (lượt này) | liệt kê 10⁴ số **TÌM RA** đích khi băm không có pepper (11 ms), **không tìm ra** khi có |
+
+**Ba điều lượt cài tìm ra mà ba lượt review KHÔNG tìm ra**, ghi ở đây vì chúng nói về giới hạn của
+chính hình thức review:
+
+1. **`packages/rfq` mang đúng khiếm khuyết MEDIUM-3 nêu cho `packages/supplier`** — `createRfq`
+   tới hôm nay vẫn nhận `actor: RfqActor` và ghi thẳng nó vào sổ. Không lượt review nào gọi tên nó,
+   vì mỗi lượt chỉ nhìn một hạng mục. **Vẫn MỞ.**
+2. **`invitation_otp_challenges.code_hash` cũng đảo ngược được** — mã OTP là sáu chữ số (10⁶) và
+   `invitation_id` nằm cùng bản sao lưu. M1 chỉ nêu băm ĐÍCH. Đã đóng trong cùng lượt.
+3. **`estimated_value` không thể bảo vệ bằng quyền theo cột** như ADR-017 mục 4 hứa: đường khách và
+   đường người mua dùng **chung role `app_api`**. Câu ấy đã bị gạch bỏ tại chỗ và thay bằng bảng
+   riêng.
+
+**Điều vòng này KHÔNG đóng:** cổng quyền ở tầng ứng dụng vẫn **mặc định MỞ** — lớp canh route chưa
+dựng được vì `apps/` rỗng, và ADR-016 mục 4 ghim nó vào **route đầu tiên của `apps/`**.

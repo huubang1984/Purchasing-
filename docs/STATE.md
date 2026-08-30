@@ -309,7 +309,7 @@ qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
 
 ~~**Sau S1.2: 724 test** — 363 / 361; t0 91 module / 224 phụ thuộc.~~
 
-~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **Sau vòng cài ADR-016 (2026-08-30): 772 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
+~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **Sau vòng cài ADR-016/017/018 (2026-08-30): 789 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
 `pnpm test:int` (15 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **94 module /
 234 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
@@ -509,10 +509,34 @@ CMK, chưa có role nào được tạo.
      **Khoản nợ có tên và có mốc:** khi **S1.5** dựng đường đọc RFQ cho phiên khách, đường ấy phải
      được ĐO là không chạm `rfq_budgets`. Hôm nay `packages/invitation` không đọc `rfq_packages`
      một lần nào, nên chưa có gì để đo.
-   - **ADR-018** → HMAC + pepper có phiên bản, **hoặc** bỏ `destination_hash`. Quyết bằng phép đo ở
-     §*Đo bằng gì* mục 1 (đối chứng dương: liệt kê phải TÌM RA số khi không có pepper).
-10. **Ba MEDIUM này KHÔNG được đánh dấu đóng khi ADR được chốt.** Một quyết định không phải một lớp;
-    `evidence/security-reviews.md` chỉ được ghi *đã đóng* sau khi có lượt **RED thật**.
+   - ~~**ADR-018** → HMAC + pepper có phiên bản, **hoặc** bỏ `destination_hash`. Quyết bằng phép đo ở
+     §*Đo bằng gì* mục 1 (đối chứng dương: liệt kê phải TÌM RA số khi không có pepper).~~
+     **ĐÃ CÀI 2026-08-30** — migration `015`, `packages/invitation/src/pepper.ts`, 7 test mới.
+     **Phép đo chạy TRƯỚC khi viết một dòng mã nào**, và nó là thứ quyết định: không pepper thì
+     liệt kê **TÌM RA** số (11 ms trên 10⁴), có pepper thì **không**; ngoại suy 10⁹ ≈ **18 phút**
+     một luồng. Phép đảo ngược là THẬT, không phải một lo ngại trên giấy.
+
+     **PHÉP BĂM THỨ BA ĐƯỢC TÌM RA KHI CÀI, không có trong ADR:** `code_hash` là
+     `sha256(invitation_id ‖ code)` với mã OTP **sáu chữ số** — 10⁶ tiền ảnh — và `invitation_id`
+     nằm ngay trong cùng bản sao lưu. Kẻ có bản sao lưu đọc ra mã của **mọi thách thức chưa tiêu
+     thụ**. E1 nói CSDL chỉ giữ BĂM của mã; khi băm đảo ngược được, hai câu ấy là một.
+
+     **Phương án "bỏ cột" KHÔNG được chọn**, và câu hỏi biến mất thay vì được cân lại:
+     `otp_rate_limits.bucket_hash` bắt buộc phải có pepper (nó là khoá bộ đếm, không dư chút nào),
+     nên chi phí biên của cột thứ ba là một dòng.
+
+     **Một hệ quả vận hành phải nói ra:** `otp_rate_limits` cố ý KHÔNG mang cột phiên bản, nên
+     xoay pepper **đặt lại hạn mức của mọi đích** trong đúng cửa sổ xoay. Cửa sổ ngắn nên hàng cũ
+     tự già đi, nhưng xoay pepper vì vậy là một thao tác **có thời điểm**, không phải làm lúc nào
+     cũng được.
+10. ~~**Ba MEDIUM này KHÔNG được đánh dấu đóng khi ADR được chốt.**~~ **Cả ba nay ĐÃ CÓ LỚP và có
+    lượt RED thật (2026-08-30).** Ba migration (`013`, `014`, `015`), bốn gói sửa, **31 test mới**
+    — trong đó **ba test đột biến** (gỡ trigger → câu ghi khai man / cờ hạ bằng tay ĐI LỌT) và
+    **năm phép đo bằng SQL viết tay** không đi qua gói.
+
+    **Nhưng ADR-016 chưa đóng hết, và phần còn lại có tên:** `packages/rfq` vẫn nhận
+    `actor: RfqActor` làm tham số, và **lớp canh route vẫn chưa dựng được** vì `apps/` rỗng.
+    Chừng nào chưa có nó, cổng quyền ở tầng ứng dụng là **mặc định MỞ** cho một đường gọi mới.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở

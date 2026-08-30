@@ -17,6 +17,7 @@ import {
   verifyOtpAndStartSession,
   type Channel,
 } from "./invitation.js";
+import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
 // S1.3 SAU REVIEW AN NINH — CHUỖI TẤN CÔNG CŨ NAY LÀ MỘT BỘ TEST
@@ -26,6 +27,11 @@ import {
 // CHẶN, và mỗi phép chặn phải kèm một vế ĐỐI CHỨNG DƯƠNG — không có vế đó thì "chặn tất cả" cũng
 // làm test xanh.
 // =============================================================================================
+
+// [ADR-018] Vong pepper cua bo test. Mot khoa co dinh 32 byte — no khong phai bi mat o day, no
+// la mot THAM SO cua phep do: khong co no, `code_hash` va `destination_hash` la SHA-256 tran,
+// va phep dao nguoc DA DUOC DO la thanh cong.
+const PEPPER = new PepperRing("p1", { p1: Buffer.alloc(32, 7) });
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 // [ADR-016] `const ACTOR = { type: "SYSTEM" }` da bien mat. Ba ham BEN MUA nay cam `sBuyerA`;
@@ -154,7 +160,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C1] đích nhận OTP ĐỌC TỪ CSDL — chữ ký hàm không còn chỗ để khai", async () => {
     const { token, contactId } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
@@ -179,7 +185,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C1] ĐỐI CHỨNG: thách thức trỏ tới người liên hệ của NHÀ CUNG CẤP KHÁC bị CSDL từ chối", async () => {
     const { invitationId, token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1b" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1b", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
@@ -201,19 +207,19 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[H1] token của MỘT lời mời khác không mở được thách thức này", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h1" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h1", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const khac = await moiMoi();
     const nham = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token: khac.token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token: khac.token, code: kq.code, pepper: PEPPER }),
     );
     expect(nham).toEqual({ ok: false, reason: "NO_CHALLENGE" });
 
     // Đối chứng dương: đúng token thì vào được.
     const dung = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(dung.ok).toBe(true);
   });
@@ -221,12 +227,12 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C2] danh tính đã xác thực là DẪN XUẤT từ chính thách thức", async () => {
     const { invitationId, token, contactId } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const r = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     if (!r.ok) throw new Error("phải mở được phiên");
     expect(r.verifiedContactId).toBe(contactId);
@@ -244,11 +250,11 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C2] ĐỐI CHỨNG: phiên KHAI một danh tính khác bị CSDL từ chối, kể cả đi thẳng bằng SQL", async () => {
     const { invitationId, token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2b" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2b", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
     await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
 
     await expect(
@@ -267,11 +273,11 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C3] sau THU HỒI: token chết, và phiên đang sống bị thu hồi theo", async () => {
     const { invitationId, token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c3" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c3", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
     const phien = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(phien.ok).toBe(true);
 
@@ -286,6 +292,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
           token,
           channel: "SMS",
           callerFingerprint: "ip-c3b",
+          pepper: PEPPER,
         }),
       ),
     ).rejects.toThrow(InvitationError);
@@ -320,18 +327,18 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[H3] khoá 5-lần-sai KHÔNG reset được bằng cách phát lại thách thức", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h3" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h3", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
     const maSai = kq.code === "000000" ? "111111" : "000000";
 
     for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
       await withTenant(apiPool, orgA, (c) =>
-        verifyOtpAndStartSession(c, orgA, { token, code: maSai }),
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, pepper: PEPPER }),
       );
     }
     const biKhoa = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(biKhoa).toEqual({ ok: false, reason: "LOCKED_OUT" });
 
@@ -341,6 +348,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
           token,
           channel: "SMS",
           callerFingerprint: "ip-h3b",
+          pepper: PEPPER,
         }),
       ),
     ).rejects.toThrow(/dang bi khoa vi qua nhieu lan thu sai/);
@@ -349,7 +357,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[H5] magic link BỊ TIÊU THỤ khi phiên ra đời — không chơi lại được", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h5" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h5", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
@@ -357,7 +365,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
     expect(truoc.invitationId).not.toBe("");
 
     await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
 
     await expect(
@@ -492,7 +500,7 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
   it("mã OTP SAI không sinh phiên; mã ĐÚNG thì có — phép hội, hai vế", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e2" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e2", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
@@ -500,12 +508,13 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
       verifyOtpAndStartSession(c, orgA, {
         token,
         code: kq.code === "000000" ? "111111" : "000000",
+        pepper: PEPPER,
       }),
     );
     expect(sai.ok).toBe(false);
 
     const dung = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(dung.ok).toBe(true);
   });
@@ -517,6 +526,7 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
         token,
         channel: "EMAIL",
         callerFingerprint: "ip-kenh",
+        pepper: PEPPER,
       }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
@@ -550,6 +560,7 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
           token: t.token,
           channel: "SMS",
           callerFingerprint: "ip-thieu-kenh",
+          pepper: PEPPER,
         }),
       ),
     ).rejects.toThrow(/chưa có kênh đã đăng ký/);
@@ -565,6 +576,7 @@ describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic l
           token,
           channel: "EMAIL",
           callerFingerprint: "ip-k1",
+          pepper: PEPPER,
         }),
       ),
     ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
@@ -578,6 +590,7 @@ describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic l
           token,
           channel: "SMS",
           callerFingerprint: "ip-k2",
+          pepper: PEPPER,
         }),
       ),
     ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
@@ -588,7 +601,7 @@ describe("[INV-E3] OTP — năm vế", () => {
   it("HẾT HẠN: thách thức quá hạn bị từ chối dù mã đúng", async () => {
     const { invitationId, token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-hh" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-hh", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
@@ -598,7 +611,7 @@ describe("[INV-E3] OTP — năm vế", () => {
       [invitationId],
     );
     const r = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(r).toEqual({ ok: false, reason: "EXPIRED" });
   });
@@ -606,19 +619,19 @@ describe("[INV-E3] OTP — năm vế", () => {
   it("DÙNG MỘT LẦN: mã đúng lần thứ hai không vào được nữa", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-ml" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-ml", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const lan1 = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(lan1.ok).toBe(true);
 
     // Token cũng đã bị tiêu thụ (H5), nên lần hai chết ngay ở lớp token — sớm hơn một bậc.
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+        verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
       ),
     ).rejects.toThrow(InvitationError);
   });
@@ -626,18 +639,18 @@ describe("[INV-E3] OTP — năm vế", () => {
   it("GIỚI HẠN SỐ LẦN THỬ: sau 5 lần sai thì khoá, và mã ĐÚNG cũng không vào được", async () => {
     const { token } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-lt" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-lt", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
     const maSai = kq.code === "000000" ? "111111" : "000000";
 
     for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
       await withTenant(apiPool, orgA, (c) =>
-        verifyOtpAndStartSession(c, orgA, { token, code: maSai }),
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, pepper: PEPPER }),
       );
     }
     const sau = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     expect(sau).toEqual({ ok: false, reason: "LOCKED_OUT" });
   });
@@ -653,6 +666,7 @@ describe("[INV-E3] OTP — năm vế", () => {
           token,
           channel: "SMS",
           callerFingerprint: `ip-xoay-${String(i)}`,
+          pepper: PEPPER,
         }),
       ).catch((e: unknown) => e as Error);
       if (r instanceof Error) {
@@ -673,12 +687,12 @@ describe("[INV-E5] link chuyển tiếp, và danh tính THỰC TẾ đã xác th
     expect(doi.invitationId).toBe(invitationId);
 
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e5" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e5", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("thách thức phải phát được");
 
     const r = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     if (!r.ok) throw new Error("phải mở được phiên");
     expect(r.verifiedContactId).toBe(contactId);
@@ -729,7 +743,7 @@ describe("danh tính là dẫn xuất — hai hình dạng", () => {
   it("bên KHÁCH: sổ kiểm toán ghi NGƯỜI LIÊN HỆ đọc ra từ token, không ghi thứ người gọi tự đặt", async () => {
     const { token, contactId } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016", pepper: PEPPER }),
     );
     expect(kq.ok).toBe(true);
 
@@ -748,11 +762,11 @@ describe("danh tính là dẫn xuất — hai hình dạng", () => {
   it("bên KHÁCH: phiên khách và sổ kiểm toán kể CÙNG một câu chuyện về ai đã xác thực", async () => {
     const { token, contactId } = await moiMoi();
     const kq = await withTenant(apiPool, orgA, (c) =>
-      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016b" }),
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016b", pepper: PEPPER }),
     );
     if (!kq.ok) throw new Error("khong phat duoc OTP");
     const mo = await withTenant(apiPool, orgA, (c) =>
-      verifyOtpAndStartSession(c, orgA, { token, code: kq.code }),
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
     );
     if (!mo.ok) throw new Error("khong mo duoc phien");
 
@@ -839,5 +853,181 @@ describe("danh tính là dẫn xuất — hai hình dạng", () => {
           " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')",
       );
     }
+  });
+});
+
+// =============================================================================================
+// [ADR-018] PEPPER — VÀ VẾ ĐỐI CHỨNG DƯƠNG LÀ PHẦN CHỊU LỰC
+//
+// Phép đo dưới đây liệt kê một không gian NHỎ và đòi:
+//   * KHÔNG pepper -> PHẢI TÌM RA số. Không có vế này, "có pepper thì không tìm ra" cũng xanh khi
+//     phép đo hỏng theo mọi hướng khác, và cả khối trở thành một lời khẳng định không đo gì.
+//   * CÓ pepper    -> PHẢI KHÔNG tìm ra.
+//
+// Con số ngoại suy đã đo trên Node 22 lúc quyết định ADR: ~0.0011 ms một băm, tức **~18 phút một
+// luồng** cho toàn bộ không gian số di động Việt Nam (~10^9). Một bản sao lưu CSDL rò ra ngoài
+// không phải một bảng băm — nó là một DANH BẠ.
+// =============================================================================================
+describe("pepper cho băm đích và băm mã", () => {
+  const KHONG_GIAN = 2000;
+  const soThu = (i: number) => "09000" + String(i).padStart(5, "0");
+
+  it("ĐỐI CHỨNG DƯƠNG: SHA-256 TRẦN đảo ngược được bằng liệt kê — lỗ là THẬT", () => {
+    const dich = soThu(1234);
+    const bamTran = (x: string) => createHash("sha256").update(x, "utf8").digest("hex");
+    const bamDich = bamTran(dich);
+
+    let timDuoc: string | null = null;
+    for (let i = 0; i < KHONG_GIAN; i++) {
+      if (bamTran(soThu(i)) === bamDich) {
+        timDuoc = soThu(i);
+        break;
+      }
+    }
+    expect(timDuoc).toBe(dich);
+  });
+
+  it("CÙNG phép liệt kê ấy THẤT BẠI khi băm có pepper", () => {
+    const dich = soThu(1234);
+    const bamCoPepper = PEPPER.bam(dich).hash.toString("hex");
+    const bamTran = (x: string) => createHash("sha256").update(x, "utf8").digest("hex");
+
+    let timDuoc: string | null = null;
+    for (let i = 0; i < KHONG_GIAN; i++) {
+      if (bamTran(soThu(i)) === bamCoPepper) {
+        timDuoc = soThu(i);
+        break;
+      }
+    }
+    expect(timDuoc).toBeNull();
+  });
+
+  it("băm ghi xuống CSDL KHÔNG khớp SHA-256 trần của cùng đầu vào — pepper thật sự đi vào cột", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-pepper",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    const { rows } = await db.pool.query<{
+      code_hash: Buffer;
+      destination_hash: Buffer;
+      pepper_version: string;
+      invitation_id: string;
+    }>(
+      "SELECT code_hash, destination_hash, pepper_version, invitation_id " +
+        " FROM invitation_otp_challenges WHERE id = $1",
+      [kq.challengeId],
+    );
+    const hang = rows[0];
+    if (hang === undefined) throw new Error("khong doc duoc hang thach thuc");
+
+    // Đây là phép đo phân biệt "đã cài pepper" với "tưởng đã cài": nếu ai đó lỡ dùng lại `bam()`
+    // trần cho hai cột này, hai khẳng định dưới đây ĐỎ ngay.
+    const tranMa = createHash("sha256")
+      .update(hang.invitation_id, "utf8")
+      .update(kq.code, "utf8")
+      .digest();
+    expect(hang.code_hash.equals(tranMa)).toBe(false);
+    expect(hang.code_hash.equals(PEPPER.bam(hang.invitation_id, kq.code).hash)).toBe(true);
+
+    const tranDich = createHash("sha256")
+      .update(orgA, "utf8")
+      .update("DEST", "utf8")
+      .update(kq.destination, "utf8")
+      .digest();
+    expect(hang.destination_hash?.equals(tranDich)).toBe(false);
+    expect(hang.pepper_version).toBe("p1");
+  });
+
+  it("XOAY PEPPER: thách thức phát TRƯỚC lần xoay vẫn đối chiếu được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-xoay",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    // Vòng SAU khi xoay: phiên bản đang dùng là `p2`, nhưng `p1` VẪN CÒN trong vòng — đó là toàn
+    // bộ điểm của việc băm mang theo phiên bản. Bỏ `p1` đi là làm chết mọi thách thức đang mở.
+    const sauXoay = new PepperRing("p2", {
+      p1: Buffer.alloc(32, 7),
+      p2: Buffer.alloc(32, 9),
+    });
+
+    const mo = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: sauXoay }),
+    );
+    expect(mo.ok).toBe(true);
+  });
+
+  it("MẤT phiên bản cũ thì NÉM, không im lặng trả về `sai mã`", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-mat-p1",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    // Một lỗi CẤU HÌNH không được đội lốt một lần người dùng gõ sai mã: ca sau sẽ bị đếm vào
+    // `failed_attempts` và khoá hồ sơ của một người không làm gì sai.
+    const thieuP1 = new PepperRing("p2", { p2: Buffer.alloc(32, 9) });
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: thieuP1 }),
+      ),
+    ).rejects.toThrow(/không đối chiếu được/);
+  });
+
+  it("`otp_rate_limits.bucket_hash` cũng có pepper — nó là cùng tập đích", async () => {
+    const { token } = await moiMoi();
+    const dauVan = "ip-bucket-" + randomBytes(4).toString("hex");
+    await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: dauVan,
+        pepper: PEPPER,
+      }),
+    );
+
+    const tran = createHash("sha256")
+      .update(orgA, "utf8")
+      .update("CALLER", "utf8")
+      .update(dauVan, "utf8")
+      .digest();
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_hash = $1",
+      [tran],
+    );
+    expect(rows[0]?.n, "băm trần KHÔNG được xuất hiện trong bảng đếm").toBe("0");
+
+    const { rows: co } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_hash = $1",
+      [PEPPER.bam(orgA, "CALLER", dauVan).hash],
+    );
+    expect(co[0]?.n, "đối chứng dương: băm CÓ pepper thì có").toBe("1");
+  });
+
+  it("`pepper_version` là NOT NULL — một hàng không nói được nó băm bằng gì là một hàng vô dụng", async () => {
+    const { rows } = await db.pool.query<{ is_nullable: string }>(
+      "SELECT is_nullable FROM information_schema.columns " +
+        " WHERE table_schema = 'public' AND table_name = 'invitation_otp_challenges' " +
+        "   AND column_name = 'pepper_version'",
+    );
+    expect(rows[0]?.is_nullable).toBe("NO");
   });
 });

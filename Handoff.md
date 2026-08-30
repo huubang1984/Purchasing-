@@ -284,6 +284,17 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
     ADR-018 là HMAC + pepper có phiên bản **hoặc** bỏ hẳn `destination_hash` — cột ấy **gần như dư**
     sau khi 011 thu hồi `UPDATE` trên `supplier_contacts`.
 
+    **ĐÃ CÀI CẢ BA (2026-08-30)** — ba migration (`013`, `014`, `015`), bốn gói sửa, **31 test mới**,
+    trong đó **ba test đột biến** và **năm phép đo bằng SQL viết tay**. `pnpm evidence` thoát mã 0,
+    **789 khẳng định**, độ phủ **đứng yên ở 30/50** — và đó là phát biểu đúng: sổ đăng ký không có
+    mệnh đề nào nói "danh tính là dẫn xuất".
+
+    **Lượt cài tìm ra BA thứ mà ba lượt review KHÔNG tìm ra**, và cả ba nói về giới hạn của hình
+    thức review theo từng hạng mục: ⑴ `packages/rfq` mang **đúng** khiếm khuyết MEDIUM-3 nêu cho
+    `packages/supplier` — **vẫn MỞ**; ⑵ `code_hash` của OTP cũng đảo ngược được (sáu chữ số, 10⁶),
+    đã đóng cùng lượt; ⑶ `estimated_value` **không** bảo vệ được bằng quyền theo cột như ADR-017
+    hứa, vì đường khách và đường người mua dùng **chung role `app_api`**.
+
 10b. **Nguyên văn cũ, giữ để đối chiếu:**
     §9 của kế hoạch S1 đòi **`security-reviewer`** cho mọi hạng mục có dấu ⭐, và **S1.3 có dấu
     đó** (lời mời, magic link, OTP, phiên khách — chạm xác thực và PII). Lượt review ấy **chưa

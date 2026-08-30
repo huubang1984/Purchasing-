@@ -855,6 +855,10 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "invitation_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "locked_until", quyen: "UPDATE" },
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "org_id", quyen: "INSERT" },
+      // [ADR-018 / 015] Phien ban pepper da dung cho CA HAI bam cua hang nay. NOT NULL: mot hang
+      // khong noi duoc no bam bang gi la mot hang khong doi chieu duoc — va no chet trong IM LANG,
+      // vi mot bam khong khop trong y het mot bam sai.
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "pepper_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "token_id", quyen: "INSERT" },
       // [Task 9] `mfa_credentials` — bốn vắng mặt là load-bearing, mỗi cái đóng một đường đi:
       //   `id`                 KHÔNG INSERT -> mfa_credentials_pkey không làm oracle xuyên tổ

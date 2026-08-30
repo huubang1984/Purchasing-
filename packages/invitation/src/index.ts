@@ -42,3 +42,11 @@ export {
   type RedeemedLink,
   type VerifyOtpInput,
 } from "./invitation.js";
+// ============================================================================================
+// [ADR-018] Vong pepper. `PepperRing` phai ra cua vi composition root la noi TIEM no — cung
+// khuon `TotpSecretUnsealer` cua identity. No la mot KIEU RIENG du hinh dang giong het
+// `MasterKeyRing`, va ly do nam o dau packages/invitation/src/pepper.ts: hai vong khoa cung KIEU
+// thi cung noi tiem duoc, va mot ngay nao do mot dong cau hinh se lam pepper BANG khoa boc phong
+// bi. Kieu rieng lam viec ay KHONG VIET DUOC.
+// ============================================================================================
+export { PepperError, PepperRing } from "./pepper.js";
