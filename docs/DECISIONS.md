@@ -807,3 +807,229 @@ phòng kinh doanh**. Một OTP về đúng hộp thư ấy **không thêm yếu 
 3. **E2 phải được đo như một phép HỘI**, không phải hai phép rời: có token hợp lệ **và không** qua
    OTP → phải bị từ chối. Đây đúng cái bẫy **D1** đang mắc ở §4 (bốn vế đo riêng ở hai file, phép
    hội chưa từng được đo một lần). S1.3 là chỗ không được lặp lại nó.
+
+---
+
+## ADR-016 — Nơi đặt cổng quyền: **ở tầng ứng dụng; và danh tính đã xác thực phải là DẪN XUẤT, không phải THAM SỐ**
+
+**Ngày:** 2026-08-30 · **Trạng thái:** **Đã chấp nhận** · Sinh ra từ: **MEDIUM-3** của lượt review S1.1 (`ac77e3c`) · Liên quan: **D3**, **D5**, **F2**
+
+**Bối cảnh.** Lượt `security-reviewer` trên S1.1 nêu: *không có một phép kiểm thẩm quyền nào trong
+`packages/supplier`; `actor` là lời khai*. Đã đọc lại mã để xác nhận thay vì tin phát hiện: **sáu**
+hàm export của `packages/supplier/src/suppliers.ts` gọi `assertTenantBound` trước mọi thứ — và
+`assertTenantBound` **không phải một lớp an ninh**, chính khối chú thích đầu file nói vậy: *"nó
+KHÔNG phải một lớp an ninh thứ hai mà là một lớp chống HIỂU LẦM"* — rồi ghi `actorType`/`actorId`
+thẳng vào sổ kiểm toán. `packages/rfq` và `packages/invitation` cùng hình dạng (`RfqActor`,
+`InvitationActor`, cùng hai trường `type`/`id`).
+
+**Hai câu hỏi bị gộp làm một, và tách chúng ra là phần có giá trị nhất của ADR này:**
+
+1. **Phép kiểm quyền chạy ở đâu** — trong gói nghiệp vụ, hay ở tầng ứng dụng?
+2. **Danh tính ghi vào sổ kiểm toán đến từ đâu** — người gọi khai, hay hệ thống đọc ra?
+
+Câu (2) **không** được trả lời bằng câu (1). `requirePermission` cũng nhận `userId` **dưới dạng
+tham số**; chuyển cổng vào trong gói chỉ dời chỗ tiêu thụ lời khai chứ không biến nó thành sự thật.
+
+**Và dự án đã có sẵn lời giải đúng cho câu (2), ở đúng lát cắt này.** Vòng sửa S1.2 (H-1) đã biến
+`rfq_packages.created_by` từ lời khai thành **dẫn xuất**: `createRfq` nay đòi `createdBySessionId`,
+và trigger `rfq_packages_kiem_nguoi_tao` (011) đòi `sessions.user_id = created_by`. Chú thích của
+chính trường ấy ghi lại ca tấn công đã đo: *"Mallory gọi `createRfq({ createdBy: idCuaBob, actor:
+Mallory })` rồi tự duyệt được, vì trigger so `Bob = Mallory` → sai → cho qua. D2 tụt từ 'hai người
+khác người tạo' xuống 'một người'."* Ba CRITICAL của S1.3 là **cùng một hình dạng** và đã được đóng
+bằng **cùng một cách**: thêm một cạnh dữ liệu, rồi để trigger đòi các cạnh nhất quán. ADR này chỉ
+làm một việc — **phát biểu cái khuôn ấy thành quy tắc chung** thay vì để mỗi lượt review tự tìm lại.
+
+### Phương án cho câu (1)
+
+| Phương án | Đánh giá |
+|---|---|
+| **A. Cổng nằm TRONG mỗi gói nghiệp vụ** (mỗi hàm gọi `requirePermission` đầu tiên) | Mặc định ĐÓNG cho một hàm mới — đúng khuôn dự án ưa. Nhưng: `requirePermission` cần **`auditPool`** (một transaction ĐỘC LẬP, để một lần từ chối sống sót qua rollback của người gọi) ⇒ mọi chữ ký của mọi gói phải mang thêm một `pg.Pool`; mọi gói nghiệp vụ phải phụ thuộc `@trustprocure/identity` ⇒ nở đồ thị phụ thuộc theo hướng ngược với ADR-006. Và nó **không** trả lời câu (2). |
+| **B. Cổng ở tầng ứng dụng** (route / composition root), gói nghiệp vụ giữ nguyên | Mã quyền hiện có ánh xạ theo **ca sử dụng**, không theo hàm: `supplier.manage` là một mã cho cả sáu hàm, và `listSuppliers` còn có đường gọi **không có người dùng nào** (runner outbox chạy dưới `app_api`). ADR-014 mục 5 đã đặt *"điều kiện cần ngữ cảnh"* ở tầng ứng dụng. **Nhược điểm thật: mặc định MỞ** — một route mới không có cổng thì không lớp nào kêu. |
+| C. Lai: cổng ở ứng dụng + gói tự kiểm một tập con | Có hai chỗ để tìm khi hỏi *"cái gì canh hàm này"*, và không chỗ nào là câu trả lời đủ. Loại. |
+
+### Quyết định
+
+1. **Cổng quyền (`requirePermission`) nằm ở TẦNG ỨNG DỤNG**, không ở gói nghiệp vụ — phương án B,
+   vì ba lý do trên và vì ADR-014 mục 5 đã đặt nó ở đó.
+2. **Bất biến, và đây mới là phần không được đổi: không gói nghiệp vụ nào được NHẬN một danh tính
+   đã xác thực dưới dạng tham số.** Hàm nào ghi một danh tính vào dữ liệu hoặc vào sổ kiểm toán thì
+   phải nhận **một `sessionId`** và để danh tính là **dẫn xuất** của nó — đúng khuôn
+   `createdBySessionId` + `rfq_packages_kiem_nguoi_tao` đã dựng ở 011, và đúng khuôn
+   `guest_sessions.verified_contact_id` đọc ra từ thách thức OTP đã dựng ở 012.
+3. **Hệ quả bắt buộc, ghi ra để nó không bị bỏ quên:** `SupplierActor` và `InvitationActor` phải đi
+   theo đường mà `RfqActor` đã đi. Chừng nào chưa đi, **không ô ✅ nào của D5 hay F2 được gắn dựa
+   trên chúng**, và docstring của chúng phải nói thẳng đó là lời khai.
+4. **Cổng ở tầng ứng dụng là mặc định MỞ, nên nó PHẢI kèm một lớp máy — và lớp ấy CHƯA DỰNG ĐƯỢC
+   HÔM NAY vì `apps/` rỗng.** Điều kiện ghim: **route đầu tiên của `apps/` ra đời CÙNG LÚC với một
+   lớp canh khẳng định mọi route đổi trạng thái đều nêu tên một mã quyền.** Viết route trước, lớp
+   canh sau, là đúng thứ tự đã sinh ra khoản nợ 17 (*"LẦN THỨ BA CÙNG MỘT LỚP LỖ"*).
+5. **`hasPermission` ở lại ngoài barrel** (Task 9, vòng fix 1). ADR này **không** nới nó: một cổng
+   gác dựng bằng nó vi phạm D5 trong im lặng, và điều đó đã được đo (11 mã quyền dò qua
+   `hasPermission` → sổ kiểm toán trước = 3, sau = 3).
+
+### Điều ADR này KHÔNG đóng
+
+- **Nó không làm `app_api` bị chiếm trở nên vô hại.** Một tiến trình `api` đã bị chiếm đặt được
+  `sessionId` nào nó muốn trong phạm vi các phiên đang sống. Cùng hạn chế cấu trúc đã ghi cho E3
+  và cho ADR-014: trigger chặn **lỗi lập trình**, không chặn **kẻ đã ở trong tiến trình**.
+- **Nó không cưỡng chế được ở tầng CSDL cho các bảng chỉ ĐỌC.** `listSuppliers` không ghi gì, nên
+  không có hàng nào để trigger soi. Lớp duy nhất cho đường đọc là cổng ở route — tức đúng chỗ mục 4
+  nói là mặc định mở.
+- **Mã `ROLE_GRANT` vẫn chưa vai trò nào giữ** (fail-closed có chủ đích, ghi ở `permissions.ts`).
+  ADR này không quyết vai trò nào được quản trị vai trò.
+
+### Đo bằng gì
+
+1. **Đối chứng dương trước đã:** viết một test dựng lại ca Mallory cho `packages/supplier` —
+   `createSupplier` với `actor.id` là một UUID **không thuộc phiên nào** phải bị từ chối sau khi
+   mục 2–3 được cài. Trước khi cài, cùng test ấy phải **THÀNH CÔNG** — không có vế đó thì không ai
+   biết lỗ có thật.
+2. **Đột biến:** gỡ trigger đòi `sessions.user_id = actor_id` → test phải **ĐỎ THẬT**.
+3. **Lớp canh của mục 4** đo bằng chính nó: thêm một route không nêu mã quyền → CI phải đỏ.
+
+---
+
+## ADR-017 — Chính sách tính `requires_dual_approval`: **ngưỡng theo tổ chức, CÓ PHIÊN BẢN, và kết luận phải TÁI LẬP ĐƯỢC**
+
+**Ngày:** 2026-08-30 · **Trạng thái:** **Đã chấp nhận** · Sinh ra từ: **M-6** của lượt review S1.2 (`fcd5986`) · Gỡ chặn: **D2** · Liên quan: **C3**, **A4**
+
+**Bối cảnh.** `rfq_packages.requires_dual_approval boolean NOT NULL DEFAULT true` tồn tại từ 009 và
+**không có một dòng mã nào tính nó**: `createRfq` nhận nó qua `input.requiresDualApproval ?? true`.
+Mặc định `true` là mặc định đóng và điều đó đúng — nhưng một cờ mà **người gọi tự đặt** thì D2
+(*"RFQ vượt ngưỡng cần 2 phê duyệt"*) chưa có ngưỡng nào cả.
+
+Khối đầu 009 giải thích vì sao cờ là `boolean` chứ không phải một số tiền: `rfq_items` **không có
+một cột giá nào**, cố ý, vì *"bảng không có cột thì không có gì để nhớ"*. Lập luận ấy vẫn đúng cho
+**giá** — nhưng nó đã bị kéo dài **một bước quá xa**, và bước ấy là chỗ ADR này can thiệp.
+
+**Ba ràng buộc độc lập cùng chỉ về một hướng:**
+
+1. **PRODUCT.md §8 ràng buộc 5:** *"Mọi ngưỡng chính sách … phải cấu hình được theo từng doanh
+   nghiệp. Không hard-code."* ⇒ ngưỡng là **dữ liệu theo tổ chức**, không phải hằng số.
+2. **USP 3 là *Procurement Governance* — "tạo bằng chứng kiểm toán".** Một `boolean` trần là một
+   phán quyết **không kiểm toán được**: kiểm toán viên hỏi *"vì sao RFQ này chỉ cần một phê duyệt"*
+   và trong dữ liệu **không có câu trả lời**. Đây không phải chuyện tiện dụng; nó là chức năng
+   chính của sản phẩm bị thiếu ở đúng chỗ.
+3. **North Star Metric là *Verified Competitive Spend* — "giá trị mua sắm đã đi qua một quy trình
+   cạnh tranh".** Chỉ số bắc đẩu của sản phẩm có **đơn vị là tiền**, và trước lúc award, số tiền
+   duy nhất tồn tại là **ước lượng của người mua**. Không có cột ấy thì chỉ số ấy **không tính được
+   bằng bất cứ cách nào** — độc lập hoàn toàn với D2.
+
+### Quyết định
+
+1. **Ngưỡng là chính sách THEO TỔ CHỨC, lưu trong một bảng có PHIÊN BẢN** (`org_procurement_policies`,
+   migration đánh số mới). Không hằng số trong mã, không biến môi trường.
+2. **Ứng dụng tính, CSDL lưu kết luận — nhưng KHÔNG được lưu kết luận TRẦN.** Cùng hàng
+   `rfq_packages` phải mang **phiên bản chính sách đã áp** và **giá trị đã đem so**, đủ để phân
+   loại được **tái lập** về sau. `requires_dual_approval` giữ nguyên là cột quyết định (trigger
+   `rfq_kiem_chuyen_trang_thai` ở 011 đọc đúng cột này để đếm phê duyệt trên băm nội dung); hai cột
+   mới là **bằng chứng**, không phải đầu vào thứ hai của trigger.
+3. **`rfq_packages.estimated_value` (+ `currency`) ra đời — ước lượng của NGƯỜI MUA, không bao giờ
+   là giá của nhà cung cấp.** Câu ở đầu 009 — *"NGƯỠNG của D2 KHÔNG được lưu dưới dạng một số
+   tiền"* — **được thu hẹp**: nó đúng cho **giá thầu** (A3/A4), không đúng cho **ngân sách của bên
+   mua**. Vì 009 là migration đánh số đã áp và **không được đụng** (sửa chú thích cũng đổi
+   checksum), phần đính chính nằm ở **migration mới cộng ADR này** — đúng cách đóng đã ghi cho
+   khoản nợ 19.
+4. **Không mặt tiền nào hướng nhà cung cấp được trả về `estimated_value`.** Công bố ngân sách cho
+   bên dự thầu là **neo giá** — nó làm hỏng chính thứ Blind Procurement mua về. Cưỡng chế bằng
+   **quyền theo cột** cho đường khách cộng một test trên đường `guest_sessions`, không bằng một
+   dòng chú thích.
+5. **Fail-closed giữ nguyên và mạnh hơn:** thiếu chính sách, thiếu ước lượng, hoặc chính sách không
+   quyết được ⇒ `requires_dual_approval = true`. Đây là lý do cột giữ `DEFAULT true` chứ không
+   chuyển sang `NOT NULL` không mặc định.
+
+### Điều ADR này KHÔNG đóng — và mục đầu là mục quan trọng nhất
+
+- **Người mua khai ước lượng THẤP để né phê duyệt kép.** Đây là cách né kinh điển của mọi kiểm soát
+  theo ngưỡng, cùng họ với **chia nhỏ đơn hàng**, và ADR này **không** chống được: ước lượng là số
+  do chính người mua nhập. Thứ bắt được nó là **so ước lượng với giá trúng sau mở thầu** và **phát
+  hiện chia nhỏ** — cả hai thuộc **S2/S3**, không thuộc S1. Ghi ra ở đây để không ai đọc ô ✅ của
+  D2 rộng hơn cơ chế.
+- **Vế *"hai phiên khác nhau"* của D2** vẫn mở, đúng như ADR-014 đã ghi.
+- **Ai được sửa chính sách** là một câu hỏi của ADR-016 mục 4 (mã quyền cho route ấy), chưa quyết
+  ở đây.
+
+### Đo bằng gì
+
+1. **Tái lập được:** tạo RFQ dưới chính sách phiên bản *n*, xoay chính sách sang *n+1* với ngưỡng
+   khác → phân loại của RFQ cũ **không đổi**, và tính lại từ `(phiên bản đã lưu, giá trị đã lưu)`
+   cho ra **đúng** cờ đã lưu.
+2. **Fail-closed:** tạo RFQ **không** có `estimated_value` → cờ phải là `true`. Đột biến: đổi mặc
+   định thành `false` → test phải **ĐỎ THẬT**.
+3. **Neo giá:** đường đọc RFQ của phiên khách phải **không** chứa `estimated_value`. Đột biến: thêm
+   cột ấy vào câu `SELECT` của đường khách → test phải **ĐỎ THẬT**. Đây là phép đo duy nhất chứng
+   minh mục 4 là một lớp chứ không phải một lời hứa.
+4. **Khai thấp: CỐ Ý KHÔNG CÓ PHÉP ĐO Ở S1**, và chỗ trống này phải nằm ở §4 của ma trận khi
+   `[INV-D2]` được gắn thẻ.
+
+---
+
+## ADR-018 — Pepper cho băm đích và băm bộ đếm: **HMAC với một khoá giữ NGOÀI CSDL, có phiên bản**
+
+**Ngày:** 2026-08-30 · **Trạng thái:** **Đã chấp nhận** · Sinh ra từ: **M1** của lượt review S1.3 (`bca870f`) · Liên quan: **E3**, **F3**, ADR-009, ADR-013
+
+**Bối cảnh.** Hai chỗ băm một định danh liên lạc rồi lưu băm xuống bảng:
+`invitation_otp_challenges.destination_hash` (đích đã thật sự gửi) và `otp_rate_limits.bucket_hash`
+(bộ đếm hạn mức). Cả hai là `sha256(orgId ‖ nhãn ‖ giá trị)` — hàm `bam()` ở
+`packages/invitation/src/invitation.ts`.
+
+**Phần đã đóng, và nó đã được ghi tại chỗ:** `orgId` nằm **trong** phép băm. Không có nó, cùng một
+số điện thoại cho cùng một `bucket_hash` ở **mọi** tổ chức, và một bản sao lưu cho phép JOIN giữa
+hai tổ chức để trả lời *"hai bên mua này có cùng nhà cung cấp không"* — đúng tài sản mà **ADR-013**
+dành trọn một ADR để bảo vệ.
+
+**Phần còn lại là M1:** không gian số di động Việt Nam cỡ **10⁹**. SHA-256 trần trên một không gian
+cỡ ấy **đảo ngược được bằng liệt kê** — với `org_id` nằm sẵn trong cùng bản sao lưu, kẻ có bản sao
+lưu dựng lại được **danh bạ**. Cột được thêm ở 012 chính vì lý do bảo mật (*"lưu BĂM chứ không lưu
+số"*), nên để nó ở dạng đảo ngược được là **giữ hình thức mà mất nội dung**.
+
+### Phương án
+
+| Phương án | Đánh giá |
+|---|---|
+| **A. Pepper — HMAC-SHA256 với một khoá bí mật giữ ngoài CSDL** | Kẻ **chỉ có bản sao lưu** không liệt kê được, cũng không **xác nhận** được một số đoán. Chi phí: một khoá nữa phải xoay và phải không bao giờ vào CSDL. |
+| B. KDF chậm (scrypt/argon2) thay pepper | Giới hạn tần suất nằm trên **đường nóng của mọi yêu cầu OTP**; một KDF chậm ở đó là một trục DoS tự tạo. Và với 10⁹ ứng viên, chậm chỉ làm **đắt**, không làm **không thể**. Loại. |
+| C. Gọi KMS cho mỗi phép băm (`GenerateMac`) | Khoá không bao giờ rời KMS — mạnh nhất. Nhưng nó biến **mỗi lần đếm** thành một lời gọi mạng, khác hẳn bậc chi phí mà ADR-009 đã đo và chấp nhận (**đúng 1 lời gọi KMS cho một lượt mở thầu**). Loại cho đường nóng. |
+| D. Bỏ hẳn cột `destination_hash` | Xem *Điều ADR này KHÔNG đóng* — đây là phương án thay thế **trung thực**, không phải một phương án tồi. |
+
+### Quyết định
+
+1. **Cả hai phép băm chuyển sang HMAC-SHA256 với một pepper**, không phải SHA-256 trần.
+2. **Pepper nằm ở kho bí mật của hạ tầng đích** (AWS — ADR-009), nạp lúc khởi động tiến trình.
+   **Không bao giờ vào CSDL** — để nó cạnh dữ liệu là xoá sạch lý do nó tồn tại — **không vào
+   repo, không vào log** (quy ước bắt buộc: không bao giờ ghi log khoá, bí mật).
+3. **Pepper CÓ PHIÊN BẢN, và mỗi băm mang theo phiên bản đã dùng.** Cùng khuôn `MasterKeyRing`
+   (`activeVersion` + bản đồ phiên bản, khoá 32 byte) và cùng khuôn ADR-011 bắt phong bì mang mã
+   thuật toán. Lý do cụ thể: `otp_rate_limits` có cửa sổ ngắn nên xoay pepper chỉ làm bộ đếm bắt
+   đầu lại — vô hại; nhưng `destination_hash` là **dữ liệu kiểm toán sống lâu**, và xoay pepper mà
+   không ghi phiên bản là **làm chết** khả năng đối chiếu của mọi hàng cũ.
+4. **Một pepper, không phải hai.** Tách miền đã có sẵn trong đầu vào băm bằng nhãn (`'DEST'`,
+   `'CALLER'`, `'INVITATION'`); thêm một pepper thứ hai chỉ thêm một thứ phải xoay.
+
+### Điều ADR này KHÔNG đóng
+
+- **Pepper chỉ chặn kẻ CHỈ có bản sao lưu CSDL.** Kẻ đã ở trong tiến trình `api` có cả hai thứ.
+  Cùng hạn chế cấu trúc đã ghi cho E3 ở `mfa-credentials.ts` và nhắc lại ở 010 khi cấp
+  `GRANT DELETE ON otp_rate_limits`.
+- **Sau vòng sửa 011/012, `destination_hash` gần như DƯ — và điều này phải nói ra thay vì để nó
+  lặng lẽ biện minh cho một khoản đầu tư.** Đích nay **đọc từ `supplier_contacts`** chứ không nhận
+  từ tham số (C1), và 011 đã **`REVOKE UPDATE ON supplier_contacts FROM app_api`** — nên
+  `contact_id` + `channel` đã xác định đích, và người liên hệ không sửa được. Giá trị **còn lại**
+  của cột là ghim giá trị **tại thời điểm gửi**, phòng một migration tương lai cấp lại `UPDATE`.
+  Đó là một giá trị thật nhưng **hẹp**. Nếu ai đó thấy pepper là đắt, câu trả lời đúng là **bỏ
+  cột** (phương án D) — **không** phải giữ cột với một phép băm đảo ngược được.
+- **`callerFingerprint` vẫn là một hợp đồng không cưỡng chế được bằng máy**: docstring của nó đòi
+  dẫn xuất từ một nguồn không giả mạo được, *"không lớp máy nào cưỡng chế được điều này"*. Pepper
+  không đụng tới điều đó. Đây là lý do bucket theo **lời mời** tồn tại.
+
+### Đo bằng gì
+
+1. **Đối chứng DƯƠNG trước, và đây là phép đo chịu lực:** trên một không gian **giả lập nhỏ**
+   (10⁴ số), một vòng liệt kê phải **TÌM RA** số từ băm khi **không** có pepper — bằng chứng rằng
+   phép đảo ngược là thật chứ không phải một lo ngại trên giấy — và phải **THẤT BẠI** khi có
+   pepper. Không có vế dương, "không tìm ra" cũng làm test xanh.
+2. **Phiên bản:** cùng một đích, hai phiên bản pepper → hai băm **khác nhau**; và một hàng mang
+   phiên bản cũ vẫn đối chiếu được sau khi đã xoay.
+3. **Quét trên dữ liệu thật của test**, không đọc mã nguồn: pepper không xuất hiện trong
+   `outbox_jobs.payload`, không trong `audit_events`, không trong bất kỳ cột nào của
+   `invitation_otp_challenges` hay `otp_rate_limits`.

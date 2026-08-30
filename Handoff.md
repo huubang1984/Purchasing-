@@ -273,7 +273,16 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
 
     **Ba MEDIUM cố ý không sửa** vì mỗi cái là một quyết định kiến trúc: cổng quyền của
     `packages/supplier` nằm ở gói hay ở tầng API; chính sách nào tính `requires_dual_approval`;
-    pepper cho băm đích của bộ đếm hạn mức. Cả ba cần một ADR — đây là việc kế tiếp có tên.
+    pepper cho băm đích của bộ đếm hạn mức. ~~Cả ba cần một ADR — đây là việc kế tiếp có tên.~~
+    **ĐÃ CHỐT 2026-08-30: ADR-016, ADR-017, ADR-018.**
+
+    **Ba ADR ấy QUYẾT, chúng CHƯA CÀI** — lượt đó không đổi một dòng mã sản phẩm nào. Ba MEDIUM
+    vẫn **mở** cho tới khi mỗi ADR có lượt **RED thật** theo §*Đo bằng gì* của nó. Ba việc rời:
+    ADR-016 buộc `SupplierActor`/`InvitationActor` đi theo đường `createdBySessionId` mà 011 đã mở
+    cho `RfqActor`, cộng một lớp canh route **đến hạn cùng route đầu tiên của `apps/`**; ADR-017 là
+    một migration đánh số mới (`org_procurement_policies` + `rfq_packages.estimated_value`);
+    ADR-018 là HMAC + pepper có phiên bản **hoặc** bỏ hẳn `destination_hash` — cột ấy **gần như dư**
+    sau khi 011 thu hồi `UPDATE` trên `supplier_contacts`.
 
 10b. **Nguyên văn cũ, giữ để đối chiếu:**
     §9 của kế hoạch S1 đòi **`security-reviewer`** cho mọi hạng mục có dấu ⭐, và **S1.3 có dấu
@@ -318,7 +327,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 | `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
-| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ **Mười lăm ADR**: 001–010 và 012–015 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất |
+| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ **Mười tám ADR**: 001–010 và 012–018 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất. **016/017/018** là ba quyết định của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã: cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, chính sách tính `requires_dual_approval`, pepper cho băm đích |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
 | `evidence/INV-matrix.md` | Ma trận bất biến; **§3 = danh sách việc của S1**, §4 = phạm vi hẹp |
 | `evidence/security-reviews.md` | Dấu vết review an ninh, kèm giới hạn của chính nó |
