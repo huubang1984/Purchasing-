@@ -396,7 +396,12 @@ describe("bề mặt export công khai của supplier", () => {
 // trigger canh mọi đường. Nhưng khác hai ca kia ở một điểm quyết định: cổng gác ấy KHÔNG làm hàng
 // rào thật biến mất, nó chỉ thừa. Có test đọc thẳng 009 và đòi hai bên khớp byte-với-cạnh.
 // ============================================================================================
+// [ADR-017] Nam symbol moi. `setRfqBudget` la duong DUY NHAT ha `requires_dual_approval` xuong
+// `false`; `createProcurementPolicy` khong co ham sua di kem, va do la co che chu khong phai su
+// thieu sot — mot nguong sua duoc lam "tai lap duoc" thanh mot loi hua rong.
 const DANH_SACH_TRANG_RFQ = [
+  "CURRENCIES",
+  "MONEY_PATTERN",
   "RFQ_STATUSES",
   "RFQ_TRANSITIONS",
   "RfqError",
@@ -404,11 +409,14 @@ const DANH_SACH_TRANG_RFQ = [
   "approveRfq",
   "cancelRfq",
   "closeRfq",
+  "createProcurementPolicy",
   "createRfq",
   "extendRfqDeadline",
+  "getActiveProcurementPolicy",
   "getRfq",
   "listRfqItems",
   "openRfq",
+  "setRfqBudget",
   "submitRfqForApproval",
 ];
 

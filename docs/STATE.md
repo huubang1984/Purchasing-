@@ -493,8 +493,22 @@ CMK, chưa có role nào được tạo.
      cho `packages/supplier`, chỉ chưa lượt review nào gọi tên. Câu trong ADR-016 mục 3 nói
      `RfqActor` "đã đi" đã bị **gạch bỏ tại chỗ** ngay khi bắt đầu cài. ⑵ **Lớp canh route** —
      mặc định MỞ cho tới khi có nó, và nó **đến hạn cùng route đầu tiên của `apps/`**.
-   - **ADR-017** → một migration đánh số mới: `org_procurement_policies` + `rfq_packages.estimated_value`
-     + phiên bản chính sách; cộng phép đo **neo giá** trên đường phiên khách.
+   - ~~**ADR-017** → một migration đánh số mới: `org_procurement_policies` + `rfq_packages.estimated_value`
+     + phiên bản chính sách; cộng phép đo **neo giá** trên đường phiên khách.~~
+     **ĐÃ CÀI 2026-08-30** — migration `014`, `packages/rfq/src/procurement-policy.ts`, 10 test mới.
+     `requiresDualApproval` **đã bị gỡ khỏi `createRfq`**: RFQ luôn ra đời ở `true`, và đường DUY
+     NHẤT hạ nó xuống là `setRfqBudget` — thứ phải trỏ tới một chính sách có thật, và **CSDL tính
+     phép so** (`rfq_can_phe_duyet_kep`), không phải TypeScript.
+
+     **HAI CÂU CỦA ADR-017 BỊ LƯỢT CÀI BÁC BỎ, cả hai đã gạch bỏ tại chỗ:** ⑴ tiền **không** nằm
+     trên `rfq_packages` mà ở bảng riêng `rfq_budgets` — vì "cưỡng chế bằng quyền theo cột cho
+     đường khách" **không cài được**: đường khách và đường người mua dùng CHUNG role `app_api`,
+     không có role thứ ba để thu hẹp; ⑵ `policy_version` **không** được chép vào bằng chứng —
+     `policy_id` trỏ tới một hàng không sửa được nên đã xác định cả phiên bản lẫn ngưỡng.
+
+     **Khoản nợ có tên và có mốc:** khi **S1.5** dựng đường đọc RFQ cho phiên khách, đường ấy phải
+     được ĐO là không chạm `rfq_budgets`. Hôm nay `packages/invitation` không đọc `rfq_packages`
+     một lần nào, nên chưa có gì để đo.
    - **ADR-018** → HMAC + pepper có phiên bản, **hoặc** bỏ `destination_hash`. Quyết bằng phép đo ở
      §*Đo bằng gì* mục 1 (đối chứng dương: liệt kê phải TÌM RA số khi không có pepper).
 10. **Ba MEDIUM này KHÔNG được đánh dấu đóng khi ADR được chốt.** Một quyết định không phải một lớp;

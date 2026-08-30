@@ -930,21 +930,41 @@ một cột giá nào**, cố ý, vì *"bảng không có cột thì không có 
 
 1. **Ngưỡng là chính sách THEO TỔ CHỨC, lưu trong một bảng có PHIÊN BẢN** (`org_procurement_policies`,
    migration đánh số mới). Không hằng số trong mã, không biến môi trường.
-2. **Ứng dụng tính, CSDL lưu kết luận — nhưng KHÔNG được lưu kết luận TRẦN.** Cùng hàng
-   `rfq_packages` phải mang **phiên bản chính sách đã áp** và **giá trị đã đem so**, đủ để phân
-   loại được **tái lập** về sau. `requires_dual_approval` giữ nguyên là cột quyết định (trigger
-   `rfq_kiem_chuyen_trang_thai` ở 011 đọc đúng cột này để đếm phê duyệt trên băm nội dung); hai cột
-   mới là **bằng chứng**, không phải đầu vào thứ hai của trigger.
-3. **`rfq_packages.estimated_value` (+ `currency`) ra đời — ước lượng của NGƯỜI MUA, không bao giờ
-   là giá của nhà cung cấp.** Câu ở đầu 009 — *"NGƯỠNG của D2 KHÔNG được lưu dưới dạng một số
-   tiền"* — **được thu hẹp**: nó đúng cho **giá thầu** (A3/A4), không đúng cho **ngân sách của bên
-   mua**. Vì 009 là migration đánh số đã áp và **không được đụng** (sửa chú thích cũng đổi
-   checksum), phần đính chính nằm ở **migration mới cộng ADR này** — đúng cách đóng đã ghi cho
-   khoản nợ 19.
+2. **Ứng dụng tính, CSDL lưu kết luận — nhưng KHÔNG được lưu kết luận TRẦN.** ~~Cùng hàng
+   `rfq_packages` phải mang **phiên bản chính sách đã áp** và **giá trị đã đem so**~~ **Một hàng
+   `rfq_budgets` phải mang một khoá ngoại tới đúng phiên bản chính sách đã áp, cộng giá trị đã đem
+   so**, đủ để phân loại được **tái lập** về sau. `requires_dual_approval` giữ nguyên là cột quyết
+   định (trigger `rfq_kiem_chuyen_trang_thai` ở 011 đọc đúng cột này để đếm phê duyệt trên băm nội
+   dung); bằng chứng nằm ở bảng riêng, không phải đầu vào thứ hai của trigger.
+
+   > **Hai thu hẹp mà lượt cài đặt bắt được, ghi tại chỗ (2026-08-30):** ⑴ **`policy_version` KHÔNG
+   > được chép vào bảng bằng chứng.** `policy_id` là khoá ngoại tới một hàng **không sửa được**,
+   > nên nó đã xác định cả phiên bản lẫn ngưỡng; chép thêm một bản là tạo hai nguồn sự thật có thể
+   > lệch nhau — đúng lớp lỗi mà `TAX_CODE_PATTERN` phải dựng một meta-test để canh. ⑵ **Phép so
+   > nằm ở SQL, không ở TypeScript** (`public.rfq_can_phe_duyet_kep`, 014). Trigger cưỡng chế
+   > *bắt buộc* phải có phép so ấy; một bản thứ hai ở TypeScript là hai bản sao của một luật — và
+   > bản TypeScript còn sai theo cách riêng của nó, vì tiền trong JavaScript là `double`.
+3. ~~**`rfq_packages.estimated_value`**~~ **`rfq_budgets.estimated_value`** **(+ `currency`) ra đời
+   — ước lượng của NGƯỜI MUA, không bao giờ là giá của nhà cung cấp.** Câu ở đầu 009 — *"NGƯỠNG
+   của D2 KHÔNG được lưu dưới dạng một số tiền"* — **được thu hẹp**: nó đúng cho **giá thầu**
+   (A3/A4), không đúng cho **ngân sách của bên mua**. Vì 009 là migration đánh số đã áp và **không
+   được đụng** (sửa chú thích cũng đổi checksum), phần đính chính nằm ở **migration mới cộng ADR
+   này** — đúng cách đóng đã ghi cho khoản nợ 19.
 4. **Không mặt tiền nào hướng nhà cung cấp được trả về `estimated_value`.** Công bố ngân sách cho
-   bên dự thầu là **neo giá** — nó làm hỏng chính thứ Blind Procurement mua về. Cưỡng chế bằng
+   bên dự thầu là **neo giá** — nó làm hỏng chính thứ Blind Procurement mua về. ~~Cưỡng chế bằng
    **quyền theo cột** cho đường khách cộng một test trên đường `guest_sessions`, không bằng một
-   dòng chú thích.
+   dòng chú thích.~~
+
+   > **Câu vừa gạch KHÔNG CÀI ĐƯỢC, và lý do là cấu trúc chứ không phải công sức:** đường khách và
+   > đường người mua dùng **CHUNG một role CSDL** (`app_api`) — không có role thứ ba để thu hẹp
+   > quyền cho riêng đường khách. Thứ thay thế được đưa vào 014 là **tiền nằm ở BẢNG RIÊNG**, dùng
+   > đúng lập luận 009 đã dùng để không cho `rfq_items` một cột giá: *"bảng không có cột thì không
+   > có gì để nhớ"*. Một cột trên `rfq_packages` sẽ đi theo mọi `SELECT *` và mọi hàm đọc RFQ về
+   > sau, và lớp phòng thủ duy nhất sẽ là trí nhớ của người viết truy vấn tiếp theo.
+   >
+   > **Phần còn lại là một khoản nợ có tên và có mốc:** khi **S1.5** dựng đường đọc RFQ cho phiên
+   > khách, đường ấy phải được **đo** là không chạm `rfq_budgets`. Hôm nay `packages/invitation`
+   > không đọc `rfq_packages` một lần nào, nên chưa có gì để đo.
 5. **Fail-closed giữ nguyên và mạnh hơn:** thiếu chính sách, thiếu ước lượng, hoặc chính sách không
    quyết được ⇒ `requires_dual_approval = true`. Đây là lý do cột giữ `DEFAULT true` chứ không
    chuyển sang `NOT NULL` không mặc định.

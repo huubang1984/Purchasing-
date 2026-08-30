@@ -18,6 +18,7 @@ import {
   openRfq,
   submitRfqForApproval,
 } from "./rfq.js";
+import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
 // S1.2 — MÁY TRẠNG THÁI RFQ, ĐO TRÊN POSTGRES THẬT DƯỚI ROLE `app_api`
@@ -60,15 +61,24 @@ async function taoPhien(orgId: string, userId: string): Promise<string> {
 }
 
 /** RFQ ở DRAFT kèm một hạng mục — điểm xuất phát của hầu hết phép đo dưới đây. */
+// [ADR-017] `requiresDualApproval` khong con la mot co tu khai. RFQ luon ra doi o `true`, va
+// duong DUY NHAT ha no xuong `false` la `setRfqBudget` — thu phai tro toi mot chinh sach co that
+// va de CSDL tinh phep so. Tham so cua helper nay vi vay DOI NGHIA: no khong con DAT mot co, no
+// chon mot SO TIEN nam duoi hay tren nguong. Nguong cua orgA la 100 trieu, dat o beforeAll.
 async function rfqNhap(orgId = orgA, requiresDualApproval = false): Promise<string> {
   return withTenant(apiPool, orgId, async (c) => {
     const r = await createRfq(c, orgId, {
       title: "Mua thep tam",
       deadlineAt: MAI_SAU,
-      requiresDualApproval,
       createdBy: u1,
       createdBySessionId: s1,
       actor: ACTOR,
+    });
+    await setRfqBudget(c, orgId, {
+      rfqId: r.id,
+      estimatedValue: requiresDualApproval ? "200000000.00" : "1000000.00",
+      currency: "VND",
+      actorSessionId: s1,
     });
     await addRfqItem(c, orgId, {
       rfqId: r.id,
@@ -110,6 +120,16 @@ beforeAll(async () => {
 
   expect([orgA, orgB, u1, u2, u3, s1, s2, s3, s2b].filter((x) => x === "")).toEqual([]);
   apiPool = db.poolAs("app_api");
+
+  // [ADR-017] Chinh sach cua orgA: nguong 100 trieu VND. Moi RFQ cua bo test nay di qua no.
+  await withTenant(apiPool, orgA, (c) =>
+    createProcurementPolicy(c, orgA, {
+      version: 1,
+      dualApprovalThreshold: "100000000.00",
+      currency: "VND",
+      actorSessionId: s1,
+    }),
+  );
 }, 180000);
 
 afterAll(async () => {
@@ -218,10 +238,15 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
       const r = await createRfq(c, orgA, {
         title: "RFQ rong",
         deadlineAt: MAI_SAU,
-        requiresDualApproval: false,
         createdBy: u1,
         createdBySessionId: s1,
         actor: ACTOR,
+      });
+      await setRfqBudget(c, orgA, {
+        rfqId: r.id,
+        estimatedValue: "1000000.00",
+        currency: "VND",
+        actorSessionId: s1,
       });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actor: ACTOR });
       return r.id;
@@ -467,5 +492,183 @@ describe("huỷ RFQ", () => {
     // kịp nói gì. Cạnh `CLOSED->CANCELLED` vẫn không có trong bảng cạnh — test "đi vòng qua ứng
     // dụng" ở trên mới là chỗ đo trigger.
     ).rejects.toThrow(/không ở trạng thái nguồn hợp lệ/);
+  });
+});
+
+// =============================================================================================
+// [ADR-017] NGƯỠNG PHÊ DUYỆT KÉP — CHÍNH SÁCH THEO TỔ CHỨC, CÓ PHIÊN BẢN, TÁI LẬP ĐƯỢC
+//
+// Trước migration 014, `requires_dual_approval` là một cờ NGƯỜI GỌI đặt và không một dòng mã nào
+// tính nó. Khối này đo bốn thứ: phân loại chạy đúng, hạ cờ mà KHÔNG có bằng chứng thì bị chặn ở
+// tầng CSDL, phân loại cũ KHÔNG đổi khi chính sách xoay, và bằng chứng không sửa được sau khi
+// RFQ rời DRAFT.
+// =============================================================================================
+describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
+  it("ĐỐI CHỨNG DƯƠNG: dưới ngưỡng thì hạ được cờ; trên ngưỡng thì KHÔNG", async () => {
+    const duoi = await rfqNhap(orgA, false);
+    const tren = await rfqNhap(orgA, true);
+
+    const { rows } = await db.pool.query<{ id: string; requires_dual_approval: boolean }>(
+      "SELECT id, requires_dual_approval FROM rfq_packages WHERE id = ANY($1::uuid[])",
+      [[duoi, tren]],
+    );
+    const theoId = new Map(rows.map((h) => [h.id, h.requires_dual_approval]));
+    expect(theoId.get(duoi)).toBe(false);
+    expect(theoId.get(tren)).toBe(true);
+  });
+
+  it("bằng chứng được LƯU, và nó trỏ tới đúng phiên bản chính sách đã dùng", async () => {
+    const rfqId = await rfqNhap(orgA, false);
+    const { rows } = await db.pool.query<{ estimated_value: string; version: number }>(
+      "SELECT b.estimated_value, p.version FROM rfq_budgets b " +
+        " JOIN org_procurement_policies p ON p.id = b.policy_id WHERE b.rfq_id = $1",
+      [rfqId],
+    );
+    // Đây là câu trả lời cho "vì sao RFQ này chỉ cần một phê duyệt". Trước 014 nó không tồn tại.
+    expect(rows[0]?.estimated_value).toBe("1000000.00");
+    expect(rows[0]?.version).toBe(1);
+  });
+
+  it("LỚP CÓ THẨM QUYỀN Ở CSDL: hạ cờ bằng SQL VIẾT TAY rồi nộp duyệt bị TRIGGER chặn", async () => {
+    const rfqId = await rfqNhap(orgA, true);
+
+    // Đi vòng qua `setRfqBudget`: đây là chỗ duy nhất chứng minh lớp nằm ở CSDL. Câu UPDATE này
+    // THÀNH CÔNG — hạ cờ khi còn DRAFT là hợp lệ về lược đồ.
+    await withTenant(apiPool, orgA, (c) =>
+      c.query("UPDATE rfq_packages SET requires_dual_approval = false WHERE id = $1", [rfqId]),
+    );
+
+    // Nhưng cạnh đi vào vòng phê duyệt thì đòi BẰNG CHỨNG, và bằng chứng nói ngược lại.
+    await expect(
+      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actor: ACTOR })),
+    ).rejects.toThrow(/phai can hai phe duyet/);
+  });
+
+  it("KHÔNG có ngân sách nào thì cũng không hạ cờ được — mặc định ĐÓNG", async () => {
+    const rfqId = await withTenant(apiPool, orgA, async (c) => {
+      const r = await createRfq(c, orgA, {
+        title: "RFQ khong ngan sach",
+        deadlineAt: MAI_SAU,
+        createdBy: u1,
+        createdBySessionId: s1,
+        actor: ACTOR,
+      });
+      await addRfqItem(c, orgA, {
+        rfqId: r.id,
+        lineNo: 1,
+        description: "Mot hang muc",
+        quantity: "1.0000",
+        unit: "cai",
+        actor: ACTOR,
+      });
+      await c.query("UPDATE rfq_packages SET requires_dual_approval = false WHERE id = $1", [r.id]);
+      return r.id;
+    });
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actor: ACTOR })),
+    ).rejects.toThrow(/chua co ngan sach va chinh sach/);
+  });
+
+  it("TÁI LẬP ĐƯỢC: xoay chính sách sang phiên bản mới KHÔNG đổi phân loại của RFQ cũ", async () => {
+    const cu = await rfqNhap(orgA, false);
+
+    // Phiên bản 2 hạ ngưỡng xuống dưới giá trị của RFQ trên. Nếu phân loại được tính lại từ
+    // "chính sách hiện hành", RFQ cũ sẽ đổi nghĩa sau lưng mọi người.
+    await withTenant(apiPool, orgA, (c) =>
+      createProcurementPolicy(c, orgA, {
+        version: 2,
+        dualApprovalThreshold: "500000.00",
+        currency: "VND",
+        actorSessionId: s1,
+      }),
+    );
+
+    const { rows } = await db.pool.query<{ requires_dual_approval: boolean; version: number }>(
+      "SELECT r.requires_dual_approval, p.version FROM rfq_packages r " +
+        " JOIN rfq_budgets b ON b.rfq_id = r.id " +
+        " JOIN org_procurement_policies p ON p.id = b.policy_id WHERE r.id = $1",
+      [cu],
+    );
+    expect(rows[0]?.requires_dual_approval).toBe(false);
+    expect(rows[0]?.version).toBe(1);
+  });
+
+  it("chính sách KHÔNG SỬA ĐƯỢC — `app_api` không có UPDATE, và đó là toàn bộ cơ chế", async () => {
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE org_procurement_policies SET dual_approval_threshold = 1 WHERE version = 1"),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("bằng chứng không sửa được sau khi RFQ rời DRAFT", async () => {
+    const rfqId = await rfqNhap(orgA, false);
+    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actor: ACTOR }));
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        setRfqBudget(c, orgA, {
+          rfqId,
+          estimatedValue: "999.00",
+          currency: "VND",
+          actorSessionId: s1,
+        }),
+      ),
+    ).rejects.toThrow(/DRAFT/);
+  });
+
+  it("ĐỘT BIẾN: gỡ trigger ngưỡng thì cờ hạ bằng tay ĐI LỌT vào vòng phê duyệt", async () => {
+    const rfqId = await rfqNhap(orgA, true);
+    await withTenant(apiPool, orgA, (c) =>
+      c.query("UPDATE rfq_packages SET requires_dual_approval = false WHERE id = $1", [rfqId]),
+    );
+
+    await db.pool.query(
+      "DROP TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep ON rfq_packages",
+    );
+    try {
+      await withTenant(apiPool, orgA, (c) =>
+        submitRfqForApproval(c, orgA, { rfqId, actor: ACTOR }),
+      );
+      const { rows } = await db.pool.query<{ status: string }>(
+        "SELECT status FROM rfq_packages WHERE id = $1",
+        [rfqId],
+      );
+      expect(rows[0]?.status, "không có trigger thì bằng chứng chỉ là một hàng dữ liệu").toBe(
+        "PENDING_APPROVAL",
+      );
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep BEFORE UPDATE ON rfq_packages " +
+          " FOR EACH ROW WHEN (NEW.status IN ('PENDING_APPROVAL', 'OPEN') " +
+          "   AND NEW.status IS DISTINCT FROM OLD.status) " +
+          " EXECUTE FUNCTION public.rfq_kiem_nguong_phe_duyet_kep()",
+      );
+    }
+  });
+
+  it("số tiền KHÔNG vào sổ kiểm toán — ngân sách rò xuống bên bán là NEO GIÁ", async () => {
+    const rfqId = await rfqNhap(orgA, false);
+    const { rows } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE resource_id = $1 AND action = 'RFQ_BUDGET_SET'",
+      [rfqId],
+    );
+    const p = rows[0]?.payload ?? {};
+    expect(Object.keys(p).sort()).toEqual(["policyVersion", "requiresDualApproval"]);
+    expect(JSON.stringify(p)).not.toContain("1000000");
+  });
+
+  it("`estimated_value` KHÔNG nằm trên `rfq_packages` — bảng không có cột thì không có gì để nhớ", async () => {
+    // Lớp thay cho thứ ADR-017 mục 4 hứa mà KHÔNG cài được: đường khách và đường người mua dùng
+    // CHUNG một role CSDL (`app_api`), nên không thu hẹp quyền theo cột cho riêng đường khách
+    // được. Bảng riêng là thứ thay thế được, và test này ghim nó.
+    const { rows } = await db.pool.query<{ column_name: string }>(
+      "SELECT column_name FROM information_schema.columns " +
+        " WHERE table_schema = 'public' AND table_name = 'rfq_packages' " +
+        "   AND (column_name LIKE '%value%' OR column_name LIKE '%price%' " +
+        "        OR column_name LIKE '%budget%' OR column_name LIKE '%amount%')",
+    );
+    expect(rows.map((h) => h.column_name)).toEqual([]);
   });
 });

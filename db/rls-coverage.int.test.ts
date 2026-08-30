@@ -680,6 +680,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
+      { grantee: "app_api", bang: "org_procurement_policies", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
       { grantee: "app_api", bang: "otp_rate_limits", quyen: "DELETE,SELECT" },
       // [Task 10] `outbox_jobs` của 007 chỉ hiện SELECT ở MỨC BẢNG: INSERT/UPDATE của nó đều là
@@ -699,6 +700,7 @@ describe("phủ RLS", () => {
       // `rfq_approvals` KHONG co UPDATE lan DELETE cho bat ky role nao: mot chu ky phe duyet sua
       // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
       { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
       // [011] `rfq_items` mat DELETE o muc bang, `suppliers`/`supplier_contacts` mat UPDATE theo
@@ -873,6 +875,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
+      // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
+      // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
+      // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "currency", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "dual_approval_threshold", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "effective_from", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "version", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
       { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_kind", quyen: "INSERT" },
@@ -913,6 +925,19 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
       // [S1.3] `rfq_invitation_tokens` - `token_hash` chi INSERT. Mot token doi duoc gia tri la
       // mot token khong thu hoi duoc that (E1).
+      // [ADR-017 / 014] Ngan sach du tinh cua nguoi mua. UPDATE co, nhung bi trigger
+      // `rfq_budgets_chi_sua_khi_soan` gioi han vao luc RFQ con o DRAFT — sua duoc bang chung SAU
+      // khi nguoi duyet da ky nghia la bang chung noi mot dang con quyet dinh da ra mot neo.
+      { grantee: "app_api", bang: "rfq_budgets", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "currency", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "currency", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "estimated_value", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "estimated_value", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "consumed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "invitation_id", quyen: "INSERT" },

@@ -76,8 +76,10 @@ export interface RfqActor {
 export interface CreateRfqInput {
   readonly title: string;
   readonly deadlineAt?: Date | null;
-  /** Mặc định `true` — mặc định ĐÓNG, cùng giá trị với DEFAULT của cột ở 009. */
-  readonly requiresDualApproval?: boolean;
+  // [ADR-017] `requiresDualApproval` ĐÃ BỊ GỠ khỏi chữ ký này. Nó từng là một cờ mà NGƯỜI GỌI
+  // đặt, và không một dòng mã nào tính nó — tức D2 ("RFQ vượt ngưỡng cần 2 phê duyệt") chưa có
+  // NGƯỠNG nào cả. RFQ nay luôn ra đời ở `true` (DEFAULT của cột, 009), và đường DUY NHẤT hạ nó
+  // xuống là `setRfqBudget` — thứ phải trỏ tới một chính sách có thật và để CSDL tính phép so.
   readonly createdBy: string;
   /**
    * [H-1, review an ninh S1.2] Phiên của CHÍNH người tạo. Không có nó, `createdBy` là một LỜI KHAI:
@@ -207,13 +209,15 @@ export async function createRfq(
   await assertTenantBound(client, orgId, "createRfq");
 
   const title = batBuoc(input.title, "title", 500);
-  const requiresDual = input.requiresDualApproval ?? true;
 
+  // [ADR-017] Cột `requires_dual_approval` cố ý KHÔNG có trong danh sách: `DEFAULT true` của 009
+  // là mặc định ĐÓNG, và không viết nó ra ở đây làm cho "chỉ `setRfqBudget` hạ được nó" thành một
+  // câu đúng theo hình dạng của mã, không phải theo trí nhớ của người đọc.
   const { rows } = await client.query<HangRfq>(
     `INSERT INTO rfq_packages
-       (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_RFQ}`,
-    [orgId, title, input.deadlineAt ?? null, requiresDual, input.createdBy, input.createdBySessionId],
+       (org_id, title, deadline_at, created_by, created_by_session_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_RFQ}`,
+    [orgId, title, input.deadlineAt ?? null, input.createdBy, input.createdBySessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("INSERT rfq_packages không trả về hàng nào");
@@ -224,7 +228,7 @@ export async function createRfq(
     action: "RFQ_CREATED",
     resourceType: "rfq_package",
     resourceId: hang.id,
-    payload: { requiresDualApproval: requiresDual },
+    payload: { requiresDualApproval: hang.requires_dual_approval },
   });
 
   return doiRfq(hang);

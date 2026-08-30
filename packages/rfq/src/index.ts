@@ -34,3 +34,20 @@ export {
   type RfqRecord,
   type RfqStatus,
 } from "./rfq.js";
+// ============================================================================================
+// [ADR-017] CHINH SACH MUA SAM. `setRfqBudget` la duong DUY NHAT ha `requires_dual_approval`
+// xuong `false`, va no khong ha duoc neu bang chung khong cho phep — vi chinh CSDL tinh phep so
+// (`public.rfq_can_phe_duyet_kep`, 014). `createRfq` khong con nhan co ay nua.
+// ============================================================================================
+export {
+  CURRENCIES,
+  MONEY_PATTERN,
+  createProcurementPolicy,
+  getActiveProcurementPolicy,
+  setRfqBudget,
+  type CreateProcurementPolicyInput,
+  type Currency,
+  type ProcurementPolicyRecord,
+  type RfqBudgetRecord,
+  type SetRfqBudgetInput,
+} from "./procurement-policy.js";

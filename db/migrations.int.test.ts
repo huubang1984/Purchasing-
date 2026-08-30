@@ -1737,6 +1737,7 @@ describe("migration của dự án", () => {
           "011_rfq_hardening.sql",
           "012_invitation_hardening.sql",
           "013_actor_from_session.sql",
+          "014_procurement_policy.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4525,6 +4526,7 @@ describe("migration của dự án", () => {
         "011_rfq_hardening.sql",
         "012_invitation_hardening.sql",
         "013_actor_from_session.sql",
+        "014_procurement_policy.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4735,6 +4737,7 @@ describe("migration của dự án", () => {
         "011_rfq_hardening.sql",
         "012_invitation_hardening.sql",
         "013_actor_from_session.sql",
+        "014_procurement_policy.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

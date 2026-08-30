@@ -312,16 +312,21 @@ describe("hình dạng file migration", () => {
     // hardening.always.sql. Hệ quả cố ý, giữ nguyên qua Task 8/9/10 và nay qua S1.1:
     // `NGOAI_LE_HINH_DANG` VẪN RỖNG. Policy của chúng là `(org_id = app_current_org_id())`
     // nguyên văn, đúng dòng `co_org_id` của danh sách trắng — không một bậc tự do nào được mở.
+    // [ADR-017 / 014] Hai bang moi — `org_procurement_policies` va `rfq_budgets` — deu co
+    // org_id, nen ca hai chiu DUNG cung bo rang buoc. He qua co y, giu nguyen qua Task 8/9/10,
+    // S1.1 va nay qua ADR-017: `NGOAI_LE_HINH_DANG` VAN RONG. Khong mot bac tu do nao duoc mo.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
       "guest_sessions",
       "invitation_otp_challenges",
       "mfa_credentials",
+      "org_procurement_policies",
       "organizations",
       "otp_rate_limits",
       "outbox_jobs",
       "rfq_approvals",
+      "rfq_budgets",
       "rfq_invitation_tokens",
       "rfq_invitations",
       "rfq_items",
