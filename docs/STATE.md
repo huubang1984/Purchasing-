@@ -116,7 +116,14 @@ ADR.
 > đổi đề bài sau khi nhà cung cấp đã đọc danh sách hạng mục — và sổ đăng ký 50 mã không có mệnh
 > đề nào nói điều đó. C4 nói về DEADLINE, không về NỘI DUNG. Test của nó cũng không mang nhãn.
 >
-> **Hai mệnh đề này nên được đưa vào sổ đăng ký hay không là một quyết định cần người chốt.**
+> **ADR-016 thêm mệnh đề thứ BA cùng loại (2026-08-30):** *danh tính ghi vào sổ kiểm toán là DẪN
+> XUẤT của một phiên, không phải một lời khai của người gọi* — trigger `kiem_danh_tinh_theo_phien`
+> ở `013`, cộng 14 test mới ở hai gói. Sổ đăng ký 50 mã **không có mệnh đề nào nói điều đó**: D5
+> nói về *ghi sổ mỗi lần TỪ CHỐI quyền*, F2 nói về IDOR. Gắn D5 lên đây là đúng thứ ADR-016 mục 3
+> cấm bằng chữ, nên **14 test ấy cố ý không mang nhãn** và độ phủ đứng yên ở **30/50** — trong khi
+> số khẳng định đi từ 758 lên **772**.
+>
+> **Ba mệnh đề này nên được đưa vào sổ đăng ký hay không là một quyết định cần người chốt.**
 > Ghi ở đây thay vì tự quyết vì thêm một mã vào sổ làm đổi mẫu số của mọi con số độ phủ.
 
 ~~Không có.~~ Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
@@ -302,7 +309,7 @@ qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
 
 ~~**Sau S1.2: 724 test** — 363 / 361; t0 91 module / 224 phụ thuộc.~~
 
-**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ** — 367 ở `pnpm test` (20 file) và 380 ở
+~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **Sau vòng cài ADR-016 (2026-08-30): 772 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
 `pnpm test:int` (15 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **94 module /
 234 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
@@ -473,8 +480,19 @@ CMK, chưa có role nào được tạo.
 
 9. ~~Ba MEDIUM cố ý không sửa cần một ADR.~~ **XONG — ADR-016/017/018 đã chốt.** Việc **còn lại là
    CÀI**, và nó là ba việc rời nhau, không phải một:
-   - **ADR-016** → `SupplierActor`/`InvitationActor` đi theo đường `createdBySessionId` mà 011 đã mở
-     cho `RfqActor`; cộng lớp canh route, **đến hạn cùng route đầu tiên của `apps/`**.
+   - ~~**ADR-016** → `SupplierActor`/`InvitationActor` đi theo đường `createdBySessionId` mà 011 đã mở
+     cho `RfqActor`; cộng lớp canh route, **đến hạn cùng route đầu tiên của `apps/`**.~~
+     **ĐÃ CÀI 2026-08-30** — migration `013`, `packages/identity/src/session-actor.ts`, và hai gói
+     `supplier`/`invitation` viết lại. `SupplierActor` và `InvitationActor` **đã bị xoá**; bên mua
+     nhận `actorSessionId`, bên khách **không nhận actor gì cả** (danh tính đọc từ token và từ
+     thách thức đã đối chiếu). 14 test mới, trong đó **hai test đột biến** (gỡ trigger → câu ghi
+     khai man ĐI LỌT) và **bốn phép đo bằng SQL viết tay** không đi qua gói.
+
+     **HAI VIỆC CÒN LẠI CỦA CHÍNH ADR-016, cả hai đều có tên:**
+     ⑴ **`packages/rfq` vẫn nhận `actor: RfqActor` làm tham số** — đúng khiếm khuyết MEDIUM-3 nêu
+     cho `packages/supplier`, chỉ chưa lượt review nào gọi tên. Câu trong ADR-016 mục 3 nói
+     `RfqActor` "đã đi" đã bị **gạch bỏ tại chỗ** ngay khi bắt đầu cài. ⑵ **Lớp canh route** —
+     mặc định MỞ cho tới khi có nó, và nó **đến hạn cùng route đầu tiên của `apps/`**.
    - **ADR-017** → một migration đánh số mới: `org_procurement_policies` + `rfq_packages.estimated_value`
      + phiên bản chính sách; cộng phép đo **neo giá** trên đường phiên khách.
    - **ADR-018** → HMAC + pepper có phiên bản, **hoặc** bỏ `destination_hash`. Quyết bằng phép đo ở

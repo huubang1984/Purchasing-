@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -24,12 +25,32 @@ import {
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
-const ACTOR = { type: "SYSTEM" } as const;
-
+// [ADR-016] `const ACTOR = { type: "SYSTEM" }` ĐÃ BIẾN MẤT khỏi file này, và sự biến mất ấy là
+// nội dung chính của vòng sửa: một hằng số ba từ ở đầu file test là toàn bộ thứ mà mọi lời gọi
+// dùng để KHAI mình là ai. Nay mỗi lời gọi phải cầm một `sessionId` có thật, và một phiên của
+// tổ chức khác thì CSDL từ chối — xem "danh tính là dẫn xuất" ở cuối file.
 let db: TestDatabase;
 let apiPool: pg.Pool;
 let orgA: string;
 let orgB: string;
+/** Người dùng và phiên của mỗi tổ chức. `sA`/`sB` là thứ thay chỗ cho `ACTOR` cũ. */
+let uA: string, uB: string;
+let sA: string, sB: string;
+
+async function taoNguoiVaPhien(orgId: string): Promise<{ userId: string; sessionId: string }> {
+  const { rows: nguoi } = await db.pool.query<{ id: string }>(
+    "INSERT INTO users (org_id, email, full_name, status) " +
+      "VALUES ($1, $2, 'Nguoi thao tac', 'ACTIVE') RETURNING id",
+    [orgId, "u-" + randomBytes(6).toString("hex") + "@x.vn"],
+  );
+  const userId = nguoi[0]?.id ?? "";
+  const { rows: phien } = await db.pool.query<{ id: string }>(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
+      "VALUES ($1, $2, $3, now() + interval '1 day') RETURNING id",
+    [orgId, userId, randomBytes(32)],
+  );
+  return { userId, sessionId: phien[0]?.id ?? "" };
+}
 
 beforeAll(async () => {
   db = await startPostgres();
@@ -44,6 +65,11 @@ beforeAll(async () => {
   expect(orgA).not.toBe("");
   expect(orgB).not.toBe("");
 
+  ({ userId: uA, sessionId: sA } = await taoNguoiVaPhien(orgA));
+  ({ userId: uB, sessionId: sB } = await taoNguoiVaPhien(orgB));
+  expect(sA).not.toBe("");
+  expect(sB).not.toBe("");
+
   apiPool = db.poolAs("app_api");
 }, 180000);
 
@@ -54,7 +80,7 @@ afterAll(async () => {
 describe("sổ nhà cung cấp — cô lập tổ chức", () => {
   it("[INV-F1] nhà cung cấp của tổ chức A không nhìn thấy được từ phiên của tổ chức B", async () => {
     const cua_a = await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "NCC cua A", taxCode: "0101010101", actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "NCC cua A", taxCode: "0101010101", actorSessionId: sA }),
     );
 
     const thayTuA = await withTenant(apiPool, orgA, (c) => getSupplier(c, orgA, cua_a.id));
@@ -70,7 +96,7 @@ describe("sổ nhà cung cấp — cô lập tổ chức", () => {
 
   it("[INV-F1] người liên hệ cũng bị cắt theo tổ chức", async () => {
     const ncc = await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "NCC co nguoi lien he", actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "NCC co nguoi lien he", actorSessionId: sA }),
     );
     const lienHe = await withTenant(apiPool, orgA, (c) =>
       addSupplierContact(c, orgA, {
@@ -78,7 +104,7 @@ describe("sổ nhà cung cấp — cô lập tổ chức", () => {
         fullName: "Nguyen Van A",
         email: "a@vidu.vn",
         phone: "0900000001",
-        actor: ACTOR,
+        actorSessionId: sA,
       }),
     );
 
@@ -102,10 +128,10 @@ describe("ADR-013 — MST là dữ liệu, không phải khoá toàn cục", () 
   it("CÙNG một MST tồn tại song song ở HAI tổ chức — đây là phép đo trực tiếp của ADR-013", async () => {
     const mst = "0202020202";
     const a = await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "Cung mot NCC, ho so cua A", taxCode: mst, actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "Cung mot NCC, ho so cua A", taxCode: mst, actorSessionId: sA }),
     );
     const b = await withTenant(apiPool, orgB, (c) =>
-      createSupplier(c, orgB, { legalName: "Cung mot NCC, ho so cua B", taxCode: mst, actor: ACTOR }),
+      createSupplier(c, orgB, { legalName: "Cung mot NCC, ho so cua B", taxCode: mst, actorSessionId: sB }),
     );
 
     // Một sổ dùng chung toàn cục với `UNIQUE (tax_code)` sẽ TỪ CHỐI hàng thứ hai — và chính lần
@@ -120,11 +146,11 @@ describe("ADR-013 — MST là dữ liệu, không phải khoá toàn cục", () 
   it("trùng MST TRONG cùng một tổ chức thì bị chặn — ràng buộc vẫn có răng trong phạm vi của nó", async () => {
     const mst = "0303030303";
     await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "Ban ghi dau", taxCode: mst, actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "Ban ghi dau", taxCode: mst, actorSessionId: sA }),
     );
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        createSupplier(c, orgA, { legalName: "Ban ghi trung", taxCode: mst, actor: ACTOR }),
+        createSupplier(c, orgA, { legalName: "Ban ghi trung", taxCode: mst, actorSessionId: sA }),
       ),
     ).rejects.toThrow(/duplicate key|suppliers_org_id_tax_code_key/);
   });
@@ -134,10 +160,10 @@ describe("ADR-013 — MST là dữ liệu, không phải khoá toàn cục", () 
     // mặc định của PostgreSQL (NULL <> NULL trong chỉ mục duy nhất). Một mặc định mà thiết kế
     // dựa vào thì phải được ĐO, không được SUY — cùng bài học với test hoa-thường của S0.
     const mot = await withTenant(apiPool, orgB, (c) =>
-      createSupplier(c, orgB, { legalName: "Khach 1, chua co MST", actor: ACTOR }),
+      createSupplier(c, orgB, { legalName: "Khach 1, chua co MST", actorSessionId: sB }),
     );
     const hai = await withTenant(apiPool, orgB, (c) =>
-      createSupplier(c, orgB, { legalName: "Khach 2, chua co MST", actor: ACTOR }),
+      createSupplier(c, orgB, { legalName: "Khach 2, chua co MST", actorSessionId: sB }),
     );
     expect(mot.taxCode).toBeNull();
     expect(hai.taxCode).toBeNull();
@@ -147,7 +173,7 @@ describe("ADR-013 — MST là dữ liệu, không phải khoá toàn cục", () 
   it("findSupplierByTaxCode chỉ trả lời trong phạm vi tổ chức đang gắn", async () => {
     const mst = "0404040404";
     await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "Chi co o A", taxCode: mst, actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "Chi co o A", taxCode: mst, actorSessionId: sA }),
     );
 
     const oA = await withTenant(apiPool, orgA, (c) => findSupplierByTaxCode(c, orgA, mst));
@@ -160,12 +186,12 @@ describe("ADR-013 — MST là dữ liệu, không phải khoá toàn cục", () 
   it("MST sai định dạng bị từ chối ở tầng ứng dụng, và thông báo KHÔNG chứa giá trị bị từ chối", async () => {
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        createSupplier(c, orgA, { legalName: "Sai dinh dang", taxCode: "abc", actor: ACTOR }),
+        createSupplier(c, orgA, { legalName: "Sai dinh dang", taxCode: "abc", actorSessionId: sA }),
       ),
     ).rejects.toThrow(SupplierError);
 
     const loi: unknown = await withTenant(apiPool, orgA, (c) =>
-      createSupplier(c, orgA, { legalName: "Sai dinh dang", taxCode: "abc", actor: ACTOR }),
+      createSupplier(c, orgA, { legalName: "Sai dinh dang", taxCode: "abc", actorSessionId: sA }),
     ).then(
       () => undefined,
       (e: unknown) => e,
@@ -185,7 +211,7 @@ describe("khoá ngoại HỢP THÀNH — và bằng chứng rằng khoá ngoại
     // trong ba nhãn ấy lên đây là lấp mã bằng NHÃN thay vì bằng LỚP — đúng thứ đã xảy ra hai lần
     // ở S0 và bị bắt cả hai lần. Nếu mệnh đề này đáng vào sổ, nó phải vào sổ tường minh.
     const cuaB = await withTenant(apiPool, orgB, (c) =>
-      createSupplier(c, orgB, { legalName: "NCC thuoc B", actor: ACTOR }),
+      createSupplier(c, orgB, { legalName: "NCC thuoc B", actorSessionId: sB }),
     );
 
     await expect(
@@ -194,7 +220,7 @@ describe("khoá ngoại HỢP THÀNH — và bằng chứng rằng khoá ngoại
           supplierId: cuaB.id,
           fullName: "Nguoi cua A",
           email: "x@vidu.vn",
-          actor: ACTOR,
+          actorSessionId: sA,
         }),
       ),
     ).rejects.toThrow(/foreign key|supplier_contacts_org_id_supplier_id_fkey/);
@@ -219,7 +245,7 @@ describe("khoá ngoại HỢP THÀNH — và bằng chứng rằng khoá ngoại
       await db.pool.query("GRANT INSERT (org_id, supplier_id) ON do_fk_don_cot TO app_api");
 
       const cuaB = await withTenant(apiPool, orgB, (c) =>
-        createSupplier(c, orgB, { legalName: "NCC thuoc B, lan hai", actor: ACTOR }),
+        createSupplier(c, orgB, { legalName: "NCC thuoc B, lan hai", actorSessionId: sB }),
       );
 
       // Hàng này mang org_id của A và supplier_id của B. RLS `WITH CHECK` chỉ soi org_id nên nó
@@ -254,7 +280,7 @@ describe("dấu vết kiểm toán", () => {
         legalName: "Ten rieng khong duoc vao so",
         taxCode: "0505050505",
         level: 1,
-        actor: ACTOR,
+        actorSessionId: sA,
       }),
     );
 
@@ -280,7 +306,7 @@ describe("dấu vết kiểm toán", () => {
 
     await expect(
       withTenant(apiPool, orgA, async (c) => {
-        await createSupplier(c, orgA, { legalName: "Se bi vut di", actor: ACTOR });
+        await createSupplier(c, orgA, { legalName: "Se bi vut di", actorSessionId: sA });
         throw new Error("nga giua chung");
       }),
     ).rejects.toThrow("nga giua chung");
@@ -293,5 +319,122 @@ describe("dấu vết kiểm toán", () => {
     // CHỐI không biến mất khi người gọi nuốt lỗi). Ở đây thứ được ghi là hệ quả của một thay đổi
     // dữ liệu, nên nó phải sống chết cùng thay đổi ấy — và test này ghim lựa chọn đó.
     expect(sau.rows[0]?.n).toBe(truoc.rows[0]?.n);
+  });
+});
+
+// =============================================================================================
+// [ADR-016] DANH TÍNH LÀ DẪN XUẤT — VÀ VẾ ĐỐI CHỨNG DƯƠNG ĐI TRƯỚC
+//
+// Vế đối chứng dương là phần chịu lực của cả khối này. Không có nó, "không tạo được nhà cung cấp
+// dưới tên người khác" cũng XANH khi hàm hỏng theo mọi hướng khác — kể cả khi nó không ghi được
+// hàng nào. Nên trước mỗi phép chặn phải có một lượt THÀNH CÔNG chứng minh đường đi vẫn thông.
+// =============================================================================================
+describe("danh tính là dẫn xuất, không phải lời khai", () => {
+  it("ĐỐI CHỨNG DƯƠNG: với phiên hợp lệ, đường tạo nhà cung cấp vẫn thông và created_by ĐƯỢC GHI", async () => {
+    const ncc = await withTenant(apiPool, orgA, (c) =>
+      createSupplier(c, orgA, { legalName: "Ban ghi co chu", actorSessionId: sA }),
+    );
+
+    const { rows } = await db.pool.query<{ created_by: string; created_by_session_id: string }>(
+      "SELECT created_by, created_by_session_id FROM suppliers WHERE id = $1",
+      [ncc.id],
+    );
+    // Bản S1.1 KHÔNG có hai cột này, nên câu hỏi "ai đã thêm nhà cung cấp này" chỉ trả lời được
+    // từ một sổ kiểm toán mà chính nó nhận đầu vào là lời khai.
+    expect(rows[0]?.created_by).toBe(uA);
+    expect(rows[0]?.created_by_session_id).toBe(sA);
+  });
+
+  it("sổ kiểm toán ghi CHỦ PHIÊN, không ghi thứ người gọi tự đặt", async () => {
+    const ncc = await withTenant(apiPool, orgA, (c) =>
+      createSupplier(c, orgA, { legalName: "Kiem tra so", actorSessionId: sA }),
+    );
+
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string }>(
+      "SELECT actor_type, actor_id FROM audit_events " +
+        " WHERE org_id = $1 AND resource_id = $2 AND action = 'SUPPLIER_CREATED'",
+      [orgA, ncc.id],
+    );
+    // Bản trước ghi `actor_type = SYSTEM, actor_id = NULL` cho ĐÚNG cùng lời gọi này, vì hằng số
+    // `ACTOR` ở đầu file nói vậy. Không lớp nào phản đối.
+    expect(rows[0]?.actor_type).toBe("USER");
+    expect(rows[0]?.actor_id).toBe(uA);
+  });
+
+  it("phiên của TỔ CHỨC KHÁC bị từ chối — kể cả khi nó là một phiên có thật và còn hiệu lực", async () => {
+    // ĐỐI CHỨNG DƯƠNG, cùng một phiên: ở ĐÚNG tổ chức của nó, `sB` hoạt động bình thường và ghi
+    // đúng chủ nhân. Không có vế này, phép chặn dưới cũng xanh nếu `sB` chỉ đơn giản là hỏng.
+    const cuaB = await withTenant(apiPool, orgB, (c) =>
+      createSupplier(c, orgB, { legalName: "Phien cua B, dung cho B", actorSessionId: sB }),
+    );
+    const { rows } = await db.pool.query<{ created_by: string }>(
+      "SELECT created_by FROM suppliers WHERE id = $1",
+      [cuaB.id],
+    );
+    expect(rows[0]?.created_by).toBe(uB);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        createSupplier(c, orgA, { legalName: "Muon phien cua B", actorSessionId: sB }),
+      ),
+    ).rejects.toThrow(/phiên không hợp lệ/);
+  });
+
+  it("phiên ĐÃ THU HỒI bị từ chối — quy trình ứng phó sự cố phải đóng được đường ghi", async () => {
+    const { sessionId } = await taoNguoiVaPhien(orgA);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sessionId]);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        createSupplier(c, orgA, { legalName: "Phien da thu hoi", actorSessionId: sessionId }),
+      ),
+    ).rejects.toThrow(/phiên không hợp lệ/);
+  });
+
+  it("LỚP CÓ THẨM QUYỀN NẰM Ở CSDL: một INSERT viết tay khai created_by của người khác bị TRIGGER chặn", async () => {
+    // Phép đo quan trọng nhất của khối này, và nó CỐ Ý KHÔNG đi qua gói `supplier`. Nếu lớp duy
+    // nhất là `resolveSessionActor`, thì một câu SQL trong script vận hành — hoặc một hàm MỚI
+    // trong chính gói này quên gọi nó — đi vòng qua mà không lớp nào kêu. Cùng lập luận ADR-014
+    // đã dùng cho máy trạng thái RFQ.
+    const nguoiKhac = await taoNguoiVaPhien(orgA);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
+            " VALUES ($1, 'Khai man', $2, $3)",
+          [orgA, nguoiKhac.userId, sA],
+        ),
+      ),
+    ).rejects.toThrow(/khong khop chu phien/);
+  });
+
+  it("thiếu HẲN cột phiên cũng bị chặn — mặc định ĐÓNG, không phải bỏ qua khi NULL", async () => {
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("INSERT INTO suppliers (org_id, legal_name) VALUES ($1, 'Khong ky ten')", [orgA]),
+      ),
+    ).rejects.toThrow(/phai duoc dat/);
+  });
+
+  it("ĐỘT BIẾN: gỡ trigger đi thì câu INSERT khai man ĐI LỌT — bằng chứng trigger không rỗng ruột", async () => {
+    await db.pool.query("DROP TRIGGER suppliers_kiem_danh_tinh ON suppliers");
+    try {
+      const nguoiKhac = await taoNguoiVaPhien(orgA);
+      const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
+            " VALUES ($1, 'Khai man khi khong co trigger', $2, $3)",
+          [orgA, nguoiKhac.userId, sA],
+        ),
+      );
+      expect(rowCount, "không có trigger thì lời khai đi lọt — đó là lý do trigger tồn tại").toBe(1);
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER suppliers_kiem_danh_tinh BEFORE INSERT ON suppliers " +
+          " FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(" +
+          " 'created_by', 'created_by_session_id')",
+      );
+    }
   });
 });

@@ -33,7 +33,6 @@ export {
   verifyOtpAndStartSession,
   type Channel,
   type CreateInvitationInput,
-  type InvitationActor,
   type InvitationRecord,
   type IssueOtpInput,
   type IssuedToken,

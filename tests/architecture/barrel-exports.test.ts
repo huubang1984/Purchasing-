@@ -172,12 +172,14 @@ const DANH_SACH_TRANG_IDENTITY = [
   "PermissionAuditFailedError",
   "PermissionDeniedError",
   "SEPARATION_OF_DUTIES_CHAIN",
+  "SessionInvalidError",
   "assertFreshMfa",
   "counterForTime",
   "deriveTotpCode",
   "enrollTotpCredential",
   "generateTotpSecret",
   "requirePermission",
+  "resolveSessionActor",
   "verifyTotpAttempt",
 ];
 

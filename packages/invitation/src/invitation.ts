@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
-import { appendAuditEvent, assertTenantBound, type ActorType } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { resolveSessionActor } from "@trustprocure/identity";
 
 // =============================================================================================
 // LỜI MỜI, MAGIC LINK, OTP, PHIÊN KHÁCH (S1.3) — BẢN SAU REVIEW AN NINH
@@ -84,10 +85,24 @@ export const OTP_MAX_PER_INVITATION = 5;
 export const MAGIC_LINK_MAX_TTL_SECONDS = 7 * 24 * 3600;
 export const GUEST_SESSION_MAX_TTL_SECONDS = 12 * 3600;
 
-export interface InvitationActor {
-  readonly type: ActorType;
-  readonly id?: string | null;
-}
+// =============================================================================================
+// [ADR-016] `InvitationActor` ĐÃ BỊ XOÁ — VÀ NÓ ĐƯỢC THAY BẰNG HAI THỨ KHÁC NHAU, KHÔNG PHẢI MỘT
+//
+// Gói này có HAI loại chủ thể, và gộp chúng vào một `actor` tự khai là chỗ lời khai sống được:
+//
+//   * BÊN MUA (`createInvitation`, `issueMagicLinkToken`, `revokeInvitation`) là một người đã
+//     đăng nhập ⇒ có một hàng `sessions`. Ba hàm ấy nay nhận `actorSessionId`, và trigger
+//     `*_kiem_danh_tinh` của 013 đòi cột người khớp chủ phiên.
+//
+//   * BÊN KHÁCH (`issueOtpChallenge`, `verifyOtpAndStartSession`) KHÔNG có phiên — đó là toàn
+//     bộ lý do gói này tồn tại (ràng buộc sản phẩm 1: lần báo giá đầu không cần tài khoản).
+//     Hai hàm ấy KHÔNG nhận actor gì cả: danh tính được ĐỌC RA từ token và từ chính thách thức
+//     đã đối chiếu. Đó là một phép chứng minh MẠNH HƠN một phiên, không phải một ngoại lệ —
+//     người gọi phải cầm được magic link, rồi phải cầm được mã OTP về đúng kênh đã đăng ký.
+//
+// Cùng một ADR, hai cách cài, vì "đọc ra từ dữ liệu" là quy tắc còn "phiên" chỉ là một trong
+// những dữ liệu ấy. Viết `actorSessionId` cho đường khách sẽ là dựng lại đúng lời khai vừa gỡ.
+// =============================================================================================
 
 function bam(...phan: string[]): Buffer {
   const h = createHash("sha256");
@@ -116,7 +131,8 @@ export interface CreateInvitationInput {
   readonly supplierId: string;
   readonly contactId: string;
   readonly linkChannel?: Channel;
-  readonly actor: InvitationActor;
+  /** Phiên của người mua đang mời. Danh tính là dẫn xuất của nó. */
+  readonly actorSessionId: string;
 }
 
 export interface InvitationRecord {
@@ -156,18 +172,21 @@ export async function createInvitation(
   input: CreateInvitationInput,
 ): Promise<InvitationRecord> {
   await assertTenantBound(client, orgId, "createInvitation");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows } = await client.query<HangInvitation>(
-    `INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel)
-     VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_INVITATION}`,
-    [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL"],
+    `INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
+                                  invited_by, invited_by_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
+    [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
+     actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("INSERT rfq_invitations không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "INVITATION_CREATED",
     resourceType: "rfq_invitation",
     resourceId: hang.id,
@@ -196,25 +215,31 @@ export interface IssuedToken {
 export async function issueMagicLinkToken(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly invitationId: string; readonly ttlSeconds?: number; readonly actor: InvitationActor },
+  input: {
+    readonly invitationId: string;
+    readonly ttlSeconds?: number;
+    readonly actorSessionId: string;
+  },
 ): Promise<IssuedToken> {
   await assertTenantBound(client, orgId, "issueMagicLinkToken");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const ttl = tranTtl(input.ttlSeconds, MAGIC_LINK_MAX_TTL_SECONDS, MAGIC_LINK_MAX_TTL_SECONDS, "ttlSeconds");
   const token = randomBytes(MAGIC_LINK_TOKEN_BYTES).toString("base64url");
 
   const { rows } = await client.query<{ id: string; expires_at: Date }>(
-    `INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at)
-     VALUES ($1, $2, $3, 'BID_SUBMISSION', now() + make_interval(secs => $4))
+    `INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at,
+                                        issued_by, issued_by_session_id)
+     VALUES ($1, $2, $3, 'BID_SUBMISSION', now() + make_interval(secs => $4), $5, $6)
      RETURNING id, expires_at`,
-    [orgId, input.invitationId, bam(token), ttl],
+    [orgId, input.invitationId, bam(token), ttl, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("INSERT token không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "MAGIC_LINK_TOKEN_ISSUED",
     resourceType: "rfq_invitation_token",
     resourceId: hang.id,
@@ -305,7 +330,6 @@ export interface IssueOtpInput {
    * đó là lý do bucket theo LỜI MỜI tồn tại.
    */
   readonly callerFingerprint: string;
-  readonly actor: InvitationActor;
 }
 
 async function demVaTang(
@@ -402,9 +426,13 @@ export async function issueOtpChallenge(
   if (hang === undefined) throw new InvitationError("INSERT thách thức OTP không trả về hàng nào");
 
   // [M4] `payload` mang challengeId và kênh — KHÔNG mang đích, KHÔNG mang mã.
+  //
+  // [ADR-016] Chủ thể là NHÀ CUNG CẤP, và danh tính của nó ĐỌC RA từ token: `t.contact_id` là
+  // người liên hệ mà magic link được phát cho, không phải một chuỗi người gọi tự đặt. Bản trước
+  // nhận `actor` tự do, nên một kẻ có token phát được OTP rồi ghi sổ dưới tên bất kỳ ai.
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: "SUPPLIER",
+    actorId: t.contact_id,
     action: "OTP_CHALLENGE_ISSUED",
     resourceType: "invitation_otp_challenge",
     resourceId: hang.id,
@@ -437,7 +465,6 @@ export interface VerifyOtpInput {
   readonly token: string;
   readonly code: string;
   readonly ttlSeconds?: number;
-  readonly actor: InvitationActor;
 }
 
 interface HangThachThuc {
@@ -543,9 +570,16 @@ export async function verifyOtpAndStartSession(
   const hangPhien = phien.rows[0];
   if (hangPhien === undefined) throw new InvitationError("INSERT guest_sessions không trả về hàng");
 
+  // [ADR-016] `actorId` là chính `tt.contact_id` — người liên hệ ĐÃ GIỮ KÊNH và đã đối chiếu
+  // đúng mã. Nó là cùng một giá trị với `verified_contact_id` của hàng phiên, và đó là chủ ý:
+  // sổ kiểm toán và bảng phiên phải kể CÙNG một câu chuyện, nếu không thì một trong hai đang
+  // nói dối và không lớp nào biết cái nào.
+  //
+  // PHẦN HẸP PHẢI NÓI RA, và nó là phần ADR-015 đã ghi cho E5: đây là NGƯỜI GIỮ KÊNH, không
+  // phải con người đang ngồi trước màn hình.
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: "SUPPLIER",
+    actorId: tt.contact_id,
     action: "GUEST_SESSION_STARTED",
     resourceType: "guest_session",
     resourceId: hangPhien.id,
@@ -580,14 +614,19 @@ export async function verifyOtpAndStartSession(
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly invitationId: string; readonly actor: InvitationActor },
+  input: { readonly invitationId: string; readonly actorSessionId: string },
 ): Promise<boolean> {
   await assertTenantBound(client, orgId, "revokeInvitation");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
+  // [ADR-016] Hai cột người thu hồi đi TRONG CÙNG câu lệnh đặt `revoked_at`, không phải một
+  // câu UPDATE thứ hai: trigger `rfq_invitations_kiem_nguoi_thu_hoi` (013) chạy đúng ở lượt
+  // chuyển sang đã-thu-hồi, nên tách ra là để lại một hàng đã thu hồi mà chưa ai ký tên.
   const loiMoi = await client.query(
-    "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now() " +
+    "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), " +
+      " revoked_by = $2, revoked_by_session_id = $3" +
       " WHERE id = $1 AND revoked_at IS NULL",
-    [input.invitationId],
+    [input.invitationId, actor.id, actor.sessionId],
   );
   if (loiMoi.rowCount !== 1) return false;
 
@@ -608,8 +647,8 @@ export async function revokeInvitation(
   );
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "INVITATION_REVOKED",
     resourceType: "rfq_invitation",
     resourceId: input.invitationId,

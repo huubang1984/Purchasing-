@@ -857,8 +857,19 @@ làm một việc — **phát biểu cái khuôn ấy thành quy tắc chung** t
    `createdBySessionId` + `rfq_packages_kiem_nguoi_tao` đã dựng ở 011, và đúng khuôn
    `guest_sessions.verified_contact_id` đọc ra từ thách thức OTP đã dựng ở 012.
 3. **Hệ quả bắt buộc, ghi ra để nó không bị bỏ quên:** `SupplierActor` và `InvitationActor` phải đi
-   theo đường mà `RfqActor` đã đi. Chừng nào chưa đi, **không ô ✅ nào của D5 hay F2 được gắn dựa
-   trên chúng**, và docstring của chúng phải nói thẳng đó là lời khai.
+   theo đường ~~mà `RfqActor` đã đi~~ **mà `rfq_packages.created_by` đã đi**. Chừng nào chưa đi,
+   **không ô ✅ nào của D5 hay F2 được gắn dựa trên chúng**, và docstring của chúng phải nói thẳng
+   đó là lời khai.
+
+   > **Câu vừa gạch là một khẳng định RỘNG HƠN thứ đã đo, và nó bị bắt khi bắt đầu cài — bốn giờ
+   > sau khi chính tôi viết nó.** Thứ đi đúng đường ở vòng sửa S1.2 là **cột `created_by`**, không
+   > phải `RfqActor`: `createRfq` tới hôm nay **vẫn** nhận `actor: RfqActor` làm tham số và ghi
+   > thẳng nó vào sổ kiểm toán. Tức `packages/rfq` mang **đúng khiếm khuyết** mà MEDIUM-3 nêu cho
+   > `packages/supplier` — nó chỉ không bị lượt review nào gọi tên. Đây là lớp lỗi mà quy ước
+   > *"một câu phát biểu rộng hơn thứ được đo là một khiếm khuyết thật"* tồn tại để bắt, và nó vừa
+   > bắt được chính tài liệu đặt ra quy ước ấy.
+   >
+   > **`RfqActor` vì vậy là một hạng mục CÒN LẠI CÓ TÊN**, không phải một thứ đã xong.
 4. **Cổng ở tầng ứng dụng là mặc định MỞ, nên nó PHẢI kèm một lớp máy — và lớp ấy CHƯA DỰNG ĐƯỢC
    HÔM NAY vì `apps/` rỗng.** Điều kiện ghim: **route đầu tiên của `apps/` ra đời CÙNG LÚC với một
    lớp canh khẳng định mọi route đổi trạng thái đều nêu tên một mã quyền.** Viết route trước, lớp

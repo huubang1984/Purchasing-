@@ -916,6 +916,10 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "consumed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "invitation_id", quyen: "INSERT" },
+      // [ADR-016 / 013] Hai cot ky ten cua nguoi PHAT token. Duc mot credential bearer la thao
+      // tac dang ghi so nhat cua ca goi invitation, nen no la cho te nhat de con mot loi khai.
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "issued_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "issued_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "purpose", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "revoked_at", quyen: "UPDATE" },
@@ -925,9 +929,16 @@ describe("phủ RLS", () => {
       // duoc sau khi OTP da phat lam trigger so hai kenh tro thanh mot phep kiem chi dung tai
       // thoi diem chen.
       { grantee: "app_api", bang: "rfq_invitations", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "link_channel", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_at", quyen: "UPDATE" },
+      // [ADR-016 / 013] UPDATE, khong phai INSERT: thu hoi la mot lan sua hang co san. Khong co
+      // hai cot nay, "ai da thu hoi loi moi" chi so kiem toan tra loi duoc — va so kiem toan
+      // nhan dau vao la loi khai, tuc khong lop nao biet.
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
@@ -978,12 +989,19 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "sessions", cot: "token_hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "email", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "full_name", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
+      // [ADR-016 / 013] Ban S1.1 KHONG co mot cot nao ghi ai tao hang. Cau hoi "ai da them nha
+      // cung cap nay" vi vay khong tra loi duoc TU DU LIEU — chi tra loi duoc tu mot so kiem
+      // toan ma chinh no nhan dau vao la loi khai.
+      { grantee: "app_api", bang: "suppliers", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "suppliers", cot: "legal_name", quyen: "INSERT" },
       { grantee: "app_api", bang: "suppliers", cot: "level", quyen: "INSERT" },
       { grantee: "app_api", bang: "suppliers", cot: "org_id", quyen: "INSERT" },

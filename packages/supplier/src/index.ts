@@ -25,7 +25,6 @@ export {
   listSuppliers,
   type AddSupplierContactInput,
   type CreateSupplierInput,
-  type SupplierActor,
   type SupplierContactRecord,
   type SupplierLevel,
   type SupplierRecord,

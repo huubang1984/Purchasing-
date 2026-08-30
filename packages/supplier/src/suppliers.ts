@@ -1,5 +1,6 @@
 import type pg from "pg";
-import { appendAuditEvent, assertTenantBound, type ActorType } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { resolveSessionActor } from "@trustprocure/identity";
 
 // =============================================================================================
 // SỔ NHÀ CUNG CẤP MỨC LEVEL 0/1 (S1.1)
@@ -78,17 +79,28 @@ export const PHONE_PATTERN = /^\+?[0-9]{8,15}$/;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export interface SupplierActor {
-  readonly type: ActorType;
-  /** Phải là UUID hoặc null — `audit_events.actor_id` là cột `uuid`. */
-  readonly id?: string | null;
-}
+// =============================================================================================
+// [ADR-016] `SupplierActor` ĐÃ BỊ XOÁ KHỎI GÓI NÀY — ĐÂY LÀ CHỖ GHI VÌ SAO
+//
+// Hình dạng cũ là `{ type: ActorType; id?: string | null }`, tức người gọi TỰ KHAI mình là ai và
+// hàm này ghi thẳng lời khai ấy vào sổ kiểm toán — bằng chứng pháp lý duy nhất của hệ thống. Đó
+// là phát hiện MEDIUM-3 của lượt review S1.1, và nó là CÙNG hình dạng với ba CRITICAL của S1.3:
+// một sự thật an ninh được NHẬN VÀO dưới dạng tham số thay vì được ĐỌC RA từ dữ liệu.
+//
+// Thay thế là `actorSessionId`: một thứ người gọi chỉ có nếu đã thật sự đăng nhập. Danh tính là
+// DẪN XUẤT của nó, và trigger `suppliers_kiem_danh_tinh` (013) đòi cột `created_by` khớp chủ
+// phiên — nên một câu `INSERT` viết tay đi vòng qua gói này cũng không khai man được.
+//
+// KHÔNG có nhánh `SYSTEM`/`SERVICE` ở đây, và đó là chủ ý: nếu ngày nào một job nền cần tạo nhà
+// cung cấp, nó phải mở một ADR chứ không được mượn một `ActorType` để đi qua cửa này.
+// =============================================================================================
 
 export interface CreateSupplierInput {
   readonly legalName: string;
   readonly taxCode?: string | null;
   readonly level?: SupplierLevel;
-  readonly actor: SupplierActor;
+  /** Phiên của CHÍNH người thao tác. Danh tính là dẫn xuất của nó — xem khối trên. */
+  readonly actorSessionId: string;
 }
 
 export interface SupplierRecord {
@@ -110,7 +122,8 @@ export interface AddSupplierContactInput {
    * mục 1 cấm (OTP không bao giờ đi cùng kênh với magic link).
    */
   readonly phone?: string | null;
-  readonly actor: SupplierActor;
+  /** Phiên của CHÍNH người thao tác. Xem khối [ADR-016] ở trên. */
+  readonly actorSessionId: string;
 }
 
 export interface SupplierContactRecord {
@@ -229,7 +242,8 @@ export async function createSupplier(
 ): Promise<SupplierRecord> {
   await assertTenantBound(client, orgId, "createSupplier");
 
-  if (input.actor.id != null) batBuocUuid(input.actor.id, "actor.id");
+  batBuocUuid(input.actorSessionId, "actorSessionId");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const legalName = batBuoc(input.legalName, "legal_name", 500);
   const taxCode = chuanHoaMst(input.taxCode);
   const level: SupplierLevel = input.level ?? 0;
@@ -238,17 +252,18 @@ export async function createSupplier(
   }
 
   const { rows } = await client.query<HangSupplier>(
-    `INSERT INTO suppliers (org_id, legal_name, tax_code, level)
-     VALUES ($1, $2, $3, $4) RETURNING ${COT_SUPPLIER}`,
-    [orgId, legalName, taxCode, level],
+    `INSERT INTO suppliers (org_id, legal_name, tax_code, level,
+                            created_by, created_by_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_SUPPLIER}`,
+    [orgId, legalName, taxCode, level, actor.id, actor.sessionId],
   );
 
   const hang = rows[0];
   if (hang === undefined) throw new SupplierError("INSERT suppliers không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "SUPPLIER_CREATED",
     resourceType: "supplier",
     resourceId: hang.id,
@@ -329,7 +344,8 @@ export async function addSupplierContact(
 ): Promise<SupplierContactRecord> {
   await assertTenantBound(client, orgId, "addSupplierContact");
   batBuocUuid(input.supplierId, "supplierId");
-  if (input.actor.id != null) batBuocUuid(input.actor.id, "actor.id");
+  batBuocUuid(input.actorSessionId, "actorSessionId");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const fullName = batBuoc(input.fullName, "full_name", 200);
 
@@ -348,9 +364,10 @@ export async function addSupplierContact(
   }
 
   const { rows } = await client.query<HangContact>(
-    `INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone)
-     VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_CONTACT}`,
-    [orgId, input.supplierId, fullName, email, phone],
+    `INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone,
+                                    created_by, created_by_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_CONTACT}`,
+    [orgId, input.supplierId, fullName, email, phone, actor.id, actor.sessionId],
   );
 
   const hang = rows[0];
@@ -361,8 +378,8 @@ export async function addSupplierContact(
   // `payload` KHÔNG mang họ tên, email hay số điện thoại. Đó là dữ liệu cá nhân, và sổ kiểm toán
   // là bảng chỉ-ghi-thêm không xoá được — một lần ghi nhầm PII vào đó là vĩnh viễn.
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "SUPPLIER_CONTACT_ADDED",
     resourceType: "supplier_contact",
     resourceId: hang.id,
