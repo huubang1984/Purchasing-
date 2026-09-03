@@ -33,6 +33,7 @@ và mặt phẳng điều khiển** cho việc đó, chưa dựng chính luồng
 | Nhánh gốc | `master` |
 | Số commit trên nhánh S0 | **46** (giữ nguyên trong lịch sử, **không** squash) |
 | Thay đổi so với `master` trước merge | 105 file, +36 375 / −88 |
+| Pull request (S1) | [#2](https://github.com/huubang1984/Purchasing-/pull/2) — **MỞ**, 15 commit, XANH cả bốn job ở run `33704750680`. Tiêu đề và mô tả đã được viết lại 2026-09-03: bản cũ nói "kế hoạch S1" trong khi PR chứa trọn S1.1–S1.3, sáu ADR và chín migration |
 | Pull request | [#1](https://github.com/huubang1984/Purchasing-/pull/1) — **MERGED** 2026-08-29, merge commit `30d1972`. Nhánh `worktree-s0-foundation` **không xoá** |
 | Kho | `https://github.com/huubang1984/Purchasing-` |
 | Thư mục làm việc | `D:\Claude\TrustProcure\.claude\worktrees\s0-foundation` (git worktree, **cố ý giữ lại**) |

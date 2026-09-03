@@ -550,6 +550,12 @@ CMK, chưa có role nào được tạo.
     nên test *"tái lập được"* của ADR-017 (tạo phiên bản 2, ngưỡng thấp hơn) làm bốn test chạy
     SAU nó đỏ. Bắt được vì chúng khẳng định TRẠNG THÁI, không chỉ khẳng định "không ném".
 
+12a. **LƯỢT CI THỨ HAI (run `33704750680`, commit `4467ca9`): XANH CẢ BỐN JOB.** Job `evidence`
+    chạy trên CI lần đầu tiên với mã S1: *vitest thoát mã 0, 803 khẳng định, 30/50, Cổng evidence
+    XANH*, và bước `git diff --exit-code -- evidence/INV-matrix.md` **qua** — tức ma trận trong git
+    khớp bộ sinh **từng byte** trên Linux. Đây là lần đầu điều kiện hoàn thành S0 mục 2 (*bốn cổng
+    xanh tại máy VÀ trên CI*) được thoả cho mã của S1.
+
 12b. **LẦN CHẠY CI ĐẦU TIÊN CỦA TOÀN BỘ S1 (2026-09-03, run `33703786759`): T0 XANH, T3 XANH,
     T1+T2 ĐỎ — và thứ đỏ là lớp canh route của chính vòng này, không phải mã sản phẩm.**
     T3 xanh là con số đáng đọc: **toàn bộ chín migration của S1 chạy trên Postgres của Linux CI
