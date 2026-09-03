@@ -135,7 +135,12 @@ describe("migration của dự án", () => {
       );
       expect(rows[0]?.org).toBeNull();
     });
-  });
+    // [ADR-016/017/018] Timeout tường minh 120s. Test này dựng MỘT container rồi chạy TOÀN BỘ
+    // migration đánh số; số file đi từ 7 (S0) lên 16, và ở lần chạy TOÀN BỘ bộ test — nơi nhiều
+    // file test tranh nhau Docker — nó vượt mặc định 30s. Nó xanh khi chạy riêng, tức đây là một
+    // ngưỡng quá chật chứ không phải một hồi quy hiệu năng. Mọi test nặng khác trong file này đã
+    // mang timeout tường minh 120–180s từ S0; test đầu tiên chỉ đơn giản chưa cần tới hôm nay.
+  }, 120_000);
 
   // [fix round 2] Test đối kháng thật cho S1: dựng sẵn app_api với BYPASSRLS + SUPERUSER +
   // LOGIN (mô phỏng role dùng chung cluster, ops tạo tay, hoặc quên gỡ sau khi debug), rồi
@@ -1739,6 +1744,7 @@ describe("migration của dự án", () => {
           "013_actor_from_session.sql",
           "014_procurement_policy.sql",
           "015_otp_pepper.sql",
+          "016_rfq_actor_from_session.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4529,6 +4535,7 @@ describe("migration của dự án", () => {
         "013_actor_from_session.sql",
         "014_procurement_policy.sql",
         "015_otp_pepper.sql",
+        "016_rfq_actor_from_session.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4741,6 +4748,7 @@ describe("migration của dự án", () => {
         "013_actor_from_session.sql",
         "014_procurement_policy.sql",
         "015_otp_pepper.sql",
+        "016_rfq_actor_from_session.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

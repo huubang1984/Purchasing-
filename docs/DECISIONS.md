@@ -869,11 +869,35 @@ làm một việc — **phát biểu cái khuôn ấy thành quy tắc chung** t
    > *"một câu phát biểu rộng hơn thứ được đo là một khiếm khuyết thật"* tồn tại để bắt, và nó vừa
    > bắt được chính tài liệu đặt ra quy ước ấy.
    >
-   > **`RfqActor` vì vậy là một hạng mục CÒN LẠI CÓ TÊN**, không phải một thứ đã xong.
-4. **Cổng ở tầng ứng dụng là mặc định MỞ, nên nó PHẢI kèm một lớp máy — và lớp ấy CHƯA DỰNG ĐƯỢC
-   HÔM NAY vì `apps/` rỗng.** Điều kiện ghim: **route đầu tiên của `apps/` ra đời CÙNG LÚC với một
-   lớp canh khẳng định mọi route đổi trạng thái đều nêu tên một mã quyền.** Viết route trước, lớp
-   canh sau, là đúng thứ tự đã sinh ra khoản nợ 17 (*"LẦN THỨ BA CÙNG MỘT LỚP LỖ"*).
+   > ~~**`RfqActor` vì vậy là một hạng mục CÒN LẠI CÓ TÊN**, không phải một thứ đã xong.~~
+   > **ĐÃ ĐÓNG 2026-09-03** (migration `016`): `RfqActor` bị xoá, và **`createdBy` cùng
+   > `approverUserId` biến mất theo** — cả hai là dẫn xuất mà trigger 011 đã ép bằng chủ phiên,
+   > tức hai chỗ để gõ nhầm chứ không phải hai bậc tự do. Bốn cạnh chuyển trạng thái nay mang chữ
+   > ký (`submitted_by`, `opened_by`, `closed_by`, `cancelled_by`); `extendRfqDeadline` cố ý
+   > **KHÔNG** có, vì nó không đổi `status` nên không có cạnh để treo một `WHEN`, và một cột
+   > `deadline_changed_by` chỉ giữ được LẦN CUỐI — tức trả lời SAI câu hỏi kiểm toán thật.
+4. ~~**Cổng ở tầng ứng dụng là mặc định MỞ, nên nó PHẢI kèm một lớp máy — và lớp ấy CHƯA DỰNG
+   ĐƯỢC HÔM NAY vì `apps/` rỗng.**~~ **ĐÃ DỰNG 2026-09-03** —
+   `tests/architecture/cong-quyen-route.test.ts`, ra đời **TRƯỚC** route đầu tiên. Điều kiện ghim
+   gốc giữ nguyên văn: **route đầu tiên của `apps/` ra đời CÙNG LÚC với một lớp canh khẳng định
+   mọi route đổi trạng thái đều nêu tên một mã quyền.** Viết route trước, lớp canh sau, là đúng
+   thứ tự đã sinh ra khoản nợ 17 (*"LẦN THỨ BA CÙNG MỘT LỚP LỖ"*).
+
+   > **Vị từ KHÔNG dùng chữ "route"**, vì framework chưa được chọn nên canh theo route là canh
+   > theo một thứ chưa tồn tại. Nó nói: *một module trong `apps/` gọi tới một hàm ĐỔI TRẠNG THÁI
+   > thì phải nhắc tới `requirePermission`*. Đó là vị từ **yếu hơn** "route có đúng mã quyền", và
+   > file tự viết ra chỗ yếu: nó không kiểm mã quyền có ĐÚNG, không kiểm cổng chạy TRƯỚC lời gọi,
+   > và một `requirePermission` nằm trong nhánh chết vẫn đi lọt. Nó đóng đúng MỘT đường — hình
+   > dạng của một sơ suất thật, không phải hình dạng của một kẻ tấn công.
+   >
+   > **Lớp thứ hai mới là lớp giữ nó không tự làm mù mình:** danh sách hàm-đổi-trạng-thái được
+   > đối chiếu với **TẬP EXPORT THẬT** của ba barrel, nên một hàm ghi mới thêm vào ngày mai buộc
+   > phải được phân loại. Không có nó, đây lại là *"hàng rào tự làm mù mình bằng một danh sách
+   > tên"* — khuôn mà khoản nợ 3 và 16 đã ghi hai lần.
+   >
+   > **Và nó CHƯA canh gì cả hôm nay.** File tự nói ra bằng một khẳng định riêng: `apps/` chưa có
+   > module `.ts` nào. Cùng tình cảnh hàng rào `g1-` ở khoản nợ 14. Khi `apps/` có module đầu
+   > tiên, khẳng định "rỗng ruột" ấy ĐỎ và phải bị xoá — đó là dấu hiệu lớp trên bắt đầu có nghĩa.
 5. **`hasPermission` ở lại ngoài barrel** (Task 9, vòng fix 1). ADR này **không** nới nó: một cổng
    gác dựng bằng nó vi phạm D5 trong im lặng, và điều đó đã được đo (11 mã quyền dò qua
    `hasPermission` → sổ kiểm toán trước = 3, sau = 3).

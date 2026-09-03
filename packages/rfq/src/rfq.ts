@@ -1,5 +1,6 @@
 import type pg from "pg";
-import { appendAuditEvent, assertTenantBound, type ActorType } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { resolveSessionActor } from "@trustprocure/identity";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -68,10 +69,23 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["OPEN", "CANCELLED"],
 ];
 
-export interface RfqActor {
-  readonly type: ActorType;
-  readonly id?: string | null;
-}
+// ===========================================================================================
+// [ADR-016] `RfqActor` ĐÃ BỊ XOÁ — VÀ NÓ LÀ HẠNG MỤC CÒN LẠI CÓ TÊN CỦA LƯỢT CÀI 2026-08-30
+//
+// ADR-016 mục 3 từng viết rằng hai gói kia phải đi theo đường mà `RfqActor` "đã đi". Câu ấy SAI
+// và đã bị gạch bỏ tại chỗ: thứ đi đúng đường ở vòng sửa S1.2 là **cột `created_by`**. Tám hàm
+// export của gói này tới trước lượt sửa ấy VẪN nhận `actor` — một object hai trường mà người gọi
+// tự khai — rồi ghi thẳng vào sổ kiểm toán.
+//
+// Tức gói này mang ĐÚNG khiếm khuyết mà MEDIUM-3 nêu cho `packages/supplier`. Nó không bị lượt
+// review nào gọi tên vì mỗi lượt chỉ nhìn MỘT hạng mục — và đó là một giới hạn của hình thức
+// review, đáng ghi hơn bản thân khiếm khuyết.
+//
+// `createdBy` và `approverUserId` cũng biến mất, vì cả hai là DẪN XUẤT đã được CSDL cưỡng chế:
+// `rfq_kiem_nguoi_tao` (011) đòi `sessions.user_id = created_by`, và `rfq_kiem_nguoi_duyet` (011)
+// đòi `sessions.user_id = approver_user_id`. Hai tham số mà trigger đã ép bằng chủ phiên là hai
+// chỗ để gõ nhầm, không phải hai bậc tự do.
+// ===========================================================================================
 
 export interface CreateRfqInput {
   readonly title: string;
@@ -80,7 +94,6 @@ export interface CreateRfqInput {
   // đặt, và không một dòng mã nào tính nó — tức D2 ("RFQ vượt ngưỡng cần 2 phê duyệt") chưa có
   // NGƯỠNG nào cả. RFQ nay luôn ra đời ở `true` (DEFAULT của cột, 009), và đường DUY NHẤT hạ nó
   // xuống là `setRfqBudget` — thứ phải trỏ tới một chính sách có thật và để CSDL tính phép so.
-  readonly createdBy: string;
   /**
    * [H-1, review an ninh S1.2] Phiên của CHÍNH người tạo. Không có nó, `createdBy` là một LỜI KHAI:
    * Mallory gọi `createRfq({ createdBy: idCuaBob, actor: Mallory })` rồi tự duyệt được, vì trigger
@@ -89,7 +102,6 @@ export interface CreateRfqInput {
    * nay là DẪN XUẤT chứ không phải lời khai.
    */
   readonly createdBySessionId: string;
-  readonly actor: RfqActor;
 }
 
 export interface RfqRecord {
@@ -111,7 +123,8 @@ export interface AddRfqItemInput {
   readonly description: string;
   readonly quantity: string;
   readonly unit: string;
-  readonly actor: RfqActor;
+  /** [ADR-016] Phiên của CHÍNH người thao tác. Danh tính là dẫn xuất của nó. */
+  readonly actorSessionId: string;
 }
 
 export interface RfqItemRecord {
@@ -208,6 +221,7 @@ export async function createRfq(
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "createRfq");
 
+  const actor = await resolveSessionActor(client, orgId, input.createdBySessionId);
   const title = batBuoc(input.title, "title", 500);
 
   // [ADR-017] Cột `requires_dual_approval` cố ý KHÔNG có trong danh sách: `DEFAULT true` của 009
@@ -217,14 +231,14 @@ export async function createRfq(
     `INSERT INTO rfq_packages
        (org_id, title, deadline_at, created_by, created_by_session_id)
      VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_RFQ}`,
-    [orgId, title, input.deadlineAt ?? null, input.createdBy, input.createdBySessionId],
+    [orgId, title, input.deadlineAt ?? null, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("INSERT rfq_packages không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_CREATED",
     resourceType: "rfq_package",
     resourceId: hang.id,
@@ -240,6 +254,7 @@ export async function addRfqItem(
   input: AddRfqItemInput,
 ): Promise<RfqItemRecord> {
   await assertTenantBound(client, orgId, "addRfqItem");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const description = batBuoc(input.description, "description", 2000);
   const unit = batBuoc(input.unit, "unit", 50);
@@ -248,9 +263,10 @@ export async function addRfqItem(
   }
 
   const { rows } = await client.query<HangItem>(
-    `INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_ITEM}`,
-    [orgId, input.rfqId, input.lineNo, description, input.quantity, unit],
+    `INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit,
+                            created_by, created_by_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COT_ITEM}`,
+    [orgId, input.rfqId, input.lineNo, description, input.quantity, unit, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("INSERT rfq_items không trả về hàng nào");
@@ -259,8 +275,8 @@ export async function addRfqItem(
   // hai phê duyệt" không nhìn thấy được kể cả khi có người đọc sổ. Băm nội dung (011) nay chặn
   // hẳn đường ấy, nhưng dấu vết vẫn phải có: sổ kiểm toán là thứ trả lời "đã có gì xảy ra".
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_ITEM_ADDED",
     resourceType: "rfq_item",
     resourceId: hang.id,
@@ -300,16 +316,18 @@ export async function listRfqItems(
 export async function submitRfqForApproval(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly rfqId: string; readonly actor: RfqActor },
+  input: { readonly rfqId: string; readonly actorSessionId: string },
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "submitRfqForApproval");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái
     // đích là một lần ghi đè IM LẶNG — kiểm (a) của trigger bỏ qua vì status không đổi.
-    `UPDATE rfq_packages SET status = 'PENDING_APPROVAL'
+    `UPDATE rfq_packages SET status = 'PENDING_APPROVAL',
+            submitted_by = $2, submitted_by_session_id = $3
       WHERE id = $1 AND status = 'DRAFT' RETURNING ${COT_RFQ}`,
-    [input.rfqId],
+    [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) {
@@ -319,8 +337,8 @@ export async function submitRfqForApproval(
   }
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_SUBMITTED_FOR_APPROVAL",
     resourceType: "rfq_package",
     resourceId: hang.id,
@@ -330,7 +348,6 @@ export async function submitRfqForApproval(
 
 export interface ApproveRfqInput {
   readonly rfqId: string;
-  readonly approverUserId: string;
   /**
    * Phiên của CHÍNH người duyệt. Trigger `rfq_kiem_nguoi_duyet` ở 009 đòi
    * `sessions.user_id = approver_user_id`, nên truyền phiên của người khác vào đây bị CSDL từ
@@ -338,7 +355,6 @@ export interface ApproveRfqInput {
    * `UNIQUE (org_id, rfq_id, session_id)` giữ.
    */
   readonly sessionId: string;
-  readonly actor: RfqActor;
 }
 
 export async function approveRfq(
@@ -347,20 +363,21 @@ export async function approveRfq(
   input: ApproveRfqInput,
 ): Promise<void> {
   await assertTenantBound(client, orgId, "approveRfq");
+  const actor = await resolveSessionActor(client, orgId, input.sessionId);
 
   await client.query(
     `INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
      VALUES ($1, $2, $3, $4)`,
-    [orgId, input.rfqId, input.approverUserId, input.sessionId],
+    [orgId, input.rfqId, actor.id, actor.sessionId],
   );
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_APPROVED",
     resourceType: "rfq_package",
     resourceId: input.rfqId,
-    payload: { approverUserId: input.approverUserId },
+    payload: { approverUserId: actor.id },
   });
 }
 
@@ -374,14 +391,16 @@ export async function approveRfq(
 export async function openRfq(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly rfqId: string; readonly actor: RfqActor },
+  input: { readonly rfqId: string; readonly actorSessionId: string },
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "openRfq");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'OPEN', opened_at = now()
+    `UPDATE rfq_packages SET status = 'OPEN', opened_at = now(),
+            opened_by = $2, opened_by_session_id = $3
       WHERE id = $1 AND status = 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
-    [input.rfqId],
+    [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) {
@@ -391,8 +410,8 @@ export async function openRfq(
   }
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_OPENED",
     resourceType: "rfq_package",
     resourceId: hang.id,
@@ -404,7 +423,8 @@ export interface CloseRfqInput {
   readonly rfqId: string;
   /** C4/ARCHITECTURE §6: đóng sớm phải có lý do. Bắt buộc, kể cả khi đóng đúng hạn. */
   readonly reason: string;
-  readonly actor: RfqActor;
+  /** [ADR-016] Phiên của CHÍNH người đóng. Đóng thầu là một hành vi có chủ thể. */
+  readonly actorSessionId: string;
 }
 
 export async function closeRfq(
@@ -413,6 +433,7 @@ export async function closeRfq(
   input: CloseRfqInput,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "closeRfq");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const { rows } = await client.query<HangRfq>(
@@ -421,9 +442,10 @@ export async function closeRfq(
     // nhau nên chúng không được gộp vào một tham số như bản S1.2 đã làm.
     `UPDATE rfq_packages
         SET status = 'CLOSED', closed_at = now(),
-            early_close_reason = CASE WHEN now() < deadline_at THEN $2::text ELSE NULL END
+            early_close_reason = CASE WHEN now() < deadline_at THEN $2::text ELSE NULL END,
+            closed_by = $3, closed_by_session_id = $4
       WHERE id = $1 AND status = 'OPEN' RETURNING ${COT_RFQ}`,
-    [input.rfqId, reason],
+    [input.rfqId, reason, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) {
@@ -433,8 +455,8 @@ export async function closeRfq(
   }
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_CLOSED",
     resourceType: "rfq_package",
     resourceId: hang.id,
@@ -447,7 +469,13 @@ export interface ExtendDeadlineInput {
   readonly rfqId: string;
   readonly newDeadlineAt: Date;
   readonly reason: string;
-  readonly actor: RfqActor;
+  /**
+   * [ADR-016] Phiên của CHÍNH người gia hạn. KHÔNG có cột ký tên nào cho đường này — nó sửa
+   * `deadline_at` mà không đổi `status`, nên không có cạnh để treo một `WHEN`. Xem khối §(3)
+   * của migration 016: một cột `deadline_changed_by` chỉ giữ được LẦN CUỐI, tức trả lời SAI câu
+   * hỏi kiểm toán thật ("đã bị đẩy mấy lần, bởi ai"). Câu trả lời đúng là sổ kiểm toán.
+   */
+  readonly actorSessionId: string;
 }
 
 /**
@@ -472,6 +500,7 @@ export async function extendRfqDeadline(
   input: ExtendDeadlineInput,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "extendRfqDeadline");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const truoc = await docRfq(client, input.rfqId);
@@ -488,8 +517,8 @@ export async function extendRfqDeadline(
   }
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_DEADLINE_EXTENDED",
     resourceType: "rfq_package",
     resourceId: hang.id,
@@ -505,15 +534,17 @@ export async function extendRfqDeadline(
 export async function cancelRfq(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly rfqId: string; readonly reason: string; readonly actor: RfqActor },
+  input: { readonly rfqId: string; readonly reason: string; readonly actorSessionId: string },
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "cancelRfq");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now()
+    `UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(),
+            cancelled_by = $2, cancelled_by_session_id = $3
       WHERE id = $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
-    [input.rfqId],
+    [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) {
@@ -523,8 +554,8 @@ export async function cancelRfq(
   }
 
   await appendAuditEvent(client, orgId, {
-    actorType: input.actor.type,
-    actorId: input.actor.id ?? null,
+    actorType: actor.type,
+    actorId: actor.id,
     action: "RFQ_CANCELLED",
     resourceType: "rfq_package",
     resourceId: hang.id,

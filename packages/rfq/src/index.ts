@@ -29,7 +29,6 @@ export {
   type CloseRfqInput,
   type CreateRfqInput,
   type ExtendDeadlineInput,
-  type RfqActor,
   type RfqItemRecord,
   type RfqRecord,
   type RfqStatus,

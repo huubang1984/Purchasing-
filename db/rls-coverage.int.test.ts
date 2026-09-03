@@ -971,6 +971,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
+      // [ADR-016 / 016] Hang muc RFQ mang chu ky nguoi them.
+      { grantee: "app_api", bang: "rfq_items", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "description", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "line_no", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "org_id", quyen: "INSERT" },
@@ -983,17 +986,28 @@ describe("phủ RLS", () => {
       // [H-4, 011] `early_close_reason`: dong som la mot hanh vi CO TEN, khong phai mot `reason`
       // chi di vao payload kiem toan.
       { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_at", quyen: "UPDATE" },
+      // [ADR-016 / 016] Bon canh chuyen trang thai mang CHU KY. Khong phai sieu du lieu trang
+      // tri: *Separation of Duties* (PRODUCT §4.1) va *Open ≠ Award* (§4.3) treo vao dung bon cau
+      // hoi nay, va truoc 016 khong cau nao tra loi duoc TU DU LIEU.
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "closed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "early_close_reason", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "opened_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
       // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
