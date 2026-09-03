@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -38,7 +39,7 @@ import { describe, expect, it } from "vitest";
 // =============================================================================================
 
 const GOC = fileURLToPath(new URL("../../", import.meta.url));
-const THU_MUC_APPS = join(GOC, "apps");
+const THU_MUC_APPS = "apps";
 
 /** Hàm ĐỔI TRẠNG THÁI — mọi lời gọi từ `apps/` phải đi kèm một phép kiểm quyền. */
 const HAM_DOI_TRANG_THAI = [
@@ -87,32 +88,33 @@ const CUA_GOI = [
   "@trustprocure/invitation",
 ] as const;
 
-function quetTepTs(thuMuc: string): string[] {
-  let ra: string[] = [];
-  let muc: string[];
-  try {
-    muc = readdirSync(thuMuc);
-  } catch {
-    return [];
-  }
-  for (const ten of muc) {
-    const duongDan = join(thuMuc, ten);
-    if (statSync(duongDan).isDirectory()) {
-      if (ten === "node_modules" || ten === "dist") continue;
-      // Fixture THOÁNG QUA của tests/architecture/boundaries.test.ts. Bỏ qua chúng là bắt buộc,
-      // và lý do là một phép đo chứ không phải một dự phòng: khi chạy TOÀN BỘ bộ test, file này
-      // ĐÃ ĐỎ vì nó quét `apps/` đúng lúc `boundaries.test.ts` đang giữ một thư mục dò ở đó.
-      // Một lớp canh đọc thư mục mà thư mục ấy bị một test khác sửa là một lớp canh FLAKY —
-      // và một lớp canh flaky sẽ bị ai đó tắt đi, tức nó tệ hơn không có.
-      if (ten.startsWith("tmp-probe-")) continue;
-      ra = ra.concat(quetTepTs(duongDan));
-    } else if (ten.endsWith(".ts") && !ten.includes(".test.") && !ten.startsWith("zprobe-")) {
-      ra.push(duongDan);
-    }
-  }
-  return ra;
+// ---------------------------------------------------------------------------------------------
+// QUÉT BẰNG `git ls-files`, KHÔNG BẰNG `readdirSync` — VÀ ĐÂY LÀ MỘT BẢN VÁ CỦA MỘT BẢN VÁ
+// ---------------------------------------------------------------------------------------------
+// Bản đầu quét thư mục thật. Nó ĐỎ khi chạy toàn bộ bộ test, vì `boundaries.test.ts` dựng fixture
+// dò ngay trong `apps/`. Bản vá thứ nhất loại trừ theo TÊN (`tmp-probe-*`) — và bản vá ấy SAI:
+// nó suy danh sách tên từ những `mkdirSync` mà tôi grep được, bỏ sót `apps/tmp-probe/src` (không
+// có gạch nối ở cuối). Máy tôi vẫn xanh vì thời điểm chạy tình cờ không trùng.
+//
+// **CI bắt được, máy không** — lần thứ hai trong dự án, và cùng một bài học: một hàng rào suy từ
+// DANH SÁCH TÊN thì mù đúng ở chỗ danh sách ấy thiếu. Khoản nợ 3 và 16 đã ghi khuôn này hai lần.
+//
+// Bản này suy từ một TÍNH CHẤT: chỉ những file **được git theo dõi** mới là mã của kho này.
+// Fixture dò là file untracked, thoáng qua — bất kể đặt tên gì, nó không bao giờ lọt vào đây.
+//
+// GIỚI HẠN PHẢI NÓI RA: một route VỪA VIẾT và CHƯA `git add` thì lớp này chưa thấy. Đó là đánh
+// đổi có chủ đích — vị từ trở thành "cái gì ĐÃ VÀO KHO thì phải có cổng quyền", và CI, nơi lớp
+// này phải cắn, chỉ bao giờ nhìn thấy mã đã commit.
+function quetTepTs(thuMucTuongDoi: string): string[] {
+  const ra = execFileSync("git", ["ls-files", "--", thuMucTuongDoi], {
+    cwd: GOC,
+    encoding: "utf8",
+  });
+  return ra
+    .split(/\r?\n/)
+    .filter((d) => d.endsWith(".ts") && !d.includes(".test."))
+    .map((d) => join(GOC, d));
 }
-
 /**
  * Vị từ, tách khỏi I/O để nó ĐO ĐƯỢC bằng một chuỗi giả lập. Không có bước tách này, vế đối chứng
  * dương chỉ chạy được bằng cách viết một file thật vào `apps/` rồi xoá đi — một phép đo để lại
@@ -164,6 +166,13 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
       "Một module trong apps/ gọi hàm ĐỔI TRẠNG THÁI mà không có một dòng nào về quyền. " +
         "ADR-016 mục 1 đặt cổng quyền ở TẦNG NÀY — nếu nó không ở đây thì nó không ở đâu cả.",
     ).toEqual([]);
+  });
+
+  it("BỘ QUÉT CÓ RĂNG: cùng hàm ấy TÌM THẤY file khi thư mục THẬT SỰ có mã đã vào kho", () => {
+    // Không có khẳng định này, một bộ quét hỏng (git không có trên PATH, sai `cwd`, đổi cờ)
+    // trả về mảng rỗng và MỌI khẳng định phía trên xanh — một lớp canh RỖNG RUỘT trông y hệt
+    // một lớp canh sạch. `packages/` là thư mục đối chứng vì nó chắc chắn có mã đã commit.
+    expect(quetTepTs("packages").length).toBeGreaterThan(10);
   });
 
   it("PHÁT BIỂU ĐÚNG MỨC: hôm nay `apps/` chưa có module `.ts` nào, nên khẳng định trên là RỖNG RUỘT", () => {
