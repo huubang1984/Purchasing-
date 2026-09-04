@@ -483,6 +483,26 @@
     them("thoa-thuan", "ECDH P-256", p ? "dat" : "thieu",
       p ? chiTietP : "không chạy được — " + chiTietP);
 
+    // ---------------------------------------------------------------------------------------
+    // [S1.4 / ADR-011 mục 2] MÃ CHÍNH TẮC — chỗ máy dò thôi là một tờ giấy và thành một DÂY NỐI
+    //
+    // Hai nhãn ở trên ("X25519", "ECDH P-256") là chữ cho người đọc. Chuỗi mà hệ thống so khớp
+    // thì khác: `chooseKeyAgreementAlgorithm` của @trustprocure/sealed-envelope nhận đúng các mã
+    // trong `KEY_AGREEMENT_ALGORITHMS`, và "ECDH P-256" (có dấu cách) KHÔNG khớp "ECDH_P256".
+    // Trước khi có khối này, mục 2 của ADR-011 — *chọn thuật toán là một phép ĐO LÚC CHẠY* — là
+    // một câu chưa có dây nối: máy dò in ra một trang cho người đọc, và không gì đi tiếp.
+    //
+    // Có test tĩnh đọc CHÍNH file này và đòi mọi mã trong `KEY_AGREEMENT_ALGORITHMS` xuất hiện ở
+    // đây (`packages/sealed-envelope/src/hang-so.test.ts`), nên thêm một thuật toán vào gói mà
+    // quên nối dây ở đây là một lượt ĐỎ, không phải một sự im lặng.
+    // ---------------------------------------------------------------------------------------
+    var HO_TRO = [];
+    if (p) HO_TRO.push("ECDH_P256");
+    if (x) HO_TRO.push("X25519");
+    window.trustprocureKeyAgreementSupport = function () { return HO_TRO.slice(); };
+    them("thoa-thuan", "mã chính tắc gửi cho hệ thống", HO_TRO.length ? "dat" : "thieu",
+      HO_TRO.length ? HO_TRO.join(", ") : "không mã nào — máy này không nộp thầu được");
+
     return { x25519: x, p256: p };
   }
 

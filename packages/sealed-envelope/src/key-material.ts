@@ -30,8 +30,9 @@ import {
 /**
  * Thuật toán MẶC ĐỊNH của ADR-011, bản sao ĐỂ ĐỌC của `public.rfq_thuat_toan_mac_dinh()` trong
  * migration 017. Bản có thẩm quyền là bản trong CSDL — trigger `rfq_packages_kiem_khoa_khi_mo`
- * đọc nó, và trigger canh MỌI đường. Có test đọc thẳng file SQL và đòi hai bên khớp, cùng khuôn
- * `RFQ_TRANSITIONS` của `packages/rfq`.
+ * đọc nó, và trigger canh MỌI đường. `hang-so.test.ts` đọc thẳng file SQL và đòi hai bên khớp —
+ * cùng khuôn `RFQ_TRANSITIONS` của `packages/rfq`, và cùng lý do: hai bản chép của một hằng sẽ
+ * trôi khỏi nhau, và bản trôi sẽ là bản không ai chạy.
  */
 export const DEFAULT_KEY_AGREEMENT_ALGORITHM: KeyAgreementAlgorithm = "ECDH_P256";
 
