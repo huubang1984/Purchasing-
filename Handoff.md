@@ -305,7 +305,12 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
     S1.1–S1.3. Ai tiếp tục việc này phải chạy `security-reviewer` cho S1.3 (và nên chạy cho cả
     S1.1/S1.2) rồi ghi vào file đó theo đúng định dạng đã có.
 
-11. ~~**Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.**~~ **HẾT CHẶN 2026-09-04.** ADR-011 chốt
+11. ~~**Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.**~~ ~~**HẾT CHẶN 2026-09-04.**~~ **S1.4 ĐÃ XONG
+    PHẦN MÃ 2026-09-04** — `packages/sealed-envelope`, migration `017`, ADR-019. Ba mã nghiệp vụ
+    được lấp (C5, G2, G4), độ phủ **33/50**, và **13 mã mục tiêu của S0 nay không còn mã nào
+    trống**. Hai khoản nợ có tên cũng đóng cùng lượt: `[NỢ ADR-006]` (hai role DB nay thật sự
+    không role nào bao trùm role kia) và vế *"tài sản được bảo vệ chưa tồn tại"* của ghi chú §4
+    cho G1. Đổi lại, G1 có một vế **thu hẹp MỚI** — xem ADR-019. Nguyên văn cũ: ADR-011 chốt
     **"P-256 mặc định, X25519 cơ hội"** — câu hỏi được **gỡ bỏ** chứ không được trả lời: thế
     hoặc/hoặc là do chính ADR tự đặt ra, và hỗ trợ cả hai thuật toán (chọn bằng máy dò lúc chạy)
     xoá hẳn phụ thuộc vào phép đo Android. Khoản nợ 23 **vẫn mở**, chỉ thôi chặn. Nguyên văn cũ: ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau

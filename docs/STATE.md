@@ -24,20 +24,39 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Đã xong:
 
-- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ **mười tám ADR** (ADR-011 **chốt 2026-09-04**, hết chặn S1.4) (bảy ở giai đoạn thiết kế,
+- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ **mười chín ADR** (ADR-011 **chốt 2026-09-04**, hết chặn S1.4; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
   ADR-008 ở Task 9, ADR-009 ở vòng fix cuối, **ADR-010/011/012 ngày 2026-08-29 khi lập kế hoạch S1**,
   **ADR-013/014/015 cùng ngày cho ba hạng mục sớm nhất**, **ADR-016/017/018 ngày 2026-08-30 cho ba
   MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã**), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- ~~Bảy~~ ~~Tám~~ ~~Chín~~ **Mười** migration `001`–**`010`** + `hardening.always.sql`: role, tổ chức, người
+- ~~Bảy~~ ~~Tám~~ ~~Chín~~ ~~Mười~~ **Mười bảy** migration `001`–**`017`** + `hardening.always.sql`: role, tổ chức, người
   dùng, sổ kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**,
   **RFQ + hạng mục + phê duyệt + máy trạng thái (S1.2)**, **lời mời + magic link + OTP + phiên
-  khách (S1.3)**.
+  khách (S1.3)**, **danh tính là dẫn xuất (013/016)**, **chính sách mua sắm (014)**, **pepper OTP
+  (015)**, **vật liệu khoá RFQ (017, S1.4)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.4 — phong bì niêm phong (2026-09-04):** migration `017` (`rfq_key_material`), gói
+  `packages/sealed-envelope` với **hai cửa** đúng khuôn `packages/crypto-keys`, và **ba mã nghiệp
+  vụ được lấp: C5, G2, G4** — độ phủ **30/50 → 33/50**, phần nghiệp vụ 14 → 17.
+
+  **Con số đáng đọc nhất của hạng mục này là một dòng do chính ma trận tự sinh ra:** *"Trong 13 mã
+  mục tiêu của S0, số còn chưa phủ: **không còn mã nào**"*. G2 và G4 là hai mã S0 tự đặt làm mục
+  tiêu rồi không giao được; chúng đóng ở đây, bốn hạng mục sau.
+
+  **Khoản nợ `[NỢ ADR-006]` cũng đóng, và nó đóng đúng cách nó được hẹn — bằng một lần ĐỎ.** Test
+  *"app_unseal vẫn là tập con quyền của app_api"* (Task 4) tự viết cho tương lai một thông điệp:
+  khi nào có bảng khoá riêng RFQ thì test này sẽ đỏ. Lượt chạy đầu sau khi `017` áp: nó **đỏ**,
+  đúng như thế. Bản mới đo **mạnh hơn** — nó đòi CẢ HAI chiều (không role nào bao trùm role kia),
+  mỗi chiều neo vào một khoá cụ thể.
+
+  Ba thứ được ghi ra thay vì nuốt vào ô ✅: G1 có một vế **thu hẹp MỚI** (tiến trình `api` **có**
+  chạm khoá riêng dạng rõ trong cửa sổ của đúng một hàm — ADR-019); G2 mang cờ §4 vì mệnh đề nói
+  *một* cặp khoá còn hiện thực cho *hai*; G4 mang cờ §4 vì mệnh đề liệt kê **bốn** thao tác còn
+  S1.4 có **ba** — vế *mở bọc* không có một dòng mã nào và nó thuộc S1.6.
 - **S1.3 — lời mời, magic link, OTP, phiên khách (2026-08-29):** migration `010` (`rfq_invitations`,
   `rfq_invitation_tokens`, `invitation_otp_challenges`, `otp_rate_limits`, `guest_sessions`), gói
   `packages/invitation`. **Ba mã NGHIỆP VỤ đầu tiên của S1 được lấp: E1, E2, E5.** Vế *giới hạn
@@ -54,7 +73,7 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Chưa xong:
 
-- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ **S1.4–S1.9**: phong bì niêm phong, nộp báo giá, mở thầu, so sánh, T5, E2E.
+- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ ~~**S1.4–S1.9**~~ **S1.5–S1.9**: nộp báo giá, mở thầu, so sánh, T5, E2E.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
@@ -294,6 +313,9 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 21 | **Chỉ `pnpm audit --prod` chặn được hạ tầng kiểm thử lọt vào phạm vi sản xuất, và nó chỉ nổ khi TÌNH CỜ có advisory.** `packages/test-support` khai `@testcontainers/postgresql` trong `dependencies` suốt từ Task 3 tới lần chạy CI đầu tiên; thứ làm nó lộ ra là **hai advisory HIGH trên `undici`**, không phải một lớp canh nào. Một gói kiểm thử **không có advisory** vẫn nằm im trong đồ thị prod và **không lớp nào kêu**. Cách đóng đúng: một test đọc mọi `package.json` của workspace và khẳng định tập phụ thuộc sản xuất đúng bằng một danh sách được ghim | `packages/test-support/package.json`, `.github/workflows/ci.yml` (bước *Audit phu thuoc (cong chan)*) |
 | 22 | ~~**Job `evidence` vẫn CHƯA từng chạy trên CI.**~~ **ĐÃ ĐÓNG** ở run `33221142361`: job chạy đủ, 672 khẳng định, 24/47, *"Cổng evidence: XANH"*, và bước so byte với bản đã commit đã chạy và qua. Toàn bộ khoản nợ *"chưa chạy trên CI thật"* nay đã trả hết. Giữ hàng này để đối chiếu, không xoá | `.github/workflows/ci.yml` (job `evidence`) |
 | 23 | **VẪN MỞ, nhưng THÔI CHẶN S1.4 kể từ 2026-09-04.** ADR-011 được chốt bằng cách **gỡ bỏ thế hoặc/hoặc** — hỗ trợ CẢ HAI thuật toán, chọn bằng chính máy dò lúc chạy — nên phép đo Android tụt từ **cổng chặn** xuống **con số vận hành**. Lượt tra dữ liệu công bố 2026-09-04 còn cho một **kết quả ÂM đáng ghi**: phân bố phiên bản Android System WebView **không tra được** từ dữ liệu tổng hợp miễn phí, tức câu hỏi cũ *không* trả lời được bằng cách đọc, chỉ bằng cách thuê máy thật — và ngay cả thế cũng chỉ cho một mẫu. Xem `tools/do-webcrypto/ket-qua-do.md` §3c. Nguyên văn cũ giữ lại: **Phía Android của WebCrypto chưa từng được đo, và việc đó đã được HOÃN CÓ CHỦ ĐÍCH ngày 2026-08-29** vì trong tay không có máy Android tầm trung/cũ và không có iPhone iOS cũ. Đây **không phải** rủi ro đã đóng; nó là rủi ro **được chấp nhận tạm** với hai điều kiện ghi rõ: ⑴ **phải đo trước khi CHỐT ADR-011** (S1.4), vì sau khi đã có phong bì thật thì đổi thoả thuận khoá là một cuộc di trú chứ không phải sửa cấu hình; ⑵ chừng nào ô ấy còn trống, **không tài liệu nào được viết *"đã đo trên webview"* mà không kèm `iOS 18.7`**. Giảm nhẹ đã có: ADR-011 buộc phong bì **mang mã thuật toán thoả thuận khoá**, nên đổi sang P-256 về sau là **thêm một nhánh**, không phải viết lại | `tools/do-webcrypto/ket-qua-do.md` §4 (quyết định hoãn, có ngày) |
+| 24 | **HAI test FLAKY, cùng một họ, và họ ấy nay có tên.** `[M10]` (`packages/db/src/migrate.int.test.ts` — đếm advisory lock còn sót) và `[T10-L]` (`packages/outbox/src/outbox.int.test.ts` — `destroyConnectionWhenDone`) đều **đỏ trong lượt chạy đầy đủ và XANH khi chạy riêng**, cả hai quanh **vòng đời kết nối dưới tranh chấp Docker**. Chúng chưa được sửa **có chủ đích**: chưa có phép đo nào phân biệt được *"lớp bị hỏng"* với *"máy chạy chậm"*, và sửa mù bằng cách nới ngưỡng là đúng thứ biến một phép đo thành một lời khai. Cách đóng đúng: một lượt chạy lặp (`--repeat`) trên CI để đo TỶ LỆ, rồi mới quyết định | `packages/db/src/migrate.int.test.ts:540`, `packages/outbox/src/outbox.int.test.ts:1404` |
+| 25 | **Vế *mở bọc* của G4 chưa có một dòng mã nào, và nó là vế một kiểm toán viên hỏi tới ĐẦU TIÊN.** S1.4 ghi sổ kiểm toán cho *sinh* (một bản ghi, vì sinh và bọc là một hành vi) và *huỷ*; *mở bọc* sống trong `apps/unseal-worker`, thứ chưa tồn tại. Đây là **phần chênh đã được khai báo** ở §4 của ma trận chứ không phải một khoảng trống bị quên — nhưng nó là khoản nợ mà **S1.6 phải trả**, không phải một ghi chú vĩnh viễn | `tools/inv-matrix/src/danh-gia.ts` (`PHAM_VI_HEP` mục `G4`) |
+| 26 | **Thu hồi vật liệu khoá là một DẤU, không phải một lần XOÁ MẬT MÃ.** Khi một RFQ bị huỷ, `rfq_key_material.revoked_at` được đặt nhưng `wrapped_private_key` **vẫn nằm nguyên trong hàng**. Xoá nó đi sẽ biến *"không ai được mở báo giá của RFQ đã huỷ"* từ một quy tắc **chính sách** thành một sự thật **mật mã** — mạnh hơn hẳn — nhưng nó cũng là một hành động không đảo ngược đứng sau một nút có thể bấm nhầm. Quyết định thuộc S1.6, nơi có cổng chính sách để đặt nó vào | `db/migrations/017_rfq_key_material.sql` khối (4) |
 
 ## Kiến trúc
 
@@ -600,7 +622,7 @@ CMK, chưa có role nào được tạo.
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ **Mười tám ADR** — 001–010 và 012–018 *Đã chấp nhận*; **011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ **Mười chín ADR** — 001–010 và 012–019 *Đã chấp nhận*; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
 | `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |

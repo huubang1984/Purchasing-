@@ -101,8 +101,18 @@ evidence/
 docs/
 ```
 
-Mỗi package có đúng một mặt tiền công khai `index.ts`. Import xuyên module không qua
-`index.ts` bị dependency-cruiser chặn ở tầng test T0.
+~~Mỗi package có đúng một mặt tiền công khai `index.ts`.~~ **[S1.4] Câu ấy đúng cho CHÍN gói và
+sai cho HAI.** `crypto-keys` và `sealed-envelope` mỗi gói có **hai** cửa, và cửa thứ hai của cả
+hai là **đường mở** — `unwrap.ts` và `unseal.ts`. Chúng không phải ngoại lệ được nới ra: mỗi cửa
+thứ hai mang một quy tắc dependency-cruiser RIÊNG cho phép **đúng một** miễn trừ
+(`apps/unseal-worker/`, cộng test vòng đời của chính gói), và mỗi quy tắc ấy có probe chứng minh
+nó đỏ thật. Import xuyên module không qua cửa bị dependency-cruiser chặn ở tầng test T0, và
+`tests/architecture/bien-gioi-goi.test.ts` ([INV-H16]) đòi MỌI gói phải có một họ quy tắc như vậy
+— suy từ tính chất, không từ một danh sách tên.
+
+**[S1.4] Nơi cặp khoá RFQ ra đời: trong `api`, không trong `unseal-worker`.** Xem ADR-019 cho ba
+phương án bị loại và cho phần **thu hẹp** mà quyết định này tạo ra cho bất biến G1. Sơ đồ trên
+vẫn đúng: `api` cần `kms:Encrypt` để **bọc** một khoá riêng, và nó vẫn **không** có `kms:Decrypt`.
 
 ## 4. Mô hình dữ liệu S0 + S1
 

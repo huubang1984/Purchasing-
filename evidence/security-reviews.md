@@ -195,3 +195,31 @@ chính hình thức review:
 
 **Điều vòng này KHÔNG đóng:** cổng quyền ở tầng ứng dụng vẫn **mặc định MỞ** — lớp canh route chưa
 dựng được vì `apps/` rỗng, và ADR-016 mục 4 ghim nó vào **route đầu tiên của `apps/`**.
+
+## S1.4 — và một dòng phải viết ra thay vì để trống
+
+⑽ **S1.4 mang dấu ⭐ `security-reviewer` trong kế hoạch S1 §1, và lượt review ấy CHƯA XẢY RA.**
+
+Đây là **cùng một khoảng trống** đã ghi cho S1.3 (xem ghi chú ⑺ và §11 của `Handoff.md`), không
+phải một khoảng trống mới: phiên làm việc dựng S1.4 chạy dưới một ràng buộc không cho gọi
+subagent trừ khi người dùng yêu cầu. Ghi ở đây vì một hạng mục ⭐ **không có dòng nào trong file
+này** sẽ được người đọc sau hiểu là *đã review và sạch*, chứ không phải *chưa review*.
+
+**Điều kiện hoàn thành S1 mục 6 vì vậy vẫn CHƯA ĐẠT**, nay vì một lý do KHÁC với lý do cũ: bốn
+CRITICAL và mười HIGH của S1.1–S1.3 **đã đóng** (xem bảng ở trên), nhưng S1.4 — hạng mục chạm
+thẳng vào khoá riêng — **chưa được ai đóng vai kẻ tấn công**.
+
+**Thứ S1.4 tự làm được và đã làm, ghi ra để lượt review sau khỏi lặp lại:**
+
+| Câu hỏi một reviewer sẽ hỏi | Đã có phép đo chưa |
+|---|---|
+| `app_api` đọc được khoá riêng không? | **Có** — `SELECT` bị từ chối; đối chứng dương dưới `app_unseal`; đột biến cấp thêm đúng cột ấy chứng minh quyền cột LÀ thứ đang chặn |
+| Khoá của RFQ A mở được phong bì của RFQ B không? | **Có** — ba mũi, mỗi mũi một đối chứng dương |
+| Sửa mã thuật toán trong phong bì có hạ cấp được không? | **Có** — hai lớp độc lập, đo riêng từng lớp |
+| AAD có răng không? | **Có, và câu trả lời ĐẦU TIÊN là KHÔNG** — gỡ AAD khỏi cả hai chiều cho 16/16 vẫn xanh. Nay đã có test giải mã tay bằng AAD là đúng phần đầu phong bì |
+| Sinh khoá sai lúc thì sao? | **Có** — ba trigger, ba phép đo, ba lượt đột biến |
+| Khoá riêng có rời khỏi tiến trình `api` không? | **Chưa đo trực tiếp.** Lớp hiện có là KIỂU (không hàm nào trả nó) cộng `fill(0)`. Một bộ quét heap/core dump thì **không có** — và ADR-019 tự khai đúng chỗ trống ấy |
+| Bên thứ ba nào import được đường mở phong bì? | **Có** — probe depcruise, cộng một đối chứng dương cho `apps/unseal-worker` (thư mục CHƯA tồn tại) |
+
+Dòng cuối cùng của bảng là dòng đáng cho reviewer bắt đầu: nó là chỗ **duy nhất** trong S1.4 mà
+một bảo đảm đứng trên KIỂU và KỶ LUẬT thay vì trên một lớp cưỡng chế.
