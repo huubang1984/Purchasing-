@@ -508,3 +508,74 @@ describe("bề mặt export công khai của invitation", () => {
     ).toEqual([]);
   });
 });
+
+// ============================================================================================
+// MẶT TIỀN THỨ SÁU: @trustprocure/sealed-envelope (S1.4)
+//
+// Đây là mặt tiền ĐẦU TIÊN mà tiêu chí lọc không phải "symbol này có dựng được một cổng gác im
+// lặng không" mà là một câu ngắn hơn nhiều: **symbol này có chạm khoá riêng không.**
+//
+// Bốn symbol nằm TRONG gói vì đúng lý do ấy, và cả bốn đều là thứ người ta sẽ muốn xuất ra:
+//   `decodeEnvelope`      — trả ra AAD/IV/ciphertext; ba thứ đó chỉ có nghĩa với đường MỞ.
+//                           Bản đủ dùng cho bên ngoài là `describeEnvelope`, và nó chỉ trả phần đầu.
+//   `deriveContentKey`    — dẫn ra khoá nội dung. Có nó cộng một khoá riêng là mở được phong bì.
+//   `importPrivateKey`    — nhập một khoá riêng. Không đường đi nào ở cửa này cần tới nó.
+//   `unsealBid`           — cửa THỨ HAI của gói, và nó KHÔNG đi qua `index.ts`; nó có quy tắc
+//                           riêng (`g8-khong-mo-phong-bi-ngoai-unseal-worker`).
+//
+// `KeyWrapper` không có trong danh sách vì nó là `export type` — không tồn tại lúc chạy.
+// ============================================================================================
+const DANH_SACH_TRANG_SEALED_ENVELOPE = [
+  "DEFAULT_KEY_AGREEMENT_ALGORITHM",
+  "KEY_AGREEMENT_ALGORITHMS",
+  "SEALED_ENVELOPE_FORMAT_VERSION",
+  "SealedEnvelopeError",
+  "chooseKeyAgreementAlgorithm",
+  "describeEnvelope",
+  "getRfqPublicKeys",
+  "issueRfqKeyPair",
+  "revokeRfqKeyMaterial",
+  "sealBid",
+];
+
+const SEALED_ENVELOPE_PACKAGE_JSON_URL = new URL(
+  "../../packages/sealed-envelope/package.json",
+  import.meta.url,
+);
+
+describe("bề mặt export công khai của sealed-envelope", () => {
+  it("[INV-H16] cửa @trustprocure/sealed-envelope chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(SEALED_ENVELOPE_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/sealed-envelope/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, SEALED_ENVELOPE_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_SEALED_ENVELOPE.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/sealed-envelope. Nếu nó nhận hay trả một " +
+        "khoá riêng, nó phá G1 trong im lặng — giữ nó ở trong gói.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_SEALED_ENVELOPE.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/sealed-envelope.",
+    ).toEqual([]);
+  });
+
+  // Đối chứng: bốn symbol nguy hiểm phải KHÔNG có ở cửa. Khẳng định "chỉ đúng danh sách trắng" ở
+  // trên đã hàm ý điều này, nhưng nó hàm ý bằng một phép trừ — còn đây gọi thẳng tên, nên ngày ai
+  // đó thêm `deriveContentKey` vào danh sách trắng thì có HAI dòng phải sửa, không phải một.
+  it("[INV-H16] bốn symbol chạm khoá riêng KHÔNG có mặt ở cửa công khai", async () => {
+    const urlCua = new URL("../../packages/sealed-envelope/src/index.ts", import.meta.url);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    for (const ten of ["decodeEnvelope", "deriveContentKey", "importPrivateKey", "unsealBid"]) {
+      expect(Object.keys(moduleThat), `${ten} lọt ra cửa công khai`).not.toContain(ten);
+    }
+  });
+});

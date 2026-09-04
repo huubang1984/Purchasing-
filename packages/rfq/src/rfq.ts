@@ -1,6 +1,11 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { resolveSessionActor } from "@trustprocure/identity";
+import {
+  issueRfqKeyPair,
+  revokeRfqKeyMaterial,
+  type KeyWrapper,
+} from "@trustprocure/sealed-envelope";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -388,13 +393,45 @@ export async function approveRfq(
  * giá trị phán xét trong hệ này đều lấy từ cùng một đồng hồ; một `new Date()` ở tầng ứng dụng là
  * đồng hồ của một máy khác, và độ lệch giữa hai máy là thứ không ai đo trong lúc chạy.
  */
+export interface OpenRfqInput {
+  readonly rfqId: string;
+  /** [ADR-016] Phiên của chính người mở. */
+  readonly actorSessionId: string;
+  /**
+   * [ADR-019 / C5] Bộ bọc khoá. Nó là THAM SỐ BẮT BUỘC, và đó là điểm đáng đọc của hàm này:
+   * mở một RFQ mà không sinh cặp khoá cho nó là một việc KHÔNG diễn đạt được nữa.
+   *
+   * Kiểu này được `@trustprocure/sealed-envelope` chuyển tiếp, nên `packages/rfq` KHÔNG có một
+   * cạnh phụ thuộc nào tới `@trustprocure/crypto-keys`.
+   */
+  readonly keyWrapper: KeyWrapper;
+}
+
+/**
+ * [C5] Mở RFQ VÀ sinh vật liệu khoá — trong CÙNG một giao dịch, theo CÙNG một thứ tự, mỗi lần.
+ *
+ * Thứ tự ở đây không phải một sở thích: migration 017 đòi RFQ còn ở `PENDING_APPROVAL` lúc INSERT
+ * khoá (vế "không sớm hơn") và đòi nó đã sang `OPEN` lúc COMMIT (vế "không mồ côi"). Đảo hai câu
+ * lệnh dưới đây thì CSDL từ chối — nên thứ tự này được cưỡng chế, không được ghi nhớ.
+ *
+ * Người gọi phải mở giao dịch. Hàm này KHÔNG tự `BEGIN`: nếu nó tự mở, hai câu lệnh dưới sẽ nằm
+ * trong một giao dịch KHÁC với phần việc còn lại của người gọi, và vế "cùng giao dịch" trở thành
+ * một lời khai thay vì một sự thật.
+ */
 export async function openRfq(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly rfqId: string; readonly actorSessionId: string },
+  input: OpenRfqInput,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "openRfq");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  // Sinh khoá TRƯỚC lần UPDATE. Xem khối chú thích trên.
+  await issueRfqKeyPair(client, orgId, {
+    rfqId: input.rfqId,
+    actorSessionId: input.actorSessionId,
+    wrapper: input.keyWrapper,
+  });
 
   const { rows } = await client.query<HangRfq>(
     `UPDATE rfq_packages SET status = 'OPEN', opened_at = now(),
@@ -560,6 +597,15 @@ export async function cancelRfq(
     resourceType: "rfq_package",
     resourceId: hang.id,
     payload: { reason },
+  });
+
+  // [G4, vế "huỷ"] Thu hồi vật liệu khoá SAU khi RFQ đã sang CANCELLED — trigger
+  // `rfq_key_material_chi_thu_hoi_khi_huy` (017) đòi đúng thứ tự này. Với RFQ còn DRAFT hay
+  // PENDING_APPROVAL thì không có khoá nào và lời gọi này là một no-op trả về 0.
+  await revokeRfqKeyMaterial(client, orgId, {
+    rfqId: input.rfqId,
+    reason,
+    actorSessionId: input.actorSessionId,
   });
   return doiRfq(hang);
 }

@@ -315,6 +315,11 @@ describe("hình dạng file migration", () => {
     // [ADR-017 / 014] Hai bang moi — `org_procurement_policies` va `rfq_budgets` — deu co
     // org_id, nen ca hai chiu DUNG cung bo rang buoc. He qua co y, giu nguyen qua Task 8/9/10,
     // S1.1 va nay qua ADR-017: `NGOAI_LE_HINH_DANG` VAN RONG. Khong mot bac tu do nao duoc mo.
+    // [S1.4 / 017] `rfq_key_material` cung co org_id nen no chiu DUNG cung bo rang buoc, va
+    // policy cua no la `(org_id = app_current_org_id())` nguyen van. Bang nay dang chu y vi mot
+    // ly do KHAC: no la bang dau tien co mot cot ma `app_api` GHI DUOC nhung KHONG DOC DUOC
+    // (`wrapped_private_key`). Hinh dang RLS khong noi gi ve dieu do — quyen theo COT noi, va
+    // lop do no la db/rls-coverage.int.test.ts. Hai lop canh hai thu khac nhau.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
@@ -330,6 +335,7 @@ describe("hình dạng file migration", () => {
       "rfq_invitation_tokens",
       "rfq_invitations",
       "rfq_items",
+      "rfq_key_material",
       "rfq_packages",
       "sessions",
       "supplier_contacts",

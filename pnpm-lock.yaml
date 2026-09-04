@@ -91,6 +91,24 @@ importers:
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../identity
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../sealed-envelope
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
+  packages/sealed-envelope:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../crypto-keys
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../identity
       pg:
         specifier: ^8.13.0
         version: 8.23.0

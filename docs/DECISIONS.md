@@ -1195,3 +1195,104 @@ số"*), nên để nó ở dạng đảo ngược được là **giữ hình th
 3. **Quét trên dữ liệu thật của test**, không đọc mã nguồn: pepper không xuất hiện trong
    `outbox_jobs.payload`, không trong `audit_events`, không trong bất kỳ cột nào của
    `invitation_otp_challenges` hay `otp_rate_limits`.
+
+---
+
+## ADR-019 — Nơi cặp khoá RFQ ra đời: **trong `api`, sống trong đúng một hàm, và G1 phải được viết HẸP LẠI thay vì được khai rộng**
+
+**Ngày:** 2026-09-04 · **Trạng thái:** **Đã chấp nhận** · Gỡ chặn: **S1.4** · Liên quan: **G1**,
+**G2**, **C5**, ADR-002, ADR-006, ADR-011
+
+### Bối cảnh — một câu hỏi mà bốn tài liệu đều giả định là đã có câu trả lời
+
+Bất biến **C5** đòi *cặp khoá RFQ chỉ sinh đúng lúc chuyển sang OPEN*. Bất biến **G1** đòi
+*private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`*. Hai câu ấy đứng cạnh nhau trong
+sổ đăng ký từ S0, và **không câu nào nói AI sinh ra cặp khoá**.
+
+Câu hỏi ấy không né được nữa, vì `openRfq` chạy trong `api` còn `apps/unseal-worker` **chưa tồn
+tại** (S1.6). Nếu chọn sai ở đây thì sai vĩnh viễn: sau khi đã có phong bì thật, đổi nơi sinh
+khoá là một cuộc di trú có dữ liệu, không phải một lần sửa hàm.
+
+### Bốn phương án, và ba trong bốn bị loại bằng một câu
+
+| # | Phương án | Vì sao loại / giữ |
+|---|---|---|
+| 1 | **Sinh trong trình duyệt NGƯỜI MUA** | **Loại thẳng.** Người mua giữ được khoá riêng ⇒ người mua mở được báo giá bất cứ lúc nào. Phá A1, C3 và cả D1. Đây là phương án dễ viết nhất và nguy hiểm nhất. |
+| 2 | **Sinh trong CSDL** | **Loại.** `pgcrypto` không sinh được cặp khoá ECDH. Và kể cả sinh được, bản rõ sẽ nằm trong bộ nhớ Postgres — đúng chỗ ADR-002 xếp vào tầng đe doạ 2. |
+| 3 | **Sinh trong `unseal-worker`** | **Loại cho S1.4, KHÔNG loại vĩnh viễn.** Nó biến *mở một RFQ* thành một lời gọi đồng bộ liên tiến trình: worker chết thì không mở được RFQ nào — một ràng buộc sẵn sàng mà nghiệp vụ không đòi. Nó còn cấp cho worker một đường **GHI** mà nó vốn không cần: hôm nay `app_unseal` chỉ `SELECT`. |
+| 4 | **Sinh trong `api`, bọc ngay, xoá bản rõ, không bao giờ trả về** | **Chọn.** |
+
+### Quyết định
+
+**Cặp khoá RFQ ra đời trong tiến trình `api`, bên trong đúng một hàm, kèm ba ràng buộc cưỡng chế
+được bằng máy.**
+
+1. **`issueRfqKeyPair` KHÔNG BAO GIỜ trả về khoá riêng dạng rõ.** Nó trả về đúng bốn thứ:
+   `algorithm`, `publicKey` (SPKI), `wrappedPrivateKey`, `keyVersion`. Khoá riêng dạng rõ là một
+   biến cục bộ, bị `fill(0)` trong `finally` — cùng khuôn `deriveOrgKey` đã dùng ở
+   `local-dev-wrapper.ts`.
+2. **Đường MỞ nằm sau một cánh cửa riêng**, `packages/sealed-envelope/src/unseal.ts`, canh bởi họ
+   quy tắc `g8-` với **đúng một** miễn trừ: `apps/unseal-worker/`. Đây là bản sao chính xác của
+   `crypto-keys/src/unwrap.ts` (ADR-006 + fix round 4), và nó ra đời **cùng lúc** với gói chứ
+   không sau — lần thứ bảy cùng một khuôn, lần thứ ba nó không phải VÁ.
+3. **`app_api` GHI ĐƯỢC nhưng KHÔNG ĐỌC ĐƯỢC `wrapped_private_key`.** Quyền theo cột:
+   `GRANT INSERT (wrapped_private_key)` mà **không** có `SELECT`. Bất đối xứng này là phần chịu
+   lực nhất của migration: một `SELECT wrapped_private_key` viết bởi người quên mất ADR này
+   **không chạy được**, và nó không chạy được vì CSDL từ chối, không vì có ai nhớ.
+
+**Vì sao ADR-006 KHÔNG bị phương án 4 làm mẻ.** ADR-006 trao cho `unseal-worker` **độc quyền
+`kms:Decrypt` trên khoá RFQ**. Bọc một khoá riêng cần `kms:Encrypt`, không cần `Decrypt`. Tức
+`api` làm được việc ở mục 1 mà **vẫn không có quyền giải mã** — ranh giới IAM của ADR-006 còn
+nguyên vẹn. Đây là lý do phương án 4 không phải một bước trượt về phía *"api mở được thầu"*.
+
+### Phần KHÔNG được nuốt vào ô ✅ — ghi chú §4 của G1 phải được VIẾT LẠI, hai chiều ngược nhau
+
+Kế hoạch S1 (§2.1) đã đoán trước chuyện này và nói đúng một nửa. Nay đủ dữ kiện để nói cả hai:
+
+- **Chiều nới ra:** vế *"tài sản được bảo vệ chưa tồn tại"* **hết hiệu lực**.
+  `rfq_key_material.wrapped_private_key` nay là một cột thật, có dữ liệu thật, và hàng rào `g1-`
+  lần đầu tiên canh một căn phòng có đồ ở trong.
+- **Chiều thu hẹp — MỚI, và nó là hệ quả trực tiếp của quyết định trên:** tiến trình `api` **có**
+  chạm khoá riêng RFQ dạng rõ, trong cửa sổ thời gian của đúng một hàm. Một **core dump của `api`
+  đúng khoảnh khắc ấy chứa nó**. Mệnh đề G1 viết *"không vào DB, log, biến môi trường, core
+  dump"* — vế core dump vì vậy **KHÔNG đúng tuyệt đối** kể từ hôm nay, và nói ra ở đây rẻ hơn
+  nhiều so với việc một kiểm toán viên tìm ra.
+
+**Điều kiện xét lại, có mốc:** khi `apps/unseal-worker` ra đời ở **S1.6**, câu hỏi *"chuyển
+`issueRfqKeyPair` sang worker"* phải được hỏi lại — và trả lời bằng một phép đo về chi phí sẵn
+sàng, không bằng trí nhớ về ADR này.
+
+### G2 nói "MỘT cặp khoá", ADR-011 cho ra HAI — và phần chịu lực là vế thứ hai
+
+Sổ đăng ký viết G2 là *"Mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ khác"*. ADR-011 chốt
+**P-256 mặc định, X25519 cơ hội**, và ECDH đòi hai bên **cùng đường cong** — nên một RFQ phải mang
+**một cặp khoá cho mỗi thuật toán** thì nhà cung cấp mới chọn được lúc chạy. Với hai thuật toán,
+một RFQ có **hai** cặp khoá.
+
+Điều đó **mâu thuẫn với chữ, không mâu thuẫn với điều được bảo vệ**. Vế chịu lực là vế thứ hai:
+mỗi cặp khoá là ngẫu nhiên độc lập, không dẫn xuất từ RFQ nào khác, nên lộ một RFQ không lan sang
+RFQ khác. Ghi ra thay vì diễn giải lại trong im lặng — và lược đồ nói đúng điều đó bằng
+`UNIQUE (org_id, rfq_id, algorithm)`, chứ không phải `UNIQUE (org_id, rfq_id)`.
+
+**Một tổ tiên chung VẪN CÒN, và nó không phải điều G2 nói:** cả hai khoá riêng đều được bọc bằng
+khoá dẫn xuất **theo tổ chức** (`deriveOrgKey`), nên mất khoá gốc của tổ chức là mất mọi RFQ của
+tổ chức ấy. Đó là địa hạt của **G1** và **F3**, không phải của G2 — nhưng nó thuộc về ghi chú §4
+của G2 để không ai đọc ô ✅ thành *"mỗi RFQ là một ốc đảo"*.
+
+### Đo bằng gì
+
+1. **C5 là một CẶP trigger, không phải một câu lệnh ứng dụng.** ⑴ `rfq_key_material` chỉ nhận
+   INSERT khi RFQ đang ở `PENDING_APPROVAL`; ⑵ `rfq_packages` không chuyển sang `OPEN` được nếu
+   thiếu khoá của thuật toán mặc định. Hai vế cộng lại cho: khoá tồn tại **⟺** RFQ đã đi qua cửa
+   OPEN, và nó ra đời **trong** giao dịch ấy. Cả hai phải có đối chứng dương.
+2. **G2 bằng một phép thử chéo, không bằng một lời khai:** hai RFQ cùng tổ chức có `public_key`
+   khác nhau, và khoá riêng của RFQ A **không mở được** phong bì niêm phong cho RFQ B — kèm đối
+   chứng dương là A mở được phong bì của chính A.
+3. **Bất đối xứng quyền cột phải ĐỎ THẬT:** một `SELECT wrapped_private_key` chạy bằng `app_api`
+   phải bị Postgres từ chối, và cùng câu ấy chạy bằng `app_unseal` phải chạy được.
+4. **KHÔNG phép đo nào ở S1 nói được *"trình duyệt thật của nhà cung cấp làm được X25519"***.
+   **Đã đo, không suy** (2026-09-04): `docker run --rm node:22-alpine` — `ECDH P-256`, `X25519`
+   và `Ed25519` đều sinh khoá và dẫn được bit chung trong `crypto.subtle`; máy dev (Node 24) cho
+   cùng kết quả. Tức **cả hai runtime của dự án đều có X25519**, và chính vì thế một lượt CI xanh
+   cho nhánh X25519 **không** là bằng chứng gì về webview Android: nó đo Node, không đo trình
+   duyệt. Khoản nợ 23 không được đóng bằng phép đo ở đây; chỗ trống ấy nằm ở §4 của ma trận.

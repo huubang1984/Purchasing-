@@ -760,6 +760,18 @@ describe("phủ RLS", () => {
     // mỗi cột là hệ quả cơ học, khoá chúng ở đây sẽ vỡ mỗi lần thêm cột. Còn lại đúng những
     // bảng mà quyền đọc được cắt THEO CỘT — và đó là những quyết định phải nhìn thấy được.
     expect(rows).toEqual([
+      // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
+      // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
+      // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
+      { bang: "rfq_key_material", cot: "algorithm" },
+      { bang: "rfq_key_material", cot: "created_at" },
+      { bang: "rfq_key_material", cot: "id" },
+      { bang: "rfq_key_material", cot: "key_version" },
+      { bang: "rfq_key_material", cot: "org_id" },
+      { bang: "rfq_key_material", cot: "public_key" },
+      { bang: "rfq_key_material", cot: "revoked_at" },
+      { bang: "rfq_key_material", cot: "rfq_id" },
+      { bang: "rfq_key_material", cot: "wrapped_private_key" },
       { bang: "rfq_packages", cot: "id" },
       { bang: "rfq_packages", cot: "org_id" },
       { bang: "rfq_packages", cot: "status" },
@@ -980,6 +992,22 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_items", cot: "quantity", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "unit", quyen: "INSERT" },
+      // [S1.4 / 017] `wrapped_private_key` co INSERT o day va KHONG co dong SELECT nao tuong ung
+      // trong khang dinh tren — do la bat doi xung "ghi duoc ma khong doc duoc", cau chiu luc cua
+      // migration 017. `id` va `created_at` vang mat: chung dung DEFAULT, va nho the chi muc
+      // PRIMARY KEY khong thanh oracle xuyen to chuc (H14).
+      { grantee: "app_api", bang: "rfq_key_material", cot: "algorithm", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "key_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "public_key", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_reason", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "wrapped_private_key", quyen: "INSERT" },
       // [H-1, 011] `created_by_session_id`: RFQ mang phien cua chinh nguoi tao, va trigger doi
       // `sessions.user_id = created_by`. Khong co cot nay, `created_by` la mot LOI KHAI va D2 tut
       // tu 'hai nguoi khac nguoi tao' xuong 'mot nguoi khac nguoi tao'.
@@ -1102,17 +1130,31 @@ describe("phủ RLS", () => {
     expect(rows).toEqual([]);
   });
 
-  // [NỢ ADR-006] Ràng buộc toàn cục "không role nào bao trùm role kia" ĐANG BỊ VI PHẠM ở S0, và
-  // nó KHÔNG thoả được bằng bất kỳ thao tác nào trong Task 4: quyền duy nhất của app_unseal là
-  // SELECT trên organizations, mà app_api cũng có; kể cả gỡ sạch quyền thì tập rỗng vẫn là tập
-  // con. Nó chỉ có nội dung khi app_unseal được cấp quyền ĐỘC QUYỀN trên bảng khoá riêng RFQ.
+  // ~~[NỢ ADR-006] Ràng buộc toàn cục "không role nào bao trùm role kia" ĐANG BỊ VI PHẠM ở S0, và~~
+  // ~~nó KHÔNG thoả được bằng bất kỳ thao tác nào trong Task 4: quyền duy nhất của app_unseal là~~
+  // ~~SELECT trên organizations, mà app_api cũng có; kể cả gỡ sạch quyền thì tập rỗng vẫn là tập~~
+  // ~~con. Nó chỉ có nội dung khi app_unseal được cấp quyền ĐỘC QUYỀN trên bảng khoá riêng RFQ.~~
   //
-  // Khẳng định dưới đây cố ý ĐẢO CHIỀU — nó khẳng định trạng thái VI PHẠM là đúng-lúc-này. Khi
-  // task khoá riêng RFQ cấp quyền độc quyền cho app_unseal, test này ĐỎ NGAY, và người sửa nó
-  // phải lật `true` thành `false` và xoá ghi chú này. Nếu thay bằng một khẳng định thuận chiều
+  // ~~Khẳng định dưới đây cố ý ĐẢO CHIỀU — nó khẳng định trạng thái VI PHẠM là đúng-lúc-này. Khi~~
+  // ~~task khoá riêng RFQ cấp quyền độc quyền cho app_unseal, test này ĐỎ NGAY, và người sửa nó~~
+  // ~~phải lật `true` thành `false` và xoá ghi chú này.~~ Nếu thay bằng một khẳng định thuận chiều
   // (hoặc không có gì, như vòng trước) thì thời điểm ràng buộc trở nên thoả được sẽ trôi qua
   // trong im lặng — đúng cách một khoản nợ kiến trúc biến mất khỏi tầm nhìn.
-  it("[NỢ ADR-006] app_unseal vẫn là tập con quyền của app_api — chưa thoả được ở S0", async () => {
+  //
+  // ============================================================================================
+  // [S1.4 / 017] KHOẢN NỢ NÀY ĐÃ ĐÓNG, VÀ NÓ ĐÓNG ĐÚNG CÁCH NÓ ĐƯỢC HẸN — BẰNG MỘT LẦN ĐỎ.
+  // ============================================================================================
+  // Migration 017 cấp `SELECT (wrapped_private_key) ON rfq_key_material TO app_unseal` và KHÔNG
+  // cấp cột ấy cho `app_api`. Ngay lượt chạy đầu sau khi 017 áp, test này ĐỎ với đúng thông điệp
+  // nó tự viết cho tương lai từ Task 4 — không phải vì ai nhớ ra, mà vì một phép đo phát hiện
+  // thế giới đã đổi. Giữ nguyên văn cũ (đã gạch) để đối chiếu.
+  //
+  // Bản mới đo MẠNH HƠN bản cũ, và đây là chỗ dễ làm ẩu nhất: chỉ lật `true` thành `false` sẽ cho
+  // ra một test XANH VÌ MỘT LÝ DO YẾU — "app_unseal không phải tập con" đúng ngay cả khi
+  // `app_api` bao trùm hoàn toàn app_unseal ở mọi chỗ khác. Ràng buộc thật của ADR-006 là
+  // **KHÔNG ROLE NÀO BAO TRÙM ROLE KIA**, tức HAI vế, nên bản mới đo cả hai vế và neo mỗi vế vào
+  // một khoá cụ thể để nó không xanh vì phép đo bỏ sót.
+  it("[ADR-006] không role nào bao trùm role kia — app_unseal độc quyền đọc khoá riêng RFQ", async () => {
     const { rows } = await db.pool.query<{ grantee: string; khoa: string }>(
       "SELECT grantee, table_name || ':' || privilege_type AS khoa " +
         "  FROM information_schema.role_table_grants " +
@@ -1139,12 +1181,23 @@ describe("phủ RLS", () => {
       cuaUnseal,
       "phép đo bỏ sót quyền CỘT trên bảng sổ — khoản nợ này sẽ xanh vì lý do sai",
     ).toContain("audit_events.action:INSERT");
-    const baoTrum = cuaUnseal.every((k) => cuaApi.has(k));
+    const cuaUnsealTap = new Set(cuaUnseal);
+    const chiUnsealCo = cuaUnseal.filter((k) => !cuaApi.has(k));
+    const chiApiCo = [...cuaApi].filter((k) => !cuaUnsealTap.has(k));
+
+    // Vế 1 — app_unseal KHÔNG là tập con của app_api. Neo vào đúng cột làm nên khoản nợ này:
+    // nếu ai đó cấp thêm `SELECT (wrapped_private_key)` cho `app_api` thì vế này đỏ, và nó đỏ
+    // vì một sự thật an ninh chứ không vì một con số đếm được.
     expect(
-      baoTrum,
-      "app_unseal đã có quyền mà app_api KHÔNG có — ràng buộc ADR-006 nay THOẢ ĐƯỢC. Lật " +
-        "khẳng định này thành false và xoá ghi chú [NỢ ADR-006].",
-    ).toBe(true);
+      chiUnsealCo,
+      "app_unseal không còn quyền nào riêng — ADR-006 lại thành một lời khai",
+    ).toContain("rfq_key_material.wrapped_private_key:SELECT");
+    expect(cuaApi.has("rfq_key_material.wrapped_private_key:SELECT")).toBe(false);
+
+    // Vế 2 — và app_api cũng KHÔNG là tập con của app_unseal. Không có vế này, một lần "gỡ sạch
+    // quyền của app_api" vẫn cho test xanh.
+    expect(chiApiCo.length).toBeGreaterThan(0);
+    expect(chiApiCo).toContain("rfq_key_material.wrapped_private_key:INSERT");
   });
 
   // [vòng fix 1 — CR3] TEST ĐỐI KHÁNG cho oracle slug. Đây là lỗ DUY NHẤT khai thác được ngay

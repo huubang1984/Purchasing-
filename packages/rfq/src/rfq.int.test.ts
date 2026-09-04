@@ -19,6 +19,7 @@ import {
   submitRfqForApproval,
 } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
+import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 
 // =============================================================================================
 // S1.2 — MÁY TRẠNG THÁI RFQ, ĐO TRÊN POSTGRES THẬT DƯỚI ROLE `app_api`
@@ -35,6 +36,28 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.me
 // [ADR-016] `const ACTOR = { type: "SYSTEM" }` da bien mat khoi file nay, va do la noi dung
 // chinh cua vong sua: mot hang ba tu o dau file test la toan bo thu ma tam ham cua goi nay dung
 // de KHAI minh la ai — roi ghi thang loi khai ay vao so kiem toan.
+
+// =============================================================================================
+// [S1.4 / ADR-019] BỘ BỌC KHOÁ GIẢ — VÀ VÌ SAO NÓ LÀ ĐỒ GIẢ CÓ CHỦ ĐÍCH
+//
+// `openRfq` nay đòi một `KeyWrapper` vì mở RFQ và sinh cặp khoá là MỘT việc (C5). File này đo
+// MÁY TRẠNG THÁI, không đo phép bọc khoá — phép bọc đã có phép đo riêng ở
+// `packages/crypto-keys/src/roundtrip.test.ts`, và vòng đời khoá có phép đo riêng ở
+// `packages/sealed-envelope/src/key-material.int.test.ts`.
+//
+// Dùng đồ giả ở đây mua đúng một thứ đáng giá: `packages/rfq` KHÔNG có một cạnh phụ thuộc nào
+// tới `@trustprocure/crypto-keys`, kể cả trong test. Đó là lý do `@trustprocure/sealed-envelope`
+// chuyển tiếp KIỂU `KeyWrapper` thay vì bắt người gọi tự đi lấy.
+//
+// *** ĐÂY KHÔNG PHẢI MÃ HOÁ. *** Nó đảo bit rồi trả lại. Ai chép đoạn này ra khỏi file test là
+// đang cất khoá riêng RFQ dưới dạng gần-như-rõ. Tên hàm nói đúng thứ nó là.
+// =============================================================================================
+const boBocGia = {
+  name: "gia-cho-test-may-trang-thai",
+  wrap: (_orgId: string, plaintext: Uint8Array) =>
+    Promise.resolve({ ciphertext: plaintext.map((b) => b ^ 0xff), keyVersion: "gia-v1" }),
+};
+
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 const MAI_SAU_XA = new Date(Date.now() + 14 * 24 * 3600 * 1000);
 
@@ -141,7 +164,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
 
@@ -162,7 +185,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
 
@@ -212,7 +235,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
       // Hai cạnh cuối chưa có hàm sản phẩm (S1.6 và S2), nên đo thẳng bằng SQL.
       await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
@@ -251,7 +274,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     });
 
     await expect(
-      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1 })),
+      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia })),
     ).rejects.toThrow(/khong co hang muc nao/);
   });
 });
@@ -265,7 +288,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
     });
 
     await expect(
-      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1 })),
+      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia })),
     ).rejects.toThrow(/can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1/);
 
     // ... và mở được ngay khi có người thứ hai. Vế dương là bắt buộc: không có nó, một trigger
@@ -273,7 +296,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
     await withTenant(apiPool, orgA, (c) =>
       approveRfq(c, orgA, { rfqId, sessionId: s3 }),
     );
-    const mo = await withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1 }));
+    const mo = await withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia }));
     expect(mo.status).toBe("OPEN");
     expect(mo.openedAt).not.toBeNull();
   });
@@ -380,7 +403,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await extendRfqDeadline(c, orgA, {
         rfqId,
         newDeadlineAt: MAI_SAU_XA,
@@ -402,7 +425,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
 
@@ -438,7 +461,7 @@ describe("hạng mục chỉ sửa được khi RFQ còn soạn", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
     });
 
     await expect(
@@ -507,7 +530,7 @@ describe("huỷ RFQ", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
 
@@ -743,7 +766,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId, actorSessionId: s2 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s2, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "du bao gia", actorSessionId: s3 });
     });
 
@@ -784,13 +807,19 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
     );
 
     // Một script vận hành "mở hàng loạt RFQ đã duyệt" sẽ đi đúng đường này.
+    //
+    // [S1.4] Câu `issueRfqKeyPair` dưới đây là MỚI, và nó KHÔNG phải một tiện nghi: từ migration
+    // 017, `rfq_packages_kiem_khoa_khi_mo` chặn mọi lần mở RFQ chưa có cặp khoá — và nó đứng
+    // TRƯỚC `rfq_packages_kiem_nguoi_mo` theo thứ tự chữ cái. Không có câu này, test dưới sẽ đỏ
+    // vì thiếu KHOÁ chứ không vì thiếu CHỮ KÝ, tức nó sẽ xanh-vì-lý-do-sai ở chiều ngược lại.
     await expect(
-      withTenant(apiPool, orgA, (c) =>
-        c.query(
+      withTenant(apiPool, orgA, async (c) => {
+        await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: s1, wrapper: boBocGia });
+        await c.query(
           "UPDATE rfq_packages SET status = 'OPEN', opened_at = now() WHERE id = $1",
           [rfqId],
-        ),
-      ),
+        );
+      }),
     ).rejects.toThrow(/phai duoc dat/);
   });
 
@@ -801,13 +830,14 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
     );
 
     await expect(
-      withTenant(apiPool, orgA, (c) =>
-        c.query(
+      withTenant(apiPool, orgA, async (c) => {
+        await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: s1, wrapper: boBocGia });
+        await c.query(
           "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), " +
             " opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
           [rfqId, u3, s2],
-        ),
-      ),
+        );
+      }),
     ).rejects.toThrow(/khong khop chu phien/);
   });
 
@@ -844,12 +874,13 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
 
     await db.pool.query("DROP TRIGGER rfq_packages_kiem_nguoi_mo ON rfq_packages");
     try {
-      const { rowCount } = await withTenant(apiPool, orgA, (c) =>
-        c.query(
+      const { rowCount } = await withTenant(apiPool, orgA, async (c) => {
+        await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: s1, wrapper: boBocGia });
+        return await c.query(
           "UPDATE rfq_packages SET status = 'OPEN', opened_at = now() WHERE id = $1",
           [rfqId],
-        ),
-      );
+        );
+      });
       expect(rowCount, "không có trigger thì một RFQ được mở mà không ai ký tên").toBe(1);
     } finally {
       await db.pool.query(
