@@ -24,21 +24,47 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Đã xong:
 
-- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ **mười chín ADR** (ADR-011 **chốt 2026-09-04**, hết chặn S1.4; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
+- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ **mười chín ADR** (ADR-011 **chốt TRỌN VẸN 2026-09-04**: mục 1 *P-256 mặc định, X25519 cơ hội*; mục 2 *`ECDSA P-256` + văn bản chính tắc*; mục 3 *xoay khoá ký có `kid`* — hết chặn S1.4 **và** S1.5; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
   ADR-008 ở Task 9, ADR-009 ở vòng fix cuối, **ADR-010/011/012 ngày 2026-08-29 khi lập kế hoạch S1**,
   **ADR-013/014/015 cùng ngày cho ba hạng mục sớm nhất**, **ADR-016/017/018 ngày 2026-08-30 cho ba
   MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã**), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- ~~Bảy~~ ~~Tám~~ ~~Chín~~ ~~Mười~~ **Mười bảy** migration `001`–**`017`** + `hardening.always.sql`: role, tổ chức, người
+- ~~Bảy~~ ~~Tám~~ ~~Chín~~ ~~Mười~~ ~~Mười bảy~~ **Mười tám** migration `001`–**`018`** + `hardening.always.sql`: role, tổ chức, người
   dùng, sổ kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**,
   **RFQ + hạng mục + phê duyệt + máy trạng thái (S1.2)**, **lời mời + magic link + OTP + phiên
   khách (S1.3)**, **danh tính là dẫn xuất (013/016)**, **chính sách mua sắm (014)**, **pepper OTP
-  (015)**, **vật liệu khoá RFQ (017, S1.4)**.
+  (015)**, **vật liệu khoá RFQ (017, S1.4)**, **báo giá + biên nhận đã ký (018, S1.5)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.5 — nộp báo giá, phiên bản, biên nhận, khoá theo deadline (2026-09-04):** migration `018`
+  (`vendor_bids`, `vendor_bid_versions`, `bid_receipts`), gói `packages/bidding`, và **bốn mã
+  nghiệp vụ được lấp: A3, B1, B2, C1** — độ phủ **33/50 → 37/50**, phần nghiệp vụ 17 → 21.
+
+  **Hạng mục này mở đầu bằng việc chốt ADR-011 mục 2 và 3, và phần đáng đọc nhất là một lập luận
+  bị chính phép tra cứu giết chết.** Lượt này suýt chốt bằng câu *"AWS KMS không ký được
+  Ed25519"* — một câu nghe dứt khoát, kiểm chứng được, và **sai**: `ECC_NIST_EDWARDS25519` có
+  thật. Giữ nguyên văn trong ADR thay vì lặng lẽ bỏ đi, vì nó đúng hình dạng của thứ đi lọt vào
+  một ADR rồi nằm đó nhiều năm.
+
+  Quyết định thật đứng trên một vế khác: đường nộp thầu **đã** đòi họ P-256 (mục 1), nên
+  `ECDSA P-256` cho chữ ký nghĩa là **ai nộp được thì kiểm chứng được**. `Ed25519` sẽ tạo ra một
+  hạng người dùng chưa từng tồn tại — *nộp được nhưng không kiểm chứng được trong trình duyệt* —
+  và hạng ấy rơi đúng vào cái đuôi Android cũ.
+
+  **Thứ được ký là VĂN BẢN CHÍNH TẮC, không phải JSON**, vì một JSON không có dạng byte chính tắc
+  và ký nó buộc bên kiểm chứng cài lại bộ mã hoá của bên **bị** kiểm chứng.
+
+  Một khe interop có thật đã được đóng trước khi nó cắn: WebCrypto dùng chữ ký ECDSA dạng **RAW**,
+  còn `openssl`/`node`/KMS dùng **DER**; sai dạng cho ra *"chữ ký không hợp lệ"* — cùng thông điệp
+  với một chữ ký bị giả mạo. Dự án lưu DER, và bộ chuyển dạng được đối chiếu với DER **thật** do
+  `node:crypto` sinh ra.
+
+  **Ba trong bốn mã mới mang cờ §4 ngay từ đầu**, và tỷ lệ ấy không phải dấu hiệu xấu — nó là dấu
+  hiệu của những mệnh đề RỘNG: B2 nói về một con người thật, C1 nói về thời gian, A3 nói về *"mọi
+  truy vấn SQL"*. B1 **cố ý** không mang cờ, và lý do được ghi tại chỗ.
 - **S1.4 — phong bì niêm phong (2026-09-04):** migration `017` (`rfq_key_material`), gói
   `packages/sealed-envelope` với **hai cửa** đúng khuôn `packages/crypto-keys`, và **ba mã nghiệp
   vụ được lấp: C5, G2, G4** — độ phủ **30/50 → 33/50**, phần nghiệp vụ 14 → 17.
@@ -73,7 +99,7 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Chưa xong:
 
-- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ ~~**S1.4–S1.9**~~ **S1.5–S1.9**: nộp báo giá, mở thầu, so sánh, T5, E2E.
+- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ ~~**S1.4–S1.9**~~ ~~**S1.5–S1.9**~~ **S1.6–S1.9**: mở thầu, so sánh, T5, E2E.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
@@ -318,6 +344,8 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 28 | **Job T3 đỏ được vì một lỗi KHÔNG PHẢI một khẳng định sai.** Lượt `33862719087` (commit tài liệu thuần `9b1c237`) đỏ với `terminating connection due to administrator command` (`57P01`) — một kết nối gộp còn sống khi container Postgres của test bị đóng; **không một `expect` nào đỏ**. Cùng lượt ấy trên commit TRƯỚC (`6e8c8aa`) thì T3 xanh. Đây là cùng họ với khoản nợ 24 (vòng đời kết nối dưới tranh chấp), nhưng khác chỗ: nó không gắn với một test có tên nào, nên `--repeat` một file không tái lập được. Cách đóng đúng: mỗi bộ test tích hợp phải đóng pool TRƯỚC khi dừng container, và điều đó phải được ĐO chứ không được sửa mù | `packages/test-support/src/postgres.ts` (`stop()`), `packages/audit/src/chain.int.test.ts` |
 | 25 | **Vế *mở bọc* của G4 chưa có một dòng mã nào, và nó là vế một kiểm toán viên hỏi tới ĐẦU TIÊN.** S1.4 ghi sổ kiểm toán cho *sinh* (một bản ghi, vì sinh và bọc là một hành vi) và *huỷ*; *mở bọc* sống trong `apps/unseal-worker`, thứ chưa tồn tại. Đây là **phần chênh đã được khai báo** ở §4 của ma trận chứ không phải một khoảng trống bị quên — nhưng nó là khoản nợ mà **S1.6 phải trả**, không phải một ghi chú vĩnh viễn | `tools/inv-matrix/src/danh-gia.ts` (`PHAM_VI_HEP` mục `G4`) |
 | 26 | **Thu hồi vật liệu khoá là một DẤU, không phải một lần XOÁ MẬT MÃ.** Khi một RFQ bị huỷ, `rfq_key_material.revoked_at` được đặt nhưng `wrapped_private_key` **vẫn nằm nguyên trong hàng**. Xoá nó đi sẽ biến *"không ai được mở báo giá của RFQ đã huỷ"* từ một quy tắc **chính sách** thành một sự thật **mật mã** — mạnh hơn hẳn — nhưng nó cũng là một hành động không đảo ngược đứng sau một nút có thể bấm nhầm. Quyết định thuộc S1.6, nơi có cổng chính sách để đặt nó vào | `db/migrations/017_rfq_key_material.sql` khối (4) |
+| 29 | **A5 KHÔNG được cưỡng chế ở tầng CSDL, và khoảng trống ấy là một QUYẾT ĐỊNH bị hoãn chứ không phải một thiếu sót.** Phiên khách chạy dưới **cùng role `app_api`** và **cùng `app.org_id`** của tổ chức người mua (010), nên RLS cô lập **tổ chức** chứ không cô lập **nhà cung cấp với nhà cung cấp**. Phần CSDL làm được đã làm: một phiên khách **không GHI được** vào luồng báo giá của người khác (trigger `bid_kiem_phien_khach`, 018, có test). Phần nó **không** làm được: chặn một câu `SELECT` đọc sang luồng khác — hôm nay đó là kỷ luật của tầng ứng dụng. Hình dạng đúng để đóng: một role `app_guest` với policy theo `current_setting('app.guest_session_id')`. Không làm ở S1.5 vì nó chạm mọi bảng và trộn vào một hạng mục sẽ làm cả hai khó xem xét | `db/migrations/018_vendor_bids.sql` khối A5; `docs/TEST-PLAN.md` mã A5 |
+| 30 | **Khoá công khai ký biên nhận chưa được CÔNG BỐ ở đâu cả.** `ReceiptSigningKeyRing.publicKeys()` trả về nửa công khai theo `kid`, và biên nhận mang `kid` trong chính văn bản đã ký — tức **cấu trúc** đã đủ. Thứ thiếu là **đường**: một endpoint HTTP trả khoá theo `kid`, và `apps/` vẫn rỗng. Hệ quả hôm nay: nhà cung cấp lấy khoá công khai bằng cách **hỏi chính chúng ta**, nên vế *"kiểm chứng độc lập"* của B2 mới đúng một nửa. Đây là phần chênh đã khai báo ở §4 của ma trận, và nó là khoản nợ mà **S1.9/T5** phải trả | `packages/bidding/src/signer.ts`; `tools/inv-matrix/src/danh-gia.ts` (`PHAM_VI_HEP` mục `B2`) |
 
 ## Kiến trúc
 

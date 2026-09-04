@@ -110,6 +110,12 @@ nó đỏ thật. Import xuyên module không qua cửa bị dependency-cruiser 
 `tests/architecture/bien-gioi-goi.test.ts` ([INV-H16]) đòi MỌI gói phải có một họ quy tắc như vậy
 — suy từ tính chất, không từ một danh sách tên.
 
+**[S1.5] `packages/bidding` chỉ có MỘT cửa, và đó là một phát biểu chứ không phải một thiếu sót:**
+gói này không giữ một khả năng nào mà thế giới bên ngoài không được có. `verifyReceipt` kiểm chứng
+bằng **khoá công khai một mình** — nó nhận đúng ba thứ và không nhận `client`, `orgId`, hay vòng
+khoá. Có test đọc **số tham số** của nó, vì thêm một tham số "chỉ máy chủ mới có" là cách B2 hỏng
+trong im lặng: mọi test vẫn xanh, vì chúng chạy trên máy chủ.
+
 **[S1.4] Nơi cặp khoá RFQ ra đời: trong `api`, không trong `unseal-worker`.** Xem ADR-019 cho ba
 phương án bị loại và cho phần **thu hẹp** mà quyết định này tạo ra cho bất biến G1. Sơ đồ trên
 vẫn đúng: `api` cần `kms:Encrypt` để **bọc** một khoá riêng, và nó vẫn **không** có `kms:Decrypt`.
@@ -125,7 +131,7 @@ S1  suppliers · supplier_contacts
     rfq_packages · rfq_items · rfq_approvals · rfq_invitations · rfq_invitation_tokens
     invitation_otp_challenges · otp_rate_limits · guest_sessions
     rfq_key_material
-    vendor_bids · vendor_bid_versions · bid_receipts
+    vendor_bids · vendor_bid_versions · bid_receipts   [S1.5 — đã tạo]
     unseal_requests · unseal_approvals
 ```
 

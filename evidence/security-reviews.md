@@ -223,3 +223,32 @@ thẳng vào khoá riêng — **chưa được ai đóng vai kẻ tấn công**.
 
 Dòng cuối cùng của bảng là dòng đáng cho reviewer bắt đầu: nó là chỗ **duy nhất** trong S1.4 mà
 một bảo đảm đứng trên KIỂU và KỶ LUẬT thay vì trên một lớp cưỡng chế.
+
+## S1.5 — hạng mục ⭐ thứ hai không có lượt review, và một điểm reviewer nên nhắm
+
+⑾ **S1.5 mang dấu `qa-engineer` (không phải ⭐) trong kế hoạch S1 §1, và lượt ấy CŨNG chưa xảy
+ra** — cùng lý do đã ghi ở ⑽. Nhưng S1.5 chạm vào nhiều bề mặt an ninh hơn dấu của nó gợi ý, nên
+nó nên được xếp cùng S1.4 trong lượt `security-reviewer` kế tiếp.
+
+**Điểm nên nhắm trước, và nó KHÔNG phải phần mật mã:**
+
+Phần mật mã của S1.5 có phép đo dày (chữ ký kiểm bằng khoá công khai một mình, đối chiếu với một
+cài đặt khác, ba đối chứng âm, xoay khoá, tính mềm dẻo được đo ra). Chỗ mỏng nằm ở **A5**, và nó
+đã được khai báo thành khoản nợ 29: phiên khách chạy dưới **cùng role và cùng `org_id`** với người
+mua, nên **RLS không cô lập nhà cung cấp với nhà cung cấp**.
+
+Câu hỏi một reviewer nên hỏi, theo thứ tự:
+
+| Câu hỏi | Trạng thái hôm nay |
+|---|---|
+| Một phiên khách GHI được vào luồng báo giá của người khác không? | **Không** — trigger `bid_kiem_phien_khach` (018), có test kèm đối chứng |
+| Một phiên khách ĐỌC được luồng của người khác không? | **Được, nếu tầng ứng dụng để lọt.** Không lớp CSDL nào chặn. Khoản nợ 29 |
+| Một báo giá nộp sau hạn có lọt không? | **Không** — trigger dùng `now()` của chính transaction ghi, có test và có lượt đột biến |
+| ... kể cả khi transaction MỞ trước hạn và COMMIT sau hạn? | **CÓ LỌT.** Phần chênh đã khai ở §4 của C1 |
+| `api` bị chiếm có rút được phong bì niêm phong không? | **Không** — `app_api` không có SELECT trên `envelope`, có test kèm hai đối chứng dương |
+| Biên nhận có bị làm giả bằng cách sửa `canonical_text` trong CSDL không? | **Không sửa được** — không GRANT UPDATE, cộng trigger chặn cả superuser trên đường DML |
+| Ai lấy khoá công khai để kiểm chứng? | **Hỏi chính chúng ta** — đường công bố chưa tồn tại. Khoản nợ 30 |
+
+Hai dòng in đậm ở cột phải là hai chỗ **đã biết là hở**, cả hai có khoản nợ mang số. Chúng được
+viết ra ở đây để lượt review không tốn thời gian tìm lại, và để nếu reviewer tìm ra một chỗ hở
+**thứ ba** thì đó là một phát hiện thật chứ không phải một thứ đã biết.
