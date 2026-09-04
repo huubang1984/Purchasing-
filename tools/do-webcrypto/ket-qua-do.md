@@ -133,3 +133,46 @@ chặn** S1.1–S1.3, và **chặn việc CHỐT** ADR-011 ở S1.4.
 > **Một dòng "ĐẠT" chỉ nói về đúng engine và đúng phiên bản ở dòng đó.** Rủi ro số 2 đóng khi
 > §3 không còn hàng ưu tiên 1–3 — hoặc khi có một quyết định tường minh rằng phần còn lại được
 > chấp nhận bỏ qua, và quyết định ấy được ghi ở chỗ có chữ ký.
+
+---
+
+## 3c. TRA CỨU DỮ LIỆU CÔNG BỐ — 2026-09-04. **KHÔNG PHẢI MỘT PHÉP ĐO.**
+
+**Đọc dòng tiêu đề trên trước khi đọc bảng.** Mọi con số ở §1 là thứ dự án tự chạy trên một engine
+thật, có ngày, có phiên bản. Bảng dưới đây thì không — nó là thứ đọc được từ tài liệu của bên khác
+và mang đúng độ tin cậy của một bản chép. Nó **không** điền vào ô nào ở §3, và **không** đóng
+khoản nợ 23.
+
+| Điều | Dữ liệu | Nguồn |
+|---|---|---|
+| `crypto.subtle` — nền của cả đường nộp thầu | Chrome **37+** (2014); phủ toàn cầu ~**97,26%** | caniuse *Web Cryptography* |
+| `X25519` trong WebCrypto | **Chrome 133**, tháng 2/2025 | Igalia, *Can I use Secure Curves in the Web Platform?* |
+| `Ed25519` trong WebCrypto | **Chrome 137** — muộn hơn X25519 bốn phiên bản | Igalia, *Ed25519 Support Lands in Chrome* |
+| Phân bố phiên bản Android System WebView | **KHÔNG tra được** từ dữ liệu tổng hợp công khai | gs.statcounter.com |
+
+### Kết quả ÂM là kết quả có giá trị nhất của lượt tra này
+
+Câu hỏi *"bao nhiêu máy ở Việt Nam đang chạy WebView ≥ 133"* **không trả lời được** bằng dữ liệu
+miễn phí: StatCounter gộp toàn bộ `Chrome for Android` thành **một dòng**, không tách phiên bản
+(kiểm ngày 2026-09-04, kỳ dữ liệu 8/2026). Cách duy nhất còn lại là **thuê máy thật theo phút** —
+và ngay cả thế cũng chỉ cho một **mẫu**, không cho một **phân bố**.
+
+Đó là lý do **ADR-011 được chốt bằng cách gỡ bỏ câu hỏi**, không phải bằng cách trả lời nó: hỗ trợ
+**cả hai** thuật toán, chọn bằng chính máy dò này lúc chạy. Xem ADR-011 §*Quyết định*.
+
+### Ba mức "giả lập Android", và chỉ hai mức là phép đo
+
+| Cách | Đo cái gì |
+|---|---|
+| DevTools *device mode* / đổi User-Agent | **Chrome desktop đội lốt.** Đo lại đúng cái máy đã đo ở §1. Một dòng *"đã đo trên webview Android"* dựa vào đây sẽ **vi phạm §3b điều kiện 2** |
+| **Android Emulator (AVD)** | System image thật, WebView thật ⇒ **phép đo thật**. Thu hẹp: emulator tải bản WebView **mới nhất**, còn rủi ro là bản **cũ** |
+| **Máy thật thuê theo phút** | Máy tầm trung, Android cũ, WebView cũ — **khớp đúng rủi ro như đã phát biểu** |
+
+Máy làm việc hiện tại **không có Android SDK** (kiểm 2026-09-04: không có `adb`, `emulator`,
+`sdkmanager`, không có thư mục SDK).
+
+### Việc kích hoạt lại KHÔNG đổi
+
+Hễ mượn được một máy Android tầm trung, chạy §5 và điền một dòng vào §1. Hai phút. Sau ADR-011,
+kết quả ấy đổi từ **cổng chặn** thành **con số vận hành**: nó nói bao nhiêu phần trăm nhà cung cấp
+đi được đường nhanh, không còn nói có nộp được thầu hay không.

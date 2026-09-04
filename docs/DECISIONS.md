@@ -476,9 +476,9 @@ là một câu văn — đúng bài học đắt nhất của S0.
 
 ---
 
-## ADR-011 — Định dạng phong bì và chữ ký biên nhận: **CHƯA CHỐT**
+## ADR-011 — Định dạng phong bì và chữ ký biên nhận: ~~**CHƯA CHỐT**~~ **P-256 mặc định, X25519 cơ hội**
 
-**Ngày:** 2026-08-29 · **Trạng thái:** **Đang mở** — chặn **S1.4**, **S1.5** · Liên quan: **B2**, **G2**, **A2**
+**Ngày:** 2026-08-29 · **Cập nhật:** 2026-09-04 · **Trạng thái:** ~~**Đang mở** — chặn **S1.4**, **S1.5**~~ **Đã chấp nhận cho mục 1; mục 2 và 3 còn mở nhưng KHÔNG chặn S1.4** · Liên quan: **B2**, **G2**, **A2**
 
 **Vì sao ADR này ra đời ngay cả khi chưa quyết được.** Đây là bài học trực tiếp từ ADR-009: tới
 hết S0, tám ADR đều "Đã chấp nhận" trong khi một quyết định đang thật sự chặn S1.6 — *cái treo là
@@ -500,15 +500,77 @@ qua các lần xoay khoá (**G3**). Không có nó, cùng tình huống ấy là
 cách biến một rủi ro *chưa đo* thành một rủi ro *rẻ* — và nó ghim được **ngay hôm nay**, không
 cần đợi phép đo.
 
+### Quyết định (2026-09-04)
+
+**Mục 1 được chốt mà KHÔNG cần phép đo Android, và cách nó được chốt mới là phần đáng đọc.**
+
+1. **`ECDH P-256` là thuật toán thoả thuận khoá MẶC ĐỊNH. `X25519` là đường NÂNG CẤP CƠ HỘI,
+   chỉ dùng khi máy dò báo trình duyệt của chính nhà cung cấp ấy có.** Phong bì ghi lại thuật
+   toán đã dùng — đó là phần đã ghim ở trên, và nó chính là thứ làm quyết định này khả thi.
+2. **Chọn thuật toán là một phép ĐO LÚC CHẠY, không phải một hằng số cấu hình.** Trình duyệt của
+   nhà cung cấp tự khai năng lực qua `tools/do-webcrypto`; hệ thống đọc kết quả và chọn. Không có
+   danh sách trắng theo phiên bản, không đoán theo User-Agent — cả hai đều là *danh sách tên*, và
+   dự án đã ba lần bị chính khuôn ấy làm mù (khoản nợ 3, 16, và lớp canh route ở `4467ca9`).
+3. **`X25519` KHÔNG được làm điều kiện để nộp thầu.** Một nhà cung cấp chỉ có P-256 phải nộp được
+   báo giá bình thường. Ràng buộc sản phẩm 1 (*friction thấp cho nhà cung cấp là điều kiện sống
+   còn*) không cho phép loại người dùng vì trình duyệt của họ cũ.
+
+**Vì sao đây KHÔNG phải "bỏ qua phép đo".** Thế lưỡng nan *X25519 hay P-256* là do chính ADR này
+tự đặt ra dưới dạng **hoặc/hoặc**, và phép đo Android chỉ cần thiết cho cái *hoặc/hoặc* ấy. Bỏ nó
+đi thì phép đo tụt từ **cổng chặn** xuống **câu hỏi tinh chỉnh** — nó trả lời *bao nhiêu phần trăm
+nhà cung cấp đi được đường nhanh*, chứ không còn trả lời *có nộp được thầu hay không*.
+
+Khoản nợ 23 vì vậy **KHÔNG được đóng** bởi quyết định này. Nó chỉ **thôi chặn S1.4**.
+
+### Bằng chứng — và nó là DỮ LIỆU CÔNG BỐ, KHÔNG phải phép đo của dự án
+
+Phân biệt này là bắt buộc: mọi con số ở §1 của `ket-qua-do.md` là thứ dự án tự chạy trên một
+engine thật. Bảng dưới đây thì không — nó là thứ đọc được từ tài liệu của bên khác, và nó mang
+đúng độ tin cậy của một bản chép.
+
+| Điều | Dữ liệu | Nguồn |
+|---|---|---|
+| `crypto.subtle` (nền của cả đường nộp thầu) | Chrome **37+** (2014); phủ toàn cầu ~**97,26%** | caniuse *Web Cryptography* |
+| `X25519` trong WebCrypto | **Chrome 133**, tháng 2/2025 | Igalia, *Can I use Secure Curves in the Web Platform?* |
+| `Ed25519` trong WebCrypto | **Chrome 137** — muộn hơn X25519 bốn phiên bản | Igalia, *Ed25519 Support Lands in Chrome* |
+| Phân bố phiên bản Android System WebView | **KHÔNG tra được từ dữ liệu tổng hợp công khai** — StatCounter gộp toàn bộ "Chrome for Android" thành một dòng, không tách phiên bản | gs.statcounter.com |
+
+**Dòng cuối là dòng có giá trị nhất, và nó là một kết quả ÂM.** Câu hỏi *"bao nhiêu máy ở Việt Nam
+đang chạy WebView ≥ 133"* **không trả lời được** bằng dữ liệu miễn phí. Tức nếu giữ nguyên thế
+hoặc/hoặc, cách duy nhất để chốt mục 1 là **thuê máy thật theo phút** — và ngay cả thế cũng chỉ
+cho một mẫu, không cho một phân bố. Một quyết định phụ thuộc vào con số ấy là một quyết định treo
+vào thứ dự án này không mua được.
+
+**Chrome 133 là tháng 2/2025.** Chrome ổn định hiện ở khoảng **151** (8/2026), nên với máy CÓ cập
+nhật, `X25519` đã có mặt khoảng mười chín tháng. Rủi ro nằm trọn ở **cái đuôi không cập nhật**:
+Android System WebView đi qua Play Store, và máy thiếu Play Services, hết dung lượng, hoặc quá cũ
+sẽ đứng lại. Cái đuôi ấy chính là thứ không đo được từ xa.
+
 ### Còn để mở
 
-1. **Thoả thuận khoá: `X25519` hay `ECDH P-256`, hay cả hai.** Chỉ được chốt **sau** khi có kết
-   quả đo Zalo/Android. Đây là ràng buộc thứ tự, không phải sở thích.
+1. ~~**Thoả thuận khoá: `X25519` hay `ECDH P-256`, hay cả hai.** Chỉ được chốt **sau** khi có kết
+   quả đo Zalo/Android. Đây là ràng buộc thứ tự, không phải sở thích.~~ **ĐÃ CHỐT — "cả hai", và
+   ràng buộc thứ tự biến mất cùng với thế hoặc/hoặc.**
 2. **Thuật toán chữ ký biên nhận.** B2 đòi nhà cung cấp **kiểm chứng độc lập được**. Điều đó
    loại thẳng một họ giải pháp: **HMAC bằng secret nội bộ KHÔNG thoả B2** — nhà cung cấp không
    kiểm chứng được thứ họ không có khoá. Cần **chữ ký khoá công khai** (Ed25519 là ứng viên đầu),
    khoá công khai của hệ thống phải **công bố được**, và biên nhận phải **tự mô tả**: mang thuật
    toán, định danh khoá, và mọi trường được ký.
+
+   > **MỘT PHÁT HIỆN MỚI CỦA LƯỢT TRA CỨU 2026-09-04, và nó chạm thẳng vào ứng viên đầu:**
+   > **`Ed25519` vào WebCrypto ở Chrome 137 — MUỘN HƠN `X25519` bốn phiên bản.** Nếu B2 được
+   > hiện thực bằng *"nhà cung cấp mở một trang web và bấm kiểm chứng"*, thì Ed25519 kế thừa
+   > **đúng cùng vấn đề đuôi cũ** mà mục 1 vừa gỡ bỏ — chỉ tệ hơn một bậc.
+   >
+   > Hệ quả: mục 2 phải chọn **một trong hai đường**, và đây là câu hỏi thật của nó chứ không
+   > phải "Ed25519 hay ECDSA":
+   > ⑴ ký bằng **`ECDSA P-256`**, thứ đi cùng nền `crypto.subtle` từ 2014 — kiểm chứng được ngay
+   > trong trình duyệt của nhà cung cấp, kể cả máy cũ; hoặc
+   > ⑵ giữ **Ed25519** và chấp nhận rằng kiểm chứng độc lập diễn ra **ngoài trình duyệt** (một
+   > lệnh `openssl`, một thư viện) — lúc ấy B2 vẫn thoả nhưng **đối tượng của nó đổi**: không còn
+   > là "nhà cung cấp bất kỳ", mà là "nhà cung cấp có người biết chạy công cụ".
+   >
+   > Câu ⑵ **không sai**, nhưng nó phải được nói ra thay vì đi lẫn vào một lựa chọn kỹ thuật.
 3. **Xoay khoá ký.** Biên nhận có giá trị pháp lý lâu hơn vòng đời một khoá. Cần định danh khoá
    trong biên nhận và một chỗ công bố các khoá cũ — cùng bài toán G3, khác đối tượng.
 
@@ -519,6 +581,20 @@ Rủi ro thật còn lại là **chốt mục 2 dưới áp lực tiến độ**
 test xanh, và **B2 bị vi phạm trong im lặng** vì không ai thử đóng vai nhà cung cấp đi kiểm
 chứng. Cách chặn: test của B2 phải **kiểm chứng bằng khoá công khai một mình**, không được chạm
 vào bất cứ thứ gì chỉ máy chủ mới có.
+
+### Đo bằng gì
+
+1. **Đối chứng dương cho đường P-256:** một phong bì niêm phong **chỉ bằng P-256** phải mở được
+   trọn vẹn. Không có vế này, "hỗ trợ cả hai" là một lời khai.
+2. **Đối chứng cho đường chọn:** vô hiệu hoá `X25519` trong máy dò (máy dò **đã có** ba đột biến
+   cho việc này) → hệ thống phải **tự rơi về P-256** và nộp thầu vẫn thành công, **không** báo lỗi
+   cho nhà cung cấp.
+3. **Phong bì phải TỰ KHAI:** đọc một phong bì P-256 và một phong bì X25519, cả hai phải nói ra
+   mã thuật toán của chính nó. Một phong bì không tự khai là một phong bì không mở được sau lần
+   xoay thuật toán kế tiếp.
+4. **KHÔNG có phép đo nào cho *"bao nhiêu % nhà cung cấp đi đường nhanh"*** ở S1, và chỗ trống
+   ấy phải nằm ở §4 của ma trận. Nó chỉ trả lời được bằng dữ liệu vận hành thật sau khi có người
+   dùng thật — tức nó thuộc S2+, không thuộc S1.
 
 ---
 

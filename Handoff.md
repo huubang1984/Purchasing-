@@ -305,7 +305,10 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
     S1.1–S1.3. Ai tiếp tục việc này phải chạy `security-reviewer` cho S1.3 (và nên chạy cho cả
     S1.1/S1.2) rồi ghi vào file đó theo đúng định dạng đã có.
 
-11. **Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.** ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
+11. ~~**Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.**~~ **HẾT CHẶN 2026-09-04.** ADR-011 chốt
+    **"P-256 mặc định, X25519 cơ hội"** — câu hỏi được **gỡ bỏ** chứ không được trả lời: thế
+    hoặc/hoặc là do chính ADR tự đặt ra, và hỗ trợ cả hai thuật toán (chọn bằng máy dò lúc chạy)
+    xoá hẳn phụ thuộc vào phép đo Android. Khoản nợ 23 **vẫn mở**, chỉ thôi chặn. Nguyên văn cũ: ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
     khi có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Sau khi đã có phong bì
     thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một ADR.
 
@@ -338,6 +341,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 |---|---|
 | `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
+| `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về con người và quy trình mà S1 đang cư xử như thật** — mỗi dòng một địa chỉ trong kho và một câu hỏi cho người mua thật. Không thay pilot; nó hạ chi phí buổi đầu |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
 | `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ **Mười tám ADR**: 001–010 và 012–018 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất. **016/017/018** là ba quyết định của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã: cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, chính sách tính `requires_dual_approval`, pepper cho băm đích |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
