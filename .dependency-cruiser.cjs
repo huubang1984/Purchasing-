@@ -116,6 +116,9 @@ const SEALED_ENVELOPE_SRC_PREFIX = ciPrefix("packages/sealed-envelope/src/");
 const SEALED_ENVELOPE_INDEX_TS = ciFile("packages/sealed-envelope/src/index.ts");
 const SEALED_ENVELOPE_UNSEAL_TS = ciFile("packages/sealed-envelope/src/unseal.ts");
 const SEALED_ENVELOPE_ROUNDTRIP_TEST_TS = ciFile("packages/sealed-envelope/src/roundtrip.test.ts");
+const SEALED_ENVELOPE_KEY_MATERIAL_INT_TEST_TS = ciFile(
+  "packages/sealed-envelope/src/key-material.int.test.ts",
+);
 
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
@@ -227,7 +230,19 @@ module.exports = {
         "TRUOC khi fix round 4 dung quy tac ca-thu-muc; o day thu tu nguoc lai nen khong co du " +
         "thua. Ghi ra vi mot quy tac VANG MAT trong mot ho quy tac se bi doc thanh mot thieu sot.",
       severity: "error",
-      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, SEALED_ENVELOPE_ROUNDTRIP_TEST_TS] },
+      from: {
+        pathNot: [
+          APPS_UNSEAL_WORKER_PREFIX,
+          SEALED_ENVELOPE_ROUNDTRIP_TEST_TS,
+          // Hai file test, HAI viec khac nhau, va ca hai deu doi duong MO — mot lop mo phong bi
+          // khong co phep do nao la mot lop khong ai biet no con chay hay khong.
+          //   roundtrip.test.ts        - phan MAT MA thuan, khong cham CSDL.
+          //   key-material.int.test.ts - chuoi TRON VEN tu CSDL ra phong bi va nguoc lai.
+          // Ca hai deu nam TRONG packages/sealed-envelope/src/, nen ca hai da la dich han che cua
+          // quy tac cua-cong-khai o tren: khong module ngoai goi nao import nguoc vao chung duoc.
+          SEALED_ENVELOPE_KEY_MATERIAL_INT_TEST_TS,
+        ],
+      },
       to: { path: SEALED_ENVELOPE_UNSEAL_TS },
     },
     {

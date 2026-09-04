@@ -70,7 +70,10 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
   ["C2", "S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2."],
   ["C3", "S1 — chưa có trạng thái RFQ nào để gác."],
   ["C4", "S1 — chưa có deadline để rút ngắn hay gia hạn."],
-  ["C5", "S1 — khoá theo RFQ chưa tồn tại (xem G2)."],
+  // [S1.4] C5 ĐÃ ĐƯỢC GỠ khỏi danh sách này. Chủ ngữ của nó — `rfq_key_material` — nay tồn tại
+  // (migration 017), và mệnh đề được cưỡng chế bởi một BỘ BA trigger chứ không bởi một câu lệnh
+  // ứng dụng: không sớm hơn, không mồ côi, và chiều ngược lại. Mỗi vế có một phép đo riêng CỘNG
+  // một phép đo ĐỘT BIẾN gỡ đúng lớp ấy đi và đòi cùng thao tác ĐI LỌT.
 
   // --- Nhóm D: hai mã còn lại. ---
   ["D2", "S1 — ngưỡng RFQ và luồng phê duyệt kép chưa tồn tại."],
@@ -95,8 +98,12 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
   ["E6", "S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian."],
 
   // --- Nhóm G: hai mã trống, hai lý do KHÁC NHAU. ---
-  ["G2", "S1 — khoá THEO RFQ đòi RFQ. `packages/crypto-keys/src/roundtrip.test.ts:47` tự ghi ra rằng nó CỐ Ý không gắn `[INV-G2]` vì lý do ấy. Trước vòng fix 1 của Task 9, năm test mang nhãn này thật ra đo quy tắc biên giới depcruise — nay là `[INV-H11]`. Cái S0 có là bọc khoá theo TỔ CHỨC có phiên bản, thứ nuôi G1/G3."],
-  ["G4", "CHƯA CÓ LỚP, không phải chưa có nhãn — `grep audit` trên `packages/crypto-keys/src/*.ts` trừ test = 0 hit. Hạ tầng ghi (`004_audit_chain_functions.sql`, nhóm B3) đã có; không một thao tác khoá nào GỌI nó."],
+  // [S1.4] G2 và G4 ĐÃ ĐƯỢC GỠ. Nguyên văn hai lý do cũ, giữ để đối chiếu:
+  //   G2 — "khoá THEO RFQ đòi RFQ ... Cái S0 có là bọc khoá theo TỔ CHỨC có phiên bản."
+  //   G4 — "CHƯA CÓ LỚP, không phải chưa có nhãn — `grep audit` trên crypto-keys = 0 hit."
+  // Cả hai lý do nay hết hiệu lực: `packages/sealed-envelope` sinh khoá THEO RFQ và ghi sổ kiểm
+  // toán ở cả hai thao tác nó có. CẢ HAI mã mang cờ PHẠM VI HẸP — xem §4, và phần chênh của G4
+  // ("mở bọc" chưa tồn tại) là phần dễ bị nuốt nhất.
 ]);
 
 /**
@@ -112,7 +119,9 @@ export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
   ["E5", "Phiên khách ghi `verified_contact_id` **DẪN XUẤT từ thách thức OTP đã đối chiếu** — trigger `guest_sessions_kiem_danh_tinh` (012) đòi nó khớp `invitation_otp_challenges.contact_id`, và một câu INSERT viết tay khai một danh tính khác bị CSDL từ chối (có test). PHẦN CHÊNH: giá trị ấy là **NGƯỜI GIỮ KÊNH đã nhận OTP**, KHÔNG phải con người đang ngồi trước màn hình. Một người chuyển tiếp cả link LẪN mã OTP vừa đọc được cho đồng nghiệp thì hệ thống ghi nhận người giữ kênh, và không cơ chế nào trong S1 phân biệt được hai ca đó."],
   ["E3", "Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công."],
   ["F1", "RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim."],
-  ["G1", "**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.** 18 test đo **quy tắc biên giới** của dependency-cruiser cộng danh sách trắng barrel — đó là một lớp phòng ngừa THẬT, đã được chứng minh có răng bằng test đối kháng (Task 2 và Task 7 đều vô hiệu hoá quy tắc rồi chạy lại để lấy RED thật). Nhưng mệnh đề nói về `private key RFQ`, và ở S0 **không có private key RFQ nào**: `grep wrapped_private_key` toàn repo cho **0 hit**, `git ls-files apps/` cho đúng `apps/.gitkeep` nên **không có `apps/unseal-worker`**. Ô ✅ này chứng minh *cánh cửa đã khoá*; nó chưa chứng minh gì về căn phòng, vì căn phòng chưa được xây. Khoảng trống thứ hai, độc lập: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào."],
+  ["G1", "~~**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.**~~ **[S1.4] VẾ ẤY HẾT HIỆU LỰC — và một vế THU HẸP MỚI ra đời cùng lúc, ngược chiều.** Nguyên văn cũ giữ để đối chiếu: *`grep wrapped_private_key` toàn repo cho 0 hit, `git ls-files apps/` cho đúng `apps/.gitkeep`*. Nay `rfq_key_material.wrapped_private_key` là một cột thật có dữ liệu thật, `app_api` GHI được mà KHÔNG ĐỌC được nó (đo được: `SELECT` bị Postgres từ chối, cùng câu ấy dưới `app_unseal` chạy), và một lượt đột biến cấp thêm đúng cột ấy cho `app_api` chứng minh quyền cột LÀ thứ đang chặn. **PHẦN CHÊNH MỚI, do ADR-019 tạo ra và không được nuốt vào ô ✅:** tiến trình `api` **CÓ** chạm khoá riêng RFQ dạng rõ, trong cửa sổ thời gian của đúng hàm `issueRfqKeyPair`. `fill(0)` xoá được chuỗi byte PKCS8 tự xuất ra; nó KHÔNG xoá được phần khoá bên trong đối tượng `CryptoKey` của runtime. Vế *“không vào core dump”* của mệnh đề vì vậy **không đúng tuyệt đối** kể từ S1.4, và điều kiện xét lại có mốc: khi `apps/unseal-worker` ra đời ở S1.6. Khoảng trống thứ hai, ĐỘC LẬP và VẪN NGUYÊN: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel."],
+  ["G2", "**MỆNH ĐỀ NÓI “MỘT CẶP KHOÁ”, HIỆN THỰC CHO HAI — và vế chịu lực là vế thứ hai.** ADR-011 chốt *P-256 mặc định, X25519 cơ hội*, mà ECDH đòi hai bên cùng đường cong, nên một RFQ mang một cặp khoá CHO MỖI thuật toán (`UNIQUE (org_id, rfq_id, algorithm)`). Vế *“lộ một RFQ không lan sang RFQ khác”* thì nguyên vẹn và được đo ba mũi: khoá riêng của A không mở được phong bì của B; ĐÚNG khoá riêng nhưng SAI mã RFQ cũng không mở được (`rfqId` nằm trong INFO của HKDF, nên ràng buộc là MẬT MÃ chứ không phải một câu `if`); và hai lần niêm phong cùng một bản rõ cho hai phong bì khác nhau. **PHẦN CHÊNH:** vẫn còn một TỔ TIÊN CHUNG mà mệnh đề không nói tới — cả hai khoá riêng được bọc bằng khoá dẫn xuất THEO TỔ CHỨC (`deriveOrgKey`), nên mất khoá gốc của tổ chức là mất mọi RFQ của tổ chức ấy. Đó là địa hạt của G1 và F3, không phải của G2; ghi ở đây để không ai đọc ô ✅ thành *“mỗi RFQ là một ốc đảo”*."],
+  ["G4", "**MỆNH ĐỀ LIỆT KÊ BỐN THAO TÁC; S1.4 CÓ BA, VÀ CHỈ ĐO ĐƯỢC BA.** *Sinh* và *bọc* là MỘT hành vi không tách được ở thiết kế của ADR-019 (bản rõ không tồn tại ngoài một hàm), nên chúng là MỘT bản ghi `RFQ_KEY_MATERIAL_ISSUED` — ghi ra thay vì để người đọc đếm bốn action và tìm không thấy. *Huỷ* là `RFQ_KEY_MATERIAL_REVOKED`. **VẾ *MỞ BỌC* KHÔNG CÓ MỘT DÒNG MÃ NÀO**: nó sống trong `apps/unseal-worker`, thứ chưa tồn tại (S1.6) — và đó là vế mà một kiểm toán viên hỏi tới ĐẦU TIÊN, vì nó là lần duy nhất một khoá riêng thật sự được dùng. **PHẦN CHÊNH THỨ HAI:** *huỷ* ở S1 chỉ có ĐÚNG MỘT nguyên nhân được hỗ trợ — RFQ bị huỷ. Thu hồi vì một sự cố an ninh trong khi RFQ đang mở không phải đường đi được hỗ trợ, và thu hồi là một DẤU chứ không phải một lần xoá mật mã: `wrapped_private_key` vẫn nằm nguyên trong hàng."],
 ]);
 
 /**
@@ -128,7 +137,13 @@ export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
  * `NGOAI_LE_HINH_DANG`: mỗi lần thu hẹp phần "được khai báo là hẹp" là một quyết định an ninh
  * mà không máy nào phán xử hộ được.
  */
-export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set(["D1", "D5", "E1", "E2", "E3", "E5", "F1", "G1"]);
+export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set([
+  "D1", "D5", "E1", "E2", "E3", "E5", "F1", "G1",
+  // [S1.4] Hai mã MỚI, và cả hai vào đây CÙNG LÚC với ô ✅ của chúng — không phải sau một vòng
+  // review. G2 vì mệnh đề nói "một cặp khoá" trong khi hiện thực cho hai; G4 vì mệnh đề liệt kê
+  // bốn thao tác trong khi S1.4 chỉ có ba.
+  "G2", "G4",
+]);
 
 /**
  * MỐC GHIM CỦA ĐỘ PHỦ — BIẾN MỘT CÂU VĂN THÀNH MỘT PHÉP ĐO.
@@ -192,7 +207,13 @@ export interface MocGhim {
 // phep chan co mot ve doi chung duong. Ca hai VAN mang co PHAM VI HEP, va phan chenh duoc ghi
 // ra la phan CHUA TUNG bi bat: 'kenh da dang ky' la kenh do NGUOI MUA khai, va
 // `verified_contact_id` la NGUOI GIU KENH chu khong phai con nguoi dang thao tac.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 30, coDanhSachToiDa: 20 };
+// [S1.4] 30 -> 33, danh sach 20 -> 17. Ba ma duoc lap deu la ma NGHIEP VU — C5, G2, G4 — nen con
+// so nghiep vu di 14 -> 17 va nhom hang rao dung yen 16/16. Day la lan dau tien trong S1 mot hang
+// muc lap duoc BA ma nghiep vu, va ly do khong phai no lam nhieu hon: no lam mot chu ngu ma ca ba
+// menh de deu doi (`rfq_key_material`), dung nhu §1 cua ke hoach S1 da anh xa tu truoc.
+// KHONG ma HANG RAO moi nao: H16 (S1.2) da phu san goi thu bay, dung nhu no duoc dung ra de lam.
+// HAI trong ba ma moi mang co PHAM_VI_HEP ngay tu dau — xem MA_PHAI_CO_CO_HEP.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 33, coDanhSachToiDa: 17 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

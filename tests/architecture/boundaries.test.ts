@@ -1347,3 +1347,78 @@ describe("biên giới module của packages/sealed-envelope", () => {
     }
   }, 60000);
 });
+
+// ==============================================================================================
+// [INV-G1] MỌI MIỄN TRỪ CỦA HỌ `g8-` PHẢI ĐỒNG THỜI LÀ ĐÍCH HẠN CHẾ
+//
+// Bản sao của bất biến chống-tái-diễn đã dựng cho họ `g1-` ở fix round 3 (phát hiện N5): một
+// module được miễn trừ vai trò `from` được phép gọi VÀO cửa hạn chế, nhưng nếu không ai cấm
+// import NGƯỢC lại chính nó thì nó thành một cầu nối — bất kỳ ai cũng re-export được khả năng mở
+// phong bì qua nó. Ba lần liên tiếp ở crypto-keys, dự án tự mở lại đúng một lỗ như thế.
+//
+// KHÁC MỘT ĐIỂM VỚI BẢN CỦA `g1-`, VÀ KHÁC CÓ CHỦ ĐÍCH: hàm tìm quy tắc chặn đường vào quét MỌI
+// họ `gN-`, không chỉ `g8-`. Miễn trừ `apps/unseal-worker/` đã là đích hạn chế nhờ
+// `g1-khong-import-nguoc-tu-apps-unseal-worker`, và chép lại quy tắc ấy dưới một cái tên `g8-`
+// sẽ tạo HAI quy tắc phải giữ đồng bộ — đúng khuôn danh-sách-tên mà dự án đã hỏng ba lần. Điều
+// bất biến này đòi là "có MỘT hàng rào nào đó đóng đường vào", không phải "hàng rào ấy mang đúng
+// tiền tố nào".
+// ==============================================================================================
+describe("miễn trừ của họ quy tắc g8-", () => {
+  it("[INV-G1] mọi module được miễn trừ vai trò `from` đều là đích hạn chế của một họ `gN-`", () => {
+    interface DepCruiseRule {
+      name: string;
+      from: { pathNot?: string | string[] };
+      to: { path?: string | string[]; pathNot?: string | string[] };
+    }
+    const config = require("../../.dependency-cruiser.cjs") as { forbidden: DepCruiseRule[] };
+    const { ci, unCi } = require("../../dependency-cruiser-ci.cjs") as {
+      ci: (s: string) => string;
+      unCi: (s: string) => string;
+    };
+
+    const nhuMang = (v: string | string[] | undefined): string[] =>
+      v === undefined ? [] : Array.isArray(v) ? v : [v];
+
+    const hoG8 = config.forbidden.filter((r) => r.name.startsWith("g8-"));
+    // Đối chứng dương: đổi giao ước đặt tên mà quên sửa test sẽ làm vòng lặp dưới thành trang trí.
+    expect(hoG8.length).toBeGreaterThanOrEqual(2);
+
+    const moiHoBienGioi = config.forbidden.filter((r) => /^g\d+-/.test(r.name));
+
+    function duongDanDaiDien(pRegex: string): string {
+      const coNeoCuoi = pRegex.endsWith("$");
+      let than = pRegex.startsWith("^") ? pRegex.slice(1) : pRegex;
+      if (coNeoCuoi) than = than.slice(0, -1);
+      const literal = unCi(than);
+      // Round-trip: một regex viết tay trong `from.pathNot` không giải mã ngược được, tức không
+      // kiểm chứng được — và một miễn trừ không kiểm chứng được là một miễn trừ không được phép.
+      expect("^" + ci(literal) + (coNeoCuoi ? "$" : "")).toBe(pRegex);
+      return coNeoCuoi ? literal : literal + "zz-mau-dai-dien.ts";
+    }
+
+    function laDichHanChe(pDuongDan: string): boolean {
+      return moiHoBienGioi.some((r) => {
+        const dsPath = nhuMang(r.to.path);
+        if (dsPath.length === 0 || !dsPath.some((p) => new RegExp(p).test(pDuongDan))) return false;
+        return !nhuMang(r.to.pathNot).some((p) => new RegExp(p).test(pDuongDan));
+      });
+    }
+
+    const thieu: string[] = [];
+    for (const quyTac of hoG8) {
+      for (const mienTru of nhuMang(quyTac.from.pathNot)) {
+        const daiDien = duongDanDaiDien(mienTru);
+        if (!laDichHanChe(daiDien)) {
+          thieu.push(`${quyTac.name} miễn trừ ${daiDien} nhưng không ai chặn đường vào`);
+        }
+      }
+    }
+    expect(thieu).toEqual([]);
+
+    // Đối chứng âm: hàm phải biết trả false, không phải hàm luôn-true.
+    expect(laDichHanChe("apps/mot-app-binh-thuong/src/index.ts")).toBe(false);
+    // Đối chứng dương cho đúng hai miễn trừ đáng ngại nhất của họ này.
+    expect(laDichHanChe("packages/sealed-envelope/src/key-material.int.test.ts")).toBe(true);
+    expect(laDichHanChe("apps/unseal-worker/src/bat-ky.ts")).toBe(true);
+  });
+});

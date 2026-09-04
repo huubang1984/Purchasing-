@@ -105,6 +105,13 @@ function main(): void {
   const hangRao = invariants.filter((i) => i.id.startsWith("H"));
   const daPhu = (id: string): boolean => ketQua(coverage.get(id)).coTest;
   const soPhuNghiepVu = nghiepVu.filter((i) => daPhu(i.id)).length;
+  /**
+   * 13 mã nghiệp vụ mà `docs/STATE.md` ghi là MỤC TIÊU của S0. Danh sách này là LỊCH SỬ — nó
+   * không đổi khi độ phủ đổi. Cái được DẪN XUẤT là phần còn thiếu của nó, để câu văn ở §1 không
+   * trôi khỏi sự thật như bản trước đã trôi.
+   */
+  const MUC_TIEU_S0 = ["B3", "B4", "D1", "D3", "D5", "E3", "F1", "F2", "F3", "G1", "G2", "G3", "G4"];
+  const conThieuTrongMucTieuS0 = MUC_TIEU_S0.filter((id) => !daPhu(id));
   const soPhuHangRao = hangRao.filter((i) => daPhu(i.id)).length;
 
   const veCoHauTo = uses.filter((u) => u.clause !== null);
@@ -163,9 +170,20 @@ function main(): void {
     "",
     `**${invariants.length - soPhuNghiepVu - soPhuHangRao} mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.`,
     "",
+    // *** CÂU DƯỚI ĐÂY TỪNG SAI, VÀ NÓ SAI THEO MỘT KIỂU ĐÁNG GHI LẠI. ***
+    // Bản trước viết: `S0 **giao được ${soPhuNghiepVu}**: G2 và G4 không có lớp` — một câu về
+    // LỊCH SỬ (S0 giao được bao nhiêu) mà nội suy con số CỦA HÔM NAY. Từ S1.3 nó đọc thành
+    // "S0 giao được 14", và ở S1.4 nó sẽ đọc thành "S0 giao được 17" — một lời khai sai trong
+    // chính hồ sơ kiểm toán, tự sinh ra mới mỗi lượt chạy. Con số của S0 là 11, cố định.
+    // Phần "hôm nay" tách xuống dòng riêng, và danh sách mã còn thiếu được DẪN XUẤT chứ không
+    // viết tay — nếu không thì câu mới sẽ trôi đúng như câu cũ.
     "`docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,",
-    `G1, G2, G3, G4). S0 **giao được ${soPhuNghiepVu}**: G2 và G4 không có lớp. \`docs/TEST-PLAN.md\` là`,
-    "nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống *có lý do*, không phải vì quên.",
+    "G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố",
+    "định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là",
+    "trống *có lý do*, không phải vì quên.",
+    "",
+    `Hôm nay: **${soPhuNghiepVu}/${nghiepVu.length}** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: ` +
+      `${conThieuTrongMucTieuS0.length === 0 ? "không còn mã nào" : conThieuTrongMucTieuS0.join(", ")}.`,
     "",
     "## 2. Ma trận",
     "",

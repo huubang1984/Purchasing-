@@ -27,15 +27,18 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **14** | 34 |
+| Nghiệp vụ (A–G) | **17** | 34 |
 | Hàng rào (H) | **16** | 16 |
-| **Cộng** | **30** | **50** |
+| **Cộng** | **33** | **50** |
 
-**20 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**17 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
-G1, G2, G3, G4). S0 **giao được 14**: G2 và G4 không có lớp. `docs/TEST-PLAN.md` là
-nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống *có lý do*, không phải vì quên.
+G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
+định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
+trống *có lý do*, không phải vì quên.
+
+Hôm nay: **17/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -56,7 +59,7 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 13 | ✅ ĐẠT |  |
 | D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 17 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 26 | ✅ ĐẠT |  |
@@ -68,13 +71,13 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 42 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 46 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
 | F3 | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 | 1 | ✅ ĐẠT |  |
-| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 18 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| G2 | Mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ khác | Thiết kế khóa | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 30 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| G2 | Mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ khác | Thiết kế khóa | T1, T3 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | G3 | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 | 2 | ✅ ĐẠT |  |
-| G4 | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| G4 | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
 | H3 | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 | 5 | ✅ ĐẠT |  |
@@ -90,7 +93,7 @@ nơi ghi vì sao — và §3 dưới đây là nơi ghi ra rằng chúng trống
 | H13 | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | T0 | 4 | ✅ ĐẠT |  |
 | H14 | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | T3 | 3 | ✅ ĐẠT |  |
 | H15 | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | T0 | 4 | ✅ ĐẠT |  |
-| H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 11 | ✅ ĐẠT |  |
+| H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 16 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -111,9 +114,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 30` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 33` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 20` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 17` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -142,13 +145,10 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 | **C2** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2. |
 | **C3** | S1 — chưa có trạng thái RFQ nào để gác. |
 | **C4** | S1 — chưa có deadline để rút ngắn hay gia hạn. |
-| **C5** | S1 — khoá theo RFQ chưa tồn tại (xem G2). |
 | **D2** | S1 — ngưỡng RFQ và luồng phê duyệt kép chưa tồn tại. |
 | **D4** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-D4]`: D4 đòi cảnh báo *tức thì*, còn outbox là POLL và độ trễ của nó bị chặn dưới bởi `pollIntervalMs`; đường đúng là `NOTIFY`/`LISTEN` hoặc một đường đồng bộ. |
 | **E4** | S1 — MST nay đã có (008) và mã RFQ nay đã có (009), nhưng E4 là một mệnh đề PHỦ ĐỊNH về ĐƯỜNG XÁC THỰC ('không bao giờ là credential'), và đường xác thực của người mua chưa có endpoint nào để đối kháng. Tầng test của nó là T5. Phần cưỡng chế được ĐÃ có: không hàm nào ở cửa `@trustprocure/supplier` hay `@trustprocure/invitation` nhận MST hay mã RFQ làm bằng chứng danh tính. |
 | **E6** | S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian. |
-| **G2** | S1 — khoá THEO RFQ đòi RFQ. `packages/crypto-keys/src/roundtrip.test.ts:47` tự ghi ra rằng nó CỐ Ý không gắn `[INV-G2]` vì lý do ấy. Trước vòng fix 1 của Task 9, năm test mang nhãn này thật ra đo quy tắc biên giới depcruise — nay là `[INV-H11]`. Cái S0 có là bọc khoá theo TỔ CHỨC có phiên bản, thứ nuôi G1/G3. |
-| **G4** | CHƯA CÓ LỚP, không phải chưa có nhãn — `grep audit` trên `packages/crypto-keys/src/*.ts` trừ test = 0 hit. Hạ tầng ghi (`004_audit_chain_functions.sql`, nhóm B3) đã có; không một thao tác khoá nào GỌI nó. |
 
 ## 4. Mã đã phủ mà **bảo đảm thật hẹp hơn mệnh đề**
 
@@ -174,7 +174,11 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 
 - **F1** — RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim.
 
-- **G1** — **TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.** 18 test đo **quy tắc biên giới** của dependency-cruiser cộng danh sách trắng barrel — đó là một lớp phòng ngừa THẬT, đã được chứng minh có răng bằng test đối kháng (Task 2 và Task 7 đều vô hiệu hoá quy tắc rồi chạy lại để lấy RED thật). Nhưng mệnh đề nói về `private key RFQ`, và ở S0 **không có private key RFQ nào**: `grep wrapped_private_key` toàn repo cho **0 hit**, `git ls-files apps/` cho đúng `apps/.gitkeep` nên **không có `apps/unseal-worker`**. Ô ✅ này chứng minh *cánh cửa đã khoá*; nó chưa chứng minh gì về căn phòng, vì căn phòng chưa được xây. Khoảng trống thứ hai, độc lập: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel, nên một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào.
+- **G1** — ~~**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.**~~ **[S1.4] VẾ ẤY HẾT HIỆU LỰC — và một vế THU HẸP MỚI ra đời cùng lúc, ngược chiều.** Nguyên văn cũ giữ để đối chiếu: *`grep wrapped_private_key` toàn repo cho 0 hit, `git ls-files apps/` cho đúng `apps/.gitkeep`*. Nay `rfq_key_material.wrapped_private_key` là một cột thật có dữ liệu thật, `app_api` GHI được mà KHÔNG ĐỌC được nó (đo được: `SELECT` bị Postgres từ chối, cùng câu ấy dưới `app_unseal` chạy), và một lượt đột biến cấp thêm đúng cột ấy cho `app_api` chứng minh quyền cột LÀ thứ đang chặn. **PHẦN CHÊNH MỚI, do ADR-019 tạo ra và không được nuốt vào ô ✅:** tiến trình `api` **CÓ** chạm khoá riêng RFQ dạng rõ, trong cửa sổ thời gian của đúng hàm `issueRfqKeyPair`. `fill(0)` xoá được chuỗi byte PKCS8 tự xuất ra; nó KHÔNG xoá được phần khoá bên trong đối tượng `CryptoKey` của runtime. Vế *“không vào core dump”* của mệnh đề vì vậy **không đúng tuyệt đối** kể từ S1.4, và điều kiện xét lại có mốc: khi `apps/unseal-worker` ra đời ở S1.6. Khoảng trống thứ hai, ĐỘC LẬP và VẪN NGUYÊN: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel.
+
+- **G2** — **MỆNH ĐỀ NÓI “MỘT CẶP KHOÁ”, HIỆN THỰC CHO HAI — và vế chịu lực là vế thứ hai.** ADR-011 chốt *P-256 mặc định, X25519 cơ hội*, mà ECDH đòi hai bên cùng đường cong, nên một RFQ mang một cặp khoá CHO MỖI thuật toán (`UNIQUE (org_id, rfq_id, algorithm)`). Vế *“lộ một RFQ không lan sang RFQ khác”* thì nguyên vẹn và được đo ba mũi: khoá riêng của A không mở được phong bì của B; ĐÚNG khoá riêng nhưng SAI mã RFQ cũng không mở được (`rfqId` nằm trong INFO của HKDF, nên ràng buộc là MẬT MÃ chứ không phải một câu `if`); và hai lần niêm phong cùng một bản rõ cho hai phong bì khác nhau. **PHẦN CHÊNH:** vẫn còn một TỔ TIÊN CHUNG mà mệnh đề không nói tới — cả hai khoá riêng được bọc bằng khoá dẫn xuất THEO TỔ CHỨC (`deriveOrgKey`), nên mất khoá gốc của tổ chức là mất mọi RFQ của tổ chức ấy. Đó là địa hạt của G1 và F3, không phải của G2; ghi ở đây để không ai đọc ô ✅ thành *“mỗi RFQ là một ốc đảo”*.
+
+- **G4** — **MỆNH ĐỀ LIỆT KÊ BỐN THAO TÁC; S1.4 CÓ BA, VÀ CHỈ ĐO ĐƯỢC BA.** *Sinh* và *bọc* là MỘT hành vi không tách được ở thiết kế của ADR-019 (bản rõ không tồn tại ngoài một hàm), nên chúng là MỘT bản ghi `RFQ_KEY_MATERIAL_ISSUED` — ghi ra thay vì để người đọc đếm bốn action và tìm không thấy. *Huỷ* là `RFQ_KEY_MATERIAL_REVOKED`. **VẾ *MỞ BỌC* KHÔNG CÓ MỘT DÒNG MÃ NÀO**: nó sống trong `apps/unseal-worker`, thứ chưa tồn tại (S1.6) — và đó là vế mà một kiểm toán viên hỏi tới ĐẦU TIÊN, vì nó là lần duy nhất một khoá riêng thật sự được dùng. **PHẦN CHÊNH THỨ HAI:** *huỷ* ở S1 chỉ có ĐÚNG MỘT nguyên nhân được hỗ trợ — RFQ bị huỷ. Thu hồi vì một sự cố an ninh trong khi RFQ đang mở không phải đường đi được hỗ trợ, và thu hồi là một DẤU chứ không phải một lần xoá mật mã: `wrapped_private_key` vẫn nằm nguyên trong hàng.
 
 ### 4.1 B3 và B4 — phát biểu bàn giao, trích nguyên văn
 
