@@ -112,6 +112,12 @@ const INVITATION_INDEX_TS = ciFile("packages/invitation/src/index.ts");
 // rieng da o dang PKCS8. Nho the hang rao G1 giu DUNG MOT mien tru (`apps/unseal-worker/`)
 // thay vi hai, va mien tru thu hai kia se la ca mot GOI chu khong phai mot app.
 // ==========================================================================================
+// S1.5 - ho "g9-", ap cho packages/bidding/src/. Lan thu TAM cung mot khuon, va lan nay goi chi
+// co MOT cua: khong co duong "mo" nao trong goi nay. `verifyReceipt` la mot phep KIEM CHUNG bang
+// khoa CONG KHAI — no khong mang kha nang nao, nen no di qua cua chinh nhu moi symbol khac.
+const BIDDING_SRC_PREFIX = ciPrefix("packages/bidding/src/");
+const BIDDING_INDEX_TS = ciFile("packages/bidding/src/index.ts");
+
 const SEALED_ENVELOPE_SRC_PREFIX = ciPrefix("packages/sealed-envelope/src/");
 const SEALED_ENVELOPE_INDEX_TS = ciFile("packages/sealed-envelope/src/index.ts");
 const SEALED_ENVELOPE_UNSEAL_TS = ciFile("packages/sealed-envelope/src/unseal.ts");
@@ -201,6 +207,18 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g9-bidding-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/bidding/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: `verifyReceipt` kiem chung duoc bang " +
+        "KHOA CONG KHAI MOT MINH (B2). Mot import tuong doi vao receipt.ts hay signer.ts tu goi " +
+        "khac se cham toi bo ky va toi cac ham chuyen dang chu ky, tuc du de dung mot duong kiem " +
+        "chung khac voi duong ma nha cung cap di — va hai duong kiem chung la mot duong sai.",
+      severity: "error",
+      from: { pathNot: BIDDING_SRC_PREFIX },
+      to: { path: BIDDING_SRC_PREFIX, pathNot: [BIDDING_INDEX_TS] },
     },
     {
       name: "g8-sealed-envelope-chi-index-va-unseal-la-cua-cong-khai",

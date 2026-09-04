@@ -50,7 +50,17 @@ import { describe, expect, it } from "vitest";
 // ============================================================================================
 
 /** Danh sách trắng: export GIÁ TRỊ của mặt tiền bọc khóa, cửa mọi service được phép import. */
-const DANH_SACH_TRANG_INDEX = ["KeyError", "MasterKeyRing", "createLocalDevWrapper"];
+// [S1.5] `assertLocalDevAllowed` được thêm vào cửa an toàn, và nó là symbol duy nhất ở đây KHÔNG
+// mang một khả năng mật mã nào — nó đọc hai biến môi trường rồi ném hoặc không ném. Tiêu chí lọc
+// của mặt tiền này là *"symbol này có cho ai thêm một bậc tự do nào không"*, và câu trả lời cho
+// nó là KHÔNG. Nó ở đây để `packages/bidding` dùng CHUNG hàng rào thay vì CHÉP LẠI — xem khối đầu
+// `packages/crypto-keys/src/moi-truong.ts`.
+const DANH_SACH_TRANG_INDEX = [
+  "KeyError",
+  "MasterKeyRing",
+  "assertLocalDevAllowed",
+  "createLocalDevWrapper",
+];
 
 /** Danh sách trắng: export GIÁ TRỊ của cửa hạn chế, chỉ apps/unseal-worker được import. */
 const DANH_SACH_TRANG_UNWRAP = ["createLocalDevUnwrapper"];
@@ -577,5 +587,74 @@ describe("bề mặt export công khai của sealed-envelope", () => {
     for (const ten of ["decodeEnvelope", "deriveContentKey", "importPrivateKey", "unsealBid"]) {
       expect(Object.keys(moduleThat), `${ten} lọt ra cửa công khai`).not.toContain(ten);
     }
+  });
+});
+
+// ============================================================================================
+// MẶT TIỀN THỨ BẢY: @trustprocure/bidding (S1.5)
+//
+// Tiêu chí lọc ở đây KHÔNG phải "symbol này có chạm khoá riêng không" (đó là tiêu chí của
+// sealed-envelope) mà là một câu về B2: **`verifyReceipt` phải kiểm chứng được bằng khoá công
+// khai MỘT MÌNH.** Vì vậy danh sách này CÓ mặt các hàm chuyển dạng chữ ký (`derToRawSignature`,
+// `rawToDerSignature`) và `sha256Hex` — chúng là thứ một bên KIỂM CHỨNG ĐỘC LẬP cần, và giấu
+// chúng đi sẽ buộc nhà cung cấp tự cài lại, tức làm B2 yếu đi chứ không mạnh lên.
+//
+// Symbol KHÔNG có ở đây và lý do: không có. Gói này chỉ có MỘT cửa — nó không giữ một khả năng
+// nào mà thế giới bên ngoài không được có.
+// ============================================================================================
+const DANH_SACH_TRANG_BIDDING = [
+  "BiddingError",
+  "RECEIPT_FORMAT_LABEL",
+  "RECEIPT_SIGNING_ALGORITHM",
+  "ReceiptError",
+  "ReceiptSigningKeyRing",
+  "buildReceiptText",
+  "createLocalDevReceiptSigner",
+  "derToRawSignature",
+  "getBidReceipt",
+  "listBidVersions",
+  "parseReceiptText",
+  "rawToDerSignature",
+  "sha256Hex",
+  "submitBid",
+  "verifyReceipt",
+];
+
+const BIDDING_PACKAGE_JSON_URL = new URL("../../packages/bidding/package.json", import.meta.url);
+
+describe("bề mặt export công khai của bidding", () => {
+  it("[INV-H16] cửa @trustprocure/bidding chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(BIDDING_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) {
+      throw new Error("packages/bidding/package.json không khai cửa '.'");
+    }
+    const urlCua = new URL(duongDan, BIDDING_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_BIDDING.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/bidding.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_BIDDING.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/bidding.",
+    ).toEqual([]);
+  });
+
+  it("[INV-B2] `verifyReceipt` nhận ĐÚNG BA thứ, không thứ nào chỉ máy chủ mới có", async () => {
+    // Đây là hàng rào chống đúng một lối trượt mà ADR-011 §"Rủi ro của việc để mở" gọi tên: thêm
+    // một tham số "chỉ máy chủ mới có" vào đường kiểm chứng làm B2 hỏng TRONG IM LẶNG, vì mọi
+    // test vẫn xanh — chúng chạy trên máy chủ. Phép kiểm này đọc SỐ THAM SỐ và tập khoá của đối
+    // tượng đầu vào, nên một tham số thứ hai (vd. `client`) làm nó đỏ.
+    const urlCua = new URL("../../packages/bidding/src/index.ts", import.meta.url);
+    const m = (await import(/* @vite-ignore */ urlCua.href)) as {
+      verifyReceipt: (...args: unknown[]) => unknown;
+    };
+    expect(m.verifyReceipt.length, "verifyReceipt phải nhận ĐÚNG MỘT đối tượng đầu vào").toBe(1);
   });
 });

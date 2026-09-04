@@ -1746,6 +1746,7 @@ describe("migration của dự án", () => {
           "015_otp_pepper.sql",
           "016_rfq_actor_from_session.sql",
           "017_rfq_key_material.sql",
+          "018_vendor_bids.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4538,6 +4539,7 @@ describe("migration của dự án", () => {
         "015_otp_pepper.sql",
         "016_rfq_actor_from_session.sql",
         "017_rfq_key_material.sql",
+        "018_vendor_bids.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4752,6 +4754,7 @@ describe("migration của dự án", () => {
         "015_otp_pepper.sql",
         "016_rfq_actor_from_session.sql",
         "017_rfq_key_material.sql",
+        "018_vendor_bids.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

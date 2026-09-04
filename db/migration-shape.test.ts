@@ -323,6 +323,7 @@ describe("hình dạng file migration", () => {
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
+      "bid_receipts",
       "guest_sessions",
       "invitation_otp_challenges",
       "mfa_credentials",
@@ -342,6 +343,8 @@ describe("hình dạng file migration", () => {
       "suppliers",
       "user_roles",
       "users",
+      "vendor_bid_versions",
+      "vendor_bids",
     ]);
   });
 

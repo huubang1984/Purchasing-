@@ -672,6 +672,11 @@ describe("phủ RLS", () => {
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
+      // [S1.5] `bid_receipts` co SELECT o MUC BANG, con `vendor_bid_versions` thi KHONG — va bat
+      // doi xung ay la mot quyet dinh: bien nhan chua mot BAM cua ciphertext, con phong bi thi
+      // chua chinh ciphertext. `app_api` phai doc lai duoc bien nhan cho nha cung cap; no khong
+      // co viec gi voi phong bi.
+      { grantee: "app_api", bang: "bid_receipts", quyen: "SELECT" },
       // [S1.3] Nam bang moi cua 010. `otp_rate_limits` la bang DUY NHAT co DELETE o muc bang,
       // va do la mot quyen THAT SU nguy hiem duoc cap CO Y THUC: mot api BI CHIEM xoa sach bang
       // nay la tat duoc E3(2). Khong tranh duoc neu giu E3 o tang ung dung - bo GRANT la bo luon
@@ -724,6 +729,7 @@ describe("phủ RLS", () => {
       // với quyền cột.
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
+      { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
@@ -784,6 +790,19 @@ describe("phủ RLS", () => {
       { bang: "users", cot: "id" },
       { bang: "users", cot: "org_id" },
       { bang: "users", cot: "status" },
+      // [S1.5] `vendor_bid_versions.envelope` la cot THU HAI trong du an ma `app_unseal` doc duoc
+      // con `app_api` thi khong (cot dau la `rfq_key_material.wrapped_private_key`). Y nghia manh
+      // hon o day: mot `api` bi chiem hoan toan cung khong rut duoc phong bi niem phong ra de
+      // tan cong ngoai tuyen ve sau.
+      { bang: "vendor_bid_versions", cot: "bid_id" },
+      { bang: "vendor_bid_versions", cot: "envelope" },
+      { bang: "vendor_bid_versions", cot: "id" },
+      { bang: "vendor_bid_versions", cot: "org_id" },
+      { bang: "vendor_bid_versions", cot: "submitted_at" },
+      { bang: "vendor_bid_versions", cot: "version" },
+      { bang: "vendor_bids", cot: "id" },
+      { bang: "vendor_bids", cot: "invitation_id" },
+      { bang: "vendor_bids", cot: "org_id" },
     ]);
   });
 
@@ -835,6 +854,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [S1.5] Bien nhan: BON cot INSERT va KHONG cot nao UPDATE. `bid_receipts` chi co HAI cot
+      // mang du lieu — van ban chinh tac va chu ky cua no; moi thu khac nam TRONG van ban da ky.
+      { grantee: "app_api", bang: "bid_receipts", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "canonical_text", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "signature", quyen: "INSERT" },
       // [S1.3] `guest_sessions` - CHI `revoked_at` co UPDATE. `otp_verified_at` KHONG sua duoc:
       // no la moc tra loi "phien nay qua OTP luc nao", va mot moc sua duoc la mot moc khong
       // dung de phan xet duoc. `verified_contact_id` cung khong - viet lai danh tinh da xac thuc
@@ -1104,6 +1129,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "users", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "UPDATE" },
+      // [S1.5] `envelope` co INSERT o day va KHONG co dong SELECT nao tuong ung o khang dinh tren
+      // — bat doi xung "ghi duoc ma khong doc duoc", lan thu HAI trong du an. `version` vang mat
+      // vi trigger dat no; `submitted_at` vang mat vi DEFAULT dat no. Va KHONG mot dong UPDATE
+      // hay DELETE nao tren ca hai bang bao gia: do la bat bien B1 nhin tu phia quyen.
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "bid_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "envelope", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "submitted_by_guest_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bids", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bids", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },

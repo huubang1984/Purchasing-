@@ -39,6 +39,21 @@ importers:
         specifier: ^8.13.0
         version: 8.23.0
 
+  packages/bidding:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../crypto-keys
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../sealed-envelope
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/crypto-keys: {}
 
   packages/db:

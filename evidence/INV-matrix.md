@@ -27,18 +27,18 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **17** | 34 |
+| Nghiệp vụ (A–G) | **21** | 34 |
 | Hàng rào (H) | **16** | 16 |
-| **Cộng** | **33** | **50** |
+| **Cộng** | **37** | **50** |
 
-**17 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**13 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
 G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **17/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **21/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -46,16 +46,16 @@ Hôm nay: **17/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 |---|---|---|---|---|---|---|
 | A1 | Với RFQ chưa UNSEALED, không endpoint nào trả về trường giá cho bất kỳ actor nội bộ nào | Kiến trúc: không có khóa giải mã trong `api` | T2, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | A2 | Giá dạng rõ không tồn tại trong `api` service tại bất kỳ thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi | Kiến trúc: mã hóa ở trình duyệt (ADR-007) | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | A5 | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 8 | ✅ ĐẠT |  |
+| B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 21 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 33 | ✅ ĐẠT |  |
 | B4 | Không đường code nào xóa/sửa audit; role ứng dụng bị REVOKE UPDATE, DELETE | Quyền DB | T3, T5 | 20 | ✅ ĐẠT |  |
 | B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
@@ -93,7 +93,7 @@ Hôm nay: **17/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | H13 | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | T0 | 4 | ✅ ĐẠT |  |
 | H14 | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | T3 | 3 | ✅ ĐẠT |  |
 | H15 | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | T0 | 4 | ✅ ĐẠT |  |
-| H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 16 | ✅ ĐẠT |  |
+| H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 20 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -114,9 +114,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 33` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 37` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 17` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 13` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -134,14 +134,10 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 |---|---|
 | **A1** | S1 — không có endpoint nào, và không có trường giá nào, trong 001–007. |
 | **A2** | S1 — mã hoá phía trình duyệt (ADR-007) chưa có; `packages/crypto-keys/src/roundtrip.test.ts:31` tự ghi lý do KHÔNG gắn thẻ. |
-| **A3** | S1 — bảng bid chưa tồn tại. |
 | **A4** | S1 — bộ quét rò rỉ đòi OpenAPI và endpoint, cả hai chưa có. |
 | **A5** | S1 — chưa có nhà cung cấp, lời mời, hay ID báo giá. |
 | **A6** | S1 — chưa có báo giá để đếm. |
-| **B1** | S1 — bảng `vendor_bid_versions` chưa tồn tại. |
-| **B2** | S1 — biên nhận nộp thầu đòi RFQ, ciphertext báo giá và chữ ký hệ thống; không thứ nào có ở S0. |
 | **B5** | S1/S6 — job kiểm tra ciphertext định kỳ chưa tồn tại. |
-| **C1** | S1 — `deadline_at` và đường nộp thầu chưa tồn tại. |
 | **C2** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2. |
 | **C3** | S1 — chưa có trạng thái RFQ nào để gác. |
 | **C4** | S1 — chưa có deadline để rút ngắn hay gia hạn. |
@@ -159,6 +155,12 @@ Những mệnh đề viết bằng **phép HỘI** được đánh dấu riêng 
 vì chúng hỏng theo một cách khác: bộ sinh gom theo **nhãn** và **không hề biết** mệnh đề là
 phép hội, nên một test đo **một** vế cũng thắp ✅ cho **cả** mệnh đề. Với những hàng đó, mục
 dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa có chủ ngữ**.
+
+- **A3** — **PHÉP ĐO LÀ MỘT LẦN QUÉT TÌM MỘT CHUỖI ĐÃ BIẾT, KHÔNG PHẢI MỘT ĐỊNH LÝ.** Lớp thật gồm ba phần và chỉ phần thứ ba là một phép đo trên dữ liệu: ⑴ `vendor_bid_versions` KHÔNG có một cột giá nào — bảng không có cột thì không có gì để rò; ⑵ đường ghi DUY NHẤT nhận một `bytea` phong bì và từ chối thứ không đọc được thành phong bì; ⑶ một lần quét `t::text` trên **năm** bảng (ba bảng báo giá cộng `audit_events` và `outbox_jobs`) dưới **superuser** — tức đúng vế *“kể cả bằng role quản trị”* — đòi chuỗi giá không xuất hiện, kèm đối chứng dương chứng minh phép quét biết tìm ra nó. **PHẦN CHÊNH:** vế ⑶ tìm **một chuỗi cụ thể**. Một bản rõ bị cất ở dạng đã biến đổi (nén, base64, đảo byte) sẽ đi lọt, và không lớp nào ở S1 bắt được điều đó. Vế ⑴ và ⑵ mới là phần chịu lực; vế ⑶ là lưới an toàn, không phải bằng chứng.
+
+- **B2** — **MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI:** khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta.
+
+- **C1** — **VẾ *“sau `deadline_at` mọi lần nộp bị từ chối”* ĐÚNG THEO `now()`, KHÔNG THEO ĐỒNG HỒ TƯỜNG.** Trigger `bid_kiem_han_nop` (018) so `now()` — dấu thời gian ĐẦU transaction — với `deadline_at`, và đó là một lựa chọn có lý do: `now()` cũng chính là giá trị `submitted_at DEFAULT now()` ghi xuống và là giá trị đi vào biên nhận đã ký, nên một biên nhận không bao giờ mang dấu thời gian trước hạn cho một lần nộp bị từ chối vì trễ. **PHẦN CHÊNH:** một transaction MỞ trước hạn rồi COMMIT sau hạn **vẫn được nhận**. Chặn nó là việc của `statement_timeout` trên đường nộp, và đường ấy chưa tồn tại (`apps/` rỗng). Cửa sổ ấy bị chặn trên bởi thời gian sống của một transaction, không bởi một hằng số nào của dự án. **PHẦN CHÊNH THỨ HAI:** kịch bản T5 #4 (*nộp 50ms sau hạn qua retry, replay và HTTP/2 multiplexing*) chưa chạy — nó đòi một tầng HTTP.
 
 - **D1** — **MỆNH ĐỀ HỘI BỐN VẾ, VÀ PHÉP HỘI CHƯA TỪNG ĐƯỢC ĐO MỘT LẦN NÀO.** 17 test mang nhãn tách làm ĐÚNG HAI cụm rời nhau, đếm từ chính báo cáo `vitest --reporter=json`: **12** test ở `packages/identity/src/mfa.int.test.ts` chỉ đo vế **(2) MFA còn hiệu lực trong cửa sổ ngắn** qua `assertFreshMfa`; **5** test ở `packages/identity/src/rbac.int.test.ts` chỉ đo vế **(1) quyền hợp lệ** qua `hasPermission`. KHÔNG test nào đo hai vế cùng lúc, và không có một hàm nào hợp hai vế lại. Vế **(3) RFQ đã CLOSED** và vế **(4) cổng chính sách thông qua** KHÔNG CÓ MỘT DÒNG MÃ NÀO: `grep` toàn repo cho `rfqs`, `wrapped_private_key`, `policyGate` cho **0 hit**, và `git ls-files apps/` cho đúng `apps/.gitkeep`. Vế (3) **CHÍNH LÀ hàng `C3`** trong bảng này, và C3 là **⏳ CHƯA PHỦ** — hai hàng cách nhau tám dòng, một hàng ✅, một hàng ⏳, cùng nói về một điều. Cuối cùng, cả hai phép kiểm ĐÃ CÓ đều **chưa có người gọi sản phẩm**: `assertFreshMfa` và `requirePermission` chỉ xuất hiện ở barrel export, ở chú thích, và ở test — toàn bộ đường đời của `sessions` (phát token, tra token, đặt `mfa_verified_at`) chưa tồn tại. Ô ✅ này chứng minh *hai vế được đo RIÊNG RẼ trên hai phép kiểm chưa có ai gọi*; nó **không** chứng minh mệnh đề ở cột kế bên.
 

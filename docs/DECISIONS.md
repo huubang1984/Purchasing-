@@ -478,7 +478,7 @@ là một câu văn — đúng bài học đắt nhất của S0.
 
 ## ADR-011 — Định dạng phong bì và chữ ký biên nhận: ~~**CHƯA CHỐT**~~ **P-256 mặc định, X25519 cơ hội**
 
-**Ngày:** 2026-08-29 · **Cập nhật:** 2026-09-04 · **Trạng thái:** ~~**Đang mở** — chặn **S1.4**, **S1.5**~~ **Đã chấp nhận cho mục 1; mục 2 và 3 còn mở nhưng KHÔNG chặn S1.4** · Liên quan: **B2**, **G2**, **A2**
+**Ngày:** 2026-08-29 · **Cập nhật:** 2026-09-04 · **Trạng thái:** ~~**Đang mở** — chặn **S1.4**, **S1.5**~~ ~~**Đã chấp nhận cho mục 1; mục 2 và 3 còn mở nhưng KHÔNG chặn S1.4**~~ **ĐÃ CHẤP NHẬN TRỌN VẸN — mục 1 chốt 2026-09-04, mục 2 và 3 chốt cùng ngày, gỡ chặn S1.5** · Liên quan: **B2**, **G2**, **A2**
 
 **Vì sao ADR này ra đời ngay cả khi chưa quyết được.** Đây là bài học trực tiếp từ ADR-009: tới
 hết S0, tám ADR đều "Đã chấp nhận" trong khi một quyết định đang thật sự chặn S1.6 — *cái treo là
@@ -551,7 +551,9 @@ sẽ đứng lại. Cái đuôi ấy chính là thứ không đo được từ x
 1. ~~**Thoả thuận khoá: `X25519` hay `ECDH P-256`, hay cả hai.** Chỉ được chốt **sau** khi có kết
    quả đo Zalo/Android. Đây là ràng buộc thứ tự, không phải sở thích.~~ **ĐÃ CHỐT — "cả hai", và
    ràng buộc thứ tự biến mất cùng với thế hoặc/hoặc.**
-2. **Thuật toán chữ ký biên nhận.** B2 đòi nhà cung cấp **kiểm chứng độc lập được**. Điều đó
+2. ~~**Thuật toán chữ ký biên nhận.**~~ **ĐÃ CHỐT 2026-09-04 — `ECDSA P-256` + `SHA-256`. Xem
+   §"Quyết định mục 2 và mục 3" bên dưới.** Nguyên văn cũ giữ lại: B2 đòi nhà cung cấp **kiểm
+   chứng độc lập được**. Điều đó
    loại thẳng một họ giải pháp: **HMAC bằng secret nội bộ KHÔNG thoả B2** — nhà cung cấp không
    kiểm chứng được thứ họ không có khoá. Cần **chữ ký khoá công khai** (Ed25519 là ứng viên đầu),
    khoá công khai của hệ thống phải **công bố được**, và biên nhận phải **tự mô tả**: mang thuật
@@ -571,8 +573,144 @@ sẽ đứng lại. Cái đuôi ấy chính là thứ không đo được từ x
    > là "nhà cung cấp bất kỳ", mà là "nhà cung cấp có người biết chạy công cụ".
    >
    > Câu ⑵ **không sai**, nhưng nó phải được nói ra thay vì đi lẫn vào một lựa chọn kỹ thuật.
-3. **Xoay khoá ký.** Biên nhận có giá trị pháp lý lâu hơn vòng đời một khoá. Cần định danh khoá
+3. ~~**Xoay khoá ký.**~~ **ĐÃ CHỐT 2026-09-04 cùng mục 2 — hai mục KHÔNG tách được: một biên
+   nhận không mang định danh khoá là một biên nhận không kiểm chứng được sau lần xoay đầu tiên.**
+   Nguyên văn cũ: Biên nhận có giá trị pháp lý lâu hơn vòng đời một khoá. Cần định danh khoá
    trong biên nhận và một chỗ công bố các khoá cũ — cùng bài toán G3, khác đối tượng.
+
+### Quyết định mục 2 và mục 3 (2026-09-04): **`ECDSA P-256` + `SHA-256`, biên nhận là VĂN BẢN CHÍNH TẮC, khoá mang định danh**
+
+**Bắt đầu bằng một lập luận đã bị chính phép tra cứu giết chết, vì nó là phần đáng đọc nhất.**
+
+Lượt này suýt chốt mục 2 bằng một câu nghe rất dứt khoát: *"ADR-009 chọn AWS KMS, mà KMS **không**
+ký được Ed25519 — nên chọn Ed25519 nghĩa là đuổi khoá ký ra khỏi HSM."* Câu ấy **sai**. Tài liệu
+AWS KMS (tra 2026-09-04) liệt kê `ECC_NIST_EDWARDS25519` với hai thuật toán `ED25519_SHA_512` và
+`ED25519_PH_SHA_512`. Ed25519 ký được trong KMS, và lập luận ấy bốc hơi.
+
+Ghi lại nguyên văn thay vì lặng lẽ bỏ đi, vì nó là **một lập luận nghe có thẩm quyền, kiểm chứng
+được, và sai** — đúng hình dạng của thứ đi lọt vào một ADR rồi nằm đó nhiều năm. Nếu quyết định
+dưới đây có vẻ hiển nhiên, hãy nhớ nó suýt được chốt bằng một lý do khác hẳn và không đúng.
+
+#### Quyết định
+
+1. **Chữ ký biên nhận là `ECDSA P-256` với `SHA-256`** — mã thuật toán `ECDSA_P256_SHA256`.
+2. **Thứ được ký là một VĂN BẢN CHÍNH TẮC, không phải một đối tượng JSON.** Khối UTF-8 nhiều dòng,
+   thứ tự trường cố định, `\n` thuần, không dấu cách thừa. Dòng đầu là nhãn định dạng.
+3. **Biên nhận TỰ MÔ TẢ và mang `kid`.** Mọi trường được ký nằm trong chính văn bản ấy, kể cả
+   thuật toán và định danh khoá.
+4. **Văn bản chính tắc được LƯU nguyên văn**, không dẫn xuất lại lúc kiểm chứng.
+5. **Khoá công khai công bố theo `kid`, và khoá cũ KHÔNG BAO GIỜ bị gỡ** — cùng cơ chế
+   `MasterKeyRing` (G3) và `PepperRing` (ADR-018), khác đối tượng.
+
+#### Vì sao `ECDSA P-256` chứ không phải `Ed25519`
+
+Câu hỏi thật của mục 2 — ADR này đã tự đặt đúng nó ở bản trước — **không phải "thuật toán nào
+đẹp hơn"** mà là: *chữ "nhà cung cấp" trong "nhà cung cấp kiểm chứng độc lập được" chỉ ai?*
+
+| | `ECDSA P-256` | `Ed25519` |
+|---|---|---|
+| `crypto.subtle.verify` trong trình duyệt nhà cung cấp | **Chrome 37 (2014)**, ~97,26% phủ toàn cầu | **Chrome 137 (2025)** |
+| AWS KMS ký được (ADR-009) | ✅ `ECC_NIST_P256` / `ECDSA_SHA_256` | ✅ `ECC_NIST_EDWARDS25519` |
+| `openssl dgst -verify` | ✅ | ✅ |
+| Chữ ký có tính mềm dẻo (malleable) | **CÓ** — `s` và `n−s` đều hợp lệ | không |
+| Phụ thuộc ngẫu nhiên lúc ký | **CÓ** | không |
+
+**Vế quyết định là vế thứ nhất, và nó không phải một con số phủ sóng — nó là một LỚP NGƯỜI DÙNG
+MỚI.** Đường nộp thầu đã chốt ở mục 1 là `ECDH P-256` mặc định, tức **mọi máy nộp được thầu đều
+có họ P-256**. Chọn `ECDSA P-256` cho chữ ký nghĩa là: *ai nộp được thì kiểm chứng được*, không
+thêm một phép dò nào, không thêm một nhánh nào trong máy dò, không thêm một thông báo lỗi nào.
+
+Chọn `Ed25519` tạo ra một hạng người dùng **chưa từng tồn tại**: *nộp được nhưng không kiểm chứng
+được trong trình duyệt*. Và hạng ấy rơi đúng vào cái đuôi Android cũ mà dự án này lo suốt từ
+ADR-007 — tức đúng những nhà cung cấp cần bằng chứng nhất lại là những người không xem được nó.
+
+**Vế thứ hai, và nó là vế dễ bị coi nhẹ:** giá trị của B2 ở thị trường này là **niềm tin hằng
+ngày**, không phải bằng chứng lúc tranh chấp. Một biên nhận chỉ kiểm chứng được bằng `openssl` là
+một biên nhận **gần như không ai kiểm chứng**; nó lùi về đúng chỗ HMAC đứng — *"họ bảo là đã ký"*.
+Vế "kiểm chứng bằng công cụ chuẩn" vẫn phải giữ, nhưng nó là **đường thứ hai**, không phải đường
+duy nhất.
+
+#### Cái giá phải trả, viết ra thay vì để phát hiện sau
+
+**`ECDSA` cho chữ ký MỀM DẺO: từ một chữ ký hợp lệ `(r, s)` ai cũng dựng được `(r, n−s)` cũng hợp
+lệ, mà không cần khoá riêng.** Hệ quả **duy nhất** nhưng nghiêm trọng:
+
+> **CHUỖI BYTE CHỮ KÝ KHÔNG BAO GIỜ ĐƯỢC DÙNG LÀM ĐỊNH DANH.** Không làm khoá chính, không làm
+> khoá duy nhất, không làm khoá khử trùng lặp, không làm "mã biên nhận". Danh tính của một biên
+> nhận là `sha256(văn bản chính tắc)` — thứ **không** mềm dẻo.
+
+Đây là một ràng buộc phải được **cưỡng chế**, không được nhớ: lược đồ `bid_receipts` vì vậy
+**không có** ràng buộc duy nhất nào trên cột `signature`, và có test đọc `pg_index` để đòi điều đó.
+
+Rủi ro thứ hai — **ngẫu nhiên lúc ký**: một `k` lặp lại làm lộ khoá riêng. Nó được giảm nhẹ bởi
+chính chỗ ký: KMS/HSM ở production (ADR-009) và `node:crypto` ở dev — không phải một thiết bị nhúng
+thiếu entropy. Nó **không** biến mất; nó chỉ nằm ở một nơi có người khác lo.
+
+#### Vì sao VĂN BẢN chứ không phải JSON — và đây là chỗ B2 sống hay chết
+
+Một đối tượng JSON **không có** dạng byte chính tắc: thứ tự khoá, dấu cách, cách thoát Unicode đều
+tự do. Ký một JSON nghĩa là ký *một trong nhiều* chuỗi byte biểu diễn cùng dữ liệu — và bên kiểm
+chứng phải dựng lại **đúng** chuỗi ấy. Điều đó buộc nhà cung cấp phải cài lại bộ mã hoá của chúng
+ta, tức **kiểm chứng phụ thuộc vào mã của bên bị kiểm chứng**. Đó không còn là *độc lập*.
+
+Văn bản chính tắc gỡ bỏ toàn bộ vế ấy. Nhà cung cấp lưu hai tệp và chạy đúng một lệnh:
+
+```bash
+openssl dgst -sha256 -verify khoa-cong-khai.pem -signature bien-nhan.sig bien-nhan.txt
+```
+
+Dạng chuẩn (`v1`), thứ tự trường **cố định**, mỗi dòng `khoa=gia-tri`, kết dòng `\n`:
+
+```text
+trustprocure-receipt-v1
+alg=ECDSA_P256_SHA256
+kid=<định danh khoá ký>
+rfq_id=<uuid>
+bid_id=<uuid>
+version=<số nguyên>
+ciphertext_sha256=<64 ký tự hex thường>
+submitted_at=<dấu thời gian của Postgres, dạng văn bản, đủ micro-giây>
+```
+
+Ba ràng buộc của khuôn này, mỗi cái đóng một đường:
+
+* **Không giá trị nào chứa `\n`.** Mọi trường là hex, UUID, số nguyên, hay dấu thời gian — dựng ra
+  đã không có xuống dòng. Vẫn kiểm lúc chạy: một giá trị lọt được một dòng mới vào là chèn được
+  một trường giả vào văn bản đã ký.
+* **`submitted_at` lấy TỪ POSTGRES DẠNG VĂN BẢN, không đi qua `Date` của JS.** `timestamptz` giữ
+  micro-giây còn `Date` chỉ tới mili-giây — dự án đã ghi cảnh báo ấy trong `AuditEventRecord` từ
+  S0. Một biên nhận cắt bớt ba chữ số cuối là một biên nhận **không khớp** dữ liệu nó chứng nhận.
+* **Cùng một `now()` cho cả phán quyết deadline lẫn `submitted_at`.** Nếu phép kiểm C1 dùng
+  `clock_timestamp()` còn biên nhận dùng `now()`, sẽ có biên nhận mang dấu thời gian **trước**
+  hạn cho một lần nộp bị từ chối vì **trễ** — hai câu trả lời cho một câu hỏi.
+
+#### Xoay khoá ký (mục 3)
+
+Cùng khuôn `MasterKeyRing` và `PepperRing`, và **cùng lý do**: xoay khoá nghĩa là **thêm** một
+phiên bản rồi chuyển `activeKeyId`, **giữ nguyên** các khoá cũ. Bỏ một khoá cũ đi là làm mọi biên
+nhận đã phát trước lần xoay ấy **vĩnh viễn không kiểm chứng được** — mà biên nhận là thứ có giá
+trị pháp lý lâu hơn vòng đời một khoá, đó chính là câu mở đầu của mục 3.
+
+`kid` nằm **trong văn bản đã ký**, nên nó không thay được sau khi ký. Bên kiểm chứng đọc `kid`,
+tra khoá công khai tương ứng ở chỗ công bố, rồi kiểm. Chỗ công bố ấy **chưa tồn tại** — nó là một
+endpoint HTTP và `apps/` vẫn rỗng; S1.5 giao **cấu trúc** (vòng khoá có `kid`, biên nhận mang
+`kid`, hàm kiểm chứng nhận khoá công khai từ ngoài), không giao đường công bố.
+
+#### Đo bằng gì
+
+1. **Kiểm chứng bằng KHOÁ CÔNG KHAI MỘT MÌNH.** Test phải kiểm được chữ ký khi trong tay chỉ có
+   văn bản chính tắc + chữ ký + khoá công khai — **không chạm** vào bất cứ thứ gì chỉ máy chủ có.
+   Không có vế này, B2 bị vi phạm trong im lặng đúng như §"Rủi ro của việc để mở" đã cảnh báo.
+2. **Đối chứng âm ba mũi:** sửa một byte của văn bản · sửa một byte của chữ ký · dùng khoá công
+   khai của một `kid` khác. Cả ba phải **từ chối**.
+3. **Xoay khoá:** phát biên nhận bằng `kid` cũ, xoay sang `kid` mới, biên nhận cũ **vẫn kiểm chứng
+   được**. Đây là G3 ở một đối tượng khác, và nó phải được đo chứ không suy.
+4. **Tính mềm dẻo được ghi nhận, không bị giả vờ là không có:** một test dựng chữ ký `(r, n−s)` từ
+   chữ ký thật và đòi CSDL **không** có ràng buộc duy nhất nào trên `signature` — tức lược đồ không
+   bao giờ coi chuỗi byte ấy là danh tính.
+5. **KHÔNG có phép đo nào cho *"nhà cung cấp thật đã kiểm chứng được"*** ở S1. Trang kiểm chứng là
+   tầng HTTP và `apps/` còn rỗng. Chỗ trống ấy thuộc về S1.9/T5, và nó phải nằm ở §4 của ma trận
+   chứ không được nuốt vào ô ✅ của B2.
 
 ### Rủi ro của việc để mở
 

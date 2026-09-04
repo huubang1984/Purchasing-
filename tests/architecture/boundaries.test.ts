@@ -1422,3 +1422,70 @@ describe("miễn trừ của họ quy tắc g8-", () => {
     expect(laDichHanChe("apps/unseal-worker/src/bat-ky.ts")).toBe(true);
   });
 });
+
+// ==============================================================================================
+// [INV-H16] BIÊN GIỚI MODULE CỦA packages/bidding — HỌ QUY TẮC `g9-`
+// ==============================================================================================
+describe("biên giới module của packages/bidding", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/bidding/src", () => {
+    const probe = "packages/audit/src/zzprobe-bidding-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { createLocalDevReceiptSigner } from "../../bidding/src/signer.js";',
+        "export { createLocalDevReceiptSigner };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/bidding"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-bidding-tuong-doi.ts");
+      expect(output).toContain("g9-bidding-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI trong packages/bidding/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/bidding/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-bidding-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-bidding-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/bidding/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-bidding-moi", "packages/bidding"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g9-bidding-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-bidding-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-bidding-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-bidding-cua/src/dung.ts",
+      [
+        'import { verifyReceipt } from "../../../packages/bidding/src/index.js";',
+        "export { verifyReceipt };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-bidding-cua", "packages/bidding"]);
+      expect(output).not.toContain("g9-bidding-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-bidding-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});

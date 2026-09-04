@@ -55,18 +55,28 @@ export const MA_DUOC_PHEP_CHUA_PHU: ReadonlyMap<string, string> = new Map([
   // --- Nhóm A: toàn bộ bí mật giá. Chủ ngữ là RFQ + phong bì niêm phong, thuộc S1. ---
   ["A1", "S1 — không có endpoint nào, và không có trường giá nào, trong 001–007."],
   ["A2", "S1 — mã hoá phía trình duyệt (ADR-007) chưa có; `packages/crypto-keys/src/roundtrip.test.ts:31` tự ghi lý do KHÔNG gắn thẻ."],
-  ["A3", "S1 — bảng bid chưa tồn tại."],
+  // [S1.5] A3 ĐÃ ĐƯỢC GỠ. Lý do cũ ("bảng bid chưa tồn tại") hết hiệu lực: `vendor_bid_versions`
+  // nay tồn tại, không có một cột giá nào, và giá dạng rõ được QUÉT trên dữ liệu thật ở NĂM bảng
+  // dưới superuser. Mang cờ PHẠM VI HẸP — xem §4.
   ["A4", "S1 — bộ quét rò rỉ đòi OpenAPI và endpoint, cả hai chưa có."],
   ["A5", "S1 — chưa có nhà cung cấp, lời mời, hay ID báo giá."],
   ["A6", "S1 — chưa có báo giá để đếm."],
 
   // --- Nhóm B: hai mã đòi luồng nộp thầu; B5 đòi job định kỳ. ---
-  ["B1", "S1 — bảng `vendor_bid_versions` chưa tồn tại."],
-  ["B2", "S1 — biên nhận nộp thầu đòi RFQ, ciphertext báo giá và chữ ký hệ thống; không thứ nào có ở S0."],
+  // [S1.5] B1 và B2 ĐÃ ĐƯỢC GỠ. Nguyên văn hai lý do cũ, giữ để đối chiếu:
+  //   B1 — "bảng `vendor_bid_versions` chưa tồn tại."
+  //   B2 — "biên nhận nộp thầu đòi RFQ, ciphertext báo giá và chữ ký hệ thống; không thứ nào có ở S0."
+  //
+  // B1 **KHÔNG** mang cờ phạm vi hẹp, và việc đó là một QUYẾT ĐỊNH chứ không phải một lần quên.
+  // Phần chênh duy nhất còn lại của nó là *"một superuser `DISABLE TRIGGER` rồi xoá"* — nhưng đó
+  // là DDL, không phải DML, và nó đúng với MỌI bất biến dựa trên trigger của dự án, kể cả B4 vốn
+  // đã mang ô ✅ từ S0 mà không có ghi chú ấy. Thêm nó vào riêng B1 sẽ là một câu đúng đặt sai
+  // chỗ: nó thuộc về một ghi chú CHUNG về giới hạn của trigger, không thuộc về một hàng.
   ["B5", "S1/S6 — job kiểm tra ciphertext định kỳ chưa tồn tại."],
 
   // --- Nhóm C: thời gian. C2/D4 do Task 10 CỐ Ý bỏ thẻ, kèm phép đo. ---
-  ["C1", "S1 — `deadline_at` và đường nộp thầu chưa tồn tại."],
+  // [S1.5] C1 ĐÃ ĐƯỢC GỠ — `deadline_at` và đường nộp thầu nay đều tồn tại, và phán quyết nằm
+  // trong chính transaction ghi (trigger `bid_kiem_han_nop`, 018). Mang cờ PHẠM VI HẸP — xem §4.
   ["C2", "S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2."],
   ["C3", "S1 — chưa có trạng thái RFQ nào để gác."],
   ["C4", "S1 — chưa có deadline để rút ngắn hay gia hạn."],
@@ -120,6 +130,9 @@ export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
   ["E3", "Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công."],
   ["F1", "RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim."],
   ["G1", "~~**TÀI SẢN ĐƯỢC BẢO VỆ CHƯA TỒN TẠI.**~~ **[S1.4] VẾ ẤY HẾT HIỆU LỰC — và một vế THU HẸP MỚI ra đời cùng lúc, ngược chiều.** Nguyên văn cũ giữ để đối chiếu: *`grep wrapped_private_key` toàn repo cho 0 hit, `git ls-files apps/` cho đúng `apps/.gitkeep`*. Nay `rfq_key_material.wrapped_private_key` là một cột thật có dữ liệu thật, `app_api` GHI được mà KHÔNG ĐỌC được nó (đo được: `SELECT` bị Postgres từ chối, cùng câu ấy dưới `app_unseal` chạy), và một lượt đột biến cấp thêm đúng cột ấy cho `app_api` chứng minh quyền cột LÀ thứ đang chặn. **PHẦN CHÊNH MỚI, do ADR-019 tạo ra và không được nuốt vào ô ✅:** tiến trình `api` **CÓ** chạm khoá riêng RFQ dạng rõ, trong cửa sổ thời gian của đúng hàm `issueRfqKeyPair`. `fill(0)` xoá được chuỗi byte PKCS8 tự xuất ra; nó KHÔNG xoá được phần khoá bên trong đối tượng `CryptoKey` của runtime. Vế *“không vào core dump”* của mệnh đề vì vậy **không đúng tuyệt đối** kể từ S1.4, và điều kiện xét lại có mốc: khi `apps/unseal-worker` ra đời ở S1.6. Khoảng trống thứ hai, ĐỘC LẬP và VẪN NGUYÊN: bốn gói (`audit`, `tenancy`, `db`, `test-support`) CHƯA có danh sách trắng barrel."],
+  ["A3", "**PHÉP ĐO LÀ MỘT LẦN QUÉT TÌM MỘT CHUỖI ĐÃ BIẾT, KHÔNG PHẢI MỘT ĐỊNH LÝ.** Lớp thật gồm ba phần và chỉ phần thứ ba là một phép đo trên dữ liệu: ⑴ `vendor_bid_versions` KHÔNG có một cột giá nào — bảng không có cột thì không có gì để rò; ⑵ đường ghi DUY NHẤT nhận một `bytea` phong bì và từ chối thứ không đọc được thành phong bì; ⑶ một lần quét `t::text` trên **năm** bảng (ba bảng báo giá cộng `audit_events` và `outbox_jobs`) dưới **superuser** — tức đúng vế *“kể cả bằng role quản trị”* — đòi chuỗi giá không xuất hiện, kèm đối chứng dương chứng minh phép quét biết tìm ra nó. **PHẦN CHÊNH:** vế ⑶ tìm **một chuỗi cụ thể**. Một bản rõ bị cất ở dạng đã biến đổi (nén, base64, đảo byte) sẽ đi lọt, và không lớp nào ở S1 bắt được điều đó. Vế ⑴ và ⑵ mới là phần chịu lực; vế ⑶ là lưới an toàn, không phải bằng chứng."],
+  ["B2", "**MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI:** khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta."],
+  ["C1", "**VẾ *“sau `deadline_at` mọi lần nộp bị từ chối”* ĐÚNG THEO `now()`, KHÔNG THEO ĐỒNG HỒ TƯỜNG.** Trigger `bid_kiem_han_nop` (018) so `now()` — dấu thời gian ĐẦU transaction — với `deadline_at`, và đó là một lựa chọn có lý do: `now()` cũng chính là giá trị `submitted_at DEFAULT now()` ghi xuống và là giá trị đi vào biên nhận đã ký, nên một biên nhận không bao giờ mang dấu thời gian trước hạn cho một lần nộp bị từ chối vì trễ. **PHẦN CHÊNH:** một transaction MỞ trước hạn rồi COMMIT sau hạn **vẫn được nhận**. Chặn nó là việc của `statement_timeout` trên đường nộp, và đường ấy chưa tồn tại (`apps/` rỗng). Cửa sổ ấy bị chặn trên bởi thời gian sống của một transaction, không bởi một hằng số nào của dự án. **PHẦN CHÊNH THỨ HAI:** kịch bản T5 #4 (*nộp 50ms sau hạn qua retry, replay và HTTP/2 multiplexing*) chưa chạy — nó đòi một tầng HTTP."],
   ["G2", "**MỆNH ĐỀ NÓI “MỘT CẶP KHOÁ”, HIỆN THỰC CHO HAI — và vế chịu lực là vế thứ hai.** ADR-011 chốt *P-256 mặc định, X25519 cơ hội*, mà ECDH đòi hai bên cùng đường cong, nên một RFQ mang một cặp khoá CHO MỖI thuật toán (`UNIQUE (org_id, rfq_id, algorithm)`). Vế *“lộ một RFQ không lan sang RFQ khác”* thì nguyên vẹn và được đo ba mũi: khoá riêng của A không mở được phong bì của B; ĐÚNG khoá riêng nhưng SAI mã RFQ cũng không mở được (`rfqId` nằm trong INFO của HKDF, nên ràng buộc là MẬT MÃ chứ không phải một câu `if`); và hai lần niêm phong cùng một bản rõ cho hai phong bì khác nhau. **PHẦN CHÊNH:** vẫn còn một TỔ TIÊN CHUNG mà mệnh đề không nói tới — cả hai khoá riêng được bọc bằng khoá dẫn xuất THEO TỔ CHỨC (`deriveOrgKey`), nên mất khoá gốc của tổ chức là mất mọi RFQ của tổ chức ấy. Đó là địa hạt của G1 và F3, không phải của G2; ghi ở đây để không ai đọc ô ✅ thành *“mỗi RFQ là một ốc đảo”*. **PHẦN CHÊNH THỨ HAI, do ADR-011 §“Đo bằng gì” mục 4 ĐẶT TÊN TRƯỚC và đòi phải nằm đúng ở đây:** không có phép đo nào ở S1 trả lời *“bao nhiêu %% nhà cung cấp đi được đường nhanh X25519”*. Bộ test chạy trên **Node** — và đã đo được rằng Node 22 lẫn Node 24 đều có đủ cả ba thuật toán trong `crypto.subtle` (2026-09-04), nên một lượt CI xanh cho nhánh X25519 nói về Node, KHÔNG nói gì về webview Android. Câu hỏi ấy chỉ trả lời được bằng dữ liệu vận hành thật sau khi có người dùng thật; nó thuộc S2+, và khoản nợ 23 vẫn mở."],
   ["G4", "**MỆNH ĐỀ LIỆT KÊ BỐN THAO TÁC; S1.4 CÓ BA, VÀ CHỈ ĐO ĐƯỢC BA.** *Sinh* và *bọc* là MỘT hành vi không tách được ở thiết kế của ADR-019 (bản rõ không tồn tại ngoài một hàm), nên chúng là MỘT bản ghi `RFQ_KEY_MATERIAL_ISSUED` — ghi ra thay vì để người đọc đếm bốn action và tìm không thấy. *Huỷ* là `RFQ_KEY_MATERIAL_REVOKED`. **VẾ *MỞ BỌC* KHÔNG CÓ MỘT DÒNG MÃ NÀO**: nó sống trong `apps/unseal-worker`, thứ chưa tồn tại (S1.6) — và đó là vế mà một kiểm toán viên hỏi tới ĐẦU TIÊN, vì nó là lần duy nhất một khoá riêng thật sự được dùng. **PHẦN CHÊNH THỨ HAI:** *huỷ* ở S1 chỉ có ĐÚNG MỘT nguyên nhân được hỗ trợ — RFQ bị huỷ. Thu hồi vì một sự cố an ninh trong khi RFQ đang mở không phải đường đi được hỗ trợ, và thu hồi là một DẤU chứ không phải một lần xoá mật mã: `wrapped_private_key` vẫn nằm nguyên trong hàng."],
 ]);
@@ -138,11 +151,14 @@ export const PHAM_VI_HEP: ReadonlyMap<string, string> = new Map([
  * mà không máy nào phán xử hộ được.
  */
 export const MA_PHAI_CO_CO_HEP: ReadonlySet<string> = new Set([
-  "D1", "D5", "E1", "E2", "E3", "E5", "F1", "G1",
+  "A3", "B2", "C1", "D1", "D5", "E1", "E2", "E3", "E5", "F1", "G1",
   // [S1.4] Hai mã MỚI, và cả hai vào đây CÙNG LÚC với ô ✅ của chúng — không phải sau một vòng
   // review. G2 vì mệnh đề nói "một cặp khoá" trong khi hiện thực cho hai; G4 vì mệnh đề liệt kê
   // bốn thao tác trong khi S1.4 chỉ có ba.
   "G2", "G4",
+  // [S1.5] BA mã mới nữa: A3 (phép quét tìm một chuỗi đã biết, không phải một định lý), B2 (chữ
+  // "nhà cung cấp" chưa xuất hiện trong phép đo nào), C1 (`now()` là đầu transaction, không phải
+  // đồng hồ tường). B1 CỐ Ý không ở đây — xem lý do tại chỗ nó được gỡ khỏi danh sách trên.
 ]);
 
 /**
@@ -213,7 +229,13 @@ export interface MocGhim {
 // menh de deu doi (`rfq_key_material`), dung nhu §1 cua ke hoach S1 da anh xa tu truoc.
 // KHONG ma HANG RAO moi nao: H16 (S1.2) da phu san goi thu bay, dung nhu no duoc dung ra de lam.
 // HAI trong ba ma moi mang co PHAM_VI_HEP ngay tu dau — xem MA_PHAI_CO_CO_HEP.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 33, coDanhSachToiDa: 17 };
+// [S1.5] 33 -> 37, danh sach 17 -> 13. BON ma nghiep vu: A3, B1, B2, C1 — nen con so nghiep vu di
+// 17 -> 21 va nhom hang rao dung yen 16/16. KHONG ma HANG RAO moi nao: H16 (S1.2) da phu san goi
+// thu tam, va do la lan thu BA no lam dung viec no duoc dung ra de lam.
+// BA trong bon ma moi mang co PHAM_VI_HEP ngay tu dau. Ty le ay (3/4) khong phai dau hieu xau: no
+// la dau hieu cua nhung menh de RONG — B2 noi ve mot con nguoi that, C1 noi ve thoi gian, A3 noi
+// ve "moi truy van SQL". Ma tran ghi ra phan chenh thay vi thu hep menh de cho vua phep do.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 37, coDanhSachToiDa: 13 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —
