@@ -185,6 +185,21 @@ export async function issueRfqKeyPair(
  *
  * `wrapped_private_key` không có trong câu SELECT, và nó cũng không thể có: `app_api` KHÔNG được
  * cấp quyền đọc cột ấy (017). Hai lớp nói cùng một điều, và lớp có thẩm quyền là lớp của Postgres.
+ *
+ * *** CẢNH BÁO CHO S1.5, GHI RA TRƯỚC KHI NÓ THÀNH MỘT LỖI ***
+ *
+ * Hàm này trả về CẢ khoá ĐÃ THU HỒI, kèm `revokedAt`. Đó là chủ đích — nó là một hàm BÁO TRẠNG
+ * THÁI, và một hàm lặng lẽ giấu bớt hàng sẽ để người đọc tự hỏi vì sao một khoá biến mất. Nhưng
+ * hệ quả là **đường nộp thầu KHÔNG được dùng thẳng kết quả này để chọn khoá niêm phong**: chọn
+ * nhầm một khoá đã thu hồi là niêm phong một báo giá cho một RFQ đã chết.
+ *
+ * Hôm nay rủi ro ấy bị chặn bởi một tính chất KHÁC, không phải bởi hàm này: thu hồi chỉ xảy ra
+ * khi RFQ đã `CANCELLED` (017 khối 4), và một RFQ đã huỷ thì không nhận báo giá. Đó là một lớp
+ * THẬT, nhưng nó là lớp GIÁN TIẾP — nó đúng nhờ một ràng buộc ở chỗ khác, và ràng buộc ấy có thể
+ * được nới ra ngày nào đó (xem khoản nợ 26: thu hồi vì sự cố an ninh chưa được hỗ trợ ở S1).
+ *
+ * Vì vậy S1.5 phải có một hàm chọn khoá RIÊNG, chỉ trả khoá còn hiệu lực. Hàm ấy **cố ý chưa tồn
+ * tại**: viết nó bây giờ, khi chưa có đường nộp thầu để gọi, là dựng một lớp không ai đo được.
  */
 export async function getRfqPublicKeys(
   client: pg.PoolClient,
