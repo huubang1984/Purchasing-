@@ -15,5 +15,13 @@
     "@trustprocure/tenancy": "workspace:*",
     "@trustprocure/test-support": "workspace:*",
     "pg": "^8.13.0"
+  },
+  "//": "devDependencies la CUA TEST, khong cua runtime. Kich ban muc 41 (S1.9) phai song trong thu muc nay vi quy tac g1-khong-import-nguoc-tu-apps-unseal-worker cam moi module ben ngoai import executeUnsealRequest — nen no keo theo ca chuoi nghiep vu vao day. Ma CHAY cua worker khong cham mot goi nao duoi day.",
+  "devDependencies": {
+    "@trustprocure/bidding": "workspace:*",
+    "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/rfq": "workspace:*",
+    "@trustprocure/supplier": "workspace:*",
+    "@trustprocure/unseal": "workspace:*"
   }
 }

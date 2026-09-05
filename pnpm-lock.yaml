@@ -56,6 +56,22 @@ importers:
       pg:
         specifier: ^8.13.0
         version: 8.23.0
+    devDependencies:
+      '@trustprocure/bidding':
+        specifier: workspace:*
+        version: link:../../packages/bidding
+      '@trustprocure/invitation':
+        specifier: workspace:*
+        version: link:../../packages/invitation
+      '@trustprocure/rfq':
+        specifier: workspace:*
+        version: link:../../packages/rfq
+      '@trustprocure/supplier':
+        specifier: workspace:*
+        version: link:../../packages/supplier
+      '@trustprocure/unseal':
+        specifier: workspace:*
+        version: link:../../packages/unseal
 
   packages/audit:
     dependencies:
