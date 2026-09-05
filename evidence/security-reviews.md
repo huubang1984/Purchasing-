@@ -272,10 +272,10 @@ viết ra ở đây để lượt review không tốn thời gian tìm lại, v�
 
 | Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
 |---|---|---|---|---|---|
-| **S1.3** ⭐ | Lời mời, magic link, OTP, phiên khách (RE-review sau vòng sửa đầu) | `388bd86` | Reviewer **không có Bash/CSDL** — tự khai; mọi kết luận là đọc mã | **1 HIGH + 5 MEDIUM + 6 LOW** (`HIGH-1`: ADR-015 mục 1 so NHÃN kênh, mà `SMS` và `ZALO_ZNS` cùng đọc `supplier_contacts.phone` ⇒ hai yếu tố tới cùng một máy) | `f0f4ea3` |
-| **S1.4** ⭐ | Phong bì niêm phong, vòng đời khoá RFQ, WebCrypto phía NCC | `388bd86` | như trên | **2 HIGH + 2 MEDIUM + 5 LOW** (`HIGH-1`: worker ghim `algorithm = 'ECDH_P256'` trong khi `chooseKeyAgreementAlgorithm` **ưu tiên X25519** ⇒ báo giá có biên nhận đã ký bị bỏ trong im lặng) | `f0f4ea3` |
-| **S1.6** ⭐ | Cổng chính sách bốn vế, phê duyệt kép, worker, giải mã | `388bd86` | như trên | **3 HIGH + 5 MEDIUM + 4 LOW** (`HIGH-1`: một byte `U+0000` trong bản rõ của MỘT nhà cung cấp làm cả lượt mở thầu rollback vĩnh viễn; `HIGH-2a`: break-glass tới `APPROVED` với KHÔNG nhân chứng nào; `HIGH-3`: một câu SAI về GRANT đang che một lớp có thật) | `f0f4ea3` |
-| **S1.7 + S1.8** ⭐ | Bảng so sánh, số báo giá, job toàn vẹn B5, bộ đối kháng T5 | `388bd86` | như trên | **1 HIGH + 5 MEDIUM + 2 LOW** (`HIGH-1`: `extendRfqDeadline` HỒI SINH được một cửa sổ thầu đã hết — cạnh `CLOSED -> OPEN` mà máy trạng thái cố ý không có, đạt được bằng một đường khác) | `f0f4ea3` |
+| **S1.3** ⭐ | Lời mời, magic link, OTP, phiên khách (RE-review sau vòng sửa đầu) | `388bd86` | Reviewer **không có Bash/CSDL** — tự khai; mọi kết luận là đọc mã | **1 HIGH + 5 MEDIUM + 6 LOW** (`HIGH-1`: ADR-015 mục 1 so NHÃN kênh, mà `SMS` và `ZALO_ZNS` cùng đọc `supplier_contacts.phone` ⇒ hai yếu tố tới cùng một máy) | `0f30b16` |
+| **S1.4** ⭐ | Phong bì niêm phong, vòng đời khoá RFQ, WebCrypto phía NCC | `388bd86` | như trên | **2 HIGH + 2 MEDIUM + 5 LOW** (`HIGH-1`: worker ghim `algorithm = 'ECDH_P256'` trong khi `chooseKeyAgreementAlgorithm` **ưu tiên X25519** ⇒ báo giá có biên nhận đã ký bị bỏ trong im lặng) | `0f30b16` |
+| **S1.6** ⭐ | Cổng chính sách bốn vế, phê duyệt kép, worker, giải mã | `388bd86` | như trên | **3 HIGH + 5 MEDIUM + 4 LOW** (`HIGH-1`: một byte `U+0000` trong bản rõ của MỘT nhà cung cấp làm cả lượt mở thầu rollback vĩnh viễn; `HIGH-2a`: break-glass tới `APPROVED` với KHÔNG nhân chứng nào; `HIGH-3`: một câu SAI về GRANT đang che một lớp có thật) | `0f30b16` |
+| **S1.7 + S1.8** ⭐ | Bảng so sánh, số báo giá, job toàn vẹn B5, bộ đối kháng T5 | `388bd86` | như trên | **1 HIGH + 5 MEDIUM + 2 LOW** (`HIGH-1`: `extendRfqDeadline` HỒI SINH được một cửa sổ thầu đã hết — cạnh `CLOSED -> OPEN` mà máy trạng thái cố ý không có, đạt được bằng một đường khác) | `0f30b16` |
 
 ## Ghi chú
 

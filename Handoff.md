@@ -372,3 +372,29 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 - **`.sql`, chú thích, tên test và `evidence/INV-matrix.md` là BẰNG CHỨNG KIỂM TOÁN.** Một câu
   phát biểu rộng hơn thứ được đo là **một khiếm khuyết thật**. Trong S0 đã có **19 câu như vậy
   bị bắt và hạ xuống đúng mức** — và quy ước là **gạch bỏ tại chỗ, giữ nguyên văn**, không xoá.
+
+---
+
+## 15. [2026-09-05] S1 ĐÃ ĐI HẾT CHÍN HẠNG MỤC — và người tiếp theo phải đọc bốn dòng này trước
+
+1. **Bốn lượt `security-reviewer` đã chạy và tìm ra BẢY mức HIGH; cả bảy đã đóng bằng mã**
+   (`db/migrations/022_security_review_s1.sql` cộng bảy file). Bảng ở
+   `evidence/security-reviews.md`. **Đừng đọc bảng ấy như một chứng chỉ**: cả bốn reviewer
+   không có Bash và không có CSDL — họ đọc mã, không đo. Mã MEDIUM/LOW chưa đóng nằm ở sổ nợ
+   `docs/STATE.md` khoản **31–37**, và khoản **31** là khoản nặng nhất còn mở.
+
+2. **Một câu SAI do chính dự án viết đã đứng ở BA chỗ và biện minh cho việc bỏ một lớp.**
+   *"`app_unseal` cố ý không đọc được `users`"* — `006:232` và `006:305` nói ngược lại, và 006
+   ghi rõ là cấp *"vì bất biến D1"*. Ba bản sao nay bị gạch bỏ tại chỗ. Bài học có thể tái dùng:
+   **một câu nói về GRANT phải được đối chiếu với chính file migration, không với trí nhớ** —
+   và một câu sai được chép ba lần thì khó bắt hơn một câu sai đứng một mình.
+
+3. **Ba mã bất biến còn trống, và cả ba trống vì KIẾN TRÚC:** `A2` (đòi một tiến trình `api`
+   đang chạy để gắn APM vào), `A5` (đòi role `app_guest` — nợ 29), `E6` (đòi một URL). Không mã
+   nào trống vì thiếu thời gian, và §3 của ma trận nói ra từng lý do.
+
+4. **Hai thứ CHƯA CÓ NGƯỜI TIÊU THỤ, và cả hai là ý định chứ chưa là hành động:**
+   `BREAK_GLASS_UNSEAL_ALERT` (nợ 34) và `RFQ_DEADLINE_EXTENDED_NOTICE`. Một job không có
+   handler bị `JobRunner` ghi thẳng `FAILED` **trong im lặng** — nên phải nối handler TRƯỚC khi
+   đường break-glass được dùng thật, không phải sau.
+

@@ -204,6 +204,14 @@ DRAFT ──► PENDING_APPROVAL ──► OPEN ──► CLOSED ──► UNSEA
 | `CLOSED → UNSEALED` | Chỉ qua `unseal-worker` sau khi cổng chính sách thông qua |
 | `CLOSED → OPEN` | **Không tồn tại**, và từ 2026-08-29 đây **không còn là một câu văn**: `009_rfq.sql` biến nó thành một `RAISE EXCEPTION` trong `rfq_kiem_chuyen_trang_thai()`, đo bằng `UPDATE` trực tiếp qua `app_api` (bị chặn) cộng một lượt gỡ trigger (cùng câu ấy ĐI LỌT) |
 
+> **[2026-09-05, review an ninh S1.7] Cạnh ấy đã được đạt tới MỘT LẦN bằng một đường khác, và
+> điều đó đáng ghi hơn bản vá.** Vì job đóng RFQ chưa được viết, mọi RFQ quá hạn đều nằm ở
+> `OPEN`; ở đó `extendRfqDeadline` đẩy hạn ra tương lai được, và cửa thầu mở lại — cho cả người
+> đã nộp lẫn người lỡ hạn — mà **không chạm `status`**, không qua phê duyệt kép, và với một quyết
+> định ĐÃ BIẾT có bao nhiêu báo giá trong tay. Bài học: một cạnh bị cấm ở BẢNG CẠNH vẫn có thể
+> đạt được qua một cột KHÁC mà bảng cạnh không nhìn. `022_security_review_s1.sql` chặn nó bằng
+> một trigger riêng: không gia hạn được một cửa sổ đã hết, và hạn mới phải nằm ở tương lai.
+
 **Cưỡng chế ở đâu (ADR-014).** CSDL giữ bốn thứ: `CHECK` trên tập trạng thái, trigger cấm mọi
 cạnh ngoài bảng cạnh hợp lệ, trigger cấm rút ngắn `deadline_at` khi đã có báo giá (C4), và phán
 quyết deadline **trong chính transaction ghi báo giá** (C1, và nó là thứ làm C2 đúng). Ứng dụng
