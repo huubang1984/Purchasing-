@@ -1,0 +1,14 @@
+{
+  "name": "@trustprocure/public-keys",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "//": "[khoan no 30] App CHI DOC. Khong phu thuoc `pg`, khong cham CSDL, khong co duong ghi nao — mot dich vu cong bo khoa CONG KHAI khong can biet mot hang du lieu nao. Danh sach phu thuoc ngan la mot bao dam, khong phai mot su thieu sot.",
+  "dependencies": {
+    "@trustprocure/bidding": "workspace:*"
+  }
+}

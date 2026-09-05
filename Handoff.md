@@ -11,8 +11,12 @@
 
 ## 1. Một câu
 
-**Dự án đang ở cuối giai đoạn S0 (Nền móng). Mã đã viết xong, đã xanh trên CI, và đang nằm ở
-một PR CHƯA MERGE. S1 (Sealed Bid Core) chưa bắt đầu một dòng nào.**
+~~**Dự án đang ở cuối giai đoạn S0 (Nền móng). Mã đã viết xong, đã xanh trên CI, và đang nằm ở
+một PR CHƯA MERGE. S1 (Sealed Bid Core) chưa bắt đầu một dòng nào.**~~
+
+**Cập nhật 2026-08-29 · S0 ĐÃ HỢP NHẤT VÀO `master` (merge commit `30d1972`). S1 đã có KẾ HOẠCH
+ĐẦY ĐỦ nhưng chưa viết một dòng mã nào.** Ba quyết định đã chốt trong lượt này (AWS + AWS KMS
+qua ADR-009, và cách merge); ba ADR mới được nêu tên và còn treo (010, 011, 012).
 
 TrustProcure là sàn đấu thầu kín (sealed-bid procurement): nhà cung cấp nộp báo giá được mã
 hoá, không ai — kể cả nhân viên mua hàng — xem được giá trước giờ mở thầu. S0 dựng **nền tảng
@@ -24,12 +28,13 @@ và mặt phẳng điều khiển** cho việc đó, chưa dựng chính luồng
 
 | | |
 |---|---|
-| Nhánh | `worktree-s0-foundation` |
-| HEAD | `c4fde9c` (2026-08-29) |
+| Nhánh | ~~`worktree-s0-foundation`~~ → **đã hợp nhất**; công việc mới đi từ `master` |
+| HEAD của `master` | **`30d1972`** (merge commit, 2026-08-29) — 49 commit |
 | Nhánh gốc | `master` |
-| Số commit trên nhánh | **45** |
-| Thay đổi so với `master` | 105 file, +36 375 / −88 |
-| Pull request | [#1](https://github.com/huubang1984/Purchasing-/pull/1) — **OPEN**, `MERGEABLE`, **chưa merge** |
+| Số commit trên nhánh S0 | **46** (giữ nguyên trong lịch sử, **không** squash) |
+| Thay đổi so với `master` trước merge | 105 file, +36 375 / −88 |
+| Pull request (S1) | [#2](https://github.com/huubang1984/Purchasing-/pull/2) — **MỞ**, 15 commit, XANH cả bốn job ở run `33704750680`. Tiêu đề và mô tả đã được viết lại 2026-09-03: bản cũ nói "kế hoạch S1" trong khi PR chứa trọn S1.1–S1.3, sáu ADR và chín migration |
+| Pull request | [#1](https://github.com/huubang1984/Purchasing-/pull/1) — **MERGED** 2026-08-29, merge commit `30d1972`. Nhánh `worktree-s0-foundation` **không xoá** |
 | Kho | `https://github.com/huubang1984/Purchasing-` |
 | Thư mục làm việc | `D:\Claude\TrustProcure\.claude\worktrees\s0-foundation` (git worktree, **cố ý giữ lại**) |
 
@@ -40,8 +45,10 @@ và mặt phẳng điều khiển** cho việc đó, chưa dựng chính luồng
 | `33218397033` | `5e76a7f` | **ĐỎ cả ba job**, `evidence` bị bỏ qua |
 | `33221142361` | `885e58f` | **XANH cả bốn job** |
 | `33221919239` | `c4fde9c` | **XANH cả bốn job** |
+| `33230092811` | `5b72143` | **XANH cả bốn job** |
 
-Hai lượt xanh liên tiếp. Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự án — xem §7.
+~~Hai lượt xanh liên tiếp.~~ **Ba lượt xanh liên tiếp** — lượt thứ ba là điều kiện để merge.
+Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự án — xem §7.
 
 ---
 
@@ -124,7 +131,9 @@ identity, `g3-` identity-không-có-năng-lực-mật-mã, `g4-` outbox), tất 
     mệnh đề đã được phủ trọn vẹn. §4 của ma trận nói rõ hẹp ở đâu.
   - Cổng evidence **đỏ theo cả hai chiều**: một mã tụt về "chưa phủ" không đi lọt được bằng
     cách thêm nó vào danh sách miễn trừ, và một mã đã phủ mà còn nằm trong danh sách cũng đỏ.
-- **Chưa triển khai.** Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS.
+- **Chưa triển khai.** ~~Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS.~~ Hạ tầng và KMS
+  **đã chốt** (AWS, AWS KMS `ap-southeast-1` — ADR-009), nhưng **chưa có tài khoản, chưa có CMK,
+  chưa có role nào được tạo**. Chốt trên giấy không phải triển khai.
 - **Chưa có khách hàng pilot.**
 
 ---
@@ -168,12 +177,42 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 ## 9. Điểm chặn và quyết định treo
 
 1. **Chưa có khách hàng pilot** — rủi ro xây đúng thứ theo sai thứ tự, lớn hơn mọi rủi ro kỹ thuật.
-2. **Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`; **chọn nhà cung cấp KMS**
+2. ~~**Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`; **chọn nhà cung cấp KMS**
    (**ADR-009**, trạng thái *Đang mở*, giữa AWS KMS / Azure Key Vault / HashiCorp Vault);
-   chọn hạ tầng triển khai. **KMS và hạ tầng KHÔNG độc lập** — ADR-006 (tách quyền giải mã)
-   chỉ cưỡng chế được bằng IAM của hạ tầng đích. **KMS phải chốt trước S1.6.**
-3. **`crypto.subtle` trong webview Zalo/Messenger chưa có một phép đo nào** — rủi ro sản phẩm
-   CAO, vì mã hoá lai được thực hiện phía trình duyệt nhà cung cấp.
+   chọn hạ tầng triển khai.~~ **KMS và hạ tầng KHÔNG độc lập** — ADR-006 (tách quyền giải mã)
+   chỉ cưỡng chế được bằng IAM của hạ tầng đích. ~~**KMS phải chốt trước S1.6.**~~
+
+   **Đã chốt 2026-08-29 (ADR-009): AWS KMS, `ap-southeast-1`, theo mô hình envelope encryption.**
+   Còn treo **một** quyết định: xử lý thư mục `Vibe Coding/`. Trục hiệu năng — thứ ADR-009 bản
+   đầu nêu như một trục chặn — **đã được đo và đã đóng**: một lượt mở thầu tốn **đúng 1 lời gọi
+   KMS**, không phụ thuộc số nhà cung cấp (`tools/bench-kms/dem-loi-goi-kms.mjs`). Trong lúc đo,
+   một câu của chính ADR-009 bị chứng minh là sai và đã bị gạch bỏ tại chỗ, giữ nguyên văn.
+3. ~~**`crypto.subtle` trong webview Zalo/Messenger chưa có một phép đo nào**~~ — rủi ro sản phẩm
+   CAO, vì mã hoá được thực hiện phía trình duyệt nhà cung cấp.
+
+   **Cập nhật 2026-08-29 — ĐÃ CÓ PHÉP ĐO TRÊN WEBVIEW THẬT.** `tools/do-webcrypto/` (máy dò đã
+   chứng minh có răng bằng ba đột biến) chạy trong **Zalo iOS, WKWebView, iOS 18.7**: **ĐẠT
+   toàn bộ, kể cả X25519.** Giả thuyết xấu nhất — *"webview Zalo không có `crypto.subtle`, toàn
+   bộ đường nộp thầu của thị trường VN gãy"* — **đã bị bác trên đường iOS**.
+
+   **Rủi ro hẹp lại, nhưng CHƯA ĐÓNG**, và hai lý do đều cụ thể: **(a)** toàn bộ phía **Android
+   còn trống** — Android System WebView cập nhật rời qua Play Store và trên máy tầm trung cũ hay
+   tụt lại nhiều phiên bản; **(b)** kết quả iOS chỉ đúng cho **iOS 18.7**, không cho iPhone chạy
+   iOS cũ. Chưa được ghi ở đâu rằng *"đã đo trên webview Zalo"* mà không kèm hai chữ **iOS 18.7**.
+
+   Phép đo này còn sửa một lỗi phân loại trong chính tài liệu trước đó: trục đúng là **engine**,
+   không phải tên ứng dụng. Trên iOS, Zalo và Messenger mượn **cùng một `WKWebView`** — nên một
+   phép đo phủ cả hai, và hai ô đó chưa bao giờ độc lập. Nhật ký: `tools/do-webcrypto/ket-qua-do.md`.
+
+   **HOÃN CÓ CHỦ ĐÍCH 2026-08-29** (khoản nợ 23): không có máy Android tầm trung/cũ và không có
+   iPhone iOS cũ trong tay, nên phần còn lại được **chấp nhận tạm** để đi tiếp S1. Hoãn này
+   **không chặn** S1.1–S1.3 (~10 ngày công), nhưng **chặn việc CHỐT ADR-011** ở S1.4 — trước
+   mốc đó đổi thoả thuận khoá là sửa một ADR, sau mốc đó là một cuộc di trú.
+
+   **Giảm nhẹ đã ghim, và đây là phần làm việc hoãn trở nên rẻ:** ADR-011 buộc phong bì **mang
+   một mã thuật toán thoả thuận khoá tường minh**, cùng khuôn với `ENVELOPE_VERSION` đã có. Nếu
+   Android hoá ra thiếu `X25519`, việc phải làm là **thêm một nhánh P-256** và phong bì cũ vẫn
+   mở được — đúng cơ chế `MasterKeyRing` dùng để sống sót qua các lần xoay khoá (G3).
 
 ---
 
@@ -201,15 +240,82 @@ nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay 
 
 ## 11. Việc kế tiếp
 
-1. **Quyết định merge PR #1.** Nhánh xanh, `MERGEABLE`, chưa merge. Worktree đang được **giữ
-   lại có chủ đích** để sửa phản hồi review.
-2. **Lập kế hoạch S1 (Sealed Bid Core).** **23 mã chưa phủ ở §3 của `evidence/INV-matrix.md`
-   chính là danh sách công việc S1 đã sắp sẵn** — mỗi mã một lý do, và mỗi lý do là một hạng mục.
-3. **Chốt ba quyết định treo** — KMS trước S1.6.
-4. **Đo `crypto.subtle` trong webview Zalo/Messenger.**
-5. **Tiếp cận khách hàng pilot** song song với S1.
+> **Bốn việc đầu đã được xử lý ngày 2026-08-29. Giữ nguyên văn, đánh dấu tại chỗ.**
+
+1. ~~**Quyết định merge PR #1.** Nhánh xanh, `MERGEABLE`, chưa merge.~~ **ĐÃ MERGE** —
+   merge commit `30d1972`, giữ nguyên 46 commit (**không** squash: `evidence/security-reviews.md`
+   trỏ tới từng SHA, squash sẽ làm mọi con trỏ đó chết). Nhánh `worktree-s0-foundation`
+   **không xoá**; worktree vẫn được giữ lại có chủ đích.
+2. ~~**Lập kế hoạch S1 (Sealed Bid Core).**~~ **XONG** —
+   `docs/superpowers/plans/2026-08-29-s1-sealed-bid-core.md`, 10 mục.
+3. ~~**Chốt ba quyết định treo** — KMS trước S1.6.~~ **XONG HAI TRONG BA** — AWS + AWS KMS
+   `ap-southeast-1` (ADR-009). Còn treo: xử lý thư mục `Vibe Coding/`.
+4. ~~**Đo `crypto.subtle` trong webview Zalo/Messenger.**~~ **CÔNG CỤ XONG, PHÉP ĐO CHƯA** —
+   `tools/do-webcrypto/`. Rủi ro **vẫn CAO và vẫn mở** cho tới khi có kết quả từ điện thoại thật.
+5. **Tiếp cận khách hàng pilot** song song với S1. — **chưa làm**, và vẫn là rủi ro lớn nhất.
 6. Hai việc cấu hình nhỏ, không chặn: **tạo team `@trustprocure/bao-mat`** trên GitHub để
    CODEOWNERS có răng; cân nhắc **thêm `windows-latest`** vào ma trận job T1+T2 (khoản nợ 20).
+7. ~~**Mới:** chốt **ADR-010** trước S1.6, **ADR-011** trong S1.4, **ADR-012** trong S1.1~~ —
+   **ADR-010 và ADR-012 đã chốt** ngày 2026-08-29. **ADR-011** để ***Đang mở*** có chủ đích:
+   nó bị khoản nợ 23 chặn, và phần ghim được thì đã ghim.
+8. ~~**Mới:** bắt đầu **S1.1** và **S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.~~
+   **Câu vừa gạch hẹp hơn thực tế:** không bị ADR *đang mở* chặn không có nghĩa là không có quyết
+   định phải ra. S1.1 mang câu hỏi **phạm vi sổ nhà cung cấp**, S1.2 mang câu hỏi **máy trạng thái
+   cưỡng chế ở đâu**, S1.3 mang câu hỏi **kênh OTP** — cả ba phải chốt trước migration `008`.
+   **Đã chốt 2026-08-29: ADR-013, ADR-014, ADR-015.**
+9. ~~**Mới:** bắt đầu **S1.1**, **S1.2**, **S1.3**.~~ **XONG CẢ BA (2026-08-29)** — ba commit,
+   ba migration (`008`, `009`, `010`), ba gói (`supplier`, `rfq`, `invitation`), độ phủ
+   24/47 → **30/50**. Chi tiết ở `docs/STATE.md`.
+
+10. ~~**MỘT BƯỚC BẮT BUỘC CỦA VÒNG LẶP ĐÃ KHÔNG CHẠY.**~~ **ĐÃ CHẠY (2026-08-29)** — ba lượt,
+    một cho mỗi hạng mục, kết quả ở `evidence/security-reviews.md` §S1. Tổng **4 CRITICAL +
+    11 HIGH**; **4/4 CRITICAL và 10/11 HIGH đã đóng** ở `011_rfq_hardening.sql`,
+    `012_invitation_hardening.sql` và ba gói. HIGH còn lại **bị phép đo bác bỏ**.
+
+    **Ba MEDIUM cố ý không sửa** vì mỗi cái là một quyết định kiến trúc: cổng quyền của
+    `packages/supplier` nằm ở gói hay ở tầng API; chính sách nào tính `requires_dual_approval`;
+    pepper cho băm đích của bộ đếm hạn mức. ~~Cả ba cần một ADR — đây là việc kế tiếp có tên.~~
+    **ĐÃ CHỐT 2026-08-30: ADR-016, ADR-017, ADR-018.**
+
+    **Ba ADR ấy QUYẾT, chúng CHƯA CÀI** — lượt đó không đổi một dòng mã sản phẩm nào. Ba MEDIUM
+    vẫn **mở** cho tới khi mỗi ADR có lượt **RED thật** theo §*Đo bằng gì* của nó. Ba việc rời:
+    ADR-016 buộc `SupplierActor`/`InvitationActor` đi theo đường `createdBySessionId` mà 011 đã mở
+    cho `RfqActor`, cộng một lớp canh route **đến hạn cùng route đầu tiên của `apps/`**; ADR-017 là
+    một migration đánh số mới (`org_procurement_policies` + `rfq_packages.estimated_value`);
+    ADR-018 là HMAC + pepper có phiên bản **hoặc** bỏ hẳn `destination_hash` — cột ấy **gần như dư**
+    sau khi 011 thu hồi `UPDATE` trên `supplier_contacts`.
+
+    **ĐÃ CÀI CẢ BA (2026-08-30)** — ba migration (`013`, `014`, `015`), bốn gói sửa, **31 test mới**,
+    trong đó **ba test đột biến** và **năm phép đo bằng SQL viết tay**. `pnpm evidence` thoát mã 0,
+    **789 khẳng định**, độ phủ **đứng yên ở 30/50** — và đó là phát biểu đúng: sổ đăng ký không có
+    mệnh đề nào nói "danh tính là dẫn xuất".
+
+    **Lượt cài tìm ra BA thứ mà ba lượt review KHÔNG tìm ra**, và cả ba nói về giới hạn của hình
+    thức review theo từng hạng mục: ⑴ `packages/rfq` mang **đúng** khiếm khuyết MEDIUM-3 nêu cho
+    `packages/supplier` — **vẫn MỞ**; ⑵ `code_hash` của OTP cũng đảo ngược được (sáu chữ số, 10⁶),
+    đã đóng cùng lượt; ⑶ `estimated_value` **không** bảo vệ được bằng quyền theo cột như ADR-017
+    hứa, vì đường khách và đường người mua dùng **chung role `app_api`**.
+
+10b. **Nguyên văn cũ, giữ để đối chiếu:**
+    §9 của kế hoạch S1 đòi **`security-reviewer`** cho mọi hạng mục có dấu ⭐, và **S1.3 có dấu
+    đó** (lời mời, magic link, OTP, phiên khách — chạm xác thực và PII). Lượt review ấy **chưa
+    xảy ra**: phiên làm việc này chạy dưới một ràng buộc không cho gọi subagent trừ khi người
+    dùng yêu cầu. Đây **không** phải một khoản nợ kỹ thuật; nó là một **điều kiện hoàn thành S1
+    chưa đạt** (mục 6 của §7 kế hoạch S1), và `evidence/security-reviews.md` chưa có dòng nào cho
+    S1.1–S1.3. Ai tiếp tục việc này phải chạy `security-reviewer` cho S1.3 (và nên chạy cho cả
+    S1.1/S1.2) rồi ghi vào file đó theo đúng định dạng đã có.
+
+11. ~~**Hạng mục kế tiếp là S1.4 và nó BỊ CHẶN.**~~ ~~**HẾT CHẶN 2026-09-04.**~~ **S1.4 ĐÃ XONG
+    PHẦN MÃ 2026-09-04** — `packages/sealed-envelope`, migration `017`, ADR-019. Ba mã nghiệp vụ
+    được lấp (C5, G2, G4), độ phủ **33/50**, và **13 mã mục tiêu của S0 nay không còn mã nào
+    trống**. Hai khoản nợ có tên cũng đóng cùng lượt: `[NỢ ADR-006]` (hai role DB nay thật sự
+    không role nào bao trùm role kia) và vế *"tài sản được bảo vệ chưa tồn tại"* của ghi chú §4
+    cho G1. Đổi lại, G1 có một vế **thu hẹp MỚI** — xem ADR-019. Nguyên văn cũ: ADR-011 chốt
+    **"P-256 mặc định, X25519 cơ hội"** — câu hỏi được **gỡ bỏ** chứ không được trả lời: thế
+    hoặc/hoặc là do chính ADR tự đặt ra, và hỗ trợ cả hai thuật toán (chọn bằng máy dò lúc chạy)
+    xoá hẳn phụ thuộc vào phép đo Android. Khoản nợ 23 **vẫn mở**, chỉ thôi chặn. Nguyên văn cũ: ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
+    khi có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Sau khi đã có phong bì
+    thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một ADR.
 
 ---
 
@@ -240,8 +346,9 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 |---|---|
 | `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
+| `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về con người và quy trình mà S1 đang cư xử như thật** — mỗi dòng một địa chỉ trong kho và một câu hỏi cho người mua thật. Không thay pilot; nó hạ chi phí buổi đầu |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
-| `docs/DECISIONS.md` | **Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6** |
+| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ **Mười tám ADR**: 001–010 và 012–018 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất. **016/017/018** là ba quyết định của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã: cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, chính sách tính `requires_dual_approval`, pepper cho băm đích |
 | `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
 | `evidence/INV-matrix.md` | Ma trận bất biến; **§3 = danh sách việc của S1**, §4 = phạm vi hẹp |
 | `evidence/security-reviews.md` | Dấu vết review an ninh, kèm giới hạn của chính nó |
@@ -265,3 +372,29 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 - **`.sql`, chú thích, tên test và `evidence/INV-matrix.md` là BẰNG CHỨNG KIỂM TOÁN.** Một câu
   phát biểu rộng hơn thứ được đo là **một khiếm khuyết thật**. Trong S0 đã có **19 câu như vậy
   bị bắt và hạ xuống đúng mức** — và quy ước là **gạch bỏ tại chỗ, giữ nguyên văn**, không xoá.
+
+---
+
+## 15. [2026-09-05] S1 ĐÃ ĐI HẾT CHÍN HẠNG MỤC — và người tiếp theo phải đọc bốn dòng này trước
+
+1. **Bốn lượt `security-reviewer` đã chạy và tìm ra BẢY mức HIGH; cả bảy đã đóng bằng mã**
+   (`db/migrations/022_security_review_s1.sql` cộng bảy file). Bảng ở
+   `evidence/security-reviews.md`. **Đừng đọc bảng ấy như một chứng chỉ**: cả bốn reviewer
+   không có Bash và không có CSDL — họ đọc mã, không đo. Mã MEDIUM/LOW chưa đóng nằm ở sổ nợ
+   `docs/STATE.md` khoản **31–37**, và khoản **31** là khoản nặng nhất còn mở.
+
+2. **Một câu SAI do chính dự án viết đã đứng ở BA chỗ và biện minh cho việc bỏ một lớp.**
+   *"`app_unseal` cố ý không đọc được `users`"* — `006:232` và `006:305` nói ngược lại, và 006
+   ghi rõ là cấp *"vì bất biến D1"*. Ba bản sao nay bị gạch bỏ tại chỗ. Bài học có thể tái dùng:
+   **một câu nói về GRANT phải được đối chiếu với chính file migration, không với trí nhớ** —
+   và một câu sai được chép ba lần thì khó bắt hơn một câu sai đứng một mình.
+
+3. **Ba mã bất biến còn trống, và cả ba trống vì KIẾN TRÚC:** `A2` (đòi một tiến trình `api`
+   đang chạy để gắn APM vào), `A5` (đòi role `app_guest` — nợ 29), `E6` (đòi một URL). Không mã
+   nào trống vì thiếu thời gian, và §3 của ma trận nói ra từng lý do.
+
+4. **Hai thứ CHƯA CÓ NGƯỜI TIÊU THỤ, và cả hai là ý định chứ chưa là hành động:**
+   `BREAK_GLASS_UNSEAL_ALERT` (nợ 34) và `RFQ_DEADLINE_EXTENDED_NOTICE`. Một job không có
+   handler bị `JobRunner` ghi thẳng `FAILED` **trong im lặng** — nên phải nối handler TRƯỚC khi
+   đường break-glass được dùng thật, không phải sau.
+

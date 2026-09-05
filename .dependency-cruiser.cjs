@@ -67,6 +67,69 @@ const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 // (tests/architecture/barrel-exports.test.ts, danh sach trang [INV-D5]); hai lop nay bo tuc
 // cho nhau: mot lop canh SYMBOL di qua cua, lop kia canh viec KHONG AI DI VONG QUA CUA.
 // ==========================================================================================
+// ==========================================================================================
+// S1.1 - HO "g5-", CUNG KHUON "MAC DINH DONG", AP CHO packages/supplier/src/
+//
+// LAN THU TU cung mot khuon, va lan nay no duoc dung TRUOC khi goi co file thu hai:
+//   crypto-keys -> g1 (fix round 4) - identity -> g2/H11 (Task 9) - outbox -> g4/H13 (Task 10)
+//   - supplier -> DAY.
+//
+// Khac biet duy nhat, va no dang ghi ra: ba lan truoc deu la VA XONG ROI SUA - lo duoc do bang
+// mot probe import tuong doi xuyen goi di lot ca ba cong (depcruise, tsc, eslint), roi quy tac
+// moi duoc them vao. Lan nay quy tac ra doi CUNG LUC voi goi, nen khoan no 17 ("bon goi con lai
+// khong co quy tac bien gioi") khong lon them. No KHONG duoc dong boi dong nay: audit, db,
+// tenancy, test-support van chua co gi.
+// ==========================================================================================
+const SUPPLIER_SRC_PREFIX = ciPrefix("packages/supplier/src/");
+const SUPPLIER_INDEX_TS = ciFile("packages/supplier/src/index.ts");
+
+// S1.2 - ho "g6-", ap cho packages/rfq/src/. Lan thu NAM cung mot khuon.
+// Den lan thu nam thi viec them tay tung ho quy tac chinh la KHUON DANH-SACH-TEN ma du an da
+// phat hien hong ba lan (khoan no 3, 16, 17) - chi khac la danh sach nam trong dau nguoi viet
+// thay vi trong mot bien. Vi vay S1.2 them mot lop SUY TU TINH CHAT:
+// tests/architecture/bien-gioi-goi.test.ts [INV-H16] doi MOI goi trong packages/ phai co mot
+// ho quy tac dong src/ cua no, voi mot danh sach mien tru DONG gom dung bon goi cua S0 va CHI
+// DUOC CO LAI. Goi thu sau khong can ai nho gi ca - test do khi quy tac vang mat.
+const RFQ_SRC_PREFIX = ciPrefix("packages/rfq/src/");
+const RFQ_INDEX_TS = ciFile("packages/rfq/src/index.ts");
+
+// S1.3 - ho "g7-", ap cho packages/invitation/src/. Lan thu SAU, va la lan DAU TIEN quy tac
+// nay khong ra doi vi ai do nho: [INV-H16] (tests/architecture/bien-gioi-goi.test.ts) DO NGAY
+// khi goi moi xuat hien ma khong co ho quy tac nao dong src/ cua no.
+const INVITATION_SRC_PREFIX = ciPrefix("packages/invitation/src/");
+const INVITATION_INDEX_TS = ciFile("packages/invitation/src/index.ts");
+
+// ==========================================================================================
+// S1.4 - HO "g8-", AP CHO packages/sealed-envelope/src/. Lan thu BAY cung mot khuon, va la lan
+// DAU TIEN mot goi MOI ra doi voi HAI cua thay vi mot - dung hinh dang cua packages/crypto-keys.
+//
+// Cua thu hai (`unseal.ts`) khong phai mot tien nghi ma la mot yeu cau do duoc: khong co duong
+// MO, khong phep do nao noi duoc gi ve duong NIEM PHONG. ADR-011 "Do bang gi" muc 1 viet thang
+// dieu do: "mot phong bi niem phong chi bang P-256 phai mo duoc tron ven. Khong co ve nay, 'ho
+// tro ca hai' la mot loi khai."
+//
+// Khac biet voi g1-: `unseal.ts` KHONG import duong mo boc khoa cua crypto-keys. No nhan khoa
+// rieng da o dang PKCS8. Nho the hang rao G1 giu DUNG MOT mien tru (`apps/unseal-worker/`)
+// thay vi hai, va mien tru thu hai kia se la ca mot GOI chu khong phai mot app.
+// ==========================================================================================
+// S1.5 - ho "g9-", ap cho packages/bidding/src/. Lan thu TAM cung mot khuon, va lan nay goi chi
+// co MOT cua: khong co duong "mo" nao trong goi nay. `verifyReceipt` la mot phep KIEM CHUNG bang
+// khoa CONG KHAI — no khong mang kha nang nao, nen no di qua cua chinh nhu moi symbol khac.
+const BIDDING_SRC_PREFIX = ciPrefix("packages/bidding/src/");
+const BIDDING_INDEX_TS = ciFile("packages/bidding/src/index.ts");
+
+// S1.6 - ho "g10-", ap cho packages/unseal/src/. Lan thu CHIN cung mot khuon.
+const UNSEAL_SRC_PREFIX = ciPrefix("packages/unseal/src/");
+const UNSEAL_INDEX_TS = ciFile("packages/unseal/src/index.ts");
+
+const SEALED_ENVELOPE_SRC_PREFIX = ciPrefix("packages/sealed-envelope/src/");
+const SEALED_ENVELOPE_INDEX_TS = ciFile("packages/sealed-envelope/src/index.ts");
+const SEALED_ENVELOPE_UNSEAL_TS = ciFile("packages/sealed-envelope/src/unseal.ts");
+const SEALED_ENVELOPE_ROUNDTRIP_TEST_TS = ciFile("packages/sealed-envelope/src/roundtrip.test.ts");
+const SEALED_ENVELOPE_KEY_MATERIAL_INT_TEST_TS = ciFile(
+  "packages/sealed-envelope/src/key-material.int.test.ts",
+);
+
 const IDENTITY_SRC_PREFIX = ciPrefix("packages/identity/src/");
 const IDENTITY_INDEX_TS = ciFile("packages/identity/src/index.ts");
 
@@ -148,6 +211,112 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g10-unseal-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/unseal/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: cong chinh sach D1 chi co MOT hinh " +
+        "dang ra ngoai, va no la hinh dang NEM. Mot import tuong doi vao gate.ts tu goi khac se " +
+        "cham toi cac ve rieng le, tuc du de dung mot cong gac chi kiem MOT trong bon ve — dung " +
+        "thu ma rui ro so 5 cua ke hoach S1 goi ten truoc.",
+      severity: "error",
+      from: { pathNot: UNSEAL_SRC_PREFIX },
+      to: { path: UNSEAL_SRC_PREFIX, pathNot: [UNSEAL_INDEX_TS] },
+    },
+    {
+      name: "g9-bidding-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/bidding/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: `verifyReceipt` kiem chung duoc bang " +
+        "KHOA CONG KHAI MOT MINH (B2). Mot import tuong doi vao receipt.ts hay signer.ts tu goi " +
+        "khac se cham toi bo ky va toi cac ham chuyen dang chu ky, tuc du de dung mot duong kiem " +
+        "chung khac voi duong ma nha cung cap di — va hai duong kiem chung la mot duong sai.",
+      severity: "error",
+      from: { pathNot: BIDDING_SRC_PREFIX },
+      to: { path: BIDDING_SRC_PREFIX, pathNot: [BIDDING_INDEX_TS] },
+    },
+    {
+      name: "g8-sealed-envelope-chi-index-va-unseal-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/sealed-envelope/src/ la vung han che doi voi module ben ngoai package. " +
+        "Chi hai cua duoc mo: index.ts (niem phong + vong doi khoa, an toan cho moi service) va " +
+        "unseal.ts (bi canh tiep boi g8-khong-mo-phong-bi-ngoai-unseal-worker). Bat bien co ten " +
+        "dang duoc giu o cua index.ts: KHONG symbol nao o do nhan hay tra mot khoa rieng - " +
+        "issueRfqKeyPair sinh ra mot khoa rieng va tra ve moi thu TRU no (ADR-019 muc 1). Mot " +
+        "import tuong doi vao format.ts tu goi khac se lay duoc deriveContentKey va importPrivateKey, " +
+        "tuc du de mo mot phong bi neu co khoa rieng - dung thu cua thu hai duoc dung de chan.",
+      severity: "error",
+      from: { pathNot: SEALED_ENVELOPE_SRC_PREFIX },
+      to: {
+        path: SEALED_ENVELOPE_SRC_PREFIX,
+        pathNot: [SEALED_ENVELOPE_INDEX_TS, SEALED_ENVELOPE_UNSEAL_TS],
+      },
+    },
+    {
+      name: "g8-khong-mo-phong-bi-ngoai-unseal-worker",
+      comment:
+        "Chi apps/unseal-worker va test vong doi cua chinh package duoc import unseal.ts " +
+        "(ADR-006, ADR-019, bat bien A2/G1). Danh sach mien tru nay CHI DUOC CO LAI. " +
+        "KHONG can mot quy tac 'khong-import-nguoc-tu-roundtrip-test' rieng nhu ho g1-: quy tac " +
+        "cua cong khai o tren da bien MOI file trong src/ ngoai hai cua thanh dich han che, va " +
+        "roundtrip.test.ts la mot trong so do. Ba quy tac nguoc cua g1- ra doi o fix round 3, " +
+        "TRUOC khi fix round 4 dung quy tac ca-thu-muc; o day thu tu nguoc lai nen khong co du " +
+        "thua. Ghi ra vi mot quy tac VANG MAT trong mot ho quy tac se bi doc thanh mot thieu sot.",
+      severity: "error",
+      from: {
+        pathNot: [
+          APPS_UNSEAL_WORKER_PREFIX,
+          SEALED_ENVELOPE_ROUNDTRIP_TEST_TS,
+          // Hai file test, HAI viec khac nhau, va ca hai deu doi duong MO — mot lop mo phong bi
+          // khong co phep do nao la mot lop khong ai biet no con chay hay khong.
+          //   roundtrip.test.ts        - phan MAT MA thuan, khong cham CSDL.
+          //   key-material.int.test.ts - chuoi TRON VEN tu CSDL ra phong bi va nguoc lai.
+          // Ca hai deu nam TRONG packages/sealed-envelope/src/, nen ca hai da la dich han che cua
+          // quy tac cua-cong-khai o tren: khong module ngoai goi nao import nguoc vao chung duoc.
+          SEALED_ENVELOPE_KEY_MATERIAL_INT_TEST_TS,
+        ],
+      },
+      to: { path: SEALED_ENVELOPE_UNSEAL_TS },
+    },
+    {
+      name: "g7-invitation-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/invitation/src/ la vung han che doi voi module ben ngoai package. " +
+        "Chi index.ts duoc mo. Bat bien co ten dang duoc giu la E2: khong ham nao o cua nay tra " +
+        "ve mot PHIEN tu mot TOKEN - redeemMagicLink tra ve mot thu khong mo duoc gi, va ham duy " +
+        "nhat sinh phien doi mot ma OTP. Mot import tuong doi vao suppliers/invitation.js tu goi " +
+        "khac se lay duoc ca cac ham noi bo va dung duoc mot duong di vong qua OTP.",
+      severity: "error",
+      from: { pathNot: INVITATION_SRC_PREFIX },
+      to: { path: INVITATION_SRC_PREFIX, pathNot: [INVITATION_INDEX_TS] },
+    },
+    {
+      name: "g6-rfq-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/rfq/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: moi ham cua goi nay goi " +
+        "assertTenantBound TRUOC MOI THU, va RFQ_TRANSITIONS la ban sao DE DOC cua bang canh " +
+        "trong 009 chu khong phai lop cuong che - mot cong gac dung no se canh dung duong di " +
+        "qua no, trong khi trigger canh MOI duong. Mot module moi trong thu muc nay mac dinh " +
+        "khong voi toi duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: RFQ_SRC_PREFIX },
+      to: { path: RFQ_SRC_PREFIX, pathNot: [RFQ_INDEX_TS] },
+    },
+    {
+      name: "g5-supplier-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/supplier/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Ly do khong phai kien truc chung chung: mot import TUONG DOI " +
+        "'../../supplier/src/suppliers.js' tu mot goi khac di lot CA BA cong (depcruise, tsc, " +
+        "eslint) - do duoc ba lan o crypto-keys, identity va outbox. Bat bien co ten dang duoc " +
+        "giu o day: moi ham cua goi nay goi assertTenantBound TRUOC MOI THU, va mot module moi " +
+        "trong thu muc nay khong doi ai phai nho lam gi ca - mac dinh no khong voi toi duoc tu " +
+        "ben ngoai. Danh sach trang barrel khoa DANH SACH export o CUA; no khong dung BUC TUONG.",
+      severity: "error",
+      from: { pathNot: SUPPLIER_SRC_PREFIX },
+      to: { path: SUPPLIER_SRC_PREFIX, pathNot: [SUPPLIER_INDEX_TS] },
     },
     {
       name: "g2-identity-chi-index-la-cua-cong-khai",

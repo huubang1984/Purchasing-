@@ -200,80 +200,108 @@ describe("vòng đời khóa", () => {
   });
 });
 
-describe("rào chắn production cho adapter local-dev (bất biến G1)", () => {
+describe("rào chắn cho adapter local-dev (bất biến G1)", () => {
+  // ==========================================================================================
+  // [REVIEW AN NINH S1.4 — MED-1] KHỐI NÀY ĐƯỢC VIẾT LẠI, VÀ MỘT TEST CŨ ĐÃ ĐỔI DẤU
+  //
+  // Bộ cũ đo một hàng rào DANH SÁCH TÊN: chặn khi `NODE_ENV` khẳng định là production, cho qua
+  // ở mọi giá trị khác — kể cả KHÔNG ĐẶT, mặc định của một container trần. Nó tự gọi mình là
+  // fail-closed và nó không phải.
+  //
+  // Test cũ *"không chặn khi NODE_ENV là một chuỗi vô hại chứa 'prod'"* (với `producthunt`) NAY
+  // ĐỔI DẤU: `producthunt` bị chặn, và đó là ĐÚNG. Nó được giữ lại dưới tên mới thay vì xoá, vì
+  // nó là bằng chứng đọc được rằng hàng rào đã đảo chiều — chứ không phải một dòng biến mất.
+  //
+  // Luật mới: `TRUSTPROCURE_KEY_ADAPTER="local-dev"` là lời khai DƯƠNG duy nhất; `NODE_ENV` ở
+  // ba giá trị dev rõ ràng là lớp thứ hai; không nói gì = TỪ CHỐI.
+  // ==========================================================================================
   const NODE_ENV_GOC = process.env["NODE_ENV"];
   const CO_GHI_DE_GOC = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+  const ADAPTER_GOC = process.env["TRUSTPROCURE_KEY_ADAPTER"];
 
   function datLai(): void {
-    if (NODE_ENV_GOC === undefined) delete process.env["NODE_ENV"];
-    else process.env["NODE_ENV"] = NODE_ENV_GOC;
-    if (CO_GHI_DE_GOC === undefined) delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
-    else process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] = CO_GHI_DE_GOC;
+    for (const [ten, goc] of [
+      ["NODE_ENV", NODE_ENV_GOC],
+      ["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS", CO_GHI_DE_GOC],
+      ["TRUSTPROCURE_KEY_ADAPTER", ADAPTER_GOC],
+    ] as const) {
+      if (goc === undefined) delete process.env[ten];
+      else process.env[ten] = goc;
+    }
   }
 
-  it("chặn createLocalDevWrapper khi NODE_ENV=production và không có cờ ghi đè", () => {
-    process.env["NODE_ENV"] = "production";
-    delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+  function dat(env: Record<string, string | undefined>): void {
+    for (const ten of ["NODE_ENV", "TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS", "TRUSTPROCURE_KEY_ADAPTER"]) {
+      const v = env[ten];
+      if (v === undefined) delete process.env[ten];
+      else process.env[ten] = v;
+    }
+  }
+
+  it("[INV-G1] MẶC ĐỊNH LÀ TỪ CHỐI: không biến môi trường nào được đặt thì cả hai factory chặn", () => {
+    // Đây là ca mà bộ cũ CHO QUA, và nó là ca thường gặp nhất trong một container trần.
+    dat({});
     try {
-      expect(() => createLocalDevWrapper(ring())).toThrow(/production/i);
+      expect(() => createLocalDevWrapper(ring())).toThrow(/không tiến trình nào khai báo/);
+      expect(() => createLocalDevUnwrapper(ring())).toThrow(/không tiến trình nào khai báo/);
     } finally {
       datLai();
     }
   });
 
-  it("chặn createLocalDevUnwrapper khi NODE_ENV=production và không có cờ ghi đè", () => {
-    process.env["NODE_ENV"] = "production";
-    delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
-    try {
-      expect(() => createLocalDevUnwrapper(ring())).toThrow(/production/i);
-    } finally {
-      datLai();
-    }
-  });
-
-  it("cho phép cả hai factory khi NODE_ENV=production có cờ ghi đè tường minh", () => {
-    process.env["NODE_ENV"] = "production";
-    process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] = "1";
-    try {
-      expect(() => createLocalDevWrapper(ring())).not.toThrow();
-      expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
-    } finally {
-      datLai();
-    }
-  });
-
-  it("cho phép cả hai factory khi NODE_ENV không phải production", () => {
-    process.env["NODE_ENV"] = "test";
-    delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
-    try {
-      expect(() => createLocalDevWrapper(ring())).not.toThrow();
-      expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
-    } finally {
-      datLai();
-    }
-  });
-
-  // Fix round 2, phát hiện N3: so khớp === "production" đúng ký tự làm rào chắn thua một
-  // biến môi trường viết "Production"/"PRODUCTION"/"prod" lúc deploy. Bốn biến thể dưới đây
-  // đều phải bị chặn giống hệt "production".
-  it.each(["Production", "PRODUCTION", "prod", "  production  ", "PROD"])(
-    'chặn cả hai factory khi NODE_ENV="%s" (biến thể hoa/thường/khoảng trắng/viết tắt)',
+  it.each(["production", "Production", "PRODUCTION", "prod", "  production  ", "PROD",
+           "staging", "live", "release", "prd", "producthunt"])(
+    '[INV-G1] chặn khi NODE_ENV="%s" và không có lời khai adapter nào',
     (bienThe) => {
-      process.env["NODE_ENV"] = bienThe;
-      delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+      // `producthunt` nằm trong danh sách này CÓ CHỦ ĐÍCH — xem khối đầu describe. Ở bộ cũ nó là
+      // một ca ĐƯỢC QUA; nay nó bị chặn, vì hàng rào không còn đoán ý nghĩa của một chuỗi lạ.
+      dat({ NODE_ENV: bienThe });
       try {
-        expect(() => createLocalDevWrapper(ring())).toThrow(/production/i);
-        expect(() => createLocalDevUnwrapper(ring())).toThrow(/production/i);
+        expect(() => createLocalDevWrapper(ring())).toThrow(/local-dev/);
+        expect(() => createLocalDevUnwrapper(ring())).toThrow(/local-dev/);
       } finally {
         datLai();
       }
     },
   );
 
-  it("không chặn khi NODE_ENV là một chuỗi vô hại chứa 'prod' như tiền tố khác nghĩa", () => {
-    // "producthunt" không phải "production" hay "prod" sau chuẩn hóa — không được chặn nhầm.
-    process.env["NODE_ENV"] = "producthunt";
-    delete process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"];
+  it.each(["development", "dev", "test"])(
+    '[INV-G1] cho qua khi NODE_ENV="%s" — ba giá trị dev RÕ RÀNG, không phải "khác production"',
+    (bienThe) => {
+      dat({ NODE_ENV: bienThe });
+      try {
+        expect(() => createLocalDevWrapper(ring())).not.toThrow();
+        expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
+      } finally {
+        datLai();
+      }
+    },
+  );
+
+  it("[INV-G1] lời khai DƯƠNG thắng mọi NODE_ENV", () => {
+    dat({ NODE_ENV: "production", TRUSTPROCURE_KEY_ADAPTER: "local-dev" });
+    try {
+      expect(() => createLocalDevWrapper(ring())).not.toThrow();
+      expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
+    } finally {
+      datLai();
+    }
+  });
+
+  it("[INV-G1] khai một adapter KHÁC thì bị chặn kể cả ở máy phát triển", () => {
+    // Một tiến trình nói nó dùng KMS thì không được dựng bộ bọc khoá nội bộ — kể cả khi
+    // `NODE_ENV=development`. Không có vế này, lời khai dương chỉ nới ra chứ không siết vào.
+    dat({ NODE_ENV: "development", TRUSTPROCURE_KEY_ADAPTER: "aws-kms" });
+    try {
+      expect(() => createLocalDevWrapper(ring())).toThrow(/đang là "aws-kms"/);
+      expect(() => createLocalDevUnwrapper(ring())).toThrow(/đang là "aws-kms"/);
+    } finally {
+      datLai();
+    }
+  });
+
+  it("[INV-G1] cờ ghi đè vẫn mở được cửa, và nó là đường CUỐI CÙNG còn lại", () => {
+    dat({ NODE_ENV: "production", TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS: "1" });
     try {
       expect(() => createLocalDevWrapper(ring())).not.toThrow();
       expect(() => createLocalDevUnwrapper(ring())).not.toThrow();

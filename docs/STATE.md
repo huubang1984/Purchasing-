@@ -4,35 +4,198 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-08-29 (vòng fix CI, sau lần chạy CI đầu tiên của nhánh S0)
+**Cập nhật lần cuối:** 2026-09-05 (S1.6–S1.9 đã có mã, và một vòng sửa sau BỐN lượt
+`security-reviewer` đóng bảy phát hiện mức HIGH)
 
 ---
 
 ## Cột mốc hiện tại
 
-**Giai đoạn: S0 (Nền móng) — MÃ NGUỒN ĐÃ CÓ, mười một task đã commit. S1 chưa bắt đầu.**
+~~**Giai đoạn: S0 (Nền móng) — MÃ NGUỒN ĐÃ CÓ, mười một task đã commit. S1 chưa bắt đầu.**~~
+
+**Giai đoạn: S0 ĐÃ HỢP NHẤT VÀO `master`** (merge commit `30d1972`, giữ nguyên 46 commit).
+~~**S1 đã có KẾ HOẠCH ĐẦY ĐỦ, chưa viết một dòng mã nào.**~~
+
+**[2026-09-05] CHÍN HẠNG MỤC CỦA S1 ĐỀU ĐÃ CÓ MÃ (S1.1–S1.9), và một vòng sửa an ninh đã chạy
+sau chúng.** Đo được, không cảm tính:
+
+| Điều kiện hoàn thành S1 (§7 của kế hoạch) | Trạng thái |
+|---|---|
+| 1. `pnpm t0` xanh; `apps/unseal-worker` tồn tại; `g1-` đo lại bằng đối kháng | ✅ — 124 module, 376 phụ thuộc, 0 vi phạm |
+| 2. `pnpm test` + `test:int` xanh, **0** lần `unhandled`, **0** lần `57P01` | ✅ — đã đo bằng cách quét chính log của hai lượt chạy |
+| 3. `pnpm evidence` xanh, độ phủ ≥ 45/47 | ✅ — **47/50** (31/34 nghiệp vụ + 16/16 hàng rào); ba mã còn trống là **A2, A5, E6**, cả ba S2+ |
+| 4. Cả 5 mã ở §4 có ghi chú được cập nhật; D1 có MỘT hàm hợp bốn vế | ✅ — `assertUnsealAllowed`; G1 viết lại sau khi căn phòng đã xây |
+| 5. Bộ T5 chạy trọn kịch bản mục 41, mọi test đối kháng có răng | ✅ — `tests/adversarial/` + kịch bản 15 bước; mỗi lượt đột biến đã chạy và ĐỎ THẬT |
+| 6. Một buổi `security-reviewer` cho mỗi hạng mục ⭐ | ✅ — bốn lượt, ghi ở `evidence/security-reviews.md`; **7 HIGH đã đóng bằng mã** |
+| 7. Không tuyên bố nào rộng hơn phép đo | ✅ trong phạm vi đã kiểm — và vòng review đã BẮT ĐƯỢC ba bản sao của một câu sai (xem nợ đã đóng) |
+
+**Điều bảng trên KHÔNG nói:** ba mã A2/A5/E6 trống vì lý do KIẾN TRÚC (không có tiến trình `api`,
+không có role `app_guest`, không có URL) — không phải vì hết thời gian. Và bốn lượt review đọc mã
+bằng mắt, **không chạy được gì**; các mã MEDIUM/LOW chưa đóng nằm ở sổ nợ dưới đây. ~~Hai hạng mục đầu (S1.1, S1.2) không
+bị quyết định nào chặn và có thể bắt đầu ngay.~~ **Câu vừa gạch HẸP HƠN thực tế và theo hướng
+nguy hiểm:** S1.1 và S1.2 không bị ADR nào *đang mở* chặn, nhưng mỗi hạng mục **mang một quyết
+định kiến trúc chưa có chỗ để treo** — phạm vi sổ nhà cung cấp, và nơi cưỡng chế máy trạng thái
+RFQ. Cả hai phải chốt **trước** migration `008`. Đây đúng khuôn lỗi ADR-009 đã dạy: *cái treo là
+có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-29 bằng ADR-013, ADR-014 và ADR-015**
+(cho S1.3). Ba hạng mục sớm nhất nay có đủ quyết định để bắt đầu.
 
 Đã xong:
 
-- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, **chín ADR** (bảy ở giai đoạn thiết kế, ADR-008 ở Task 9,
-  ADR-009 ở vòng fix cuối), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
+- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ **mười chín ADR** (ADR-011 **chốt TRỌN VẸN 2026-09-04**: mục 1 *P-256 mặc định, X25519 cơ hội*; mục 2 *`ECDSA P-256` + văn bản chính tắc*; mục 3 *xoay khoá ký có `kid`* — hết chặn S1.4 **và** S1.5; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
+  ADR-008 ở Task 9, ADR-009 ở vòng fix cuối, **ADR-010/011/012 ngày 2026-08-29 khi lập kế hoạch S1**,
+  **ADR-013/014/015 cùng ngày cho ba hạng mục sớm nhất**, **ADR-016/017/018 ngày 2026-08-30 cho ba
+  MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã**), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
 - **Mười một task của kế hoạch S0 đã commit** (`docs/superpowers/plans/2026-08-27-s0-foundation.md`).
 - Hai hook `git-safety` / `protect-secrets` đã viết lại fail-closed và có test.
 - Monorepo pnpm, CI bốn job, cổng tĩnh T0 (tsc + eslint + dependency-cruiser + gitleaks + audit).
-- Bảy migration `001`–`007` + `hardening.always.sql`: role, tổ chức, người dùng, sổ kiểm toán
-  chuỗi hash, vai trò/quyền, phiên + MFA, outbox.
+- ~~Bảy~~ ~~Tám~~ ~~Chín~~ ~~Mười~~ ~~Mười bảy~~ **Mười tám** migration `001`–**`018`** + `hardening.always.sql`: role, tổ chức, người
+  dùng, sổ kiểm toán chuỗi hash, vai trò/quyền, phiên + MFA, outbox, **sổ nhà cung cấp (S1.1)**,
+  **RFQ + hạng mục + phê duyệt + máy trạng thái (S1.2)**, **lời mời + magic link + OTP + phiên
+  khách (S1.3)**, **danh tính là dẫn xuất (013/016)**, **chính sách mua sắm (014)**, **pepper OTP
+  (015)**, **vật liệu khoá RFQ (017, S1.4)**, **báo giá + biên nhận đã ký (018, S1.5)**.
 - `KeyProvider` + adapter `local-dev` bọc khoá theo tổ chức có phiên bản, công cụ đo hiệu năng.
 - **Evidence pack**: `pnpm evidence` sinh `evidence/INV-matrix.md` từ `docs/TEST-PLAN.md`.
 
+- **S1.5 — nộp báo giá, phiên bản, biên nhận, khoá theo deadline (2026-09-04):** migration `018`
+  (`vendor_bids`, `vendor_bid_versions`, `bid_receipts`), gói `packages/bidding`, và **bốn mã
+  nghiệp vụ được lấp: A3, B1, B2, C1** — độ phủ **33/50 → 37/50**, phần nghiệp vụ 17 → 21.
+
+  **Hạng mục này mở đầu bằng việc chốt ADR-011 mục 2 và 3, và phần đáng đọc nhất là một lập luận
+  bị chính phép tra cứu giết chết.** Lượt này suýt chốt bằng câu *"AWS KMS không ký được
+  Ed25519"* — một câu nghe dứt khoát, kiểm chứng được, và **sai**: `ECC_NIST_EDWARDS25519` có
+  thật. Giữ nguyên văn trong ADR thay vì lặng lẽ bỏ đi, vì nó đúng hình dạng của thứ đi lọt vào
+  một ADR rồi nằm đó nhiều năm.
+
+  Quyết định thật đứng trên một vế khác: đường nộp thầu **đã** đòi họ P-256 (mục 1), nên
+  `ECDSA P-256` cho chữ ký nghĩa là **ai nộp được thì kiểm chứng được**. `Ed25519` sẽ tạo ra một
+  hạng người dùng chưa từng tồn tại — *nộp được nhưng không kiểm chứng được trong trình duyệt* —
+  và hạng ấy rơi đúng vào cái đuôi Android cũ.
+
+  **Thứ được ký là VĂN BẢN CHÍNH TẮC, không phải JSON**, vì một JSON không có dạng byte chính tắc
+  và ký nó buộc bên kiểm chứng cài lại bộ mã hoá của bên **bị** kiểm chứng.
+
+  Một khe interop có thật đã được đóng trước khi nó cắn: WebCrypto dùng chữ ký ECDSA dạng **RAW**,
+  còn `openssl`/`node`/KMS dùng **DER**; sai dạng cho ra *"chữ ký không hợp lệ"* — cùng thông điệp
+  với một chữ ký bị giả mạo. Dự án lưu DER, và bộ chuyển dạng được đối chiếu với DER **thật** do
+  `node:crypto` sinh ra.
+
+  **Ba trong bốn mã mới mang cờ §4 ngay từ đầu**, và tỷ lệ ấy không phải dấu hiệu xấu — nó là dấu
+  hiệu của những mệnh đề RỘNG: B2 nói về một con người thật, C1 nói về thời gian, A3 nói về *"mọi
+  truy vấn SQL"*. B1 **cố ý** không mang cờ, và lý do được ghi tại chỗ.
+- **S1.4 — phong bì niêm phong (2026-09-04):** migration `017` (`rfq_key_material`), gói
+  `packages/sealed-envelope` với **hai cửa** đúng khuôn `packages/crypto-keys`, và **ba mã nghiệp
+  vụ được lấp: C5, G2, G4** — độ phủ **30/50 → 33/50**, phần nghiệp vụ 14 → 17.
+
+  **Con số đáng đọc nhất của hạng mục này là một dòng do chính ma trận tự sinh ra:** *"Trong 13 mã
+  mục tiêu của S0, số còn chưa phủ: **không còn mã nào**"*. G2 và G4 là hai mã S0 tự đặt làm mục
+  tiêu rồi không giao được; chúng đóng ở đây, bốn hạng mục sau.
+
+  **Khoản nợ `[NỢ ADR-006]` cũng đóng, và nó đóng đúng cách nó được hẹn — bằng một lần ĐỎ.** Test
+  *"app_unseal vẫn là tập con quyền của app_api"* (Task 4) tự viết cho tương lai một thông điệp:
+  khi nào có bảng khoá riêng RFQ thì test này sẽ đỏ. Lượt chạy đầu sau khi `017` áp: nó **đỏ**,
+  đúng như thế. Bản mới đo **mạnh hơn** — nó đòi CẢ HAI chiều (không role nào bao trùm role kia),
+  mỗi chiều neo vào một khoá cụ thể.
+
+  Ba thứ được ghi ra thay vì nuốt vào ô ✅: G1 có một vế **thu hẹp MỚI** (tiến trình `api` **có**
+  chạm khoá riêng dạng rõ trong cửa sổ của đúng một hàm — ADR-019); G2 mang cờ §4 vì mệnh đề nói
+  *một* cặp khoá còn hiện thực cho *hai*; G4 mang cờ §4 vì mệnh đề liệt kê **bốn** thao tác còn
+  S1.4 có **ba** — vế *mở bọc* không có một dòng mã nào và nó thuộc S1.6.
+- **S1.3 — lời mời, magic link, OTP, phiên khách (2026-08-29):** migration `010` (`rfq_invitations`,
+  `rfq_invitation_tokens`, `invitation_otp_challenges`, `otp_rate_limits`, `guest_sessions`), gói
+  `packages/invitation`. **Ba mã NGHIỆP VỤ đầu tiên của S1 được lấp: E1, E2, E5.** Vế *giới hạn
+  tần suất* của **E3** — vế không có một dòng mã nào trong toàn S0 — nay CÓ LỚP, nhưng chỉ trên
+  đường OTP của lời mời; đường TOTP vẫn trống, và ghi chú §4 nói đúng điều đó.
+- **S1.2 — RFQ, hạng mục, máy trạng thái (2026-08-29):** migration `009` (`rfq_packages`,
+  `rfq_items`, `rfq_approvals`), gói `packages/rfq`, và **H16** — biên giới module SUY TỪ TÍNH
+  CHẤT cho mọi gói trong `packages/`. Máy trạng thái nằm ở tầng CSDL đúng như ADR-014 chốt, và
+  điều đó đã được ĐO bằng một `UPDATE` đi vòng qua ứng dụng cộng một lượt gỡ trigger.
+- **S1.1 — sổ nhà cung cấp Level 0/1 (2026-08-29):** migration `008` (`suppliers`,
+  `supplier_contacts`), gói `packages/supplier`, và **hai hàng rào mới vào sổ đăng ký** —
+  **H14** (bộ dò oracle xuyên tổ chức qua ràng buộc duy nhất) và **H15** (biên giới module của
+  `packages/supplier`, họ quy tắc `g5-` cộng danh sách trắng barrel).
+
 Chưa xong:
 
-- Toàn bộ S1 (Sealed Bid Core): RFQ, lời mời, phong bì niêm phong, luồng mở thầu.
+- ~~Toàn bộ S1~~ ~~**S1.2–S1.9**~~ ~~**S1.3–S1.9**~~ ~~**S1.4–S1.9**~~ ~~**S1.5–S1.9**~~ **S1.6–S1.9**: mở thầu, so sánh, T5, E2E.
 - `apps/` **rỗng**. Không có một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
   outbox runner, hay `assertFreshMfa` — các gói đã có được test gọi, chưa có ứng dụng gọi.
 
 ## Công việc đang làm
 
-Không có. Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
+> *** VÒNG SỬA ĐÃ XONG: 4/4 CRITICAL và 10/11 HIGH đã đóng; HIGH còn lại đã bị PHÉP ĐO BÁC BỎ. ***
+> Hai migration mới — `011_rfq_hardening.sql` và `012_invitation_hardening.sql` — cộng bản viết
+> lại của `packages/invitation`. Chuỗi tấn công đã đo được nay là một bộ test: từng bước từng
+> THÀNH CÔNG nay bị chặn, mỗi phép chặn kèm một vế đối chứng dương, và hai phép chặn được đo bằng
+> câu SQL VIẾT TAY vì đó là chỗ duy nhất chứng minh lớp nằm ở CSDL. Chi tiết:
+> `evidence/security-reviews.md` §*Vòng sửa sau review*.
+>
+> **Ba phát hiện MEDIUM cố ý KHÔNG sửa**, vì đóng chúng là một quyết định kiến trúc chứ không
+> phải một dòng mã: cổng quyền của `packages/supplier` nằm ở gói hay ở tầng API; chính sách nào
+> tính `requires_dual_approval`; và pepper cho băm đích của bộ đếm hạn mức. ~~Cả ba cần một ADR.~~
+> **Cả ba ĐÃ CÓ ADR ngày 2026-08-30: ADR-016, ADR-017, ADR-018.** Ba ADR ấy **quyết**, chúng
+> **chưa cài** — không một dòng mã sản phẩm nào đổi trong lượt đó, và mỗi ADR để lại phần *Đo bằng
+> gì* của riêng nó. Chừng nào chưa có lượt **RED thật**, ba MEDIUM này vẫn **mở**.
+>
+> **Một việc ADR-016 sinh ra và nó có mốc chết:** cổng quyền đặt ở tầng ứng dụng là **mặc định
+> MỞ**, nên nó phải kèm một lớp máy — và lớp ấy **chưa dựng được vì `apps/` rỗng**. Điều kiện đã
+> ghim: **route đầu tiên của `apps/` phải ra đời CÙNG LÚC với lớp canh ấy.** Viết route trước, lớp
+> canh sau, là đúng thứ tự đã sinh ra khoản nợ 17.
+>
+> **Một việc ADR-017 sinh ra và nó chạm lược đồ:** `rfq_packages` cần `estimated_value` + phiên bản
+> chính sách, và một bảng `org_procurement_policies`. Đây là **migration đánh số mới** — 009 không
+> được đụng, nên câu *"ngưỡng D2 không lưu dưới dạng một số tiền"* ở đầu 009 được thu hẹp **ở nơi
+> khác**, đúng cách đóng đã ghi cho khoản nợ 19.
+>
+> **Một khả năng ADR-018 mở ra và nó có thể RẺ HƠN việc cài pepper:** sau 011/012, `destination_hash`
+> **gần như dư** — đích đọc từ `supplier_contacts` và `app_api` **không còn `UPDATE`** trên bảng ấy.
+> Nếu pepper bị coi là đắt, câu trả lời đúng là **bỏ cột**, không phải giữ cột với băm đảo ngược được.
+
+> ~~*** BA HẠNG MỤC ĐẦU KHÔNG ĐƯỢC COI LÀ XONG. ***~~ Ba lượt `security-reviewer` chạy ngày
+> 2026-08-29 tìm ra **4 CRITICAL + 11 HIGH**, và điều kiện hoàn thành S1 mục 6 đòi *mọi phát
+> hiện CRITICAL/HIGH đã được xử lý*. **Chưa một phát hiện nào được sửa.** Việc duy nhất đã làm
+> ~~là gỡ một lời khai sai~~ **đã gỡ một lời khai sai** khỏi `evidence/INV-matrix.md`: E2 và E5 từng bị khai là ĐÃ PHỦ, và
+> chuỗi tấn công chứng minh điều đó sai đã được dựng lại thành phép đo. Độ phủ **30/50 → 28/50**,
+> và sau vòng sửa **28/50 → 30/50** — lần này kèm một chuỗi đối chứng, và cả hai mã mang cờ §4.
+> Chi tiết từng phát hiện: `evidence/security-reviews.md` §S1.
+
+~~**S1 — ba hạng mục đầu ĐÃ XONG và đã commit (S1.1, S1.2, S1.3).**~~ Ba hạng mục đã có MÃ và
+đã commit, nhưng chưa đạt điều kiện hoàn thành. ~~Hạng mục kế tiếp là **S1.4**
+(phong bì niêm phong), và nó **BỊ CHẶN**: ADR-011 vẫn *Đang mở*, và ADR-011 chỉ được chốt sau khi
+có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Đây không phải một điều kiện hình
+thức — sau khi đã có phong bì thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một
+ADR.~~
+
+**S1.4 HẾT BỊ CHẶN 2026-09-04, và cách nó hết chặn là phần đáng đọc: câu hỏi được GỠ BỎ chứ không
+được trả lời.** Thế lưỡng nan *X25519 hay P-256* là do chính ADR-011 tự đặt ra dưới dạng
+**hoặc/hoặc**, và phép đo Android chỉ cần thiết cho cái hoặc/hoặc ấy. ADR-011 nay chốt **cả hai**:
+P-256 mặc định, X25519 cơ hội, chọn bằng chính `tools/do-webcrypto` **lúc chạy**. Phong bì đã mang
+mã thuật toán tường minh từ trước — đó là thứ làm quyết định này khả thi. Khoản nợ 23 **vẫn mở**;
+nó chỉ thôi chặn.
+
+> **Một khoảng trống của S1.1 đã được ghi ra thay vì lấp bằng nhãn:** test *"người liên hệ của tổ
+> chức A KHÔNG treo được vào nhà cung cấp của tổ chức B"* (`packages/supplier/src/suppliers.int.test.ts`)
+> **cố ý không mang nhãn `[INV-...]`**. Nó đo một tính chất thật — ràng buộc tham chiếu phải nằm
+> TRONG một tổ chức — nhưng sổ đăng ký 49 mã **không có mệnh đề nào phát biểu điều đó**: F1 nói
+> về TRUY VẤN bị ràng buộc `org_id`, F2 nói về IDOR, F3 nói về khoá. Gắn một trong ba nhãn ấy lên
+> đây là lấp mã bằng NHÃN thay vì bằng LỚP. Nếu mệnh đề này đáng vào sổ, nó phải vào sổ tường minh
+> — và đó là một quyết định, không phải một dòng thêm vào lặng lẽ.
+>
+> **S1.2 thêm mệnh đề thứ hai cùng loại:** *hạng mục của một RFQ chỉ sửa được khi RFQ còn ở
+> DRAFT/PENDING_APPROVAL* (trigger `rfq_items_chi_sua_khi_soan` ở 009). Nó chống một thứ thật —
+> đổi đề bài sau khi nhà cung cấp đã đọc danh sách hạng mục — và sổ đăng ký 50 mã không có mệnh
+> đề nào nói điều đó. C4 nói về DEADLINE, không về NỘI DUNG. Test của nó cũng không mang nhãn.
+>
+> **ADR-016 thêm mệnh đề thứ BA cùng loại (2026-08-30):** *danh tính ghi vào sổ kiểm toán là DẪN
+> XUẤT của một phiên, không phải một lời khai của người gọi* — trigger `kiem_danh_tinh_theo_phien`
+> ở `013`, cộng 14 test mới ở hai gói. Sổ đăng ký 50 mã **không có mệnh đề nào nói điều đó**: D5
+> nói về *ghi sổ mỗi lần TỪ CHỐI quyền*, F2 nói về IDOR. Gắn D5 lên đây là đúng thứ ADR-016 mục 3
+> cấm bằng chữ, nên **14 test ấy cố ý không mang nhãn** và độ phủ đứng yên ở **30/50** — trong khi
+> số khẳng định đi từ 758 lên **772**.
+>
+> **Ba mệnh đề này nên được đưa vào sổ đăng ký hay không là một quyết định cần người chốt.**
+> Ghi ở đây thay vì tự quyết vì thêm một mã vào sổ làm đổi mẫu số của mọi con số độ phủ.
+
+~~Không có.~~ Task 11 là task cuối của S0; sau đó là **một vòng fix cuối** đóng bốn việc văn bản/cấu hình của review toàn nhánh (không sửa một dòng mã sản phẩm nào), và **một vòng fix CI** đóng ba lỗi mà lần chạy CI đầu tiên phát hiện (cũng không sửa một dòng mã sản phẩm nào — hai file test, một `package.json`, một workflow, hai tài liệu).
 
 ### Điều kiện hoàn thành S0 — đối chiếu từng mục
 
@@ -146,8 +309,8 @@ Không có. Task 11 là task cuối của S0; sau đó là **một vòng fix cu�
 
 | # | Điểm chặn | Ảnh hưởng | Trạng thái |
 |---|---|---|---|
-| 1 | **Chưa có khách hàng pilot** | Rủi ro xây đúng thứ theo sai thứ tự — lớn hơn mọi rủi ro kỹ thuật | Chưa xử lý. Nên tiếp cận song song ngay từ S1 |
-| 2 | **Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`, chọn nhà cung cấp KMS (**ADR-009**, trạng thái *Đang mở*), chọn hạ tầng triển khai | KMS ảnh hưởng S1.6; hạ tầng ảnh hưởng mô hình IAM tách quyền giải mã của ADR-006 — **hai quyết định này không độc lập** | Chưa chốt |
+| 1 | **Chưa có khách hàng pilot** | Rủi ro xây đúng thứ theo sai thứ tự — lớn hơn mọi rủi ro kỹ thuật | **VẪN CHƯA XỬ LÝ.** 2026-09-04 lập `docs/TIEN-DE-CHUA-DO.md`: **17 tiền đề** về người mua/nhà cung cấp mà mã đang cư xử như thật, mỗi dòng trỏ tới một chỗ có địa chỉ trong kho. Nó **HẠ CHI PHÍ** của buổi làm việc đầu tiên xuống một tiếng đồng hồ đi hết một danh sách — nó **KHÔNG gỡ hộ** điểm chặn này |
+| 2 | ~~**Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`, chọn nhà cung cấp KMS (**ADR-009**, trạng thái *Đang mở*), chọn hạ tầng triển khai~~ → **còn MỘT**: xử lý thư mục `Vibe Coding/` | KMS và hạ tầng **đã chốt cùng lúc 2026-08-29: AWS KMS, `ap-southeast-1`** — đúng như dòng bên phải đã dự báo, chúng không độc lập và được quyết trong một lần. Xem ADR-009. | **Đã chốt một phần** |
 
 > Điểm chặn cũ *"hook `git-safety.sh` và `protect-secrets.sh` đang fail-open"* đã được **gỡ**:
 > Task 1 viết lại cả hai theo hướng fail-closed, và điều kiện hoàn thành S0 mục 3 đã đạt.
@@ -158,9 +321,9 @@ Không có. Task 11 là task cuối của S0; sau đó là **một vòng fix cu�
 |---|---|---|---|
 | 1 | `~/.claude/settings.json` chứa `ANTHROPIC_AUTH_TOKEN` dạng rõ | TRUNG BÌNH | `protect-secrets` nay đã phủ `.claude/settings*.json` (H8). File đã tồn tại thì hook không xoá được token khỏi nó — đó là việc của người dùng |
 | 2 | Thư mục `Vibe Coding/` là bản copy-paste thủ công của CLAUDE.md + 5 file SKILL, trùng với plugin `ai-eng-os` đã cài | THẤP | README của plugin cảnh báo gây nhầm lẫn giữa `/feature` và `/ai-eng-os:feature`. Là thao tác **xoá file** nên kế hoạch cố ý không tự làm |
-| 3 | Rủi ro `crypto.subtle` không khả dụng trong webview Zalo/Messenger | CAO (rủi ro sản phẩm) | **Chưa đo.** Cần dò tìm khả năng và hướng dẫn người dùng — xem ADR-007 |
-| 4 | Hiệu năng bọc/mở khoá `local-dev` (rủi ro §8.4 của spec) | THAM KHẢO | `pnpm bench:keys` trên máy dev, **đo lại 2026-08-29**: 10.000 lần **bọc** 447 ms (**≈22.400 thao tác/giây**), 10.000 lần **mở** 392 ms (**≈25.500 thao tác/giây**). Lần đo trước (sau fix round 1 của Task 7): 512 ms / 440 ms — cùng bậc. Tham chiếu: RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá/lượt mở thầu ⇒ dưới nửa giây CPU thuần. Đây là mốc của `local-dev` (mã hoá nội bộ, không qua mạng); adapter KMS/Vault thật (S1.6) sẽ chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng — **phải đo lại trước khi bắt đầu S1.6** |
-| 5 | `[M10]` flaky tiền tồn | THẤP | Ghi nhận từ vòng review trước, chưa truy nguyên |
+| 3 | Rủi ro `crypto.subtle` không khả dụng trong webview Zalo/Messenger | CAO (rủi ro sản phẩm) | ~~**Chưa đo.**~~ **Vẫn CHƯA ĐO TRÊN THIẾT BỊ THẬT**, nhưng nay đã có **máy dò**: `tools/do-webcrypto/index.html` chạy thật từng phép mật mã của đường nộp thầu và cho ra một trong **bốn** phán quyết. Máy dò đã được chứng minh có răng bằng ba đột biến (`?dot=x25519\|aes\|rnd` qua `phuc-vu-va-dot-bien.mjs`) — bốn phán quyết phân biệt được, đo trên Chrome 148 ngày 2026-08-29. **ĐÃ CÓ PHÉP ĐO TRÊN WEBVIEW THẬT (2026-08-29): Zalo iOS, WKWebView, iOS 18.7 — ĐẠT TOÀN BỘ, kể cả X25519.** Giả thuyết xấu nhất (*"webview Zalo không có `crypto.subtle`"*) **đã bị bác trên đường iOS**. Rủi ro **hẹp lại nhưng CHƯA ĐÓNG**: phía **Android vẫn trống hoàn toàn**, và kết quả iOS chỉ đúng cho **iOS 18.7** — `X25519` vào WebCrypto muộn hơn nhiều so với AES-GCM nên một WebKit cũ là chỗ nó có thể vắng. Phép đo này cũng làm lộ ra rằng trục phân loại đúng là **engine**, không phải tên ứng dụng: trên iOS, Zalo và Messenger dùng **cùng một `WKWebView`**, nên một phép đo phủ cả hai. Nhật ký: `tools/do-webcrypto/ket-qua-do.md`. Xem ADR-007 và §10 của kế hoạch S1. **[2026-09-05] MỘT KHIẾM KHUYẾT CỦA CHÍNH CÔNG CỤ ĐO, tìm ra bởi lớp canh của khoản nợ 20:** `tools/do-webcrypto/phuc-vu-va-dot-bien.mjs` đọc `./do-webcrypto.html`, một tên KHÔNG CÒN TỒN TẠI (trang đã đổi thành `index.html`) — nên server đột biến ném `ENOENT` ở dòng đầu và ai cầm nó lên hôm nay sẽ không chạy được một lượt nào. Đã sửa. Điều đáng ghi không phải lỗi mà là chỗ nó trốn: `tsc` không nhìn thấy đường dẫn dạng chuỗi, và không test nào gọi tới tệp `.mjs` ấy |
+| 4 | Hiệu năng bọc/mở khoá `local-dev` (rủi ro §8.4 của spec) | THAM KHẢO | `pnpm bench:keys` trên máy dev, **đo lại 2026-08-29**: 10.000 lần **bọc** 447 ms (**≈22.400 thao tác/giây**), 10.000 lần **mở** 392 ms (**≈25.500 thao tác/giây**). Lần đo trước (sau fix round 1 của Task 7): 512 ms / 440 ms — cùng bậc. Đây là mốc của `local-dev` (mã hoá nội bộ, không qua mạng). ~~Tham chiếu: RFQ 50 NCC × 200 hạng mục ≈ 10.000 lần mở khoá/lượt mở thầu ⇒ dưới nửa giây CPU thuần. Adapter KMS/Vault thật (S1.6) sẽ chậm hơn **nhiều bậc** vì mỗi lần là một lời gọi mạng~~ — **hai câu vừa gạch đã được ĐO là sai** (2026-08-29, `tools/bench-kms/dem-loi-goi-kms.mjs`): 200 hạng mục nằm trong **cùng một phong bì** nên số phong bì là **50** chứ không phải 10.000; và một lượt mở thầu tốn **đúng 1 lời gọi KMS** bất kể số nhà cung cấp, vì chỉ data key của tổ chức đi qua KMS. Giữ nguyên văn để đối chiếu. **Câu "phải đo lại trước khi bắt đầu S1.6" thì vẫn đúng và vẫn còn hiệu lực** — phép đo trên là mô phỏng, chưa chạy qua `packages/crypto-keys`; xem ADR-009 |
+| 5 | `[M10]` flaky tiền tồn | THẤP | ~~Ghi nhận từ vòng review trước, chưa truy nguyên~~ **QUAN SÁT LẦN THỨ HAI (2026-08-29, vòng sửa sau review an ninh), và lần này có CHỮ KÝ.** Test `[fix round 5 — M10]` ở `packages/db/src/migrate.int.test.ts:540` đỏ trong một lượt `pnpm evidence` toàn bộ, **xanh khi chạy riêng file ấy**. Khẳng định đỏ là `expect(rows[0]?.n).toBe(0)` trên `SELECT count(*) FROM pg_locks WHERE locktype='advisory'` — thu được **1**, chờ **0**. Hai khẳng định ngay trước (`poolThuong.totalCount`/`idleCount` = 0) thì QUA, tức client phía Node đã bị huỷ. **GIẢ THUYẾT, chưa kiểm chứng:** đây là cùng cơ chế mà lần chạy CI đầu tiên đã đo và ghi ở mục 2 — *`await pool.end()` chỉ bảo đảm phía CLIENT*; backend phía server chưa kịp thoát nên advisory lock của nó chưa được nhả tại đúng khoảnh khắc câu đếm chạy. Nếu giả thuyết đúng thì bản vá cùng hình dạng với bản vá T3 của S0: **chờ `pg_stat_activity` hết backend rồi mới đếm**, thay vì đếm ngay. **Điểm dữ liệu thứ hai, cùng ngày:** lượt `pnpm evidence` chạy lại NGAY SAU đó, cùng cây mã, **XANH TOÀN BỘ** — 758 test, 0 file đỏ, vitest thoát mã 0. Hai lượt liên tiếp cho hai kết quả khác nhau trên cùng một cây: đây là bằng chứng FLAKY, không phải hồi quy. **Cố ý KHÔNG sửa trong vòng này**: nó là một test tiền tồn, không thuộc phạm vi review an ninh, và sửa một flake bằng một giả thuyết chưa đo là đúng thứ dự án phạt. **[2026-09-05 — ĐÃ ĐO, xem khoản nợ 24]** 14 lượt trên máy này (1 lượt `test:int` đầy đủ, 5 lượt cặp `migrate`+`outbox`, 8 lượt tranh chấp bốn tệp cùng lúc): **0 lần đỏ, 0 lần `57P01`, 0 unhandled**. Nguồn phát ĐÃ BIẾT của `57P01` nay có phép đo riêng ở `TestDatabase.stop()` (khoản nợ 28). Vẫn CHƯA tuyên bố là hết: cùng con số ấy phải lặp lại trên phần cứng CI, và `.github/workflows/do-lap.yml` chạy lặp hằng tuần, fail-closed |
 
 ## Nợ kỹ thuật
 
@@ -182,16 +345,31 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 10 | **`.gitattributes` ghim đúng hai thứ**: `*.sql` và `evidence/INV-matrix.md`. `.ts` là **CRLF trong mọi checkout mới** trên Windows | `.gitattributes` |
 | 11 | **Artefact neo ngoài của B3 vẫn không tồn tại.** Cơ chế đã có, artefact thì chưa — và không có nó, một chuỗi hash hợp lệ **không chứng minh gì** trước một chủ sở hữu bảng | `evidence/INV-matrix.md` §4.1 (trích nguyên văn) |
 | 12 | Lớp canh nhãn của Task 10 (`packages/outbox/src/nhan-bat-bien.test.ts`) **chỉ phủ `packages/outbox/src/`**. Lớp canh toàn repo mà Task 11 dựng chỉ bắt được nhãn trỏ tới mã **không tồn tại** — nó **không** bắt được nhãn đúng cú pháp gắn sai chỗ | `tools/inv-matrix/src/parse.ts` |
-| 13 | **`D1` là một mệnh đề HỘI bốn vế mà phép hội chưa từng được đo một lần.** 12 test đo vế *MFA còn hiệu lực*, 5 test đo vế *quyền hợp lệ*, **không test nào đo hai vế cùng lúc**; hai vế còn lại (*RFQ đã CLOSED*, *cổng chính sách*) không có một dòng mã nào. Vế thứ ba **chính là hàng `C3`**, đang ⏳ trong cùng bảng | `evidence/INV-matrix.md` §4 (mục D1) |
-| 14 | **`G1` canh một cánh cửa chưa có phòng ở sau.** 18 test đo quy tắc biên giới — lớp phòng ngừa thật, đã chứng minh có răng — nhưng `wrapped_private_key` và `apps/unseal-worker` **chưa tồn tại** | `evidence/INV-matrix.md` §4 (mục G1) |
+| 13 | **ĐÃ ĐÓNG [S1.6].** ~~**`D1` là một mệnh đề HỘI bốn vế mà phép hội chưa từng được đo một lần.**~~ `assertUnsealAllowed` hợp cả bốn vế; phép hội được đo bằng khuôn *một trạng thái chỉ sai đúng một vế*, và `C3` nay ✅ nên mâu thuẫn số học giữa hai hàng cũng hết. Nguyên văn cũ: 12 test đo vế *MFA còn hiệu lực*, 5 test đo vế *quyền hợp lệ*, **không test nào đo hai vế cùng lúc**; hai vế còn lại (*RFQ đã CLOSED*, *cổng chính sách*) không có một dòng mã nào. Vế thứ ba **chính là hàng `C3`**, đang ⏳ trong cùng bảng | `evidence/INV-matrix.md` §4 (mục D1) |
+| 14 | **ĐÃ ĐÓNG [S1.6].** ~~**`G1` canh một cánh cửa chưa có phòng ở sau.**~~ `apps/unseal-worker` tồn tại và THẬT SỰ import cả hai cửa hạn chế. Nguyên văn cũ: 18 test đo quy tắc biên giới — lớp phòng ngừa thật, đã chứng minh có răng — nhưng `wrapped_private_key` và `apps/unseal-worker` **chưa tồn tại** | `evidence/INV-matrix.md` §4 (mục G1) |
 | 15 | **Không có ADR mở cho KMS dù nó chặn S1.6** — đã đóng bằng **ADR-009**; khoản nợ còn lại là *chốt nhà cung cấp*, và nó **không độc lập** với quyết định hạ tầng (ADR-006 chỉ cưỡng chế được bằng IAM của hạ tầng đích) | `docs/DECISIONS.md` ADR-009 |
 | 16 | **Bốn mục hardening cùng khuôn danh-sách-tên, chưa có trong sổ nợ.** Nặng nhất: hình dạng bảng sổ chỉ **ĐẾM** `attname IN (15 tên) = 15`, **không cấm cột thừa** ⇒ thêm một cột `payload_plaintext` vào `audit_events` **không bị mục nào chạm**. Kế đó: bất đối xứng `bang_so` (2 tên viết cứng) vs `bang_al` (theo tính chất) — **bảng báo giá S1 sẽ rơi thẳng vào đó**: được kiểm trigger nhưng **không** bị kiểm UNLOGGED, **không** bị kiểm UNIQUE, **không** bị thu hồi UPDATE/DELETE/TRUNCATE. **Bất đối xứng này không có một chú thích nào giải thích.** Và `VI_TU_BANG_TENANT` giấu `OR relname IN ('organizations')` bên trong một vị từ tính-chất ⇒ bảng gốc tenant thứ hai không bị đổi RLS/FORCE, `rls-coverage.int.test.ts` cũng mù | `db/migrations/hardening.always.sql`, `db/rls-coverage.int.test.ts` |
 | 17 | **Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào.** `packages/tenancy/src/with-tenant.ts` là **điểm DUY NHẤT gắn `app.org_id`** — toàn bộ RLS của 002–007 treo vào nó — và `packages/audit/src/writer.ts` là đường ghi sổ kiểm toán. Cả hai **với tới được bằng import tương đối**: 3/7 gói có quy tắc biên giới (`crypto-keys`, `identity`, `outbox`); `audit`, `db`, `tenancy`, `test-support` **không có** | `.dependency-cruiser.cjs:77-78` (tự đặt tên cho quy luật: *"LẦN THỨ BA CÙNG MỘT LỚP LỖ"*) |
 | 18 | **Bộ máy evidence nằm ngoài vòng review bắt buộc** — đã đóng ở vòng fix cuối: `/tools/inv-matrix/`, `/docs/TEST-PLAN.md`, `/docs/STATE.md`, `/evidence/` nay có trong `.github/CODEOWNERS`. Khoản nợ **còn lại**: `CODEOWNERS` trỏ tới `@trustprocure/bao-mat`, một team **chưa tồn tại**, nên tới hôm nay nó **chưa cưỡng chế gì** | `.github/CODEOWNERS` (khối cảnh báo ở đầu file) |
 | 19 | **Bốn phép đo THIU trong chú thích của migration đã áp**, không sửa được tại chỗ vì `001`–`007` và `hardening.always.sql` **không được đụng** (migration đánh số chạy đúng một lần; sửa chú thích cũng đổi checksum): ⑴ `006:23` và `007:29` chép **nguyên văn giống nhau** *"~71 chỗ `::text`/`::oid`"* — đo lại bằng công cụ **nhị phân** trên `hardening.always.sql`: `::text` = **55**, `::oid` = **2**, tổng **57**; một phép đo thiu được chép sang file thứ hai **mà không đo lại**. ⑵ `hardening:863-864` (khối *DƯ LƯỢNG CÒN LẠI*, đúng đoạn có giá trị kiểm toán cao nhất) nói *"một bảng ở schema khác mang ĐÚNG **14** cột này"* trong khi danh sách có **15** tên và vị từ dòng 886 đúng là `= 15` — mô tả sai bề mặt tấn công **đi một cột**. ⑶ `005:190-191` nói mục (C) *"CẤM MỌI"* hàm SECURITY DEFINER, nhưng bản cài đặt còn loại trừ `pg_toast%`/`pg_temp%`, `NGOAI_LE_DOC_VONG`, và **hàm thuộc EXTENSION** — file viện dẫn nói **rộng hơn** file có thẩm quyền. ⑷ `hardening:73-76` nói *"4 trong 6 câu lệnh"* trong khi bảng hiện có **36 mục**. **Cách đóng đúng: một migration mới, hoặc sửa kèm lần migrate() kế tiếp có đổi lược đồ.** | `db/migrations/006_sessions_and_mfa.sql`, `007_outbox.sql`, `005_identity.sql`, `hardening.always.sql` |
-| 20 | **Không lớp nào canh "bảo đảm chỉ đúng trên một hệ điều hành".** Lần chạy CI đầu tiên tìm ra **một** ca (test import sai hoa-thường) và ca đó đã sửa, nhưng cơ chế phát hiện vẫn là *"chạy trên hệ điều hành thứ hai rồi xem cái gì đỏ"*. Toàn bộ 346 test đơn vị mới chỉ được chạy trên **hai** nền tảng đúng **một** lần mỗi bên, và CI chỉ có `ubuntu-latest` — nên một bảo đảm chỉ đúng trên **Linux** thì hôm nay **không lớp nào bắt được**. Cách đóng đúng: thêm `windows-latest` vào ma trận job T1+T2 | `tests/architecture/boundaries.test.ts` (khối chú thích của test hoa-thường); `.github/workflows/ci.yml` |
-| 21 | **Chỉ `pnpm audit --prod` chặn được hạ tầng kiểm thử lọt vào phạm vi sản xuất, và nó chỉ nổ khi TÌNH CỜ có advisory.** `packages/test-support` khai `@testcontainers/postgresql` trong `dependencies` suốt từ Task 3 tới lần chạy CI đầu tiên; thứ làm nó lộ ra là **hai advisory HIGH trên `undici`**, không phải một lớp canh nào. Một gói kiểm thử **không có advisory** vẫn nằm im trong đồ thị prod và **không lớp nào kêu**. Cách đóng đúng: một test đọc mọi `package.json` của workspace và khẳng định tập phụ thuộc sản xuất đúng bằng một danh sách được ghim | `packages/test-support/package.json`, `.github/workflows/ci.yml` (bước *Audit phu thuoc (cong chan)*) |
+| 20 | **ĐÃ ĐÓNG [2026-09-05] bằng HAI lớp không thay thế nhau.** ⑴ Job T1+T2 nay chạy trên CẢ `ubuntu-latest` LẪN `windows-latest` (`fail-fast: false`); T3 cố ý ĐỨNG NGOÀI ma trận vì runner Windows không chạy được `postgres:16-alpine`, và giới hạn ấy được ghi thẳng vào `ci.yml`. ⑵ `tests/architecture/bao-dam-mot-he-dieu-hanh.test.ts` đo THẲNG tính chất, trên mọi hệ điều hành. **MỘT DỰ ĐOÁN CỦA TÔI ĐÃ BỊ PHÉP ĐO BÁC BỎ:** bản đầu của lớp ⑵ canh đường dẫn `import`, và phép đo (đổi `./comparison.js` → `./Comparison.js` ở một module chỉ có ĐÚNG MỘT nơi import) cho thấy `tsc` BẮT ĐƯỢC bằng `TS1261` — trục ấy đã có chủ, nên vế ấy bị GỠ. Thứ còn lại không có chủ là **đường dẫn dạng CHUỖI** (`new URL(..., import.meta.url)`, hơn năm mươi chỗ trong kho): `tsc` mù hoàn toàn với chúng. Lớp mới TÌM RA MỘT LỖI THẬT ngay lần chạy đầu — server đột biến của máy dò WebCrypto đọc `./do-webcrypto.html`, một tên không còn tồn tại, nên nó ném `ENOENT` ở dòng đầu và không ai biết. Nó cũng ĐỎ TRÊN CHÍNH NÓ một lần (khối lý do NHẮC TỚI một `new URL(...)` như ví dụ và phép quét đọc câu văn ấy thành lời gọi thật) — đã sửa bằng cách bỏ chú thích trước khi quét. Mũi đột biến (`db/migrations` → `db/Migrations`) ĐỎ THẬT. Nguyên văn: ~~**Không lớp nào canh "bảo đảm chỉ đúng trên một hệ điều hành".**~~ Lần chạy CI đầu tiên tìm ra **một** ca (test import sai hoa-thường) và ca đó đã sửa, nhưng cơ chế phát hiện vẫn là *"chạy trên hệ điều hành thứ hai rồi xem cái gì đỏ"*. Toàn bộ 346 test đơn vị mới chỉ được chạy trên **hai** nền tảng đúng **một** lần mỗi bên, và CI chỉ có `ubuntu-latest` — nên một bảo đảm chỉ đúng trên **Linux** thì hôm nay **không lớp nào bắt được**. Cách đóng đúng: thêm `windows-latest` vào ma trận job T1+T2 | `tests/architecture/boundaries.test.ts` (khối chú thích của test hoa-thường); `.github/workflows/ci.yml` |
+| 21 | **ĐÃ ĐÓNG [2026-09-05] bằng `tests/architecture/pham-vi-san-xuat.test.ts`.** Ba vế, và vế giữa suy TỪ TÍNH CHẤT chứ không từ một danh sách tên: một gói workspace mà MỌI nơi import nó đều là tệp test thì không được nằm ở `dependencies` của bất kỳ ai — một `packages/x-support` mai sau tự rơi vào rổ ấy mà không ai phải nhớ thêm tên nó vào đâu. Hai vế kia: tập phụ thuộc NGOÀI ở phạm vi sản xuất được ghim đúng bằng `pg` + `pg-connection-string`, và phụ thuộc phát triển của gốc không được lọt vào `dependencies` của gói nào. **NÓ TÌM RA MỘT LỖ NGAY LẦN CHẠY ĐẦU:** `apps/unseal-worker` khai `@trustprocure/test-support` ở `dependencies` — tức hạ tầng Testcontainers nằm trong phạm vi sản xuất của app ấy, và `pnpm audit --prod` KHÔNG kêu một tiếng, vì sau lần sửa Task 3 gói đó không còn phụ thuộc ngoài nào để mà có advisory. Đúng cơ chế khoản nợ này mô tả, tái diễn lần thứ hai. Nguyên văn: ~~**Chỉ `pnpm audit --prod` chặn được hạ tầng kiểm thử lọt vào phạm vi sản xuất, và nó chỉ nổ khi TÌNH CỜ có advisory.**~~ và nó chỉ nổ khi TÌNH CỜ có advisory.** `packages/test-support` khai `@testcontainers/postgresql` trong `dependencies` suốt từ Task 3 tới lần chạy CI đầu tiên; thứ làm nó lộ ra là **hai advisory HIGH trên `undici`**, không phải một lớp canh nào. Một gói kiểm thử **không có advisory** vẫn nằm im trong đồ thị prod và **không lớp nào kêu**. Cách đóng đúng: một test đọc mọi `package.json` của workspace và khẳng định tập phụ thuộc sản xuất đúng bằng một danh sách được ghim | `packages/test-support/package.json`, `.github/workflows/ci.yml` (bước *Audit phu thuoc (cong chan)*) |
 | 22 | ~~**Job `evidence` vẫn CHƯA từng chạy trên CI.**~~ **ĐÃ ĐÓNG** ở run `33221142361`: job chạy đủ, 672 khẳng định, 24/47, *"Cổng evidence: XANH"*, và bước so byte với bản đã commit đã chạy và qua. Toàn bộ khoản nợ *"chưa chạy trên CI thật"* nay đã trả hết. Giữ hàng này để đối chiếu, không xoá | `.github/workflows/ci.yml` (job `evidence`) |
+| 23 | **VẪN MỞ, và [2026-09-05] xác nhận lại: KHÔNG mã nào đóng được nó.** Vế còn thiếu là một phép đo trên MÁY THẬT — Android tầm trung/cũ — và trong tay không có máy ấy; lượt tra dữ liệu công bố 2026-09-04 đã cho một kết quả ÂM (phân bố phiên bản Android System WebView không tra được từ dữ liệu tổng hợp miễn phí). Viết thêm một dòng mã nào ở đây cũng chỉ là viết quanh chỗ trống. Một điều CÓ sửa được thì đã sửa: server đột biến của chính máy dò (`tools/do-webcrypto/phuc-vu-va-dot-bien.mjs`) đọc một tên tệp không còn tồn tại và ném `ENOENT` ở dòng đầu — tức công cụ dùng để đo, nếu ai đó cầm lên hôm nay, sẽ KHÔNG CHẠY. Lớp canh của khoản nợ 20 tìm ra nó. Nguyên văn cũ giữ lại: **VẪN MỞ, nhưng THÔI CHẶN S1.4 kể từ 2026-09-04.** ADR-011 được chốt bằng cách **gỡ bỏ thế hoặc/hoặc** — hỗ trợ CẢ HAI thuật toán, chọn bằng chính máy dò lúc chạy — nên phép đo Android tụt từ **cổng chặn** xuống **con số vận hành**. Lượt tra dữ liệu công bố 2026-09-04 còn cho một **kết quả ÂM đáng ghi**: phân bố phiên bản Android System WebView **không tra được** từ dữ liệu tổng hợp miễn phí, tức câu hỏi cũ *không* trả lời được bằng cách đọc, chỉ bằng cách thuê máy thật — và ngay cả thế cũng chỉ cho một mẫu. Xem `tools/do-webcrypto/ket-qua-do.md` §3c. Nguyên văn cũ giữ lại: **Phía Android của WebCrypto chưa từng được đo, và việc đó đã được HOÃN CÓ CHỦ ĐÍCH ngày 2026-08-29** vì trong tay không có máy Android tầm trung/cũ và không có iPhone iOS cũ. Đây **không phải** rủi ro đã đóng; nó là rủi ro **được chấp nhận tạm** với hai điều kiện ghi rõ: ⑴ **phải đo trước khi CHỐT ADR-011** (S1.4), vì sau khi đã có phong bì thật thì đổi thoả thuận khoá là một cuộc di trú chứ không phải sửa cấu hình; ⑵ chừng nào ô ấy còn trống, **không tài liệu nào được viết *"đã đo trên webview"* mà không kèm `iOS 18.7`**. Giảm nhẹ đã có: ADR-011 buộc phong bì **mang mã thuật toán thoả thuận khoá**, nên đổi sang P-256 về sau là **thêm một nhánh**, không phải viết lại | `tools/do-webcrypto/ket-qua-do.md` §4 (quyết định hoãn, có ngày) |
+| 24 | **ĐÃ ĐO [2026-09-05], VÀ CƠ CHẾ ĐO NAY CHẠY ĐỀU — nhưng chưa tuyên bố là đã sửa.** Số liệu thật trên máy phát triển (Windows 11, Docker Desktop 29.7.2): 1 lượt `pnpm test:int` đầy đủ (23/23 tệp, **0** lần `57P01`, **0** unhandled), 5 lượt cặp `migrate`+`outbox`, 8 lượt tranh chấp bốn tệp cùng lúc — **0/14 lần đỏ**. Cộng thêm: nguồn phát ĐÃ BIẾT của `57P01` nay có phép đo riêng (khoản nợ 28), và `[M10]` đã được truy nguyên từ vòng fix trước với năm nhánh B0–B4 đo thật. Thứ CÒN THIẾU đúng một điều — cùng con số ấy trên PHẦN CỨNG CỦA CI, nơi cả hai lần đỏ thật sự xảy ra — nên `.github/workflows/do-lap.yml` chạy lặp `test:int` hằng tuần và **fail-closed** khi tỷ lệ khác 0. Không nới một ngưỡng nào. Nguyên văn: ~~**HAI test FLAKY, cùng một họ, và họ ấy nay có tên.**~~ `[M10]` (`packages/db/src/migrate.int.test.ts` — đếm advisory lock còn sót) và `[T10-L]` (`packages/outbox/src/outbox.int.test.ts` — `destroyConnectionWhenDone`) đều **đỏ trong lượt chạy đầy đủ và XANH khi chạy riêng**, cả hai quanh **vòng đời kết nối dưới tranh chấp Docker**. Chúng chưa được sửa **có chủ đích**: chưa có phép đo nào phân biệt được *"lớp bị hỏng"* với *"máy chạy chậm"*, và sửa mù bằng cách nới ngưỡng là đúng thứ biến một phép đo thành một lời khai. Cách đóng đúng: một lượt chạy lặp (`--repeat`) trên CI để đo TỶ LỆ, rồi mới quyết định | `packages/db/src/migrate.int.test.ts:540`, `packages/outbox/src/outbox.int.test.ts:1404` |
+| 27 | **ĐÃ ĐÓNG [2026-09-05].** Bước audit tách ra thành job riêng `t0b-audit`. Hướng fail-closed KHÔNG đổi — một lần audit không chạy được vẫn không được đọc thành *"không có lỗ hổng"*; thứ sai là GỘP, vì nó để một lần gián đoạn mạng của bên thứ ba che mất kết quả của bốn cổng tĩnh không phụ thuộc gì ngoài kho mã. Nay một lượt gián đoạn cho ra hai câu khác nhau: `T0 — cổng tĩnh` XANH, `T0b — audit` ĐỎ. `tests/architecture/hinh-dang-ci.test.ts` ghim cả hai thay đổi, và hai mũi đột biến (gỡ `windows-latest`; đưa `pnpm audit` về `t0`) đều ĐỎ THẬT. Nguyên văn: ~~**Cổng T0 ĐỎ được vì một lý do KHÔNG nằm trong kho mã, và điều đó đã xảy ra thật.**~~, và điều đó đã xảy ra thật.** Hai lượt CI ngày 2026-09-04 (`33862380751` commit `6e8c8aa`, `33862719087` commit `9b1c237`) đỏ ở bước *Audit phu thuoc (cong chan)* với `ERR_SOCKET_TIMEOUT` khi gọi `registry.npmjs.org` — `tsc`, `eslint`, `depcruise`, `gitleaks` đều xanh, và `pnpm t0` cục bộ xanh trên đúng cây ấy. Tức **cổng chặn merge phụ thuộc vào một dịch vụ ngoài còn sống**. Hướng fail-closed là ĐÚNG (một lần audit không chạy được không được đọc thành "không có lỗ hổng"), nên đây **không** phải một lỗi cần sửa vội; nó là một tính chất phải **được biết**, vì lần tới ai đó thấy T0 đỏ sẽ đi tìm lỗi trong mã của mình. Cách đóng đúng nếu nó lặp lại: tách bước audit thành một job RIÊNG, để một lượt gián đoạn mạng không che mất kết quả của bốn cổng tĩnh còn lại | `.github/workflows/ci.yml` (bước *Audit phu thuoc (cong chan)*) |
+| 28 | **ĐÃ ĐÓNG [2026-09-05], và đóng bằng ĐO chứ không bằng sửa mù — đúng cách khoản nợ này đòi.** `TestDatabase.stop()` nay hỏi `pg_stat_activity` NGAY TRƯỚC `container.stop()` và ném nếu còn backend khách sống sau một cửa sổ chờ 3 giây; cửa sổ ấy không phải một ngưỡng được nới cho tới lúc hết đỏ mà là một quãng chọn DƯỚI `idleTimeoutMillis` mặc định 10 giây của `pg`, nên nó phân biệt được *"đã đóng, chưa thoát"* với *"rò rỉ thật"*. Ba quyết định được ghi tại chỗ: khẳng định KHÔNG chặn `container.stop()` (một lớp canh làm rò rỉ container thật thì tệ hơn thứ nó canh); [CẤM LOG] thông điệp KHÔNG mang cột `query`; và `withMigratedDatabase` viết lại để lỗi THÂN HÀM thắng lỗi dọn dẹp — một `finally` trần sẽ để phép đo mới che mất đúng thứ bộ test đang tìm. Có ca rò rỉ dựng sẵn chứng minh nó có răng. Đo trên cả 23 tệp tích hợp: **0 rò rỉ, 0 lần `57P01`, 0 unhandled**. Nguyên văn: ~~**Job T3 đỏ được vì một lỗi KHÔNG PHẢI một khẳng định sai.**~~ Lượt `33862719087` (commit tài liệu thuần `9b1c237`) đỏ với `terminating connection due to administrator command` (`57P01`) — một kết nối gộp còn sống khi container Postgres của test bị đóng; **không một `expect` nào đỏ**. Cùng lượt ấy trên commit TRƯỚC (`6e8c8aa`) thì T3 xanh. Đây là cùng họ với khoản nợ 24 (vòng đời kết nối dưới tranh chấp), nhưng khác chỗ: nó không gắn với một test có tên nào, nên `--repeat` một file không tái lập được. Cách đóng đúng: mỗi bộ test tích hợp phải đóng pool TRƯỚC khi dừng container, và điều đó phải được ĐO chứ không được sửa mù | `packages/test-support/src/postgres.ts` (`stop()`), `packages/audit/src/chain.int.test.ts` |
+| 25 | **ĐÃ ĐÓNG [S1.6]** bằng `RFQ_KEY_MATERIAL_UNWRAPPED` ghi bởi chính worker. Nguyên văn cũ: **Vế *mở bọc* của G4 chưa có một dòng mã nào, và nó là vế một kiểm toán viên hỏi tới ĐẦU TIÊN.** S1.4 ghi sổ kiểm toán cho *sinh* (một bản ghi, vì sinh và bọc là một hành vi) và *huỷ*; *mở bọc* sống trong `apps/unseal-worker`, thứ chưa tồn tại. Đây là **phần chênh đã được khai báo** ở §4 của ma trận chứ không phải một khoảng trống bị quên — nhưng nó là khoản nợ mà **S1.6 phải trả**, không phải một ghi chú vĩnh viễn | `tools/inv-matrix/src/danh-gia.ts` (`PHAM_VI_HEP` mục `G4`) |
+| 26 | **ĐÃ ĐÓNG [2026-09-05] bằng `026_xoa_mat_ma_vat_lieu_khoa.sql` — S1.6 đã xây xong cổng chính sách mà `017` khối (4) chờ.** Xoá mật mã ĐƯỢC hỗ trợ và KHÔNG BAO GIỜ là tác dụng phụ của một nút: bốn điều kiện hợp lại — ⑴ đã THU HỒI, ⑵ hết quãng ân hạn `key_purge_grace_hours` của chính sách ĐÃ GHIM, ⑶ chính sách phải BẬT (mặc định `NULL` = không bao giờ xoá; một hành động không đảo ngược được không được bật sẵn cho ai chưa nghe nói tới nó), ⑷ `wrapped_private_key` chỉ đổi được VỀ `NULL`, một lần. `app_api` nay CÓ `UPDATE` trên cột ấy — một sự nới quyền phải nói thẳng — nhưng nó vẫn KHÔNG ĐỌC được cột, và trigger từ chối mọi giá trị mới khác `NULL`: hình dạng của một nút phá huỷ, không phải một nút sửa. Mã quyền `rfq.key.purge` chỉ `PROCUREMENT_MANAGER`; người gọi phải khai đúng SỐ HÀNG mình đang phá huỷ. Bốn ca từ chối đi THẲNG bằng SQL, không qua mặt tiền; mũi đột biến bỏ vế ân hạn ĐỎ THẬT. **GIỚI HẠN ĐÃ GHI RA:** `UPDATE ... = NULL` xoá GIÁ TRỊ, không bảo đảm byte cũ biến khỏi WAL/bản sao lưu/standby — bảo đảm mật mã thật chỉ đóng khi khoá chủ ở KMS cũng bị huỷ, và đó là lý do bản ghi mang tên `RFQ_KEY_MATERIAL_PURGED` chứ không `CRYPTO_ERASED`. Nguyên văn: ~~**Thu hồi vật liệu khoá là một DẤU, không phải một lần XOÁ MẬT MÃ.**~~ Khi một RFQ bị huỷ, `rfq_key_material.revoked_at` được đặt nhưng `wrapped_private_key` **vẫn nằm nguyên trong hàng**. Xoá nó đi sẽ biến *"không ai được mở báo giá của RFQ đã huỷ"* từ một quy tắc **chính sách** thành một sự thật **mật mã** — mạnh hơn hẳn — nhưng nó cũng là một hành động không đảo ngược đứng sau một nút có thể bấm nhầm. Quyết định thuộc S1.6, nơi có cổng chính sách để đặt nó vào | `db/migrations/017_rfq_key_material.sql` khối (4) |
+| 29 | **ĐÃ ĐÓNG [2026-09-05] bằng `027_phien_khach_co_lap.sql` — nhưng KHÔNG theo hình dạng khoản nợ này tự đề xuất, và sự khác ấy là một phép đo.** Sổ nợ nói *"một role `app_guest`"*. Tôi đã định làm đúng thế, rồi đọc `hardening.always.sql` và đổi ý: một role thứ ba PHẢI được file ấy cưỡng chế lại thuộc tính ở MỌI lần `migrate()` (nếu không, một `ALTER ROLE app_guest BYPASSRLS` sau triển khai sống mãi — và đó ĐÚNG NGƯỢC LẠI thứ A5 cần), mà file ấy liệt kê role theo TÊN ở ba chỗ, tức đóng bằng role sẽ kéo theo một lần sửa file 1600 dòng chịu lực nhất kho. Và một role KHÔNG mạnh hơn ở đúng trục đang bàn: cả hai thiết kế đều đứng trên *"ứng dụng chọn đúng cách nối"*; thứ THẬT SỰ cô lập là VỊ TỪ RLS. Thêm nữa, chính `hardening.always.sql` ghi *"HÌNH DẠNG THỨ TƯ — policy AS RESTRICTIVE — KHÔNG cần dòng nào"* trong danh sách ngoại lệ, tức nó đã chừa sẵn chỗ cho cách này. Nên: policy `AS RESTRICTIVE` đọc `app.guest_session_id`, cộng vào policy sẵn có bằng phép HỘI, không chạm một dòng nào của đường người mua. **MẶC ĐỊNH LÀ TỪ CHỐI** — mọi bảng có RLS đều mang một policy `<bảng>_khach`, và bảng nào không thuộc bảy bảng của mặt khách thì vị từ của nó đóng hoàn toàn; một lớp canh suy từ `pg_class.relrowsecurity` bắt bảng TIẾP THEO phải được quyết định. Đo bằng HAI nhà cung cấp trên CÙNG một RFQ, có đối chứng dương (khách đọc được của chính mình) và một mũi đột biến ĐỎ THẬT. **MỘT THIẾT KẾ CỦA TÔI ĐÃ BỊ BỘ TEST BÁC BỎ, và nó đổi hình dạng của lời giải:** bản đầu để chính vị từ policy TRA `guest_sessions` để lấy lời mời. Nó đỏ ở năm test của đường mở thầu với `permission denied for table guest_sessions` — vì Postgres kiểm quyền trên MỌI bảng trong kế hoạch, KHÔNG theo kiểu ngắn mạch của `OR`, nên mọi role đọc `vendor_bid_versions` sẽ phải có `SELECT` trên `guest_sessions`, kể cả `app_unseal` vốn không bao giờ gắn phiên khách. Ba đường ra được cân; đường đã chọn là GUC THỨ HAI (`app.guest_invitation_id`) mà `withGuestSession()` DẪN XUẤT từ chính hàng phiên — và nhân đó thêm một phép kiểm không có ở bản đầu: một phiên đã THU HỒI hay HẾT HẠN không gắn được, đo bằng `clock_timestamp()` chứ không `now()`. `withGuestSession()` gắn GUC và KHẲNG ĐỊNH nó có hiệu lực — fail-open trong im lặng là hướng hỏng duy nhất không chấp nhận được ở đây. **HAI PHẦN CHÊNH ĐÃ GHI VÀO §4 CỦA MA TRẬN:** bảo đảm chỉ đứng KHI kết nối đã gắn phiên khách (không có tầng HTTP nào để cưỡng chế việc gắn ấy), và vế *"gián tiếp qua thời gian phản hồi"* vẫn là một phép đo T6 chưa ai chạy. Role `app_guest` ở lại sổ nợ như một lớp phòng thủ chiều sâu ở tầng GRANT, với lý do đo được ở trên. Nguyên văn: Hình dạng đúng vẫn là `app_guest` + policy theo `current_setting('app.guest_session_id')`, và bản thân RLS thì rẻ hơn tưởng: **policy `AS RESTRICTIVE ... TO app_guest`** cộng vào các policy sẵn có mà KHÔNG chạm một dòng nào của `app_api`/`app_unseal` — tức *"nó chạm mọi bảng"* không còn là vế chặn. Vế chặn THẬT nằm chỗ khác, và đọc mã mới thấy: một role thứ ba phải được `hardening.always.sql` cưỡng chế lại thuộc tính ở MỌI lần `migrate()` (nếu không, một `ALTER ROLE app_guest BYPASSRLS` sau triển khai sẽ sống mãi — và một `app_guest` có `BYPASSRLS` là ĐÚNG NGƯỢC LẠI thứ A5 cần), mà file ấy liệt kê role theo TÊN ở ba chỗ: tạo role, ghim thuộc tính, và bước gỡ membership vốn hẹp xuống ĐÚNG hai cặp `app_*_login → app_*`. Sửa file 1600 dòng chịu lực nhất kho, trong cùng một lượt với sáu khoản nợ khác, là đúng thứ chính khoản nợ này cảnh báo — *"trộn vào một hạng mục sẽ làm cả hai khó xem xét"*. Nó cần một hạng mục riêng, có buổi `security-reviewer` riêng. Nguyên văn giữ lại: **A5 KHÔNG được cưỡng chế ở tầng CSDL, và khoảng trống ấy là một QUYẾT ĐỊNH bị hoãn chứ không phải một thiếu sót.** Phiên khách chạy dưới cùng role `app_api` và cùng `app.org_id` của tổ chức người mua (010), nên RLS cô lập TỔ CHỨC chứ không cô lập nhà cung cấp với nhà cung cấp. Phần CSDL làm được đã làm: một phiên khách KHÔNG GHI được vào luồng báo giá của người khác (trigger `bid_kiem_phien_khach`, 018, có test). Phần nó không làm được: chặn một câu `SELECT` đọc sang luồng khác, và khoảng trống ấy là một QUYẾT ĐỊNH bị hoãn chứ không phải một thiếu sót.** Phiên khách chạy dưới **cùng role `app_api`** và **cùng `app.org_id`** của tổ chức người mua (010), nên RLS cô lập **tổ chức** chứ không cô lập **nhà cung cấp với nhà cung cấp**. Phần CSDL làm được đã làm: một phiên khách **không GHI được** vào luồng báo giá của người khác (trigger `bid_kiem_phien_khach`, 018, có test). Phần nó **không** làm được: chặn một câu `SELECT` đọc sang luồng khác — hôm nay đó là kỷ luật của tầng ứng dụng. Hình dạng đúng để đóng: một role `app_guest` với policy theo `current_setting('app.guest_session_id')`. Không làm ở S1.5 vì nó chạm mọi bảng và trộn vào một hạng mục sẽ làm cả hai khó xem xét | `db/migrations/018_vendor_bids.sql` khối A5; `docs/TEST-PLAN.md` mã A5 |
+| 30 | **ĐÃ ĐÓNG NỬA ĐƯỜNG, VÀ NỬA CÒN LẠI CÓ TÊN [2026-09-05].** `apps/public-keys` ra đời: `node:http` trần (không thêm một phụ thuộc sản xuất nào), CHỈ ĐỌC, phục vụ `/.well-known/trustprocure-receipt-keys` và tra theo `kid`. Khoản nợ nói *"thứ thiếu là ĐƯỜNG"* — đường ấy nay có, và một nhà cung cấp viết được script kiểm chữ ký mà không phải hỏi ai. Thứ nó **KHÔNG** đóng, và không được đọc thành đã đóng: **tính ĐỘC LẬP**. Một endpoint do chính chúng ta phục vụ vẫn là *"hỏi chúng ta"*, chỉ nhanh hơn — một máy chủ bị chiếm phục vụ được khoá khác và mọi biên nhận giả sẽ kiểm chứng SẠCH. Thứ đóng nốt là một NEO NGOÀI, và `fingerprint` (SHA-256 của SPKI) trong mỗi mục tồn tại đúng để đi ra khỏi hệ thống (in vào hợp đồng, đọc qua điện thoại). **Đây là cùng một khoản nợ với số 11** — cơ chế có, artefact neo ngoài thì chưa. Vế chịu lực của bộ test là một vế PHỦ ĐỊNH suy từ tính chất: không phản hồi nào của bất kỳ đường nào mang một byte nào của khoá RIÊNG, dò dưới cả `base64`/`hex`/`base64url`, kèm một đối chứng chứng minh chính phép dò ấy bắt được một lần rò rỉ dựng sẵn. Nguyên văn: ~~**Khoá công khai ký biên nhận chưa được CÔNG BỐ ở đâu cả.**~~ `ReceiptSigningKeyRing.publicKeys()` trả về nửa công khai theo `kid`, và biên nhận mang `kid` trong chính văn bản đã ký — tức **cấu trúc** đã đủ. Thứ thiếu là **đường**: một endpoint HTTP trả khoá theo `kid`, và `apps/` vẫn rỗng. Hệ quả hôm nay: nhà cung cấp lấy khoá công khai bằng cách **hỏi chính chúng ta**, nên vế *"kiểm chứng độc lập"* của B2 mới đúng một nửa. Đây là phần chênh đã khai báo ở §4 của ma trận, và nó là khoản nợ mà **S1.9/T5** phải trả | `packages/bidding/src/signer.ts`; `tools/inv-matrix/src/danh-gia.ts` (`PHAM_VI_HEP` mục `B2`) |
+| 31 | **ĐÃ ĐÓNG [2026-09-05] bằng `023_rfq_open_cancel_permissions.sql` cộng hai lời gọi `requirePermission`.** `rfq.open` và `rfq.cancel` nay có trong danh mục và chỉ `PROCUREMENT_MANAGER` giữ — `BUYER` soạn được và mời được nhưng không tự mở được gói thầu mình soạn, và `DIRECTOR` (vai phê duyệt mở thầu) cố ý không được cấp. Bốn phép đo mới, kèm một lượt đột biến gỡ cả hai cổng làm cả bốn ĐỎ. Hai mốc ghim của D3 phải viết lại vì chúng đọc DUY NHẤT văn bản `005` — nay đọc **mọi** `NNN_*.sql` theo tính chất, nên một migration tương lai tự rơi vào phạm vi. Nguyên văn khoản nợ: ~~**Không phép kiểm quyền nào trên `openRfq` và `cancelRfq` — và từ vựng để viết nó KHÔNG TỒN TẠI.**~~ Cả hai hàm xác lập *ai* (`resolveSessionActor`) và *tổ chức nào* (`assertTenantBound`) rồi làm việc, không hỏi *người ấy có được phép không*. Hệ quả: bất kỳ phiên hợp lệ nào của tổ chức — kể cả một vai không có một quyền RFQ nào — mở được RFQ và đúc khoá cho nó, hoặc huỷ RFQ (thứ thu hồi TOÀN BỘ vật liệu khoá của nó, không đảo ngược được: 017 cấm bỏ dấu thu hồi, và worker lọc `revoked_at IS NULL`). Tức một phiên không đặc quyền làm cho báo giá của một RFQ VĨNH VIỄN không mở được bằng một lời gọi. Đây KHÔNG phải khoảng trống *"tầng ứng dụng chưa có"*: `packages/unseal` cùng nhánh GỌI `requirePermission` bên trong gói. Thứ chặn là `permissions.ts` chỉ có `RFQ_CREATE`/`RFQ_APPROVE`/`RFQ_INVITE`/`RFQ_UNSEAL` — **không có `rfq.open`, không có `rfq.cancel`** — nên câu gọi ấy hôm nay không viết ra được. Đóng đúng: thêm hai mã quyền vào `permissions.ts` VÀ vào 005 (meta-test giữ hai bên đồng bộ), rồi gọi `requirePermission` ở đầu hai hàm — KHÔNG đặt phép kiểm bên trong `issueRfqKeyPair`/`revokeRfqKeyMaterial`, vì trigger đã buộc chúng vào cạnh chuyển trạng thái; quyền thuộc về CẠNH | `packages/rfq/src/rfq.ts` (`openRfq`, `cancelRfq`); `packages/identity/src/permissions.ts` |
+| 32 | **ĐÃ ĐÓNG [2026-09-05].** Mọi `UnsealDeniedError` nay ghi `UNSEAL_DENIED` mang tên vế, ở một giao dịch ĐỘC LẬP — và có test dựng đúng ca rollback của người gọi để chứng minh bản ghi sống qua nó. Một lần THỬ vi phạm D2 ghi `UNSEAL_APPROVAL_DENIED`; phân loại theo THÔNG BÁO chứ không theo SQLSTATE, và đó là một thu hẹp đã ghi tại chỗ (hai trigger dùng chung `check_violation`). Nguyên văn: ~~**D5 chỉ đúng cho vế 1 của cổng mở thầu; ba vế còn lại từ chối trong IM LẶNG.**~~ `requirePermission` ghi `PERMISSION_DENIED` ở một giao dịch độc lập, nên vế `PERMISSION` thoả D5. `MFA_FRESH`, `RFQ_CLOSED` và cả hai nhánh `POLICY_GATE` ném `UnsealDeniedError` mà **không ghi gì**. Nặng hơn: một lần tự-phê-duyệt bị `unseal_kiem_nguoi_duyet` chặn làm ROLLBACK cả giao dịch của `approveUnseal` — **kể cả bản ghi `UNSEAL_APPROVED`** — nên một lần THỬ vi phạm D2 không để lại một dấu vết nào. Một người trong tổ chức dò *"RFQ đóng chưa / phê duyệt về chưa"* bằng cách gọi `dispatchUnseal` liên tục sinh ra **con số không** bản ghi. Đóng đúng: ghi một sự kiện từ chối ở giao dịch ĐỘC LẬP cho mỗi `UnsealDeniedError`, mang `clause`, không mang `reason`; và bắt hai lỗi trigger của D2 theo SQLSTATE rồi ghi ngoài giao dịch | `packages/unseal/src/gate.ts`, `packages/unseal/src/requests.ts` |
+| 33 | **ĐÃ ĐÓNG [2026-09-05].** `CUA_GOI` nay có `unseal` và `bidding`, và bảng phân loại nở từ ba rổ lên SÁU: thêm `HAM_DOC_CO_QUYEN` (đọc mà vẫn phải có cổng), `HAM_THUAN_TUY`, `HAM_TU_LA_CONG`. Rổ thứ nhất KHÔNG phải một nhãn — một test đọc MÃ NGUỒN từng hàm và đòi thân nó thật sự gọi `requirePermission`; để phép đọc ấy thấy được, lời gọi phải nằm THẲNG trong thân hàm chứ không trong một helper dùng chung, và `comparison.ts` đã được viết lại theo đúng ràng buộc ấy. Nguyên văn: ~~**Lớp canh cổng quyền tự làm mù mình đúng ở hai gói mới nhất và nhạy nhất.**~~ `tests/architecture/cong-quyen-route.test.ts` giữ `CUA_GOI` gồm `supplier`, `rfq`, `invitation` — **không có `unseal`, không có `bidding`**. Tức `requestUnseal`/`approveUnseal`/`cancelUnseal`/`dispatchUnseal` (toàn bộ phê duyệt kép của việc lộ mọi giá trong một RFQ) cộng `buildComparisonTable`/`countReceivedBids`/`submitBid` đều **không bị lớp ấy nhìn thấy**. Một module `apps/api` tương lai gọi `approveUnseal` mà quên dòng quyền sẽ đi qua sạch sẽ. Đây đúng khuôn lỗi mà chính file ấy dựng lớp thứ hai để chặn (nợ 3 và 16), và nó tái diễn ở lần thứ ba. Đóng đúng: thêm hai gói vào `CUA_GOI`, và **không** xếp hai hàm đọc của S1.7 vào rổ `HAM_CHI_DOC` — rổ ấy biện minh bằng *"không đổi trạng thái"*, câu ấy sai với một hàm mà mục đích duy nhất là kiểm soát TIẾT LỘ | `tests/architecture/cong-quyen-route.test.ts` |
+| 34 | **ĐÃ ĐÓNG [2026-09-05]** bằng `apps/unseal-worker/src/composition.ts` cộng migration `025`. Hai `kind` nay có handler; `onJobFailure` là THAM SỐ BẮT BUỘC nên một composition root không còn diễn đạt được cấu hình *"hỏng trong im lặng"*; `BreakGlassAlertSink` phải tiêm vào và KHÔNG có mặc định — một mặc định *"ghi log cho có"* là đúng thứ làm người ta tưởng cảnh báo đã tới tay ai đó. Cộng một lớp chống-mù suy từ TÍNH CHẤT: mọi `kind` được enqueue trong kho phải HOẶC có handler, HOẶC nằm trong `KIND_KHONG_NHAN` kèm lý do. Nguyên văn: ~~**Cảnh báo break-glass được PHÁT nhưng KHÔNG AI NHẬN.**~~ Không handler nào đăng ký `BREAK_GLASS_UNSEAL_ALERT` và không tiến trình nào `LISTEN` trong sản phẩm — `grep` toàn kho chỉ ra hai chỗ: chính migration 019 và một test. Tệ hơn *"chưa nối"*: `JobRunner` ghi một job không có handler thẳng sang `FAILED` với lý do `NO_HANDLER`, và `onJobFailure` **mặc định im lặng**. Nên hôm nay cảnh báo mức cao được tạo ra rồi bị đánh dấu chết, không một tiếng động. D4 nói *"không bao giờ im lặng"*; vế ấy đúng ở tầng SINH, sai ở tầng GIAO. Phải nối TRƯỚC khi đường break-glass được dùng thật | `db/migrations/019_unseal.sql` mục (5); `packages/outbox/src/runner.ts` |
+| 35 | **ĐÃ ĐÓNG [2026-09-05].** Bucket đích tách làm hai: `DEST` khoá theo (LỜI MỜI, ĐÍCH) — hạn mức thật, không xuyên qua lời mời được nữa — và `DEST_ORG` theo đích toàn tổ chức, một TRẦN CHI PHÍ đặt ở 20 để ba lời gọi không vũ khí hoá được. Mọi bucket nay được tăng TRƯỚC mọi phán quyết, nên việc một lần từ chối vẫn tiêu ngân sách là một QUYẾT ĐỊNH đã ghi ra chứ không một tác dụng phụ. Test đo đúng kịch bản ADR-015 §5 đặt tên. Nguyên văn: ~~**Hạn mức OTP theo ĐÍCH đang KHOÁ chứ không LÀM CHẬM.**~~ ADR-015 §5 viết rõ *"chỉ được làm chậm, không được khoá, vì khoá theo đích cho phép một người khoá lối vào của người khác"*. Bản cài đặt từ chối thẳng (`DEST_RATE_LIMITED`), và khoá bucket là `HMAC(pepper, orgId ‖ "DEST" ‖ đích)` — **không mang lời mời, không mang RFQ**. Nên ba lần phát cho một số điện thoại ở RFQ-1 làm chính nhà cung cấp ấy không nhận được OTP cho RFQ-2 trong 15 phút. Thứ tự cũng sai: hai bucket `CALLER` và `INVITATION` được tăng TRƯỚC phép kiểm `DEST`, nên một lần bị chặn vẫn tiêu ngân sách của lời mời | `packages/invitation/src/invitation.ts` (`issueOtpChallenge`) |
+| 36 | **ĐÃ ĐÓNG [2026-09-05].** ⑴ `verifyOtpAndStartSession` nay KHẲNG ĐỊNH nó đang ở trong một giao dịch — và phép đo ấy đã phải viết lại một lần: bản đầu so `statement_timestamp()` với `now()` và **đỏ giả trên một test hợp lệ**, vì hai mốc ấy trùng nhau ở độ phân giải micro giây. Bản hiện tại dùng `SET LOCAL` rồi đọc lại ở câu sau — nhị phân, không phụ thuộc đồng hồ. ⑵ Phép so `token_hash` — phép so credential chịu lực duy nhất của cả lát cắt — nay ghim `OPERATOR(pg_catalog.=)` và `::pg_catalog.bytea`, với một test đọc thẳng mã nguồn. Nguyên văn: ~~**Hai khoản nợ về cách viết SQL trong `packages/invitation`.**~~ ⑴ Cổng OTP đọc trạng thái ở MỘT câu (`FOR UPDATE`) rồi tăng bộ đếm ở câu KHÁC; nó chỉ tuần tự hoá đúng khi người gọi đang ở trong một giao dịch — điều `withTenant` hôm nay bảo đảm nhưng **không lớp nào cưỡng chế**, và chú thích tại chỗ đang nói mạnh hơn thứ mã làm được. ⑵ Gói này dùng `=` trần ở **mọi** vị từ, kể cả phép so `token_hash` — phép so chịu lực duy nhất của cả lát cắt — trong khi `audit`/`identity`/`outbox` ghim `OPERATOR(pg_catalog.=)` **127 lần** vì một lần chiếm `search_path` đã được TÁI LẬP END-TO-END và lật được một phán quyết an ninh | `packages/invitation/src/invitation.ts` |
+| 37 | **ĐÃ ĐÓNG [2026-09-05].** `UNIQUE (org_id, rfq_id, supplier_id)` đổi thành chỉ mục duy nhất BỘ PHẬN `WHERE revoked_at IS NULL`, nên mời lại được sau khi thu hồi — mà vế gốc *"một nhà cung cấp được mời ĐÚNG MỘT LẦN cho mỗi RFQ"* vẫn nguyên, có test riêng. `clearOtpLockout` là đường ra của khoá cấp-lời-mời: có mã quyền `invitation.unlock`, có audit, và một trigger của `024` cấm `failed_attempts` GIẢM — gỡ khoá là một hành vi, không phải một lần xoá dấu vết. Nguyên văn: ~~**Thu hồi lời mời là VĨNH VIỄN, và khoá theo lời mời không có đường mở.**~~ `rfq_invitations` mang `UNIQUE (org_id, rfq_id, supplier_id)` **không có vị từ bộ phận loại `REVOKED`**, nên một lần bấm nhầm loại một nhà cung cấp khỏi RFQ ấy mãi mãi. Cùng lúc, khoá cấp-lời-mời của 012 chặn MỌI lần phát thách thức mới khi còn một thách thức đang khoá — nên ai cầm một link đã chuyển tiếp giữ được nhà cung cấp thật ở ngoài vô hạn (5 lần sai → khoá 900 giây → lặp), và không có hàm nào gỡ khoá. Cả hai là đường CHẶN NGƯỜI KHÁC DỰ THẦU, cùng họ với nợ 35 | `db/migrations/010_invitations.sql:52`; `db/migrations/012_invitation_hardening.sql` |
 
 ## Kiến trúc
 
@@ -207,11 +385,45 @@ và toàn bộ tầng HTTP/giao diện.
 
 ## Trạng thái kiểm thử
 
-**672 test, xanh toàn bộ:** 346 ở `pnpm test` (T0–T2) và 326 ở `pnpm test:int` (T3, Postgres thật
-qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc. Vòng fix cuối thêm **20 test**,
+~~**672 test, xanh toàn bộ:** 346 ở `pnpm test` (T0–T2) và 326 ở `pnpm test:int` (T3, Postgres thật
+qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
+
+~~**Sau S1.1 (2026-08-29): 694 test** — 353 `pnpm test` / 341 `pnpm test:int`; t0 86 module / 206 phụ thuộc.~~
+
+~~**Sau S1.2: 724 test** — 363 / 361; t0 91 module / 224 phụ thuộc.~~
+
+~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **Sau vòng cài ADR-016/017/018 (2026-08-30 → 09-03): 802 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
+`pnpm test:int` (15 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **94 module /
+234 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
 
-**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**
+~~**`evidence/INV-matrix.md`: 24/47 bất biến được kiểm chứng — 11/34 nghiệp vụ + 13/13 hàng rào.**~~
+
+~~**Sau S1.1: 26/49 — 11/34 nghiệp vụ + 15/15 hàng rào.**~~
+
+~~**Sau S1.2: 27/50 — 11/34 nghiệp vụ + 16/16 hàng rào.**~~
+
+~~**Sau S1.3: 30/50 — 14/34 nghiệp vụ + 16/16 hàng rào.**~~ **SAU REVIEW AN NINH: 28/50 —
+12/34 nghiệp vụ + 16/16 hàng rào.** Câu dưới đây giữ nguyên văn để đối chiếu, và nó đã sai ở
+vế E2/E5. Đây là lần đầu trong S1 con số NGHIỆP VỤ
+nhúc nhích: **E1**, **E2**, **E5**. Cả ba nằm trong MỘT hạng mục, và đó là hệ quả của việc chủ ngữ
+của chúng — lời mời, token, phiên khách — cuối cùng cũng tồn tại. `MOC_GHIM`: `soPhuToiThieu` 27 →
+**30**, `coDanhSachToiDa` 23 → **20** (danh sách được-phép-chưa-phủ CO LẠI đúng ba dòng).
+
+**E2 và E5 vào sổ KÈM ghi chú §4**, và `MA_PHAI_CO_CO_HEP` đi từ năm mã lên **bảy**. Hai phần chênh:
+*"kênh đã đăng ký" là kênh do NGƯỜI MUA khai*, và *`verified_contact_id` là NGƯỜI GIỮ KÊNH, không
+phải con người đang ngồi trước màn hình*. Không ô ✅ nào ở đây rộng hơn thứ được đo. Hai mã mới (**H14**, **H15**) đều thuộc
+nhóm HÀNG RÀO, nên **tử số và mẫu số cùng tăng 2 và số mã NGHIỆP VỤ được phủ ĐỨNG YÊN ở 11**.
+Đây là điều đáng đọc kỹ hơn con số tổng: S1.1 dựng thêm hai lớp canh, nó **không** đóng thêm một
+mệnh đề nghiệp vụ nào — E4 cần chủ ngữ *"mã RFQ"* của S1.2, A5 cần cả S1.9. `MOC_GHIM`:
+`soPhuToiThieu` 24 → **26** → **27**, `coDanhSachToiDa` giữ nguyên **23** qua CẢ HAI hạng mục.
+
+**Con số đáng đọc nhất là con số KHÔNG đổi: 11/34 nghiệp vụ, sau hai hạng mục và ba bảng… năm
+bảng.** Đó không phải dấu hiệu công việc chưa tới nơi — nó là hệ quả đã được §1 của kế hoạch S1
+ánh xạ trước: **C4** còn thiếu vế *"có thông báo toàn bộ nhà cung cấp đã mời"* (cần lời mời,
+S1.3); **C5** chưa có chủ ngữ (`rfq_key_material` là S1.4); **C3**/**D2** cần cổng chính sách của
+S1.6; **E4** cần cả MST lẫn mã RFQ đi qua một đường xác thực chưa tồn tại. Độ phủ nghiệp vụ sẽ
+nhảy ở S1.3, không sớm hơn — và một lần nhảy sớm hơn thế sẽ là dấu hiệu ai đó lấp mã bằng NHÃN.
 
 ### Hoà giải hai cách đếm (việc Task 11 sinh ra để làm)
 
@@ -291,8 +503,15 @@ chưa xác minh.
 
 ## Trạng thái triển khai
 
-Chưa triển khai. Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS (**ADR-009**, trạng thái
-*Đang mở*, giữa AWS KMS, Azure Key Vault và HashiCorp Vault).
+Chưa triển khai. ~~Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS (**ADR-009**, trạng thái
+*Đang mở*, giữa AWS KMS, Azure Key Vault và HashiCorp Vault).~~
+
+**Cập nhật 2026-08-29 — cả hai đã chốt: AWS, và AWS KMS ở `ap-southeast-1` (ADR-009).** Chốt
+cùng lúc là bắt buộc chứ không phải tiện tay: ADR-006 (tách quyền giải mã cho `unseal-worker`)
+chỉ cưỡng chế được bằng IAM của nơi compute chạy, nên **chọn hạ tầng đích là câu hỏi trước,
+KMS là hệ quả** — bản đầu của ADR-009 liệt kê ba nhà cung cấp như thể đó là một câu hỏi đứng
+riêng, và đó là chỗ nó đặt sai thứ tự. Vẫn **chưa triển khai**: chưa có tài khoản, chưa có
+CMK, chưa có role nào được tạo.
 
 > Hai dòng trong tài liệu này (mục *Điểm chặn* 2 và dòng trên) từng trích **ADR-004** như
 > *"quyết định KMS để mở"*. **Sai:** ADR-004 là *Sổ kiểm toán chuỗi hash, chỉ ghi thêm*, đã chốt.
@@ -304,12 +523,146 @@ Chưa triển khai. Chưa chọn hạ tầng đích, chưa chọn nhà cung cấ
 
 ## Hành động tiếp theo
 
-1. **Lập kế hoạch S1 (Sealed Bid Core).** 23 mã chưa phủ ở §3 của `evidence/INV-matrix.md` là
-   danh sách công việc S1 đã được sắp sẵn — mỗi mã một lý do, và mỗi lý do là một hạng mục.
-2. **Chốt ba quyết định treo** (Điểm chặn 2) — KMS phải chốt trước S1.6.
-3. **Đo `crypto.subtle` trong webview Zalo/Messenger** (Vấn đề đã biết 3) — rủi ro sản phẩm CAO
-   và vẫn chưa có một phép đo nào.
-4. Tiếp cận **khách hàng pilot** song song với S1.
+> **Bốn hành động dưới đây đã được xử lý trong lượt 2026-08-29. Giữ nguyên văn, đánh dấu tại
+> chỗ, để đối chiếu — không xoá.**
+
+1. ~~**Lập kế hoạch S1 (Sealed Bid Core).**~~ **XONG** — `docs/superpowers/plans/2026-08-29-s1-sealed-bid-core.md`.
+   23 mã chưa phủ ở §3 của `evidence/INV-matrix.md` là danh sách công việc S1 đã được sắp sẵn —
+   mỗi mã một lý do, và mỗi lý do là một hạng mục. Kế hoạch ánh xạ **đủ 23 mã** vào 9 hạng mục,
+   cộng **5 mã ở §4** như nợ phải trả, và ghim quỹ đạo `MOC_GHIM` cho từng mốc.
+2. ~~**Chốt ba quyết định treo** (Điểm chặn 2) — KMS phải chốt trước S1.6.~~ **XONG HAI TRONG BA**:
+   hạ tầng đích **AWS** và **AWS KMS** `ap-southeast-1` (ADR-009, nay *Đã chấp nhận*). Còn treo:
+   xử lý thư mục `Vibe Coding/`.
+3. ~~**Đo `crypto.subtle` trong webview Zalo/Messenger** (Vấn đề đã biết 3) — rủi ro sản phẩm CAO
+   và vẫn chưa có một phép đo nào.~~ **CÔNG CỤ XONG, PHÉP ĐO CHƯA.** `tools/do-webcrypto/` đã có
+   và đã chứng minh có răng, nhưng nó **chưa từng chạy trên một webview Việt Nam nào**. Rủi ro
+   vẫn **CAO và vẫn mở** — xem Vấn đề đã biết 3.
+4. Tiếp cận **khách hàng pilot** song song với S1. — **CHƯA LÀM.** Đây là việc duy nhất trong
+   bốn việc không có phần kỹ thuật nào để trú, và nó vẫn là rủi ro lớn nhất của dự án.
+
+**Hành động tiếp theo, sau lượt 2026-08-29:**
+
+5. ~~**Mở `tools/do-webcrypto/index.html` qua một URL https, từ bên trong Zalo và Messenger, trên
+   vài điện thoại thật** — Android WebView cũ, iOS WKWebView. Phải xong **trước S1.4**.~~
+   **Vế "phải xong trước S1.4" ĐÃ HẾT HIỆU LỰC 2026-09-04** — ADR-011 chốt "P-256 mặc định,
+   X25519 cơ hội", nên phép đo không còn là điều kiện tiên quyết. **Việc đo thì vẫn nên làm**,
+   và nó vẫn mất hai phút; cái đổi là hậu quả của việc KHÔNG làm.
+6. ~~**Chốt ADR-010**, **ADR-011**, **ADR-012**.~~ **XONG HAI TRONG BA (2026-08-29):**
+   **ADR-010** chốt *outbox bền cộng `NOTIFY` đánh thức* — `NOTIFY` là **bộ tăng tốc, không phải
+   cơ chế**, vì nó không bền; **ADR-012** chốt *UUIDv4, cấm UUIDv7/ULID* — UUIDv7 chứa timestamp
+   và sắp theo thứ tự nên **vi phạm A5**. **ADR-011** cố ý để ***Đang mở***: nó bị khoản nợ 23
+   chặn, nhưng phần ghim được thì đã ghim (phong bì mang mã thuật toán thoả thuận khoá).
+7. ~~**Bắt đầu S1.1 và S1.2** — hai hạng mục duy nhất không bị chặn bởi quyết định nào.~~
+   **Ba quyết định chặn ba hạng mục sớm nhất đã được chốt cùng ngày:** **ADR-013** (sổ NCC là bảng
+   tenant; `UNIQUE (tax_code)` toàn cục là một **oracle xuyên tổ chức** — cùng lớp lỗi đã ĐO hai
+   lần ở S0, và MST tệ hơn vì nó công khai, liệt kê được), **ADR-014** (CSDL giữ cạnh và bất biến
+   trên dữ liệu, ứng dụng giữ điều kiện cần ngữ cảnh), **ADR-015** (OTP không bao giờ cùng kênh
+   với magic link; giới hạn tần suất trên Postgres, **không** thêm Redis).
+8. ~~**Bắt đầu S1.1, S1.2 và S1.3** — ba hạng mục nay có đủ quyết định.~~ **XONG (2026-08-29),** kèm
+   một vòng sửa an ninh. Mỗi ADR để lại **một phép
+   đối kháng bắt buộc** (§*Đo bằng gì* của từng ADR); không có lượt RED thật thì lớp chưa được đo.
+
+**Hành động tiếp theo, sau lượt 2026-08-30:**
+
+9. ~~Ba MEDIUM cố ý không sửa cần một ADR.~~ **XONG — ADR-016/017/018 đã chốt.** Việc **còn lại là
+   CÀI**, và nó là ba việc rời nhau, không phải một:
+   - ~~**ADR-016** → `SupplierActor`/`InvitationActor` đi theo đường `createdBySessionId` mà 011 đã mở
+     cho `RfqActor`; cộng lớp canh route, **đến hạn cùng route đầu tiên của `apps/`**.~~
+     **ĐÃ CÀI 2026-08-30** — migration `013`, `packages/identity/src/session-actor.ts`, và hai gói
+     `supplier`/`invitation` viết lại. `SupplierActor` và `InvitationActor` **đã bị xoá**; bên mua
+     nhận `actorSessionId`, bên khách **không nhận actor gì cả** (danh tính đọc từ token và từ
+     thách thức đã đối chiếu). 14 test mới, trong đó **hai test đột biến** (gỡ trigger → câu ghi
+     khai man ĐI LỌT) và **bốn phép đo bằng SQL viết tay** không đi qua gói.
+
+     **HAI VIỆC CÒN LẠI CỦA CHÍNH ADR-016, cả hai đều có tên:**
+     ⑴ **`packages/rfq` vẫn nhận `actor: RfqActor` làm tham số** — đúng khiếm khuyết MEDIUM-3 nêu
+     cho `packages/supplier`, chỉ chưa lượt review nào gọi tên. Câu trong ADR-016 mục 3 nói
+     `RfqActor` "đã đi" đã bị **gạch bỏ tại chỗ** ngay khi bắt đầu cài. ⑵ **Lớp canh route** —
+     mặc định MỞ cho tới khi có nó, và nó **đến hạn cùng route đầu tiên của `apps/`**.
+   - ~~**ADR-017** → một migration đánh số mới: `org_procurement_policies` + `rfq_packages.estimated_value`
+     + phiên bản chính sách; cộng phép đo **neo giá** trên đường phiên khách.~~
+     **ĐÃ CÀI 2026-08-30** — migration `014`, `packages/rfq/src/procurement-policy.ts`, 10 test mới.
+     `requiresDualApproval` **đã bị gỡ khỏi `createRfq`**: RFQ luôn ra đời ở `true`, và đường DUY
+     NHẤT hạ nó xuống là `setRfqBudget` — thứ phải trỏ tới một chính sách có thật, và **CSDL tính
+     phép so** (`rfq_can_phe_duyet_kep`), không phải TypeScript.
+
+     **HAI CÂU CỦA ADR-017 BỊ LƯỢT CÀI BÁC BỎ, cả hai đã gạch bỏ tại chỗ:** ⑴ tiền **không** nằm
+     trên `rfq_packages` mà ở bảng riêng `rfq_budgets` — vì "cưỡng chế bằng quyền theo cột cho
+     đường khách" **không cài được**: đường khách và đường người mua dùng CHUNG role `app_api`,
+     không có role thứ ba để thu hẹp; ⑵ `policy_version` **không** được chép vào bằng chứng —
+     `policy_id` trỏ tới một hàng không sửa được nên đã xác định cả phiên bản lẫn ngưỡng.
+
+     **Khoản nợ có tên và có mốc:** khi **S1.5** dựng đường đọc RFQ cho phiên khách, đường ấy phải
+     được ĐO là không chạm `rfq_budgets`. Hôm nay `packages/invitation` không đọc `rfq_packages`
+     một lần nào, nên chưa có gì để đo.
+   - ~~**ADR-018** → HMAC + pepper có phiên bản, **hoặc** bỏ `destination_hash`. Quyết bằng phép đo ở
+     §*Đo bằng gì* mục 1 (đối chứng dương: liệt kê phải TÌM RA số khi không có pepper).~~
+     **ĐÃ CÀI 2026-08-30** — migration `015`, `packages/invitation/src/pepper.ts`, 7 test mới.
+     **Phép đo chạy TRƯỚC khi viết một dòng mã nào**, và nó là thứ quyết định: không pepper thì
+     liệt kê **TÌM RA** số (11 ms trên 10⁴), có pepper thì **không**; ngoại suy 10⁹ ≈ **18 phút**
+     một luồng. Phép đảo ngược là THẬT, không phải một lo ngại trên giấy.
+
+     **PHÉP BĂM THỨ BA ĐƯỢC TÌM RA KHI CÀI, không có trong ADR:** `code_hash` là
+     `sha256(invitation_id ‖ code)` với mã OTP **sáu chữ số** — 10⁶ tiền ảnh — và `invitation_id`
+     nằm ngay trong cùng bản sao lưu. Kẻ có bản sao lưu đọc ra mã của **mọi thách thức chưa tiêu
+     thụ**. E1 nói CSDL chỉ giữ BĂM của mã; khi băm đảo ngược được, hai câu ấy là một.
+
+     **Phương án "bỏ cột" KHÔNG được chọn**, và câu hỏi biến mất thay vì được cân lại:
+     `otp_rate_limits.bucket_hash` bắt buộc phải có pepper (nó là khoá bộ đếm, không dư chút nào),
+     nên chi phí biên của cột thứ ba là một dòng.
+
+     **Một hệ quả vận hành phải nói ra:** `otp_rate_limits` cố ý KHÔNG mang cột phiên bản, nên
+     xoay pepper **đặt lại hạn mức của mọi đích** trong đúng cửa sổ xoay. Cửa sổ ngắn nên hàng cũ
+     tự già đi, nhưng xoay pepper vì vậy là một thao tác **có thời điểm**, không phải làm lúc nào
+     cũng được.
+10. ~~**Ba MEDIUM này KHÔNG được đánh dấu đóng khi ADR được chốt.**~~ **Cả ba nay ĐÃ CÓ LỚP và có
+    lượt RED thật (2026-08-30).** Ba migration (`013`, `014`, `015`), bốn gói sửa, **31 test mới**
+    — trong đó **ba test đột biến** (gỡ trigger → câu ghi khai man / cờ hạ bằng tay ĐI LỌT) và
+    **năm phép đo bằng SQL viết tay** không đi qua gói.
+
+    ~~**Nhưng ADR-016 chưa đóng hết, và phần còn lại có tên:** `packages/rfq` vẫn nhận
+    `actor: RfqActor` làm tham số, và **lớp canh route vẫn chưa dựng được** vì `apps/` rỗng.~~
+    **CẢ HAI ĐÃ XONG 2026-09-03** — migration `016` và
+    `tests/architecture/cong-quyen-route.test.ts`. **13 test mới**; khẳng định 789 → **802**.
+
+11. **Ba thứ lượt cài ADR-016 bước 2 tìm ra, và cả ba là hệ quả của việc ĐO chứ không của việc đọc:**
+    ⑴ **`createdBy` và `approverUserId` cũng là lời khai thừa** — trigger 011 đã ép cả hai bằng
+    chủ phiên, nên chúng là hai chỗ để gõ nhầm chứ không phải hai bậc tự do. Cả hai đã bị xoá.
+    ⑵ **Một test ĐỔI NGHĨA thay vì hỏng:** *"mượn phiên của người khác bị chặn"* nay KHÔNG VIẾT
+    RA ĐƯỢC ở tầng ứng dụng — không còn hai tham số để cho lệch nhau. Lỗ bị đóng bằng HÌNH DẠNG
+    CHỮ KÝ, mạnh hơn một phép kiểm. Test được **viết lại** để đo trigger bằng SQL viết tay, không
+    bị xoá — lớp CSDL vẫn phải còn răng vì nó canh MỌI đường.
+    ⑶ **Một phụ thuộc THỨ TỰ ẩn trong chính bộ test** — `rfqNhap` đọc chính sách đang hiệu lực,
+    nên test *"tái lập được"* của ADR-017 (tạo phiên bản 2, ngưỡng thấp hơn) làm bốn test chạy
+    SAU nó đỏ. Bắt được vì chúng khẳng định TRẠNG THÁI, không chỉ khẳng định "không ném".
+
+12a. **LƯỢT CI THỨ HAI (run `33704750680`, commit `4467ca9`): XANH CẢ BỐN JOB.** Job `evidence`
+    chạy trên CI lần đầu tiên với mã S1: *vitest thoát mã 0, 803 khẳng định, 30/50, Cổng evidence
+    XANH*, và bước `git diff --exit-code -- evidence/INV-matrix.md` **qua** — tức ma trận trong git
+    khớp bộ sinh **từng byte** trên Linux. Đây là lần đầu điều kiện hoàn thành S0 mục 2 (*bốn cổng
+    xanh tại máy VÀ trên CI*) được thoả cho mã của S1.
+
+12b. **LẦN CHẠY CI ĐẦU TIÊN CỦA TOÀN BỘ S1 (2026-09-03, run `33703786759`): T0 XANH, T3 XANH,
+    T1+T2 ĐỎ — và thứ đỏ là lớp canh route của chính vòng này, không phải mã sản phẩm.**
+    T3 xanh là con số đáng đọc: **toàn bộ chín migration của S1 chạy trên Postgres của Linux CI
+    lần đầu tiên** và không câu lệnh nào gãy.
+
+    **Lỗi T1+T2 là một BẢN VÁ CỦA MỘT BẢN VÁ SAI, và nó lặp đúng bài học đắt nhất của S0.** Lớp
+    canh route quét `apps/` bằng `readdirSync`; nó đỏ cục bộ vì `boundaries.test.ts` dựng fixture
+    dò ở đó, và tôi vá bằng cách **loại trừ theo TÊN** (`tmp-probe-*`) — danh sách tên suy từ
+    những `mkdirSync` grep được. Danh sách ấy **bỏ sót `apps/tmp-probe/src`** (không có gạch nối
+    ở cuối). Máy vẫn xanh vì thời điểm chạy tình cờ không trùng; **CI bắt được**.
+
+    Bản vá thứ hai suy từ một **TÍNH CHẤT**: chỉ file **được git theo dõi** mới là mã của kho này
+    — fixture dò là file untracked, bất kể đặt tên gì. Kèm một **đối chứng dương cho chính bộ
+    quét** (`quetTepTs("packages")` phải > 10 file): không có nó, một bộ quét hỏng trả mảng rỗng
+    và mọi khẳng định phía trên xanh — một lớp canh rỗng ruột trông y hệt một lớp canh sạch.
+
+13. **Một khoản nợ hạ tầng test đã đóng, và một ngưỡng đã nới:** lớp canh route quét `apps/` từng
+    ĐỎ trong lượt chạy toàn bộ vì `boundaries.test.ts` giữ fixture dò ở đó — một lớp canh flaky
+    sẽ bị ai đó tắt đi, tức tệ hơn không có, nên nó nay loại trừ `tmp-probe-*`/`zprobe-*` tường
+    minh. Và test *"migration áp dụng sạch"* nay mang timeout 120s: số file migration đi từ 7 lên
+    **16**, và ngưỡng mặc định 30s trở nên quá chật khi nhiều file test tranh nhau Docker.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
@@ -320,10 +673,11 @@ Chưa triển khai. Chưa chọn hạ tầng đích, chưa chọn nhà cung cấ
 
 | Tài liệu | Nội dung |
 |---|---|
+| `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | **Chín ADR** — 001–008 *Đã chấp nhận*, **009 (nhà cung cấp KMS) *Đang mở*, chặn S1.6** |
-| `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào), bảy tầng kiểm thử, evidence pack |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ **Mười chín ADR** — 001–010 và 012–019 *Đã chấp nhận*; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |
 | `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |

@@ -93,3 +93,18 @@ export {
   type TotpSecretUnsealer,
   type WrappedTotpSecret,
 } from "./mfa-credentials.js";
+// ============================================================================================
+// [ADR-016] `resolveSessionActor` Ở LẠI TRONG CỬA NÀY, và tiêu chí là tiêu chí đã viết ở trên:
+// nó NÉM khi không thoả chứ không trả boolean hay `null`, nên nó không dựng ra được một cổng gác
+// im lặng. `SessionInvalidError` đi kèm vì người gọi phải phân biệt được "phiên hỏng" với một lỗi
+// Postgres bất kỳ; `SessionActor` là chữ ký trả về của chính hàm.
+//
+// PHÁT BIỂU ĐÚNG MỨC: hàm này KHÔNG phải cổng quyền. ADR-016 mục 1 đặt `requirePermission` ở tầng
+// ứng dụng, và mục 4 ghi rằng cổng ấy là MẶC ĐỊNH MỞ cho tới khi có lớp canh route. Xuất hàm này
+// KHÔNG đóng thêm một mét nào của D5.
+// ============================================================================================
+export {
+  SessionInvalidError,
+  resolveSessionActor,
+  type SessionActor,
+} from "./session-actor.js";

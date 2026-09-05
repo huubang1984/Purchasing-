@@ -1,0 +1,684 @@
+<title>Máy dò WebCrypto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+  :root {
+    /* Nền trung tính lệch lam — chọn, không thừa hưởng. */
+    --nen:        #F2F4F5;
+    --nen-the:    #FFFFFF;
+    --nen-chim:   #E4E8EA;
+    --vien:       #CFD6DA;
+    --vien-manh:  #AEB9BF;
+    --chu:        #161D21;
+    --chu-mo:     #56646C;
+    --chu-nhat:   #7C8A92;
+
+    /* Accent nhận diện: lam thép. Cố ý KHÔNG trùng họ với màu ngữ nghĩa bên dưới. */
+    --lam:        #2F6F8F;
+    --lam-nen:    #DCE9EF;
+
+    /* Ngữ nghĩa — ba họ tách bạch, không cái nào là accent. */
+    --dat:        #2E7D5B;
+    --dat-nen:    #DCEDE4;
+    --ho-phach:   #96631A;
+    --ho-nen:     #F1E6CE;
+    --gach:       #A63D2F;
+    --gach-nen:   #F3DDD9;
+
+    --bong: 0 1px 2px rgb(22 29 33 / .06), 0 8px 24px -12px rgb(22 29 33 / .18);
+    --r: 10px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --nen:        #0E1418;
+      --nen-the:    #151D22;
+      --nen-chim:   #1C262C;
+      --vien:       #2A363D;
+      --vien-manh:  #43535C;
+      --chu:        #E7EDF0;
+      --chu-mo:     #9CACB5;
+      --chu-nhat:   #74848D;
+
+      --lam:        #6FB3D2;
+      --lam-nen:    #17303D;
+
+      --dat:        #67C39A;
+      --dat-nen:    #143126;
+      --ho-phach:   #D6A648;
+      --ho-nen:     #362A11;
+      --gach:       #E08471;
+      --gach-nen:   #3B1C16;
+
+      --bong: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px -14px rgb(0 0 0 / .7);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --nen:        #0E1418;
+    --nen-the:    #151D22;
+    --nen-chim:   #1C262C;
+    --vien:       #2A363D;
+    --vien-manh:  #43535C;
+    --chu:        #E7EDF0;
+    --chu-mo:     #9CACB5;
+    --chu-nhat:   #74848D;
+
+    --lam:        #6FB3D2;
+    --lam-nen:    #17303D;
+
+    --dat:        #67C39A;
+    --dat-nen:    #143126;
+    --ho-phach:   #D6A648;
+    --ho-nen:     #362A11;
+    --gach:       #E08471;
+    --gach-nen:   #3B1C16;
+
+    --bong: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px -14px rgb(0 0 0 / .7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--nen);
+    color: var(--chu);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .khung {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 28px 18px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  /* ---------- Đầu trang ---------- */
+  .dau { display: flex; flex-direction: column; gap: 8px; }
+
+  .nhan {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--lam);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(26px, 6.5vw, 34px);
+    font-weight: 700;
+    letter-spacing: -.022em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .phu { margin: 0; color: var(--chu-mo); font-size: 15px; max-width: 40rem; }
+
+  /* ---------- Thẻ phán quyết ---------- */
+  .phan-quyet {
+    background: var(--nen-the);
+    border: 1px solid var(--vien);
+    border-radius: var(--r);
+    box-shadow: var(--bong);
+    overflow: hidden;
+  }
+
+  .phan-quyet-dai { height: 5px; background: var(--vien-manh); }
+  .phan-quyet[data-muc="dat"]  .phan-quyet-dai { background: var(--dat); }
+  .phan-quyet[data-muc="canh"] .phan-quyet-dai { background: var(--ho-phach); }
+  .phan-quyet[data-muc="hong"] .phan-quyet-dai { background: var(--gach); }
+
+  .phan-quyet-than { padding: 20px 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+
+  .phan-quyet-tieu {
+    margin: 0;
+    font-size: clamp(21px, 5.4vw, 26px);
+    font-weight: 700;
+    letter-spacing: -.018em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  .phan-quyet[data-muc="dat"]  .phan-quyet-tieu { color: var(--dat); }
+  .phan-quyet[data-muc="canh"] .phan-quyet-tieu { color: var(--ho-phach); }
+  .phan-quyet[data-muc="hong"] .phan-quyet-tieu { color: var(--gach); }
+
+  .phan-quyet-y { margin: 0; color: var(--chu-mo); font-size: 15px; }
+
+  .he-qua {
+    margin: 0;
+    padding: 12px 14px;
+    background: var(--nen-chim);
+    border-radius: 8px;
+    border-left: 3px solid var(--vien-manh);
+    font-size: 14px;
+    color: var(--chu);
+  }
+  .phan-quyet[data-muc="dat"]  .he-qua { border-left-color: var(--dat); }
+  .phan-quyet[data-muc="canh"] .he-qua { border-left-color: var(--ho-phach); }
+  .phan-quyet[data-muc="hong"] .he-qua { border-left-color: var(--gach); }
+
+  /* ---------- Nhóm phép đo ---------- */
+  .nhom { display: flex; flex-direction: column; gap: 10px; }
+
+  .nhom-dau { display: flex; flex-direction: column; gap: 3px; }
+
+  .nhom-ten {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--chu-nhat);
+  }
+
+  .nhom-vi { font-size: 13.5px; color: var(--chu-mo); margin: 0; }
+
+  .bang {
+    display: flex;
+    flex-direction: column;
+    background: var(--nen-the);
+    border: 1px solid var(--vien);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+
+  .hang {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--vien);
+    align-items: start;
+  }
+  .hang:first-child { border-top: 0; }
+
+  .hang-ten {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13.5px;
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .hang-chi-tiet {
+    grid-column: 1 / -1;
+    font-size: 12.5px;
+    color: var(--chu-mo);
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+  }
+
+  .chip {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+    background: var(--nen-chim);
+    color: var(--chu-mo);
+  }
+  .chip[data-kq="dat"]   { background: var(--dat-nen);  color: var(--dat); }
+  .chip[data-kq="thieu"] { background: var(--gach-nen); color: var(--gach); }
+  .chip[data-kq="canh"]  { background: var(--ho-nen);   color: var(--ho-phach); }
+
+  /* ---------- Khối chép ---------- */
+  .chep { display: flex; flex-direction: column; gap: 10px; }
+
+  textarea {
+    width: 100%;
+    min-height: 190px;
+    padding: 12px 13px;
+    background: var(--nen-the);
+    color: var(--chu);
+    border: 1px solid var(--vien);
+    border-radius: var(--r);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    padding: 12px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--lam);
+    background: var(--lam);
+    color: var(--nen-the);
+    cursor: pointer;
+    align-self: flex-start;
+    transition: opacity .12s ease;
+  }
+  button:hover { opacity: .88; }
+  button:focus-visible { outline: 3px solid var(--lam); outline-offset: 2px; }
+  button[data-xong="1"] { background: var(--dat); border-color: var(--dat); }
+
+  footer {
+    border-top: 1px solid var(--vien);
+    padding-top: 16px;
+    font-size: 13px;
+    color: var(--chu-nhat);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  footer code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--chu-mo);
+    word-break: break-all;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="khung">
+  <header class="dau">
+    <div class="nhan">TrustProcure · dò khả năng trước S1.4</div>
+    <h1>Trình duyệt này có nộp thầu niêm phong được không?</h1>
+    <p class="phu">
+      Trang này <strong>chạy thật</strong> từng phép mật mã mà đường nộp báo giá cần, ngay trên
+      thiết bị đang mở nó. Nó không hỏi trình duyệt là ai — nó bắt trình duyệt làm việc rồi xem
+      kết quả. Mở link này <strong>bên trong Zalo hoặc Messenger</strong> để đo đúng webview thật.
+    </p>
+  </header>
+
+  <section class="phan-quyet" id="phan-quyet" aria-live="polite">
+    <div class="phan-quyet-dai"></div>
+    <div class="phan-quyet-than">
+      <h2 class="phan-quyet-tieu" id="pq-tieu">Đang đo…</h2>
+      <p class="phan-quyet-y" id="pq-y">Các phép đo chạy ngay khi trang mở.</p>
+      <p class="he-qua" id="pq-he-qua">—</p>
+    </div>
+  </section>
+
+  <div id="cac-nhom"></div>
+
+  <section class="chep">
+    <div class="nhom-dau">
+      <div class="nhom-ten">Gửi kết quả về</div>
+      <p class="nhom-vi">Bấm nút để chép, rồi dán thẳng vào chat. Nếu nút không chạy trong webview,
+        chạm vào ô bên dưới và chọn tất cả bằng tay.</p>
+    </div>
+    <button id="nut-chep" type="button">Chép kết quả</button>
+    <textarea id="ket-qua-text" readonly aria-label="Kết quả dạng văn bản"></textarea>
+  </section>
+
+  <footer>
+    <div>Trang chỉ chạy trong trình duyệt. Không gửi gì đi đâu, không lưu gì lại.</div>
+    <code id="ua">—</code>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var ket = [];   // {nhom, ten, kq: "dat"|"thieu"|"canh", chiTiet}
+
+  function them(nhom, ten, kq, chiTiet) {
+    ket.push({ nhom: nhom, ten: ten, kq: kq, chiTiet: chiTiet });
+  }
+
+  function bangNhau(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function loi(e) {
+    if (!e) return "không rõ";
+    return (e.name ? e.name + ": " : "") + (e.message || String(e));
+  }
+
+  var NHOM = [
+    {
+      ma: "tien-quyet",
+      ten: "Điều kiện tiên quyết",
+      vi: "Thiếu bất kỳ dòng nào ở đây thì mọi thứ bên dưới không thể chạy. Đây là chỗ webview hay chết nhất — WebCrypto chỉ tồn tại trong ngữ cảnh bảo mật."
+    },
+    {
+      ma: "bat-buoc",
+      ten: "Đường bắt buộc",
+      vi: "Ba phép này nằm trên đường nộp báo giá. Không có cách nào đi vòng: không có chúng thì không có phong bì niêm phong."
+    },
+    {
+      ma: "thoa-thuan",
+      ten: "Thoả thuận khoá",
+      vi: "Thiết kế hiện tại dùng X25519. P-256 là phương án dự phòng — nó được hỗ trợ rộng hơn nhiều. Nếu X25519 thiếu mà P-256 có, đây là dữ kiện làm đổi ADR-011, không phải lỗi thiết bị."
+    },
+    {
+      ma: "phu-tro",
+      ten: "Phụ trợ",
+      vi: "Cần cho tệp đính kèm và mã hoá chuỗi. Thiếu thì mất tính năng, không mất cả đường nộp."
+    }
+  ];
+
+  function doTienQuyet() {
+    var an = (typeof window.isSecureContext === "boolean") ? window.isSecureContext : null;
+    them("tien-quyet", "window.isSecureContext",
+      an === true ? "dat" : (an === null ? "canh" : "thieu"),
+      an === true ? "true — trang chạy trong ngữ cảnh bảo mật"
+        : an === null ? "trình duyệt không khai báo thuộc tính này"
+        : "false — crypto.subtle sẽ KHÔNG tồn tại, dù trình duyệt có hỗ trợ");
+
+    them("tien-quyet", "location.protocol", "dat", location.protocol);
+
+    var coCrypto = typeof crypto !== "undefined" && crypto !== null;
+    them("tien-quyet", "window.crypto", coCrypto ? "dat" : "thieu",
+      coCrypto ? "có" : "KHÔNG có đối tượng crypto");
+
+    var coSubtle = coCrypto && typeof crypto.subtle === "object" && crypto.subtle !== null;
+    them("tien-quyet", "crypto.subtle", coSubtle ? "dat" : "thieu",
+      coSubtle ? "có" : "KHÔNG có — đây là điểm chết chính của webview");
+
+    var coRnd = coCrypto && typeof crypto.getRandomValues === "function";
+    var chiTietRnd = "không có";
+    if (coRnd) {
+      try {
+        var b = new Uint8Array(16);
+        crypto.getRandomValues(b);
+        var toanKhong = b.every(function (x) { return x === 0; });
+        chiTietRnd = toanKhong ? "chạy nhưng trả về toàn số 0 — KHÔNG dùng được" : "sinh được 16 byte ngẫu nhiên";
+        if (toanKhong) coRnd = false;
+      } catch (e) { coRnd = false; chiTietRnd = loi(e); }
+    }
+    them("tien-quyet", "crypto.getRandomValues", coRnd ? "dat" : "thieu", chiTietRnd);
+
+    return coSubtle && coRnd;
+  }
+
+  async function doBatBuoc() {
+    var ok = true;
+
+    // AES-256-GCM: sinh khoá, mã hoá, giải mã, so byte. Chạy thật, không hỏi API.
+    try {
+      var khoa = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      var goc = new Uint8Array([7, 42, 255, 0, 128, 3, 99, 16]);
+      var ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, khoa, goc);
+      var pt = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, khoa, ct));
+      var khop = bangNhau(goc, pt);
+      them("bat-buoc", "AES-256-GCM", khop ? "dat" : "thieu",
+        khop ? "vòng mã hoá → giải mã khớp đúng từng byte" : "roundtrip KHÔNG khớp");
+      if (!khop) ok = false;
+    } catch (e) {
+      them("bat-buoc", "AES-256-GCM", "thieu", loi(e)); ok = false;
+    }
+
+    // SHA-256 — dùng cho hash biên nhận.
+    try {
+      var d = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([0x61, 0x62, 0x63])));
+      var hex = Array.prototype.map.call(d, function (x) { return ("0" + x.toString(16)).slice(-2); }).join("");
+      var dung = hex === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+      them("bat-buoc", "SHA-256", dung ? "dat" : "thieu",
+        dung ? 'hash("abc") khớp giá trị chuẩn' : "hash sai: " + hex.slice(0, 24) + "…");
+      if (!dung) ok = false;
+    } catch (e) {
+      them("bat-buoc", "SHA-256", "thieu", loi(e)); ok = false;
+    }
+
+    // HKDF — dẫn xuất content key.
+    try {
+      var ikm = await crypto.subtle.importKey("raw", new Uint8Array(32), "HKDF", false, ["deriveBits"]);
+      var bits = await crypto.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: new Uint8Array([1, 2, 3]) }, ikm, 256);
+      var du = bits && bits.byteLength === 32;
+      them("bat-buoc", "HKDF-SHA256", du ? "dat" : "thieu",
+        du ? "dẫn xuất được 32 byte" : "trả về " + (bits ? bits.byteLength : 0) + " byte");
+      if (!du) ok = false;
+    } catch (e) {
+      them("bat-buoc", "HKDF-SHA256", "thieu", loi(e)); ok = false;
+    }
+
+    return ok;
+  }
+
+  async function thuThoaThuan(thamSo, nhanDai) {
+    var cap = await crypto.subtle.generateKey(thamSo, false, ["deriveBits"]);
+    var cap2 = await crypto.subtle.generateKey(thamSo, false, ["deriveBits"]);
+    var bits = await crypto.subtle.deriveBits(
+      { name: thamSo.name, public: cap2.publicKey }, cap.privateKey, thamSo.soBit || 256);
+    if (!bits || bits.byteLength === 0) throw new Error("deriveBits trả về rỗng");
+    return nhanDai + " · dẫn xuất " + bits.byteLength + " byte bí mật chung";
+  }
+
+  async function doThoaThuan() {
+    // X25519 có hai cách khai báo tuỳ trình duyệt. Thử cả hai trước khi kết luận thiếu.
+    var x = false, chiTietX = "";
+    var cachX = [
+      { ts: { name: "X25519" }, nhan: 'khai báo { name: "X25519" }' },
+      { ts: { name: "ECDH", namedCurve: "X25519" }, nhan: 'khai báo { name: "ECDH", namedCurve: "X25519" }' }
+    ];
+    for (var i = 0; i < cachX.length; i++) {
+      try {
+        chiTietX = await thuThoaThuan(cachX[i].ts, cachX[i].nhan);
+        x = true;
+        break;
+      } catch (e) { chiTietX = loi(e); }
+    }
+    them("thoa-thuan", "X25519", x ? "dat" : "canh",
+      x ? chiTietX : "không chạy được theo cả hai cách khai báo — " + chiTietX);
+
+    var p = false, chiTietP = "";
+    try {
+      chiTietP = await thuThoaThuan({ name: "ECDH", namedCurve: "P-256", soBit: 256 }, "đường cong P-256");
+      p = true;
+    } catch (e) { chiTietP = loi(e); }
+    them("thoa-thuan", "ECDH P-256", p ? "dat" : "thieu",
+      p ? chiTietP : "không chạy được — " + chiTietP);
+
+    // ---------------------------------------------------------------------------------------
+    // [S1.4 / ADR-011 mục 2] MÃ CHÍNH TẮC — chỗ máy dò thôi là một tờ giấy và thành một DÂY NỐI
+    //
+    // Hai nhãn ở trên ("X25519", "ECDH P-256") là chữ cho người đọc. Chuỗi mà hệ thống so khớp
+    // thì khác: `chooseKeyAgreementAlgorithm` của @trustprocure/sealed-envelope nhận đúng các mã
+    // trong `KEY_AGREEMENT_ALGORITHMS`, và "ECDH P-256" (có dấu cách) KHÔNG khớp "ECDH_P256".
+    // Trước khi có khối này, mục 2 của ADR-011 — *chọn thuật toán là một phép ĐO LÚC CHẠY* — là
+    // một câu chưa có dây nối: máy dò in ra một trang cho người đọc, và không gì đi tiếp.
+    //
+    // Có test tĩnh đọc CHÍNH file này và đòi mọi mã trong `KEY_AGREEMENT_ALGORITHMS` xuất hiện ở
+    // đây (`packages/sealed-envelope/src/hang-so.test.ts`), nên thêm một thuật toán vào gói mà
+    // quên nối dây ở đây là một lượt ĐỎ, không phải một sự im lặng.
+    // ---------------------------------------------------------------------------------------
+    var HO_TRO = [];
+    if (p) HO_TRO.push("ECDH_P256");
+    if (x) HO_TRO.push("X25519");
+    window.trustprocureKeyAgreementSupport = function () { return HO_TRO.slice(); };
+    them("thoa-thuan", "mã chính tắc gửi cho hệ thống", HO_TRO.length ? "dat" : "thieu",
+      HO_TRO.length ? HO_TRO.join(", ") : "không mã nào — máy này không nộp thầu được");
+
+    return { x25519: x, p256: p };
+  }
+
+  function doPhuTro() {
+    var coFile = typeof FileReader === "function" && typeof Blob === "function";
+    them("phu-tro", "FileReader + Blob", coFile ? "dat" : "canh",
+      coFile ? "đọc được tệp đính kèm" : "không đính kèm tệp được");
+
+    var coTE = typeof TextEncoder === "function";
+    them("phu-tro", "TextEncoder", coTE ? "dat" : "thieu",
+      coTE ? "mã hoá được chuỗi sang byte" : "không có");
+  }
+
+  function ve(pq) {
+    // Thẻ phán quyết
+    var el = document.getElementById("phan-quyet");
+    el.setAttribute("data-muc", pq.muc);
+    document.getElementById("pq-tieu").textContent = pq.tieu;
+    document.getElementById("pq-y").textContent = pq.y;
+    document.getElementById("pq-he-qua").textContent = pq.heQua;
+
+    // Các nhóm
+    var goc = document.getElementById("cac-nhom");
+    goc.innerHTML = "";
+    var boc = document.createElement("div");
+    boc.style.display = "flex";
+    boc.style.flexDirection = "column";
+    boc.style.gap = "26px";
+
+    NHOM.forEach(function (n) {
+      var hang = ket.filter(function (k) { return k.nhom === n.ma; });
+      if (!hang.length) return;
+
+      var sec = document.createElement("section");
+      sec.className = "nhom";
+
+      var dau = document.createElement("div");
+      dau.className = "nhom-dau";
+      var ten = document.createElement("div");
+      ten.className = "nhom-ten";
+      ten.textContent = n.ten;
+      var vi = document.createElement("p");
+      vi.className = "nhom-vi";
+      vi.textContent = n.vi;
+      dau.appendChild(ten); dau.appendChild(vi);
+
+      var bang = document.createElement("div");
+      bang.className = "bang";
+      hang.forEach(function (k) {
+        var h = document.createElement("div");
+        h.className = "hang";
+        var t = document.createElement("div");
+        t.className = "hang-ten";
+        t.textContent = k.ten;
+        var c = document.createElement("span");
+        c.className = "chip";
+        c.setAttribute("data-kq", k.kq);
+        c.textContent = k.kq === "dat" ? "Đạt" : (k.kq === "canh" ? "Không có" : "Thiếu");
+        var ct = document.createElement("div");
+        ct.className = "hang-chi-tiet";
+        ct.textContent = k.chiTiet;
+        h.appendChild(t); h.appendChild(c); h.appendChild(ct);
+        bang.appendChild(h);
+      });
+
+      sec.appendChild(dau); sec.appendChild(bang);
+      boc.appendChild(sec);
+    });
+    goc.appendChild(boc);
+
+    // Khối văn bản để dán vào chat
+    var dong = [];
+    dong.push("TrustProcure — dò WebCrypto");
+    dong.push("PHÁN QUYẾT: " + pq.tieu);
+    dong.push("");
+    NHOM.forEach(function (n) {
+      var hang = ket.filter(function (k) { return k.nhom === n.ma; });
+      if (!hang.length) return;
+      dong.push("[" + n.ten + "]");
+      hang.forEach(function (k) {
+        var nhan = k.kq === "dat" ? "ĐẠT  " : (k.kq === "canh" ? "KHÔNG" : "THIẾU");
+        dong.push("  " + nhan + "  " + k.ten + " — " + k.chiTiet);
+      });
+      dong.push("");
+    });
+    dong.push("UA: " + navigator.userAgent);
+    dong.push("secureContext=" + window.isSecureContext + "  protocol=" + location.protocol);
+    document.getElementById("ket-qua-text").value = dong.join("\n");
+
+    document.getElementById("ua").textContent = navigator.userAgent;
+  }
+
+  function phanQuyet(tienQuyetOk, batBuocOk, tt) {
+    if (!tienQuyetOk) {
+      return {
+        muc: "hong",
+        tieu: "KHÔNG nộp thầu được trên trình duyệt này",
+        y: "Thiếu ngay ở điều kiện tiên quyết — crypto.subtle hoặc nguồn ngẫu nhiên không dùng được.",
+        heQua: "Hệ quả cho sản phẩm: nhà cung cấp mở link trong webview này sẽ KHÔNG nộp được báo giá. Đường thoát duy nhất là hướng dẫn họ mở bằng trình duyệt ngoài (Chrome/Safari). Đây chính là rủi ro mà ràng buộc sản phẩm số 4 và ADR-007 đã nêu — nay có số đo."
+      };
+    }
+    if (!batBuocOk) {
+      return {
+        muc: "hong",
+        tieu: "KHÔNG nộp thầu được — đường bắt buộc gãy",
+        y: "crypto.subtle có mặt nhưng một phép trên đường nộp không chạy được.",
+        heQua: "Hệ quả: không thể tạo phong bì niêm phong. Phải hướng dẫn mở bằng trình duyệt ngoài."
+      };
+    }
+    if (tt.x25519) {
+      return {
+        muc: "dat",
+        tieu: "Nộp thầu được — thiết kế hiện tại chạy nguyên vẹn",
+        y: "Cả đường bắt buộc lẫn X25519 đều chạy thật trên thiết bị này.",
+        heQua: "Hệ quả: không cần đổi gì trong §3.2 của bản thiết kế. Vẫn nên đo thêm trên các webview và phiên bản OS khác — một máy đạt không chứng minh mọi máy đạt."
+      };
+    }
+    if (tt.p256) {
+      return {
+        muc: "canh",
+        tieu: "Nộp được, nhưng phải đổi sang P-256",
+        y: "Đường bắt buộc chạy tốt. X25519 KHÔNG chạy được; ECDH P-256 thì chạy.",
+        heQua: "Hệ quả: đây là dữ kiện làm đổi ADR-011 và §3.2 — thoả thuận khoá nên dùng P-256, hoặc phải có cả hai đường. Ghi lại kết quả này TRƯỚC khi bắt đầu S1.4; đổi sau khi đã có phong bì thật là một cuộc di trú."
+      };
+    }
+    return {
+      muc: "hong",
+      tieu: "KHÔNG nộp được — không có thoả thuận khoá nào chạy",
+      y: "AES và hash chạy được, nhưng cả X25519 lẫn P-256 đều không.",
+      heQua: "Hệ quả: không bọc được content key cho RFQ. Phải hướng dẫn mở bằng trình duyệt ngoài."
+    };
+  }
+
+  async function chay() {
+    var tienQuyetOk = doTienQuyet();
+    var batBuocOk = false;
+    var tt = { x25519: false, p256: false };
+
+    if (tienQuyetOk) {
+      batBuocOk = await doBatBuoc();
+      try { tt = await doThoaThuan(); }
+      catch (e) { them("thoa-thuan", "thoả thuận khoá", "thieu", loi(e)); }
+    } else {
+      them("bat-buoc", "cả ba phép", "thieu", "không chạy được vì thiếu điều kiện tiên quyết");
+      them("thoa-thuan", "cả hai đường cong", "thieu", "không chạy được vì thiếu điều kiện tiên quyết");
+    }
+    doPhuTro();
+
+    ve(phanQuyet(tienQuyetOk, batBuocOk, tt));
+  }
+
+  document.getElementById("nut-chep").addEventListener("click", function () {
+    var o = document.getElementById("ket-qua-text");
+    var nut = this;
+    function xong() {
+      nut.textContent = "Đã chép";
+      nut.setAttribute("data-xong", "1");
+      setTimeout(function () {
+        nut.textContent = "Chép kết quả";
+        nut.removeAttribute("data-xong");
+      }, 2200);
+    }
+    // Webview hay chặn clipboard API — luôn có đường lùi bằng chọn thủ công.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(o.value).then(xong, function () { o.focus(); o.select(); });
+    } else {
+      o.focus(); o.select();
+      try { document.execCommand("copy"); xong(); } catch (e) { /* để người dùng chép tay */ }
+    }
+  });
+
+  chay().catch(function (e) {
+    document.getElementById("pq-tieu").textContent = "Phép đo tự nó hỏng";
+    document.getElementById("pq-y").textContent = loi(e);
+    document.getElementById("pq-he-qua").textContent =
+      "Đây là lỗi của trang dò, không phải phán quyết về thiết bị. Chụp màn hình và gửi lại nguyên văn dòng trên.";
+  });
+})();
+</script>

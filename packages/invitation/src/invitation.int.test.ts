@@ -1,0 +1,1379 @@
+import { createHash, randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type pg from "pg";
+import { migrate } from "@trustprocure/db";
+import { withTenant } from "@trustprocure/tenancy";
+import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import {
+  InvitationError,
+  MAGIC_LINK_TOKEN_BYTES,
+  OTP_MAX_FAILED_ATTEMPTS,
+  clearOtpLockout,
+  createInvitation,
+  issueMagicLinkToken,
+  issueOtpChallenge,
+  redeemMagicLink,
+  revokeInvitation,
+  verifyOtpAndStartSession,
+  type Channel,
+} from "./invitation.js";
+import { PepperRing } from "./pepper.js";
+
+// =============================================================================================
+// S1.3 SAU REVIEW AN NINH — CHUỖI TẤN CÔNG CŨ NAY LÀ MỘT BỘ TEST
+//
+// Ba CRITICAL của bản trước đã được dựng lại thành phép đo và chúng chạy TRỌN. Bộ test này giữ
+// NGUYÊN từng bước của chuỗi ấy và đảo chiều khẳng định: mỗi bước từng THÀNH CÔNG nay phải BỊ
+// CHẶN, và mỗi phép chặn phải kèm một vế ĐỐI CHỨNG DƯƠNG — không có vế đó thì "chặn tất cả" cũng
+// làm test xanh.
+// =============================================================================================
+
+// [ADR-018] Vong pepper cua bo test. Mot khoa co dinh 32 byte — no khong phai bi mat o day, no
+// la mot THAM SO cua phep do: khong co no, `code_hash` va `destination_hash` la SHA-256 tran,
+// va phep dao nguoc DA DUOC DO la thanh cong.
+const PEPPER = new PepperRing("p1", { p1: Buffer.alloc(32, 7) });
+
+const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+// [ADR-016] `const ACTOR = { type: "SYSTEM" }` da bien mat. Ba ham BEN MUA nay cam `sBuyerA`;
+// hai ham BEN KHACH khong cam gi ca — danh tinh cua chung doc ra tu token va tu thach thuc.
+
+let db: TestDatabase;
+let apiPool: pg.Pool;
+let orgA: string;
+let orgB: string;
+let supplierKhac: string;
+/** Người liên hệ thuộc MỘT NHÀ CUNG CẤP KHÁC — dùng cho phép đo đối chứng của C2. */
+let lienHeKhac: string;
+let rfqA: string;
+/** Nguoi mua va phien cua ho. Thay cho cho hang `ACTOR` cu o moi loi goi ben mua. */
+let buyerA: string;
+let sBuyerA: string;
+
+interface LoiMoiDaPhat {
+  readonly invitationId: string;
+  readonly token: string;
+  readonly contactId: string;
+}
+
+/** Một nhà cung cấp mới, một người liên hệ mới, một lời mời, một token. */
+async function moiMoi(linkChannel: Channel = "EMAIL"): Promise<LoiMoiDaPhat> {
+  const ncc = await db.pool.query<{ id: string }>(
+    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
+      "VALUES ($1, 'NCC tam', $2, $3) RETURNING id",
+    [orgA, buyerA, sBuyerA],
+  );
+  const nccId = ncc.rows[0]?.id ?? "";
+  const duoi = randomBytes(6).toString("hex");
+  const lh = await db.pool.query<{ id: string }>(
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
+      " created_by, created_by_session_id) " +
+      "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4, $5, $6) RETURNING id",
+    [
+      orgA,
+      nccId,
+      `lh${duoi}@vidu.vn`,
+      `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"),
+      buyerA,
+      sBuyerA,
+    ],
+  );
+  const contactId = lh.rows[0]?.id ?? "";
+
+  return withTenant(apiPool, orgA, async (c) => {
+    const loi = await createInvitation(c, orgA, {
+      rfqId: rfqA,
+      supplierId: nccId,
+      contactId,
+      linkChannel,
+      actorSessionId: sBuyerA,
+    });
+    const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sBuyerA });
+    return { invitationId: loi.id, token: t.token, contactId };
+  });
+}
+
+beforeAll(async () => {
+  db = await startPostgres();
+  await migrate(db.pool, MIGRATIONS_DIR);
+
+  const orgs = await db.pool.query<{ id: string }>(
+    "INSERT INTO organizations (name, slug) VALUES ('Cong ty A', 'cong-ty-a'), " +
+      "('Cong ty B', 'cong-ty-b') RETURNING id",
+  );
+  orgA = orgs.rows[0]?.id ?? "";
+  orgB = orgs.rows[1]?.id ?? "";
+
+  const nguoi = await db.pool.query<{ id: string }>(
+    "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'buyer@vidu.vn', 'Nguoi mua') " +
+      "RETURNING id",
+    [orgA],
+  );
+  buyerA = nguoi.rows[0]?.id ?? "";
+  // [khoản nợ 37] `clearOtpLockout` là hàm ĐẦU TIÊN của gói này có cổng quyền — mọi hàm khác đi
+  // đường khách (token + OTP) hoặc đường người mua không gác. Fixture vì thế phải cấp vai trò.
+  await db.pool.query(
+    "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')",
+    [orgA, buyerA],
+  );
+
+  // [ADR-016 / 013] Phien phai ra doi TRUOC moi hang `suppliers`: trigger
+  // `suppliers_kiem_danh_tinh` chay cho MOI cau INSERT, ke ca cau chay duoi superuser. Thu tu
+  // cua khoi nay vi vay khong con tuy y — va do la dau hieu lop nam o CSDL chu khong o goi.
+  const phienMua = await db.pool.query<{ id: string }>(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+      "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+    [orgA, buyerA, randomBytes(32)],
+  );
+  sBuyerA = phienMua.rows[0]?.id ?? "";
+
+  const ncc = await db.pool.query<{ id: string }>(
+    "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) " +
+      "VALUES ($1, 'NCC khac', '0202020202', $2, $3) RETURNING id",
+    [orgA, buyerA, sBuyerA],
+  );
+  supplierKhac = ncc.rows[0]?.id ?? "";
+
+  const lh = await db.pool.query<{ id: string }>(
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
+      " created_by, created_by_session_id) " +
+      "VALUES ($1, $2, 'Nguoi cua NCC khac', 'b@vidu.vn', '0900000002', $3, $4) RETURNING id",
+    [orgA, supplierKhac, buyerA, sBuyerA],
+  );
+  lienHeKhac = lh.rows[0]?.id ?? "";
+
+  // [H-1, 011] RFQ mang phien cua chinh nguoi tao — cung phien da tao o tren.
+  const rfq = await db.pool.query<{ id: string }>(
+    "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+      "VALUES ($1, 'RFQ de moi', now() + interval '7 days', $2, $3) RETURNING id",
+    [orgA, buyerA, sBuyerA],
+  );
+  rfqA = rfq.rows[0]?.id ?? "";
+
+  expect(
+    [orgA, orgB, buyerA, sBuyerA, supplierKhac, lienHeKhac, rfqA].filter((x) => x === ""),
+  ).toEqual([]);
+  apiPool = db.poolAs("app_api");
+}, 180000);
+
+afterAll(async () => {
+  await db?.stop();
+});
+
+// =============================================================================================
+// CHUỖI TẤN CÔNG CŨ — TỪNG BƯỚC, ĐẢO CHIỀU
+// =============================================================================================
+describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng bước", () => {
+  it("[C1] đích nhận OTP ĐỌC TỪ CSDL — chữ ký hàm không còn chỗ để khai", async () => {
+    const { token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const { rows } = await db.pool.query<{ phone: string }>(
+      "SELECT phone FROM supplier_contacts WHERE id = $1",
+      [contactId],
+    );
+    expect(kq.contactId).toBe(contactId);
+    expect(kq.destination).toBe(rows[0]?.phone);
+
+    // Hàng thách thức GHI LẠI đích đã dùng — thứ bản trước không lưu, nên "không lớp nào, ở bất
+    // kỳ thời điểm nào, biết mã đã đi tới đâu".
+    const { rows: tt } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM invitation_otp_challenges " +
+        " WHERE id = $1 AND destination_hash IS NOT NULL AND contact_id IS NOT NULL " +
+        "   AND token_id IS NOT NULL",
+      [kq.challengeId],
+    );
+    expect(tt[0]?.n).toBe("1");
+  });
+
+  it("[C1] ĐỐI CHỨNG: thách thức trỏ tới người liên hệ của NHÀ CUNG CẤP KHÁC bị CSDL từ chối", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c1b", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    // Câu INSERT viết tay: khoá ngoại một mình chỉ đòi "có trong tổ chức", nên nó cho phép gửi
+    // OTP tới người liên hệ của một nhà cung cấp KHÁC. Trigger ở 012 mới là lớp chặn.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO invitation_otp_challenges (org_id, invitation_id, token_id, contact_id," +
+            " channel, code_hash, expires_at) " +
+            "VALUES ($1, $2, (SELECT token_id FROM invitation_otp_challenges WHERE id = $3), $4," +
+            " 'SMS', decode(repeat('ab', 32), 'hex'), now() + interval '5 minutes')",
+          [orgA, invitationId, kq.challengeId, lienHeKhac],
+        ),
+      ),
+    ).rejects.toThrow(/Nguoi lien he khong thuoc nha cung cap duoc moi/);
+  });
+
+  it("[H1] token của MỘT lời mời khác không mở được thách thức này", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h1", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const khac = await moiMoi();
+    const nham = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token: khac.token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(nham).toEqual({ ok: false, reason: "NO_CHALLENGE" });
+
+    // Đối chứng dương: đúng token thì vào được.
+    const dung = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(dung.ok).toBe(true);
+  });
+
+  it("[C2] danh tính đã xác thực là DẪN XUẤT từ chính thách thức", async () => {
+    const { invitationId, token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const r = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    if (!r.ok) throw new Error("phải mở được phiên");
+    expect(r.verifiedContactId).toBe(contactId);
+
+    const { rows } = await db.pool.query<{ vc: string; cid: string; ch: string }>(
+      "SELECT g.verified_contact_id AS vc, c.contact_id AS cid, g.verified_channel AS ch " +
+        "  FROM guest_sessions g JOIN invitation_otp_challenges c ON c.id = g.challenge_id " +
+        " WHERE g.invitation_id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.vc).toBe(rows[0]?.cid);
+    expect(rows[0]?.ch).toBe("SMS");
+  });
+
+  it("[C2] ĐỐI CHỨNG: phiên KHAI một danh tính khác bị CSDL từ chối, kể cả đi thẳng bằng SQL", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c2b", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO guest_sessions (org_id, invitation_id, challenge_id, token_hash," +
+            " verified_contact_id, verified_channel, expires_at) " +
+            "VALUES ($1, $2, $3, decode(repeat('ef', 32), 'hex'), $4, 'SMS'," +
+            " now() + interval '1 hour')",
+          [orgA, invitationId, kq.challengeId, lienHeKhac],
+        ),
+      ),
+    ).rejects.toThrow(/Danh tinh da xac thuc phai DAN XUAT tu thach thuc OTP/);
+  });
+
+  it("[C3] sau THU HỒI: token chết, và phiên đang sống bị thu hồi theo", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-c3", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const phien = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(phien.ok).toBe(true);
+
+    const daThuHoi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    expect(daThuHoi).toBe(true);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: "ip-c3b",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(InvitationError);
+
+    // Phiên ĐANG SỐNG bị thu hồi theo — thứ bản trước hoàn toàn không chạm tới.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM guest_sessions " +
+        " WHERE invitation_id = $1 AND revoked_at IS NULL",
+      [invitationId],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("[C3] thu hồi hai lần: lần sau trả `false` và KHÔNG ghi thêm sự kiện kiểm toán", async () => {
+    const { invitationId } = await moiMoi();
+    const lan1 = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    const lan2 = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    expect([lan1, lan2]).toEqual([true, false]);
+
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events " +
+        " WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.n).toBe("1");
+  });
+
+  it("[H3] khoá 5-lần-sai KHÔNG reset được bằng cách phát lại thách thức", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h3", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const maSai = kq.code === "000000" ? "111111" : "000000";
+
+    for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, pepper: PEPPER }),
+      );
+    }
+    const biKhoa = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(biKhoa).toEqual({ ok: false, reason: "LOCKED_OUT" });
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: "ip-h3b",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/dang bi khoa vi qua nhieu lan thu sai/);
+  });
+
+  it("[H5] magic link BỊ TIÊU THỤ khi phiên ra đời — không chơi lại được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-h5", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const truoc = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
+    expect(truoc.invitationId).not.toBe("");
+
+    await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("[H5] thu hồi ĐƠN ĐIỆU — cờ đã bật không tắt lại được, kể cả bằng SQL", async () => {
+    const { invitationId, token } = await moiMoi();
+    await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    const bam = createHash("sha256").update(token, "utf8").digest();
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_invitation_tokens SET revoked_at = NULL WHERE token_hash = $1", [bam]),
+      ),
+    ).rejects.toThrow(/revoked_at da bat thi khong duoc tat lai/);
+  });
+});
+
+// =============================================================================================
+// NHÓM E — NAY CÓ ĐỦ LỚP ĐỂ MANG NHÃN
+// =============================================================================================
+describe("[INV-E1] token của magic link", () => {
+  it("entropy ≥ 128 bit từ CSPRNG, và hai lần phát KHÔNG trùng nhau", async () => {
+    expect(MAGIC_LINK_TOKEN_BYTES * 8).toBeGreaterThanOrEqual(128);
+    const a = await moiMoi();
+    const b = await moiMoi();
+    expect(Buffer.from(a.token, "base64url").length).toBe(MAGIC_LINK_TOKEN_BYTES);
+    expect(a.token).not.toBe(b.token);
+  });
+
+  it("lưu dạng HASH — token dạng rõ KHÔNG xuất hiện ở BẤT KỲ cột nào của hàng", async () => {
+    const { token } = await moiMoi();
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_invitation_tokens t " +
+        " WHERE to_jsonb(t)::text LIKE '%' || $1 || '%'",
+      [token],
+    );
+    expect(rows[0]?.n).toBe("0");
+    const { rows: khop } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_invitation_tokens WHERE token_hash = $1",
+      [createHash("sha256").update(token, "utf8").digest()],
+    );
+    expect(khop[0]?.n).toBe("1");
+  });
+
+  it("ĐƠN MỤC ĐÍCH — lược đồ từ chối một `purpose` ngoài tập đóng", async () => {
+    const { invitationId } = await moiMoi();
+    await expect(
+      db.pool.query(
+        // Hai cot ky ten di kem CO CHU DICH: khong co chung, trigger 013 chan truoc va test nay
+        // se xanh VI MOT LY DO KHAC voi ly do no duoc viet — dung lop loi §6 cua ma tran canh bao.
+        "INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose," +
+          " expires_at, issued_by, issued_by_session_id)" +
+          " VALUES ($1, $2, decode(repeat('ab', 32), 'hex'), 'DOC_MOI_THU'," +
+          " now() + interval '1 day', $3, $4)",
+        [orgA, invitationId, buyerA, sBuyerA],
+      ),
+    ).rejects.toThrow(/purpose/);
+  });
+
+  it("CÓ HẠN — token hết hạn thì chết, và TTL có TRẦN TRÊN", async () => {
+    const { invitationId, token } = await moiMoi();
+    await db.pool.query(
+      "UPDATE rfq_invitation_tokens SET created_at = now() - interval '1 hour', " +
+        "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
+      [invitationId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
+    ).rejects.toThrow(InvitationError);
+
+    // `CHECK (expires_at > created_at)` chỉ chặn cận DƯỚI: một cấu hình sai đặt TTL = 10^9 làm vế
+    // "có hạn" của E1 biến mất trong im lặng. Cùng bài học với `MFA_MAX_ALLOWED_FAILED_ATTEMPTS`.
+    const khac = await moiMoi();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueMagicLinkToken(c, orgA, {
+          invitationId: khac.invitationId,
+          ttlSeconds: 1_000_000_000,
+          actorSessionId: sBuyerA,
+        }),
+      ),
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("THU HỒI ĐƯỢC — và thu hồi chạm CẢ token, thách thức, LẪN phiên", async () => {
+    const { invitationId, token } = await moiMoi();
+    const truoc = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
+    expect(truoc.invitationId).toBe(invitationId);
+
+    await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("bốn ca hỏng trả CÙNG một thông báo — không phân biệt được là không có oracle", async () => {
+    const { invitationId, token } = await moiMoi();
+    await db.pool.query(
+      "UPDATE rfq_invitation_tokens SET created_at = now() - interval '1 hour', " +
+        "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
+      [invitationId],
+    );
+    const bat = async (t: string): Promise<string> =>
+      withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, t)).then(
+        () => "KHONG NEM",
+        (e: unknown) => (e as Error).message,
+      );
+    expect(await bat(token)).toBe(await bat("khong-phai-token-nao-ca"));
+  });
+});
+
+describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh ĐÃ ĐĂNG KÝ", () => {
+  it("đổi được magic link nhưng KHÔNG có phiên nào ra đời", async () => {
+    const { invitationId, token } = await moiMoi();
+    const doi = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
+    expect(doi.invitationId).toBe(invitationId);
+
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM guest_sessions WHERE invitation_id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("mã OTP SAI không sinh phiên; mã ĐÚNG thì có — phép hội, hai vế", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e2", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const sai = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, {
+        token,
+        code: kq.code === "000000" ? "111111" : "000000",
+        pepper: PEPPER,
+      }),
+    );
+    expect(sai.ok).toBe(false);
+
+    const dung = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(dung.ok).toBe(true);
+  });
+
+  it("kênh quyết định CỘT nào được đọc — nhãn và sự thật là một thứ", async () => {
+    const { token, contactId } = await moiMoi("SMS"); // link đi SMS ⇒ OTP phải đi EMAIL
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "EMAIL",
+        callerFingerprint: "ip-kenh",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const { rows } = await db.pool.query<{ email: string }>(
+      "SELECT email FROM supplier_contacts WHERE id = $1",
+      [contactId],
+    );
+    expect(kq.destination).toBe(rows[0]?.email);
+  });
+
+  it("người liên hệ chưa có kênh đã đăng ký thì BỊ TỪ CHỐI, không rơi về kênh khác", async () => {
+    const lh = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, " +
+        " created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Khong co so', 'khongso@vidu.vn', $3, $4) RETURNING id",
+      [orgA, supplierKhac, buyerA, sBuyerA],
+    );
+    const t = await withTenant(apiPool, orgA, async (c) => {
+      const l = await createInvitation(c, orgA, {
+        rfqId: rfqA,
+        supplierId: supplierKhac,
+        contactId: lh.rows[0]?.id ?? "",
+        actorSessionId: sBuyerA,
+      });
+      return issueMagicLinkToken(c, orgA, { invitationId: l.id, actorSessionId: sBuyerA });
+    });
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: t.token,
+          channel: "SMS",
+          callerFingerprint: "ip-thieu-kenh",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/chưa có kênh đã đăng ký/);
+  });
+});
+
+describe("ADR-015 mục 1 — OTP không bao giờ tới cùng một ĐÍCH với magic link", () => {
+  // ==========================================================================================
+  // [REVIEW AN NINH S1.3 — HIGH-1] TIÊU ĐỀ VÀ PHÉP ĐO ĐỀU ĐỔI: TỪ "KÊNH" SANG "ĐÍCH".
+  //
+  // Bản cũ so hai NHÃN kênh. `supplier_contacts` có ĐÚNG MỘT `email` và ĐÚNG MỘT `phone`, và
+  // `issueOtpChallenge` đọc cột theo kênh — nên `SMS` và `ZALO_ZNS` cùng đọc `phone`. Với
+  // `link_channel = 'SMS'` và OTP `ZALO_ZNS`, hai nhãn KHÁC nhau, phép so cũ cho qua, và cả hai
+  // yếu tố tới đúng một máy điện thoại. Lý do ADR-015 mục 1 tồn tại — *"ai đọc được kênh đó có
+  // cả hai"* — bị vô hiệu, và E2 tụt từ hai yếu tố xuống một.
+  //
+  // Ca ZALO_ZNS ấy KHÔNG có một test nào cho tới vòng này; `ZALO_ZNS` không xuất hiện một lần
+  // nào trong cả `packages/invitation` ngoài hằng `CHANNELS`.
+  // ==========================================================================================
+  it("link EMAIL + OTP EMAIL bị CSDL từ chối", async () => {
+    const { token } = await moiMoi("EMAIL");
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "EMAIL",
+          callerFingerprint: "ip-k1",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
+  });
+
+  it("link SMS + OTP SMS CŨNG bị từ chối — lớp này so HAI KÊNH, không cấm cứng EMAIL", async () => {
+    const { token } = await moiMoi("SMS");
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: "ip-k2",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
+  });
+
+  it.each([
+    ["SMS", "ZALO_ZNS"],
+    ["ZALO_ZNS", "SMS"],
+  ] as const)(
+    "link %s + OTP %s bị từ chối — hai NHÃN khác nhau, một SỐ ĐIỆN THOẠI",
+    async (kenhLink, kenhOtp) => {
+      const { token } = await moiMoi(kenhLink);
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          issueOtpChallenge(c, orgA, {
+            token,
+            channel: kenhOtp,
+            callerFingerprint: `ip-${kenhLink}-${kenhOtp}`,
+            pepper: PEPPER,
+          }),
+        ),
+      ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
+    },
+  );
+
+  it.each([
+    ["EMAIL", "SMS"],
+    ["EMAIL", "ZALO_ZNS"],
+    ["SMS", "EMAIL"],
+  ] as const)(
+    "ĐỐI CHỨNG DƯƠNG: link %s + OTP %s đi được — hai ĐÍCH thật sự khác nhau",
+    async (kenhLink, kenhOtp) => {
+      // Không có ba ca này, lớp so đích xanh kể cả khi nó cấm cứng mọi cặp — tức nó đã chặn
+      // luôn đường hợp pháp và không ai nộp thầu được nữa.
+      const { token } = await moiMoi(kenhLink);
+      const kq = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: kenhOtp,
+          callerFingerprint: `ip-ok-${kenhLink}-${kenhOtp}`,
+          pepper: PEPPER,
+        }),
+      );
+      expect(kq.ok).toBe(true);
+    },
+  );
+});
+
+describe("[INV-E3] OTP — năm vế", () => {
+  it("HẾT HẠN: thách thức quá hạn bị từ chối dù mã đúng", async () => {
+    const { invitationId, token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-hh", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    await db.pool.query(
+      "UPDATE invitation_otp_challenges SET created_at = now() - interval '1 hour', " +
+        "       expires_at = now() - interval '1 minute' WHERE invitation_id = $1",
+      [invitationId],
+    );
+    const r = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(r).toEqual({ ok: false, reason: "EXPIRED" });
+  });
+
+  it("DÙNG MỘT LẦN: mã đúng lần thứ hai không vào được nữa", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-ml", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const lan1 = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(lan1.ok).toBe(true);
+
+    // Token cũng đã bị tiêu thụ (H5), nên lần hai chết ngay ở lớp token — sớm hơn một bậc.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+      ),
+    ).rejects.toThrow(InvitationError);
+  });
+
+  it("GIỚI HẠN SỐ LẦN THỬ: sau 5 lần sai thì khoá, và mã ĐÚNG cũng không vào được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-lt", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+    const maSai = kq.code === "000000" ? "111111" : "000000";
+
+    for (let i = 0; i < OTP_MAX_FAILED_ATTEMPTS; i++) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: maSai, pepper: PEPPER }),
+      );
+    }
+    const sau = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    expect(sau).toEqual({ ok: false, reason: "LOCKED_OUT" });
+  });
+
+  it("GIỚI HẠN TẦN SUẤT theo LỜI MỜI: bucket kẻ tấn công KHÔNG xoay được", async () => {
+    // `callerFingerprint` đổi mỗi lần — bản trước sẽ không bao giờ chạm trần vì bucket theo người
+    // gọi là chuỗi do người gọi chọn. Bucket theo LỜI MỜI thì không xoay được.
+    const { token } = await moiMoi();
+    let biChan = false;
+    for (let i = 0; i < 12; i++) {
+      const r = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: "SMS",
+          callerFingerprint: `ip-xoay-${String(i)}`,
+          pepper: PEPPER,
+        }),
+      ).catch((e: unknown) => e as Error);
+      if (r instanceof Error) {
+        expect(r.message).toMatch(/vượt giới hạn tần suất/);
+        biChan = true;
+        break;
+      }
+    }
+    expect(biChan, "xoay callerFingerprint phải chạm một trần nào đó").toBe(true);
+  });
+});
+
+describe("[INV-E5] link chuyển tiếp, và danh tính THỰC TẾ đã xác thực", () => {
+  it("người nhận link chuyển tiếp vẫn vào được, và phiên ghi NGƯỜI GIỮ KÊNH đã nhận mã", async () => {
+    const { invitationId, token, contactId } = await moiMoi();
+    // Link được chuyển tiếp: một người khác cầm token và đổi được nó. Hành vi ĐƯỢC THIẾT KẾ.
+    const doi = await withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token));
+    expect(doi.invitationId).toBe(invitationId);
+
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-e5", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("thách thức phải phát được");
+
+    const r = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    if (!r.ok) throw new Error("phải mở được phiên");
+    expect(r.verifiedContactId).toBe(contactId);
+
+    const { rows } = await db.pool.query<{ payload: { verifiedContactId?: string } }>(
+      "SELECT payload FROM audit_events WHERE action = 'GUEST_SESSION_STARTED' " +
+        "  AND org_id = $1 ORDER BY seq DESC LIMIT 1",
+      [orgA],
+    );
+    expect(rows[0]?.payload.verifiedContactId).toBe(contactId);
+  });
+});
+
+describe("cô lập tổ chức", () => {
+  it("[INV-F1] token của tổ chức A không đổi được từ phiên của tổ chức B", async () => {
+    const { token } = await moiMoi();
+    await expect(
+      withTenant(apiPool, orgB, (c) => redeemMagicLink(c, orgB, token)),
+    ).rejects.toThrow(InvitationError);
+  });
+});
+
+// =============================================================================================
+// [ADR-016] DANH TÍNH LÀ DẪN XUẤT — VÀ Ở GÓI NÀY NÓ CÓ HAI HÌNH DẠNG
+//
+// Bên MUA chứng minh bằng một phiên. Bên KHÁCH không có phiên và chứng minh bằng một thứ MẠNH
+// HƠN: cầm được magic link, rồi cầm được mã OTP về đúng kênh đã đăng ký. Khối này đo cả hai, và
+// mỗi phép chặn đi sau một vế đối chứng dương.
+// =============================================================================================
+describe("danh tính là dẫn xuất — hai hình dạng", () => {
+  it("ĐỐI CHỨNG DƯƠNG bên mua: lời mời và token ĐỀU mang chữ ký của người phát", async () => {
+    const { invitationId, token } = await moiMoi();
+
+    const loi = await db.pool.query<{ invited_by: string; invited_by_session_id: string }>(
+      "SELECT invited_by, invited_by_session_id FROM rfq_invitations WHERE id = $1",
+      [invitationId],
+    );
+    expect(loi.rows[0]?.invited_by).toBe(buyerA);
+    expect(loi.rows[0]?.invited_by_session_id).toBe(sBuyerA);
+
+    const tk = await db.pool.query<{ issued_by: string }>(
+      "SELECT issued_by FROM rfq_invitation_tokens WHERE token_hash = $1",
+      [createHash("sha256").update(token, "utf8").digest()],
+    );
+    expect(tk.rows[0]?.issued_by).toBe(buyerA);
+  });
+
+  it("bên KHÁCH: sổ kiểm toán ghi NGƯỜI LIÊN HỆ đọc ra từ token, không ghi thứ người gọi tự đặt", async () => {
+    const { token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016", pepper: PEPPER }),
+    );
+    expect(kq.ok).toBe(true);
+
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string }>(
+      "SELECT actor_type, actor_id FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'OTP_CHALLENGE_ISSUED' " +
+        " ORDER BY seq DESC LIMIT 1",
+      [orgA],
+    );
+    // Bản trước ghi `SYSTEM`/NULL cho đúng lời gọi này, vì hằng `ACTOR` ở đầu file nói vậy — và
+    // một kẻ chỉ có token phát được OTP rồi ghi sổ dưới tên bất kỳ ai.
+    expect(rows[0]?.actor_type).toBe("SUPPLIER");
+    expect(rows[0]?.actor_id).toBe(contactId);
+  });
+
+  it("bên KHÁCH: phiên khách và sổ kiểm toán kể CÙNG một câu chuyện về ai đã xác thực", async () => {
+    const { token, contactId } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-adr016b", pepper: PEPPER }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+    const mo = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: PEPPER }),
+    );
+    if (!mo.ok) throw new Error("khong mo duoc phien");
+
+    const { rows } = await db.pool.query<{ actor_id: string; verified_contact_id: string }>(
+      "SELECT a.actor_id, g.verified_contact_id FROM audit_events a " +
+        " JOIN guest_sessions g ON g.id = a.resource_id " +
+        " WHERE a.action = 'GUEST_SESSION_STARTED' AND g.id = $1",
+      [mo.sessionId],
+    );
+    // Nếu hai giá trị này lệch nhau thì một trong hai đang nói dối, và không lớp nào biết cái nào.
+    expect(rows[0]?.actor_id).toBe(contactId);
+    expect(rows[0]?.verified_contact_id).toBe(contactId);
+  });
+
+  it("bên MUA: phiên của tổ chức khác bị từ chối khi mời", async () => {
+    const nguoiB = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi cua B') RETURNING id",
+      [orgB, "b-" + randomBytes(5).toString("hex") + "@vidu.vn"],
+    );
+    const phienB = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day') RETURNING id",
+      [orgB, nguoiB.rows[0]?.id ?? "", randomBytes(32)],
+    );
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        createInvitation(c, orgA, {
+          rfqId: rfqA,
+          supplierId: supplierKhac,
+          contactId: lienHeKhac,
+          actorSessionId: phienB.rows[0]?.id ?? "",
+        }),
+      ),
+    ).rejects.toThrow(/phiên không hợp lệ/);
+  });
+
+  it("LỚP CÓ THẨM QUYỀN Ở CSDL: thu hồi bằng SQL VIẾT TAY mà không ký tên bị TRIGGER chặn", async () => {
+    const { invitationId } = await moiMoi();
+
+    // Không đi qua `revokeInvitation`: đây là chỗ duy nhất chứng minh lớp nằm ở CSDL. Một script
+    // vận hành thu hồi hàng loạt lời mời sẽ đi đúng đường này.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now() WHERE id = $1",
+          [invitationId],
+        ),
+      ),
+    ).rejects.toThrow(/phai duoc dat/);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: cùng lời mời đó, `revokeInvitation` thu hồi được VÀ ghi tên người thu hồi", async () => {
+    const { invitationId } = await moiMoi();
+
+    const xong = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+    );
+    expect(xong).toBe(true);
+
+    const { rows } = await db.pool.query<{ revoked_by: string; revoked_by_session_id: string }>(
+      "SELECT revoked_by, revoked_by_session_id FROM rfq_invitations WHERE id = $1",
+      [invitationId],
+    );
+    expect(rows[0]?.revoked_by).toBe(buyerA);
+    expect(rows[0]?.revoked_by_session_id).toBe(sBuyerA);
+  });
+
+  it("ĐỘT BIẾN: gỡ trigger thu hồi thì câu UPDATE không ký tên ĐI LỌT", async () => {
+    const { invitationId } = await moiMoi();
+    await db.pool.query("DROP TRIGGER rfq_invitations_kiem_nguoi_thu_hoi ON rfq_invitations");
+    try {
+      const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now() WHERE id = $1",
+          [invitationId],
+        ),
+      );
+      expect(rowCount, "không có trigger thì một lời mời bị thu hồi mà không ai ký tên").toBe(1);
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER rfq_invitations_kiem_nguoi_thu_hoi BEFORE UPDATE ON rfq_invitations " +
+          " FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL) " +
+          " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')",
+      );
+    }
+  });
+});
+
+// =============================================================================================
+// [ADR-018] PEPPER — VÀ VẾ ĐỐI CHỨNG DƯƠNG LÀ PHẦN CHỊU LỰC
+//
+// Phép đo dưới đây liệt kê một không gian NHỎ và đòi:
+//   * KHÔNG pepper -> PHẢI TÌM RA số. Không có vế này, "có pepper thì không tìm ra" cũng xanh khi
+//     phép đo hỏng theo mọi hướng khác, và cả khối trở thành một lời khẳng định không đo gì.
+//   * CÓ pepper    -> PHẢI KHÔNG tìm ra.
+//
+// Con số ngoại suy đã đo trên Node 22 lúc quyết định ADR: ~0.0011 ms một băm, tức **~18 phút một
+// luồng** cho toàn bộ không gian số di động Việt Nam (~10^9). Một bản sao lưu CSDL rò ra ngoài
+// không phải một bảng băm — nó là một DANH BẠ.
+// =============================================================================================
+describe("pepper cho băm đích và băm mã", () => {
+  const KHONG_GIAN = 2000;
+  const soThu = (i: number) => "09000" + String(i).padStart(5, "0");
+
+  it("ĐỐI CHỨNG DƯƠNG: SHA-256 TRẦN đảo ngược được bằng liệt kê — lỗ là THẬT", () => {
+    const dich = soThu(1234);
+    const bamTran = (x: string) => createHash("sha256").update(x, "utf8").digest("hex");
+    const bamDich = bamTran(dich);
+
+    let timDuoc: string | null = null;
+    for (let i = 0; i < KHONG_GIAN; i++) {
+      if (bamTran(soThu(i)) === bamDich) {
+        timDuoc = soThu(i);
+        break;
+      }
+    }
+    expect(timDuoc).toBe(dich);
+  });
+
+  it("CÙNG phép liệt kê ấy THẤT BẠI khi băm có pepper", () => {
+    const dich = soThu(1234);
+    const bamCoPepper = PEPPER.bam(dich).hash.toString("hex");
+    const bamTran = (x: string) => createHash("sha256").update(x, "utf8").digest("hex");
+
+    let timDuoc: string | null = null;
+    for (let i = 0; i < KHONG_GIAN; i++) {
+      if (bamTran(soThu(i)) === bamCoPepper) {
+        timDuoc = soThu(i);
+        break;
+      }
+    }
+    expect(timDuoc).toBeNull();
+  });
+
+  it("băm ghi xuống CSDL KHÔNG khớp SHA-256 trần của cùng đầu vào — pepper thật sự đi vào cột", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-pepper",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    const { rows } = await db.pool.query<{
+      code_hash: Buffer;
+      destination_hash: Buffer;
+      pepper_version: string;
+      invitation_id: string;
+    }>(
+      "SELECT code_hash, destination_hash, pepper_version, invitation_id " +
+        " FROM invitation_otp_challenges WHERE id = $1",
+      [kq.challengeId],
+    );
+    const hang = rows[0];
+    if (hang === undefined) throw new Error("khong doc duoc hang thach thuc");
+
+    // Đây là phép đo phân biệt "đã cài pepper" với "tưởng đã cài": nếu ai đó lỡ dùng lại `bam()`
+    // trần cho hai cột này, hai khẳng định dưới đây ĐỎ ngay.
+    const tranMa = createHash("sha256")
+      .update(hang.invitation_id, "utf8")
+      .update(kq.code, "utf8")
+      .digest();
+    expect(hang.code_hash.equals(tranMa)).toBe(false);
+    expect(hang.code_hash.equals(PEPPER.bam(hang.invitation_id, kq.code).hash)).toBe(true);
+
+    const tranDich = createHash("sha256")
+      .update(orgA, "utf8")
+      .update("DEST", "utf8")
+      .update(kq.destination, "utf8")
+      .digest();
+    expect(hang.destination_hash?.equals(tranDich)).toBe(false);
+    expect(hang.pepper_version).toBe("p1");
+  });
+
+  it("XOAY PEPPER: thách thức phát TRƯỚC lần xoay vẫn đối chiếu được", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-xoay",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    // Vòng SAU khi xoay: phiên bản đang dùng là `p2`, nhưng `p1` VẪN CÒN trong vòng — đó là toàn
+    // bộ điểm của việc băm mang theo phiên bản. Bỏ `p1` đi là làm chết mọi thách thức đang mở.
+    const sauXoay = new PepperRing("p2", {
+      p1: Buffer.alloc(32, 7),
+      p2: Buffer.alloc(32, 9),
+    });
+
+    const mo = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: sauXoay }),
+    );
+    expect(mo.ok).toBe(true);
+  });
+
+  it("MẤT phiên bản cũ thì NÉM, không im lặng trả về `sai mã`", async () => {
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: "ip-mat-p1",
+        pepper: PEPPER,
+      }),
+    );
+    if (!kq.ok) throw new Error("khong phat duoc OTP");
+
+    // Một lỗi CẤU HÌNH không được đội lốt một lần người dùng gõ sai mã: ca sau sẽ bị đếm vào
+    // `failed_attempts` và khoá hồ sơ của một người không làm gì sai.
+    const thieuP1 = new PepperRing("p2", { p2: Buffer.alloc(32, 9) });
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper: thieuP1 }),
+      ),
+    ).rejects.toThrow(/không đối chiếu được/);
+  });
+
+  it("`otp_rate_limits.bucket_hash` cũng có pepper — nó là cùng tập đích", async () => {
+    const { token } = await moiMoi();
+    const dauVan = "ip-bucket-" + randomBytes(4).toString("hex");
+    await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: dauVan,
+        pepper: PEPPER,
+      }),
+    );
+
+    const tran = createHash("sha256")
+      .update(orgA, "utf8")
+      .update("CALLER", "utf8")
+      .update(dauVan, "utf8")
+      .digest();
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_hash = $1",
+      [tran],
+    );
+    expect(rows[0]?.n, "băm trần KHÔNG được xuất hiện trong bảng đếm").toBe("0");
+
+    const { rows: co } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_hash = $1",
+      [PEPPER.bam(orgA, "CALLER", dauVan).hash],
+    );
+    expect(co[0]?.n, "đối chứng dương: băm CÓ pepper thì có").toBe("1");
+  });
+
+  it("`pepper_version` là NOT NULL — một hàng không nói được nó băm bằng gì là một hàng vô dụng", async () => {
+    const { rows } = await db.pool.query<{ is_nullable: string }>(
+      "SELECT is_nullable FROM information_schema.columns " +
+        " WHERE table_schema = 'public' AND table_name = 'invitation_otp_challenges' " +
+        "   AND column_name = 'pepper_version'",
+    );
+    expect(rows[0]?.is_nullable).toBe("NO");
+  });
+});
+
+// ===============================================================================================
+// [khoản nợ 36] HAI CÁCH VIẾT SQL CỦA GÓI NÀY, NAY LÀ HAI PHÉP ĐO
+// ===============================================================================================
+describe("[khoản nợ 36] cổng OTP đòi một giao dịch, và phép so credential ghim toán tử", () => {
+  it("[INV-E3] gọi `verifyOtpAndStartSession` NGOÀI giao dịch bị từ chối", async () => {
+    // Ngoài giao dịch, `FOR UPDATE` nhả khoá ngay cuối câu đọc, nên N lời gọi đồng thời đều thấy
+    // `dang_khoa = false` và đều được đoán — trần 5 lần của E3 thành vô hạn. Dựng đúng ca ấy:
+    // gắn `app.org_id` ở phạm vi PHIÊN (`is_local = false`) để `assertTenantBound` cho qua trong
+    // khi KHÔNG có giao dịch nào mở.
+    const c = await apiPool.connect();
+    try {
+      await c.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+      await expect(
+        verifyOtpAndStartSession(c, orgA, { token: "khong-quan-trong", code: "000000", pepper: PEPPER }),
+      ).rejects.toThrow(/phải chạy TRONG một giao dịch/);
+    } finally {
+      await c.query("SELECT set_config('app.org_id', '', false)").catch(() => undefined);
+      c.release();
+    }
+  });
+
+  it("[INV-E3] ĐỐI CHỨNG DƯƠNG: trong giao dịch thì phép kiểm ấy KHÔNG chặn đường hợp pháp", async () => {
+    // Không có vế này, khẳng định trên xanh kể cả khi hàm từ chối MỌI lời gọi.
+    const { token, invitationId } = await moiMoi("EMAIL");
+    const otp = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: `ip-no36-${invitationId.slice(0, 8)}`,
+        pepper: PEPPER,
+      }),
+    );
+    expect(otp.ok).toBe(true);
+    if (!otp.ok) throw new Error("khong phat duoc OTP");
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: otp.code, pepper: PEPPER }),
+    );
+    expect(kq.ok).toBe(true);
+  });
+
+  it("[khoản nợ 36] phép so credential ghim toán tử và tên kiểu — đọc thẳng mã nguồn", async () => {
+    // Lớp này KHÔNG đo được bằng hành vi: một `=` bị chiếm đòi `CREATE` trên một schema nằm trên
+    // `search_path`, và `hardening.always.sql` đã thu hồi quyền ấy cho `app_api` trên `public`.
+    // Thứ đo được là VĂN BẢN — cùng khuôn §R3 của dự án cho thân hàm plpgsql.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const nguon = readFileSync(
+      fileURLToPath(new URL("./invitation.ts", import.meta.url)),
+      "utf8",
+    );
+    const than = nguon.slice(
+      nguon.indexOf("async function docToken("),
+      nguon.indexOf("export async function redeemMagicLink("),
+    );
+    expect(than.length, "chống rỗng ruột: phải cắt được thân `docToken`").toBeGreaterThan(200);
+    expect(than, "phép so `token_hash` phải ghim toán tử").toContain(
+      "t.token_hash OPERATOR(pg_catalog.=)",
+    );
+    expect(than, "và phải ghim cả TÊN KIỂU — trục thứ hai của cùng cuộc tấn công").toContain(
+      "$1::pg_catalog.bytea",
+    );
+  });
+});
+
+// ===============================================================================================
+// [khoản nợ 35 + 37] HAI ĐƯỜNG "CHẶN NGƯỜI KHÁC DỰ THẦU"
+//
+// Không đường nào làm lộ một giá. Cả hai giữ một nhà cung cấp Ở NGOÀI cuộc thầu — và với một sản
+// phẩm bán *"bằng chứng cạnh tranh"*, một đường loại người ra khỏi cuộc là một lỗ hổng đúng nghĩa.
+// ===============================================================================================
+describe("[khoản nợ 35] hạn mức OTP theo đích không xuyên qua lời mời được nữa", () => {
+  it("[INV-E3] đốt cạn hạn mức của lời mời A KHÔNG chặn OTP của lời mời B tới CÙNG một số", async () => {
+    // Đây là kịch bản mà ADR-015 §5 đặt tên: *"khoá theo đích cho phép một người khoá lối vào của
+    // người khác"*. Hai lời mời, cùng một người liên hệ, tức CÙNG một số điện thoại.
+    const a = await moiMoi("EMAIL");
+    const { rows: lh } = await db.pool.query<{ supplier_id: string }>(
+      "SELECT supplier_id FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    const { rows: r2 } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+        "VALUES ($1, 'RFQ thu hai', now() + interval '7 days', $2, $3) RETURNING id",
+      [orgA, buyerA, sBuyerA],
+    );
+    const b = await withTenant(apiPool, orgA, async (c) => {
+      const loi = await createInvitation(c, orgA, {
+        rfqId: r2[0]?.id ?? "",
+        supplierId: lh[0]?.supplier_id ?? "",
+        contactId: a.contactId,
+        linkChannel: "EMAIL",
+        actorSessionId: sBuyerA,
+      });
+      const t = await issueMagicLinkToken(c, orgA, {
+        invitationId: loi.id,
+        actorSessionId: sBuyerA,
+      });
+      return t.token;
+    });
+
+    // Đốt cạn hạn mức đích của lời mời A: bốn lần, trần là ba.
+    let lanCuoiOk = true;
+    for (let i = 0; i < 4; i += 1) {
+      const kq = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: a.token,
+          channel: "SMS",
+          callerFingerprint: `ip-a-${i}`,
+          pepper: PEPPER,
+        }),
+      );
+      lanCuoiOk = kq.ok;
+    }
+    expect(lanCuoiOk, "tiền đề: lời mời A PHẢI chạm trần đích của chính nó").toBe(false);
+
+    // Và lời mời B — cùng số điện thoại, khác gói thầu — vẫn phát được.
+    const kqB = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: b,
+        channel: "SMS",
+        callerFingerprint: "ip-b",
+        pepper: PEPPER,
+      }),
+    );
+    expect(
+      kqB.ok,
+      "một lời mời đốt cạn hạn mức đích vẫn chặn được lời mời khác — ADR-015 §5 cấm đúng điều này",
+    ).toBe(true);
+  });
+
+  it("[INV-E3] trần CHI PHÍ toàn tổ chức VẪN còn — nó chỉ cao hơn, không biến mất", async () => {
+    // Không có vế này, bản sửa trên đọc thành "bỏ hạn mức theo đích đi". Trần chi phí là thứ chặn
+    // một lượt gửi hàng loạt về một số; nó phải tồn tại và phải được ghi thật.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_kind = 'DEST_ORG'",
+    );
+    expect(Number(rows[0]?.n ?? "0"), "bucket DEST_ORG phải THẬT SỰ được ghi").toBeGreaterThan(0);
+  });
+});
+
+describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đường ra", () => {
+  it("[INV-E1] mời LẠI được sau khi thu hồi — và bản thu hồi vẫn nằm nguyên trong sổ", async () => {
+    const lm = await moiMoi("EMAIL");
+    const { rows: ncc } = await db.pool.query<{ supplier_id: string; rfq_id: string }>(
+      "SELECT supplier_id, rfq_id FROM rfq_invitations WHERE id = $1",
+      [lm.invitationId],
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }),
+    );
+
+    const moiLai = await withTenant(apiPool, orgA, (c) =>
+      createInvitation(c, orgA, {
+        rfqId: ncc[0]?.rfq_id ?? "",
+        supplierId: ncc[0]?.supplier_id ?? "",
+        contactId: lm.contactId,
+        linkChannel: "EMAIL",
+        actorSessionId: sBuyerA,
+      }),
+    );
+    expect(moiLai.id).not.toBe(lm.invitationId);
+
+    // HAI hàng cùng tồn tại: bản đã thu hồi KHÔNG bị xoá, và 022 vẫn cấm nó sống lại.
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_invitations WHERE rfq_id = $1 AND supplier_id = $2",
+      [ncc[0]?.rfq_id ?? "", ncc[0]?.supplier_id ?? ""],
+    );
+    expect(dem[0]?.n).toBe("2");
+    await expect(
+      db.pool.query(
+        "UPDATE rfq_invitations SET status = 'SENT', revoked_at = NULL WHERE id = $1",
+        [lm.invitationId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("[INV-E1] HAI lời mời CÒN SỐNG cho cùng một nhà cung cấp vẫn bị chặn", async () => {
+    // Vị từ bộ phận chỉ mở lại vế "sau khi thu hồi"; vế gốc *"một nhà cung cấp được mời ĐÚNG MỘT
+    // LẦN cho mỗi RFQ"* phải nguyên vẹn. Không có vế này, bản sửa đọc thành "bỏ ràng buộc đi".
+    const lm = await moiMoi("EMAIL");
+    const { rows: ncc } = await db.pool.query<{ supplier_id: string; rfq_id: string }>(
+      "SELECT supplier_id, rfq_id FROM rfq_invitations WHERE id = $1",
+      [lm.invitationId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        createInvitation(c, orgA, {
+          rfqId: ncc[0]?.rfq_id ?? "",
+          supplierId: ncc[0]?.supplier_id ?? "",
+          contactId: lm.contactId,
+          linkChannel: "EMAIL",
+          actorSessionId: sBuyerA,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("[INV-E3] gỡ khoá mở lại đường phát OTP, và nó KHÔNG xoá dấu vết", async () => {
+    const lm = await moiMoi("EMAIL");
+    const otp = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: lm.token,
+        channel: "SMS",
+        callerFingerprint: "ip-khoa",
+        pepper: PEPPER,
+      }),
+    );
+    if (!otp.ok) throw new Error("khong phat duoc OTP");
+
+    for (let i = 0; i < 5; i += 1) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token: lm.token, code: "000000", pepper: PEPPER }),
+      );
+    }
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: lm.token,
+          channel: "SMS",
+          callerFingerprint: "ip-khoa-2",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/dang bi khoa/);
+
+    const go = await withTenant(apiPool, orgA, (c) =>
+      clearOtpLockout(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }, apiPool),
+    );
+    expect(go.cleared).toBe(1);
+
+    const lai = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: lm.token,
+        channel: "SMS",
+        callerFingerprint: "ip-khoa-3",
+        pepper: PEPPER,
+      }),
+    );
+    expect(lai.ok).toBe(true);
+
+    // ...nhưng SỐ LẦN ĐOÁN SAI vẫn nguyên. Gỡ khoá là một hành vi, không phải một lần xoá.
+    const { rows } = await db.pool.query<{ failed_attempts: number }>(
+      "SELECT failed_attempts FROM invitation_otp_challenges WHERE id = $1",
+      [otp.challengeId],
+    );
+    expect(rows[0]?.failed_attempts).toBe(5);
+
+    // Và tầng CSDL chặn cả một câu SQL viết tay cố hạ nó xuống.
+    await expect(
+      db.pool.query("UPDATE invitation_otp_challenges SET failed_attempts = 0 WHERE id = $1", [
+        otp.challengeId,
+      ]),
+    ).rejects.toThrow(/khong duoc giam/);
+  });
+
+  it("[INV-D5] gỡ khoá đòi quyền, và một lần từ chối để lại dấu vết", async () => {
+    const lm = await moiMoi("EMAIL");
+    const { rows: u } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Khong vai tro') RETURNING id",
+      [orgA, `no37-${randomBytes(4).toString("hex")}@vidu.vn`],
+    );
+    const { rows: pi } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgA, u[0]?.id ?? "", randomBytes(32)],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        clearOtpLockout(
+          c,
+          orgA,
+          { invitationId: lm.invitationId, actorSessionId: pi[0]?.id ?? "" },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/invitation/);
+
+    const { rows: sk } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 " +
+        "  AND action = 'PERMISSION_DENIED' AND resource_id = $2",
+      [orgA, lm.invitationId],
+    );
+    expect(sk[0]?.n).toBe("1");
+  });
+});
