@@ -671,7 +671,16 @@ describe("bề mặt export công khai của bidding", () => {
 // ĐO ĐƯỢC. Một cổng chỉ ném `Error("bị từ chối")` sẽ làm bốn test của bốn vế không phân biệt được
 // vế nào đã chặn — và lúc ấy bốn test đo đúng một thứ.
 // ============================================================================================
+//
+// [S1.7] Bốn symbol của bảng so sánh vào danh sách này, và `countReceivedBids` là symbol ĐẦU TIÊN
+// ở cửa `@trustprocure/unseal` KHÔNG ném khi từ chối. Nó vẫn qua được tiêu chí lọc vì tiêu chí ấy
+// là *"người gọi có lỡ bỏ qua lời từ chối được không"*, và câu trả lời là KHÔNG: nhánh giấu của
+// union trả về không có trường `count` để mà đọc. Ném là MỘT cách cưỡng chế bằng hình dạng, không
+// phải cách duy nhất.
 const DANH_SACH_TRANG_UNSEAL = [
+  "COMPARISON_ALLOWED_STATUSES",
+  "ComparisonDeniedError",
+  "ComparisonError",
   "UNSEAL_CLAUSES",
   "UNSEAL_JOB_KIND",
   "UNSEAL_MFA_MAX_AGE_SECONDS",
@@ -679,7 +688,9 @@ const DANH_SACH_TRANG_UNSEAL = [
   "UnsealError",
   "approveUnseal",
   "assertUnsealAllowed",
+  "buildComparisonTable",
   "cancelUnseal",
+  "countReceivedBids",
   "dispatchUnseal",
   "getUnsealRequest",
   "requestUnseal",

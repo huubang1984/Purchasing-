@@ -27,18 +27,18 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **25** | 34 |
+| Nghiệp vụ (A–G) | **27** | 34 |
 | Hàng rào (H) | **16** | 16 |
-| **Cộng** | **41** | **50** |
+| **Cộng** | **43** | **50** |
 
-**9 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**7 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
 G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **25/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **27/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -47,9 +47,9 @@ Hôm nay: **25/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | A1 | Với RFQ chưa UNSEALED, không endpoint nào trả về trường giá cho bất kỳ actor nội bộ nào | Kiến trúc: không có khóa giải mã trong `api` | T2, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A2 | Giá dạng rõ không tồn tại trong `api` service tại bất kỳ thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi | Kiến trúc: mã hóa ở trình duyệt (ADR-007) | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A5 | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 8 | ✅ ĐẠT |  |
 | B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 21 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 33 | ✅ ĐẠT |  |
@@ -114,9 +114,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 41` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 43` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 9` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 7` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -133,9 +133,7 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 | INV | Vì sao chưa phủ |
 |---|---|
 | **A2** | S1 — mã hoá phía trình duyệt (ADR-007) chưa có; `packages/crypto-keys/src/roundtrip.test.ts:31` tự ghi lý do KHÔNG gắn thẻ. |
-| **A4** | S1 — bộ quét rò rỉ đòi OpenAPI và endpoint, cả hai chưa có. |
 | **A5** | S1 — chưa có nhà cung cấp, lời mời, hay ID báo giá. |
-| **A6** | S1 — chưa có báo giá để đếm. |
 | **B5** | S1/S6 — job kiểm tra ciphertext định kỳ chưa tồn tại. |
 | **C2** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2. |
 | **C4** | S1 — chưa có deadline để rút ngắn hay gia hạn. |
@@ -155,6 +153,10 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 - **A1** — **Ô ✅ NÀY ĐỨNG TRÊN SỰ VẮNG MẶT CỦA DỮ LIỆU, KHÔNG TRÊN MỘT CỔNG ĐỌC — VÀ ĐÓ LÀ ĐIỂM MẠNH, KHÔNG PHẢI ĐIỂM YẾU.** Hàng của `rfq_unsealed_bids` không TỒN TẠI cho tới lúc mở thầu chạy, nên *“không endpoint nào trả về trường giá”* đúng kể cả với một câu `SELECT *` viết bởi người chưa đọc tài liệu nào. Ba lớp cộng lại: `app_api` không có INSERT trên bảng ấy (nó không giải mã được nên nó không có gì để ghi, và một GRANT INSERT sẽ cho phép nó **BỊA** một bản rõ); trigger đòi một yêu cầu đã được phê duyệt; và `app_api` không đọc được `vendor_bid_versions.envelope`. **PHẦN CHÊNH:** mệnh đề nói *“không ENDPOINT nào”*, và **không có endpoint nào để đo** — `apps/` chỉ có một worker, không có API. Thứ được đo là TẦNG DỮ LIỆU; vế *“cho bất kỳ actor nội bộ nào”* ở tầng HTTP thuộc T2/T5 và thuộc S2+.
 
 - **A3** — **PHÉP ĐO LÀ MỘT LẦN QUÉT TÌM MỘT CHUỖI ĐÃ BIẾT, KHÔNG PHẢI MỘT ĐỊNH LÝ.** Lớp thật gồm ba phần và chỉ phần thứ ba là một phép đo trên dữ liệu: ⑴ `vendor_bid_versions` KHÔNG có một cột giá nào — bảng không có cột thì không có gì để rò; ⑵ đường ghi DUY NHẤT nhận một `bytea` phong bì và từ chối thứ không đọc được thành phong bì; ⑶ một lần quét `t::text` trên **năm** bảng (ba bảng báo giá cộng `audit_events` và `outbox_jobs`) dưới **superuser** — tức đúng vế *“kể cả bằng role quản trị”* — đòi chuỗi giá không xuất hiện, kèm đối chứng dương chứng minh phép quét biết tìm ra nó. **PHẦN CHÊNH:** vế ⑶ tìm **một chuỗi cụ thể**. Một bản rõ bị cất ở dạng đã biến đổi (nén, base64, đảo byte) sẽ đi lọt, và không lớp nào ở S1 bắt được điều đó. Vế ⑴ và ⑵ mới là phần chịu lực; vế ⑶ là lưới an toàn, không phải bằng chứng.
+
+- **A4** — **BA LỚP, VÀ LỚP THỨ HAI ĐƯỢC ĐO TRONG MỘT THẾ GIỚI NƠI LỚP THỨ NHẤT ĐÃ HỎNG.** ⑰ Trước mở thầu không có gì để tổng hợp: `rfq_unsealed_bids` rỗng và `app_api` không đọc được `vendor_bid_versions.envelope`. ⑱ `buildComparisonTable` từ chối ở cả **năm** trạng thái còn lại — và phép đo ấy chạy với bản rõ ĐANG NẰM TRONG BẢNG, trạng thái bị ép lùi bằng cách gỡ bảng cạnh; nếu cổng chỉ là một cách nói khác của “chưa có dữ liệu” thì năm khẳng định đó xanh sai, và một lượt đột biến gỡ cổng đã chứng minh chúng không xanh sai. ⑲ Một **bộ quét rò rỉ** gieo mốc giá vào phong bì thật rồi tìm nó ở MỌI bảng của schema — danh sách bảng đọc từ `pg_class`, không viết tay — với hai đối chứng: một chuỗi có thật thì tìm ra được, và SAU mở thầu mốc giá xuất hiện ở ĐÚNG MỘT bảng, đúng bảng mà 019 chỉ định. **PHẦN CHÊNH THỨ NHẤT:** §6 của đặc tả định nghĩa bộ quét này là một vòng lặp trên MỌI endpoint của OpenAPI. Không có endpoint nào, nên phép quét ở TẦNG DỮ LIỆU. Một trường phái sinh tính trong một handler HTTP tương lai và không bao giờ ghi xuống là thứ bộ quét này **không nhìn thấy** — nó thuộc T2 và thuộc S2+. **PHẦN CHÊNH THỨ HAI, cùng họ với A3:** phép quét tìm MỘT CHUỖI đã biết; một bản rõ cất ở dạng đã biến đổi (nén, base64) đi lọt. **PHẦN CHÊNH THỨ BA, và nó là một khiếm khuyết ĐÃ TÍNH RA của khuôn mà đặc tả gợi ý:** mốc phải là một chuỗi có chữ HOA chứ không phải một con số, vì `bytea` hiện ra dưới `::text` bằng hex và chữ số thập phân LÀ chữ số hex — một mốc 10 chữ số cho kỳ vọng ~2.6 lần khớp GIẢ trong một phong bì ~150 byte.
+
+- **A6** — **Ô ✅ NÀY LÀ MỘT HÀNG RÀO Ở TẦNG HÀM, KHÔNG Ở TẦNG QUYỀN — VÀ CÓ MỘT TEST ĐO ĐÚNG ĐIỀU ĐÓ.** Thứ đã đo, và đo bằng khuôn *đổi đúng một thứ*: cùng trạng thái `OPEN`, hai RFQ chỉ khác nhau ở cờ chính sách, câu trả lời lật; chính sách ĐÃ GHIM qua `rfq_budgets` thắng chính sách mới nhất ở **cả hai chiều** (bản đầu của phép đo này bị chứng minh là KHÔNG CÓ RĂNG và đã được dựng lại); không tra được chính sách nào thì MẶC ĐỊNH ĐÓNG, kèm đối chứng dương; và con số bị giấu KHÔNG ĐƯỢC ĐẾM — hai truy vấn tách rời, nên nó không lọt vào log hay vào một thông báo lỗi mang cả đối tượng kết quả. **PHẦN CHÊNH, ĐÃ ĐO CHỨ KHÔNG PHỎNG ĐOÁN:** `app_api` vẫn giữ `SELECT` trên `vendor_bids`, nên một câu SQL viết tay đếm được số báo giá trong khi hàm đang giấu — có một test khẳng định đúng con số ấy, và nếu một ngày nó ĐỎ thì A6 đã lên được tầng quyền. Lớp đúng là một policy RLS trên `vendor_bids`, và S1 KHÔNG dựng được nó vì một lý do cấu trúc: đường người mua và đường khách dùng CHUNG role `app_api` (khoản nợ 29). **PHẦN CHÊNH THỨ HAI:** mệnh đề nói *“ẩn khỏi Buyer”*, và chữ “Buyer” là một khái niệm của tầng HTTP; thứ được đo là hàm, không phải màn hình.
 
 - **B2** — **MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI:** khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta.
 

@@ -23,6 +23,24 @@ export {
   type UnsealGateInput,
   type UnsealGateReport,
 } from "./gate.js";
+// [S1.7] `buildComparisonTable` ra cửa với CÙNG tiêu chí hình dạng: nó NÉM cho RFQ chưa mở thầu
+// thay vì trả về một bảng rỗng. Một bảng rỗng là một câu trả lời — và "0 báo giá dưới ngân sách"
+// vẫn là một trường phái sinh mà A4 cấm nói trước giờ mở.
+//
+// `countReceivedBids` thì KHÔNG ném, và đó không phải một ngoại lệ của tiêu chí trên: nó trả về
+// một union mà nhánh giấu KHÔNG MANG trường `count`. Kiểu ấy làm người gọi không lỡ đọc được con
+// số, tức nó cưỡng chế bằng hình dạng chứ không bằng lời hứa — cùng thứ mà một lần ném làm.
+export {
+  COMPARISON_ALLOWED_STATUSES,
+  ComparisonDeniedError,
+  ComparisonError,
+  buildComparisonTable,
+  countReceivedBids,
+  type BidCountDisclosure,
+  type ComparisonAggregates,
+  type ComparisonRow,
+  type ComparisonTable,
+} from "./comparison.js";
 export {
   UNSEAL_JOB_KIND,
   UnsealError,

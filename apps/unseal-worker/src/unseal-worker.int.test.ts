@@ -509,3 +509,84 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     expect(rows[0]?.payload.donGia, "phải là bản CUỐI, không phải bản đầu").toBe(999);
   });
 });
+
+// ===============================================================================================
+// [INV-A4] BỘ QUÉT RÒ RỈ TỰ ĐỘNG — PHIÊN BẢN CHẠY ĐƯỢC KHI CHƯA CÓ TẦNG HTTP
+//
+// §6 của đặc tả mô tả bộ quét này là một vòng lặp trên MỌI endpoint của OpenAPI. Không có
+// endpoint nào để lặp, và `apps/` chỉ có worker này. Nhưng ý chịu lực của nó thì KHÔNG phụ thuộc
+// vào HTTP: *gieo một giá trị dễ nhận, rồi tìm nó ở mọi chỗ nó có thể tới, thay vì kiểm từng chỗ
+// mình NHỚ RA*. Ở tầng dữ liệu, "mọi chỗ" là mọi bảng của schema — và danh sách bảng được đọc từ
+// `pg_class` chứ không viết tay, nên một bảng thêm vào ở S2 tự rơi vào phạm vi.
+//
+// QUÉT DƯỚI SUPERUSER, không dưới `app_api`. Hai lý do: nó là tập CHA của mọi thứ một role ứng
+// dụng đọc được, và nó là đúng vế *"kể cả bằng role quản trị"* của A3 — cùng phép quét trả lời
+// được cả hai mệnh đề.
+//
+// VÌ SAO MỐC LÀ MỘT CHUỖI CHỨ KHÔNG PHẢI MỘT CON SỐ, và đây là một khiếm khuyết ĐÃ TÍNH RA của
+// khuôn "gieo 1234567891" mà đặc tả gợi ý: `bytea` hiện ra dưới `::text` dưới dạng hex, và chữ
+// số thập phân LÀ chữ số hex. Một phong bì ~150 byte cho ~300 ký tự hex, nên xác suất một chuỗi
+// 10 chữ số bất kỳ xuất hiện tình cờ trong đó là ~290 × (10/16)^10 ≈ 2.6 — tức gần như CHẮC CHẮN
+// có ít nhất một lần khớp giả. Một bộ quét như thế sẽ đỏ ngẫu nhiên và bị tắt đi trong một tuần.
+// Mốc ở đây có chữ HOA và dấu gạch dưới, hai thứ không bao giờ có trong hex viết thường.
+// ===============================================================================================
+const MOC_GIA = "GIA_BI_MAT_9182736450";
+const TEN_BANG_HOP_LE = /^[a-z_][a-z0-9_]*$/;
+
+/** Trả về tên các bảng có chứa `chuoi` ở BẤT KỲ cột nào của BẤT KỲ hàng nào. */
+async function quetRoRi(chuoi: string): Promise<{ dinh: string[]; soBangDaQuet: number }> {
+  const { rows: bang } = await db.pool.query<{ ten: string }>(
+    `SELECT c.relname AS ten
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+      ORDER BY c.relname`,
+  );
+  const dinh: string[] = [];
+  for (const b of bang) {
+    if (!TEN_BANG_HOP_LE.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
+    const { rows } = await db.pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`,
+      [chuoi],
+    );
+    if (rows[0]?.n !== "0") dinh.push(b.ten);
+  }
+  return { dinh, soBangDaQuet: bang.length };
+}
+
+describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới được bảng nào khác", () => {
+  it("[INV-A4] TRƯỚC mở thầu: mốc giá không có mặt ở MỘT bảng nào của schema", async () => {
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA }));
+    await dongVaXinMoThau(rfqId);
+
+    const { dinh, soBangDaQuet } = await quetRoRi(MOC_GIA);
+    // Chống rỗng ruột: "0 lần khớp" phải khác "đã quét 0 bảng". Ngưỡng là một con số SÀN, không
+    // phải một con số ghim — thêm bảng ở S2 không được làm test này đỏ.
+    expect(soBangDaQuet, "bộ quét phải nhìn thấy toàn bộ schema").toBeGreaterThan(20);
+    expect(dinh, "mốc giá lọt ra ngoài phong bì trước khi mở thầu").toEqual([]);
+
+    // ĐỐI CHỨNG DƯƠNG: cùng bộ quét, một chuỗi CÓ THẬT trong dữ liệu, và nó tìm ra.
+    const { dinh: coThat } = await quetRoRi("Mua thep tam");
+    expect(coThat, "bộ quét không biết tìm ra thứ đang có mặt").toContain("rfq_packages");
+
+    // Và `app_api` không đọc được thứ CHỨA mốc ấy — phong bì là cột duy nhất mang nó.
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query("SELECT envelope FROM vendor_bid_versions")),
+    ).rejects.toThrow(/permission denied/i);
+  }, 120000);
+
+  it("[INV-A4] SAU mở thầu: mốc giá có mặt ở ĐÚNG MỘT bảng — và đó là bảng 019 đã chỉ định", async () => {
+    // Vế này là đối chứng dương của vế trên ở mức mạnh nhất: nó chứng minh mốc giá THẬT SỰ đã đi
+    // vào hệ thống, nên "không tìm thấy ở đâu" phía trên không phải vì gieo hụt.
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA }));
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+    );
+    expect(ketQua.opened).toBe(1);
+
+    const { dinh } = await quetRoRi(MOC_GIA);
+    expect(dinh, "bản rõ chỉ được phép tồn tại ở rfq_unsealed_bids").toEqual(["rfq_unsealed_bids"]);
+  }, 120000);
+});

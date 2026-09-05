@@ -941,6 +941,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "org_procurement_policies", cot: "dual_approval_threshold", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "effective_from", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "org_id", quyen: "INSERT" },
+      // [S1.7] Cột chế độ nghiêm của A6. Nó vào tập INSERT chứ KHÔNG vào tập UPDATE: bảng này
+      // chỉ ghi thêm, và đổi chính sách nghĩa là thêm một phiên bản — xem 014 và 020.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "strict_blind_mode", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "version", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
       { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
