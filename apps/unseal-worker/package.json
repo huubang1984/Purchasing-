@@ -11,6 +11,7 @@
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
     "@trustprocure/db": "workspace:*",
+    "@trustprocure/outbox": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/tenancy": "workspace:*",
     "@trustprocure/test-support": "workspace:*",

@@ -61,13 +61,13 @@ Hôm nay: **31/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 12 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 15 | ✅ ĐẠT |  |
 | D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 29 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
-| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 15 | ✅ ĐẠT |  |
+| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 16 | ✅ ĐẠT |  |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 34 | ✅ ĐẠT |  |
-| D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 20 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 25 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |

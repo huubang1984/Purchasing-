@@ -9,6 +9,7 @@ import {
   InvitationError,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_MAX_FAILED_ATTEMPTS,
+  clearOtpLockout,
   createInvitation,
   issueMagicLinkToken,
   issueOtpChallenge,
@@ -109,6 +110,12 @@ beforeAll(async () => {
     [orgA],
   );
   buyerA = nguoi.rows[0]?.id ?? "";
+  // [khoản nợ 37] `clearOtpLockout` là hàm ĐẦU TIÊN của gói này có cổng quyền — mọi hàm khác đi
+  // đường khách (token + OTP) hoặc đường người mua không gác. Fixture vì thế phải cấp vai trò.
+  await db.pool.query(
+    "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')",
+    [orgA, buyerA],
+  );
 
   // [ADR-016 / 013] Phien phai ra doi TRUOC moi hang `suppliers`: trigger
   // `suppliers_kiem_danh_tinh` chay cho MOI cau INSERT, ke ca cau chay duoi superuser. Thu tu
@@ -1083,5 +1090,290 @@ describe("pepper cho băm đích và băm mã", () => {
         "   AND column_name = 'pepper_version'",
     );
     expect(rows[0]?.is_nullable).toBe("NO");
+  });
+});
+
+// ===============================================================================================
+// [khoản nợ 36] HAI CÁCH VIẾT SQL CỦA GÓI NÀY, NAY LÀ HAI PHÉP ĐO
+// ===============================================================================================
+describe("[khoản nợ 36] cổng OTP đòi một giao dịch, và phép so credential ghim toán tử", () => {
+  it("[INV-E3] gọi `verifyOtpAndStartSession` NGOÀI giao dịch bị từ chối", async () => {
+    // Ngoài giao dịch, `FOR UPDATE` nhả khoá ngay cuối câu đọc, nên N lời gọi đồng thời đều thấy
+    // `dang_khoa = false` và đều được đoán — trần 5 lần của E3 thành vô hạn. Dựng đúng ca ấy:
+    // gắn `app.org_id` ở phạm vi PHIÊN (`is_local = false`) để `assertTenantBound` cho qua trong
+    // khi KHÔNG có giao dịch nào mở.
+    const c = await apiPool.connect();
+    try {
+      await c.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+      await expect(
+        verifyOtpAndStartSession(c, orgA, { token: "khong-quan-trong", code: "000000", pepper: PEPPER }),
+      ).rejects.toThrow(/phải chạy TRONG một giao dịch/);
+    } finally {
+      await c.query("SELECT set_config('app.org_id', '', false)").catch(() => undefined);
+      c.release();
+    }
+  });
+
+  it("[INV-E3] ĐỐI CHỨNG DƯƠNG: trong giao dịch thì phép kiểm ấy KHÔNG chặn đường hợp pháp", async () => {
+    // Không có vế này, khẳng định trên xanh kể cả khi hàm từ chối MỌI lời gọi.
+    const { token, invitationId } = await moiMoi("EMAIL");
+    const otp = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token,
+        channel: "SMS",
+        callerFingerprint: `ip-no36-${invitationId.slice(0, 8)}`,
+        pepper: PEPPER,
+      }),
+    );
+    expect(otp.ok).toBe(true);
+    if (!otp.ok) throw new Error("khong phat duoc OTP");
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      verifyOtpAndStartSession(c, orgA, { token, code: otp.code, pepper: PEPPER }),
+    );
+    expect(kq.ok).toBe(true);
+  });
+
+  it("[khoản nợ 36] phép so credential ghim toán tử và tên kiểu — đọc thẳng mã nguồn", async () => {
+    // Lớp này KHÔNG đo được bằng hành vi: một `=` bị chiếm đòi `CREATE` trên một schema nằm trên
+    // `search_path`, và `hardening.always.sql` đã thu hồi quyền ấy cho `app_api` trên `public`.
+    // Thứ đo được là VĂN BẢN — cùng khuôn §R3 của dự án cho thân hàm plpgsql.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const nguon = readFileSync(
+      fileURLToPath(new URL("./invitation.ts", import.meta.url)),
+      "utf8",
+    );
+    const than = nguon.slice(
+      nguon.indexOf("async function docToken("),
+      nguon.indexOf("export async function redeemMagicLink("),
+    );
+    expect(than.length, "chống rỗng ruột: phải cắt được thân `docToken`").toBeGreaterThan(200);
+    expect(than, "phép so `token_hash` phải ghim toán tử").toContain(
+      "t.token_hash OPERATOR(pg_catalog.=)",
+    );
+    expect(than, "và phải ghim cả TÊN KIỂU — trục thứ hai của cùng cuộc tấn công").toContain(
+      "$1::pg_catalog.bytea",
+    );
+  });
+});
+
+// ===============================================================================================
+// [khoản nợ 35 + 37] HAI ĐƯỜNG "CHẶN NGƯỜI KHÁC DỰ THẦU"
+//
+// Không đường nào làm lộ một giá. Cả hai giữ một nhà cung cấp Ở NGOÀI cuộc thầu — và với một sản
+// phẩm bán *"bằng chứng cạnh tranh"*, một đường loại người ra khỏi cuộc là một lỗ hổng đúng nghĩa.
+// ===============================================================================================
+describe("[khoản nợ 35] hạn mức OTP theo đích không xuyên qua lời mời được nữa", () => {
+  it("[INV-E3] đốt cạn hạn mức của lời mời A KHÔNG chặn OTP của lời mời B tới CÙNG một số", async () => {
+    // Đây là kịch bản mà ADR-015 §5 đặt tên: *"khoá theo đích cho phép một người khoá lối vào của
+    // người khác"*. Hai lời mời, cùng một người liên hệ, tức CÙNG một số điện thoại.
+    const a = await moiMoi("EMAIL");
+    const { rows: lh } = await db.pool.query<{ supplier_id: string }>(
+      "SELECT supplier_id FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    const { rows: r2 } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+        "VALUES ($1, 'RFQ thu hai', now() + interval '7 days', $2, $3) RETURNING id",
+      [orgA, buyerA, sBuyerA],
+    );
+    const b = await withTenant(apiPool, orgA, async (c) => {
+      const loi = await createInvitation(c, orgA, {
+        rfqId: r2[0]?.id ?? "",
+        supplierId: lh[0]?.supplier_id ?? "",
+        contactId: a.contactId,
+        linkChannel: "EMAIL",
+        actorSessionId: sBuyerA,
+      });
+      const t = await issueMagicLinkToken(c, orgA, {
+        invitationId: loi.id,
+        actorSessionId: sBuyerA,
+      });
+      return t.token;
+    });
+
+    // Đốt cạn hạn mức đích của lời mời A: bốn lần, trần là ba.
+    let lanCuoiOk = true;
+    for (let i = 0; i < 4; i += 1) {
+      const kq = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: a.token,
+          channel: "SMS",
+          callerFingerprint: `ip-a-${i}`,
+          pepper: PEPPER,
+        }),
+      );
+      lanCuoiOk = kq.ok;
+    }
+    expect(lanCuoiOk, "tiền đề: lời mời A PHẢI chạm trần đích của chính nó").toBe(false);
+
+    // Và lời mời B — cùng số điện thoại, khác gói thầu — vẫn phát được.
+    const kqB = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: b,
+        channel: "SMS",
+        callerFingerprint: "ip-b",
+        pepper: PEPPER,
+      }),
+    );
+    expect(
+      kqB.ok,
+      "một lời mời đốt cạn hạn mức đích vẫn chặn được lời mời khác — ADR-015 §5 cấm đúng điều này",
+    ).toBe(true);
+  });
+
+  it("[INV-E3] trần CHI PHÍ toàn tổ chức VẪN còn — nó chỉ cao hơn, không biến mất", async () => {
+    // Không có vế này, bản sửa trên đọc thành "bỏ hạn mức theo đích đi". Trần chi phí là thứ chặn
+    // một lượt gửi hàng loạt về một số; nó phải tồn tại và phải được ghi thật.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_kind = 'DEST_ORG'",
+    );
+    expect(Number(rows[0]?.n ?? "0"), "bucket DEST_ORG phải THẬT SỰ được ghi").toBeGreaterThan(0);
+  });
+});
+
+describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đường ra", () => {
+  it("[INV-E1] mời LẠI được sau khi thu hồi — và bản thu hồi vẫn nằm nguyên trong sổ", async () => {
+    const lm = await moiMoi("EMAIL");
+    const { rows: ncc } = await db.pool.query<{ supplier_id: string; rfq_id: string }>(
+      "SELECT supplier_id, rfq_id FROM rfq_invitations WHERE id = $1",
+      [lm.invitationId],
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }),
+    );
+
+    const moiLai = await withTenant(apiPool, orgA, (c) =>
+      createInvitation(c, orgA, {
+        rfqId: ncc[0]?.rfq_id ?? "",
+        supplierId: ncc[0]?.supplier_id ?? "",
+        contactId: lm.contactId,
+        linkChannel: "EMAIL",
+        actorSessionId: sBuyerA,
+      }),
+    );
+    expect(moiLai.id).not.toBe(lm.invitationId);
+
+    // HAI hàng cùng tồn tại: bản đã thu hồi KHÔNG bị xoá, và 022 vẫn cấm nó sống lại.
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_invitations WHERE rfq_id = $1 AND supplier_id = $2",
+      [ncc[0]?.rfq_id ?? "", ncc[0]?.supplier_id ?? ""],
+    );
+    expect(dem[0]?.n).toBe("2");
+    await expect(
+      db.pool.query(
+        "UPDATE rfq_invitations SET status = 'SENT', revoked_at = NULL WHERE id = $1",
+        [lm.invitationId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("[INV-E1] HAI lời mời CÒN SỐNG cho cùng một nhà cung cấp vẫn bị chặn", async () => {
+    // Vị từ bộ phận chỉ mở lại vế "sau khi thu hồi"; vế gốc *"một nhà cung cấp được mời ĐÚNG MỘT
+    // LẦN cho mỗi RFQ"* phải nguyên vẹn. Không có vế này, bản sửa đọc thành "bỏ ràng buộc đi".
+    const lm = await moiMoi("EMAIL");
+    const { rows: ncc } = await db.pool.query<{ supplier_id: string; rfq_id: string }>(
+      "SELECT supplier_id, rfq_id FROM rfq_invitations WHERE id = $1",
+      [lm.invitationId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        createInvitation(c, orgA, {
+          rfqId: ncc[0]?.rfq_id ?? "",
+          supplierId: ncc[0]?.supplier_id ?? "",
+          contactId: lm.contactId,
+          linkChannel: "EMAIL",
+          actorSessionId: sBuyerA,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("[INV-E3] gỡ khoá mở lại đường phát OTP, và nó KHÔNG xoá dấu vết", async () => {
+    const lm = await moiMoi("EMAIL");
+    const otp = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: lm.token,
+        channel: "SMS",
+        callerFingerprint: "ip-khoa",
+        pepper: PEPPER,
+      }),
+    );
+    if (!otp.ok) throw new Error("khong phat duoc OTP");
+
+    for (let i = 0; i < 5; i += 1) {
+      await withTenant(apiPool, orgA, (c) =>
+        verifyOtpAndStartSession(c, orgA, { token: lm.token, code: "000000", pepper: PEPPER }),
+      );
+    }
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token: lm.token,
+          channel: "SMS",
+          callerFingerprint: "ip-khoa-2",
+          pepper: PEPPER,
+        }),
+      ),
+    ).rejects.toThrow(/dang bi khoa/);
+
+    const go = await withTenant(apiPool, orgA, (c) =>
+      clearOtpLockout(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }, apiPool),
+    );
+    expect(go.cleared).toBe(1);
+
+    const lai = await withTenant(apiPool, orgA, (c) =>
+      issueOtpChallenge(c, orgA, {
+        token: lm.token,
+        channel: "SMS",
+        callerFingerprint: "ip-khoa-3",
+        pepper: PEPPER,
+      }),
+    );
+    expect(lai.ok).toBe(true);
+
+    // ...nhưng SỐ LẦN ĐOÁN SAI vẫn nguyên. Gỡ khoá là một hành vi, không phải một lần xoá.
+    const { rows } = await db.pool.query<{ failed_attempts: number }>(
+      "SELECT failed_attempts FROM invitation_otp_challenges WHERE id = $1",
+      [otp.challengeId],
+    );
+    expect(rows[0]?.failed_attempts).toBe(5);
+
+    // Và tầng CSDL chặn cả một câu SQL viết tay cố hạ nó xuống.
+    await expect(
+      db.pool.query("UPDATE invitation_otp_challenges SET failed_attempts = 0 WHERE id = $1", [
+        otp.challengeId,
+      ]),
+    ).rejects.toThrow(/khong duoc giam/);
+  });
+
+  it("[INV-D5] gỡ khoá đòi quyền, và một lần từ chối để lại dấu vết", async () => {
+    const lm = await moiMoi("EMAIL");
+    const { rows: u } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Khong vai tro') RETURNING id",
+      [orgA, `no37-${randomBytes(4).toString("hex")}@vidu.vn`],
+    );
+    const { rows: pi } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgA, u[0]?.id ?? "", randomBytes(32)],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        clearOtpLockout(
+          c,
+          orgA,
+          { invitationId: lm.invitationId, actorSessionId: pi[0]?.id ?? "" },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/invitation/);
+
+    const { rows: sk } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 " +
+        "  AND action = 'PERMISSION_DENIED' AND resource_id = $2",
+      [orgA, lm.invitationId],
+    );
+    expect(sk[0]?.n).toBe("1");
   });
 });

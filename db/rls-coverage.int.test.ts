@@ -739,7 +739,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
+      // [025, khoản nợ 34] `app_unseal` nay ĐỌC được hàng đợi. 007 viết *"cố ý KHÔNG cấp gì
+      // cho app_unseal — kể cả SELECT"*, và câu ấy đúng cho tới khi có hai `kind` mà chỉ
+      // tiến trình này chạy được. Cố ý KHÔNG có `INSERT`: một tiến trình vừa tự xếp việc
+      // vừa tự chạy việc là một tiến trình tự cấp việc cho mình.
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "outbox_jobs", quyen: "SELECT" },
       // [022, review an ninh S1.6 MED-2] BA dòng của `app_unseal` ĐÃ BỊ THU HỒI, và mỗi dòng
       // biến mất là một câu:
       //   `rfq_unsealed_bids` — 019 tự viết *"nó KHÔNG đọc lại được"* rồi cấp SELECT ngay 30
@@ -1223,6 +1228,13 @@ describe("phủ RLS", () => {
       // dang cua ADR-006 trong mot bang quyen: no GHI ban ro (`rfq_unsealed_bids`), no TUYEN BO
       // ket qua (`rfq_packages.status`, `unseal_requests.status`), va no khong lam gi khac.
       // `rfq_packages.status` la dong trong nguy hiem nhat — xem khoi giai thich o dau 019.
+      // [025] Sáu cột vòng đời mà runner ghi — đúng bằng bộ của `app_api`, không hơn.
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "attempts", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "finished_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "last_failure_reason", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "lease_expires_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
       { grantee: "app_unseal", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
       { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "bid_version_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "org_id", quyen: "INSERT" },

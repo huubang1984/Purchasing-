@@ -28,6 +28,18 @@ export const PERMISSIONS = {
    */
   RFQ_OPEN: "rfq.open",
   RFQ_CANCEL: "rfq.cancel",
+  /**
+   * [khoản nợ 37] Gỡ khoá OTP của một lời mời.
+   *
+   * Khoá cấp-lời-mời của 012 là một phép sửa ĐÚNG cho một khiếm khuyết đã đo, nhưng nó để lại
+   * một hệ quả không ai quyết định: ai cầm một link đã chuyển tiếp giữ được nhà cung cấp THẬT ở
+   * ngoài cuộc thầu **vô hạn** — 5 lần sai, khoá 900 giây, lặp lại — và không hàm nào gỡ được.
+   *
+   * `BUYER` cũng giữ mã này, khác `rfq.open`/`rfq.cancel`: gỡ khoá không chạm vòng đời mật mã
+   * của gói thầu, và người phát hiện một nhà cung cấp đang kêu "tôi không nhận được mã" chính là
+   * người đang chạy vòng mời.
+   */
+  INVITATION_UNLOCK: "invitation.unlock",
   RFQ_UNSEAL: "rfq.unseal",
   RFQ_UNSEAL_APPROVE: "rfq.unseal.approve",
   BID_VIEW: "bid.view",

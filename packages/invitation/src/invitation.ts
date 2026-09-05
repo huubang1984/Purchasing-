@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
@@ -66,8 +66,31 @@ export const OTP_TTL_SECONDS = 300;
 export const OTP_MAX_FAILED_ATTEMPTS = 5;
 export const OTP_LOCKOUT_SECONDS = 900;
 export const OTP_RATE_WINDOW_SECONDS = 900;
-/** Theo ĐÍCH — chạm trần thì LÀM CHẬM, không khoá. */
+/**
+ * Theo ĐÍCH ~~— chạm trần thì LÀM CHẬM, không khoá.~~
+ *
+ * [khoản nợ 35] CÂU VỪA GẠCH LÀ MỘT LỜI HỨA MÀ MÃ KHÔNG GIỮ, và nó đứng đây suốt từ S1.3.
+ * ADR-015 §5 viết rõ: *"hạn mức theo đích chỉ được **làm chậm**, không được **khoá**, vì khoá
+ * theo đích cho phép một người khoá lối vào của người khác."* Bản cài đặt trả thẳng
+ * `DEST_RATE_LIMITED` — một lần từ chối, không một lần chậm.
+ *
+ * Và khoá bucket là `HMAC(pepper, orgId ‖ "DEST" ‖ đích)` — **không mang lời mời, không mang
+ * RFQ**. Hai điều ấy cộng lại thành một đường CHẶN NGƯỜI KHÁC DỰ THẦU: ai cầm một link đã chuyển
+ * tiếp cho RFQ-1 phát ba lần OTP về số của nhà cung cấp, và chính nhà cung cấp ấy không nhận
+ * được OTP cho RFQ-2 của một bên mua khác trong 15 phút.
+ *
+ * Nay tách làm HAI bucket, và mỗi cái trả lời một câu khác nhau:
+ *   • theo (LỜI MỜI, ĐÍCH) — hạn mức THẬT, và nó không xuyên qua lời mời được nữa;
+ *   • theo ĐÍCH toàn tổ chức — một TRẦN CHI PHÍ, đặt cao hơn hẳn mức dùng bình thường, để nó
+ *     không bao giờ là thứ ba lời gọi vũ khí hoá được.
+ */
 export const OTP_MAX_PER_DEST = 3;
+/**
+ * [khoản nợ 35] Trần CHI PHÍ theo đích, toàn tổ chức. Nó tồn tại để chặn một lượt gửi hàng loạt
+ * về một số điện thoại, KHÔNG để làm hạn mức của một lời mời — nên nó phải cao hơn hẳn tích
+ * `OTP_MAX_PER_INVITATION` × (số lời mời hợp lý cùng nhắm một người trong một cửa sổ 15 phút).
+ */
+export const OTP_MAX_PER_DEST_TOAN_TO_CHUC = 20;
 /** Theo NGƯỜI GỌI — chạm trần thì KHOÁ. */
 export const OTP_MAX_PER_CALLER = 10;
 /**
@@ -196,7 +219,7 @@ export async function createInvitation(
     actorType: actor.type,
     actorId: actor.id,
     action: "INVITATION_CREATED",
-    resourceType: "rfq_invitation",
+    resourceType: "RFQ_INVITATION",
     resourceId: hang.id,
     payload: { rfqId: hang.rfq_id, supplierId: hang.supplier_id },
   });
@@ -284,17 +307,76 @@ interface HangToken {
  * ĐỌC nó, nên magic link là một bearer token chơi lại được cho tới khi hết hạn — và tệ hơn, ngày
  * ai đó viết mã đặt `consumed_at` thì `redeemMagicLink` vẫn cho qua: một bẫy fail-open đã cài sẵn.
  */
+/*
+ * [khoản nợ 36] TOÁN TỬ VÀ TÊN KIỂU ĐƯỢC GHIM Ở ĐÂY, VÀ ĐÂY LÀ PHÉP SO CHỊU LỰC DUY NHẤT CỦA CẢ
+ * LÁT CẮT.
+ *
+ * `packages/audit/src/tenant-guard.ts` ghi lại một lần khai thác đã được TÁI LẬP END-TO-END:
+ * một `=` bị chiếm cộng một tên kiểu không ghim đã LẬT một phán quyết an ninh trên mã sản phẩm.
+ * Ba gói (`audit`, `identity`, `outbox`) ghim `OPERATOR(pg_catalog.=)` 127 lần vì lần ấy; gói
+ * này thì ZERO lần cho tới vòng sửa này.
+ *
+ * Một `=` bị chiếm trên `bytea` ở đây làm MỌI chuỗi ứng viên khớp hàng token đầu tiên nhìn thấy
+ * được — tức magic link thôi là một bí mật.
+ *
+ * NÓI ĐÚNG MỨC: tiền đề của cuộc tấn công ấy (`CREATE` trên một schema nằm trên `search_path`)
+ * đã bị `hardening.always.sql` thu hồi cho `app_api` trên `public`. Nhưng chính file ấy ghi rằng
+ * `ALTER ROLE ... SET search_path` và biến thể `?options=-c search_path=` **không** được che —
+ * *"chặn 0%, vĩnh viễn"*. Nên đây là một lớp thứ hai cho một tiền đề chưa đóng hết.
+ */
+/**
+ * [khoản nợ 36] KHẲNG ĐỊNH NGƯỜI GỌI ĐANG Ở TRONG MỘT GIAO DỊCH — và nó là một phép ĐO, không
+ * phải một lời hứa trong chú thích.
+ *
+ * Cổng OTP đọc trạng thái (`dang_khoa`, `da_dung`, `het_han`) ở MỘT câu `FOR UPDATE` rồi tăng bộ
+ * đếm ở câu KHÁC. Ngoài giao dịch, `FOR UPDATE` nhả khoá ngay cuối câu ấy, nên N lời gọi đồng
+ * thời đều đọc `dang_khoa = false`, đều so mã, đều tăng — bộ đếm cuối cùng vẫn đúng bằng N, mà
+ * kẻ tấn công đã có N lần đoán ở chỗ E3 hứa 5. Không có hạn mức nào trên đường ĐỐI CHIẾU.
+ *
+ * Chú thích cũ ở thân hàm nói biểu thức tự tham chiếu là *"thứ đúng kể cả khi không có khoá"* —
+ * câu ấy đúng cho BỘ ĐẾM và SAI cho CỔNG, và phần sai đã được sửa tại chỗ.
+ *
+ * ~~PHÉP ĐO: trong một giao dịch nhiều câu lệnh, `now()` đứng yên ở mốc BẮT ĐẦU GIAO DỊCH trong~~
+ * ~~khi `statement_timestamp()` tiến theo từng câu — nên `statement_timestamp() > now()`.~~
+ *
+ * **BẢN ĐẦU ẤY ĐÃ ĐỎ GIẢ, VÀ NÓ ĐỎ TRÊN MỘT TEST HỢP LỆ.** Hai mốc ấy có độ phân giải micro
+ * giây, và một lời gọi qua socket cục bộ chạy xong trong CÙNG micro giây với lúc mở giao dịch —
+ * nên `statement_timestamp() = now()` ở một lượt gọi hoàn toàn đúng luật. Một hàng rào phụ thuộc
+ * ĐỘ PHÂN GIẢI ĐỒNG HỒ là một hàng rào chập chờn, và nó tệ hơn không có: nó dạy người ta chạy
+ * lại cho tới khi xanh.
+ *
+ * PHÉP ĐO THẬT SỰ TẤT ĐỊNH: `SET LOCAL` chỉ có tác dụng TRONG một khối giao dịch. Ngoài giao
+ * dịch, PostgreSQL phát một WARNING và giá trị KHÔNG sống qua câu kế tiếp — vì câu kế tiếp là
+ * một giao dịch khác. Nên đọc lại nó ở câu thứ hai là một câu trả lời nhị phân, không phụ thuộc
+ * thời gian, máy, hay tải.
+ */
+async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise<void> {
+  await client.query("SET LOCAL trustprocure.trong_giao_dich = '1'");
+  const { rows } = await client.query<{ v: string | null }>(
+    "SELECT pg_catalog.current_setting('trustprocure.trong_giao_dich', true) AS v",
+  );
+  if (rows[0]?.v !== "1") {
+    throw new InvitationError(
+      `${ten} phải chạy TRONG một giao dịch: cổng OTP đọc trạng thái ở một câu và tăng bộ đếm ` +
+        "ở câu khác, nên ngoài giao dịch `FOR UPDATE` không tuần tự hoá được và trần số lần " +
+        "đoán của E3 thành vô hạn.",
+    );
+  }
+}
+
 async function docToken(client: pg.PoolClient, orgId: string, token: string): Promise<HangToken> {
   const { rows } = await client.query<HangToken>(
     `SELECT t.id AS token_id, i.id AS invitation_id, i.contact_id, i.supplier_id, i.link_channel
        FROM rfq_invitation_tokens t
-       JOIN rfq_invitations i ON i.id = t.invitation_id AND i.org_id = t.org_id
-      WHERE t.token_hash = $1
-        AND t.purpose = 'BID_SUBMISSION'
-        AND t.expires_at > now()
+       JOIN rfq_invitations i
+         ON i.id OPERATOR(pg_catalog.=) t.invitation_id
+        AND i.org_id OPERATOR(pg_catalog.=) t.org_id
+      WHERE t.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
+        AND t.purpose OPERATOR(pg_catalog.=) 'BID_SUBMISSION'::pg_catalog.text
+        AND t.expires_at OPERATOR(pg_catalog.>) pg_catalog.now()
         AND t.revoked_at IS NULL
         AND t.consumed_at IS NULL
-        AND i.status <> 'REVOKED'
+        AND i.status OPERATOR(pg_catalog.<>) 'REVOKED'::pg_catalog.text
         AND i.revoked_at IS NULL`,
     [bam(token)],
   );
@@ -350,7 +432,7 @@ export interface IssueOtpInput {
 async function demVaTang(
   client: pg.PoolClient,
   orgId: string,
-  kind: "DEST" | "CALLER" | "INVITATION",
+  kind: "DEST" | "DEST_ORG" | "CALLER" | "INVITATION",
   khoa: string,
   pepper: PepperRing,
 ): Promise<number> {
@@ -411,18 +493,27 @@ export async function issueOtpChallenge(
     throw new InvitationError("người liên hệ chưa có kênh đã đăng ký cho loại kênh này");
   }
 
+  // [khoản nợ 35] BỐN bucket, và THỨ TỰ TĂNG là một phần của thiết kế: mọi bucket đều được tăng
+  // TRƯỚC mọi phán quyết. Một lần từ chối vì thế vẫn tiêu ngân sách của cả bốn — cố ý, vì chúng
+  // là TRẦN CHI PHÍ: một lời gọi đã tốn một lượt ghi CSDL dù nó bị từ chối ở đâu.
+  //
+  // Bản trước xen kẽ tăng và phán quyết, nên một lần bị chặn ở bucket cuối vẫn tiêu ngân sách của
+  // hai bucket đầu MÀ KHÔNG NÓI RA — cùng hệ quả, khác chỗ: nó là một tác dụng phụ chứ không một
+  // quyết định.
   const soLanNguoiGoi = await demVaTang(client, orgId, "CALLER", input.callerFingerprint, input.pepper);
+  const soLanLoiMoi = await demVaTang(client, orgId, "INVITATION", t.invitation_id, input.pepper);
+  // Khoá mang CẢ lời mời: đây là thứ làm hạn mức thôi xuyên qua lời mời được. `invitation_id` là
+  // một UUID dài cố định nên dấu hai chấm không tạo ra hai khoá đụng nhau.
+  const soLanDich = await demVaTang(client, orgId, "DEST", `${t.invitation_id}:${dich}`, input.pepper);
+  const soLanDichChung = await demVaTang(client, orgId, "DEST_ORG", dich, input.pepper);
+
   if (soLanNguoiGoi > OTP_MAX_PER_CALLER) {
     throw new InvitationError("vượt giới hạn tần suất theo người gọi");
   }
-
-  const soLanLoiMoi = await demVaTang(client, orgId, "INVITATION", t.invitation_id, input.pepper);
   if (soLanLoiMoi > OTP_MAX_PER_INVITATION) {
     throw new InvitationError("vượt giới hạn tần suất theo lời mời");
   }
-
-  const soLanDich = await demVaTang(client, orgId, "DEST", dich, input.pepper);
-  if (soLanDich > OTP_MAX_PER_DEST) {
+  if (soLanDich > OTP_MAX_PER_DEST || soLanDichChung > OTP_MAX_PER_DEST_TOAN_TO_CHUC) {
     return { ok: false, reason: "DEST_RATE_LIMITED", retryAfterSeconds: OTP_RATE_WINDOW_SECONDS };
   }
 
@@ -526,6 +617,7 @@ export async function verifyOtpAndStartSession(
   input: VerifyOtpInput,
 ): Promise<OtpVerifyResult> {
   await assertTenantBound(client, orgId, "verifyOtpAndStartSession");
+  await batBuocTrongGiaoDich(client, "verifyOtpAndStartSession");
 
   const ttl = tranTtl(
     input.ttlSeconds,
@@ -543,7 +635,8 @@ export async function verifyOtpAndStartSession(
             (consumed_at IS NOT NULL) AS da_dung,
             (locked_until IS NOT NULL AND locked_until > now()) AS dang_khoa
        FROM invitation_otp_challenges
-      WHERE invitation_id = $1 AND token_id = $2
+      WHERE invitation_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND token_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
       ORDER BY created_at DESC
       LIMIT 1
         FOR UPDATE`,
@@ -659,6 +752,62 @@ export async function verifyOtpAndStartSession(
  * kể cả khi hai câu UPDATE chạm 0 hàng (id không tồn tại, hoặc thuộc tổ chức khác và bị RLS lọc)
  * — tức sổ kiểm toán chứa một sự kiện thu hồi chưa từng xảy ra.
  */
+/**
+ * [khoản nợ 37] Gỡ khoá OTP của một lời mời — ĐƯỜNG RA của một khoá vốn không có đường ra.
+ *
+ * Khoá cấp-lời-mời (012 §H3) chặn MỌI lần phát thách thức mới khi còn một thách thức đang khoá.
+ * Đó là phép sửa đúng cho một khiếm khuyết đã đo, nhưng nó tạo ra một đường CHẶN NGƯỜI KHÁC DỰ
+ * THẦU: ai cầm một link đã chuyển tiếp đoán sai năm lần là giữ được nhà cung cấp thật ở ngoài
+ * 900 giây, lặp lại vô hạn, và tới trước hàm này KHÔNG có gì gỡ.
+ *
+ * Ba thứ hàm này KHÔNG làm, và cả ba là cố ý:
+ *   ✘ không đặt lại `failed_attempts` — trigger của 024 chặn cả việc ấy ở tầng CSDL. Gỡ khoá là
+ *     một HÀNH VI, không phải một lần xoá dấu vết;
+ *   ✘ không tiêu thụ hay huỷ thách thức đang khoá — nó vẫn hết hạn theo lịch của nó;
+ *   ✘ không phát một mã mới — người mua gỡ khoá, nhà cung cấp mới là người xin mã.
+ */
+export async function clearOtpLockout(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly invitationId: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
+): Promise<{ readonly cleared: number }> {
+  await assertTenantBound(client, orgId, "clearOtpLockout");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.INVITATION_UNLOCK,
+      resourceType: "RFQ_INVITATION",
+      resourceId: input.invitationId,
+    },
+    auditPool,
+  );
+
+  const { rowCount } = await client.query(
+    `UPDATE invitation_otp_challenges SET locked_until = NULL
+      WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND invitation_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND locked_until IS NOT NULL
+        AND locked_until OPERATOR(pg_catalog.>) pg_catalog.now()`,
+    [orgId, input.invitationId],
+  );
+
+  // Ghi sổ kể cả khi KHÔNG có khoá nào để gỡ: *"ai đã thử gỡ khoá lời mời này"* là một câu kiểm
+  // toán viên hỏi, và một lần gỡ hụt cũng là một lần ai đó chạm vào.
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "INVITATION_OTP_LOCKOUT_CLEARED",
+    resourceType: "RFQ_INVITATION",
+    resourceId: input.invitationId,
+    payload: { cleared: rowCount ?? 0 },
+  });
+  return { cleared: rowCount ?? 0 };
+}
+
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,
@@ -698,7 +847,7 @@ export async function revokeInvitation(
     actorType: actor.type,
     actorId: actor.id,
     action: "INVITATION_REVOKED",
-    resourceType: "rfq_invitation",
+    resourceType: "RFQ_INVITATION",
     resourceId: input.invitationId,
   });
   return true;

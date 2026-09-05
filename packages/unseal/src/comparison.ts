@@ -168,26 +168,26 @@ export interface ComparisonInput {
  * A1 vẫn đúng như câu chữ của nó (trước mở thầu không có gì để trả về). Thứ thiếu là uỷ quyền
  * SAU mở thầu, và đó là chỗ A5 sẽ đổ vào khi `app_guest` ra đời (khoản nợ 29).
  */
-async function batBuocQuyenXemGia(
+/**
+ * [khoản nợ 33] Hàm này CỐ Ý chỉ giải danh tính, KHÔNG gọi `requirePermission`.
+ *
+ * Bản đầu gói cả lời gọi ấy vào đây, và nó trông gọn hơn. Nhưng `cong-quyen-route.test.ts` đọc
+ * MÃ NGUỒN của từng hàm ở rổ `HAM_DOC_CO_QUYEN` và đòi thân nó thật sự gọi `requirePermission` —
+ * và với một helper dùng chung, phép đọc ấy KHÔNG THẤY GÌ. Hai đường sửa: dạy lớp canh đi theo
+ * một tầng gián tiếp (tức lại suy từ một danh sách tên helper), hoặc để lời gọi nằm THẲNG trong
+ * thân hàm được canh.
+ *
+ * Chọn đường thứ hai: hai lời gọi gần giống nhau đổi lấy một phép đo TRỰC TIẾP. Đây đúng chỗ mà
+ * *"một lớp đo được"* đáng giá hơn *"một lớp gọn"*.
+ */
+async function nguoiDoc(
   client: pg.PoolClient,
   orgId: string,
   input: ComparisonInput,
-  auditPool: pg.Pool,
   ten: string,
-): Promise<void> {
+): Promise<{ id: string }> {
   batBuocUuid(input.actorSessionId, `${ten}.actorSessionId`);
-  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
-  await requirePermission(
-    client,
-    {
-      userId: actor.id,
-      orgId,
-      permission: PERMISSIONS.BID_VIEW,
-      resourceType: "RFQ",
-      resourceId: input.rfqId,
-    },
-    auditPool,
-  );
+  return resolveSessionActor(client, orgId, input.actorSessionId);
 }
 
 function batBuocUuid(gia: string, ten: string): void {
@@ -224,7 +224,18 @@ export async function buildComparisonTable(
   await assertTenantBound(client, orgId, "buildComparisonTable");
   const { rfqId } = input;
   batBuocUuid(rfqId, "rfqId");
-  await batBuocQuyenXemGia(client, orgId, input, auditPool, "buildComparisonTable");
+  const nguoiXem = await nguoiDoc(client, orgId, input, "buildComparisonTable");
+  await requirePermission(
+    client,
+    {
+      userId: nguoiXem.id,
+      orgId,
+      permission: PERMISSIONS.BID_VIEW,
+      resourceType: "RFQ",
+      resourceId: rfqId,
+    },
+    auditPool,
+  );
 
   const trangThai = await docTrangThai(client, rfqId);
   if (!(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(trangThai)) {
@@ -329,7 +340,18 @@ export async function countReceivedBids(
   await assertTenantBound(client, orgId, "countReceivedBids");
   const { rfqId } = input;
   batBuocUuid(rfqId, "rfqId");
-  await batBuocQuyenXemGia(client, orgId, input, auditPool, "countReceivedBids");
+  const nguoiDem = await nguoiDoc(client, orgId, input, "countReceivedBids");
+  await requirePermission(
+    client,
+    {
+      userId: nguoiDem.id,
+      orgId,
+      permission: PERMISSIONS.BID_VIEW,
+      resourceType: "RFQ",
+      resourceId: rfqId,
+    },
+    auditPool,
+  );
 
   const { rows } = await client.query<{ status: string; nghiem: boolean }>(
     "SELECT status, rfq_che_do_nghiem(id) AS nghiem FROM rfq_packages WHERE id = $1",

@@ -25,6 +25,7 @@ export {
   OTP_MAX_PER_INVITATION,
   OTP_RATE_WINDOW_SECONDS,
   OTP_TTL_SECONDS,
+  clearOtpLockout,
   createInvitation,
   issueMagicLinkToken,
   issueOtpChallenge,

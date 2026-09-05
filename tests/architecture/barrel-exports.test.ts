@@ -468,6 +468,8 @@ describe("bề mặt export công khai của rfq", () => {
 // duy nhất bắt được nó là danh sách trắng cộng người đọc, đúng như giới hạn đã ghi cho identity.
 // ============================================================================================
 const DANH_SACH_TRANG_INVITATION = [
+  // [khoản nợ 37] Đường RA của khoá cấp-lời-mời. Xem khối chú thích của chính hàm.
+  "clearOtpLockout",
   "CHANNELS",
   "GUEST_SESSION_MAX_TTL_SECONDS",
   "GUEST_SESSION_TOKEN_BYTES",

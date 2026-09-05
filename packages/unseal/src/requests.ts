@@ -18,6 +18,7 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { withTenant } from "@trustprocure/tenancy";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
@@ -206,12 +207,43 @@ export async function approveUnseal(
     auditPool,
   );
 
-  await client.query(
-    `INSERT INTO unseal_approvals
-       (org_id, unseal_request_id, approver_user_id, approver_session_id)
-     VALUES ($1, $2, $3, $4)`,
-    [orgId, input.unsealRequestId, actor.id, actor.sessionId],
-  );
+  // [khoản nợ 32] MỘT LẦN THỬ VI PHẠM D2 PHẢI ĐỂ LẠI DẤU VẾT.
+  //
+  // Hai trigger của 019 chặn tự-phê-duyệt và phê-duyệt-cùng-phiên, và chúng chặn ĐÚNG. Nhưng lời
+  // từ chối của chúng làm ROLLBACK cả giao dịch này — kể cả bản ghi `UNSEAL_APPROVED` ở dưới —
+  // nên tới trước vòng sửa này, một lần THỬ vi phạm D2 để lại **con số không** bản ghi. Cùng lỗ
+  // với D5 mà cổng chính sách vừa vá.
+  //
+  // Phân loại theo THÔNG BÁO chứ không theo SQLSTATE, và đó là một thu hẹp phải nói ra: cả hai
+  // trigger dùng chung `check_violation`, nên SQLSTATE không phân biệt được chúng với nhau hay
+  // với một `CHECK` bất kỳ. Thông báo thì do chính 019 viết ra và có test đọc nó.
+  try {
+    await client.query(
+      `INSERT INTO unseal_approvals
+         (org_id, unseal_request_id, approver_user_id, approver_session_id)
+       VALUES ($1, $2, $3, $4)`,
+      [orgId, input.unsealRequestId, actor.id, actor.sessionId],
+    );
+  } catch (loi) {
+    const van = loi instanceof Error ? loi.message : "";
+    const viPhamD2 = /khong duoc tu phe duyet|phai o mot PHIEN khac|mot lan tren mot yeu cau/i.test(
+      van,
+    );
+    if (viPhamD2) {
+      await withTenant(auditPool, orgId, (c) =>
+        appendAuditEvent(c, orgId, {
+          actorType: actor.type,
+          actorId: actor.id,
+          action: "UNSEAL_APPROVAL_DENIED",
+          resourceType: "UNSEAL_REQUEST",
+          resourceId: input.unsealRequestId,
+          // KHÔNG mang `reason` của yêu cầu: với break-glass đó là chỗ chi tiết sự cố nằm.
+          payload: { viPham: "D2" },
+        }),
+      );
+    }
+    throw loi;
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,

@@ -46,15 +46,20 @@ const HAM_DOI_TRANG_THAI = [
   "addRfqItem",
   "addSupplierContact",
   "approveRfq",
+  "approveUnseal",
   "cancelRfq",
+  "cancelUnseal",
+  "clearOtpLockout",
   "closeRfq",
   "createInvitation",
   "createProcurementPolicy",
   "createRfq",
   "createSupplier",
+  "dispatchUnseal",
   "extendRfqDeadline",
   "issueMagicLinkToken",
   "openRfq",
+  "requestUnseal",
   "revokeInvitation",
   "setRfqBudget",
   "submitRfqForApproval",
@@ -66,10 +71,16 @@ const HAM_DOI_TRANG_THAI = [
  * đường gọi KHÔNG CÓ NGƯỜI DÙNG NÀO (một job nền chạy dưới `app_api`).
  */
 const HAM_CHI_DOC = [
+  // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
+  // `app_unseal`, và KHÔNG có người dùng nào để hỏi quyền. Cùng lý do đã ghi cho `listSuppliers`.
+  "auditStoredCiphertexts",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
+  "getBidReceipt",
   "getRfq",
   "getSupplier",
+  "getUnsealRequest",
+  "listBidVersions",
   "listRfqItems",
   "listSupplierContacts",
   "listSuppliers",
@@ -80,12 +91,91 @@ const HAM_CHI_DOC = [
  * buộc sản phẩm 1 nói lần báo giá đầu KHÔNG yêu cầu tài khoản. Ba hàm này tự chứng minh thẩm
  * quyền bằng token và mã OTP — một phép chứng minh MẠNH HƠN một phiên, không phải một ngoại lệ.
  */
-const HAM_DUONG_KHACH = ["issueOtpChallenge", "redeemMagicLink", "verifyOtpAndStartSession"] as const;
+const HAM_DUONG_KHACH = [
+  "issueOtpChallenge",
+  "redeemMagicLink",
+  "verifyOtpAndStartSession",
+  // [khoản nợ 33] `submitBid` ở đây chứ không ở `HAM_DOI_TRANG_THAI`, và đó là một QUYẾT ĐỊNH:
+  // nó ghi thật (một phiên bản báo giá cộng một biên nhận), nhưng người ghi là NHÀ CUNG CẤP, và
+  // họ tự chứng minh thẩm quyền bằng phiên khách — thứ đã đi qua token cộng OTP. Một cổng quyền
+  // ở đây sẽ đòi một tài khoản người mua, tức phá ràng buộc sản phẩm 1.
+  "submitBid",
+] as const;
 
+/**
+ * [khoản nợ 33] HÀM ĐỌC MÀ VẪN PHẢI CÓ CỔNG QUYỀN — rổ THỨ TƯ, và nó tồn tại vì rổ
+ * `HAM_CHI_DOC` biện minh bằng một câu SAI với chúng.
+ *
+ * Câu biện minh của `HAM_CHI_DOC` là *"không đổi trạng thái nào, nên một cổng quyền cho chúng là
+ * quyết định của tầng ứng dụng"*. Câu ấy đúng cho `getSupplier`; nó SAI cho một hàm mà MỤC ĐÍCH
+ * DUY NHẤT là kiểm soát TIẾT LỘ. `buildComparisonTable` trả về giá của mọi nhà cung cấp trong
+ * một gói thầu; `countReceivedBids` trả về một con số mà A6 gọi thẳng là nhạy cảm.
+ *
+ * Rổ này KHÔNG phải một nhãn: test bên dưới đọc MÃ NGUỒN của từng hàm và đòi thân nó thật sự gọi
+ * `requirePermission`. Một hàm nằm ở đây mà không có cổng là một lần ĐỎ.
+ */
+const HAM_DOC_CO_QUYEN = ["buildComparisonTable", "countReceivedBids"] as const;
+
+/**
+ * [khoản nợ 33] HÀM THUẦN TUÝ — không nhận `client`, không nhận `orgId`, không chạm CSDL.
+ *
+ * Một cổng quyền cho chúng là một câu không có chủ ngữ. `verifyReceipt` là ca chịu lực: B2 đòi nó
+ * kiểm chứng được bằng khoá công khai MỘT MÌNH, nên thêm bất kỳ tham số "chỉ máy chủ mới có" nào
+ * vào đây là phá chính bất biến ấy — `barrel-exports.test.ts` canh riêng điều đó.
+ */
+const HAM_THUAN_TUY = [
+  "buildReceiptText",
+  "createLocalDevReceiptSigner",
+  "derToRawSignature",
+  "parseReceiptText",
+  "rawToDerSignature",
+  "sha256Hex",
+  "verifyReceipt",
+] as const;
+
+/**
+ * [khoản nợ 33] Hàm TỰ NÓ LÀ cổng quyền. `assertUnsealAllowed` là phép hội bốn vế của D1; hỏi
+ * "nó có được canh bởi một cổng quyền không" là một câu vòng tròn.
+ */
+const HAM_TU_LA_CONG = ["assertUnsealAllowed"] as const;
+
+/**
+ * [khoản nợ 33] Đọc THÂN của một hàm export từ mã nguồn thật, để rổ `HAM_DOC_CO_QUYEN` là một
+ * phép đo chứ không một cái nhãn.
+ *
+ * Quét MỌI file nguồn dưới `packages` theo tính chất, không theo một danh sách file — nên một hàm
+ * chuyển sang module khác vẫn tìm thấy. "Thân" ở đây là đoạn từ chỗ khai báo tới `export` kế
+ * tiếp: thô, nhưng đủ, và nó không bao giờ ĐỌC THIẾU (chỉ có thể đọc THỪA sang phần sau, tức
+ * lệch về phía KHOAN DUNG — nên một lần ĐỎ luôn là một lần đỏ thật).
+ */
+function thanHamExport(pTen: string): string | null {
+  const cacTep = execFileSync("git", ["ls-files", "packages/*/src/*.ts"], {
+    cwd: GOC,
+    encoding: "utf8",
+  })
+    .split(/\r?\n/)
+    .filter((t) => t.length > 0 && !t.endsWith(".test.ts"));
+  for (const t of cacTep) {
+    const noiDung = readFileSync(join(GOC, t), "utf8");
+    const vt = noiDung.indexOf(`export async function ${pTen}(`);
+    if (vt < 0) continue;
+    const ke = noiDung.indexOf(`${String.fromCharCode(10)}export `, vt + 1);
+    return ke < 0 ? noiDung.slice(vt) : noiDung.slice(vt, ke);
+  }
+  return null;
+}
+
+// [khoản nợ 33] Hai gói MỚI vào danh sách. Trước vòng sửa này, `CUA_GOI` gồm ba gói của S1.1–S1.3
+// và KHÔNG có `unseal` lẫn `bidding` — tức toàn bộ phê duyệt kép của việc lộ mọi giá trong một
+// RFQ, cộng hai hàm đọc bảng giá, đều nằm ngoài tầm nhìn của cả hai lớp ở file này. Một module
+// `apps/api` gọi `approveUnseal` mà quên dòng quyền sẽ đi qua sạch sẽ. Đúng khuôn *"hàng rào tự
+// làm mù mình bằng một danh sách tên"* mà khoản nợ 3 và 16 đã ghi — lần thứ ba.
 const CUA_GOI = [
   "@trustprocure/supplier",
   "@trustprocure/rfq",
   "@trustprocure/invitation",
+  "@trustprocure/unseal",
+  "@trustprocure/bidding",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -213,6 +303,9 @@ describe("[ADR-016] danh sách hàm ghi không được tự làm mù mình", ()
       ...HAM_DOI_TRANG_THAI,
       ...HAM_CHI_DOC,
       ...HAM_DUONG_KHACH,
+      ...HAM_DOC_CO_QUYEN,
+      ...HAM_THUAN_TUY,
+      ...HAM_TU_LA_CONG,
     ]);
 
     const chuaPhanLoai: string[] = [];
@@ -235,8 +328,40 @@ describe("[ADR-016] danh sách hàm ghi không được tự làm mù mình", ()
     ).toEqual([]);
   });
 
-  it("ba nhóm không giao nhau — một hàm không thể vừa ghi vừa chỉ đọc", () => {
-    const tatCa = [...HAM_DOI_TRANG_THAI, ...HAM_CHI_DOC, ...HAM_DUONG_KHACH];
+  it("sáu nhóm không giao nhau — một hàm không thể vừa ghi vừa chỉ đọc", () => {
+    const tatCa = [
+      ...HAM_DOI_TRANG_THAI,
+      ...HAM_CHI_DOC,
+      ...HAM_DUONG_KHACH,
+      ...HAM_DOC_CO_QUYEN,
+      ...HAM_THUAN_TUY,
+      ...HAM_TU_LA_CONG,
+    ];
     expect(new Set(tatCa).size).toBe(tatCa.length);
+  });
+
+  it("[khoản nợ 33] rổ `HAM_DOC_CO_QUYEN` KHÔNG phải một nhãn — mỗi hàm phải THẬT SỰ có cổng", () => {
+    // Không có phép đo này, rổ mới chỉ là một chỗ để cất tên cho qua lớp phân loại — đúng thứ
+    // rủi ro số 3 của kế hoạch S1 gọi là *"lấp mã bằng nhãn thay vì bằng lớp"*.
+    const thieu: string[] = [];
+    for (const ten of HAM_DOC_CO_QUYEN) {
+      const than = thanHamExport(ten);
+      if (than === null) {
+        thieu.push(`${ten}: không tìm thấy định nghĩa`);
+      } else if (!than.includes("requirePermission")) {
+        thieu.push(`${ten}: thân hàm không gọi requirePermission`);
+      }
+    }
+    expect(
+      thieu,
+      "Một hàm ở rổ HAM_DOC_CO_QUYEN không thật sự kiểm quyền. Rổ ấy tồn tại vì câu biện minh " +
+        "của HAM_CHI_DOC ('không đổi trạng thái') SAI với một hàm mà mục đích duy nhất là kiểm " +
+        "soát tiết lộ — nên nó phải mang một cổng, không mang một cái tên.",
+    ).toEqual([]);
+
+    // Chống rỗng ruột: phép đọc mã nguồn phải BIẾT trả về `null` cho một tên không tồn tại, và
+    // biết thấy một thân hàm KHÔNG có cổng.
+    expect(thanHamExport("khongCoHamTenNay")).toBeNull();
+    expect(thanHamExport("getUnsealRequest")?.includes("requirePermission")).toBe(false);
   });
 });

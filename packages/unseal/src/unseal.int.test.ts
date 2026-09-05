@@ -613,3 +613,130 @@ describe("dispatchUnseal", () => {
     expect(rows[0]?.n).toBe("0");
   });
 });
+
+// ===============================================================================================
+// [khoản nợ 32] D5 CHO CẢ BỐN VẾ, KHÔNG CHỈ VẾ MỘT
+//
+// `requirePermission` ghi sổ cho vế 1 từ S0. Ba vế còn lại ném và KHÔNG ghi gì — nên một người
+// trong tổ chức dò *"RFQ đóng chưa / phê duyệt về chưa"* bằng cách gọi `dispatchUnseal` liên tục
+// sinh ra CON SỐ KHÔNG bản ghi. Và một lần THỬ vi phạm D2 còn tệ hơn: trigger chặn đúng, nhưng
+// lời từ chối của nó ROLLBACK cả bản ghi `UNSEAL_APPROVED` — nên không còn dấu vết nào.
+// ===============================================================================================
+describe("[INV-D5] mọi lần từ chối của cổng mở thầu đều để lại dấu vết", () => {
+  async function demTuChoi(requestId: string, action: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 " +
+        "  AND resource_id = $3",
+      [orgA, action, requestId],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  it("[INV-D5] vế 2 (MFA quá cũ) ghi `UNSEAL_DENIED` mang đúng tên vế", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    const sCu = await taoPhien(uYc, 3600);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        assertUnsealAllowed(c, orgA, { unsealRequestId: requestId, actorSessionId: sCu }, auditPool),
+      ),
+    ).rejects.toBeInstanceOf(UnsealDeniedError);
+
+    expect(await demTuChoi(requestId, "UNSEAL_DENIED")).toBe(1);
+    const { rows } = await db.pool.query<{ payload: { clause: string } }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_DENIED' " +
+        "  AND resource_id = $2",
+      [orgA, requestId],
+    );
+    expect(rows[0]?.payload.clause).toBe("MFA_FRESH");
+  });
+
+  it("[INV-D5] vế 3 (RFQ chưa CLOSED) cũng ghi — và bản ghi SỐNG QUA một lần rollback", async () => {
+    // Vế chịu lực: một lần từ chối thường kéo theo rollback của người gọi. Một bản ghi kiểm toán
+    // biến mất cùng lần rollback ấy là một bản ghi KHÔNG TỒN TẠI. Giao dịch độc lập là thứ mua
+    // được điều đó, và test này đo chính nó.
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "chua dong ma xin mo", actorSessionId: sYc }, auditPool),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+    );
+    // Đưa RFQ ra khỏi CLOSED bằng SQL viết tay — đúng ca mà vế 3 tồn tại để bắt.
+    await db.pool.query(
+      "ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+    );
+    try {
+      await db.pool.query(
+        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', opened_at = NULL, closed_at = NULL, " +
+          " early_close_reason = NULL, opened_by = NULL, opened_by_session_id = NULL, " +
+          " closed_by = NULL, closed_by_session_id = NULL WHERE id = $1",
+        [rfqId],
+      );
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+      );
+    }
+
+    const CHAN = new Error("chan-lai-de-do-rollback");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await assertUnsealAllowed(
+          c,
+          orgA,
+          { unsealRequestId: yc.id, actorSessionId: sYc },
+          auditPool,
+        ).catch(() => undefined);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+
+    expect(
+      await demTuChoi(yc.id, "UNSEAL_DENIED"),
+      "bản ghi từ chối biến mất cùng rollback của người gọi — nó phải ở một giao dịch ĐỘC LẬP",
+    ).toBe(1);
+  });
+
+  it("[INV-D5] vế 4 (chưa đủ phê duyệt) cũng ghi", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "moi mot phe duyet", actorSessionId: sYc }, auditPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        assertUnsealAllowed(c, orgA, { unsealRequestId: yc.id, actorSessionId: sYc }, auditPool),
+      ),
+    ).rejects.toBeInstanceOf(UnsealDeniedError);
+    expect(await demTuChoi(yc.id, "UNSEAL_DENIED")).toBe(1);
+  });
+
+  it("[INV-D2] một lần THỬ tự phê duyệt để lại `UNSEAL_APPROVAL_DENIED`", async () => {
+    const rfqId = await taoRfqDaDong();
+    // Người YÊU CẦU phải là một `DIRECTOR`, không phải `uYc`: `uYc` là `PROCUREMENT_MANAGER` và
+    // KHÔNG giữ `rfq.unseal.approve`, nên lượt tự-phê-duyệt của nó dừng ở CỔNG QUYỀN — tức nó đo
+    // vế 1 của D5 một lần nữa chứ không đo trigger D2. Bản đầu của test này mắc đúng lỗi ấy và
+    // đỏ vì lý do đúng.
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "tu phe duyet", actorSessionId: sD1 }, auditPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+      ),
+    ).rejects.toThrow(/tu phe duyet/i);
+    expect(
+      await demTuChoi(yc.id, "UNSEAL_APPROVAL_DENIED"),
+      "trigger chặn đúng, nhưng lời từ chối của nó rollback cả bản ghi kiểm toán — nên nó phải " +
+        "được ghi ở một giao dịch ĐỘC LẬP",
+    ).toBe(1);
+  });
+
+  it("[INV-D5] ĐỐI CHỨNG DƯƠNG: một lần cho qua KHÔNG ghi bản ghi từ chối nào", async () => {
+    // Không có vế này, bốn khẳng định trên xanh kể cả khi hàm ghi `UNSEAL_DENIED` ở MỌI lượt gọi.
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      assertUnsealAllowed(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    expect(await demTuChoi(requestId, "UNSEAL_DENIED")).toBe(0);
+  });
+});

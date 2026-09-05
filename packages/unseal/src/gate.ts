@@ -52,7 +52,8 @@
 // ==============================================================================================
 
 import type pg from "pg";
-import { assertTenantBound } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { withTenant } from "@trustprocure/tenancy";
 import {
   MfaRequiredError,
   PERMISSIONS,
@@ -112,6 +113,41 @@ export interface UnsealGateReport {
    * đã đủ phê duyệt.
    */
   readonly breakGlass: boolean;
+}
+
+/**
+ * [khoản nợ 32] GHI SỔ MỘT LẦN TỪ CHỐI, RỒI MỚI NÉM.
+ *
+ * D5 nói *"lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công"*, và
+ * `requirePermission` giữ đúng điều đó cho vế 1. Ba vế còn lại của cổng này ném `UnsealDeniedError`
+ * mà KHÔNG ghi gì — nên một người trong tổ chức dò *"RFQ đóng chưa / phê duyệt về chưa"* bằng
+ * cách gọi `dispatchUnseal` liên tục sinh ra CON SỐ KHÔNG bản ghi.
+ *
+ * GIAO DỊCH ĐỘC LẬP, cùng khuôn `requirePermission`: một lần từ chối thường kéo theo rollback của
+ * người gọi, và một bản ghi kiểm toán biến mất cùng lần rollback ấy là một bản ghi không tồn tại.
+ *
+ * PAYLOAD chỉ mang `clause`. KHÔNG mang `reason` của yêu cầu mở thầu — với break-glass, đó chính
+ * là chỗ chi tiết sự cố nằm, và sổ kiểm toán không phải chỗ để nó rò ra một lần nữa.
+ */
+async function tuChoi(
+  auditPool: pg.Pool,
+  orgId: string,
+  actorId: string | null,
+  unsealRequestId: string,
+  clause: UnsealClause,
+  message: string,
+): Promise<never> {
+  await withTenant(auditPool, orgId, (c) =>
+    appendAuditEvent(c, orgId, {
+      actorType: actorId === null ? "SERVICE" : "USER",
+      actorId,
+      action: "UNSEAL_DENIED",
+      resourceType: "UNSEAL_REQUEST",
+      resourceId: unsealRequestId,
+      payload: { clause },
+    }),
+  );
+  throw new UnsealDeniedError(clause, message);
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -199,9 +235,14 @@ export async function assertUnsealAllowed(
     });
   } catch (loi) {
     if (loi instanceof MfaRequiredError) {
-      throw new UnsealDeniedError("MFA_FRESH", "phiên chưa qua MFA trong cửa sổ cho phép", {
-        cause: loi,
-      });
+      await tuChoi(
+        auditPool,
+        orgId,
+        actor.id,
+        input.unsealRequestId,
+        "MFA_FRESH",
+        "phiên chưa qua MFA trong cửa sổ cho phép",
+      );
     }
     throw loi;
   }
@@ -211,7 +252,11 @@ export async function assertUnsealAllowed(
   // cách nhau tám dòng trong ma trận, một hàng ✅ và một hàng ⏳, cùng nói về một điều. Nay chúng
   // nói về một điều VÀ cùng được một lớp giữ.
   if (yc.rfq_status !== "CLOSED") {
-    throw new UnsealDeniedError(
+    await tuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.unsealRequestId,
       "RFQ_CLOSED",
       `RFQ phải ở trạng thái CLOSED để mở thầu; đang ở ${yc.rfq_status}`,
     );
@@ -222,13 +267,21 @@ export async function assertUnsealAllowed(
   // ngưỡng mà chính sách của tổ chức đòi (D2). Vế thứ hai KHÔNG thừa: nó là lớp bắt được ca một
   // ai đó lật `status` bằng SQL viết tay mà bỏ qua trigger — trigger chỉ chạy trên đường DML.
   if (yc.status !== "APPROVED") {
-    throw new UnsealDeniedError(
+    await tuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.unsealRequestId,
       "POLICY_GATE",
       `yêu cầu mở thầu phải ở trạng thái APPROVED; đang ở ${yc.status}`,
     );
   }
   if (!yc.break_glass && Number(yc.so_phe_duyet) < yc.can_phe_duyet) {
-    throw new UnsealDeniedError(
+    await tuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.unsealRequestId,
       "POLICY_GATE",
       `yêu cầu này cần ${yc.can_phe_duyet} phê duyệt, mới có ${yc.so_phe_duyet} (D2)`,
     );

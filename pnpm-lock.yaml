@@ -44,6 +44,9 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
       '@trustprocure/sealed-envelope':
         specifier: workspace:*
         version: link:../../packages/sealed-envelope
@@ -212,6 +215,9 @@ importers:
       '@trustprocure/outbox':
         specifier: workspace:*
         version: link:../outbox
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
       pg:
         specifier: ^8.13.0
         version: 8.23.0

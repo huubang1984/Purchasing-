@@ -1752,6 +1752,8 @@ describe("migration của dự án", () => {
           "021_ciphertext_audit.sql",
           "022_security_review_s1.sql",
           "023_rfq_open_cancel_permissions.sql",
+          "024_moi_lai_va_tran_chi_phi.sql",
+          "025_worker_doc_hang_doi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4550,6 +4552,8 @@ describe("migration của dự án", () => {
         "021_ciphertext_audit.sql",
         "022_security_review_s1.sql",
         "023_rfq_open_cancel_permissions.sql",
+        "024_moi_lai_va_tran_chi_phi.sql",
+        "025_worker_doc_hang_doi.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4770,6 +4774,8 @@ describe("migration của dự án", () => {
         "021_ciphertext_audit.sql",
         "022_security_review_s1.sql",
         "023_rfq_open_cancel_permissions.sql",
+        "024_moi_lai_va_tran_chi_phi.sql",
+        "025_worker_doc_hang_doi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
