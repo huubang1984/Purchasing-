@@ -247,7 +247,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
         rfqId: trangThai.rfqId,
         actorSessionId: sMua,
         keyWrapper: boBoc,
-      });
+      }, apiPool);
       expect(mo.status).toBe("OPEN");
     });
 

@@ -7,6 +7,27 @@ export const PERMISSIONS = {
   RFQ_CREATE: "rfq.create",
   RFQ_APPROVE: "rfq.approve",
   RFQ_INVITE: "rfq.invite",
+  /**
+   * [khoản nợ 31 — review an ninh S1.4 MED-2] Mở RFQ cho nhà cung cấp báo giá, và huỷ RFQ.
+   *
+   * HAI MÃ NÀY RA ĐỜI VÌ CÙNG MỘT KHIẾM KHUYẾT ĐO ĐƯỢC, và nó là bản sao chính xác của lớp lỗi
+   * mà `ROLE_GRANT` bên dưới đã đặt tên: `openRfq` và `cancelRfq` xác lập *ai* và *tổ chức nào*
+   * rồi làm việc, mà không hỏi *người ấy có được phép không* — và câu `requirePermission(...)`
+   * lẽ ra phải gọi là câu **KHÔNG VIẾT ĐƯỢC**, vì danh mục này không có mã nào cho hai hành vi.
+   *
+   * Cái giá của khoảng trống ấy KHÔNG đối xứng, và vế nặng là vế HUỶ: `cancelRfq` thu hồi TOÀN
+   * BỘ vật liệu khoá của RFQ (`rfq.ts` gọi `revokeRfqKeyMaterial`), 017 cấm bỏ dấu thu hồi, và
+   * worker lọc `revoked_at IS NULL`. Tức một phiên hợp lệ BẤT KỲ của tổ chức — kể cả một vai
+   * không có một quyền RFQ nào — làm cho báo giá của một RFQ **vĩnh viễn không mở được**, bằng
+   * một lời gọi, và không có đường lùi.
+   *
+   * Khác `ROLE_GRANT` ở đúng một chỗ, và chỗ ấy đáng nói: `ROLE_GRANT` cố ý KHÔNG được gán cho
+   * vai trò nào (fail-closed cho tới khi có màn hình quản trị). Hai mã này thì ĐƯỢC gán ngay ở
+   * `023`, vì đường đi của chúng ĐÃ TỒN TẠI và đang chạy — để trống nghĩa là chặn cả đường hợp
+   * pháp, tức đổi một lỗ hổng lấy một lần hỏng.
+   */
+  RFQ_OPEN: "rfq.open",
+  RFQ_CANCEL: "rfq.cancel",
   RFQ_UNSEAL: "rfq.unseal",
   RFQ_UNSEAL_APPROVE: "rfq.unseal.approve",
   BID_VIEW: "bid.view",

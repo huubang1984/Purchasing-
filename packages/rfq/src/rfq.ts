@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
@@ -438,9 +438,24 @@ export async function openRfq(
   client: pg.PoolClient,
   orgId: string,
   input: OpenRfqInput,
+  auditPool: pg.Pool,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "openRfq");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  // [khoản nợ 31] TRƯỚC lần đúc khoá, không sau: `issueRfqKeyPair` ghi một hàng
+  // `rfq_key_material` và một bản ghi kiểm toán, và một lần từ chối sau đó chỉ dọn được chúng
+  // bằng rollback của người gọi — thứ hàm này không kiểm soát.
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.RFQ_OPEN,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
 
   // Sinh khoá TRƯỚC lần UPDATE. Xem khối chú thích trên.
   await issueRfqKeyPair(client, orgId, {
@@ -637,9 +652,24 @@ export async function cancelRfq(
   client: pg.PoolClient,
   orgId: string,
   input: { readonly rfqId: string; readonly reason: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "cancelRfq");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  // [khoản nợ 31] Đây là vế NẶNG của khoản nợ ấy: huỷ thì thu hồi TOÀN BỘ vật liệu khoá của
+  // RFQ, 017 cấm bỏ dấu thu hồi, và worker lọc `revoked_at IS NULL`. Một lời gọi không có phép
+  // kiểm nào ở đây làm báo giá của một gói thầu VĨNH VIỄN không mở được.
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.RFQ_CANCEL,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const { rows } = await client.query<HangRfq>(
