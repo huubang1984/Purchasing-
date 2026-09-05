@@ -579,7 +579,19 @@ export async function verifyOtpAndStartSession(
         RETURNING c.locked_until`,
       [tt.id, OTP_MAX_FAILED_ATTEMPTS, OTP_LOCKOUT_SECONDS],
     );
-    const bikhoa = sau[0]?.locked_until != null;
+    // [REVIEW AN NINH S1.3 — MED-2] `rowCount` PHẢI được kiểm, và đây là một bất đối xứng đã đo
+  // trong chính file này: đường TIÊU THỤ ba dòng dưới có `if (danhVi.rowCount !== 1)`, đường ĐẾM
+  // thì không. Nếu câu `UPDATE` này chạm 0 hàng — RLS đổi, GRANT bị thu, một trigger tương lai
+  // trả `NULL` — thì `sau` rỗng, `bikhoa` là `false`, hàm trả `WRONG_CODE`, và LẦN THỬ ẤY KHÔNG
+  // ĐƯỢC ĐẾM. Trần 5 lần đoán của E3 lặng lẽ thành vô hạn, không một dòng nào đỏ.
+  //
+  // Một lần thử KHÔNG ĐẾM ĐƯỢC phải TỪ CHỐI, không được rơi xuống `WRONG_CODE`.
+  if (sau.length !== 1) {
+    throw new InvitationError(
+      "không ghi nhận được lần thử OTP — từ chối thay vì bỏ qua phép đếm (E3)",
+    );
+  }
+  const bikhoa = sau[0]?.locked_until != null;
     return { ok: false, reason: bikhoa ? "LOCKED_OUT" : "WRONG_CODE" };
   }
 

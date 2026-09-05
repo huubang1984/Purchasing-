@@ -229,7 +229,7 @@ describe("[INV-D1] cổng chính sách mở thầu là một PHÉP HỘI bốn v
     // Đưa RFQ về OPEN để CHỈ vế 3 sai. Cạnh `CLOSED -> OPEN` không tồn tại trong bảng cạnh, nên
     // đây là một thao tác DỰNG FIXTURE, không phải một đường đi của sản phẩm — trigger máy trạng
     // thái bị vô hiệu hoá đúng trong lúc dựng, còn cổng ĐANG ĐƯỢC ĐO thì nguyên vẹn.
-    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     try {
       // `closed_at`/`early_close_reason` phải về NULL cùng lúc: CHECK
       // `rfq_chua_dong_thi_khong_co_moc_dong` (011) là một bất biến TRÊN DỮ LIỆU và nó đúng kể cả
@@ -240,7 +240,7 @@ describe("[INV-D1] cổng chính sách mở thầu là một PHÉP HỘI bốn v
         [rfqId],
       );
     } finally {
-      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
 
     const loi = await withTenant(apiPool, orgA, (c) =>
@@ -289,7 +289,7 @@ describe("[INV-D1] cổng chính sách mở thầu là một PHÉP HỘI bốn v
 describe("[INV-C3] không yêu cầu mở thầu được khi RFQ chưa đóng", () => {
   it("[INV-C3] RFQ đang OPEN thì không tạo được yêu cầu mở thầu", async () => {
     const rfqId = await taoRfqDaDong();
-    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     try {
       // `closed_at`/`early_close_reason` phải về NULL cùng lúc: CHECK
       // `rfq_chua_dong_thi_khong_co_moc_dong` (011) là một bất biến TRÊN DỮ LIỆU và nó đúng kể cả
@@ -300,7 +300,7 @@ describe("[INV-C3] không yêu cầu mở thầu được khi RFQ chưa đóng",
         [rfqId],
       );
     } finally {
-      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
     await expect(
       withTenant(apiPool, orgA, (c) =>
@@ -472,7 +472,7 @@ describe("[INV-D4] break-glass", () => {
       requestUnseal(
         c,
         orgA,
-        { rfqId, reason: "su co: giam doc yeu cau mo gap", actorSessionId: sYc, breakGlass: true },
+        { rfqId, reason: "su co: giam doc yeu cau mo gap", actorSessionId: sYc, breakGlass: true, breakGlassWitnessSessionId: sD1 },
         auditPool,
       ),
     );
@@ -505,7 +505,7 @@ describe("[INV-D4] break-glass", () => {
         requestUnseal(
           c,
           orgA,
-          { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true },
+          { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true, breakGlassWitnessSessionId: sD1 },
           auditPool,
         ),
       );
@@ -540,7 +540,7 @@ describe("[INV-D4] break-glass", () => {
       requestUnseal(
         c,
         orgA,
-        { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true },
+        { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true, breakGlassWitnessSessionId: sD1 },
         auditPool,
       ),
     );
@@ -560,7 +560,7 @@ describe("[INV-D4] break-glass", () => {
         requestUnseal(
           c,
           orgA,
-          { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true },
+          { rfqId, reason: "su co", actorSessionId: sYc, breakGlass: true, breakGlassWitnessSessionId: sD1 },
           auditPool,
         ),
       );

@@ -237,6 +237,14 @@ async function dongVaXinMoThau(rfqId: string): Promise<string> {
       "UPDATE unseal_requests SET status = 'APPROVED', approved_at = now() WHERE id = $1",
       [requestId],
     );
+    // [022] Mốc ĐIỀU PHỐI. Worker kiểm lại vế 2 của D1 trên chính phiên này, nên một fixture
+    // không ghi nó sẽ bị từ chối — đúng như mong muốn: một job không biết ai đã điều phối mình
+    // là một job không kiểm lại được uỷ quyền.
+    await c.query(
+      "UPDATE unseal_requests SET dispatched_at = now(), dispatched_by = $2, " +
+        "dispatched_by_session_id = $3 WHERE id = $1",
+      [requestId, uYc, sYc],
+    );
   });
   return requestId;
 }
@@ -293,7 +301,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
       executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
     );
     expect(ketQua.opened).toBe(1);
-    expect(ketQua.failed).toBe(0);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
 
     const { rows } = await withTenant(apiPool, orgA, (c) =>
       c.query<{ payload: { donGia: number; tienTe: string }; bid_version_id: string }>(
@@ -324,7 +332,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
 
     const { rows } = await db.pool.query<{
       actor_type: string;
-      payload: { algorithm: string; opened: number };
+      payload: { algorithms: string[]; opened: number };
     }>(
       "SELECT actor_type, payload FROM audit_events " +
         " WHERE resource_id = $1 AND action = 'RFQ_KEY_MATERIAL_UNWRAPPED'",
@@ -332,7 +340,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.actor_type).toBe("SERVICE");
-    expect(rows[0]?.payload.algorithm).toBe("ECDH_P256");
+    expect(rows[0]?.payload.algorithms).toEqual(["ECDH_P256"]);
     expect(rows[0]?.payload.opened).toBe(1);
 
     // ... và KHÔNG một mảnh khoá hay bản rõ nào trong payload.
@@ -446,7 +454,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
       executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
     );
     expect(ketQua.opened).toBe(2);
-    expect(ketQua.failed).toBe(1);
+    expect(ketQua.failedBidVersionIds.length).toBe(1);
 
     const { rows } = await withTenant(apiPool, orgA, (c) =>
       c.query<{ payload: { donGia: number } }>(

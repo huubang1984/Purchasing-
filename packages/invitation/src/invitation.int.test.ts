@@ -567,7 +567,19 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
   });
 });
 
-describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic link", () => {
+describe("ADR-015 mục 1 — OTP không bao giờ tới cùng một ĐÍCH với magic link", () => {
+  // ==========================================================================================
+  // [REVIEW AN NINH S1.3 — HIGH-1] TIÊU ĐỀ VÀ PHÉP ĐO ĐỀU ĐỔI: TỪ "KÊNH" SANG "ĐÍCH".
+  //
+  // Bản cũ so hai NHÃN kênh. `supplier_contacts` có ĐÚNG MỘT `email` và ĐÚNG MỘT `phone`, và
+  // `issueOtpChallenge` đọc cột theo kênh — nên `SMS` và `ZALO_ZNS` cùng đọc `phone`. Với
+  // `link_channel = 'SMS'` và OTP `ZALO_ZNS`, hai nhãn KHÁC nhau, phép so cũ cho qua, và cả hai
+  // yếu tố tới đúng một máy điện thoại. Lý do ADR-015 mục 1 tồn tại — *"ai đọc được kênh đó có
+  // cả hai"* — bị vô hiệu, và E2 tụt từ hai yếu tố xuống một.
+  //
+  // Ca ZALO_ZNS ấy KHÔNG có một test nào cho tới vòng này; `ZALO_ZNS` không xuất hiện một lần
+  // nào trong cả `packages/invitation` ngoài hằng `CHANNELS`.
+  // ==========================================================================================
   it("link EMAIL + OTP EMAIL bị CSDL từ chối", async () => {
     const { token } = await moiMoi("EMAIL");
     await expect(
@@ -579,7 +591,7 @@ describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic l
           pepper: PEPPER,
         }),
       ),
-    ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
+    ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
   });
 
   it("link SMS + OTP SMS CŨNG bị từ chối — lớp này so HAI KÊNH, không cấm cứng EMAIL", async () => {
@@ -593,8 +605,50 @@ describe("ADR-015 mục 1 — OTP không bao giờ đi cùng kênh với magic l
           pepper: PEPPER,
         }),
       ),
-    ).rejects.toThrow(/OTP khong duoc di cung kenh voi magic link/);
+    ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
   });
+
+  it.each([
+    ["SMS", "ZALO_ZNS"],
+    ["ZALO_ZNS", "SMS"],
+  ] as const)(
+    "link %s + OTP %s bị từ chối — hai NHÃN khác nhau, một SỐ ĐIỆN THOẠI",
+    async (kenhLink, kenhOtp) => {
+      const { token } = await moiMoi(kenhLink);
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          issueOtpChallenge(c, orgA, {
+            token,
+            channel: kenhOtp,
+            callerFingerprint: `ip-${kenhLink}-${kenhOtp}`,
+            pepper: PEPPER,
+          }),
+        ),
+      ).rejects.toThrow(/OTP khong duoc toi cung mot dich voi magic link/);
+    },
+  );
+
+  it.each([
+    ["EMAIL", "SMS"],
+    ["EMAIL", "ZALO_ZNS"],
+    ["SMS", "EMAIL"],
+  ] as const)(
+    "ĐỐI CHỨNG DƯƠNG: link %s + OTP %s đi được — hai ĐÍCH thật sự khác nhau",
+    async (kenhLink, kenhOtp) => {
+      // Không có ba ca này, lớp so đích xanh kể cả khi nó cấm cứng mọi cặp — tức nó đã chặn
+      // luôn đường hợp pháp và không ai nộp thầu được nữa.
+      const { token } = await moiMoi(kenhLink);
+      const kq = await withTenant(apiPool, orgA, (c) =>
+        issueOtpChallenge(c, orgA, {
+          token,
+          channel: kenhOtp,
+          callerFingerprint: `ip-ok-${kenhLink}-${kenhOtp}`,
+          pepper: PEPPER,
+        }),
+      );
+      expect(kq.ok).toBe(true);
+    },
+  );
 });
 
 describe("[INV-E3] OTP — năm vế", () => {

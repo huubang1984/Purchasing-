@@ -32,17 +32,36 @@ import { KeyError } from "./types.js";
  * ở fix round 1).
  */
 export function assertLocalDevAllowed(): void {
-  // Chuẩn hóa .trim().toLowerCase() và chấp nhận cả "prod" (fix round 2, phát hiện N3):
-  // so khớp === "production" đúng ký tự bị người vận hành gõ "Production"/"PRODUCTION"/"prod"
-  // lúc deploy làm im lặng tắt — một hàng rào fail-closed thua một biến môi trường viết hoa
-  // không đáng có.
-  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
-  const laProduction = moiTruong === "production" || moiTruong === "prod";
-  const choPhepGhiDe = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] === "1";
-  if (laProduction && !choPhepGhiDe) {
+  // ~~Chuẩn hóa .trim().toLowerCase() và chấp nhận cả "prod" (fix round 2, phát hiện N3)~~ —
+  // vòng ấy nới phép so theo trục CHỮ HOA và dừng ở đó.
+  //
+  // [REVIEW AN NINH S1.4 — MED-1] KHỐI NÀY TỰ GỌI MÌNH LÀ FAIL-CLOSED VÀ NÓ KHÔNG PHẢI.
+  // Bản cũ chỉ chặn khi `NODE_ENV` KHẲNG ĐỊNH là production. `NODE_ENV` KHÔNG ĐẶT — mặc định
+  // của một container trần — đi lọt; `staging`, `live`, `release`, `prd` cũng đi lọt. Tức mặc
+  // định của hàng rào là CHO QUA, trên đúng thứ quyết định private key RFQ có HSM hay không.
+  //
+  // Và nó hỏng theo đúng khuôn mà chính file này đặt tên ở đầu: một DANH SÁCH TÊN.
+  //
+  // Nay đảo chiều thành một KHẲNG ĐỊNH DƯƠNG: triển khai phải NÓI RA nó đang chạy adapter nào.
+  // Không nói gì = từ chối. Danh sách tên môi trường vẫn giữ làm lớp thứ hai, không phải lớp
+  // duy nhất.
+  const adapter = (process.env["TRUSTPROCURE_KEY_ADAPTER"] ?? "").trim().toLowerCase();
+  if (adapter === "local-dev") return;
+  if (adapter !== "") {
     throw new KeyError(
-      'Adapter "local-dev" bị chặn khi NODE_ENV=production. Dùng adapter KMS/Vault thật, ' +
-        "hoặc đặt TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS=1 nếu bạn chắc chắn muốn ghi đè (không khuyến khích).",
+      `Adapter "local-dev" bị chặn: TRUSTPROCURE_KEY_ADAPTER đang là "${adapter}". ` +
+        "Một tiến trình khai báo dùng KMS/Vault thì không được dựng bộ bọc khoá nội bộ.",
+    );
+  }
+
+  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
+  const laDevRoRang = moiTruong === "development" || moiTruong === "dev" || moiTruong === "test";
+  const choPhepGhiDe = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] === "1";
+  if (!laDevRoRang && !choPhepGhiDe) {
+    throw new KeyError(
+      'Adapter "local-dev" bị chặn: không tiến trình nào khai báo nó. Đặt ' +
+        'TRUSTPROCURE_KEY_ADAPTER="local-dev" (hoặc NODE_ENV=development|test) cho máy phát ' +
+        "triển, và dùng adapter KMS/Vault thật ở mọi nơi khác.",
     );
   }
 }

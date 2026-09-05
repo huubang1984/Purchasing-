@@ -86,6 +86,18 @@ export interface RequestUnsealInput {
    * tức thì (`NOTIFY`), không có đường nào tắt. Xem mục (5) của migration 019.
    */
   readonly breakGlass?: boolean;
+  /**
+   * [REVIEW AN NINH S1.6 — HIGH-2a] Phiên của NGƯỜI LÀM CHỨNG cho một yêu cầu break-glass.
+   *
+   * BẮT BUỘC khi `breakGlass` bật. Break-glass bỏ qua NGƯỠNG — đó là lý do nó tồn tại — nhưng
+   * nó không được bỏ qua NHÂN CHỨNG: tới trước vòng sửa này, một yêu cầu break-glass đi tới
+   * `APPROVED` với KHÔNG một hàng phê duyệt nào, và chính người yêu cầu điều phối được nó. Một
+   * người sở hữu trọn chuỗi, và lớp bù duy nhất là một cảnh báo mà chưa ai tiêu thụ.
+   *
+   * Trigger `unseal_kiem_du_phe_duyet` (022) đòi nhân chứng khác người yêu cầu VÀ khác phiên —
+   * đúng hai vế mà `unseal_kiem_nguoi_duyet` đòi ở đường thường.
+   */
+  readonly breakGlassWitnessSessionId?: string;
 }
 
 /** [C3] Tạo một yêu cầu mở thầu. RFQ phải đã CLOSED — và CSDL là lớp nói điều đó. */
@@ -112,11 +124,34 @@ export async function requestUnseal(
     auditPool,
   );
 
+  const breakGlass = input.breakGlass ?? false;
+  let nhanChung: { id: string; sessionId: string } | null = null;
+  if (breakGlass) {
+    if (input.breakGlassWitnessSessionId === undefined) {
+      throw new UnsealError("Break-glass phải có phiên của người làm chứng (D3).");
+    }
+    const nc = await resolveSessionActor(client, orgId, input.breakGlassWitnessSessionId);
+    nhanChung = { id: nc.id, sessionId: nc.sessionId };
+  } else if (input.breakGlassWitnessSessionId !== undefined) {
+    // Một nhân chứng trên một yêu cầu KHÔNG break-glass là một hàng nói dối về đường nó đã đi.
+    throw new UnsealError("Chỉ yêu cầu break-glass mới mang người làm chứng.");
+  }
+
   const { rows } = await client.query<HangYeuCau>(
     `INSERT INTO unseal_requests
-       (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT}`,
-    [orgId, input.rfqId, reason, input.breakGlass ?? false, actor.id, actor.sessionId],
+       (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id,
+        break_glass_witness_user_id, break_glass_witness_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COT}`,
+    [
+      orgId,
+      input.rfqId,
+      reason,
+      breakGlass,
+      actor.id,
+      actor.sessionId,
+      nhanChung?.id ?? null,
+      nhanChung?.sessionId ?? null,
+    ],
   );
   const h = rows[0];
   if (h === undefined) throw new UnsealError("Không ghi được yêu cầu mở thầu.");
@@ -127,7 +162,11 @@ export async function requestUnseal(
     action: h.break_glass ? "UNSEAL_REQUESTED_BREAK_GLASS" : "UNSEAL_REQUESTED",
     resourceType: "unseal_request",
     resourceId: h.id,
-    payload: { rfqId: input.rfqId, reason },
+    payload: {
+      rfqId: input.rfqId,
+      reason,
+      ...(nhanChung === null ? {} : { breakGlassWitnessUserId: nhanChung.id }),
+    },
   });
   return doiYeuCau(h);
 }
@@ -244,6 +283,18 @@ export async function dispatchUnseal(
     auditPool,
   );
 
+  // [REVIEW AN NINH S1.6 — HIGH-3 / MED-1] Ghi mốc ĐIỀU PHỐI trước khi xếp job, trong CÙNG giao
+  // dịch. Không có ba cột này, worker không có gì để hỏi lại vế 2 của D1 lúc giải mã — và mở
+  // thầu là hành động DUY NHẤT của hệ thống không thu hồi được.
+  const dp = await client.query(
+    "UPDATE unseal_requests SET dispatched_at = now(), dispatched_by = $2, " +
+      "dispatched_by_session_id = $3 WHERE id = $1 AND org_id = $4 AND dispatched_at IS NULL",
+    [bangChung.unsealRequestId, bangChung.userId, bangChung.sessionId, orgId],
+  );
+  if (dp.rowCount !== 1) {
+    throw new UnsealError("Yêu cầu mở thầu này đã được điều phối rồi.");
+  }
+
   await enqueueJob(client, orgId, {
     kind: UNSEAL_JOB_KIND,
     payload: { unsealRequestId: bangChung.unsealRequestId, rfqId: bangChung.rfqId },
@@ -256,7 +307,14 @@ export async function dispatchUnseal(
     action: "UNSEAL_DISPATCHED",
     resourceType: "unseal_request",
     resourceId: bangChung.unsealRequestId,
-    payload: { rfqId: bangChung.rfqId, clauses: [...bangChung.clauses] },
+    // [REVIEW AN NINH S1.6 — MED-4] `breakGlass` phải có mặt. Không có nó, một lần điều phối
+    // break-glass GIỐNG HỆT một lần điều phối đã đủ phê duyệt trong sổ kiểm toán, và D4
+    // (*"không bao giờ im lặng"*) hỏng ở đúng bản ghi mà kiểm toán viên đọc đầu tiên.
+    payload: {
+      rfqId: bangChung.rfqId,
+      clauses: [...bangChung.clauses],
+      breakGlass: bangChung.breakGlass,
+    },
   });
   return bangChung;
 }

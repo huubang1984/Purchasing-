@@ -405,9 +405,15 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
 });
 
 describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
-  it("deadline KHÔNG lùi được, kể cả khi RFQ còn DRAFT — dạng MẠNH HƠN mệnh đề", async () => {
+  it("deadline KHÔNG lùi được, kể cả khi RFQ còn DRAFT — HAI lớp, hai thông báo", async () => {
+    // [REVIEW AN NINH S1.7 — MED-1] Test này từng khẳng định ĐÚNG MỘT thông báo — thông báo của
+    // trigger. Nó xanh, và nó che mất một điều: hàm ứng dụng lúc ấy KHÔNG có phép kiểm nào cả,
+    // nên ca `NEW = OLD` (bằng nhau, không lùi) đi lọt cả hai lớp và ghi một bản ghi kiểm toán
+    // cho một lần gia hạn không xảy ra. Nay hai lớp được đo RIÊNG.
     const rfqId = await rfqNhap();
     const somHon = new Date(MAI_SAU.getTime() - 24 * 3600 * 1000);
+
+    // Lớp ỨNG DỤNG: nó định nghĩa "gia hạn" là ĐẨY RA XA, nên nó chặn trước và nói rõ hơn.
     await expect(
       withTenant(apiPool, orgA, (c) =>
         extendRfqDeadline(c, orgA, {
@@ -417,6 +423,25 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
           actorSessionId: s1,
         }),
       ),
+    ).rejects.toThrow(/đẩy hạn nộp RA XA hơn/);
+
+    // Và ca BẰNG NHAU — thứ trigger KHÔNG chặn, vì kiểm (c) của 011 có vế bảo vệ
+    // `NEW IS DISTINCT FROM OLD` nên với hạn bằng nhau nó còn không chạy.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        extendRfqDeadline(c, orgA, {
+          rfqId,
+          newDeadlineAt: MAI_SAU,
+          reason: "gia han bang chinh no",
+          actorSessionId: s1,
+        }),
+      ),
+    ).rejects.toThrow(/đẩy hạn nộp RA XA hơn/);
+
+    // Lớp CSDL: cùng phép lùi ấy đi bằng SQL viết tay vẫn bị chặn. Đây là lớp canh MỌI đường,
+    // và nó là lý do lớp ứng dụng ở trên KHÔNG phải một bản sao thừa.
+    await expect(
+      db.pool.query("UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1", [rfqId, somHon]),
     ).rejects.toThrow(/Khong duoc rut ngan hay xoa deadline/);
   });
 

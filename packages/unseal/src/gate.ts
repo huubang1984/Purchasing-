@@ -31,11 +31,24 @@
 // ---------------------------------------------------------------------------------------------
 //
 // PHẦN CHÊNH PHẢI NÓI RA, và nó đi vào §4 của ma trận: cổng này chạy ở thời điểm **ĐIỀU PHỐI**
-// (`dispatchUnseal`), không ở thời điểm **GIẢI MÃ**. Nó không chạy được ở worker: `app_unseal`
-// cố ý KHÔNG đọc được `users` (quyết định của 002) và không đọc được ma trận quyền (005), nên hai
-// vế đầu của D1 là những câu worker không hỏi được. Giữa lúc điều phối và lúc giải mã, hai vế còn
-// lại (`RFQ đã CLOSED`, `yêu cầu đã được phê duyệt`) vẫn được CSDL giữ bằng trigger; hai vế đầu
-// thì không được kiểm lại.
+// (`dispatchUnseal`), không ở thời điểm **GIẢI MÃ**.
+//
+// [REVIEW AN NINH S1.6 — HIGH-3] Nguyên văn câu cũ, giữ để đối chiếu vì nó SAI và vì cái sai của
+// nó đã che một lớp có thật:
+//
+//   ~~*"Nó không chạy được ở worker: `app_unseal` cố ý KHÔNG đọc được `users` (quyết định của~~
+//   ~~002) và không đọc được ma trận quyền (005), nên HAI vế đầu của D1 là những câu worker~~
+//   ~~không hỏi được."*~~
+//
+// Vế `users` SAI: `006:232` cấp `SELECT (id, org_id, status) ON users TO app_unseal`, và `006:305`
+// cấp đúng sáu cột của `sessions` mà `assertFreshMfa` đọc — 006 ghi rõ là cấp *"vì bất biến D1"*.
+// Chỉ vế QUYỀN là thật sự không hỏi được ở worker (`app_unseal` không có GRANT nào trên
+// `user_roles`/`role_permissions`/`permissions`).
+//
+// Nay: `executeUnsealRequest` chạy LẠI `assertFreshMfa` trên phiên đã điều phối (022 thêm ba cột
+// `dispatched_*` để có thứ mà hỏi), với một cửa sổ riêng của lúc giải mã. Phần chênh CÒN LẠI, và
+// nó hẹp hơn hẳn: một người bị GỠ QUYỀN nhưng vẫn giữ phiên hợp lệ, trong khoảng giữa điều phối
+// và giải mã, vẫn dẫn tới một lượt mở thầu chạy trọn.
 // ==============================================================================================
 
 import type pg from "pg";
@@ -90,6 +103,15 @@ export interface UnsealGateReport {
   readonly userId: string;
   readonly sessionId: string;
   readonly clauses: readonly UnsealClause[];
+  /**
+   * [REVIEW AN NINH S1.6 — MED-4] Yêu cầu này có đi đường break-glass không.
+   *
+   * Nó ở đây vì `clauses` là một HẰNG SỐ — nó nói cổng có BỐN vế, không nói vế nào đã thật sự
+   * đếm được gì. Với break-glass, `POLICY_GATE` bỏ qua phép đếm phê duyệt, nên một bản ghi kiểm
+   * toán chỉ mang `clauses` sẽ khiến một lần điều phối break-glass GIỐNG HỆT một lần điều phối
+   * đã đủ phê duyệt.
+   */
+  readonly breakGlass: boolean;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -218,5 +240,6 @@ export async function assertUnsealAllowed(
     userId: actor.id,
     sessionId: actor.sessionId,
     clauses: UNSEAL_CLAUSES,
+    breakGlass: yc.break_glass,
   };
 }

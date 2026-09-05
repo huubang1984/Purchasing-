@@ -740,9 +740,14 @@ describe("phủ RLS", () => {
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
-      { grantee: "app_unseal", bang: "rfq_unsealed_bids", quyen: "SELECT" },
-      { grantee: "app_unseal", bang: "unseal_approvals", quyen: "SELECT" },
-      { grantee: "app_unseal", bang: "unseal_requests", quyen: "SELECT" },
+      // [022, review an ninh S1.6 MED-2] BA dòng của `app_unseal` ĐÃ BỊ THU HỒI, và mỗi dòng
+      // biến mất là một câu:
+      //   `rfq_unsealed_bids` — 019 tự viết *"nó KHÔNG đọc lại được"* rồi cấp SELECT ngay 30
+      //     dòng dưới. Worker chỉ INSERT. Để lại quyền ấy là để một tiến trình `app_unseal` bị
+      //     chiếm đọc HÀNG LOẠT mọi báo giá đã mở, không tốn một lần mở bọc khoá nào.
+      //   `unseal_approvals` — worker không truy vấn bảng này một lần nào.
+      //   `unseal_requests`  — thu xuống quyền CỘT (xem test [S1.2] bên dưới); `reason` bị gỡ,
+      //     và với break-glass thì `reason` chính là chỗ chi tiết sự cố nằm.
     ]);
   });
 
@@ -811,6 +816,14 @@ describe("phủ RLS", () => {
       { bang: "sessions", cot: "org_id" },
       { bang: "sessions", cot: "revoked_at" },
       { bang: "sessions", cot: "user_id" },
+      // [022] `unseal_requests` chuyển từ SELECT mức BẢNG xuống ĐÚNG sáu cột worker đọc.
+      // `reason`, `break_glass`, và mọi mốc thời gian khác KHÔNG được cấp.
+      { bang: "unseal_requests", cot: "dispatched_by" },
+      { bang: "unseal_requests", cot: "dispatched_by_session_id" },
+      { bang: "unseal_requests", cot: "id" },
+      { bang: "unseal_requests", cot: "org_id" },
+      { bang: "unseal_requests", cot: "rfq_id" },
+      { bang: "unseal_requests", cot: "status" },
       { bang: "users", cot: "id" },
       { bang: "users", cot: "org_id" },
       { bang: "users", cot: "status" },
@@ -1157,7 +1170,17 @@ describe("phủ RLS", () => {
       // khong rut lai bang cach xoa dong. Duong dung la HUY yeu cau — mot hanh vi co ten, co moc.
       { grantee: "app_api", bang: "unseal_requests", cot: "approved_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "unseal_requests", cot: "break_glass", quyen: "INSERT" },
+      // [022, review S1.6 HIGH-2a] Nhân chứng của break-glass: nó bỏ qua NGƯỠNG, không bỏ qua
+      // NGƯỜI THỨ HAI.
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "unseal_requests", cot: "cancelled_at", quyen: "UPDATE" },
+      // [022, review S1.6 HIGH-3] Mốc ĐIỀU PHỐI — thứ để worker hỏi lại được vế 2 của D1.
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "unseal_requests", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "unseal_requests", cot: "reason", quyen: "INSERT" },
       { grantee: "app_api", bang: "unseal_requests", cot: "requested_by", quyen: "INSERT" },

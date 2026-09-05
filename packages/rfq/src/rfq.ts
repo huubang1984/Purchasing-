@@ -563,6 +563,24 @@ export async function extendRfqDeadline(
 
   const truoc = await docRfq(client, input.rfqId);
 
+  // [REVIEW AN NINH S1.7 — MED-1] Hạn mới phải LỚN HƠN hạn cũ, không chỉ "không nhỏ hơn".
+  //
+  // Trigger của 011 chặn `NEW < OLD`; nó KHÔNG chặn `NEW = OLD`, và kiểm (c) của nó có vế bảo vệ
+  // `NEW IS DISTINCT FROM OLD` nên với hạn BẰNG NHAU thì phép kiểm trạng thái cũng không chạy.
+  // Hệ quả đo được từ chính hai câu ấy: gọi hàm này với ĐÚNG hạn hiện tại trên một RFQ đã
+  // `CLOSED`, `UNSEALED` hay `CANCELLED` sẽ đi lọt cả hai lớp, rồi ghi một bản ghi kiểm toán
+  // *"RFQ_DEADLINE_EXTENDED"* cho một lần gia hạn KHÔNG XẢY RA — vào một bảng chỉ ghi thêm, sau
+  // khi mở thầu, tức đúng lúc sổ kiểm toán đang bị đọc để phán xử — cộng một thông báo gửi cho
+  // toàn bộ nhà cung cấp của một RFQ đã đóng.
+  //
+  // Đây là phép kiểm ở tầng ỨNG DỤNG cho một điều CSDL cố ý không nói: CSDL cấm LÙI, nó không
+  // định nghĩa "gia hạn" là gì. Định nghĩa ấy là của hàm này.
+  if (truoc.deadline_at !== null && input.newDeadlineAt.getTime() <= truoc.deadline_at.getTime()) {
+    throw new RfqError(
+      "gia hạn phải đẩy hạn nộp RA XA hơn hạn hiện tại; hạn bằng nhau không phải một lần gia hạn",
+    );
+  }
+
   const { rows } = await client.query<HangRfq>(
     `UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1 RETURNING ${COT_RFQ}`,
     [input.rfqId, input.newDeadlineAt],

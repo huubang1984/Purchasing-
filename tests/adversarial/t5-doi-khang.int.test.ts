@@ -202,7 +202,7 @@ async function nopBaoGia(
 /** Đẩy hạn nộp về QUÁ KHỨ mà không đụng `status` — mô phỏng "thời gian đã trôi qua". */
 async function dayHanVeQuaKhu(rfqId: string): Promise<void> {
   await db.pool.query(
-    "ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+    "ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
   );
   try {
     await db.pool.query(
@@ -211,7 +211,7 @@ async function dayHanVeQuaKhu(rfqId: string): Promise<void> {
     );
   } finally {
     await db.pool.query(
-      "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+      "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
     );
   }
 }
@@ -385,10 +385,15 @@ describe("[INV-C4] gia hạn là một hành vi có bốn điều kiện, và c�
           actorSessionId: sA,
         }),
       ),
+    ).rejects.toThrow(/đẩy hạn nộp RA XA hơn/);
+
+    // Cùng phép lùi ấy bằng SQL viết tay — lớp CSDL, thứ canh cả những đường không đi qua hàm.
+    await expect(
+      db.pool.query("UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1", [rfqId, somHon]),
     ).rejects.toThrow(/Khong duoc rut ngan hay xoa deadline/);
 
     await db.pool.query(
-      "ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+      "ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
     );
     try {
       const { rowCount } = await db.pool.query(
@@ -402,7 +407,7 @@ describe("[INV-C4] gia hạn là một hành vi có bốn điều kiện, và c�
       ]);
     } finally {
       await db.pool.query(
-        "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
+        "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
       );
     }
   });
@@ -427,30 +432,104 @@ describe("[INV-C4] gia hạn là một hành vi có bốn điều kiện, và c�
   });
 
   it("[INV-C4] vế 3: lý do rỗng bị từ chối TRƯỚC khi có bất kỳ lần ghi nào", async () => {
+    // ==========================================================================================
+    // [REVIEW AN NINH S1.7 — MED-5] TEST NÀY TỪNG VÔ NGHĨA, VÀ §4 CỦA C4 TỪNG DỰA VÀO NÓ.
+    //
+    // Bản đầu: `.rejects.toThrow()` KHÔNG mẫu — bất kỳ lần ném nào cũng cho nó xanh, kể cả một
+    // phiên sai hay một RFQ không tồn tại; rồi ba hậu điều kiện đọc trạng thái SAU khi
+    // `withTenant` đã ROLLBACK. Tức nó vẫn xanh nếu `extendRfqDeadline` ghi hạn mới, ghi sổ
+    // kiểm toán, xếp ba thông báo, RỒI mới ném. Chữ "TRƯỚC" trong tên nó chưa từng được đo.
+    //
+    // Bản này đo đúng chữ ấy: đọc ba hậu điều kiện khi VẪN CÒN TRONG giao dịch.
+    // ==========================================================================================
     const rfqId = await taoRfqMo();
     await moiNhaCungCap(rfqId);
+    const CHAN = new Error("chan-lai-de-doc-trong-giao-dich");
+
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        const loi = await extendRfqDeadline(c, orgA, {
+          rfqId,
+          newDeadlineAt: XA_HON,
+          reason: "   ",
+          actorSessionId: sA,
+        }).then(
+          () => null,
+          (e: unknown) => e as Error,
+        );
+        expect(loi?.message, "phải từ chối vì LÝ DO RỖNG, không vì một cớ nào khác").toMatch(
+          /reason/,
+        );
+
+        const { rows } = await c.query<{ han: Date; n: string; j: string }>(
+          "SELECT p.deadline_at AS han, " +
+            "(SELECT count(*)::text FROM audit_events e WHERE e.resource_id = p.id " +
+            "   AND e.action = 'RFQ_DEADLINE_EXTENDED') AS n, " +
+            "(SELECT count(*)::text FROM outbox_jobs o WHERE o.payload->>'rfqId' = p.id::text) AS j " +
+            "FROM rfq_packages p WHERE p.id = $1",
+          [rfqId],
+        );
+        expect(rows[0]?.han?.getTime(), "hạn đã bị ghi trước khi lý do được xét").toBe(
+          MAI_SAU.getTime(),
+        );
+        expect(rows[0]?.n, "sổ kiểm toán đã bị ghi trước khi lý do được xét").toBe("0");
+        expect(rows[0]?.j, "thông báo đã được xếp trước khi lý do được xét").toBe("0");
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+  });
+
+  it("[INV-C4] HỒI SINH một cửa sổ ĐÃ HẾT bị chặn — cạnh CLOSED->OPEN bằng một đường khác", async () => {
+    // [REVIEW AN NINH S1.7 — HIGH-1] Máy trạng thái CỐ Ý không có cạnh `CLOSED -> OPEN`. Nhưng
+    // vì job đóng RFQ chưa được viết — chính test [INV-C2] ở trên khẳng định điều đó — mọi RFQ
+    // quá hạn đều đang nằm ở `OPEN`. Ở đó, kiểm (b) của 011 chỉ so `NEW < OLD` và kiểm (c) chỉ
+    // so trạng thái; KHÔNG vế nào đòi cửa sổ đang gia hạn còn SỐNG.
+    //
+    // Nên: đếm số báo giá đã nhận (đường SQL viết tay mà §4 của A6 đã ghi), rồi đẩy hạn ra
+    // tương lai, và cửa thầu mở lại — cho cả người đã nộp lẫn người lỡ hạn. Đúng hình dạng
+    // thông đồng mà một hệ đấu thầu kín tồn tại để chặn.
+    const rfqId = await taoRfqMo();
+    await moiNhaCungCap(rfqId);
+    await dayHanVeQuaKhu(rfqId);
+
+    const { rows: tt } = await db.pool.query<{ status: string }>(
+      "SELECT status FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    expect(tt[0]?.status, "tiền đề: RFQ vẫn OPEN sau hạn vì không scheduler nào chạy").toBe("OPEN");
+
     await expect(
       withTenant(apiPool, orgA, (c) =>
         extendRfqDeadline(c, orgA, {
           rfqId,
           newDeadlineAt: XA_HON,
-          reason: "   ",
+          reason: "mo lai cho nguoi lo han",
           actorSessionId: sA,
         }),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/DA HET han/);
 
-    const { rows } = await db.pool.query<{ han: Date; n: string; j: string }>(
-      "SELECT p.deadline_at AS han, " +
-        "(SELECT count(*)::text FROM audit_events e WHERE e.resource_id = p.id " +
-        "   AND e.action = 'RFQ_DEADLINE_EXTENDED') AS n, " +
-        "(SELECT count(*)::text FROM outbox_jobs o WHERE o.payload->>'rfqId' = p.id::text) AS j " +
-        "FROM rfq_packages p WHERE p.id = $1",
-      [rfqId],
+    // Và bằng SQL viết tay cũng vậy — lớp này phải là trigger, không phải một câu `if`.
+    await expect(
+      db.pool.query("UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1", [rfqId, XA_HON]),
+    ).rejects.toThrow(/DA HET han/);
+
+    // ĐỐI CHỨNG DƯƠNG: một RFQ mà cửa sổ CÒN SỐNG thì vẫn gia hạn được bình thường.
+    const conSong = await taoRfqMo();
+    await moiNhaCungCap(conSong);
+    await withTenant(apiPool, orgA, (c) =>
+      extendRfqDeadline(c, orgA, {
+        rfqId: conSong,
+        newDeadlineAt: XA_HON,
+        reason: "nha cung cap xin them thoi gian",
+        actorSessionId: sA,
+      }),
     );
-    expect(rows[0]?.han?.getTime()).toBe(MAI_SAU.getTime());
-    expect(rows[0]?.n, "một lần gia hạn bị từ chối không được để lại dấu vết kiểm toán").toBe("0");
-    expect(rows[0]?.j, "và không được để lại một ý định thông báo nào").toBe("0");
+    const { rows: sau } = await db.pool.query<{ han: Date }>(
+      "SELECT deadline_at AS han FROM rfq_packages WHERE id = $1",
+      [conSong],
+    );
+    expect(sau[0]?.han?.getTime()).toBe(XA_HON.getTime());
   });
 
   it("[INV-C4] vế 4+5: gia hạn hợp lệ sinh audit VÀ đúng một thông báo cho MỖI lời mời", async () => {

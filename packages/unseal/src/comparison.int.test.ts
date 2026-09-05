@@ -326,7 +326,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
       [v3, { totalAmount: "1500000.00", currency: "VND" }],
     ]);
 
-    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId));
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
 
     // ⑴ SẮP THEO GIÁ — mệnh đề cấm nó trước mở thầu, nên nó phải có mặt SAU.
     expect(bang.rows.map((r) => r.totalAmount)).toEqual([
@@ -373,7 +373,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
 
     for (const trangThai of biTuChoi) {
       await epTrangThai(rfqId, trangThai);
-      const loi = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId)).then(
+      const loi = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool)).then(
         () => null,
         (e: unknown) => e as ComparisonDeniedError,
       );
@@ -386,7 +386,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
     // Đối chứng dương thứ hai: đưa về đúng hai trạng thái được phép thì cổng mở lại.
     for (const trangThai of COMPARISON_ALLOWED_STATUSES) {
       await epTrangThai(rfqId, trangThai);
-      const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId));
+      const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
       expect(bang.rfqStatus).toBe(trangThai);
       expect(bang.aggregates.min).toBe("500000.00");
     }
@@ -406,7 +406,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
       [v3, { totalAmount: "0.02", currency: "VND" }],
     ]);
 
-    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId));
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
     expect(bang.aggregates.max, "qua double sẽ là 99999999999999.98").toBe("99999999999999.99");
     expect(bang.aggregates.average, "qua double sẽ là 66666666666666.66").toBe(
       "66666666666666.67",
@@ -427,7 +427,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
       [v3, { totalAmount: "-1.00", currency: "VND" }],
     ]);
 
-    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId));
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
     expect(bang.rows.length, "cả ba dòng vẫn có mặt").toBe(3);
     expect(bang.aggregates.parsed).toBe(1);
     expect(bang.aggregates.unparsed).toBe(2);
@@ -463,7 +463,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
       [v2, { totalAmount: "100.00", currency: "USD" }],
     ]);
 
-    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, rfqId));
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
     expect(bang.aggregates.currencyMismatch).toBe(true);
     expect(bang.aggregates.currency).toBeNull();
     expect(bang.aggregates.min).toBeNull();
@@ -490,7 +490,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     await nopBaoGia(rfqLong, "NCC L1");
     await nopBaoGia(rfqLong, "NCC L2");
 
-    const a = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqNghiem));
+    const a = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqNghiem, actorSessionId: sYc }, apiPool));
     expect(a.disclosed).toBe(false);
     expect(a).toEqual({
       disclosed: false,
@@ -500,7 +500,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     // Hình dạng là một tuyên bố: nhánh giấu KHÔNG có trường `count` để mà đọc.
     expect(Object.keys(a).includes("count")).toBe(false);
 
-    const b = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqLong));
+    const b = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqLong, actorSessionId: sYc }, apiPool));
     expect(b).toEqual({ disclosed: true, count: 2 });
   });
 
@@ -510,14 +510,14 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
 
     for (const trangThai of ["DRAFT", "PENDING_APPROVAL", "OPEN", "CANCELLED"]) {
       await epTrangThai(rfqId, trangThai);
-      const kq = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqId));
+      const kq = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
       expect(kq.disclosed, `số báo giá bị công bố khi RFQ đang ở ${trangThai}`).toBe(false);
     }
     // `CANCELLED` nằm ở nhóm GIẤU chứ không nhóm CÔNG BỐ, và đó là một lựa chọn: một RFQ bị huỷ
     // có thể chưa từng đi qua `CLOSED`, nên hạn nộp của nó chưa chắc đã qua.
     for (const trangThai of ["CLOSED", "UNSEALED", "EVALUATING"]) {
       await epTrangThai(rfqId, trangThai);
-      const kq = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqId));
+      const kq = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
       expect(kq, `số báo giá bị giấu khi RFQ đã ở ${trangThai}`).toEqual({
         disclosed: true,
         count: 1,
@@ -536,7 +536,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     //   • RFQ ghim `csLong`   (v2, LỎNG)   trong khi sau đó có v90 NGHIÊM         -> phải CÔNG BỐ
     const rfqNghiem = await taoRfqMo(csNghiem);
     await nopBaoGia(rfqNghiem, "NCC Ghim Nghiem");
-    const a = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqNghiem));
+    const a = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqNghiem, actorSessionId: sYc }, apiPool));
     expect(a.disclosed, "ghim vào v1 NGHIÊM mà lại đọc v2 LỎNG — nhánh tra-theo-ghim đã mất").toBe(
       false,
     );
@@ -544,7 +544,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     const rfqLong = await taoRfqMo(csLong);
     await nopBaoGia(rfqLong, "NCC Ghim Long");
     await taoChinhSach(90, true);
-    const b = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqLong));
+    const b = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqLong, actorSessionId: sYc }, apiPool));
     expect(b, "chính sách BAN HÀNH SAU không được đổi phán quyết của một RFQ đã ghim").toEqual({
       disclosed: true,
       count: 1,
@@ -560,24 +560,51 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
       [orgB, MAI_SAU, uB, sB],
     );
     const rfqId = rows[0]?.id ?? "";
-    const kq = await withTenant(apiPool, orgB, (c) => countReceivedBids(c, orgB, rfqId));
+    const kq = await withTenant(apiPool, orgB, (c) => countReceivedBids(c, orgB, { rfqId: rfqId, actorSessionId: sB }, apiPool));
     expect(kq).toEqual({
       disclosed: false,
       reason: "STRICT_BLIND_BEFORE_CLOSE",
       rfqStatus: "DRAFT",
     });
 
-    // Đối chứng dương: ban hành một chính sách KHÔNG nghiêm, có hiệu lực TRƯỚC lúc RFQ ra đời,
-    // thì nguồn tra ⑵ tìm thấy nó và phán quyết lật. Không có vế này, khẳng định trên xanh kể cả
-    // khi hàm là `SELECT true`.
+    // ĐỐI CHỨNG DƯƠNG, và nó đã phải VIẾT LẠI MỘT LẦN — chuyện đáng ghi hơn bản thân phép đo.
+    //
+    // Bản đầu ban hành một chính sách với `effective_from = now() - interval '1 year'`, tức LÙI
+    // hiệu lực về trước lúc RFQ ra đời. Nó chạy, và nó xanh. Rồi review an ninh S1.7 (MED-2) chỉ
+    // ra rằng chính đường ấy là một lỗ: lùi được hiệu lực nghĩa là lật được CHẾ ĐỘ NGHIÊM của
+    // MỌI RFQ chưa có ngân sách, HỒI TỐ — trong khi 020 khẳng định nhánh ⑵ *"CỐ ĐỊNH theo thời
+    // gian"*. Câu khẳng định ấy đúng chỉ vì `createProcurementPolicy` tình cờ không truyền cột
+    // đó, chứ 014 CÓ cấp INSERT trên nó.
+    //
+    // `CHECK (effective_from >= created_at)` của 022 đóng đường ấy — và bằng chứng nó có răng là
+    // chính test này đã ĐỎ khi ràng buộc được thêm vào. Nên đối chứng dương nay đi đường THẬT:
+    // chính sách ra đời TRƯỚC, RFQ ra đời SAU.
     await db.pool.query(
       "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
-        "strict_blind_mode, effective_from, created_by, created_by_session_id) " +
-        "VALUES ($1, 1, '100000000.00', 'VND', false, now() - interval '1 year', $2, $3)",
+        "strict_blind_mode, created_by, created_by_session_id) " +
+        "VALUES ($1, 1, '100000000.00', 'VND', false, $2, $3)",
       [orgB, uB, sB],
     );
-    const sau = await withTenant(apiPool, orgB, (c) => countReceivedBids(c, orgB, rfqId));
-    expect(sau).toEqual({ disclosed: true, count: 0 });
+    const { rows: sauNay } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Mua thep tam dot hai', $2, $3, $4) RETURNING id",
+      [orgB, MAI_SAU, uB, sB],
+    );
+    const sau = await withTenant(apiPool, orgB, (c) =>
+      countReceivedBids(c, orgB, { rfqId: sauNay[0]?.id ?? "", actorSessionId: sB }, apiPool),
+    );
+    expect(sau, "chính sách KHÔNG nghiêm có hiệu lực trước RFQ thì con số được công bố").toEqual({
+      disclosed: true,
+      count: 0,
+    });
+
+    // Và RFQ CŨ — ra đời khi chưa có chính sách nào — KHÔNG bị chính sách mới kéo theo.
+    const cu = await withTenant(apiPool, orgB, (c) =>
+      countReceivedBids(c, orgB, { rfqId, actorSessionId: sB }, apiPool),
+    );
+    expect(cu.disclosed, "một chính sách ban hành SAU không được đổi phán quyết của RFQ cũ").toBe(
+      false,
+    );
   });
 
   it("[INV-A6] PHẦN CHÊNH ĐƯỢC ĐO: `app_api` VẪN đếm được bảng bằng SQL viết tay", async () => {
@@ -588,7 +615,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     await nopBaoGia(rfqId, "NCC Vong");
     await nopBaoGia(rfqId, "NCC Vong 2");
 
-    const bi = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, rfqId));
+    const bi = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
     expect(bi.disclosed).toBe(false);
 
     const { rows } = await withTenant(apiPool, orgA, (c) =>

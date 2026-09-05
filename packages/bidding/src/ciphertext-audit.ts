@@ -40,6 +40,17 @@ export interface CiphertextAuditRow {
 
 export interface CiphertextAuditReport {
   readonly rfqId: string;
+  /**
+   * [REVIEW AN NINH S1.7 — LOW-1] PHÁN QUYẾT NẰM TRONG KIỂU, KHÔNG TRONG ĐẦU NGƯỜI GỌI.
+   *
+   * Vị từ tự nhiên mà một người viết giám sát sẽ gõ là `mismatched.length === 0` — và nó IM
+   * LẶNG đúng trong ca tệ nhất: một lần khôi phục làm mất `bid_receipts` thì không còn gì để so,
+   * `mismatched` rỗng, và báo cáo trông sạch trong khi phép so đã trở thành BẤT KHẢ. `ok` gộp cả
+   * bốn điều kiện, kể cả `checked === total`.
+   */
+  readonly ok: boolean;
+  /** Tổng số phiên bản báo giá của RFQ — mẫu số của `checked`. */
+  readonly total: number;
   /** Số phiên bản báo giá đã băm lại và so được. */
   readonly checked: number;
   /** Các phiên bản mà hai chuỗi hash LỆCH nhau. Rỗng là kết quả mong đợi. */
@@ -117,5 +128,17 @@ export async function auditStoredCiphertexts(
     }
   }
 
-  return { rfqId, checked, mismatched, missingReceipt, unparsableReceipt };
+  return {
+    rfqId,
+    ok:
+      mismatched.length === 0 &&
+      missingReceipt.length === 0 &&
+      unparsableReceipt.length === 0 &&
+      checked === rows.length,
+    total: rows.length,
+    checked,
+    mismatched,
+    missingReceipt,
+    unparsableReceipt,
+  };
 }

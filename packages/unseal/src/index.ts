@@ -38,6 +38,7 @@ export {
   countReceivedBids,
   type BidCountDisclosure,
   type ComparisonAggregates,
+  type ComparisonInput,
   type ComparisonRow,
   type ComparisonTable,
 } from "./comparison.js";

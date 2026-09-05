@@ -472,14 +472,14 @@ describe("[INV-C1] hạn nộp", () => {
     // được một RFQ đã hết hạn; và deadline không bao giờ lùi được. Vô hiệu hoá trigger MÁY TRẠNG
     // THÁI để dựng fixture là hợp lệ — trigger ĐANG ĐƯỢC ĐO (`vendor_bid_versions_kiem_han_nop`)
     // vẫn bật nguyên.
-    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     try {
       await db.pool.query(
         "UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1",
         [bc.rfqId],
       );
     } finally {
-      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
 
     await expect(
@@ -518,14 +518,14 @@ describe("[INV-C1] hạn nộp", () => {
   it("[INV-C1] ĐỘT BIẾN: gỡ trigger hạn nộp thì một báo giá TRỄ đi lọt", async () => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
-    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     try {
       await db.pool.query(
         "UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1",
         [bc.rfqId],
       );
     } finally {
-      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
 
     await db.pool.query("DROP TRIGGER vendor_bid_versions_kiem_han_nop ON vendor_bid_versions");

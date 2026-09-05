@@ -427,7 +427,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
 
   it("bước 7 — [A6] trước khi đóng, số báo giá đã nhận bị GIẤU; sau khi đóng thì công bố", async () => {
     const truoc = await withTenant(apiPool, orgA, (c) =>
-      countReceivedBids(c, orgA, trangThai.rfqId),
+      countReceivedBids(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool),
     );
     expect(truoc, "chính sách mặc định là chế độ nghiêm — con số này chưa được nói ra").toEqual({
       disclosed: false,
@@ -444,7 +444,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
     );
 
     const sau = await withTenant(apiPool, orgA, (c) =>
-      countReceivedBids(c, orgA, trangThai.rfqId),
+      countReceivedBids(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool),
     );
     expect(sau).toEqual({ disclosed: true, count: 5 });
   });
@@ -453,7 +453,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
     // Đây là khoảnh khắc nguy hiểm nhất của cả kịch bản: hạn đã hết, mọi báo giá đã nằm trong
     // CSDL, và người mua có mọi lý do để muốn nhìn. Không có gì nhìn được.
     await expect(
-      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, trangThai.rfqId)),
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool)),
     ).rejects.toThrow(/RFQ đang ở CLOSED/);
 
     const { rows } = await withTenant(apiPool, orgA, (c) =>
@@ -529,13 +529,13 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       }),
     );
     expect(ketQua.opened, "năm luồng báo giá, năm bản rõ").toBe(5);
-    expect(ketQua.failed).toBe(0);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
     expect(ketQua.rfqId).toBe(trangThai.rfqId);
   });
 
   it("bước 12 — BẢNG SO SÁNH: năm dòng, sắp theo giá, và giá SỬA LẠI thắng giá đầu", async () => {
     const bang = await withTenant(apiPool, orgA, (c) =>
-      buildComparisonTable(c, orgA, trangThai.rfqId),
+      buildComparisonTable(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool),
     );
     expect(bang.rfqStatus).toBe("UNSEALED");
     expect(bang.rows.length).toBe(5);

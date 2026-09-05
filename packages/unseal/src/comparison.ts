@@ -27,6 +27,7 @@
 
 import type pg from "pg";
 import { assertTenantBound } from "@trustprocure/audit";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 
 /**
  * Hai trạng thái mà một bảng so sánh được phép tồn tại.
@@ -148,6 +149,47 @@ interface HangTongHop {
   readonly duoi_ngan_sach: number | null;
 }
 
+export interface ComparisonInput {
+  readonly rfqId: string;
+  /** [ADR-016] Phiên của CHÍNH người đọc. Danh tính — và vì thế quyền — là dẫn xuất của nó. */
+  readonly actorSessionId: string;
+}
+
+/**
+ * [REVIEW AN NINH S1.6 — MED-5] BẢNG GIÁ SAU MỞ THẦU LÀ MỘT THỨ CÓ QUYỀN, KHÔNG PHẢI MỘT THỨ AI
+ * GẮN ĐÚNG TỔ CHỨC CŨNG ĐỌC ĐƯỢC.
+ *
+ * Tới trước vòng sửa này, hai hàm dưới đây chỉ gọi `assertTenantBound` rồi kiểm trạng thái RFQ.
+ * Hệ quả: `bid.view` — một mã quyền CÓ THẬT trong `permissions.ts` và trong 005 — **không được
+ * cưỡng chế ở một dòng mã nào của cả dự án**; `grep` cho 0 hit ngoài test. Một người dùng vai
+ * `TECHNICAL` hay `REQUESTER` không phân biệt được với một `DIRECTOR`, và một phiên khách thì
+ * chỉ bị ngăn bởi việc CHƯA CÓ route nào — tức bởi sự vắng mặt của tính năng, không bởi một lớp.
+ *
+ * A1 vẫn đúng như câu chữ của nó (trước mở thầu không có gì để trả về). Thứ thiếu là uỷ quyền
+ * SAU mở thầu, và đó là chỗ A5 sẽ đổ vào khi `app_guest` ra đời (khoản nợ 29).
+ */
+async function batBuocQuyenXemGia(
+  client: pg.PoolClient,
+  orgId: string,
+  input: ComparisonInput,
+  auditPool: pg.Pool,
+  ten: string,
+): Promise<void> {
+  batBuocUuid(input.actorSessionId, `${ten}.actorSessionId`);
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.BID_VIEW,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+}
+
 function batBuocUuid(gia: string, ten: string): void {
   if (!UUID_PATTERN.test(gia)) {
     throw new ComparisonError(`${ten} phải là UUID hợp lệ, nhận được: "${gia}".`);
@@ -176,10 +218,13 @@ async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<strin
 export async function buildComparisonTable(
   client: pg.PoolClient,
   orgId: string,
-  rfqId: string,
+  input: ComparisonInput,
+  auditPool: pg.Pool,
 ): Promise<ComparisonTable> {
   await assertTenantBound(client, orgId, "buildComparisonTable");
+  const { rfqId } = input;
   batBuocUuid(rfqId, "rfqId");
+  await batBuocQuyenXemGia(client, orgId, input, auditPool, "buildComparisonTable");
 
   const trangThai = await docTrangThai(client, rfqId);
   if (!(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(trangThai)) {
@@ -278,10 +323,13 @@ export async function buildComparisonTable(
 export async function countReceivedBids(
   client: pg.PoolClient,
   orgId: string,
-  rfqId: string,
+  input: ComparisonInput,
+  auditPool: pg.Pool,
 ): Promise<BidCountDisclosure> {
   await assertTenantBound(client, orgId, "countReceivedBids");
+  const { rfqId } = input;
   batBuocUuid(rfqId, "rfqId");
+  await batBuocQuyenXemGia(client, orgId, input, auditPool, "countReceivedBids");
 
   const { rows } = await client.query<{ status: string; nghiem: boolean }>(
     "SELECT status, rfq_che_do_nghiem(id) AS nghiem FROM rfq_packages WHERE id = $1",

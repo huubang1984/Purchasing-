@@ -127,6 +127,14 @@ export function parseReceiptText(text: string): ReceiptFields & { readonly alg: 
 
   const version = Number(doc["version"]);
   batBuoc(Number.isInteger(version) && version > 0, "version không phải số nguyên dương.");
+  // [REVIEW AN NINH S1.7 — LOW-2] `buildReceiptText` ép `HEX64_PATTERN` lúc DỰNG; lúc ĐỌC thì
+  // không ép gì, và người đọc chính là job toàn vẹn của B5. Một chuỗi hash viết HOA hoặc hỏng
+  // định dạng sẽ được báo là LỆCH (một sự cố toàn vẹn lưu trữ) thay vì là BIÊN NHẬN HỎNG (một
+  // khiếm khuyết định dạng) — nó fail-safe, nhưng nó chỉ người trực đêm sang đúng hướng sai.
+  batBuoc(
+    HEX64_PATTERN.test(doc["ciphertext_sha256"] ?? ""),
+    "ciphertext_sha256 không phải 64 ký tự hex thường.",
+  );
   return {
     alg: doc["alg"] ?? "",
     kid: doc["kid"] ?? "",

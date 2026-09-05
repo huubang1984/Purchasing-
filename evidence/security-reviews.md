@@ -1,4 +1,4 @@
-# Dấu vết review an ninh — S0
+# Dấu vết review an ninh — S0 và S1
 
 > **Vì sao file này tồn tại.** Điều kiện hoàn thành S0 mục 8 đòi `security-reviewer` chạy trên
 > task 4–9 và mọi phát hiện CRITICAL/HIGH được xử lý. Cho tới cuối S0, toàn bộ bằng chứng cho
@@ -252,3 +252,56 @@ Câu hỏi một reviewer nên hỏi, theo thứ tự:
 Hai dòng in đậm ở cột phải là hai chỗ **đã biết là hở**, cả hai có khoản nợ mang số. Chúng được
 viết ra ở đây để lượt review không tốn thời gian tìm lại, và để nếu reviewer tìm ra một chỗ hở
 **thứ ba** thì đó là một phát hiện thật chứ không phải một thứ đã biết.
+
+
+---
+
+# S1 — bốn lượt review, một vòng sửa
+
+> **Điều kiện #6 của kế hoạch S1** đòi *"một buổi `security-reviewer` cho mỗi hạng mục có dấu ⭐,
+> ghi vào `evidence/security-reviews.md` theo đúng định dạng đã có"*. Bốn lượt dưới đây chạy
+> **cùng lúc, trên cùng một commit**, mỗi lượt một phạm vi tách rời.
+>
+> **Khác biệt so với bảng S0, và nó quan trọng:** bốn reviewer này KHÔNG CÓ Bash, KHÔNG CÓ cơ sở
+> dữ liệu, và KHÔNG chạy được một test nào — chỉ `Read`/`Grep`/`Glob`. Mọi phát hiện là **đọc mã**,
+> không phải **đo**. Cả bốn đều tự khai điều đó trong báo cáo. Hệ quả đọc được ở cột "Đóng ở":
+> phần lớn phát hiện được xác minh lại bằng một phép đo TRƯỚC khi sửa — và một phát hiện đã được
+> xác minh là **sai một nửa** (xem ghi chú ⑵).
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.3** ⭐ | Lời mời, magic link, OTP, phiên khách (RE-review sau vòng sửa đầu) | `388bd86` | Reviewer **không có Bash/CSDL** — tự khai; mọi kết luận là đọc mã | **1 HIGH + 5 MEDIUM + 6 LOW** (`HIGH-1`: ADR-015 mục 1 so NHÃN kênh, mà `SMS` và `ZALO_ZNS` cùng đọc `supplier_contacts.phone` ⇒ hai yếu tố tới cùng một máy) | `f0f4ea3` |
+| **S1.4** ⭐ | Phong bì niêm phong, vòng đời khoá RFQ, WebCrypto phía NCC | `388bd86` | như trên | **2 HIGH + 2 MEDIUM + 5 LOW** (`HIGH-1`: worker ghim `algorithm = 'ECDH_P256'` trong khi `chooseKeyAgreementAlgorithm` **ưu tiên X25519** ⇒ báo giá có biên nhận đã ký bị bỏ trong im lặng) | `f0f4ea3` |
+| **S1.6** ⭐ | Cổng chính sách bốn vế, phê duyệt kép, worker, giải mã | `388bd86` | như trên | **3 HIGH + 5 MEDIUM + 4 LOW** (`HIGH-1`: một byte `U+0000` trong bản rõ của MỘT nhà cung cấp làm cả lượt mở thầu rollback vĩnh viễn; `HIGH-2a`: break-glass tới `APPROVED` với KHÔNG nhân chứng nào; `HIGH-3`: một câu SAI về GRANT đang che một lớp có thật) | `f0f4ea3` |
+| **S1.7 + S1.8** ⭐ | Bảng so sánh, số báo giá, job toàn vẹn B5, bộ đối kháng T5 | `388bd86` | như trên | **1 HIGH + 5 MEDIUM + 2 LOW** (`HIGH-1`: `extendRfqDeadline` HỒI SINH được một cửa sổ thầu đã hết — cạnh `CLOSED -> OPEN` mà máy trạng thái cố ý không có, đạt được bằng một đường khác) | `f0f4ea3` |
+
+## Ghi chú
+
+⑴ **Bảy phát hiện mức HIGH, cả bảy đã đóng bằng mã, và mỗi cái để lại một phép đo.** Vòng sửa
+nằm trong migration `022_security_review_s1.sql` cộng bảy file mã. Không phát hiện nào được đóng
+bằng một dòng chú thích.
+
+⑵ **Một phát hiện đã được xác minh là SAI MỘT NỬA trước khi sửa, và nó được ghi ra chứ không làm
+tròn.** Báo cáo S1.4 xếp `HIGH-1` (X25519) là *"latent, không live"* — đúng; nhưng nó cũng viết
+rằng *"không production module nào gọi `chooseKeyAgreementAlgorithm`"*, và từ đó suy rằng lỗi chỉ
+kích hoạt khi có giao diện. Vế suy luận ấy đúng, nhưng nó KHÔNG làm cho lỗi nhẹ đi: `issueRfqKeyPair`
+mặc định sinh CẢ HAI cặp khoá ngay hôm nay, nên dữ liệu đã ở hình dạng nguy hiểm trước khi có
+giao diện. Bản sửa vì thế đi xa hơn khuyến nghị: worker chọn khoá theo thứ **phong bì tự khai**
+(`describeEnvelope`), không theo một hằng số.
+
+⑶ **Một phát hiện đã lật ngược một câu do CHÍNH DỰ ÁN viết ba lần.** `S1.6 HIGH-3`: chú thích ở
+`packages/unseal/src/gate.ts`, ở `apps/unseal-worker/src/index.ts` và §4 của D1 đều nói
+*"`app_unseal` cố ý không đọc được `users`"*. `006_sessions_and_mfa.sql:232` và `:305` nói ngược
+lại, và 006 ghi rõ là cấp *"vì bất biến D1"*. Ba bản sao của một câu sai đã biện minh cho việc
+KHÔNG kiểm lại MFA ở đúng hành động không thu hồi được của hệ thống. Cả ba nay bị **gạch bỏ tại
+chỗ, giữ nguyên văn**, và lớp bị che nay đã được cài.
+
+⑷ **Điều này chứng minh gì, và không chứng minh gì.**
+**Chứng minh:** bốn lượt review đã chạy trên commit `388bd86`; các phát hiện mức HIGH được liệt
+kê ở trên đều có một phép đo tương ứng trong bộ test của nhánh này, và mỗi phép đo ấy được dựng
+để ĐỎ nếu bản sửa bị gỡ đi.
+**Không chứng minh:** rằng bốn báo cáo ấy đã quét hết. Cả bốn reviewer đọc mã bằng mắt, không
+chạy được gì, và không lượt nào tự nhận là đã vét cạn. Các mã MEDIUM/LOW chưa đóng được ghi
+thành khoản nợ có tên ở `docs/STATE.md`.
