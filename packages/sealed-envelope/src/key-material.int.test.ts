@@ -24,7 +24,14 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { getRfqPublicKeys, issueRfqKeyPair, revokeRfqKeyMaterial, sealBid } from "./index.js";
+import {
+  getRfqPublicKeys,
+  issueRfqKeyPair,
+  listPurgeableKeyMaterial,
+  purgeRfqKeyMaterial,
+  revokeRfqKeyMaterial,
+  sealBid,
+} from "./index.js";
 import { unsealBid } from "./unseal.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -64,6 +71,12 @@ let orgA: string;
 let orgB: string;
 let uA: string, uB: string;
 let sA: string, sB: string;
+// [khoản nợ 26] Một người CÓ vai trò PROCUREMENT_MANAGER trong tổ chức A. `uA` cố ý không có
+// vai trò nào — nhờ vậy cặp (uA, uQuanLy) tự nó là một đối chứng hai chiều cho cổng quyền của
+// `purgeRfqKeyMaterial`, thay vì một khẳng định "bị từ chối" mà không ai chứng minh được có
+// đường nào ĐI QUA.
+let uQuanLy: string;
+let sQuanLy: string;
 /** [ADR-017] Chính sách mua sắm của mỗi tổ chức — thứ làm `requires_dual_approval = false` hợp lệ. */
 let csA: string, csB: string;
 
@@ -162,10 +175,22 @@ beforeAll(async () => {
   sA = await taoPhien(orgA, uA);
   sB = await taoPhien(orgB, uB);
 
+  const qlRows = await db.pool.query<{ id: string }>(
+    "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'ql@vidu.vn', 'Truong phong mua') " +
+      "RETURNING id",
+    [orgA],
+  );
+  uQuanLy = qlRows.rows[0]?.id ?? "";
+  sQuanLy = await taoPhien(orgA, uQuanLy);
+  await db.pool.query(
+    "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')",
+    [orgA, uQuanLy],
+  );
+
   csA = await taoChinhSach(orgA, uA, sA);
   csB = await taoChinhSach(orgB, uB, sB);
 
-  expect([orgA, orgB, uA, uB, sA, sB, csA, csB].filter((x) => x === "")).toEqual([]);
+  expect([orgA, orgB, uA, uB, sA, sB, csA, csB, uQuanLy, sQuanLy].filter((x) => x === "")).toEqual([]);
   apiPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
 }, 180000);
@@ -674,5 +699,236 @@ describe("đột biến — chứng minh từng lớp là thứ ĐANG chặn, kh
     } finally {
       await db.pool.query("REVOKE SELECT (wrapped_private_key) ON rfq_key_material FROM app_api");
     }
+  });
+});
+
+// ===============================================================================================
+// [khoản nợ 26] TỪ MỘT DẤU THÀNH MỘT SỰ THẬT MẬT MÃ — BỐN ĐIỀU KIỆN, ĐO TỪNG CÁI MỘT
+//
+// Khối (4) của `017` viết: *"thu hồi ở đây là MỘT DẤU, không phải một lần XOÁ MẬT MÃ ... Quyết
+// định ấy thuộc về S1.6, nơi có cổng chính sách để đặt nó vào."* `026` là quyết định; nhóm này
+// là phép đo của nó.
+//
+// KHUÔN ĐO: mỗi điều kiện được đo bằng *một trạng thái chỉ sai đúng điều kiện ấy* — cùng khuôn
+// đã dùng cho phép hội bốn vế của D1. Ba ca từ chối dưới đây khác nhau đúng một biến, và ca
+// thuận ở đầu chứng minh cả bốn cùng thoả thì đường đi THÔNG.
+// ===============================================================================================
+describe("[khoản nợ 26] xoá mật mã vật liệu khoá — bốn điều kiện và một đối chứng dương", () => {
+  /** Đặt quãng ân hạn lên CHÍNH chính sách đã ghim của tổ chức A. */
+  async function datAnHan(gio: number | null): Promise<void> {
+    // Dùng pool siêu quyền: `014` cố ý KHÔNG cấp `UPDATE` trên bảng chính sách cho `app_api`
+    // (chính sách chỉ thêm phiên bản mới, không sửa tại chỗ). Đây là dàn cảnh, không phải một
+    // đường đi sản phẩm — nói ra để không ai đọc test này thành "ứng dụng sửa được chính sách".
+    await db.pool.query(
+      "UPDATE org_procurement_policies SET key_purge_grace_hours = $2 WHERE id = $1",
+      [csA, gio],
+    );
+  }
+
+  /** Một RFQ mở rồi huỷ ngay — tức khoá đã sinh và đã bị THU HỒI. */
+  async function rfqDaHuy(): Promise<string> {
+    const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    await moRfq(orgA, rfqId, uA, sA);
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = $2, " +
+        "cancelled_by_session_id = $3 WHERE id = $1",
+      [rfqId, uA, sA],
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      revokeRfqKeyMaterial(c, orgA, { rfqId, reason: "Huy goi thau", actorSessionId: sA }),
+    );
+    return rfqId;
+  }
+
+  /** Số hàng của một RFQ còn giữ khoá riêng. Hỏi bằng `app_unseal` — vai trò duy nhất đọc được. */
+  async function conKhoa(rfqId: string): Promise<number> {
+    // Qua `withTenant`: `rfq_key_material` có `FORCE ROW LEVEL SECURITY`, nên một pool chưa gắn
+    // `app.org_id` đọc ra RỖNG chứ không lỗi — và một phép đếm rỗng sẽ làm mọi khẳng định
+    // "khoá đã biến mất" dưới đây xanh giả. Đã tự vấp đúng cái đó khi viết nhóm này.
+    const { rows } = await withTenant(unsealPool, orgA, (c) =>
+      c.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM rfq_key_material " +
+          " WHERE rfq_id = $1 AND wrapped_private_key IS NOT NULL",
+        [rfqId],
+      ),
+    );
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  const CAU_UPDATE_XOA =
+    "UPDATE rfq_key_material SET wrapped_private_key = NULL, purged_at = now(), " +
+    "purged_by = $2, purged_by_session_id = $3 WHERE rfq_id = $1";
+
+  it("[khoản nợ 26] ĐỐI CHỨNG DƯƠNG: đủ bốn điều kiện thì khoá BIẾN MẤT, và có bản ghi", async () => {
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    expect(
+      await conKhoa(rfqId),
+      "trước khi xoá phải CÒN khoá — nếu không, ca này rỗng ruột",
+    ).toBeGreaterThan(0);
+
+    const duDieuKien = await withTenant(apiPool, orgA, (c) =>
+      listPurgeableKeyMaterial(c, orgA, rfqId),
+    );
+    expect(duDieuKien.length).toBeGreaterThan(0);
+    expect(duDieuKien.every((h) => h.eligible && h.reason === "DU_DIEU_KIEN")).toBe(true);
+
+    const soXoa = await withTenant(apiPool, orgA, (c) =>
+      purgeRfqKeyMaterial(
+        c,
+        orgA,
+        { rfqId, actorSessionId: sQuanLy, expectedCount: duDieuKien.length },
+        db.pool,
+      ),
+    );
+    expect(soXoa).toBe(duDieuKien.length);
+
+    // VẾ CHỊU LỰC: sau lời gọi, KHÔNG AI mở được nữa — kể cả `app_unseal`, vai trò duy nhất từng
+    // đọc được cột này. Đây là chỗ một quy tắc CHÍNH SÁCH trở thành một sự thật MẬT MÃ.
+    expect(await conKhoa(rfqId)).toBe(0);
+
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'RFQ_KEY_MATERIAL_PURGED'",
+      [orgA],
+    );
+    expect(Number(rows[0]?.n ?? "0"), "một lần phá huỷ không được đi qua trong im lặng").toBe(soXoa);
+  });
+
+  it("[khoản nợ 26] vế 1 CHƯA THU HỒI: khoá của một RFQ đang MỞ không xoá được", async () => {
+    await datAnHan(0);
+    const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    await moRfq(orgA, rfqId, uA, sA);
+
+    const ds = await withTenant(apiPool, orgA, (c) => listPurgeableKeyMaterial(c, orgA, rfqId));
+    expect(ds.length).toBeGreaterThan(0);
+    expect(ds.every((h) => !h.eligible && h.reason === "CHUA_THU_HOI")).toBe(true);
+
+    // Và trigger chặn kể cả khi ai đó đi vòng qua mặt tiền, viết thẳng câu UPDATE.
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query(CAU_UPDATE_XOA, [rfqId, uA, sA])),
+    ).rejects.toThrow(/DA THU HOI/iu);
+    expect(await conKhoa(rfqId)).toBeGreaterThan(0);
+  });
+
+  it("[khoản nợ 26] vế 2 CÒN TRONG ÂN HẠN: đã thu hồi nhưng chưa tới hạn thì vẫn không xoá được", async () => {
+    await datAnHan(8760);
+    const rfqId = await rfqDaHuy();
+
+    const ds = await withTenant(apiPool, orgA, (c) => listPurgeableKeyMaterial(c, orgA, rfqId));
+    expect(ds.length).toBeGreaterThan(0);
+    expect(ds.every((h) => !h.eligible && h.reason === "CON_TRONG_AN_HAN")).toBe(true);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query(CAU_UPDATE_XOA, [rfqId, uA, sA])),
+    ).rejects.toThrow(/an han/iu);
+    expect(await conKhoa(rfqId)).toBeGreaterThan(0);
+  });
+
+  it("[khoản nợ 26] vế 3 CHÍNH SÁCH TẮT (NULL): không có đường nào xoá được, kể cả đã thu hồi", async () => {
+    await datAnHan(null);
+    const rfqId = await rfqDaHuy();
+
+    const ds = await withTenant(apiPool, orgA, (c) => listPurgeableKeyMaterial(c, orgA, rfqId));
+    expect(ds.length).toBeGreaterThan(0);
+    expect(ds.every((h) => !h.eligible && h.reason === "CHINH_SACH_TAT")).toBe(true);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query(CAU_UPDATE_XOA, [rfqId, uA, sA])),
+    ).rejects.toThrow(/KHONG bat xoa/iu);
+    expect(await conKhoa(rfqId)).toBeGreaterThan(0);
+  });
+
+  it("[khoản nợ 26] vế 4 CHỈ VỀ NULL: không thay được khoá bằng một giá trị khác", async () => {
+    // Ca nguy hiểm nhất mà việc cấp `UPDATE (wrapped_private_key)` cho `app_api` mở ra: THAY khoá
+    // bằng một khoá của kẻ tấn công. `app_api` không ĐỌC được cột này nên nó cũng không kiểm
+    // chứng được mình đang thay bằng cái gì — chỉ trigger đứng giữa.
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "UPDATE rfq_key_material SET wrapped_private_key = $2, purged_at = now(), " +
+            "purged_by = $3, purged_by_session_id = $4 WHERE rfq_id = $1",
+          [rfqId, Buffer.from("khoa cua ke tan cong"), uA, sA],
+        ),
+      ),
+    ).rejects.toThrow(/khong duoc thay gia tri khac/iu);
+    expect(await conKhoa(rfqId)).toBeGreaterThan(0);
+  });
+
+  it("[khoản nợ 26] ĐÁNH DẤU MÀ KHÔNG XOÁ là một câu nói dối, và nó bị chặn", async () => {
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "UPDATE rfq_key_material SET purged_at = now(), purged_by = $2, " +
+            "purged_by_session_id = $3 WHERE rfq_id = $1",
+          [rfqId, uA, sA],
+        ),
+      ),
+    ).rejects.toThrow(/purged_at chi duoc dat CUNG LUC|rfq_key_material_xoa_dong_bo/iu);
+  });
+
+  it("[khoản nợ 26] XOÁ LÀ MỘT CHIỀU: hàng đã xoá không sửa được nữa, kể cả bởi superuser", async () => {
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    const ds = await withTenant(apiPool, orgA, (c) => listPurgeableKeyMaterial(c, orgA, rfqId));
+    await withTenant(apiPool, orgA, (c) =>
+      purgeRfqKeyMaterial(
+        c,
+        orgA,
+        { rfqId, actorSessionId: sQuanLy, expectedCount: ds.length },
+        db.pool,
+      ),
+    );
+
+    // Siêu người dùng vượt được RLS và GRANT nhưng KHÔNG vượt được trigger — cùng lập luận đã
+    // dựng trigger bất biến cho `audit_events` ở `003`.
+    await expect(
+      db.pool.query("UPDATE rfq_key_material SET wrapped_private_key = $2 WHERE rfq_id = $1", [
+        rfqId,
+        Buffer.from("khoi phuc lai"),
+      ]),
+    ).rejects.toThrow(/da bi xoa/iu);
+  });
+
+  it("[khoản nợ 26] SỐ HÀNG KHAI SAI thì KHÔNG xoá gì cả", async () => {
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    const truoc = await conKhoa(rfqId);
+    expect(truoc).toBeGreaterThan(0);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        purgeRfqKeyMaterial(
+          c,
+          orgA,
+          { rfqId, actorSessionId: sQuanLy, expectedCount: 99 },
+          db.pool,
+        ),
+      ),
+    ).rejects.toThrow(/Không xoá gì cả/u);
+    expect(await conKhoa(rfqId), "một lần khai sai không được xoá nửa vời").toBe(truoc);
+  });
+
+  it("[khoản nợ 26] KHÔNG CÓ QUYỀN `rfq.key.purge` thì dừng ở cổng, không tới trigger", async () => {
+    // `uA` là người mua KHÔNG có vai trò nào trong bộ dàn cảnh này — cổng quyền phải chặn TRƯỚC
+    // khi chạm tới vật liệu khoá. Đối chứng dương của chính vế này là ca thuận ở đầu nhóm, nơi
+    // `sQuanLy` (PROCUREMENT_MANAGER) đi qua được.
+    await datAnHan(0);
+    const rfqId = await rfqDaHuy();
+    const ds = await withTenant(apiPool, orgA, (c) => listPurgeableKeyMaterial(c, orgA, rfqId));
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        purgeRfqKeyMaterial(
+          c,
+          orgA,
+          { rfqId, actorSessionId: sA, expectedCount: ds.length },
+          db.pool,
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(await conKhoa(rfqId)).toBeGreaterThan(0);
   });
 });

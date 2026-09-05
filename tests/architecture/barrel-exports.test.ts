@@ -549,6 +549,12 @@ const DANH_SACH_TRANG_SEALED_ENVELOPE = [
   "describeEnvelope",
   "getRfqPublicKeys",
   "issueRfqKeyPair",
+  // [khoản nợ 26] Hai symbol MỚI, và chúng là cặp duy nhất ở cửa này đứng sau một hành động
+  // KHÔNG ĐẢO NGƯỢC ĐƯỢC. Chúng đi cùng nhau có chủ đích: `listPurgeableKeyMaterial` chỉ ĐỌC và
+  // trả lời "cái gì đủ điều kiện, cái gì không thì vì sao", nên một màn hình gọi `purge...` mà
+  // không gọi nó là một màn hình bắt người ta bấm mù. Xem `026` mục (4).
+  "listPurgeableKeyMaterial",
+  "purgeRfqKeyMaterial",
   "revokeRfqKeyMaterial",
   "sealBid",
 ];

@@ -17,7 +17,7 @@ import type { webcrypto } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import type { KeyWrapper } from "@trustprocure/crypto-keys";
-import { resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import {
   assertAlgorithm,
   assertRfqId,
@@ -258,6 +258,143 @@ export async function revokeRfqKeyMaterial(
       resourceType: "rfq_key_material",
       resourceId: input.rfqId,
       payload: { algorithm: hang.algorithm, reason },
+    });
+  }
+  return rows.length;
+}
+
+// ==============================================================================================
+// [khoản nợ 26] TỪ MỘT DẤU THÀNH MỘT SỰ THẬT MẬT MÃ
+//
+// Khối (4) của `017` để lại câu hỏi *"thu hồi là một DẤU, không phải một lần XOÁ MẬT MÃ"* và giao
+// nó cho S1.6. `026` là quyết định; đây là mặt tiền của nó.
+//
+// Hai hàm, và sự tách đôi ấy là load-bearing: `listPurgeableKeyMaterial` chỉ ĐỌC — nó trả lời
+// *"cái gì đủ điều kiện, và cái gì không thì vì sao"* — còn `purgeRfqKeyMaterial` là hành động.
+// Một mặt tiền duy nhất kiểu `purgeIfEligible()` sẽ khiến màn hình gọi nó mà không bao giờ hiển
+// thị được cho người bấm biết họ sắp phá huỷ cái gì.
+// ==============================================================================================
+
+/** Vì sao một hàng KHÔNG xoá được — nguyên văn từ `rfq_khoa_du_dieu_kien_xoa()` của `026`. */
+export type LyDoChuaXoaDuoc =
+  | "DU_DIEU_KIEN"
+  | "DA_XOA"
+  | "CHUA_THU_HOI"
+  | "CHINH_SACH_TAT"
+  | "CON_TRONG_AN_HAN";
+
+export interface PurgeableKeyMaterial {
+  readonly keyMaterialId: string;
+  readonly revokedAt: Date | null;
+  readonly eligible: boolean;
+  readonly reason: LyDoChuaXoaDuoc;
+}
+
+/**
+ * Đọc trạng thái đủ-điều-kiện-xoá của mọi vật liệu khoá thuộc một RFQ.
+ *
+ * Phép tính nằm ở CSDL (`rfq_khoa_du_dieu_kien_xoa`), không ở đây: quãng ân hạn phải đo trên cùng
+ * đồng hồ đã ghi `revoked_at`. Xem mục (4) của `026`.
+ */
+export async function listPurgeableKeyMaterial(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+): Promise<PurgeableKeyMaterial[]> {
+  await assertTenantBound(client, orgId, "listPurgeableKeyMaterial");
+  assertRfqId(rfqId);
+  const { rows } = await client.query<{
+    key_material_id: string;
+    revoked_at: Date | null;
+    du_dieu_kien: boolean;
+    ly_do: LyDoChuaXoaDuoc;
+  }>("SELECT * FROM rfq_khoa_du_dieu_kien_xoa($1)", [rfqId]);
+  return rows.map((h) => ({
+    keyMaterialId: h.key_material_id,
+    revokedAt: h.revoked_at,
+    eligible: h.du_dieu_kien,
+    reason: h.ly_do,
+  }));
+}
+
+export interface PurgeRfqKeyMaterialInput {
+  readonly rfqId: string;
+  readonly actorSessionId: string;
+  /**
+   * Người gọi phải nhắc lại SỐ HÀNG mình đang phá huỷ.
+   *
+   * Đây không phải một phép kiểm an ninh — người gọi tự đặt được con số. Nó là một phép kiểm
+   * CHỦ ĐÍCH, cùng khuôn "gõ lại tên kho để xoá": một lời gọi đi qua vì người viết nó nghĩ hàm
+   * này chỉ đánh dấu gì đó sẽ dừng ở đây thay vì ở lúc không còn khoá nào để mở.
+   */
+  readonly expectedCount: number;
+}
+
+/**
+ * [khoản nợ 26] Xoá vật liệu khoá ĐÃ THU HỒI của một RFQ.
+ *
+ * KHÔNG ĐẢO NGƯỢC ĐƯỢC. Sau lời gọi này, mọi báo giá đã niêm phong của RFQ ấy là rác ngẫu nhiên
+ * đối với mọi người, kể cả chúng ta.
+ *
+ * Bốn điều kiện của `026` được cưỡng chế bởi TRIGGER, không bởi hàm này — hàm này chỉ gọi tới và
+ * để lỗi nổi lên. Đó là chủ đích: một phép kiểm ở tầng ứng dụng là một phép kiểm mà đường thứ hai
+ * đi vòng được.
+ */
+export async function purgeRfqKeyMaterial(
+  client: pg.PoolClient,
+  orgId: string,
+  input: PurgeRfqKeyMaterialInput,
+  auditPool: pg.Pool,
+): Promise<number> {
+  await assertTenantBound(client, orgId, "purgeRfqKeyMaterial");
+  assertRfqId(input.rfqId);
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  // Cổng quyền đi TRƯỚC mọi lần ghi sổ trong cùng giao dịch: `requirePermission` ghi bản ghi từ
+  // chối của nó ở một giao dịch ĐỘC LẬP, và khoá tư vấn của chuỗi kiểm toán sẽ kẹt nếu giao dịch
+  // này đã cầm nó.
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.RFQ_KEY_PURGE,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  const duDieuKien = (await listPurgeableKeyMaterial(client, orgId, input.rfqId)).filter(
+    (h) => h.eligible,
+  );
+  if (duDieuKien.length !== input.expectedCount) {
+    throw new SealedEnvelopeError(
+      `purgeRfqKeyMaterial: người gọi khai ${String(input.expectedCount)} hàng nhưng có ` +
+        `${String(duDieuKien.length)} hàng đủ điều kiện. Không xoá gì cả.`,
+    );
+  }
+  if (duDieuKien.length === 0) return 0;
+
+  const { rows } = await client.query<{ id: string; algorithm: string }>(
+    `UPDATE rfq_key_material
+        SET wrapped_private_key = NULL, purged_at = now(),
+            purged_by = $2, purged_by_session_id = $3
+      WHERE rfq_id = $1 AND id = ANY($4::uuid[])
+      RETURNING id, algorithm`,
+    [input.rfqId, actor.id, actor.sessionId, duDieuKien.map((h) => h.keyMaterialId)],
+  );
+
+  for (const hang of rows) {
+    await appendAuditEvent(client, orgId, {
+      actorType: actor.type,
+      actorId: actor.id,
+      // KHÔNG đặt tên là `CRYPTO_ERASED`. `UPDATE ... = NULL` xoá GIÁ TRỊ; byte cũ còn trong hàng
+      // chết, WAL, bản sao lưu và bản standby. Bảo đảm mật mã thật chỉ đóng khi khoá chủ ở KMS
+      // cũng bị huỷ — xem khối "GIỚI HẠN" của `026`.
+      action: "RFQ_KEY_MATERIAL_PURGED",
+      resourceType: "rfq_key_material",
+      resourceId: hang.id,
+      payload: { algorithm: hang.algorithm, rfqId: input.rfqId },
     });
   }
   return rows.length;

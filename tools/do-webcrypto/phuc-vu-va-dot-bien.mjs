@@ -3,7 +3,11 @@
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 
-const html = readFileSync(new URL("./do-webcrypto.html", import.meta.url), "utf8");
+// [khoan no 20] Duong dan nay TUNG SAI: no doc "./do-webcrypto.html", mot ten khong con ton tai
+// (trang do da doi ten thanh index.html). Server dot bien nem ENOENT ngay dong dau va KHONG AI
+// BIET, vi `tsc` khong nhin thay duong dan dang chuoi va khong test nao goi toi file .mjs nay.
+// Lop canh moi o tests/architecture/bao-dam-mot-he-dieu-hanh.test.ts tim ra no ngay lan chay dau.
+const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 
 const DOT = {
   // Chan CA HAI cach khai bao X25519. P-256 van chay.

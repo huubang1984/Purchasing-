@@ -23,6 +23,77 @@ export interface TestDatabase {
   stop(): Promise<void>;
 }
 
+// ==============================================================================================
+// [khoản nợ 28] CHỖ 57P01 ĐƯỢC ĐO, THAY VÌ ĐƯỢC SỬA MÙ
+//
+// Lượt CI `33862719087` đỏ job T3 với `terminating connection due to administrator command`
+// (`57P01`) và **không một `expect` nào đỏ**: một kết nối gộp còn sống lúc container Postgres bị
+// đóng. Cùng lượt ấy trên commit trước thì xanh. Khoản nợ 28 ghi rõ cách đóng đúng là *"mỗi bộ
+// test tích hợp phải đóng pool TRƯỚC khi dừng container, và điều đó phải được ĐO chứ không được
+// sửa mù"* — vì nới một `setTimeout` cho tới lúc hết đỏ là đúng thứ biến một phép đo thành một
+// lời khai.
+//
+// Đây là phép đo ấy, và nó đứng ở ĐÚNG một chỗ: khoảnh khắc ngay trước `container.stop()`.
+// `stop()` đã tự đóng `pool` và mọi pool của `poolAs()`; thứ nó KHÔNG biết là những pool mà một
+// bộ test tự `new pg.Pool(...)` (có thật: `migrate.int.test.ts` dựng bảy cái). Sau khi phần của
+// mình đã đóng xong, hỏi thẳng `pg_stat_activity`: còn backend khách nào bám vào cluster không.
+//
+// BA QUYẾT ĐỊNH ĐÃ CÂN, GHI RA ĐỂ KHÔNG AI PHẢI ĐOÁN LẠI:
+//
+//   ⑴ CÓ một cửa sổ chờ, và nó KHÔNG phải cách nới ngưỡng. `pool.end()` trả về khi client đã
+//     được yêu cầu đóng; backend phía Postgres thoát sau đó vài mili-giây. Cửa sổ này đo cái
+//     ĐÃ ĐÓNG-nhưng-chưa-thoát, nên nó hội tụ về 0 gần như tức thì ở ca lành. Một rò rỉ THẬT —
+//     pool bị bỏ quên — giữ client của nó tới `idleTimeoutMillis` (mặc định 10 giây của `pg`),
+//     nên hạn 3 giây ở đây phân biệt được hai ca. Đúng bài học đã ghi ở đầu
+//     `migrate.int.test.ts`: thứ mua được sự tất định là VÒNG CHỜ, và nói cho đúng thì khẳng
+//     định này bắt được rò rỉ SỐNG LÂU HƠN 3 giây, không phải mọi rò rỉ.
+//
+//   ⑵ Nó KHÔNG chặn `container.stop()`. Một khẳng định làm rò rỉ container Testcontainers thật
+//     là một khẳng định tệ hơn thứ nó canh — cùng bài học đã ghi ở khối `[fix Minor]` bên dưới.
+//     Verdict được giữ lại, container dừng, rồi mới ném.
+//
+//   ⑶ [CẤM LOG] Thông điệp KHÔNG mang cột `query`. Câu lệnh của một backend còn sống có thể
+//     đang mang giá, bản rõ báo giá, hay `token_hash` — và một thông điệp lỗi đi thẳng vào log
+//     CI công khai. Chỉ `pid`, `datname`, `state`, `application_name` được nêu: đủ để tìm ra
+//     bộ test nào rò rỉ, không đủ để lộ thứ nó đang chạy.
+// ==============================================================================================
+
+/** Hạn chờ backend khách thoát hẳn. Xem quyết định ⑴ ở khối trên: 3s < `idleTimeoutMillis` 10s. */
+const HAN_CHO_KET_NOI_THOAT_MS = 3_000;
+
+interface BackendConLai {
+  readonly pid: number;
+  readonly datname: string | null;
+  readonly state: string | null;
+  readonly application_name: string | null;
+}
+
+/**
+ * Chờ mọi backend KHÁCH ngoài chính kết nối này thoát, rồi trả về danh sách còn sót.
+ *
+ * Rỗng = không ai còn bám vào cluster lúc container bị dừng. Không rỗng = một bộ test đã dựng
+ * pool riêng và quên đóng, và `57P01` của khoản nợ 28 sắp xảy ra lần nữa.
+ */
+async function chuoBackendKhachThoat(connectionString: string): Promise<BackendConLai[]> {
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    const hetHan = Date.now() + HAN_CHO_KET_NOI_THOAT_MS;
+    for (;;) {
+      // `backend_type = 'client backend'` loại autovacuum/walwriter/checkpointer ra — chúng là
+      // của chính Postgres và không bao giờ là thứ một bộ test rò rỉ.
+      const { rows } = await client.query<BackendConLai>(
+        "SELECT pid, datname, state, application_name FROM pg_stat_activity " +
+          " WHERE pid <> pg_backend_pid() AND backend_type = 'client backend'",
+      );
+      if (rows.length === 0 || Date.now() >= hetHan) return rows;
+      await new Promise((giaiQuyet) => setTimeout(giaiQuyet, 25));
+    }
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 /**
  * Tái khẳng định role trên MỘT client cụ thể ngay trước khi giao cho người gọi, và ném lỗi
  * rõ ràng nếu SET ROLE không có hiệu lực thật.
@@ -127,7 +198,33 @@ export async function startPostgres(): Promise<TestDatabase> {
       // lại — container luôn phải dừng dù bước nào trước đó thất bại.
       await Promise.allSettled(rolePools.map((p) => p.end()));
       await pool.end().catch(() => {});
+
+      // [khoản nợ 28] Đo TRƯỚC khi dừng container — xem khối lý do phía trên file. Bản thân
+      // phép đo không được phép làm hỏng việc dọn dẹp: nếu nó không hỏi được (container đã
+      // chết, mạng docker đứt), coi như không có gì để nói, vì lúc ấy cũng chẳng còn kết nối
+      // nào để rò rỉ.
+      let conSot: BackendConLai[] = [];
+      try {
+        conSot = await chuoBackendKhachThoat(connectionString);
+      } catch {
+        conSot = [];
+      }
+
       await container.stop();
+
+      if (conSot.length > 0) {
+        const moTa = conSot
+          .map((b) => `pid=${b.pid} db=${b.datname ?? "?"} state=${b.state ?? "?"} app=${b.application_name ?? "?"}`)
+          .join("; ");
+        throw new Error(
+          `[khoản nợ 28] Bộ test này dừng container khi còn ${conSot.length} kết nối khách sống ` +
+            `sau ${HAN_CHO_KET_NOI_THOAT_MS}ms chờ. Đó chính là nguồn của \`57P01\` ` +
+            `("terminating connection due to administrator command") — một lỗi làm JOB đỏ mà ` +
+            `KHÔNG một \`expect\` nào đỏ, nên nó không tìm được bằng cách đọc kết quả test. ` +
+            `Cách sửa: \`await pool.end()\` mọi pool bộ test TỰ dựng, trong \`finally\` hoặc ` +
+            `\`afterAll\`, TRƯỚC khi \`db.stop()\` chạy. Backend còn sót: ${moTa}`,
+        );
+      }
     },
   };
 }
@@ -137,10 +234,21 @@ export async function withMigratedDatabase(
   fn: (db: TestDatabase) => Promise<void>,
 ): Promise<void> {
   const db = await startPostgres();
+  // [khoản nợ 28] `finally { await db.stop() }` trần KHÔNG dùng được nữa: `stop()` nay có thể
+  // ném vì rò rỉ kết nối, và một lần ném trong `finally` NUỐT lỗi gốc của thân hàm — tức phép
+  // đo mới sẽ che mất đúng thứ bộ test đang tìm. Lỗi của thân hàm luôn thắng; lỗi dọn dẹp chỉ
+  // được nói khi thân hàm đã qua.
+  let loiThan: unknown;
   try {
     await migrate(db.pool, MIGRATIONS_DIR);
     await fn(db);
-  } finally {
-    await db.stop();
+  } catch (loi) {
+    loiThan = loi;
   }
+  try {
+    await db.stop();
+  } catch (loiDon) {
+    if (loiThan === undefined) throw loiDon;
+  }
+  if (loiThan !== undefined) throw loiThan;
 }

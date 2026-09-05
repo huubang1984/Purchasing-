@@ -40,6 +40,18 @@ export const PERMISSIONS = {
    * người đang chạy vòng mời.
    */
   INVITATION_UNLOCK: "invitation.unlock",
+  /**
+   * [khoản nợ 26] Xoá vật liệu khoá ĐÃ THU HỒI của một RFQ đã huỷ.
+   *
+   * Đây là mã quyền duy nhất trong danh mục đứng sau một hành động **phá huỷ không đảo ngược
+   * được**: sau nó, báo giá của gói thầu ấy không ai mở được nữa, kể cả chính chúng ta. Vì thế
+   * nó KHÔNG đi kèm `rfq.cancel` — huỷ RFQ chỉ đặt một DẤU, còn mã này biến dấu ấy thành một sự
+   * thật mật mã, và gộp hai thứ vào một lời gọi là biến một nút "huỷ" thành một nút "phá huỷ".
+   *
+   * Chỉ `PROCUREMENT_MANAGER`. `DIRECTOR` giữ `rfq.unseal.approve`; người phê duyệt việc MỞ
+   * không nên đồng thời là người xoá được thứ cần mở — xem `026` mục (3).
+   */
+  RFQ_KEY_PURGE: "rfq.key.purge",
   RFQ_UNSEAL: "rfq.unseal",
   RFQ_UNSEAL_APPROVE: "rfq.unseal.approve",
   BID_VIEW: "bid.view",

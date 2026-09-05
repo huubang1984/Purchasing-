@@ -26,8 +26,13 @@ export {
   DEFAULT_KEY_AGREEMENT_ALGORITHM,
   getRfqPublicKeys,
   issueRfqKeyPair,
+  listPurgeableKeyMaterial,
+  purgeRfqKeyMaterial,
   revokeRfqKeyMaterial,
   type IssueRfqKeyPairInput,
+  type LyDoChuaXoaDuoc,
+  type PurgeableKeyMaterial,
+  type PurgeRfqKeyMaterialInput,
   type RevokeRfqKeyMaterialInput,
   type RfqPublicKeyRecord,
 } from "./key-material.js";

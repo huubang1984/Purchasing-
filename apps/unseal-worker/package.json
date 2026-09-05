@@ -14,15 +14,15 @@
     "@trustprocure/outbox": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/tenancy": "workspace:*",
-    "@trustprocure/test-support": "workspace:*",
     "pg": "^8.13.0"
   },
-  "//": "devDependencies la CUA TEST, khong cua runtime. Kich ban muc 41 (S1.9) phai song trong thu muc nay vi quy tac g1-khong-import-nguoc-tu-apps-unseal-worker cam moi module ben ngoai import executeUnsealRequest — nen no keo theo ca chuoi nghiep vu vao day. Ma CHAY cua worker khong cham mot goi nao duoi day.",
+  "//": "devDependencies la CUA TEST, khong cua runtime. [khoan no 21] `@trustprocure/test-support` NAM O `dependencies` cho toi 2026-09-05 — tuc ha tang Testcontainers nam trong PHAM VI SAN XUAT cua app nay. `pnpm audit --prod` khong kheu, vi sau lan sua Task 3 goi do khong con phu thuoc ngoai nao de ma co advisory: dung co che ma khoan no 21 mo ta. Kich ban muc 41 (S1.9) phai song trong thu muc nay vi quy tac g1-khong-import-nguoc-tu-apps-unseal-worker cam moi module ben ngoai import executeUnsealRequest — nen no keo theo ca chuoi nghiep vu vao day. Ma CHAY cua worker khong cham mot goi nao duoi day.",
   "devDependencies": {
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/supplier": "workspace:*",
+    "@trustprocure/test-support": "workspace:*",
     "@trustprocure/unseal": "workspace:*"
   }
 }
