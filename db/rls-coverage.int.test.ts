@@ -421,10 +421,15 @@ describe("phủ RLS", () => {
           [bangTenant],
         )
       ).rows;
+      // [khoản nợ 29] `toBe(1)` HẾT ĐÚNG kể từ `027`: lược đồ nay CÓ policy RESTRICTIVE thật
+      // (một `<bảng>_khach` cho mỗi bảng có RLS), nên phép đếm không còn là 1. Thứ khẳng định
+      // này thật sự muốn nói là *"fixture ĐÃ được dựng"*, và nói thẳng điều ấy MẠNH HƠN đếm:
+      // một phép đếm ≥ 1 sẽ xanh nhờ policy của `027` kể cả khi `CREATE POLICY` ở trên im lặng
+      // không chạy. Nên đòi ĐÍCH DANH policy fixture.
       expect(
-        rows.filter((r) => !r.cho_phep).length,
+        rows.filter((r) => !r.cho_phep).map((r) => r.ten_policy),
         "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
-      ).toBe(1);
+      ).toContain("users_chan_bi_khoa");
     } finally {
       await client.query("ROLLBACK");
       client.release();
@@ -541,10 +546,15 @@ describe("phủ RLS", () => {
           [bangTenant],
         )
       ).rows;
+      // [khoản nợ 29] `toBe(1)` HẾT ĐÚNG kể từ `027`: lược đồ nay CÓ policy RESTRICTIVE thật
+      // (một `<bảng>_khach` cho mỗi bảng có RLS), nên phép đếm không còn là 1. Thứ khẳng định
+      // này thật sự muốn nói là *"fixture ĐÃ được dựng"*, và nói thẳng điều ấy MẠNH HƠN đếm:
+      // một phép đếm ≥ 1 sẽ xanh nhờ policy của `027` kể cả khi `CREATE POLICY` ở trên im lặng
+      // không chạy. Nên đòi ĐÍCH DANH policy fixture.
       expect(
-        rows.filter((r) => !r.cho_phep).length,
+        rows.filter((r) => !r.cho_phep).map((r) => r.ten_policy),
         "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
-      ).toBe(1);
+      ).toContain("users_chan_bi_khoa");
     } finally {
       await client.query("ROLLBACK");
       client.release();
@@ -1075,12 +1085,22 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_key_material", cot: "key_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "public_key", quyen: "INSERT" },
+      // [khoan no 26 / 026] BON dong MOI, va chung la mot NOI QUYEN phai nhin thay duoc.
+      // `017` co y KHONG cap `UPDATE (wrapped_private_key)` cho app_api va goi su vang mat ay
+      // la load-bearing. `026` cap no — nhung chi de GHI `NULL`: trigger
+      // `rfq_key_material_bat_bien` tu choi moi gia tri moi khac NULL, va app_api VAN khong
+      // doc duoc cot nay. Ghi duoc, chi ghi duoc NULL, va chi mot lan: hinh dang cua mot nut
+      // PHA HUY, khong phai mot nut SUA. Ba cot `purged_*` la dau vet cua lan pha huy ay.
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_reason", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_key_material", cot: "wrapped_private_key", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "wrapped_private_key", quyen: "UPDATE" },
       // [H-1, 011] `created_by_session_id`: RFQ mang phien cua chinh nguoi tao, va trigger doi
       // `sessions.user_id = created_by`. Khong co cot nay, `created_by` la mot LOI KHAI va D2 tut
       // tu 'hai nguoi khac nguoi tao' xuong 'mot nguoi khac nguoi tao'.
@@ -1542,6 +1562,13 @@ describe("phủ RLS", () => {
       await client.query(
         "GRANT EXECUTE ON FUNCTION app_current_org_id() TO chu_so_huu_thuong",
       );
+      // [khoản nợ 29 / 027] CỐ Ý KHÔNG cấp gì thêm cho hàm phiên khách, và sự vắng mặt ấy là
+      // một khẳng định: policy khách của `027` viết THẲNG `pg_catalog.current_setting(...)`
+      // chứ không gọi một hàm của dự án, nên nó KHÔNG thêm một khớp nối quyền nào lên các
+      // role. Bản đầu của `027` thì có, và chính khẳng định này cùng hai khẳng định ở
+      // `audit-append-only` và `outbox` đã ĐỎ THẬT với `permission denied for function
+      // app_current_guest_session_id` — ba lần đỏ ấy là lý do `027` được viết lại. Nếu ai đó
+      // đưa một hàm trở lại vị từ policy, dòng này lại đỏ.
       for (const tenBang of bangTenant) {
         await client.query(`ALTER TABLE "${tenBang}" OWNER TO chu_so_huu_thuong`);
       }

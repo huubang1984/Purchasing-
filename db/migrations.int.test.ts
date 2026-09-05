@@ -1754,6 +1754,8 @@ describe("migration của dự án", () => {
           "023_rfq_open_cancel_permissions.sql",
           "024_moi_lai_va_tran_chi_phi.sql",
           "025_worker_doc_hang_doi.sql",
+          "026_xoa_mat_ma_vat_lieu_khoa.sql",
+          "027_phien_khach_co_lap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -2244,11 +2246,16 @@ describe("migration của dự án", () => {
         await db.pool.query(`CREATE POLICY ${ten} ON users AS RESTRICTIVE ${than}`);
       }
       // Chốt fixture: bảy policy RESTRICTIVE THẬT SỰ tồn tại, nếu không cả (a) rỗng ruột.
+      // [khoản nợ 29] Phép đếm hẹp lại còn ĐÚNG policy của fixture (`r_...`). Trước `027`, `users`
+      // không có policy RESTRICTIVE nào ngoài fixture nên một phép đếm trần là đủ; nay nó có
+      // `users_khach`, và một phép đếm trần sẽ trôi theo mọi policy khách thêm về sau. Khẳng định
+      // vẫn ĐỎ khi một policy fixture không dựng được — đó là toàn bộ việc của nó.
       expect(
         (
           await db.pool.query<{ n: string }>(
             "SELECT count(*)::text AS n FROM pg_policy " +
-              " WHERE polrelid = 'users'::regclass AND NOT polpermissive",
+              " WHERE polrelid = 'users'::regclass AND NOT polpermissive " +
+              "   AND polname LIKE 'r|_%' ESCAPE '|'",
           )
         ).rows[0]!.n,
       ).toBe("7");
@@ -4554,6 +4561,8 @@ describe("migration của dự án", () => {
         "023_rfq_open_cancel_permissions.sql",
         "024_moi_lai_va_tran_chi_phi.sql",
         "025_worker_doc_hang_doi.sql",
+        "026_xoa_mat_ma_vat_lieu_khoa.sql",
+        "027_phien_khach_co_lap.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4776,6 +4785,8 @@ describe("migration của dự án", () => {
         "023_rfq_open_cancel_permissions.sql",
         "024_moi_lai_va_tran_chi_phi.sql",
         "025_worker_doc_hang_doi.sql",
+        "026_xoa_mat_ma_vat_lieu_khoa.sql",
+        "027_phien_khach_co_lap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

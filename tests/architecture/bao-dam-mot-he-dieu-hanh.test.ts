@@ -82,8 +82,29 @@ function khopDungHoaThuong(p: string): boolean {
   return true;
 }
 
+/**
+ * Bỏ chú thích trước khi quét.
+ *
+ * Cần, và tôi biết là cần vì lớp canh này ĐỎ TRÊN CHÍNH NÓ ở lần chạy đầu: khối lý do ở đầu file
+ * này NHẮC TỚI `new URL("../../../db/migrations", import.meta.url)` như một ví dụ, và phép quét
+ * đọc câu văn ấy thành một lời gọi thật. Một lớp canh tự sinh việc cho mình — cùng khuôn đã bắt
+ * được ở bộ quét `kind` của khoản nợ 34.
+ *
+ * Chỉ bỏ chú thích KHỐI và chú thích chiếm TRỌN DÒNG. Một `//` giữa dòng không được đụng tới: nó
+ * có thể là phần thân của một URL trong chuỗi (`"http://..."`), và cắt từ đó đi sẽ nuốt luôn phần
+ * còn lại của dòng — tức làm phép quét MÙ, đúng hướng hỏng nguy hiểm hơn.
+ */
+function boChuThich(noiDung: string): string {
+  return noiDung
+    .replace(/\/\*[\s\S]*?\*\//gu, " ")
+    .split(/\r?\n/)
+    .filter((d) => !/^\s*\/\//u.test(d))
+    .join("\n");
+}
+
 /** Mọi `new URL("<đường dẫn tương đối>", import.meta.url)` trong một tệp nguồn. */
-function duongDanLucChay(noiDung: string): string[] {
+function duongDanLucChay(noiDungGoc: string): string[] {
+  const noiDung = boChuThich(noiDungGoc);
   const ra: string[] = [];
   for (const m of noiDung.matchAll(
     /new URL\(\s*["'](\.[^"']*)["']\s*,\s*import\.meta\.url\s*\)/gu,

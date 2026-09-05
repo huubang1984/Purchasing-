@@ -193,3 +193,116 @@ export async function withTenant<T>(
     client.release(loiLamHongClient ?? (tuyChon.destroyConnectionWhenDone === true ? true : undefined));
   }
 }
+
+// ==============================================================================================
+// [khoản nợ 29] GẮN MỘT PHIÊN KHÁCH — VÀ ĐÂY LÀ CHỖ A5 TRỞ THÀNH MỘT LỚP CSDL
+// ==============================================================================================
+// `withTenant` gắn TỔ CHỨC; nó không nói gì về việc bên trong tổ chức ấy ai được đọc của ai. Với
+// người mua thì đúng — họ được đọc mọi thứ của tổ chức mình. Với một phiên khách thì đó chính là
+// khoảng trống A5: phiên khách chạy dưới cùng `app_api` và cùng `app.org_id` của tổ chức người
+// mua, nên RLS cô lập TỔ CHỨC chứ không cô lập nhà cung cấp với nhà cung cấp.
+//
+// Hàm này gắn thêm BA trục — phiên, lời mời, gói thầu — và ba chứ không một là một quyết định có
+// lý do: `027` khoá `rfq_packages`/`rfq_items` theo GUC gói thầu thay vì bằng một truy vấn con vào
+// `rfq_invitations`, vì một bảng xuất hiện trong vị từ policy làm MỌI role đọc bảng chủ phải có
+// `SELECT` trên nó. Hai GUC dẫn xuất (`app.guest_invitation_id`, `app.guest_rfq_id`) vì thế là
+// cái giá phải trả để không nới quyền của bất kỳ ai.
+//
+// Migration `027` cài các policy `AS RESTRICTIVE` đọc đúng những GUC mà hàm này đặt, và MẶC ĐỊNH
+// của chúng là TỪ CHỐI: một kết nối đã gắn phiên khách nhìn thấy KHÔNG HÀNG NÀO ở mọi bảng ngoài
+// bảy bảng của mặt khách.
+//
+// PHẠM VI, nói rõ để không ai trích quá lời — cùng câu với docstring của `withTenant`: hàm này
+// không ngăn được `fn` tự gọi `set_config` lần nữa để đổi sang phiên khách khác. Nó cũng không
+// ngăn được ai đó QUÊN dùng nó và phục vụ một yêu cầu của khách bằng `withTenant` trần. Lớp bù
+// cho vế thứ hai là cổng ở tầng ứng dụng, không phải hàm này.
+// ==============================================================================================
+
+/**
+ * Chạy `fn` trong một transaction gắn CẢ tổ chức LẪN phiên khách.
+ *
+ * BA VIỆC, theo đúng thứ tự, và không việc nào bỏ được:
+ *
+ *   ⑴ **DẪN XUẤT lời mời VÀ gói thầu từ hàng phiên**, không nhận chúng làm tham số. `027` so
+ *     policy với `app.guest_invitation_id` và `app.guest_rfq_id`, và một GUC thì người gọi đặt gì
+ *     cũng được — nên chỗ DUY NHẤT chúng được đặt là ở đây, từ một câu đọc chính `guest_sessions`
+ *     nối `rfq_invitations`. Người gọi khai được một `guestSessionId`; họ không khai được một lời
+ *     mời, và cũng không khai được một gói thầu.
+ *
+ *   ⑵ **TỪ CHỐI một phiên đã chết.** `revoked_at IS NULL AND expires_at > clock_timestamp()`.
+ *     `clock_timestamp()` chứ không `now()`: `now()` đứng yên suốt transaction nên một phiên hết
+ *     hạn giữa chừng vẫn qua — cùng cạm bẫy đã ghim ở D1.
+ *
+ *   ⑶ **ĐỌC LẠI CẢ BA GUC.** `set_config` đã ghim `pg_catalog.` nên không cướp được, nhưng một
+ *     GUC KHÔNG có hiệu lực nghĩa là policy khách tương ứng của `027` thấy `NULL` và MỞ TOANG trở
+ *     lại đúng khoảng trống A5. Đọc lại HAI trong ba là đủ để một lượt fail-open đi qua trên trục
+ *     thứ ba, nên phép kiểm phải phủ cả ba. Fail-open trong im lặng là hướng hỏng duy nhất không
+ *     chấp nhận được ở hàm này, nên nó được ĐO chứ không được tin.
+ */
+export async function withGuestSession<T>(
+  pool: pg.Pool,
+  orgId: string,
+  guestSessionId: string,
+  fn: (client: pg.PoolClient) => Promise<T>,
+  tuyChon: WithTenantOptions = {},
+): Promise<T> {
+  if (!UUID_RE.test(guestSessionId)) {
+    // Cố ý KHÔNG nội suy giá trị vào thông báo — cùng lý do với nhánh `orgId` của `withTenant`.
+    throw new TenantError("guestSessionId không phải UUID hợp lệ");
+  }
+  return withTenant(
+    pool,
+    orgId,
+    async (client) => {
+      const phien = await client.query<{ invitation_id: string; rfq_id: string }>(
+        "SELECT g.invitation_id, i.rfq_id FROM public.guest_sessions g " +
+          "  JOIN public.rfq_invitations i " +
+          "    ON i.id OPERATOR(pg_catalog.=) g.invitation_id " +
+          " WHERE g.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+          "   AND g.revoked_at IS NULL " +
+          "   AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()",
+        [guestSessionId],
+      );
+      const invitationId = phien.rows[0]?.invitation_id;
+      const rfqId = phien.rows[0]?.rfq_id;
+      if (invitationId === undefined || rfqId === undefined) {
+        // Cố ý KHÔNG phân biệt "không có phiên" với "phiên đã chết": một thông điệp phân biệt
+        // được hai ca ấy là một oracle cho người cầm một token đã hết hạn.
+        throw new TenantError(
+          "phiên khách không tồn tại trong tổ chức đang gắn, hoặc đã thu hồi/hết hạn",
+        );
+      }
+      await client.query("SELECT pg_catalog.set_config('app.guest_session_id', $1, true)", [
+        guestSessionId,
+      ]);
+      await client.query("SELECT pg_catalog.set_config('app.guest_invitation_id', $1, true)", [
+        invitationId,
+      ]);
+      // Trục THỨ BA: `rfq_packages`/`rfq_items` khoá theo RFQ chứ không theo lời mời, vì một
+      // truy vấn con vào `rfq_invitations` trong policy của bảng được đọc rộng nhất kho sẽ bắt
+      // mọi role phải đọc được `rfq_invitations`. Xem mục (5) của `027`.
+      await client.query("SELECT pg_catalog.set_config('app.guest_rfq_id', $1, true)", [rfqId]);
+      const { rows } = await client.query<{
+        phien: string | null;
+        loi_moi: string | null;
+        goi_thau: string | null;
+      }>(
+        "SELECT public.app_current_guest_session_id()::text AS phien, " +
+          "       public.app_current_guest_invitation_id()::text AS loi_moi, " +
+          "       NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau",
+      );
+      if (
+        rows[0]?.phien !== guestSessionId ||
+        rows[0]?.loi_moi !== invitationId ||
+        rows[0]?.goi_thau !== rfqId
+      ) {
+        throw new TenantError(
+          "GUC phiên khách KHÔNG có hiệu lực sau khi đặt. Mọi policy khách của 027 sẽ đọc NULL " +
+            "và mở lại đúng khoảng trống A5, nên không truy vấn nào được phép chạy tiếp.",
+        );
+      }
+      return fn(client);
+    },
+    tuyChon,
+  );
+}

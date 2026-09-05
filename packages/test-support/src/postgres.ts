@@ -238,17 +238,20 @@ export async function withMigratedDatabase(
   // ném vì rò rỉ kết nối, và một lần ném trong `finally` NUỐT lỗi gốc của thân hàm — tức phép
   // đo mới sẽ che mất đúng thứ bộ test đang tìm. Lỗi của thân hàm luôn thắng; lỗi dọn dẹp chỉ
   // được nói khi thân hàm đã qua.
-  let loiThan: unknown;
+  // `Error` chứ không `unknown`: quy tắc `only-throw-error` cấm ném lại một biến `unknown`, và
+  // nó có lý — một `throw "chuỗi"` lọt xuống đây sẽ mất sạch ngăn xếp. Bọc lại thay vì tắt quy tắc.
+  const nhuLoi = (v: unknown): Error => (v instanceof Error ? v : new Error(String(v)));
+  let loiThan: Error | undefined;
   try {
     await migrate(db.pool, MIGRATIONS_DIR);
     await fn(db);
   } catch (loi) {
-    loiThan = loi;
+    loiThan = nhuLoi(loi);
   }
   try {
     await db.stop();
   } catch (loiDon) {
-    if (loiThan === undefined) throw loiDon;
+    if (loiThan === undefined) throw nhuLoi(loiDon);
   }
   if (loiThan !== undefined) throw loiThan;
 }

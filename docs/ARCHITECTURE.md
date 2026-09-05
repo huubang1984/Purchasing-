@@ -82,8 +82,18 @@ apps/
   vendor-portal/        Next.js — cổng nhà cung cấp
   api/                  NestJS — API chính (KHÔNG có quyền giải mã)
   unseal-worker/        NestJS — runtime mở thầu có kiểm soát
+  public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
+                        CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy
+                        khoá, KHÔNG đóng tính ĐỘC LẬP: một endpoint do chính ta phục vụ vẫn
+                        là "hỏi chúng ta". Neo ngoài (fingerprint SHA-256 in ra hợp đồng)
+                        là thứ đóng nốt, và nó vẫn là khoản nợ 11.
 packages/
-  tenancy/              TenantContext, tích hợp RLS
+  tenancy/              TenantContext, tích hợp RLS. `withTenant` gắn TỔ CHỨC;
+                        [khoản nợ 29] `withGuestSession` gắn thêm PHIÊN KHÁCH, và migration
+                        027 cài policy `AS RESTRICTIVE` đọc GUC ấy với mặc định TỪ CHỐI —
+                        nên một kết nối đã gắn phiên khách chỉ thấy dữ liệu của đúng lời mời
+                        đó (A5 ở tầng CSDL). Không có role `app_guest`: xem khối đầu 027 cho
+                        lý do đo được, và phần chênh ở §4 của ma trận bất biến.
   audit/                Sổ chuỗi hash, bộ kiểm chứng
   crypto-keys/          Interface KeyProvider và các adapter
   identity/             Tổ chức, người dùng, vai trò, quyền, phiên, MFA
