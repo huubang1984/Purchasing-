@@ -1522,3 +1522,70 @@ describe("biên giới module của packages/bidding", () => {
     }
   }, 60000);
 });
+
+// ==============================================================================================
+// [INV-H16] BIÊN GIỚI MODULE CỦA packages/unseal — HỌ QUY TẮC `g10-`
+// ==============================================================================================
+describe("biên giới module của packages/unseal", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/unseal/src", () => {
+    const probe = "packages/audit/src/zzprobe-unseal-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { assertUnsealAllowed } from "../../unseal/src/gate.js";',
+        "export { assertUnsealAllowed };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/unseal"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-unseal-tuong-doi.ts");
+      expect(output).toContain("g10-unseal-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI trong packages/unseal/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/unseal/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-unseal-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-unseal-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/unseal/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-unseal-moi", "packages/unseal"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g10-unseal-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-unseal-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-unseal-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-unseal-cua/src/dung.ts",
+      [
+        'import { assertUnsealAllowed } from "../../../packages/unseal/src/index.js";',
+        "export { assertUnsealAllowed };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-unseal-cua", "packages/unseal"]);
+      expect(output).not.toContain("g10-unseal-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-unseal-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});

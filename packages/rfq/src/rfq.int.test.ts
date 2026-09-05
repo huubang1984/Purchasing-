@@ -237,7 +237,28 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia });
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
-      // Hai cạnh cuối chưa có hàm sản phẩm (S1.6 và S2), nên đo thẳng bằng SQL.
+      // ~~Hai cạnh cuối chưa có hàm sản phẩm (S1.6 và S2), nên đo thẳng bằng SQL.~~
+      // [S1.6] Cạnh `CLOSED -> UNSEALED` NAY ĐÒI một yêu cầu mở thầu đã được phê duyệt (trigger
+      // `rfq_packages_kiem_yeu_cau_mo_thau`, 019). Test này đỏ ở đúng lượt chạy đầu sau khi 019
+      // áp — và nó đỏ vì một lớp MỚI đứng đúng chỗ, không vì máy trạng thái hỏng.
+      //
+      // Dựng yêu cầu bằng SQL viết tay chứ không gọi `@trustprocure/unseal`: `packages/rfq` không
+      // cần một cạnh phụ thuộc tới gói ấy lúc chạy, và fixture ở đây chỉ cần trạng thái, không
+      // cần cổng chính sách.
+      const { rows: yc } = await c.query<{ id: string }>(
+        "INSERT INTO unseal_requests (org_id, rfq_id, reason, requested_by, " +
+          "requested_by_session_id) VALUES ($1, $2, 'den gio mo thau', $3, $4) RETURNING id",
+        [orgA, rfqId, u1, s1],
+      );
+      await c.query(
+        "INSERT INTO unseal_approvals (org_id, unseal_request_id, approver_user_id, " +
+          "approver_session_id) VALUES ($1, $2, $3, $4)",
+        [orgA, yc[0]?.id ?? "", u2, s2],
+      );
+      await c.query(
+        "UPDATE unseal_requests SET status = 'APPROVED', approved_at = now() WHERE id = $1",
+        [yc[0]?.id ?? ""],
+      );
       await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
       await c.query("UPDATE rfq_packages SET status = 'EVALUATING' WHERE id = $1", [rfqId]);
     });

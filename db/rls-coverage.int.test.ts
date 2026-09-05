@@ -716,6 +716,7 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
@@ -727,12 +728,21 @@ describe("phủ RLS", () => {
       // và runtime mở thầu không có việc gì với sổ nhà cung cấp). Khác với `sessions`/`users`,
       // ở đây "không có dòng nào" là KẾT LUẬN ĐẦY ĐỦ chứ không phải hệ quả của việc view này mù
       // với quyền cột.
+      // [S1.6] `unseal_requests`/`unseal_approvals` chi SELECT o muc bang; INSERT/UPDATE cua
+      // chung deu la quyen COT. Va `rfq_unsealed_bids` — cho DUY NHAT ban ro duoc phep ton tai —
+      // co SELECT cho app_api nhung KHONG co INSERT: `api` khong giai ma duoc nen no khong co gi
+      // de ghi, va mot GRANT INSERT o day se cho phep no BIA mot ban ro.
+      { grantee: "app_api", bang: "unseal_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "unseal_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "unseal_approvals", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "unseal_requests", quyen: "SELECT" },
     ]);
   });
 
@@ -769,6 +779,12 @@ describe("phủ RLS", () => {
       // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
       // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
       // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
+      // [S1.6] BA cot cua `rfq_invitations`, khong hon: worker phai di tu `vendor_bids` toi
+      // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
+      // `link_channel`, `status` KHONG duoc cap — worker khong co viec gi voi danh tinh NCC.
+      { bang: "rfq_invitations", cot: "id" },
+      { bang: "rfq_invitations", cot: "org_id" },
+      { bang: "rfq_invitations", cot: "rfq_id" },
       { bang: "rfq_key_material", cot: "algorithm" },
       { bang: "rfq_key_material", cot: "created_at" },
       { bang: "rfq_key_material", cot: "id" },
@@ -1119,6 +1135,22 @@ describe("phủ RLS", () => {
       // theo ý mình (cùng khuôn `occurred_at` ở 003 và `created_at` ở 002). KHÔNG có UPDATE trên
       // bất kỳ cột nào: mọi thay đổi biểu diễn được bằng DELETE + INSERT, và một UPDATE
       // `role_code` là đường đi mà trigger D3 khó soi nhất trong khi không mua thêm năng lực nào.
+      { grantee: "app_api", bang: "unseal_approvals", cot: "approver_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "unseal_request_id", quyen: "INSERT" },
+      // KHONG mot dong UPDATE hay DELETE nao tren `unseal_approvals`: mot chu ky da dat xuong thi
+      // khong rut lai bang cach xoa dong. Duong dung la HUY yeu cau — mot hanh vi co ten, co moc.
+      { grantee: "app_api", bang: "unseal_requests", cot: "approved_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "cancelled_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "requested_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "requested_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "rfq_id", quyen: "INSERT" },
+      // `status` co UPDATE nhung KHONG co INSERT: mot yeu cau khong duoc RA DOI da o APPROVED.
+      { grantee: "app_api", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "user_roles", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "role_code", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "user_id", quyen: "INSERT" },
@@ -1150,6 +1182,17 @@ describe("phủ RLS", () => {
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [S1.6] BON dong duoi day la toan bo quyen GHI cua tien trinh mo thau, va chung la hinh
+      // dang cua ADR-006 trong mot bang quyen: no GHI ban ro (`rfq_unsealed_bids`), no TUYEN BO
+      // ket qua (`rfq_packages.status`, `unseal_requests.status`), va no khong lam gi khac.
+      // `rfq_packages.status` la dong trong nguy hiem nhat — xem khoi giai thich o dau 019.
+      { grantee: "app_unseal", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "payload", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "unseal_request_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "unseal_requests", cot: "executed_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
     ]);
   });
 

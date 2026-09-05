@@ -658,3 +658,63 @@ describe("bề mặt export công khai của bidding", () => {
     expect(m.verifyReceipt.length, "verifyReceipt phải nhận ĐÚNG MỘT đối tượng đầu vào").toBe(1);
   });
 });
+
+// ============================================================================================
+// MẶT TIỀN THỨ TÁM: @trustprocure/unseal (S1.6)
+//
+// Tiêu chí lọc ở đây là một câu về HÌNH DẠNG, không về năng lực: **cổng chính sách D1 chỉ được
+// ra cửa dưới dạng NÉM.** Không có `canUnseal`, không có `checkUnsealPolicy` trả boolean, không
+// có phiên bản nào trả `null` — cùng tiêu chí đã rút `hasPermission` khỏi mặt tiền của
+// `@trustprocure/identity` và `verifyTotpCode` khỏi cùng chỗ ấy.
+//
+// `UNSEAL_CLAUSES` và `UnsealDeniedError` ra cửa CÓ CHỦ ĐÍCH: chúng là thứ làm phép hội bốn vế
+// ĐO ĐƯỢC. Một cổng chỉ ném `Error("bị từ chối")` sẽ làm bốn test của bốn vế không phân biệt được
+// vế nào đã chặn — và lúc ấy bốn test đo đúng một thứ.
+// ============================================================================================
+const DANH_SACH_TRANG_UNSEAL = [
+  "UNSEAL_CLAUSES",
+  "UNSEAL_JOB_KIND",
+  "UNSEAL_MFA_MAX_AGE_SECONDS",
+  "UnsealDeniedError",
+  "UnsealError",
+  "approveUnseal",
+  "assertUnsealAllowed",
+  "cancelUnseal",
+  "dispatchUnseal",
+  "getUnsealRequest",
+  "requestUnseal",
+];
+
+const UNSEAL_PACKAGE_JSON_URL = new URL("../../packages/unseal/package.json", import.meta.url);
+
+describe("bề mặt export công khai của unseal", () => {
+  it("[INV-H16] cửa @trustprocure/unseal chỉ xuất đúng danh sách trắng", async () => {
+    const noiDung = JSON.parse(readFileSync(UNSEAL_PACKAGE_JSON_URL, "utf8")) as {
+      exports?: Record<string, string>;
+    };
+    const duongDan = noiDung.exports?.["."];
+    if (duongDan === undefined) throw new Error("packages/unseal/package.json không khai cửa '.'");
+    const urlCua = new URL(duongDan, UNSEAL_PACKAGE_JSON_URL);
+    const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+    const thucTe = Object.keys(moduleThat).sort();
+
+    expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+    expect(
+      thucTe.filter((ten) => !DANH_SACH_TRANG_UNSEAL.includes(ten)),
+      "Symbol LẠ lọt ra cửa công khai của @trustprocure/unseal. Nếu nó trả boolean thay vì ném, " +
+        "nó dựng được một cổng gác im lặng — giữ nó ở trong gói.",
+    ).toEqual([]);
+    expect(
+      DANH_SACH_TRANG_UNSEAL.filter((ten) => !thucTe.includes(ten)),
+      "Symbol trong danh sách trắng đã biến mất khỏi cửa @trustprocure/unseal.",
+    ).toEqual([]);
+  });
+
+  it("[INV-D1] `UNSEAL_CLAUSES` có ĐÚNG BỐN vế, đúng thứ tự của mệnh đề", async () => {
+    // Mệnh đề D1 là một phép HỘI bốn vế. Hằng này là chỗ duy nhất số bốn ấy được viết ra, và một
+    // ngày ai đó gỡ một vế đi thì đây là dòng đỏ trước tiên — trước cả bốn test tích hợp.
+    const urlCua = new URL("../../packages/unseal/src/index.ts", import.meta.url);
+    const m = (await import(/* @vite-ignore */ urlCua.href)) as { UNSEAL_CLAUSES: readonly string[] };
+    expect(m.UNSEAL_CLAUSES).toEqual(["PERMISSION", "MFA_FRESH", "RFQ_CLOSED", "POLICY_GATE"]);
+  });
+});

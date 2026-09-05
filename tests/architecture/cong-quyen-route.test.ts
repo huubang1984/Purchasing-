@@ -175,14 +175,35 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     expect(quetTepTs("packages").length).toBeGreaterThan(10);
   });
 
-  it("PHÁT BIỂU ĐÚNG MỨC: hôm nay `apps/` chưa có module `.ts` nào, nên khẳng định trên là RỖNG RUỘT", () => {
-    // Câu này ở đây để không ai đọc ô xanh phía trên thành "cổng quyền đã được canh". Nó CHƯA —
-    // tài sản được canh chưa ra đời, y hệt tình cảnh của hàng rào `g1-` mà khoản nợ 14 đã ghi.
-    // Giá trị của lớp này là PHÒNG NGỪA: route đầu tiên viết ra đã bị canh sẵn, không ai phải nhớ.
+  // ============================================================================================
+  // *** KHẲNG ĐỊNH CŨ ĐÃ ĐỎ ĐÚNG NGÀY NÓ ĐƯỢC HẸN. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU. ***
+  //
+  //   it("PHÁT BIỂU ĐÚNG MỨC: hôm nay `apps/` chưa có module `.ts` nào, nên khẳng định trên là
+  //       RỖNG RUỘT", () => { expect(quetTepTs(THU_MUC_APPS)).toEqual([]); });
+  //
+  // Nguyên văn lý do khi ấy: *"Khi `apps/` có module đầu tiên, khẳng định này ĐỎ và phải bị xoá —
+  // đó là dấu hiệu lớp trên bắt đầu có nghĩa, không phải một lỗi."*
+  //
+  // [S1.6] `apps/unseal-worker` ra đời, và khẳng định ấy đỏ ở đúng lượt chạy đầu tiên sau đó.
+  // ============================================================================================
+  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ MÃ, và lớp trên vừa quét nó thật", () => {
+    const cacTep = quetTepTs(THU_MUC_APPS);
+    expect(cacTep.length, "apps/ phải có ít nhất một module .ts đã vào kho").toBeGreaterThan(0);
+
+    // ... NHƯNG phát biểu đúng mức vẫn phải nói ra phần chênh, và nó KHÔNG nhỏ: thứ vừa ra đời là
+    // một WORKER, không phải một ROUTE. Nó không nhận request HTTP, không có người dùng cuối, và
+    // nó chạy dưới `app_unseal` — một role cố ý không đọc được `users` hay ma trận quyền, nên một
+    // câu `requirePermission` ở đó là câu KHÔNG VIẾT ĐƯỢC.
     //
-    // Khi `apps/` có module đầu tiên, khẳng định này ĐỎ và phải bị xoá — đó là dấu hiệu lớp trên
-    // bắt đầu có nghĩa, không phải một lỗi.
-    expect(quetTepTs(THU_MUC_APPS)).toEqual([]);
+    // Tức lớp này nay quét mã THẬT, và mã thật ấy đúng là không được phép mang cổng quyền. Vế
+    // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh; nó chỉ
+    // thôi rỗng ruột về mặt PHẠM VI QUÉT. Ngày `apps/api` ra đời mới là ngày nó có nghĩa trọn vẹn.
+    const coRoute = cacTep.some((t) => !t.includes("unseal-worker"));
+    expect(
+      coRoute,
+      "Nếu câu này đỏ thì `apps/` đã có một app KHÁC ngoài worker — hãy đọc lại khối chú thích " +
+        "trên và viết lại phần chênh cho đúng thứ vừa ra đời.",
+    ).toBe(false);
   });
 });
 
