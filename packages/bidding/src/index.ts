@@ -34,6 +34,15 @@ export {
   type ReceiptKeyPair,
   type ReceiptSigner,
 } from "./signer.js";
+// [S1.8] Job toàn vẹn của B5. Nó ra cửa vì nó là thứ một tiến trình vận hành gọi theo lịch —
+// nhưng nó KHÔNG ném khi phát hiện lệch, và đó là một ngoại lệ CÓ LÝ DO của tiêu chí "cổng gác
+// phải ném": nó không phải một cổng gác. Nó là một lớp PHÁT HIỆN, và một lớp phát hiện dừng ở
+// hàng hỏng đầu tiên là một lớp phát hiện nói sai quy mô sự cố.
+export {
+  auditStoredCiphertexts,
+  type CiphertextAuditReport,
+  type CiphertextAuditRow,
+} from "./ciphertext-audit.js";
 export {
   BiddingError,
   getBidReceipt,

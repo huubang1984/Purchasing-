@@ -11,6 +11,7 @@
 // SQL và đòi hai bên khớp — nên nó không trôi được, nhưng nó vẫn không phải hàng rào.
 // ============================================================================================
 export {
+  RFQ_DEADLINE_NOTICE_KIND,
   RFQ_STATUSES,
   RFQ_TRANSITIONS,
   RfqError,

@@ -412,6 +412,9 @@ describe("bề mặt export công khai của supplier", () => {
 const DANH_SACH_TRANG_RFQ = [
   "CURRENCIES",
   "MONEY_PATTERN",
+  // [S1.8] `kind` cua job thong bao gia han (C4 ve 5). No ra cua vi tien trinh dang ky handler
+  // nam ngoai goi nay, va mot chuoi chep tay o hai dau hang doi la hai nguon su that cho mot ten.
+  "RFQ_DEADLINE_NOTICE_KIND",
   "RFQ_STATUSES",
   "RFQ_TRANSITIONS",
   "RfqError",
@@ -602,8 +605,12 @@ describe("bề mặt export công khai của sealed-envelope", () => {
 // Symbol KHÔNG có ở đây và lý do: không có. Gói này chỉ có MỘT cửa — nó không giữ một khả năng
 // nào mà thế giới bên ngoài không được có.
 // ============================================================================================
+// [S1.8] `auditStoredCiphertexts` vào cửa. Nó là symbol duy nhất ở đây TRẢ VỀ MỘT BÁO CÁO khi
+// phát hiện sai — không ném. Tiêu chí lọc vẫn giữ, chỉ đọc đúng: nó không phải một cổng gác,
+// nên "người gọi có lỡ bỏ qua lời từ chối được không" không phải câu hỏi áp cho nó.
 const DANH_SACH_TRANG_BIDDING = [
   "BiddingError",
+  "auditStoredCiphertexts",
   "RECEIPT_FORMAT_LABEL",
   "RECEIPT_SIGNING_ALGORITHM",
   "ReceiptError",

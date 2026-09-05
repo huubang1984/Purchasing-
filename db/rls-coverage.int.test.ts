@@ -776,6 +776,14 @@ describe("phủ RLS", () => {
     // mỗi cột là hệ quả cơ học, khoá chúng ở đây sẽ vỡ mỗi lần thêm cột. Còn lại đúng những
     // bảng mà quyền đọc được cắt THEO CỘT — và đó là những quyết định phải nhìn thấy được.
     expect(rows).toEqual([
+      // [S1.8 / 021] `bid_receipts` la bang thu hai ma quyen doc bi cat theo COT cho app_unseal,
+      // va no o day vi mot ly do KHAC han `rfq_key_material`: khong phai de GIU BI MAT ma de
+      // JOB TOAN VEN cua B5 chay duoc. `signature` vang mat co chu dich — kiem chu ky la viec
+      // cua NHA CUNG CAP (B2), khong phai cua mot tien trinh may chu.
+      { bang: "bid_receipts", cot: "bid_version_id" },
+      { bang: "bid_receipts", cot: "canonical_text" },
+      { bang: "bid_receipts", cot: "id" },
+      { bang: "bid_receipts", cot: "org_id" },
       // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
       // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
       // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
@@ -876,6 +884,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "bid_receipts", cot: "canonical_text", quyen: "INSERT" },
       { grantee: "app_api", bang: "bid_receipts", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "bid_receipts", cot: "signature", quyen: "INSERT" },
+      // [S1.8, migration 021] `app_unseal` nay doc duoc BON cot cua bang nay — nhung day la danh
+      // sach quyen GHI (truy van tren loc `privilege_type <> 'SELECT'`), nen chung nam o test
+      // "[S1.2] quyen SELECT theo COT cua app_unseal" chu khong o day.
       // [S1.3] `guest_sessions` - CHI `revoked_at` co UPDATE. `otp_verified_at` KHONG sua duoc:
       // no la moc tra loi "phien nay qua OTP luc nao", va mot moc sua duoc la mot moc khong
       // dung de phan xet duoc. `verified_contact_id` cung khong - viet lai danh tinh da xac thuc

@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { resolveSessionActor } from "@trustprocure/identity";
+import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
   revokeRfqKeyMaterial,
@@ -32,9 +33,15 @@ import {
 // `UPDATE` viết tay trong một script vận hành. Lặp lại phép kiểm ở tầng này sẽ mua thêm đúng một
 // thứ: một thông báo lỗi đẹp hơn, đổi lấy hai bản sao của cùng một bảng cạnh phải giữ đồng bộ.
 //
-// C4 — PHẦN GÓI NÀY KHÔNG ĐÓNG ĐƯỢC: mệnh đề đòi "gia hạn ... có thông báo toàn bộ nhà cung cấp
-// đã mời". Lời mời là S1.3 và CHƯA TỒN TẠI, nên `extendRfqDeadline` hôm nay không gửi cho ai cả.
-// Vì vậy KHÔNG test nào ở S1.2 được mang nhãn `[INV-C4]`.
+// ~~C4 — PHẦN GÓI NÀY KHÔNG ĐÓNG ĐƯỢC: mệnh đề đòi "gia hạn ... có thông báo toàn bộ nhà cung~~
+// ~~cấp đã mời". Lời mời là S1.3 và CHƯA TỒN TẠI, nên `extendRfqDeadline` hôm nay không gửi cho~~
+// ~~ai cả. Vì vậy KHÔNG test nào ở S1.2 được mang nhãn `[INV-C4]`.~~
+//
+// **[S1.8] Câu trên hết hiệu lực, và nó hết hiệu lực vì ĐIỀU KIỆN nó nêu đã thành sự thật** —
+// `rfq_invitations` ra đời ở S1.3. `extendRfqDeadline` nay xếp một job outbox cho MỖI lời mời,
+// trong CÙNG giao dịch. Đó là hình dạng đúng của "thông báo" trong một hệ có outbox giao dịch:
+// thứ được bảo đảm là *ý định gửi không bao giờ lạc khỏi lần ghi hạn mới*, không phải *thư đã
+// tới*. Phần chênh ấy nằm ở §4 của C4 và không được nuốt vào ô ✅.
 // =============================================================================================
 
 export class RfqError extends Error {
@@ -43,6 +50,15 @@ export class RfqError extends Error {
     this.name = "RfqError";
   }
 }
+
+/**
+ * [C4 vế 5] `kind` của job thông báo gia hạn. Một hằng, một chỗ ở — cùng khuôn `UNSEAL_JOB_KIND`.
+ *
+ * Nó CHƯA có handler nào đăng ký, và đó là một phần chênh có tên ở §4 của C4: ở S1, mệnh đề đúng
+ * ở mức *"ý định thông báo đã nằm cùng chỗ với lần ghi hạn mới"*, chưa đúng ở mức *"nhà cung cấp
+ * đã biết"*. Chặng cuối là một tầng vận hành mà `apps/` chưa có.
+ */
+export const RFQ_DEADLINE_NOTICE_KIND = "RFQ_DEADLINE_EXTENDED_NOTICE";
 
 export const RFQ_STATUSES = [
   "DRAFT",
@@ -522,9 +538,14 @@ export interface ExtendDeadlineInput {
  *                              đổi deadline là SOẠN THẢO, không phải gia hạn);
  *   (3) có lý do            -> hàm này, `reason` bắt buộc;
  *   (4) có audit            -> hàm này;
- *   (5) THÔNG BÁO cho toàn bộ nhà cung cấp đã mời -> **KHÔNG CÓ**. Lời mời là S1.3.
+ *   (5) THÔNG BÁO cho toàn bộ nhà cung cấp đã mời -> ~~**KHÔNG CÓ**. Lời mời là S1.3.~~
+ *       **[S1.8] ĐÃ CÓ.** Một job outbox cho MỖI hàng `rfq_invitations` của RFQ, ghi trong CÙNG
+ *       giao dịch với `UPDATE` và với bản ghi kiểm toán — nên một lần gia hạn không bao giờ tồn
+ *       tại mà không có ý định thông báo đi kèm, và một lần gia hạn BỊ TỪ CHỐI (rút ngắn, sai
+ *       trạng thái) không để lại job nào.
  *
- * Vì (5) trống, C4 CHƯA ĐƯỢC PHỦ và không test nào ở S1.2 được mang nhãn `[INV-C4]`.
+ * ~~Vì (5) trống, C4 CHƯA ĐƯỢC PHỦ và không test nào ở S1.2 được mang nhãn `[INV-C4]`.~~ Câu ấy
+ * hết hiệu lực ở S1.8; phần CHÊNH còn lại — *"gửi"* khác *"tới tay"* — nằm ở §4 của C4.
  *
  * DƯ LƯỢNG của `reason`, nói thẳng: nó là VĂN BẢN TỰ DO đi vào `audit_events.payload`. `CHECK`
  * của 003 chặn KHOÁ mang giá ở mọi độ sâu, nó KHÔNG chặn một con số nằm trong GIÁ TRỊ — một lý do
@@ -565,6 +586,32 @@ export async function extendRfqDeadline(
       sau: hang.deadline_at?.toISOString() ?? null,
     },
   });
+
+  // [C4 vế 5] MỘT job cho MỖI lời mời, trong CÙNG giao dịch. Đọc danh sách người nhận từ CSDL
+  // ngay tại đây chứ không nhận nó làm tham số: một tham số `recipients` là một danh sách mà
+  // người gọi có thể rút ngắn, và lúc ấy mệnh đề *"toàn bộ nhà cung cấp đã mời"* thành một lời
+  // hứa của người gọi. Ở đây nó là một câu `SELECT`.
+  //
+  // KHÔNG lọc theo `status` của lời mời: một nhà cung cấp đã từ chối vẫn được biết hạn đã đổi —
+  // họ có thể đổi ý, và giấu thông tin ấy đi là một cách thiên vị người còn lại.
+  //
+  // `dedupe_key` mang cả hạn MỚI: gia hạn hai lần là hai thông báo, còn một lần retry của cùng
+  // giao dịch là một. Payload KHÔNG mang `reason` — lý do là văn bản tự do của người mua và nó
+  // có thể chứa một con số (xem DƯ LƯỢNG ở trên); nó thuộc sổ kiểm toán, không thuộc thứ gửi ra
+  // ngoài cho nhà cung cấp.
+  const moc = hang.deadline_at?.toISOString() ?? "";
+  const { rows: loiMoi } = await client.query<{ id: string }>(
+    "SELECT id FROM rfq_invitations WHERE rfq_id = $1 ORDER BY id",
+    [hang.id],
+  );
+  for (const lm of loiMoi) {
+    await enqueueJob(client, orgId, {
+      kind: RFQ_DEADLINE_NOTICE_KIND,
+      payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
+      dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
+    });
+  }
+
   return doiRfq(hang);
 }
 

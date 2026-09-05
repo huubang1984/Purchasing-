@@ -130,6 +130,9 @@ importers:
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../identity
+      '@trustprocure/outbox':
+        specifier: workspace:*
+        version: link:../outbox
       '@trustprocure/sealed-envelope':
         specifier: workspace:*
         version: link:../sealed-envelope

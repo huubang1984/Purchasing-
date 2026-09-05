@@ -10,6 +10,7 @@
   "dependencies": {
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/identity": "workspace:*",
+    "@trustprocure/outbox": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "pg": "^8.13.0"
   }

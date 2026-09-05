@@ -1,0 +1,30 @@
+-- db/migrations/021_ciphertext_audit.sql
+-- S1.8 — MỘT CÂU GRANT, VÀ LÝ DO NÓ CẦN CẢ MỘT FILE
+--
+-- ============================================================================================
+-- KHIẾM KHUYẾT ĐÃ ĐO: B5 KHÔNG CÓ ROLE NÀO CHẠY ĐƯỢC
+-- ============================================================================================
+-- B5 đòi *"ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau"*. Phép so
+-- ấy cần ĐỒNG THỜI hai thứ:
+--
+--   • `vendor_bid_versions.envelope`  — 018 chỉ cấp cho `app_unseal`
+--   • `bid_receipts.canonical_text`   — 018 chỉ cấp cho `app_api`
+--
+-- Tức tới trước file này, **không role nào của dự án chạy được job toàn vẹn của B5**. Đó không
+-- phải một quyền bị quên: cả hai câu GRANT của 018 đều đúng vào lúc chúng được viết, và khoảng
+-- trống chỉ hiện ra khi có một người tiêu thụ THỨ BA — cái job — đứng ngoài cả hai đường.
+--
+-- ============================================================================================
+-- VÌ SAO CẤP CHO `app_unseal` CHỨ KHÔNG CHO `app_api`
+-- ============================================================================================
+-- Hướng ngược lại (cấp `envelope` cho `app_api`) là hướng SAI, và sai theo một cách không sửa
+-- được: `app_api` không được đọc ciphertext là toàn bộ nội dung của A3 và của một vế G1. Cấp
+-- thêm cho `app_unseal` thì không phá gì — nó ĐÃ đọc được `envelope`, nên `canonical_text` không
+-- cho nó biết thêm điều gì nó chưa tính ra được: chuỗi hash trong biên nhận CHÍNH LÀ thứ nó tự
+-- băm ra từ phong bì.
+--
+-- BA CỘT, KHÔNG BỐN. `signature` KHÔNG được cấp, và đó là một câu về VAI TRÒ chứ không phải một
+-- lần tiết kiệm: kiểm chữ ký là việc của B2, và B2 nói rõ rằng nó phải làm được bằng **khoá công
+-- khai một mình** — tức bởi NHÀ CUNG CẤP, không bởi một tiến trình máy chủ. Một job máy chủ cầm
+-- chữ ký là một job có thể bị hiểu nhầm thành "hệ thống đã tự kiểm chứng biên nhận của mình".
+GRANT SELECT (id, org_id, bid_version_id, canonical_text) ON bid_receipts TO app_unseal;

@@ -27,18 +27,18 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **27** | 34 |
+| Nghiệp vụ (A–G) | **31** | 34 |
 | Hàng rào (H) | **16** | 16 |
-| **Cộng** | **43** | **50** |
+| **Cộng** | **47** | **50** |
 
-**7 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**3 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
 G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **27/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **31/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -54,11 +54,11 @@ Hôm nay: **27/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 21 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 33 | ✅ ĐẠT |  |
 | B4 | Không đường code nào xóa/sửa audit; role ứng dụng bị REVOKE UPDATE, DELETE | Quyền DB | T3, T5 | 20 | ✅ ĐẠT |  |
-| B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 6 | ✅ ĐẠT |  |
-| C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 15 | ✅ ĐẠT |  |
 | D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 29 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 15 | ✅ ĐẠT |  |
@@ -68,7 +68,7 @@ Hôm nay: **27/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 20 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 46 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -114,9 +114,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 43` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 47` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 7` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 3` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -132,12 +132,8 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 
 | INV | Vì sao chưa phủ |
 |---|---|
-| **A2** | S1 — mã hoá phía trình duyệt (ADR-007) chưa có; `packages/crypto-keys/src/roundtrip.test.ts:31` tự ghi lý do KHÔNG gắn thẻ. |
-| **A5** | S1 — chưa có nhà cung cấp, lời mời, hay ID báo giá. |
-| **B5** | S1/S6 — job kiểm tra ciphertext định kỳ chưa tồn tại. |
-| **C2** | S1 — Task 10 CỐ Ý bỏ thẻ `[INV-C2]`: chủ ngữ (RFQ, `deadline_at`, báo giá muộn) chưa có trong 001–007, nên test 'kind lạ chuyển sang FAILED chứ không treo' đo một tính chất THẬT của runner nhưng không đo C2. |
-| **C4** | S1 — chưa có deadline để rút ngắn hay gia hạn. |
-| **E4** | S1 — MST nay đã có (008) và mã RFQ nay đã có (009), nhưng E4 là một mệnh đề PHỦ ĐỊNH về ĐƯỜNG XÁC THỰC ('không bao giờ là credential'), và đường xác thực của người mua chưa có endpoint nào để đối kháng. Tầng test của nó là T5. Phần cưỡng chế được ĐÃ có: không hàm nào ở cửa `@trustprocure/supplier` hay `@trustprocure/invitation` nhận MST hay mã RFQ làm bằng chứng danh tính. |
+| **A2** | S2+ — CHỦ NGỮ ĐÃ CÓ, THIẾT BỊ ĐO THÌ CHƯA. Ba vế của mệnh đề nói về MỘT TIẾN TRÌNH `api` ĐANG CHẠY: bộ nhớ, APM trace, thông báo lỗi. `apps/` chỉ có một worker mở thầu; không có tiến trình `api` nào để gắn một heap dump hay một APM agent vào. Phần ĐÃ đo được thì nằm ở chỗ khác và đã mang ô của nó: A1 (bảng bản rõ rỗng trước mở thầu), A3 (quét năm bảng dưới superuser) và G1 (`app_api` không đọc được `envelope`). Cái còn thiếu là một phép đo TRÊN TIẾN TRÌNH, và nó đòi một tầng HTTP. |
+| **A5** | S2+ (khoản nợ 29) — KHÔNG CÓ ROLE NÀO ĐỂ DIỄN ĐẠT CÂU HỎI. Mệnh đề nói về thứ MỘT NHÀ CUNG CẤP nhìn thấy, nhưng đường người mua và đường khách dùng CHUNG một role CSDL (`app_api`), nên không có lớp nào mà “nhà cung cấp truy vấn” khác “hệ thống truy vấn”. Dựng một role thứ ba (`app_guest`) là khoản nợ 29, và nó kéo theo một vạch quyền riêng cho toàn bộ bảng tenant. Vế *“gián tiếp qua thời gian phản hồi”* còn nặng hơn: nó là một phép đo T6 trên tải thật. Vế ĐÃ được chốt và cưỡng chế: ADR-012 cấm UUIDv7/ULID nên không ID nào sắp theo thứ tự; và `version` của `vendor_bid_versions` đếm theo TỪNG luồng báo giá chứ không theo RFQ, nên nó không rò số người đã nộp. |
 | **E6** | S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian. |
 
 ## 4. Mã đã phủ mà **bảo đảm thật hẹp hơn mệnh đề**
@@ -160,7 +156,13 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 
 - **B2** — **MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI:** khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta.
 
+- **B5** — **MỘT LẦN GỌI TRÊN MỘT RFQ — CHỮ *“định kỳ”* VÀ CHỮ *“mọi thời điểm về sau”* VẪN CHƯA CÓ CHỦ THỂ.** Thứ đã đo, và đo mạnh: `auditStoredCiphertexts` băm LẠI từng phong bì đang nằm trong bảng rồi so với chuỗi hash đọc từ biên nhận; một lượt phá thật (gỡ trigger `bid_chi_ghi_them` rồi thay phong bì) làm nó chỉ ĐÍCH DANH đúng phiên bản ấy và KHÔNG vạ lây phiên bản sạch; và gọi nhầm role hỏng ỒN ÀO với `permission denied` thay vì âm thầm báo “mọi thứ đều khớp”. Cộng một phép đo cho thấy B1 chặn TRƯỚC: không gỡ trigger thì kể cả superuser cũng không đổi được phong bì. **PHẦN CHÊNH THỨ NHẤT:** không có gì GỌI hàm này theo lịch — không cron, không handler outbox. Ở S1 mệnh đề đúng ở mức *“phép so tồn tại và nó biết phát hiện”*, chưa đúng ở mức *“nó chạy mãi về sau”*; chặng ấy thuộc S6. **PHẦN CHÊNH THỨ HAI, và nó nặng hơn:** job so phong bì với BIÊN NHẬN TRONG CÙNG CƠ SỞ DỮ LIỆU. Một lần khôi phục sai hay một kẻ tấn công viết lại CẢ HAI sẽ đi lọt. Thứ đóng được lỗ ấy là chữ ký của biên nhận — và chữ ký CỐ Ý không nằm trong quyền của `app_unseal` (xem 021), vì B2 nói phép kiểm ấy phải làm được bằng khoá công khai một mình, tức bởi NHÀ CUNG CẤP chứ không bởi máy chủ.
+
 - **C1** — **VẾ *“sau `deadline_at` mọi lần nộp bị từ chối”* ĐÚNG THEO `now()`, KHÔNG THEO ĐỒNG HỒ TƯỜNG.** Trigger `bid_kiem_han_nop` (018) so `now()` — dấu thời gian ĐẦU transaction — với `deadline_at`, và đó là một lựa chọn có lý do: `now()` cũng chính là giá trị `submitted_at DEFAULT now()` ghi xuống và là giá trị đi vào biên nhận đã ký, nên một biên nhận không bao giờ mang dấu thời gian trước hạn cho một lần nộp bị từ chối vì trễ. **PHẦN CHÊNH:** một transaction MỞ trước hạn rồi COMMIT sau hạn **vẫn được nhận**. Chặn nó là việc của `statement_timeout` trên đường nộp, và đường ấy chưa tồn tại (`apps/` rỗng). Cửa sổ ấy bị chặn trên bởi thời gian sống của một transaction, không bởi một hằng số nào của dự án. **PHẦN CHÊNH THỨ HAI:** kịch bản T5 #4 (*nộp 50ms sau hạn qua retry, replay và HTTP/2 multiplexing*) chưa chạy — nó đòi một tầng HTTP.
+
+- **C2** — **SCHEDULER KHÔNG CHẾT — NÓ CHƯA TỪNG RA ĐỜI, VÀ PHÉP ĐO NÓI ĐÚNG ĐIỀU ĐÓ.** Thứ đã đo: hạn nộp bị đẩy về quá khứ, KHÔNG một job nào tồn tại trong `outbox_jobs` và không runner nào được khởi động, RFQ vì thế VẪN mang trạng thái `OPEN` sau hạn — rồi một lần nộp vào đúng cửa sổ ấy bị từ chối. Khẳng định chịu lực không phải “bị từ chối” mà là **lời từ chối nói về HẠN, không về TRẠNG THÁI**: nếu nó nói về trạng thái thì phép kiểm đang dựa vào việc một scheduler đã kịp đặt `CLOSED`, tức đúng thứ mệnh đề cấm. Kèm một lượt đột biến gỡ trigger cho thấy đúng lần nộp ấy đi lọt. **PHẦN CHÊNH:** mệnh đề nói *“job đóng RFQ CHẾT”*, và ở S1 job ấy chưa được viết — phép đo dựng sự VẮNG MẶT của nó chứ không giết một tiến trình đang chạy. Hai thứ này cho cùng một trạng thái CSDL, nhưng chúng không cho cùng một bảo đảm về một scheduler chết NỬA CHỪNG. **PHẦN CHÊNH THỨ HAI, thừa hưởng nguyên vẹn từ §4 của C1:** một transaction MỞ trước hạn rồi COMMIT sau hạn vẫn được nhận. **PHẦN CHÊNH THỨ BA:** tầng test của C2 gồm cả T6 (tải quanh hạn, lệch đồng hồ), và T6 chưa chạy một lần nào.
+
+- **C4** — **NĂM VẾ ĐỀU CÓ LỚP; VẾ THỨ NĂM LÀ MỘT Ý ĐỊNH GỬI, KHÔNG PHẢI MỘT LẦN GIAO.** Thứ đã đo: rút ngắn bị trigger từ chối (kèm đột biến gỡ trigger cho thấy hạn lùi được); gia hạn khi RFQ đã `CLOSED` bị từ chối; lý do rỗng bị chặn TRƯỚC mọi lần ghi và không để lại dấu vết nào; một lần gia hạn hợp lệ sinh ĐÚNG một bản ghi kiểm toán và ĐÚNG một job cho MỖI lời mời — so bằng phép so TẬP HỢP chứ không bằng phép đếm, vì đếm bằng nhau vẫn đúng khi hai job cùng trỏ về một người và một người bị bỏ quên; và một lần rollback xoá sạch cả ba. **PHẦN CHÊNH:** `RFQ_DEADLINE_EXTENDED_NOTICE` CHƯA CÓ HANDLER nào đăng ký, nên không email hay SMS nào rời khỏi hệ thống. Ở S1 mệnh đề đúng ở mức *“ý định thông báo không bao giờ lạc khỏi lần ghi hạn mới”* — đó là bảo đảm mà outbox giao dịch mua được, và nó là bảo đảm mạnh — nhưng KHÔNG đúng ở mức *“nhà cung cấp đã biết”*. **PHẦN CHÊNH THỨ HAI:** payload cố ý KHÔNG mang `reason`, nên nhà cung cấp biết hạn mới mà không biết vì sao; đó là một quyết định (lý do là văn bản tự do và có thể chứa một con số), không phải một lần quên, nhưng nó là một phần của mệnh đề mà ô ✅ không chứng minh.
 
 - **D1** — ~~**MỆNH ĐỀ HỘI BỐN VẾ, VÀ PHÉP HỘI CHƯA TỪNG ĐƯỢC ĐO MỘT LẦN NÀO.**~~ **[S1.6] PHÉP HỘI NAY ĐƯỢC ĐO, VÀ ĐO BẰNG MỘT CÁCH KHÁC ĐỘT BIẾN MÃ NGUỒN.** Nguyên văn cũ giữ để đối chiếu: *17 test mang nhãn tách làm ĐÚNG HAI cụm rời nhau — 12 test chỉ đo vế (2) MFA, 5 test chỉ đo vế (1) quyền; KHÔNG test nào đo hai vế cùng lúc, và vế (3) cùng vế (4) KHÔNG CÓ MỘT DÒNG MÃ NÀO.* Nay cả bốn vế nằm trong **một hàm** (`assertUnsealAllowed`), và phép hội được đo bằng khuôn *một trạng thái chỉ sai đúng một vế*: với mỗi vế i, dựng trạng thái mà CHỈ vế i sai rồi đòi cổng từ chối VÀ **gọi đúng tên vế i** — nếu một vế bị quên trong cài đặt, test của vế ấy thấy cổng CHO QUA, tức nó đỏ đúng như một lượt đột biến trên trigger. Cộng một đối chứng dương nơi cả bốn vế đúng và cổng trả về đủ bốn tên. **PHẦN CHÊNH, và nó là phần chênh MỚI do kiến trúc tạo ra:** cổng chạy ở thời điểm **ĐIỀU PHỐI** (`dispatchUnseal`), KHÔNG ở thời điểm **GIẢI MÃ**. Nó không chạy được ở worker: `app_unseal` cố ý không đọc được `users` (002) hay ma trận quyền (005), nên hai vế đầu là những câu worker KHÔNG HỎI ĐƯỢC. Giữa điều phối và giải mã, hai vế cuối vẫn được CSDL giữ bằng trigger; hai vế đầu **không được kiểm lại**. Một phiên bị thu hồi ngay sau khi điều phối vẫn dẫn tới một lượt mở thầu chạy trọn.
 
@@ -173,6 +175,8 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 - **E2** — **Hai vế đã được đóng, và phần chênh còn lại KHÔNG phải phần đã bị bắt.** Vế *token một mình không đủ* nay được cưỡng chế bằng KIỂU: `issueOtpChallenge` và `verifyOtpAndStartSession` đòi **token dạng rõ**, và trigger ở 012 đòi thách thức mang `token_id` của đúng lời mời. Vế *trên kênh đã đăng ký* nay đọc đích **từ `supplier_contacts`**, và `channel` quyết định CỘT nào được đọc — nhãn và sự thật là một thứ. PHẦN CHÊNH: *"kênh đã đăng ký"* vẫn là kênh do **NGƯỜI MUA KHAI** khi tạo người liên hệ (`supplier_contacts.phone`, do người mua nhập). Ô ✅ chống được *link bị chuyển tiếp* và *đích do người gọi chọn*; nó **không** chống được *người mua khai sai số*. Xem ADR-015.
 
 - **E3** — Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công.
+
+- **E4** — **ĐO Ở TẦNG DỮ LIỆU; MỆNH ĐỀ NÓI VỀ MỘT ĐƯỜNG XÁC THỰC CHƯA CÓ ENDPOINT NÀO.** Thứ đã đo, và đo bằng một kịch bản tấn công dựng trọn: cùng một mã số thuế tồn tại được ở HAI tổ chức (ADR-013 ở dạng đo được — một `UNIQUE (tax_code)` toàn cục sẽ làm khẳng định ấy đỏ, và lúc ấy MST thành một danh tính toàn hệ thống); cầm ĐÚNG MST và ĐÚNG mã RFQ của tổ chức A, tổ chức B đọc được 0 hàng ở cả ba đường, kèm đối chứng dương dưới đúng tổ chức; không đường nào dựng được một phiên khách nếu chỉ có hai mã ấy (thiếu thách thức OTP, hoặc thách thức chưa đối chiếu, đều bị chặn), kèm đối chứng dương cho đường hợp pháp; và một lần quét NỘI DUNG bốn bảng trên đường xác thực cho thấy không bảng nào CẤT hai mã ấy. **PHẦN CHÊNH:** tất cả những phép đo trên chạy trên Postgres, không trên một đường đăng nhập. Chúng chứng minh hai mã ấy không phải credential TRONG DỮ LIỆU; chúng KHÔNG chứng minh một form đăng nhập tương lai sẽ từ chối chúng. Đó là T5 trên một tầng HTTP, và `apps/` chưa có tầng ấy. **PHẦN CHÊNH THỨ HAI, cùng họ với A3 và A4:** phép quét bốn bảng tìm MỘT CHUỖI đã biết; một mã cất ở dạng đã băm hay đã biến đổi sẽ đi lọt.
 
 - **E5** — Phiên khách ghi `verified_contact_id` **DẪN XUẤT từ thách thức OTP đã đối chiếu** — trigger `guest_sessions_kiem_danh_tinh` (012) đòi nó khớp `invitation_otp_challenges.contact_id`, và một câu INSERT viết tay khai một danh tính khác bị CSDL từ chối (có test). PHẦN CHÊNH: giá trị ấy là **NGƯỜI GIỮ KÊNH đã nhận OTP**, KHÔNG phải con người đang ngồi trước màn hình. Một người chuyển tiếp cả link LẪN mã OTP vừa đọc được cho đồng nghiệp thì hệ thống ghi nhận người giữ kênh, và không cơ chế nào trong S1 phân biệt được hai ca đó.
 
