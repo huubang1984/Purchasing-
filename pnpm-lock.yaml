@@ -33,6 +33,30 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(supports-color@7.2.0)
 
+  apps/unseal-worker:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../../packages/crypto-keys
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../../packages/sealed-envelope
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
+      '@trustprocure/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/audit:
     dependencies:
       pg:
@@ -154,6 +178,21 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../db
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
+  packages/unseal:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@trustprocure/outbox':
+        specifier: workspace:*
+        version: link:../outbox
       pg:
         specifier: ^8.13.0
         version: 8.23.0

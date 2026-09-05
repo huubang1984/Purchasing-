@@ -1,17 +1,16 @@
 {
-  "name": "@trustprocure/sealed-envelope",
+  "name": "@trustprocure/unseal",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./unseal": "./src/unseal.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
     "@trustprocure/audit": "workspace:*",
-    "@trustprocure/crypto-keys": "workspace:*",
     "@trustprocure/identity": "workspace:*",
+    "@trustprocure/outbox": "workspace:*",
     "pg": "^8.13.0"
   }
 }

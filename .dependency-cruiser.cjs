@@ -118,6 +118,10 @@ const INVITATION_INDEX_TS = ciFile("packages/invitation/src/index.ts");
 const BIDDING_SRC_PREFIX = ciPrefix("packages/bidding/src/");
 const BIDDING_INDEX_TS = ciFile("packages/bidding/src/index.ts");
 
+// S1.6 - ho "g10-", ap cho packages/unseal/src/. Lan thu CHIN cung mot khuon.
+const UNSEAL_SRC_PREFIX = ciPrefix("packages/unseal/src/");
+const UNSEAL_INDEX_TS = ciFile("packages/unseal/src/index.ts");
+
 const SEALED_ENVELOPE_SRC_PREFIX = ciPrefix("packages/sealed-envelope/src/");
 const SEALED_ENVELOPE_INDEX_TS = ciFile("packages/sealed-envelope/src/index.ts");
 const SEALED_ENVELOPE_UNSEAL_TS = ciFile("packages/sealed-envelope/src/unseal.ts");
@@ -207,6 +211,18 @@ module.exports = {
       severity: "error",
       from: { pathNot: OUTBOX_SRC_PREFIX },
       to: { path: OUTBOX_SRC_PREFIX, pathNot: [OUTBOX_INDEX_TS] },
+    },
+    {
+      name: "g10-unseal-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/unseal/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Bat bien co ten dang duoc giu: cong chinh sach D1 chi co MOT hinh " +
+        "dang ra ngoai, va no la hinh dang NEM. Mot import tuong doi vao gate.ts tu goi khac se " +
+        "cham toi cac ve rieng le, tuc du de dung mot cong gac chi kiem MOT trong bon ve — dung " +
+        "thu ma rui ro so 5 cua ke hoach S1 goi ten truoc.",
+      severity: "error",
+      from: { pathNot: UNSEAL_SRC_PREFIX },
+      to: { path: UNSEAL_SRC_PREFIX, pathNot: [UNSEAL_INDEX_TS] },
     },
     {
       name: "g9-bidding-chi-index-la-cua-cong-khai",

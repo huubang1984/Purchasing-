@@ -283,9 +283,24 @@ describe("ranh giới kiến trúc", () => {
     // "from" để nó được import unwrap.ts/local-dev-unwrapper.ts/local-dev-shared.ts — nhưng
     // không rule nào (trước fix round 3) cấm import NGƯỢC LẠI vào chính apps/unseal-worker/**.
     // Một module bên trong unseal-worker re-export khả năng mở khóa, module khác import lại
-    // — hàng rào không kêu. Nguy hiểm nhất vì thư mục này CHƯA TỒN TẠI: khi nó ra đời, mọi
-    // symbol nó export sẽ với tới được từ mọi app khác nếu không có rule này.
-    mkdirSync("apps/unseal-worker/src", { recursive: true });
+    // — hàng rào không kêu. ~~Nguy hiểm nhất vì thư mục này CHƯA TỒN TẠI: khi nó ra đời, mọi
+    // symbol nó export sẽ với tới được từ mọi app khác nếu không có rule này.~~
+    //
+    // *** [S1.6] THƯ MỤC NAY ĐÃ RA ĐỜI, VÀ BẢN TRƯỚC CỦA TEST NÀY XOÁ MẤT NÓ. ***
+    // Nguyên văn dòng dọn dẹp cũ, giữ để đối chiếu:
+    //     rmSync("apps/unseal-worker", { recursive: true, force: true });
+    // Câu ấy đúng suốt từ fix round 3 của Task 7 vì thư mục là GIẢ ĐỊNH — probe dựng nó, đo, rồi
+    // xoá. Ngày `apps/unseal-worker` thành mã nguồn thật, cùng câu ấy thành một lệnh xoá thư mục
+    // sản phẩm chạy trong bộ test; nó đã nổ HAI LẦN trong phiên viết S1.6.
+    //
+    // Bản mới KHÔNG dựng và KHÔNG xoá thư mục nào: nó ĐÒI thư mục có thật, và dọn đúng file nó
+    // tự viết. Cùng bài học với probe `g8-` ở cuối file: **một hàng rào dựng quanh một thứ GIẢ
+    // ĐỊNH phải được đọc lại vào ngày thứ ấy thành thật** — và không cơ chế nào báo cho ai biết
+    // ngày đó đã tới.
+    expect(
+      existsSync("apps/unseal-worker/src"),
+      "apps/unseal-worker phải TỒN TẠI THẬT — test này không dựng nó và không xoá nó",
+    ).toBe(true);
     writeFileSync(
       "apps/unseal-worker/src/zprobe-reexport.ts",
       [
@@ -307,7 +322,7 @@ describe("ranh giới kiến trúc", () => {
       expect(status).not.toBe(0);
       expect(output).toContain("g1-khong-import-nguoc-tu-apps-unseal-worker");
     } finally {
-      rmSync("apps/unseal-worker", { recursive: true, force: true });
+      rmSync("apps/unseal-worker/src/zprobe-reexport.ts", { force: true });
       rmSync("apps/tmp-probe-uw-bridge", { recursive: true, force: true });
     }
   }, 60000);
@@ -1323,12 +1338,31 @@ describe("biên giới module của packages/sealed-envelope", () => {
     }
   }, 60000);
 
+  // ============================================================================================
+  // *** BẢN TRƯỚC CỦA TEST NÀY ĐÃ XOÁ MẤT MỘT THƯ MỤC MÃ NGUỒN THẬT. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU. ***
+  //
+  //     const daCo = existsSync("apps/unseal-worker");
+  //     mkdirSync("apps/unseal-worker/src", { recursive: true });
+  //     ...
+  //     finally { if (!daCo) rmSync("apps/unseal-worker", { recursive: true, force: true }); }
+  //
+  // Ở S1.4 đoạn ấy ĐÚNG và có giá trị: `apps/unseal-worker` chưa tồn tại, probe dựng nó tạm để
+  // chứng minh miễn trừ của `g8-` viết đúng tên, rồi dọn sạch. Ở S1.6 thư mục ấy thành MÃ NGUỒN
+  // THẬT — và cùng đoạn mã ấy trở thành một câu `rm -rf` có điều kiện chạy trong bộ test.
+  //
+  // Nó ĐÃ NỔ trong phiên viết S1.6: thư mục vừa tạo cùng `package.json` và `src/index.ts` biến
+  // mất sau một lượt `vitest run`, và `git status` không thấy gì vì mọi thứ còn chưa commit.
+  //
+  // BÀI HỌC, và nó rộng hơn một test: **một hàng rào dựng quanh một thứ GIẢ ĐỊNH phải được đọc
+  // lại vào ngày thứ ấy thành thật.** Điều kiện `if (!daCo)` là một phép đoán về thế giới, và
+  // phép đoán ấy hết hạn mà không ai được báo. Bản mới KHÔNG dựng và KHÔNG xoá thư mục nào: nó
+  // ĐÒI thư mục có thật, và nó chỉ dọn đúng một FILE nó tự viết.
+  // ============================================================================================
   it("[INV-G1] apps/unseal-worker THÌ import được — đối chứng dương cho miễn trừ duy nhất", () => {
-    // `apps/unseal-worker` chưa tồn tại (nó là S1.6). Probe này dựng nó TẠM để đo, và đó chính là
-    // giá trị của nó: quy tắc được chứng minh có răng và có CỬA trước khi căn phòng được xây, nên
-    // ngày `apps/unseal-worker` ra đời thật, không ai phải phát hiện ra rằng miễn trừ viết sai tên.
-    const daCo = existsSync("apps/unseal-worker");
-    mkdirSync("apps/unseal-worker/src", { recursive: true });
+    expect(
+      existsSync("apps/unseal-worker/src"),
+      "apps/unseal-worker phải TỒN TẠI THẬT — test này không dựng nó và không xoá nó",
+    ).toBe(true);
     writeFileSync(
       "apps/unseal-worker/src/zzprobe-mo.ts",
       [
@@ -1343,7 +1377,6 @@ describe("biên giới module của packages/sealed-envelope", () => {
       expect(status, `miễn trừ hợp pháp bị chặn:\n${output}`).toBe(0);
     } finally {
       rmSync("apps/unseal-worker/src/zzprobe-mo.ts", { force: true });
-      if (!daCo) rmSync("apps/unseal-worker", { recursive: true, force: true });
     }
   }, 60000);
 });
