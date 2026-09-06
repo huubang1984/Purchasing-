@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type pg from "pg";
 import { assertTenantBound } from "@trustprocure/audit";
 
@@ -72,4 +73,47 @@ export async function resolveSessionActor(
   const hang = rows[0];
   if (hang === undefined) throw new SessionInvalidError();
   return { type: "USER", id: hang.user_id, sessionId };
+}
+
+// ==============================================================================================
+// [ADR-020 mục 2 — S1.10.2] BEARER → PHIÊN, bằng BĂM. Đường "cookie → SessionActor" của apps/api.
+//
+// `resolveSessionActor` nhận `sessionId` (UUID) và tồn tại cho các gói nghiệp vụ, nơi phiên đã
+// được xác lập. Tầng HTTP cầm thứ khác: một TOKEN dạng rõ từ cookie. 006 đã thiết kế sẵn cột
+// `token_hash` + `UNIQUE (org_id, token_hash)` cho đúng việc này — chỉ chưa có hàm nào dùng tới
+// (khoản nợ 6). Hàm này là nửa ĐỌC của khoản nợ ấy; nửa PHÁT (`startUserSession`) là S1.10.4.
+//
+// HAI ĐIỀU CỐ Ý:
+//   ⑴ Đòi `mfa_verified_at IS NOT NULL`. ADR-020 nói "không có đăng nhập nửa chừng": một phiên
+//      chưa qua TOTP không mở được route người mua nào, kể cả route đọc. Trigger ép điều đó ở tầng
+//      CSDL là S1.10.4; cho tới lúc đó, đây là lớp duy nhất và test đo nó.
+//   ⑵ MỌI ca hỏng — token sai, phiên thu hồi, hết hạn, chưa MFA, tổ chức khác — ném CÙNG MỘT
+//      `SessionInvalidError`. Cùng lý do đã ghi ở `resolveSessionActor`: phân biệt chúng là một
+//      oracle trên tập phiên, và tầng HTTP còn nén tiếp thành một 401 duy nhất.
+// ==============================================================================================
+
+/** base64url, 32–128 ký tự. Sai hình dạng thì không tra CSDL — không có gì để tra. */
+const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/u;
+
+export async function resolveSessionByToken(
+  client: pg.PoolClient,
+  orgId: string,
+  token: string,
+): Promise<SessionActor> {
+  await assertTenantBound(client, orgId, "resolveSessionByToken");
+  if (!TOKEN_RE.test(token)) throw new SessionInvalidError();
+  const hash = createHash("sha256").update(token, "utf8").digest();
+
+  const { rows } = await client.query<{ id: string; user_id: string }>(
+    `SELECT s.id, s.user_id
+       FROM public.sessions s
+      WHERE s.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
+        AND s.revoked_at IS NULL
+        AND s.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()
+        AND s.mfa_verified_at IS NOT NULL`,
+    [hash],
+  );
+  const hang = rows[0];
+  if (hang === undefined) throw new SessionInvalidError();
+  return { type: "USER", id: hang.user_id, sessionId: hang.id };
 }

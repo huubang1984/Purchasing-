@@ -4,8 +4,8 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (PR #2 và #3 đã merge vào `master` — `dca6dab`; **ADR-020 đề
-xuất + kế hoạch S1.10** đang chờ chốt — xem *Điểm chặn* 3 và *Hành động tiếp theo* mục 15. Trước
+**Cập nhật lần cuối:** 2026-09-06 (**S1.10.2 — khung `apps/api` — ĐÃ CÓ MÃ**, xem *Hành động tiếp
+theo* mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -312,7 +312,7 @@ nó chỉ thôi chặn.
 | # | Điểm chặn | Ảnh hưởng | Trạng thái |
 |---|---|---|---|
 | 1 | **Chưa có khách hàng pilot** | Rủi ro xây đúng thứ theo sai thứ tự — lớn hơn mọi rủi ro kỹ thuật | **VẪN CHƯA XỬ LÝ.** 2026-09-04 lập `docs/TIEN-DE-CHUA-DO.md`: **17 tiền đề** về người mua/nhà cung cấp mà mã đang cư xử như thật, mỗi dòng trỏ tới một chỗ có địa chỉ trong kho. Nó **HẠ CHI PHÍ** của buổi làm việc đầu tiên xuống một tiếng đồng hồ đi hết một danh sách — nó **KHÔNG gỡ hộ** điểm chặn này |
-| 3 | **[2026-09-06] ADR-020 (tầng HTTP của `apps/api`) ở trạng thái *Đề xuất — chờ chốt*** | Chặn toàn bộ S1.10: framework, cách phát phiên người mua, dạng URL của magic link, cách cưỡng chế `withGuestSession`. Đổi bất kỳ mục nào sau khi có mã là một cuộc di trú | **Chờ người chốt.** Kế hoạch đã có: `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md` |
+| 3 | ~~**[2026-09-06] ADR-020 (tầng HTTP của `apps/api`) ở trạng thái *Đề xuất — chờ chốt***~~ | ~~Chặn toàn bộ S1.10~~ | **ĐÃ CHỐT cùng ngày** — ADR-020 *Đã chấp nhận*, `policy.manage` → `PROCUREMENT_MANAGER`, H17 vào sổ đăng ký. S1.10.2 bắt đầu. Kế hoạch: `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md` |
 | 2 | ~~**Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`, chọn nhà cung cấp KMS (**ADR-009**, trạng thái *Đang mở*), chọn hạ tầng triển khai~~ → **còn MỘT**: xử lý thư mục `Vibe Coding/` | KMS và hạ tầng **đã chốt cùng lúc 2026-08-29: AWS KMS, `ap-southeast-1`** — đúng như dòng bên phải đã dự báo, chúng không độc lập và được quyết trong một lần. Xem ADR-009. | **Đã chốt một phần** |
 
 > Điểm chặn cũ *"hook `git-safety.sh` và `protect-secrets.sh` đang fail-open"* đã được **gỡ**:
@@ -341,7 +341,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 3 | **Hàng rào tự làm mù mình bằng danh sách tên**, hai lỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng **bốn tên role**, và một **hàm plpgsql ngoài danh sách** không được ghim | `db/rls-coverage.int.test.ts`, `task-4-report.md` |
 | 4 | Hai GUC log nằm ở **tầng vận hành**, không ở tầng có thể cưỡng chế bằng test | `packages/db/src/pool.ts` |
 | 5 | `enqueueJob` **không có oracle xuyên tổ chức và không test nào canh** | `packages/outbox/`, `task-10-report.md` |
-| 6 | **Đường đời `sessions` chưa tồn tại**: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi | `evidence/INV-matrix.md` §4 |
+| 6 | **ĐÓNG NỬA ĐỌC [S1.10.2]:** `resolveSessionByToken` tra token (băm, đòi `mfa_verified_at`) và `apps/api` gọi nó ở mọi route người mua. **Nửa PHÁT vẫn mở** — không hàm sản phẩm nào INSERT `sessions`; đó là S1.10.4 (`startUserSession`). Nguyên văn cũ: ~~**Đường đời `sessions` chưa tồn tại**: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi~~ | `packages/identity/src/session-actor.ts`; `evidence/INV-matrix.md` §4 |
 | 7 | `apps/` rỗng ⇒ `listOrganizations` / `start()` **chưa có đường gọi sản phẩm** | — |
 | 8 | **Không lớp máy nào cưỡng chế quy ước QT3**; chú thích + test là tất cả những gì đang giữ nó | `packages/audit/src/tenant-guard.ts`, `task-8-report.md` §V3.5 |
 | 9 | **Bốn gói thiếu danh sách trắng barrel**: `audit`, `tenancy`, `db`, `test-support`. Một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào | `tests/architecture/barrel-exports.test.ts` |
@@ -395,7 +395,7 @@ qua Testcontainers). `pnpm t0` exit 0, 78 module / 187 phụ thuộc.~~
 
 ~~**Sau S1.2: 724 test** — 363 / 361; t0 91 module / 224 phụ thuộc.~~
 
-~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **Sau vòng cài ADR-016/017/018 (2026-08-30 → 09-03): 802 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
+~~**Sau S1.3 (2026-08-29): 747 test, xanh toàn bộ**~~ **[S1.10.2, 2026-09-06] 1092 khẳng định, 50/51 (33/34 + 17/17), `pnpm test` 491/491 — xem Hành động tiếp theo mục 16.** Số cũ giữ nguyên văn: **Sau vòng cài ADR-016/017/018 (2026-08-30 → 09-03): 802 khẳng định, `pnpm evidence` thoát mã 0, 0 file đỏ, độ phủ ĐỨNG YÊN ở 30/50 — xem ba mệnh đề cố ý không mang nhãn ở trên.** Số cũ giữ nguyên văn: — 367 ở `pnpm test` (20 file) và 380 ở
 `pnpm test:int` (15 file, Postgres thật qua Testcontainers). `pnpm t0` exit 0, **94 module /
 234 phụ thuộc**. `pnpm evidence`: vitest thoát mã 0, 0 file đỏ, *"Cổng evidence: XANH"*. Vòng fix cuối thêm **20 test**,
 tất cả ở `tools/inv-matrix/src/danh-gia.test.ts` cho cơ chế `MOC_GHIM` — xem *Lớp canh cho lần sau*.
@@ -723,6 +723,54 @@ CMK, chưa có role nào được tạo.
     `TIEN-DE-CHUA-DO.md`: người mua có chấp nhận TOTP không — nếu không, S1.10.4 thành SSO và đó
     là một cuộc di trú bảng phiên.
 
+16. **[2026-09-06] S1.10.2 ĐÃ CÓ MÃ — `apps/api` ra đời, và route đầu tiên ra đời CÙNG LÚC với cổng
+    của nó, đúng điều kiện ADR-016 mục 4 ghim từ 2026-08-30.** Đo được, không cảm tính:
+
+    | Phép đo | Kết quả |
+    |---|---|
+    | `pnpm t0` | 146 module, 473 phụ thuộc, 0 vi phạm; họ `g9-` mới có probe ĐỎ THẬT |
+    | `pnpm test` | 491/491 (30 file) |
+    | `apps/api/src/api.int.test.ts` — tiến trình HTTP thật, cổng thật | 11/11 |
+    | `pnpm evidence` | **50/51** (33/34 nghiệp vụ + 17/17 hàng rào), 1092 khẳng định, *Cổng evidence: XANH* |
+    | Đột biến ⑴ gỡ `withGuestSession` khỏi bộ điều phối | `[INV-A5]` qua HTTP **ĐỎ** — hai khách thấy phiên của nhau |
+    | Đột biến ⑵ gỡ bộ header mặc định của `server.ts` | `[INV-E6]` **ĐỎ hai chỗ** |
+    | Đột biến ⑶ handler import `@trustprocure/tenancy` | depcruise **ĐỎ** với `g9-api-routes-khong-cham-tenancy-va-db` |
+
+    **Hình dạng của khung, và vì sao mỗi phần ở chỗ nó ở:** `route-types.ts` (kiểu + `timViPhamBangRoute`
+    thuần), `routes.ts` (lắp `ROUTES` — DỮ LIỆU liệt kê được, điểm chịu lực của ADR-020), `routes/*.ts`
+    (handler, KHÔNG có pool, KHÔNG có `withTenant`, KHÔNG có `node:http`), `dispatch.ts` (nơi DUY NHẤT
+    gọi `withTenant` / `withGuestSession` / `requirePermission`; hai giai đoạn lỗi: xác thực ⇒ một 401
+    duy nhất, handler ⇒ 403/422/mã của `HttpError`/500 câm), `server.ts` (file DUY NHẤT chạm
+    `node:http`; ba header của E6 đặt SAU header của handler nên không ghi đè được; trần thân 64 KiB
+    cưỡng chế TRONG LÚC đọc). Bốn route đủ để đo khung: `GET /health`, `GET /guest/session`, `GET /me`,
+    `GET|POST /suppliers`. Hai hàm mới ở hai gói: `resolveSessionByToken` (identity — cookie → phiên
+    người mua, đòi `mfa_verified_at`) và `resolveGuestSessionByToken` (invitation — cookie → phiên
+    khách, chỉ tra, không gắn GUC).
+
+    **Ba điều lượt này tìm ra bằng cách CHẠY, không bằng cách đọc:** ⑴ `routes.ts` import `routes/*`
+    và `routes/*` import kiểu từ `routes.ts` là một **vòng** — `khong-phu-thuoc-vong` bắt ở lượt T0 đầu;
+    kiểu tách sang `route-types.ts`. ⑵ `req.destroy()` ngay khi vượt trần làm client thấy *"other side
+    closed"* thay vì **413** — đo ở lượt int đầu; nay 413 đi ra trước, socket đóng ở `finish`. ⑶ Bộ
+    quét *"chỉ dispatch.ts gọi `requirePermission`"* bản đầu đếm CHUỖI và tự đỏ vì chú thích của
+    `routes/buyer.ts` nhắc tới tên ấy để nói nó KHÔNG gọi; nay bỏ chú thích rồi đo LỜI GỌI.
+
+    **Sổ đăng ký nở 50 → 51 (H17), và E6 vào ✅ KÈM CỜ §4 ngay hôm nó vào:** hai phép đo (không tham
+    số tên credential trong `ROUTES`; ba header trên mọi phản hồi kể cả 404/405) — còn magic link
+    dạng URL (`/i#<token>`) là S1.10.3, và cờ nói đúng thế. `MOC_GHIM`: 48 → **50**, danh sách 2 → **1**
+    (còn A2, S1.10.6). Kế hoạch S1.10 §4 dự báo E6 vào ở 10.3; thực tế vào ở 10.2 vì vế đo được của nó
+    thuộc KHUNG chứ không thuộc route nghiệp vụ — ghi vào kế hoạch, không sửa dự báo cũ.
+
+    **Một lần đỏ KHÔNG thuộc thay đổi này, ghi ra thay vì nuốt:** lượt `pnpm evidence` đầu tiên có
+    `vitest thoát mã 1` — `packages/db/src/migrate.int.test.ts` *"[M10] unlock bị từ chối quyền khi kết
+    nối còn sống"* đỏ (`expected 1 to be +0`) trong lượt gộp, và **xanh 15/15 khi chạy riêng**. Cùng
+    họ với khoản nợ 24 (tranh chấp Docker), và **cổng evidence vẫn XANH** vì test ấy không mang nhãn
+    INV — tức cổng chỉ canh test có nhãn, và một test hạ tầng đỏ đi lọt qua nó; job T3 của CI mới là
+    nơi bắt. Lượt evidence thứ hai chạy lại để có một phép đo sạch trước khi đẩy.
+
+    **Còn lại của S1.10 (chưa làm):** 10.3 đường khách + `consumed_at` (028); 10.4 đăng nhập người mua
+    ⭐ (029, trigger `mfa_verified_at`, `MFA_LOCKED`); 10.5 route nghiệp vụ + `policy.manage` (030);
+    10.6 bộ quét rò rỉ + kịch bản 41 qua HTTP (A2 vào có cờ); 10.7 bốn lượt security-reviewer.
+
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng
     `git rev-list --count b1a9a8b^1..b1a9a8b^2`, và GitHub cũng đếm 44. Số 91 đến từ phép đếm
@@ -745,8 +793,8 @@ CMK, chưa có role nào được tạo.
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ **Hai mươi ADR** — 001–010 và 012–019 *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) ***Đề xuất — chờ chốt*** 2026-09-06, chặn S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
-| `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1), bảy tầng kiểm thử, evidence pack |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ **Hai mươi ADR** — 001–010 và 012–019 *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ ~~**Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1)~~ **Sổ đăng ký 51 bất biến** (34 nghiệp vụ + **17** hàng rào; H16 ở S1.2, **H17 ở S1.10.2** — mọi route ghi của `apps/api` khai mã quyền), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |
 | `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |

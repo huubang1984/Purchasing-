@@ -106,5 +106,8 @@ export {
 export {
   SessionInvalidError,
   resolveSessionActor,
+  // [ADR-020 / S1.10.2] Đường "cookie → phiên" của tầng HTTP. Cùng tiêu chí với hai symbol trên:
+  // apps/api không có cách nào tra `sessions` mà không đi qua đây, và đó là điều mong muốn.
+  resolveSessionByToken,
   type SessionActor,
 } from "./session-actor.js";

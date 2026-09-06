@@ -1215,8 +1215,10 @@ một cột giá nào**, cố ý, vì *"bảng không có cột thì không có 
   hiện chia nhỏ** — cả hai thuộc **S2/S3**, không thuộc S1. Ghi ra ở đây để không ai đọc ô ✅ của
   D2 rộng hơn cơ chế.
 - **Vế *"hai phiên khác nhau"* của D2** vẫn mở, đúng như ADR-014 đã ghi.
-- **Ai được sửa chính sách** là một câu hỏi của ADR-016 mục 4 (mã quyền cho route ấy), chưa quyết
-  ở đây.
+- ~~**Ai được sửa chính sách** là một câu hỏi của ADR-016 mục 4 (mã quyền cho route ấy), chưa quyết
+  ở đây.~~ **Chốt 2026-09-06 cùng ADR-020:** mã quyền mới `policy.manage`, gán cho
+  `PROCUREMENT_MANAGER` (migration `030`, S1.10.5). `BUYER` không được — người khai ước lượng
+  không được là người đặt ngưỡng; `DIRECTOR` cố ý không được, cùng lý do đã ghi cho `rfq.open`.
 
 ### Đo bằng gì
 
@@ -1439,7 +1441,8 @@ của G2 để không ai đọc ô ✅ thành *"mỗi RFQ là một ốc đảo"
 
 ## ADR-020 — Tầng HTTP đầu tiên của `apps/api`: **`node:http` trần + bảng route KHAI BÁO; phiên người mua phát bằng magic link email + TOTP; token KHÔNG BAO GIỜ vào URL; đường khách chỉ nhận `client` đã gắn phiên**
 
-**Ngày:** 2026-09-06 · **Trạng thái:** ***Đề xuất — chờ chốt*** · Gỡ chặn: **S1.10** (vòng tầng
+**Ngày:** 2026-09-06 · **Trạng thái:** ~~*Đề xuất — chờ chốt*~~ **Đã chấp nhận (chốt cùng ngày,
+kèm hai quyết định phụ: `policy.manage` thuộc `PROCUREMENT_MANAGER`; H17 vào sổ đăng ký)** · Gỡ chặn: **S1.10** (vòng tầng
 HTTP) · Liên quan: **A2**, **A5**, **E1**, **E6**, **D5**, ADR-007, ADR-008, ADR-012, ADR-015,
 ADR-016 mục 4, ADR-019, khoản nợ 6, 21, 30
 

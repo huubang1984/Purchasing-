@@ -852,3 +852,45 @@ export async function revokeInvitation(
   });
   return true;
 }
+
+// ==============================================================================================
+// [ADR-020 mục 4 — S1.10.2] COOKIE KHÁCH → PHIÊN KHÁCH, bằng BĂM. Đường vào của `withGuestSession`.
+//
+// `verifyOtpAndStartSession` trả `sessionToken` dạng rõ và ghi `bam(sessionToken)` xuống
+// `guest_sessions.token_hash` (010 có `UNIQUE (org_id, token_hash)`). Tầng HTTP cầm token ấy từ
+// cookie và cần `guest_sessions.id` để gọi `withGuestSession` — hàm này là mắt xích đó.
+//
+// Nó CHỈ tra, KHÔNG gắn GUC: gắn là việc của `withGuestSession`, và nó phải chạy ở một giao dịch
+// KHÁC (đọc lại hàng phiên, từ chối thu hồi/hết hạn, đặt cả ba GUC, đọc lại cả ba). Một hàm vừa
+// tra vừa gắn là một chỗ để hai phép kiểm lệch nhau. Mọi ca hỏng ném CÙNG MỘT thông điệp.
+// ==============================================================================================
+
+export interface ResolvedGuestSession {
+  readonly guestSessionId: string;
+  readonly invitationId: string;
+  readonly verifiedChannel: Channel;
+}
+
+export async function resolveGuestSessionByToken(
+  client: pg.PoolClient,
+  orgId: string,
+  token: string,
+): Promise<ResolvedGuestSession> {
+  await assertTenantBound(client, orgId, "resolveGuestSessionByToken");
+  if (!/^[A-Za-z0-9_-]{32,128}$/u.test(token)) {
+    throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
+  }
+  const { rows } = await client.query<{ id: string; invitation_id: string; verified_channel: Channel }>(
+    `SELECT g.id, g.invitation_id, g.verified_channel
+       FROM guest_sessions g
+      WHERE g.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
+        AND g.revoked_at IS NULL
+        AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()`,
+    [bam(token)],
+  );
+  const hang = rows[0];
+  if (hang === undefined) {
+    throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
+  }
+  return { guestSessionId: hang.id, invitationId: hang.invitation_id, verifiedChannel: hang.verified_channel };
+}

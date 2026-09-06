@@ -190,6 +190,8 @@ const DANH_SACH_TRANG_IDENTITY = [
   "generateTotpSecret",
   "requirePermission",
   "resolveSessionActor",
+  // [ADR-020 / S1.10.2] cookie -> phien, bang bam. Cung tieu chi voi resolveSessionActor.
+  "resolveSessionByToken",
   "verifyTotpAttempt",
 ];
 
@@ -489,6 +491,11 @@ const DANH_SACH_TRANG_INVITATION = [
   "issueMagicLinkToken",
   "issueOtpChallenge",
   "redeemMagicLink",
+  // [ADR-020 / S1.10.2] Nhận TOKEN PHIÊN KHÁCH (thứ chỉ tồn tại SAU khi OTP đã đối chiếu) và trả
+  // `guest_sessions.id` cho `withGuestSession`. Nó KHÔNG nhận magic link và KHÔNG mở phiên — tức
+  // không phải ca "nhận token, trả phiên" mà khối chú thích trên cảnh báo; nó chỉ tra một phiên
+  // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
+  "resolveGuestSessionByToken",
   "revokeInvitation",
   "verifyOtpAndStartSession",
 ];

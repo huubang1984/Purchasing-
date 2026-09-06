@@ -422,3 +422,11 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    LÊN.** Lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD sắp đẩy, và hai mốc chết ở
    đây nổ đúng như thiết kế — đó là điều đáng ghi, không phải điều đáng giấu.
 
+6. **[2026-09-06] VÒNG S1.10 ĐÃ BẮT ĐẦU, và hạng mục 10.2 đã có mã.** ADR-020 (tầng HTTP: `node:http`
+   trần + bảng route KHAI BÁO, phiên người mua bằng magic link email + TOTP, token vào fragment,
+   đường khách chỉ nhận `client` đã gắn phiên) chốt cùng ngày; kế hoạch bảy hạng mục ở
+   `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md`. `apps/api` ra đời với bốn route đo khung,
+   lớp canh `g9-`, sổ đăng ký nở lên **51** (H17), độ phủ **50/51**. Chi tiết và ba thứ tìm ra bằng
+   cách chạy: `docs/STATE.md` §*Hành động tiếp theo* mục 15–16. Người tiếp theo bắt đầu ở **S1.10.3**
+   (đường khách) hoặc **S1.10.4** (đăng nhập người mua ⭐) — hai hạng mục ấy độc lập nhau.
+

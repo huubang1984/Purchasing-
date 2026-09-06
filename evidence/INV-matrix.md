@@ -15,9 +15,9 @@ chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này ch�
 
 - **34 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
-- **16 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
+- **17 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 50 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 51 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,18 +27,18 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **32** | 34 |
-| Hàng rào (H) | **16** | 16 |
-| **Cộng** | **48** | **50** |
+| Nghiệp vụ (A–G) | **33** | 34 |
+| Hàng rào (H) | **17** | 17 |
+| **Cộng** | **50** | **51** |
 
-**2 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**1 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
 G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **32/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **33/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -48,7 +48,7 @@ Hôm nay: **32/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | A2 | Giá dạng rõ không tồn tại trong `api` service tại bất kỳ thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi | Kiến trúc: mã hóa ở trình duyệt (ADR-007) | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
 | A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| A5 | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 | 12 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A5 | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 8 | ✅ ĐẠT |  |
 | B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 23 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -64,13 +64,13 @@ Hôm nay: **32/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 16 | ✅ ĐẠT |  |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 34 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 20 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 25 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E4 | MST hay mã RFQ không bao giờ là credential | Thiết kế | T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E5 | Link chuyển tiếp vẫn dùng được, nhưng người nhận phải qua OTP; hệ thống ghi danh tính **thực tế đã xác thực**, không phải danh tính người được mời | Ứng dụng + audit | T4, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 0 | ⏳ CHƯA PHỦ | xem §3 |
+| E6 | Không dữ liệu nhạy cảm nào nằm trong URL — kể cả rò qua header `Referer` | Thiết kế URL + Referrer-Policy | T2, T4 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 46 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
 | F3 | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 | 1 | ✅ ĐẠT |  |
@@ -94,6 +94,7 @@ Hôm nay: **32/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | H14 | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | T3 | 3 | ✅ ĐẠT |  |
 | H15 | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | T0 | 4 | ✅ ĐẠT |  |
 | H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 24 | ✅ ĐẠT |  |
+| H17 | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 | 12 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -114,9 +115,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 48` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 50` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 2` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 1` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -133,7 +134,6 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 | INV | Vì sao chưa phủ |
 |---|---|
 | **A2** | S2+ — CHỦ NGỮ ĐÃ CÓ, THIẾT BỊ ĐO THÌ CHƯA. Ba vế của mệnh đề nói về MỘT TIẾN TRÌNH `api` ĐANG CHẠY: bộ nhớ, APM trace, thông báo lỗi. `apps/` chỉ có một worker mở thầu; không có tiến trình `api` nào để gắn một heap dump hay một APM agent vào. Phần ĐÃ đo được thì nằm ở chỗ khác và đã mang ô của nó: A1 (bảng bản rõ rỗng trước mở thầu), A3 (quét năm bảng dưới superuser) và G1 (`app_api` không đọc được `envelope`). Cái còn thiếu là một phép đo TRÊN TIẾN TRÌNH, và nó đòi một tầng HTTP. |
-| **E6** | S1 — VẪN chưa có URL nào. Magic link của S1.3 sinh ra một TOKEN, không sinh ra một URL: việc token đi vào đường dẫn, vào fragment, hay vào một form POST là quyết định của tầng HTTP, và `apps/` vẫn rỗng. Referrer-Policy cũng thuộc tầng đó. Đây là mã DUY NHẤT của nhóm E còn trống, và nó trống vì một lý do KIẾN TRÚC chứ không vì thiếu thời gian. |
 
 ## 4. Mã đã phủ mà **bảo đảm thật hẹp hơn mệnh đề**
 
@@ -180,6 +180,8 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 - **E4** — **ĐO Ở TẦNG DỮ LIỆU; MỆNH ĐỀ NÓI VỀ MỘT ĐƯỜNG XÁC THỰC CHƯA CÓ ENDPOINT NÀO.** Thứ đã đo, và đo bằng một kịch bản tấn công dựng trọn: cùng một mã số thuế tồn tại được ở HAI tổ chức (ADR-013 ở dạng đo được — một `UNIQUE (tax_code)` toàn cục sẽ làm khẳng định ấy đỏ, và lúc ấy MST thành một danh tính toàn hệ thống); cầm ĐÚNG MST và ĐÚNG mã RFQ của tổ chức A, tổ chức B đọc được 0 hàng ở cả ba đường, kèm đối chứng dương dưới đúng tổ chức; không đường nào dựng được một phiên khách nếu chỉ có hai mã ấy (thiếu thách thức OTP, hoặc thách thức chưa đối chiếu, đều bị chặn), kèm đối chứng dương cho đường hợp pháp; và một lần quét NỘI DUNG bốn bảng trên đường xác thực cho thấy không bảng nào CẤT hai mã ấy. **PHẦN CHÊNH:** tất cả những phép đo trên chạy trên Postgres, không trên một đường đăng nhập. Chúng chứng minh hai mã ấy không phải credential TRONG DỮ LIỆU; chúng KHÔNG chứng minh một form đăng nhập tương lai sẽ từ chối chúng. Đó là T5 trên một tầng HTTP, và `apps/` chưa có tầng ấy. **PHẦN CHÊNH THỨ HAI, cùng họ với A3 và A4:** phép quét bốn bảng tìm MỘT CHUỖI đã biết; một mã cất ở dạng đã băm hay đã biến đổi sẽ đi lọt.
 
 - **E5** — Phiên khách ghi `verified_contact_id` **DẪN XUẤT từ thách thức OTP đã đối chiếu** — trigger `guest_sessions_kiem_danh_tinh` (012) đòi nó khớp `invitation_otp_challenges.contact_id`, và một câu INSERT viết tay khai một danh tính khác bị CSDL từ chối (có test). PHẦN CHÊNH: giá trị ấy là **NGƯỜI GIỮ KÊNH đã nhận OTP**, KHÔNG phải con người đang ngồi trước màn hình. Một người chuyển tiếp cả link LẪN mã OTP vừa đọc được cho đồng nghiệp thì hệ thống ghi nhận người giữ kênh, và không cơ chế nào trong S1 phân biệt được hai ca đó.
+
+- **E6** — **[S1.10.2] Ô ✅ NÀY ĐỨNG TRÊN HAI PHÉP ĐO, VÀ MAGIC LINK DẠNG URL CHƯA PHẢI MỘT TRONG HAI.** Đã đo: ⑴ không mẫu đường dẫn nào trong `ROUTES` mang tham số tên credential (`token|otp|code|session|secret|password`), đọc CẤU TRÚC, kèm đối chứng dương `/guest/redeem/:token` bị bắt; ⑵ **mọi** phản hồi của tiến trình HTTP thật — duyệt từng route của `ROUTES`, cộng 404/405 — mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, và một handler cố ghi đè bị header mặc định đè lại. Phiên (người mua lẫn khách) đi trong cookie, không trong URL; query bị cắt và KHÔNG được đọc. **PHẦN CHÊNH:** magic link **chưa có dạng URL** — ADR-020 mục 3 chốt token vào FRAGMENT (`/i#<token>`) và đó là S1.10.3; cho tới lúc đó vế *"không dữ liệu nhạy cảm nào nằm trong URL"* đúng cho mọi URL mà api ĐÃ phục vụ, chưa đúng cho URL mà email SẼ gửi. Vế *"rò qua Referer"* được đóng ở tầng header; vế trình duyệt thật (T4) chưa đo.
 
 - **F1** — RLS + FORCE phủ mọi bảng tenant, `outbox_jobs` gồm cả. Hàng rào `assertTenantBound` ở tầng ứng dụng là lớp thứ hai và nó tự làm mù mình bằng DANH SÁCH TÊN ở hai chỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng bốn tên role, và hàm plpgsql ngoài danh sách không được ghim.
 
