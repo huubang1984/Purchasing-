@@ -13,7 +13,7 @@
 // Danh tính ở MỌI lời gọi gói là `ctx.actor.sessionId` — dẫn xuất từ cookie (ADR-016). Thân yêu
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
-import { PERMISSIONS } from "@trustprocure/identity";
+import { PERMISSIONS, approveMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
   createInvitation,
@@ -121,6 +121,8 @@ const rfqIdParam = (req: ApiRequest): string => uuidParam(req, "rfqId");
 const unsealIdParam = (req: ApiRequest): string => uuidParam(req, "unsealRequestId");
 const invitationIdParam = (req: ApiRequest): string => uuidParam(req, "invitationId");
 const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId");
+const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
+const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -592,6 +594,43 @@ const ghi: readonly BuyerWriteRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
+    }),
+  },
+  // --------------------------------------------------------------------------------------------
+  // [sổ nợ 40 / review M-5] Đặt lại TOTP — hai người. Yêu cầu và phê duyệt cùng một mã quyền; CSDL
+  // (040) cấm cùng người, cùng phiên; phê duyệt xoá hồ sơ + thu hồi phiên trong một giao dịch.
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/users/:userId/mfa-reset",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.USER_MFA_RESET,
+    resourceType: "USER",
+    resourceId: userIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        mfaReset: await requestMfaReset(
+          ctx.client,
+          ctx.orgId,
+          { userId: userIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/mfa-resets/:requestId/approve",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.USER_MFA_RESET,
+    resourceType: "MFA_RESET_REQUEST",
+    resourceId: mfaResetIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { mfaReset: await approveMfaReset(ctx.client, ctx.orgId, { requestId: mfaResetIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
     }),
   },
 ];

@@ -113,6 +113,8 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   "InvitationError",
   // [S1.10.4] token đăng nhập hỏng/hết hạn/đã dùng — cùng lớp với InvitationError của khách.
   "LoginTokenError",
+  // [040] yêu cầu đặt lại TOTP không ở PENDING / hết hạn / lý do rỗng — lỗi nghiệp vụ, không nội suy dữ liệu.
+  "MfaResetError",
   "BiddingError",
   "ReceiptError",
   "SealedEnvelopeError",

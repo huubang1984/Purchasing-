@@ -334,3 +334,37 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     expect((await goi("GET", "/rfqs/khong-phai-uuid", pm)).status).toBe(404);
   });
 });
+
+describe("[sổ nợ 40 / 040] đặt lại TOTP qua HTTP — hai người", () => {
+  it("BUYER ⇒ 403; PM yêu cầu ⇒ 201; thiếu lý do ⇒ 422; PM tự duyệt ⇒ 422 (CHECK); PM khác duyệt ⇒ 200, hồ sơ mất, cookie nạn nhân ⇒ 401", async () => {
+    const buyer = await nguoi("mr-buyer@vidu.vn", ["BUYER"]);
+    const pm1 = await nguoi("mr-pm1@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const pm2 = await nguoi("mr-pm2@vidu.vn", ["DIRECTOR"]);
+    const nan = await nguoi("mr-nan@vidu.vn", ["BUYER"]);
+    await db.pool.query(
+      "INSERT INTO mfa_credentials (org_id, user_id, kind, secret_wrapped, secret_key_version, confirmed_at, last_used_counter) VALUES ($1, $2, 'TOTP', '\\x01', 'v1', now(), 1)",
+      [orgA, nan.id],
+    );
+    expect((await goi("GET", "/me", nan)).status).toBe(200);
+    expect((await goi("POST", `/users/${nan.id}/mfa-reset`, buyer, { reason: "mat may" })).status).toBe(403);
+    expect((await goi("POST", `/users/${nan.id}/mfa-reset`, pm1, {})).status).toBe(422);
+    const yc = await goi("POST", `/users/${nan.id}/mfa-reset`, pm1, { reason: "mat may" });
+    expect(yc.status, yc.text).toBe(201);
+    const id = (yc.body as { mfaReset: { id: string; status: string } }).mfaReset.id;
+    expect((yc.body as { mfaReset: { status: string } }).mfaReset.status).toBe("PENDING");
+    const tu = await goi("POST", `/mfa-resets/${id}/approve`, pm1, {});
+    expect(tu.status).toBe(422);
+    // CHECK thường (không phải RAISE của trigger): thân cố định, không lộ tên ràng buộc (review H2-8).
+    expect(tu.text).toBe(JSON.stringify({ error: "du lieu vi pham rang buoc" }));
+    const ok = await goi("POST", `/mfa-resets/${id}/approve`, pm2, {});
+    expect(ok.status, ok.text).toBe(200);
+    const kq = (ok.body as { mfaReset: { status: string; credentialDeleted: boolean; sessionsRevoked: number } }).mfaReset;
+    expect(kq.status).toBe("APPROVED");
+    expect(kq.credentialDeleted).toBe(true);
+    expect(kq.sessionsRevoked).toBe(1);
+    expect((await db.pool.query("SELECT 1 FROM mfa_credentials WHERE org_id = $1 AND user_id = $2", [orgA, nan.id])).rows).toHaveLength(0);
+    expect((await goi("GET", "/me", nan)).status).toBe(401);
+    expect((await goi("POST", `/mfa-resets/${id}/approve`, pm2, {})).status).toBe(422);
+    expect((await goi("POST", "/mfa-resets/00000000-0000-4000-8000-000000000000/approve", pm2, {})).status).toBe(422);
+  });
+});

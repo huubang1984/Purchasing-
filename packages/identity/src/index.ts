@@ -136,3 +136,17 @@ export {
   type RedeemedLoginToken,
   type StartedUserSession,
 } from "./login.js";
+// ============================================================================================
+// [040 / sổ nợ 40] Đặt lại TOTP hai người. Cả hai hàm NÉM khi không thoả (MfaResetError, hoặc
+// PermissionDeniedError/23514 của CSDL) và cả hai GHI SỔ — không cái nào là cổng gác im lặng.
+// ============================================================================================
+export {
+  MFA_RESET_TTL_HOURS,
+  MfaResetError,
+  approveMfaReset,
+  requestMfaReset,
+  type ApproveMfaResetInput,
+  type MfaResetOutcome,
+  type MfaResetRequestRecord,
+  type RequestMfaResetInput,
+} from "./mfa-reset.js";
