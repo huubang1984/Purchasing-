@@ -38,12 +38,21 @@ importers:
       '@trustprocure/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@trustprocure/bidding':
+        specifier: workspace:*
+        version: link:../../packages/bidding
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/rfq':
+        specifier: workspace:*
+        version: link:../../packages/rfq
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../../packages/sealed-envelope
       '@trustprocure/supplier':
         specifier: workspace:*
         version: link:../../packages/supplier
