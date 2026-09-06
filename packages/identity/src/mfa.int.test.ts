@@ -1370,12 +1370,10 @@ describe("lược đồ 006", () => {
           "VALUES ($1, $2, $3, 'v1', 999999999)",
         [orgA, nguoiA, Buffer.from("x")],
       ],
-      // Bí mật đã lưu KHÔNG sửa được, và hồ sơ KHÔNG xoá được.
-      [
-        "mfa_credentials.secret_wrapped (UPDATE)",
-        "UPDATE mfa_credentials SET secret_wrapped = $2 WHERE user_id = $1",
-        [nguoiA, Buffer.from("x")],
-      ],
+      // ~~Bí mật đã lưu KHÔNG sửa được~~ [S1.10.7 / 031 / review M-5] app_api nay THAY được bí mật của
+      // hồ sơ CHƯA XÁC NHẬN (ghi danh lại khi ai đó đọc trộm hộp thư ghi danh trước); vế "chỉ khi chưa
+      // xác nhận" do `WHERE confirmed_at IS NULL` ở `login.ts` giữ — đo ở auth.int.test.ts [review M-5].
+      // Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.
       ["mfa_credentials (DELETE)", "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]],
       // `expires_at` không được UPDATE -> không gia hạn phiên vô hạn.
       [
@@ -1585,7 +1583,9 @@ describe("quyền trên hai bảng mới, đo không mù", () => {
       { bang: "mfa_credentials", cot: "locked_until", ai: "app_api", quyen: "UPDATE" },
       { bang: "mfa_credentials", cot: "org_id", ai: "app_api", quyen: "INSERT" },
       { bang: "mfa_credentials", cot: "secret_key_version", ai: "app_api", quyen: "INSERT" },
+      { bang: "mfa_credentials", cot: "secret_key_version", ai: "app_api", quyen: "UPDATE" }, // [031]
       { bang: "mfa_credentials", cot: "secret_wrapped", ai: "app_api", quyen: "INSERT" },
+      { bang: "mfa_credentials", cot: "secret_wrapped", ai: "app_api", quyen: "UPDATE" }, // [031]
       { bang: "mfa_credentials", cot: "user_id", ai: "app_api", quyen: "INSERT" },
       { bang: "sessions", cot: "expires_at", ai: "app_api", quyen: "INSERT" },
       { bang: "sessions", cot: "expires_at", ai: "app_unseal", quyen: "SELECT" },

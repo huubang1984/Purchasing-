@@ -305,3 +305,50 @@ kê ở trên đều có một phép đo tương ứng trong bộ test của nh�
 **Không chứng minh:** rằng bốn báo cáo ấy đã quét hết. Cả bốn reviewer đọc mã bằng mắt, không
 chạy được gì, và không lượt nào tự nhận là đã vét cạn. Các mã MEDIUM/LOW chưa đóng được ghi
 thành khoản nợ có tên ở `docs/STATE.md`.
+
+
+---
+
+# S1.10 — tầng HTTP đầu tiên: lượt review thứ nhất (10.3 + 10.4), và vòng sửa
+
+> **Cùng giới hạn với bốn lượt S1:** reviewer KHÔNG có Bash, KHÔNG có CSDL, KHÔNG chạy được test —
+> chỉ `Read`/`Grep`/`Glob`, và tự khai điều đó ở dòng đầu báo cáo. Mọi phát hiện là **đọc mã**.
+> Lượt này còn có một giới hạn thứ hai, do chính reviewer chỉ ra ở mục "không kết luận được" ⑴:
+> khi reviewer đọc, `routes/buyer.ts` của S1.10.5 đã được viết dở trên cùng cây mã, nên reviewer
+> **không chắc bản mình đọc biên dịch được** — đúng thứ đã xảy ra (commit `214a741` có một lỗi
+> lint, xem STATE mục 21). Báo cáo toàn văn nằm trong sổ tay phiên làm việc (ngoài git); bảng dưới
+> là bản chép có xuất xứ, cùng độ tin cậy với bảng S1.
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.10.3** ⭐ + **S1.10.4** ⭐ | `apps/api` (dispatch, server, router, route-types, routes/anon, guest, auth), `identity/login.ts`, `identity/session-actor.ts`, `invitation.resolveGuestSessionByToken`, migration `028`, `029` | cây mã giữa `5a3dca3` và `214a741` (10.5 đang viết) | Reviewer **không có Bash/CSDL** | **0 CRITICAL · 0 HIGH · 8 MEDIUM · 8 LOW** | vòng sửa 10.7 — xem cột "Trạng thái" bảng dưới |
+
+## Tám MEDIUM, tám LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa 10.7 |
+|---|---|---|
+| M-1 | `/auth/link` đồng nhất THÂN nhưng không đồng nhất THỜI GIAN và mã lỗi: nhánh có người dùng làm nhiều I/O hơn (INSERT + gửi mail), và `send` ném ⇒ 500 chỉ khi người dùng tồn tại | **Đóng một nửa bằng mã** — gửi mail chuyển ra SAU COMMIT (`afterCommit`), nên lỗi của bộ gửi không còn đổi mã trạng thái; **nửa thời gian VẪN MỞ** — sổ nợ **38** |
+| M-2 | Không có bucket theo NGƯỜI GỌI (IP) cho ba route `/auth/*`; ADR-020 hứa `LOGIN_DEST` trên `otp_rate_limits` mà mã không dùng | **MỞ** — sổ nợ **39**; ADR-020 §"Phần KHÔNG đóng" sửa cho đúng thứ đang có (hạn mức theo người dùng, trên bảng token) |
+| M-3 | ADR-020 khai "kiểm `Origin` trên mọi POST" — **không có dòng nào** làm việc ấy | **Đóng bằng mã** — `server.ts` từ chối 403 mọi yêu cầu không-GET có `Origin`/`Sec-Fetch-Site` khác nguồn cho phép; test đối kháng kèm |
+| M-4 | Trigger 029 chỉ kiểm `mfa_verified_at IS NOT NULL` — một proxy mà `startUserSession` luôn thoả; bất biến thật ("vừa có một lần TOTP đúng") chỉ do thứ tự ba dòng trong handler giữ | **Đóng bằng KIỂU, CSDL còn mở** — `startUserSession` đòi `mfaProof: MfaProof`, một lớp constructor riêng tư chỉ `verifyTotpForLogin` tạo được, kiểm đúng người/đúng tổ chức: "mở phiên mà quên TOTP" nay KHÔNG BIÊN DỊCH ĐƯỢC. Vế trigger (đòi bộ đếm TOTP gần đây) **không làm** — lý do đo được ở đầu migration `031`: bộ test lược đồ 006 chèn `sessions` dưới `app_api` để đo FK/CHECK/UNIQUE, và trigger ấy làm tám phép đo rỗng ruột. Sổ nợ **43** |
+| M-5 | Ghi danh TOTP bằng MỘT yếu tố, không audit, không phân biệt hồ sơ chưa xác nhận; ai đọc được hộp thư trước lần đăng nhập đầu chiếm yếu tố thứ hai vĩnh viễn | **Đóng một phần bằng mã** — `MFA_ENROLLED` vào sổ (kèm IP); hồ sơ **chưa `confirmed_at`** được ghi danh LẠI (không khoá chết người mua thật); **đường quản trị đặt lại TOTP VẪN MỞ** — sổ nợ **40** |
+| M-6 | Test `[INV-E6]` "bí mật không vào log" là phép đo RỖNG — đường 500 không chạy (thân `code: 123456` chỉ cho 422) | **Đóng** — test ép 500 THẬT bằng bộ mở bí mật TOTP ném lỗi, đòi `logLoi` KHÔNG rỗng trước khi đòi nó không chứa bí mật |
+| M-7 | Bốn lời gọi I/O ra ngoài (SMS, mail, KMS bọc/mở) chạy TRONG giao dịch `withTenant`: giữ kết nối pool suốt độ trễ nhà cung cấp; `send` ném ⇒ rollback bộ đếm hạn mức | **Đóng cho SMS/mail** — `afterCommit`; **KMS bọc/mở vẫn trong giao dịch** (ghi ở sổ nợ 38, cùng dòng với timeout pool) |
+| M-8 | `callerFingerprint` = IP socket, không có cấu hình proxy tin cậy — sau LB mọi client là MỘT fingerprint, bucket `CALLER` thành hạn mức toàn tổ chức | **Đóng một nửa** — `ServerOptions.remoteAddressOf` cho composition root thay nguồn; ADR-020 ghi rõ *"chưa có hook ấy thì api không được đặt sau proxy"*; hook đọc `X-Forwarded-For` theo CIDR tin cậy là sổ nợ **41** |
+| L-1 | `resolveSessionByToken` không xét `users.status`: người bị đình chỉ vẫn đọc được route đọc tới hết TTL | **Đóng bằng mã** — JOIN `users.status = ACTIVE`, cùng lỗi, có test |
+| L-2 | Cookie không có tiền tố `__Host-`; cookie trùng tên lấy giá trị ĐẦU | **MỞ** — sổ nợ **42** (đổi tên cookie là đổi hợp đồng client) |
+| L-3 | Trộn header bằng spread phân biệt hoa thường — `Cache-Control` (hoa) của handler đứng cạnh `cache-control` mặc định | **Đóng bằng mã** — chuẩn hoá khoá về chữ thường; test |
+| L-4 | Trigger 029 so tên vai `app_api` — vai thứ hai đi qua im lặng | **MỞ, có chủ đích** — ghi ở 029; đổi sang danh sách vai được miễn là quyết định vận hành |
+| L-5 | Không lớp máy nào cấm handler khách `mutates:true` viết SQL tay dưới kết nối chỉ gắn tổ chức | **Đóng bằng lớp canh tĩnh** — `routes.test.ts`: route khách ghi không được chứa `.query(` |
+| L-6 | Bí mật TOTP bị sao chép hai lần trước khi `fill(0)` | **Đóng bằng mã** |
+| L-7 | 401 của `/auth/totp` mang `reason` chi tiết + `lockedUntil` tới giây; thân 200 mang `userId` | **Đóng bằng mã** — chỉ `WRONG_CODE`/`LOCKED_OUT`, `lockedUntil` làm tròn lên phút, bỏ `userId` |
+| L-8 | Không đặt `requestTimeout`/`headersTimeout`/`keepAliveTimeout` — Slowloris thân JSON | **Đóng bằng mã** — ba con số tường minh trong `ServerOptions` |
+
+**Một điều reviewer đúng mà lượt viết không thấy:** chú thích ở `dispatch.ts` nói `withTenant` "ném
+TenantError cho một orgId không tồn tại" — sai, nó chỉ kiểm hình dạng UUID. Đã sửa chú thích trước
+cả vòng sửa. **Ba điểm reviewer KHÔNG kết luận được** vì không chạy được mã: ⑴ cây mã có biên dịch
+không (đúng là không — lỗi lint ở `214a741`); ⑵ độ lớn oracle thời gian M-1 và bộ gửi thật; ⑶ policy
+027 lọc hai route khách không `WHERE`, và trigger 013 chấp nhận `MFA_LOCKED` không kèm phiên — cả
+hai ĐÃ được đo bằng test (`guest.int.test.ts` [INV-A5], `auth.int.test.ts` [INV-E3]).

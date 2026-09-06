@@ -971,7 +971,11 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "locked_until", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "INSERT" },
+      // [S1.10.7 / 031 / review M-5] app_api THAY được bí mật — vế "chỉ khi chưa xác nhận" do UPDATE ở
+      // login.ts giữ (WHERE confirmed_at IS NULL), có đột biến. Hồ sơ đã xác nhận vẫn bất biến ở tầng app.
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai

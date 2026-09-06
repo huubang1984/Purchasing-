@@ -85,7 +85,10 @@ apps/
                         canh "với MỌI route" (cổng quyền, E6, bộ quét rò rỉ) đo được mà không
                         khởi động tiến trình. `dispatch.ts` là nơi DUY NHẤT gọi withTenant /
                         withGuestSession / requirePermission; `routes/**` bị `g9-` cấm chạm
-                        pg, tenancy, node:http. Đang xây ở S1.10.
+                        pg, tenancy, node:http. [S1.10, 2026-09-06] Đủ bốn đối tượng route
+                        (PUBLIC/ANON/GUEST/BUYER), đăng nhập người mua bằng magic link + TOTP,
+                        đường khách trọn vẹn, 28 route người mua; kiểm `Origin` cho mọi yêu cầu
+                        không-GET. CHƯA có composition root chạy thật (pool, KMS, bộ gửi).
   unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy

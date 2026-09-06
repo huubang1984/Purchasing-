@@ -1759,6 +1759,7 @@ describe("migration của dự án", () => {
           "028_khoa_cong_khai_cho_khach.sql",
           "029_dang_nhap_nguoi_mua.sql",
           "030_policy_manage.sql",
+          "031_ghi_danh_lai_totp.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4569,6 +4570,7 @@ describe("migration của dự án", () => {
         "028_khoa_cong_khai_cho_khach.sql",
         "029_dang_nhap_nguoi_mua.sql",
         "030_policy_manage.sql",
+        "031_ghi_danh_lai_totp.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4796,6 +4798,7 @@ describe("migration của dự án", () => {
         "028_khoa_cong_khai_cho_khach.sql",
         "029_dang_nhap_nguoi_mua.sql",
         "030_policy_manage.sql",
+        "031_ghi_danh_lai_totp.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

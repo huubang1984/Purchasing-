@@ -104,13 +104,17 @@ export async function resolveSessionByToken(
   if (!TOKEN_RE.test(token)) throw new SessionInvalidError();
   const hash = createHash("sha256").update(token, "utf8").digest();
 
+  // [review L-1] JOIN `users.status`: một người bị đình chỉ không được đọc gì nữa — không đợi hết TTL.
+  // Cùng một lỗi cho ca này như bốn ca kia: "bị đình chỉ" cũng là một oracle nếu nói ra.
   const { rows } = await client.query<{ id: string; user_id: string }>(
     `SELECT s.id, s.user_id
        FROM public.sessions s
+       JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.user_id
       WHERE s.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
         AND s.revoked_at IS NULL
         AND s.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()
-        AND s.mfa_verified_at IS NOT NULL`,
+        AND s.mfa_verified_at IS NOT NULL
+        AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'`,
     [hash],
   );
   const hang = rows[0];

@@ -17,7 +17,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { verifyTotpAttempt, type MfaAttemptResult, type TotpSecretUnsealer } from "./mfa-credentials.js";
+import { verifyTotpAttempt, type MfaAttemptResult, type TotpSecretUnsealer, type WrappedTotpSecret } from "./mfa-credentials.js";
 
 export const LOGIN_TOKEN_BYTES = 32;
 export const LOGIN_TOKEN_TTL_SECONDS = 15 * 60;
@@ -93,7 +93,11 @@ export interface RedeemedLoginToken {
   readonly tokenId: string;
   readonly userId: string;
   readonly email: string;
-  /** Đã có hồ sơ TOTP chưa — quyết định client phải ghi danh trước hay nhập mã ngay. */
+  /**
+   * Đã có hồ sơ TOTP ĐÃ XÁC NHẬN chưa — quyết định client phải ghi danh trước hay nhập mã ngay.
+   * [review M-5] "Đã xác nhận" = `confirmed_at IS NOT NULL`, tức đã có một lần TOTP đúng: một hồ sơ
+   * chèn bởi ai đó đọc trộm hộp thư nhưng chưa từng chứng minh cầm bí mật KHÔNG khoá được người thật.
+   */
   readonly hasTotp: boolean;
 }
 
@@ -108,7 +112,8 @@ export async function redeemLoginToken(
   const { rows } = await client.query<{ token_id: string; user_id: string; email: string; has_totp: boolean }>(
     `SELECT t.id AS token_id, u.id AS user_id, u.email,
             EXISTS (SELECT 1 FROM public.mfa_credentials m
-                     WHERE m.user_id OPERATOR(pg_catalog.=) u.id AND m.kind OPERATOR(pg_catalog.=) 'TOTP') AS has_totp
+                     WHERE m.user_id OPERATOR(pg_catalog.=) u.id AND m.kind OPERATOR(pg_catalog.=) 'TOTP'
+                       AND m.confirmed_at IS NOT NULL) AS has_totp
        FROM public.user_login_tokens t
        JOIN public.users u ON u.id OPERATOR(pg_catalog.=) t.user_id
       WHERE t.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
@@ -130,13 +135,36 @@ export async function redeemLoginToken(
  * ghi có CHIỀU THỜI GIAN mà `failed_attempts` (một trạng thái bị đặt về 0 khi thành công) không
  * cho được — đúng ba khiếm khuyết ADR-008 liệt kê.
  */
+/**
+ * [review M-4] BẰNG CHỨNG một lần TOTP đúng. Chỉ `verifyTotpForLogin` tạo được (constructor riêng
+ * tư, không export lớp), và `startUserSession` ĐÒI nó — nên "mở phiên mà quên TOTP" là câu KHÔNG
+ * BIÊN DỊCH ĐƯỢC, không phải một thứ tự ba dòng phải nhớ. Vế CSDL của cùng khiếm khuyết (trigger
+ * đòi bộ đếm TOTP gần đây) cố ý chưa làm — sổ nợ 43, lý do ở đầu migration 031.
+ */
+export class MfaProof {
+  private constructor(
+    readonly orgId: string,
+    readonly userId: string,
+    readonly counter: number,
+  ) {}
+  /** @internal — chỉ `verifyTotpForLogin` gọi. */
+  static _tao(orgId: string, userId: string, counter: number): MfaProof {
+    return new MfaProof(orgId, userId, counter);
+  }
+}
+
+export type LoginTotpResult =
+  | { readonly ok: true; readonly proof: MfaProof }
+  | Extract<MfaAttemptResult, { readonly ok: false }>;
+
 export async function verifyTotpForLogin(
   client: pg.PoolClient,
   input: { readonly orgId: string; readonly userId: string; readonly code: string },
   unsealer: TotpSecretUnsealer,
-): Promise<MfaAttemptResult> {
+): Promise<LoginTotpResult> {
   const kq = await verifyTotpAttempt(client, input, unsealer);
-  if (!kq.ok && kq.justLocked) {
+  if (kq.ok) return { ok: true, proof: MfaProof._tao(input.orgId, input.userId, kq.counter) };
+  if (kq.justLocked) {
     await appendAuditEvent(client, input.orgId, {
       actorType: "USER",
       actorId: input.userId,
@@ -146,6 +174,40 @@ export async function verifyTotpForLogin(
     });
   }
   return kq;
+}
+
+/**
+ * [review M-5] Ghi danh TOTP lúc đăng nhập — hoặc THAY bí mật của một hồ sơ CHƯA XÁC NHẬN. Hồ sơ đã
+ * xác nhận (đã có một lần TOTP đúng) KHÔNG thay được ở đây: `rowCount = 0` ⇒ ném. Mọi lần ghi danh
+ * để lại `MFA_ENROLLED` trong sổ (kèm IP) — trước đó việc này KHÔNG có dấu vết nào.
+ */
+export async function enrollOrReplaceTotpForLogin(
+  client: pg.PoolClient,
+  input: { readonly orgId: string; readonly userId: string; readonly wrapped: WrappedTotpSecret; readonly ip: string | null },
+): Promise<{ readonly replaced: boolean }> {
+  await assertTenantBound(client, input.orgId, "enrollOrReplaceTotpForLogin");
+  if (!UUID_RE.test(input.userId)) throw new LoginTokenError();
+  const { rows } = await client.query<{ replaced: boolean }>(
+    `INSERT INTO public.mfa_credentials (org_id, user_id, kind, secret_wrapped, secret_key_version)
+     VALUES ($1, $2, 'TOTP', $3, $4)
+     ON CONFLICT (org_id, user_id, kind) DO UPDATE
+       SET secret_wrapped = EXCLUDED.secret_wrapped,
+           secret_key_version = EXCLUDED.secret_key_version
+       WHERE public.mfa_credentials.confirmed_at IS NULL
+     RETURNING (xmax OPERATOR(pg_catalog.<>) 0) AS replaced`,
+    [input.orgId, input.userId, Buffer.from(input.wrapped.ciphertext), input.wrapped.keyVersion],
+  );
+  const h = rows[0];
+  if (h === undefined) throw new LoginTokenError();
+  await appendAuditEvent(client, input.orgId, {
+    actorType: "USER",
+    actorId: input.userId,
+    action: "MFA_ENROLLED",
+    resourceType: "MFA_CREDENTIAL",
+    payload: { keyVersion: input.wrapped.keyVersion, replaced: h.replaced },
+    ip: input.ip,
+  });
+  return { replaced: h.replaced };
 }
 
 export interface StartedUserSession {
@@ -166,6 +228,8 @@ export async function startUserSession(
   input: {
     readonly tokenId: string;
     readonly userId: string;
+    /** [review M-4] Bằng chứng TOTP — chỉ `verifyTotpForLogin` tạo được; phải là của ĐÚNG người này. */
+    readonly mfaProof: MfaProof;
     readonly ttlSeconds?: number;
     readonly ip?: string | null;
     readonly userAgent?: string | null;
@@ -173,6 +237,9 @@ export async function startUserSession(
 ): Promise<StartedUserSession> {
   await assertTenantBound(client, orgId, "startUserSession");
   if (!UUID_RE.test(input.tokenId) || !UUID_RE.test(input.userId)) throw new LoginTokenError();
+  if (!(input.mfaProof instanceof MfaProof) || input.mfaProof.userId !== input.userId || input.mfaProof.orgId !== orgId) {
+    throw new LoginTokenError();
+  }
   const ttl = Math.min(Math.max(input.ttlSeconds ?? USER_SESSION_DEFAULT_TTL_SECONDS, 60), USER_SESSION_MAX_TTL_SECONDS);
 
   // Tiêu thụ TRƯỚC, và đòi đúng một hàng: hai lượt song song với cùng token thì đúng một lượt

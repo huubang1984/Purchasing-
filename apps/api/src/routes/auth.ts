@@ -14,7 +14,7 @@
 // ==============================================================================================
 import {
   LoginTokenError,
-  enrollTotpCredential,
+  enrollOrReplaceTotpForLogin,
   generateTotpSecret,
   issueLoginToken,
   redeemLoginToken,
@@ -68,7 +68,11 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
       const kq = await issueLoginToken(ctx.client, ctx.orgId, { email });
       // Không có người dùng, bị hạn mức, hay đã gửi: CÙNG một phản hồi. Cái khác duy nhất nằm ở
       // hộp thư — nơi kẻ liệt kê email không nhìn vào được.
-      if (kq.ok) await ctx.services.loginLinkSender.send({ orgId: ctx.orgId, email: kq.email, token: kq.token });
+      // [review M-7] Gửi SAU COMMIT — token đã ở CSDL trước khi mail đi, và lỗi bộ gửi không đổi 200.
+      if (kq.ok) {
+        const { email: dich, token } = kq;
+        ctx.afterCommit(() => ctx.services.loginLinkSender.send({ orgId: ctx.orgId, email: dich, token }));
+      }
       return { status: 200, body: { ok: true } };
     },
   },
@@ -81,12 +85,19 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
       const token = chuoi(ctx.req.body, "token");
       const nguoi = await redeemLoginToken(ctx.client, ctx.orgId, token);
       if (nguoi.hasTotp) return { status: 200, body: { needsEnrollment: false } };
-      // Ghi danh TOTP lần đầu: bí mật sinh ở đây, bọc bằng bộ bọc TIÊM vào, lưu băm-bọc, và đi về
-      // client ĐÚNG MỘT LẦN. Lần redeem sau (cùng token) thấy `hasTotp = true` và không trả gì nữa.
+      // Ghi danh TOTP: bí mật sinh ở đây, bọc bằng bộ bọc TIÊM vào, lưu băm-bọc, và đi về client
+      // ĐÚNG MỘT LẦN. [review M-5] Hồ sơ CHƯA XÁC NHẬN được ghi danh LẠI (thay bí mật) — người mua
+      // thật không bị khoá bởi một lần ghi danh trộm; hồ sơ đã xác nhận thì không, và mọi lần đều
+      // để lại `MFA_ENROLLED`. [review L-6] `Buffer` LÀ `Uint8Array` — không sao chép, xoá một lần.
       const biMat = generateTotpSecret();
-      const boc = await ctx.services.totpSecretWrapper.wrapTotpSecret(ctx.orgId, new Uint8Array(biMat));
-      await enrollTotpCredential(ctx.client, { orgId: ctx.orgId, userId: nguoi.userId, wrapped: boc });
-      const secretBase32 = base32(new Uint8Array(biMat));
+      const boc = await ctx.services.totpSecretWrapper.wrapTotpSecret(ctx.orgId, biMat);
+      await enrollOrReplaceTotpForLogin(ctx.client, {
+        orgId: ctx.orgId,
+        userId: nguoi.userId,
+        wrapped: boc,
+        ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
+      });
+      const secretBase32 = base32(biMat);
       biMat.fill(0);
       return { status: 200, body: { needsEnrollment: true, totpSecretBase32: secretBase32, issuer: "TrustProcure" } };
     },
@@ -106,19 +117,22 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
-        return {
-          status: 401,
-          body: { ok: false, reason: kq.reason, lockedUntil: kq.lockedUntil?.toISOString() ?? null },
-        };
+        // [review L-7] Hai giá trị cho client, không hơn: lý do chi tiết (NO_CREDENTIAL,
+        // CODE_ALREADY_USED, …) là oracle cho kẻ cầm token bị chuyển tiếp; `lockedUntil` làm tròn
+        // LÊN phút để không ai lên lịch đoán tới giây.
+        const khoa = kq.reason === "LOCKED_OUT";
+        const lam = kq.lockedUntil === null ? null : new Date(Math.ceil(kq.lockedUntil.getTime() / 60_000) * 60_000).toISOString();
+        return { status: 401, body: { ok: false, reason: khoa ? "LOCKED_OUT" : "WRONG_CODE", lockedUntil: khoa ? lam : null } };
       }
       const phien = await startUserSession(ctx.client, ctx.orgId, {
         tokenId: nguoi.tokenId,
         userId: nguoi.userId,
+        mfaProof: kq.proof,
         ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
       });
       return {
         status: 200,
-        body: { ok: true, userId: nguoi.userId },
+        body: { ok: true },
         setCookie: [cookiePhienNguoiMua(ctx.orgId, phien.token, phien.expiresInSeconds)],
       };
     },

@@ -53,7 +53,11 @@ function docThan(req: IncomingMessage, tran: number): Promise<string> {
 }
 
 function ghi(req: IncomingMessage, res: ServerResponse, r: ApiResponse): void {
-  const headers: Record<string, string | string[]> = { ...(r.headers ?? {}), ...HEADER_MAC_DINH };
+  // [review L-3] Chuẩn hoá khoá về chữ thường TRƯỚC khi trộn: `Cache-Control` (hoa) của một handler
+  // không được đứng cạnh `cache-control` mặc định thành HAI header cùng tên.
+  const cuaHandler: Record<string, string> = {};
+  for (const [k, v] of Object.entries(r.headers ?? {})) cuaHandler[k.toLowerCase()] = v;
+  const headers: Record<string, string | string[]> = { ...cuaHandler, ...HEADER_MAC_DINH };
   if (r.setCookie !== undefined && r.setCookie.length > 0) headers["set-cookie"] = [...r.setCookie];
   if (r.status === 413) {
     // Thân bị từ chối giữa chừng: không tái dùng kết nối này. Đóng socket khi phản hồi đã ĐI HẾT,
@@ -67,17 +71,52 @@ function ghi(req: IncomingMessage, res: ServerResponse, r: ApiResponse): void {
 
 export interface ServerOptions {
   readonly maxBodyBytes?: number;
+  /**
+   * [review M-3] Origin được phép gửi yêu cầu KHÔNG-GET kèm cookie. Mặc định RỖNG: mọi yêu cầu
+   * không-GET mang header `Origin` (tức đến từ một trình duyệt) đều bị 403 — composition root của
+   * ứng dụng web phải khai origin của nó. Yêu cầu không mang `Origin` lẫn `Sec-Fetch-Site` (client
+   * không phải trình duyệt, test) đi qua: CSRF là bài toán của trình duyệt, và trình duyệt luôn gửi
+   * ít nhất một trong hai header ấy cho yêu cầu không-GET cross-site.
+   */
+  readonly allowedOrigins?: readonly string[];
+  /**
+   * [review M-8] Nguồn địa chỉ bên gọi. Mặc định là socket. Sau một proxy/LB tin cậy, composition
+   * root PHẢI thay bằng một hàm đọc `X-Forwarded-For` theo CIDR tin cậy (sổ nợ 41) — nếu không, mọi
+   * client là MỘT fingerprint và hạn mức theo người gọi của OTP thành hạn mức toàn tổ chức.
+   */
+  readonly remoteAddressOf?: (req: IncomingMessage) => string;
+  /** [review L-8] Ba mốc thời gian tường minh — Slowloris không được sống bằng mặc định của Node. */
+  readonly requestTimeoutMs?: number;
+  readonly headersTimeoutMs?: number;
+  readonly keepAliveTimeoutMs?: number;
+}
+
+/** Yêu cầu không-GET này có đến từ một nguồn KHÁC không? `null` = không xác định được nguồn. */
+export function nguonKhac(
+  origin: string | undefined,
+  secFetchSite: string | undefined,
+  allowedOrigins: readonly string[],
+): boolean {
+  if (origin !== undefined) return !allowedOrigins.includes(origin);
+  if (secFetchSite !== undefined) return secFetchSite !== "same-origin" && secFetchSite !== "none";
+  return false;
 }
 
 export function createApiServer(dispatch: Dispatcher, tuyChon: ServerOptions = {}): Server {
   const tran = tuyChon.maxBodyBytes ?? TRAN_THAN_BYTE;
+  const allowed = tuyChon.allowedOrigins ?? [];
+  const diaChi = tuyChon.remoteAddressOf ?? ((req: IncomingMessage) => req.socket.remoteAddress ?? "");
 
-  return createServer((req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
       let phanHoi: ApiResponse;
       try {
         if (!laHttpMethod(req.method)) {
           phanHoi = { status: 405, body: { error: "phuong thuc khong duoc ho tro" } };
+        } else if (req.method !== "GET" && nguonKhac(req.headers.origin, req.headers["sec-fetch-site"], allowed)) {
+          // [review M-3] Thân cố định, và KHÔNG đọc thân yêu cầu: một POST cross-site bị chặn trước
+          // khi tốn một byte bộ nhớ cho nó.
+          phanHoi = { status: 403, body: { error: "nguon khong duoc phep" } };
         } else {
           const chuoi = await docThan(req, tran);
           const body = phanTichThan(chuoi, req.headers["content-type"]);
@@ -86,7 +125,7 @@ export function createApiServer(dispatch: Dispatcher, tuyChon: ServerOptions = {
             path: tachQuery(req.url ?? "/"),
             body,
             cookies: docCookie(req.headers.cookie),
-            remoteAddress: req.socket.remoteAddress ?? "",
+            remoteAddress: diaChi(req),
           });
         }
       } catch (err) {
@@ -99,4 +138,8 @@ export function createApiServer(dispatch: Dispatcher, tuyChon: ServerOptions = {
       if (!res.destroyed && !res.writableEnded) ghi(req, res, phanHoi);
     })();
   });
+  server.requestTimeout = tuyChon.requestTimeoutMs ?? 30_000;
+  server.headersTimeout = tuyChon.headersTimeoutMs ?? 15_000;
+  server.keepAliveTimeout = tuyChon.keepAliveTimeoutMs ?? 5_000;
+  return server;
 }

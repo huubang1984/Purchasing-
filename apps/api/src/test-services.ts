@@ -29,6 +29,8 @@ export interface LoiMoiDaGui {
 
 export interface DichVuTest {
   readonly services: ApiServices;
+  /** Công tắc gây hỏng cho test đường 500: bật thì bộ mở bí mật TOTP ném. */
+  readonly hong: { totpUnsealer: boolean };
   /** Mọi link đăng nhập đã đi qua bộ gửi. Test đọc token ở đây — và CHỈ ở đây. */
   readonly linkDaGui: LinkDaGui[];
   /** Mọi magic link mời thầu đã đi qua bộ gửi. */
@@ -46,6 +48,7 @@ export function dichVuTest(): DichVuTest {
   };
   const otpDaGui: OtpDaGui[] = [];
   const linkDaGui: LinkDaGui[] = [];
+  const hong = { totpUnsealer: false };
   const loiMoiDaGui: LoiMoiDaGui[] = [];
   // Bộ bọc/mở bí mật TOTP của test: AES-256-GCM, khoá dẫn xuất theo tổ chức, AAD ràng buộc tổ chức
   // + phiên bản — cùng fixture với `packages/identity/src/mfa.int.test.ts`, KHÔNG phải stub trả
@@ -61,6 +64,7 @@ export function dichVuTest(): DichVuTest {
     kind: "TOTP_SECRET_UNSEALER",
     name: "aes-gcm-test",
     openTotpSecret: (orgId: string, wrapped: WrappedTotpSecret): Promise<Uint8Array> => {
+      if (hong.totpUnsealer) return Promise.reject(new Error(`KMS gia dang hong ${Buffer.from(wrapped.ciphertext).toString("base64")}`));
       const phongBi = Buffer.from(wrapped.ciphertext);
       const khoa = khoaTheoToChuc(orgId);
       const d = createDecipheriv("aes-256-gcm", khoa, phongBi.subarray(0, 12));
@@ -72,6 +76,7 @@ export function dichVuTest(): DichVuTest {
     },
   };
   return {
+    hong,
     otpDaGui,
     linkDaGui,
     loiMoiDaGui,

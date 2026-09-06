@@ -128,6 +128,20 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
     expect(readFileSync(join(GOC, "apps/api/src/server.ts"), "utf8")).toMatch(/from "node:http"/u);
   });
 
+  it("[review L-5] route KHÁCH ghi (mutates:true) KHÔNG viết SQL tay — chỉ gọi hàm gói nhận guestSessionId", () => {
+    // Đường ghi của khách chạy dưới `withTenant` KHÔNG GUC (dispatch.ts khối [S1.10.3]); cô lập do
+    // trigger + chữ ký hàm gói giữ. Một `client.query(` trong handler ghi là đọc rộng hơn phiên.
+    const ma = readFileSync(join(GOC, "apps/api/src/routes/guest.ts"), "utf8");
+    const khoi = ma.split(/\n  \{\n    method:/u).slice(1);
+    expect(khoi.length, "phải tách được các route của guest.ts").toBeGreaterThan(3);
+    // `.query<...>(` cũng là một lời gọi — regex phải thấy cả dạng có tham số kiểu.
+    const goiSql = /\.query\s*(?:<|\()/u;
+    const viPham = khoi.filter((k) => /mutates:\s*true/u.test(k) && goiSql.test(k)).map((k) => k.slice(0, 60));
+    expect(viPham).toEqual([]);
+    // Đối chứng: có route ĐỌC dùng SQL tay (cố ý, không WHERE) — nếu không, bộ tách route rỗng ruột.
+    expect(khoi.some((k) => /mutates:\s*false/u.test(k) && goiSql.test(k))).toBe(true);
+  });
+
   it("PROBE: một handler import @trustprocure/tenancy làm depcruise ĐỎ với quy tắc g9-", () => {
     const thuMuc = join(GOC, "apps/api/src/routes");
     const probe = join(thuMuc, "zprobe-g9.ts");

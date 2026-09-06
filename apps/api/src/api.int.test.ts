@@ -334,6 +334,52 @@ describe("[INV-A5] đường khách chỉ nhìn thấy lời mời của chính 
   });
 });
 
+describe("[review M-3] CSRF: yêu cầu không-GET từ nguồn khác bị 403 TRƯỚC khi đọc thân", () => {
+  it("Origin lạ ⇒ 403 dù cookie hợp lệ; Sec-Fetch-Site cross-site ⇒ 403; không header nguồn ⇒ đi qua; Origin được phép ⇒ đi qua", async () => {
+    const goiVoiHeader = async (them: Record<string, string>) => {
+      const res = await fetch(`${goc}/suppliers`, {
+        method: "POST",
+        headers: { cookie: cookieMua(tokPM), "content-type": "application/json", ...them },
+        body: JSON.stringify({ legalName: "CSRF" }),
+      });
+      return res.status;
+    };
+    expect(await goiVoiHeader({ origin: "https://evil.example" })).toBe(403);
+    expect(await goiVoiHeader({ "sec-fetch-site": "cross-site" })).toBe(403);
+    expect(await goiVoiHeader({ "sec-fetch-site": "same-site" })).toBe(403);
+    // Không có nguồn ⇒ không phải trình duyệt ⇒ đi qua (201 vì PM có quyền).
+    expect(await goiVoiHeader({})).toBe(201);
+    expect(await goiVoiHeader({ "sec-fetch-site": "same-origin" })).toBe(201);
+    // Và GET không bị chặn theo Origin.
+    const g = await fetch(`${goc}/me`, { headers: { cookie: cookieMua(tokPM), origin: "https://evil.example" } });
+    expect(g.status).toBe(200);
+    // Hàng "CSRF" KHÔNG được tạo bởi hai lần 403 (chặn trước khi chạm handler): đúng 2 hàng từ hai lần 201.
+    const { rows } = await db.pool.query("SELECT 1 FROM suppliers WHERE org_id = $1 AND legal_name = 'CSRF'", [orgA]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("[review L-3] header của handler viết HOA không đứng cạnh header mặc định — một tên, một giá trị", async () => {
+    const { createDispatcher: tao } = await import("./dispatch.js");
+    const dispatch = tao({
+      pool: apiPool,
+      auditPool,
+      services: dichVuTest().services,
+      routes: [{ method: "GET", path: "/hoa", audience: "PUBLIC", handler: () => Promise.resolve({ status: 200, body: {}, headers: { "Cache-Control": "public, max-age=999", "X-Them": "1" } }) }],
+    });
+    const s2 = createApiServer(dispatch);
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    try {
+      const res = await fetch(`http://127.0.0.1:${(s2.address() as AddressInfo).port}/hoa`);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("x-them")).toBe("1");
+      // Node gộp header trùng tên bằng dấu phẩy — nếu có hai giá trị, chuỗi sẽ chứa "public".
+      expect(res.headers.get("cache-control")).not.toContain("public");
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+});
+
 describe("tầng vận chuyển: trần thân, content-type, phương thức", () => {
   it("thân vượt trần ⇒ 413; content-type sai ⇒ 415; JSON hỏng ⇒ 400; PUT /health ⇒ 405", async () => {
     const to = await goi("POST", "/suppliers", { cookie: cookieMua(tokPM), rawBody: JSON.stringify({ legalName: "x".repeat(4096) }) });

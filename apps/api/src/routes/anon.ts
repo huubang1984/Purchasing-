@@ -90,7 +90,9 @@ export const ROUTES_ANON: readonly AnonRoute[] = [
       }
       // Mã đi TỚI bộ gửi và dừng ở đó. Phản hồi không mang mã, không mang đích — đích là thứ người
       // mua khai, và một client cầm token chuyển tiếp không được biết số của người được mời (E5).
-      await ctx.services.otpSender.send({ channel, destination: kq.destination, code: kq.code });
+      // [review M-7] Gửi SAU COMMIT: bộ đếm hạn mức và thách thức đã được ghi bền trước khi SMS đi.
+      const { destination, code } = kq;
+      ctx.afterCommit(() => ctx.services.otpSender.send({ channel, destination, code }));
       return { status: 200, body: { ok: true, challengeId: kq.challengeId, channel } };
     },
   },

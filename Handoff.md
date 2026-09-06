@@ -430,3 +430,11 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    cách chạy: `docs/STATE.md` §*Hành động tiếp theo* mục 15–16. Người tiếp theo bắt đầu ở **S1.10.3**
    (đường khách) hoặc **S1.10.4** (đăng nhập người mua ⭐) — hai hạng mục ấy độc lập nhau.
 
+7. **[2026-09-06, cuối ngày] S1.10 ĐÃ ĐI HẾT BẢY HẠNG MỤC.** Độ phủ **51/51** — danh sách được-phép-
+   chưa-phủ RỖNG lần đầu; kịch bản mục 41 chạy trọn **qua HTTP** với năm lần đăng nhập TOTP thật và
+   năm phiên khách thật; hai lượt security-reviewer (10.3+10.4; 10.5+10.6+vòng sửa) ở
+   `evidence/security-reviews.md`. Sổ nợ nhận **38–43** — toàn bộ là phần chênh review chỉ ra và
+   được viết thành tên. Ba thứ đọc trước khi tin con số 51/51: A2 mang cờ §4 (heap/APM chưa đo); E6
+   mang cờ (trang `/i#<token>` là tầng web chưa có); đường ghi của khách chạy dưới `withTenant`
+   không GUC (lý do đo được ở 028). Chi tiết: `docs/STATE.md` mục 16–21.
+

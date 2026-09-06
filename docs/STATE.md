@@ -4,8 +4,8 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (**S1.10.5 — route nghiệp vụ người mua — ĐÃ CÓ MÃ**, xem *Hành động
-tiếp theo* mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+**Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 vòng
+sửa sau review; xem *Hành động tiếp theo* mục 20–21; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -373,6 +373,12 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 35 | **ĐÃ ĐÓNG [2026-09-05].** Bucket đích tách làm hai: `DEST` khoá theo (LỜI MỜI, ĐÍCH) — hạn mức thật, không xuyên qua lời mời được nữa — và `DEST_ORG` theo đích toàn tổ chức, một TRẦN CHI PHÍ đặt ở 20 để ba lời gọi không vũ khí hoá được. Mọi bucket nay được tăng TRƯỚC mọi phán quyết, nên việc một lần từ chối vẫn tiêu ngân sách là một QUYẾT ĐỊNH đã ghi ra chứ không một tác dụng phụ. Test đo đúng kịch bản ADR-015 §5 đặt tên. Nguyên văn: ~~**Hạn mức OTP theo ĐÍCH đang KHOÁ chứ không LÀM CHẬM.**~~ ADR-015 §5 viết rõ *"chỉ được làm chậm, không được khoá, vì khoá theo đích cho phép một người khoá lối vào của người khác"*. Bản cài đặt từ chối thẳng (`DEST_RATE_LIMITED`), và khoá bucket là `HMAC(pepper, orgId ‖ "DEST" ‖ đích)` — **không mang lời mời, không mang RFQ**. Nên ba lần phát cho một số điện thoại ở RFQ-1 làm chính nhà cung cấp ấy không nhận được OTP cho RFQ-2 trong 15 phút. Thứ tự cũng sai: hai bucket `CALLER` và `INVITATION` được tăng TRƯỚC phép kiểm `DEST`, nên một lần bị chặn vẫn tiêu ngân sách của lời mời | `packages/invitation/src/invitation.ts` (`issueOtpChallenge`) |
 | 36 | **ĐÃ ĐÓNG [2026-09-05].** ⑴ `verifyOtpAndStartSession` nay KHẲNG ĐỊNH nó đang ở trong một giao dịch — và phép đo ấy đã phải viết lại một lần: bản đầu so `statement_timestamp()` với `now()` và **đỏ giả trên một test hợp lệ**, vì hai mốc ấy trùng nhau ở độ phân giải micro giây. Bản hiện tại dùng `SET LOCAL` rồi đọc lại ở câu sau — nhị phân, không phụ thuộc đồng hồ. ⑵ Phép so `token_hash` — phép so credential chịu lực duy nhất của cả lát cắt — nay ghim `OPERATOR(pg_catalog.=)` và `::pg_catalog.bytea`, với một test đọc thẳng mã nguồn. Nguyên văn: ~~**Hai khoản nợ về cách viết SQL trong `packages/invitation`.**~~ ⑴ Cổng OTP đọc trạng thái ở MỘT câu (`FOR UPDATE`) rồi tăng bộ đếm ở câu KHÁC; nó chỉ tuần tự hoá đúng khi người gọi đang ở trong một giao dịch — điều `withTenant` hôm nay bảo đảm nhưng **không lớp nào cưỡng chế**, và chú thích tại chỗ đang nói mạnh hơn thứ mã làm được. ⑵ Gói này dùng `=` trần ở **mọi** vị từ, kể cả phép so `token_hash` — phép so chịu lực duy nhất của cả lát cắt — trong khi `audit`/`identity`/`outbox` ghim `OPERATOR(pg_catalog.=)` **127 lần** vì một lần chiếm `search_path` đã được TÁI LẬP END-TO-END và lật được một phán quyết an ninh | `packages/invitation/src/invitation.ts` |
 | 37 | **ĐÃ ĐÓNG [2026-09-05].** `UNIQUE (org_id, rfq_id, supplier_id)` đổi thành chỉ mục duy nhất BỘ PHẬN `WHERE revoked_at IS NULL`, nên mời lại được sau khi thu hồi — mà vế gốc *"một nhà cung cấp được mời ĐÚNG MỘT LẦN cho mỗi RFQ"* vẫn nguyên, có test riêng. `clearOtpLockout` là đường ra của khoá cấp-lời-mời: có mã quyền `invitation.unlock`, có audit, và một trigger của `024` cấm `failed_attempts` GIẢM — gỡ khoá là một hành vi, không phải một lần xoá dấu vết. Nguyên văn: ~~**Thu hồi lời mời là VĨNH VIỄN, và khoá theo lời mời không có đường mở.**~~ `rfq_invitations` mang `UNIQUE (org_id, rfq_id, supplier_id)` **không có vị từ bộ phận loại `REVOKED`**, nên một lần bấm nhầm loại một nhà cung cấp khỏi RFQ ấy mãi mãi. Cùng lúc, khoá cấp-lời-mời của 012 chặn MỌI lần phát thách thức mới khi còn một thách thức đang khoá — nên ai cầm một link đã chuyển tiếp giữ được nhà cung cấp thật ở ngoài vô hạn (5 lần sai → khoá 900 giây → lặp), và không có hàm nào gỡ khoá. Cả hai là đường CHẶN NGƯỜI KHÁC DỰ THẦU, cùng họ với nợ 35 | `db/migrations/010_invitations.sql:52`; `db/migrations/012_invitation_hardening.sql` |
+| 38 | **[S1.10.7, review M-1/M-7] `/auth/link` còn ORACLE THỜI GIAN** — nhánh có người dùng làm INSERT + gửi, nhánh không thì một SELECT rồi về; gửi mail/SMS nay ở SAU COMMIT (không đổi mã trạng thái, không giữ pool) nhưng RTT hai nhánh vẫn khác. Đóng đúng cách: đặt job outbox cho MỌI email (kể cả không tồn tại) và phát token trong handler outbox. Cùng dòng: bọc/mở bí mật TOTP (KMS) vẫn chạy TRONG giao dịch; pool `app_api` chưa có `statement_timeout`/`idle_in_transaction_session_timeout` | `apps/api/src/routes/auth.ts`, `dispatch.ts` (afterCommit) |
+| 39 | **[review M-2] Không có bucket theo NGƯỜI GỌI cho `/auth/link`, `/auth/redeem`, `/auth/totp`** — chỉ hạn mức theo người dùng (5 token/15 phút). ADR-020 từng hứa `LOGIN_DEST` trên `otp_rate_limits`; câu ấy đã sửa cho đúng thứ đang có. Cần bucket `CALLER` (IP) ⇒ 429 — và nó phụ thuộc nợ 41 | `packages/identity/src/login.ts` |
+| 40 | **[review M-5] Không có đường QUẢN TRỊ đặt lại TOTP** — người mất bí mật đã xác nhận không có lối vào; ghi danh lại chỉ cho hồ sơ CHƯA xác nhận. Cần một route hai người duyệt + audit | `apps/api/src/routes/auth.ts` |
+| 41 | **[review M-8] `remoteAddressOf` là một hook, chưa có cài đặt đọc `X-Forwarded-For` theo CIDR tin cậy** — chừng nào chưa có, api KHÔNG được đặt sau proxy/LB (ADR-020 ghi); nếu đặt, bucket `CALLER` của OTP thành hạn mức toàn tổ chức | `apps/api/src/server.ts` |
+| 42 | **[review L-2] Cookie phiên chưa dùng tiền tố `__Host-`; cookie trùng tên lấy giá trị ĐẦU** — một subdomain anh em bị chiếm ném cookie được (login CSRF). Đổi tên cookie là đổi hợp đồng với client — làm khi có client thật | `apps/api/src/routes/auth.ts`, `anon.ts`, `router.ts` |
+| 43 | **[review M-4] Vế CSDL của "phiên chỉ ra đời sau một lần TOTP đúng" chưa có** — trigger 029 chỉ đòi `mfa_verified_at`; bằng chứng TOTP nay là KIỂU (`MfaProof`), không phải hàng trong CSDL. Làm được bằng trigger đòi `mfa_credentials.last_used_counter` gần đây, nhưng phải đổi cách tám phép đo lược đồ 006 chèn `sessions` (dưới superuser thay vì `app_api`) | `db/migrations/031_ghi_danh_lai_totp.sql` (khối đầu), `packages/identity/src/login.ts` |
 
 ## Kiến trúc
 
@@ -882,6 +888,40 @@ CMK, chưa có role nào được tạo.
     test `[INV-E6]` "bí mật không vào log" của `auth.int.test.ts` là phép đo RỖNG (đường 500 không
     chạy — ép bằng `code: 123456` chỉ cho 422); và chú thích ở `dispatch.ts` nói `withTenant` tra
     `organizations` — sai, nó chỉ kiểm hình dạng UUID (đã sửa chú thích). Còn lại: 10.6, 10.7.
+
+20. **[2026-09-06] S1.10.6 ĐÃ CÓ MÃ — kịch bản mục 41 đi TRỌN qua HTTP, và độ phủ chạm 51/51 lần đầu.**
+    `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (16 test, sống ở worker vì `g1-` cấm import
+    `executeUnsealRequest` từ ngoài): năm người mua đăng nhập THẬT qua magic link + TOTP, năm nhà cung
+    cấp đi trọn link → OTP → phiên → nộp phong bì → biên nhận, tất cả bằng `fetch`. Bước 11 (worker
+    giải mã) CỐ Ý không qua HTTP — đó là điều A1/G1 đòi. **[INV-A1] [INV-A2] BỘ QUÉT RÒ RỈ:** năm mức
+    giá thật gieo qua năm phong bì, rồi MỌI route trong `ROUTES` (bốn đối tượng, đọc lẫn ghi) gọi
+    TRƯỚC khi mở thầu; quét thân + mọi header + mọi dòng `console.error` bắt được — không một chữ số
+    giá nào lọt. Đối chứng dương: bộ quét bắt được chuỗi giá gieo vào thân giả, và SAU mở thầu nó
+    THẤY giá ở bảng so sánh. **A2 vào ✅ KÈM CỜ §4** (đo phản hồi/header/log; KHÔNG đo heap và APM),
+    vào `MA_PHAI_CO_CO_HEP` ngay hôm đó. `MOC_GHIM` 50 → **51**, danh sách được-phép-chưa-phủ **RỖNG**
+    lần đầu tiên trong dự án. `pnpm evidence` 1129/1129, **51/51** (34/34 + 17/17), XANH. Bước 15 còn
+    đo thêm: không token, mã OTP, bí mật nào của lượt chạy nằm trong sổ kiểm toán hay log.
+
+    **Một lỗi của chính lượt này, ghi ra:** `214a741` (10.4 + 10.5) được đẩy với một lỗi lint —
+    `pnpm t0` đã chạy TRƯỚC lần sửa cuối của `dispatch.ts`, còn `pnpm evidence` không chạy eslint.
+    Cùng bài học mục 14, lần thứ hai. Sửa ở `9005a6a`.
+
+21. **[2026-09-06] S1.10.7 — vòng sửa sau review an ninh, và lượt review thứ hai.** Lượt thứ nhất
+    (10.3 + 10.4): 0 CRITICAL, 0 HIGH, **8 MEDIUM, 8 LOW** — bảng đầy đủ và trạng thái từng dòng ở
+    `evidence/security-reviews.md` §S1.10. **Mười hai đóng bằng mã** trong cùng vòng: kiểm `Origin` /
+    `Sec-Fetch-Site` cho mọi yêu cầu không-GET (M-3 — ADR-020 từng KHAI một lớp không tồn tại, nay
+    có và có test); `MfaProof` — "mở phiên mà quên TOTP" thành câu không biên dịch được (M-4, vế
+    kiểu); ghi danh lại TOTP cho hồ sơ CHƯA xác nhận + `MFA_ENROLLED` vào sổ (M-5, migration `031`
+    cấp UPDATE bí mật, vế "chỉ khi chưa xác nhận" do `WHERE confirmed_at IS NULL` giữ, có đột biến);
+    test `[INV-E6]` "bí mật không vào log" từng là phép đo RỖNG — nay ép 500 THẬT bằng bộ mở bí mật
+    ném và đòi log không rỗng trước (M-6); gửi mail/SMS SAU COMMIT qua `afterCommit` (M-7);
+    `remoteAddressOf` hook (M-8); JOIN `users.status` khi tra phiên — người bị đình chỉ ⇒ 401 ngay
+    (L-1); chuẩn hoá khoá header (L-3); lớp canh tĩnh "route khách ghi không viết SQL tay" (L-5);
+    bỏ hai bản sao bí mật TOTP (L-6); nén `reason` về hai giá trị, `lockedUntil` làm tròn lên phút,
+    bỏ `userId` khỏi thân (L-7); ba timeout máy chủ tường minh (L-8). **Năm khoản vào sổ nợ 38–43:**
+    oracle thời gian `/auth/link` (M-1), bucket theo người gọi cho `/auth/*` (M-2), đường quản trị đặt
+    lại TOTP (M-5 nửa sau), cài đặt `X-Forwarded-For` theo CIDR (M-8 nửa sau), `__Host-` (L-2), vế
+    CSDL của M-4. ADR-020 sửa hai câu cho đúng thứ đang có (CSRF, hạn mức đăng nhập).
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

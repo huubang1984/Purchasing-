@@ -77,6 +77,14 @@ export interface PublicContext {
 }
 
 /**
+ * [review M-7] Việc có TÁC DỤNG PHỤ RA NGOÀI (gửi mail, SMS) không được chạy TRONG giao dịch: nó giữ
+ * một kết nối pool suốt độ trễ của nhà cung cấp, và một lần gửi hỏng làm rollback cả bộ đếm hạn mức.
+ * Handler xếp việc ấy vào đây; bộ điều phối chạy SAU khi giao dịch đã commit, và một lỗi ở đó không
+ * đổi phản hồi (đã quyết) — chỉ được ghi tên ra log.
+ */
+export type AfterCommit = (viec: () => Promise<void>) => void;
+
+/**
  * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
  * link, OTP). `orgId` đọc từ thân, được kiểm hình dạng UUID rồi gắn bằng `withTenant` — nó không
  * phải bí mật, chỉ là toạ độ. Chỉ có ở `/guest/*` và `/auth/*` (lớp canh ở dưới).
@@ -86,6 +94,7 @@ export interface AnonContext {
   readonly orgId: string;
   readonly client: pg.PoolClient;
   readonly services: ApiServices;
+  readonly afterCommit: AfterCommit;
 }
 
 /**
@@ -118,6 +127,7 @@ export interface BuyerContext {
    */
   readonly auditPool: pg.Pool;
   readonly services: ApiServices;
+  readonly afterCommit: AfterCommit;
 }
 
 interface RouteBase {

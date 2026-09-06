@@ -16,4 +16,4 @@ export {
   type TotpSecretWrapper,
 } from "./route-types.js";
 export { ROUTES } from "./routes.js";
-export { createApiServer, HEADER_MAC_DINH } from "./server.js";
+export { createApiServer, HEADER_MAC_DINH, nguonKhac, type ServerOptions } from "./server.js";

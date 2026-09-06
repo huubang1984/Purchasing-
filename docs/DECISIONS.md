@@ -1554,8 +1554,15 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
   thật (SMTP/SES) là hạ tầng chưa có (ADR-009 chưa triển khai). Kịch bản E2E đọc token từ job.
 - **CSRF** đóng bằng `SameSite=Strict` cộng kiểm `Origin` trên mọi POST; **không** có CSRF token
   riêng. Đủ cho một API JSON không có form HTML; phải xét lại khi có form POST cổ điển.
-- **Giới hạn tần suất trên endpoint đăng nhập người mua** đi theo `otp_rate_limits` (ADR-015/018)
-  với bucket mới `LOGIN_DEST`; TOTP thất bại có khoá hồ sơ sẵn (006). **Không** thêm Redis.
+  **[S1.10.7] Câu trên đã có lúc SAI:** từ S1.10.2 tới `214a741` không một dòng nào kiểm `Origin` —
+  review M-3 bắt được. Nay `server.ts` từ chối 403 mọi yêu cầu không-GET có `Origin` ngoài
+  `allowedOrigins` (mặc định rỗng) hoặc `Sec-Fetch-Site` khác `same-origin`/`none`, TRƯỚC khi đọc
+  thân; có test. Composition root của web app phải khai origin của nó.
+- ~~**Giới hạn tần suất trên endpoint đăng nhập người mua** đi theo `otp_rate_limits` (ADR-015/018)
+  với bucket mới `LOGIN_DEST`~~ **[S1.10.7] Thực tế cài KHÁC:** hạn mức theo NGƯỜI DÙNG, đếm trên
+  chính `user_login_tokens` (5 token / 15 phút), không bucket, không pepper. **Chưa có** bucket theo
+  người gọi (IP) cho `/auth/*` — review M-2, sổ nợ 39; và nó phụ thuộc nguồn IP tin cậy (nợ 41).
+  TOTP thất bại có khoá hồ sơ sẵn (006). **Không** thêm Redis.
 - **`ROUTES` liệt kê được chỉ đóng "mọi route ĐÃ KHAI"**; một handler mở `createServer` thứ hai
   ngoài bảng thì không lớp nào thấy — lớp canh `g9-` cấm `node:http` ngoài `server.ts` để đóng
   đúng khe ấy, và đó là phần chênh phải ghi.

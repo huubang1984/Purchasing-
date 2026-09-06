@@ -177,6 +177,22 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     if (!("route" in tim)) return tim;
     const req: ApiRequest = { ...vao, params: tim.params, requestId };
     const route = tim.route;
+    // [review M-7] Việc SAU COMMIT: chạy khi giao dịch đã đóng và phản hồi đã quyết. Một lỗi ở đây
+    // chỉ được ghi TÊN — không đổi mã trạng thái, không mang nội dung (A2).
+    const sauCommit: (() => Promise<void>)[] = [];
+    const afterCommit = (viec: () => Promise<void>): void => {
+      sauCommit.push(viec);
+    };
+    const chaySauCommit = async (r: ApiResponse): Promise<ApiResponse> => {
+      for (const viec of sauCommit) {
+        try {
+          await viec();
+        } catch (e) {
+          console.error(`[api] ${requestId} sau-commit ${e instanceof Error ? e.name : "loi khong ro"}`);
+        }
+      }
+      return r;
+    };
 
     try {
       switch (route.audience) {
@@ -186,8 +202,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "ANON": {
           const orgId = orgIdTuThan(req.body);
           if (orgId === null) throw new HttpError(422, 'thiếu trường "orgId"');
-          return await withTenant(deps.pool, orgId, (client) =>
-            route.handler({ req, orgId, client, services: deps.services }),
+          return await chaySauCommit(
+            await withTenant(deps.pool, orgId, (client) =>
+              route.handler({ req, orgId, client, services: deps.services, afterCommit }),
+            ),
           );
         }
 
@@ -216,8 +234,8 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 deps.auditPool,
               );
             }
-            return route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services });
-          });
+            return route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit });
+          }).then(chaySauCommit);
         }
 
         case "GUEST": {

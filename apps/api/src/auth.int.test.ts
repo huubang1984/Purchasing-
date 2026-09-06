@@ -164,21 +164,73 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     const { token, biMat } = await linkVaGhiDanh("e2@vidu.vn");
     expect(biMat).toHaveLength(20);
     expect((await goi("GET", "/me", { cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}` })).status).toBe(401);
+    // [review M-5] Hồ sơ CHƯA xác nhận ⇒ redeem lần hai ghi danh LẠI (bí mật KHÁC), vẫn không mở phiên.
     const lan2 = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token } });
     expect(lan2.status).toBe(200);
-    expect(lan2.body).toEqual({ needsEnrollment: false });
+    expect((lan2.body as { needsEnrollment: boolean; totpSecretBase32: string }).needsEnrollment).toBe(true);
+    expect(base32Decode((lan2.body as { totpSecretBase32: string }).totpSecretBase32).equals(biMat)).toBe(false);
     expect(lan2.headers.get("set-cookie")).toBeNull();
   });
 
-  it("[INV-E6] bí mật TOTP và token đăng nhập KHÔNG xuất hiện trong bất kỳ dòng log lỗi nào", async () => {
+  it("[INV-E6] bí mật TOTP và token đăng nhập KHÔNG xuất hiện trong bất kỳ dòng log lỗi nào — trên một 500 THẬT", async () => {
+    // [review M-6] Bản trước gửi `code: 123456` (số) và tin rằng nó ép 500 — thực tế 422 và không một
+    // dòng log nào chạy: một phép đo RỖNG mang nhãn [INV-E6]. Nay ép 500 bằng bộ mở bí mật TOTP ném
+    // (thông điệp lỗi giả CỐ Ý mang phong bì bí mật — nếu dispatcher in `err.message`, test đỏ), và
+    // đòi log KHÔNG rỗng trước khi đòi nó không chứa bí mật.
     await taoNguoi("log@vidu.vn");
     const { token, biMat } = await linkVaGhiDanh("log@vidu.vn");
-    // Ép một lỗi 500 có thật để đường log CÓ chạy: một route ghi với thân gây lỗi kiểu lạ.
-    await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: 123456 } });
+    const truoc = logLoi.length;
+    dv.hong.totpUnsealer = true;
+    try {
+      const r = await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: "000000" } });
+      expect(r.status).toBe(500);
+      expect(r.text).toBe(JSON.stringify({ error: "loi noi bo" }));
+    } finally {
+      dv.hong.totpUnsealer = false;
+    }
+    expect(logLoi.length, "đường 500 phải ghi ĐÚNG một dòng — không có nó, phép đo dưới rỗng ruột").toBe(truoc + 1);
     const toanBo = logLoi.join("\n");
     expect(toanBo).not.toContain(token);
     expect(toanBo).not.toContain(biMat.toString("base64"));
     expect(toanBo).not.toContain(biMat.toString("hex"));
+    expect(toanBo).not.toContain("KMS gia dang hong");
+  });
+
+  it("[review L-1] người bị ĐÌNH CHỈ với phiên còn hạn ⇒ 401 ngay, không đợi hết TTL", async () => {
+    const u = await taoNguoi("dinhchi2@vidu.vn");
+    const { cookie } = await dangNhap("dinhchi2@vidu.vn");
+    expect((await goi("GET", "/me", { cookie })).status).toBe(200);
+    await db.pool.query("UPDATE users SET status = 'SUSPENDED' WHERE id = $1", [u]);
+    const r = await goi("GET", "/me", { cookie });
+    expect(r.status).toBe(401);
+    expect(r.text).toBe(JSON.stringify({ error: "phien khong hop le" }));
+  });
+
+  it("[review M-5] hồ sơ TOTP CHƯA xác nhận được ghi danh LẠI và để lại MFA_ENROLLED; hồ sơ ĐÃ xác nhận thì không", async () => {
+    const u = await taoNguoi("ghidanh@vidu.vn");
+    const dem = async () => Number((await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'MFA_ENROLLED'", [orgA, u])).rows[0]?.n ?? "-1");
+    // Lần 1 (kẻ đọc trộm hộp thư): ghi danh, KHÔNG xác nhận.
+    const l1 = await linkVaGhiDanh("ghidanh@vidu.vn");
+    expect(await dem()).toBe(1);
+    // Lần 2 (người thật, link mới): hồ sơ chưa xác nhận ⇒ ghi danh LẠI, bí mật KHÁC, MFA_ENROLLED thứ hai.
+    const l2 = await linkVaGhiDanh("ghidanh@vidu.vn");
+    expect(l2.biMat.equals(l1.biMat)).toBe(false);
+    expect(await dem()).toBe(2);
+    // Bí mật cũ KHÔNG còn mở được phiên; bí mật mới thì có.
+    expect((await goi("POST", "/auth/totp", { body: { orgId: orgA, token: l2.token, code: maHienTai(l1.biMat) } })).status).toBe(401);
+    const ok = await goi("POST", "/auth/totp", { body: { orgId: orgA, token: l2.token, code: maHienTai(l2.biMat) } });
+    expect(ok.status, ok.text).toBe(200);
+    expect(ok.text).not.toContain("userId");
+    // Đã xác nhận: redeem link mới ⇒ needsEnrollment false, KHÔNG có MFA_ENROLLED mới, bí mật giữ nguyên.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ghidanh@vidu.vn" } })).status).toBe(200);
+    const rd = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: dv.linkDaGui.at(-1)!.token } });
+    expect(rd.body).toEqual({ needsEnrollment: false });
+    expect(await dem()).toBe(2);
+    // Đột biến ở tầng SQL: UPDATE thay bí mật của hồ sơ ĐÃ xác nhận dưới app_api ⇒ 0 hàng (vế WHERE giữ).
+    const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+      c.query("UPDATE mfa_credentials SET secret_key_version = 'x' WHERE user_id = $1 AND confirmed_at IS NULL", [u]),
+    );
+    expect(rowCount).toBe(0);
   });
 
   it("[INV-E1] mã đúng ⇒ cookie HttpOnly/Secure/Strict/Path=/ và /me mở; token đăng nhập TIÊU THỤ — replay ⇒ 422", async () => {
