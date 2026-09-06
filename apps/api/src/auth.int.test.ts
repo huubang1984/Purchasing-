@@ -21,7 +21,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
 import type { Route } from "./route-types.js";
-import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
+import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "./test-services.js";
@@ -41,6 +41,7 @@ const logLoi: string[] = [];
 // để trần theo người gọi của một test không rơi vào test khác.
 let soIp = 0;
 let ipHienTai = "203.0.113.1";
+const TRE_TEST_MS = 800;
 beforeEach(() => {
   soIp += 1;
   ipHienTai = `203.0.${Math.floor(soIp / 250)}.${(soIp % 250) + 1}`;
@@ -135,7 +136,8 @@ beforeAll(async () => {
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
   ob = outboxTest(apiPool, dv.services);
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
+  // [review H5-1] `treQuaTranMs` nhỏ để đo "làm chậm, không khoá" mà không chờ 2 s thật.
+  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, treQuaTranMs: TRE_TEST_MS }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }, 180000);
@@ -288,12 +290,66 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     }
   });
 
-  it("tổ chức KHÔNG tồn tại: không đếm được (khoá ngoại) nhưng vẫn cùng một 200 — không mở oracle mới", async () => {
+  it("tổ chức KHÔNG tồn tại: ~~không đếm được (khoá ngoại) nhưng vẫn cùng một 200~~ [nợ 52] cùng một 200 tới lần N, rồi 429 như tổ chức thật (bucket bộ nhớ) — cùng địa chỉ, tổ chức thật vẫn có bucket riêng", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000abcd";
-    const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
-    expect(r.status).toBe(200);
-    expect(r.text).toBe(JSON.stringify({ ok: true }));
+    const orgLa2 = "00000000-0000-4000-8000-00000000abce";
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
+      // Hai tổ chức lạ xen kẽ: bucket theo `route|người gọi`, KHÔNG theo orgId — xoay orgId lạ không mở thêm trần.
+      const r = await goi("POST", "/auth/link", { body: { orgId: i % 2 === 0 ? orgLa : orgLa2, email: "ai-do@vidu.vn" } });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+      expect(r.text).toBe(JSON.stringify({ ok: true }));
+    }
+    const chan = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
+    expect(chan.status).toBe(429);
+    expect(chan.headers.get("retry-after")).toBe("900");
+    // Tổ chức thật từ cùng địa chỉ: bucket CSDL riêng, chưa chạm trần.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } })).status).toBe(200);
+    // Địa chỉ khác, tổ chức lạ: bucket bộ nhớ mới ⇒ 200.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" }, ip: "198.51.100.77" })).status).toBe(200);
   });
+
+  it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 ~~là 429~~ [H5-1] vẫn 200 nhưng bị LÀM CHẬM; tổ chức khác từ cùng địa chỉ vẫn 200 và nhanh", async () => {
+    const orgC = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty C', 'cong-ty-c') RETURNING id")).rows[0]?.id ?? "";
+    const ipThu = (i: number): string => `2001:db8:52:${(i + 1).toString(16)}::1`; // mỗi lần một /64 khác
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const t0 = Date.now();
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(i) });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+      expect(Date.now() - t0, `lần ${i + 1} phải nhanh`).toBeLessThan(TRE_TEST_MS);
+    }
+    const t1 = Date.now();
+    const cham = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
+    expect(cham.status).toBe(200);
+    expect(Date.now() - t1).toBeGreaterThanOrEqual(TRE_TEST_MS);
+    // Cùng địa chỉ mới ấy, tổ chức A: 200 và nhanh — trần là của tổ chức C, không phải của địa chỉ.
+    const t2 = Date.now();
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
+    expect(Date.now() - t2).toBeLessThan(TRE_TEST_MS);
+    // Bucket CSDL: đúng một bucket chạm N+1 cho tổ chức C (bucket toàn tổ chức), N+1 bucket theo địa chỉ ở 1.
+    const { rows } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
+      [orgC],
+    );
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, LOGIN_LINK_MAX_PER_ORG + 1], [LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
+  }, 60_000);
+
+  it("[review H5-1] MỘT địa chỉ không khoá được cả tổ chức: 300 lời gọi từ một địa chỉ (30 tới handler, 270 là 429 rẻ) chỉ cộng 30 vào bucket tổ chức; địa chỉ sạch sau đó 200 và NHANH", async () => {
+    const orgD = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty D', 'cong-ty-d') RETURNING id")).rows[0]?.id ?? "";
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgD, email: "mot-dia-chi@vidu.vn" }, ip: "198.51.100.200" });
+      expect(r.status, `lần ${i + 1}`).toBe(i < LOGIN_LINK_MAX_PER_CALLER ? 200 : 429);
+    }
+    const t0 = Date.now();
+    const sach = await goi("POST", "/auth/link", { body: { orgId: orgD, email: "nguoi-that@vidu.vn" }, ip: "198.51.100.201" });
+    expect(sach.status, "RED THẬT nếu bucket tổ chức được cộng cả khi người gọi đã vượt trần riêng").toBe(200);
+    expect(Date.now() - t0).toBeLessThan(TRE_TEST_MS);
+    const { rows } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
+      [orgD],
+    );
+    // Địa chỉ tấn công: 300 lượt ở bucket riêng; bucket tổ chức: 30 (từ địa chỉ ấy) + 1 (địa chỉ sạch); địa chỉ sạch: 1.
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, 1], [LOGIN_LINK_MAX_PER_CALLER + 1, 1], [LOGIN_LINK_MAX_PER_ORG, 1]]);
+  }, 60_000);
 });
 
 describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là phiên", () => {
@@ -480,10 +536,12 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
 });
 
 describe("[review H2-7] [sổ nợ 38] bộ gửi treo không chạm được phản hồi — và job treo có trần", () => {
-  it("bộ gửi link TREO ⇒ /auth/link về 200 ngay (handler không gọi bộ gửi); job của nó hết hạn với lý do HANDLER_TIMEOUT; không log nào mang token", async () => {
+  it("bộ gửi link TREO ⇒ /auth/link về 200 ngay (handler không gọi bộ gửi); ~~job của nó hết hạn với lý do HANDLER_TIMEOUT~~ [nợ 53] job DONE, việc gửi sau commit quá hạn ⇒ AFTER_COMMIT_FAILED; không log nào mang token", async () => {
     // ~~Bản trước: `await viec()` không trần; bộ gửi treo ⇒ email CÓ THẬT treo vô hạn, email lạ về ngay.~~
     // [sổ nợ 38] Handler HTTP không còn gọi bộ gửi — nó chỉ enqueue — nên một bộ gửi treo KHÔNG có cách
     // nào chạm vào RTT của phản hồi. Cái còn có trần là JOB: runner cắt handler theo `handlerTimeoutMs`.
+    // [sổ nợ 53] Gửi nay là việc SAU COMMIT: job đã DONE, token đã commit, phần gửi quá hạn được báo
+    // riêng và không thử lại.
     await taoNguoi("treo@vidu.vn");
     const treo = { name: "bo-gui-treo", send: () => new Promise<void>(() => undefined) };
     const dvTreo = { ...dv.services, loginLinkSender: treo };
@@ -502,12 +560,49 @@ describe("[review H2-7] [sổ nợ 38] bộ gửi treo không chạm được ph
       expect(Date.now() - batDau).toBeLessThan(3000);
       expect(logLoi.slice(truoc)).toHaveLength(0);
       await obTreo.chay(orgA);
-      expect(obTreo.loi.map((b) => b.reason)).toEqual(["HANDLER_TIMEOUT"]);
+      expect(obTreo.loi.map((b) => b.reason)).toEqual(["AFTER_COMMIT_FAILED"]);
+      expect(obTreo.loi[0]?.gaveUp).toBe(false);
+      const { rows: jobTreo } = await db.pool.query<{ status: string; last_failure_reason: string | null }>(
+        "SELECT status, last_failure_reason FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' ORDER BY created_at DESC LIMIT 1",
+        [orgA],
+      );
+      expect(jobTreo[0]).toEqual({ status: "DONE", last_failure_reason: null });
       // Không dòng log nào (của dispatcher lẫn runner test) mang email hay token.
       expect(logLoi.slice(truoc).join("\n")).not.toContain("treo@vidu.vn");
     } finally {
       await new Promise<void>((xong) => s2.close(() => xong()));
     }
+  });
+});
+
+describe("[sổ nợ 53 / ADR-023] gửi link là việc SAU COMMIT", () => {
+  it("tại lúc `send` được gọi, token ĐÃ COMMIT (đếm được từ pool khác) và job đã DONE; gửi hỏng ⇒ job vẫn DONE, AFTER_COMMIT_FAILED, không email thứ hai", async () => {
+    await taoNguoi("saucommit@vidu.vn");
+    const demToken = async (): Promise<number> =>
+      Number((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM user_login_tokens WHERE org_id = $1", [orgA])).rows[0]?.n);
+    const truoc = await demToken();
+    const thayLucGui: { token: number; job: string | undefined }[] = [];
+    const guiRoiHong = {
+      name: "bo-gui-do-truoc-commit",
+      send: async () => {
+        // ~~Trước nợ 53: token nằm trong giao dịch CHƯA commit của job ⇒ pool khác đếm được `truoc`.~~
+        const { rows } = await db.pool.query<{ status: string }>(
+          "SELECT status FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' ORDER BY created_at DESC LIMIT 1",
+          [orgA],
+        );
+        thayLucGui.push({ token: await demToken(), job: rows[0]?.status });
+        throw new Error("SMTP hong");
+      },
+    };
+    const obHong = outboxTest(apiPool, { ...dv.services, loginLinkSender: guiRoiHong });
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "saucommit@vidu.vn" } })).status).toBe(200);
+    expect(await obHong.chay(orgA)).toBe(1);
+    expect(thayLucGui).toEqual([{ token: truoc + 1, job: "DONE" }]);
+    expect(obHong.loi.map((b) => [b.reason, b.gaveUp])).toEqual([["AFTER_COMMIT_FAILED", false]]);
+    // Không thử lại: lượt chạy sau không nhặt gì, không token thứ hai, bộ gửi không được gọi lần hai.
+    expect(await obHong.chay(orgA)).toBe(0);
+    expect(await demToken()).toBe(truoc + 1);
+    expect(thayLucGui).toHaveLength(1);
   });
 });
 

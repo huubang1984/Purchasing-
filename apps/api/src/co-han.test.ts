@@ -16,6 +16,25 @@ describe("[sổ nợ 38] coHan / boiTranKms", () => {
     await expect(coHan(() => Promise.reject(new Error("goc")), 100, "X")).rejects.toThrow("goc");
   });
 
+  it("[review H5-4] viec() NÉM ĐỒNG BỘ ⇒ coHan reject đúng lỗi ấy, đồng hồ được dọn, KHÔNG có unhandledRejection", async () => {
+    const moCoi: unknown[] = [];
+    const nghe = (e: unknown): void => {
+      moCoi.push(e);
+    };
+    process.on("unhandledRejection", nghe);
+    try {
+      const nem = (): Promise<never> => {
+        throw new Error("adapter hong dong bo");
+      };
+      await expect(coHan(nem, 20, "X")).rejects.toThrow("adapter hong dong bo");
+      // Chờ quá `ms` để đồng hồ (nếu chưa dọn) kịp reject `het`.
+      await new Promise((r) => setTimeout(r, 60));
+      expect(moCoi).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", nghe);
+    }
+  });
+
   it("boiTranKms: wrapper/unsealer treo ⇒ KmsQuaHan trong trần; các trường khác giữ NGUYÊN tham chiếu; kind/name giữ nguyên", async () => {
     const wrapper: TotpSecretWrapper = { name: "treo", wrapTotpSecret: () => treo() };
     const unsealer: TotpSecretUnsealer = { kind: "TOTP_SECRET_UNSEALER", name: "treo", openTotpSecret: () => treo() };

@@ -461,3 +461,37 @@ nên hồ sơ người khác cùng tổ chức không dùng được; DELETE 040
 kind) và `consumed_at` đặt trong cùng giao dịch nên không dùng lại được; FK `(org_id, approved_by)`
 ép người duyệt cùng tổ chức; `__Host-` chặn subdomain anh em ném cookie nên "bỏ tên lặp" không mở
 DoS thực tế; cookie khách `Path=/` không được đọc ở route người mua.
+
+---
+
+# S1.13 — lượt review thứ NĂM (ba khoản nợ 51–53), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.13** (ADR-023) | `packages/outbox/src/{runner,index}.ts`, `apps/api/src/{outbox-api,bucket-bo-nho,dispatch,route-types,co-han}.ts`, `apps/api/src/routes/{auth,anon}.ts`, `hardening.always.sql` khối [S1.13], `db/migrations/{039,040,041}` | cây nhánh `no-51-53` tại `be200c3` (ba commit nợ, trước lượt sửa) | Review tĩnh; reviewer đọc thẳng tệp, không chạy mã, không CSDL | **0 CRITICAL, 1 HIGH, 1 MEDIUM, 4 LOW; sau sửa: 0 mở, hai phần chênh thành sổ nợ 54–55** | `f346788` (H5-1, H5-3, H5-4), commit H5-2/H5-5 ngay sau, docs (H5-6) |
+
+## Một HIGH, một MEDIUM, bốn LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H5-1 | **HIGH.** Bucket TOÀN TỔ CHỨC của `/auth/link` được cộng cả khi người gọi đã vượt trần riêng, và vượt thì 429 ⇒ MỘT địa chỉ, 300 lời gọi/15 phút (30 tới handler, 270 là 429 rẻ) khoá cửa xin link của cả tổ chức, lặp mãi; `orgId` không phải bí mật (cookie của mọi NCC từng được mời). Lời khai "bịt đường xoay /64" giả định một cái giá mà mã không đòi | **Đóng bằng mã.** Bucket tổ chức chỉ cộng khi người gọi CHƯA vượt trần riêng (một địa chỉ góp tối đa `callerLimit`); vượt `orgLimit` ⇒ LÀM CHẬM `treQuaTranMs` (mặc định 2 s) rồi vẫn xử lý — không 429 (ADR-015 §5); log một dòng chỉ mang route + requestId. Test RED thật: một địa chỉ 300 lời gọi ⇒ địa chỉ sạch sau đó 200 và NHANH, bucket tổ chức = 31; 300 địa chỉ khác /64 ⇒ lần 301 vẫn 200 nhưng chậm ≥ trễ. Lời khai ở `auth.ts`, `route-types.ts`, ADR-023 §2 gạch tại chỗ. Trần "chi phí theo số người dùng" và kênh cảnh báo vận hành: chưa có kênh, ghi ở ADR-023 |
+| H5-2 | **MEDIUM.** Tiền điều kiện "hàm đã tồn tại" của năm mục hardening ⇒ `DROP FUNCTION … CASCADE` (xoá cả hàm lẫn trigger) làm mục im lặng bỏ qua ở cả lượt sửa lẫn phán xét — khác `la_duong_ung_dung` (caller ném), các hàm này LÀ trigger, mất chúng là mất phép kiểm (041 ⇒ email nằm lại; 039 ⇒ phiên đã-MFA không cần TOTP; 040 ⇒ `app_api` xoá hồ sơ TOTP của bất kỳ ai) mà `migrate()` xanh mãi. Cùng ca R4 đã đo ở vòng fix 5 | **Đóng bằng mã.** Tiền điều kiện đổi sang "migration nguồn đã áp dụng": bảng `mfa_reset_requests` tồn tại cho ba mục 040 (kể cả `mfa_credentials_xoa_can_yeu_cau`), dòng `schema_migrations` cho 013/037/039/041. Hàm mất được DỰNG LẠI. Test trôi thêm hai ca `DROP … CASCADE` — chạy trên bản hardening cũ: hai hàm KHÔNG trở lại (RED thật); bản mới: trở lại kèm trigger `A`. Lời khai đầu khối sửa |
+| H5-3 | **LOW.** Lời khai "oracle H4-5 đóng" sai: bucket bộ nhớ (tổ chức lạ) và bucket CSDL (tổ chức thật) là hai bộ đếm rời ⇒ mồi N lần vào UUID giả rồi gửi UUID ứng viên: 429 = lạ, 200 = thật — MỘT lời gọi thay vì N | **Đóng bằng lời khai đúng** (dispatch.ts, ADR-023 §2, STATE): chấp nhận với cùng lý do H4-5 (UUIDv4); đóng thật cần bảng bucket không khoá ngoại tới `organizations` — **sổ nợ 55** |
+| H5-4 | **LOW.** `coHan`: `viec()` ném ĐỒNG BỘ ⇒ `Promise.race` không được dựng, đồng hồ không bị dọn, `het` reject không ai bắt sau `ms` ⇒ `unhandledRejection` giết tiến trình `api`; nợ 53 mở call site đầu tiên cho một adapter gửi do bên thứ ba cài | **Đóng bằng mã.** `Promise.race([Promise.resolve().then(viec), het])`. Test: adapter ném đồng bộ ⇒ reject đúng lỗi, chờ quá `ms`, `process.on("unhandledRejection")` không nhận gì |
+| H5-5 | **LOW.** Danh sách ghim viết tay và còn thiếu cùng lớp: hai trigger danh tính của chính 040, thân 013 `kiem_danh_tinh_theo_phien`, 029 `sessions_kiem_mfa_khi_tao` và 032 `mfa_credentials_khoa_ho_so_da_xac_nhan` (bản 037) | **Đóng phần lớn bằng mã.** Ba mục hàm mới (013 thân-không-trigger, hai hàm 037 kèm trigger 029/032) và hai trigger danh tính 040 ghim vào mục `mfa_reset_kiem_quyen`; `HAM_51` của test đồng bộ mở rộng; test trôi DROP trigger danh tính ⇒ trở lại. 21 trigger của 013 và test "mọi hàm trigger có mặt trong danh sách" — **sổ nợ 54** |
+| H5-6 | **LOW.** Bốn tệp mã viện dẫn "ADR-023" nhưng ADR chưa có lúc review (kế hoạch 13.4 mới hứa); hợp đồng đổi của gói chỉ sống trong docstring | **Đóng bằng tài liệu.** ADR-023 viết trong cùng PR, ghi rõ ba điều reviewer đòi: at-most-once là cố ý; token không gửi vẫn tiêu 1/5 hạn mức 15 phút của người dùng (khi SMTP hỏng người dùng bị "câm" không thông điệp — hệ quả của nợ 38); `AFTER_COMMIT_FAILED` chỉ tới `console.error` vì dự án chưa có kênh cảnh báo vận hành |
+
+**Ghi chú của reviewer, giữ lại để lượt sau khỏi tìm lại:** việc sau commit chỉ chạy sau `withTenant`
+trả về (commit + huỷ kết nối), nhánh `KetCucKhongGhiDuocError` `continue` trước đó ⇒ không còn cửa
+sổ "email đã đi, token bị rollback"; hai runner song song: sau DONE không ai claim lại, A chậm–B claim
+⇒ A không gửi, đúng một email; promise gửi bị BỎ chứ không HUỶ khi quá hạn — trách nhiệm adapter
+(cần AbortSignal riêng); `AFTER_COMMIT_FAILED` không bao giờ vào `last_failure_reason`; unseal-worker
+không có việc sau commit và cố ý giữ "gửi trong giao dịch" cho break-glass; khoá bộ nhớ không có orgId
+nên xoay UUID lạ không mở trần; hai `INSERT … ON CONFLICT` cùng thứ tự ⇒ không deadlock; không đặt
+được `remoteAddress = "to-chuc"` vì `taoDocDiaChi` chỉ trả IP hợp lệ hoặc socket; `pg_get_triggerdef`
+ổn định PG11–16, nếu deparse đổi thì hậu điều kiện SAI ⇒ `migrate()` gãy ồn ào, không im lặng; `DROP
+FUNCTION` có điều kiện chỉ chạy khi `prorettype <> trigger` nên không vỡ vì trigger phụ thuộc; 038 chỉ
+đổi CHECK, trôi ở đó fail-closed.
+

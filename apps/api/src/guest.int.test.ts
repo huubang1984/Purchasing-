@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
@@ -22,8 +22,9 @@ import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation"
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
-import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
+import { COOKIE_PHIEN_KHACH, GUEST_OTP_VERIFY_MAX_PER_CALLER, GUEST_REDEEM_MAX_PER_CALLER } from "./routes/anon.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, type DichVuTest } from "./test-services.js";
 
@@ -84,8 +85,17 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown } = {}): Promise<PhanHoi> {
-  const headers: Record<string, string> = {};
+// [sổ nợ 52] Mỗi test một địa chỉ người gọi (qua X-Forwarded-For, socket 127.0.0.1 khai là proxy), để
+// trần theo người gọi của hai route khách không rơi từ test này sang test khác — cùng khuôn auth.int.
+let soIp = 0;
+let ipHienTai = "203.0.113.1";
+beforeEach(() => {
+  soIp += 1;
+  ipHienTai = `203.0.${Math.floor(soIp / 250)}.${(soIp % 250) + 1}`;
+});
+
+async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown; ip?: string } = {}): Promise<PhanHoi> {
+  const headers: Record<string, string> = { "x-forwarded-for": tuyChon.ip ?? ipHienTai };
   if (tuyChon.cookie !== undefined) headers.cookie = tuyChon.cookie;
   let body: string | undefined;
   if (tuyChon.body !== undefined) {
@@ -160,7 +170,7 @@ beforeAll(async () => {
   });
 
   dv = dichVuTest();
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }));
+  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   expect([orgA, uA, sA, csA, rfqA].filter((x) => x === "")).toEqual([]);
@@ -230,6 +240,27 @@ describe("ba bước vô danh: redeem → OTP → verify", () => {
     expect((await goi("POST", "/guest/redeem", { body: { token: lm.token } })).status).toBe(422);
     const la = await goi("POST", "/guest/redeem", { body: { orgId: "00000000-0000-4000-8000-000000000000", token: lm.token } });
     expect(la.status).toBe(422);
+  });
+});
+
+describe("[sổ nợ 52] hạn mức theo NGƯỜI GỌI trên hai route khách", () => {
+  it("/guest/redeem: token SAI N lần ⇒ 422, lần N+1 ⇒ 429 + Retry-After; địa chỉ khác vẫn 422; /guest/otp/verify cùng khuôn", async () => {
+    const rac = "A".repeat(43);
+    for (let i = 0; i < GUEST_REDEEM_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/guest/redeem", { body: { orgId: orgA, token: rac } })).status, `lần ${i + 1}`).toBe(422);
+    }
+    const chan = await goi("POST", "/guest/redeem", { body: { orgId: orgA, token: rac } });
+    expect(chan.status).toBe(429);
+    expect(chan.headers.get("retry-after")).toBe("900");
+    expect((await goi("POST", "/guest/redeem", { body: { orgId: orgA, token: rac }, ip: "198.51.100.52" })).status).toBe(422);
+    // Bucket của redeem KHÔNG chạm verify: verify từ cùng địa chỉ vẫn đếm từ đầu.
+    for (let i = 0; i < GUEST_OTP_VERIFY_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/guest/otp/verify", { body: { orgId: orgA, token: rac, code: "000000" } })).status, `verify lần ${i + 1}`).toBe(422);
+    }
+    expect((await goi("POST", "/guest/otp/verify", { body: { orgId: orgA, token: rac, code: "000000" } })).status).toBe(429);
+    // Một khách THẬT từ địa chỉ khác không bị ảnh hưởng.
+    const lm = await moi("NCC hạn mức");
+    expect((await goi("POST", "/guest/redeem", { body: { orgId: orgA, token: lm.token }, ip: "198.51.100.53" })).status).toBe(200);
   });
 });
 

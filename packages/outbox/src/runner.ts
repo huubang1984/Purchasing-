@@ -41,7 +41,17 @@ export interface OutboxJob {
  *   3. Handler PHẢI idempotent (AT-LEAST-ONCE — xem docstring `JobRunner`), và phải chạy
  *      xong trong `handlerTimeoutMs`; quá hạn thì lượt chạy bị bỏ dở và job được hẹn lại.
  */
-export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void>;
+/**
+ * [sổ nợ 53 / ADR-023] Việc SAU COMMIT: handler trả về một hàm thì runner gọi hàm ấy SAU khi giao
+ * dịch của job (công việc của handler + dấu DONE) đã commit và kết nối đã được trả — ngoài mọi giao
+ * dịch, có trần `handlerTimeoutMs`. Dành cho tác dụng phụ không rollback được (gửi email): làm nó
+ * TRONG giao dịch là "email đã đi, token bị rollback" khi kết cục không ghi được. Đổi lại, phần này
+ * là AT-MOST-ONCE: hàm ném hay quá hạn ⇒ `AFTER_COMMIT_FAILED` tới `onJobFailure`, job VẪN DONE,
+ * không thử lại — người dùng gọi lại `/auth/link`. Đó là đánh đổi có chủ đích, ghi ở ADR-023.
+ */
+export type SauCommit = () => Promise<void>;
+
+export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void | SauCommit>;
 
 /**
  * Nguồn danh sách tổ chức mà runner phục vụ.
@@ -108,7 +118,12 @@ export type JobFailureReason =
   | "HANDLER_ERROR"
   | "HANDLER_TIMEOUT"
   | "NO_HANDLER"
-  | "OUTCOME_NOT_WRITTEN";
+  | "OUTCOME_NOT_WRITTEN"
+  /**
+   * [sổ nợ 53] Việc sau commit ném hoặc quá hạn. KHÔNG bao giờ vào `last_failure_reason` (job đã
+   * DONE và CHECK của 007 không nhận nó) — chỉ tới `onJobFailure`, `gaveUp = false`.
+   */
+  | "AFTER_COMMIT_FAILED";
 
 /**
  * Báo cáo gửi tới `onJobFailure`.
@@ -440,6 +455,7 @@ export class JobRunner {
         continue;
       }
 
+      let sauCommit: SauCommit | undefined;
       try {
         await withTenant(
           this.#pool,
@@ -451,7 +467,8 @@ export class JobRunner {
             await client.query("SELECT pg_catalog.set_config('statement_timeout', $1, true)", [
               String(this.#handlerTimeoutMs),
             ]);
-            await this.#chayCoHanGio(handler(job, client));
+            const ketQuaHandler = await this.#chayCoHanGio(handler(job, client));
+            if (typeof ketQuaHandler === "function") sauCommit = ketQuaHandler;
             // Đánh dấu DONE trong CÙNG transaction với công việc của handler: hoặc cả hai cùng
             // được ghi, hoặc không cái nào. Không có cửa sổ nào mà handler đã ghi xong còn job
             // vẫn ở RUNNING.
@@ -464,6 +481,15 @@ export class JobRunner {
           { destroyConnectionWhenDone: true },
         );
         xong += 1;
+        // [sổ nợ 53] Tới đây giao dịch đã COMMIT và kết nối đã bị huỷ: việc sau commit chạy ngoài
+        // mọi giao dịch, không giữ kết nối nào. Thất bại của nó KHÔNG đổi kết cục của job.
+        if (sauCommit !== undefined) {
+          try {
+            await this.#chayCoHanGio(sauCommit());
+          } catch (loiSau) {
+            this.#baoLoi(job, "AFTER_COMMIT_FAILED", false, loiSau);
+          }
+        }
       } catch (loi) {
         if (loi instanceof KetCucKhongGhiDuocError) {
           this.#baoLoi(job, "OUTCOME_NOT_WRITTEN", false, loi);
@@ -617,7 +643,7 @@ export class JobRunner {
    * đường thành công: một `setTimeout` còn sống giữ tiến trình Node không thoát được, và một
    * runner để lại một bộ đếm cho MỖI job là một rò rỉ đo được ngay trên đường đi bình thường.
    */
-  async #chayCoHanGio(viec: Promise<void>): Promise<void> {
+  async #chayCoHanGio<T>(viec: Promise<T>): Promise<T> {
     let dongHo: NodeJS.Timeout | undefined;
     const hetGio = new Promise<never>((_, reject) => {
       dongHo = setTimeout(() => {
@@ -625,7 +651,7 @@ export class JobRunner {
       }, this.#handlerTimeoutMs);
     });
     try {
-      await Promise.race([viec, hetGio]);
+      return await Promise.race([viec, hetGio]);
     } finally {
       if (dongHo) clearTimeout(dongHo);
       // Lời hứa THUA cuộc đua vẫn còn sống và vẫn có thể ném về sau. Một `rejection` không ai

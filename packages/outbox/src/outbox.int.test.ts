@@ -1714,3 +1714,74 @@ describe("[T10-P] biên của các ràng buộc cấu trúc", () => {
     ).resolves.toMatchObject({ rowCount: 1 });
   });
 });
+
+// ============================================================================================
+// [sổ nợ 53 / ADR-023] VIỆC SAU COMMIT — handler trả về một hàm, runner chạy nó SAU khi DONE đã commit
+// ============================================================================================
+describe("[sổ nợ 53] việc sau commit", () => {
+  it("hàm trả về chạy SAU khi hàng job đã DONE và thấy được từ kết nối KHÁC; handler ném ⇒ hàm không chạy", async () => {
+    const id = await xepHang(orgId, { kind: "VIEC_SAU", payload: {} });
+    const trangThaiLucChay: string[] = [];
+    let thuTu = "";
+    const runner = runnerChoMotToChuc({
+      VIEC_SAU: () => {
+        thuTu += "handler;";
+        return Promise.resolve(async () => {
+          thuTu += "sau;";
+          // Đọc bằng pool SIÊU NGƯỜI DÙNG, kết nối khác: chỉ thấy DONE nếu giao dịch của job đã commit.
+          trangThaiLucChay.push((await docHang(id)).status);
+        });
+      },
+    });
+    expect(await runner.runOnce()).toBe(1);
+    expect(thuTu).toBe("handler;sau;");
+    expect(trangThaiLucChay).toEqual(["DONE"]);
+
+    // Handler ném ⇒ không có hàm nào để chạy, job thử lại — đối chứng: "sau" không bao giờ xuất hiện.
+    const id2 = await xepHang(orgId, { kind: "VIEC_NEM", payload: {} });
+    let saiThuTu = "";
+    const runner2 = runnerChoMotToChuc({
+      VIEC_NEM: () => {
+        saiThuTu += "handler;";
+        return Promise.reject(new Error("hong truoc commit"));
+      },
+    }, { maxAttempts: 1 });
+    // `runOnce` đếm job ĐÃ ĐI TỚI KẾT CỤC (kể cả FAILED) — cùng ngữ nghĩa với [T10-B].
+    expect(await runner2.runOnce()).toBe(1);
+    expect(saiThuTu).toBe("handler;");
+    expect((await docHang(id2)).status).toBe("FAILED");
+  });
+
+  it("hàm sau commit NÉM hay TREO ⇒ job VẪN DONE (không thử lại), onJobFailure nhận AFTER_COMMIT_FAILED với gaveUp=false; không ghi gì vào CSDL", async () => {
+    const idNem = await xepHang(orgId, { kind: "SAU_NEM", payload: {} });
+    const idTreo = await xepHang(orgId, { kind: "SAU_TREO", payload: {} });
+    const baoCao: { reason: string; gaveUp: boolean; jobId: string; cause: unknown }[] = [];
+    const runner = runnerChoMotToChuc(
+      {
+        SAU_NEM: () => Promise.resolve(() => Promise.reject(new Error("gia 980000000.00 khong duoc vao CSDL"))),
+        SAU_TREO: () => Promise.resolve(() => new Promise<void>(() => undefined)),
+      },
+      { handlerTimeoutMs: 200, onJobFailure: (b) => baoCao.push({ reason: b.reason, gaveUp: b.gaveUp, jobId: b.jobId, cause: b.cause }) },
+    );
+    expect(await runner.runOnce()).toBe(2);
+    expect(baoCao.map((b) => [b.jobId, b.reason, b.gaveUp]).sort()).toEqual(
+      [
+        [idNem, "AFTER_COMMIT_FAILED", false],
+        [idTreo, "AFTER_COMMIT_FAILED", false],
+      ].sort(),
+    );
+    expect((baoCao.find((b) => b.jobId === idTreo)?.cause as Error).name).toBe("HetGioHandlerError");
+    for (const id of [idNem, idTreo]) {
+      const h = await docHang(id);
+      expect(h.status).toBe("DONE");
+      expect(h.last_failure_reason).toBeNull();
+      expect(h.attempts).toBe(1);
+    }
+    // Không mảnh nào của lỗi vào CSDL (cùng khuôn [T10-F]).
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM outbox_jobs WHERE last_failure_reason IS NOT NULL AND id = ANY($1::uuid[])", [[idNem, idTreo]]);
+    expect(rows[0]?.n).toBe("0");
+    // Lần chạy sau KHÔNG nhặt lại hai job này — at-most-once cho phần sau commit, nói ra.
+    expect(await runner.runOnce()).toBe(0);
+  });
+});
+

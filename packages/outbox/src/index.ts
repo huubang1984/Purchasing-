@@ -30,5 +30,6 @@ export {
   type JobHandler,
   type JobRunnerOptions,
   type OrganizationLister,
+  type SauCommit,
   type OutboxJob,
 } from "./runner.js";

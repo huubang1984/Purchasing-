@@ -49,12 +49,22 @@ export function cookiePhienKhach(orgId: string, sessionToken: string): string {
   );
 }
 
+/**
+ * [sổ nợ 52] Trần theo NGƯỜI GỌI cho hai route khách mang credential trong thân (token magic link, mã
+ * OTP). `/guest/otp` đã có bucket theo ĐÍCH (`issueOtpChallenge`, ADR-018) — đếm thành công, không
+ * đếm thử; hai route này trước nợ 52 không có gì: token sai 10⁶ lần là 10⁶ lần 422 không trần.
+ * 30/15 phút cho một /64 — cùng con số với `/auth/redeem`, `/auth/totp`.
+ */
+export const GUEST_REDEEM_MAX_PER_CALLER = 30;
+export const GUEST_OTP_VERIFY_MAX_PER_CALLER = 30;
+
 export const ROUTES_ANON: readonly AnonRoute[] = [
   {
     method: "POST",
     path: "/guest/redeem",
     audience: "ANON",
     mutates: false,
+    callerLimit: GUEST_REDEEM_MAX_PER_CALLER,
     handler: async (ctx) => {
       const token = chuoi(ctx.req.body, "token");
       const loi = await redeemMagicLink(ctx.client, ctx.orgId, token);
@@ -104,6 +114,7 @@ export const ROUTES_ANON: readonly AnonRoute[] = [
     path: "/guest/otp/verify",
     audience: "ANON",
     mutates: true,
+    callerLimit: GUEST_OTP_VERIFY_MAX_PER_CALLER,
     handler: async (ctx) => {
       const token = chuoi(ctx.req.body, "token");
       const code = chuoi(ctx.req.body, "code");
