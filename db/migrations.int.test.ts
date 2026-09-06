@@ -872,24 +872,28 @@ describe("migration của dự án", () => {
   // tại). Hai lớp đo: (1) tĩnh — thân trong migration và thân trong hardening khớp nhau, và hậu điều
   // kiện `$than$` là chính thân ấy; (2) trôi — thay thân thành no-op, DROP một trigger, DISABLE một
   // trigger ⇒ `migrate()` khôi phục cả ba.
+  // [review H5-5] Thêm 013 (thân, không ghim 21 trigger), 029/032 qua bản 037, và hai trigger danh tính 040.
   const HAM_51: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
+    { ham: "kiem_danh_tinh_theo_phien", migration: "013_actor_from_session.sql", trigger: [] },
+    { ham: "sessions_kiem_mfa_khi_tao", migration: "037_vai_ung_dung_la_thanh_vien.sql", trigger: ["sessions_kiem_mfa_khi_tao"] },
+    { ham: "mfa_credentials_khoa_ho_so_da_xac_nhan", migration: "037_vai_ung_dung_la_thanh_vien.sql", trigger: ["mfa_credentials_khoa_ho_so_da_xac_nhan"] },
     { ham: "sessions_kiem_totp_gan_day", migration: "039_phien_can_totp_gan_day.sql", trigger: ["sessions_kiem_totp_gan_day"] },
-    { ham: "mfa_reset_kiem_quyen", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_reset_requests_kiem_quyen_yeu_cau", "mfa_reset_requests_kiem_quyen_duyet"] },
+    { ham: "mfa_reset_kiem_quyen", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_reset_requests_kiem_quyen_yeu_cau", "mfa_reset_requests_kiem_quyen_duyet", "mfa_reset_requests_kiem_danh_tinh", "mfa_reset_requests_kiem_danh_tinh_duyet"] },
     { ham: "mfa_reset_kiem_chuyen_trang_thai", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_reset_requests_kiem_chuyen_trang_thai"] },
     { ham: "mfa_credentials_xoa_can_yeu_cau", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_credentials_xoa_can_yeu_cau"] },
     { ham: "outbox_jobs_xoa_payload_dang_nhap", migration: "041_outbox_payload_dang_nhap_xoa_sau_xong.sql", trigger: ["outbox_jobs_xoa_payload_dang_nhap"] },
   ];
 
-  it("[S1.13 / nợ 51] năm thân hàm trigger 039/040/041 trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.13 / nợ 51] ~~năm~~ tám thân hàm trigger (013, 037, 039–041) trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
     const hardening = docFile("hardening.always.sql");
     const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
     for (const { ham, migration, trigger } of HAM_51) {
-      const reMig = new RegExp(`CREATE FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql\\s+SET search_path = pg_catalog\\s+AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
+      const reMig = new RegExp(`CREATE (?:OR REPLACE )?FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql\\s+SET search_path = [^\\n]+?\\s+AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
       const khopMig = [...docFile(migration).matchAll(reMig)];
       expect(khopMig, `${ham} trong ${migration}`).toHaveLength(1);
       const thanMig = chuanHoa(khopMig[0]![2]!);
-      const reHard = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql SET search_path = pg_catalog AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
+      const reHard = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql SET search_path = [^\\n]+? AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
       const khopHard = [...hardening.matchAll(reHard)];
       expect(khopHard, `${ham} trong hardening`).toHaveLength(1);
       expect(chuanHoa(khopHard[0]![2]!), ham).toBe(thanMig);
@@ -899,11 +903,11 @@ describe("migration của dự án", () => {
       const hau = /\$than\$([\s\S]*?)\$than\$/.exec(hardening.slice(viTri))?.[1];
       expect(hau, ham).toBe(thanMig);
       // Và mỗi trigger có một định nghĩa ghim (`$def$...$def$`) trong cùng mục.
-      for (const t of trigger) expect(hardening.slice(viTri, viTri + 12_000), `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
+      for (const t of trigger) expect(hardening.slice(viTri, viTri + 16_000), `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
     }
   });
 
-  it("[S1.13 / nợ 51] hardening khôi phục thân hàm trigger bị thay thành no-op, trigger bị DROP, trigger bị DISABLE ở lần migrate() sau", async () => {
+  it("[S1.13 / nợ 51] hardening khôi phục thân hàm trigger bị thay thành no-op, trigger bị DROP, trigger bị DISABLE, và [H5-2] hàm bị DROP … CASCADE ở lần migrate() sau", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -915,7 +919,30 @@ describe("migration của dự án", () => {
       await db.pool.query("DROP TRIGGER outbox_jobs_xoa_payload_dang_nhap ON public.outbox_jobs");
       await db.pool.query("ALTER TABLE public.sessions DISABLE TRIGGER sessions_kiem_totp_gan_day");
       await db.pool.query("CREATE OR REPLACE FUNCTION public.mfa_reset_kiem_quyen() RETURNS trigger LANGUAGE plpgsql AS $x$ BEGIN RETURN NEW; END $x$");
+      // [review H5-2] DROP … CASCADE xoá cả hàm lẫn trigger: với tiền điều kiện "hàm đã tồn tại" mục hardening
+      // im lặng bỏ qua; với "migration nguồn đã áp dụng" nó dựng lại. [H5-5] Thêm 029-qua-037 và trigger danh tính 040.
+      await db.pool.query("DROP FUNCTION public.mfa_credentials_xoa_can_yeu_cau() CASCADE");
+      await db.pool.query("DROP FUNCTION public.sessions_kiem_mfa_khi_tao() CASCADE");
+      await db.pool.query("DROP TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet ON public.mfa_reset_requests");
+      expect((await db.pool.query("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()') AS o")).rows[0]?.o).toBeNull();
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: dungLai } = await db.pool.query<{ ten: string; than: string; trg: string }>(
+        `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than,
+                (SELECT string_agg(t.tgname || ':' || t.tgenabled::text, ',' ORDER BY t.tgname) FROM pg_trigger t WHERE t.tgfoid = p.oid AND NOT t.tgisinternal) AS trg
+           FROM pg_proc p WHERE p.proname IN ('mfa_credentials_xoa_can_yeu_cau', 'sessions_kiem_mfa_khi_tao') ORDER BY 1`,
+      );
+      expect(dungLai.map((h) => [h.ten, h.trg])).toEqual([
+        ["mfa_credentials_xoa_can_yeu_cau", "mfa_credentials_xoa_can_yeu_cau:A"],
+        ["sessions_kiem_mfa_khi_tao", "sessions_kiem_mfa_khi_tao:A"],
+      ]);
+      expect(dungLai[0]?.than).toContain("040");
+      expect(dungLai[1]?.than).toContain("la_duong_ung_dung");
+      const { rows: danhTinh } = await db.pool.query<{ enabled: string; def: string }>(
+        "SELECT t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def FROM pg_trigger t WHERE t.tgname = 'mfa_reset_requests_kiem_danh_tinh_duyet' AND NOT t.tgisinternal",
+      );
+      expect(danhTinh).toHaveLength(1);
+      expect(danhTinh[0]?.enabled).toBe("A");
+      expect(danhTinh[0]?.def).toContain("kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id')");
       const { rows: ham } = await db.pool.query<{ ten: string; than: string; cfg: string | null }>(
         `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, array_to_string(p.proconfig, ',') AS cfg
            FROM pg_proc p WHERE p.proname IN ('mfa_reset_kiem_chuyen_trang_thai', 'mfa_reset_kiem_quyen') ORDER BY 1`,

@@ -1637,18 +1637,232 @@ $ham$$q$,
       $q$quyền sở hữu hàm la_duong_ung_dung(name) hoặc SUPERUSER$q$
     ],
 
-    -- ---- [S1.13 / sổ nợ 51 / review H4-7] Thân NĂM hàm trigger của 039/040/041 và SÁU trigger ----
+    -- ---- [S1.13 / sổ nợ 51 / review H4-7, H5-2, H5-5] Thân TÁM hàm trigger và định nghĩa MƯỜI trigger ----
     -- Cùng mô hình đe doạ với R3 và với `la_duong_ung_dung` ở trên: một `CREATE OR REPLACE FUNCTION
     -- … BEGIN RETURN NEW; END` sau triển khai giữ nguyên tên hàm, tên trigger, tgfoid, tgenabled —
     -- và biến phép canh thành no-op sống qua `migrate()`. Máy trạng thái 040 còn VÔ ĐIỀU KIỆN (không
     -- đi qua điểm đơn `la_duong_ung_dung`), nên chỉ ghim vị từ là chưa đủ. Mỗi mục: thân chuẩn hoá +
     -- thuộc tính hàm + ĐỊNH NGHĨA trigger (`pg_get_triggerdef`, gồm cả mệnh đề WHEN) + `tgenabled='A'`.
-    -- Tiền điều kiện "hàm đã tồn tại" như `la_duong_ung_dung`: lượt hardening TRƯỚC vòng migration
-    -- trên cụm mới không được dựng hàm hộ 039/040/041. Bản NGUỒN của mỗi thân ở migration tương ứng;
-    -- test đồng bộ và test trôi: db/migrations.int.test.ts [S1.13 / nợ 51].
+    -- [review H5-2] Tiền điều kiện là "MIGRATION NGUỒN ĐÃ ÁP DỤNG" (dòng trong `schema_migrations`,
+    -- hoặc bảng do chính migration ấy tạo), KHÔNG phải "hàm đã tồn tại": một `DROP FUNCTION … CASCADE`
+    -- xoá cả hàm lẫn trigger, và với tiền điều kiện "hàm tồn tại" mục này sẽ im lặng bỏ qua ở cả lượt
+    -- sửa lẫn lượt phán xét — không như `la_duong_ung_dung` (caller ném), năm hàm này LÀ trigger, mất
+    -- chúng là mất phép kiểm mà không ai kêu. Với tiền điều kiện mới, hàm mất được DỰNG LẠI. Lượt
+    -- hardening TRƯỚC vòng migration trên cụm mới vẫn bỏ qua (migration nguồn chưa được ghi) nên
+    -- `CREATE FUNCTION` của migration không vỡ. [review H5-5] Cùng lớp: 013 (`kiem_danh_tinh_theo_phien`
+    -- — thân, không ghim 21 trigger của nó), 029/032 qua bản 037, và hai trigger danh tính của 040.
+    -- Bản NGUỒN của mỗi thân ở migration ghi trong tên mục; test đồng bộ và test trôi (kể cả DROP …
+    -- CASCADE): db/migrations.int.test.ts [S1.13 / nợ 51]. 48 hàm `RETURNS trigger` trong `public`,
+    -- ghim 8 + hai của D3 + `chan_sua_xoa` — danh sách vẫn viết tay, sổ nợ 54.
+    ARRAY[
+      $q$hàm + trigger kiem_danh_tinh_theo_phien (013)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '013_actor_from_session.sql')$q$,
+      $q$DO $fn51$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.kiem_danh_tinh_theo_phien();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.kiem_danh_tinh_theo_phien() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  cot_nguoi  text := TG_ARGV[0];
+  cot_phien  text := TG_ARGV[1];
+  id_nguoi   uuid;
+  id_phien   uuid;
+  chu_phien  uuid;
+BEGIN
+  id_nguoi := (to_jsonb(NEW) ->> cot_nguoi)::uuid;
+  id_phien := (to_jsonb(NEW) ->> cot_phien)::uuid;
+
+  IF id_phien IS NULL THEN
+    RAISE EXCEPTION '%.% phai duoc dat: danh tinh la DAN XUAT cua mot phien, khong phai loi khai',
+      TG_TABLE_NAME, cot_phien
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT s.user_id INTO chu_phien
+    FROM public.sessions s
+   WHERE s.id OPERATOR(pg_catalog.=) id_phien
+     AND s.org_id OPERATOR(pg_catalog.=) NEW.org_id
+     AND s.revoked_at IS NULL
+     AND s.expires_at OPERATOR(pg_catalog.>) now();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Phien khong hop le: het han, bi thu hoi, hoac thuoc to chuc khac (%.%)',
+      TG_TABLE_NAME, cot_phien
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF chu_phien IS DISTINCT FROM id_nguoi THEN
+    RAISE EXCEPTION '%.% khong khop chu phien — no phai la DAN XUAT, khong phai loi khai',
+      TG_TABLE_NAME, cot_nguoi
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END
+$ham$;
+         END
+         $fn51$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE cot_nguoi text := TG_ARGV[0]; cot_phien text := TG_ARGV[1]; id_nguoi uuid; id_phien uuid; chu_phien uuid; BEGIN id_nguoi := (to_jsonb(NEW) ->> cot_nguoi)::uuid; id_phien := (to_jsonb(NEW) ->> cot_phien)::uuid; IF id_phien IS NULL THEN RAISE EXCEPTION '%.% phai duoc dat: danh tinh la DAN XUAT cua mot phien, khong phai loi khai', TG_TABLE_NAME, cot_phien USING ERRCODE = 'check_violation'; END IF; SELECT s.user_id INTO chu_phien FROM public.sessions s WHERE s.id OPERATOR(pg_catalog.=) id_phien AND s.org_id OPERATOR(pg_catalog.=) NEW.org_id AND s.revoked_at IS NULL AND s.expires_at OPERATOR(pg_catalog.>) now(); IF NOT FOUND THEN RAISE EXCEPTION 'Phien khong hop le: het han, bi thu hoi, hoac thuoc to chuc khac (%.%)', TG_TABLE_NAME, cot_phien USING ERRCODE = 'check_violation'; END IF; IF chu_phien IS DISTINCT FROM id_nguoi THEN RAISE EXCEPTION '%.% khong khop chu phien — no phai la DAN XUAT, khong phai loi khai', TG_TABLE_NAME, cot_nguoi USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')),
+                  'hàm public.kiem_danh_tinh_theo_phien() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.kiem_danh_tinh_theo_phien() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$hàm + trigger sessions_kiem_mfa_khi_tao (029/037)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '037_vai_ung_dung_la_thanh_vien.sql')$q$,
+      $q$DO $fn51$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.sessions_kiem_mfa_khi_tao()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.sessions_kiem_mfa_khi_tao();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.sessions_kiem_mfa_khi_tao() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
+BEGIN
+  IF public.la_duong_ung_dung('app_api'::pg_catalog.name)
+     AND NEW.mfa_verified_at IS NULL THEN
+    RAISE EXCEPTION 'app_api khong duoc tao mot phien chua qua MFA (ADR-020 muc 2): mfa_verified_at phai duoc dat trong cung cau INSERT'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.sessions')
+                             AND t.tgname = 'sessions_kiem_mfa_khi_tao'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.sessions_kiem_mfa_khi_tao()')
+                             AND t.tgenabled = 'A'
+                             AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER sessions_kiem_mfa_khi_tao BEFORE INSERT ON public.sessions FOR EACH ROW EXECUTE FUNCTION sessions_kiem_mfa_khi_tao()$def$) THEN
+             DROP TRIGGER IF EXISTS sessions_kiem_mfa_khi_tao ON public.sessions;
+             CREATE TRIGGER sessions_kiem_mfa_khi_tao
+               BEFORE INSERT ON public.sessions
+               FOR EACH ROW EXECUTE FUNCTION public.sessions_kiem_mfa_khi_tao();
+             ALTER TABLE public.sessions ENABLE ALWAYS TRIGGER sessions_kiem_mfa_khi_tao;
+           END IF;
+         END
+         $fn51$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF public.la_duong_ung_dung('app_api'::pg_catalog.name) AND NEW.mfa_verified_at IS NULL THEN RAISE EXCEPTION 'app_api khong duoc tao mot phien chua qua MFA (ADR-020 muc 2): mfa_verified_at phai duoc dat trong cung cau INSERT' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.sessions')
+                           AND t.tgname = 'sessions_kiem_mfa_khi_tao'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.sessions_kiem_mfa_khi_tao()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER sessions_kiem_mfa_khi_tao BEFORE INSERT ON public.sessions FOR EACH ROW EXECUTE FUNCTION sessions_kiem_mfa_khi_tao()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.sessions_kiem_mfa_khi_tao()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.sessions_kiem_mfa_khi_tao()')),
+                  'hàm public.sessions_kiem_mfa_khi_tao() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.sessions_kiem_mfa_khi_tao() và bảng public.sessions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$hàm + trigger mfa_credentials_khoa_ho_so_da_xac_nhan (032/037)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '037_vai_ung_dung_la_thanh_vien.sql')$q$,
+      $q$DO $fn51$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.mfa_credentials_khoa_ho_so_da_xac_nhan()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.mfa_credentials_khoa_ho_so_da_xac_nhan();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.mfa_credentials_khoa_ho_so_da_xac_nhan() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog AS $ham$
+BEGIN
+  IF public.la_duong_ung_dung('app_api'::pg_catalog.name)
+     AND OLD.confirmed_at IS NOT NULL
+     AND (NEW.secret_wrapped IS DISTINCT FROM OLD.secret_wrapped
+          OR NEW.secret_key_version IS DISTINCT FROM OLD.secret_key_version
+          OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at) THEN
+    RAISE EXCEPTION 'Ho so TOTP da xac nhan: bi mat va confirmed_at khong thay duoc (032, review H2-1)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.mfa_credentials')
+                             AND t.tgname = 'mfa_credentials_khoa_ho_so_da_xac_nhan'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.mfa_credentials_khoa_ho_so_da_xac_nhan()')
+                             AND t.tgenabled = 'A'
+                             AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan BEFORE UPDATE ON public.mfa_credentials FOR EACH ROW EXECUTE FUNCTION mfa_credentials_khoa_ho_so_da_xac_nhan()$def$) THEN
+             DROP TRIGGER IF EXISTS mfa_credentials_khoa_ho_so_da_xac_nhan ON public.mfa_credentials;
+             CREATE TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan
+               BEFORE UPDATE ON public.mfa_credentials
+               FOR EACH ROW EXECUTE FUNCTION public.mfa_credentials_khoa_ho_so_da_xac_nhan();
+             ALTER TABLE public.mfa_credentials ENABLE ALWAYS TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan;
+           END IF;
+         END
+         $fn51$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF public.la_duong_ung_dung('app_api'::pg_catalog.name) AND OLD.confirmed_at IS NOT NULL AND (NEW.secret_wrapped IS DISTINCT FROM OLD.secret_wrapped OR NEW.secret_key_version IS DISTINCT FROM OLD.secret_key_version OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at) THEN RAISE EXCEPTION 'Ho so TOTP da xac nhan: bi mat va confirmed_at khong thay duoc (032, review H2-1)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.mfa_credentials')
+                           AND t.tgname = 'mfa_credentials_khoa_ho_so_da_xac_nhan'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.mfa_credentials_khoa_ho_so_da_xac_nhan()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan BEFORE UPDATE ON public.mfa_credentials FOR EACH ROW EXECUTE FUNCTION mfa_credentials_khoa_ho_so_da_xac_nhan()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.mfa_credentials_khoa_ho_so_da_xac_nhan()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.mfa_credentials_khoa_ho_so_da_xac_nhan()')),
+                  'hàm public.mfa_credentials_khoa_ho_so_da_xac_nhan() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.mfa_credentials_khoa_ho_so_da_xac_nhan() và bảng public.mfa_credentials (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
     ARRAY[
       $q$hàm + trigger sessions_kiem_totp_gan_day (039)$q$,
-      $q$to_regprocedure('public.sessions_kiem_totp_gan_day()') IS NOT NULL AND to_regclass('public.sessions') IS NOT NULL$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '039_phien_can_totp_gan_day.sql')$q$,
       $q$DO $fn51$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -1707,7 +1921,7 @@ $ham$;
                          WHERE t.tgrelid = to_regclass('public.sessions')
                            AND t.tgname = 'sessions_kiem_totp_gan_day'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.sessions_kiem_totp_gan_day()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER sessions_kiem_totp_gan_day AFTER INSERT ON public.sessions FOR EACH ROW EXECUTE FUNCTION sessions_kiem_totp_gan_day()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.sessions_kiem_totp_gan_day()'))$q$,
@@ -1727,7 +1941,7 @@ $ham$;
     ],
     ARRAY[
       $q$hàm + trigger mfa_reset_kiem_quyen (040)$q$,
-      $q$to_regprocedure('public.mfa_reset_kiem_quyen()') IS NOT NULL AND to_regclass('public.mfa_reset_requests') IS NOT NULL$q$,
+      $q$to_regclass('public.mfa_reset_requests') IS NOT NULL$q$,
       $q$DO $fn51$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -1786,6 +2000,35 @@ $ham$;
                EXECUTE FUNCTION public.mfa_reset_kiem_quyen();
              ALTER TABLE public.mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_quyen_duyet;
            END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
+                             AND t.tgname = 'mfa_reset_requests_kiem_danh_tinh'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                             AND t.tgenabled = 'A'
+                             AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh BEFORE INSERT ON public.mfa_reset_requests FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS mfa_reset_requests_kiem_danh_tinh ON public.mfa_reset_requests;
+             CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh
+               BEFORE INSERT ON public.mfa_reset_requests
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'requested_by', 'requested_by_session_id');
+             ALTER TABLE public.mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_danh_tinh;
+           END IF;
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
+                             AND t.tgname = 'mfa_reset_requests_kiem_danh_tinh_duyet'
+                             AND NOT t.tgisinternal
+                             AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                             AND t.tgenabled = 'A'
+                             AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet BEFORE UPDATE ON public.mfa_reset_requests FOR EACH ROW WHEN (((old.approved_by IS NULL) AND (new.approved_by IS NOT NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS mfa_reset_requests_kiem_danh_tinh_duyet ON public.mfa_reset_requests;
+             CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet
+               BEFORE UPDATE ON public.mfa_reset_requests
+               FOR EACH ROW
+               WHEN (OLD.approved_by IS NULL AND NEW.approved_by IS NOT NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id');
+             ALTER TABLE public.mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet;
+           END IF;
          END
          $fn51$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -1799,16 +2042,30 @@ $ham$;
                          WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
                            AND t.tgname = 'mfa_reset_requests_kiem_quyen_yeu_cau'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.mfa_reset_kiem_quyen()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau BEFORE INSERT ON public.mfa_reset_requests FOR EACH ROW EXECUTE FUNCTION mfa_reset_kiem_quyen()$def$)
             AND EXISTS (SELECT 1 FROM pg_trigger t
                          WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
                            AND t.tgname = 'mfa_reset_requests_kiem_quyen_duyet'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.mfa_reset_kiem_quyen()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_quyen_duyet BEFORE UPDATE ON public.mfa_reset_requests FOR EACH ROW WHEN (((old.approved_by IS NULL) AND (new.approved_by IS NOT NULL))) EXECUTE FUNCTION mfa_reset_kiem_quyen()$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
+                           AND t.tgname = 'mfa_reset_requests_kiem_danh_tinh'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh BEFORE INSERT ON public.mfa_reset_requests FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
+                           AND t.tgname = 'mfa_reset_requests_kiem_danh_tinh_duyet'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet BEFORE UPDATE ON public.mfa_reset_requests FOR EACH ROW WHEN (((old.approved_by IS NULL) AND (new.approved_by IS NOT NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id')$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.mfa_reset_kiem_quyen()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -1826,7 +2083,7 @@ $ham$;
     ],
     ARRAY[
       $q$hàm + trigger mfa_reset_kiem_chuyen_trang_thai (040)$q$,
-      $q$to_regprocedure('public.mfa_reset_kiem_chuyen_trang_thai()') IS NOT NULL AND to_regclass('public.mfa_reset_requests') IS NOT NULL$q$,
+      $q$to_regclass('public.mfa_reset_requests') IS NOT NULL$q$,
       $q$DO $fn51$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -1896,7 +2153,7 @@ $ham$;
                          WHERE t.tgrelid = to_regclass('public.mfa_reset_requests')
                            AND t.tgname = 'mfa_reset_requests_kiem_chuyen_trang_thai'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.mfa_reset_kiem_chuyen_trang_thai()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_reset_requests_kiem_chuyen_trang_thai BEFORE UPDATE ON public.mfa_reset_requests FOR EACH ROW EXECUTE FUNCTION mfa_reset_kiem_chuyen_trang_thai()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.mfa_reset_kiem_chuyen_trang_thai()'))$q$,
@@ -1916,7 +2173,7 @@ $ham$;
     ],
     ARRAY[
       $q$hàm + trigger mfa_credentials_xoa_can_yeu_cau (040)$q$,
-      $q$to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()') IS NOT NULL AND to_regclass('public.mfa_credentials') IS NOT NULL$q$,
+      $q$to_regclass('public.mfa_reset_requests') IS NOT NULL$q$,
       $q$DO $fn51$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -1968,7 +2225,7 @@ $ham$;
                          WHERE t.tgrelid = to_regclass('public.mfa_credentials')
                            AND t.tgname = 'mfa_credentials_xoa_can_yeu_cau'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER mfa_credentials_xoa_can_yeu_cau BEFORE DELETE ON public.mfa_credentials FOR EACH ROW EXECUTE FUNCTION mfa_credentials_xoa_can_yeu_cau()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()'))$q$,
@@ -1988,7 +2245,7 @@ $ham$;
     ],
     ARRAY[
       $q$hàm + trigger outbox_jobs_xoa_payload_dang_nhap (041)$q$,
-      $q$to_regprocedure('public.outbox_jobs_xoa_payload_dang_nhap()') IS NOT NULL AND to_regclass('public.outbox_jobs') IS NOT NULL$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '041_outbox_payload_dang_nhap_xoa_sau_xong.sql')$q$,
       $q$DO $fn51$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -2031,7 +2288,7 @@ $ham$;
                          WHERE t.tgrelid = to_regclass('public.outbox_jobs')
                            AND t.tgname = 'outbox_jobs_xoa_payload_dang_nhap'
                            AND NOT t.tgisinternal
-                           AND t.tgfoid = p.oid
+                           AND t.tgfoid = to_regprocedure('public.outbox_jobs_xoa_payload_dang_nhap()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER outbox_jobs_xoa_payload_dang_nhap BEFORE UPDATE ON public.outbox_jobs FOR EACH ROW WHEN (((new.kind = 'LOGIN_LINK_SEND'::text) AND (new.status = ANY (ARRAY['DONE'::text, 'FAILED'::text])) AND (old.status IS DISTINCT FROM new.status))) EXECUTE FUNCTION outbox_jobs_xoa_payload_dang_nhap()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_jobs_xoa_payload_dang_nhap()'))$q$,
