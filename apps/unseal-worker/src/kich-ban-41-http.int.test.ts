@@ -486,6 +486,10 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
           };
         case "POST /mfa-resets/:requestId/approve":
           return { path: r.path.replace(":requestId", hy.mfaResetId), body: {}, cookie: trangThai.pm2.cookie };
+        // [review H4-2] Yêu cầu ở trên đã được duyệt (tiêu thụ) trước khi tới đây ⇒ 422 nghiệp vụ có
+        // tên — vẫn là "qua bộ đọc thân", đúng thứ bộ quét cần.
+        case "POST /mfa-resets/:requestId/cancel":
+          return { path: r.path.replace(":requestId", hy.mfaResetId), body: {}, cookie: m };
         default:
           return null;
       }

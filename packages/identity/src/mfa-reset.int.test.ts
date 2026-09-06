@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { withTenant } from "@trustprocure/tenancy";
-import { MfaResetError, approveMfaReset, requestMfaReset } from "./mfa-reset.js";
+import { MfaResetError, approveMfaReset, cancelMfaReset, requestMfaReset } from "./mfa-reset.js";
 import { PermissionDeniedError } from "./rbac.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -82,6 +82,13 @@ const yeuCau = (ai: Nguoi, userId: string, reason = "Mat dien thoai") =>
   withTenant(apiPool, org, (c) => requestMfaReset(c, org, { userId, reason, actorSessionId: ai.phien }, auditPool));
 const duyet = (ai: Nguoi, requestId: string) =>
   withTenant(apiPool, org, (c) => approveMfaReset(c, org, { requestId, actorSessionId: ai.phien }, auditPool));
+const huy = (ai: Nguoi, requestId: string) =>
+  withTenant(apiPool, org, (c) => cancelMfaReset(c, org, { requestId, actorSessionId: ai.phien }, auditPool));
+
+async function trangThaiCua(requestId: string): Promise<string> {
+  const { rows } = await db.pool.query<{ status: string }>("SELECT status FROM mfa_reset_requests WHERE id = $1", [requestId]);
+  return rows[0]?.status ?? "(khong co)";
+}
 
 beforeAll(async () => {
   db = await startPostgres();
@@ -193,6 +200,14 @@ describe("[040] đặt lại TOTP — hai người", () => {
       await db.pool.query("ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_chuyen_trang_thai");
     }
     await expect(duyet(pm2, r.id)).rejects.toThrow(/het han/u);
+    // [review H4-2] Yêu cầu hết hạn KHÔNG khoá vĩnh viễn đường về: yêu cầu mới cho cùng người tạo được,
+    // yêu cầu cũ chuyển CANCELLED, một bản ghi MFA_RESET_EXPIRED cho nó.
+    const rMoi = await yeuCau(pm1, nan.id);
+    expect(rMoi.status).toBe("PENDING");
+    expect(rMoi.id).not.toBe(r.id);
+    expect(await trangThaiCua(r.id)).toBe("CANCELLED");
+    expect(await demSo("MFA_RESET_EXPIRED", r.id)).toBe(1);
+    await expect(duyet(pm2, rMoi.id)).resolves.toMatchObject({ status: "APPROVED" });
     // 013 trên cột duyệt: superuser khai approved_by = pm2 nhưng phiên của pm1 ⇒ 23514.
     const nan2 = await nguoi(["BUYER"]);
     const r2 = await yeuCau(pm1, nan2.id);
@@ -202,5 +217,74 @@ describe("[040] đặt lại TOTP — hai người", () => {
         [r2.id, pm2.id, pm1.phien],
       ),
     ).rejects.toThrow(/khong khop chu phien/u);
+  });
+
+  it("[review H4-2] huỷ: PENDING → CANCELLED + sổ; duyệt sau huỷ ⇒ MfaResetError; huỷ lại ⇒ MfaResetError; yêu cầu mới cho cùng người tạo được; BUYER huỷ ⇒ PermissionDeniedError", async () => {
+    const pm1 = await nguoi(["PROCUREMENT_MANAGER"]);
+    const pm2 = await nguoi(["PROCUREMENT_MANAGER"]);
+    const buyer = await nguoi(["BUYER"]);
+    const nan = await nguoi(["BUYER"]);
+    const r = await yeuCau(pm1, nan.id);
+    await expect(huy(buyer, r.id)).rejects.toBeInstanceOf(PermissionDeniedError);
+    const daHuy = await huy(pm2, r.id);
+    expect(daHuy.status).toBe("CANCELLED");
+    expect(await demSo("MFA_RESET_CANCELLED", nan.id)).toBe(1);
+    await expect(duyet(pm2, r.id)).rejects.toBeInstanceOf(MfaResetError);
+    await expect(huy(pm2, r.id)).rejects.toBeInstanceOf(MfaResetError);
+    const r2 = await yeuCau(pm1, nan.id);
+    expect(r2.status).toBe("PENDING");
+    // Đã duyệt thì không huỷ được — hồ sơ đã mất trong giao dịch duyệt, "huỷ" không còn nghĩa.
+    await hoSoTotp(nan.id);
+    await duyet(pm2, r2.id);
+    await expect(huy(pm1, r2.id)).rejects.toBeInstanceOf(MfaResetError);
+  });
+
+  it("[review H4-1] CSDL đòi người yêu cầu VÀ người duyệt CÓ user.mfa_reset: app_api với hai phiên BUYER sống ⇒ 23514 nêu H4-1 ở cả INSERT lẫn UPDATE; ĐỘT BIẾN gỡ hai trigger ⇒ đi lọt tới tận DELETE", async () => {
+    const b1 = await nguoi(["BUYER"]);
+    const b2 = await nguoi(["BUYER"]);
+    const pm = await nguoi(["PROCUREMENT_MANAGER"]);
+    const nan = await nguoi(["BUYER"]);
+    await hoSoTotp(nan.id);
+    // Đường "app_api bị chiếm": không qua requirePermission, gõ thẳng SQL với hai phiên BUYER.
+    const chenTho = (ai: Nguoi) =>
+      withTenant(apiPool, org, (c) =>
+        c.query<{ id: string }>(
+          "INSERT INTO mfa_reset_requests (org_id, user_id, reason, requested_by, requested_by_session_id) VALUES ($1, $2, 'x', $3, $4) RETURNING id",
+          [org, nan.id, ai.id, ai.phien],
+        ),
+      );
+    const duyetTho = (id: string, ai: Nguoi) =>
+      withTenant(apiPool, org, (c) =>
+        c.query(
+          "UPDATE mfa_reset_requests SET status = 'APPROVED', approved_by = $2, approved_by_session_id = $3, approved_at = now() WHERE id = $1",
+          [id, ai.id, ai.phien],
+        ),
+      );
+    await expect(chenTho(b1)).rejects.toMatchObject({ code: "23514" });
+    await expect(chenTho(b1)).rejects.toThrow(/H4-1/u);
+    // Người yêu cầu hợp lệ (PM) nhưng người duyệt là BUYER ⇒ vẫn 23514 ở UPDATE.
+    const hopLe = (await chenTho(pm)).rows[0]!.id;
+    await expect(duyetTho(hopLe, b2)).rejects.toMatchObject({ code: "23514" });
+    await expect(duyetTho(hopLe, b2)).rejects.toThrow(/H4-1/u);
+    expect(await coHoSo(nan.id)).toBe(true);
+    await db.pool.query("UPDATE mfa_reset_requests SET status = 'CANCELLED' WHERE id = $1", [hopLe]);
+
+    await db.pool.query(
+      "DROP TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau ON mfa_reset_requests; DROP TRIGGER mfa_reset_requests_kiem_quyen_duyet ON mfa_reset_requests",
+    );
+    try {
+      const id = (await chenTho(b1)).rows[0]!.id;
+      await expect(duyetTho(id, b2)).resolves.toMatchObject({ rowCount: 1 });
+      await withTenant(apiPool, org, (c) => c.query("DELETE FROM mfa_credentials WHERE org_id = $1 AND user_id = $2", [org, nan.id]));
+      expect(await coHoSo(nan.id), "RED THẬT: không có trigger quyền, hai phiên BUYER sống là đủ để app_api bị chiếm xoá hồ sơ TOTP của bất kỳ ai").toBe(false);
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau BEFORE INSERT ON mfa_reset_requests FOR EACH ROW EXECUTE FUNCTION public.mfa_reset_kiem_quyen(); " +
+          "ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau; " +
+          "CREATE TRIGGER mfa_reset_requests_kiem_quyen_duyet BEFORE UPDATE ON mfa_reset_requests FOR EACH ROW WHEN (OLD.approved_by IS NULL AND NEW.approved_by IS NOT NULL) EXECUTE FUNCTION public.mfa_reset_kiem_quyen(); " +
+          "ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_quyen_duyet",
+      );
+    }
+    await expect(chenTho(b1)).rejects.toMatchObject({ code: "23514" });
   });
 });

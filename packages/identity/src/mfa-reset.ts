@@ -4,6 +4,10 @@
 //   requestMfaReset   người có `user.mfa_reset` yêu cầu, lý do bắt buộc, hết hạn 24 giờ
 //   approveMfaReset   người KHÁC (khác người, khác phiên) phê duyệt; cùng giao dịch: xoá hồ sơ TOTP,
 //                     thu hồi mọi phiên còn sống, đánh dấu đã tiêu thụ, ghi sổ
+//   cancelMfaReset    [review H4-2] người có `user.mfa_reset` huỷ một yêu cầu đang chờ (PENDING →
+//                     CANCELLED), ghi sổ — và `requestMfaReset` tự dọn yêu cầu đang chờ ĐÃ HẾT HẠN
+//                     trước khi tạo (không có bước này, chỉ mục "một yêu cầu đang chờ" khoá vĩnh viễn
+//                     đường về của người ấy sau 24 giờ)
 //
 // Ba vế CSDL giữ (040): yêu cầu ≠ duyệt (CHECK); danh tính là dẫn xuất của phiên (013); `app_api`
 // chỉ xoá được hồ sơ khi có yêu cầu đã duyệt chưa tiêu thụ. Mã dưới đây gọi đúng thứ tự, và một
@@ -94,6 +98,28 @@ export async function requestMfaReset(
     { userId: actor.id, orgId, permission: PERMISSIONS.USER_MFA_RESET, resourceType: "USER", resourceId: input.userId },
     auditPool,
   );
+  // [review H4-2] Một yêu cầu đang chờ đã HẾT HẠN không tự rời PENDING, và chỉ mục
+  // `mfa_reset_requests_mot_yeu_cau_dang_cho` sẽ chặn mọi yêu cầu mới cho người ấy — vĩnh viễn, cho
+  // tới khi ai đó sửa tay ở CSDL. Dọn ở đây, TRƯỚC khi tạo: PENDING → CANCELLED (máy trạng thái 040
+  // cho phép), mỗi yêu cầu hết hạn một bản ghi sổ để không lối rẽ nào im lặng.
+  const { rows: hetHan } = await client.query<{ id: string }>(
+    `UPDATE public.mfa_reset_requests SET status = 'CANCELLED'
+      WHERE org_id OPERATOR(pg_catalog.=) $1 AND user_id OPERATOR(pg_catalog.=) $2
+        AND status OPERATOR(pg_catalog.=) 'PENDING'
+        AND expires_at OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
+      RETURNING id`,
+    [orgId, input.userId],
+  );
+  for (const cu of hetHan) {
+    await appendAuditEvent(client, orgId, {
+      actorType: actor.type,
+      actorId: actor.id,
+      action: "MFA_RESET_EXPIRED",
+      resourceType: "MFA_RESET_REQUEST",
+      resourceId: cu.id,
+      payload: { userId: input.userId },
+    });
+  }
   const { rows } = await client.query<Hang>(
     `INSERT INTO public.mfa_reset_requests (org_id, user_id, reason, requested_by, requested_by_session_id)
      VALUES ($1, $2, $3, $4, $5) RETURNING ${COT}`,
@@ -196,4 +222,48 @@ export async function approveMfaReset(
     payload: { requestId: h.id, requestedBy: h.requested_by, credentialDeleted: (xoa.rowCount ?? 0) > 0, sessionsRevoked: thuHoi.rowCount ?? 0 },
   });
   return { ...banGhi(cuoi), credentialDeleted: (xoa.rowCount ?? 0) > 0, sessionsRevoked: thuHoi.rowCount ?? 0 };
+}
+
+export interface CancelMfaResetInput {
+  readonly requestId: string;
+  readonly actorSessionId: string;
+}
+
+/**
+ * [review H4-2] Huỷ một yêu cầu ĐANG CHỜ. Cùng mã quyền với yêu cầu/phê duyệt; không đòi "người
+ * huỷ = người yêu cầu" — một yêu cầu mở nhầm cho ai đó là thứ bất kỳ người quản lý nào cũng phải
+ * đóng được, và sổ ghi ai đóng. APPROVED không huỷ được (hồ sơ đã mất trong giao dịch duyệt).
+ */
+export async function cancelMfaReset(
+  client: pg.PoolClient,
+  orgId: string,
+  input: CancelMfaResetInput,
+  auditPool: pg.Pool,
+): Promise<MfaResetRequestRecord> {
+  await assertTenantBound(client, orgId, "cancelMfaReset");
+  batBuocUuid(input.requestId, "requestId");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  await requirePermission(
+    client,
+    { userId: actor.id, orgId, permission: PERMISSIONS.USER_MFA_RESET, resourceType: "MFA_RESET_REQUEST", resourceId: input.requestId },
+    auditPool,
+  );
+  const { rows } = await client.query<Hang>(
+    `UPDATE public.mfa_reset_requests SET status = 'CANCELLED'
+      WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2
+        AND status OPERATOR(pg_catalog.=) 'PENDING'
+      RETURNING ${COT}`,
+    [input.requestId, orgId],
+  );
+  const h = rows[0];
+  if (h === undefined) throw new MfaResetError("yêu cầu đặt lại TOTP không ở trạng thái PENDING, hoặc không thuộc tổ chức này");
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "MFA_RESET_CANCELLED",
+    resourceType: "USER",
+    resourceId: h.user_id,
+    payload: { requestId: h.id, requestedBy: h.requested_by },
+  });
+  return banGhi(h);
 }

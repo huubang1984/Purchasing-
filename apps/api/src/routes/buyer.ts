@@ -13,7 +13,7 @@
 // Danh tính ở MỌI lời gọi gói là `ctx.actor.sessionId` — dẫn xuất từ cookie (ADR-016). Thân yêu
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
-import { PERMISSIONS, approveMfaReset, requestMfaReset } from "@trustprocure/identity";
+import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
   createInvitation,
@@ -631,6 +631,21 @@ const ghi: readonly BuyerWriteRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: { mfaReset: await approveMfaReset(ctx.client, ctx.orgId, { requestId: mfaResetIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
+    }),
+  },
+  // [review H4-2] Huỷ yêu cầu đang chờ — không có route này, một yêu cầu mở nhầm sống 24 giờ và
+  // chặn mọi yêu cầu mới cho người ấy suốt thời gian đó.
+  {
+    method: "POST",
+    path: "/mfa-resets/:requestId/cancel",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.USER_MFA_RESET,
+    resourceType: "MFA_RESET_REQUEST",
+    resourceId: mfaResetIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { mfaReset: await cancelMfaReset(ctx.client, ctx.orgId, { requestId: mfaResetIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
     }),
   },
 ];

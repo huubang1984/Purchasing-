@@ -366,5 +366,16 @@ describe("[sổ nợ 40 / 040] đặt lại TOTP qua HTTP — hai người", () 
     expect((await goi("GET", "/me", nan)).status).toBe(401);
     expect((await goi("POST", `/mfa-resets/${id}/approve`, pm2, {})).status).toBe(422);
     expect((await goi("POST", "/mfa-resets/00000000-0000-4000-8000-000000000000/approve", pm2, {})).status).toBe(422);
+    // [review H4-2] Huỷ qua HTTP: đã duyệt ⇒ 422; yêu cầu mới ⇒ BUYER huỷ 403, PM huỷ 200 (CANCELLED), duyệt sau huỷ ⇒ 422.
+    expect((await goi("POST", `/mfa-resets/${id}/cancel`, pm2, {})).status).toBe(422);
+    const nan2 = await nguoi("mr-nan2@vidu.vn", ["BUYER"]);
+    const yc2 = await goi("POST", `/users/${nan2.id}/mfa-reset`, pm1, { reason: "mo nham" });
+    expect(yc2.status, yc2.text).toBe(201);
+    const id2 = (yc2.body as { mfaReset: { id: string } }).mfaReset.id;
+    expect((await goi("POST", `/mfa-resets/${id2}/cancel`, buyer, {})).status).toBe(403);
+    const huy = await goi("POST", `/mfa-resets/${id2}/cancel`, pm2, {});
+    expect(huy.status, huy.text).toBe(200);
+    expect((huy.body as { mfaReset: { status: string } }).mfaReset.status).toBe("CANCELLED");
+    expect((await goi("POST", `/mfa-resets/${id2}/approve`, pm2, {})).status).toBe(422);
   });
 });

@@ -12,10 +12,13 @@
 --      sống để ai đó xác nhận lại), mọi phiên còn sống của người ấy bị thu hồi, yêu cầu được đánh
 --      dấu đã tiêu thụ. Lần đăng nhập kế của người ấy ⇒ `needsEnrollment` ⇒ bí mật MỚI.
 --
--- CSDL cưỡng chế ba vế mà mã ứng dụng chỉ NHỚ: yêu cầu ≠ duyệt (CHECK, hai vế người và phiên);
--- danh tính là dẫn xuất của phiên (trigger 013 cho cả người yêu cầu lẫn người duyệt); và `app_api`
--- CHỈ xoá được hồ sơ TOTP khi có một yêu cầu ĐÃ DUYỆT, CHƯA TIÊU THỤ, CHƯA HẾT HẠN cho đúng
--- (org, user) — trigger BEFORE DELETE trên đường ứng dụng (037). 032 không cần chạm.
+-- CSDL cưỡng chế ~~ba~~ BỐN vế mà mã ứng dụng chỉ NHỚ: yêu cầu ≠ duyệt (CHECK, hai vế người và phiên);
+-- danh tính là dẫn xuất của phiên (trigger 013 cho cả người yêu cầu lẫn người duyệt); [review H4-1]
+-- người yêu cầu VÀ người duyệt đều phải CÓ `user.mfa_reset` (trigger đọc `user_roles ⋈
+-- role_permissions`, khuôn 033 — vì `requirePermission` là tầng ứng dụng, tức tầng mà mô hình
+-- "app_api bị chiếm" giả định là mất); và `app_api` CHỈ xoá được hồ sơ TOTP khi có một yêu cầu ĐÃ
+-- DUYỆT, CHƯA TIÊU THỤ, CHƯA HẾT HẠN cho đúng (org, user) — trigger BEFORE DELETE trên đường ứng
+-- dụng (037). 032 không cần chạm.
 -- =============================================================================================
 
 INSERT INTO permissions (code, description) VALUES
@@ -92,6 +95,49 @@ CREATE TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet
   EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id');
 ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet;
 
+-- [review H4-1] "Hai người" phải là "hai người CÓ `user.mfa_reset`", và vế ấy phải đứng Ở CSDL: với
+-- hai phiên BUYER sống bất kỳ (app_api có SELECT ON sessions), một app_api bị chiếm tự dựng yêu cầu
+-- + phê duyệt + DELETE và trigger xoá cho qua — "hai phiên sống" không phải "hai người quản lý".
+-- Đọc `user_roles ⋈ role_permissions` như 033. VÔ ĐIỀU KIỆN (không theo đường ứng dụng): không có
+-- đường nào mà một người không quyền được đứng tên yêu cầu hay phê duyệt.
+CREATE FUNCTION public.mfa_reset_kiem_quyen() RETURNS trigger
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog
+AS $ham$
+DECLARE
+  nguoi pg_catalog.uuid;
+  vai   pg_catalog.text;
+BEGIN
+  IF TG_OP OPERATOR(pg_catalog.=) 'INSERT' THEN
+    nguoi := NEW.requested_by; vai := 'nguoi yeu cau';
+  ELSE
+    nguoi := NEW.approved_by;  vai := 'nguoi phe duyet';
+  END IF;
+  IF nguoi IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM public.user_roles ur
+         JOIN public.role_permissions rp ON rp.role_code OPERATOR(pg_catalog.=) ur.role_code
+        WHERE ur.org_id OPERATOR(pg_catalog.=) NEW.org_id
+          AND ur.user_id OPERATOR(pg_catalog.=) nguoi
+          AND rp.permission_code OPERATOR(pg_catalog.=) 'user.mfa_reset') THEN
+    RAISE EXCEPTION 'Dat lai TOTP: % phai co user.mfa_reset (040, review H4-1)', vai
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+
+CREATE TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau
+  BEFORE INSERT ON mfa_reset_requests
+  FOR EACH ROW EXECUTE FUNCTION public.mfa_reset_kiem_quyen();
+ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_quyen_yeu_cau;
+
+CREATE TRIGGER mfa_reset_requests_kiem_quyen_duyet
+  BEFORE UPDATE ON mfa_reset_requests
+  FOR EACH ROW
+  WHEN (OLD.approved_by IS NULL AND NEW.approved_by IS NOT NULL)
+  EXECUTE FUNCTION public.mfa_reset_kiem_quyen();
+ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_quyen_duyet;
+
 -- Máy trạng thái: PENDING → APPROVED (chưa hết hạn) | CANCELLED; APPROVED chỉ còn nhận `consumed_at`
 -- đúng một lần; các cột yêu cầu bất biến.
 CREATE FUNCTION public.mfa_reset_kiem_chuyen_trang_thai() RETURNS trigger
@@ -141,7 +187,10 @@ ALTER TABLE mfa_reset_requests ENABLE ALWAYS TRIGGER mfa_reset_requests_kiem_chu
 -- ---------------------------------------------------------------------------------------------
 -- Hồ sơ TOTP: `app_api` nay XOÁ được — nhưng chỉ khi CSDL thấy một yêu cầu đã duyệt đang chờ tiêu
 -- thụ cho đúng người ấy. Không có yêu cầu ⇒ 23514, và một `app_api` bị chiếm không xoá trộm được
--- hồ sơ ai (xoá hồ sơ = mở đường ghi danh lại = chiếm tài khoản qua hộp thư).
+-- hồ sơ ai (xoá hồ sơ = mở đường ghi danh lại = chiếm tài khoản qua hộp thư) — ~~vì cần hai phiên
+-- sống~~ [review H4-1] vì cần hai phiên sống của hai người CÓ `user.mfa_reset` (trigger
+-- `mfa_reset_kiem_quyen` ở trên); một app_api bị chiếm có hai phiên quản lý sống vẫn làm được —
+-- đó là phần chênh còn lại, ghi ở ADR-022 §3.
 -- ---------------------------------------------------------------------------------------------
 GRANT DELETE ON mfa_credentials TO app_api;
 
