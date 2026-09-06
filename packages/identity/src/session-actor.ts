@@ -62,12 +62,18 @@ export async function resolveSessionActor(
 ): Promise<SessionActor> {
   await assertTenantBound(client, orgId, "resolveSessionActor");
 
+  // [034 / sổ nợ 48] Nối `users.status = 'ACTIVE'` — cùng vế chịu lực của `hasPermission` và của
+  // `resolveSessionByToken` (đường HTTP, review L-1). Trigger 034 thu hồi phiên lúc đình chỉ; vế này
+  // đứng riêng cho ca phiên CÒN SỐNG của người bị đình chỉ (chèn sau đình chỉ, hoặc trigger bị gỡ).
+  // Cùng một lỗi cho mọi ca hỏng — "bị đình chỉ" nói ra cũng là một oracle.
   const { rows } = await client.query<{ user_id: string }>(
     `SELECT s.user_id
        FROM public.sessions s
+       JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.user_id
       WHERE s.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND s.revoked_at IS NULL
-        AND s.expires_at OPERATOR(pg_catalog.>) now()`,
+        AND s.expires_at OPERATOR(pg_catalog.>) now()
+        AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'`,
     [sessionId],
   );
   const hang = rows[0];

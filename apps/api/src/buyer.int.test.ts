@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { PERMISSIONS } from "@trustprocure/identity";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
@@ -132,6 +133,49 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
       [orgA, khongQuyen.id, UUID0],
     );
     expect(Number(rows[0]?.n)).toBe(coToaDo);
+  });
+
+  it("[INV-H17] [sổ nợ 47] MÃ QUYỀN ĐÚNG: với mỗi route ghi, một phiên giữ ĐÚNG MỘT mã quyền — chỉ đúng `route.permission` mới qua cổng, MỌI mã khác ⇒ 403", async () => {
+    // [review H2-11 ⑶] Quét "không quyền ⇒ 403" chứng minh cổng ĐÓNG, không chứng minh nó đóng ĐÚNG
+    // KHOÁ: `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh. Reviewer đề nghị "mọi quyền TRỪ
+    // route.permission ⇒ 403" — bất khả thi theo đúng thiết kế: một vai/một người gom gần hết quyền
+    // bị chính trigger D3 (005) và 033 chặn. Phép đo tương đương và trigger-an-toàn: MỖI mã quyền
+    // một vai đơn lẻ, một người; với mỗi route ghi, đúng một người qua cổng (không thêm bản ghi
+    // từ chối), mọi người khác 403 và +1 PERMISSION_DENIED. Tất cả tự sinh từ ROUTES và PERMISSIONS.
+    const maQuyen = Object.values(PERMISSIONS);
+    const nguoiTheoQuyen = new Map<string, Nguoi>();
+    for (const ma of maQuyen) {
+      const vai = `KIEM_${ma.toUpperCase().replace(/\./gu, "_")}`;
+      await db.pool.query("INSERT INTO roles (code, name) VALUES ($1, $2)", [vai, `Kiem ${ma}`]);
+      await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ($1, $2)", [vai, ma]);
+      nguoiTheoQuyen.set(ma, await nguoi(`kiem-${ma}@vidu.vn`, [vai]));
+    }
+    const routeGhi = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self !== true);
+    expect(routeGhi.length).toBeGreaterThan(15);
+    const truoc = new Map<string, number>();
+    for (const [ma, ng] of nguoiTheoQuyen) truoc.set(ma, await demTuChoi(ng.id));
+
+    const sai: string[] = [];
+    for (const r of routeGhi) {
+      // TS suy ra vị từ từ `filter` ở trên: `r` là BuyerWriteRoute, `permission` chắc chắn có.
+      const path = r.path.replace(/:[A-Za-z]+/gu, UUID0);
+      for (const [ma, ng] of nguoiTheoQuyen) {
+        const kq = await goi(r.method, path, ng, {});
+        const quaCong = kq.status !== 403;
+        if (ma === (r.permission as string) && !quaCong) sai.push(`${r.method} ${r.path}: ĐÚNG mã ${ma} mà vẫn 403`);
+        if (ma !== (r.permission as string) && quaCong) sai.push(`${r.method} ${r.path}: mã ${ma} (không phải ${r.permission}) đi qua với ${kq.status}`);
+      }
+    }
+    expect(sai, "cổng quyền của một route đóng SAI KHOÁ").toEqual([]);
+    // Đếm chéo bằng sổ kiểm toán: người giữ mã P bị từ chối đúng bằng số route ghi KHÔNG đòi P.
+    for (const [ma, ng] of nguoiTheoQuyen) {
+      const mongDoi = routeGhi.filter((r) => (r.permission as string) !== ma).length;
+      expect(await demTuChoi(ng.id) - (truoc.get(ma) ?? 0), `PERMISSION_DENIED của người giữ ${ma}`).toBe(mongDoi);
+    }
+    // Chống rỗng ruột: có mã quyền không route nào đòi (bị từ chối ở MỌI route) và có mã được ≥ 1 route đòi.
+    const doiBoi = new Set(routeGhi.map((r) => r.permission as string));
+    expect(maQuyen.filter((m) => !doiBoi.has(m)).length).toBeGreaterThan(0);
+    expect(doiBoi.size).toBeGreaterThan(5);
   });
 
   it("route ĐỌC không có cổng ở dispatcher (theo ADR-016): phiên không quyền vẫn đọc được /me, /suppliers", async () => {
