@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm 13 bất biến hàng rào (nhóm H, §5) là 47 mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ **16** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ **50** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 ---
 
@@ -289,6 +289,9 @@ còn răng hay không.
 | **H11** | **Biên giới module của `packages/identity`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; không miễn trừ nào được phép mà không đồng thời là đích hạn chế | Họ quy tắc `g2-` của dependency-cruiser | **T0** |
 | **H12** | **`packages/identity` KHÔNG có một cạnh phụ thuộc nào tới `packages/crypto-keys`** — cả đường BỌC lẫn đường MỞ, và họ quy tắc này không có bậc tự do nào (không `from.pathNot`, không `to.pathNot`) | Quy tắc `g3-` của dependency-cruiser | **T0** |
 | **H13** | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | **T0** |
+| **H14** | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | **T3** |
+| **H15** | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | **T0** |
+| **H16** | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | **T0** |
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
@@ -297,7 +300,41 @@ identity → `g2-`/H11, nay outbox → `g4-`). Phép đo, tái lập được �
 CẢ BA cổng — `depcruise` 0 vi phạm, `tsc` exit 0, `eslint` exit 0 — trong khi bản bare
 specifier bị chặn ở cả hai lớp. Danh sách trắng barrel khoá DANH SÁCH export Ở CỬA; nó không
 dựng BỨC TƯỜNG, nên nó không thay thế được hàng rào này.
-Hai con số ở §2 (12 → 13 và 46 → 47) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
+**H14 và H15 được bổ sung ngày 2026-08-29** (S1.1), và hai lý do khác hẳn nhau:
+
+**H14** ra đời từ ADR-013 và từ hai phép đo ĐÃ CÓ SẴN trong kho mã — `organizations.slug` và
+`users_pkey` ở 002 — chứ không từ một lỗ mới. Cái mới là NHẬN RA rằng chúng cùng MỘT lớp, và
+rằng S1 thêm 13 bảng là 13 lần rút thăm lại. Bộ dò tự chứng minh có răng bằng hai bảng dò trong
+cùng một lượt chạy (chiều dương và chiều âm), và nó ĐÃ tìm ra một khiếm khuyết của chính nó ở
+lượt đột biến đầu tiên: `array_agg` trên `pg_attribute.attname` trả kiểu `name[]` mà node-pg
+không phân tích được, nên bộ dò NÉM thay vì BÁO. Xem khối chú thích ở đầu `db/unique-oracle.int.test.ts`.
+
+**H15** là LẦN THỨ TƯ cùng một khuôn biên giới module (crypto-keys → `g1-`, identity → `g2-`/H11,
+outbox → `g4-`/H13, nay supplier → `g5-`), và khác biệt đáng ghi: ba lần trước đều là VÁ XONG RỒI
+SỬA — quy tắc được thêm SAU khi một probe import tương đối xuyên gói đã đo được là đi lọt cả ba
+cổng. Lần này quy tắc ra đời CÙNG LÚC với gói. Khoản nợ 17 KHÔNG được đóng: `audit`, `db`,
+`tenancy`, `test-support` vẫn chưa có gì — nó chỉ không lớn thêm.
+
+**H16 được bổ sung ngày 2026-08-29** (S1.2), và lý do của nó là một QUAN SÁT VỀ CHÍNH DỰ ÁN chứ
+không phải một lỗ mới. Tới S1.2, năm họ quy tắc biên giới đã được thêm TAY, mỗi họ cho một gói:
+`g1-` (crypto-keys) · `g2-`/H11 (identity) · `g4-`/H13 (outbox) · `g5-`/H15 (supplier) · `g6-`
+(rfq). Bốn lần đầu đều là VÁ XONG RỒI SỬA. Tới lần thứ năm, hình dạng hiện rõ và nó không dễ
+chịu: **danh sách các gói được bảo vệ đang nằm trong đầu người viết, không nằm trong một biến
+nào** — đúng KHUÔN DANH-SÁCH-TÊN mà dự án đã bắt gặp hỏng ba lần (khoản nợ 3, 16, 17), chỉ khác
+ở chỗ danh sách này còn không được viết ra.
+
+H16 đảo chiều: nó **không** liệt kê gói ĐƯỢC bảo vệ, nó liệt kê gói ĐƯỢC MIỄN — bốn gói của S0
+(`audit`, `db`, `tenancy`, `test-support`), mỗi dòng một lý do, và danh sách **chỉ được co lại**;
+một gói vừa có quy tắc vừa nằm trong danh sách miễn làm test ĐỎ. Hệ quả: gói thứ sáu không đòi ai
+phải nhớ gì. Đo bằng đột biến (2026-08-29): nới `to.pathNot` của họ `g6-` từ một cửa thành ba →
+**ĐỎ THẬT**, gọi tên đúng `rfq`.
+
+**H16 KHÔNG thay thế H11/H13/H15 và cũng không thay ba probe của mỗi họ.** Nó đòi quy tắc TỒN TẠI
+và có HÌNH DẠNG đúng; nó **không chạy depcruise** nên không chứng minh quy tắc CHẶN THẬT. Nó cũng
+**không** phủ danh sách trắng barrel — khoản nợ 9 còn nguyên: hai gói S1 có danh sách trắng, nhưng
+"có" ấy vẫn là một hằng viết tay, không phải một tính chất.
+
+Hai con số ở §2 (12 → 13 và 46 → 47, rồi 13 → 15 và 47 → 49, nay 15 → 16 và 49 → 50) ĐƯỢC SỬA CÙNG LÚC ở đây. Việc HOÀ GIẢI hai cách đếm
 ("34 vs 46", nay "34 vs 47") vẫn là việc của Task 11 và KHÔNG được làm ở đây — sửa cho hai con
 số ĐÚNG với thực tế là một việc khác hẳn với việc chọn cách đếm.
 

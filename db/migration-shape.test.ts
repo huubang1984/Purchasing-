@@ -223,6 +223,25 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
     for (const [nhan, bieuThuc] of cacCauLenh) {
       for (const khop of sql.matchAll(bieuThuc)) {
         const tenBang = chuanHoaTen(khop[1]!);
+        // [khoản nợ 29] MIỄN TRỪ CÓ ĐIỀU KIỆN, và điều kiện là một tính chất chứ không một tên
+        // file: một `CREATE POLICY ... AS RESTRICTIVE` trên bảng do file khác tạo KHÔNG mở được
+        // cửa sổ mà quy tắc này canh.
+        //
+        // Lý do của quy tắc, nguyên văn ở thông điệp bên dưới, là *"tách hai việc qua hai file
+        // để lộ cửa sổ không có RLS giữa hai transaction"*. Cửa sổ ấy chỉ tồn tại với policy
+        // CHO PHÉP: bảng ra đời ở file A mà policy cô lập tổ chức nằm ở file B thì giữa hai lần
+        // chạy, bảng không có gì che. Policy HẠN CHẾ được AND vào các policy sẵn có, nên vắng
+        // mặt nó bảng vẫn được che nguyên như trước — nó chỉ SIẾT, không bao giờ NỚI.
+        //
+        // `ALTER POLICY` KHÔNG được miễn trừ dù mang `RESTRICTIVE`: sửa một policy đang có thì
+        // nới được, và đó đúng là lỗ mà vòng fix 1 (M6) đã bịt.
+        const duoiKhop = sql.slice(
+          (khop.index ?? 0) + khop[0].length,
+          (khop.index ?? 0) + khop[0].length + 40,
+        );
+        if (/^\s*CREATE\b/iu.test(khop[0]) && /^\s*AS\s+RESTRICTIVE\b/iu.test(duoiKhop)) {
+          continue;
+        }
         const fileGoc = fileTaoBang.get(tenBang);
         if (fileGoc === undefined) {
           lacCho.push(`${tenFile}: "${nhan}" trên bảng "${tenBang}" không được file nào tạo`);
@@ -307,15 +326,47 @@ describe("hình dạng file migration", () => {
     // khác (tức một dòng đầu tiên trong cửa ngoại lệ), hoặc một role có BYPASSRLS. 007 không
     // làm cái nào — nó chạy runner TRONG ngữ cảnh tenant. Xem "LỆCH KHỎI BRIEF (4/9)" ở
     // db/migrations/007_outbox.sql.
+    // [S1.1] Hai bảng mới của 008 — `suppliers` và `supplier_contacts` — đều có org_id, nên cả
+    // hai chịu ĐÚNG cùng bộ ràng buộc và đi qua hình dạng CHUẨN của mục (B) trong
+    // hardening.always.sql. Hệ quả cố ý, giữ nguyên qua Task 8/9/10 và nay qua S1.1:
+    // `NGOAI_LE_HINH_DANG` VẪN RỖNG. Policy của chúng là `(org_id = app_current_org_id())`
+    // nguyên văn, đúng dòng `co_org_id` của danh sách trắng — không một bậc tự do nào được mở.
+    // [ADR-017 / 014] Hai bang moi — `org_procurement_policies` va `rfq_budgets` — deu co
+    // org_id, nen ca hai chiu DUNG cung bo rang buoc. He qua co y, giu nguyen qua Task 8/9/10,
+    // S1.1 va nay qua ADR-017: `NGOAI_LE_HINH_DANG` VAN RONG. Khong mot bac tu do nao duoc mo.
+    // [S1.4 / 017] `rfq_key_material` cung co org_id nen no chiu DUNG cung bo rang buoc, va
+    // policy cua no la `(org_id = app_current_org_id())` nguyen van. Bang nay dang chu y vi mot
+    // ly do KHAC: no la bang dau tien co mot cot ma `app_api` GHI DUOC nhung KHONG DOC DUOC
+    // (`wrapped_private_key`). Hinh dang RLS khong noi gi ve dieu do — quyen theo COT noi, va
+    // lop do no la db/rls-coverage.int.test.ts. Hai lop canh hai thu khac nhau.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
+      "bid_receipts",
+      "guest_sessions",
+      "invitation_otp_challenges",
       "mfa_credentials",
+      "org_procurement_policies",
       "organizations",
+      "otp_rate_limits",
       "outbox_jobs",
+      "rfq_approvals",
+      "rfq_budgets",
+      "rfq_invitation_tokens",
+      "rfq_invitations",
+      "rfq_items",
+      "rfq_key_material",
+      "rfq_packages",
+      "rfq_unsealed_bids",
       "sessions",
+      "supplier_contacts",
+      "suppliers",
+      "unseal_approvals",
+      "unseal_requests",
       "user_roles",
       "users",
+      "vendor_bid_versions",
+      "vendor_bids",
     ]);
   });
 
@@ -448,6 +499,75 @@ describe("lớp tĩnh không mù với các cách viết hợp lệ", () => {
     // Và nó cũng phải bị bắt khi nằm ở file KHÁC file tạo bảng.
     expect(kiemTraLacCho(cacFile)).toEqual([
       '9r.sql: "CREATE/ALTER POLICY" trên bảng "users" không được file nào tạo',
+    ]);
+  });
+
+  // ==========================================================================================
+  // [khoản nợ 29] MIỄN TRỪ CHO POLICY `AS RESTRICTIVE` — BA CA, VÀ HAI TRONG SỐ ĐÓ LÀ CA CHẶN
+  // ==========================================================================================
+  // Miễn trừ nào cũng là một lỗ tiềm năng, nên nó được đo theo cả hai chiều: nó PHẢI cho đúng
+  // thứ nó nói là cho, và PHẢI KHÔNG cho ba thứ ở cạnh nó.
+  it("[khoản nợ 29] CREATE POLICY ... AS RESTRICTIVE ở file khác ĐƯỢC PHÉP", () => {
+    const cacFile = new Map([
+      [
+        "9s.sql",
+        "CREATE TABLE bids (id int, org_id uuid NOT NULL);\n" +
+          "ALTER TABLE bids ENABLE ROW LEVEL SECURITY;\n" +
+          "ALTER TABLE bids FORCE ROW LEVEL SECURITY;\n" +
+          "CREATE POLICY bids_tenant ON bids USING (org_id = app_current_org_id()) " +
+          "WITH CHECK (org_id = app_current_org_id());\n" +
+          "GRANT SELECT ON bids TO app_api;",
+      ],
+      [
+        "9t.sql",
+        "CREATE POLICY bids_khach ON bids AS RESTRICTIVE " +
+          "USING (app_current_guest_session_id() IS NULL) " +
+          "WITH CHECK (app_current_guest_session_id() IS NULL);",
+      ],
+    ]);
+    expect(kiemTraLacCho(cacFile)).toEqual([]);
+  });
+
+  it("[khoản nợ 29] nhưng CREATE POLICY thường ở file khác VẪN bị chặn — miễn trừ không tràn", () => {
+    // Đây là vế làm cho miễn trừ trên không phải một lần mở cửa: bỏ đúng hai chữ
+    // `AS RESTRICTIVE` là quay lại bị chặn.
+    const cacFile = new Map([
+      [
+        "9s.sql",
+        "CREATE TABLE bids (id int, org_id uuid NOT NULL);\n" +
+          "ALTER TABLE bids ENABLE ROW LEVEL SECURITY;\n" +
+          "ALTER TABLE bids FORCE ROW LEVEL SECURITY;\n" +
+          "CREATE POLICY bids_tenant ON bids USING (org_id = app_current_org_id()) " +
+          "WITH CHECK (org_id = app_current_org_id());\n" +
+          "GRANT SELECT ON bids TO app_api;",
+      ],
+      ["9t.sql", "CREATE POLICY bids_them ON bids USING (true) WITH CHECK (true);"],
+    ]);
+    expect(kiemTraLacCho(cacFile)).toEqual([
+      '9t.sql: "CREATE/ALTER POLICY" trên bảng "bids" — bảng đó được tạo ở 9s.sql. ' +
+        "Tách hai việc qua hai file để lộ cửa sổ không có RLS giữa hai transaction.",
+    ]);
+  });
+
+  it("[khoản nợ 29] ALTER POLICY ... AS RESTRICTIVE KHÔNG được miễn trừ", () => {
+    // `CREATE ... AS RESTRICTIVE` chỉ SIẾT được. `ALTER` thì sửa một policy đang có, tức nới
+    // được — và đó đúng là lỗ mà vòng fix 1 (M6) đã bịt. Miễn trừ không được đi theo hai chữ
+    // `RESTRICTIVE` một mình.
+    const cacFile = new Map([
+      [
+        "9s.sql",
+        "CREATE TABLE bids (id int, org_id uuid NOT NULL);\n" +
+          "ALTER TABLE bids ENABLE ROW LEVEL SECURITY;\n" +
+          "ALTER TABLE bids FORCE ROW LEVEL SECURITY;\n" +
+          "CREATE POLICY bids_tenant ON bids USING (org_id = app_current_org_id()) " +
+          "WITH CHECK (org_id = app_current_org_id());\n" +
+          "GRANT SELECT ON bids TO app_api;",
+      ],
+      ["9t.sql", "ALTER POLICY bids_tenant ON bids AS RESTRICTIVE USING (true);"],
+    ]);
+    expect(kiemTraLacCho(cacFile)).toEqual([
+      '9t.sql: "CREATE/ALTER POLICY" trên bảng "bids" — bảng đó được tạo ở 9s.sql. ' +
+        "Tách hai việc qua hai file để lộ cửa sổ không có RLS giữa hai transaction.",
     ]);
   });
 });

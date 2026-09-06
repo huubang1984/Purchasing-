@@ -944,18 +944,32 @@ describe("[T10-D] runner chạy dưới hồ sơ vai trò THẬT", () => {
     );
     expect(Number(dem[0]!.n), "siêu người dùng nhìn thấy CẢ HAI tổ chức").toBe(2);
 
-    // (ii) Nó bỏ qua cả GRANT: app_unseal KHÔNG có quyền nào trên bảng này (xem [T10-G]), nhưng
-    //      một phiên siêu người dùng đọc được như thường. Một bộ test chạy trên pool ấy vì thế
-    //      xanh y hệt khi mọi GRANT bị thu hồi.
+    // (ii) Nó bỏ qua cả GRANT. ~~app_unseal KHÔNG có quyền nào trên bảng này (xem [T10-G])~~ —
+    //      câu ấy ĐÚNG cho tới migration `025`, thứ cấp cho `app_unseal` quyền ĐỌC và sáu cột
+    //      vòng đời để nó tự nhặt được hai `kind` mà chỉ nó chạy được (khoản nợ 34). Vế được đo
+    //      ở đây vì thế đổi sang quyền mà `app_unseal` VẪN KHÔNG có, và sẽ không bao giờ có:
+    //      **INSERT**. Một tiến trình vừa tự xếp việc vừa tự chạy việc là một tiến trình tự cấp
+    //      việc cho mình — với tiến trình DUY NHẤT giữ khả năng giải mã thì đó đúng thứ ADR-006
+    //      dựng hai role để đóng.
     const unsealPool = db.poolAs("app_unseal");
     try {
-      await expect(unsealPool.query("SELECT 1 FROM outbox_jobs LIMIT 1")).rejects.toThrow(
-        /permission denied/i,
-      );
+      await expect(
+        unsealPool.query(
+          "INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1, 'THU_XEP_VIEC', '{}'::jsonb)",
+          [orgId],
+        ),
+      ).rejects.toThrow(/permission denied/i);
     } finally {
       await unsealPool.end();
     }
-    await expect(db.pool.query("SELECT 1 FROM outbox_jobs LIMIT 1")).resolves.toBeDefined();
+    // Còn một phiên siêu người dùng thì chèn được như thường — tức một bộ test chạy trên pool ấy
+    // xanh y hệt khi mọi GRANT bị thu hồi.
+    await expect(
+      db.pool.query(
+        "INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1, 'THU_XEP_VIEC', '{}'::jsonb)",
+        [orgId],
+      ),
+    ).resolves.toBeDefined();
   });
 
   it("BYPASSRLS là thuộc tính của ROLE, không theo từng bảng — và migrate() KHÔNG canh role lạ", async () => {
@@ -1096,7 +1110,7 @@ describe("[T10-D] runner chạy dưới hồ sơ vai trò THẬT", () => {
 // 6. [T10-G] BỀ MẶT QUYỀN — ĐO BẰNG CÔNG CỤ KHÔNG MÙ
 // ============================================================================================
 describe("[T10-G] quyền trên outbox_jobs", () => {
-  it("app_unseal KHÔNG có một quyền nào — mức BẢNG lẫn mức CỘT, và PUBLIC cũng vậy", async () => {
+  it("app_unseal có ĐÚNG bộ quyền của 025 — và KHÔNG có INSERT; PUBLIC vẫn trắng", async () => {
     // `information_schema.role_table_grants` MÙ với quyền mức CỘT (đã đo ở Task 8/9), nên phép
     // kiểm có thẩm quyền đọc pg_class.relacl + pg_attribute.attacl qua aclexplode, cộng PUBLIC
     // riêng, cộng role định sẵn riêng.
@@ -1119,8 +1133,33 @@ describe("[T10-G] quyền trên outbox_jobs", () => {
     expect(mucBang.length).toBeGreaterThan(0);
     expect(mucCot.length).toBeGreaterThan(0);
 
-    expect(mucBang.filter((h) => h.ai === "app_unseal")).toEqual([]);
-    expect(mucCot.filter((h) => h.ai === "app_unseal")).toEqual([]);
+    // ~~`app_unseal` KHÔNG có một quyền nào.~~ Câu ấy đúng cho tới `025` — xem khối [T10-D].
+    // Nay nó có ĐÚNG hai thứ, và mốc ghim đổi từ "không có gì" sang "đúng bằng thứ đã quyết".
+    expect(
+      mucBang.filter((h) => h.ai === "app_unseal").map((h) => h.quyen),
+      "app_unseal chỉ được ĐỌC ở mức bảng — không INSERT, không DELETE, không TRUNCATE",
+    ).toEqual(["SELECT"]);
+    expect(
+      mucCot
+        .filter((h) => h.ai === "app_unseal")
+        .map((h) => `${h.cot}:${h.quyen}`)
+        .sort(),
+      "đúng SÁU cột vòng đời mà runner ghi, không hơn",
+    ).toEqual([
+      "attempts:UPDATE",
+      "finished_at:UPDATE",
+      "last_failure_reason:UPDATE",
+      "lease_expires_at:UPDATE",
+      "run_after:UPDATE",
+      "status:UPDATE",
+    ]);
+    // VẾ CHỊU LỰC, và nó là vế duy nhất của mốc ghim cũ còn nguyên: KHÔNG có `INSERT`, ở cả hai
+    // mức. Đường xếp việc đi qua `dispatchUnseal` phía `api`, sau cổng bốn vế của D1.
+    expect(
+      [...mucBang, ...mucCot].filter(
+        (h) => h.ai === "app_unseal" && h.quyen === "INSERT",
+      ),
+    ).toEqual([]);
     expect(mucBang.filter((h) => h.ai === "PUBLIC")).toEqual([]);
     expect(mucCot.filter((h) => h.ai === "PUBLIC")).toEqual([]);
     // Role định sẵn của PostgreSQL cũng không được cấp gì — chúng là đường vòng ai cũng quên.

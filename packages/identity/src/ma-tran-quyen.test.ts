@@ -35,6 +35,32 @@ const THU_MUC = fileURLToPath(new URL("../../../db/migrations", import.meta.url)
 const SQL_005 = readFileSync(`${THU_MUC}/005_identity.sql`, "utf8");
 const SQL_HARDENING = readFileSync(`${THU_MUC}/hardening.always.sql`, "utf8");
 
+/**
+ * [khoản nợ 31] MỌI migration đánh số, theo THỨ TỰ ÁP — không phải một danh sách tên.
+ *
+ * Hai mốc ghim ở dưới từng đọc DUY NHẤT văn bản của `005`, và câu biện minh cho việc đó đúng
+ * cho tới ngày `023` ra đời: `005` là file DUY NHẤT ghi vào `permissions` và `role_permissions`.
+ * Một trong hai mốc ghim còn tự dựng một lớp canh để phát hiện đúng ngày ấy — và nó đã ĐỎ, đúng
+ * như nó được viết ra để làm.
+ *
+ * Cách đóng SAI là thêm `023` vào một danh sách miễn trừ: lần sau lại quên. Cách đóng đúng là
+ * đọc theo TÍNH CHẤT — mọi file `NNN_*.sql` — nên một migration `0nn` tương lai tự rơi vào phạm
+ * vi mà không ai phải nhớ gì.
+ */
+/** `catValues` NÉM khi không tìm thấy bảng; hầu hết migration không nhắc tới hai bảng này. */
+function catValuesNeuCo(pSql: string, pBang: string): string {
+  try {
+    return catValues(pSql, pBang);
+  } catch {
+    return "";
+  }
+}
+
+const MOI_MIGRATION = readdirSync(THU_MUC)
+  .filter((f) => /^\d{3}_.*\.sql$/.test(f))
+  .sort()
+  .map((f) => ({ ten: f, sql: readFileSync(`${THU_MUC}/${f}`, "utf8") }));
+
 /** Cắt phần nằm giữa cặp thẻ dollar-quote `$<ten>$` thứ n và n+1. */
 function catTheDollar(pNoiDung: string, pThe: string, pLanThu = 0): string {
   const mau = `$${pThe}$`;
@@ -131,10 +157,21 @@ describe("§R3 — các bản của chuỗi phân tách nhiệm vụ (D3)", () =
 });
 
 describe("§R3 — danh mục quyền", () => {
-  it("PERMISSIONS khớp NGUYÊN VĂN bảng `permissions` trong 005", () => {
+  it("PERMISSIONS khớp NGUYÊN VĂN bảng `permissions` trong TOÀN BỘ migration", () => {
+    // [khoản nợ 31] Phép ghim này từng đọc riêng `005` — xem khối chú thích của `MOI_MIGRATION`.
     // `cacChuoi` lấy CẢ mã lẫn mô tả, nên chỉ giữ phần tử ở vị trí chẵn (cột `code`).
-    const maTrongSql = cacChuoi(catValues(SQL_005, "permissions")).filter((_v, i) => i % 2 === 0);
+    const maTrongSql: string[] = [];
+    for (const { sql } of MOI_MIGRATION) {
+      const than = catValuesNeuCo(sql, "permissions");
+      if (than === "") continue;
+      maTrongSql.push(...cacChuoi(than).filter((_v, i) => i % 2 === 0));
+    }
     expect(maTrongSql.length, "chống rỗng ruột").toBeGreaterThan(0);
+    expect(
+      maTrongSql.length,
+      "một mã quyền được khai HAI LẦN ở hai migration — `permissions.code` là khoá chính nên " +
+        "lần thứ hai sẽ làm migrate() gãy, và phép ghim này phải nói ra trước khi tới đó",
+    ).toBe(new Set(maTrongSql).size);
     expect([...maTrongSql].sort()).toEqual([...Object.values(PERMISSIONS)].sort());
   });
 });
@@ -142,7 +179,10 @@ describe("§R3 — danh mục quyền", () => {
 describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ", () => {
   /** (vai trò -> tập mã quyền), đọc THẲNG từ văn bản migration. */
   const maTran = (() => {
-    const cap = [...catValues(SQL_005, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)];
+    // [khoản nợ 31] Đọc MỌI migration, không riêng `005` — xem khối `MOI_MIGRATION`.
+    const cap = MOI_MIGRATION.flatMap(({ sql }) => [
+      ...catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g),
+    ]);
     const ketQua = new Map<string, Set<string>>();
     for (const [, vaiTro, quyen] of cap) {
       const tap = ketQua.get(vaiTro!) ?? new Set<string>();
@@ -281,16 +321,17 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     expect(capPhuChuoi(donLe).map((c) => c.join("+"))).toContain("TECHNICAL+TECHNICAL");
   });
 
-  it("[INV-D3] CHỈ 005 được ghi vào role_permissions — mọi migration khác làm mốc ghim mù", () => {
+  it("[INV-D3] mọi migration ghi `role_permissions` đều NẰM TRONG phạm vi của mốc ghim", () => {
     // [QT1 — bất biến ở phạm vi TỆP đòi quét TOÀN BỘ thư mục, không chỉ file vừa thêm]. Mốc
     // ghim ở trên đọc DUY NHẤT văn bản của 005. Một migration `006_...sql` chèn thêm quyền cho
     // một vai trò sẽ đổi ma trận THẬT mà không đổi thứ mốc ghim nhìn thấy — đúng khe hở [MR]/
     // [FO2], chỉ khác là đi qua đường "sửa bằng một migration đánh số MỚI" mà 005 tuyên bố là
     // an toàn. Test này biến việc đó thành một lần ĐỎ Ở CI, buộc tác giả tính lại mốc ghim.
     const thuMuc = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+    const trongPhamVi = new Set(MOI_MIGRATION.map((m) => m.ten));
     const viPham: string[] = [];
     for (const ten of readdirSync(thuMuc).filter((f) => f.endsWith(".sql")).sort()) {
-      if (ten === "005_identity.sql") continue;
+      if (trongPhamVi.has(ten)) continue;
       const noiDung = readFileSync(`${thuMuc}/${ten}`, "utf8");
       // Chỉ soi câu GHI (INSERT/UPDATE/DELETE/COPY/TRUNCATE) nhắm vào bảng, không soi mọi lần
       // NHẮC TỚI tên bảng: hardening.always.sql đọc `role_permissions` ở hàng chục chỗ và đó là
@@ -301,11 +342,23 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     }
     expect(
       viPham,
-      "Một migration ngoài 005 ghi vào `role_permissions`. Mốc ghim CHAIN_COVERING_ROLE_PAIRS " +
-        "chỉ đọc văn bản 005 nên nó KHÔNG thấy thay đổi này — tính lại tập cặp phủ trọn chuỗi " +
-        "trên ma trận SAU khi áp file đó, cập nhật cả hai bản mốc ghim, và rà những người đang " +
-        "giữ tổ hợp mới. Sau đó mở rộng chính test này để nó đọc được file mới.",
+      "Một file .sql NGOÀI tập migration đánh số ghi vào `role_permissions` — hôm nay chỉ có " +
+        "`hardening.always.sql` ở diện ấy, và nó CHẠY LẠI ở mọi lần migrate(). Mốc ghim " +
+        "CHAIN_COVERING_ROLE_PAIRS đọc mọi file `NNN_*.sql` nên nó KHÔNG thấy thay đổi này — " +
+        "tính lại tập cặp phủ trọn chuỗi trên ma trận SAU khi áp file đó, cập nhật cả hai bản " +
+        "mốc ghim, và rà những người đang giữ tổ hợp mới.",
     ).toEqual([]);
+
+    // Chống rỗng ruột hai chiều: phạm vi đọc phải THẬT SỰ bắt được ít nhất hai file ghi ma trận
+    // (`005` và `023`). Nếu biểu thức lọc `NNN_*.sql` hỏng, `MOI_MIGRATION` rỗng, `viPham` cũng
+    // rỗng vì mọi file rơi vào nhánh `continue` — và test này xanh trong khi không canh gì.
+    const cauGhiMaTran = new RegExp(
+      String.raw`INSERT\s+INTO\s+(?:public\.)?role_permissions`,
+      "i",
+    );
+    const coGhi = MOI_MIGRATION.filter(({ sql }) => cauGhiMaTran.test(sql)).map((m) => m.ten);
+    expect(coGhi.length, "phạm vi đọc không thấy một migration nào ghi ma trận quyền").toBeGreaterThanOrEqual(2);
+    expect(coGhi).toContain("005_identity.sql");
   });
 
   it("phép kiểm D3 KHÔNG rỗng ruột — một ma trận cố tình sai phải bị bắt", () => {

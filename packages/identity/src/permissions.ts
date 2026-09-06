@@ -7,6 +7,51 @@ export const PERMISSIONS = {
   RFQ_CREATE: "rfq.create",
   RFQ_APPROVE: "rfq.approve",
   RFQ_INVITE: "rfq.invite",
+  /**
+   * [khoản nợ 31 — review an ninh S1.4 MED-2] Mở RFQ cho nhà cung cấp báo giá, và huỷ RFQ.
+   *
+   * HAI MÃ NÀY RA ĐỜI VÌ CÙNG MỘT KHIẾM KHUYẾT ĐO ĐƯỢC, và nó là bản sao chính xác của lớp lỗi
+   * mà `ROLE_GRANT` bên dưới đã đặt tên: `openRfq` và `cancelRfq` xác lập *ai* và *tổ chức nào*
+   * rồi làm việc, mà không hỏi *người ấy có được phép không* — và câu `requirePermission(...)`
+   * lẽ ra phải gọi là câu **KHÔNG VIẾT ĐƯỢC**, vì danh mục này không có mã nào cho hai hành vi.
+   *
+   * Cái giá của khoảng trống ấy KHÔNG đối xứng, và vế nặng là vế HUỶ: `cancelRfq` thu hồi TOÀN
+   * BỘ vật liệu khoá của RFQ (`rfq.ts` gọi `revokeRfqKeyMaterial`), 017 cấm bỏ dấu thu hồi, và
+   * worker lọc `revoked_at IS NULL`. Tức một phiên hợp lệ BẤT KỲ của tổ chức — kể cả một vai
+   * không có một quyền RFQ nào — làm cho báo giá của một RFQ **vĩnh viễn không mở được**, bằng
+   * một lời gọi, và không có đường lùi.
+   *
+   * Khác `ROLE_GRANT` ở đúng một chỗ, và chỗ ấy đáng nói: `ROLE_GRANT` cố ý KHÔNG được gán cho
+   * vai trò nào (fail-closed cho tới khi có màn hình quản trị). Hai mã này thì ĐƯỢC gán ngay ở
+   * `023`, vì đường đi của chúng ĐÃ TỒN TẠI và đang chạy — để trống nghĩa là chặn cả đường hợp
+   * pháp, tức đổi một lỗ hổng lấy một lần hỏng.
+   */
+  RFQ_OPEN: "rfq.open",
+  RFQ_CANCEL: "rfq.cancel",
+  /**
+   * [khoản nợ 37] Gỡ khoá OTP của một lời mời.
+   *
+   * Khoá cấp-lời-mời của 012 là một phép sửa ĐÚNG cho một khiếm khuyết đã đo, nhưng nó để lại
+   * một hệ quả không ai quyết định: ai cầm một link đã chuyển tiếp giữ được nhà cung cấp THẬT ở
+   * ngoài cuộc thầu **vô hạn** — 5 lần sai, khoá 900 giây, lặp lại — và không hàm nào gỡ được.
+   *
+   * `BUYER` cũng giữ mã này, khác `rfq.open`/`rfq.cancel`: gỡ khoá không chạm vòng đời mật mã
+   * của gói thầu, và người phát hiện một nhà cung cấp đang kêu "tôi không nhận được mã" chính là
+   * người đang chạy vòng mời.
+   */
+  INVITATION_UNLOCK: "invitation.unlock",
+  /**
+   * [khoản nợ 26] Xoá vật liệu khoá ĐÃ THU HỒI của một RFQ đã huỷ.
+   *
+   * Đây là mã quyền duy nhất trong danh mục đứng sau một hành động **phá huỷ không đảo ngược
+   * được**: sau nó, báo giá của gói thầu ấy không ai mở được nữa, kể cả chính chúng ta. Vì thế
+   * nó KHÔNG đi kèm `rfq.cancel` — huỷ RFQ chỉ đặt một DẤU, còn mã này biến dấu ấy thành một sự
+   * thật mật mã, và gộp hai thứ vào một lời gọi là biến một nút "huỷ" thành một nút "phá huỷ".
+   *
+   * Chỉ `PROCUREMENT_MANAGER`. `DIRECTOR` giữ `rfq.unseal.approve`; người phê duyệt việc MỞ
+   * không nên đồng thời là người xoá được thứ cần mở — xem `026` mục (3).
+   */
+  RFQ_KEY_PURGE: "rfq.key.purge",
   RFQ_UNSEAL: "rfq.unseal",
   RFQ_UNSEAL_APPROVE: "rfq.unseal.approve",
   BID_VIEW: "bid.view",

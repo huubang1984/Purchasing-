@@ -1,1 +1,6 @@
-export { TenantError, withTenant, type WithTenantOptions } from "./with-tenant.js";
+export {
+  TenantError,
+  withGuestSession,
+  withTenant,
+  type WithTenantOptions,
+} from "./with-tenant.js";

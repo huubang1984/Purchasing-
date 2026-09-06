@@ -434,14 +434,36 @@ describe("cấu hình ghim đối chiếu với docs/TEST-PLAN.md thật", () =>
     expect(hoi.filter((m) => !MA_PHAI_CO_CO_HEP.has(m))).toEqual([]);
   });
 
-  it("ghi chú §4 của D1 phải nêu ĐÍCH DANH hàng C3 — hai hàng nói về cùng một vế", () => {
-    // Khiếm khuyết đã đo: D1 ✅ và C3 ⏳ mâu thuẫn số học, cách nhau tám dòng trong cùng bảng.
-    // Nếu ghi chú không trỏ sang C3 thì kiểm toán viên phải tự bắc cầu.
+  // ============================================================================================
+  // *** TIỀN ĐỀ CỦA TEST NÀY ĐÃ HẾT HẠN Ở S1.6. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU. ***
+  //
+  //   it("ghi chú §4 của D1 phải nêu ĐÍCH DANH hàng C3 — hai hàng nói về cùng một vế", () => {
+  //     // Khiếm khuyết đã đo: D1 ✅ và C3 ⏳ mâu thuẫn số học, cách nhau tám dòng trong cùng bảng.
+  //     // Nếu ghi chú không trỏ sang C3 thì kiểm toán viên phải tự bắc cầu.
+  //     expect(PHAM_VI_HEP.get("D1") ?? "").toContain("C3");
+  //   });
+  //
+  // Test ấy đòi một CÂY CẦU BẰNG CHỮ giữa hai hàng mâu thuẫn nhau. Ở S1.6 mâu thuẫn biến mất vì
+  // **C3 được lấp**, không vì ai viết thêm một câu — nên đòi cây cầu ấy nữa là đòi một dòng chú
+  // thích trỏ tới một vấn đề không còn tồn tại.
+  //
+  // Bản mới đo THỨ ĐÃ THAY THẾ nó: mâu thuẫn được giải quyết bằng ĐỘ PHỦ (C3 rời khỏi danh sách
+  // được-phép-chưa-phủ), và ghi chú §4 của D1 nay phải nói về phần chênh CÒN LẠI — cổng chạy ở
+  // lúc ĐIỀU PHỐI chứ không ở lúc GIẢI MÃ.
+  // ============================================================================================
+  it("ghi chú §4 của D1 nói về phép HỘI, và mâu thuẫn D1/C3 được giải bằng ĐỘ PHỦ", () => {
+    expect(
+      MA_DUOC_PHEP_CHUA_PHU.has("C3"),
+      "C3 còn trong danh sách chưa-phủ thì mâu thuẫn D1 ✅ / C3 ⏳ quay lại, và ghi chú §4 của " +
+        "D1 phải bắc cầu sang nó như bản trước đã đòi",
+    ).toBe(false);
+
     const d1 = PHAM_VI_HEP.get("D1") ?? "";
-    expect(d1).toContain("C3");
-    expect(d1, "phải nói rõ phép HỘI chưa được đo, không chỉ nói một khoảng trống").toContain(
-      "HỘI",
-    );
+    expect(d1, "phải nói rõ đây là một phép HỘI, không chỉ là một khoảng trống").toContain("HỘI");
+    expect(
+      d1,
+      "phải nói ra phần chênh CÒN LẠI: cổng chạy lúc điều phối, không lúc giải mã",
+    ).toContain("ĐIỀU PHỐI");
   });
 
   it("hai phát biểu bàn giao trích nguyên văn đều trỏ tới mã có thật và không bị rút gọn", () => {

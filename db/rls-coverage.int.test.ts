@@ -421,10 +421,15 @@ describe("phủ RLS", () => {
           [bangTenant],
         )
       ).rows;
+      // [khoản nợ 29] `toBe(1)` HẾT ĐÚNG kể từ `027`: lược đồ nay CÓ policy RESTRICTIVE thật
+      // (một `<bảng>_khach` cho mỗi bảng có RLS), nên phép đếm không còn là 1. Thứ khẳng định
+      // này thật sự muốn nói là *"fixture ĐÃ được dựng"*, và nói thẳng điều ấy MẠNH HƠN đếm:
+      // một phép đếm ≥ 1 sẽ xanh nhờ policy của `027` kể cả khi `CREATE POLICY` ở trên im lặng
+      // không chạy. Nên đòi ĐÍCH DANH policy fixture.
       expect(
-        rows.filter((r) => !r.cho_phep).length,
+        rows.filter((r) => !r.cho_phep).map((r) => r.ten_policy),
         "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
-      ).toBe(1);
+      ).toContain("users_chan_bi_khoa");
     } finally {
       await client.query("ROLLBACK");
       client.release();
@@ -541,10 +546,15 @@ describe("phủ RLS", () => {
           [bangTenant],
         )
       ).rows;
+      // [khoản nợ 29] `toBe(1)` HẾT ĐÚNG kể từ `027`: lược đồ nay CÓ policy RESTRICTIVE thật
+      // (một `<bảng>_khach` cho mỗi bảng có RLS), nên phép đếm không còn là 1. Thứ khẳng định
+      // này thật sự muốn nói là *"fixture ĐÃ được dựng"*, và nói thẳng điều ấy MẠNH HƠN đếm:
+      // một phép đếm ≥ 1 sẽ xanh nhờ policy của `027` kể cả khi `CREATE POLICY` ở trên im lặng
+      // không chạy. Nên đòi ĐÍCH DANH policy fixture.
       expect(
-        rows.filter((r) => !r.cho_phep).length,
+        rows.filter((r) => !r.cho_phep).map((r) => r.ten_policy),
         "fixture RESTRICTIVE không dựng được — nhánh miễn trừ lại thành mã chết",
-      ).toBe(1);
+      ).toContain("users_chan_bi_khoa");
     } finally {
       await client.query("ROLLBACK");
       client.release();
@@ -672,8 +682,22 @@ describe("phủ RLS", () => {
     expect(rows).toEqual([
       { grantee: "app_api", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_api", bang: "audit_events", quyen: "SELECT" },
+      // [S1.5] `bid_receipts` co SELECT o MUC BANG, con `vendor_bid_versions` thi KHONG — va bat
+      // doi xung ay la mot quyet dinh: bien nhan chua mot BAM cua ciphertext, con phong bi thi
+      // chua chinh ciphertext. `app_api` phai doc lai duoc bien nhan cho nha cung cap; no khong
+      // co viec gi voi phong bi.
+      { grantee: "app_api", bang: "bid_receipts", quyen: "SELECT" },
+      // [S1.3] Nam bang moi cua 010. `otp_rate_limits` la bang DUY NHAT co DELETE o muc bang,
+      // va do la mot quyen THAT SU nguy hiem duoc cap CO Y THUC: mot api BI CHIEM xoa sach bang
+      // nay la tat duoc E3(2). Khong tranh duoc neu giu E3 o tang ung dung - bo GRANT la bo luon
+      // co che (dung han muc phai xoa duoc cua so cu), va thu hep xuong mot ham SECURITY DEFINER
+      // la thu muc (C) cua hardening.always.sql CAM. Cung han che cau truc da ghi cho E3(1).
+      { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
+      { grantee: "app_api", bang: "org_procurement_policies", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_api", bang: "otp_rate_limits", quyen: "DELETE,SELECT" },
       // [Task 10] `outbox_jobs` của 007 chỉ hiện SELECT ở MỨC BẢNG: INSERT/UPDATE của nó đều là
       // quyền CỘT (xem test [M5] dưới). Và app_unseal KHÔNG có dòng nào — cố ý, và đó là một
       // LỆCH khỏi brief (brief cấp SELECT/INSERT/UPDATE mức bảng cho CẢ HAI role). Hôm nay
@@ -683,14 +707,62 @@ describe("phủ RLS", () => {
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
+      // [S1.2] Ba bang moi cua 009. `rfq_items` co DELETE o MUC BANG va do la lech co chu dinh
+      // so voi hai bang kia: sua danh sach hang muc luc con DRAFT la viec binh thuong va no chi
+      // bieu dien duoc bang DELETE. Thu gioi han NO theo trang thai cua RFQ cha la trigger
+      // `rfq_items_chi_sua_khi_soan`, khong phai quyen — quyen khong biet trang thai.
+      //
+      // `rfq_approvals` KHONG co UPDATE lan DELETE cho bat ky role nao: mot chu ky phe duyet sua
+      // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
+      { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
+      // [011] `rfq_items` mat DELETE o muc bang, `suppliers`/`supplier_contacts` mat UPDATE theo
+      // cot: trong toan kho ma khong co mot cau nao dung chung. Nguyen tac do CHINH 008 phat
+      // bieu — mot quyen cap 'cho chac' la mot quyen khong ai go ra nua — duoc ap cho app_unseal
+      // va bi bo qua cho app_api. He qua cu the: `supplier_contacts.phone` LA kenh da dang ky cua
+      // E2, va mot api bi chiem doi duoc so nhan OTP bang mot cau UPDATE ma KHONG sinh mot ban
+      // ghi kiem toan nao.
+      { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
+      { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
+      // [S1.1] Hai bảng mới của 008 cũng chỉ hiện SELECT ở MỨC BẢNG — INSERT/UPDATE của chúng
+      // đều là quyền CỘT. Và app_unseal KHÔNG có dòng nào ở đây, cũng không có dòng nào ở test
+      // [M5] bên dưới: đó là ADR-013 mục 5 (hai bảng này chứa DỮ LIỆU CÁ NHÂN của người liên hệ,
+      // và runtime mở thầu không có việc gì với sổ nhà cung cấp). Khác với `sessions`/`users`,
+      // ở đây "không có dòng nào" là KẾT LUẬN ĐẦY ĐỦ chứ không phải hệ quả của việc view này mù
+      // với quyền cột.
+      // [S1.6] `unseal_requests`/`unseal_approvals` chi SELECT o muc bang; INSERT/UPDATE cua
+      // chung deu la quyen COT. Va `rfq_unsealed_bids` — cho DUY NHAT ban ro duoc phep ton tai —
+      // co SELECT cho app_api nhung KHONG co INSERT: `api` khong giai ma duoc nen no khong co gi
+      // de ghi, va mot GRANT INSERT o day se cho phep no BIA mot ban ro.
+      { grantee: "app_api", bang: "unseal_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "unseal_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
+      { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
+      // [025, khoản nợ 34] `app_unseal` nay ĐỌC được hàng đợi. 007 viết *"cố ý KHÔNG cấp gì
+      // cho app_unseal — kể cả SELECT"*, và câu ấy đúng cho tới khi có hai `kind` mà chỉ
+      // tiến trình này chạy được. Cố ý KHÔNG có `INSERT`: một tiến trình vừa tự xếp việc
+      // vừa tự chạy việc là một tiến trình tự cấp việc cho mình.
       { grantee: "app_unseal", bang: "organizations", quyen: "SELECT" },
+      { grantee: "app_unseal", bang: "outbox_jobs", quyen: "SELECT" },
+      // [022, review an ninh S1.6 MED-2] BA dòng của `app_unseal` ĐÃ BỊ THU HỒI, và mỗi dòng
+      // biến mất là một câu:
+      //   `rfq_unsealed_bids` — 019 tự viết *"nó KHÔNG đọc lại được"* rồi cấp SELECT ngay 30
+      //     dòng dưới. Worker chỉ INSERT. Để lại quyền ấy là để một tiến trình `app_unseal` bị
+      //     chiếm đọc HÀNG LOẠT mọi báo giá đã mở, không tốn một lần mở bọc khoá nào.
+      //   `unseal_approvals` — worker không truy vấn bảng này một lần nào.
+      //   `unseal_requests`  — thu xuống quyền CỘT (xem test [S1.2] bên dưới); `reason` bị gỡ,
+      //     và với break-glass thì `reason` chính là chỗ chi tiết sự cố nằm.
     ]);
   });
 
@@ -699,6 +771,93 @@ describe("phủ RLS", () => {
   // UPDATE nào trong role_table_grants — quyền cột chỉ hiện ở role_column_grants. Nghĩa là nếu
   // chỉ giữ khẳng định trên thì nó xanh VÌ LÝ DO SAI, và một "GRANT UPDATE (slug)" thêm vào sau
   // này sẽ đi qua im lặng. Đây là lớp khoá đúng chỗ đó.
+  // [S1.2] MỘT KHE HỞ CỦA HAI KHẲNG ĐỊNH TRÊN, VÀ 009 VỪA MỞ RỘNG NÓ.
+  //
+  // `role_table_grants` mù với quyền CỘT (đã đo, xem [M5] ngay dưới); còn [M5] thì lọc
+  // `privilege_type <> 'SELECT'` vì SELECT theo cột là hệ quả cơ học của GRANT SELECT cả bảng.
+  // Giao của hai vế ấy là một VÙNG MÙ: **một GRANT SELECT THEO CỘT không xuất hiện ở khẳng định
+  // nào.** `users` (006) đã nằm trong vùng đó, và 009 đưa `rfq_packages` vào cùng chỗ.
+  //
+  // Vì sao nó đáng đóng ngay chứ không ghi vào sổ nợ: cột được cấp cho `app_unseal` chính là
+  // thứ trả lời câu hỏi của cổng chính sách S1.6 ("RFQ này đã CLOSED chưa" — C3, D1 vế 3).
+  // Một `GRANT SELECT (title)` thêm vào sau này sẽ đi qua HOÀN TOÀN im lặng.
+  it("[S1.2] quyền SELECT theo CỘT của app_unseal đúng bằng danh sách đã quyết định", async () => {
+    const { rows } = await db.pool.query<{ bang: string; cot: string }>(
+      "SELECT table_name AS bang, column_name AS cot " +
+        "  FROM information_schema.role_column_grants " +
+        " WHERE table_schema = 'public' AND grantee = 'app_unseal' " +
+        "   AND privilege_type = 'SELECT' " +
+        "   AND table_name NOT IN (SELECT table_name FROM information_schema.role_table_grants " +
+        "                           WHERE table_schema = 'public' AND grantee = 'app_unseal' " +
+        "                             AND privilege_type = 'SELECT') " +
+        " ORDER BY 1, 2",
+    );
+    // Loại các bảng mà app_unseal có SELECT ở MỨC BẢNG (audit_events, ...): ở đó một dòng cho
+    // mỗi cột là hệ quả cơ học, khoá chúng ở đây sẽ vỡ mỗi lần thêm cột. Còn lại đúng những
+    // bảng mà quyền đọc được cắt THEO CỘT — và đó là những quyết định phải nhìn thấy được.
+    expect(rows).toEqual([
+      // [S1.8 / 021] `bid_receipts` la bang thu hai ma quyen doc bi cat theo COT cho app_unseal,
+      // va no o day vi mot ly do KHAC han `rfq_key_material`: khong phai de GIU BI MAT ma de
+      // JOB TOAN VEN cua B5 chay duoc. `signature` vang mat co chu dich — kiem chu ky la viec
+      // cua NHA CUNG CAP (B2), khong phai cua mot tien trinh may chu.
+      { bang: "bid_receipts", cot: "bid_version_id" },
+      { bang: "bid_receipts", cot: "canonical_text" },
+      { bang: "bid_receipts", cot: "id" },
+      { bang: "bid_receipts", cot: "org_id" },
+      // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
+      // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
+      // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
+      // [S1.6] BA cot cua `rfq_invitations`, khong hon: worker phai di tu `vendor_bids` toi
+      // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
+      // `link_channel`, `status` KHONG duoc cap — worker khong co viec gi voi danh tinh NCC.
+      { bang: "rfq_invitations", cot: "id" },
+      { bang: "rfq_invitations", cot: "org_id" },
+      { bang: "rfq_invitations", cot: "rfq_id" },
+      { bang: "rfq_key_material", cot: "algorithm" },
+      { bang: "rfq_key_material", cot: "created_at" },
+      { bang: "rfq_key_material", cot: "id" },
+      { bang: "rfq_key_material", cot: "key_version" },
+      { bang: "rfq_key_material", cot: "org_id" },
+      { bang: "rfq_key_material", cot: "public_key" },
+      { bang: "rfq_key_material", cot: "revoked_at" },
+      { bang: "rfq_key_material", cot: "rfq_id" },
+      { bang: "rfq_key_material", cot: "wrapped_private_key" },
+      { bang: "rfq_packages", cot: "id" },
+      { bang: "rfq_packages", cot: "org_id" },
+      { bang: "rfq_packages", cot: "status" },
+      { bang: "sessions", cot: "expires_at" },
+      { bang: "sessions", cot: "id" },
+      { bang: "sessions", cot: "mfa_verified_at" },
+      { bang: "sessions", cot: "org_id" },
+      { bang: "sessions", cot: "revoked_at" },
+      { bang: "sessions", cot: "user_id" },
+      // [022] `unseal_requests` chuyển từ SELECT mức BẢNG xuống ĐÚNG sáu cột worker đọc.
+      // `reason`, `break_glass`, và mọi mốc thời gian khác KHÔNG được cấp.
+      { bang: "unseal_requests", cot: "dispatched_by" },
+      { bang: "unseal_requests", cot: "dispatched_by_session_id" },
+      { bang: "unseal_requests", cot: "id" },
+      { bang: "unseal_requests", cot: "org_id" },
+      { bang: "unseal_requests", cot: "rfq_id" },
+      { bang: "unseal_requests", cot: "status" },
+      { bang: "users", cot: "id" },
+      { bang: "users", cot: "org_id" },
+      { bang: "users", cot: "status" },
+      // [S1.5] `vendor_bid_versions.envelope` la cot THU HAI trong du an ma `app_unseal` doc duoc
+      // con `app_api` thi khong (cot dau la `rfq_key_material.wrapped_private_key`). Y nghia manh
+      // hon o day: mot `api` bi chiem hoan toan cung khong rut duoc phong bi niem phong ra de
+      // tan cong ngoai tuyen ve sau.
+      { bang: "vendor_bid_versions", cot: "bid_id" },
+      { bang: "vendor_bid_versions", cot: "envelope" },
+      { bang: "vendor_bid_versions", cot: "id" },
+      { bang: "vendor_bid_versions", cot: "org_id" },
+      { bang: "vendor_bid_versions", cot: "submitted_at" },
+      { bang: "vendor_bid_versions", cot: "version" },
+      { bang: "vendor_bids", cot: "id" },
+      { bang: "vendor_bids", cot: "invitation_id" },
+      { bang: "vendor_bids", cot: "org_id" },
+    ]);
+  });
+
   it("[M5] quyền CỘT của app_api/app_unseal đúng bằng những gì đã quyết định", async () => {
     const { rows } = await db.pool.query<{ grantee: string; bang: string; cot: string; quyen: string }>(
       "SELECT grantee, table_name AS bang, column_name AS cot, privilege_type AS quyen " +
@@ -747,6 +906,52 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_api", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [S1.5] Bien nhan: BON cot INSERT va KHONG cot nao UPDATE. `bid_receipts` chi co HAI cot
+      // mang du lieu — van ban chinh tac va chu ky cua no; moi thu khac nam TRONG van ban da ky.
+      { grantee: "app_api", bang: "bid_receipts", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "canonical_text", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "bid_receipts", cot: "signature", quyen: "INSERT" },
+      // [S1.8, migration 021] `app_unseal` nay doc duoc BON cot cua bang nay — nhung day la danh
+      // sach quyen GHI (truy van tren loc `privilege_type <> 'SELECT'`), nen chung nam o test
+      // "[S1.2] quyen SELECT theo COT cua app_unseal" chu khong o day.
+      // [S1.3] `guest_sessions` - CHI `revoked_at` co UPDATE. `otp_verified_at` KHONG sua duoc:
+      // no la moc tra loi "phien nay qua OTP luc nao", va mot moc sua duoc la mot moc khong
+      // dung de phan xet duoc. `verified_contact_id` cung khong - viet lai danh tinh da xac thuc
+      // chinh la thu E5 sinh ra de chan.
+      // [C2, 012] `challenge_id`: phien khach TRO TOI thach thuc da doi chieu, va trigger doi
+      // `verified_contact_id`/`verified_channel` KHOP voi hang do. Khong co cot nay, danh tinh
+      // da xac thuc la mot LOI KHAI cua nguoi goi.
+      { grantee: "app_api", bang: "guest_sessions", cot: "challenge_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "verified_channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "guest_sessions", cot: "verified_contact_id", quyen: "INSERT" },
+      // [S1.3] `invitation_otp_challenges` - `code_hash` chi INSERT: mot ma OTP sua duoc sau khi
+      // phat la mot ma khong dung mot lan duoc. `channel` cung chi INSERT: trigger so kenh OTP
+      // voi kenh magic link chay o BEFORE INSERT, nen mot cot `channel` sua duoc sau do se lam
+      // phep kiem ay chi dung tai thoi diem chen (ADR-015 muc 1).
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "code_hash", quyen: "INSERT" },
+      // [C1/H1, 012] `contact_id` va `token_id`: dich nhan OTP DOC TU CSDL va phat OTP DOI TOKEN.
+      // `destination_hash` ghi lai dich DA THAT SU DUNG — ban truoc khong luu, nen "khong lop nao,
+      // o bat ky thoi diem nao, biet ma da di toi dau".
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "destination_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "failed_attempts", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "locked_until", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "org_id", quyen: "INSERT" },
+      // [ADR-018 / 015] Phien ban pepper da dung cho CA HAI bam cua hang nay. NOT NULL: mot hang
+      // khong noi duoc no bam bang gi la mot hang khong doi chieu duoc — va no chet trong IM LANG,
+      // vi mot bam khong khop trong y het mot bam sai.
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "pepper_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "invitation_otp_challenges", cot: "token_id", quyen: "INSERT" },
       // [Task 9] `mfa_credentials` — bốn vắng mặt là load-bearing, mỗi cái đóng một đường đi:
       //   `id`                 KHÔNG INSERT -> mfa_credentials_pkey không làm oracle xuyên tổ
       //                                        chức được (khuôn users_pkey ở 002).
@@ -766,7 +971,26 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
+      // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
+      // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
+      // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "currency", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "dual_approval_threshold", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "effective_from", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "org_id", quyen: "INSERT" },
+      // [S1.7] Cột chế độ nghiêm của A6. Nó vào tập INSERT chứ KHÔNG vào tập UPDATE: bảng này
+      // chỉ ghi thêm, và đổi chính sách nghĩa là thêm một phiên bản — xem 014 và 020.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "strict_blind_mode", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "version", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_kind", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "hits", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "hits", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "otp_rate_limits", cot: "window_start", quyen: "INSERT" },
       // [Task 10] `outbox_jobs` — bốn nhóm vắng mặt, mỗi nhóm đóng một đường đi:
       //   `id`/`created_at`          KHÔNG có gì -> `outbox_jobs_pkey` không dùng làm oracle
       //                                            xuyên tổ chức được (khuôn `users_pkey` ở
@@ -793,6 +1017,127 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
+      // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
+      { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
+      // [S1.3] `rfq_invitation_tokens` - `token_hash` chi INSERT. Mot token doi duoc gia tri la
+      // mot token khong thu hoi duoc that (E1).
+      // [ADR-017 / 014] Ngan sach du tinh cua nguoi mua. UPDATE co, nhung bi trigger
+      // `rfq_budgets_chi_sua_khi_soan` gioi han vao luc RFQ con o DRAFT — sua duoc bang chung SAU
+      // khi nguoi duyet da ky nghia la bang chung noi mot dang con quyet dinh da ra mot neo.
+      { grantee: "app_api", bang: "rfq_budgets", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "currency", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "currency", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "estimated_value", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "estimated_value", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_budgets", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "invitation_id", quyen: "INSERT" },
+      // [ADR-016 / 013] Hai cot ky ten cua nguoi PHAT token. Duc mot credential bearer la thao
+      // tac dang ghi so nhat cua ca goi invitation, nen no la cho te nhat de con mot loi khai.
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "issued_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "issued_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "purpose", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "token_hash", quyen: "INSERT" },
+      // [S1.3] `rfq_invitations` - `contact_id` va `link_channel` KHONG co UPDATE. Doi nguoi nhan
+      // hay doi kenh cua mot loi moi DA GUI la gui mot loi moi KHAC; va mot `link_channel` sua
+      // duoc sau khi OTP da phat lam trigger so hai kenh tro thanh mot phep kiem chi dung tai
+      // thoi diem chen.
+      { grantee: "app_api", bang: "rfq_invitations", cot: "contact_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "invited_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "link_channel", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_at", quyen: "UPDATE" },
+      // [ADR-016 / 013] UPDATE, khong phai INSERT: thu hoi la mot lan sua hang co san. Khong co
+      // hai cot nay, "ai da thu hoi loi moi" chi so kiem toan tra loi duoc — va so kiem toan
+      // nhan dau vao la loi khai, tuc khong lop nao biet.
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "revoked_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
+      // [ADR-016 / 016] Hang muc RFQ mang chu ky nguoi them.
+      { grantee: "app_api", bang: "rfq_items", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "description", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "quantity", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_items", cot: "unit", quyen: "INSERT" },
+      // [S1.4 / 017] `wrapped_private_key` co INSERT o day va KHONG co dong SELECT nao tuong ung
+      // trong khang dinh tren — do la bat doi xung "ghi duoc ma khong doc duoc", cau chiu luc cua
+      // migration 017. `id` va `created_at` vang mat: chung dung DEFAULT, va nho the chi muc
+      // PRIMARY KEY khong thanh oracle xuyen to chuc (H14).
+      { grantee: "app_api", bang: "rfq_key_material", cot: "algorithm", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "key_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "public_key", quyen: "INSERT" },
+      // [khoan no 26 / 026] BON dong MOI, va chung la mot NOI QUYEN phai nhin thay duoc.
+      // `017` co y KHONG cap `UPDATE (wrapped_private_key)` cho app_api va goi su vang mat ay
+      // la load-bearing. `026` cap no — nhung chi de GHI `NULL`: trigger
+      // `rfq_key_material_bat_bien` tu choi moi gia tri moi khac NULL, va app_api VAN khong
+      // doc duoc cot nay. Ghi duoc, chi ghi duoc NULL, va chi mot lan: hinh dang cua mot nut
+      // PHA HUY, khong phai mot nut SUA. Ba cot `purged_*` la dau vet cua lan pha huy ay.
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "purged_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "revoked_reason", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "wrapped_private_key", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_key_material", cot: "wrapped_private_key", quyen: "UPDATE" },
+      // [H-1, 011] `created_by_session_id`: RFQ mang phien cua chinh nguoi tao, va trigger doi
+      // `sessions.user_id = created_by`. Khong co cot nay, `created_by` la mot LOI KHAI va D2 tut
+      // tu 'hai nguoi khac nguoi tao' xuong 'mot nguoi khac nguoi tao'.
+      // [H-4, 011] `early_close_reason`: dong som la mot hanh vi CO TEN, khong phai mot `reason`
+      // chi di vao payload kiem toan.
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_at", quyen: "UPDATE" },
+      // [ADR-016 / 016] Bon canh chuyen trang thai mang CHU KY. Khong phai sieu du lieu trang
+      // tri: *Separation of Duties* (PRODUCT §4.1) va *Open ≠ Award* (§4.3) treo vao dung bon cau
+      // hoi nay, va truoc 016 khong cau nao tra loi duoc TU DU LIEU.
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "closed_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "deadline_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "early_close_reason", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "opened_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "requires_dual_approval", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
+      // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
+      // muc sang RFQ khac hay sang to chuc khac.
+      // [S1.2] `rfq_packages` — `status` co UPDATE va no BUOC phai co de ung dung lam viec.
+      // Ke tu giay do, `UPDATE ... SET status='OPEN'` tren mot RFQ da CLOSED la MOT DONG SQL,
+      // khong phai mot cuoc tan cong; trigger `rfq_packages_kiem_chuyen_trang_thai` la thu duy
+      // nhat dung giua. Do la toan bo lap luan cua ADR-014, doc tu phia quyen.
+      // `created_by` chi INSERT, `created_at` khong co gi, `org_id` chi INSERT.
       // [Task 9] `sessions` — ba vắng mặt là load-bearing:
       //   `id`              KHÔNG INSERT -> sessions_pkey không làm oracle được.
       //   `created_at`      KHÔNG có gì   -> dấu thời gian do CSDL đóng (khuôn occurred_at/003).
@@ -808,11 +1153,66 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "sessions", cot: "token_hash", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_agent", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "email", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "full_name", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
+      // [ADR-016 / 013] Ban S1.1 KHONG co mot cot nao ghi ai tao hang. Cau hoi "ai da them nha
+      // cung cap nay" vi vay khong tra loi duoc TU DU LIEU — chi tra loi duoc tu mot so kiem
+      // toan ma chinh no nhan dau vao la loi khai.
+      { grantee: "app_api", bang: "suppliers", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "legal_name", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "level", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "status", quyen: "INSERT" },
+      { grantee: "app_api", bang: "suppliers", cot: "tax_code", quyen: "INSERT" },
+      // [S1.1] `supplier_contacts` (008). Ba vắng mặt, mỗi cái đóng một đường đi:
+      //   `id`/`created_at` KHÔNG có gì  -> khuôn `users_pkey` ở 002 và `occurred_at` ở 003.
+      //   `org_id`          chỉ INSERT   -> không đường nào chuyển một người liên hệ sang tổ
+      //                                     chức khác.
+      //   `supplier_id`     chỉ INSERT   -> chuyển một người liên hệ sang nhà cung cấp khác
+      //                                     không phải sửa hồ sơ; đó là xoá một người và tạo
+      //                                     một người khác.
+      // [S1.1] `suppliers` (008). `tax_code` CÓ cả INSERT lẫn UPDATE, và điều đó AN TOÀN đúng
+      // vì ràng buộc duy nhất mà nó tham gia đã dẫn đầu bằng `org_id` — nếu ai đó đổi ràng buộc
+      // ấy thành `UNIQUE (tax_code)` toàn cục thì chính hai dòng này biến nó thành một oracle
+      // xuyên tổ chức. Lớp canh cho mối nối đó: db/unique-oracle.int.test.ts [INV-H14].
       // [Task 8] `user_roles` cấp INSERT theo CỘT, và `granted_at` vắng mặt là load-bearing:
       // dấu thời gian do CSDL đóng, bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được
       // theo ý mình (cùng khuôn `occurred_at` ở 003 và `created_at` ở 002). KHÔNG có UPDATE trên
       // bất kỳ cột nào: mọi thay đổi biểu diễn được bằng DELETE + INSERT, và một UPDATE
       // `role_code` là đường đi mà trigger D3 khó soi nhất trong khi không mua thêm năng lực nào.
+      { grantee: "app_api", bang: "unseal_approvals", cot: "approver_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_approvals", cot: "unseal_request_id", quyen: "INSERT" },
+      // KHONG mot dong UPDATE hay DELETE nao tren `unseal_approvals`: mot chu ky da dat xuong thi
+      // khong rut lai bang cach xoa dong. Duong dung la HUY yeu cau — mot hanh vi co ten, co moc.
+      { grantee: "app_api", bang: "unseal_requests", cot: "approved_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass", quyen: "INSERT" },
+      // [022, review S1.6 HIGH-2a] Nhân chứng của break-glass: nó bỏ qua NGƯỠNG, không bỏ qua
+      // NGƯỜI THỨ HAI.
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "cancelled_at", quyen: "UPDATE" },
+      // [022, review S1.6 HIGH-3] Mốc ĐIỀU PHỐI — thứ để worker hỏi lại được vế 2 của D1.
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "requested_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "requested_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "unseal_requests", cot: "rfq_id", quyen: "INSERT" },
+      // `status` co UPDATE nhung KHONG co INSERT: mot yeu cau khong duoc RA DOI da o APPROVED.
+      { grantee: "app_api", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "user_roles", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "role_code", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "user_id", quyen: "INSERT" },
@@ -823,6 +1223,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "users", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "users", cot: "status", quyen: "UPDATE" },
+      // [S1.5] `envelope` co INSERT o day va KHONG co dong SELECT nao tuong ung o khang dinh tren
+      // — bat doi xung "ghi duoc ma khong doc duoc", lan thu HAI trong du an. `version` vang mat
+      // vi trigger dat no; `submitted_at` vang mat vi DEFAULT dat no. Va KHONG mot dong UPDATE
+      // hay DELETE nao tren ca hai bang bao gia: do la bat bien B1 nhin tu phia quyen.
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "bid_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "envelope", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bid_versions", cot: "submitted_by_guest_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bids", cot: "invitation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "vendor_bids", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "action", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "actor_id", quyen: "INSERT" },
@@ -834,6 +1244,24 @@ describe("phủ RLS", () => {
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [S1.6] BON dong duoi day la toan bo quyen GHI cua tien trinh mo thau, va chung la hinh
+      // dang cua ADR-006 trong mot bang quyen: no GHI ban ro (`rfq_unsealed_bids`), no TUYEN BO
+      // ket qua (`rfq_packages.status`, `unseal_requests.status`), va no khong lam gi khac.
+      // `rfq_packages.status` la dong trong nguy hiem nhat — xem khoi giai thich o dau 019.
+      // [025] Sáu cột vòng đời mà runner ghi — đúng bằng bộ của `app_api`, không hơn.
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "attempts", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "finished_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "last_failure_reason", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "lease_expires_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "rfq_packages", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "payload", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "rfq_unsealed_bids", cot: "unseal_request_id", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "unseal_requests", cot: "executed_at", quyen: "UPDATE" },
+      { grantee: "app_unseal", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
     ]);
   });
 
@@ -849,17 +1277,31 @@ describe("phủ RLS", () => {
     expect(rows).toEqual([]);
   });
 
-  // [NỢ ADR-006] Ràng buộc toàn cục "không role nào bao trùm role kia" ĐANG BỊ VI PHẠM ở S0, và
-  // nó KHÔNG thoả được bằng bất kỳ thao tác nào trong Task 4: quyền duy nhất của app_unseal là
-  // SELECT trên organizations, mà app_api cũng có; kể cả gỡ sạch quyền thì tập rỗng vẫn là tập
-  // con. Nó chỉ có nội dung khi app_unseal được cấp quyền ĐỘC QUYỀN trên bảng khoá riêng RFQ.
+  // ~~[NỢ ADR-006] Ràng buộc toàn cục "không role nào bao trùm role kia" ĐANG BỊ VI PHẠM ở S0, và~~
+  // ~~nó KHÔNG thoả được bằng bất kỳ thao tác nào trong Task 4: quyền duy nhất của app_unseal là~~
+  // ~~SELECT trên organizations, mà app_api cũng có; kể cả gỡ sạch quyền thì tập rỗng vẫn là tập~~
+  // ~~con. Nó chỉ có nội dung khi app_unseal được cấp quyền ĐỘC QUYỀN trên bảng khoá riêng RFQ.~~
   //
-  // Khẳng định dưới đây cố ý ĐẢO CHIỀU — nó khẳng định trạng thái VI PHẠM là đúng-lúc-này. Khi
-  // task khoá riêng RFQ cấp quyền độc quyền cho app_unseal, test này ĐỎ NGAY, và người sửa nó
-  // phải lật `true` thành `false` và xoá ghi chú này. Nếu thay bằng một khẳng định thuận chiều
+  // ~~Khẳng định dưới đây cố ý ĐẢO CHIỀU — nó khẳng định trạng thái VI PHẠM là đúng-lúc-này. Khi~~
+  // ~~task khoá riêng RFQ cấp quyền độc quyền cho app_unseal, test này ĐỎ NGAY, và người sửa nó~~
+  // ~~phải lật `true` thành `false` và xoá ghi chú này.~~ Nếu thay bằng một khẳng định thuận chiều
   // (hoặc không có gì, như vòng trước) thì thời điểm ràng buộc trở nên thoả được sẽ trôi qua
   // trong im lặng — đúng cách một khoản nợ kiến trúc biến mất khỏi tầm nhìn.
-  it("[NỢ ADR-006] app_unseal vẫn là tập con quyền của app_api — chưa thoả được ở S0", async () => {
+  //
+  // ============================================================================================
+  // [S1.4 / 017] KHOẢN NỢ NÀY ĐÃ ĐÓNG, VÀ NÓ ĐÓNG ĐÚNG CÁCH NÓ ĐƯỢC HẸN — BẰNG MỘT LẦN ĐỎ.
+  // ============================================================================================
+  // Migration 017 cấp `SELECT (wrapped_private_key) ON rfq_key_material TO app_unseal` và KHÔNG
+  // cấp cột ấy cho `app_api`. Ngay lượt chạy đầu sau khi 017 áp, test này ĐỎ với đúng thông điệp
+  // nó tự viết cho tương lai từ Task 4 — không phải vì ai nhớ ra, mà vì một phép đo phát hiện
+  // thế giới đã đổi. Giữ nguyên văn cũ (đã gạch) để đối chiếu.
+  //
+  // Bản mới đo MẠNH HƠN bản cũ, và đây là chỗ dễ làm ẩu nhất: chỉ lật `true` thành `false` sẽ cho
+  // ra một test XANH VÌ MỘT LÝ DO YẾU — "app_unseal không phải tập con" đúng ngay cả khi
+  // `app_api` bao trùm hoàn toàn app_unseal ở mọi chỗ khác. Ràng buộc thật của ADR-006 là
+  // **KHÔNG ROLE NÀO BAO TRÙM ROLE KIA**, tức HAI vế, nên bản mới đo cả hai vế và neo mỗi vế vào
+  // một khoá cụ thể để nó không xanh vì phép đo bỏ sót.
+  it("[ADR-006] không role nào bao trùm role kia — app_unseal độc quyền đọc khoá riêng RFQ", async () => {
     const { rows } = await db.pool.query<{ grantee: string; khoa: string }>(
       "SELECT grantee, table_name || ':' || privilege_type AS khoa " +
         "  FROM information_schema.role_table_grants " +
@@ -886,12 +1328,23 @@ describe("phủ RLS", () => {
       cuaUnseal,
       "phép đo bỏ sót quyền CỘT trên bảng sổ — khoản nợ này sẽ xanh vì lý do sai",
     ).toContain("audit_events.action:INSERT");
-    const baoTrum = cuaUnseal.every((k) => cuaApi.has(k));
+    const cuaUnsealTap = new Set(cuaUnseal);
+    const chiUnsealCo = cuaUnseal.filter((k) => !cuaApi.has(k));
+    const chiApiCo = [...cuaApi].filter((k) => !cuaUnsealTap.has(k));
+
+    // Vế 1 — app_unseal KHÔNG là tập con của app_api. Neo vào đúng cột làm nên khoản nợ này:
+    // nếu ai đó cấp thêm `SELECT (wrapped_private_key)` cho `app_api` thì vế này đỏ, và nó đỏ
+    // vì một sự thật an ninh chứ không vì một con số đếm được.
     expect(
-      baoTrum,
-      "app_unseal đã có quyền mà app_api KHÔNG có — ràng buộc ADR-006 nay THOẢ ĐƯỢC. Lật " +
-        "khẳng định này thành false và xoá ghi chú [NỢ ADR-006].",
-    ).toBe(true);
+      chiUnsealCo,
+      "app_unseal không còn quyền nào riêng — ADR-006 lại thành một lời khai",
+    ).toContain("rfq_key_material.wrapped_private_key:SELECT");
+    expect(cuaApi.has("rfq_key_material.wrapped_private_key:SELECT")).toBe(false);
+
+    // Vế 2 — và app_api cũng KHÔNG là tập con của app_unseal. Không có vế này, một lần "gỡ sạch
+    // quyền của app_api" vẫn cho test xanh.
+    expect(chiApiCo.length).toBeGreaterThan(0);
+    expect(chiApiCo).toContain("rfq_key_material.wrapped_private_key:INSERT");
   });
 
   // [vòng fix 1 — CR3] TEST ĐỐI KHÁNG cho oracle slug. Đây là lỗ DUY NHẤT khai thác được ngay
@@ -1109,6 +1562,13 @@ describe("phủ RLS", () => {
       await client.query(
         "GRANT EXECUTE ON FUNCTION app_current_org_id() TO chu_so_huu_thuong",
       );
+      // [khoản nợ 29 / 027] CỐ Ý KHÔNG cấp gì thêm cho hàm phiên khách, và sự vắng mặt ấy là
+      // một khẳng định: policy khách của `027` viết THẲNG `pg_catalog.current_setting(...)`
+      // chứ không gọi một hàm của dự án, nên nó KHÔNG thêm một khớp nối quyền nào lên các
+      // role. Bản đầu của `027` thì có, và chính khẳng định này cùng hai khẳng định ở
+      // `audit-append-only` và `outbox` đã ĐỎ THẬT với `permission denied for function
+      // app_current_guest_session_id` — ba lần đỏ ấy là lý do `027` được viết lại. Nếu ai đó
+      // đưa một hàm trở lại vị từ policy, dòng này lại đỏ.
       for (const tenBang of bangTenant) {
         await client.query(`ALTER TABLE "${tenBang}" OWNER TO chu_so_huu_thuong`);
       }

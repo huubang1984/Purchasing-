@@ -1,0 +1,87 @@
+name: Do lap — ty le flaky cua tang tich hop
+
+# =============================================================================================
+# [khoan no 24] DO TY LE, KHONG SUA MU
+# =============================================================================================
+# Hai test tung do trong luot chay day du va XANH khi chay rieng — `[M10]`
+# (`packages/db/src/migrate.int.test.ts`) va `[T10-L]` (`packages/outbox/src/outbox.int.test.ts`),
+# ca hai quanh VONG DOI KET NOI duoi tranh chap Docker. Chung KHONG duoc sua bang cach noi mot
+# nguong: chua co phep do nao phan biet duoc "lop bi hong" voi "may chay cham", va noi nguong toi
+# luc het do la bien mot phep do thanh mot loi khai.
+#
+# Khoan no ay ghi ro cach dong dung: **mot luot chay lap tren CI de do TY LE, roi moi quyet dinh**.
+# Workflow nay la luot ay.
+#
+# VI SAO KHONG CHAY TREN MOI PR: mot cong chan lap 10 lan tang tich hop tra ~70 phut CI cho moi
+# lan day. Cai gia ay chi dang khi co mot quyet dinh dang cho no. Lich hang tuan cong
+# `workflow_dispatch` cho ra du lieu deu dan ma khong dat mot thue bao len moi commit.
+#
+# VI SAO KHONG `continue-on-error`: mot job xanh-nhung-thuc-ra-do khong sinh chu thich nao va
+# khong ai mo log cua mot job da xanh. Job nay DO THAT khi ty le khac 0, va do la toan bo diem
+# cua no.
+#
+# DU LIEU DA CO, do tren may phat trien (Windows 11, Docker Desktop 29.7.2), 2026-09-05:
+#   - 1 luot `pnpm test:int` day du            -> 23/23 tep xanh, 0 lan 57P01, 0 unhandled
+#   - 5 luot cap (migrate + outbox)            -> 5/5 xanh
+#   - 8 luot tranh chap (4 tep cung luc)       -> 8/8 xanh
+# Tuc 0/14 tren mot may. Con thieu dung mot thu: cung con so ay tren PHAN CUNG CUA CI, noi ca
+# hai lan do that su xay ra.
+# =============================================================================================
+
+on:
+  schedule:
+    # 19:00 UTC thu Hai = 02:00 thu Ba gio Viet Nam. Ngoai gio lam viec, dau tuan.
+    - cron: "0 19 * * 1"
+  workflow_dispatch:
+    inputs:
+      so_luot:
+        description: "So luot chay lap"
+        required: false
+        default: "10"
+
+jobs:
+  lap:
+    name: Lap tang tich hop de do ty le flaky
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `--repeat` cua vitest chay lai TUNG TEST trong cung mot tien trinh; thu can do o day la
+      # ca luot chay — dung vong doi container, dung tranh chap Docker — nen phai lap CA LENH.
+      - name: Chay lap va dem so luot do
+        env:
+          SO_LUOT: ${{ github.event.inputs.so_luot || '10' }}
+        run: |
+          do=0
+          n="${SO_LUOT}"
+          for i in $(seq 1 "$n"); do
+            echo "===== LUOT $i / $n ====="
+            if pnpm test:int > "luot-$i.log" 2>&1; then
+              echo "LUOT $i: XANH"
+            else
+              do=$((do+1))
+              echo "LUOT $i: DO"
+              # Chi in phan can doc. Ca log cua mot luot dai hang nghin dong.
+              grep -E "FAIL|AssertionError|57P01|Unhandled" "luot-$i.log" | head -40 || true
+            fi
+          done
+          echo "===================================================="
+          echo "TY LE DO: $do / $n"
+          echo "===================================================="
+          # Fail-closed. Mot ty le khac 0 la mot ket qua CAN DOC, khong phai mot thu de xanh cho qua.
+          test "$do" -eq 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-cac-luot
+          path: luot-*.log

@@ -114,3 +114,78 @@ describe("stop() — dọn dẹp bền vững dù một pool con đã tự end()
     }
   });
 });
+
+// ==============================================================================================
+// [khoản nợ 28] PHÉP ĐO CÓ RĂNG — VÀ RĂNG ẤY ĐƯỢC CHỨNG MINH BẰNG MỘT CA RÒ RỈ DỰNG SẴN
+//
+// Khoản nợ 28 nói *"phải được ĐO chứ không được sửa mù"*. Một khẳng định canh rò rỉ kết nối mà
+// chưa bao giờ thấy một rò rỉ thật thì không phân biệt được với `expect(true).toBe(true)`. Nên
+// ca dưới đây RÒ RỈ CÓ CHỦ ĐÍCH — đúng hình dạng đã gây `57P01` trên CI: một pool do bộ test tự
+// dựng, không đi qua `poolAs()`, nên `stop()` không biết đường đóng nó.
+// ==============================================================================================
+describe("[khoản nợ 28] stop() ĐO được kết nối còn sống, và vẫn dừng container", () => {
+  it("một pool do bộ test TỰ dựng và quên đóng làm `stop()` ném — nêu pid, KHÔNG nêu câu lệnh", async () => {
+    const db = await startPostgres();
+    const poolRoRi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    // Pool bị bỏ quên sẽ nhận `error` khi backend của nó bị giết lúc container dừng. Không nuốt
+    // ở đây thì chính test này sập tiến trình vì "unhandled error" — đúng cái nó đang tố cáo.
+    poolRoRi.on("error", () => undefined);
+    try {
+      // Mở một kết nối THẬT và giữ nó: `new pg.Pool` một mình chưa nối tới đâu cả.
+      await poolRoRi.query("SELECT 1");
+
+      let loi: Error | undefined;
+      try {
+        await db.stop();
+      } catch (e) {
+        loi = e as Error;
+      }
+
+      expect(loi, "stop() phải ném — nếu không, phép đo của khoản nợ 28 rỗng ruột").toBeDefined();
+      expect(loi?.message).toMatch(/khoản nợ 28/);
+      expect(loi?.message, "phải chỉ được ra AI còn sống, không chỉ nói rằng có ai đó").toMatch(
+        /pid=\d+/,
+      );
+      // [CẤM LOG] Câu lệnh của backend còn sống có thể mang giá hoặc bản rõ. Thông điệp lỗi đi
+      // thẳng vào log CI, nên cột `query` không được có mặt — kể cả câu vô hại của test này.
+      expect(loi?.message, "thông điệp KHÔNG được mang câu lệnh của backend").not.toMatch(
+        /SELECT 1/,
+      );
+
+      // QUYẾT ĐỊNH ⑵ của khối lý do trong `postgres.ts`, đo ở đây: khẳng định KHÔNG được rò rỉ
+      // container thật. Ném là ném SAU khi đã dừng.
+      const poolThuNoiLai = new pg.Pool({
+        connectionString: db.connectionString,
+        max: 1,
+        connectionTimeoutMillis: 2000,
+      });
+      poolThuNoiLai.on("error", () => undefined);
+      try {
+        await expect(poolThuNoiLai.query("SELECT 1")).rejects.toThrow();
+      } finally {
+        await poolThuNoiLai.end().catch(() => undefined);
+      }
+    } finally {
+      await poolRoRi.end().catch(() => undefined);
+    }
+  }, 120_000);
+
+  it("lỗi của THÂN HÀM thắng lỗi dọn dẹp trong `withMigratedDatabase`", async () => {
+    // Phép đo mới ném từ `stop()`, và `stop()` chạy ở đường dọn dẹp. Một `finally` trần sẽ NUỐT
+    // lỗi gốc — tức lớp canh rò rỉ che mất đúng thứ bộ test đang tìm. Ca này ép cả hai lỗi xảy
+    // ra cùng lúc và đòi lỗi của thân hàm là lỗi người gọi nhìn thấy.
+    let poolRoRi: pg.Pool | undefined;
+    try {
+      await expect(
+        withMigratedDatabase(async (db) => {
+          poolRoRi = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+          poolRoRi.on("error", () => undefined);
+          await poolRoRi.query("SELECT 1");
+          throw new Error("LOI-GOC-CUA-THAN-HAM");
+        }),
+      ).rejects.toThrow(/LOI-GOC-CUA-THAN-HAM/);
+    } finally {
+      await poolRoRi?.end().catch(() => undefined);
+    }
+  }, 120_000);
+});
