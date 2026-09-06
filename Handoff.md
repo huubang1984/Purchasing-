@@ -380,8 +380,13 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 1. **Bốn lượt `security-reviewer` đã chạy và tìm ra BẢY mức HIGH; cả bảy đã đóng bằng mã**
    (`db/migrations/022_security_review_s1.sql` cộng bảy file). Bảng ở
    `evidence/security-reviews.md`. **Đừng đọc bảng ấy như một chứng chỉ**: cả bốn reviewer
-   không có Bash và không có CSDL — họ đọc mã, không đo. Mã MEDIUM/LOW chưa đóng nằm ở sổ nợ
-   `docs/STATE.md` khoản **31–37**, và khoản **31** là khoản nặng nhất còn mở.
+   không có Bash và không có CSDL — họ đọc mã, không đo. ~~Mã MEDIUM/LOW chưa đóng nằm ở sổ nợ
+   `docs/STATE.md` khoản **31–37**, và khoản **31** là khoản nặng nhất còn mở.~~ **Câu vừa gạch
+   đã thiu ngay trong ngày nó được viết:** cả bảy khoản **31–37** đã đóng bằng mã cùng ngày
+   2026-09-05 (`06ef869` cho 31, `c9ab088` cho 32–37 — xem sổ nợ `docs/STATE.md`). Hai khoản
+   còn mở của toàn bộ sổ nợ 20–37 là **23** (Android WebCrypto — cần một máy thật) và nửa sau
+   của **30** (neo ngoài — cùng khoản với 11). Đọc mục 5 dưới đây trước khi tin bất kỳ con số
+   "đã đóng" nào.
 
 2. **Một câu SAI do chính dự án viết đã đứng ở BA chỗ và biện minh cho việc bỏ một lớp.**
    *"`app_unseal` cố ý không đọc được `users`"* — `006:232` và `006:305` nói ngược lại, và 006
@@ -389,12 +394,31 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    **một câu nói về GRANT phải được đối chiếu với chính file migration, không với trí nhớ** —
    và một câu sai được chép ba lần thì khó bắt hơn một câu sai đứng một mình.
 
-3. **Ba mã bất biến còn trống, và cả ba trống vì KIẾN TRÚC:** `A2` (đòi một tiến trình `api`
-   đang chạy để gắn APM vào), `A5` (đòi role `app_guest` — nợ 29), `E6` (đòi một URL). Không mã
-   nào trống vì thiếu thời gian, và §3 của ma trận nói ra từng lý do.
+3. ~~**Ba mã bất biến còn trống, và cả ba trống vì KIẾN TRÚC:** `A2` (đòi một tiến trình `api`
+   đang chạy để gắn APM vào), `A5` (đòi role `app_guest` — nợ 29), `E6` (đòi một URL).~~ **Còn
+   HAI** sau khi khoản 29 đóng `A5` ở `623458b` (bằng policy `AS RESTRICTIVE`, KHÔNG bằng role
+   `app_guest` — sổ nợ ghi vì sao): `A2` và `E6`, cả hai đòi một tiến trình `api` có URL. Không mã
+   nào trống vì thiếu thời gian, và §3 của ma trận nói ra từng lý do. Độ phủ **48/50**.
 
 4. **Hai thứ CHƯA CÓ NGƯỜI TIÊU THỤ, và cả hai là ý định chứ chưa là hành động:**
    `BREAK_GLASS_UNSEAL_ALERT` (nợ 34) và `RFQ_DEADLINE_EXTENDED_NOTICE`. Một job không có
    handler bị `JobRunner` ghi thẳng `FAILED` **trong im lặng** — nên phải nối handler TRƯỚC khi
-   đường break-glass được dùng thật, không phải sau.
+   đường break-glass được dùng thật, không phải sau. **[Cùng ngày] Khoản 34 đã đóng** ở
+   `c9ab088` (`apps/unseal-worker/src/composition.ts` + migration `025`): cả hai `kind` có
+   handler, và `onJobFailure` là tham số BẮT BUỘC nên cấu hình *"hỏng trong im lặng"* không còn
+   diễn đạt được. Giữ nguyên văn ở trên vì lý do *"nối handler trước khi dùng thật"* vẫn đúng.
+
+5. **[2026-09-06] Commit `623458b` được ĐẨY LÊN mà chưa chạy lại tầng T1 — và CI đã bắt.**
+   Mô tả PR #2 khai *"1056/1056 khẳng định xanh"* cho commit ấy; con số ấy là thật cho lượt
+   `pnpm evidence` **trước** khi `apps/public-keys` được thêm vào, không phải cho cây mã đã đẩy.
+   Run `33978573210` đỏ T1+T2 trên cả hai hệ điều hành: lớp canh route
+   (`tests/architecture/cong-quyen-route.test.ts`) nổ đúng mốc chết *"apps/ có app khác ngoài
+   worker"*, và trên Windows thêm ba khẳng định của `hinh-dang-ci.test.ts` đỏ vì `ci.yml` dạng
+   CRLF ở checkout mới (khoản nợ 10). Job `evidence` vì thế bị **bỏ qua**, tức con số 48/50 của
+   commit ấy **chưa từng được CI xác nhận** cho tới `83e4cba`. Cả hai đã sửa ở `83e4cba` — chỉ
+   hai file test, không một dòng mã sản phẩm — và run `34004571171` xanh cả sáu job.
+
+   Bài học, cùng họ với §7: **một lượt đo trên cây mã CŨ không phải bằng chứng cho cây mã ĐẨY
+   LÊN.** Lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD sắp đẩy, và hai mốc chết ở
+   đây nổ đúng như thiết kế — đó là điều đáng ghi, không phải điều đáng giấu.
 

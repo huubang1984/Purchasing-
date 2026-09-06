@@ -4,8 +4,9 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-05 (S1.6–S1.9 đã có mã, và một vòng sửa sau BỐN lượt
-`security-reviewer` đóng bảy phát hiện mức HIGH)
+**Cập nhật lần cuối:** 2026-09-06 (hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã
+đóng ở `83e4cba` — xem *Hành động tiếp theo* mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
+một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
 ---
 
@@ -663,6 +664,38 @@ CMK, chưa có role nào được tạo.
     sẽ bị ai đó tắt đi, tức tệ hơn không có, nên nó nay loại trừ `tmp-probe-*`/`zprobe-*` tường
     minh. Và test *"migration áp dụng sạch"* nay mang timeout 120s: số file migration đi từ 7 lên
     **16**, và ngưỡng mặc định 30s trở nên quá chật khi nhiều file test tranh nhau Docker.
+
+14. **[2026-09-06] Commit `623458b` (đóng khoản 29 và 30) được ĐẨY LÊN mà chưa chạy lại tầng
+    T1 trên cây mã sắp đẩy — CI bắt được, và hai lớp canh nổ đúng như thiết kế.** Con số
+    *"1056/1056 khẳng định, 48/50"* trong mô tả PR #2 là thật cho lượt `pnpm evidence` chạy
+    **trước** khi `apps/public-keys` được thêm; nó không phải phép đo trên HEAD đã đẩy. Run
+    `33978573210`: T0, T0b, T3 xanh; **T1+T2 đỏ trên cả `ubuntu-latest` lẫn `windows-latest`**;
+    job `evidence` vì thế **bị bỏ qua** — tức 48/50 chưa từng được CI xác nhận cho tới `83e4cba`.
+
+    Hai thứ đỏ, hai bản chất khác nhau:
+    ⑴ `tests/architecture/cong-quyen-route.test.ts` — mốc chết *"`apps/` có app khác ngoài
+    worker"* nổ vì `apps/public-keys` ra đời. Đây là **lớp canh làm đúng việc**: khẳng định ấy
+    được viết ra để đỏ vào đúng ngày này. Viết lại thành phát biểu cho HAI app (worker không
+    viết được `requirePermission` vì role `app_unseal`; `public-keys` chỉ đọc, không xác thực,
+    không gọi hàm ghi nào — và vế *"không gọi hàm ghi"* nay là một PHÉP ĐO trên mã nguồn của nó,
+    không phải một câu chú thích). Mốc chết mới: app **thứ ba** làm nó đỏ, và nếu đó là
+    `apps/api` thì là ngày ADR-016 mục 4 hẹn.
+    ⑵ `tests/architecture/hinh-dang-ci.test.ts` — đỏ **chỉ trên Windows**, ba khẳng định
+    *"không tìm thấy job"*. Checkout mới với `core.autocrlf=true` cho `ci.yml` dạng CRLF nên
+    `\n  t0:\n` không khớp; máy phát triển xanh vì worktree có sẵn file LF. **Đúng khoản nợ 10
+    cắn**, và là lần thứ hai một bảo đảm chỉ đúng trên một hệ điều hành (bài học S0 §7 Handoff) —
+    lần này theo chiều ngược: ma trận hai hệ điều hành của khoản 20 là thứ **bắt được** nó. Sửa:
+    chuẩn hoá `\r\n` trước khi đọc, vì bảo đảm nói về HÌNH DẠNG của `ci.yml`, không về byte
+    xuống dòng.
+
+    Cả hai đo bằng đột biến trước khi commit: ép `ci.yml` sang CRLF → 3/3 vẫn xanh (trước sửa
+    3/3 đỏ); thêm `apps/zz-mutant` vào chỉ mục git → test route ĐỎ với thông điệp *"app THỨ
+    BA"*. `pnpm t0` 133 module / 0 vi phạm, `pnpm test` 466/466. Run **`34004571171`** trên
+    `83e4cba`: **xanh cả sáu job**, kể cả `evidence`. Không một dòng mã sản phẩm nào đổi; ma
+    trận không đổi vì hai test không mang nhãn INV.
+
+    **Bài học, ghi để không lặp:** lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD
+    sắp đẩy. Một lượt đo trên cây mã cũ là bằng chứng cho cây mã cũ.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
