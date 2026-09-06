@@ -448,3 +448,15 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    `app_api`, không nhìn thấy role đăng nhập kế thừa nó — bài học: **một vị từ theo TÊN role chỉ
    đúng trên đường có `SET ROLE`; đường sản xuất phải được đo với role đăng nhập THẬT** (nay
    `vai-tro.int.test.ts` và `composition.int.test.ts` đều tạo `app_api_login` thật).
+
+9. **[2026-09-07] S1.12 — sổ nợ 38–50 KHÔNG còn khoản nào mở.** Bảy khoản trả trong một PR, mỗi khoản
+   một commit và một đột biến RED thật. Ba thứ người tiếp theo phải biết trước khi chạm tầng đăng nhập:
+   ⑴ `/auth/link` KHÔNG tra người dùng — nó enqueue; link ra đời khi runner chạy (test gọi
+   `outboxTest(...).chay(orgId)` tường minh, tiến trình thật tự đánh thức sau commit); ⑵ hạn mức theo
+   người gọi đếm ở DISPATCHER trong giao dịch riêng — thêm một route `/auth/*` là khai `callerLimit`;
+   ⑶ một phiên đã-MFA do `app_api` chèn phải đi sau một `verifyTotpAttempt` thành công trong 90 giây
+   (039) — fixture chèn phiên dưới `app_api` phải gieo hồ sơ TOTP tươi, còn superuser thì không.
+   ADR-022 ghi bốn quyết định; `evidence/security-reviews.md` §S1.12 ghi lượt review thứ tư (0 CRITICAL/HIGH,
+   4 MEDIUM, 8 LOW — cả mười hai đóng trong cùng PR; sổ nợ mới 51–53 là ba phần chênh). Bài học của lượt ấy
+   cho người tiếp theo: "CSDL cưỡng chế" phải cưỡng chế ĐÚNG VẾ — 040 cưỡng chế "hai người, hai phiên" mà
+   không "hai người CÓ QUYỀN", và vế thiếu ấy là vế duy nhất còn nghĩa khi `app_api` bị chiếm (H4-1).

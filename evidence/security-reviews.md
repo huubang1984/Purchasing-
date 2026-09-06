@@ -420,3 +420,44 @@ rolsuper` của 037 đọc thuộc tính của `current_user` sau SET ROLE nên 
 (đường `poolAs`) vẫn bị chặn đúng; nhãn HKDF `totp-dek/v1` ≠ `org-dek/v1` cộng AAD khác định dạng nên
 kể cả khi hai biến khoá bị HOÁN ĐỔI (điều `kiemKhongTrung` không bắt), adapter TOTP không mở được
 phong bì RFQ; `openTotpSecret` một thông điệp cho mọi thất bại giải mã.
+
+---
+
+# S1.12 — lượt review thứ TƯ (bảy khoản nợ 38–43, 49), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.12** (ADR-022) | migration `038`–`040`, `packages/identity/src/mfa-reset.ts`, `apps/api/src/{dispatch,dia-chi,co-han,outbox-api,router,composition}.ts`, `routes/auth.ts`, `routes/buyer.ts`, bộ quét `kich-ban-41-http.int.test.ts`, `hardening.always.sql` | cây nhánh `no-38-43-49` tại `af114ae` (bảy commit nợ, trước lượt sửa) | Review tĩnh; reviewer đọc thẳng tệp và diff so với master, không chạy mã | **0 CRITICAL, 0 HIGH — 4 MEDIUM, 8 LOW; sau sửa: 0 mở, ba phần chênh thành sổ nợ 51–53** | `084b4ec` (H4-1, H4-2), `40753e2` (H4-3, H4-4, H4-5, H4-9, H4-12), `077fdec` (H4-6, H4-7, H4-8, H4-10, H4-11) |
+
+## Bốn MEDIUM, tám LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H4-1 | **MEDIUM.** 040 cưỡng chế "hai người, hai phiên, danh tính theo phiên" nhưng KHÔNG cưỡng chế "hai người CÓ `user.mfa_reset`" — vế ấy chỉ ở `requirePermission`, tức tầng mà mô hình "app_api bị chiếm" giả định là mất. Với hai phiên BUYER sống bất kỳ (app_api có `SELECT ON sessions`), ba câu SQL tự dựng yêu cầu, phê duyệt, DELETE và trigger xoá cho qua; lời khai 040:143 và ADR-022 §3 không đứng | **Đóng bằng mã.** Trigger `mfa_reset_kiem_quyen` (040): BEFORE INSERT cho `requested_by`, BEFORE UPDATE khi `approved_by` được đặt, đọc `user_roles ⋈ role_permissions` như 033, vô điều kiện, `check_violation` nêu "H4-1". Test `mfa-reset.int.test.ts`: app_api với hai phiên BUYER ⇒ 23514 ở INSERT lẫn UPDATE; ĐỘT BIẾN gỡ hai trigger ⇒ đi lọt tới tận DELETE hồ sơ TOTP (RED thật). Lời khai 040 và ADR-022 §3 sửa, phần chênh ghi: hai phiên QUẢN LÝ sống + app_api bị chiếm vẫn làm được |
+| H4-2 | **MEDIUM.** Yêu cầu PENDING hết hạn không bao giờ rời PENDING; chỉ mục riêng phần "một yêu cầu đang chờ" + không có đường huỷ ⇒ đường về của người ấy khoá VĨNH VIỄN sau 24 giờ, và một PM ác ý làm được cho bất kỳ ai không cần ai duyệt | **Đóng bằng mã.** `requestMfaReset` dọn yêu cầu đang chờ đã hết hạn TRƯỚC khi tạo (PENDING → CANCELLED, sổ `MFA_RESET_EXPIRED`); `cancelMfaReset` + route `POST /mfa-resets/:requestId/cancel` (sổ `MFA_RESET_CANCELLED`). Test: hết hạn ⇒ yêu cầu mới tạo được, cũ thành CANCELLED; huỷ rồi duyệt ⇒ `MfaResetError`; BUYER huỷ ⇒ 403; qua HTTP ở `buyer.int.test.ts`; bộ quét gọi route mới |
+| H4-3 | **MEDIUM.** `outbox_jobs.payload = {email}` vi phạm hợp đồng payload của chính gói outbox (`enqueue.ts` cấm `email`); bảng chỉ lớn lên, app_api không xoá/sửa được ⇒ PII do người gọi VÔ DANH chọn, lưu vĩnh viễn, không kiểm dạng | **Đóng bằng mã, hai lớp.** Migration `041`: trigger BEFORE UPDATE đưa payload của `LOGIN_LINK_SEND` về `{}` khi job kết thúc (DONE/FAILED) — sửa `NEW`, không nới ACL; `/auth/link` đòi hình dạng email (`laHinhDangEmail`) trước khi enqueue. Test: sau runner không hàng nào còn email (đo toàn bảng theo giá trị); sáu chuỗi sai dạng ⇒ 422 không để lại job; ĐỘT BIẾN gỡ trigger ⇒ email nằm lại. Phần chênh ghi ở 041 và ADR-022 §1 (email sống tới khi job xong; log Postgres nếu ghi tham số bind) |
+| H4-4 | **MEDIUM.** Bucket theo địa chỉ NGUYÊN VẸN: IPv6 cho kẻ tấn công 2^64 bucket miễn phí (trần 10/30 vô nghĩa); chiều ngược, một NAT IPv4 văn phòng chạm 10 link/15 phút ⇒ 429 cho cả tổ chức | **Đóng bằng mã.** `khoaNguoiGoi` (`dia-chi.ts`): IPv6 gom về /64 (mọi cách viết, đuôi IPv4, vùng `%`); IPv4 giữ nguyên; trần `/auth/link` 10 → 30 (trần chống lạm dụng hộp thư vẫn là 5/15 phút theo người dùng). Test đơn vị cho khoá; `auth.int.test.ts`: 30 địa chỉ KHÁC NHAU cùng /64 rồi lần 31 ⇒ 429, /64 khác ⇒ 200. Trần toàn tổ chức chưa có — **sổ nợ 52** |
+| H4-5 | **LOW.** 429 là oracle "tổ chức có tồn tại" (tổ chức thật ⇒ 429 sau N, tổ chức lạ ⇒ 200 mãi) — trái lời khai ở dispatcher; tổ chức lạ tốn hai giao dịch lỗi mỗi lời gọi mà không bị đếm; `Retry-After` luôn 900 | **Đóng bằng lời khai đúng** (dispatch.ts, ADR-022 §2): oracle chấp nhận vì `orgId` UUIDv4 không vét cạn được; `Retry-After` cố ý là cả cửa sổ (không lộ mốc bucket). Đếm tổ chức lạ cần bucket ngoài CSDL — **sổ nợ 52** |
+| H4-6 | **LOW.** 039 thiếu CẬN TRÊN cho `last_used_counter` (bộ đếm tương lai thoả mãn vĩnh viễn) — đúng bài học (2) `assertFreshMfa` đã viết; lời khai đầu 039 bỏ qua rằng app_api có `UPDATE (last_used_counter)` nên HAI câu vòng qua được | **Đóng bằng mã + lời khai.** `≤ bước hiện tại + 3` thêm vào 039; test: +4 bước và +10⁶ bước ⇒ 23514, +3 qua. Phần chênh (hai câu UPDATE rồi INSERT đi qua — cùng hạn chế 006 §(2)) viết ở đầu 039, ADR-022 §4, và có test ĐO ĐÚNG phần chênh ấy |
+| H4-7 | **LOW.** Hardening không ghim thân ba hàm trigger mới; máy trạng thái 040 không đi qua `la_duong_ung_dung` nên "điểm đơn" không phủ nó; chú thích hardening nói "hai trigger" — nay bốn | **Một phần.** Chú thích hardening sửa (bốn trigger qua vị từ; kể tên thứ chưa ghim). Ghim thân + `tgenabled` cho bốn hàm (039, 040 ×2, 041) và máy trạng thái 040 — **sổ nợ 51** |
+| H4-8 | **LOW.** `rfqKeyWrapper.wrap` (openRfq) là lời gọi KMS TRONG giao dịch thứ ba, không có trần (ADR nói "hai"); đường quá hạn ở `/auth/redeem` không `fill(0)` bí mật | **Đóng bằng mã.** `boiTranKms` bọc cả `rfqKeyWrapper` (test: treo ⇒ `KmsQuaHan`); `/auth/redeem` `fill(0)` trong `finally`; ADR-022 §1 và `co-han.ts` sửa "hai" → "ba" |
+| H4-9 | **LOW.** `TRUSTPROCURE_TRUSTED_PROXIES` nhận `0.0.0.0/0`/`::/0` ⇒ mọi socket là proxy ⇒ XFF do khách tự đặt được tin; proxy ghi `ip:port` ⇒ mọi khách rơi về socket ⇒ cả tổ chức chung một bucket, im lặng | **Đóng bằng mã.** Tiền tố rộng hơn /8 (v4) hay /7 (v6 — `fc00::/7` ULA vẫn hợp lệ) ⇒ ném lúc khởi động (`cau-hinh.test.ts` đo qua `docCauHinh`); `chuanHoaDiaChi` bỏ cổng ở `ip:port` và `[v6]:port`, không cắt IPv6 trần. Đếm/cảnh báo header hỏng: không làm (không mang giá trị nào đáng log hơn số 0) |
+| H4-10 | **LOW.** At-least-once: `send` xong rồi `CAU_XONG` chạm 0 hàng ⇒ email đã đi mang token bị rollback (link chết) rồi gửi lần hai; `send` không có trần riêng — với bộ gửi thật, mười job treo là cạn pool `api` | **Một phần.** `send` bọc `coHan` 5 s (`BoGuiQuaHan`, ngắn hơn lease 60 s). Tách gửi khỏi giao dịch của job / pool riêng cho runner — **sổ nợ 53**, làm khi có bộ gửi thật; phần chênh ghi ở ADR-022 §1 |
+| H4-11 | **LOW.** Bộ dò base64 không nhận base64url (`-`,`_`) — chính dạng token/cookie của dự án; không đệ quy quá một tầng; không hex | **Đóng bằng test.** Bộ dò giải mã base64, base64url, hex, sâu hai tầng; đối chứng dương cho base64url, hex, và base64-trong-base64url. §4 của A2 (`danh-gia.ts`) sửa cho khớp |
+| H4-12 | **LOW.** `docCookie` dùng `ten in ra` trên object thường ⇒ `toString`/`constructor`/`__proto__` bị coi là "trùng"; `req.cookies["constructor"]` trả về hàm | **Đóng bằng mã.** `Object.create(null)` + `Object.hasOwn`; test: ba tên ấy đọc đúng, tên không có ⇒ `undefined` |
+
+**Cùng lượt, không phải phát hiện của reviewer:** tầng tích hợp đầy đủ (`pnpm test:int`) bắt hai
+phép đo ghim ở `mfa.int.test.ts` đỏ vì `GRANT DELETE` mới của 040 (một ca "permission denied" nay là
+"trigger 040", một dòng ACL mới) — sửa ở `c5cd561`, gạch tại chỗ.
+
+**Ghi chú của reviewer, giữ lại để lượt sau khỏi tìm lại:** bucket 39 đếm trong giao dịch riêng nên
+sống qua rollback; địa chỉ rỗng vào một bucket chung; XFF chỉ đọc khi socket ∈ CIDR và `BlockList`
+tự khớp IPv4-mapped; savepoint `/auth/link` trả cùng thân và không nudge cho tổ chức lạ; handler
+outbox không ghi email/token ra `console`; nudge qua `setImmediate` chạy SAU `res.end()`; hai runner
+cùng tổ chức an toàn nhờ `FOR UPDATE SKIP LOCKED` + lease; 039 kiểm đúng `user_id`/`org_id` của NEW
+nên hồ sơ người khác cùng tổ chức không dùng được; DELETE 040 chạm tối đa một hàng (UNIQUE org, user,
+kind) và `consumed_at` đặt trong cùng giao dịch nên không dùng lại được; FK `(org_id, approved_by)`
+ép người duyệt cùng tổ chức; `__Host-` chặn subdomain anh em ném cookie nên "bỏ tên lặp" không mở
+DoS thực tế; cookie khách `Path=/` không được đọc ở route người mua.
