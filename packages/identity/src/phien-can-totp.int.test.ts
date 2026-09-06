@@ -79,6 +79,23 @@ describe("[039] app_api chỉ chèn được phiên đã-MFA khi có một lần
     await expect(chenPhienMfa(orgA, u)).resolves.toMatchObject({ rowCount: 1 });
     await hoSo(orgA, u, true, 0);
     await expect(chenPhienMfa(orgA, u)).resolves.toMatchObject({ rowCount: 1 });
+    // [review H4-6] CẬN TRÊN: bộ đếm ở tương lai 4 bước ⇒ 23514 (không được thoả mãn vĩnh viễn); +3 vẫn qua.
+    await hoSo(orgA, u, true, -4);
+    await expect(chenPhienMfa(orgA, u)).rejects.toMatchObject({ code: "23514" });
+    await hoSo(orgA, u, true, -1_000_000);
+    await expect(chenPhienMfa(orgA, u)).rejects.toMatchObject({ code: "23514" });
+    await hoSo(orgA, u, true, -3);
+    await expect(chenPhienMfa(orgA, u)).resolves.toMatchObject({ rowCount: 1 });
+  });
+
+  it("[review H4-6] PHẦN CHÊNH nói ra: app_api có UPDATE (last_used_counter) nên HAI câu (UPDATE bộ đếm rồi INSERT) đi qua — trigger chặn một INSERT trần, không chặn đường này", async () => {
+    const u = await taoNguoi(orgA);
+    await hoSo(orgA, u, true, 10);
+    await expect(chenPhienMfa(orgA, u)).rejects.toMatchObject({ code: "23514" });
+    await withTenant(apiPool, orgA, (c) =>
+      c.query("UPDATE mfa_credentials SET last_used_counter = $3 WHERE org_id = $1 AND user_id = $2", [orgA, u, counterForTime(Date.now())]),
+    );
+    await expect(chenPhienMfa(orgA, u)).resolves.toMatchObject({ rowCount: 1 });
   });
 
   it("phiên CHƯA MFA (mfa_verified_at NULL) không thuộc 039 — nó thuộc 029, và 029 vẫn chặn app_api", async () => {

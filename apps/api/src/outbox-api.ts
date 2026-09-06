@@ -19,9 +19,18 @@
 
 import { issueLoginToken } from "@trustprocure/identity";
 import type { JobHandler } from "@trustprocure/outbox";
+import { coHan } from "./co-han.js";
 import type { ApiServices } from "./route-types.js";
 
 export const LOGIN_LINK_SEND_KIND = "LOGIN_LINK_SEND";
+
+/**
+ * [review H4-10] Trần RIÊNG cho bộ gửi, ngắn hơn lease của runner (60 s): một bộ gửi thật treo giữ
+ * một kết nối pool `api` suốt thời gian ấy, và mười job treo là mọi HTTP 500. Phần chênh còn lại,
+ * nói ra ở ADR-022 §1: gửi vẫn nằm TRONG giao dịch của job (at-least-once — `send` xong mà kết cục
+ * không ghi được ⇒ email đã đi mang token bị rollback, rồi một email thứ hai).
+ */
+export const SEND_TIMEOUT_MS = 5000;
 
 /** Trần độ dài email đi vào payload — cùng con số `issueLoginToken` chấp nhận. */
 export const EMAIL_MAX_BYTES = 320;
@@ -41,7 +50,7 @@ export function buildApiOutboxHandlers(services: Pick<ApiServices, "loginLinkSen
       const kq = await issueLoginToken(client, job.orgId, { email });
       // Không có người dùng / bị hạn mức: job xong, không gửi gì — và không ai ngoài sổ biết.
       if (!kq.ok) return;
-      await services.loginLinkSender.send({ orgId: job.orgId, email: kq.email, token: kq.token });
+      await coHan(() => services.loginLinkSender.send({ orgId: job.orgId, email: kq.email, token: kq.token }), SEND_TIMEOUT_MS, "BoGuiQuaHan");
     },
   };
 }

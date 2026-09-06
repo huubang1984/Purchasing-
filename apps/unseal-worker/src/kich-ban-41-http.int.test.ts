@@ -175,25 +175,32 @@ function rutSo(vanBan: string): ReadonlySet<number> {
 /**
  * Bộ quét: mọi giá TÌM THẤY trong một văn bản, theo GIÁ TRỊ — không phải theo một chuỗi đã biết.
  * [sổ nợ 49 / review H2-4] Bản cũ là `includes` trên chuỗi thập phân: `980,000,000`, `9.8e8`, base64
- * đi lọt. Nay: rút số theo mọi cách viết; và mọi khối trông như base64 (≥ 16 ký tự) được giải mã rồi
- * quét lại một lần. Vẫn KHÔNG bắt được rò THỨ TỰ (xếp hạng) — §4 của A2. Hàm THUẦN để có đối chứng dương.
+ * đi lọt. Nay: rút số theo mọi cách viết; và mọi khối trông như base64 ~~(≥ 16 ký tự) được giải mã rồi
+ * quét lại một lần~~ [review H4-11] base64, base64url (`-`/`_` — dạng token và cookie của dự án) hay HEX
+ * (≥ 16 ký tự) được giải mã rồi quét lại, sâu HAI tầng. Vẫn KHÔNG bắt được rò THỨ TỰ (xếp hạng), và
+ * không bắt mã hoá/nén khác ba dạng ấy — §4 của A2. Hàm THUẦN để có đối chứng dương.
  */
+const SAU_TOI_DA = 2;
 function quetRoRi(vanBan: string, sau = 0): readonly string[] {
   const thay = new Set<string>();
   for (const so of rutSo(vanBan)) {
     const g = GIA_SO.get(so);
     if (g !== undefined) thay.add(g);
   }
-  if (sau === 0) {
-    for (const m of vanBan.matchAll(/[A-Za-z0-9+/]{16,}={0,2}/gu)) {
+  if (sau < SAU_TOI_DA) {
+    const khoi: { chuoi: string; ma: BufferEncoding }[] = [];
+    for (const m of vanBan.matchAll(/[A-Za-z0-9+/]{16,}={0,2}/gu)) khoi.push({ chuoi: m[0], ma: "base64" });
+    for (const m of vanBan.matchAll(/[A-Za-z0-9_-]{16,}/gu)) if (/[_-]/u.test(m[0])) khoi.push({ chuoi: m[0], ma: "base64url" });
+    for (const m of vanBan.matchAll(/\b[0-9a-fA-F]{16,}\b/gu)) if (m[0].length % 2 === 0) khoi.push({ chuoi: m[0], ma: "hex" });
+    for (const { chuoi, ma } of khoi) {
       let giaiMa: string;
       try {
-        giaiMa = Buffer.from(m[0], "base64").toString("utf8");
+        giaiMa = Buffer.from(chuoi, ma).toString("utf8");
       } catch {
         continue;
       }
       // Chỉ văn bản in được mới đáng quét lại — một phong bì nhị phân không phải chỗ giá đứng dạng rõ.
-      if (/^[\x20-\x7e\s]+$/u.test(giaiMa)) for (const g of quetRoRi(giaiMa, 1)) thay.add(g);
+      if (/^[\x20-\x7e\s]+$/u.test(giaiMa)) for (const g of quetRoRi(giaiMa, sau + 1)) thay.add(g);
     }
   }
   return MOI_GIA.filter((g) => thay.has(g));
@@ -362,6 +369,10 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
       expect(quetRoRi(`gia: ${cachViet} VND`), cachViet).toEqual([NHA_CUNG_CAP[0].gia]);
     }
     expect(quetRoRi(Buffer.from('{"totalAmount":"1400000000.00"}').toString("base64"))).toEqual(["1400000000.00"]);
+    // [review H4-11] base64url (dạng token/cookie của dự án), hex, và hai tầng (base64 trong base64url).
+    expect(quetRoRi(Buffer.from('{"gia":"980000000.00","k":">>>???"}').toString("base64url"))).toEqual([NHA_CUNG_CAP[0].gia]);
+    expect(quetRoRi(Buffer.from('{"totalAmount":"1400000000.00"}').toString("hex"))).toEqual(["1400000000.00"]);
+    expect(quetRoRi(Buffer.from(Buffer.from('{"gia":"980000000.00","k":">>>???"}').toString("base64")).toString("base64url"))).toEqual([NHA_CUNG_CAP[0].gia]);
     expect(quetRoRi("{}")).toEqual([]);
     expect(quetRoRi(JSON.stringify({ deadlineAt: "2026-09-07T10:00:00.000Z", id: "3f2504e0-4f89-11d3-9a0c-0305e82c3301", n: 98000000 }))).toEqual([]);
 

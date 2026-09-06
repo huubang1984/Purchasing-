@@ -19,8 +19,12 @@ describe("[sổ nợ 38] coHan / boiTranKms", () => {
     const wrapper: TotpSecretWrapper = { name: "treo", wrapTotpSecret: () => treo() };
     const unsealer: TotpSecretUnsealer = { kind: "TOTP_SECRET_UNSEALER", name: "treo", openTotpSecret: () => treo() };
     const khac = { name: "khac" };
-    const boc = boiTranKms({ totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, khac }, 20);
+    const rfqKeyWrapper = { name: "rfq-treo", wrap: () => treo() };
+    const boc = boiTranKms({ totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, rfqKeyWrapper, khac }, 20);
     expect(boc.khac).toBe(khac);
+    // [review H4-8] Lời gọi KMS thứ ba (openRfq) cũng có trần.
+    expect(boc.rfqKeyWrapper.name).toBe("rfq-treo");
+    await expect(boc.rfqKeyWrapper.wrap("o", new Uint8Array(1))).rejects.toMatchObject({ name: "KmsQuaHan" });
     expect(boc.totpSecretUnsealer.kind).toBe("TOTP_SECRET_UNSEALER");
     expect(boc.totpSecretWrapper.name).toBe("treo");
     await expect(boc.totpSecretWrapper.wrapTotpSecret("o", new Uint8Array(1))).rejects.toMatchObject({ name: "KmsQuaHan" });

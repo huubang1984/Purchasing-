@@ -6,6 +6,12 @@
 -- không ai gõ mã nào. Tầng ứng dụng đóng bằng KIỂU (`MfaProof`, chỉ `verifyTotpForLogin` tạo được),
 -- và kiểu thì không chạy ở CSDL — đó là khoản nợ 43.
 --
+-- [review H4-6] Cái trigger này MUA và cái nó KHÔNG mua, nói thẳng: nó chặn MỘT câu INSERT trần.
+-- `app_api` có `UPDATE (last_used_counter)` (006 — `verifyTotpAttempt` cần), nên một app_api bị
+-- chiếm đi HAI câu (UPDATE bộ đếm về bước hiện tại rồi INSERT) vẫn qua — cùng hạn chế mà 006 §(2)
+-- đã ghi cho E3. Vế còn lại ở tầng kiểu. Và bộ đếm có CẬN TRÊN (+3 bước): một bộ đếm ở tương lai
+-- xa không được thoả mãn trigger vĩnh viễn — đúng bài học `assertFreshMfa` (mfa.ts) đã viết ra.
+--
 -- Bằng chứng ở CSDL là `mfa_credentials.last_used_counter`: `verifyTotpAttempt` ghi bộ đếm TOTP
 -- vừa khớp vào đó, trong CÙNG giao dịch mà `startUserSession` chèn phiên. Nên trigger này đòi: hồ
 -- sơ TOTP của đúng (org, user) đã xác nhận VÀ bộ đếm ấy nằm trong ba bước gần nhất (bước 30 giây —
@@ -40,8 +46,9 @@ BEGIN
           AND m.confirmed_at IS NOT NULL
           AND m.last_used_counter IS NOT NULL
           AND m.last_used_counter OPERATOR(pg_catalog.>=) (buoc_hien_tai OPERATOR(pg_catalog.-) 3)
+          AND m.last_used_counter OPERATOR(pg_catalog.<=) (buoc_hien_tai OPERATOR(pg_catalog.+) 3)
      ) THEN
-    RAISE EXCEPTION 'Phien da-MFA phai di sau mot lan TOTP dung GAN DAY cua chinh nguoi ay (039, review M-4): khong co ho so TOTP da xac nhan voi bo dem trong 3 buoc gan nhat'
+    RAISE EXCEPTION 'Phien da-MFA phai di sau mot lan TOTP dung GAN DAY cua chinh nguoi ay (039, review M-4/H4-6): khong co ho so TOTP da xac nhan voi bo dem trong +-3 buoc quanh hien tai'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NULL;
