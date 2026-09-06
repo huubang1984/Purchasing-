@@ -44,6 +44,13 @@ export const COOKIE_PHIEN_NGUOI_MUA = "__Host-tp_session";
 // 9 giờ không được thành 429 cho cả văn phòng. Trần theo người dùng (5/15 phút, `issueLoginToken`)
 // mới là trần chống lạm dụng hộp thư; trần này chỉ chống một người gọi làm đầy `outbox_jobs`.
 export const LOGIN_LINK_MAX_PER_CALLER = 30;
+/**
+ * [sổ nợ 52] Trần TOÀN TỔ CHỨC cho `/auth/link` mỗi 15 phút. Một tổ chức người mua có vài chục
+ * người; 300 link/15 phút là gấp nhiều lần mọi buổi sáng thứ hai, và là trần cho kẻ xoay /64 IPv6.
+ * Vượt ⇒ 429 cho cả tổ chức — DoS có chủ đích thu hẹp: chỉ route link, chỉ 15 phút, người đã có
+ * phiên không bị ảnh hưởng.
+ */
+export const LOGIN_LINK_MAX_PER_ORG = 300;
 export const LOGIN_REDEEM_MAX_PER_CALLER = 30;
 export const LOGIN_TOTP_MAX_PER_CALLER = 30;
 
@@ -90,6 +97,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
     audience: "ANON",
     mutates: true,
     callerLimit: LOGIN_LINK_MAX_PER_CALLER,
+    orgLimit: LOGIN_LINK_MAX_PER_ORG,
     handler: async (ctx) => {
       const email = chuoi(ctx.req.body, "email");
       if (email.length > EMAIL_MAX_BYTES) throw new HttpError(422, 'trường "email" quá dài');

@@ -157,6 +157,12 @@ export interface AnonRoute extends RouteBase {
    * Không khai = không đếm theo người gọi (đường khách có bộ đếm riêng trong `issueOtpChallenge`).
    */
   readonly callerLimit?: number;
+  /**
+   * [sổ nợ 52] Trần cho CẢ TỔ CHỨC trên route này trong cùng cửa sổ — bucket `LOGIN_CALLER` với khoá
+   * theo route, không theo địa chỉ. Bịt đường "xoay /64" của IPv6 mà không siết NAT: một tổ chức có
+   * chừng ấy người, không ai cần hơn chừng ấy link mỗi 15 phút. Chỉ có nghĩa cùng `callerLimit`.
+   */
+  readonly orgLimit?: number;
   readonly handler: (ctx: AnonContext) => Promise<ApiResponse>;
 }
 

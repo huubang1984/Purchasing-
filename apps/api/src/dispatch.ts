@@ -61,6 +61,7 @@ import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitat
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
+import { BucketBoNho } from "./bucket-bo-nho.js";
 import { khoaNguoiGoi } from "./dia-chi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
@@ -79,6 +80,11 @@ export interface DispatcherDeps {
   readonly services: ApiServices;
   /** Mặc định `ROUTES`; test tiêm một bảng khác để đo bộ điều phối trên route giả. */
   readonly routes?: readonly Route[];
+  /**
+   * [sổ nợ 52] Bucket TRONG BỘ NHỚ cho lời gọi khai tổ chức KHÔNG tồn tại (khoá ngoại 23503 — CSDL
+   * không đếm được). Mặc định một bucket riêng của dispatcher này, cửa sổ `OTP_RATE_WINDOW_SECONDS`.
+   */
+  readonly bucketToChucLa?: BucketBoNho;
   /**
    * [review H2-7] Trần thời gian cho MỖI việc sau commit (gửi mail/SMS). Việc ấy chạy TRƯỚC khi
    * phản hồi được ghi, và `requestTimeout` của máy chủ không phủ pha này — một bộ gửi treo làm
@@ -202,6 +208,7 @@ function orgIdTuThan(body: unknown): string | null {
 
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const routes = deps.routes ?? ROUTES;
+  const bucketToChucLa = deps.bucketToChucLa ?? new BucketBoNho({ cuaSoMs: OTP_RATE_WINDOW_SECONDS * 1000 });
 
   return async (vao) => {
     const requestId = randomUUID();
@@ -241,23 +248,32 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           // handler rollback khi token sai, nên đếm bên trong nó là đếm thành công chứ không đếm thử.
           // Khoá mang cả đường dẫn route: ba route, ba bộ đếm. Địa chỉ rỗng (không xác định) dùng
           // chung MỘT bucket — fail-closed. [review H4-4] Địa chỉ đi qua `khoaNguoiGoi`: IPv6 đếm theo
-          // /64, không theo địa chỉ nguyên vẹn. Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
-          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức ~~, không mở oracle mới~~
-          // [review H4-5] — nhưng 429 CÓ là một oracle: tổ chức thật bị chặn sau N lần, tổ chức lạ
+          // /64, không theo địa chỉ nguyên vẹn. ~~Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
+          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức, không mở oracle mới~~
+          // [review H4-5] ~~— nhưng 429 CÓ là một oracle: tổ chức thật bị chặn sau N lần, tổ chức lạ
           // thì không. Chấp nhận, nói ra: `orgId` là UUIDv4, không liệt kê được bằng vét cạn, và
-          // đếm cả tổ chức lạ đòi một bucket ngoài CSDL (không khoá ngoại) — ghi sổ nợ 52.
+          // đếm cả tổ chức lạ đòi một bucket ngoài CSDL (không khoá ngoại) — ghi sổ nợ 52.~~
+          // [sổ nợ 52] Tổ chức không tồn tại (23503) được đếm ở bucket TRONG BỘ NHỚ theo `route|người
+          // gọi`, CÙNG trần: tổ chức thật hay lạ đều 429 ở lần N+1 — oracle H4-5 đóng, và tổ chức lạ
+          // không còn là cần gạt tải CSDL không trần. Cùng giao dịch đếm thêm bucket TOÀN TỔ CHỨC khi
+          // route khai `orgLimit` (khoá theo route, không theo địa chỉ) — bịt đường xoay /64 của IPv6.
           // `Retry-After` là cả cửa sổ, không phải phần còn lại — cố ý thô, không tiết lộ mốc bucket.
           if (route.callerLimit !== undefined) {
             const tran = route.callerLimit;
+            const khoaNguoi = `${route.path}|${khoaNguoiGoi(req.remoteAddress)}`;
             let soLan = 0;
+            let soLanToChuc = 0;
             try {
-              soLan = await withTenant(deps.pool, orgId, (client) =>
-                tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|${khoaNguoiGoi(req.remoteAddress)}`, deps.services.pepper),
-              );
+              [soLan, soLanToChuc] = await withTenant(deps.pool, orgId, async (client) => {
+                const a = await tangBucketHanMuc(client, orgId, "LOGIN_CALLER", khoaNguoi, deps.services.pepper);
+                const b = route.orgLimit === undefined ? 0 : await tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|to-chuc`, deps.services.pepper);
+                return [a, b];
+              });
             } catch (e) {
               if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
+              soLan = bucketToChucLa.tang(khoaNguoi);
             }
-            if (soLan > tran) {
+            if (soLan > tran || (route.orgLimit !== undefined && soLanToChuc > route.orgLimit)) {
               return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
             }
           }

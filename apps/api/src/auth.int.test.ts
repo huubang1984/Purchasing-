@@ -21,7 +21,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
 import type { Route } from "./route-types.js";
-import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
+import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "./test-services.js";
@@ -288,12 +288,42 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     }
   });
 
-  it("tổ chức KHÔNG tồn tại: không đếm được (khoá ngoại) nhưng vẫn cùng một 200 — không mở oracle mới", async () => {
+  it("tổ chức KHÔNG tồn tại: ~~không đếm được (khoá ngoại) nhưng vẫn cùng một 200~~ [nợ 52] cùng một 200 tới lần N, rồi 429 như tổ chức thật (bucket bộ nhớ) — cùng địa chỉ, tổ chức thật vẫn có bucket riêng", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000abcd";
-    const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
-    expect(r.status).toBe(200);
-    expect(r.text).toBe(JSON.stringify({ ok: true }));
+    const orgLa2 = "00000000-0000-4000-8000-00000000abce";
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
+      // Hai tổ chức lạ xen kẽ: bucket theo `route|người gọi`, KHÔNG theo orgId — xoay orgId lạ không mở thêm trần.
+      const r = await goi("POST", "/auth/link", { body: { orgId: i % 2 === 0 ? orgLa : orgLa2, email: "ai-do@vidu.vn" } });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+      expect(r.text).toBe(JSON.stringify({ ok: true }));
+    }
+    const chan = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
+    expect(chan.status).toBe(429);
+    expect(chan.headers.get("retry-after")).toBe("900");
+    // Tổ chức thật từ cùng địa chỉ: bucket CSDL riêng, chưa chạm trần.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } })).status).toBe(200);
+    // Địa chỉ khác, tổ chức lạ: bucket bộ nhớ mới ⇒ 200.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" }, ip: "198.51.100.77" })).status).toBe(200);
   });
+
+  it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 là 429 dù bucket theo địa chỉ còn trống; tổ chức khác từ cùng địa chỉ vẫn 200", async () => {
+    const orgC = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty C', 'cong-ty-c') RETURNING id")).rows[0]?.id ?? "";
+    const ipThu = (i: number): string => `2001:db8:52:${(i + 1).toString(16)}::1`; // mỗi lần một /64 khác
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(i) });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+    }
+    const chan = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
+    expect(chan.status).toBe(429);
+    // Cùng địa chỉ mới ấy, tổ chức A: 200 — trần là của tổ chức C, không phải của địa chỉ.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
+    // Bucket CSDL: đúng một bucket chạm N+1 cho tổ chức C (bucket toàn tổ chức), N+1 bucket theo địa chỉ ở 1.
+    const { rows } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
+      [orgC],
+    );
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, LOGIN_LINK_MAX_PER_ORG + 1], [LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
+  }, 60_000);
 });
 
 describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là phiên", () => {
