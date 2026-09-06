@@ -160,6 +160,7 @@ const trangThai: {
   pm3: Nguoi;
   gd1: Nguoi;
   gd2: Nguoi;
+  taiChinh: Nguoi;
 } = {
   rfqId: "",
   loiMoi: [],
@@ -170,6 +171,7 @@ const trangThai: {
   pm3: { id: "", cookie: "" },
   gd1: { id: "", cookie: "" },
   gd2: { id: "", cookie: "" },
+  taiChinh: { id: "", cookie: "" },
 };
 
 beforeAll(async () => {
@@ -191,6 +193,8 @@ beforeAll(async () => {
   trangThai.pm3 = await dangNhap("pm3@vidu.vn", "PROCUREMENT_MANAGER");
   trangThai.gd1 = await dangNhap("gd1@vidu.vn", "DIRECTOR");
   trangThai.gd2 = await dangNhap("gd2@vidu.vn", "DIRECTOR");
+  // [033 / nợ 44] Ngưỡng phê duyệt kép do FINANCE đặt — PM (người đặt ước lượng, người duyệt) không được.
+  trangThai.taiChinh = await dangNhap("taichinh@vidu.vn", "FINANCE");
 }, 240000);
 
 afterAll(async () => {
@@ -205,7 +209,8 @@ afterAll(async () => {
 describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", () => {
   it("bước 1 — người mua dựng RFQ 1 tỷ qua HTTP và nó GIỮ yêu cầu phê duyệt kép", async () => {
     const m = trangThai.mua.cookie;
-    expect((await goi("POST", "/policy", m, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(201);
+    expect((await goi("POST", "/policy", m, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(403);
+    expect((await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(201);
     const rfq = await goi("POST", "/rfqs", m, { title: "Mua thep tam SS400 quy IV", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
     expect(rfq.status, rfq.text).toBe(201);
     trangThai.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;

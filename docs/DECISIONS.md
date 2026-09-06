@@ -1230,9 +1230,14 @@ một cột giá nào**, cố ý, vì *"bảng không có cột thì không có 
 - **[review lượt 2 của S1.10, H2-2 — cùng ngày] Người đặt ngưỡng TỰ đặt được ước lượng.**
   `PROCUREMENT_MANAGER` giữ `rfq.create` (ước lượng), `rfq.approve` và `policy.manage`: một PM nâng
   ngưỡng lên rất cao rồi khai ước lượng dưới ngưỡng ⇒ một phê duyệt là đủ. Cùng họ với mục đầu
-  (khai thấp), nhưng KHÔNG cần khai thấp — chỉ cần đổi thước. Chưa quyết: tách `policy.manage` sang
+  (khai thấp), nhưng KHÔNG cần khai thấp — chỉ cần đổi thước. ~~Chưa quyết: tách `policy.manage` sang
   một vai không có `rfq.create`, hay mở rộng trigger D3 (`role_permissions_ma_tran_quyen`) cấm một
-  vai giữ cả hai. Sổ nợ 44; §4 của D2 ghi phần chênh này.
+  vai giữ cả hai. Sổ nợ 44; §4 của D2 ghi phần chênh này.~~ **Chốt cùng ngày (nợ 44 đóng, migration
+  `033`): CẢ HAI.** `policy.manage` chuyển sang `FINANCE` — vai không có `rfq.create`, `rfq.approve`,
+  `rfq.unseal`: nó đặt thước, không cầm thứ bị đo; `DIRECTOR` vẫn không được (lý do 023). Và quy tắc
+  *"`policy.manage` không đứng cùng `rfq.create`/`rfq.approve`"* thành hai trigger MỚI (không sửa thân
+  D3 của 005 — hardening ghim nguyên văn): mức vai trò và mức người dùng (hợp các vai). Danh sách loại
+  trừ `POLICY_MANAGE_EXCLUDES` ở ba bản, meta-test khoá. Cái mục này VẪN không đóng: khai thấp.
 
 ### Đo bằng gì
 
@@ -1456,7 +1461,7 @@ của G2 để không ai đọc ô ✅ thành *"mỗi RFQ là một ốc đảo"
 ## ADR-020 — Tầng HTTP đầu tiên của `apps/api`: **`node:http` trần + bảng route KHAI BÁO; phiên người mua phát bằng magic link email + TOTP; token KHÔNG BAO GIỜ vào URL; đường khách chỉ nhận `client` đã gắn phiên**
 
 **Ngày:** 2026-09-06 · **Trạng thái:** ~~*Đề xuất — chờ chốt*~~ **Đã chấp nhận (chốt cùng ngày,
-kèm hai quyết định phụ: `policy.manage` thuộc `PROCUREMENT_MANAGER`; H17 vào sổ đăng ký)** · Gỡ chặn: **S1.10** (vòng tầng
+kèm hai quyết định phụ: ~~`policy.manage` thuộc `PROCUREMENT_MANAGER`~~ [nợ 44, `033`: thuộc `FINANCE`]; H17 vào sổ đăng ký)** · Gỡ chặn: **S1.10** (vòng tầng
 HTTP) · Liên quan: **A2**, **A5**, **E1**, **E6**, **D5**, ADR-007, ADR-008, ADR-012, ADR-015,
 ADR-016 mục 4, ADR-019, khoản nợ 6, 21, 30
 

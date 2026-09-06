@@ -723,7 +723,7 @@ describe("[QT3] hasPermission dưới search_path thù địch", () => {
 // Đó là mục đích — một khe hở có tên không được phép biến mất khỏi hồ sơ trong im lặng.
 // ==============================================================================================
 describe("[A3b] tự nâng quyền qua user_roles", () => {
-  it("một người dùng thường TỰ GÁN được vai trò cho mình — khe hở CÒN MỞ, có chủ ý ghi ra", async () => {
+  it("một người dùng thường TỰ GÁN được vai trò cho mình — khe hở CÒN MỞ (hẹp lại từ 033), có chủ ý ghi ra", async () => {
     const { rows: u } = await db.pool.query<{ id: string }>(
       "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'a3b@a.com', 'A3b') RETURNING id",
       [orgId],
@@ -744,7 +744,9 @@ describe("[A3b] tự nâng quyền qua user_roles", () => {
       ),
     ).rejects.toMatchObject({ code: "42501" });
 
-    // VÀ ĐÂY LÀ KHE HỞ: một tổ hợp KHÔNG trọn chuỗi đi lọt, và nó mua đúng những quyền nặng nhất.
+    // [033] ĐỐI CHỨNG THỨ HAI: tự gán FINANCE — tổ hợp mà bản trước của test này đo là "đi lọt" —
+    // nay bị trigger "ngưỡng không cùng tay" chặn (FINANCE giữ policy.manage, BUYER giữ rfq.create).
+    // Khe hở [A3b] HẸP LẠI, chưa đóng: xem ngay dưới.
     await expect(
       withTenant(apiPool, orgId, (c) =>
         c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'FINANCE')", [
@@ -752,12 +754,23 @@ describe("[A3b] tự nâng quyền qua user_roles", () => {
           nan,
         ]),
       ),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    // VÀ ĐÂY LÀ KHE HỞ: một tổ hợp KHÔNG trọn chuỗi và KHÔNG chạm policy.manage đi lọt, và nó mua
+    // đúng những quyền nặng: duyệt RFQ, yêu cầu mở thầu, xem báo giá sau mở thầu.
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [
+          orgId,
+          nan,
+        ]),
+      ),
     ).resolves.toBeDefined();
 
-    for (const quyen of [PERMISSIONS.PO_APPROVE, PERMISSIONS.AUDIT_READ, PERMISSIONS.BID_VIEW]) {
+    for (const quyen of [PERMISSIONS.RFQ_APPROVE, PERMISSIONS.RFQ_UNSEAL, PERMISSIONS.BID_VIEW]) {
       expect(
         await withTenant(apiPool, orgId, (c) => hasPermission(c, { userId: nan, orgId, permission: quyen })),
-        `sau khi tự gán FINANCE, người dùng vừa tự cấp cho mình quyền ${quyen}`,
+        `sau khi tự gán PROCUREMENT_MANAGER, người dùng vừa tự cấp cho mình quyền ${quyen}`,
       ).toBe(true);
     }
 
@@ -978,9 +991,12 @@ describe("[C1-KHE-HỞ] trục thứ hai của D3", () => {
       );
       const nan = u[0]!.id;
 
-      // BUYER + FINANCE = 4/5. Hợp lệ hôm nay, và trigger mức người dùng CHO QUA — đúng thiết kế.
+      // ~~BUYER + FINANCE = 4/5.~~ [033] BUYER+FINANCE nay bị trigger "ngưỡng không cùng tay" chặn
+      // (FINANCE giữ policy.manage, BUYER giữ rfq.create) — nên ca đo đổi sang REQUESTER + DIRECTOR
+      // = 4/5 (create; unseal, award, po.approve — thiếu invite). Hợp lệ hôm nay, và cả hai trigger
+      // mức người dùng CHO QUA — đúng thiết kế.
       await dbRieng.pool.query(
-        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1,$2,'BUYER'),($1,$2,'FINANCE')",
+        "INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1,$2,'REQUESTER'),($1,$2,'DIRECTOR')",
         [org, nan],
       );
       expect(await demBuoc(dbRieng, nan), "tiền đề: người này CHƯA trọn chuỗi").toBe(4);
@@ -995,15 +1011,15 @@ describe("[C1-KHE-HỞ] trục thứ hai của D3", () => {
       // đánh số MỚI" mà chính 005 tuyên bố là đường an toàn duy nhất.
       await expect(
         dbRieng.pool.query(
-          "INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE', 'rfq.unseal')",
+          "INSERT INTO role_permissions (role_code, permission_code) VALUES ('DIRECTOR', 'rfq.invite')",
         ),
-        "trigger mức VAI TRÒ không bắn: FINANCE riêng lẻ vẫn chưa ôm trọn chuỗi",
+        "trigger mức VAI TRÒ không bắn: DIRECTOR riêng lẻ vẫn chưa ôm trọn chuỗi",
       ).resolves.toBeDefined();
 
-      // Đối chứng chống rỗng ruột cho câu trên: FINANCE riêng lẻ THẬT SỰ chưa trọn chuỗi.
+      // Đối chứng chống rỗng ruột cho câu trên: DIRECTOR riêng lẻ THẬT SỰ chưa trọn chuỗi.
       const { rows: rieng } = await dbRieng.pool.query<{ n: string }>(
         `SELECT count(DISTINCT permission_code)::text AS n FROM role_permissions
-          WHERE role_code = 'FINANCE' AND permission_code = ANY($1::text[])`,
+          WHERE role_code = 'DIRECTOR' AND permission_code = ANY($1::text[])`,
         [[...SEPARATION_OF_DUTIES_CHAIN]],
       );
       expect(Number(rieng[0]!.n)).toBeLessThan(SEPARATION_OF_DUTIES_CHAIN.length);
@@ -1034,7 +1050,7 @@ describe("[C1-KHE-HỞ] trục thứ hai của D3", () => {
       // LỚP DUY NHẤT NHÌN THẤY: mục (E3) — và nó CHỈ phát WARNING, đúng như đã ghi.
       const canhBao = (await warningCuaLuotPhanXet(dbRieng)).filter((m) => m.includes("(E3)"));
       expect(canhBao.length, "mục (E3) phải kêu lên").toBe(1);
-      expect(canhBao[0]).toContain("BUYER+FINANCE");
+      expect(canhBao[0]).toContain("DIRECTOR+REQUESTER");
       expect(canhBao[0]).toContain("PHÂN TÁCH NHIỆM VỤ (D3)");
 
       // ĐỐI CHỨNG: trigger mức NGƯỜI DÙNG vẫn sống và vẫn có răng trên đường THẲNG.
@@ -1284,4 +1300,86 @@ describe("[QT3] hasPermission dưới TOÁN TỬ thù địch", () => {
       await dbRieng.stop();
     }
   }, 300_000);
+});
+
+// ==============================================================================================
+// [033 / sổ nợ 44] NGƯỜI ĐẶT NGƯỠNG KHÔNG ĐƯỢC LÀ NGƯỜI ĐẶT ƯỚC LƯỢNG HAY NGƯỜI DUYỆT — hai lớp CSDL.
+// Mỗi lớp một đột biến gỡ trigger ⇒ câu ghi ĐI LỌT, rồi khôi phục ⇒ lại bị chặn.
+// ==============================================================================================
+describe("[INV-D2] [033] policy.manage không đứng cùng rfq.create / rfq.approve", () => {
+  const TAO_TRIGGER_VAI =
+    "CREATE TRIGGER role_permissions_nguong_khong_cung_tay AFTER INSERT OR UPDATE ON role_permissions " +
+    "FOR EACH ROW EXECUTE FUNCTION public.kiem_tra_nguong_khong_cung_tay_vai_tro()";
+  const TAO_TRIGGER_NGUOI =
+    "CREATE TRIGGER user_roles_nguong_khong_cung_tay AFTER INSERT OR UPDATE ON user_roles " +
+    "FOR EACH ROW EXECUTE FUNCTION public.kiem_tra_nguong_khong_cung_tay_nguoi_dung()";
+
+  it("mức VAI TRÒ: cấp policy.manage cho vai có rfq.create/rfq.approve ⇒ 42501, và chiều ngược lại cũng vậy; đột biến gỡ trigger ⇒ ĐI LỌT", async () => {
+    const capPM = () =>
+      db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('PROCUREMENT_MANAGER', 'policy.manage')");
+    await expect(capPM()).rejects.toMatchObject({ code: "42501" });
+    await expect(capPM()).rejects.toThrow(/policy\.manage/u);
+    await expect(
+      db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE', 'rfq.create')"),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE', 'rfq.approve')"),
+    ).rejects.toMatchObject({ code: "42501" });
+    // Đối chứng dương: một mã KHÔNG thuộc danh sách loại trừ vào FINANCE bình thường (rồi dọn).
+    await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('FINANCE', 'supplier.manage')");
+    await db.pool.query("DELETE FROM role_permissions WHERE role_code = 'FINANCE' AND permission_code = 'supplier.manage'");
+
+    await db.pool.query("DROP TRIGGER role_permissions_nguong_khong_cung_tay ON role_permissions");
+    try {
+      await expect(capPM()).resolves.toBeDefined();
+      await db.pool.query("DELETE FROM role_permissions WHERE role_code = 'PROCUREMENT_MANAGER' AND permission_code = 'policy.manage'");
+    } finally {
+      await db.pool.query(TAO_TRIGGER_VAI);
+      await db.pool.query("ALTER TABLE role_permissions ENABLE ALWAYS TRIGGER role_permissions_nguong_khong_cung_tay");
+    }
+    await expect(capPM()).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("mức NGƯỜI DÙNG: BUYER + FINANCE ⇒ 42501 dưới app_api; DIRECTOR + FINANCE đi qua; đột biến gỡ trigger ⇒ BUYER + FINANCE ĐI LỌT", async () => {
+    const tao = async (email: string, vai: string) => {
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'D2') RETURNING id",
+        [orgId, email],
+      );
+      await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgId, rows[0]!.id, vai]);
+      return rows[0]!.id;
+    };
+    const ganFinance = (uId: string) =>
+      withTenant(apiPool, orgId, (c) =>
+        c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'FINANCE')", [orgId, uId]),
+      );
+    const buyer = await tao("d2-buyer@a.com", "BUYER");
+    const pm = await tao("d2-pm@a.com", "PROCUREMENT_MANAGER");
+    const gd = await tao("d2-gd@a.com", "DIRECTOR");
+    await expect(ganFinance(buyer)).rejects.toMatchObject({ code: "42501" });
+    await expect(ganFinance(buyer)).rejects.toThrow(/policy\.manage/u);
+    await expect(ganFinance(pm)).rejects.toMatchObject({ code: "42501" });
+    // Đối chứng dương: DIRECTOR không có rfq.create lẫn rfq.approve ⇒ nhận FINANCE được.
+    await expect(ganFinance(gd)).resolves.toBeDefined();
+    expect(
+      await withTenant(apiPool, orgId, (c) => hasPermission(c, { userId: gd, orgId, permission: PERMISSIONS.POLICY_MANAGE })),
+    ).toBe(true);
+    // Và chiều ngược lại: người đã có FINANCE nhận thêm BUYER cũng bị chặn (trigger xét HỢP các vai).
+    const tc = await tao("d2-tc@a.com", "FINANCE");
+    await expect(
+      withTenant(apiPool, orgId, (c) =>
+        c.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [orgId, tc]),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    await db.pool.query("DROP TRIGGER user_roles_nguong_khong_cung_tay ON user_roles");
+    try {
+      await expect(ganFinance(buyer)).resolves.toBeDefined();
+      await db.pool.query("DELETE FROM user_roles WHERE user_id = $1 AND role_code = 'FINANCE'", [buyer]);
+    } finally {
+      await db.pool.query(TAO_TRIGGER_NGUOI);
+      await db.pool.query("ALTER TABLE user_roles ENABLE ALWAYS TRIGGER user_roles_nguong_khong_cung_tay");
+    }
+    await expect(ganFinance(buyer)).rejects.toMatchObject({ code: "42501" });
+  });
 });

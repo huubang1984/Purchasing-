@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   CHAIN_COVERING_ROLE_PAIRS,
   PERMISSIONS,
+  POLICY_MANAGE_CONFLICT_ROLE_PAIRS,
+  POLICY_MANAGE_EXCLUDES,
   SEPARATION_OF_DUTIES_CHAIN,
   type Permission,
 } from "./permissions.js";
@@ -34,6 +36,7 @@ import {
 const THU_MUC = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const SQL_005 = readFileSync(`${THU_MUC}/005_identity.sql`, "utf8");
 const SQL_HARDENING = readFileSync(`${THU_MUC}/hardening.always.sql`, "utf8");
+const SQL_033 = readFileSync(`${THU_MUC}/033_policy_manage_khong_cung_tay.sql`, "utf8");
 
 /**
  * [khoản nợ 31] MỌI migration đánh số, theo THỨ TỰ ÁP — không phải một danh sách tên.
@@ -87,6 +90,21 @@ function catValues(pSql: string, pBang: string): string {
   const khop = bieuThuc.exec(pSql);
   if (khop === null) throw new Error(`Không tìm thấy INSERT INTO ${pBang}`);
   return khop[1]!;
+}
+
+/**
+ * [033] Mọi câu `DELETE FROM role_permissions WHERE role_code = 'X' AND permission_code = 'Y'` của
+ * một migration — 033 là file đầu tiên XOÁ một hàng của ma trận (chuyển `policy.manage` khỏi
+ * PROCUREMENT_MANAGER). Một ma trận tĩnh chỉ cộng dồn INSERT sẽ thấy PM VẪN giữ mã ấy — và đỏ ở
+ * đúng quy tắc 033 đặt ra. Chỉ nhận đúng hình dạng hai vế bằng nhau; một DELETE rộng hơn (không
+ * WHERE, hoặc WHERE khác) làm test "mọi DELETE đều đọc được" dưới đây đỏ.
+ */
+function catDeletes(pSql: string): [string, string][] {
+  return [
+    ...pSql.matchAll(
+      /DELETE\s+FROM\s+(?:public\.)?role_permissions\s+WHERE\s+role_code\s*=\s*'([^']+)'\s+AND\s+permission_code\s*=\s*'([^']+)'\s*;/gi,
+    ),
+  ].map((m) => [m[1]!, m[2]!]);
 }
 
 /** Lấy danh sách mã trong `unnest(ARRAY[...])` của một thân hàm plpgsql. */
@@ -177,20 +195,41 @@ describe("§R3 — danh mục quyền", () => {
 });
 
 describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ", () => {
-  /** (vai trò -> tập mã quyền), đọc THẲNG từ văn bản migration. */
-  const maTran = (() => {
+  /**
+   * (vai trò -> tập mã quyền), đọc THẲNG từ văn bản migration, theo THỨ TỰ ÁP: trong mỗi file, DELETE
+   * áp trước INSERT ([033] xoá hàng của 030 rồi mới chèn hàng mới của chính nó).
+   */
+  function docMaTran(pDocDelete: boolean): Map<string, Set<string>> {
     // [khoản nợ 31] Đọc MỌI migration, không riêng `005` — xem khối `MOI_MIGRATION`.
-    const cap = MOI_MIGRATION.flatMap(({ sql }) => [
-      ...catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g),
-    ]);
     const ketQua = new Map<string, Set<string>>();
-    for (const [, vaiTro, quyen] of cap) {
-      const tap = ketQua.get(vaiTro!) ?? new Set<string>();
-      tap.add(quyen!);
-      ketQua.set(vaiTro!, tap);
+    for (const { sql } of MOI_MIGRATION) {
+      if (pDocDelete) {
+        for (const [vaiTro, quyen] of catDeletes(sql)) ketQua.get(vaiTro)?.delete(quyen);
+      }
+      for (const [, vaiTro, quyen] of catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)) {
+        const tap = ketQua.get(vaiTro!) ?? new Set<string>();
+        tap.add(quyen!);
+        ketQua.set(vaiTro!, tap);
+      }
     }
     return ketQua;
-  })();
+  }
+  const maTran = docMaTran(true);
+
+  it("[033] mọi câu DELETE trên role_permissions trong migration đều được bộ đọc HIỂU — không có DELETE nào rộng hơn khuôn (X, Y)", () => {
+    const thoSo = /\bDELETE\s+FROM\s+(?:public\.)?role_permissions\b/gi;
+    let soCauDelete = 0;
+    let soDocDuoc = 0;
+    for (const { sql } of MOI_MIGRATION) {
+      soCauDelete += [...sql.matchAll(thoSo)].length;
+      soDocDuoc += catDeletes(sql).length;
+    }
+    expect(soCauDelete, "chống rỗng ruột: 033 phải có ít nhất một DELETE").toBeGreaterThan(0);
+    expect(soDocDuoc, "một DELETE không đúng khuôn (X, Y) — bộ đọc ma trận tĩnh sẽ mù với nó").toBe(soCauDelete);
+    // Và DELETE ấy THẬT SỰ đổi ma trận: chỉ cộng INSERT thì PM vẫn giữ policy.manage.
+    expect(docMaTran(false).get("PROCUREMENT_MANAGER")).toContain(PERMISSIONS.POLICY_MANAGE);
+    expect(maTran.get("PROCUREMENT_MANAGER")).not.toContain(PERMISSIONS.POLICY_MANAGE);
+  });
 
   it("chống rỗng ruột: ma trận đọc được và có đủ sáu vai trò", () => {
     expect([...maTran.keys()].sort()).toEqual([
@@ -372,5 +411,65 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
       .filter(([, tap]) => SEPARATION_OF_DUTIES_CHAIN.every((ma) => tap.has(ma)))
       .map(([vaiTro]) => vaiTro);
     expect(omTron).toEqual(["SIEU_VAI"]);
+  });
+});
+
+describe("[INV-D2] [033] thước đo không cùng tay: policy.manage tách khỏi rfq.create / rfq.approve", () => {
+  const maTran = (() => {
+    const ketQua = new Map<string, Set<string>>();
+    for (const { sql } of MOI_MIGRATION) {
+      for (const [vaiTro, quyen] of catDeletes(sql)) ketQua.get(vaiTro)?.delete(quyen);
+      for (const [, vaiTro, quyen] of catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)) {
+        const tap = ketQua.get(vaiTro!) ?? new Set<string>();
+        tap.add(quyen!);
+        ketQua.set(vaiTro!, tap);
+      }
+    }
+    return ketQua;
+  })();
+
+  it("danh sách loại trừ khớp NGUYÊN VĂN ở ba bản: TypeScript, thân trigger mức vai trò, thân trigger mức người dùng", () => {
+    const vaiTro = chuoiTrongThan(catTheDollar(SQL_033, "tnv"), "033 $tnv$");
+    const nguoiDung = chuoiTrongThan(catTheDollar(SQL_033, "tnn"), "033 $tnn$");
+    expect(vaiTro.length, "chống rỗng ruột").toBe(2);
+    expect([...POLICY_MANAGE_EXCLUDES]).toEqual(vaiTro);
+    expect([...POLICY_MANAGE_EXCLUDES]).toEqual(nguoiDung);
+    for (const than of [catTheDollar(SQL_033, "tnv"), catTheDollar(SQL_033, "tnn")]) {
+      expect(cacChuoi(than)).toContain(PERMISSIONS.POLICY_MANAGE);
+    }
+    const hopLe = new Set<string>(Object.values(PERMISSIONS));
+    for (const ma of POLICY_MANAGE_EXCLUDES) expect(hopLe).toContain(ma);
+  });
+
+  it("KHÔNG vai trò nào giữ policy.manage cùng một mã loại trừ; và đúng MỘT vai giữ nó — FINANCE", () => {
+    const giu = [...maTran.entries()].filter(([, tap]) => tap.has(PERMISSIONS.POLICY_MANAGE)).map(([v]) => v);
+    expect(giu).toEqual(["FINANCE"]);
+    const viPham = [...maTran.entries()]
+      .filter(([, tap]) => tap.has(PERMISSIONS.POLICY_MANAGE) && POLICY_MANAGE_EXCLUDES.some((ma) => tap.has(ma)))
+      .map(([v]) => v);
+    expect(viPham, "một vai vừa đặt ngưỡng vừa đặt ước lượng / duyệt — đúng phát hiện H2-2").toEqual([]);
+  });
+
+  it("[033] tập CẶP vai trò mà một người mang cả hai sẽ vi phạm — đúng bằng mốc đã GHIM", () => {
+    const ten = [...maTran.keys()].sort();
+    const doDuoc: string[] = [];
+    for (let i = 0; i < ten.length; i += 1) {
+      for (let j = i + 1; j < ten.length; j += 1) {
+        const hop = new Set([...(maTran.get(ten[i]!) ?? []), ...(maTran.get(ten[j]!) ?? [])]);
+        if (hop.has(PERMISSIONS.POLICY_MANAGE) && POLICY_MANAGE_EXCLUDES.some((ma) => hop.has(ma))) doDuoc.push(`${ten[i]}+${ten[j]}`);
+      }
+    }
+    const daGhim = POLICY_MANAGE_CONFLICT_ROLE_PAIRS.map((c) => [...c].sort().join("+")).sort();
+    expect(daGhim.length, "chống rỗng ruột").toBeGreaterThan(0);
+    expect(doDuoc.sort()).toEqual(daGhim);
+  });
+
+  it("phép kiểm KHÔNG rỗng ruột: trả policy.manage về PROCUREMENT_MANAGER thì bị bắt", () => {
+    const xau = new Map([...maTran].map(([k, v]) => [k, new Set(v)] as const));
+    xau.get("PROCUREMENT_MANAGER")!.add(PERMISSIONS.POLICY_MANAGE);
+    const viPham = [...xau.entries()]
+      .filter(([, tap]) => tap.has(PERMISSIONS.POLICY_MANAGE) && POLICY_MANAGE_EXCLUDES.some((ma) => tap.has(ma)))
+      .map(([v]) => v);
+    expect(viPham).toEqual(["PROCUREMENT_MANAGER"]);
   });
 });

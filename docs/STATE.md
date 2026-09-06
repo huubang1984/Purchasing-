@@ -5,7 +5,7 @@
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
 **Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
-review + hai vòng sửa, migration `032`, sổ nợ tới **49**; xem *Hành động tiếp theo* mục 20–22; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23; xem *Hành động tiếp theo* mục 20–23; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -379,7 +379,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 41 | **[review M-8] `remoteAddressOf` là một hook, chưa có cài đặt đọc `X-Forwarded-For` theo CIDR tin cậy** — chừng nào chưa có, api KHÔNG được đặt sau proxy/LB (ADR-020 ghi); nếu đặt, bucket `CALLER` của OTP thành hạn mức toàn tổ chức | `apps/api/src/server.ts` |
 | 42 | **[review L-2] Cookie phiên chưa dùng tiền tố `__Host-`; cookie trùng tên lấy giá trị ĐẦU** — một subdomain anh em bị chiếm ném cookie được (login CSRF). Đổi tên cookie là đổi hợp đồng với client — làm khi có client thật | `apps/api/src/routes/auth.ts`, `anon.ts`, `router.ts` |
 | 43 | **[review M-4] Vế CSDL của "phiên chỉ ra đời sau một lần TOTP đúng" chưa có** — trigger 029 chỉ đòi `mfa_verified_at`; bằng chứng TOTP nay là KIỂU (`MfaProof`), không phải hàng trong CSDL. Làm được bằng trigger đòi `mfa_credentials.last_used_counter` gần đây, nhưng phải đổi cách tám phép đo lược đồ 006 chèn `sessions` (dưới superuser thay vì `app_api`) | `db/migrations/031_ghi_danh_lai_totp.sql` (khối đầu), `packages/identity/src/login.ts` |
-| 44 | **[review lượt 2, H2-2] `PROCUREMENT_MANAGER` giữ cả `policy.manage` lẫn `rfq.create`** — người đặt ngưỡng đặt được ước lượng, nên D2 hạ xuống MỘT phê duyệt bằng một PM + một người duyệt. Câu biện minh sai ở 030 đã gạch; §4 của D2 ghi phần chênh. **QUYẾT ĐỊNH ĐANG CHỜ:** tách vai, hay mở rộng trigger D3 cấm một vai giữ cả hai | `db/migrations/030_policy_manage.sql`, `docs/DECISIONS.md` ADR-017 |
+| 44 | ~~**[review lượt 2, H2-2] `PROCUREMENT_MANAGER` giữ cả `policy.manage` lẫn `rfq.create`** — người đặt ngưỡng đặt được ước lượng, nên D2 hạ xuống MỘT phê duyệt bằng một PM + một người duyệt. Câu biện minh sai ở 030 đã gạch; §4 của D2 ghi phần chênh. **QUYẾT ĐỊNH ĐANG CHỜ:** tách vai, hay mở rộng trigger D3 cấm một vai giữ cả hai~~ **ĐÓNG 2026-09-06 (chốt: cả hai)** — migration `033`: `policy.manage` chuyển sang `FINANCE`; hai trigger mới cấm `policy.manage` đứng cùng `rfq.create`/`rfq.approve` ở một vai VÀ ở một người (hợp các vai); ba bản của danh sách loại trừ khoá bằng meta-test; hai đột biến gỡ trigger ⇒ đi lọt. Hệ quả: khe hở [A3b] hẹp lại (BUYER không tự gán FINANCE được nữa), ca [C1] đổi sang REQUESTER+DIRECTOR | `db/migrations/033_policy_manage_khong_cung_tay.sql`, `packages/identity/src/permissions.ts` |
 | 45 | **[review lượt 2, H2-3] Vế CSDL của "`version` chính sách không ghim được tổ chức"** — tầng HTTP nay đòi `version` = hiện hành + 1 (giá trị kỳ vọng, chống đua), nhưng một `app_api` bị chiếm vẫn INSERT được `version = 2147483647` và trigger 022 ("phải lớn hơn") + không UPDATE/DELETE ghim tổ chức vĩnh viễn. Đóng đúng: trigger tự gán `version = max + 1`, hoặc `CHECK (version < 1000000)` phòng hờ | `db/migrations/022_security_review_s1.sql` (khối `chinh_sach_phien_ban_tang_dan`) |
 | 46 | **[review lượt 2, H2-9 ⑵] Không ràng buộc CSDL nào nói `contact ∈ supplier` cho lời mời** — `rfq_invitations` chỉ có FK `(org_id, contact_id)`; route nay kiểm TRƯỚC khi tạo, nhưng gọi `createInvitation` từ nơi khác (job, route tương lai) với contact của NCC khác thì link tới người của Y mà đơn thầu mang danh X. Cần FK tổ hợp `(org_id, supplier_id, contact_id) → supplier_contacts (org_id, supplier_id, id)` | `db/migrations/010_invitations.sql`, `packages/invitation/src/invitation.ts` |
 | 47 | **[review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG** — `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh; chỉ ba route được đo chéo ở test vòng đời. Cần vòng quét "mọi quyền TRỪ `route.permission` ⇒ 403" tự sinh từ `ROUTES`. Cùng dòng: lớp canh tĩnh `\brequirePermission\s*\(` bị `const rp = requirePermission` qua mặt (ADR-016 §4 đã tự nhận) | `apps/api/src/buyer.int.test.ts`, `routes.test.ts` |
@@ -958,6 +958,22 @@ CMK, chưa có role nào được tạo.
 
     **Số đo trên HEAD của vòng sửa 2:** `pnpm t0` 154 module / 0 vi phạm; `pnpm evidence` **1138/1138**,
     **51/51** (34/34 + 17/17), cổng XANH; danh sách được-phép-chưa-phủ vẫn RỖNG.
+
+23. **[2026-09-06] Nợ 44 đóng — PR #4 đã merge (`610d510`, 9 commit, không squash), PR #5.** Chốt:
+    `policy.manage` sang **`FINANCE`** (vai không có `rfq.create`, `rfq.approve`, `rfq.unseal`; `DIRECTOR`
+    vẫn cố ý không được, lý do 023), và quy tắc *"người đặt ngưỡng không được là người đặt ước lượng
+    hay người duyệt"* thành hai trigger ở migration **`033`**: mức vai trò (`role_permissions`) và mức
+    người dùng (`user_roles`, hợp các vai). Không sửa thân hai hàm D3 của 005 (hardening ghim nguyên
+    văn) — D2 là bất biến khác, có hàm riêng; danh sách loại trừ `POLICY_MANAGE_EXCLUDES` sống ở ba
+    bản (TypeScript + hai thân trigger), meta-test `ma-tran-quyen.test.ts` khoá khớp nguyên văn, và
+    bộ đọc ma trận tĩnh nay hiểu câu `DELETE` (033 là file đầu tiên xoá một hàng của ma trận — chỉ
+    cộng INSERT thì PM vẫn "giữ" mã ấy). Mốc ghim mới `POLICY_MANAGE_CONFLICT_ROLE_PAIRS` (BUYER+FINANCE,
+    FINANCE+PM, FINANCE+REQUESTER). Hai đột biến gỡ trigger ⇒ câu ghi đi lọt, khôi phục ⇒ chặn lại.
+    Hai test cũ đổi ca đo vì chính lớp mới: [A3b] "BUYER tự gán FINANCE đi lọt" nay 42501 — khe hở hẹp
+    lại, ca còn lọt là BUYER tự gán PROCUREMENT_MANAGER (ghi ở 005); [C1] BUYER+FINANCE đổi sang
+    REQUESTER+DIRECTOR. Qua HTTP: PM tạo chính sách ⇒ 403, FINANCE ⇒ 201 (buyer.int, kịch bản 41).
+    **Số đo trên HEAD:** `pnpm t0` 154 module / 0 vi phạm; `pnpm test` 497/497; `pnpm evidence` **1145/1145**,
+    **51/51**, cổng XANH.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

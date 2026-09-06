@@ -153,18 +153,21 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     const gd1 = await nguoi("gd1@vidu.vn", ["DIRECTOR"]);
     const gd2 = await nguoi("gd2@vidu.vn", ["DIRECTOR"]);
     const gd3 = await nguoi("gd3@vidu.vn", ["DIRECTOR"]);
+    const tc = await nguoi("taichinh@vidu.vn", ["FINANCE"]);
 
-    // Chính sách: BUYER bị 403 (policy.manage là của PROCUREMENT_MANAGER — 030), PM tạo được.
+    // Chính sách: ~~policy.manage là của PROCUREMENT_MANAGER — 030~~ [033 / nợ 44] là của FINANCE —
+    // BUYER (đặt ước lượng) và PM (đặt ước lượng + duyệt) đều 403; người đặt thước không cầm thứ bị đo.
     expect((await goi("POST", "/policy", buyer, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(403);
-    const cs = await goi("POST", "/policy", pm1, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" });
+    expect((await goi("POST", "/policy", pm1, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(403);
+    const cs = await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" });
     expect(cs.status, cs.text).toBe(201);
     expect((await goi("GET", "/policy", buyer)).status).toBe(200);
     // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng hiện hành + 1. Một `2147483647` (trần
     // int4 — ghim tổ chức vĩnh viễn vì trigger 022 đòi "lớn hơn" và không có UPDATE/DELETE) bị 422.
-    const ghim = await goi("POST", "/policy", pm1, { version: 2147483647, dualApprovalThreshold: "0.01", currency: "VND" });
+    const ghim = await goi("POST", "/policy", tc, { version: 2147483647, dualApprovalThreshold: "0.01", currency: "VND" });
     expect(ghim.status, ghim.text).toBe(422);
     expect(ghim.text).toContain("hiện hành + 1 (2)");
-    expect((await goi("POST", "/policy", pm1, { version: 1, dualApprovalThreshold: "0.01", currency: "VND" })).status).toBe(422);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "0.01", currency: "VND" })).status).toBe(422);
     expect((await goi("GET", "/policy", buyer)).text).toContain('"version":1');
 
     // Nhà cung cấp + người liên hệ (đích của magic link).
