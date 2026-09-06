@@ -34,7 +34,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.js";
 import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
-import { dichVuTest, type DichVuTest } from "../../api/src/test-services.js";
+import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
 import { executeUnsealRequest } from "./index.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -63,6 +63,7 @@ let apiPool: pg.Pool;
 let auditPool: pg.Pool;
 let unsealPool: pg.Pool;
 let dv: DichVuTest;
+let ob: ReturnType<typeof outboxTest>;
 let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
@@ -120,6 +121,7 @@ async function dangNhap(email: string, vaiTro: string): Promise<Nguoi> {
   await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgA, id, vaiTro]);
   const truoc = dv.linkDaGui.length;
   expect((await goi("POST", "/auth/link", undefined, { orgId: orgA, email })).status).toBe(200);
+  await ob.chay(orgA); // [sổ nợ 38] link ra đời khi job chạy
   expect(dv.linkDaGui).toHaveLength(truoc + 1);
   const token = dv.linkDaGui.at(-1)!.token;
   const rd = await goi("POST", "/auth/redeem", undefined, { orgId: orgA, token });
@@ -185,6 +187,7 @@ beforeAll(async () => {
   auditPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
   dv = dichVuTest();
+  ob = outboxTest(apiPool, dv.services);
   server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }));
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -482,6 +485,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // mật TOTP ném, thông điệp cố ý mang phong bì) để log KHÔNG rỗng trước khi đòi nó sạch.
     const truocLog = logLoi.length;
     expect((await goi("POST", "/auth/link", undefined, { orgId: orgA, email: "mua@vidu.vn" })).status).toBe(200);
+    await ob.chay(orgA);
     const tokenHong = dv.linkDaGui.at(-1)!.token;
     dv.hong.totpUnsealer = true;
     try {

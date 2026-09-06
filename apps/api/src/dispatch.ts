@@ -60,6 +60,7 @@ import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invit
 import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitation";
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
+import { coHan } from "./co-han.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
@@ -84,25 +85,15 @@ export interface DispatcherDeps {
    * Mặc định 5 000 ms; quá trần chỉ ghi TÊN lỗi, không đổi phản hồi.
    */
   readonly afterCommitTimeoutMs?: number;
+  /**
+   * [sổ nợ 38] Đánh thức runner outbox của tiến trình cho một tổ chức vừa có job — gọi SAU commit,
+   * đồng bộ (bên nhận tự lên lịch, không được chặn phản hồi). Composition root cài; test lắp tay
+   * bỏ trống và tự chạy `runOnceForOrg`.
+   */
+  readonly outboxNudge?: (orgId: string) => void;
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
-
-class SauCommitQuaHan extends Error {
-  constructor() {
-    super("viec sau commit qua han");
-    this.name = "SauCommitQuaHan";
-  }
-}
-
-/** `viec()` đua với một đồng hồ; thua thì ném `SauCommitQuaHan` — promise gốc bị bỏ, không đợi. */
-function coHan(viec: () => Promise<void>, ms: number): Promise<void> {
-  let dongHo: NodeJS.Timeout | undefined;
-  const het = new Promise<never>((_ok, hong) => {
-    dongHo = setTimeout(() => hong(new SauCommitQuaHan()), ms);
-  });
-  return Promise.race([viec(), het]).finally(() => clearTimeout(dongHo));
-}
 
 export type Dispatcher = (req: Omit<ApiRequest, "params" | "requestId">) => Promise<ApiResponse>;
 
@@ -229,7 +220,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (r.status >= 400) return r;
       for (const viec of sauCommit) {
         try {
-          await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH);
+          await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH, "SauCommitQuaHan");
         } catch (e) {
           console.error(`[api] ${requestId} sau-commit ${e instanceof Error ? e.name : "loi khong ro"}`);
         }
@@ -264,11 +255,18 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
             }
           }
-          return await chaySauCommit(
+          let danhThuc = false;
+          const nudgeOutbox = (): void => {
+            danhThuc = true;
+          };
+          const phanHoi = await chaySauCommit(
             await withTenant(deps.pool, orgId, (client) =>
-              route.handler({ req, orgId, client, services: deps.services, afterCommit }),
+              route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox }),
             ),
           );
+          // [sổ nợ 38] Job đã nằm trong CSDL (commit xong) và phản hồi đã quyết: đánh thức, không đợi.
+          if (danhThuc && phanHoi.status < 400) deps.outboxNudge?.(orgId);
+          return phanHoi;
         }
 
         case "BUYER": {

@@ -51,6 +51,9 @@ export const KIND_KHONG_NHAN: Readonly<Record<string, string>> = {
   // `app_unseal` — role KHÔNG đọc được `supplier_contacts`, tức nó không biết gửi tới đâu, và
   // việc cấp thêm quyền ấy sẽ mở đúng thứ ADR-006 dựng cả một role riêng để đóng.
   RFQ_DEADLINE_EXTENDED_NOTICE: "đường thông báo nhà cung cấp — thuộc app gửi, không thuộc worker",
+  // [sổ nợ 38] Link đăng nhập người mua: handler nằm trong tiến trình `api` (apps/api/src/outbox-api.ts)
+  // — nó cần `users` (app_unseal chỉ đọc ba cột) và bộ gửi, cả hai thuộc api.
+  LOGIN_LINK_SEND: "link đăng nhập người mua — handler ở tiến trình api, không thuộc worker",
 };
 
 export interface BreakGlassAlert {

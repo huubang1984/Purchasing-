@@ -236,6 +236,7 @@ export async function migrate(
       // đến từ PGOPTIONS lúc mở kết nối, nên RESET khôi phục đúng nó.
       await lockClient.query("RESET lock_timeout");
       await lockClient.query("RESET idle_in_transaction_session_timeout");
+      await lockClient.query("RESET statement_timeout");
       await lockClient.query("SELECT pg_catalog.pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
       // [fix round 4 — N1] Gỡ listener 'error' đã gắn ở trên TRƯỚC release() trên CẢ HAI
       // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
@@ -333,6 +334,8 @@ export async function migrate(
     // và dòng RESET ở finally bên dưới đóng ca chia sẻ pool.
     await lockClient.query("SET lock_timeout = 0");
     await lockClient.query("SET idle_in_transaction_session_timeout = 0");
+    // [sổ nợ 38] createPool nay đặt statement_timeout; một migration dài là bình thường ở đây.
+    await lockClient.query("SET statement_timeout = 0");
 
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.

@@ -16,13 +16,14 @@ import {
   LoginTokenError,
   enrollOrReplaceTotpForLogin,
   generateTotpSecret,
-  issueLoginToken,
   redeemLoginToken,
   revokeSession,
   startUserSession,
   verifyTotpForLogin,
 } from "@trustprocure/identity";
+import { enqueueJob } from "@trustprocure/outbox";
 import { HttpError } from "../http.js";
+import { EMAIL_MAX_BYTES, LOGIN_LINK_SEND_KIND } from "../outbox-api.js";
 import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
 
 /**
@@ -82,14 +83,23 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
     callerLimit: LOGIN_LINK_MAX_PER_CALLER,
     handler: async (ctx) => {
       const email = chuoi(ctx.req.body, "email");
-      const kq = await issueLoginToken(ctx.client, ctx.orgId, { email });
-      // Không có người dùng, bị hạn mức, hay đã gửi: CÙNG một phản hồi. Cái khác duy nhất nằm ở
-      // hộp thư — nơi kẻ liệt kê email không nhìn vào được.
-      // [review M-7] Gửi SAU COMMIT — token đã ở CSDL trước khi mail đi, và lỗi bộ gửi không đổi 200.
-      if (kq.ok) {
-        const { email: dich, token } = kq;
-        ctx.afterCommit(() => ctx.services.loginLinkSender.send({ orgId: ctx.orgId, email: dich, token }));
+      if (email.length > EMAIL_MAX_BYTES) throw new HttpError(422, 'trường "email" quá dài');
+      // [sổ nợ 38 / review M-1, M-7] KHÔNG tra người dùng ở đây. Một INSERT vào outbox cho MỌI email —
+      // có người hay không, bị hạn mức hay không — là cùng một câu lệnh, cùng một RTT. Việc "email này
+      // là ai, phát token, gửi" chạy SAU phản hồi, dưới runner của tiến trình (`outbox-api.ts`).
+      // Nguyên văn cũ, giữ để đối chiếu: ~~`issueLoginToken` ở đây, gửi ở `afterCommit`~~ — hai nhánh
+      // ấy khác nhau một INSERT, và RTT nói ra điều đó.
+      // Tổ chức KHÔNG tồn tại: khoá ngoại của outbox_jobs từ chối (23503). Vẫn phải là CÙNG một 200 —
+      // savepoint để giao dịch không bị bỏ dở, và không có gì để đánh thức.
+      await ctx.client.query("SAVEPOINT xep_hang");
+      try {
+        await enqueueJob(ctx.client, ctx.orgId, { kind: LOGIN_LINK_SEND_KIND, payload: { email } });
+      } catch (e) {
+        if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
+        await ctx.client.query("ROLLBACK TO SAVEPOINT xep_hang");
+        return { status: 200, body: { ok: true } };
       }
+      ctx.nudgeOutbox();
       return { status: 200, body: { ok: true } };
     },
   },

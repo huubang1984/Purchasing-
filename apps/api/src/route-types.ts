@@ -95,6 +95,12 @@ export interface AnonContext {
   readonly client: pg.PoolClient;
   readonly services: ApiServices;
   readonly afterCommit: AfterCommit;
+  /**
+   * [sổ nợ 38] Handler vừa `enqueueJob` cho tổ chức này — dispatcher ĐÁNH THỨC runner outbox SAU
+   * commit, KHÔNG await (await là đưa oracle thời gian trở lại dưới dạng khác). Không có runner
+   * (test lắp tay) thì là no-op; test gọi `runOnceForOrg` tường minh.
+   */
+  readonly nudgeOutbox: () => void;
 }
 
 /**

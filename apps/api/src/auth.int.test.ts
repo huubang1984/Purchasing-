@@ -24,7 +24,7 @@ import type { Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
-import { dichVuTest, type DichVuTest } from "./test-services.js";
+import { dichVuTest, outboxTest, type DichVuTest } from "./test-services.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -32,6 +32,7 @@ let db: TestDatabase;
 let apiPool: pg.Pool;
 let auditPool: pg.Pool;
 let dv: DichVuTest;
+let ob: ReturnType<typeof outboxTest>;
 let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
@@ -98,6 +99,8 @@ async function linkVaGhiDanh(email: string): Promise<{ token: string; biMat: Buf
   const truoc = dv.linkDaGui.length;
   const r = await goi("POST", "/auth/link", { body: { orgId: orgA, email } });
   expect(r.status).toBe(200);
+  // [sổ nợ 38] Link chỉ ra đời khi job chạy — test chạy runner tường minh.
+  await ob.chay(orgA);
   expect(dv.linkDaGui).toHaveLength(truoc + 1);
   const token = dv.linkDaGui.at(-1)!.token;
   const rd = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token } });
@@ -131,6 +134,7 @@ beforeAll(async () => {
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
+  ob = outboxTest(apiPool, dv.services);
   server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -154,6 +158,17 @@ describe("/auth/link — không liệt kê được email", () => {
     const dc = await goi("POST", "/auth/link", { body: { orgId: orgA, email: "dinhchi@vidu.vn" } });
     expect([dung.status, la.status, dc.status]).toEqual([200, 200, 200]);
     expect(new Set([dung.text, la.text, dc.text]).size).toBe(1);
+    // [sổ nợ 38] TRƯỚC khi runner chạy: ba email để lại đúng BA job và KHÔNG một token nào — handler
+    // HTTP không nhìn vào bảng người dùng, nên hai nhánh có/không người dùng là cùng một câu lệnh.
+    const { rows: job } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' AND status = 'PENDING'",
+      [orgA],
+    );
+    expect(Number(job[0]?.n)).toBe(3);
+    const { rows: tokenTruoc } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM user_login_tokens WHERE org_id = $1", [orgA]);
+    expect(Number(tokenTruoc[0]?.n)).toBe(0);
+    expect(dv.linkDaGui).toHaveLength(truoc);
+    expect(await ob.chay(orgA)).toBe(3);
     expect(dv.linkDaGui).toHaveLength(truoc + 1);
     expect(dv.linkDaGui.at(-1)?.email).toBe("a@vidu.vn");
     expect(dung.text).not.toContain(dv.linkDaGui.at(-1)!.token);
@@ -165,6 +180,9 @@ describe("/auth/link — không liệt kê được email", () => {
     for (let i = 0; i < LOGIN_MAX_TOKENS_PER_WINDOW + 3; i += 1) {
       expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "hanmuc@vidu.vn" } })).status).toBe(200);
     }
+    // [sổ nợ 38] Cả tám job đều chạy XONG (không job nào thất bại); ba job cuối không gửi gì.
+    expect(await ob.chay(orgA)).toBe(LOGIN_MAX_TOKENS_PER_WINDOW + 3);
+    expect(ob.loi).toHaveLength(0);
     expect(dv.linkDaGui.length - truoc).toBe(LOGIN_MAX_TOKENS_PER_WINDOW);
   });
 });
@@ -303,6 +321,7 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     expect(ok.text).not.toContain("userId");
     // Đã xác nhận: redeem link mới ⇒ needsEnrollment false, KHÔNG có MFA_ENROLLED mới, bí mật giữ nguyên.
     expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ghidanh@vidu.vn" } })).status).toBe(200);
+    await ob.chay(orgA);
     const rd = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: dv.linkDaGui.at(-1)!.token } });
     expect(rd.body).toEqual({ needsEnrollment: false });
     expect(await dem()).toBe(2);
@@ -405,16 +424,16 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
   });
 });
 
-describe("[review H2-7] việc sau commit có TRẦN thời gian", () => {
-  it("bộ gửi link TREO ⇒ /auth/link vẫn về 200 trong trần, và log ghi đúng TÊN lỗi quá hạn — không thân, không token", async () => {
-    // Bản trước: `await viec()` không trần; `requestTimeout` chỉ phủ pha nhận yêu cầu. Bộ gửi mail treo
-    // ⇒ email CÓ THẬT treo vô hạn, email lạ về ngay (oracle M-1 ở dạng vô hạn). Đột biến: bỏ `coHan`
-    // ở dispatch.ts ⇒ lời gọi dưới không bao giờ về và test này đỏ vì hết giờ.
+describe("[review H2-7] [sổ nợ 38] bộ gửi treo không chạm được phản hồi — và job treo có trần", () => {
+  it("bộ gửi link TREO ⇒ /auth/link về 200 ngay (handler không gọi bộ gửi); job của nó hết hạn với lý do HANDLER_TIMEOUT; không log nào mang token", async () => {
+    // ~~Bản trước: `await viec()` không trần; bộ gửi treo ⇒ email CÓ THẬT treo vô hạn, email lạ về ngay.~~
+    // [sổ nợ 38] Handler HTTP không còn gọi bộ gửi — nó chỉ enqueue — nên một bộ gửi treo KHÔNG có cách
+    // nào chạm vào RTT của phản hồi. Cái còn có trần là JOB: runner cắt handler theo `handlerTimeoutMs`.
     await taoNguoi("treo@vidu.vn");
     const treo = { name: "bo-gui-treo", send: () => new Promise<void>(() => undefined) };
-    const s2 = createApiServer(
-      createDispatcher({ pool: apiPool, auditPool, services: { ...dv.services, loginLinkSender: treo }, afterCommitTimeoutMs: 200 }),
-    );
+    const dvTreo = { ...dv.services, loginLinkSender: treo };
+    const obTreo = outboxTest(apiPool, dvTreo, { handlerTimeoutMs: 200 });
+    const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dvTreo }));
     await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
     try {
       const truoc = logLoi.length;
@@ -426,9 +445,11 @@ describe("[review H2-7] việc sau commit có TRẦN thời gian", () => {
       });
       expect(res.status).toBe(200);
       expect(Date.now() - batDau).toBeLessThan(3000);
-      expect(logLoi.slice(truoc)).toHaveLength(1);
-      expect(logLoi[truoc]).toContain("sau-commit SauCommitQuaHan");
-      expect(logLoi[truoc]).not.toContain("treo@vidu.vn");
+      expect(logLoi.slice(truoc)).toHaveLength(0);
+      await obTreo.chay(orgA);
+      expect(obTreo.loi.map((b) => b.reason)).toEqual(["HANDLER_TIMEOUT"]);
+      // Không dòng log nào (của dispatcher lẫn runner test) mang email hay token.
+      expect(logLoi.slice(truoc).join("\n")).not.toContain("treo@vidu.vn");
     } finally {
       await new Promise<void>((xong) => s2.close(() => xong()));
     }

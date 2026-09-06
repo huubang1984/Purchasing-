@@ -101,6 +101,17 @@ function docHopThu(): TinHopThuDev[] {
     .map((t) => JSON.parse(readFileSync(join(hopThu, t), "utf8")) as TinHopThuDev);
 }
 
+/** [sổ nợ 38] Link ra đời SAU phản hồi, khi runner outbox của tiến trình được đánh thức: đợi tới khi hộp thư có `n` tin. */
+async function doiHopThu(n: number, hanMs = 5000): Promise<TinHopThuDev[]> {
+  const het = Date.now() + hanMs;
+  for (;;) {
+    const tin = docHopThu();
+    if (tin.length >= n) return tin;
+    if (Date.now() > het) throw new Error(`het ${hanMs}ms, hop thu co ${tin.length} tin, mong ${n}`);
+    await new Promise((x) => setTimeout(x, 50));
+  }
+}
+
 function base32Decode(s: string): Buffer {
   const BANG = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   let bits = 0;
@@ -203,7 +214,8 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     const r1 = await goi("POST", "/auth/link", { body: { orgId: org, email: "mua@vidu.vn" } });
     expect(r1.status).toBe(200);
     expect(r1.text).not.toMatch(/token/iu);
-    const tin = docHopThu();
+    expect(docHopThu(), "phản hồi về TRƯỚC khi link được gửi — handler không đợi bộ gửi").toHaveLength(0);
+    const tin = await doiHopThu(1);
     expect(tin).toHaveLength(1);
     const t0 = tin[0]!;
     if (t0.loai !== "LOGIN_LINK") throw new Error("tin dau tien phai la LOGIN_LINK");
@@ -265,7 +277,7 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
   it("route người mua bị từ chối quyền ghi sổ qua pool KIỂM TOÁN của composition (D5 trên tiến trình thật)", async () => {
     // Đăng nhập lại (token cũ đã tiêu thụ), rồi gọi một route ghi mà BUYER không có quyền.
     await goi("POST", "/auth/link", { body: { orgId: org, email: "mua@vidu.vn" } });
-    const tin = docHopThu().filter((t) => t.loai === "LOGIN_LINK");
+    const tin = (await doiHopThu(2)).filter((t) => t.loai === "LOGIN_LINK");
     const t = tin.at(-1)!;
     if (t.loai !== "LOGIN_LINK") throw new Error("phai la LOGIN_LINK");
     const token = new URL(t.duongLink).hash.slice(1);
