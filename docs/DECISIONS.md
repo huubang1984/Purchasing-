@@ -1938,3 +1938,62 @@ danh sách viết tay, sổ nợ 54 (một test "mọi hàm trigger có mặt tr
    NHANH, bucket tổ chức = 31; 300 địa chỉ khác /64 ⇒ lần 301 vẫn 200 nhưng CHẬM ≥ `treQuaTranMs`.
    **[H5-4]** `viec()` ném đồng bộ ⇒ `coHan` reject đúng lỗi, không `unhandledRejection`.
 
+## ADR-024 — Bộ đếm theo NGƯỜI GỌI nằm ngoài cây tenant: một bảng không `org_id`, không khoá ngoại; và danh sách ghim của hardening phải tự đối chiếu với thực tế
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.14)** · Đóng: sổ nợ 54, 55
+(hai phần chênh của review lượt 5) · Liên quan: ADR-013 (cô lập tổ chức), ADR-015 §5, ADR-018
+(pepper), ADR-022, ADR-023, migration `042`, review lượt 4 H4-5 và lượt 5 H5-3/H5-5; lượt 6 (H6-x,
+`evidence/security-reviews.md` §S1.14)
+
+### 1. Nợ 55 — vì sao bộ đếm người gọi phải RỜI khỏi `otp_rate_limits`
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Giữ hai bộ đếm (CSDL cho tổ chức thật, bộ nhớ cho tổ chức lạ) và chấp nhận oracle | Đúng thứ H5-3 vừa bác: hai bộ đếm RỜI cho cùng một khoá là một oracle chỉ cần MỘT lời gọi sau khi mồi. **Loại.** |
+| b | Bỏ khoá ngoại của `otp_rate_limits` | Bảng ấy còn ba kind theo ĐÍCH (số điện thoại, hộp thư). ADR-013 đòi `org_id` vào phép băm của chúng: không có nó, một bản sao lưu cho phép JOIN giữa hai tổ chức trên cùng tập nhà cung cấp. Bỏ khoá ngoại là nới lỏng đúng chỗ không được nới. **Loại.** |
+| c | **Bảng RIÊNG `caller_rate_limits`: không `org_id`, không khoá ngoại, khoá `HMAC(pepper, "LOGIN_CALLER_TOAN_CUC" ‖ route ‖ ip)`** | Khoá của bucket này là *route* + *địa chỉ KẺ GÕ CỬA* — không mang bí mật xuyên tổ chức nào, nên `org_id` ở đó chỉ mua một oracle. Tổ chức thật và tổ chức lạ tăng CÙNG MỘT HÀNG ⇒ 429 không phân biệt được hai ca. **Chọn.** |
+
+**Ba hệ quả được nói ra, không giấu:**
+- **Bảng đầu tiên ngoài cây tenant mà `app_api` GHI được.** `roles`/`permissions`/`role_permissions`
+  cũng ngoài cây tenant nhưng chỉ đọc. Mọi lớp canh "bảng tenant" của dự án (`VI_TU_BANG_TENANT` của
+  hardening, hai danh sách ghim ở `db/`) đọc theo cột `org_id`, nên bảng này nằm NGOÀI chúng — và
+  một phép đo từng giả định "bật RLS ⇒ thuộc cây tenant" đã phải sửa (`db/migrations.int.test.ts`,
+  ca R3 dựng lại policy sau `DROP … CASCADE`).
+- **Policy DUY NHẤT là "mọi hàng, trừ phiên KHÁCH".** `USING (true)` là đúng hình dạng
+  `db/migration-shape.test.ts` cấm — nó không phân biệt được với một lần quên. Vế thật sự có nghĩa ở
+  đây là vế khách (khoản nợ 29), nên nó là policy chứ không phải một lớp thứ hai.
+- **Số hàng do người gọi VÔ DANH quyết** — khác `otp_rate_limits`, nơi khoá ngoại buộc phải có một
+  tổ chức thật. Đường bịt là DỌN: `app_api` có DELETE mức bảng, tiến trình `api` chạy
+  `donBucketNguoiGoiCu` mỗi 5 phút (`setInterval` có `unref`, lỗi chỉ ghi TÊN), xoá mọi cửa sổ cũ
+  hơn HAI cửa sổ — không bao giờ chạm cửa sổ đang đếm. Giữa hai lần dọn, một kẻ xoay /64 vẫn tạo
+  được hàng; hàng nhỏ và cửa sổ 15 phút, đó là phần chênh còn lại.
+
+**Bucket TOÀN TỔ CHỨC (`orgLimit`, nợ 52) Ở LẠI `otp_rate_limits`:** nó đúng là chuyện của một tổ
+chức. Tổ chức lạ không có nó (23503, bỏ qua) — và điều đó không mở lại oracle vì mã trạng thái của
+hai ca đã do bucket toàn cục quyết trước; phần chênh còn lại là một giao dịch lỗi, tức THỜI GIAN.
+Hai bucket vì thế là HAI giao dịch: bucket toàn cục không được rollback theo lỗi khoá ngoại của
+bucket kia.
+
+### 2. Nợ 54 — một danh sách viết tay phải có lớp đối chiếu với thực tế
+
+Hardening ghim thân hàm trigger theo danh sách viết tay. Hai lượt liền, danh sách ấy thiếu đúng thứ
+vừa được thêm (H4-7 rồi H5-5) và không lớp nào kêu — vì không có gì so danh sách với CSDL. Nay có:
+tập hàm `RETURNS trigger` trong `public` phải bằng ĐÚNG *(hàm hardening có canh)* ∪ *(danh sách loại
+trừ có lý do)*, hai tập rời nhau. Tập thứ nhất **đọc thẳng từ `hardening.always.sql`** (mọi
+`to_regprocedure('public.X()')`) — viết tay ở đây là dựng lại đúng cái mù vừa đóng.
+
+**"Loại trừ" ở đây nghĩa là CHƯA GHIM, không phải KHÔNG CẦN GHIM.** Cả 35 hàm còn lại canh một bất
+biến thật ở CSDL và thuộc cùng lớp trôi R3; mỗi hàm có một dòng nói nó canh gì, và cả lớp là **sổ nợ
+56**. Cùng vòng: 19 trigger danh tính của `kiem_danh_tinh_theo_phien` (nằm rải bảy migration) được
+ghim định nghĩa, mỗi cái có điều kiện `to_regclass(<bảng>) IS NOT NULL` và ghim `tgenabled = 'O'` —
+trạng thái THẬT của chúng, không phải trạng thái mong muốn.
+
+### Đo bằng gì
+
+1. **55:** mồi N lần vào hai UUID lạ rồi gọi `orgId` THẬT ⇒ 429 với CÙNG thân (RED thật: trước vòng
+   này là 200); địa chỉ khác ⇒ 200 cho cả tổ chức lạ lẫn tổ chức thật; hàng nằm ở CSDL (đếm được từ
+   pool khác); phiên khách đọc 0 hàng và ghi ⇒ 42501; bộ dọn xoá cửa sổ cũ ba giờ và GIỮ cửa sổ đang
+   đếm; băm mang pepper và không đụng hàng nào của `otp_rate_limits`.
+2. **54:** thêm một hàm `RETURNS trigger` vào một migration tạm ⇒ test ĐỎ ngay và nêu tên hàm; DROP
+   một trong 19 trigger danh tính ⇒ `migrate()` khôi phục đúng định nghĩa và đúng `tgenabled = 'O'`.
+

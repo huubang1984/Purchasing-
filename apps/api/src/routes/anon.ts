@@ -16,6 +16,7 @@ import {
   verifyOtpAndStartSession,
   type Channel,
 } from "@trustprocure/invitation";
+import { khoaNguoiGoi } from "../dia-chi.js";
 import { HttpError } from "../http.js";
 import type { AnonRoute } from "../route-types.js";
 
@@ -91,7 +92,9 @@ export const ROUTES_ANON: readonly AnonRoute[] = [
       const kq = await issueOtpChallenge(ctx.client, ctx.orgId, {
         token,
         channel,
-        callerFingerprint: ctx.req.remoteAddress,
+        // [review H6-5] CHUẨN HOÁ trước khi băm: địa chỉ thô cho IPv6 2^64 bucket miễn phí —
+        // đúng thứ H4-4 đã sửa ở dispatcher, và đường này không đi qua chỗ sửa ấy.
+        callerFingerprint: khoaNguoiGoi(ctx.req.remoteAddress),
         pepper: ctx.services.pepper,
       });
       if (!kq.ok) {

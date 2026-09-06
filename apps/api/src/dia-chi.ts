@@ -50,6 +50,16 @@ export const TIEN_TO_TOI_THIEU = { ipv4: 8, ipv6: 7 } as const;
  * (một NAT văn phòng là một địa chỉ — trần theo route phải đủ rộng cho nó, `auth.ts`). Địa chỉ không
  * phải IP (rỗng, hỏng) trả về nguyên văn — dispatcher đã coi đó là MỘT bucket chung, fail-closed.
  */
+/**
+ * [review H6-1] Địa chỉ có phân giải được thành một IP không. Trước nợ 55, một địa chỉ không phân
+ * giải được rơi vào "MỘT bucket chung" và đó là fail-closed vì bucket ấy thuộc về MỘT tổ chức. Từ
+ * 042 bucket là toàn cục, nên cùng cái bucket chung ấy là fail-OPEN ở trục sẵn sàng: mọi lời gọi
+ * không đọc được địa chỉ, của mọi tổ chức, chia nhau một trần. Dispatcher vì thế TỪ CHỐI thay vì gộp.
+ */
+export function diaChiPhanGiaiDuoc(dc: string): boolean {
+  return isIP(chuanHoaDiaChi(dc)) !== 0;
+}
+
 export function khoaNguoiGoi(dc: string): string {
   const s = chuanHoaDiaChi(dc);
   if (isIP(s) !== 6) return s;
