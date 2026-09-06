@@ -1271,8 +1271,8 @@ describe("lược đồ 006", () => {
       await chayRieng(
         apiPool,
         orgA,
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
-          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour')",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
         [orgA, nguoiB, randomBytes(32)],
       ),
     ).toMatch(/foreign key constraint/i);
@@ -1290,8 +1290,8 @@ describe("lược đồ 006", () => {
       await chayRieng(
         apiPool,
         orgA,
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
-          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour')",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
         [orgA, nguoiA, randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
@@ -1341,8 +1341,8 @@ describe("lược đồ 006", () => {
       await withTenant(apiPool, org, async (c) => {
         await expect(
           c.query(
-            "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
-              "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour')",
+            "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+              "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
             [org, nguoi, bam],
           ),
         ).resolves.toMatchObject({ rowCount: 1 });
@@ -1359,13 +1359,10 @@ describe("lược đồ 006", () => {
           "VALUES (gen_random_uuid(), $1, $2, $3, clock_timestamp() + interval '1 hour')",
         [orgA, nguoiA, randomBytes(32)],
       ],
-      // `mfa_verified_at` không được INSERT -> phiên không ra đời ở trạng thái "đã xác thực".
-      [
-        "sessions.mfa_verified_at (INSERT)",
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
-          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32)],
-      ],
+      // ~~`mfa_verified_at` không được INSERT -> phiên không ra đời ở trạng thái "đã xác thực".~~
+      // [ADR-020 mục 2 / 029] ĐẢO NGƯỢC: app_api nay PHẢI INSERT `mfa_verified_at` (trigger
+      // `sessions_kiem_mfa_khi_tao` từ chối hàng thiếu nó). Câu Task 9 giữ nguyên văn ở trên; phép đo
+      // mới nằm ở khối `[029]` của apps/api/src/auth.int.test.ts và ở test mfa_verified_at bên dưới.
       // `last_used_counter` không được INSERT -> không chiếm trước bộ đếm dùng-một-lần.
       [
         "mfa_credentials.last_used_counter (INSERT)",
@@ -1395,8 +1392,8 @@ describe("lược đồ 006", () => {
       await chayRieng(
         apiPool,
         orgA,
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) " +
-          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour')",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
         [orgA, nguoiA, randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
@@ -1500,17 +1497,17 @@ describe("lược đồ 006", () => {
     for (const [mo_ta, cau, tham] of [
       [
         "token_hash không đủ 32 byte",
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour')",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
         [orgA, nguoiA, randomBytes(16)],
       ],
       [
         "expires_at không sau created_at",
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, clock_timestamp() - interval '1 hour')",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, clock_timestamp() - interval '1 hour', clock_timestamp())",
         [orgA, nguoiA, randomBytes(32)],
       ],
       [
         "user_agent vượt trần 512 byte",
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent) VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4)",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent, mfa_verified_at) VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4, clock_timestamp())",
         [orgA, nguoiA, randomBytes(32), "x".repeat(513)],
       ],
     ] as const) {
@@ -1523,8 +1520,8 @@ describe("lược đồ 006", () => {
       await chayRieng(
         apiPool,
         orgA,
-        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent) " +
-          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4)",
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent, mfa_verified_at) " +
+          "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4, clock_timestamp())",
         [orgA, nguoiA, randomBytes(32), "x".repeat(512)],
       ),
     ).toBe("THÀNH CÔNG");
@@ -1594,6 +1591,7 @@ describe("quyền trên hai bảng mới, đo không mù", () => {
       { bang: "sessions", cot: "expires_at", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "id", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "ip", ai: "app_api", quyen: "INSERT" },
+      { bang: "sessions", cot: "mfa_verified_at", ai: "app_api", quyen: "INSERT" }, // [029]
       { bang: "sessions", cot: "mfa_verified_at", ai: "app_api", quyen: "UPDATE" },
       { bang: "sessions", cot: "mfa_verified_at", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "org_id", ai: "app_api", quyen: "INSERT" },

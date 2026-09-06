@@ -41,6 +41,9 @@ importers:
       '@trustprocure/bidding':
         specifier: workspace:*
         version: link:../../packages/bidding
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../../packages/crypto-keys
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity
@@ -59,6 +62,9 @@ importers:
       '@trustprocure/tenancy':
         specifier: workspace:*
         version: link:../../packages/tenancy
+      '@trustprocure/unseal':
+        specifier: workspace:*
+        version: link:../../packages/unseal
       pg:
         specifier: ^8.13.0
         version: 8.23.0

@@ -199,8 +199,8 @@ suy yếu chính bất biến A2.
 
 ## ADR-008 — Một lần thử MFA thất bại KHÔNG ghi vào sổ kiểm toán chuỗi-hash
 
-**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, **có nợ bắt buộc trả trước khi có
-endpoint đăng nhập**
+**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, ~~**có nợ bắt buộc trả trước khi có
+endpoint đăng nhập**~~ **nợ ĐÃ TRẢ 2026-09-06 (S1.10.4) bằng phương án (ii)** — xem cuối ADR
 
 **Bối cảnh.** `verifyTotpAttempt` (`packages/identity/src/mfa-credentials.ts`) phán xét một
 mã TOTP trên một đường đi mà **kẻ tấn công chưa đăng nhập vẫn chạm tới được**. Task 8 lập
@@ -241,6 +241,14 @@ dấu vết, nhưng ba tính chất làm nó không thay được sổ, cả ba 
 **Nợ phải trả TRƯỚC KHI có endpoint đăng nhập.** Chọn (i) hoặc (ii) và cài đặt. Trạng thái
 hôm nay — "không ghi gì, và có một trường `justLocked` không ai gọi" — là một quyết định
 đúng về chuỗi hash cộng một khoảng trống chưa lấp, không phải một thiết kế đã xong.
+
+**[2026-09-06 — ĐÃ TRẢ, phương án (ii).** `verifyTotpForLogin` (`packages/identity/src/login.ts`)
+gọi `verifyTotpAttempt` rồi, khi `justLocked`, ghi đúng MỘT bản ghi `MFA_LOCKED` (actor USER, resource
+`MFA_CREDENTIAL`, payload `lockedUntil`) vào chuỗi hash. Tần suất bị chặn trên `1 / MFA_LOCKOUT_SECONDS`
+mỗi hồ sơ nên lập luận DoS ở trên không áp dụng. Đo qua HTTP ở `apps/api/src/auth.int.test.ts`
+[INV-E3]: sai `MFA_MAX_FAILED_ATTEMPTS` lần ⇒ đúng một bản ghi; lần sai kế tiếp (đã khoá) không ghi
+thêm; đột biến gỡ dòng ghi ⇒ test ĐỎ. Endpoint đăng nhập (`POST /auth/totp`) ra đời CÙNG commit —
+đúng thứ tự khoản nợ đòi.**
 
 **Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
 chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`

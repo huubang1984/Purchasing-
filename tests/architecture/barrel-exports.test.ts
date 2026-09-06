@@ -192,6 +192,19 @@ const DANH_SACH_TRANG_IDENTITY = [
   "resolveSessionActor",
   // [ADR-020 / S1.10.2] cookie -> phien, bang bam. Cung tieu chi voi resolveSessionActor.
   "resolveSessionByToken",
+  // [ADR-020 muc 2 / S1.10.4] nua PHAT cua khoan no 6: token dang nhap, TOTP cho dang nhap
+  // (tra no ADR-008 phuong an ii), phien DA MFA, dang xuat. Khong ham nao nhan userId lam
+  // loi khai — userId DAN XUAT tu token.
+  "LOGIN_MAX_TOKENS_PER_WINDOW",
+  "LOGIN_RATE_WINDOW_SECONDS",
+  "LOGIN_TOKEN_TTL_SECONDS",
+  "LoginTokenError",
+  "USER_SESSION_DEFAULT_TTL_SECONDS",
+  "issueLoginToken",
+  "redeemLoginToken",
+  "revokeSession",
+  "startUserSession",
+  "verifyTotpForLogin",
   "verifyTotpAttempt",
 ];
 

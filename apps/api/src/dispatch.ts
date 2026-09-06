@@ -62,9 +62,10 @@ import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
+import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 
-export const COOKIE_PHIEN_NGUOI_MUA = "tp_session";
+export { COOKIE_PHIEN_NGUOI_MUA };
 
 export interface DispatcherDeps {
   /** Pool chạy dưới `app_api`. */
@@ -84,6 +85,8 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   "SupplierError",
   "RfqError",
   "InvitationError",
+  // [S1.10.4] token đăng nhập hỏng/hết hạn/đã dùng — cùng lớp với InvitationError của khách.
+  "LoginTokenError",
   "BiddingError",
   "ReceiptError",
   "SealedEnvelopeError",
@@ -126,12 +129,32 @@ function timRoute(
   return cungDuong ? { status: 405, body: THAN_405 } : { status: 404, body: THAN_404 };
 }
 
+/**
+ * Lỗi Postgres mang SQLSTATE — và ở dự án này, lớp 23 (toàn vẹn) chính là nơi LỚP CSDL nói "không":
+ * trigger máy trạng thái, phân tách nhiệm vụ, ràng buộc duy nhất. Chúng là câu trả lời nghiệp vụ,
+ * không phải sự cố. Ánh xạ HẸP, theo mã, và chỉ để lộ thông điệp cho `check_violation` (23514) —
+ * thông điệp ấy do migration VIẾT, không nội suy dữ liệu người dùng; các mã còn lại đi ra với thân
+ * cố định. Mọi mã khác (kể cả 42xxx cú pháp, 08xxx kết nối) là 500 câm — đó là lỗi của chúng ta.
+ */
+function anhXaLoiPostgres(err: Error & { code?: unknown }): ApiResponse | null {
+  const code = typeof err.code === "string" ? err.code : "";
+  if (code === "23514") return { status: 422, body: { error: err.message } };
+  if (code === "23505") return { status: 409, body: { error: "xung dot du lieu" } };
+  if (code === "23503") return { status: 422, body: { error: "tham chieu khong hop le" } };
+  if (code === "42501") return { status: 403, body: THAN_403 };
+  return null;
+}
+
 function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
   if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
   if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
   if (err instanceof MfaRequiredError) return { status: 401, body: THAN_401 };
   if (err instanceof Error && LOI_NGHIEP_VU_422.has(err.name)) {
     return { status: 422, body: { error: err.message } };
+  }
+  if (err instanceof Error && err.name === "error" && "code" in err) {
+    const pg = anhXaLoiPostgres(err as Error & { code?: unknown });
+    if (pg !== null) return pg;
   }
   // Chỉ TÊN lỗi và mã yêu cầu. Không `err` nguyên, không `cause`: `cause` của một lỗi Postgres
   // mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
@@ -178,7 +201,8 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             } catch (e) {
               throw new LoiXacThuc({ cause: e });
             }
-            if (route.mutates) {
+            // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
+            if (route.mutates && route.self !== true) {
               await requirePermission(
                 client,
                 {
@@ -192,7 +216,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 deps.auditPool,
               );
             }
-            return route.handler({ req, orgId: cookie.orgId, client, actor });
+            return route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services });
           });
         }
 
@@ -226,8 +250,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       }
     } catch (err) {
       if (err instanceof LoiXacThuc) return { status: 401, body: THAN_401 };
-      // `withTenant` ném TenantError cho một orgId không tồn tại hoặc một phiên khách hỏng —
-      // cả hai thuộc giai đoạn xác thực, không phải lỗi handler. `SessionInvalidError` và
+      // `withTenant` ném TenantError cho một orgId SAI HÌNH DẠNG (nó KHÔNG tra `organizations` —
+      // một orgId lạ nhưng đúng UUID đi qua và RLS lọc thành 0 hàng), và `withGuestSession` ném
+      // TenantError cho một phiên khách hỏng — cả hai thuộc giai đoạn xác thực, không phải lỗi handler. `SessionInvalidError` và
       // `InvitationError` KHÔNG bao giờ tới đây từ giai đoạn 1 (đã bọc), nên nếu thấy chúng thì
       // đó là lỗi nghiệp vụ của handler và rơi vào bảng 422 ở dưới.
       if (err instanceof TenantError) return { status: 401, body: THAN_401 };

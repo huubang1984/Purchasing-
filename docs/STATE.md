@@ -4,8 +4,8 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (**S1.10.3 — đường khách qua HTTP — ĐÃ CÓ MÃ**, xem *Hành động tiếp
-theo* mục 17; S1.10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+**Cập nhật lần cuối:** 2026-09-06 (**S1.10.5 — route nghiệp vụ người mua — ĐÃ CÓ MÃ**, xem *Hành động
+tiếp theo* mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -809,6 +809,79 @@ CMK, chưa có role nào được tạo.
     lời mời 75/75; db 119/119 sau khi ba danh sách migration mong đợi nhận `028`. Độ phủ **đứng yên
     50/51** — đúng: 10.3 không lấp mã nào, nó cho E1/E2/E5/A5/B1/B2 một phép đo THỨ HAI qua HTTP.
     Còn lại: 10.4 ⭐, 10.5, 10.6, 10.7.
+
+18. **[2026-09-06] S1.10.4 ĐÃ CÓ MÃ — đăng nhập người mua theo ADR-020 mục 2 (magic link email +
+    TOTP, không mật khẩu), và HAI khoản nợ có tên đóng cùng lượt: nợ 6 (nửa PHÁT) và nợ ADR-008.**
+    Migration `029`: bảng `user_login_tokens` (cùng khuôn `rfq_invitation_tokens`, có policy `_khach`
+    đóng vì lớp canh ở `tests/adversarial/a5-*` đòi), `GRANT INSERT (mfa_verified_at)` cho `app_api`
+    và trigger `sessions_kiem_mfa_khi_tao`: **một hàng `sessions` do `app_api` chèn phải đã MFA** —
+    không có "đăng nhập nửa chừng" trong bảng. Trigger cố ý điều kiện theo `current_user`, khác
+    các trigger 011/013, vì hàng thiếu MFA là trạng thái hợp lệ cho test/vận hành; điều bị cấm là
+    ỨNG DỤNG tạo ra nó. `packages/identity/src/login.ts`: `issueLoginToken` (không ném khi không có
+    người dùng — để route không thể lỡ tay phân biệt), `redeemLoginToken`, `verifyTotpForLogin`
+    (ghi `MFA_LOCKED` khi `justLocked` — ADR-008 phương án ii), `startUserSession` (tiêu thụ token
+    + chèn phiên đã MFA trong CÙNG giao dịch), `revokeSession`. Bốn route: `POST /auth/link`,
+    `/auth/redeem` (ghi danh TOTP lần đầu, bí mật base32 về client ĐÚNG MỘT LẦN), `/auth/totp`
+    (cookie `tp_session`), `/auth/logout` — route "tự thân" (`self: true`, không mã quyền, lớp
+    canh chỉ cho phép dưới `/auth/*`).
+
+    **Số đo:** `auth.int.test.ts` 9/9 — không liệt kê email (đúng/lạ/đình chỉ cùng một 200, token
+    chỉ tới bộ gửi); hạn mức 5 token/15 phút mỗi người; E2 (token nhét cookie ⇒ 401, redeem không
+    mở phiên); E6 (token và bí mật TOTP không có trong log, kể cả khi ép một 500); E1 (replay ⇒
+    422, không hàng phiên nào thiếu MFA); E3 (5 lần sai ⇒ khoá, ĐÚNG MỘT `MFA_LOCKED`, lần sau
+    không ghi thêm); đăng xuất; `[029]` app_api không chèn được phiên thiếu MFA, superuser chèn
+    được, gỡ trigger ⇒ đi lọt. Đột biến gỡ dòng ghi `MFA_LOCKED` ⇒ [INV-E3] ĐỎ (`expected 0 to be
+    1`). `pnpm t0` 152 module / 0 vi phạm; `pnpm test` 491/491; ba bộ api 28/28; db + mfa 177/177.
+
+    **Hai câu cũ bị 029 ĐẢO NGƯỢC, gạch tại chỗ chứ không xoá:** ⑴ Task 9 (rls-coverage, mfa.int)
+    ghi *"`mfa_verified_at` KHÔNG INSERT — trạng thái đã xác thực hai lớp phải tới bằng một câu
+    lệnh riêng"*; ADR-020 đòi điều ngược lại và mạnh hơn (không tồn tại hàng nửa chừng), nên hai
+    test đổi kỳ vọng kèm chú thích. ⑵ ADR-008 *"có nợ bắt buộc trả trước endpoint đăng nhập"* —
+    trả trong cùng commit với endpoint ấy.
+
+    **Hai thứ tìm ra bằng cách CHẠY:** ⑴ `a > b - c` viết bằng `OPERATOR(pg_catalog.x)` là
+    `(a > b) - c` — mọi OPERATOR() cùng độ ưu tiên và kết hợp trái; `boolean - interval` (42883) ở
+    `issueLoginToken` lượt đầu; nay có ngoặc và chú thích tại chỗ. ⑵ `LoginTokenError` chưa nằm
+    trong bảng lỗi 422 của dispatcher nên replay token cho 500 thay vì 422 — thêm vào danh sách
+    đóng. Phần chênh còn lại của 10.4: bí mật TOTP đi về client base32 trong MỘT phản hồi (đúng
+    điều `generateTotpSecret` đòi) — ai mất bí mật chưa xác nhận thì KHÔNG có đường tự phục vụ;
+    không hạn mức theo IP cho `/auth/link` (chỉ theo người dùng); adapter bọc/mở bí mật TOTP thật
+    (KMS, CMK riêng — `apps/api` bị `g1-` cấm `crypto-keys/unwrap`) chưa có, test dùng AES-GCM.
+    Còn lại: 10.5, 10.6, 10.7 (security-reviewer đang chạy cho 10.3 + 10.4).
+
+19. **[2026-09-06] S1.10.5 ĐÃ CÓ MÃ — toàn bộ vòng đời phía người mua của kịch bản mục 41 qua HTTP,
+    và một phép quét làm H17 thành mệnh đề "với MỌI route".** Migration `030`: mã quyền
+    `policy.manage` cho `PROCUREMENT_MANAGER` (ADR-017 để ngỏ, chốt cùng ADR-020; `ma-tran-quyen.test`
+    đòi TypeScript khớp nguyên văn bảng `permissions`, hai bên đổi cùng commit). `routes/buyer.ts`:
+    10 route đọc (trong đó `comparison`/`bid-count` là đường đọc CÓ CỔNG — gói tự gọi
+    `requirePermission(BID_VIEW)`, route chỉ đưa `auditPool`) và 18 route ghi, mỗi route một mã
+    quyền, `resourceId` đọc từ ĐƯỜNG DẪN. `BuyerContext` nay có `auditPool` + `services` (khách cố
+    ý không có pool nào); `ApiServices` thêm `rfqKeyWrapper` (cửa BỌC của crypto-keys — cửa MỞ thì
+    `g1-` cấm) và `invitationLinkSender` (đích đọc từ `supplier_contacts`, token không về client).
+
+    **Số đo (`buyer.int.test.ts` 4/4):** ⑴ **[INV-H17] QUÉT** — mọi route ghi trong `ROUTES`
+    (18, trừ route tự thân) gọi bằng một phiên KHÔNG có vai trò ⇒ 403 tất cả, và `PERMISSION_DENIED`
+    tăng ĐÚNG 18; ⑵ vòng đời: chính sách (BUYER 403) → NCC + liên hệ → RFQ 1 tỷ → hạng mục → ngân
+    sách (`requiresDualApproval: true`) → nộp → duyệt: BUYER 403, PM2 200, PM2 lần hai **409**
+    (UNIQUE `rfq_approvals_mot_nguoi_mot_lan`), mở với một phê duyệt 422, PM3 200 → mở: BUYER 403,
+    PM 200 và **[INV-C5]** khoá xuất hiện sau, không trước → mời: token tới bộ gửi với đích
+    `ban@thepviet.vn`, không trong phản hồi → gia hạn → đóng → thu hồi lời mời → **[INV-A4]** bảng
+    so sánh 422 khi CLOSED chưa mở thầu → yêu cầu mở thầu (DIRECTOR) → người yêu cầu tự duyệt 422 →
+    hai giám đốc khác duyệt → điều phối 200 = ĐÚNG MỘT `outbox_jobs` `UNSEAL_RFQ`, và bảng so sánh
+    vẫn 422 sau điều phối (chưa UNSEALED). ⑶ huỷ: BUYER 403, thiếu lý do 422, PM 200; tham số đường
+    dẫn không phải UUID ⇒ 404.
+
+    **Một thứ tìm ra bằng cách CHẠY:** lớp CSDL nói "không" bằng SQLSTATE lớp 23 (61 chỗ
+    `check_violation`, 3 `foreign_key_violation`, 1 `insufficient_privilege` trong migration) và
+    bằng ràng buộc UNIQUE — bộ điều phối trước đó đọc chúng thành **500 câm**. Nay ánh xạ HẸP theo
+    mã: 23514 ⇒ 422 kèm thông điệp (do migration VIẾT, không nội suy dữ liệu người dùng); 23505 ⇒
+    409 thân cố định; 23503 ⇒ 422 thân cố định; 42501 ⇒ 403. Mọi mã khác vẫn 500 câm.
+
+    **Review an ninh cho 10.3 + 10.4 đã về:** 0 CRITICAL, 0 HIGH, **8 MEDIUM, 8 LOW** — sổ nợ và
+    `evidence/security-reviews.md` nhận ở 10.7. Hai thứ reviewer bắt được mà lượt viết không thấy:
+    test `[INV-E6]` "bí mật không vào log" của `auth.int.test.ts` là phép đo RỖNG (đường 500 không
+    chạy — ép bằng `code: 123456` chỉ cho 422); và chú thích ở `dispatch.ts` nói `withTenant` tra
+    `organizations` — sai, nó chỉ kiểm hình dạng UUID (đã sửa chú thích). Còn lại: 10.6, 10.7.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

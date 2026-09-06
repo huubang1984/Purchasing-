@@ -18,7 +18,8 @@
 
 import type pg from "pg";
 import type { ReceiptSigner } from "@trustprocure/bidding";
-import type { Permission, SessionActor } from "@trustprocure/identity";
+import type { KeyWrapper } from "@trustprocure/crypto-keys";
+import type { Permission, SessionActor, TotpSecretUnsealer, WrappedTotpSecret } from "@trustprocure/identity";
 import type { Channel, PepperRing } from "@trustprocure/invitation";
 import type { ApiRequest, ApiResponse, HttpMethod } from "./http.js";
 
@@ -30,11 +31,45 @@ export interface OtpSender {
   send(input: { readonly channel: Channel; readonly destination: string; readonly code: string }): Promise<void>;
 }
 
-/** Ba thứ có KHOÁ hoặc có TÁC DỤNG PHỤ mà handler cần và không được tự tạo. */
+/** Bộ gửi link đăng nhập người mua — cùng khuôn `OtpSender`: token đi tới đây, không về client. */
+export interface LoginLinkSender {
+  readonly name: string;
+  send(input: { readonly orgId: string; readonly email: string; readonly token: string }): Promise<void>;
+}
+
+/**
+ * Bộ BỌC bí mật TOTP lúc ghi danh — cặp với `TotpSecretUnsealer` của identity. Cả hai là adapter
+ * TIÊM vào: `apps/api` KHÔNG được import `@trustprocure/crypto-keys/unwrap` (họ `g1-`), nên adapter
+ * thật là một lời gọi KMS trên một CMK RIÊNG cho TOTP — không phải CMK của khoá RFQ (ADR-006/009).
+ */
+export interface TotpSecretWrapper {
+  readonly name: string;
+  wrapTotpSecret(orgId: string, secret: Uint8Array): Promise<WrappedTotpSecret>;
+}
+
+/** Bộ gửi magic link mời thầu — đích ĐỌC TỪ `supplier_contacts`, token không về client. */
+export interface InvitationLinkSender {
+  readonly name: string;
+  send(input: {
+    readonly orgId: string;
+    readonly invitationId: string;
+    readonly channel: Channel;
+    readonly destination: string;
+    readonly token: string;
+  }): Promise<void>;
+}
+
+/** Những thứ có KHOÁ hoặc có TÁC DỤNG PHỤ mà handler cần và không được tự tạo. */
 export interface ApiServices {
+  /** Bọc khoá riêng RFQ lúc `openRfq` (ADR-019) — cửa BỌC của crypto-keys; cửa MỞ thì apps/api không có. */
+  readonly rfqKeyWrapper: KeyWrapper;
+  readonly invitationLinkSender: InvitationLinkSender;
   readonly pepper: PepperRing;
   readonly otpSender: OtpSender;
   readonly receiptSigner: ReceiptSigner;
+  readonly loginLinkSender: LoginLinkSender;
+  readonly totpSecretWrapper: TotpSecretWrapper;
+  readonly totpSecretUnsealer: TotpSecretUnsealer;
 }
 
 export interface PublicContext {
@@ -76,6 +111,13 @@ export interface BuyerContext {
   readonly orgId: string;
   readonly client: pg.PoolClient;
   readonly actor: SessionActor;
+  /**
+   * Pool ĐỘC LẬP cho sổ kiểm toán — hợp đồng của `requirePermission`/`requestUnseal`/… (D5: một lần
+   * từ chối phải sống qua rollback của người gọi). Chỉ route NGƯỜI MUA có nó; route khách cố ý
+   * KHÔNG — handler khách không được cầm một pool nào (A5 §4).
+   */
+  readonly auditPool: pg.Pool;
+  readonly services: ApiServices;
 }
 
 interface RouteBase {
@@ -108,9 +150,21 @@ export interface BuyerReadRoute extends RouteBase {
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
+/**
+ * Route ghi TỰ THÂN của người mua: đổi trạng thái của CHÍNH phiên đang gọi (đăng xuất), không chạm
+ * dữ liệu nghiệp vụ, nên không có mã quyền nào mô tả nó. Chỉ được ở `/auth/*` — lớp canh ở dưới.
+ */
+export interface BuyerSelfRoute extends RouteBase {
+  readonly audience: "BUYER";
+  readonly mutates: true;
+  readonly self: true;
+  readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
+}
+
 export interface BuyerWriteRoute extends RouteBase {
   readonly audience: "BUYER";
   readonly mutates: true;
+  readonly self?: false;
   /** Mã quyền — bộ điều phối gọi `requirePermission` TRƯỚC handler. */
   readonly permission: Permission;
   /** Đi thẳng vào `resource_type` của sổ kiểm toán: MÃ ĐỊNH DANH viết hoa (xem `rbac.ts`). */
@@ -120,7 +174,7 @@ export interface BuyerWriteRoute extends RouteBase {
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
-export type Route = PublicRoute | AnonRoute | GuestRoute | BuyerReadRoute | BuyerWriteRoute;
+export type Route = PublicRoute | AnonRoute | GuestRoute | BuyerReadRoute | BuyerSelfRoute | BuyerWriteRoute;
 
 // ----------------------------------------------------------------------------------------------
 // LỚP CANH DƯỚI DẠNG HÀM THUẦN — để test đo được nó trên một bảng GIẢ, không chỉ trên `ROUTES`.
@@ -178,7 +232,11 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     if (r.audience !== "PUBLIC" && r.audience !== "ANON" && r.method !== "GET" && !r.mutates) {
       viPham.push(`${khoa}: phương thức ghi mà khai mutates:false — hoặc sai phương thức, hoặc đang trốn cổng quyền`);
     }
-    if (r.audience === "BUYER" && r.mutates) {
+    if (r.audience === "BUYER" && r.mutates && r.self === true) {
+      if (!r.path.startsWith("/auth/")) {
+        viPham.push(`${khoa}: route TỰ THÂN (self) ngoài /auth/* — một route ghi không có mã quyền chỉ được là đăng xuất`);
+      }
+    } else if (r.audience === "BUYER" && r.mutates) {
       // Ép về `string`: kiểu nói `permission` là một `Permission`, nhưng một bảng đến từ JSON thì không.
       if (typeof r.permission !== "string" || (r.permission as string) === "") {
         viPham.push(`${khoa}: route ghi của người mua KHÔNG khai mã quyền [INV-H17]`);

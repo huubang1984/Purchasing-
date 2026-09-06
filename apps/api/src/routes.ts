@@ -7,8 +7,16 @@
 // ==============================================================================================
 import type { Route } from "./route-types.js";
 import { ROUTES_ANON } from "./routes/anon.js";
+import { ROUTES_AUTH, ROUTES_AUTH_SELF } from "./routes/auth.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
 import { ROUTES_GUEST } from "./routes/guest.js";
 import { ROUTES_PUBLIC } from "./routes/public.js";
 
-export const ROUTES: readonly Route[] = [...ROUTES_PUBLIC, ...ROUTES_ANON, ...ROUTES_GUEST, ...ROUTES_BUYER];
+export const ROUTES: readonly Route[] = [
+  ...ROUTES_PUBLIC,
+  ...ROUTES_ANON,
+  ...ROUTES_AUTH,
+  ...ROUTES_GUEST,
+  ...ROUTES_BUYER,
+  ...ROUTES_AUTH_SELF,
+];
