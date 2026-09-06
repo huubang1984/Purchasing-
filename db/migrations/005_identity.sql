@@ -465,6 +465,10 @@ ALTER TABLE user_roles ENABLE ALWAYS TRIGGER user_roles_phan_tach_nhiem_vu;
 -- gác đầu tiên viết bằng nó TỪ CHỐI TẤT CẢ cho tới khi một migration đánh số MỚI quyết định.
 -- Dư lượng còn lại, nói thẳng: cho tới khi màn hình đó tồn tại VÀ gọi requirePermission('role.grant'),
 -- [A3b] VẪN ĐÚNG. Có test khẳng định đúng điều đó, để nó không im lặng biến mất khỏi hồ sơ.
+-- [033 / sổ nợ 44, 2026-09-06] Khe hở HẸP LẠI, chưa đóng: `policy.manage` chuyển sang FINANCE và
+-- trigger `user_roles_nguong_khong_cung_tay` chặn một người giữ nó cùng rfq.create/rfq.approve —
+-- nên ca "BUYER tự gán FINANCE" ở trên nay -> 42501. Ca còn lọt (và test [A3b] nay đo ca ấy):
+-- BUYER tự gán PROCUREMENT_MANAGER -> OK, quyền mới: rfq.approve, rfq.unseal, bid.view, ...
 GRANT SELECT ON user_roles TO app_api;
 -- INSERT theo CỘT, không theo bảng: `granted_at` đã có DEFAULT và là dấu thời gian do CSDL
 -- đóng — bên ghi chọn được nó là một sổ gán vai trò sắp xếp lại được theo ý mình. Cùng khuôn

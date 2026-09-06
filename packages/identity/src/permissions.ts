@@ -61,9 +61,14 @@ export const PERMISSIONS = {
   SUPPLIER_MANAGE: "supplier.manage",
   /**
    * [S1.10.5 / 030 / ADR-017] Tạo phiên bản chính sách mua sắm — ngưỡng phê duyệt kép. ADR-017 để
-   * ngỏ "ai được sửa chính sách"; chốt cùng ADR-020: chỉ `PROCUREMENT_MANAGER`. Không cấp cho
+   * ngỏ "ai được sửa chính sách"; ~~chốt cùng ADR-020: chỉ `PROCUREMENT_MANAGER`.~~ Không cấp cho
    * `BUYER` (người khai ước lượng không được là người đặt ngưỡng mà ước lượng bị so với) và không
    * cấp cho `DIRECTOR` (cùng lý do 023 không cấp `rfq.open`).
+   *
+   * [033 / sổ nợ 44 / review lượt 2 H2-2] `PROCUREMENT_MANAGER` giữ `rfq.create` VÀ `rfq.approve`,
+   * nên câu gạch trên tự mâu thuẫn: người được cấp quyền đặt ngưỡng chính là người đặt được ước
+   * lượng và duyệt. Chốt 2026-09-06: `FINANCE` giữ mã này; quy tắc `POLICY_MANAGE_EXCLUDES` (dưới)
+   * được cưỡng chế bằng hai trigger ở 033 — mức vai trò và mức người dùng.
    */
   POLICY_MANAGE: "policy.manage",
   AUDIT_READ: "audit.read",
@@ -173,6 +178,29 @@ export const SEPARATION_OF_DUTIES_CHAIN = [
  * Bản thứ hai của danh sách này nằm trong `CAP_PHU_CHUOI` của db/migrations/hardening.always.sql;
  * meta-test khoá cả hai cùng với ma trận đọc từ văn bản 005 (khuôn §R3).
  */
+/**
+ * [033 / sổ nợ 44] Bất biến **D2**, vế "thước đo không nằm cùng tay với thứ bị đo": `policy.manage`
+ * (đặt ngưỡng phê duyệt kép) KHÔNG được đứng cùng hai mã này — ở một vai trò, và ở một người (hợp
+ * các vai). `rfq.create` vì nó đặt ƯỚC LƯỢNG (thứ bị so với ngưỡng); `rfq.approve` vì nó là NGƯỜI
+ * DUYỆT (thứ ngưỡng quyết định cần một hay hai). Danh sách này sống ở BA nơi phải khớp nguyên văn:
+ * đây, thân `kiem_tra_nguong_khong_cung_tay_vai_tro()` và thân
+ * `kiem_tra_nguong_khong_cung_tay_nguoi_dung()` (033) — meta-test `ma-tran-quyen.test.ts` khoá.
+ */
+export const POLICY_MANAGE_EXCLUDES = ["rfq.create", "rfq.approve"] as const satisfies readonly Permission[];
+
+/**
+ * [033] Mốc GHIM (QT2): các CẶP vai trò mà một người mang cả hai sẽ giữ `policy.manage` cùng một mã
+ * trong `POLICY_MANAGE_EXCLUDES` — trigger mức người dùng của 033 chặn đúng các cặp này. Hôm nay
+ * `FINANCE` là vai duy nhất giữ `policy.manage`, nên tập này là "FINANCE + mọi vai có
+ * rfq.create/rfq.approve". Một migration đổi ma trận làm tập này đổi phải cập nhật mốc ghim MỘT
+ * CÁCH CÓ Ý THỨC (meta-test đỏ), cùng khuôn `CHAIN_COVERING_ROLE_PAIRS`.
+ */
+export const POLICY_MANAGE_CONFLICT_ROLE_PAIRS = [
+  ["BUYER", "FINANCE"],
+  ["FINANCE", "PROCUREMENT_MANAGER"],
+  ["FINANCE", "REQUESTER"],
+] as const satisfies readonly (readonly [string, string])[];
+
 export const CHAIN_COVERING_ROLE_PAIRS = [
   ["BUYER", "DIRECTOR"],
   ["FINANCE", "PROCUREMENT_MANAGER"],

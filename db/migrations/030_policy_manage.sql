@@ -12,6 +12,8 @@
 --     được vì BUYER là người khai ước lượng THƯỜNG XUYÊN nhất; còn "ngưỡng và ước lượng không
 --     cùng một tay" thì bảng này KHÔNG giữ. Lớp bù là sổ kiểm toán (`PROCUREMENT_POLICY_CREATED`);
 --     tách vai là quyết định đang chờ — sổ nợ 44, và §4 của D2 trong ma trận.
+--     [033, cùng ngày] ĐÃ CHỐT: `policy.manage` chuyển sang FINANCE (033 XOÁ hàng PM của file này)
+--     và hai trigger cấm nó đứng cùng rfq.create/rfq.approve. Hàng INSERT dưới đây là lịch sử.
 --   • KHÔNG cấp cho `DIRECTOR`: vai phê duyệt mở thầu cố ý đứng ngoài việc định hình chính sách,
 --     cùng lý do 023 không cấp `rfq.open` cho họ.
 --   • Không chạm chuỗi D3 (`rfq.create → rfq.invite → rfq.unseal → award.recommend → po.approve`),
