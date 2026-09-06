@@ -33,6 +33,34 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(supports-color@7.2.0)
 
+  apps/api:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@trustprocure/invitation':
+        specifier: workspace:*
+        version: link:../../packages/invitation
+      '@trustprocure/supplier':
+        specifier: workspace:*
+        version: link:../../packages/supplier
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+    devDependencies:
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
+
   apps/public-keys:
     dependencies:
       '@trustprocure/bidding':
