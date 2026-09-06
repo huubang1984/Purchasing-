@@ -25,6 +25,7 @@
 import { createPrivateKey, createPublicKey, timingSafeEqual } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { ReceiptKeyPair } from "@trustprocure/bidding";
+import { DiaChiError, taoDanhSachTinCay } from "./dia-chi.js";
 
 export class CauHinhError extends Error {
   constructor(message: string) {
@@ -54,6 +55,12 @@ export interface CauHinhApi {
   readonly publicBaseUrl: string;
   /** [review M-3] Origin được phép gửi yêu cầu không-GET kèm cookie. Rỗng = mọi trình duyệt bị 403. */
   readonly allowedOrigins: readonly string[];
+  /**
+   * [sổ nợ 41] CIDR của proxy/LB đứng trước api. Rỗng = không có proxy, `X-Forwarded-For` bị bỏ qua.
+   * Khai sai ở đây là khai một kẻ lạ được quyền nói "khách là ai" — nên mỗi mục được kiểm hình dạng
+   * lúc khởi động (`dia-chi.ts`).
+   */
+  readonly trustedProxies: readonly string[];
   readonly keyAdapter: "local-dev";
   /** Vòng khoá chính bọc khoá riêng RFQ (ADR-019). */
   readonly masterKeys: VongBiMat;
@@ -183,6 +190,18 @@ function docOrigins(env: MoiTruong, ten: string): readonly string[] {
   return ra;
 }
 
+function docProxyTinCay(env: MoiTruong, ten: string): readonly string[] {
+  const tho = tuyChon(env, ten);
+  if (tho === undefined) return [];
+  const ds = tho.split(",").map((m) => m.trim()).filter((m) => m !== "");
+  try {
+    taoDanhSachTinCay(ds);
+  } catch (e) {
+    throw new CauHinhError(`${ten}: ${e instanceof DiaChiError ? e.message : "mục không hợp lệ"}`);
+  }
+  return ds;
+}
+
 function docAdapter<T extends string>(env: MoiTruong, ten: string, hopLe: readonly T[], loai: string): T {
   const v = bat(env, ten);
   const khop = hopLe.find((h) => h === v);
@@ -259,6 +278,7 @@ export function docCauHinh(env: MoiTruong): CauHinhApi {
     listenPort: soNguyen(env, "TRUSTPROCURE_LISTEN_PORT", 8080, 0, 65535),
     publicBaseUrl: docBaseUrl(env, "TRUSTPROCURE_PUBLIC_BASE_URL"),
     allowedOrigins: docOrigins(env, "TRUSTPROCURE_ALLOWED_ORIGINS"),
+    trustedProxies: docProxyTinCay(env, "TRUSTPROCURE_TRUSTED_PROXIES"),
     keyAdapter,
     masterKeys,
     totpMasterKeys,

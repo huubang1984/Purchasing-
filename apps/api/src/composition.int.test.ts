@@ -58,6 +58,8 @@ function moiTruong(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
     TRUSTPROCURE_LISTEN_HOST: "127.0.0.1",
     TRUSTPROCURE_LISTEN_PORT: "0",
     TRUSTPROCURE_PUBLIC_BASE_URL: "http://localhost:3000",
+    // [sổ nợ 41] Socket của mọi yêu cầu trong test là 127.0.0.1 — khai nó là proxy để đo đường X-Forwarded-For.
+    TRUSTPROCURE_TRUSTED_PROXIES: "127.0.0.1",
     TRUSTPROCURE_KEY_ADAPTER: "local-dev",
     TRUSTPROCURE_MASTER_KEYS: `v1=${randomBytes(32).toString("base64")}`,
     TRUSTPROCURE_MASTER_KEY_ACTIVE: "v1",
@@ -80,8 +82,8 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown } = {}): Promise<PhanHoi> {
-  const headers: Record<string, string> = {};
+async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<PhanHoi> {
+  const headers: Record<string, string> = { ...tuyChon.headers };
   if (tuyChon.cookie !== undefined) headers.cookie = tuyChon.cookie;
   let body: string | undefined;
   if (tuyChon.body !== undefined) {
@@ -227,8 +229,18 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
 
     const sai = await goi("POST", "/auth/totp", { body: { orgId: org, token, code: "000000" } });
     expect(sai.status).toBe(401);
-    const r3 = await goi("POST", "/auth/totp", { body: { orgId: org, token, code: deriveTotpCode(biMat, counterForTime(Date.now())) } });
+    // [sổ nợ 41] Socket 127.0.0.1 là proxy đã khai: hop ngoài cùng bên phải KHÔNG thuộc proxy là khách;
+    // hop "1.1.1.1" do khách tự ghi trước đó bị bỏ qua.
+    const r3 = await goi("POST", "/auth/totp", {
+      body: { orgId: org, token, code: deriveTotpCode(biMat, counterForTime(Date.now())) },
+      headers: { "x-forwarded-for": "1.1.1.1, 203.0.113.9" },
+    });
     expect(r3.status, r3.text).toBe(200);
+    const { rows: ip } = await db.pool.query<{ ip: string }>(
+      "SELECT host(ip) AS ip FROM sessions WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
+      [org, nguoi],
+    );
+    expect(ip[0]?.ip).toBe("203.0.113.9");
     const sc = r3.headers.get("set-cookie") ?? "";
     const gt = /tp_session=([^;]+)/u.exec(sc)?.[1] ?? "";
     expect(gt).not.toBe("");

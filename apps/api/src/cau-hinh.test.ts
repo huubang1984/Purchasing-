@@ -59,6 +59,7 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(ch.listenPort).toBe(8080);
     expect(ch.dbPoolMax).toBe(10);
     expect(ch.allowedOrigins).toEqual([]);
+    expect(ch.trustedProxies).toEqual([]);
     expect(ch.afterCommitTimeoutMs).toBeUndefined();
     expect(ch.masterKeys.active).toBe("v2");
     expect(Object.keys(ch.masterKeys.keys).sort()).toEqual(["v1", "v2"]);
@@ -160,6 +161,12 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
     for (const xau of ["./hop-thu-dev", "hop-thu-dev", "../ngoai"]) {
       nemVeBien(envHopLe({ TRUSTPROCURE_DEV_MAILBOX_DIR: xau }), "TRUSTPROCURE_DEV_MAILBOX_DIR", /TUYỆT ĐỐI/u);
     }
+  });
+
+  it("[sổ nợ 41] proxy tin cậy: danh sách CIDR được đọc; mục sai IP/tiền tố ⇒ ném nêu tên biến", () => {
+    expect(docCauHinh(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: " 10.0.0.0/8, fd00::/8 ,127.0.0.1 " })).trustedProxies).toEqual(["10.0.0.0/8", "fd00::/8", "127.0.0.1"]);
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "proxy.noi.bo" }), "TRUSTPROCURE_TRUSTED_PROXIES", /không phải địa chỉ IP/u);
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "10.0.0.0/40" }), "TRUSTPROCURE_TRUSTED_PROXIES", /tiền tố/u);
   });
 
   it("số: không phải số, ngoài khoảng ⇒ ném", () => {

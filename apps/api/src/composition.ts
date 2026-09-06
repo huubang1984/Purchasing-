@@ -28,6 +28,7 @@ import { PepperRing } from "@trustprocure/invitation";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
 import type { CauHinhApi } from "./cau-hinh.js";
+import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
@@ -73,7 +74,8 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       services,
       ...(ch.afterCommitTimeoutMs === undefined ? {} : { afterCommitTimeoutMs: ch.afterCommitTimeoutMs }),
     }),
-    { allowedOrigins: ch.allowedOrigins },
+    // [sổ nợ 41] Địa chỉ người gọi: socket, trừ khi socket là một proxy đã khai — xem dia-chi.ts.
+    { allowedOrigins: ch.allowedOrigins, remoteAddressOf: taoDocDiaChi(ch.trustedProxies) },
   );
 
   let daDung = false;
