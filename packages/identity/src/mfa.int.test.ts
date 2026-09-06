@@ -1391,8 +1391,10 @@ describe("lược đồ 006", () => {
       // xác nhận" ~~do `WHERE confirmed_at IS NULL` ở `login.ts` giữ~~ [032 / review H2-1] do trigger
       // `mfa_credentials_khoa_ho_so_da_xac_nhan` giữ Ở CSDL — đo (kèm đột biến gỡ trigger) ở
       // auth.int.test.ts [review M-5][review H2-1].
-      // Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.
-      ["mfa_credentials (DELETE)", "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]],
+      // ~~Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.~~ [S1.12 / 040 / sổ nợ 40] app_api nay CÓ quyền
+      // DELETE, nhưng trigger BEFORE DELETE `mfa_credentials_xoa_can_yeu_cau` chỉ cho xoá khi CSDL thấy
+      // một yêu cầu đặt lại ĐÃ DUYỆT chưa tiêu thụ — ca ấy đo riêng bên dưới (không còn là "permission
+      // denied"); đột biến gỡ trigger ở mfa-reset.int.test.ts.
       // `expires_at` không được UPDATE -> không gia hạn phiên vô hạn.
       [
         "sessions.expires_at (UPDATE)",
@@ -1403,6 +1405,12 @@ describe("lược đồ 006", () => {
     for (const [moTa, cau, tham] of ca) {
       expect(await chayRieng(apiPool, orgA, cau, tham), moTa).toMatch(/permission denied/i);
     }
+    // [S1.12 / 040] DELETE không còn bị GRANT chặn mà bị TRIGGER chặn: không có yêu cầu đặt lại đã duyệt
+    // ⇒ lỗi có tên "040", không phải "permission denied".
+    expect(
+      await chayRieng(apiPool, orgA, "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]),
+      "mfa_credentials (DELETE) không có yêu cầu đã duyệt",
+    ).toMatch(/040/);
     // Đối chứng dương: đường đi HỢP LỆ của ứng dụng không bị bản vá làm hỏng.
     expect(
       await chayRieng(
@@ -1569,6 +1577,8 @@ describe("quyền trên hai bảng mới, đo không mù", () => {
       [BANG_MOI],
     );
     expect(rows).toEqual([
+      // [S1.12 / 040 / sổ nợ 40] DELETE cấp cho app_api — trigger BEFORE DELETE đòi yêu cầu đã duyệt.
+      { bang: "mfa_credentials", ai: "app_api", quyen: "DELETE" },
       { bang: "mfa_credentials", ai: "app_api", quyen: "SELECT" },
       { bang: "sessions", ai: "app_api", quyen: "SELECT" },
     ]);
