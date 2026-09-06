@@ -23,10 +23,46 @@ export class DiaChiError extends Error {
   }
 }
 
-/** `::ffff:1.2.3.4` → `1.2.3.4`; mọi dạng khác giữ nguyên. */
+/**
+ * `::ffff:1.2.3.4` → `1.2.3.4`; [review H4-9] `1.2.3.4:51234` và `[2001:db8::1]:51234` (IIS/ARR, vài LB
+ * ghi kèm cổng) → bỏ cổng; mọi dạng khác giữ nguyên. Không bỏ cổng cho một chuỗi IPv6 trần có dấu
+ * hai chấm — `2001:db8::1` không phải "địa chỉ:cổng".
+ */
 export function chuanHoaDiaChi(dc: string): string {
-  const m = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/iu.exec(dc.trim());
-  return m?.[1] ?? dc.trim();
+  let s = dc.trim();
+  const ngoac = /^\[([^\]]+)\](?::\d{1,5})?$/u.exec(s);
+  if (ngoac !== null) s = ngoac[1] ?? "";
+  const v4Cong = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5}$/u.exec(s);
+  if (v4Cong !== null) s = v4Cong[1] ?? "";
+  const m = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/iu.exec(s);
+  return m?.[1] ?? s;
+}
+
+/**
+ * Tiền tố hẹp nhất còn có nghĩa "mạng của tôi" — rộng hơn là "cả Internet là proxy của tôi". IPv6 lấy
+ * /7 vì `fc00::/7` (ULA) là dải riêng hợp lệ; cái bị chặn là `::/0` và các dải bao cả Internet.
+ */
+export const TIEN_TO_TOI_THIEU = { ipv4: 8, ipv6: 7 } as const;
+
+/**
+ * [review H4-4] KHOÁ BUCKET theo người gọi. IPv6: mỗi khách dân dụng có ít nhất một /64, nên đếm theo
+ * địa chỉ nguyên vẹn là cho kẻ tấn công 2^64 bucket miễn phí — khoá là tiền tố /64. IPv4 giữ nguyên
+ * (một NAT văn phòng là một địa chỉ — trần theo route phải đủ rộng cho nó, `auth.ts`). Địa chỉ không
+ * phải IP (rỗng, hỏng) trả về nguyên văn — dispatcher đã coi đó là MỘT bucket chung, fail-closed.
+ */
+export function khoaNguoiGoi(dc: string): string {
+  const s = chuanHoaDiaChi(dc);
+  if (isIP(s) !== 6) return s;
+  const khongVung = s.split("%")[0] ?? s;
+  const [trai, phai] = khongVung.split("::");
+  const nhomTrai = trai === "" || trai === undefined ? [] : trai.split(":");
+  const nhomPhaiTho = phai === undefined || phai === "" ? [] : phai.split(":");
+  // Đuôi IPv4 (`64:ff9b::1.2.3.4`) là HAI nhóm 16 bit; giá trị của chúng không bao giờ lọt vào 64 bit đầu.
+  const nhomPhai = nhomPhaiTho.flatMap((g) => (g.includes(".") ? ["0", "0"] : [g]));
+  const nhomTraiDayDu = nhomTrai.flatMap((g) => (g.includes(".") ? ["0", "0"] : [g]));
+  const thieu = Math.max(0, 8 - nhomTraiDayDu.length - nhomPhai.length);
+  const tatCa = [...nhomTraiDayDu, ...new Array<string>(thieu).fill("0"), ...nhomPhai];
+  return `${tatCa.slice(0, 4).map((g) => g.toLowerCase().padStart(4, "0")).join(":")}::/64`;
 }
 
 /**
@@ -49,6 +85,11 @@ export function taoDanhSachTinCay(cac: readonly string[]): BlockList {
     }
     const n = /^\d{1,3}$/u.test(tienTo) ? Number(tienTo) : -1;
     if (n < 0 || n > (ho === 4 ? 32 : 128)) throw new DiaChiError(`proxy tin cậy "${muc}" có tiền tố không hợp lệ`);
+    // [review H4-9] `0.0.0.0/0` hay `::/0` là "mọi socket là proxy" ⇒ XFF do khách tự đặt được tin ⇒
+    // bucket theo người gọi và `sessions.ip` đều giả được. Đó là một lỗi cấu hình, chặn lúc khởi động.
+    if (n < TIEN_TO_TOI_THIEU[loai]) {
+      throw new DiaChiError(`proxy tin cậy "${muc}" có tiền tố quá rộng (tối thiểu /${TIEN_TO_TOI_THIEU[loai]})`);
+    }
     ds.addSubnet(dc, n, loai);
   }
   return ds;

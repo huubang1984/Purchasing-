@@ -61,6 +61,7 @@ import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitat
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
+import { khoaNguoiGoi } from "./dia-chi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
@@ -239,14 +240,19 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           // [sổ nợ 39] Đếm theo NGƯỜI GỌI trong một giao dịch RIÊNG, TRƯỚC handler: giao dịch của
           // handler rollback khi token sai, nên đếm bên trong nó là đếm thành công chứ không đếm thử.
           // Khoá mang cả đường dẫn route: ba route, ba bộ đếm. Địa chỉ rỗng (không xác định) dùng
-          // chung MỘT bucket — fail-closed. Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
-          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức, không mở oracle mới.
+          // chung MỘT bucket — fail-closed. [review H4-4] Địa chỉ đi qua `khoaNguoiGoi`: IPv6 đếm theo
+          // /64, không theo địa chỉ nguyên vẹn. Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
+          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức ~~, không mở oracle mới~~
+          // [review H4-5] — nhưng 429 CÓ là một oracle: tổ chức thật bị chặn sau N lần, tổ chức lạ
+          // thì không. Chấp nhận, nói ra: `orgId` là UUIDv4, không liệt kê được bằng vét cạn, và
+          // đếm cả tổ chức lạ đòi một bucket ngoài CSDL (không khoá ngoại) — ghi sổ nợ 52.
+          // `Retry-After` là cả cửa sổ, không phải phần còn lại — cố ý thô, không tiết lộ mốc bucket.
           if (route.callerLimit !== undefined) {
             const tran = route.callerLimit;
             let soLan = 0;
             try {
               soLan = await withTenant(deps.pool, orgId, (client) =>
-                tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|${req.remoteAddress}`, deps.services.pepper),
+                tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|${khoaNguoiGoi(req.remoteAddress)}`, deps.services.pepper),
               );
             } catch (e) {
               if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;

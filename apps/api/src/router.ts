@@ -76,7 +76,7 @@ export function laHttpMethod(x: string | undefined): x is HttpMethod {
  * — cùng thứ tự trình duyệt gửi (cookie có `Path` cụ thể hơn đứng trước).
  */
 export function docCookie(header: string | undefined): Readonly<Record<string, string>> {
-  const ra: Record<string, string> = {};
+  const ra: Record<string, string> = Object.create(null) as Record<string, string>;
   if (header === undefined || header === "") return ra;
   // [sổ nợ 42 / review L-2] Một tên xuất hiện HAI LẦN là dấu hiệu có kẻ ném cookie (subdomain anh
   // em, hay hai `Path` chồng nhau): không lấy cái đầu, không lấy cái sau — BỎ tên ấy, người gọi
@@ -88,7 +88,9 @@ export function docCookie(header: string | undefined): Readonly<Record<string, s
     const ten = phan.slice(0, i).trim();
     const giaTri = phan.slice(i + 1).trim();
     if (ten === "" || trung.has(ten)) continue;
-    if (ten in ra) {
+    // [review H4-12] `hasOwn`, không `in`: `"toString" in {}` là true — một cookie tên `constructor`
+    // sẽ bị coi là "trùng" và một tên không có sẽ trả về hàm của prototype.
+    if (Object.hasOwn(ra, ten)) {
       delete ra[ten];
       trung.add(ten);
       continue;

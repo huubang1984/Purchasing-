@@ -62,6 +62,12 @@ describe("tachQuery / docCookie / tachCookiePhien", () => {
     expect(docCookie("a=1; a=1")).toEqual({});
     expect(docCookie("a=1; b=2; a=3; a=4")).toEqual({ b: "2" });
     expect(docCookie(undefined)).toEqual({});
+    // [review H4-12] Tên trùng tên thuộc tính prototype không bị coi là "trùng"; tên không có ⇒ undefined, không phải hàm.
+    const la = docCookie("toString=1; constructor=2; __proto__=3");
+    expect([la["toString"], la["constructor"], la["__proto__"]]).toEqual(["1", "2", "3"]);
+    expect(Object.keys(la).sort()).toEqual(["__proto__", "constructor", "toString"]);
+    expect(docCookie("a=1")["constructor"]).toBeUndefined();
+    expect(docCookie("a=1")["toString"]).toBeUndefined();
   });
 
   it("cookie phiên phải là <uuid>.<base64url ≥ 32 ký tự>", () => {

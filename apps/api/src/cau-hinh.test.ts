@@ -167,6 +167,9 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
     expect(docCauHinh(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: " 10.0.0.0/8, fd00::/8 ,127.0.0.1 " })).trustedProxies).toEqual(["10.0.0.0/8", "fd00::/8", "127.0.0.1"]);
     nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "proxy.noi.bo" }), "TRUSTPROCURE_TRUSTED_PROXIES", /không phải địa chỉ IP/u);
     nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "10.0.0.0/40" }), "TRUSTPROCURE_TRUSTED_PROXIES", /tiền tố/u);
+    // [review H4-9] "cả Internet là proxy" bị chặn lúc khởi động.
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "0.0.0.0/0" }), "TRUSTPROCURE_TRUSTED_PROXIES", /quá rộng/u);
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "::/0" }), "TRUSTPROCURE_TRUSTED_PROXIES", /quá rộng/u);
   });
 
   it("số: không phải số, ngoài khoảng ⇒ ném", () => {

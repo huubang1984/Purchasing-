@@ -172,6 +172,47 @@ describe("/auth/link — không liệt kê được email", () => {
     expect(dv.linkDaGui).toHaveLength(truoc + 1);
     expect(dv.linkDaGui.at(-1)?.email).toBe("a@vidu.vn");
     expect(dung.text).not.toContain(dv.linkDaGui.at(-1)!.token);
+    // [review H4-3 / 041] Job xong ⇒ payload về `{}`: không email nào (có người hay không) nằm lại
+    // trong `outbox_jobs`. Đo theo GIÁ TRỊ trên toàn bảng, không chỉ ba job vừa chạy.
+    const { rows: conEmail } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM outbox_jobs WHERE kind = 'LOGIN_LINK_SEND' AND status IN ('DONE', 'FAILED') AND payload::text <> '{}'",
+    );
+    expect(Number(conEmail[0]?.n)).toBe(0);
+    const { rows: daXong } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' AND status = 'DONE'",
+      [orgA],
+    );
+    expect(Number(daXong[0]?.n)).toBeGreaterThanOrEqual(3);
+    expect(JSON.stringify((await db.pool.query("SELECT payload FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND'", [orgA])).rows)).not.toContain("vidu.vn");
+  });
+
+  it("[review H4-3] chuỗi không có hình dạng email ⇒ 422 TRƯỚC khi chạm CSDL: không job nào được để lại", async () => {
+    const { rows: truoc } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND'", [orgA]);
+    for (const xau of ["khong-phai-email", "@vidu.vn", "a@", "a b@vidu.vn", "a@b@c", "a\u0000@vidu.vn"]) {
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgA, email: xau } });
+      expect(r.status, JSON.stringify(xau)).toBe(422);
+    }
+    const { rows: sau } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND'", [orgA]);
+    expect(sau[0]?.n).toBe(truoc[0]?.n);
+    // ĐỘT BIẾN 041: gỡ trigger ⇒ email nằm lại sau khi job xong; khôi phục ⇒ xoá lại.
+    await db.pool.query("DROP TRIGGER outbox_jobs_xoa_payload_dang_nhap ON outbox_jobs");
+    try {
+      expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "dot-bien-041@vidu.vn" } })).status).toBe(200);
+      await ob.chay(orgA);
+      const { rows } = await db.pool.query<{ payload: unknown }>(
+        "SELECT payload FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' AND status = 'DONE' AND payload::text <> '{}'",
+        [orgA],
+      );
+      expect(JSON.stringify(rows), "RED THẬT: không có 041, email nằm lại vĩnh viễn trong outbox_jobs").toContain("dot-bien-041@vidu.vn");
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER outbox_jobs_xoa_payload_dang_nhap BEFORE UPDATE ON outbox_jobs FOR EACH ROW " +
+          "WHEN (NEW.kind = 'LOGIN_LINK_SEND' AND NEW.status IN ('DONE', 'FAILED') AND OLD.status IS DISTINCT FROM NEW.status) " +
+          "EXECUTE FUNCTION public.outbox_jobs_xoa_payload_dang_nhap(); " +
+          "ALTER TABLE outbox_jobs ENABLE ALWAYS TRIGGER outbox_jobs_xoa_payload_dang_nhap",
+      );
+      await db.pool.query("UPDATE outbox_jobs SET payload = '{}' WHERE kind = 'LOGIN_LINK_SEND' AND status = 'DONE'");
+    }
   });
 
   it("[INV-E1] hạn mức theo người dùng: quá LOGIN_MAX_TOKENS_PER_WINDOW ⇒ vẫn 200 nhưng không gửi thêm", async () => {
@@ -207,11 +248,25 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     }
     expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac } })).status).toBe(429);
     // Bộ đếm nằm ở CSDL, đúng kind và đúng số: N+1 lần cho khoá của route + địa chỉ này.
-    const { rows } = await db.pool.query<{ hits: number; n: string }>(
-      "SELECT hits, count(*) OVER () AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' ORDER BY hits DESC LIMIT 1",
-      [orgA],
+    // Khoá bucket đã băm nên không lọc theo route được; đo "có đúng một bucket vừa chạm N+1" thay vì
+    // "bucket lớn nhất" (~~ORDER BY hits DESC~~ [review H4-4] trần link nay 30, bucket link của test
+    // trước lớn hơn N+1 của redeem).
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' AND hits = $2",
+      [orgA, LOGIN_REDEEM_MAX_PER_CALLER + 1],
     );
-    expect(rows[0]?.hits).toBe(LOGIN_REDEEM_MAX_PER_CALLER + 1);
+    expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("[review H4-4] IPv6: hai địa chỉ CÙNG /64 dùng chung bucket (lần N+1 từ địa chỉ thứ hai ⇒ 429); /64 khác ⇒ 200", async () => {
+    const rac = "A".repeat(43);
+    for (let i = 0; i < LOGIN_REDEEM_MAX_PER_CALLER; i += 1) {
+      // Mỗi lần một địa chỉ KHÁC trong cùng /64 — nếu bucket theo địa chỉ nguyên vẹn thì không bao giờ 429.
+      const r = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac }, ip: `2001:db8:77:1::${(i + 1).toString(16)}` });
+      expect(r.status, `lần ${i + 1}`).toBe(422);
+    }
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac }, ip: "2001:db8:77:1:ffff:ffff:ffff:ffff" })).status).toBe(429);
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac }, ip: "2001:db8:77:2::1" })).status).toBe(422);
   });
 
   it("ĐỐI CHỨNG: cùng dispatcher nhưng bảng route KHÔNG khai callerLimit ⇒ không bao giờ 429 — trần đúng là cờ ấy, không phải thứ gì khác", async () => {
