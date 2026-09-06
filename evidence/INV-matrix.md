@@ -27,41 +27,41 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **33** | 34 |
+| Nghiệp vụ (A–G) | **34** | 34 |
 | Hàng rào (H) | **17** | 17 |
-| **Cộng** | **50** | **51** |
+| **Cộng** | **51** | **51** |
 
-**1 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
+**0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
 `docs/STATE.md` ghi S0 **nhắm tới** 13 bất biến nghiệp vụ (B3, B4, D1, D3, D5, E3, F1, F2, F3,
 G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con số ấy là LỊCH SỬ và cố
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **33/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
 | INV | Mệnh đề | Cưỡng chế | Tầng test | Số test | Kết quả | Ghi chú |
 |---|---|---|---|---|---|---|
-| A1 | Với RFQ chưa UNSEALED, không endpoint nào trả về trường giá cho bất kỳ actor nội bộ nào | Kiến trúc: không có khóa giải mã trong `api` | T2, T5 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| A2 | Giá dạng rõ không tồn tại trong `api` service tại bất kỳ thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi | Kiến trúc: mã hóa ở trình duyệt (ADR-007) | T1, T5 | 0 | ⏳ CHƯA PHỦ | xem §3 |
-| A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A1 | Với RFQ chưa UNSEALED, không endpoint nào trả về trường giá cho bất kỳ actor nội bộ nào | Kiến trúc: không có khóa giải mã trong `api` | T2, T5 | 5 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A2 | Giá dạng rõ không tồn tại trong `api` service tại bất kỳ thời điểm nào — kể cả bộ nhớ, log, APM trace, thông báo lỗi | Kiến trúc: mã hóa ở trình duyệt (ADR-007) | T1, T5 | 1 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A3 | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 | 5 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A4 | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | T2 | 17 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | A5 | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 | 17 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 9 | ✅ ĐẠT |  |
-| B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 24 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 11 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 10 | ✅ ĐẠT |  |
+| B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 25 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 33 | ✅ ĐẠT |  |
 | B4 | Không đường code nào xóa/sửa audit; role ứng dụng bị REVOKE UPDATE, DELETE | Quyền DB | T3, T5 | 20 | ✅ ĐẠT |  |
-| B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 9 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 6 | ✅ ĐẠT |  |
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 12 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 15 | ✅ ĐẠT |  |
-| D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 29 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
-| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 16 | ✅ ĐẠT |  |
+| D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 30 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
+| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 17 | ✅ ĐẠT |  |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 34 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 21 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -115,9 +115,9 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 50` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 51` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
-- `MOC_GHIM.coDanhSachToiDa = 1` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
+- `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
 Cộng thêm hai phép kiểm cùng họ: năm mã bắt buộc phải giữ ghi chú §4 (`MA_PHAI_CO_CO_HEP`),
 và **mọi mệnh đề HỘI đang mang ô ✅ đều phải có ghi chú §4** — vế sau *dẫn xuất* từ chính câu
@@ -133,7 +133,6 @@ bằng lớp** — gắn `[INV-G2]` lên một test đo thứ khác. Chuyện đ
 
 | INV | Vì sao chưa phủ |
 |---|---|
-| **A2** | S2+ — CHỦ NGỮ ĐÃ CÓ, THIẾT BỊ ĐO THÌ CHƯA. Ba vế của mệnh đề nói về MỘT TIẾN TRÌNH `api` ĐANG CHẠY: bộ nhớ, APM trace, thông báo lỗi. `apps/` chỉ có một worker mở thầu; không có tiến trình `api` nào để gắn một heap dump hay một APM agent vào. Phần ĐÃ đo được thì nằm ở chỗ khác và đã mang ô của nó: A1 (bảng bản rõ rỗng trước mở thầu), A3 (quét năm bảng dưới superuser) và G1 (`app_api` không đọc được `envelope`). Cái còn thiếu là một phép đo TRÊN TIẾN TRÌNH, và nó đòi một tầng HTTP. |
 
 ## 4. Mã đã phủ mà **bảo đảm thật hẹp hơn mệnh đề**
 
@@ -146,6 +145,8 @@ phép hội, nên một test đo **một** vế cũng thắp ✅ cho **cả** m�
 dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa có chủ ngữ**.
 
 - **A1** — **Ô ✅ NÀY ĐỨNG TRÊN SỰ VẮNG MẶT CỦA DỮ LIỆU, KHÔNG TRÊN MỘT CỔNG ĐỌC — VÀ ĐÓ LÀ ĐIỂM MẠNH, KHÔNG PHẢI ĐIỂM YẾU.** Hàng của `rfq_unsealed_bids` không TỒN TẠI cho tới lúc mở thầu chạy, nên *“không endpoint nào trả về trường giá”* đúng kể cả với một câu `SELECT *` viết bởi người chưa đọc tài liệu nào. Ba lớp cộng lại: `app_api` không có INSERT trên bảng ấy (nó không giải mã được nên nó không có gì để ghi, và một GRANT INSERT sẽ cho phép nó **BỊA** một bản rõ); trigger đòi một yêu cầu đã được phê duyệt; và `app_api` không đọc được `vendor_bid_versions.envelope`. **PHẦN CHÊNH:** mệnh đề nói *“không ENDPOINT nào”*, và **không có endpoint nào để đo** — `apps/` chỉ có một worker, không có API. Thứ được đo là TẦNG DỮ LIỆU; vế *“cho bất kỳ actor nội bộ nào”* ở tầng HTTP thuộc T2/T5 và thuộc S2+.
+
+- **A2** — **[S1.10.6] Ô ✅ NÀY ĐO BA TRONG NĂM VẾ CỦA MỆNH ĐỀ, VÀ HAI VẾ CÒN LẠI ĐƯỢC GỌI TÊN.** Mệnh đề liệt kê *bộ nhớ, log, APM trace, thông báo lỗi* — và ngầm cả phản hồi. Đã đo, trên TIẾN TRÌNH `apps/api` THẬT với cổng thật (`apps/unseal-worker/src/kich-ban-41-http.int.test.ts`): năm mức giá thật đi vào qua năm phong bì niêm phong, rồi MỌI route trong `ROUTES` — đủ bốn đối tượng PUBLIC/ANON/GUEST/BUYER, cả đọc lẫn ghi — được gọi TRƯỚC khi mở thầu; bộ quét tìm từng chuỗi giá trong ⑴ thân phản hồi, ⑵ mọi header phản hồi, ⑶ mọi dòng `console.error` bắt được của tiến trình (kể cả thông báo lỗi 4xx/5xx). Kèm đối chứng dương: bộ quét bắt được một chuỗi giá gieo vào thân giả, và SAU khi mở thầu nó THẤY giá ở bảng so sánh — tức nó không mù. **PHẦN CHÊNH, hai vế:** ⑷ *bộ nhớ / core dump* — KHÔNG đo; `issueRfqKeyPair` chạy trong `api` giữ khoá riêng dạng rõ trong cửa sổ một hàm (ADR-019) và một phong bì đi qua bộ nhớ của handler nộp thầu; một heap snapshot ở đúng khoảnh khắc ấy không được đo. ⑸ *APM trace* — không có APM agent nào để gắn; ngày có, phép đo phải chạy lại với agent bật. Vế *thông báo lỗi* đo ở tầng phản hồi + log của api; lỗi ở tầng vận chuyển ngoài tiến trình (proxy, LB) không thuộc phép đo này.
 
 - **A3** — **PHÉP ĐO LÀ MỘT LẦN QUÉT TÌM MỘT CHUỖI ĐÃ BIẾT, KHÔNG PHẢI MỘT ĐỊNH LÝ.** Lớp thật gồm ba phần và chỉ phần thứ ba là một phép đo trên dữ liệu: ⑴ `vendor_bid_versions` KHÔNG có một cột giá nào — bảng không có cột thì không có gì để rò; ⑵ đường ghi DUY NHẤT nhận một `bytea` phong bì và từ chối thứ không đọc được thành phong bì; ⑶ một lần quét `t::text` trên **năm** bảng (ba bảng báo giá cộng `audit_events` và `outbox_jobs`) dưới **superuser** — tức đúng vế *“kể cả bằng role quản trị”* — đòi chuỗi giá không xuất hiện, kèm đối chứng dương chứng minh phép quét biết tìm ra nó. **PHẦN CHÊNH:** vế ⑶ tìm **một chuỗi cụ thể**. Một bản rõ bị cất ở dạng đã biến đổi (nén, base64, đảo byte) sẽ đi lọt, và không lớp nào ở S1 bắt được điều đó. Vế ⑴ và ⑵ mới là phần chịu lực; vế ⑶ là lưới an toàn, không phải bằng chứng.
 

@@ -109,6 +109,9 @@ importers:
       '@trustprocure/bidding':
         specifier: workspace:*
         version: link:../../packages/bidding
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation

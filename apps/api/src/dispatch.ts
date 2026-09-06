@@ -153,7 +153,7 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
     return { status: 422, body: { error: err.message } };
   }
   if (err instanceof Error && err.name === "error" && "code" in err) {
-    const pg = anhXaLoiPostgres(err as Error & { code?: unknown });
+    const pg = anhXaLoiPostgres(err);
     if (pg !== null) return pg;
   }
   // Chỉ TÊN lỗi và mã yêu cầu. Không `err` nguyên, không `cause`: `cause` của một lỗi Postgres
