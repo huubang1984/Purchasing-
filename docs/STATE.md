@@ -4,8 +4,9 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã
-đóng ở `83e4cba` — xem *Hành động tiếp theo* mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
+**Cập nhật lần cuối:** 2026-09-06 (PR #2 và #3 đã merge vào `master` — `dca6dab`; **ADR-020 đề
+xuất + kế hoạch S1.10** đang chờ chốt — xem *Điểm chặn* 3 và *Hành động tiếp theo* mục 15. Trước
+đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
 ---
@@ -311,6 +312,7 @@ nó chỉ thôi chặn.
 | # | Điểm chặn | Ảnh hưởng | Trạng thái |
 |---|---|---|---|
 | 1 | **Chưa có khách hàng pilot** | Rủi ro xây đúng thứ theo sai thứ tự — lớn hơn mọi rủi ro kỹ thuật | **VẪN CHƯA XỬ LÝ.** 2026-09-04 lập `docs/TIEN-DE-CHUA-DO.md`: **17 tiền đề** về người mua/nhà cung cấp mà mã đang cư xử như thật, mỗi dòng trỏ tới một chỗ có địa chỉ trong kho. Nó **HẠ CHI PHÍ** của buổi làm việc đầu tiên xuống một tiếng đồng hồ đi hết một danh sách — nó **KHÔNG gỡ hộ** điểm chặn này |
+| 3 | **[2026-09-06] ADR-020 (tầng HTTP của `apps/api`) ở trạng thái *Đề xuất — chờ chốt*** | Chặn toàn bộ S1.10: framework, cách phát phiên người mua, dạng URL của magic link, cách cưỡng chế `withGuestSession`. Đổi bất kỳ mục nào sau khi có mã là một cuộc di trú | **Chờ người chốt.** Kế hoạch đã có: `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md` |
 | 2 | ~~**Ba quyết định treo trước S1**: xử lý thư mục `Vibe Coding/`, chọn nhà cung cấp KMS (**ADR-009**, trạng thái *Đang mở*), chọn hạ tầng triển khai~~ → **còn MỘT**: xử lý thư mục `Vibe Coding/` | KMS và hạ tầng **đã chốt cùng lúc 2026-08-29: AWS KMS, `ap-southeast-1`** — đúng như dòng bên phải đã dự báo, chúng không độc lập và được quyết trong một lần. Xem ADR-009. | **Đã chốt một phần** |
 
 > Điểm chặn cũ *"hook `git-safety.sh` và `protect-secrets.sh` đang fail-open"* đã được **gỡ**:
@@ -697,6 +699,30 @@ CMK, chưa có role nào được tạo.
     **Bài học, ghi để không lặp:** lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD
     sắp đẩy. Một lượt đo trên cây mã cũ là bằng chứng cho cây mã cũ.
 
+15. **[2026-09-06] VÒNG TIẾP THEO ĐÃ ĐƯỢC ĐẶT TÊN VÀ LẬP KẾ HOẠCH, CHƯA VIẾT MỘT DÒNG MÃ: S1.10 —
+    tầng HTTP đầu tiên (`apps/api`).** Không phải S2: S2 chưa có spec và không nên có trước khi một
+    người mua thật đi hết `docs/TIEN-DE-CHUA-DO.md`. S1.10 là cây cầu — nó cho hai mã trống cuối
+    (A2, E6) và ba phần chênh §4 (A5, E1, D5) một chủ ngữ.
+
+    **Ba phát hiện của lượt đọc mã, và cả ba đổi phạm vi:** ⑴ **không hàm sản phẩm nào chèn
+    `sessions`** — năm file test tự chèn; nợ 6 vẫn mở nguyên. ⑵ **`users` không có cột mật khẩu**
+    (002) — tức *route người mua đầu tiên* kéo theo *đường đăng nhập đầu tiên*, không tách được.
+    ⑶ ADR-008 ghi một nợ *bắt buộc trả trước endpoint đăng nhập* mà chưa ai nhắc lại từ 28/08.
+
+    **ADR-020 (trạng thái *Đề xuất — chờ chốt*)** trả lời bốn câu: `node:http` trần + bảng route
+    KHAI BÁO (loại NestJS của spec 26/08 — lý do là *route phải là dữ liệu liệt kê được* để ba
+    lớp canh "với MỌI route" đo được không cần khởi động tiến trình); phiên người mua bằng magic
+    link email + TOTP, **không mật khẩu**, nợ ADR-008 trả bằng phương án (ii); token vào **fragment**
+    của URL, không bao giờ vào path/query; đường khách chỉ nhận `client` đã gắn phiên, cưỡng chế
+    bằng `g9-`. Kế hoạch: `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md` — bảy hạng mục,
+    16,5 ngày công, ba migration, quỹ đạo 48/50 → 50/50 với A2 **mang cờ §4**.
+
+    **Ba việc cần người chốt trước dòng mã đầu tiên:** ADR-020 (cả bốn mục); mã quyền
+    `policy.manage` thuộc vai nào (ADR-017 để ngỏ; đề xuất `PROCUREMENT_MANAGER`); có thêm H17
+    (*mọi route ghi khai quyền*) vào sổ đăng ký hay không. Và **một tiền đề mới B6** ở
+    `TIEN-DE-CHUA-DO.md`: người mua có chấp nhận TOTP không — nếu không, S1.10.4 thành SSO và đó
+    là một cuộc di trú bảng phiên.
+
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng
     `git rev-list --count b1a9a8b^1..b1a9a8b^2`, và GitHub cũng đếm 44. Số 91 đến từ phép đếm
@@ -719,7 +745,7 @@ CMK, chưa có role nào được tạo.
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ **Mười chín ADR** — 001–010 và 012–019 *Đã chấp nhận*; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ **Hai mươi ADR** — 001–010 và 012–019 *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) ***Đề xuất — chờ chốt*** 2026-09-06, chặn S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
 | `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |
