@@ -78,12 +78,22 @@ export function laHttpMethod(x: string | undefined): x is HttpMethod {
 export function docCookie(header: string | undefined): Readonly<Record<string, string>> {
   const ra: Record<string, string> = {};
   if (header === undefined || header === "") return ra;
+  // [sổ nợ 42 / review L-2] Một tên xuất hiện HAI LẦN là dấu hiệu có kẻ ném cookie (subdomain anh
+  // em, hay hai `Path` chồng nhau): không lấy cái đầu, không lấy cái sau — BỎ tên ấy, người gọi
+  // thành 401. `__Host-` đã đóng đường subdomain; đây là lớp cho ca tiền tố không áp được.
+  const trung = new Set<string>();
   for (const phan of header.split(";")) {
     const i = phan.indexOf("=");
     if (i <= 0) continue;
     const ten = phan.slice(0, i).trim();
     const giaTri = phan.slice(i + 1).trim();
-    if (ten !== "" && !(ten in ra)) ra[ten] = giaTri;
+    if (ten === "" || trung.has(ten)) continue;
+    if (ten in ra) {
+      delete ra[ten];
+      trung.add(ten);
+      continue;
+    }
+    ra[ten] = giaTri;
   }
   return ra;
 }

@@ -14,10 +14,10 @@
 //   PUBLIC  không tổ chức, không CSDL.
 //   ANON    tổ chức đọc từ THÂN (`orgId`), gắn `withTenant`; thẩm quyền do chính handler chứng
 //           minh bằng token trong thân (magic link, OTP). Chỉ ở /guest/* và /auth/*.
-//   GUEST   cookie `tp_guest=<orgId>.<token>` → `resolveGuestSessionByToken` (một giao dịch) →
+//   GUEST   cookie `__Host-tp_guest=<orgId>.<token>` → `resolveGuestSessionByToken` (một giao dịch) →
 //           route ĐỌC: `withGuestSession` (giao dịch thứ hai, đặt ba GUC) → handler;
 //           route GHI: `withTenant` (KHÔNG GUC) → handler. Vì sao rẽ nhánh — xem khối dưới.
-//   BUYER   cookie `tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
+//   BUYER   cookie `__Host-tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
 //           `requirePermission` → handler. Tất cả trong MỘT `withTenant`.
 //
 // ---------------------------------------------------------------------------------------------

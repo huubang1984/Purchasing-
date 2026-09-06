@@ -19,7 +19,8 @@ import {
 import { HttpError } from "../http.js";
 import type { AnonRoute } from "../route-types.js";
 
-export const COOKIE_PHIEN_KHACH = "tp_guest";
+/** [sổ nợ 42] Tiền tố `__Host-` — cùng lý do với `COOKIE_PHIEN_NGUOI_MUA` (routes/auth.ts). */
+export const COOKIE_PHIEN_KHACH = "__Host-tp_guest";
 /** Bằng mặc định của `verifyOtpAndStartSession` (4 giờ). Cookie chết cùng lúc với hàng phiên. */
 const TUOI_COOKIE_KHACH_GIAY = 4 * 3600;
 
@@ -36,12 +37,14 @@ function kenh(body: unknown): Channel {
 }
 
 /**
- * Dòng `Set-Cookie` cho phiên khách. `Path=/guest` để cookie không đi kèm mọi yêu cầu tới api;
- * `SameSite=Strict` + `HttpOnly` + `Secure` — cùng bộ với phiên người mua (ADR-020 mục 2).
+ * Dòng `Set-Cookie` cho phiên khách. ~~`Path=/guest` để cookie không đi kèm mọi yêu cầu tới api~~
+ * [sổ nợ 42] `__Host-` ĐÒI `Path=/`, nên cookie khách nay đi kèm mọi yêu cầu — vô hại: tên khác
+ * cookie người mua, và dispatcher chỉ đọc đúng tên cho đúng đối tượng route. `SameSite=Strict` +
+ * `HttpOnly` + `Secure` — cùng bộ với phiên người mua (ADR-020 mục 2).
  */
 export function cookiePhienKhach(orgId: string, sessionToken: string): string {
   return (
-    `${COOKIE_PHIEN_KHACH}=${orgId}.${sessionToken}; Path=/guest; Max-Age=${TUOI_COOKIE_KHACH_GIAY}; ` +
+    `${COOKIE_PHIEN_KHACH}=${orgId}.${sessionToken}; Path=/; Max-Age=${TUOI_COOKIE_KHACH_GIAY}; ` +
     "HttpOnly; Secure; SameSite=Strict"
   );
 }

@@ -3,7 +3,7 @@
 //
 //   POST /auth/link     {orgId, email}        → luôn 200 cùng một thân; token đi tới BỘ GỬI
 //   POST /auth/redeem   {orgId, token}        → đã có TOTP chưa; nếu chưa: ghi danh, trả bí mật MỘT LẦN
-//   POST /auth/totp     {orgId, token, code}  → phiên ĐÃ MFA, đi ra bằng cookie `tp_session`
+//   POST /auth/totp     {orgId, token, code}  → phiên ĐÃ MFA, đi ra bằng cookie `__Host-tp_session`
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
@@ -25,7 +25,13 @@ import {
 import { HttpError } from "../http.js";
 import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
 
-export const COOKIE_PHIEN_NGUOI_MUA = "tp_session";
+/**
+ * [sổ nợ 42 / review L-2] Tiền tố `__Host-`: trình duyệt chỉ nhận cookie này khi nó đến từ một
+ * phản hồi HTTPS, KHÔNG có `Domain`, và `Path=/` — nên một subdomain anh em bị chiếm KHÔNG ném được
+ * một `tp_session` giả vào trình duyệt của người mua (login CSRF). Đổi tên là đổi hợp đồng với
+ * client; làm trước khi có client thật là rẻ nhất.
+ */
+export const COOKIE_PHIEN_NGUOI_MUA = "__Host-tp_session";
 
 function chuoi(body: unknown, ten: string): string {
   const v = (body as Record<string, unknown> | null | undefined)?.[ten];

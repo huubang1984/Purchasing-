@@ -164,7 +164,22 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     const { token, biMat } = await linkVaGhiDanh("e2@vidu.vn");
     expect(biMat).toHaveLength(20);
     expect((await goi("GET", "/me", { cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}` })).status).toBe(401);
-    // [review M-5] Hồ sơ CHƯA xác nhận ⇒ redeem lần hai ghi danh LẠI (bí mật KHÁC), vẫn không mở phiên.
+  });
+
+  it("[sổ nợ 42] hai cookie CÙNG TÊN trong một header ⇒ 401, kể cả khi một trong hai là phiên hợp lệ", async () => {
+    await taoNguoi("trung-ten@vidu.vn");
+    const { cookie } = await dangNhap("trung-ten@vidu.vn");
+    expect((await goi("GET", "/me", { cookie })).status).toBe(200);
+    const gia = `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${"x".repeat(43)}`;
+    expect((await goi("GET", "/me", { cookie: `${gia}; ${cookie}` })).status).toBe(401);
+    expect((await goi("GET", "/me", { cookie: `${cookie}; ${gia}` })).status).toBe(401);
+    // Một cookie KHÁC TÊN đứng cạnh thì vô hại.
+    expect((await goi("GET", "/me", { cookie: `khac=1; ${cookie}` })).status).toBe(200);
+  });
+
+  it("[review M-5] hồ sơ CHƯA xác nhận ⇒ redeem lần hai ghi danh LẠI (bí mật KHÁC), vẫn không mở phiên", async () => {
+    await taoNguoi("e2b@vidu.vn");
+    const { token, biMat } = await linkVaGhiDanh("e2b@vidu.vn");
     const lan2 = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token } });
     expect(lan2.status).toBe(200);
     expect((lan2.body as { needsEnrollment: boolean; totpSecretBase32: string }).needsEnrollment).toBe(true);
@@ -284,8 +299,10 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     const { token, biMat } = await linkVaGhiDanh("cookie@vidu.vn");
     const r = await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: maHienTai(biMat) } });
     const sc = r.headers.get("set-cookie") ?? "";
-    expect(sc).toMatch(/^tp_session=[0-9a-f-]{36}\.[A-Za-z0-9_-]{32,}/u);
+    expect(sc).toMatch(/^__Host-tp_session=[0-9a-f-]{36}\.[A-Za-z0-9_-]{32,}/u);
     for (const tt of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/;"]) expect(sc).toContain(tt);
+    // [sổ nợ 42] `__Host-` chỉ có nghĩa khi KHÔNG có `Domain` — trình duyệt bỏ cookie nếu có.
+    expect(sc).not.toMatch(/domain=/iu);
     expect(r.text).not.toContain(/tp_session=[^.]+\.([^;]+)/u.exec(sc)?.[1] ?? "@@");
   });
 

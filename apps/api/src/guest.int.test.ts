@@ -198,8 +198,10 @@ describe("ba bước vô danh: redeem → OTP → verify", () => {
     const dung = await goi("POST", "/guest/otp/verify", { body: { orgId: orgA, token: lm.token, code: gui.code } });
     expect(dung.status, dung.text).toBe(200);
     const sc = dung.headers.get("set-cookie") ?? "";
-    expect(sc).toMatch(/^tp_guest=[0-9a-f-]{36}\.[A-Za-z0-9_-]{32,}/u);
-    for (const thuocTinh of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/guest"]) expect(sc).toContain(thuocTinh);
+    expect(sc).toMatch(/^__Host-tp_guest=[0-9a-f-]{36}\.[A-Za-z0-9_-]{32,}/u);
+    // [sổ nợ 42] `__Host-` đòi `Path=/` và không `Domain`; cookie khách rời `Path=/guest`.
+    for (const thuocTinh of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/;"]) expect(sc).toContain(thuocTinh);
+    expect(sc).not.toMatch(/domain=/iu);
     // Token phiên không nằm ở đâu ngoài Set-Cookie.
     const tokenPhien = /tp_guest=[0-9a-f-]{36}\.([^;]+)/u.exec(sc)?.[1] ?? "";
     expect(dung.text).not.toContain(tokenPhien);
