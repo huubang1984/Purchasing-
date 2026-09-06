@@ -433,8 +433,10 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 7. **[2026-09-06, cuối ngày] S1.10 ĐÃ ĐI HẾT BẢY HẠNG MỤC.** Độ phủ **51/51** — danh sách được-phép-
    chưa-phủ RỖNG lần đầu; kịch bản mục 41 chạy trọn **qua HTTP** với năm lần đăng nhập TOTP thật và
    năm phiên khách thật; hai lượt security-reviewer (10.3+10.4; 10.5+10.6+vòng sửa) ở
-   `evidence/security-reviews.md`. Sổ nợ nhận **38–43** — toàn bộ là phần chênh review chỉ ra và
-   được viết thành tên. Ba thứ đọc trước khi tin con số 51/51: A2 mang cờ §4 (heap/APM chưa đo); E6
+   `evidence/security-reviews.md`. Sổ nợ nhận ~~**38–43**~~ **38–49** (lượt 2 thêm 44–49; **44 là một
+   QUYẾT ĐỊNH đang chờ**: PM giữ cả `policy.manage` lẫn `rfq.create`) — toàn bộ là phần chênh review
+   chỉ ra và được viết thành tên. Lượt 2 bắt được BA chỗ vòng sửa 1 đóng sai (M-4, M-5/031, §4 A2)
+   — đã sửa, migration `032`. Ba thứ đọc trước khi tin con số 51/51: A2 mang cờ §4 (heap/APM chưa đo); E6
    mang cờ (trang `/i#<token>` là tầng web chưa có); đường ghi của khách chạy dưới `withTenant`
    không GUC (lý do đo được ở 028). Chi tiết: `docs/STATE.md` mục 16–21.
 

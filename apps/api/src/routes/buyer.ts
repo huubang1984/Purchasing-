@@ -70,6 +70,12 @@ function chuoiBatBuoc(body: unknown, ten: string): string {
   if (typeof v !== "string" || v.trim() === "") throw new HttpError(422, `thiếu trường "${ten}"`);
   return v;
 }
+/** [review H2-8] Định danh trong THÂN phải đúng dạng UUID trước khi chạm CSDL — sai dạng là 422, không phải 22P02 → 500. */
+function uuidBody(body: unknown, ten: string): string {
+  const v = chuoiBatBuoc(body, ten);
+  if (!UUID_RE.test(v)) throw new HttpError(422, `trường "${ten}" phải là UUID`);
+  return v;
+}
 function chuoiTuyChon(body: unknown, ten: string): string | null {
   const v = truong(body, ten);
   if (v === undefined || v === null) return null;
@@ -246,8 +252,16 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.POLICY_MANAGE,
     resourceType: "PROCUREMENT_POLICY",
     handler: async (ctx) => {
+      // [review H2-3] `version` do người gọi chọn + cột `integer` + trigger 022 "phải LỚN HƠN" + không
+      // UPDATE/DELETE ⇒ một `version: 2147483647` GHIM tổ chức vào chính sách ấy vĩnh viễn. Ở tầng
+      // HTTP, `version` chỉ là GIÁ TRỊ KỲ VỌNG (chống đua): phải bằng phiên bản hiện hành + 1.
+      // Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.
+      const version = soNguyen(ctx.req.body, "version");
+      const hienHanh = await getActiveProcurementPolicy(ctx.client, ctx.orgId);
+      const keTiep = (hienHanh?.version ?? 0) + 1;
+      if (version !== keTiep) throw new HttpError(422, `trường "version" phải bằng phiên bản hiện hành + 1 (${keTiep})`);
       const policy = await createProcurementPolicy(ctx.client, ctx.orgId, {
-        version: soNguyen(ctx.req.body, "version"),
+        version,
         dualApprovalThreshold: chuoiBatBuoc(ctx.req.body, "dualApprovalThreshold"),
         currency: tienTe(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
@@ -456,9 +470,17 @@ const ghi: readonly BuyerWriteRoute[] = [
     mutates: true,
     permission: PERMISSIONS.RFQ_INVITE,
     resourceType: "INVITATION",
+    // [review H2-9] RFQ bị mời nằm trong đường dẫn — bản ghi PERMISSION_DENIED (D5) phải mang nó.
+    resourceId: rfqIdParam,
     handler: async (ctx) => {
-      const supplierId = chuoiBatBuoc(ctx.req.body, "supplierId");
-      const contactId = chuoiBatBuoc(ctx.req.body, "contactId");
+      const supplierId = uuidBody(ctx.req.body, "supplierId");
+      const contactId = uuidBody(ctx.req.body, "contactId");
+      // [review H2-9 ⑵] "Người liên hệ thuộc nhà cung cấp" kiểm TRƯỚC khi tạo lời mời và phát token —
+      // CSDL chỉ có FK `(org_id, contact_id)`, không ràng `contact ∈ supplier`; bản trước kiểm SAU và
+      // dựa vào rollback của `withTenant` để vứt `INVITATION_CREATED` + token. Đích của link đọc từ
+      // `supplier_contacts` — không từ thân yêu cầu (cùng kỷ luật với OTP, ADR-015 [C1]).
+      const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, supplierId)).find((c) => c.id === contactId);
+      if (lienHe === undefined) throw new HttpError(422, "nguoi lien he khong thuoc nha cung cap");
       const loi = await createInvitation(ctx.client, ctx.orgId, {
         rfqId: rfqIdParam(ctx.req),
         supplierId,
@@ -467,10 +489,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         actorSessionId: ctx.actor.sessionId,
       });
       const t = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
-      // Đích của link đọc từ `supplier_contacts` — không từ thân yêu cầu (cùng kỷ luật với OTP,
-      // ADR-015 [C1]). Token đi tới bộ gửi TIÊM vào và KHÔNG về client.
-      const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, supplierId)).find((c) => c.id === contactId);
-      if (lienHe === undefined) throw new HttpError(422, "nguoi lien he khong thuoc nha cung cap");
+      // Token đi tới bộ gửi TIÊM vào và KHÔNG về client.
       await ctx.services.invitationLinkSender.send({
         orgId: ctx.orgId,
         invitationId: loi.id,
@@ -514,6 +533,11 @@ const ghi: readonly BuyerWriteRoute[] = [
     mutates: true,
     permission: PERMISSIONS.RFQ_UNSEAL,
     resourceType: "UNSEAL_REQUEST",
+    // [review H2-9] RFQ được yêu cầu mở nằm trong đường dẫn — bản ghi PERMISSION_DENIED phải mang nó.
+    resourceId: rfqIdParam,
+    // [review lượt 2] `breakGlass: true` qua HTTP hôm nay LUÔN 422: `requestUnseal` đòi
+    // `breakGlassWitnessSessionId` (phiên của người làm chứng) mà route không có cách nào truyền —
+    // đường break-glass qua HTTP CHƯA ĐI ĐƯỢC, ghi ở §4 của D4, không phải một tính năng đã có.
     handler: async (ctx) => {
       const breakGlass = truong(ctx.req.body, "breakGlass");
       if (breakGlass !== undefined && typeof breakGlass !== "boolean") throw new HttpError(422, 'trường "breakGlass" phải là boolean');

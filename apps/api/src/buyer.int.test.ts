@@ -122,6 +122,16 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     }
     expect(lot, "route ghi cho một phiên KHÔNG có quyền nào đi qua mà không 403").toEqual([]);
     expect(await demTuChoi(khongQuyen.id)).toBe(truoc + routeGhi.length);
+    // [review H2-9] [INV-D5] Bản ghi từ chối mang TOẠ ĐỘ: mọi route khai `resourceId` (đọc từ đường
+    // dẫn) để lại `resource_id = UUID0`; số bản ghi có toạ độ bằng đúng số route khai nó.
+    const coToaDo = routeGhi.filter((r) => "resourceId" in r && r.resourceId !== undefined).length;
+    expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
+    expect(routeGhi.length - coToaDo, "route ghi KHÔNG có toạ độ: chỉ POST /policy, /suppliers, /rfqs (tạo mới)").toBe(3);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' AND resource_id = $3",
+      [orgA, khongQuyen.id, UUID0],
+    );
+    expect(Number(rows[0]?.n)).toBe(coToaDo);
   });
 
   it("route ĐỌC không có cổng ở dispatcher (theo ADR-016): phiên không quyền vẫn đọc được /me, /suppliers", async () => {
@@ -149,6 +159,13 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     const cs = await goi("POST", "/policy", pm1, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" });
     expect(cs.status, cs.text).toBe(201);
     expect((await goi("GET", "/policy", buyer)).status).toBe(200);
+    // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng hiện hành + 1. Một `2147483647` (trần
+    // int4 — ghim tổ chức vĩnh viễn vì trigger 022 đòi "lớn hơn" và không có UPDATE/DELETE) bị 422.
+    const ghim = await goi("POST", "/policy", pm1, { version: 2147483647, dualApprovalThreshold: "0.01", currency: "VND" });
+    expect(ghim.status, ghim.text).toBe(422);
+    expect(ghim.text).toContain("hiện hành + 1 (2)");
+    expect((await goi("POST", "/policy", pm1, { version: 1, dualApprovalThreshold: "0.01", currency: "VND" })).status).toBe(422);
+    expect((await goi("GET", "/policy", buyer)).text).toContain('"version":1');
 
     // Nhà cung cấp + người liên hệ (đích của magic link).
     const ncc = await goi("POST", "/suppliers", pm1, { legalName: "Thep Viet", taxCode: "0301234567" });
@@ -177,8 +194,12 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     // Cùng người duyệt hai lần: `rfq_approvals_mot_nguoi_mot_lan` (UNIQUE) ⇒ 23505 ⇒ 409, thân cố định.
     const d1lai = await goi("POST", `/rfqs/${rfqId}/approve`, pm2);
     expect(d1lai.status, d1lai.text).toBe(409);
-    // Chưa đủ hai người ⇒ mở bị từ chối.
-    expect((await goi("POST", `/rfqs/${rfqId}/open`, pm1)).status).toBe(422);
+    // Chưa đủ hai người ⇒ mở bị từ chối — và [review H2-10] đọc LÝ DO: thông điệp của trigger 009 (D2),
+    // không phải một 422 nào đó khác (trạng thái sai, thiếu hạng mục) trông y hệt.
+    const moSom = await goi("POST", `/rfqs/${rfqId}/open`, pm1);
+    expect(moSom.status).toBe(422);
+    expect(moSom.text).toContain("can 2 phe duyet");
+    expect(moSom.text).toContain(", moi co 1 (D2)");
     expect((await goi("POST", `/rfqs/${rfqId}/approve`, pm3)).status).toBe(200);
 
     // [INV-C5] Trước khi mở: chưa có khoá. Sau khi mở: có.
@@ -192,7 +213,21 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     expect(khoaSau.rows.length).toBeGreaterThan(0);
 
     // [INV-E6] Mời: token magic link tới BỘ GỬI với đích đọc từ supplier_contacts, KHÔNG về client.
+    // [review H2-9 ⑵] Người liên hệ của NCC KHÁC ⇒ 422 TRƯỚC khi có lời mời hay token nào; định danh
+    // sai dạng ⇒ 422 (không phải 22P02 → 500). Đo cả "không để lại gì": không hàng rfq_invitations
+    // cho NCC ấy, bộ gửi không nhận thêm link.
+    const nccKhac = await goi("POST", "/suppliers", pm1, { legalName: "Thep Khac", taxCode: "0309876543" });
+    const supplierKhac = (nccKhac.body as { supplier: { id: string } }).supplier.id;
+    const lhKhac = await goi("POST", `/suppliers/${supplierKhac}/contacts`, pm1, { fullName: "Chi Khac", email: "khac@thepkhac.vn" });
+    const contactKhac = (lhKhac.body as { contact: { id: string } }).contact.id;
     const truocMoi = dv.loiMoiDaGui.length;
+    const lech = await goi("POST", `/rfqs/${rfqId}/invitations`, buyer, { supplierId, contactId: contactKhac });
+    expect(lech.status, lech.text).toBe(422);
+    expect(lech.text).toContain("khong thuoc nha cung cap");
+    expect((await goi("POST", `/rfqs/${rfqId}/invitations`, buyer, { supplierId: "khong-phai-uuid", contactId })).status).toBe(422);
+    expect((await db.pool.query("SELECT 1 FROM rfq_invitations WHERE rfq_id = $1", [rfqId])).rows).toHaveLength(0);
+    expect(dv.loiMoiDaGui).toHaveLength(truocMoi);
+
     const moi = await goi("POST", `/rfqs/${rfqId}/invitations`, buyer, { supplierId, contactId });
     expect(moi.status, moi.text).toBe(201);
     expect(dv.loiMoiDaGui).toHaveLength(truocMoi + 1);
@@ -216,9 +251,15 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, gd1, { reason: "den gio mo thau" });
     expect(yc.status, yc.text).toBe(201);
     const unsealId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
-    expect((await goi("POST", `/unseal/${unsealId}/approve`, gd1)).status).toBe(422); // người yêu cầu không tự duyệt
+    // [review H2-10] Hai 422 dưới đọc LÝ DO: trigger 019 (D2, D3) và cổng D1 — không phải 422 nào cũng được.
+    const tuDuyet = await goi("POST", `/unseal/${unsealId}/approve`, gd1);
+    expect(tuDuyet.status).toBe(422);
+    expect(tuDuyet.text).toContain("khong duoc tu phe duyet (D2, D3)");
     expect((await goi("POST", `/unseal/${unsealId}/approve`, gd2)).status).toBe(200);
-    expect((await goi("POST", `/unseal/${unsealId}/dispatch`, gd1)).status).toBe(422); // mới một phê duyệt
+    const somMot = await goi("POST", `/unseal/${unsealId}/dispatch`, gd1);
+    expect(somMot.status).toBe(422);
+    // Cổng D1 đọc trạng thái trước khi đếm: mới một phê duyệt ⇒ yêu cầu còn PENDING, chưa APPROVED.
+    expect(somMot.text).toContain("phải ở trạng thái APPROVED; đang ở PENDING");
     expect((await goi("POST", `/unseal/${unsealId}/approve`, gd3)).status).toBe(200);
     const dp = await goi("POST", `/unseal/${unsealId}/dispatch`, gd1);
     expect(dp.status, dp.text).toBe(200);

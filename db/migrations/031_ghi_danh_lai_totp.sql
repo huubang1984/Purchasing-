@@ -7,10 +7,15 @@
 -- và không có bí mật. Cột `confirmed_at` (006) đã có sẵn đúng thứ cần: nó chỉ được đóng ở lần
 -- TOTP thành công ĐẦU TIÊN, tức "hồ sơ chưa xác nhận" = "chưa ai chứng minh đã cầm bí mật".
 --
--- File này cấp cho `app_api` quyền THAY bí mật — và CHỈ khi hồ sơ chưa xác nhận là do câu UPDATE
+-- File này cấp cho `app_api` quyền THAY bí mật — ~~và CHỈ khi hồ sơ chưa xác nhận là do câu UPDATE
 -- ở `packages/identity/src/login.ts` (`enrollOrReplaceTotpForLogin`) giữ bằng vế `WHERE
--- confirmed_at IS NULL`; GRANT không biết trạng thái, nên vế ấy có test kèm đột biến. Hồ sơ ĐÃ xác
+-- confirmed_at IS NULL`; GRANT không biết trạng thái, nên vế ấy có test kèm đột biến.~~ Hồ sơ ĐÃ xác
 -- nhận vẫn không thay được ở tầng ứng dụng — đường đặt lại cho người mất bí mật là sổ nợ 40.
+--
+-- [review lượt 2, H2-1 — cùng ngày] Câu gạch trên SAI ở hai chỗ: GRANT này cho một `app_api` bị
+-- chiếm thay bí mật của hồ sơ ĐÃ xác nhận, và "test kèm đột biến" xanh vì câu UPDATE của test tự
+-- mang `WHERE confirmed_at IS NULL`. Lớp CSDL thật nằm ở `032` (trigger BEFORE UPDATE), và test đã
+-- được viết lại để câu đột biến KHÔNG mang vế WHERE ấy.
 --
 -- KHÔNG có trigger "phiên phải kèm bằng chứng TOTP" ở đây (review M-4 đề xuất): bộ test lược đồ
 -- của 006 chèn `sessions` dưới `app_api` để đo khoá ngoại/CHECK/UNIQUE, và một trigger đòi hồ sơ

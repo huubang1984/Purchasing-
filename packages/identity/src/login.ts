@@ -141,15 +141,18 @@ export async function redeemLoginToken(
  * BIÊN DỊCH ĐƯỢC, không phải một thứ tự ba dòng phải nhớ. Vế CSDL của cùng khiếm khuyết (trigger
  * đòi bộ đếm TOTP gần đây) cố ý chưa làm — sổ nợ 43, lý do ở đầu migration 031.
  */
+let taoMfaProof!: (orgId: string, userId: string, counter: number) => MfaProof;
 export class MfaProof {
   private constructor(
     readonly orgId: string,
     readonly userId: string,
     readonly counter: number,
   ) {}
-  /** @internal — chỉ `verifyTotpForLogin` gọi. */
-  static _tao(orgId: string, userId: string, counter: number): MfaProof {
-    return new MfaProof(orgId, userId, counter);
+  // [review H2-5] Bản trước có `static _tao(...)` công khai (chỉ ghi `@internal`) và barrel xuất lớp
+  // dưới dạng GIÁ TRỊ — `MfaProof._tao(orgId, userId, 0)` biên dịch sạch từ apps/api. Nay lớp chỉ
+  // xuất dưới dạng KIỂU, và đường tạo là một hàm KHÔNG export của module này.
+  static {
+    taoMfaProof = (orgId, userId, counter) => new MfaProof(orgId, userId, counter);
   }
 }
 
@@ -163,7 +166,7 @@ export async function verifyTotpForLogin(
   unsealer: TotpSecretUnsealer,
 ): Promise<LoginTotpResult> {
   const kq = await verifyTotpAttempt(client, input, unsealer);
-  if (kq.ok) return { ok: true, proof: MfaProof._tao(input.orgId, input.userId, kq.counter) };
+  if (kq.ok) return { ok: true, proof: taoMfaProof(input.orgId, input.userId, kq.counter) };
   if (kq.justLocked) {
     await appendAuditEvent(client, input.orgId, {
       actorType: "USER",

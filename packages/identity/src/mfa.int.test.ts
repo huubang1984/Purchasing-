@@ -1372,7 +1372,9 @@ describe("lược đồ 006", () => {
       ],
       // ~~Bí mật đã lưu KHÔNG sửa được~~ [S1.10.7 / 031 / review M-5] app_api nay THAY được bí mật của
       // hồ sơ CHƯA XÁC NHẬN (ghi danh lại khi ai đó đọc trộm hộp thư ghi danh trước); vế "chỉ khi chưa
-      // xác nhận" do `WHERE confirmed_at IS NULL` ở `login.ts` giữ — đo ở auth.int.test.ts [review M-5].
+      // xác nhận" ~~do `WHERE confirmed_at IS NULL` ở `login.ts` giữ~~ [032 / review H2-1] do trigger
+      // `mfa_credentials_khoa_ho_so_da_xac_nhan` giữ Ở CSDL — đo (kèm đột biến gỡ trigger) ở
+      // auth.int.test.ts [review M-5][review H2-1].
       // Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.
       ["mfa_credentials (DELETE)", "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]],
       // `expires_at` không được UPDATE -> không gia hạn phiên vô hạn.

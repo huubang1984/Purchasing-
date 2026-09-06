@@ -131,15 +131,24 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
   it("[review L-5] route KHÁCH ghi (mutates:true) KHÔNG viết SQL tay — chỉ gọi hàm gói nhận guestSessionId", () => {
     // Đường ghi của khách chạy dưới `withTenant` KHÔNG GUC (dispatch.ts khối [S1.10.3]); cô lập do
     // trigger + chữ ký hàm gói giữ. Một `client.query(` trong handler ghi là đọc rộng hơn phiên.
-    const ma = readFileSync(join(GOC, "apps/api/src/routes/guest.ts"), "utf8");
-    const khoi = ma.split(/\n  \{\n    method:/u).slice(1);
+    // Checkout Windows của CI dùng CRLF (cùng họ lỗi `hinh-dang-ci.test.ts` ở PR #2): chuẩn hoá
+    // trước khi tách, nếu không bộ tách thấy 0 route và phép đo "rỗng ruột" tự bắt chính nó.
+    const ma = boChuThich(readFileSync(join(GOC, "apps/api/src/routes/guest.ts"), "utf8").replace(/\r\n/gu, "\n"));
+    const [phanDau, ...khoi] = ma.split(/\n  \{\n    method:/u);
     expect(khoi.length, "phải tách được các route của guest.ts").toBeGreaterThan(3);
     // `.query<...>(` cũng là một lời gọi — regex phải thấy cả dạng có tham số kiểu.
     const goiSql = /\.query\s*(?:<|\()/u;
+    // [review H2-11 ⑴] Quét CẢ phần đầu file: một helper `docRong(client) { client.query(...) }`
+    // đặt trước bảng route và được route ghi gọi cũng là "SQL tay dưới kết nối chỉ gắn tổ chức".
+    expect(goiSql.test(phanDau ?? ""), "SQL tay ở phần đầu guest.ts, ngoài mọi route").toBe(false);
     const viPham = khoi.filter((k) => /mutates:\s*true/u.test(k) && goiSql.test(k)).map((k) => k.slice(0, 60));
     expect(viPham).toEqual([]);
     // Đối chứng: có route ĐỌC dùng SQL tay (cố ý, không WHERE) — nếu không, bộ tách route rỗng ruột.
     expect(khoi.some((k) => /mutates:\s*false/u.test(k) && goiSql.test(k))).toBe(true);
+    // Đối chứng CRLF: KHÔNG chuẩn hoá thì cùng file ở dạng CRLF tách ra 0 route — đúng lỗi CI đã thấy.
+    const crlf = ma.replace(/\n/gu, "\r\n");
+    expect(crlf.split(/\n  \{\n    method:/u).length - 1).toBe(0);
+    expect(crlf.replace(/\r\n/gu, "\n").split(/\n  \{\n    method:/u).length - 1).toBe(khoi.length);
   });
 
   it("PROBE: một handler import @trustprocure/tenancy làm depcruise ĐỎ với quy tắc g9-", () => {

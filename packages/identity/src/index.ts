@@ -122,7 +122,6 @@ export {
   LOGIN_RATE_WINDOW_SECONDS,
   LOGIN_TOKEN_TTL_SECONDS,
   LoginTokenError,
-  MfaProof,
   USER_SESSION_DEFAULT_TTL_SECONDS,
   enrollOrReplaceTotpForLogin,
   issueLoginToken,
@@ -132,6 +131,8 @@ export {
   verifyTotpForLogin,
   type IssueLoginTokenOutcome,
   type LoginTotpResult,
+  // [review H2-5] CHỈ KIỂU: xuất lớp dưới dạng giá trị là để lộ đường tạo bằng chứng giả từ ngoài.
+  type MfaProof,
   type RedeemedLoginToken,
   type StartedUserSession,
 } from "./login.js";

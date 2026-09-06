@@ -4,8 +4,8 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 vòng
-sửa sau review; xem *Hành động tiếp theo* mục 20–21; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+**Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+review + hai vòng sửa, migration `032`, sổ nợ tới **49**; xem *Hành động tiếp theo* mục 20–22; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -379,6 +379,12 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 41 | **[review M-8] `remoteAddressOf` là một hook, chưa có cài đặt đọc `X-Forwarded-For` theo CIDR tin cậy** — chừng nào chưa có, api KHÔNG được đặt sau proxy/LB (ADR-020 ghi); nếu đặt, bucket `CALLER` của OTP thành hạn mức toàn tổ chức | `apps/api/src/server.ts` |
 | 42 | **[review L-2] Cookie phiên chưa dùng tiền tố `__Host-`; cookie trùng tên lấy giá trị ĐẦU** — một subdomain anh em bị chiếm ném cookie được (login CSRF). Đổi tên cookie là đổi hợp đồng với client — làm khi có client thật | `apps/api/src/routes/auth.ts`, `anon.ts`, `router.ts` |
 | 43 | **[review M-4] Vế CSDL của "phiên chỉ ra đời sau một lần TOTP đúng" chưa có** — trigger 029 chỉ đòi `mfa_verified_at`; bằng chứng TOTP nay là KIỂU (`MfaProof`), không phải hàng trong CSDL. Làm được bằng trigger đòi `mfa_credentials.last_used_counter` gần đây, nhưng phải đổi cách tám phép đo lược đồ 006 chèn `sessions` (dưới superuser thay vì `app_api`) | `db/migrations/031_ghi_danh_lai_totp.sql` (khối đầu), `packages/identity/src/login.ts` |
+| 44 | **[review lượt 2, H2-2] `PROCUREMENT_MANAGER` giữ cả `policy.manage` lẫn `rfq.create`** — người đặt ngưỡng đặt được ước lượng, nên D2 hạ xuống MỘT phê duyệt bằng một PM + một người duyệt. Câu biện minh sai ở 030 đã gạch; §4 của D2 ghi phần chênh. **QUYẾT ĐỊNH ĐANG CHỜ:** tách vai, hay mở rộng trigger D3 cấm một vai giữ cả hai | `db/migrations/030_policy_manage.sql`, `docs/DECISIONS.md` ADR-017 |
+| 45 | **[review lượt 2, H2-3] Vế CSDL của "`version` chính sách không ghim được tổ chức"** — tầng HTTP nay đòi `version` = hiện hành + 1 (giá trị kỳ vọng, chống đua), nhưng một `app_api` bị chiếm vẫn INSERT được `version = 2147483647` và trigger 022 ("phải lớn hơn") + không UPDATE/DELETE ghim tổ chức vĩnh viễn. Đóng đúng: trigger tự gán `version = max + 1`, hoặc `CHECK (version < 1000000)` phòng hờ | `db/migrations/022_security_review_s1.sql` (khối `chinh_sach_phien_ban_tang_dan`) |
+| 46 | **[review lượt 2, H2-9 ⑵] Không ràng buộc CSDL nào nói `contact ∈ supplier` cho lời mời** — `rfq_invitations` chỉ có FK `(org_id, contact_id)`; route nay kiểm TRƯỚC khi tạo, nhưng gọi `createInvitation` từ nơi khác (job, route tương lai) với contact của NCC khác thì link tới người của Y mà đơn thầu mang danh X. Cần FK tổ hợp `(org_id, supplier_id, contact_id) → supplier_contacts (org_id, supplier_id, id)` | `db/migrations/010_invitations.sql`, `packages/invitation/src/invitation.ts` |
+| 47 | **[review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG** — `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh; chỉ ba route được đo chéo ở test vòng đời. Cần vòng quét "mọi quyền TRỪ `route.permission` ⇒ 403" tự sinh từ `ROUTES`. Cùng dòng: lớp canh tĩnh `\brequirePermission\s*\(` bị `const rp = requirePermission` qua mặt (ADR-016 §4 đã tự nhận) | `apps/api/src/buyer.int.test.ts`, `routes.test.ts` |
+| 48 | **[review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên** — đường HTTP chặn (L-1, JOIN `users.status`); đường gói không; người bị đình chỉ rồi kích hoạt lại thì mọi phiên cũ còn TTL sống lại. Cần trigger `AFTER UPDATE OF status ON users` thu hồi phiên trong cùng giao dịch + `u.status = 'ACTIVE'` ở `resolveSessionActor` — nhưng bộ test identity bật/tắt `SUSPENDED` nhiều lần trên cùng phiên, phải sửa test trước | `packages/identity/src/session-actor.ts`, `db/migrations/006_sessions_and_mfa.sql` |
+| 49 | **[review lượt 2, H2-4 ⑶ + bộ dò] Bộ quét rò rỉ gọi route GHI với thân `{}`** — chúng dừng ở 422 trước nghiệp vụ, nên vòng quét chứng minh cho route đọc nhiều hơn route ghi; và bộ dò là `includes` chuỗi thập phân đã biết (giá viết `980,000,000`, `9.8e8`, base64, thứ tự xếp hạng đi lọt). Cần gọi route ghi với thân HỢP LỆ trên một RFQ hy sinh, và bộ dò theo giá trị số (mọi cách viết) | `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` |
 
 ## Kiến trúc
 
@@ -922,6 +928,36 @@ CMK, chưa có role nào được tạo.
     oracle thời gian `/auth/link` (M-1), bucket theo người gọi cho `/auth/*` (M-2), đường quản trị đặt
     lại TOTP (M-5 nửa sau), cài đặt `X-Forwarded-For` theo CIDR (M-8 nửa sau), `__Host-` (L-2), vế
     CSDL của M-4. ADR-020 sửa hai câu cho đúng thứ đang có (CSRF, hạn mức đăng nhập).
+
+22. **[2026-09-06] S1.10.7 — lượt review thứ HAI (10.5 + 10.6 + vòng sửa 10.7) và vòng sửa thứ hai.**
+    0 CRITICAL, 0 HIGH, **4 MEDIUM, 8 LOW** — bảng ở `evidence/security-reviews.md` §S1.10 (lượt 2).
+    **Ba chỗ vòng sửa thứ nhất đóng SAI, reviewer bắt được, đều đã sửa:** ⑴ M-5/031 — "vế chỉ khi
+    chưa xác nhận có test kèm đột biến" là SAI: câu UPDATE của test tự mang `WHERE confirmed_at IS
+    NULL`, và GRANT 031 cho một `app_api` bị chiếm thay bí mật của hồ sơ ĐÃ xác nhận; nay migration
+    **`032`** (trigger BEFORE UPDATE khoá `secret_wrapped`/`secret_key_version`/`confirmed_at` khi đã
+    xác nhận) và test viết lại: câu đột biến KHÔNG mang WHERE, đòi CSDL ném; gỡ trigger ⇒ đi lọt.
+    ⑵ M-4 — "không biên dịch được" rộng hơn cơ chế: `MfaProof._tao` công khai và barrel xuất lớp
+    dạng giá trị; nay `export type` + hàm tạo module-private. ⑶ §4 của A2 khai "cả đọc lẫn ghi" và
+    "kể cả 4xx/5xx" — rộng hơn phép đo (route ghi dừng ở 422 với thân `{}`; 4xx không vào log; vòng
+    quét chạy khi bản rõ chưa tồn tại phía máy chủ). Nay: vòng quét THỨ HAI sau mở thầu (năm phiên
+    khách + người mua không `bid.view`), vế log đo trên một 500 THẬT, §4 viết lại.
+    **Đóng bằng mã trong cùng vòng:** nhánh cho phép của `allowedOrigins` có test (H2-6); việc sau
+    commit có TRẦN thời gian và chỉ chạy khi phản hồi < 400 (H2-7); thông điệp 23514 chỉ lộ khi đến
+    từ `RAISE` của trigger (`routine = exec_stmt_raise`), CHECK thường và lớp 22 ra thân cố định,
+    `uuidBody` cho định danh trong thân (H2-8); `resourceId` cho `/rfqs/:id/invitations` và
+    `/rfqs/:id/unseal`, kiểm "contact ∈ supplier" TRƯỚC khi tạo (H2-9 ⑴); `version` chính sách chỉ là
+    giá trị kỳ vọng = hiện hành + 1 (H2-3, vế HTTP); bốn `toBe(422)` nay đọc LÝ DO, vòng lặp
+    `toBeTruthy` rỗng bị bỏ (H2-10); lớp canh L-5 quét cả phần đầu file (H2-11 ⑴). **Sáu khoản vào
+    sổ nợ 44–49**, trong đó **44 là một QUYẾT ĐỊNH đang chờ** (PM giữ cả ngưỡng lẫn ước lượng —
+    H2-2). D2 nhận cờ §4 lần đầu; D4 ghi "break-glass qua HTTP chưa đi được".
+
+    **Một lỗi CI của chính vòng này, ghi ra:** `f40803f` đỏ ở job Windows — test L-5 tách `guest.ts`
+    theo `\n` mà checkout Windows dùng CRLF (cùng họ `hinh-dang-ci.test.ts` ở PR #2, mục 14). Ubuntu
+    xanh, nên `pnpm evidence` cục bộ (Windows, autocrlf tắt) không thấy. Sửa: chuẩn hoá CRLF và một
+    đối chứng "không chuẩn hoá thì 0 route".
+
+    **Số đo trên HEAD của vòng sửa 2:** `pnpm t0` 154 module / 0 vi phạm; `pnpm evidence` **1138/1138**,
+    **51/51** (34/34 + 17/17), cổng XANH; danh sách được-phép-chưa-phủ vẫn RỖNG.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

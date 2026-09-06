@@ -199,7 +199,8 @@ const DANH_SACH_TRANG_IDENTITY = [
   "LOGIN_RATE_WINDOW_SECONDS",
   "LOGIN_TOKEN_TTL_SECONDS",
   "LoginTokenError",
-  "MfaProof",
+  // [review H2-5] `MfaProof` xuat CHI KIEU (export type) — khong co mat trong Object.keys(), va do
+  // la dieu duoc do: mot lan xuat lai duoi dang gia tri se lam danh sach nay lech.
   "USER_SESSION_DEFAULT_TTL_SECONDS",
   "enrollOrReplaceTotpForLogin",
   "issueLoginToken",

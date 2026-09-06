@@ -1227,6 +1227,12 @@ một cột giá nào**, cố ý, vì *"bảng không có cột thì không có 
   ở đây.~~ **Chốt 2026-09-06 cùng ADR-020:** mã quyền mới `policy.manage`, gán cho
   `PROCUREMENT_MANAGER` (migration `030`, S1.10.5). `BUYER` không được — người khai ước lượng
   không được là người đặt ngưỡng; `DIRECTOR` cố ý không được, cùng lý do đã ghi cho `rfq.open`.
+- **[review lượt 2 của S1.10, H2-2 — cùng ngày] Người đặt ngưỡng TỰ đặt được ước lượng.**
+  `PROCUREMENT_MANAGER` giữ `rfq.create` (ước lượng), `rfq.approve` và `policy.manage`: một PM nâng
+  ngưỡng lên rất cao rồi khai ước lượng dưới ngưỡng ⇒ một phê duyệt là đủ. Cùng họ với mục đầu
+  (khai thấp), nhưng KHÔNG cần khai thấp — chỉ cần đổi thước. Chưa quyết: tách `policy.manage` sang
+  một vai không có `rfq.create`, hay mở rộng trigger D3 (`role_permissions_ma_tran_quyen`) cấm một
+  vai giữ cả hai. Sổ nợ 44; §4 của D2 ghi phần chênh này.
 
 ### Đo bằng gì
 

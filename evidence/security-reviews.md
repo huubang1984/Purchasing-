@@ -352,3 +352,43 @@ cả vòng sửa. **Ba điểm reviewer KHÔNG kết luận được** vì khôn
 không (đúng là không — lỗi lint ở `214a741`); ⑵ độ lớn oracle thời gian M-1 và bộ gửi thật; ⑶ policy
 027 lọc hai route khách không `WHERE`, và trigger 013 chấp nhận `MFA_LOCKED` không kèm phiên — cả
 hai ĐÃ được đo bằng test (`guest.int.test.ts` [INV-A5], `auth.int.test.ts` [INV-E3]).
+
+# S1.10 — lượt review thứ hai (10.5 + 10.6 + vòng sửa 10.7), và vòng sửa thứ hai
+
+> Cùng giới hạn: reviewer chỉ `Read`/`Grep`/`Glob`, không chạy được test hay `tsc`, tự khai ở dòng
+> đầu. Lượt này đọc bảng lượt thứ nhất TRƯỚC, và cố ý kiểm lại từng dòng "đóng bằng mã" của vòng
+> sửa 10.7 — ba dòng bị bắt là đóng SAI (M-4, M-5/031, §4 của A2). Đó là giá trị lớn nhất của lượt
+> này, hơn cả mười hai phát hiện mới.
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.10.5** + **S1.10.6** + vòng sửa **10.7** | `routes/buyer.ts`, `dispatch.ts` (ánh xạ lỗi, afterCommit), `server.ts` (Origin), migration `030`, `031`, `kich-ban-41-http.int.test.ts` (bộ quét), `login.ts` (`MfaProof`), lớp canh `routes.test.ts` | `f40803f` (cây sạch) | Review tĩnh; CSDL/test do lượt viết chạy sau | **0 CRITICAL, 0 HIGH, 4 MEDIUM, 8 LOW** | commit vòng sửa 2 (cùng PR #4) |
+
+## Bốn MEDIUM, tám LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa 2 |
+|---|---|---|
+| H2-1 | 031 cấp `UPDATE (secret_wrapped, secret_key_version)` — một `app_api` bị chiếm thay được bí mật của hồ sơ ĐÃ xác nhận; 006 đã cấp `UPDATE (confirmed_at)` và không đâu cấm đưa nó về NULL; "đột biến ở tầng SQL" xanh vì câu UPDATE của test tự mang `WHERE confirmed_at IS NULL` | **Đóng bằng CSDL** — migration `032`: trigger BEFORE UPDATE, khi `OLD.confirmed_at IS NOT NULL` thì ba cột phải giữ nguyên (`check_violation`, điều kiện theo vai `app_api` cùng khuôn 029). Test viết lại: UPDATE KHÔNG mang WHERE ⇒ ném; cặp "mở khoá rồi thay" chết ở nửa đầu; gỡ trigger ⇒ 1 hàng đi lọt; khôi phục ⇒ ném; câu hợp lệ của `verifyTotpAttempt` ⇒ 1 hàng. Đầu 031 gạch câu sai; trạng thái M-5 ở bảng trên đọc kèm dòng này |
+| H2-2 | 030 biện minh "người khai ước lượng không được là người đặt ngưỡng" nhưng `PROCUREMENT_MANAGER` có `rfq.create` (ước lượng) + `rfq.approve` + `policy.manage`: một PM nâng ngưỡng ⇒ D2 hạ xuống một phê duyệt | **MỞ — QUYẾT ĐỊNH đang chờ, sổ nợ 44.** Câu biện minh gạch và sửa tại chỗ ở 030; ADR-017 thêm mục; **D2 nhận cờ §4 lần đầu**. Hai lựa chọn reviewer nêu (tách vai / mở rộng trigger D3) đều là quyết định sản phẩm, không tự chốt |
+| H2-3 | `POST /policy` nhận `version` tuỳ ý; cột `integer`, trigger 022 đòi "lớn hơn", không UPDATE/DELETE ⇒ `2147483647` ghim tổ chức vĩnh viễn | **Đóng ở tầng HTTP, vế CSDL mở — sổ nợ 45.** Route đòi `version` = hiện hành + 1 (giá trị kỳ vọng, chống đua); test: `2147483647` ⇒ 422, `1` lặp ⇒ 422. Trigger tự gán `max + 1` chưa làm |
+| H2-4 | Bộ quét rò rỉ rỗng ruột ở cửa sổ nó chạy: trước mở thầu bản rõ chưa tồn tại phía máy chủ; route ghi gọi với thân `{}` ⇒ 422 trước nghiệp vụ; vế log đo trên log RỖNG (`sha256(...).length === 64` đúng cả với chuỗi rỗng); §4 A2 khai "cả đọc lẫn ghi", "kể cả 4xx/5xx" | **Đóng ba trong bốn vế bằng mã, vế thứ tư vào sổ nợ 49.** ⑴ VÒNG QUÉT THỨ HAI sau bước 11: năm phiên khách + người mua KHÔNG `bid.view` gọi mọi route đọc — không giá nào lọt, `comparison` ⇒ 403 thật; ⑵ bước 15 ép một 500 THẬT (khuôn M-6) rồi mới đòi log sạch; ⑷ §4 A2 viết lại (gạch tại chỗ, thêm giới hạn bộ dò như A3/A4). ⑶ thân hợp lệ cho route ghi — nợ 49 |
+| H2-5 | `MfaProof._tao` công khai + barrel xuất lớp dạng GIÁ TRỊ ⇒ `startUserSession(..., { mfaProof: MfaProof._tao(...) })` biên dịch sạch từ `apps/api` | **Đóng bằng mã** — `export type { MfaProof }`; hàm tạo là biến module-private gán trong `static {}`; whitelist barrel bỏ tên (một lần xuất lại dạng giá trị làm test lệch). Câu ở M-4 nay đọc: "không biên dịch được, và không còn cửa `_tao`" |
+| H2-6 | Test M-3 "Origin được phép ⇒ đi qua" chạy trên máy chủ KHÔNG truyền `allowedOrigins` — nhánh `includes` chưa từng chạy | **Đóng bằng test** — máy chủ thứ hai với `allowedOrigins: ["https://app.test"]`: đúng ⇒ 201; `.evil`, khác scheme, khác cổng ⇒ 403 |
+| H2-7 | `afterCommit` chạy TRƯỚC khi phản hồi được ghi, không trần thời gian; bộ gửi treo ⇒ `/auth/link` treo cho email thật, về ngay cho email lạ | **Đóng bằng mã** — `afterCommitTimeoutMs` (mặc định 5 s, `Promise.race`), chỉ ghi TÊN lỗi `SauCommitQuaHan`; chỉ chạy khi `status < 400`. Test: bộ gửi treo ⇒ 200 trong trần, một dòng log đúng tên, không email. Vế outbox vẫn là nợ 38 |
+| H2-8 | 23514 lộ `err.message` kể cả khi là CHECK THƯỜNG (Postgres viết: tên bảng/ràng buộc); `supplierId`/`contactId` không kiểm UUID ⇒ 22P02 ⇒ 500 + log; `version` > int4 ⇒ 22003 ⇒ 500 | **Đóng bằng mã** — chỉ lộ thông điệp khi `err.routine === "exec_stmt_raise"` (RAISE của trigger), CHECK thường ⇒ thân cố định; lớp 22 ⇒ 422 câm; `uuidBody` cho hai định danh. Test dùng route giả: CHECK `tax_code` ⇒ thân cố định không chứa "violates"/tên bảng; `'abc'::uuid` ⇒ 422 câm; không dòng log |
+| H2-9 | ⑴ `/rfqs/:rfqId/invitations`, `/rfqs/:rfqId/unseal` không khai `resourceId` — `PERMISSION_DENIED` mất toạ độ; ⑵ "contact ∈ supplier" kiểm SAU `createInvitation` + phát token, CSDL không ràng | **⑴ Đóng bằng mã** — hai route khai `resourceId: rfqIdParam`; quét H17 nay đếm bản ghi có `resource_id` = đúng số route khai (16/19; ba route tạo mới không có). **⑵ Đóng nửa ứng dụng** — kiểm TRƯỚC khi tạo, test: contact của NCC khác ⇒ 422, không hàng `rfq_invitations`, bộ gửi không nhận thêm; FK tổ hợp — sổ nợ 46 |
+| H2-10 | `expect(tt).toBeTruthy()` trên bốn chuỗi hằng mang nhãn [INV-E1]; bốn `toBe(422)` không đọc lý do | **Đóng bằng test** — vòng lặp bỏ; bốn chỗ đọc thông điệp trigger/cổng (`can 2 phe duyet`, `khong duoc la mot trong hai nguoi duyet (D2)`, `khong duoc tu phe duyet (D2, D3)`, `phải ở trạng thái APPROVED; đang ở PENDING`) |
+| H2-11 | ⑴ lớp canh L-5 chỉ quét TRONG khối route — helper ở đầu file đi lọt; ⑵ `const rp = requirePermission` qua mặt regex; ⑶ quét H17 không chứng minh mã quyền ĐÚNG | **⑴ Đóng bằng test** — quét cả phần đầu `guest.ts` (và nhân tiện sửa lỗi CRLF làm CI Windows đỏ ở `f40803f`). **⑵⑶ MỞ — sổ nợ 47** |
+| H2-12 | `resolveSessionActor` (đường gói) không xét `users.status`; đình chỉ không thu hồi phiên | **MỞ — sổ nợ 48** (bộ test identity bật/tắt `SUSPENDED` trên cùng phiên; sửa test trước khi thêm trigger) |
+
+**Kiểm chứng vòng sửa 10.7 của reviewer, chép lại cho đúng:** M-3, M-6, M-7 (đường lỗi), L-1 (tầng
+HTTP), L-3, L-7, L-8 — *đóng đúng*; M-4 *đóng nhưng khai rộng hơn cơ chế* (H2-5); M-5/031 *phần
+"CSDL còn giữ" là SAI* (H2-1). Reviewer cũng rà 20 route ghi: mọi định danh bị đổi trạng thái đọc
+từ ĐƯỜNG DẪN; `breakGlass` qua HTTP luôn 422 vì thiếu nhân chứng — đã ghi vào §4 của D4 thay vì để
+route trông như đã hỗ trợ. **Ba điểm reviewer không kết luận được** vì không chạy được mã: ⑴ cây có
+biên dịch không (có — T0 sạch, nhưng CI Windows của `f40803f` đỏ vì CRLF ở test L-5, sửa trong vòng
+này); ⑵ Node nối `Origin` trùng lặp bằng `, ` (chưa đo; fail-closed theo cả hai cách đọc); ⑶ rollback
+ở nhánh 422 của `/rfqs/:rfqId/invitations` — nay không còn cần rollback vì kiểm TRƯỚC khi tạo, và có
+test "không để lại gì".

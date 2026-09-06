@@ -358,6 +358,97 @@ describe("[review M-3] CSRF: yêu cầu không-GET từ nguồn khác bị 403 T
     expect(rows).toHaveLength(2);
   });
 
+  it("[review H2-6] nhánh CHO PHÉP: Origin trong `allowedOrigins` ⇒ đi qua; Origin chỉ KHÁC một hậu tố ⇒ 403", async () => {
+    // Bản trước đo M-3 trên máy chủ KHÔNG truyền `allowedOrigins` — nhánh `includes(origin)` chưa từng
+    // chạy; một hồi quy làm nó luôn `false` sẽ chặn mọi POST của web app thật mà không test nào đỏ.
+    const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dichVuTest().services }), {
+      allowedOrigins: ["https://app.test"],
+    });
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    try {
+      const goi2 = async (origin: string) => {
+        const res = await fetch(`http://127.0.0.1:${(s2.address() as AddressInfo).port}/suppliers`, {
+          method: "POST",
+          headers: { cookie: cookieMua(tokPM), "content-type": "application/json", origin },
+          body: JSON.stringify({ legalName: "Origin duoc phep" }),
+        });
+        return res.status;
+      };
+      expect(await goi2("https://app.test")).toBe(201);
+      expect(await goi2("https://app.test.evil")).toBe(403);
+      expect(await goi2("http://app.test")).toBe(403); // khác scheme là khác nguồn
+      expect(await goi2("https://app.test:8443")).toBe(403); // khác cổng cũng vậy
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+});
+
+describe("[review H2-8] ánh xạ lỗi Postgres: chỉ thông điệp của TRIGGER mới đi ra; CHECK thường và lớp 22 ra thân cố định", () => {
+  it("CHECK thường (23514, không phải RAISE) ⇒ 422 thân cố định, KHÔNG lộ tên bảng/ràng buộc; 22P02 ⇒ 422 câm; không dòng log nào", async () => {
+    const { createDispatcher: tao } = await import("./dispatch.js");
+    const dispatch = tao({
+      pool: apiPool,
+      auditPool,
+      services: dichVuTest().services,
+      routes: [
+        {
+          method: "POST",
+          path: "/check-thuong",
+          audience: "BUYER",
+          mutates: true,
+          permission: "rfq.create",
+          resourceType: "X",
+          // `tax_code` có CHECK regex ở 008 — Postgres viết thông điệp, không phải migration.
+          handler: async (ctx) => {
+            // Mang đủ phiên người tạo để trigger 011/013 KHÔNG nói gì — cái nói "không" phải là CHECK.
+            await ctx.client.query(
+              "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, 'kiem', 'abc', $2, $3)",
+              [ctx.orgId, ctx.actor.id, ctx.actor.sessionId],
+            );
+            return { status: 201 };
+          },
+        },
+        {
+          method: "POST",
+          path: "/sai-kieu",
+          audience: "BUYER",
+          mutates: true,
+          permission: "rfq.create",
+          resourceType: "X",
+          handler: async (ctx) => {
+            await ctx.client.query("SELECT $1::uuid", ["khong-phai-uuid"]);
+            return { status: 201 };
+          },
+        },
+      ],
+    });
+    const s2 = createApiServer(dispatch);
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    const logLoi: string[] = [];
+    const goc2 = () => `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    const cu = console.error;
+    console.error = (...args: unknown[]) => {
+      logLoi.push(args.map(String).join(" "));
+    };
+    try {
+      const a = await fetch(`${goc2()}/check-thuong`, { method: "POST", headers: { cookie: cookieMua(tokPM) } });
+      const aText = await a.text();
+      expect(a.status).toBe(422);
+      expect(aText).toBe(JSON.stringify({ error: "du lieu vi pham rang buoc" }));
+      expect(aText).not.toContain("violates");
+      expect(aText).not.toContain("suppliers");
+      const b = await fetch(`${goc2()}/sai-kieu`, { method: "POST", headers: { cookie: cookieMua(tokPM) } });
+      expect(b.status).toBe(422);
+      expect(await b.text()).toBe(JSON.stringify({ error: "du lieu sai kieu" }));
+      // Hai lỗi đầu vào của người gọi không phải sự cố: không một dòng `console.error` nào.
+      expect(logLoi).toEqual([]);
+    } finally {
+      console.error = cu;
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+
   it("[review L-3] header của handler viết HOA không đứng cạnh header mặc định — một tên, một giá trị", async () => {
     const { createDispatcher: tao } = await import("./dispatch.js");
     const dispatch = tao({

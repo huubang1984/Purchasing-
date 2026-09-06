@@ -226,11 +226,38 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     const rd = await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: dv.linkDaGui.at(-1)!.token } });
     expect(rd.body).toEqual({ needsEnrollment: false });
     expect(await dem()).toBe(2);
-    // Đột biến ở tầng SQL: UPDATE thay bí mật của hồ sơ ĐÃ xác nhận dưới app_api ⇒ 0 hàng (vế WHERE giữ).
-    const { rowCount } = await withTenant(apiPool, orgA, (c) =>
-      c.query("UPDATE mfa_credentials SET secret_key_version = 'x' WHERE user_id = $1 AND confirmed_at IS NULL", [u]),
+    // ~~Đột biến ở tầng SQL: UPDATE thay bí mật của hồ sơ ĐÃ xác nhận dưới app_api ⇒ 0 hàng (vế WHERE giữ).~~
+    // [review H2-1] Câu trên xanh vì lý do SAI: nó tự mang `AND confirmed_at IS NULL`, nên 0 hàng chỉ
+    // chứng minh hồ sơ đã xác nhận, không chứng minh CSDL từ chối. Nay câu đột biến KHÔNG mang vế
+    // WHERE ấy và đòi trigger 032 ném; rồi gỡ trigger ⇒ cùng câu ĐI LỌT (1 hàng); khôi phục ⇒ lại ném.
+    const thayBiMat = (ver = "x") =>
+      withTenant(apiPool, orgA, (c) => c.query("UPDATE mfa_credentials SET secret_key_version = $2 WHERE user_id = $1", [u, ver]));
+    const datLaiXacNhan = () =>
+      withTenant(apiPool, orgA, (c) => c.query("UPDATE mfa_credentials SET confirmed_at = NULL WHERE user_id = $1", [u]));
+    await expect(thayBiMat()).rejects.toThrow(/da xac nhan/u);
+    await expect(datLaiXacNhan()).rejects.toThrow(/da xac nhan/u); // cặp UPDATE "mở khoá rồi thay" cũng chết ở nửa đầu
+    await db.pool.query("DROP TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan ON mfa_credentials");
+    try {
+      expect((await thayBiMat()).rowCount).toBe(1);
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan BEFORE UPDATE ON mfa_credentials FOR EACH ROW EXECUTE FUNCTION public.mfa_credentials_khoa_ho_so_da_xac_nhan()",
+      );
+      await db.pool.query("ALTER TABLE mfa_credentials ENABLE ALWAYS TRIGGER mfa_credentials_khoa_ho_so_da_xac_nhan");
+    }
+    // Sau khi khôi phục: một giá trị KHÁC (hàng đã mang 'x' từ lần đột biến — cùng giá trị thì không có gì để đổi).
+    await expect(thayBiMat("y")).rejects.toThrow(/da xac nhan/u);
+    await expect(datLaiXacNhan()).rejects.toThrow(/da xac nhan/u);
+    // Đường HỢP LỆ vẫn đi: đúng hình dạng câu UPDATE của `verifyTotpAttempt` (bộ đếm + COALESCE
+    // confirmed_at) trên hồ sơ đã xác nhận ⇒ 1 hàng. (Đường TOTP thật trên hồ sơ đã xác nhận chạy
+    // dưới cùng trigger ở `mfa.int.test.ts` [INV-E3] "confirmed_at không bị ghi đè".)
+    const hopLe = await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "UPDATE mfa_credentials SET last_used_counter = 7, failed_attempts = 0, confirmed_at = COALESCE(confirmed_at, clock_timestamp()) WHERE user_id = $1",
+        [u],
+      ),
     );
-    expect(rowCount).toBe(0);
+    expect(hopLe.rowCount).toBe(1);
   });
 
   it("[INV-E1] mã đúng ⇒ cookie HttpOnly/Secure/Strict/Path=/ và /me mở; token đăng nhập TIÊU THỤ — replay ⇒ 422", async () => {
@@ -239,10 +266,8 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     const me = await goi("GET", "/me", { cookie });
     expect(me.status).toBe(200);
     expect((me.body as { userId: string }).userId).toBe(u);
-    for (const tt of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/"]) {
-      // cookie ở đây đã bị cắt thuộc tính; kiểm lại trên một lần đăng nhập mới ở dưới.
-      expect(tt).toBeTruthy();
-    }
+    // [review H2-10] Bản trước có một vòng `expect(tt).toBeTruthy()` trên bốn chuỗi hằng — một khẳng
+    // định không thể đỏ, mang nhãn [INV-E1]. Đã bỏ; thuộc tính cookie đo ở test "thuộc tính cookie" dưới.
     const replay = await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: "000000" } });
     expect(replay.status).toBe(422);
     expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token } })).status).toBe(422);
@@ -295,6 +320,36 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     expect(r.headers.get("set-cookie")).toContain("Max-Age=0");
     expect((await goi("GET", "/me", { cookie })).status).toBe(401);
     expect((await goi("POST", "/auth/logout", { cookie })).status).toBe(401);
+  });
+});
+
+describe("[review H2-7] việc sau commit có TRẦN thời gian", () => {
+  it("bộ gửi link TREO ⇒ /auth/link vẫn về 200 trong trần, và log ghi đúng TÊN lỗi quá hạn — không thân, không token", async () => {
+    // Bản trước: `await viec()` không trần; `requestTimeout` chỉ phủ pha nhận yêu cầu. Bộ gửi mail treo
+    // ⇒ email CÓ THẬT treo vô hạn, email lạ về ngay (oracle M-1 ở dạng vô hạn). Đột biến: bỏ `coHan`
+    // ở dispatch.ts ⇒ lời gọi dưới không bao giờ về và test này đỏ vì hết giờ.
+    await taoNguoi("treo@vidu.vn");
+    const treo = { name: "bo-gui-treo", send: () => new Promise<void>(() => undefined) };
+    const s2 = createApiServer(
+      createDispatcher({ pool: apiPool, auditPool, services: { ...dv.services, loginLinkSender: treo }, afterCommitTimeoutMs: 200 }),
+    );
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    try {
+      const truoc = logLoi.length;
+      const batDau = Date.now();
+      const res = await fetch(`http://127.0.0.1:${(s2.address() as AddressInfo).port}/auth/link`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orgId: orgA, email: "treo@vidu.vn" }),
+      });
+      expect(res.status).toBe(200);
+      expect(Date.now() - batDau).toBeLessThan(3000);
+      expect(logLoi.slice(truoc)).toHaveLength(1);
+      expect(logLoi[truoc]).toContain("sau-commit SauCommitQuaHan");
+      expect(logLoi[truoc]).not.toContain("treo@vidu.vn");
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
   });
 });
 

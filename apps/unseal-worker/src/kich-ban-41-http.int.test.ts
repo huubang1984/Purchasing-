@@ -18,7 +18,7 @@
 // Nó KHÔNG đo heap, KHÔNG đo APM trace, KHÔNG đo lỗi ở tầng vận chuyển ngoài tiến trình. §4 của ma
 // trận ghi đúng ba vế ấy; ô ✅ của A2 KHÔNG được đọc rộng hơn.
 // ==============================================================================================
-import { createHash, createPublicKey } from "node:crypto";
+import { createPublicKey } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -218,8 +218,10 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     const m = trangThai.mua.cookie;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
-    // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422), hai PM khác duyệt.
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m)).status).toBe(422);
+    // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
+    const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
+    expect(tuDuyet.status).toBe(422);
+    expect(tuDuyet.text).toContain("khong duoc la mot trong hai nguoi duyet (D2)");
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
@@ -399,6 +401,39 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(quetRoRi(r.text).length).toBeGreaterThan(0);
   });
 
+  it("[INV-A2] [INV-A5] [INV-A4] BỘ QUÉT RÒ RỈ LẦN HAI — SAU mở thầu, khi bản rõ ĐÃ nằm trong CSDL: năm phiên khách và một người mua KHÔNG có bid.view đọc mọi route đọc — không giá nào lọt", async () => {
+    // [review H2-4 ⑴⑷] Vòng quét thứ nhất chạy TRƯỚC mở thầu, khi bản rõ giá chưa tồn tại phía máy chủ —
+    // không route nào rò được thứ chưa có. Vòng này chạy ở cửa sổ có nghĩa: `rfq_unsealed_bids` đã có
+    // năm hàng, và người đọc là đúng hai đối tượng A5/A4 nói tới. Đối chứng dương ngay trên: bước 12
+    // thấy giá với người có `bid.view`.
+    const khongXem = await dangNhap("khongxem@vidu.vn", "BUYER"); // BUYER không có bid.view (005)
+    const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    const thay = (path: string) =>
+      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(/:[A-Za-z]+/gu, UUID0);
+    const roRi: string[] = [];
+    let soGoi = 0;
+    for (const r of ROUTES) {
+      if (r.method !== "GET") continue;
+      const cookies =
+        r.audience === "GUEST" ? trangThai.loiMoi.map((lm) => lm.cookie)
+        : r.audience === "BUYER" ? [khongXem.cookie]
+        : [];
+      for (const cookie of cookies) {
+        const path = r.audience === "GUEST" && r.path.includes(":bidVersionId")
+          ? r.path.replace(":bidVersionId", trangThai.bienNhan.find((b) => trangThai.loiMoi.some((lm) => lm.cookie === cookie && lm.ten === b.ten))?.bidVersionId ?? UUID0)
+          : thay(r.path);
+        const ph = await goi(r.method, path, cookie);
+        soGoi += 1;
+        const headerText = [...ph.headers.entries()].map(([a, b]) => `${a}: ${b}`).join("\n");
+        for (const g of quetRoRi(ph.text + "\n" + headerText)) roRi.push(`${r.method} ${r.path} (${ph.status}): ${g}`);
+      }
+    }
+    expect(soGoi).toBeGreaterThan(5 * 4 + 8);
+    expect(roRi, "giá dạng rõ lọt ra SAU mở thầu tới người không được xem").toEqual([]);
+    // Và cổng bid.view thật sự đóng với người này (403), không phải "rỗng vì chưa có gì".
+    expect((await goi("GET", `/rfqs/${trangThai.rfqId}/comparison`, khongXem.cookie)).status).toBe(403);
+  });
+
   it("bước 13 — [INV-B5] job toàn vẹn chạy sạch trên sáu phiên bản (đường vận hành, không HTTP)", async () => {
     const bc = await withTenant(unsealPool, orgA, (c) => auditStoredCiphertexts(c, orgA, trangThai.rfqId));
     expect(bc.checked).toBe(6);
@@ -437,9 +472,23 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
       const { rows: r2 } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text LIKE '%' || $2 || '%'", [orgA, t]);
       expect(r2[0]?.n, "bí mật lọt vào sổ kiểm toán").toBe("0");
     }
-    // Không log lỗi nào của tiến trình mang bất kỳ bí mật nào.
+    // Không log lỗi nào của tiến trình mang bất kỳ bí mật nào. [review H2-4 ⑵] Bản trước "chống rỗng
+    // ruột" bằng `sha256(log).length === 64` — đúng cả với chuỗi rỗng. Nay ép MỘT 500 THẬT (bộ mở bí
+    // mật TOTP ném, thông điệp cố ý mang phong bì) để log KHÔNG rỗng trước khi đòi nó sạch.
+    const truocLog = logLoi.length;
+    expect((await goi("POST", "/auth/link", undefined, { orgId: orgA, email: "mua@vidu.vn" })).status).toBe(200);
+    const tokenHong = dv.linkDaGui.at(-1)!.token;
+    dv.hong.totpUnsealer = true;
+    try {
+      expect((await goi("POST", "/auth/totp", undefined, { orgId: orgA, token: tokenHong, code: "000000" })).status).toBe(500);
+    } finally {
+      dv.hong.totpUnsealer = false;
+    }
+    expect(logLoi.length).toBe(truocLog + 1);
     const toanBo = logLoi.join("\n");
+    expect(toanBo.length).toBeGreaterThan(0);
     for (const t of [...dv.linkDaGui.map((l) => l.token), ...dv.otpDaGui.map((o) => o.code)]) expect(toanBo).not.toContain(t);
-    expect(createHash("sha256").update(toanBo).digest("hex")).toHaveLength(64); // chống rỗng ruột: log đã được gom
+    expect(toanBo).not.toContain("KMS gia dang hong");
+    for (const g of quetRoRi(toanBo)) expect.fail(`giá trong log: ${g}`);
   });
 });
