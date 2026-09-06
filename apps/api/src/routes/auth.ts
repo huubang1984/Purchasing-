@@ -33,6 +33,16 @@ import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
  */
 export const COOKIE_PHIEN_NGUOI_MUA = "__Host-tp_session";
 
+/**
+ * [sổ nợ 39 / review M-2] Trần theo NGƯỜI GỌI, mỗi route, mỗi 15 phút (dispatcher đếm — `callerLimit`).
+ * `/auth/link` thấp nhất: nó là cửa liệt kê email, và một người thật hiếm khi cần hơn vài link một
+ * lượt; hai route sau cho phép gõ sai nhiều hơn vì khoá hồ sơ (E3, 5 lần) đã canh theo nạn nhân,
+ * còn trần này canh theo kẻ thử nhiều nạn nhân.
+ */
+export const LOGIN_LINK_MAX_PER_CALLER = 10;
+export const LOGIN_REDEEM_MAX_PER_CALLER = 30;
+export const LOGIN_TOTP_MAX_PER_CALLER = 30;
+
 function chuoi(body: unknown, ten: string): string {
   const v = (body as Record<string, unknown> | null | undefined)?.[ten];
   if (typeof v !== "string" || v === "") throw new HttpError(422, `thiếu trường "${ten}"`);
@@ -69,6 +79,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
     path: "/auth/link",
     audience: "ANON",
     mutates: true,
+    callerLimit: LOGIN_LINK_MAX_PER_CALLER,
     handler: async (ctx) => {
       const email = chuoi(ctx.req.body, "email");
       const kq = await issueLoginToken(ctx.client, ctx.orgId, { email });
@@ -87,6 +98,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
     path: "/auth/redeem",
     audience: "ANON",
     mutates: true,
+    callerLimit: LOGIN_REDEEM_MAX_PER_CALLER,
     handler: async (ctx) => {
       const token = chuoi(ctx.req.body, "token");
       const nguoi = await redeemLoginToken(ctx.client, ctx.orgId, token);
@@ -113,6 +125,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
     path: "/auth/totp",
     audience: "ANON",
     mutates: true,
+    callerLimit: LOGIN_TOTP_MAX_PER_CALLER,
     handler: async (ctx) => {
       const token = chuoi(ctx.req.body, "token");
       const code = chuoi(ctx.req.body, "code");

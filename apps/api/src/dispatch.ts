@@ -57,6 +57,7 @@ import {
   type SessionActor,
 } from "@trustprocure/identity";
 import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitation";
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
@@ -126,6 +127,7 @@ const THAN_403 = { error: "khong co quyen" } as const;
 const THAN_404 = { error: "khong co duong nay" } as const;
 const THAN_405 = { error: "phuong thuc khong duoc ho tro" } as const;
 const THAN_500 = { error: "loi noi bo" } as const;
+const THAN_429 = { error: "qua nhieu yeu cau" } as const;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -241,6 +243,25 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "ANON": {
           const orgId = orgIdTuThan(req.body);
           if (orgId === null) throw new HttpError(422, 'thiếu trường "orgId"');
+          // [sổ nợ 39] Đếm theo NGƯỜI GỌI trong một giao dịch RIÊNG, TRƯỚC handler: giao dịch của
+          // handler rollback khi token sai, nên đếm bên trong nó là đếm thành công chứ không đếm thử.
+          // Khoá mang cả đường dẫn route: ba route, ba bộ đếm. Địa chỉ rỗng (không xác định) dùng
+          // chung MỘT bucket — fail-closed. Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
+          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức, không mở oracle mới.
+          if (route.callerLimit !== undefined) {
+            const tran = route.callerLimit;
+            let soLan = 0;
+            try {
+              soLan = await withTenant(deps.pool, orgId, (client) =>
+                tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|${req.remoteAddress}`, deps.services.pepper),
+              );
+            } catch (e) {
+              if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
+            }
+            if (soLan > tran) {
+              return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+            }
+          }
           return await chaySauCommit(
             await withTenant(deps.pool, orgId, (client) =>
               route.handler({ req, orgId, client, services: deps.services, afterCommit }),

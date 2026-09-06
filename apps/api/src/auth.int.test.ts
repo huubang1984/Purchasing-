@@ -12,14 +12,17 @@
 import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, counterForTime, deriveTotpCode } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
-import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
+import type { Route } from "./route-types.js";
+import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
+import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, type DichVuTest } from "./test-services.js";
 
@@ -33,6 +36,14 @@ let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
 const logLoi: string[] = [];
+// [sổ nợ 39] Mỗi test một địa chỉ người gọi riêng (qua X-Forwarded-For, socket 127.0.0.1 khai là proxy),
+// để trần theo người gọi của một test không rơi vào test khác.
+let soIp = 0;
+let ipHienTai = "203.0.113.1";
+beforeEach(() => {
+  soIp += 1;
+  ipHienTai = `203.0.${Math.floor(soIp / 250)}.${(soIp % 250) + 1}`;
+});
 
 function base32Decode(s: string): Buffer {
   const BANG = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -69,15 +80,15 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown } = {}): Promise<PhanHoi> {
-  const headers: Record<string, string> = {};
+async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown; ip?: string; goc?: string } = {}): Promise<PhanHoi> {
+  const headers: Record<string, string> = { "x-forwarded-for": tuyChon.ip ?? ipHienTai };
   if (tuyChon.cookie !== undefined) headers.cookie = tuyChon.cookie;
   let body: string | undefined;
   if (tuyChon.body !== undefined) {
     body = JSON.stringify(tuyChon.body);
     headers["content-type"] = "application/json";
   }
-  const res = await fetch(`${goc}${path}`, { method, headers, body });
+  const res = await fetch(`${tuyChon.goc ?? goc}${path}`, { method, headers, body });
   const text = await res.text();
   return { status: res.status, headers: res.headers, text, body: text === "" ? undefined : (JSON.parse(text) as unknown) };
 }
@@ -120,7 +131,7 @@ beforeAll(async () => {
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }));
+  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }, 180000);
@@ -155,6 +166,60 @@ describe("/auth/link — không liệt kê được email", () => {
       expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "hanmuc@vidu.vn" } })).status).toBe(200);
     }
     expect(dv.linkDaGui.length - truoc).toBe(LOGIN_MAX_TOKENS_PER_WINDOW);
+  });
+});
+
+describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đếm sống qua rollback của handler", () => {
+  it("/auth/link: lần thứ N+1 từ cùng địa chỉ ⇒ 429 + Retry-After; địa chỉ khác vẫn 200; email lạ cũng bị đếm", async () => {
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: `khong-co-${i}@vidu.vn` } })).status).toBe(200);
+    }
+    const chan = await goi("POST", "/auth/link", { body: { orgId: orgA, email: "khong-co-x@vidu.vn" } });
+    expect(chan.status).toBe(429);
+    expect(chan.headers.get("retry-after")).toBe("900");
+    expect(chan.text).toBe(JSON.stringify({ error: "qua nhieu yeu cau" }));
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "khong-co-y@vidu.vn" } })).status).toBe(429);
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "khong-co-z@vidu.vn" }, ip: "198.51.100.7" })).status).toBe(200);
+  });
+
+  it("/auth/redeem: token SAI bị đếm dù handler rollback (LoginTokenError ⇒ 422) — lần thứ N+1 ⇒ 429", async () => {
+    const rac = "A".repeat(43);
+    for (let i = 0; i < LOGIN_REDEEM_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac } })).status).toBe(422);
+    }
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac } })).status).toBe(429);
+    // Bộ đếm nằm ở CSDL, đúng kind và đúng số: N+1 lần cho khoá của route + địa chỉ này.
+    const { rows } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*) OVER () AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' ORDER BY hits DESC LIMIT 1",
+      [orgA],
+    );
+    expect(rows[0]?.hits).toBe(LOGIN_REDEEM_MAX_PER_CALLER + 1);
+  });
+
+  it("ĐỐI CHỨNG: cùng dispatcher nhưng bảng route KHÔNG khai callerLimit ⇒ không bao giờ 429 — trần đúng là cờ ấy, không phải thứ gì khác", async () => {
+    const khongTran = ROUTES.map((r) =>
+      r.audience === "ANON" ? (Object.fromEntries(Object.entries(r).filter(([k]) => k !== "callerLimit")) as unknown as Route) : r,
+    );
+    const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, routes: khongTran }), {
+      remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+    });
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    try {
+      const rac = "B".repeat(43);
+      for (let i = 0; i < LOGIN_REDEEM_MAX_PER_CALLER + 5; i += 1) {
+        expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac }, goc: goc2 })).status).toBe(422);
+      }
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+
+  it("tổ chức KHÔNG tồn tại: không đếm được (khoá ngoại) nhưng vẫn cùng một 200 — không mở oracle mới", async () => {
+    const orgLa = "00000000-0000-4000-8000-00000000abcd";
+    const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
+    expect(r.status).toBe(200);
+    expect(r.text).toBe(JSON.stringify({ ok: true }));
   });
 });
 

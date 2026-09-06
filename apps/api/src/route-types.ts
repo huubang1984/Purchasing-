@@ -144,6 +144,13 @@ export interface PublicRoute extends RouteBase {
 export interface AnonRoute extends RouteBase {
   readonly audience: "ANON";
   readonly mutates: boolean;
+  /**
+   * [sổ nợ 39] Trần số lời gọi cho MỘT người gọi (địa chỉ, sau proxy đã khai — nợ 41) trên route
+   * này trong một cửa sổ 15 phút (`OTP_RATE_WINDOW_SECONDS`). Dispatcher đếm trong một giao dịch
+   * RIÊNG trước handler và trả 429 khi vượt — nên một token sai (handler rollback) vẫn bị đếm.
+   * Không khai = không đếm theo người gọi (đường khách có bộ đếm riêng trong `issueOtpChallenge`).
+   */
+  readonly callerLimit?: number;
   readonly handler: (ctx: AnonContext) => Promise<ApiResponse>;
 }
 

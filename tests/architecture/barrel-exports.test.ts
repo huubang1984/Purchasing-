@@ -513,6 +513,8 @@ const DANH_SACH_TRANG_INVITATION = [
   // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
   "resolveGuestSessionByToken",
   "revokeInvitation",
+  // [sổ nợ 39] Đếm-và-tăng một bucket LOGIN_CALLER; trả số, không trả phiên, không nhận token.
+  "tangBucketHanMuc",
   "verifyOtpAndStartSession",
 ];
 

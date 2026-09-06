@@ -33,6 +33,8 @@ export {
   // [ADR-020 / S1.10.2] Cookie khách → phiên khách. Đường vào DUY NHẤT của `withGuestSession` từ apps/api.
   resolveGuestSessionByToken,
   revokeInvitation,
+  // [sổ nợ 39] Bộ đếm bucket cho người gọi ba route /auth/* — chỉ mở kind LOGIN_CALLER; dispatcher gọi.
+  tangBucketHanMuc,
   verifyOtpAndStartSession,
   type Channel,
   type CreateInvitationInput,
