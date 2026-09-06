@@ -1377,3 +1377,46 @@ describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đ
     expect(sk[0]?.n).toBe("1");
   });
 });
+
+// ==============================================================================================
+// [036 / sổ nợ 46] NGƯỜI LIÊN HỆ ĐƯỢC MỜI PHẢI THUỘC NHÀ CUNG CẤP ĐƯỢC MỜI — khoá ngoại tổ hợp.
+// Route đã kiểm ở tầng ứng dụng (S1.10.7); lớp này canh mọi đường KHÁC tới `createInvitation`.
+// ==============================================================================================
+describe("[INV-E5] [036] contact của nhà cung cấp KHÁC không mời được dưới danh nghĩa nhà cung cấp này", () => {
+  const nccMoi = async (ten: string) =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        [orgA, ten, buyerA, sBuyerA],
+      )
+    ).rows[0]!.id;
+  const moiLech = (supplierId: string) =>
+    withTenant(apiPool, orgA, (c) =>
+      createInvitation(c, orgA, { rfqId: rfqA, supplierId, contactId: lienHeKhac, linkChannel: "EMAIL", actorSessionId: sBuyerA }),
+    );
+
+  it("supplierId = X, contactId của Y ⇒ 23503 từ `rfq_invitations_contact_thuoc_supplier`; cặp đúng vẫn đi qua", async () => {
+    const x = await nccMoi("NCC X");
+    await expect(moiLech(x)).rejects.toMatchObject({ code: "23503" });
+    await expect(moiLech(x)).rejects.toThrow(/rfq_invitations_contact_thuoc_supplier/u);
+    // Đối chứng dương: cùng câu lệnh, contact đúng nhà cung cấp — đi qua.
+    expect((await moiMoi()).invitationId).toMatch(/^[0-9a-f-]{36}$/u);
+    // Không hàng nào để lại cho X.
+    const { rows } = await db.pool.query("SELECT 1 FROM rfq_invitations WHERE supplier_id = $1", [x]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("ĐỘT BIẾN: gỡ khoá ngoại ⇒ lời mời LỆCH danh tính ĐI VÀO (đúng trạng thái trước 036); khôi phục ⇒ chặn lại", async () => {
+    const x = await nccMoi("NCC X dot bien");
+    await db.pool.query("ALTER TABLE rfq_invitations DROP CONSTRAINT rfq_invitations_contact_thuoc_supplier");
+    try {
+      await expect(moiLech(x)).resolves.toMatchObject({ supplierId: x, contactId: lienHeKhac });
+      await db.pool.query("DELETE FROM rfq_invitations WHERE supplier_id = $1", [x]);
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_invitations ADD CONSTRAINT rfq_invitations_contact_thuoc_supplier FOREIGN KEY (org_id, supplier_id, contact_id) REFERENCES supplier_contacts (org_id, supplier_id, id)",
+      );
+    }
+    await expect(moiLech(x)).rejects.toMatchObject({ code: "23503" });
+  });
+});

@@ -48,6 +48,8 @@ CREATE TABLE rfq_invitations (
   FOREIGN KEY (org_id, rfq_id) REFERENCES rfq_packages (org_id, id),
   FOREIGN KEY (org_id, supplier_id) REFERENCES suppliers (org_id, id),
   FOREIGN KEY (org_id, contact_id) REFERENCES supplier_contacts (org_id, id),
+  -- [036 / sổ nợ 46] Hai khoá ngoại trên KHÔNG nói `contact ∈ supplier`; 036 thêm khoá ngoại tổ hợp
+  -- `(org_id, supplier_id, contact_id) → supplier_contacts (org_id, supplier_id, id)`.
   -- Một nhà cung cấp được mời ĐÚNG MỘT LẦN cho mỗi RFQ. org_id đứng đầu (ADR-013 / H14).
   UNIQUE (org_id, rfq_id, supplier_id),
   UNIQUE (org_id, id),

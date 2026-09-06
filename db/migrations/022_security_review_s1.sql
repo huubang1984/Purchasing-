@@ -385,6 +385,9 @@ $ham$;
 -- Cùng lúc, `version` do người gọi chọn và chỉ bị `UNIQUE` chặn trùng, không chặn TỤT. Cả hai
 -- hàm chọn đều `ORDER BY version DESC`, nên một hàng `version = 2147483647` ghim vĩnh viễn tổ
 -- chức vào đúng chính sách ấy trong khi mọi lần siết sau đó bị bỏ qua trong im lặng.
+-- [035 / sổ nợ 45, 2026-09-06] Trigger "tăng dần" dưới đây KHÔNG đóng ca ghim ấy: nó chặn TỤT,
+-- không chặn GHIM Ở TRẦN — sau 2147483647 không phiên bản nào "lớn hơn" được nữa. 035 thay thân
+-- hàm (cùng tên): `version` phải BẰNG đúng lớn nhất + 1. Thân dưới đây là lịch sử.
 ALTER TABLE org_procurement_policies
   ADD CONSTRAINT org_procurement_policies_hieu_luc_khong_lui
   CHECK (effective_from >= created_at);

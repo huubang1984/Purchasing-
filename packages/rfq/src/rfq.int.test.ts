@@ -1110,3 +1110,48 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     ).rejects.toThrow(/rfq\.open/);
   });
 });
+
+// ==============================================================================================
+// [035 / sổ nợ 46→45] PHIÊN BẢN CHÍNH SÁCH PHẢI BẰNG ĐÚNG "LỚN NHẤT + 1" — ở CSDL, không chỉ ở route.
+// Chạy CUỐI file: ca đối chứng dương chèn một phiên bản mới với CÙNG ngưỡng hiện hành để không
+// đổi nghĩa của các test trước; ca đột biến dọn hàng nó chèn.
+// ==============================================================================================
+describe("[INV-D2] [035] version chính sách không chọn được, không ghim được", () => {
+  const tao = (version: number, nguong: string) =>
+    withTenant(apiPool, orgA, (c) =>
+      createProcurementPolicy(c, orgA, { version, dualApprovalThreshold: nguong, currency: "VND", actorSessionId: s1 }),
+    );
+  const hienHanh = async () => {
+    const { rows } = await db.pool.query<{ v: number; t: string }>(
+      "SELECT version AS v, dual_approval_threshold::text AS t FROM org_procurement_policies WHERE org_id = $1 ORDER BY version DESC LIMIT 1",
+      [orgA],
+    );
+    return { version: rows[0]!.v, nguong: rows[0]!.t };
+  };
+
+  it("2147483647 (ghim trần int4), max+2, và max lặp lại ⇒ 23514 với lý do đọc được; max+1 ⇒ đi qua", async () => {
+    const { version, nguong } = await hienHanh();
+    await expect(tao(2147483647, nguong)).rejects.toMatchObject({ code: "23514" });
+    await expect(tao(2147483647, nguong)).rejects.toThrow(/BANG phien ban lon nhat \+ 1/u);
+    await expect(tao(version + 2, nguong)).rejects.toMatchObject({ code: "23514" });
+    // Lặp lại phiên bản hiện hành: trigger BEFORE INSERT nói trước cả UNIQUE — cùng một mã, cùng lý do.
+    await expect(tao(version, nguong)).rejects.toMatchObject({ code: "23514" });
+    await expect(tao(version + 1, nguong)).resolves.toMatchObject({ version: version + 1 });
+    expect((await hienHanh()).version).toBe(version + 1);
+  });
+
+  it("ĐỘT BIẾN: gỡ trigger ⇒ 2147483647 ĐI VÀO (tổ chức bị ghim); khôi phục ⇒ lại bị chặn", async () => {
+    const { nguong } = await hienHanh();
+    await db.pool.query("DROP TRIGGER org_procurement_policies_phien_ban_tang_dan ON org_procurement_policies");
+    try {
+      await expect(tao(2147483647, nguong)).resolves.toMatchObject({ version: 2147483647 });
+      // Và đây là cái ghim: không phiên bản nào lớn hơn được nữa — đúng ca reviewer tả.
+      await db.pool.query("DELETE FROM org_procurement_policies WHERE org_id = $1 AND version = 2147483647", [orgA]);
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER org_procurement_policies_phien_ban_tang_dan BEFORE INSERT ON org_procurement_policies FOR EACH ROW EXECUTE FUNCTION public.chinh_sach_phien_ban_tang_dan()",
+      );
+    }
+    await expect(tao(2147483647, nguong)).rejects.toMatchObject({ code: "23514" });
+  });
+});
