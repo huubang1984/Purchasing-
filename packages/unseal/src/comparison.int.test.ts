@@ -533,7 +533,9 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
     //
     // Bản này ghim NGƯỢC với thứ mà "chính sách mới nhất" sẽ chọn, ở CẢ HAI CHIỀU:
     //   • RFQ ghim `csNghiem` (v1, NGHIÊM) trong khi mới nhất là `csLong` (v2, LỎNG) -> phải GIẤU
-    //   • RFQ ghim `csLong`   (v2, LỎNG)   trong khi sau đó có v90 NGHIÊM         -> phải CÔNG BỐ
+    //   • RFQ ghim `csLong`   (v2, LỎNG)   trong khi sau đó có ~~v90~~ v3 NGHIÊM      -> phải CÔNG BỐ
+    //     ([035] phiên bản phải BẰNG đúng lớn nhất + 1 — v90 không còn chèn được, và không cần: cái
+    //     test đo là "ban hành SAU", không phải "số lớn".)
     const rfqNghiem = await taoRfqMo(csNghiem);
     await nopBaoGia(rfqNghiem, "NCC Ghim Nghiem");
     const a = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqNghiem, actorSessionId: sYc }, apiPool));
@@ -543,7 +545,7 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
 
     const rfqLong = await taoRfqMo(csLong);
     await nopBaoGia(rfqLong, "NCC Ghim Long");
-    await taoChinhSach(90, true);
+    await taoChinhSach(3, true);
     const b = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqLong, actorSessionId: sYc }, apiPool));
     expect(b, "chính sách BAN HÀNH SAU không được đổi phán quyết của một RFQ đã ghim").toEqual({
       disclosed: true,
