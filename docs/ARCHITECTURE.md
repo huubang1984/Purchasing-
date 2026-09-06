@@ -17,6 +17,7 @@
 | Cổng nhà cung cấp | Next.js — mã hóa bằng WebCrypto phía trình duyệt |
 | API | ~~NestJS~~ **`node:http` trần + bảng route khai báo** (ADR-020, 2026-09-06) |
 | Worker mở thầu | ~~NestJS~~ hàm thuần + composition root, `node` trần (process riêng) |
+| Tiến trình `api` | [S1.11 / ADR-021] composition root trong `apps/api`; `pnpm api:dev` chạy TypeScript trực tiếp bằng Node ≥ 22 — chưa có bước build |
 | Cơ sở dữ liệu | PostgreSQL — RLS, trigger, quyền theo cột |
 | Quản lý khóa | AWS KMS / HashiCorp Vault (qua interface `KeyProvider`) |
 | Test | Vitest · fast-check · Testcontainers · Playwright · k6 |
@@ -88,7 +89,11 @@ apps/
                         pg, tenancy, node:http. [S1.10, 2026-09-06] Đủ bốn đối tượng route
                         (PUBLIC/ANON/GUEST/BUYER), đăng nhập người mua bằng magic link + TOTP,
                         đường khách trọn vẹn, 28 route người mua; kiểm `Origin` cho mọi yêu cầu
-                        không-GET. CHƯA có composition root chạy thật (pool, KMS, bộ gửi).
+                        không-GET. ~~CHƯA có composition root chạy thật (pool, KMS, bộ gửi).~~
+                        [S1.11 / ADR-021] `main.ts` + `composition.ts` + `cau-hinh.ts`: tiến
+                        trình dựng từ biến môi trường (fail-closed, adapter phải khai tên), pool
+                        `SET ROLE app_api` mỗi kết nối, hai adapter dev (bọc TOTP, hộp thư dev).
+                        Chưa có: adapter KMS, bộ gửi thật, bước build — ADR-021 §*Phần KHÔNG đóng*.
   unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy

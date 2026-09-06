@@ -7,11 +7,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "//": "[ADR-020] node:http TRAN, KHONG framework. Danh sach phu thuoc ngoai o pham vi san xuat cua ca kho van la hai dong (`tests/architecture/pham-vi-san-xuat.test.ts`) — do la PHEP DO cua lua chon C trong ADR-020, khong phai mot su thieu sot. `@trustprocure/db` va `@trustprocure/test-support` nam o devDependencies: ma CHAY cua api nhan pool tu composition root, khong tu tao.",
+  "//": "[ADR-020] node:http TRAN, KHONG framework. Danh sach phu thuoc ngoai o pham vi san xuat cua ca kho van la hai dong (`tests/architecture/pham-vi-san-xuat.test.ts`) — do la PHEP DO cua lua chon C trong ADR-020, khong phai mot su thieu sot. [S1.11 / ADR-021] `@trustprocure/db` nay o `dependencies`: composition root (`src/composition.ts`) SONG TRONG app nay va tu dung pool bang `createPool(..., { role: 'app_api' })`. Nguyen van cu, giu de doi chieu: ~~`@trustprocure/db` va `@trustprocure/test-support` nam o devDependencies: ma CHAY cua api nhan pool tu composition root, khong tu tao~~ — ve `test-support` van dung.",
   "dependencies": {
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
+    "@trustprocure/db": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
@@ -22,7 +23,6 @@
     "pg": "^8.13.0"
   },
   "devDependencies": {
-    "@trustprocure/db": "workspace:*",
     "@trustprocure/test-support": "workspace:*"
   }
 }

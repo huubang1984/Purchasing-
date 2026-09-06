@@ -176,7 +176,12 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     const doiBoi = new Set(routeGhi.map((r) => r.permission as string));
     expect(maQuyen.filter((m) => !doiBoi.has(m)).length).toBeGreaterThan(0);
     expect(doiBoi.size).toBeGreaterThan(5);
-  });
+    // [S1.11] Ngân sách riêng, vì ca này là một VÒNG QUÉT (route ghi × mã quyền, mỗi cặp một phiên
+    // và một lời gọi HTTP) và nó lớn theo cả hai chiều. Đo được: ~13,5 s trong một lượt `test:int`
+    // đầy đủ; 30 s+ khi `pnpm evidence` chạy CẢ HAI tầng trên cùng máy (16 worker) — đỏ hai lượt
+    // liên tiếp đúng ở trần 30 s mặc định, không một khẳng định nào sai. Không phải họ 57P01 của
+    // nợ 24 (đó là vòng đời kết nối); đây là ngân sách wall-clock cho một ca cố ý nặng.
+  }, 120_000);
 
   it("route ĐỌC không có cổng ở dispatcher (theo ADR-016): phiên không quyền vẫn đọc được /me, /suppliers", async () => {
     const khongQuyen = await nguoi("docduoc@vidu.vn", []);

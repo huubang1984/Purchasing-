@@ -18,8 +18,12 @@
 -- Trigger CỐ Ý điều kiện theo `current_user = 'app_api'`, khác với các trigger 011/013 (chạy cho
 -- MỌI role). Lý do: một hàng `sessions` thiếu MFA là một TRẠNG THÁI hợp lệ cho bộ test (đo
 -- `assertFreshMfa`, đo `resolveSessionByToken` từ chối) và cho một đường vận hành chưa có tên;
--- điều ADR-020 cấm là ỨNG DỤNG tạo ra nó. `SET ROLE app_api` làm `current_user` = `app_api`
--- (test-support đo điều ấy ngay khi mở pool), nên vị từ này nhìn thấy đúng đường ứng dụng.
+-- điều ADR-020 cấm là ỨNG DỤNG tạo ra nó. ~~`SET ROLE app_api` làm `current_user` = `app_api`
+-- (test-support đo điều ấy ngay khi mở pool), nên vị từ này nhìn thấy đúng đường ứng dụng.~~
+-- [S1.11 / 037] Câu vừa gạch đúng cho đường TEST và SAI cho đường SẢN XUẤT: tiến trình đăng nhập
+-- bằng `app_api_login` (INHERIT, hardening) — có mọi quyền của app_api mà `current_user` KHÁC tên —
+-- nên vị từ này IM LẶNG nếu ứng dụng quên `SET ROLE`. Thân hàm dưới đây là LỊCH SỬ: 037 thay bằng
+-- `la_duong_ung_dung('app_api')` (kế thừa quyền + không superuser), cùng tên hàm, cùng trigger.
 -- =============================================================================================
 
 CREATE TABLE user_login_tokens (

@@ -1,0 +1,119 @@
+// ==============================================================================================
+// apps/api/src/composition.ts — COMPOSITION ROOT CỦA TIẾN TRÌNH `api`
+//
+// [ADR-021] Nơi DUY NHẤT của apps/api dựng hạ tầng thật từ cấu hình: hai pool `app_api` (một cho
+// giao dịch, một ĐỘC LẬP cho sổ từ chối quyền — D5), ba vòng bí mật, bộ ký biên nhận, ba bộ gửi,
+// rồi lắp `createDispatcher` + `createApiServer`. Cùng khuôn `apps/unseal-worker/src/composition.ts`:
+// hàm thuần nhận cấu hình, không đọc `process.env`, không `listen` — `main.ts` mới là chỗ ấy.
+//
+// HAI ĐIỀU FILE NÀY CỐ Ý LÀM:
+//   ⑴ Pool mang `role: "app_api"`: mỗi client `SET ROLE` + kiểm `current_user` trước khi giao ra
+//      (`@trustprocure/db`, vai-tro.ts). Tiến trình đăng nhập bằng `app_api_login` — role INHERIT có
+//      toàn bộ quyền của app_api nhưng KHÁC tên — và mọi phép đo của dự án chạy dưới `SET ROLE app_api`;
+//      lớp này làm tiến trình thật chạy ĐÚNG danh tính đã đo. Migration `037` là lớp CSDL đứng sau.
+//   ⑵ `batDau()` chạm CSDL TRƯỚC khi mở cổng: một client của mỗi pool được lấy và trả lại. Sai role,
+//      sai mật khẩu, CSDL chưa migrate — tất cả nổ ở đây, khi chưa có ai kết nối được vào, thay vì ở
+//      yêu cầu đầu tiên của một người dùng thật.
+//
+// MỘT ĐIỀU NÓ KHÔNG LÀM: chọn adapter. `cau-hinh.ts` đã đòi tên adapter và hôm nay mỗi loại chỉ có
+// một — nên file này không có `switch`; ngày có adapter thứ hai (KMS, SMTP), `switch` mọc ở đây và
+// `cau-hinh.ts` mở thêm một giá trị, cả hai trong cùng một commit.
+// ==============================================================================================
+
+import type { AddressInfo } from "node:net";
+import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
+import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
+import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import { PepperRing } from "@trustprocure/invitation";
+import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
+import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
+import type { CauHinhApi } from "./cau-hinh.js";
+import { createDispatcher } from "./dispatch.js";
+import type { ApiServices } from "./route-types.js";
+import { createApiServer } from "./server.js";
+
+export interface DiaChiNghe {
+  readonly host: string;
+  readonly port: number;
+}
+
+export interface TienTrinhApi {
+  /** Kiểm CSDL (cả hai pool giao ra client đúng vai) rồi mở cổng. Ném thì KHÔNG có cổng nào mở. */
+  batDau(): Promise<DiaChiNghe>;
+  /** Đóng cổng, chờ kết nối đang mở, rồi đóng cả hai pool. Gọi được nhiều lần. */
+  dung(): Promise<void>;
+}
+
+/** Số kết nối của pool sổ từ chối quyền — nhỏ, vì nó chỉ ghi một hàng cho mỗi lần 403. */
+const AUDIT_POOL_MAX = 2;
+
+export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
+  const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
+  const auditPool = createPool(ch.databaseUrl, AUDIT_POOL_MAX, { role: "app_api" });
+
+  const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
+  const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
+  const services: ApiServices = {
+    rfqKeyWrapper: createLocalDevWrapper(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
+    totpSecretWrapper: totp.wrapper,
+    totpSecretUnsealer: totp.unsealer,
+    pepper: new PepperRing(ch.otpPeppers.active, ch.otpPeppers.keys),
+    receiptSigner: createLocalDevReceiptSigner(
+      new ReceiptSigningKeyRing(ch.receiptSigningKeys.active, ch.receiptSigningKeys.keys),
+    ),
+    loginLinkSender: hopThu.loginLinkSender,
+    invitationLinkSender: hopThu.invitationLinkSender,
+    otpSender: hopThu.otpSender,
+  };
+
+  const server = createApiServer(
+    createDispatcher({
+      pool,
+      auditPool,
+      services,
+      ...(ch.afterCommitTimeoutMs === undefined ? {} : { afterCommitTimeoutMs: ch.afterCommitTimeoutMs }),
+    }),
+    { allowedOrigins: ch.allowedOrigins },
+  );
+
+  let daDung = false;
+
+  return {
+    async batDau(): Promise<DiaChiNghe> {
+      // Chạm CSDL trước khi mở cổng — xem ⑵ ở đầu file. `connect()` của pool có vai tự ném nếu SET ROLE
+      // không có hiệu lực; [review H3-1] và PHIÊN đăng nhập phải không mạnh hơn vai ấy (superuser,
+      // BYPASSRLS, CREATEROLE, thành viên app_unseal) — SET ROLE không giấu được một RESET ROLE.
+      for (const p of [pool, auditPool]) {
+        const c = await p.connect();
+        try {
+          await khangDinhPhienDangNhapUngDung(c, "app_api");
+        } finally {
+          c.release();
+        }
+      }
+      await new Promise<void>((xong, hong) => {
+        server.once("error", hong);
+        server.listen(ch.listenPort, ch.listenHost, () => {
+          server.off("error", hong);
+          xong();
+        });
+      });
+      const dc = server.address() as AddressInfo;
+      return { host: dc.address, port: dc.port };
+    },
+    async dung(): Promise<void> {
+      if (daDung) return;
+      daDung = true;
+      await new Promise<void>((xong) => {
+        if (!server.listening) {
+          xong();
+          return;
+        }
+        server.close(() => xong());
+        // Kết nối keep-alive rảnh không tự đóng khi `close()`; đóng chúng để tiến trình không treo.
+        server.closeIdleConnections();
+      });
+      await Promise.allSettled([pool.end(), auditPool.end()]);
+    },
+  };
+}

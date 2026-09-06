@@ -46,7 +46,24 @@ export function assertLocalDevAllowed(): void {
   // Không nói gì = từ chối. Danh sách tên môi trường vẫn giữ làm lớp thứ hai, không phải lớp
   // duy nhất.
   const adapter = (process.env["TRUSTPROCURE_KEY_ADAPTER"] ?? "").trim().toLowerCase();
-  if (adapter === "local-dev") return;
+  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
+  const choPhepGhiDe = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] === "1";
+  if (adapter === "local-dev") {
+    // [S1.11 / review H3-2] Lời khai dương KHÔNG còn thắng `NODE_ENV=production`: hai tín hiệu
+    // mâu thuẫn là một lỗi cấu hình, không phải một lựa chọn. Lý do đo được: từ S1.11, cấu hình
+    // của tiến trình `api` BẮT BUỘC `TRUSTPROCURE_KEY_ADAPTER=local-dev` (adapter duy nhất trong
+    // kho), nên nếu lời khai ấy một mình mở cửa thì mọi cấu hình khởi động được — kể cả
+    // production — đều mở hàng rào cho cả bốn adapter local-dev, trong đó hộp thư dev ghi bản rõ
+    // token và OTP ra đĩa. Production cần thêm cờ ghi đè tường minh (đường CUỐI CÙNG, đã có).
+    if ((moiTruong === "production" || moiTruong === "prod") && !choPhepGhiDe) {
+      throw new KeyError(
+        'Adapter "local-dev" bị chặn: TRUSTPROCURE_KEY_ADAPTER="local-dev" mà NODE_ENV="' + moiTruong +
+          '" — hai tín hiệu mâu thuẫn. Dùng adapter thật ở production, hoặc đặt ' +
+          "TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS=1 nếu đây thật sự là một môi trường thử với dữ liệu giả.",
+      );
+    }
+    return;
+  }
   if (adapter !== "") {
     throw new KeyError(
       `Adapter "local-dev" bị chặn: TRUSTPROCURE_KEY_ADAPTER đang là "${adapter}". ` +
@@ -54,9 +71,7 @@ export function assertLocalDevAllowed(): void {
     );
   }
 
-  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
   const laDevRoRang = moiTruong === "development" || moiTruong === "dev" || moiTruong === "test";
-  const choPhepGhiDe = process.env["TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS"] === "1";
   if (!laDevRoRang && !choPhepGhiDe) {
     throw new KeyError(
       'Adapter "local-dev" bị chặn: không tiến trình nào khai báo nó. Đặt ' +

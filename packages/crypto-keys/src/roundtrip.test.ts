@@ -278,15 +278,42 @@ describe("rào chắn cho adapter local-dev (bất biến G1)", () => {
     },
   );
 
-  it("[INV-G1] lời khai DƯƠNG thắng mọi NODE_ENV", () => {
-    dat({ NODE_ENV: "production", TRUSTPROCURE_KEY_ADAPTER: "local-dev" });
-    try {
-      expect(() => createLocalDevWrapper(ring())).not.toThrow();
-      expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
-    } finally {
-      datLai();
-    }
-  });
+  // ~~it("[INV-G1] lời khai DƯƠNG thắng mọi NODE_ENV", …)~~ — [S1.11 / review H3-2] Câu ấy đúng cho
+  // mọi NODE_ENV TRỪ production: từ S1.11 cấu hình của tiến trình `api` BẮT BUỘC khai `local-dev`
+  // (adapter duy nhất), nên "lời khai dương một mình mở cửa" nghĩa là mọi cấu hình khởi động được
+  // đều mở cửa, kể cả production. Nay production + local-dev là MÂU THUẪN ⇒ chặn; cờ ghi đè vẫn là
+  // đường cuối.
+  it.each(["staging", "live", "producthunt", "development"])(
+    '[INV-G1] lời khai DƯƠNG thắng NODE_ENV="%s" — mọi giá trị KHÔNG phải production',
+    (bienThe) => {
+      dat({ NODE_ENV: bienThe, TRUSTPROCURE_KEY_ADAPTER: "local-dev" });
+      try {
+        expect(() => createLocalDevWrapper(ring())).not.toThrow();
+        expect(() => createLocalDevUnwrapper(ring())).not.toThrow();
+      } finally {
+        datLai();
+      }
+    },
+  );
+
+  it.each(["production", "prod", " PRODUCTION "])(
+    '[INV-G1][S1.11] lời khai DƯƠNG + NODE_ENV="%s" là mâu thuẫn ⇒ chặn; thêm cờ ghi đè ⇒ qua',
+    (bienThe) => {
+      dat({ NODE_ENV: bienThe, TRUSTPROCURE_KEY_ADAPTER: "local-dev" });
+      try {
+        expect(() => createLocalDevWrapper(ring())).toThrow(/mâu thuẫn/);
+        expect(() => createLocalDevUnwrapper(ring())).toThrow(/mâu thuẫn/);
+      } finally {
+        datLai();
+      }
+      dat({ NODE_ENV: bienThe, TRUSTPROCURE_KEY_ADAPTER: "local-dev", TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS: "1" });
+      try {
+        expect(() => createLocalDevWrapper(ring())).not.toThrow();
+      } finally {
+        datLai();
+      }
+    },
+  );
 
   it("[INV-G1] khai một adapter KHÁC thì bị chặn kể cả ở máy phát triển", () => {
     // Một tiến trình nói nó dùng KMS thì không được dựng bộ bọc khoá nội bộ — kể cả khi

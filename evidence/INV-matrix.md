@@ -74,7 +74,7 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 46 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
 | F3 | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 | 1 | ✅ ĐẠT |  |
-| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 49 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 55 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | G2 | Mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ khác | Thiết kế khóa | T1, T3 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | G3 | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 | 2 | ✅ ĐẠT |  |
 | G4 | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 | 9 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |

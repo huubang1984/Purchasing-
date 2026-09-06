@@ -1579,6 +1579,60 @@ $ham$$q$,
       $q$quyền sở hữu hàm app_current_org_id() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
+    -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của hai trigger đăng nhập ------
+    -- `la_duong_ung_dung(name)` là ĐIỂM ĐƠN: thay thân nó là đủ để 029 (phiên thiếu MFA) và 032
+    -- (bí mật TOTP đã xác nhận) im lặng — `packages/db/src/vai-tro.int.test.ts` chứng minh đúng
+    -- thế bằng đột biến. Cùng mô hình đe doạ với R3 ở trên (một CREATE OR REPLACE sau triển khai
+    -- đi qua migrate() mà không ai thấy), nên cùng lớp canh: thân đã chuẩn hoá + thuộc tính.
+    -- KHÁC R3 ở tiền điều kiện: chỉ canh khi hàm ĐÃ TỒN TẠI — lượt hardening TRƯỚC vòng migration
+    -- trên cụm mới chạy trước 037, và dựng hàm ở đây sẽ làm `CREATE FUNCTION` của 037 vỡ. Hàm bị
+    -- DROP thì không tự chữa, nhưng không im lặng: hai trigger ném ngay ở câu ghi đầu tiên.
+    -- Test đồng bộ hai bản thân hàm (037 ↔ file này): db/migrations.int.test.ts [S1.11].
+    ARRAY[
+      $q$định nghĩa hàm la_duong_ung_dung(name) (037)$q$,
+      $q$to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)') IS NOT NULL$q$,
+      $q$CREATE OR REPLACE FUNCTION public.la_duong_ung_dung(ten_vai pg_catalog.name) RETURNS boolean
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog
+AS $ham$
+  SELECT pg_catalog.pg_has_role(current_user, ten_vai, 'USAGE')
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_roles r
+        WHERE r.rolname OPERATOR(pg_catalog.=) current_user AND r.rolsuper
+     )
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT pg_catalog.pg_has_role(current_user, ten_vai, 'USAGE') AND NOT EXISTS ( SELECT 1 FROM pg_catalog.pg_roles r WHERE r.rolname OPERATOR(pg_catalog.=) current_user AND r.rolsuper )$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 1
+            AND p.prorettype = 'pg_catalog.bool'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)')),
+                  'hàm public.la_duong_ung_dung(name) không tồn tại')$q$,
+      $q$quyền sở hữu hàm la_duong_ung_dung(name) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$EXECUTE trên la_duong_ung_dung(name): PUBLIC không, app_api có (037)$q$,
+      $q$to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)') IS NOT NULL$q$,
+      $q$REVOKE ALL ON FUNCTION public.la_duong_ung_dung(pg_catalog.name) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.la_duong_ung_dung(pg_catalog.name) TO app_api$q$,
+      $q$(SELECT p.proacl IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM aclexplode(p.proacl) a
+                            WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')
+            AND has_function_privilege('app_api', p.oid, 'EXECUTE')
+          FROM pg_proc p WHERE p.oid = to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)'))$q$,
+      $q$'ACL của public.la_duong_ung_dung(name) lệch: PUBLIC phải KHÔNG có EXECUTE, app_api phải CÓ'$q$,
+      $q$quyền sở hữu hàm la_duong_ung_dung(name) hoặc SUPERUSER$q$
+    ],
+
     -- ---- Thuộc tính role (hàng rào S1) ---------------------------------------------------
     -- app_api có BYPASSRLS là đọc được giá thầu của MỌI tổ chức, bất chấp toàn bộ RLS.
     ARRAY[

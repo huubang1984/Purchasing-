@@ -41,6 +41,11 @@ export default tseslint.config(
       // "mọi file .mjs khác trong repo đều ồn ào" mà fix round 2 đã mua bằng một lần đo.
       "tools/bench-kms/*.mjs",
       "tools/do-webcrypto/*.mjs",
+      // [S1.11] `apps/api/*.mjs` — bộ ghi danh hook resolve cho `pnpm api:dev` (điểm vào của tiến
+      // trình api chạy TypeScript trực tiếp bằng Node ≥ 22). Bản sao có chủ ý thứ ba của cùng
+      // hook, cùng lý do đã ghi ở `tools/inv-matrix/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một
+      // thư mục, không gộp `apps/*/*.mjs`.
+      "apps/api/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",
