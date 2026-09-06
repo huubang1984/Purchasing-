@@ -1,5 +1,6 @@
 // [sổ nợ 38] Trần thời gian cho việc ngoài CSDL: lỗi mang TÊN riêng, promise gốc bị bỏ, hai adapter KMS được bọc.
 import { describe, expect, it } from "vitest";
+import type { KeyWrapper } from "@trustprocure/crypto-keys";
 import type { TotpSecretUnsealer } from "@trustprocure/identity";
 import { KMS_TIMEOUT_MS_MAC_DINH, QuaHanError, boiTranKms, coHan } from "./co-han.js";
 import type { TotpSecretWrapper } from "./route-types.js";
@@ -19,7 +20,7 @@ describe("[sổ nợ 38] coHan / boiTranKms", () => {
     const wrapper: TotpSecretWrapper = { name: "treo", wrapTotpSecret: () => treo() };
     const unsealer: TotpSecretUnsealer = { kind: "TOTP_SECRET_UNSEALER", name: "treo", openTotpSecret: () => treo() };
     const khac = { name: "khac" };
-    const rfqKeyWrapper = { name: "rfq-treo", wrap: () => treo() };
+    const rfqKeyWrapper: KeyWrapper = { name: "rfq-treo", wrap: () => treo() };
     const boc = boiTranKms({ totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, rfqKeyWrapper, khac }, 20);
     expect(boc.khac).toBe(khac);
     // [review H4-8] Lời gọi KMS thứ ba (openRfq) cũng có trần.

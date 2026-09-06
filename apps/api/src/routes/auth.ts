@@ -56,7 +56,6 @@ function chuoi(body: unknown, ten: string): string {
 /** [review H4-3] Hình dạng email tối thiểu: `a@b`, không khoảng trắng, không ký tự điều khiển, một `@`. */
 export function laHinhDangEmail(v: string): boolean {
   const s = v.trim();
-  // eslint-disable-next-line no-control-regex
   return /^[^\s@\x00-\x1f\x7f]+@[^\s@\x00-\x1f\x7f]+$/u.test(s);
 }
 
