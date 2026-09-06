@@ -1846,3 +1846,95 @@ và mã hoá/nén khác ba dạng ấy — §4 của A2.
 8. **[H4-3]** sau runner, không hàng `outbox_jobs` DONE nào của `LOGIN_LINK_SEND` còn payload khác
    `{}`; sáu chuỗi sai dạng ⇒ 422, không để lại job; gỡ trigger 041 ⇒ email nằm lại.
 7. **49:** đếm 422 "thiếu trường" = 0 trên route ghi; đối chứng dương ba dạng viết.
+
+## ADR-023 — Việc SAU COMMIT trong `JobRunner`: tác dụng phụ không rollback được chạy sau khi kết cục của job đã ghi; hạn mức theo tổ chức và cho tổ chức lạ; thân trigger được hardening ghim
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.13)** · Đóng: sổ nợ 51, 52,
+53 (ba phần chênh của review lượt 4) · Liên quan: ADR-010 (outbox), ADR-022, migration `039`–`041`,
+`hardening.always.sql`, review lượt 4 H4-4/H4-5/H4-7/H4-10; lượt 5 (H5-x, `evidence/security-reviews.md`
+§S1.13)
+
+### 1. Nợ 53 — gửi email KHÔNG nằm trong giao dịch của job
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Giữ `send` trong giao dịch, thêm pool riêng nhỏ cho runner | Chỉ đóng vế "cạn pool"; vế "email đã đi mang token bị rollback rồi email thứ hai" vẫn còn — đó là vế huấn luyện người dùng bấm link chết. **Loại.** |
+| b | Hai job: `LOGIN_LINK_SEND` phát token, enqueue `LOGIN_LINK_DELIVER` | Token phải đi qua payload (ADR-015 cấm) hoặc phải lưu dạng rõ để job sau đọc — cả hai đều là thứ 007/015 đã cấm bằng chữ. **Loại.** |
+| c | **`JobHandler` được TRẢ VỀ một hàm (`SauCommit`); runner gọi nó SAU khi giao dịch của job (công việc + dấu DONE) đã commit và kết nối đã bị huỷ — ngoài mọi giao dịch, có trần `handlerTimeoutMs`** | Token commit trước, gửi sau: link trong email luôn trỏ tới một token đã tồn tại; bộ gửi treo không giữ kết nối nào. Đổi lại phần gửi là **at-most-once**: hàm ném hay quá hạn ⇒ `AFTER_COMMIT_FAILED` tới `onJobFailure` (`gaveUp=false`), job VẪN DONE, không thử lại, không ghi gì vào CSDL (CHECK của 007 không nhận lý do này — cố ý). Người dùng gọi lại `/auth/link`; token không gửi nằm đó tới hết hạn, chưa từng rời tiến trình. **Chọn.** |
+
+Hợp đồng gói đổi tương thích: handler cũ trả `void` vẫn đúng kiểu; unseal-worker không đổi. Trần của
+việc sau commit dùng chung `handlerTimeoutMs` — một trần, một tên lỗi (`HetGioHandlerError`), không
+thêm nút cấu hình cho một việc mà hôm nay chỉ có một người dùng.
+
+**[review H5-6] Ba điều phải nói thẳng:** ⑴ at-most-once là CỐ Ý — không phải thứ sẽ "sửa sau";
+⑵ một token phát ra mà không gửi được vẫn tiêu 1/5 hạn mức 15 phút của người dùng (`issueLoginToken`)
+— khi SMTP hỏng, người dùng bị "câm" tới hết cửa sổ mà không nhận được thông điệp nào, vì thân
+phản hồi của `/auth/link` cố ý giống nhau cho mọi ca (nợ 38); ⑶ `AFTER_COMMIT_FAILED` hôm nay chỉ
+tới `console.error` của composition (kind + reason) — dự án CHƯA có kênh cảnh báo vận hành nào, nên
+"nối vào cảnh báo" là việc của ngày có kênh ấy, ghi ở đây để không ai tưởng nó đã có. **[review H5-4]**
+`coHan` bọc `viec()` qua `Promise.resolve().then` — một adapter gửi NÉM ĐỒNG BỘ trước đây làm đồng hồ
+của `coHan` reject không ai bắt và giết tiến trình; nay thành reject bình thường.
+
+### 2. Nợ 52 — ba lỗ hạn mức còn lại
+
+- **Trần TOÀN TỔ CHỨC** (`orgLimit` trên `AnonRoute`, hôm nay chỉ `/auth/link` = 300/15 phút): cùng
+  giao dịch với bucket theo người gọi, khoá `route|to-chuc` (không địa chỉ). Bịt đường xoay /64 của
+  IPv6 (H4-4) mà không siết NAT. ~~Hệ quả nói ra: 300 lời gọi từ bất kỳ đâu khoá `/auth/link` của một
+  tổ chức 15 phút — DoS thu hẹp có chủ đích (chỉ route link, người đã có phiên không bị ảnh hưởng),
+  rẻ hơn nhiều so với 300 email rác vào hộp thư của tổ chức ấy.~~ **[review H5-1, HIGH]** Câu vừa gạch
+  là một vũ khí: `orgId` không phải bí mật (nằm trong cookie của mọi NCC từng được mời), và bản đầu
+  cộng bucket tổ chức cả khi người gọi đã vượt trần riêng — MỘT địa chỉ, 300 lời gọi (270 là 429 rẻ)
+  khoá cửa đăng nhập của cả tổ chức, lặp mỗi 15 phút. Nay: bucket tổ chức chỉ cộng khi người gọi
+  CHƯA vượt trần riêng (một địa chỉ góp tối đa `callerLimit`), và vượt `orgLimit` thì **LÀM CHẬM**
+  (`treQuaTranMs`, mặc định 2 s) rồi vẫn xử lý — nguyên tắc ADR-015 §5, "hạn mức theo đích chỉ được
+  làm chậm, không được khoá". Log một dòng chỉ mang route + requestId (tín hiệu tấn công).
+- **Tổ chức LẠ** (`BucketBoNho`, `apps/api/src/bucket-bo-nho.ts`): 23503 ở bucket CSDL ⇒ đếm trong bộ
+  nhớ theo `route|người gọi` (không orgId — xoay orgId lạ không mở thêm trần), CÙNG trần, 429 ở lần
+  N+1 như tổ chức thật ~~⇒ oracle H4-5 đóng~~ **[review H5-3]** — oracle H4-5 vẫn còn, đổi dạng: hai bộ
+  đếm rời nên mồi N lần vào một UUID giả rồi gửi UUID ứng viên là phân biệt được bằng MỘT lời gọi;
+  chấp nhận với cùng lý do H4-5 (UUIDv4), đóng thật cần một bảng bucket không khoá ngoại tới
+  `organizations` — sổ nợ 55. Trần 50 000 khoá; đầy ⇒ dọn khoá hết hạn, vẫn đầy ⇒
+  FAIL-CLOSED cho khoá mới (kẻ xoay địa chỉ chỉ tự khoá mình và những người gọi tổ chức lạ khác —
+  tổ chức thật có bucket CSDL). Theo tiến trình, mất khi khởi động lại — cùng giới hạn nhiều
+  instance với runner (ADR-022).
+- **Hai route khách** `/guest/redeem`, `/guest/otp/verify`: `callerLimit` 30/15 phút — cùng con số
+  với `/auth/redeem`, `/auth/totp`. `/guest/otp` giữ bucket theo đích (ADR-018).
+
+### 3. Nợ 51 — hardening ghim thân năm hàm trigger và định nghĩa sáu trigger
+
+~~Năm~~ Tám mục mới theo khuôn `la_duong_ung_dung` ~~(chỉ canh khi hàm ĐÃ tồn tại — lượt hardening trước
+vòng migration trên cụm mới không dựng hàm hộ)~~ **[review H5-2, MEDIUM]** với tiền điều kiện "MIGRATION
+NGUỒN ĐÃ ÁP DỤNG" (dòng trong `schema_migrations`, hoặc bảng do chính migration ấy tạo): tiền điều kiện
+"hàm đã tồn tại" làm một `DROP FUNCTION … CASCADE` (xoá cả hàm lẫn trigger) trở thành ca hardening
+im lặng bỏ qua — khác `la_duong_ung_dung` (caller ném khi nó mất), các hàm này LÀ trigger, mất chúng
+là mất phép kiểm mà không ai kêu (041 mất ⇒ email nằm lại; 039 mất ⇒ phiên đã-MFA không cần TOTP;
+040 mất ⇒ `app_api` xoá được hồ sơ TOTP của bất kỳ ai). Nay hàm mất được DỰNG LẠI; lượt hardening
+trước vòng migration trên cụm mới vẫn bỏ qua vì migration nguồn chưa được ghi. Mỗi mục: thân đã
+chuẩn hoá + `prosecdef`/`proconfig`/kiểu trả về/ngôn ngữ + định nghĩa trigger nguyên văn qua
+`pg_get_triggerdef` (gồm WHEN) + `tgenabled='A'`; câu sửa dựng lại từ bản nguồn. Máy trạng thái 040
+(vô điều kiện, không qua điểm đơn) nay cũng được ghim. **[review H5-5]** Cùng lớp, cùng vòng: 013
+`kiem_danh_tinh_theo_phien` (thân; 21 trigger của nó chưa ghim), 029/032 qua bản 037, và hai trigger
+danh tính của 040. 48 hàm `RETURNS trigger` trong `public`, ghim 8 + hai của D3 + `chan_sua_xoa` —
+danh sách viết tay, sổ nợ 54 (một test "mọi hàm trigger có mặt trong danh sách ghim"). Bản nguồn vẫn
+ở migration; test đồng bộ đọc cả hai và so.
+
+### Đo bằng gì
+
+1. **53:** (outbox) hàm sau commit thấy hàng job đã DONE từ kết nối KHÁC; handler ném ⇒ hàm không
+   chạy; hàm ném/treo ⇒ DONE + `AFTER_COMMIT_FAILED`, không ghi gì vào CSDL, lượt sau không nhặt lại.
+   (api) tại lúc `send` được gọi, token đã commit (đếm từ pool khác) và job đã DONE; gửi hỏng ⇒ không
+   email thứ hai. H2-7: bộ gửi treo ⇒ job DONE, lý do đổi thành `AFTER_COMMIT_FAILED` (gạch tại chỗ).
+2. **52:** 300 địa chỉ IPv6 KHÁC /64 cùng tổ chức ⇒ lần 301 là 429, cùng địa chỉ mới tổ chức khác
+   vẫn 200, bucket CSDL đúng hình (301 bucket ở 1, một bucket ở 301); hai orgId lạ xen kẽ ⇒ 429 ở
+   lần N+1, tổ chức thật cùng địa chỉ vẫn 200, địa chỉ khác ⇒ 200; `/guest/redeem` sai 30 lần rồi
+   429, `verify` đếm riêng, khách thật địa chỉ khác vẫn 200; bucket bộ nhớ: đầy ⇒ vô cực.
+3. **51:** tĩnh — ~~năm~~ tám thân migration ↔ hardening khớp, hậu điều kiện `$than$` là chính thân ấy,
+   mỗi trigger có định nghĩa ghim; trôi — thay hai thân thành `RETURN NEW`, DROP trigger 041, DISABLE
+   trigger 039, [H5-2] `DROP FUNCTION … CASCADE` hai hàm (040, 029-qua-037), [H5-5] DROP trigger danh
+   tính 040 ⇒ `migrate()` khôi phục tất cả và 041 sống lại (payload về `{}`). Test trôi đỏ THẬT trước
+   khi thêm mục, và đỏ THẬT với tiền điều kiện cũ cho ca CASCADE (đo bằng cách chạy lại trên bản
+   hardening trước H5-2: hai hàm không trở lại).
+4. **[H5-1]** một địa chỉ 300 lời gọi (30 tới handler, 270 là 429) ⇒ địa chỉ sạch sau đó 200 và
+   NHANH, bucket tổ chức = 31; 300 địa chỉ khác /64 ⇒ lần 301 vẫn 200 nhưng CHẬM ≥ `treQuaTranMs`.
+   **[H5-4]** `viec()` ném đồng bộ ⇒ `coHan` reject đúng lỗi, không `unhandledRejection`.
+

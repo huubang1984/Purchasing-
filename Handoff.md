@@ -460,3 +460,18 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    4 MEDIUM, 8 LOW — cả mười hai đóng trong cùng PR; sổ nợ mới 51–53 là ba phần chênh). Bài học của lượt ấy
    cho người tiếp theo: "CSDL cưỡng chế" phải cưỡng chế ĐÚNG VẾ — 040 cưỡng chế "hai người, hai phiên" mà
    không "hai người CÓ QUYỀN", và vế thiếu ấy là vế duy nhất còn nghĩa khi `app_api` bị chiếm (H4-1).
+
+10. **[2026-09-07] S1.13 — sổ nợ 51–53 (ba phần chênh của review lượt 4) ĐÓNG cùng ngày, ADR-023.** Hai
+    thứ đổi HỢP ĐỒNG mà người tiếp theo phải biết: ⑴ `JobHandler` của `@trustprocure/outbox` nay được
+    trả về một hàm — runner gọi nó SAU khi job đã DONE và commit, ngoài giao dịch, có trần; hàm ấy
+    ném thì job KHÔNG chạy lại (`AFTER_COMMIT_FAILED` chỉ tới `onJobFailure`). Đặt vào đó đúng những
+    tác dụng phụ không rollback được (gửi mail/SMS), không đặt việc ghi CSDL; ⑵ mọi route ANON có
+    credential trong thân nay có `callerLimit`, `/auth/link` có thêm `orgLimit`, và tổ chức lạ bị đếm
+    trong bộ nhớ — thêm một route ANON là khai hai trần ấy. Thân hàm trigger của 039/040/041 nay được
+    hardening ghim: sửa một thân là sửa Ở HAI CHỖ (migration mới + mục hardening), và test đồng bộ sẽ
+    đỏ nếu quên. `evidence/security-reviews.md` §S1.13 ghi lượt review thứ năm (1 HIGH, 1 MEDIUM, 4 LOW —
+    cả sáu đóng cùng PR; nợ mới 54–55). Bài học của lượt ấy: một TRẦN CHẶN theo tổ chức trên đường xác thực
+    là vũ khí khoá cửa cho bất kỳ ai biết `orgId` — và `orgId` nằm trong cookie của mọi NCC; hạn mức theo
+    đích chỉ được làm chậm (ADR-015 §5). Và: tiền điều kiện "đối tượng đã tồn tại" ở hardening là ca im lặng
+    khi đối tượng bị xoá — dùng "migration nguồn đã áp dụng".
+

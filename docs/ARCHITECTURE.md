@@ -98,6 +98,9 @@ apps/
                         enqueue; `outbox-api.ts` phát token và gửi); cookie `__Host-`; địa chỉ
                         người gọi sau proxy khai CIDR (`dia-chi.ts`); bucket theo người gọi cho
                         `/auth/*` đếm ở dispatcher; đặt lại TOTP hai người (`040`).
+                        [S1.13 / ADR-023] Runner nhận việc SAU COMMIT (gửi mail ngoài giao dịch
+                        của job); trần toàn tổ chức + bucket bộ nhớ cho tổ chức lạ
+                        (`bucket-bo-nho.ts`); thân trigger 039–041 được hardening ghim.
   unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy
