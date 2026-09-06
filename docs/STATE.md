@@ -4,8 +4,8 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (**S1.10.2 — khung `apps/api` — ĐÃ CÓ MÃ**, xem *Hành động tiếp
-theo* mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+**Cập nhật lần cuối:** 2026-09-06 (**S1.10.3 — đường khách qua HTTP — ĐÃ CÓ MÃ**, xem *Hành động tiếp
+theo* mục 17; S1.10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -770,6 +770,45 @@ CMK, chưa có role nào được tạo.
     **Còn lại của S1.10 (chưa làm):** 10.3 đường khách + `consumed_at` (028); 10.4 đăng nhập người mua
     ⭐ (029, trigger `mfa_verified_at`, `MFA_LOCKED`); 10.5 route nghiệp vụ + `policy.manage` (030);
     10.6 bộ quét rò rỉ + kịch bản 41 qua HTTP (A2 vào có cờ); 10.7 bốn lượt security-reviewer.
+
+17. **[2026-09-06] S1.10.3 ĐÃ CÓ MÃ — đường khách đi trọn qua HTTP, và một phép đo đã ĐỔI thiết kế
+    của ADR-020 mục 4 cho đường ghi.** Bảy route: ba vô danh (`POST /guest/redeem`, `/guest/otp`,
+    `/guest/otp/verify` — token trong THÂN, OTP đi tới bộ gửi tiêm vào chứ không về client, phiên
+    đi ra bằng `Set-Cookie` HttpOnly/Secure/Strict/`Path=/guest`) và bốn có phiên (`GET /guest/rfq`,
+    `POST /guest/bids`, `GET /guest/bids`, `GET /guest/bids/:id/receipt`). Đối tượng route thứ tư
+    **ANON** ra đời cho ba route đầu, với lớp canh: chỉ POST, chỉ dưới `/guest/*` hay `/auth/*`.
+    `guest.int.test.ts` **8/8** trên tiến trình thật: E2 (token một mình không mở được, kể cả nhét
+    vào cookie), E1 (link bị tiêu thụ — T5 #9 có lớp), E6 (mã OTP và số điện thoại không có trong
+    phản hồi), B2 (biên nhận nhận qua HTTP kiểm chứng bằng khoá công khai một mình), B1 (version 2,
+    version 1 còn), A5 (khách B: danh sách rỗng, biên nhận của A ⇒ 404 trùng thân "không tồn tại"),
+    ADR-017 (phản hồi không có ngân sách VÀ `SELECT count(*) FROM rfq_budgets` dưới phiên khách = 0).
+
+    **Ba thứ tìm ra bằng cách CHẠY:**
+    ⑴ **Ghi chú §4 của E1 đã THIU từ vòng sửa an ninh S1.3 mà không ai sửa lại.** Nó nói
+    *"`consumed_at` không bao giờ được ghi… chơi lại được cho tới khi hết hạn"*; thực tế
+    `verifyOtpAndStartSession` ghi `consumed_at` từ vòng H5, `docToken` đọc nó, trigger 012 cấm tắt
+    lại, và test `[H5]` đã đo. Kế hoạch S1.10 §1 chép lại câu thiu ấy và định làm migration `028`
+    cho một thứ đã có. Ghi chú §4 nay gạch nguyên văn cũ và trỏ tới cả hai phép đo (gói + HTTP).
+    ⑵ **`rfq_key_material` đóng với khách** — 027 liệt kê nó trong danh sách "không có lý do xuất
+    hiện trước một phiên khách", đúng cho khoá riêng đã bọc, SAI cho khoá công khai. `028` thay policy
+    đóng bằng policy mở đúng RFQ được mời (USING theo GUC `app.guest_rfq_id`, WITH CHECK vẫn đóng);
+    có đối chứng trong test: dựng lại policy 027 ⇒ `publicKeys: []`.
+    ⑶ **Nặng nhất: một kết nối đã gắn phiên khách KHÔNG BAO GIỜ được chèn vào sổ kiểm toán.**
+    `submitBid` chèn audit trong cùng giao dịch; dưới `withGuestSession` ⇒ `42501` ở `audit_append`
+    (vế RETURNING bị USING đóng từ chối) — đúng như 027 hẹn. Bản đầu của 028 ĐÃ VIẾT policy mở khe
+    ấy, rồi bị chính lược đồ bác bỏ: trigger `noi_chuoi_kiem_toan` (004) là SECURITY INVOKER và tìm
+    đầu chuỗi dưới RLS của kết nối — khách với USING đóng thấy 0 hàng và chèn một NHÁNH RẼ; mở USING
+    thì khách đọc sổ của cả tổ chức. Không policy nào đúng cả hai vế. **Kết luận kiến trúc:** route
+    khách `mutates: true` chạy dưới `withTenant` sau khi phiên đã xác thực; cô lập đường ghi do
+    trigger `bid_kiem_phien_khach` (018) + chữ ký `submitBid` giữ. Đường ĐỌC vẫn `withGuestSession`.
+    Phần chênh ghi vào §4 của A5: handler ghi của khách KHÔNG được viết SQL tay, và lớp cho ca ấy
+    hôm nay là review. Đây là **một sửa đổi của ADR-020 mục 4**, ghi ở `dispatch.ts` khối [S1.10.3]
+    và ở 028 — không phải một ngoại lệ lặng lẽ.
+
+    **Số đo:** `pnpm t0` 149 module / 0 vi phạm; `pnpm test` 491/491; ba bộ tích hợp api + khách +
+    lời mời 75/75; db 119/119 sau khi ba danh sách migration mong đợi nhận `028`. Độ phủ **đứng yên
+    50/51** — đúng: 10.3 không lấp mã nào, nó cho E1/E2/E5/A5/B1/B2 một phép đo THỨ HAI qua HTTP.
+    Còn lại: 10.4 ⭐, 10.5, 10.6, 10.7.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

@@ -17,21 +17,57 @@
 // ==============================================================================================
 
 import type pg from "pg";
+import type { ReceiptSigner } from "@trustprocure/bidding";
 import type { Permission, SessionActor } from "@trustprocure/identity";
+import type { Channel, PepperRing } from "@trustprocure/invitation";
 import type { ApiRequest, ApiResponse, HttpMethod } from "./http.js";
 
-export type Audience = "PUBLIC" | "GUEST" | "BUYER";
+export type Audience = "PUBLIC" | "ANON" | "GUEST" | "BUYER";
+
+/** Bộ gửi OTP — được TIÊM ở composition root (ADR-015 mục 3: người gọi issueOtpChallenge là handler gửi). */
+export interface OtpSender {
+  readonly name: string;
+  send(input: { readonly channel: Channel; readonly destination: string; readonly code: string }): Promise<void>;
+}
+
+/** Ba thứ có KHOÁ hoặc có TÁC DỤNG PHỤ mà handler cần và không được tự tạo. */
+export interface ApiServices {
+  readonly pepper: PepperRing;
+  readonly otpSender: OtpSender;
+  readonly receiptSigner: ReceiptSigner;
+}
 
 export interface PublicContext {
   readonly req: ApiRequest;
 }
 
-/** Kết nối ĐÃ gắn tổ chức + phiên khách (`withGuestSession`). Cửa duy nhất vào CSDL của handler. */
+/**
+ * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
+ * link, OTP). `orgId` đọc từ thân, được kiểm hình dạng UUID rồi gắn bằng `withTenant` — nó không
+ * phải bí mật, chỉ là toạ độ. Chỉ có ở `/guest/*` và `/auth/*` (lớp canh ở dưới).
+ */
+export interface AnonContext {
+  readonly req: ApiRequest;
+  readonly orgId: string;
+  readonly client: pg.PoolClient;
+  readonly services: ApiServices;
+}
+
+/**
+ * Cửa duy nhất vào CSDL của handler khách. Route ĐỌC: `client` đã gắn phiên khách (`withGuestSession`,
+ * ba GUC, policy 027/028 lọc theo lời mời). Route GHI (`mutates: true`): `client` chỉ gắn tổ chức —
+ * lý do đo được ở `dispatch.ts` khối [S1.10.3]; handler ghi vì thế KHÔNG được viết SQL tay, chỉ gọi
+ * hàm gói nhận `guestSessionId` (mọi thứ khác dẫn xuất ở CSDL).
+ */
 export interface GuestContext {
   readonly req: ApiRequest;
   readonly orgId: string;
   readonly client: pg.PoolClient;
   readonly guestSessionId: string;
+  /** DẪN XUẤT từ hàng phiên bởi `withGuestSession` — không đọc từ thân, không đọc từ đường dẫn. */
+  readonly invitationId: string;
+  readonly rfqId: string;
+  readonly services: ApiServices;
 }
 
 /** Kết nối ĐÃ gắn tổ chức (`withTenant`); `actor` dẫn xuất từ cookie, không từ thân yêu cầu. */
@@ -51,6 +87,12 @@ interface RouteBase {
 export interface PublicRoute extends RouteBase {
   readonly audience: "PUBLIC";
   readonly handler: (ctx: PublicContext) => Promise<ApiResponse>;
+}
+
+export interface AnonRoute extends RouteBase {
+  readonly audience: "ANON";
+  readonly mutates: boolean;
+  readonly handler: (ctx: AnonContext) => Promise<ApiResponse>;
 }
 
 export interface GuestRoute extends RouteBase {
@@ -78,7 +120,7 @@ export interface BuyerWriteRoute extends RouteBase {
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
-export type Route = PublicRoute | GuestRoute | BuyerReadRoute | BuyerWriteRoute;
+export type Route = PublicRoute | AnonRoute | GuestRoute | BuyerReadRoute | BuyerWriteRoute;
 
 // ----------------------------------------------------------------------------------------------
 // LỚP CANH DƯỚI DẠNG HÀM THUẦN — để test đo được nó trên một bảng GIẢ, không chỉ trên `ROUTES`.
@@ -120,10 +162,20 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     if (r.audience === "PUBLIC" && r.method !== "GET") {
       viPham.push(`${khoa}: route PUBLIC chỉ được là GET — không ai xác thực thì không ai được ghi`);
     }
+    // Đường VÔ DANH là bề mặt tấn công rộng nhất của api: không cookie, không phiên. Nó chỉ được
+    // tồn tại ở hai tiền tố có lý do (magic link + OTP của khách; đăng nhập người mua), và chỉ
+    // bằng POST — một GET vô danh đổi trạng thái là một link bấm-là-chết.
+    if (r.audience === "ANON" && !(r.path.startsWith("/guest/") || r.path.startsWith("/auth/"))) {
+      viPham.push(`${khoa}: route ANON ngoài /guest/* và /auth/* — đường vô danh không được mọc ở chỗ khác`);
+    }
+    if (r.audience === "ANON" && r.method !== "POST") {
+      viPham.push(`${khoa}: route ANON chỉ được là POST — token đi trong THÂN, không trong URL (E6)`);
+    }
     if (r.audience !== "PUBLIC" && r.method === "GET" && r.mutates) {
       viPham.push(`${khoa}: GET không được đổi trạng thái`);
     }
-    if (r.audience !== "PUBLIC" && r.method !== "GET" && !r.mutates) {
+    // ANON được POST mà không đổi trạng thái: token phải đi trong THÂN (E6), và GET không có thân.
+    if (r.audience !== "PUBLIC" && r.audience !== "ANON" && r.method !== "GET" && !r.mutates) {
       viPham.push(`${khoa}: phương thức ghi mà khai mutates:false — hoặc sai phương thức, hoặc đang trốn cổng quyền`);
     }
     if (r.audience === "BUYER" && r.mutates) {

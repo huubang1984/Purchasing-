@@ -20,6 +20,12 @@ export interface ApiRequest {
   readonly cookies: Readonly<Record<string, string>>;
   /** Định danh yêu cầu — sinh ở server, đi vào sổ kiểm toán như `requestId`. */
   readonly requestId: string;
+  /**
+   * Địa chỉ tầng vận chuyển của bên gọi — `callerFingerprint` của hạn mức OTP (ADR-015).
+   * Đọc từ socket, KHÔNG từ `X-Forwarded-For`: header ấy do client viết. Sau một proxy tin cậy,
+   * composition root phải thay nguồn này — và đó là một quyết định triển khai, ghi ở ADR-020.
+   */
+  readonly remoteAddress: string;
 }
 
 export interface ApiResponse {
@@ -27,6 +33,8 @@ export interface ApiResponse {
   readonly body?: unknown;
   /** Header THÊM. Bộ header mặc định (E6) do `server.ts` đặt và không handler nào bỏ được. */
   readonly headers?: Readonly<Record<string, string>>;
+  /** Mỗi phần tử là một dòng `Set-Cookie` hoàn chỉnh. Cookie là đường DUY NHẤT một phiên đi ra (E6). */
+  readonly setCookie?: readonly string[];
 }
 
 /**

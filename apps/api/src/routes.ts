@@ -6,8 +6,9 @@
 // LẮP ba nhóm lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
 // ==============================================================================================
 import type { Route } from "./route-types.js";
+import { ROUTES_ANON } from "./routes/anon.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
 import { ROUTES_GUEST } from "./routes/guest.js";
 import { ROUTES_PUBLIC } from "./routes/public.js";
 
-export const ROUTES: readonly Route[] = [...ROUTES_PUBLIC, ...ROUTES_GUEST, ...ROUTES_BUYER];
+export const ROUTES: readonly Route[] = [...ROUTES_PUBLIC, ...ROUTES_ANON, ...ROUTES_GUEST, ...ROUTES_BUYER];

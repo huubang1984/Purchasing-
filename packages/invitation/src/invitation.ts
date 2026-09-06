@@ -868,6 +868,8 @@ export async function revokeInvitation(
 export interface ResolvedGuestSession {
   readonly guestSessionId: string;
   readonly invitationId: string;
+  /** DẪN XUẤT qua `rfq_invitations` — cùng cách `withGuestSession` dẫn xuất GUC thứ ba. */
+  readonly rfqId: string;
   readonly verifiedChannel: Channel;
 }
 
@@ -880,9 +882,10 @@ export async function resolveGuestSessionByToken(
   if (!/^[A-Za-z0-9_-]{32,128}$/u.test(token)) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  const { rows } = await client.query<{ id: string; invitation_id: string; verified_channel: Channel }>(
-    `SELECT g.id, g.invitation_id, g.verified_channel
+  const { rows } = await client.query<{ id: string; invitation_id: string; rfq_id: string; verified_channel: Channel }>(
+    `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel
        FROM guest_sessions g
+       JOIN rfq_invitations i ON i.id OPERATOR(pg_catalog.=) g.invitation_id
       WHERE g.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
         AND g.revoked_at IS NULL
         AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()`,
@@ -892,5 +895,5 @@ export async function resolveGuestSessionByToken(
   if (hang === undefined) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  return { guestSessionId: hang.id, invitationId: hang.invitation_id, verifiedChannel: hang.verified_channel };
+  return { guestSessionId: hang.id, invitationId: hang.invitation_id, rfqId: hang.rfq_id, verifiedChannel: hang.verified_channel };
 }

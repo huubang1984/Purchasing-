@@ -53,7 +53,8 @@ function docThan(req: IncomingMessage, tran: number): Promise<string> {
 }
 
 function ghi(req: IncomingMessage, res: ServerResponse, r: ApiResponse): void {
-  const headers: Record<string, string> = { ...(r.headers ?? {}), ...HEADER_MAC_DINH };
+  const headers: Record<string, string | string[]> = { ...(r.headers ?? {}), ...HEADER_MAC_DINH };
+  if (r.setCookie !== undefined && r.setCookie.length > 0) headers["set-cookie"] = [...r.setCookie];
   if (r.status === 413) {
     // Thân bị từ chối giữa chừng: không tái dùng kết nối này. Đóng socket khi phản hồi đã ĐI HẾT,
     // để client nhận được 413 trước — không sớm hơn.
@@ -85,6 +86,7 @@ export function createApiServer(dispatch: Dispatcher, tuyChon: ServerOptions = {
             path: tachQuery(req.url ?? "/"),
             body,
             cookies: docCookie(req.headers.cookie),
+            remoteAddress: req.socket.remoteAddress ?? "",
           });
         }
       } catch (err) {

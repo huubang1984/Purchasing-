@@ -10,8 +10,11 @@
   "//": "[ADR-020] node:http TRAN, KHONG framework. Danh sach phu thuoc ngoai o pham vi san xuat cua ca kho van la hai dong (`tests/architecture/pham-vi-san-xuat.test.ts`) — do la PHEP DO cua lua chon C trong ADR-020, khong phai mot su thieu sot. `@trustprocure/db` va `@trustprocure/test-support` nam o devDependencies: ma CHAY cua api nhan pool tu composition root, khong tu tao.",
   "dependencies": {
     "@trustprocure/audit": "workspace:*",
+    "@trustprocure/bidding": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/rfq": "workspace:*",
+    "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/supplier": "workspace:*",
     "@trustprocure/tenancy": "workspace:*",
     "pg": "^8.13.0"

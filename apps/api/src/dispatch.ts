@@ -9,6 +9,32 @@
 // suất, và sơ suất thì có đúng một hình dạng.
 //
 // ---------------------------------------------------------------------------------------------
+// BỐN ĐỐI TƯỢNG, BỐN CÁCH VÀO
+// ---------------------------------------------------------------------------------------------
+//   PUBLIC  không tổ chức, không CSDL.
+//   ANON    tổ chức đọc từ THÂN (`orgId`), gắn `withTenant`; thẩm quyền do chính handler chứng
+//           minh bằng token trong thân (magic link, OTP). Chỉ ở /guest/* và /auth/*.
+//   GUEST   cookie `tp_guest=<orgId>.<token>` → `resolveGuestSessionByToken` (một giao dịch) →
+//           route ĐỌC: `withGuestSession` (giao dịch thứ hai, đặt ba GUC) → handler;
+//           route GHI: `withTenant` (KHÔNG GUC) → handler. Vì sao rẽ nhánh — xem khối dưới.
+//   BUYER   cookie `tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
+//           `requirePermission` → handler. Tất cả trong MỘT `withTenant`.
+//
+// ---------------------------------------------------------------------------------------------
+// [S1.10.3] ĐƯỜNG GHI CỦA KHÁCH KHÔNG ĐI QUA `withGuestSession` — ĐO ĐƯỢC, KHÔNG PHẢI LỰA CHỌN TIỆN
+// ---------------------------------------------------------------------------------------------
+// `submitBid` chèn một sự kiện vào sổ kiểm toán trong CÙNG giao dịch với phiên bản báo giá. Trigger
+// nối chuỗi (`noi_chuoi_kiem_toan`, 004) là SECURITY INVOKER và tìm đầu chuỗi bằng một SELECT trên
+// `audit_events` dưới chính RLS của kết nối. Một kết nối đã gắn phiên khách có USING đóng trên sổ
+// (027), nên trigger thấy 0 hàng và chèn một NHÁNH RẼ; mở USING cho khách thì một nhà cung cấp đọc
+// được sổ của cả tổ chức (A5). Đo ở 028 và ở `guest.int.test.ts`. Kết luận: kết nối gắn phiên khách
+// KHÔNG BAO GIỜ chèn vào sổ — nên route khách `mutates: true` nhận kết nối `withTenant` sau khi phiên
+// đã được xác thực. Cô lập của đường ghi do CSDL giữ: trigger `bid_kiem_phien_khach` (018) và chữ ký
+// `submitBid` (chỉ nhận `guestSessionId`; bid/invitation/rfq DẪN XUẤT). Phần chênh so với ADR-020
+// mục 4 ghi ở §4 của A5: một handler ghi cẩu thả có thể SELECT rộng hơn phiên của nó, và lớp duy
+// nhất cho ca ấy là review — handler ghi của khách vì thế KHÔNG được viết SQL tay (chỉ gọi gói).
+//
+// ---------------------------------------------------------------------------------------------
 // ÁNH XẠ LỖI → MÃ HTTP, và vì sao có HAI GIAI ĐOẠN
 // ---------------------------------------------------------------------------------------------
 // Giai đoạn 1 (xác thực): mọi lỗi ⇒ 401 với CÙNG MỘT thân, bất kể là thiếu cookie, sai hình dạng,
@@ -34,17 +60,19 @@ import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invit
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
-import type { Route } from "./route-types.js";
+import type { ApiServices, Route } from "./route-types.js";
+import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { ROUTES } from "./routes.js";
 
 export const COOKIE_PHIEN_NGUOI_MUA = "tp_session";
-export const COOKIE_PHIEN_KHACH = "tp_guest";
 
 export interface DispatcherDeps {
   /** Pool chạy dưới `app_api`. */
   readonly pool: pg.Pool;
   /** Pool ghi sổ kiểm toán ĐỘC LẬP cho lần từ chối quyền (D5) — cùng hợp đồng với `requirePermission`. */
   readonly auditPool: pg.Pool;
+  /** Pepper OTP, bộ gửi OTP, bộ ký biên nhận — TIÊM, không mặc định (cùng khuôn `BreakGlassAlertSink`). */
+  readonly services: ApiServices;
   /** Mặc định `ROUTES`; test tiêm một bảng khác để đo bộ điều phối trên route giả. */
   readonly routes?: readonly Route[];
 }
@@ -70,6 +98,8 @@ const THAN_403 = { error: "khong co quyen" } as const;
 const THAN_404 = { error: "khong co duong nay" } as const;
 const THAN_405 = { error: "phuong thuc khong duoc ho tro" } as const;
 const THAN_500 = { error: "loi noi bo" } as const;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 /** Lỗi ném ra từ giai đoạn xác thực — bọc để ánh xạ thành 401 mà không mất nguyên nhân. */
 class LoiXacThuc extends Error {
@@ -109,6 +139,12 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
   return { status: 500, body: THAN_500 };
 }
 
+/** `orgId` của một yêu cầu vô danh: trong THÂN, đúng hình dạng UUID — hoặc không có gì để gắn. */
+function orgIdTuThan(body: unknown): string | null {
+  const v = (body as Record<string, unknown> | null | undefined)?.orgId;
+  return typeof v === "string" && UUID_RE.test(v) ? v : null;
+}
+
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const routes = deps.routes ?? ROUTES;
 
@@ -123,6 +159,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       switch (route.audience) {
         case "PUBLIC":
           return await route.handler({ req });
+
+        case "ANON": {
+          const orgId = orgIdTuThan(req.body);
+          if (orgId === null) throw new HttpError(422, 'thiếu trường "orgId"');
+          return await withTenant(deps.pool, orgId, (client) =>
+            route.handler({ req, orgId, client, services: deps.services }),
+          );
+        }
 
         case "BUYER": {
           const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_NGUOI_MUA]);
@@ -155,19 +199,29 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "GUEST": {
           const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_KHACH]);
           if (cookie === null) return { status: 401, body: THAN_401 };
-          let guestSessionId: string;
+          let phien: { guestSessionId: string; invitationId: string; rfqId: string };
           try {
-            guestSessionId = await withTenant(deps.pool, cookie.orgId, (client) =>
+            phien = await withTenant(deps.pool, cookie.orgId, (client) =>
               resolveGuestSessionByToken(client, cookie.orgId, cookie.token),
-            ).then((g) => g.guestSessionId);
+            );
           } catch (e) {
             throw new LoiXacThuc({ cause: e });
           }
-          // `withGuestSession` tự đọc lại hàng phiên, từ chối phiên thu hồi/hết hạn, và đặt CẢ BA
-          // GUC. Handler nhận `client` khi mọi việc ấy đã xong — hoặc không nhận gì cả.
-          return await withGuestSession(deps.pool, cookie.orgId, guestSessionId, (client) =>
-            route.handler({ req, orgId: cookie.orgId, client, guestSessionId }),
-          );
+          const goiHandler = (client: pg.PoolClient): Promise<ApiResponse> =>
+            route.handler({
+              req,
+              orgId: cookie.orgId,
+              client,
+              guestSessionId: phien.guestSessionId,
+              invitationId: phien.invitationId,
+              rfqId: phien.rfqId,
+              services: deps.services,
+            });
+          // Đường GHI: `withTenant`, không GUC — xem khối [S1.10.3] ở đầu file.
+          if (route.mutates) return await withTenant(deps.pool, cookie.orgId, goiHandler);
+          // Đường ĐỌC: `withGuestSession` tự đọc lại hàng phiên, từ chối phiên thu hồi/hết hạn, và
+          // đặt CẢ BA GUC. Handler nhận `client` khi mọi việc ấy đã xong — hoặc không nhận gì cả.
+          return await withGuestSession(deps.pool, cookie.orgId, phien.guestSessionId, goiHandler);
         }
       }
     } catch (err) {

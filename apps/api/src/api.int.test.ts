@@ -24,7 +24,9 @@ import {
   issueOtpChallenge,
   verifyOtpAndStartSession,
 } from "@trustprocure/invitation";
-import { COOKIE_PHIEN_KHACH, COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
+import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
+import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
+import { dichVuTest } from "./test-services.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 
@@ -171,7 +173,7 @@ beforeAll(async () => {
   guest1 = await moiVaMoPhien("NCC mot");
   guest2 = await moiVaMoPhien("NCC hai");
 
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool }), { maxBodyBytes: 2048 });
+  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dichVuTest().services }), { maxBodyBytes: 2048 });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   const dc = server.address() as AddressInfo;
   goc = `http://127.0.0.1:${dc.port}`;
@@ -215,6 +217,7 @@ describe("[INV-E6] ba header của E6 nằm trên MỌI phản hồi", () => {
     const dispatch = tao({
       pool: apiPool,
       auditPool,
+      services: dichVuTest().services,
       routes: [
         {
           method: "GET",
