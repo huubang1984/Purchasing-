@@ -46,6 +46,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# [S1.11] Hộp thư dev của apps/api (token đăng nhập, mã OTP, email/SĐT ở dạng rõ). Cấu hình đòi
+# đường dẫn TUYỆT ĐỐI nên bình thường nó không nằm trong cây repo; dòng này là lớp thứ hai.
+.hop-thu-dev/
+
 # Evidence pack — bao cao tho va xuat xu moi luot chay khong vao git; MA TRAN thi CO.
 # Liet ke TUNG FILE chu khong dung `evidence/*` + phu dinh: mot file bang chung MOI them vao
 # thu muc nay phai duoc quyet dinh mot cach co y thuc, khong duoc bien mat trong im lang.

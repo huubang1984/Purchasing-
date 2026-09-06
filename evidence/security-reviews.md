@@ -392,3 +392,31 @@ biên dịch không (có — T0 sạch, nhưng CI Windows của `f40803f` đỏ 
 này); ⑵ Node nối `Origin` trùng lặp bằng `, ` (chưa đo; fail-closed theo cả hai cách đọc); ⑶ rollback
 ở nhánh 422 của `/rfqs/:rfqId/invitations` — nay không còn cần rollback vì kiểm TRƯỚC khi tạo, và có
 test "không để lại gì".
+
+---
+
+# S1.11 — lượt review thứ BA (tiến trình `api` chạy thật), 2026-09-06
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.11** (ADR-021) | migration `037`, `packages/db/src/vai-tro.ts` + `pool.ts`, `test-support/postgres.ts` (poolAs dùng chung), `apps/api/src/cau-hinh.ts`, `composition.ts`, `main.ts`, `adapters/totp-local-dev.ts`, `adapters/hop-thu-dev.ts`, `.env.example` | cây chưa commit của nhánh `s1.11-tien-trinh-api` (trước lượt sửa) | Review tĩnh; reviewer không có shell — đọc thẳng tệp, không xem được diff | **0 CRITICAL, 0 HIGH sau sửa — lúc review: 1 HIGH, 2 MEDIUM, 3 LOW** | commit S1.11 (cùng PR) |
+
+## Một HIGH, hai MEDIUM, ba LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H3-1 | **HIGH.** Lớp `SET ROLE` chỉ kiểm `current_user`, không kiểm `session_user`: URL superuser / BYPASSRLS / role thành viên cả `app_unseal` đi qua mọi phép kiểm (superuser `SET ROLE` sang bất kỳ role nào); một `RESET ROLE` (bug, SQL injection) trả lại toàn quyền; đồng thời F9 của `rbac.ts` (đọc `CURRENT_USER`) bị làm mù | **Đóng bằng mã, hai lớp.** ⑴ THUỘC TÍNH: `khangDinhPhienDangNhapUngDung(client, vai)` (`@trustprocure/db`) đọc `session_user` — từ chối SUPERUSER, BYPASSRLS, CREATEROLE, và thành viên của vai ứng dụng KHÁC; `composition.batDau()` gọi cho cả hai pool TRƯỚC khi mở cổng. ⑵ TÊN: `cau-hinh.ts` đòi URL đăng nhập bằng đúng `app_api_login` (tên duy nhất CAP_HOP_LE của hardening giữ membership). Test: superuser đã `SET ROLE app_api` ⇒ ném nêu SUPERUSER; `GRANT app_unseal TO app_api_login` ⇒ ném; BYPASSRLS ⇒ ném; qua composition: `ALTER ROLE app_api_login SUPERUSER` ⇒ `batDau()` ném, không cổng nào nghe. F9 nhận một khối ghi rõ giới hạn (nó chứng minh danh tính SAU SET ROLE; danh tính phiên do composition chứng minh — không đọc `session_user` ở F9 vì `poolAs` cố ý đăng nhập bằng superuser). ADR-021 §3 ghi thêm hệ quả `RESET ROLE` |
+| H3-2 | **MEDIUM.** Hộp thư dev (ghi token + OTP dạng rõ ra đĩa) chạy được ở `NODE_ENV=production`: hàng rào duy nhất là `TRUSTPROCURE_KEY_ADAPTER=local-dev`, mà `cau-hinh.ts` BẮT BUỘC đúng giá trị ấy — tức mọi cấu hình khởi động được đều mở cửa; lời khai ở đầu `hop-thu-dev.ts` rộng hơn cơ chế | **Đóng bằng mã** — `assertLocalDevAllowed` (crypto-keys): `local-dev` + `NODE_ENV ∈ {production, prod}` là MÂU THUẪN ⇒ ném, trừ khi có `TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS=1` (đường cuối, đã có). Test cũ *"lời khai DƯƠNG thắng mọi NODE_ENV"* gạch và thay bằng hai ca: thắng mọi giá trị KHÔNG phải production (staging/live/producthunt/development); production ⇒ chặn, thêm cờ ⇒ qua. Áp cho cả bốn adapter local-dev; `hop-thu-dev.test.ts` đo trực tiếp. Lời khai ở đầu file sửa cho khớp cơ chế |
+| H3-3 | **MEDIUM.** `.env.example` mặc định `./.hop-thu-dev` (tương đối, trong cây repo), không có trong `.gitignore` ⇒ credential dạng rõ đi vào `git add -A`; `mkdirSync(mode)` không siết thư mục có sẵn | **Đóng bằng mã** — `cau-hinh.ts` đòi `TRUSTPROCURE_DEV_MAILBOX_DIR` là đường dẫn TUYỆT ĐỐI; `taoHopThuDev` `chmodSync(0o700)` sau mkdir (POSIX); `.hop-thu-dev/` vào `.gitignore` làm lớp hai; `.env.example` đổi ví dụ. Test: đường tương đối ⇒ ném; thư mục có sẵn 0755 ⇒ 0700 (POSIX, bỏ qua trên Windows và nói rõ) |
+| H3-4 | **LOW.** `la_duong_ung_dung` là điểm đơn vô hiệu hoá hai kiểm soát nhưng hardening không canh (khác khuôn R3); GRANT cho `app_unseal` thừa; role thứ ba nhận 42501 từ trong trigger | **Đóng bằng mã** — hai dòng mới trong `hardening.always.sql` (thân đã chuẩn hoá + `provolatile`/`prosecdef`/`proconfig`/kiểu; ACL: PUBLIC không EXECUTE, app_api có), tiền điều kiện "hàm đã tồn tại" (lượt hardening trước 037 trên cụm mới không được dựng hàm — sẽ làm `CREATE FUNCTION` của 037 vỡ); test đồng bộ thân 037 ↔ hardening ↔ hậu điều kiện, và test trôi (thay thân + GRANT PUBLIC ⇒ `migrate()` khôi phục). GRANT `app_unseal` bỏ; hệ quả với role thứ ba ghi ở 037 |
+| H3-5 | **LOW.** `taoTienTrinhApi(ch)` nằm ngoài `try` ở `main.ts`: lỗi ném đồng bộ (createPool, mkdir, KeyError) thành unhandled rejection kèm stack — trái quy tắc "không stack" file tự khai | **Đóng bằng mã** — vào cùng `try` với `batDau()`. Test tiến trình con: `?sslmode=disable` trong URL ⇒ mã thoát 1, stderr nêu `sslmode`, không dòng `at `, không URL, không mật khẩu |
+| H3-6 | **LOW.** Lời khai ⑵ ở đầu `composition.int.test.ts` ("route giả đọc current_user") không có test tương ứng; bộ dò rò ra stderr bỏ qua giá trị < 12 ký tự nên mật khẩu `mk-api` không bị bắt; không ca nào đo URL superuser bị từ chối | **Đóng bằng test** — lời khai sửa (vế `current_user` đo ở `vai-tro.int.test.ts`); `khongRo()` tách mật khẩu khỏi URL và kiểm riêng không ngưỡng, kiểm cả URL nguyên vẹn; ca URL superuser thêm cùng H3-1 |
+
+**Ghi chú của reviewer, giữ lại để lượt sau khỏi tìm lại:** `SET ROLE` + `SELECT current_user` chạy tuần
+tự trên cùng client nên không có race; `SET ROLE ${vai}` chỉ nhận hai tên từ danh sách đóng; vế `NOT
+rolsuper` của 037 đọc thuộc tính của `current_user` sau SET ROLE nên superuser đã `SET ROLE app_api`
+(đường `poolAs`) vẫn bị chặn đúng; nhãn HKDF `totp-dek/v1` ≠ `org-dek/v1` cộng AAD khác định dạng nên
+kể cả khi hai biến khoá bị HOÁN ĐỔI (điều `kiemKhongTrung` không bắt), adapter TOTP không mở được
+phong bì RFQ; `openTotpSecret` một thông điệp cho mọi thất bại giải mã.

@@ -263,6 +263,13 @@ const poolDaKiemQuyen = new WeakSet<pg.Pool>();
  * Ném chứ không WARNING: một pool sai quyền là lỗi CẤU HÌNH của người gọi, phát hiện ở lần từ
  * chối đầu tiên, và fail-closed ở đây vẫn giữ nguyên kết cục an toàn (thao tác không được phép
  * trong cả hai nhánh — xem `PermissionAuditFailedError`).
+ *
+ * [S1.11 / review H3-1] GIỚI HẠN, viết ra: phép kiểm này đọc `CURRENT_USER` — danh tính SAU
+ * `SET ROLE`. Một pool có vai (`createPool(..., { role: "app_api" })`) luôn cho `app_api` ở đây,
+ * kể cả khi PHIÊN đăng nhập là superuser (superuser `SET ROLE` sang bất kỳ role nào). Danh tính
+ * phiên (`session_user`) do composition root chứng minh lúc khởi động —
+ * `khangDinhPhienDangNhapUngDung` ở `@trustprocure/db` — không phải ở đây, vì `poolAs` của
+ * test-support cố ý đăng nhập bằng superuser rồi `SET ROLE`.
  */
 async function khangDinhAuditPoolDungQuyen(auditPool: pg.Pool): Promise<void> {
   if (poolDaKiemQuyen.has(auditPool)) return;

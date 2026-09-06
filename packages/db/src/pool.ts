@@ -1,5 +1,6 @@
 import pg from "pg";
 import { parse as phanTichConnectionString } from "pg-connection-string";
+import { ganVaiTroChoPool, type VaiUngDung } from "./vai-tro.js";
 
 const CAC_HOST_LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
 
@@ -107,6 +108,15 @@ export interface TuyChonPool {
   readonly lockTimeoutMs?: number;
   /** ms; 0 = không giới hạn. */
   readonly idleInTransactionTimeoutMs?: number;
+  /**
+   * [S1.11] Vai ứng dụng gắn vào MỌI client trước khi giao ra (`SET ROLE` + kiểm `current_user`).
+   *
+   * Tiến trình thật đăng nhập bằng `app_api_login` (hardening: INHERIT, danh sách trắng CAP_HOP_LE)
+   * — role ấy có toàn bộ quyền của `app_api` nhưng `current_user` KHÁC tên, và mọi phép đo của dự
+   * án đã chạy dưới `SET ROLE app_api`. Đặt `role` để tiến trình chạy ĐÚNG danh tính đã đo; migration
+   * `037` là lớp CSDL đứng sau cho ca quên đặt. Xem `vai-tro.ts`.
+   */
+  readonly role?: VaiUngDung;
 }
 
 const LOCK_TIMEOUT_MS_MAC_DINH = 15_000;
@@ -154,7 +164,7 @@ export function createPool(
   const lockMs = soMs(tuyChon.lockTimeoutMs, LOCK_TIMEOUT_MS_MAC_DINH);
   const idleTxMs = soMs(tuyChon.idleInTransactionTimeoutMs, IDLE_IN_TX_TIMEOUT_MS_MAC_DINH);
 
-  return new pg.Pool({
+  const pool = new pg.Pool({
     host,
     port: daPhanTich.port ? Number(daPhanTich.port) : undefined,
     user: daPhanTich.user,
@@ -171,4 +181,5 @@ export function createPool(
     // rò từ máy chủ vào tiến trình.
     ssl: canBoQuaTls ? false : { rejectUnauthorized: true },
   });
+  return tuyChon.role === undefined ? pool : ganVaiTroChoPool(pool, tuyChon.role);
 }

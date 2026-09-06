@@ -126,7 +126,11 @@ describe("migration của dự án", () => {
       );
       expect(rows.map((r) => r.rolname)).toEqual(["app_api", "app_unseal"]);
     });
-  });
+    // [S1.11] Ngân sách riêng: ca này dựng một container MỚI rồi chạy trọn 37 migration + ba lượt
+    // hardening. Đo được: ~5 s khi chạy ba file; ~21 s trong `test:int` đầy đủ; chạm trần 30 s khi
+    // `pnpm evidence` chạy cả hai tầng (đỏ hai lượt liên tiếp, không khẳng định nào sai). Các ca
+    // sau trong file này cũng ở 25–30 s dưới cùng tải — chúng là cùng một ngân sách.
+  }, 120_000);
 
   it("app_current_org_id trả NULL khi chưa gắn tổ chức — fail-closed", async () => {
     await withMigratedDatabase(async (db) => {
@@ -812,6 +816,55 @@ describe("migration của dự án", () => {
       "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '')::pg_catalog.uuid",
     );
     expect(docThanHam("hardening.always.sql")).toBe(than001);
+  });
+
+  // [S1.11 / 037 / review H3-4] Cùng đánh đổi với R3, cho vị từ `la_duong_ung_dung(name)`: thân
+  // hàm nằm ở 037 VÀ ở hardening. Đọc bằng regex riêng (hàm này có `SET search_path`, nên regex
+  // của R3 cố ý KHÔNG khớp nó — R3 vẫn đòi đúng một định nghĩa mỗi file).
+  it("[S1.11] định nghĩa la_duong_ung_dung(name) trong 037 và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện", () => {
+    const docThan = (tenFile: string): string => {
+      const duongDan = fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url));
+      const noiDung = readFileSync(duongDan, "utf8");
+      const khop = [
+        ...noiDung.matchAll(
+          /FUNCTION public\.la_duong_ung_dung\(ten_vai pg_catalog\.name\) RETURNS boolean\s+LANGUAGE sql STABLE\s+SET search_path = pg_catalog\s+AS \$(\w*)\$([\s\S]*?)\$\1\$/g,
+        ),
+      ];
+      expect(khop, tenFile).toHaveLength(1);
+      return khop[0]![2]!.replace(/\s+/g, " ").trim();
+    };
+    const than037 = docThan("037_vai_ung_dung_la_thanh_vien.sql");
+    expect(docThan("hardening.always.sql")).toBe(than037);
+    // Hậu điều kiện so `prosrc` đã chuẩn hoá với một chuỗi viết tay — chuỗi ấy phải là chính thân này.
+    const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+    const hau = /\$than\$(SELECT pg_catalog\.pg_has_role[^$]*)\$than\$/.exec(hardening)?.[1];
+    expect(hau).toBe(than037);
+  });
+
+  it("[S1.11] hardening khôi phục thân la_duong_ung_dung(name) bị thay và ACL bị nới ở lần migrate() sau", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      // Đột biến đúng như vai-tro.int.test.ts: vị từ chỉ đọc tên — hai trigger đăng nhập im lặng trên đường sản xuất.
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.la_duong_ung_dung(ten_vai pg_catalog.name) RETURNS boolean LANGUAGE sql STABLE " +
+          "SET search_path = pg_catalog AS $x$ SELECT current_user OPERATOR(pg_catalog.=) ten_vai $x$",
+      );
+      await db.pool.query("GRANT EXECUTE ON FUNCTION public.la_duong_ung_dung(pg_catalog.name) TO PUBLIC");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows } = await db.pool.query<{ than: string; pub: boolean; api: boolean }>(
+        `SELECT btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than,
+                EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE') AS pub,
+                has_function_privilege('app_api', p.oid, 'EXECUTE') AS api
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.la_duong_ung_dung(pg_catalog.name)')`,
+      );
+      expect(rows[0]?.than).toContain("pg_has_role(current_user, ten_vai, 'USAGE')");
+      expect(rows[0]?.than).toContain("r.rolsuper");
+      expect(rows[0]?.pub).toBe(false);
+      expect(rows[0]?.api).toBe(true);
+    } finally {
+      await db.stop();
+    }
   });
 
   // [fix round 5 — R4] Vòng 4 dùng tiền điều kiện "schema tồn tại" cho dòng REVOKE, nên
@@ -1765,6 +1818,7 @@ describe("migration của dự án", () => {
           "034_dinh_chi_thu_hoi_phien.sql",
           "035_phien_ban_chinh_sach_lien_tuc.sql",
           "036_loi_moi_contact_thuoc_supplier.sql",
+          "037_vai_ung_dung_la_thanh_vien.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4581,6 +4635,7 @@ describe("migration của dự án", () => {
         "034_dinh_chi_thu_hoi_phien.sql",
         "035_phien_ban_chinh_sach_lien_tuc.sql",
         "036_loi_moi_contact_thuoc_supplier.sql",
+        "037_vai_ung_dung_la_thanh_vien.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4814,6 +4869,7 @@ describe("migration của dự án", () => {
         "034_dinh_chi_thu_hoi_phien.sql",
         "035_phien_ban_chinh_sach_lien_tuc.sql",
         "036_loi_moi_contact_thuoc_supplier.sql",
+        "037_vai_ung_dung_la_thanh_vien.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

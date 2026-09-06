@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-06 (**S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -384,6 +384,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 46 | ~~**[review lượt 2, H2-9 ⑵] Không ràng buộc CSDL nào nói `contact ∈ supplier` cho lời mời**~~ **ĐÓNG 2026-09-06 (PR #7)** — migration `036`: UNIQUE `(org_id, supplier_id, id)` trên `supplier_contacts` + khoá ngoại tổ hợp trên `rfq_invitations`; test: contact của Y dưới danh nghĩa X ⇒ 23503 nêu đúng tên ràng buộc, cặp đúng đi qua; gỡ khoá ngoại ⇒ lời mời lệch đi vào. Nguyên văn cũ: [review lượt 2, H2-9 ⑵] Không ràng buộc CSDL nào nói `contact ∈ supplier` cho lời mời — `rfq_invitations` chỉ có FK `(org_id, contact_id)`; route nay kiểm TRƯỚC khi tạo, nhưng gọi `createInvitation` từ nơi khác (job, route tương lai) với contact của NCC khác thì link tới người của Y mà đơn thầu mang danh X. Cần FK tổ hợp `(org_id, supplier_id, contact_id) → supplier_contacts (org_id, supplier_id, id)` | `db/migrations/010_invitations.sql`, `packages/invitation/src/invitation.ts` |
 | 47 | ~~**[review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG**~~ **ĐÓNG 2026-09-06 (PR #6)** — vòng quét "mỗi route ghi × mỗi mã quyền ĐƠN LẺ": chỉ đúng `route.permission` qua cổng, mọi mã khác 403, đếm chéo bằng sổ kiểm toán, tự sinh từ `ROUTES` × `PERMISSIONS` ("mọi quyền trừ một" bất khả thi vì D3/033 cấm gom quyền — phép đo tương đương, trigger-an-toàn); lớp canh tĩnh nay cấm cả ĐỊNH DANH `requirePermission`/`withTenant`/`withGuestSession` ngoài dispatch.ts (bí danh cũng bị bắt). Nguyên văn cũ: [review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG — `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh; chỉ ba route được đo chéo ở test vòng đời. Cần vòng quét "mọi quyền TRỪ `route.permission` ⇒ 403" tự sinh từ `ROUTES`. Cùng dòng: lớp canh tĩnh `\brequirePermission\s*\(` bị `const rp = requirePermission` qua mặt (ADR-016 §4 đã tự nhận) | `apps/api/src/buyer.int.test.ts`, `routes.test.ts` |
 | 48 | ~~**[review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên**~~ **ĐÓNG 2026-09-06 (PR #6)** — migration `034`: trigger `users_thu_hoi_phien_khi_dinh_chi` thu hồi mọi phiên còn sống trong cùng giao dịch (kích hoạt lại không mở lại; chạy được dưới `app_api` qua RLS); `resolveSessionActor` nối `users.status = 'ACTIVE'`; test `dinh-chi.int.test.ts` với đột biến gỡ trigger. Dự đoán "bộ test identity bật/tắt SUSPENDED phải sửa trước" hoá ra KHÔNG cần: không test nào dùng lại phiên sau lần đình chỉ. Nguyên văn cũ: [review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên — đường HTTP chặn (L-1, JOIN `users.status`); đường gói không; người bị đình chỉ rồi kích hoạt lại thì mọi phiên cũ còn TTL sống lại. Cần trigger `AFTER UPDATE OF status ON users` thu hồi phiên trong cùng giao dịch + `u.status = 'ACTIVE'` ở `resolveSessionActor` — nhưng bộ test identity bật/tắt `SUSPENDED` nhiều lần trên cùng phiên, phải sửa test trước | `packages/identity/src/session-actor.ts`, `db/migrations/006_sessions_and_mfa.sql` |
+| 50 | ~~**[S1.11] Hai trigger 029/032 điều kiện theo `current_user = 'app_api'`, còn tiến trình thật đăng nhập bằng `app_api_login` (INHERIT) — quên `SET ROLE` là cả hai IM LẶNG**~~ **MỞ VÀ ĐÓNG CÙNG VÒNG (2026-09-06, ADR-021)** — đo được trước khi đóng: `app_api_login` không `SET ROLE` chèn được `sessions` thiếu MFA và thay được bí mật TOTP đã xác nhận, trong khi mọi test xanh (chúng chạy dưới `poolAs`, có `SET ROLE`). Đóng hai lớp: migration `037` (vị từ `la_duong_ung_dung('app_api')` = kế thừa quyền + không superuser, thay vào hai thân trigger) và `createPool(..., { role: "app_api" })` (`SET ROLE` + kiểm `current_user` mỗi lần lấy client — một bản dùng chung với `poolAs`). Đột biến trả vị từ về tên cũ ⇒ cả hai câu đi lọt. NOINHERIT cho role đăng nhập bị loại có lý do (ADR-021 §3c) | `db/migrations/037_vai_ung_dung_la_thanh_vien.sql`, `packages/db/src/vai-tro.ts` |
 | 49 | **[review lượt 2, H2-4 ⑶ + bộ dò] Bộ quét rò rỉ gọi route GHI với thân `{}`** — chúng dừng ở 422 trước nghiệp vụ, nên vòng quét chứng minh cho route đọc nhiều hơn route ghi; và bộ dò là `includes` chuỗi thập phân đã biết (giá viết `980,000,000`, `9.8e8`, base64, thứ tự xếp hạng đi lọt). Cần gọi route ghi với thân HỢP LỆ trên một RFQ hy sinh, và bộ dò theo giá trị số (mọi cách viết) | `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` |
 
 ## Kiến trúc
@@ -526,7 +527,9 @@ cùng lúc là bắt buộc chứ không phải tiện tay: ADR-006 (tách quy�
 chỉ cưỡng chế được bằng IAM của nơi compute chạy, nên **chọn hạ tầng đích là câu hỏi trước,
 KMS là hệ quả** — bản đầu của ADR-009 liệt kê ba nhà cung cấp như thể đó là một câu hỏi đứng
 riêng, và đó là chỗ nó đặt sai thứ tự. Vẫn **chưa triển khai**: chưa có tài khoản, chưa có
-CMK, chưa có role nào được tạo.
+CMK, chưa có role nào được tạo. **[S1.11]** Nhưng nay có một tiến trình `api` khởi động được từ
+biến môi trường (`pnpm api:dev`, ADR-021) với adapter dev — thứ một lần triển khai sẽ thay bằng
+adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi được khai một adapter chưa có.
 
 > Hai dòng trong tài liệu này (mục *Điểm chặn* 2 và dòng trên) từng trích **ADR-004** như
 > *"quyết định KMS để mở"*. **Sai:** ADR-004 là *Sổ kiểm toán chuỗi hash, chỉ ghi thêm*, đã chốt.
@@ -1007,6 +1010,41 @@ CMK, chưa có role nào được tạo.
     `version = 90` — dưới 035 phải là 3; lần `pnpm evidence` đầu của vòng này ĐỎ ở A6 vì thế, sửa test
     (cái nó đo là "sau", không phải "số lớn"). **Số đo trên HEAD:** `pnpm t0` 155 module / 0 vi phạm;
     `pnpm test` 497/497; `pnpm evidence` **1154/1154**, **51/51**, cổng XANH.
+
+26. **[2026-09-06, tối] S1.11 — TIẾN TRÌNH `api` CHẠY THẬT (ADR-021, kế hoạch
+    `docs/superpowers/plans/2026-09-06-s1.11-tien-trinh-api.md`).** Ba thứ mới trong `apps/api`:
+    `cau-hinh.ts` (đọc môi trường thành cấu hình — bí mật không có mặc định, thông điệp chỉ nêu TÊN
+    biến, adapter phải khai tên và hôm nay chỉ có `local-dev`/`dev-mailbox`, ba vòng bí mật phải đôi
+    một khác nhau), `composition.ts` (hai pool `app_api` có vai, ba vòng bí mật, bộ ký, ba bộ gửi;
+    `batDau()` chạm CSDL trước khi mở cổng), `main.ts` (`pnpm api:dev`; SIGTERM/SIGINT dừng sạch).
+    Hai adapter dev: bọc/mở bí mật TOTP trên vòng khoá RIÊNG (AES-GCM + HKDF theo tổ chức), và hộp
+    thư dev — ba bộ gửi ghi mỗi tin một tệp JSON, link ở fragment; cả hai qua `assertLocalDevAllowed()`.
+    `@trustprocure/db` sang `dependencies` của `apps/api` (composition root sống trong app); phạm vi
+    sản xuất ngoài vẫn hai dòng. **Khoản nợ 50 lộ ra và đóng trong cùng vòng** — xem sổ nợ: hardening
+    ép `app_api_login` INHERIT, hai trigger 029/032 đọc `current_user = 'app_api'`, nên đường sản
+    xuất không `SET ROLE` đi qua cả hai; migration **`037`** + `createPool({ role })`.
+    Test (đếm từ báo cáo evidence): `packages/db/src/vai-tro.{test,int.test}.ts` (3 + 8), `apps/api/src/cau-hinh.test.ts` (23),
+    `adapters/*.test.ts` (3 + 5), `composition.int.test.ts` (10 — gồm `main.ts` chạy như tiến trình con:
+    cấu hình hỏng ⇒ mã thoát 1 nêu tên biến; đúng ⇒ `/health` 200 trên cổng in ra). Chưa có: adapter
+    KMS, bộ gửi thật, bước build, `/readyz` chạm CSDL — ADR-021 §*Phần KHÔNG đóng*.
+    **Lượt `security-reviewer` thứ ba (S1.11): 0 CRITICAL, 1 HIGH, 2 MEDIUM, 3 LOW — cả sáu đóng bằng mã
+    trong cùng vòng** (`evidence/security-reviews.md` §S1.11). HIGH là thật và đáng đọc: lớp `SET ROLE`
+    chỉ kiểm `current_user`, mà superuser `SET ROLE` sang bất kỳ role nào và `RESET ROLE` trả lại toàn
+    quyền — nên URL superuser đi qua cả pool có vai lẫn vị từ 037. Nay lớp thứ ba
+    `khangDinhPhienDangNhapUngDung` đọc `session_user` lúc khởi động (từ chối SUPERUSER/BYPASSRLS/
+    CREATEROLE/thành viên `app_unseal`) và cấu hình đòi đúng tên `app_api_login`. MEDIUM đáng đọc:
+    hộp thư dev chạy được ở `NODE_ENV=production` vì hàng rào local-dev coi lời khai dương là đủ —
+    nay `local-dev` + `production` là mâu thuẫn (MED-1 sửa một luật, test cũ gạch tại chỗ). Hardening
+    nhận hai dòng canh thân + ACL của `la_duong_ung_dung` (khuôn R3) kèm test đồng bộ và test trôi.
+    **Số đo trên HEAD:** `pnpm t0` 169 module / 0 vi phạm; `pnpm test` 537/537; `pnpm test:int` (lượt
+    đầy đủ trước lượt sửa review) 672/672, các bộ chịu ảnh hưởng chạy lại sau sửa: `vai-tro` 8/8,
+    `composition` 10/10, `migrations` 87/87; `pnpm evidence` **1214/1214**, **51/51**, cổng XANH — ở lượt
+    thứ BA. Hai lượt đầu đỏ cùng chỗ: hai ca hết hạn 30 s ("áp dụng sạch trên CSDL trống" của
+    `migrations.int` và vòng quét H17 × mã quyền của `buyer.int`) khi cả hai tầng chạy trên cùng máy
+    (đo: 5 s riêng → 21 s trong `test:int` → chạm 30 s trong evidence; lượt xanh: 19,5 s và 27,4 s). Không
+    khẳng định nào sai; hai ca ấy nay có ngân sách riêng 120 s kèm số đo trong chú thích — không phải
+    họ 57P01 của nợ 24. Lượt đầu còn một ca T10-M (outbox, thứ tự xoay vòng dưới tranh chấp) — đúng họ
+    nợ 24, không tái hiện ở hai lượt sau; `do-lap.yml` hằng tuần là nơi đo tỷ lệ của nó.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

@@ -1561,8 +1561,12 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
 - **A2 vế *bộ nhớ / APM / core dump*:** vòng này đo được **phản hồi HTTP, log bắt được, và thông
   điệp lỗi** của tiến trình `api` thật (bộ quét rò rỉ T2 chạy trên `ROUTES`). Heap dump và APM
   trace **không** đo — A2 vào ô ✅ **kèm cờ §4** nếu vào, và §4 phải nói đúng ba vế đã đo.
-- **Email gửi link** là một handler outbox (ADR-010) — vòng này chỉ **đặt job** kèm hash; bộ gửi
-  thật (SMTP/SES) là hạ tầng chưa có (ADR-009 chưa triển khai). Kịch bản E2E đọc token từ job.
+- ~~**Email gửi link** là một handler outbox (ADR-010) — vòng này chỉ **đặt job** kèm hash; bộ gửi
+  thật (SMTP/SES) là hạ tầng chưa có (ADR-009 chưa triển khai). Kịch bản E2E đọc token từ job.~~
+  **[S1.11] Câu trên KHÔNG đúng với thứ đã cài:** S1.10 gọi ba cổng gửi (`LoginLinkSender`,
+  `InvitationLinkSender`, `OtpSender`) SAU commit qua `afterCommit`, không đặt job outbox; test đọc
+  token từ bộ gửi ghi lại, và tiến trình thật (ADR-021) đọc từ hộp thư dev. Vế outbox vẫn là cách
+  đóng đúng của **sổ nợ 38** — chưa làm.
 - **CSRF** đóng bằng `SameSite=Strict` cộng kiểm `Origin` trên mọi POST; **không** có CSRF token
   riêng. Đủ cho một API JSON không có form HTML; phải xét lại khi có form POST cổ điển.
   **[S1.10.7] Câu trên đã có lúc SAI:** từ S1.10.2 tới `214a741` không một dòng nào kiểm `Origin` —
@@ -1598,3 +1602,119 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
    điệp lỗi; **đối chứng dương**: cùng bộ quét bắt được khi một route cố ý trả bản rõ.
 6. **Phạm vi sản xuất KHÔNG đổi:** `NGOAI_DUOC_PHEP_O_SAN_XUAT` vẫn đúng hai dòng sau khi
    `apps/api` ra đời — đó là phép đo của lựa chọn C.
+
+## ADR-021 — Tiến trình `api` chạy thật: **composition root trong `apps/api`, cấu hình từ môi trường fail-closed, pool `SET ROLE` mỗi kết nối, và "đường ứng dụng" ở CSDL là mọi thành viên kế thừa của `app_api`**
+
+**Ngày:** 2026-09-06 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.11)** · Gỡ chặn: sổ nợ
+38 (outbox cho mail), 41 (proxy tin cậy) — cả hai cần một tiến trình có thật để treo · Liên quan:
+ADR-006, ADR-009, ADR-011 mục 3, ADR-018, ADR-019, ADR-020, migration `029`/`032`/`037`, khoản nợ 6, 21, 50
+
+### Bối cảnh — một câu trong `apps/api/src/index.ts` đã thiu, và một khe hở chỉ lộ ra khi nối dây
+
+`apps/api/src/index.ts` viết *"Không có `main`: tiến trình chạy thật (composition root với pool,
+pepper, khoá ký) là việc của S1.10.6"*. S1.10.6 làm bộ quét rò rỉ, không làm composition root;
+`docs/ARCHITECTURE.md` §3 ghi đúng: *"CHƯA có composition root chạy thật (pool, KMS, bộ gửi)"*. Mọi
+test của `apps/api` lắp `createDispatcher` với `dichVuTest()` và pool `poolAs("app_api")` của
+test-support — tức **mười một gói và một tầng HTTP đã được test gọi, chưa có ai chạy**.
+
+Khi thiết kế đường kết nối thật, một khe hở lộ ra mà không test nào trước đó nhìn thấy: `app_api`
+là NOLOGIN (001, hardening), nên tiến trình đăng nhập bằng `app_api_login` — role thành viên mà
+hardening **cưỡng chế INHERIT** (danh sách trắng CAP_HOP_LE). Role ấy có TOÀN BỘ quyền của
+`app_api` ngay khi kết nối, và `current_user` của nó là `app_api_login`. Hai trigger của lớp đăng
+nhập — 029 (*app_api không tạo phiên thiếu MFA*) và 032 (*app_api không thay bí mật TOTP đã xác
+nhận*) — điều kiện theo `current_user = 'app_api'`, vì được viết và đo dưới `poolAs` (mỗi client
+`SET ROLE app_api`). Trên đường sản xuất mà không `SET ROLE`, **cả hai im lặng**. Đo được:
+`packages/db/src/vai-tro.int.test.ts` — trước 037, `app_api_login` chèn được `sessions` thiếu
+`mfa_verified_at` và thay được `secret_wrapped` của hồ sơ đã xác nhận. Không ai viết sai; hai vế
+của cùng một kiến trúc chưa từng gặp nhau vì chưa có composition root nối chúng. Đó là **khoản nợ 50**, và nó đóng trong cùng vòng.
+
+### 1. Composition root — trong `apps/api`, hàm thuần, không đọc `process.env`
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| A | Gói riêng `apps/api-runtime` | Thêm một gói chỉ để chứa ba file; `@trustprocure/db` vẫn phải vào phạm vi sản xuất ở đâu đó. **Loại.** |
+| B | **`apps/api/src/composition.ts` + `main.ts` + `cau-hinh.ts`** — cùng khuôn `apps/unseal-worker/src/composition.ts` | `taoTienTrinhApi(cauHinh)` nhận cấu hình đã kiểm, dựng hai pool (`app_api` giao dịch + `app_api` sổ từ chối quyền, D5), ba vòng bí mật, bộ ký, ba bộ gửi, rồi lắp `createDispatcher` + `createApiServer`. `main.ts` chỉ đọc `process.env`, gọi `batDau()`, nghe SIGTERM/SIGINT. `@trustprocure/db` chuyển sang `dependencies` của `apps/api` — câu "mã chạy của api nhận pool từ composition root, không tự tạo" vẫn đúng: composition root nay SỐNG TRONG app. **Chọn.** |
+
+**`batDau()` chạm CSDL trước khi mở cổng**: lấy và trả một client của mỗi pool. Sai role, sai
+mật khẩu, CSDL chưa migrate — nổ ở đây, khi chưa ai kết nối được vào. `dung()` đóng cổng, đóng
+kết nối rảnh, rồi đóng cả hai pool; gọi nhiều lần vô hại.
+
+### 2. Cấu hình — từ biến môi trường, fail-closed, không mặc định cho bí mật, adapter phải khai tên
+
+`docCauHinh(env)` là hàm thuần trên một bản đồ tên → chuỗi. Ba quy tắc, mỗi quy tắc có test T1:
+⑴ bí mật không có mặc định — thiếu là ném; ⑵ thông điệp lỗi chỉ nêu **tên** biến, không bao giờ
+nêu giá trị; ⑶ `TRUSTPROCURE_KEY_ADAPTER` và `TRUSTPROCURE_SENDER_ADAPTER` phải được khai, và hôm
+nay mỗi biến chỉ có **một** giá trị hợp lệ (`local-dev`, `dev-mailbox`) — `"kms"` hay `"ses"` ném
+với đúng câu *"adapter chưa có trong kho"*, không rơi về bản dev trong im lặng. Cộng một phép kiểm
+mua bằng vận hành: **ba vòng bí mật 32 byte (khoá RFQ, khoá TOTP, pepper OTP) phải đôi một khác
+nhau** — dán cùng một base64 vào hai biến là lỗi dễ nhất, và nó biến ba khoá thành một (G1/ADR-006,
+ADR-018). Khoá ký biên nhận: PKCS8 DER, phải là EC P-256 (ADR-011 mục 2); nửa công khai dẫn ra từ
+nửa riêng. `TRUSTPROCURE_PUBLIC_BASE_URL` (gốc của `/login#` và `/i#`) phải là `https:` — `http:`
+chỉ cho localhost — và chỉ được là gốc. Bảng biến ở `apps/api/.env.example`.
+
+### 3. Pool — `SET ROLE app_api` ở MỖI lần lấy client, và lớp CSDL đứng sau cho ca quên
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Chỉ sửa trigger (037), pool giữ nguyên | Tiến trình thật chạy dưới `current_user = app_api_login` — KHÁC danh tính mà mọi phép đo của dự án đã chạy. Mọi test "dưới app_api" từ S0 là bằng chứng cho một danh tính khác. **Loại làm lớp duy nhất.** |
+| b | Chỉ `SET ROLE` ở pool, trigger giữ `current_user = 'app_api'` | Đúng khi ứng dụng NHỚ; một pool thứ hai (job, script vận hành, một `pg.Pool` viết tay) quên là hai trigger im lặng lại. **Loại làm lớp duy nhất.** |
+| c | Đổi `app_api_login` sang NOINHERIT | Fail-closed đẹp (quên SET ROLE thì không có quyền gì), nhưng hardening cưỡng chế INHERIT có chủ ý và có test ([CR2-T3]); ba bộ test (`tenant-guard`, `mfa`, `unique-oracle`) đo RLS dưới `app_api_login` kế thừa. Đổi là một cuộc di trú của hardening. **Loại — có thể xét lại.** |
+| d | **Cả a lẫn b** | `createPool(..., { role: "app_api" })` — `SET ROLE` + kiểm `current_user` ở mỗi lần lấy client, cùng cơ chế `poolAs` của test-support, nay MỘT bản ở `packages/db/src/vai-tro.ts` và test-support gọi lại. VÀ migration `037`: vị từ `la_duong_ung_dung('app_api')` = `pg_has_role(current_user, 'app_api', 'USAGE') AND NOT superuser`, thay vào 029/032 (`CREATE OR REPLACE`, cùng tên). Vế *không superuser* là load-bearing: `pg_has_role` trả TRUE cho superuser với mọi role, thiếu nó thì đường test/vận hành dưới superuser bị chặn theo — chính lý do 029/032 điều kiện theo vai. **Chọn.** |
+
+**[review lượt 3, H3-1] Vế mà bảng trên chưa nói, và nó đổi phương án d thành ba lớp:** `SET ROLE`
+KHÔNG phải một phép giảm quyền không đảo ngược — superuser `SET ROLE` sang bất kỳ role nào, và một
+`RESET ROLE` (bug, SQL injection ở một handler) trả kết nối về đúng phiên đăng nhập. Nên
+`current_user = app_api` sau SET ROLE chứng minh *đang là* app_api, không chứng minh phiên ấy *không
+mạnh hơn* app_api; một URL superuser đi qua cả pool có vai lẫn vị từ 037. Phương án (c) NOINHERIT
+là phương án duy nhất trong bảng mà `RESET ROLE` không đảo ngược được — lý do loại nó vẫn đứng
+(hardening + ba bộ test), nhưng cái giá được nói ra ở đây. Lớp thứ ba, thêm cùng ngày:
+`khangDinhPhienDangNhapUngDung` (`@trustprocure/db`) đọc `session_user` lúc khởi động — từ chối
+SUPERUSER, BYPASSRLS, CREATEROLE, thành viên của vai ứng dụng khác — và `cau-hinh.ts` đòi URL đăng
+nhập bằng đúng `app_api_login`. Không đặt phép kiểm này trong `ganVaiTroChoPool`, vì `poolAs` của
+test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
+
+### 4. Adapter dev — hai cái mới, cùng hàng rào với ba cái cũ
+
+- **Bọc/mở bí mật TOTP (`adapters/totp-local-dev.ts`)**: AES-256-GCM, khoá dẫn xuất HKDF theo
+  `orgId` (nhãn `trustprocure/totp-dek/v1`), `orgId` + phiên bản trong AAD; ném khi không mở
+  được, không bao giờ trả rỗng; `kind` phân biệt. KHÔNG phải bản chép của `local-dev-shared.ts`
+  (không import được, và không nên: nhãn HKDF khác nên cùng khoá chính cũng cho khoá dẫn xuất khác).
+- **Hộp thư dev (`adapters/hop-thu-dev.ts`)**: ba bộ gửi ghi mỗi tin một tệp JSON (0700/0600) vào
+  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (`/login#<token>`, `/i#<token>`); không
+  một byte nào qua `console`. Đây là adapter DUY NHẤT hôm nay: bộ gửi thật (SMTP/SES/SMS) là hạ
+  tầng chưa có, và cách đóng đúng vẫn là nợ 38 (outbox cho mọi email, token phát trong handler).
+- Cả hai gọi `assertLocalDevAllowed()` NGAY KHI TẠO — cùng hàm với `createLocalDevWrapper` và
+  `createLocalDevReceiptSigner`, không phải một bản chép. **[review lượt 3, H3-2]** Và hàm ấy đổi
+  một luật của MED-1: vì cấu hình của `api` BẮT BUỘC khai `local-dev`, "lời khai dương thắng mọi
+  `NODE_ENV`" nghĩa là mọi cấu hình khởi động được đều mở cửa — nay `local-dev` + `production` là
+  mâu thuẫn ⇒ chặn, trừ khi có `TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS=1`. **[H3-3]** Thư mục hộp thư
+  phải là đường dẫn tuyệt đối, được `chmod 0700`, và `.hop-thu-dev/` vào `.gitignore`.
+
+### Phần KHÔNG đóng — nói trước
+
+- **Không có build.** `pnpm api:dev` chạy TypeScript trực tiếp bằng Node ≥ 22 (`--experimental-transform-types`
+  + hook resolve `.js → .ts`, bản sao có chủ ý thứ ba của cùng hook). Một pipeline `tsc` emit +
+  image là việc của vòng triển khai (ADR-009 chưa triển khai).
+- **Không có adapter KMS, không có bộ gửi thật.** Tiến trình từ chối khởi động khi được khai một
+  adapter khác — đó là hình dạng của phần chênh, không phải một mặc định.
+- **Không có `/readyz` chạm CSDL**: `/health` cố ý không mở kết nối (public.ts). Kiểm sẵn sàng
+  làm ở `batDau()`; một health-check theo chu kỳ có chạm CSDL là quyết định của tầng triển khai.
+- **Vị từ 037 chỉ biết `app_api`**; vai ứng dụng thứ hai vẫn đi qua im lặng (L-4 của 029).
+- **Nợ 38, 39, 41, 42** vẫn mở; vòng này chỉ cho chúng một tiến trình để treo.
+
+### Đo bằng gì
+
+1. **037:** `app_api_login` KHÔNG `SET ROLE` chèn `sessions` thiếu MFA ⇒ 23514; thay bí mật TOTP đã
+   xác nhận ⇒ 23514; superuser vẫn làm được cả hai. **Đột biến:** trả vị từ về `current_user = ten_vai`
+   ⇒ cả hai câu ĐI LỌT; cùng đột biến, đường `SET ROLE` vẫn bị chặn (đối chứng cho "vì sao không
+   test nào thấy"). Vị từ: STABLE, không SECURITY DEFINER, PUBLIC không EXECUTE.
+2. **Pool có vai:** `current_user = app_api` ở `pool.query` lẫn `pool.connect`, và SAU một `RESET ROLE`
+   trên client được tái dùng; role không phải thành viên ⇒ 42501, không giao client, pool không rò.
+3. **Cấu hình:** 13 biến bắt buộc — thiếu/rỗng ⇒ ném nêu đúng tên, thông điệp không chứa bí mật;
+   adapter lạ ⇒ "chưa có"; ba vòng trùng ⇒ ném nêu cả hai tên; khoá ký sai PKCS8/không P-256 ⇒ ném.
+4. **Tiến trình:** `taoTienTrinhApi` từ env với role thật ⇒ người mua đi trọn magic link (đọc từ hộp
+   thư dev, token ở fragment) → ghi danh TOTP qua adapter local-dev thật (hàng `mfa_credentials` bọc,
+   `keyVersion` = phiên bản vòng) → phiên → `/me` → logout. Role không phải thành viên ⇒ `batDau()`
+   ném 42501, KHÔNG cổng nào nghe. `main.ts` chạy như tiến trình con: cấu hình hỏng ⇒ mã thoát 1 +
+   tên biến, không giá trị; đúng ⇒ `/health` 200 trên cổng in ra stderr; stderr không mang bí mật.
+5. **Phạm vi sản xuất KHÔNG đổi:** `NGOAI_DUOC_PHEP_O_SAN_XUAT` vẫn hai dòng; `depcruise` 0 vi phạm.

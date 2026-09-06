@@ -25,6 +25,9 @@
 -- những phép đo ấy rỗng ruột. Mối đe doạ được đặt tên là `app_api`, và trigger nói đúng tên ấy.
 -- Cùng giới hạn L-4 của 029: một vai ứng dụng THỨ HAI đi qua im lặng — đổi sang danh sách vai
 -- là quyết định vận hành, ghi ở STATE.
+-- [S1.11 / 037] Và một giới hạn KHÔNG được thấy lúc viết: `app_api_login` (role đăng nhập INHERIT
+-- của sản xuất) không mang tên `app_api`, nên vị từ dưới đây im lặng trên đường thật nếu thiếu
+-- `SET ROLE`. Thân hàm dưới đây là LỊCH SỬ: 037 thay vị từ bằng `la_duong_ung_dung('app_api')`.
 -- =============================================================================================
 
 CREATE OR REPLACE FUNCTION public.mfa_credentials_khoa_ho_so_da_xac_nhan() RETURNS trigger

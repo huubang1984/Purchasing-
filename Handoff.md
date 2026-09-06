@@ -441,3 +441,10 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    mang cờ (trang `/i#<token>` là tầng web chưa có); đường ghi của khách chạy dưới `withTenant`
    không GUC (lý do đo được ở 028). Chi tiết: `docs/STATE.md` mục 16–21.
 
+8. **[2026-09-06, tối] S1.11 — `apps/api` có `main`.** `pnpm api:dev` khởi động tiến trình từ biến
+   môi trường (`apps/api/.env.example` liệt kê đủ), kết nối bằng role đăng nhập `app_api_login` và
+   `SET ROLE app_api` ở mỗi kết nối. Đọc ADR-021 trước khi chạm `composition.ts`. Một khe hở lộ ra
+   khi nối dây và đã đóng (nợ 50, migration `037`): hai trigger 029/032 từng chỉ nhìn thấy cái TÊN
+   `app_api`, không nhìn thấy role đăng nhập kế thừa nó — bài học: **một vị từ theo TÊN role chỉ
+   đúng trên đường có `SET ROLE`; đường sản xuất phải được đo với role đăng nhập THẬT** (nay
+   `vai-tro.int.test.ts` và `composition.int.test.ts` đều tạo `app_api_login` thật).
