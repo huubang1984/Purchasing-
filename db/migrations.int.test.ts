@@ -915,6 +915,88 @@ describe("migration của dự án", () => {
     }
   });
 
+  // ============================================================================================
+  // [S1.14 / sổ nợ 54 / review H5-5] DANH SÁCH GHIM KHÔNG ĐƯỢC TỰ LÀM MÙ MÌNH
+  //
+  // Hardening ghim thân hàm trigger theo một danh sách VIẾT TAY. Hai lần trước, danh sách ấy thiếu
+  // đúng thứ vừa được thêm (H4-7 rồi H5-5), và không lớp nào kêu — vì không có gì so danh sách với
+  // THỰC TẾ. Test này là lớp ấy: tập hàm `RETURNS trigger` trong `public` phải bằng ĐÚNG
+  //   (hàm được hardening nhắc tới) ∪ (danh sách loại trừ dưới đây),
+  // và hai tập không giao nhau. Thêm một hàm trigger mới mà không ghim cũng không khai ⇒ ĐỎ.
+  //
+  // LOẠI TRỪ NGHĨA LÀ GÌ Ở ĐÂY — nói thẳng: **chưa ghim**, không phải "không cần ghim". Cả 35 hàm
+  // dưới đây canh một bất biến thật ở CSDL và đều thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE
+  // FUNCTION … BEGIN RETURN NEW; END` sau triển khai làm chúng no-op và sống qua `migrate()`).
+  // Chúng nằm ở **sổ nợ 56**, và thứ tự đóng đã ghi ở đó. Giá trị mỗi dòng là thứ hàm ấy canh —
+  // viết ra để lần ghim sau không phải đọc lại bảy migration.
+  const HAM_TRIGGER_KHONG_GHIM: Readonly<Record<string, string>> = {
+    bid_chi_ghi_them: "báo giá là append-only — không UPDATE/DELETE trên ba bảng báo giá",
+    bid_dat_so_phien_ban: "số phiên bản báo giá do CSDL đặt, không do người gọi khai",
+    bid_kiem_han_nop: "không nộp sau hạn (C4)",
+    bid_kiem_phien_khach: "phiên khách nộp phải khớp lời mời của chính nó",
+    bid_phai_co_bien_nhan: "mỗi phiên bản báo giá phải kèm một biên nhận đã ký",
+    chinh_sach_phien_ban_tang_dan: "phiên bản chính sách mua sắm chỉ tăng",
+    guest_session_kiem_danh_tinh: "danh tính khách là dẫn xuất của thách thức OTP",
+    kiem_tra_nguong_khong_cung_tay_nguoi_dung: "D2 mức người dùng (033)",
+    kiem_tra_nguong_khong_cung_tay_vai_tro: "D2 mức vai trò (033)",
+    loi_moi_khong_song_lai: "lời mời đã thu hồi không sống lại",
+    otp_go_khoa_khong_xoa_dau_vet: "gỡ khoá OTP không xoá dấu vết thất bại",
+    otp_kiem_kenh_khac_link: "OTP không đi cùng kênh với magic link (ADR-015 mục 1)",
+    rfq_budgets_chi_sua_khi_soan: "ngân sách chỉ sửa khi RFQ còn soạn",
+    rfq_gia_han_khong_hoi_sinh: "gia hạn không hồi sinh một RFQ đã đóng",
+    rfq_items_cam_truncate: "TRUNCATE hạng mục bị chặn (đường vòng của DELETE)",
+    rfq_items_chi_sua_khi_soan: "hạng mục chỉ sửa khi RFQ còn soạn",
+    rfq_key_material_bat_bien: "vật liệu khoá bất biến sau khi ghi",
+    rfq_khoa_chi_sinh_luc_mo: "khoá RFQ chỉ sinh đúng lúc mở thầu",
+    rfq_khoa_chi_thu_hoi_khi_huy: "khoá chỉ thu hồi khi RFQ bị huỷ",
+    rfq_khoa_phai_di_kem_lan_mo: "mỗi lần mở thầu phải đi kèm đúng một vật liệu khoá",
+    rfq_kiem_chuyen_trang_thai: "máy trạng thái RFQ",
+    rfq_kiem_khoa_khi_mo: "mở thầu phải có khoá công khai",
+    rfq_kiem_nguoi_duyet: "người duyệt RFQ ≠ người tạo (D2)",
+    rfq_kiem_nguoi_tao: "người tạo RFQ là dẫn xuất của phiên",
+    rfq_kiem_nguong_phe_duyet_kep: "ngưỡng phê duyệt kép theo chính sách (ADR-017)",
+    rfq_kiem_yeu_cau_mo_thau: "mở thầu cần đủ điều kiện nghiệp vụ",
+    thu_hoi_don_dieu: "thu hồi là ĐƠN ĐIỆU trên năm bảng — không hồi sinh",
+    unseal_canh_bao_break_glass: "mở khẩn cấp phát cảnh báo, không im lặng",
+    unseal_dieu_phoi_mot_lan: "điều phối mở thầu đúng một lần",
+    unseal_kiem_chuyen_trang_thai: "máy trạng thái yêu cầu mở thầu",
+    unseal_kiem_du_phe_duyet: "đủ số phê duyệt mới điều phối được",
+    unseal_kiem_nguoi_duyet: "người duyệt mở thầu ≠ người yêu cầu (D2)",
+    unseal_kiem_rfq_da_dong: "chỉ mở thầu RFQ đã đóng",
+    unseal_kiem_yeu_cau_khi_ghi_ban_ro: "bản rõ chỉ ghi được kèm một yêu cầu đã điều phối",
+    users_thu_hoi_phien_khi_dinh_chi: "đình chỉ người dùng thu hồi mọi phiên (034)",
+  };
+
+  it("[S1.14 / nợ 54] mọi hàm RETURNS trigger trong public: hoặc hardening có canh, hoặc nằm trong danh sách loại trừ CÓ LÝ DO", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows } = await db.pool.query<{ ten: string }>(
+        `SELECT p.proname AS ten FROM pg_proc p JOIN pg_namespace ns ON ns.oid = p.pronamespace
+          WHERE ns.nspname = 'public' AND p.prorettype = 'pg_catalog.trigger'::regtype ORDER BY 1`,
+      );
+      const trongCsdl = rows.map((r) => r.ten);
+      // Tập "hardening có canh" KHÔNG viết tay: đọc thẳng mọi `to_regprocedure('public.X()')` của
+      // file hardening rồi giao với tập hàm trigger thật. Viết tay ở đây là dựng lại đúng cái mù.
+      const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+      const nhacToi = new Set(
+        [...hardening.matchAll(/to_regprocedure\('public\.([a-z_]+)\(\)'\)/gu)].map((m) => m[1]!),
+      );
+      const ghim = trongCsdl.filter((t) => nhacToi.has(t));
+      const loaiTru = Object.keys(HAM_TRIGGER_KHONG_GHIM);
+      expect(ghim.filter((t) => loaiTru.includes(t)), "một hàm không được vừa ghim vừa loại trừ").toEqual([]);
+      expect([...ghim, ...loaiTru].sort()).toEqual([...trongCsdl].sort());
+      for (const [ten, lyDo] of Object.entries(HAM_TRIGGER_KHONG_GHIM)) {
+        expect(lyDo.length, `loại trừ ${ten} phải có lý do`).toBeGreaterThan(10);
+      }
+      // Chốt chống rỗng ruột: cả hai tập đều phải có thật, và tổng phải là con số đã đo.
+      expect(ghim.length).toBeGreaterThanOrEqual(13);
+      expect(trongCsdl.length).toBeGreaterThanOrEqual(48);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
   it("[S1.13 / nợ 51] hardening khôi phục thân hàm trigger bị thay thành no-op, trigger bị DROP, trigger bị DISABLE, và [H5-2] hàm bị DROP … CASCADE ở lần migrate() sau", async () => {
     const db = await startPostgres();
     try {
@@ -932,6 +1014,9 @@ describe("migration của dự án", () => {
       await db.pool.query("DROP FUNCTION public.mfa_credentials_xoa_can_yeu_cau() CASCADE");
       await db.pool.query("DROP FUNCTION public.sessions_kiem_mfa_khi_tao() CASCADE");
       await db.pool.query("DROP TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet ON public.mfa_reset_requests");
+      // [S1.14 / nợ 54] Một trong MƯỜI CHÍN trigger danh tính của 013 (ở đây: 019) — chúng nằm rải
+      // bảy migration và tới S1.14 mới được ghim định nghĩa.
+      await db.pool.query("DROP TRIGGER unseal_requests_kiem_danh_tinh ON public.unseal_requests");
       expect((await db.pool.query<{ o: string | null }>("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()')::text AS o")).rows[0]?.o).toBeNull();
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
       const { rows: dungLai } = await db.pool.query<{ ten: string; than: string; trg: string }>(
@@ -951,6 +1036,13 @@ describe("migration của dự án", () => {
       expect(danhTinh).toHaveLength(1);
       expect(danhTinh[0]?.enabled).toBe("A");
       expect(danhTinh[0]?.def).toContain("kiem_danh_tinh_theo_phien('approved_by', 'approved_by_session_id')");
+      const { rows: dt013 } = await db.pool.query<{ enabled: string; def: string }>(
+        "SELECT t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def FROM pg_trigger t WHERE t.tgname = 'unseal_requests_kiem_danh_tinh' AND NOT t.tgisinternal",
+      );
+      expect(dt013).toHaveLength(1);
+      // `O`, không phải `A`: mười chín trigger của 013 canh đường ghi ứng dụng, không phải sao chép.
+      expect(dt013[0]?.enabled).toBe("O");
+      expect(dt013[0]?.def).toContain("kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')");
       const { rows: ham } = await db.pool.query<{ ten: string; than: string; cfg: string | null }>(
         `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, array_to_string(p.proconfig, ',') AS cfg
            FROM pg_proc p WHERE p.proname IN ('mfa_reset_kiem_chuyen_trang_thai', 'mfa_reset_kiem_quyen') ORDER BY 1`,

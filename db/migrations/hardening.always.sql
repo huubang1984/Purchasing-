@@ -1650,7 +1650,12 @@ $ham$$q$,
     -- chúng là mất phép kiểm mà không ai kêu. Với tiền điều kiện mới, hàm mất được DỰNG LẠI. Lượt
     -- hardening TRƯỚC vòng migration trên cụm mới vẫn bỏ qua (migration nguồn chưa được ghi) nên
     -- `CREATE FUNCTION` của migration không vỡ. [review H5-5] Cùng lớp: 013 (`kiem_danh_tinh_theo_phien`
-    -- — thân, không ghim 21 trigger của nó), 029/032 qua bản 037, và hai trigger danh tính của 040.
+    -- — ~~thân, không ghim 21 trigger của nó~~ [S1.14 / sổ nợ 54] thân VÀ 19 trigger của nó; hai
+    -- trigger còn lại thuộc 040 và được ghim ở mục `mfa_reset_kiem_quyen`), 029/032 qua bản 037, và
+    -- hai trigger danh tính của 040. Mười chín trigger ấy nằm rải ở BẢY migration (013/014/016/017/
+    -- 019/022/026) nên mỗi cái tự canh có điều kiện `to_regclass(<bảng>) IS NOT NULL` — một lược đồ
+    -- rút gọn vẫn phải đi qua im lặng; và chúng KHÔNG `ENABLE ALWAYS` (`tgenabled = 'O'`), nên bản
+    -- ghim nói đúng trạng thái THẬT thay vì một trạng thái mong muốn.
     -- Bản NGUỒN của mỗi thân ở migration ghi trong tên mục; test đồng bộ và test trôi (kể cả DROP …
     -- CASCADE): db/migrations.int.test.ts [S1.13 / nợ 51]. 48 hàm `RETURNS trigger` trong `public`,
     -- ghim 8 + hai của D3 + `chan_sua_xoa` — danh sách vẫn viết tay, sổ nợ 54.
@@ -1703,6 +1708,282 @@ BEGIN
   RETURN NEW;
 END
 $ham$;
+           IF to_regclass('public.org_procurement_policies') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.org_procurement_policies')
+                                 AND t.tgname = 'org_procurement_policies_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER org_procurement_policies_kiem_danh_tinh BEFORE INSERT ON public.org_procurement_policies FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS org_procurement_policies_kiem_danh_tinh ON public.org_procurement_policies;
+             CREATE TRIGGER org_procurement_policies_kiem_danh_tinh
+               BEFORE INSERT ON public.org_procurement_policies
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_budgets') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_budgets')
+                                 AND t.tgname = 'rfq_budgets_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_budgets_kiem_danh_tinh BEFORE INSERT ON public.rfq_budgets FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_budgets_kiem_danh_tinh ON public.rfq_budgets;
+             CREATE TRIGGER rfq_budgets_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_budgets
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_invitation_tokens') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_invitation_tokens')
+                                 AND t.tgname = 'rfq_invitation_tokens_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitation_tokens_kiem_danh_tinh BEFORE INSERT ON public.rfq_invitation_tokens FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('issued_by', 'issued_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_invitation_tokens_kiem_danh_tinh ON public.rfq_invitation_tokens;
+             CREATE TRIGGER rfq_invitation_tokens_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_invitation_tokens
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'issued_by', 'issued_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_invitations') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                                 AND t.tgname = 'rfq_invitations_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_danh_tinh BEFORE INSERT ON public.rfq_invitations FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('invited_by', 'invited_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_invitations_kiem_danh_tinh ON public.rfq_invitations;
+             CREATE TRIGGER rfq_invitations_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_invitations
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'invited_by', 'invited_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_invitations') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                                 AND t.tgname = 'rfq_invitations_kiem_nguoi_thu_hoi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_nguoi_thu_hoi BEFORE UPDATE ON public.rfq_invitations FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_invitations_kiem_nguoi_thu_hoi ON public.rfq_invitations;
+             CREATE TRIGGER rfq_invitations_kiem_nguoi_thu_hoi
+               BEFORE UPDATE ON public.rfq_invitations
+               FOR EACH ROW
+               WHEN (NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_items') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_items')
+                                 AND t.tgname = 'rfq_items_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_items_kiem_danh_tinh BEFORE INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_items_kiem_danh_tinh ON public.rfq_items;
+             CREATE TRIGGER rfq_items_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_items
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_key_material') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                                 AND t.tgname = 'rfq_key_material_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_danh_tinh BEFORE INSERT ON public.rfq_key_material FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_key_material_kiem_danh_tinh ON public.rfq_key_material;
+             CREATE TRIGGER rfq_key_material_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_key_material
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_key_material') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                                 AND t.tgname = 'rfq_key_material_kiem_nguoi_thu_hoi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_nguoi_thu_hoi BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_key_material_kiem_nguoi_thu_hoi ON public.rfq_key_material;
+             CREATE TRIGGER rfq_key_material_kiem_nguoi_thu_hoi
+               BEFORE UPDATE ON public.rfq_key_material
+               FOR EACH ROW
+               WHEN (NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_key_material') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                                 AND t.tgname = 'rfq_key_material_kiem_nguoi_xoa'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_nguoi_xoa BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.purged_at IS NOT NULL) AND (old.purged_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('purged_by', 'purged_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_key_material_kiem_nguoi_xoa ON public.rfq_key_material;
+             CREATE TRIGGER rfq_key_material_kiem_nguoi_xoa
+               BEFORE UPDATE ON public.rfq_key_material
+               FOR EACH ROW
+               WHEN (NEW.purged_at IS NOT NULL AND OLD.purged_at IS NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('purged_by', 'purged_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_nguoi_dong'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_dong BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'CLOSED'::text) AND (old.status IS DISTINCT FROM 'CLOSED'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('closed_by', 'closed_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_nguoi_dong ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_nguoi_dong
+               BEFORE UPDATE ON public.rfq_packages
+               FOR EACH ROW
+               WHEN (NEW.status = 'CLOSED' AND OLD.status IS DISTINCT FROM 'CLOSED')
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('closed_by', 'closed_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_nguoi_huy'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_huy BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'CANCELLED'::text) AND (old.status IS DISTINCT FROM 'CANCELLED'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('cancelled_by', 'cancelled_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_nguoi_huy ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_nguoi_huy
+               BEFORE UPDATE ON public.rfq_packages
+               FOR EACH ROW
+               WHEN (NEW.status = 'CANCELLED' AND OLD.status IS DISTINCT FROM 'CANCELLED')
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('cancelled_by', 'cancelled_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_nguoi_mo'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'OPEN'::text) AND (old.status IS DISTINCT FROM 'OPEN'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('opened_by', 'opened_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_nguoi_mo ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_nguoi_mo
+               BEFORE UPDATE ON public.rfq_packages
+               FOR EACH ROW
+               WHEN (NEW.status = 'OPEN' AND OLD.status IS DISTINCT FROM 'OPEN')
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('opened_by', 'opened_by_session_id');
+           END IF;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_nguoi_nop'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'PENDING_APPROVAL'::text) AND (old.status IS DISTINCT FROM 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('submitted_by', 'submitted_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_nguoi_nop ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_nguoi_nop
+               BEFORE UPDATE ON public.rfq_packages
+               FOR EACH ROW
+               WHEN (NEW.status = 'PENDING_APPROVAL' AND OLD.status IS DISTINCT FROM 'PENDING_APPROVAL')
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('submitted_by', 'submitted_by_session_id');
+           END IF;
+           IF to_regclass('public.supplier_contacts') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_contacts')
+                                 AND t.tgname = 'supplier_contacts_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_contacts_kiem_danh_tinh BEFORE INSERT ON public.supplier_contacts FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_contacts_kiem_danh_tinh ON public.supplier_contacts;
+             CREATE TRIGGER supplier_contacts_kiem_danh_tinh
+               BEFORE INSERT ON public.supplier_contacts
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.suppliers') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.suppliers')
+                                 AND t.tgname = 'suppliers_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER suppliers_kiem_danh_tinh BEFORE INSERT ON public.suppliers FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS suppliers_kiem_danh_tinh ON public.suppliers;
+             CREATE TRIGGER suppliers_kiem_danh_tinh
+               BEFORE INSERT ON public.suppliers
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+           END IF;
+           IF to_regclass('public.unseal_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.unseal_approvals')
+                                 AND t.tgname = 'unseal_approvals_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_approvals_kiem_danh_tinh BEFORE INSERT ON public.unseal_approvals FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approver_user_id', 'approver_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS unseal_approvals_kiem_danh_tinh ON public.unseal_approvals;
+             CREATE TRIGGER unseal_approvals_kiem_danh_tinh
+               BEFORE INSERT ON public.unseal_approvals
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'approver_user_id', 'approver_session_id');
+           END IF;
+           IF to_regclass('public.unseal_requests') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                                 AND t.tgname = 'unseal_requests_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_danh_tinh BEFORE INSERT ON public.unseal_requests FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS unseal_requests_kiem_danh_tinh ON public.unseal_requests;
+             CREATE TRIGGER unseal_requests_kiem_danh_tinh
+               BEFORE INSERT ON public.unseal_requests
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'requested_by', 'requested_by_session_id');
+           END IF;
+           IF to_regclass('public.unseal_requests') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                                 AND t.tgname = 'unseal_requests_kiem_nguoi_dieu_phoi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND (old.dispatched_by IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS unseal_requests_kiem_nguoi_dieu_phoi ON public.unseal_requests;
+             CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi
+               BEFORE UPDATE ON public.unseal_requests
+               FOR EACH ROW
+               WHEN (NEW.dispatched_by IS NOT NULL AND OLD.dispatched_by IS NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id');
+           END IF;
+           IF to_regclass('public.unseal_requests') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                                 AND t.tgname = 'unseal_requests_kiem_nhan_chung'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'O'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS unseal_requests_kiem_nhan_chung ON public.unseal_requests;
+             CREATE TRIGGER unseal_requests_kiem_nhan_chung
+               BEFORE INSERT OR UPDATE ON public.unseal_requests
+               FOR EACH ROW
+               WHEN (NEW.break_glass_witness_user_id IS NOT NULL)
+               EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'break_glass_witness_user_id', 'break_glass_witness_session_id');
+           END IF;
          END
          $fn51$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -1712,6 +1993,158 @@ $ham$;
             AND p.pronargs = 0
             AND p.prorettype = 'pg_catalog.trigger'::regtype
             AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND (to_regclass('public.org_procurement_policies') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.org_procurement_policies')
+                               AND t.tgname = 'org_procurement_policies_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER org_procurement_policies_kiem_danh_tinh BEFORE INSERT ON public.org_procurement_policies FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.rfq_budgets') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_budgets')
+                               AND t.tgname = 'rfq_budgets_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_budgets_kiem_danh_tinh BEFORE INSERT ON public.rfq_budgets FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.rfq_invitation_tokens') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_invitation_tokens')
+                               AND t.tgname = 'rfq_invitation_tokens_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitation_tokens_kiem_danh_tinh BEFORE INSERT ON public.rfq_invitation_tokens FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('issued_by', 'issued_by_session_id')$def$))
+            AND (to_regclass('public.rfq_invitations') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                               AND t.tgname = 'rfq_invitations_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_danh_tinh BEFORE INSERT ON public.rfq_invitations FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('invited_by', 'invited_by_session_id')$def$))
+            AND (to_regclass('public.rfq_invitations') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                               AND t.tgname = 'rfq_invitations_kiem_nguoi_thu_hoi'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_nguoi_thu_hoi BEFORE UPDATE ON public.rfq_invitations FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')$def$))
+            AND (to_regclass('public.rfq_items') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_items')
+                               AND t.tgname = 'rfq_items_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_items_kiem_danh_tinh BEFORE INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.rfq_key_material') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                               AND t.tgname = 'rfq_key_material_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_danh_tinh BEFORE INSERT ON public.rfq_key_material FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.rfq_key_material') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                               AND t.tgname = 'rfq_key_material_kiem_nguoi_thu_hoi'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_nguoi_thu_hoi BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('revoked_by', 'revoked_by_session_id')$def$))
+            AND (to_regclass('public.rfq_key_material') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_key_material')
+                               AND t.tgname = 'rfq_key_material_kiem_nguoi_xoa'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_kiem_nguoi_xoa BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.purged_at IS NOT NULL) AND (old.purged_at IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('purged_by', 'purged_by_session_id')$def$))
+            AND (to_regclass('public.rfq_packages') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                               AND t.tgname = 'rfq_packages_kiem_nguoi_dong'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_dong BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'CLOSED'::text) AND (old.status IS DISTINCT FROM 'CLOSED'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('closed_by', 'closed_by_session_id')$def$))
+            AND (to_regclass('public.rfq_packages') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                               AND t.tgname = 'rfq_packages_kiem_nguoi_huy'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_huy BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'CANCELLED'::text) AND (old.status IS DISTINCT FROM 'CANCELLED'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('cancelled_by', 'cancelled_by_session_id')$def$))
+            AND (to_regclass('public.rfq_packages') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                               AND t.tgname = 'rfq_packages_kiem_nguoi_mo'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'OPEN'::text) AND (old.status IS DISTINCT FROM 'OPEN'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('opened_by', 'opened_by_session_id')$def$))
+            AND (to_regclass('public.rfq_packages') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                               AND t.tgname = 'rfq_packages_kiem_nguoi_nop'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguoi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'PENDING_APPROVAL'::text) AND (old.status IS DISTINCT FROM 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('submitted_by', 'submitted_by_session_id')$def$))
+            AND (to_regclass('public.supplier_contacts') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.supplier_contacts')
+                               AND t.tgname = 'supplier_contacts_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_contacts_kiem_danh_tinh BEFORE INSERT ON public.supplier_contacts FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.suppliers') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.suppliers')
+                               AND t.tgname = 'suppliers_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER suppliers_kiem_danh_tinh BEFORE INSERT ON public.suppliers FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.unseal_approvals') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.unseal_approvals')
+                               AND t.tgname = 'unseal_approvals_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_approvals_kiem_danh_tinh BEFORE INSERT ON public.unseal_approvals FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approver_user_id', 'approver_session_id')$def$))
+            AND (to_regclass('public.unseal_requests') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                               AND t.tgname = 'unseal_requests_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_danh_tinh BEFORE INSERT ON public.unseal_requests FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')$def$))
+            AND (to_regclass('public.unseal_requests') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                               AND t.tgname = 'unseal_requests_kiem_nguoi_dieu_phoi'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND (old.dispatched_by IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$))
+            AND (to_regclass('public.unseal_requests') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                               AND t.tgname = 'unseal_requests_kiem_nhan_chung'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'O'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
