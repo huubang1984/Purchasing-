@@ -57,11 +57,10 @@ import {
   type SessionActor,
 } from "@trustprocure/identity";
 import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
-import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc, tangBucketNguoiGoi } from "@trustprocure/invitation";
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
-import { BucketBoNho } from "./bucket-bo-nho.js";
 import { khoaNguoiGoi } from "./dia-chi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
@@ -80,11 +79,6 @@ export interface DispatcherDeps {
   readonly services: ApiServices;
   /** Mặc định `ROUTES`; test tiêm một bảng khác để đo bộ điều phối trên route giả. */
   readonly routes?: readonly Route[];
-  /**
-   * [sổ nợ 52] Bucket TRONG BỘ NHỚ cho lời gọi khai tổ chức KHÔNG tồn tại (khoá ngoại 23503 — CSDL
-   * không đếm được). Mặc định một bucket riêng của dispatcher này, cửa sổ `OTP_RATE_WINDOW_SECONDS`.
-   */
-  readonly bucketToChucLa?: BucketBoNho;
   /**
    * [review H5-1] Vượt trần TOÀN TỔ CHỨC (`orgLimit`) thì LÀM CHẬM chừng này ms rồi vẫn xử lý — không
    * 429. Mặc định `TRE_QUA_TRAN_TO_CHUC_MS`; test tiêm số nhỏ để đo. Xem chú thích ở nhánh ANON.
@@ -215,7 +209,6 @@ function orgIdTuThan(body: unknown): string | null {
 
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const routes = deps.routes ?? ROUTES;
-  const bucketToChucLa = deps.bucketToChucLa ?? new BucketBoNho({ cuaSoMs: OTP_RATE_WINDOW_SECONDS * 1000 });
   const treQuaTranMs = deps.treQuaTranMs ?? TRE_QUA_TRAN_TO_CHUC_MS;
 
   return async (vao) => {
@@ -261,13 +254,17 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           // [review H4-5] ~~— nhưng 429 CÓ là một oracle: tổ chức thật bị chặn sau N lần, tổ chức lạ
           // thì không. Chấp nhận, nói ra: `orgId` là UUIDv4, không liệt kê được bằng vét cạn, và
           // đếm cả tổ chức lạ đòi một bucket ngoài CSDL (không khoá ngoại) — ghi sổ nợ 52.~~
-          // [sổ nợ 52] Tổ chức không tồn tại (23503) được đếm ở bucket TRONG BỘ NHỚ theo `route|người
-          // gọi`, CÙNG trần: tổ chức thật hay lạ đều 429 ở lần N+1 ~~— oracle H4-5 đóng~~ [review H5-3]
+          // ~~[sổ nợ 52] Tổ chức không tồn tại (23503) được đếm ở bucket TRONG BỘ NHỚ theo `route|người
+          // gọi`, CÙNG trần: tổ chức thật hay lạ đều 429 ở lần N+1 — oracle H4-5 đóng [review H5-3]
           // — oracle H4-5 vẫn CÒN, chỉ đổi dạng: hai bộ đếm rời (bộ nhớ cho lạ, CSDL cho thật) nên
           // kẻ dò mồi N lần vào một UUID giả rồi gửi UUID ứng viên là phân biệt được bằng MỘT lời gọi.
           // Chấp nhận với cùng lý do H4-5 (`orgId` UUIDv4 không vét cạn được); đóng thật cần một bảng
-          // bucket không khoá ngoại tới `organizations` — sổ nợ 55. Cái nợ 52 mua được là: tổ chức lạ
-          // không còn là cần gạt tải CSDL không trần.
+          // bucket không khoá ngoại tới `organizations` — sổ nợ 55.~~
+          // [sổ nợ 55 / migration 042] Bucket người gọi nay ở `caller_rate_limits`: KHÔNG `org_id`,
+          // KHÔNG khoá ngoại — tổ chức thật và tổ chức lạ tăng CÙNG MỘT HÀNG, nên không còn gì để
+          // phân biệt hai ca. Bucket bộ nhớ của nợ 52 bị XOÁ cùng lúc: nó tồn tại chỉ vì bảng cũ từ
+          // chối tổ chức lạ. Hai bucket nay là HAI GIAO DỊCH: bucket toàn cục không được rollback
+          // cùng lỗi khoá ngoại của bucket tổ chức.
           // [review H5-1] Bucket TOÀN TỔ CHỨC (`orgLimit`) KHÔNG khoá: ~~429~~ vượt thì LÀM CHẬM
           // `treQuaTranMs` rồi vẫn xử lý — nguyên tắc ADR-015 §5 ("hạn mức theo đích chỉ được làm chậm,
           // không được khoá, vì khoá cho phép một người khoá lối vào của người khác"); `orgId` không phải
@@ -278,25 +275,30 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           if (route.callerLimit !== undefined) {
             const tran = route.callerLimit;
             const khoaNguoi = `${route.path}|${khoaNguoiGoi(req.remoteAddress)}`;
-            let soLan = 0;
-            let soLanToChuc = 0;
-            try {
-              [soLan, soLanToChuc] = await withTenant(deps.pool, orgId, async (client) => {
-                const a = await tangBucketHanMuc(client, orgId, "LOGIN_CALLER", khoaNguoi, deps.services.pepper);
-                const b = route.orgLimit === undefined || a > tran ? 0 : await tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|to-chuc`, deps.services.pepper);
-                return [a, b];
-              });
-            } catch (e) {
-              if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
-              soLan = bucketToChucLa.tang(khoaNguoi);
-            }
+            const soLan = await withTenant(deps.pool, orgId, (client) =>
+              tangBucketNguoiGoi(client, khoaNguoi, deps.services.pepper),
+            );
             if (soLan > tran) {
               return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
             }
-            if (route.orgLimit !== undefined && soLanToChuc > route.orgLimit) {
-              // Tín hiệu tấn công, không phải tải thường — log chỉ mang route và requestId (không orgId).
-              console.error(`[api] ${requestId} qua tran to chuc ${route.path}`);
-              await new Promise<void>((xong) => setTimeout(xong, treQuaTranMs));
+            // Bucket TOÀN TỔ CHỨC vẫn ở `otp_rate_limits`: nó ĐÚNG LÀ chuyện của một tổ chức. Tổ chức
+            // lạ không có nó (23503) — bỏ qua, và điều đó KHÔNG mở lại oracle: mã trạng thái của hai
+            // ca vẫn bằng nhau (bucket toàn cục ở trên đã quyết), phần chênh còn lại là một giao dịch
+            // lỗi (thời gian), ghi ra ở ADR-024. Chỉ tới đây khi người gọi CHƯA vượt trần riêng (H5-1).
+            if (route.orgLimit !== undefined) {
+              let soLanToChuc = 0;
+              try {
+                soLanToChuc = await withTenant(deps.pool, orgId, (client) =>
+                  tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|to-chuc`, deps.services.pepper),
+                );
+              } catch (e) {
+                if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
+              }
+              if (soLanToChuc > route.orgLimit) {
+                // Tín hiệu tấn công, không phải tải thường — log chỉ mang route và requestId (không orgId).
+                console.error(`[api] ${requestId} qua tran to chuc ${route.path}`);
+                await new Promise<void>((xong) => setTimeout(xong, treQuaTranMs));
+              }
             }
           }
           let danhThuc = false;

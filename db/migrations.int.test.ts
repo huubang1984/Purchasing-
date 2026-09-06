@@ -756,13 +756,21 @@ describe("migration của dự án", () => {
       // [Task 5] Danh sách này KHÔNG viết tay: từ khi 003 thêm hai bảng sổ, một danh sách cứng
       // sẽ khôi phục thiếu và test đỏ vì lý do không liên quan tới thứ nó đang đo. Đọc thẳng
       // tập bảng tenant từ catalog cho nó tự lớn theo lược đồ.
+      // [S1.14 / 042] Vế `org_id ... OR relname = 'organizations'` KHÔNG phải trang trí: nó là đúng
+      // `VI_TU_BANG_TENANT` của hardening. Từ 042 có một bảng BẬT RLS mà KHÔNG thuộc cây tenant
+      // (`caller_rate_limits` — bộ đếm theo người gọi, không `org_id`); policy của nó không nhắc tới
+      // `app_current_org_id()` nên `DROP ... CASCADE` ở trên không chạm, và dựng cho nó một policy
+      // `id = app_current_org_id()` là dựng một policy trên cột không tồn tại.
       const { rows: bangTenant } = await db.pool.query<{ ten: string; cot: string }>(
         "SELECT c.relname AS ten, " +
           "       CASE WHEN EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid " +
           "                          AND a.attname = 'org_id' AND a.attnum > 0 " +
           "                          AND NOT a.attisdropped) THEN 'org_id' ELSE 'id' END AS cot " +
           "  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-          " WHERE n.nspname = 'public' AND c.relrowsecurity ORDER BY 1",
+          " WHERE n.nspname = 'public' AND c.relrowsecurity " +
+          "   AND (EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid " +
+          "                 AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped) " +
+          "        OR c.relname = 'organizations') ORDER BY 1",
       );
       expect(bangTenant.length, "không có bảng tenant nào để khôi phục").toBeGreaterThan(1);
       for (const { ten, cot } of bangTenant) {
@@ -1929,6 +1937,7 @@ describe("migration của dự án", () => {
           "039_phien_can_totp_gan_day.sql",
           "040_dat_lai_totp_hai_nguoi.sql",
           "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
+          "042_bucket_nguoi_goi_toan_cuc.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4750,6 +4759,7 @@ describe("migration của dự án", () => {
         "039_phien_can_totp_gan_day.sql",
         "040_dat_lai_totp_hai_nguoi.sql",
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
+        "042_bucket_nguoi_goi_toan_cuc.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -4988,6 +4998,7 @@ describe("migration của dự án", () => {
         "039_phien_can_totp_gan_day.sql",
         "040_dat_lai_totp_hai_nguoi.sql",
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
+        "042_bucket_nguoi_goi_toan_cuc.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

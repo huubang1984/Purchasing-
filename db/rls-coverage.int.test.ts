@@ -692,6 +692,10 @@ describe("phủ RLS", () => {
       // nay la tat duoc E3(2). Khong tranh duoc neu giu E3 o tang ung dung - bo GRANT la bo luon
       // co che (dung han muc phai xoa duoc cua so cu), va thu hep xuong mot ham SECURITY DEFINER
       // la thu muc (C) cua hardening.always.sql CAM. Cung han che cau truc da ghi cho E3(1).
+      // [S1.14 / 042 / sổ nợ 55] `caller_rate_limits` là bảng NGOÀI cây tenant (không `org_id`):
+      // bộ đếm theo người gọi phải chung cho tổ chức thật lẫn tổ chức lạ, nếu không 429 là một
+      // oracle tồn tại tổ chức. DELETE mức bảng cho bộ dọn — cùng đánh đổi đã ghi ở 010.
+      { grantee: "app_api", bang: "caller_rate_limits", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       // [040 / sổ nợ 40] DELETE: đường đặt lại TOTP — trigger `mfa_credentials_xoa_can_yeu_cau` chỉ cho
@@ -927,6 +931,12 @@ describe("phủ RLS", () => {
       // [C2, 012] `challenge_id`: phien khach TRO TOI thach thuc da doi chieu, va trigger doi
       // `verified_contact_id`/`verified_channel` KHOP voi hang do. Khong co cot nay, danh tinh
       // da xac thuc la mot LOI KHAI cua nguoi goi.
+      // [S1.14 / 042] Ba cột INSERT được, chỉ `hits` UPDATE được: một hàng đã ghi không đổi được
+      // khoá băm lẫn mốc cửa sổ, nên không ai dời một bộ đếm sang cửa sổ khác.
+      { grantee: "app_api", bang: "caller_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "INSERT" },
+      { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "caller_rate_limits", cot: "window_start", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "challenge_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },

@@ -24,7 +24,7 @@ import type { AddressInfo } from "node:net";
 import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
-import { PepperRing } from "@trustprocure/invitation";
+import { PepperRing, donBucketNguoiGoiCu } from "@trustprocure/invitation";
 import { JobRunner } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
@@ -52,6 +52,12 @@ export interface TienTrinhApi {
 const AUDIT_POOL_MAX = 2;
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
+/**
+ * [sổ nợ 55 / 042] Nhịp dọn `caller_rate_limits`. Bảng ấy là bảng DUY NHẤT mà số hàng do người gọi
+ * VÔ DANH quyết (không cần một tổ chức thật nào), nên nó phải có bộ dọn — mỗi lượt xoá cửa sổ cũ
+ * hơn hai cửa sổ, tức không bao giờ chạm bộ đếm đang sống.
+ */
+const DON_BUCKET_MS = 5 * 60 * 1000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
@@ -108,6 +114,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   );
 
   let daDung = false;
+  let dongHoDon: NodeJS.Timeout | undefined;
 
   return {
     async batDau(): Promise<DiaChiNghe> {
@@ -130,6 +137,14 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         });
       });
       runner.start();
+      // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó chỉ ghi
+      // TÊN — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng khuôn `onPollError`).
+      dongHoDon = setInterval(() => {
+        void donBucketNguoiGoiCu(pool).catch((e: unknown) =>
+          console.error(`[api] don bucket nguoi goi ${e instanceof Error ? e.name : "loi khong ro"}`),
+        );
+      }, DON_BUCKET_MS);
+      dongHoDon.unref();
       const dc = server.address() as AddressInfo;
       return { host: dc.address, port: dc.port };
     },
@@ -137,6 +152,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       if (daDung) return;
       daDung = true;
       runner.stop();
+      if (dongHoDon !== undefined) clearInterval(dongHoDon);
       await new Promise<void>((xong) => {
         if (!server.listening) {
           xong();

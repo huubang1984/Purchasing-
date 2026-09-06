@@ -253,11 +253,19 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     // Khoá bucket đã băm nên không lọc theo route được; đo "có đúng một bucket vừa chạm N+1" thay vì
     // "bucket lớn nhất" (~~ORDER BY hits DESC~~ [review H4-4] trần link nay 30, bucket link của test
     // trước lớn hơn N+1 của redeem).
+    // [nợ 55] Bộ đếm theo người gọi nay ở `caller_rate_limits` — bảng TOÀN CỤC, không `org_id`, nên
+    // phép đo lọc theo `hits` chứ không theo tổ chức (đó chính là tính chất đang được đo).
     const { rows } = await db.pool.query<{ n: string }>(
-      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' AND hits = $2",
-      [orgA, LOGIN_REDEEM_MAX_PER_CALLER + 1],
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE hits = $1",
+      [LOGIN_REDEEM_MAX_PER_CALLER + 1],
     );
     expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
+    // Và KHÔNG hàng nào của `otp_rate_limits` mang số ấy: bucket người gọi đã rời khỏi bảng tenant.
+    const { rows: cu } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_kind = 'LOGIN_CALLER' AND hits = $1",
+      [LOGIN_REDEEM_MAX_PER_CALLER + 1],
+    );
+    expect(cu[0]?.n).toBe("0");
   });
 
   it("[review H4-4] IPv6: hai địa chỉ CÙNG /64 dùng chung bucket (lần N+1 từ địa chỉ thứ hai ⇒ 429); /64 khác ⇒ 200", async () => {
@@ -290,7 +298,7 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     }
   });
 
-  it("tổ chức KHÔNG tồn tại: ~~không đếm được (khoá ngoại) nhưng vẫn cùng một 200~~ [nợ 52] cùng một 200 tới lần N, rồi 429 như tổ chức thật (bucket bộ nhớ) — cùng địa chỉ, tổ chức thật vẫn có bucket riêng", async () => {
+  it("[sổ nợ 55 / 042] tổ chức KHÔNG tồn tại và tổ chức THẬT dùng CHUNG một bộ đếm: mồi N lần vào hai UUID lạ rồi gọi orgId THẬT ⇒ 429 — oracle tồn tại tổ chức ĐÓNG", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000abcd";
     const orgLa2 = "00000000-0000-4000-8000-00000000abce";
     for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
@@ -302,10 +310,21 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     const chan = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
     expect(chan.status).toBe(429);
     expect(chan.headers.get("retry-after")).toBe("900");
-    // Tổ chức thật từ cùng địa chỉ: bucket CSDL riêng, chưa chạm trần.
-    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } })).status).toBe(200);
-    // Địa chỉ khác, tổ chức lạ: bucket bộ nhớ mới ⇒ 200.
+    // ~~Tổ chức thật từ cùng địa chỉ: bucket CSDL riêng, chưa chạm trần.~~ [nợ 55] ĐÂY là phép đo
+    // chịu lực: với hai bộ đếm rời (S1.12/S1.13) dòng dưới trả 200 và một lời gọi phân biệt được
+    // tổ chức thật với tổ chức lạ. Cùng một bảng, cùng một hàng ⇒ cùng một 429.
+    const that = await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } });
+    expect(that.status, "RED THẬT: bộ đếm của tổ chức thật và tổ chức lạ phải là MỘT").toBe(429);
+    expect(that.text).toBe(chan.text);
+    // Địa chỉ khác: bộ đếm khác ⇒ 200 cho cả tổ chức lạ lẫn tổ chức thật.
     expect((await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" }, ip: "198.51.100.77" })).status).toBe(200);
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" }, ip: "198.51.100.78" })).status).toBe(200);
+    // Và bộ đếm ấy nằm ở CSDL, không ở bộ nhớ tiến trình: đúng một hàng mang đủ số lần của cả hai loại tổ chức.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE hits = $1",
+      [LOGIN_LINK_MAX_PER_CALLER + 2],
+    );
+    expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
   });
 
   it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 ~~là 429~~ [H5-1] vẫn 200 nhưng bị LÀM CHẬM; tổ chức khác từ cùng địa chỉ vẫn 200 và nhanh", async () => {
@@ -325,12 +344,14 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     const t2 = Date.now();
     expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
     expect(Date.now() - t2).toBeLessThan(TRE_TEST_MS);
-    // Bucket CSDL: đúng một bucket chạm N+1 cho tổ chức C (bucket toàn tổ chức), N+1 bucket theo địa chỉ ở 1.
+    // Bucket CSDL của TỔ CHỨC: ~~N+1 bucket theo địa chỉ ở 1~~ [nợ 55] bucket theo địa chỉ nay ở
+    // `caller_rate_limits` (không org_id), nên `otp_rate_limits` của tổ chức C còn ĐÚNG MỘT hàng —
+    // bucket toàn tổ chức — và nó đếm đủ N+1.
     const { rows } = await db.pool.query<{ hits: number; n: string }>(
       "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
       [orgC],
     );
-    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, LOGIN_LINK_MAX_PER_ORG + 1], [LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
   }, 60_000);
 
   it("[review H5-1] MỘT địa chỉ không khoá được cả tổ chức: 300 lời gọi từ một địa chỉ (30 tới handler, 270 là 429 rẻ) chỉ cộng 30 vào bucket tổ chức; địa chỉ sạch sau đó 200 và NHANH", async () => {
@@ -347,8 +368,9 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
       "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
       [orgD],
     );
-    // Địa chỉ tấn công: 300 lượt ở bucket riêng; bucket tổ chức: 30 (từ địa chỉ ấy) + 1 (địa chỉ sạch); địa chỉ sạch: 1.
-    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, 1], [LOGIN_LINK_MAX_PER_CALLER + 1, 1], [LOGIN_LINK_MAX_PER_ORG, 1]]);
+    // [nợ 55] Bucket tổ chức: 30 (từ địa chỉ tấn công, tới khi nó chạm trần riêng) + 1 (địa chỉ sạch)
+    // — đúng MỘT hàng ở `otp_rate_limits`; hai bucket theo địa chỉ nay nằm ở `caller_rate_limits`.
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[LOGIN_LINK_MAX_PER_CALLER + 1, 1]]);
   }, 60_000);
 });
 
