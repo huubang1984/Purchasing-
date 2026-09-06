@@ -161,6 +161,8 @@ export interface AnonRoute extends RouteBase {
    * [sổ nợ 52] Trần cho CẢ TỔ CHỨC trên route này trong cùng cửa sổ — bucket `LOGIN_CALLER` với khoá
    * theo route, không theo địa chỉ. Bịt đường "xoay /64" của IPv6 mà không siết NAT: một tổ chức có
    * chừng ấy người, không ai cần hơn chừng ấy link mỗi 15 phút. Chỉ có nghĩa cùng `callerLimit`.
+   * [review H5-1] Vượt ⇒ LÀM CHẬM (`treQuaTranMs`), KHÔNG 429: một trần chặn theo tổ chức là vũ khí
+   * khoá cửa đăng nhập của cả tổ chức với giá một địa chỉ. Chỉ cộng khi người gọi chưa vượt trần riêng.
    */
   readonly orgLimit?: number;
   readonly handler: (ctx: AnonContext) => Promise<ApiResponse>;

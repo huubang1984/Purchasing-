@@ -41,6 +41,7 @@ const logLoi: string[] = [];
 // để trần theo người gọi của một test không rơi vào test khác.
 let soIp = 0;
 let ipHienTai = "203.0.113.1";
+const TRE_TEST_MS = 800;
 beforeEach(() => {
   soIp += 1;
   ipHienTai = `203.0.${Math.floor(soIp / 250)}.${(soIp % 250) + 1}`;
@@ -135,7 +136,8 @@ beforeAll(async () => {
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
   ob = outboxTest(apiPool, dv.services);
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
+  // [review H5-1] `treQuaTranMs` nhỏ để đo "làm chậm, không khoá" mà không chờ 2 s thật.
+  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, treQuaTranMs: TRE_TEST_MS }), { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) });
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }, 180000);
@@ -306,23 +308,47 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     expect((await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" }, ip: "198.51.100.77" })).status).toBe(200);
   });
 
-  it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 là 429 dù bucket theo địa chỉ còn trống; tổ chức khác từ cùng địa chỉ vẫn 200", async () => {
+  it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 ~~là 429~~ [H5-1] vẫn 200 nhưng bị LÀM CHẬM; tổ chức khác từ cùng địa chỉ vẫn 200 và nhanh", async () => {
     const orgC = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty C', 'cong-ty-c') RETURNING id")).rows[0]?.id ?? "";
     const ipThu = (i: number): string => `2001:db8:52:${(i + 1).toString(16)}::1`; // mỗi lần một /64 khác
     for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const t0 = Date.now();
       const r = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(i) });
       expect(r.status, `lần ${i + 1}`).toBe(200);
+      expect(Date.now() - t0, `lần ${i + 1} phải nhanh`).toBeLessThan(TRE_TEST_MS);
     }
-    const chan = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
-    expect(chan.status).toBe(429);
-    // Cùng địa chỉ mới ấy, tổ chức A: 200 — trần là của tổ chức C, không phải của địa chỉ.
+    const t1 = Date.now();
+    const cham = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
+    expect(cham.status).toBe(200);
+    expect(Date.now() - t1).toBeGreaterThanOrEqual(TRE_TEST_MS);
+    // Cùng địa chỉ mới ấy, tổ chức A: 200 và nhanh — trần là của tổ chức C, không phải của địa chỉ.
+    const t2 = Date.now();
     expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
+    expect(Date.now() - t2).toBeLessThan(TRE_TEST_MS);
     // Bucket CSDL: đúng một bucket chạm N+1 cho tổ chức C (bucket toàn tổ chức), N+1 bucket theo địa chỉ ở 1.
     const { rows } = await db.pool.query<{ hits: number; n: string }>(
       "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
       [orgC],
     );
     expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, LOGIN_LINK_MAX_PER_ORG + 1], [LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
+  }, 60_000);
+
+  it("[review H5-1] MỘT địa chỉ không khoá được cả tổ chức: 300 lời gọi từ một địa chỉ (30 tới handler, 270 là 429 rẻ) chỉ cộng 30 vào bucket tổ chức; địa chỉ sạch sau đó 200 và NHANH", async () => {
+    const orgD = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty D', 'cong-ty-d') RETURNING id")).rows[0]?.id ?? "";
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgD, email: "mot-dia-chi@vidu.vn" }, ip: "198.51.100.200" });
+      expect(r.status, `lần ${i + 1}`).toBe(i < LOGIN_LINK_MAX_PER_CALLER ? 200 : 429);
+    }
+    const t0 = Date.now();
+    const sach = await goi("POST", "/auth/link", { body: { orgId: orgD, email: "nguoi-that@vidu.vn" }, ip: "198.51.100.201" });
+    expect(sach.status, "RED THẬT nếu bucket tổ chức được cộng cả khi người gọi đã vượt trần riêng").toBe(200);
+    expect(Date.now() - t0).toBeLessThan(TRE_TEST_MS);
+    const { rows } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
+      [orgD],
+    );
+    // Địa chỉ tấn công: 300 lượt ở bucket riêng; bucket tổ chức: 30 (từ địa chỉ ấy) + 1 (địa chỉ sạch); địa chỉ sạch: 1.
+    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, 1], [LOGIN_LINK_MAX_PER_CALLER + 1, 1], [LOGIN_LINK_MAX_PER_ORG, 1]]);
   }, 60_000);
 });
 

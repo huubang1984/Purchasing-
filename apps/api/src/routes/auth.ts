@@ -47,8 +47,9 @@ export const LOGIN_LINK_MAX_PER_CALLER = 30;
 /**
  * [sổ nợ 52] Trần TOÀN TỔ CHỨC cho `/auth/link` mỗi 15 phút. Một tổ chức người mua có vài chục
  * người; 300 link/15 phút là gấp nhiều lần mọi buổi sáng thứ hai, và là trần cho kẻ xoay /64 IPv6.
- * Vượt ⇒ 429 cho cả tổ chức — DoS có chủ đích thu hẹp: chỉ route link, chỉ 15 phút, người đã có
- * phiên không bị ảnh hưởng.
+ * ~~Vượt ⇒ 429 cho cả tổ chức — DoS có chủ đích thu hẹp: chỉ route link, chỉ 15 phút, người đã có
+ * phiên không bị ảnh hưởng.~~ [review H5-1] Vượt ⇒ LÀM CHẬM, không khoá (`TRE_QUA_TRAN_TO_CHUC_MS`):
+ * "DoS thu hẹp" vẫn là DoS, và `orgId` không phải bí mật.
  */
 export const LOGIN_LINK_MAX_PER_ORG = 300;
 export const LOGIN_REDEEM_MAX_PER_CALLER = 30;

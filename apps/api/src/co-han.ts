@@ -20,13 +20,19 @@ export class QuaHanError extends Error {
   }
 }
 
-/** `viec()` đua với một đồng hồ; thua thì ném lỗi mang tên `tenLoi` — promise gốc bị bỏ, không đợi. */
+/**
+ * `viec()` đua với một đồng hồ; thua thì ném lỗi mang tên `tenLoi` — promise gốc bị bỏ, không đợi.
+ * [review H5-4] `viec()` NÉM ĐỒNG BỘ (một adapter viết `send(m) { if (...) throw ...; }`) cũng phải
+ * thành một reject: bản trước gọi `viec()` ngay trong tham số của `Promise.race`, nên ném đồng bộ làm
+ * `race` không bao giờ được dựng, đồng hồ không bị dọn, và `het` reject không ai bắt sau `ms` — một
+ * `unhandledRejection` giết cả tiến trình `api` vì một lỗi lập trình ở adapter.
+ */
 export function coHan<T>(viec: () => Promise<T>, ms: number, tenLoi: string): Promise<T> {
   let dongHo: NodeJS.Timeout | undefined;
   const het = new Promise<never>((_ok, hong) => {
     dongHo = setTimeout(() => hong(new QuaHanError(tenLoi, "qua han")), ms);
   });
-  return Promise.race([viec(), het]).finally(() => clearTimeout(dongHo));
+  return Promise.race([Promise.resolve().then(viec), het]).finally(() => clearTimeout(dongHo));
 }
 
 export const KMS_TIMEOUT_MS_MAC_DINH = 5000;
