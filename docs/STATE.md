@@ -5,7 +5,7 @@
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
 **Cập nhật lần cuối:** 2026-09-06 (**S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
-review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23; xem *Hành động tiếp theo* mục 20–23; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
+review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24; xem *Hành động tiếp theo* mục 20–24; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
 
@@ -382,8 +382,8 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 44 | ~~**[review lượt 2, H2-2] `PROCUREMENT_MANAGER` giữ cả `policy.manage` lẫn `rfq.create`** — người đặt ngưỡng đặt được ước lượng, nên D2 hạ xuống MỘT phê duyệt bằng một PM + một người duyệt. Câu biện minh sai ở 030 đã gạch; §4 của D2 ghi phần chênh. **QUYẾT ĐỊNH ĐANG CHỜ:** tách vai, hay mở rộng trigger D3 cấm một vai giữ cả hai~~ **ĐÓNG 2026-09-06 (chốt: cả hai)** — migration `033`: `policy.manage` chuyển sang `FINANCE`; hai trigger mới cấm `policy.manage` đứng cùng `rfq.create`/`rfq.approve` ở một vai VÀ ở một người (hợp các vai); ba bản của danh sách loại trừ khoá bằng meta-test; hai đột biến gỡ trigger ⇒ đi lọt. Hệ quả: khe hở [A3b] hẹp lại (BUYER không tự gán FINANCE được nữa), ca [C1] đổi sang REQUESTER+DIRECTOR | `db/migrations/033_policy_manage_khong_cung_tay.sql`, `packages/identity/src/permissions.ts` |
 | 45 | **[review lượt 2, H2-3] Vế CSDL của "`version` chính sách không ghim được tổ chức"** — tầng HTTP nay đòi `version` = hiện hành + 1 (giá trị kỳ vọng, chống đua), nhưng một `app_api` bị chiếm vẫn INSERT được `version = 2147483647` và trigger 022 ("phải lớn hơn") + không UPDATE/DELETE ghim tổ chức vĩnh viễn. Đóng đúng: trigger tự gán `version = max + 1`, hoặc `CHECK (version < 1000000)` phòng hờ | `db/migrations/022_security_review_s1.sql` (khối `chinh_sach_phien_ban_tang_dan`) |
 | 46 | **[review lượt 2, H2-9 ⑵] Không ràng buộc CSDL nào nói `contact ∈ supplier` cho lời mời** — `rfq_invitations` chỉ có FK `(org_id, contact_id)`; route nay kiểm TRƯỚC khi tạo, nhưng gọi `createInvitation` từ nơi khác (job, route tương lai) với contact của NCC khác thì link tới người của Y mà đơn thầu mang danh X. Cần FK tổ hợp `(org_id, supplier_id, contact_id) → supplier_contacts (org_id, supplier_id, id)` | `db/migrations/010_invitations.sql`, `packages/invitation/src/invitation.ts` |
-| 47 | **[review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG** — `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh; chỉ ba route được đo chéo ở test vòng đời. Cần vòng quét "mọi quyền TRỪ `route.permission` ⇒ 403" tự sinh từ `ROUTES`. Cùng dòng: lớp canh tĩnh `\brequirePermission\s*\(` bị `const rp = requirePermission` qua mặt (ADR-016 §4 đã tự nhận) | `apps/api/src/buyer.int.test.ts`, `routes.test.ts` |
-| 48 | **[review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên** — đường HTTP chặn (L-1, JOIN `users.status`); đường gói không; người bị đình chỉ rồi kích hoạt lại thì mọi phiên cũ còn TTL sống lại. Cần trigger `AFTER UPDATE OF status ON users` thu hồi phiên trong cùng giao dịch + `u.status = 'ACTIVE'` ở `resolveSessionActor` — nhưng bộ test identity bật/tắt `SUSPENDED` nhiều lần trên cùng phiên, phải sửa test trước | `packages/identity/src/session-actor.ts`, `db/migrations/006_sessions_and_mfa.sql` |
+| 47 | ~~**[review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG**~~ **ĐÓNG 2026-09-06 (PR #6)** — vòng quét "mỗi route ghi × mỗi mã quyền ĐƠN LẺ": chỉ đúng `route.permission` qua cổng, mọi mã khác 403, đếm chéo bằng sổ kiểm toán, tự sinh từ `ROUTES` × `PERMISSIONS` ("mọi quyền trừ một" bất khả thi vì D3/033 cấm gom quyền — phép đo tương đương, trigger-an-toàn); lớp canh tĩnh nay cấm cả ĐỊNH DANH `requirePermission`/`withTenant`/`withGuestSession` ngoài dispatch.ts (bí danh cũng bị bắt). Nguyên văn cũ: [review lượt 2, H2-11 ⑵⑶] Quét H17 chứng minh "KHÔNG quyền ⇒ 403", không chứng minh mã quyền ĐÚNG — `/rfqs/:id/approve` gán nhầm `RFQ_CREATE` vẫn xanh; chỉ ba route được đo chéo ở test vòng đời. Cần vòng quét "mọi quyền TRỪ `route.permission` ⇒ 403" tự sinh từ `ROUTES`. Cùng dòng: lớp canh tĩnh `\brequirePermission\s*\(` bị `const rp = requirePermission` qua mặt (ADR-016 §4 đã tự nhận) | `apps/api/src/buyer.int.test.ts`, `routes.test.ts` |
+| 48 | ~~**[review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên**~~ **ĐÓNG 2026-09-06 (PR #6)** — migration `034`: trigger `users_thu_hoi_phien_khi_dinh_chi` thu hồi mọi phiên còn sống trong cùng giao dịch (kích hoạt lại không mở lại; chạy được dưới `app_api` qua RLS); `resolveSessionActor` nối `users.status = 'ACTIVE'`; test `dinh-chi.int.test.ts` với đột biến gỡ trigger. Dự đoán "bộ test identity bật/tắt SUSPENDED phải sửa trước" hoá ra KHÔNG cần: không test nào dùng lại phiên sau lần đình chỉ. Nguyên văn cũ: [review lượt 2, H2-12] `resolveSessionActor` (đường gói, trigger 013) KHÔNG xét `users.status`, và đình chỉ KHÔNG thu hồi phiên — đường HTTP chặn (L-1, JOIN `users.status`); đường gói không; người bị đình chỉ rồi kích hoạt lại thì mọi phiên cũ còn TTL sống lại. Cần trigger `AFTER UPDATE OF status ON users` thu hồi phiên trong cùng giao dịch + `u.status = 'ACTIVE'` ở `resolveSessionActor` — nhưng bộ test identity bật/tắt `SUSPENDED` nhiều lần trên cùng phiên, phải sửa test trước | `packages/identity/src/session-actor.ts`, `db/migrations/006_sessions_and_mfa.sql` |
 | 49 | **[review lượt 2, H2-4 ⑶ + bộ dò] Bộ quét rò rỉ gọi route GHI với thân `{}`** — chúng dừng ở 422 trước nghiệp vụ, nên vòng quét chứng minh cho route đọc nhiều hơn route ghi; và bộ dò là `includes` chuỗi thập phân đã biết (giá viết `980,000,000`, `9.8e8`, base64, thứ tự xếp hạng đi lọt). Cần gọi route ghi với thân HỢP LỆ trên một RFQ hy sinh, và bộ dò theo giá trị số (mọi cách viết) | `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` |
 
 ## Kiến trúc
@@ -973,6 +973,23 @@ CMK, chưa có role nào được tạo.
     lại, ca còn lọt là BUYER tự gán PROCUREMENT_MANAGER (ghi ở 005); [C1] BUYER+FINANCE đổi sang
     REQUESTER+DIRECTOR. Qua HTTP: PM tạo chính sách ⇒ 403, FINANCE ⇒ 201 (buyer.int, kịch bản 41).
     **Số đo trên HEAD:** `pnpm t0` 154 module / 0 vi phạm; `pnpm test` 497/497; `pnpm evidence` **1145/1145**,
+    **51/51**, cổng XANH.
+
+24. **[2026-09-06] Nợ 48 và 47 đóng — PR #5 đã merge (`886d812`), PR #6.** **Nợ 48:** migration **`034`**
+    — đình chỉ một người (`users.status` rời `ACTIVE`) thu hồi mọi phiên còn sống của người ấy trong
+    cùng giao dịch; kích hoạt lại KHÔNG mở lại phiên; trigger chạy dưới quyền phiên ghi nên `app_api`
+    đình chỉ qua RLS cũng thu hồi đủ. `resolveSessionActor` (đường gói) nối `users.status = 'ACTIVE'`,
+    cùng vế chịu lực của `hasPermission` — lớp đứng riêng cho phiên còn sống của người bị đình chỉ.
+    Test mới `packages/identity/src/dinh-chi.int.test.ts`: bốn ca, đột biến gỡ trigger ⇒ phiên sống
+    nguyên. Dự đoán ở sổ nợ "phải sửa bộ test identity trước" hoá ra sai: không test nào dùng lại một
+    phiên sau khi đình chỉ. **Nợ 47:** ⑴ lớp canh tĩnh cấm cả ĐỊNH DANH `requirePermission` /
+    `withTenant` / `withGuestSession` ngoài `dispatch.ts` (không chỉ lời gọi — bí danh `const rp =
+    requirePermission` nay bị bắt, có đối chứng); ⑵ vòng quét "mỗi route ghi × mỗi mã quyền đơn lẻ" ở
+    `buyer.int.test.ts`: một vai + một người cho MỖI mã quyền, và với mỗi route ghi chỉ đúng
+    `route.permission` qua cổng, mọi mã khác 403; đếm chéo bằng sổ `PERMISSION_DENIED`. Cách reviewer
+    đề nghị ("mọi quyền TRỪ một") bất khả thi theo đúng thiết kế — trigger D3 (005) và 033 cấm một
+    vai/một người gom gần hết quyền — nên phép đo đổi chiều mà vẫn chứng minh cùng một điều.
+    **Số đo trên HEAD:** `pnpm t0` 155 module / 0 vi phạm; `pnpm test` 497/497; `pnpm evidence` **1150/1150**,
     **51/51**, cổng XANH.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của

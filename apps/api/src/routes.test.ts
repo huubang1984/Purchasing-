@@ -72,17 +72,23 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     const viPham: string[] = [];
     for (const t of tep) {
       if (t.endsWith("/dispatch.ts")) continue;
-      // Đo LỜI GỌI, không đo chuỗi: chú thích của routes/buyer.ts nhắc tới `requirePermission` để
-      // nói rằng nó KHÔNG gọi — một phép đếm chuỗi sẽ đọc câu ấy thành một vi phạm.
+      // Đo ĐỊNH DANH trong MÃ (chú thích đã bỏ), không đo lời gọi: [review H2-11 ⑵ / sổ nợ 47] bản
+      // trước chỉ bắt `requirePermission(` nên `const rp = requirePermission; rp(...)` đi lọt. Để gọi
+      // được thì phải IMPORT, và import cũng là một lần nhắc tên — nên mọi lần nhắc tên ngoài
+      // dispatch.ts đều là vi phạm. Chú thích của routes/buyer.ts nhắc tới nó để nói rằng nó KHÔNG
+      // gọi — đã bỏ chú thích trước khi đo.
       const ma = boChuThich(readFileSync(join(GOC, t), "utf8"));
       for (const ten of ["requirePermission", "withTenant", "withGuestSession"]) {
-        if (new RegExp(`\\b${ten}\\s*\\(`, "u").test(ma)) viPham.push(`${t}: ${ten}(`);
+        if (new RegExp(`\\b${ten}\\b`, "u").test(ma)) viPham.push(`${t}: ${ten}`);
       }
     }
     expect(
       viPham,
       "Một cổng quyền / một lần gắn phiên mọc ngoài dispatch.ts. Hai nơi là hai nơi để lệch nhau.",
     ).toEqual([]);
+    // Đối chứng cho vế "định danh, không phải lời gọi": một bí danh KHÔNG có dấu ngoặc cũng bị bắt.
+    expect(/\brequirePermission\b/u.test(boChuThich("// requirePermission\nconst rp = requirePermission;"))).toBe(true);
+    expect(/\brequirePermission\b/u.test(boChuThich("// requirePermission\nconst rp = 1;"))).toBe(false);
     // Đối chứng: dispatch.ts THẬT SỰ gọi cả ba — nếu không, "chỉ ở dispatch" đúng vì không ở đâu cả.
     const dispatch = readFileSync(join(GOC, "apps/api/src/dispatch.ts"), "utf8");
     expect(dispatch).toContain("requirePermission(");
