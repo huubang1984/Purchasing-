@@ -115,6 +115,22 @@ async function taoNguoi(orgId: string, email: string, trangThai = "ACTIVE"): Pro
 }
 
 /**
+ * [039 / sổ nợ 43] Một người MỚI của tổ chức, có hồ sơ TOTP đã xác nhận với bộ đếm TƯƠI. Bốn phép đo
+ * lược đồ 006 dưới `app_api` chèn phiên đã-MFA — sau 039 chúng cần bằng chứng TOTP gần đây. Cố ý là
+ * người MỚI chứ không chạm hồ sơ của `nguoiA`: đặt `last_used_counter` = bộ đếm hiện tại lên hồ sơ ấy
+ * là làm mọi lần `verifyTotpAttempt` sau đó với mã hiện tại thành "chơi lại".
+ */
+async function nguoiCoTotpTuoi(orgId: string): Promise<string> {
+  const id = await taoNguoi(orgId, `totp-tuoi-${randomBytes(6).toString("hex")}@vidu.vn`);
+  await db.pool.query(
+    "INSERT INTO mfa_credentials (org_id, user_id, kind, secret_wrapped, secret_key_version, confirmed_at, last_used_counter) " +
+      "VALUES ($1, $2, 'TOTP', '\\x01', 'v1', clock_timestamp(), $3)",
+    [orgId, id, counterForTime(Date.now())],
+  );
+  return id;
+}
+
+/**
  * Tạo một phiên bằng quyền superuser (fixture), trả về id.
  *
  * `taoLuc` tồn tại vì một ràng buộc CỦA LƯỢC ĐỒ, không phải vì tiện: `CHECK (expires_at >
@@ -1292,7 +1308,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
   });
@@ -1335,8 +1351,8 @@ describe("lược đồ 006", () => {
     // hai tổ chức khác nhau — tức không còn oracle nào để hỏi.
     const bam = randomBytes(32);
     for (const [org, nguoi] of [
-      [orgA, nguoiA],
-      [orgB, nguoiB],
+      [orgA, await nguoiCoTotpTuoi(orgA)],
+      [orgB, await nguoiCoTotpTuoi(orgB)],
     ] as const) {
       await withTenant(apiPool, org, async (c) => {
         await expect(
@@ -1394,7 +1410,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
     expect(
@@ -1522,7 +1538,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4, clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32), "x".repeat(512)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32), "x".repeat(512)],
       ),
     ).toBe("THÀNH CÔNG");
   });
