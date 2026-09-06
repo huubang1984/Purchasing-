@@ -1724,13 +1724,13 @@ describe("[sổ nợ 53] việc sau commit", () => {
     const trangThaiLucChay: string[] = [];
     let thuTu = "";
     const runner = runnerChoMotToChuc({
-      VIEC_SAU: async () => {
+      VIEC_SAU: () => {
         thuTu += "handler;";
-        return async () => {
+        return Promise.resolve(async () => {
           thuTu += "sau;";
           // Đọc bằng pool SIÊU NGƯỜI DÙNG, kết nối khác: chỉ thấy DONE nếu giao dịch của job đã commit.
           trangThaiLucChay.push((await docHang(id)).status);
-        };
+        });
       },
     });
     expect(await runner.runOnce()).toBe(1);
@@ -1741,9 +1741,9 @@ describe("[sổ nợ 53] việc sau commit", () => {
     const id2 = await xepHang(orgId, { kind: "VIEC_NEM", payload: {} });
     let saiThuTu = "";
     const runner2 = runnerChoMotToChuc({
-      VIEC_NEM: async () => {
+      VIEC_NEM: () => {
         saiThuTu += "handler;";
-        throw new Error("hong truoc commit");
+        return Promise.reject(new Error("hong truoc commit"));
       },
     }, { maxAttempts: 1 });
     // `runOnce` đếm job ĐÃ ĐI TỚI KẾT CỤC (kể cả FAILED) — cùng ngữ nghĩa với [T10-B].
@@ -1758,10 +1758,8 @@ describe("[sổ nợ 53] việc sau commit", () => {
     const baoCao: { reason: string; gaveUp: boolean; jobId: string; cause: unknown }[] = [];
     const runner = runnerChoMotToChuc(
       {
-        SAU_NEM: async () => async () => {
-          throw new Error("gia 980000000.00 khong duoc vao CSDL");
-        },
-        SAU_TREO: async () => () => new Promise<void>(() => undefined),
+        SAU_NEM: () => Promise.resolve(() => Promise.reject(new Error("gia 980000000.00 khong duoc vao CSDL"))),
+        SAU_TREO: () => Promise.resolve(() => new Promise<void>(() => undefined)),
       },
       { handlerTimeoutMs: 200, onJobFailure: (b) => baoCao.push({ reason: b.reason, gaveUp: b.gaveUp, jobId: b.jobId, cause: b.cause }) },
     );
