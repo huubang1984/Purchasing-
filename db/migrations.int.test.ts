@@ -867,6 +867,85 @@ describe("migration của dự án", () => {
     }
   });
 
+  // [S1.13 / sổ nợ 51 / review H4-7] Năm hàm trigger của 039/040/041 và sáu trigger của chúng được
+  // hardening ghim THÂN + định nghĩa trigger, cùng khuôn `la_duong_ung_dung` (chỉ canh khi hàm đã tồn
+  // tại). Hai lớp đo: (1) tĩnh — thân trong migration và thân trong hardening khớp nhau, và hậu điều
+  // kiện `$than$` là chính thân ấy; (2) trôi — thay thân thành no-op, DROP một trigger, DISABLE một
+  // trigger ⇒ `migrate()` khôi phục cả ba.
+  const HAM_51: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
+    { ham: "sessions_kiem_totp_gan_day", migration: "039_phien_can_totp_gan_day.sql", trigger: ["sessions_kiem_totp_gan_day"] },
+    { ham: "mfa_reset_kiem_quyen", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_reset_requests_kiem_quyen_yeu_cau", "mfa_reset_requests_kiem_quyen_duyet"] },
+    { ham: "mfa_reset_kiem_chuyen_trang_thai", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_reset_requests_kiem_chuyen_trang_thai"] },
+    { ham: "mfa_credentials_xoa_can_yeu_cau", migration: "040_dat_lai_totp_hai_nguoi.sql", trigger: ["mfa_credentials_xoa_can_yeu_cau"] },
+    { ham: "outbox_jobs_xoa_payload_dang_nhap", migration: "041_outbox_payload_dang_nhap_xoa_sau_xong.sql", trigger: ["outbox_jobs_xoa_payload_dang_nhap"] },
+  ];
+
+  it("[S1.13 / nợ 51] năm thân hàm trigger 039/040/041 trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+    const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
+    const hardening = docFile("hardening.always.sql");
+    const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
+    for (const { ham, migration, trigger } of HAM_51) {
+      const reMig = new RegExp(`CREATE FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql\\s+SET search_path = pg_catalog\\s+AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
+      const khopMig = [...docFile(migration).matchAll(reMig)];
+      expect(khopMig, `${ham} trong ${migration}`).toHaveLength(1);
+      const thanMig = chuanHoa(khopMig[0]![2]!);
+      const reHard = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql SET search_path = pg_catalog AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
+      const khopHard = [...hardening.matchAll(reHard)];
+      expect(khopHard, `${ham} trong hardening`).toHaveLength(1);
+      expect(chuanHoa(khopHard[0]![2]!), ham).toBe(thanMig);
+      // Hậu điều kiện: `$than$...$than$` đầu tiên SAU mục mang tên hàm là chính thân đã chuẩn hoá.
+      const viTri = hardening.indexOf(`hàm + trigger ${ham} (`);
+      expect(viTri, `mục hardening cho ${ham}`).toBeGreaterThan(0);
+      const hau = /\$than\$([\s\S]*?)\$than\$/.exec(hardening.slice(viTri))?.[1];
+      expect(hau, ham).toBe(thanMig);
+      // Và mỗi trigger có một định nghĩa ghim (`$def$...$def$`) trong cùng mục.
+      for (const t of trigger) expect(hardening.slice(viTri, viTri + 12_000), `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
+    }
+  });
+
+  it("[S1.13 / nợ 51] hardening khôi phục thân hàm trigger bị thay thành no-op, trigger bị DROP, trigger bị DISABLE ở lần migrate() sau", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      // Ba đột biến, ba hàm khác nhau — mỗi cái là một ca R3 đã đo: sống qua migrate() nếu không ghim.
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.mfa_reset_kiem_chuyen_trang_thai() RETURNS trigger LANGUAGE plpgsql " +
+          "SET search_path = pg_catalog AS $x$ BEGIN RETURN NEW; END $x$",
+      );
+      await db.pool.query("DROP TRIGGER outbox_jobs_xoa_payload_dang_nhap ON public.outbox_jobs");
+      await db.pool.query("ALTER TABLE public.sessions DISABLE TRIGGER sessions_kiem_totp_gan_day");
+      await db.pool.query("CREATE OR REPLACE FUNCTION public.mfa_reset_kiem_quyen() RETURNS trigger LANGUAGE plpgsql AS $x$ BEGIN RETURN NEW; END $x$");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const { rows: ham } = await db.pool.query<{ ten: string; than: string; cfg: string | null }>(
+        `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, array_to_string(p.proconfig, ',') AS cfg
+           FROM pg_proc p WHERE p.proname IN ('mfa_reset_kiem_chuyen_trang_thai', 'mfa_reset_kiem_quyen') ORDER BY 1`,
+      );
+      expect(ham.map((h) => h.ten)).toEqual(["mfa_reset_kiem_chuyen_trang_thai", "mfa_reset_kiem_quyen"]);
+      expect(ham[0]?.than).toContain("cac cot yeu cau la bat bien (040)");
+      expect(ham[1]?.than).toContain("user.mfa_reset");
+      expect(ham[1]?.cfg).toBe("search_path=pg_catalog");
+      const { rows: trg } = await db.pool.query<{ ten: string; enabled: string }>(
+        `SELECT t.tgname AS ten, t.tgenabled AS enabled FROM pg_trigger t
+          WHERE NOT t.tgisinternal AND t.tgname IN ('outbox_jobs_xoa_payload_dang_nhap', 'sessions_kiem_totp_gan_day') ORDER BY 1`,
+      );
+      expect(trg).toEqual([
+        { ten: "outbox_jobs_xoa_payload_dang_nhap", enabled: "A" },
+        { ten: "sessions_kiem_totp_gan_day", enabled: "A" },
+      ]);
+      // Hành vi thật sau khôi phục: một job LOGIN_LINK_SEND xong thì payload về {} (041 sống lại).
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('X', 'x') RETURNING id")).rows[0]!.id;
+      const { rows: job } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1, 'LOGIN_LINK_SEND', '{\"email\":\"a@b\"}') RETURNING id",
+        [org],
+      );
+      await db.pool.query("UPDATE outbox_jobs SET status = 'DONE', finished_at = now() WHERE id = $1", [job[0]!.id]);
+      const { rows: sau } = await db.pool.query<{ payload: unknown }>("SELECT payload FROM outbox_jobs WHERE id = $1", [job[0]!.id]);
+      expect(sau[0]?.payload).toEqual({});
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
   // [fix round 5 — R4] Vòng 4 dùng tiền điều kiện "schema tồn tại" cho dòng REVOKE, nên
   // schema mất là bỏ qua luôn — đo thật: migrate QUA, app_private không bao giờ trở lại (001
   // đã nằm trong schema_migrations). Test mới của vòng 4 dùng withMigratedDatabase trên DB
