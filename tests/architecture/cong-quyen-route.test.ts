@@ -102,6 +102,10 @@ const HAM_DUONG_KHACH = [
   // họ tự chứng minh thẩm quyền bằng phiên khách — thứ đã đi qua token cộng OTP. Một cổng quyền
   // ở đây sẽ đòi một tài khoản người mua, tức phá ràng buộc sản phẩm 1.
   "submitBid",
+  // [sổ nợ 39] `tangBucketHanMuc` GHI (một hàng đếm trong `otp_rate_limits`) nhưng người gọi là chính
+  // DISPATCHER, TRƯỚC khi có bất kỳ danh tính nào — nó đếm kẻ gõ vào cửa đăng nhập, và một cổng
+  // quyền ở đó là hỏi thẻ của người chưa vào. Cùng lý do với `issueOtpChallenge` ở đầu danh sách.
+  "tangBucketHanMuc",
 ] as const;
 
 /**

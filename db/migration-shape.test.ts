@@ -346,6 +346,8 @@ describe("hình dạng file migration", () => {
       "guest_sessions",
       "invitation_otp_challenges",
       "mfa_credentials",
+      // [S1.12 / 040] yêu cầu đặt lại TOTP — bảng tenant thứ 29.
+      "mfa_reset_requests",
       "org_procurement_policies",
       "organizations",
       "otp_rate_limits",

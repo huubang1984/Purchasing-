@@ -25,10 +25,14 @@ import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocur
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing } from "@trustprocure/invitation";
+import { JobRunner } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
 import type { CauHinhApi } from "./cau-hinh.js";
+import { KMS_TIMEOUT_MS_MAC_DINH, boiTranKms } from "./co-han.js";
+import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
+import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
 
@@ -46,6 +50,8 @@ export interface TienTrinhApi {
 
 /** Số kết nối của pool sổ từ chối quyền — nhỏ, vì nó chỉ ghi một hàng cho mỗi lần 403. */
 const AUDIT_POOL_MAX = 2;
+/** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
+const OUTBOX_POLL_MS = 5000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
@@ -53,7 +59,9 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
 
   const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
   const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
-  const services: ApiServices = {
+  // [sổ nợ 38] Hai adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS treo không
+  // được giữ kết nối tới idle_in_transaction_session_timeout.
+  const services: ApiServices = boiTranKms({
     rfqKeyWrapper: createLocalDevWrapper(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
     totpSecretWrapper: totp.wrapper,
     totpSecretUnsealer: totp.unsealer,
@@ -64,6 +72,27 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
     loginLinkSender: hopThu.loginLinkSender,
     invitationLinkSender: hopThu.invitationLinkSender,
     otpSender: hopThu.otpSender,
+  }, KMS_TIMEOUT_MS_MAC_DINH);
+
+  // [sổ nợ 38 / ADR-022 §1] Runner outbox TRONG tiến trình `api`. `app_api` không đọc được danh sách
+  // tổ chức (RLS), nên `listOrganizations` là tập tổ chức tiến trình này ĐÃ THẤY enqueue; `nudge`
+  // đánh thức ngay cho tổ chức vừa có job (setImmediate — không chặn phản hồi), vòng poll nhặt job
+  // còn sót (thử lại). Giới hạn nhiều instance ghi ở ADR-022.
+  const toChucDaThay = new Set<string>();
+  const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
+    pollIntervalMs: OUTBOX_POLL_MS,
+    listOrganizations: () => [...toChucDaThay],
+    onJobFailure: (bao) => {
+      // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — chỉ tên lý do và kind.
+      console.error(`[api] outbox ${bao.kind} ${bao.reason}${bao.gaveUp ? " (bo cuoc)" : ""}`);
+    },
+    onPollError: (e) => console.error(`[api] outbox poll ${e instanceof Error ? e.name : "loi khong ro"}`),
+  });
+  const outboxNudge = (orgId: string): void => {
+    toChucDaThay.add(orgId);
+    setImmediate(() => {
+      runner.runOnceForOrg(orgId).catch((e: unknown) => console.error(`[api] outbox ${e instanceof Error ? e.name : "loi khong ro"}`));
+    });
   };
 
   const server = createApiServer(
@@ -71,9 +100,11 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       pool,
       auditPool,
       services,
+      outboxNudge,
       ...(ch.afterCommitTimeoutMs === undefined ? {} : { afterCommitTimeoutMs: ch.afterCommitTimeoutMs }),
     }),
-    { allowedOrigins: ch.allowedOrigins },
+    // [sổ nợ 41] Địa chỉ người gọi: socket, trừ khi socket là một proxy đã khai — xem dia-chi.ts.
+    { allowedOrigins: ch.allowedOrigins, remoteAddressOf: taoDocDiaChi(ch.trustedProxies) },
   );
 
   let daDung = false;
@@ -98,12 +129,14 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
           xong();
         });
       });
+      runner.start();
       const dc = server.address() as AddressInfo;
       return { host: dc.address, port: dc.port };
     },
     async dung(): Promise<void> {
       if (daDung) return;
       daDung = true;
+      runner.stop();
       await new Promise<void>((xong) => {
         if (!server.listening) {
           xong();

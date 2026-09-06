@@ -109,6 +109,12 @@ export interface TuyChonPool {
   /** ms; 0 = không giới hạn. */
   readonly idleInTransactionTimeoutMs?: number;
   /**
+   * [sổ nợ 38] `statement_timeout` (ms; 0 = không giới hạn). Một câu lệnh treo (khoá, truy vấn nặng)
+   * bị Postgres huỷ và kết nối được trả lại — nửa CSDL của hàng rào thời gian; nửa JS (`coHan`) ở
+   * apps/api. `migrate()` tự đặt 0 trên kết nối của nó (migration dài là bình thường).
+   */
+  readonly statementTimeoutMs?: number;
+  /**
    * [S1.11] Vai ứng dụng gắn vào MỌI client trước khi giao ra (`SET ROLE` + kiểm `current_user`).
    *
    * Tiến trình thật đăng nhập bằng `app_api_login` (hardening: INHERIT, danh sách trắng CAP_HOP_LE)
@@ -121,6 +127,7 @@ export interface TuyChonPool {
 
 const LOCK_TIMEOUT_MS_MAC_DINH = 15_000;
 const IDLE_IN_TX_TIMEOUT_MS_MAC_DINH = 60_000;
+const STATEMENT_TIMEOUT_MS_MAC_DINH = 15_000;
 
 export function createPool(
   connectionString: string,
@@ -163,6 +170,7 @@ export function createPool(
   };
   const lockMs = soMs(tuyChon.lockTimeoutMs, LOCK_TIMEOUT_MS_MAC_DINH);
   const idleTxMs = soMs(tuyChon.idleInTransactionTimeoutMs, IDLE_IN_TX_TIMEOUT_MS_MAC_DINH);
+  const cauLenhMs = soMs(tuyChon.statementTimeoutMs, STATEMENT_TIMEOUT_MS_MAC_DINH);
 
   const pool = new pg.Pool({
     host,
@@ -174,7 +182,7 @@ export function createPool(
     application_name: "trustprocure",
     // [vòng fix 1 — IM7] Xem khối chú thích của TuyChonPool. Chỉ chứa chữ số nên không có
     // đường tiêm tham số nào qua PGOPTIONS.
-    options: `-c lock_timeout=${lockMs} -c idle_in_transaction_session_timeout=${idleTxMs}`,
+    options: `-c lock_timeout=${lockMs} -c idle_in_transaction_session_timeout=${idleTxMs} -c statement_timeout=${cauLenhMs}`,
     // Không có tham số nào của createPool cho phép truyền rejectUnauthorized: false — cấm
     // tuyệt đối bằng cách không mở đường thoát đó ra API công khai. Đặt tường minh false cho
     // nhánh loopback (không để undefined) để không phụ thuộc biến môi trường PGSSLMODE có thể

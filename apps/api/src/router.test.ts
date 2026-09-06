@@ -56,9 +56,18 @@ describe("tachQuery / docCookie / tachCookiePhien", () => {
     expect(tachQuery("/health")).toBe("/health");
   });
 
-  it("cookie: lấy giá trị ĐẦU khi lặp tên, bỏ mảnh không có dấu bằng", () => {
-    expect(docCookie("a=1; b=2; a=3; rac; =x")).toEqual({ a: "1", b: "2" });
+  it("[sổ nợ 42] cookie: tên LẶP thì BỎ tên ấy (không lấy đầu, không lấy sau); bỏ mảnh không có dấu bằng", () => {
+    // ~~lấy giá trị ĐẦU khi lặp tên~~ — review L-2: lấy cái đầu là cho kẻ ném cookie thắng.
+    expect(docCookie("a=1; b=2; a=3; rac; =x")).toEqual({ b: "2" });
+    expect(docCookie("a=1; a=1")).toEqual({});
+    expect(docCookie("a=1; b=2; a=3; a=4")).toEqual({ b: "2" });
     expect(docCookie(undefined)).toEqual({});
+    // [review H4-12] Tên trùng tên thuộc tính prototype không bị coi là "trùng"; tên không có ⇒ undefined, không phải hàm.
+    const la = docCookie("toString=1; constructor=2; __proto__=3");
+    expect(Object.entries(la).sort()).toEqual([["__proto__", "3"], ["constructor", "2"], ["toString", "1"]]);
+    expect(Object.hasOwn(docCookie("a=1"), "constructor")).toBe(false);
+    expect(Object.hasOwn(docCookie("a=1"), "toString")).toBe(false);
+    expect(Object.getPrototypeOf(docCookie("a=1"))).toBeNull();
   });
 
   it("cookie phiên phải là <uuid>.<base64url ≥ 32 ký tự>", () => {

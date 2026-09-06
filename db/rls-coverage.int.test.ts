@@ -694,7 +694,10 @@ describe("phủ RLS", () => {
       // la thu muc (C) cua hardening.always.sql CAM. Cung han che cau truc da ghi cho E3(1).
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
-      { grantee: "app_api", bang: "mfa_credentials", quyen: "SELECT" },
+      // [040 / sổ nợ 40] DELETE: đường đặt lại TOTP — trigger `mfa_credentials_xoa_can_yeu_cau` chỉ cho
+      // qua khi có yêu cầu đã duyệt chưa tiêu thụ; không có trigger ấy thì GRANT này là một lỗ.
+      { grantee: "app_api", bang: "mfa_credentials", quyen: "DELETE,SELECT" },
+      { grantee: "app_api", bang: "mfa_reset_requests", quyen: "SELECT" },
       { grantee: "app_api", bang: "org_procurement_policies", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
       { grantee: "app_api", bang: "otp_rate_limits", quyen: "DELETE,SELECT" },
@@ -977,6 +980,18 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
+      // [040 / sổ nợ 40] mfa_reset_requests: cột yêu cầu chỉ INSERT (bất biến bởi trigger), cột duyệt và
+      // tiêu thụ chỉ UPDATE (máy trạng thái bởi trigger); `id`, `requested_at`, `expires_at` không cấp.
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "approved_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "approved_by", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "approved_by_session_id", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "requested_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "requested_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "status", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "mfa_reset_requests", cot: "user_id", quyen: "INSERT" },
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
       // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.

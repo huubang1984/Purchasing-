@@ -14,10 +14,10 @@
 //   PUBLIC  không tổ chức, không CSDL.
 //   ANON    tổ chức đọc từ THÂN (`orgId`), gắn `withTenant`; thẩm quyền do chính handler chứng
 //           minh bằng token trong thân (magic link, OTP). Chỉ ở /guest/* và /auth/*.
-//   GUEST   cookie `tp_guest=<orgId>.<token>` → `resolveGuestSessionByToken` (một giao dịch) →
+//   GUEST   cookie `__Host-tp_guest=<orgId>.<token>` → `resolveGuestSessionByToken` (một giao dịch) →
 //           route ĐỌC: `withGuestSession` (giao dịch thứ hai, đặt ba GUC) → handler;
 //           route GHI: `withTenant` (KHÔNG GUC) → handler. Vì sao rẽ nhánh — xem khối dưới.
-//   BUYER   cookie `tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
+//   BUYER   cookie `__Host-tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
 //           `requirePermission` → handler. Tất cả trong MỘT `withTenant`.
 //
 // ---------------------------------------------------------------------------------------------
@@ -57,8 +57,11 @@ import {
   type SessionActor,
 } from "@trustprocure/identity";
 import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, tangBucketHanMuc } from "@trustprocure/invitation";
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
+import { coHan } from "./co-han.js";
+import { khoaNguoiGoi } from "./dia-chi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
@@ -83,25 +86,15 @@ export interface DispatcherDeps {
    * Mặc định 5 000 ms; quá trần chỉ ghi TÊN lỗi, không đổi phản hồi.
    */
   readonly afterCommitTimeoutMs?: number;
+  /**
+   * [sổ nợ 38] Đánh thức runner outbox của tiến trình cho một tổ chức vừa có job — gọi SAU commit,
+   * đồng bộ (bên nhận tự lên lịch, không được chặn phản hồi). Composition root cài; test lắp tay
+   * bỏ trống và tự chạy `runOnceForOrg`.
+   */
+  readonly outboxNudge?: (orgId: string) => void;
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
-
-class SauCommitQuaHan extends Error {
-  constructor() {
-    super("viec sau commit qua han");
-    this.name = "SauCommitQuaHan";
-  }
-}
-
-/** `viec()` đua với một đồng hồ; thua thì ném `SauCommitQuaHan` — promise gốc bị bỏ, không đợi. */
-function coHan(viec: () => Promise<void>, ms: number): Promise<void> {
-  let dongHo: NodeJS.Timeout | undefined;
-  const het = new Promise<never>((_ok, hong) => {
-    dongHo = setTimeout(() => hong(new SauCommitQuaHan()), ms);
-  });
-  return Promise.race([viec(), het]).finally(() => clearTimeout(dongHo));
-}
 
 export type Dispatcher = (req: Omit<ApiRequest, "params" | "requestId">) => Promise<ApiResponse>;
 
@@ -112,6 +105,8 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   "InvitationError",
   // [S1.10.4] token đăng nhập hỏng/hết hạn/đã dùng — cùng lớp với InvitationError của khách.
   "LoginTokenError",
+  // [040] yêu cầu đặt lại TOTP không ở PENDING / hết hạn / lý do rỗng — lỗi nghiệp vụ, không nội suy dữ liệu.
+  "MfaResetError",
   "BiddingError",
   "ReceiptError",
   "SealedEnvelopeError",
@@ -126,6 +121,7 @@ const THAN_403 = { error: "khong co quyen" } as const;
 const THAN_404 = { error: "khong co duong nay" } as const;
 const THAN_405 = { error: "phuong thuc khong duoc ho tro" } as const;
 const THAN_500 = { error: "loi noi bo" } as const;
+const THAN_429 = { error: "qua nhieu yeu cau" } as const;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -225,7 +221,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (r.status >= 400) return r;
       for (const viec of sauCommit) {
         try {
-          await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH);
+          await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH, "SauCommitQuaHan");
         } catch (e) {
           console.error(`[api] ${requestId} sau-commit ${e instanceof Error ? e.name : "loi khong ro"}`);
         }
@@ -241,11 +237,42 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "ANON": {
           const orgId = orgIdTuThan(req.body);
           if (orgId === null) throw new HttpError(422, 'thiếu trường "orgId"');
-          return await chaySauCommit(
+          // [sổ nợ 39] Đếm theo NGƯỜI GỌI trong một giao dịch RIÊNG, TRƯỚC handler: giao dịch của
+          // handler rollback khi token sai, nên đếm bên trong nó là đếm thành công chứ không đếm thử.
+          // Khoá mang cả đường dẫn route: ba route, ba bộ đếm. Địa chỉ rỗng (không xác định) dùng
+          // chung MỘT bucket — fail-closed. [review H4-4] Địa chỉ đi qua `khoaNguoiGoi`: IPv6 đếm theo
+          // /64, không theo địa chỉ nguyên vẹn. Tổ chức không tồn tại (khoá ngoại 23503) thì không đếm
+          // và đi tiếp: handler vẫn trả cùng một thân cho mọi tổ chức ~~, không mở oracle mới~~
+          // [review H4-5] — nhưng 429 CÓ là một oracle: tổ chức thật bị chặn sau N lần, tổ chức lạ
+          // thì không. Chấp nhận, nói ra: `orgId` là UUIDv4, không liệt kê được bằng vét cạn, và
+          // đếm cả tổ chức lạ đòi một bucket ngoài CSDL (không khoá ngoại) — ghi sổ nợ 52.
+          // `Retry-After` là cả cửa sổ, không phải phần còn lại — cố ý thô, không tiết lộ mốc bucket.
+          if (route.callerLimit !== undefined) {
+            const tran = route.callerLimit;
+            let soLan = 0;
+            try {
+              soLan = await withTenant(deps.pool, orgId, (client) =>
+                tangBucketHanMuc(client, orgId, "LOGIN_CALLER", `${route.path}|${khoaNguoiGoi(req.remoteAddress)}`, deps.services.pepper),
+              );
+            } catch (e) {
+              if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
+            }
+            if (soLan > tran) {
+              return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+            }
+          }
+          let danhThuc = false;
+          const nudgeOutbox = (): void => {
+            danhThuc = true;
+          };
+          const phanHoi = await chaySauCommit(
             await withTenant(deps.pool, orgId, (client) =>
-              route.handler({ req, orgId, client, services: deps.services, afterCommit }),
+              route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox }),
             ),
           );
+          // [sổ nợ 38] Job đã nằm trong CSDL (commit xong) và phản hồi đã quyết: đánh thức, không đợi.
+          if (danhThuc && phanHoi.status < 400) deps.outboxNudge?.(orgId);
+          return phanHoi;
         }
 
         case "BUYER": {

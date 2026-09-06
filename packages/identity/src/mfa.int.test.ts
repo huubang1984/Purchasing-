@@ -115,6 +115,22 @@ async function taoNguoi(orgId: string, email: string, trangThai = "ACTIVE"): Pro
 }
 
 /**
+ * [039 / sổ nợ 43] Một người MỚI của tổ chức, có hồ sơ TOTP đã xác nhận với bộ đếm TƯƠI. Bốn phép đo
+ * lược đồ 006 dưới `app_api` chèn phiên đã-MFA — sau 039 chúng cần bằng chứng TOTP gần đây. Cố ý là
+ * người MỚI chứ không chạm hồ sơ của `nguoiA`: đặt `last_used_counter` = bộ đếm hiện tại lên hồ sơ ấy
+ * là làm mọi lần `verifyTotpAttempt` sau đó với mã hiện tại thành "chơi lại".
+ */
+async function nguoiCoTotpTuoi(orgId: string): Promise<string> {
+  const id = await taoNguoi(orgId, `totp-tuoi-${randomBytes(6).toString("hex")}@vidu.vn`);
+  await db.pool.query(
+    "INSERT INTO mfa_credentials (org_id, user_id, kind, secret_wrapped, secret_key_version, confirmed_at, last_used_counter) " +
+      "VALUES ($1, $2, 'TOTP', '\\x01', 'v1', clock_timestamp(), $3)",
+    [orgId, id, counterForTime(Date.now())],
+  );
+  return id;
+}
+
+/**
  * Tạo một phiên bằng quyền superuser (fixture), trả về id.
  *
  * `taoLuc` tồn tại vì một ràng buộc CỦA LƯỢC ĐỒ, không phải vì tiện: `CHECK (expires_at >
@@ -1292,7 +1308,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
   });
@@ -1335,8 +1351,8 @@ describe("lược đồ 006", () => {
     // hai tổ chức khác nhau — tức không còn oracle nào để hỏi.
     const bam = randomBytes(32);
     for (const [org, nguoi] of [
-      [orgA, nguoiA],
-      [orgB, nguoiB],
+      [orgA, await nguoiCoTotpTuoi(orgA)],
+      [orgB, await nguoiCoTotpTuoi(orgB)],
     ] as const) {
       await withTenant(apiPool, org, async (c) => {
         await expect(
@@ -1375,8 +1391,10 @@ describe("lược đồ 006", () => {
       // xác nhận" ~~do `WHERE confirmed_at IS NULL` ở `login.ts` giữ~~ [032 / review H2-1] do trigger
       // `mfa_credentials_khoa_ho_so_da_xac_nhan` giữ Ở CSDL — đo (kèm đột biến gỡ trigger) ở
       // auth.int.test.ts [review M-5][review H2-1].
-      // Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.
-      ["mfa_credentials (DELETE)", "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]],
+      // ~~Hồ sơ KHÔNG xoá được — vế ấy giữ nguyên.~~ [S1.12 / 040 / sổ nợ 40] app_api nay CÓ quyền
+      // DELETE, nhưng trigger BEFORE DELETE `mfa_credentials_xoa_can_yeu_cau` chỉ cho xoá khi CSDL thấy
+      // một yêu cầu đặt lại ĐÃ DUYỆT chưa tiêu thụ — ca ấy đo riêng bên dưới (không còn là "permission
+      // denied"); đột biến gỡ trigger ở mfa-reset.int.test.ts.
       // `expires_at` không được UPDATE -> không gia hạn phiên vô hạn.
       [
         "sessions.expires_at (UPDATE)",
@@ -1387,6 +1405,12 @@ describe("lược đồ 006", () => {
     for (const [moTa, cau, tham] of ca) {
       expect(await chayRieng(apiPool, orgA, cau, tham), moTa).toMatch(/permission denied/i);
     }
+    // [S1.12 / 040] DELETE không còn bị GRANT chặn mà bị TRIGGER chặn: không có yêu cầu đặt lại đã duyệt
+    // ⇒ lỗi có tên "040", không phải "permission denied".
+    expect(
+      await chayRieng(apiPool, orgA, "DELETE FROM mfa_credentials WHERE user_id = $1", [nguoiA]),
+      "mfa_credentials (DELETE) không có yêu cầu đã duyệt",
+    ).toMatch(/040/);
     // Đối chứng dương: đường đi HỢP LỆ của ứng dụng không bị bản vá làm hỏng.
     expect(
       await chayRieng(
@@ -1394,7 +1418,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32)],
       ),
     ).toBe("THÀNH CÔNG");
     expect(
@@ -1522,7 +1546,7 @@ describe("lược đồ 006", () => {
         orgA,
         "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, user_agent, mfa_verified_at) " +
           "VALUES ($1, $2, $3, clock_timestamp() + interval '1 hour', $4, clock_timestamp())",
-        [orgA, nguoiA, randomBytes(32), "x".repeat(512)],
+        [orgA, await nguoiCoTotpTuoi(orgA), randomBytes(32), "x".repeat(512)],
       ),
     ).toBe("THÀNH CÔNG");
   });
@@ -1553,6 +1577,8 @@ describe("quyền trên hai bảng mới, đo không mù", () => {
       [BANG_MOI],
     );
     expect(rows).toEqual([
+      // [S1.12 / 040 / sổ nợ 40] DELETE cấp cho app_api — trigger BEFORE DELETE đòi yêu cầu đã duyệt.
+      { bang: "mfa_credentials", ai: "app_api", quyen: "DELETE" },
       { bang: "mfa_credentials", ai: "app_api", quyen: "SELECT" },
       { bang: "sessions", ai: "app_api", quyen: "SELECT" },
     ]);

@@ -58,6 +58,8 @@ function moiTruong(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
     TRUSTPROCURE_LISTEN_HOST: "127.0.0.1",
     TRUSTPROCURE_LISTEN_PORT: "0",
     TRUSTPROCURE_PUBLIC_BASE_URL: "http://localhost:3000",
+    // [sổ nợ 41] Socket của mọi yêu cầu trong test là 127.0.0.1 — khai nó là proxy để đo đường X-Forwarded-For.
+    TRUSTPROCURE_TRUSTED_PROXIES: "127.0.0.1",
     TRUSTPROCURE_KEY_ADAPTER: "local-dev",
     TRUSTPROCURE_MASTER_KEYS: `v1=${randomBytes(32).toString("base64")}`,
     TRUSTPROCURE_MASTER_KEY_ACTIVE: "v1",
@@ -80,8 +82,8 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown } = {}): Promise<PhanHoi> {
-  const headers: Record<string, string> = {};
+async function goi(method: string, path: string, tuyChon: { cookie?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<PhanHoi> {
+  const headers: Record<string, string> = { ...tuyChon.headers };
   if (tuyChon.cookie !== undefined) headers.cookie = tuyChon.cookie;
   let body: string | undefined;
   if (tuyChon.body !== undefined) {
@@ -97,6 +99,17 @@ function docHopThu(): TinHopThuDev[] {
   return readdirSync(hopThu)
     .sort()
     .map((t) => JSON.parse(readFileSync(join(hopThu, t), "utf8")) as TinHopThuDev);
+}
+
+/** [sổ nợ 38] Link ra đời SAU phản hồi, khi runner outbox của tiến trình được đánh thức: đợi tới khi hộp thư có `n` tin. */
+async function doiHopThu(n: number, hanMs = 5000): Promise<TinHopThuDev[]> {
+  const het = Date.now() + hanMs;
+  for (;;) {
+    const tin = docHopThu();
+    if (tin.length >= n) return tin;
+    if (Date.now() > het) throw new Error(`het ${hanMs}ms, hop thu co ${tin.length} tin, mong ${n}`);
+    await new Promise((x) => setTimeout(x, 50));
+  }
 }
 
 function base32Decode(s: string): Buffer {
@@ -201,7 +214,8 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     const r1 = await goi("POST", "/auth/link", { body: { orgId: org, email: "mua@vidu.vn" } });
     expect(r1.status).toBe(200);
     expect(r1.text).not.toMatch(/token/iu);
-    const tin = docHopThu();
+    expect(docHopThu(), "phản hồi về TRƯỚC khi link được gửi — handler không đợi bộ gửi").toHaveLength(0);
+    const tin = await doiHopThu(1);
     expect(tin).toHaveLength(1);
     const t0 = tin[0]!;
     if (t0.loai !== "LOGIN_LINK") throw new Error("tin dau tien phai la LOGIN_LINK");
@@ -227,8 +241,18 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
 
     const sai = await goi("POST", "/auth/totp", { body: { orgId: org, token, code: "000000" } });
     expect(sai.status).toBe(401);
-    const r3 = await goi("POST", "/auth/totp", { body: { orgId: org, token, code: deriveTotpCode(biMat, counterForTime(Date.now())) } });
+    // [sổ nợ 41] Socket 127.0.0.1 là proxy đã khai: hop ngoài cùng bên phải KHÔNG thuộc proxy là khách;
+    // hop "1.1.1.1" do khách tự ghi trước đó bị bỏ qua.
+    const r3 = await goi("POST", "/auth/totp", {
+      body: { orgId: org, token, code: deriveTotpCode(biMat, counterForTime(Date.now())) },
+      headers: { "x-forwarded-for": "1.1.1.1, 203.0.113.9" },
+    });
     expect(r3.status, r3.text).toBe(200);
+    const { rows: ip } = await db.pool.query<{ ip: string }>(
+      "SELECT host(ip) AS ip FROM sessions WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1",
+      [org, nguoi],
+    );
+    expect(ip[0]?.ip).toBe("203.0.113.9");
     const sc = r3.headers.get("set-cookie") ?? "";
     const gt = /tp_session=([^;]+)/u.exec(sc)?.[1] ?? "";
     expect(gt).not.toBe("");
@@ -253,7 +277,7 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
   it("route người mua bị từ chối quyền ghi sổ qua pool KIỂM TOÁN của composition (D5 trên tiến trình thật)", async () => {
     // Đăng nhập lại (token cũ đã tiêu thụ), rồi gọi một route ghi mà BUYER không có quyền.
     await goi("POST", "/auth/link", { body: { orgId: org, email: "mua@vidu.vn" } });
-    const tin = docHopThu().filter((t) => t.loai === "LOGIN_LINK");
+    const tin = (await doiHopThu(2)).filter((t) => t.loai === "LOGIN_LINK");
     const t = tin.at(-1)!;
     if (t.loai !== "LOGIN_LINK") throw new Error("phai la LOGIN_LINK");
     const token = new URL(t.duongLink).hash.slice(1);

@@ -1579,10 +1579,13 @@ $ham$$q$,
       $q$quyền sở hữu hàm app_current_org_id() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của hai trigger đăng nhập ------
+    -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của ~~hai~~ BỐN trigger đăng nhập ----
     -- `la_duong_ung_dung(name)` là ĐIỂM ĐƠN: thay thân nó là đủ để 029 (phiên thiếu MFA) và 032
     -- (bí mật TOTP đã xác nhận) im lặng — `packages/db/src/vai-tro.int.test.ts` chứng minh đúng
-    -- thế bằng đột biến. Cùng mô hình đe doạ với R3 ở trên (một CREATE OR REPLACE sau triển khai
+    -- thế bằng đột biến. [S1.12 / review H4-7] 039 (phiên đã-MFA cần TOTP gần đây) và 040 (xoá hồ
+    -- sơ TOTP cần yêu cầu đã duyệt) cũng đi qua vị từ này; nhưng THÂN của ba hàm trigger mới
+    -- (039, 040 ×2, 041) và máy trạng thái 040 (vô điều kiện, không qua vị từ) CHƯA được ghim ở
+    -- đây — sổ nợ 51. Cùng mô hình đe doạ với R3 ở trên (một CREATE OR REPLACE sau triển khai
     -- đi qua migrate() mà không ai thấy), nên cùng lớp canh: thân đã chuẩn hoá + thuộc tính.
     -- KHÁC R3 ở tiền điều kiện: chỉ canh khi hàm ĐÃ TỒN TẠI — lượt hardening TRƯỚC vòng migration
     -- trên cụm mới chạy trước 037, và dựng hàm ở đây sẽ làm `CREATE FUNCTION` của 037 vỡ. Hàm bị

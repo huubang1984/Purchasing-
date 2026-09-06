@@ -15,6 +15,7 @@
     "@trustprocure/db": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/outbox": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/supplier": "workspace:*",

@@ -199,6 +199,12 @@ const DANH_SACH_TRANG_IDENTITY = [
   "LOGIN_RATE_WINDOW_SECONDS",
   "LOGIN_TOKEN_TTL_SECONDS",
   "LoginTokenError",
+  // [040 / sổ nợ 40] Đặt lại TOTP hai người: cả hai hàm ném khi không thoả và ghi sổ.
+  "MFA_RESET_TTL_HOURS",
+  "MfaResetError",
+  "approveMfaReset",
+  "cancelMfaReset",
+  "requestMfaReset",
   // [review H2-5] `MfaProof` xuat CHI KIEU (export type) — khong co mat trong Object.keys(), va do
   // la dieu duoc do: mot lan xuat lai duoi dang gia tri se lam danh sach nay lech.
   "USER_SESSION_DEFAULT_TTL_SECONDS",
@@ -513,6 +519,8 @@ const DANH_SACH_TRANG_INVITATION = [
   // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
   "resolveGuestSessionByToken",
   "revokeInvitation",
+  // [sổ nợ 39] Đếm-và-tăng một bucket LOGIN_CALLER; trả số, không trả phiên, không nhận token.
+  "tangBucketHanMuc",
   "verifyOtpAndStartSession",
 ];
 

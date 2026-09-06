@@ -63,8 +63,13 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
   // [review H3-3] `mode` của mkdirSync chỉ áp cho thư mục MỚI; một thư mục có sẵn 0755 giữ nguyên 0755.
   // Siết lại tường minh (POSIX; Windows không có mode).
   if (process.platform !== "win32") chmodSync(tuyChon.thuMuc, 0o700);
+  // Tên tệp sắp xếp theo THỨ TỰ GỬI kể cả khi hai tin rơi cùng mili-giây: một số thứ tự trong tiến
+  // trình đứng trước phần ngẫu nhiên (CI Linux nhanh hơn Windows đủ để ba tin cùng `Date.now()`, và
+  // test đọc tệp theo tên đã sort — đỏ ngẫu nhiên ở lượt CI đầu của S1.12).
+  let thuTu = 0;
   const ghi = async (tin: TinHopThuDev): Promise<void> => {
-    const tep = join(tuyChon.thuMuc, `${Date.now()}-${randomBytes(4).toString("hex")}.json`);
+    thuTu += 1;
+    const tep = join(tuyChon.thuMuc, `${Date.now()}-${String(thuTu).padStart(6, "0")}-${randomBytes(4).toString("hex")}.json`);
     await writeFile(tep, JSON.stringify(tin), { mode: 0o600, flag: "wx" });
   };
   const luc = (): string => new Date().toISOString();

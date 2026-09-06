@@ -91,6 +91,12 @@ export const PERMISSIONS = {
    * kiểm quyền không viết được và "là việc của ứng dụng" là một lời hứa rỗng.
    */
   ROLE_GRANT: "role.grant",
+  /**
+   * [040 / sổ nợ 40 / review M-5] Yêu cầu hoặc phê duyệt đặt lại TOTP cho một người dùng. Hai người
+   * (CHECK ở 040: người duyệt ≠ người yêu cầu, phiên khác); hồ sơ bị XOÁ, phiên bị thu hồi. Cấp cho
+   * `PROCUREMENT_MANAGER` và `DIRECTOR` — không thuộc chuỗi D3.
+   */
+  USER_MFA_RESET: "user.mfa_reset",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

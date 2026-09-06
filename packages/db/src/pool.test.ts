@@ -95,7 +95,7 @@ describe("createPool — hai GUC giảm nhẹ của khoá tư vấn (IM7)", () =
   it("mặc định đặt lock_timeout và idle_in_transaction_session_timeout qua PGOPTIONS", () => {
     const pool = createPool("postgres://u:p@127.0.0.1:5432/db");
     expect(docOptionsHieuLuc(pool)).toBe(
-      "-c lock_timeout=15000 -c idle_in_transaction_session_timeout=60000",
+      "-c lock_timeout=15000 -c idle_in_transaction_session_timeout=60000 -c statement_timeout=15000",
     );
   });
 
@@ -103,9 +103,10 @@ describe("createPool — hai GUC giảm nhẹ của khoá tư vấn (IM7)", () =
     const pool = createPool("postgres://u:p@127.0.0.1:5432/db", 5, {
       lockTimeoutMs: 0,
       idleInTransactionTimeoutMs: 1_000,
+      statementTimeoutMs: 2_000,
     });
     expect(docOptionsHieuLuc(pool)).toBe(
-      "-c lock_timeout=0 -c idle_in_transaction_session_timeout=1000",
+      "-c lock_timeout=0 -c idle_in_transaction_session_timeout=1000 -c statement_timeout=2000",
     );
   });
 

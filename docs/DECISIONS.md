@@ -1718,3 +1718,131 @@ test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
    ném 42501, KHÔNG cổng nào nghe. `main.ts` chạy như tiến trình con: cấu hình hỏng ⇒ mã thoát 1 +
    tên biến, không giá trị; đúng ⇒ `/health` 200 trên cổng in ra stderr; stderr không mang bí mật.
 5. **Phạm vi sản xuất KHÔNG đổi:** `NGOAI_DUOC_PHEP_O_SAN_XUAT` vẫn hai dòng; `depcruise` 0 vi phạm.
+
+## ADR-022 — Trả bảy khoản nợ của tầng đăng nhập: **`/auth/link` chỉ enqueue, token phát trong handler outbox chạy TRONG tiến trình `api`; hạn mức theo người gọi đếm NGOÀI giao dịch của handler; đặt lại TOTP = XOÁ hồ sơ sau phê duyệt kép cưỡng chế ở CSDL; cookie `__Host-`; địa chỉ người gọi chỉ tin sau proxy khai CIDR**
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.12)** · Đóng: sổ nợ 38, 39,
+40, 41, 42, 43, 49 · Liên quan: ADR-010 (outbox), ADR-015, ADR-018, ADR-020, ADR-021, migration
+`038`/`039`/`040`/`041`, review S1.10 M-1/M-2/M-4/M-5/M-7/M-8/L-2 và lượt 2 H2-4; lượt 4 (H4-1…H4-12,
+`evidence/security-reviews.md` §S1.12) sửa trong cùng PR — các đoạn **[review H4-x]** dưới đây
+
+### 1. Nợ 38 — `/auth/link` không còn nhìn vào bảng người dùng
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Giữ handler, thêm "chờ giả" cho nhánh không có người dùng | Cân bằng RTT bằng tay là một lời khai; mỗi lần đổi câu lệnh phải cân lại. **Loại.** |
+| b | **Handler chỉ `enqueueJob(LOGIN_LINK_SEND, {email})` — MỘT INSERT cho MỌI email; handler outbox tra người dùng, phát token, gửi** | Cùng số câu lệnh cho cả hai nhánh, đo được bằng cách đếm job: mỗi lời gọi đúng một job. Hạn mức theo người dùng (5/15 phút) chuyển vào handler. Token KHÔNG nằm trong payload (ADR-015 mục 3: payload mang tham chiếu). **Chọn.** |
+
+**Runner ở đâu.** `JobRunner` (ADR-010) cần `listOrganizations`, và `app_api` không đọc được danh
+sách tổ chức (RLS). Tiến trình `api` biết tổ chức nào vừa enqueue — nên composition root giữ một
+tập `orgId` đã thấy, và `nudgeOutbox(orgId)` sau commit đánh thức `runOnceForOrg` **không await**
+(một `setImmediate`; awaiting nó trong pha sau-commit là đưa oracle trở lại dưới dạng khác). Vòng
+poll theo `pollIntervalMs` nhặt job còn sót (thử lại). Không worker riêng: một worker cần đọc danh
+sách tổ chức, tức cần một role vượt RLS hoặc một hàm SECURITY DEFINER — cả hai là quyết định lớn
+hơn khoản nợ này. Ghi giới hạn: nhiều instance thì job của instance A do A đánh thức; B chỉ nhặt
+nếu B cũng từng thấy tổ chức ấy. `KIND_KHONG_NHAN` của unseal-worker nhận `LOGIN_LINK_SEND` kèm lý do.
+
+**Cùng dòng nợ 38:** `createPool` có `statementTimeoutMs` (mặc định 15 s) — câu lệnh treo bị huỷ ở
+Postgres, không chỉ ở JS; ~~hai~~ ba lời gọi KMS trong giao dịch (`wrapTotpSecret`, `openTotpSecret`,
+và **[review H4-8]** `rfqKeyWrapper.wrap` ở `openRfq`) có TRẦN 5 s (`coHan`, cùng hàm với sau-commit)
+— chúng vẫn chạy trong giao dịch, và đó là phần chênh còn lại được nói ra.
+
+**[review H4-3] Email trong payload.** Hợp đồng payload của gói outbox cấm `email` — nó là PII do
+người gọi VÔ DANH chọn, và `outbox_jobs` chỉ lớn lên (`app_api` không có UPDATE payload lẫn DELETE).
+Migration `041`: trigger BEFORE UPDATE đưa payload của `LOGIN_LINK_SEND` về `{}` khi job kết thúc
+(DONE/FAILED) — sửa `NEW`, không nới ACL. Lớp hai: `/auth/link` đòi HÌNH DẠNG email trước khi
+enqueue (không lưu chuỗi tuỳ ý). Phần chênh: email nằm trong payload từ enqueue tới khi job xong, và
+trong log Postgres nếu cấu hình ghi tham số bind (007 §MỤC 1). **[review H4-10]** `send` có trần 5 s
+riêng (`BoGuiQuaHan`, ngắn hơn lease 60 s) nhưng vẫn nằm TRONG giao dịch của job: `send` xong mà
+kết cục không ghi được ⇒ link chết rồi email thứ hai — sổ nợ 53, làm khi có bộ gửi thật.
+
+### 2. Nợ 39 + 41 — người gọi là ai, và đếm ở đâu
+
+- **41:** `TRUSTPROCURE_TRUSTED_PROXIES` (CIDR, tuỳ chọn; rỗng = không proxy). `X-Forwarded-For` chỉ
+  được đọc khi địa chỉ SOCKET thuộc danh sách; đi từ PHẢI sang trái, bỏ qua mọi địa chỉ thuộc danh
+  sách, lấy địa chỉ đầu tiên không thuộc — không có thì dùng socket. Cài bằng `net.BlockList`
+  (không phụ thuộc ngoài). Header từ socket lạ bị bỏ qua hoàn toàn. Đo qua `sessions.ip`.
+- **39:** bucket `LOGIN_CALLER` trên `otp_rate_limits` (migration `038`), khoá `HMAC(pepper, org ‖
+  route ‖ ip)`, cửa sổ 15 phút, trần theo route (`/auth/link` ~~10~~ 30, `/auth/redeem` 30, `/auth/totp` 30).
+  **[review H4-4]** `ip` trong khoá là `khoaNguoiGoi(ip)`: IPv6 gom về /64 (mỗi khách dân dụng có ít
+  nhất một /64 — đếm theo địa chỉ nguyên vẹn là 2^64 bucket miễn phí); IPv4 giữ nguyên, và vì một
+  NAT văn phòng là MỘT địa chỉ, trần link lên 30 (trần chống lạm dụng hộp thư là 5/15 phút theo
+  người dùng, ở `issueLoginToken`). Chưa có trần toàn tổ chức — sổ nợ 52. **[review H4-5]** 429 LÀ
+  một oracle tồn tại tổ chức (tổ chức lạ không bị đếm) — chấp nhận, nói ra: `orgId` UUIDv4 không vét
+  cạn được; `Retry-After` cố ý là cả cửa sổ. **[review H4-9]** danh sách proxy từ chối tiền tố rộng
+  hơn /8 (v4) hay /7 (v6 — ULA `fc00::/7` vẫn hợp lệ) lúc khởi động; hop ghi `ip:port`/`[v6]:port`
+  được bỏ cổng thay vì rơi về socket (cả tổ chức chung một bucket, im lặng).
+  **Đếm ở dispatcher, trong một giao dịch RIÊNG trước handler:** giao dịch của handler rollback khi
+  token sai (`LoginTokenError`), nên đếm bên trong nó là đếm thành công chứ không đếm thử — bộ đếm
+  OTP của khách hôm nay đúng là như thế (ghi ra, chưa đổi). Vượt ⇒ 429 + `Retry-After`, handler
+  không chạy. Địa chỉ rỗng (không xác định) dùng chung MỘT bucket — fail-closed.
+
+### 3. Nợ 40 — đặt lại TOTP: hai người, và hồ sơ bị XOÁ chứ không bị sửa
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Đặt `confirmed_at = NULL` trên hồ sơ | 032 cấm đúng phép đổi ấy dưới `app_api` (H2-1), và bí mật cũ vẫn nằm đó: ai cầm bí mật cũ + hộp thư gọi thẳng `/auth/totp` là xác nhận lại được. **Loại.** |
+| b | **XOÁ hàng `mfa_credentials`** — `GRANT DELETE` cho `app_api` kèm trigger BEFORE DELETE (đường ứng dụng) đòi một `mfa_reset_requests` `APPROVED` chưa tiêu thụ cho đúng (org, user) | Không còn bí mật nào để xác nhận lại; lần đăng nhập kế ⇒ `needsEnrollment` ⇒ bí mật mới. 032 không cần chạm. Cùng giao dịch: thu hồi mọi phiên còn sống, đánh dấu yêu cầu đã tiêu thụ, hai bản ghi sổ. **Chọn.** |
+
+Bảng `mfa_reset_requests` theo khuôn `unseal_requests`/`unseal_approvals` (019): `requested_by`,
+`requested_by_session_id` (trigger 013 kiểm danh tính theo phiên), `approved_by` ≠ `requested_by` VÀ
+phiên khác (trigger, ERRCODE check_violation), hết hạn 24 giờ, lý do bắt buộc. Mã quyền
+`user.mfa_reset` cho `PROCUREMENT_MANAGER` và `DIRECTOR` (không chạm chuỗi D3/033). ~~Hai~~ Ba route:
+`POST /users/:userId/mfa-reset`, `POST /mfa-resets/:id/approve`, và **[review H4-2]** `POST
+/mfa-resets/:id/cancel`.
+
+**[review H4-1] "Hai người" phải là "hai người CÓ QUYỀN", ở CSDL.** Bản đầu cưỡng chế khác người,
+khác phiên, danh tính theo phiên — nhưng vế "có `user.mfa_reset`" chỉ ở `requirePermission`, tức ở
+tầng mà mô hình "app_api bị chiếm" giả định là mất: hai phiên BUYER sống bất kỳ là đủ để tự dựng
+yêu cầu, phê duyệt, DELETE. Nay trigger `mfa_reset_kiem_quyen` (BEFORE INSERT cho `requested_by`,
+BEFORE UPDATE khi `approved_by` được đặt) đọc `user_roles ⋈ role_permissions` như 033, vô điều kiện.
+Phần chênh còn lại: một `app_api` bị chiếm có hai phiên QUẢN LÝ sống vẫn làm được — trigger mua
+"hai người quản lý", không mua "hai người thật". **[review H4-2]** Yêu cầu hết hạn không tự rời
+PENDING, và chỉ mục "một yêu cầu đang chờ" sẽ khoá vĩnh viễn đường về của người ấy: `requestMfaReset`
+dọn yêu cầu đang chờ đã hết hạn trước khi tạo (`MFA_RESET_EXPIRED`), và route huỷ ghi
+`MFA_RESET_CANCELLED`.
+
+### 4. Nợ 42 + 43
+
+- **42:** `__Host-tp_session`, `__Host-tp_guest` — `Secure`, `Path=/`, không `Domain` (tiền tố đòi
+  thế; cookie khách rời `Path=/guest`, hai tên khác nhau nên một trình duyệt giữ cả hai vẫn ổn).
+  `docCookie` gặp tên lặp ⇒ bỏ tên ấy (401), không lấy cái đầu.
+- **43:** migration `039` — trigger BEFORE INSERT `sessions` (đường ứng dụng, `mfa_verified_at`
+  không NULL) đòi hồ sơ TOTP đã xác nhận có `last_used_counter ≥ bước hiện tại − 3` (bước 30 s của
+  `totp.ts` — CSDL nay biết hằng số ấy, ghi ra) **[review H4-6]** VÀ `≤ bước hiện tại + 3` — một bộ
+  đếm ở tương lai không được thoả mãn vĩnh viễn (bài học `assertFreshMfa`). Phần chênh, nói ra:
+  trigger chặn MỘT câu INSERT trần; `app_api` có `UPDATE (last_used_counter)` (006, `verifyTotpAttempt`
+  cần) nên HAI câu vẫn qua — cùng hạn chế 006 §(2), có test đo đúng phần chênh ấy. Bốn phép đo 006
+  dưới `app_api` được cho một hồ sơ TOTP tươi thay vì chuyển sang superuser — chúng vẫn đo `app_api`.
+
+### 5. Nợ 49 — bộ quét gọi route ghi bằng thân hợp lệ, bộ dò theo GIÁ TRỊ
+
+RFQ hy sinh đi qua DRAFT → OPEN với một lời mời; mỗi route ghi có một thân hợp lệ và một đích
+thật; khẳng định: không phản hồi nào là 422 "thiếu trường/sai kiểu", và ít nhất tám route trả 2xx.
+Bộ dò: rút mọi số (bỏ dấu phân cách, mở rộng `e`), giải mã mọi khối base64 ~~dài rồi quét lại~~
+**[review H4-11]** base64url (dạng token/cookie của dự án) và hex, sâu HAI tầng, rồi quét lại; đối
+chứng dương cho `980,000,000`, `9.8e8`, base64, base64url, hex, hai tầng. Không bắt được rò THỨ TỰ
+và mã hoá/nén khác ba dạng ấy — §4 của A2.
+
+### Đo bằng gì
+
+1. **38:** với email có và không có người dùng, `/auth/link` để lại đúng MỘT `outbox_jobs` mỗi lời
+   gọi và KHÔNG hàng `user_login_tokens` nào trước khi runner chạy; chạy runner ⇒ email có người
+   dùng nhận link, email lạ không; hạn mức 5/15 phút vẫn đứng (job thứ 6 chạy xong không gửi).
+2. **39:** lần thứ ~~11~~ 31 `/auth/link` từ cùng IP ⇒ 429 có `Retry-After`; `/auth/redeem` sai token 30
+   lần rồi lần 31 ⇒ 429 (đếm sống qua rollback); IP khác ⇒ vẫn 200. Đột biến bỏ bước đếm ⇒ lọt.
+   [H4-4] 30 địa chỉ IPv6 KHÁC NHAU cùng /64 rồi lần 31 ⇒ 429; /64 khác ⇒ 200.
+3. **41:** không proxy: XFF ⇒ `sessions.ip` = socket; có proxy tin cậy: XFF `a, b` với b tin cậy ⇒ a;
+   socket lạ gửi XFF ⇒ socket.
+4. **42:** `Set-Cookie` bắt đầu bằng `__Host-`, chứa `Path=/`, không `Domain`; header `Cookie` mang hai
+   `__Host-tp_session` ⇒ 401.
+5. **43:** app_api INSERT phiên đã-MFA khi `last_used_counter` cũ ⇒ 23514; tươi ⇒ đi qua; gỡ trigger
+   ⇒ cũ đi lọt; đăng nhập trọn qua HTTP vẫn xanh.
+6. **40:** BUYER ⇒ 403; PM tự duyệt ⇒ 422 (23514); PM2 duyệt ⇒ hồ sơ mất, phiên thu hồi, sổ có
+   `MFA_RESET_REQUESTED` + `MFA_RESET_APPROVED`; người ấy `/auth/redeem` ⇒ `needsEnrollment: true`;
+   app_api `DELETE mfa_credentials` không có yêu cầu ⇒ 23514; gỡ trigger ⇒ xoá được. [H4-1] app_api
+   với hai phiên BUYER ⇒ 23514 ở INSERT lẫn UPDATE; gỡ hai trigger quyền ⇒ đi lọt tới DELETE. [H4-2]
+   hết hạn ⇒ yêu cầu mới tạo được, cũ thành CANCELLED + `MFA_RESET_EXPIRED`; huỷ rồi duyệt ⇒ lỗi.
+8. **[H4-3]** sau runner, không hàng `outbox_jobs` DONE nào của `LOGIN_LINK_SEND` còn payload khác
+   `{}`; sáu chuỗi sai dạng ⇒ 422, không để lại job; gỡ trigger 041 ⇒ email nằm lại.
+7. **49:** đếm 422 "thiếu trường" = 0 trên route ghi; đối chứng dương ba dạng viết.

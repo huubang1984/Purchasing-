@@ -6,7 +6,38 @@ import { createLocalDevReceiptSigner, ReceiptSigningKeyRing, type ReceiptKeyPair
 import { createCipheriv, createDecipheriv } from "node:crypto";
 import type { TotpSecretUnsealer, WrappedTotpSecret } from "@trustprocure/identity";
 import { PepperRing, type Channel } from "@trustprocure/invitation";
+import { JobRunner, type JobFailureReport } from "@trustprocure/outbox";
+import type pg from "pg";
+import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
+
+/**
+ * [sổ nợ 38] Runner outbox của TEST: không poll, không đánh thức — test gọi `chay(orgId)` tường minh
+ * sau mỗi `/auth/link` để job chạy đúng lúc test muốn đo. `loi` gom báo cáo thất bại (tên lý do).
+ */
+export function outboxTest(pool: pg.Pool, services: ApiServices, tuyChon: { handlerTimeoutMs?: number } = {}): {
+  readonly chay: (orgId: string) => Promise<number>;
+  readonly loi: JobFailureReport[];
+} {
+  const loi: JobFailureReport[] = [];
+  const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
+    ...tuyChon,
+    onJobFailure: (b) => {
+      loi.push(b);
+    },
+  });
+  // Vét tới khi rỗng: một lượt chỉ nhặt một lô, và job của test trước (email lạ — chưa ai chạy) không
+  // được đứng trước job của test này.
+  const chay = async (orgId: string): Promise<number> => {
+    let tong = 0;
+    for (;;) {
+      const n = await runner.runOnceForOrg(orgId);
+      if (n === 0) return tong;
+      tong += n;
+    }
+  };
+  return { chay, loi };
+}
 
 export interface OtpDaGui {
   readonly channel: Channel;

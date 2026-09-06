@@ -94,6 +94,10 @@ apps/
                         trình dựng từ biến môi trường (fail-closed, adapter phải khai tên), pool
                         `SET ROLE app_api` mỗi kết nối, hai adapter dev (bọc TOTP, hộp thư dev).
                         Chưa có: adapter KMS, bộ gửi thật, bước build — ADR-021 §*Phần KHÔNG đóng*.
+                        [S1.12 / ADR-022] Runner outbox chạy TRONG tiến trình (`/auth/link` chỉ
+                        enqueue; `outbox-api.ts` phát token và gửi); cookie `__Host-`; địa chỉ
+                        người gọi sau proxy khai CIDR (`dia-chi.ts`); bucket theo người gọi cho
+                        `/auth/*` đếm ở dispatcher; đặt lại TOTP hai người (`040`).
   unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy

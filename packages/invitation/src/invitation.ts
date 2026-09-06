@@ -429,10 +429,29 @@ export interface IssueOtpInput {
   readonly pepper: PepperRing;
 }
 
+/**
+ * [sổ nợ 39 / migration 038] Cửa CÔNG KHAI của bộ đếm bucket, và nó chỉ mở ĐÚNG MỘT kind:
+ * `LOGIN_CALLER` — người gọi ba route đăng nhập người mua. Bốn kind của OTP khách ở lại trong gói:
+ * chúng là một phần của `issueOtpChallenge` (thứ tự tăng và phán quyết là thiết kế — khối [khoản nợ
+ * 35] bên dưới), và mở chúng ra là cho một handler ngoài gói tiêu ngân sách của khách.
+ *
+ * Trả về số lần ĐÃ ĐẾM trong cửa sổ hiện tại (kể cả lần này). Người gọi phán quyết; hàm này không
+ * ném vì vượt trần — cùng khuôn "đếm trước, phán sau" của [khoản nợ 35].
+ */
+export async function tangBucketHanMuc(
+  client: pg.PoolClient,
+  orgId: string,
+  kind: "LOGIN_CALLER",
+  khoa: string,
+  pepper: PepperRing,
+): Promise<number> {
+  return demVaTang(client, orgId, kind, khoa, pepper);
+}
+
 async function demVaTang(
   client: pg.PoolClient,
   orgId: string,
-  kind: "DEST" | "DEST_ORG" | "CALLER" | "INVITATION",
+  kind: "DEST" | "DEST_ORG" | "CALLER" | "INVITATION" | "LOGIN_CALLER",
   khoa: string,
   pepper: PepperRing,
 ): Promise<number> {

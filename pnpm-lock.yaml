@@ -53,6 +53,9 @@ importers:
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
       '@trustprocure/rfq':
         specifier: workspace:*
         version: link:../../packages/rfq
