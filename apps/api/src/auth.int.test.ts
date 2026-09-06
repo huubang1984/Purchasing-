@@ -480,10 +480,12 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
 });
 
 describe("[review H2-7] [sổ nợ 38] bộ gửi treo không chạm được phản hồi — và job treo có trần", () => {
-  it("bộ gửi link TREO ⇒ /auth/link về 200 ngay (handler không gọi bộ gửi); job của nó hết hạn với lý do HANDLER_TIMEOUT; không log nào mang token", async () => {
+  it("bộ gửi link TREO ⇒ /auth/link về 200 ngay (handler không gọi bộ gửi); ~~job của nó hết hạn với lý do HANDLER_TIMEOUT~~ [nợ 53] job DONE, việc gửi sau commit quá hạn ⇒ AFTER_COMMIT_FAILED; không log nào mang token", async () => {
     // ~~Bản trước: `await viec()` không trần; bộ gửi treo ⇒ email CÓ THẬT treo vô hạn, email lạ về ngay.~~
     // [sổ nợ 38] Handler HTTP không còn gọi bộ gửi — nó chỉ enqueue — nên một bộ gửi treo KHÔNG có cách
     // nào chạm vào RTT của phản hồi. Cái còn có trần là JOB: runner cắt handler theo `handlerTimeoutMs`.
+    // [sổ nợ 53] Gửi nay là việc SAU COMMIT: job đã DONE, token đã commit, phần gửi quá hạn được báo
+    // riêng và không thử lại.
     await taoNguoi("treo@vidu.vn");
     const treo = { name: "bo-gui-treo", send: () => new Promise<void>(() => undefined) };
     const dvTreo = { ...dv.services, loginLinkSender: treo };
@@ -502,12 +504,49 @@ describe("[review H2-7] [sổ nợ 38] bộ gửi treo không chạm được ph
       expect(Date.now() - batDau).toBeLessThan(3000);
       expect(logLoi.slice(truoc)).toHaveLength(0);
       await obTreo.chay(orgA);
-      expect(obTreo.loi.map((b) => b.reason)).toEqual(["HANDLER_TIMEOUT"]);
+      expect(obTreo.loi.map((b) => b.reason)).toEqual(["AFTER_COMMIT_FAILED"]);
+      expect(obTreo.loi[0]?.gaveUp).toBe(false);
+      const { rows: jobTreo } = await db.pool.query<{ status: string; last_failure_reason: string | null }>(
+        "SELECT status, last_failure_reason FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' ORDER BY created_at DESC LIMIT 1",
+        [orgA],
+      );
+      expect(jobTreo[0]).toEqual({ status: "DONE", last_failure_reason: null });
       // Không dòng log nào (của dispatcher lẫn runner test) mang email hay token.
       expect(logLoi.slice(truoc).join("\n")).not.toContain("treo@vidu.vn");
     } finally {
       await new Promise<void>((xong) => s2.close(() => xong()));
     }
+  });
+});
+
+describe("[sổ nợ 53 / ADR-023] gửi link là việc SAU COMMIT", () => {
+  it("tại lúc `send` được gọi, token ĐÃ COMMIT (đếm được từ pool khác) và job đã DONE; gửi hỏng ⇒ job vẫn DONE, AFTER_COMMIT_FAILED, không email thứ hai", async () => {
+    await taoNguoi("saucommit@vidu.vn");
+    const demToken = async (): Promise<number> =>
+      Number((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM user_login_tokens WHERE org_id = $1", [orgA])).rows[0]?.n);
+    const truoc = await demToken();
+    const thayLucGui: { token: number; job: string | undefined }[] = [];
+    const guiRoiHong = {
+      name: "bo-gui-do-truoc-commit",
+      send: async () => {
+        // ~~Trước nợ 53: token nằm trong giao dịch CHƯA commit của job ⇒ pool khác đếm được `truoc`.~~
+        const { rows } = await db.pool.query<{ status: string }>(
+          "SELECT status FROM outbox_jobs WHERE org_id = $1 AND kind = 'LOGIN_LINK_SEND' ORDER BY created_at DESC LIMIT 1",
+          [orgA],
+        );
+        thayLucGui.push({ token: await demToken(), job: rows[0]?.status });
+        throw new Error("SMTP hong");
+      },
+    };
+    const obHong = outboxTest(apiPool, { ...dv.services, loginLinkSender: guiRoiHong });
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "saucommit@vidu.vn" } })).status).toBe(200);
+    expect(await obHong.chay(orgA)).toBe(1);
+    expect(thayLucGui).toEqual([{ token: truoc + 1, job: "DONE" }]);
+    expect(obHong.loi.map((b) => [b.reason, b.gaveUp])).toEqual([["AFTER_COMMIT_FAILED", false]]);
+    // Không thử lại: lượt chạy sau không nhặt gì, không token thứ hai, bộ gửi không được gọi lần hai.
+    expect(await obHong.chay(orgA)).toBe(0);
+    expect(await demToken()).toBe(truoc + 1);
+    expect(thayLucGui).toHaveLength(1);
   });
 });
 

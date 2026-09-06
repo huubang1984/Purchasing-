@@ -9,9 +9,10 @@
 //
 // Payload mang THAM CHIẾU (email), không mang token (ADR-015 mục 3): token sinh ra ở đây, trong
 // giao dịch của job, và đi thẳng tới bộ gửi. Hạn mức theo người dùng (5 token / 15 phút) vẫn do
-// `issueLoginToken` giữ — job thứ sáu chạy xong mà không gửi gì. At-least-once: một lần gửi hỏng
+// `issueLoginToken` giữ — job thứ sáu chạy xong mà không gửi gì. ~~At-least-once: một lần gửi hỏng
 // làm job thất bại và chạy lại; lần chạy lại phát MỘT token mới (token trước còn hiệu lực tới khi
-// hết hạn, chưa từng rời tiến trình) — hạn mức 5/15 phút chặn đường lạm dụng.
+// hết hạn, chưa từng rời tiến trình) — hạn mức 5/15 phút chặn đường lạm dụng.~~ [sổ nợ 53] Gửi là
+// việc SAU COMMIT (xem `SEND_TIMEOUT_MS`): token commit trước, gửi sau, không thử lại.
 //
 // `KIND_KHONG_NHAN` của apps/unseal-worker liệt kê kind này kèm lý do: worker mở thầu chạy dưới
 // `app_unseal`, không đọc được `users`, và cũng không phải nơi giữ bộ gửi.
@@ -25,10 +26,13 @@ import type { ApiServices } from "./route-types.js";
 export const LOGIN_LINK_SEND_KIND = "LOGIN_LINK_SEND";
 
 /**
- * [review H4-10] Trần RIÊNG cho bộ gửi, ngắn hơn lease của runner (60 s): một bộ gửi thật treo giữ
- * một kết nối pool `api` suốt thời gian ấy, và mười job treo là mọi HTTP 500. Phần chênh còn lại,
+ * [review H4-10] Trần RIÊNG cho bộ gửi, ngắn hơn lease của runner (60 s). ~~Phần chênh còn lại,
  * nói ra ở ADR-022 §1: gửi vẫn nằm TRONG giao dịch của job (at-least-once — `send` xong mà kết cục
- * không ghi được ⇒ email đã đi mang token bị rollback, rồi một email thứ hai).
+ * không ghi được ⇒ email đã đi mang token bị rollback, rồi một email thứ hai).~~ [sổ nợ 53 / ADR-023]
+ * `send` nay là VIỆC SAU COMMIT: handler phát token trong giao dịch và TRẢ VỀ hàm gửi; runner gọi
+ * hàm ấy sau khi token + dấu DONE đã commit, ngoài giao dịch, không giữ kết nối. Link trong email
+ * vì thế luôn trỏ tới một token đã tồn tại. Đổi lại: gửi hỏng ⇒ `AFTER_COMMIT_FAILED`, không thử
+ * lại (token nằm đó tới hết hạn, chưa từng rời tiến trình; người dùng gọi lại `/auth/link`).
  */
 export const SEND_TIMEOUT_MS = 5000;
 
@@ -50,7 +54,7 @@ export function buildApiOutboxHandlers(services: Pick<ApiServices, "loginLinkSen
       const kq = await issueLoginToken(client, job.orgId, { email });
       // Không có người dùng / bị hạn mức: job xong, không gửi gì — và không ai ngoài sổ biết.
       if (!kq.ok) return;
-      await coHan(() => services.loginLinkSender.send({ orgId: job.orgId, email: kq.email, token: kq.token }), SEND_TIMEOUT_MS, "BoGuiQuaHan");
+      return () => coHan(() => services.loginLinkSender.send({ orgId: job.orgId, email: kq.email, token: kq.token }), SEND_TIMEOUT_MS, "BoGuiQuaHan");
     },
   };
 }
