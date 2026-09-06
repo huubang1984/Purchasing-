@@ -24,7 +24,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const CI = readFileSync(fileURLToPath(new URL("../../.github/workflows/ci.yml", import.meta.url)), "utf8");
+// Chuẩn hoá xuống dòng TRƯỚC khi đo. `.gitattributes` cố ý chỉ ghim `*.sql` và
+// `evidence/INV-matrix.md` (khoản nợ 10), nên một checkout MỚI trên Windows với
+// `core.autocrlf=true` cho `ci.yml` dạng CRLF — và `\n  t0:\n` không còn khớp. Đã xảy ra thật:
+// run 33978573210, job windows-latest đỏ cả ba khẳng định với "không tìm thấy job", trong khi
+// máy phát triển (worktree có sẵn file LF) xanh. Bảo đảm này nói về HÌNH DẠNG của ci.yml, không
+// về byte xuống dòng của nó — nên phép đo phải mù với byte ấy.
+const CI = readFileSync(
+  fileURLToPath(new URL("../../.github/workflows/ci.yml", import.meta.url)),
+  "utf8",
+).replace(/\r\n/gu, "\n");
 
 /** Thân của một job, từ dòng khai tên job tới job kế tiếp cùng mức thụt đầu dòng. */
 function thanJob(ten: string): string {

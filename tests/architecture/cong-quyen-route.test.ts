@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // =============================================================================================
@@ -276,24 +276,62 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
   //
   // [S1.6] `apps/unseal-worker` ra đời, và khẳng định ấy đỏ ở đúng lượt chạy đầu tiên sau đó.
   // ============================================================================================
-  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ MÃ, và lớp trên vừa quét nó thật", () => {
+  // ============================================================================================
+  // *** KHẲNG ĐỊNH THỨ HAI CŨNG ĐÃ ĐỎ ĐÚNG NGÀY NÓ ĐƯỢC HẸN. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU. ***
+  //
+  //   const coRoute = cacTep.some((t) => !t.includes("unseal-worker"));
+  //   expect(coRoute, "Nếu câu này đỏ thì `apps/` đã có một app KHÁC ngoài worker — hãy đọc lại
+  //       khối chú thích trên và viết lại phần chênh cho đúng thứ vừa ra đời.").toBe(false);
+  //
+  // [khoản nợ 30] `apps/public-keys` ra đời ở commit 623458b, và khẳng định ấy đỏ ở lượt CI đầu
+  // tiên sau đó (run 33978573210, cả ubuntu lẫn windows) — commit ấy không chạy lại tầng T1
+  // trước khi đẩy, nên chính CI là nơi mốc chết này nổ. Đúng việc nó sinh ra để làm.
+  // ============================================================================================
+  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ HAI APP, và CẢ HAI đều đúng là không mang cổng quyền", () => {
     const cacTep = quetTepTs(THU_MUC_APPS);
     expect(cacTep.length, "apps/ phải có ít nhất một module .ts đã vào kho").toBeGreaterThan(0);
 
-    // ... NHƯNG phát biểu đúng mức vẫn phải nói ra phần chênh, và nó KHÔNG nhỏ: thứ vừa ra đời là
-    // một WORKER, không phải một ROUTE. Nó không nhận request HTTP, không có người dùng cuối, và
-    // nó chạy dưới `app_unseal` — một role cố ý không đọc được `users` hay ma trận quyền, nên một
-    // câu `requirePermission` ở đó là câu KHÔNG VIẾT ĐƯỢC.
+    // Phần chênh, viết lại cho đúng thứ đang có — và nó VẪN không nhỏ:
     //
-    // Tức lớp này nay quét mã THẬT, và mã thật ấy đúng là không được phép mang cổng quyền. Vế
-    // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh; nó chỉ
-    // thôi rỗng ruột về mặt PHẠM VI QUÉT. Ngày `apps/api` ra đời mới là ngày nó có nghĩa trọn vẹn.
-    const coRoute = cacTep.some((t) => !t.includes("unseal-worker"));
+    //   ⑴ `apps/unseal-worker` là một WORKER: không nhận request HTTP, không có người dùng cuối,
+    //      chạy dưới `app_unseal` — role cố ý không đọc được ma trận quyền, nên `requirePermission`
+    //      ở đó là câu KHÔNG VIẾT ĐƯỢC.
+    //   ⑵ `apps/public-keys` là app HTTP ĐẦU TIÊN của kho, nhưng nó CHỈ ĐỌC và KHÔNG XÁC THỰC:
+    //      nó phục vụ khoá CÔNG KHAI, không chạm CSDL, không gọi một hàm đổi trạng thái nào, và
+    //      không có người dùng nào để hỏi quyền. Một cổng quyền ở đó là một cổng canh cửa vào
+    //      một căn phòng trống.
+    //
+    // Tức lớp này quét mã THẬT của hai app, và cả hai đúng là không được phép mang cổng quyền. Vế
+    // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh. Ngày
+    // `apps/api` ra đời — route đầu tiên nhận một phiên NGƯỜI DÙNG và gọi một hàm ghi — mới là
+    // ngày nó có nghĩa trọn vẹn, và ngày ấy khẳng định dưới đây phải đỏ rồi được viết lại lần nữa.
+    const APP_DA_BIET = ["unseal-worker", "public-keys"] as const;
+    const tepNgoaiDanhSach = cacTep.filter(
+      (t) => !APP_DA_BIET.some((app) => t.includes(`${THU_MUC_APPS}${sep}${app}${sep}`)),
+    );
     expect(
-      coRoute,
-      "Nếu câu này đỏ thì `apps/` đã có một app KHÁC ngoài worker — hãy đọc lại khối chú thích " +
-        "trên và viết lại phần chênh cho đúng thứ vừa ra đời.",
-    ).toBe(false);
+      tepNgoaiDanhSach,
+      "Nếu câu này đỏ thì `apps/` đã có một app THỨ BA — hãy đọc lại khối chú thích trên và viết " +
+        "lại phần chênh cho đúng thứ vừa ra đời. Nếu thứ vừa ra đời là `apps/api`, đây là ngày " +
+        "ADR-016 mục 4 hẹn: route đầu tiên phải ra đời CÙNG LÚC với cổng quyền của nó.",
+    ).toEqual([]);
+
+    // Đối chứng cho vế ⑵, để "public-keys không mang cổng quyền" là một PHÉP ĐO chứ không phải
+    // một câu trong chú thích: mã nguồn của nó không gọi một hàm đổi trạng thái nào — tức nó rơi
+    // vào ca "không có gì để canh", không phải ca "có thứ để canh mà không canh".
+    const tepPublicKeys = cacTep.filter((t) => t.includes(`${sep}public-keys${sep}`));
+    expect(tepPublicKeys.length, "apps/public-keys phải có mã đã vào kho").toBeGreaterThan(0);
+    for (const tep of tepPublicKeys) {
+      const ma = readFileSync(tep, "utf8");
+      const hamGhiDuocGoi = HAM_DOI_TRANG_THAI.filter((ten) =>
+        new RegExp("\\b" + ten + "\\s*\\(").test(ma),
+      );
+      expect(
+        hamGhiDuocGoi,
+        `${tep.slice(GOC.length)} gọi hàm đổi trạng thái — app "chỉ đọc" không còn chỉ đọc nữa, ` +
+          "và phần chênh ở trên đã sai.",
+      ).toEqual([]);
+    }
   });
 });
 
