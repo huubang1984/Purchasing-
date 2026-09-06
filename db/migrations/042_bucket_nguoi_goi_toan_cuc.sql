@@ -56,7 +56,12 @@ ALTER TABLE caller_rate_limits FORCE ROW LEVEL SECURITY;
 -- PERMISSIVE duy nhất của bảng phát biểu đúng vế ấy — "mọi hàng, trừ phiên khách" — thay vì `true`
 -- cộng một RESTRICTIVE nói cùng một điều. Một phiên khách chạm vào bảng này thấy 0 hàng và ghi
 -- không được: fail-closed, và fail-closed ấy nằm trong CHÍNH policy chứ không ở một lớp thứ hai.
-CREATE POLICY caller_rate_limits_khong_phai_khach ON caller_rate_limits
+--
+-- TÊN `_khach` là bắt buộc, không phải khẩu vị: `tests/adversarial/a5-co-lap-nha-cung-cap.int.test.ts`
+-- quét MỌI bảng có RLS và đòi một policy tên `<bảng>_khach` — vế chống-mù của khoản nợ 29. Bảng này
+-- là bảng ĐẦU TIÊN mà policy ấy PERMISSIVE chứ không RESTRICTIVE, đúng vì nó là policy DUY NHẤT:
+-- một bảng chỉ có policy restrictive là một bảng không đọc được.
+CREATE POLICY caller_rate_limits_khach ON caller_rate_limits
   USING (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL)
   WITH CHECK (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL);
 
