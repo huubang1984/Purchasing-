@@ -924,7 +924,7 @@ describe("migration của dự án", () => {
       await db.pool.query("DROP FUNCTION public.mfa_credentials_xoa_can_yeu_cau() CASCADE");
       await db.pool.query("DROP FUNCTION public.sessions_kiem_mfa_khi_tao() CASCADE");
       await db.pool.query("DROP TRIGGER mfa_reset_requests_kiem_danh_tinh_duyet ON public.mfa_reset_requests");
-      expect((await db.pool.query("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()') AS o")).rows[0]?.o).toBeNull();
+      expect((await db.pool.query<{ o: string | null }>("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()')::text AS o")).rows[0]?.o).toBeNull();
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
       const { rows: dungLai } = await db.pool.query<{ ten: string; than: string; trg: string }>(
         `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than,
