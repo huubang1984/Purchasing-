@@ -697,6 +697,16 @@ CMK, chưa có role nào được tạo.
     **Bài học, ghi để không lặp:** lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD
     sắp đẩy. Một lượt đo trên cây mã cũ là bằng chứng cho cây mã cũ.
 
+    **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
+    `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng
+    `git rev-list --count b1a9a8b^1..b1a9a8b^2`, và GitHub cũng đếm 44. Số 91 đến từ phép đếm
+    `master..s1-planning` trên nhánh `master` CỤC BỘ đang thiu ở `0b073d2` (trước cả merge S0),
+    nên nó gộp luôn 46 commit của S0 và merge commit `30d1972`. Cùng họ lỗi với §*Trạng thái
+    kiểm thử* đoạn *"hoà giải hai cách đếm"*: một con số đúng trong phạm vi của nó, đem ra khỏi
+    phạm vi thì sai. Merge commit đã nằm trên `master` và sửa nó là viết lại lịch sử, nên câu
+    này là bản đối chiếu, không phải bản sửa. Số commit của PR #1 (S0) là 46, của PR #2 (S1) là
+    **44**; tổng lịch sử `master` sau hai lần merge: 92 commit trên `0b073d2`.
+
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
 > mục 8 của bảng điều kiện hoàn thành — một ví dụ sống cho việc một câu sai trong tài liệu trạng
