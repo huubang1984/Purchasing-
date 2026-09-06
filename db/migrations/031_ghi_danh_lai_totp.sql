@@ -1,0 +1,26 @@
+-- =============================================================================================
+-- 031 — [S1.10.7 / review M-5] GHI DANH LẠI TOTP cho hồ sơ CHƯA XÁC NHẬN
+-- =============================================================================================
+-- Review an ninh S1.10 (M-5) chỉ ra: ghi danh TOTP ở `/auth/redeem` xảy ra bằng MỘT yếu tố (magic
+-- link), và một hồ sơ đã INSERT thì không đường nào thay được — ai đọc trộm hộp thư trước lần
+-- đăng nhập đầu chiếm yếu tố thứ hai VĨNH VIỄN, còn người mua thật thấy `needsEnrollment: false`
+-- và không có bí mật. Cột `confirmed_at` (006) đã có sẵn đúng thứ cần: nó chỉ được đóng ở lần
+-- TOTP thành công ĐẦU TIÊN, tức "hồ sơ chưa xác nhận" = "chưa ai chứng minh đã cầm bí mật".
+--
+-- File này cấp cho `app_api` quyền THAY bí mật — ~~và CHỈ khi hồ sơ chưa xác nhận là do câu UPDATE
+-- ở `packages/identity/src/login.ts` (`enrollOrReplaceTotpForLogin`) giữ bằng vế `WHERE
+-- confirmed_at IS NULL`; GRANT không biết trạng thái, nên vế ấy có test kèm đột biến.~~ Hồ sơ ĐÃ xác
+-- nhận vẫn không thay được ở tầng ứng dụng — đường đặt lại cho người mất bí mật là sổ nợ 40.
+--
+-- [review lượt 2, H2-1 — cùng ngày] Câu gạch trên SAI ở hai chỗ: GRANT này cho một `app_api` bị
+-- chiếm thay bí mật của hồ sơ ĐÃ xác nhận, và "test kèm đột biến" xanh vì câu UPDATE của test tự
+-- mang `WHERE confirmed_at IS NULL`. Lớp CSDL thật nằm ở `032` (trigger BEFORE UPDATE), và test đã
+-- được viết lại để câu đột biến KHÔNG mang vế WHERE ấy.
+--
+-- KHÔNG có trigger "phiên phải kèm bằng chứng TOTP" ở đây (review M-4 đề xuất): bộ test lược đồ
+-- của 006 chèn `sessions` dưới `app_api` để đo khoá ngoại/CHECK/UNIQUE, và một trigger đòi hồ sơ
+-- TOTP có bộ đếm trong 90 giây làm tám phép đo ấy rỗng ruột. Vế KIỂU của M-4 (`startUserSession`
+-- đòi `MfaProof` chỉ `verifyTotpForLogin` tạo được) đã đóng; vế CSDL là sổ nợ 43.
+-- =============================================================================================
+
+GRANT UPDATE (secret_wrapped, secret_key_version) ON mfa_credentials TO app_api;

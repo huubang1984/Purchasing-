@@ -422,3 +422,21 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    LÊN.** Lệnh cuối trước `git push` phải là lệnh đo trên đúng HEAD sắp đẩy, và hai mốc chết ở
    đây nổ đúng như thiết kế — đó là điều đáng ghi, không phải điều đáng giấu.
 
+6. **[2026-09-06] VÒNG S1.10 ĐÃ BẮT ĐẦU, và hạng mục 10.2 đã có mã.** ADR-020 (tầng HTTP: `node:http`
+   trần + bảng route KHAI BÁO, phiên người mua bằng magic link email + TOTP, token vào fragment,
+   đường khách chỉ nhận `client` đã gắn phiên) chốt cùng ngày; kế hoạch bảy hạng mục ở
+   `docs/superpowers/plans/2026-09-06-s1.10-tang-http.md`. `apps/api` ra đời với bốn route đo khung,
+   lớp canh `g9-`, sổ đăng ký nở lên **51** (H17), độ phủ **50/51**. Chi tiết và ba thứ tìm ra bằng
+   cách chạy: `docs/STATE.md` §*Hành động tiếp theo* mục 15–16. Người tiếp theo bắt đầu ở **S1.10.3**
+   (đường khách) hoặc **S1.10.4** (đăng nhập người mua ⭐) — hai hạng mục ấy độc lập nhau.
+
+7. **[2026-09-06, cuối ngày] S1.10 ĐÃ ĐI HẾT BẢY HẠNG MỤC.** Độ phủ **51/51** — danh sách được-phép-
+   chưa-phủ RỖNG lần đầu; kịch bản mục 41 chạy trọn **qua HTTP** với năm lần đăng nhập TOTP thật và
+   năm phiên khách thật; hai lượt security-reviewer (10.3+10.4; 10.5+10.6+vòng sửa) ở
+   `evidence/security-reviews.md`. Sổ nợ nhận ~~**38–43**~~ **38–49** (lượt 2 thêm 44–49; **44 là một
+   QUYẾT ĐỊNH đang chờ**: PM giữ cả `policy.manage` lẫn `rfq.create`) — toàn bộ là phần chênh review
+   chỉ ra và được viết thành tên. Lượt 2 bắt được BA chỗ vòng sửa 1 đóng sai (M-4, M-5/031, §4 A2)
+   — đã sửa, migration `032`. Ba thứ đọc trước khi tin con số 51/51: A2 mang cờ §4 (heap/APM chưa đo); E6
+   mang cờ (trang `/i#<token>` là tầng web chưa có); đường ghi của khách chạy dưới `withTenant`
+   không GUC (lý do đo được ở 028). Chi tiết: `docs/STATE.md` mục 16–21.
+

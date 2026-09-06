@@ -363,6 +363,8 @@ describe("hình dạng file migration", () => {
       "suppliers",
       "unseal_approvals",
       "unseal_requests",
+      // [S1.10.4 / 029] token đăng nhập người mua — bảng tenant thứ 28.
+      "user_login_tokens",
       "user_roles",
       "users",
       "vendor_bid_versions",

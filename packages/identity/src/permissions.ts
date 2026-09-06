@@ -59,6 +59,13 @@ export const PERMISSIONS = {
   AWARD_RECOMMEND: "award.recommend",
   PO_APPROVE: "po.approve",
   SUPPLIER_MANAGE: "supplier.manage",
+  /**
+   * [S1.10.5 / 030 / ADR-017] Tạo phiên bản chính sách mua sắm — ngưỡng phê duyệt kép. ADR-017 để
+   * ngỏ "ai được sửa chính sách"; chốt cùng ADR-020: chỉ `PROCUREMENT_MANAGER`. Không cấp cho
+   * `BUYER` (người khai ước lượng không được là người đặt ngưỡng mà ước lượng bị so với) và không
+   * cấp cho `DIRECTOR` (cùng lý do 023 không cấp `rfq.open`).
+   */
+  POLICY_MANAGE: "policy.manage",
   AUDIT_READ: "audit.read",
   /**
    * [vòng fix 1 — A3] Gán và thu hồi vai trò cho người dùng trong tổ chức.

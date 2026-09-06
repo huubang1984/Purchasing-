@@ -106,5 +106,33 @@ export {
 export {
   SessionInvalidError,
   resolveSessionActor,
+  // [ADR-020 / S1.10.2] Đường "cookie → phiên" của tầng HTTP. Cùng tiêu chí với hai symbol trên:
+  // apps/api không có cách nào tra `sessions` mà không đi qua đây, và đó là điều mong muốn.
+  resolveSessionByToken,
   type SessionActor,
 } from "./session-actor.js";
+// ============================================================================================
+// [ADR-020 mục 2 / S1.10.4] Nửa PHÁT của khoản nợ 6. Cùng tiêu chí với khối trên: mọi hàm ở đây
+// NÉM một `LoginTokenError` duy nhất khi không thoả; `issueLoginToken` là ngoại lệ có chủ đích —
+// nó trả `{ ok: false }` thay vì ném để route `/auth/link` không có cách nào lỡ tay phân biệt
+// "không có người dùng" với "đã gửi" trước kẻ liệt kê email.
+// ============================================================================================
+export {
+  LOGIN_MAX_TOKENS_PER_WINDOW,
+  LOGIN_RATE_WINDOW_SECONDS,
+  LOGIN_TOKEN_TTL_SECONDS,
+  LoginTokenError,
+  USER_SESSION_DEFAULT_TTL_SECONDS,
+  enrollOrReplaceTotpForLogin,
+  issueLoginToken,
+  redeemLoginToken,
+  revokeSession,
+  startUserSession,
+  verifyTotpForLogin,
+  type IssueLoginTokenOutcome,
+  type LoginTotpResult,
+  // [review H2-5] CHỈ KIỂU: xuất lớp dưới dạng giá trị là để lộ đường tạo bằng chứng giả từ ngoài.
+  type MfaProof,
+  type RedeemedLoginToken,
+  type StartedUserSession,
+} from "./login.js";

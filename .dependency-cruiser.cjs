@@ -42,6 +42,10 @@ const { ci, ciFile, ciPrefix } = require("./dependency-cruiser-ci.cjs");
 
 const CRYPTO_KEYS_SRC_PREFIX = ciPrefix("packages/crypto-keys/src/");
 const APPS_UNSEAL_WORKER_PREFIX = ciPrefix("apps/unseal-worker/");
+// [ADR-020 / S1.10.2] Ho "g9-": handler cua apps/api KHONG duoc cham tang CSDL/tenancy.
+const APPS_API_ROUTES_PREFIX = ciPrefix("apps/api/src/routes/");
+const TENANCY_PKG_PREFIX = ciPrefix("packages/tenancy/");
+const DB_PKG_PREFIX = ciPrefix("packages/db/");
 const BENCH_KEYPROVIDER_SRC_PREFIX = ciPrefix("tools/bench-keyprovider/src/");
 const INDEX_TS = ciFile("packages/crypto-keys/src/index.ts");
 const UNWRAP_TS = ciFile("packages/crypto-keys/src/unwrap.ts");
@@ -184,6 +188,31 @@ const CRYPTO_KEYS_PKG_PREFIX = ciPrefix("packages/crypto-keys/");
 
 module.exports = {
   forbidden: [
+    // ------------------------------------------------------------------------------------------
+    // [ADR-020 muc 4 / S1.10.2] HO "g9-" — handler cua apps/api chi nhan `ctx.client` DA GAN phien.
+    //
+    // A5 §4 ve 1 noi: "mot duong phuc vu khach quen gan phien thi vi tu tra NULL va policy mo lai
+    // — hom nay khong co tang HTTP nao de cuong che viec gan ay". Cach cuong che duoc chon KHONG
+    // phai "nho gan": la lam cho handler KHONG THE tu mo ket noi. `apps/api/src/routes/**` vi the
+    // bi cam import packages/tenancy (withTenant/withGuestSession) va packages/db (createPool);
+    // noi duy nhat duoc goi chung la apps/api/src/dispatch.ts. `pg` va `node:http` la module
+    // ngoai/loi nen khong nam trong do thi cruise (exclude node_modules) — hai ten ay do
+    // `apps/api/src/routes.test.ts` canh bang cach doc ma nguon, cung khuon cong-quyen-route.
+    //
+    // TIEN TO "g9-" LA MOT GIAO UOC MAY DOC DUOC nhu g1-..g8-: routes.test.ts co mot probe viet
+    // file that vao routes/ roi chay depcruise, doi quy tac nay DO.
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g9-api-routes-khong-cham-tenancy-va-db",
+      comment:
+        "Handler trong apps/api/src/routes/ khong duoc import packages/tenancy hay packages/db. " +
+        "Gan to chuc / gan phien khach / mo pool la viec cua apps/api/src/dispatch.ts — noi DUY " +
+        "NHAT. Mot handler tu mo withTenant la mot handler co the quen withGuestSession, tuc dung " +
+        "lo A5 §4 ve 1 (ADR-020 muc 4).",
+      severity: "error",
+      from: { path: APPS_API_ROUTES_PREFIX },
+      to: { path: [TENANCY_PKG_PREFIX, DB_PKG_PREFIX] },
+    },
     {
       name: "g3-identity-khong-co-nang-luc-mat-ma",
       comment:

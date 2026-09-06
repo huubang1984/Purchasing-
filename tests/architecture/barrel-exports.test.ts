@@ -190,6 +190,24 @@ const DANH_SACH_TRANG_IDENTITY = [
   "generateTotpSecret",
   "requirePermission",
   "resolveSessionActor",
+  // [ADR-020 / S1.10.2] cookie -> phien, bang bam. Cung tieu chi voi resolveSessionActor.
+  "resolveSessionByToken",
+  // [ADR-020 muc 2 / S1.10.4] nua PHAT cua khoan no 6: token dang nhap, TOTP cho dang nhap
+  // (tra no ADR-008 phuong an ii), phien DA MFA, dang xuat. Khong ham nao nhan userId lam
+  // loi khai — userId DAN XUAT tu token.
+  "LOGIN_MAX_TOKENS_PER_WINDOW",
+  "LOGIN_RATE_WINDOW_SECONDS",
+  "LOGIN_TOKEN_TTL_SECONDS",
+  "LoginTokenError",
+  // [review H2-5] `MfaProof` xuat CHI KIEU (export type) — khong co mat trong Object.keys(), va do
+  // la dieu duoc do: mot lan xuat lai duoi dang gia tri se lam danh sach nay lech.
+  "USER_SESSION_DEFAULT_TTL_SECONDS",
+  "enrollOrReplaceTotpForLogin",
+  "issueLoginToken",
+  "redeemLoginToken",
+  "revokeSession",
+  "startUserSession",
+  "verifyTotpForLogin",
   "verifyTotpAttempt",
 ];
 
@@ -489,6 +507,11 @@ const DANH_SACH_TRANG_INVITATION = [
   "issueMagicLinkToken",
   "issueOtpChallenge",
   "redeemMagicLink",
+  // [ADR-020 / S1.10.2] Nhận TOKEN PHIÊN KHÁCH (thứ chỉ tồn tại SAU khi OTP đã đối chiếu) và trả
+  // `guest_sessions.id` cho `withGuestSession`. Nó KHÔNG nhận magic link và KHÔNG mở phiên — tức
+  // không phải ca "nhận token, trả phiên" mà khối chú thích trên cảnh báo; nó chỉ tra một phiên
+  // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
+  "resolveGuestSessionByToken",
   "revokeInvitation",
   "verifyOtpAndStartSession",
 ];

@@ -60,6 +60,7 @@
 | **B3** | Người mua **khai ước lượng trung thực** | ADR-017 §*Điều KHÔNG đóng* | Né phê duyệt kép bằng cách khai thấp — **không lớp nào ở S1 chặn**, cùng họ với chia nhỏ đơn hàng. Thứ bắt được nó thuộc S2/S3 | *"Nếu một người mua muốn tránh phải xin hai chữ ký, anh nghĩ họ sẽ làm gì?"* |
 | **B4** | Tổ chức có **đủ người** để tách vai: người tạo ≠ hai người duyệt | `011` `rfq_kiem_nguoi_duyet`; D3 | Doanh nghiệp nhỏ có thể chỉ có **một** người mua. Lúc ấy D3 không phải một lớp bảo vệ mà là một **cửa khoá không mở được** | *"Ở công ty anh, người tạo yêu cầu mua và người duyệt có phải hai người khác nhau không?"* |
 | **B5** | Người mua biết **đúng người liên hệ** ở phía nhà cung cấp khi mời | `010` `rfq_invitations.contact_id`; một lời mời một người | Mời sai người ⇒ OTP về sai máy ⇒ A5 thành đường chính chứ không phải ngoại lệ | *"Anh mời đích danh một người, hay gửi vào địa chỉ chung của nhà cung cấp?"* |
+| **B6** | **[2026-09-06, ADR-020 đề xuất]** Nhân viên mua hàng **chấp nhận cài một ứng dụng TOTP** và đăng nhập bằng **email + TOTP, không mật khẩu** | ADR-020 mục 2; kế hoạch S1.10.4 | Nếu công ty đã chuẩn hoá SSO hoặc nhân viên không cài được ứng dụng TOTP trên máy công ty, S1.10.4 phải làm lại thành SSO (S5) — **di trú bảng phiên**, không phải sửa cấu hình | *"Nhân viên mua hàng của anh có sẵn sàng cài một ứng dụng TOTP (Google/Microsoft Authenticator) không, hay công ty đã có đăng nhập một lần (SSO)?"* |
 
 ## C. Về QUY TRÌNH
 
@@ -98,6 +99,6 @@
 - **Không có dòng nào ở đây được kiểm chứng.** Toàn bộ file là một danh sách câu hỏi. Ngày nào có
   dòng đầu tiên mang tên người và ngày, dòng ấy chuyển sang `docs/DECISIONS.md` dưới dạng một ADR
   hoặc một sửa đổi ADR — **không** ở lại đây dưới dạng một dấu tích.
-- **Danh sách này chưa chắc đủ.** Nó suy từ mã đã viết (S1.1–S1.3), nên nó mù với mọi tiền đề của
+- **Danh sách này chưa chắc đủ.** Nó suy từ mã đã viết (S1.1–S1.3; B6 thêm 2026-09-06 từ ADR-020), nên nó mù với mọi tiền đề của
   S1.4–S1.9 chưa tồn tại. Bổ sung khi mỗi hạng mục mới ra đời là một phần của vòng lặp, không phải
   một việc riêng.

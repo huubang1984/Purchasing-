@@ -199,8 +199,8 @@ suy yếu chính bất biến A2.
 
 ## ADR-008 — Một lần thử MFA thất bại KHÔNG ghi vào sổ kiểm toán chuỗi-hash
 
-**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, **có nợ bắt buộc trả trước khi có
-endpoint đăng nhập**
+**Ngày:** 2026-08-28 · **Trạng thái:** Đã chấp nhận, ~~**có nợ bắt buộc trả trước khi có
+endpoint đăng nhập**~~ **nợ ĐÃ TRẢ 2026-09-06 (S1.10.4) bằng phương án (ii)** — xem cuối ADR
 
 **Bối cảnh.** `verifyTotpAttempt` (`packages/identity/src/mfa-credentials.ts`) phán xét một
 mã TOTP trên một đường đi mà **kẻ tấn công chưa đăng nhập vẫn chạm tới được**. Task 8 lập
@@ -241,6 +241,14 @@ dấu vết, nhưng ba tính chất làm nó không thay được sổ, cả ba 
 **Nợ phải trả TRƯỚC KHI có endpoint đăng nhập.** Chọn (i) hoặc (ii) và cài đặt. Trạng thái
 hôm nay — "không ghi gì, và có một trường `justLocked` không ai gọi" — là một quyết định
 đúng về chuỗi hash cộng một khoảng trống chưa lấp, không phải một thiết kế đã xong.
+
+**[2026-09-06 — ĐÃ TRẢ, phương án (ii).** `verifyTotpForLogin` (`packages/identity/src/login.ts`)
+gọi `verifyTotpAttempt` rồi, khi `justLocked`, ghi đúng MỘT bản ghi `MFA_LOCKED` (actor USER, resource
+`MFA_CREDENTIAL`, payload `lockedUntil`) vào chuỗi hash. Tần suất bị chặn trên `1 / MFA_LOCKOUT_SECONDS`
+mỗi hồ sơ nên lập luận DoS ở trên không áp dụng. Đo qua HTTP ở `apps/api/src/auth.int.test.ts`
+[INV-E3]: sai `MFA_MAX_FAILED_ATTEMPTS` lần ⇒ đúng một bản ghi; lần sai kế tiếp (đã khoá) không ghi
+thêm; đột biến gỡ dòng ghi ⇒ test ĐỎ. Endpoint đăng nhập (`POST /auth/totp`) ra đời CÙNG commit —
+đúng thứ tự khoản nợ đòi.**
 
 **Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
 chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`
@@ -1215,8 +1223,16 @@ một cột giá nào**, cố ý, vì *"bảng không có cột thì không có 
   hiện chia nhỏ** — cả hai thuộc **S2/S3**, không thuộc S1. Ghi ra ở đây để không ai đọc ô ✅ của
   D2 rộng hơn cơ chế.
 - **Vế *"hai phiên khác nhau"* của D2** vẫn mở, đúng như ADR-014 đã ghi.
-- **Ai được sửa chính sách** là một câu hỏi của ADR-016 mục 4 (mã quyền cho route ấy), chưa quyết
-  ở đây.
+- ~~**Ai được sửa chính sách** là một câu hỏi của ADR-016 mục 4 (mã quyền cho route ấy), chưa quyết
+  ở đây.~~ **Chốt 2026-09-06 cùng ADR-020:** mã quyền mới `policy.manage`, gán cho
+  `PROCUREMENT_MANAGER` (migration `030`, S1.10.5). `BUYER` không được — người khai ước lượng
+  không được là người đặt ngưỡng; `DIRECTOR` cố ý không được, cùng lý do đã ghi cho `rfq.open`.
+- **[review lượt 2 của S1.10, H2-2 — cùng ngày] Người đặt ngưỡng TỰ đặt được ước lượng.**
+  `PROCUREMENT_MANAGER` giữ `rfq.create` (ước lượng), `rfq.approve` và `policy.manage`: một PM nâng
+  ngưỡng lên rất cao rồi khai ước lượng dưới ngưỡng ⇒ một phê duyệt là đủ. Cùng họ với mục đầu
+  (khai thấp), nhưng KHÔNG cần khai thấp — chỉ cần đổi thước. Chưa quyết: tách `policy.manage` sang
+  một vai không có `rfq.create`, hay mở rộng trigger D3 (`role_permissions_ma_tran_quyen`) cấm một
+  vai giữ cả hai. Sổ nợ 44; §4 của D2 ghi phần chênh này.
 
 ### Đo bằng gì
 
@@ -1434,3 +1450,146 @@ của G2 để không ai đọc ô ✅ thành *"mỗi RFQ là một ốc đảo"
    cùng kết quả. Tức **cả hai runtime của dự án đều có X25519**, và chính vì thế một lượt CI xanh
    cho nhánh X25519 **không** là bằng chứng gì về webview Android: nó đo Node, không đo trình
    duyệt. Khoản nợ 23 không được đóng bằng phép đo ở đây; chỗ trống ấy nằm ở §4 của ma trận.
+
+---
+
+## ADR-020 — Tầng HTTP đầu tiên của `apps/api`: **`node:http` trần + bảng route KHAI BÁO; phiên người mua phát bằng magic link email + TOTP; token KHÔNG BAO GIỜ vào URL; đường khách chỉ nhận `client` đã gắn phiên**
+
+**Ngày:** 2026-09-06 · **Trạng thái:** ~~*Đề xuất — chờ chốt*~~ **Đã chấp nhận (chốt cùng ngày,
+kèm hai quyết định phụ: `policy.manage` thuộc `PROCUREMENT_MANAGER`; H17 vào sổ đăng ký)** · Gỡ chặn: **S1.10** (vòng tầng
+HTTP) · Liên quan: **A2**, **A5**, **E1**, **E6**, **D5**, ADR-007, ADR-008, ADR-012, ADR-015,
+ADR-016 mục 4, ADR-019, khoản nợ 6, 21, 30
+
+### Bối cảnh — bốn câu hỏi mà mã đang cư xử như đã có câu trả lời
+
+`docs/ARCHITECTURE.md` §3 ghi `api/ NestJS` từ 2026-08-26 và chưa ai đụng dòng ấy. Từ đó tới
+nay ba thứ đã xảy ra và cả ba kéo ngược lại: ⑴ khoản nợ 21 dựng `tests/architecture/pham-vi-san-xuat.test.ts`
+ghim **đúng hai** phụ thuộc ngoài ở phạm vi sản xuất (`pg`, `pg-connection-string`) và ghi *"thêm
+một dòng vào đây là một quyết định kiến trúc"*; ⑵ `apps/public-keys` (khoản nợ 30) ra đời bằng
+`node:http` trần và tự nói *"định tuyến ở đây là so chuỗi bằng tay, và nó chỉ chịu được chừng này
+đường"*; ⑶ ADR-016 mục 4 ghim *"route đầu tiên của `apps/` ra đời CÙNG LÚC với lớp canh"* và lớp
+ấy cố ý **không dùng chữ route** vì framework chưa chọn.
+
+Bốn câu hỏi phải trả lời **trước** dòng mã đầu tiên của `apps/api`, vì mỗi câu đổi sau đều là một
+cuộc di trú chứ không phải một lần sửa hàm:
+
+1. **Framework nào** — hay không framework.
+2. **Phiên người mua phát ở đâu.** Đo được: **không một hàm sản phẩm nào INSERT vào `sessions`**;
+   năm file test tự chèn hàng. `users` **không có cột mật khẩu** (002). `resolveSessionActor` nhận
+   `sessionId` UUID, không nhận token — tức đường *"bearer → phiên"* chưa tồn tại. Đây là khoản nợ 6
+   của sổ S0, vẫn mở. Và ADR-008 ghi một nợ **bắt buộc trả trước endpoint đăng nhập**: chọn (i) bảng
+   riêng hay (ii) chỉ ghi chuyển trạng thái `justLocked`.
+3. **Magic link đi vào URL dạng nào** — E6 trống vì đúng câu này (§3 ma trận).
+4. **Cưỡng chế `withGuestSession()` bằng gì.** §4 của A5: *"một đường phục vụ khách quên gắn thì vị
+   từ trả NULL và policy mở lại — hôm nay không có tầng HTTP nào để cưỡng chế việc gắn ấy"*.
+
+### 1. Framework — ba phương án
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| A | **NestJS** như spec 26/08 | Kéo hơn một trăm gói vào phạm vi sản xuất; DI bằng decorator và `reflect-metadata`; route là **phản chiếu lúc chạy** nên lớp canh ADR-016 phải đọc metadata thay vì đọc một cấu trúc dữ liệu. Mọi thứ nó cho — DI, module, pipe — dự án đã có bằng hàm thuần và composition root (`apps/unseal-worker/src/composition.ts`). Chi phí audit: mỗi advisory của cây ấy làm `t0b-audit` đỏ. **Loại.** |
+| B | **Hono / Fastify** | Hono không phụ thuộc ngoài, cộng `@hono/node-server`; Fastify ~30 gói. Nhẹ hơn A nhiều, nhưng vẫn là *một* dòng mới trong danh sách ghim để mua đúng hai thứ: ghép đường dẫn và đọc thân JSON — hai thứ dưới 150 dòng. **Không loại vĩnh viễn** — xem điều kiện xét lại. |
+| C | **`node:http` trần + bảng route KHAI BÁO** (`ROUTES: readonly Route[]`) | Không thêm phụ thuộc. Route là **dữ liệu**: `{ method, path, audience, permission?, handler }`. Lớp canh ADR-016 duyệt mảng ấy thay vì grep mã nguồn; bộ quét rò rỉ T2 (spec: *"gọi MỌI endpoint"*) duyệt cùng mảng ấy — không cần OpenAPI để liệt kê. Cái giá: tự viết ghép đường dẫn có tham số, đọc thân JSON có trần kích thước, và ánh xạ lỗi → mã HTTP. **Chọn.** |
+
+**Vì sao C không phải "tiết kiệm một phụ thuộc".** Điểm chịu lực là **route là một cấu trúc dữ liệu
+liệt kê được**. Ba lớp canh của vòng này (cổng quyền, E6, bộ quét rò rỉ) đều là *"với MỌI route…"*,
+và một mệnh đề *với mọi* chỉ đo được khi tập hợp ấy đóng và đọc được không cần chạy tiến trình.
+Framework nào cũng liệt kê được route, nhưng bằng phản chiếu sau khi khởi động — tức lớp canh chạy
+ở T1 phải khởi động cả ứng dụng. Với C, lớp canh là một `import { ROUTES }`.
+
+**Điều kiện xét lại B, có mốc:** khi `ROUTES` vượt **40** đường, hoặc khi cần streaming/multipart
+(xuất CSV lớn, tải tệp đính kèm — S2/S3). Lúc đó bảng route khai báo **vẫn giữ**, chỉ bộ ghép
+đường dẫn đổi chủ.
+
+### 2. Phiên người mua — phát bằng magic link email + TOTP, KHÔNG mật khẩu
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | Mật khẩu + TOTP | Cần cột mới, cần `argon2`/`bcrypt` (phụ thuộc ngoài, native build — cùng họ `cpu-features` đã phải tắt ở `pnpm-workspace.yaml`), cần chính sách mật khẩu, đặt lại mật khẩu. Thêm một bí mật để lộ. **Loại cho S1.10.** |
+| b | **Magic link email + TOTP bắt buộc** | Cùng khuôn `rfq_invitation_tokens` (E1: hash, đơn mục đích, có hạn, thu hồi được) trên bảng riêng `user_login_tokens`. Hai yếu tố trên **hai kênh** (hộp thư + ứng dụng TOTP) — đúng nguyên tắc ADR-015. Không lưu mật khẩu. `enrollTotpCredential`/`verifyTotpAttempt` đã có từ S0. **Chọn.** |
+| c | SSO/OIDC | Enterprise (S5). |
+
+Ba ràng buộc đi kèm, cả ba cưỡng chế được:
+
+1. **Phiên chỉ ra đời sau TOTP.** `startUserSession` chèn hàng `sessions` với `mfa_verified_at = now()`
+   trong **cùng giao dịch** với `verifyTotpAttempt` thành công; một hàng `sessions` có
+   `mfa_verified_at IS NULL` là **không hợp lệ** cho mọi route người mua (không có "đăng nhập nửa
+   chừng"). Trigger ở migration mới: `sessions` INSERT bởi `app_api` phải mang `mfa_verified_at`.
+2. **Bearer → phiên bằng băm.** `resolveSessionByToken(client, orgId, token)` băm SHA-256 rồi tra
+   `(org_id, token_hash)` (006 đã có `UNIQUE`), rồi ủy cho `resolveSessionActor`. Token phiên đi
+   trong cookie `HttpOnly; Secure; SameSite=Strict; Path=/`, **không** trong URL, **không** trong
+   `Authorization` của trình duyệt (để CSRF không có bề mặt qua form cross-site).
+3. **Nợ ADR-008 trả bằng phương án (ii):** khi `verifyTotpAttempt` trả `justLocked`, ghi **một** bản
+   ghi `MFA_LOCKED` vào sổ kiểm toán. Tần suất bị chặn trên `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ nên
+   lập luận DoS của ADR-008 không áp dụng. Trường `justLocked` có người gọi đầu tiên.
+
+### 3. E6 — token KHÔNG BAO GIỜ vào đường dẫn hay query
+
+- **Magic link = `https://<host>/i#<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
+  fragment lên máy chủ, không ghi vào log truy cập, không đi vào `Referer`. Trang `/i` là tĩnh;
+  JS đọc `location.hash`, xoá nó (`history.replaceState`), rồi **POST** token trong thân JSON tới
+  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: `/login#<token>`.
+- **Mọi phản hồi** mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (trừ
+  `public-keys`, đã có chính sách riêng), `X-Content-Type-Options: nosniff`.
+- **Phiên khách** đi trong cookie như phiên người mua; **mã OTP** chỉ đi trong thân POST.
+- **Định danh trong URL** chỉ được là UUIDv4 (ADR-012); `rfqId`, `invitationId` trong đường dẫn
+  là chấp nhận được vì chúng không phải credential (E4).
+
+### 4. A5 — đường khách chỉ nhận một `client` đã gắn phiên
+
+Handler của route `audience: "GUEST"` có chữ ký `(ctx: GuestContext) => …` với **đúng một** cửa
+vào CSDL: `ctx.client`, được bộ điều phối mở bằng `withGuestSession(pool, orgId, guestSessionId, …)`
+TRƯỚC khi gọi handler. Handler **không nhận `pool`**, và `apps/api/src/routes/**` bị cấm import
+`createPool`, `pg`, `withTenant`, `withGuestSession` — bốn tên ấy chỉ được xuất hiện ở
+`apps/api/src/dispatch.ts`. Lớp canh: quy tắc dependency-cruiser `g9-` cộng một test đọc mã nguồn
+`routes/**` (cùng khuôn `cong-quyen-route.test.ts`). Quên gắn phiên trở thành **không viết được**,
+không phải "phải nhớ".
+
+Route `audience: "BUYER"` cùng khuôn: `ctx.client` mở bằng `withTenant`, `ctx.actor` là
+`SessionActor` dẫn xuất từ cookie; handler đổi trạng thái **phải** khai `permission`, và bộ điều
+phối gọi `requirePermission` **trước** handler — nên vị từ *"nhắc tới `requirePermission`"* của
+ADR-016 mục 4 được **thay bằng** vị từ mạnh hơn: *"mọi route ghi có trường `permission` không rỗng,
+và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
+
+### Phần KHÔNG đóng — nói trước để không ai đọc rộng hơn
+
+- **A2 vế *bộ nhớ / APM / core dump*:** vòng này đo được **phản hồi HTTP, log bắt được, và thông
+  điệp lỗi** của tiến trình `api` thật (bộ quét rò rỉ T2 chạy trên `ROUTES`). Heap dump và APM
+  trace **không** đo — A2 vào ô ✅ **kèm cờ §4** nếu vào, và §4 phải nói đúng ba vế đã đo.
+- **Email gửi link** là một handler outbox (ADR-010) — vòng này chỉ **đặt job** kèm hash; bộ gửi
+  thật (SMTP/SES) là hạ tầng chưa có (ADR-009 chưa triển khai). Kịch bản E2E đọc token từ job.
+- **CSRF** đóng bằng `SameSite=Strict` cộng kiểm `Origin` trên mọi POST; **không** có CSRF token
+  riêng. Đủ cho một API JSON không có form HTML; phải xét lại khi có form POST cổ điển.
+  **[S1.10.7] Câu trên đã có lúc SAI:** từ S1.10.2 tới `214a741` không một dòng nào kiểm `Origin` —
+  review M-3 bắt được. Nay `server.ts` từ chối 403 mọi yêu cầu không-GET có `Origin` ngoài
+  `allowedOrigins` (mặc định rỗng) hoặc `Sec-Fetch-Site` khác `same-origin`/`none`, TRƯỚC khi đọc
+  thân; có test. Composition root của web app phải khai origin của nó.
+- ~~**Giới hạn tần suất trên endpoint đăng nhập người mua** đi theo `otp_rate_limits` (ADR-015/018)
+  với bucket mới `LOGIN_DEST`~~ **[S1.10.7] Thực tế cài KHÁC:** hạn mức theo NGƯỜI DÙNG, đếm trên
+  chính `user_login_tokens` (5 token / 15 phút), không bucket, không pepper. **Chưa có** bucket theo
+  người gọi (IP) cho `/auth/*` — review M-2, sổ nợ 39; và nó phụ thuộc nguồn IP tin cậy (nợ 41).
+  TOTP thất bại có khoá hồ sơ sẵn (006). **Không** thêm Redis.
+- **`ROUTES` liệt kê được chỉ đóng "mọi route ĐÃ KHAI"**; một handler mở `createServer` thứ hai
+  ngoài bảng thì không lớp nào thấy — lớp canh `g9-` cấm `node:http` ngoài `server.ts` để đóng
+  đúng khe ấy, và đó là phần chênh phải ghi.
+
+### Đo bằng gì
+
+1. **Cổng quyền:** một route ghi thêm vào `ROUTES` mà thiếu `permission` → T1 đỏ **không cần khởi
+   động máy chủ**; đối chứng: bộ điều phối từ chối 403 và ghi `PERMISSION_DENIED` (D5) khi một
+   phiên thiếu quyền gọi route ấy — đo trên tiến trình HTTP thật.
+2. **E6:** ⑴ không mẫu đường dẫn nào trong `ROUTES` chứa tham số tên `token|otp|session|code`; ⑵ mọi
+   phản hồi mang `Referrer-Policy: no-referrer` (duyệt `ROUTES`, gọi từng route, đọc header);
+   ⑶ **đột biến**: bỏ header ở một route → đỏ; thêm route `/guest/redeem/:token` → đỏ.
+3. **A5 tại tầng HTTP:** hai phiên khách của hai nhà cung cấp trên cùng RFQ gọi cùng route, mỗi bên
+   chỉ thấy của mình; **đột biến** gỡ `withGuestSession` khỏi bộ điều phối → test đỏ VÀ lớp canh
+   `g9-` đỏ (hai lớp, hai lý do).
+4. **Phiên người mua:** một `INSERT INTO sessions` viết tay bởi `app_api` thiếu `mfa_verified_at` bị
+   trigger từ chối; `resolveSessionByToken` với token sai/hết hạn/thu hồi ném **cùng một** lỗi
+   (không oracle); bản ghi `MFA_LOCKED` xuất hiện đúng **một** lần sau `MFA_MAX_FAILED_ATTEMPTS`
+   lần sai, không xuất hiện ở lần sai thứ nhất.
+5. **Bộ quét rò rỉ (A1/A2/A4 ở tầng HTTP):** gieo giá `1234567891` qua một báo giá niêm phong
+   THẬT, gọi mọi route `BUYER`/`GUEST` trước mở thầu, quét thân phản hồi + log bắt được + thông
+   điệp lỗi; **đối chứng dương**: cùng bộ quét bắt được khi một route cố ý trả bản rõ.
+6. **Phạm vi sản xuất KHÔNG đổi:** `NGOAI_DUOC_PHEP_O_SAN_XUAT` vẫn đúng hai dòng sau khi
+   `apps/api` ra đời — đó là phép đo của lựa chọn C.

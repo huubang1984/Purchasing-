@@ -94,6 +94,8 @@ const HAM_CHI_DOC = [
 const HAM_DUONG_KHACH = [
   "issueOtpChallenge",
   "redeemMagicLink",
+  // [ADR-020 / S1.10.2] cookie khách → phiên khách: tự chứng minh bằng token, không có mã quyền.
+  "resolveGuestSessionByToken",
   "verifyOtpAndStartSession",
   // [khoản nợ 33] `submitBid` ở đây chứ không ở `HAM_DOI_TRANG_THAI`, và đó là một QUYẾT ĐỊNH:
   // nó ghi thật (một phiên bản báo giá cộng một biên nhận), nhưng người ghi là NHÀ CUNG CẤP, và
@@ -245,7 +247,14 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
   });
 
   it("không module nào trong `apps/` gọi hàm đổi trạng thái mà thiếu phép kiểm quyền", () => {
-    const cacTep = quetTepTs(THU_MUC_APPS);
+    // [ADR-020 / S1.10.2] `apps/api/src/routes/**` ĐƯỢC LOẠI KHỎI vị từ này, và đó là một sự THAY
+    // THẾ chứ không phải một miễn trừ: handler ở đó CỐ Ý không nhắc tới `requirePermission` —
+    // cổng chạy ở dispatch.ts TRƯỚC handler, và một cổng thứ hai trong handler là hai nơi để
+    // lệch nhau. Lớp canh cho thư mục ấy mạnh hơn lớp này: nó đọc CẤU TRÚC `ROUTES` (một route
+    // ghi thiếu `permission` không biên dịch, và không qua `timViPhamBangRoute`), và nó đo trên
+    // tiến trình HTTP thật (403 + bản ghi PERMISSION_DENIED). Xem apps/api/src/routes.test.ts
+    // [INV-H17] và apps/api/src/api.int.test.ts.
+    const cacTep = quetTepTs(THU_MUC_APPS).filter((t) => !t.includes(`${sep}api${sep}src${sep}routes${sep}`));
     const viPham = cacTep
       .map((tep) => ({ tep, ham: timViPham(readFileSync(tep, "utf8")) }))
       .filter((x) => x.ham.length > 0)
@@ -287,7 +296,15 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
   // tiên sau đó (run 33978573210, cả ubuntu lẫn windows) — commit ấy không chạy lại tầng T1
   // trước khi đẩy, nên chính CI là nơi mốc chết này nổ. Đúng việc nó sinh ra để làm.
   // ============================================================================================
-  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ HAI APP, và CẢ HAI đều đúng là không mang cổng quyền", () => {
+  // ============================================================================================
+  // *** MỐC CHẾT THỨ BA ĐÃ NỔ ĐÚNG NGÀY NÓ ĐƯỢC HẸN — apps/api ra đời (S1.10.2). ***
+  //
+  // Nguyên văn khẳng định trước: `const APP_DA_BIET = ["unseal-worker", "public-keys"]` cộng
+  // thông điệp *"Nếu thứ vừa ra đời là `apps/api`, đây là ngày ADR-016 mục 4 hẹn: route đầu tiên
+  // phải ra đời CÙNG LÚC với cổng quyền của nó."* Đúng thế: route đầu tiên (`POST /suppliers`)
+  // và cổng của nó (`dispatch.ts` + `routes.test.ts` [INV-H17]) vào kho trong CÙNG một commit.
+  // ============================================================================================
+  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ BA APP, và app thứ ba là nơi cổng quyền CÓ NGHĨA", () => {
     const cacTep = quetTepTs(THU_MUC_APPS);
     expect(cacTep.length, "apps/ phải có ít nhất một module .ts đã vào kho").toBeGreaterThan(0);
 
@@ -305,15 +322,14 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh. Ngày
     // `apps/api` ra đời — route đầu tiên nhận một phiên NGƯỜI DÙNG và gọi một hàm ghi — mới là
     // ngày nó có nghĩa trọn vẹn, và ngày ấy khẳng định dưới đây phải đỏ rồi được viết lại lần nữa.
-    const APP_DA_BIET = ["unseal-worker", "public-keys"] as const;
+    const APP_DA_BIET = ["unseal-worker", "public-keys", "api"] as const;
     const tepNgoaiDanhSach = cacTep.filter(
       (t) => !APP_DA_BIET.some((app) => t.includes(`${THU_MUC_APPS}${sep}${app}${sep}`)),
     );
     expect(
       tepNgoaiDanhSach,
-      "Nếu câu này đỏ thì `apps/` đã có một app THỨ BA — hãy đọc lại khối chú thích trên và viết " +
-        "lại phần chênh cho đúng thứ vừa ra đời. Nếu thứ vừa ra đời là `apps/api`, đây là ngày " +
-        "ADR-016 mục 4 hẹn: route đầu tiên phải ra đời CÙNG LÚC với cổng quyền của nó.",
+      "Nếu câu này đỏ thì `apps/` đã có một app THỨ TƯ — hãy đọc lại khối chú thích trên và viết " +
+        "lại phần chênh cho đúng thứ vừa ra đời, và quyết định nó có route hay không.",
     ).toEqual([]);
 
     // Đối chứng cho vế ⑵, để "public-keys không mang cổng quyền" là một PHÉP ĐO chứ không phải

@@ -15,8 +15,8 @@
 |---|---|
 | Giao diện nội bộ | Next.js (App Router) |
 | Cổng nhà cung cấp | Next.js — mã hóa bằng WebCrypto phía trình duyệt |
-| API | NestJS |
-| Worker mở thầu | NestJS (process riêng) |
+| API | ~~NestJS~~ **`node:http` trần + bảng route khai báo** (ADR-020, 2026-09-06) |
+| Worker mở thầu | ~~NestJS~~ hàm thuần + composition root, `node` trần (process riêng) |
 | Cơ sở dữ liệu | PostgreSQL — RLS, trigger, quyền theo cột |
 | Quản lý khóa | AWS KMS / HashiCorp Vault (qua interface `KeyProvider`) |
 | Test | Vitest · fast-check · Testcontainers · Playwright · k6 |
@@ -31,7 +31,7 @@
 └────────────┬─────────────┴───────────────┬──────────────────┘
              │                             │  ciphertext (WebCrypto)
 ┌────────────▼─────────────────────────────▼──────────────────┐
-│  api  (NestJS)                                              │
+│  api  (node:http + ROUTES khai báo — ADR-020)               │
 │  identity · tenancy · audit · rfq · invitation · supplier   │
 │  sealed-envelope (CHỈ encrypt/verify) · bidding             │
 │  unseal-request (chỉ tạo yêu cầu, không giải mã)            │
@@ -80,8 +80,16 @@ tầng. Chi tiết: ADR-015.
 apps/
   web/                  Next.js — giao diện nội bộ
   vendor-portal/        Next.js — cổng nhà cung cấp
-  api/                  NestJS — API chính (KHÔNG có quyền giải mã)
-  unseal-worker/        NestJS — runtime mở thầu có kiểm soát
+  api/                  ~~NestJS~~ [ADR-020] node:http trần + `ROUTES` KHAI BÁO — API chính
+                        (KHÔNG có quyền giải mã). Route là DỮ LIỆU liệt kê được, để ba lớp
+                        canh "với MỌI route" (cổng quyền, E6, bộ quét rò rỉ) đo được mà không
+                        khởi động tiến trình. `dispatch.ts` là nơi DUY NHẤT gọi withTenant /
+                        withGuestSession / requirePermission; `routes/**` bị `g9-` cấm chạm
+                        pg, tenancy, node:http. [S1.10, 2026-09-06] Đủ bốn đối tượng route
+                        (PUBLIC/ANON/GUEST/BUYER), đăng nhập người mua bằng magic link + TOTP,
+                        đường khách trọn vẹn, 28 route người mua; kiểm `Origin` cho mọi yêu cầu
+                        không-GET. CHƯA có composition root chạy thật (pool, KMS, bộ gửi).
+  unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy
                         khoá, KHÔNG đóng tính ĐỘC LẬP: một endpoint do chính ta phục vụ vẫn

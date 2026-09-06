@@ -744,6 +744,8 @@ describe("phủ RLS", () => {
       // de ghi, va mot GRANT INSERT o day se cho phep no BIA mot ban ro.
       { grantee: "app_api", bang: "unseal_approvals", quyen: "SELECT" },
       { grantee: "app_api", bang: "unseal_requests", quyen: "SELECT" },
+      // [S1.10.4 / 029] token đăng nhập người mua: SELECT mức bảng; INSERT/UPDATE theo cột (xem dưới).
+      { grantee: "app_api", bang: "user_login_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "users", quyen: "SELECT" },
       { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
@@ -969,7 +971,11 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_credentials", cot: "locked_until", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "INSERT" },
+      // [S1.10.7 / 031 / review M-5] app_api THAY được bí mật — vế "chỉ khi chưa xác nhận" do UPDATE ở
+      // login.ts giữ (WHERE confirmed_at IS NULL), có đột biến. Hồ sơ đã xác nhận vẫn bất biến ở tầng app.
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_key_version", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "INSERT" },
+      { grantee: "app_api", bang: "mfa_credentials", cot: "secret_wrapped", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_credentials", cot: "user_id", quyen: "INSERT" },
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
@@ -1147,6 +1153,12 @@ describe("phủ RLS", () => {
       //   `expires_at`      KHÔNG có UPDATE -> không gia hạn phiên trượt vô hạn.
       { grantee: "app_api", bang: "sessions", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "ip", quyen: "INSERT" },
+      // [ADR-020 mục 2 / 029] `mfa_verified_at` NAY CÓ INSERT — ĐẢO NGƯỢC câu Task 9 ở trên, và ghi ra
+      // vì sao: ADR-020 đòi "không có đăng nhập nửa chừng" — một hàng `sessions` do app_api tạo phải
+      // ĐÃ MFA ngay lúc chèn (trigger `sessions_kiem_mfa_khi_tao` ép), nên trạng thái "đã xác thực hai
+      // lớp" tới trong CÙNG câu INSERT chứ không bằng "một câu lệnh riêng". Vế UPDATE giữ nguyên cho
+      // `assertFreshMfa`/xác thực lại. Nguyên văn Task 9 giữ ở khối trên để đối chiếu.
+      { grantee: "app_api", bang: "sessions", cot: "mfa_verified_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "mfa_verified_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "sessions", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "revoked_at", quyen: "UPDATE" },
@@ -1213,6 +1225,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "unseal_requests", cot: "rfq_id", quyen: "INSERT" },
       // `status` co UPDATE nhung KHONG co INSERT: mot yeu cau khong duoc RA DOI da o APPROVED.
       { grantee: "app_api", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
+      // [S1.10.4 / 029] user_login_tokens: cùng khuôn rfq_invitation_tokens — token_hash chỉ INSERT,
+      // consumed_at chỉ UPDATE (đơn điệu bởi trigger), không có revoked_at.
+      { grantee: "app_api", bang: "user_login_tokens", cot: "consumed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "user_login_tokens", cot: "expires_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_login_tokens", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_login_tokens", cot: "purpose", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_login_tokens", cot: "token_hash", quyen: "INSERT" },
+      { grantee: "app_api", bang: "user_login_tokens", cot: "user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "role_code", quyen: "INSERT" },
       { grantee: "app_api", bang: "user_roles", cot: "user_id", quyen: "INSERT" },

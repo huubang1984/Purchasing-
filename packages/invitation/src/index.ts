@@ -30,6 +30,8 @@ export {
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
+  // [ADR-020 / S1.10.2] Cookie khách → phiên khách. Đường vào DUY NHẤT của `withGuestSession` từ apps/api.
+  resolveGuestSessionByToken,
   revokeInvitation,
   verifyOtpAndStartSession,
   type Channel,
@@ -41,6 +43,7 @@ export {
   type OtpIssueOutcome,
   type OtpVerifyResult,
   type RedeemedLink,
+  type ResolvedGuestSession,
   type VerifyOtpInput,
 } from "./invitation.js";
 // ============================================================================================
