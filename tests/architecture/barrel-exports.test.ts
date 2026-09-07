@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { cacGoiWorkspace } from "./goi-workspace.js";
 
 // ============================================================================================
 // FIX ROUND 5 (CR3) — CHẶN SYMBOL, KHÔNG PHẢI CHẶN CẠNH
@@ -1074,26 +1075,15 @@ const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly
  */
 const GOI_MIEN_DANH_SACH_TRANG: ReadonlyMap<string, string> = new Map<string, string>();
 
-/** Mọi thư mục con của `packages/` có `src/index.ts` — đọc từ ĐĨA, cùng vị từ với [INV-H16]. */
-function cacGoiCoBarrel(): string[] {
-  const goc = new URL("../../packages/", import.meta.url);
-  return readdirSync(goc, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .filter((ten) => existsSync(new URL(`${ten}/src/index.ts`, goc)))
-    .sort();
-}
-
-function docCuaKhaiTrongPackageJson(pGoi: string): string[] {
-  const noiDung = JSON.parse(
-    readFileSync(new URL(`../../packages/${pGoi}/package.json`, import.meta.url), "utf8"),
-  ) as { exports?: Record<string, string> };
-  return Object.keys(noiDung.exports ?? {}).sort();
-}
+// [review lượt 10 — H10-1] Vị từ "gói" nay đọc `packages/*/package.json` và lấy tập cửa từ chính
+// `exports`, DÙNG CHUNG một hàm với [INV-H16] (`goi-workspace.ts`). Bản đầu của cả hai bất biến
+// lọc theo sự tồn tại của `src/index.ts` — một gói khai `"exports": { ".": "./src/main.ts" }` rơi
+// khỏi CẢ HAI lớp trong im lặng, và hai khẳng định "danh sách miễn RỖNG" vẫn xanh vì miễn trừ
+// đúng là rỗng thật. Lý do đầy đủ ở khối đầu `goi-workspace.ts`.
 
 describe("danh sách trắng barrel của MỌI gói", () => {
   it("[INV-H18] mọi gói trong packages/ có danh sách trắng, trừ danh sách miễn ĐÓNG", () => {
-    const goi = cacGoiCoBarrel();
+    const goi = cacGoiWorkspace().map((g) => g.ten);
     // Chống rỗng ruột theo hai chiều, cùng khuôn [INV-H16].
     expect(goi.length, "không đọc được gói nào trong packages/").toBeGreaterThan(4);
     const phaiCo = goi.filter((ten) => !GOI_MIEN_DANH_SACH_TRANG.has(ten));
@@ -1113,18 +1103,33 @@ describe("danh sách trắng barrel của MỌI gói", () => {
     // `@trustprocure/audit/anchor-sign` (S1.17) và `@trustprocure/sealed-envelope/unseal` (S1.4,
     // tìm ra khi viết chính khẳng định này). Cả hai lần, thứ mở cửa là một dòng package.json.
     const lech: string[] = [];
-    for (const goi of cacGoiCoBarrel()) {
-      if (GOI_MIEN_DANH_SACH_TRANG.has(goi)) continue;
-      const cuaKhai = docCuaKhaiTrongPackageJson(goi);
-      const cuaDuocCanh = [...(DANH_SACH_TRANG_THEO_CUA.get(goi)?.keys() ?? [])].sort();
+    for (const goi of cacGoiWorkspace()) {
+      if (GOI_MIEN_DANH_SACH_TRANG.has(goi.ten)) continue;
+      const cuaKhai = [...goi.cua.keys()].sort();
+      const cuaDuocCanh = [...(DANH_SACH_TRANG_THEO_CUA.get(goi.ten)?.keys() ?? [])].sort();
       for (const cua of cuaKhai) {
-        if (!cuaDuocCanh.includes(cua)) lech.push(`${goi} ${cua} — khai nhưng KHÔNG được canh`);
+        if (!cuaDuocCanh.includes(cua)) lech.push(`${goi.ten} ${cua} — khai nhưng KHÔNG được canh`);
       }
       for (const cua of cuaDuocCanh) {
-        if (!cuaKhai.includes(cua)) lech.push(`${goi} ${cua} — được canh nhưng KHÔNG còn khai`);
+        if (!cuaKhai.includes(cua)) lech.push(`${goi.ten} ${cua} — được canh nhưng KHÔNG còn khai`);
       }
     }
     expect(lech, "Tập cửa khai trong package.json khác tập cửa có danh sách trắng.").toEqual([]);
+  });
+
+  it("[INV-H18] `main` trỏ CÙNG tệp với `exports[\".\"]` — hai bộ resolve không được đọc hai cửa", () => {
+    // [review lượt 10 — H10-6] Mọi khẳng định ở trên đọc `exports`. Nhưng `vitest.config.ts` alias
+    // `@trustprocure` → `packages`, và Node đọc `main` khi không đi qua `exports`. Một dòng
+    // `"main": "src/with-tenant.ts"` để lại toàn bộ lớp này XANH trong khi bề mặt được CHẠY khác
+    // bề mặt được ĐO. Hai trường phải trỏ cùng một tệp, hoặc `main` phải vắng mặt.
+    const lech: string[] = [];
+    for (const goi of cacGoiWorkspace()) {
+      const cuaChinh = goi.cua.get(".");
+      if (goi.main !== undefined && goi.main !== cuaChinh) {
+        lech.push(`${goi.ten}: main=${goi.main} nhưng exports["."]=${String(cuaChinh)}`);
+      }
+    }
+    expect(lech, "`main` và `exports[\".\"]` trỏ hai tệp khác nhau.").toEqual([]);
   });
 
   it("[INV-H18] danh sách trắng của MỌI cửa khớp bề mặt THẬT — sổ đăng ký chịu lực", async () => {
