@@ -14,6 +14,18 @@ function depcruise(targets: string[]): { status: number; output: string } {
   return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
 }
 
+/** Đồ thị phụ thuộc dạng JSON — dùng để đo CHÍNH đồ thị, không chỉ đo kết luận vi phạm. */
+function depcruiseJson(targets: string[]): {
+  modules: { source: string; dependencies: { module: string; dependencyTypes?: string[] }[] }[];
+} {
+  const proc = spawnSync(
+    "pnpm",
+    ["exec", "depcruise", ...targets, "--config", ".dependency-cruiser.cjs", "--output-type", "json"],
+    { encoding: "utf8", shell: true, maxBuffer: 64 * 1024 * 1024 },
+  );
+  return JSON.parse(proc.stdout) as ReturnType<typeof depcruiseJson>;
+}
+
 /**
  * Chạy ĐÚNG script `pnpm depcruise` khai trong package.json thay vì một danh sách target tự
  * chọn. Fix round 4 (I1): hàng rào chỉ bảo vệ những thư mục thực sự nằm trong danh sách
@@ -1587,6 +1599,38 @@ describe("biên giới module của packages/unseal", () => {
     } finally {
       rmSync("apps/tmp-probe-unseal-cua", { recursive: true, force: true });
     }
+  }, 60000);
+});
+
+// ==============================================================================================
+// [S1.18 / review lượt 10 — H10-4] MỘT CỔNG KHÔNG BAO GIỜ BẮN ĐƯỢC LÀ MỘT CỔNG RỖNG RUỘT
+//
+// `khong-phu-thuoc-devdep-trong-src` đã rỗng ruột từ khi nó ra đời, và không lượt review nào
+// trong chín lượt trước bắt được — vì nó XANH, và một quy tắc xanh trông giống hệt một quy tắc
+// đang làm việc. Cơ chế: `options.exclude` cũ chứa `node_modules`, mà `exclude` GỠ HẲN module
+// khỏi đồ thị (khác `doNotFollow`, chỉ ngừng duyệt tiếp); `npm-dev` lại chỉ được gán cho cạnh
+// resolve VÀO node_modules. Đo trên toàn đồ thị trước khi sửa: 264 cạnh `import`, 231 `local`,
+// 94 `aliased`, 83 `core` — và KHÔNG một cạnh nào mang `npm-dev`.
+//
+// Test dưới đây là lớp chống-rỗng-ruột cho chính quy tắc ấy: nó không hỏi "có vi phạm không", nó
+// hỏi "quy tắc này có ĐỐI TƯỢNG nào để phán xét không". Trả `node_modules` về `exclude` làm nó
+// ĐỎ ngay, kể cả khi `pnpm depcruise` vẫn xanh — mà một lượt depcruise xanh chính là thứ đã che
+// khiếm khuyết này suốt từ S0.
+// ==============================================================================================
+describe("cổng devDependency không rỗng ruột", () => {
+  it("[INV-H16] đồ thị phụ thuộc THẬT SỰ có cạnh `npm-dev` để quy tắc phán xét", () => {
+    const doThi = depcruiseJson(["packages", "apps", "tools"]);
+    const soCanhDev = doThi.modules.reduce(
+      (tong, m) =>
+        tong + m.dependencies.filter((d) => (d.dependencyTypes ?? []).includes("npm-dev")).length,
+      0,
+    );
+    expect(
+      soCanhDev,
+      "KHÔNG cạnh nào trong đồ thị mang `npm-dev`, nên quy tắc khong-phu-thuoc-devdep-trong-src " +
+        "không có gì để phán xét — nó XANH vì rỗng ruột, không vì mã sạch. Nguyên nhân gần như " +
+        "chắc chắn: `node_modules` bị trả về `options.exclude` (xem chú thích ở đó).",
+    ).toBeGreaterThan(0);
   }, 60000);
 });
 

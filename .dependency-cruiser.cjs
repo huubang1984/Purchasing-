@@ -608,8 +608,28 @@ module.exports = {
     },
     {
       name: "khong-phu-thuoc-devdep-trong-src",
+      comment:
+        "[S1.18 / review luot 10 - H10-4] QUY TAC NAY DA RONG RUOT TU KHI NO RA DOI, va phep do " +
+        "noi ra dieu do: voi `exclude` cu (co node_modules), depcruise GO HAN module node_modules " +
+        "khoi do thi, ma `npm-dev` chi duoc gan cho canh resolve VAO node_modules. Do tren toan " +
+        "do thi truoc khi sua: 264 canh `import`, 231 `local`, 94 `aliased`, 83 `core` - va KHONG " +
+        "MOT canh nao mang `npm-dev`. Tuc mot hang rao khong bao gio ban duoc, dung thu ma " +
+        "docs/TEST-PLAN.md §5 goi ten: \"khong co hang rao thi nguoi ta con can than; co hang rao " +
+        "hong thi khong\". Sua bang cach bo node_modules khoi `exclude` (giu `doNotFollow` nen " +
+        "chung la la nut, khong duoc duyet tiep): do lai cho 2 vi pham THAT, ca hai o " +
+        "packages/test-support/src/postgres.ts. " +
+        "MIEN TRU DUY NHAT la packages/test-support/src/, va no KHONG phai mot ten trong mot danh " +
+        "sach: goi ay la ha tang kiem thu, va tinh chat ay duoc cuong che boi mot lop KHAC - " +
+        "tests/architecture/pham-vi-san-xuat.test.ts ve ⑵ (mot goi workspace ma MOI noi import no " +
+        "deu la tep test thi khong duoc nam o `dependencies` cua bat ky ai). Chuyen `pg` / " +
+        "`@testcontainers/postgresql` sang `dependencies` cua goi ay KHONG phai duong sua: no tai " +
+        "lap dung khiem khuyet ma khoan no 21 ra doi de chan, va ve ⑴ cua lop kia se do. " +
+        "Lop chong rong ruot cho chinh quy tac nay: mot test doc do thi JSON va doi so canh " +
+        "`npm-dev` > 0 (boundaries.test.ts).",
       severity: "error",
-      from: { pathNot: "\\.(test|config)\\.(ts|js|cjs)$" },
+      from: {
+        pathNot: ["\\.(test|config)\\.(ts|js|cjs)$", ciPrefix("packages/test-support/src/")],
+      },
       to: { dependencyTypes: ["npm-dev"] },
     },
   ],
@@ -631,7 +651,12 @@ module.exports = {
     // HOA THUONG o day (khong dung ci()): exclude/doNotFollow la thao tac NOI LONG, lam no
     // khong phan biet hoa thuong se MO RONG vung khong duoc quet - nguoc huong an toan.
     doNotFollow: { path: "(^|/)node_modules(/|$)" },
-    exclude: { path: "(^|/)(node_modules|dist|\\.next)(/|$)" },
+    // [S1.18 / review luot 10 - H10-4] `node_modules` DA BI GO khoi `exclude`. Ly do day du o
+    // chu thich cua quy tac khong-phu-thuoc-devdep-trong-src: `exclude` go han module khoi do
+    // thi, nen khong canh nao con mang `npm-dev` va quy tac ay khong bao giờ ban duoc. `dist` va
+    // `.next` GIU NGUYEN trong `exclude` - chung khong phai dich cua quy tac nao. `doNotFollow`
+    // o tren van chan viec DUYET TIEP vao node_modules, nen chi phi la 3 module la nut.
+    exclude: { path: "(^|/)(dist|\\.next)(/|$)" },
     tsConfig: { fileName: "tsconfig.json" },
     tsPreCompilationDeps: true,
     // Bat buoc de depcruise tu resolve subpath export (vd. "@trustprocure/crypto-keys/unwrap")
