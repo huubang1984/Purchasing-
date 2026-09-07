@@ -58,6 +58,11 @@ const OUTBOX_POLL_MS = 5000;
  * hơn hai cửa sổ, tức không bao giờ chạm bộ đếm đang sống.
  */
 const DON_BUCKET_MS = 5 * 60 * 1000;
+/**
+ * [review H6-8] Ngưỡng "ồn ào" của một lượt dọn. Một tiến trình khoẻ dọn vài chục hàng mỗi năm phút;
+ * hàng nghìn nghĩa là ai đó đang xoay địa chỉ. Con số này KHÔNG phải một trần — nó chỉ là ngưỡng ghi log.
+ */
+const DON_BUCKET_ON_AO = 1000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
@@ -139,10 +144,24 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       runner.start();
       // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó chỉ ghi
       // TÊN — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng khuôn `onPollError`).
+      // [review H6-8] Bộ dọn là ĐƯỜNG BỊT DUY NHẤT của một bảng mà số hàng do người gọi vô danh
+      // quyết, nên nó không được hỏng trong im lặng: mỗi lượt xoá được nhiều hơn `DON_BUCKET_ON_AO`
+      // hàng là một tín hiệu tải bất thường, và hai lượt hỏng LIÊN TIẾP là một tín hiệu bộ dọn chết.
+      // Cả hai chỉ ghi SỐ và TÊN lỗi — không giá trị nào của bảng đi vào log.
+      let honglienTiep = 0;
       dongHoDon = setInterval(() => {
-        void donBucketNguoiGoiCu(pool).catch((e: unknown) =>
-          console.error(`[api] don bucket nguoi goi ${e instanceof Error ? e.name : "loi khong ro"}`),
-        );
+        void donBucketNguoiGoiCu(pool)
+          .then((n) => {
+            honglienTiep = 0;
+            if (n > DON_BUCKET_ON_AO) console.error(`[api] don bucket nguoi goi: ${n} hang`);
+          })
+          .catch((e: unknown) => {
+            honglienTiep += 1;
+            console.error(
+              `[api] don bucket nguoi goi ${e instanceof Error ? e.name : "loi khong ro"}` +
+                (honglienTiep >= 2 ? ` (hong ${honglienTiep} luot lien tiep — bang chi lon len)` : ""),
+            );
+          });
       }, DON_BUCKET_MS);
       dongHoDon.unref();
       const dc = server.address() as AddressInfo;

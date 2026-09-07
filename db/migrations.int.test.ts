@@ -882,7 +882,33 @@ describe("migration của dự án", () => {
   // trigger ⇒ `migrate()` khôi phục cả ba.
   // [review H5-5] Thêm 013 (thân, không ghim 21 trigger), 029/032 qua bản 037, và hai trigger danh tính 040.
   const HAM_51: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
-    { ham: "kiem_danh_tinh_theo_phien", migration: "013_actor_from_session.sql", trigger: [] },
+    {
+      ham: "kiem_danh_tinh_theo_phien",
+      migration: "013_actor_from_session.sql",
+      // [review H6-6] MƯỜI CHÍN trigger — viết ra để phép kiểm "mỗi trigger có định nghĩa ghim" có
+      // việc; hai trigger còn lại của hàm này thuộc 040 và được ghim ở mục `mfa_reset_kiem_quyen`.
+      trigger: [
+        "org_procurement_policies_kiem_danh_tinh",
+        "rfq_budgets_kiem_danh_tinh",
+        "rfq_invitation_tokens_kiem_danh_tinh",
+        "rfq_invitations_kiem_danh_tinh",
+        "rfq_invitations_kiem_nguoi_thu_hoi",
+        "rfq_items_kiem_danh_tinh",
+        "rfq_key_material_kiem_danh_tinh",
+        "rfq_key_material_kiem_nguoi_thu_hoi",
+        "rfq_key_material_kiem_nguoi_xoa",
+        "rfq_packages_kiem_nguoi_dong",
+        "rfq_packages_kiem_nguoi_huy",
+        "rfq_packages_kiem_nguoi_mo",
+        "rfq_packages_kiem_nguoi_nop",
+        "supplier_contacts_kiem_danh_tinh",
+        "suppliers_kiem_danh_tinh",
+        "unseal_approvals_kiem_danh_tinh",
+        "unseal_requests_kiem_danh_tinh",
+        "unseal_requests_kiem_nguoi_dieu_phoi",
+        "unseal_requests_kiem_nhan_chung",
+      ],
+    },
     { ham: "sessions_kiem_mfa_khi_tao", migration: "037_vai_ung_dung_la_thanh_vien.sql", trigger: ["sessions_kiem_mfa_khi_tao"] },
     { ham: "mfa_credentials_khoa_ho_so_da_xac_nhan", migration: "037_vai_ung_dung_la_thanh_vien.sql", trigger: ["mfa_credentials_khoa_ho_so_da_xac_nhan"] },
     { ham: "sessions_kiem_totp_gan_day", migration: "039_phien_can_totp_gan_day.sql", trigger: ["sessions_kiem_totp_gan_day"] },
@@ -911,7 +937,11 @@ describe("migration của dự án", () => {
       const hau = /\$than\$([\s\S]*?)\$than\$/.exec(hardening.slice(viTri))?.[1];
       expect(hau, ham).toBe(thanMig);
       // Và mỗi trigger có một định nghĩa ghim (`$def$...$def$`) trong cùng mục.
-      for (const t of trigger) expect(hardening.slice(viTri, viTri + 16_000), `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
+      // Cắt tới mục KẾ TIẾP, không cắt theo số byte: mục 013 mang 19 khối trigger nên mọi hằng số
+      // byte đều là một cái bẫy chờ sẵn.
+      const ketMuc = hardening.indexOf("$q$hàm + trigger ", viTri + 20);
+      const than = hardening.slice(viTri, ketMuc === -1 ? undefined : ketMuc);
+      for (const t of trigger) expect(than, `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
     }
   });
 
@@ -976,19 +1006,45 @@ describe("migration của dự án", () => {
           WHERE ns.nspname = 'public' AND p.prorettype = 'pg_catalog.trigger'::regtype ORDER BY 1`,
       );
       const trongCsdl = rows.map((r) => r.ten);
-      // Tập "hardening có canh" KHÔNG viết tay: đọc thẳng mọi `to_regprocedure('public.X()')` của
-      // file hardening rồi giao với tập hàm trigger thật. Viết tay ở đây là dựng lại đúng cái mù.
+      // Tập "hardening có canh" KHÔNG viết tay: rút thẳng từ file hardening rồi giao với tập hàm
+      // trigger thật. Viết tay ở đây là dựng lại đúng cái mù.
+      //
+      // [review H6-3] Rút theo HÌNH DẠNG của một mục ghim, KHÔNG theo một lần nhắc tên. Bản trước
+      // dùng mọi `to_regprocedure('public.X()')`, tức một hàm chỉ xuất hiện trong tiền điều kiện của
+      // mục KHÁC cũng được tính là "đã ghim" — và khi ấy nó vừa ở `ghim` vừa ở danh sách loại trừ,
+      // nên cách rẻ nhất để test xanh trở lại là XOÁ nó khỏi danh sách loại trừ. Test khi đó tự mời
+      // người sửa nói dối, đúng hình dạng cái mù mà nợ 54 tồn tại để đóng.
       const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
-      const nhacToi = new Set(
-        [...hardening.matchAll(/to_regprocedure\('public\.([a-z_]+)\(\)'\)/gu)].map((m) => m[1]!),
+      // Tiêu chí: hardening có CÂU SỬA dựng lại thân hàm ấy, VÀ có nhắc nó trong một câu phán xét/
+      // tiền điều kiện. Một lần nhắc tên đơn độc (tiền điều kiện của mục khác) KHÔNG còn đủ.
+      const ghim = trongCsdl.filter(
+        (t) =>
+          hardening.includes(`CREATE OR REPLACE FUNCTION public.${t}() RETURNS trigger`) &&
+          hardening.includes(`to_regprocedure('public.${t}()')`),
       );
-      const ghim = trongCsdl.filter((t) => nhacToi.has(t));
+      // Và danh sách viết tay `HAM_51` không được trôi ra ngoài tập ấy.
+      expect(HAM_51.map((h) => h.ham).filter((h) => !ghim.includes(h)), "HAM_51 có tên không còn được ghim").toEqual([]);
       const loaiTru = Object.keys(HAM_TRIGGER_KHONG_GHIM);
       expect(ghim.filter((t) => loaiTru.includes(t)), "một hàm không được vừa ghim vừa loại trừ").toEqual([]);
       expect([...ghim, ...loaiTru].sort()).toEqual([...trongCsdl].sort());
       for (const [ten, lyDo] of Object.entries(HAM_TRIGGER_KHONG_GHIM)) {
         expect(lyDo.length, `loại trừ ${ten} phải có lý do`).toBeGreaterThan(10);
       }
+      // [review H6-6] Trục THỨ HAI của cùng cái mù: tập TRIGGER. `kiem_danh_tinh_theo_phien` chạy
+      // trên nhiều bảng, nên một migration tương lai gắn trigger thứ 22 mà không khai sẽ đi qua phép
+      // kiểm hàm ở trên mà không ai thấy. Tập trigger của nó phải bằng ĐÚNG (19 ghim ở mục 013) ∪
+      // (2 ghim ở mục `mfa_reset_kiem_quyen`).
+      const { rows: trg } = await db.pool.query<{ ten: string }>(
+        `SELECT t.tgname AS ten FROM pg_trigger t
+          WHERE NOT t.tgisinternal AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+          ORDER BY 1`,
+      );
+      const daKhai = [
+        ...(HAM_51.find((h) => h.ham === "kiem_danh_tinh_theo_phien")?.trigger ?? []),
+        "mfa_reset_requests_kiem_danh_tinh",
+        "mfa_reset_requests_kiem_danh_tinh_duyet",
+      ];
+      expect(trg.map((r) => r.ten).sort()).toEqual([...daKhai].sort());
       // Chốt chống rỗng ruột: cả hai tập đều phải có thật, và tổng phải là con số đã đo.
       expect(ghim.length).toBeGreaterThanOrEqual(13);
       expect(trongCsdl.length).toBeGreaterThanOrEqual(48);
@@ -1017,6 +1073,10 @@ describe("migration của dự án", () => {
       // [S1.14 / nợ 54] Một trong MƯỜI CHÍN trigger danh tính của 013 (ở đây: 019) — chúng nằm rải
       // bảy migration và tới S1.14 mới được ghim định nghĩa.
       await db.pool.query("DROP TRIGGER unseal_requests_kiem_danh_tinh ON public.unseal_requests");
+      // [review H6-7] `caller_rate_limits` (042) nằm NGOÀI cây tenant, nên mục (A) của hardening
+      // không với tới nó: trước H6-7, hai câu dưới đây sống qua mọi lần `migrate()`.
+      await db.pool.query("ALTER TABLE public.caller_rate_limits DISABLE ROW LEVEL SECURITY");
+      await db.pool.query("DROP POLICY caller_rate_limits_khach ON public.caller_rate_limits");
       expect((await db.pool.query<{ o: string | null }>("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()')::text AS o")).rows[0]?.o).toBeNull();
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
       const { rows: dungLai } = await db.pool.query<{ ten: string; than: string; trg: string }>(
@@ -1040,9 +1100,20 @@ describe("migration của dự án", () => {
         "SELECT t.tgenabled::text AS enabled, pg_get_triggerdef(t.oid) AS def FROM pg_trigger t WHERE t.tgname = 'unseal_requests_kiem_danh_tinh' AND NOT t.tgisinternal",
       );
       expect(dt013).toHaveLength(1);
-      // `O`, không phải `A`: mười chín trigger của 013 canh đường ghi ứng dụng, không phải sao chép.
-      expect(dt013[0]?.enabled).toBe("O");
+      // ~~`O`, không phải `A`~~ [review H6-4 / 043] `A`: cùng bất biến D với hai trigger của 040, nên
+      // cùng độ mạnh — `'O'` là trạng thái `session_replication_role = 'replica'` bỏ qua.
+      expect(dt013[0]?.enabled).toBe("A");
       expect(dt013[0]?.def).toContain("kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')");
+      const { rows: bucket } = await db.pool.query<{ rls: boolean; force: boolean; pol: string | null }>(
+        `SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
+                (SELECT string_agg(p.polname, ',' ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS pol
+           FROM pg_class c WHERE c.oid = to_regclass('public.caller_rate_limits')`,
+      );
+      expect(bucket[0], "RED THẬT trước H6-7: RLS của bảng ngoài cây tenant không ai dựng lại").toEqual({
+        rls: true,
+        force: true,
+        pol: "caller_rate_limits_khach",
+      });
       const { rows: ham } = await db.pool.query<{ ten: string; than: string; cfg: string | null }>(
         `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, array_to_string(p.proconfig, ',') AS cfg
            FROM pg_proc p WHERE p.proname IN ('mfa_reset_kiem_chuyen_trang_thai', 'mfa_reset_kiem_quyen') ORDER BY 1`,
@@ -2030,6 +2101,7 @@ describe("migration của dự án", () => {
           "040_dat_lai_totp_hai_nguoi.sql",
           "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
           "042_bucket_nguoi_goi_toan_cuc.sql",
+          "043_danh_tinh_theo_phien_enable_always.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4852,6 +4924,7 @@ describe("migration của dự án", () => {
         "040_dat_lai_totp_hai_nguoi.sql",
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
         "042_bucket_nguoi_goi_toan_cuc.sql",
+        "043_danh_tinh_theo_phien_enable_always.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -5091,6 +5164,7 @@ describe("migration của dự án", () => {
         "040_dat_lai_totp_hai_nguoi.sql",
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
         "042_bucket_nguoi_goi_toan_cuc.sql",
+        "043_danh_tinh_theo_phien_enable_always.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
