@@ -101,8 +101,14 @@ export interface ExternalAnchor extends ChainHeadExport {
  * lối vào KHÁC bộ ký (xem `packages/test-support/src/neo-fixture.ts`). Thứ CHƯA ĐO: một kiểm
  * toán viên cầm tệp JSONL và chạy `openssl(1)`. Giữa hai chỗ đó còn ba thao tác không ai trong
  * kho này từng chạy — tách `text` ra khỏi JSON (chuỗi trong tệp mang `\n` ở dạng escape),
- * `base64 -d` cho `sig`, và đổi SPKI DER sang PEM. Phát biểu đúng mức: **ĐỊNH DẠNG là thứ
- * OpenSSL kiểm được; CÔNG THỨC tách nó ra khỏi nơi cất thì chưa được đo.** Xem ADR-026 §5⑷.
+ * `base64 -d` cho `sig`, và đổi SPKI DER sang PEM. ~~Phát biểu đúng mức: ĐỊNH DẠNG là thứ
+ * OpenSSL kiểm được; CÔNG THỨC tách nó ra khỏi nơi cất thì chưa được đo.~~
+ *
+ * **[S1.19] BA THAO TÁC ẤY NAY LÀ `pnpm neo trich`, VÀ CÔNG THỨC ĐÃ ĐƯỢC CHẠY.**
+ * `cong-cu.int.test.ts` gọi `openssl dgst -sha256 -verify` trên ba tệp do `trich` sinh ra và
+ * nhận *Verified OK*; ba đối chứng âm làm nó từ chối. Phát biểu đúng mức **hôm nay**: công thức
+ * chạy được đầu-cuối, nhưng nó KHÔNG chứng minh một cài đặt mật mã độc lập — `node:crypto` gọi
+ * OpenSSL bên dưới. Xem ADR-026 §5⑶ và khối `trich` ở `tools/neo-so-kiem-toan/src/index.ts`.
  */
 export interface SignedAnchorRecord {
   readonly text: string;

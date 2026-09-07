@@ -27,15 +27,18 @@
 // thay vì một câu trong tài liệu này.
 // ==============================================================================================
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { argv, env, exit, stderr, stdout } from "node:process";
 import {
   createFileAnchorStore,
   exportChainHead,
   loadVerifiedAnchors,
+  parseAnchorText,
   verifyAuditChain,
   type AnchorStore,
   type ExternalAnchor,
+  type SignedAnchorRecord,
 } from "@trustprocure/audit";
 import {
   AnchorSigningKeyRing,
@@ -53,6 +56,7 @@ const CACH_DUNG = `Cách dùng:
   pnpm neo khoi-tao
   pnpm neo xuat --org <uuid> [--org <uuid> ...]
   pnpm neo kiem --org <uuid> [--org <uuid> ...]
+  pnpm neo trich --org <uuid> --ra <thu-muc> [--seq <n>]
 
 Biến môi trường:
   DATABASE_URL                     bắt buộc
@@ -60,9 +64,11 @@ Biến môi trường:
   TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_CONG_KHAI  SPKI DER, base64 — "<kid>=<base64>", lặp lại bằng dấu phẩy
+
+  "trich" tách một mốc neo thành ba tệp mà openssl(1) đọc thẳng. Nó KHÔNG cần DATABASE_URL.
 `;
 
-type Lenh = "khoi-tao" | "xuat" | "kiem";
+type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich";
 
 function batBuoc(ten: string): string {
   const gt = env[ten];
@@ -234,8 +240,160 @@ async function khoiTao(): Promise<number> {
   return 0;
 }
 
+// ==============================================================================================
+// `trich` — TÁCH MỘT MỐC NEO RA KHỎI NƠI CẤT THÀNH BA TỆP MÀ `openssl(1)` ĐỌC THẲNG
+//
+// [ADR-026 §5⑶ / S1.19] Lượt review thứ chín (H9-9) hạ một câu rộng hơn phép đo ở bốn chỗ:
+// *"kiểm toán viên kiểm được artefact này mà không cần một dòng mã nào của chúng ta"*. Thứ đã đo
+// khi ấy là chữ ký kiểm được bằng `createVerify` của `node:crypto`. Thứ CHƯA đo là ba thao tác ở
+// giữa — tách `text` khỏi dòng JSONL (chuỗi trong tệp mang `\n` ở dạng escape), `base64 -d` cho
+// `sig`, và đổi SPKI DER sang PEM. Lệnh này là ba thao tác ấy, và `cong-cu.int.test.ts` chạy
+// `openssl` THẬT trên đầu ra của nó.
+//
+// BA QUYẾT ĐỊNH, mỗi cái đóng một ca hỏng cụ thể:
+//
+// ⑴ **Không tách khi nơi cất đang hỏng.** `trich` đi qua `loadVerifiedAnchors`, nên một bản ghi
+//    không kiểm được ở BẤT KỲ đâu trong tệp làm cả lượt trích ném. Một artefact tách ra từ một nơi
+//    cất có bản ghi hỏng là một artefact trông sạch hơn nơi nó đến.
+//
+// ⑵ **KHÔNG cần `DATABASE_URL`.** Đây không phải sự tiện tay: nếu khâu tách đòi cơ sở dữ liệu thì
+//    thứ gọi là "artefact độc lập" vẫn phải đi qua chính hệ thống bị kiểm. Kiểm toán viên cầm tệp
+//    JSONL cộng vòng khoá công khai phải dựng lại được ba tệp ấy, và chỉ thế.
+//
+// ⑶ **PEM dựng bằng cách BỌC base64 chính những byte đã lưu, không đi qua `createPublicKey`.**
+//    Cách kia gọn hơn nhưng nó PHÂN TÍCH rồi MÃ HOÁ LẠI, nên PEM đi ra không còn là một bản chép
+//    trung thành của thứ nằm trong vòng khoá.
+//
+//    **PHÉP ĐO ĐÃ BÁC MỘT NỬA LẬP LUẬN BAN ĐẦU CỦA CHỖ NÀY, ghi lại vì nó đắt hơn kết luận.** Bản
+//    đầu của khối này viết: *"một SPKI DER lưu sai chút ít sẽ được Node lặng lẽ sửa, còn kiểm toán
+//    viên chạy `openssl pkey -pubin -inform DER` thì gãy"*. Đo thật, trên một SPKI P-256 91 byte
+//    cộng MỘT byte rác ở cuối:
+//      * `createPublicKey({format:"der",type:"spki"})` **NHẬN**, và `export({format:"pem"})` trả
+//        về đúng 91 byte — tức nó CHUẨN HOÁ, bỏ byte thừa đi;
+//      * `openssl pkey -pubin -inform DER` cũng **NHẬN**, mã thoát 0.
+//    Vế *"kiểm toán viên thì gãy"* vì thế **KHÔNG được chứng minh** cho ca này. Thứ lựa chọn này
+//    thật sự mua, và chỉ chừng này: **PEM đi ra là bản chép ĐÚNG BYTE của thứ nơi cất đang giữ**,
+//    nên nếu một ngày nơi cất giữ thứ mà OpenSSL từ chối, đầu ra tái hiện nó thay vì che nó. Việc
+//    có tồn tại một giá trị như thế hay không thì CHƯA đo.
+//
+// Văn bản ghi ra bằng `Buffer.from(text, "utf8")` chứ không đưa chuỗi thẳng cho `writeFile`: thứ
+// được ký là một chuỗi BYTE, và mọi lớp có thể xen vào giữa chuỗi và đĩa đều phải bị loại. Kho này
+// chạy với `core.autocrlf=true` — một lần dịch xuống dòng là một chữ ký hỏng, và thông điệp lỗi
+// của nó ("Verification failure") giống hệt thông điệp của một chữ ký giả mạo.
+// ==============================================================================================
+
+interface ThamSoTrich {
+  readonly org: string;
+  readonly ra: string;
+  readonly seq: number | undefined;
+}
+
+function docThamSoTrich(thamSo: readonly string[]): ThamSoTrich {
+  let org: string | undefined;
+  let ra: string | undefined;
+  let seq: number | undefined;
+  for (let i = 0; i < thamSo.length; i += 1) {
+    const ten = thamSo[i];
+    const gt = thamSo[i + 1];
+    if (ten !== "--org" && ten !== "--ra" && ten !== "--seq") {
+      throw new Error(`Tham số lạ: "${String(ten)}".`);
+    }
+    if (gt === undefined) throw new Error(`${ten} thiếu giá trị.`);
+    if (ten === "--org") {
+      if (org !== undefined) throw new Error("trich nhận ĐÚNG MỘT --org: nó tách một mốc neo.");
+      org = gt;
+    } else if (ten === "--ra") {
+      ra = gt;
+    } else {
+      seq = Number(gt);
+      if (!Number.isInteger(seq) || seq <= 0) throw new Error(`--seq phải là số nguyên dương: "${gt}".`);
+    }
+    i += 1;
+  }
+  if (org === undefined) throw new Error("Phải nêu --org.");
+  if (ra === undefined) throw new Error("Phải nêu --ra <thư mục nhận ba tệp>.");
+  return { org, ra, seq };
+}
+
+function laBanGhiDaKy(gt: unknown): gt is SignedAnchorRecord {
+  if (typeof gt !== "object" || gt === null) return false;
+  const o = gt as { text?: unknown; sig?: unknown };
+  return typeof o.text === "string" && typeof o.sig === "string";
+}
+
+/** SPKI DER → PEM bằng cách BỌC, không phân tích. Xem quyết định ⑶ ở khối trên. */
+function pemTuSpkiDer(der: Uint8Array): string {
+  if (der.length === 0) throw new Error("Khoá công khai rỗng — không dựng được PEM.");
+  const b64 = Buffer.from(der).toString("base64");
+  const dong = b64.match(/.{1,64}/g);
+  if (dong === null) throw new Error("Không chia được base64 của khoá công khai thành dòng.");
+  return `-----BEGIN PUBLIC KEY-----\n${dong.join("\n")}\n-----END PUBLIC KEY-----\n`;
+}
+
+async function trich(kho: AnchorStore, ts: ThamSoTrich): Promise<number> {
+  const khoaCongKhai = docKhoaCongKhai();
+
+  // Quyết định ⑴: fail-closed trên TOÀN nơi cất, không chỉ trên bản ghi sắp tách.
+  const neo = await loadVerifiedAnchors(kho, ts.org, khoaCongKhai);
+  const tho = await kho.readAllRaw(ts.org);
+  if (tho.length !== neo.length) {
+    throw new Error(
+      `Nơi cất trả ${tho.length} bản ghi thô nhưng ${neo.length} mốc neo đã kiểm cho tổ chức ` +
+        `${ts.org}. Hai con số này phải bằng nhau sau một lượt loadVerifiedAnchors THÀNH CÔNG; ` +
+        "lệch nghĩa là nơi cất đổi giữa hai lượt đọc.",
+    );
+  }
+  if (neo.length === 0) {
+    throw new Error(
+      `Tổ chức ${ts.org} chưa có mốc neo nào trong nơi cất — chạy "pnpm neo xuat" trước.`,
+    );
+  }
+
+  let i: number;
+  if (ts.seq === undefined) {
+    i = 0;
+    for (let k = 1; k < neo.length; k += 1) if (neo[k]!.seq > neo[i]!.seq) i = k;
+  } else {
+    const muc = ts.seq;
+    i = neo.findIndex((n) => n.seq === muc);
+    if (i < 0) {
+      // Im lặng lấy mốc gần nhất là ca hỏng tệ nhất ở đây: người vận hành tin họ đang cầm mốc
+      // neo của một thời điểm cụ thể, còn tệp trong tay lại là một thời điểm khác.
+      throw new Error(
+        `Nơi cất không có mốc neo seq=${muc} cho tổ chức ${ts.org}. Các seq đang có: ` +
+          `${neo.map((n) => n.seq).join(", ")}.`,
+      );
+    }
+  }
+
+  const banGhi = tho[i];
+  if (!laBanGhiDaKy(banGhi)) {
+    throw new Error(`Bản ghi ${i + 1} không có hai trường text/sig dạng chuỗi.`);
+  }
+  const truong = parseAnchorText(banGhi.text);
+  const der = khoaCongKhai.get(truong.kid);
+  if (der === undefined) throw new Error(`Vòng khoá công khai không có kid "${truong.kid}".`);
+
+  await mkdir(ts.ra, { recursive: true });
+  const nen = `neo-${truong.orgId}-seq${truong.seq}`;
+  const dVanBan = join(ts.ra, `${nen}.txt`);
+  const dChuKy = join(ts.ra, `${nen}.sig`);
+  const dKhoa = join(ts.ra, `khoa-${truong.kid}.pem`);
+
+  await writeFile(dVanBan, Buffer.from(banGhi.text, "utf8"));
+  await writeFile(dChuKy, Buffer.from(banGhi.sig, "base64"));
+  await writeFile(dKhoa, Buffer.from(pemTuSpkiDer(der), "utf8"));
+
+  stdout.write(`${dVanBan}\n${dChuKy}\n${dKhoa}\n`);
+  stdout.write(
+    `\nopenssl dgst -sha256 -verify "${dKhoa}" -signature "${dChuKy}" "${dVanBan}"\n` +
+      "Kết quả mong đợi: Verified OK\n",
+  );
+  return 0;
+}
+
 function laLenh(gt: string | undefined): gt is Lenh {
-  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem";
+  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich";
 }
 
 async function main(): Promise<number> {
@@ -245,8 +403,10 @@ async function main(): Promise<number> {
     return 2;
   }
   if (lenh === "khoi-tao") return khoiTao();
-  const org = docDanhSachToChuc(thamSo);
   const kho = createFileAnchorStore(batBuoc("TRUSTPROCURE_NEO_KHO"));
+  // `trich` KHÔNG mở pool và KHÔNG đọc DATABASE_URL — xem khối chú thích của nó, quyết định ⑵.
+  if (lenh === "trich") return trich(kho, docThamSoTrich(thamSo));
+  const org = docDanhSachToChuc(thamSo);
   return lenh === "xuat" ? xuat(kho, org) : kiem(kho, org);
 }
 

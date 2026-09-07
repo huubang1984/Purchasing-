@@ -122,7 +122,8 @@ export interface AnchorSigner {
  * `createSign` trả chữ ký DER thẳng, đúng dạng `openssl dgst -sha256 -verify` đọc được, nên
  * không cần vòng đổi RAW → DER. Biên nhận chọn WebCrypto vì bên KIỂM là nhà cung cấp chạy trong
  * trình duyệt; bên kiểm mốc neo là một kiểm toán viên chạy `openssl` trên máy của họ —
- * [review lượt 9 — H9-9] một kịch bản CHƯA ĐƯỢC ĐO đầu-cuối, xem `anchor-verify.ts`.
+ * ~~[review lượt 9 — H9-9] một kịch bản CHƯA ĐƯỢC ĐO đầu-cuối~~ **[S1.19] nay ĐÃ ĐO đầu-cuối**
+ * bằng `pnpm neo trich` cộng một lượt `openssl dgst` thật trong `cong-cu.int.test.ts`.
  */
 export function createLocalDevAnchorSigner(ring: AnchorSigningKeyRing): AnchorSigner {
   assertLocalDevAllowed();

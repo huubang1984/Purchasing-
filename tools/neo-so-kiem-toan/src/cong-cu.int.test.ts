@@ -12,7 +12,7 @@
 
 import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath } from "node:process";
@@ -227,4 +227,181 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
       bienMoiTruong["TRUSTPROCURE_NEO_KHO"] = cu;
     }
   });
+});
+
+// ==============================================================================================
+// [ADR-026 §5⑶ / S1.19] CÔNG THỨC KIỂM BẰNG `openssl(1)` — THỨ CHƯA AI TRONG KHO NÀY CHẠY
+//
+// Lượt review thứ chín (H9-9) bắt được một câu rộng hơn phép đo: *"kiểm toán viên kiểm được
+// artefact này mà không cần một dòng mã nào của chúng ta"*. Thứ ĐÃ đo khi ấy là chữ ký kiểm được
+// bằng `createVerify` của `node:crypto`. Thứ CHƯA đo là **ba thao tác ở giữa**:
+//
+//   ⑴ tách `text` ra khỏi dòng JSONL — chuỗi trong tệp mang `\n` ở dạng escape;
+//   ⑵ `base64 -d` cho `sig` để lấy lại đúng chuỗi byte DER;
+//   ⑶ đổi SPKI DER sang PEM.
+//
+// Ba thao tác ấy là toàn bộ khoảng cách giữa *"định dạng OpenSSL kiểm được"* và *"kiểm toán viên
+// cầm tệp JSONL và kiểm được"*. Câu bị hạ ở bốn chỗ tại S1.17; khối này là thứ mua nó lại.
+//
+// ----------------------------------------------------------------------------------------------
+// CÁI KHỐI NÀY KHÔNG CHỨNG MINH, nói ngay để không ai đọc rộng hơn
+// ----------------------------------------------------------------------------------------------
+// Nó **KHÔNG** chứng minh chữ ký được kiểm bởi một cài đặt mật mã ĐỘC LẬP. `node:crypto` gọi
+// OpenSSL bên dưới, nên `createVerify` và `openssl dgst` chia nhau phần lớn cùng một khối mã.
+// Thứ mới ở đây là **CÔNG THỨC**: một chuỗi thao tác của con người, chạy trên đúng những tệp mà
+// một kiểm toán viên sẽ có trong tay, bằng một chương trình KHÁC tiến trình đã tạo ra chúng.
+//
+// FAIL-CLOSED, KHÔNG SKIP: nếu `openssl` không có trên máy chạy test, khối này ĐỎ. Một phép đo
+// bị bỏ qua trong im lặng là đúng thứ đã sinh ra khoản nợ 23.
+// ==============================================================================================
+describe("công thức kiểm mốc neo bằng openssl(1) — ADR-026 §5⑶", () => {
+  let orgSsl: string;
+  let raSsl: string;
+
+  function openssl(...thamSo: string[]): { ma: number; ra: string; loi: string } {
+    const kq = spawnSync("openssl", thamSo, { encoding: "utf8" });
+    return { ma: kq.status ?? -1, ra: kq.stdout ?? "", loi: kq.stderr ?? "" };
+  }
+
+  beforeAll(async () => {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id",
+      ["neo-cli-openssl"],
+    );
+    orgSsl = rows[0]!.id;
+    const apiPool = db.poolAs("app_api");
+    await withTenant(apiPool, orgSsl, async (client) => {
+      for (let i = 0; i < 4; i += 1) {
+        await appendAuditEvent(client, orgSsl, {
+          actorType: "USER",
+          action: `SSL${i}`,
+          resourceType: "TEST",
+        });
+      }
+    });
+    raSsl = join(thuMuc, "ra-openssl");
+  }, 60_000);
+
+  it("[INV-B3] trich xuất ba tệp và `openssl dgst -sha256 -verify` nói Verified OK", async () => {
+    // Fail-closed: thiếu openssl thì ĐỎ, không skip. Xem khối đầu.
+    expect(
+      openssl("version").ma,
+      "không chạy được `openssl version` — phép đo này KHÔNG được bỏ qua trong im lặng, vì nó là " +
+        "vế duy nhất chứng minh CÔNG THỨC tách artefact ra khỏi nơi cất chạy được",
+    ).toBe(0);
+
+    expect(chay("xuat", "--org", orgSsl).ma).toBe(0);
+
+    const trich = chay("trich", "--org", orgSsl, "--ra", raSsl);
+    expect(trich.loi, "bộ trích không được ném").not.toMatch(/Error/);
+    expect(trich.ma).toBe(0);
+
+    const vanBan = join(raSsl, `neo-${orgSsl}-seq4.txt`);
+    const chuKy = join(raSsl, `neo-${orgSsl}-seq4.sig`);
+    const khoa = join(raSsl, "khoa-neo-cli.pem");
+    for (const p of [vanBan, chuKy, khoa]) {
+      expect((await stat(p)).isFile(), `${p} phải tồn tại`).toBe(true);
+    }
+
+    // Ba tính chất của artefact mà công thức đứng trên, khẳng định riêng để một lượt đỏ nói được
+    // NÓ hỏng ở đâu thay vì chỉ nói "openssl từ chối".
+    const txt = await readFile(vanBan, "utf8");
+    expect(txt.endsWith("\n"), "văn bản chính tắc kết thúc bằng đúng một \\n").toBe(true);
+    expect(txt, "không được có CR — một lần dịch xuống dòng là một chữ ký hỏng").not.toContain("\r");
+    expect((await readFile(khoa, "utf8")).startsWith("-----BEGIN PUBLIC KEY-----\n")).toBe(true);
+
+    // CÔNG THỨC. Đúng dòng lệnh mà `trich` in ra cho người vận hành.
+    const kq = openssl("dgst", "-sha256", "-verify", khoa, "-signature", chuKy, vanBan);
+    expect(`${kq.ra}${kq.loi}`, "openssl phải nói Verified OK").toContain("Verified OK");
+    expect(kq.ma).toBe(0);
+
+    // Và dòng lệnh ấy phải được IN RA, không để người vận hành tự đoán.
+    expect(trich.ra).toContain("openssl dgst -sha256 -verify");
+  }, 120_000);
+
+  it("[INV-B3] ba đối chứng ÂM: sửa văn bản, sửa chữ ký, sai khoá ⇒ openssl TỪ CHỐI", async () => {
+    const vanBan = join(raSsl, `neo-${orgSsl}-seq4.txt`);
+    const chuKy = join(raSsl, `neo-${orgSsl}-seq4.sig`);
+    const khoa = join(raSsl, "khoa-neo-cli.pem");
+
+    // Không có ba vế này, vế dương ở trên chỉ chứng minh openssl chạy được — không chứng minh nó
+    // đang PHÁN XÉT gì. Cùng khuôn ba đối chứng âm của `receipt.test.ts`.
+    const goc = await readFile(vanBan);
+    const sua = join(raSsl, "sua-van-ban.txt");
+    // Đổi đúng MỘT ký tự của trường `chain_hash`, giữ nguyên độ dài và hình dạng: một bản ghi
+    // vẫn hợp lệ về cú pháp nhưng đã KHÁC thứ được ký.
+    await writeFile(sua, goc.toString("utf8").replace(/chain_hash=(.)/, (_, c: string) => `chain_hash=${c === "a" ? "b" : "a"}`));
+    const caA = openssl("dgst", "-sha256", "-verify", khoa, "-signature", chuKy, sua);
+    expect(caA.ma, "văn bản bị sửa mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
+    expect(`${caA.ra}${caA.loi}`).toContain("Verification failure");
+
+    const sigGoc = await readFile(chuKy);
+    const sigHong = Buffer.from(sigGoc);
+    sigHong.writeUInt8(sigHong.readUInt8(sigHong.length - 1) ^ 0xff, sigHong.length - 1);
+    const sigSua = join(raSsl, "sua-chu-ky.sig");
+    await writeFile(sigSua, sigHong);
+    const caB = openssl("dgst", "-sha256", "-verify", khoa, "-signature", sigSua, vanBan);
+    expect(caB.ma, "chữ ký bị sửa mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
+
+    const { publicKey } = generateKeyPairSync("ec", {
+      namedCurve: "P-256",
+      privateKeyEncoding: { type: "pkcs8", format: "der" },
+      publicKeyEncoding: { type: "spki", format: "der" },
+    });
+    const khoaLa = join(raSsl, "khoa-la.pem");
+    const b64 = Buffer.from(publicKey).toString("base64");
+    await writeFile(
+      khoaLa,
+      `-----BEGIN PUBLIC KEY-----\n${(b64.match(/.{1,64}/g) ?? []).join("\n")}\n-----END PUBLIC KEY-----\n`,
+    );
+    const caC = openssl("dgst", "-sha256", "-verify", khoaLa, "-signature", chuKy, vanBan);
+    expect(caC.ma, "khoá LẠ mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
+  }, 120_000);
+
+  it("[INV-B3] trich KHÔNG cần DATABASE_URL — tách artefact là một thao tác NGOẠI TUYẾN", () => {
+    // Tính chất này không phải một sự tiện tay. Một kiểm toán viên cầm tệp JSONL và vòng khoá
+    // công khai phải dựng lại được ba tệp ấy MÀ KHÔNG có quyền vào cơ sở dữ liệu — nếu khâu tách
+    // đòi `DATABASE_URL` thì thứ gọi là "artefact độc lập" vẫn phải đi qua hệ thống bị kiểm.
+    const cu = bienMoiTruong["DATABASE_URL"]!;
+    bienMoiTruong["DATABASE_URL"] = "";
+    try {
+      const kq = chay("trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-khong-db"));
+      expect(kq.loi, "trich không được đòi DATABASE_URL").not.toContain("DATABASE_URL");
+      expect(kq.ma).toBe(0);
+    } finally {
+      bienMoiTruong["DATABASE_URL"] = cu;
+    }
+  }, 60_000);
+
+  it("[INV-B3] trich KHÔNG tách artefact ra khỏi một nơi cất đang hỏng", async () => {
+    // Quyết định ⑴ của khối `trich`. Một artefact tách ra từ một nơi cất có bản ghi không kiểm
+    // được là một artefact TRÔNG SẠCH HƠN nơi nó đến — và nó sẽ đi vào tay kiểm toán viên đúng
+    // như thế, vì `openssl` chỉ phán xét ba tệp trước mặt nó, không biết gì về tệp JSONL.
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id",
+      ["neo-cli-kho-hong"],
+    );
+    const orgHong = rows[0]!.id;
+    const apiPool = db.poolAs("app_api");
+    await withTenant(apiPool, orgHong, (client) =>
+      appendAuditEvent(client, orgHong, { actorType: "USER", action: "E", resourceType: "TEST" }),
+    );
+    expect(chay("xuat", "--org", orgHong).ma).toBe(0);
+
+    // Bản ghi hỏng đứng SAU một bản ghi tốt: nếu `trich` chỉ kiểm bản ghi nó sắp tách thì nó vẫn
+    // xanh, và vế fail-closed trở thành trang trí.
+    await writeFile(join(thuMuc, `${orgHong}.jsonl`), '{"text":"khong ky","sig":"AA"}\n', {
+      flag: "a",
+    });
+
+    const kq = chay("trich", "--org", orgHong, "--ra", join(thuMuc, "ra-kho-hong"));
+    expect(kq.ma).toBe(1);
+    expect(kq.loi).toContain("không kiểm được");
+  }, 60_000);
+
+  it("trich từ chối một --seq không có trong nơi cất, thay vì im lặng lấy mốc gần nhất", () => {
+    const kq = chay("trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-seq-la"), "--seq", "999");
+    expect(kq.ma).toBe(1);
+    expect(kq.loi).toContain("999");
+  }, 60_000);
 });

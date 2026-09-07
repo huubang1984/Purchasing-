@@ -19,8 +19,14 @@
 // dòng, và văn bản kết thúc bằng đúng một `\n`.
 //
 // [review lượt 9 — H9-9] Nói cho hết: cái ĐÃ ĐO là ĐỊNH DẠNG — chữ ký kiểm được bằng OpenSSL qua
-// `createVerify` của `node:crypto`, một lối vào khác bộ ký. Cái CHƯA ĐO là CÔNG THỨC: tách `text`
-// và `sig` ra khỏi dòng JSONL rồi chạy `openssl(1)` trên tệp. Đừng đọc đoạn trên rộng hơn thế.
+// `createVerify` của `node:crypto`, một lối vào khác bộ ký. ~~Cái CHƯA ĐO là CÔNG THỨC: tách
+// `text` và `sig` ra khỏi dòng JSONL rồi chạy `openssl(1)` trên tệp.~~
+//
+// **[S1.19] VẾ VỪA GẠCH NAY ĐÃ ĐƯỢC ĐO.** `pnpm neo trich` tách một mốc neo thành ba tệp và
+// `tools/neo-so-kiem-toan/src/cong-cu.int.test.ts` chạy `openssl dgst -sha256 -verify` THẬT trên
+// chúng: *Verified OK*, cộng ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá). Giới hạn còn
+// lại, nói ngay: `node:crypto` gọi OpenSSL bên dưới, nên đây **KHÔNG** phải hai cài đặt mật mã
+// độc lập — thứ mới là CÔNG THỨC, chạy trên đúng những tệp một kiểm toán viên sẽ có trong tay.
 // ==============================================================================================
 
 /** Nhãn định dạng. Đổi nhãn là đổi định dạng — mọi neo cũ phải vẫn kiểm được, nên nhãn có `v1`. */

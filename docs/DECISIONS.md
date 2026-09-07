@@ -2303,13 +2303,40 @@ khoản AWS mà role deploy không có vai trò nào. Ở đó *"không xoá đ�
 thay vì một câu trong tài liệu này. **Cho tới lúc đó, phát biểu đúng là: cơ chế đã đủ, chỗ cất thì
 chưa.**
 
-⑶ **CÔNG THỨC KIỂM BẰNG `openssl(1)`.** [review lượt 9 — H9-9] Định dạng được chọn đúng để
-OpenSSL kiểm được, và điều đó ĐÃ ĐO — nhưng đo qua `createVerify` của `node:crypto`, không qua
-`openssl(1)` trên một tệp tách ra từ JSONL. Ba thao tác ở giữa (tách `text`, `base64 -d` cho
-`sig`, đổi SPKI DER sang PEM) chưa ai trong kho này chạy. Đường đóng: một lệnh phụ `trich` xuất
-ba tệp cộng một test int chạy `openssl` thật. Cho tới lúc đó, câu đúng là *"định dạng là thứ
-OpenSSL kiểm được"*, KHÔNG phải *"kiểm toán viên kiểm được mà không cần một dòng mã nào của
-chúng ta"* — bốn chỗ mang câu rộng ấy đã được gạch tại chỗ.
+⑶ ~~**CÔNG THỨC KIỂM BẰNG `openssl(1)`.**~~ **ĐÓNG 2026-09-07 (S1.19).** Nguyên văn giữ lại vì
+đường đóng nó tự viết ra đã được đi đúng từng bước:
+
+> [review lượt 9 — H9-9] Định dạng được chọn đúng để OpenSSL kiểm được, và điều đó ĐÃ ĐO — nhưng
+> đo qua `createVerify` của `node:crypto`, không qua `openssl(1)` trên một tệp tách ra từ JSONL.
+> Ba thao tác ở giữa (tách `text`, `base64 -d` cho `sig`, đổi SPKI DER sang PEM) chưa ai trong kho
+> này chạy. Đường đóng: một lệnh phụ `trich` xuất ba tệp cộng một test int chạy `openssl` thật.
+
+`pnpm neo trich --org <uuid> --ra <thư-mục> [--seq <n>]` sinh ba tệp, và
+`tools/neo-so-kiem-toan/src/cong-cu.int.test.ts` chạy `openssl dgst -sha256 -verify` THẬT trên
+chúng: **Verified OK**, cộng **ba đối chứng âm** (sửa một ký tự của `chain_hash`, lật một byte cuối
+chữ ký, dùng một khoá công khai lạ) — cả ba đều làm OpenSSL từ chối.
+
+**Ba tính chất của lệnh ấy, mỗi cái đóng một ca hỏng cụ thể:** ⑴ nó đi qua `loadVerifiedAnchors`
+nên **không tách artefact ra khỏi một nơi cất đang hỏng** — một artefact tách ra từ một tệp có bản
+ghi không kiểm được là một artefact TRÔNG SẠCH HƠN nơi nó đến, và `openssl` chỉ phán xét ba tệp
+trước mặt nó; ⑵ nó **KHÔNG đọc `DATABASE_URL`** — nếu khâu tách đòi cơ sở dữ liệu thì thứ gọi là
+*"artefact độc lập"* vẫn phải đi qua chính hệ thống bị kiểm; ⑶ nó ghi văn bản bằng
+`Buffer.from(text, "utf8")`, và **đột biến ghi ra CRLF làm `openssl` từ chối** — thông điệp của một
+lần dịch xuống dòng giống hệt thông điệp của một chữ ký giả mạo (*"Verification failure"*).
+
+**MỘT PHÉP ĐO CỦA VÒNG NÀY BÁC MỘT NỬA LẬP LUẬN CỦA CHÍNH NÓ, ghi ra vì nó đắt hơn kết luận.** Bản
+đầu biện minh cho việc dựng PEM bằng cách bọc base64 (thay vì qua `createPublicKey`) bằng câu:
+*"một SPKI DER lưu sai chút ít sẽ được Node lặng lẽ sửa, còn kiểm toán viên chạy `openssl pkey
+-pubin -inform DER` thì gãy"*. Đo trên một SPKI P-256 91 byte cộng MỘT byte rác: `createPublicKey`
+**nhận** và chuẩn hoá về 91 byte; `openssl pkey -pubin -inform DER` **cũng nhận**, mã thoát 0. Vế
+*"kiểm toán viên thì gãy"* **không được chứng minh**. Thứ lựa chọn ấy thật sự mua, và chỉ chừng
+này: **PEM đi ra là bản chép ĐÚNG BYTE của thứ nơi cất đang giữ.**
+
+**Và giới hạn phải nói ngay, vì nó là chỗ dễ đọc rộng nhất:** `node:crypto` gọi OpenSSL bên dưới,
+nên đây **KHÔNG** phải hai cài đặt mật mã độc lập. Thứ mới là **CÔNG THỨC** — một chuỗi thao tác
+của con người, chạy trên đúng những tệp một kiểm toán viên sẽ có trong tay, bằng một chương trình
+KHÁC tiến trình đã tạo ra chúng. Câu *"kiểm toán viên kiểm được mà không cần một dòng mã nào của
+chúng ta"* vẫn **chưa** đúng: `trich` là mã của chúng ta.
 
 ⑷ **NEO NGOÀI CHO KHOÁ CÔNG KHAI CỦA CHÍNH MỐC NEO.** Kiểm toán viên phải lấy được vòng khoá công khai
 qua một đường KHÁC đường lấy artefact — nếu không, kẻ chiếm được cả hai phục vụ một cặp khớp nhau.
