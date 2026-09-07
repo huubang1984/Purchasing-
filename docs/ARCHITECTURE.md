@@ -104,6 +104,12 @@ apps/
                         [S1.14 / ADR-024] Bộ đếm theo người gọi ở bảng `caller_rate_limits`
                         (042) — không `org_id`, không khoá ngoại, tổ chức thật và lạ chung
                         một hàng; bộ dọn nền 5 phút trong tiến trình `api`.
+                        [S1.15 / ADR-025] Bộ dọn THỨ HAI cho `otp_rate_limits` (044): một
+                        policy `FOR DELETE` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và
+                        chỉ trên hàng đã quá sàn 30 phút — bảng ấy XOÁ ĐƯỢC mà KHÔNG ĐỌC
+                        ĐƯỢC, nên câu dọn không có `WHERE` (một `WHERE` tham chiếu cột kéo
+                        theo đòi hỏi policy SELECT). Thân 43 hàm trigger và 70 định nghĩa
+                        trigger nay được hardening ghim; 80/80 trigger ở `ENABLE ALWAYS`.
   unseal-worker/        ~~NestJS~~ hàm thuần — runtime mở thầu có kiểm soát
   public-keys/          [khoản nợ 30] node:http trần — CÔNG BỐ khoá công khai ký biên nhận.
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy
