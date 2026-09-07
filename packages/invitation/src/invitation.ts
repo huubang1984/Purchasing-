@@ -494,13 +494,45 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
 }
 
 /**
- * [review H6-5 ⑵ / sổ nợ 57] `otp_rate_limits` KHÔNG có bộ dọn, và không có ở đây là một quyết định
- * có lý do chứ không phải một lần quên: bảng ấy bật RLS theo `org_id`, nên một `DELETE` nền (ngoài
- * `withTenant`) lọc hết và xoá 0 hàng; còn dọn TỪNG TỔ CHỨC đòi biết tập tổ chức, mà `app_api` không
- * đọc được danh sách ấy (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022),
- * và tập "tổ chức đã thấy" của tiến trình `api` không phủ các tổ chức chỉ có lưu lượng KHÁCH.
- * `caller_rate_limits` (042) dọn được đúng vì nó không mang `org_id`. Sổ nợ 57 ghi ba đường đã xét.
+ * [sổ nợ 57 / migration 044] Dọn `otp_rate_limits`. ~~`otp_rate_limits` KHÔNG có bộ dọn, và không
+ * có ở đây là một quyết định có lý do chứ không phải một lần quên: bảng ấy bật RLS theo `org_id`,
+ * nên một `DELETE` nền (ngoài `withTenant`) lọc hết và xoá 0 hàng; còn dọn TỪNG TỔ CHỨC đòi biết
+ * tập tổ chức, mà `app_api` không đọc được danh sách ấy (cùng ràng buộc đã buộc runner outbox nhận
+ * `listOrganizations` — ADR-022), và tập "tổ chức đã thấy" của tiến trình `api` không phủ các tổ
+ * chức chỉ có lưu lượng KHÁCH.~~ Cả ba câu ấy vẫn ĐÚNG; thứ đổi là `044` không đi đường nào trong
+ * ba: nó thêm một policy `FOR DELETE` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức, và chỉ trên
+ * hàng đã quá SÀN 30 phút. Nên hàm này KHÔNG hỏi "tổ chức nào" — nó hỏi "hàng này còn chặn được ai".
+ *
+ * KHÔNG có tham số tuổi, và KHÔNG THỂ có — đây là phần đắt nhất của thiết kế và nó phải đọc được
+ * ngay ở đây. PostgreSQL đòi policy `SELECT` cho một `DELETE` NGAY KHI câu lệnh tham chiếu cột của
+ * bảng, kể cả chỉ trong `WHERE`. Bộ dọn cố ý KHÔNG có đường đọc (policy của nó là `FOR DELETE`, để
+ * `[INV-F1]` còn đúng), nên một câu `DELETE … WHERE window_start < …` xoá ĐÚNG 0 hàng — đã đo. Câu
+ * TRẦN không tham chiếu cột nào; PostgreSQL tự AND vế `USING` của policy vào, nên mốc tuổi do CSDL
+ * áp. Hệ quả: `044` là nơi DUY NHẤT con số 30 phút có hiệu lực, và `don-bucket.test.ts` canh nó.
+ *
+ * Nhận `pg.Pool` chứ không `PoolClient` vì đây là việc NỀN, và vì câu trần chỉ an toàn trên kết nối
+ * CHƯA gắn tổ chức: gắn rồi thì policy cách ly duyệt mọi hàng của tổ chức ấy — kể cả cửa sổ đang
+ * đếm — và bộ đếm hạn mức của họ về 0. Không lớp nào ở CSDL phân biệt được ca ấy với một lệnh dọn
+ * hợp lệ, nên phép phân biệt nằm ở đây: lấy client, HỎI `app.org_id`, rồi mới xoá.
  */
+export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query<{ tu_do: boolean }>(
+      "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL AS tu_do",
+    );
+    if (rows[0]?.tu_do !== true) {
+      throw new InvitationError(
+        "bộ dọn otp_rate_limits nhận một kết nối ĐÃ gắn tổ chức — câu DELETE trần ở đó sẽ xoá cả " +
+          "cửa sổ đang đếm của tổ chức ấy",
+      );
+    }
+    const kq = await client.query("DELETE FROM otp_rate_limits");
+    return kq.rowCount ?? 0;
+  } finally {
+    client.release();
+  }
+}
 
 /** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
 const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";

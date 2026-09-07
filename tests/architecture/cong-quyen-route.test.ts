@@ -112,6 +112,10 @@ const HAM_DUONG_KHACH = [
   // [sổ nợ 55] `donBucketNguoiGoiCu` XOÁ, nhưng nó là việc NỀN của tiến trình, không có người gọi
   // nào để hỏi thẻ; thứ nó xoá là bộ đếm hết hạn, không phải dữ liệu của ai.
   "donBucketNguoiGoiCu",
+  // [sổ nợ 57] `donOtpRateLimitsCu` cùng lý do, và cửa của nó HẸP HƠN cả hai hàm trên: nó chạy trên
+  // kết nối CHƯA gắn tổ chức (tự kiểm và ném nếu không), và policy `FOR DELETE` của `044` chỉ duyệt
+  // hàng đã quá 30 phút. Một cổng quyền ở đây là hỏi thẻ của một `setInterval`.
+  "donOtpRateLimitsCu",
 ] as const;
 
 /**

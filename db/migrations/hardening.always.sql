@@ -497,8 +497,28 @@ DECLARE
   --
   --   Cả hai danh sách có meta-test khoá ở db/rls-coverage.int.test.ts — sửa một bên mà quên
   --   bên kia là ĐỎ.
+  -- [S1.15 / sổ nợ 57 / 044] DÒNG ĐẦU TIÊN của danh sách này, sau ba vòng RỖNG. Ghi chú ở trên
+  -- nói trước rằng cửa "chỉ nổ khi cấp dòng đầu tiên — tức khi không ai còn nhìn", nên dòng này
+  -- viết ra ĐỦ sáu trục và nói ra thứ nó cho phép:
+  --   bảng   `otp_rate_limits` (bảng tenant, có `org_id` ⇒ pham_vi = 'co_org_id')
+  --   policy `otp_rate_limits_don_cua_so_cu`, LỆNH 'd' (DELETE — không phải '*'), ROLE `app_api`
+  --   biểu thức: "kết nối CHƯA gắn tổ chức" AND "cửa sổ đã quá 30 phút"
+  -- Nó KHÔNG có tính chất mà `HINH_DANG_CHUAN` đòi (tự ràng buộc về đúng tổ chức đang gắn) —
+  -- và không thể có: bộ dọn tồn tại đúng vì `otp_rate_limits` là bảng mà KHÔNG kết nối nào gắn
+  -- được tất cả các tổ chức của nó. Lập luận đầy đủ ở đầu `044_don_bucket_otp.sql`; ba vế ngắn:
+  --   ⑴ mọi đường yêu cầu đi qua `withTenant`, tức `app.org_id` LUÔN có ⇒ vế đầu SAI ⇒ không một
+  --      đường yêu cầu nào nhận thêm quyền nào từ dòng này;
+  --   ⑵ 'd' chứ không '*': đường ĐỌC không bị chạm, nên `[INV-F1]` ("chưa gắn tổ chức thì mọi
+  --      bảng tenant trả 0 hàng") vẫn đúng nguyên văn, và có test đo nó sau khi dòng này tồn tại;
+  --   ⑶ 30 phút là mốc DUY NHẤT, và nó ở đây chứ không ở phía gọi: bộ dọn chạy một `DELETE` TRẦN
+  --      (không `WHERE`) vì mọi mệnh đề `WHERE` tham chiếu cột sẽ kéo theo đòi hỏi policy SELECT —
+  --      thứ mà vế ⑵ cố ý không cấp. PostgreSQL tự AND vế `USING` này vào, nên tuổi do CSDL áp.
+  -- Đổi một ký tự của biểu thức, đổi 'd' sang '*', hay đổi role đều làm dòng này HẾT KHỚP và
+  -- hardening gãy — đó là toàn bộ lý do khoá sáu cột thay vì hai.
   NGOAI_LE_HINH_DANG constant text :=
-    $q$(VALUES ('', '', '', '', '', ''))
+    $q$(VALUES ('', '', '', '', '', ''),
+               ('otp_rate_limits', 'otp_rate_limits_don_cua_so_cu', 'd', 'app_api', 'co_org_id',
+                '((NULLIF(current_setting(''app.org_id''::text, true), ''''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))'))
          AS g(bang, polname, lenh, vai_tro, pham_vi, bieu_thuc)$q$;
 
   -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
@@ -2811,6 +2831,51 @@ $ham$;
                      FROM pg_class c WHERE c.oid = to_regclass('public.caller_rate_limits')),
                   'bảng public.caller_rate_limits không tồn tại')$q$,
       $q$quyền sở hữu bảng public.caller_rate_limits hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.15 / sổ nợ 57] Policy dọn của `otp_rate_limits` (044) ----------------------
+    -- `CAU_POLICY_SAI` nguồn (i) chỉ kêu khi bảng KHÔNG CÒN policy PERMISSIVE nào. `otp_rate_limits`
+    -- có hai, nên một `DROP POLICY otp_rate_limits_don_cua_so_cu` đi qua MỌI lớp trong im lặng:
+    -- cách ly tenant vẫn nguyên, bảng vẫn đọc/ghi được, và thứ DUY NHẤT đổi là bộ dọn xoá 0 hàng
+    -- ở mỗi lượt — tức bảng lại chỉ lớn lên, đúng khoản nợ 57 quay lại mà không ai kêu. Mục này
+    -- là lớp ấy: hardening dựng lại policy, và phán xét đòi ĐÚNG lệnh, ĐÚNG role, ĐÚNG biểu thức.
+    -- Cùng khuôn mục `caller_rate_limits` ở trên, và cùng lý do dùng `EXECUTE format(...)`:
+    -- `db/migration-shape.test.ts` cấm một file tạo policy cho bảng do file KHÁC tạo, và mọi mục
+    -- tự chữa RLS trong file này đi qua idiom động ấy.
+    ARRAY[
+      $q$policy dọn cửa sổ cũ của otp_rate_limits (044)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '044_don_bucket_otp.sql')$q$,
+      $q$DO $fn57b$
+         DECLARE
+           ten_bang constant text := 'public.otp_rate_limits';
+           vi_tu constant text := 'NULLIF(pg_catalog.current_setting(''app.org_id'', true), '''') IS NULL AND window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => 1800))';
+         BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_policy p
+                           WHERE p.polrelid = to_regclass(ten_bang)
+                             AND p.polname = 'otp_rate_limits_don_cua_so_cu') THEN
+             EXECUTE format('CREATE POLICY otp_rate_limits_don_cua_so_cu ON %s FOR DELETE TO app_api USING (%s)',
+                            ten_bang, vi_tu);
+           END IF;
+         END
+         $fn57b$$q$,
+      $q$(SELECT count(*) = 1 FROM pg_policy p
+           WHERE p.polrelid = to_regclass('public.otp_rate_limits')
+             AND p.polname = 'otp_rate_limits_don_cua_so_cu'
+             AND p.polpermissive
+             AND p.polcmd = 'd'
+             AND p.polwithcheck IS NULL
+             AND (SELECT array_agg(r.rolname::text ORDER BY r.rolname COLLATE "C")
+                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)) = ARRAY['app_api']
+             AND pg_get_expr(p.polqual, p.polrelid) = $than57$((NULLIF(current_setting('app.org_id'::text, true), ''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))$than57$)$q$,
+      $q$coalesce((SELECT 'policy dọn của otp_rate_limits lệch — lệnh=' || p.polcmd
+                          || ' vai=' || coalesce((SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C")
+                                                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)), '(không có)')
+                          || ' using=' || coalesce(pg_get_expr(p.polqual, p.polrelid), '(không có)')
+                     FROM pg_policy p
+                    WHERE p.polrelid = to_regclass('public.otp_rate_limits')
+                      AND p.polname = 'otp_rate_limits_don_cua_so_cu'),
+                  'policy otp_rate_limits_don_cua_so_cu KHÔNG tồn tại — bộ dọn xoá 0 hàng, bảng chỉ lớn lên')$q$,
+      $q$quyền sở hữu bảng public.otp_rate_limits hoặc SUPERUSER$q$
     ],
 
     -- ---- Thuộc tính role (hàng rào S1) ---------------------------------------------------

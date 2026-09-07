@@ -29,6 +29,7 @@ export {
   createInvitation,
   // [sổ nợ 55 / 042] Bộ dọn `caller_rate_limits` — việc NỀN của tiến trình `api`, nhận Pool.
   donBucketNguoiGoiCu,
+  donOtpRateLimitsCu,
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,

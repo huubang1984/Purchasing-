@@ -1077,6 +1077,11 @@ describe("migration của dự án", () => {
       // không với tới nó: trước H6-7, hai câu dưới đây sống qua mọi lần `migrate()`.
       await db.pool.query("ALTER TABLE public.caller_rate_limits DISABLE ROW LEVEL SECURITY");
       await db.pool.query("DROP POLICY caller_rate_limits_khach ON public.caller_rate_limits");
+      // [S1.15 / sổ nợ 57] Policy dọn của `otp_rate_limits` (044). Nó KHÔNG được nguồn (i) của
+      // `CAU_POLICY_SAI` che: nguồn ấy chỉ kêu khi bảng hết sạch policy PERMISSIVE, mà bảng này còn
+      // policy cách ly. Gỡ nó đi thì mọi lớp im lặng và thứ duy nhất đổi là bộ dọn xoá 0 hàng —
+      // tức sổ nợ 57 quay lại mà không ai kêu.
+      await db.pool.query("DROP POLICY otp_rate_limits_don_cua_so_cu ON public.otp_rate_limits");
       expect((await db.pool.query<{ o: string | null }>("SELECT to_regprocedure('public.mfa_credentials_xoa_can_yeu_cau()')::text AS o")).rows[0]?.o).toBeNull();
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
       const { rows: dungLai } = await db.pool.query<{ ten: string; than: string; trg: string }>(
@@ -1114,6 +1119,24 @@ describe("migration của dự án", () => {
         force: true,
         pol: "caller_rate_limits_khach",
       });
+      // [S1.15 / sổ nợ 57] Dựng lại ĐÚNG policy, không chỉ MỘT policy cùng tên: lệnh, role và cả
+      // biểu thức. Một bản dựng lại rộng hơn (vd. thiếu vế `window_start`) sẽ xoá cửa sổ đang đếm.
+      const { rows: donCu } = await db.pool.query<{ lenh: string; vai: string | null; using: string }>(
+        `SELECT p.polcmd::text AS lenh,
+                (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C")
+                   FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai,
+                pg_get_expr(p.polqual, p.polrelid) AS using
+           FROM pg_policy p
+          WHERE p.polrelid = to_regclass('public.otp_rate_limits')
+            AND p.polname = 'otp_rate_limits_don_cua_so_cu'`,
+      );
+      expect(donCu, "policy dọn của 044 phải được dựng lại").toHaveLength(1);
+      expect(donCu[0]?.lenh).toBe("d");
+      expect(donCu[0]?.vai).toBe("app_api");
+      expect(donCu[0]?.using).toBe(
+        "((NULLIF(current_setting('app.org_id'::text, true), ''::text) IS NULL) AND " +
+          "(window_start < (now() - make_interval(secs => (1800)::double precision))))",
+      );
       const { rows: ham } = await db.pool.query<{ ten: string; than: string; cfg: string | null }>(
         `SELECT p.proname AS ten, btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, array_to_string(p.proconfig, ',') AS cfg
            FROM pg_proc p WHERE p.proname IN ('mfa_reset_kiem_chuyen_trang_thai', 'mfa_reset_kiem_quyen') ORDER BY 1`,
@@ -2102,6 +2125,7 @@ describe("migration của dự án", () => {
           "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
           "042_bucket_nguoi_goi_toan_cuc.sql",
           "043_danh_tinh_theo_phien_enable_always.sql",
+          "044_don_bucket_otp.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -2173,10 +2197,13 @@ describe("migration của dự án", () => {
       // [vòng fix 3 — I2] Cửa nay khoá SÁU cột. Cố ý KHÔNG so khớp nguyên văn khoảng trắng
       // của file SQL (một lần xuống dòng trong danh sách sẽ làm test vỡ vì lý do vô nghĩa):
       // bắt đúng dòng giữ chỗ RỖNG rồi chèn dòng ngoại lệ ngay sau nó.
+      // [S1.15 / sổ nợ 57] Danh sách nay KHÔNG còn rỗng (044 cấp dòng đầu tiên), nên mẫu cũ —
+      // bắt cả `))` đóng danh sách — hết khớp. Neo vào ĐÚNG dòng giữ chỗ RỖNG và chèn ngay sau
+      // nó: cách ấy đúng với danh sách rỗng lẫn danh sách đã có dòng thật.
       const sqlDaMo = sqlGoc.replace(
-        /\(VALUES \('', '', '', '', '', ''\)\)/,
+        /\(VALUES \('', '', '', '', '', ''\),/,
         "(VALUES ('', '', '', '', '', ''),\n" +
-          "         ('bao_gia', 'bao_gia_unseal', 'r', 'app_unseal', 'co_org_id', 'true'))",
+          "         ('bao_gia', 'bao_gia_unseal', 'r', 'app_unseal', 'co_org_id', 'true'),",
       );
       expect(sqlDaMo, "không tìm thấy NGOAI_LE_HINH_DANG để mở cửa trong bản sao tạm").not.toBe(
         sqlGoc,
@@ -2236,10 +2263,13 @@ describe("migration của dự án", () => {
       );
       const duongDanHardening = join(thuMucTam, "hardening.always.sql");
       const sqlGoc = await readFile(duongDanHardening, "utf8");
+      // [S1.15 / sổ nợ 57] Danh sách nay KHÔNG còn rỗng (044 cấp dòng đầu tiên), nên mẫu cũ —
+      // bắt cả `))` đóng danh sách — hết khớp. Neo vào ĐÚNG dòng giữ chỗ RỖNG và chèn ngay sau
+      // nó: cách ấy đúng với danh sách rỗng lẫn danh sách đã có dòng thật.
       const sqlDaMo = sqlGoc.replace(
-        /\(VALUES \('', '', '', '', '', ''\)\)/,
+        /\(VALUES \('', '', '', '', '', ''\),/,
         "(VALUES ('', '', '', '', '', ''),\n" +
-          "         ('bao_gia', 'bao_gia_unseal', 'r', 'app_unseal', 'co_org_id', 'true'))",
+          "         ('bao_gia', 'bao_gia_unseal', 'r', 'app_unseal', 'co_org_id', 'true'),",
       );
       expect(sqlDaMo, "không tìm thấy NGOAI_LE_HINH_DANG để mở cửa trong bản sao tạm").not.toBe(
         sqlGoc,
@@ -4925,6 +4955,7 @@ describe("migration của dự án", () => {
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
         "042_bucket_nguoi_goi_toan_cuc.sql",
         "043_danh_tinh_theo_phien_enable_always.sql",
+        "044_don_bucket_otp.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -5165,6 +5196,7 @@ describe("migration của dự án", () => {
         "041_outbox_payload_dang_nhap_xoa_sau_xong.sql",
         "042_bucket_nguoi_goi_toan_cuc.sql",
         "043_danh_tinh_theo_phien_enable_always.sql",
+        "044_don_bucket_otp.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

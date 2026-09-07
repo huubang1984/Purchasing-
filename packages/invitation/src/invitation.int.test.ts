@@ -12,6 +12,7 @@ import {
   clearOtpLockout,
   createInvitation,
   donBucketNguoiGoiCu,
+  donOtpRateLimitsCu,
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
@@ -1506,5 +1507,221 @@ describe("[sổ nợ 55] bucket người gọi toàn cục (caller_rate_limits)"
     expect(cu[0]?.n).toBe("0");
     // Cửa sổ đang đếm KHÔNG bị chạm: bộ đếm đi tiếp từ 1 lên 2, không quay về 1.
     expect(await dem(khoa, orgA)).toBe(2);
+  });
+});
+
+// ============================================================================================
+// [sổ nợ 57 / migration 044] BỘ DỌN CỦA `otp_rate_limits` — XOÁ ĐƯỢC MÀ KHÔNG ĐỌC ĐƯỢC
+//
+// Ba đường mà sổ nợ 57 đã xét đều vướng RLS, và `044` không đi đường nào trong ba: nó thêm một
+// policy `FOR DELETE` có hiệu lực ĐÚNG trên kết nối chưa gắn tổ chức và ĐÚNG trên hàng đã quá sàn.
+// Bộ này đo cả ba vế của lời khai ấy, và mỗi vế có một đột biến làm nó đỏ:
+//   ⑴ xoá được hàng quá sàn của MỌI tổ chức — bỏ policy ⇒ xoá 0 hàng (đúng trạng thái trước 044);
+//   ⑵ KHÔNG xoá được cửa sổ đang sống — bỏ vế `window_start` khỏi policy ⇒ hàng sống biến mất;
+//   ⑶ kết nối ĐÃ gắn tổ chức không nhận thêm quyền nào — bỏ vế `app.org_id IS NULL` ⇒ một câu
+//      `DELETE` TRẦN dưới tổ chức A quét luôn hàng cũ của tổ chức B.
+// Cộng hai vế chống-mù:
+//   ⑷ kết nối nền xoá được nhưng ĐỌC ra 0 hàng (`[INV-F1]` vẫn đúng nguyên văn) — và đó chính là
+//      lý do câu dọn KHÔNG có `WHERE`: một `WHERE` tham chiếu cột kéo theo đòi hỏi policy SELECT,
+//      thứ bảng này cố ý không cấp cho kết nối nền. Ca ấy được đo TRỰC TIẾP, không suy luận.
+//   ⑸ đưa cho bộ dọn một kết nối ĐÃ gắn tổ chức ⇒ nó NÉM, không xoá. Câu trần trên một kết nối như
+//      thế sẽ quét sạch cả cửa sổ đang đếm của tổ chức ấy, và CSDL không phân biệt được ca đó.
+// ============================================================================================
+describe("[sổ nợ 57] bộ dọn otp_rate_limits (044)", () => {
+  /** Chèn thẳng bằng superuser: phép đo cần hàng CŨ, mà đường đếm chỉ tạo được hàng của cửa sổ này. */
+  const chen = async (orgId: string, tuoiPhut: number): Promise<Buffer> => {
+    const bam = randomBytes(32);
+    await db.pool.query(
+      "INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits) " +
+        "VALUES ($1, 'DEST', $2, now() - make_interval(mins => $3::int), 1)",
+      [orgId, bam, tuoiPhut],
+    );
+    return bam;
+  };
+  const con = async (bam: Buffer): Promise<boolean> => {
+    const { rows } = await db.pool.query("SELECT 1 FROM otp_rate_limits WHERE bucket_hash = $1", [bam]);
+    return rows.length > 0;
+  };
+
+  it("xoá hàng đã quá sàn của MỌI tổ chức, giữ cửa sổ đang sống, và KHÔNG đọc được bảng", async () => {
+    const cuA = await chen(orgA, 90);
+    const cuB = await chen(orgB, 40);
+    const moiA = await chen(orgA, 20);
+    const moiNhat = await chen(orgB, 0);
+
+    // Vế chống-mù, đo TRƯỚC khi xoá: kết nối nền không đọc được một hàng nào của bảng này. Không có
+    // vế ấy, "xoá được" ở dưới không phân biệt được với "policy dọn mở luôn đường đọc".
+    const { rows: doc0 } = await apiPool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits",
+    );
+    expect(doc0[0]?.n, "kết nối nền phải đọc ra 0 hàng — [INV-F1]").toBe("0");
+
+    expect(await donOtpRateLimitsCu(apiPool)).toBe(2);
+    expect(await con(cuA), "hàng 90 phút của tổ chức A").toBe(false);
+    expect(await con(cuB), "hàng 40 phút của tổ chức B — bộ dọn KHÔNG gắn tổ chức nào").toBe(false);
+    expect(await con(moiA), "hàng 20 phút — chưa quá sàn 30 phút").toBe(true);
+    expect(await con(moiNhat), "cửa sổ đang đếm").toBe(true);
+    await db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = ANY($1)", [[moiA, moiNhat]]);
+  });
+
+  it("cùng câu ấy CÓ `WHERE` thì xoá 0 hàng — đó là lý do câu dọn không có `WHERE`", async () => {
+    // Đây là phép đo giải thích một quyết định thiết kế, không phải một khẳng định về an ninh:
+    // PostgreSQL đòi policy SELECT ngay khi câu lệnh tham chiếu cột, và bảng này không cấp đường
+    // đọc nào cho kết nối nền. Không có phép đo này, `DELETE` trần ở trên đọc như một sự cẩu thả.
+    const cu = await chen(orgA, 90);
+    const kq = await apiPool.query(
+      "DELETE FROM otp_rate_limits WHERE window_start < now() - make_interval(secs => 1800)",
+    );
+    expect(kq.rowCount, "mệnh đề WHERE kéo theo policy SELECT ⇒ không thấy hàng nào để xoá").toBe(0);
+    expect(await con(cu)).toBe(true);
+    // Và câu TRẦN, cùng kết nối, cùng hàng: xoá được.
+    expect(await donOtpRateLimitsCu(apiPool)).toBe(1);
+    expect(await con(cu)).toBe(false);
+  });
+
+  it("kết nối ĐÃ gắn tổ chức ⇒ bộ dọn NÉM thay vì xoá — câu trần ở đó quét cả cửa sổ đang đếm", async () => {
+    const song = await chen(orgA, 0);
+    // `withTenant` giao ra client chứ không pool, nên ca này không viết được bằng cách gọi nhầm
+    // tham số. Dựng nó bằng một pool mà MỌI kết nối đã gắn sẵn tổ chức — đúng hình dạng của một
+    // "pool tenant" mà ai đó có thể thêm vào sau này.
+    const c = await apiPool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgA]);
+      // Pool GIẢ giao ra đúng client đã gắn ấy. `release` là no-op để vòng đời kết nối vẫn thuộc
+      // về test — hàm dọn gọi `release()` trong `finally` của nó, và một client bị trả hai lần ném.
+      const poolGia = {
+        connect: () => Promise.resolve({ query: c.query.bind(c), release: () => undefined }),
+      } as unknown as pg.Pool;
+      await expect(donOtpRateLimitsCu(poolGia)).rejects.toThrow(/ĐÃ gắn tổ chức/u);
+      await c.query("ROLLBACK");
+    } finally {
+      c.release();
+      expect(await con(song), "không hàng nào bị chạm").toBe(true);
+      await db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = $1", [song]);
+    }
+  });
+
+  it("kết nối ĐÃ gắn tổ chức không xoá được hàng quá sàn của tổ chức KHÁC — policy dọn không nới nó", async () => {
+    const cuaB = await chen(orgB, 90);
+    const cuaA = await chen(orgA, 90);
+    const xoaDuoi = (orgId: string): Promise<number> =>
+      withTenant(apiPool, orgId, async (c) => {
+        const kq = await c.query(
+          "DELETE FROM otp_rate_limits WHERE window_start < now() - make_interval(mins => 30)",
+        );
+        return kq.rowCount ?? 0;
+      });
+    // Gắn tổ chức A: chỉ hàng của A biến mất. Đối chứng dương nằm ngay trong cùng câu — nếu policy
+    // cách ly cũng chặn luôn hàng của A thì số này là 0 và khẳng định dưới đỏ.
+    expect(await xoaDuoi(orgA)).toBe(1);
+    expect(await con(cuaA)).toBe(false);
+    expect(await con(cuaB), "hàng của tổ chức B phải còn nguyên").toBe(true);
+    await db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = $1", [cuaB]);
+  });
+});
+
+// ============================================================================================
+// [sổ nợ 57] BA ĐỘT BIẾN — mỗi vế của policy dọn phải chịu lực, và phải chứng minh được là nó chịu
+//
+// Policy `otp_rate_limits_don_cua_so_cu` có đúng hai vế và một phạm vi lệnh. Ba test dưới đây gỡ
+// từng thứ một trên CSDL đang chạy, đo hậu quả, rồi dựng lại nguyên trạng. Không có chúng, cả bộ
+// trên xanh y hệt khi policy được viết rộng hơn nhiều so với thứ đã review.
+// ============================================================================================
+describe("[sổ nợ 57] đột biến trên policy dọn", () => {
+  const NGUYEN_TRANG =
+    "CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits FOR DELETE TO app_api " +
+    "USING (NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL " +
+    "       AND window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => 1800)))";
+
+  /** Thay policy bằng một bản ĐỘT BIẾN, chạy phép đo, rồi dựng lại nguyên trạng dù đo có ném. */
+  const voi = async (banDotBien: string | null, do_: () => Promise<void>): Promise<void> => {
+    await db.pool.query("DROP POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits");
+    try {
+      if (banDotBien !== null) await db.pool.query(banDotBien);
+      await do_();
+    } finally {
+      await db.pool
+        .query("DROP POLICY IF EXISTS otp_rate_limits_don_cua_so_cu ON otp_rate_limits")
+        .then(() => db.pool.query(NGUYEN_TRANG));
+    }
+  };
+  const chen = async (orgId: string, tuoiPhut: number): Promise<Buffer> => {
+    const bam = randomBytes(32);
+    await db.pool.query(
+      "INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits) " +
+        "VALUES ($1, 'DEST', $2, now() - make_interval(mins => $3::int), 1)",
+      [orgId, bam, tuoiPhut],
+    );
+    return bam;
+  };
+  const con = async (bam: Buffer): Promise<boolean> => {
+    const { rows } = await db.pool.query("SELECT 1 FROM otp_rate_limits WHERE bucket_hash = $1", [bam]);
+    return rows.length > 0;
+  };
+  const donSach = (bam: Buffer[]): Promise<unknown> =>
+    db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = ANY($1)", [bam]);
+
+  it("GỠ HẲN policy ⇒ bộ dọn xoá 0 hàng — đúng trạng thái sổ nợ 57 trước 044", async () => {
+    const cu = await chen(orgA, 90);
+    await voi(null, async () => {
+      expect(await donOtpRateLimitsCu(apiPool)).toBe(0);
+      expect(await con(cu), "hàng 90 phút vẫn còn — bảng chỉ lớn lên").toBe(true);
+    });
+    // Khôi phục xong: cùng hàng ấy, cùng lời gọi ấy — nay biến mất.
+    expect(await donOtpRateLimitsCu(apiPool)).toBe(1);
+    expect(await con(cu)).toBe(false);
+  });
+
+  it("BỎ vế `window_start` ⇒ cửa sổ ĐANG ĐẾM bị xoá — vế ấy là thứ duy nhất giữ nó", async () => {
+    const song = await chen(orgA, 0);
+    await voi(
+      "CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits FOR DELETE TO app_api " +
+        "USING (NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL)",
+      async () => {
+        expect(await donOtpRateLimitsCu(apiPool)).toBeGreaterThanOrEqual(1);
+        expect(await con(song), "cửa sổ đang đếm biến mất — hạn mức của tổ chức A về 0").toBe(false);
+      },
+    );
+    // Đối chứng dương sau khi khôi phục: hàng mới của cửa sổ này sống sót qua đúng lời gọi ấy.
+    const songLai = await chen(orgA, 0);
+    expect(await donOtpRateLimitsCu(apiPool)).toBe(0);
+    expect(await con(songLai)).toBe(true);
+    await donSach([songLai]);
+  });
+
+  it("BỎ vế `app.org_id IS NULL` ⇒ kết nối gắn tổ chức A xoá được hàng cũ của tổ chức B", async () => {
+    // ĐO ĐƯỢC MỘT ĐIỀU TRÁI VỚI BẢN ĐẦU CỦA TEST NÀY, và nó đáng ghi: với một câu `DELETE … WHERE`,
+    // bỏ vế `IS NULL` KHÔNG đủ để tổ chức A chạm hàng của B — mệnh đề `WHERE` kéo theo policy
+    // SELECT, và policy cách ly giấu hàng của B đi. Thứ vế `IS NULL` thật sự canh là câu TRẦN:
+    // đúng hình dạng mà bộ dọn dùng, và là hình dạng KHÔNG đi qua policy SELECT.
+    const cuaB = await chen(orgB, 90);
+    const cuaA = await chen(orgA, 90);
+    const xoaTranDuoiA = (): Promise<number> =>
+      withTenant(apiPool, orgA, async (c) => {
+        const kq = await c.query("DELETE FROM otp_rate_limits");
+        return kq.rowCount ?? 0;
+      });
+    await voi(
+      "CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits FOR DELETE TO app_api " +
+        "USING (window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => 1800)))",
+      async () => {
+        // Vế `IS NULL` là thứ giữ policy này NGOÀI mọi đường yêu cầu. Không có nó, một tổ chức xoá
+        // được hạn mức đã hết hiệu lực của tổ chức khác — vẫn không lộ dữ liệu, nhưng nó là một
+        // quyền xuyên tổ chức mà không ai quyết định cấp.
+        expect(await xoaTranDuoiA()).toBeGreaterThanOrEqual(2);
+        expect(await con(cuaA), "hàng của chính tổ chức A — policy cách ly vẫn cho").toBe(false);
+        expect(await con(cuaB), "hàng của tổ chức B bị tổ chức A xoá").toBe(false);
+      },
+    );
+    // Đối chứng dương sau khôi phục: đúng câu ấy, đúng tổ chức ấy — hàng của A vẫn biến mất (policy
+    // cách ly cho phép, và luôn cho phép), hàng của B thì không. Không có vế đối chứng này, "0 hàng
+    // của B" xanh y hệt khi câu lệnh chẳng xoá được gì cả.
+    const cuaBLai = await chen(orgB, 90);
+    const cuaALai = await chen(orgA, 90);
+    expect(await xoaTranDuoiA()).toBeGreaterThanOrEqual(1);
+    expect(await con(cuaALai), "hàng của chính tổ chức A").toBe(false);
+    expect(await con(cuaBLai), "hàng của tổ chức B còn nguyên").toBe(true);
+    await donSach([cuaBLai]);
   });
 });

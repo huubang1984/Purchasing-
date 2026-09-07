@@ -194,35 +194,76 @@ function kiemTraNguyenTu(pFile: Map<string, string>): string[] {
   return thieu;
 }
 
+/**
+ * [S1.15 / sổ nợ 57] NGOẠI LỆ ĐẶT CHỖ, khoá theo (file, bảng, policy) — ba trục, không một tên file.
+ *
+ * Quy tắc bên dưới có một lý do viết sẵn trong chính thông điệp của nó: *"tách hai việc qua hai
+ * file để lộ cửa sổ không có RLS giữa hai transaction"*. Cửa sổ ấy là cửa sổ mà bảng KHÔNG ĐƯỢC
+ * CHE. Miễn trừ sẵn có (`AS RESTRICTIVE`) suy từ đúng tính chất ấy: policy hạn chế chỉ SIẾT.
+ *
+ * `044` là ca thứ hai không mở cửa sổ ấy, và nó KHÔNG suy được từ một tính chất viết ra được:
+ * `otp_rate_limits` ra đời ở `010` CÙNG policy cách ly của nó, nên bảng chưa từng có một khoảnh
+ * khắc trần; policy của `044` là policy THỨ HAI, `FOR DELETE`, và nó NỚI chứ không siết. Nới thì
+ * đáng bị soi kỹ hơn chứ không đáng được miễn trừ theo lớp — nên chỗ này là một DÒNG CÓ TÊN chứ
+ * không phải một vế điều kiện mới trong quy tắc. Nới quy tắc ra để chứa ca này sẽ pre-approve mọi
+ * policy PERMISSIVE tương lai trên mọi bảng đã có policy; đó là hình dạng của lỗ, không phải cửa.
+ *
+ * Lớp có thẩm quyền vẫn là danh sách trắng hình dạng (`hardening.always.sql` +
+ * `db/rls-coverage.int.test.ts`), nơi cùng policy này phải có một dòng khoá SÁU cột.
+ */
+const NGOAI_LE_LAC_CHO: readonly {
+  readonly tenFile: string;
+  readonly tenBang: string;
+  readonly tenPolicy: string;
+  readonly lyDo: string;
+}[] = [
+  {
+    tenFile: "044_don_bucket_otp.sql",
+    tenBang: "otp_rate_limits",
+    tenPolicy: "otp_rate_limits_don_cua_so_cu",
+    lyDo:
+      "bảng ra đời ở 010 CÙNG policy cách ly của nó — không có cửa sổ trần nào; đây là policy " +
+      "THỨ HAI, FOR DELETE, chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên cửa sổ đã " +
+      "quá 30 phút (sổ nợ 57 — bộ dọn không hỏi được 'tổ chức nào')",
+  },
+];
+
 /** Không file nào được bật RLS hay tạo/sửa policy cho bảng do file KHÁC tạo ra. */
 function kiemTraLacCho(pFile: Map<string, string>): string[] {
   const fileTaoBang = new Map(timCacBang(pFile).map((b) => [b.tenBang, b.tenFile]));
   const lacCho: string[] = [];
 
-  const cacCauLenh: [string, RegExp][] = [
-    [
-      "ALTER TABLE ... ROW LEVEL SECURITY",
-      new RegExp(
+  const cacCauLenh: { nhan: string; bieuThuc: RegExp; iBang: number; iPolicy: number }[] = [
+    {
+      nhan: "ALTER TABLE ... ROW LEVEL SECURITY",
+      bieuThuc: new RegExp(
         String.raw`ALTER\s+TABLE\s+${TEN_CO_SCHEMA}\s+(?:ENABLE|FORCE|DISABLE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY`,
         "gi",
       ),
-    ],
+      iBang: 1,
+      iPolicy: 0,
+    },
     // [vòng fix 1 — M6] ALTER POLICY cũng bị soi. Vòng trước chỉ nhìn CREATE POLICY, nên một
     // "ALTER POLICY ... USING (true)" viết thẳng trong file migration đi qua lớp tĩnh im lặng.
-    [
-      "CREATE/ALTER POLICY",
-      new RegExp(
-        String.raw`(?:CREATE|ALTER)\s+POLICY\s+${DINH_DANH}\s+ON\s+${TEN_CO_SCHEMA}`,
+    {
+      nhan: "CREATE/ALTER POLICY",
+      // [S1.15] TÊN POLICY nay được BẮT, không bỏ qua: `NGOAI_LE_LAC_CHO` khoá theo nó, và một
+      // ngoại lệ cấp cho `otp_rate_limits_don_cua_so_cu` không được phủ cho policy cách ly.
+      bieuThuc: new RegExp(
+        String.raw`(?:CREATE|ALTER)\s+POLICY\s+(${DINH_DANH})\s+ON\s+${TEN_CO_SCHEMA}`,
         "gi",
       ),
-    ],
+      iBang: 2,
+      iPolicy: 1,
+    },
   ];
 
   for (const [tenFile, sqlTho] of pFile) {
     const sql = boChuThich(sqlTho);
-    for (const [nhan, bieuThuc] of cacCauLenh) {
+    for (const { nhan, bieuThuc, iBang, iPolicy } of cacCauLenh) {
       for (const khop of sql.matchAll(bieuThuc)) {
-        const tenBang = chuanHoaTen(khop[1]!);
+        const tenBang = chuanHoaTen(khop[iBang]!);
+        const tenPolicy = iPolicy === 0 ? "" : chuanHoaTen(khop[iPolicy]!);
         // [khoản nợ 29] MIỄN TRỪ CÓ ĐIỀU KIỆN, và điều kiện là một tính chất chứ không một tên
         // file: một `CREATE POLICY ... AS RESTRICTIVE` trên bảng do file khác tạo KHÔNG mở được
         // cửa sổ mà quy tắc này canh.
@@ -240,6 +281,13 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
           (khop.index ?? 0) + khop[0].length + 40,
         );
         if (/^\s*CREATE\b/iu.test(khop[0]) && /^\s*AS\s+RESTRICTIVE\b/iu.test(duoiKhop)) {
+          continue;
+        }
+        if (
+          NGOAI_LE_LAC_CHO.some(
+            (n) => n.tenFile === tenFile && n.tenBang === tenBang && n.tenPolicy === tenPolicy,
+          )
+        ) {
           continue;
         }
         const fileGoc = fileTaoBang.get(tenBang);
@@ -384,6 +432,26 @@ describe("hình dạng file migration", () => {
 
   it("[INV-F1] không file nào bật RLS hay tạo/sửa policy cho bảng do file KHÁC tạo ra", () => {
     expect(kiemTraLacCho(cacFile)).toEqual([]);
+  });
+
+  // [S1.15 / sổ nợ 57] Meta-test của cửa vừa mở. Cùng khuôn "không có ngoại lệ chết" đã dùng cho
+  // NGOAI_LE_HINH_DANG: một dòng trỏ tới file/bảng/policy không còn tồn tại là rác IM LẶNG, và rác
+  // im lặng trong một danh sách ngoại lệ là chỗ mà lần nới tiếp theo trốn vào.
+  it("[S1.15] mỗi ngoại lệ đặt chỗ ứng với một CREATE POLICY CÓ THẬT, và có lý do", () => {
+    const chet = NGOAI_LE_LAC_CHO.filter((n) => {
+      const sql = cacFile.get(n.tenFile);
+      if (sql === undefined) return true;
+      const re = new RegExp(
+        String.raw`CREATE\s+POLICY\s+${n.tenPolicy}\s+ON\s+${TEN_CO_SCHEMA}`,
+        "i",
+      );
+      const khop = re.exec(boChuThich(sql));
+      return khop === null || chuanHoaTen(khop[1]!) !== n.tenBang;
+    });
+    expect(chet, "ngoại lệ đặt chỗ không ứng với policy nào đang tồn tại").toEqual([]);
+    for (const n of NGOAI_LE_LAC_CHO) {
+      expect(n.lyDo.length, `ngoại lệ ${n.tenPolicy} phải có lý do`).toBeGreaterThan(40);
+    }
   });
 
   it("[INV-F1] không file migration nào chứa cách viết policy fail-open bị cấm", () => {
