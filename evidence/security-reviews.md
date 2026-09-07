@@ -571,3 +571,47 @@ thật:** `pnpm evidence` đỏ đúng một ca — `[review H5-1] … lần 201
 mức là RỜI RẠC và làm tròn theo EPOCH, nên một vòng đếm vắt qua ranh giới thấy 200 ở đúng chỗ nó chờ
 429. Không phải hồi quy của vòng này (ba bộ đếm của `/auth/*` ở `caller_rate_limits`). Sửa ở
 `13b418f`: `beforeEach` của hai khối có vòng đếm không bắt đầu khi cửa sổ còn dưới 45 giây.
+
+---
+
+# S1.16 — lượt review thứ TÁM (khoản nợ 58), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.16** | `db/migrations/046` (một câu `CREATE INDEX`), `db/otp-don-ke-hoach.int.test.ts`, và bốn chỗ gạch lời khai sai của H7-3 | `ac7cc58` | Review tĩnh; hai phép đo kế hoạch đã chạy thật ở commit ấy | **0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW** | `<commit sửa>` |
+
+**Bề mặt của vòng này nhỏ hơn mọi vòng trước — một chỉ số không-duy-nhất — nên bảng phát hiện ngắn là
+KẾT QUẢ, không phải một lượt review qua loa.** Bốn câu hỏi đối kháng đã hỏi và trả lời:
+
+- **Chỉ số này có tạo oracle không?** Không. Oracle của lớp chỉ số là oracle của tính DUY NHẤT: một
+  `duplicate key` nói cho người gọi biết hàng của TỔ CHỨC KHÁC tồn tại — đó là thứ
+  `db/unique-oracle.int.test.ts` quét, và nó đọc `pg_index` với `indisunique`. Chỉ số này không duy
+  nhất, không sinh lỗi nào, nên nó nằm ngoài lớp ấy một cách ĐÚNG ĐẮN chứ không phải vì lọt lưới.
+- **Nó có mở một kênh THỜI GIAN không?** Đường duy nhất chạm `otp_rate_limits` mà người gọi đo được
+  độ trễ là `demVaTang` (`INSERT … ON CONFLICT`), và đường ấy đi qua KHOÁ CHÍNH — giải quyết xung đột
+  chỉ dùng chỉ số duy nhất. Bộ dọn thì chạy nền. Không có truy vấn nào vừa quan sát được vừa đổi kế
+  hoạch vì chỉ số này.
+- **Nó có đổi thứ tự áp vế RLS không?** Không. `window_start < <mốc>` là phép so sánh btree
+  **leakproof**, nên việc nó được đẩy xuống thành index condition không đưa một hàng nào ra ngoài vế
+  RLS — vế ấy vẫn được áp trước mọi vế người dùng không-leakproof, đúng khuôn PostgreSQL.
+- **`046` có gãy trên cụm đã có chỉ số trùng tên không?** Có, và gãy ỒN ÀO là hành vi ĐÚNG ở đây.
+  Cụm duy nhất có thể ở trạng thái ấy là một CSDL test dựng từ nhánh `no-56-57` trong khoảng giữa
+  `044` và H7-3 — không có cụm thật nào. `IF NOT EXISTS` sẽ nuốt luôn ca "một chỉ số KHÁC mang cùng
+  tên", nên nó không được dùng.
+
+## Một LOW
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H8-1 | **LOW.** Test kế hoạch khẳng định `BitmapOr` — tức nó ghim HÌNH DẠNG NÚT, không phải tính chất. Một bản PostgreSQL sau phục vụ đúng vế ấy bằng Index Scan sẽ làm test đỏ trong khi kết quả vẫn đúng: cùng lớp lỗi mà chính vòng này vừa sửa ở H7-3 (ghim một chi tiết của MỘT chế độ rồi phát biểu cho mọi chế độ) | **Đóng bằng test.** Bỏ khẳng định `BitmapOr`; giữ hai vế nói đúng tính chất — kế hoạch có nhắc `otp_rate_limits_window_idx`, và không có `Seq Scan on otp_rate_limits`. Đối chứng dương (gỡ chỉ số ⇒ Seq Scan) giữ nguyên vì nó là thứ chứng minh hai vế kia có răng |
+
+**Ghi chú của reviewer:** một chốt chống rỗng ruột trong chính test này suýt tự làm mù mình —
+`rows=2000` là TIỀN TỐ của `rows=200000`, nên khẳng định "khớp đúng 1%" sẽ xanh nhờ chính con số nó
+phải phân biệt với; đã sửa thành `rows=2000\b` trong cùng commit `ac7cc58`. Giá ghi của chỉ số là
+một lần chèn btree cho mỗi HÀNG MỚI; đường `ON CONFLICT DO UPDATE` chỉ đổi `hits`, mà `hits` không
+nằm trong chỉ số nào nên cập nhật ấy vẫn HOT. Bộ dọn của `caller_rate_limits` KHÔNG cùng bài toán:
+bảng ấy không có policy tenant để OR vào, nên câu dọn của nó có `WHERE` và dùng Index Scan thẳng
+(0,94 ms trên cùng fixture 200 000 hàng) — sự bất đối xứng giữa hai bộ dọn là có lý do, không phải
+một lần quên.

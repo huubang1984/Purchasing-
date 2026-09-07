@@ -79,7 +79,10 @@ describe("[sổ nợ 58] câu dọn otp_rate_limits dùng được chỉ số", 
     expect(kh, "chỉ số của 046 không được dùng — bộ dọn quay về chi phí theo KÍCH THƯỚC BẢNG").toContain(
       "otp_rate_limits_window_idx",
     );
-    expect(kh).toContain("BitmapOr");
+    // [review H8-1] KHÔNG khẳng định `BitmapOr`. Tính chất cần giữ là *"chỉ số được dùng"*; HÌNH
+    // DẠNG NÚT là việc của bộ lập lịch, và một bản PostgreSQL sau có thể phục vụ đúng vế ấy bằng
+    // Index Scan hay một nút khác mà kết quả vẫn đúng như nhau. Ghim hình dạng nút là mời một lần
+    // nâng cấp làm test đỏ vì một lý do sai — đúng lớp lỗi mà chính vòng này vừa sửa ở H7-3.
     expect(kh, "Seq Scan ở chế độ 1% nghĩa là chỉ số mất tác dụng").not.toContain("Seq Scan on otp_rate_limits");
     // Chốt chống rỗng ruột: fixture phải thật, và số hàng KHỚP phải đúng 1%. `\b` không thừa —
     // `rows=2000` là TIỀN TỐ của `rows=200000`, tức không có nó thì khẳng định này xanh nhờ chính
