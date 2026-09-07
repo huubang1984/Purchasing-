@@ -133,6 +133,9 @@ importers:
 
   packages/audit:
     dependencies:
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../crypto-keys
       pg:
         specifier: ^8.13.0
         version: 8.23.0
@@ -252,6 +255,9 @@ importers:
       '@testcontainers/postgresql':
         specifier: ^10.13.0
         version: 10.28.0(supports-color@7.2.0)
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../db
@@ -284,6 +290,22 @@ importers:
         version: link:../../packages/crypto-keys
 
   tools/inv-matrix: {}
+
+  tools/neo-so-kiem-toan:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
+    devDependencies:
+      '@trustprocure/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
 
 packages:
 

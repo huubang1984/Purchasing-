@@ -26,6 +26,7 @@ import {
   MA_DUOC_PHEP_CHUA_PHU,
   MOC_GHIM,
   PHAM_VI_HEP,
+  PHU_LUC_BAN_GIAO,
   TRICH_BAN_GIAO,
   assertFullSha,
   demVeMenhDe,
@@ -252,7 +253,16 @@ function main(): void {
     "để viết lại cho đẹp. Đây là câu trả lời đúng khi kiểm toán viên hỏi *một chuỗi hash hợp lệ",
     "chứng minh điều gì*.",
     "",
-    ...TRICH_BAN_GIAO.flatMap((t) => ["```text", t.trich, "```", ""]),
+    ...TRICH_BAN_GIAO.flatMap((t) => [
+      "```text",
+      t.trich,
+      "```",
+      "",
+      // [S1.17] Đính chính đi RIÊNG, ngay dưới khối trích, và chỉ cho mã có phụ lục. Sửa trong
+      // khối sẽ xoá mất chính cái đã thay đổi — xem khối chú thích của `PHU_LUC_BAN_GIAO`.
+      ...(PHU_LUC_BAN_GIAO.find((p) => p.ma === t.ma)?.noiDung ?? []),
+      "",
+    ]),
     "## 5. Nhãn vế `[INV-XX(k)]` — cố ý **không** được tính là độ phủ",
     "",
     maCoVe.length === 0

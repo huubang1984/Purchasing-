@@ -17,6 +17,11 @@ export default defineConfig({
       "@trustprocure/sealed-envelope/unseal": fileURLToPath(
         new URL("./packages/sealed-envelope/src/unseal.ts", import.meta.url),
       ),
+      // [S1.17] Cửa hạn chế thứ ba, cùng khuôn: `g11-` chỉ cho tools/neo-so-kiem-toan và test
+      // của chính file đó đi qua. Xem khối đầu `packages/audit/src/anchor-sign.ts`.
+      "@trustprocure/audit/anchor-sign": fileURLToPath(
+        new URL("./packages/audit/src/anchor-sign.ts", import.meta.url),
+      ),
       "@trustprocure": fileURLToPath(new URL("./packages", import.meta.url)),
     },
   },

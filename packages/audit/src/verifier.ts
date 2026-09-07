@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { ExternalAnchor } from "./writer.js";
+import { laNeoDaKiemChuKy, type ExternalAnchor } from "./anchor-verify.js";
 import { assertTenantBound } from "./tenant-guard.js";
 
 export type ChainProblemKind =
@@ -8,6 +8,18 @@ export type ChainProblemKind =
   | "SEQ_GAP"
   | "ANCHOR_MISSING"
   | "NOT_ANCHORED"
+  /**
+   * [S1.17] Một giá trị được truyền vào chỗ `ExternalAnchor` nhưng KHÔNG phải một mốc neo do
+   * `verifyAnchorRecord` đúc ra, tức nó chưa từng qua một phép kiểm chữ ký nào.
+   *
+   * ~~Chỉ tới được đây bằng một `as unknown as` — tầng kiểu đã chặn mọi đường còn lại.~~
+   * [review lượt 9 — H9-2] Câu vừa gạch SAI, và nó sai theo hướng nguy hiểm: một giá trị SAO CHÉP
+   * từ một mốc neo thật (`{ ...neo, seq: 3 }`) typecheck SẠCH, không cần `as` nào. Đó là lý do
+   * bằng chứng ở tầng chạy chuyển sang một `WeakSet` gắn với THAM CHIẾU — xem `anchor-verify.ts`.
+   * Phát biểu đúng: tới được đây bằng một `as unknown as`, một `@ts-expect-error`, HOẶC một phép
+   * sao chép; cả ba nay đều bị bắt.
+   */
+  | "ANCHOR_UNVERIFIED"
   | "EMPTY_LEDGER";
 
 export interface ChainProblem {
@@ -39,8 +51,13 @@ export interface VerifyOptions {
    * trong cùng một vùng tin cậy với tác nhân; `ok:true` thu được KHÔNG PHÂN BIỆT ĐƯỢC với một
    * kết luận kiểm toán thật. Vì thế `exportChainHead` trả `ChainHeadExport` chứ không trả kiểu
    * này, và kiểu này đòi thêm `source` — giá trị chỉ điền được khi neo ĐÃ ĐI QUA nơi cất ngoài
-   * database và QUAY VỀ. `source` KHÔNG được xác thực ở đây (không thể — artefact chưa được
-   * ký); nó chỉ bắt xuất xứ phải viết ra thành chữ và đưa xuất xứ đó vào chẩn đoán.
+   * database và QUAY VỀ. ~~`source` KHÔNG được xác thực ở đây (không thể — artefact chưa được
+   * ký); nó chỉ bắt xuất xứ phải viết ra thành chữ và đưa xuất xứ đó vào chẩn đoán.~~
+   *
+   * [S1.17] ARTEFACT NAY ĐƯỢC KÝ, nên câu vừa gạch không còn đúng. Đường DUY NHẤT đúc ra một giá
+   * trị kiểu này là `verifyAnchorRecord`, và nó chỉ đúc sau khi chữ ký đạt; `loadVerifiedAnchors`
+   * là đường gọi thường dùng. Một giá trị lọt vào đây mà không mang dấu đúc bị báo
+   * `ANCHOR_UNVERIFIED` chứ không được bỏ qua trong im lặng.
    */
   readonly externalAnchors: readonly ExternalAnchor[];
   /**
@@ -269,6 +286,24 @@ export async function verifyAuditChain(
 
   let coNeoDungToChuc = false;
   for (const neo of options.externalAnchors) {
+    // [S1.17] LỚP THỨ HAI CỦA DẤU ĐÚC, và nó đứng TRƯỚC phép lọc tổ chức có chủ đích: một mốc
+    // neo chưa kiểm chữ ký của tổ chức KHÁC vẫn phải kêu. Nếu nó bị `continue` bỏ qua như một
+    // mốc neo lạc chỗ bình thường thì đường "đúc bừa một mốc neo rồi để nó rơi vào nhánh im
+    // lặng" lại mở ra.
+    //
+    // MỐC CHẾT — bỏ khối `if` này thì test "mốc neo tự đúc bằng tay bị từ chối" trong
+    // `verifier.test.ts` phải ĐỎ.
+    if (!laNeoDaKiemChuKy(neo)) {
+      problems.push({
+        seq: 0,
+        kind: "ANCHOR_UNVERIFIED",
+        detail:
+          "Một mốc neo được truyền vào mà KHÔNG mang dấu đúc của verifyAnchorRecord — nó chưa " +
+          "qua phép kiểm chữ ký nào. Mốc neo phải lấy từ nơi cất qua loadVerifiedAnchors, không " +
+          "dựng bằng tay.",
+      });
+      continue;
+    }
     if (neo.orgId !== orgId) continue;
     coNeoDungToChuc = true;
     const bamThucTe = bamTheoSeq.get(neo.seq);

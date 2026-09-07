@@ -54,6 +54,11 @@ const LOCAL_DEV_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-unwrap
 const LOCAL_DEV_SHARED_TS = ciFile("packages/crypto-keys/src/local-dev-shared.ts");
 const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
 const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
+// [S1.17] Ho "g11-": kha nang KY moc neo ngoai. Xem khoi chu thich cua ba quy tac g11- ben duoi.
+const NEO_TOOL_PREFIX = ciPrefix("tools/neo-so-kiem-toan/");
+const NEO_TOOL_SRC_PREFIX = ciPrefix("tools/neo-so-kiem-toan/src/");
+const ANCHOR_SIGN_TS = ciFile("packages/audit/src/anchor-sign.ts");
+const ANCHOR_SIGN_TEST_TS = ciFile("packages/audit/src/anchor-sign.test.ts");
 
 // ==========================================================================================
 // VONG FIX 2 (MUC D) - CUNG KHUON "MAC DINH DONG", AP CHO packages/identity/src/
@@ -453,6 +458,49 @@ module.exports = {
       severity: "error",
       from: {},
       to: { path: ROUNDTRIP_TEST_TS },
+    },
+    // ==========================================================================================
+    // [S1.17] HO "g11-" - KHA NANG KY MOC NEO NGOAI KHONG DUOC VAO TIEN TRINH `api`
+    // ==========================================================================================
+    // Moc neo ngoai ton tai de rang buoc mot vung tin cay MA TIEN TRINH `api` NAM TRONG. Neu bo
+    // ky moc neo di theo `packages/audit` vao `apps/api` (noi nao cung goi appendAuditEvent) thi
+    // ranh gioi ay bien mat o tang lien ket - chua phai mot lo (van can khoa rieng), nhung no xoa
+    // mat thu ma ca co che dung tren.
+    //
+    // Cung khuon g1-: mot file KHONG re-export o index.ts, cong mot quy tac liet ke DICH DANH
+    // nhung module duoc phep import no, cong cac quy tac "khong import nguoc" cho tung module
+    // duoc mien tru - vi mot module duoc mien tru ma khong phai dich han che la mot cau noi.
+    {
+      name: "g11-ky-neo-chi-o-cong-cu-xuat-neo",
+      comment:
+        "Chi tools/neo-so-kiem-toan (entry point xuat moc neo) va test cua chinh file do duoc " +
+        "import anchor-sign.ts. Moi module khac - ke ca packages/audit/src/index.ts - phai di " +
+        "qua duong DOC (anchor-verify.ts), khong cham duong KY (ADR-026, khoan no 11 va 30).",
+      severity: "error",
+      from: { pathNot: [NEO_TOOL_SRC_PREFIX, ANCHOR_SIGN_TEST_TS] },
+      to: { path: ANCHOR_SIGN_TS },
+    },
+    {
+      name: "g11-khong-import-nguoc-tu-cong-cu-xuat-neo",
+      comment:
+        "tools/neo-so-kiem-toan giu kha nang ky moc neo - khong module nao ngoai chinh no duoc " +
+        "import bat cu thu gi no export, ke ca mot re-export mot dong. Khong co quy tac nay, mot " +
+        "file trong cong cu re-export createLocalDevAnchorSigner va bat ky app nao cung voi toi " +
+        "duoc ma khong cham quy tac g11 nao khac.",
+      severity: "error",
+      from: { pathNot: NEO_TOOL_PREFIX },
+      to: { path: NEO_TOOL_PREFIX },
+    },
+    {
+      name: "g11-khong-import-nguoc-tu-anchor-sign-test",
+      comment:
+        "anchor-sign.test.ts la file test, khong phai module san xuat - khong co ly do hop phap " +
+        "nao de bat ky module nao import no. Khong mien tru module nao: day la cau noi thu hai " +
+        "co the dua kha nang ky moc neo ra ngoai neu bi bo qua (cung lop loi voi " +
+        "g1-khong-import-nguoc-tu-roundtrip-test).",
+      severity: "error",
+      from: {},
+      to: { path: ANCHOR_SIGN_TEST_TS },
     },
     {
       name: "g1-khong-import-trustprocure-khong-resolve-duoc",

@@ -115,7 +115,10 @@ apps/
                         CHỈ ĐỌC, không chạm CSDL, không phụ thuộc `pg`. Nó đóng ĐƯỜNG lấy
                         khoá, KHÔNG đóng tính ĐỘC LẬP: một endpoint do chính ta phục vụ vẫn
                         là "hỏi chúng ta". Neo ngoài (fingerprint SHA-256 in ra hợp đồng)
-                        là thứ đóng nốt, và nó vẫn là khoản nợ 11.
+                        là thứ đóng nốt, và ~~nó vẫn là khoản nợ 11~~ [S1.17] nó KHÔNG phải
+                        khoản nợ 11: khoản 11 nói về artefact neo cho SỔ KIỂM TOÁN và đã đóng
+                        (ADR-026); cái còn lại ở đây là neo cho KHOÁ CÔNG KHAI, và nó không
+                        có đường đóng bằng mã.
 packages/
   tenancy/              TenantContext, tích hợp RLS. `withTenant` gắn TỔ CHỨC;
                         [khoản nợ 29] `withGuestSession` gắn thêm PHIÊN KHÁCH, và migration
@@ -123,7 +126,13 @@ packages/
                         nên một kết nối đã gắn phiên khách chỉ thấy dữ liệu của đúng lời mời
                         đó (A5 ở tầng CSDL). Không có role `app_guest`: xem khối đầu 027 cho
                         lý do đo được, và phần chênh ở §4 của ma trận bất biến.
-  audit/                Sổ chuỗi hash, bộ kiểm chứng
+  audit/                Sổ chuỗi hash, bộ kiểm chứng. [S1.17 / ADR-026] Cộng ARTEFACT NEO
+                        NGOÀI: `anchor-text.ts` (văn bản chính tắc được ký), `anchor-verify.ts`
+                        (kiểm chữ ký — chỗ DUY NHẤT đúc ra `ExternalAnchor`, nhờ một dấu đúc
+                        symbol module-private), `anchor-store.ts` (nơi cất CHỈ-GHI-THÊM), và
+                        `anchor-sign.ts` — CỬA THỨ HAI của gói, đường KÝ, sau quy tắc `g11-`
+                        và KHÔNG có ở `index.ts`: tiến trình `api` nằm TRONG vùng tin cậy mà
+                        mốc neo sinh ra để ràng buộc, nên nó không được link khả năng ký.
   crypto-keys/          Interface KeyProvider và các adapter
   identity/             Tổ chức, người dùng, vai trò, quyền, phiên, MFA
   outbox/               Transactional outbox
@@ -135,14 +144,22 @@ packages/
   unseal/               Yêu cầu mở, cổng chính sách, phê duyệt kép
 db/
   migrations/           Migration SQL — RLS, trigger, quyền role
+tools/
+  neo-so-kiem-toan/     [S1.17 / ADR-026] Entry point mốc neo ngoài: `xuat` (đọc đầu chuỗi, KÝ,
+                        nối vào nơi cất) và `kiem` (lấy MỌI mốc neo từ nơi cất, kiểm chữ ký,
+                        đối chiếu với sổ). Danh sách tổ chức là THAM SỐ `--org` chứ không do
+                        công cụ đoán — `app_api` không đọc được danh sách ấy (ADR-022).
 evidence/
   INV-matrix.md         Sinh tự động bởi CI
 docs/
 ```
 
-~~Mỗi package có đúng một mặt tiền công khai `index.ts`.~~ **[S1.4] Câu ấy đúng cho CHÍN gói và
-sai cho HAI.** `crypto-keys` và `sealed-envelope` mỗi gói có **hai** cửa, và cửa thứ hai của cả
-hai là **đường mở** — `unwrap.ts` và `unseal.ts`. Chúng không phải ngoại lệ được nới ra: mỗi cửa
+~~Mỗi package có đúng một mặt tiền công khai `index.ts`.~~ ~~**[S1.4] Câu ấy đúng cho CHÍN gói và
+sai cho HAI.**~~ **[S1.17] Nay sai cho BA.** `crypto-keys`, `sealed-envelope` và `audit` mỗi gói có
+**hai** cửa. Cửa thứ hai của hai gói đầu là **đường mở** — `unwrap.ts` và `unseal.ts`; cửa thứ hai
+của `audit` là **đường KÝ mốc neo** (`anchor-sign.ts`, họ quy tắc `g11-`, miễn trừ duy nhất là
+`tools/neo-so-kiem-toan` cộng test của chính file đó). Ba cửa, ba khả năng khác nhau, cùng một
+khuôn: giải mã, mở phong bì, và đúc mốc neo đều là những thứ mà "ai import cũng được" là sai. Chúng không phải ngoại lệ được nới ra: mỗi cửa
 thứ hai mang một quy tắc dependency-cruiser RIÊNG cho phép **đúng một** miễn trừ
 (`apps/unseal-worker/`, cộng test vòng đời của chính gói), và mỗi quy tắc ấy có probe chứng minh
 nó đỏ thật. Import xuyên module không qua cửa bị dependency-cruiser chặn ở tầng test T0, và
