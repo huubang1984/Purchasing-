@@ -1233,7 +1233,7 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0). **Không mở nợ mới.**
 
     **Số đo trên HEAD:** `pnpm t0` 179 module / 0 vi phạm; `pnpm test` 554/554; `pnpm test:int`
-    **725/725**; `pnpm evidence` **51/51**, cổng XANH.
+    **725/725**; `pnpm evidence` **51/51**, **1279 khẳng định**, cổng XANH, vitest thoát mã 0.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
