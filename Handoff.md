@@ -671,7 +671,13 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     tại để tôn trọng quy ước "giữ nguyên văn" — dùng được để LÀM IM một con trỏ chết và để bóc mất
     một lời khai đang sống.
 
-    ⑺ **Một phép kiểm dừng ở lời khai ĐẦU TIÊN sẽ xanh trên đúng tệp đang sai.** Bản đầu của P5 đòi
+    ⑺ **Một phép kiểm đọc ĐĨA đo cái đĩa của người chạy nó.** Lượt CI đầu tiên của vòng này
+    đỏ ở CẢ HAI runner trong khi `pnpm t0`, bộ test đơn vị và `pnpm evidence:check` đều xanh
+    trên máy phát triển: hai con trỏ vừa được *sửa* trỏ tới tệp có thật trên đĩa của tôi mà
+    KHÔNG có trong kho (cây báo cáo SDD bị `.gitignore` phủ). Nếu khẳng định là về CÁI KHO
+    thì nguồn phải là `git ls-files`, không phải `existsSync`.
+
+    ⑻ **Một phép kiểm dừng ở lời khai ĐẦU TIÊN sẽ xanh trên đúng tệp đang sai.** Bản đầu của P5 đòi
     *"đúng MỘT lời khai `n ADR`"*; chạy lên thì có HAI, ở hai mục của cùng một tệp, khai **28** và
     **27**. Đổi thành *"MỌI lời khai"*. Cùng khuôn với `MIEN_TRU` phải RỖNG của ADR-027: **đừng
     thiết kế phép kiểm quanh số lượng bạn tưởng là có.**

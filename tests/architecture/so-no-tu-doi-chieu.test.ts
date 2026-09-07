@@ -47,10 +47,11 @@
 //   P3 **Tập dòng khai MỞ hoặc NỬA bằng đúng tập số ở dòng tổng kết.** Đây là vế đóng khiếm
 //      khuyết ở trên, và nó đóng theo CẢ HAI CHIỀU: khai thiếu là đỏ, khai thừa cũng đỏ.
 //
-//   P4 **Mọi đường dẫn ở cột con trỏ phải giải được.** Đo trước khi sửa: mười đường hỏng, trong
-//      đó dòng 55 trỏ tới `apps/api/src/bucket-bo-nho.ts` — tệp mà THÂN CỦA CHÍNH DÒNG ẤY nói đã
-//      bị xoá. Một con trỏ chết làm khoản nợ không đọc lại được, tức nó âm thầm biến một khoản
-//      nợ thành một câu chuyện.
+//   P4 **Mọi đường dẫn ở cột con trỏ phải giải được trong tập tệp GIT THEO DÕI.** Đo trước khi
+//      sửa: mười đường hỏng, trong đó dòng 55 trỏ tới `apps/api/src/bucket-bo-nho.ts` — tệp mà
+//      THÂN CỦA CHÍNH DÒNG ẤY nói đã bị xoá. Một con trỏ chết làm khoản nợ không đọc lại được,
+//      tức nó âm thầm biến một khoản nợ thành một câu chuyện. Vế *"git theo dõi"* chứ không
+//      *"có trên đĩa"* là kết quả của lượt CI đầu tiên — xem `DUOC_THEO_DOI`.
 //
 //   P5 **Số ADR mà `docs/STATE.md` khai bằng số đầu mục `## ADR-` trong sổ quyết định.** S1.20
 //      bắt được *"mười chín ADR"* trong khi sổ đã tới 28 — bắt được vì tình cờ đọc tới, không vì
@@ -65,8 +66,9 @@
 // (bài học của khoản nợ 59: `apps/api/src/routes.test.ts` viết probe thật vào cây nguồn).
 // ==============================================================================================
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -241,24 +243,44 @@ function trongKho(duong: string): boolean {
   return tuyet === resolve(GOC) || tuyet.startsWith(resolve(GOC) + sep);
 }
 
+/**
+ * [lượt CI đầu tiên của vòng này] NGUỒN LÀ `git ls-files`, KHÔNG PHẢI ĐĨA — và đây là một phép đo,
+ * không phải một sở thích.
+ *
+ * Bản trước hỏi `existsSync`. Nó XANH trên máy phát triển và **ĐỎ trên cả hai runner của CI**, vì
+ * hai con trỏ vừa được "sửa" trong chính vòng này trỏ tới
+ * `.superpowers/sdd/…/task-10-report.md` — tệp có thật trên đĩa của tôi và **không có trong kho**
+ * (`.superpowers/sdd/.gitignore` là `*`). Tức P4 khi ấy đang đo CÁI ĐĨA CỦA NGƯỜI CHẠY NÓ, không
+ * đo cái kho — đúng lớp khiếm khuyết mà review lượt 13 (H13-11) nêu ở dạng nhẹ hơn, và CI đưa ra
+ * bản nặng hơn: một con trỏ chỉ giải được ở đúng một chỗ trên đời.
+ *
+ * Đọc tập tệp ĐƯỢC THEO DÕI cũng bịt luôn hai thứ khác: không còn lối thoát thư mục nào để mà lo
+ * (mọi đường trong tập đều là đường tương đối trong kho), và không còn `readdirSync` nào chạy
+ * trên một tên lấy từ tài liệu.
+ */
+const DUOC_THEO_DOI: ReadonlySet<string> = new Set(
+  execFileSync("git", ["ls-files"], { cwd: GOC, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+    .split(/\r?\n/)
+    .filter((d) => d !== "")
+    .map((d) => d.replace(/\\/g, "/")),
+);
+
 function giaiDuoc(duong: string): boolean {
   const sach = duong.replace(/\/$/, "");
   if (!trongKho(sach)) return false;
-  if (!sach.includes("*")) return existsSync(join(GOC, sach));
-  const thuMuc = dirname(sach);
-  if (!existsSync(join(GOC, thuMuc))) return false;
-  // [review lượt 13, H13-12] `new RegExp` dựng từ chuỗi trong tài liệu: một tên bắt đầu bằng `?`
+  if (!sach.includes("*")) {
+    return DUOC_THEO_DOI.has(sach) || [...DUOC_THEO_DOI].some((t) => t.startsWith(`${sach}/`));
+  }
+  // [review lượt 13, H13-12] `new RegExp` dựng từ chuỗi trong tài liệu: một mẫu bắt đầu bằng `?`
   // làm nó NÉM `SyntaxError`. Hỏng ồn ào vẫn tốt hơn hỏng im, nhưng nó phải hỏng thành MỘT VI
   // PHẠM CÓ TÊN, không thành một stack trace ở giữa bộ test.
   let mau: RegExp;
   try {
-    mau = new RegExp(
-      `^${sach.slice(thuMuc.length + 1).replace(/[.+^${}()|[\]\\?]/g, "\\$&").replace(/\*/g, ".*")}$`,
-    );
+    mau = new RegExp(`^${sach.replace(/[.+^${}()|[\]\\?]/g, "\\$&").replace(/\*/g, "[^/]*")}$`);
   } catch {
     return false;
   }
-  return readdirSync(join(GOC, thuMuc)).some((t) => mau.test(t));
+  return [...DUOC_THEO_DOI].some((t) => mau.test(t));
 }
 
 function cacDuongTrong(o: string): readonly string[] {
@@ -462,7 +484,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     ]);
   });
 
-  it("P4 — mọi con trỏ chưa bị gạch đều giải được trên đĩa", () => {
+  it("P4 — mọi con trỏ chưa bị gạch đều giải được TRONG TẬP TỆP GIT THEO DÕI", () => {
     expect(viPhamConTro(STATE)).toEqual([]);
   });
 

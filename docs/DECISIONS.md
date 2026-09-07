@@ -2830,6 +2830,10 @@ gì**. Khai năm khoản trong khi có mười ba nghĩa là tám khoản nợ k
    `issueOtpChallenge` và chặt hơn), và nó KHÔNG rỗng một cách cố ý — khác `MIEN_TRU` của ADR-027,
    ở đây miễn trừ nói *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"*.
 
+⑺ **[lượt CI đầu tiên] Nguồn của một khẳng định về CÁI KHO phải là CÁI KHO, không phải cái
+   đĩa.** `existsSync` trả lời câu *"tệp này có trên máy đang chạy không"* — một câu khác
+   câu đang hỏi, và nó xanh trên đúng máy đã viết ra lỗi. `git ls-files` trả lời đúng câu.
+
 ### 3. Vì sao không phải "cẩn thận hơn"
 
 Đây là lựa chọn đã bị bác bỏ bằng đo, hai lần. Mục 33 (S1.18) **gọi tên** khoản nợ 7 là thiu; mục
@@ -2901,6 +2905,11 @@ một vòng riêng. Ghi ra ở đây để nó là một **quyết định**, kh
    trên đúng dòng ấy.
 8. **[vòng sửa]** Bảng *Tham chiếu* khai *"Sổ đăng ký 51 bất biến (34 + 17)"*, sổ đăng ký có
    **54 (34 + 20)**. ✔ đã đo — P6 ĐỎ ngay lượt đầu.
+10. **[lượt CI đầu tiên]** Hai con trỏ do chính vòng này sửa trỏ tới tệp **có trên đĩa mà
+    KHÔNG có trong kho** (`git ls-files .superpowers` = 0). `pnpm t0`, bộ test đơn vị và
+    `pnpm evidence:check` đều xanh trên máy phát triển; **T1+T2 đỏ ở CẢ HAI runner của CI**.
+    Nguồn của P4 đổi từ `existsSync` sang `git ls-files`. ✔ đã đo — và đây là bản NẶNG của
+    chính lớp lỗi mà review lượt 13 nêu ở H13-11.
 9. **[vòng sửa]** Xoá `callerLimit` khỏi `/auth/totp`: trước vòng sửa **không test nào đỏ**;
    sau vòng sửa, phép kiểm tĩnh đỏ cho TỪNG route ANON một, và test tích hợp đo
    `429 + Retry-After` trên chính đường ấy. ✔ đã đo cả hai chiều.
