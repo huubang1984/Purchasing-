@@ -51,19 +51,30 @@ export interface ChainAnchor {
  * này dài `seq` và đầu chuỗi là `hashHex`". Nó KHÔNG chứng minh những sự kiện đã bị nuốt trước
  * lúc ghi từng tồn tại.
  *
- * [vòng fix 1 — IM6] TRẠNG THÁI THẬT, viết ra thay vì để "đã làm" che đi: CƠ CHẾ đã có (kiểu
+ * [vòng fix 1 — IM6] ~~TRẠNG THÁI THẬT, viết ra thay vì để "đã làm" che đi: CƠ CHẾ đã có (kiểu
  * này + `exportChainHead` + nhánh `externalAnchors` của bộ kiểm chứng). ARTEFACT thì CHƯA CÓ —
  * không exporter, không lịch, không nơi cất, không chữ ký, không entry point; `grep` ngoài
  * packages/audit không ra gì và ci.yml không bao giờ kiểm chứng một chuỗi nào. Đó là NỢ VẬN
- * HÀNH, không phải một bảo đảm đã mua được.
+ * HÀNH, không phải một bảo đảm đã mua được.~~
+ * **[S1.17] BỐN TRONG NĂM ĐÃ CÓ, và cái thứ năm là thứ mã không làm được.** Nơi cất:
+ * `anchor-store.ts`. Chữ ký: `anchor-sign.ts` + `anchor-verify.ts`. Exporter và entry point:
+ * `tools/neo-so-kiem-toan/`. Và `pnpm test:int` — job T3 của ci.yml — nay kiểm chứng một chuỗi
+ * THẬT với một artefact THẬT lấy từ một nơi cất THẬT (`chain.int.test.ts`). Còn thiếu: **LỊCH**,
+ * và nó không thiếu vì quên — một cái lịch là một tiến trình đang chạy ở một nơi đã triển khai,
+ * và dự án chưa triển khai ở đâu. Xem ADR-026 §5.
  *
  * [vòng fix 1 — M5] HAI YÊU CẦU BẮT BUỘC cho nơi cất, cả hai đều đo được là load-bearing:
  *   (1) NƠI CẤT PHẢI CHỈ-GHI-THÊM, không được GHI ĐÈ. Đo dưới một policy cắt đuôi:
  *       `exportChainHead` trả HEAD {"seq":3} trên một sổ 6 hàng. Nếu nơi cất ghi đè, một lần
  *       cắt đuôi được RỬA THÀNH GỐC TIN CẬY mới. Và việc kiểm chứng phải xét MỌI neo còn giữ,
  *       không chỉ neo mới nhất — `verifyAuditChain` nhận cả MẢNG chính vì lý do này.
- *   (2) ARTEFACT HIỆN KHÔNG ĐƯỢC KÝ, nên "nằm ngoài vùng ghi của role deploy" là bảo đảm DUY
- *       NHẤT. Mất tính chất đó thì neo MẤT SẠCH giá trị, không suy giảm dần.
+ *       **[S1.17] Vế này KHÔNG đổi, và nay nó có một mốc chết**: hằng số `CO_CHE_MO_DE_GHI` của
+ *       `anchor-store.ts`, cộng một test đo đúng kịch bản trên.
+ *   (2) ~~ARTEFACT HIỆN KHÔNG ĐƯỢC KÝ, nên "nằm ngoài vùng ghi của role deploy" là bảo đảm DUY
+ *       NHẤT. Mất tính chất đó thì neo MẤT SẠCH giá trị, không suy giảm dần.~~
+ *       **[S1.17] ARTEFACT NAY ĐƯỢC KÝ**, nên "nằm ngoài vùng ghi của role deploy" thôi là bảo
+ *       đảm duy nhất — nhưng nó vẫn là bảo đảm KHÔNG THAY THẾ ĐƯỢC, vì chữ ký chặn BỊA THÊM còn
+ *       chỉ-ghi-thêm chặn BỎ BỚT. Xem khối đầu `anchor-store.ts`.
  *
  * [vòng fix 2 — I2] KIỂU NÀY TÁCH LÀM HAI, và đó là toàn bộ nội dung bản vá. Trước vòng này,
  * `exportChainHead` trả thẳng một `ExternalAnchor`, nên đường DỄ VIẾT NHẤT là:
@@ -79,14 +90,23 @@ export interface ChainAnchor {
  * tín hiệu bị HẠ, không nâng, ở đúng ca dễ viết nhất.
  *
  * Nên `exportChainHead` nay trả `ChainHeadExport` — thứ ĐI RA kho — và `ExternalAnchor` đòi
- * thêm `source`, thứ chỉ điền được khi giá trị ĐÃ ĐI QUA kho và QUAY VỀ. Người gọi vẫn tự tay
+ * thêm `source`, thứ chỉ điền được khi giá trị ĐÃ ĐI QUA kho và QUAY VỀ. ~~Người gọi vẫn tự tay
  * đúc được một neo giả (`{ ...xuat, source: "bịa" }`) — không lớp kiểu nào chặn được điều đó,
  * và nói ngược lại là nói quá. Cái mua được là: việc đó không còn VIẾT ĐƯỢC MỘT CÁCH TÌNH CỜ,
- * nó phải viết ra thành chữ, tại chỗ, nơi review nhìn thấy.
+ * nó phải viết ra thành chữ, tại chỗ, nơi review nhìn thấy.~~
+ * **[S1.17] Nay CÓ một lớp chặn nó, và nó là hai lớp:** `ExternalAnchor` chuyển sang
+ * `anchor-verify.ts` và mang một DẤU ĐÚC — một symbol module-private — nên object literal ấy
+ * không còn typecheck; và `verifyAuditChain` kiểm dấu đúc ở TẦNG CHẠY, nên một `as unknown as`
+ * cho ra `ANCHOR_UNVERIFIED` chứ không cho ra một kết luận xanh. Giới hạn của lớp này được viết
+ * ra ở chính khối đầu `anchor-verify.ts`, không giấu: cùng tiến trình thì
+ * `Object.getOwnPropertySymbols` lấy lại được dấu đúc.
  *
- * `source` KHÔNG được `verifyAuditChain` xác thực và KHÔNG THỂ được xác thực trong phạm vi S0
+ * ~~`source` KHÔNG được `verifyAuditChain` xác thực và KHÔNG THỂ được xác thực trong phạm vi S0
  * (artefact chưa được ký — xem (2) ở trên). Nó là một NHÃN XUẤT XỨ: nó đi vào chẩn đoán của
- * `ANCHOR_MISSING` để một kết luận kiểm toán tự nói ra gốc tin cậy mà nó dựa vào.
+ * `ANCHOR_MISSING` để một kết luận kiểm toán tự nói ra gốc tin cậy mà nó dựa vào.~~
+ * **[S1.17] `source` nay là DẪN XUẤT**, không phải chữ của người gọi: `verifyAnchorRecord` ghép
+ * nó từ mô tả nơi cất và `kid` lấy TỪ CHÍNH VĂN BẢN ĐÃ ĐƯỢC KÝ. Nó vẫn đi vào chẩn đoán với
+ * đúng mục đích cũ.
  */
 export interface ChainHeadExport {
   readonly orgId: string;
@@ -95,15 +115,13 @@ export interface ChainHeadExport {
   readonly exportedAt: string;
 }
 
-/**
- * Một `ChainHeadExport` đã LẤY VỀ TỪ NƠI CẤT NGOÀI DATABASE. Xem khối chú thích trên.
- *
- * `source` mô tả nơi cất đã trả giá trị này về (kho artefact của CI, sổ của bên thứ ba, ...).
- * Nó là chữ của người gọi, không phải một chứng cứ mật mã.
- */
-export interface ExternalAnchor extends ChainHeadExport {
-  readonly source: string;
-}
+// [S1.17] `ExternalAnchor` KHÔNG còn khai ở đây. Nó chuyển sang `anchor-verify.ts` vì kiểu ấy nay
+// mang một dấu đúc mà chỉ chỗ KIỂM CHỮ KÝ đặt được — để ở đây thì `writer.ts` (một file mà tiến
+// trình `api` import ở mọi đường ghi) sẽ là nơi đúc ra được mốc neo. Nguyên văn cũ:
+//   ┌ /** Một `ChainHeadExport` đã LẤY VỀ TỪ NƠI CẤT NGOÀI DATABASE. Xem khối chú thích trên.
+//   │   * `source` mô tả nơi cất đã trả giá trị này về (kho artefact của CI, sổ của bên thứ ba,
+//   │   * ...). Nó là chữ của người gọi, không phải một chứng cứ mật mã. */
+//   └ export interface ExternalAnchor extends ChainHeadExport { readonly source: string; }
 
 interface HangGhi {
   id: string;

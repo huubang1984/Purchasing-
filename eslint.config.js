@@ -46,6 +46,9 @@ export default tseslint.config(
       // hook, cùng lý do đã ghi ở `tools/inv-matrix/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một
       // thư mục, không gộp `apps/*/*.mjs`.
       "apps/api/*.mjs",
+      // [S1.17] `tools/neo-so-kiem-toan/*.mjs` — bản sao có chủ ý thứ tư của cùng hook resolve,
+      // cho entry point xuất/kiểm mốc neo ngoài. Vẫn liệt kê đúng một thư mục.
+      "tools/neo-so-kiem-toan/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

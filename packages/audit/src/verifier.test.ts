@@ -1,7 +1,9 @@
+import { taoBoKyNeoThuNghiem } from "@trustprocure/test-support";
 import type pg from "pg";
 import { describe, expect, it } from "vitest";
+import { verifyAnchorRecord, type ExternalAnchor } from "./anchor-verify.js";
 import { verifyAuditChain, type ChainProblem } from "./verifier.js";
-import type { ChainHeadExport, ExternalAnchor } from "./writer.js";
+import type { ChainHeadExport } from "./writer.js";
 
 /**
  * Kiểm chứng LOGIC ghép chuỗi, không cần container.
@@ -76,16 +78,35 @@ function chuoiTot(n: number): HangGia[] {
  * mảng rỗng sinh `NOT_ANCHORED`. Đó chính là điều mục CR2 mua được — xem docstring của
  * verifyAuditChain.
  */
+const BO_KY_NEO = taoBoKyNeoThuNghiem("neo-test");
+const NOI_CAT = "kho-artefact-gia-lap-cua-test";
+
+/**
+ * [S1.17] Đúc một mốc neo BẰNG ĐÚNG ĐƯỜNG THẬT: ký một văn bản chính tắc rồi cho nó đi qua
+ * `verifyAnchorRecord`. Không còn object literal nào ở file này — kiểu `ExternalAnchor` nay mang
+ * một dấu đúc mà chỉ chỗ kiểm chữ ký đặt được, nên một literal không còn typecheck.
+ *
+ * Nguyên văn cũ, giữ để đối chiếu:
+ *   ┌ // [vòng fix 2 — I2] `source` là BẮT BUỘC từ vòng này. Nó không được xác thực ở đâu cả —
+ *   │ // giá trị của nó là bắt xuất xứ phải viết ra thành chữ, và fixture cũng không được miễn.
+ *   └ source: "kho-artefact-gia-lap-cua-test",
+ * Câu *"không được xác thực ở đâu cả"* nay SAI: `source` là dẫn xuất của chữ ký đã kiểm.
+ */
+function neoDaKiem(
+  orgId: string,
+  seq: number,
+  hashHex: string,
+  exportedAt = "2026-08-27T00:00:00.000Z",
+): ExternalAnchor {
+  return verifyAnchorRecord(
+    BO_KY_NEO.ky({ orgId, seq, hashHex, exportedAt }),
+    BO_KY_NEO.khoaCongKhai,
+    NOI_CAT,
+  );
+}
+
 function neoKhop(seq: number): ExternalAnchor {
-  return {
-    orgId: ORG,
-    seq,
-    hashHex: bam(`h${seq}`).toString("hex"),
-    exportedAt: "2026-08-27T00:00:00.000Z",
-    // [vòng fix 2 — I2] `source` là BẮT BUỘC từ vòng này. Nó không được xác thực ở đâu cả —
-    // giá trị của nó là bắt xuất xứ phải viết ra thành chữ, và fixture cũng không được miễn.
-    source: "kho-artefact-gia-lap-cua-test",
-  };
+  return neoDaKiem(ORG, seq, bam(`h${seq}`).toString("hex"));
 }
 
 /** Chỉ giữ những vấn đề THUỘC CHUỖI, bỏ hai vấn đề mức-kết-luận của vòng fix 1. */
@@ -131,11 +152,17 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
    * lời gọi đó không còn biên dịch được. `@ts-expect-error` bên dưới LÀ phép đo — nếu ai gỡ
    * `source` khỏi `ExternalAnchor` thì lỗi biến mất và `pnpm typecheck` (cổng t0) ĐỎ.
    *
-   * Và vế thứ hai của test này quan trọng không kém: ở THÌ CHẠY, lớp kiểu không tồn tại. Một
+   * ~~Và vế thứ hai của test này quan trọng không kém: ở THÌ CHẠY, lớp kiểu không tồn tại. Một
    * object thiếu `source` vẫn làm `NOT_ANCHORED` im đi. Bản vá mua đúng MỘT thứ — đường tắt
-   * không còn viết được một cách TÌNH CỜ — và nói rộng hơn thế là nói quá.
+   * không còn viết được một cách TÌNH CỜ — và nói rộng hơn thế là nói quá.~~
+   *
+   * **[S1.17] VẾ VỪA GẠCH ĐÃ HẾT ĐÚNG, và đó là toàn bộ nội dung của vòng này ở tầng kiểm.** Ở
+   * thì chạy nay CÓ một lớp: `verifyAuditChain` đòi dấu đúc của `verifyAnchorRecord`, và một giá
+   * trị không mang nó cho ra `ANCHOR_UNVERIFIED` + `ok:false` thay vì làm `NOT_ANCHORED` im đi.
+   * Tên test đổi theo. MỐC CHẾT: gỡ khối `if (!laNeoDaKiemChuKy(neo))` trong `verifier.ts` thì
+   * test này ĐỎ ở khẳng định `ok`.
    */
-  it("[vòng fix 2 — I2] neo tự đúc từ exportChainHead bị KIỂU chặn, còn thì chạy thì KHÔNG", async () => {
+  it("[INV-B3] neo tự đúc từ exportChainHead bị KIỂU chặn, VÀ ở thì chạy cũng bị chặn", async () => {
     const xuat: ChainHeadExport = {
       orgId: ORG,
       seq: 4,
@@ -143,24 +170,34 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
       exportedAt: "2026-08-27T00:00:00.000Z",
     };
     const kq = await verifyAuditChain(clientGia(chuoiTot(4), []), ORG, {
-      // @ts-expect-error `ChainHeadExport` thiếu `source` nên nó KHÔNG phải một `ExternalAnchor`.
+      // @ts-expect-error `ChainHeadExport` thiếu `source` và dấu đúc nên nó KHÔNG phải `ExternalAnchor`.
       externalAnchors: [xuat],
     });
-    expect(
-      kq.ok,
-      "ở thì chạy KHÔNG có lớp nào chặn — bản vá là lớp KIỂU, và chỉ là lớp kiểu",
-    ).toBe(true);
-    expect(kq.problems).toEqual([]);
+    expect(kq.ok, "một mốc neo chưa kiểm chữ ký không được mua một kết luận xanh").toBe(false);
+    // Hai vấn đề, và cả hai đều phải có: mốc neo bị TỪ CHỐI, và vì thế chuỗi coi như CHƯA NEO.
+    expect(kq.problems.map((p) => p.kind)).toEqual(["ANCHOR_UNVERIFIED", "NOT_ANCHORED"]);
+    expect(kq.problems[0]!.detail).toContain("chưa qua phép kiểm chữ ký nào");
+  });
+
+  it("[INV-B3] mốc neo tự đúc của tổ chức KHÁC cũng bị từ chối, không rơi vào nhánh im lặng", async () => {
+    // Phép lọc `neo.orgId !== orgId` đứng SAU phép kiểm dấu đúc, có chủ đích: nếu nó đứng trước
+    // thì một mốc neo tự đúc chỉ cần mang một `orgId` lạ là đi qua trong im lặng, và đường tắt
+    // vừa bị đóng lại mở ra ở một chỗ khác.
+    const kq = await verifyAuditChain(clientGia(chuoiTot(2), []), ORG, {
+      externalAnchors: [
+        // @ts-expect-error thiếu dấu đúc — đây chính là điều được đo.
+        { orgId: "22222222-2222-2222-2222-222222222222", seq: 9, hashHex: "0".repeat(64), exportedAt: "2026-08-27T00:00:00.000Z", source: "bịa" },
+      ],
+    });
+    expect(kq.problems.map((p) => p.kind)).toEqual(["ANCHOR_UNVERIFIED", "NOT_ANCHORED"]);
   });
 
   it("[INV-F1] mốc neo CHỈ của tổ chức khác không tính là đã neo -> NOT_ANCHORED", async () => {
-    const neoNgoai: ExternalAnchor = {
-      orgId: "22222222-2222-2222-2222-222222222222",
-      seq: 99,
-      hashHex: bam("khac").toString("hex"),
-      exportedAt: "2026-08-27T00:00:00.000Z",
-      source: "kho-artefact-gia-lap-cua-test",
-    };
+    const neoNgoai = neoDaKiem(
+      "22222222-2222-2222-2222-222222222222",
+      99,
+      bam("khac").toString("hex"),
+    );
     const kq = await verifyAuditChain(clientGia(chuoiTot(2), []), ORG, {
       externalAnchors: [neoNgoai],
     });
@@ -264,13 +301,7 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
   });
 
   it("[INV-B3] mốc neo NGOÀI DB không khớp -> ANCHOR_MISSING, kể cả khi sổ đã bị dựng lại rỗng", async () => {
-    const neoNgoai: ExternalAnchor = {
-      orgId: ORG,
-      seq: 5,
-      hashHex: bam("h5").toString("hex"),
-      exportedAt: "2026-08-27T00:00:00.000Z",
-      source: "kho-artefact-gia-lap-cua-test",
-    };
+    const neoNgoai = neoDaKiem(ORG, 5, bam("h5").toString("hex"));
     const kq = await verifyAuditChain(clientGia([], []), ORG, {
       externalAnchors: [neoNgoai],
       expectEmpty: true,
@@ -287,13 +318,7 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
   });
 
   it("[INV-B3] mốc neo NGOÀI DB có băm KHÁC ở đúng seq đó -> ANCHOR_MISSING", async () => {
-    const neoNgoai: ExternalAnchor = {
-      orgId: ORG,
-      seq: 2,
-      hashHex: bam("bam-cu").toString("hex"),
-      exportedAt: "2026-08-27T00:00:00.000Z",
-      source: "kho-artefact-gia-lap-cua-test",
-    };
+    const neoNgoai = neoDaKiem(ORG, 2, bam("bam-cu").toString("hex"));
     const kq = await verifyAuditChain(clientGia(chuoiTot(3), []), ORG, {
       externalAnchors: [neoNgoai],
     });
@@ -302,17 +327,15 @@ describe("bộ kiểm chứng chuỗi kiểm toán", () => {
     // [vòng fix 2 — I2] Xuất xứ phải ĐI VÀO KẾT LUẬN. Không có vế này thì `source` là một
     // trường trang trí mà chỉ trình biên dịch nhìn thấy, và một kết luận kiểm toán vẫn không
     // nói được nó dựa vào gốc tin cậy nào.
-    expect(kq.problems[0]!.detail).toContain('nguồn "kho-artefact-gia-lap-cua-test"');
+    expect(kq.problems[0]!.detail).toContain(`nguồn "${NOI_CAT} · kid=neo-test · chữ ký ĐÃ KIỂM"`);
   });
 
   it("[INV-F1] mốc neo của tổ chức KHÁC bị bỏ qua, không sinh báo động giả", async () => {
-    const neoNgoai: ExternalAnchor = {
-      orgId: "22222222-2222-2222-2222-222222222222",
-      seq: 99,
-      hashHex: bam("khac").toString("hex"),
-      exportedAt: "2026-08-27T00:00:00.000Z",
-      source: "kho-artefact-gia-lap-cua-test",
-    };
+    const neoNgoai = neoDaKiem(
+      "22222222-2222-2222-2222-222222222222",
+      99,
+      bam("khac").toString("hex"),
+    );
     const kq = await verifyAuditChain(clientGia(chuoiTot(2), []), ORG, {
       externalAnchors: [neoNgoai, neoKhop(2)],
     });

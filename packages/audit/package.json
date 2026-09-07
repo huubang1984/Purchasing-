@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "pg": "^8.13.0" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./anchor-sign": "./src/anchor-sign.ts"
+  },
+  "dependencies": {
+    "@trustprocure/crypto-keys": "workspace:*",
+    "pg": "^8.13.0"
+  }
 }

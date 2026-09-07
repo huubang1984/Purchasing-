@@ -1,16 +1,27 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import {
+  startPostgres,
+  taoBoKyNeoThuNghiem,
+  type TestDatabase,
+} from "@trustprocure/test-support";
 import { withTenant } from "@trustprocure/tenancy";
 import {
   appendAuditEvent,
+  createFileAnchorStore,
   exportChainHead,
+  loadVerifiedAnchors,
   recordChainAnchor,
+  verifyAnchorRecord,
   verifyAuditChain,
   type ChainHeadExport,
   type ExternalAnchor,
+  type SignedAnchorRecord,
 } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -41,10 +52,30 @@ async function orgMoi(slug: string): Promise<string> {
  * #4), và đặt một hàm "biến export thành anchor" vào mã sản phẩm sẽ dựng lại đúng đường tắt mà
  * [I2] vừa đóng. Ở đây nó là FIXTURE, và tên của nó nói ra điều đó.
  */
-function layNeoTuKhoGiaLap(xuat: ChainHeadExport | null): ExternalAnchor {
+const BO_KY_NEO = taoBoKyNeoThuNghiem("neo-kiem-toan");
+const NOI_CAT_THU = "kho-artefact-gia-lap-cua-test";
+
+/**
+ * [S1.17] KÝ một mốc chuỗi và cho nó ĐI QUA JSON — đây là artefact thật, thứ nằm trong nơi cất.
+ *
+ * Nguyên văn của bản trước (một `ChainHeadExport` đi qua JSON rồi được dán thêm `source`) không
+ * còn viết được: `ExternalAnchor` nay mang một dấu đúc mà chỉ `verifyAnchorRecord` đặt được.
+ */
+function kyNeo(xuat: ChainHeadExport | null): SignedAnchorRecord {
   if (xuat === null) throw new Error("không xuất được mốc chuỗi");
-  const quaJson = JSON.parse(JSON.stringify(xuat)) as ChainHeadExport;
-  return { ...quaJson, source: "kho-artefact-gia-lap-cua-test" };
+  return JSON.parse(JSON.stringify(BO_KY_NEO.ky(xuat))) as SignedAnchorRecord;
+}
+
+/**
+ * Vòng đời đầy đủ của một mốc neo: xuất -> KÝ -> đi ra kho (qua JSON) -> lấy về -> KIỂM CHỮ KÝ.
+ *
+ * Bản trước của hàm này tên là `layNeoTuKhoGiaLap` và nó chỉ dán một chuỗi `source` vào, vì
+ * artefact khi ấy chưa được ký. Ghi chú cũ của nó nói *"đặt một hàm 'biến export thành anchor'
+ * vào mã sản phẩm sẽ dựng lại đúng đường tắt mà [I2] vừa đóng"* — câu ấy vẫn đúng, và đó chính
+ * là lý do `verifyAnchorRecord` (mã sản phẩm) đòi một CHỮ KÝ chứ không đòi một chuỗi.
+ */
+function layNeoTuKho(xuat: ChainHeadExport | null): ExternalAnchor {
+  return verifyAnchorRecord(kyNeo(xuat), BO_KY_NEO.khoaCongKhai, NOI_CAT_THU);
 }
 
 async function docTgenabled(bang: string, tenTrigger: string): Promise<string> {
@@ -141,7 +172,7 @@ describe("chuỗi hash kiểm toán", () => {
           payload: { chiSo: i, ghiChu: "giá trị có dấu tiếng Việt" },
         });
       }
-      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      return layNeoTuKho(await exportChainHead(client, org));
     });
 
     const ketQua = await withTenant(apiPool, org, (client) =>
@@ -171,7 +202,7 @@ describe("chuỗi hash kiểm toán", () => {
           resourceType: "TEST",
         });
       }
-      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      return layNeoTuKho(await exportChainHead(client, org));
     });
 
     // Tác nhân: chủ sở hữu bảng đã qua lớp trigger. Nó sửa seq 3 rồi đi từ seq 3 tính lại
@@ -249,7 +280,7 @@ describe("chuỗi hash kiểm toán", () => {
             userAgent: "trustprocure-test/1.0",
           });
         }
-        return layNeoTuKhoGiaLap(await exportChainHead(client, org));
+        return layNeoTuKho(await exportChainHead(client, org));
       });
 
       await voHieuHoaTrigger("audit_events", "audit_events_chan_update", async () => {
@@ -411,13 +442,15 @@ describe("chuỗi hash kiểm toán", () => {
         });
       }
       await recordChainAnchor(client, org);
-      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      return layNeoTuKho(await exportChainHead(client, org));
     });
 
-    // Artefact phải sống được qua JSON — nó nằm NGOÀI database, trong kho của CI.
-    const quaJson: ExternalAnchor = JSON.parse(JSON.stringify(neoNgoai)) as ExternalAnchor;
-    expect(quaJson.seq).toBe(5);
-    expect(quaJson.hashHex).toMatch(/^[0-9a-f]{64}$/);
+    // Artefact phải sống được qua JSON — nó nằm NGOÀI database, trong nơi cất. [S1.17] Chuyến
+    // đi qua JSON nay nằm TRONG `kyNeo`, và nó chở BẢN GHI ĐÃ KÝ chứ không chở mốc neo: một mốc
+    // neo đi qua JSON MẤT dấu đúc, đúng như nó phải thế — kết luận "đã kiểm chữ ký" không được
+    // phép sống sót qua một chuyến ra khỏi tiến trình.
+    expect(neoNgoai.seq).toBe(5);
+    expect(neoNgoai.hashHex).toMatch(/^[0-9a-f]{64}$/);
 
     await voHieuHoaTrigger("audit_events", "audit_events_chan_delete", async () => {
       await voHieuHoaTrigger("audit_chain_anchors", "audit_chain_anchors_chan_delete", async () => {
@@ -447,10 +480,84 @@ describe("chuỗi hash kiểm toán", () => {
     ).toEqual([]);
 
     const coNeo = await withTenant(apiPool, org, (client) =>
-      verifyAuditChain(client, org, { externalAnchors: [quaJson] }),
+      verifyAuditChain(client, org, { externalAnchors: [neoNgoai] }),
     );
     expect(coNeo.ok).toBe(false);
     expect(coNeo.problems.some((p) => p.seq === 5 && p.kind === "ANCHOR_MISSING")).toBe(true);
+  });
+
+  it("[INV-B3] cắt đuôi rồi XUẤT LẠI: nơi cất chỉ-ghi-thêm bắt được, nơi cất ghi đè thì KHÔNG", async () => {
+    // ==========================================================================================
+    // [S1.17 / khoản nợ 11 và 30] VÒNG ĐỜI THẬT, TRỌN VẸN, TRÊN MỘT CÁI SỔ THẬT VÀ MỘT NƠI CẤT
+    // THẬT — và đây là chỗ duy nhất trong kho đo được CẢ HAI vế của yêu cầu [M5] mục (1).
+    //
+    // Kịch bản đúng như `writer.ts` mô tả bằng lời từ S0:
+    //   sổ 6 hàng -> xuất neo seq 6 -> kẻ tấn công CẮT ĐUÔI còn 3 và xoá mốc neo trong DB ->
+    //   bộ xuất chạy lại theo lịch -> xuất neo seq 3
+    //
+    // Vế A (nơi cất CHỈ-GHI-THÊM): còn cả hai mốc neo, và mốc seq 6 tố cáo vụ cắt đuôi.
+    // Vế B (ĐỐI CHỨNG, mô phỏng một nơi cất GHI ĐÈ): chỉ còn mốc seq 3, và kết luận kiểm toán
+    //       SẠCH HOÀN TOÀN trên một cái sổ đã bị cắt mất một nửa.
+    //
+    // Vế B là thứ làm cho vế A có nghĩa. Không có nó, "chúng tôi giữ mọi mốc neo" là một lựa
+    // chọn triển khai; có nó, đó là một RÀNG BUỘC có hậu quả đo được.
+    // ==========================================================================================
+    const org = await orgMoi("chuoi-neo-ghi-them");
+    const thuMuc = await mkdtemp(join(tmpdir(), "tp-neo-int-"));
+    try {
+      const kho = createFileAnchorStore(thuMuc, NOI_CAT_THU);
+
+      await withTenant(apiPool, org, async (client) => {
+        for (let i = 0; i < 6; i += 1) {
+          await appendAuditEvent(client, org, {
+            actorType: "USER",
+            action: `E${i}`,
+            resourceType: "TEST",
+          });
+        }
+        await recordChainAnchor(client, org);
+        await kho.append(org, kyNeo(await exportChainHead(client, org)));
+      });
+
+      await voHieuHoaTrigger("audit_events", "audit_events_chan_delete", async () => {
+        await voHieuHoaTrigger("audit_chain_anchors", "audit_chain_anchors_chan_delete", async () => {
+          await db.pool.query("DELETE FROM audit_events WHERE org_id = $1 AND seq > 3", [org]);
+          await db.pool.query("DELETE FROM audit_chain_anchors WHERE org_id = $1", [org]);
+        });
+      });
+
+      // Bộ xuất chạy lại — nó KHÔNG biết gì về vụ cắt đuôi, nó chỉ đọc đầu chuỗi hiện tại.
+      await withTenant(apiPool, org, async (client) => {
+        await kho.append(org, kyNeo(await exportChainHead(client, org)));
+      });
+
+      const neo = await loadVerifiedAnchors(kho, org, BO_KY_NEO.khoaCongKhai);
+      expect(neo.map((n) => n.seq)).toEqual([6, 3]);
+
+      const veA = await withTenant(apiPool, org, (client) =>
+        verifyAuditChain(client, org, { externalAnchors: neo }),
+      );
+      expect(veA.checked).toBe(3);
+      expect(veA.ok).toBe(false);
+      expect(veA.problems.some((p) => p.seq === 6 && p.kind === "ANCHOR_MISSING")).toBe(true);
+      // Xuất xứ đi vào kết luận, và nay nó mang cả `kid` — một báo cáo kiểm toán tự nói ra gốc
+      // tin cậy mà nó dựa vào.
+      expect(veA.problems.find((p) => p.kind === "ANCHOR_MISSING")!.detail).toContain(
+        "kid=neo-kiem-toan",
+      );
+
+      const veB = await withTenant(apiPool, org, (client) =>
+        verifyAuditChain(client, org, { externalAnchors: [neo[1]!] }),
+      );
+      expect(
+        veB.ok,
+        "một nơi cất GHI ĐÈ rửa được vụ cắt đuôi thành gốc tin cậy mới — đây là lý do nơi cất " +
+          "phải chỉ-ghi-thêm",
+      ).toBe(true);
+      expect(veB.problems).toEqual([]);
+    } finally {
+      await rm(thuMuc, { recursive: true, force: true });
+    }
   });
 
   it("[INV-B3] mốc neo ngoài DB khớp chuỗi nguyên vẹn thì kiểm chứng vẫn đạt", async () => {
@@ -463,7 +570,7 @@ describe("chuỗi hash kiểm toán", () => {
           resourceType: "TEST",
         });
       }
-      return layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      return layNeoTuKho(await exportChainHead(client, org));
     });
 
     await withTenant(apiPool, org, (client) =>
@@ -533,7 +640,7 @@ describe("chuỗi hash kiểm toán", () => {
     );
 
     const neo = await withTenant(apiPool, org, async (client) =>
-      layNeoTuKhoGiaLap(await exportChainHead(client, org)),
+      layNeoTuKho(await exportChainHead(client, org)),
     );
     const ketQua = await withTenant(apiPool, org, (client) =>
       verifyAuditChain(client, org, { externalAnchors: [neo] }),
@@ -585,7 +692,7 @@ describe("chuỗi hash kiểm toán", () => {
           "VALUES ($1, 'SYSTEM', 'GHI_THANG', 'T')",
         [org],
       );
-      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      const neo = layNeoTuKho(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.ok).toBe(true);
@@ -608,7 +715,7 @@ describe("chuỗi hash kiểm toán", () => {
     expect(Number(rows[0]!.seq)).toBe(2);
 
     const ketQua = await withTenant(apiPool, org, async (client) => {
-      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      const neo = layNeoTuKho(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.problems).toEqual([]);
@@ -637,7 +744,7 @@ describe("chuỗi hash kiểm toán", () => {
     });
 
     const neo = await withTenant(apiPool, org, async (client) =>
-      layNeoTuKhoGiaLap(await exportChainHead(client, org)),
+      layNeoTuKho(await exportChainHead(client, org)),
     );
 
     const ketQua = await withTenant(apiPool, org, async (client) => {
@@ -827,7 +934,7 @@ describe("chuỗi hash kiểm toán", () => {
 
     // (c) và kiểm chứng vẫn sạch — không có ANCHOR_MISSING giả nào.
     const ketQua = await withTenant(apiPool, org, async (client) => {
-      const neo = layNeoTuKhoGiaLap(await exportChainHead(client, org));
+      const neo = layNeoTuKho(await exportChainHead(client, org));
       return verifyAuditChain(client, org, { externalAnchors: [neo] });
     });
     expect(ketQua.problems).toEqual([]);
