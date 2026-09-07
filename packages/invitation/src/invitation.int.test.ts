@@ -1586,17 +1586,18 @@ describe("[sổ nợ 57] bộ dọn otp_rate_limits (044)", () => {
     // "pool tenant" mà ai đó có thể thêm vào sau này.
     const c = await apiPool.connect();
     try {
-      await c.query("BEGIN");
-      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgA]);
+      // Gắn ở phạm vi PHIÊN, không phải giao dịch: hàm dọn tự mở giao dịch của nó, và một `BEGIN`
+      // lồng trong `BEGIN` của test sẽ làm phép đo đo nhầm thứ khác. Kết nối này vì thế bị HUỶ ở
+      // `finally` thay vì trả về pool.
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, false)", [orgA]);
       // Pool GIẢ giao ra đúng client đã gắn ấy. `release` là no-op để vòng đời kết nối vẫn thuộc
       // về test — hàm dọn gọi `release()` trong `finally` của nó, và một client bị trả hai lần ném.
       const poolGia = {
         connect: () => Promise.resolve({ query: c.query.bind(c), release: () => undefined }),
       } as unknown as pg.Pool;
       await expect(donOtpRateLimitsCu(poolGia)).rejects.toThrow(/ĐÃ gắn tổ chức/u);
-      await c.query("ROLLBACK");
     } finally {
-      c.release();
+      c.release(true);
       expect(await con(song), "không hàng nào bị chạm").toBe(true);
       await db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = $1", [song]);
     }

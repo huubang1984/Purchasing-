@@ -171,6 +171,11 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         };
       };
       const donNguoiGoi = nhipDon("bucket nguoi goi", () => donBucketNguoiGoiCu(pool));
+      // [review H7-4] Lượt dọn ĐẦU TIÊN sau khi `044` được áp xoá TOÀN BỘ tồn đọng lịch sử của
+      // `otp_rate_limits` — bảng ấy chưa từng có ai xoá — nên nó gần như chắc chắn vượt
+      // `DON_BUCKET_ON_AO` và ghi một dòng. Dòng ấy ĐÚNG (số hàng là số hàng), nhưng nó KHÔNG phải
+      // "tín hiệu tải bất thường" như câu ở trên nói; người trực đêm đọc log lần đầu sau triển khai
+      // cần biết điều đó ở đây chứ không phải sau ba mươi phút truy nguyên.
       const donOtp = nhipDon("bucket otp", () => donOtpRateLimitsCu(pool));
       dongHoDon = setInterval(() => {
         donNguoiGoi();

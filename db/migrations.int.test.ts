@@ -1115,10 +1115,51 @@ describe("migration của dự án", () => {
       for (const [ten, lyDo] of Object.entries(HAM_TRIGGER_KHONG_GHIM)) {
         expect(lyDo.length, `loại trừ ${ten} phải có lý do`).toBeGreaterThan(10);
       }
+      // [S1.15 / review H7-2] Vòng ngay trên nay chạy 0 lần (danh sách RỖNG — sổ nợ 56), tức nó là
+      // MÃ CHẾT: bỏ nó đi không test nào đỏ. Cùng khuôn `[I2]` đã dùng khi `NGOAI_LE_HINH_DANG` còn
+      // rỗng — đo THẲNG quy tắc thay vì chờ ca dùng đầu tiên xuất hiện lúc không ai còn nhìn.
+      const quyTacLyDo = (m: Readonly<Record<string, string>>): string[] =>
+        Object.entries(m)
+          .filter(([, lyDo]) => lyDo.length <= 10)
+          .map(([ten]) => ten);
+      expect(quyTacLyDo({ ham_gia: "canh mọi thứ, thật đấy" })).toEqual([]);
+      expect(quyTacLyDo({ ham_gia: "vì thế" }), "lý do rỗng ruột phải bị bắt").toEqual(["ham_gia"]);
       // [review H6-6] Trục THỨ HAI của cùng cái mù: tập TRIGGER. `kiem_danh_tinh_theo_phien` chạy
       // trên nhiều bảng, nên một migration tương lai gắn trigger thứ 22 mà không khai sẽ đi qua phép
       // kiểm hàm ở trên mà không ai thấy. Tập trigger của nó phải bằng ĐÚNG (19 ghim ở mục 013) ∪
       // (2 ghim ở mục `mfa_reset_kiem_quyen`).
+      //
+      // [S1.15 / review H7-1] Vế ấy nay áp cho MỌI hàm được ghim, không riêng một hàm. H6-6 đóng
+      // đúng cái mù nó thấy — trên hàm chạy trên nhiều bảng — nhưng để nguyên cùng cái mù ấy cho
+      // bốn mươi hai hàm còn lại: mục ghim chỉ đòi các trigger ĐÃ KHAI phải tồn tại, nên gắn thêm
+      // một trigger cho một hàm đã ghim (vd. `bid_chi_ghi_them` lên một bảng mới) đi qua mọi lớp
+      // trong im lặng, và trigger ấy KHÔNG có định nghĩa ghim nào canh. Suy từ CSDL, không từ danh sách.
+      const { rows: moiTrigger } = await db.pool.query<{ ham: string; ten: string }>(
+        `SELECT p.proname AS ham, t.tgname AS ten
+           FROM pg_trigger t
+           JOIN pg_proc p ON p.oid = t.tgfoid
+           JOIN pg_namespace ns ON ns.oid = p.pronamespace
+          WHERE NOT t.tgisinternal AND ns.nspname = 'public'
+          ORDER BY 1, 2`,
+      );
+      // So theo TÊN chứ không theo (hàm → tập trigger của hàm ấy), và đó không phải sự tiện tay:
+      // hai trigger `mfa_reset_requests_kiem_danh_tinh*` CHẠY `kiem_danh_tinh_theo_phien` nhưng được
+      // ghim trong mục của `mfa_reset_kiem_quyen` (chúng ra đời ở 040 cùng bảng ấy). Khoá theo hàm
+      // sẽ báo đỏ đúng cặp ấy vì một lý do sai. Tính chất CẦN giữ là: mỗi trigger đang chạy một hàm
+      // ĐÃ GHIM phải có một định nghĩa `$def$` ở đâu đó trong khối ghim, và ngược lại.
+      const hamDaGhim = new Set(HAM_GHIM.map((h) => h.ham));
+      const trigThat = moiTrigger
+        .filter((r) => hamDaGhim.has(r.ham))
+        .map((r) => r.ten)
+        .sort();
+      const trigKhai = HAM_GHIM.flatMap((h) => [...h.trigger]).sort();
+      expect(
+        trigKhai.filter((t, i) => trigKhai.indexOf(t) !== i),
+        "một tên trigger khai ở hai mục — bản ghim nào có hiệu lực là không đọc được",
+      ).toEqual([]);
+      expect(trigThat, "trigger có thật mà mục ghim không khai — không định nghĩa nào canh nó").toEqual(
+        trigKhai,
+      );
       const { rows: trg } = await db.pool.query<{ ten: string }>(
         `SELECT t.tgname AS ten FROM pg_trigger t
           WHERE NOT t.tgisinternal AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')

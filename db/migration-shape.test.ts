@@ -283,7 +283,14 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
         if (/^\s*CREATE\b/iu.test(khop[0]) && /^\s*AS\s+RESTRICTIVE\b/iu.test(duoiKhop)) {
           continue;
         }
+        // [S1.15 / review H7-5] Cửa chỉ mở cho `CREATE`. Khoá (file, bảng, policy) KHÔNG mang LỆNH,
+        // nên nếu không có vế này thì một `ALTER POLICY otp_rate_limits_don_cua_so_cu … USING (true)`
+        // viết ngay trong `044` cũng được cùng dòng ngoại lệ tha — đúng lớp lỗ mà vòng fix 3 đã đo
+        // được ở `NGOAI_LE_HINH_DANG` (mở cho FOR SELECT TO app_unseal rồi ALTER sang app_api vẫn
+        // lọt). Và nó khớp với miễn trừ RESTRICTIVE ngay dưới: `ALTER POLICY` KHÔNG bao giờ được tha,
+        // vì sửa một policy đang có thì NỚI được.
         if (
+          /^\s*CREATE\b/iu.test(khop[0]) &&
           NGOAI_LE_LAC_CHO.some(
             (n) => n.tenFile === tenFile && n.tenBang === tenBang && n.tenPolicy === tenPolicy,
           )
@@ -456,6 +463,34 @@ describe("hình dạng file migration", () => {
 
   it("[INV-F1] không file migration nào chứa cách viết policy fail-open bị cấm", () => {
     expect(kiemTraFailOpen(cacFile)).toEqual([]);
+  });
+
+  // [S1.15 / review H7-5] Cửa `NGOAI_LE_LAC_CHO` mở cho ĐÚNG một câu `CREATE POLICY`. Đo thẳng vế
+  // ấy trên file GIẢ thay vì chờ ngày ai đó viết `ALTER POLICY` trong `044`: dòng ngoại lệ có thật
+  // (cùng file, cùng bảng, cùng policy) nhưng lệnh là `ALTER` ⇒ vẫn phải bị bắt.
+  it("[H7-5] ngoại lệ đặt chỗ KHÔNG tha một `ALTER POLICY` trên cùng (file, bảng, policy)", () => {
+    const gia = new Map([
+      ["010_invitations.sql", "CREATE TABLE otp_rate_limits (org_id uuid NOT NULL);"],
+      [
+        "044_don_bucket_otp.sql",
+        "ALTER POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits USING (true);",
+      ],
+    ]);
+    expect(kiemTraLacCho(gia)).toEqual([
+      '044_don_bucket_otp.sql: "CREATE/ALTER POLICY" trên bảng "otp_rate_limits" — bảng đó được ' +
+        "tạo ở 010_invitations.sql. Tách hai việc qua hai file để lộ cửa sổ không có RLS giữa hai " +
+        "transaction.",
+    ]);
+    // Đối chứng dương: cùng ba trục ấy với `CREATE` thì cửa mở — nếu không, khẳng định trên xanh
+    // vì cửa hỏng hẳn chứ không vì cửa hẹp đúng chỗ.
+    const giaCreate = new Map([
+      ["010_invitations.sql", "CREATE TABLE otp_rate_limits (org_id uuid NOT NULL);"],
+      [
+        "044_don_bucket_otp.sql",
+        "CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits FOR DELETE TO app_api USING (window_start < now());",
+      ],
+    ]);
+    expect(kiemTraLacCho(giaCreate)).toEqual([]);
   });
 });
 

@@ -518,6 +518,13 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
 export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
   const client = await pool.connect();
   try {
+    // [review H7-6] MỘT giao dịch, và có TRẦN THỜI GIAN. Câu dọn quét TOÀN BẢNG (vế lọc là OR của
+    // hai policy trên hai cột nên không chỉ số nào phục vụ được — đã đo bằng EXPLAIN, xem `044`),
+    // nên chi phí của nó lớn theo số hàng. Không có trần, một lần dọn bệnh lý giữ một kết nối của
+    // pool YÊU CẦU vô hạn định; có trần, nó hỏng ỒN ÀO và bộ đếm "hỏng liên tiếp" ở composition
+    // nhìn thấy. `SET LOCAL` chứ không `SET`: kết nối trả về pool không được mang theo trạng thái.
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL statement_timeout = ${TRAN_DON_MS}`);
     const { rows } = await client.query<{ tu_do: boolean }>(
       "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL AS tu_do",
     );
@@ -528,11 +535,24 @@ export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
       );
     }
     const kq = await client.query("DELETE FROM otp_rate_limits");
+    await client.query("COMMIT");
     return kq.rowCount ?? 0;
+  } catch (loi) {
+    // Không nuốt: `ROLLBACK` chỉ để kết nối về trạng thái dùng lại được, lỗi THẬT vẫn bay lên.
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw loi;
   } finally {
     client.release();
   }
 }
+
+/**
+ * [review H7-6] Trần thời gian của MỘT lượt dọn `otp_rate_limits`, mili-giây. Không phải một ngưỡng
+ * hiệu năng: nó là mốc mà quá đó thì "đang dọn" và "đang treo" không phân biệt được nữa, và một
+ * kết nối của pool yêu cầu bị giữ là cái giá thật. Rộng hơn nhiều so với phép đo (20 000 hàng =
+ * 9,5 ms) vì nó không được kêu ở tải bình thường.
+ */
+const TRAN_DON_MS = 60_000;
 
 /** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
 const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";

@@ -62,10 +62,25 @@
 -- hàng không còn chặn ai. Mất chúng là mất một trần đã hết hiệu lực, không mất một bằng chứng nào.
 -- =============================================================================================
 
--- Bộ dọn quét theo `window_start`, và khoá chính `(org_id, bucket_kind, bucket_hash, window_start)`
+-- ~~Bộ dọn quét theo `window_start`, và khoá chính `(org_id, bucket_kind, bucket_hash, window_start)`
 -- không phục vụ được câu ấy (cột dẫn đầu là `org_id`). Cùng lý do với `caller_rate_limits_window_idx`
--- của `042`; ở đây vế lọc nằm trong policy chứ trong câu lệnh, nhưng bộ lập lịch vẫn dùng được nó.
-CREATE INDEX otp_rate_limits_window_idx ON otp_rate_limits (window_start);
+-- của `042`; ở đây vế lọc nằm trong policy chứ trong câu lệnh, nhưng bộ lập lịch vẫn dùng được nó.~~
+-- KHÔNG CÓ CHỈ SỐ NÀO Ở ĐÂY, và câu trên là thứ đã bị phép đo bác bỏ. `EXPLAIN (ANALYZE, BUFFERS)`
+-- của đúng câu bộ dọn chạy, trên 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức:
+--     Delete on otp_rate_limits (actual time=9.456..9.458 rows=0) Buffers: shared hit=19246
+--       ->  Seq Scan on otp_rate_limits (actual time=0.006..4.932 rows=18999)
+--             Filter: ((guest_session_id IS NULL) AND ((org_id = app.org_id) OR (app.org_id IS NULL
+--                      AND window_start < now() - '00:30:00')))
+-- Vế lọc là OR của HAI policy trên HAI cột khác nhau, nên không chỉ số nào phục vụ được nó — bộ lập
+-- lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1`, tức nó KHÔNG có phương án nào khác.
+-- Một chỉ số không bao giờ được đọc nhưng phải được GHI ở mọi lời gọi OTP là một khoản lỗ ròng trên
+-- đúng đường ghi nóng nhất của hệ, nên nó không ra đời.
+--
+-- GIÁ PHẢI TRẢ, nói ra bằng số: bộ dọn quét TOÀN BẢNG mỗi năm phút. Ở phép đo trên, 20 000 hàng tốn
+-- 9,5 ms — tức ~0,5 µs/hàng, và 5 triệu hàng sẽ là ~2,4 giây. Chấp nhận được ở quy mô hôm nay và
+-- KHÔNG chấp nhận được mãi mãi; đường thoát khi tới lúc là một bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng
+-- được chỉ số) cho các tổ chức tiến trình đã thấy, CỘNG câu trần này cho phần còn lại — tức đúng
+-- đường ⑵ mà sổ nợ 57 đã loại, nhưng khi ấy nó là một tối ưu chứ không phải cơ chế duy nhất.
 
 CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits
   FOR DELETE TO app_api
