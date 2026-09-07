@@ -329,7 +329,7 @@ export interface MocGhim {
 // [S1.18] 51 -> 52: H18 vào sổ đăng ký (danh sách trắng barrel của MỌI gói, suy từ tính
 // chất). Mốc được NÂNG TAY sau khi cổng đã chặn một lượt — đúng cơ chế: một mốc tự trôi
 // theo tử số sẽ mua sẵn chỗ cho một lần tụt sau này.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 52, coDanhSachToiDa: 0 };
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 53, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

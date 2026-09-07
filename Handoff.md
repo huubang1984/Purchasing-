@@ -561,3 +561,42 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     *"miễn trừ RỖNG"* vẫn xanh. Vị từ đúng nay ở `tests/architecture/goi-workspace.ts` và **dùng
     chung** cho cả hai bất biến — hai bản chép gần giống nhau của cùng một vị từ là thứ sẽ trôi khỏi
     nhau.
+
+15. **[2026-09-07] S1.20 — HAI KHOẢN NỢ 3 VÀ 16 ĐÓNG, và bốn dòng dưới đây là thứ đắt nhất vòng.**
+
+    ⑴ **Một khoản nợ có thể chỉ ĐÚNG MỘT NỬA lỗ của chính nó.** Khoản 16 dự báo *"bảng báo giá S1
+    sẽ rơi thẳng vào đó"* và liệt kê ba hậu quả: UNLOGGED, UNIQUE, REVOKE. Thứ nó bỏ sót là thứ
+    nặng nhất: `TRUNCATE`. Ba trigger chỉ-ghi-thêm của 018/019 là `BEFORE DELETE OR UPDATE FOR EACH
+    ROW`, và **một trigger cấp HÀNG không bao giờ chạy cho một thao tác cấp CÂU LỆNH**. Đo được:
+    `TRUNCATE public.bid_receipts` → **OK**, trong khi `TRUNCATE public.audit_events` → NÉM. Bài
+    học tái dùng được: **đọc một khoản nợ như một GIẢ THUYẾT phải đo lại, không như một danh sách
+    việc phải làm.**
+
+    ⑵ **Một khoản nợ có thể ĐÃ ĐÓNG mà không ai biết — theo hai kiểu khác nhau, cùng lúc.** Nửa sau
+    của khoản 3 (*"hàm plpgsql ngoài danh sách không được ghim"*) đóng từ **S1.14/S1.15** và nằm
+    thiu bốn vòng. Nửa đầu (*"`NOBYPASSRLS` chỉ ghim bốn tên role"*) thì **chưa bao giờ là một lỗ**:
+    BƯỚC 1 của hardening thu hồi mọi tư cách thành viên lạ, nên cây role LUÔN BẰNG bốn tên ấy — đo
+    được, `ke_gian` rời cây sau `migrate()`. Mục canh đã viết cho nó **bị GỠ**, vì không đột biến
+    nào làm nó đỏ được. Cùng lớp với mục 7 của sổ nợ S0 (*"apps/ rỗng"*): **sổ nợ cũng trôi, và nó
+    trôi theo cả hai chiều.**
+
+    ⑶ **`hardening.always.sql` có một quy tắc mà vi phạm nó KHÔNG làm test nào đỏ — nó làm DEPLOY
+    gãy.** Quy tắc: *tự chữa chỉ trên thứ một migration đánh số sở hữu theo TÊN; thứ SUY RA thì chỉ
+    phán xét* (`[CR4]`, nay là **ADR-028**). Vòng này suýt vi phạm ở bước thứ hai — cách sửa hiển
+    nhiên cho lỗ TRUNCATE là mượn `chan_sua_xoa()`, và vì `bang_al` nhận bảng lạ theo **OID của
+    chính hàm ấy**, ba bảng của S1 sẽ rơi vào `can_co` và `migrate()` sẽ **báo lỗi trên một lược đồ
+    HỢP LỆ**. Trước khi thêm bất cứ gì vào file ấy, hỏi: *mục này có thể chặn một lược đồ ĐÚNG
+    không?* — và viết một đối chứng dương cho câu trả lời.
+
+    ⑸ **`hardening.always.sql` và migration đánh số mà nó ghim phải đi CÙNG MỘT COMMIT.** Mục
+    ghim khai tiền điều kiện là *migration ấy đã nằm trong `schema_migrations`*, nên tách hai file
+    ra hai commit tạo một cửa sổ mà mục phán xét đã kêu trong khi mục ghim còn nằm im — tức deploy
+    bị chặn mà không có gì tự dựng lại. Reviewer lượt 12 truy được trình tự này và nó AN TOÀN khi
+    hai file đi cùng nhau; đừng tách chúng.
+
+    ⑷ **Bí danh SQL trong một câu nhúng vào plpgsql là một cái bẫy IM LẶNG.** plpgsql thay tên biến
+    **trước khi** PostgreSQL phân giải bí danh, nên `FROM pg_roles r … WHERE r.rolbypassrls` đọc
+    biến vòng lặp `r` chứ không đọc bảng — và vị từ trả về **TẬP RỖNG**, tức mục canh **luôn XANH**.
+    `[IM2]` đã ghi cảnh báo này ở vòng fix 1 của S0 và vòng này **vẫn vấp**. Ca của `[IM2]` ném
+    55000 (ồn ào); ca này im lặng. Dùng bí danh không trùng tên biến (`vai`, `bg`, …), và đừng tin
+    một mục canh chưa từng đỏ.

@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-07 (**S1.19 — ADR-026 §5⑶ ĐÓNG: công thức `openssl(1)` đã được CHẠY (lệnh `trich`; review lượt 11 — một mốc chết cũng cần một phép đo)** — mục 34; cùng ngày: **S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG (ADR-027: biên giới module và bề mặt export là một TÍNH CHẤT; hai danh sách miễn trừ về RỖNG; review lượt 10 bắt một cổng đã rỗng ruột từ S0)** — mục 33; cùng ngày: **S1.17 — KHOẢN NỢ 11 ĐÓNG (ADR-026: artefact neo ngoài)** — mục 32; trước đó: **S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-07 (**S1.20 — HAI KHOẢN NỢ 3 VÀ 16 ĐÓNG: hardening thôi tự làm mù bằng danh sách tên (ADR-028, migration `047`, H19 vào sổ đăng ký); ba bảng chỉ-ghi-thêm của S1 TRUNCATE được — lỗ mà sổ nợ 16 không nêu**) — mục 35; cùng ngày: **S1.19 — ADR-026 §5⑶ ĐÓNG: công thức `openssl(1)` đã được CHẠY (lệnh `trich`; review lượt 11 — một mốc chết cũng cần một phép đo)** — mục 34; cùng ngày: **S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG (ADR-027: biên giới module và bề mặt export là một TÍNH CHẤT; hai danh sách miễn trừ về RỖNG; review lượt 10 bắt một cổng đã rỗng ruột từ S0)** — mục 33; cùng ngày: **S1.17 — KHOẢN NỢ 11 ĐÓNG (ADR-026: artefact neo ngoài)** — mục 32; trước đó: **S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -43,7 +43,7 @@ có thật; cái thiếu là một chỗ để nó treo*. **Đã đóng 2026-08-
 
 Đã xong:
 
-- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ **mười chín ADR** (ADR-011 **chốt TRỌN VẸN 2026-09-04**: mục 1 *P-256 mặc định, X25519 cơ hội*; mục 2 *`ECDSA P-256` + văn bản chính tắc*; mục 3 *xoay khoá ký có `kid`* — hết chặn S1.4 **và** S1.5; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
+- Thiết kế S0+S1, sáu lát cắt dọc S0–S5, ~~**chín ADR**~~ ~~**mười hai ADR**~~ ~~**mười lăm ADR**~~ ~~**mười tám ADR**~~ ~~**mười chín ADR**~~ **hai mươi tám ADR** (ADR-011 **chốt TRỌN VẸN 2026-09-04**: mục 1 *P-256 mặc định, X25519 cơ hội*; mục 2 *`ECDSA P-256` + văn bản chính tắc*; mục 3 *xoay khoá ký có `kid`* — hết chặn S1.4 **và** S1.5; **ADR-019 cùng ngày** — nơi cặp khoá RFQ ra đời) (bảy ở giai đoạn thiết kế,
   ADR-008 ở Task 9, ADR-009 ở vòng fix cuối, **ADR-010/011/012 ngày 2026-08-29 khi lập kế hoạch S1**,
   **ADR-013/014/015 cùng ngày cho ba hạng mục sớm nhất**, **ADR-016/017/018 ngày 2026-08-30 cho ba
   MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã**), sổ đăng ký bất biến, kiến trúc kiểm thử bảy tầng.
@@ -338,7 +338,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 |---|---|---|
 | 1 | **E3 vế *giới hạn tần suất* không có một dòng mã nào** trong toàn S0. Bốn vế còn lại có lớp và có mốc chết | `packages/identity/src/mfa-credentials.ts` (khối đầu); `evidence/INV-matrix.md` §4 |
 | 2 | Trần loạt đầu của vế *giới hạn số lần thử* (E3) là **độ đồng thời của kẻ tấn công**, không phải hằng số cấu hình. Sau loạt đầu, hồ sơ bị khoá | `packages/identity/src/mfa.ts` |
-| 3 | **Hàng rào tự làm mù mình bằng danh sách tên**, hai lỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng **bốn tên role**, và một **hàm plpgsql ngoài danh sách** không được ghim | `db/rls-coverage.int.test.ts`, `task-4-report.md` |
+| 3 | **ĐÃ ĐÓNG — CẢ HAI NỬA, VÀ KHÔNG NỬA NÀO ĐÓNG BẰNG MỘT LỚP MỚI.** ~~**Hàng rào tự làm mù mình bằng danh sách tên**, hai lỗ đã đo: `NOBYPASSRLS` chỉ ghim đúng **bốn tên role**, và một **hàm plpgsql ngoài danh sách** không được ghim~~ ⑴ Nửa *bốn tên role* **[S1.20] bị PHÉP ĐO BÁC BỎ**: BƯỚC 1 thu hồi mọi tư cách thành viên lạ, nên cây role LUÔN BẰNG tập bốn tên đã ghim (`CREATE ROLE ke_gian BYPASSRLS; GRANT app_api TO ke_gian;` → sau `migrate()` ke_gian RỜI cây). Mục canh viết cho nó đã bị GỠ theo ADR-028 §2⑷; thứ có thể trôi được canh ở `db/hardening-suy-tu-tinh-chat.int.test.ts`. ⑵ Nửa *hàm plpgsql ngoài danh sách* **đóng từ S1.14/S1.15** (nợ 54, 56 — danh sách loại trừ RỖNG), và dòng nợ này THIU bốn vòng vì không ai sửa nó | `db/hardening-suy-tu-tinh-chat.int.test.ts`, `docs/DECISIONS.md` ADR-028 §5⑶ |
 | 4 | Hai GUC log nằm ở **tầng vận hành**, không ở tầng có thể cưỡng chế bằng test | `packages/db/src/pool.ts` |
 | 5 | `enqueueJob` **không có oracle xuyên tổ chức và không test nào canh** | `packages/outbox/`, `task-10-report.md` |
 | 6 | **ĐÓNG NỬA ĐỌC [S1.10.2]:** `resolveSessionByToken` tra token (băm, đòi `mfa_verified_at`) và `apps/api` gọi nó ở mọi route người mua. **Nửa PHÁT vẫn mở** — không hàm sản phẩm nào INSERT `sessions`; đó là S1.10.4 (`startUserSession`). Nguyên văn cũ: ~~**Đường đời `sessions` chưa tồn tại**: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi~~ | `packages/identity/src/session-actor.ts`; `evidence/INV-matrix.md` §4 |
@@ -351,7 +351,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 13 | **ĐÃ ĐÓNG [S1.6].** ~~**`D1` là một mệnh đề HỘI bốn vế mà phép hội chưa từng được đo một lần.**~~ `assertUnsealAllowed` hợp cả bốn vế; phép hội được đo bằng khuôn *một trạng thái chỉ sai đúng một vế*, và `C3` nay ✅ nên mâu thuẫn số học giữa hai hàng cũng hết. Nguyên văn cũ: 12 test đo vế *MFA còn hiệu lực*, 5 test đo vế *quyền hợp lệ*, **không test nào đo hai vế cùng lúc**; hai vế còn lại (*RFQ đã CLOSED*, *cổng chính sách*) không có một dòng mã nào. Vế thứ ba **chính là hàng `C3`**, đang ⏳ trong cùng bảng | `evidence/INV-matrix.md` §4 (mục D1) |
 | 14 | **ĐÃ ĐÓNG [S1.6].** ~~**`G1` canh một cánh cửa chưa có phòng ở sau.**~~ `apps/unseal-worker` tồn tại và THẬT SỰ import cả hai cửa hạn chế. Nguyên văn cũ: 18 test đo quy tắc biên giới — lớp phòng ngừa thật, đã chứng minh có răng — nhưng `wrapped_private_key` và `apps/unseal-worker` **chưa tồn tại** | `evidence/INV-matrix.md` §4 (mục G1) |
 | 15 | **Không có ADR mở cho KMS dù nó chặn S1.6** — đã đóng bằng **ADR-009**; khoản nợ còn lại là *chốt nhà cung cấp*, và nó **không độc lập** với quyết định hạ tầng (ADR-006 chỉ cưỡng chế được bằng IAM của hạ tầng đích) | `docs/DECISIONS.md` ADR-009 |
-| 16 | **Bốn mục hardening cùng khuôn danh-sách-tên, chưa có trong sổ nợ.** Nặng nhất: hình dạng bảng sổ chỉ **ĐẾM** `attname IN (15 tên) = 15`, **không cấm cột thừa** ⇒ thêm một cột `payload_plaintext` vào `audit_events` **không bị mục nào chạm**. Kế đó: bất đối xứng `bang_so` (2 tên viết cứng) vs `bang_al` (theo tính chất) — **bảng báo giá S1 sẽ rơi thẳng vào đó**: được kiểm trigger nhưng **không** bị kiểm UNLOGGED, **không** bị kiểm UNIQUE, **không** bị thu hồi UPDATE/DELETE/TRUNCATE. **Bất đối xứng này không có một chú thích nào giải thích.** Và `VI_TU_BANG_TENANT` giấu `OR relname IN ('organizations')` bên trong một vị từ tính-chất ⇒ bảng gốc tenant thứ hai không bị đổi RLS/FORCE, `rls-coverage.int.test.ts` cũng mù | `db/migrations/hardening.always.sql`, `db/rls-coverage.int.test.ts` |
+| 16 | **ĐÃ ĐÓNG [S1.20] bằng ADR-028 + migration `047` + H19.** Tập bảng chỉ-ghi-thêm nay SUY TỪ TÍNH CHẤT (mang cả hai trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm không có `RETURN`), và ba mục mới canh LOGGED · chốt TRUNCATE · ACL trên tập ấy. Bảng sổ nay bị cấm cột NGOÀI chuỗi hash. `VI_TU_BANG_TENANT` thôi giấu `OR relname IN ('organizations')` — gốc tenant suy từ đích của khoá ngoại `org_id` MỘT CỘT. `UNIQUE (org_id, seq)` VẪN chỉ áp cho hai bảng sổ, nay KÈM lý do (nó gắn với chuỗi hash, không với tính chỉ-ghi-thêm). **Và khoản nợ này bỏ sót lỗ nặng nhất của chính nó: `TRUNCATE` đi qua ba bảng S1** — đo được `TRUNCATE bid_receipts` → OK | `docs/DECISIONS.md` ADR-028, `db/migrations/047_*.sql` |
 | 17 | ~~**Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào.** `packages/tenancy/src/with-tenant.ts` là **điểm DUY NHẤT gắn `app.org_id`** — toàn bộ RLS của 002–007 treo vào nó — và `packages/audit/src/writer.ts` là đường ghi sổ kiểm toán. Cả hai **với tới được bằng import tương đối**: 3/7 gói có quy tắc biên giới (`crypto-keys`, `identity`, `outbox`); `audit`, `db`, `tenancy`, `test-support` **không có**~~ **ĐÓNG 2026-09-07 (S1.18, ADR-027).** Họ `g12-`…`g15-`; số họ quy tắc biên giới **5 → 9**; `MIEN_TRU` của [INV-H16] về **RỖNG**. Phép đo bác bỏ chính lý do miễn trừ (*"rủi ro hồi quy riêng"*): **0 chỗ import phải di trú**. Vị từ *gói* nay là *thư mục có `package.json`* và tập cửa đọc từ `exports` — cả hai sửa sau review lượt 10 (H10-1 HIGH, H10-2) | ~~`.dependency-cruiser.cjs:77-78`~~ nay là `tests/architecture/goi-workspace.ts` + ADR-027 |
 | 18 | **Bộ máy evidence nằm ngoài vòng review bắt buộc** — đã đóng ở vòng fix cuối: `/tools/inv-matrix/`, `/docs/TEST-PLAN.md`, `/docs/STATE.md`, `/evidence/` nay có trong `.github/CODEOWNERS`. Khoản nợ **còn lại**: `CODEOWNERS` trỏ tới `@trustprocure/bao-mat`, một team **chưa tồn tại**, nên tới hôm nay nó **chưa cưỡng chế gì** | `.github/CODEOWNERS` (khối cảnh báo ở đầu file) |
 | 19 | **Bốn phép đo THIU trong chú thích của migration đã áp**, không sửa được tại chỗ vì `001`–`007` và `hardening.always.sql` **không được đụng** (migration đánh số chạy đúng một lần; sửa chú thích cũng đổi checksum): ⑴ `006:23` và `007:29` chép **nguyên văn giống nhau** *"~71 chỗ `::text`/`::oid`"* — đo lại bằng công cụ **nhị phân** trên `hardening.always.sql`: `::text` = **55**, `::oid` = **2**, tổng **57**; một phép đo thiu được chép sang file thứ hai **mà không đo lại**. ⑵ `hardening:863-864` (khối *DƯ LƯỢNG CÒN LẠI*, đúng đoạn có giá trị kiểm toán cao nhất) nói *"một bảng ở schema khác mang ĐÚNG **14** cột này"* trong khi danh sách có **15** tên và vị từ dòng 886 đúng là `= 15` — mô tả sai bề mặt tấn công **đi một cột**. ⑶ `005:190-191` nói mục (C) *"CẤM MỌI"* hàm SECURITY DEFINER, nhưng bản cài đặt còn loại trừ `pg_toast%`/`pg_temp%`, `NGOAI_LE_DOC_VONG`, và **hàm thuộc EXTENSION** — file viện dẫn nói **rộng hơn** file có thẩm quyền. ⑷ `hardening:73-76` nói *"4 trong 6 câu lệnh"* trong khi bảng hiện có **36 mục**. **Cách đóng đúng: một migration mới, hoặc sửa kèm lần migrate() kế tiếp có đổi lược đồ.** | `db/migrations/006_sessions_and_mfa.sql`, `007_outbox.sql`, `005_identity.sql`, `hardening.always.sql` |
@@ -395,6 +395,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 57 | ~~**[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — đường THỨ TƯ: migration `044` thêm một policy `FOR DELETE TO app_api` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên hàng đã quá SÀN 30 phút. Ba đường cũ vẫn đúng như đã ghi; đường này không hỏi "tổ chức nào" mà hỏi "hàng này còn chặn được ai". Bộ dọn **xoá được mà KHÔNG đọc được** (`FOR DELETE`, không `FOR ALL` ⇒ `[INV-F1]` còn đúng nguyên văn), nên câu dọn KHÔNG có `WHERE`: PostgreSQL đòi policy SELECT ngay khi câu lệnh tham chiếu cột — đã đo, `WHERE` ⇒ 0 hàng, câu trần ⇒ xoá đúng hàng quá sàn. Hai cửa ngoại lệ có tên được mở (`NGOAI_LE_HINH_DANG` dòng ĐẦU TIÊN sau ba vòng rỗng, `NGOAI_LE_LAC_CHO`), mỗi cửa một meta-test | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
 | 58 | ~~**[S1.15 / review H7-3] Bộ dọn `otp_rate_limits` quét TOÀN BẢNG mỗi năm phút** — và không sửa được bằng một chỉ số: vế lọc là OR của hai policy trên hai cột, nên bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1`~~ **ĐÓNG 2026-09-07 (S1.16, migration `046`) — bằng cách BÁC BỎ TIỀN ĐỀ CỦA CHÍNH NÓ.** Phép đo của H7-3 có thật; chế độ của nó thì không đại diện: **95% hàng đã quá sàn**, nơi Seq Scan là tối ưu THẬT, nên kết luận *"không chỉ số nào phục vụ được"* là một suy diễn quá phạm vi. Đo lại ở chế độ của một bảng ĐANG CHẠY (200 000 hàng, **1%** quá sàn): PostgreSQL dựng `BitmapOr` từ `otp_rate_limits_pkey` (vế `org_id = <GUC>`) và `otp_rate_limits_window_idx` (vế `window_start < mốc`) — **1,07 ms** so với **37,96 ms**, tức **35 lần**, và chi phí đi theo SỐ HÀNG PHẢI XOÁ chứ không theo KÍCH THƯỚC BẢNG. `046` dựng lại chỉ số mà H7-3 đã gỡ; `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch, có ĐỐI CHỨNG DƯƠNG (gỡ chỉ số ⇒ quay về Seq Scan). Bài học đắt hơn bản vá: **một phép đo ở MỘT chế độ không phải một kết luận cho MỌI chế độ** — và lần này chính lớp "đo trước khi tin" của dự án lại là thứ sinh ra lời khai sai | `packages/invitation/src/invitation.ts`, `db/migrations/044_don_bucket_otp.sql` |
 | 59 | **[S1.19] Khẳng định *"mã nguồn hiện tại không vi phạm quy tắc nào"* KHÔNG HERMETIC.** `apps/api/src/routes.test.ts` viết một probe thật vào `apps/api/src/routes/` rồi chạy `depcruise`; `tests/architecture/boundaries.test.ts` chạy `pnpm run depcruise` trên TOÀN kho. Hai tệp khác nhau ⇒ vitest chạy song song ⇒ lượt quét toàn kho nhìn thấy probe của tệp kia. **Quan sát được LẶP LẠI trong lượt gộp `pnpm evidence` (chạy cả hai tầng trong một tiến trình), và CHƯA LẦN NÀO trong lượt `pnpm test` đơn tầng** — chênh lệch khớp với cơ chế: lượt gộp có nhiều tệp chạy song song hơn nên cửa sổ chồng lấn rộng hơn.
+| 60 | **[S1.20] Tập hàm canh chỉ-ghi-thêm suy từ HÌNH DẠNG THÂN HÀM, không từ ngữ nghĩa.** Vị từ của H19 hỏi *`prosrc` có chứa `RETURN` không* — một phép so khớp VĂN BẢN trên thân hàm. Nó chặt hơn một danh sách tên và có một phản ví dụ thật giữ cho nó không lỏng (`rfq_items_chan_truncate` cùng hình dạng thân nhưng là trigger TRUNCATE cấp câu lệnh, nên vế *cả UPDATE lẫn DELETE, cấp HÀNG* loại nó ra). Nhưng một hàm canh viết theo kiểu khác — ví dụ `IF … THEN RAISE … END IF; RETURN NULL;` — sẽ **rơi khỏi tập** và bảng của nó thôi được canh, trong im lặng. Hôm nay hai cách đếm TRÙNG NHAU — đã đo: vị từ hình dạng và phép liệt kê theo TÊN HAI HÀM canh (`chan_sua_xoa`, `bid_chi_ghi_them`) cho ra CÙNG năm bảng. Nên đây là một khoảng trống đã ĐO chứ chưa phải một lỗ đang mở | `db/hardening-suy-tu-tinh-chat.int.test.ts` (khối đầu), `docs/DECISIONS.md` ADR-028 §6 |
 
 > **KHÔNG ghi một tỷ lệ ở đây, và việc đó là có chủ đích.** Dòng này lần lượt mang *2/2* rồi *2/3*, và mỗi lượt đo tiếp theo lại bác con số vừa ghi — lượt thứ tư đỏ, thành *3/4*. Một tỷ lệ của một CHẠY ĐUA không phải một hằng số của kho: nó phụ thuộc số nhân công vitest, tải máy, và số tệp test đang có. Ghi nó như một hằng số là một khẳng định rộng hơn phép đo — chỉ khác ở chỗ nó tự bác mình nhanh hơn thường lệ. Thứ ổn định và đáng ghi là CƠ CHẾ, cộng hai vế định tính ở trên. — chênh lệch khớp với cơ chế: lượt gộp có nhiều tệp chạy song song hơn nên cửa sổ chồng lấn rộng hơn. Cửa sổ ấy còn rộng thêm sau S1.18 (13 probe mới). Hệ quả cho CI: job `evidence` KHÔNG đỏ vì `pnpm evidence` cố ý cho bước vitest đỏ (xem khối đầu `chay-evidence.mjs`), nhưng T1/T2 thì đỏ được — chỉ là hiếm hơn. Không phải fail-open — là ĐỎ GIẢ — nhưng một cổng đỏ ngẫu nhiên là cổng người ta học cách chạy lại thay vì đọc. Đường đóng có thể: cho mọi probe ghi vào một thư mục ngoài cây được cruise, hoặc cưỡng chế chạy tuần tự cho nhóm test chạy depcruise (`describe.sequential` / `poolOptions`), hoặc để lượt quét toàn kho đọc một cây SẠCH (`git stash`-free: cruise một bản `git archive`) | `tests/architecture/boundaries.test.ts`, `apps/api/src/routes.test.ts` |
 
@@ -1573,6 +1574,106 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
 > mục 8 của bảng điều kiện hoàn thành — một ví dụ sống cho việc một câu sai trong tài liệu trạng
 > thái tự sinh ra công việc thừa.
+
+35. **[2026-09-07] S1.20 — HAI KHOẢN NỢ 3 VÀ 16 ĐÓNG, và vòng này tìm ra một lỗ mà KHÔNG khoản nợ
+    nào nêu.** Khoản nợ 16 viết ở vòng fix cuối của S0 tố cáo một bất đối xứng trong
+    `hardening.always.sql` — `bang_so` nhận bảng theo **hai tên viết cứng** trong khi `bang_al`
+    nhận bảng lạ theo **tính chất** — và kèm một dự báo: *"bảng báo giá S1 sẽ rơi thẳng vào đó"*.
+
+    **DỰ BÁO ĐÚNG, VÀ NÓ ĐÚNG THEO MỘT CÁCH NẶNG HƠN CHÍNH NÓ MÔ TẢ.** S1 dựng một hàm canh
+    chỉ-ghi-thêm **thứ hai** — `bid_chi_ghi_them()` (018) — cắm trên **ba** bảng: `bid_receipts`,
+    `rfq_unsealed_bids`, `vendor_bid_versions`. Cả ba nằm ngoài `bang_so` (không có tên trong danh
+    sách hai tên) VÀ ngoài `bang_al` (vế bảng-lạ khoá theo OID của `chan_sua_xoa`). Bốn phép đo
+    trên PostgreSQL 16, mỗi lần `migrate()` trả `applied=[]` và KHÔNG một lỗi nào:
+
+    | Đột biến | Trước S1.20 |
+    |---|---|
+    | `ALTER TABLE bid_receipts SET UNLOGGED` | `MIGRATE OK`, `relpersistence` còn `'u'` |
+    | `GRANT UPDATE, DELETE ON bid_receipts TO app_api` | `MIGRATE OK`, acl còn `app_api=rwd` |
+    | **`TRUNCATE public.bid_receipts`** | **OK** (`TRUNCATE public.audit_events` thì NÉM) |
+    | `ALTER TABLE audit_events ADD COLUMN payload_plaintext text` | `MIGRATE OK`, không mục nào chạm |
+
+    **HÀNG THỨ BA LÀ LỖ SỔ NỢ 16 KHÔNG NÊU, và nó nặng nhất vòng.** Khoản nợ đoán UNLOGGED, UNIQUE
+    và REVOKE. Thứ nó bỏ sót là cấu trúc: ba trigger của 018/019 là `BEFORE DELETE OR UPDATE FOR
+    EACH ROW`, và **một trigger cấp HÀNG không bao giờ chạy cho `TRUNCATE`** — TRUNCATE là thao tác
+    cấp CÂU LỆNH. Bảng sổ có một trigger TRUNCATE riêng từ 003 vì đúng lý do ấy; ba bảng của S1 ra
+    đời sau và không ai chép vế thứ ba sang. **Một câu lệnh xoá sạch mọi biên nhận nộp thầu (B2),
+    mọi phiên bản báo giá (B1) và mọi giá đã mở** — trong khi `evidence/INV-matrix.md` ghi cả hai
+    mã ✅ với 10 và 25 khẳng định. Đóng bằng migration `047`.
+
+    **Hàng thứ tư là HAI CÂU HỎI BỊ NHẬP LÀM MỘT.** `MAU_HINH_DANG_SO` đếm `attname IN (15 tên) =
+    15`, và chú thích của chính nó viết *"THÊM cột thì an toàn"*. Câu ấy **đúng** cho câu hỏi mà vị
+    từ ấy trả lời (*"thân trigger dereference đủ 15 trường chứ?"*). Câu hỏi thứ hai — *"sổ có chứa
+    gì mà chuỗi hash KHÔNG phủ không?"* — chưa từng có ai hỏi. Một cột thứ 16 là nội dung sống
+    trong sổ kiểm toán mà sửa nó **không làm chuỗi gãy**, và B3 nói về HÀNG nên mệnh đề ấy không
+    với tới. Cái tên `payload_plaintext` không phải ví dụ ngẫu nhiên — nó là đúng hình dạng của
+    **A2**.
+
+    **THỨ ĐÁNG MANG SANG VÒNG SAU KHÔNG PHẢI BỐN LỖ, MÀ LÀ RANH GIỚI GIỮA TỰ CHỮA VÀ PHÁN XÉT.**
+    `[CR4]` của S0 cấm `migrate()` tự tay đổi ngữ nghĩa một bảng nó SUY RA, và quy tắc ấy đã sống
+    **bốn vòng trong một khối chú thích, không có ADR nào**. Vòng này suýt vi phạm nó ở bước thứ
+    hai: cách sửa hiển nhiên cho lỗ TRUNCATE là dùng `chan_sua_xoa()` — hàm có sẵn thông điệp theo
+    `TG_OP` và đã được ghim. Nhưng `bang_al` nhận bảng lạ theo **OID của chính hàm ấy**, nên cắm nó
+    lên ba bảng này đưa chúng vào `can_co`, nơi hardening đòi đủ bộ ba trigger mang tên KHÁC — tức
+    **`migrate()` báo lỗi trên một lược đồ HỢP LỆ**, đúng ngõ cụt `QT1`. **ADR-028** viết quy tắc ấy
+    ra ở dạng khẳng định: *tự chữa chỉ trên thứ một migration đánh số sở hữu theo TÊN; thứ SUY RA
+    thì chỉ phán xét.* Và H19 đo CẢ HAI chiều: cùng một đột biến `SET UNLOGGED` cho hai kết quả
+    ĐÚNG KHÁC NHAU — bảng có tên thì `migrate()` OK và bảng về LOGGED, bảng suy ra thì `migrate()`
+    NÉM.
+
+    **NỬA ĐẦU KHOẢN NỢ 3 KHÔNG ĐÓNG BẰNG MỘT LỚP MỚI — NÓ BỊ PHÉP ĐO BÁC BỎ.** Khoản nợ viết
+    *"`NOBYPASSRLS` chỉ ghim đúng BỐN TÊN ROLE"*. Vòng này **đã viết** mục thứ năm suy từ tính
+    chất, **đã chạy nó**, rồi đo: `CREATE ROLE ke_gian BYPASSRLS; GRANT app_api TO ke_gian;` →
+    `migrate()` OK → **`ke_gian` KHÔNG còn trong cây**. BƯỚC 1 thu hồi mọi tư cách thành viên lạ,
+    nên tập *"role trong cây dự án"* LUÔN BẰNG tập bốn tên đã ghim. Cửa có thật và **đã đóng — bởi
+    một lớp KHÁC với lớp mà khoản nợ chỉ tên**. Mục mới **đã bị GỠ**: không đột biến nào làm nó đỏ
+    được, và một cổng an ninh không bao giờ đỏ được là đúng thứ dự án đã bắt hai mươi lần. Đây là
+    lần thứ HAI một khoản nợ đóng bằng cách bác bỏ tiền đề của chính nó (lần đầu: khoản 58, S1.16).
+
+    **VÀ NỬA SAU KHOẢN NỢ 3 ĐÃ THIU BỐN VÒNG:** vế *"một hàm plpgsql ngoài danh sách không được
+    ghim"* đóng từ **S1.14/S1.15** (nợ 54 và 56, danh sách loại trừ RỖNG), mà dòng nợ 3 không ai
+    sửa. Cùng lớp với mục 7 (*"apps/ rỗng"*) — và là bằng chứng thứ hai cho vòng **rà lại sổ nợ S0**
+    đang xếp hàng.
+
+    **MỘT KHIẾM KHUYẾT CỦA CHÍNH VÒNG NÀY, tìm ra bằng cách CHẠY chứ không bằng cách đọc:** bí danh
+    `r` trong một câu SQL nhúng bị plpgsql thay bằng biến vòng lặp **trước khi** PostgreSQL phân
+    giải bí danh — vị từ trả về TẬP RỖNG và mục canh **luôn XANH**. `[IM2]` đã ghi nguyên văn cảnh
+    báo này ở vòng fix 1 của S0 (*"bí danh pg_roles viết là `vai`, KHÔNG phải `r`"*), và vòng này
+    vẫn vấp. Khác một điểm quan trọng: ca của `[IM2]` ném 55000 — ồn ào; ca này **im lặng**.
+
+    **VÒNG SỬA SAU REVIEW LƯỢT 12 — HAI HIGH, BỐN MEDIUM, NĂM LOW, và ba trong số đó là khiếm
+    khuyết THẬT trong mã vòng này viết ra.** ⑴ Vị từ mới **khoá cứng `nspname = 'public'`** trong
+    khi `bang_so`/`bang_al` cố ý phủ mọi schema — tức tái lập đúng thứ `[CR2a]` đã GỠ; một bảng
+    chỉ-ghi-thêm ở `app_private` sẽ rơi ngoài cả ba mục mới. ⑵ Mục ACL **chỉ đọc `relacl`**, nên
+    `GRANT UPDATE (canonical_text) ON bid_receipts TO app_api` — quyền mức CỘT, vô hình với
+    `relacl` — sống qua mọi deploy; `canonical_text` là **chính chuỗi được ký** của biên nhận, tức
+    nó chạm thẳng **B2**. ⑶ Vế *"có chốt TRUNCATE"* **không hỏi `tgenabled`**, nên một
+    `DISABLE TRIGGER` cho ra mục XANH trong khi `TRUNCATE` đi lọt hoàn toàn — đúng lớp "xanh giả"
+    mà cả vòng này tồn tại để đóng, lần này do chính vòng này tạo ra.
+
+    **VÀ MỘT CÂU CỦA ADR-028 BỊ PHÉP ĐO CỦA CHÍNH NÓ BÁC BỎ.** §2⑵ viết *"`migrate()` chỉ TỰ CHỮA
+    những đối tượng mà một migration đánh số sở hữu theo TÊN"*, trong khi §7⑷ của cùng ADR đo rằng
+    `migrate()` bật RLS + FORCE trên `chi_nhanh` — một bảng không migration nào sở hữu. Câu ấy sai
+    **về cả mã cũ**: mục (A) đã tự chữa trên một tập SUY RA từ S0 (*"bảng có cột `org_id`"* là một
+    tính chất). Phát biểu đúng nay là: **tự chữa được phép trên tập suy ra khi hành động ĐƠN ĐIỆU
+    và fail-closed** (bật RLS, `SET LOGGED`), bị cấm khi nó đổi ngữ nghĩa (cắm trigger, đổi thân
+    hàm, xoá cột). Đây là một câu **rộng hơn phép đo theo hướng DỄ CHỊU** — nó khen mã nhiều hơn mã
+    đáng được khen — và đó là hướng khó tự bắt nhất.
+
+    **MỘT PHẢN BÁC ĐƯỢC KIỂM VÀ BỊ BÁC LẠI, ghi vì lập luận mới là thứ đáng giữ:** reviewer nêu ca
+    bảng chỉ-ghi-thêm PHÂN MẢNH như một khả năng *chặn deploy trên lược đồ HỢP LỆ*. Bốn phép đo bác
+    vế *"hợp lệ"*: trigger TRUNCATE **cắm được** trên `relkind='p'`; trigger cấp HÀNG **được** nhân
+    bản xuống lá (nên lá vào tập suy ra); trigger TRUNCATE thì **không**; và `TRUNCATE <lá>` **đi
+    lọt** dù cha có chốt. Lá là một LỖ THẬT, nên đòi chốt trên từng lá là ĐÚNG. Cái giá — một phân
+    mảnh mới tạo ngoài migration sẽ chặn deploy — là có thật và nằm ở ADR-028 §6.
+
+    **MỘT DÒNG THIU THỨ HAI, tìm ra khi đi sửa dòng đầu:** §*Cột mốc hiện tại* của chính file này
+    khai **"mười chín ADR"**. Con số ấy đứng yên từ 2026-09-04 trong khi sổ quyết định đi tới
+    **28** — chín ADR, chín vòng. Không cổng nào đỏ vì không lớp nào đọc dòng ấy, đúng nguyên văn
+    lớp khiếm khuyết mà S1.18 đã bắt ở `docs/TEST-PLAN.md` (*"16/50"* trong khi bảng §5 có 17
+    hàng). Hai lần trong ba vòng, cùng một hình dạng: **một con số tóm tắt không có ai đọc nó**.
+
+    **Sổ nợ mở còn: 23, nửa sau của 30, 24, 59 — và MỘT KHOẢN MỚI, 60.**
 
 ## Tham chiếu
 
