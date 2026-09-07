@@ -880,6 +880,9 @@ const DANH_SACH_TRANG_AUDIT = [
   "ANCHOR_FORMAT_LABEL",
   "ANCHOR_SIGNING_ALGORITHM",
   "AnchorError",
+  // [S1.19] Không mang khả năng nào: cắt 120 ký tự + escape ký tự điều khiển.
+  // Ra cửa để `tools/neo-so-kiem-toan` dùng CHUNG thay vì chép lại (review lượt 11, H11-9).
+  "antoanChoBaoCao",
   "appendAuditEvent",
   "assertTenantBound",
   "buildAnchorText",

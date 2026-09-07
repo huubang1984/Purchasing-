@@ -94,7 +94,11 @@ function duongDanCua(thuMuc: string, orgId: string): string {
   // đủ (`..`, `/`, `\`, `:` của Windows, byte 0, tên thiết bị `NUL`/`CON`...), còn một UUID
   // thường thì chỉ có hex và gạch nối. Đây là quy tắc QT2 của dự án, áp cho đường tệp.
   if (!UUID_PATTERN.test(orgId)) {
-    throw new AnchorError(`orgId phải là UUID thường: "${orgId}".`);
+    // [review lượt 11 — H11-9] `antoanChoBaoCao` là BẮT BUỘC ở đây, và chỗ này từng là ngoại lệ
+    // duy nhất của họ `anchor-*`: `orgId` tới đây CHƯA qua một phép kiểm nào (nó là chuỗi người
+    // vận hành gõ sau `--org`), nên một giá trị mang `\r` hoặc escape ANSI xoá hoặc ghi đè những
+    // dòng đã in trên stderr của công cụ. Đó đúng luật H9-6 đặt ra và file này chưa theo.
+    throw new AnchorError(`orgId phải là UUID thường: "${antoanChoBaoCao(orgId)}".`);
   }
   return join(thuMuc, `${orgId}.jsonl`);
 }

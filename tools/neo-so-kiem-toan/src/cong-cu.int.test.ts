@@ -11,7 +11,7 @@
 // ==============================================================================================
 
 import { spawnSync } from "node:child_process";
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, createSign, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { withTenant } from "@trustprocure/tenancy";
-import { appendAuditEvent } from "@trustprocure/audit";
+import { appendAuditEvent, buildAnchorText } from "@trustprocure/audit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const GOC = fileURLToPath(new URL("../../..", import.meta.url));
@@ -324,24 +324,38 @@ describe("công thức kiểm mốc neo bằng openssl(1) — ADR-026 §5⑶", (
     const chuKy = join(raSsl, `neo-${orgSsl}-seq4.sig`);
     const khoa = join(raSsl, "khoa-neo-cli.pem");
 
-    // Không có ba vế này, vế dương ở trên chỉ chứng minh openssl chạy được — không chứng minh nó
-    // đang PHÁN XÉT gì. Cùng khuôn ba đối chứng âm của `receipt.test.ts`.
+    // ==========================================================================================
+    // [review lượt 11 — H11-3] BA CA NÀY PHẢI KHẲNG ĐỊNH THÔNG ĐIỆP, KHÔNG CHỈ MÃ THOÁT
+    // ==========================================================================================
+    // `openssl dgst` trả mã khác 0 cho MỌI thất bại: không tìm thấy tệp, không nạp được khoá, DER
+    // hỏng, cũng như chữ ký sai. Bản đầu của ca B và ca C chỉ đòi `≠ 0`, nên một tệp khoá rỗng
+    // ruột hay một đường dẫn sai sau một lần refactor sẽ giữ chúng XANH — kèm đúng thông điệp
+    // tự tin *"khoá LẠ mà openssl vẫn nhận ⇒ phép đo này rỗng ruột"*. Tức chính lớp canh
+    // chống-rỗng-ruột rỗng ruột được.
+    const noiTuChoi = (kq: { ra: string; loi: string }): string => `${kq.ra}${kq.loi}`.toLowerCase();
+
     const goc = await readFile(vanBan);
     const sua = join(raSsl, "sua-van-ban.txt");
-    // Đổi đúng MỘT ký tự của trường `chain_hash`, giữ nguyên độ dài và hình dạng: một bản ghi
-    // vẫn hợp lệ về cú pháp nhưng đã KHÁC thứ được ký.
-    await writeFile(sua, goc.toString("utf8").replace(/chain_hash=(.)/, (_, c: string) => `chain_hash=${c === "a" ? "b" : "a"}`));
+    await writeFile(
+      sua,
+      goc
+        .toString("utf8")
+        .replace(/chain_hash=(.)/, (_, c: string) => `chain_hash=${c === "a" ? "b" : "a"}`),
+    );
     const caA = openssl("dgst", "-sha256", "-verify", khoa, "-signature", chuKy, sua);
     expect(caA.ma, "văn bản bị sửa mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
-    expect(`${caA.ra}${caA.loi}`).toContain("Verification failure");
+    expect(noiTuChoi(caA)).toContain("verification failure");
 
     const sigGoc = await readFile(chuKy);
     const sigHong = Buffer.from(sigGoc);
     sigHong.writeUInt8(sigHong.readUInt8(sigHong.length - 1) ^ 0xff, sigHong.length - 1);
     const sigSua = join(raSsl, "sua-chu-ky.sig");
     await writeFile(sigSua, sigHong);
+    // Vế phân biệt "chữ ký SAI" với "tệp không đọc được": độ dài phải giữ nguyên.
+    expect((await stat(sigSua)).size).toBe(sigGoc.length);
     const caB = openssl("dgst", "-sha256", "-verify", khoa, "-signature", sigSua, vanBan);
     expect(caB.ma, "chữ ký bị sửa mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
+    expect(noiTuChoi(caB)).toContain("verification failure");
 
     const { publicKey } = generateKeyPairSync("ec", {
       namedCurve: "P-256",
@@ -354,51 +368,175 @@ describe("công thức kiểm mốc neo bằng openssl(1) — ADR-026 §5⑶", (
       khoaLa,
       `-----BEGIN PUBLIC KEY-----\n${(b64.match(/.{1,64}/g) ?? []).join("\n")}\n-----END PUBLIC KEY-----\n`,
     );
+    // Đối chứng DƯƠNG cho chính tệp khoá lạ: nó phải NẠP ĐƯỢC, nếu không thì ca C dưới đây chỉ
+    // chứng minh "openssl không đọc được tệp", không chứng minh "openssl phán xét chữ ký".
+    expect(
+      openssl("pkey", "-pubin", "-in", khoaLa, "-noout").ma,
+      "khoá lạ phải là một PEM HỢP LỆ — nếu không, ca C đỏ vì một lý do sai",
+    ).toBe(0);
     const caC = openssl("dgst", "-sha256", "-verify", khoaLa, "-signature", chuKy, vanBan);
     expect(caC.ma, "khoá LẠ mà openssl vẫn nhận ⇒ phép đo này rỗng ruột").not.toBe(0);
+    expect(noiTuChoi(caC)).toContain("verification failure");
   }, 120_000);
 
-  it("[INV-B3] trich KHÔNG cần DATABASE_URL — tách artefact là một thao tác NGOẠI TUYẾN", () => {
-    // Tính chất này không phải một sự tiện tay. Một kiểm toán viên cầm tệp JSONL và vòng khoá
-    // công khai phải dựng lại được ba tệp ấy MÀ KHÔNG có quyền vào cơ sở dữ liệu — nếu khâu tách
-    // đòi `DATABASE_URL` thì thứ gọi là "artefact độc lập" vẫn phải đi qua hệ thống bị kiểm.
-    const cu = bienMoiTruong["DATABASE_URL"]!;
-    bienMoiTruong["DATABASE_URL"] = "";
+  it("[INV-B3] MỘT lần dịch xuống dòng làm openssl TỪ CHỐI — và nó nói đúng câu của giả mạo", async () => {
+    // [review lượt 11 — H11-7] Bản đầu khai *"đột biến ghi ra CRLF làm openssl từ chối"* như một
+    // phép đo đã chạy, trong khi test khi ấy chỉ khẳng định đầu ra không chứa `\r` — dưới đột
+    // biến CRLF nó đỏ ở khẳng định ấy, TRƯỚC khi openssl được hỏi một câu nào. Ca này biến lời
+    // khai thành một phép đo THƯỜNG TRỰC, và nó không phải chuyện lý thuyết: kho chạy với
+    // `core.autocrlf=true`, và thông điệp của một lần dịch xuống dòng KHÔNG phân biệt được với
+    // thông điệp của một chữ ký giả mạo.
+    const vanBan = join(raSsl, `neo-${orgSsl}-seq4.txt`);
+    const chuKy = join(raSsl, `neo-${orgSsl}-seq4.sig`);
+    const khoa = join(raSsl, "khoa-neo-cli.pem");
+
+    const crlf = join(raSsl, "van-ban-crlf.txt");
+    await writeFile(crlf, (await readFile(vanBan, "utf8")).split("\n").join("\r\n"));
+    const kq = openssl("dgst", "-sha256", "-verify", khoa, "-signature", chuKy, crlf);
+    expect(kq.ma, "CRLF mà openssl vẫn nhận ⇒ lời khai về byte-chính-xác là rỗng").not.toBe(0);
+    expect(`${kq.ra}${kq.loi}`.toLowerCase()).toContain("verification failure");
+  }, 120_000);
+
+  it("[INV-B3] PEM là bản chép ĐÚNG BYTE của khoá trong vòng khoá — mốc chết của quyết định ⑶", async () => {
+    // ==========================================================================================
+    // [review lượt 11 — H11-4] BẢN ĐẦU CỦA CHÍNH TEST NÀY SỐNG SÓT ĐỘT BIẾN, và điều đó đáng ghi
+    // ==========================================================================================
+    // Bản đầu đọc PEM của khoá THẬT rồi so byte với khoá trong vòng khoá. Đột biến — đổi
+    // `pemTuSpkiDer` sang `createPublicKey(...).export({format:"pem"})`, tức đúng đường mà quyết
+    // định ⑶ bác bỏ — **đi lọt**: với một SPKI hợp lệ, hai đường cho ra CÙNG một chuỗi base64.
+    // Một mốc chết chỉ đỏ khi hai đường KHÁC nhau, nên nó phải chạy trên đúng đầu vào làm chúng
+    // khác nhau.
+    //
+    // Đầu vào ấy đã được đo: một SPKI P-256 91 byte cộng MỘT byte rác ở cuối. `createPublicKey`
+    // NHẬN và chuẩn hoá về 91 byte; `openssl pkey -pubin -inform DER` cũng nhận. Nên vòng khoá
+    // có thể mang một giá trị như thế mà mọi phép kiểm chữ ký vẫn đạt — và đó chính là ca mà
+    // "bản chép đúng byte" khác "bản chép đã được sửa hộ".
+    const spkiGoc = Buffer.from(
+      bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"]!.split("=").slice(1).join("="),
+      "base64",
+    );
+    const spkiThua = Buffer.concat([spkiGoc, Buffer.from([0x00])]);
+    const raThua = join(thuMuc, "ra-khoa-thua");
+
+    const cu = bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"]!;
+    bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"] = `neo-cli=${spkiThua.toString("base64")}`;
     try {
-      const kq = chay("trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-khong-db"));
-      expect(kq.loi, "trich không được đòi DATABASE_URL").not.toContain("DATABASE_URL");
+      const kq = chay("trich", "--org", orgSsl, "--ra", raThua);
+      expect(kq.loi, "vòng khoá có byte thừa vẫn phải kiểm được chữ ký").not.toMatch(/Error/);
       expect(kq.ma).toBe(0);
     } finally {
-      bienMoiTruong["DATABASE_URL"] = cu;
+      bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"] = cu;
+    }
+
+    const pem = await readFile(join(raThua, "khoa-neo-cli.pem"), "utf8");
+    const than = pem
+      .split("\n")
+      .filter((d) => d !== "" && !d.startsWith("-----"))
+      .join("");
+    expect(
+      Buffer.from(than, "base64"),
+      "PEM không còn là bản chép ĐÚNG BYTE của khoá trong vòng khoá — nhiều khả năng ai đó đã " +
+        "đổi `pemTuSpkiDer` sang một đường PHÂN TÍCH-RỒI-MÃ-HOÁ-LẠI (quyết định ⑶). Đường ấy " +
+        "chuẩn hoá đầu vào, tức nó SỬA HỘ nơi cất thay vì tái hiện nó.",
+    ).toEqual(spkiThua);
+  }, 120_000);
+
+  it("[INV-B3] trich KHÔNG cần DATABASE_URL, cũng KHÔNG cần KHOÁ RIÊNG — thao tác NGOẠI TUYẾN", () => {
+    // Hai tính chất, và vế thứ hai mới là vế an ninh: một kiểm toán viên chạy `trich` phải không
+    // bao giờ cần khoá KÝ trong tay. Ở tầng mã điều đó đúng (`docBoKy` chỉ được gọi trong `xuat`),
+    // nhưng cho tới [review lượt 11 — H11-12] nó không có lớp cưỡng chế nào.
+    // Xoá HẲN biến, không đặt rỗng: đo đúng thứ một kiểm toán viên có.
+    const cu = {
+      DATABASE_URL: bienMoiTruong["DATABASE_URL"]!,
+      TRUSTPROCURE_NEO_KHOA_RIENG: bienMoiTruong["TRUSTPROCURE_NEO_KHOA_RIENG"]!,
+      TRUSTPROCURE_NEO_KID: bienMoiTruong["TRUSTPROCURE_NEO_KID"]!,
+    };
+    for (const k of Object.keys(cu)) delete bienMoiTruong[k];
+    try {
+      // Chống rỗng ruột: `chay` hợp `process.env` với `bienMoiTruong`, nên nếu ba biến ấy có
+      // trong môi trường của chính bộ chạy test thì việc xoá chúng khỏi map không đo được gì.
+      for (const k of Object.keys(cu)) {
+        expect(process.env[k], `${k} có sẵn trong môi trường test — phép đo này rỗng`).toBeUndefined();
+      }
+      const kq = chay("trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-ngoai-tuyen"));
+      expect(kq.loi, "trich không được đòi DATABASE_URL").not.toContain("DATABASE_URL");
+      expect(kq.loi, "trich không được đòi khoá RIÊNG").not.toContain("KHOA_RIENG");
+      expect(kq.ma).toBe(0);
+    } finally {
+      Object.assign(bienMoiTruong, cu);
     }
   }, 60_000);
 
-  it("[INV-B3] trich KHÔNG tách artefact ra khỏi một nơi cất đang hỏng", async () => {
-    // Quyết định ⑴ của khối `trich`. Một artefact tách ra từ một nơi cất có bản ghi không kiểm
-    // được là một artefact TRÔNG SẠCH HƠN nơi nó đến — và nó sẽ đi vào tay kiểm toán viên đúng
-    // như thế, vì `openssl` chỉ phán xét ba tệp trước mặt nó, không biết gì về tệp JSONL.
+  it("[INV-B3] trich KHÔNG ghi đè: chạy lại vào cùng --ra thì NÉM", () => {
+    // [review lượt 11 — H11-2] `flag: "wx"` đóng hai thứ cùng lúc — ghi đè im lặng, và đi theo
+    // một symlink do người khác đặt sẵn trong `--ra`. Ca hỏng đắt hơn là ca TRỘN: một thư mục đầu
+    // ra giữ `.txt` của lượt này cạnh `.sig` của lượt trước cho ra một cặp không khớp nhau, và
+    // openssl trả lời điều đó bằng đúng câu của một vụ giả mạo.
+    const kq = chay("trich", "--org", orgSsl, "--ra", raSsl);
+    expect(kq.ma).toBe(1);
+    expect(kq.loi).toContain("KHÔNG ghi đè");
+  }, 60_000);
+
+  it("[INV-B3] hai mốc neo cùng seq mà KHÁC chain_hash ⇒ trich NÉM, không chọn hộ", async () => {
+    // [review lượt 11 — H11-6] Trùng `seq` là bình thường (hai lượt `xuat` không có sự kiện mới).
+    // Trùng `seq` với chain_hash KHÁC nhau thì không: cùng một độ dài chuỗi, hai cái đuôi — đó là
+    // hình dạng của một vụ cắt-đuôi-rồi-neo-lại. `kiem` bắt được; đường `trich` → openssl thì
+    // KHÔNG, vì kiểm toán viên chỉ có ba tệp trước mặt. Bản đầu lấy im lặng cái ĐẦU TIÊN.
     const { rows } = await db.pool.query<{ id: string }>(
       "INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id",
-      ["neo-cli-kho-hong"],
+      ["neo-cli-mau-thuan"],
     );
-    const orgHong = rows[0]!.id;
+    const orgMt = rows[0]!.id;
     const apiPool = db.poolAs("app_api");
-    await withTenant(apiPool, orgHong, (client) =>
-      appendAuditEvent(client, orgHong, { actorType: "USER", action: "E", resourceType: "TEST" }),
+    await withTenant(apiPool, orgMt, (client) =>
+      appendAuditEvent(client, orgMt, { actorType: "USER", action: "E", resourceType: "TEST" }),
     );
-    expect(chay("xuat", "--org", orgHong).ma).toBe(0);
+    expect(chay("xuat", "--org", orgMt).ma).toBe(0);
 
-    // Bản ghi hỏng đứng SAU một bản ghi tốt: nếu `trich` chỉ kiểm bản ghi nó sắp tách thì nó vẫn
-    // xanh, và vế fail-closed trở thành trang trí.
-    await writeFile(join(thuMuc, `${orgHong}.jsonl`), '{"text":"khong ky","sig":"AA"}\n', {
+    // Sổ bị dựng lại: cùng seq=1, một chain_hash KHÁC. Ký bằng CHÍNH khoá riêng mà công cụ
+    // dùng, nên cả hai bản ghi đều qua được `verifyAnchorRecord` — mâu thuẫn nằm ở chỗ khác,
+    // và đó đúng là điều làm ca này khó thấy. Ký bằng `createSign` thẳng, không qua
+    // `anchor-sign.ts` — cùng lý do đã ghi cho `neo-fixture.ts`.
+    const text = buildAnchorText({
+      kid: "neo-cli",
+      orgId: orgMt,
+      seq: 1,
+      hashHex: "c".repeat(64),
+      exportedAt: "2026-09-07T00:00:00.000Z",
+    });
+    const khoaRieng = createPrivateKey({
+      key: Buffer.from(bienMoiTruong["TRUSTPROCURE_NEO_KHOA_RIENG"]!, "base64"),
+      format: "der",
+      type: "pkcs8",
+    });
+    const sig = createSign("sha256").update(text).end().sign(khoaRieng).toString("base64");
+    await writeFile(join(thuMuc, `${orgMt}.jsonl`), `${JSON.stringify({ text, sig })}\n`, {
       flag: "a",
     });
 
-    const kq = chay("trich", "--org", orgHong, "--ra", join(thuMuc, "ra-kho-hong"));
+    const kq = chay("trich", "--org", orgMt, "--ra", join(thuMuc, "ra-mau-thuan"));
     expect(kq.ma).toBe(1);
-    expect(kq.loi).toContain("không kiểm được");
+    expect(kq.loi).toContain("MÂU THUẪN");
+    expect(kq.loi).toContain("KHÔNG chọn hộ");
   }, 60_000);
 
+  it("[INV-B3] dòng lệnh ĐƯỢC TÀI LIỆU HOÁ chạy được: `pnpm neo trich ...`", () => {
+    // [review lượt 11 — H11-13] Mọi ca khác trong file này spawn `node --experimental-
+    // transform-types ... src/index.ts`, KHÔNG đi qua script `neo` của package.json và không
+    // đi qua bộ chuyển tham số của pnpm. Nhưng thứ `CACH_DUNG` in ra và thứ ADR-026 §5⑶ viết
+    // là `pnpm neo trich ...`. Khoản nợ 23 ra đời đúng từ khoảng chênh ấy: một entry point
+    // được nhắc tên ở ba tài liệu và ném ENOENT ở dòng đầu khi có người cầm lên.
+    // Tự đủ, không dựa vào thứ tự chạy của các ca khác: bảo đảm nơi cất có mốc neo trước.
+    // Lượt `xuat` thứ hai (nếu có) ghi cùng seq và cùng chain_hash, nên nó không tạo mâu thuẫn.
+    expect(chay("xuat", "--org", orgSsl).ma).toBe(0);
+    const kq = spawnSync(
+      "pnpm",
+      ["neo", "trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-qua-pnpm")],
+      { env: { ...process.env, ...bienMoiTruong }, encoding: "utf8", cwd: GOC, shell: true },
+    );
+    expect(`${kq.stdout ?? ""}${kq.stderr ?? ""}`).toContain("openssl dgst -sha256 -verify");
+    expect(kq.status).toBe(0);
+  }, 120_000);
   it("trich từ chối một --seq không có trong nơi cất, thay vì im lặng lấy mốc gần nhất", () => {
     const kq = chay("trich", "--org", orgSsl, "--ra", join(thuMuc, "ra-seq-la"), "--seq", "999");
     expect(kq.ma).toBe(1);
