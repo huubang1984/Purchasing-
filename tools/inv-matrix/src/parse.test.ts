@@ -112,7 +112,9 @@ describe("phân tích ma trận bất biến", () => {
 // ---------------------------------------------------------------------------------------------
 // T11-D — NHÃN CÓ HẬU TỐ VẾ KHÔNG ĐƯỢC TÍNH LÀ ĐỘ PHỦ
 //
-// E3 có NĂM vế và vế *giới hạn tần suất* không có một dòng mã nào trong toàn S0. Nới regex độ
+// E3 có NĂM vế; ~~vế *giới hạn tần suất* không có một dòng mã nào trong toàn S0~~ **[S1.21]
+// vế ấy nay có lớp, và quy ước dưới đây KHÔNG phụ thuộc vào điều đó** — nó nói rằng một nhãn
+// VẾ không chứng minh một mệnh đề đủ vế, đúng cả khi mọi vế đã có lớp. Nới regex độ
 // phủ để nhận `(n)` sẽ đổ các test hàm thuần vào hàng E3. Hai khẳng định dưới đây là mốc chết
 // của quy ước đó: một cho ca "chỉ có nhãn vế" (E3 phải VẮNG khỏi bảng độ phủ), một cho ca hỗn
 // hợp (chỉ nhãn TRẦN được đếm).

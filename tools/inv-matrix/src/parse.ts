@@ -8,8 +8,11 @@
 //
 // (1) `NHAN_PHU_DO_DUOC` — nhãn ĐƯỢC TÍNH LÀ ĐỘ PHỦ — CỐ Ý HẸP: đúng `[INV-<chữ><số>]`, không
 //     hậu tố. Nới nó để nhận `[INV-E3(3)]` sẽ đổ chín test hàm thuần vào hàng E3 và làm E3
-//     trông như "đã phủ" — trong khi E3 có NĂM vế và vế *giới hạn tần suất* không có một dòng
-//     mã nào trong toàn S0. Đó đúng là thứ QT2 cấm: nới một bảo đảm để mua một con số đẹp.
+//     trông như "đã phủ" — trong khi E3 có NĂM vế và ~~vế *giới hạn tần suất* không có một
+//     dòng mã nào trong toàn S0~~ **[S1.21] vế ấy nay CÓ LỚP trên cả hai đường OTP (khoản nợ
+//     1 đóng)**. Quy ước KHÔNG đổi theo: nó nói về CÁCH ĐẾM (một nhãn vế không chứng minh
+//     mệnh đề đủ vế), không về việc vế nào đã có lớp. Đó đúng là thứ QT2 cấm: nới một bảo
+//     đảm để mua một con số đẹp.
 //     Các nhãn `[T9-J]`, `[T10-*]`, `[QT3]`, `[CẤM LOG]`, `[C1-KHE-HỞ]`, `[NỢ ADR-006]` cũng
 //     nằm ngoài, và cũng cố ý — chúng khẳng định NGOẠI LỆ hoặc quy ước, không khẳng định bất biến.
 //

@@ -14,7 +14,11 @@ import {
 // [vòng fix 1 — MỤC 6] SỔ ĐĂNG KÝ LÀ docs/TEST-PLAN.md, KHÔNG PHẢI TRÍ NHỚ. E3 ở đó có NĂM vế,
 // không phải ba như bản trước của khối này (và của totp.ts, và của 006) viết:
 //     E3(1) giới hạn số lần thử            — FILE NÀY, trên `failed_attempts`/`locked_until`.
-//     E3(2) GIỚI HẠN TẦN SUẤT              — *** KHÔNG CÓ LỚP NÀO TRONG S0 ***. Xem dưới.
+//     E3(2) GIỚI HẠN TẦN SUẤT              — ~~*** KHÔNG CÓ LỚP NÀO TRONG S0 ***~~ [S1.21]
+//                                            CÓ LỚP TRÊN CẢ HAI ĐƯỜNG OTP: `otp_rate_limits`
+//                                            cho đường lời mời (S1.3, ADR-015 §5) và
+//                                            `callerLimit` 30/15 phút cho `/auth/totp`
+//                                            (khoản nợ 39, migration `042`). Xem dưới.
 //     E3(3) hết hạn                        — cửa sổ trượt của `verifyTotpCode` (totp.ts).
 //     E3(4) dùng một lần                   — `last_used_counter`, FILE NÀY (vế bền vững) +
 //                                            totp.ts (vế hàm thuần).
@@ -28,6 +32,13 @@ import {
 // file này gọi hạn mức theo NGƯỜI GỌI là "lớp bù" cho đánh đổi "khoá được tài khoản người
 // khác"; điều đó đúng NHƯNG không đầy đủ: nó CŨNG là một vế E3 chưa cài. Hai cái tên cho cùng
 // một thứ chưa có, và chỉ một trong hai nằm trong sổ đăng ký bất biến. Vào sổ nợ Task 11.
+//
+// [S1.21] KHOẢN NỢ ẤY (số 1) ĐÃ ĐÓNG, VÀ NÓ ĐÓNG BỞI MỘT KHOẢN NỢ KHÁC. Lớp trả cho E3(2)
+// ra đời để trả khoản nợ 39 (*"không có bucket theo NGƯỜI GỌI cho `/auth/link`,
+// `/auth/redeem`, `/auth/totp`"*), và không ai nối nó về đây — nên khối này, dòng 1 của sổ
+// nợ, và `docs/TEST-PLAN.md` cùng khai một lỗ đã được lấp suốt chín vòng. Phần dư THẬT của
+// E3 hôm nay là khoản nợ 2: trần loạt đầu của E3(1) vẫn là độ đồng thời của kẻ tấn công
+// chia cho số địa chỉ nó có, vì không có `FOR UPDATE` nào trên `failed_attempts`.
 //
 // Brief tạo hai cột `mfa_credentials.failed_attempts` và `locked_until` rồi KHÔNG có một dòng
 // mã nào đọc hay ghi chúng. Hệ quả đo được nếu để nguyên: vế E3(1) (giới hạn số lần thử)

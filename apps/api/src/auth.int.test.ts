@@ -22,7 +22,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
 import type { Route } from "./route-types.js";
-import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
+import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER, LOGIN_TOTP_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "./test-services.js";
@@ -302,6 +302,28 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
       [LOGIN_REDEEM_MAX_PER_CALLER + 1],
     );
     expect(cu[0]?.n).toBe("0");
+  });
+
+  it("[S1.21, review lượt 13 H13-1] /auth/totp: lần thứ N+1 từ cùng địa chỉ ⇒ 429 + Retry-After — vế GIỚI HẠN TẦN SUẤT của E3 trên đường TOTP", async () => {
+    // Trước vòng này, `callerLimit` của `/auth/totp` là một dòng cấu hình mà KHÔNG test nào canh:
+    // hai test ở trên chỉ đo `/auth/link` và `/auth/redeem`, còn đối chứng thì gỡ cờ khỏi MỌI route
+    // ANON rồi vẫn chỉ đo `/auth/redeem`. Xoá đúng dòng 166 của `routes/auth.ts` thì đường đoán mã
+    // TOTP mất trần theo người gọi và bộ test vẫn XANH — đó là lý do khoản nợ 1 không được tuyên
+    // ĐÓNG cho tới khi có test này (và lớp tĩnh ở `routes.test.ts`).
+    const rac = "C".repeat(43);
+    const than = { orgId: orgA, token: rac, code: "000000" };
+    for (let i = 0; i < LOGIN_TOTP_MAX_PER_CALLER; i += 1) {
+      const r = await goi("POST", "/auth/totp", { body: than });
+      expect(r.status, `lần ${i + 1}`).toBe(422);
+    }
+    const chan = await goi("POST", "/auth/totp", { body: than });
+    expect(chan.status).toBe(429);
+    expect(chan.headers.get("retry-after")).toBe("900");
+    expect(chan.text).toBe(JSON.stringify({ error: "qua nhieu yeu cau" }));
+    // Bucket theo (route, địa chỉ): một địa chỉ khác vẫn đi qua — trần KHÔNG phải một công tắc toàn cục.
+    expect((await goi("POST", "/auth/totp", { body: than, ip: "198.51.100.11" })).status).toBe(422);
+    // Và trần của `/auth/totp` là bucket RIÊNG: `/auth/redeem` từ cùng địa chỉ vẫn còn ngân sách.
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: rac } })).status).toBe(422);
   });
 
   it("[review H4-4] IPv6: hai địa chỉ CÙNG /64 dùng chung bucket (lần N+1 từ địa chỉ thứ hai ⇒ 429); /64 khác ⇒ 200", async () => {

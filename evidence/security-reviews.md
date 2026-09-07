@@ -877,3 +877,67 @@ danh-sách-tên, rồi tự viết lại khuôn ấy dưới dạng một phép 
 **Một reviewer không chạy được gì vẫn tìm ra ba khiếm khuyết THẬT trong mã — và một trong ba là một câu của chính ADR mâu thuẫn với phép đo nằm cách nó vài trăm dòng.** M3 không đòi hỏi một cơ sở dữ liệu; nó đòi hỏi **đọc §2 và §7 của cùng một tài liệu rồi so chúng với nhau**. Đây là lần thứ hai trong ba vòng thứ đắt nhất đến từ một phép so nội bộ chứ không từ một công cụ.
 
 **Và một câu sai theo hướng DỄ CHỊU khó tự bắt hơn một câu sai theo hướng khó chịu.** §2⑵ khen `migrate()` kỷ luật hơn thực tế. Không cổng nào đỏ vì một lời khen; chỉ có một người đọc chậm mới bắt được. Cùng họ với *"mười chín ADR"* và *"16/50"* — nhưng nguy hiểm hơn, vì hai cái kia là con số còn cái này là một **quy tắc mà vòng sau sẽ dựa vào**.
+
+---
+
+# S1.21 — review lượt 13: một vòng RÀ SỔ, và cái sổ tự khai sai chính nó
+
+## Bảng
+
+| Trường | Giá trị |
+|---|---|
+| Vòng | **S1.21** — rà lại sổ nợ S0, `[INV-H20]`, ADR-029; đóng khoản nợ **1, 5, 6, 7**, mở khoản nợ **61** |
+| Nhánh | `ra-lai-so-no-s0`, cắt từ `8605a07` |
+| Phạm vi | `tests/architecture/so-no-tu-doi-chieu.test.ts`, `docs/STATE.md` (bảng sổ nợ + mục 36 + §Tham chiếu), `docs/DECISIONS.md` ADR-028/029, `docs/TEST-PLAN.md`, `tools/inv-matrix/src/{danh-gia,parse}.ts`, `packages/identity/src/{session-actor,mfa-credentials,login}.ts`, `apps/api/src/{dispatch.ts,routes/auth.ts,auth.int.test.ts,composition.ts}`, `packages/outbox/src/{enqueue,runner}.ts`, `db/migrations/029`, `Handoff.md` |
+| Trạng thái được review | **CÂY LÀM VIỆC CHƯA COMMIT.** Khác mọi lượt trước — chúng trỏ được tới một SHA *"trước lượt sửa"*, lượt này thì KHÔNG có: mọi phát hiện được sửa trước commit đầu tiên của nhánh. Ghi ra để không ai đi tìm một SHA không tồn tại |
+| Môi trường của reviewer | **Read/Grep/Glob. KHÔNG Bash, KHÔNG cơ sở dữ liệu.** Reviewer nói rõ giới hạn ấy và kèm phép đo bác bỏ cho những phát hiện nó tự thấy có thể sai |
+| Phát hiện | **0 CRITICAL, 3 HIGH, 7 MEDIUM, 6 LOW** |
+| Kết quả | **3/3 HIGH và 7/7 MEDIUM đã xử lý; 6/6 LOW đã đóng.** Một HIGH đổi hình dạng của cả vòng: nó bác bỏ dấu `[ĐÓNG]` của khoản nợ 1 và sinh ra ADR-029 §2⑹ |
+
+## Ba HIGH
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H13-1** | **Khoản nợ 1 được tuyên ĐÓNG dựa trên một lớp KHÔNG CÓ GÌ GIỮ.** `callerLimit` của `/auth/totp` là toàn bộ vế E3(2) trên đường TOTP; xoá đúng dòng ấy thì **không test nào đỏ** — hai test hạn mức đã có chỉ đo `/auth/link` và `/auth/redeem`, đối chứng của chúng gỡ cờ khỏi MỌI route ANON rồi vẫn chỉ đo `/auth/redeem` | **ĐÓNG bằng HAI lớp:** test tích hợp `429 + Retry-After` trên `/auth/totp` (32 lời gọi HTTP thật, 37 s) + phép kiểm TĨNH *mọi route ANON khai `callerLimit`* trong `timViPhamBangRoute`, mũi đột biến gỡ cờ của **từng** route ANON. Nay là **ADR-029 §2⑹** |
+| **H13-2** | `evidence/INV-matrix.md` chưa sinh lại ⇒ artefact đưa cho kiểm toán viên vẫn khai một biện pháp kiểm soát **KHÔNG tồn tại** (*"đường TOTP VẪN KHÔNG CÓ giới hạn tần suất nào"*), cộng ba con số lệch với mốc đã ghim | **ĐÓNG** — sinh lại trong cùng commit; cổng `evidence:check` so byte |
+| **H13-3** | **Bộ đọc của chính lớp mới bỏ sót dòng TRONG IM LẶNG** — một dòng nợ thụt vào **một dấu cách** (GFM cho phép tới ba) rơi khỏi P1, P2, P4 mà P3 vẫn xanh ⇒ một khoản nợ MỞ vô hình với chính lớp canh sổ nợ | **ĐÓNG bằng P0** (mọi hàng bảng phải được bộ đọc NHẬN) + mũi đột biến khẳng định luôn *bốn phép kiểm kia KHÔNG thấy gì* |
+
+## Bảy MEDIUM
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H13-4** | `docs/STATE.md` bảng *Tham chiếu* khai *"Sổ đăng ký 51 bất biến (34 + 17)"*, sổ có **54 (34 + 20)** — cách lời khai số ADR đúng MỘT hàng bảng, và P5 không đọc nó | **ĐÓNG bằng P6** (nguồn: số HÀNG của sổ đăng ký) — ĐỎ ngay lượt đầu |
+| **H13-5** | Câu của khoản nợ 7 còn sống nguyên văn ở `docs/STATE.md:122` (trong đúng tệp lớp mới đọc) và `Handoff.md` §13 (*"22 khoản nợ"*, sửa một chỗ bỏ một chỗ trong cùng vòng) | **ĐÓNG** — gạch cả hai, giữ nguyên chữ |
+| **H13-6** | `packages/outbox/src/runner.ts` còn khai *"`apps/` còn rỗng"* — bản sao thứ TƯ, trong mã sản xuất | **ĐÓNG** |
+| **H13-7** | Trong đúng khối chú thích vòng này vừa sửa, câu THỨ HAI vẫn thiu: *"trigger ép điều đó ở tầng CSDL là S1.10.4"* — trigger `sessions_kiem_mfa_khi_tao` có từ `029` | **ĐÓNG** (chiều sai là BI QUAN — khai ít lớp hơn số lớp thật) |
+| **H13-8** | `viPhamSoADR` bóc `~~…~~` trên toàn tệp: một dấu `~~` LẺ dời mọi cặp phía sau ⇒ một lời khai đang sống rơi vào khoảng bị xoá ⇒ **xanh trên đúng tệp đang sai**. Và vị từ chỉ đọc số viết bằng CHỮ | **ĐÓNG** — số dấu `~~` phải CHẴN (mũi đột biến riêng), vị từ đọc cả chữ số, và câu ở TEST-PLAN/ADR hạ xuống ĐÚNG hai hình dạng đã nêu tên |
+| **H13-9** | Cửa `~~` của P4 dùng được để **làm im** một con trỏ chết: gạch nó đi là xong, cổng vẫn xanh. Đo: ô con trỏ khoản 11 sau khi bóc gạch không còn đường nào | **ĐÓNG** — ô đã gạch một con trỏ thì phải còn ít nhất một con trỏ SỐNG; ĐỎ ngay lượt đầu ở đúng dòng 11 |
+| **H13-10** | Khoản nợ 5 đóng bằng một bảo đảm CÓ ĐIỀU KIỆN (RLS không áp cho phiên không chịu RLS) mà điều kiện không đi kèm | **ĐÓNG** — điều kiện ghi vào dòng nợ, kèm lớp thứ ba giữ nó (`NOBYPASSRLS` + BƯỚC 1 của hardening, đo ở S1.20) |
+
+## Sáu LOW
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H13-11** | `join(GOC, "../../…")` xác thực bằng hệ thống tệp NGOÀI worktree ⇒ phép kiểm phụ thuộc máy | **ĐÓNG** — `resolve` + kiểm chứa |
+| **H13-12** | `new RegExp` dựng từ chuỗi trong tài liệu: một tên bắt đầu bằng `?` NÉM `SyntaxError` giữa bộ test. (Reviewer tự bác mức cao: lượng tử duy nhất sinh ra là `.*`, chuỗi đối tượng ≤ 255 ký tự ⇒ không có ca hàm mũ) | **ĐÓNG** — `?` được thoát, và lỗi quy về một vi phạm có tên |
+| **H13-13** | Số khoản không bắt buộc DUY NHẤT ⇒ hai dòng cùng số đi qua P3 sạch sẽ | **ĐÓNG** — một dòng, một mũi đột biến |
+| **H13-14** | Tám câu tổng kết sai bị CHÈN một dấu vào giữa thay vì bị GẠCH — chính vòng này làm sai quy ước *"gạch tại chỗ, giữ nguyên văn"* của kho | **ĐÓNG** — gạch cả tám câu, nguyên văn |
+| **H13-15** | Sổ ghi của `MOC_GHIM` dừng ở S1.18 trong khi hằng số đã nhảy hai nhịp — đúng lớp lỗi ADR-029 đặt tên, ở ngay tệp cưỡng chế mốc | **ĐÓNG** — hai dòng lý do |
+| **H13-16** | Giả định *"tài liệu là dữ liệu tin cậy"* chưa được cưỡng chế: `CODEOWNERS` trỏ tới team chưa tồn tại (khoản nợ 18) ⇒ không branch protection nào bắt buộc review trên `docs/` | **ĐÓNG bằng cách NÓI RA** — ADR-029 §5 và giới hạn của H20 ở TEST-PLAN |
+
+## Ba mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề
+
+- **Bộ test có ghi vào cây nguồn không (khoản nợ 59 tái diễn)?** KHÔNG. Tệp chỉ nhập `existsSync`, `readdirSync`, `readFileSync`; không `writeFileSync`, không `spawn`. Mọi đột biến là phép biến đổi trên chuỗi trong bộ nhớ, và lời tuyên bố ở khối đầu khớp với mã.
+- **Các mũi đột biến có chạy đúng hàm mà phép kiểm thật chạy không?** CÓ, không có bản sao logic nào trong test; `dotBien` NÉM khi neo khớp ≠ 1, nên một mũi trượt không âm thầm thành xanh.
+- **Hai chú thích sửa trong mã sản xuất có nói đúng thứ mã đang làm không?** CÓ — reviewer kiểm từng vế tới tận hằng số (`LOGIN_TOTP_MAX_PER_CALLER = 30`, cưỡng chế ở `dispatch.ts:297-313`, bảng `caller_rate_limits` của `042`, cửa sổ 900 s) và tới tận dòng (`login.ts:228`, `auth.ts:184`). Tiêu đề ADR-028 sửa đúng, nguyên văn cũ giữ lại.
+
+## Điều đáng mang sang vòng sau
+
+**"ĐÓNG" nghĩa là CÓ LỚP GIỮ, không phải CÓ CÀI ĐẶT** (ADR-029 §2⑹). Đây là lượt review đầu tiên
+bác bỏ một dấu *đã đóng* không phải vì mã sai mà vì **không có gì giữ mã ấy đúng** — một hàng rào
+thật, cưỡng chế thật, mà xoá một dòng thì bộ test vẫn xanh. Vòng rà nào cũng nên hỏi câu ấy trước
+khi đánh dấu.
+
+**Và một lớp canh mới phải bị hỏi đúng câu nó dùng để hỏi người khác.** Ba HIGH/MEDIUM của lượt
+này — bộ đọc bỏ sót dòng, cửa `~~` làm im con trỏ chết, cửa `~~` bóc mất lời khai — đều là *chính
+khiếm khuyết mà lớp ấy ra đời để bắt*, tái tạo bên trong lớp ấy.

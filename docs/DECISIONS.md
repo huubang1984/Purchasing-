@@ -1888,7 +1888,8 @@ của `coHan` reject không ai bắt và giết tiến trình; nay thành reject
   CHƯA vượt trần riêng (một địa chỉ góp tối đa `callerLimit`), và vượt `orgLimit` thì **LÀM CHẬM**
   (`treQuaTranMs`, mặc định 2 s) rồi vẫn xử lý — nguyên tắc ADR-015 §5, "hạn mức theo đích chỉ được
   làm chậm, không được khoá". Log một dòng chỉ mang route + requestId (tín hiệu tấn công).
-- **Tổ chức LẠ** (`BucketBoNho`, `apps/api/src/bucket-bo-nho.ts`): 23503 ở bucket CSDL ⇒ đếm trong bộ
+- **Tổ chức LẠ** (`BucketBoNho`, ~~`apps/api/src/bucket-bo-nho.ts`~~ — **[S1.21] tệp ấy đã bị XOÁ ở
+  S1.14/ADR-024**, xem cuối mục này): 23503 ở bucket CSDL ⇒ đếm trong bộ
   nhớ theo `route|người gọi` (không orgId — xoay orgId lạ không mở thêm trần), CÙNG trần, 429 ở lần
   N+1 như tổ chức thật ~~⇒ oracle H4-5 đóng~~ **[review H5-3]** — oracle H4-5 vẫn còn, đổi dạng: hai bộ
   đếm rời nên mồi N lần vào một UUID giả rồi gửi UUID ứng viên là phân biệt được bằng MỘT lời gọi;
@@ -2578,7 +2579,12 @@ nạp"* được **kiểm bằng cách ĐỌC**, chưa phải một phép đo l�
 
 ---
 
-## ADR-028 — Ranh giới TỰ CHỮA / PHÁN XÉT của `hardening.always.sql`: chủ thể suy từ TÍNH CHẤT, tự chữa chỉ thứ có TÊN
+## ADR-028 — Ranh giới TỰ CHỮA / PHÁN XÉT của `hardening.always.sql`: chủ thể suy từ TÍNH CHẤT, tự chữa chỉ thứ ĐƠN ĐIỆU
+
+> **[S1.21] Tiêu đề trên đã được sửa; nguyên văn cũ:** *"…, tự chữa chỉ thứ có TÊN"*.
+> Vế ấy là đúng câu mà §2⑵ của chính ADR này đã GẠCH ở vòng sửa sau review lượt 12 — cùng
+> tệp, cách hai mươi hai dòng, cùng ngày. Một lời đính chính nằm trong THÂN mà không chạm
+> tới TIÊU ĐỀ thì cái đọc được từ mục lục vẫn là câu đã bị bác bỏ.
 
 **Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 16**, và **bác bỏ nửa
 đầu khoản nợ 3** · Liên quan: **B1**, **B2**, **B3**, **F1**, **H19**, ADR-027
@@ -2763,3 +2769,147 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
     `lanname = 'internal'`** — không chứa `RETURN`. Đây là phép đo buộc vế `prolang = plpgsql` vào vị
     từ: không có nó, hai trigger dựng sẵn của PostgreSQL đủ để chặn deploy trên một lược đồ hợp lệ.
     ✔ đã đo.
+
+## ADR-029 — Một lời khai TÓM TẮT trong tài liệu phải được SUY RA, hoặc nó sẽ thiu
+
+**Ngày:** 2026-09-08 (phép đo: 2026-09-07) · **Trạng thái:** **Đã chấp nhận** · Đóng: **không
+khoản nợ nào** (vòng rà sổ), mở **khoản nợ 61** · Liên quan: **H20**, ADR-027, ADR-028
+
+### 1. Vì sao ADR này tồn tại
+
+Ba vòng liên tiếp, ba lần cùng một hình dạng, mỗi lần tìm ra **do tình cờ đọc tới** chứ không do
+một cổng nào đỏ:
+
+| Vòng | Lời khai | Sự thật khi đo | Thiu bao lâu |
+|---|---|---|---|
+| S1.18 | `docs/TEST-PLAN.md`: *"16/50"* | bảng §5 có 17 hàng | vài vòng |
+| S1.20 | `docs/STATE.md`: *"mười chín ADR"* | sổ quyết định có 28 | chín vòng |
+| S1.21 | `docs/STATE.md`: *"Sổ nợ mở còn: 23 và nửa sau của 30"* | phán xét lại từng dòng: **13** khoản mở (đếm theo dấu văn bản thì ra **14** — xem §2⑶) | tám lần, từ S1.12 |
+
+Hình dạng chung, nói bằng một câu: **một lời khai tóm tắt là một BẢN SAO của một sự thật nằm chỗ
+khác, và mọi bản sao không được đối chiếu đều trôi.** Nó không trôi vì ai đó cẩu thả — nó trôi vì
+lời khai và sự thật nằm ở hai chỗ mà không thao tác nào chạm cả hai.
+
+Và lần thứ ba thì cái giá thôi là thẩm mỹ: câu *"Sổ nợ mở còn…"* là thứ quyết định **vòng sau làm
+gì**. Khai năm khoản trong khi có mười ba nghĩa là tám khoản nợ không bao giờ được xếp lịch.
+
+### 2. Quyết định
+
+⑴ **Một lời khai tóm tắt trong tài liệu chỉ được tồn tại nếu có một lớp SUY RA nó từ nguồn.**
+   Nguồn là thứ đếm được: số hàng của một bảng, số đầu mục của một tệp, tập tệp trên đĩa. Lời khai
+   là thứ chép lại. Lớp là thứ so hai cái.
+
+⑵ **Lớp ấy phải đỏ theo CẢ HAI CHIỀU.** Khai thiếu (bỏ sót một khoản mở) và khai thừa (kể một
+   khoản đã đóng) đều là lời khai sai. Một cổng chỉ bắt một chiều là một cổng **mời** người ta đi
+   chiều kia.
+
+⑶ **Trạng thái phải là một TỪ KHOÁ, không phải văn phong.** Trước vòng này, *đã đóng* được viết
+   bằng bốn cách (`ĐÃ ĐÓNG`, `ĐÓNG 2026-…`, `ĐÃ ĐO`, `MỞ VÀ ĐÓNG CÙNG VÒNG`) và *còn mở* thì không
+   có dấu nào — nên **một khoản đang mở và một khoản QUÊN GHI trạng thái trông giống hệt nhau**.
+   Từ khoá đóng (`ĐÓNG` · `MỞ` · `NỬA`) làm sự vắng mặt trở nên ồn ào.
+
+⑷ **Mọi lời khai, không phải lời khai đầu tiên.** Bản đầu của phép kiểm số ADR đòi *"đúng MỘT lời
+   khai"*; lượt chạy đầu tìm ra HAI, ở hai mục khác nhau của cùng một tệp, khai **28** và **27**.
+   Một phép kiểm dừng ở lời khai đầu tiên sẽ XANH trên đúng tệp đang sai.
+
+⑸ **Con trỏ là một phần của lời khai.** Một khoản nợ mà đường dẫn của nó không giải được là một
+   khoản nợ không đọc lại được — nó âm thầm biến thành một câu chuyện. Ngoại lệ DUY NHẤT là đường
+   dẫn nằm trong đoạn đã **gạch**: dấu gạch nghĩa là *"nguyên văn cũ, giữ lại để đối chiếu"*, và
+   một nguyên văn cũ ĐƯỢC PHÉP trỏ tới thứ đã mất.
+
+⑹ **[review lượt 13, H13-1] *"ĐÓNG"* nghĩa là CÓ LỚP GIỮ, không phải CÓ CÀI ĐẶT.** Vòng này
+   suýt tuyên khoản nợ 1 đóng dựa trên `callerLimit: LOGIN_TOTP_MAX_PER_CALLER` ở
+   `apps/api/src/routes/auth.ts:166` — một dòng cấu hình THẬT, cưỡng chế THẬT ở dispatcher, nhưng
+   **xoá đúng dòng ấy thì không một test nào đỏ**: hai test hạn mức đã có chỉ đo `/auth/link` và
+   `/auth/redeem`, và đối chứng của chúng gỡ cờ khỏi MỌI route ANON rồi vẫn chỉ đo `/auth/redeem`.
+   Đó là "xanh giả" ở chiều ngược với chiều quen thuộc: **hàng rào có thật, nhưng không có gì giữ
+   nó.** Đủ để nói THU HẸP, chưa đủ để nói ĐÓNG. Khoản nợ 1 chỉ được đánh `[ĐÓNG]` sau khi có hai
+   lớp: một test tích hợp đo `429 + Retry-After` trên `/auth/totp`, và một phép kiểm TĨNH trong
+   `timViPhamBangRoute` — *mọi route `ANON` phải khai `callerLimit`, hoặc có một dòng lý do ĐO ĐƯỢC
+   trong `MIEN_TRAN_NGUOI_GOI`*. Danh sách miễn ấy có đúng một dòng (`/guest/otp`, trần nằm trong
+   `issueOtpChallenge` và chặt hơn), và nó KHÔNG rỗng một cách cố ý — khác `MIEN_TRU` của ADR-027,
+   ở đây miễn trừ nói *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"*.
+
+⑺ **[lượt CI đầu tiên] Nguồn của một khẳng định về CÁI KHO phải là CÁI KHO, không phải cái
+   đĩa.** `existsSync` trả lời câu *"tệp này có trên máy đang chạy không"* — một câu khác
+   câu đang hỏi, và nó xanh trên đúng máy đã viết ra lỗi. `git ls-files` trả lời đúng câu.
+
+### 3. Vì sao không phải "cẩn thận hơn"
+
+Đây là lựa chọn đã bị bác bỏ bằng đo, hai lần. Mục 33 (S1.18) **gọi tên** khoản nợ 7 là thiu; mục
+35 (S1.20) **gọi tên lần nữa**; tới vòng này dòng ấy vẫn nguyên văn *"`apps/` rỗng"* trong khi
+`apps/` có ba tiến trình. Hai lần ghi vào lịch sử, không lần nào thành một lần sửa. **Ghi một dòng
+thiu vào lịch sử không phải một lớp.**
+
+### 4. Phạm vi — và vì sao nó HẸP
+
+ADR này KHÔNG nói *"mọi câu trong tài liệu phải kiểm được"*. Phần lớn nội dung của
+`docs/STATE.md` là lập luận, và lập luận thì không suy ra được từ đâu cả. Nó nói về đúng một lớp
+câu: **lời khai tóm tắt một tập đếm được** — bao nhiêu ADR, bao nhiêu bất biến, những khoản nợ nào
+còn mở. Dấu hiệu nhận ra: nếu bạn viết được một câu lệnh trả lời cùng câu hỏi ấy, thì lời khai
+phải được đối chiếu với câu lệnh đó.
+
+**Và phạm vi của lớp ĐẦU TIÊN hẹp hơn phạm vi của quy tắc — nói ra thay vì để người đọc tự phát
+hiện.** `[INV-H20]` phủ `docs/STATE.md` và `docs/DECISIONS.md`. Nó **KHÔNG** phủ `Handoff.md`, và
+S1.21 đo được rằng đó là khoảng trống đắt nhất còn lại: §10 của tệp ấy khai *"22 khoản"* trong khi
+sổ có **60**, liệt kê *"năm khoản nặng nhất"* mà **bốn** đã đóng, và §6 *"Cái CHƯA có"* — mục tự
+mở đầu bằng *"đây là phần dễ hiểu sai nhất"* — có **ba** gạch đầu dòng đầu tiên đều sai. Cả hai đã
+sửa tại chỗ ở S1.21 **bằng tay**, tức chúng sẽ trôi lại — và vì thế nó là **khoản nợ 61**, mở
+cố ý ở chính vòng đã sửa chúng. Lý do chưa phủ: `Handoff.md` chưa có một
+hình dạng máy đọc được (nó là văn xuôi có đánh số, không phải bảng), và ép một hình dạng lên nó là
+một vòng riêng. Ghi ra ở đây để nó là một **quyết định**, không phải một chỗ quên.
+
+### 5. Cái giá, nói ra thay vì để người đọc tự phát hiện
+
+- **Bảng sổ nợ nay có một quy ước cú pháp** (ba cột, từ khoá trạng thái ở đầu ô, dòng tổng kết
+  đúng dạng). Một dòng nợ mới viết cẩu thả sẽ **chặn CI** thay vì lặng lẽ vào sổ. Đó là đánh đổi
+  cố ý: một khoản nợ đáng ghi thì đáng ghi đúng.
+- **`[INV-H20]` đọc tài liệu như DỮ LIỆU.** Đổi một tiêu đề mục trong `docs/STATE.md` làm nó đỏ.
+  Chi phí ấy có thật; nó rẻ hơn một sổ nợ khai sai một nửa số nợ.
+- **[review lượt 13, H13-16] Nó đọc tài liệu như DỮ LIỆU TIN CẬY, và giả định ấy chưa được
+  cưỡng chế.** Lớp mới dựng đường dẫn và một biểu thức chính quy từ nội dung `docs/STATE.md`.
+  An toàn hôm nay vì tài liệu do người trong kho viết — nhưng `CODEOWNERS` trỏ tới một team
+  CHƯA TỒN TẠI (khoản nợ 18), nên không branch protection nào bắt buộc review trên `docs/`.
+  Hai lớp đã bịt phần rẻ nhất (đường dẫn phải nằm trong worktree; `new RegExp` hỏng thành một
+  vi phạm có tên), và kết luận đúng ở mức *tự gây thương tích*, KHÔNG ở mức *chống nội dung
+  thù địch*. Nếu lớp này về sau chạy trên tài liệu do bên ngoài đóng góp, phải xét lại trước.
+- **Nó không kiểm được tính ĐÚNG của một phán xét.** `[INV-H20]` bắt được *"bảng nói mở, dòng tổng
+  kết nói đóng"*; nó KHÔNG bắt được một dòng đánh dấu `ĐÓNG` bởi một người đọc nhầm mã. Vế ấy vẫn
+  là việc của mắt người và của những vòng rà như vòng này — nhưng vòng rà nay chỉ phải xét NỘI
+  DUNG, không phải đi tìm xem có bao nhiêu dòng bị bỏ quên.
+
+### 6. Phép đo
+
+1. Câu *"Sổ nợ mở còn…"* xuất hiện **8** lần từ mục 27 tới mục 35 và khai **5** khoản; bảng cho
+   **14** dòng không mang dấu đã-đóng khi đếm theo dấu văn bản, và **13** khoản khi phán xét lại
+   từng dòng. Ba con số. Hai con số sau lệch nhau ở **bảy** dòng, chia làm hai lớp lý do khác hẳn
+   nhau: **1, 5, 7** đóng bởi phép đo HÔM NAY (chúng đã đóng từ lâu, không ai đánh dấu), còn
+   **50, 24, 30, 59** thì không ai đọc sai MÃ cả — người ta đọc sai CHỮ (50 đã đóng nhưng viết
+   bằng một cách thứ năm; 24 và 30 mang dấu đọc như đã đóng trong khi còn mở; 59 thì không bộ đọc
+   nào thấy). Lớp thứ hai là lý do §2⑶ tồn tại. ✔ đã đo cả ba.
+2. Dòng **59** của bảng có **một** ô nội dung, dòng **52** có **bốn**; Markdown vẫn dựng bảng, nên
+   không ai thấy, còn mọi bộ đọc theo cột thì bỏ qua dòng 59 **trong im lặng**. ✔ đã đo.
+3. **Mười** con trỏ không giải được, trong đó dòng 55 trỏ tới `apps/api/src/bucket-bo-nho.ts` —
+   tệp mà thân của chính dòng ấy nói đã bị xoá. ✔ đã đo.
+4. `docs/STATE.md` mang **hai** lời khai số ADR, **28** và **27**, ở hai mục khác nhau. ✔ đã đo —
+   và đây là phép đo buộc §2⑷ vào phép kiểm.
+5. Khoản nợ 1 đóng bởi lớp trả cho khoản nợ **39** (`callerLimit = 30`/15 phút trên `/auth/totp`,
+   `apps/api/src/routes/auth.ts:166`); khoản nợ 5 đóng bởi `RLS WITH CHECK` với test có từ commit
+   `13a6e5b` (2026-08-28). ✔ đã đo cả hai — và cả hai là **lớp KHÁC lớp mà khoản nợ chỉ tên**, đúng
+   khuôn nửa đầu khoản nợ 3 ở S1.20.
+6. **[vòng sửa sau review lượt 13]** Một dòng nợ thụt vào **một dấu cách** vẫn là hàng bảng với
+   GFM, và nó rơi khỏi P1, P2, P4 **trong im lặng** trong khi P3 vẫn xanh. ✔ đã đo bằng chính
+   mũi đột biến của P0, và mũi ấy khẳng định luôn bốn phép kiểm kia KHÔNG thấy gì.
+7. **[vòng sửa]** Ô con trỏ của khoản 11 sau khi bóc phần đã gạch KHÔNG còn một đường nào —
+   tức cửa `~~` dùng được để làm im một con trỏ chết. ✔ đã đo: phép kiểm mới ĐỎ ngay lượt đầu
+   trên đúng dòng ấy.
+8. **[vòng sửa]** Bảng *Tham chiếu* khai *"Sổ đăng ký 51 bất biến (34 + 17)"*, sổ đăng ký có
+   **54 (34 + 20)**. ✔ đã đo — P6 ĐỎ ngay lượt đầu.
+10. **[lượt CI đầu tiên]** Hai con trỏ do chính vòng này sửa trỏ tới tệp **có trên đĩa mà
+    KHÔNG có trong kho** (`git ls-files .superpowers` = 0). `pnpm t0`, bộ test đơn vị và
+    `pnpm evidence:check` đều xanh trên máy phát triển; **T1+T2 đỏ ở CẢ HAI runner của CI**.
+    Nguồn của P4 đổi từ `existsSync` sang `git ls-files`. ✔ đã đo — và đây là bản NẶNG của
+    chính lớp lỗi mà review lượt 13 nêu ở H13-11.
+9. **[vòng sửa]** Xoá `callerLimit` khỏi `/auth/totp`: trước vòng sửa **không test nào đỏ**;
+   sau vòng sửa, phép kiểm tĩnh đỏ cho TỪNG route ANON một, và test tích hợp đo
+   `429 + Retry-After` trên chính đường ấy. ✔ đã đo cả hai chiều.

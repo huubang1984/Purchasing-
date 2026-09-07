@@ -119,12 +119,23 @@ identity, `g3-` identity-không-có-năng-lực-mật-mã, `g4-` outbox), tất 
 
 Đây là phần dễ hiểu sai nhất nếu chỉ nhìn "S0 đã xong".
 
-- **`apps/` RỖNG.** Không một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
-  outbox runner, hay `assertFreshMfa`. Các gói đã có **được test gọi, chưa có ứng dụng gọi**.
-- **`apps/unseal-worker` CHƯA TỒN TẠI**, và `wrapped_private_key` cũng vậy. Hàng rào `g1-`
+> **[S1.21] BA GẠCH ĐẦU DÒNG ĐẦU TIÊN CỦA MỤC NÀY ĐÃ THIU** — đo lại ngày 2026-09-07. Giữ
+> nguyên chữ, gạch tại chỗ. Cùng lớp với `docs/STATE.md` mục 36: một mục *"cái CHƯA có"* mà
+> không ai đối chiếu sẽ mô tả một dự án đã không còn tồn tại.
+
+- ~~**`apps/` RỖNG.** Không một đường gọi sản phẩm nào tới `listOrganizations`, `start()` của
+  outbox runner, hay `assertFreshMfa`. Các gói đã có **được test gọi, chưa có ứng dụng gọi**.~~
+  **[S1.21] SAI TỪ S1.10** — `apps/` có ba tiến trình (`api`, `public-keys`, `unseal-worker`);
+  `listOrganizations` được gọi ở `apps/api/src/composition.ts:96`. Khoản nợ 7.
+- ~~**`apps/unseal-worker` CHƯA TỒN TẠI**, và `wrapped_private_key` cũng vậy. Hàng rào `g1-`
   đang canh **một cánh cửa chưa có phòng ở sau** — lớp phòng ngừa là thật và đã chứng minh có
-  răng, nhưng tài sản nó bảo vệ thì chưa ra đời.
-- **Ma trận báo 24/47, không phải 47/47** — và đó là câu trả lời **đúng**:
+  răng, nhưng tài sản nó bảo vệ thì chưa ra đời.~~ **[S1.21] SAI TỪ S1.6** — cả hai đã tồn tại;
+  khoản nợ 14 đóng từ đó, và `apps/unseal-worker` THẬT SỰ import cả hai cửa hạn chế.
+- ~~**Ma trận báo 24/47, không phải 47/47**~~ **[S1.21] con số ấy đã thiu; sổ đăng ký nay có
+  **54** bất biến (34 nghiệp vụ + 20 hàng rào) và tỉ lệ phủ nằm ở chính `evidence/INV-matrix.md`.
+  Cố ý KHÔNG chép một con số mới vào đây: chép là tạo bản sao thứ hai, và ADR-029 nói mọi bản
+  sao không được đối chiếu đều trôi — đúng cách con số cũ đã trôi.** Lập luận dưới đây thì
+  KHÔNG đổi, và nó vẫn là câu trả lời **đúng**:
   - **23 hàng trống**, mỗi hàng một lý do được ghim trong mã (`MA_DUOC_PHEP_CHUA_PHU`). Nhóm A,
     C1–C5, E1/E2/E4–E6 và phần lớn nhóm B chờ S1 vì **chủ ngữ của chúng chưa tồn tại**.
   - **5 mã mang cờ "phạm vi hẹp hơn mệnh đề"** (D1, D5, E3, F1, G1) — ô ✅ **không** có nghĩa
@@ -218,23 +229,38 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-**22 khoản**, đầy đủ ở `docs/STATE.md` §*Nợ kỹ thuật*. Mỗi khoản là một **khoảng trống đã đo**,
-không phải linh cảm. Năm khoản nặng nhất:
+~~**22 khoản**~~ **[S1.21] 61 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
+chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
-1. **Artefact neo ngoài của B3 chưa tồn tại.** Cơ chế đã có, artefact thì chưa — không có nó,
-   một chuỗi hash hợp lệ **không chứng minh gì** trước một chủ sở hữu bảng.
-2. **Vế *giới hạn tần suất* của E3 không có một dòng mã nào** trong toàn S0.
+**Năm khoản nặng nhất — viết ở cuối S0, và [S1.21] rà lại thì BỐN trong năm đã đóng.** Danh
+sách này giữ nguyên chữ để đối chiếu; nó là ví dụ gọn nhất của thứ ADR-029 nói: một bản sao
+không được đối chiếu thì trôi, và ở đây nó trôi **bốn phần năm**.
+
+1. ~~**Artefact neo ngoài của B3 chưa tồn tại.** Cơ chế đã có, artefact thì chưa — không có nó,
+   một chuỗi hash hợp lệ **không chứng minh gì** trước một chủ sở hữu bảng.~~ **[S1.21] ĐÓNG từ
+   S1.17 (ADR-026)** — khoản nợ 11.
+2. ~~**Vế *giới hạn tần suất* của E3 không có một dòng mã nào** trong toàn S0.~~ **[S1.21]
+   ĐÓNG** — `otp_rate_limits` (S1.3) cho đường lời mời, `callerLimit` 30/15 phút cho
+   `/auth/totp` (S1.12, khoản nợ 39). Đây là **một trong bảy** bản sao của cùng lời khai
+   đã thiu; xem `docs/STATE.md` mục 36.
 3. **Không lớp máy nào cưỡng chế quy ước `OPERATOR(pg_catalog.=)`** — chú thích + test là tất
-   cả những gì đang giữ nó.
-4. **Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào**: `with-tenant.ts` (điểm
-   duy nhất gắn `app.org_id`) và `audit/writer.ts`. Chỉ 3/7 gói có quy tắc biên giới.
-5. **Bốn mục hardening theo khuôn danh-sách-tên**, nặng nhất: hình dạng bảng sổ chỉ **ĐẾM** cột,
+   cả những gì đang giữ nó. **[S1.21] VẪN MỞ (khoản nợ 8), và nay là khoản nợ S0 nặng nhất còn
+   lại** — 15 tệp sản xuất giữ quy ước ấy bằng tay, không lớp nào bắt tệp thứ 16 quên.
+4. ~~**Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào**: `with-tenant.ts` (điểm
+   duy nhất gắn `app.org_id`) và `audit/writer.ts`. Chỉ 3/7 gói có quy tắc biên giới.~~ **[S1.21]
+   ĐÓNG từ S1.18 (ADR-027)** — khoản nợ 17; số họ quy tắc biên giới 5 → 9, `MIEN_TRU` về RỖNG.
+5. ~~**Bốn mục hardening theo khuôn danh-sách-tên**, nặng nhất: hình dạng bảng sổ chỉ **ĐẾM** cột,
    **không cấm cột thừa** ⇒ thêm một cột `payload_plaintext` vào `audit_events` **không bị mục
-   nào chạm**.
+   nào chạm**.~~ **[S1.21] ĐÓNG từ S1.20 (ADR-028, migration `047`)** — khoản nợ 16; và ca
+   `payload_plaintext` được đóng đúng bằng `CAU_COT_NGOAI_CHUOI`.
 
-Còn mở từ vòng CI: **(20)** không lớp nào canh "bảo đảm chỉ đúng trên một hệ điều hành";
+~~Còn mở từ vòng CI: **(20)** không lớp nào canh "bảo đảm chỉ đúng trên một hệ điều hành";
 **(21)** chỉ `pnpm audit --prod` chặn được hạ tầng kiểm thử lọt vào phạm vi sản xuất, và nó chỉ
-nổ khi *tình cờ* có advisory. **(22) đã đóng** — job `evidence` nay đã chạy trên CI.
+nổ khi *tình cờ* có advisory.~~ **[S1.21] cả (20) lẫn (21) ĐÃ ĐÓNG từ 2026-09-05** —
+`tests/architecture/bao-dam-mot-he-dieu-hanh.test.ts` và
+`tests/architecture/pham-vi-san-xuat.test.ts`. **(22) đã đóng** — job `evidence` nay đã chạy
+trên CI.
 
 ---
 
@@ -344,7 +370,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 
 | Tài liệu | Vì sao |
 |---|---|
-| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, 22 khoản nợ |
+| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, ~~22 khoản nợ~~ **[S1.21] 61 khoản nợ, 14 còn mở** |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về con người và quy trình mà S1 đang cư xử như thật** — mỗi dòng một địa chỉ trong kho và một câu hỏi cho người mua thật. Không thay pilot; nó hạ chi phí buổi đầu |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
@@ -600,3 +626,58 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     `[IM2]` đã ghi cảnh báo này ở vòng fix 1 của S0 và vòng này **vẫn vấp**. Ca của `[IM2]` ném
     55000 (ồn ào); ca này im lặng. Dùng bí danh không trùng tên biến (`vai`, `bg`, …), và đừng tin
     một mục canh chưa từng đỏ.
+
+16. **[2026-09-08] S1.21 — RÀ LẠI SỔ NỢ S0, và thứ vòng này tìm ra là chính câu mà tám vòng gần
+    nhất dùng để kết thúc.**
+
+    ⑴ **Câu *"Sổ nợ mở còn: 23 và nửa sau của 30"* SAI, và nó sai ở cả tám lần được viết ra.** Nó
+    khai NĂM khoản; đếm bảng theo dấu văn bản ra **mười bốn**; phán xét lại từng dòng ra **mười
+    ba**. Ba cách đếm, ba con số. Không cổng nào đỏ vì hai khẳng định — bảng và
+    câu tổng kết — nằm ở hai chỗ mà **không thao tác nào chạm cả hai**. Sai theo hướng DỄ CHỊU, và
+    cái giá không phải thẩm mỹ: câu ấy là thứ quyết định vòng sau làm gì, nên tám khoản nợ chưa bao
+    giờ được xếp lịch. Bài học tái dùng được: **một lời khai tóm tắt là một BẢN SAO, và mọi bản sao
+    không được đối chiếu đều trôi** (ADR-029).
+
+    ⑵ **Ghi một dòng thiu vào LỊCH SỬ không phải một lớp.** Khoản nợ 7 (*"`apps/` rỗng"*) được gọi
+    tên là thiu ở mục 33 (S1.18), rồi gọi tên **lần nữa** ở mục 35 (S1.20), và tới vòng này dòng ấy
+    vẫn nguyên văn trong khi `apps/` có ba tiến trình. Hai lần ghi, không lần nào thành một lần
+    sửa. Nếu bạn thấy một dòng thiu: **sửa nó ngay tại chỗ**, đừng chỉ ghi ra rằng nó thiu.
+    Và chính tệp này là ví dụ nặng nhất: §10 khai *"22 khoản"* trong khi sổ có 60, liệt kê
+    *"năm khoản nặng nhất"* mà **bốn** đã đóng; §6 *"Cái CHƯA có"* có **ba** gạch đầu dòng đầu
+    tiên đều sai. Cả hai đã sửa ở vòng này — nhưng `[INV-H20]` KHÔNG phủ tệp này, nên nó sẽ
+    trôi lại nếu không ai đối chiếu.
+
+    ⑶ **Một khoản nợ có thể đóng bởi một lớp KHÁC lớp mà nó chỉ tên — và đó là ca thường, không
+    phải ca lạ.** Khoản 1 (*"E3 không có giới hạn tần suất"*) đóng bởi lớp trả cho **khoản 39**;
+    khoản 5 (*"không test nào canh"*) đóng bởi `RLS WITH CHECK` với một test có từ **chính commit
+    tạo ra outbox**, tức vế ấy sai ngay ngày nó được viết. Cộng nửa đầu khoản 3 ở S1.20: **ba lần
+    trong hai vòng.** Trước khi mở một vòng để đóng một khoản nợ, hãy ĐO xem nó còn mở không.
+
+    ⑷ **Markdown giấu được khiếm khuyết hình dạng, và bộ đọc thì bỏ qua chúng trong IM LẶNG.** Dòng
+    59 của bảng sổ nợ có **một** ô nội dung (thiếu hẳn cột con trỏ); dòng 52 có **bốn** (một `|`
+    trần bên trong `` `route|to-chuc` `` cắt ô làm đôi — trong bảng Markdown phải viết `\|`). Cả hai
+    vẫn dựng thành bảng, nên mắt người không thấy. Khi một tài liệu trở thành ĐẦU VÀO của một lớp
+    canh, hình dạng của nó là một hợp đồng — và phép kiểm đầu tiên phải là *"mọi dòng có đúng số ô"*.
+
+    ⑸ **"ĐÓNG" nghĩa là CÓ LỚP GIỮ, không phải CÓ CÀI ĐẶT** (review lượt 13, ADR-029 §2⑹). Vòng
+    này suýt tuyên khoản nợ 1 đóng dựa trên `callerLimit` của `/auth/totp` — một dòng cấu hình
+    THẬT, cưỡng chế THẬT, mà **xoá nó thì không test nào đỏ**. Hàng rào có thật, không có gì giữ
+    nó. Trước khi đánh dấu một khoản nợ là đóng, hỏi: *xoá lớp ấy đi thì cái gì đỏ?* — nếu câu trả
+    lời là "không gì cả" thì đó là THU HẸP, không phải ĐÓNG.
+
+    ⑹ **Một lớp canh mới phải bị hỏi đúng câu nó dùng để hỏi người khác.** Ba phát hiện nặng nhất
+    của review lượt 13 đều là *chính khiếm khuyết mà lớp ấy ra đời để bắt*, tái tạo bên trong lớp
+    ấy: bộ đọc bỏ sót một dòng trong im lặng (một dấu cách đầu dòng là đủ), và cửa `~~` — thứ tồn
+    tại để tôn trọng quy ước "giữ nguyên văn" — dùng được để LÀM IM một con trỏ chết và để bóc mất
+    một lời khai đang sống.
+
+    ⑺ **Một phép kiểm đọc ĐĨA đo cái đĩa của người chạy nó.** Lượt CI đầu tiên của vòng này
+    đỏ ở CẢ HAI runner trong khi `pnpm t0`, bộ test đơn vị và `pnpm evidence:check` đều xanh
+    trên máy phát triển: hai con trỏ vừa được *sửa* trỏ tới tệp có thật trên đĩa của tôi mà
+    KHÔNG có trong kho (cây báo cáo SDD bị `.gitignore` phủ). Nếu khẳng định là về CÁI KHO
+    thì nguồn phải là `git ls-files`, không phải `existsSync`.
+
+    ⑻ **Một phép kiểm dừng ở lời khai ĐẦU TIÊN sẽ xanh trên đúng tệp đang sai.** Bản đầu của P5 đòi
+    *"đúng MỘT lời khai `n ADR`"*; chạy lên thì có HAI, ở hai mục của cùng một tệp, khai **28** và
+    **27**. Đổi thành *"MỌI lời khai"*. Cùng khuôn với `MIEN_TRU` phải RỖNG của ADR-027: **đừng
+    thiết kế phép kiểm quanh số lượng bạn tưởng là có.**
