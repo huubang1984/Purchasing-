@@ -27,15 +27,20 @@
 // thay vì một câu trong tài liệu này.
 // ==============================================================================================
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { argv, env, exit, stderr, stdout } from "node:process";
 import {
+  antoanChoBaoCao,
   createFileAnchorStore,
   exportChainHead,
   loadVerifiedAnchors,
+  parseAnchorText,
+  verifyAnchorRecord,
   verifyAuditChain,
   type AnchorStore,
   type ExternalAnchor,
+  type SignedAnchorRecord,
 } from "@trustprocure/audit";
 import {
   AnchorSigningKeyRing,
@@ -53,6 +58,7 @@ const CACH_DUNG = `Cách dùng:
   pnpm neo khoi-tao
   pnpm neo xuat --org <uuid> [--org <uuid> ...]
   pnpm neo kiem --org <uuid> [--org <uuid> ...]
+  pnpm neo trich --org <uuid> --ra <thu-muc> [--seq <n>]
 
 Biến môi trường:
   DATABASE_URL                     bắt buộc
@@ -60,9 +66,11 @@ Biến môi trường:
   TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_CONG_KHAI  SPKI DER, base64 — "<kid>=<base64>", lặp lại bằng dấu phẩy
+
+  "trich" tách một mốc neo thành ba tệp mà openssl(1) đọc thẳng. Nó KHÔNG cần DATABASE_URL.
 `;
 
-type Lenh = "khoi-tao" | "xuat" | "kiem";
+type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich";
 
 function batBuoc(ten: string): string {
   const gt = env[ten];
@@ -234,8 +242,306 @@ async function khoiTao(): Promise<number> {
   return 0;
 }
 
+// ==============================================================================================
+// `trich` — TÁCH MỘT MỐC NEO RA KHỎI NƠI CẤT THÀNH BA TỆP MÀ `openssl(1)` ĐỌC THẲNG
+//
+// [ADR-026 §5⑶ / S1.19] Lượt review thứ chín (H9-9) hạ một câu rộng hơn phép đo ở bốn chỗ:
+// *"kiểm toán viên kiểm được artefact này mà không cần một dòng mã nào của chúng ta"*. Thứ đã đo
+// khi ấy là chữ ký kiểm được bằng `createVerify` của `node:crypto`. Thứ CHƯA đo là ba thao tác ở
+// giữa — tách `text` khỏi dòng JSONL (chuỗi trong tệp mang `\n` ở dạng escape), `base64 -d` cho
+// `sig`, và đổi SPKI DER sang PEM. Lệnh này là ba thao tác ấy, và `cong-cu.int.test.ts` chạy
+// `openssl` THẬT trên đầu ra của nó.
+//
+// BA QUYẾT ĐỊNH, mỗi cái đóng một ca hỏng cụ thể:
+//
+// ⑴ **Không tách khi nơi cất đang hỏng.** `trich` đi qua `loadVerifiedAnchors`, nên một bản ghi
+//    không kiểm được ở BẤT KỲ đâu trong tệp làm cả lượt trích ném. Một artefact tách ra từ một nơi
+//    cất có bản ghi hỏng là một artefact trông sạch hơn nơi nó đến.
+//
+// ⑵ **KHÔNG cần `DATABASE_URL`.** Đây không phải sự tiện tay: nếu khâu tách đòi cơ sở dữ liệu thì
+//    thứ gọi là "artefact độc lập" vẫn phải đi qua chính hệ thống bị kiểm. Kiểm toán viên cầm tệp
+//    JSONL cộng vòng khoá công khai phải dựng lại được ba tệp ấy, và chỉ thế.
+//
+// ⑶ **PEM dựng bằng cách BỌC base64 chính những byte đã lưu, không đi qua `createPublicKey`.**
+//    Cách kia gọn hơn nhưng nó PHÂN TÍCH rồi MÃ HOÁ LẠI, nên PEM đi ra không còn là một bản chép
+//    trung thành của thứ nằm trong vòng khoá.
+//
+//    **PHÉP ĐO ĐÃ BÁC MỘT NỬA LẬP LUẬN BAN ĐẦU CỦA CHỖ NÀY, ghi lại vì nó đắt hơn kết luận.** Bản
+//    đầu của khối này viết: *"một SPKI DER lưu sai chút ít sẽ được Node lặng lẽ sửa, còn kiểm toán
+//    viên chạy `openssl pkey -pubin -inform DER` thì gãy"*. Đo thật, trên một SPKI P-256 91 byte
+//    cộng MỘT byte rác ở cuối:
+//      * `createPublicKey({format:"der",type:"spki"})` **NHẬN**, và `export({format:"pem"})` trả
+//        về đúng 91 byte — tức nó CHUẨN HOÁ, bỏ byte thừa đi;
+//      * `openssl pkey -pubin -inform DER` cũng **NHẬN**, mã thoát 0.
+//    Vế *"kiểm toán viên thì gãy"* vì thế **KHÔNG được chứng minh** cho ca này. Thứ lựa chọn này
+//    thật sự mua, và chỉ chừng này: **PEM đi ra là bản chép ĐÚNG BYTE của thứ nơi cất đang giữ**,
+//    nên nếu một ngày nơi cất giữ thứ mà OpenSSL từ chối, đầu ra tái hiện nó thay vì che nó. Việc
+//    có tồn tại một giá trị như thế hay không thì CHƯA đo.
+//
+// Văn bản ghi ra bằng `Buffer.from(text, "utf8")` chứ không đưa chuỗi thẳng cho `writeFile`: thứ
+// được ký là một chuỗi BYTE, và mọi lớp có thể xen vào giữa chuỗi và đĩa đều phải bị loại. Kho này
+// chạy với `core.autocrlf=true` — một lần dịch xuống dòng là một chữ ký hỏng, và thông điệp lỗi
+// của nó ("Verification failure") giống hệt thông điệp của một chữ ký giả mạo.
+// ==============================================================================================
+
+interface ThamSoTrich {
+  readonly org: string;
+  readonly ra: string;
+  readonly seq: number | undefined;
+}
+
+/**
+ * [review lượt 11 — H11-10] Bộ phân tích tham số của `trich` chặt hơn `docDanhSachToChuc`, và ba
+ * chỗ chặt hơn ấy đều đóng một ca mơ hồ đã đo được ở bản đầu:
+ *   ⑴ cả BA cờ đều từ chối lặp lại. Bản đầu chỉ `--org` từ chối; `--ra`/`--seq` lặp lại lấy giá
+ *      trị CUỐI trong im lặng, tức một dòng lệnh mơ hồ vẫn cho ra artefact.
+ *   ⑵ giá trị KHÔNG được mở đầu bằng `--`. Bản đầu nhận `--ra --seq` và tạo một thư mục tên
+ *      `--seq` trong thư mục hiện hành.
+ *   ⑶ `--seq` đọc bằng một biểu thức chính quy, không bằng `Number()`. `Number("0x10")` là 16 và
+ *      `Number(" 4 ")` là 4 — hai cách viết mà người gõ không nghĩ là mình đang gõ.
+ */
+function docThamSoTrich(thamSo: readonly string[]): ThamSoTrich {
+  const SEQ_PATTERN = /^[1-9][0-9]{0,15}$/;
+  let org: string | undefined;
+  let ra: string | undefined;
+  let seq: number | undefined;
+  for (let i = 0; i < thamSo.length; i += 1) {
+    const ten = thamSo[i];
+    const gt = thamSo[i + 1];
+    if (ten !== "--org" && ten !== "--ra" && ten !== "--seq") {
+      throw new Error(`Tham số lạ: "${antoanChoBaoCao(String(ten))}".`);
+    }
+    if (gt === undefined) throw new Error(`${ten} thiếu giá trị.`);
+    if (gt.startsWith("--")) {
+      throw new Error(
+        `${ten} nhận một giá trị mở đầu bằng "--": "${antoanChoBaoCao(gt)}". Gần như chắc chắn ` +
+          "là một cờ bị thiếu giá trị, không phải một giá trị thật.",
+      );
+    }
+    if (ten === "--org") {
+      if (org !== undefined) throw new Error("--org nêu nhiều lần: trich tách MỘT mốc neo.");
+      org = gt;
+    } else if (ten === "--ra") {
+      if (ra !== undefined) throw new Error("--ra nêu nhiều lần.");
+      ra = gt;
+    } else {
+      if (seq !== undefined) throw new Error("--seq nêu nhiều lần.");
+      if (!SEQ_PATTERN.test(gt)) {
+        throw new Error(`--seq phải là số nguyên dương viết bằng chữ số: "${antoanChoBaoCao(gt)}".`);
+      }
+      seq = Number(gt);
+    }
+    i += 1;
+  }
+  if (org === undefined) throw new Error("Phải nêu --org.");
+  if (ra === undefined) throw new Error("Phải nêu --ra <thư mục nhận ba tệp>.");
+  return { org, ra, seq };
+}
+
+function laBanGhiDaKy(gt: unknown): gt is SignedAnchorRecord {
+  if (typeof gt !== "object" || gt === null) return false;
+  const o = gt as { text?: unknown; sig?: unknown };
+  return typeof o.text === "string" && typeof o.sig === "string";
+}
+
+/** SPKI DER → PEM bằng cách BỌC, không phân tích. Xem quyết định ⑶ ở khối trên. */
+function pemTuSpkiDer(der: Uint8Array): string {
+  if (der.length === 0) throw new Error("Khoá công khai rỗng — không dựng được PEM.");
+  const b64 = Buffer.from(der).toString("base64");
+  const dong = b64.match(/.{1,64}/g);
+  if (dong === null) throw new Error("Không chia được base64 của khoá công khai thành dòng.");
+  return `-----BEGIN PUBLIC KEY-----\n${dong.join("\n")}\n-----END PUBLIC KEY-----\n`;
+}
+
+/**
+ * `kid` an toàn cho một MẢNH TÊN TỆP.
+ *
+ * [review lượt 11 — H11-11] `KID_PATTERN` của `anchor-text.ts` cho phép `:`, và trên Win32 dấu
+ * hai chấm mở một **alternate data stream**: `khoa-a:b.pem` tạo ra tệp `khoa-a` mang luồng
+ * `b.pem`, nên tệp mà công cụ IN RA không tồn tại dưới cái tên đã in và dòng lệnh openssl kèm
+ * theo hỏng. Siết ở ĐÂY chứ không ở `anchor-text.ts`: `KID_PATTERN` là một hằng của ĐỊNH DẠNG ĐÃ
+ * KÝ, siết nó sẽ làm những mốc neo cũ mang `kid` có `:` không còn kiểm được — đổi định dạng để
+ * sửa một vấn đề tên tệp là đúng thứ ADR-026 §1 cấm.
+ */
+function kidAnToanChoTenTep(kid: string): string {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(kid)) {
+    throw new Error(
+      `kid "${antoanChoBaoCao(kid)}" chứa ký tự không an toàn cho một tên tệp. Định dạng mốc neo ` +
+        "cho phép nó, nhưng lệnh này thì không — hãy trích bằng tay, hoặc đổi kid ở lần xoay khoá sau.",
+    );
+  }
+  return kid;
+}
+
+async function trich(kho: AnchorStore, ts: ThamSoTrich): Promise<number> {
+  const khoaCongKhai = docKhoaCongKhai();
+
+  // Quyết định ⑴: fail-closed trên TOÀN nơi cất, không chỉ trên bản ghi sắp tách.
+  const neo = await loadVerifiedAnchors(kho, ts.org, khoaCongKhai);
+  const tho = await kho.readAllRaw(ts.org);
+  if (tho.length !== neo.length) {
+    throw new Error(
+      `Nơi cất trả ${tho.length} bản ghi thô nhưng ${neo.length} mốc neo đã kiểm cho tổ chức ` +
+        `${ts.org}. Hai con số này phải bằng nhau sau một lượt loadVerifiedAnchors THÀNH CÔNG; ` +
+        "lệch nghĩa là nơi cất đổi giữa hai lượt đọc.",
+    );
+  }
+  if (neo.length === 0) {
+    // ==========================================================================================
+    // [review lượt 11 — H11-5] THÔNG ĐIỆP NÀY TỪNG LÀ MỘT LỜI KHUYÊN ĐI ĐÚNG BƯỚC RỬA
+    // ==========================================================================================
+    // `readAllRaw` trả `[]` cho ENOENT, nên nó KHÔNG phân biệt "chưa từng neo" với "tệp
+    // `<org>.jsonl` vừa bị XOÁ". Đường GHI phân biệt được và kêu rất to (H9-1 ⑴); đường ĐỌC thì
+    // im. Bản đầu của lệnh này biến sự im lặng ấy thành một câu chỉ dẫn — *"chạy `pnpm neo xuat`
+    // trước"* — và đó chính xác là thao tác biến một vụ cắt đuôi thành một gốc tin cậy mới:
+    // không còn mốc neo cũ thì `mocNuocCao` bằng 0, lớp "từ chối neo lùi" mất mốc so sánh, và
+    // `kiem` sau đó trả `ok=true` trên một cái sổ đã bị cắt.
+    //
+    // Ca hở ấy là ca ADR-026 §5⑵ tự khai là CÒN HỞ, và đóng nó cần một trạng thái nằm NGOÀI nơi
+    // cất. Thứ sửa được ngay là thông điệp: nó phải nêu CẢ HAI khả năng và không được khuyên
+    // `xuat` trần.
+    throw new Error(
+      `Tổ chức ${ts.org} không có mốc neo nào đọc được trong nơi cất "${kho.moTa}". HAI khả ` +
+        "năng, và chúng khác nhau về hậu quả: ⑴ tổ chức này CHƯA TỪNG được neo — chạy " +
+        '"pnpm neo xuat" là đúng; ⑵ tệp mốc neo của nó đã bị XOÁ — chạy "pnpm neo xuat" bây giờ ' +
+        "sẽ tạo một GỐC TIN CẬY MỚI trên cái sổ hiện tại và rửa sạch mọi vụ cắt đuôi trước đó " +
+        "(ADR-026 §5⑵). Đối chiếu với một bản sao ngoài trước khi chạy.",
+    );
+  }
+
+  let i: number;
+  if (ts.seq === undefined) {
+    i = 0;
+    for (let k = 1; k < neo.length; k += 1) if (neo[k]!.seq > neo[i]!.seq) i = k;
+  } else {
+    const muc = ts.seq;
+    i = neo.findIndex((n) => n.seq === muc);
+    if (i < 0) {
+      // Im lặng lấy mốc gần nhất là ca hỏng tệ nhất ở đây: người vận hành tin họ đang cầm mốc
+      // neo của một thời điểm cụ thể, còn tệp trong tay lại là một thời điểm khác.
+      throw new Error(
+        `Nơi cất không có mốc neo seq=${muc} cho tổ chức ${ts.org}. Các seq đang có: ` +
+          `${neo.map((n) => n.seq).join(", ")}.`,
+      );
+    }
+  }
+
+  // ============================================================================================
+  // [review lượt 11 — H11-6] HAI MỐC NEO CÙNG `seq` LÀ HÌNH DẠNG CỦA MỘT VỤ CẮT-ĐUÔI-RỒI-NEO-LẠI
+  // ============================================================================================
+  // Trùng `seq` là chuyện BÌNH THƯỜNG ở đây: `xuat` chỉ từ chối khi `dau.seq < cao`, nên hai lượt
+  // xuất liên tiếp không có sự kiện mới ghi hai bản ghi cùng `seq`, khác `exported_at`. Nhưng
+  // trùng `seq` với `chain_hash` KHÁC nhau là một mâu thuẫn: cùng một độ dài chuỗi, hai cái đuôi.
+  //
+  // `kiem` bắt được mâu thuẫn ấy. Đường `trich` → `openssl` thì KHÔNG — kiểm toán viên chỉ có ba
+  // tệp trước mặt, và openssl nói *Verified OK* cho bản ghi được chọn. Bản đầu lấy im lặng cái
+  // ĐẦU TIÊN, tức nó xuất ra một artefact TRÔNG SẠCH HƠN nơi nó đến: đúng ca hỏng mà quyết định
+  // ⑴ ở khối trên tự nhận là đã chặn.
+  const cungSeq = neo.filter((n) => n.seq === neo[i]!.seq);
+  const bamKhacNhau = new Set(cungSeq.map((n) => n.hashHex));
+  if (bamKhacNhau.size > 1) {
+    throw new Error(
+      `Nơi cất có ${cungSeq.length} mốc neo cùng seq=${neo[i]!.seq} cho tổ chức ${ts.org} với ` +
+        `${bamKhacNhau.size} chain_hash KHÁC NHAU: ${[...bamKhacNhau].join(", ")}. Cùng một độ ` +
+        "dài chuỗi mà hai cái đuôi là một MÂU THUẪN, và nó là hình dạng của một vụ cắt đuôi rồi " +
+        'neo lại. Chạy "pnpm neo kiem" để xem kết luận đầy đủ; lệnh này KHÔNG chọn hộ một trong hai.',
+    );
+  }
+
+  const banGhi = tho[i];
+  if (!laBanGhiDaKy(banGhi)) {
+    throw new Error(`Bản ghi ${i + 1} không có hai trường text/sig dạng chuỗi.`);
+  }
+
+  // ============================================================================================
+  // [review lượt 11 — H11-1, HIGH] KIỂM LẠI CHỮ KÝ TRÊN ĐÚNG ĐỐI TƯỢNG SẮP GHI RA ĐĨA
+  // ============================================================================================
+  // `loadVerifiedAnchors` kiểm chữ ký trên lượt đọc THỨ NHẤT. Byte thật sự đi vào ba tệp đến từ
+  // `tho[i]` — lượt đọc THỨ HAI, chưa qua `verifyAnchorRecord` một lần nào. Lớp canh duy nhất
+  // giữa hai lượt là phép so ĐỘ DÀI ở trên, mà một nơi cất bị thay nội dung GIỮ NGUYÊN SỐ DÒNG
+  // đi lọt qua nó. Khi ấy công cụ in ra "Kết quả mong đợi: Verified OK" cho một artefact mà
+  // openssl sẽ từ chối — và thông điệp từ chối ấy giống hệt thông điệp của một chữ ký giả mạo,
+  // nên người vận hành không phân biệt được "lượt trích hỏng" với "cái sổ hỏng".
+  //
+  // Quan trọng hơn cả cửa sổ TOCTOU: lời khai *"trich đi qua loadVerifiedAnchors nên không tách
+  // artefact ra khỏi một nơi cất đang hỏng"* chỉ đúng cho lượt đọc thứ nhất. Vế dưới đây làm cho
+  // nó đúng cho những byte RỜI KHỎI tiến trình.
+  //
+  // **VÀ NÓI THẲNG MỘT ĐIỀU VỀ CHÍNH VẾ NÀY: nó KHÔNG có mốc chết.** Đột biến đã chạy — thay
+  // `verifyAnchorRecord(banGhi, …)` bằng `neo[i]` và tắt phép so — và **cả 16 test vẫn XANH**.
+  // Lý do là bản chất của ca: dựng một lượt chạy mà nơi cất đổi GIỮA hai lượt đọc đòi một móc
+  // tiêm vào `readAllRaw`, thứ mà đường CLI không có. Nên vế này được giữ vì lập luận, không vì
+  // một phép đo — và người sửa nó sau sẽ không bị lớp nào chặn. Đó là trạng thái thật; đừng đọc
+  // dòng `verifyAnchorRecord` dưới đây như một bảo đảm đã được kiểm chứng.
+  const daKiem = verifyAnchorRecord(banGhi, khoaCongKhai, kho.moTa);
+  if (daKiem.orgId !== ts.org || daKiem.seq !== neo[i]!.seq || daKiem.hashHex !== neo[i]!.hashHex) {
+    throw new Error(
+      "Bản ghi đọc lượt hai KHÔNG khớp mốc neo đã kiểm ở lượt một — nơi cất đã đổi giữa hai lượt " +
+        `đọc. Lượt một: org=${neo[i]!.orgId} seq=${neo[i]!.seq} hash=${neo[i]!.hashHex}; lượt ` +
+        `hai: org=${daKiem.orgId} seq=${daKiem.seq} hash=${daKiem.hashHex}.`,
+    );
+  }
+
+  const truong = parseAnchorText(banGhi.text);
+  const der = khoaCongKhai.get(truong.kid);
+  if (der === undefined) throw new Error(`Vòng khoá công khai không có kid "${truong.kid}".`);
+
+  // [review lượt 11 — H11-8] `Buffer.from(x, "base64")` KHÔNG BAO GIỜ ném: nó bỏ qua ký tự lạ,
+  // nên `sig: "!!!"` cho ra một Buffer 0 byte và một tệp `.sig` rỗng được ghi ra không một tiếng
+  // kêu. Chữ ký đã qua `verifyAnchorRecord` ngay trên, nên ca này không tới được từ một nơi cất
+  // hợp lệ — nhưng một lớp canh rẻ ở chỗ tệp SẮP RA ĐĨA thì không phụ thuộc vào việc suy luận ấy
+  // còn đúng sau lần refactor sau.
+  const byteChuKy = Buffer.from(banGhi.sig, "base64");
+  if (byteChuKy.length === 0) throw new Error("Chữ ký giải mã ra 0 byte — không ghi tệp rỗng.");
+  const byteVanBan = Buffer.from(banGhi.text, "utf8");
+  if (byteVanBan.length === 0) throw new Error("Văn bản chính tắc rỗng — không ghi tệp rỗng.");
+
+  // ============================================================================================
+  // [review lượt 11 — H11-2, HIGH] TẠO ĐỘC QUYỀN, QUYỀN HẸP, KHÔNG ĐI THEO SYMLINK
+  // ============================================================================================
+  // `flag: "w"` mặc định ĐI THEO SYMLINK và GHI ĐÈ IM LẶNG. Trên một máy nhiều người dùng, kẻ
+  // biết `--ra` (và `<uuid>` — nó là dữ liệu công khai, nằm trong tên tệp nơi cất và trong mọi
+  // dòng stdout của `xuat`) đặt trước một symlink `neo-<uuid>-seq<N>.txt` trỏ tới một tệp mà
+  // người vận hành ghi được, và lượt trích ghi đè tệp đích. `flag: "wx"` đóng cả hai: nó ném
+  // trên tệp đã tồn tại VÀ trên symlink, và nó không mở cửa sổ TOCTOU như một phép `existsSync`
+  // đứng trước.
+  //
+  // Khuôn lấy từ `apps/api/src/adapters/hop-thu-dev.ts` ([review H3-3]) — kho này đã có chuẩn cho
+  // việc ghi tệp, và bản đầu của `trich` không theo nó.
+  await mkdir(ts.ra, { recursive: true, mode: 0o700 });
+  const nen = `neo-${truong.orgId}-seq${truong.seq}`;
+  const dVanBan = join(ts.ra, `${nen}.txt`);
+  const dChuKy = join(ts.ra, `${nen}.sig`);
+  const dKhoa = join(ts.ra, `khoa-${kidAnToanChoTenTep(truong.kid)}.pem`);
+
+  const tuyChon = { mode: 0o600, flag: "wx" } as const;
+  try {
+    await writeFile(dVanBan, byteVanBan, tuyChon);
+    await writeFile(dChuKy, byteChuKy, tuyChon);
+    await writeFile(dKhoa, Buffer.from(pemTuSpkiDer(der), "utf8"), tuyChon);
+  } catch (loi) {
+    const ma = (loi as { code?: string }).code;
+    if (ma === "EEXIST") {
+      throw new Error(
+        `Một trong ba tệp đã tồn tại trong "${antoanChoBaoCao(ts.ra)}". Lệnh này KHÔNG ghi đè: ` +
+          "một thư mục đầu ra trộn hai lượt trích có thể mang một cặp (văn bản, chữ ký) không " +
+          "khớp nhau, và openssl trả lời điều đó bằng đúng câu của một vụ giả mạo. Hãy nêu một " +
+          "--ra sạch.",
+      );
+    }
+    throw loi;
+  }
+
+  stdout.write(`${dVanBan}\n${dChuKy}\n${dKhoa}\n`);
+  stdout.write(
+    `\nopenssl dgst -sha256 -verify "${dKhoa}" -signature "${dChuKy}" "${dVanBan}"\n` +
+      "Kết quả mong đợi: Verified OK\n",
+  );
+  return 0;
+}
+
 function laLenh(gt: string | undefined): gt is Lenh {
-  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem";
+  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich";
 }
 
 async function main(): Promise<number> {
@@ -245,8 +551,10 @@ async function main(): Promise<number> {
     return 2;
   }
   if (lenh === "khoi-tao") return khoiTao();
-  const org = docDanhSachToChuc(thamSo);
   const kho = createFileAnchorStore(batBuoc("TRUSTPROCURE_NEO_KHO"));
+  // `trich` KHÔNG mở pool và KHÔNG đọc DATABASE_URL — xem khối chú thích của nó, quyết định ⑵.
+  if (lenh === "trich") return trich(kho, docThamSoTrich(thamSo));
+  const org = docDanhSachToChuc(thamSo);
   return lenh === "xuat" ? xuat(kho, org) : kiem(kho, org);
 }
 
