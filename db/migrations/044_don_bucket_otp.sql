@@ -65,7 +65,7 @@
 -- ~~Bộ dọn quét theo `window_start`, và khoá chính `(org_id, bucket_kind, bucket_hash, window_start)`
 -- không phục vụ được câu ấy (cột dẫn đầu là `org_id`). Cùng lý do với `caller_rate_limits_window_idx`
 -- của `042`; ở đây vế lọc nằm trong policy chứ trong câu lệnh, nhưng bộ lập lịch vẫn dùng được nó.~~
--- KHÔNG CÓ CHỈ SỐ NÀO Ở ĐÂY, và câu trên là thứ đã bị phép đo bác bỏ. `EXPLAIN (ANALYZE, BUFFERS)`
+-- ~~KHÔNG CÓ CHỈ SỐ NÀO Ở ĐÂY, và câu trên là thứ đã bị phép đo bác bỏ. `EXPLAIN (ANALYZE, BUFFERS)`
 -- của đúng câu bộ dọn chạy, trên 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức:
 --     Delete on otp_rate_limits (actual time=9.456..9.458 rows=0) Buffers: shared hit=19246
 --       ->  Seq Scan on otp_rate_limits (actual time=0.006..4.932 rows=18999)
@@ -80,7 +80,16 @@
 -- 9,5 ms — tức ~0,5 µs/hàng, và 5 triệu hàng sẽ là ~2,4 giây. Chấp nhận được ở quy mô hôm nay và
 -- KHÔNG chấp nhận được mãi mãi; đường thoát khi tới lúc là một bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng
 -- được chỉ số) cho các tổ chức tiến trình đã thấy, CỘNG câu trần này cho phần còn lại — tức đúng
--- đường ⑵ mà sổ nợ 57 đã loại, nhưng khi ấy nó là một tối ưu chứ không phải cơ chế duy nhất.
+-- đường ⑵ mà sổ nợ 57 đã loại, nhưng khi ấy nó là một tối ưu chứ không phải cơ chế duy nhất.~~
+--
+-- [sổ nợ 58 / migration 046] CẢ KHỐI VỪA GẠCH LÀ MỘT KẾT LUẬN SAI RÚT TỪ MỘT PHÉP ĐO ĐÚNG. Phép đo
+-- ấy chạy ở chế độ **95% hàng đã quá sàn**, nơi Seq Scan là tối ưu THẬT — bộ lập lịch chọn đúng, và
+-- câu "không chỉ số nào phục vụ được" là thứ được suy ra quá phạm vi. Đo lại ở chế độ của một bảng
+-- ĐANG CHẠY (200 000 hàng, 2 000 hàng = 1% quá sàn): PostgreSQL dựng `BitmapOr` từ `otp_rate_limits_pkey`
+-- (vế `org_id = <GUC>`) và `otp_rate_limits_window_idx` (vế `window_start < mốc`), **1,07 ms** so với
+-- **37,96 ms** khi không có chỉ số — 35 lần, và chi phí đi theo SỐ HÀNG PHẢI XOÁ thay vì KÍCH THƯỚC
+-- BẢNG. `046` dựng lại chỉ số; lập luận đầy đủ và cả hai kế hoạch nằm ở đầu file ấy, lớp canh ở
+-- `db/otp-don-ke-hoach.int.test.ts`. Sổ nợ 58 đóng cùng lúc, vì nó đứng trọn trên vế đã sai.
 
 CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits
   FOR DELETE TO app_api

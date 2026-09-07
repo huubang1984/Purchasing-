@@ -296,8 +296,29 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     await tienTrinh!.dung();
     await tienTrinh!.dung();
     await expect(fetch(`${goc}/health`)).rejects.toThrow();
-    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_stat_activity WHERE usename = 'app_api_login'");
-    expect(rows0(rows)).toBe("0");
+    // [S1.16] VÒNG CHỜ, không phải một phép đếm tức thì — và nó KHÔNG phải một ngưỡng được nới cho
+    // tới lúc hết đỏ. `pool.end()` trả về khi client đã được YÊU CẦU đóng; backend phía Postgres
+    // thoát sau đó vài mili-giây, nên bản cũ đo "đã đóng nhưng chưa thoát" và gọi nó là rò rỉ. Đo
+    // được trong một lượt `pnpm evidence` song song: `expected '2' to be '0'` — đúng HAI backend,
+    // tức đúng hai pool của tiến trình, ở khoảnh khắc ngay sau `dung()`.
+    //
+    // Cửa sổ 3 giây là con số ĐÃ CÓ LẬP LUẬN ở `packages/test-support/src/postgres.ts` (khoản nợ
+    // 28, quyết định ⑴): nó nhỏ hơn `idleTimeoutMillis` mặc định 10 giây của `pg`, nên nó phân
+    // biệt được "đã đóng, chưa thoát" với một pool BỊ BỎ QUÊN — thứ sẽ giữ client của nó tới 10
+    // giây và vẫn làm khẳng định này đỏ. Nói cho đúng phạm vi: nó bắt rò rỉ SỐNG LÂU HƠN 3 giây.
+    const demBackend = async (): Promise<string> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM pg_stat_activity WHERE usename = 'app_api_login'",
+      );
+      return rows0(rows);
+    };
+    const hetHan = Date.now() + 3_000;
+    let con = await demBackend();
+    while (con !== "0" && Date.now() < hetHan) {
+      await new Promise((xong) => setTimeout(xong, 25));
+      con = await demBackend();
+    }
+    expect(con, "backend của app_api_login còn sống > 3 giây sau dung() — đây là rò rỉ pool thật").toBe("0");
     tienTrinh = undefined;
   });
 });

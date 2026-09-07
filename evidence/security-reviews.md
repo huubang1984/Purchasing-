@@ -546,7 +546,7 @@ bộ máy trạng thái mở thầu (sổ nợ 56).
 | Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
 |---|---|---|
 | H7-1 | **MEDIUM.** H6-6 đóng cái mù "trigger thứ 22 không ai khai" cho ĐÚNG MỘT hàm (`kiem_danh_tinh_theo_phien`). Cùng cái mù còn nguyên cho 42 hàm còn lại: mục ghim chỉ đòi các trigger ĐÃ KHAI phải tồn tại, nên gắn thêm một trigger cho một hàm đã ghim (vd. `bid_chi_ghi_them` lên một bảng mới) đi qua mọi lớp trong im lặng — và trigger ấy KHÔNG có định nghĩa `$def$` nào canh | **Đóng bằng test.** So BẰNG NHAU giữa "trigger đang chạy một hàm đã ghim" (đọc từ CSDL) và "trigger được khai trong khối ghim", cộng một khẳng định không tên nào khai ở hai mục. So theo TÊN chứ không theo *(hàm → tập trigger)*: hai trigger `mfa_reset_requests_kiem_danh_tinh*` chạy `kiem_danh_tinh_theo_phien` nhưng được ghim ở mục `mfa_reset_kiem_quyen`, và khoá theo hàm báo đỏ đúng cặp ấy vì một lý do sai (đã đo, và đó là lý do bản đầu của phép kiểm này bị viết lại). **RED thật:** migration tạm gắn `bid_chi_ghi_them` vào `organizations` ⇒ đỏ, nêu tên trigger |
-| H7-3 | **MEDIUM.** Chỉ số `otp_rate_limits_window_idx` mà chính `044` thêm KHÔNG BAO GIỜ được đọc, trong khi nó phải được GHI ở mọi lời gọi OTP — đường ghi nóng nhất của hệ | **Đóng bằng mã: gỡ chỉ số.** `EXPLAIN (ANALYZE, BUFFERS)` của đúng câu bộ dọn, 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức: `Seq Scan`, 18 999 hàng qua bộ lọc, **9,5 ms**, `shared hit=19246`. Vế lọc là OR của HAI policy trên HAI cột nên không chỉ số nào phục vụ được — bộ lập lịch chọn Seq Scan **kể cả khi ước lượng của nó là `rows=1`**, tức nó không có phương án nào khác. Giá phải trả ghi bằng số ngay trong `044`: ~0,5 µs/hàng ⇒ 5 triệu hàng ≈ 2,4 giây mỗi năm phút (**sổ nợ 58**, kèm đường thoát) |
+| H7-3 | ~~**MEDIUM.** Chỉ số `otp_rate_limits_window_idx` mà chính `044` thêm KHÔNG BAO GIỜ được đọc, trong khi nó phải được GHI ở mọi lời gọi OTP — đường ghi nóng nhất của hệ~~ **[S1.16 / sổ nợ 58] PHÁT HIỆN NÀY SAI.** Phép đo có thật, chế độ thì không đại diện (95% hàng quá sàn — Seq Scan là tối ưu thật ở đó). Ở 1%, `BitmapOr` dùng CẢ khoá chính LẪN chỉ số ấy: 1,07 ms so với 37,96 ms. `046` dựng lại chỉ số, và `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch kèm đối chứng dương | ~~**Đóng bằng mã: gỡ chỉ số.**~~ Nguyên văn phép đo cũ giữ lại vì nó vẫn đúng TRONG chế độ của nó: `EXPLAIN (ANALYZE, BUFFERS)` của đúng câu bộ dọn, 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức: `Seq Scan`, 18 999 hàng qua bộ lọc, **9,5 ms**, `shared hit=19246`. Vế lọc là OR của HAI policy trên HAI cột nên không chỉ số nào phục vụ được — bộ lập lịch chọn Seq Scan **kể cả khi ước lượng của nó là `rows=1`**, tức nó không có phương án nào khác. Giá phải trả ghi bằng số ngay trong `044`: ~0,5 µs/hàng ⇒ 5 triệu hàng ≈ 2,4 giây mỗi năm phút (**sổ nợ 58**, kèm đường thoát) |
 | H7-5 | **MEDIUM.** `NGOAI_LE_LAC_CHO` khoá (file, bảng, policy) nhưng KHÔNG khoá LỆNH, nên một `ALTER POLICY otp_rate_limits_don_cua_so_cu … USING (true)` viết ngay trong `044` cũng được dòng ngoại lệ ấy tha — đúng lớp lỗ mà vòng fix 3 đã đo được ở `NGOAI_LE_HINH_DANG` | **Đóng bằng mã.** Cửa chỉ mở cho `CREATE`, khớp với miễn trừ `AS RESTRICTIVE` ngay cạnh nó (`ALTER POLICY` không bao giờ được tha, vì sửa một policy đang có thì NỚI được). **RED thật** trên file giả: gỡ vế `CREATE` ⇒ test mới đỏ |
 | H7-2 | **LOW.** Vòng kiểm "mỗi loại trừ phải có lý do" chạy 0 lần sau khi danh sách về RỖNG, tức MÃ CHẾT: bỏ nó đi không test nào đỏ | **Đóng bằng test.** Đo THẲNG quy tắc ấy trên hai bản đồ giả (một lý do thật ⇒ qua, một lý do rỗng ruột ⇒ bị bắt), cùng khuôn `[I2]` đã dùng khi `NGOAI_LE_HINH_DANG` còn rỗng |
 | H7-4 | **LOW.** Lượt dọn ĐẦU TIÊN sau `044` xoá toàn bộ tồn đọng lịch sử của `otp_rate_limits` (bảng chưa từng có ai xoá), nên nó gần như chắc chắn vượt ngưỡng "ồn ào" và ghi một dòng. Dòng ấy ĐÚNG nhưng KHÔNG phải "tín hiệu tải bất thường" như câu ngay trên nó nói | **Đóng bằng ghi chú tại chỗ** ở `composition.ts`, cạnh đúng chỗ người trực đêm sẽ tìm |
@@ -571,3 +571,47 @@ thật:** `pnpm evidence` đỏ đúng một ca — `[review H5-1] … lần 201
 mức là RỜI RẠC và làm tròn theo EPOCH, nên một vòng đếm vắt qua ranh giới thấy 200 ở đúng chỗ nó chờ
 429. Không phải hồi quy của vòng này (ba bộ đếm của `/auth/*` ở `caller_rate_limits`). Sửa ở
 `13b418f`: `beforeEach` của hai khối có vòng đếm không bắt đầu khi cửa sổ còn dưới 45 giây.
+
+---
+
+# S1.16 — lượt review thứ TÁM (khoản nợ 58), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.16** | `db/migrations/046` (một câu `CREATE INDEX`), `db/otp-don-ke-hoach.int.test.ts`, và bốn chỗ gạch lời khai sai của H7-3 | `ac7cc58` | Review tĩnh; hai phép đo kế hoạch đã chạy thật ở commit ấy | **0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW** | `fbf5cc9` |
+
+**Bề mặt của vòng này nhỏ hơn mọi vòng trước — một chỉ số không-duy-nhất — nên bảng phát hiện ngắn là
+KẾT QUẢ, không phải một lượt review qua loa.** Bốn câu hỏi đối kháng đã hỏi và trả lời:
+
+- **Chỉ số này có tạo oracle không?** Không. Oracle của lớp chỉ số là oracle của tính DUY NHẤT: một
+  `duplicate key` nói cho người gọi biết hàng của TỔ CHỨC KHÁC tồn tại — đó là thứ
+  `db/unique-oracle.int.test.ts` quét, và nó đọc `pg_index` với `indisunique`. Chỉ số này không duy
+  nhất, không sinh lỗi nào, nên nó nằm ngoài lớp ấy một cách ĐÚNG ĐẮN chứ không phải vì lọt lưới.
+- **Nó có mở một kênh THỜI GIAN không?** Đường duy nhất chạm `otp_rate_limits` mà người gọi đo được
+  độ trễ là `demVaTang` (`INSERT … ON CONFLICT`), và đường ấy đi qua KHOÁ CHÍNH — giải quyết xung đột
+  chỉ dùng chỉ số duy nhất. Bộ dọn thì chạy nền. Không có truy vấn nào vừa quan sát được vừa đổi kế
+  hoạch vì chỉ số này.
+- **Nó có đổi thứ tự áp vế RLS không?** Không. `window_start < <mốc>` là phép so sánh btree
+  **leakproof**, nên việc nó được đẩy xuống thành index condition không đưa một hàng nào ra ngoài vế
+  RLS — vế ấy vẫn được áp trước mọi vế người dùng không-leakproof, đúng khuôn PostgreSQL.
+- **`046` có gãy trên cụm đã có chỉ số trùng tên không?** Có, và gãy ỒN ÀO là hành vi ĐÚNG ở đây.
+  Cụm duy nhất có thể ở trạng thái ấy là một CSDL test dựng từ nhánh `no-56-57` trong khoảng giữa
+  `044` và H7-3 — không có cụm thật nào. `IF NOT EXISTS` sẽ nuốt luôn ca "một chỉ số KHÁC mang cùng
+  tên", nên nó không được dùng.
+
+## Một LOW
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H8-1 | **LOW.** Test kế hoạch khẳng định `BitmapOr` — tức nó ghim HÌNH DẠNG NÚT, không phải tính chất. Một bản PostgreSQL sau phục vụ đúng vế ấy bằng Index Scan sẽ làm test đỏ trong khi kết quả vẫn đúng: cùng lớp lỗi mà chính vòng này vừa sửa ở H7-3 (ghim một chi tiết của MỘT chế độ rồi phát biểu cho mọi chế độ) | **Đóng bằng test.** Bỏ khẳng định `BitmapOr`; giữ hai vế nói đúng tính chất — kế hoạch có nhắc `otp_rate_limits_window_idx`, và không có `Seq Scan on otp_rate_limits`. Đối chứng dương (gỡ chỉ số ⇒ Seq Scan) giữ nguyên vì nó là thứ chứng minh hai vế kia có răng |
+
+**Ghi chú của reviewer:** một chốt chống rỗng ruột trong chính test này suýt tự làm mù mình —
+`rows=2000` là TIỀN TỐ của `rows=200000`, nên khẳng định "khớp đúng 1%" sẽ xanh nhờ chính con số nó
+phải phân biệt với; đã sửa thành `rows=2000\b` trong cùng commit `ac7cc58`. Giá ghi của chỉ số là
+một lần chèn btree cho mỗi HÀNG MỚI; đường `ON CONFLICT DO UPDATE` chỉ đổi `hits`, mà `hits` không
+nằm trong chỉ số nào nên cập nhật ấy vẫn HOT. Bộ dọn của `caller_rate_limits` KHÔNG cùng bài toán:
+bảng ấy không có policy tenant để OR vào, nên câu dọn của nó có `WHERE` và dùng Index Scan thẳng
+(0,94 ms trên cùng fixture 200 000 hàng) — sự bất đối xứng giữa hai bộ dọn là có lý do, không phải
+một lần quên.

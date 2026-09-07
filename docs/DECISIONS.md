@@ -2083,9 +2083,14 @@ statement_timeout` — một lượt dọn bệnh lý không được giữ mộ
 **Phần chênh nói ra, không giấu:** ⑴ một `api` bị chiếm nay xoá được hàng đã quá 30 phút của tổ chức
 KHÁC — hàng không còn chặn ai, mất chúng là mất một trần đã hết hiệu lực; ⑵ `rowCount` của câu trần
 là một con số XUYÊN TỔ CHỨC (bao nhiêu cửa sổ chết tồn tại), chỉ đọc được bởi chính tiến trình;
-⑶ **[review H7-3]** câu dọn quét TOÀN BẢNG — vế lọc là OR của hai policy trên hai cột nên không chỉ
+⑶ ~~**[review H7-3]** câu dọn quét TOÀN BẢNG — vế lọc là OR của hai policy trên hai cột nên không chỉ
 số nào phục vụ được, đã đo bằng `EXPLAIN`: 20 000 hàng = 9,5 ms, tức ~0,5 µs/hàng và 5 triệu hàng ≈
-2,4 giây mỗi năm phút (**sổ nợ 58**); ⑷ bộ dọn theo TIẾN TRÌNH, như mọi bộ dọn khác của dự án.
+2,4 giây mỗi năm phút (**sổ nợ 58**)~~ — **[S1.16 / sổ nợ 58] SAI, và sai theo cách đáng ghi:** phép
+đo của H7-3 có thật nhưng chạy ở chế độ **95% hàng quá sàn**, nơi Seq Scan là tối ưu THẬT; kết luận
+*"không chỉ số nào phục vụ được"* là một suy diễn QUÁ PHẠM VI từ nó. Ở chế độ của một bảng đang chạy
+(1% quá sàn), PostgreSQL dựng `BitmapOr` từ khoá chính + `otp_rate_limits_window_idx`: **1,07 ms** so
+với **37,96 ms** — 35 lần, và chi phí đi theo SỐ HÀNG PHẢI XOÁ chứ không theo kích thước bảng. `046`
+dựng lại chỉ số mà H7-3 đã gỡ; ⑷ bộ dọn theo TIẾN TRÌNH, như mọi bộ dọn khác của dự án.
 
 ### 2. Nợ 56 — "loại trừ" là một khoản nợ, không phải một hạng mục
 
@@ -2131,7 +2136,9 @@ sẽ báo đỏ đúng cặp ấy vì một lý do sai.
 - Ghim thân KHÔNG bảo vệ trước một migration ĐÁNH SỐ MỚI cố ý làm hàm yếu đi — nó chỉ bảo vệ trước
   TRÔI SAU TRIỂN KHAI (lớp R3). Một migration mới là một thay đổi có review; một `CREATE OR REPLACE`
   trên cụm thì không.
-- Bộ dọn `otp_rate_limits` chạy theo TIẾN TRÌNH và quét toàn bảng. Đường thoát khi quy mô đòi (sổ nợ
+- Bộ dọn `otp_rate_limits` chạy theo TIẾN TRÌNH ~~và quét toàn bảng. Đường thoát khi quy mô đòi (sổ nợ
   58) là một bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng được chỉ số) cho các tổ chức đã thấy, CỘNG câu trần
   cho phần còn lại — tức đúng đường ⑵ đã loại ở trên, nhưng khi ấy nó là một tối ưu chứ không phải cơ
-  chế duy nhất.
+  chế duy nhất.~~ **[S1.16]** Nó KHÔNG quét toàn bảng: `BitmapOr` dùng được cả hai vế của phép OR khi
+  chỉ số của vế thứ hai tồn tại, nên "đường thoát" vừa gạch không cần tới. Vế còn đúng: bộ dọn theo
+  TIẾN TRÌNH, và nhiều instance nghĩa là nhiều lượt dọn — vô hại vì câu lệnh idempotent.

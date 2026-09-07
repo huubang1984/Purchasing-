@@ -503,3 +503,20 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     không cấp đường đọc nào cho kết nối nền (`FOR DELETE`, không `FOR ALL`), nên thêm một `WHERE` sẽ
     làm bộ dọn xoá đúng 0 hàng. Mốc tuổi nằm trong policy `044` chứ không ở phía gọi, và đổi nó là
     đổi ở HAI chỗ (migration `044` + bản ghim hardening) — có test đọc thẳng cả hai file.
+
+13. **[2026-09-07] S1.16 — sổ nợ 58 đóng bằng cách bác bỏ tiền đề của chính nó (`046`).** Một điều
+    người tiếp theo nên mang theo, và nó không phải chuyện của cái chỉ số:
+
+    **Một phép đo ở MỘT chế độ không phải một kết luận cho MỌI chế độ.** H7-3 đo `EXPLAIN (ANALYZE)`
+    thật, in ra số thật, rồi phát biểu *"không chỉ số nào phục vụ được vế lọc này"* — trong khi phép
+    đo ấy chạy ở tỷ lệ 95% hàng khớp, nơi Seq Scan là tối ưu THẬT. Con số thật đi kèm làm cho một
+    kết luận rộng quá phạm vi trông như đã được kiểm chứng, và nó sống qua một vòng review, một PR,
+    một sổ nợ. Khi bạn đọc một dòng "đã đo" trong repo này, hãy hỏi thêm một câu: **đo ở chế độ
+    nào?** Với kế hoạch truy vấn, chế độ là tỷ lệ chọn lọc; với hạn mức, là vị trí trong cửa sổ; với
+    tranh chấp, là số tiến trình.
+
+    Cụ thể ở đây: bộ dọn `otp_rate_limits` DÙNG ĐƯỢC chỉ số — `BitmapOr` hợp hai vế của phép OR do
+    RLS sinh ra, miễn cả hai vế đều có chỉ số. `046` dựng lại `otp_rate_limits_window_idx`, và
+    `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch ở đúng chế độ 1% kèm đối chứng dương. Nếu bạn
+    thấy test ấy đỏ, đừng nới nó: hoặc chỉ số đã mất, hoặc hình dạng policy đã đổi thành thứ không
+    hợp bitmap được nữa — cả hai đều là thứ phải biết.
