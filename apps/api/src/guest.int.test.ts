@@ -18,7 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
-import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -243,7 +243,24 @@ describe("ba bước vô danh: redeem → OTP → verify", () => {
   });
 });
 
+/**
+ * [S1.15] Cùng cái bẫy đã đo ở `auth.int.test.ts` (xem khối `choDuCuaSo` ở đó, và commit `13b418f`):
+ * cửa sổ hạn mức làm tròn theo EPOCH, nên mọi bộ đếm về 0 cùng lúc ở những mốc biết trước, và một
+ * vòng đếm vắt qua ranh giới thấy 422 ở đúng chỗ nó chờ 429. Khối dưới đây đếm 30 + 30 lời gọi, tức
+ * phơi ra cùng cơ chế với xác suất nhỏ hơn (~1 giây trên 900). Bản sao năm dòng thay vì một hàm
+ * dùng chung là có chủ đích: đưa nó vào `@trustprocure/test-support` sẽ kéo gói ấy phụ thuộc
+ * `@trustprocure/invitation` chỉ vì một hằng số.
+ */
+const CAN_CUA_SO_MS = 45_000;
+const choDuCuaSo = async (): Promise<void> => {
+  const cuaSoMs = OTP_RATE_WINDOW_SECONDS * 1000;
+  const conLai = cuaSoMs - (Date.now() % cuaSoMs);
+  if (conLai < CAN_CUA_SO_MS) await new Promise((xong) => setTimeout(xong, conLai + 100));
+};
+
 describe("[sổ nợ 52] hạn mức theo NGƯỜI GỌI trên hai route khách", () => {
+  beforeEach(choDuCuaSo);
+
   it("/guest/redeem: token SAI N lần ⇒ 422, lần N+1 ⇒ 429 + Retry-After; địa chỉ khác vẫn 422; /guest/otp/verify cùng khuôn", async () => {
     const rac = "A".repeat(43);
     for (let i = 0; i < GUEST_REDEEM_MAX_PER_CALLER; i += 1) {
