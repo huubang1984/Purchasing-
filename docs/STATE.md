@@ -392,6 +392,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 54 | ~~**[review lượt 5, H5-5] Danh sách ghim thân hàm trigger ở hardening vẫn VIẾT TAY** — 48 hàm `RETURNS trigger` trong `public`, ghim 8 (S1.13) + hai của D3 + `chan_sua_xoa`; 21 trigger của `kiem_danh_tinh_theo_phien` (013) chưa ghim định nghĩa. Cần một test "mọi hàm trigger trong `public` có mặt trong danh sách ghim (hoặc trong danh sách loại trừ có lý do)" để danh sách không tự làm mù mình lần thứ ba~~ **ĐÓNG 2026-09-07 (S1.14, ADR-024)** — test ĐẦY ĐỦ ở `db/migrations.int.test.ts`: tập hàm `RETURNS trigger` trong `public` = (hàm hardening có canh, đọc THẲNG từ `hardening.always.sql`) ∪ (35 mục loại trừ, mỗi mục một dòng nói nó canh gì), hai tập rời nhau — thêm một hàm trigger mới mà không khai là ĐỎ (đo bằng migration tạm). Ghim thêm định nghĩa 19 trigger danh tính của `kiem_danh_tinh_theo_phien` (rải bảy migration, `tgenabled='O'`). Loại trừ = CHƯA ghim, không phải không cần ghim — sổ nợ 56 | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
 | 55 | ~~**[review lượt 5, H5-3] Oracle tồn tại tổ chức qua 429 (H4-5) vẫn còn, đổi dạng** — bucket bộ nhớ (tổ chức lạ) và bucket CSDL (tổ chức thật) là hai bộ đếm rời: mồi N lần vào một UUID giả rồi gửi UUID ứng viên ⇒ 429 = lạ, 200 = thật, MỘT lời gọi. Chấp nhận (UUIDv4 không vét cạn được); đóng thật cần một bảng bucket người gọi KHÔNG khoá ngoại tới `organizations`, tổ chức thật hay lạ đếm cùng hàng~~ **ĐÓNG 2026-09-07 (S1.14, ADR-024)** — migration `042`: bảng `caller_rate_limits` không `org_id`, không khoá ngoại ⇒ tổ chức thật và tổ chức lạ tăng CÙNG MỘT HÀNG (429 hết là oracle); `BucketBoNho` của nợ 52 bị xoá; bộ dọn nền 5 phút xoá cửa sổ cũ hơn hai cửa sổ; policy DUY NHẤT là 'mọi hàng, trừ phiên khách'. Bucket toàn tổ chức ở lại `otp_rate_limits` — phần chênh còn lại là THỜI GIAN của một giao dịch lỗi khoá ngoại | `apps/api/src/dispatch.ts`, `apps/api/src/bucket-bo-nho.ts` |
 | 56 | **[S1.14 / nợ 54] 35 hàm `RETURNS trigger` còn lại CHƯA được hardening ghim thân** — danh sách có tên và có lý do ở `HAM_TRIGGER_KHONG_GHIM` (`db/migrations.int.test.ts`), và test đầy đủ của nợ 54 giữ cho nó không lớn thêm trong im lặng. Cả 35 thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE FUNCTION … RETURN NEW` sau triển khai sống qua `migrate()`). Thứ tự đóng nên theo "app_api ghi được bảng nó canh không": nhóm RFQ/unseal/bid trước (máy trạng thái, D2, append-only), nhóm còn lại sau | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
+| 57 | **[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng: ⑴ `DELETE` nền ngoài `withTenant` bị RLS lọc hết (xoá 0 hàng); ⑵ dọn từng tổ chức đòi biết TẬP tổ chức, mà `app_api` không đọc được (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022), và tập "tổ chức đã thấy" của tiến trình `api` không phủ tổ chức chỉ có lưu lượng KHÁCH; ⑶ dọn cơ hội trong `demVaTang` là một `DELETE` trên MỌI lời gọi OTP. Lý do đã viết ở `packages/invitation/src/invitation.ts` | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
 
 ## Kiến trúc
 
@@ -1108,7 +1109,18 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     hai lượt liền danh sách ghim của hardening thiếu đúng thứ vừa thêm mà không ai kêu, nay tập hàm
     trigger trong CSDL phải bằng đúng tập được canh ∪ tập loại trừ có lý do, và tập "được canh" đọc
     thẳng từ chính file hardening. **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0), cộng **56 mới mở**
-    (35 hàm trigger chưa ghim thân). **Lượt review an ninh thứ sáu:** __REVIEW6__ **Số đo trên HEAD:** __SO_DO__
+    (35 hàm trigger chưa ghim thân). **Lượt review an ninh thứ sáu:** 0 CRITICAL, **1 HIGH**, 4 MEDIUM, 4 LOW
+    (`evidence/security-reviews.md` §S1.14) — cả chín đóng trong cùng PR, một phần chênh thành sổ nợ
+    57. HIGH đáng nhớ: bỏ `org_id` khỏi khoá bucket đóng được oracle nhưng làm BÁN KÍNH NỔ của mọi ca
+    "gộp địa chỉ" (proxy chưa khai, CGNAT) thành CẢ NỀN TẢNG — 31 lời gọi từ một địa chỉ khoá cửa đăng
+    nhập của mọi tổ chức. Nay ba bộ đếm cùng ở bảng không khoá ngoại: `orgId` trong KHOÁ mà không có
+    KHOÁ NGOẠI thì không phải oracle, và đó chính là thứ 042 mua được. MEDIUM đáng nhớ: oracle chưa
+    đóng thật — nó chuyển sang độ trễ 2 giây của trần toàn tổ chức, vì tổ chức lạ không bao giờ chậm. **Số đo trên HEAD:** `pnpm t0` 177 module / 0 vi phạm; `pnpm test` 549/549;
+    `pnpm test:int` **714/714** (lượt đầy đủ SAU lượt sửa review, trên HEAD sắp đẩy); `pnpm evidence`
+    **1263/1263**, **51/51**, cổng XANH ngay lượt đầu. Lượt đầy đủ TRƯỚC lượt sửa (tại `aeaf611`) đỏ
+    một ca: phép quét A5 đòi mọi bảng có RLS mang policy tên `<bảng>_khach`, và policy của 042 mang
+    đúng vị từ ấy nhưng sai TÊN — sửa ở `aeaf611`, ghi ra vì nó là một lớp chống-mù bắt được đúng
+    thứ nó tồn tại để bắt.
 
     **Một con số SAI trong chính merge commit của PR #2, ghi ra vì không sửa được:** thân của
     `b1a9a8b` viết *"giữ nguyên lịch sử 91 commit"*. Con số đúng là **44** — đo bằng

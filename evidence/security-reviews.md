@@ -495,3 +495,39 @@ nên xoay UUID lạ không mở trần; hai `INSERT … ON CONFLICT` cùng thứ
 FUNCTION` có điều kiện chỉ chạy khi `prorettype <> trigger` nên không vỡ vì trigger phụ thuộc; 038 chỉ
 đổi CHECK, trôi ở đó fail-closed.
 
+---
+
+# S1.14 — lượt review thứ SÁU (hai khoản nợ 54–55), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.14** (ADR-024) | `db/migrations/042`, `packages/invitation/src/invitation.ts`, `apps/api/src/{dispatch,composition,dia-chi,cau-hinh}.ts`, `apps/api/src/routes/{auth,anon}.ts`, `db/migrations.int.test.ts` [S1.14], `hardening.always.sql` khối [S1.13/S1.14] | cây nhánh `no-54-55` tại `aeaf611` (hai commit nợ, trước lượt sửa) | Review tĩnh; reviewer đọc thẳng tệp, không chạy mã, không CSDL | **0 CRITICAL, 1 HIGH, 4 MEDIUM, 4 LOW; sau sửa: 0 mở, một phần chênh thành sổ nợ 57** | `7cfa9f8` (H6-1, H6-2, H6-5⑴, H6-9), `fdcad0e` (H6-3, H6-4, H6-6, H6-7, H6-8) |
+
+## Một HIGH, bốn MEDIUM, bốn LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H6-1 | **HIGH.** Bucket người gọi thành TOÀN CỤC ⇒ mọi ca "gộp địa chỉ" (proxy chưa khai — và không khai là MẶC ĐỊNH, CGNAT/NAT chung, địa chỉ rỗng) khoá cửa đăng nhập của CẢ NỀN TẢNG chứ không còn của một tổ chức: 31 lời gọi/15 phút từ một địa chỉ. Bán kính nổ này do chính vòng 55 tạo ra | **Đóng bằng mã.** BA bộ đếm, cả ba ở `caller_rate_limits` (không khoá ngoại, nên tổ chức thật và lạ đi cùng đường): `route\|ip` là trần TOÀN CỤC của một địa chỉ (`callerLimit × 10`), `route\|ip\|org` là trần THẬT theo người gọi — trả lại bán kính nổ theo TỔ CHỨC, `route\|to-chuc\|org` là trần toàn tổ chức (làm chậm). Cộng: địa chỉ không phân giải được ⇒ **503** + một dòng log (với bucket toàn cục, "một bucket chung" là fail-OPEN ở trục sẵn sàng); `TRUSTPROCURE_TRUSTED_PROXIES` nay **BẮT BUỘC** (danh sách CIDR hoặc `direct`) — quên không được phép trông giống một lựa chọn. Ba phép đo RED thật, gồm "chạm trần với tổ chức A xong, tổ chức B từ cùng địa chỉ vẫn 200" |
+| H6-2 | **MEDIUM.** Oracle tồn tại tổ chức chưa đóng, chỉ đổi kênh: độ trễ 2 giây của trần toàn tổ chức chỉ xảy ra với tổ chức CÓ THẬT (tổ chức lạ nuốt 23503 nên không bao giờ chậm). ~301 lời gọi là đủ để dựng phép đo. ADR-024 khai phần chênh là "một giao dịch lỗi", trong khi phần chênh thật là một lệnh ngủ do chính dự án đặt | **Đóng bằng mã.** Trần toàn tổ chức rời `otp_rate_limits` sang `caller_rate_limits` với khoá `route\|to-chuc\|org` — không khoá ngoại nên tổ chức lạ cũng đếm và cũng bị làm chậm. Test: tổ chức LẠ vượt trần toàn tổ chức ⇒ chậm ≥ ngưỡng (RED thật trước H6-2). `tangBucketHanMuc` không còn người gọi ở dispatcher |
+| H6-3 | **MEDIUM.** Tập "hardening có canh" rút bằng mọi lần `to_regprocedure('public.X()')` xuất hiện — kể cả trong tiền điều kiện của mục KHÁC. Cộng phép kiểm rời-nhau, test tự mời người sửa XOÁ một hàm khỏi danh sách loại trừ để xanh trở lại: đúng hình dạng cái mù mà nợ 54 tồn tại để đóng | **Đóng bằng mã.** Tiêu chí đổi sang HÌNH DẠNG của một mục ghim: phải có CÂU SỬA `CREATE OR REPLACE FUNCTION public.X() RETURNS trigger` VÀ một lần nhắc trong câu phán xét. Thêm khẳng định `HAM_51` không trôi ra ngoài tập ấy. Đo: thêm một dòng CHỈ nhắc tên vào hardening ⇒ test vẫn xanh và hàm ấy vẫn nằm ở danh sách loại trừ |
+| H6-4 | **MEDIUM.** Ghim `tgenabled = 'O'` biến `migrate()` thành thứ HẠ một trigger đã được nâng lên `ENABLE ALWAYS`; và `'O'` là trạng thái `session_replication_role = 'replica'` bỏ qua — cùng hàm, cùng bất biến D, hai độ mạnh khác nhau giữa 040 (`'A'`) và 013–026 (`'O'`) | **Đóng bằng mã.** Migration `043` nâng cả 19 trigger danh tính lên `ENABLE ALWAYS`; bản ghim đổi sang `'A'` và câu sửa thêm `ALTER … ENABLE ALWAYS` sau `CREATE TRIGGER`. Test trôi đo đúng `'A'` |
+| H6-5 | **MEDIUM.** `/guest/otp` truyền `remoteAddress` THÔ vào bucket CALLER (không qua `khoaNguoiGoi`) ⇒ IPv6 có 2^64 bucket; và mỗi địa chỉ mới là một hàng VĨNH VIỄN ở `otp_rate_limits`, bảng không có bộ dọn | **Đóng vế ⑴ bằng mã** (`khoaNguoiGoi` ở `anon.ts`, cùng phép chuẩn hoá dispatcher dùng). **Vế ⑵ thành sổ nợ 57** với lý do viết ra ở chính `invitation.ts`: `otp_rate_limits` bật RLS theo `org_id` nên một `DELETE` nền lọc hết, còn dọn từng tổ chức đòi biết tập tổ chức mà `app_api` không đọc được (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations`) |
+| H6-6 | **LOW.** 19 định nghĩa `$def$` không được đối chiếu với migration nguồn (`HAM_51` vẫn `trigger: []`), và không lớp nào đếm tập trigger của `kiem_danh_tinh_theo_phien` ⇒ trigger thứ 22 sẽ im lặng không được ghim | **Đóng bằng test.** 19 tên vào `HAM_51`; cửa sổ cắt của phép kiểm đổi từ một hằng số byte sang "tới mục KẾ TIẾP"; thêm một khẳng định chạy trên CSDL: tập trigger của hàm ấy phải bằng đúng 19 + 2 tên đã khai |
+| H6-7 | **LOW.** `caller_rate_limits` nằm ngoài mọi lớp TỰ CHỮA (`VI_TU_BANG_TENANT` lọc theo `org_id`), nên `DISABLE ROW LEVEL SECURITY` hay `DROP POLICY` trên nó sống qua mọi lần `migrate()` — trong khi 042 viết "Nó vẫn bật RLS + FORCE" như một tính chất của lược đồ | **Đóng bằng mã.** Một mục hardening theo ĐỐI TƯỢNG cho bảng ấy (ENABLE + FORCE + policy khách, câu sửa qua `EXECUTE format` như mọi mục tự chữa RLS khác, và nói rõ vì sao không viết thẳng). Test trôi: `DISABLE RLS` + `DROP POLICY` ⇒ `migrate()` dựng lại cả ba |
+| H6-8 | **LOW.** Bộ dọn là đường bịt DUY NHẤT của một bảng mà số hàng do người gọi vô danh quyết, nhưng nó hỏng trong im lặng: chỉ một dòng `console.error` mang tên lỗi | **Đóng bằng mã.** Mỗi lượt xoá nhiều hơn ngưỡng ồn ào ghi SỐ hàng; hai lượt hỏng LIÊN TIẾP ghi rõ "bảng chỉ lớn lên". Vẫn chỉ là log — dự án chưa có kênh cảnh báo vận hành, và câu ấy nằm ở ADR-024 |
+| H6-9 | **LOW.** `rows[0]?.hits ?? 0` — mặc định FAIL-OPEN của một trần: không có hàng trả về thì lời gọi đi tiếp như chưa đếm gì | **Đóng bằng mã.** Ném `InvitationError` thay vì trả 0, ở cả `tangBucketNguoiGoi` lẫn `demVaTang` (bốn bucket OTP dùng chung nó) |
+
+**Ghi chú của reviewer, giữ lại để lượt sau khỏi tìm lại:** miền băm `LOGIN_CALLER_TOAN_CUC` không va
+được với `org_id ‖ kind` của bảng cũ (hai bảng, và `org_id` là UUID); policy DUY NHẤT đúng hơn cặp
+`USING (true)` + RESTRICTIVE vì không có policy PERMISSIVE thứ hai để OR vào, và lớp tĩnh chặn mọi
+`CREATE/ALTER POLICY` từ file khác trừ `AS RESTRICTIVE`; `app.guest_session_id` không phải UUID ⇒
+22P02 ⇒ fail-closed; bộ dọn hai cửa sổ không bao giờ chạm bộ đếm sống (`window_start` làm tròn xuống
+bội 900 s, ngưỡng là 1800 s); `clearInterval` chạy trước `pool.end()` nên `dung()` không ném; hai
+giao dịch không có trạng thái nào để lệch; `GRANT DELETE` mở đúng thứ 042 khai và không có đường HTTP
+nào tới một `DELETE` tuỳ ý; 19 chuỗi `pg_get_triggerdef` khớp deparse hôm nay và nếu deparse đổi thì
+`migrate()` gãy ồn ào; danh sách 35 loại trừ không mâu thuẫn và không thiếu — nhưng nó là danh sách
+CHƯA GHIM, trong đó có báo giá append-only, hạn nộp, danh tính khách, hai trigger ngưỡng D2 và toàn
+bộ máy trạng thái mở thầu (sổ nợ 56).
+

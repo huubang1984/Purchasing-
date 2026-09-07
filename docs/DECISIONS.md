@@ -1966,13 +1966,32 @@ danh sách viết tay, sổ nợ 54 (một test "mọi hàm trigger có mặt tr
   tổ chức thật. Đường bịt là DỌN: `app_api` có DELETE mức bảng, tiến trình `api` chạy
   `donBucketNguoiGoiCu` mỗi 5 phút (`setInterval` có `unref`, lỗi chỉ ghi TÊN), xoá mọi cửa sổ cũ
   hơn HAI cửa sổ — không bao giờ chạm cửa sổ đang đếm. Giữa hai lần dọn, một kẻ xoay /64 vẫn tạo
-  được hàng; hàng nhỏ và cửa sổ 15 phút, đó là phần chênh còn lại.
+  được hàng; hàng nhỏ và cửa sổ 15 phút, đó là phần chênh còn lại. **[review H6-8]** Đường bịt duy
+  nhất không được hỏng trong im lặng: mỗi lượt dọn ồn ào ghi SỐ hàng, hai lượt hỏng liên tiếp ghi rõ
+  "bảng chỉ lớn lên" — vẫn chỉ là `console.error`, vì dự án chưa có kênh cảnh báo vận hành (cùng
+  câu đã phải viết cho `AFTER_COMMIT_FAILED` ở ADR-023). **[review H6-7]** Và bảng nằm ngoài
+  `VI_TU_BANG_TENANT` nên nó cũng nằm ngoài lớp TỰ CHỮA RLS: một mục hardening riêng theo đối tượng
+  giữ cho câu "vẫn bật RLS + FORCE" là tính chất của lược đồ chứ không của một lần chạy migration.
 
-**Bucket TOÀN TỔ CHỨC (`orgLimit`, nợ 52) Ở LẠI `otp_rate_limits`:** nó đúng là chuyện của một tổ
+~~**Bucket TOÀN TỔ CHỨC (`orgLimit`, nợ 52) Ở LẠI `otp_rate_limits`:** nó đúng là chuyện của một tổ
 chức. Tổ chức lạ không có nó (23503, bỏ qua) — và điều đó không mở lại oracle vì mã trạng thái của
-hai ca đã do bucket toàn cục quyết trước; phần chênh còn lại là một giao dịch lỗi, tức THỜI GIAN.
-Hai bucket vì thế là HAI giao dịch: bucket toàn cục không được rollback theo lỗi khoá ngoại của
-bucket kia.
+hai ca đã do bucket toàn cục quyết trước; phần chênh còn lại là một giao dịch lỗi, tức THỜI GIAN.~~
+
+**[review H6-2] Câu vừa gạch SAI ở đúng chỗ nó tự tin nhất.** Phần chênh không phải "một giao dịch
+lỗi" mà là một lệnh ngủ **2 000 ms** do chính dự án đặt (H5-1): tổ chức lạ nuốt 23503 nên KHÔNG BAO
+GIỜ chậm, còn tổ chức thật thì chậm sau khi vượt trần — ~301 lời gọi là đủ để dựng phép đo. Nên
+trần toàn tổ chức cũng rời sang `caller_rate_limits` (khoá `route ‖ to-chuc ‖ orgId`). ADR-013 không
+cấm điều đó: khoá ấy chỉ có route và chính `orgId`, không một giá trị nào CHUNG giữa hai tổ chức để
+một bản sao lưu JOIN.
+
+**[review H6-1] Và bucket theo người gọi không được CHỈ toàn cục.** Bản đầu bỏ `orgId` khỏi khoá,
+nên mọi ca "gộp địa chỉ" — proxy chưa khai (mặc định!), CGNAT, địa chỉ rỗng — khoá cửa đăng nhập của
+CẢ NỀN TẢNG với 31 lời gọi. Nay BA bộ đếm, cả ba ở bảng không khoá ngoại: `route ‖ ip` (trần toàn
+cục của một địa chỉ, `callerLimit × 10` — bịt đường xoay `orgId` lạ), `route ‖ ip ‖ orgId` (trần
+thật theo người gọi — bán kính nổ trở lại đúng một tổ chức), `route ‖ to-chuc ‖ orgId` (trần toàn tổ
+chức, làm chậm). Có `orgId` trong KHOÁ mà không có khoá ngoại thì không phải oracle — chính đó là
+điều 042 mua được. Cộng hai hàng rào: địa chỉ không phân giải được ⇒ **503** thay vì gộp vào một
+bucket dùng chung, và `TRUSTPROCURE_TRUSTED_PROXIES` **bắt buộc** (CIDR hoặc `direct`).
 
 ### 2. Nợ 54 — một danh sách viết tay phải có lớp đối chiếu với thực tế
 
@@ -1980,13 +1999,21 @@ Hardening ghim thân hàm trigger theo danh sách viết tay. Hai lượt liền
 vừa được thêm (H4-7 rồi H5-5) và không lớp nào kêu — vì không có gì so danh sách với CSDL. Nay có:
 tập hàm `RETURNS trigger` trong `public` phải bằng ĐÚNG *(hàm hardening có canh)* ∪ *(danh sách loại
 trừ có lý do)*, hai tập rời nhau. Tập thứ nhất **đọc thẳng từ `hardening.always.sql`** (mọi
-`to_regprocedure('public.X()')`) — viết tay ở đây là dựng lại đúng cái mù vừa đóng.
+~~`to_regprocedure('public.X()')`~~ **[review H6-3]** hình dạng của một mục ghim: phải có CÂU SỬA
+`CREATE OR REPLACE FUNCTION public.X() RETURNS trigger` VÀ một lần nhắc ở câu phán xét. Rút theo một
+lần NHẮC TÊN là mời người sửa nói dối: một tiền điều kiện của mục khác biến hàm thành "đã ghim", và
+khi ấy cách rẻ nhất để test xanh là xoá nó khỏi danh sách loại trừ — viết tay ở đây là dựng lại đúng
+cái mù vừa đóng.
 
 **"Loại trừ" ở đây nghĩa là CHƯA GHIM, không phải KHÔNG CẦN GHIM.** Cả 35 hàm còn lại canh một bất
 biến thật ở CSDL và thuộc cùng lớp trôi R3; mỗi hàm có một dòng nói nó canh gì, và cả lớp là **sổ nợ
 56**. Cùng vòng: 19 trigger danh tính của `kiem_danh_tinh_theo_phien` (nằm rải bảy migration) được
-ghim định nghĩa, mỗi cái có điều kiện `to_regclass(<bảng>) IS NOT NULL` và ghim `tgenabled = 'O'` —
-trạng thái THẬT của chúng, không phải trạng thái mong muốn.
+ghim định nghĩa, mỗi cái có điều kiện `to_regclass(<bảng>) IS NOT NULL` và ~~ghim `tgenabled = 'O'` —
+trạng thái THẬT của chúng, không phải trạng thái mong muốn~~ **[review H6-4]** ghim `'A'`, sau khi
+migration `043` nâng cả 19 lên `ENABLE ALWAYS`: ghim `'O'` biến `migrate()` thành thứ HẠ một trigger
+đã được nâng, và `'O'` là trạng thái mà `session_replication_role = 'replica'` bỏ qua — cùng hàm,
+cùng bất biến D với hai trigger `'A'` của 040. **[review H6-6]** Trục thứ hai của cùng cái mù cũng
+được đóng: tập TRIGGER của hàm ấy phải bằng đúng 19 + 2 tên đã khai, nên trigger thứ 22 là ĐỎ.
 
 ### Đo bằng gì
 
