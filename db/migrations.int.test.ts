@@ -4,7 +4,7 @@ import {
   withMigratedDatabase,
   type TestDatabase,
 } from "@trustprocure/test-support";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -918,11 +918,55 @@ describe("migration của dự án", () => {
     { ham: "outbox_jobs_xoa_payload_dang_nhap", migration: "041_outbox_payload_dang_nhap_xoa_sau_xong.sql", trigger: ["outbox_jobs_xoa_payload_dang_nhap"] },
   ];
 
-  it("[S1.13 / nợ 51] ~~năm~~ tám thân hàm trigger (013, 037, 039–041) trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  // [S1.15 / sổ nợ 56] BA MƯƠI LĂM hàm còn lại, ghim trong cùng khuôn. `migration` là file ĐÁNH SỐ
+  // LỚN NHẤT định nghĩa hàm ấy — bảy hàm ở đây được `CREATE OR REPLACE` nhiều lần, và ghim nhầm bản
+  // cũ làm `migrate()` LÙI hàm về bản ấy ở MỌI lần chạy. Có phép kiểm riêng bên dưới cho đúng điều đó.
+  const HAM_56: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
+    { ham: "bid_chi_ghi_them", migration: "018_vendor_bids.sql", trigger: ["bid_receipts_chi_ghi_them", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
+    { ham: "bid_kiem_han_nop", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
+    { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
+    { ham: "chinh_sach_phien_ban_tang_dan", migration: "035_phien_ban_chinh_sach_lien_tuc.sql", trigger: ["org_procurement_policies_phien_ban_tang_dan"] },
+    { ham: "guest_session_kiem_danh_tinh", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_kiem_danh_tinh"] },
+    { ham: "kiem_tra_nguong_khong_cung_tay_nguoi_dung", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["user_roles_nguong_khong_cung_tay"] },
+    { ham: "kiem_tra_nguong_khong_cung_tay_vai_tro", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["role_permissions_nguong_khong_cung_tay"] },
+    { ham: "loi_moi_khong_song_lai", migration: "022_security_review_s1.sql", trigger: ["rfq_invitations_khong_song_lai"] },
+    { ham: "otp_go_khoa_khong_xoa_dau_vet", migration: "024_moi_lai_va_tran_chi_phi.sql", trigger: ["invitation_otp_go_khoa_khong_xoa_dau_vet"] },
+    { ham: "otp_kiem_kenh_khac_link", migration: "022_security_review_s1.sql", trigger: ["invitation_otp_kiem_kenh"] },
+    { ham: "rfq_budgets_chi_sua_khi_soan", migration: "014_procurement_policy.sql", trigger: ["rfq_budgets_chi_sua_khi_soan"] },
+    { ham: "rfq_gia_han_khong_hoi_sinh", migration: "022_security_review_s1.sql", trigger: ["rfq_packages_gia_han_khong_hoi_sinh"] },
+    { ham: "rfq_items_cam_truncate", migration: "011_rfq_hardening.sql", trigger: ["rfq_items_cam_truncate"] },
+    { ham: "rfq_items_chi_sua_khi_soan", migration: "011_rfq_hardening.sql", trigger: ["rfq_items_chi_sua_khi_soan"] },
+    { ham: "rfq_key_material_bat_bien", migration: "026_xoa_mat_ma_vat_lieu_khoa.sql", trigger: ["rfq_key_material_bat_bien"] },
+    { ham: "rfq_khoa_chi_sinh_luc_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_sinh_luc_mo"] },
+    { ham: "rfq_khoa_chi_thu_hoi_khi_huy", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_thu_hoi_khi_huy"] },
+    { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
+    { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
+    { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
+    { ham: "rfq_kiem_nguong_phe_duyet_kep", migration: "014_procurement_policy.sql", trigger: ["rfq_packages_kiem_nguong_phe_duyet_kep"] },
+    { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "019_unseal.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
+    { ham: "thu_hoi_don_dieu", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_thu_hoi_don_dieu", "invitation_otp_thu_hoi_don_dieu", "rfq_invitation_tokens_thu_hoi_don_dieu", "rfq_invitations_thu_hoi_don_dieu", "user_login_tokens_thu_hoi_don_dieu"] },
+    { ham: "unseal_canh_bao_break_glass", migration: "019_unseal.sql", trigger: ["unseal_requests_canh_bao_break_glass"] },
+    { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
+    { ham: "unseal_kiem_chuyen_trang_thai", migration: "019_unseal.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
+    { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
+    { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
+    { ham: "unseal_kiem_rfq_da_dong", migration: "019_unseal.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
+    { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "019_unseal.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
+    { ham: "users_thu_hoi_phien_khi_dinh_chi", migration: "034_dinh_chi_thu_hoi_phien.sql", trigger: ["users_thu_hoi_phien_khi_dinh_chi"] },
+  ];
+
+  /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
+  const HAM_GHIM = [...HAM_51, ...HAM_56];
+
+  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ BỐN MƯƠI BA thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
     const hardening = docFile("hardening.always.sql");
     const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
-    for (const { ham, migration, trigger } of HAM_51) {
+    for (const { ham, migration, trigger } of HAM_GHIM) {
       const reMig = new RegExp(`CREATE (?:OR REPLACE )?FUNCTION public\\.${ham}\\(\\) RETURNS trigger\\s+LANGUAGE plpgsql\\s+SET search_path = [^\\n]+?\\s+AS \\$(\\w*)\\$([\\s\\S]*?)\\$\\1\\$`, "g");
       const khopMig = [...docFile(migration).matchAll(reMig)];
       expect(khopMig, `${ham} trong ${migration}`).toHaveLength(1);
@@ -941,9 +985,69 @@ describe("migration của dự án", () => {
       // byte đều là một cái bẫy chờ sẵn.
       const ketMuc = hardening.indexOf("$q$hàm + trigger ", viTri + 20);
       const than = hardening.slice(viTri, ketMuc === -1 ? undefined : ketMuc);
-      for (const t of trigger) expect(than, `${t} trong mục ${ham}`).toContain(`CREATE TRIGGER ${t} `);
+      // [S1.15 / nợ 56] `CONSTRAINT TRIGGER` cũng là một trigger, và hai cái trong lược đồ này là
+      // constraint trigger (`vendor_bid_versions_phai_co_bien_nhan` — 018,
+      // `rfq_key_material_phai_di_kem_lan_mo` — 017: cả hai DEFERRABLE INITIALLY DEFERRED, tức
+      // chúng canh ở thời điểm COMMIT). Bản trước tìm đúng chuỗi `CREATE TRIGGER `, nên khi khối
+      // ghim của nợ 56 mang chúng vào, phép kiểm này đỏ vì một lý do SAI — nó không thấy trigger,
+      // trong khi trigger có mặt và đúng.
+      for (const t of trigger) {
+        expect(than, `${t} trong mục ${ham}`).toMatch(
+          new RegExp(String.raw`CREATE (?:CONSTRAINT )?TRIGGER ${t} `),
+        );
+      }
     }
   });
+
+  // [S1.15 / sổ nợ 56] Bản ghim phải trỏ vào định nghĩa CUỐI CÙNG, không phải định nghĩa đầu tiên.
+  //
+  // Đây là một lớp mà bốn vòng trước KHÔNG có, và nó không phải lo xa: bảy trong ba mươi lăm hàm
+  // vừa ghim được `CREATE OR REPLACE` nhiều lần (`otp_kiem_kenh_khac_link` ba lần). Hardening chạy
+  // TRƯỚC vòng migration đánh số, và migration cũ đã có dòng trong `schema_migrations` nên không
+  // chạy lại — nên một bản ghim trỏ vào thân CŨ làm `migrate()` LÙI hàm về thân ấy ở MỌI lần triển
+  // khai, vĩnh viễn, trong im lặng. Test đồng bộ ở trên KHÔNG bắt được ca đó: nó so hardening với
+  // đúng file được khai, và hai bên khớp nhau hoàn hảo — chỉ là khớp vào bản sai.
+  it("[S1.15 / nợ 56] migration ghi trong mỗi mục ghim là migration CUỐI CÙNG định nghĩa hàm ấy", () => {
+    const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
+    const tenFile = readdirSync(thuMuc)
+      .filter((f) => /^\d{3}_.*\.sql$/u.test(f))
+      .sort();
+    for (const { ham, migration } of HAM_GHIM) {
+      const dinhNghiaO = tenFile.filter((f) =>
+        new RegExp(String.raw`CREATE (?:OR REPLACE )?FUNCTION public\.${ham}\(\)`).test(
+          readFileSync(`${thuMuc}/${f}`, "utf8"),
+        ),
+      );
+      expect(dinhNghiaO, `không migration nào định nghĩa ${ham}`).not.toEqual([]);
+      expect(dinhNghiaO.at(-1), `${ham}: hardening ghim ${migration} nhưng bản CUỐI ở ${dinhNghiaO.at(-1)}`).toBe(
+        migration,
+      );
+    }
+  });
+
+  // [S1.15 / sổ nợ 56 / 045] MỌI trigger trong `public` ở trạng thái ALWAYS — suy từ tính chất, không
+  // từ danh sách tên. `043` nâng mười chín cái, `045` nâng ba mươi bảy cái còn lại; sau đó câu phát
+  // biểu đúng của lược đồ là "không còn trigger ORIGIN nào", và một migration tương lai thêm một
+  // trigger ORIGIN sẽ ĐỎ ở đây thay vì lặng lẽ nhận độ mạnh thấp hơn hàng xóm của nó.
+  it("[S1.15 / nợ 56] không trigger nào trong public còn ở ORIGIN — 'replica' không bỏ qua được cái nào", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows } = await db.pool.query<{ ten: string; bang: string; en: string }>(
+        `SELECT t.tgname AS ten, c.relname AS bang, t.tgenabled::text AS en
+           FROM pg_trigger t
+           JOIN pg_class c ON c.oid = t.tgrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND NOT t.tgisinternal
+          ORDER BY 1`,
+      );
+      // Chốt chống rỗng ruột trước: nếu truy vấn không thấy trigger nào thì khẳng định dưới vô nghĩa.
+      expect(rows.length).toBeGreaterThanOrEqual(80);
+      expect(rows.filter((r) => r.en !== "A").map((r) => `${r.bang}.${r.ten}:${r.en}`)).toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
 
   // ============================================================================================
   // [S1.14 / sổ nợ 54 / review H5-5] DANH SÁCH GHIM KHÔNG ĐƯỢC TỰ LÀM MÙ MÌNH
@@ -954,47 +1058,20 @@ describe("migration của dự án", () => {
   //   (hàm được hardening nhắc tới) ∪ (danh sách loại trừ dưới đây),
   // và hai tập không giao nhau. Thêm một hàm trigger mới mà không ghim cũng không khai ⇒ ĐỎ.
   //
-  // LOẠI TRỪ NGHĨA LÀ GÌ Ở ĐÂY — nói thẳng: **chưa ghim**, không phải "không cần ghim". Cả 35 hàm
+  // LOẠI TRỪ NGHĨA LÀ GÌ Ở ĐÂY — nói thẳng: **chưa ghim**, không phải "không cần ghim". ~~Cả 35 hàm
   // dưới đây canh một bất biến thật ở CSDL và đều thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE
   // FUNCTION … BEGIN RETURN NEW; END` sau triển khai làm chúng no-op và sống qua `migrate()`).
   // Chúng nằm ở **sổ nợ 56**, và thứ tự đóng đã ghi ở đó. Giá trị mỗi dòng là thứ hàm ấy canh —
-  // viết ra để lần ghim sau không phải đọc lại bảy migration.
+  // viết ra để lần ghim sau không phải đọc lại bảy migration.~~
+  //
+  // [S1.15] Ba mươi lăm dòng ấy đã đi hết: sổ nợ 56 đóng, danh sách RỖNG, và khẳng định bên dưới
+  // giữ cho nó rỗng. Câu định nghĩa ở trên GIỮ NGUYÊN vì nó vẫn đúng cho ngày có dòng thứ nhất
+  // quay lại: loại trừ là CHƯA ghim.
   const HAM_TRIGGER_KHONG_GHIM: Readonly<Record<string, string>> = {
-    bid_chi_ghi_them: "báo giá là append-only — không UPDATE/DELETE trên ba bảng báo giá",
-    bid_dat_so_phien_ban: "số phiên bản báo giá do CSDL đặt, không do người gọi khai",
-    bid_kiem_han_nop: "không nộp sau hạn (C4)",
-    bid_kiem_phien_khach: "phiên khách nộp phải khớp lời mời của chính nó",
-    bid_phai_co_bien_nhan: "mỗi phiên bản báo giá phải kèm một biên nhận đã ký",
-    chinh_sach_phien_ban_tang_dan: "phiên bản chính sách mua sắm chỉ tăng",
-    guest_session_kiem_danh_tinh: "danh tính khách là dẫn xuất của thách thức OTP",
-    kiem_tra_nguong_khong_cung_tay_nguoi_dung: "D2 mức người dùng (033)",
-    kiem_tra_nguong_khong_cung_tay_vai_tro: "D2 mức vai trò (033)",
-    loi_moi_khong_song_lai: "lời mời đã thu hồi không sống lại",
-    otp_go_khoa_khong_xoa_dau_vet: "gỡ khoá OTP không xoá dấu vết thất bại",
-    otp_kiem_kenh_khac_link: "OTP không đi cùng kênh với magic link (ADR-015 mục 1)",
-    rfq_budgets_chi_sua_khi_soan: "ngân sách chỉ sửa khi RFQ còn soạn",
-    rfq_gia_han_khong_hoi_sinh: "gia hạn không hồi sinh một RFQ đã đóng",
-    rfq_items_cam_truncate: "TRUNCATE hạng mục bị chặn (đường vòng của DELETE)",
-    rfq_items_chi_sua_khi_soan: "hạng mục chỉ sửa khi RFQ còn soạn",
-    rfq_key_material_bat_bien: "vật liệu khoá bất biến sau khi ghi",
-    rfq_khoa_chi_sinh_luc_mo: "khoá RFQ chỉ sinh đúng lúc mở thầu",
-    rfq_khoa_chi_thu_hoi_khi_huy: "khoá chỉ thu hồi khi RFQ bị huỷ",
-    rfq_khoa_phai_di_kem_lan_mo: "mỗi lần mở thầu phải đi kèm đúng một vật liệu khoá",
-    rfq_kiem_chuyen_trang_thai: "máy trạng thái RFQ",
-    rfq_kiem_khoa_khi_mo: "mở thầu phải có khoá công khai",
-    rfq_kiem_nguoi_duyet: "người duyệt RFQ ≠ người tạo (D2)",
-    rfq_kiem_nguoi_tao: "người tạo RFQ là dẫn xuất của phiên",
-    rfq_kiem_nguong_phe_duyet_kep: "ngưỡng phê duyệt kép theo chính sách (ADR-017)",
-    rfq_kiem_yeu_cau_mo_thau: "mở thầu cần đủ điều kiện nghiệp vụ",
-    thu_hoi_don_dieu: "thu hồi là ĐƠN ĐIỆU trên năm bảng — không hồi sinh",
-    unseal_canh_bao_break_glass: "mở khẩn cấp phát cảnh báo, không im lặng",
-    unseal_dieu_phoi_mot_lan: "điều phối mở thầu đúng một lần",
-    unseal_kiem_chuyen_trang_thai: "máy trạng thái yêu cầu mở thầu",
-    unseal_kiem_du_phe_duyet: "đủ số phê duyệt mới điều phối được",
-    unseal_kiem_nguoi_duyet: "người duyệt mở thầu ≠ người yêu cầu (D2)",
-    unseal_kiem_rfq_da_dong: "chỉ mở thầu RFQ đã đóng",
-    unseal_kiem_yeu_cau_khi_ghi_ban_ro: "bản rõ chỉ ghi được kèm một yêu cầu đã điều phối",
-    users_thu_hoi_phien_khi_dinh_chi: "đình chỉ người dùng thu hồi mọi phiên (034)",
+    // [S1.15 / sổ nợ 56] RỖNG, và rỗng là trạng thái ĐÚNG kể từ vòng này: ba mươi lăm dòng từng
+    // đứng ở đây nay có mục ghim thật trong `hardening.always.sql`. Danh sách KHÔNG bị xoá đi cùng
+    // với nợ 56 vì nó vẫn là cửa duy nhất cho ngày có một hàm trigger mà ghim thân là sai — nhưng
+    // mở cửa ấy nay là một quyết định phải viết ra ở HAI chỗ (dòng ở đây, và con số 0 bên dưới).
   };
 
   it("[S1.14 / nợ 54] mọi hàm RETURNS trigger trong public: hoặc hardening có canh, hoặc nằm trong danh sách loại trừ CÓ LÝ DO", async () => {
@@ -1027,6 +1104,14 @@ describe("migration của dự án", () => {
       const loaiTru = Object.keys(HAM_TRIGGER_KHONG_GHIM);
       expect(ghim.filter((t) => loaiTru.includes(t)), "một hàm không được vừa ghim vừa loại trừ").toEqual([]);
       expect([...ghim, ...loaiTru].sort()).toEqual([...trongCsdl].sort());
+      // [S1.15 / sổ nợ 56] Vế MẠNH HƠN, và là vế đóng khoản nợ ấy: danh sách loại trừ RỖNG, tức
+      // phép hợp ở trên nay là "tập ghim BẰNG tập thật". Thêm một dòng vào `HAM_TRIGGER_KHONG_GHIM`
+      // làm khẳng định này ĐỎ — cố ý: đó là MỞ LẠI sổ nợ 56, và nó phải được viết ra ở STATE chứ
+      // không lặng lẽ thành một dòng trong một map.
+      expect(
+        loaiTru,
+        "sổ nợ 56 đã đóng — mọi hàm trigger đều có mục ghim. Thêm một loại trừ là MỞ LẠI khoản nợ ấy",
+      ).toEqual([]);
       for (const [ten, lyDo] of Object.entries(HAM_TRIGGER_KHONG_GHIM)) {
         expect(lyDo.length, `loại trừ ${ten} phải có lý do`).toBeGreaterThan(10);
       }
@@ -1045,8 +1130,9 @@ describe("migration của dự án", () => {
         "mfa_reset_requests_kiem_danh_tinh_duyet",
       ];
       expect(trg.map((r) => r.ten).sort()).toEqual([...daKhai].sort());
-      // Chốt chống rỗng ruột: cả hai tập đều phải có thật, và tổng phải là con số đã đo.
-      expect(ghim.length).toBeGreaterThanOrEqual(13);
+      // Chốt chống rỗng ruột: tập ghim phải có thật, và tổng phải là con số đã đo.
+      // ~~cả hai tập đều phải có thật~~ — tập loại trừ nay RỖNG có chủ đích (sổ nợ 56).
+      expect(ghim.length).toBe(trongCsdl.length);
       expect(trongCsdl.length).toBeGreaterThanOrEqual(48);
     } finally {
       await db.stop();
@@ -1073,6 +1159,19 @@ describe("migration của dự án", () => {
       // [S1.14 / nợ 54] Một trong MƯỜI CHÍN trigger danh tính của 013 (ở đây: 019) — chúng nằm rải
       // bảy migration và tới S1.14 mới được ghim định nghĩa.
       await db.pool.query("DROP TRIGGER unseal_requests_kiem_danh_tinh ON public.unseal_requests");
+      // [S1.15 / nợ 56] Ba đột biến trên nhóm ba mươi lăm hàm vừa ghim, mỗi cái một hình dạng khác:
+      // ⑴ máy trạng thái RFQ thành no-op (thân hàm — bản NGUỒN ở 011, không phải 009);
+      // ⑵ một trigger append-only bị DROP;
+      // ⑶ một trigger bị HẠ từ ALWAYS xuống ORIGIN — ca mà `043`/`045` tồn tại để chặn, và là ca mà
+      //    bản ghim `tgenabled = 'A'` là lớp DUY NHẤT nhìn thấy.
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.rfq_kiem_chuyen_trang_thai() RETURNS trigger LANGUAGE plpgsql " +
+          "SET search_path = pg_catalog, public AS $x$ BEGIN RETURN NEW; END $x$",
+      );
+      await db.pool.query("DROP TRIGGER vendor_bid_versions_chi_ghi_them ON public.vendor_bid_versions");
+      await db.pool.query(
+        "ALTER TABLE public.unseal_requests ENABLE REPLICA TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+      );
       // [review H6-7] `caller_rate_limits` (042) nằm NGOÀI cây tenant, nên mục (A) của hardening
       // không với tới nó: trước H6-7, hai câu dưới đây sống qua mọi lần `migrate()`.
       await db.pool.query("ALTER TABLE public.caller_rate_limits DISABLE ROW LEVEL SECURITY");
@@ -1109,6 +1208,25 @@ describe("migration của dự án", () => {
       // cùng độ mạnh — `'O'` là trạng thái `session_replication_role = 'replica'` bỏ qua.
       expect(dt013[0]?.enabled).toBe("A");
       expect(dt013[0]?.def).toContain("kiem_danh_tinh_theo_phien('requested_by', 'requested_by_session_id')");
+      // [S1.15 / nợ 56] Ba đột biến của nhóm ba mươi lăm hàm, dựng lại đủ cả ba trục.
+      const { rows: n56 } = await db.pool.query<{ than: string; trg: string | null }>(
+        `SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')) AS than,
+                (SELECT string_agg(t.tgname || ':' || t.tgenabled::text, ',' ORDER BY t.tgname)
+                   FROM pg_trigger t WHERE t.tgfoid = p.oid AND NOT t.tgisinternal) AS trg
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_kiem_chuyen_trang_thai()')`,
+      );
+      expect(n56[0]?.than, "thân máy trạng thái RFQ bị thay thành no-op").toContain("Chuyen trang thai");
+      expect(n56[0]?.trg).toBe("rfq_packages_kiem_chuyen_trang_thai:A");
+      const { rows: n56b } = await db.pool.query<{ ten: string; en: string }>(
+        `SELECT t.tgname AS ten, t.tgenabled::text AS en FROM pg_trigger t
+          WHERE NOT t.tgisinternal
+            AND t.tgname IN ('vendor_bid_versions_chi_ghi_them', 'unseal_requests_kiem_chuyen_trang_thai')
+          ORDER BY 1`,
+      );
+      expect(n56b).toEqual([
+        { ten: "unseal_requests_kiem_chuyen_trang_thai", en: "A" },
+        { ten: "vendor_bid_versions_chi_ghi_them", en: "A" },
+      ]);
       const { rows: bucket } = await db.pool.query<{ rls: boolean; force: boolean; pol: string | null }>(
         `SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
                 (SELECT string_agg(p.polname, ',' ORDER BY p.polname) FROM pg_policy p WHERE p.polrelid = c.oid) AS pol
@@ -2126,6 +2244,7 @@ describe("migration của dự án", () => {
           "042_bucket_nguoi_goi_toan_cuc.sql",
           "043_danh_tinh_theo_phien_enable_always.sql",
           "044_don_bucket_otp.sql",
+          "045_trigger_con_lai_enable_always.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4956,6 +5075,7 @@ describe("migration của dự án", () => {
         "042_bucket_nguoi_goi_toan_cuc.sql",
         "043_danh_tinh_theo_phien_enable_always.sql",
         "044_don_bucket_otp.sql",
+        "045_trigger_con_lai_enable_always.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -5197,6 +5317,7 @@ describe("migration của dự án", () => {
         "042_bucket_nguoi_goi_toan_cuc.sql",
         "043_danh_tinh_theo_phien_enable_always.sql",
         "044_don_bucket_otp.sql",
+        "045_trigger_con_lai_enable_always.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
