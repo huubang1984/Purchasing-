@@ -526,3 +526,38 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch ở đúng chế độ 1% kèm đối chứng dương. Nếu bạn
     thấy test ấy đỏ, đừng nới nó: hoặc chỉ số đã mất, hoặc hình dạng policy đã đổi thành thứ không
     hợp bitmap được nữa — cả hai đều là thứ phải biết.
+
+14. **[2026-09-07] S1.17 và S1.18 — hai vòng, và cả hai để lại một bài học về CHÍNH CÁCH ĐO.**
+    S1.17 đóng nợ 11 (artefact neo ngoài, ADR-026); S1.18 đóng nợ 9 và 17 (biên giới module +
+    danh sách trắng barrel cho bốn gói S0 cuối cùng, ADR-027). Bốn thứ người tiếp theo phải biết
+    trước khi chạm bất kỳ lớp canh nào:
+
+    ⑴ **Thêm một gói vào `packages/` nay đòi BA thứ, và hai lớp sẽ đỏ cho tới khi có đủ:** một họ
+    quy tắc biên giới trong `.dependency-cruiser.cjs` đóng `src/` với ĐÚNG tập cửa mà `package.json`
+    khai trong `exports`; ba probe trong `boundaries.test.ts` (quy tắc chưa từng đỏ thật là quy tắc
+    chưa được đo); và một danh sách trắng barrel cộng một dòng trong `DANH_SACH_TRANG_THEO_CUA`.
+    Hai danh sách miễn trừ (`MIEN_TRU`, `GOI_MIEN_DANH_SACH_TRANG`) nay **RỖNG** và có khẳng định
+    riêng giữ chúng rỗng — viết thêm một dòng vào đó vẫn ĐƯỢC, nhưng nó là hành vi **mở lại nợ 9
+    hoặc 17** và phải ghi ra ở `docs/STATE.md`.
+
+    ⑵ **Một dòng trong `package.json` là một cửa công khai mới.** Đó là cách
+    `@trustprocure/audit/anchor-sign` (S1.17) và `@trustprocure/sealed-envelope/unseal` (S1.4) ra
+    đời, và cửa thứ hai của `sealed-envelope` — xuất `unsealBid`, hàm MỞ phong bì giá thầu — **chưa
+    bao giờ có danh sách trắng** cho tới S1.18. Ba lớp chia việc và không thay nhau: họ `gN-` canh
+    *không ai đi vòng QUA tường*; một quy tắc riêng canh *AI* được đi qua cửa hạn chế; danh sách
+    trắng canh *CÁI GÌ* đi ra qua nó.
+
+    ⑶ **Một quy tắc XANH trông giống hệt một quy tắc đang làm việc.**
+    `khong-phu-thuoc-devdep-trong-src` **không bao giờ bắn được** từ S0 tới S1.18 — `options.exclude`
+    chứa `node_modules` nên không cạnh nào trong đồ thị mang `npm-dev`. Nó sống qua chín lượt review
+    vì thứ duy nhất ai cũng nhìn là dòng *"no dependency violations found"*. Khi bạn thêm một quy tắc
+    depcruise, hãy hỏi thêm câu thứ hai: **quy tắc này có ĐỐI TƯỢNG nào để phán xét không** — và
+    viết câu ấy thành một test, đừng để nó là một niềm tin.
+
+    ⑷ **"Suy từ tính chất" chỉ đúng khi tính chất được chọn ĐÚNG MIỀN.** Vòng S1.18 sinh ra để xoá
+    khuôn danh-sách-tên, rồi tự viết lại khuôn ấy: vị từ *"gói"* của cả [INV-H16] lẫn [INV-H18] là
+    *thư mục có `src/index.ts`* — một **quy ước đặt tên**, không phải định nghĩa. Một gói khai
+    `"exports": { ".": "./src/main.ts" }` rơi khỏi cả hai lớp trong im lặng, và hai khẳng định
+    *"miễn trừ RỖNG"* vẫn xanh. Vị từ đúng nay ở `tests/architecture/goi-workspace.ts` và **dùng
+    chung** cho cả hai bất biến — hai bản chép gần giống nhau của cùng một vị từ là thứ sẽ trôi khỏi
+    nhau.

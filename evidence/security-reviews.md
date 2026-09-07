@@ -688,3 +688,82 @@ không cần đo lại:
 nhánh im lặng. `readAllRaw` đọc cả tệp vào bộ nhớ không giới hạn kích thước: với nhịp neo theo ngày
 thì `n` nhỏ, chỉ đáng nêu nếu nơi cất chuyển sang nhịp phút. Và CLI dùng pool role `app_api` cho cả
 hai lệnh — đúng chiều: công cụ neo không chạy dưới role deploy.
+
+---
+
+# S1.18 — lượt review thứ MƯỜI (biên giới bốn gói S0 + danh sách trắng barrel, khoản nợ 17 và 9), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.18** | `.dependency-cruiser.cjs` (họ `g12-`…`g15-`), `tests/architecture/boundaries.test.ts` (13 probe mới), `tests/architecture/bien-gioi-goi.test.ts` ([INV-H16], `MIEN_TRU` → RỖNG), `tests/architecture/barrel-exports.test.ts` (4 danh sách trắng + cửa `./anchor-sign` + [INV-H18]), `docs/TEST-PLAN.md`, `tools/inv-matrix/src/danh-gia.ts` | **`b47ecc1`** | Read/Grep/Glob; **không** chạy được `depcruise`/`vitest`/`tsc` (reviewer không có Bash) | **0 CRITICAL, 1 HIGH, 3 MEDIUM, 6 LOW** | `b4378cf` (H10-1, H10-2, H10-6, H10-10) · `ffafd71` (H10-4) · `02e6fc6` (H10-3, H10-5, H10-7, H10-8, H10-9) |
+
+**LƯỢT NÀY CHẠY TRÊN MỘT COMMIT CÓ TÊN — bài học mục 32 của `docs/STATE.md` đã được áp.** S1.17
+review trên cây làm việc chưa commit và vì thế mất truy nguyên. Ở đây trạng thái reviewer nhìn thấy
+là `b47ecc1`, dựng lại được bằng một lệnh `git checkout`.
+
+## Một HIGH
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| **H10-1** | **HIGH — VỊ TỪ "GÓI" CHỈ CHUYỂN CHỖ GIẤU, KHÔNG BIẾN MẤT.** Cả [INV-H16] lẫn [INV-H18] tự nhận *"suy TỪ TÍNH CHẤT, không từ một danh sách tên"*, nhưng cả hai định nghĩa gói = *thư mục con của `packages/` **có `src/index.ts`***. Một gói là một thư mục có `package.json`. Kịch bản không cần một dòng mã xấu nào: `packages/kms/package.json` khai `"exports": { ".": "./src/main.ts" }`, không có `src/index.ts` ⇒ gói ấy rơi khỏi **cả hai** vị từ, không họ quy tắc biên giới nào bị đòi, không danh sách trắng nào bị đòi, và **hai khẳng định *"danh sách miễn RỖNG"* vẫn XANH** vì miễn trừ đúng là rỗng thật. Khoản nợ 9 và 17 mở lại **trong im lặng, ngay sau vòng tuyên bố đóng chúng**. Cùng lối: đổi tên `packages/db/src/index.ts` → `main.ts` làm `db` biến mất khỏi cả hai lớp | **ĐÓNG** `b4378cf` — vị từ chuyển sang `tests/architecture/goi-workspace.ts`, đọc `packages/*/package.json`, và **DÙNG CHUNG** cho cả hai bất biến (hai bản chép gần giống nhau là thứ sẽ trôi khỏi nhau). Cộng một khẳng định mới: mọi THƯ MỤC con của `packages/` phải là một gói có `package.json` — thư mục không có thì NÉM. Đột biến: dựng `packages/zzprobe-kms` đúng hình dạng trên ⇒ **H16 và H18 cùng ĐỎ**; dựng một thư mục không có `package.json` ⇒ khẳng định mới ĐỎ |
+
+## Ba MEDIUM
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| **H10-2** | **Trần *"tối đa hai cửa"* là một khoản CẤP KHÔNG.** `coQuyTacBienGioi` đòi `to.pathNot` CHỨA `index.ts` và có `length <= 2` — một con số dùng chung cho cả mười ba gói, đặt ở 2 để không đỏ oan trên `crypto-keys`. Hai gói tiêu thụ nó hợp pháp; **mười một gói còn lại được cấp sẵn một cửa thứ hai**. Sửa một dòng `pathNot: [DB_INDEX_TS, ciFile("packages/db/src/pool.ts")]` là đủ: H16 xanh (length = 2), H18 xanh (`exports` không đổi), và không probe nào đỏ vì probe của `db` nhắm `migrate.ts` | **ĐÓNG** `b4378cf` — bỏ trần, so **BẰNG TẬP**, và tập cửa hợp lệ đọc từ chính `exports` của gói. Mở một cửa thứ hai vì thế không còn là một dòng trong file cấu hình mà **buộc phải là một dòng trong `package.json`** — thứ [INV-H18] cũng nhìn thấy. Cả 13 quy tắc hiện có đã khớp đúng tập ấy nên không quy tắc nào phải sửa. Đột biến: mở cửa thứ hai cho `g14-` mà không động vào `package.json` ⇒ ĐỎ |
+| **H10-3** | **Khẳng định rộng hơn phép đo.** Văn của vòng đóng khung `g14-`/`g15-` như lớp canh cho *"điểm DUY NHẤT gắn GUC `app.org_id`"*, với câu *"một đường vòng tới hàm này là một đường vòng tới quyết định phiên này thuộc tổ chức nào"*. Đo thật thì hai họ ấy **không rút một symbol nào** khỏi tầm với — mọi symbol giá trị của `with-tenant.ts` và của `test-support/src/` đều đã ở cửa | **ĐÓNG** `02e6fc6` — đếm được và ghi vào đúng chỗ: `g12-` rút **một** (`antoanChoBaoCao`), `g13-` rút **một** (`migrationChecksum`), `g14-` và `g15-` rút **không**. Thứ hai họ ấy mua là **mặc định đóng cho module tương lai**; câu cũ nói về HẬU QUẢ nếu có một đường vòng, không được đọc thành *"đang có một đường vòng bị chặn"* |
+| **H10-4** | **Một cổng đã RỖNG RUỘT từ S0, và chín lượt review trước không bắt được vì nó XANH.** `khong-phu-thuoc-devdep-trong-src` không bao giờ bắn được: `options.exclude` chứa `node_modules`, mà `exclude` **gỡ hẳn** module khỏi đồ thị (khác `doNotFollow`, chỉ ngừng duyệt tiếp), trong khi `npm-dev` chỉ được gán cho cạnh resolve **vào** node_modules | **ĐÓNG** `ffafd71`, **và nó là phát hiện duy nhất của lượt này được nâng từ *nghi ngờ* lên *xác nhận* bằng một phép đo mới.** Đếm trên toàn đồ thị trước khi sửa: 264 `import`, 231 `local`, 94 `aliased`, 83 `core`, 44 `export`, 40 `unknown`, 14 `type-only`, 6 `dynamic-import` — và **KHÔNG một cạnh nào mang `npm-dev`**. Sửa: bỏ `node_modules` khỏi `exclude` (giữ `doNotFollow`), giá là 194→197 module, 758→822 phụ thuộc. Một miễn trừ duy nhất, `packages/test-support/src/`, và nó **không phải một tên trong một danh sách**: tính chất *"gói này là hạ tầng kiểm thử"* do `pham-vi-san-xuat.test.ts` vế ⑵ cưỡng chế. Đường sửa *"chuyển `pg`/`@testcontainers` sang `dependencies` của gói ấy"* đã được xét và **BÁC BỎ**: nó tái lập đúng khiếm khuyết mà khoản nợ 21 ra đời để chặn. Đột biến: trả `node_modules` về `exclude` ⇒ test chống-rỗng-ruột ĐỎ **trong khi `pnpm depcruise` vẫn XANH**; gỡ miễn trừ ⇒ 2 vi phạm THẬT |
+
+## Sáu LOW
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| **H10-5** | Probe thứ tư của `audit` (*"cửa THỨ HAI không bị `g12-` đóng"*) đo sự **vắng mặt** của một vi phạm, không có đối chứng đòi cạnh `tools/neo-so-kiem-toan → anchor-sign.ts` **tồn tại** ⇒ ngày công cụ thôi đi qua cửa ấy, test xanh vĩnh viễn mà không đo gì | **ĐÓNG** `02e6fc6` — thêm một đối chứng đứng TRƯỚC: đọc mã nguồn công cụ và đòi specifier `@trustprocure/audit/anchor-sign` có thật. Cùng khuôn `existsSync` mà test của `apps/unseal-worker` dùng |
+| **H10-6** | `main` và `exports["."]` không bị lớp nào buộc phải trùng, trong khi `vitest.config.ts` alias `@trustprocure` → `packages` (đi vòng qua `exports` hoàn toàn) ⇒ một dòng `"main": "src/with-tenant.ts"` để lại mọi khẳng định XANH trong khi bề mặt được CHẠY khác bề mặt được ĐO | **ĐÓNG** `b4378cf` — [INV-H18] thêm một khẳng định cho cả 13 gói. Đột biến: đổi `main` của `tenancy` ⇒ ĐỎ |
+| **H10-7** | Chú thích `g12-` khai *"đi lọt CẢ BA cổng (depcruise, tsc, eslint)"* trong khi vòng chỉ đo bằng `depcruise` | **ĐÓNG** `02e6fc6` — ba cổng đã chạy trên **cùng một probe**: `tsc` exit 0, `eslint` exit 0, `depcruise` exit 1. Câu ấy nay là một phép đo |
+| **H10-8** | Kế hoạch mở rộng phát biểu của nợ 17 sang vector **subpath**, vốn chưa bao giờ mở: `db`/`tenancy`/`test-support` khai `exports` chỉ có `"."`, và `enhancedResolveOptions` bắt depcruise resolve qua đúng trường ấy ⇒ `@trustprocure/db/src/pool.js` chưa bao giờ resolve được; thứ bắn cho nó là lưới đỡ `g1-khong-import-trustprocure-khong-resolve-duoc` | **ĐÓNG** `02e6fc6` — thu hẹp phát biểu về đúng vector đường TƯƠNG ĐỐI. Trên vector subpath, bốn họ mới cộng thêm **0** |
+| **H10-9** | [INV-H18] tạo ra một **ngoại lệ cho doctrine *"một tiến trình, một khả năng"***: khẳng định *"khớp bề mặt THẬT"* nạp cả ba cửa hạn chế trong cùng một worker vitest (`unwrap.ts`, `unseal.ts`, `anchor-sign.ts`), và dynamic import với specifier dựng từ biến làm depcruise **về nguyên lý** không thấy cạnh đó | **ĐÓNG** `02e6fc6` bằng cách GHI RA ở cả hai nơi — nơi ngoại lệ được tạo ([INV-H18]) và nơi doctrine được viết (khối `g11-`). Kèm một câu nói rõ: *"không module nào làm gì lúc nạp"* là **kiểm bằng cách ĐỌC**, chưa phải một phép đo lúc chạy |
+| **H10-10** | Hàng H16 của sổ đăng ký viết *"`index.ts` là cửa duy nhất"* — chặt hơn thứ được cưỡng chế (mã chấp nhận tới hai cửa), và chính chỗ chênh ấy là cửa vào của H10-2 | **ĐÓNG** `b4378cf` — gạch tại chỗ, viết lại theo đúng thứ H10-2 dựng: *"ĐÚNG tập cửa mà `package.json` khai trong `exports`"* |
+
+## Mười một mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề
+
+Ghi lại vì dự án tính *"đã kiểm, không thấy"* là một kết quả, và vì hai mục dưới đây là phần đắt
+nhất của lượt review:
+
+1. **Lỗ C1 ở 13 probe mới — KHÔNG tái diễn.** Cả 13 dùng specifier **tương đối**, nên resolve độc
+   lập với `package.json` và liên kết workspace — đúng lớp lỗi S1.17 suýt vấp. Mọi probe âm khẳng
+   định CẢ HAI vế (`status !== 0` **và** `output` chứa **tên quy tắc đầy đủ**), nên một quy tắc im
+   lặng không thể cho ra một lượt xanh; một lần `spawnSync` hỏng cũng không, vì vế `toContain` vẫn
+   phải thoả.
+2. **`g11-` và `g12-` không che nhau** — bốn ca được liệt kê hết: import nội bộ tới `anchor-sign.ts`
+   (`g12-` không áp, `g11-` bắn) · import từ ngoài qua cửa thứ hai (`g12-` im vì đó là cửa, `g11-`
+   bắn) · import `anchor-sign.test.ts` (cả hai cùng bắn) · file trong `packages/audit/` ngoài `src/`
+   (`g12-` bắn). Không cấu hình nào làm cả hai im.
+3. Hoa/thường trên hệ tệp Windows — bốn họ mới dựng **mọi** mảnh đường dẫn bằng `ciFile`/`ciPrefix`,
+   không một regex viết tay nào.
+4. Đường qua `node_modules` không làm bốn quy tắc mới mù (symlink workspace resolve về đường thật).
+5. Đường qua tsconfig `paths` không có lối vòng (wildcard một mảnh không diễn đạt được subpath lồng).
+6. Nội dung bốn danh sách trắng khớp bề mặt thật; sổ đăng ký phủ đúng **16 cửa** = đúng tập `exports`
+   của cả 13 gói, và nó dùng **chính** các mảng của từng khối nên không sinh ra một danh sách thứ hai
+   đi lệch.
+7. Một cửa `exports` mới không lọt được (hai khẳng định cùng đỏ).
+8. Không bí mật/khoá/token nào được thêm.
+9. Xác thực/uỷ quyền không bị nới cho test đi qua; bốn họ mới mỗi họ có **đúng một** miễn trừ `from`,
+   và miễn trừ ấy đồng thời là đích hạn chế của chính quy tắc đó.
+10. Không đường log mới; bộ báo rò rỉ kết nối của `test-support` vẫn cố ý không in cột `query`.
+11. `MOC_GHIM` 51 → 52 nhất quán, và cơ chế hai chiều buộc lần nâng phải là một dòng có chữ ký.
+
+## Điều đáng mang sang vòng sau
+
+**Một quy tắc XANH trông giống hệt một quy tắc đang làm việc.** H10-4 sống qua chín lượt review và
+mọi lượt CI kể từ S0, vì thứ duy nhất ai cũng nhìn là dòng *"no dependency violations found"*. Lớp
+bắt được nó không phải một con mắt tinh hơn mà là một câu hỏi khác: **không phải *"có vi phạm
+không"* mà là *"quy tắc này có ĐỐI TƯỢNG nào để phán xét không"***. Câu hỏi ấy nay là một test.
+
+**Và H10-1 nói một điều khó chịu hơn về chính vòng này:** vòng S1.18 sinh ra để xoá khuôn
+danh-sách-tên, rồi tự viết lại khuôn ấy dưới dạng một phép thử tồn tại tệp. *"Suy từ tính chất"* chỉ
+đúng khi **tính chất được chọn đúng miền** — `src/index.ts` là một quy ước, `package.json` mới là
+định nghĩa.
