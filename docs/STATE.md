@@ -1232,6 +1232,17 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
 
     **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0). **Không mở nợ mới.**
 
+    **MỘT CA ĐỎ NỮA ĐƯỢC ĐO, và lần này KHÔNG mất danh tính** (vòng trước mất một ca vì phép lọc
+    đầu ra — xem mục 30). Lượt `pnpm evidence` song song đỏ `composition.int.test.ts:300`:
+    `expected '2' to be '0'` — đúng HAI backend, tức đúng hai pool của tiến trình, ở khoảnh khắc
+    ngay sau `dung()`. Cùng họ với khoản nợ 24/28: `pool.end()` trả về khi client đã được YÊU CẦU
+    đóng, backend phía Postgres thoát sau đó vài mili-giây, nên bản cũ đo *"đã đóng nhưng chưa
+    thoát"* rồi gọi nó là rò rỉ. Tải song song của chính vòng này (một tệp test mới chèn 200 000
+    hàng) làm cửa sổ ấy rộng ra. Bản vá không nới một ngưỡng nào — nó đổi CÁCH ĐO, từ một lần đếm
+    tức thì sang một VÒNG CHỜ có hạn, dùng đúng con số 3 giây đã có lập luận ở
+    `packages/test-support/src/postgres.ts` (nhỏ hơn `idleTimeoutMillis` 10 giây của `pg`, nên nó
+    vẫn phân biệt được "chưa thoát" với một pool bị bỏ quên).
+
     **Số đo trên HEAD:** `pnpm t0` 179 module / 0 vi phạm; `pnpm test` 554/554; `pnpm test:int`
     **725/725**; `pnpm evidence` **51/51**, **1279 khẳng định**, cổng XANH, vitest thoát mã 0.
 
