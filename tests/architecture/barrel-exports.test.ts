@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { cacGoiWorkspace } from "./goi-workspace.js";
 
 // ============================================================================================
 // FIX ROUND 5 (CR3) — CHẶN SYMBOL, KHÔNG PHẢI CHẶN CẠNH
@@ -167,10 +168,16 @@ describe("bề mặt export công khai của crypto-keys", () => {
 // vậy KHÔNG tự động áp cho E3 — nó chỉ bắt được symbol MỚI xuất hiện, không bắt được một
 // symbol đã nằm trong danh sách trắng nhưng có hình dạng "cổng gác im lặng".
 //
-// SỔ NỢ (QT1 quét toàn thư mục packages/): hôm nay CHỈ `crypto-keys` và `identity` có danh
+// SỔ NỢ (QT1 quét toàn thư mục packages/): ~~hôm nay CHỈ `crypto-keys` và `identity` có danh
 // sách trắng barrel. `audit`, `tenancy`, `db`, `test-support` KHÔNG CÓ — nên một symbol mọc ra
-// ở mặt tiền của một trong bốn gói đó ngày mai KHÔNG được canh bởi lớp nào. Xem
+// ở mặt tiền của một trong bốn gói đó ngày mai KHÔNG được canh bởi lớp nào.~~ Xem
 // task-9-report.md §V3.5.
+//
+// [S1.18 / khoản nợ 9] CÂU VỪA GẠCH ĐÃ THIU QUA SÁU VÒNG — `supplier`, `rfq`, `invitation`,
+// `sealed-envelope`, `bidding`, `unseal` và `outbox` đều có danh sách trắng, và từ vòng này CẢ
+// BỐN gói được nêu tên cũng có (khối cuối file). Khoản nợ 9 ĐÓNG. Giữ nguyên văn vì nó ghi đúng
+// cái giá của việc mua lớp canh SAU: bốn gói không có lớp lại chính là bốn gói cũ nhất, tức lớp
+// mỏng nhất nằm đúng chỗ mã đã sống lâu nhất.
 const DANH_SACH_TRANG_IDENTITY = [
   "CHAIN_COVERING_ROLE_PAIRS",
   "MAX_TOTP_WINDOW",
@@ -597,6 +604,13 @@ const DANH_SACH_TRANG_SEALED_ENVELOPE = [
   "sealBid",
 ];
 
+// [S1.18 / khoản nợ 9] CỬA THỨ HAI của gói này, khai từ S1.4 và chưa từng có danh sách trắng.
+// `unsealBid` là hàm MỞ phong bì giá thầu — năng lực cao nhất kho. `g8-khong-mo-phong-bi-ngoai-
+// unseal-worker` canh AI đi qua được cửa này; cho tới vòng S1.18, KHÔNG lớp nào canh CÁI GÌ đi ra
+// qua nó. Một symbol thứ hai ở đây là một khả năng mới trong tay `apps/unseal-worker`, và nó phải
+// là một quyết định nhìn thấy được — đúng cùng lý do đã viết cho cửa "." ngay trên.
+const DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL = ["unsealBid"];
+
 const SEALED_ENVELOPE_PACKAGE_JSON_URL = new URL(
   "../../packages/sealed-envelope/package.json",
   import.meta.url,
@@ -630,6 +644,18 @@ describe("bề mặt export công khai của sealed-envelope", () => {
   // Đối chứng: bốn symbol nguy hiểm phải KHÔNG có ở cửa. Khẳng định "chỉ đúng danh sách trắng" ở
   // trên đã hàm ý điều này, nhưng nó hàm ý bằng một phép trừ — còn đây gọi thẳng tên, nên ngày ai
   // đó thêm `deriveContentKey` vào danh sách trắng thì có HAI dòng phải sửa, không phải một.
+  // [S1.18] `kiemCuaTheoDanhSach` khai bên dưới (khối bốn gói S0) — khai báo hàm nên nó dùng
+  // được ở đây; đặt nó cạnh bốn gói vì đó là nơi nó ra đời, không nhân bản thêm một bản thứ hai.
+  it("[INV-H16] cửa @trustprocure/sealed-envelope/unseal chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "sealed-envelope",
+      "./unseal",
+      DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL,
+      "Cửa này mở phong bì giá thầu. Một symbol thứ hai ở đây là một khả năng mới trong tay " +
+        "apps/unseal-worker — G1/ADR-006.",
+    );
+  });
+
   it("[INV-H16] bốn symbol chạm khoá riêng KHÔNG có mặt ở cửa công khai", async () => {
     const urlCua = new URL("../../packages/sealed-envelope/src/index.ts", import.meta.url);
     const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
@@ -780,5 +806,371 @@ describe("bề mặt export công khai của unseal", () => {
     const urlCua = new URL("../../packages/unseal/src/index.ts", import.meta.url);
     const m = (await import(/* @vite-ignore */ urlCua.href)) as { UNSEAL_CLAUSES: readonly string[] };
     expect(m.UNSEAL_CLAUSES).toEqual(["PERMISSION", "MFA_FRESH", "RFQ_CLOSED", "POLICY_GATE"]);
+  });
+});
+
+// ============================================================================================
+// [S1.18 / khoản nợ 9] BỐN MẶT TIỀN CUỐI CÙNG: audit, db, tenancy, test-support
+//
+// Khoản nợ 9 ra đời ở Task 9 và câu của nó chưa bao giờ sai: *"một symbol mọc ra ở mặt tiền của
+// một trong bốn gói đó ngày mai KHÔNG được canh bởi lớp nào"*. Sáu gói sinh sau đều có danh sách
+// trắng NGAY TỪ KHI RA ĐỜI; bốn gói của S0 thì không, và chúng là bốn gói cũ nhất — tức lớp canh
+// mỏng nhất nằm đúng ở chỗ mã đã sống lâu nhất.
+//
+// HAI THỨ KHỐI NÀY KHÔNG MUA, giống hệt giới hạn đã ghi cho identity và supplier: nó khoá DANH
+// SÁCH export, KHÔNG khoá HÌNH DẠNG từng symbol; và nó là một hằng viết tay, không phải một tính
+// chất — vế ấy là việc của [INV-H18] (18.3), không phải của khối này.
+//
+// VÌ SAO DYNAMIC IMPORT VỚI SPECIFIER DỰNG TỪ BIẾN, và ở đây nó còn LOAD-BEARING hơn ca
+// crypto-keys: cửa `"./anchor-sign"` trỏ tới `packages/audit/src/anchor-sign.ts`. Một `import`
+// tĩnh từ file test này vào đó sẽ TỰ NÓ vi phạm `g11-ky-neo-chi-o-cong-cu-xuat-neo`
+// (`tsPreCompilationDeps: true` nên depcruise thấy cả cạnh chỉ-kiểu) và làm `pnpm depcruise` đỏ.
+// Test cần ĐỌC bề mặt export chứ không cần PHỤ THUỘC vào module.
+// ============================================================================================
+
+/** Đọc tên các export GIÁ TRỊ của một cửa, đi qua `exports` của chính package. */
+async function docCuaCuaGoi(pGoi: string, pCua: string): Promise<string[]> {
+  const urlPackageJson = new URL(`../../packages/${pGoi}/package.json`, import.meta.url);
+  const noiDung = JSON.parse(readFileSync(urlPackageJson, "utf8")) as {
+    exports?: Record<string, string>;
+  };
+  const duongDan = noiDung.exports?.[pCua];
+  if (duongDan === undefined) {
+    throw new Error(`packages/${pGoi}/package.json không khai cửa "${pCua}"`);
+  }
+  const urlCua = new URL(duongDan, urlPackageJson);
+  const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
+  return Object.keys(moduleThat).sort();
+}
+
+/** Hợp đồng HAI CHIỀU của một mặt tiền: thiếu cũng sai như thừa. */
+async function kiemCuaTheoDanhSach(
+  pGoi: string,
+  pCua: string,
+  pDanhSach: readonly string[],
+  pLyDo: string,
+): Promise<void> {
+  const thucTe = await docCuaCuaGoi(pGoi, pCua);
+  expect(thucTe.length, "chống rỗng ruột: cửa phải xuất ít nhất một symbol").toBeGreaterThan(0);
+  expect(
+    thucTe.filter((ten) => !pDanhSach.includes(ten)),
+    `Symbol LẠ lọt ra cửa "${pCua}" của @trustprocure/${pGoi}. ${pLyDo}`,
+  ).toEqual([]);
+  expect(
+    pDanhSach.filter((ten) => !thucTe.includes(ten)),
+    `Symbol trong danh sách trắng đã BIẾN MẤT khỏi cửa "${pCua}" của @trustprocure/${pGoi}.`,
+  ).toEqual([]);
+}
+
+// [S1.17] `anchor-sign.ts` là CỬA THỨ HAI của gói này (ADR-026 §4) và cho tới S1.18 nó là cửa
+// công khai DUY NHẤT của kho không có danh sách trắng — `g11-` canh AI đi qua được nó, không canh
+// CÁI GÌ đi ra qua nó. Ba symbol dưới đây là ba năng lực ký mốc neo; một symbol thứ tư mọc ra ở
+// đây là một năng lực mới trong tay công cụ xuất neo, và nó phải là một quyết định nhìn thấy được.
+const DANH_SACH_TRANG_AUDIT_KY_NEO = [
+  "AnchorSigningKeyRing",
+  "createLocalDevAnchorSigner",
+  "generateAnchorKeyPair",
+];
+
+// Tiêu chí lọc của mặt tiền `audit`: `writer.ts` là đường ghi sổ kiểm toán và `tenant-guard.ts`
+// giữ QT3. Đường ĐỌC của mốc neo (`anchor-*`) ở đây là cố ý — `verifyAuditChain` cần nó, và nó
+// không mang khả năng KÝ nào. Nếu một ngày `createLocalDevAnchorSigner` xuất hiện trong danh sách
+// này thì hai lớp cùng đỏ: khẳng định dưới đây, và `g11-ky-neo-chi-o-cong-cu-xuat-neo`.
+const DANH_SACH_TRANG_AUDIT = [
+  "ANCHOR_FORMAT_LABEL",
+  "ANCHOR_SIGNING_ALGORITHM",
+  "AnchorError",
+  "appendAuditEvent",
+  "assertTenantBound",
+  "buildAnchorText",
+  "createFileAnchorStore",
+  "exportChainHead",
+  "laNeoDaKiemChuKy",
+  "loadVerifiedAnchors",
+  "parseAnchorText",
+  "recordChainAnchor",
+  "verifyAnchorRecord",
+  "verifyAuditChain",
+];
+
+// `migrate` băm nội dung migration rồi so với checksum đã ghi; `createPool` đặt hai GUC log; ba
+// symbol `vai-tro` là cơ chế `SET ROLE app_api` mà ADR-021 chốt. Không symbol nào ở đây được là
+// một đường mở kết nối "tiện tay" — `g9-api-routes-khong-cham-tenancy-va-db` cấm handler của
+// `apps/api` chạm gói này HOÀN TOÀN, kể cả qua cửa.
+const DANH_SACH_TRANG_DB = [
+  "VAI_UNG_DUNG",
+  "createPool",
+  "ganVaiTroChoPool",
+  "khangDinhPhienDangNhapUngDung",
+  "laVaiUngDung",
+  "migrate",
+];
+
+// BA SYMBOL, và đây là mặt tiền đáng canh nhất kho theo hậu quả chứ không theo kích thước:
+// `withTenant` là điểm DUY NHẤT gắn GUC `app.org_id`, tức mọi policy RLS của 002–007 treo vào nó.
+// Một symbol thứ tư ở đây mà gắn GUC theo một đường khác là một đường vòng qua quyết định "phiên
+// này thuộc tổ chức nào" — và hậu quả của nó không phải một lỗi, mà là dữ liệu của tổ chức khác
+// đọc như dữ liệu của mình.
+const DANH_SACH_TRANG_TENANCY = ["TenantError", "withGuestSession", "withTenant"];
+
+// `test-support` không phải mã sản phẩm, và lớp canh của nó vẫn cần thiết vì đúng lý do đó: mọi
+// thứ ở đây chạy với quyền cao (dựng CSDL, chạy migration, đúc khoá ký thử). `taoBoKyNeoThuNghiem`
+// ký mốc neo bằng `createSign` trực tiếp — nó là bộ ký ĐỘC LẬP với `anchor-sign.ts` để mọi test
+// kiểm chữ ký là một phép đối chiếu HAI CÀI ĐẶT, không phải một phép tự-nghịch-đảo. Nếu nó lọt ra
+// một đường sản xuất thì đó là một bộ ký thứ hai ngoài mọi ranh giới `g11-`; vế "không được vào
+// `dependencies` sản xuất" do `pham-vi-san-xuat.test.ts` (khoản nợ 21) giữ, và hai lớp khác nhau.
+const DANH_SACH_TRANG_TEST_SUPPORT = [
+  "startPostgres",
+  "taoBoKyNeoThuNghiem",
+  "withMigratedDatabase",
+];
+
+describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
+  it("[INV-H16] cửa @trustprocure/audit chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "audit",
+      ".",
+      DANH_SACH_TRANG_AUDIT,
+      "Đây là mặt tiền của đường ghi sổ kiểm toán và của QT3. Một symbol mới ở đây phải là một " +
+        "quyết định nhìn thấy được; nếu nó là một khả năng KÝ mốc neo thì nó thuộc cửa " +
+        '"./anchor-sign" và bị g11- chặn, không thuộc cửa này.',
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/audit/anchor-sign chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "audit",
+      "./anchor-sign",
+      DANH_SACH_TRANG_AUDIT_KY_NEO,
+      "Mỗi symbol ở cửa này là một năng lực KÝ mốc neo ngoài (ADR-026 §4). g11- canh AI đi qua " +
+        "được cửa; danh sách này canh CÁI GÌ đi ra qua nó — hai vế khác nhau.",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/db chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "db",
+      ".",
+      DANH_SACH_TRANG_DB,
+      "migrate() và createPool() là hai chỗ mà một dòng thêm vào đổi hành vi của MỌI kết nối.",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/tenancy chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "tenancy",
+      ".",
+      DANH_SACH_TRANG_TENANCY,
+      "withTenant là điểm DUY NHẤT gắn GUC app.org_id — mọi policy RLS của 002–007 treo vào nó.",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/test-support chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "test-support",
+      ".",
+      DANH_SACH_TRANG_TEST_SUPPORT,
+      "Mọi thứ ở gói này chạy với quyền cao (dựng CSDL, chạy migration, đúc khoá ký thử).",
+    );
+  });
+
+  it("[INV-H16] bốn gói này khai đúng tập cửa đã được canh — không cửa nào lọt ngoài", () => {
+    // Hai khẳng định trên chỉ có nghĩa khi TẬP cửa là cố định. Thêm một subpath export vào một
+    // trong bốn package.json là mở một cửa công khai đi vòng qua mọi danh sách trắng ở đây — và
+    // depcruise vẫn im, vì cạnh tới file sau cửa mới có thể hoàn toàn hợp pháp với chính cửa đó.
+    // Đây đúng là cách `@trustprocure/audit/anchor-sign` ra đời ở S1.17: một dòng trong
+    // package.json, và cho tới vòng này nó là cửa công khai DUY NHẤT không có danh sách trắng.
+    const capCua: ReadonlyArray<readonly [string, readonly string[]]> = [
+      ["audit", [".", "./anchor-sign"]],
+      ["db", ["."]],
+      ["tenancy", ["."]],
+      ["test-support", ["."]],
+    ];
+    for (const [goi, cuaHopLe] of capCua) {
+      const noiDung = JSON.parse(
+        readFileSync(new URL(`../../packages/${goi}/package.json`, import.meta.url), "utf8"),
+      ) as { exports?: Record<string, string> };
+      expect(
+        Object.keys(noiDung.exports ?? {}).sort(),
+        `packages/${goi}/package.json khai một tập cửa khác tập đã được canh ở đây.`,
+      ).toEqual([...cuaHopLe].sort());
+    }
+  });
+});
+
+// ============================================================================================
+// [INV-H18 / S1.18 — khoản nợ 9, vế THỨ HAI] DANH SÁCH TRẮNG PHẢI LÀ MỘT TÍNH CHẤT, KHÔNG PHẢI
+// MỘT HẰNG VIẾT TAY
+//
+// Mười ba khối ở trên đóng vế thứ nhất của khoản nợ 9: mọi gói hôm nay đều có danh sách trắng.
+// Vế thứ hai do chính `bien-gioi-goi.test.ts` đặt tên khi nó ra đời ở S1.2:
+//
+//   > nó KHÔNG phủ danh sách trắng barrel (khoản nợ 9). Bốn gói S0 vẫn không có, và hai gói S1
+//   > có — nhưng "có" ấy vẫn là một hằng viết tay trong `barrel-exports.test.ts`, không phải một
+//   > tính chất. Đó là khoản nợ còn lại sau file này.
+//
+// Gói thứ mười bốn ra đời không có khối nào ở trên thì KHÔNG lớp nào kêu — đúng khuôn danh-sách-
+// tên mà dự án đã bắt hỏng ba lần (khoản nợ 3, 16, 17) và chữa được một lần (S1.15, bằng cách
+// ghim danh sách loại trừ về RỖNG). Khối này áp đúng cách chữa ấy cho mặt tiền.
+//
+// VÀ VIỆC DỰNG NÓ ĐÃ TÌM RA MỘT LỖ CÓ THẬT, không phải một ca giả định:
+// `packages/sealed-envelope` khai HAI cửa từ S1.4 (`.` và `./unseal`) nhưng chỉ cửa `.` có danh
+// sách trắng. `./unseal` xuất `unsealBid` — hàm MỞ phong bì giá thầu, năng lực cao nhất kho — và
+// bề mặt của nó chưa từng bị khoá. `g8-khong-mo-phong-bi-ngoai-unseal-worker` canh AI đi qua được
+// cửa ấy; không lớp nào canh CÁI GÌ đi ra qua nó. Đúng cùng hình dạng với
+// `@trustprocure/audit/anchor-sign` (đóng ở 18.2) — và cả hai lần, thứ mở cửa là MỘT DÒNG trong
+// `package.json`.
+//
+// **[review lượt 10 — H10-9] KHỐI NÀY TẠO RA MỘT NGOẠI LỆ CHO MỘT DOCTRINE CỦA KHO, và nó phải
+// được ghi ra chứ không được để người sau tự phát hiện.** Khẳng định *"khớp bề mặt THẬT"* lặp
+// trên toàn sổ đăng ký, nên trong MỘT worker vitest nó `import()` cả ba cửa hạn chế cùng lúc:
+// `crypto-keys/src/unwrap.ts` (`createLocalDevUnwrapper`), `sealed-envelope/src/unseal.ts`
+// (`unsealBid`) và `audit/src/anchor-sign.ts` (`createLocalDevAnchorSigner`). Toàn bộ lý do tồn
+// tại của `g1-`, `g8-` và `g11-` là ba khả năng ấy KHÔNG ở chung một tiến trình — và thủ thuật
+// dynamic import với specifier dựng từ biến (cố ý, xem khối trên) làm depcruise **về nguyên lý**
+// không bao giờ nhìn thấy ngoại lệ này.
+//
+// **Vì sao vẫn chấp nhận, và phần nào là KHẲNG ĐỊNH chứ chưa phải phép đo:** không module nào
+// trong ba module ấy ký, mở bọc hay giải mã LÚC NẠP — vật liệu khoá và `assertLocalDevAllowed()`
+// nằm bên trong hàm factory, không ở top-level; nạp `test-support/src/index.ts` chỉ tính một
+// hằng đường dẫn, không dựng container, không mở kết nối. Điều đó đã được KIỂM BẰNG CÁCH ĐỌC
+// từng module, KHÔNG bằng một phép đo lúc chạy. Nếu một ngày một trong ba module ấy làm việc gì
+// ở top-level, lớp phát hiện sẽ không phải là depcruise — nó sẽ là người đọc dòng này.
+//
+// LỚP NÀY KHÔNG MUA ĐƯỢC GÌ, nói thẳng để không ai đọc rộng hơn: nó khoá DANH SÁCH, không khoá
+// HÌNH DẠNG — một hàm mới được thêm vào danh sách trắng kèm một dòng lý do vẫn đi lọt, và lớp
+// cuối vẫn là người đọc (`.github/CODEOWNERS`). Với mười ba gói đang có khối riêng, khẳng định
+// "khớp bề mặt THẬT" dưới đây là một cách diễn đạt THỨ HAI của cùng hợp đồng; giá trị của nó nằm
+// ở gói thứ mười bốn, và ở chỗ nó làm cho sổ đăng ký dưới đây CHỊU LỰC thay vì chỉ là một danh
+// sách tên đối chiếu với một danh sách tên khác.
+// ============================================================================================
+
+/**
+ * Sổ đăng ký: gói → cửa → danh sách trắng. Mỗi mảng ở đây là CHÍNH mảng mà khối của gói đó dùng,
+ * nên một dòng thêm vào sổ này không tạo ra được một danh sách trắng thứ hai đi lệch.
+ */
+const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>> =
+  new Map<string, ReadonlyMap<string, readonly string[]>>([
+    [
+      "audit",
+      new Map([
+        [".", DANH_SACH_TRANG_AUDIT],
+        ["./anchor-sign", DANH_SACH_TRANG_AUDIT_KY_NEO],
+      ]),
+    ],
+    ["bidding", new Map([[".", DANH_SACH_TRANG_BIDDING]])],
+    [
+      "crypto-keys",
+      new Map([
+        [".", DANH_SACH_TRANG_INDEX],
+        ["./unwrap", DANH_SACH_TRANG_UNWRAP],
+      ]),
+    ],
+    ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
+    ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
+    ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],
+    ["outbox", new Map([[".", DANH_SACH_TRANG_OUTBOX]])],
+    ["rfq", new Map([[".", DANH_SACH_TRANG_RFQ]])],
+    [
+      "sealed-envelope",
+      new Map([
+        [".", DANH_SACH_TRANG_SEALED_ENVELOPE],
+        ["./unseal", DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL],
+      ]),
+    ],
+    ["supplier", new Map([[".", DANH_SACH_TRANG_SUPPLIER]])],
+    ["tenancy", new Map([[".", DANH_SACH_TRANG_TENANCY]])],
+    ["test-support", new Map([[".", DANH_SACH_TRANG_TEST_SUPPORT]])],
+    ["unseal", new Map([[".", DANH_SACH_TRANG_UNSEAL]])],
+  ]);
+
+/**
+ * Gói được MIỄN danh sách trắng, mỗi dòng một lý do. Cùng cơ chế `MIEN_TRU` của [INV-H16] và
+ * `HAM_TRIGGER_KHONG_GHIM` của S1.15: viết thêm một dòng vào đây vẫn ĐƯỢC, nhưng nó làm khẳng
+ * định *"RỖNG"* đỏ — tức nó là hành vi MỞ LẠI khoản nợ 9 và phải được ghi ra ở `docs/STATE.md`.
+ */
+const GOI_MIEN_DANH_SACH_TRANG: ReadonlyMap<string, string> = new Map<string, string>();
+
+// [review lượt 10 — H10-1] Vị từ "gói" nay đọc `packages/*/package.json` và lấy tập cửa từ chính
+// `exports`, DÙNG CHUNG một hàm với [INV-H16] (`goi-workspace.ts`). Bản đầu của cả hai bất biến
+// lọc theo sự tồn tại của `src/index.ts` — một gói khai `"exports": { ".": "./src/main.ts" }` rơi
+// khỏi CẢ HAI lớp trong im lặng, và hai khẳng định "danh sách miễn RỖNG" vẫn xanh vì miễn trừ
+// đúng là rỗng thật. Lý do đầy đủ ở khối đầu `goi-workspace.ts`.
+
+describe("danh sách trắng barrel của MỌI gói", () => {
+  it("[INV-H18] mọi gói trong packages/ có danh sách trắng, trừ danh sách miễn ĐÓNG", () => {
+    const goi = cacGoiWorkspace().map((g) => g.ten);
+    // Chống rỗng ruột theo hai chiều, cùng khuôn [INV-H16].
+    expect(goi.length, "không đọc được gói nào trong packages/").toBeGreaterThan(4);
+    const phaiCo = goi.filter((ten) => !GOI_MIEN_DANH_SACH_TRANG.has(ten));
+    expect(phaiCo.length, "mọi gói đều được miễn — lớp này không đo gì").toBeGreaterThan(0);
+
+    expect(
+      phaiCo.filter((ten) => !DANH_SACH_TRANG_THEO_CUA.has(ten)),
+      "Gói không có danh sách trắng barrel. Thêm một khối theo khuôn các khối ở trên CỘNG một " +
+        "dòng vào DANH_SACH_TRANG_THEO_CUA. Thêm gói vào GOI_MIEN_DANH_SACH_TRANG KHÔNG phải " +
+        "cách sửa: nó làm khẳng định RỖNG đỏ và đó là mở lại khoản nợ 9.",
+    ).toEqual([]);
+  });
+
+  it("[INV-H18] mọi CỬA khai trong package.json đều có danh sách trắng", () => {
+    // Vế này KHÔNG suy ra được từ vế trên: một gói có danh sách trắng cho cửa `.` vẫn có thể mở
+    // thêm một subpath export mà không ai canh. Đó không phải giả định — nó đã xảy ra HAI lần:
+    // `@trustprocure/audit/anchor-sign` (S1.17) và `@trustprocure/sealed-envelope/unseal` (S1.4,
+    // tìm ra khi viết chính khẳng định này). Cả hai lần, thứ mở cửa là một dòng package.json.
+    const lech: string[] = [];
+    for (const goi of cacGoiWorkspace()) {
+      if (GOI_MIEN_DANH_SACH_TRANG.has(goi.ten)) continue;
+      const cuaKhai = [...goi.cua.keys()].sort();
+      const cuaDuocCanh = [...(DANH_SACH_TRANG_THEO_CUA.get(goi.ten)?.keys() ?? [])].sort();
+      for (const cua of cuaKhai) {
+        if (!cuaDuocCanh.includes(cua)) lech.push(`${goi.ten} ${cua} — khai nhưng KHÔNG được canh`);
+      }
+      for (const cua of cuaDuocCanh) {
+        if (!cuaKhai.includes(cua)) lech.push(`${goi.ten} ${cua} — được canh nhưng KHÔNG còn khai`);
+      }
+    }
+    expect(lech, "Tập cửa khai trong package.json khác tập cửa có danh sách trắng.").toEqual([]);
+  });
+
+  it("[INV-H18] `main` trỏ CÙNG tệp với `exports[\".\"]` — hai bộ resolve không được đọc hai cửa", () => {
+    // [review lượt 10 — H10-6] Mọi khẳng định ở trên đọc `exports`. Nhưng `vitest.config.ts` alias
+    // `@trustprocure` → `packages`, và Node đọc `main` khi không đi qua `exports`. Một dòng
+    // `"main": "src/with-tenant.ts"` để lại toàn bộ lớp này XANH trong khi bề mặt được CHẠY khác
+    // bề mặt được ĐO. Hai trường phải trỏ cùng một tệp, hoặc `main` phải vắng mặt.
+    const lech: string[] = [];
+    for (const goi of cacGoiWorkspace()) {
+      const cuaChinh = goi.cua.get(".");
+      if (goi.main !== undefined && goi.main !== cuaChinh) {
+        lech.push(`${goi.ten}: main=${goi.main} nhưng exports["."]=${String(cuaChinh)}`);
+      }
+    }
+    expect(lech, "`main` và `exports[\".\"]` trỏ hai tệp khác nhau.").toEqual([]);
+  });
+
+  it("[INV-H18] danh sách trắng của MỌI cửa khớp bề mặt THẬT — sổ đăng ký chịu lực", async () => {
+    // Không có khẳng định này, DANH_SACH_TRANG_THEO_CUA chỉ là một danh sách tên đối chiếu với
+    // một danh sách tên khác: một dòng trỏ tới một mảng RỖNG cũng "có danh sách trắng".
+    const lech: string[] = [];
+    for (const [goi, theoCua] of DANH_SACH_TRANG_THEO_CUA) {
+      for (const [cua, danhSach] of theoCua) {
+        const thucTe = await docCuaCuaGoi(goi, cua);
+        for (const ten of thucTe) {
+          if (!danhSach.includes(ten)) lech.push(`${goi} ${cua}: THỪA ${ten}`);
+        }
+        for (const ten of danhSach) {
+          if (!thucTe.includes(ten)) lech.push(`${goi} ${cua}: THIẾU ${ten}`);
+        }
+      }
+    }
+    expect(lech, "Bề mặt export thật lệch khỏi danh sách trắng đã đăng ký.").toEqual([]);
+  });
+
+  it("[INV-H18] danh sách miễn RỖNG — không gói nào của packages/ còn đứng ngoài", () => {
+    expect(
+      [...GOI_MIEN_DANH_SACH_TRANG.entries()],
+      "Miễn một gói khỏi danh sách trắng barrel là MỞ LẠI khoản nợ 9. Nếu đó thật sự là việc " +
+        "phải làm, hãy ghi vào docs/STATE.md trước rồi sửa khẳng định này.",
+    ).toEqual([]);
   });
 });

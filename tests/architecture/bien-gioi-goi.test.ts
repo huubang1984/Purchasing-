@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import { readdirSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { cacGoiWorkspace, cacThuMucTrongPackages, type GoiWorkspace } from "./goi-workspace.js";
 
 const require = createRequire(import.meta.url);
 
@@ -20,6 +20,12 @@ const require = createRequire(import.meta.url);
 // Test này đảo chiều: nó KHÔNG liệt kê các gói ĐƯỢC bảo vệ, nó liệt kê các gói ĐƯỢC MIỄN, và
 // danh sách miễn trừ là ĐÓNG, có lý do từng dòng, và CHỈ ĐƯỢC CO LẠI. Gói thứ sáu sẽ không đòi
 // ai phải nhớ gì: nó ra đời không có quy tắc thì test này đỏ ngay.
+//
+// [S1.18 / khoản nợ 17] DANH SÁCH MIỄN TRỪ NAY RỖNG — bốn gói S0 cuối cùng (`audit`, `db`,
+// `tenancy`, `test-support`) đã nhận họ quy tắc `g12-`…`g15-`, nâng số họ từ năm lên chín. Khi
+// lớp này ra đời ở S1.2, chính nó đã làm bốn dòng miễn trừ ấy HẾT HẠN một cách tự động: thêm quy
+// tắc xong thì khẳng định "miễn trừ không chứa gói đã có quy tắc" đỏ ngay, và đó là thứ ép việc
+// dọn danh sách xảy ra thay vì trông chờ ai đó nhớ.
 //
 // PHẦN LỚP NÀY KHÔNG MUA ĐƯỢC, nói thẳng:
 //   * nó đòi quy tắc TỒN TẠI và có HÌNH DẠNG đúng; nó KHÔNG chạy depcruise nên không chứng minh
@@ -45,49 +51,65 @@ const { ciFile, ciPrefix } = require("../../dependency-cruiser-ci.cjs") as {
  * Gói được MIỄN, mỗi dòng một lý do. Danh sách này CHỈ ĐƯỢC CO LẠI — thêm một dòng là mở một lỗ,
  * và nó phải đi qua review của `.github/CODEOWNERS`.
  *
- * Cả bốn đều là gói của S0 và đều nằm trong khoản nợ 17 ("hai mặt tiền chịu lực nhất repo không
- * có lớp nào canh đường vào"). Chúng KHÔNG được miễn vì an toàn hơn — `tenancy/src/with-tenant.ts`
- * là điểm DUY NHẤT gắn `app.org_id` và `audit/src/writer.ts` là đường ghi sổ kiểm toán, tức đúng
- * hai chỗ đáng canh nhất. Chúng được miễn vì đóng chúng là một thay đổi có rủi ro hồi quy riêng,
- * và trộn nó vào S1.2 sẽ làm cả hai việc khó xem xét hơn.
+ * **[S1.18 / khoản nợ 17] DANH SÁCH NÀY NAY RỖNG.** Bốn dòng cuối — `audit`, `db`, `tenancy`,
+ * `test-support` — được gỡ khi bốn họ quy tắc `g12-`…`g15-` ra đời. Nguyên văn cũ giữ lại nguyên
+ * chữ, vì lý do miễn trừ của nó đã được ĐO LẠI và phép đo cho kết quả ngược:
+ *
+ * > ~~Cả bốn đều là gói của S0 và đều nằm trong khoản nợ 17 ("hai mặt tiền chịu lực nhất repo
+ * > không có lớp nào canh đường vào"). Chúng KHÔNG được miễn vì an toàn hơn — `tenancy/src/
+ * > with-tenant.ts` là điểm DUY NHẤT gắn `app.org_id` và `audit/src/writer.ts` là đường ghi sổ
+ * > kiểm toán, tức đúng hai chỗ đáng canh nhất. Chúng được miễn vì đóng chúng là một thay đổi có
+ * > rủi ro hồi quy riêng, và trộn nó vào S1.2 sẽ làm cả hai việc khó xem xét hơn.~~
+ *
+ * Hai câu ĐẦU vẫn đúng, và chính chúng là lý do vòng S1.18 tồn tại. Câu CUỐI thì không: quét toàn
+ * kho trước khi viết bốn họ quy tắc cho **0 chỗ import phải di trú**, và `pnpm depcruise` sau khi
+ * thêm chúng vẫn là *"no dependency violations found (193 modules, 756 dependencies)"*. Cái "rủi ro
+ * hồi quy riêng" được khai làm lý do miễn trừ, khi đem đo, bằng KHÔNG — và nó đã đứng mười bảy
+ * vòng. Bài học không phải "lý do ấy dối"; nó là: **một lý do miễn trừ cũng là một khẳng định, và
+ * khẳng định thì phải đo.**
+ *
+ * Thêm lại một dòng vào đây vẫn VIẾT ĐƯỢC — nhưng nó làm khẳng định *"RỖNG"* ở dưới đỏ, tức nó là
+ * hành vi MỞ LẠI khoản nợ 17 và phải được ghi ra ở `docs/STATE.md`, không lặng lẽ thành một dòng
+ * trong một map. Cùng cơ chế S1.15 đã đặt cho `HAM_TRIGGER_KHONG_GHIM`.
  */
-const MIEN_TRU: ReadonlyMap<string, string> = new Map([
-  ["audit", "khoản nợ 17 — chưa đóng; `writer.ts` là đường ghi sổ kiểm toán"],
-  ["db", "khoản nợ 17 — chưa đóng"],
-  ["tenancy", "khoản nợ 17 — chưa đóng; `with-tenant.ts` là điểm DUY NHẤT gắn app.org_id"],
-  ["test-support", "hạ tầng kiểm thử, không phải mã sản phẩm — xem khoản nợ 21"],
-]);
-
-/** Mọi thư mục con của `packages/` có `src/index.ts`. Đọc từ đĩa, không từ một danh sách. */
-function cacGoi(): string[] {
-  const goc = new URL("../../packages/", import.meta.url);
-  return readdirSync(goc, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .filter((ten) => existsSync(new URL(`${ten}/src/index.ts`, goc)))
-    .sort();
-}
+const MIEN_TRU: ReadonlyMap<string, string> = new Map<string, string>();
 
 function nhuMang(giaTri: string | string[] | undefined): string[] {
   if (giaTri === undefined) return [];
   return Array.isArray(giaTri) ? giaTri : [giaTri];
 }
 
-/** Quy tắc đóng `packages/<ten>/src/` với `index.ts` là cửa duy nhất, và không cửa nào khác. */
-function coQuyTacBienGioi(ten: string): boolean {
-  const tienTo = ciPrefix(`packages/${ten}/src/`);
-  const cua = ciFile(`packages/${ten}/src/index.ts`);
+/**
+ * Quy tắc đóng `packages/<ten>/src/` với ĐÚNG tập cửa mà `package.json` của gói khai — không
+ * nhiều hơn một cửa, không ít hơn một cửa.
+ *
+ * **[review lượt 10 — H10-2] BẢN ĐẦU SO BẰNG MỘT TRẦN, VÀ TRẦN ẤY LÀ MỘT KHOẢN CẤP KHÔNG.** Nó
+ * đòi `to.pathNot` CHỨA `index.ts` và có `length <= 2` — một con số dùng chung cho cả mười ba gói,
+ * đặt ở 2 để không đỏ oan trên `crypto-keys`. Hệ quả: mười một gói chỉ có một cửa được cấp sẵn một
+ * cửa thứ hai mà không lớp nào kêu. Sửa một dòng là đủ:
+ *
+ * ```js
+ * to: { path: DB_SRC_PREFIX, pathNot: [DB_INDEX_TS, ciFile("packages/db/src/pool.ts")] },
+ * ```
+ *
+ * — [INV-H16] xanh (length = 2), [INV-H18] xanh (`exports` không đổi), và không probe nào đỏ vì
+ * probe của `db` nhắm `migrate.ts`. `createPool` khi ấy với tới được thẳng từ mọi gói.
+ *
+ * Bản này bỏ trần và so BẰNG TẬP: cửa hợp lệ đọc từ `exports` của chính gói (xem
+ * `goi-workspace.ts`). Mở một cửa thứ hai vì thế không còn là một dòng trong file cấu hình này
+ * nữa — nó buộc phải là một dòng trong `package.json`, và [INV-H18] cũng nhìn thấy dòng ấy.
+ */
+function coQuyTacBienGioi(goi: GoiWorkspace): boolean {
+  const tienTo = ciPrefix(`packages/${goi.ten}/src/`);
+  const cuaMongDoi = [...goi.cua.values()].map((duongDan) => ciFile(duongDan)).sort();
   return cauHinh.forbidden.some((r) => {
     const toPath = nhuMang(r.to?.path);
-    const toPathNot = nhuMang(r.to?.pathNot);
+    const toPathNot = [...nhuMang(r.to?.pathNot)].sort();
     const fromPathNot = nhuMang(r.from?.pathNot);
     return (
       toPath.includes(tienTo) &&
-      toPathNot.includes(cua) &&
-      // Cửa duy nhất: nếu `to.pathNot` có thêm phần tử thì gói này mở nhiều hơn một cửa, và ca đó
-      // phải được xem tay (crypto-keys là ca như vậy — nó mở `unwrap.ts` và có quy tắc RIÊNG canh
-      // cửa thứ hai). Cho phép tối đa hai để không đỏ oan trên crypto-keys.
-      toPathNot.length <= 2 &&
+      toPathNot.length === cuaMongDoi.length &&
+      toPathNot.every((duongDan, i) => duongDan === cuaMongDoi[i]) &&
       // Miễn trừ `from` duy nhất được phép là CHÍNH thư mục đang được bảo vệ. Một miễn trừ khác
       // nghĩa là có module ngoài được đi thẳng vào trong, và đó phải là một quyết định nhìn thấy
       // được — đúng bất biến chống-tái-diễn của họ `g1-`/`g2-`.
@@ -98,21 +120,35 @@ function coQuyTacBienGioi(ten: string): boolean {
 }
 
 describe("biên giới module của mọi gói", () => {
+  it("[INV-H16] mọi THƯ MỤC con của packages/ là một gói có package.json", () => {
+    // [review lượt 10 — H10-1] Vị từ "gói" của hai bất biến đọc `packages/*/package.json`. Một thư
+    // mục không có `package.json` vì thế RƠI KHỎI cả hai lớp trong im lặng — nên sự vắng mặt ấy
+    // phải tự nó ồn ào, thay vì để lớp dưới đo một tập nhỏ hơn thực tế mà vẫn xanh.
+    const thuMuc = cacThuMucTrongPackages();
+    const laGoi = new Set(cacGoiWorkspace().map((g) => g.ten));
+    expect(
+      thuMuc.filter((ten) => !laGoi.has(ten)),
+      "Thư mục con của packages/ không có package.json. Nó nằm ngoài MỌI lớp biên giới và MỌI " +
+        "danh sách trắng barrel. Hoặc khai nó thành một gói, hoặc chuyển nó ra khỏi packages/.",
+    ).toEqual([]);
+  });
+
   it("[INV-H16] mọi gói trong packages/ có quy tắc biên giới, trừ danh sách miễn ĐÓNG", () => {
-    const goi = cacGoi();
+    const goi = cacGoiWorkspace();
 
     // Chống rỗng ruột theo hai chiều: phải đọc được gói, và phải có gói KHÔNG được miễn (nếu mọi
     // gói đều nằm trong danh sách miễn thì test này xanh mà không đo gì).
     expect(goi.length, "không đọc được gói nào trong packages/").toBeGreaterThan(4);
-    const phaiCo = goi.filter((t) => !MIEN_TRU.has(t));
+    const phaiCo = goi.filter((g) => !MIEN_TRU.has(g.ten));
     expect(phaiCo.length, "mọi gói đều được miễn — lớp này không đo gì").toBeGreaterThan(0);
 
     expect(
-      phaiCo.filter((ten) => !coQuyTacBienGioi(ten)),
-      "Gói không có họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất. Thêm một họ " +
-        "quy tắc mới vào .dependency-cruiser.cjs theo khuôn `g5-`/`g6-`, CỘNG ba test probe " +
-        "trong tests/architecture/boundaries.test.ts — quy tắc chưa từng đỏ thật là quy tắc chưa " +
-        "được đo. Thêm gói vào MIEN_TRU KHÔNG phải cách sửa: danh sách đó chỉ được co lại.",
+      phaiCo.filter((g) => !coQuyTacBienGioi(g)).map((g) => g.ten),
+      "Gói không có họ quy tắc biên giới đóng `src/` với ĐÚNG tập cửa mà `package.json` của nó " +
+        "khai trong `exports` — không nhiều hơn, không ít hơn. Thêm một họ quy tắc mới vào " +
+        ".dependency-cruiser.cjs theo khuôn `g5-`/`g6-`, CỘNG ba test probe trong " +
+        "tests/architecture/boundaries.test.ts — quy tắc chưa từng đỏ thật là quy tắc chưa được " +
+        "đo. Thêm gói vào MIEN_TRU KHÔNG phải cách sửa: danh sách đó chỉ được co lại.",
     ).toEqual([]);
   });
 
@@ -120,16 +156,33 @@ describe("biên giới module của mọi gói", () => {
     // Ràng buộc hai chiều, cùng cơ chế với `MA_DUOC_PHEP_CHUA_PHU` của evidence pack: một gói vừa
     // có quy tắc vừa nằm trong danh sách miễn là một dòng đã hết hạn, và nếu không ai gỡ thì danh
     // sách sẽ chỉ dài thêm.
+    const theoTen = new Map(cacGoiWorkspace().map((g) => [g.ten, g]));
     expect(
-      [...MIEN_TRU.keys()].filter((ten) => coQuyTacBienGioi(ten)),
+      [...MIEN_TRU.keys()].filter((ten) => {
+        const goi = theoTen.get(ten);
+        return goi !== undefined && coQuyTacBienGioi(goi);
+      }),
       "Gói này đã có quy tắc biên giới — gỡ nó khỏi MIEN_TRU và cập nhật khoản nợ 17.",
+    ).toEqual([]);
+  });
+
+  it("[INV-H16] danh sách miễn trừ RỖNG — không gói nào của packages/ còn đứng ngoài", () => {
+    // [S1.18 / khoản nợ 17] Vế này KHÔNG suy ra được từ hai khẳng định trên: một danh sách "chỉ
+    // được co lại" vẫn có thể dừng ở một dòng rồi ở đó mãi mãi, và dòng ấy sẽ mang một lý do
+    // KHÔNG BAO GIỜ HẾT HẠN (bản cũ có đúng một dòng như vậy: `test-support`, "hạ tầng kiểm thử").
+    // Dự án đã gặp khuôn danh-sách-tên hỏng ba lần (khoản nợ 3, 16, 17); lần chữa được là S1.15,
+    // và thứ làm nó chữa được là ghim danh sách loại trừ về RỖNG chứ không về "ngắn".
+    expect(
+      [...MIEN_TRU.entries()],
+      "Miễn trừ một gói khỏi biên giới module là MỞ LẠI khoản nợ 17. Nếu đó thật sự là việc phải " +
+        "làm, hãy ghi vào docs/STATE.md trước rồi sửa khẳng định này — đừng sửa khẳng định trước.",
     ).toEqual([]);
   });
 
   it("[INV-H16] mọi tên trong danh sách miễn trừ là một gói CÓ THẬT", () => {
     // Một dòng miễn trừ trỏ tới gói không tồn tại là một dòng chết: nó không miễn gì, nhưng nó
     // làm danh sách trông dài hơn thực tế và làm khoản nợ 17 trông lớn hơn thực tế.
-    const goi = new Set(cacGoi());
+    const goi = new Set(cacGoiWorkspace().map((g) => g.ten));
     expect([...MIEN_TRU.keys()].filter((ten) => !goi.has(ten))).toEqual([]);
   });
 });

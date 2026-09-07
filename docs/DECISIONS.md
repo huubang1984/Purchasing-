@@ -2373,3 +2373,137 @@ danh sách ấy đúng là một sự thật vận hành phải viết ra ở đ
     `.dependency-cruiser.cjs` đã đặt tên từ S0, lần này hiện ra trong một PHÉP ĐO chứ không trong mã
     sản phẩm. Probe chuyển sang `packages/test-support` — gói có liên kết thật tới
     `@trustprocure/audit`.
+
+---
+
+## ADR-027 — Biên giới module và bề mặt export là một TÍNH CHẤT, không phải một danh sách: vị từ *gói* là `package.json`, tập cửa là `exports`, và mọi danh sách miễn trừ phải RỖNG
+
+**Ngày:** 2026-09-07 · **Trạng thái:** Đã chấp nhận · **Vòng:** S1.18 · **Đóng:** khoản nợ 9 và 17
+
+### 0. Câu hỏi, và vì sao nó không phải một việc dọn dẹp
+
+Bốn gói của S0 — `audit`, `db`, `tenancy`, `test-support` — chưa bao giờ có họ quy tắc biên giới
+(`packages/<ten>/src/` là vùng hạn chế, `index.ts` là cửa) và chưa bao giờ có danh sách trắng barrel.
+Đó không phải một sự thiếu ngăn nắp: **hai trong bốn là hai mặt tiền chịu lực nhất kho.**
+`tenancy/src/with-tenant.ts` là điểm DUY NHẤT gắn GUC `app.org_id` — mọi policy RLS của `002`–`007`
+đọc GUC đó — và `audit/src/writer.ts` là đường ghi sổ kiểm toán.
+
+Điều làm câu hỏi này đáng một ADR không phải bốn họ quy tắc, mà là **thứ được phát hiện khi đóng
+chúng**: cả hai lớp canh *"suy từ tính chất"* của kho đều đang suy từ một tính chất **sai miền**, và
+một cổng của kho đã **rỗng ruột từ S0** mà chín lượt review không bắt được.
+
+### 1. Bốn quyết định
+
+**⑴ Vị từ *"gói"* là *thư mục con của `packages/` có `package.json`*, không phải *có `src/index.ts`*.**
+Bản đầu của [INV-H16] (S1.2) và [INV-H18] (vòng này) dùng vế thứ hai. Nó nghe như một tính chất
+nhưng là một **quy ước đặt tên**, và nó để lọt một lỗ đầy đủ: `packages/kms/package.json` khai
+`"exports": { ".": "./src/main.ts" }` mà không có `src/index.ts` thì gói ấy rơi khỏi **cả hai** lớp,
+không lớp nào kêu, và **hai khẳng định *"danh sách miễn RỖNG"* vẫn xanh** — vì miễn trừ đúng là rỗng
+thật. Vị từ đúng nằm ở `tests/architecture/goi-workspace.ts` và **dùng chung** cho cả hai bất biến:
+hai bản chép gần giống nhau của cùng một vị từ là thứ sẽ trôi khỏi nhau.
+
+**⑵ Tập cửa hợp lệ của một gói ĐỌC TỪ `exports` của chính nó, không từ một trần đếm.**
+`coQuyTacBienGioi` từng đòi `to.pathNot` *chứa* `index.ts` và có `length <= 2` — một con số dùng
+chung, đặt ở 2 để không đỏ oan trên `crypto-keys`. Hai gói tiêu thụ nó hợp pháp; **mười một gói còn
+lại được cấp không một cửa thứ hai**, mở được bằng một dòng trong file cấu hình mà không lớp nào
+phản đối. Nay so **bằng tập**, nên mở một cửa thứ hai buộc phải là một dòng trong `package.json` —
+thứ [INV-H18] cũng nhìn thấy. Hệ quả: hai lớp cùng nhìn một nguồn sự thật.
+
+**⑶ `main` phải trỏ cùng tệp với `exports["."]`.** Mọi khẳng định của [INV-H18] đọc `exports`, nhưng
+`vitest.config.ts` alias `@trustprocure` → `packages` và Node đọc `main` khi không đi qua `exports`.
+Không có ràng buộc này, **bề mặt được ĐO và bề mặt được CHẠY tách nhau trong im lặng**.
+
+**⑷ Mọi danh sách miễn trừ của hai lớp này phải RỖNG.** `MIEN_TRU` ([INV-H16]) và
+`GOI_MIEN_DANH_SACH_TRANG` ([INV-H18]) đều có một khẳng định *"rỗng"* riêng. Viết thêm một dòng vẫn
+ĐƯỢC — nhưng nó làm khẳng định ấy đỏ, tức là **mở lại khoản nợ 9 hoặc 17** và phải được ghi ra ở
+`docs/STATE.md`, không lặng lẽ thành một dòng trong một map. Cùng cơ chế ADR-025 đặt cho
+`HAM_TRIGGER_KHONG_GHIM`.
+
+### 2. Vì sao RỖNG chứ không NGẮN — và `test-support` là ca chứng minh
+
+Bản cũ của `MIEN_TRU` có bốn dòng, ba dòng mang lý do *"khoản nợ 17 — chưa đóng"* (hết hạn khi nợ
+đóng) và **một dòng mang lý do *"hạ tầng kiểm thử, không phải mã sản phẩm"***. Lý do thứ tư đúng về
+bản chất và **không bao giờ hết hạn** — nên nếu chấp nhận nó, danh sách sẽ dừng ở một dòng và ở đó
+mãi mãi. Một danh sách loại trừ không bao giờ rỗng được thì không phải một khoản nợ; nó là một lỗ
+vĩnh viễn có giấy phép. `test-support` vì thế nhận biên giới như ba gói kia. Vế *"không được vào
+`dependencies` sản xuất"* vẫn do `pham-vi-san-xuat.test.ts` (khoản nợ 21) giữ — hai lớp đo hai thứ
+khác nhau: lớp kia canh gói này không bị PHÁT vào đường sản xuất, lớp này canh không ai với vào RUỘT
+nó.
+
+### 3. `audit` có HAI cửa, và hai lớp chia việc chứ không thay nhau
+
+`packages/audit/package.json` khai `"./anchor-sign"` (ADR-026 §4 — bộ ký mốc neo cố ý không nằm ở
+`index.ts` vì tiến trình `api` import gói này ở mọi đường ghi). Một `g12-` chỉ khai MỘT cửa sẽ chặn
+chính `tools/neo-so-kiem-toan`: nó **phá build chứ không đóng lỗ nào** — và đó là ca hỏng dễ xảy ra
+nhất khi chép khuôn `g5-`/`g6-` sang một gói có subpath export. Phân vai:
+
+| Lớp | Câu nó trả lời |
+|---|---|
+| `g12-` | *Không ai đi vòng QUA tường* — mọi tệp trong `src/` trừ hai cửa |
+| `g11-` | *Chỉ công cụ xuất neo được đi qua cửa thứ hai* — ai |
+| Danh sách trắng `./anchor-sign` | *Cái gì đi ra qua cửa thứ hai* — ba năng lực ký, không hơn |
+
+Đúng tiền lệ `crypto-keys` (`index.ts` + `unwrap.ts`). Vòng này phát hiện **cùng hình dạng ấy đang
+hở ở một chỗ khác**: `sealed-envelope` khai hai cửa từ S1.4, và cửa `./unseal` — xuất `unsealBid`,
+hàm mở phong bì giá thầu — chưa bao giờ có danh sách trắng. `g8-` canh AI, không ai canh CÁI GÌ.
+**Cả hai lần, thứ mở một cửa công khai mới là MỘT DÒNG trong `package.json`** — thứ không quy tắc
+depcruise nào phản đối, vì cạnh tới tệp sau cửa mới là hợp pháp với chính cửa đó.
+
+### 4. Một cổng đã rỗng ruột từ S0 — và vì sao nó sống lâu đến thế
+
+`khong-phu-thuoc-devdep-trong-src` **không bao giờ bắn được**: `options.exclude` chứa `node_modules`,
+mà `exclude` gỡ hẳn module khỏi đồ thị (khác `doNotFollow`, chỉ ngừng duyệt tiếp), trong khi
+`npm-dev` chỉ được gán cho cạnh resolve **vào** node_modules. Đếm trên toàn đồ thị trước khi sửa:
+264 `import`, 231 `local`, 94 `aliased`, 83 `core`, 44 `export`, 40 `unknown`, 14 `type-only`,
+6 `dynamic-import` — **không một cạnh nào mang `npm-dev`**.
+
+Nó sống qua chín lượt review và mọi lượt CI vì thứ duy nhất ai cũng nhìn là dòng *"no dependency
+violations found"*. **Một quy tắc xanh trông giống hệt một quy tắc đang làm việc.** Lớp bắt được nó
+không phải một con mắt tinh hơn mà là **một câu hỏi khác**: không phải *"có vi phạm không"* mà
+*"quy tắc này có ĐỐI TƯỢNG nào để phán xét không"* — và câu hỏi ấy nay là một test đọc đồ thị JSON.
+
+Miễn trừ duy nhất sau khi sửa là `packages/test-support/src/`, và nó **không phải một tên trong một
+danh sách**: tính chất *"gói này là hạ tầng kiểm thử"* do `pham-vi-san-xuat.test.ts` vế ⑵ cưỡng chế.
+Đường sửa *"chuyển `pg`/`@testcontainers` sang `dependencies` của gói ấy"* đã được xét và **bác bỏ**
+— nó tái lập đúng khiếm khuyết mà khoản nợ 21 ra đời để chặn, và vế ⑴ của lớp kia sẽ đỏ.
+
+### 5. Cái vòng này KHÔNG đóng
+
+⑴ **Hai lớp khoá DANH SÁCH, không khoá HÌNH DẠNG.** Một hàm mới được thêm vào danh sách trắng kèm
+một dòng lý do vẫn đi lọt; lớp cuối là người đọc (`.github/CODEOWNERS`) — và `CODEOWNERS` vẫn trỏ
+tới một team **chưa tồn tại** (khoản nợ 18).
+
+⑵ **`g14-` và `g15-` không rút một symbol nào khỏi tầm với hôm nay.** Đếm được: `g12-` rút một
+(`antoanChoBaoCao`), `g13-` rút một (`migrationChecksum`), hai họ còn lại rút **không** — mọi symbol
+giá trị của chúng đã ở cửa. Thứ chúng mua là **mặc định đóng cho module tương lai**. Đọc rộng hơn
+thế là nói quá.
+
+⑶ **Vector subpath không phải thứ bốn họ mới đóng.** `db`/`tenancy`/`test-support` khai `exports`
+chỉ có `"."`, nên `@trustprocure/db/src/pool.js` chưa bao giờ resolve được; thứ bắn cho nó là lưới
+đỡ `g1-khong-import-trustprocure-khong-resolve-duoc`. Trên vector ấy, bốn họ mới cộng thêm **0**.
+
+⑷ **[INV-H18] tạo ra một ngoại lệ cho doctrine *"một tiến trình, một khả năng"***: khẳng định *"khớp
+bề mặt THẬT"* nạp cả ba cửa hạn chế trong cùng một worker vitest, và dynamic import với specifier
+dựng từ biến làm depcruise **về nguyên lý** không thấy cạnh đó. Việc *"không module nào làm gì lúc
+nạp"* được **kiểm bằng cách ĐỌC**, chưa phải một phép đo lúc chạy.
+
+### 6. Đo bằng gì
+
+1. **8 probe ĐỎ THẬT trước khi có quy tắc** — `depcruise` trả về 0 trên một import thẳng vào
+   `with-tenant.ts` từ một gói khác. ✔ đã đo.
+2. **Ba cổng trên cùng một probe:** `tsc` exit 0, `eslint` exit 0, `depcruise` exit 1. ✔ đã đo.
+3. **`g12-` khai MỘT cửa ⇒ `tools/neo-so-kiem-toan` THẬT vi phạm.** ✔ đã đo — probe thứ tư của
+   `audit` đọc thẳng trên công cụ thật, kèm đối chứng đòi cạnh ấy tồn tại.
+4. **Hạ `g14-` xuống `severity: "info"` ⇒ hai probe tenancy ĐỎ, đối chứng dương còn XANH.** ✔ đã đo.
+5. **Ba đột biến danh sách trắng:** symbol lạ mọc ra · symbol biến mất khỏi cửa · một cửa subpath
+   thứ ba trong `package.json`. ✔ đã đo cả ba.
+6. **Bốn đột biến [INV-H18]:** gói thứ mười bốn không có mục · một cửa không được canh · một mục trỏ
+   tới mảng RỖNG · một dòng thêm vào danh sách miễn. ✔ đã đo cả bốn.
+7. **Hai đột biến của vị từ (H10-1):** `packages/kms` khai `exports` trỏ `src/main.ts` ⇒ **H16 và
+   H18 cùng ĐỎ**; một thư mục con không có `package.json` ⇒ khẳng định mới ĐỎ. ✔ đã đo.
+8. **Đột biến tập cửa (H10-2):** mở cửa thứ hai cho `g14-` mà không động vào `package.json` ⇒ ĐỎ.
+   ✔ đã đo.
+9. **Đột biến `main` (H10-3):** `main` trỏ một tệp khác `exports["."]` ⇒ ĐỎ. ✔ đã đo.
+10. **Hai đột biến của cổng devDependency:** trả `node_modules` về `exclude` ⇒ test chống-rỗng-ruột
+    ĐỎ **trong khi `pnpm depcruise` vẫn XANH**; gỡ miễn trừ `test-support` ⇒ 2 vi phạm THẬT.
+    ✔ đã đo.

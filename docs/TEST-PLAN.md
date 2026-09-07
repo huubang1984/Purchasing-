@@ -109,7 +109,9 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ **16** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ **50** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ **18** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ **52** mã cùng chảy vào `evidence/INV-matrix.md`.
+
+> **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
 ---
 
@@ -291,8 +293,9 @@ còn răng hay không.
 | **H13** | **Biên giới module của `packages/outbox`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; họ quy tắc không có miễn trừ `from` nào | Họ quy tắc `g4-` của dependency-cruiser | **T0** |
 | **H14** | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | **T3** |
 | **H15** | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | **T0** |
-| **H16** | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với `index.ts` là cửa duy nhất** — suy từ TÍNH CHẤT (đọc thư mục thật + đọc cấu hình thật), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | **T0** |
+| **H16** | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với ĐÚNG tập cửa mà `package.json` của gói khai trong `exports`** — ~~`index.ts` là cửa duy nhất~~ (câu cũ nói chặt hơn thứ được cưỡng chế: `coQuyTacBienGioi` từng chấp nhận tới HAI cửa qua một trần dùng chung, tức cấp không một cửa thứ hai cho mười một gói; sửa ở review lượt 10, H10-2) — suy từ TÍNH CHẤT (đọc thư mục thật + đọc `package.json` thật + đọc cấu hình thật; vị từ *gói* là *thư mục có `package.json`*, không phải *thư mục có `src/index.ts`* — H10-1), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | **T0** |
 | **H17** | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 |
+| **H18** | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | **T0** |
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
@@ -329,6 +332,24 @@ H16 đảo chiều: nó **không** liệt kê gói ĐƯỢC bảo vệ, nó li�
 một gói vừa có quy tắc vừa nằm trong danh sách miễn làm test ĐỎ. Hệ quả: gói thứ sáu không đòi ai
 phải nhớ gì. Đo bằng đột biến (2026-08-29): nới `to.pathNot` của họ `g6-` từ một cửa thành ba →
 **ĐỎ THẬT**, gọi tên đúng `rfq`.
+
+**H18 được bổ sung ngày 2026-09-07** (S1.18), và nó là VẾ THỨ HAI của chính khoản nợ mà H16 tự
+đặt tên khi ra đời: *"nó KHÔNG phủ danh sách trắng barrel (khoản nợ 9) … 'có' ấy vẫn là một hằng
+viết tay, không phải một tính chất"*. Quan hệ giữa hai mã đọc thẳng được: **H16 canh BỨC TƯỜNG
+(không ai đi vòng qua cửa), H18 canh CÁI CỬA (không gì lạ đi ra qua nó)** — và cả hai nay đều suy
+từ tính chất, cả hai đều có danh sách miễn trừ RỖNG.
+
+**Việc dựng H18 tìm ra một lỗ có thật, ghi ra vì nó là lý do lớp này đáng có:**
+`packages/sealed-envelope` khai HAI cửa từ S1.4 (`.` và `./unseal`) nhưng chỉ cửa `.` có danh sách
+trắng. Cửa `./unseal` xuất `unsealBid` — hàm MỞ phong bì giá thầu — và bề mặt của nó chưa từng bị
+khoá; `g8-khong-mo-phong-bi-ngoai-unseal-worker` canh AI đi qua được cửa ấy, không canh CÁI GÌ đi
+ra qua nó. Cùng hình dạng với `@trustprocure/audit/anchor-sign` (S1.17, đóng cùng vòng này), và cả
+hai lần thứ mở một cửa công khai mới là **một dòng trong `package.json`** — thứ mà không quy tắc
+depcruise nào phản đối, vì cạnh tới file sau cửa mới là hợp pháp với chính cửa đó.
+
+**Giới hạn của H18, cùng giới hạn đã ghi cho H11/H15/H16:** nó khoá DANH SÁCH, không khoá HÌNH
+DẠNG. Một hàm mới thêm vào danh sách trắng kèm một dòng lý do vẫn đi lọt, và lớp cuối là người
+đọc (`.github/CODEOWNERS`).
 
 **H16 KHÔNG thay thế H11/H13/H15 và cũng không thay ba probe của mỗi họ.** Nó đòi quy tắc TỒN TẠI
 và có HÌNH DẠNG đúng; nó **không chạy depcruise** nên không chứng minh quy tắc CHẶN THẬT. Nó cũng

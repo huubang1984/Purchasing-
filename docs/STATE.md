@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-07 (**S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-07 (**S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG (ADR-027: biên giới module và bề mặt export là một TÍNH CHẤT; hai danh sách miễn trừ về RỖNG; review lượt 10 bắt một cổng đã rỗng ruột từ S0)** — mục 33; cùng ngày: **S1.17 — KHOẢN NỢ 11 ĐÓNG (ADR-026: artefact neo ngoài)** — mục 32; trước đó: **S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -344,7 +344,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 6 | **ĐÓNG NỬA ĐỌC [S1.10.2]:** `resolveSessionByToken` tra token (băm, đòi `mfa_verified_at`) và `apps/api` gọi nó ở mọi route người mua. **Nửa PHÁT vẫn mở** — không hàm sản phẩm nào INSERT `sessions`; đó là S1.10.4 (`startUserSession`). Nguyên văn cũ: ~~**Đường đời `sessions` chưa tồn tại**: không hàm nào phát token, tra token, hay đặt `mfa_verified_at`. D1 là một phép kiểm ĐÚNG chưa có ai gọi~~ | `packages/identity/src/session-actor.ts`; `evidence/INV-matrix.md` §4 |
 | 7 | `apps/` rỗng ⇒ `listOrganizations` / `start()` **chưa có đường gọi sản phẩm** | — |
 | 8 | **Không lớp máy nào cưỡng chế quy ước QT3**; chú thích + test là tất cả những gì đang giữ nó | `packages/audit/src/tenant-guard.ts`, `task-8-report.md` §V3.5 |
-| 9 | **Bốn gói thiếu danh sách trắng barrel**: `audit`, `tenancy`, `db`, `test-support`. Một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào | `tests/architecture/barrel-exports.test.ts` |
+| 9 | ~~**Bốn gói thiếu danh sách trắng barrel**: `audit`, `tenancy`, `db`, `test-support`. Một symbol mọc ra ở mặt tiền của chúng không được canh bởi lớp nào~~ **ĐÓNG 2026-09-07 (S1.18, ADR-027).** Bốn danh sách trắng, cộng **[INV-H18]** — sổ đăng ký *gói → cửa → danh sách trắng* suy TỪ TÍNH CHẤT (đọc `packages/*/package.json`, đọc `exports`, import cửa thật), danh sách miễn **RỖNG**. Dựng nó tìm ra một lỗ THẬT: `sealed-envelope` khai hai cửa từ S1.4 mà cửa `./unseal` (xuất `unsealBid` — hàm MỞ phong bì giá thầu) chưa bao giờ có danh sách trắng; `g8-` canh AI, không ai canh CÁI GÌ. Cùng hình dạng với `@trustprocure/audit/anchor-sign`, và cả hai lần thứ mở cửa là MỘT DÒNG `package.json` | `tests/architecture/barrel-exports.test.ts` |
 | 10 | **`.gitattributes` ghim đúng hai thứ**: `*.sql` và `evidence/INV-matrix.md`. `.ts` là **CRLF trong mọi checkout mới** trên Windows | `.gitattributes` |
 | 11 | ~~**Artefact neo ngoài của B3 vẫn không tồn tại.** Cơ chế đã có, artefact thì chưa — và không có nó, một chuỗi hash hợp lệ **không chứng minh gì** trước một chủ sở hữu bảng~~ **ĐÓNG 2026-09-07 (S1.17, ADR-026).** Artefact tồn tại và nó là bốn thứ, không phải một: một **văn bản chính tắc** (`anchor-text.ts`, cùng khuôn `buildReceiptText`), một **chữ ký** ECDSA P-256 dạng DER — dạng `openssl dgst -sha256 -verify` đọc thẳng — với vòng khoá RIÊNG khác vòng khoá ký biên nhận (`anchor-sign.ts`, sau quy tắc `g11-`, không có ở `index.ts`), một **nơi cất CHỈ-GHI-THÊM** (`anchor-store.ts`, JSONL mỗi tổ chức một tệp), và một **entry point** (`tools/neo-so-kiem-toan`, hai lệnh `xuat`/`kiem`). `ExternalAnchor` nay mang một **dấu đúc** — symbol module-private, không `Symbol.for` — nên `{ ...xuat, source: "bịa" }` không còn typecheck, và một `as unknown as` bị `verifyAuditChain` bắt ở thì chạy với `ANCHOR_UNVERIFIED`. **Chữ ký và tính chỉ-ghi-thêm chặn HAI thứ khác nhau và không thay được nhau:** chữ ký chặn BỊA THÊM, chỉ-ghi-thêm chặn BỎ BỚT — đo bằng một test có ĐỐI CHỨNG (nơi cất ghi đè ⇒ kết luận kiểm toán SẠCH trên một sổ đã bị cắt mất một nửa). **Còn mở, và cả hai đều KHÔNG phải mã:** cái LỊCH (một tiến trình ở nơi đã triển khai), và tính ĐỘC LẬP của nơi cất (S3 Object Lock ở một tài khoản AWS role deploy không với tới) — xem ADR-026 §5 | ~~`evidence/INV-matrix.md` §4.1 (trích nguyên văn)~~ nay là §4.1 **cộng phụ lục đính chính** (hai câu của bản trích đã bị bác bỏ, bản trích giữ nguyên byte); ADR-026 |
 | 12 | Lớp canh nhãn của Task 10 (`packages/outbox/src/nhan-bat-bien.test.ts`) **chỉ phủ `packages/outbox/src/`**. Lớp canh toàn repo mà Task 11 dựng chỉ bắt được nhãn trỏ tới mã **không tồn tại** — nó **không** bắt được nhãn đúng cú pháp gắn sai chỗ | `tools/inv-matrix/src/parse.ts` |
@@ -352,7 +352,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 14 | **ĐÃ ĐÓNG [S1.6].** ~~**`G1` canh một cánh cửa chưa có phòng ở sau.**~~ `apps/unseal-worker` tồn tại và THẬT SỰ import cả hai cửa hạn chế. Nguyên văn cũ: 18 test đo quy tắc biên giới — lớp phòng ngừa thật, đã chứng minh có răng — nhưng `wrapped_private_key` và `apps/unseal-worker` **chưa tồn tại** | `evidence/INV-matrix.md` §4 (mục G1) |
 | 15 | **Không có ADR mở cho KMS dù nó chặn S1.6** — đã đóng bằng **ADR-009**; khoản nợ còn lại là *chốt nhà cung cấp*, và nó **không độc lập** với quyết định hạ tầng (ADR-006 chỉ cưỡng chế được bằng IAM của hạ tầng đích) | `docs/DECISIONS.md` ADR-009 |
 | 16 | **Bốn mục hardening cùng khuôn danh-sách-tên, chưa có trong sổ nợ.** Nặng nhất: hình dạng bảng sổ chỉ **ĐẾM** `attname IN (15 tên) = 15`, **không cấm cột thừa** ⇒ thêm một cột `payload_plaintext` vào `audit_events` **không bị mục nào chạm**. Kế đó: bất đối xứng `bang_so` (2 tên viết cứng) vs `bang_al` (theo tính chất) — **bảng báo giá S1 sẽ rơi thẳng vào đó**: được kiểm trigger nhưng **không** bị kiểm UNLOGGED, **không** bị kiểm UNIQUE, **không** bị thu hồi UPDATE/DELETE/TRUNCATE. **Bất đối xứng này không có một chú thích nào giải thích.** Và `VI_TU_BANG_TENANT` giấu `OR relname IN ('organizations')` bên trong một vị từ tính-chất ⇒ bảng gốc tenant thứ hai không bị đổi RLS/FORCE, `rls-coverage.int.test.ts` cũng mù | `db/migrations/hardening.always.sql`, `db/rls-coverage.int.test.ts` |
-| 17 | **Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào.** `packages/tenancy/src/with-tenant.ts` là **điểm DUY NHẤT gắn `app.org_id`** — toàn bộ RLS của 002–007 treo vào nó — và `packages/audit/src/writer.ts` là đường ghi sổ kiểm toán. Cả hai **với tới được bằng import tương đối**: 3/7 gói có quy tắc biên giới (`crypto-keys`, `identity`, `outbox`); `audit`, `db`, `tenancy`, `test-support` **không có** | `.dependency-cruiser.cjs:77-78` (tự đặt tên cho quy luật: *"LẦN THỨ BA CÙNG MỘT LỚP LỖ"*) |
+| 17 | ~~**Hai mặt tiền chịu lực nhất repo không có lớp nào canh đường vào.** `packages/tenancy/src/with-tenant.ts` là **điểm DUY NHẤT gắn `app.org_id`** — toàn bộ RLS của 002–007 treo vào nó — và `packages/audit/src/writer.ts` là đường ghi sổ kiểm toán. Cả hai **với tới được bằng import tương đối**: 3/7 gói có quy tắc biên giới (`crypto-keys`, `identity`, `outbox`); `audit`, `db`, `tenancy`, `test-support` **không có**~~ **ĐÓNG 2026-09-07 (S1.18, ADR-027).** Họ `g12-`…`g15-`; số họ quy tắc biên giới **5 → 9**; `MIEN_TRU` của [INV-H16] về **RỖNG**. Phép đo bác bỏ chính lý do miễn trừ (*"rủi ro hồi quy riêng"*): **0 chỗ import phải di trú**. Vị từ *gói* nay là *thư mục có `package.json`* và tập cửa đọc từ `exports` — cả hai sửa sau review lượt 10 (H10-1 HIGH, H10-2) | ~~`.dependency-cruiser.cjs:77-78`~~ nay là `tests/architecture/goi-workspace.ts` + ADR-027 |
 | 18 | **Bộ máy evidence nằm ngoài vòng review bắt buộc** — đã đóng ở vòng fix cuối: `/tools/inv-matrix/`, `/docs/TEST-PLAN.md`, `/docs/STATE.md`, `/evidence/` nay có trong `.github/CODEOWNERS`. Khoản nợ **còn lại**: `CODEOWNERS` trỏ tới `@trustprocure/bao-mat`, một team **chưa tồn tại**, nên tới hôm nay nó **chưa cưỡng chế gì** | `.github/CODEOWNERS` (khối cảnh báo ở đầu file) |
 | 19 | **Bốn phép đo THIU trong chú thích của migration đã áp**, không sửa được tại chỗ vì `001`–`007` và `hardening.always.sql` **không được đụng** (migration đánh số chạy đúng một lần; sửa chú thích cũng đổi checksum): ⑴ `006:23` và `007:29` chép **nguyên văn giống nhau** *"~71 chỗ `::text`/`::oid`"* — đo lại bằng công cụ **nhị phân** trên `hardening.always.sql`: `::text` = **55**, `::oid` = **2**, tổng **57**; một phép đo thiu được chép sang file thứ hai **mà không đo lại**. ⑵ `hardening:863-864` (khối *DƯ LƯỢNG CÒN LẠI*, đúng đoạn có giá trị kiểm toán cao nhất) nói *"một bảng ở schema khác mang ĐÚNG **14** cột này"* trong khi danh sách có **15** tên và vị từ dòng 886 đúng là `= 15` — mô tả sai bề mặt tấn công **đi một cột**. ⑶ `005:190-191` nói mục (C) *"CẤM MỌI"* hàm SECURITY DEFINER, nhưng bản cài đặt còn loại trừ `pg_toast%`/`pg_temp%`, `NGOAI_LE_DOC_VONG`, và **hàm thuộc EXTENSION** — file viện dẫn nói **rộng hơn** file có thẩm quyền. ⑷ `hardening:73-76` nói *"4 trong 6 câu lệnh"* trong khi bảng hiện có **36 mục**. **Cách đóng đúng: một migration mới, hoặc sửa kèm lần migrate() kế tiếp có đổi lược đồ.** | `db/migrations/006_sessions_and_mfa.sql`, `007_outbox.sql`, `005_identity.sql`, `hardening.always.sql` |
 | 20 | **ĐÃ ĐÓNG [2026-09-05] bằng HAI lớp không thay thế nhau.** ⑴ Job T1+T2 nay chạy trên CẢ `ubuntu-latest` LẪN `windows-latest` (`fail-fast: false`); T3 cố ý ĐỨNG NGOÀI ma trận vì runner Windows không chạy được `postgres:16-alpine`, và giới hạn ấy được ghi thẳng vào `ci.yml`. ⑵ `tests/architecture/bao-dam-mot-he-dieu-hanh.test.ts` đo THẲNG tính chất, trên mọi hệ điều hành. **MỘT DỰ ĐOÁN CỦA TÔI ĐÃ BỊ PHÉP ĐO BÁC BỎ:** bản đầu của lớp ⑵ canh đường dẫn `import`, và phép đo (đổi `./comparison.js` → `./Comparison.js` ở một module chỉ có ĐÚNG MỘT nơi import) cho thấy `tsc` BẮT ĐƯỢC bằng `TS1261` — trục ấy đã có chủ, nên vế ấy bị GỠ. Thứ còn lại không có chủ là **đường dẫn dạng CHUỖI** (`new URL(..., import.meta.url)`, hơn năm mươi chỗ trong kho): `tsc` mù hoàn toàn với chúng. Lớp mới TÌM RA MỘT LỖI THẬT ngay lần chạy đầu — server đột biến của máy dò WebCrypto đọc `./do-webcrypto.html`, một tên không còn tồn tại, nên nó ném `ENOENT` ở dòng đầu và không ai biết. Nó cũng ĐỎ TRÊN CHÍNH NÓ một lần (khối lý do NHẮC TỚI một `new URL(...)` như ví dụ và phép quét đọc câu văn ấy thành lời gọi thật) — đã sửa bằng cách bỏ chú thích trước khi quét. Mũi đột biến (`db/migrations` → `db/Migrations`) ĐỎ THẬT. Nguyên văn: ~~**Không lớp nào canh "bảo đảm chỉ đúng trên một hệ điều hành".**~~ Lần chạy CI đầu tiên tìm ra **một** ca (test import sai hoa-thường) và ca đó đã sửa, nhưng cơ chế phát hiện vẫn là *"chạy trên hệ điều hành thứ hai rồi xem cái gì đỏ"*. Toàn bộ 346 test đơn vị mới chỉ được chạy trên **hai** nền tảng đúng **một** lần mỗi bên, và CI chỉ có `ubuntu-latest` — nên một bảo đảm chỉ đúng trên **Linux** thì hôm nay **không lớp nào bắt được**. Cách đóng đúng: thêm `windows-latest` vào ma trận job T1+T2 | `tests/architecture/boundaries.test.ts` (khối chú thích của test hoa-thường); `.github/workflows/ci.yml` |
@@ -1344,6 +1344,98 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     Windows tuyệt đối (`D:\...` bị đọc thành scheme `d:`) — chỉ bắt được vì test `spawn` một tiến
     trình THẬT thay vì gọi một hàm, đúng bài học của khoản nợ 23.
 
+33. **[2026-09-07] S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG, và vòng này đáng đọc vì thứ nó tìm ra khi
+    đóng chúng chứ không vì hai khoản nợ (ADR-027).** Bốn gói của S0 — `audit`, `db`, `tenancy`,
+    `test-support` — chưa bao giờ có họ quy tắc biên giới và chưa bao giờ có danh sách trắng
+    barrel. Hai trong bốn là **hai mặt tiền chịu lực nhất kho**: `tenancy/src/with-tenant.ts` là
+    điểm DUY NHẤT gắn GUC `app.org_id` (mọi policy RLS của `002`–`007` đọc GUC đó) và
+    `audit/src/writer.ts` là đường ghi sổ kiểm toán. Nay có `g12-`…`g15-` (số họ quy tắc biên giới
+    **5 → 9**), bốn danh sách trắng, và một bất biến mới **[INV-H18]** — sổ đăng ký **51 → 52**.
+
+    **HAI DANH SÁCH MIỄN TRỪ VỀ RỖNG, và cơ chế đóng chúng là thứ đáng chép lại:** lớp [INV-H16]
+    dựng ở S1.2 tự làm bốn dòng miễn trừ của mình **HẾT HẠN TỰ ĐỘNG** — thêm quy tắc xong thì khẳng
+    định *"miễn trừ không chứa gói đã có quy tắc"* đỏ ngay, tức việc dọn danh sách bị ÉP xảy ra thay
+    vì trông chờ ai nhớ. Đó là hình dạng mà một khoản nợ nên có.
+
+    **PHÉP ĐO BÁC BỎ CHÍNH LÝ DO MIỄN TRỪ.** `MIEN_TRU` khai lý do là *"đóng chúng là một thay đổi
+    có rủi ro hồi quy riêng"*. Quét toàn kho: **0 chỗ import phải di trú**; `pnpm depcruise` sau khi
+    thêm bốn họ vẫn *"no dependency violations found"*. Rủi ro ấy, khi đem đo, **bằng KHÔNG** — và
+    nó đã đứng mười bảy vòng. Bài học không phải *"lý do ấy dối"*; nó là: **một lý do miễn trừ cũng
+    là một khẳng định, và khẳng định thì phải đo.**
+
+    **LƯỢT REVIEW AN NINH THỨ MƯỜI: 0 CRITICAL, 1 HIGH, 3 MEDIUM, 6 LOW** — bảng đầy đủ ở
+    `evidence/security-reviews.md` §S1.18. Lượt này chạy trên **một commit có tên** (`b47ecc1`),
+    đúng bài học mục 32. Ba phát hiện đáng đọc kể cả khi không ai đụng lại mã này:
+
+    - **H10-1 (HIGH) — vòng sinh ra để xoá khuôn danh-sách-tên đã TỰ VIẾT LẠI khuôn ấy.** Cả
+      [INV-H16] lẫn [INV-H18] tự nhận *"suy từ TÍNH CHẤT"*, nhưng vị từ *"gói"* của chúng là *thư
+      mục con của `packages/` **có `src/index.ts`***. Đó là một **quy ước đặt tên**, không phải một
+      định nghĩa. `packages/kms/package.json` khai `"exports": { ".": "./src/main.ts" }` mà không có
+      `src/index.ts` thì gói ấy rơi khỏi CẢ HAI lớp, và **hai khẳng định *"danh sách miễn RỖNG"* vẫn
+      XANH** — vì miễn trừ đúng là rỗng thật. Tức nợ 9 và 17 mở lại **trong im lặng, ngay sau vòng
+      tuyên bố đóng chúng**. Vị từ đúng (`package.json`) nay ở `tests/architecture/goi-workspace.ts`
+      và dùng CHUNG cho cả hai bất biến. *"Suy từ tính chất"* chỉ đúng khi **tính chất được chọn
+      đúng miền.**
+    - **H10-4 (MEDIUM) — một cổng đã RỖNG RUỘT từ S0, sống qua CHÍN lượt review.**
+      `khong-phu-thuoc-devdep-trong-src` không bao giờ bắn được: `options.exclude` chứa
+      `node_modules`, mà `exclude` **gỡ hẳn** module khỏi đồ thị (khác `doNotFollow`, chỉ ngừng
+      duyệt tiếp), trong khi `npm-dev` chỉ được gán cho cạnh resolve VÀO node_modules. Đếm trên toàn
+      đồ thị: 264 `import`, 231 `local`, 94 `aliased`, 83 `core` — và **KHÔNG một cạnh nào mang
+      `npm-dev`**. Nó sống lâu vì thứ duy nhất ai cũng nhìn là dòng *"no dependency violations
+      found"*: **một quy tắc XANH trông giống hệt một quy tắc đang làm việc.** Lớp bắt được nó không
+      phải một con mắt tinh hơn mà là **một câu hỏi khác** — không phải *"có vi phạm không"* mà
+      *"quy tắc này có ĐỐI TƯỢNG nào để phán xét không"*, và câu hỏi ấy nay là một test đọc đồ thị
+      JSON. Giá của việc sửa: 194 → **197 module**, 758 → **822 phụ thuộc**.
+    - **H10-2 (MEDIUM) — trần *"tối đa hai cửa"* là một khoản CẤP KHÔNG.** `coQuyTacBienGioi` đòi
+      `to.pathNot` *chứa* `index.ts` và `length <= 2` — một con số dùng chung cho mười ba gói, đặt ở
+      2 để không đỏ oan trên `crypto-keys`. Hai gói tiêu thụ hợp pháp; **mười một gói còn lại được
+      cấp sẵn một cửa thứ hai**, mở bằng một dòng trong file cấu hình mà không lớp nào phản đối. Nay
+      so BẰNG TẬP, tập cửa đọc từ chính `exports` — mở một cửa thứ hai buộc phải là một dòng trong
+      `package.json`, thứ [INV-H18] cũng nhìn thấy.
+
+    **MỘT LỖ CÓ THẬT ĐƯỢC TÌM RA KHI DỰNG [INV-H18], và nó không phải một ca giả định:**
+    `packages/sealed-envelope` khai HAI cửa từ S1.4 (`.` và `./unseal`) nhưng chỉ cửa `.` có danh
+    sách trắng. Cửa `./unseal` xuất `unsealBid` — hàm MỞ phong bì giá thầu, năng lực cao nhất kho —
+    và bề mặt của nó chưa từng bị khoá; `g8-` canh AI đi qua được cửa ấy, không lớp nào canh CÁI GÌ
+    đi ra qua nó. Cùng hình dạng với `@trustprocure/audit/anchor-sign` (S1.17, đóng cùng vòng này),
+    và **cả hai lần thứ mở một cửa công khai mới là MỘT DÒNG trong `package.json`** — thứ không quy
+    tắc depcruise nào phản đối.
+
+    **BỐN THỨ ADR-027 §5 KHAI LÀ KHÔNG ĐÓNG, ghi ở đây để không ai đọc gộp:** hai lớp khoá DANH
+    SÁCH chứ không khoá HÌNH DẠNG (và `.github/CODEOWNERS` vẫn trỏ tới một team chưa tồn tại — nợ
+    18); `g14-`/`g15-` rút **KHÔNG** symbol nào khỏi tầm với hôm nay (`g12-` rút một —
+    `antoanChoBaoCao`; `g13-` rút một — `migrationChecksum`), thứ chúng mua là mặc định đóng cho
+    module tương lai; vector **subpath** không phải thứ bốn họ mới đóng (ba gói kia khai `exports`
+    chỉ có `"."`, nên thứ bắn là lưới đỡ `g1-khong-import-trustprocure-khong-resolve-duoc`); và
+    [INV-H18] **tạo ra một ngoại lệ** cho doctrine *"một tiến trình, một khả năng"* — nó nạp cả ba
+    cửa hạn chế trong cùng một worker vitest, và việc *"không module nào làm gì lúc nạp"* được kiểm
+    **bằng cách ĐỌC**, chưa phải một phép đo lúc chạy.
+
+    **Số đo trên HEAD:** `pnpm t0` **197 module / 822 phụ thuộc / 0 vi phạm**; `pnpm test`
+    **656/656**; `pnpm test:int` **733/733**; `pnpm evidence` **52/52**, cổng XANH. **Mười lăm đột
+    biến của vòng, tất cả ĐỎ THẬT** — tám cho lớp gốc (8 probe trước khi có quy tắc; `g14-` hạ
+    severity; `g12-` một cửa ⇒ công cụ THẬT vi phạm; ba đột biến danh sách trắng; bốn đột biến
+    [INV-H18]) và bảy cho vòng sửa (`packages/kms` ⇒ H16 và H18 cùng đỏ; thư mục không có
+    `package.json`; cửa thứ hai không qua `package.json`; `main` lệch `exports`; symbol mọc ở cửa
+    `./unseal`; `node_modules` về `exclude` ⇒ test chống-rỗng-ruột đỏ **trong khi depcruise vẫn
+    xanh**; gỡ miễn trừ `test-support` ⇒ 2 vi phạm thật).
+
+    **MỘT KHIẾM KHUYẾT QUY TRÌNH CỦA CHÍNH VÒNG NÀY, ghi ra vì giấu nó thì rẻ hơn nhiều:** lượt
+    `pnpm test:int` ĐẦU TIÊN của vòng cho **732/733, một tệp đỏ** — và tôi **không ghi lại được tệp
+    nào**, vì lượt ấy chạy mà không lưu output. Hai lượt sau: 733/733, mã thoát 0. Ba lượt trên cùng
+    một cây mã, cùng một máy. Con số ghi ở trên là con số của lượt CÓ output; vế thành thật là:
+    **một lượt đỏ đã xảy ra và nó không truy nguyên được**, đúng cùng lớp mất-truy-nguyên mà mục 32
+    đã ghi cho lượt review S1.17. Khoản nợ **24** (bất ổn định của tầng T3, đã đo 0/14 đỏ ngày
+    2026-09-05) là nơi ca này thuộc về, và nó **không được coi là đã đóng**. Quy ước rút ra, cùng họ
+    với *"commit trước, review sau"*: **lượt đo dài thì ghi ra tệp trước, đọc sau.**
+
+    **Sổ nợ mở còn: 23 và nửa sau của 30 — không đổi, và cả hai vẫn KHÔNG phải việc của mã nguồn.**
+    Ba khoản có hình dạng mã nguồn còn lại đã có đường đóng viết sẵn: ADR-026 §5⑶ (lệnh `trich` +
+    một test int chạy `openssl(1)` thật), nợ **3** + **16** (hardening tự làm mù mình bằng danh sách
+    tên — đã đo lại: `hardening.always.sql:906` vẫn là một phép **ĐẾM**, nên thêm một cột
+    `payload_plaintext` vào `audit_events` đi qua hardening mà không mục nào chạm), và một lượt rà
+    lại sổ nợ S0 (ít nhất mục 7 đã thiu: *"apps/ rỗng"* sai từ S1.10). **Không mở nợ mới.**
+
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
 > mục 8 của bảng điều kiện hoàn thành — một ví dụ sống cho việc một câu sai trong tài liệu trạng
@@ -1356,7 +1448,7 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ ~~**Hai mươi ADR**~~ **HAI MƯƠI LĂM ADR** — dòng này đã thiu qua bốn vòng (021–024 ra đời mà con số không đổi; [S1.15] đối chiếu và sửa): 001–010 và 012–019 *Đã chấp nhận*; **021** (vai ứng dụng là thành viên), **022** (`/auth/link` chỉ xếp hàng), **023** (việc SAU COMMIT của runner), **024** (bộ đếm người gọi ngoài cây tenant), **025** (bảng tenant dọn được mà không đọc được) *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ ~~**Hai mươi ADR**~~ ~~**HAI MƯƠI LĂM ADR**~~ ~~**HAI MƯƠI SÁU ADR**~~ **HAI MƯƠI BẢY ADR** (**026** artefact neo ngoài, **027** biên giới module là một tính chất) — dòng này đã thiu qua bốn vòng (021–024 ra đời mà con số không đổi; [S1.15] đối chiếu và sửa): 001–010 và 012–019 *Đã chấp nhận*; **021** (vai ứng dụng là thành viên), **022** (`/auth/link` chỉ xếp hàng), **023** (việc SAU COMMIT của runner), **024** (bộ đếm người gọi ngoài cây tenant), **025** (bảng tenant dọn được mà không đọc được) *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
 | `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ ~~**Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1)~~ **Sổ đăng ký 51 bất biến** (34 nghiệp vụ + **17** hàng rào; H16 ở S1.2, **H17 ở S1.10.2** — mọi route ghi của `apps/api` khai mã quyền), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |
