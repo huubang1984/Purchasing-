@@ -822,3 +822,58 @@ danh-sách-tên, rồi tự viết lại khuôn ấy dưới dạng một phép 
 **Một mốc chết cũng cần một phép đo.** H11-4 là ca hiếm và đắt: reviewer chỉ ra rằng một quyết định thiết kế không có mốc chết; tôi viết một mốc chết; **nó sống sót đột biến**; phải viết lại lần hai trên đúng đầu vào làm hai đường khác nhau. Bài học không phải *"viết mốc chết"* mà là: **chạy đột biến NGAY sau khi viết mốc chết, vì một mốc chết chưa từng đỏ là một mốc chết chưa được đo** — cùng câu mà `bien-gioi-goi.test.ts` đã viết cho quy tắc depcruise, nay áp cho chính test.
 
 **Và một vế của vòng sửa KHÔNG có mốc chết** (H11-1). Nó được ghi ra ở ba nơi thay vì để người sau tự phát hiện. Một bản vá không đo được vẫn đáng có — nhưng nó phải được đọc đúng như thế.
+
+---
+
+# S1.20 — review lượt 12: bốn danh sách tên cuối cùng của `hardening.always.sql`
+
+## Bảng
+
+| Trường | Giá trị |
+|---|---|
+| Vòng | **S1.20** — đóng khoản nợ 3 và 16 (ADR-028, migration `047`, `[INV-H19]`) |
+| Nhánh | `no-3-16-hardening-danh-sach-ten`, cắt từ `f768d3f` |
+| Phạm vi | `db/migrations/hardening.always.sql`, `db/migrations/047_chi_ghi_them_chan_truncate.sql`, `db/hardening-suy-tu-tinh-chat.int.test.ts`, `db/migrations.int.test.ts`, `db/rls-coverage.int.test.ts`, `docs/DECISIONS.md` (ADR-028), `docs/STATE.md`, `docs/TEST-PLAN.md`, `Handoff.md` |
+| Môi trường của reviewer | **Read/Grep/Glob. KHÔNG Bash, KHÔNG cơ sở dữ liệu.** Reviewer nói thẳng giới hạn ấy ở dòng đầu báo cáo và đánh dấu từng chỗ suy-từ-tài-liệu |
+| Phát hiện | **2 HIGH, 4 MEDIUM, 5 LOW** |
+| Kết quả | **2/2 HIGH và 4/4 MEDIUM đã xử lý; 5/5 LOW đã đóng.** Trong đó **một HIGH bị PHÉP ĐO BÁC BỎ một nửa** (H1), và **một MEDIUM bác bỏ một câu của chính ADR-028** (M3) |
+
+## Hai HIGH
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H1** | Mục *"chốt TRUNCATE"* **chặn deploy vĩnh viễn trên một lược đồ PHÂN MẢNH hợp lệ**: trigger cấp HÀNG được nhân bản xuống lá (nên lá vào tập suy ra) trong khi trigger TRUNCATE thì không, nên mọi lá đều bị báo thiếu chốt. Reviewer đề nghị miễn trừ con-cháu theo khuôn `LA_CUA_BANG_TENANT` | **ĐÓNG, NHƯNG KHÔNG THEO CÁCH ĐƯỢC ĐỀ NGHỊ — bốn phép đo bác bỏ vế *"hợp lệ"*.** ⑴ `CREATE TRIGGER … BEFORE TRUNCATE` trên `relkind='p'` **CHẠY ĐƯỢC** (nên ca "điều kiện không thoả mãn được" không tồn tại); ⑵ trigger hàng ĐƯỢC nhân bản xuống lá; ⑶ trigger TRUNCATE **KHÔNG** được nhân bản; ⑷ **`TRUNCATE <lá>` ĐI LỌT** dù cha có chốt. Lá là một **LỖ THẬT**, nên miễn trừ nó là fail-open. Giữ nguyên phép kiểm; thông điệp nay nói thẳng *"chốt trên CHA KHÔNG phủ LÁ — mỗi phân mảnh cần chốt riêng"*; cái giá (một phân mảnh mới ngoài migration chặn deploy) ghi ở ADR-028 §6. Một ca test mới đo cả bốn sự kiện |
+| **H2** | Ba mục mới **khoá cứng `nspname = 'public'`** trong khi `bang_so`/`bang_al` cố ý phủ mọi schema — tái lập đúng thứ `[CR2a]` đã GỠ. Một bảng chỉ-ghi-thêm ở `app_private` sẽ UNLOGGED được, TRUNCATE được, nhận `GRANT UPDATE` sống qua mọi deploy | **ĐÓNG** — vế schema của `VI_TU_BANG_CHI_GHI_THEM` nay là `MAU_SCHEMA_DU_AN` khai triển, và test có một khẳng định đọc thẳng hằng ấy từ file rồi so (gộp khoảng trắng) nên hai bên không trôi khỏi nhau được. `CAU_COT_NGOAI_CHUOI` **cố ý giữ** hai tên đủ điều kiện `public.…` — cùng phạm vi và cùng lý do đã ghi cho `CAU_HINH_DANG_CHINH_TAC` của S0 — và giới hạn ấy nay nằm trong khối *"Giới hạn của H19"* ở `docs/TEST-PLAN.md` |
+
+## Bốn MEDIUM
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **M1** | Mục ACL suy-ra **chỉ đọc `relacl`**, không đọc `attacl` — tái tạo đúng lỗ `[M1]` mà `bang_so` đã phải vá. `GRANT UPDATE (canonical_text) ON bid_receipts TO app_api` sống qua mọi deploy; `canonical_text` là **chính chuỗi được ký** của biên nhận ⇒ chạm thẳng **B2** | **ĐÓNG** — thêm nhánh `attacl` (mức cột chỉ cấm UPDATE: `attacl` không lưu được DELETE/TRUNCATE, nên `relacl` là đầy đủ cho hai quyền ấy). Đột biến mức cột vào test: trước ⇒ `MIGRATE OK`, sau ⇒ NÉM kèm tên cột |
+| **M2** | Vế *"có chốt TRUNCATE"* **không hỏi `tgenabled`** và không hỏi bit BEFORE ⇒ một `DISABLE TRIGGER` cho ra mục XANH trong khi `TRUNCATE` đi lọt hoàn toàn | **ĐÓNG** — thêm `tgenabled = 'A'`, bit BEFORE (`tgtype & 34 = 34`), và `prolang = plpgsql`. Đột biến cho **hai kết quả ĐÚNG KHÁC NHAU**: trên `bid_receipts` (có TÊN trong mục ghim `047`) hardening **tự chữa**; trên một phân mảnh SUY RA hardening **NÉM**. Cả hai đều được đo |
+| **M3** | **ADR-028 §2⑵ mâu thuẫn với phép đo của chính ADR ấy**: §2⑵ viết *"chỉ TỰ CHỮA thứ một migration đánh số sở hữu theo TÊN"* trong khi §7⑷ đo `migrate()` bật RLS + FORCE trên `chi_nhanh` — một bảng không migration nào sở hữu. Và vế FK không đòi cột đích là `id`, trong khi `HINH_DANG_CHUAN` ghi cứng `(id = app_current_org_id())` | **ĐÓNG, HAI PHẦN.** ⑴ Câu §2⑵ **gạch bỏ tại chỗ** và viết lại: *tự chữa được phép trên tập suy ra khi hành động ĐƠN ĐIỆU và fail-closed; bị cấm khi nó đổi ngữ nghĩa*. Câu cũ sai **cả về mã cũ** — mục (A) đã tự chữa trên một tập suy ra từ S0. Trạng thái lai (lượt `sua` COMMIT riêng) nay được ghi ra. ⑵ Vế FK thêm `confkey → 'id'` |
+| **M4** | `prosrc !~* '\mRETURN\M'` là so khớp VĂN BẢN: chiều ỒN ÀO — `prosrc` của hàm `LANGUAGE internal`/`c` là tên symbol, không chứa `RETURN` ⇒ bảng bị nhận nhầm ⇒ chặn deploy; chiều IM LẶNG — một hàm canh viết kiểu khác rơi khỏi tập | **ĐÓNG NỬA, và nửa kia có tên.** Chiều ồn ào: thêm `prolang = plpgsql` (đo: `suppress_redundant_updates_trigger` có `prosrc = 'suppress_redundant_updates_trigger'`, `lanname = 'internal'`). Chiều im lặng: **khoản nợ 60**, đã mở, kèm phép đo *"hai cách đếm hôm nay TRÙNG NHAU"* |
+
+## Năm LOW
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **L1** | `047` khai *"hardening ghim `tgenabled='A'` cho **mọi** trigger trong `public`"* — sai phạm vi: file ghim một tập được LIỆT KÊ theo tên | **ĐÓNG** — gạch bỏ tại chỗ, viết lại lý do đúng (*"ba trigger này có TÊN trong mục ghim `bid_chi_ghi_them (047)`"*) và ghi ra bậc tự do còn lại |
+| **L2** | `047` kể phép đo sai chỗ: *"`relacl` của ba bảng chỉ mang `r` và `a`"* — `a` là quyền **CỘT**, nó ở `attacl` | **ĐÓNG** — tách hai cột catalog, gọi đúng tên từng cái |
+| **L3** | Phản ví dụ chịu lực của vị từ được gọi là `rfq_items_chan_truncate`; tên thật là **`rfq_items_cam_truncate`** | **ĐÓNG** — sửa ở cả ba chỗ (hardening, test, ADR). Đo: `pg_trigger` trên `rfq_items` cho ra `rfq_items_cam_truncate`, `rfq_items_chi_sua_khi_soan`, `rfq_items_kiem_danh_tinh` |
+| **L4** | `db/migrations.int.test.ts` giữ một bản sao đã trôi của `VI_TU_BANG_TENANT` (`OR relname = 'organizations'`) ⇒ ngày có bảng gốc thứ hai, vòng khôi phục không dựng policy cho nó và `migrate()` gãy vì lý do không liên quan | **ĐÓNG** — truy vấn đi theo vị từ FK mới; câu khẳng định cũ gạch bỏ tại chỗ |
+| **L5** | Mục ACL suy-ra chỉ phán xét ⇒ một `GRANT` của kẻ có đặc quyền là một **DoS deploy không tự gỡ**, chặn cả bản vá khẩn | **ĐÓNG BẰNG CÁCH GHI RA** — đánh đổi cố ý, nay nằm ở ADR-028 §6 thay vì nằm im |
+
+## Năm mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề
+
+1. **Trình tự nâng cấp của `047` trên cụm đang chạy — AN TOÀN, và reviewer truy được từng bước.** Trên cụm có 001–046: lượt `sua` #1 chạy trước vòng đánh số, tiền điều kiện `version = '047_…'` SAI ⇒ mục **nằm im** ⇒ thân hàm **không bị lùi**. Rồi 047 áp, rồi `sua` #2, rồi `phan_xet`. Cửa sổ ấy an toàn vì thân cũ (018) vẫn NÉM vô điều kiện — mất thông điệp `TG_OP`, không mất bảo vệ.
+2. **Rollback ứng dụng về bản trước trong khi CSDL đã ở 047** — hardening cũ đưa thân hàm về bản 018; ba trigger TRUNCATE vẫn tồn tại và vẫn gọi hàm ấy ⇒ vẫn NÉM. Không có trạng thái vĩnh viễn hỏng. **Ràng buộc kéo theo: `hardening.always.sql` và `047` phải luôn đi CÙNG một commit** — đã ghi ở `Handoff.md`.
+3. **Mục ACL mới không báo động giả** — `018:113-121`, `018:342-343`, `019:459-465`: ba bảng chỉ được cấp SELECT và INSERT **mức cột**. Không một `GRANT UPDATE/DELETE/TRUNCATE` nào. Mục mới khoá một cánh cửa đang đóng.
+4. **Trigger TRUNCATE mới không chặn đường hợp lệ nào** — quét toàn kho: không mã sản phẩm, không `packages/test-support`, không test nào TRUNCATE ba bảng ấy.
+5. **Không bí mật mới, không bề mặt injection mới** — ba mục mới có câu lệnh cưỡng chế là `SELECT 1`; tên role/cột trong thông điệp đi qua `quote_ident` và chỉ vào chuỗi lỗi. Và **không bẫy bí danh kiểu `[IM2]`** trong mã mới (bí danh dùng: `b`, `c`, `n`, `t`, `p`, `a`, `vai` — không cái nào trùng biến plpgsql của khối bao ngoài).
+
+## Điều đáng mang sang vòng sau
+
+**Một reviewer không chạy được gì vẫn tìm ra ba khiếm khuyết THẬT trong mã — và một trong ba là một câu của chính ADR mâu thuẫn với phép đo nằm cách nó vài trăm dòng.** M3 không đòi hỏi một cơ sở dữ liệu; nó đòi hỏi **đọc §2 và §7 của cùng một tài liệu rồi so chúng với nhau**. Đây là lần thứ hai trong ba vòng thứ đắt nhất đến từ một phép so nội bộ chứ không từ một công cụ.
+
+**Và một câu sai theo hướng DỄ CHỊU khó tự bắt hơn một câu sai theo hướng khó chịu.** §2⑵ khen `migrate()` kỷ luật hơn thực tế. Không cổng nào đỏ vì một lời khen; chỉ có một người đọc chậm mới bắt được. Cùng họ với *"mười chín ADR"* và *"16/50"* — nhưng nguy hiểm hơn, vì hai cái kia là con số còn cái này là một **quy tắc mà vòng sau sẽ dựa vào**.

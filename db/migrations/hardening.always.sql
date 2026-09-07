@@ -406,12 +406,49 @@ DECLARE
   -- LÁ. Đã đo hậu quả để chắc nó không phá gì: lá bật RLS mà không có policy riêng cho ra
   -- 0 hàng khi đọc THẲNG lá (fail-closed) trong khi đọc QUA CHA vẫn trả đúng 1 hàng của tổ
   -- chức đang gắn. ALTER TABLE ... ENABLE/FORCE áp được thẳng lên bảng cha (relkind=p).
+  -- [S1.20 / sổ nợ 16] VẾ THỨ HAI CỦA VỊ TỪ NÀY TỪNG LÀ MỘT CÁI TÊN, GIẤU BÊN TRONG MỘT VỊ TỪ
+  -- TÍNH-CHẤT. Nguyên văn bản trước: `OR %2$s.relname IN ('organizations')`. Hệ quả đo được: một
+  -- bảng gốc tenant THỨ HAI — bảng mà chính `id` của nó LÀ một tổ chức — không được bật RLS lẫn
+  -- FORCE, và `db/rls-coverage.int.test.ts` cũng mù cùng chỗ vì nó nhân bản cùng danh sách.
+  --
+  -- TÍNH CHẤT THAY CHO CÁI TÊN: **bảng gốc là ĐÍCH của một khoá ngoại MỘT CỘT tên `org_id`.**
+  -- Đo trên lược đồ hôm nay: 28 bảng có cột `org_id`, và cả 28 khoá ngoại một cột `org_id` đều
+  -- trỏ tới ĐÚNG `organizations` — tính chất có thật, duy nhất, và không cần cái tên.
+  --
+  -- VÌ SAO VẾ "MỘT CỘT" LÀ LOAD-BEARING: lược đồ này có nhiều khoá ngoại GHÉP mang `org_id`
+  -- (`(org_id, user_id) -> users`, `(org_id, challenge_id) -> invitation_otp_challenges`, …).
+  -- Bỏ `array_length(conkey, 1) = 1` thì `users`, `rfq_packages`, `suppliers` … đều thành "gốc
+  -- tenant" và mục (A) sẽ bật FORCE trên chúng theo một lý do sai.
+  --
+  -- [review lượt 12, M3] VẾ `confkey -> 'id'` LÀ BẮT BUỘC: `HINH_DANG_CHUAN` ghi cứng hình dạng
+  -- policy của bảng gốc là `(id = app_current_org_id())`. Không có vế ấy, một khoá ngoại `org_id`
+  -- trỏ tới một cột KHÁC `id` vẫn kéo bảng đích vào tập gốc tenant, và mục (A) sẽ bật FORCE RLS
+  -- trên nó trong khi không hình dạng policy nào hợp lệ cho nó tồn tại — tức lượt `sua` để lại một
+  -- bảng FORCE-RLS-không-policy (mọi đọc = 0 hàng) rồi lượt `phan_xet` chặn deploy. Xem ADR-028 §2⑵.
+  -- CHIỀU GIẢ MẠO: thêm một khoá ngoại `org_id` một cột trỏ tới bảng X là THÊM X vào vùng canh,
+  -- không phải gỡ. Gỡ X ra khỏi vùng canh đòi gỡ MỌI khoá ngoại `org_id` trỏ tới nó — tức phá
+  -- chính ràng buộc tham chiếu của cây tenant, và đó là một thay đổi lược đồ nhìn thấy được.
   MAU_VI_TU_BANG_TENANT constant text :=
     $q$%1$s.nspname = 'public' AND %2$s.relkind IN ('r', 'p')
        AND (EXISTS (SELECT 1 FROM pg_attribute a
                      WHERE a.attrelid = %2$s.oid AND a.attname = 'org_id'
                        AND a.attnum > 0 AND NOT a.attisdropped)
-            OR %2$s.relname IN ('organizations'))$q$;
+            OR EXISTS (SELECT 1 FROM pg_constraint fk
+                        JOIN pg_class fkb ON fkb.oid = fk.conrelid
+                        JOIN pg_namespace fkn ON fkn.oid = fkb.relnamespace
+                       WHERE fk.confrelid = %2$s.oid AND fk.contype = 'f'
+                         AND fkn.nspname = 'public'
+                         AND pg_catalog.array_length(fk.conkey, 1) = 1
+                         AND EXISTS (SELECT 1 FROM pg_attribute fka
+                                      WHERE fka.attrelid = fkb.oid
+                                        AND fka.attnum = fk.conkey[1]
+                                        AND fka.attname = 'org_id'
+                                        AND NOT fka.attisdropped)
+                         AND EXISTS (SELECT 1 FROM pg_attribute fkd
+                                      WHERE fkd.attrelid = %2$s.oid
+                                        AND fkd.attnum = fk.confkey[1]
+                                        AND fkd.attname = 'id'
+                                        AND NOT fkd.attisdropped)))$q$;
   VI_TU_BANG_TENANT constant text := pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'n', 'c');
 
   -- ---- [vòng fix 1 — CR1 / vòng fix 2 — CR1+CR2+I4] HAI DANH SÁCH, KHÔNG PHẢI MỘT -----
@@ -1529,6 +1566,219 @@ $ham$;
                          'cấp INSERT trên chúng'
                     ELSE ' — bảng sổ chỉ được cấp SELECT và INSERT (INSERT theo cột)' END AS mo_ta
        FROM ($q$ || CAU_QUYEN_BANG_SO_SAI || $q$) q$q$;
+
+  -- ==========================================================================================
+  -- [S1.20 / sổ nợ 3 + 16] BỐN DANH SÁCH TÊN CUỐI CÙNG CỦA FILE NÀY, VÀ TÍNH CHẤT THAY CHO CHÚNG
+  -- ==========================================================================================
+  -- Khoản nợ 16 tố cáo một bất đối xứng: `bang_so` nhận bảng theo HAI TÊN VIẾT CỨNG trong khi
+  -- `bang_al` nhận bảng lạ theo TÍNH CHẤT. Nó dự báo *"bảng báo giá S1 sẽ rơi thẳng vào đó"*.
+  --
+  -- DỰ BÁO ẤY ĐÃ THÀNH HIỆN THỰC. S1 dựng một hàm canh chỉ-ghi-thêm THỨ HAI —
+  -- `public.bid_chi_ghi_them()` — cắm trên BA bảng (`bid_receipts`, `rfq_unsealed_bids`,
+  -- `vendor_bid_versions`). Cả ba nằm ngoài `bang_so` (không có trong danh sách hai tên) VÀ ngoài
+  -- `bang_al` (vế bảng-lạ khoá theo OID của `chan_sua_xoa`). Đo trên PostgreSQL 16, sau một lượt
+  -- `migrate()` sạch, mỗi lần trả `applied=[]` và KHÔNG một lỗi nào:
+  --
+  --     ALTER TABLE bid_receipts SET UNLOGGED               -> MIGRATE OK, relpersistence còn 'u'
+  --     GRANT UPDATE, DELETE ON bid_receipts TO app_api     -> MIGRATE OK, acl còn `app_api=rwd`
+  --     TRUNCATE public.bid_receipts                        -> **OK** (audit_events thì NÉM)
+  --
+  -- Vế thứ ba là lỗ mà chính khoản nợ 16 KHÔNG nêu, và nó nặng hơn hai vế kia — xem `047`.
+  --
+  -- TÍNH CHẤT THAY CHO DANH SÁCH: **một bảng là CHỈ-GHI-THÊM khi nó mang CẢ HAI trigger
+  -- BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm của chúng KHÔNG BAO GIỜ TRẢ VỀ** (thân plpgsql
+  -- không chứa `RETURN` nào). Một hàm trigger không trả về thì chỉ có thể NÉM.
+  --
+  -- VẾ `RETURN` LÀ CẦN, KHÔNG THỪA — có phản ví dụ THẬT trong kho: `rfq_items_cam_truncate`
+  -- (011) cũng có thân `BEGIN RAISE EXCEPTION … END` không `RETURN`, nhưng nó là trigger TRUNCATE
+  -- CẤP CÂU LỆNH. `rfq_items` KHÔNG chỉ-ghi-thêm — nó sửa và xoá được khi RFQ còn DRAFT. Vế "cả
+  -- UPDATE lẫn DELETE, CẤP HÀNG" (`tgtype & 19 = 19` và `tgtype & 11 = 11`) là thứ loại nó ra.
+  --
+  -- CHIỀU GIẢ MẠO: cắm thêm một trigger luôn-ném là THÊM bảng vào vùng canh. Gỡ bảng ra khỏi vùng
+  -- canh đòi viết lại thân hàm thành một hàm CÓ `RETURN` — và đường ấy đã có lớp khác đứng: mỗi
+  -- hàm `RETURNS trigger` trong `public` đều có một mục ghim thân trong chính file này, và
+  -- `db/migrations.int.test.ts` [S1.14/S1.15] giữ cho danh sách loại trừ RỖNG.
+  --
+  -- BA MỤC DƯỚI ĐÂY CHỈ **PHÁN XÉT**, KHÔNG TỰ CHỮA — và đó là [CR4] phát biểu ở dạng khẳng định:
+  -- **tự chữa chỉ trên thứ một migration đánh số sở hữu theo TÊN; thứ SUY RA thì chỉ phán xét.**
+  -- Mục ACL của `bang_so` (mục (D4)) vẫn tự chữa vì hai bảng ấy có tên trong `BANG_CHI_GHI_THEM`;
+  -- ba bảng của S1 có tên trong mục ghim `bid_chi_ghi_them (047)` nên trigger của chúng vẫn được
+  -- dựng lại. Một bảng chỉ-ghi-thêm TƯƠNG LAI mà chưa ai ghim thì được BÁO RA kèm hướng dẫn,
+  -- không bị `migrate()` tự tay đổi ngữ nghĩa.
+  --
+  -- VẾ KHÔNG TỔNG QUÁT HOÁ ĐƯỢC, và khoản nợ 16 đòi đúng lời giải thích này: `UNIQUE (org_id,
+  -- seq)` gắn với CHUỖI HASH, không với tính chỉ-ghi-thêm — `bid_receipts` không có cột `seq`, và
+  -- một RFQ có nhiều báo giá song song nên không có thứ tự toàn cục nào để đánh số. Ràng buộc ấy
+  -- VẪN chỉ áp cho `bang_so`, và bất đối xứng ấy nay có lý do đọc được thay vì đứng trần.
+  -- [review lượt 12, H2] VẾ SCHEMA PHẢI GIỐNG `MAU_SCHEMA_DU_AN`, KHÔNG ĐƯỢC KHOÁ CỨNG
+  -- `nspname = 'public'`. Bản đầu của vòng này viết khoá cứng, và đó là **tái lập đúng thứ [CR2a]
+  -- đã CỐ Ý gỡ khỏi `bang_so`**: một bảng chỉ-ghi-thêm ra đời ở `app_private` (schema mà chính
+  -- file này tạo) sẽ UNLOGGED được, TRUNCATE được, và nhận `GRANT UPDATE` sống qua mọi deploy —
+  -- đúng ba lỗ vòng này vừa tuyên bố đã đóng. Vế dưới đây là `MAU_SCHEMA_DU_AN` đã KHAI TRIỂN cho
+  -- bí danh `n` (`%%` của format() thành `%` thật); `db/hardening-suy-tu-tinh-chat.int.test.ts`
+  -- có một khẳng định so nó với chính hằng ấy, nên hai bên không trôi khỏi nhau được.
+  --
+  -- [review lượt 12, M4] `prolang = plpgsql` đóng CHIỀU ỒN ÀO của phép so khớp văn bản: `prosrc`
+  -- của một hàm `LANGUAGE internal`/`c` là TÊN SYMBOL (đã đo: `suppress_redundant_updates_trigger`
+  -- có `prosrc = 'suppress_redundant_updates_trigger'`, `lanname = 'internal'`) — không chứa
+  -- `RETURN`, nên không có vế này thì hai trigger dựng sẵn của PostgreSQL đủ để một bảng bị nhận
+  -- nhầm là chỉ-ghi-thêm và bị đòi LOGGED + chốt TRUNCATE + ACL sạch, tức CHẶN DEPLOY trên một
+  -- lược đồ hợp lệ. Chiều IM LẶNG (một hàm canh viết kiểu khác rơi khỏi tập) vẫn mở — khoản nợ 60.
+  VI_TU_BANG_CHI_GHI_THEM constant text :=
+    $q$SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
+          AND c.relkind IN ('r', 'p')
+          AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+                WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
+                  AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+                  AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+                  AND p.prosrc !~* '\mRETURN\M'
+                  AND (t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) OPERATOR(pg_catalog.>) 0
+          AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+                WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
+                  AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+                  AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+                  AND p.prosrc !~* '\mRETURN\M'
+                  AND (t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) OPERATOR(pg_catalog.>) 0$q$;
+
+  -- Trạng thái VẬT LÝ của MỌI bảng chỉ-ghi-thêm: LOGGED, và có chốt TRUNCATE.
+  CAU_CHI_GHI_THEM_VAT_LY constant text :=
+    $q$SELECT b.bang_oid::regclass::text || ': bảng CHỈ-GHI-THÊM đang UNLOGGED (relpersistence='
+              || b.relpersistence::text || ') — mọi hàng biến mất sau lần crash kế tiếp. [CR5] đã '
+                 'đo bằng SIGKILL postgres thật: trước-crash 4 hàng, sau-crash 0. Sửa: '
+                 'ALTER TABLE … SET LOGGED.' AS mo_ta
+         FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
+        WHERE b.relpersistence <> 'p'
+       UNION ALL
+       SELECT b.bang_oid::regclass::text || ': bảng CHỈ-GHI-THÊM không có chốt TRUNCATE ĐANG BẬT. '
+                 'Trigger cấp HÀNG không bao giờ chạy cho TRUNCATE — một câu lệnh xoá sạch bảng '
+                 'trong khi UPDATE và DELETE đều bị chặn. Sửa: một migration đánh số MỚI thêm '
+                 'trigger BEFORE TRUNCATE FOR EACH STATEMENT gọi cùng hàm canh, kèm ENABLE ALWAYS '
+                 '(xem 047). NẾU ĐÂY LÀ MỘT PHÂN MẢNH: chốt trên bảng CHA KHÔNG phủ LÁ — đã đo, '
+                 'TRUNCATE thẳng vào lá đi lọt — nên MỖI phân mảnh cần chốt của riêng nó.' AS mo_ta
+         FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
+        WHERE NOT EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+                           WHERE t.tgrelid = b.bang_oid AND NOT t.tgisinternal
+                             AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+                             AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+                             AND p.prosrc !~* '\mRETURN\M'
+                             AND t.tgenabled OPERATOR(pg_catalog.=) 'A'
+                             AND (t.tgtype OPERATOR(pg_catalog.&) 34::pg_catalog.int2)
+                                 OPERATOR(pg_catalog.=) 34)$q$;
+
+  -- ACL của MỌI bảng chỉ-ghi-thêm. Đo trước khi viết mục này, để chắc nó không thu hồi một quyền
+  -- ĐANG DÙNG: `relacl` của ba bảng S1 chỉ mang `r` (SELECT), `attacl` chỉ mang `r` và `a`
+  -- (INSERT theo cột) — KHÔNG một quyền UPDATE/DELETE/TRUNCATE nào được cấp hôm nay. Mục này vì
+  -- thế khoá một cánh cửa đang đóng, đúng lập luận [IM2] đã dùng cho bảng sổ.
+  --
+  -- [review lượt 12, M1] NHÁNH `attacl` LÀ BẮT BUỘC, KHÔNG PHẢI ĐẦY ĐỦ CHO ĐẸP. Quyền mức CỘT nằm
+  -- ở `pg_attribute.attacl` và **vô hình với `relacl`** — 003:362-364 đã ghi đúng điều đó, và mục
+  -- ACL của `bang_so` có sẵn nhánh ấy từ vòng fix 1. Bản đầu của vòng này quên nó, tức tái tạo
+  -- đúng lỗ đã được vá một lần. Kịch bản đo được:
+  --     GRANT UPDATE (canonical_text) ON public.bid_receipts TO app_api;
+  -- không xuất hiện trong `relacl` ⇒ mục XANH ⇒ sống qua mọi `migrate()`. Trong cửa sổ phơi mà
+  -- 003 thừa nhận (`DISABLE TRIGGER`), lớp trigger không đứng và `app_api` sửa được
+  -- `canonical_text` — tức chính chuỗi ĐƯỢC KÝ của biên nhận. Đây chạm thẳng **B2**.
+  -- `attacl` chỉ lưu được SELECT/INSERT/UPDATE/REFERENCES nên ở mức cột chỉ cần cấm UPDATE;
+  -- DELETE và TRUNCATE không tồn tại ở mức cột, nên `relacl` là đầy đủ cho hai quyền ấy.
+  CAU_CHI_GHI_THEM_QUYEN constant text :=
+    $q$SELECT b.bang_oid::regclass::text || ': quyền ' || a.privilege_type || ' cấp cho '
+              || CASE WHEN vai.rolname IS NULL THEN 'PUBLIC' ELSE quote_ident(vai.rolname) END
+              || ' — bảng CHỈ-GHI-THÊM chỉ được cấp SELECT và INSERT. Quyền này SỐNG QUA MỌI '
+                 'DEPLOY nếu không có mục này. Sửa: REVOKE … CASCADE.' AS mo_ta
+         FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
+         JOIN pg_class c ON c.oid = b.bang_oid
+         CROSS JOIN LATERAL aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+         LEFT JOIN pg_roles vai ON vai.oid = a.grantee
+        WHERE a.grantee <> c.relowner
+          AND a.privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
+       UNION ALL
+       SELECT b.bang_oid::regclass::text || ': quyền ' || a.privilege_type || ' trên cột '
+              || pg_catalog.quote_ident(att.attname) || ' cấp cho '
+              || CASE WHEN vai.rolname IS NULL THEN 'PUBLIC' ELSE quote_ident(vai.rolname) END
+              || ' — quyền mức CỘT vô hình với relacl. Sửa: REVOKE UPDATE (cột) … CASCADE.' AS mo_ta
+         FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
+         JOIN pg_class c ON c.oid = b.bang_oid
+         JOIN pg_attribute att ON att.attrelid = b.bang_oid AND att.attnum > 0
+                              AND NOT att.attisdropped
+         CROSS JOIN LATERAL aclexplode(att.attacl) a
+         LEFT JOIN pg_roles vai ON vai.oid = a.grantee
+        WHERE a.grantee <> c.relowner AND a.privilege_type = 'UPDATE'$q$;
+
+  -- [S1.20 / sổ nợ 16] BẢNG SỔ KHÔNG ĐƯỢC CÓ CỘT NÀO NGOÀI CHUỖI HASH.
+  --
+  -- `MAU_HINH_DANG_SO` là một phép ĐẾM: `count(attname IN (15 tên)) = 15`. Thêm một cột thứ 16 vẫn
+  -- cho ra 15. Đo được: `ALTER TABLE audit_events ADD COLUMN payload_plaintext text` -> MIGRATE OK,
+  -- `applied=[]`, không mục nào chạm. Và chú thích của chính vị từ ấy còn viết *"THÊM cột thì an
+  -- toàn"* — câu đó ĐÚNG cho câu hỏi mà vị từ ấy trả lời (*"thân trigger dereference đủ 15 trường
+  -- chứ?"*), và đó chính là chỗ HAI CÂU HỎI KHÁC NHAU bị nhập làm một. Câu hỏi thứ hai — *"sổ có
+  -- chứa gì mà chuỗi hash không phủ không?"* — chưa từng có ai hỏi.
+  --
+  -- VÌ SAO NÓ QUAN TRỌNG: `noi_chuoi_kiem_toan()` băm ĐÚNG 15 trường (hằng `COT_SO` là nguồn duy
+  -- nhất cho cả thân hàm lẫn vị từ hình dạng). Một cột thứ 16 là nội dung sống TRONG sổ kiểm toán
+  -- mà chuỗi hash KHÔNG phủ: sửa nó không làm chuỗi gãy, và `verifyAuditChain` không thấy gì. B3
+  -- nói *"bộ kiểm chứng phát hiện được chèn, sửa, xoá và cắt đuôi"* — mệnh đề ấy nói về HÀNG; một
+  -- cột ngoài chuỗi là một đường ghi vào sổ mà mệnh đề ấy không với tới. Và cái tên
+  -- `payload_plaintext` không phải ví dụ ngẫu nhiên: nó là đúng hình dạng của **A2**.
+  --
+  -- MỤC NÀY CHỈ PHÁN XÉT (không tự `DROP COLUMN`): xoá một cột là xoá dữ liệu, và [CR4] cấm
+  -- `migrate()` tự tay làm thế. Hướng sửa đúng nằm trong chính thông điệp.
+  --
+  -- `COT_NEO` là tập PHÂN BIỆT (bốn tên đủ để nhận ra một bảng mốc neo), không phải tập ĐẦY ĐỦ —
+  -- bảng neo thật có năm cột, thêm `id`. Hai câu hỏi khác nhau, nên hai hằng khác nhau.
+  COT_NEO_DAY_DU constant text := COT_NEO || $q$, 'id'$q$;
+
+  CAU_COT_NGOAI_CHUOI constant text :=
+    $q$SELECT 'public.audit_events: có cột NGOÀI chuỗi hash — {'
+              || pg_catalog.string_agg(pg_catalog.quote_ident(a.attname), ', ' ORDER BY a.attname)
+              || '}. `noi_chuoi_kiem_toan()` băm ĐÚNG 15 trường, nên nội dung của cột này nằm '
+                 'TRONG sổ kiểm toán mà chuỗi hash KHÔNG phủ: sửa nó không làm chuỗi gãy và bộ '
+                 'kiểm chứng không thấy gì (nền của B3). Sửa: một migration đánh số MỚI bỏ cột, '
+                 'hoặc — nếu cột thật sự thuộc về sổ — đưa nó vào COT_SO và vào thân hàm nối '
+                 'chuỗi CÙNG LÚC.' AS mo_ta
+         FROM pg_attribute a
+        WHERE a.attrelid = to_regclass('public.audit_events') AND a.attnum > 0
+          AND NOT a.attisdropped AND a.attname NOT IN ($q$ || COT_SO || $q$)
+       HAVING pg_catalog.count(*) > 0
+       UNION ALL
+       SELECT 'public.audit_chain_anchors: có cột NGOÀI mốc neo — {'
+              || pg_catalog.string_agg(pg_catalog.quote_ident(a.attname), ', ' ORDER BY a.attname)
+              || '}. Cùng lý do: `chot_moc_neo()` chỉ chốt org_id/seq/hash/anchored_at.' AS mo_ta
+         FROM pg_attribute a
+        WHERE a.attrelid = to_regclass('public.audit_chain_anchors') AND a.attnum > 0
+          AND NOT a.attisdropped AND a.attname NOT IN ($q$ || COT_NEO_DAY_DU || $q$)
+       HAVING pg_catalog.count(*) > 0$q$;
+
+  -- ==========================================================================================
+  -- [S1.20 / sổ nợ 3] NỬA ĐẦU CỦA KHOẢN NỢ 3 ĐÃ ĐƯỢC PHÉP ĐO **BÁC BỎ** — KHÔNG CÓ MỤC MỚI
+  -- ==========================================================================================
+  -- Khoản nợ 3 viết: *"`NOBYPASSRLS` chỉ ghim đúng BỐN TÊN ROLE"*, và vòng này bắt đầu bằng việc
+  -- dựng một mục thứ năm suy từ tính chất (`pg_has_role(…, 'MEMBER')` với cây app_api/app_unseal).
+  -- Mục ấy ĐÃ ĐƯỢC VIẾT, ĐÃ CHẠY, và ĐÃ BỊ GỠ, vì phép đo cho thấy tiền đề của khoản nợ sai.
+  --
+  -- ĐO ĐƯỢC (PostgreSQL 16, một lượt `migrate()` sạch):
+  --     cây role của dự án TRƯỚC     : {app_api, app_unseal}
+  --     CREATE ROLE ke_gian BYPASSRLS NOLOGIN; GRANT app_api TO ke_gian;
+  --     cây role SAU GRANT           : {app_api, app_unseal, ke_gian(bypassrls)}
+  --     migrate()                    : OK
+  --     cây role SAU migrate()       : {app_api, app_unseal}      <-- ke_gian ĐÃ RỜI CÂY
+  --
+  -- **BƯỚC 1 thu hồi mọi tư cách thành viên LẠ** của app_api/app_unseal và của hai role đăng nhập
+  -- được danh sách trắng. Nên tập "role trong cây dự án" LUÔN BẰNG tập bốn tên đã ghim — và cả
+  -- bốn đều bị ghim `NOBYPASSRLS`. Cửa mà khoản nợ 3 mô tả có thật, nhưng nó **đã đóng, bởi một
+  -- lớp KHÁC với lớp mà khoản nợ chỉ tên.**
+  --
+  -- VÌ SAO GỠ THAY VÌ GIỮ CHO CHẮC: mục ấy KHÔNG tạo ra được một lượt ĐỎ nào — mọi đột biến nghĩ
+  -- ra được đều bị BƯỚC 1 dọn trước khi nó kịp phán xét. Một cổng an ninh không bao giờ đỏ được là
+  -- đúng thứ dự án gọi là **"xanh giả"**, và đã bắt hai mươi lần. Giữ nó là thêm một mục vào file
+  -- nguy hiểm nhất kho mã để đổi lấy một cảm giác.
+  --
+  -- THỨ ĐO ĐƯỢC VÀ CÓ THỂ TRÔI thì được canh ở TẦNG TEST, nơi nó thuộc về:
+  -- `db/hardening-suy-tu-tinh-chat.int.test.ts` khẳng định **cây role BẰNG tập tên được ghim**.
+  -- Ngày một migration mở danh sách trắng cho role thứ năm, khẳng định ấy ĐỎ — và người mở phải
+  -- ghim nó hoặc viết ra vì sao không cần. Đó là chỗ duy nhất cái trôi ấy nhìn thấy được.
 
   -- Mỗi hàng: [1] tên mục, [2] tiền điều kiện, [3] câu lệnh cưỡng chế, [4] hậu điều kiện
   -- ("trạng thái đã đúng"), [5] biểu thức mô tả chỗ sai, [6] quyền cần có để sửa.
@@ -2808,8 +3058,8 @@ $ham$;
     -- `tgenabled = 'A'` cho cả 41 trigger, và `045` nâng 37 cái còn ở ORIGIN trong CÙNG COMMIT —
     -- cùng lập luận H6-4 đã dùng cho `043`, áp cho phần còn lại. Ba cái đã ALWAYS từ 033/034.
     ARRAY[
-      $q$hàm + trigger bid_chi_ghi_them (018)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '018_vendor_bids.sql')$q$,
+      $q$hàm + trigger bid_chi_ghi_them (047)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '047_chi_ghi_them_chan_truncate.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -2820,7 +3070,7 @@ $ham$;
            CREATE OR REPLACE FUNCTION public.bid_chi_ghi_them() RETURNS trigger
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 BEGIN
-  RAISE EXCEPTION 'Bang % chi duoc ghi them: khong UPDATE, khong DELETE (B1)', TG_TABLE_NAME
+  RAISE EXCEPTION 'Bang % chi duoc ghi them: thao tac % bi tu choi (B1, B2)', TG_TABLE_NAME, TG_OP
     USING ERRCODE = 'check_violation';
 END
 $ham$;
@@ -2860,10 +3110,46 @@ $ham$;
              CREATE TRIGGER vendor_bid_versions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.vendor_bid_versions FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.vendor_bid_versions ENABLE ALWAYS TRIGGER vendor_bid_versions_chi_ghi_them;
            END IF;
+           IF to_regclass('public.vendor_bid_versions') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.vendor_bid_versions')
+                                 AND t.tgname = 'vendor_bid_versions_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER vendor_bid_versions_chan_truncate BEFORE TRUNCATE ON public.vendor_bid_versions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS vendor_bid_versions_chan_truncate ON public.vendor_bid_versions;
+             CREATE TRIGGER vendor_bid_versions_chan_truncate BEFORE TRUNCATE ON public.vendor_bid_versions FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.vendor_bid_versions ENABLE ALWAYS TRIGGER vendor_bid_versions_chan_truncate;
+           END IF;
+           IF to_regclass('public.bid_receipts') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.bid_receipts')
+                                 AND t.tgname = 'bid_receipts_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER bid_receipts_chan_truncate BEFORE TRUNCATE ON public.bid_receipts FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS bid_receipts_chan_truncate ON public.bid_receipts;
+             CREATE TRIGGER bid_receipts_chan_truncate BEFORE TRUNCATE ON public.bid_receipts FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.bid_receipts ENABLE ALWAYS TRIGGER bid_receipts_chan_truncate;
+           END IF;
+           IF to_regclass('public.rfq_unsealed_bids') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_unsealed_bids')
+                                 AND t.tgname = 'rfq_unsealed_bids_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_unsealed_bids_chan_truncate BEFORE TRUNCATE ON public.rfq_unsealed_bids FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_unsealed_bids_chan_truncate ON public.rfq_unsealed_bids;
+             CREATE TRIGGER rfq_unsealed_bids_chan_truncate BEFORE TRUNCATE ON public.rfq_unsealed_bids FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_unsealed_bids ENABLE ALWAYS TRIGGER rfq_unsealed_bids_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN RAISE EXCEPTION 'Bang % chi duoc ghi them: khong UPDATE, khong DELETE (B1)', TG_TABLE_NAME USING ERRCODE = 'check_violation'; END$than$
+                = $than$BEGIN RAISE EXCEPTION 'Bang % chi duoc ghi them: thao tac % bi tu choi (B1, B2)', TG_TABLE_NAME, TG_OP USING ERRCODE = 'check_violation'; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -2890,6 +3176,27 @@ $ham$;
                            AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER vendor_bid_versions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.vendor_bid_versions FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.vendor_bid_versions')
+                           AND t.tgname = 'vendor_bid_versions_chan_truncate'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER vendor_bid_versions_chan_truncate BEFORE TRUNCATE ON public.vendor_bid_versions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.bid_receipts')
+                           AND t.tgname = 'bid_receipts_chan_truncate'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER bid_receipts_chan_truncate BEFORE TRUNCATE ON public.bid_receipts FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$)
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_unsealed_bids')
+                           AND t.tgname = 'rfq_unsealed_bids_chan_truncate'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_unsealed_bids_chan_truncate BEFORE TRUNCATE ON public.rfq_unsealed_bids FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -7015,6 +7322,34 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
       $q$quyền sở hữu các bảng sổ đó (hoặc là grantor của chính quyền cần thu hồi) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.20 / sổ nợ 3 + 16] Bốn tính chất thay cho bốn danh sách tên -------------------
+    -- Cả bốn CHỈ PHÁN XÉT: câu lệnh cưỡng chế là một no-op đọc được, và hậu điều kiện là thứ
+    -- làm `migrate()` NÉM kèm mô tả. Xem khối lập luận ở phần khai báo hằng.
+    ARRAY[
+      $q$trạng thái vật lý của bảng CHỈ-GHI-THÊM (suy từ tính chất)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_CHI_GHI_THEM_VAT_LY || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_CHI_GHI_THEM_VAT_LY || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (ALTER TABLE … SET LOGGED / CREATE TRIGGER) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$quyền GHI trên bảng CHỈ-GHI-THÊM (suy từ tính chất)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_CHI_GHI_THEM_QUYEN || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_CHI_GHI_THEM_QUYEN || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (hoặc là grantor của chính quyền cần thu hồi) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$bảng sổ không có cột ngoài chuỗi hash$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_COT_NGOAI_CHUOI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_COT_NGOAI_CHUOI || $q$) t)$q$,
+      $q$quyền sở hữu bảng sổ (ALTER TABLE … DROP COLUMN) hoặc SUPERUSER$q$
     ]
   ];
 

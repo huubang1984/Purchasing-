@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ **18** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ **52** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ **19** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ **53** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -296,6 +296,7 @@ còn răng hay không.
 | **H16** | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với ĐÚNG tập cửa mà `package.json` của gói khai trong `exports`** — ~~`index.ts` là cửa duy nhất~~ (câu cũ nói chặt hơn thứ được cưỡng chế: `coQuyTacBienGioi` từng chấp nhận tới HAI cửa qua một trần dùng chung, tức cấp không một cửa thứ hai cho mười một gói; sửa ở review lượt 10, H10-2) — suy từ TÍNH CHẤT (đọc thư mục thật + đọc `package.json` thật + đọc cấu hình thật; vị từ *gói* là *thư mục có `package.json`*, không phải *thư mục có `src/index.ts`* — H10-1), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | **T0** |
 | **H17** | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 |
 | **H18** | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | **T0** |
+| **H19** | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | **T3** |
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
@@ -332,6 +333,45 @@ H16 đảo chiều: nó **không** liệt kê gói ĐƯỢC bảo vệ, nó li�
 một gói vừa có quy tắc vừa nằm trong danh sách miễn làm test ĐỎ. Hệ quả: gói thứ sáu không đòi ai
 phải nhớ gì. Đo bằng đột biến (2026-08-29): nới `to.pathNot` của họ `g6-` từ một cửa thành ba →
 **ĐỎ THẬT**, gọi tên đúng `rfq`.
+
+**Giới hạn của H19, nói ra thay vì để người đọc tự phát hiện** — cả ba do vòng review lượt 12 chỉ ra:
+
+- Vế *"chặn TRUNCATE"* được cưỡng chế bằng **sự tồn tại của một trigger đúng hình dạng và đang
+  BẬT**, không bằng một phép thử `TRUNCATE` thật ở deploy-time. Phép thử thật nằm ở tầng T3.
+- Vế *"cột ngoài chuỗi hash"* chỉ soi **hai cái tên đủ điều kiện** `public.audit_events` và
+  `public.audit_chain_anchors` — cùng phạm vi và cùng lý do với `CAU_HINH_DANG_CHINH_TAC` của S0:
+  nó khẳng định về BẢNG CHÍNH TẮC, không đi tìm mọi bảng sổ có thể có ở mọi schema.
+- Tập hàm canh suy từ **hình dạng thân hàm** (`prosrc` không chứa `RETURN`), tức một phép so khớp
+  VĂN BẢN. Chiều ồn ào đã đóng bằng `prolang = plpgsql`; chiều IM LẶNG — một hàm canh viết kiểu
+  khác rơi khỏi tập — vẫn mở, và là **khoản nợ 60**.
+
+**H19 được bổ sung ngày 2026-09-07** (S1.20), và nó là lần thứ BA cùng một khuôn — sau H16 (biên
+giới gói) và H18 (bề mặt export) — nhưng lần này ở tầng CSDL, trong `hardening.always.sql`: file
+chạy **mọi lần `migrate()`**, kể cả trên production đã có dữ liệu.
+
+**Nó ra đời từ một dự báo của chính sổ nợ, và dự báo ấy đã đúng.** Khoản nợ 16 (viết ở vòng fix
+cuối của S0) tố cáo bất đối xứng *"`bang_so` nhận bảng theo HAI TÊN VIẾT CỨNG trong khi `bang_al`
+nhận bảng lạ theo TÍNH CHẤT"* và viết: *"bảng báo giá S1 sẽ rơi thẳng vào đó"*. S1 dựng một hàm
+canh chỉ-ghi-thêm THỨ HAI (`bid_chi_ghi_them()`, migration 018) cắm trên BA bảng —
+`bid_receipts`, `rfq_unsealed_bids`, `vendor_bid_versions` — và cả ba nằm ngoài cả hai vế.
+
+**Lỗ nặng nhất KHÔNG phải lỗ mà khoản nợ nêu.** Khoản nợ đoán UNLOGGED, UNIQUE và REVOKE. Phép đo
+tìm ra vế thứ tư mà nó không nghĩ tới: ba trigger của 018/019 là `BEFORE DELETE OR UPDATE FOR EACH
+ROW`, và **một trigger cấp HÀNG không bao giờ chạy cho `TRUNCATE`**. Đo trên PostgreSQL 16:
+`TRUNCATE public.bid_receipts` → **OK**, trong khi `TRUNCATE public.audit_events` → NÉM. Một câu
+lệnh xoá sạch mọi biên nhận nộp thầu (**B2**), mọi phiên bản báo giá (**B1**) và mọi giá đã mở —
+trong khi hai mã ấy đang ✅ với 10 và 25 khẳng định. Đóng ở `047`.
+
+**Vế KHÔNG tổng quát hoá được, và nó phải được nói ra:** `UNIQUE (org_id, seq)` gắn với CHUỖI HASH
+chứ không với tính chỉ-ghi-thêm — `bid_receipts` không có cột `seq`, và một RFQ có nhiều báo giá
+song song nên không có thứ tự toàn cục nào để đánh số. Ràng buộc ấy VẪN chỉ áp cho hai bảng sổ.
+Khoản nợ 16 buộc tội *"bất đối xứng này không có một chú thích nào giải thích"*; nay nó có.
+
+**Ranh giới TỰ CHỮA / PHÁN XÉT là một phần của mệnh đề, không phải chi tiết cài đặt.** [CR4] của S0
+cấm `migrate()` tự tay đổi ngữ nghĩa một bảng mà nó SUY RA — và bẫy ấy có thật: cắm
+`chan_sua_xoa()` lên ba bảng của S1 sẽ đưa chúng vào `can_co`, nơi hardening đòi đủ bộ ba trigger
+mang tên khác, tức **chặn deploy trên một lược đồ hợp lệ**. H19 vì thế đo CẢ HAI chiều: bảng có
+TÊN thì `migrate()` tự chữa và trả OK; bảng SUY RA thì `migrate()` NÉM kèm hướng dẫn.
 
 **H18 được bổ sung ngày 2026-09-07** (S1.18), và nó là VẾ THỨ HAI của chính khoản nợ mà H16 tự
 đặt tên khi ra đời: *"nó KHÔNG phủ danh sách trắng barrel (khoản nợ 9) … 'có' ấy vẫn là một hằng

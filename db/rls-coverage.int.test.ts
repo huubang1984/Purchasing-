@@ -295,15 +295,31 @@ describe("phủ RLS", () => {
     }
   });
 
-  // [vòng fix 1 — M1] Danh sách bảng GỐC tenant nhân bản BA nơi. Đây là test đồng bộ, đúng
-  // khuôn §R3 đã dùng cho thân hàm app_current_org_id() (nhân bản HAI nơi và CÓ test). Không có
-  // nó, task sau thêm bảng gốc thứ hai rồi quên một bản sao là một lỗ IM LẶNG: hardening sẽ
-  // không bật RLS cho bảng đó, hoặc lớp tĩnh sẽ không đòi POLICY/GRANT cho nó.
-  it("[M1] danh sách bảng GỐC tenant khớp nhau ở cả ba nơi nhân bản", () => {
-    const sqlHardening = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
-    const khopSql = /relname IN \(([^)]*)\)\)\$q\$/.exec(sqlHardening);
-    expect(khopSql, "không tìm thấy danh sách bảng gốc trong VI_TU_BANG_TENANT").not.toBeNull();
-    const tuSql = [...khopSql![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!).sort();
+  // ~~[vòng fix 1 — M1] Danh sách bảng GỐC tenant nhân bản BA nơi. Đây là test đồng bộ, đúng~~
+  // ~~khuôn §R3 đã dùng cho thân hàm app_current_org_id() (nhân bản HAI nơi và CÓ test). Không có~~
+  // ~~nó, task sau thêm bảng gốc thứ hai rồi quên một bản sao là một lỗ IM LẶNG: hardening sẽ~~
+  // ~~không bật RLS cho bảng đó, hoặc lớp tĩnh sẽ không đòi POLICY/GRANT cho nó.~~
+  //
+  // [S1.20 / sổ nợ 16] **BẢN SAO THỨ BA KHÔNG CÒN TỒN TẠI, và đó là điểm của vòng này.**
+  // `VI_TU_BANG_TENANT` từng giấu `OR relname IN ('organizations')` bên trong một vị từ tính-chất;
+  // nay nó SUY bảng gốc từ *đích của một khoá ngoại MỘT CỘT tên `org_id`*. Không còn danh sách nào
+  // ở đó để đồng bộ — nên phép so ba-nơi được thay bằng thứ MẠNH HƠN: **tập suy ra từ CSDL THẬT
+  // phải bằng hai danh sách viết tay còn lại.** Câu hỏi cũ (*"ba bản sao có khớp nhau không?"*)
+  // là câu hỏi về văn bản; câu hỏi mới (*"danh sách viết tay có còn đúng với lược đồ không?"*) là
+  // câu hỏi về sự thật, và nó bắt được cả ca mà cả ba bản sao cùng SAI.
+  it("[M1 / S1.20] danh sách bảng GỐC tenant khớp hai nơi nhân bản CÒN LẠI, và khớp tập SUY TỪ lược đồ thật", async () => {
+    // Bỏ dòng CHÚ THÍCH trước khi tìm: `hardening.always.sql` giữ nguyên văn câu cũ trong một khối
+    // `--` để người sau đọc được lịch sử, và một phép tìm thô sẽ khớp vào chính khối ấy. Đã tự vấp
+    // — cùng họ với bài học "gạch bỏ tại chỗ, giữ nguyên văn": quy ước ấy làm mọi phép tìm THÔ
+    // trên file này thành một cái bẫy.
+    const maHardening = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8")
+      .split("\n")
+      .filter((d) => !d.trimStart().startsWith("--"))
+      .join("\n");
+    expect(
+      maHardening.includes("relname IN ('organizations')"),
+      "VI_TU_BANG_TENANT không được quay lại nhận bảng gốc theo TÊN",
+    ).toBe(false);
 
     const tsShape = readFileSync(
       fileURLToPath(new URL("./migration-shape.test.ts", import.meta.url)),
@@ -312,9 +328,26 @@ describe("phủ RLS", () => {
     const khopShape = /const BANG_GOC_TENANT = \[([^\]]*)\]/.exec(tsShape);
     expect(khopShape, "không tìm thấy BANG_GOC_TENANT trong migration-shape.test.ts").not.toBeNull();
     const tuShape = [...khopShape![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!).sort();
-
-    expect(tuSql).toEqual([...BANG_GOC_TENANT].sort());
     expect(tuShape).toEqual([...BANG_GOC_TENANT].sort());
+
+    // Vế mạnh: đúng cái vị từ hardening dùng, chạy trên lược đồ thật.
+    const { rows } = await db.pool.query<{ goc: string }>(
+      `SELECT DISTINCT ref.relname AS goc
+         FROM pg_constraint fk
+         JOIN pg_class fkb ON fkb.oid = fk.conrelid
+         JOIN pg_class ref ON ref.oid = fk.confrelid
+         JOIN pg_namespace fkn ON fkn.oid = fkb.relnamespace
+        WHERE fk.contype = 'f' AND fkn.nspname = 'public'
+          AND array_length(fk.conkey, 1) = 1
+          AND EXISTS (SELECT 1 FROM pg_attribute fka
+                       WHERE fka.attrelid = fkb.oid AND fka.attnum = fk.conkey[1]
+                         AND fka.attname = 'org_id' AND NOT fka.attisdropped)
+        ORDER BY 1`,
+    );
+    expect(
+      rows.map((r) => r.goc),
+      "tập bảng gốc SUY TỪ lược đồ thật phải bằng danh sách viết tay",
+    ).toEqual([...BANG_GOC_TENANT].sort());
   });
 
   // [vòng fix 1 — CR1] META-TEST của danh sách trắng hình dạng. Đúng khuôn hàng rào G1 ở

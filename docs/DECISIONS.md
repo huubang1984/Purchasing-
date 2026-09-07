@@ -2575,3 +2575,191 @@ nạp"* được **kiểm bằng cách ĐỌC**, chưa phải một phép đo l�
 10. **Hai đột biến của cổng devDependency:** trả `node_modules` về `exclude` ⇒ test chống-rỗng-ruột
     ĐỎ **trong khi `pnpm depcruise` vẫn XANH**; gỡ miễn trừ `test-support` ⇒ 2 vi phạm THẬT.
     ✔ đã đo.
+
+---
+
+## ADR-028 — Ranh giới TỰ CHỮA / PHÁN XÉT của `hardening.always.sql`: chủ thể suy từ TÍNH CHẤT, tự chữa chỉ thứ có TÊN
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 16**, và **bác bỏ nửa
+đầu khoản nợ 3** · Liên quan: **B1**, **B2**, **B3**, **F1**, **H19**, ADR-027
+
+### 1. Vì sao ADR này tồn tại
+
+`hardening.always.sql` chạy **mọi lần `migrate()`**, kể cả trên production đã có dữ liệu. Nó là
+file duy nhất trong kho có quyền **tự tay sửa lược đồ**. Quy tắc chi phối quyền ấy — S0 gọi là
+`[CR4]` — đã tồn tại từ Task 6 và đã được đo bằng ba chế độ hỏng thật, nhưng nó **chỉ sống trong
+một khối chú thích**. Không có ADR nào cho nó, nên mỗi vòng mở rộng vùng canh lại phải suy lại từ
+đầu, và S1.20 suýt vi phạm nó ở bước thứ hai (xem §5⑵).
+
+ADR-027 vừa phát biểu *"biên giới là một TÍNH CHẤT, không phải một danh sách"* cho tầng module.
+ADR này phát biểu **hai vế** của cùng nguyên tắc cho tầng CSDL, và vế thứ hai mới là vế mới.
+
+### 2. Quyết định
+
+⑴ **Chủ thể của một mục hardening được SUY TỪ TÍNH CHẤT.** Một danh sách tên chỉ được giữ khi có
+   một lý do **đo được** viết ngay tại chỗ nói vì sao tính chất tương ứng không tồn tại hoặc suy
+   sai. *"Chưa ai đổi"* và *"hiện tại chỉ có hai bảng"* không phải lý do.
+
+⑵ ~~**`migrate()` chỉ TỰ CHỮA những đối tượng mà một migration đánh số sở hữu theo TÊN. Thứ nó
+   SUY RA thì chỉ PHÁN XÉT** — báo lỗi kèm hướng dẫn sửa, không tự sửa.~~
+
+   **[review lượt 12, M3] CÂU VỪA GẠCH RỘNG HƠN PHÉP ĐO CỦA CHÍNH VÒNG NÀY, và nó sai theo hướng
+   dễ chịu — nó khen mã nhiều hơn mã đáng được khen.** §7⑷ dưới đây đo rằng `migrate()` bật
+   ENABLE + FORCE RLS trên `chi_nhanh`, một bảng **không migration đánh số nào sở hữu theo tên**.
+   Nó không phải khiếm khuyết của vòng này: **mục (A) đã tự chữa trên một tập SUY RA từ S0** —
+   *"bảng có cột `org_id`"* là một tính chất, không phải một danh sách. Câu ⑵ như đã viết mô tả sai
+   cả mã cũ lẫn mã mới.
+
+   **Phát biểu đúng:** `migrate()` được TỰ CHỮA trên một tập suy ra **khi và chỉ khi** hành động là
+   ĐƠN ĐIỆU và FAIL-CLOSED — nó chỉ BẬT một lớp bảo vệ, không đổi ngữ nghĩa của bảng và không cho
+   bên ghi làm được thêm bất cứ điều gì. `ENABLE ROW LEVEL SECURITY`, `FORCE`, `SET LOGGED`,
+   `REVOKE` là đơn điệu. **Không đơn điệu, và vì thế bị cấm trên tập suy ra:** cắm/gỡ trigger, đổi
+   thân hàm, `DROP COLUMN`, `ADD CONSTRAINT` — mỗi thứ đều đổi được hành vi của một đường ghi HỢP
+   LỆ, và cả ba chế độ hỏng ở §3 đều thuộc lớp ấy.
+
+   **Hệ quả phải nói ra, vì nó không hiển nhiên:** lượt `sua` COMMIT riêng, TRƯỚC lượt `phan_xet`
+   (`packages/db/src/migrate.ts`). Nên một bảng gốc tenant mới, sai hình dạng policy, để lại một
+   **trạng thái lai**: cờ RLS đã bật (mọi đọc trả 0 hàng — fail-closed, đúng chiều) VÀ deploy bị
+   chặn ở lượt phán xét. Đó là cái giá của tính đơn điệu, và nó rẻ hơn chiều ngược lại.
+
+⑶ **Vế nào không tổng quát hoá được thì GIỮ theo tên VÀ phải mang chú thích nói vì sao.** Một bất
+   đối xứng có lý do đọc được là một quyết định; một bất đối xứng trần là một khoản nợ.
+
+⑷ **Một mục canh mà không đột biến nào làm nó ĐỎ được thì KHÔNG ĐƯỢC THÊM.** Nếu phép đo cho thấy
+   cửa đã đóng bởi một lớp khác, thứ đúng để làm là **ghi lại phép đo** và đặt lớp canh ở chỗ cái
+   trôi thật sự nhìn thấy được — thường là một test — chứ không thêm một mục vĩnh viễn vào file
+   nguy hiểm nhất kho mã.
+
+### 3. Vì sao ⑵ là vế nặng nhất
+
+Chế độ hỏng của hardening **không đối xứng**. Một mục quá LỎNG để lọt một lỗ; một mục quá CHẶT
+**chặn deploy trên một lược đồ hợp lệ** — và vì hardening chạy TRƯỚC vòng migration đánh số, đường
+vá bằng một migration mới **không tới được**. Chỉ còn sửa tay trên cụm. Đó là ngõ cụt `QT1`.
+
+S0 đã đo ba chế độ hỏng của việc tự chữa trên bảng SUY RA, và cả ba đều im lặng:
+
+- tạo một bảng trùng tên khác hình dạng ⇒ hardening tự cắm trigger nối chuỗi ⇒ mọi `INSERT` ném
+  `record "new" has no field "org_id"` **vĩnh viễn**;
+- một bảng qua được mọi phép kiểm ⇒ `migrate()` **THÀNH CÔNG, không lỗi không warning** ⇒ `INSERT`
+  ném ở cột thứ bảy;
+- `bao_gia` chỉ muốn chặn DELETE ⇒ hardening tự thêm `bao_gia_chan_update` ⇒ `UPDATE` bị từ chối;
+  `DROP TRIGGER` rồi `migrate()` thì nó **quay lại**.
+
+### 4. Hệ quả: bốn lỗ đo được, và lỗ nặng nhất không nằm trong sổ nợ
+
+Khoản nợ 16 dự báo *"bảng báo giá S1 sẽ rơi thẳng vào đó"*. Dự báo đúng: S1 dựng hàm canh
+chỉ-ghi-thêm **thứ hai** (`bid_chi_ghi_them()`, 018) cắm trên **ba** bảng, cả ba nằm ngoài cả
+`bang_so` (danh sách hai tên) lẫn `bang_al` (khoá theo OID của `chan_sua_xoa`).
+
+| # | Lỗ | Đo được |
+|---|---|---|
+| ⑴ | Bảng chỉ-ghi-thêm của S1 **UNLOGGED được** | `ALTER TABLE bid_receipts SET UNLOGGED` → `MIGRATE OK`, `relpersistence` còn `'u'` |
+| ⑵ | ACL của chúng **không bị canh** | `GRANT UPDATE, DELETE ON bid_receipts TO app_api` → `MIGRATE OK`, acl còn `app_api=rwd` |
+| ⑶ | **`TRUNCATE` đi qua** — lỗ mà sổ nợ 16 KHÔNG nêu | `TRUNCATE public.bid_receipts` → **OK**; `TRUNCATE public.audit_events` → NÉM |
+| ⑷ | Bảng sổ nhận **cột ngoài chuỗi hash** | `ALTER TABLE audit_events ADD COLUMN payload_plaintext text` → `MIGRATE OK`, `applied=[]` |
+
+**⑶ nặng nhất, và nó nặng vì lý do cấu trúc chứ không vì sơ suất:** ba trigger của 018/019 là
+`BEFORE DELETE OR UPDATE FOR EACH ROW`, và **một trigger cấp HÀNG không bao giờ chạy cho
+`TRUNCATE`** — TRUNCATE là thao tác cấp CÂU LỆNH. Bảng sổ có một trigger TRUNCATE riêng từ 003 vì
+đúng lý do ấy; ba bảng của S1 ra đời sau và không ai chép vế thứ ba sang. Một câu lệnh xoá sạch
+mọi biên nhận nộp thầu (**B2**), mọi phiên bản báo giá (**B1**) và mọi giá đã mở — trong khi ma
+trận ghi cả hai mã ✅ với 10 và 25 khẳng định. Đóng bằng migration `047`.
+
+**⑷ là hai câu hỏi bị nhập làm một.** `MAU_HINH_DANG_SO` đếm `attname IN (15 tên) = 15` và chú
+thích của chính nó viết *"THÊM cột thì an toàn"*. Câu ấy **đúng** cho câu hỏi mà vị từ ấy trả lời
+(*"thân trigger dereference đủ 15 trường chứ?"*). Câu hỏi thứ hai — *"sổ có chứa gì mà chuỗi hash
+không phủ không?"* — chưa từng có ai hỏi. Một cột thứ 16 là nội dung sống TRONG sổ kiểm toán mà
+sửa nó **không làm chuỗi gãy**; B3 nói về HÀNG, nên mệnh đề ấy không với tới. Và cái tên
+`payload_plaintext` không phải ví dụ ngẫu nhiên — nó là đúng hình dạng của **A2**.
+
+### 5. Ba thứ phải ghi ra vì chúng là quyết định, không phải chi tiết
+
+⑴ **`UNIQUE (org_id, seq)` KHÔNG tổng quát hoá.** Nó gắn với CHUỖI HASH chứ không với tính
+chỉ-ghi-thêm: `bid_receipts` không có cột `seq`, và một RFQ có nhiều báo giá song song nên không có
+thứ tự toàn cục nào để đánh số. Ràng buộc ấy VẪN chỉ áp cho hai bảng sổ — nay kèm lý do, đúng thứ
+khoản nợ 16 đòi khi nó viết *"bất đối xứng này không có một chú thích nào giải thích"*.
+
+⑵ **Cách sửa hiển nhiên cho ⑶ là một cái bẫy, và nó suýt được chọn.** Dùng `chan_sua_xoa()` cho ba
+trigger TRUNCATE mới là lựa chọn đầu tiên: hàm ấy có sẵn thông điệp theo `TG_OP` và đã được ghim.
+Nhưng vế "bảng lạ" của `bang_al` nhận bảng theo **OID của `chan_sua_xoa`** — cắm nó lên ba bảng
+này đưa chúng vào `can_co`, nơi hardening đòi đủ bộ ba `<bảng>_chan_update/_chan_delete/
+_chan_truncate`. Ba tên ấy không tồn tại (tên thật là `_chi_ghi_them`), nên `migrate()` sẽ **BÁO
+LỖI trên một lược đồ HỢP LỆ**. `047` vì thế định nghĩa lại thân `bid_chi_ghi_them()` (thông điệp
+đọc `TG_OP`) thay vì mượn hàm kia — đắt hơn một mục ghim, rẻ hơn một lần chặn deploy.
+
+⑶ **Nửa đầu khoản nợ 3 bị PHÉP ĐO BÁC BỎ, và mục đã viết cho nó đã bị GỠ.** Khoản nợ viết
+*"`NOBYPASSRLS` chỉ ghim đúng BỐN TÊN ROLE"*. Vòng này dựng một mục thứ năm suy từ tính chất, chạy
+nó, rồi đo:
+
+```text
+cây role của dự án TRƯỚC          : {app_api, app_unseal}
+CREATE ROLE ke_gian BYPASSRLS NOLOGIN; GRANT app_api TO ke_gian;
+cây role SAU GRANT                : {app_api, app_unseal, ke_gian(bypassrls)}
+migrate()                         : OK
+cây role SAU migrate()            : {app_api, app_unseal}      <- ke_gian ĐÃ RỜI CÂY
+```
+
+**BƯỚC 1 thu hồi mọi tư cách thành viên LẠ**, nên tập *"role trong cây dự án"* LUÔN BẰNG tập bốn
+tên đã ghim. Cửa mà khoản nợ mô tả có thật và **đã đóng — bởi một lớp KHÁC với lớp mà khoản nợ chỉ
+tên**. Mục mới không tạo ra được một lượt ĐỎ nào, nên theo §2⑷ nó bị gỡ; thứ CÓ THỂ trôi (danh
+sách trắng nở ra role thứ năm) được canh ở `db/hardening-suy-tu-tinh-chat.int.test.ts` bằng khẳng
+định *"cây role BẰNG tập tên được ghim"*.
+
+Đây là lần thứ hai một khoản nợ đóng bằng cách bác bỏ tiền đề của chính nó (lần đầu: khoản 58,
+S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết ra của một hàng rào (S1.18).
+
+### 6. Cái này KHÔNG đóng
+
+- **Tập hàm canh chỉ-ghi-thêm vẫn suy từ HÌNH DẠNG THÂN HÀM** (`prosrc` không có `RETURN`), tức một
+  phép so khớp văn bản. Nó chặt hơn một danh sách tên và có phản ví dụ thật giữ cho nó không lỏng
+  (`rfq_items_chan_truncate` — cùng hình dạng thân, nhưng là trigger TRUNCATE cấp câu lệnh, nên vế
+  *"cả UPDATE lẫn DELETE, cấp HÀNG"* loại nó ra). Nó **không** là một tính chất ngữ nghĩa.
+- **Không đóng phần còn lại của khoản nợ 3** — vế *"một hàm plpgsql ngoài danh sách không được
+  ghim"* đã đóng từ **S1.14/S1.15** (nợ 54 và 56), và sổ nợ 3 THIU ở nửa ấy suốt bốn vòng.
+- **`047` chỉ thêm chốt TRUNCATE cho ba bảng ĐANG CÓ.** Một bảng chỉ-ghi-thêm thứ tư ra đời mà
+  không có chốt TRUNCATE sẽ được **báo ra**, không được vá hộ — đúng §2⑵.
+- **[review lượt 12, H1] MỘT BẢNG CHỈ-GHI-THÊM PHÂN MẢNH TỐN MỘT CHỐT CHO MỖI PHÂN MẢNH.** Reviewer
+  nêu ca này như một khả năng *chặn deploy trên lược đồ hợp lệ*. Phép đo bác bỏ vế *"hợp lệ"*: trigger
+  cấp HÀNG **được** nhân bản xuống lá (nên lá vào tập suy ra), trigger TRUNCATE **không** được nhân
+  bản, và `TRUNCATE <lá>` **đi lọt** dù cha có chốt. Lá là một LỖ THẬT, nên đòi chốt trên từng lá là
+  ĐÚNG chứ không quá chặt. **Cái giá là có thật và không được giấu:** một phân mảnh mới tạo ngoài
+  vòng migration (việc bảo trì định kỳ, thường tự động) sẽ **chặn deploy** cho tới khi nó có chốt —
+  và thông điệp của mục canh nói thẳng điều đó. Ca này **chưa tồn tại** hôm nay (không bảng
+  chỉ-ghi-thêm nào phân mảnh), nên đây là một cái giá đã ĐO chứ chưa phải một cái giá đang trả.
+- **[review lượt 12, L5] MỘT `GRANT` CỦA KẺ CÓ ĐẶC QUYỀN LÀ MỘT DoS DEPLOY KHÔNG TỰ GỠ.** Mục ACL
+  của tập SUY RA chỉ phán xét (đúng §2⑵ đã sửa: `REVOKE` là đơn điệu, nhưng nó đi kèm `CASCADE` nên
+  bán kính của nó không đơn điệu — xem `[I2]`), trong khi mục tương đương của `bang_so` tự thu hồi.
+  Hệ quả: một `GRANT UPDATE ON bid_receipts TO …` chặn MỌI deploy sau đó, kể cả bản vá khẩn, cho tới
+  khi có người vào cụm gõ `REVOKE`. Đây là đánh đổi CỐ Ý — chiều còn lại là `migrate()` tự thu hồi
+  quyền trên một bảng nó chỉ suy ra — nhưng nó thuộc về danh sách này chứ không nên nằm im.
+
+### 7. Đo bằng gì
+
+1. **Bảy khẳng định ĐỎ THẬT trước khi sửa** — cả bảy chạy trên cây mã `f768d3f`. ✔ đã đo.
+2. **`TRUNCATE` trên ba bảng S1 trả về OK trước `047`, NÉM sau `047`.** ✔ đã đo.
+3. **Hai kết quả ĐÚNG KHÁC NHAU cho cùng một đột biến `SET UNLOGGED`:** bảng có TÊN ⇒ `migrate()`
+   OK và bảng về LOGGED (tự chữa); bảng SUY RA ⇒ `migrate()` NÉM (phán xét). Đây là phép đo của
+   chính §2⑵. ✔ đã đo.
+4. **Đối chứng dương của vị từ tenant:** một bảng gốc tenant THỨ HAI kèm policy đúng
+   `HINH_DANG_CHUAN` ⇒ RLS + FORCE được bật trên CẢ HAI bảng **và `migrate()` vẫn THÀNH CÔNG**.
+   Không có vế thứ hai này thì một vị từ quá rộng sẽ đi qua mà không ai thấy. ✔ đã đo.
+5. **Phản ví dụ giữ vị từ không lỏng:** `rfq_items` KHÔNG được lọt vào tập chỉ-ghi-thêm. ✔ đã đo.
+6. **Đột biến `ADD COLUMN payload_plaintext`** ⇒ `migrate()` NÉM kèm tên cột. ✔ đã đo.
+7. **Bác bỏ nửa đầu nợ 3:** `ke_gian` rời cây sau `migrate()`. ✔ đã đo (§5⑶).
+8. **Một khiếm khuyết của chính vòng này, tìm ra bằng cách chạy:** bí danh `r` trong một câu SQL
+   nhúng bị plpgsql thay bằng biến vòng lặp **trước khi** SQL phân giải bí danh — vị từ trả về TẬP
+   RỖNG và mục canh **luôn XANH**. `[IM2]` đã ghi nguyên văn cảnh báo này ở vòng fix 1 của S0, và
+   vòng này vẫn vấp. Ca của `[IM2]` ném 55000 (ồn ào); ca này im lặng. ✔ đã đo.
+9. **[vòng sửa sau review lượt 12] `GRANT UPDATE (canonical_text) ON bid_receipts`** ⇒ `migrate()`
+   NÉM kèm tên cột. Trước vòng sửa: `MIGRATE OK` — quyền mức CỘT vô hình với `relacl`. ✔ đã đo.
+10. **[vòng sửa] `DISABLE TRIGGER` trên chốt TRUNCATE** cho hai kết quả ĐÚNG KHÁC NHAU: trên
+    `bid_receipts` (có TÊN trong mục ghim `047`) hardening **tự chữa** và trigger về `'A'`; trên một
+    phân mảnh SUY RA hardening **NÉM**. Trước vòng sửa cả hai đều XANH trong khi `TRUNCATE` đi lọt.
+    ✔ đã đo cả hai.
+11. **[vòng sửa] Bốn sự kiện của ca PHÂN MẢNH** — trigger TRUNCATE cắm được trên `relkind='p'`;
+    trigger hàng nhân bản xuống lá; trigger TRUNCATE thì không; `TRUNCATE <lá>` đi lọt. ✔ đã đo cả
+    bốn, và chúng là thứ bác bỏ vế *"lược đồ hợp lệ"* của H1.
+12. **[vòng sửa] `prosrc` của `suppress_redundant_updates_trigger` là `'suppress_redundant_updates_trigger'`,
+    `lanname = 'internal'`** — không chứa `RETURN`. Đây là phép đo buộc vế `prolang = plpgsql` vào vị
+    từ: không có nó, hai trigger dựng sẵn của PostgreSQL đủ để chặn deploy trên một lược đồ hợp lệ.
+    ✔ đã đo.
