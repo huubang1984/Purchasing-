@@ -756,8 +756,13 @@ describe("migration của dự án", () => {
       // [Task 5] Danh sách này KHÔNG viết tay: từ khi 003 thêm hai bảng sổ, một danh sách cứng
       // sẽ khôi phục thiếu và test đỏ vì lý do không liên quan tới thứ nó đang đo. Đọc thẳng
       // tập bảng tenant từ catalog cho nó tự lớn theo lược đồ.
-      // [S1.14 / 042] Vế `org_id ... OR relname = 'organizations'` KHÔNG phải trang trí: nó là đúng
-      // `VI_TU_BANG_TENANT` của hardening. Từ 042 có một bảng BẬT RLS mà KHÔNG thuộc cây tenant
+      // [S1.14 / 042] ~~Vế `org_id ... OR relname = 'organizations'` KHÔNG phải trang trí: nó là đúng~~
+      // ~~`VI_TU_BANG_TENANT` của hardening.~~ **[S1.20 / review lượt 12, L4] Câu vừa gạch nay SAI:**
+      // `VI_TU_BANG_TENANT` không còn vế `relname` — bảng gốc suy từ *đích của khoá ngoại `org_id`
+      // MỘT CỘT trỏ tới cột `id`* (ADR-028). Bản sao ở đây phải đi theo, nếu không thì ngày có bảng
+      // gốc tenant THỨ HAI, vòng khôi phục bên dưới sẽ không dựng policy cho nó và `migrate()` gãy
+      // vì một lý do KHÔNG liên quan tới thứ test này đang đo.
+      // Từ 042 có một bảng BẬT RLS mà KHÔNG thuộc cây tenant
       // (`caller_rate_limits` — bộ đếm theo người gọi, không `org_id`); policy của nó không nhắc tới
       // `app_current_org_id()` nên `DROP ... CASCADE` ở trên không chạm, và dựng cho nó một policy
       // `id = app_current_org_id()` là dựng một policy trên cột không tồn tại.
@@ -770,7 +775,22 @@ describe("migration của dự án", () => {
           " WHERE n.nspname = 'public' AND c.relrowsecurity " +
           "   AND (EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid " +
           "                 AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped) " +
-          "        OR c.relname = 'organizations') ORDER BY 1",
+          "        OR EXISTS (SELECT 1 FROM pg_constraint fk " +
+          "                     JOIN pg_class fkb ON fkb.oid = fk.conrelid " +
+          "                     JOIN pg_namespace fkn ON fkn.oid = fkb.relnamespace " +
+          "                    WHERE fk.confrelid = c.oid AND fk.contype = 'f' " +
+          "                      AND fkn.nspname = 'public' " +
+          "                      AND array_length(fk.conkey, 1) = 1 " +
+          "                      AND EXISTS (SELECT 1 FROM pg_attribute fka " +
+          "                                   WHERE fka.attrelid = fkb.oid " +
+          "                                     AND fka.attnum = fk.conkey[1] " +
+          "                                     AND fka.attname = 'org_id' " +
+          "                                     AND NOT fka.attisdropped) " +
+          "                      AND EXISTS (SELECT 1 FROM pg_attribute fkd " +
+          "                                   WHERE fkd.attrelid = c.oid " +
+          "                                     AND fkd.attnum = fk.confkey[1] " +
+          "                                     AND fkd.attname = 'id' " +
+          "                                     AND NOT fkd.attisdropped))) ORDER BY 1",
       );
       expect(bangTenant.length, "không có bảng tenant nào để khôi phục").toBeGreaterThan(1);
       for (const { ten, cot } of bangTenant) {
@@ -922,7 +942,10 @@ describe("migration của dự án", () => {
   // LỚN NHẤT định nghĩa hàm ấy — bảy hàm ở đây được `CREATE OR REPLACE` nhiều lần, và ghim nhầm bản
   // cũ làm `migrate()` LÙI hàm về bản ấy ở MỌI lần chạy. Có phép kiểm riêng bên dưới cho đúng điều đó.
   const HAM_56: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
-    { ham: "bid_chi_ghi_them", migration: "018_vendor_bids.sql", trigger: ["bid_receipts_chi_ghi_them", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chi_ghi_them"] },
+    // [S1.20 / sổ nợ 16] `047` định nghĩa lại thân hàm này (thông điệp đọc `TG_OP`) và thêm BA
+    // trigger `_chan_truncate` — nên bản ghim phải trỏ sang `047`, đúng quy tắc "migration CUỐI
+    // CÙNG" mà chính khoản nợ 56 dựng ra. Sáu trigger, không phải ba.
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
@@ -2287,6 +2310,7 @@ describe("migration của dự án", () => {
           "044_don_bucket_otp.sql",
           "045_trigger_con_lai_enable_always.sql",
           "046_chi_so_cua_so_otp.sql",
+          "047_chi_ghi_them_chan_truncate.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -5050,7 +5074,7 @@ describe("migration của dự án", () => {
    *   (c) hai đường nâng cấp 001/002 và 001/002/003 vẫn QUA — hậu điều kiện mới có tiền điều
    *       kiện `to_regclass(...) IS NOT NULL`, và đó đúng là chỗ mục (D1c) của vòng trước đã vấp.
    */
-  it("[Task 6 — vòng fix 2 — I1] (D5): bảng neo cùng khuôn, THÊM cột thì an toàn, hai đường nâng cấp vẫn QUA", async () => {
+  it("[Task 6 — vòng fix 2 — I1 · S1.20] (D5): bảng neo cùng khuôn, ~~THÊM cột thì an toàn~~ THÊM cột thì hardening KÊU chứ không HỎNG, hai đường nâng cấp vẫn QUA", async () => {
     const db = await startPostgres();
     const d12 = await mkdtemp(join(tmpdir(), "tp-t6-d12-"));
     const d123 = await mkdtemp(join(tmpdir(), "tp-t6-d123-"));
@@ -5119,11 +5143,33 @@ describe("migration của dự án", () => {
         "044_don_bucket_otp.sql",
         "045_trigger_con_lai_enable_always.sql",
         "046_chi_so_cua_so_otp.sql",
+        "047_chi_ghi_them_chan_truncate.sql",
       ]);
 
-      // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
+      // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
+      //
+      // [S1.20 / sổ nợ 16] **CÂU VỪA GẠCH ĐÚNG MỘT NỬA, VÀ NỬA KIA LÀ MỘT LỖ.** Nó đúng ở tầng nó
+      // được viết ra để đo: vị từ hình dạng (`MAU_HINH_DANG_SO`) là một phép ĐẾM, nên thêm cột
+      // không làm hardening tưởng đây là bảng khác và không làm nó cắm/gỡ trigger sai — đó là
+      // `[CR4]`, và vế ấy VẪN ĐÚNG (khẳng định trigger bên dưới không đổi một chữ).
+      //
+      // Nhưng nó bị ĐỌC như *"thêm cột vào sổ kiểm toán là chuyện an toàn"*, và câu đó SAI:
+      // `noi_chuoi_kiem_toan()` băm ĐÚNG 15 trường, nên **mọi cột thứ 16 là nội dung sống trong sổ
+      // mà chuỗi hash KHÔNG phủ** — sửa nó không làm chuỗi gãy và `verifyAuditChain` không thấy gì.
+      // Đo được trước S1.20: `ALTER TABLE audit_events ADD COLUMN payload_plaintext text` →
+      // `MIGRATE OK`, `applied=[]`, không mục nào chạm. Cái tên ấy là đúng hình dạng của **A2**.
+      //
+      // NAY: thêm cột KHÔNG làm hardening HỎNG — nó làm hardening **KÊU**. Hai vế được đo riêng.
       await db.pool.query("ALTER TABLE audit_events ADD COLUMN ghi_chu text");
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      const loiCotThua = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiCotThua, "cột ngoài chuỗi hash mà migrate() vẫn QUA").not.toBeNull();
+      expect(loiCotThua!.message).toContain(
+        "public.audit_events: có cột NGOÀI chuỗi hash — {ghi_chu}",
+      );
+      // Và vế S0 vẫn đứng: hardening KHÔNG cắm/gỡ trigger sai vì một cột lạ.
       const { rows: tg } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM pg_trigger t " +
           " WHERE t.tgrelid = 'public.audit_events'::regclass AND NOT t.tgisinternal " +
@@ -5131,6 +5177,8 @@ describe("migration của dự án", () => {
       );
       expect(tg[0]!.n).toBe("1");
       await db.pool.query("ALTER TABLE audit_events DROP COLUMN ghi_chu");
+      // Đối chứng dương: gỡ cột xong thì deploy đi qua lại ngay.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       // (a) bảng MỐC NEO cùng khuôn.
       await db.pool.query("ALTER TABLE audit_chain_anchors RENAME COLUMN anchored_at TO neo_luc");
@@ -5362,6 +5410,7 @@ describe("migration của dự án", () => {
         "044_don_bucket_otp.sql",
         "045_trigger_con_lai_enable_always.sql",
         "046_chi_so_cua_so_otp.sql",
+        "047_chi_ghi_them_chan_truncate.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
