@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-07 (**S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-07 (**S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -393,7 +393,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 55 | ~~**[review lượt 5, H5-3] Oracle tồn tại tổ chức qua 429 (H4-5) vẫn còn, đổi dạng** — bucket bộ nhớ (tổ chức lạ) và bucket CSDL (tổ chức thật) là hai bộ đếm rời: mồi N lần vào một UUID giả rồi gửi UUID ứng viên ⇒ 429 = lạ, 200 = thật, MỘT lời gọi. Chấp nhận (UUIDv4 không vét cạn được); đóng thật cần một bảng bucket người gọi KHÔNG khoá ngoại tới `organizations`, tổ chức thật hay lạ đếm cùng hàng~~ **ĐÓNG 2026-09-07 (S1.14, ADR-024)** — migration `042`: bảng `caller_rate_limits` không `org_id`, không khoá ngoại ⇒ tổ chức thật và tổ chức lạ tăng CÙNG MỘT HÀNG (429 hết là oracle); `BucketBoNho` của nợ 52 bị xoá; bộ dọn nền 5 phút xoá cửa sổ cũ hơn hai cửa sổ; policy DUY NHẤT là 'mọi hàng, trừ phiên khách'. Bucket toàn tổ chức ở lại `otp_rate_limits` — phần chênh còn lại là THỜI GIAN của một giao dịch lỗi khoá ngoại | `apps/api/src/dispatch.ts`, `apps/api/src/bucket-bo-nho.ts` |
 | 56 | ~~**[S1.14 / nợ 54] 35 hàm `RETURNS trigger` còn lại CHƯA được hardening ghim thân** — danh sách có tên và có lý do ở `HAM_TRIGGER_KHONG_GHIM` (`db/migrations.int.test.ts`), và test đầy đủ của nợ 54 giữ cho nó không lớn thêm trong im lặng. Cả 35 thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE FUNCTION … RETURN NEW` sau triển khai sống qua `migrate()`). Thứ tự đóng nên theo "app_api ghi được bảng nó canh không": nhóm RFQ/unseal/bid trước (máy trạng thái, D2, append-only), nhóm còn lại sau~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — ghim nốt 35 hàm, 41 trigger, cùng khuôn khối S1.13; `HAM_TRIGGER_KHONG_GHIM` nay **RỖNG** và phép kiểm đổi từ "hai tập phủ nhau" sang "tập ghim BẰNG tập thật" (thêm một dòng loại trừ là MỞ LẠI khoản nợ này). Không đóng theo nhóm như dự kiến — ghim cả 35 cùng lúc vì bản ghim đọc THẲNG từ CSDL nên chia nhóm chỉ thêm việc. Ba lớp mới đi kèm: ⑴ migration ghi trong mỗi mục phải là migration CUỐI CÙNG định nghĩa hàm (bảy hàm được `CREATE OR REPLACE` nhiều lần — ghim nhầm bản cũ làm `migrate()` LÙI hàm ở MỌI lần chạy, và test đồng bộ KHÔNG thấy); ⑵ `045` nâng 37 trigger còn lại lên `ENABLE ALWAYS` ⇒ 80/80 là `'A'`, có phép kiểm suy từ tính chất; ⑶ [H7-1] tập trigger của MỌI hàm đã ghim phải bằng đúng tập đã khai | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
 | 57 | ~~**[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — đường THỨ TƯ: migration `044` thêm một policy `FOR DELETE TO app_api` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên hàng đã quá SÀN 30 phút. Ba đường cũ vẫn đúng như đã ghi; đường này không hỏi "tổ chức nào" mà hỏi "hàng này còn chặn được ai". Bộ dọn **xoá được mà KHÔNG đọc được** (`FOR DELETE`, không `FOR ALL` ⇒ `[INV-F1]` còn đúng nguyên văn), nên câu dọn KHÔNG có `WHERE`: PostgreSQL đòi policy SELECT ngay khi câu lệnh tham chiếu cột — đã đo, `WHERE` ⇒ 0 hàng, câu trần ⇒ xoá đúng hàng quá sàn. Hai cửa ngoại lệ có tên được mở (`NGOAI_LE_HINH_DANG` dòng ĐẦU TIÊN sau ba vòng rỗng, `NGOAI_LE_LAC_CHO`), mỗi cửa một meta-test | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
-| 58 | **[S1.15 / review H7-3] Bộ dọn `otp_rate_limits` quét TOÀN BẢNG mỗi năm phút** — và không sửa được bằng một chỉ số: vế lọc là OR của hai policy trên hai cột, nên bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1` (đo bằng `EXPLAIN (ANALYZE, BUFFERS)`: 20 000 hàng ⇒ 9,5 ms, `shared hit=19246`). ~0,5 µs/hàng, tức 5 triệu hàng ≈ **2,4 giây** mỗi lượt, giữ một kết nối của pool YÊU CẦU (nay có trần `statement_timeout` 60 s — H7-6). Chỉ số `window_start` đã bị GỠ khỏi `044` vì nó không bao giờ được đọc nhưng phải được ghi ở mọi lời gọi OTP. Đường thoát khi quy mô đòi: bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng được chỉ số) cho các tổ chức tiến trình đã thấy, CỘNG câu trần cho phần còn lại | `packages/invitation/src/invitation.ts`, `db/migrations/044_don_bucket_otp.sql` |
+| 58 | ~~**[S1.15 / review H7-3] Bộ dọn `otp_rate_limits` quét TOÀN BẢNG mỗi năm phút** — và không sửa được bằng một chỉ số: vế lọc là OR của hai policy trên hai cột, nên bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1`~~ **ĐÓNG 2026-09-07 (S1.16, migration `046`) — bằng cách BÁC BỎ TIỀN ĐỀ CỦA CHÍNH NÓ.** Phép đo của H7-3 có thật; chế độ của nó thì không đại diện: **95% hàng đã quá sàn**, nơi Seq Scan là tối ưu THẬT, nên kết luận *"không chỉ số nào phục vụ được"* là một suy diễn quá phạm vi. Đo lại ở chế độ của một bảng ĐANG CHẠY (200 000 hàng, **1%** quá sàn): PostgreSQL dựng `BitmapOr` từ `otp_rate_limits_pkey` (vế `org_id = <GUC>`) và `otp_rate_limits_window_idx` (vế `window_start < mốc`) — **1,07 ms** so với **37,96 ms**, tức **35 lần**, và chi phí đi theo SỐ HÀNG PHẢI XOÁ chứ không theo KÍCH THƯỚC BẢNG. `046` dựng lại chỉ số mà H7-3 đã gỡ; `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch, có ĐỐI CHỨNG DƯƠNG (gỡ chỉ số ⇒ quay về Seq Scan). Bài học đắt hơn bản vá: **một phép đo ở MỘT chế độ không phải một kết luận cho MỌI chế độ** — và lần này chính lớp "đo trước khi tin" của dự án lại là thứ sinh ra lời khai sai | `packages/invitation/src/invitation.ts`, `db/migrations/044_don_bucket_otp.sql` |
 
 ## Kiến trúc
 
@@ -1184,6 +1184,40 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     **Số đo trên HEAD (`c4b453d`):** `pnpm t0` 178 module / 0 vi phạm; `pnpm test` 554/554;
     `pnpm test:int` **723/723**; `pnpm evidence` **51/51**, **1277 khẳng định**, cổng XANH, vitest
     thoát mã 0.
+
+31. **[2026-09-07] S1.16 — KHOẢN NỢ 58 ĐÓNG, và nó đóng bằng cách BÁC BỎ TIỀN ĐỀ CỦA CHÍNH NÓ.**
+    Sổ nợ 58 ra đời từ phát hiện H7-3 của vòng trước: *"bộ dọn `otp_rate_limits` quét toàn bảng, và
+    không chỉ số nào phục vụ được vế lọc OR của hai policy"*. Vòng này mở ra để tìm đường tối ưu, và
+    việc đầu tiên là **đo lại tiền đề** thay vì đi thẳng vào đường thoát đã ghi sẵn. Tiền đề sai.
+
+    Phép đo của H7-3 chạy trên 20 000 hàng với **19 000 (95%) đã quá sàn**. Ở tỷ lệ ấy Seq Scan là
+    tối ưu THẬT — đọc tuần tự rẻ hơn đọc chỉ số rồi nhảy vào gần như mọi trang — nên bộ lập lịch
+    chọn đúng, và thứ sai là câu suy ra từ đó. Đo lại ở chế độ của một bảng có bộ dọn chạy đều
+    (200 000 hàng, **2 000 = 1%** quá sàn), cùng câu lệnh, cùng `app_api` chưa gắn tổ chức:
+
+    | Phương án | Kế hoạch | Thời gian | Buffers |
+    |---|---|---|---|
+    | CÓ chỉ số | `BitmapOr`(`otp_rate_limits_pkey`, `otp_rate_limits_window_idx`) → Bitmap Heap Scan, `Heap Blocks: exact=25` | **1,07 ms** | `hit=25 read=3` |
+    | KHÔNG chỉ số | `Seq Scan`, `Rows Removed by Filter: 198000` | **37,96 ms** | `hit=2470` |
+
+    **35 lần**, và điều quan trọng hơn con số: có chỉ số thì chi phí đi theo SỐ HÀNG PHẢI XOÁ, không
+    theo KÍCH THƯỚC BẢNG — tức toàn bộ vế *"5 triệu hàng ≈ 2,4 giây"* của sổ nợ 58 tan cùng với nó.
+    Cơ chế: PostgreSQL tách `A OR B` thành hai lần quét chỉ số rồi hợp bitmap, miễn CẢ HAI vế đều có
+    chỉ số; vế `org_id = <GUC>` dùng cột dẫn đầu của khoá chính, vế `window_start < mốc` cần đúng
+    chỉ số đã bị gỡ. Gỡ nó đi là gỡ mất một nửa của phép hợp.
+
+    **Không có gì khác được thêm vào, và đó là một quyết định.** Đường thoát đã ghi ở ADR-025 §3
+    (một bộ dọn GẮN TỔ CHỨC cho các tổ chức đã thấy, cộng câu trần cho phần còn lại) KHÔNG được cài
+    đặt: nó phức tạp hơn, chỉ phủ được một phần, và — quan trọng nhất — nó giải một bài toán không
+    tồn tại. Nhịp dọn 5 phút cũng giữ nguyên: ở 1,07 ms mỗi lượt, không có gì để tối ưu.
+
+    **Bài học, đắt hơn bản vá:** một phép đo ở MỘT chế độ không phải một kết luận cho MỌI chế độ. Lần
+    này chính lớp *"đo trước khi tin"* của dự án lại là thứ sinh ra lời khai sai — vì con số thật đi
+    kèm làm cho kết luận rộng quá phạm vi trông như đã được kiểm chứng. Bốn chỗ mang lời khai ấy đã
+    được gạch TẠI CHỖ, giữ nguyên văn: `044`, ADR-025 (§1 và §3), `evidence/security-reviews.md`
+    §S1.15 dòng H7-3, và chính dòng 58 của sổ nợ.
+
+    **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0). **Không mở nợ mới.**
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở

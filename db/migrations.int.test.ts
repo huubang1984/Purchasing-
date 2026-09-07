@@ -2286,6 +2286,7 @@ describe("migration của dự án", () => {
           "043_danh_tinh_theo_phien_enable_always.sql",
           "044_don_bucket_otp.sql",
           "045_trigger_con_lai_enable_always.sql",
+          "046_chi_so_cua_so_otp.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -5117,6 +5118,7 @@ describe("migration của dự án", () => {
         "043_danh_tinh_theo_phien_enable_always.sql",
         "044_don_bucket_otp.sql",
         "045_trigger_con_lai_enable_always.sql",
+        "046_chi_so_cua_so_otp.sql",
       ]);
 
       // (b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.
@@ -5359,6 +5361,7 @@ describe("migration của dự án", () => {
         "043_danh_tinh_theo_phien_enable_always.sql",
         "044_don_bucket_otp.sql",
         "045_trigger_con_lai_enable_always.sql",
+        "046_chi_so_cua_so_otp.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

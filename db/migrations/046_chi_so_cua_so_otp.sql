@@ -1,0 +1,52 @@
+-- =============================================================================================
+-- 046 — [sổ nợ 58] DỰNG LẠI `otp_rate_limits_window_idx`: PHÉP ĐO CỦA H7-3 ĐÚNG, KẾT LUẬN THÌ SAI
+-- =============================================================================================
+-- `044` tạo chỉ số này. Review lượt 7 (H7-3) gỡ nó đi, với lý do *"vế lọc là OR của hai policy trên
+-- hai cột nên không chỉ số nào phục vụ được — bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó
+-- là `rows=1`"*. Câu ấy SAI, và nó sai theo một cách đáng ghi lại hơn là đáng xoá: phép đo đứng sau
+-- nó có thật, chỉ là nó được thực hiện ở MỘT CHẾ ĐỘ, rồi kết luận được phát biểu cho MỌI chế độ.
+--
+-- Phép đo của H7-3: 20 000 hàng, **19 000 trong đó (95%) đã quá sàn**. Ở tỷ lệ ấy Seq Scan là tối
+-- ưu THẬT — đọc tuần tự cả bảng rẻ hơn đọc chỉ số rồi nhảy vào gần như mọi trang. Bộ lập lịch chọn
+-- đúng; thứ sai là câu *"không chỉ số nào phục vụ được"* suy ra từ đó.
+--
+-- Phép đo lại, ở chế độ của một bảng ĐANG CHẠY (200 000 hàng, **2 000 hàng = 1%** đã quá sàn — hình
+-- dạng thật của một bảng có bộ dọn chạy đều), cùng câu lệnh, cùng `app_api` chưa gắn tổ chức:
+--
+--   CÓ chỉ số:
+--     Delete on otp_rate_limits (actual time=0.968..0.969) Buffers: shared hit=2025 read=3
+--       ->  Bitmap Heap Scan (actual time=0.060..0.517 rows=2000) Heap Blocks: exact=25
+--             ->  BitmapOr
+--                   ->  Bitmap Index Scan on otp_rate_limits_pkey
+--                         Index Cond: (org_id = <app.org_id>)
+--                   ->  Bitmap Index Scan on otp_rate_limits_window_idx   <- ĐÂY
+--                         Index Cond: (window_start < now() - '00:30:00')
+--     Execution Time: 1.072 ms
+--
+--   KHÔNG chỉ số:
+--     Seq Scan on otp_rate_limits (actual time=0.012..37.224 rows=2000)
+--       Rows Removed by Filter: 198000   Buffers: shared hit=2470
+--     Execution Time: 37.958 ms
+--
+-- **35 lần**, và quan trọng hơn con số: có chỉ số thì chi phí đi theo SỐ HÀNG PHẢI XOÁ, không đi
+-- theo KÍCH THƯỚC BẢNG. Toàn bộ sổ nợ 58 ("bộ dọn quét toàn bảng mỗi năm phút, ~2,4 giây ở 5 triệu
+-- hàng") đứng trên vế sau, nên nó tan cùng với vế sau.
+--
+-- VÌ SAO `BitmapOr` LÀM ĐƯỢC ĐIỀU MÀ H7-3 NÓI LÀ KHÔNG: PostgreSQL tách `A OR B` thành hai lần quét
+-- chỉ số rồi hợp bitmap, miễn CẢ HAI vế đều có chỉ số. Vế thứ nhất (`org_id = <GUC>`) dùng cột dẫn
+-- đầu của khoá chính; vế thứ hai cần đúng chỉ số này. Vế `NULLIF(...) IS NULL` đi kèm được áp như
+-- một bộ lọc trên bitmap, không cản việc dùng chỉ số. Gỡ chỉ số đi là gỡ mất MỘT nửa của phép hợp,
+-- và khi ấy `BitmapOr` không dựng được nữa — đó là toàn bộ cơ chế.
+--
+-- GIÁ CỦA CHỈ SỐ, cân lại cho đủ: một lần chèn btree cho mỗi HÀNG MỚI. Đường `ON CONFLICT DO UPDATE`
+-- chỉ đổi `hits`, mà `hits` không nằm trong chỉ số nào nên cập nhật ấy vẫn HOT — không chạm chỉ số.
+-- Tức giá là "một lần chèn cho mỗi bucket mới mỗi cửa sổ", đổi lấy việc bộ dọn không phải đọc cả
+-- bảng mỗi lượt. H7-3 gọi nó là "khoản lỗ ròng trên đường ghi nóng nhất"; ở chế độ đo lại, nó là
+-- khoản lãi ròng.
+--
+-- LỚP CANH ĐI KÈM (`db/otp-don-ke-hoach.int.test.ts`): kế hoạch của đúng câu bộ dọn, ở đúng chế độ
+-- 1%, phải DÙNG chỉ số này — và test có ĐỐI CHỨNG DƯƠNG: gỡ chỉ số ra thì cùng câu ấy quay về
+-- Seq Scan. Không có vế đối chứng, một khẳng định "không thấy Seq Scan" xanh y hệt khi bảng rỗng.
+-- =============================================================================================
+
+CREATE INDEX otp_rate_limits_window_idx ON otp_rate_limits (window_start);
