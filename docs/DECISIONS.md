@@ -2403,6 +2403,47 @@ danh sách ấy đúng là một sự thật vận hành phải viết ra ở đ
 
 ---
 
+### 7c. Phép đo của S1.19 — lệnh `trich` và công thức `openssl(1)`
+
+14. **Công thức đầu-cuối:** `pnpm neo trich` sinh ba tệp, `openssl dgst -sha256 -verify` trả
+    **Verified OK**. ✔ đã đo.
+15. **Ba đối chứng âm**, mỗi cái khẳng định CẢ mã thoát LẪN chuỗi *"verification failure"*: sửa một
+    ký tự của `chain_hash` · lật byte cuối chữ ký (kèm phép so độ dài, để phân biệt *"chữ ký sai"*
+    với *"tệp không đọc được"*) · khoá công khai lạ (kèm một đối chứng **dương** đòi chính tệp khoá
+    lạ ấy nạp được bằng `openssl pkey -pubin`). ✔ đã đo cả ba.
+16. **Một lần dịch xuống dòng làm OpenSSL từ chối**, và nó nói đúng câu của một vụ giả mạo. ✔ đã đo
+    — [review lượt 11 — H11-7] bản đầu khai điều này như một phép đo đã chạy trong khi test khi ấy
+    đỏ ở một khẳng định KHÁC trước khi OpenSSL được hỏi; nay là một ca thường trực.
+17. **`trich` không cần `DATABASE_URL`, cũng không cần khoá RIÊNG** — hai biến bị XOÁ hẳn khỏi môi
+    trường (không đặt rỗng), kèm một vế chống rỗng ruột đòi chúng cũng không có trong môi trường
+    của bộ chạy test. Đột biến: gọi `docBoKy()` ở đầu `trich` ⇒ ĐỎ. ✔ đã đo.
+18. **`trich` không ghi đè** (`flag: "wx"`, `mode: 0o600`, `mkdir` `mode: 0o700`). Đột biến: bỏ
+    `wx` ⇒ ĐỎ. ✔ đã đo. Nó đóng hai thứ cùng lúc — ghi đè im lặng, và **đi theo một symlink** do
+    người khác đặt sẵn trong `--ra`.
+19. **Hai mốc neo cùng `seq` mà khác `chain_hash` ⇒ NÉM, không chọn hộ.** Đột biến: gỡ phép kiểm ⇒
+    ĐỎ. ✔ đã đo. Ca này dựng bằng `createSign` thẳng trên khoá riêng thật, nên cả hai bản ghi đều
+    qua được `verifyAnchorRecord` — mâu thuẫn nằm ở chỗ khác, và đó là điều làm nó khó thấy.
+20. **PEM là bản chép ĐÚNG BYTE của khoá trong vòng khoá.** Đột biến: đổi `pemTuSpkiDer` sang
+    `createPublicKey(...).export({format:"pem"})` ⇒ ĐỎ. ✔ đã đo — **nhưng chỉ sau lần viết thứ
+    hai**: bản đầu của mốc chết này SỐNG SÓT đột biến, vì với một SPKI hợp lệ hai đường cho ra cùng
+    một chuỗi base64. Nó chỉ đỏ khi chạy trên đúng đầu vào làm hai đường khác nhau — một SPKI 91
+    byte cộng một byte rác, thứ mà cả `createPublicKey` lẫn `openssl pkey` đều NHẬN.
+21. **Dòng lệnh ĐƯỢC TÀI LIỆU HOÁ chạy được:** một ca `spawn` đúng `pnpm neo trich --org … --ra …`,
+    đi qua script workspace thật thay vì gọi `node … src/index.ts`. ✔ đã đo — bài học khoản nợ 23.
+
+**MỘT VẾ CỦA VÒNG SỬA KHÔNG CÓ MỐC CHẾT, và nó phải được đọc như thế:** phép kiểm lại chữ ký trên
+ĐÚNG đối tượng sắp ghi ra đĩa ([review lượt 11 — H11-1], đóng ca *"byte đi ra đến từ lượt đọc thứ
+hai chưa qua kiểm"*). Đột biến đã chạy — gỡ nó — và **cả 16 test vẫn XANH**, vì dựng một lượt chạy
+mà nơi cất đổi GIỮA hai lượt đọc đòi một móc tiêm vào `readAllRaw` mà đường CLI không có. Vế ấy
+được giữ vì lập luận, không vì một phép đo.
+
+**PHẠM VI CHẠY:** toàn bộ khối này là `*.int.test.ts`, nên trong CI nó chỉ chạy ở job **T3
+(`ubuntu-latest`)** — `t1`/`t2` chạy trên cả Windows nhưng loại trừ int test. Tức mối lo CRLF, vốn
+là mối lo của Windows với `core.autocrlf=true`, **không bao giờ được đo trên Windows trong CI**.
+Nói ra vì nó là một khoảng chênh thật giữa thứ được bảo vệ và thứ được đo.
+
+---
+
 ## ADR-027 — Biên giới module và bề mặt export là một TÍNH CHẤT, không phải một danh sách: vị từ *gói* là `package.json`, tập cửa là `exports`, và mọi danh sách miễn trừ phải RỖNG
 
 **Ngày:** 2026-09-07 · **Trạng thái:** Đã chấp nhận · **Vòng:** S1.18 · **Đóng:** khoản nợ 9 và 17

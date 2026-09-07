@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-07 (**S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG (ADR-027: biên giới module và bề mặt export là một TÍNH CHẤT; hai danh sách miễn trừ về RỖNG; review lượt 10 bắt một cổng đã rỗng ruột từ S0)** — mục 33; cùng ngày: **S1.17 — KHOẢN NỢ 11 ĐÓNG (ADR-026: artefact neo ngoài)** — mục 32; trước đó: **S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-07 (**S1.19 — ADR-026 §5⑶ ĐÓNG: công thức `openssl(1)` đã được CHẠY (lệnh `trich`; review lượt 11 — một mốc chết cũng cần một phép đo)** — mục 34; cùng ngày: **S1.18 — HAI KHOẢN NỢ 9 VÀ 17 ĐÓNG (ADR-027: biên giới module và bề mặt export là một TÍNH CHẤT; hai danh sách miễn trừ về RỖNG; review lượt 10 bắt một cổng đã rỗng ruột từ S0)** — mục 33; cùng ngày: **S1.17 — KHOẢN NỢ 11 ĐÓNG (ADR-026: artefact neo ngoài)** — mục 32; trước đó: **S1.16 — KHOẢN NỢ 58 ĐÓNG bằng cách BÁC BỎ tiền đề của chính nó (migration `046`)** — mục 31; cùng ngày: **S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -394,6 +394,7 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 56 | ~~**[S1.14 / nợ 54] 35 hàm `RETURNS trigger` còn lại CHƯA được hardening ghim thân** — danh sách có tên và có lý do ở `HAM_TRIGGER_KHONG_GHIM` (`db/migrations.int.test.ts`), và test đầy đủ của nợ 54 giữ cho nó không lớn thêm trong im lặng. Cả 35 thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE FUNCTION … RETURN NEW` sau triển khai sống qua `migrate()`). Thứ tự đóng nên theo "app_api ghi được bảng nó canh không": nhóm RFQ/unseal/bid trước (máy trạng thái, D2, append-only), nhóm còn lại sau~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — ghim nốt 35 hàm, 41 trigger, cùng khuôn khối S1.13; `HAM_TRIGGER_KHONG_GHIM` nay **RỖNG** và phép kiểm đổi từ "hai tập phủ nhau" sang "tập ghim BẰNG tập thật" (thêm một dòng loại trừ là MỞ LẠI khoản nợ này). Không đóng theo nhóm như dự kiến — ghim cả 35 cùng lúc vì bản ghim đọc THẲNG từ CSDL nên chia nhóm chỉ thêm việc. Ba lớp mới đi kèm: ⑴ migration ghi trong mỗi mục phải là migration CUỐI CÙNG định nghĩa hàm (bảy hàm được `CREATE OR REPLACE` nhiều lần — ghim nhầm bản cũ làm `migrate()` LÙI hàm ở MỌI lần chạy, và test đồng bộ KHÔNG thấy); ⑵ `045` nâng 37 trigger còn lại lên `ENABLE ALWAYS` ⇒ 80/80 là `'A'`, có phép kiểm suy từ tính chất; ⑶ [H7-1] tập trigger của MỌI hàm đã ghim phải bằng đúng tập đã khai | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
 | 57 | ~~**[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — đường THỨ TƯ: migration `044` thêm một policy `FOR DELETE TO app_api` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên hàng đã quá SÀN 30 phút. Ba đường cũ vẫn đúng như đã ghi; đường này không hỏi "tổ chức nào" mà hỏi "hàng này còn chặn được ai". Bộ dọn **xoá được mà KHÔNG đọc được** (`FOR DELETE`, không `FOR ALL` ⇒ `[INV-F1]` còn đúng nguyên văn), nên câu dọn KHÔNG có `WHERE`: PostgreSQL đòi policy SELECT ngay khi câu lệnh tham chiếu cột — đã đo, `WHERE` ⇒ 0 hàng, câu trần ⇒ xoá đúng hàng quá sàn. Hai cửa ngoại lệ có tên được mở (`NGOAI_LE_HINH_DANG` dòng ĐẦU TIÊN sau ba vòng rỗng, `NGOAI_LE_LAC_CHO`), mỗi cửa một meta-test | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
 | 58 | ~~**[S1.15 / review H7-3] Bộ dọn `otp_rate_limits` quét TOÀN BẢNG mỗi năm phút** — và không sửa được bằng một chỉ số: vế lọc là OR của hai policy trên hai cột, nên bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1`~~ **ĐÓNG 2026-09-07 (S1.16, migration `046`) — bằng cách BÁC BỎ TIỀN ĐỀ CỦA CHÍNH NÓ.** Phép đo của H7-3 có thật; chế độ của nó thì không đại diện: **95% hàng đã quá sàn**, nơi Seq Scan là tối ưu THẬT, nên kết luận *"không chỉ số nào phục vụ được"* là một suy diễn quá phạm vi. Đo lại ở chế độ của một bảng ĐANG CHẠY (200 000 hàng, **1%** quá sàn): PostgreSQL dựng `BitmapOr` từ `otp_rate_limits_pkey` (vế `org_id = <GUC>`) và `otp_rate_limits_window_idx` (vế `window_start < mốc`) — **1,07 ms** so với **37,96 ms**, tức **35 lần**, và chi phí đi theo SỐ HÀNG PHẢI XOÁ chứ không theo KÍCH THƯỚC BẢNG. `046` dựng lại chỉ số mà H7-3 đã gỡ; `db/otp-don-ke-hoach.int.test.ts` canh kế hoạch, có ĐỐI CHỨNG DƯƠNG (gỡ chỉ số ⇒ quay về Seq Scan). Bài học đắt hơn bản vá: **một phép đo ở MỘT chế độ không phải một kết luận cho MỌI chế độ** — và lần này chính lớp "đo trước khi tin" của dự án lại là thứ sinh ra lời khai sai | `packages/invitation/src/invitation.ts`, `db/migrations/044_don_bucket_otp.sql` |
+| 59 | **[S1.19] Khẳng định *"mã nguồn hiện tại không vi phạm quy tắc nào"* KHÔNG HERMETIC.** `apps/api/src/routes.test.ts` viết một probe thật vào `apps/api/src/routes/` rồi chạy `depcruise`; `tests/architecture/boundaries.test.ts` chạy `pnpm run depcruise` trên TOÀN kho. Hai tệp khác nhau ⇒ vitest chạy song song ⇒ lượt quét toàn kho nhìn thấy probe của tệp kia. **Tỷ lệ đã đo trong vòng S1.19: 2/2 lượt `pnpm evidence` (chạy cả hai tầng trong một tiến trình) ĐỎ; 0/4 lượt `pnpm test` (chỉ tầng đơn vị) đỏ** — chênh lệch khớp với cơ chế: lượt gộp có nhiều tệp chạy song song hơn nên cửa sổ chồng lấn rộng hơn. Cửa sổ ấy còn rộng thêm sau S1.18 (13 probe mới). Hệ quả cho CI: job `evidence` KHÔNG đỏ vì `pnpm evidence` cố ý cho bước vitest đỏ (xem khối đầu `chay-evidence.mjs`), nhưng T1/T2 thì đỏ được — chỉ là hiếm hơn. Không phải fail-open — là ĐỎ GIẢ — nhưng một cổng đỏ ngẫu nhiên là cổng người ta học cách chạy lại thay vì đọc. Đường đóng có thể: cho mọi probe ghi vào một thư mục ngoài cây được cruise, hoặc cưỡng chế chạy tuần tự cho nhóm test chạy depcruise (`describe.sequential` / `poolOptions`), hoặc để lượt quét toàn kho đọc một cây SẠCH (`git stash`-free: cruise một bản `git archive`) | `tests/architecture/boundaries.test.ts`, `apps/api/src/routes.test.ts` |
 
 ## Kiến trúc
 
@@ -1435,6 +1436,102 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     tên — đã đo lại: `hardening.always.sql:906` vẫn là một phép **ĐẾM**, nên thêm một cột
     `payload_plaintext` vào `audit_events` đi qua hardening mà không mục nào chạm), và một lượt rà
     lại sổ nợ S0 (ít nhất mục 7 đã thiu: *"apps/ rỗng"* sai từ S1.10). **Không mở nợ mới.**
+
+34. **[2026-09-07] S1.19 — ADR-026 §5⑶ ĐÓNG: công thức `openssl(1)` đã được CHẠY, và vòng này để
+    lại một bài học về chính cách viết mốc chết.** Lượt review thứ chín (H9-9) từng hạ một câu ở
+    bốn chỗ: *"kiểm toán viên kiểm được artefact này mà không cần một dòng mã nào của chúng ta"*.
+    Thứ đã đo khi ấy là chữ ký kiểm được bằng `createVerify` của `node:crypto`; thứ CHƯA đo là
+    **ba thao tác ở giữa** — tách `text` khỏi dòng JSONL (chuỗi mang `\n` ở dạng escape),
+    `base64 -d` cho `sig`, và đổi SPKI DER sang PEM. `pnpm neo trich --org <uuid> --ra <thư-mục>
+    [--seq <n>]` là ba thao tác ấy, và `cong-cu.int.test.ts` chạy `openssl dgst -sha256 -verify`
+    THẬT trên đầu ra: **Verified OK**, cộng **ba đối chứng âm** (sửa một ký tự `chain_hash`, lật
+    một byte cuối chữ ký, khoá công khai lạ).
+
+    **GIỚI HẠN PHẢI ĐỌC CÙNG, vì đây là chỗ dễ đọc rộng nhất:** `node:crypto` gọi OpenSSL bên
+    dưới, nên đây **KHÔNG** phải hai cài đặt mật mã độc lập. Thứ mới là **CÔNG THỨC** — một chuỗi
+    thao tác của con người, chạy trên đúng những tệp một kiểm toán viên sẽ có trong tay, bằng một
+    chương trình KHÁC tiến trình đã tạo ra chúng. Và câu *"không cần một dòng mã nào của chúng
+    ta"* vẫn **CHƯA** đúng: `trich` là mã của chúng ta.
+
+    **LƯỢT REVIEW AN NINH THỨ MƯỜI MỘT: 0 CRITICAL, 2 HIGH, 5 MEDIUM, 6 LOW** — bảng đầy đủ ở
+    `evidence/security-reviews.md` §S1.19. Lượt này chạy trên một commit có tên (`2cc36bb`). Bốn
+    phát hiện đáng đọc kể cả khi không ai đụng lại mã này:
+
+    - **H11-1 (HIGH) — byte đi vào artefact đến từ lượt đọc THỨ HAI, chưa qua kiểm chữ ký.**
+      `trich` gọi `loadVerifiedAnchors` (fail-closed) rồi `readAllRaw` LẦN NỮA, và ghép hai kết
+      quả theo CHỈ SỐ; lớp canh duy nhất giữa hai lượt là phép so **ĐỘ DÀI**. Một nơi cất bị thay
+      nội dung mà GIỮ NGUYÊN SỐ DÒNG đi lọt, và công cụ in *"Kết quả mong đợi: Verified OK"* cho
+      một artefact mà OpenSSL sẽ từ chối — bằng đúng câu của một vụ giả mạo. Đóng bằng một lượt
+      `verifyAnchorRecord` trên ĐÚNG đối tượng sắp ghi. **Vế này KHÔNG có mốc chết** — đột biến
+      gỡ nó đi thì cả 16 test vẫn XANH — và điều đó được ghi ra ở ba nơi thay vì để người sau tự
+      phát hiện.
+    - **H11-2 (HIGH) — ba tệp ghi bằng `flag` mặc định, tức ĐI THEO SYMLINK.** Kẻ tấn công cục bộ
+      biết `--ra` và `<uuid>` (dữ liệu công khai, nằm trong tên tệp nơi cất và mọi dòng stdout của
+      `xuat`) đặt trước một symlink trỏ tới một tệp người vận hành ghi được. Kho **đã có** chuẩn
+      ngược lại từ [review H3-3] (`hop-thu-dev.ts`: `mode: 0o600`, `flag: "wx"`) và `trich` không
+      theo. Đóng bằng đúng khuôn ấy.
+    - **H11-4 (MEDIUM) — MỘT MỐC CHẾT CŨNG CẦN MỘT PHÉP ĐO, và đây là ca dạy điều đó.** Reviewer
+      chỉ ra rằng quyết định *"PEM là bản chép ĐÚNG BYTE"* không có mốc chết. Tôi viết một mốc
+      chết; **nó SỐNG SÓT đột biến** — vì với một SPKI hợp lệ, `pemTuSpkiDer` và
+      `createPublicKey(...).export(...)` cho ra CÙNG một chuỗi base64. Phải viết lại lần hai trên
+      đúng đầu vào làm hai đường khác nhau: một SPKI 91 byte cộng một byte rác, thứ mà **cả
+      `createPublicKey` lẫn `openssl pkey` đều NHẬN**. Bài học: **chạy đột biến NGAY sau khi viết
+      mốc chết** — cùng câu `bien-gioi-goi.test.ts` đã viết cho quy tắc depcruise, nay áp cho
+      chính test.
+    - **H11-5 (MEDIUM) — thông điệp của `trich` từng là một lời khuyên đi đúng bước RỬA.**
+      `readAllRaw` trả `[]` cho ENOENT nên nó không phân biệt *"chưa từng neo"* với *"tệp
+      `<org>.jsonl` vừa bị XOÁ"*; bản đầu biến sự im lặng ấy thành *"chạy `pnpm neo xuat` trước"*
+      — đúng thao tác làm `mocNuocCao` bằng 0 và rửa một vụ cắt đuôi thành gốc tin cậy mới (ca hở
+      ADR-026 §5⑵). Thông điệp nay nêu CẢ HAI khả năng; **ca hở gốc không đóng**, nó cần một
+      trạng thái nằm NGOÀI nơi cất.
+
+    **MỘT PHÉP ĐO CỦA VÒNG BÁC MỘT NỬA LẬP LUẬN CỦA CHÍNH NÓ.** Bản đầu biện minh cho việc dựng
+    PEM bằng bọc base64 bằng câu *"Node lặng lẽ sửa, còn kiểm toán viên chạy `openssl pkey` thì
+    gãy"*. Đo: `createPublicKey` **nhận** và chuẩn hoá; `openssl pkey -pubin -inform DER` **cũng
+    nhận**, mã thoát 0. Vế *"kiểm toán viên thì gãy"* **không được chứng minh**. Thứ lựa chọn ấy
+    thật sự mua chỉ chừng này: PEM đi ra là bản chép đúng byte của thứ nơi cất đang giữ.
+
+    **`antoanChoBaoCao` RA CỬA CÔNG KHAI của `packages/audit`** (H11-9), vì công cụ cần ĐÚNG bộ
+    khử độc ấy cho những giá trị người vận hành gõ vào; đường còn lại là chép nó sang công cụ, và
+    một bản chép của một hàm an ninh là thứ dự án đã đặt tên nhiều lần. [INV-H18] của S1.18 buộc
+    symbol mới ấy vào danh sách trắng trong cùng lượt — lớp canh dựng vòng trước làm việc ngay
+    vòng sau.
+
+    **PHẠM VI CHẠY, nói ra vì nó là một khoảng chênh thật:** toàn bộ khối openssl là
+    `*.int.test.ts`, nên trong CI nó **chỉ chạy ở T3 (`ubuntu-latest`)**. Mối lo CRLF vốn là mối
+    lo của Windows với `core.autocrlf=true`, và nó **không bao giờ được đo trên Windows trong CI**.
+
+    **Số đo trên HEAD:** `pnpm t0` **197 module / 823 phụ thuộc / 0 vi phạm**; `pnpm test`
+    **656/656**; `pnpm test:int` **742/742** (mã thoát 0); `pnpm evidence` **52/52**, **1398 khẳng
+    định**, cổng độ phủ XANH. **Sáu đột biến của vòng sửa, năm ĐỎ THẬT và MỘT SỐNG SÓT** — sống
+    sót là vế H11-1, và nó được ghi ra thay vì giấu.
+
+    **BA LƯỢT ĐỎ KHÔNG TÁI LẬP TRONG CÙNG VÒNG, ghi ra vì con số ở trên là con số của lượt XANH:**
+    ⑴ lượt `pnpm test:int` ĐẦU TIÊN cho **741/742** — `[fix round 5 — M10] unlock bị từ chối quyền
+    khi kết nối còn sống` (`db/migrations.int.test.ts`) đỏ; lượt thứ hai 742/742, mã thoát 0.
+    ⑵ và ⑶ lượt `pnpm evidence` (chạy CẢ HAI tầng trong một tiến trình) có **hai** test đỏ:
+    `boundaries.test.ts > mã nguồn hiện tại không vi phạm quy tắc nào`, và
+    `composition.int.test.ts > … pool KIỂM TOÁN của composition` (*SyntaxError: Unexpected end of
+    JSON input*). Cả hai KHÔNG đỏ khi chạy từng tầng riêng.
+
+    **Ca ⑵ có cơ chế đã đọc ra được, và nó là một khoản nợ mới — 59.** `apps/api/src/routes.test.ts`
+    viết một probe THẬT vào `apps/api/src/routes/` rồi chạy `depcruise`; `boundaries.test.ts` chạy
+    `pnpm run depcruise` trên TOÀN kho. Hai tệp khác nhau ⇒ vitest chạy song song ⇒ lượt quét toàn
+    kho nhìn thấy probe của tệp kia và báo vi phạm. Khẳng định *"mã nguồn hiện tại không vi phạm
+    quy tắc nào"* vì thế **không hermetic**, và cửa sổ ấy rộng thêm sau S1.18 (13 probe mới). Nó
+    không phải fail-open — nó là đỏ GIẢ — nhưng một cổng đỏ ngẫu nhiên là cổng người ta học cách
+    chạy lại thay vì đọc, và đó là đường ngắn nhất tới chỗ một lượt đỏ THẬT bị bỏ qua.
+
+    **Đây là lần thứ HAI trong hai vòng liên tiếp một lượt đo dài cho kết quả không tái lập** (S1.18
+    mục 33 ghi lượt 732/733 không truy nguyên được). Khác biệt của lần này: **mọi lượt đều được ghi
+    ra tệp trước rồi mới đọc**, đúng quy ước rút ra ở mục 33 — nên lần này ba ca đỏ đều có tên, có
+    tệp, có cơ chế cho một trong ba.
+
+    **Sổ nợ mở còn: 23, nửa sau của 30, 24 — và MỘT KHOẢN MỚI, 59** (khẳng định *"mã nguồn hiện
+    tại không vi phạm quy tắc nào"* không hermetic; xem đoạn trên). Vòng này **CÓ mở nợ mới**, và
+    nó mở vì một lượt đo chỉ ra cơ chế chứ không vì một linh cảm. Hai khoản có hình dạng mã nguồn
+    còn lại từ trước: nợ **3** + **16** (hardening tự làm mù mình bằng danh sách tên), và một lượt
+    rà lại sổ nợ S0.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở

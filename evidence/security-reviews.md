@@ -767,3 +767,58 @@ không"* mà là *"quy tắc này có ĐỐI TƯỢNG nào để phán xét khô
 danh-sách-tên, rồi tự viết lại khuôn ấy dưới dạng một phép thử tồn tại tệp. *"Suy từ tính chất"* chỉ
 đúng khi **tính chất được chọn đúng miền** — `src/index.ts` là một quy ước, `package.json` mới là
 định nghĩa.
+
+---
+
+# S1.19 — lượt review thứ MƯỜI MỘT (lệnh `trich`, công thức `openssl(1)`, ADR-026 §5⑶), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.19** | `tools/neo-so-kiem-toan/src/index.ts` (lệnh `trich`), `cong-cu.int.test.ts` (khối openssl), `packages/audit/src/anchor-{store,text,verify,sign}.ts`, `docs/DECISIONS.md` ADR-026 §5⑶ | **`2cc36bb`** | Read/Grep/Glob; **không** chạy được lệnh nào | **0 CRITICAL, 2 HIGH, 5 MEDIUM, 6 LOW** | vòng sửa cùng PR |
+
+## Hai HIGH
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| **H11-1** | **Byte đi vào artefact đến từ lượt đọc THỨ HAI, chưa qua kiểm chữ ký.** `trich` gọi `loadVerifiedAnchors` (fail-closed) rồi `readAllRaw` lần nữa, và ghép hai kết quả **theo chỉ số**. Lớp canh duy nhất giữa hai lượt là phép so **ĐỘ DÀI**. Một nơi cất bị thay nội dung mà GIỮ NGUYÊN SỐ DÒNG đi lọt: công cụ in *"Kết quả mong đợi: Verified OK"* cho một artefact mà OpenSSL sẽ từ chối — và thông điệp từ chối ấy không phân biệt được với thông điệp của một chữ ký giả mạo. Nặng hơn cửa sổ TOCTOU là **lời khai**: câu *"đi qua `loadVerifiedAnchors` nên không tách artefact ra khỏi một nơi cất đang hỏng"* chỉ đúng cho lượt đọc thứ nhất | **ĐÓNG** — `verifyAnchorRecord` chạy lại trên ĐÚNG đối tượng sắp ghi, cộng phép so `orgId`/`seq`/`hashHex` với mốc neo của lượt một. **KHÔNG CÓ MỐC CHẾT, và điều đó được ghi ra ở cả ba nơi** (mã, ADR §7c, mục này): đột biến gỡ vế ấy ⇒ **cả 16 test vẫn XANH**, vì dựng một lượt chạy mà nơi cất đổi giữa hai lượt đọc đòi một móc tiêm vào `readAllRaw` mà đường CLI không có |
+| **H11-2** | **Ba tệp ghi bằng `flag` mặc định `"w"`** — đi theo symlink và ghi đè im lặng, không đặt `mode`. Kịch bản: kẻ tấn công cục bộ biết `--ra` và `<uuid>` (dữ liệu công khai) đặt trước một symlink `neo-<uuid>-seq4.txt → ~/.ssh/authorized_keys`; `mkdir recursive` thành công vì thư mục đã có, `writeFile` đi theo symlink và ghi đè tệp đích. Ca thứ hai: hai lượt `trich` vào cùng `--ra` trộn `.txt` của lượt này với `.sig` của lượt trước ⇒ một cặp KHÔNG khớp nhau, và OpenSSL trả lời bằng đúng câu của một vụ giả mạo. Kho đã có chuẩn ngược lại từ [review H3-3] (`apps/api/src/adapters/hop-thu-dev.ts`), `trich` không theo | **ĐÓNG** — `{ mode: 0o600, flag: "wx" }` cho cả ba tệp, `mkdir` `mode: 0o700`, và `EEXIST` ném với thông điệp nêu đúng ca TRỘN. `wx` đóng cả hai vector và không mở cửa sổ TOCTOU như một phép `existsSync` đứng trước. Đột biến: bỏ `wx` ⇒ ĐỎ |
+
+## Năm MEDIUM
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| **H11-3** | Hai trong ba đối chứng âm chỉ đòi mã thoát `≠ 0`. `openssl dgst` trả `≠ 0` cho MỌI thất bại — kể cả không nạp được khoá. Ca "khoá lạ" xanh được vì OpenSSL **không đọc nổi tệp khoá**, kèm đúng thông điệp tự tin *"khoá LẠ mà openssl vẫn nhận ⇒ phép đo này rỗng ruột"* | **ĐÓNG** — cả ba ca khẳng định thêm chuỗi *"verification failure"*; ca khoá lạ có một đối chứng **dương** (`openssl pkey -pubin -noout` phải exit 0); ca chữ ký có phép so độ dài tệp |
+| **H11-4** | Quyết định ⑶ (*PEM là bản chép ĐÚNG BYTE*) **không có mốc chết** — đổi sang `createPublicKey(...).export(...)` thì mọi test vẫn xanh | **ĐÓNG, sau HAI lần viết.** Bản đầu của mốc chết **cũng sống sót đột biến**, vì với một SPKI hợp lệ hai đường cho ra cùng chuỗi base64. Bản thứ hai chạy trên đúng đầu vào làm chúng khác nhau — một SPKI 91 byte cộng một byte rác, thứ mà **cả `createPublicKey` lẫn `openssl pkey` đều NHẬN** — và nó ĐỎ đúng ở 91 vs 92 byte |
+| **H11-5** | `readAllRaw` trả `[]` cho ENOENT, nên nó không phân biệt *"chưa từng neo"* với *"tệp `<org>.jsonl` vừa bị XOÁ"*. `trich` biến sự im lặng ấy thành một câu chỉ dẫn — *"chạy `pnpm neo xuat` trước"* — mà đó **đúng là thao tác RỬA** của ca hở ADR-026 §5⑵: không còn mốc neo cũ thì `mocNuocCao` bằng 0, lớp "từ chối neo lùi" mất mốc so sánh | **ĐÓNG phần sửa được** — thông điệp nay nêu CẢ HAI khả năng, nói thẳng hậu quả của khả năng thứ hai, và đòi đối chiếu với một bản sao ngoài trước khi chạy. Ca hở gốc **không đóng**: nó cần một trạng thái nằm NGOÀI nơi cất |
+| **H11-6** | Nhiều bản ghi cùng `seq` ⇒ chọn im lặng cái ĐẦU TIÊN. Trùng `seq` là bình thường; trùng `seq` với **`chain_hash` khác nhau** là hình dạng của một vụ cắt-đuôi-rồi-neo-lại. `kiem` bắt được; đường `trich` → OpenSSL thì **giấu nó**, vì kiểm toán viên chỉ có ba tệp trước mặt | **ĐÓNG** — ném, liệt kê các `chain_hash` mâu thuẫn, và nói rõ *"lệnh này KHÔNG chọn hộ"*. Đột biến: gỡ phép kiểm ⇒ ĐỎ |
+| **H11-7** | ADR khai *"đột biến ghi ra CRLF làm openssl từ chối"* như một phép đo đã chạy; test khi ấy đỏ ở khẳng định `not.toContain("\r")` **trước khi OpenSSL được hỏi một câu nào**. Và §7/§7b của ADR-026 không có mục nào của S1.19 | **ĐÓNG** — một ca THƯỜNG TRỰC dựng bản CRLF rồi hỏi OpenSSL; §7c thêm tám mục (14–21) |
+
+## Sáu LOW
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H11-8** | `Buffer.from(x,"base64")` không bao giờ ném ⇒ `.sig` rỗng ghi ra không một tiếng kêu | **ĐÓNG** — chặn `length === 0` cho cả chữ ký lẫn văn bản, ngay trước khi ghi |
+| **H11-9** | `anchor-store.ts` nội suy `orgId` **chưa qua phép kiểm nào** vào thông điệp mà không qua `antoanChoBaoCao` — ngoại lệ duy nhất của họ `anchor-*`, đúng thứ H9-6 sinh ra để chặn | **ĐÓNG** — bọc `antoanChoBaoCao`. Kéo theo một quyết định nhìn thấy được: `antoanChoBaoCao` **ra cửa công khai** của `packages/audit` để công cụ dùng CHUNG thay vì chép lại; [INV-H18] buộc nó vào danh sách trắng trong cùng lượt |
+| **H11-10** | `--ra`/`--seq` lặp lại lấy giá trị cuối trong im lặng; giá trị mở đầu `--` được nhận (`--ra --seq` tạo thư mục tên `--seq`); `--seq 0x10` thành 16; `ts.ra` in ra không khử độc | **ĐÓNG** — cả ba cờ từ chối lặp lại, từ chối giá trị mở đầu `--`, `--seq` đọc bằng `/^[1-9][0-9]{0,15}$/`, và mọi giá trị người gõ đi qua `antoanChoBaoCao` trên đường in |
+| **H11-11** | `KID_PATTERN` cho phép `:`; trên Win32 `khoa-a:b.pem` là một **alternate data stream**, nên tệp in ra không tồn tại dưới tên đã in | **ĐÓNG** — siết ở `trich` (tập con an-toàn-đường-dẫn), **KHÔNG** siết `KID_PATTERN`: nó là hằng của ĐỊNH DẠNG ĐÃ KÝ, siết nó làm mốc neo cũ không kiểm được |
+| **H11-12** | Có test *"không cần `DATABASE_URL`"*, không có test *"không cần khoá RIÊNG"* — vế thứ hai mới là vế an ninh | **ĐÓNG** — xoá HẲN ba biến (không đặt rỗng) kèm vế chống rỗng ruột. Đột biến: gọi `docBoKy()` trong `trich` ⇒ ĐỎ |
+| **H11-13** | Dòng lệnh được tài liệu hoá (`pnpm neo trich …`) chưa bao giờ được chạy đúng như tài liệu — đúng lớp khoản nợ 23 | **ĐÓNG** — một ca `spawn` qua script workspace thật |
+
+## Tám mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề
+
+1. **Fail-open khi `openssl` vắng mặt — KHÔNG.** `spawnSync` trả `status: null` → hàm bọc quy về `-1` → `expect(-1).toBe(0)` ĐỎ. Không `skipIf`, không `try/catch` quanh phép đo.
+2. **Path traversal qua tên tệp — KHÔNG**, trừ ca `kid` chứa `:` (H11-11). `parseAnchorText` chạy `kiemHinhDang` TRƯỚC khi dựng tên; `orgId` là UUID, `seq` là số nguyên dương.
+3. **Ghép theo chỉ số trong MỘT lượt đọc là đúng** — `loadVerifiedAnchors` duyệt và `push` theo thứ tự, ném nếu bất kỳ bản ghi nào hỏng. Cái sai là ghép với lượt đọc THỨ HAI (H11-1).
+4. **`trich` không chạm `DATABASE_URL`/`createPool`/`withTenant`/`anchor-sign`** — lần theo `main()` từng nhánh; ranh giới khả năng của ADR-026 §4 không bị nới.
+5. **Rò rỉ qua thông điệp** — mọi dữ liệu chưa xác thực trong đường `trich` đi qua `antoanChoBaoCao`, trừ hai chỗ đã thành H11-9 và H11-10.
+6. **Nội dung ba tệp không chứa bí mật** (org_id, seq, chain hash, dấu thời gian, chữ ký, khoá CÔNG KHAI) — nên H11-2 là vấn đề TOÀN VẸN, không phải bí mật.
+7. **Không bí mật nào commit vào kho**; test sinh cặp khoá lúc chạy.
+8. **Vòng này không nới một lớp cưỡng chế cũ nào** — `CO_CHE_MO_DE_GHI` vẫn `"a"`, `append` vẫn không `mkdir`, `if (dau.seq < cao)` còn nguyên, `DA_KIEM` vẫn `WeakSet`, chốt loại khoá EC/P-256 còn nguyên.
+
+## Điều đáng mang sang vòng sau
+
+**Một mốc chết cũng cần một phép đo.** H11-4 là ca hiếm và đắt: reviewer chỉ ra rằng một quyết định thiết kế không có mốc chết; tôi viết một mốc chết; **nó sống sót đột biến**; phải viết lại lần hai trên đúng đầu vào làm hai đường khác nhau. Bài học không phải *"viết mốc chết"* mà là: **chạy đột biến NGAY sau khi viết mốc chết, vì một mốc chết chưa từng đỏ là một mốc chết chưa được đo** — cùng câu mà `bien-gioi-goi.test.ts` đã viết cho quy tắc depcruise, nay áp cho chính test.
+
+**Và một vế của vòng sửa KHÔNG có mốc chết** (H11-1). Nó được ghi ra ở ba nơi thay vì để người sau tự phát hiện. Một bản vá không đo được vẫn đáng có — nhưng nó phải được đọc đúng như thế.
