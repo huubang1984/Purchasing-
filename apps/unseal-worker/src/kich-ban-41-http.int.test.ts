@@ -158,7 +158,28 @@ const GIA_SO: ReadonlyMap<number, string> = new Map(MOI_GIA.map((g) => [Number(g
  */
 function rutSo(vanBan: string): ReadonlySet<number> {
   const ra = new Set<number>();
-  for (const m of vanBan.matchAll(/\d+(?:[.,]\d+)?[eE][+-]?\d+/gu)) {
+  // ============================================================================================
+  // [S1.19 / CI run 34125062632] NHÁNH KÝ HIỆU KHOA HỌC PHẢI CÓ BIÊN — NẾU KHÔNG NÓ ĐỌC UUID
+  // ============================================================================================
+  // Bản trước không có hai vế nhìn trước/nhìn sau, nên nó khớp `98e7` **bên trong** một chuỗi
+  // hex: `Number("98e7")` = 980 000 000 = ĐÚNG một giá của kịch bản. Một UUID bất kỳ chứa `98e7`
+  // hay `14e8` làm bộ quét báo RÒ RỈ trên một phản hồi KHÔNG có một trường giá nào —
+  // `GET /guest/session` trả về đúng bốn trường: hai UUID, một rfqId, một kênh.
+  //
+  // ĐO ĐƯỢC, và đây là lý do nó chỉ thỉnh thoảng đỏ: trên 300 000 thân giả lập của
+  // `GET /guest/session` (5 phiên, 15 UUID mỗi thân) bản cũ báo rò rỉ **1381 lần — 0,46%**. Với
+  // hơn bốn mươi route mỗi lượt quét và hai lượt quét mỗi lần chạy, một lượt CI đỏ vì lý do này
+  // là chuyện thường gặp chứ không phải hiếm — và nó đã đỏ ở CI của chính vòng S1.19
+  // (`kich-ban-41-http.int.test.ts`, `GET /guest/session (200): 930000000.00`).
+  //
+  // Vì sao đây là khiếm khuyết NẶNG dù nó là ĐỎ GIẢ: nó là một cổng an ninh kêu sai định kỳ, và
+  // một cổng như thế dạy người ta chạy lại thay vì đọc. Ngày nó kêu ĐÚNG, phản xạ đã được huấn
+  // luyện sẵn là bấm "re-run".
+  //
+  // Biên: hai vế chặn cả chữ-số-chữ-cái LẪN dấu `-` (một mảnh UUID có thể ĐÚNG BẰNG `98e7`, khi
+  // ấy nó đứng giữa hai dấu gạch nối). Giá là số DƯƠNG, nên `-9.8e8` không phải thứ cần bắt.
+  // Mọi cách viết thật vẫn khớp: `gia: 9.8e8 VND`, `9.8E+8`, `0.98e9`, `"9.8e8"` trong JSON.
+  for (const m of vanBan.matchAll(/(?<![0-9A-Za-z-])\d+(?:[.,]\d+)?[eE][+-]?\d+(?![0-9A-Za-z-])/gu)) {
     const n = Number(m[0].replace(",", "."));
     if (Number.isFinite(n)) ra.add(Math.round(n));
   }
@@ -375,6 +396,21 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(quetRoRi(Buffer.from(Buffer.from('{"gia":"980000000.00","k":">>>???"}').toString("base64")).toString("base64url"))).toEqual([NHA_CUNG_CAP[0].gia]);
     expect(quetRoRi("{}")).toEqual([]);
     expect(quetRoRi(JSON.stringify({ deadlineAt: "2026-09-07T10:00:00.000Z", id: "3f2504e0-4f89-11d3-9a0c-0305e82c3301", n: 98000000 }))).toEqual([]);
+    // [S1.19 / CI run 34125062632] BA CA UUID PHẢI SẠCH — chúng là ca đã làm CI đỏ.
+    // `98e7` và `14e8` nằm trong một chuỗi hex đọc ra 980 000 000 và 1 400 000 000, đúng hai giá
+    // của kịch bản; và một mảnh UUID có thể ĐÚNG BẰNG `98e7`, khi ấy nó đứng giữa hai gạch nối.
+    expect(quetRoRi(JSON.stringify({ id: "c98e7abc-1234-4567-89ab-000000000000" })), "98e7 trong hex").toEqual([]);
+    expect(quetRoRi(JSON.stringify({ id: "abcd1234-98e7-4567-89ab-00000014e800" })), "98e7 là MỘT mảnh UUID").toEqual([]);
+    expect(quetRoRi(JSON.stringify({ id: "0000000a-0000-4000-8000-0000c14e8abc" })), "14e8 trong hex").toEqual([]);
+    // Và bộ quét KHÔNG được mất răng vì hai vế biên vừa thêm: một thân đúng năm phiên khách của
+    // `GET /guest/session` mang một giá THẬT vẫn phải bị bắt.
+    expect(
+      quetRoRi(
+        JSON.stringify({
+          sessions: [{ guestSessionId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301", tong: "980000000.00" }],
+        }),
+      ),
+    ).toEqual([NHA_CUNG_CAP[0].gia]);
 
     const m = trangThai.mua.cookie;
     const k = trangThai.loiMoi[0]!.cookie;

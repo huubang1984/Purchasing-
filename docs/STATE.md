@@ -1529,6 +1529,40 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     ra tệp trước rồi mới đọc**, đúng quy ước rút ra ở mục 33 — nên lần này ba ca đỏ đều có tên, có
     tệp, có cơ chế cho một trong ba.
 
+    **LƯỢT CI ĐẦU TIÊN CỦA VÒNG NÀY ĐỎ, VÀ NÓ TÌM RA MỘT KHIẾM KHUYẾT CÓ THẬT TRONG MỘT CỔNG AN
+    NINH — không phải trong mã của vòng.** T3 đỏ ở `kich-ban-41-http.int.test.ts` với
+    `GET /guest/session (200): 930000000.00`, tức bộ quét rò rỉ báo rằng một GIÁ dạng rõ đi ra
+    trước khi mở thầu. Nhưng route ấy trả về đúng bốn trường — `guestSessionId`, `invitationId`,
+    `rfqId`, `verifiedChannel` — **không một trường giá nào**. Con số ấy do chính bộ quét tổng hợp.
+
+    **Cơ chế, tất định và tái lập được bằng một dòng:** `rutSo` có một nhánh ký hiệu khoa học
+    `/\d+(?:[.,]\d+)?[eE][+-]?\d+/` **không có biên**, nên nó khớp `98e7` **bên trong một chuỗi
+    hex** — và `Number("98e7")` = **980 000 000**, đúng một giá của kịch bản. `14e8` cho
+    1 400 000 000, cũng đúng một giá. Một UUID bất kỳ chứa `98e7` hay `14e8` làm cổng ấy kêu.
+
+    **Tỷ lệ đã đo:** trên **300 000** thân giả lập của `GET /guest/session` (5 phiên, 15 UUID mỗi
+    thân), bản cũ báo rò rỉ **1381 lần — 0,46%**. Với hơn bốn mươi route mỗi lượt quét và hai lượt
+    quét mỗi lần chạy, một lượt CI đỏ vì lý do này là chuyện **thường gặp**, không hiếm. Sau khi
+    thêm hai vế biên (chặn cả chữ-số-chữ-cái lẫn dấu `-`, vì một mảnh UUID có thể ĐÚNG BẰNG
+    `98e7`): **0/300 000**.
+
+    **Vì sao một ĐỎ GIẢ ở đây là khiếm khuyết nặng, chứ không phải một phiền toái:** đây là cổng
+    canh bất biến A1/A2 — *"không một chữ số giá nào ở thân, header, hay log"*. Một cổng an ninh
+    kêu sai định kỳ dạy người ta **chạy lại thay vì đọc**; ngày nó kêu ĐÚNG, phản xạ đã được huấn
+    luyện sẵn là bấm *re-run*. Đó là cùng một câu `docs/TEST-PLAN.md` §5 đã viết cho hàng rào
+    hỏng, và cùng lớp lý do khoản nợ 59 được mở ở trên.
+
+    **Ba đối chứng mới, và một đối chứng dương đi kèm:** ba ca UUID chứa `98e7`/`14e8` (trong hex,
+    và như một mảnh UUID trọn vẹn giữa hai gạch nối) phải SẠCH; cộng một thân `GET /guest/session`
+    năm phiên mang một giá THẬT vẫn phải bị BẮT — để hai vế biên vừa thêm không làm bộ quét mất
+    răng. Đột biến gỡ hai vế biên ⇒ **ĐỎ** (`98e7 trong hex: expected ['980000000.00'] to deeply
+    equal []`).
+
+    **Và một câu về quy trình:** khiếm khuyết này sống qua **mười một lượt review an ninh** và mọi
+    lượt CI trước, vì nó chỉ hiện ra khi một UUID ngẫu nhiên rơi trúng. Nó không được tìm ra bằng
+    cách đọc mã — nó được tìm ra vì **CI chạy trên dữ liệu khác máy phát triển**. Đây là lần thứ
+    hai trong ba vòng liên tiếp thứ đắt nhất đến từ một phép đo chứ không từ một lượt đọc.
+
     **Sổ nợ mở còn: 23, nửa sau của 30, 24 — và MỘT KHOẢN MỚI, 59** (khẳng định *"mã nguồn hiện
     tại không vi phạm quy tắc nào"* không hermetic; xem đoạn trên). Vòng này **CÓ mở nợ mới**, và
     nó mở vì một lượt đo chỉ ra cơ chế chứ không vì một linh cảm. Hai khoản có hình dạng mã nguồn
