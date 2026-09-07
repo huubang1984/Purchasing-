@@ -580,7 +580,7 @@ mức là RỜI RẠC và làm tròn theo EPOCH, nên một vòng đếm vắt q
 
 | Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
 |---|---|---|---|---|---|
-| **S1.16** | `db/migrations/046` (một câu `CREATE INDEX`), `db/otp-don-ke-hoach.int.test.ts`, và bốn chỗ gạch lời khai sai của H7-3 | `ac7cc58` | Review tĩnh; hai phép đo kế hoạch đã chạy thật ở commit ấy | **0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW** | `<commit sửa>` |
+| **S1.16** | `db/migrations/046` (một câu `CREATE INDEX`), `db/otp-don-ke-hoach.int.test.ts`, và bốn chỗ gạch lời khai sai của H7-3 | `ac7cc58` | Review tĩnh; hai phép đo kế hoạch đã chạy thật ở commit ấy | **0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW** | `fbf5cc9` |
 
 **Bề mặt của vòng này nhỏ hơn mọi vòng trước — một chỉ số không-duy-nhất — nên bảng phát hiện ngắn là
 KẾT QUẢ, không phải một lượt review qua loa.** Bốn câu hỏi đối kháng đã hỏi và trả lời:
