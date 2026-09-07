@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // ============================================================================================
@@ -603,6 +603,13 @@ const DANH_SACH_TRANG_SEALED_ENVELOPE = [
   "sealBid",
 ];
 
+// [S1.18 / khoản nợ 9] CỬA THỨ HAI của gói này, khai từ S1.4 và chưa từng có danh sách trắng.
+// `unsealBid` là hàm MỞ phong bì giá thầu — năng lực cao nhất kho. `g8-khong-mo-phong-bi-ngoai-
+// unseal-worker` canh AI đi qua được cửa này; cho tới vòng S1.18, KHÔNG lớp nào canh CÁI GÌ đi ra
+// qua nó. Một symbol thứ hai ở đây là một khả năng mới trong tay `apps/unseal-worker`, và nó phải
+// là một quyết định nhìn thấy được — đúng cùng lý do đã viết cho cửa "." ngay trên.
+const DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL = ["unsealBid"];
+
 const SEALED_ENVELOPE_PACKAGE_JSON_URL = new URL(
   "../../packages/sealed-envelope/package.json",
   import.meta.url,
@@ -636,6 +643,18 @@ describe("bề mặt export công khai của sealed-envelope", () => {
   // Đối chứng: bốn symbol nguy hiểm phải KHÔNG có ở cửa. Khẳng định "chỉ đúng danh sách trắng" ở
   // trên đã hàm ý điều này, nhưng nó hàm ý bằng một phép trừ — còn đây gọi thẳng tên, nên ngày ai
   // đó thêm `deriveContentKey` vào danh sách trắng thì có HAI dòng phải sửa, không phải một.
+  // [S1.18] `kiemCuaTheoDanhSach` khai bên dưới (khối bốn gói S0) — khai báo hàm nên nó dùng
+  // được ở đây; đặt nó cạnh bốn gói vì đó là nơi nó ra đời, không nhân bản thêm một bản thứ hai.
+  it("[INV-H16] cửa @trustprocure/sealed-envelope/unseal chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "sealed-envelope",
+      "./unseal",
+      DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL,
+      "Cửa này mở phong bì giá thầu. Một symbol thứ hai ở đây là một khả năng mới trong tay " +
+        "apps/unseal-worker — G1/ADR-006.",
+    );
+  });
+
   it("[INV-H16] bốn symbol chạm khoá riêng KHÔNG có mặt ở cửa công khai", async () => {
     const urlCua = new URL("../../packages/sealed-envelope/src/index.ts", import.meta.url);
     const moduleThat = (await import(/* @vite-ignore */ urlCua.href)) as Record<string, unknown>;
@@ -975,5 +994,162 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
         `packages/${goi}/package.json khai một tập cửa khác tập đã được canh ở đây.`,
       ).toEqual([...cuaHopLe].sort());
     }
+  });
+});
+
+// ============================================================================================
+// [INV-H18 / S1.18 — khoản nợ 9, vế THỨ HAI] DANH SÁCH TRẮNG PHẢI LÀ MỘT TÍNH CHẤT, KHÔNG PHẢI
+// MỘT HẰNG VIẾT TAY
+//
+// Mười ba khối ở trên đóng vế thứ nhất của khoản nợ 9: mọi gói hôm nay đều có danh sách trắng.
+// Vế thứ hai do chính `bien-gioi-goi.test.ts` đặt tên khi nó ra đời ở S1.2:
+//
+//   > nó KHÔNG phủ danh sách trắng barrel (khoản nợ 9). Bốn gói S0 vẫn không có, và hai gói S1
+//   > có — nhưng "có" ấy vẫn là một hằng viết tay trong `barrel-exports.test.ts`, không phải một
+//   > tính chất. Đó là khoản nợ còn lại sau file này.
+//
+// Gói thứ mười bốn ra đời không có khối nào ở trên thì KHÔNG lớp nào kêu — đúng khuôn danh-sách-
+// tên mà dự án đã bắt hỏng ba lần (khoản nợ 3, 16, 17) và chữa được một lần (S1.15, bằng cách
+// ghim danh sách loại trừ về RỖNG). Khối này áp đúng cách chữa ấy cho mặt tiền.
+//
+// VÀ VIỆC DỰNG NÓ ĐÃ TÌM RA MỘT LỖ CÓ THẬT, không phải một ca giả định:
+// `packages/sealed-envelope` khai HAI cửa từ S1.4 (`.` và `./unseal`) nhưng chỉ cửa `.` có danh
+// sách trắng. `./unseal` xuất `unsealBid` — hàm MỞ phong bì giá thầu, năng lực cao nhất kho — và
+// bề mặt của nó chưa từng bị khoá. `g8-khong-mo-phong-bi-ngoai-unseal-worker` canh AI đi qua được
+// cửa ấy; không lớp nào canh CÁI GÌ đi ra qua nó. Đúng cùng hình dạng với
+// `@trustprocure/audit/anchor-sign` (đóng ở 18.2) — và cả hai lần, thứ mở cửa là MỘT DÒNG trong
+// `package.json`.
+//
+// LỚP NÀY KHÔNG MUA ĐƯỢC GÌ, nói thẳng để không ai đọc rộng hơn: nó khoá DANH SÁCH, không khoá
+// HÌNH DẠNG — một hàm mới được thêm vào danh sách trắng kèm một dòng lý do vẫn đi lọt, và lớp
+// cuối vẫn là người đọc (`.github/CODEOWNERS`). Với mười ba gói đang có khối riêng, khẳng định
+// "khớp bề mặt THẬT" dưới đây là một cách diễn đạt THỨ HAI của cùng hợp đồng; giá trị của nó nằm
+// ở gói thứ mười bốn, và ở chỗ nó làm cho sổ đăng ký dưới đây CHỊU LỰC thay vì chỉ là một danh
+// sách tên đối chiếu với một danh sách tên khác.
+// ============================================================================================
+
+/**
+ * Sổ đăng ký: gói → cửa → danh sách trắng. Mỗi mảng ở đây là CHÍNH mảng mà khối của gói đó dùng,
+ * nên một dòng thêm vào sổ này không tạo ra được một danh sách trắng thứ hai đi lệch.
+ */
+const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>> =
+  new Map<string, ReadonlyMap<string, readonly string[]>>([
+    [
+      "audit",
+      new Map([
+        [".", DANH_SACH_TRANG_AUDIT],
+        ["./anchor-sign", DANH_SACH_TRANG_AUDIT_KY_NEO],
+      ]),
+    ],
+    ["bidding", new Map([[".", DANH_SACH_TRANG_BIDDING]])],
+    [
+      "crypto-keys",
+      new Map([
+        [".", DANH_SACH_TRANG_INDEX],
+        ["./unwrap", DANH_SACH_TRANG_UNWRAP],
+      ]),
+    ],
+    ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
+    ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
+    ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],
+    ["outbox", new Map([[".", DANH_SACH_TRANG_OUTBOX]])],
+    ["rfq", new Map([[".", DANH_SACH_TRANG_RFQ]])],
+    [
+      "sealed-envelope",
+      new Map([
+        [".", DANH_SACH_TRANG_SEALED_ENVELOPE],
+        ["./unseal", DANH_SACH_TRANG_SEALED_ENVELOPE_UNSEAL],
+      ]),
+    ],
+    ["supplier", new Map([[".", DANH_SACH_TRANG_SUPPLIER]])],
+    ["tenancy", new Map([[".", DANH_SACH_TRANG_TENANCY]])],
+    ["test-support", new Map([[".", DANH_SACH_TRANG_TEST_SUPPORT]])],
+    ["unseal", new Map([[".", DANH_SACH_TRANG_UNSEAL]])],
+  ]);
+
+/**
+ * Gói được MIỄN danh sách trắng, mỗi dòng một lý do. Cùng cơ chế `MIEN_TRU` của [INV-H16] và
+ * `HAM_TRIGGER_KHONG_GHIM` của S1.15: viết thêm một dòng vào đây vẫn ĐƯỢC, nhưng nó làm khẳng
+ * định *"RỖNG"* đỏ — tức nó là hành vi MỞ LẠI khoản nợ 9 và phải được ghi ra ở `docs/STATE.md`.
+ */
+const GOI_MIEN_DANH_SACH_TRANG: ReadonlyMap<string, string> = new Map<string, string>();
+
+/** Mọi thư mục con của `packages/` có `src/index.ts` — đọc từ ĐĨA, cùng vị từ với [INV-H16]. */
+function cacGoiCoBarrel(): string[] {
+  const goc = new URL("../../packages/", import.meta.url);
+  return readdirSync(goc, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .filter((ten) => existsSync(new URL(`${ten}/src/index.ts`, goc)))
+    .sort();
+}
+
+function docCuaKhaiTrongPackageJson(pGoi: string): string[] {
+  const noiDung = JSON.parse(
+    readFileSync(new URL(`../../packages/${pGoi}/package.json`, import.meta.url), "utf8"),
+  ) as { exports?: Record<string, string> };
+  return Object.keys(noiDung.exports ?? {}).sort();
+}
+
+describe("danh sách trắng barrel của MỌI gói", () => {
+  it("[INV-H18] mọi gói trong packages/ có danh sách trắng, trừ danh sách miễn ĐÓNG", () => {
+    const goi = cacGoiCoBarrel();
+    // Chống rỗng ruột theo hai chiều, cùng khuôn [INV-H16].
+    expect(goi.length, "không đọc được gói nào trong packages/").toBeGreaterThan(4);
+    const phaiCo = goi.filter((ten) => !GOI_MIEN_DANH_SACH_TRANG.has(ten));
+    expect(phaiCo.length, "mọi gói đều được miễn — lớp này không đo gì").toBeGreaterThan(0);
+
+    expect(
+      phaiCo.filter((ten) => !DANH_SACH_TRANG_THEO_CUA.has(ten)),
+      "Gói không có danh sách trắng barrel. Thêm một khối theo khuôn các khối ở trên CỘNG một " +
+        "dòng vào DANH_SACH_TRANG_THEO_CUA. Thêm gói vào GOI_MIEN_DANH_SACH_TRANG KHÔNG phải " +
+        "cách sửa: nó làm khẳng định RỖNG đỏ và đó là mở lại khoản nợ 9.",
+    ).toEqual([]);
+  });
+
+  it("[INV-H18] mọi CỬA khai trong package.json đều có danh sách trắng", () => {
+    // Vế này KHÔNG suy ra được từ vế trên: một gói có danh sách trắng cho cửa `.` vẫn có thể mở
+    // thêm một subpath export mà không ai canh. Đó không phải giả định — nó đã xảy ra HAI lần:
+    // `@trustprocure/audit/anchor-sign` (S1.17) và `@trustprocure/sealed-envelope/unseal` (S1.4,
+    // tìm ra khi viết chính khẳng định này). Cả hai lần, thứ mở cửa là một dòng package.json.
+    const lech: string[] = [];
+    for (const goi of cacGoiCoBarrel()) {
+      if (GOI_MIEN_DANH_SACH_TRANG.has(goi)) continue;
+      const cuaKhai = docCuaKhaiTrongPackageJson(goi);
+      const cuaDuocCanh = [...(DANH_SACH_TRANG_THEO_CUA.get(goi)?.keys() ?? [])].sort();
+      for (const cua of cuaKhai) {
+        if (!cuaDuocCanh.includes(cua)) lech.push(`${goi} ${cua} — khai nhưng KHÔNG được canh`);
+      }
+      for (const cua of cuaDuocCanh) {
+        if (!cuaKhai.includes(cua)) lech.push(`${goi} ${cua} — được canh nhưng KHÔNG còn khai`);
+      }
+    }
+    expect(lech, "Tập cửa khai trong package.json khác tập cửa có danh sách trắng.").toEqual([]);
+  });
+
+  it("[INV-H18] danh sách trắng của MỌI cửa khớp bề mặt THẬT — sổ đăng ký chịu lực", async () => {
+    // Không có khẳng định này, DANH_SACH_TRANG_THEO_CUA chỉ là một danh sách tên đối chiếu với
+    // một danh sách tên khác: một dòng trỏ tới một mảng RỖNG cũng "có danh sách trắng".
+    const lech: string[] = [];
+    for (const [goi, theoCua] of DANH_SACH_TRANG_THEO_CUA) {
+      for (const [cua, danhSach] of theoCua) {
+        const thucTe = await docCuaCuaGoi(goi, cua);
+        for (const ten of thucTe) {
+          if (!danhSach.includes(ten)) lech.push(`${goi} ${cua}: THỪA ${ten}`);
+        }
+        for (const ten of danhSach) {
+          if (!thucTe.includes(ten)) lech.push(`${goi} ${cua}: THIẾU ${ten}`);
+        }
+      }
+    }
+    expect(lech, "Bề mặt export thật lệch khỏi danh sách trắng đã đăng ký.").toEqual([]);
+  });
+
+  it("[INV-H18] danh sách miễn RỖNG — không gói nào của packages/ còn đứng ngoài", () => {
+    expect(
+      [...GOI_MIEN_DANH_SACH_TRANG.entries()],
+      "Miễn một gói khỏi danh sách trắng barrel là MỞ LẠI khoản nợ 9. Nếu đó thật sự là việc " +
+        "phải làm, hãy ghi vào docs/STATE.md trước rồi sửa khẳng định này.",
+    ).toEqual([]);
   });
 });

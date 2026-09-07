@@ -326,7 +326,10 @@ export interface MocGhim {
 // [S1.10.2] 48 -> 50 va 2 -> 1: E6 lap (co co §4) + H17 vao so dang ky VA duoc phu cung luot.
 // Mau so 50 -> 51. Danh sach duoc-phep-chua-phu con dung MOT dong: A2 (S1.10.6).
 // [S1.10.6] 50 -> 51 va 1 -> 0: A2 lap (co co §4), danh sach duoc-phep-chua-phu RONG lan dau tien.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 51, coDanhSachToiDa: 0 };
+// [S1.18] 51 -> 52: H18 vào sổ đăng ký (danh sách trắng barrel của MỌI gói, suy từ tính
+// chất). Mốc được NÂNG TAY sau khi cổng đã chặn một lượt — đúng cơ chế: một mốc tự trôi
+// theo tử số sẽ mua sẵn chỗ cho một lần tụt sau này.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 52, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —
