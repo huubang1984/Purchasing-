@@ -52,7 +52,7 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | A6 | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 | 11 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | B1 | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 | 10 | ✅ ĐẠT |  |
 | B2 | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 | 25 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 33 | ✅ ĐẠT |  |
+| B3 | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** | Lược đồ + bộ kiểm chứng | **T1**, T3 | 63 | ✅ ĐẠT |  |
 | B4 | Không đường code nào xóa/sửa audit; role ứng dụng bị REVOKE UPDATE, DELETE | Quyền DB | T3, T5 | 20 | ✅ ĐẠT |  |
 | B5 | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 | 9 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 8 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -74,7 +74,7 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | F1 | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng | Postgres RLS | **T3**, T5 | 46 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | F2 | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 | 2 | ✅ ĐẠT |  |
 | F3 | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 | 1 | ✅ ĐẠT |  |
-| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 55 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| G1 | Private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker` — không vào DB, log, biến môi trường, core dump | IAM + quyền cột DB | **T0**, T3, T5 | 62 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | G2 | Mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ khác | Thiết kế khóa | T1, T3 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | G3 | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 | 2 | ✅ ĐẠT |  |
 | G4 | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 | 9 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -156,7 +156,7 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 
 - **A6** — **Ô ✅ NÀY LÀ MỘT HÀNG RÀO Ở TẦNG HÀM, KHÔNG Ở TẦNG QUYỀN — VÀ CÓ MỘT TEST ĐO ĐÚNG ĐIỀU ĐÓ.** Thứ đã đo, và đo bằng khuôn *đổi đúng một thứ*: cùng trạng thái `OPEN`, hai RFQ chỉ khác nhau ở cờ chính sách, câu trả lời lật; chính sách ĐÃ GHIM qua `rfq_budgets` thắng chính sách mới nhất ở **cả hai chiều** (bản đầu của phép đo này bị chứng minh là KHÔNG CÓ RĂNG và đã được dựng lại); không tra được chính sách nào thì MẶC ĐỊNH ĐÓNG, kèm đối chứng dương; và con số bị giấu KHÔNG ĐƯỢC ĐẾM — hai truy vấn tách rời, nên nó không lọt vào log hay vào một thông báo lỗi mang cả đối tượng kết quả. **PHẦN CHÊNH, ĐÃ ĐO CHỨ KHÔNG PHỎNG ĐOÁN:** `app_api` vẫn giữ `SELECT` trên `vendor_bids`, nên một câu SQL viết tay đếm được số báo giá trong khi hàm đang giấu — có một test khẳng định đúng con số ấy, và nếu một ngày nó ĐỎ thì A6 đã lên được tầng quyền. Lớp đúng là một policy RLS trên `vendor_bids`, và S1 KHÔNG dựng được nó vì một lý do cấu trúc: đường người mua và đường khách dùng CHUNG role `app_api` (khoản nợ 29). **PHẦN CHÊNH THỨ HAI:** mệnh đề nói *“ẩn khỏi Buyer”*, và chữ “Buyer” là một khái niệm của tầng HTTP; thứ được đo là hàm, không phải màn hình. **[review an ninh S1.7 MED-2] ĐƯỜNG GHI CỦA CÁI CÔNG TẮC ẤY CŨNG ĐÃ PHẢI SIẾT, và đó là một phần chênh KHÔNG ai nêu ra khi S1.7 được viết:** `strict_blind_mode` sống trên một bảng mà 014 cấp `INSERT (effective_from)` và để người gọi tự chọn `version`. Hai đường ấy lật được phán quyết HỒI TỐ — một hàng `effective_from = now() - 1 năm` kèm cờ TẮT đổi chế độ của mọi RFQ chưa có ngân sách; một hàng `version = 2147483647` ghim vĩnh viễn tổ chức vào chính sách ấy trong khi mọi lần siết sau đó bị bỏ qua trong im lặng. 022 đóng cả hai bằng `CHECK (effective_from >= created_at)` và một trigger đòi phiên bản TĂNG DẦN. Bằng chứng nó có răng: chính đối chứng dương của phép đo *“mặc định đóng”* đã ĐỎ khi ràng buộc được thêm — nó từng đi đường lùi ngày, và nó đã phải viết lại.
 
-- **B2** — **MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI, VIẾT LẠI [khoản nợ 30, 2026-09-05]:** ~~khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta.~~ **ĐƯỜNG nay đã có** (`apps/public-keys`, `/.well-known/trustprocure-receipt-keys`, tra được theo `kid`, chỉ đọc, không phụ thuộc `pg`). Nhưng phần chênh KHÔNG biến mất, nó chỉ đổi hình: một endpoint do CHÍNH CHÚNG TA phục vụ vẫn là *“hỏi chúng ta”* — nhanh hơn, không đáng tin hơn. Một máy chủ bị chiếm phục vụ được một khoá khác và mọi biên nhận giả ký bằng khoá ấy sẽ kiểm chứng SẠCH. Thứ đóng nốt là một NEO NGOÀI (`fingerprint` SHA-256 của SPKI, in vào hợp đồng hay đăng ở nơi ta không kiểm soát), và nó là **cùng một khoản nợ với artefact neo ngoài của B3** — cơ chế có, artefact thì chưa.
+- **B2** — **MỆNH ĐỀ NÓI *“nhà cung cấp kiểm chứng độc lập được”*, VÀ CHỮ *“nhà cung cấp”* CHƯA TỪNG XUẤT HIỆN TRONG BẤT KỲ PHÉP ĐO NÀO.** Thứ đã đo, và đo mạnh: chữ ký kiểm được bằng **khoá công khai một mình** (`verifyReceipt` nhận đúng ba thứ, không nhận `client`, không nhận `orgId`, và có test đọc số tham số của nó); cùng chữ ký ấy kiểm được bằng **một cài đặt khác** (`createVerify` của `node:crypto` — con đường mà `openssl dgst -sha256 -verify` đi); ba đối chứng âm (sửa văn bản, sửa chữ ký, sai khoá); và biên nhận cũ vẫn kiểm được sau khi xoay khoá. **PHẦN CHÊNH — ADR-011 §“Đo bằng gì” mục 5 đặt tên trước:** không có phép đo nào cho *“một nhà cung cấp THẬT đã kiểm chứng được”*. Trang kiểm chứng là tầng HTTP và `apps/` còn rỗng; chỗ trống ấy thuộc T5/S1.9. **PHẦN CHÊNH THỨ HAI, VIẾT LẠI [khoản nợ 30, 2026-09-05]:** ~~khoá công khai chưa được CÔNG BỐ ở đâu cả — vòng khoá có `publicKeys()` nhưng đường công bố (một endpoint theo `kid`) chưa tồn tại, nên hôm nay nhà cung cấp lấy khoá bằng cách hỏi chính chúng ta.~~ **ĐƯỜNG nay đã có** (`apps/public-keys`, `/.well-known/trustprocure-receipt-keys`, tra được theo `kid`, chỉ đọc, không phụ thuộc `pg`). Nhưng phần chênh KHÔNG biến mất, nó chỉ đổi hình: một endpoint do CHÍNH CHÚNG TA phục vụ vẫn là *“hỏi chúng ta”* — nhanh hơn, không đáng tin hơn. Một máy chủ bị chiếm phục vụ được một khoá khác và mọi biên nhận giả ký bằng khoá ấy sẽ kiểm chứng SẠCH. Thứ đóng nốt là một NEO NGOÀI (`fingerprint` SHA-256 của SPKI, in vào hợp đồng hay đăng ở nơi ta không kiểm soát), và nó là **cùng một khoản nợ với artefact neo ngoài của B3** — ~~cơ chế có, artefact thì chưa~~. **PHẦN CHÊNH THỨ HAI, VIẾT LẠI LẦN NỮA [S1.17, ADR-026]:** vế *“artefact thì chưa”* nay chỉ còn đúng cho MỘT nửa. Artefact neo ngoài của B3 **ĐÃ CÓ** — mốc neo được KÝ (ECDSA P-256, chữ ký DER), nằm trong một nơi cất CHỈ-GHI-THÊM (`packages/audit/src/anchor-store.ts`), lấy về qua `loadVerifiedAnchors` và chỉ đúc ra `ExternalAnchor` sau khi chữ ký ĐẠT; entry point là `tools/neo-so-kiem-toan`, và nó được đo bằng một tiến trình THẬT. Nửa CÒN LẠI thì không đổi một chữ, và nó là nửa của B2: kiểm toán viên (và nhà cung cấp) phải lấy được **vòng khoá CÔNG KHAI** qua một đường KHÁC đường lấy artefact. Kẻ chiếm được cả hai phục vụ một cặp khớp nhau. Đó vẫn là `fingerprint` in vào hợp đồng, đọc qua điện thoại — một artefact NGOÀI hệ thống mà không dòng mã nào sinh ra được. Vòng S1.17 không đóng nó; nó chỉ làm cho nó trở thành thứ DUY NHẤT còn lại.
 
 - **B5** — **MỘT LẦN GỌI TRÊN MỘT RFQ — CHỮ *“định kỳ”* VÀ CHỮ *“mọi thời điểm về sau”* VẪN CHƯA CÓ CHỦ THỂ.** Thứ đã đo, và đo mạnh: `auditStoredCiphertexts` băm LẠI từng phong bì đang nằm trong bảng rồi so với chuỗi hash đọc từ biên nhận; một lượt phá thật (gỡ trigger `bid_chi_ghi_them` rồi thay phong bì) làm nó chỉ ĐÍCH DANH đúng phiên bản ấy và KHÔNG vạ lây phiên bản sạch; và gọi nhầm role hỏng ỒN ÀO với `permission denied` thay vì âm thầm báo “mọi thứ đều khớp”. Cộng một phép đo cho thấy B1 chặn TRƯỚC: không gỡ trigger thì kể cả superuser cũng không đổi được phong bì. **PHẦN CHÊNH THỨ NHẤT:** không có gì GỌI hàm này theo lịch — không cron, không handler outbox. Ở S1 mệnh đề đúng ở mức *“phép so tồn tại và nó biết phát hiện”*, chưa đúng ở mức *“nó chạy mãi về sau”*; chặng ấy thuộc S6. **PHẦN CHÊNH THỨ HAI, và nó nặng hơn:** job so phong bì với BIÊN NHẬN TRONG CÙNG CƠ SỞ DỮ LIỆU. Một lần khôi phục sai hay một kẻ tấn công viết lại CẢ HAI sẽ đi lọt. Thứ đóng được lỗ ấy là chữ ký của biên nhận — và chữ ký CỐ Ý không nằm trong quyền của `app_unseal` (xem 021), vì B2 nói phép kiểm ấy phải làm được bằng khoá công khai một mình, tức bởi NHÀ CUNG CẤP chứ không bởi máy chủ.
 
@@ -226,6 +226,29 @@ NO KHONG CHUNG MINH: (1) "moi su kien da xay ra deu co mat" — lop phong thu la
   KHONG NGAN CHAN; giua luc mot cot bi doi ten va lan migrate() ke, ben ghi TU CHON DUOC seq/prev_hash/hash.
 ```
 
+**[S1.17 / ADR-026] HAI CÂU TRONG KHỐI TRÊN ĐÃ BỊ BÁC BỎ. Bản trích giữ nguyên byte; đính
+chính nằm ở đây.**
+
+- Mục **(3)** nói `source` của `ExternalAnchor` là *“NHAN XUAT XU DO NGUOI GOI VIET, khong xac
+  thuc, khong the xac thuc o S0”*, và *“O THI CHAY KHONG CO LOP NAO CHAN”*. Cả hai vế nay SAI.
+  Artefact được KÝ (ECDSA P-256, chữ ký DER trên một văn bản chính tắc), `source` là DẪN XUẤT
+  của `kid` lấy từ chính văn bản đã ký cộng mô tả nơi cất, và ở thì chạy `verifyAuditChain`
+  báo `ANCHOR_UNVERIFIED` cho một mốc neo không mang dấu đúc của `verifyAnchorRecord`.
+  Đo bằng đột biến: vô hiệu hoá phép kiểm dấu đúc ⇒ 2 test ĐỎ; gỡ dấu đúc khỏi kiểu ⇒ `tsc`
+  ĐỎ với hai lỗi *“Unused '@ts-expect-error' directive”*.
+- Mục **(4)** nói *“ARTEFACT NEO NGOAI HIEN KHONG TON TAI — CO CHE da co, ARTEFACT thi chua”*.
+  Artefact nay TỒN TẠI: `packages/audit/src/anchor-{text,sign,verify,store}.ts` cộng entry
+  point `tools/neo-so-kiem-toan`. Câu CÒN ĐÚNG trong mục ấy là vế sau: `audit_events`,
+  `audit_chain_anchors` và `schema_migrations` vẫn cùng vùng tin cậy, nên KHÔNG cái nào trong
+  ba được dùng làm gốc tin cậy — chính vì thế mốc neo phải ra khỏi CSDL và phải được ký.
+
+**BA THỨ KHÔNG ĐỔI MỘT CHỮ, và chúng là phần quan trọng của phát biểu:** ⑴ mốc neo ràng buộc
+quá khứ TỚI LẦN XUẤT CUỐI — *NHIP NEO CHINH LA CUA SO GIA MAO*; ⑵ nó không nói gì về sự kiện
+bị NUỐT TRƯỚC KHI GHI (lớp phòng thủ là danh sách trắng trigger trong hardening); ⑶ *“nơi cất
+role deploy KHÔNG GHI ĐƯỢC”* vẫn là một sự thật về TRIỂN KHAI, không về mã nguồn — bản cài đặt
+hôm nay ghi ra một thư mục trên đĩa, và ai xoá được thư mục ấy thì xoá được mốc neo. Xem
+ADR-026 §5.
+
 ```text
 B4 BAO DAM: truoc app_api/app_unseal bi chiem, role dang nhap ung dung, SQL injection, va thanh vien
   pg_write_all_data — HANG DA NAM TRONG public.audit_events KHONG BI SUA, KHONG BI XOA, KHONG BI CAT DUOI.
@@ -247,6 +270,7 @@ B4 KHONG BAO DAM: "moi su kien da xay ra deu co mat trong bang", va "day van la 
   => GIOI HAN CAU TRUC, khong dong duoc o tang nay (can event trigger cap cum, doi SUPERUSER,
      hoac mot NEO NGOAI DATABASE).
 ```
+
 
 ## 5. Nhãn vế `[INV-XX(k)]` — cố ý **không** được tính là độ phủ
 

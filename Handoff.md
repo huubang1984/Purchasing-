@@ -383,9 +383,15 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
    không có Bash và không có CSDL — họ đọc mã, không đo. ~~Mã MEDIUM/LOW chưa đóng nằm ở sổ nợ
    `docs/STATE.md` khoản **31–37**, và khoản **31** là khoản nặng nhất còn mở.~~ **Câu vừa gạch
    đã thiu ngay trong ngày nó được viết:** cả bảy khoản **31–37** đã đóng bằng mã cùng ngày
-   2026-09-05 (`06ef869` cho 31, `c9ab088` cho 32–37 — xem sổ nợ `docs/STATE.md`). Hai khoản
+   2026-09-05 (`06ef869` cho 31, `c9ab088` cho 32–37 — xem sổ nợ `docs/STATE.md`). ~~Hai khoản
    còn mở của toàn bộ sổ nợ 20–37 là **23** (Android WebCrypto — cần một máy thật) và nửa sau
-   của **30** (neo ngoài — cùng khoản với 11). Đọc mục 5 dưới đây trước khi tin bất kỳ con số
+   của **30** (neo ngoài — cùng khoản với 11).~~ **[2026-09-07, S1.17] Khoản 11 ĐÃ ĐÓNG** (artefact
+   neo ngoài cho sổ kiểm toán: mốc neo ĐƯỢC KÝ + nơi cất CHỈ-GHI-THÊM + entry point — ADR-026), và
+   **nửa sau của 30 thì KHÔNG**, dù hai khoản này từng được viết như một. Chúng khác nhau về đối
+   tượng: 11 nói về artefact neo cho SỔ, 30 nói về artefact neo cho KHOÁ CÔNG KHAI. Cái thứ hai
+   không có đường nào đóng bằng mã — nó là một `fingerprint` đi ra khỏi hệ thống (in vào hợp đồng,
+   đọc qua điện thoại). Hai khoản còn mở nay là **23** và nửa sau của **30**, và **cả hai đều không
+   phải việc của mã nguồn**. Đọc mục 5 dưới đây trước khi tin bất kỳ con số
    "đã đóng" nào.
 
 2. **Một câu SAI do chính dự án viết đã đứng ở BA chỗ và biện minh cho việc bỏ một lớp.**

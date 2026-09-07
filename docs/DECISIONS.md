@@ -2142,3 +2142,234 @@ sẽ báo đỏ đúng cặp ấy vì một lý do sai.
   chế duy nhất.~~ **[S1.16]** Nó KHÔNG quét toàn bảng: `BitmapOr` dùng được cả hai vế của phép OR khi
   chỉ số của vế thứ hai tồn tại, nên "đường thoát" vừa gạch không cần tới. Vế còn đúng: bộ dọn theo
   TIẾN TRÌNH, và nhiều instance nghĩa là nhiều lượt dọn — vô hại vì câu lệnh idempotent.
+
+---
+
+## ADR-026 — Artefact neo ngoài: một dòng CHỈ-GHI-THÊM các mốc neo ĐƯỢC KÝ, và `ExternalAnchor` chỉ đúc được từ một chữ ký ĐÃ KIỂM
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.17)** · Đóng: sổ nợ 11 và
+nửa sau của sổ nợ 30 · Liên quan: ADR-006 (hai role, khuôn `unwrap.ts`), ADR-009 (AWS KMS
+`ap-southeast-1`), ADR-011 mục 3 (xoay khoá là THÊM, không THAY), ADR-016 (danh tính là DẪN XUẤT,
+không phải THAM SỐ), ADR-022 (`listOrganizations` do composition root tiêm), `evidence/INV-matrix.md`
+§4 mục B2 và §4.1 (phát biểu bàn giao B3/B4)
+
+### 0. Câu hỏi, và vì sao nó không phải một câu hỏi kỹ thuật nhỏ
+
+Bàn giao Task 5 của S0 đo được ba đường mà **chủ sở hữu bảng không-superuser** — tức chính role
+deploy — dựng lại được cả sổ kiểm toán lẫn bảng mốc neo mà `migrate()` vẫn báo OK. Từ đó, phát biểu
+đúng mức của B3 có một mệnh đề *nếu và chỉ nếu*:
+
+> `CHUOI KHONG CO NEO NGOAI chung minh VE CO BAN LA KHONG GI CA` ... `NEU VA CHI NEU co ExternalAnchor
+> giu o noi role deploy KHONG GHI DUOC: chuoi con phat hien so bi THAY THE / DUNG LAI / LAM RONG`
+
+Cơ chế cho mệnh đề ấy đã có từ S0 (`exportChainHead`, `ExternalAnchor`, nhánh `externalAnchors` của
+bộ kiểm chứng). **Artefact thì chưa** — và `writer.ts` liệt kê đúng năm thứ thiếu: *không exporter,
+không lịch, không nơi cất, không chữ ký, không entry point*. Hệ quả đo được, cũng viết ở đó:
+
+> "Người gọi vẫn tự tay đúc được một neo giả (`{ ...xuat, source: "bịa" }`) — không lớp kiểu nào chặn
+> được điều đó, và nói ngược lại là nói quá."
+
+Tức lớp *"phải có neo ngoài mới được xanh"* mà vòng fix 1 mua được, vòng fix 2 chỉ làm cho khó viết
+nhầm hơn chứ không đóng. Một dòng là đủ để có một kết luận kiểm toán màu xanh không dựa trên gì.
+
+### 1. Bốn quyết định
+
+| # | Câu hỏi | Chốt |
+|---|---|---|
+| 1 | Artefact có được KÝ không? | **Có.** ECDSA P-256 + SHA-256, chữ ký **DER**, trên một **văn bản chính tắc** cùng khuôn biên nhận (`buildReceiptText`). |
+| 2 | Vòng khoá ký mốc neo có dùng chung với vòng khoá ký BIÊN NHẬN không? | **Không.** Vòng riêng, `AnchorSigningKeyRing`. |
+| 3 | `ExternalAnchor` đúc ở đâu? | **Chỉ ở `verifyAnchorRecord`**, sau khi chữ ký đạt. Kiểu mang một **dấu đúc** (symbol module-private); `verifyAuditChain` kiểm dấu đúc ở tầng chạy và báo `ANCHOR_UNVERIFIED`. |
+| 4 | Nơi cất có hình dạng gì? | **Một dòng JSONL cho mỗi tổ chức, CHỈ GHI THÊM.** `readAllRaw` trả `unknown[]` — nơi cất nằm ngoài vùng tin cậy theo đúng định nghĩa của nó. |
+
+**Mục 2 không phải một chi tiết.** Ba lý do, và cả ba là hậu quả chứ không phải sở thích: ⑴ khoá ký
+biên nhận sống trong tiến trình `api`, tức TRONG vùng tin cậy mà mốc neo sinh ra để ràng buộc; ⑵ nhịp
+xoay khác nhau; ⑶ một lần lộ khoá ký biên nhận cho phép đúc biên nhận giả — nếu cùng khoá ấy đúc được
+mốc neo thì kẻ tấn công RỬA LUÔN được cái sổ đã ghi việc đó.
+
+### 2. Chữ ký và tính chỉ-ghi-thêm chặn HAI thứ khác nhau — không cái nào thay được cái kia
+
+Đây là điều dễ đọc nhầm nhất của vòng này, nên nó được viết ở khối đầu `anchor-store.ts` và đo bằng
+một test có ĐỐI CHỨNG:
+
+- **Chữ ký chặn BỊA THÊM.** Kẻ sửa sổ rồi muốn một mốc neo khớp với sổ đã sửa phải có khoá riêng.
+- **Chỉ-ghi-thêm chặn BỎ BỚT.** Kẻ ghi đè được nơi cất **không cần giả mạo gì cả** — họ chỉ cần giữ
+  lại mốc neo cũ. Mọi bản ghi còn lại đều thật, chữ ký đều hợp lệ, và kết luận vẫn xanh trên một cái
+  sổ đã bị cắt đuôi.
+
+Phép đo (`chain.int.test.ts`, *"cắt đuôi rồi XUẤT LẠI"*), trên một sổ thật và một nơi cất thật:
+
+| Vế | Nơi cất giữ gì | Kết luận kiểm toán |
+|---|---|---|
+| A — chỉ-ghi-thêm | neo seq **6** và neo seq **3** | `ok=false`, `ANCHOR_MISSING` tại seq 6 |
+| B — **đối chứng**, mô phỏng nơi cất GHI ĐÈ | chỉ neo seq **3** | `ok=true`, `problems: []` — **sạch hoàn toàn trên một cái sổ đã bị cắt mất một nửa** |
+
+Vế B là thứ làm cho vế A có nghĩa. Không có nó, *"chúng tôi giữ mọi mốc neo"* là một lựa chọn triển
+khai; có nó, đó là một ràng buộc có hậu quả đo được. Mốc chết: hằng số `CO_CHE_MO_DE_GHI` của
+`anchor-store.ts` — đổi `"a"` thành `"w"` thì bốn test ĐỎ.
+
+### 3. Dấu đúc — nói đúng mức, vì đây là chỗ dễ nói quá nhất
+
+`ExternalAnchor` mang một thuộc tính khoá bằng `Symbol()` module-private (KHÔNG `Symbol.for`, vốn đọc
+sổ đăng ký toàn cục). Hai lớp, và chúng đo được riêng rẽ:
+
+- **Tầng kiểu:** một object literal thiếu dấu đúc không typecheck. Mốc chết là hai `@ts-expect-error`
+  trong `anchor-verify.test.ts` và `verifier.test.ts` — gỡ dấu đúc khỏi kiểu thì `tsc` ĐỎ với
+  *"Unused '@ts-expect-error' directive"*, tức lớp này không mục đi được trong im lặng.
+- **Tầng chạy:** `verifyAuditChain` kiểm dấu đúc TRƯỚC phép lọc tổ chức, và một giá trị không mang nó
+  cho ra `ANCHOR_UNVERIFIED` + `NOT_ANCHORED`. Thứ tự ấy chịu lực: nếu phép lọc tổ chức đứng trước thì
+  một mốc neo tự đúc chỉ cần mang một `orgId` lạ là đi qua trong im lặng.
+
+**[review lượt 9 — H9-2] BẢN ĐẦU CỦA LỚP NÀY KHÔNG MUA ĐƯỢC THỨ NÓ TỰ NHẬN, và phát hiện ấy đáng
+đọc kỹ hơn bản vá.** Dấu đúc khi ấy là một thuộc tính own **enumerable** khoá bằng symbol, còn
+`laNeoDaKiemChuKy` đọc nó bằng phép truy cập thuộc tính. Nhưng spread và `Object.assign` **chép own
+enumerable symbol keys**, và phép truy cập thuộc tính đọc qua chuỗi prototype. Nên:
+
+```ts
+const neoGia = { ...neo, seq: 3, hashHex: "b".repeat(64) };   // typecheck SẠCH
+```
+
+—không cần `as unknown as`, không cần `@ts-expect-error`, và `verifyAuditChain` nhận nó như một mốc
+neo đã kiểm chữ ký. Tức đường lọt **không** phải một nỗ lực có chủ đích như câu cũ mô tả; nó là **một
+dòng refactor bình thường** (`neoDaTai.map(n => ({ ...n, exportedAt: chuanHoa(n.exportedAt) }))`), tức
+đúng thứ *"lọt vào một cách TÌNH CỜ"* mà lớp này sinh ra để chặn. Cả bốn cổng — `tsc`, `eslint`,
+`depcruise`, test — đều im.
+
+Bằng chứng ở tầng chạy vì thế chuyển sang một **`WeakSet` module-private**: tư cách thành viên gắn với
+CHÍNH THAM CHIẾU, nên spread, `Object.assign`, `Object.create` và `structuredClone` đều không mang nó
+theo. Thuộc tính symbol vẫn còn, nhưng CHỈ để tầng KIỂU giữ được hai `@ts-expect-error` làm mốc chết.
+Năm ca sao chép có test riêng, và mốc chết của chúng là: đổi `laNeoDaKiemChuKy` về phép đọc thuộc tính
+thì bốn trong năm ca ĐỎ.
+
+**Cái nó KHÔNG mua, viết ra để không ai đọc rộng hơn:** kẻ chạy được mã trong tiến trình kiểm toán
+vẫn không bị chặn — họ import `verifyAnchorRecord` và tự đúc, hoặc sửa thẳng kết quả trả về. Thứ mua
+được đúng bằng chừng này: **một mốc neo chưa qua kiểm chữ ký không còn lọt vào được một cách TÌNH
+CỜ** — và từ lượt review thứ chín, câu đó mới thật sự đúng.
+
+Cùng một nước đi với ADR-016 (*lỗ đóng bằng HÌNH DẠNG CHỮ KÝ, không bằng một phép kiểm phải nhớ gọi*),
+khác ở chỗ ở đó hình dạng chữ ký đóng được lỗ một mình; ở đây nó là lớp thứ hai, lớp chịu lực là chữ
+ký số.
+
+### 4. Ranh giới KHẢ NĂNG: bộ ký không được vào tiến trình `api`
+
+`packages/audit` được `apps/api` import ở mọi đường ghi. Nếu bộ ký mốc neo nằm trong cửa công khai
+của gói thì tiến trình `api` — tiến trình NẰM TRONG vùng tin cậy mà mốc neo ràng buộc — link luôn được
+khả năng đúc mốc neo. Chưa phải một lỗ (vẫn cần khoá riêng), nhưng nó xoá ranh giới mà cả cơ chế đứng
+trên.
+
+Nên `anchor-sign.ts` đi theo đúng khuôn `packages/crypto-keys/src/unwrap.ts` (ADR-006, INV-G1): không
+re-export ở `index.ts`, một subpath export riêng (`@trustprocure/audit/anchor-sign`), và **họ quy tắc
+`g11-`** với ba quy tắc — quy tắc đích danh, cộng hai quy tắc *"không import ngược"* cho hai module
+được miễn trừ, vì một module được miễn trừ mà không phải đích hạn chế là một cây cầu (bài học N5 của
+S0). Mốc chết: thêm một dòng `export ... from "./anchor-sign.js"` vào `index.ts` thì depcruise ĐỎ với
+`g11-ky-neo-chi-o-cong-cu-xuat-neo`.
+
+### 5. Cái vòng này KHÔNG đóng — ba thứ, mỗi thứ một lý do
+
+⑴ **LỊCH.** Bốn trong năm thứ mà `writer.ts` liệt kê nay đã có; thứ thứ năm là một tiến trình chạy đều
+ở một nơi đã triển khai, và dự án **chưa triển khai ở đâu**. Đây không phải một khoản nợ mã nguồn, và
+biến nó thành một cron trong kho sẽ là một lời khai rộng hơn sự thật.
+
+⑵ **TÍNH ĐỘC LẬP CỦA NƠI CẤT.** `createFileAnchorStore` ghi ra một thư mục trên đĩa. Ai xoá được thư
+mục ấy thì xoá được mốc neo, ~~và không dòng mã nào đổi được điều đó~~.
+
+**[review lượt 9 — H9-1] VẾ VỪA GẠCH LÀ MỘT LỜI KHAI SAI, VÀ NÓ CHE MỘT LỖ FAIL-OPEN ĐẦU-CUỐI.** Mã
+không ngăn được việc xoá — đúng. Nhưng bản đầu của `append` gọi `mkdir(recursive)` rồi để `appendFile`
+tự tạo tệp, tức nó làm đúng điều tệ nhất mà mã làm được ở chỗ đó: ghép với một bộ xuất chạy theo lịch,
+một lần XOÁ nơi cất không phải là *mất mốc neo* mà là **RESET nơi cất về trạng thái "chưa từng neo"**,
+và lượt xuất kế tiếp lấp đầy lại bằng mốc neo của cái sổ đã bị cắt. Kịch bản đủ năm bước, không bước
+nào bị một dòng mã nào phản đối:
+
+1. sổ 6 hàng, nơi cất có neo `seq=6` ký hợp lệ;
+2. `DELETE ... WHERE seq > 3`, dọn `audit_chain_anchors`, tính lại đuôi bằng `audit_compute_hash`;
+3. `rm -rf $TRUSTPROCURE_NEO_KHO`;
+4. bộ xuất chạy theo lịch → `mkdir` dựng lại, `appendFile` dựng lại, ghi neo `seq=3` **ký hợp lệ**;
+5. `kiem` → `ok=true`, `problems: []`, **mã thoát 0**.
+
+Cửa sổ giữa bước 3 và 4 CÓ kêu (`NOT_ANCHORED`) — và chính bộ xuất đóng nó lại.
+
+**Hai lớp đóng ca đó, và cả hai đo được:** ⑴ `append` KHÔNG còn tạo thư mục gốc; nơi cất vắng mặt thì
+NÉM, và việc dựng nó là một lệnh tường minh (`pnpm neo khoi-tao`). ⑵ `xuat` đọc nơi cất TRƯỚC khi ghi
+và **từ chối** một mốc neo có `seq` LÙI so với mốc cao nhất đã kiểm được — `audit_events.seq` chỉ đi
+lên, nên một đầu chuỗi thấp hơn là một vụ cắt đuôi, và bộ xuất ở đúng vị trí để nói ra điều đó vào
+đúng lúc nó xảy ra.
+
+**Ca CÒN HỞ, nói thẳng:** xoá đúng MỘT tệp `<org>.jsonl` mà giữ thư mục thì lớp ⑵ mất mốc so sánh.
+Đóng nó đòi một trạng thái nằm NGOÀI nơi cất — tức lại đúng bài toán triển khai dưới đây.
+
+Mã giữ đúng phần hợp đồng mà mã giữ được — **không có một thao tác nào sửa hay xoá một bản ghi đã
+ghi**, đường ghi mở tệp ở chế độ nối thêm, và một nơi cất vừa biến mất thì KÊU thay vì tự dựng lại.
+Phần còn lại thuộc TRIỂN KHAI: một bucket S3 bật **Object Lock chế độ Compliance**, trong một tài
+khoản AWS mà role deploy không có vai trò nào. Ở đó *"không xoá được"* là một chính sách IAM đọc được
+thay vì một câu trong tài liệu này. **Cho tới lúc đó, phát biểu đúng là: cơ chế đã đủ, chỗ cất thì
+chưa.**
+
+⑶ **CÔNG THỨC KIỂM BẰNG `openssl(1)`.** [review lượt 9 — H9-9] Định dạng được chọn đúng để
+OpenSSL kiểm được, và điều đó ĐÃ ĐO — nhưng đo qua `createVerify` của `node:crypto`, không qua
+`openssl(1)` trên một tệp tách ra từ JSONL. Ba thao tác ở giữa (tách `text`, `base64 -d` cho
+`sig`, đổi SPKI DER sang PEM) chưa ai trong kho này chạy. Đường đóng: một lệnh phụ `trich` xuất
+ba tệp cộng một test int chạy `openssl` thật. Cho tới lúc đó, câu đúng là *"định dạng là thứ
+OpenSSL kiểm được"*, KHÔNG phải *"kiểm toán viên kiểm được mà không cần một dòng mã nào của
+chúng ta"* — bốn chỗ mang câu rộng ấy đã được gạch tại chỗ.
+
+⑷ **NEO NGOÀI CHO KHOÁ CÔNG KHAI CỦA CHÍNH MỐC NEO.** Kiểm toán viên phải lấy được vòng khoá công khai
+qua một đường KHÁC đường lấy artefact — nếu không, kẻ chiếm được cả hai phục vụ một cặp khớp nhau.
+Đây là **đúng cùng một bài toán** với `fingerprint` của `apps/public-keys` (khoản nợ 30 nửa đầu), và
+cùng một câu trả lời: in vào hợp đồng, đọc qua điện thoại, đăng ở nơi ta không kiểm soát. Vòng này
+không sinh ra bài toán ấy và cũng không đóng nó; nó chỉ làm cho bài toán ấy trở thành **thứ duy nhất
+còn lại**.
+
+**Và một giới hạn CŨ không đổi, nhắc lại vì nó dễ bị quên khi có artefact thật:** mốc neo ràng buộc
+QUÁ KHỨ tới lần xuất cuối. Nhịp neo CHÍNH LÀ cửa sổ giả mạo. Nó vẫn không nói gì về sự kiện bị NUỐT
+TRƯỚC KHI GHI — lớp phòng thủ cho ca đó là danh sách trắng trigger trong `hardening.always.sql`,
+không phải chuỗi hash và không phải mốc neo.
+
+### 6. Danh sách tổ chức là THAM SỐ của công cụ, không phải thứ nó tự đoán
+
+`app_api` không đọc được danh sách tổ chức — cùng ràng buộc đã buộc runner outbox nhận
+`listOrganizations` từ composition root (ADR-022), và bản cài đặt hôm nay của tuỳ chọn ấy là *"tổ chức
+tiến trình ĐÃ THẤY enqueue"*, một tập KHÔNG phủ hết. Một bộ xuất tự đoán sẽ im lặng bỏ sót đúng những
+tổ chức ít hoạt động nhất — và một tổ chức không được neo thì `verifyAuditChain` trả `NOT_ANCHORED`,
+tức **mất trắng bảo đảm chứ không suy giảm dần**. Nên `--org` là bắt buộc và lặp lại được, và việc giữ
+danh sách ấy đúng là một sự thật vận hành phải viết ra ở đâu đó.
+
+### 7. Đo bằng gì
+
+1. **Đột biến nơi cất:** `CO_CHE_MO_DE_GHI` `"a"` → `"w"` ⇒ 4 test ĐỎ, trong đó có *"cắt đuôi rồi XUẤT
+   LẠI"* của `chain.int.test.ts`. ✔ đã đo.
+2. **Đột biến dấu đúc ở tầng chạy:** vô hiệu hoá `if (!laNeoDaKiemChuKy(neo))` ⇒ 2 test ĐỎ. ✔ đã đo.
+3. **Đột biến dấu đúc ở tầng kiểu:** gỡ `[DAU_DUC]` khỏi `ExternalAnchor` ⇒ `tsc` ĐỎ, 3 lỗi, trong đó
+   2 lỗi *"Unused '@ts-expect-error'"*. ✔ đã đo.
+4. **Đột biến đối chiếu dạng chính tắc:** bỏ `buildAnchorText(truong) === text` ⇒ test *"văn bản KÝ
+   HỢP LỆ mà không ở dạng chính tắc"* ĐỎ. ✔ đã đo.
+5. **Đột biến ranh giới khả năng:** `index.ts` re-export bộ ký ⇒ depcruise ĐỎ với
+   `g11-ky-neo-chi-o-cong-cu-xuat-neo`. ✔ đã đo.
+6. **Đối chiếu HAI CÀI ĐẶT:** fixture của test ký bằng `createSign` trần của `node:crypto` — đúng con
+   đường `openssl dgst -sha256 -sign` đi — chứ KHÔNG gọi `anchor-sign.ts`. Nên mọi test kiểm chữ ký là
+   một phép đối chiếu hai cài đặt, không phải một phép thử *"hàm kiểm là nghịch đảo của hàm ký của
+   chính nó"*. ✔ đã đo.
+7. **Entry point phải được CHẠY, không chỉ được biên dịch:** `cong-cu.int.test.ts` `spawn` đúng dòng
+   lệnh người vận hành gõ. Bài học của khoản nợ 23 (`tools/do-webcrypto/phuc-vu-va-dot-bien.mjs` ném
+   `ENOENT` ở dòng đầu vì không test nào chạy nó). ✔ đã đo — **và nó bắt được một lỗi thật ngay lượt
+   chạy đầu**: `--import` với một đường dẫn Windows tuyệt đối cho ra `ERR_UNSUPPORTED_ESM_URL_SCHEME`
+   vì `D:\...` bị đọc thành một URL scheme `d:`.
+
+### 7b. Phép đo của VÒNG SỬA sau review lượt 9
+
+8. **Đột biến nơi cất tự dựng lại:** trả `mkdir(thuMuc, { recursive: true })` vào `append` ⇒ test
+   *"nơi cất bị XOÁ thì đường ghi NÉM"* ĐỎ. ✔ đã đo.
+9. **Đột biến từ chối lùi:** gỡ khối `if (dau.seq < cao)` khỏi `xuat` ⇒ test int *"xuat TỪ CHỐI một
+   mốc neo LÙI"* ĐỎ. ✔ đã đo.
+10. **Đột biến dấu đúc, lần hai:** đổi `laNeoDaKiemChuKy` về phép đọc thuộc tính ⇒ **bốn trong năm**
+    ca sao chép (spread, spread-có-sửa, `Object.assign`, `Object.create`) ĐỎ; `structuredClone` vốn
+    đã fail-closed vì nó bỏ khoá symbol. ✔ đã đo.
+11. **Đột biến tự kiểm cặp khoá:** gỡ khối tự kiểm khỏi `createLocalDevAnchorSigner` ⇒ test *"hai nửa
+    khoá KHÔNG phải một cặp"* ĐỎ. ✔ đã đo.
+12. **Đột biến chốt loại khoá:** gỡ phép kiểm `asymmetricKeyType`/`namedCurve` ⇒ ca RSA và ca Ed25519
+    chuyển từ "ném" sang "đạt". ✔ đã đo.
+13. **Bốn probe `g11-`** (import nội bộ, cửa subpath, import ngược, đối chứng dương cho `index.ts`).
+    ✔ đã đo — **và chính chúng bắt được một lớp canh RỖNG RUỘT trong bản đầu của mình**: probe đặt ở
+    một thư mục `apps/tmp-probe-*` không có `package.json` nên specifier subpath KHÔNG resolve được,
+    `to.path` của `g11-` không khớp gì cả, và quy tắc im lặng. Đó đúng là lỗ **C1** mà chính
+    `.dependency-cruiser.cjs` đã đặt tên từ S0, lần này hiện ra trong một PHÉP ĐO chứ không trong mã
+    sản phẩm. Probe chuyển sang `packages/test-support` — gói có liên kết thật tới
+    `@trustprocure/audit`.

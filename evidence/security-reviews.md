@@ -615,3 +615,76 @@ nằm trong chỉ số nào nên cập nhật ấy vẫn HOT. Bộ dọn của `
 bảng ấy không có policy tenant để OR vào, nên câu dọn của nó có `WHERE` và dùng Index Scan thẳng
 (0,94 ms trên cùng fixture 200 000 hàng) — sự bất đối xứng giữa hai bộ dọn là có lý do, không phải
 một lần quên.
+---
+
+# S1.17 — lượt review thứ CHÍN (artefact neo ngoài, khoản nợ 11), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.17** | `packages/audit/src/anchor-{text,verify,sign,store}.ts`, `verifier.ts`, `writer.ts`, `index.ts` + `package.json` của gói; `tools/neo-so-kiem-toan/`; `packages/test-support/src/neo-fixture.ts`; `.dependency-cruiser.cjs` (họ `g11-`), `vitest.config.ts`, `eslint.config.js`; toàn bộ test của vòng | **cây làm việc, TRƯỚC commit đầu tiên của vòng** — xem ghi chú dưới bảng | Review tĩnh (reviewer không có Bash, không có CSDL); mọi phép đo trong bảng do vòng sửa chạy | **0 CRITICAL, 1 HIGH, 3 MEDIUM, 6 LOW** | `0985ada` (gói `audit`: H9-1 nửa kho, H9-2, H9-3, H9-5, H9-6, H9-10) · `236a7ba` (công cụ: H9-1 nửa từ-chối-lùi, H9-7, H9-8) · `ac118a6` (H9-4) |
+
+**MỘT KHÁC BIỆT VỚI TÁM LƯỢT TRƯỚC, PHẢI NÓI RA VÌ NÓ LÀM MẤT MỘT PHẦN TRUY NGUYÊN:** tám lượt trước
+review một COMMIT đã tồn tại, nên ai cũng dựng lại được đúng trạng thái mà reviewer nhìn thấy. Lượt
+này chạy trên **cây làm việc chưa commit**, nên **trạng thái trước sửa không có tên và không dựng lại
+được**. Đổi lại, mọi phát hiện được đóng TRƯỚC khi lịch sử ghi lại một trạng thái có lỗ.
+
+Hai vế ấy không thay thế nhau, và vế mất là vế thật. **Bài học cho vòng sau: commit trước, review
+sau** — một lượt review không có SHA là một lượt review mà người thứ ba phải tin lời kể.
+
+## Một HIGH
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H9-1 | **HIGH — LỖ FAIL-OPEN ĐẦU-CUỐI.** `append` gọi `mkdir(recursive)` rồi để `appendFile` tự tạo tệp, nên một lần XOÁ nơi cất không phải là *mất mốc neo* mà là **RESET về "chưa từng neo"**: lượt xuất theo lịch kế tiếp lấp đầy lại bằng mốc neo của cái sổ đã bị cắt, và `kiem` trả `ok=true`, `problems: []`, mã thoát 0. Đủ năm bước, không bước nào bị một dòng mã nào phản đối. Nó cũng bác một lời khai của chính vòng: *"không dòng mã nào ở đây đổi được điều đó"* — mã không ngăn được việc XOÁ, nhưng mã ngăn được việc âm thầm coi một nơi cất vừa biến mất là một nơi cất mới tinh, và bản đầu cố ý làm điều ngược lại | **Đóng bằng hai lớp.** ⑴ `append` KHÔNG tạo thư mục gốc; nơi cất vắng mặt thì NÉM với thông điệp nói ra hệ quả, và việc dựng nó là một lệnh tường minh `pnpm neo khoi-tao`. ⑵ `xuat` đọc nơi cất TRƯỚC khi ghi và **từ chối** một mốc neo có `seq` LÙI so với mốc cao nhất đã kiểm được — `audit_events.seq` chỉ đi lên, nên một đầu chuỗi thấp hơn là một vụ cắt đuôi, và bộ xuất ở đúng vị trí để nói ra điều đó vào đúng lúc. Hai đột biến, hai test ĐỎ. **Ca CÒN HỞ, ghi ra:** xoá đúng MỘT tệp `<org>.jsonl` mà giữ thư mục thì lớp ⑵ mất mốc so sánh — đóng nó đòi một trạng thái NGOÀI nơi cất, tức lại là bài toán triển khai (ADR-026 §5⑵) |
+
+## Ba MEDIUM
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H9-2 | **MEDIUM — dấu đúc SAO CHÉP ĐƯỢC bằng một phép spread.** Dấu đúc là thuộc tính own **enumerable** khoá bằng symbol, và phép kiểm đọc nó qua truy cập thuộc tính. `{ ...neo, seq: 3 }` **typecheck sạch**, giữ nguyên dấu đúc, không cần `as unknown as`; `Object.create(neo)` cũng lọt vì đọc qua prototype. Tức đường lọt không phải một nỗ lực có chủ đích như tài liệu mô tả — nó là **một dòng refactor bình thường**, đúng thứ *"lọt vào một cách TÌNH CỜ"* mà lớp này sinh ra để chặn. Kèm một lời khai sai ở `verifier.ts`: *"tầng kiểu đã chặn mọi đường còn lại"* | **Đóng bằng `WeakSet`.** Bằng chứng ở tầng chạy gắn với CHÍNH THAM CHIẾU, nên spread / `Object.assign` / `Object.create` / `structuredClone` đều không mang nó theo; thuộc tính symbol giữ lại CHỈ để tầng kiểu còn hai `@ts-expect-error` làm mốc chết. Năm ca sao chép có test riêng; đột biến (trả phép kiểm về đọc thuộc tính) giết **4/5** — `structuredClone` sống sót vì nó vốn bỏ khoá symbol, và điều đó được ghi vào chính test. Lời khai ở `verifier.ts` gạch tại chỗ và viết lại |
+| H9-3 | **MEDIUM — bộ ký không chứng minh hai nửa khoá là MỘT CẶP.** `docBoKy` ghép nửa riêng từ một biến môi trường với nửa công khai từ một biến khác; không nơi nào kiểm chúng khớp. Một lần xoay khoá dán nhầm cho ra một bộ xuất chạy SẠCH hàng tháng (mã thoát 0, in `seq=...` mỗi lượt), và vì `kiem` **chưa có LỊCH** thì lỗi chỉ lộ ở lần kiểm toán thật — khi ấy fail-closed đúng thiết kế, nhưng TOÀN BỘ cửa sổ đó không có một mốc neo dùng được. Fail-closed ở đường ĐỌC không cứu một lỗi cấu hình ở đường GHI; nó chỉ báo tin muộn | **Đóng bằng tự kiểm một lần.** `createLocalDevAnchorSigner` ký một văn bản mẫu rồi `verifyAnchorRecord` bằng chính nửa công khai của `kid` ấy, và NÉM ngay lúc tạo nếu không đạt — cùng khuôn "hàng rào chạy NGAY khi tạo" mà `assertLocalDevAllowed` đã đặt ở dòng trên. Đột biến ⇒ test ĐỎ |
+| H9-4 | **MEDIUM — `g11-` là họ quy tắc DUY NHẤT không có probe.** Mọi họ trước (`g1-`…`g10-`) đều có test viết một file probe thật rồi chạy `depcruise` và đòi đúng tên quy tắc; `grep g11 tests/` trả về rỗng. Nó đáng có hơn các họ khác một bậc, vì `packages/audit` nằm trong danh sách MIỄN TRỪ của `[INV-H16]` (khoản nợ 17) — gói này KHÔNG có quy tắc "index là cửa duy nhất", nên `g11-` là lớp cưỡng chế DUY NHẤT giữ đường ký khỏi `apps/api`. Đột biến thủ công của vòng không phải một mốc chết: nó không chạy lại lần thứ hai | **Đóng bằng bốn probe** (import nội bộ, cửa subpath, import ngược, đối chứng dương cho `index.ts`). **Và chính chúng bắt được một lớp canh RỖNG RUỘT trong bản đầu của mình:** probe đặt ở `apps/tmp-probe-*` không có `package.json` nên specifier subpath KHÔNG resolve được, `to.path` của `g11-` không khớp gì cả và quy tắc IM LẶNG — thứ kêu là lưới đỡ `g1-khong-import-trustprocure-khong-resolve-duoc`. Đó đúng là lỗ **C1** mà `.dependency-cruiser.cjs` đã đặt tên từ S0, lần này hiện ra trong một PHÉP ĐO chứ không trong mã sản phẩm. Probe chuyển sang `packages/test-support` — gói có liên kết thật tới `@trustprocure/audit` |
+
+## Sáu LOW
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H9-5 | **LOW.** `alg` được kiểm nhưng KHÔNG ràng buộc với loại khoá thật: `createVerify("sha256").verify(...)` chọn thuật toán theo **SPKI trong vòng khoá**, không theo trường `alg`. Một khoá RSA dưới `kid` ấy cho ra phép kiểm RSA-PKCS1 trong khi artefact vẫn khai `ECDSA_P256_SHA256` | **Đóng.** `createPublicKey` rồi đòi `asymmetricKeyType === "ec"` và `namedCurve === "prime256v1"`. Đột biến ⇒ ca RSA và ca Ed25519 chuyển từ "ném" sang "đạt", 3 test ĐỎ. Không khai thác được bởi tác nhân trong mô hình đe doạ (cần kiểm soát vòng khoá) — đóng vì một **artefact nói sai về chính nó** là đủ nặng cho một tài liệu dùng cho kiểm toán |
+| H9-6 | **LOW.** Dữ liệu CHƯA XÁC THỰC (`kid` từ văn bản chưa kiểm chữ ký, độ dài không giới hạn) và `moTa` chưa lọc đi thẳng vào thông điệp mà kiểm toán viên ĐỌC. Một `\r` hoặc escape ANSI ở đó xoá/ghi đè những dòng đã in — tức nội dung nơi cất viết lại được phần kết luận người đọc nhìn thấy. Sản phẩm của cả cơ chế này là một BÁO CÁO, nên "dữ liệu chưa xác thực vào báo cáo" đáng đóng | **Đóng bằng `antoanChoBaoCao`:** cắt về 120 ký tự và thay MỌI ký tự lớp `\p{C}` bằng escape đọc được. Áp cho mọi nội suy giá trị chưa xác thực ở `anchor-text.ts` và `anchor-verify.ts`, và cho `moTa` ngay tại `createFileAnchorStore` — chỗ nó ra đời, không chỉ chỗ nó được đọc |
+| H9-7 | **LOW.** `loadVerifiedAnchors` ném xuyên qua vòng lặp `--org`, nên một bản ghi hỏng ở tổ chức đầu biến một lượt 50 tổ chức thành một dòng lỗi duy nhất; nếu ai đó "vá" bằng cách bỏ tổ chức ấy ra khỏi danh sách thì tổ chức bị tấn công là tổ chức duy nhất không được kiểm | **Đóng.** Bọc TỪNG tổ chức ở cả `xuat` lẫn `kiem`, in `KHONG KIEM DUOC` / `KHONG XUAT DUOC` kèm lý do, chạy tiếp; mã thoát vẫn khác 0. Test int khẳng định tổ chức thứ hai VẪN được kiểm |
+| H9-8 | **LOW.** Bảng "Cách dùng" in `neo-so-kiem-toan xuat …` — một lệnh không có `bin`, không có script workspace, tức **không chạy được**. Đúng lớp lỗi của khoản nợ 23 | **Đóng.** Script gốc `pnpm neo`, và `CACH_DUNG` in đúng dòng ấy. Test int khẳng định chuỗi `pnpm neo xuat` có trong output của lệnh lạ |
+| H9-9 | **LOW.** *"kiểm toán viên kiểm được artefact này mà không cần một dòng mã nào của chúng ta"* rộng hơn phép đo: thứ ĐÃ đo là chữ ký kiểm được bằng `createVerify` của `node:crypto`; thứ CHƯA đo là tách `text`/`sig` khỏi dòng JSONL, đổi SPKI DER sang PEM, rồi chạy `openssl(1)` | **Đóng bằng cách HẠ PHÁT BIỂU** ở bốn chỗ (`anchor-text.ts`, `anchor-verify.ts`, `anchor-sign.ts`, ADR-026), gạch nguyên văn tại chỗ: *"ĐỊNH DẠNG là thứ OpenSSL kiểm được; CÔNG THỨC tách nó ra khỏi nơi cất thì chưa được đo"*. Đường đóng thật (một lệnh `trich` + một test int chạy `openssl`) ghi vào ADR-026 §5⑶ |
+| H9-10 | **LOW.** `parseAnchorText` ở CỬA CÔNG KHAI của gói trả về các trường **chưa qua một regex nào** — đường DỰNG chạy đủ 5 phép kiểm, đường ĐỌC không chạy phép nào. `verifyAnchorRecord` an toàn nhờ vế dựng-lại-và-so-từng-byte, nhưng người gọi THỨ HAI thì không có vế ấy | **Đóng.** Tách `kiemHinhDang` và chạy nó ở CẢ hai đường. Nói rõ trong chú thích rằng nó KHÔNG thay thế vế dựng-lại (vế ấy bắt được `seq=06`, thứ mà `Number.isInteger` cho qua) — nó là lớp thứ hai cho người gọi không có vế ấy |
+
+## Bảy câu hỏi bị chính phép đo BÁC BỎ
+
+Ghi lại vì một mối lo bị bác bỏ có giá trị bằng một phát hiện — nó nói cho vòng sau biết chỗ nào
+không cần đo lại:
+
+- **Nhập nhằng văn bản chính tắc / chèn ký tự phân cách** — vế `buildAnchorText(truong) === text`
+  giết mọi biến thể đã thử: `seq=06`, `seq=+6`, `seq= 6`, `kid=a=b`, `\r\n`, dòng thừa/thiếu,
+  ` `, và cả ca lone-surrogate.
+- **Lỗ kiểu `alg: none`** — `alg` KHÔNG BAO GIỜ chọn thuật toán kiểm; nó chỉ là một trường phải khớp
+  hằng số, và bị vế dựng-lại ghim lần hai. (Dư lượng ngược chiều là H9-5.)
+- **`kid` chưa xác thực dùng tra khoá** — tra bằng `ReadonlyMap.get`, không bằng thuộc tính object,
+  nên `kid = "__proto__"` không trả về gì.
+- **Malleability của chữ ký DER** — OpenSSL giải mã rồi **mã hoá lại và so từng byte**, nên DER thừa
+  đuôi bị từ chối. Malleability `(r, n−s)` vốn có của ECDSA thì vô hại ở đây: nơi cất chỉ-ghi-thêm và
+  bộ tải kiểm MỌI bản ghi, nên một chữ ký khác của cùng văn bản chỉ nhân đôi một phép kiểm.
+- **`orgId` vào tên tệp — traversal / tên thiết bị Windows** — `UUID_PATTERN` neo `^…$` (JavaScript
+  không có cờ `m` ở đây, nên `$` chỉ khớp cuối chuỗi — không có lỗ "xuống dòng cuối" kiểu Python);
+  tập ký tự còn lại đúng bằng `[0-9a-f-]`, độ dài cố định 36. Cả HAI đường đi qua `duongDanCua`.
+- **`loadVerifiedAnchors` fail-open** — bác bỏ Ở TẦNG HÀM (mọi lối "im lặng thiếu" đều bịt); nhưng
+  ghép với bộ xuất thì tính fail-closed ấy bị chính `xuat` gỡ ⇒ đó là H9-1, không phải một ca riêng.
+- **Khoá riêng rò ra thông điệp lỗi** — `batBuoc` chỉ in TÊN biến; lỗi ký bọc bằng một thông điệp cố
+  định và `cause` KHÔNG được in (bộ bắt chỉ in `loi.message`); `publicKeys()` đã có test dò khoá
+  riêng dưới cả ba cách mã hoá. Rủi ro còn lại là bản chất của biến môi trường, đã khai là khiếm
+  khuyết đã biết cùng đường đi KMS.
+
+**Ghi chú của reviewer, không phải phát hiện:** đặt phép kiểm dấu đúc **trước** phép lọc
+`neo.orgId !== orgId` là đúng — nếu đảo lại, một mốc neo tự đúc chỉ cần mang một `orgId` lạ là rơi vào
+nhánh im lặng. `readAllRaw` đọc cả tệp vào bộ nhớ không giới hạn kích thước: với nhịp neo theo ngày
+thì `n` nhỏ, chỉ đáng nêu nếu nơi cất chuyển sang nhịp phút. Và CLI dùng pool role `app_api` cho cả
+hai lệnh — đúng chiều: công cụ neo không chạy dưới role deploy.
