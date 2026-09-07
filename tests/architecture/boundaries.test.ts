@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -1646,10 +1646,19 @@ describe("cổng devDependency không rỗng ruột", () => {
 //
 // LÝ DO MIỄN TRỪ ĐÃ ĐƯỢC ĐO LẠI, VÀ NÓ YẾU HƠN LÚC NÓ ĐƯỢC VIẾT. `MIEN_TRU` khai lý do là *"đóng
 // chúng là một thay đổi có rủi ro hồi quy riêng"*. Quét toàn kho trước khi viết vòng này: **0 chỗ
-// import phải di trú** — không một specifier subpath `@trustprocure/{audit,db,tenancy,test-support}/…`
-// nào, không một đường tương đối xuyên gói nào; mọi chỗ gọi đều đã đi qua barrel. Bốn họ quy tắc
-// dưới đây vì thế là thuần THÊM LỚP, không sửa một dòng mã gọi nào — và cái giá đã trả bằng phép
-// đo chứ không bằng một câu trấn an.
+// import phải di trú** — không một đường tương đối xuyên gói nào; mọi chỗ gọi đều đã đi qua
+// barrel. Bốn họ quy tắc dưới đây vì thế là thuần THÊM LỚP, không sửa một dòng mã gọi nào — và
+// cái giá đã trả bằng phép đo chứ không bằng một câu trấn an.
+//
+// **[review lượt 10 — H10-8] VECTOR ĐƯỢC ĐÓNG Ở ĐÂY LÀ ĐƯỜNG TƯƠNG ĐỐI, KHÔNG PHẢI SUBPATH.**
+// Bản đầu của khối này viết *"không một specifier subpath … nào"* ngay cạnh vế đường tương đối, và
+// đọc liền hai vế ấy cho ra một ấn tượng sai: rằng bốn họ quy tắc đóng cả HAI vector. Đo lại thì
+// `db`, `tenancy`, `test-support` khai `exports` CHỈ có `"."`, và `enhancedResolveOptions` bắt
+// depcruise resolve qua đúng trường ấy — nên `@trustprocure/db/src/pool.js` CHƯA BAO GIỜ resolve
+// được, và thứ bắn cho nó là lưới đỡ `g1-khong-import-trustprocure-khong-resolve-duoc`. Bốn họ
+// mới khớp trên ĐƯỜNG ĐÃ RESOLVE, nên trên vector subpath chúng cộng thêm 0. Gói duy nhất có
+// vector subpath thật là `audit` (`./anchor-sign`), và nó do `g11-` canh, có probe riêng đặt
+// trong một gói có liên kết workspace thật.
 //
 // `audit` CÓ HAI CỬA, và đó không phải một nhân nhượng. `packages/audit/package.json` khai
 // `"./anchor-sign"` (ADR-026 §4 — bộ ký mốc neo CỐ Ý không nằm ở `index.ts` vì tiến trình `api`
@@ -1727,6 +1736,15 @@ describe("biên giới module của packages/audit", () => {
     // sản phẩm DUY NHẤT được phép đi qua cửa thứ hai. Nếu `g12-` khai một cửa thay vì hai, dòng
     // này đỏ — và nó đỏ vì quy tắc mới PHÁ BUILD, không vì nó đóng được lỗ nào. Đó là ca hỏng dễ
     // xảy ra nhất khi sao chép khuôn `g5-`/`g6-` (một cửa) sang một gói có subpath export.
+    // [review lượt 10 — H10-5] ĐỐI CHỨNG CHỐNG RỖNG RUỘT, và nó phải đứng TRƯỚC: test này đo sự
+    // VẮNG MẶT của một vi phạm, nên ngày ai đó refactor công cụ để không còn đi qua cửa thứ hai,
+    // nó xanh vĩnh viễn mà không đo gì — và câu "cửa thứ hai không bị g12- đóng" trở thành một
+    // lời khai. Cùng lý do test của `apps/unseal-worker` khẳng định `existsSync` trước khi kết luận.
+    expect(
+      readFileSync("tools/neo-so-kiem-toan/src/index.ts", "utf8"),
+      "công cụ xuất mốc neo KHÔNG còn đi qua cửa @trustprocure/audit/anchor-sign — test này không " +
+        "còn đo gì. Tìm module thật sự đi qua cửa thứ hai, hoặc gỡ cửa ấy khỏi package.json.",
+    ).toContain("@trustprocure/audit/anchor-sign");
     const { status, output } = depcruise(["tools/neo-so-kiem-toan", "packages/audit"]);
     expect(
       output,

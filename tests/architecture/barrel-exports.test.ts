@@ -1021,6 +1021,22 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
 // `@trustprocure/audit/anchor-sign` (đóng ở 18.2) — và cả hai lần, thứ mở cửa là MỘT DÒNG trong
 // `package.json`.
 //
+// **[review lượt 10 — H10-9] KHỐI NÀY TẠO RA MỘT NGOẠI LỆ CHO MỘT DOCTRINE CỦA KHO, và nó phải
+// được ghi ra chứ không được để người sau tự phát hiện.** Khẳng định *"khớp bề mặt THẬT"* lặp
+// trên toàn sổ đăng ký, nên trong MỘT worker vitest nó `import()` cả ba cửa hạn chế cùng lúc:
+// `crypto-keys/src/unwrap.ts` (`createLocalDevUnwrapper`), `sealed-envelope/src/unseal.ts`
+// (`unsealBid`) và `audit/src/anchor-sign.ts` (`createLocalDevAnchorSigner`). Toàn bộ lý do tồn
+// tại của `g1-`, `g8-` và `g11-` là ba khả năng ấy KHÔNG ở chung một tiến trình — và thủ thuật
+// dynamic import với specifier dựng từ biến (cố ý, xem khối trên) làm depcruise **về nguyên lý**
+// không bao giờ nhìn thấy ngoại lệ này.
+//
+// **Vì sao vẫn chấp nhận, và phần nào là KHẲNG ĐỊNH chứ chưa phải phép đo:** không module nào
+// trong ba module ấy ký, mở bọc hay giải mã LÚC NẠP — vật liệu khoá và `assertLocalDevAllowed()`
+// nằm bên trong hàm factory, không ở top-level; nạp `test-support/src/index.ts` chỉ tính một
+// hằng đường dẫn, không dựng container, không mở kết nối. Điều đó đã được KIỂM BẰNG CÁCH ĐỌC
+// từng module, KHÔNG bằng một phép đo lúc chạy. Nếu một ngày một trong ba module ấy làm việc gì
+// ở top-level, lớp phát hiện sẽ không phải là depcruise — nó sẽ là người đọc dòng này.
+//
 // LỚP NÀY KHÔNG MUA ĐƯỢC GÌ, nói thẳng để không ai đọc rộng hơn: nó khoá DANH SÁCH, không khoá
 // HÌNH DẠNG — một hàm mới được thêm vào danh sách trắng kèm một dòng lý do vẫn đi lọt, và lớp
 // cuối vẫn là người đọc (`.github/CODEOWNERS`). Với mười ba gói đang có khối riêng, khẳng định

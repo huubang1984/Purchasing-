@@ -234,8 +234,12 @@ module.exports = {
         "@trustprocure/audit/anchor-sign, bi canh tiep boi g11-ky-neo-chi-o-cong-cu-xuat-neo). " +
         "`writer.ts` la duong ghi so kiem toan va `tenant-guard.ts` giu QT3; mot import tuong " +
         "doi '../../audit/src/writer.js' tu mot goi khac di lot CA BA cong (depcruise, tsc, " +
-        "eslint) - do duoc o S1.18 truoc khi quy tac nay ton tai. Mot module MOI trong thu muc " +
-        "nay mac dinh khong voi toi duoc tu ben ngoai.",
+        "eslint). [review luot 10 - H10-7] Ban dau cau nay CHI duoc do bang depcruise; ba cong " +
+        "sau do da chay tren CUNG mot probe: tsc exit 0, eslint exit 0, depcruise exit 1 (bat " +
+        "boi chinh quy tac nay). Mot module MOI trong thu muc nay mac dinh khong voi toi duoc tu " +
+        "ben ngoai. [H10-3] PHAM VI THAT cua g12- hom nay: no rut DUNG MOT symbol khoi tam voi - " +
+        "`antoanChoBaoCao` (anchor-text.ts). Ba symbol cua anchor-sign.ts la CUA THU HAI, do g11- " +
+        "canh; moi symbol con lai da o index.ts.",
       severity: "error",
       from: { pathNot: AUDIT_SRC_PREFIX },
       to: { path: AUDIT_SRC_PREFIX, pathNot: [AUDIT_INDEX_TS, ANCHOR_SIGN_TS] },
@@ -247,7 +251,9 @@ module.exports = {
         "duoc mo. `pool.ts` dat hai GUC log va `migrate.ts` bam noi dung migration roi so voi " +
         "checksum da ghi - hai thu khong ai duoc goi vong qua. Luu y g9-api-routes-khong-cham-" +
         "tenancy-va-db la mot lop KHAC: no cam handler cua apps/api cham goi nay HOAN TOAN, ke ca " +
-        "qua cua; quy tac nay canh moi nguoi goi khac khong di vong QUA cua.",
+        "qua cua; quy tac nay canh moi nguoi goi khac khong di vong QUA cua. [review luot 10 - " +
+        "H10-3] PHAM VI THAT: g13- rut DUNG MOT symbol khoi tam voi - `migrationChecksum` " +
+        "(migrate.ts). Sau symbol con lai da o cua.",
       severity: "error",
       from: { pathNot: DB_SRC_PREFIX },
       to: { path: DB_SRC_PREFIX, pathNot: [DB_INDEX_TS] },
@@ -259,7 +265,12 @@ module.exports = {
         "index.ts duoc mo. Day la goi dang canh nhat trong bon, va ly do khong nam o kich thuoc " +
         "cua no: `with-tenant.ts` la diem DUY NHAT trong toan kho gan GUC `app.org_id`, tuc moi " +
         "policy RLS cua 002-007 treo vao no. Mot duong vong toi ham nay la mot duong vong toi " +
-        "quyet dinh \"phien nay thuoc to chuc nao\". Goi co dung ba symbol gia tri o cua.",
+        "quyet dinh \"phien nay thuoc to chuc nao\". Goi co dung ba symbol gia tri o cua. " +
+        "[review luot 10 - H10-3] VA CHINH VI THE, PHAM VI THAT CUA QUY TAC NAY PHAI DUOC NOI " +
+        "RA: hom nay no rut KHONG symbol nao khoi tam voi - ca ba symbol gia tri cua " +
+        "with-tenant.ts deu DA o cua. Thu no mua la MAC DINH DONG cho module tuong lai, cong " +
+        "viec chan import vao cac tep khong-phai-cua cua goi. Cau tren noi ve HAU QUA neu co mot " +
+        "duong vong; no khong duoc doc thanh \"dang co mot duong vong bi chan\".",
       severity: "error",
       from: { pathNot: TENANCY_SRC_PREFIX },
       to: { path: TENANCY_SRC_PREFIX, pathNot: [TENANCY_INDEX_TS] },
@@ -272,7 +283,10 @@ module.exports = {
         "san pham\") dung ve ban chat nhung no la mot ly do KHONG BAO GIO HET HAN - va mot dong " +
         "mien tru khong bao gio het han thi khong phai mot khoan no, no la mot lo vinh vien " +
         "(cung hinh dang ma S1.15 da bac bo cho HAM_TRIGGER_KHONG_GHIM). Ve \"khong duoc vao " +
-        "dependencies san xuat\" do tests/architecture/pham-vi-san-xuat.test.ts giu, KHONG doi.",
+        "dependencies san xuat\" do tests/architecture/pham-vi-san-xuat.test.ts giu, KHONG doi. " +
+        "[review luot 10 - H10-3] PHAM VI THAT, nhu g14-: quy tac nay rut KHONG symbol nao khoi " +
+        "tam voi hom nay - ca ba symbol gia tri deu da o cua. No mua mac dinh dong cho module " +
+        "tuong lai, khong mua mot phep thu hep nao dang co hieu luc.",
       severity: "error",
       from: { pathNot: TEST_SUPPORT_SRC_PREFIX },
       to: { path: TEST_SUPPORT_SRC_PREFIX, pathNot: [TEST_SUPPORT_INDEX_TS] },
@@ -550,6 +564,13 @@ module.exports = {
     // ky moc neo di theo `packages/audit` vao `apps/api` (noi nao cung goi appendAuditEvent) thi
     // ranh gioi ay bien mat o tang lien ket - chua phai mot lo (van can khoa rieng), nhung no xoa
     // mat thu ma ca co che dung tren.
+    //
+    // [S1.18 / review luot 10 - H10-9] MOT NGOAI LE DA DUOC TAO RA, ghi o day de doctrine
+    // "mot tien trinh, mot kha nang" khong bi doc thanh vo dieu kien:
+    // tests/architecture/barrel-exports.test.ts ([INV-H18]) nap CA BA cua han che trong cung
+    // mot worker vitest - unwrap.ts (g1-), unseal.ts (g8-) va anchor-sign.ts (g11-) - bang
+    // dynamic import voi specifier dung tu bien, nen depcruise VE NGUYEN LY khong thay canh do.
+    // Ly do chap nhan va phan nao con la KHANG DINH chu chua phai phep do: xem khoi [INV-H18].
     //
     // Cung khuon g1-: mot file KHONG re-export o index.ts, cong mot quy tac liet ke DICH DANH
     // nhung module duoc phep import no, cong cac quy tac "khong import nguoc" cho tung module
