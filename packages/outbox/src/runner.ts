@@ -317,9 +317,12 @@ function khangDinhTrong(pTen: string, pGiaTri: number, pMin: number, pMax: numbe
  *   * runner KHÔNG tự đọc được danh sách tổ chức (`organizations` cũng bật RLS).
  *
  * Hệ quả thứ ba là CÁI GIÁ, và nó được trả bằng một CỔNG chứ không bằng một role vượt RLS:
- * `options.listOrganizations` do composition root tiêm vào. Hôm nay KHÔNG có cài đặt sản phẩm
+ * `options.listOrganizations` do composition root tiêm vào. ~~Hôm nay KHÔNG có cài đặt sản phẩm
  * nào cho cổng đó vì `apps/` còn rỗng — cùng tình trạng với `TotpSecretUnsealer` của Task 9, và
- * được ghi vào sổ nợ thay vì bị che.
+ * được ghi vào sổ nợ thay vì bị che.~~ **[S1.21, review lượt 13 H13-6] CÓ cài đặt sản phẩm từ
+ * S1.10:** `apps/api/src/composition.ts:96` tiêm `listOrganizations` thật (tập tổ chức tiến
+ * trình này đã thấy enqueue). Câu vừa gạch là bản sao thứ tư của lời khai *"`apps/` rỗng"* —
+ * khoản nợ 7, thiu từ S1.10.
  *
  * ==========================================================================================
  * AT-LEAST-ONCE — HỢP ĐỒNG VỚI NGƯỜI VIẾT HANDLER
