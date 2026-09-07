@@ -1,0 +1,14 @@
+{
+  "name": "@trustprocure/neo-so-kiem-toan",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@trustprocure/audit": "workspace:*",
+    "@trustprocure/db": "workspace:*",
+    "@trustprocure/tenancy": "workspace:*"
+  },
+  "devDependencies": {
+    "@trustprocure/test-support": "workspace:*"
+  }
+}
