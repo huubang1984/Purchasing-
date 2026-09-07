@@ -33,6 +33,8 @@ function envHopLe(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
     TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE: "ky-2026",
     TRUSTPROCURE_SENDER_ADAPTER: "dev-mailbox",
     TRUSTPROCURE_DEV_MAILBOX_DIR: join(tmpdir(), "hop-thu-dev"),
+    // [review H6-1] Quyết định proxy nay BẮT BUỘC — fixture khai `direct` để mọi ca khác giữ nguyên ý nghĩa.
+    TRUSTPROCURE_TRUSTED_PROXIES: "direct",
     ...ghiDe,
   };
 }
@@ -170,6 +172,11 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
     // [review H4-9] "cả Internet là proxy" bị chặn lúc khởi động.
     nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "0.0.0.0/0" }), "TRUSTPROCURE_TRUSTED_PROXIES", /quá rộng/u);
     nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "::/0" }), "TRUSTPROCURE_TRUSTED_PROXIES", /quá rộng/u);
+    // [review H6-1] Quên khai KHÔNG còn trông giống "không có proxy": thiếu biến ⇒ ném; `direct` ⇒ rỗng.
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: undefined }), "TRUSTPROCURE_TRUSTED_PROXIES");
+    nemVeBien(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "   " }), "TRUSTPROCURE_TRUSTED_PROXIES");
+    expect(docCauHinh(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: "direct" })).trustedProxies).toEqual([]);
+    expect(docCauHinh(envHopLe({ TRUSTPROCURE_TRUSTED_PROXIES: " direct " })).trustedProxies).toEqual([]);
   });
 
   it("số: không phải số, ngoài khoảng ⇒ ném", () => {

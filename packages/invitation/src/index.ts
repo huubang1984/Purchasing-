@@ -27,6 +27,8 @@ export {
   OTP_TTL_SECONDS,
   clearOtpLockout,
   createInvitation,
+  // [sổ nợ 55 / 042] Bộ dọn `caller_rate_limits` — việc NỀN của tiến trình `api`, nhận Pool.
+  donBucketNguoiGoiCu,
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
@@ -35,6 +37,8 @@ export {
   revokeInvitation,
   // [sổ nợ 39] Bộ đếm bucket cho người gọi ba route /auth/* — chỉ mở kind LOGIN_CALLER; dispatcher gọi.
   tangBucketHanMuc,
+  // [sổ nợ 55] Bộ đếm người gọi TOÀN CỤC (không org_id) — tổ chức thật và tổ chức lạ cùng một hàng.
+  tangBucketNguoiGoi,
   verifyOtpAndStartSession,
   type Channel,
   type CreateInvitationInput,

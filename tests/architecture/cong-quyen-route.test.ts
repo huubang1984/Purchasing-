@@ -106,6 +106,12 @@ const HAM_DUONG_KHACH = [
   // DISPATCHER, TRƯỚC khi có bất kỳ danh tính nào — nó đếm kẻ gõ vào cửa đăng nhập, và một cổng
   // quyền ở đó là hỏi thẻ của người chưa vào. Cùng lý do với `issueOtpChallenge` ở đầu danh sách.
   "tangBucketHanMuc",
+  // [sổ nợ 55] Cùng lý do, cùng người gọi: `tangBucketNguoiGoi` đếm ở bảng TOÀN CỤC (042) nên nó
+  // còn ít quyền hơn — không `org_id` để nhầm, không hàng nào của một tổ chức để chạm.
+  "tangBucketNguoiGoi",
+  // [sổ nợ 55] `donBucketNguoiGoiCu` XOÁ, nhưng nó là việc NỀN của tiến trình, không có người gọi
+  // nào để hỏi thẻ; thứ nó xoá là bộ đếm hết hạn, không phải dữ liệu của ai.
+  "donBucketNguoiGoiCu",
 ] as const;
 
 /**

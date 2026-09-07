@@ -19,7 +19,7 @@ import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, counterForTime, d
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
-import { createDispatcher } from "./dispatch.js";
+import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
 import type { Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -253,11 +253,19 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     // Khoá bucket đã băm nên không lọc theo route được; đo "có đúng một bucket vừa chạm N+1" thay vì
     // "bucket lớn nhất" (~~ORDER BY hits DESC~~ [review H4-4] trần link nay 30, bucket link của test
     // trước lớn hơn N+1 của redeem).
+    // [nợ 55] Bộ đếm theo người gọi nay ở `caller_rate_limits` — bảng TOÀN CỤC, không `org_id`, nên
+    // phép đo lọc theo `hits` chứ không theo tổ chức (đó chính là tính chất đang được đo).
     const { rows } = await db.pool.query<{ n: string }>(
-      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' AND hits = $2",
-      [orgA, LOGIN_REDEEM_MAX_PER_CALLER + 1],
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE hits = $1",
+      [LOGIN_REDEEM_MAX_PER_CALLER + 1],
     );
     expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
+    // Và KHÔNG hàng nào của `otp_rate_limits` mang số ấy: bucket người gọi đã rời khỏi bảng tenant.
+    const { rows: cu } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM otp_rate_limits WHERE bucket_kind = 'LOGIN_CALLER' AND hits = $1",
+      [LOGIN_REDEEM_MAX_PER_CALLER + 1],
+    );
+    expect(cu[0]?.n).toBe("0");
   });
 
   it("[review H4-4] IPv6: hai địa chỉ CÙNG /64 dùng chung bucket (lần N+1 từ địa chỉ thứ hai ⇒ 429); /64 khác ⇒ 200", async () => {
@@ -290,23 +298,60 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     }
   });
 
-  it("tổ chức KHÔNG tồn tại: ~~không đếm được (khoá ngoại) nhưng vẫn cùng một 200~~ [nợ 52] cùng một 200 tới lần N, rồi 429 như tổ chức thật (bucket bộ nhớ) — cùng địa chỉ, tổ chức thật vẫn có bucket riêng", async () => {
+  it("[sổ nợ 55 / 042] tổ chức KHÔNG tồn tại đi qua ĐÚNG cùng đường với tổ chức thật: mồi N lần vào MỘT UUID lạ rồi gọi lại ⇒ 429 y hệt tổ chức thật, cùng thân, cùng Retry-After", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000abcd";
-    const orgLa2 = "00000000-0000-4000-8000-00000000abce";
     for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
-      // Hai tổ chức lạ xen kẽ: bucket theo `route|người gọi`, KHÔNG theo orgId — xoay orgId lạ không mở thêm trần.
-      const r = await goi("POST", "/auth/link", { body: { orgId: i % 2 === 0 ? orgLa : orgLa2, email: "ai-do@vidu.vn" } });
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
       expect(r.status, `lần ${i + 1}`).toBe(200);
       expect(r.text).toBe(JSON.stringify({ ok: true }));
     }
+    // [nợ 55] RED THẬT trước 042: tổ chức lạ ném 23503 nên KHÔNG đếm được — lần này và mọi lần sau
+    // đều 200. Nay nó có một hàng ở `caller_rate_limits` (không khoá ngoại) như tổ chức thật.
     const chan = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" } });
     expect(chan.status).toBe(429);
     expect(chan.headers.get("retry-after")).toBe("900");
-    // Tổ chức thật từ cùng địa chỉ: bucket CSDL riêng, chưa chạm trần.
-    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } })).status).toBe(200);
-    // Địa chỉ khác, tổ chức lạ: bucket bộ nhớ mới ⇒ 200.
-    expect((await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "ai-do@vidu.vn" }, ip: "198.51.100.77" })).status).toBe(200);
-  });
+    // Tổ chức THẬT từ cùng địa chỉ, cùng số lần ⇒ CÙNG một 429 với cùng thân: không có gì phân biệt.
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } })).status, `thật lần ${i + 1}`).toBe(200);
+    }
+    const that = await goi("POST", "/auth/link", { body: { orgId: orgA, email: "ai-do@vidu.vn" } });
+    expect(that.status).toBe(429);
+    expect(that.text).toBe(chan.text);
+    expect(that.headers.get("retry-after")).toBe(chan.headers.get("retry-after"));
+    // [review H6-1] Trần TOÀN CỤC của địa chỉ đã đếm cả hai loại: 2N lời gọi thành công + 2 lần bị chặn.
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE hits = $1",
+      [2 * LOGIN_LINK_MAX_PER_CALLER + 2],
+    );
+    expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
+  }, 60_000);
+
+  it("[review H6-1] một địa chỉ KHÔNG khoá được cả nền tảng: chạm trần với tổ chức A xong, tổ chức B từ CÙNG địa chỉ vẫn 200 — tới khi chạm trần TOÀN CỤC của địa chỉ", async () => {
+    const orgE = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty E', 'cong-ty-e') RETURNING id")).rows[0]?.id ?? "";
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
+      expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "nen-tang@vidu.vn" } })).status, `A lần ${i + 1}`).toBe(200);
+    }
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "nen-tang@vidu.vn" } })).status).toBe(429);
+    // RED THẬT với bản chỉ-toàn-cục (S1.14 trước H6-1): dòng dưới là 429 — một địa chỉ khoá mọi tổ chức.
+    expect(
+      (await goi("POST", "/auth/link", { body: { orgId: orgE, email: "nen-tang@vidu.vn" } })).status,
+      "trần theo người gọi phải là trần TRONG một tổ chức, không phải trần của cả nền tảng",
+    ).toBe(200);
+  }, 60_000);
+
+  it("[review H6-1] trần TOÀN CỤC của một địa chỉ vẫn có: xoay orgId LẠ không cho ngân sách vô hạn", async () => {
+    // Mỗi orgId lạ là một bucket (địa chỉ, tổ chức) mới; thứ chặn lại là bucket TOÀN CỤC của địa chỉ.
+    const tranToanCuc = LOGIN_LINK_MAX_PER_CALLER * BOI_TRAN_DIA_CHI;
+    for (let i = 0; i < tranToanCuc; i += 1) {
+      const orgLa = `00000000-0000-4000-8000-${(0x500000000000 + i).toString(16).padStart(12, "0")}`;
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "xoay@vidu.vn" } });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+    }
+    const chan = await goi("POST", "/auth/link", { body: { orgId: "00000000-0000-4000-8000-0000ffffffff", email: "xoay@vidu.vn" } });
+    expect(chan.status, "RED THẬT: không có trần toàn cục, xoay orgId lạ là ngân sách vô hạn cho một địa chỉ").toBe(429);
+    // Địa chỉ khác vẫn sạch.
+    expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "xoay@vidu.vn" }, ip: "198.51.100.90" })).status).toBe(200);
+  }, 120_000);
 
   it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 ~~là 429~~ [H5-1] vẫn 200 nhưng bị LÀM CHẬM; tổ chức khác từ cùng địa chỉ vẫn 200 và nhanh", async () => {
     const orgC = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty C', 'cong-ty-c') RETURNING id")).rows[0]?.id ?? "";
@@ -325,13 +370,39 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
     const t2 = Date.now();
     expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
     expect(Date.now() - t2).toBeLessThan(TRE_TEST_MS);
-    // Bucket CSDL: đúng một bucket chạm N+1 cho tổ chức C (bucket toàn tổ chức), N+1 bucket theo địa chỉ ở 1.
+    // Bucket CSDL của TỔ CHỨC: ~~N+1 bucket theo địa chỉ ở 1~~ [nợ 55] bucket theo địa chỉ nay ở
+    // `caller_rate_limits` (không org_id), nên `otp_rate_limits` của tổ chức C còn ĐÚNG MỘT hàng —
+    // bucket toàn tổ chức — và nó đếm đủ N+1.
     const { rows } = await db.pool.query<{ hits: number; n: string }>(
       "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
       [orgC],
     );
-    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, LOGIN_LINK_MAX_PER_ORG + 1], [LOGIN_LINK_MAX_PER_ORG + 1, 1]]);
+    // [review H6-2] Bucket toàn tổ chức rời khỏi `otp_rate_limits` sang `caller_rate_limits` (không
+    // khoá ngoại) để tổ chức lạ cũng đếm được — nên bảng cũ không còn hàng `LOGIN_CALLER` nào.
+    expect(rows).toEqual([]);
+    const { rows: moi } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE hits = $1",
+      [LOGIN_LINK_MAX_PER_ORG + 1],
+    );
+    expect(Number(moi[0]?.n)).toBeGreaterThanOrEqual(1);
   }, 60_000);
+
+  it("[review H6-2] tổ chức LẠ cũng bị LÀM CHẬM khi vượt trần toàn tổ chức — độ trễ không còn là oracle tồn tại tổ chức", async () => {
+    const orgLa = "00000000-0000-4000-8000-00000000cafe";
+    const ipThu = (i: number): string => `2001:db8:62:${(i + 1).toString(16)}::1`;
+    for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
+      const t0 = Date.now();
+      const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "la@vidu.vn" }, ip: ipThu(i) });
+      expect(r.status, `lần ${i + 1}`).toBe(200);
+      expect(Date.now() - t0, `lần ${i + 1} phải nhanh`).toBeLessThan(TRE_TEST_MS);
+    }
+    const t1 = Date.now();
+    const cham = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "la@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
+    expect(cham.status).toBe(200);
+    // RED THẬT trước H6-2: tổ chức lạ ném 23503 ở bucket tổ chức nên KHÔNG BAO GIỜ chậm, và một
+    // phép đo thời gian phân biệt được tổ chức thật với tổ chức lạ.
+    expect(Date.now() - t1, "tổ chức lạ phải chậm y như tổ chức thật").toBeGreaterThanOrEqual(TRE_TEST_MS);
+  }, 120_000);
 
   it("[review H5-1] MỘT địa chỉ không khoá được cả tổ chức: 300 lời gọi từ một địa chỉ (30 tới handler, 270 là 429 rẻ) chỉ cộng 30 vào bucket tổ chức; địa chỉ sạch sau đó 200 và NHANH", async () => {
     const orgD = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty D', 'cong-ty-d') RETURNING id")).rows[0]?.id ?? "";
@@ -347,8 +418,15 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
       "SELECT hits, count(*)::text AS n FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'LOGIN_CALLER' GROUP BY hits ORDER BY hits",
       [orgD],
     );
-    // Địa chỉ tấn công: 300 lượt ở bucket riêng; bucket tổ chức: 30 (từ địa chỉ ấy) + 1 (địa chỉ sạch); địa chỉ sạch: 1.
-    expect(rows.map((r) => [r.hits, Number(r.n)])).toEqual([[1, 1], [LOGIN_LINK_MAX_PER_CALLER + 1, 1], [LOGIN_LINK_MAX_PER_ORG, 1]]);
+    // [review H6-2] Bucket toàn tổ chức nay cũng ở `caller_rate_limits` (không khoá ngoại), nên
+    // `otp_rate_limits` KHÔNG còn hàng `LOGIN_CALLER` nào của tổ chức này — bucket duy nhất còn ở
+    // bảng cũ là bốn kind theo ĐÍCH của khách.
+    expect(rows).toEqual([]);
+    const { rows: moi } = await db.pool.query<{ hits: number; n: string }>(
+      "SELECT hits, count(*)::text AS n FROM caller_rate_limits WHERE hits = $1 GROUP BY hits",
+      [LOGIN_LINK_MAX_PER_CALLER + 1],
+    );
+    expect(Number(moi[0]?.n ?? 0)).toBeGreaterThanOrEqual(1);
   }, 60_000);
 });
 

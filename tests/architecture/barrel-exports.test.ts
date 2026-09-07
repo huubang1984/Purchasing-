@@ -510,6 +510,8 @@ const DANH_SACH_TRANG_INVITATION = [
   "PepperError",
   "PepperRing",
   "createInvitation",
+  // [sổ nợ 55 / 042] Xoá hàng cũ của bucket toàn cục; nhận Pool, trả số hàng — không token, không phiên.
+  "donBucketNguoiGoiCu",
   "issueMagicLinkToken",
   "issueOtpChallenge",
   "redeemMagicLink",
@@ -521,6 +523,8 @@ const DANH_SACH_TRANG_INVITATION = [
   "revokeInvitation",
   // [sổ nợ 39] Đếm-và-tăng một bucket LOGIN_CALLER; trả số, không trả phiên, không nhận token.
   "tangBucketHanMuc",
+  // [sổ nợ 55] Đếm-và-tăng bucket TOÀN CỤC theo người gọi; KHÔNG nhận orgId (bảng ngoài cây tenant).
+  "tangBucketNguoiGoi",
   "verifyOtpAndStartSession",
 ];
 

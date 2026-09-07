@@ -24,7 +24,7 @@ import type { AddressInfo } from "node:net";
 import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
-import { PepperRing } from "@trustprocure/invitation";
+import { PepperRing, donBucketNguoiGoiCu } from "@trustprocure/invitation";
 import { JobRunner } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
@@ -52,6 +52,17 @@ export interface TienTrinhApi {
 const AUDIT_POOL_MAX = 2;
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
+/**
+ * [sổ nợ 55 / 042] Nhịp dọn `caller_rate_limits`. Bảng ấy là bảng DUY NHẤT mà số hàng do người gọi
+ * VÔ DANH quyết (không cần một tổ chức thật nào), nên nó phải có bộ dọn — mỗi lượt xoá cửa sổ cũ
+ * hơn hai cửa sổ, tức không bao giờ chạm bộ đếm đang sống.
+ */
+const DON_BUCKET_MS = 5 * 60 * 1000;
+/**
+ * [review H6-8] Ngưỡng "ồn ào" của một lượt dọn. Một tiến trình khoẻ dọn vài chục hàng mỗi năm phút;
+ * hàng nghìn nghĩa là ai đó đang xoay địa chỉ. Con số này KHÔNG phải một trần — nó chỉ là ngưỡng ghi log.
+ */
+const DON_BUCKET_ON_AO = 1000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
@@ -108,6 +119,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   );
 
   let daDung = false;
+  let dongHoDon: NodeJS.Timeout | undefined;
 
   return {
     async batDau(): Promise<DiaChiNghe> {
@@ -130,6 +142,28 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         });
       });
       runner.start();
+      // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó chỉ ghi
+      // TÊN — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng khuôn `onPollError`).
+      // [review H6-8] Bộ dọn là ĐƯỜNG BỊT DUY NHẤT của một bảng mà số hàng do người gọi vô danh
+      // quyết, nên nó không được hỏng trong im lặng: mỗi lượt xoá được nhiều hơn `DON_BUCKET_ON_AO`
+      // hàng là một tín hiệu tải bất thường, và hai lượt hỏng LIÊN TIẾP là một tín hiệu bộ dọn chết.
+      // Cả hai chỉ ghi SỐ và TÊN lỗi — không giá trị nào của bảng đi vào log.
+      let honglienTiep = 0;
+      dongHoDon = setInterval(() => {
+        void donBucketNguoiGoiCu(pool)
+          .then((n) => {
+            honglienTiep = 0;
+            if (n > DON_BUCKET_ON_AO) console.error(`[api] don bucket nguoi goi: ${n} hang`);
+          })
+          .catch((e: unknown) => {
+            honglienTiep += 1;
+            console.error(
+              `[api] don bucket nguoi goi ${e instanceof Error ? e.name : "loi khong ro"}` +
+                (honglienTiep >= 2 ? ` (hong ${honglienTiep} luot lien tiep — bang chi lon len)` : ""),
+            );
+          });
+      }, DON_BUCKET_MS);
+      dongHoDon.unref();
       const dc = server.address() as AddressInfo;
       return { host: dc.address, port: dc.port };
     },
@@ -137,6 +171,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       if (daDung) return;
       daDung = true;
       runner.stop();
+      if (dongHoDon !== undefined) clearInterval(dongHoDon);
       await new Promise<void>((xong) => {
         if (!server.listening) {
           xong();

@@ -448,6 +448,63 @@ export async function tangBucketHanMuc(
   return demVaTang(client, orgId, kind, khoa, pepper);
 }
 
+/**
+ * [sổ nợ 55 / migration 042] Bộ đếm theo NGƯỜI GỌI **TOÀN CỤC** — bảng `caller_rate_limits`, không
+ * `org_id`, không khoá ngoại. Một lời gọi khai tổ chức KHÔNG tồn tại tăng ĐÚNG HÀNG mà một lời gọi
+ * khai tổ chức thật tăng, nên 429 không còn phân biệt được hai ca (review H5-3/H4-5).
+ *
+ * Không nhận `orgId` và KHÔNG gọi `assertTenantBound`: bảng này cố ý nằm ngoài cây tenant, và nhận
+ * một `orgId` chỉ để bỏ đi là mời người sau tưởng nó có tác dụng. Trả về số lần đã đếm trong cửa sổ
+ * hiện tại (kể cả lần này); người gọi phán quyết — cùng khuôn "đếm trước, phán sau".
+ */
+export async function tangBucketNguoiGoi(
+  client: pg.PoolClient,
+  khoa: string,
+  pepper: PepperRing,
+): Promise<number> {
+  const { rows } = await client.query<{ hits: number }>(
+    `INSERT INTO caller_rate_limits (bucket_hash, window_start, hits)
+     VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / $2) * $2), 1)
+     ON CONFLICT (bucket_hash, window_start)
+       DO UPDATE SET hits = caller_rate_limits.hits + 1
+     RETURNING hits`,
+    [pepper.bam(MIEN_BUCKET_TOAN_CUC, khoa).hash, OTP_RATE_WINDOW_SECONDS],
+  );
+  // [review H6-9] KHÔNG `?? 0`: một trần không đếm được phải NÉM, không được đi tiếp như chưa ai gõ
+  // cửa. `DO UPDATE … RETURNING` luôn trả một hàng ở PostgreSQL, nên nhánh này là phòng thủ cho ngày
+  // câu lệnh đổi — và hướng của giá trị mặc định là thứ chọn được mà không cần biết ca ấy có thật.
+  const hits = rows[0]?.hits;
+  if (hits === undefined) throw new InvitationError("bộ đếm hạn mức không trả về số lần — không phán quyết được");
+  return hits;
+}
+
+/**
+ * [sổ nợ 55] Dọn `caller_rate_limits`. Hàng ở bảng ấy do người gọi VÔ DANH tạo (không cần một tổ
+ * chức thật nào), nên nó là bảng DUY NHẤT của dự án mà số hàng do kẻ tấn công chọn. Xoá mọi cửa sổ
+ * cũ hơn `soCuaSo` lần cửa sổ — mặc định 2, tức không bao giờ chạm cửa sổ đang đếm lẫn cửa sổ ngay
+ * trước nó. Trả về số hàng đã xoá. Nhận `pg.Pool` chứ không `PoolClient`: đây là việc NỀN, không
+ * thuộc giao dịch của một yêu cầu nào.
+ */
+export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<number> {
+  const kq = await pool.query(
+    "DELETE FROM caller_rate_limits WHERE window_start < now() - make_interval(secs => $1::float8)",
+    [OTP_RATE_WINDOW_SECONDS * soCuaSo],
+  );
+  return kq.rowCount ?? 0;
+}
+
+/**
+ * [review H6-5 ⑵ / sổ nợ 57] `otp_rate_limits` KHÔNG có bộ dọn, và không có ở đây là một quyết định
+ * có lý do chứ không phải một lần quên: bảng ấy bật RLS theo `org_id`, nên một `DELETE` nền (ngoài
+ * `withTenant`) lọc hết và xoá 0 hàng; còn dọn TỪNG TỔ CHỨC đòi biết tập tổ chức, mà `app_api` không
+ * đọc được danh sách ấy (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022),
+ * và tập "tổ chức đã thấy" của tiến trình `api` không phủ các tổ chức chỉ có lưu lượng KHÁCH.
+ * `caller_rate_limits` (042) dọn được đúng vì nó không mang `org_id`. Sổ nợ 57 ghi ba đường đã xét.
+ */
+
+/** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
+const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";
+
 async function demVaTang(
   client: pg.PoolClient,
   orgId: string,
@@ -476,7 +533,10 @@ async function demVaTang(
      RETURNING hits`,
     [orgId, kind, pepper.bam(orgId, kind, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
-  return rows[0]?.hits ?? 0;
+  // [review H6-9] Cùng lý do với `tangBucketNguoiGoi`: fail-closed, không fail-open.
+  const hits = rows[0]?.hits;
+  if (hits === undefined) throw new InvitationError("bộ đếm hạn mức không trả về số lần — không phán quyết được");
+  return hits;
 }
 
 /**

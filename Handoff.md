@@ -475,3 +475,12 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     đích chỉ được làm chậm (ADR-015 §5). Và: tiền điều kiện "đối tượng đã tồn tại" ở hardening là ca im lặng
     khi đối tượng bị xoá — dùng "migration nguồn đã áp dụng".
 
+11. **[2026-09-07] S1.14 — sổ nợ 54–55 đóng, ADR-024.** Hai thứ người tiếp theo phải biết: ⑴ có một
+    bảng CSDL nằm NGOÀI cây tenant mà `app_api` ghi được — `caller_rate_limits` (042). Mọi lớp canh
+    "bảng tenant" của dự án đọc theo cột `org_id`, nên bảng ấy không nằm trong chúng; nếu bạn thêm một
+    bảng như thế nữa, hãy đọc ADR-024 §1 trước và nhớ rằng một phép đo từng giả định "bật RLS ⇒ thuộc
+    cây tenant" (ca R3 ở `db/migrations.int.test.ts`); ⑵ thêm một hàm `RETURNS trigger` vào bất kỳ
+    migration nào SẼ làm test "[S1.14 / nợ 54]" đỏ cho tới khi bạn hoặc ghim nó ở
+    `hardening.always.sql`, hoặc khai nó vào `HAM_TRIGGER_KHONG_GHIM` kèm một dòng nói nó canh gì.
+    Đó là cố ý: hai lượt trước danh sách ghim thiếu đúng thứ vừa thêm mà không lớp nào kêu.
+

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   InvitationError,
@@ -11,10 +11,12 @@ import {
   OTP_MAX_FAILED_ATTEMPTS,
   clearOtpLockout,
   createInvitation,
+  donBucketNguoiGoiCu,
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
   revokeInvitation,
+  tangBucketNguoiGoi,
   verifyOtpAndStartSession,
   type Channel,
 } from "./invitation.js";
@@ -1418,5 +1420,91 @@ describe("[INV-E5] [036] contact của nhà cung cấp KHÁC không mời đư�
       );
     }
     await expect(moiLech(x)).rejects.toMatchObject({ code: "23503" });
+  });
+});
+
+// ============================================================================================
+// [sổ nợ 55 / migration 042] BUCKET NGƯỜI GỌI TOÀN CỤC — không org_id, không khoá ngoại
+// ============================================================================================
+describe("[sổ nợ 55] bucket người gọi toàn cục (caller_rate_limits)", () => {
+  const pepper = PEPPER;
+  const dem = (khoa: string, orgId: string): Promise<number> =>
+    withTenant(apiPool, orgId, (c) => tangBucketNguoiGoi(c, khoa, pepper));
+
+  it("cùng khoá ⇒ CÙNG MỘT HÀNG dù gắn tổ chức nào — kể cả một tổ chức KHÔNG TỒN TẠI (không khoá ngoại)", async () => {
+    const khoa = `/auth/link|${randomBytes(4).toString("hex")}`;
+    const orgLa = "00000000-0000-4000-8000-0000000055aa";
+    // Tổ chức lạ đếm trước, tổ chức thật đếm tiếp: 1, 2, 3 — một bộ đếm, không phải hai.
+    expect(await dem(khoa, orgLa)).toBe(1);
+    expect(await dem(khoa, orgA)).toBe(2);
+    expect(await dem(khoa, orgB)).toBe(3);
+    // Đúng MỘT hàng cho khoá ấy trong cửa sổ này.
+    const { rows } = await db.pool.query<{ n: string; hits: number }>(
+      "SELECT count(*)::text AS n, max(hits) AS hits FROM caller_rate_limits WHERE bucket_hash = $1",
+      [pepper.bam("LOGIN_CALLER_TOAN_CUC", khoa).hash],
+    );
+    expect([rows[0]?.n, rows[0]?.hits]).toEqual(["1", 3]);
+    // Khoá khác ⇒ hàng khác, đếm lại từ 1.
+    expect(await dem(`${khoa}-khac`, orgA)).toBe(1);
+  });
+
+  it("băm mang PEPPER và một miền RIÊNG: cùng khoá với pepper khác ⇒ hàng khác; và không đụng hàng nào của otp_rate_limits", async () => {
+    const khoa = `/auth/redeem|${randomBytes(4).toString("hex")}`;
+    const pepper2 = new PepperRing("p2", { p2: Buffer.alloc(32, 9) });
+    expect(await dem(khoa, orgA)).toBe(1);
+    expect(await withTenant(apiPool, orgA, (c) => tangBucketNguoiGoi(c, khoa, pepper2))).toBe(1);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE bucket_hash IN ($1, $2)",
+      [pepper.bam("LOGIN_CALLER_TOAN_CUC", khoa).hash, pepper2.bam("LOGIN_CALLER_TOAN_CUC", khoa).hash],
+    );
+    expect(rows[0]?.n).toBe("2");
+    // Miền băm tách khỏi `otp_rate_limits` (org_id ‖ kind ‖ khoá): không hàng nào trùng băm.
+    const { rows: chung } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits c JOIN otp_rate_limits o ON o.bucket_hash = c.bucket_hash",
+    );
+    expect(chung[0]?.n).toBe("0");
+  });
+
+  it("[042] phiên KHÁCH không thấy và không ghi được bảng này — policy DUY NHẤT của bảng là vế ấy", async () => {
+    const khoa = `/guest/redeem|${randomBytes(4).toString("hex")}`;
+    expect(await dem(khoa, orgA)).toBe(1);
+    // Một phiên khách thật: đọc thấy 0 hàng, và ghi bị policy chặn.
+    const { token } = await moiMoi();
+    const kq = await withTenant(apiPool, orgA, (c) => issueOtpChallenge(c, orgA, { token, channel: "SMS", callerFingerprint: "ip-55", pepper }));
+    if (!kq.ok) throw new Error("thach thuc phai phat duoc");
+    const mo = await withTenant(apiPool, orgA, (c) => verifyOtpAndStartSession(c, orgA, { token, code: kq.code, pepper }));
+    if (!mo.ok) throw new Error("phai mo duoc phien khach");
+    const phienKhach = mo.sessionId;
+    await withGuestSession(apiPool, orgA, phienKhach, async (c) => {
+      const { rows } = await c.query<{ n: string }>("SELECT count(*)::text AS n FROM caller_rate_limits");
+      expect(rows[0]?.n).toBe("0");
+    });
+    // Ghi: giao dịch RIÊNG — một lỗi bị bắt BÊN TRONG callback vẫn để lại giao dịch hỏng, và
+    // `withGuestSession` sẽ báo "không commit được" thay vì lỗi thật.
+    await expect(
+      withGuestSession(apiPool, orgA, phienKhach, (c) => tangBucketNguoiGoi(c, khoa, pepper)),
+    ).rejects.toMatchObject({ code: "42501" });
+    // Ngoài phiên khách, hàng vẫn còn nguyên — phép đo trên không phá bộ đếm.
+    expect(await dem(khoa, orgA)).toBe(2);
+  });
+
+  it("bộ dọn xoá cửa sổ CŨ hơn hai cửa sổ và GIỮ cửa sổ đang đếm", async () => {
+    const khoa = `/auth/totp|${randomBytes(4).toString("hex")}`;
+    expect(await dem(khoa, orgA)).toBe(1);
+    // Một hàng của cửa sổ ba lần trước — superuser chèn thẳng, không đi qua hàm đếm.
+    const bamCu = Buffer.alloc(32, 3);
+    await db.pool.query(
+      "INSERT INTO caller_rate_limits (bucket_hash, window_start, hits) VALUES ($1, now() - interval '3 hours', 5)",
+      [bamCu],
+    );
+    const daXoa = await donBucketNguoiGoiCu(apiPool);
+    expect(daXoa).toBeGreaterThanOrEqual(1);
+    const { rows: cu } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM caller_rate_limits WHERE bucket_hash = $1",
+      [bamCu],
+    );
+    expect(cu[0]?.n).toBe("0");
+    // Cửa sổ đang đếm KHÔNG bị chạm: bộ đếm đi tiếp từ 1 lên 2, không quay về 1.
+    expect(await dem(khoa, orgA)).toBe(2);
   });
 });

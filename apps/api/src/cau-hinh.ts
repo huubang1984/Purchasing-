@@ -190,9 +190,19 @@ function docOrigins(env: MoiTruong, ten: string): readonly string[] {
   return ra;
 }
 
+/**
+ * [review H6-1] Giá trị khai rõ "không có proxy nào đứng trước tiến trình này". Bắt buộc phải khai
+ * một trong hai: danh sách CIDR, hoặc chuỗi này. Bỏ trống KHÔNG còn là mặc định.
+ */
+export const KHONG_CO_PROXY = "direct";
+
 function docProxyTinCay(env: MoiTruong, ten: string): readonly string[] {
-  const tho = tuyChon(env, ten);
-  if (tho === undefined) return [];
+  // ~~Thiếu biến ⇒ danh sách rỗng (không proxy).~~ [review H6-1] Từ nợ 55, bucket theo người gọi là
+  // TOÀN CỤC, nên một triển khai có LB đứng trước mà quên khai proxy gộp mọi khách vào một địa chỉ —
+  // và bán kính của lần gộp ấy nay là cả nền tảng, không còn là một tổ chức. Quên không được phép
+  // trông giống một lựa chọn: phải khai danh sách CIDR, hoặc khai `direct`.
+  const tho = bat(env, ten);
+  if (tho.trim() === KHONG_CO_PROXY) return [];
   const ds = tho.split(",").map((m) => m.trim()).filter((m) => m !== "");
   try {
     taoDanhSachTinCay(ds);
