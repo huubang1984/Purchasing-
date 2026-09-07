@@ -1217,7 +1217,23 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     được gạch TẠI CHỖ, giữ nguyên văn: `044`, ADR-025 (§1 và §3), `evidence/security-reviews.md`
     §S1.15 dòng H7-3, và chính dòng 58 của sổ nợ.
 
+    **Lượt review an ninh thứ tám:** 0 CRITICAL, 0 HIGH, 0 MEDIUM, **1 LOW**
+    (`evidence/security-reviews.md` §S1.16). Bề mặt của vòng là MỘT câu `CREATE INDEX`, nên bảng
+    ngắn là kết quả chứ không phải một lượt review qua loa: bốn câu hỏi đối kháng được hỏi và trả
+    lời (oracle của tính DUY NHẤT — chỉ số này không duy nhất nên không sinh lỗi nào; kênh thời gian
+    — đường duy nhất người gọi đo được độ trễ là `ON CONFLICT`, đi qua khoá chính; thứ tự áp vế RLS
+    — `window_start <` là phép so sánh **leakproof** nên đẩy xuống index condition không đưa hàng
+    nào ra ngoài vế RLS; và `046` gãy ỒN ÀO trên cụm đã có chỉ số trùng tên, đó là hành vi đúng).
+    LOW đóng bằng test: khẳng định `BitmapOr` ghim HÌNH DẠNG NÚT chứ không phải tính chất — đúng lớp
+    lỗi vòng này vừa sửa ở H7-3 — nên nó bị bỏ, giữ lại hai vế nói đúng tính chất.
+
+    Một chốt chống rỗng ruột trong chính test mới suýt tự làm mù mình: `rows=2000` là TIỀN TỐ của
+    `rows=200000`, nên khẳng định "khớp đúng 1%" sẽ xanh nhờ chính con số nó phải phân biệt với.
+
     **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0). **Không mở nợ mới.**
+
+    **Số đo trên HEAD:** `pnpm t0` 179 module / 0 vi phạm; `pnpm test` 554/554; `pnpm test:int`
+    **725/725**; `pnpm evidence` **51/51**, cổng XANH.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
