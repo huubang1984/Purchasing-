@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ **19** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ **53** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ **20** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ **54** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -253,7 +253,10 @@ qua; một nhãn `[INV-…]` trỏ tới mã **không có trong sổ đăng ký 
 không được phép fail-open.
 
 Nhãn dạng `[INV-E3(3)]` (chỉ MỘT VẾ của một bất biến nhiều vế) **cố ý không** được tính là độ
-phủ của `E3`: E3 có năm vế và vế *giới hạn tần suất* không có một dòng mã nào trong toàn S0.
+phủ của `E3`: E3 có năm vế và ~~vế *giới hạn tần suất* không có một dòng mã nào trong toàn
+S0~~ **[S1.21] vế ấy nay CÓ LỚP trên cả hai đường OTP** (`otp_rate_limits` cho đường lời
+mời từ S1.3; `callerLimit` 30/15 phút cho `/auth/totp` từ S1.12 — khoản nợ 39). Nhãn vế vẫn
+**cố ý không** được tính là độ phủ: quy ước ấy nói về CÁCH ĐẾM, không về khoản nợ 1.
 
 Đây vừa là kỷ luật kỹ thuật vừa là tài sản thương mại: khi kiểm toán viên của khách hàng
 hỏi *"làm sao chứng minh nhân viên mua hàng không xem được giá trước giờ mở?"*, câu trả
@@ -297,6 +300,26 @@ còn răng hay không.
 | **H17** | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 |
 | **H18** | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | **T0** |
 | **H19** | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | **T3** |
+| **H20** | **Sổ nợ trong `docs/STATE.md` TỰ ĐỐI CHIẾU, bảy tính chất: mọi HÀNG BẢNG trong khối sổ nợ đều được bộ đọc NHẬN (một dòng thụt vào một dấu cách vẫn là bảng với GFM, và nó từng vô hình); mọi dòng có đúng BA cột và số khoản DUY NHẤT; mọi dòng KHAI trạng thái bằng một từ khoá đóng (`ĐÓNG`/`MỞ`/`NỬA`) đặt ở đầu thân; tập dòng khai MỞ/NỬA BẰNG dòng tổng kết — đỏ theo CẢ HAI chiều; mọi con trỏ chưa bị gạch giải được TRONG worktree, và một ô đã gạch một con trỏ thì phải còn ít nhất một con trỏ SỐNG; số dấu `~~` của tệp là CHẴN; mọi lời khai hình dạng `**<số> ADR**` chưa bị gạch bằng số đầu mục `## ADR-` thật; mọi lời khai hình dạng `**Sổ đăng ký <n> bất biến** (<x> nghiệp vụ + <y> hàng rào` bằng số HÀNG của sổ đăng ký này** | `tests/architecture/so-no-tu-doi-chieu.test.ts` | **T1** |
+
+**Giới hạn của H20, nói ra thay vì để người đọc tự phát hiện** — cả bốn do review lượt 13 chỉ ra
+hoặc buộc phải nói đúng mức:
+
+- Nó bắt được *"hai lời khai không khớp nhau"*, **KHÔNG** bắt được *"một phán xét sai"*. Một dòng
+  nợ đánh dấu `ĐÓNG` bởi một người đọc nhầm mã vẫn xanh. Vế ấy là việc của mắt người và của những
+  vòng rà sổ như S1.21 — nhưng vòng rà nay chỉ phải xét NỘI DUNG, không phải đi đếm xem có bao
+  nhiêu dòng bị bỏ quên.
+- Hai vế *"mọi lời khai"* chỉ đúng cho **hai hình dạng ĐÃ NÊU TÊN** ở trên (`**<số> ADR**` và
+  `**Sổ đăng ký <n> bất biến**`). Một con số viết theo cách khác — không đậm, hay `ADR: 29` —
+  không bị đọc. Phát biểu rộng hơn thế là rộng hơn phép đo.
+- Phạm vi tệp là `docs/STATE.md`, `docs/DECISIONS.md` và `docs/TEST-PLAN.md`. **`Handoff.md` KHÔNG
+  được phủ** — khoản nợ 61.
+- Lớp này đọc tài liệu như DỮ LIỆU TIN CẬY (người trong kho viết, qua review). Giả định ấy hôm nay
+  **chưa được cưỡng chế**: `CODEOWNERS` trỏ tới một team chưa tồn tại (khoản nợ 18), nên không
+  branch protection nào bắt buộc review trên `docs/`. Kết luận về đường dẫn và biểu thức chính quy
+  dựng từ tài liệu (`giaiDuoc`) đúng ở mức *tự gây thương tích*, không ở mức *chống nội dung thù
+  địch*. Xem ADR-029 §5.
+
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,

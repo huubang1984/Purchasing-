@@ -15,9 +15,9 @@ chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này ch�
 
 - **34 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
-- **19 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
+- **20 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 53 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 54 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -28,8 +28,8 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
 | Nghiệp vụ (A–G) | **34** | 34 |
-| Hàng rào (H) | **19** | 19 |
-| **Cộng** | **53** | **53** |
+| Hàng rào (H) | **20** | 20 |
+| **Cộng** | **54** | **54** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -94,9 +94,10 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | H14 | **Không một chỉ mục duy nhất nào trên bảng tenant vừa GHI ĐƯỢC bởi `app_api` vừa thiếu `org_id` ở cột đầu tiên** — phạm vi là `pg_index` (phủ cả PRIMARY KEY, UNIQUE constraint và `CREATE UNIQUE INDEX` trần), vị từ suy từ TÍNH CHẤT chứ không từ danh sách tên, và chỉ mục trên BIỂU THỨC bị báo ra thay vì bỏ qua | `db/unique-oracle.int.test.ts` | T3 | 3 | ✅ ĐẠT |  |
 | H15 | **Biên giới module của `packages/supplier`**: chỉ `index.ts` là cửa công khai; module mới thêm vào `src/` mặc định không với tới được từ ngoài; đường dẫn TƯƠNG ĐỐI xuyên gói cũng bị chặn; cộng danh sách trắng khoá TẬP EXPORT ở cửa | Họ quy tắc `g5-` của dependency-cruiser + `tests/architecture/barrel-exports.test.ts` | T0 | 4 | ✅ ĐẠT |  |
 | H16 | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với ĐÚNG tập cửa mà `package.json` của gói khai trong `exports`** — ~~`index.ts` là cửa duy nhất~~ (câu cũ nói chặt hơn thứ được cưỡng chế: `coQuyTacBienGioi` từng chấp nhận tới HAI cửa qua một trần dùng chung, tức cấp không một cửa thứ hai cho mười một gói; sửa ở review lượt 10, H10-2) — suy từ TÍNH CHẤT (đọc thư mục thật + đọc `package.json` thật + đọc cấu hình thật; vị từ *gói* là *thư mục có `package.json`*, không phải *thư mục có `src/index.ts`* — H10-1), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | T0 | 47 | ✅ ĐẠT |  |
-| H17 | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 | 17 | ✅ ĐẠT |  |
+| H17 | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 | 19 | ✅ ĐẠT |  |
 | H18 | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | T0 | 5 | ✅ ĐẠT |  |
 | H19 | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | T3 | 8 | ✅ ĐẠT |  |
+| H20 | **Sổ nợ trong `docs/STATE.md` TỰ ĐỐI CHIẾU, bảy tính chất: mọi HÀNG BẢNG trong khối sổ nợ đều được bộ đọc NHẬN (một dòng thụt vào một dấu cách vẫn là bảng với GFM, và nó từng vô hình); mọi dòng có đúng BA cột và số khoản DUY NHẤT; mọi dòng KHAI trạng thái bằng một từ khoá đóng (`ĐÓNG`/`MỞ`/`NỬA`) đặt ở đầu thân; tập dòng khai MỞ/NỬA BẰNG dòng tổng kết — đỏ theo CẢ HAI chiều; mọi con trỏ chưa bị gạch giải được TRONG worktree, và một ô đã gạch một con trỏ thì phải còn ít nhất một con trỏ SỐNG; số dấu `~~` của tệp là CHẴN; mọi lời khai hình dạng `**<số> ADR**` chưa bị gạch bằng số đầu mục `## ADR-` thật; mọi lời khai hình dạng `**Sổ đăng ký <n> bất biến** (<x> nghiệp vụ + <y> hàng rào` bằng số HÀNG của sổ đăng ký này** | `tests/architecture/so-no-tu-doi-chieu.test.ts` | T1 | 19 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -117,7 +118,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 53` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 54` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
@@ -180,7 +181,7 @@ dưới đây phải nói rõ **vế nào được đo** và **vế nào chưa c
 
 - **E2** — **Hai vế đã được đóng, và phần chênh còn lại KHÔNG phải phần đã bị bắt.** Vế *token một mình không đủ* nay được cưỡng chế bằng KIỂU: `issueOtpChallenge` và `verifyOtpAndStartSession` đòi **token dạng rõ**, và trigger ở 012 đòi thách thức mang `token_id` của đúng lời mời. Vế *trên kênh đã đăng ký* nay đọc đích **từ `supplier_contacts`**, và `channel` quyết định CỘT nào được đọc — nhãn và sự thật là một thứ. PHẦN CHÊNH: *"kênh đã đăng ký"* vẫn là kênh do **NGƯỜI MUA KHAI** khi tạo người liên hệ (`supplier_contacts.phone`, do người mua nhập). Ô ✅ chống được *link bị chuyển tiếp* và *đích do người gọi chọn*; nó **không** chống được *người mua khai sai số*. Xem ADR-015.
 
-- **E3** — Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). **Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng. Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công.
+- **E3** — Sổ đăng ký định nghĩa E3 bằng **năm** vế. ~~Vế *giới hạn tần suất* **không có một dòng mã nào** trong toàn S0.~~ **[S1.3] Vế ấy nay CÓ LỚP — nhưng CHỈ trên đường OTP của LỜI MỜI** (`otp_rate_limits`, hai hạn mức với hai loại phản ứng, ADR-015 mục 5). ~~**Đường TOTP của `packages/identity` VẪN KHÔNG CÓ giới hạn tần suất nào** — khoản nợ 1 thu hẹp lại, không đóng.~~ **[S1.21] Đường TOTP CŨNG có lớp từ S1.12** — `callerLimit = 30` mỗi 15 phút trên `/auth/totp`, đếm ở `caller_rate_limits` (migration `042`); lớp ấy ra đời để trả khoản nợ 39 và không ai nối nó về E3, nên câu vừa gạch sống thiu chín vòng. **Khoản nợ 1 ĐÓNG.** Trần loạt đầu của vế *giới hạn số lần thử*: trên đường lời mời nó nay là một hằng số cấu hình thật (`FOR UPDATE` trên thách thức mới nhất), còn trên đường TOTP nó vẫn là độ đồng thời của kẻ tấn công.
 
 - **E4** — **ĐO Ở TẦNG DỮ LIỆU; MỆNH ĐỀ NÓI VỀ MỘT ĐƯỜNG XÁC THỰC CHƯA CÓ ENDPOINT NÀO.** Thứ đã đo, và đo bằng một kịch bản tấn công dựng trọn: cùng một mã số thuế tồn tại được ở HAI tổ chức (ADR-013 ở dạng đo được — một `UNIQUE (tax_code)` toàn cục sẽ làm khẳng định ấy đỏ, và lúc ấy MST thành một danh tính toàn hệ thống); cầm ĐÚNG MST và ĐÚNG mã RFQ của tổ chức A, tổ chức B đọc được 0 hàng ở cả ba đường, kèm đối chứng dương dưới đúng tổ chức; không đường nào dựng được một phiên khách nếu chỉ có hai mã ấy (thiếu thách thức OTP, hoặc thách thức chưa đối chiếu, đều bị chặn), kèm đối chứng dương cho đường hợp pháp; và một lần quét NỘI DUNG bốn bảng trên đường xác thực cho thấy không bảng nào CẤT hai mã ấy. **PHẦN CHÊNH:** tất cả những phép đo trên chạy trên Postgres, không trên một đường đăng nhập. Chúng chứng minh hai mã ấy không phải credential TRONG DỮ LIỆU; chúng KHÔNG chứng minh một form đăng nhập tương lai sẽ từ chối chúng. Đó là T5 trên một tầng HTTP, và `apps/` chưa có tầng ấy. **PHẦN CHÊNH THỨ HAI, cùng họ với A3 và A4:** phép quét bốn bảng tìm MỘT CHUỖI đã biết; một mã cất ở dạng đã băm hay đã biến đổi sẽ đi lọt.
 
