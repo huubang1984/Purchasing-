@@ -1588,4 +1588,125 @@ describe("biên giới module của packages/unseal", () => {
       rmSync("apps/tmp-probe-unseal-cua", { recursive: true, force: true });
     }
   }, 60000);
+
+  // ==========================================================================================
+  // [S1.17 / review lượt 9 — H9-4] HỌ "g11-" — KHẢ NĂNG KÝ MỐC NEO NGOÀI
+  // ==========================================================================================
+  // Ba test dưới đây ra đời từ một phát hiện của lượt review thứ chín, và phát hiện ấy nói về
+  // CHÍNH BỘ TEST NÀY chứ không về mã sản phẩm: `g11-` là họ quy tắc DUY NHẤT của kho không có
+  // một probe nào. `grep "g11" tests/` trả về rỗng. Vòng S1.17 có đo đột biến bằng tay (thêm một
+  // dòng re-export vào `packages/audit/src/index.ts` ⇒ depcruise đỏ), nhưng một phép đo thủ công
+  // không phải một mốc chết — nó không chạy lại ở lần thứ hai.
+  //
+  // Nó đáng có hơn các họ khác một bậc, vì `packages/audit` nằm trong danh sách MIỄN TRỪ của
+  // `[INV-H16]` (`bien-gioi-goi.test.ts`, khoản nợ 17): gói này KHÔNG có quy tắc "index là cửa
+  // duy nhất", nên `g11-` là lớp cưỡng chế DUY NHẤT giữ cho đường ký không với tới được từ
+  // `apps/api`.
+  describe("họ g11- — khả năng ký mốc neo ngoài", () => {
+    it("[INV-G1] chặn import anchor-sign.ts từ trong chính packages/audit", () => {
+      // Đường DỄ XẢY RA NHẤT: một ngày nào đó ai đó thêm một dòng re-export vào cửa công khai
+      // của gói "cho tiện". Từ giây đó, `apps/api` link được khả năng đúc mốc neo.
+      const probe = "packages/audit/src/zzprobe-cau-noi-ky-neo.ts";
+      writeFileSync(
+        probe,
+        [
+          'export { createLocalDevAnchorSigner } from "./anchor-sign.js";',
+          "",
+        ].join("\n"),
+      );
+      try {
+        const { status, output } = depcruise(["packages/audit"]);
+        expect(status).not.toBe(0);
+        expect(output).toContain("zzprobe-cau-noi-ky-neo");
+        expect(output).toContain("g11-ky-neo-chi-o-cong-cu-xuat-neo");
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    }, 60000);
+
+    it("[INV-G1] chặn cửa subpath @trustprocure/audit/anchor-sign", () => {
+      // ====================================================================================
+      // BẢN ĐẦU CỦA TEST NÀY ĐẶT PROBE Ở `apps/tmp-probe-.../src` VÀ NÓ ĐỎ VÌ MỘT LÝ DO SAI —
+      // ghi lại vì đó chính là lớp lỗi mà cả họ `g11-` được viết ra để chặn.
+      //
+      // Một thư mục probe dựng bằng `mkdirSync` KHÔNG có `package.json`, nên không có liên kết
+      // `node_modules/@trustprocure/audit`, nên specifier subpath KHÔNG RESOLVE ĐƯỢC. Khi ấy
+      // `to.path` của `g11-` không khớp gì cả và quy tắc IM LẶNG; thứ kêu là lưới đỡ
+      // `g1-khong-import-trustprocure-khong-resolve-duoc`. Đo được ở lượt chạy đầu tiên của
+      // chính test này: output có đúng dòng đó và KHÔNG có một dòng `g11-` nào.
+      //
+      // Đây là lỗ C1 mà `.dependency-cruiser.cjs` đã đặt tên từ S0 (một specifier không resolve
+      // được thì quy tắc "coi như không có gì để chặn", trong im lặng) — lần này nó hiện ra
+      // trong một PHÉP ĐO chứ không trong mã sản phẩm, và nó suýt cho một lớp canh rỗng ruột.
+      //
+      // Nên probe phải nằm trong một gói THẬT SỰ có liên kết tới `@trustprocure/audit`.
+      // `packages/test-support` khai nó ở `devDependencies` (cho `neo-fixture.ts`), nên ở đó
+      // specifier resolve được và `g11-` mới thật sự được đo.
+      // ====================================================================================
+      const probe = "packages/test-support/src/zzprobe-cua-subpath.ts";
+      writeFileSync(
+        probe,
+        [
+          'import { createLocalDevAnchorSigner } from "@trustprocure/audit/anchor-sign";',
+          "export { createLocalDevAnchorSigner };",
+          "",
+        ].join("\n"),
+      );
+      try {
+        const { status, output } = depcruise(["packages/test-support", "packages/audit"]);
+        expect(status).not.toBe(0);
+        expect(output).toContain("g11-ky-neo-chi-o-cong-cu-xuat-neo");
+        expect(
+          output,
+          "specifier subpath phải RESOLVE được — nếu không, quy tắc g11- im lặng và test này " +
+            "đỏ vì một lý do sai",
+        ).not.toContain("g1-khong-import-trustprocure-khong-resolve-duoc");
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    }, 60000);
+
+    it("[INV-G1] chặn import ngược từ tools/neo-so-kiem-toan", () => {
+      // Cùng lớp lỗ hổng N5 mà ba quy tắc "không import ngược" của g1- đóng: công cụ được miễn
+      // trừ để GỌI anchor-sign.ts, nên nếu không gì cấm import NGƯỢC vào nó thì một file trong
+      // công cụ re-export một dòng là đủ để mở lại cửa.
+      writeFileSync("tools/neo-so-kiem-toan/src/zprobe-plain.ts", "export const zplaceholder = 1;\n");
+      mkdirSync("apps/tmp-probe-neo-bridge/src", { recursive: true });
+      writeFileSync(
+        "apps/tmp-probe-neo-bridge/src/leak.ts",
+        [
+          'import { zplaceholder } from "../../../tools/neo-so-kiem-toan/src/zprobe-plain.js";',
+          "export { zplaceholder };",
+          "",
+        ].join("\n"),
+      );
+      try {
+        const { status, output } = depcruise(["apps/tmp-probe-neo-bridge", "tools/neo-so-kiem-toan"]);
+        expect(status).not.toBe(0);
+        expect(output).toContain("g11-khong-import-nguoc-tu-cong-cu-xuat-neo");
+      } finally {
+        rmSync("tools/neo-so-kiem-toan/src/zprobe-plain.ts", { force: true });
+        rmSync("apps/tmp-probe-neo-bridge", { recursive: true, force: true });
+      }
+    }, 60000);
+
+    it("[INV-G1] cửa index.ts của audit VẪN đi qua được — đối chứng dương", () => {
+      mkdirSync("apps/tmp-probe-neo-cua/src", { recursive: true });
+      writeFileSync(
+        "apps/tmp-probe-neo-cua/src/dung.ts",
+        [
+          'import { verifyAnchorRecord } from "../../../packages/audit/src/index.js";',
+          "export { verifyAnchorRecord };",
+          "",
+        ].join("\n"),
+      );
+      try {
+        const { status, output } = depcruise(["apps/tmp-probe-neo-cua", "packages/audit"]);
+        expect(output).not.toContain("g11-");
+        expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+      } finally {
+        rmSync("apps/tmp-probe-neo-cua", { recursive: true, force: true });
+      }
+    }, 60000);
+  });
 });
