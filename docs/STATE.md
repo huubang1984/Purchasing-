@@ -1175,8 +1175,15 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     không nới một ngưỡng nào: `beforeEach` của hai khối có vòng đếm không bắt đầu khi cửa sổ còn dưới
     45 giây. Ba bộ đếm của `/auth/*` nằm ở `caller_rate_limits`, không phải bảng mà `044` đụng tới.
 
-    **Số đo trên HEAD:** `pnpm t0` 178 module / 0 vi phạm; `pnpm test` 554/554; `pnpm test:int`
-    **723/723**; `pnpm evidence` **51/51**, cổng XANH.
+    Và bản vá ấy CHƯA ĐỦ ở lượt đầu: lượt `pnpm test:int` đầy đủ tiếp theo (trên `f879d5c`) vẫn đỏ
+    **1/723**, và danh tính ca ấy MẤT vì phép lọc đầu ra của chính lượt chạy — ghi ra thay vì im.
+    Truy theo LỚP thay vì theo ca: `guest.int.test.ts` có đúng cùng hình dạng (30 + 30 lời gọi đếm
+    cộng dồn), nên nó nhận cùng bản vá (`c4b453d`). Ba lượt `test:int` đầy đủ SAU đó: **723/723,
+    723/723, 723/723**, và `pnpm evidence` thoát mã **0** (lượt trước thoát mã 1 dù cổng vẫn xanh).
+
+    **Số đo trên HEAD (`c4b453d`):** `pnpm t0` 178 module / 0 vi phạm; `pnpm test` 554/554;
+    `pnpm test:int` **723/723**; `pnpm evidence` **51/51**, **1277 khẳng định**, cổng XANH, vitest
+    thoát mã 0.
 
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
