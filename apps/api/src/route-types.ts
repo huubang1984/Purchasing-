@@ -225,6 +225,21 @@ export const TEN_THAM_SO_CAM = ["token", "otp", "code", "session", "secret", "pa
  * một `Permission` THẬT của danh mục — kiểu ép ở biên dịch, và hàm này ép lại lúc chạy cho một
  * bảng đến từ JSON.
  */
+/**
+ * [S1.21] Đường VÔ DANH được miễn trần theo người gọi ở tầng dispatcher — mỗi dòng một lý do ĐO
+ * ĐƯỢC, không một dòng nào là "chưa làm".
+ *
+ * Danh sách này KHÔNG rỗng, và đó là khác biệt so với `MIEN_TRU` của ADR-027: ở đây miễn trừ nói
+ * *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"*. Một dòng mới chỉ được thêm khi đường dẫn
+ * ấy có một bộ đếm THẬT ở tầng khác, và lời khai ấy phải chỉ được tới tận tên hằng số.
+ */
+export const MIEN_TRAN_NGUOI_GOI: Readonly<Record<string, string>> = {
+  "/guest/otp":
+    "trần nằm TRONG `issueOtpChallenge` (packages/invitation) và nó CHẶT HƠN một trần theo route: " +
+    "`OTP_MAX_PER_CALLER` = 10, `OTP_MAX_PER_INVITATION` = 5 (bucket kẻ tấn công không xoay được), " +
+    "`OTP_MAX_PER_DEST` = 3 và `OTP_MAX_PER_DEST_TOAN_TO_CHUC` = 20 — ADR-015 §5.",
+};
+
 export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] {
   const viPham: string[] = [];
   const daThay = new Set<string>();
@@ -255,6 +270,18 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     }
     if (r.audience === "ANON" && r.method !== "POST") {
       viPham.push(`${khoa}: route ANON chỉ được là POST — token đi trong THÂN, không trong URL (E6)`);
+    }
+    // [S1.21, review lượt 13 H13-1] MỘT ĐƯỜNG VÔ DANH PHẢI CÓ TRẦN THEO NGƯỜI GỌI.
+    //
+    // Vì sao ở đây chứ không ở một chú thích: trước vòng này, `callerLimit` của `/auth/totp` là
+    // MỘT DÒNG CẤU HÌNH mà không lớp nào canh — xoá đúng dòng ấy thì vế *giới hạn tần suất* của
+    // E3 biến mất khỏi đường TOTP và **không test nào đỏ**. Đó là "xanh giả" ở chiều ngược: hàng
+    // rào có thật, nhưng không có gì giữ nó.
+    if (r.audience === "ANON" && !(typeof r.callerLimit === "number" && r.callerLimit > 0)) {
+      const lyDo = MIEN_TRAN_NGUOI_GOI[r.path];
+      if (lyDo === undefined) {
+        viPham.push(`${khoa}: route ANON không khai callerLimit và không có lý do miễn — E3 vế giới hạn tần suất`);
+      }
     }
     if (r.audience !== "PUBLIC" && r.method === "GET" && r.mutates) {
       viPham.push(`${khoa}: GET không được đổi trạng thái`);

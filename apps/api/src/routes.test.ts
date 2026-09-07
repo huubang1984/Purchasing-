@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { timViPhamBangRoute, type Route } from "./route-types.js";
+import { MIEN_TRAN_NGUOI_GOI, timViPhamBangRoute, type Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 
 const GOC = fileURLToPath(new URL("../../../", import.meta.url));
@@ -49,6 +49,30 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
       { method: "POST", path: "/x", audience: "BUYER", mutates: true, resourceType: "X", handler: khongLam },
     ] as unknown as Route[];
     expect(timViPhamBangRoute(xau).join("\n")).toContain("[INV-H17]");
+  });
+
+  it("[S1.21, review lượt 13 H13-1] mọi route ANON khai `callerLimit` — và một route mất cờ ấy thì ĐỎ", () => {
+    // Vế chịu lực: trước vòng này, `callerLimit` của `/auth/totp` là một dòng cấu hình KHÔNG có
+    // lớp nào canh. Xoá nó khỏi bảng phải làm phép kiểm này đỏ, cho TỪNG route ANON một.
+    for (const r of ROUTES.filter((x) => x.audience === "ANON" && x.callerLimit !== undefined)) {
+      const khongTran = ROUTES.map((x) =>
+        x === r ? ({ ...x, callerLimit: undefined } as unknown as Route) : x,
+      );
+      expect(timViPhamBangRoute(khongTran).join("\n"), `${r.method} ${r.path}`).toContain(
+        "route ANON không khai callerLimit",
+      );
+    }
+  });
+
+  it("[S1.21] danh sách miễn trần người gọi KHÔNG rỗng, và mỗi dòng trỏ tới một route ANON THẬT", () => {
+    const anon = new Set(ROUTES.filter((r) => r.audience === "ANON").map((r) => r.path));
+    // Miễn trừ ở đây nói *"trần nằm ở chỗ khác"*, không nói *"chưa có trần"* — nên một dòng trỏ
+    // tới một đường không còn tồn tại là một lời khai đã thiu, đúng lớp lỗi mà S1.21 đi đóng.
+    expect(Object.keys(MIEN_TRAN_NGUOI_GOI)).toEqual(["/guest/otp"]);
+    for (const [duong, lyDo] of Object.entries(MIEN_TRAN_NGUOI_GOI)) {
+      expect(anon.has(duong), `${duong} không còn là route ANON`).toBe(true);
+      expect(lyDo).toMatch(/OTP_MAX_PER_/u);
+    }
   });
 
   it("GET không được đổi trạng thái; POST không được trốn cổng bằng mutates:false; không khai hai lần", () => {
