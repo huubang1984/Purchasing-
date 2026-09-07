@@ -59,6 +59,15 @@ const NEO_TOOL_PREFIX = ciPrefix("tools/neo-so-kiem-toan/");
 const NEO_TOOL_SRC_PREFIX = ciPrefix("tools/neo-so-kiem-toan/src/");
 const ANCHOR_SIGN_TS = ciFile("packages/audit/src/anchor-sign.ts");
 const ANCHOR_SIGN_TEST_TS = ciFile("packages/audit/src/anchor-sign.test.ts");
+// [S1.18] Ho "g12-".."g15-": bon goi S0 cuoi cung cua danh sach MIEN TRU o [INV-H16].
+const AUDIT_SRC_PREFIX = ciPrefix("packages/audit/src/");
+const AUDIT_INDEX_TS = ciFile("packages/audit/src/index.ts");
+const DB_SRC_PREFIX = ciPrefix("packages/db/src/");
+const DB_INDEX_TS = ciFile("packages/db/src/index.ts");
+const TENANCY_SRC_PREFIX = ciPrefix("packages/tenancy/src/");
+const TENANCY_INDEX_TS = ciFile("packages/tenancy/src/index.ts");
+const TEST_SUPPORT_SRC_PREFIX = ciPrefix("packages/test-support/src/");
+const TEST_SUPPORT_INDEX_TS = ciFile("packages/test-support/src/index.ts");
 
 // ==========================================================================================
 // VONG FIX 2 (MUC D) - CUNG KHUON "MAC DINH DONG", AP CHO packages/identity/src/
@@ -193,6 +202,81 @@ const CRYPTO_KEYS_PKG_PREFIX = ciPrefix("packages/crypto-keys/");
 
 module.exports = {
   forbidden: [
+    // ------------------------------------------------------------------------------------------
+    // [S1.18 / khoan no 17] HO "g12-".."g15-" - BON GOI S0 CUOI CUNG NHAN BIEN GIOI
+    //
+    // `tests/architecture/bien-gioi-goi.test.ts` [INV-H16] giu mot danh sach MIEN TRU DONG, moi
+    // dong mot ly do, va no CHI DUOC CO LAI. Bon dong cuoi cua danh sach ay la audit, db, tenancy,
+    // test-support - va hai trong bon la hai mat tien chiu luc nhat kho: `tenancy/src/
+    // with-tenant.ts` la diem DUY NHAT gan GUC `app.org_id` (moi policy RLS cua 002-007 doc GUC
+    // do) va `audit/src/writer.ts` la duong ghi so kiem toan. Chung chua bao gio duoc mien vi an
+    // toan hon; ly do mien la "dong chung la mot thay doi co rui ro hoi quy rieng".
+    //
+    // LY DO AY DA DUOC DO LAI VA NO YEU HON LUC NO DUOC VIET: 0 cho import phai di tru - khong
+    // mot specifier subpath `@trustprocure/{audit,db,tenancy,test-support}/...` nao, khong mot
+    // duong tuong doi xuyen goi nao. Bon ho quy tac nay vi the la thuan THEM LOP. Va phep do
+    // nguoc lai cung da chay TRUOC khi chung ton tai: 8 probe "chan import tuong doi" / "module
+    // moi" DO THAT (depcruise tra ve 0 tren mot import thang vao `with-tenant.ts`).
+    //
+    // `audit` CO HAI CUA, va do khong phai mot nhan nhuong. `packages/audit/package.json` khai
+    // "./anchor-sign" (ADR-026 §4 - bo ky moc neo CO Y khong nam o index.ts vi tien trinh `api`
+    // import goi nay o moi duong ghi). Mot `g12-` chi khai MOT cua se chan chinh
+    // `tools/neo-so-kiem-toan`: no PHA BUILD chu khong dong lo nao. Hai lop chia viec va khong
+    // thay nhau - `g12-` canh "khong ai di vong QUA tuong", `g11-` canh "chi cong cu xuat neo
+    // duoc di qua cua thu hai". Dung tien le `crypto-keys` (index.ts + unwrap.ts, cua thu hai do
+    // ba quy tac `g1-` canh tiep).
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/audit/src/ la vung han che doi voi module ben ngoai package. Hai cua " +
+        "duoc mo: index.ts (duong DOC + duong ghi so) va anchor-sign.ts (subpath export " +
+        "@trustprocure/audit/anchor-sign, bi canh tiep boi g11-ky-neo-chi-o-cong-cu-xuat-neo). " +
+        "`writer.ts` la duong ghi so kiem toan va `tenant-guard.ts` giu QT3; mot import tuong " +
+        "doi '../../audit/src/writer.js' tu mot goi khac di lot CA BA cong (depcruise, tsc, " +
+        "eslint) - do duoc o S1.18 truoc khi quy tac nay ton tai. Mot module MOI trong thu muc " +
+        "nay mac dinh khong voi toi duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: AUDIT_SRC_PREFIX },
+      to: { path: AUDIT_SRC_PREFIX, pathNot: [AUDIT_INDEX_TS, ANCHOR_SIGN_TS] },
+    },
+    {
+      name: "g13-db-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/db/src/ la vung han che doi voi module ben ngoai package. Chi index.ts " +
+        "duoc mo. `pool.ts` dat hai GUC log va `migrate.ts` bam noi dung migration roi so voi " +
+        "checksum da ghi - hai thu khong ai duoc goi vong qua. Luu y g9-api-routes-khong-cham-" +
+        "tenancy-va-db la mot lop KHAC: no cam handler cua apps/api cham goi nay HOAN TOAN, ke ca " +
+        "qua cua; quy tac nay canh moi nguoi goi khac khong di vong QUA cua.",
+      severity: "error",
+      from: { pathNot: DB_SRC_PREFIX },
+      to: { path: DB_SRC_PREFIX, pathNot: [DB_INDEX_TS] },
+    },
+    {
+      name: "g14-tenancy-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/tenancy/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Day la goi dang canh nhat trong bon, va ly do khong nam o kich thuoc " +
+        "cua no: `with-tenant.ts` la diem DUY NHAT trong toan kho gan GUC `app.org_id`, tuc moi " +
+        "policy RLS cua 002-007 treo vao no. Mot duong vong toi ham nay la mot duong vong toi " +
+        "quyet dinh \"phien nay thuoc to chuc nao\". Goi co dung ba symbol gia tri o cua.",
+      severity: "error",
+      from: { pathNot: TENANCY_SRC_PREFIX },
+      to: { path: TENANCY_SRC_PREFIX, pathNot: [TENANCY_INDEX_TS] },
+    },
+    {
+      name: "g15-test-support-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/test-support/src/ la vung han che doi voi module ben ngoai package. " +
+        "Chi index.ts duoc mo. Ly do mien tru cu cua goi nay (\"ha tang kiem thu, khong phai ma " +
+        "san pham\") dung ve ban chat nhung no la mot ly do KHONG BAO GIO HET HAN - va mot dong " +
+        "mien tru khong bao gio het han thi khong phai mot khoan no, no la mot lo vinh vien " +
+        "(cung hinh dang ma S1.15 da bac bo cho HAM_TRIGGER_KHONG_GHIM). Ve \"khong duoc vao " +
+        "dependencies san xuat\" do tests/architecture/pham-vi-san-xuat.test.ts giu, KHONG doi.",
+      severity: "error",
+      from: { pathNot: TEST_SUPPORT_SRC_PREFIX },
+      to: { path: TEST_SUPPORT_SRC_PREFIX, pathNot: [TEST_SUPPORT_INDEX_TS] },
+    },
     // ------------------------------------------------------------------------------------------
     // [ADR-020 muc 4 / S1.10.2] HO "g9-" — handler cua apps/api chi nhan `ctx.client` DA GAN phien.
     //

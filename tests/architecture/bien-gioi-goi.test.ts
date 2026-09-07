@@ -21,6 +21,12 @@ const require = createRequire(import.meta.url);
 // danh sách miễn trừ là ĐÓNG, có lý do từng dòng, và CHỈ ĐƯỢC CO LẠI. Gói thứ sáu sẽ không đòi
 // ai phải nhớ gì: nó ra đời không có quy tắc thì test này đỏ ngay.
 //
+// [S1.18 / khoản nợ 17] DANH SÁCH MIỄN TRỪ NAY RỖNG — bốn gói S0 cuối cùng (`audit`, `db`,
+// `tenancy`, `test-support`) đã nhận họ quy tắc `g12-`…`g15-`, nâng số họ từ năm lên chín. Khi
+// lớp này ra đời ở S1.2, chính nó đã làm bốn dòng miễn trừ ấy HẾT HẠN một cách tự động: thêm quy
+// tắc xong thì khẳng định "miễn trừ không chứa gói đã có quy tắc" đỏ ngay, và đó là thứ ép việc
+// dọn danh sách xảy ra thay vì trông chờ ai đó nhớ.
+//
 // PHẦN LỚP NÀY KHÔNG MUA ĐƯỢC, nói thẳng:
 //   * nó đòi quy tắc TỒN TẠI và có HÌNH DẠNG đúng; nó KHÔNG chạy depcruise nên không chứng minh
 //     quy tắc có răng. Vế đó do các test probe trong `boundaries.test.ts` giữ, mỗi họ ba ca.
@@ -45,18 +51,28 @@ const { ciFile, ciPrefix } = require("../../dependency-cruiser-ci.cjs") as {
  * Gói được MIỄN, mỗi dòng một lý do. Danh sách này CHỈ ĐƯỢC CO LẠI — thêm một dòng là mở một lỗ,
  * và nó phải đi qua review của `.github/CODEOWNERS`.
  *
- * Cả bốn đều là gói của S0 và đều nằm trong khoản nợ 17 ("hai mặt tiền chịu lực nhất repo không
- * có lớp nào canh đường vào"). Chúng KHÔNG được miễn vì an toàn hơn — `tenancy/src/with-tenant.ts`
- * là điểm DUY NHẤT gắn `app.org_id` và `audit/src/writer.ts` là đường ghi sổ kiểm toán, tức đúng
- * hai chỗ đáng canh nhất. Chúng được miễn vì đóng chúng là một thay đổi có rủi ro hồi quy riêng,
- * và trộn nó vào S1.2 sẽ làm cả hai việc khó xem xét hơn.
+ * **[S1.18 / khoản nợ 17] DANH SÁCH NÀY NAY RỖNG.** Bốn dòng cuối — `audit`, `db`, `tenancy`,
+ * `test-support` — được gỡ khi bốn họ quy tắc `g12-`…`g15-` ra đời. Nguyên văn cũ giữ lại nguyên
+ * chữ, vì lý do miễn trừ của nó đã được ĐO LẠI và phép đo cho kết quả ngược:
+ *
+ * > ~~Cả bốn đều là gói của S0 và đều nằm trong khoản nợ 17 ("hai mặt tiền chịu lực nhất repo
+ * > không có lớp nào canh đường vào"). Chúng KHÔNG được miễn vì an toàn hơn — `tenancy/src/
+ * > with-tenant.ts` là điểm DUY NHẤT gắn `app.org_id` và `audit/src/writer.ts` là đường ghi sổ
+ * > kiểm toán, tức đúng hai chỗ đáng canh nhất. Chúng được miễn vì đóng chúng là một thay đổi có
+ * > rủi ro hồi quy riêng, và trộn nó vào S1.2 sẽ làm cả hai việc khó xem xét hơn.~~
+ *
+ * Hai câu ĐẦU vẫn đúng, và chính chúng là lý do vòng S1.18 tồn tại. Câu CUỐI thì không: quét toàn
+ * kho trước khi viết bốn họ quy tắc cho **0 chỗ import phải di trú**, và `pnpm depcruise` sau khi
+ * thêm chúng vẫn là *"no dependency violations found (193 modules, 756 dependencies)"*. Cái "rủi ro
+ * hồi quy riêng" được khai làm lý do miễn trừ, khi đem đo, bằng KHÔNG — và nó đã đứng mười bảy
+ * vòng. Bài học không phải "lý do ấy dối"; nó là: **một lý do miễn trừ cũng là một khẳng định, và
+ * khẳng định thì phải đo.**
+ *
+ * Thêm lại một dòng vào đây vẫn VIẾT ĐƯỢC — nhưng nó làm khẳng định *"RỖNG"* ở dưới đỏ, tức nó là
+ * hành vi MỞ LẠI khoản nợ 17 và phải được ghi ra ở `docs/STATE.md`, không lặng lẽ thành một dòng
+ * trong một map. Cùng cơ chế S1.15 đã đặt cho `HAM_TRIGGER_KHONG_GHIM`.
  */
-const MIEN_TRU: ReadonlyMap<string, string> = new Map([
-  ["audit", "khoản nợ 17 — chưa đóng; `writer.ts` là đường ghi sổ kiểm toán"],
-  ["db", "khoản nợ 17 — chưa đóng"],
-  ["tenancy", "khoản nợ 17 — chưa đóng; `with-tenant.ts` là điểm DUY NHẤT gắn app.org_id"],
-  ["test-support", "hạ tầng kiểm thử, không phải mã sản phẩm — xem khoản nợ 21"],
-]);
+const MIEN_TRU: ReadonlyMap<string, string> = new Map<string, string>();
 
 /** Mọi thư mục con của `packages/` có `src/index.ts`. Đọc từ đĩa, không từ một danh sách. */
 function cacGoi(): string[] {
@@ -123,6 +139,19 @@ describe("biên giới module của mọi gói", () => {
     expect(
       [...MIEN_TRU.keys()].filter((ten) => coQuyTacBienGioi(ten)),
       "Gói này đã có quy tắc biên giới — gỡ nó khỏi MIEN_TRU và cập nhật khoản nợ 17.",
+    ).toEqual([]);
+  });
+
+  it("[INV-H16] danh sách miễn trừ RỖNG — không gói nào của packages/ còn đứng ngoài", () => {
+    // [S1.18 / khoản nợ 17] Vế này KHÔNG suy ra được từ hai khẳng định trên: một danh sách "chỉ
+    // được co lại" vẫn có thể dừng ở một dòng rồi ở đó mãi mãi, và dòng ấy sẽ mang một lý do
+    // KHÔNG BAO GIỜ HẾT HẠN (bản cũ có đúng một dòng như vậy: `test-support`, "hạ tầng kiểm thử").
+    // Dự án đã gặp khuôn danh-sách-tên hỏng ba lần (khoản nợ 3, 16, 17); lần chữa được là S1.15,
+    // và thứ làm nó chữa được là ghim danh sách loại trừ về RỖNG chứ không về "ngắn".
+    expect(
+      [...MIEN_TRU.entries()],
+      "Miễn trừ một gói khỏi biên giới module là MỞ LẠI khoản nợ 17. Nếu đó thật sự là việc phải " +
+        "làm, hãy ghi vào docs/STATE.md trước rồi sửa khẳng định này — đừng sửa khẳng định trước.",
     ).toEqual([]);
   });
 

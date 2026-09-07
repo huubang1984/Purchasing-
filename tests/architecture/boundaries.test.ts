@@ -1590,6 +1590,323 @@ describe("biên giới module của packages/unseal", () => {
   }, 60000);
 });
 
+// ==============================================================================================
+// [S1.18 / khoản nợ 17] BỐN GÓI S0 CUỐI CÙNG NHẬN BIÊN GIỚI — HỌ `g12-` … `g15-`
+//
+// Tới S1.2, `tests/architecture/bien-gioi-goi.test.ts` [INV-H16] đã đảo chiều bài toán: nó KHÔNG
+// liệt kê gói ĐƯỢC bảo vệ, nó liệt kê gói ĐƯỢC MIỄN, và danh sách miễn trừ là ĐÓNG, chỉ được CO
+// LẠI. Bốn dòng còn lại của danh sách ấy là `audit`, `db`, `tenancy`, `test-support` — và hai
+// trong bốn là hai mặt tiền chịu lực nhất kho: `tenancy/src/with-tenant.ts` là điểm DUY NHẤT gắn
+// `app.org_id` (toàn bộ RLS của 002–007 treo vào nó) và `audit/src/writer.ts` là đường ghi sổ
+// kiểm toán. Chúng chưa bao giờ được miễn vì an toàn hơn.
+//
+// LÝ DO MIỄN TRỪ ĐÃ ĐƯỢC ĐO LẠI, VÀ NÓ YẾU HƠN LÚC NÓ ĐƯỢC VIẾT. `MIEN_TRU` khai lý do là *"đóng
+// chúng là một thay đổi có rủi ro hồi quy riêng"*. Quét toàn kho trước khi viết vòng này: **0 chỗ
+// import phải di trú** — không một specifier subpath `@trustprocure/{audit,db,tenancy,test-support}/…`
+// nào, không một đường tương đối xuyên gói nào; mọi chỗ gọi đều đã đi qua barrel. Bốn họ quy tắc
+// dưới đây vì thế là thuần THÊM LỚP, không sửa một dòng mã gọi nào — và cái giá đã trả bằng phép
+// đo chứ không bằng một câu trấn an.
+//
+// `audit` CÓ HAI CỬA, và đó không phải một nhân nhượng. `packages/audit/package.json` khai
+// `"./anchor-sign"` (ADR-026 §4 — bộ ký mốc neo CỐ Ý không nằm ở `index.ts` vì tiến trình `api`
+// import gói này ở mọi đường ghi). Một `g12-` chỉ khai MỘT cửa sẽ chặn chính
+// `tools/neo-so-kiem-toan`: nó phá build chứ không đóng lỗ nào. Hai lớp chia việc và không thay
+// nhau: `g12-` canh *"không ai đi vòng QUA tường"*, `g11-` canh *"chỉ công cụ xuất neo được đi
+// qua cửa thứ hai"*. Đúng tiền lệ `crypto-keys` (index.ts + unwrap.ts, cửa thứ hai do ba quy tắc
+// `g1-` canh tiếp).
+// ==============================================================================================
+describe("biên giới module của packages/audit", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/audit/src", () => {
+    const probe = "packages/rfq/src/zzprobe-audit-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { appendAuditEvent } from "../../audit/src/writer.js";',
+        "export { appendAuditEvent };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/rfq", "packages/audit"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-audit-tuong-doi.ts");
+      expect(output).toContain("g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/audit/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/audit/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-audit-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-audit-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/audit/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-audit-moi", "packages/audit"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-audit-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-audit-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-audit-cua/src/dung.ts",
+      [
+        'import { appendAuditEvent } from "../../../packages/audit/src/index.js";',
+        "export { appendAuditEvent };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-audit-cua", "packages/audit"]);
+      expect(output).not.toContain("g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-audit-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa THỨ HAI (anchor-sign.ts) không bị g12- đóng — đo trên CÔNG CỤ THẬT", () => {
+    // Đối chứng dương này KHÔNG dựng một file giả: nó chạy trên `tools/neo-so-kiem-toan`, module
+    // sản phẩm DUY NHẤT được phép đi qua cửa thứ hai. Nếu `g12-` khai một cửa thay vì hai, dòng
+    // này đỏ — và nó đỏ vì quy tắc mới PHÁ BUILD, không vì nó đóng được lỗ nào. Đó là ca hỏng dễ
+    // xảy ra nhất khi sao chép khuôn `g5-`/`g6-` (một cửa) sang một gói có subpath export.
+    const { status, output } = depcruise(["tools/neo-so-kiem-toan", "packages/audit"]);
+    expect(
+      output,
+      "g12- đang đóng cả cửa `anchor-sign.ts` — công cụ xuất mốc neo không đi qua được",
+    ).not.toContain("g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai");
+    expect(status, `mã sản phẩm hiện tại vi phạm một quy tắc:\n${output}`).toBe(0);
+  }, 60000);
+});
+
+describe("biên giới module của packages/db", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/db/src", () => {
+    const probe = "packages/rfq/src/zzprobe-db-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      ['import { migrate } from "../../db/src/migrate.js";', "export { migrate };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/rfq", "packages/db"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-db-tuong-doi.ts");
+      expect(output).toContain("g13-db-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/db/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/db/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-db-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-db-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/db/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-db-moi", "packages/db"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g13-db-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-db-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-db-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-db-cua/src/dung.ts",
+      [
+        'import { migrate } from "../../../packages/db/src/index.js";',
+        "export { migrate };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-db-cua", "packages/db"]);
+      expect(output).not.toContain("g13-db-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-db-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+// ==============================================================================================
+// `packages/tenancy` — GÓI ĐÁNG CANH NHẤT TRONG BỐN, và lý do không nằm ở kích thước của nó.
+//
+// `with-tenant.ts` là điểm DUY NHẤT trong toàn kho gắn GUC `app.org_id`. Mọi policy RLS của
+// 002–007 đọc GUC đó; một đường vòng tới hàm này là một đường vòng tới quyết định "phiên này
+// thuộc tổ chức nào". Gói có đúng BA symbol giá trị ở cửa, nên lớp này rẻ tới mức nó lẽ ra phải
+// có từ S0 — và nó không có, suốt mười bảy vòng.
+// ==============================================================================================
+describe("biên giới module của packages/tenancy", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/tenancy/src", () => {
+    const probe = "packages/rfq/src/zzprobe-tenancy-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { withTenant } from "../../tenancy/src/with-tenant.js";',
+        "export { withTenant };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/rfq", "packages/tenancy"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-tenancy-tuong-doi.ts");
+      expect(output).toContain("g14-tenancy-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/tenancy/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/tenancy/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-tenancy-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-tenancy-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/tenancy/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-tenancy-moi", "packages/tenancy"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g14-tenancy-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-tenancy-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-tenancy-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-tenancy-cua/src/dung.ts",
+      [
+        'import { withTenant } from "../../../packages/tenancy/src/index.js";',
+        "export { withTenant };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-tenancy-cua", "packages/tenancy"]);
+      expect(output).not.toContain("g14-tenancy-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-tenancy-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+// ==============================================================================================
+// `packages/test-support` — VÌ SAO NÓ KHÔNG ĐƯỢC MIỄN TIẾP.
+//
+// Lý do miễn trừ cũ của nó KHÁC ba gói kia: *"hạ tầng kiểm thử, không phải mã sản phẩm"*. Câu ấy
+// đúng về bản chất và không đổi — nhưng nó là một lý do KHÔNG BAO GIỜ HẾT HẠN, và một dòng miễn
+// trừ không bao giờ hết hạn thì không phải một khoản nợ, nó là một lỗ vĩnh viễn. Đó chính là hình
+// dạng mà S1.15 đã bác bỏ một lần cho `HAM_TRIGGER_KHONG_GHIM`: danh sách loại trừ phải về RỖNG,
+// không phải "về ngắn".
+//
+// Vế *"test-support không được vào `dependencies` sản xuất"* do `pham-vi-san-xuat.test.ts` (khoản
+// nợ 21) giữ và KHÔNG đổi. Hai lớp đo hai thứ khác nhau: lớp kia canh gói này không bị PHÁT vào
+// đường sản xuất, lớp này canh không ai với vào RUỘT nó.
+// ==============================================================================================
+describe("biên giới module của packages/test-support", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/test-support/src", () => {
+    const probe = "packages/rfq/src/zzprobe-test-support-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { startPostgres } from "../../test-support/src/postgres.js";',
+        "export { startPostgres };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/rfq", "packages/test-support"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-test-support-tuong-doi.ts");
+      expect(output).toContain("g15-test-support-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/test-support/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/test-support/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-test-support-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-test-support-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/test-support/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise([
+        "apps/tmp-probe-test-support-moi",
+        "packages/test-support",
+      ]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g15-test-support-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-test-support-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-test-support-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-test-support-cua/src/dung.ts",
+      [
+        'import { startPostgres } from "../../../packages/test-support/src/index.js";',
+        "export { startPostgres };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise([
+        "apps/tmp-probe-test-support-cua",
+        "packages/test-support",
+      ]);
+      expect(output).not.toContain("g15-test-support-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-test-support-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
 // ==========================================================================================
 // [S1.17 / review lượt 9 — H9-4] HỌ "g11-" — KHẢ NĂNG KÝ MỐC NEO NGOÀI
 // ==========================================================================================
@@ -1662,6 +1979,15 @@ describe("họ g11- — khả năng ký mốc neo ngoài", () => {
         "specifier subpath phải RESOLVE được — nếu không, quy tắc g11- im lặng và test này " +
           "đỏ vì một lý do sai",
       ).not.toContain("g1-khong-import-trustprocure-khong-resolve-duoc");
+      // [S1.18] `g12-` ra đời sau test này và nó cũng phủ `packages/audit/src/`. Khẳng định dưới
+      // đây giữ cho HAI lớp chia việc đúng như thiết kế thay vì một lớp che lớp kia:
+      // `anchor-sign.ts` là CỬA của `g12-` (nếu không, `tools/neo-so-kiem-toan` không đi qua
+      // được), nên thứ chặn một người ngoài đi qua cửa ấy phải là `g11-` và CHỈ `g11-`.
+      expect(
+        output,
+        "g12- đang bắt trước g11- — nghĩa là anchor-sign.ts không còn là cửa, và công cụ xuất " +
+          "mốc neo cũng bị chặn cùng",
+      ).not.toContain("g12-audit-chi-index-va-anchor-sign-la-cua-cong-khai");
     } finally {
       rmSync(probe, { force: true });
     }
