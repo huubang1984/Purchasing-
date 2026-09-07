@@ -531,3 +531,43 @@ nào tới một `DELETE` tuỳ ý; 19 chuỗi `pg_get_triggerdef` khớp depars
 CHƯA GHIM, trong đó có báo giá append-only, hạn nộp, danh tính khách, hai trigger ngưỡng D2 và toàn
 bộ máy trạng thái mở thầu (sổ nợ 56).
 
+---
+
+# S1.15 — lượt review thứ BẢY (hai khoản nợ 56–57), 2026-09-07
+
+## Bảng
+
+| Hạng mục | Phạm vi | Commit được review | Môi trường đo | Phát hiện | Đóng ở commit |
+|---|---|---|---|---|---|
+| **S1.15** (ADR-025) | `db/migrations/044`, `045`, khối `[S1.15 / sổ nợ 56]` + dòng đầu của `NGOAI_LE_HINH_DANG` + mục policy dọn ở `hardening.always.sql`, `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts`, `db/migration-shape.test.ts`, `db/rls-coverage.int.test.ts`, `db/migrations.int.test.ts` | cây nhánh `no-56-57` tại `3d047bd` (hai commit nợ, trước lượt sửa) | Review tĩnh + ba phép đo chạy thật trên PostgreSQL 16.15 (EXPLAIN của câu dọn; hai đột biến trên file giả và trên migration tạm) | **0 CRITICAL, 0 HIGH, 3 MEDIUM, 3 LOW; sau sửa: 0 mở, một phần chênh thành sổ nợ 58** | `630613e` (H7-1..H7-6) |
+
+## Ba MEDIUM, ba LOW — và cái gì được làm với từng cái
+
+| Mã | Tóm tắt phát hiện | Trạng thái sau vòng sửa |
+|---|---|---|
+| H7-1 | **MEDIUM.** H6-6 đóng cái mù "trigger thứ 22 không ai khai" cho ĐÚNG MỘT hàm (`kiem_danh_tinh_theo_phien`). Cùng cái mù còn nguyên cho 42 hàm còn lại: mục ghim chỉ đòi các trigger ĐÃ KHAI phải tồn tại, nên gắn thêm một trigger cho một hàm đã ghim (vd. `bid_chi_ghi_them` lên một bảng mới) đi qua mọi lớp trong im lặng — và trigger ấy KHÔNG có định nghĩa `$def$` nào canh | **Đóng bằng test.** So BẰNG NHAU giữa "trigger đang chạy một hàm đã ghim" (đọc từ CSDL) và "trigger được khai trong khối ghim", cộng một khẳng định không tên nào khai ở hai mục. So theo TÊN chứ không theo *(hàm → tập trigger)*: hai trigger `mfa_reset_requests_kiem_danh_tinh*` chạy `kiem_danh_tinh_theo_phien` nhưng được ghim ở mục `mfa_reset_kiem_quyen`, và khoá theo hàm báo đỏ đúng cặp ấy vì một lý do sai (đã đo, và đó là lý do bản đầu của phép kiểm này bị viết lại). **RED thật:** migration tạm gắn `bid_chi_ghi_them` vào `organizations` ⇒ đỏ, nêu tên trigger |
+| H7-3 | **MEDIUM.** Chỉ số `otp_rate_limits_window_idx` mà chính `044` thêm KHÔNG BAO GIỜ được đọc, trong khi nó phải được GHI ở mọi lời gọi OTP — đường ghi nóng nhất của hệ | **Đóng bằng mã: gỡ chỉ số.** `EXPLAIN (ANALYZE, BUFFERS)` của đúng câu bộ dọn, 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức: `Seq Scan`, 18 999 hàng qua bộ lọc, **9,5 ms**, `shared hit=19246`. Vế lọc là OR của HAI policy trên HAI cột nên không chỉ số nào phục vụ được — bộ lập lịch chọn Seq Scan **kể cả khi ước lượng của nó là `rows=1`**, tức nó không có phương án nào khác. Giá phải trả ghi bằng số ngay trong `044`: ~0,5 µs/hàng ⇒ 5 triệu hàng ≈ 2,4 giây mỗi năm phút (**sổ nợ 58**, kèm đường thoát) |
+| H7-5 | **MEDIUM.** `NGOAI_LE_LAC_CHO` khoá (file, bảng, policy) nhưng KHÔNG khoá LỆNH, nên một `ALTER POLICY otp_rate_limits_don_cua_so_cu … USING (true)` viết ngay trong `044` cũng được dòng ngoại lệ ấy tha — đúng lớp lỗ mà vòng fix 3 đã đo được ở `NGOAI_LE_HINH_DANG` | **Đóng bằng mã.** Cửa chỉ mở cho `CREATE`, khớp với miễn trừ `AS RESTRICTIVE` ngay cạnh nó (`ALTER POLICY` không bao giờ được tha, vì sửa một policy đang có thì NỚI được). **RED thật** trên file giả: gỡ vế `CREATE` ⇒ test mới đỏ |
+| H7-2 | **LOW.** Vòng kiểm "mỗi loại trừ phải có lý do" chạy 0 lần sau khi danh sách về RỖNG, tức MÃ CHẾT: bỏ nó đi không test nào đỏ | **Đóng bằng test.** Đo THẲNG quy tắc ấy trên hai bản đồ giả (một lý do thật ⇒ qua, một lý do rỗng ruột ⇒ bị bắt), cùng khuôn `[I2]` đã dùng khi `NGOAI_LE_HINH_DANG` còn rỗng |
+| H7-4 | **LOW.** Lượt dọn ĐẦU TIÊN sau `044` xoá toàn bộ tồn đọng lịch sử của `otp_rate_limits` (bảng chưa từng có ai xoá), nên nó gần như chắc chắn vượt ngưỡng "ồn ào" và ghi một dòng. Dòng ấy ĐÚNG nhưng KHÔNG phải "tín hiệu tải bất thường" như câu ngay trên nó nói | **Đóng bằng ghi chú tại chỗ** ở `composition.ts`, cạnh đúng chỗ người trực đêm sẽ tìm |
+| H7-6 | **LOW.** Bộ dọn giữ một kết nối của pool YÊU CẦU trong suốt một câu quét toàn bảng không có trần | **Đóng bằng mã.** Một giao dịch với `SET LOCAL statement_timeout = 60s` — một lượt dọn bệnh lý hỏng ỒN ÀO và bộ đếm "hỏng liên tiếp" của composition nhìn thấy, thay vì giữ kết nối vô hạn định. `SET LOCAL` chứ không `SET`: kết nối trả về pool không mang theo trạng thái. Trần là một CHẶN TRÊN phòng thủ, không phải một ngưỡng hiệu năng — nó rộng gấp ~6 000 lần phép đo, và cố ý thế |
+
+**Ghi chú của reviewer, giữ lại để lượt sau khỏi tìm lại:** policy dọn là PERMISSIVE nên nó OR vào
+policy cách ly — với kết nối ĐÃ gắn tổ chức, vế `IS NULL` sai nên nó không cho thêm một hàng nào, và
+đó là lý do một đột biến gỡ vế ấy CHỈ đo được bằng câu `DELETE` TRẦN (bản đầu của phép đo viết
+`DELETE … WHERE` và không đo được gì — mệnh đề `WHERE` kéo theo policy SELECT, và policy cách ly giấu
+hàng của tổ chức kia đi); policy `otp_rate_limits_khach` là RESTRICTIVE `guest_session_id IS NULL`
+nên kết nối nền đi qua nó; `rowCount` của câu trần là một con số XUYÊN TỔ CHỨC, chỉ đọc được bởi
+chính tiến trình; `045` không phải thứ làm trạng thái cuối đúng (đã đo: bỏ một câu `ALTER` thì mục
+ghim vẫn kéo trigger về `'A'`) mà là hình dạng của lần triển khai; hai `CONSTRAINT TRIGGER` làm một
+phép kiểm cũ đỏ vì một lý do SAI (nó tìm đúng chuỗi `CREATE TRIGGER `) — đã sửa; ~1 000 dòng thân
+plpgsql chép lại trong hardening là một nguồn sự thật thứ hai, chấp nhận được ĐÚNG VÌ có hai lớp canh
+bản chép (đồng bộ thân, và "migration cuối cùng"); ghim thân KHÔNG bảo vệ trước một migration đánh số
+mới cố ý làm hàm yếu đi — nó chỉ bảo vệ trước TRÔI SAU TRIỂN KHAI.
+
+**Một điều KHÔNG phải phát hiện của lượt này nhưng được đo trong lượt ấy, ghi ra vì nó là một flake
+thật:** `pnpm evidence` đỏ đúng một ca — `[review H5-1] … lần 201: expected 200 to be 429`
+(`auth.int.test.ts:411`), chạy lại riêng tệp ấy 26/26 xanh, vòng 300 lời gọi tốn 4,6 s. Cửa sổ hạn
+mức là RỜI RẠC và làm tròn theo EPOCH, nên một vòng đếm vắt qua ranh giới thấy 200 ở đúng chỗ nó chờ
+429. Không phải hồi quy của vòng này (ba bộ đếm của `/auth/*` ở `caller_rate_limits`). Sửa ở
+`13b418f`: `beforeEach` của hai khối có vòng đếm không bắt đầu khi cửa sổ còn dưới 45 giây.

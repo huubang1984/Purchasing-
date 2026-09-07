@@ -24,7 +24,7 @@ import type { AddressInfo } from "node:net";
 import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
-import { PepperRing, donBucketNguoiGoiCu } from "@trustprocure/invitation";
+import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
@@ -53,9 +53,10 @@ const AUDIT_POOL_MAX = 2;
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
 /**
- * [sổ nợ 55 / 042] Nhịp dọn `caller_rate_limits`. Bảng ấy là bảng DUY NHẤT mà số hàng do người gọi
- * VÔ DANH quyết (không cần một tổ chức thật nào), nên nó phải có bộ dọn — mỗi lượt xoá cửa sổ cũ
- * hơn hai cửa sổ, tức không bao giờ chạm bộ đếm đang sống.
+ * [sổ nợ 55 / 042] Nhịp dọn `caller_rate_limits` ~~. Bảng ấy là bảng DUY NHẤT mà số hàng do người
+ * gọi VÔ DANH quyết~~ — và [sổ nợ 57 / 044] của cả `otp_rate_limits`. Bảng đầu vẫn là bảng duy nhất
+ * mà số hàng do người gọi VÔ DANH quyết; bảng thứ hai lớn theo lưu lượng THẬT nhưng chưa từng có ai
+ * xoá. Mỗi lượt xoá cửa sổ cũ hơn hai cửa sổ, tức không bao giờ chạm bộ đếm đang sống.
  */
 const DON_BUCKET_MS = 5 * 60 * 1000;
 /**
@@ -148,20 +149,37 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       // quyết, nên nó không được hỏng trong im lặng: mỗi lượt xoá được nhiều hơn `DON_BUCKET_ON_AO`
       // hàng là một tín hiệu tải bất thường, và hai lượt hỏng LIÊN TIẾP là một tín hiệu bộ dọn chết.
       // Cả hai chỉ ghi SỐ và TÊN lỗi — không giá trị nào của bảng đi vào log.
-      let honglienTiep = 0;
+      //
+      // [sổ nợ 57 / 044] Từ nay có HAI bảng phải dọn, và mỗi bảng giữ bộ đếm "hỏng liên tiếp"
+      // RIÊNG: gộp chúng vào một biến thì một bộ dọn khoẻ sẽ đặt lại bộ đếm của bộ dọn đã chết,
+      // và tín hiệu "hỏng hai lượt liên tiếp" biến mất đúng lúc nó cần được nghe.
+      const nhipDon = (ten: string, chay: () => Promise<number>): (() => void) => {
+        let hongLienTiep = 0;
+        return () => {
+          void chay()
+            .then((n) => {
+              hongLienTiep = 0;
+              if (n > DON_BUCKET_ON_AO) console.error(`[api] don ${ten}: ${n} hang`);
+            })
+            .catch((e: unknown) => {
+              hongLienTiep += 1;
+              console.error(
+                `[api] don ${ten} ${e instanceof Error ? e.name : "loi khong ro"}` +
+                  (hongLienTiep >= 2 ? ` (hong ${hongLienTiep} luot lien tiep — bang chi lon len)` : ""),
+              );
+            });
+        };
+      };
+      const donNguoiGoi = nhipDon("bucket nguoi goi", () => donBucketNguoiGoiCu(pool));
+      // [review H7-4] Lượt dọn ĐẦU TIÊN sau khi `044` được áp xoá TOÀN BỘ tồn đọng lịch sử của
+      // `otp_rate_limits` — bảng ấy chưa từng có ai xoá — nên nó gần như chắc chắn vượt
+      // `DON_BUCKET_ON_AO` và ghi một dòng. Dòng ấy ĐÚNG (số hàng là số hàng), nhưng nó KHÔNG phải
+      // "tín hiệu tải bất thường" như câu ở trên nói; người trực đêm đọc log lần đầu sau triển khai
+      // cần biết điều đó ở đây chứ không phải sau ba mươi phút truy nguyên.
+      const donOtp = nhipDon("bucket otp", () => donOtpRateLimitsCu(pool));
       dongHoDon = setInterval(() => {
-        void donBucketNguoiGoiCu(pool)
-          .then((n) => {
-            honglienTiep = 0;
-            if (n > DON_BUCKET_ON_AO) console.error(`[api] don bucket nguoi goi: ${n} hang`);
-          })
-          .catch((e: unknown) => {
-            honglienTiep += 1;
-            console.error(
-              `[api] don bucket nguoi goi ${e instanceof Error ? e.name : "loi khong ro"}` +
-                (honglienTiep >= 2 ? ` (hong ${honglienTiep} luot lien tiep — bang chi lon len)` : ""),
-            );
-          });
+        donNguoiGoi();
+        donOtp();
       }, DON_BUCKET_MS);
       dongHoDon.unref();
       const dc = server.address() as AddressInfo;

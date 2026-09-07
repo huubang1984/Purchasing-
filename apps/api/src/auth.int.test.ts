@@ -16,6 +16,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { OTP_RATE_WINDOW_SECONDS } from "@trustprocure/invitation";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
@@ -151,6 +152,9 @@ afterAll(async () => {
 });
 
 describe("/auth/link — không liệt kê được email", () => {
+  // [S1.15] Khối này cũng có một vòng đếm (`LOGIN_MAX_TOKENS_PER_WINDOW + 3`) — cùng lý do.
+  beforeEach(choDuCuaSo);
+
   it("email đúng, email lạ, email bị đình chỉ: CÙNG một 200; token chỉ đi tới bộ gửi, KHÔNG về client", async () => {
     await taoNguoi("a@vidu.vn");
     await taoNguoi("dinhchi@vidu.vn", "SUSPENDED");
@@ -230,7 +234,39 @@ describe("/auth/link — không liệt kê được email", () => {
   });
 });
 
+/**
+ * [S1.15] CỬA SỔ HẠN MỨC LÀ RỜI RẠC, VÀ MỘT VÒNG ĐẾM VẮT QUA RANH GIỚI CỦA NÓ LÀ MỘT FLAKE.
+ *
+ * `demVaTang`/`tangBucketNguoiGoi` làm tròn `window_start` xuống bội của `OTP_RATE_WINDOW_SECONDS`
+ * TÍNH TỪ EPOCH, nên mọi bộ đếm về 0 cùng lúc, ở những mốc biết trước. Chính `invitation.ts` đã ghi
+ * tính chất ấy như một đánh đổi có chủ đích ("một kẻ tấn công canh đúng ranh giới hai cửa sổ gửi
+ * được GẤP ĐÔI hạn mức"). Hệ quả cho bộ test thì chưa ai ghi, và nó ĐÃ NỔ:
+ *
+ *   Lượt `pnpm evidence` của vòng S1.15 (song song, máy phát triển) — 1 test đỏ, 1277 khẳng định:
+ *     [review H5-1] MỘT địa chỉ không khoá được cả tổ chức …
+ *       AssertionError: lần 201: expected 200 to be 429   (auth.int.test.ts:411)
+ *   Chạy LẠI riêng tệp ấy ngay sau đó: 26/26 XANH, vòng 300 lời gọi tốn 4,6 s.
+ *
+ * Chữ ký khớp đúng một cơ chế: sau ~200 lời gọi (≈3 s ở nhịp đo được), cửa sổ lăn sang mốc mới và
+ * bộ đếm của người gọi về 0 ⇒ lời gọi 201 được 200 thay vì 429. KHÔNG phải hồi quy của vòng này:
+ * ba bộ đếm của `/auth/*` nằm ở `caller_rate_limits`, không phải bảng mà `044` đụng tới.
+ *
+ * Bản vá KHÔNG nới một ngưỡng nào và không bọc lại một khẳng định nào: nó chỉ không bắt đầu một
+ * vòng đếm khi cửa sổ sắp hết. Ngưỡng 45 giây là ~10 lần thời gian đo được của vòng dài nhất, nên
+ * nó chịu được cả một lượt chạy song song chậm gấp mấy lần; và vì nó chỉ chờ khi thật sự cần
+ * (5% số lượt), giá trung bình là vài giây cho cả tệp.
+ */
+const CAN_CUA_SO_MS = 45_000;
+const choDuCuaSo = async (): Promise<void> => {
+  const cuaSoMs = OTP_RATE_WINDOW_SECONDS * 1000;
+  const conLai = cuaSoMs - (Date.now() % cuaSoMs);
+  if (conLai < CAN_CUA_SO_MS) await new Promise((xong) => setTimeout(xong, conLai + 100));
+};
+
 describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đếm sống qua rollback của handler", () => {
+  // Mọi test trong khối này đếm CỘNG DỒN qua nhiều lời gọi, nên không cái nào được vắt qua ranh giới.
+  beforeEach(choDuCuaSo);
+
   it("/auth/link: lần thứ N+1 từ cùng địa chỉ ⇒ 429 + Retry-After; địa chỉ khác vẫn 200; email lạ cũng bị đếm", async () => {
     for (let i = 0; i < LOGIN_LINK_MAX_PER_CALLER; i += 1) {
       expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: `khong-co-${i}@vidu.vn` } })).status).toBe(200);

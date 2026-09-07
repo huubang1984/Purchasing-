@@ -494,13 +494,65 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
 }
 
 /**
- * [review H6-5 ⑵ / sổ nợ 57] `otp_rate_limits` KHÔNG có bộ dọn, và không có ở đây là một quyết định
- * có lý do chứ không phải một lần quên: bảng ấy bật RLS theo `org_id`, nên một `DELETE` nền (ngoài
- * `withTenant`) lọc hết và xoá 0 hàng; còn dọn TỪNG TỔ CHỨC đòi biết tập tổ chức, mà `app_api` không
- * đọc được danh sách ấy (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022),
- * và tập "tổ chức đã thấy" của tiến trình `api` không phủ các tổ chức chỉ có lưu lượng KHÁCH.
- * `caller_rate_limits` (042) dọn được đúng vì nó không mang `org_id`. Sổ nợ 57 ghi ba đường đã xét.
+ * [sổ nợ 57 / migration 044] Dọn `otp_rate_limits`. ~~`otp_rate_limits` KHÔNG có bộ dọn, và không
+ * có ở đây là một quyết định có lý do chứ không phải một lần quên: bảng ấy bật RLS theo `org_id`,
+ * nên một `DELETE` nền (ngoài `withTenant`) lọc hết và xoá 0 hàng; còn dọn TỪNG TỔ CHỨC đòi biết
+ * tập tổ chức, mà `app_api` không đọc được danh sách ấy (cùng ràng buộc đã buộc runner outbox nhận
+ * `listOrganizations` — ADR-022), và tập "tổ chức đã thấy" của tiến trình `api` không phủ các tổ
+ * chức chỉ có lưu lượng KHÁCH.~~ Cả ba câu ấy vẫn ĐÚNG; thứ đổi là `044` không đi đường nào trong
+ * ba: nó thêm một policy `FOR DELETE` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức, và chỉ trên
+ * hàng đã quá SÀN 30 phút. Nên hàm này KHÔNG hỏi "tổ chức nào" — nó hỏi "hàng này còn chặn được ai".
+ *
+ * KHÔNG có tham số tuổi, và KHÔNG THỂ có — đây là phần đắt nhất của thiết kế và nó phải đọc được
+ * ngay ở đây. PostgreSQL đòi policy `SELECT` cho một `DELETE` NGAY KHI câu lệnh tham chiếu cột của
+ * bảng, kể cả chỉ trong `WHERE`. Bộ dọn cố ý KHÔNG có đường đọc (policy của nó là `FOR DELETE`, để
+ * `[INV-F1]` còn đúng), nên một câu `DELETE … WHERE window_start < …` xoá ĐÚNG 0 hàng — đã đo. Câu
+ * TRẦN không tham chiếu cột nào; PostgreSQL tự AND vế `USING` của policy vào, nên mốc tuổi do CSDL
+ * áp. Hệ quả: `044` là nơi DUY NHẤT con số 30 phút có hiệu lực, và `don-bucket.test.ts` canh nó.
+ *
+ * Nhận `pg.Pool` chứ không `PoolClient` vì đây là việc NỀN, và vì câu trần chỉ an toàn trên kết nối
+ * CHƯA gắn tổ chức: gắn rồi thì policy cách ly duyệt mọi hàng của tổ chức ấy — kể cả cửa sổ đang
+ * đếm — và bộ đếm hạn mức của họ về 0. Không lớp nào ở CSDL phân biệt được ca ấy với một lệnh dọn
+ * hợp lệ, nên phép phân biệt nằm ở đây: lấy client, HỎI `app.org_id`, rồi mới xoá.
  */
+export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
+  const client = await pool.connect();
+  try {
+    // [review H7-6] MỘT giao dịch, và có TRẦN THỜI GIAN. Câu dọn quét TOÀN BẢNG (vế lọc là OR của
+    // hai policy trên hai cột nên không chỉ số nào phục vụ được — đã đo bằng EXPLAIN, xem `044`),
+    // nên chi phí của nó lớn theo số hàng. Không có trần, một lần dọn bệnh lý giữ một kết nối của
+    // pool YÊU CẦU vô hạn định; có trần, nó hỏng ỒN ÀO và bộ đếm "hỏng liên tiếp" ở composition
+    // nhìn thấy. `SET LOCAL` chứ không `SET`: kết nối trả về pool không được mang theo trạng thái.
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL statement_timeout = ${TRAN_DON_MS}`);
+    const { rows } = await client.query<{ tu_do: boolean }>(
+      "SELECT NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL AS tu_do",
+    );
+    if (rows[0]?.tu_do !== true) {
+      throw new InvitationError(
+        "bộ dọn otp_rate_limits nhận một kết nối ĐÃ gắn tổ chức — câu DELETE trần ở đó sẽ xoá cả " +
+          "cửa sổ đang đếm của tổ chức ấy",
+      );
+    }
+    const kq = await client.query("DELETE FROM otp_rate_limits");
+    await client.query("COMMIT");
+    return kq.rowCount ?? 0;
+  } catch (loi) {
+    // Không nuốt: `ROLLBACK` chỉ để kết nối về trạng thái dùng lại được, lỗi THẬT vẫn bay lên.
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw loi;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * [review H7-6] Trần thời gian của MỘT lượt dọn `otp_rate_limits`, mili-giây. Không phải một ngưỡng
+ * hiệu năng: nó là mốc mà quá đó thì "đang dọn" và "đang treo" không phân biệt được nữa, và một
+ * kết nối của pool yêu cầu bị giữ là cái giá thật. Rộng hơn nhiều so với phép đo (20 000 hàng =
+ * 9,5 ms) vì nó không được kêu ở tải bình thường.
+ */
+const TRAN_DON_MS = 60_000;
 
 /** Miền băm của bucket toàn cục — tách khỏi `org_id ‖ kind` của `otp_rate_limits` (042). */
 const MIEN_BUCKET_TOAN_CUC = "LOGIN_CALLER_TOAN_CUC";

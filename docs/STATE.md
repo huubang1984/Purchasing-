@@ -4,7 +4,7 @@
 > nguồn thật — mã, test và hành vi runtime là bằng chứng mạnh hơn tài liệu này.
 > Không bao giờ ghi "đã xong / đã test / đã sửa / đã triển khai" nếu chưa thực sự kiểm chứng.
 
-**Cập nhật lần cuối:** 2026-09-07 (**S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
+**Cập nhật lần cuối:** 2026-09-07 (**S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG (ADR-025: bảng tenant dọn được mà không đọc được; danh sách loại trừ ghim về RỖNG)** — mục 30; cùng ngày: **S1.14 — HAI KHOẢN NỢ 54–55 ĐÓNG (ADR-024: bộ đếm người gọi ngoài cây tenant, danh sách ghim tự đối chiếu)** — mục 29; cùng ngày: **S1.13 — BA KHOẢN NỢ 51–53 ĐÓNG (ADR-023: việc sau commit của runner, hạn mức tổ chức + tổ chức lạ, hardening ghim thân trigger)** — mục 28; cùng ngày: **S1.12 — BẢY KHOẢN NỢ 38–43, 49 ĐÓNG cùng vòng (ADR-022, migration `038`–`040`)** — mục 27; trước đó 2026-09-06: **S1.11 — tiến trình `api` chạy thật: ADR-021, migration `037`, `main.ts`, nợ 50 mở và đóng cùng vòng** — mục 26; trước đó cùng ngày: **S1.10 ĐI HẾT BẢY HẠNG MỤC** — 10.6 kịch bản 41 qua HTTP **51/51**, 10.7 HAI lượt
 review + hai vòng sửa, migration `032`, sổ nợ tới **49**, **nợ 44 đóng bằng `033`** — mục 23, **nợ 47 và 48 đóng (`034`)** — mục 24, **nợ 45 và 46 đóng (`035`, `036`)** — mục 25; xem *Hành động tiếp theo* mục 20–25; 10.5 mục 19; 10.4 mục 18; 10.3 mục 17; 10.2 mục 16; ADR-020 chốt cùng ngày; PR #2 và #3 đã merge vào `master` — `dca6dab`. Trước
 đó cùng ngày: hai mốc chết của tầng T1 nổ ở CI sau commit `623458b`, đã đóng ở `83e4cba` — mục 14. Trước đó: 2026-09-05, S1.6–S1.9 đã có mã,
 một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiện mức HIGH, và ba vòng trả nợ)
@@ -391,8 +391,9 @@ Sổ nợ gom từ mười một task **và từ review cuối toàn nhánh**. M
 | 53 | ~~**[review lượt 4, H4-10] Bộ gửi chạy TRONG giao dịch của job `LOGIN_LINK_SEND`** — `send` xong mà kết cục không ghi được (mất lease, COMMIT hỏng) ⇒ email đã đi mang token bị rollback (link chết), rồi email thứ hai (at-least-once). Nay chỉ có trần 5 s riêng cho `send`. Khi có bộ gửi thật: tách gửi khỏi giao dịch (ghi token + commit, gửi, đánh dấu) hoặc pool riêng nhỏ cho runner~~ **ĐÓNG 2026-09-07 (S1.13, ADR-023)** — `JobHandler` trả về `SauCommit`; runner chạy nó sau khi DONE đã commit và kết nối đã huỷ, có trần; ném/treo ⇒ `AFTER_COMMIT_FAILED`, job vẫn DONE, không thử lại (at-most-once cho phần gửi — nói ra ở ADR-023 §1). Handler `LOGIN_LINK_SEND` trả về hàm gửi: token commit trước, gửi sau | `apps/api/src/outbox-api.ts` |
 | 54 | ~~**[review lượt 5, H5-5] Danh sách ghim thân hàm trigger ở hardening vẫn VIẾT TAY** — 48 hàm `RETURNS trigger` trong `public`, ghim 8 (S1.13) + hai của D3 + `chan_sua_xoa`; 21 trigger của `kiem_danh_tinh_theo_phien` (013) chưa ghim định nghĩa. Cần một test "mọi hàm trigger trong `public` có mặt trong danh sách ghim (hoặc trong danh sách loại trừ có lý do)" để danh sách không tự làm mù mình lần thứ ba~~ **ĐÓNG 2026-09-07 (S1.14, ADR-024)** — test ĐẦY ĐỦ ở `db/migrations.int.test.ts`: tập hàm `RETURNS trigger` trong `public` = (hàm hardening có canh, đọc THẲNG từ `hardening.always.sql`) ∪ (35 mục loại trừ, mỗi mục một dòng nói nó canh gì), hai tập rời nhau — thêm một hàm trigger mới mà không khai là ĐỎ (đo bằng migration tạm). Ghim thêm định nghĩa 19 trigger danh tính của `kiem_danh_tinh_theo_phien` (rải bảy migration, `tgenabled='O'`). Loại trừ = CHƯA ghim, không phải không cần ghim — sổ nợ 56 | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
 | 55 | ~~**[review lượt 5, H5-3] Oracle tồn tại tổ chức qua 429 (H4-5) vẫn còn, đổi dạng** — bucket bộ nhớ (tổ chức lạ) và bucket CSDL (tổ chức thật) là hai bộ đếm rời: mồi N lần vào một UUID giả rồi gửi UUID ứng viên ⇒ 429 = lạ, 200 = thật, MỘT lời gọi. Chấp nhận (UUIDv4 không vét cạn được); đóng thật cần một bảng bucket người gọi KHÔNG khoá ngoại tới `organizations`, tổ chức thật hay lạ đếm cùng hàng~~ **ĐÓNG 2026-09-07 (S1.14, ADR-024)** — migration `042`: bảng `caller_rate_limits` không `org_id`, không khoá ngoại ⇒ tổ chức thật và tổ chức lạ tăng CÙNG MỘT HÀNG (429 hết là oracle); `BucketBoNho` của nợ 52 bị xoá; bộ dọn nền 5 phút xoá cửa sổ cũ hơn hai cửa sổ; policy DUY NHẤT là 'mọi hàng, trừ phiên khách'. Bucket toàn tổ chức ở lại `otp_rate_limits` — phần chênh còn lại là THỜI GIAN của một giao dịch lỗi khoá ngoại | `apps/api/src/dispatch.ts`, `apps/api/src/bucket-bo-nho.ts` |
-| 56 | **[S1.14 / nợ 54] 35 hàm `RETURNS trigger` còn lại CHƯA được hardening ghim thân** — danh sách có tên và có lý do ở `HAM_TRIGGER_KHONG_GHIM` (`db/migrations.int.test.ts`), và test đầy đủ của nợ 54 giữ cho nó không lớn thêm trong im lặng. Cả 35 thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE FUNCTION … RETURN NEW` sau triển khai sống qua `migrate()`). Thứ tự đóng nên theo "app_api ghi được bảng nó canh không": nhóm RFQ/unseal/bid trước (máy trạng thái, D2, append-only), nhóm còn lại sau | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
-| 57 | **[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng: ⑴ `DELETE` nền ngoài `withTenant` bị RLS lọc hết (xoá 0 hàng); ⑵ dọn từng tổ chức đòi biết TẬP tổ chức, mà `app_api` không đọc được (cùng ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022), và tập "tổ chức đã thấy" của tiến trình `api` không phủ tổ chức chỉ có lưu lượng KHÁCH; ⑶ dọn cơ hội trong `demVaTang` là một `DELETE` trên MỌI lời gọi OTP. Lý do đã viết ở `packages/invitation/src/invitation.ts` | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
+| 56 | ~~**[S1.14 / nợ 54] 35 hàm `RETURNS trigger` còn lại CHƯA được hardening ghim thân** — danh sách có tên và có lý do ở `HAM_TRIGGER_KHONG_GHIM` (`db/migrations.int.test.ts`), và test đầy đủ của nợ 54 giữ cho nó không lớn thêm trong im lặng. Cả 35 thuộc cùng lớp trôi R3 (một `CREATE OR REPLACE FUNCTION … RETURN NEW` sau triển khai sống qua `migrate()`). Thứ tự đóng nên theo "app_api ghi được bảng nó canh không": nhóm RFQ/unseal/bid trước (máy trạng thái, D2, append-only), nhóm còn lại sau~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — ghim nốt 35 hàm, 41 trigger, cùng khuôn khối S1.13; `HAM_TRIGGER_KHONG_GHIM` nay **RỖNG** và phép kiểm đổi từ "hai tập phủ nhau" sang "tập ghim BẰNG tập thật" (thêm một dòng loại trừ là MỞ LẠI khoản nợ này). Không đóng theo nhóm như dự kiến — ghim cả 35 cùng lúc vì bản ghim đọc THẲNG từ CSDL nên chia nhóm chỉ thêm việc. Ba lớp mới đi kèm: ⑴ migration ghi trong mỗi mục phải là migration CUỐI CÙNG định nghĩa hàm (bảy hàm được `CREATE OR REPLACE` nhiều lần — ghim nhầm bản cũ làm `migrate()` LÙI hàm ở MỌI lần chạy, và test đồng bộ KHÔNG thấy); ⑵ `045` nâng 37 trigger còn lại lên `ENABLE ALWAYS` ⇒ 80/80 là `'A'`, có phép kiểm suy từ tính chất; ⑶ [H7-1] tập trigger của MỌI hàm đã ghim phải bằng đúng tập đã khai | `db/migrations/hardening.always.sql`, `db/migrations.int.test.ts` |
+| 57 | ~~**[review lượt 6, H6-5 ⑵] `otp_rate_limits` không có bộ dọn** — bảng chỉ lớn lên: một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ; `GRANT DELETE` có từ 010 nhưng chưa ai gọi. Ba đường đã xét, đường nào cũng vướng~~ **ĐÓNG 2026-09-07 (S1.15, ADR-025)** — đường THỨ TƯ: migration `044` thêm một policy `FOR DELETE TO app_api` chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên hàng đã quá SÀN 30 phút. Ba đường cũ vẫn đúng như đã ghi; đường này không hỏi "tổ chức nào" mà hỏi "hàng này còn chặn được ai". Bộ dọn **xoá được mà KHÔNG đọc được** (`FOR DELETE`, không `FOR ALL` ⇒ `[INV-F1]` còn đúng nguyên văn), nên câu dọn KHÔNG có `WHERE`: PostgreSQL đòi policy SELECT ngay khi câu lệnh tham chiếu cột — đã đo, `WHERE` ⇒ 0 hàng, câu trần ⇒ xoá đúng hàng quá sàn. Hai cửa ngoại lệ có tên được mở (`NGOAI_LE_HINH_DANG` dòng ĐẦU TIÊN sau ba vòng rỗng, `NGOAI_LE_LAC_CHO`), mỗi cửa một meta-test | `packages/invitation/src/invitation.ts`, `apps/api/src/composition.ts` |
+| 58 | **[S1.15 / review H7-3] Bộ dọn `otp_rate_limits` quét TOÀN BẢNG mỗi năm phút** — và không sửa được bằng một chỉ số: vế lọc là OR của hai policy trên hai cột, nên bộ lập lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1` (đo bằng `EXPLAIN (ANALYZE, BUFFERS)`: 20 000 hàng ⇒ 9,5 ms, `shared hit=19246`). ~0,5 µs/hàng, tức 5 triệu hàng ≈ **2,4 giây** mỗi lượt, giữ một kết nối của pool YÊU CẦU (nay có trần `statement_timeout` 60 s — H7-6). Chỉ số `window_start` đã bị GỠ khỏi `044` vì nó không bao giờ được đọc nhưng phải được ghi ở mọi lời gọi OTP. Đường thoát khi quy mô đòi: bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng được chỉ số) cho các tổ chức tiến trình đã thấy, CỘNG câu trần cho phần còn lại | `packages/invitation/src/invitation.ts`, `db/migrations/044_don_bucket_otp.sql` |
 
 ## Kiến trúc
 
@@ -1132,6 +1133,58 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     này là bản đối chiếu, không phải bản sửa. Số commit của PR #1 (S0) là 46, của PR #2 (S1) là
     **44**; tổng lịch sử `master` sau hai lần merge: 92 commit trên `0b073d2`.
 
+30. **[2026-09-07] S1.15 — HAI KHOẢN NỢ 56–57 ĐÓNG, mỗi khoản một commit (ADR-025).** Thứ tự 57 →
+    56 vì 56 ghim DANH SÁCH hàm trigger nên phải đi sau khi lược đồ không còn gì đổi — cùng lý do
+    đã dùng ở S1.14. Hai quyết định đáng đọc:
+
+    ⑴ **Một bảng tenant DỌN ĐƯỢC MÀ KHÔNG ĐỌC ĐƯỢC.** `otp_rate_limits` chỉ lớn lên từ `010`, và ba
+    đường mà sổ nợ 57 đã xét đều vướng RLS. Đường thứ tư (`044`) không hỏi *"tổ chức nào"* mà hỏi
+    *"hàng này còn chặn được ai"*: một policy `FOR DELETE TO app_api` chỉ có hiệu lực trên kết nối
+    CHƯA gắn tổ chức, chỉ trên hàng đã quá sàn 30 phút. Điều đắt nhất là một RÀNG BUỘC chứ không
+    phải một lựa chọn — PostgreSQL đòi policy `SELECT` cho một `DELETE` ngay khi câu lệnh tham chiếu
+    cột, nên bộ dọn chạy câu **TRẦN** và **không có tham số tuổi, và không thể có**. Đo trực tiếp,
+    dưới `app_api` chưa gắn tổ chức, một hàng 90 phút tuổi: `DELETE … WHERE window_start < …` ⇒ **0
+    hàng**; `DELETE FROM otp_rate_limits` ⇒ **1 hàng**.
+
+    ⑵ **"Loại trừ" là một khoản nợ, không phải một hạng mục.** 35 dòng loại trừ của S1.14 canh máy
+    trạng thái RFQ, D2, append-only của báo giá, tính bất biến của vật liệu khoá và tính đơn điệu của
+    thu hồi — nay tất cả có mục ghim thật, `HAM_TRIGGER_KHONG_GHIM` **RỖNG**, và phép kiểm đổi sang
+    *"tập ghim BẰNG tập thật"*.
+
+    **Lớp mới đáng nhớ nhất của vòng**, và nó không phải lo xa: **bản ghim phải trỏ vào định nghĩa
+    CUỐI CÙNG**. Bảy trong 35 hàm được `CREATE OR REPLACE` nhiều lần; hardening chạy TRƯỚC vòng
+    migration đánh số và migration cũ không chạy lại, nên một bản ghim trỏ vào thân CŨ làm
+    `migrate()` **LÙI** hàm về thân ấy ở MỌI lần triển khai, vĩnh viễn, trong im lặng — và test đồng
+    bộ KHÔNG thấy, vì nó so hardening với đúng file được khai và hai bên khớp nhau hoàn hảo.
+
+    **Sổ nợ mở còn:** 23 và nửa sau của 30 (từ S0), cộng **58 mới mở** (bộ dọn quét toàn bảng).
+
+    **Lượt review an ninh thứ bảy:** 0 CRITICAL, 0 HIGH, **3 MEDIUM, 3 LOW**
+    (`evidence/security-reviews.md` §S1.15) — cả sáu đóng trong cùng PR. MEDIUM đáng nhớ: ⑴ cùng cái
+    mù mà H6-6 đóng cho MỘT hàm vẫn nguyên cho 42 hàm còn lại — gắn thêm một trigger cho một hàm đã
+    ghim đi qua mọi lớp trong im lặng; ⑵ chỉ số `otp_rate_limits_window_idx` mà chính vòng này thêm
+    **không bao giờ được đọc** (`EXPLAIN` cho Seq Scan kể cả khi ước lượng là `rows=1`) nhưng phải
+    được ghi ở mọi lời gọi OTP — đã gỡ; ⑶ cửa `NGOAI_LE_LAC_CHO` không khoá LỆNH nên một
+    `ALTER POLICY … USING (true)` trong cùng file cũng được tha.
+
+    **MỘT FLAKE ĐƯỢC ĐO VÀ SỬA, không phải hồi quy của vòng này.** Lượt `pnpm evidence` đỏ đúng một
+    ca: `[review H5-1] … lần 201: expected 200 to be 429` (`auth.int.test.ts:411`); chạy lại riêng
+    tệp ấy ngay sau đó 26/26 xanh, vòng 300 lời gọi tốn 4,6 s. Chữ ký khớp một cơ chế mà chính dự án
+    đã ghi ra từ trước: cửa sổ hạn mức RỜI RẠC, làm tròn theo EPOCH, nên mọi bộ đếm về 0 cùng lúc ở
+    những mốc biết trước — một vòng đếm vắt qua ranh giới ấy thấy 200 ở đúng chỗ nó chờ 429. Bản vá
+    không nới một ngưỡng nào: `beforeEach` của hai khối có vòng đếm không bắt đầu khi cửa sổ còn dưới
+    45 giây. Ba bộ đếm của `/auth/*` nằm ở `caller_rate_limits`, không phải bảng mà `044` đụng tới.
+
+    Và bản vá ấy CHƯA ĐỦ ở lượt đầu: lượt `pnpm test:int` đầy đủ tiếp theo (trên `f879d5c`) vẫn đỏ
+    **1/723**, và danh tính ca ấy MẤT vì phép lọc đầu ra của chính lượt chạy — ghi ra thay vì im.
+    Truy theo LỚP thay vì theo ca: `guest.int.test.ts` có đúng cùng hình dạng (30 + 30 lời gọi đếm
+    cộng dồn), nên nó nhận cùng bản vá (`c4b453d`). Ba lượt `test:int` đầy đủ SAU đó: **723/723,
+    723/723, 723/723**, và `pnpm evidence` thoát mã **0** (lượt trước thoát mã 1 dù cổng vẫn xanh).
+
+    **Số đo trên HEAD (`c4b453d`):** `pnpm t0` 178 module / 0 vi phạm; `pnpm test` 554/554;
+    `pnpm test:int` **723/723**; `pnpm evidence` **51/51**, **1277 khẳng định**, cổng XANH, vitest
+    thoát mã 0.
+
 > Hành động cũ *"Chạy `security-reviewer` cho Task 7, 8, 9"* đã được **gỡ**: các lượt review ấy
 > đã xảy ra (xem `evidence/security-reviews.md`). Nó ra đời từ đúng lời khai sai đã gạch bỏ ở
 > mục 8 của bảng điều kiện hoàn thành — một ví dụ sống cho việc một câu sai trong tài liệu trạng
@@ -1144,7 +1197,7 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
-| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ **Hai mươi ADR** — 001–010 và 012–019 *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
+| `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ ~~**Hai mươi ADR**~~ **HAI MƯƠI LĂM ADR** — dòng này đã thiu qua bốn vòng (021–024 ra đời mà con số không đổi; [S1.15] đối chiếu và sửa): 001–010 và 012–019 *Đã chấp nhận*; **021** (vai ứng dụng là thành viên), **022** (`/auth/link` chỉ xếp hàng), **023** (việc SAU COMMIT của runner), **024** (bộ đếm người gọi ngoài cây tenant), **025** (bảng tenant dọn được mà không đọc được) *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |
 | `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ ~~**Sổ đăng ký 49 bất biến** (34 nghiệp vụ + **15** hàng rào; H14/H15 thêm ở S1.1)~~ **Sổ đăng ký 51 bất biến** (34 nghiệp vụ + **17** hàng rào; H16 ở S1.2, **H17 ở S1.10.2** — mọi route ghi của `apps/api` khai mã quyền), bảy tầng kiểm thử, evidence pack |
 | `evidence/INV-matrix.md` | **Ma trận bất biến** — sinh tự động, không sửa tay |
 | `evidence/security-reviews.md` | **Dấu vết review an ninh** — một dòng mỗi task, commit được review, môi trường đo, phát hiện theo mức, commit đóng |

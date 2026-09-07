@@ -484,3 +484,22 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     `hardening.always.sql`, hoặc khai nó vào `HAM_TRIGGER_KHONG_GHIM` kèm một dòng nói nó canh gì.
     Đó là cố ý: hai lượt trước danh sách ghim thiếu đúng thứ vừa thêm mà không lớp nào kêu.
 
+12. **[2026-09-07] S1.15 — sổ nợ 56–57 đóng, ADR-025.** Ba thứ người tiếp theo phải biết:
+
+    ⑴ **`HAM_TRIGGER_KHONG_GHIM` nay RỖNG.** Thêm một hàm `RETURNS trigger` vào bất kỳ migration nào
+    làm test đầy đủ đỏ, và đường đi đúng nay CHỈ CÒN MỘT: ghim thân nó ở `hardening.always.sql` theo
+    khuôn của khối `[S1.15 / sổ nợ 56]`, và khai nó vào `HAM_56` ở `db/migrations.int.test.ts`. Khai
+    vào danh sách loại trừ vẫn viết được, nhưng nó sẽ làm một khẳng định KHÁC đỏ — đó là MỞ LẠI sổ nợ
+    56 và phải được ghi ra ở STATE, không lặng lẽ thành một dòng trong một map.
+
+    ⑵ **Nếu bạn `CREATE OR REPLACE` một hàm trigger ĐÃ ĐƯỢC GHIM trong một migration mới, bạn PHẢI
+    cập nhật bản ghim và trường `migration` của nó.** Không phải để cho đẹp: hardening chạy TRƯỚC
+    vòng migration đánh số, và migration cũ đã có dòng trong `schema_migrations` nên không chạy lại —
+    nên bản ghim cũ sẽ LÙI hàm của bạn về thân cũ ở MỌI lần `migrate()`, vĩnh viễn. Có hai test canh
+    (đồng bộ thân, và "migration cuối cùng"), nhưng hãy biết cơ chế thay vì chỉ biết test.
+
+    ⑶ **`otp_rate_limits` nay có bộ dọn, và câu dọn của nó KHÔNG có `WHERE` — đừng "sửa" nó.**
+    PostgreSQL đòi policy `SELECT` cho một `DELETE` ngay khi câu lệnh tham chiếu cột; bảng này cố ý
+    không cấp đường đọc nào cho kết nối nền (`FOR DELETE`, không `FOR ALL`), nên thêm một `WHERE` sẽ
+    làm bộ dọn xoá đúng 0 hàng. Mốc tuổi nằm trong policy `044` chứ không ở phía gọi, và đổi nó là
+    đổi ở HAI chỗ (migration `044` + bản ghim hardening) — có test đọc thẳng cả hai file.

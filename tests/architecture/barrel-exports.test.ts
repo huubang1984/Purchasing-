@@ -512,6 +512,9 @@ const DANH_SACH_TRANG_INVITATION = [
   "createInvitation",
   // [sổ nợ 55 / 042] Xoá hàng cũ của bucket toàn cục; nhận Pool, trả số hàng — không token, không phiên.
   "donBucketNguoiGoiCu",
+  // [sổ nợ 57 / 044] Cùng hình dạng, bảng khác: nhận Pool, trả số hàng. Nó KHÔNG nhận mốc tuổi —
+  // mốc ấy nằm trong policy `otp_rate_limits_don_cua_so_cu`, và câu DELETE của nó không có `WHERE`.
+  "donOtpRateLimitsCu",
   "issueMagicLinkToken",
   "issueOtpChallenge",
   "redeemMagicLink",

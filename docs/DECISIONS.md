@@ -2024,3 +2024,114 @@ cùng bất biến D với hai trigger `'A'` của 040. **[review H6-6]** Trục
 2. **54:** thêm một hàm `RETURNS trigger` vào một migration tạm ⇒ test ĐỎ ngay và nêu tên hàm; DROP
    một trong 19 trigger danh tính ⇒ `migrate()` khôi phục đúng định nghĩa và đúng `tgenabled = 'O'`.
 
+---
+
+## ADR-025 — Một bảng tenant dọn được mà không đọc được: policy `FOR DELETE` cho kết nối chưa gắn tổ chức; và "loại trừ khỏi danh sách ghim" phải về RỖNG
+
+**Ngày:** 2026-09-07 · **Trạng thái:** **Đã chấp nhận (chốt cùng ngày, S1.15)** · Đóng: sổ nợ 56, 57
+· Liên quan: ADR-013 (cô lập tổ chức), ADR-022 (`listOrganizations` của runner), ADR-024 (nợ 54/55),
+migration `044`, `045`, review lượt 6 H6-5⑵ và H6-4; lượt 7 (H7-x, `evidence/security-reviews.md`
+§S1.15)
+
+### 1. Nợ 57 — vì sao `otp_rate_limits` dọn được mà không cần biết "tổ chức nào"
+
+| # | Phương án | Đánh giá |
+|---|---|---|
+| a | `DELETE` nền ngoài `withTenant` | Policy cách ly đọc `app_current_org_id()`; kết nối nền không gắn tổ chức ⇒ lọc hết, xoá 0 hàng. **Loại (đã đo).** |
+| b | Dọn TỪNG tổ chức trong `withTenant` | Đòi biết TẬP tổ chức. `app_api` không đọc được danh sách ấy — đúng ràng buộc đã buộc runner outbox nhận `listOrganizations` (ADR-022), và bản cài đặt hôm nay của tuỳ chọn ấy là *"tổ chức tiến trình ĐÃ THẤY enqueue"*, không phủ tổ chức chỉ có lưu lượng KHÁCH. **Loại.** |
+| c | Dọn CƠ HỘI trong `demVaTang` | Một `DELETE` trên MỌI lời gọi OTP: trả một việc nền bằng độ trễ của đường nóng. **Loại.** |
+| d | Chuyển bảng ra ngoài cây tenant như `042` | `org_id` ở đây KHÔNG phải trang trí: ba `bucket_kind` theo ĐÍCH băm số điện thoại/hộp thư, và ADR-013 đòi `org_id` vào phép băm để một bản sao lưu không JOIN được hai tổ chức trên cùng tập nhà cung cấp. **Loại.** |
+| e | **Một policy `FOR DELETE TO app_api` cho kết nối CHƯA gắn tổ chức, trên hàng đã quá một SÀN** | Không hỏi *"tổ chức nào"* mà hỏi *"hàng này còn chặn được ai"*. Bảng, cột và policy cách ly ở nguyên chỗ. **Chọn.** |
+
+**Ba vế làm cho (e) không phải một lần nới RLS, và cả ba đo được:**
+- Vế `NULLIF(current_setting('app.org_id', true), '') IS NULL` giữ policy NGOÀI mọi đường yêu cầu:
+  mọi đường ấy đi qua `withTenant`, tức `app.org_id` luôn có. Không đường yêu cầu nào nhận thêm quyền.
+- `FOR DELETE`, không `FOR ALL`: `[INV-F1]` (*"chưa gắn tổ chức thì mọi bảng tenant trả 0 hàng"*) còn
+  đúng NGUYÊN VĂN. Bộ dọn **xoá được mà không đọc được**.
+- Mốc tuổi nằm ở CSDL, không ở phía gọi.
+
+**Điều đắt nhất của thiết kế, và nó là một RÀNG BUỘC chứ không phải một lựa chọn:** PostgreSQL đòi
+policy `SELECT` cho một `DELETE` **ngay khi câu lệnh tham chiếu cột** — kể cả chỉ trong `WHERE`. Đo
+trên PostgreSQL 16.15, dưới `app_api` chưa gắn tổ chức, một hàng 90 phút tuổi:
+
+```
+DELETE ... WHERE window_start < now() - interval '30 minutes'   -> 0 hàng   (policy SELECT chặn)
+DELETE FROM otp_rate_limits                                     -> 1 hàng   (chỉ policy DELETE)
+```
+
+Nên bộ dọn chạy câu **TRẦN** và **không có tham số tuổi, và không thể có**: một bộ dọn muốn tự viết
+mốc sẽ buộc phải có đường đọc, tức phá vế thứ hai. PostgreSQL tự AND vế `USING` vào, nên tuổi do
+CSDL áp. Con số 30 phút vì thế sống ở ĐÚNG MỘT chỗ có hiệu lực (`044`) cộng một bản ghim để khôi
+phục (`hardening.always.sql`), và một test đọc thẳng cả hai file so với `OTP_RATE_WINDOW_SECONDS`.
+
+**Mặt nguy hiểm của câu trần, nói thẳng:** chạy nó trên kết nối ĐÃ gắn tổ chức thì policy cách ly
+duyệt MỌI hàng của tổ chức ấy — kể cả cửa sổ đang đếm — và hạn mức của họ về 0. CSDL không phân biệt
+được ca ấy với một lệnh dọn hợp lệ, nên phép phân biệt nằm ở hàm gọi: lấy client, HỎI `app.org_id`,
+ném nếu đã gắn. **[review H7-6]** Và cả hai câu nằm trong MỘT giao dịch có `SET LOCAL
+statement_timeout` — một lượt dọn bệnh lý không được giữ một kết nối của pool YÊU CẦU vô hạn định.
+
+**HAI CỬA MỞ CÓ TÊN, mỗi cửa một dòng và một meta-test.** Đây là lần đầu dự án mở cửa nào trong hai:
+- `NGOAI_LE_HINH_DANG` (hardening + `db/rls-coverage.int.test.ts`) nhận **dòng đầu tiên sau ba vòng
+  RỖNG**, khoá đủ sáu cột. Ghi chú của chính danh sách ấy nói trước rằng nó *"chỉ nổ khi cấp dòng
+  đầu tiên — tức khi không ai còn nhìn"*: bộ đọc danh sách đọc mỗi ô bằng `'([^']*)'`, tức chỉ đọc
+  được ô KHÔNG có nháy đơn bên trong. Đúng với danh sách rỗng, sai ngay với dòng đầu tiên.
+- `NGOAI_LE_LAC_CHO` (`db/migration-shape.test.ts`) cho đúng (file, bảng, policy) này. **Không nới
+  quy tắc:** miễn trừ theo LỚP sẽ pre-approve mọi policy PERMISSIVE tương lai trên mọi bảng đã có
+  policy. **[review H7-5]** Cửa chỉ mở cho `CREATE` — khoá ba trục không mang LỆNH, nên thiếu vế ấy
+  thì một `ALTER POLICY … USING (true)` trong cùng file cũng được tha.
+
+**Phần chênh nói ra, không giấu:** ⑴ một `api` bị chiếm nay xoá được hàng đã quá 30 phút của tổ chức
+KHÁC — hàng không còn chặn ai, mất chúng là mất một trần đã hết hiệu lực; ⑵ `rowCount` của câu trần
+là một con số XUYÊN TỔ CHỨC (bao nhiêu cửa sổ chết tồn tại), chỉ đọc được bởi chính tiến trình;
+⑶ **[review H7-3]** câu dọn quét TOÀN BẢNG — vế lọc là OR của hai policy trên hai cột nên không chỉ
+số nào phục vụ được, đã đo bằng `EXPLAIN`: 20 000 hàng = 9,5 ms, tức ~0,5 µs/hàng và 5 triệu hàng ≈
+2,4 giây mỗi năm phút (**sổ nợ 58**); ⑷ bộ dọn theo TIẾN TRÌNH, như mọi bộ dọn khác của dự án.
+
+### 2. Nợ 56 — "loại trừ" là một khoản nợ, không phải một hạng mục
+
+ADR-024 dựng lớp đối chiếu: tập hàm `RETURNS trigger` trong `public` = *(hàm hardening có canh)* ∪
+*(loại trừ có lý do)*. Lớp ấy giữ cho danh sách không lớn thêm trong im lặng, nhưng nó **không rút
+ngắn** danh sách — và 35 dòng loại trừ ấy canh máy trạng thái RFQ, phân tách nhiệm vụ D2, append-only
+của báo giá, tính bất biến của vật liệu khoá và tính đơn điệu của thu hồi. Vòng này ghim nốt: 35 hàm,
+41 trigger, cùng khuôn. `HAM_TRIGGER_KHONG_GHIM` nay RỖNG, và phép kiểm đổi từ *"hai tập phủ nhau"*
+sang *"tập ghim BẰNG tập thật"* — thêm một dòng loại trừ là MỞ LẠI sổ nợ 56 và làm test đỏ.
+
+**MỘT LỚP MỚI mà bốn vòng trước không có, và nó không phải lo xa.** Bảy trong 35 hàm được
+`CREATE OR REPLACE` nhiều lần (`otp_kiem_kenh_khac_link` ba lần: 010 → 012 → 022). Hardening chạy
+TRƯỚC vòng migration đánh số và migration cũ đã có dòng trong `schema_migrations` nên không chạy lại
+— nên một bản ghim trỏ vào thân CŨ làm `migrate()` **LÙI** hàm về thân ấy ở MỌI lần triển khai, vĩnh
+viễn, trong im lặng. Test đồng bộ KHÔNG bắt được ca đó: nó so hardening với đúng file được khai, và
+hai bên khớp nhau hoàn hảo — chỉ là khớp vào bản sai. Nay có một phép kiểm riêng: **migration ghi
+trong mỗi mục ghim phải là migration CUỐI CÙNG định nghĩa hàm ấy**.
+
+**`045` nâng 37 trigger còn lại lên `ENABLE ALWAYS`** — cùng lập luận H6-4 đã dùng cho `043`, áp cho
+phần còn lại, và phải đi CÙNG COMMIT với các mục ghim (ghim `'O'` là biến `migrate()` thành thứ hạ
+cấp một trigger đã nâng; ghim `'A'` mà không nâng thật là bắt mọi lần `migrate()` phải sửa). Sau
+`045`, câu phát biểu đúng của lược đồ là **"không còn trigger ORIGIN nào"** (80/80), và một migration
+tương lai thêm một trigger ORIGIN sẽ đỏ ở một phép kiểm suy từ TÍNH CHẤT.
+
+**`045` KHÔNG phải thứ làm cho trạng thái cuối đúng, và nói ra vì đã đo:** bỏ một câu `ALTER` khỏi nó
+thì trigger ấy VẪN về `'A'` — mục ghim thấy `tgenabled <> 'A'` rồi DROP/CREATE lại. Thứ `045` mua là
+hình dạng của lần triển khai (đổi cờ tại chỗ thay vì dựng lại 41 trigger, trong đó có hai
+`CONSTRAINT TRIGGER`) và một câu lệnh mà người review đọc được.
+
+**[review H7-1] Và cùng cái mù mà H6-6 đóng cho MỘT hàm vẫn nguyên cho 42 hàm còn lại:** mục ghim chỉ
+đòi các trigger ĐÃ KHAI phải tồn tại, nên gắn thêm một trigger cho một hàm đã ghim đi qua mọi lớp
+trong im lặng — và trigger ấy không có định nghĩa `$def$` nào canh. Nay so BẰNG NHAU, theo TÊN chứ
+không theo *(hàm → tập trigger của hàm ấy)*: hai trigger `mfa_reset_requests_kiem_danh_tinh*` chạy
+`kiem_danh_tinh_theo_phien` nhưng được ghim trong mục của `mfa_reset_kiem_quyen`, và khoá theo hàm
+sẽ báo đỏ đúng cặp ấy vì một lý do sai.
+
+### 3. Giá của hai quyết định này, và cái KHÔNG được hứa
+
+- `hardening.always.sql` đi từ ~4 400 lên ~7 500 dòng, trong đó ~1 000 dòng là thân plpgsql CHÉP LẠI
+  từ migration. Đó là một nguồn sự thật thứ hai, và nó chấp nhận được ĐÚNG VÌ có hai lớp canh bản
+  chép: test đồng bộ (thân trong migration ≡ thân trong hardening ≡ hậu điều kiện `$than$`) và test
+  "migration cuối cùng". Không có hai lớp ấy thì đây là một cái bẫy chứ không phải một bản ghim.
+- Ghim thân KHÔNG bảo vệ trước một migration ĐÁNH SỐ MỚI cố ý làm hàm yếu đi — nó chỉ bảo vệ trước
+  TRÔI SAU TRIỂN KHAI (lớp R3). Một migration mới là một thay đổi có review; một `CREATE OR REPLACE`
+  trên cụm thì không.
+- Bộ dọn `otp_rate_limits` chạy theo TIẾN TRÌNH và quét toàn bảng. Đường thoát khi quy mô đòi (sổ nợ
+  58) là một bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng được chỉ số) cho các tổ chức đã thấy, CỘNG câu trần
+  cho phần còn lại — tức đúng đường ⑵ đã loại ở trên, nhưng khi ấy nó là một tối ưu chứ không phải cơ
+  chế duy nhất.

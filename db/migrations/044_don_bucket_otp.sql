@@ -1,0 +1,90 @@
+-- =============================================================================================
+-- 044 — [sổ nợ 57 / review H6-5 ⑵] BỘ DỌN CHO `otp_rate_limits`: MỘT POLICY DELETE CHO CỬA SỔ ĐÃ CHẾT
+-- =============================================================================================
+-- `otp_rate_limits` chỉ LỚN LÊN. Một hàng cho mỗi đích, mỗi lời mời, mỗi người gọi, mỗi cửa sổ 15
+-- phút; `GRANT DELETE` có từ `010` nhưng chưa ai gọi được nó, và sổ nợ 57 ghi ba đường đã xét cùng
+-- lý do từng đường vướng:
+--   ⑴ `DELETE` NỀN ngoài `withTenant` — policy `otp_rate_limits_tenant_isolation` đọc
+--      `app_current_org_id()`, mà kết nối nền không gắn tổ chức nào ⇒ lọc hết, xoá 0 hàng.
+--   ⑵ Dọn TỪNG TỔ CHỨC — đòi biết TẬP tổ chức, và `app_api` không đọc được danh sách ấy (đúng
+--      ràng buộc đã buộc runner outbox nhận `listOrganizations` — ADR-022). Tập "tổ chức đã thấy"
+--      của tiến trình `api` cũng không phủ tổ chức chỉ có lưu lượng KHÁCH.
+--   ⑶ Dọn CƠ HỘI trong `demVaTang` — một `DELETE` trên MỌI lời gọi OTP, tức trả một việc nền
+--      bằng độ trễ của đường nóng.
+--
+-- ĐƯỜNG THỨ TƯ, và là đường file này đi: bảng ở lại nguyên chỗ, `org_id` ở lại nguyên chỗ, và cái
+-- được thêm là MỘT POLICY `FOR DELETE` cho ĐÚNG kết nối KHÔNG gắn tổ chức, trên ĐÚNG những hàng mà
+-- cửa sổ của chúng đã chết. Không phải ba đường trên vì nó không hỏi "tổ chức nào" — nó hỏi
+-- "hàng này còn chặn được ai".
+--
+-- VÌ SAO ĐÂY KHÔNG PHẢI MỘT LẦN NỚI RLS — ba vế, đo được cả ba
+-- (`packages/invitation/src/invitation.int.test.ts` [sổ nợ 57]):
+--   ⑴ Vế `NULLIF(current_setting('app.org_id', true), '') IS NULL` nghĩa là policy này CHỈ có hiệu
+--      lực trên kết nối CHƯA gắn tổ chức. Mọi đường yêu cầu đi qua `withTenant`, tức `app.org_id`
+--      LUÔN được đặt ở đó (`set_config(..., true)`, phạm vi giao dịch) — nên không một đường yêu cầu
+--      nào nhận thêm một quyền nào.
+--   ⑵ `FOR DELETE`, không `FOR ALL`. `[INV-F1]` (`db/rls-coverage.int.test.ts`) đòi mọi bảng tenant
+--      trả 0 hàng khi chưa gắn tổ chức; một policy `FOR ALL` sẽ mở đường ĐỌC và làm khẳng định ấy
+--      sai. Bộ dọn vì thế XOÁ ĐƯỢC MÀ KHÔNG ĐỌC ĐƯỢC — có phép đo đúng câu ấy.
+--   ⑶ Mốc `now() - interval 30 phút` là NƠI DUY NHẤT con số ấy tồn tại. Xem khối dưới.
+--
+-- VÌ SAO BỘ DỌN GỌI `DELETE FROM otp_rate_limits` KHÔNG CÓ MỆNH ĐỀ `WHERE` — và vì sao đó KHÔNG
+-- phải sự cẩu thả mà là hệ quả trực tiếp của vế ⑵. PostgreSQL đòi quyền (và policy) `SELECT` cho
+-- một `UPDATE`/`DELETE` NGAY KHI câu lệnh THAM CHIẾU CỘT của bảng — kể cả chỉ trong `WHERE`. Đã đo
+-- trên PostgreSQL 16.15, dưới `app_api` chưa gắn tổ chức, với một hàng 90 phút tuổi:
+--     DELETE ... WHERE window_start < now() - interval '30 minutes'   -> 0 hàng   (policy SELECT chặn)
+--     DELETE FROM otp_rate_limits                                     -> 1 hàng   (chỉ policy DELETE)
+-- Nên một bộ dọn muốn TỰ viết mốc tuổi sẽ buộc phải có đường ĐỌC, tức phải phá vế ⑵. Câu trần thì
+-- không tham chiếu cột nào, và PostgreSQL tự AND policy `USING` vào — tức MỐC TUỔI DO CSDL ÁP, không
+-- do người gọi khai. Hệ quả cố ý và phải nói ra: hàm dọn KHÔNG có tham số tuổi, và không thể có.
+-- Con số 30 phút sống ở ĐÚNG MỘT chỗ có hiệu lực (policy này) cộng một bản GHIM để khôi phục
+-- (`hardening.always.sql`), và `packages/invitation/src/don-bucket.test.ts` buộc hai bản khớp nhau
+-- VÀ khớp quan hệ "sàn ≥ một cửa sổ đếm" với `OTP_RATE_WINDOW_SECONDS`.
+--
+-- MẶT NGUY HIỂM của câu trần, nói thẳng: chạy nó trên kết nối ĐÃ gắn tổ chức thì policy cách ly
+-- duyệt MỌI hàng của tổ chức ấy — kể cả cửa sổ đang đếm — và bộ đếm hạn mức của họ về 0. Không lớp
+-- nào ở CSDL phân biệt được "bộ dọn gọi nhầm chỗ" với "một lệnh dọn hợp lệ của chính tổ chức ấy",
+-- nên lớp phân biệt nằm ở hàm gọi: `donOtpRateLimitsCu` LẤY một client rồi HỎI `app.org_id` trước
+-- khi xoá, và ném nếu client ấy đã gắn tổ chức. Có phép đo cho cả hai nhánh.
+--
+-- HÌNH DẠNG POLICY: đây là DÒNG ĐẦU TIÊN của `NGOAI_LE_HINH_DANG` trong `hardening.always.sql`.
+-- Danh sách ấy RỖNG từ S0, và ghi chú của chính nó nói trước rằng nó "chỉ nổ khi cấp dòng đầu tiên
+-- — tức khi không ai còn nhìn". Nên dòng ấy khoá đủ SÁU cột (bảng, policy, lệnh, vai trò, phạm vi,
+-- biểu thức): đổi policy sang `FOR ALL`, hay sang `TO app_unseal`, hay sửa một ký tự của biểu thức
+-- đều làm dòng ngoại lệ hết khớp và hardening gãy. Bản sao TypeScript ở `db/rls-coverage.int.test.ts`
+-- có meta-test khoá hai chiều. Cửa THỨ HAI, cùng khuôn: `db/migration-shape.test.ts` cấm một file
+-- tạo policy cho bảng do file KHÁC tạo, và `NGOAI_LE_LAC_CHO` ở đó mang đúng một dòng, cho đúng
+-- (file, bảng, policy) này.
+--
+-- ĐÁNH ĐỔI CÒN LẠI, nói ra thay vì hứa suông: một `api` BỊ CHIẾM vốn đã xoá sạch được bảng này
+-- trong PHẠM VI tổ chức nó đang gắn (`GRANT DELETE` mức bảng, từ `010`). Policy này thêm cho nó
+-- đúng một khả năng: xoá hàng của tổ chức KHÁC — nhưng chỉ những hàng đã quá 30 phút, tức những
+-- hàng không còn chặn ai. Mất chúng là mất một trần đã hết hiệu lực, không mất một bằng chứng nào.
+-- =============================================================================================
+
+-- ~~Bộ dọn quét theo `window_start`, và khoá chính `(org_id, bucket_kind, bucket_hash, window_start)`
+-- không phục vụ được câu ấy (cột dẫn đầu là `org_id`). Cùng lý do với `caller_rate_limits_window_idx`
+-- của `042`; ở đây vế lọc nằm trong policy chứ trong câu lệnh, nhưng bộ lập lịch vẫn dùng được nó.~~
+-- KHÔNG CÓ CHỈ SỐ NÀO Ở ĐÂY, và câu trên là thứ đã bị phép đo bác bỏ. `EXPLAIN (ANALYZE, BUFFERS)`
+-- của đúng câu bộ dọn chạy, trên 20 000 hàng (19 000 cũ), dưới `app_api` chưa gắn tổ chức:
+--     Delete on otp_rate_limits (actual time=9.456..9.458 rows=0) Buffers: shared hit=19246
+--       ->  Seq Scan on otp_rate_limits (actual time=0.006..4.932 rows=18999)
+--             Filter: ((guest_session_id IS NULL) AND ((org_id = app.org_id) OR (app.org_id IS NULL
+--                      AND window_start < now() - '00:30:00')))
+-- Vế lọc là OR của HAI policy trên HAI cột khác nhau, nên không chỉ số nào phục vụ được nó — bộ lập
+-- lịch chọn Seq Scan kể cả khi ước lượng của nó là `rows=1`, tức nó KHÔNG có phương án nào khác.
+-- Một chỉ số không bao giờ được đọc nhưng phải được GHI ở mọi lời gọi OTP là một khoản lỗ ròng trên
+-- đúng đường ghi nóng nhất của hệ, nên nó không ra đời.
+--
+-- GIÁ PHẢI TRẢ, nói ra bằng số: bộ dọn quét TOÀN BẢNG mỗi năm phút. Ở phép đo trên, 20 000 hàng tốn
+-- 9,5 ms — tức ~0,5 µs/hàng, và 5 triệu hàng sẽ là ~2,4 giây. Chấp nhận được ở quy mô hôm nay và
+-- KHÔNG chấp nhận được mãi mãi; đường thoát khi tới lúc là một bộ dọn GẮN TỔ CHỨC (có `WHERE`, dùng
+-- được chỉ số) cho các tổ chức tiến trình đã thấy, CỘNG câu trần này cho phần còn lại — tức đúng
+-- đường ⑵ mà sổ nợ 57 đã loại, nhưng khi ấy nó là một tối ưu chứ không phải cơ chế duy nhất.
+
+CREATE POLICY otp_rate_limits_don_cua_so_cu ON otp_rate_limits
+  FOR DELETE TO app_api
+  USING (
+    NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NULL
+    AND window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => 1800))
+  );

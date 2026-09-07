@@ -62,8 +62,13 @@ const HINH_DANG_CHUAN: readonly (readonly [string, string])[] = [
  * (polroles = {0}, OID 0 không có hàng trong pg_roles — nếu để nó thành chuỗi rỗng thì chỗ
  * RỘNG NHẤT lại trùng giá trị giữ chỗ của dòng rỗng trong file SQL).
  *
- * RỖNG là trạng thái đúng ở S0, và có test bên dưới đòi mỗi dòng ở đây phải ứng với một policy
+ * ~~RỖNG là trạng thái đúng ở S0~~, và có test bên dưới đòi mỗi dòng ở đây phải ứng với một policy
  * CÓ THẬT — ngoại lệ chết (bảng/policy đã bị xoá) là ĐỎ, không phải rác im lặng.
+ *
+ * [S1.15 / sổ nợ 57] Danh sách hết rỗng: `044` cấp dòng ĐẦU TIÊN, cho policy dọn cửa sổ cũ của
+ * `otp_rate_limits`. Lập luận đầy đủ ở đầu `044_don_bucket_otp.sql` và cạnh chính dòng ấy trong
+ * `hardening.always.sql`. Điều đáng ghi ở ĐÂY: từ hôm nay, logic khớp sáu cột không còn là mã
+ * chết — nó có một ca dùng thật, nên đột biến "bỏ một trục khỏi hàm khớp" nay đỏ ở HAI chỗ.
  */
 type DongNgoaiLe = readonly [
   bang: string,
@@ -73,7 +78,17 @@ type DongNgoaiLe = readonly [
   phamVi: string,
   bieuThuc: string,
 ];
-const NGOAI_LE_HINH_DANG: readonly DongNgoaiLe[] = [];
+const NGOAI_LE_HINH_DANG: readonly DongNgoaiLe[] = [
+  [
+    "otp_rate_limits",
+    "otp_rate_limits_don_cua_so_cu",
+    "d",
+    "app_api",
+    "co_org_id",
+    "((NULLIF(current_setting('app.org_id'::text, true), ''::text) IS NULL) AND " +
+      "(window_start < (now() - make_interval(secs => (1800)::double precision))))",
+  ],
+];
 
 /** Danh tính của một policy đủ để so với một dòng ngoại lệ. */
 type DanhTinhPolicy = { ten_bang: string; ten_policy: string; lenh: string; vai_tro: string };
@@ -337,15 +352,25 @@ describe("phủ RLS", () => {
 
     // [vòng fix 3 — I2] SÁU cột. Meta-test này là thứ buộc Task 6 sửa CẢ HAI file khi mở một
     // hình dạng, và là thứ sẽ ĐỎ nếu ai đó lặng lẽ bỏ bớt một cột khỏi khoá ở một bên.
-    const tuSql = [
-      ...khoi![1]!.matchAll(
-        /\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/g,
-      ),
-    ]
+    // [S1.15 / sổ nợ 57] Bản trước đọc mỗi ô bằng `'([^']*)'`, tức nó CHỈ đọc được ô không có
+    // nháy đơn bên trong — đúng với danh sách RỖNG, sai ngay với dòng đầu tiên: biểu thức của
+    // `044` mang `''app.org_id''`. Ô ở đây là một chuỗi SQL, nên đọc nó theo đúng luật của chuỗi
+    // SQL: nháy đơn NHÂN ĐÔI là một ký tự, và ô kết thúc ở nháy đơn KHÔNG theo sau bởi nháy đơn.
+    // Viết lười (`*?`) cộng `(?!')` thay vì tham: tham thì `)` sau ô cuối vẫn khớp `[^']` và bộ
+    // đọc trượt sang dòng sau.
+    const CHUOI_SQL = String.raw`'((?:[^']|'')*?)'(?!')`;
+    const DONG_SAU_COT = new RegExp(
+      String.raw`\(\s*` + Array(6).fill(CHUOI_SQL).join(String.raw`\s*,\s*`) + String.raw`\s*\)`,
+      "g",
+    );
+    const tuSql = [...khoi![1]!.matchAll(DONG_SAU_COT)]
       // Dòng RỖNG là chỗ giữ chỗ của danh sách trống trong SQL (VALUES không cho phép 0 hàng),
       // không phải một ngoại lệ. polname không bao giờ rỗng nên nó không khớp policy nào.
       .filter((m) => m[2] !== "")
-      .map((m) => [m[1]!, m[2]!, m[3]!, m[4]!, m[5]!, m[6]!] as const);
+      .map(
+        (m) =>
+          [m[1]!, m[2]!, m[3]!, m[4]!, m[5]!, m[6]!].map((o) => o.replace(/''/g, "'")) as unknown as DongNgoaiLe,
+      );
     expect(tuSql).toEqual(NGOAI_LE_HINH_DANG);
   });
 
@@ -436,13 +461,16 @@ describe("phủ RLS", () => {
     }
 
     // [vòng fix 3 — I2] Cột `vai_tro` phải ĐỌC RA ĐƯỢC, nếu không cả khoá sáu cột chỉ là
-    // trang trí. Mọi policy ở S0 đều áp cho PUBLIC (polroles = {0}), và OID 0 KHÔNG có hàng
+    // trang trí. ~~Mọi policy ở S0 đều áp cho PUBLIC (polroles = {0})~~, và OID 0 KHÔNG có hàng
     // trong pg_roles — viết truy vấn theo kiểu JOIN thẳng sẽ cho ra chuỗi RỖNG, tức chỗ RỘNG
     // NHẤT lại trùng giá trị giữ chỗ của dòng rỗng trong file SQL.
+    // [S1.15 / sổ nợ 57] Nay có HAI giá trị: `044` là policy đầu tiên viết `TO app_api`. Khẳng
+    // định vì thế MẠNH HƠN bản cũ — nó đo được cả nhánh PUBLIC (OID 0, không có hàng trong
+    // pg_roles) LẪN nhánh role thật, và một bản kết xuất chỉ đúng một nhánh nay sẽ đỏ.
     expect(
-      [...new Set(rows.map((r) => r.vai_tro))],
+      [...new Set(rows.map((r) => r.vai_tro))].sort(),
       "vai_tro không kết xuất được PUBLIC — khoá sáu cột đang so bằng chuỗi rỗng",
-    ).toEqual(["PUBLIC"]);
+    ).toEqual(["PUBLIC", "app_api"]);
 
     // Không có policy nào thì mọi khẳng định dưới đây rỗng ruột — chốt trước.
     const bangCoPolicy = new Set(rows.map((r) => r.ten_bang));
