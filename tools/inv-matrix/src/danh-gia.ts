@@ -330,10 +330,11 @@ export interface MocGhim {
 // chất). Mốc được NÂNG TAY sau khi cổng đã chặn một lượt — đúng cơ chế: một mốc tự trôi
 // theo tử số sẽ mua sẵn chỗ cho một lần tụt sau này.
 // [S1.20] 52 -> 53: H19 vao so dang ky (bang chi-ghi-them suy tu tinh chat, ADR-028).
-// [S1.21] 53 -> 54: H20 vao so dang ky (so no tu doi chieu, ADR-029). Hai dong nay THIEU cho
+// [S1.21] 53 -> 54: H20 vao so dang ky (so no tu doi chieu, ADR-029).
+// [S1.22] 54 -> 55: H21 vao so dang ky (QT3 co lop may, ADR-030). Hai dong nay THIEU cho
 // toi review luot 13 (H13-15): hang so da nhay hai nhip ma so ghi cua chinh no thi khong —
 // dung lop "ban sao khong duoc doi chieu" ma ADR-029 dat ten, o ngay tep cuong che moc.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 54, coDanhSachToiDa: 0 };
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 55, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

@@ -536,7 +536,11 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
     const loi = viPhamSoBatBien(STATE, them);
     expect(loi).toHaveLength(1);
-    expect(loi[0]).toContain("sổ đăng ký có 55 (34 + 21)");
+    // Con số phải SUY từ chính `them`, không chép tay: bản trước ghim "55 (34 + 21)" và nó ĐỎ ở
+    // đúng vòng sau, khi sổ đăng ký lớn thêm một hàng — cùng lớp lỗi mà tệp này đi đóng.
+    const soHang = (them.match(/^\|\s*\*\*[A-H]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHangRao = (them.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
+    expect(loi[0]).toContain(`sổ đăng ký có ${soHang} (${soHang - soHangRao} + ${soHangRao})`);
   });
 
   it("P5 — bộ đọc số đếm tiếng Việt đọc đúng cả bốn dạng đã từng xuất hiện ở STATE", () => {

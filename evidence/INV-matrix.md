@@ -15,9 +15,9 @@ chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này ch�
 
 - **34 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
-- **20 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
+- **21 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 54 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 55 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -28,8 +28,8 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
 | Nghiệp vụ (A–G) | **34** | 34 |
-| Hàng rào (H) | **20** | 20 |
-| **Cộng** | **54** | **54** |
+| Hàng rào (H) | **21** | 21 |
+| **Cộng** | **55** | **55** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -98,6 +98,7 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | H18 | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | T0 | 5 | ✅ ĐẠT |  |
 | H19 | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | T3 | 8 | ✅ ĐẠT |  |
 | H20 | **Sổ nợ trong `docs/STATE.md` TỰ ĐỐI CHIẾU, bảy tính chất: mọi HÀNG BẢNG trong khối sổ nợ đều được bộ đọc NHẬN (một dòng thụt vào một dấu cách vẫn là bảng với GFM, và nó từng vô hình); mọi dòng có đúng BA cột và số khoản DUY NHẤT; mọi dòng KHAI trạng thái bằng một từ khoá đóng (`ĐÓNG`/`MỞ`/`NỬA`) đặt ở đầu thân; tập dòng khai MỞ/NỬA BẰNG dòng tổng kết — đỏ theo CẢ HAI chiều; mọi con trỏ chưa bị gạch giải được trong TẬP TỆP GIT THEO DÕI (không phải *"có trên đĩa"* — lượt CI đầu tiên bắt đúng chỗ ấy), và một ô đã gạch một con trỏ thì phải còn ít nhất một con trỏ SỐNG; số dấu `~~` của tệp là CHẴN; mọi lời khai hình dạng `**<số> ADR**` chưa bị gạch bằng số đầu mục `## ADR-` thật; mọi lời khai hình dạng `**Sổ đăng ký <n> bất biến** (<x> nghiệp vụ + <y> hàng rào` bằng số HÀNG của sổ đăng ký này** | `tests/architecture/so-no-tu-doi-chieu.test.ts` | T1 | 19 | ✅ ĐẠT |  |
+| H21 | QT3 có lớp máy: một câu SQL trong mã sản xuất đã ghim MỘT trục (`pg_catalog.`/`public.`) phải ghim ĐỦ BỐN — tên hàm, toán tử, ép kiểu, tên bảng; số câu chưa ghim trục nào không được TĂNG; không mã sản xuất nào ngoài `migrate.ts` được chạm `search_path` (mọi cú pháp); và mọi danh sách miễn trừ được PostgreSQL thật phán xét — tên ngữ pháp phải KHÔNG có hàm trong `pg_catalog`, từ khoá phải có trong `pg_get_keywords()`, tên kiểu đã ghim phải có trong `pg_type` | `tests/architecture/qt3-ghim-schema.test.ts` + `tests/architecture/qt3-ngu-phap.int.test.ts` | T1 + T3 | 17 | ✅ ĐẠT |  |
 
 ## 3. Mã chưa phủ — **trạng thái đúng, không phải khoảng trống bị quên**
 
@@ -118,7 +119,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 54` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 55` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 

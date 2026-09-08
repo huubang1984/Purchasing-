@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ **20** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ **54** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ **21** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ **55** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -319,6 +319,19 @@ hoặc buộc phải nói đúng mức:
   branch protection nào bắt buộc review trên `docs/`. Kết luận về đường dẫn và biểu thức chính quy
   dựng từ tài liệu (`giaiDuoc`) đúng ở mức *tự gây thương tích*, không ở mức *chống nội dung thù
   địch*. Xem ADR-029 §5.
+
+| **H21** | **QT3 có lớp máy: một câu SQL trong mã sản xuất đã ghim MỘT trục (`pg_catalog.`/`public.`) phải ghim ĐỦ BỐN — tên hàm, toán tử, ép kiểu, tên bảng; số câu chưa ghim trục nào không được TĂNG; không mã sản xuất nào ngoài `migrate.ts` được chạm `search_path` (mọi cú pháp); và mọi danh sách miễn trừ được PostgreSQL thật phán xét — tên ngữ pháp phải KHÔNG có hàm trong `pg_catalog`, từ khoá phải có trong `pg_get_keywords()`, tên kiểu đã ghim phải có trong `pg_type`** | `tests/architecture/qt3-ghim-schema.test.ts` + `tests/architecture/qt3-ngu-phap.int.test.ts` | **T1 + T3** |
+
+**Giới hạn của H21, nói ra thay vì để người đọc tự phát hiện:**
+
+- Chủ thể là câu **đã ghim một trục**. Một câu chưa ghim gì chỉ chịu MỐC ĐẾM (`TRAN_TOI_DA`), tức
+  H21 GIỮ phần dư chứ không hạ nó — **80** câu, trong đó **39** chạm bảng nhạy cảm. Đó là khoản
+  nợ 62, và nó là phần lớn hơn theo số đếm.
+- Bộ đọc là một BỘ TÁCH TỪ trên mã TypeScript, không phải trình phân tích SQL: nó ghép chuỗi nối
+  bằng `+` nhưng không hiểu SQL dựng động kiểu khác.
+- Nó đọc `git ls-files`, nên một tệp sản xuất chưa vào chỉ mục là vô hình.
+- `db/migrations/*.sql` NGOÀI phạm vi, và cái giữ chúng là chính vế `search_path` của H21 —
+  xem ADR-030 §5.
 
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
