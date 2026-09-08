@@ -14,6 +14,7 @@
 | 1 | 2026-08-29 | Chrome 148, Windows desktop | Chromium 148 | `http://localhost` | ĐẠT | Nộp thầu được |
 | 2 | 2026-08-29 | Edge 151, Windows desktop | Chromium 151 | `https:` | ĐẠT | Nộp thầu được |
 | 3 | 2026-08-29 | **Zalo iOS** (`Zalo iOS/260801802`), iPhone | **WKWebView, iOS 18.7** | `https:` | **ĐẠT** | **Nộp thầu được** |
+| 4 | 2026-09-08 | **Chrome iOS** (`CriOS/151.0.7922.112`), iPhone | **WKWebView, iOS 26.6.1** | `https:` | **ĐẠT** | **Nộp thầu được** |
 
 Lần 1 còn chạy thêm ~~**ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
 được**~~ — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
@@ -31,6 +32,20 @@ cho **năm** thẻ khác nhau, ba mũi cũ không đổi nghĩa.
 **Dòng 3 là phép đo có giá trị nhất trong bảng.** Nó là lần đầu máy dò chạy **bên trong một
 webview thật của thị trường Việt Nam**, và nó bác bỏ được giả thuyết xấu nhất: *"webview Zalo
 không có `crypto.subtle`"*. Trên đường đi này, **cả `crypto.subtle` lẫn `X25519` đều có**.
+
+**[2026-09-08] Dòng 4 KHÔNG lấp ô nào ở §3, và điều đó phải nói trước khi nói nó ĐẠT.** Nó nới
+đường iOS lên **phía trên** — WebKit của iOS 26.6.1 vẫn có `X25519`, nên rủi ro *"một bản WebKit
+nào đó đánh rơi X25519"* không hiện ra ở đầu mới. Nhưng ô ưu tiên **2** của §3 hỏi về đầu **CŨ**
+(iOS ≤ 16), và một phép đo ở đầu mới **không nói gì** về đầu cũ. Ô ưu tiên 1 và 3 là Android, và
+dòng 4 không phải Android.
+
+**Dòng 4 còn dạy một quy tắc về chính cách thu kết quả, và nó suýt làm hỏng một dòng trong bảng
+này.** Kết quả đến kèm một **ảnh chụp máy Android** (thanh điều hướng ba nút, thanh công cụ Chrome
+kiểu Android) trong khi **khối văn bản dán về lại mang `UA:` của một iPhone** — clipboard đồng bộ
+giữa hai máy là đủ để hai thứ lệch nhau mà không ai cố ý. Thứ phân xử là `UA:`, vì nó do **chính
+lượt chạy ấy** sinh ra; ảnh chụp thẻ phán quyết **không định danh engine** và không bao giờ đủ để
+điền một dòng. Quy tắc: **một dòng ở §1 chỉ được điền từ khối văn bản, và engine đọc từ `UA:`, kể
+cả khi người gửi đã nói rõ mình đang cầm máy nào.**
 
 ---
 
