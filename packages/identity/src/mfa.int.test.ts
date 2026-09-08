@@ -574,58 +574,115 @@ describe("xác thực TOTP bền vững", () => {
     // vế "dùng một lần" được cưỡng chế bởi HÀM THUẦN (lời gọi thứ hai ĐỌC ĐƯỢC last_used_counter
     // đã ghi) chứ không bởi vế chống đua. Một mốc chết phụ thuộc lịch biểu là một mốc chết GIẢ.
     //
-    // Bản này ép ĐÚNG cửa sổ đua bằng chính CỔNG mở bí mật: cổng được gọi SAU câu SELECT và
-    // TRƯỚC câu UPDATE, nên chặn nó lại là chốt được request A ở giữa hai câu đó.
-    //   A: BEGIN, SELECT (last_used_counter = NULL), rồi TREO trong cổng
-    //   B: chạy trọn vẹn, ghi last_used_counter = C, COMMIT
-    //   A: thả cổng ra, chạy tiếp câu UPDATE — bây giờ hàng đã mang C
-    // Với vế chống đua, A nhận rowCount = 0 -> CODE_ALREADY_USED. Không có nó, A ghi đè và CẢ
-    // HAI cùng "xác thực thành công" — đúng kịch bản kẻ tấn công gửi SONG SONG một mã bắt được.
+    // ==========================================================================================
+    // [khoản nợ 2 / S1.26] KỸ THUẬT CŨ ĐÃ CHẾT, VÀ NÓ CHẾT VÌ CHÍNH BẢN VÁ — GHI RA VÌ ĐÂY LÀ
+    // THỨ ĐẮT NHẤT CỦA VÒNG NÀY.
+    //
+    // Bản trước ép cửa sổ đua bằng cách TREO request A ở trong cổng mở bí mật rồi cho B chạy
+    // TRỌN VẸN. Kỹ thuật ấy đứng trên một tiền đề mà bản vá vừa xoá: *cổng được gọi khi chưa ai
+    // giữ khoá hàng*. Nay `CAU_DAT_COC` lấy khoá hàng TRƯỚC cổng và `withTenant` giữ giao dịch
+    // tới `COMMIT`, nên A treo trong cổng nghĩa là A GIỮ khoá; B kẹt ở `CAU_DAT_COC` và không bao
+    // giờ chạy xong; `await` của B không bao giờ giải quyết; `thaCong()` không bao giờ được gọi.
+    // ĐO ĐƯỢC: test treo tới hết hạn 60 000 ms, và vì giao dịch của A không nhả, 26 test SAU nó
+    // cũng chết theo — 27/50 đỏ, tất cả bằng HẾT GIỜ.
+    //
+    // ĐÂY LÀ HIỆN VẬT CỦA TEST, KHÔNG PHẢI CỦA SẢN XUẤT. Trong sản xuất cổng có trần
+    // (`boiTranKms`), người chờ có `lock_timeout`, và người giữ có
+    // `idle_in_transaction_session_timeout` — không có chu trình chờ nào. Thứ vô hạn ở đây là
+    // cái chốt do CHÍNH TEST cầm.
+    //
+    // KỸ THUẬT MỚI, mượn nguyên của test "LOẠT ĐẦU dưới đồng thời 24" ngay bên dưới: một giao
+    // dịch NGOÀI giữ khoá hàng, hai request cùng đi qua câu SELECT (cả hai thấy
+    // `last_used_counter = NULL`) rồi cùng KẸT ở `CAU_DAT_COC`. Thả khoá ra, chúng được tuần tự
+    // hoá bởi CSDL chứ không bởi lịch biểu của Node. Đó vẫn là ĐÚNG cửa sổ đua cần đo: kẻ thua
+    // mang một ảnh chụp CŨ của `last_used_counter` đi qua cổng, và vế `last_used_counter < $3`
+    // của `CAU_GHI_THANH_CONG` là thứ duy nhất chặn nó.
     // ==========================================================================================
     await datLai(nguoiA);
     const buoc = counterForTime(NGAY);
     const ma = deriveTotpCode(biMatA, buoc);
 
-    let thaCong = (): void => {};
-    const chotLai = new Promise<void>((r) => {
-      thaCong = r;
-    });
-    let baoDaVaoCong = (): void => {};
-    const daVaoCong = new Promise<void>((r) => {
-      baoDaVaoCong = r;
-    });
-
-    const congTreo: TotpSecretUnsealer = {
-      kind: "TOTP_SECRET_UNSEALER",
-      name: "treo",
-      async openTotpSecret(orgId: string, wrapped: WrappedTotpSecret): Promise<Uint8Array> {
-        baoDaVaoCong();
-        await chotLai;
-        return await congMoBiMat.openTotpSecret(orgId, wrapped);
-      },
+    // Hai pool riêng: `poolAs()` trả pool `max = 3`, nhưng dùng CHUNG một pool thì hai request
+    // vẫn có thể xếp hàng ở tầng pool và khi ấy phép đo đo hàng đợi của pg-pool, không đo CSDL.
+    const cacPool = [db.poolAs("app_api"), db.poolAs("app_api")];
+    const demKetKhoa = async (): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND state = 'active'
+            AND wait_event_type = 'Lock'`,
+      );
+      return Number(rows[0]!.n);
     };
-    const chayA: Promise<MfaAttemptResult> = withTenant(apiPool, orgA, (c) =>
-      verifyTotpAttempt(c, { orgId: orgA, userId: nguoiA, code: ma, now: NGAY }, congTreo),
-    );
 
-    await daVaoCong; // A đã SELECT xong và đang treo TRONG cổng.
-    const b = await thu(orgA, nguoiA, ma, NGAY);
-    expect(b, "request B (chạy trọn vẹn trước) phải QUA").toMatchObject({ ok: true });
+    const giu = await db.pool.connect();
+    let ketQua: PromiseSettledResult<MfaAttemptResult>[];
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT id FROM mfa_credentials WHERE user_id = $1 FOR UPDATE", [nguoiA]);
 
-    thaCong();
-    const a = await chayA;
+      const caHai = Promise.allSettled(
+        cacPool.map((p) =>
+          withTenant(p, orgA, (c) =>
+            verifyTotpAttempt(
+              c,
+              { orgId: orgA, userId: nguoiA, code: ma, now: NGAY },
+              congMoBiMat,
+            ),
+          ),
+        ),
+      );
+
+      // Cả HAI phải kẹt thì cửa sổ đua mới được ép. Không đủ hai thì ĐỎ, không "đi tiếp".
+      const hetHan = Date.now() + 30_000;
+      let ketCuoi = 0;
+      while ((ketCuoi = await demKetKhoa()) < 2) {
+        if (Date.now() > hetHan) {
+          throw new Error(
+            `Chỉ ${ketCuoi}/2 request kẹt ở khoá hàng — cửa sổ đua KHÔNG được ép, ` +
+              "nên mọi khẳng định dưới đây vô nghĩa.",
+          );
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      await giu.query("COMMIT");
+      ketQua = await caHai;
+    } finally {
+      giu.release();
+      await Promise.allSettled(cacPool.map((p) => p.end()));
+    }
+
+    const nem = ketQua.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(nem.length, `có request ném: ${nem.map((r) => String(r.reason)).join(" | ")}`).toBe(0);
+    const gt = ketQua.map((r) => (r.status === "fulfilled" ? r.value : null));
+    const qua = gt.filter((v) => v?.ok === true).length;
+    const daDung = gt.filter((v) => v !== null && !v.ok && v.reason === "CODE_ALREADY_USED").length;
+
+    expect(qua, `đúng MỘT request được qua. Kết quả: ${JSON.stringify(gt)}`).toBe(1);
     expect(
-      a,
-      `Request A ghi đè bộ đếm của B — vế "dùng một lần" của E3 sụp ở đúng ca nó cần nhất. ` +
-        `Kết quả A: ${JSON.stringify(a)}`,
-    ).toMatchObject({ ok: false, reason: "CODE_ALREADY_USED" });
+      daDung,
+      `Kẻ thua phải nhận CODE_ALREADY_USED — vế "dùng một lần" của E3 sụp ở đúng ca nó cần ` +
+        `nhất nếu không. Kết quả: ${JSON.stringify(gt)}`,
+    ).toBe(1);
 
-    // Và bộ đếm trong bảng vẫn đúng bằng bước đã dùng, không bị A ghi đè.
-    const { rows } = await db.pool.query<{ c: string }>(
-      "SELECT last_used_counter AS c FROM mfa_credentials WHERE user_id = $1",
+    // Và bộ đếm trong bảng vẫn đúng bằng bước đã dùng, không bị kẻ thua ghi đè.
+    const { rows } = await db.pool.query<{ c: string; f: number }>(
+      "SELECT last_used_counter AS c, failed_attempts AS f FROM mfa_credentials WHERE user_id = $1",
       [nguoiA],
     );
     expect(Number(rows[0]!.c)).toBe(buoc);
+
+    // [khoản nợ 2] CÁI GIÁ CỦA "ĐẾM TRƯỚC, PHÁN SAU", ghim bằng số thay vì để nó trôi: kẻ thua ĐÃ
+    // đặt cọc trước khi biết mình thua, và `CAU_GHI_THANH_CONG` không khớp nên cọc KHÔNG được
+    // hoàn. Một người dùng thật bấm gửi hai lần vì thế tiêu mất 1 trong 5 lần thử. Đó là hướng
+    // fail-CLOSED và là hệ quả trực tiếp của việc thu tiền trước — nhưng nó PHẢI hiện ra ở đây,
+    // không được nằm im trong một chú thích.
+    expect(
+      rows[0]!.f,
+      "kẻ thua đặt cọc rồi không được hoàn — đây là CÁI GIÁ đã biết của bản vá khoản nợ 2",
+    ).toBe(1);
+
+    await datLai(nguoiA);
   }, 60_000);
 
   it("[INV-E3] bộ đếm vượt số nguyên an toàn của JS bị TỪ CHỐI, không so sánh sai trong im lặng", async () => {
@@ -858,35 +915,31 @@ describe("xác thực TOTP bền vững", () => {
     await datLai(nguoiA);
   }, 60_000);
 
-  it("[INV-E3] LOẠT ĐẦU dưới đồng thời 24: 24 mã ĐƯỢC PHÁN XÉT, bộ đếm 24, rồi hồ sơ BỊ KHOÁ", async () => {
+  it("[INV-E3] LOẠT ĐẦU dưới đồng thời 24: cổng mở bí mật chỉ mở ĐÚNG NGƯỠNG lần, không 24", async () => {
     // ==========================================================================================
-    // [vòng fix 2 — MỤC 1] GHIM CHÍNH CON SỐ, ĐỂ DƯ LƯỢNG LÀ BẰNG CHỨNG ĐO ĐƯỢC CHỨ KHÔNG PHẢI
-    // MỘT CÂU TRONG CHÚ THÍCH.
+    // [khoản nợ 2 / S1.26] TEST NÀY TỪNG GHIM DƯ LƯỢNG; NAY NÓ GHIM TRẦN. VÀ THỨ ĐỔI QUAN TRỌNG
+    // HƠN CẢ CON SỐ LÀ **ĐẠI LƯỢNG ĐƯỢC ĐẾM**.
     //
-    // Vòng fix 1 viết vào `CAU_GHI_THAT_BAI` rằng mỗi cửa sổ cho đúng `maxFailedAttempts` lần
-    // đoán được phán xét "KỂ CẢ KHI các lần đoán tới ĐỒNG THỜI". Vế sau BỊ ĐO LÀ SAI: `dang_khoa`
-    // đọc từ câu SELECT chạy TRƯỚC khi bất kỳ request nào ghi, nên N request chồng nhau đều thấy
-    // `locked_until IS NULL` và đều đi TRỌN tới `verifyTotpCode`. Test này ghim cả HAI nửa của
-    // phát biểu đã được hạ xuống:
-    //   (A) DƯ LƯỢNG CÓ THẬT — loạt đầu cho tới C mã được phán xét, KHÔNG phải `maxFailedAttempts`
-    //       (ở đây 24 so với ngưỡng 5, tức 4,8x);
-    //   (B) THỨ BẢN VÁ MUA ĐƯỢC — biên độ đúng 1 (24 phán xét -> bộ đếm 24, không phải 3), và
-    //       SAU loạt hồ sơ BỊ KHOÁ, nên đây là "24 lần MỘT LẦN rồi khoá", không phải "24 lần mỗi
-    //       cửa sổ, lặp mãi" như bản CTE.
+    // Bản trước đếm LÝ DO ĐƯỢC TRẢ VỀ (`reason === "WRONG_CODE"`). Phép đếm ấy KHÔNG phân biệt
+    // được bản đã vá với chính khoản nợ 2, và đây là chứng minh: dời `CAU_DAT_COC` xuống SAU
+    // `moPhongBiVaSo` — tức trả lại đúng lỗ của khoản nợ — thì cả 24 request vẫn mở cổng, nhưng
+    // rồi vẫn xếp hàng ở `CAU_DAT_COC`, 5 cái đầu nhận rowCount 1 và 19 cái sau nhận 0. Số
+    // `WRONG_CODE` vẫn là 5. Test vẫn XANH. Một phép đo không phân biệt được cái nó đi đo thì
+    // không phải một phép đo.
     //
-    // ĐỒNG THỜI ĐƯỢC ÉP TẤT ĐỊNH, KHÔNG NHỜ LỊCH BIỂU — cùng kỷ luật với test hai-request ở trên,
-    // và đây là điều kiện để con số 24 không phải một phép đo may rủi: một transaction ngoài giữ
-    // KHOÁ HÀNG bằng `SELECT ... FOR UPDATE`. Câu SELECT của `verifyTotpAttempt` KHÔNG bị khoá
-    // hàng chặn (người đọc không chờ người ghi), nên cả 24 request đi qua phép kiểm `dang_khoa`
-    // rồi KẸT ở câu UPDATE. Việc cả 24 thật sự kẹt được QUAN SÁT qua pg_stat_activity; không đủ
-    // 24 thì ĐỎ, không phải "đi tiếp".
+    // ĐẠI LƯỢNG ĐÚNG LÀ **NGÂN SÁCH CỦA KẺ TẤN CÔNG**: số lần cổng mở bí mật ĐƯỢC MỞ. Đó chính
+    // là số lần đoán được trả tiền — mỗi lần mở là một mã được đem đối chiếu với bí mật thật.
+    // Khoản nợ 2 nói: con số ấy bằng ĐỘ ĐỒNG THỜI của kẻ tấn công (24), không bằng một hằng số
+    // cấu hình. Bản vá nói: nó bằng `maxFailedAttempts` (5). Đếm nó là đo thẳng câu ấy.
+    //
+    // ĐỒNG THỜI ĐƯỢC ÉP TẤT ĐỊNH, KHÔNG NHỜ LỊCH BIỂU — một transaction ngoài giữ KHOÁ HÀNG bằng
+    // `SELECT ... FOR UPDATE`. Câu SELECT của `verifyTotpAttempt` KHÔNG bị khoá hàng chặn (người
+    // đọc không chờ người ghi), nên cả 24 request đi qua phép kiểm `dang_khoa` — đường tắt đọc
+    // ảnh chụp cũ — rồi KẸT ở `CAU_DAT_COC`. Việc cả 24 thật sự kẹt được QUAN SÁT qua
+    // pg_stat_activity; không đủ 24 thì ĐỎ, không phải "đi tiếp".
     //
     // `poolAs()` trả pool `max = 3`, nên 24 request đồng thời đòi 8 pool — nếu không, 21 request
     // sẽ xếp hàng ở tầng pool và phép đo này đo hàng đợi của pg-pool chứ không đo CSDL.
-    //
-    // NẾU AI ĐÓ ĐÓNG TRẦN LOẠT ĐẦU (khoản nợ: lấy khoá hàng TRƯỚC lời gọi cổng mở bí mật), test
-    // này ĐỎ — và đó là kết cục ĐÚNG: việc đóng phải đi kèm sửa phát biểu ở `CAU_GHI_THAT_BAI`
-    // và một quyết định về đánh đổi DoS, chứ không được trôi qua trong im lặng.
     // ==========================================================================================
     const N = 24;
     const SO_POOL = 8;
@@ -895,14 +948,25 @@ describe("xác thực TOTP bền vững", () => {
     const buoc = counterForTime(NGAY);
     const maSai = deriveTotpCode(biMatA, buoc) === "000000" ? "111111" : "000000";
 
-    // Vế chống rỗng ruột thứ nhất: hồ sơ phải KHÔNG bị khoá trước loạt, nếu không "24 lần được
-    // phán xét" có thể xanh vì một lý do khác hẳn.
+    // Vế chống rỗng ruột thứ nhất: hồ sơ phải KHÔNG bị khoá trước loạt, nếu không mọi con số
+    // dưới đây có thể xanh vì một lý do khác hẳn.
     const { rows: truoc } = await db.pool.query<{ f: number; l: Date | null }>(
       "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
       [nguoiA],
     );
     expect(truoc[0]!.f, "loạt phải bắt đầu từ bộ đếm 0").toBe(0);
     expect(truoc[0]!.l, "loạt phải bắt đầu từ hồ sơ KHÔNG bị khoá").toBeNull();
+
+    // ĐẠI LƯỢNG ĐƯỢC ĐO. Cổng đếm bọc cổng thật, không đổi hành vi nào.
+    let soLanMoCong = 0;
+    const congDemLoat: TotpSecretUnsealer = {
+      kind: "TOTP_SECRET_UNSEALER",
+      name: "dem-loat",
+      async openTotpSecret(orgId: string, wrapped: WrappedTotpSecret): Promise<Uint8Array> {
+        soLanMoCong += 1;
+        return await congMoBiMat.openTotpSecret(orgId, wrapped);
+      },
+    };
 
     const cacPool = Array.from({ length: SO_POOL }, () => db.poolAs("app_api"));
     const demKetKhoa = async (): Promise<number> => {
@@ -926,7 +990,7 @@ describe("xác thực TOTP bền vững", () => {
             verifyTotpAttempt(
               c,
               { orgId: orgA, userId: nguoiA, code: maSai, now: NGAY },
-              congMoBiMat,
+              congDemLoat,
             ),
           ),
         ),
@@ -944,6 +1008,10 @@ describe("xác thực TOTP bền vững", () => {
         await new Promise((r) => setTimeout(r, 50));
       }
 
+      // ĐỐI CHỨNG DƯƠNG cho chính phép ép: trong lúc cả 24 còn kẹt, KHÔNG cổng nào được mở. Nếu
+      // con số này khác 0 thì phép ép đã hỏng và mọi khẳng định sau đó đo một thứ khác.
+      expect(soLanMoCong, "chưa thả khoá mà đã có cổng được mở — phép ép đồng thời hỏng").toBe(0);
+
       await giu.query("COMMIT");
       ketQua = await tatCa;
     } finally {
@@ -953,33 +1021,49 @@ describe("xác thực TOTP bền vững", () => {
 
     const nem = ketQua.filter((r): r is PromiseRejectedResult => r.status === "rejected");
     expect(nem.length, `có request ném: ${nem.map((r) => String(r.reason)).join(" | ")}`).toBe(0);
-    const daPhanXet = ketQua.filter(
-      (r) => r.status === "fulfilled" && !r.value.ok && r.value.reason === "WRONG_CODE",
-    ).length;
-    const biKhoaSom = ketQua.filter(
-      (r) => r.status === "fulfilled" && !r.value.ok && r.value.reason === "LOCKED_OUT",
-    ).length;
+    const gt = ketQua.map((r) => (r.status === "fulfilled" ? r.value : null));
+    const daPhanXet = gt.filter((v) => v !== null && !v.ok && v.reason === "WRONG_CODE").length;
+    const biChanSom = gt.filter(
+      (v): v is Extract<MfaAttemptResult, { ok: false }> =>
+        v !== null && !v.ok && v.reason === "LOCKED_OUT",
+    );
 
-    // (A) DƯ LƯỢNG. Con số này LỚN HƠN ngưỡng, và đó chính là thứ câu "đúng maxFailedAttempts
-    //     mỗi cửa sổ, kể cả khi ĐỒNG THỜI" nói sai.
-    expect(
-      daPhanXet,
-      "cả 24 request đều đi TRỌN tới verifyTotpCode vì `dang_khoa` được đọc TRƯỚC khi bất kỳ " +
-        "request nào ghi — đây là DƯ LƯỢNG, không phải thứ bản vá mua được",
-    ).toBe(N);
-    expect(biKhoaSom, "không request nào bị chặn sớm trong loạt ĐẦU").toBe(0);
+    // (A) KHẲNG ĐỊNH CHỊU LỰC: ngân sách của kẻ tấn công là một HẰNG SỐ CẤU HÌNH, không phải độ
+    //     đồng thời. Đây là câu mà khoản nợ 2 nói là sai, và là câu duy nhất trong test này mà
+    //     mũi "dời CAU_DAT_COC xuống sau cổng" không sống sót được.
     expect(N).toBeGreaterThan(MFA_MAX_FAILED_ATTEMPTS);
+    expect(
+      soLanMoCong,
+      `cổng mở bí mật chỉ được mở ĐÚNG ${MFA_MAX_FAILED_ATTEMPTS} lần dù ${N} request tới cùng ` +
+        "lúc — nếu nó bằng 24 thì trần loạt đầu lại là ĐỘ ĐỒNG THỜI của kẻ tấn công (khoản nợ 2)",
+    ).toBe(MFA_MAX_FAILED_ATTEMPTS);
 
-    // (B) THỨ BẢN VÁ MUA ĐƯỢC: biên độ đúng 1, và sau loạt thì KHOÁ.
+    // (B) Phần còn lại của loạt bị chặn ở CỔNG CHỊU LỰC, không phải ở đường tắt.
+    expect(daPhanXet, "đúng ngưỡng mã được phán xét").toBe(MFA_MAX_FAILED_ATTEMPTS);
+    expect(biChanSom.length, "phần còn lại của loạt bị chặn").toBe(N - MFA_MAX_FAILED_ATTEMPTS);
+
+    // (C) MỌI câu trả lời LOCKED_OUT mang một mốc THẬT. Không có vế này, nhánh không giành được
+    //     cọc có thể trả `lockedUntil` đọc từ ảnh chụp CŨ — trong đúng loạt đầu ảnh ấy là NULL,
+    //     và `apps/api` sẽ dựng một phản hồi LOCKED_OUT không mốc.
+    for (const v of biChanSom) {
+      expect(v.lockedUntil, `LOCKED_OUT phải mang mốc thật: ${JSON.stringify(v)}`).toBeInstanceOf(Date);
+      expect((v.lockedUntil as Date).getTime()).toBeGreaterThan(Date.now());
+    }
+
+    // (D) ADR-008 §(ii): `justLocked` bắn ĐÚNG MỘT lần mỗi lần CHUYỂN TRẠNG THÁI. Trước bản vá,
+    //     mọi request có bộ đếm mới ≥ ngưỡng đều nhận `justLocked` — tức 20 bản ghi MFA_LOCKED
+    //     cho một loạt, và phát biểu tần suất của ADR-008 bị phá trong im lặng.
+    expect(
+      gt.filter((v) => v !== null && !v.ok && v.justLocked).length,
+      "justLocked phải bắn ĐÚNG một lần cho một lần chuyển trạng thái (ADR-008 §ii)",
+    ).toBe(1);
+
+    // (E) Bộ đếm bằng đúng ngưỡng — không phải 24 — và hồ sơ BỊ KHOÁ.
     const { rows: sau } = await db.pool.query<{ f: number; l: Date | null }>(
       "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
       [nguoiA],
     );
-    expect(
-      sau[0]!.f,
-      "24 mã được phán xét phải làm bộ đếm tăng ĐÚNG 24 (biên độ 1). Bản CTE cho 3 — tức 24 " +
-        "lần đoán mỗi đơn vị bộ đếm, và vì hồ sơ không bao giờ khoá thì LẶP MÃI.",
-    ).toBe(N);
+    expect(sau[0]!.f, "bộ đếm dừng ở NGƯỠNG, không chạy tới độ đồng thời").toBe(MFA_MAX_FAILED_ATTEMPTS);
     expect(
       sau[0]!.l,
       "sau loạt đầu hồ sơ phải BỊ KHOÁ — đó là thứ biến 'N lần đoán' thành 'N lần MỘT LẦN'",
