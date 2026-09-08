@@ -3319,3 +3319,84 @@ lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM"*.
    hai harness lần lượt đo **không cái gì** rồi báo *"xanh"*: một bộ lọc tên test viết không
    dấu (khớp 0 test, vitest thoát 0), và một phép thay chuỗi không khớp (cả hai vế chạy cùng
    một bản). Một phép đo chưa chạy nhìn giống hệt một phép đo đã qua.
+
+## ADR-034 — Một ngưỡng phải đo đúng đại lượng nó mang tên; khi không thể, đổi đại lượng chứ đừng nới ngưỡng
+
+**Bối cảnh:** khoản nợ **2** và khoản nợ **66**, S1.26. Chúng vào sổ như hai việc rời — một lỗ
+xác thực và một test nhạy tải — nhưng cả hai là cùng một hình dạng: **một con số được dùng để
+phán xét một tính chất mà nó không đo.**
+
+* Khoản 2: `failed_attempts` là một bộ đếm ĐÚNG, nhưng cái nó chặn — trần loạt đầu — hoá ra bằng
+  **độ đồng thời của kẻ tấn công**, không bằng ngưỡng cấu hình. Con số có thật; nó chỉ không đo
+  thứ người đọc tưởng.
+* Khoản 66: `TRE_TEST_MS = 800` phán xét *"được phục vụ ngay"* bằng một **khoảng thời gian tuyệt
+  đối**, trong khi tính chất cần chứng minh là **tương đối**. Dưới tải, một lượt bình thường mất
+  1090 ms và cổng đỏ mà không có gì hỏng.
+
+### 1. Quyết định chung
+
+**Khi một ngưỡng không đo được đại lượng nó mang tên, hãy ĐỔI ĐẠI LƯỢNG. Không nới ngưỡng, và
+cũng không thay nó bằng một ngưỡng thứ hai cùng loại.**
+
+Nới ngưỡng biến một phép đo thành một lời khai. Thay bằng một ngưỡng cùng loại chỉ dời chỗ hỏng
+— và ở khoản 66 phản biện đối kháng **đo được** rằng cách ấy còn tệ hơn: một hiệu tương đối
+(`t₃₀₁ − trung vị`) **vừa yếu hơn sàn tuyệt đối vừa đỏ oan được**, với biên đỏ oan thật là **80
+ms** chứ không phải 720 — vì `BIÊN + đệm = D` theo định nghĩa. Nó dựng lại chính khoản nợ 66 ở
+một chỗ mới, chỉ khó thấy hơn.
+
+### 2. Khoản 2 — đưa cổng vào `WHERE`, và ĐO NGÂN SÁCH CỦA KẺ TẤN CÔNG
+
+Bản vá **không** thêm khoá tường minh, **không** thêm round trip: nó đưa cổng vào mệnh đề `WHERE`
+của câu `UPDATE` đếm, và chuyển câu ấy lên **TRƯỚC** lời gọi cổng mở bí mật. Đếm trước, phán sau.
+
+**Phần đắt nhất không phải bản vá mà là ĐẠI LƯỢNG ĐƯỢC ĐO.** Phép đo cũ đếm *lý do trả về*
+(`WRONG_CODE`), và nó **không phân biệt được bản đã vá với chính khoản nợ**: dời câu đặt cọc
+xuống sau cổng thì cả 24 request vẫn mở cổng, rồi vẫn xếp hàng, và số `WRONG_CODE` vẫn là 5 —
+test vẫn xanh. Đại lượng đúng là thứ khoản nợ GỌI TÊN: **ngân sách của kẻ tấn công = số lần cổng
+mở bí mật được mở**. Đo dưới đồng thời ép tất định 24: **5, không phải 24**.
+
+**Đánh đổi DoS được nhận, và nó đứng trên ba con số ĐÃ CÓ LỚP** chứ không trên một lời hứa:
+`idle_in_transaction_session_timeout = 60 s` (cận **cấu trúc** cho người GIỮ khoá),
+`lock_timeout` = `statement_timeout` = 15 s (người CHỜ **chết** chứ không treo), và
+`MAX_TOTP_WINDOW = 10` ⇒ ≤ 21 lần HMAC chặn TRƯỚC cổng. Trần 5 s của `boiTranKms` là cận **chặt
+hơn nhưng CÓ ĐIỀU KIỆN** — nó phụ thuộc composition root, nên **không** được kể là tính chất cấu
+trúc.
+
+**Cái giá được ghim bằng số, không để trong chú thích:** kẻ thua một cuộc đua đã đặt cọc trước
+khi biết mình thua, và cọc không được hoàn — một người dùng bấm gửi hai lần tiêu mất 1 trong 5
+lần thử. Đó là hướng fail-CLOSED, và nó có một khẳng định riêng.
+
+### 3. Khoản 66 — vấn đề KHÔNG ĐỐI XỨNG, nên bản vá cũng không đối xứng
+
+Một **SÀN** đặt trên một request bị làm chậm **cố ý** không đỏ oan được bao giờ: tải chỉ làm nó
+lớn hơn. Nó ở lại nguyên vẹn. Chỉ vai **TRẦN** bị gỡ — và không thay bằng ngưỡng nào cả.
+
+Tính chất cần chứng minh cho 300 lượt đầu là *"KHÔNG đi vào nhánh làm chậm"* — một câu hỏi
+**PHẠM TRÙ**, không phải một phép đo thời gian. Nhánh ấy để lại dấu vết trực tiếp, nên đếm dấu
+vết là đo thẳng tính chất. Nó **mạnh hơn** phép đo cũ: bắt cả một throttle bắn với độ trễ **0
+ms**, thứ đồng hồ mù hoàn toàn.
+
+**Một khẳng định ÂM cần một ĐỐI CHỨNG DƯƠNG trong cùng lượt chạy.** *"Số lần làm chậm vẫn là 0"*
+sẽ xanh oan nếu ai đổi chuỗi log — bộ đếm khi ấy đứng yên vì nó không thấy gì nữa. Nên sau vòng
+lặp, số ấy phải thành **đúng 1**. Đây là quy tắc chung cho mọi lớp canh đếm dấu vết.
+
+**Cái giá được ghi ra:** mũi đột biến *đưa `setTimeout` ra ngoài khối `if`* vẫn ĐỎ nhưng **bằng
+HẾT GIỜ** (514 giây thay vì 45), thay vì bằng một thông điệp trong ~1 giây. **Không vá nó bằng
+một trần TÍCH LUỸ**: 300 lượt dưới đúng lượt tải từng cho ra 1090 ms sẽ chạm bất kỳ trần tích
+luỹ nào đủ chặt để bắt mũi ấy.
+
+### 4. Cái ADR này KHÔNG quyết
+
+**Một bản vá có thể giết một KỸ THUẬT TEST, và chi phí ấy phải được đo chứ không ước lượng.** Kỹ
+thuật *"treo A trong cổng rồi cho B chạy trọn"* đứng trên tiền đề *cổng được gọi khi chưa ai giữ
+khoá hàng* — khoản 2 xoá tiền đề ấy. Đo được: **27/50 đỏ, tất cả bằng hết giờ**, một lỗi gốc kéo
+26 lỗi dây chuyền. Đó là hiện vật của TEST chứ không của sản xuất (ở đó cổng có trần, người chờ
+có `lock_timeout`, người giữ có `idle_in_transaction_session_timeout`). ADR này **không** đặt ra
+một quy tắc chung cho việc ép cửa sổ đua; nó chỉ ghi rằng khuôn khoá-ngoài đã thay được khuôn
+treo-trong-cổng ở cả hai chỗ cần.
+
+**Và một khoảng trống MỚI phải nói ra:** trong lúc đóng khoản 2, đo được rằng `pnpm
+evidence:check` đóng dấu xanh cho **32 019 ký tự văn xuôi VIẾT TAY** trong ma trận bằng chứng —
+nó chứng minh bộ sinh **tất định**, không chứng minh các lời khai **đúng**. Suýt nữa một lời khai
+đã bị chính bản vá bác bỏ đi vào kho dưới một dấu kiểm màu xanh. Đó là khoản nợ **68**, và ADR
+này không đóng nó.

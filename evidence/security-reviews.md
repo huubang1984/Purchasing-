@@ -1107,3 +1107,60 @@ trường mang ký tự xuống dòng **không đi qua nổi Windows**. Cả hai
 quả của một phép đo chưa chạy. Quy tắc: **mọi harness đột biến phải FAIL-CLOSED** — khai số phép đo
 kỳ vọng, đối chứng bản không đột biến trước, và ném khi số thực tế lệch.
 
+# §S1.26 — review an ninh lượt 17 (khoản nợ 2 và 66: một ngưỡng đo nhầm đại lượng)
+
+**Phạm vi:** `git diff origin/master...HEAD` giới hạn ở `packages` + `apps`, so với `origin/master`
+= `7dfd552`.
+**Chủ đề đặt cho reviewer:** sáu mục hẹp trên khoản nợ 2 — đường đi vòng cổng mới, oracle ở nhánh
+`rowCount = 0`, lật mã lỗi ở ca *hồ sơ đang khoá + mã sai hình dạng*, khoá hàng sống tới `COMMIT`
+(deadlock và DoS), vế `locked_until` bị gỡ khỏi `CAU_DAT_KHOA`, và QT3 — cộng một câu hỏi cho
+khoản 66: lớp mới có YẾU HƠN về AN NINH không.
+
+## Bảng
+
+| Mức | Số | Nội dung |
+|---|---|---|
+| CRITICAL / HIGH | **0** | Reviewer dựng thử ba đường HIGH (bỏ qua `CAU_DAT_COC`, oracle mới ở nhánh `rowCount = 0`, ghi đè khoá đang hiệu lực) và **cả ba đều đóng** |
+| **MEDIUM** | **1** | **M-1** lập luận DoS thiếu hạng **HÀNG ĐỢI POOL**, và đó là hạng CHỊU LỰC |
+| LOW | 5 | L-1 `CAU_DAT_KHOA` an toàn nhờ THỨ TỰ LỜI GỌI chứ không nhờ chính câu lệnh · L-2 cọc lấy theo `id` nhưng đọc lại theo `(org_id, user_id)` · L-3 nhánh `CODE_ALREADY_USED` tiêu cọc mà bỏ phép so ngưỡng · L-4 mã sai hình dạng là phép dò trạng thái khoá miễn phí (**có từ trước**, vòng này không làm tệ hơn) · L-5 `MFA_LOCKED` ghi trong cùng giao dịch giữ khoá hàng |
+| INFO | 6 | không đường đi vòng cổng (`moPhongBiVaSo` có **đúng một** call site) · nhánh mới không mở oracle ở tầng HTTP · **không chu trình chờ** (đã đọc mọi trigger trên `mfa_credentials`) · QT3 đủ bốn trục và `OPERATOR()` không đổi cây phân tích · khoản 66 **không yếu hơn** về an ninh · vụn đã có tài liệu |
+
+**Đã xử trong vòng này: M-1, L-1, L-2, L-3, và I-5.** **Còn lại thành khoản nợ 69** (rút ngắn đoạn
+giữ khoá — gồm cả L-5). **L-4 không xử**: nó là một quyết định ADR (đảo `MALFORMED_CODE` lên trước
+`dang_khoa` sẽ phá tính chất *"hồ sơ đang khoá chỉ trả về đúng một câu trả lời"* vốn là chủ ý), và
+nó **có từ trước vòng này**.
+
+## Hai chỗ LỜI KHAI CỦA VÒNG NÀY rộng hơn thứ đo được — và đó là phần đáng giá nhất
+
+**⑴ M-1 — *"đứng trên ba con số đã có lớp"* bỏ sót hạng chịu lực nhất.** Ba GUC (`lock_timeout`,
+`statement_timeout`, `idle_in_transaction_session_timeout`) chặn **thời gian một phiên**; không
+cái nào chặn **số kết nối bị ghim**. `createPool` không đặt `connectionTimeoutMillis`, mà mặc định
+của `pg-pool` là `0` — hàng đợi `pool.connect()` **vô hạn**, và `server.requestTimeout` chỉ huỷ
+socket chứ không huỷ promise đang treo. Vì bản vá **tuần tự hoá** các request chồng nhau, tổng
+thời gian rút cạn pool đi từ ≈ 1× độ trễ cổng lên ≈ `min(đồng thời, ngưỡng)` lần. Với `dbPoolMax`
+mặc định **10**, một người dùng hợp lệ bắn 10 lượt `/auth/totp` đồng thời cho **chính hồ sơ mình**
+chạm được tới người của **tổ chức khác**. Đây là **khuếch đại do vòng này tạo ra**. Đã vá:
+`connectionTimeoutMillis = 20 s` (lớn hơn `lock_timeout` 15 s, để người chờ vẫn chết bằng 55P03
+với thông điệp đúng của nó), và hạng thứ tư được viết vào chính khối lập luận.
+
+**⑵ I-5 — khối chú thích của khoản 66 nói như thể vai *trần trên* đã bị gỡ khỏi cả tệp.** Nó bị gỡ
+ở **hai** test có vòng lặp 300 lượt; `:546` và `:768` vẫn là ngưỡng tuyệt đối kiểu *"phải nhanh"*.
+Đã ghi phạm vi chính xác.
+
+## Điều đáng mang sang vòng sau
+
+**⑴ MỘT BẢN VÁ ĐÚNG VẪN ĐỔI HÌNH DẠNG TẢI, VÀ LẬP LUẬN AN TOÀN PHẢI THEO KỊP.** Khoản 2 không
+thêm khoá tường minh, không thêm round trip, không nới cổng nào — nhưng nó đổi **song song** thành
+**tuần tự**, và một hạng vốn vô hại (hàng đợi pool) thành hạng chịu lực. Khi một bản vá đổi hình
+dạng đồng thời, **danh sách các cận trên phải được liệt kê lại từ đầu**, không phải kế thừa.
+
+**⑵ "AN TOÀN NHỜ THỨ TỰ LỜI GỌI" KHÔNG PHẢI MỘT TÍNH CHẤT CỦA CÂU LỆNH.** `CAU_DAT_KHOA` không
+bao giờ gặp một `locked_until` đang hiệu lực — đúng, nhưng đúng vì một lý do nằm NGOÀI câu lệnh.
+Vế phòng thủ được khôi phục **kèm lời khai rằng không mũi đột biến nào làm nó đỏ được**, nên nó
+không được kể là một lớp canh. Ghi cả hai vế là cách duy nhất để nó vừa có ích vừa không nói dối.
+
+**⑶ CẶP NGOẶC ĐẮT NHẤT CỦA VÒNG KHÔNG CÓ MỐC CHẾT NÀO CANH.** Reviewer chỉ ra: nếu vế
+`(locked_until IS NULL OR ... <= clock_timestamp())` trong `WHERE` của `CAU_DAT_COC` **không** được
+đóng ngoặc, `A AND B AND C OR D` phân tích thành `(A AND B AND C) OR D` — cổng mở toang cho mọi
+hàng. Cặp ngoặc có mặt, và `PREPARE` không bắt được lỗi ấy vì nó hợp lệ về cú pháp. Thứ bắt được
+nó là phép đo `soLanMoCong` — nhưng chỉ vì test dựng đúng ca đồng thời.
