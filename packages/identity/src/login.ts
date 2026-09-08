@@ -60,8 +60,23 @@ export async function issueLoginToken(
   if (email === "" || email.length > 320) return { ok: false, reason: "NO_USER" };
   const ttl = Math.min(Math.max(input.ttlSeconds ?? LOGIN_TOKEN_TTL_SECONDS, 60), LOGIN_TOKEN_TTL_SECONDS);
 
-  const { rows } = await client.query<{ id: string; status: string }>(
-    "SELECT id, status FROM public.users WHERE lower(email) OPERATOR(pg_catalog.=) $1",
+  // [review lượt 14, H14-6] ĐỌC CẢ `email` CỦA HÀNG, và trả về CHÍNH NÓ ở cuối hàm — không trả
+  // lại chuỗi người gọi gửi lên.
+  //
+  // Hỏng như thế nào nếu trả chuỗi người gọi: ràng buộc duy nhất của `users` là
+  // `UNIQUE (org_id, email)` — so NGUYÊN VĂN (`db/migrations/002_organizations_and_users.sql`),
+  // không có chỉ mục nào trên `lower(email)`. Nên một tổ chức CÓ THỂ mang đồng thời
+  // `Alice@corp.com` và `alice@corp.com`; câu dưới khớp CẢ HAI, `rows[0]` là hàng nào thì không
+  // xác định, và `apps/api/src/outbox-api.ts` gửi magic link tới **chuỗi người gọi gửi lên**. Đó
+  // là chiếm tài khoản: xin link cho `alice@corp.com`, nhận token của `Alice@corp.com`.
+  //
+  // Trả `u.email` làm link LUÔN đi tới địa chỉ ĐÃ ĐĂNG KÝ của chính chủ token — hàng nào được
+  // chọn thì link đi tới hộp thư của hàng ấy. Phần chênh còn lại (một lời xin có thể trả link cho
+  // hàng biến thể hoa-thường khác) là khoản nợ 63: nó cần một chỉ mục
+  // `UNIQUE (org_id, lower(email))`, tức một migration và một lượt đối chiếu dữ liệu.
+  const { rows } = await client.query<{ id: string; status: string; email: string }>(
+    "SELECT id, status, email FROM public.users " +
+      "WHERE pg_catalog.lower(email) OPERATOR(pg_catalog.=) $1",
     [email],
   );
   const u = rows[0];
@@ -72,7 +87,7 @@ export async function issueLoginToken(
   // Ngoặc quanh phép trừ là BẮT BUỘC: mọi `OPERATOR(pg_catalog.x)` có CÙNG độ ưu tiên và kết hợp trái,
   // nên `a > b - c` viết bằng OPERATOR() thành `(a > b) - c` — đo được: `boolean - interval` (42883).
   const { rows: dem } = await client.query<{ n: string }>(
-    `SELECT count(*) AS n FROM public.user_login_tokens
+    `SELECT pg_catalog.count(*) AS n FROM public.user_login_tokens
       WHERE user_id OPERATOR(pg_catalog.=) $1
         AND created_at OPERATOR(pg_catalog.>)
             (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $2::pg_catalog.float8))`,
@@ -86,7 +101,7 @@ export async function issueLoginToken(
      VALUES ($1, $2, $3, 'LOGIN', (pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $4::pg_catalog.float8)))`,
     [orgId, u.id, bam(token), ttl],
   );
-  return { ok: true, userId: u.id, token, email };
+  return { ok: true, userId: u.id, token, email: u.email };
 }
 
 export interface RedeemedLoginToken {
