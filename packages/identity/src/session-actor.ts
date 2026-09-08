@@ -72,7 +72,7 @@ export async function resolveSessionActor(
        JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.user_id
       WHERE s.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND s.revoked_at IS NULL
-        AND s.expires_at OPERATOR(pg_catalog.>) now()
+        AND s.expires_at OPERATOR(pg_catalog.>) pg_catalog.now()
         AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'`,
     [sessionId],
   );

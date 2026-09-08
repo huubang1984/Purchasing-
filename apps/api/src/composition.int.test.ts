@@ -96,7 +96,11 @@ async function goi(method: string, path: string, tuyChon: { cookie?: string; bod
 }
 
 function docHopThu(): TinHopThuDev[] {
+  // [S1.22] CHỈ đọc `.json`. Bộ ghi tạo tệp `.tmp` rồi `rename` — đổi tên là nguyên tử, nên một
+  // tệp `.json` luôn ĐẦY ĐỦ. Trước bản sửa ấy, người đọc này bắt được tệp vừa-tạo-chưa-ghi và
+  // `JSON.parse` ném `Unexpected end of JSON input` (CI lượt S1.22, hai lượt liên tiếp).
   return readdirSync(hopThu)
+    .filter((t) => t.endsWith(".json"))
     .sort()
     .map((t) => JSON.parse(readFileSync(join(hopThu, t), "utf8")) as TinHopThuDev);
 }

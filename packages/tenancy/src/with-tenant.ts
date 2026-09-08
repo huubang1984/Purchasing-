@@ -287,8 +287,8 @@ export async function withGuestSession<T>(
         loi_moi: string | null;
         goi_thau: string | null;
       }>(
-        "SELECT public.app_current_guest_session_id()::text AS phien, " +
-          "       public.app_current_guest_invitation_id()::text AS loi_moi, " +
+        "SELECT public.app_current_guest_session_id()::pg_catalog.text AS phien, " +
+          "       public.app_current_guest_invitation_id()::pg_catalog.text AS loi_moi, " +
           "       NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau",
       );
       if (

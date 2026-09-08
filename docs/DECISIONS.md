@@ -2913,3 +2913,100 @@ một vòng riêng. Ghi ra ở đây để nó là một **quyết định**, kh
 9. **[vòng sửa]** Xoá `callerLimit` khỏi `/auth/totp`: trước vòng sửa **không test nào đỏ**;
    sau vòng sửa, phép kiểm tĩnh đỏ cho TỪNG route ANON một, và test tích hợp đo
    `429 + Retry-After` trên chính đường ấy. ✔ đã đo cả hai chiều.
+
+## ADR-030 — QT3 được cưỡng chế trên tập câu SQL TỰ KHAI, và điều kiện tiên quyết của mọi ca cướp bị đóng ở tầng tĩnh
+
+**Ngày:** 2026-09-08 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 8** · Mở: **khoản nợ
+62**, **63** · Liên quan: **H21**, **E3**, **D1**, ADR-027, ADR-029
+
+### 1. Vì sao ADR này tồn tại
+
+QT3 — *mọi câu SQL chạy dưới một `search_path` mà dự án không kiểm soát phải ghim đủ tên hàm,
+toán tử, ép kiểu và tên bảng* — đã sống từ S0 trong **chú thích và test cho từng hàm một**. Khoản
+nợ 8 nói thẳng: *"Không lớp máy nào cưỡng chế quy ước này."* Nó là khoản nợ S0 nặng nhất còn lại
+sau S1.21, và nó nặng vì cả bốn trục đều đã được **tái lập end-to-end** trên chính kho này: một
+`doc.=` trả `true` lật được phán quyết của `hasPermission`; `CREATE CAST … AS IMPLICIT` lật được
+phán quyết của MFA.
+
+### 2. Quyết định
+
+⑴ **Chủ thể của lớp cưỡng chế suy từ NỘI DUNG câu SQL, không từ một danh sách tệp: một câu đã
+   ghim MỘT trục phải ghim ĐỦ BỐN.** Đây là vế mới, và nó không phải một sự thoả hiệp — nó nhắm
+   vào chiều hỏng đắt nhất trong ba chiều:
+
+   | Nhóm | Đo được | Người đọc thấy gì |
+   |---|---|---|
+   | ghim ĐỦ | | được bảo vệ, và đúng thế |
+   | ghim KHÔNG GÌ | 80 câu | chưa được bảo vệ, và thấy ngay |
+   | **ghim NỬA VỜI** | **13 câu** | **đọc như đã được bảo vệ, và không phải** |
+
+   Một câu mang `OPERATOR(pg_catalog.=)` ở ba chỗ và một `=` trần ở chỗ thứ tư là cùng một hình
+   dạng với *"xanh giả"*: thứ tệ hơn một lỗ hổng là một lỗ hổng trông như đã được vá.
+
+⑵ **Điều kiện tiên quyết của mọi ca cướp bị đóng ở tầng TĨNH.** Cả ba ca đều cần `search_path`
+   NÊU TÊN `pg_catalog` ở vị trí sau; không nêu thì `pg_catalog` được tìm ngầm trước tiên và
+   không gì cướp được. Ba đường đưa tiền đề ấy vào — `rolconfig` (hardening canh), `options` của
+   chuỗi kết nối (`createPool` canh), và **một câu do chính mã ứng dụng phát** — chỉ đường thứ ba
+   không có lớp. Nay có, và nó kiểm theo *"câu này có nhắc `search_path` không"* chứ không theo
+   một cú pháp: `SET LOCAL search_path` và `set_config('search_path', …)` là khuôn ĐANG DÙNG của
+   kho này cho những GUC khác, nên một phép kiểm chỉ khớp `SET search_path` sẽ mời người viết
+   dòng tiếp theo đi vòng qua nó mà không biết.
+
+⑶ **Mọi danh sách miễn trừ của lớp này được ĐO trên PostgreSQL thật, không được viết tay.**
+   `pg_proc` phán xét danh sách "cấu trúc ngữ pháp" (một tên có hàm thật thì nó GHIM ĐƯỢC, tức nó
+   phải bị ghim); `pg_get_keywords()` phán xét hai danh sách từ khoá. Phép đo ấy đã bác **năm**
+   dòng của bản đầu (`extract`, `substring`, `overlay`, `position`, `normalize`) và **bốn** dòng
+   nữa sau review lượt 14 (`unnest`, `generate_series`, `left`, `right`).
+
+⑷ **Tên kiểu ĐÃ GHIM phải là một kiểu THẬT của `pg_catalog`.** Vế này ra đời từ một lần ĐỎ trong
+   chính vòng: bản sửa ghim `$2::pg_catalog.int`, và `int` là **đường cú pháp**, không phải tên
+   kiểu trong catalog (`int4` mới là). Câu ném 42704, `/guest/otp/verify` trả 500 thay vì 401, và
+   chỉ T3 bắt được. Hình dạng của lỗi đáng nhớ hơn bản thân lỗi: **một lớp canh đòi
+   `::pg_catalog.<t>` cho mọi `::<t>` sẽ DẠY người ta viết `::pg_catalog.int`** — nên vế "tên kiểu
+   ghim phải tồn tại" thuộc về chính lớp ấy, không phải về sự cẩn thận của người viết.
+
+### 3. Vì sao KHÔNG phải "mọi câu SQL"
+
+Vì nó là một cuộc di trú 200+ chỗ trong một vòng, và mỗi chỗ đổi một câu SQL đang chạy trong
+đường nghiệp vụ thật. Khoản nợ 29 đã ghi nguyên tắc: *"trộn vào một hạng mục sẽ làm cả hai khó
+xem xét"*. Vòng này ghim **20** câu — 13 câu nửa vời cộng 7 câu trên đường ra quyết định an ninh
+mà review lượt 14 chỉ tên — và mỗi câu ấy được T3 chạy qua.
+
+Phần dư **không bị giấu**: nó có một con số (80), một mốc ghim (`TRAN_TOI_DA`, chỉ đi xuống), một
+phép đo phụ (**39** trong số đó chạm bảng nhạy cảm) và một số hiệu (**khoản nợ 62**).
+
+### 4. Cái giá, nói ra thay vì để người đọc tự phát hiện
+
+- **Bộ đọc SQL là một bộ tách từ trên mã TypeScript, không phải một trình phân tích SQL.** Nó
+  ghép được chuỗi nối bằng `+`, bỏ đúng chú thích và hằng chuỗi, đọc cả ba kiểu dấu nháy. Nó
+  KHÔNG hiểu SQL dựng động ngoài phép nối chuỗi, và nó không đọc `.sql` (xem §5).
+- **Nó đọc `git ls-files`.** Một tệp sản xuất mới chưa `git add` là vô hình với lớp này — và đó
+  không phải giả thuyết: chính vòng này gặp nó khi bốn tệp test mới chưa vào chỉ mục.
+- **Ghim làm SQL khó đọc hơn.** `a > b` thành `a OPERATOR(pg_catalog.>) b`. Đây là một cái giá
+  thật, trả cho một bảo đảm đã được tái lập bằng phép đo chứ không phải cho một nỗi lo.
+- **Độ ưu tiên đổi khi ghim.** Mọi `OPERATOR(…)` có CÙNG độ ưu tiên và kết hợp TRÁI, nên
+  `a > b - c` viết bằng OPERATOR() thành `(a > b) - c`. Ngoặc là bắt buộc khi có hai toán tử ghim
+  trong một biểu thức — `packages/identity/src/login.ts` ghi nguyên văn phép đo
+  (`boolean - interval` ⇒ 42883).
+
+### 5. Phạm vi — và cái gì giữ phần NGOÀI phạm vi
+
+`db/migrations/*.sql` và `hardening.always.sql` **không** thuộc lớp này. Lý do đo được: chúng chạy
+trên kết nối của `migrate()`, nơi câu lệnh ĐẦU TIÊN là `SET search_path = public` — một
+`search_path` KHÔNG nêu `pg_catalog`, tức `pg_catalog` được tìm ngầm trước tiên. Thứ giữ cho tiền
+đề ấy đứng chính là §2⑵.
+
+### 6. Phép đo
+
+1. Trước vòng: **13** câu ghim nửa vời (21 toán tử, 8 hàm, 1 ép kiểu, 16 tên bảng trần), trong đó
+   `packages/unseal/src/gate.ts` — cổng chính sách mở thầu — đếm phê duyệt bằng năm `=` trần và
+   ba tên bảng trần trong khi vẫn ghim `public.unseal_so_phe_duyet_can`. ✔ đã đo.
+2. `packages/invitation/src/invitation.ts` có `(expires_at <= now())` và `locked_until > now()`
+   trần trong một câu mà toàn bộ mệnh đề `WHERE` đã ghim — hai biểu thức quyết định một OTP đã
+   hết hạn hay đang bị khoá. ✔ đã đo.
+3. `pg_proc` bác **năm** tên khỏi danh sách "ngữ pháp"; `pg_get_keywords()` + `pg_proc` bác thêm
+   **bốn** sau review lượt 14. Mã sản xuất đã GHIM `unnest` từ trước, tức lớp canh và mã nguồn
+   từng nói ngược nhau. ✔ đã đo.
+4. `$2::pg_catalog.int` ⇒ 42704 ⇒ 500 thay vì 401 trên `/guest/otp/verify`. `int` không có trong
+   `pg_type` của `pg_catalog`; `int4` thì có. ✔ đã đo, và nay có một phép kiểm cho nó.
+5. 20 câu SQL được ghim trong vòng, **757 test tích hợp** chạy qua chúng. ✔ đã đo.

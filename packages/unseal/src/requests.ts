@@ -258,16 +258,19 @@ export async function approveUnseal(
   // nuốt một `check_violation` sẽ nuốt cả những lý do khác cùng mã lỗi.
   const { rows: dem } = await client.query<{ can: number; co: string }>(
     `SELECT public.unseal_so_phe_duyet_can(r.rfq_id) AS can,
-            (SELECT count(*) FROM unseal_approvals a
-              WHERE a.unseal_request_id = r.id AND a.org_id = r.org_id) AS co
-       FROM unseal_requests r WHERE r.id = $1`,
+            (SELECT pg_catalog.count(*) FROM public.unseal_approvals a
+              WHERE a.unseal_request_id OPERATOR(pg_catalog.=) r.id
+                AND a.org_id OPERATOR(pg_catalog.=) r.org_id) AS co
+       FROM public.unseal_requests r
+      WHERE r.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
     [input.unsealRequestId],
   );
   const d = dem[0];
   if (d !== undefined && Number(d.co) >= d.can) {
     const { rows } = await client.query<HangYeuCau>(
-      `UPDATE unseal_requests SET status = 'APPROVED', approved_at = now()
-        WHERE id = $1 AND status = 'PENDING' RETURNING ${COT}`,
+      `UPDATE public.unseal_requests SET status = 'APPROVED', approved_at = pg_catalog.now()
+        WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+          AND status OPERATOR(pg_catalog.=) 'PENDING' RETURNING ${COT}`,
       [input.unsealRequestId],
     );
     const h = rows[0];

@@ -108,9 +108,13 @@ export async function submitBid(
   // (018) một cách có chủ đích: lớp này cho một thông báo đọc được, lớp kia là lớp có thẩm quyền.
   const { rows: phien } = await client.query<HangPhien>(
     `SELECT g.invitation_id, i.rfq_id, g.verified_contact_id
-       FROM guest_sessions g
-       JOIN rfq_invitations i ON i.id = g.invitation_id AND i.org_id = g.org_id
-      WHERE g.id = $1 AND g.revoked_at IS NULL AND g.expires_at > now()`,
+       FROM public.guest_sessions g
+       JOIN public.rfq_invitations i
+         ON i.id OPERATOR(pg_catalog.=) g.invitation_id
+        AND i.org_id OPERATOR(pg_catalog.=) g.org_id
+      WHERE g.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND g.revoked_at IS NULL
+        AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.now()`,
     [input.guestSessionId],
   );
   const p = phien[0];
@@ -130,7 +134,7 @@ export async function submitBid(
     // `submitted_at_text` đi qua `public.bid_dau_thoi_gian_chinh_tac` chứ KHÔNG qua `Date` của
     // JavaScript: `timestamptz` giữ micro-giây còn `Date` chỉ tới mili-giây, và một biên nhận cắt
     // bớt ba chữ số cuối là một biên nhận không khớp dữ liệu nó chứng nhận.
-    `INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id)
+    `INSERT INTO public.vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id)
      VALUES ($1, $2, $3, $4)
      RETURNING id, version, public.bid_dau_thoi_gian_chinh_tac(submitted_at) AS submitted_at_text`,
     [orgId, bidId, Buffer.from(input.envelope), input.guestSessionId],
@@ -235,7 +239,9 @@ export async function listBidVersions(
   batBuocUuid(bidId, "bidId");
   const { rows } = await client.query<{ id: string; version: number; submitted_at_text: string }>(
     `SELECT id, version, public.bid_dau_thoi_gian_chinh_tac(submitted_at) AS submitted_at_text
-       FROM vendor_bid_versions WHERE bid_id = $1 ORDER BY version`,
+       FROM public.vendor_bid_versions
+      WHERE bid_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+      ORDER BY version`,
     [bidId],
   );
   return rows.map((r) => ({ id: r.id, version: r.version, submittedAt: r.submitted_at_text }));

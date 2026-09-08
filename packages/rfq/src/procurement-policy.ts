@@ -141,8 +141,9 @@ export async function getActiveProcurementPolicy(
   await assertTenantBound(client, orgId, "getActiveProcurementPolicy");
 
   const { rows } = await client.query<HangChinhSach>(
-    `SELECT ${COT_CHINH_SACH} FROM org_procurement_policies
-      WHERE effective_from <= now() ORDER BY version DESC LIMIT 1`,
+    `SELECT ${COT_CHINH_SACH} FROM public.org_procurement_policies
+      WHERE effective_from OPERATOR(pg_catalog.<=) pg_catalog.now()
+      ORDER BY version DESC LIMIT 1`,
   );
   const hang = rows[0];
   return hang === undefined ? null : doiChinhSach(hang);
@@ -214,9 +215,10 @@ export async function setRfqBudget(
   );
 
   const { rows } = await client.query<{ requires_dual_approval: boolean }>(
-    `UPDATE rfq_packages
+    `UPDATE public.rfq_packages
         SET requires_dual_approval = public.rfq_can_phe_duyet_kep(id)
-      WHERE id = $1 AND status = 'DRAFT'
+      WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND status OPERATOR(pg_catalog.=) 'DRAFT'
       RETURNING requires_dual_approval`,
     [input.rfqId],
   );
