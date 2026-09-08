@@ -237,7 +237,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ **[S1.24] 65 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ **[S1.25] 67 khoản, trong đó 13 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
@@ -800,3 +800,33 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     đã sửa); và một job `schedule` **fail-closed** đã đỏ từ hôm trước với đúng con số khoản nợ 24
     đang chờ — `TỶ LỆ ĐỎ: 2 / 10` — mà không tới tay ai (khoản nợ 65). **Fail-closed mà không có
     người đọc thì chỉ là fail-lặng.**
+
+20. **[2026-09-08] S1.25 — BA KHOẢN NỢ 24, 59, 65 LÀ MỘT CHỦ ĐỀ: ĐỘ TIN CẬY CỦA CHÍNH CÁI LƯỚI.**
+    Chúng nhìn như ba việc rời — một tỷ lệ chưa đo, một cổng đỏ giả, một kết quả không tới ai —
+    nhưng cả ba đều làm người đọc mất khả năng phân biệt *"cổng này nói gì"* với *"cổng này lại
+    thế thôi"*. Bốn dòng dưới đây là thứ đắt nhất vòng.
+
+    ⑴ **Đóng một đỏ giả bằng KHOÁ, đừng đóng bằng LOẠI TRỪ.** Đường dễ là cho `pnpm run depcruise`
+    bỏ qua mọi tệp `zprobe-*`. Nó đóng được đua tranh, nhưng đổi lại cổng sản xuất **thôi nhìn một
+    lớp tệp** mà chỉ một quy ước đặt tên giữ cho trống — mua sự yên tĩnh bằng một lỗ. Khoá không
+    đổi thứ gì được đo. Và khoá phải bao **trọn vòng đời của probe**, không chỉ bao lượt quét:
+    probe nằm trên đĩa thật, nên chỉ cần nó TỒN TẠI là đủ.
+
+    ⑵ **Một đường báo động không được kiểm là một đường báo động không tồn tại.** `do-lap.yml` nay
+    mở issue khi tỷ lệ khác 0, và có input `dot_bien` để bắt đường ấy chạy lúc kho đang xanh. Mũi
+    ấy đã chạy thật: issue #22, mang tỷ lệ + link + commit, tự khai mình là mũi đo, rồi được đóng.
+    **Không có mũi ấy thì lần đầu tiên đường báo động cần chạy cũng là lần đầu tiên nó hỏng.**
+
+    ⑶ **"Test flaky" là một cái tên, không phải một cơ chế — và cái tên ấy che mất bản vá.** Đo
+    được 1/10 trên CI, đọc log ra `[M10]`, đọc `[M10]` ra một điều cụ thể: `pool.end()` là thao
+    tác CỤC BỘ của Node (đóng socket), còn backend PostgreSQL giữ advisory lock chỉ chết SAU đó,
+    bất đồng bộ. **Phép đếm tức thì đo sai THỜI ĐIỂM, không đo sai tính chất.** Khuôn đúng — vòng
+    chờ — đã nằm sẵn trong chính tệp ấy cho một ca khác, và chú thích đầu tệp còn viết ra thành
+    câu. Trước khi gọi một test là flaky, hãy hỏi *cái gì thay đổi trạng thái, và phép đo đứng ở
+    đâu so với nó*.
+
+    ⑷ **Đóng đúng thứ mình nói, đừng đóng thêm.** Khoản 59 đóng **đua tranh `depcruise`** — và
+    chính lượt chứng minh điều đó lại đỏ một test KHÁC: một ngưỡng thời gian tuyệt đối
+    (`TRE_TEST_MS = 800`) dùng để đo một tính chất TƯƠNG ĐỐI (*"lượt N+1 chậm hơn hẳn"*). Nó thành
+    khoản nợ **66**, không gộp vào 59. Ghi *"lượt gộp hết đỏ"* lúc ấy sẽ là một câu rộng hơn phép
+    đo — và là đúng lỗi mà ADR-029 cấm.

@@ -1044,3 +1044,66 @@ không được chỉ kiểm đầu ra.
 
 **Và một điều về thứ tự:** cả 20 lỗi đều làm đường **đóng cứng**, không fail-open. Đó là may chứ
 không phải thiết kế.
+
+# §S1.25 — review an ninh lượt 16 (khoản nợ 24, 59, 65: độ tin cậy của chính cái lưới)
+
+**Phạm vi:** 9 tệp của `git diff origin/master...HEAD`, so với `origin/master` = `adb2f9a`.
+**Chủ đề đặt cho reviewer:** ba mục hẹp — `do-lap.yml` (tiêm `$GITHUB_OUTPUT`, tiêm biểu thức
+`${{ }}`, lạm dụng `issues: write`, rò rỉ bí mật qua thân issue), `khoa-depcruise.ts` (symlink,
+giành trước tên, khoá cũ, tiến trình chết giữa chừng), và `migrate.int.test.ts` (vòng chờ mới có
+làm YẾU khẳng định không).
+
+## Bảng
+
+| Mức | Số | Nội dung |
+|---|---|---|
+| CRITICAL / HIGH | **0** | — và ba đường nghi nhất đều SẠCH: không `${{ }}` nào nội suy thẳng vào `run:` (mọi giá trị đi qua `env:`); thân issue chỉ mang `%s` đã trích dẫn, không `eval`; trigger chỉ `schedule` + `workflow_dispatch`, nên **không có đường nào cho người ngoài chạy workflow hay nhét dữ liệu vào** |
+| **MEDIUM** | **3** | **M1** vòng quay VÔ HẠN trong khoá (không hạn, không ngủ, chặn event loop) · **M2** hạn chờ 15 s vượt `idleTimeoutMillis` 10 s của pool · **M3** token `issues: write` nằm cùng job với `pnpm install` |
+| LOW | 7 | L1 tiêm khoá `$GITHUB_OUTPUT` · L2 chuyển hướng issue báo động · L3 đường khoá đoán được trong `/tmp` · L4 `HAN_CHO_MS` < `HAN_KHOA_MS` · L5 log ra artifact vòng qua cơ chế che bí mật · L6 `dot_bien` che tỷ lệ đỏ THẬT · L7 `so_luot` không cận trên |
+| INFO | 6 | export chết · không chống tái nhập · nội suy định danh SQL · ranh giới import mới (đã kiểm: SẠCH) · quét bí mật toàn kho (SẠCH) · thân issue không rò môi trường (SẠCH) |
+
+**Đã xử trong vòng này: M1, M2, M3, L1, L2, L4, L5, L6, L7, và 3 mục INFO** (export chết, chống
+tái nhập, `pg.escapeIdentifier`). **Còn lại thành khoản nợ 67**: tách `do-lap.yml` làm hai job để
+không bước nào vừa cầm token ghi vừa chạy mã bên thứ ba — một cuộc tái cấu trúc, không phải một
+dòng sửa.
+
+## Mỗi bản vá đi kèm một lượt ĐỎ THẬT
+
+| Vá | Mũi đột biến | Kết quả |
+|---|---|---|
+| M1 ném lỗi khác `EEXIST` | gỡ dòng `throw e` | **ĐỎ 1/6** — *"đường khoá KHÔNG DÙNG ĐƯỢC ⇒ NÉM NGAY"* |
+| L4 + ⑶ hỏi chủ khoá còn sống | `laKhoaRac` chỉ nhìn đồng hồ | **ĐỎ 1/6** — *"tiến trình ĐÃ CHẾT bị thu hồi NGAY"* |
+| ⑶ chiều âm | `laKhoaRac` luôn trả `true` | **ĐỎ 2/6** — kể cả phép nối tiếp gốc |
+| nhả khoá theo PID | nhả vô điều kiện | **ĐỎ 1/6** — *"KHÔNG xoá khoá mà người khác đã giành lại"* |
+| chống tái nhập | gỡ chặn | **ĐỎ 1/6** — *"gọi LỒNG không tự khoá chết chính mình"* |
+| L1 dấu phân cách ngẫu nhiên | chạy lại bản `echo "khoá=giá-trị"` với `dot_bien` mang ký tự xuống dòng | bản **CŨ**: `so_do` bị ghi đè thành `0` ⇒ **bước báo động BỊ TẮT** dù tỷ lệ đỏ thật khác 0; bản **VÁ**: giá trị nằm trọn trong heredoc, `so_do` giữ nguyên |
+| L6 tách số đỏ thật / giả | chạy khối lệnh báo động thật với `gh` giả, 3 tình huống | `dot_bien=true` + 0 đỏ thật ⇒ tiêu đề *"KHÔNG phải một phép đo"*; `dot_bien=true` + **2 đỏ thật** ⇒ tiêu đề **báo động thật** kèm một dòng nói rõ có mũi đo |
+
+## Điều đáng mang sang vòng sau
+
+**⑴ MỘT LỚP CANH DỰNG ĐỂ CHỐNG TREO MÀ BẢN THÂN NÓ TREO ĐƯỢC.** M1 là `continue` trong một `catch`
+nhảy vượt **cả** kiểm tra hạn **cả** giấc ngủ. Chú thích ngay bên trên viết *"một lượt treo im lặng
+còn tệ hơn một lượt đỏ, nên chỗ này NÉM"* — và có một đường đi tới đúng chỗ ấy mà không bao giờ
+ném. Đường kích hoạt **không cần kẻ tấn công**: một `TMPDIR` trỏ vào thư mục đã bị dọn là đủ. Quy
+tắc rút ra: **trong một vòng lặp chờ, kiểm tra hạn phải là câu lệnh ĐẦU TIÊN của mọi nhánh lỗi, và
+không nhánh nào được thoát mà không đi qua giấc ngủ.**
+
+**⑵ HẠN THEO ĐỒNG HỒ LÀ MỘT PHỎNG ĐOÁN; "CHỦ CÒN SỐNG KHÔNG" LÀ MỘT SỰ KIỆN.** Câu hỏi *"khoá này
+già hơn 300 giây chưa"* sai cả hai chiều cùng lúc: nó **giết khoá đang sống** của một lượt cruise
+chậm, và nó **giữ khoá đã chết** của một lượt bị `Ctrl-C` đủ lâu để đầu độc 2 phút kế tiếp.
+`process.kill(pid, 0)` trả lời đúng câu hỏi cần hỏi. Đồng hồ tụt xuống làm lưới đỡ cho một khe
+micro-giây, và vì thế `HAN_KHOA_MS` phải **nhỏ hơn** `HAN_CHO_MS`.
+
+**⑶ MỘT KHẲNG ĐỊNH CÓ THỂ HỎNG VÌ MỘT CON SỐ Ở TỆP KHÁC.** M2: hạn chờ 15 s vượt
+`idleTimeoutMillis` mặc định **10 s** của `pg.Pool`, nên `pg-pool` tự dọn client rảnh trước khi
+vòng chờ hết hạn — khẳng định thôi đo mã dưới test và quay ra đo cơ chế thu hồi của thư viện. Cái
+bẫy ấy **đã được ghi ra trong chính tệp đó**, cách 60 dòng, cho một khẳng định khác. Viết ra một
+bài học không làm nó tự áp dụng cho dòng tiếp theo.
+
+**⑷ HAI LẦN TRONG MỘT VÒNG, BỘ ĐO CỦA TÔI ĐO KHÔNG CÁI GÌ VÀ BÁO "XANH".** Lượt đột biến đầu lọc
+test bằng chuỗi **không dấu** ⇒ khớp 0 test ⇒ vitest bỏ qua cả 6 và thoát 0 ⇒ 5/5 mũi báo "xanh".
+Lượt đo L1 đầu có phép thay chuỗi không khớp nên **cả hai vế đều chạy bản mới**, cộng một biến môi
+trường mang ký tự xuống dòng **không đi qua nổi Windows**. Cả hai lần, kết quả "an toàn" là kết
+quả của một phép đo chưa chạy. Quy tắc: **mọi harness đột biến phải FAIL-CLOSED** — khai số phép đo
+kỳ vọng, đối chứng bản không đột biến trước, và ném khi số thực tế lệch.
+

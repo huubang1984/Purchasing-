@@ -109,10 +109,69 @@ async function xoaDatabaseSauKhiHetKetNoi(
   // Đường lui: còn kết nối thì vẫn phải xoá cho sạch, và người gọi sẽ làm test đỏ vì `conLai`.
   await pQuanTri.query(
     conLai === 0
-      ? `DROP DATABASE IF EXISTS ${pTenDb}`
-      : `DROP DATABASE IF EXISTS ${pTenDb} WITH (FORCE)`,
+      // [review lượt 16, INFO] `escapeIdentifier`, dù hôm nay mọi người gọi đều truyền hằng chữ.
+      // Khác với ba chỗ nội suy còn lại trong tệp này, đây là một HÀM NHẬN THAM SỐ — chữ ký ấy mời
+      // một người gọi tương lai truyền vào thứ không phải hằng, và lúc ấy sẽ không có gì kêu.
+      ? `DROP DATABASE IF EXISTS ${pg.escapeIdentifier(pTenDb)}`
+      : `DROP DATABASE IF EXISTS ${pg.escapeIdentifier(pTenDb)} WITH (FORCE)`,
   );
   return conLai;
+}
+
+/**
+ * Đợi tới khi KHÔNG còn advisory lock nào trong CSDL hiện tại, rồi trả về số còn lại.
+ *
+ * [khoản nợ 24] Cùng một lý do với `xoaDatabaseSauKhiHetKetNoi` ngay bên trên, và vòng này bỏ
+ * sót nó: `pool.end()` / `client.destroy()` là thao tác CỤC BỘ của tiến trình Node — nó đóng
+ * socket. Backend PostgreSQL giữ advisory lock chỉ chết SAU đó, bất đồng bộ, và cửa sổ giữa hai
+ * việc rộng ra đúng lúc máy đang gánh nặng. Một phép ĐẾM TỨC THÌ ở giữa cửa sổ ấy đo sai THỜI
+ * ĐIỂM chứ không đo sai tính chất.
+ *
+ * Phép đo, không phải linh cảm: lượt `workflow_dispatch` ngày 2026-09-08 trên master chạy
+ * `pnpm test:int` **10 lượt** và đỏ **1** — lượt ấy đỏ đúng ở đây, `expected 1 to be +0`.
+ *
+ * Vòng chờ KHÔNG nới tính chất: *"không kẹt advisory lock"* vẫn là *"không kẹt"*. Một khoá rơi
+ * trong vài trăm mili-giây thì chưa bao giờ là kẹt; một khoá kẹt thật thì ở lại tới hết hạn và
+ * test vẫn ĐỎ với đúng con số cũ.
+ *
+ * ----------------------------------------------------------------------------------------------
+ * VÌ SAO HẠN LÀ **5** GIÂY, KHÔNG PHẢI 15 — review an ninh lượt 16 (S1.25), mức MEDIUM
+ * ----------------------------------------------------------------------------------------------
+ * Bản đầu của vòng chờ này đặt hạn **15 000 ms**, và con số ấy rơi thẳng vào cái bẫy mà CHÍNH TỆP
+ * NÀY đã ghi ra ở khối B3 phía trên: `pg.Pool` có `idleTimeoutMillis` mặc định **10 giây**, và
+ * `poolThuong` ở chỗ gọi được dựng KHÔNG đặt tham số ấy nên nó nhận đúng mặc định.
+ *
+ * Hậu quả, nói bằng đúng mũi đột biến mà khẳng định này khai là mình canh (`release(err)` đổi
+ * thành `release()`): một client hỏng khi ấy **nằm lại pool ở trạng thái RẢNH và vẫn giữ advisory
+ * lock**. Với hạn 15 s > 10 s, `pg-pool` tự đóng client rảnh ấy ở giây thứ 10, backend thoát,
+ * khoá được nhả, và vòng chờ thấy 0 ở giây thứ 10 rồi **XANH**. Tức khẳng định thôi đo tính chất
+ * của mã dưới test và quay ra đo cơ chế thu hồi rảnh của thư viện.
+ *
+ * Với hạn **5 s < 10 s**, cửa sổ ấy đóng: một khoá do client rảnh giữ vẫn còn nguyên khi vòng chờ
+ * hết hạn, và test ĐỎ. Cái giá là 5 s phải đủ rộng cho hiện tượng thật — cửa sổ backend chết bất
+ * đồng bộ đo được ở mức vài trăm mili-giây, nên 5 s là hơn mười lần biên; và nếu một ngày nó
+ * không đủ, test đỏ với ĐÚNG con số cũ chứ không xanh nhầm.
+ *
+ * Ghi cho đủ, vì đây là vế dễ nói rộng: mũi đột biến `release()` **vẫn** bị bắt ngay cả ở bản 15 s,
+ * nhưng bắt bởi `expect(poolThuong.totalCount).toBe(0)` đứng TRƯỚC, không phải bởi vòng chờ này.
+ * Thứ hạn 5 s mua được là **tín hiệu độc lập** của chính khẳng định advisory lock — để ngày ai đó
+ * gỡ `totalCount` đi thì vẫn còn một lớp.
+ */
+async function doiHetKhoaTuVan(pPool: pg.Pool, pHanMs = 5_000): Promise<number> {
+  const dem = async (): Promise<number> => {
+    const { rows } = await pPool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' " +
+        "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
+    );
+    return rows[0]?.n ?? -1;
+  };
+  const hetHan = Date.now() + pHanMs;
+  let n = await dem();
+  while (n > 0 && Date.now() < hetHan) {
+    await new Promise((giaiQuyet) => setTimeout(giaiQuyet, 25));
+    n = await dem();
+  }
+  return n;
 }
 
 /**
@@ -533,11 +592,13 @@ describe("bộ chạy migration", () => {
       expect(poolThuong.totalCount).toBe(0);
       expect(poolThuong.idleCount).toBe(0);
 
-      const { rows } = await poolSieuQuyen.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' " +
-          "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
-      );
-      expect(rows[0]?.n).toBe(0);
+      // [khoản nợ 24] VÒNG CHỜ, không phải một phép đếm tức thì — xem `doiHetKhoaTuVan`.
+      // Thông điệp nói ĐÚNG thời điểm: `poolThuong.end()` chạy ở `finally` bên dưới, tức SAU chỗ
+      // này. Lúc khẳng định chạy, pool CHƯA đóng — `totalCount` bằng 0 vì client đã bị huỷ.
+      expect(
+        await doiHetKhoaTuVan(poolSieuQuyen),
+        "advisory lock KẸT sau khi mọi client của pool đã bị huỷ",
+      ).toBe(0);
     } finally {
       await poolThuong.end();
       await poolSieuQuyen.end();

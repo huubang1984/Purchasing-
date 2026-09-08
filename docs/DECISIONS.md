@@ -3200,3 +3200,122 @@ cách viết ấy** thì nó không phải hàng rào, nó là một cái khuôn
 2. 63 câu được viết lại, **758 test tích hợp** chạy qua chúng trên PostgreSQL thật. ✔ đã đo.
 3. Hai mũi đột biến mới ĐỎ thật: một câu viết trần hoàn toàn, và `=>` bị đọc thành hai toán tử.
    ✔ đã đo.
+
+---
+
+## ADR-033 — Lưới an toàn phải tự nói: đóng đỏ giả bằng KHOÁ chứ không bằng LOẠI TRỪ, và fail-closed phải có đường đi tới người đọc
+
+**Ngày:** 2026-09-08 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 59**, **65** · Mở:
+**khoản nợ 66** · Liên quan: ADR-029, khoản nợ 24
+
+### 1. Vì sao ADR này tồn tại
+
+Ba khoản nợ 24, 59, 65 nhìn như ba việc rời. Chúng là **một**: chúng nói về độ tin cậy của
+chính cái lưới đang đo mọi thứ khác. Một lưới sai theo ba kiểu khác nhau — **đỏ giả** (59), **kết
+quả không tới ai** (65), **một tỷ lệ chưa đo** (24) — và cả ba đều làm người đọc mất khả năng
+phân biệt *"cổng này nói gì"* với *"cổng này lại thế thôi"*.
+
+### 2. Quyết định
+
+⑴ **Đỏ giả của `depcruise` đóng bằng một KHOÁ LIÊN TIẾN TRÌNH, không bằng loại trừ theo tên.**
+   Đường dễ hơn là cho `pnpm run depcruise` bỏ qua mọi tệp `zprobe-*`. Nó đóng được đua tranh,
+   nhưng đổi lại cổng sản xuất **thôi nhìn một lớp tệp** mà chỉ một quy ước đặt tên giữ cho trống
+   — tức mua sự yên tĩnh bằng một lỗ. Khoá không đổi thứ gì được đo; nó chỉ nói *"đừng đo trong
+   lúc người khác đang sửa cây nguồn"*.
+
+⑵ **Khoá bao TRỌN vòng đời của probe**, không chỉ bao lượt quét: probe nằm trên đĩa thật, nên chỉ
+   cần nó **tồn tại** trong lúc lượt quét toàn kho chạy là đủ để sinh một vi phạm không có thật.
+
+⑶ **Một job fail-closed phải có đường đưa kết quả tới một chỗ CÓ NGƯỜI.** `do-lap.yml` khi tỷ lệ
+   khác 0 nay mở (hoặc bình luận vào) một issue mang **con số**, **tên tệp đỏ** và **link lượt
+   chạy**. Fail-closed mà không ai đọc thì chỉ là **fail-lặng** — và điều đó đã xảy ra thật: ngày
+   2026-09-07 job ấy đo được `TỶ LỆ ĐỎ: 2/10`, đúng con số khoản nợ 24 chờ, rồi nằm yên 22 giờ.
+
+⑷ **Một đường báo động không được kiểm là một đường báo động không tồn tại.** Vì thế có
+   `workflow_dispatch` input `dot_bien`: nó cộng một lượt đỏ **giả** để bắt đường báo động chạy
+   khi kho đang xanh, và issue sinh ra từ nó **tự khai mình là một mũi đo**.
+
+### 3. Đo được, không suy
+
+| Vế | Phép đo | Kết quả |
+|---|---|---|
+| khoá có nối tiếp thật không | hai **tiến trình** thật; vế *"không khoá"* chạy TRƯỚC để chứng minh máy dựng được đua tranh | không khoá ⇒ chồng lấn; có khoá ⇒ không, và tổng thời gian ≥ 2× thời gian giữ |
+| khoá có đóng được đỏ giả không | chạy lại **đúng bối cảnh** từng đỏ: lượt gộp `pnpm evidence` | `boundaries.test.ts` **XANH** |
+| đường báo động có chạy không | `dot_bien=true`, `so_luot=1` trên nhánh | **issue #22** được mở, mang tỷ lệ + link + commit; đã đóng kèm giải thích |
+| bản vá `[M10]` có hạ được tỷ lệ đỏ không | 10 lượt `pnpm test:int` trên **phần cứng CI**, nhánh đã vá `33af790` (lượt 34225703897, 87 phút) | **`TỶ LỆ ĐỎ: 0 / 10`** — trước vòng: 2/10 trên master, trong đó **một** thuộc khoản nợ 24. Đọc kèm §5 |
+
+### 4. Cái ADR này KHÔNG quyết, và một khoản nợ MỚI phải nói ra
+
+**`pnpm evidence` VẪN có thể đỏ, và lần này vì một lý do KHÁC.** Cùng lượt chạy chứng minh khoá
+hoạt động, một test khác đỏ: `auth.int.test.ts` — *"lần 61 phải nhanh: expected 1090 to be less
+than 800"*. Đó là một **khẳng định thời gian TUYỆT ĐỐI** (`TRE_TEST_MS = 800`) dùng để phân biệt
+*"được phục vụ ngay"* với *"bị làm chậm"*; dưới tải, một lượt bình thường vượt ngưỡng ấy và cổng
+đỏ mà **không có gì hỏng**.
+
+Đây là **khoản nợ 66**, và nó KHÔNG được gộp vào 59: cơ chế khác, bản vá khác. Hình dạng đóng đã
+thấy được — đo **tương đối** trong chính lượt ấy (so lượt bị làm chậm với trung vị của các lượt
+nhanh) thay vì so với một hằng số tuyệt đối — nhưng nó là một vòng riêng.
+
+Nói cách khác: **khoản nợ 59 đóng đúng thứ nó nói (đua tranh `depcruise`), không đóng câu
+*"lượt gộp hết đỏ"*.** Hai câu ấy khác nhau, và gộp chúng lại là đúng lỗi mà ADR-029 cấm.
+
+### 5. MỘT LƯỢT `0 / 10` CHO PHÉP KẾT LUẬN GÌ — VÀ KHÔNG CHO PHÉP GÌ
+
+Vế đo của khoản nợ 24 về `0 / 10`, và đó là một con số **dễ đọc quá tay**. Tính ra chứ đừng cảm
+thấy: với tỷ lệ nền **1/10** đã đo trước vòng, xác suất thấy 0 đỏ trong 10 lượt **ngay cả khi
+không sửa gì cả** là
+
+    0,9¹⁰ ≈ 0,35
+
+tức **hơn một phần ba số lần, một kho hoàn toàn chưa được vá vẫn cho ra `0 / 10`**. Độ mạnh của
+phép thử này chỉ khoảng 65%. Một lượt 10 sạch **không** phân biệt được *"đã sửa"* với *"gặp
+may"*, và bất kỳ ai đọc `0 / 10` như một chứng minh đều đang đọc rộng hơn phép đo — đúng hình
+dạng mà ADR-029 tồn tại để chặn.
+
+**Quyết định: một khoản nợ dạng "test flaky" được đóng khi và chỉ khi có ĐỦ BA CHÂN, và tỷ lệ là
+chân YẾU NHẤT trong ba.**
+
+1. **Cơ chế gọi được tên.** Không phải *"chắc do máy chậm"* mà một câu kiểm chứng được: `pool.end()`
+   là thao tác cục bộ của Node, backend PostgreSQL giữ advisory lock chết **sau đó** và bất đồng
+   bộ, nên một phép **đếm tức thì** đo sai **thời điểm** chứ không đo sai tính chất.
+2. **Bản vá không nới một ngưỡng nào.** Vòng chờ có hạn thay cho phép đếm tức thì **giữ nguyên
+   răng** của lớp canh: một khoá kẹt THẬT vẫn ở lại tới hết hạn và test vẫn đỏ với **đúng con số
+   cũ**. Đây là vế tách *"sửa"* khỏi *"làm cho hết kêu"* — và là vế mà một lần nới ngưỡng sẽ
+   trượt qua trong im lặng.
+3. **Một tỷ lệ đo trên phần cứng CI**, làm chứng cho hai chân trên chứ không thay chúng.
+
+**Hệ quả thứ nhất — thứ tự đóng không tuỳ ý.** Chân thứ ba là một phép đo **còn chạy tiếp sau khi
+vòng kết thúc** (lượt hằng tuần). Một phép đo không ai đọc thì không phải một phép đo, nên **khoản
+nợ 65 phải đóng TRƯỚC khoản nợ 24**. Đảo thứ tự lại thì lời đóng của 24 dựa vào một cái cổng
+fail-lặng.
+
+**Hệ quả thứ hai — "không quan sát được" phải được ghi khác "đã chữa".** Khoản nợ 24 gọi tên hai
+test. `[M10]` có đủ ba chân. `[T10-L]` (`outbox.int.test.ts`) **không phát lần nào trong 10 lượt
+và không nhận một dòng sửa nào** — nó rời sổ vì *không quan sát được*, và hàng sổ phải nói đúng
+chữ ấy. Ngày nó trở lại, một issue mang con số sẽ mở: đó là một **phép đo mới**, không phải khoản
+nợ cũ mở lại.
+
+### 6. HỆ QUẢ THỨ BA — MỘT LỚP CANH CHỐNG TREO PHẢI TỰ CHỨNG MINH LÀ NÓ KHÔNG TREO
+
+Review an ninh lượt 16 đọc chính cái khoá mà §2⑴ vừa dựng lên, và tìm thấy **một đường đi tới
+một vòng quay vô hạn**: `continue` trong khối `catch` nhảy thẳng lên đầu `for(;;)`, vượt qua
+**cả** kiểm tra hạn **cả** giấc ngủ. Nó nằm ngay dưới một chú thích viết *"một lượt treo im
+lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM"*.
+
+**Quyết định, phát biểu thành luật để lần sau có chỗ mà đối chiếu:**
+
+1. **Trong một vòng lặp chờ, kiểm tra hạn là câu lệnh ĐẦU TIÊN của mọi nhánh lỗi**, và không
+   nhánh nào được rời vòng lặp mà không đi qua giấc ngủ. Một `catch` trần (`catch {}`) trong
+   một vòng lặp chờ là một lỗi cho tới khi chứng minh được ngược lại: nó nuốt đúng cái chẩn
+   đoán cần đọc.
+2. **"Chủ còn sống không" thay cho "khoá già bao nhiêu".** Một hạn theo đồng hồ sai cả hai
+   chiều cùng lúc — giết khoá đang sống của một lượt chạy chậm, và giữ khoá đã chết của một
+   lượt bị giết. `process.kill(pid, 0)` hỏi đúng câu cần hỏi. Đồng hồ chỉ còn là lưới đỡ cho
+   khe giữa `mkdir` và lúc ghi xong tên chủ, nên hạn ấy phải **nhỏ hơn** hạn chờ.
+3. **Nhả khoá theo CHỦ, không vô điều kiện.** Nếu khoá hiện tại không còn mang tên mình thì
+   xoá nó là dựng lại đúng đua tranh mà lớp này đi đóng.
+4. **Và luật cho chính phép đo:** một harness đột biến phải **fail-closed** — khai trước số
+   phép đo kỳ vọng, chạy đối chứng không-đột-biến, ném khi số thực tế lệch. Trong vòng này,
+   hai harness lần lượt đo **không cái gì** rồi báo *"xanh"*: một bộ lọc tên test viết không
+   dấu (khớp 0 test, vitest thoát 0), và một phép thay chuỗi không khớp (cả hai vế chạy cùng
+   một bản). Một phép đo chưa chạy nhìn giống hệt một phép đo đã qua.
