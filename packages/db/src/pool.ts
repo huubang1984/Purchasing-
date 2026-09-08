@@ -179,6 +179,23 @@ export function createPool(
     password: daPhanTich.password,
     database: daPhanTich.database ?? undefined,
     max,
+    // [review an ninh lượt 17, M-1] MỐC CHẾT CHO HÀNG ĐỢI POOL. Mặc định của `pg-pool` là `0`,
+    // tức `pool.connect()` xếp hàng VÔ HẠN — và `server.requestTimeout` chỉ huỷ socket chứ không
+    // huỷ promise đang treo, nên hàng đợi KHÔNG co lại khi client bỏ đi.
+    //
+    // Vì sao nó thành chuyện ở S1.26: bản vá khoản nợ 2 giữ một khoá hàng qua trọn lời gọi cổng
+    // mở bí mật, nên các request chồng nhau trên CÙNG một hồ sơ TUẦN TỰ HOÁ thay vì chạy song
+    // song. Ba GUC mà khối chú thích của khoản nợ 2 dựa vào (`lock_timeout`,
+    // `statement_timeout`, `idle_in_transaction_session_timeout`) chặn THỜI GIAN MỘT PHIÊN; không
+    // cái nào chặn SỐ KẾT NỐI BỊ GHIM. Với `dbPoolMax` mặc định 10, một người dùng hợp lệ bắn 10
+    // lượt `/auth/totp` đồng thời cho CHÍNH hồ sơ mình có thể rút cạn pool của cả tiến trình —
+    // tức chạm tới người của TỔ CHỨC KHÁC.
+    //
+    // 20 giây = cận trên của một lượt chờ hợp lý: nó LỚN HƠN `lock_timeout` (15 s) nên một người
+    // chờ khoá hàng vẫn chết vì 55P03 với thông điệp đúng của nó, chứ không bị cắt sớm bởi hàng
+    // đợi pool và mất chẩn đoán. Vượt mốc này thì `pool.connect()` NÉM, và một lỗi ồn ào đúng hơn
+    // hẳn một hàng đợi lớn dần trong im lặng.
+    connectionTimeoutMillis: 20_000,
     application_name: "trustprocure",
     // [vòng fix 1 — IM7] Xem khối chú thích của TuyChonPool. Chỉ chứa chữ số nên không có
     // đường tiêm tham số nào qua PGOPTIONS.

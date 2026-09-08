@@ -82,6 +82,13 @@ let ipHienTai = "203.0.113.1";
 //       (mọi lượt đều bị làm chậm)                    (120 000 ms / 60 000 ms), lượt chạy mất
 //                                                     **514 giây** thay vì 45.
 //
+// PHẠM VI CHÍNH XÁC, vì khối này dễ đọc rộng hơn thứ nó làm [review an ninh lượt 17, I-5]:
+// vai ⒝ bị gỡ ở HAI test — `[nợ 52]` và `[review H6-2]`, hai chỗ có vòng lặp 300 lượt. Nó KHÔNG
+// bị gỡ ở cả tệp: `:546` (`toBeLessThan(TRE_TEST_MS)`, test H5-1) và `:768`
+// (`toBeLessThan(3000)`) vẫn là khẳng định thời gian tuyệt đối kiểu "phải nhanh". Cả hai đo MỘT
+// lượt chứ không 300, nên cửa sổ đỏ oan của chúng hẹp hơn hẳn — nhưng chúng CÙNG HỌ, và ngày một
+// trong hai đỏ oan dưới tải thì cách sửa là cách ở đây, không phải nới hằng số.
+//
 // M4 LÀ CÁI GIÁ, VÀ ĐÂY LÀ LÝ DO TRẢ NÓ. Trước vòng này, M4 bị bắt trong ~1 giây với một thông
 // điệp gọi đúng tên. Nay nó bị bắt sau 60–120 giây bằng một timeout không nói gì. Đổi lại: **300
 // khẳng định thôi đỏ oan dưới tải**, và cái đỏ oan ấy KHÔNG phải giả thuyết — nó đã xảy ra thật
