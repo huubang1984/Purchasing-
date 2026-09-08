@@ -12,14 +12,29 @@
 // PostgreSQL 16 ở chính kho này (Task 8 vòng fix 1–3, Task 9 §I-3).
 //
 // ----------------------------------------------------------------------------------------------
-// VÌ SAO CHỦ THỂ LÀ *"CÂU ĐÃ GHIM MỘT THỨ"* CHỨ KHÔNG PHẢI *"MỌI CÂU"*
-// ----------------------------------------------------------------------------------------------
-// Đo trước vòng này trên toàn bộ mã sản xuất có SQL: **13 câu ghim NỬA VỜI**, và phần dư là những
-// câu chưa ghim trục nào (con số ở `TRAN_TOI_DA`).
+// [S1.24] CHỦ THỂ NAY LÀ **MỌI CÂU**. Khoản nợ 62 đóng: 63 câu còn lại đã được ghim trong một
+// lượt, nên phép lọc `daGhim` và mốc `TRAN_TOI_DA` không còn chỗ đứng — giữ chúng lại sau khi
+// phần dư đã hết là để lại một cánh cửa mở có khoá treo lủng lẳng.
 //
-// Nếu chủ thể là *"mọi câu"* thì lớp này đòi một cuộc di trú 200+ chỗ trong một vòng — đúng thứ
-// khoản nợ 29 cảnh báo. Nhưng **câu ghim nửa vời là chiều hỏng ĐẮT NHẤT**, và lý do không phải
-// số học:
+// Ba con số của lượt di trú, vì chúng nói về CHÍNH LỚP NÀY chứ không riêng mã sản xuất: sổ nợ
+// khai **80** câu "chưa ghim gì", đo lại được **9** trong đó KHÔNG PHẢI SQL (thông báo lỗi tiếng
+// Việt mở đầu bằng `INSERT` — bộ đọc chỉ đòi chuỗi BẮT ĐẦU bằng một từ khoá) và **8** câu không
+// có gì để ghim (`SET lock_timeout = 0`, `SET ROLE $1`, `SELECT current_user`). Việc thật là
+// **63**. Chín thông báo kia được SỬA CHỖ GỌI chứ không nới bộ đọc: một hàng rào an ninh thà kêu
+// nhầm còn hơn bỏ sót, và giá của lần kêu nhầm này là chín câu văn.
+//
+// Khối dưới đây giữ nguyên chữ vì nó vẫn đúng về THỨ TỰ ƯU TIÊN — vòng S1.22 chọn câu ghim nửa
+// vời trước là chọn đúng, và lý do ấy không mất giá trị khi phần dư đã hết:
+// ----------------------------------------------------------------------------------------------
+// ~~VÌ SAO CHỦ THỂ LÀ *"CÂU ĐÃ GHIM MỘT THỨ"* CHỨ KHÔNG PHẢI *"MỌI CÂU"*~~
+// ----------------------------------------------------------------------------------------------
+// Đo trước vòng S1.22 trên toàn bộ mã sản xuất có SQL: **13 câu ghim NỬA VỜI**, và phần dư là
+// những câu chưa ghim trục nào.
+//
+// ~~Nếu chủ thể là *"mọi câu"* thì lớp này đòi một cuộc di trú 200+ chỗ trong một vòng — đúng thứ
+// khoản nợ 29 cảnh báo.~~ Con số **200+** ấy cũng là một ước lượng chưa đo: việc thật hoá ra là
+// **63** câu, và nó đi hết trong một vòng. Nhưng **câu ghim nửa vời là chiều hỏng ĐẮT NHẤT**, và
+// lý do không phải số học:
 //
 //   • một câu ghim KHÔNG GÌ trông đúng như nó là — chưa được bảo vệ, và người đọc thấy ngay;
 //   • một câu ghim NỬA VỜI **đọc như đã được bảo vệ**. Nó mang `OPERATOR(pg_catalog.=)` ở ba chỗ
@@ -57,18 +72,21 @@ import { moiCauSql, type CauSql } from "./qt3-doc-sql.js";
 import { NGU_PHAP_KHONG_GHIM, TU_KHOA_SAU_FROM, TU_KHOA_TRUOC_NGOAC } from "./qt3-tu-vung.js";
 
 /**
- * Mốc ghim của PHẦN DƯ — khoản nợ 62.
+ * ~~Mốc ghim của PHẦN DƯ — khoản nợ 62.~~ **[S1.24] MỐC ĐÃ ĐƯỢC GỠ, VÌ PHẦN DƯ ĐÃ HẾT.**
  *
- * Số câu SQL trong mã sản xuất chưa ghim một trục nào. Con số này chỉ được ĐI XUỐNG: một câu SQL
- * mới viết trần làm test này ĐỎ, nên cái lỗ không lớn thêm trong khi khoản nợ còn mở.
+ * ~~Số câu SQL trong mã sản xuất chưa ghim một trục nào. Con số này chỉ được ĐI XUỐNG.~~ Một mốc
+ * chỉ-đi-xuống là hàng rào của một cuộc di trú ĐANG chạy; khi số về 0 thì giữ nó lại chỉ còn tác
+ * dụng cho phép quay lui. Luật nay là điều kiện chặt hơn và không có tham số: **mọi câu, đủ bốn
+ * trục** — xem `it("MỌI câu SQL …")` bên dưới.
  *
- * [review lượt 14, H14-M6] Nó được ĐO LẠI trên HEAD **sau** lượt ghim, không phải chép từ số đo
- * trước vòng — một mốc cao hơn số thật là một mốc cho không một khe hở đúng bằng phần chênh.
+ * Số câu SQL và số tệp mà bộ đọc PHẢI thấy — đóng đinh sát số đo, không phải một cái sàn lỏng.
+ *
+ * **[S1.24] 148 → 139, và con số này ĐI XUỐNG một cách hợp lệ:** chín chuỗi rời khỏi tập vì chúng
+ * chưa bao giờ là SQL — thông báo lỗi tiếng Việt mở đầu bằng `INSERT`. Chúng được sửa ở CHỖ GỌI
+ * (`"Câu INSERT … không trả về hàng nào"`), không phải bằng cách nới bộ đọc. Một cái sàn tụt vì
+ * bộ đọc mù đi là một cái sàn hỏng; cái sàn này tụt vì tập chủ thể đúng lên.
  */
-const TRAN_TOI_DA = 80;
-
-/** Số câu SQL và số tệp mà bộ đọc PHẢI thấy — đóng đinh sát số đo, không phải một cái sàn lỏng. */
-const SO_CAU_TOI_THIEU = 148;
+const SO_CAU_TOI_THIEU = 139;
 const SO_TEP_TOI_THIEU = 27;
 
 /**
@@ -250,12 +268,22 @@ describe("[INV-H21] QT3: ghim thì phải ghim ĐỦ", () => {
     expect(cau!.sql).toMatch(/SELECT[\s\S]*FROM/i);
   });
 
-  it("không câu SQL nào GHIM NỬA VỜI — ghim một trục là nhận mình đứng dưới QT3", () => {
-    const loi = CAC_CAU.filter((c) => daGhim(c.sql))
-      .map((c) => ({ c, v: viPhamGhim(c.sql) }))
+  it("MỌI câu SQL trong mã sản xuất phải ghim ĐỦ BỐN TRỤC — không còn phần dư nào được miễn", () => {
+    // [S1.24] Phép lọc `daGhim` đã bị GỠ khỏi đúng dòng này. Trước đó chủ thể là "câu đã tự khai
+    // rằng nó đứng dưới QT3"; nay là mọi câu. Đó là toàn bộ nội dung của khoản nợ 62.
+    const loi = CAC_CAU.map((c) => ({ c, v: viPhamGhim(c.sql) }))
       .filter((x) => x.v.length > 0)
       .map((x) => `${x.c.tep}:${x.c.dong} — ${x.v.map((v) => `${v.truc} \`${v.ten}\``).join(", ")}`);
     expect(loi).toEqual([]);
+  });
+
+  it("câu ghim NỬA VỜI vẫn bị bắt — hình dạng đắt nhất không mất chủ khi luật rộng ra", () => {
+    // Luật mới bao luật cũ, nhưng một mệnh đề bị bao vẫn đáng có mũi đo riêng: nếu ai đó thu chủ
+    // thể lại trong tương lai, mũi này ĐỎ trước khi con số tổng kịp đổi.
+    const nuaVoi =
+      "UPDATE public.sessions SET revoked_at = pg_catalog.now() " +
+      "WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND org_id = $2";
+    expect(viPhamGhim(nuaVoi).map((v) => `${v.truc} ${v.ten}`)).toEqual(["toán tử ="]);
   });
 
   it("ĐỐI CHỨNG DƯƠNG: gỡ MỘT ghim khỏi một câu thật thì ĐỎ, cho từng trục một", () => {
@@ -308,9 +336,27 @@ describe("[INV-H21] QT3: ghim thì phải ghim ĐỦ", () => {
     expect(viPhamGhim("SELECT CAST($1 AS pg_catalog.uuid) FROM public.t")).toEqual([]);
   });
 
-  it("[khoản nợ 62] số câu CHƯA ghim gì không được TĂNG", () => {
-    const tran = CAC_CAU.filter((c) => !daGhim(c.sql));
-    expect(tran.length).toBeLessThanOrEqual(TRAN_TOI_DA);
+  it("[khoản nợ 62] ĐỘT BIẾN: một câu viết TRẦN HOÀN TOÀN nay ĐỎ — mốc cũ cho nó đi qua", () => {
+    // Đây là mũi đo phân biệt luật MỚI với luật CŨ. Dưới `TRAN_TOI_DA`, câu này hợp lệ chừng nào
+    // tổng số câu trần không vượt mốc — tức lớp canh im lặng trước đúng thứ nó tồn tại để canh.
+    const tran = "SELECT id FROM sessions WHERE user_id = $1::uuid AND expires_at > now()";
+    expect(new Set(viPhamGhim(tran).map((v) => v.truc))).toEqual(
+      new Set(["tên bảng", "toán tử", "ép kiểu", "tên hàm"] as const),
+    );
+    // …và chính câu ấy, ghim đủ, thì SẠCH. Không có vế này thì mũi trên chỉ chứng minh bộ dò hay kêu.
+    expect(
+      viPhamGhim(
+        "SELECT id FROM public.sessions WHERE user_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+          "AND expires_at OPERATOR(pg_catalog.>) pg_catalog.now()",
+      ),
+    ).toEqual([]);
+  });
+
+  it("[S1.24] `=>` là ĐỐI SỐ CÓ TÊN, không phải hai toán tử — bộ ghim của vòng đã sai đúng chỗ này", () => {
+    // Bộ ghim tự động của vòng S1.24 biến `make_interval(secs => $4)` thành
+    // `make_interval(secs OPERATOR(pg_catalog.=) OPERATOR(pg_catalog.>) $4)` — SQL hỏng, và chỉ
+    // một lượt đọc lại bản đề xuất mới bắt được. Lớp canh phải nói rõ `=>` là ngữ pháp.
+    expect(viPhamGhim("SELECT pg_catalog.make_interval(secs => $1::pg_catalog.int4)")).toEqual([]);
   });
 });
 

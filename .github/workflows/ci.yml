@@ -1,8 +1,24 @@
 name: CI
 
+# =============================================================================================
+# [S1.24] TRIGGER NAY TUNG TRO VAO MOT NHANH KHONG TON TAI, VA KHONG AI THAY.
+# =============================================================================================
+# Nhanh mac dinh cua kho la `master`; kho KHONG co nhanh `main` (`git ls-remote --heads origin
+# main` tra 0 dong). Nen `push: branches: [main]` chua bao gio khop mot lan day nao: toan bo CI
+# cua kho den tu trigger `pull_request`, va **khong luot nao chay tren commit merge**.
+#
+# Vi sao dieu do khong vo hai du moi PR deu duoc chan: commit merge KHAC voi dau nhanh. Mot PR
+# xanh cong mot master xanh van co the cho ra mot merge commit do — hai thay doi khong dung
+# chung mot dong nhung pha nhau (mot ham doi chu ky o PR A, mot cho goi moi o PR B). Khong co
+# luot chay tren than thi khong ai bat duoc lop ay.
+#
+# Cach phat hien: sau khi merge PR #20, `gh api .../actions/runs?head_sha=<merge>` tra `total_count
+# 0`. Mot con so 0 o cho le ra phai co sau job.
+# =============================================================================================
+
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:

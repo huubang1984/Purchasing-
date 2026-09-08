@@ -25,6 +25,17 @@
  * Bản đầu của danh sách này có thêm `extract`, `substring`, `overlay`, `position`, `normalize` —
  * chép theo trí nhớ về "SQL grammar". Phép đo `pg_proc` bác cả năm: cả năm CÓ hàm thật trong
  * `pg_catalog`, tức cả năm GHIM ĐƯỢC, tức cả năm PHẢI bị ghim.
+ *
+ * **[S1.24, review lượt 15] KẾT LUẬN VỪA RỒI ĐÚNG MỘT NỬA, VÀ NỬA THIẾU ĐÃ LÀM HỎNG HAI CÂU.**
+ * `pg_proc` chứng minh **dạng LỜI GỌI HÀM** ghim được — `pg_catalog.extract('epoch', ts)` chạy.
+ * Nó KHÔNG nói gì về **dạng NGỮ PHÁP** `EXTRACT(field FROM source)`, thứ được kích hoạt bởi chính
+ * token từ khoá `EXTRACT` và đi qua một production riêng: `pg_catalog.extract(epoch FROM now())`
+ * ném 42601. Vòng S1.24 ghim tự động theo kết luận nửa vời ấy và làm hỏng hai câu bucket hạn mức
+ * OTP; khuôn đúng đã nằm sẵn trong kho từ migration `039` — `pg_catalog.date_part('epoch', …)`.
+ *
+ * Nên với năm tên này, câu đúng là: **hàm thì ghim được, ngữ pháp thì không — và một cái tên có
+ * thể là CẢ HAI.** Thứ phân xử không phải `pg_proc` mà là một lượt `PREPARE` trên chính câu ấy:
+ * `tests/architecture/qt3-cu-phap.int.test.ts`.
  */
 export const NGU_PHAP_KHONG_GHIM: readonly string[] = [
   "coalesce",

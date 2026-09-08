@@ -140,7 +140,7 @@ export async function issueRfqKeyPair(
   for (const algorithm of thuatToan) {
     const { publicKey, wrapped, keyVersion } = await sinhVaBoc(input.wrapper, orgId, algorithm);
     const { rows } = await client.query<HangKhoa>(
-      `INSERT INTO rfq_key_material
+      `INSERT INTO public.rfq_key_material
          (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version,
           created_by, created_by_session_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -210,7 +210,7 @@ export async function getRfqPublicKeys(
   assertRfqId(rfqId);
   const { rows } = await client.query<HangKhoa>(
     `SELECT algorithm, public_key, key_version, revoked_at
-       FROM rfq_key_material WHERE rfq_id = $1 ORDER BY algorithm`,
+       FROM public.rfq_key_material WHERE rfq_id OPERATOR(pg_catalog.=) $1 ORDER BY algorithm`,
     [rfqId],
   );
   return rows.map(doiKhoa);
@@ -242,10 +242,10 @@ export async function revokeRfqKeyMaterial(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows } = await client.query<{ algorithm: string }>(
-    `UPDATE rfq_key_material
-        SET revoked_at = now(), revoked_reason = $2,
+    `UPDATE public.rfq_key_material
+        SET revoked_at = pg_catalog.now(), revoked_reason = $2,
             revoked_by = $3, revoked_by_session_id = $4
-      WHERE rfq_id = $1 AND revoked_at IS NULL
+      WHERE rfq_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL
       RETURNING algorithm`,
     [input.rfqId, reason, actor.id, actor.sessionId],
   );
@@ -308,7 +308,7 @@ export async function listPurgeableKeyMaterial(
     revoked_at: Date | null;
     du_dieu_kien: boolean;
     ly_do: LyDoChuaXoaDuoc;
-  }>("SELECT * FROM rfq_khoa_du_dieu_kien_xoa($1)", [rfqId]);
+  }>("SELECT * FROM public.rfq_khoa_du_dieu_kien_xoa($1)", [rfqId]);
   return rows.map((h) => ({
     keyMaterialId: h.key_material_id,
     revokedAt: h.revoked_at,
@@ -376,10 +376,10 @@ export async function purgeRfqKeyMaterial(
   if (duDieuKien.length === 0) return 0;
 
   const { rows } = await client.query<{ id: string; algorithm: string }>(
-    `UPDATE rfq_key_material
-        SET wrapped_private_key = NULL, purged_at = now(),
+    `UPDATE public.rfq_key_material
+        SET wrapped_private_key = NULL, purged_at = pg_catalog.now(),
             purged_by = $2, purged_by_session_id = $3
-      WHERE rfq_id = $1 AND id = ANY($4::uuid[])
+      WHERE rfq_id OPERATOR(pg_catalog.=) $1 AND id OPERATOR(pg_catalog.=) ANY($4::pg_catalog.uuid[])
       RETURNING id, algorithm`,
     [input.rfqId, actor.id, actor.sessionId, duDieuKien.map((h) => h.keyMaterialId)],
   );

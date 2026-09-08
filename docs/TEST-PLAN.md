@@ -320,13 +320,16 @@ hoặc buộc phải nói đúng mức:
   dựng từ tài liệu (`giaiDuoc`) đúng ở mức *tự gây thương tích*, không ở mức *chống nội dung thù
   địch*. Xem ADR-029 §5.
 
-| **H21** | **QT3 có lớp máy: một câu SQL trong mã sản xuất đã ghim MỘT trục (`pg_catalog.`/`public.`) phải ghim ĐỦ BỐN — tên hàm, toán tử, ép kiểu, tên bảng; số câu chưa ghim trục nào không được TĂNG; không mã sản xuất nào ngoài `migrate.ts` được chạm `search_path` (mọi cú pháp); và mọi danh sách miễn trừ được PostgreSQL thật phán xét — tên ngữ pháp phải KHÔNG có hàm trong `pg_catalog`, từ khoá phải có trong `pg_get_keywords()`, tên kiểu đã ghim phải có trong `pg_type`** | `tests/architecture/qt3-ghim-schema.test.ts` + `tests/architecture/qt3-ngu-phap.int.test.ts` | **T1 + T3** |
+| **H21** | **QT3 có lớp máy: ~~một câu SQL trong mã sản xuất đã ghim MỘT trục (`pg_catalog.`/`public.`)~~ [S1.24] MỌI câu SQL trong mã sản xuất phải ghim ĐỦ BỐN — tên hàm, toán tử, ép kiểu, tên bảng; ~~số câu chưa ghim trục nào không được TĂNG;~~ không mã sản xuất nào ngoài `migrate.ts` được chạm `search_path` (mọi cú pháp); và mọi danh sách miễn trừ được PostgreSQL thật phán xét — tên ngữ pháp phải KHÔNG có hàm trong `pg_catalog`, từ khoá phải có trong `pg_get_keywords()`, tên kiểu đã ghim phải có trong `pg_type`** | `tests/architecture/qt3-ghim-schema.test.ts` + `tests/architecture/qt3-ngu-phap.int.test.ts` + **[S1.24]** `tests/architecture/qt3-cu-phap.int.test.ts` (mỗi câu DML được `PREPARE` trên PostgreSQL thật — lớp canh nay HAI CHIỀU: bắt cả **thiếu ghim** lẫn **ghim sai**) | **T1 + T3** |
 
 **Giới hạn của H21, nói ra thay vì để người đọc tự phát hiện:**
 
-- Chủ thể là câu **đã ghim một trục**. Một câu chưa ghim gì chỉ chịu MỐC ĐẾM (`TRAN_TOI_DA`), tức
+- ~~Chủ thể là câu **đã ghim một trục**. Một câu chưa ghim gì chỉ chịu MỐC ĐẾM (`TRAN_TOI_DA`), tức
   H21 GIỮ phần dư chứ không hạ nó — **80** câu, trong đó **39** chạm bảng nhạy cảm. Đó là khoản
-  nợ 62, và nó là phần lớn hơn theo số đếm.
+  nợ 62, và nó là phần lớn hơn theo số đếm.~~ **[S1.24] Chủ thể nay là MỌI câu; mốc đã được GỠ.**
+  Con số **80** khi đo lại gồm **9** chuỗi không phải SQL và **8** câu không có gì để ghim; việc
+  thật là **63**, và nó đã đi hết. Giới hạn còn lại không phải phạm vi mà là **tầm nhìn của bộ
+  đọc** — xem gạch đầu dòng ngay dưới.
 - Bộ đọc là một BỘ TÁCH TỪ trên mã TypeScript, không phải trình phân tích SQL: nó ghép chuỗi nối
   bằng `+` nhưng không hiểu SQL dựng động kiểu khác.
 - Nó đọc `git ls-files`, nên một tệp sản xuất chưa vào chỉ mục là vô hình.

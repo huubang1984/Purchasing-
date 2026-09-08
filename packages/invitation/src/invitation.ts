@@ -206,14 +206,14 @@ export async function createInvitation(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows } = await client.query<HangInvitation>(
-    `INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
+    `INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
                                   invited_by, invited_by_session_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
     [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
      actor.id, actor.sessionId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new InvitationError("INSERT rfq_invitations không trả về hàng nào");
+  if (hang === undefined) throw new InvitationError("Câu INSERT rfq_invitations không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,
@@ -259,14 +259,14 @@ export async function issueMagicLinkToken(
   const token = randomBytes(MAGIC_LINK_TOKEN_BYTES).toString("base64url");
 
   const { rows } = await client.query<{ id: string; expires_at: Date }>(
-    `INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at,
+    `INSERT INTO public.rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at,
                                         issued_by, issued_by_session_id)
-     VALUES ($1, $2, $3, 'BID_SUBMISSION', now() + make_interval(secs => $4), $5, $6)
+     VALUES ($1, $2, $3, 'BID_SUBMISSION', pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $4), $5, $6)
      RETURNING id, expires_at`,
     [orgId, input.invitationId, bam(token), ttl, actor.id, actor.sessionId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new InvitationError("INSERT token không trả về hàng nào");
+  if (hang === undefined) throw new InvitationError("Câu INSERT token không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,
@@ -463,10 +463,10 @@ export async function tangBucketNguoiGoi(
   pepper: PepperRing,
 ): Promise<number> {
   const { rows } = await client.query<{ hits: number }>(
-    `INSERT INTO caller_rate_limits (bucket_hash, window_start, hits)
-     VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / $2) * $2), 1)
+    `INSERT INTO public.caller_rate_limits (bucket_hash, window_start, hits)
+     VALUES ($1, pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.date_part('epoch', pg_catalog.now()) OPERATOR(pg_catalog./) $2) * $2), 1)
      ON CONFLICT (bucket_hash, window_start)
-       DO UPDATE SET hits = caller_rate_limits.hits + 1
+       DO UPDATE SET hits = caller_rate_limits.hits OPERATOR(pg_catalog.+) 1
      RETURNING hits`,
     [pepper.bam(MIEN_BUCKET_TOAN_CUC, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
@@ -487,7 +487,7 @@ export async function tangBucketNguoiGoi(
  */
 export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<number> {
   const kq = await pool.query(
-    "DELETE FROM caller_rate_limits WHERE window_start < now() - make_interval(secs => $1::float8)",
+    "DELETE FROM public.caller_rate_limits WHERE window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $1::pg_catalog.float8))",
     [OTP_RATE_WINDOW_SECONDS * soCuaSo],
   );
   return kq.rowCount ?? 0;
@@ -534,7 +534,7 @@ export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
           "cửa sổ đang đếm của tổ chức ấy",
       );
     }
-    const kq = await client.query("DELETE FROM otp_rate_limits");
+    const kq = await client.query("DELETE FROM public.otp_rate_limits");
     await client.query("COMMIT");
     return kq.rowCount ?? 0;
   } catch (loi) {
@@ -577,11 +577,11 @@ async function demVaTang(
   // làm bộ đếm bắt đầu lại: trong đúng cửa sổ xoay, hạn mức của mọi đích được đặt lại. Cửa sổ
   // ngắn nên hàng cũ tự già đi, nhưng xoay pepper vì vậy là một thao tác có thời điểm.
   const { rows } = await client.query<{ hits: number }>(
-    `INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits)
+    `INSERT INTO public.otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits)
      VALUES ($1, $2, $3,
-             to_timestamp(floor(extract(epoch FROM now()) / $4) * $4), 1)
+             pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.date_part('epoch', pg_catalog.now()) OPERATOR(pg_catalog./) $4) * $4), 1)
      ON CONFLICT (org_id, bucket_kind, bucket_hash, window_start)
-       DO UPDATE SET hits = otp_rate_limits.hits + 1
+       DO UPDATE SET hits = otp_rate_limits.hits OPERATOR(pg_catalog.+) 1
      RETURNING hits`,
     [orgId, kind, pepper.bam(orgId, kind, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
@@ -614,7 +614,7 @@ export async function issueOtpChallenge(
   // đúng hộp thư đã nhận magic link (H2).
   const cot = input.channel === "EMAIL" ? "email" : "phone";
   const { rows: lh } = await client.query<{ dich: string | null }>(
-    `SELECT ${cot} AS dich FROM supplier_contacts WHERE id = $1`,
+    `SELECT ${cot} AS dich FROM public.supplier_contacts WHERE id OPERATOR(pg_catalog.=) $1`,
     [t.contact_id],
   );
   const dich = lh[0]?.dich ?? null;
@@ -656,10 +656,10 @@ export async function issueOtpChallenge(
   const bamMa = input.pepper.bam(t.invitation_id, code);
   const bamDich = input.pepper.bam(orgId, "DEST", dich);
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO invitation_otp_challenges
+    `INSERT INTO public.invitation_otp_challenges
        (org_id, invitation_id, token_id, contact_id, channel, code_hash, destination_hash,
         pepper_version, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + make_interval(secs => $9)) RETURNING id`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $9)) RETURNING id`,
     [
       orgId,
       t.invitation_id,
@@ -673,7 +673,7 @@ export async function issueOtpChallenge(
     ],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new InvitationError("INSERT thách thức OTP không trả về hàng nào");
+  if (hang === undefined) throw new InvitationError("Câu INSERT thách thức OTP không trả về hàng nào");
 
   // [M4] `payload` mang challengeId và kênh — KHÔNG mang đích, KHÔNG mang mã.
   //
@@ -851,7 +851,7 @@ export async function verifyOtpAndStartSession(
     [orgId, t.invitation_id, tt.id, bam(sessionToken), tt.contact_id, tt.channel, ttl],
   );
   const hangPhien = phien.rows[0];
-  if (hangPhien === undefined) throw new InvitationError("INSERT guest_sessions không trả về hàng");
+  if (hangPhien === undefined) throw new InvitationError("Câu INSERT guest_sessions không trả về hàng");
 
   // [ADR-016] `actorId` là chính `tt.contact_id` — người liên hệ ĐÃ GIỮ KÊNH và đã đối chiếu
   // đúng mã. Nó là cùng một giá trị với `verified_contact_id` của hàng phiên, và đó là chủ ý:
@@ -962,26 +962,26 @@ export async function revokeInvitation(
   // câu UPDATE thứ hai: trigger `rfq_invitations_kiem_nguoi_thu_hoi` (013) chạy đúng ở lượt
   // chuyển sang đã-thu-hồi, nên tách ra là để lại một hàng đã thu hồi mà chưa ai ký tên.
   const loiMoi = await client.query(
-    "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), " +
+    "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
       " revoked_by = $2, revoked_by_session_id = $3" +
-      " WHERE id = $1 AND revoked_at IS NULL",
+      " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId, actor.id, actor.sessionId],
   );
   if (loiMoi.rowCount !== 1) return false;
 
   await client.query(
-    "UPDATE rfq_invitation_tokens SET revoked_at = now() " +
-      " WHERE invitation_id = $1 AND revoked_at IS NULL",
+    "UPDATE public.rfq_invitation_tokens SET revoked_at = pg_catalog.now() " +
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
   await client.query(
-    "UPDATE invitation_otp_challenges SET consumed_at = now() " +
-      " WHERE invitation_id = $1 AND consumed_at IS NULL",
+    "UPDATE public.invitation_otp_challenges SET consumed_at = pg_catalog.now() " +
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND consumed_at IS NULL",
     [input.invitationId],
   );
   await client.query(
-    "UPDATE guest_sessions SET revoked_at = now() " +
-      " WHERE invitation_id = $1 AND revoked_at IS NULL",
+    "UPDATE public.guest_sessions SET revoked_at = pg_catalog.now() " +
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
 

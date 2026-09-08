@@ -237,7 +237,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ **[S1.23] 63 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ **[S1.24] 65 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
@@ -762,3 +762,41 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     **không còn quyết định gì** — ADR-011 đã gỡ thế hoặc/hoặc từ 2026-09-04. Phần việc thật sự
     còn lại **đổi hình từ một khoản nợ thành một yêu cầu giao diện của S1.4/S1.5**. Khi một khoản
     nợ đóng theo kiểu ấy, phải viết ra **cái gì đi đâu**, nếu không nó chỉ là một dòng bị xoá.
+
+19. **[2026-09-08] S1.24 — KHOẢN NỢ 62 ĐÓNG, và bốn dòng dưới đây là thứ đắt nhất vòng.**
+
+    ⑴ **Một khoản nợ cũng là một lời khai, và lời khai thì thiu.** Nợ 62 khai **80** câu SQL chưa
+    ghim; đo lại thì **9** không phải SQL và **8** không có gì để ghim — việc thật là **63**. Cả
+    ba con số do chính lớp canh sinh ra ở vòng trước rồi được chép vào sổ. **Đo lại phạm vi TRƯỚC
+    khi lập kế hoạch cho một vòng**, kể cả khi con số ấy do chính mình viết ra.
+
+    ⑵ **Một bộ sửa tự động cần một bộ KIỂM ĐỘC LẬP, và "đọc lại bản đề xuất" KHÔNG phải bộ
+    kiểm ấy.** Lượt đọc lại bắt được **bốn** lỗi (ghim `pg_stat_activity` — khung nhìn catalog —
+    vào `public.`; ghim `bid_so_tien` — hàm của dự án — vào `pg_catalog.`; mất khoảng trắng quanh
+    `->>`; tách `=>` thành hai toán tử) và **bỏ sót HAI MƯƠI**: 10 chỗ dấu `=` của phép gán trong
+    `SET` bị ghim, 6 chỗ văn bản nhân đôi, 2 chỗ `extract` dạng ngữ pháp, 2 chỗ đổi cây phân tích.
+    Review an ninh lượt 15 đọc tay ra cả 20. **Không lỗi nào bị trình biên dịch bắt** — chúng là
+    SQL, và SQL là chuỗi.
+
+    ⑵b **Một lỗi lệch-một-đơn-vị trong một bộ sửa hàng loạt không hỏng một chỗ, nó hỏng mười.**
+    Cả 10 chỗ `SET` có cùng nguyên nhân: bộ ghim nuốt dấu `(` của lời gọi hàm mà không tăng độ sâu
+    ngoặc ⇒ độ sâu về −1 ⇒ mọi phép kiểm `độ sâu === 0` tắt tới hết câu. **Trạng thái của một bộ
+    sửa hàng loạt phải có đối chứng riêng, không được chỉ kiểm đầu ra.**
+
+    ⑵c **Thứ bắt được cả 20 trong MỘT phép đo: `PREPARE` từng câu trên PostgreSQL thật.**
+    `tests/architecture/qt3-cu-phap.int.test.ts`. Hạ tầng đã nằm sẵn trong kho; thứ thiếu chỉ là ý
+    định đưa câu SQL cho thứ duy nhất đọc được nó. **Một lớp canh đòi một cách viết mà không chạy
+    thử cách viết ấy thì không phải hàng rào, nó là một cái khuôn.**
+
+    ⑶ **Gỡ một cái mốc, đừng hạ nó về 0.** `TRAN_TOI_DA` là hàng rào của một cuộc di trú đang
+    chạy. Khi số về 0, giữ nó lại chỉ còn một tác dụng: cho phép quay lui.
+
+    ⑷ **Một cái sàn đi xuống có thể HỢP LỆ.** `SO_CAU_TOI_THIEU` 148 → 139 vì chín chuỗi rời khỏi
+    tập chủ thể — chúng chưa bao giờ là SQL. Một cái sàn tụt vì bộ đọc mù đi thì hỏng; cái này tụt
+    vì tập chủ thể đúng lên. Phân biệt hai thứ ấy là việc của người viết, không của con số.
+
+    **Và hai thứ tìm được ngoài phạm vi, cả hai về chính lưới an toàn:** `ci.yml` kích hoạt trên
+    một nhánh **không tồn tại** nên **không lượt CI nào từng chạy trên commit merge** (khoản nợ 64,
+    đã sửa); và một job `schedule` **fail-closed** đã đỏ từ hôm trước với đúng con số khoản nợ 24
+    đang chờ — `TỶ LỆ ĐỎ: 2 / 10` — mà không tới tay ai (khoản nợ 65). **Fail-closed mà không có
+    người đọc thì chỉ là fail-lặng.**

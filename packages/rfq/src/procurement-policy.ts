@@ -105,13 +105,13 @@ export async function createProcurementPolicy(
   }
 
   const { rows } = await client.query<HangChinhSach>(
-    `INSERT INTO org_procurement_policies
+    `INSERT INTO public.org_procurement_policies
        (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id)
-     VALUES ($1, $2, $3::numeric, $4, $5, $6) RETURNING ${COT_CHINH_SACH}`,
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5, $6) RETURNING ${COT_CHINH_SACH}`,
     [orgId, input.version, nguong, input.currency, actor.id, actor.sessionId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("INSERT org_procurement_policies không trả về hàng");
+  if (hang === undefined) throw new RfqError("Câu INSERT org_procurement_policies không trả về hàng");
 
   // `payload` mang NGƯỠNG. Đây là ngoại lệ có lý do với thói quen "không đưa số vào sổ": ngưỡng
   // KHÔNG phải giá thầu và không thuộc bí mật nào của A3/A4 — nó là một tham số quản trị, và một
@@ -204,9 +204,9 @@ export async function setRfqBudget(
   }
 
   await client.query(
-    `INSERT INTO rfq_budgets
+    `INSERT INTO public.rfq_budgets
        (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id)
-     VALUES ($1, $2, $3::numeric, $4, $5, $6, $7)
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5, $6, $7)
      ON CONFLICT (org_id, rfq_id) DO UPDATE
        SET estimated_value = EXCLUDED.estimated_value,
            currency = EXCLUDED.currency,

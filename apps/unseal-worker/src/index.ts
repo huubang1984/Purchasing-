@@ -170,8 +170,8 @@ export async function executeUnsealRequest(
   }
 
   const { rows: yc } = await client.query<HangYeuCau>(
-    "SELECT rfq_id, status, dispatched_by, dispatched_by_session_id FROM unseal_requests " +
-      " WHERE id = $1 AND org_id = $2 FOR NO KEY UPDATE",
+    "SELECT rfq_id, status, dispatched_by, dispatched_by_session_id FROM public.unseal_requests " +
+      " WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 FOR NO KEY UPDATE",
     [input.unsealRequestId, orgId],
   );
   const r = yc[0];
@@ -205,8 +205,8 @@ export async function executeUnsealRequest(
   // vào nhánh thất bại trong khi hàm vẫn báo thành công và vẫn lật RFQ sang `UNSEALED`.
   const { rows: khoa } = await client.query<HangKhoa>(
     `SELECT algorithm, wrapped_private_key, key_version
-       FROM rfq_key_material
-      WHERE rfq_id = $1 AND org_id = $2 AND revoked_at IS NULL
+       FROM public.rfq_key_material
+      WHERE rfq_id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 AND revoked_at IS NULL
       ORDER BY algorithm`,
     [r.rfq_id, orgId],
   );
@@ -227,10 +227,10 @@ export async function executeUnsealRequest(
   // thứ đã nộp; mở thầu thì chỉ mở thứ nhà cung cấp muốn được chấm — bản cuối trước hạn.
   const { rows: phongBi } = await client.query<HangPhongBi>(
     `SELECT DISTINCT ON (v.bid_id) v.id, v.envelope
-       FROM vendor_bid_versions v
-       JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id
-       JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id
-      WHERE i.rfq_id = $1 AND v.org_id = $2
+       FROM public.vendor_bid_versions v
+       JOIN public.vendor_bids b ON b.id OPERATOR(pg_catalog.=) v.bid_id AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+       JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1 AND v.org_id OPERATOR(pg_catalog.=) $2
       ORDER BY v.bid_id, v.version DESC`,
     [r.rfq_id, orgId],
   );
@@ -283,7 +283,7 @@ export async function executeUnsealRequest(
       }
       try {
         await client.query(
-          `INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload)
+          `INSERT INTO public.rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload)
            VALUES ($1, $2, $3, $4)`,
           [orgId, input.unsealRequestId, pb.id, JSON.stringify(thanhJson(banRo))],
         );
@@ -322,15 +322,15 @@ export async function executeUnsealRequest(
   // thái, và `rowCount` được kiểm. `runner.ts` của outbox đã ghi rằng *"RLS đã thu hẹp tập hàng"*
   // là một câu ĐO ĐƯỢC LÀ SAI với một phiên `BYPASSRLS`; worker không được là chỗ ngoại lệ.
   const kt1 = await client.query(
-    "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() " +
-      " WHERE id = $1 AND org_id = $2 AND status = 'APPROVED'",
+    "UPDATE public.unseal_requests SET status = 'EXECUTED', executed_at = pg_catalog.now() " +
+      " WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 AND status OPERATOR(pg_catalog.=) 'APPROVED'",
     [input.unsealRequestId, orgId],
   );
   if (kt1.rowCount !== 1) {
     throw new UnsealWorkerError("không đóng được yêu cầu mở thầu — trạng thái đã đổi giữa chừng");
   }
   const kt2 = await client.query(
-    "UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1 AND org_id = $2 AND status = 'CLOSED'",
+    "UPDATE public.rfq_packages SET status = 'UNSEALED' WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 AND status OPERATOR(pg_catalog.=) 'CLOSED'",
     [r.rfq_id, orgId],
   );
   if (kt2.rowCount !== 1) {
