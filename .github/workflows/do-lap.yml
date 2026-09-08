@@ -38,6 +38,31 @@ on:
         description: "So luot chay lap"
         required: false
         default: "10"
+      dot_bien:
+        description: "MUI DOT BIEN: cong mot luot do GIA de thu duong bao dong (khoan no 65)"
+        required: false
+        default: "false"
+
+# =============================================================================================
+# [khoan no 65] FAIL-CLOSED MA KHONG AI DOC THI CHI LA FAIL-LANG
+# =============================================================================================
+# Job nay da lam dung phan cua no ngay 2026-09-07: no do duoc TY LE DO: 2/10 tren phan cung CI,
+# dung con so ma khoan no 24 dang cho. Va khong ai doc. Mot luot `schedule` do khong gan voi PR
+# nao, khong hien tren trang nao ai mo hang ngay, va GitHub chi gui thu cho nguoi so huu lich —
+# nen phep do ay nam yen 22 gio truoc khi co nguoi tinh co doc toi.
+#
+# Nen ket qua phai TU DI toi mot cho co nguoi: khi ty le khac 0, job mo (hoac binh luan vao) mot
+# issue mang con so, duong dan luot chay, va ten hai test do. Issue la cho re nhat co san trong
+# kho nay ma mot nguoi that se thay ma khong phai nho.
+#
+# Vi sao co `dot_bien`: mot duong bao dong khong duoc kiem la mot duong bao dong khong ton tai.
+# Muc `dot_bien: true` cong MOT luot do gia de bat duong ay chay khi kho dang XANH — va issue
+# sinh ra tu no tu khai minh la mot mui do, khong phai mot phep do.
+# =============================================================================================
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   lap:
@@ -58,11 +83,14 @@ jobs:
       # `--repeat` cua vitest chay lai TUNG TEST trong cung mot tien trinh; thu can do o day la
       # ca luot chay — dung vong doi container, dung tranh chap Docker — nen phai lap CA LENH.
       - name: Chay lap va dem so luot do
+        id: do
         env:
           SO_LUOT: ${{ github.event.inputs.so_luot || '10' }}
+          DOT_BIEN: ${{ github.event.inputs.dot_bien || 'false' }}
         run: |
           do=0
           n="${SO_LUOT}"
+          ten_do=""
           for i in $(seq 1 "$n"); do
             echo "===== LUOT $i / $n ====="
             if pnpm test:int > "luot-$i.log" 2>&1; then
@@ -72,13 +100,54 @@ jobs:
               echo "LUOT $i: DO"
               # Chi in phan can doc. Ca log cua mot luot dai hang nghin dong.
               grep -E "FAIL|AssertionError|57P01|Unhandled" "luot-$i.log" | head -40 || true
+              # [khoan no 65] Ten tep DO di theo ket qua ra ngoai: mot con so khong noi duoc
+              # "cai gi do", va nguoi doc issue can biet no la [M10] hay mot thu moi.
+              ten_do="$ten_do$(grep -oE "FAIL +[^ ]+" "luot-$i.log" | awk '{print $2}' | sort -u | tr '\n' ' ')"
             fi
           done
           echo "===================================================="
           echo "TY LE DO: $do / $n"
           echo "===================================================="
+          if [ "${DOT_BIEN}" = "true" ]; then
+            echo "MUI DOT BIEN: cong mot luot do GIA de thu duong bao dong cua khoan no 65."
+            do=$((do+1))
+            ten_do="$ten_do(mui-dot-bien-khong-phai-test-that) "
+          fi
+          {
+            echo "ty_le=$do/$n"
+            echo "so_do=$do"
+            echo "ten_do=$(echo "$ten_do" | tr -s ' ' | cut -c1-400)"
+            echo "dot_bien=${DOT_BIEN}"
+          } >> "$GITHUB_OUTPUT"
           # Fail-closed. Mot ty le khac 0 la mot ket qua CAN DOC, khong phai mot thu de xanh cho qua.
           test "$do" -eq 0
+
+      # [khoan no 65] Duong di cua ket qua. Chay CA khi buoc tren da do — do la toan bo diem cua no.
+      - name: Bao dong — mo hoac binh luan mot issue mang con so
+        if: always() && steps.do.outputs.so_do != '0' && steps.do.outputs.so_do != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TY_LE: ${{ steps.do.outputs.ty_le }}
+          TEN_DO: ${{ steps.do.outputs.ten_do }}
+          LA_DOT_BIEN: ${{ steps.do.outputs.dot_bien }}
+        run: |
+          moc="[flaky-tang-tich-hop]"
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ "$LA_DOT_BIEN" = "true" ]; then
+            dau="MUI DOT BIEN (khoan no 65) — day KHONG phai mot phep do"
+          else
+            dau="Ty le flaky cua tang tich hop KHAC 0"
+          fi
+          than="$(printf '%s\n\n- **Ty le do:** `%s`\n- **Tep do:** `%s`\n- **Luot chay:** %s\n- **Commit:** `%s`\n\n%s\n' \
+            "$dau" "$TY_LE" "${TEN_DO:-khong doc duoc ten}" "$url" "$GITHUB_SHA" \
+            "Job \`do-lap\` la fail-closed CO CHU DICH. Issue nay ton tai vi mot lan do ma khong ai doc thi chi la fail-lang — xem khoan no 65 trong docs/STATE.md.")"
+          cu="$(gh issue list --state open --search "$moc in:title" --json number --jq '.[0].number' || true)"
+          if [ -n "$cu" ]; then
+            gh issue comment "$cu" --body "$than"
+            echo "da binh luan vao issue #$cu"
+          else
+            gh issue create --title "$moc $dau" --body "$than"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

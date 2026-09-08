@@ -2,28 +2,35 @@ import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { voiKhoaDepcruise } from "./khoa-depcruise.js";
 
 const require = createRequire(import.meta.url);
 
 function depcruise(targets: string[]): { status: number; output: string } {
-  const proc = spawnSync(
-    "pnpm",
-    ["exec", "depcruise", ...targets, "--config", ".dependency-cruiser.cjs"],
-    { encoding: "utf8", shell: true },
-  );
-  return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+  // [khoản nợ 59] Mọi lượt cruise đi qua khoá: cây nguồn là tài nguyên dùng chung, và
+  // `apps/api/src/routes.test.ts` viết một probe THẬT vào nó ở một tiến trình khác.
+  return voiKhoaDepcruise(() => {
+    const proc = spawnSync(
+      "pnpm",
+      ["exec", "depcruise", ...targets, "--config", ".dependency-cruiser.cjs"],
+      { encoding: "utf8", shell: true },
+    );
+    return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+  });
 }
 
 /** Đồ thị phụ thuộc dạng JSON — dùng để đo CHÍNH đồ thị, không chỉ đo kết luận vi phạm. */
 function depcruiseJson(targets: string[]): {
   modules: { source: string; dependencies: { module: string; dependencyTypes?: string[] }[] }[];
 } {
-  const proc = spawnSync(
-    "pnpm",
-    ["exec", "depcruise", ...targets, "--config", ".dependency-cruiser.cjs", "--output-type", "json"],
-    { encoding: "utf8", shell: true, maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(proc.stdout) as ReturnType<typeof depcruiseJson>;
+  return voiKhoaDepcruise(() => {
+    const proc = spawnSync(
+      "pnpm",
+      ["exec", "depcruise", ...targets, "--config", ".dependency-cruiser.cjs", "--output-type", "json"],
+      { encoding: "utf8", shell: true, maxBuffer: 64 * 1024 * 1024 },
+    );
+    return JSON.parse(proc.stdout) as ReturnType<typeof depcruiseJson>;
+  });
 }
 
 /**
@@ -35,8 +42,11 @@ function depcruiseJson(targets: string[]): {
  * chính script thì việc ai đó thu hẹp danh sách target mới làm test đỏ.
  */
 function depcruiseTheoScript(): { status: number; output: string } {
-  const proc = spawnSync("pnpm", ["run", "depcruise"], { encoding: "utf8", shell: true });
-  return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+  // [khoản nợ 59] Đây là lượt quét TOÀN kho — chính nó là bên bị probe của tệp khác làm đỏ giả.
+  return voiKhoaDepcruise(() => {
+    const proc = spawnSync("pnpm", ["run", "depcruise"], { encoding: "utf8", shell: true });
+    return { status: proc.status ?? -1, output: `${proc.stdout}${proc.stderr}` };
+  });
 }
 
 /**

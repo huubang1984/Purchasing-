@@ -17,6 +17,10 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+// [khoản nợ 59] Cây nguồn là tài nguyên DÙNG CHUNG: probe bên dưới có thật trên đĩa, và
+// `tests/architecture/boundaries.test.ts` quét TOÀN kho ở một tiến trình khác. Khoá này là
+// thứ giữ hai lượt quét không giẫm lên nhau — xem khối lý do đầy đủ trong chính tệp khoá.
+import { voiKhoaDepcruise } from "../../../tests/architecture/khoa-depcruise.js";
 import { MIEN_TRAN_NGUOI_GOI, timViPhamBangRoute, type Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 
@@ -182,21 +186,26 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
   });
 
   it("PROBE: một handler import @trustprocure/tenancy làm depcruise ĐỎ với quy tắc g9-", () => {
-    const thuMuc = join(GOC, "apps/api/src/routes");
-    const probe = join(thuMuc, "zprobe-g9.ts");
-    mkdirSync(thuMuc, { recursive: true });
-    writeFileSync(probe, 'import { withTenant } from "@trustprocure/tenancy";\nexport const x = withTenant;\n');
-    try {
-      const kq = spawnSync(
-        "pnpm",
-        ["exec", "depcruise", "apps/api", "--config", ".dependency-cruiser.cjs"],
-        { cwd: GOC, encoding: "utf8", shell: true },
-      );
-      const ra = `${kq.stdout}${kq.stderr}`;
-      expect(kq.status, ra).not.toBe(0);
-      expect(ra).toContain("g9-api-routes-khong-cham-tenancy-va-db");
-    } finally {
-      rmSync(probe, { force: true });
-    }
+    // [khoản nợ 59] Khoá bao TRỌN vòng đời của probe — tạo, quét, xoá — chứ không chỉ bao
+    // lượt quét: probe nằm trên đĩa THẬT, nên chỉ cần nó TỒN TẠI trong lúc lượt quét toàn
+    // kho ở tiến trình khác chạy là đủ để sinh một vi phạm không có thật.
+    voiKhoaDepcruise(() => {
+      const thuMuc = join(GOC, "apps/api/src/routes");
+      const probe = join(thuMuc, "zprobe-g9.ts");
+      mkdirSync(thuMuc, { recursive: true });
+      writeFileSync(probe, 'import { withTenant } from "@trustprocure/tenancy";\nexport const x = withTenant;\n');
+      try {
+        const kq = spawnSync(
+          "pnpm",
+          ["exec", "depcruise", "apps/api", "--config", ".dependency-cruiser.cjs"],
+          { cwd: GOC, encoding: "utf8", shell: true },
+        );
+        const ra = `${kq.stdout}${kq.stderr}`;
+        expect(kq.status, ra).not.toBe(0);
+        expect(ra).toContain("g9-api-routes-khong-cham-tenancy-va-db");
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    });
   }, 120000);
 });
