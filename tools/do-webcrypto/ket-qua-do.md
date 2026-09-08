@@ -15,8 +15,18 @@
 | 2 | 2026-08-29 | Edge 151, Windows desktop | Chromium 151 | `https:` | ĐẠT | Nộp thầu được |
 | 3 | 2026-08-29 | **Zalo iOS** (`Zalo iOS/260801802`), iPhone | **WKWebView, iOS 18.7** | `https:` | **ĐẠT** | **Nộp thầu được** |
 
-Lần 1 còn chạy thêm **ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
-được** — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
+Lần 1 còn chạy thêm ~~**ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
+được**~~ — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
+
+**[2026-09-08] NAY LÀ BỐN ĐỘT BIẾN VÀ NĂM PHÁN QUYẾT, và mũi thứ tư nói về một lỗ của CHÍNH MÁY
+DÒ.** Bản trước không phân biệt được *"thiết bị này thiếu WebCrypto"* với *"cái link không phải
+https"*: ngoài ngữ cảnh bảo mật, `crypto.subtle` **không tồn tại** dù engine hỗ trợ đầy đủ, và
+trang phán **"KHÔNG nộp thầu được trên trình duyệt này"** — một câu về **cái link**, mang hình
+dạng một câu về **cái máy**. Chép một dòng như thế vào §1 là đặt một lời khai sai vào đúng chỗ
+đang cần sự thật, và không ai kiểm lại được vì thiết bị đã đi khỏi. Nay có phán quyết thứ năm —
+**"PHÉP ĐO HỎNG — link này không phải https"**, màu lam thép, cố ý **không** thuộc ba họ màu ngữ
+nghĩa — và mũi `?dot=ngucanh` chứng minh nó phân biệt được. Đo trên Chromium 2026-09-08: năm URL
+cho **năm** thẻ khác nhau, ba mũi cũ không đổi nghĩa.
 
 **Dòng 3 là phép đo có giá trị nhất trong bảng.** Nó là lần đầu máy dò chạy **bên trong một
 webview thật của thị trường Việt Nam**, và nó bác bỏ được giả thuyết xấu nhất: *"webview Zalo
@@ -121,8 +131,13 @@ chặn** S1.1–S1.3, và **chặn việc CHỐT** ADR-011 ở S1.4.
 
 ## 5. Cách thêm một dòng
 
+0. **Link chính chủ:** <https://huubang1984.github.io/do-webcrypto/> — repo `huubang1984/do-webcrypto`
+   chỉ chứa đúng một tệp là bản sao của `index.html` ở đây, bật GitHub Pages để có **https thật,
+   không đăng nhập**. Sửa `index.html` trong kho này thì **phải đẩy lại bản sao ấy**, nếu không
+   thiết bị đo bản cũ mà không ai biết. Repo đó tồn tại chỉ để đo; xoá được sau khi §3 hết hàng.
 1. Mở `index.html` qua một URL **https** mà **không đòi đăng nhập** — nếu link bắt đăng nhập,
-   webview sẽ hiện màn hình đăng nhập và phép đo hỏng **mà không báo lỗi**.
+   webview sẽ hiện màn hình đăng nhập và phép đo hỏng **mà không báo lỗi**. Mở qua `http://` LAN
+   thì **không** phải một dòng: trang sẽ tự nói **PHÉP ĐO HỎNG** thay vì phán về thiết bị.
 2. Gửi link vào một cuộc trò chuyện, rồi **mở từ bên trong ứng dụng đó**. Bấm "Mở trong trình
    duyệt" là đo **sai thứ** — đó là Chrome/Safari, không phải webview.
 3. Bấm **Chép kết quả**, dán vào §1, và ghi **cả engine lẫn phiên bản hệ điều hành**, không chỉ

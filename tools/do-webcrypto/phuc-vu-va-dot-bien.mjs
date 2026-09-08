@@ -28,6 +28,13 @@ const DOT = {
   // Nguon ngau nhien tra toan so 0 -> dieu kien tien quyet gay.
   rnd: `
     crypto.getRandomValues = function (b) { b.fill(0); return b; };`,
+  // Ep trang tin no dang chay NGOAI ngu canh bao mat, du URL van la http://localhost. Mui nay
+  // do mot tinh chat cua CHINH MAY DO: no phai phan biet duoc "may thieu WebCrypto" voi "link
+  // khong phai https". Truoc ban va, ca hai cho ra cung mot the do.
+  ngucanh: `
+    Object.defineProperty(window, "isSecureContext", {
+      get: function () { return false; }, configurable: true,
+    });`,
 };
 
 createServer((req, res) => {
