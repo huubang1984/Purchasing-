@@ -253,30 +253,30 @@ export async function buildComparisonTable(
             s.id                                         AS supplier_id,
             s.legal_name,
             u.payload,
-            public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount')::pg_catalog.text AS total_amount,
-            u.payload OPERATOR(pg_catalog.->>) 'currency'                       AS currency
+            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS total_amount,
+            (u.payload OPERATOR(pg_catalog.->>) 'currency')                       AS currency
        FROM public.rfq_unsealed_bids u
        JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
        JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
        JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
        JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
       WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
-      ORDER BY public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount') ASC NULLS LAST, s.legal_name ASC`,
+      ORDER BY public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) ASC NULLS LAST, s.legal_name ASC`,
     [rfqId],
   );
 
   // Gom theo TIỀN TỆ chứ không gom một cục: nếu truy vấn trả về nhiều hơn một nhóm thì các phép
   // tổng hợp không có nghĩa, và đó là điều duy nhất phía TypeScript cần biết để quyết.
   const { rows: th } = await client.query<HangTongHop>(
-    `SELECT u.payload OPERATOR(pg_catalog.->>) 'currency'                                     AS currency,
+    `SELECT (u.payload OPERATOR(pg_catalog.->>) 'currency')                                     AS currency,
             pg_catalog.count(*)::pg_catalog.int4                                              AS n,
-            pg_catalog.min(public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text           AS gia_min,
-            pg_catalog.max(public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text           AS gia_max,
-            pg_catalog.round(pg_catalog.avg(public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount')), 2)::pg_catalog.text AS gia_tb,
+            pg_catalog.min(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_min,
+            pg_catalog.max(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_max,
+            pg_catalog.round(pg_catalog.avg(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))), 2)::pg_catalog.text AS gia_tb,
             pg_catalog.count(*) FILTER (
               WHERE ns.estimated_value IS NOT NULL
-                AND ns.currency OPERATOR(pg_catalog.=) u.payload OPERATOR(pg_catalog.->>) 'currency'
-                AND public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount') OPERATOR(pg_catalog.<=) ns.estimated_value
+                AND ns.currency OPERATOR(pg_catalog.=) (u.payload OPERATOR(pg_catalog.->>) 'currency')
+                AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) OPERATOR(pg_catalog.<=) ns.estimated_value
             )::pg_catalog.int4                                                     AS duoi_ngan_sach
        FROM public.rfq_unsealed_bids u
        JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
@@ -284,8 +284,8 @@ export async function buildComparisonTable(
        JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
        LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) i.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) i.org_id
       WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
-        AND public.bid_so_tien(u.payload OPERATOR(pg_catalog.->>) 'totalAmount') IS NOT NULL
-      GROUP BY u.payload OPERATOR(pg_catalog.->>) 'currency'`,
+        AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
+      GROUP BY (u.payload OPERATOR(pg_catalog.->>) 'currency')`,
     [rfqId],
   );
 

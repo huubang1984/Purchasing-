@@ -243,8 +243,8 @@ export async function revokeRfqKeyMaterial(
 
   const { rows } = await client.query<{ algorithm: string }>(
     `UPDATE public.rfq_key_material
-        SET revoked_at = pg_catalog.now(), revoked_reason OPERATOR(pg_catalog.=) $2,
-            revoked_by OPERATOR(pg_catalog.=) $3, revoked_by_session_id OPERATOR(pg_catalog.=) $4
+        SET revoked_at = pg_catalog.now(), revoked_reason = $2,
+            revoked_by = $3, revoked_by_session_id = $4
       WHERE rfq_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL
       RETURNING algorithm`,
     [input.rfqId, reason, actor.id, actor.sessionId],
@@ -378,7 +378,7 @@ export async function purgeRfqKeyMaterial(
   const { rows } = await client.query<{ id: string; algorithm: string }>(
     `UPDATE public.rfq_key_material
         SET wrapped_private_key = NULL, purged_at = pg_catalog.now(),
-            purged_by OPERATOR(pg_catalog.=) $2, purged_by_session_id OPERATOR(pg_catalog.=) $3
+            purged_by = $2, purged_by_session_id = $3
       WHERE rfq_id OPERATOR(pg_catalog.=) $1 AND id OPERATOR(pg_catalog.=) ANY($4::pg_catalog.uuid[])
       RETURNING id, algorithm`,
     [input.rfqId, actor.id, actor.sessionId, duDieuKien.map((h) => h.keyMaterialId)],

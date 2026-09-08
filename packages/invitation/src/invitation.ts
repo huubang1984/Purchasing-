@@ -464,9 +464,9 @@ export async function tangBucketNguoiGoi(
 ): Promise<number> {
   const { rows } = await client.query<{ hits: number }>(
     `INSERT INTO public.caller_rate_limits (bucket_hash, window_start, hits)
-     VALUES ($1, pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch FROM pg_catalog.now()) OPERATOR(pg_catalog./) $2) * $2), 1)
+     VALUES ($1, pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.date_part('epoch', pg_catalog.now()) OPERATOR(pg_catalog./) $2) * $2), 1)
      ON CONFLICT (bucket_hash, window_start)
-       DO UPDATE SET hits OPERATOR(pg_catalog.=) caller_rate_limits.hits OPERATOR(pg_catalog.+) 1
+       DO UPDATE SET hits = caller_rate_limits.hits OPERATOR(pg_catalog.+) 1
      RETURNING hits`,
     [pepper.bam(MIEN_BUCKET_TOAN_CUC, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
@@ -487,7 +487,7 @@ export async function tangBucketNguoiGoi(
  */
 export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<number> {
   const kq = await pool.query(
-    "DELETE FROM public.caller_rate_limits WHERE window_start OPERATOR(pg_catalog.<) pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $1::pg_catalog.float8)",
+    "DELETE FROM public.caller_rate_limits WHERE window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $1::pg_catalog.float8))",
     [OTP_RATE_WINDOW_SECONDS * soCuaSo],
   );
   return kq.rowCount ?? 0;
@@ -579,9 +579,9 @@ async function demVaTang(
   const { rows } = await client.query<{ hits: number }>(
     `INSERT INTO public.otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits)
      VALUES ($1, $2, $3,
-             pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch FROM pg_catalog.now()) OPERATOR(pg_catalog./) $4) * $4), 1)
+             pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.date_part('epoch', pg_catalog.now()) OPERATOR(pg_catalog./) $4) * $4), 1)
      ON CONFLICT (org_id, bucket_kind, bucket_hash, window_start)
-       DO UPDATE SET hits OPERATOR(pg_catalog.=) otp_rate_limits.hits OPERATOR(pg_catalog.+) 1
+       DO UPDATE SET hits = otp_rate_limits.hits OPERATOR(pg_catalog.+) 1
      RETURNING hits`,
     [orgId, kind, pepper.bam(orgId, kind, khoa).hash, OTP_RATE_WINDOW_SECONDS],
   );
@@ -963,7 +963,7 @@ export async function revokeInvitation(
   // chuyển sang đã-thu-hồi, nên tách ra là để lại một hàng đã thu hồi mà chưa ai ký tên.
   const loiMoi = await client.query(
     "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
-      " revoked_by OPERATOR(pg_catalog.=) $2, revoked_by_session_id OPERATOR(pg_catalog.=) $3" +
+      " revoked_by = $2, revoked_by_session_id = $3" +
       " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId, actor.id, actor.sessionId],
   );
@@ -971,7 +971,7 @@ export async function revokeInvitation(
 
   await client.query(
     "UPDATE public.rfq_invitation_tokens SET revoked_at = pg_catalog.now() " +
-      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
   await client.query(
@@ -981,7 +981,7 @@ export async function revokeInvitation(
   );
   await client.query(
     "UPDATE public.guest_sessions SET revoked_at = pg_catalog.now() " +
-      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [input.invitationId],
   );
 

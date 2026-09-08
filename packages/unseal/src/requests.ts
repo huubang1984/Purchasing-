@@ -278,7 +278,7 @@ export async function approveUnseal(
   }
 
   const { rows } = await client.query<HangYeuCau>(
-    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
+    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
     [input.unsealRequestId],
   );
   const h = rows[0];
@@ -322,8 +322,8 @@ export async function dispatchUnseal(
   // dịch. Không có ba cột này, worker không có gì để hỏi lại vế 2 của D1 lúc giải mã — và mở
   // thầu là hành động DUY NHẤT của hệ thống không thu hồi được.
   const dp = await client.query(
-    "UPDATE public.unseal_requests SET dispatched_at = pg_catalog.now(), dispatched_by OPERATOR(pg_catalog.=) $2, " +
-      "dispatched_by_session_id OPERATOR(pg_catalog.=) $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $4 AND dispatched_at IS NULL",
+    "UPDATE public.unseal_requests SET dispatched_at = pg_catalog.now(), dispatched_by = $2, " +
+      "dispatched_by_session_id = $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $4 AND dispatched_at IS NULL",
     [bangChung.unsealRequestId, bangChung.userId, bangChung.sessionId, orgId],
   );
   if (dp.rowCount !== 1) {
@@ -416,7 +416,7 @@ export async function getUnsealRequest(
   await assertTenantBound(client, orgId, "getUnsealRequest");
   batBuocUuid(unsealRequestId, "unsealRequestId");
   const { rows } = await client.query<HangYeuCau>(
-    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
+    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
     [unsealRequestId],
   );
   const h = rows[0];

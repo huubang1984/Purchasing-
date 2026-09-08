@@ -208,9 +208,9 @@ export async function setRfqBudget(
        (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id)
      VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5, $6, $7)
      ON CONFLICT (org_id, rfq_id) DO UPDATE
-       SET estimated_value OPERATOR(pg_catalog.=) EXCLUDED.estimated_value,
-           currency OPERATOR(pg_catalog.=) EXCLUDED.currency,
-           policy_id OPERATOR(pg_catalog.=) EXCLUDED.policy_id`,
+       SET estimated_value = EXCLUDED.estimated_value,
+           currency = EXCLUDED.currency,
+           policy_id = EXCLUDED.policy_id`,
     [orgId, input.rfqId, giaTri, input.currency, chinhSach.id, actor.id, actor.sessionId],
   );
 

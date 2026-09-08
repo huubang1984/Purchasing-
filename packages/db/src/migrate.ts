@@ -314,9 +314,14 @@ export async function migrate(
     // trần trong file này VÀ trong 001/002 đều phân giải về pg_catalog trước.
     //   - Lời gọi hàm của CHÍNH file này nay viết đủ "pg_catalog." nên chúng KHÔNG còn phụ
     //     thuộc dòng này (trước vòng fix 3 thì có, và không ghi chú nào nói ra).
-    //   - VẪN phụ thuộc dòng này: "CREATE TABLE IF NOT EXISTS schema_migrations" và mọi
+    //   - ~~VẪN phụ thuộc dòng này: "CREATE TABLE IF NOT EXISTS schema_migrations" và mọi
     //     SELECT/INSERT trên schema_migrations bên dưới (tên bảng KHÔNG ghi schema, nên nó
-    //     rơi vào schema ĐẦU TIÊN của search_path), toàn bộ DDL không ghi schema trong
+    //     rơi vào schema ĐẦU TIÊN của search_path)~~ — [S1.24] cả ba câu ấy nay ghi
+    //     "public.schema_migrations", nên chúng KHÔNG còn phụ thuộc dòng này. Review lượt 15
+    //     bắt được một BẤT ĐỐI XỨNG do chính vòng ghim tạo ra: SELECT/INSERT đã ghi schema
+    //     mà CREATE thì chưa, tức nếu ai gỡ dòng dưới theo lời chú thích cũ thì CREATE tạo
+    //     bảng ở một schema còn SELECT đọc schema khác. Nay CREATE cũng ghi schema. VẪN phụ
+    //     thuộc dòng này: toàn bộ DDL không ghi schema trong
     //     001/002, và tính ổn định của pg_get_expr mà hardening.always.sql phán xét.
     await lockClient.query("SET search_path = public");
 
@@ -348,7 +353,7 @@ export async function migrate(
     // mâu thuẫn trực tiếp với lời hứa "không giẫm lên nhau" ở docstring trên. IF NOT EXISTS
     // KHÔNG chống được đua này: nó chỉ kiểm tra tại thời điểm bắt đầu, không khoá tên kiểu.
     await lockClient.query(
-      "CREATE TABLE IF NOT EXISTS schema_migrations (" +
+      "CREATE TABLE IF NOT EXISTS public.schema_migrations (" +
         "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT pg_catalog.now())",
     );
 

@@ -222,7 +222,7 @@ function batBuoc(giaTri: string, ten: string, gioiHan: number): string {
 
 async function docRfq(client: pg.PoolClient, rfqId: string): Promise<HangRfq> {
   const { rows } = await client.query<HangRfq>(
-    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
+    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
     [rfqId],
   );
   const hang = rows[0];
@@ -314,7 +314,7 @@ export async function getRfq(
 ): Promise<RfqRecord | null> {
   await assertTenantBound(client, orgId, "getRfq");
   const { rows } = await client.query<HangRfq>(
-    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
+    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
     [rfqId],
   );
   const hang = rows[0];
@@ -466,7 +466,7 @@ export async function openRfq(
 
   const { rows } = await client.query<HangRfq>(
     `UPDATE public.rfq_packages SET status = 'OPEN', opened_at = pg_catalog.now(),
-            opened_by OPERATOR(pg_catalog.=) $2, opened_by_session_id OPERATOR(pg_catalog.=) $3
+            opened_by = $2, opened_by_session_id = $3
       WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
@@ -510,8 +510,8 @@ export async function closeRfq(
     // nhau nên chúng không được gộp vào một tham số như bản S1.2 đã làm.
     `UPDATE public.rfq_packages
         SET status = 'CLOSED', closed_at = pg_catalog.now(),
-            early_close_reason OPERATOR(pg_catalog.=) CASE WHEN pg_catalog.now() OPERATOR(pg_catalog.<) deadline_at THEN $2::pg_catalog.text ELSE NULL END,
-            closed_by OPERATOR(pg_catalog.=) $3, closed_by_session_id OPERATOR(pg_catalog.=) $4
+            early_close_reason = CASE WHEN pg_catalog.now() OPERATOR(pg_catalog.<) deadline_at THEN $2::pg_catalog.text ELSE NULL END,
+            closed_by = $3, closed_by_session_id = $4
       WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'OPEN' RETURNING ${COT_RFQ}`,
     [input.rfqId, reason, actor.id, actor.sessionId],
   );
@@ -674,7 +674,7 @@ export async function cancelRfq(
 
   const { rows } = await client.query<HangRfq>(
     `UPDATE public.rfq_packages SET status = 'CANCELLED', cancelled_at = pg_catalog.now(),
-            cancelled_by OPERATOR(pg_catalog.=) $2, cancelled_by_session_id OPERATOR(pg_catalog.=) $3
+            cancelled_by = $2, cancelled_by_session_id = $3
       WHERE id OPERATOR(pg_catalog.=) $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
