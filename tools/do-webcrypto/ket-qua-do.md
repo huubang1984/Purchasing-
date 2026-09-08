@@ -14,13 +14,73 @@
 | 1 | 2026-08-29 | Chrome 148, Windows desktop | Chromium 148 | `http://localhost` | ĐẠT | Nộp thầu được |
 | 2 | 2026-08-29 | Edge 151, Windows desktop | Chromium 151 | `https:` | ĐẠT | Nộp thầu được |
 | 3 | 2026-08-29 | **Zalo iOS** (`Zalo iOS/260801802`), iPhone | **WKWebView, iOS 18.7** | `https:` | **ĐẠT** | **Nộp thầu được** |
+| 4 | 2026-09-08 | **Chrome iOS** (`CriOS/151.0.7922.112`), iPhone | **WKWebView, iOS 26.6.1** | `https:` | **ĐẠT** | **Nộp thầu được** |
+| **5** | 2026-09-08 | **Zalo Android** (`Zalo android/260802903`), Samsung **SM-A025F** (Galaxy A02s), **Android 12** | **Android System WebView, Chromium 151.0.7922.200** | `https:` | **ĐẠT** | **Nộp thầu được** |
+| **6** | 2026-09-08 | **Messenger Android** (`FB_IAB/FB4A;FBAV/577.0.0.49.89`), **cùng máy** SM-A025F, Android 12 | **Android System WebView, Chromium 151.0.7922.200** — *cùng build với dòng 5* | `https:` | **ĐẠT** | **Nộp thầu được** |
 
-Lần 1 còn chạy thêm **ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
-được** — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
+Lần 1 còn chạy thêm ~~**ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
+được**~~ — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
+
+**[2026-09-08] NAY LÀ BỐN ĐỘT BIẾN VÀ NĂM PHÁN QUYẾT, và mũi thứ tư nói về một lỗ của CHÍNH MÁY
+DÒ.** Bản trước không phân biệt được *"thiết bị này thiếu WebCrypto"* với *"cái link không phải
+https"*: ngoài ngữ cảnh bảo mật, `crypto.subtle` **không tồn tại** dù engine hỗ trợ đầy đủ, và
+trang phán **"KHÔNG nộp thầu được trên trình duyệt này"** — một câu về **cái link**, mang hình
+dạng một câu về **cái máy**. Chép một dòng như thế vào §1 là đặt một lời khai sai vào đúng chỗ
+đang cần sự thật, và không ai kiểm lại được vì thiết bị đã đi khỏi. Nay có phán quyết thứ năm —
+**"PHÉP ĐO HỎNG — link này không phải https"**, màu lam thép, cố ý **không** thuộc ba họ màu ngữ
+nghĩa — và mũi `?dot=ngucanh` chứng minh nó phân biệt được. Đo trên Chromium 2026-09-08: năm URL
+cho **năm** thẻ khác nhau, ba mũi cũ không đổi nghĩa.
 
 **Dòng 3 là phép đo có giá trị nhất trong bảng.** Nó là lần đầu máy dò chạy **bên trong một
 webview thật của thị trường Việt Nam**, và nó bác bỏ được giả thuyết xấu nhất: *"webview Zalo
 không có `crypto.subtle`"*. Trên đường đi này, **cả `crypto.subtle` lẫn `X25519` đều có**.
+
+**[2026-09-08] Dòng 4 KHÔNG lấp ô nào ở §3, và điều đó phải nói trước khi nói nó ĐẠT.** Nó nới
+đường iOS lên **phía trên** — WebKit của iOS 26.6.1 vẫn có `X25519`, nên rủi ro *"một bản WebKit
+nào đó đánh rơi X25519"* không hiện ra ở đầu mới. Nhưng ô ưu tiên **2** của §3 hỏi về đầu **CŨ**
+(iOS ≤ 16), và một phép đo ở đầu mới **không nói gì** về đầu cũ. Ô ưu tiên 1 và 3 là Android, và
+dòng 4 không phải Android.
+
+**[2026-09-08] DÒNG 5 ĐIỀN Ô ƯU TIÊN 1 — phép đo Android đầu tiên của dự án — VÀ NÓ KHÔNG ĐO ĐƯỢC
+CHÍNH ĐIỀU Ô ẤY NGHI.** Máy đúng phân khúc mà ô mô tả: **Galaxy A02s**, máy phổ thông giá rẻ, hệ
+điều hành dừng ở **Android 12**. Đường nộp thầu chạy **nguyên vẹn**, `X25519` **ĐẠT**. Nhưng đọc
+tiếp `UA:` thì thấy **System WebView của nó là Chromium 151** — tức **mới**, không tụt một phiên
+bản nào. Đó chính là cơ chế §2 đã mô tả: WebView đi theo **Play Store**, không theo tuổi máy.
+
+Nên phải tách hai câu, và chỉ câu thứ nhất là phép đo:
+
+- **Bác được:** *"webview Zalo trên Android thiếu `crypto.subtle` hoặc thiếu `X25519`"* — sai, ở
+  **WebView 151**. Và nó bác luôn một suy diễn dễ mắc hơn: *"máy rẻ đời cũ thì đường Android tự
+  khắc là đường yếu"* — không, vì thứ quyết định là **bản WebView**, không phải tuổi máy.
+- **KHÔNG đo được:** chế độ mà ô ưu tiên 1 thật sự nghi — một máy có **WebView tụt lại nhiều
+  phiên bản** (chủ máy không cập nhật, hoặc máy bị chặn Play Store). Dòng 5 không có mẫu nào ở
+  chế độ ấy, nên nó **không** nói gì về chế độ ấy.
+
+Đây đúng hình dạng bài học của khoản nợ 58 (S1.16): **một phép đo ở MỘT chế độ không phải một kết
+luận cho MỌI chế độ.** Ghi *"Android: ĐẠT"* mà không kèm **WebView 151** là một câu rộng hơn phép
+đo — đúng như §2 đã nói về *"Zalo iOS"* mà không kèm **iOS 18.7**.
+
+**[2026-09-08] DÒNG 6 ĐIỀN Ô ƯU TIÊN 3, VÀ NÓ BÁC GIẢ ĐỊNH ĐÃ SINH RA CHÍNH Ô ẤY.** Ô 3 tồn tại
+vì một điều nghi: *"Messenger có thể nhúng webview riêng thay vì dùng System WebView"*. Trên máy
+này thì **không**: dòng 5 và dòng 6 báo **cùng một chuỗi build — `Chrome/151.0.7922.200`** — tức
+hai ứng dụng **mượn cùng một Android System WebView**. Đây là lần thứ hai bảng này thu hai ô về
+một phép đo, y như dòng 3 đã phủ luôn Messenger iOS: **trục đúng là engine, không phải tên ứng
+dụng.** Giả định ấy nay đã được **đo** ở cả hai hệ điều hành chứ không còn là suy luận.
+
+**Và dòng 6 dạy một điều về cách ĐỌC `UA:` mà lẽ ra tôi đã đọc sai.** UA của Messenger có token
+`wv` — dấu hiệu kinh điển của Android WebView. UA của Zalo ở dòng 5 **không có** `wv`, dù nó cũng
+là WebView và cùng build. Nghĩa là **`wv` không phải chỗ để nhận dạng**: một ứng dụng sửa được
+chuỗi UA của webview mình nhúng (Zalo còn nối thêm `Zalo android/...`, `ZaloTheme/`,
+`ZaloLanguage/`). Thứ đáng tin là **chuỗi build Chromium** cộng **token định danh ứng dụng** — hai
+thứ khớp nhau giữa hai dòng thì mới kết luận được là cùng engine.
+
+**Dòng 4 còn dạy một quy tắc về chính cách thu kết quả, và nó suýt làm hỏng một dòng trong bảng
+này.** Kết quả đến kèm một **ảnh chụp máy Android** (thanh điều hướng ba nút, thanh công cụ Chrome
+kiểu Android) trong khi **khối văn bản dán về lại mang `UA:` của một iPhone** — clipboard đồng bộ
+giữa hai máy là đủ để hai thứ lệch nhau mà không ai cố ý. Thứ phân xử là `UA:`, vì nó do **chính
+lượt chạy ấy** sinh ra; ảnh chụp thẻ phán quyết **không định danh engine** và không bao giờ đủ để
+điền một dòng. Quy tắc: **một dòng ở §1 chỉ được điền từ khối văn bản, và engine đọc từ `UA:`, kể
+cả khi người gửi đã nói rõ mình đang cầm máy nào.**
 
 ---
 
@@ -54,9 +114,9 @@ Vì vậy §3 dưới đây được viết lại theo trục **engine**, không
 
 | Ưu tiên | Cần đo | Vì sao chính nó |
 |---|---|---|
-| **1 — cao nhất** | **Zalo trên Android**, máy tầm trung hoặc cũ | Android System WebView cập nhật **rời** qua Play Store và trên máy tầm trung cũ thường **tụt lại nhiều phiên bản**. Đây là ô duy nhất còn lại thật sự đáng ngờ, và cũng là phân khúc máy phổ biến nhất của nhà cung cấp nhỏ. |
+| ~~**1 — cao nhất**~~ **ĐÃ ĐO 2026-09-08 → dòng 5** | ~~**Zalo trên Android**, máy tầm trung hoặc cũ~~ | ~~Android System WebView cập nhật **rời** qua Play Store và trên máy tầm trung cũ thường **tụt lại nhiều phiên bản**. Đây là ô duy nhất còn lại thật sự đáng ngờ, và cũng là phân khúc máy phổ biến nhất của nhà cung cấp nhỏ.~~ **Đo trên Galaxy A02s / Android 12 — đúng phân khúc ô này mô tả — và ĐẠT toàn bộ. Nhưng WebView của máy ấy là 151, tức KHÔNG tụt lại: vế "tụt lại nhiều phiên bản" của chính ô này vẫn CHƯA có mẫu nào.** |
 | **2** | **Zalo trên iPhone chạy iOS CŨ** (16.x hoặc cũ hơn) | Dòng 3 chỉ nói về **iOS 18.7**. `X25519` vào WebCrypto muộn hơn nhiều so với `AES-GCM`; một WebKit cũ là chỗ nó vắng mặt. |
-| 3 | Messenger trên **Android** | Không suy ra được từ Zalo Android: Messenger có thể nhúng webview riêng thay vì dùng System WebView. **Phải đo, không được suy.** |
+| ~~3~~ **ĐÃ ĐO 2026-09-08 → dòng 6** | ~~Messenger trên **Android**~~ | ~~Không suy ra được từ Zalo Android: Messenger có thể nhúng webview riêng thay vì dùng System WebView.~~ **Phải đo, không được suy** — và phép đo BÁC điều nghi ấy: cùng máy, cùng `Chrome/151.0.7922.200`, tức cùng System WebView. Câu "phải đo, không được suy" vẫn đúng: nếu suy, ta đã suy ra một điều SAI theo hướng ngược lại. |
 | — | ~~Messenger trên iOS~~ | **Đã được dòng 3 phủ** — cùng `WKWebView`, cùng iOS 18.7. Vẫn nên chạy một lần để xác nhận giả định "cùng engine" ở trên là đúng. |
 
 > **Không tra bảng tương thích để lấp mấy ô này.** Bảng tương thích nói về *trình duyệt*, còn
@@ -104,7 +164,10 @@ Việc này mất hai phút và không cần chuẩn bị gì.
 
 - Giả thuyết xấu nhất — *"webview Zalo không có `crypto.subtle`, toàn bộ đường nộp thầu của
   thị trường VN gãy"* — **đã bị bác trên đường iOS**. Đó là kết quả có giá trị thật.
-- Nhưng phần iOS chỉ được chứng minh **ở iOS 18.7**, và **toàn bộ phía Android vẫn trống**.
+- Nhưng phần iOS chỉ được chứng minh ~~**ở iOS 18.7**~~ **ở iOS 18.7 và 26.6.1** (dòng 4), và
+  ~~**toàn bộ phía Android vẫn trống**~~ **[2026-09-08] phía Android đã có phép đo đầu tiên: dòng
+  5, Zalo trên Galaxy A02s/Android 12, ĐẠT cả `X25519` — nhưng ở WebView 151, không phải ở một
+  WebView tụt lại.**
 - Nên **chưa được** phép ghi ở bất kỳ đâu rằng *"đã đo `crypto.subtle` trên webview Zalo"* mà
   không kèm hai chữ **iOS 18.7**.
 
@@ -121,8 +184,13 @@ chặn** S1.1–S1.3, và **chặn việc CHỐT** ADR-011 ở S1.4.
 
 ## 5. Cách thêm một dòng
 
+0. **Link chính chủ:** <https://huubang1984.github.io/do-webcrypto/> — repo `huubang1984/do-webcrypto`
+   chỉ chứa đúng một tệp là bản sao của `index.html` ở đây, bật GitHub Pages để có **https thật,
+   không đăng nhập**. Sửa `index.html` trong kho này thì **phải đẩy lại bản sao ấy**, nếu không
+   thiết bị đo bản cũ mà không ai biết. Repo đó tồn tại chỉ để đo; xoá được sau khi §3 hết hàng.
 1. Mở `index.html` qua một URL **https** mà **không đòi đăng nhập** — nếu link bắt đăng nhập,
-   webview sẽ hiện màn hình đăng nhập và phép đo hỏng **mà không báo lỗi**.
+   webview sẽ hiện màn hình đăng nhập và phép đo hỏng **mà không báo lỗi**. Mở qua `http://` LAN
+   thì **không** phải một dòng: trang sẽ tự nói **PHÉP ĐO HỎNG** thay vì phán về thiết bị.
 2. Gửi link vào một cuộc trò chuyện, rồi **mở từ bên trong ứng dụng đó**. Bấm "Mở trong trình
    duyệt" là đo **sai thứ** — đó là Chrome/Safari, không phải webview.
 3. Bấm **Chép kết quả**, dán vào §1, và ghi **cả engine lẫn phiên bản hệ điều hành**, không chỉ

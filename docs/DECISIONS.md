@@ -3010,3 +3010,75 @@ trên kết nối của `migrate()`, nơi câu lệnh ĐẦU TIÊN là `SET sear
 4. `$2::pg_catalog.int` ⇒ 42704 ⇒ 500 thay vì 401 trên `/guest/otp/verify`. `int` không có trong
    `pg_type` của `pg_catalog`; `int4` thì có. ✔ đã đo, và nay có một phép kiểm cho nó.
 5. 20 câu SQL được ghim trong vòng, **757 test tích hợp** chạy qua chúng. ✔ đã đo.
+
+---
+
+## ADR-031 — Khoản nợ 23 đóng bằng BA phép đo trên máy thật CỘNG một quyết định tường minh cho phần không đo
+
+**Ngày:** 2026-09-08 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 23** · Liên quan:
+**ADR-007**, **ADR-011**, **ADR-019**, rủi ro sản phẩm số 3, `tools/do-webcrypto/`
+
+### 1. Vì sao ADR này tồn tại
+
+Khoản nợ 23 ra đời 2026-08-29 như một **hoãn có điều kiện**: máy dò WebCrypto đã chạy trong một
+webview thật (Zalo iOS, WKWebView, iOS 18.7 — ĐẠT), nhưng **toàn bộ phía Android còn trống** và
+trong tay không có máy. Điều kiện hoãn ghi rõ: *"phải đo trước khi CHỐT ADR-011"*.
+
+Điều kiện ấy **đã tự tan** ngày 2026-09-04, và đó là chỗ dễ đọc nhầm nhất của cả khoản nợ này:
+ADR-011 được chốt bằng cách **gỡ bỏ thế hoặc/hoặc** — hỗ trợ **cả hai** thuật toán thoả thuận
+khoá, chọn bằng chính máy dò lúc chạy. Từ mốc đó, phép đo Android tụt từ **cổng chặn** xuống
+**con số vận hành**. Khoản nợ vẫn được giữ mở suốt bốn vòng sau đó, và giữ đúng: một con số vận
+hành chưa đo vẫn là một ô trống, chỉ không còn chặn ai.
+
+Ngày 2026-09-08 ô ấy được điền — bằng một máy thật, không bằng một bảng tương thích.
+
+### 2. Ba phép đo, và điều mỗi phép đo KHÔNG nói
+
+| Dòng | Engine đo được | Nói được | KHÔNG nói được |
+|---|---|---|---|
+| 4 | **WKWebView, iOS 26.6.1** (Chrome iOS) | WebKit đời mới **không** đánh rơi `X25519` | không nói gì về **iOS ≤ 16** — câu hỏi ở đầu CŨ, phép đo ở đầu MỚI |
+| **5** | **Android System WebView, Chromium 151.0.7922.200** (Zalo, Galaxy A02s, Android 12) | đường nộp thầu chạy **nguyên vẹn** trên một máy phổ thông giá rẻ; *"máy rẻ đời cũ thì Android tự khắc là đường yếu"* là **SAI** — thứ quyết định là bản WebView, không phải tuổi máy | không nói gì về một máy có **WebView tụt lại nhiều phiên bản**: máy đo có WebView **151**, tức mới |
+| **6** | **cùng build 151.0.7922.200** (Messenger, cùng máy) | Messenger **mượn chính Android System WebView** — điều nghi đã sinh ra ô ưu tiên 3 bị **bác bằng phép đo**, không bằng suy luận | không nói gì về một bản Messenger nhúng engine riêng ở tương lai |
+
+Cả ba: **ĐẠT toàn bộ, kể cả `X25519`.**
+
+### 3. Quyết định
+
+⑴ **Khoản nợ 23 ĐÓNG.** Lý do đóng **không phải** *"đã đo hết"* — mà là: phần đã đo lấp đúng hai
+   ô ưu tiên cao nhất bằng máy thật, và phần chưa đo **không còn quyết định gì**, vì ADR-011 đã
+   gỡ thế hoặc/hoặc. Một engine thiếu `X25519` **tụt xuống P-256 chứ không gãy**; một engine
+   thiếu cả hai thì gãy ngay ở `crypto.subtle`, tức đã nằm trong đường thoát của ADR-007.
+
+⑵ **Hai chế độ được CHẤP NHẬN không đo, và phải gọi tên chứ không được im lặng:** ⓐ một máy có
+   **Android System WebView tụt lại nhiều phiên bản** (chủ máy không cập nhật, hoặc máy không có
+   Play Store); ⓑ **iOS ≤ 16**. Không tra bảng tương thích để lấp hai ô ấy — §3 của nhật ký đo
+   cấm đúng việc đó, và lượt tra dữ liệu công bố 2026-09-04 đã cho một **kết quả ÂM** (phân bố
+   phiên bản System WebView không tra được từ dữ liệu tổng hợp miễn phí).
+
+⑶ **Phần việc còn lại chuyển sang S1.4/S1.5 dưới dạng một YÊU CẦU GIAO DIỆN, không phải một khoản
+   nợ:** đường nộp báo giá **phải chạy chính phép dò này trước khi cho nộp**, và khi phán quyết
+   không phải *"Nộp thầu được"* thì phải **chuyển hướng sang trình duyệt ngoài** kèm câu giải
+   thích — chứ không để nhà cung cấp gặp một lỗi mật mã giữa chừng. Đây là chỗ duy nhất mà hai
+   chế độ ở ⑵ còn có thể làm hỏng việc của một người thật, và nó được xử bằng **mã**, không bằng
+   một phép đo thêm.
+
+⑷ **Cách viết bị ràng buộc:** mọi câu về webview phải kèm **phiên bản engine**. *"Android: ĐẠT"*
+   là câu rộng hơn phép đo; câu đúng là *"Android System WebView 151: ĐẠT"* — cùng một luật đã
+   áp cho *"Zalo iOS"* mà không kèm **iOS 18.7**.
+
+### 4. Cái ADR này KHÔNG quyết
+
+- **Không** đổi ADR-011. Ba phép đo **xác nhận** hướng hiện tại; chúng không đòi sửa gì.
+- **Không** hạ rủi ro sản phẩm số 3 xuống ĐÓNG. Nó xuống **TRUNG BÌNH**, và thứ đưa nó lên lại
+  là một dòng ĐỎ mới trong nhật ký đo, không phải một suy đoán.
+- **Không** tuyên bố phủ thị trường. Sáu dòng là sáu engine, không phải một mẫu thống kê.
+
+### 5. Số đo
+
+1. Ba lượt chạy trên máy thật ngày 2026-09-08, mỗi lượt một khối văn bản có `UA:` tự khai —
+   `tools/do-webcrypto/ket-qua-do.md` §1 dòng 4, 5, 6. ✔ đã đo.
+2. Dòng 5 và 6 báo **cùng chuỗi build** `Chrome/151.0.7922.200` ⇒ cùng System WebView. ✔ đã đo.
+3. Máy dò nay có **năm** phán quyết và **bốn** mũi đột biến; `?dot=ngucanh` chứng minh nó phân
+   biệt được *"máy thiếu WebCrypto"* với *"link không phải https"*. ✔ đã đo trên Chromium.
+4. Token `wv` **không** dùng để nhận dạng được: UA của Zalo không có `wv` dù là WebView cùng
+   build. ✔ đã đo — hai dòng cạnh nhau trong cùng bảng.

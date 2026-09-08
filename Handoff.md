@@ -206,10 +206,18 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
    toàn bộ, kể cả X25519.** Giả thuyết xấu nhất — *"webview Zalo không có `crypto.subtle`, toàn
    bộ đường nộp thầu của thị trường VN gãy"* — **đã bị bác trên đường iOS**.
 
-   **Rủi ro hẹp lại, nhưng CHƯA ĐÓNG**, và hai lý do đều cụ thể: **(a)** toàn bộ phía **Android
+   ~~**Rủi ro hẹp lại, nhưng CHƯA ĐÓNG**, và hai lý do đều cụ thể: **(a)** toàn bộ phía **Android
    còn trống** — Android System WebView cập nhật rời qua Play Store và trên máy tầm trung cũ hay
    tụt lại nhiều phiên bản; **(b)** kết quả iOS chỉ đúng cho **iOS 18.7**, không cho iPhone chạy
-   iOS cũ. Chưa được ghi ở đâu rằng *"đã đo trên webview Zalo"* mà không kèm hai chữ **iOS 18.7**.
+   iOS cũ.~~ Chưa được ghi ở đâu rằng *"đã đo trên webview Zalo"* mà không kèm hai chữ **iOS 18.7**.
+
+   **[2026-09-08, S1.23] VẾ (a) ĐÃ ĐÓNG BẰNG MÁY THẬT, VẾ (b) ĐƯỢC CHẤP NHẬN TƯỜNG MINH —
+   ADR-031.** Zalo và Messenger trên **Galaxy A02s / Android 12** (máy phổ thông giá rẻ): **ĐẠT
+   toàn bộ, kể cả `X25519`**, và cả hai báo **cùng build `Chrome/151.0.7922.200`** — tức Messenger
+   mượn chính System WebView, một ô nữa của bảng đo bị thu về cùng một phép đo. Nhưng đọc cho
+   đúng: máy ấy có WebView **151**, tức **mới**, nên chế độ mà vế (a) thật sự nghi — **WebView tụt
+   lại nhiều phiên bản** — vẫn **không có mẫu nào**. Cùng luật cũ, đổi tên: đừng ghi *"Android:
+   ĐẠT"* mà không kèm **WebView 151**.
 
    Phép đo này còn sửa một lỗi phân loại trong chính tài liệu trước đó: trục đúng là **engine**,
    không phải tên ứng dụng. Trên iOS, Zalo và Messenger mượn **cùng một `WKWebView`** — nên một
@@ -229,7 +237,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ **[S1.21] 61 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ **[S1.23] 63 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
@@ -276,8 +284,13 @@ trên CI.
    `docs/superpowers/plans/2026-08-29-s1-sealed-bid-core.md`, 10 mục.
 3. ~~**Chốt ba quyết định treo** — KMS trước S1.6.~~ **XONG HAI TRONG BA** — AWS + AWS KMS
    `ap-southeast-1` (ADR-009). Còn treo: xử lý thư mục `Vibe Coding/`.
-4. ~~**Đo `crypto.subtle` trong webview Zalo/Messenger.**~~ **CÔNG CỤ XONG, PHÉP ĐO CHƯA** —
-   `tools/do-webcrypto/`. Rủi ro **vẫn CAO và vẫn mở** cho tới khi có kết quả từ điện thoại thật.
+4. ~~**Đo `crypto.subtle` trong webview Zalo/Messenger.**~~ ~~**CÔNG CỤ XONG, PHÉP ĐO CHƯA** —
+   `tools/do-webcrypto/`. Rủi ro **vẫn CAO và vẫn mở** cho tới khi có kết quả từ điện thoại thật.~~
+   **[2026-09-08, S1.23] PHÉP ĐO XONG** — sáu dòng trong `tools/do-webcrypto/ket-qua-do.md`, ba
+   dòng mới trên máy thật (Zalo/Android, Messenger/Android, Chrome iOS). Rủi ro sản phẩm số 3
+   xuống **TRUNG BÌNH**; khoản nợ 23 **ĐÓNG** (ADR-031). Việc còn lại không phải một phép đo nữa
+   mà là **mã của S1.4/S1.5**: chạy phép dò trước khi cho nộp, chuyển hướng sang trình duyệt ngoài
+   khi phán quyết không phải *"Nộp thầu được"*.
 5. **Tiếp cận khách hàng pilot** song song với S1. — **chưa làm**, và vẫn là rủi ro lớn nhất.
 6. Hai việc cấu hình nhỏ, không chặn: **tạo team `@trustprocure/bao-mat`** trên GitHub để
    CODEOWNERS có răng; cân nhắc **thêm `windows-latest`** vào ma trận job T1+T2 (khoản nợ 20).
@@ -339,7 +352,8 @@ trên CI.
     cho G1. Đổi lại, G1 có một vế **thu hẹp MỚI** — xem ADR-019. Nguyên văn cũ: ADR-011 chốt
     **"P-256 mặc định, X25519 cơ hội"** — câu hỏi được **gỡ bỏ** chứ không được trả lời: thế
     hoặc/hoặc là do chính ADR tự đặt ra, và hỗ trợ cả hai thuật toán (chọn bằng máy dò lúc chạy)
-    xoá hẳn phụ thuộc vào phép đo Android. Khoản nợ 23 **vẫn mở**, chỉ thôi chặn. Nguyên văn cũ: ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
+    xoá hẳn phụ thuộc vào phép đo Android. ~~Khoản nợ 23 **vẫn mở**, chỉ thôi chặn.~~ **[S1.23]
+    Khoản nợ 23 ĐÓNG — ADR-031.** Nguyên văn cũ: ADR-011 vẫn *Đang mở*, và nó chỉ được chốt sau
     khi có kết quả đo WebCrypto trên **webview Android** (khoản nợ 23). Sau khi đã có phong bì
     thật thì đổi thoả thuận khoá là một cuộc di trú, không phải sửa một ADR.
 
@@ -716,3 +730,35 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     Ba lỗ nặng nhất — miễn cả khoảng `SET`, chỉ đọc mảnh đầu của SQL nối chuỗi, chỉ khớp một cú
     pháp `search_path` — đều là *"hàng rào không tạo được lượt ĐỎ cho đúng hình dạng nó tuyên bố
     canh"*.
+
+18. **[2026-09-08] S1.23 — KHOẢN NỢ 23 ĐÓNG BẰNG MỘT MÁY THẬT, và bốn dòng dưới đây là thứ đắt
+    nhất vòng.** Vòng này gần như không có mã: một máy Android xuất hiện, máy dò
+    `tools/do-webcrypto/index.html` chạy trong **Zalo**, **Messenger**, **Chrome** trên cùng máy
+    (**Galaxy A02s / Android 12**), cả ba **ĐẠT toàn bộ kể cả `X25519`**.
+
+    ⑴ **Phép đo lấp một ô KHÔNG có nghĩa là nó đo được điều ô ấy nghi.** Ô ưu tiên 1 nghi *"máy
+    tầm trung cũ hay tụt lại nhiều phiên bản WebView"*. Máy đo đúng phân khúc, nhưng WebView của
+    nó là **151** — mới. Ô được điền; **chế độ tụt lại vẫn không có mẫu nào**. Trước khi ghi một
+    ô là xong, hỏi: *phép đo này có rơi vào chế độ mà ô ấy sợ không?*
+
+    ⑵ **`UA:` là thứ phân xử, không phải ảnh chụp và cũng không phải lời người gửi.** Một khối
+    kết quả đến kèm ảnh chụp máy Android nhưng mang `UA:` của iPhone — clipboard đồng bộ giữa hai
+    máy là đủ. Nó vẫn là phép đo thật, chỉ là của engine khác, và thành dòng 4. **Ảnh chụp thẻ
+    phán quyết không định danh engine.**
+
+    ⑶ **Đừng nhận dạng WebView bằng token `wv`.** UA của Zalo không có `wv` dù là WebView cùng
+    build với Messenger. Ứng dụng sửa được UA của webview mình nhúng. Nhận dạng bằng **chuỗi build
+    Chromium** cộng **token ứng dụng**.
+
+    ⑷ **Một lớp ĐO cũng không được lẫn lỗi của chính nó với kết luận về đối tượng** — cùng hình
+    dạng với bốn HIGH của review lượt 14 (S1.22), nhưng lần này ở một công cụ thủ công. Ngoài ngữ
+    cảnh bảo mật `crypto.subtle` không tồn tại **dù engine đủ tốt**, và bản cũ phán *"KHÔNG nộp
+    thầu được trên trình duyệt này"* — một câu về CÁI LINK mang hình dạng một câu về CÁI MÁY. Nay
+    có phán quyết thứ năm *"PHÉP ĐO HỎNG — link này không phải https"*, mũi `?dot=ngucanh` chứng
+    minh nó phân biệt được.
+
+    **Và một điều về chính chữ "đóng":** nợ 23 đóng **không phải vì đã đo hết**. Hai chế độ cố ý
+    không đo (WebView tụt lại; iOS ≤ 16) được gọi tên ở ADR-031 §3⑵. Đóng được vì phần chưa đo
+    **không còn quyết định gì** — ADR-011 đã gỡ thế hoặc/hoặc từ 2026-09-04. Phần việc thật sự
+    còn lại **đổi hình từ một khoản nợ thành một yêu cầu giao diện của S1.4/S1.5**. Khi một khoản
+    nợ đóng theo kiểu ấy, phải viết ra **cái gì đi đâu**, nếu không nó chỉ là một dòng bị xoá.

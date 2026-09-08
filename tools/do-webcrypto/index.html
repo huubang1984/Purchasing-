@@ -136,6 +136,7 @@
   .phan-quyet[data-muc="dat"]  .phan-quyet-dai { background: var(--dat); }
   .phan-quyet[data-muc="canh"] .phan-quyet-dai { background: var(--ho-phach); }
   .phan-quyet[data-muc="hong"] .phan-quyet-dai { background: var(--gach); }
+  .phan-quyet[data-muc="vo-hieu"] .phan-quyet-dai { background: var(--lam); }
 
   .phan-quyet-than { padding: 20px 20px 22px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -150,6 +151,7 @@
   .phan-quyet[data-muc="dat"]  .phan-quyet-tieu { color: var(--dat); }
   .phan-quyet[data-muc="canh"] .phan-quyet-tieu { color: var(--ho-phach); }
   .phan-quyet[data-muc="hong"] .phan-quyet-tieu { color: var(--gach); }
+  .phan-quyet[data-muc="vo-hieu"] .phan-quyet-tieu { color: var(--lam); }
 
   .phan-quyet-y { margin: 0; color: var(--chu-mo); font-size: 15px; }
 
@@ -595,7 +597,33 @@
     document.getElementById("ua").textContent = navigator.userAgent;
   }
 
+  // [khoản nợ 23] MỘT PHÉP ĐO KHÔNG ĐƯỢC LẪN LỖI CỦA CHÍNH NÓ VỚI KẾT LUẬN VỀ ĐỐI TƯỢNG.
+  // Ngoài ngữ cảnh bảo mật, `crypto.subtle` KHÔNG TỒN TẠI dù engine hỗ trợ đầy đủ. Bản trước
+  // của trang này phán "KHÔNG nộp thầu được trên trình duyệt này" trong đúng tình huống ấy —
+  // một câu về CÁI LINK, mang hình dạng một câu về CÁI MÁY. Chép nó vào nhật ký đo là đặt một
+  // lời khai sai vào đúng chỗ đang cần sự thật, và không ai đọc lại được nữa vì thiết bị đã đi.
+  function ngoaiNguCanhBaoMat() {
+    if (window.isSecureContext === true) return false;
+    if (window.isSecureContext === false) return true;
+    // Webview cũ có thể không khai báo thuộc tính ấy: đọc thẳng từ URL. localhost là NGOẠI LỆ —
+    // trình duyệt coi nó là ngữ cảnh bảo mật, nên một lượt chạy trên máy phát triển vẫn hợp lệ.
+    var h = location.hostname;
+    return location.protocol === "http:" &&
+      h !== "localhost" && h !== "127.0.0.1" && h !== "[::1]" && h !== "::1";
+  }
+
   function phanQuyet(tienQuyetOk, batBuocOk, tt) {
+    if (ngoaiNguCanhBaoMat()) {
+      return {
+        muc: "vo-hieu",
+        tieu: "PHÉP ĐO HỎNG — link này không phải https",
+        y: "Trang chạy ngoài ngữ cảnh bảo mật (" + location.protocol + "//" + location.host +
+          "). Ở đó crypto.subtle KHÔNG tồn tại kể cả khi engine hỗ trợ đầy đủ, nên mọi dòng bên " +
+          "dưới nói về cái LINK chứ không nói về cái MÁY.",
+        heQua: "ĐÂY KHÔNG PHẢI một phán quyết về thiết bị — đừng chép nó vào nhật ký đo. Mở lại " +
+          "đúng trang này qua một URL https không đòi đăng nhập, rồi chạy lại."
+      };
+    }
     if (!tienQuyetOk) {
       return {
         muc: "hong",
