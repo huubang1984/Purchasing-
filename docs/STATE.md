@@ -1911,6 +1911,32 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     DẠY người ta viết `::pg_catalog.int`** — nên vế *"tên kiểu ghim phải TỒN TẠI"* thuộc về chính
     lớp ấy. Nay có, với `int` làm răng.
 
+    **CI ĐỎ HAI LƯỢT LIÊN TIẾP Ở HAI CHỖ KHÁC NHAU, VÀ CHÍNH SỰ KHÁC NHAU ẤY LÀ MANH MỐI.** Lượt
+    một: `postgres.int.test.ts` timeout 30 s. Lượt hai: `composition.int.test.ts` ném
+    `SyntaxError: Unexpected end of JSON input`. Hai chỗ khác nhau là chữ ký của TẢI, không phải
+    của một lỗi logic — nhưng "flake" là một kết luận, không phải một phép đo, nên phải đọc log.
+
+    Nguyên nhân thật: `apps/api/src/adapters/hop-thu-dev.ts` ghi bằng
+    `writeFile(tệp, json, { flag: "wx" })`. Cờ `wx` **TẠO tệp trước rồi mới ghi nội dung**, nên có
+    một cửa sổ mà tệp TỒN TẠI và RỖNG. Người đọc của test poll cả thư mục mỗi 50 ms và
+    `JSON.parse` MỌI tệp — nó rơi đúng vào cửa sổ ấy. Lỗi thứ hai trong cùng tệp
+    (`needsEnrollment` mong `false`, nhận `true`) là **hệ quả dây chuyền**: test trước thất bại nên
+    hồ sơ TOTP chưa được ghi danh.
+
+    **Hai sự thật, và cả hai đều phải nói:** đua tranh ấy **không do vòng này tạo ra** — nó nằm sẵn
+    trong cách ghi tệp từ S1.11; nhưng vòng này **làm nó phát**, vì thêm một tệp int khởi động
+    container (39 thay vì 38) và T3 trên runner CI đi từ **409 s** lên **511 s**. Máy phát triển
+    chạy cả bộ T3 xanh (757/757) ở cùng lúc ấy.
+
+    Sửa: ghi vào tên `.tmp` rồi `rename` sang `.json` — đổi tên trong cùng thư mục là NGUYÊN TỬ,
+    nên người đọc hoặc không thấy tệp, hoặc thấy nó ĐẦY ĐỦ; người đọc lọc `.json`. Sau bản sửa,
+    CI **6/6 xanh** (T3 552 s).
+
+    Đáng ghi: chính khối chú thích của hàm ghi ấy đã mang dấu vết một lần đỏ ngẫu nhiên TRƯỚC —
+    thứ tự tin khi hai tin rơi cùng mili-giây, lượt CI đầu của S1.12. **Cùng một hàm, lần thứ hai,
+    một trục khác.** Một hàm đã đỏ ngẫu nhiên một lần đáng được đọc lại toàn bộ, không chỉ vá đúng
+    trục vừa đỏ.
+
     **Số đo:** 20 câu SQL được ghim trong vòng; `pnpm t0` 203 module / 845 phụ thuộc / 0 vi phạm;
     **687** test đơn vị và **757** test tích hợp xanh; sổ đăng ký 54 → **55** bất biến.
 

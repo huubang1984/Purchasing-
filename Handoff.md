@@ -704,6 +704,13 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     `pg_get_keywords()`, `pg_type` bác chín dòng tôi viết theo trí nhớ — trong đó `unnest` là ca
     đắt nhất: mã sản xuất đã GHIM nó từ trước, tức lớp canh và mã nguồn nói ngược nhau.
 
+
+    ⑹ **"Đỏ ngẫu nhiên" là một KẾT LUẬN, không phải một phép đo.** CI của vòng này đỏ hai lượt ở
+    hai chỗ khác nhau — chữ ký của tải. Nhưng đọc log ra một nguyên nhân THẬT và sửa được:
+    `writeFile(..., { flag: "wx" })` tạo tệp trước khi ghi nội dung, nên một người đọc poll thư mục
+    bắt được tệp rỗng. Trước khi đổ cho nợ 24, hãy đọc dòng lỗi đầu tiên và hỏi *cái gì đọc, cái gì
+    ghi, và giữa hai việc ấy có cửa sổ nào không*.
+
     ⑸ **Bốn trong sáu HIGH của review lượt 14 nói về LỚP CANH, không về mã.** Một lớp canh mới là
     mã mới, và nó phải chịu đúng câu hỏi nó dùng để hỏi người khác: *xoá một dòng thì cái gì đỏ?*
     Ba lỗ nặng nhất — miễn cả khoảng `SET`, chỉ đọc mảnh đầu của SQL nối chuỗi, chỉ khớp một cú
