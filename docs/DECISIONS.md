@@ -3294,3 +3294,28 @@ test. `[M10]` có đủ ba chân. `[T10-L]` (`outbox.int.test.ts`) **không phá
 và không nhận một dòng sửa nào** — nó rời sổ vì *không quan sát được*, và hàng sổ phải nói đúng
 chữ ấy. Ngày nó trở lại, một issue mang con số sẽ mở: đó là một **phép đo mới**, không phải khoản
 nợ cũ mở lại.
+
+### 6. HỆ QUẢ THỨ BA — MỘT LỚP CANH CHỐNG TREO PHẢI TỰ CHỨNG MINH LÀ NÓ KHÔNG TREO
+
+Review an ninh lượt 16 đọc chính cái khoá mà §2⑴ vừa dựng lên, và tìm thấy **một đường đi tới
+một vòng quay vô hạn**: `continue` trong khối `catch` nhảy thẳng lên đầu `for(;;)`, vượt qua
+**cả** kiểm tra hạn **cả** giấc ngủ. Nó nằm ngay dưới một chú thích viết *"một lượt treo im
+lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM"*.
+
+**Quyết định, phát biểu thành luật để lần sau có chỗ mà đối chiếu:**
+
+1. **Trong một vòng lặp chờ, kiểm tra hạn là câu lệnh ĐẦU TIÊN của mọi nhánh lỗi**, và không
+   nhánh nào được rời vòng lặp mà không đi qua giấc ngủ. Một `catch` trần (`catch {}`) trong
+   một vòng lặp chờ là một lỗi cho tới khi chứng minh được ngược lại: nó nuốt đúng cái chẩn
+   đoán cần đọc.
+2. **"Chủ còn sống không" thay cho "khoá già bao nhiêu".** Một hạn theo đồng hồ sai cả hai
+   chiều cùng lúc — giết khoá đang sống của một lượt chạy chậm, và giữ khoá đã chết của một
+   lượt bị giết. `process.kill(pid, 0)` hỏi đúng câu cần hỏi. Đồng hồ chỉ còn là lưới đỡ cho
+   khe giữa `mkdir` và lúc ghi xong tên chủ, nên hạn ấy phải **nhỏ hơn** hạn chờ.
+3. **Nhả khoá theo CHỦ, không vô điều kiện.** Nếu khoá hiện tại không còn mang tên mình thì
+   xoá nó là dựng lại đúng đua tranh mà lớp này đi đóng.
+4. **Và luật cho chính phép đo:** một harness đột biến phải **fail-closed** — khai trước số
+   phép đo kỳ vọng, chạy đối chứng không-đột-biến, ném khi số thực tế lệch. Trong vòng này,
+   hai harness lần lượt đo **không cái gì** rồi báo *"xanh"*: một bộ lọc tên test viết không
+   dấu (khớp 0 test, vitest thoát 0), và một phép thay chuỗi không khớp (cả hai vế chạy cùng
+   một bản). Một phép đo chưa chạy nhìn giống hệt một phép đo đã qua.

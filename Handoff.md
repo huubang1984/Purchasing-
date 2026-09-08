@@ -237,7 +237,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ **[S1.25] 66 khoản, trong đó 12 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ **[S1.25] 67 khoản, trong đó 13 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 

@@ -417,11 +417,13 @@ DUY NHẤT được `[INV-H20]` đối chiếu với cột trạng thái của b
 
 | 66 | **[MỞ]** **[S1.25] MỘT KHẲNG ĐỊNH THỜI GIAN TUYỆT ĐỐI LÀ MỘT CỔNG ĐỎ GIẢ ĐANG CHỜ.** `apps/api/src/auth.int.test.ts` phân biệt *"được phục vụ ngay"* với *"bị làm chậm"* bằng một hằng số: `TRE_TEST_MS = 800`, và khẳng định mỗi lượt trong 300 lượt đầu phải nhanh hơn ngưỡng ấy. Dưới tải — đúng lượt gộp `pnpm evidence` — một lượt bình thường mất **1090 ms** và cổng đỏ **mà không có gì hỏng**: *"lần 61 phải nhanh: expected 1090 to be less than 800"*. Đây là cùng HỌ với khoản nợ 24 (test nhạy với tải) nhưng KHÁC CƠ CHẾ: không phải vòng đời kết nối dưới tranh chấp Docker, mà là một ngưỡng tuyệt đối đo một tính chất TƯƠNG ĐỐI. Hình dạng đóng đã thấy được: đo lượt bị làm chậm **so với trung vị của chính các lượt nhanh trong cùng lượt chạy** — tính chất cần chứng minh là *"lượt thứ N+1 CHẬM HƠN HẲN"*, không phải *"lượt thứ i nhanh hơn 800 ms"*. Chưa làm: nó là một vòng riêng, và trộn vào vòng của khoản 59 sẽ làm cả hai khó xem xét (khoản nợ 29) | `apps/api/src/auth.int.test.ts:45` (`TRE_TEST_MS`), `:421` |
 
-**CÒN MỞ TÍNH TỚI HEAD:** 2 · 4 · 10 · 12 · 15 · 18 · 19 · 30 · 60 · 61 · 63 · 66
+| 67 | **[MỞ]** **[S1.25, review an ninh lượt 16 M3] `do-lap.yml` để một token mang `issues: write` NẰM CÙNG JOB với `pnpm install` và cả tầng tích hợp.** `permissions:` khai ở mức workflow nên áp cho mọi bước; job chạy `pnpm install --frozen-lockfile` (script vòng đời của CẢ cây phụ thuộc) rồi `pnpm test:int` (23 tệp, container thật). Một phụ thuộc bắc cầu bị chiếm hoặc một `postinstall` typosquat chỉ cần đọc `.git/config` là cầm được một token ghi issue: mở issue mạo danh kho, **sửa bình luận có sẵn trên cả issue lẫn pull request** (API issue comments phục vụ cả PR), đóng issue an ninh đang mở. `contents: read` chặn đường ghi MÃ, nên thiệt hại giới hạn ở **kênh giao tiếp** — nhưng đó đúng là kênh mà cả đội tin, và cũng đúng thứ khoản nợ 65 vừa mua. **Vế rẻ đã làm trong vòng này:** `persist-credentials: false` cho `actions/checkout@v4`, nên token không còn được ghi vào `.git/config`. **Vế còn lại là một cuộc TÁI CẤU TRÚC, nên nó là một vòng riêng:** tách làm hai job — `lap` giữ `permissions: {contents: read}` và chạy mã của kho; `bao-dong` với `needs: lap`, `permissions: {issues: write}`, **không** checkout, **không** `pnpm install`, chỉ gọi `gh` — và khai `permissions` ở mức JOB thay vì mức workflow. Khi ấy không bước nào vừa cầm token ghi vừa chạy mã bên thứ ba. **Chưa đo được từ trong cây nguồn:** mặc định `permissions` của kho — nếu trước đây workflow không có khối ấy thì khối mới có thể là một lần THU HẸP chứ không phải một lần leo thang; đây là rủi ro còn lại, không phải một hồi quy | `.github/workflows/do-lap.yml` |
 
-Trong ~~mười lăm~~ ~~**mười bốn**~~ **mười hai** khoản ấy, ~~**năm**~~ **bốn** không phải việc của mã nguồn (15 chốt
+**CÒN MỞ TÍNH TỚI HEAD:** 2 · 4 · 10 · 12 · 15 · 18 · 19 · 30 · 60 · 61 · 63 · 66 · 67
+
+Trong ~~mười lăm~~ ~~**mười bốn**~~ **mười ba** khoản ấy, ~~**năm**~~ **bốn** không phải việc của mã nguồn (15 chốt
 nhà cung cấp KMS · 18 tạo team GitHub · 19 chú thích migration đã áp, không sửa được tại chỗ ·
-~~23 máy Android thật ·~~ nửa sau của 30 neo ngoài cho khoá công khai), và ~~**mười**~~ **tám** thì có
+~~23 máy Android thật ·~~ nửa sau của 30 neo ngoài cho khoá công khai), và ~~**mười**~~ **chín** thì có
 hình dạng mã nguồn. **[2026-09-08] Khoản 23 rời khỏi danh sách này bằng một máy thật, không bằng một
 lần viết lại định nghĩa** — xem mục 38 và ADR-031.
 
@@ -2116,10 +2118,31 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     chế** cộng **một bản vá không nới ngưỡng nào**, với tỷ lệ chỉ là chân thứ ba. Vế `[T10-L]` thì
     ghi thẳng là *không quan sát được*, không phải *đã chữa*.
 
-    **Số đo:** `TỶ LỆ ĐỎ: 0 / 10` trên phần cứng CI (lượt 34225703897, 87 phút, nhánh `33af790`)
-    · khoá liên tiến trình đo bằng **2 tiến trình thật**, hai chiều · đường báo động đo bằng **1
-    issue thật** (#22) đã mở và đã đóng · `pnpm t0` 206 module / 858 phụ thuộc / **0** vi phạm ·
-    `pnpm test` **690/690** · `[INV-H20]` **19/19**.
+    ⑸ **VÀ RỒI REVIEW AN NINH LƯỢT 16 TÌM RA RẰNG CHÍNH CÁI KHOÁ ẤY TREO ĐƯỢC.** Ba mức MEDIUM,
+    bảy mức LOW, không CRITICAL/HIGH. Nặng nhất: một `continue` trong `catch` **nhảy vượt cả
+    kiểm tra hạn cả giấc ngủ** ⇒ quay 100% CPU vĩnh viễn, và vì hàm đồng bộ nên `timeout` của
+    `it()` cũng không cứu được — kích hoạt được bằng một `TMPDIR` hỏng, **không cần kẻ tấn
+    công**. Tức lớp canh dựng để chống treo tự nó treo được, ngay dưới một chú thích viết
+    *"chỗ này NÉM"*. Cùng họ: hạn khoá 300 s **dài hơn** hạn chờ 180 s nên một lần `Ctrl-C`
+    đầu độc 2 phút kế tiếp; và hạn chờ 15 s của khoản 24 **vượt** `idleTimeoutMillis` mặc định
+    10 s của `pg.Pool` — cái bẫy mà CHÍNH tệp ấy đã ghi ra cách đó 60 dòng cho một khẳng định
+    khác. Tất cả đã vá, mỗi vá kèm một lượt đỏ thật (bảng ở `evidence/security-reviews.md`
+    §S1.25). Phần tái cấu trúc `do-lap.yml` thành khoản nợ **67**.
+
+    ⑹ **HAI LẦN TRONG VÒNG NÀY, BỘ ĐO CỦA CHÍNH TÔI ĐO KHÔNG CÁI GÌ VÀ BÁO "XANH".** Lượt
+    đột biến đầu lọc test bằng chuỗi **không dấu** ⇒ khớp 0 test ⇒ vitest bỏ qua cả 6 rồi thoát
+    0 ⇒ 5/5 mũi báo *"xanh"*. Lượt đo tiêm `$GITHUB_OUTPUT` đầu có phép thay chuỗi không khớp
+    nên **cả hai vế đều chạy bản mới**, cộng một biến môi trường mang ký tự xuống dòng không đi
+    qua nổi Windows. Cả hai lần, *"an toàn"* là kết quả của một phép đo **chưa chạy** — cùng
+    đúng một hình dạng mà cả vòng này đi bắt, chỉ khác là ở bộ đo chứ không ở bộ được đo. Luật
+    rút ra và đã áp: **mọi harness đột biến phải FAIL-CLOSED** — khai số phép đo kỳ vọng, chạy
+    đối chứng KHÔNG đột biến trước, và ném khi số thực tế lệch.
+
+    **Số đo:** `TỶ LỆ ĐỎ: 0 / 10` trên phần cứng CI (lượt 34225703897, 87 phút, nhánh
+    `33af790`) · khoá liên tiến trình đo bằng **2 tiến trình thật**, hai chiều · **5 mũi đột
+    biến** trên lớp khoá, cả 5 ĐỎ đúng chỗ · tiêm `$GITHUB_OUTPUT` đo hai chiều (bản cũ: bước
+    báo động **bị tắt**; bản vá: không) · đường báo động đo bằng **1 issue thật** (#22) đã mở
+    và đã đóng · `[INV-H20]` **19/19**.
 
 ## Tham chiếu
 
