@@ -1008,3 +1008,39 @@ canh. Theo quy ước của kho, hàng rào ở trạng thái đó phải sửa 
 **Và một lớp canh đòi một cách viết thì phải kiểm rằng cách viết ấy HỢP LỆ.** `::pg_catalog.int`
 không tồn tại; lớp canh đòi `::pg_catalog.<t>` mà không kiểm `pg_type` sẽ dạy người ta viết đúng
 cái sai ấy — và chỉ T3 bắt được, sau khi một route đã trả 500 thay vì 401.
+
+
+---
+
+# §S1.24 — review an ninh lượt 15 (khoản nợ 62: ghim đủ bốn trục cho 63 câu còn lại)
+
+**Phạm vi:** 12 tệp sản xuất mà bộ ghim tự động viết lại, so với `origin/master` = `764c082`.
+**Chủ đề đặt cho reviewer:** năm mục hẹp — SQL hỏng cú pháp do bộ ghim, ghim sai địa chỉ, tên kiểu
+không tồn tại, đổi nghĩa, và chạm đường ra quyết định an ninh.
+
+## Bảng
+
+| Mức | Số | Nội dung |
+|---|---|---|
+| **HIGH** | **20 câu SQL hỏng** | 10 gán `SET` bị ghim · 6 văn bản nhân đôi · 2 `extract` dạng ngữ pháp · 2 đổi cây phân tích |
+| MEDIUM | 2 | bộ dọn `caller_rate_limits` chết (DoS nếu sửa đường ghi mà quên đường dọn); bảng so sánh sau mở thầu ném |
+| LOW | 1 | chú thích `migrate.ts` nay sai: `SELECT`/`INSERT` đã ghi schema mà `CREATE TABLE` thì chưa |
+
+**Ba mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề:** ghim sai địa chỉ (`public.` ↔ `pg_catalog.`) —
+không thấy; tên kiểu không tồn tại — không thấy (`::pg_catalog.int4` viết đúng); `IS NOT DISTINCT
+FROM` bị thay bằng `=` — không thấy.
+
+## Điều đáng mang sang vòng sau
+
+**Một bộ sửa TỰ ĐỘNG cần một bộ kiểm ĐỘC LẬP, và "đọc lại bản đề xuất" không phải bộ kiểm ấy.**
+Lượt đọc lại của tôi bắt được 3 lỗi trước khi áp và 1 sau khi áp; nó bỏ sót **20**. Cái bắt được
+cả 20 trong một phép đo là `PREPARE` từng câu trên PostgreSQL thật — hạ tầng cho nó (`moiCauSql()`
++ `withMigratedDatabase`) đã nằm sẵn trong kho từ trước.
+
+**Một lỗi lệch-một-đơn-vị trong một bộ sửa hàng loạt không hỏng một chỗ — nó hỏng mười chỗ.** Bộ
+ghim quên tăng độ sâu ngoặc khi nuốt dấu `(` của một lời gọi hàm; mọi phép kiểm phụ thuộc độ sâu
+tắt từ đó tới hết câu. Khi viết một bộ sửa hàng loạt, **trạng thái của nó phải có đối chứng riêng**,
+không được chỉ kiểm đầu ra.
+
+**Và một điều về thứ tự:** cả 20 lỗi đều làm đường **đóng cứng**, không fail-open. Đó là may chứ
+không phải thiết kế.

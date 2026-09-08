@@ -3082,3 +3082,121 @@ Cả ba: **ĐẠT toàn bộ, kể cả `X25519`.**
    biệt được *"máy thiếu WebCrypto"* với *"link không phải https"*. ✔ đã đo trên Chromium.
 4. Token `wv` **không** dùng để nhận dạng được: UA của Zalo không có `wv` dù là WebView cùng
    build. ✔ đã đo — hai dòng cạnh nhau trong cùng bảng.
+
+---
+
+## ADR-032 — QT3 hết phần dư: chủ thể của lớp cưỡng chế là MỌI câu SQL, và ba con số của khoản nợ 62 đều sai theo hướng khác nhau
+
+**Ngày:** 2026-09-08 · **Trạng thái:** **Đã chấp nhận** · Đóng: **khoản nợ 62** · Mở: **khoản nợ
+65** · Liên quan: **H21**, ADR-029, ADR-030
+
+### 1. Vì sao ADR này tồn tại
+
+ADR-030 dựng lớp máy cho QT3 với chủ thể hẹp: **câu đã ghim MỘT trục phải ghim ĐỦ BỐN**. Phần dư
+— câu chưa ghim trục nào — chỉ chịu một mốc chỉ-đi-xuống (`TRAN_TOI_DA = 80`). Khoản nợ 62 là
+phần dư ấy, và nó được cố ý để lại cho một vòng riêng (khoản nợ 29).
+
+### 2. Đo lại trước khi làm, và con số 80 vỡ ra làm ba
+
+| | Số | Là gì |
+|---|---|---|
+| khai ở sổ nợ | **80** | "câu SQL chưa ghim trục nào" |
+| **không phải SQL** | **9** | thông báo lỗi tiếng Việt mở đầu bằng `INSERT` — bộ đọc chỉ đòi chuỗi **bắt đầu** bằng một từ khoá SQL |
+| **không có gì để ghim** | **8** | `SET lock_timeout = 0`, `SET ROLE $1`, `SELECT current_user`, `SET LOCAL statement_timeout = …` |
+| **việc thật** | **63** | trên 12 tệp |
+
+Con số **39 câu chạm bảng nhạy cảm** cũng đi theo: nó được đếm trên tập 80, tức trên một tập có
+9 phần tử không phải SQL.
+
+**Điều đáng ghi không phải sai số, mà là chỗ nó đến từ:** cả ba con số đều do CHÍNH lớp canh sinh
+ra ở S1.22 và được chép vào sổ nợ mà không ai đo lại. Đây đúng hình dạng ADR-029 nói — *một lời
+khai suy được thì phải suy ra* — chỉ khác ở chỗ lần này lời khai nằm trong một khoản nợ, nơi nó
+định nghĩa quy mô của một vòng chưa làm.
+
+### 3. Quyết định
+
+⑴ **Chủ thể của H21 là MỌI câu SQL trong mã sản xuất.** Phép lọc `daGhim` và mốc `TRAN_TOI_DA`
+   bị **gỡ**. Một mốc chỉ-đi-xuống là hàng rào của một cuộc di trú *đang chạy*; giữ nó lại sau khi
+   số về 0 chỉ còn một tác dụng: cho phép quay lui.
+
+⑵ **Chín thông báo lỗi được sửa ở CHỖ GỌI, không nới bộ đọc.** `"INSERT rfq_invitations không
+   trả về hàng nào"` → `"Câu INSERT …"`. Bộ đọc giữ nguyên độ **kêu nhầm**: một hàng rào an ninh
+   thà kêu nhầm còn hơn bỏ sót, và giá của lần kêu nhầm này là chín câu văn. Hệ quả phải nói ra:
+   từ nay một thông báo lỗi **không được mở đầu bằng động từ SQL** — khuôn `login.ts` đã dùng sẵn
+   (`"startUserSession: INSERT sessions …"`).
+
+⑶ **63 câu được ghim bằng một BỘ GHIM TỰ ĐỘNG, và bản đề xuất được ĐỌC LẠI trước khi áp.** Địa
+   chỉ của một cái tên (`public.` hay `pg_catalog.`) được **suy từ `db/migrations/*.sql`**, không
+   gõ tay. Sàn `SO_CAU_TOI_THIEU` 148 → **139**: nó đi xuống hợp lệ vì tập chủ thể **đúng lên**,
+   không phải vì bộ đọc mù đi.
+
+### 4. Bảy lỗi của chính bộ ghim mà lượt ĐỌC LẠI bắt được — và HAI MƯƠI lỗi nó KHÔNG bắt được
+
+Đọc mục 4 trước mục 4b, rồi đọc cả hai như một mệnh đề: **đọc lại một bản đề xuất tự động là cần,
+và nó KHÔNG đủ.**
+
+| | Lỗi | Nếu áp thẳng |
+|---|---|---|
+| 1 | `pg_stat_activity` → `public.pg_stat_activity` | trỏ tới một bảng **không tồn tại** — nó là khung nhìn của catalog |
+| 2 | `bid_so_tien(…)` → `pg_catalog.bid_so_tien(…)` | cùng hình dạng với `::pg_catalog.int` mà S1.22 đã trả giá: **lớp canh dạy người ta viết một cái tên không có** |
+| 3 | `u.payload->>'x'` → `u.payloadOPERATOR(pg_catalog.->>)'x'` | mất khoảng trắng ⇒ **một định danh khác hẳn** |
+| 4 | `make_interval(secs => $4)` → `secs OPERATOR(pg_catalog.=) OPERATOR(pg_catalog.>) $4` | `=>` là **đối số có tên**, không phải hai toán tử — SQL hỏng ở ba chỗ |
+
+Ba lỗi đầu bắt được **trước** khi áp, lỗi thứ tư bắt được **sau**, bằng một lượt quét lại bản đã
+vá. Lỗi 4 nay có một mũi đo riêng trong H21.
+
+### 4b. HAI MƯƠI câu hỏng đi qua `tsc`, `eslint`, `depcruise` VÀ chính H21 — review lượt 15 đọc tay ra
+
+Bốn lỗi ở mục 4 là những lỗi tôi tự thấy. Review an ninh lượt 15 đọc cả 12 tệp và tìm ra **20 câu
+SQL hỏng**, trong đó **18 câu chắc chắn ném lúc chạy**:
+
+| Nhóm | Số | Hình dạng | Mã lỗi |
+|---|---|---|---|
+| **gán trong `SET` bị ghim** | **10** | `SET opened_by OPERATOR(pg_catalog.=) $2` — ngữ pháp `set_clause` chỉ nhận token `=` trần | 42601 |
+| **văn bản NHÂN ĐÔI** | **6** | `… WHERE id OPERATOR(pg_catalog.=) $1SELECT … WHERE id …` | 42601 |
+| **`extract` dạng ngữ pháp** | **2** | `pg_catalog.extract(epoch FROM …)` | 42601 |
+| **đổi CÂY PHÂN TÍCH** | **2** | `a OPERATOR(=) b OPERATOR(->>) 'k'` ⇒ `(a = b) ->> 'k'` | 42883 |
+
+**Một nguyên nhân gốc cho cả 10 chỗ `SET`:** bộ ghim khi nhận ra một lời gọi hàm đã **nuốt luôn
+dấu `(`** mà không tăng độ sâu ngoặc. Dấu `)` kế tiếp hạ độ sâu xuống **−1**, nên mọi phép kiểm
+`độ sâu === 0` tắt vĩnh viễn — kể cả phép kiểm *"dấu `=` đầu tiên của mỗi mục `SET` là ngữ pháp"*.
+Một biến đếm lệch một đơn vị, mười đường ra quyết định an ninh đóng cứng.
+
+**Hậu quả nếu merge:** thu hồi lời mời (C3) chết hẳn; phê duyệt kép mở thầu không gom đủ hai chữ
+ký vì người phê duyệt **thứ nhất** luôn rollback cả hàng phê duyệt lẫn bản ghi kiểm toán; toàn bộ
+hạn mức OTP và `LOGIN_CALLER` ném; bộ dọn `caller_rate_limits` — bảng **duy nhất** của dự án mà số
+hàng do kẻ tấn công chọn — ném 42883 mỗi lượt.
+
+**Không lỗ FAIL-OPEN nào.** Cả 20 lỗi đều làm đường **đóng cứng**, không mở toang. Đó là may, không
+phải thiết kế: một bộ ghim tự động sai theo hướng khác đã có thể mở.
+
+### 4c. Lớp canh nay HAI CHIỀU: `PREPARE` từng câu trên PostgreSQL thật
+
+`qt3-ghim-schema.test.ts` bắt **THIẾU ghim**; không lớp nào bắt **GHIM SAI**. `qt3-ngu-phap.int`
+có hỏi PostgreSQL, nhưng chỉ hỏi về **tên rời rạc** — không câu nào trong 63 câu được đưa cho
+PostgreSQL **phân tích**. Đó là lý do 18 lỗi cú pháp đi qua cả bốn cổng tĩnh.
+
+`tests/architecture/qt3-cu-phap.int.test.ts` đóng khoảng cách ấy: mỗi câu DML được `PREPARE` trên
+một CSDL đã migrate — phân giải tên bảng, tên hàm, toán tử và kiểu, tức **đúng bốn trục QT3**, mà
+không thực thi gì. Nó có hai mũi răng viết nguyên dạng hai trong 20 lỗi của chính vòng này, nên
+nó không thể xanh rỗng. Câu tiện ích (`SET`, `CREATE`, `GRANT`) nằm ngoài `PREPARE` và số ấy được
+**đếm ra**, không im lặng.
+
+**Bài học đắt nhất vòng, viết thành một câu:** một lớp canh đòi một cách viết mà **không chạy thử
+cách viết ấy** thì nó không phải hàng rào, nó là một cái khuôn. Cùng hình dạng với `::pg_catalog.int`
+ở S1.22, nhưng lần này khoảng cách rộng gấp hai mươi lần.
+
+### 5. Cái ADR này KHÔNG quyết
+
+- **Không** đưa `db/migrations/*.sql` vào phạm vi — ADR-030 §5 giữ nguyên, và cái giữ chúng vẫn là
+  vế `search_path` của H21.
+- **Không** biến bộ đọc thành trình phân tích SQL. Nó vẫn là bộ tách từ trên TypeScript.
+- **Không** nói rằng mọi câu SQL của kho nay an toàn trước mọi ca cướp: nó nói **mọi câu ĐỌC ĐƯỢC
+  bởi bộ tách từ** đã ghim đủ bốn trục.
+
+### 6. Số đo
+
+1. 139 câu SQL / 27 tệp; **0** câu còn vi phạm (trước vòng: 63). ✔ đã đo.
+2. 63 câu được viết lại, **758 test tích hợp** chạy qua chúng trên PostgreSQL thật. ✔ đã đo.
+3. Hai mũi đột biến mới ĐỎ thật: một câu viết trần hoàn toàn, và `=>` bị đọc thành hai toán tử.
+   ✔ đã đo.
