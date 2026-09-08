@@ -116,6 +116,39 @@ async function xoaDatabaseSauKhiHetKetNoi(
 }
 
 /**
+ * Đợi tới khi KHÔNG còn advisory lock nào trong CSDL hiện tại, rồi trả về số còn lại.
+ *
+ * [khoản nợ 24] Cùng một lý do với `xoaDatabaseSauKhiHetKetNoi` ngay bên trên, và vòng này bỏ
+ * sót nó: `pool.end()` / `client.destroy()` là thao tác CỤC BỘ của tiến trình Node — nó đóng
+ * socket. Backend PostgreSQL giữ advisory lock chỉ chết SAU đó, bất đồng bộ, và cửa sổ giữa hai
+ * việc rộng ra đúng lúc máy đang gánh nặng. Một phép ĐẾM TỨC THÌ ở giữa cửa sổ ấy đo sai THỜI
+ * ĐIỂM chứ không đo sai tính chất.
+ *
+ * Phép đo, không phải linh cảm: lượt `workflow_dispatch` ngày 2026-09-08 trên master chạy
+ * `pnpm test:int` **10 lượt** và đỏ **1** — lượt ấy đỏ đúng ở đây, `expected 1 to be +0`.
+ *
+ * Vòng chờ KHÔNG nới tính chất: *"không kẹt advisory lock"* vẫn là *"không kẹt"*. Một khoá rơi
+ * trong vài trăm mili-giây thì chưa bao giờ là kẹt; một khoá kẹt thật thì ở lại tới hết hạn và
+ * test vẫn ĐỎ với đúng con số cũ.
+ */
+async function doiHetKhoaTuVan(pPool: pg.Pool, pHanMs = 15_000): Promise<number> {
+  const dem = async (): Promise<number> => {
+    const { rows } = await pPool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' " +
+        "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
+    );
+    return rows[0]?.n ?? -1;
+  };
+  const hetHan = Date.now() + pHanMs;
+  let n = await dem();
+  while (n > 0 && Date.now() < hetHan) {
+    await new Promise((giaiQuyet) => setTimeout(giaiQuyet, 25));
+    n = await dem();
+  }
+  return n;
+}
+
+/**
  * Ghi lại mọi sự kiện `error` của pool thay vì để nó thành "unhandled error" của tiến trình.
  * Trả về chính mảng ghi — người gọi khẳng định nó rỗng SAU khi đã dọn dẹp xong.
  */
@@ -533,11 +566,8 @@ describe("bộ chạy migration", () => {
       expect(poolThuong.totalCount).toBe(0);
       expect(poolThuong.idleCount).toBe(0);
 
-      const { rows } = await poolSieuQuyen.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' " +
-          "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
-      );
-      expect(rows[0]?.n).toBe(0);
+      // [khoản nợ 24] VÒNG CHỜ, không phải một phép đếm tức thì — xem `doiHetKhoaTuVan`.
+      expect(await doiHetKhoaTuVan(poolSieuQuyen), "advisory lock KẸT sau khi pool đã đóng").toBe(0);
     } finally {
       await poolThuong.end();
       await poolSieuQuyen.end();
