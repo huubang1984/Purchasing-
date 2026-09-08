@@ -3242,6 +3242,7 @@ phân biệt *"cổng này nói gì"* với *"cổng này lại thế thôi"*.
 | khoá có nối tiếp thật không | hai **tiến trình** thật; vế *"không khoá"* chạy TRƯỚC để chứng minh máy dựng được đua tranh | không khoá ⇒ chồng lấn; có khoá ⇒ không, và tổng thời gian ≥ 2× thời gian giữ |
 | khoá có đóng được đỏ giả không | chạy lại **đúng bối cảnh** từng đỏ: lượt gộp `pnpm evidence` | `boundaries.test.ts` **XANH** |
 | đường báo động có chạy không | `dot_bien=true`, `so_luot=1` trên nhánh | **issue #22** được mở, mang tỷ lệ + link + commit; đã đóng kèm giải thích |
+| bản vá `[M10]` có hạ được tỷ lệ đỏ không | 10 lượt `pnpm test:int` trên **phần cứng CI**, nhánh đã vá `33af790` (lượt 34225703897, 87 phút) | **`TỶ LỆ ĐỎ: 0 / 10`** — trước vòng: 2/10 trên master, trong đó **một** thuộc khoản nợ 24. Đọc kèm §5 |
 
 ### 4. Cái ADR này KHÔNG quyết, và một khoản nợ MỚI phải nói ra
 
@@ -3257,3 +3258,39 @@ nhanh) thay vì so với một hằng số tuyệt đối — nhưng nó là m�
 
 Nói cách khác: **khoản nợ 59 đóng đúng thứ nó nói (đua tranh `depcruise`), không đóng câu
 *"lượt gộp hết đỏ"*.** Hai câu ấy khác nhau, và gộp chúng lại là đúng lỗi mà ADR-029 cấm.
+
+### 5. MỘT LƯỢT `0 / 10` CHO PHÉP KẾT LUẬN GÌ — VÀ KHÔNG CHO PHÉP GÌ
+
+Vế đo của khoản nợ 24 về `0 / 10`, và đó là một con số **dễ đọc quá tay**. Tính ra chứ đừng cảm
+thấy: với tỷ lệ nền **1/10** đã đo trước vòng, xác suất thấy 0 đỏ trong 10 lượt **ngay cả khi
+không sửa gì cả** là
+
+    0,9¹⁰ ≈ 0,35
+
+tức **hơn một phần ba số lần, một kho hoàn toàn chưa được vá vẫn cho ra `0 / 10`**. Độ mạnh của
+phép thử này chỉ khoảng 65%. Một lượt 10 sạch **không** phân biệt được *"đã sửa"* với *"gặp
+may"*, và bất kỳ ai đọc `0 / 10` như một chứng minh đều đang đọc rộng hơn phép đo — đúng hình
+dạng mà ADR-029 tồn tại để chặn.
+
+**Quyết định: một khoản nợ dạng "test flaky" được đóng khi và chỉ khi có ĐỦ BA CHÂN, và tỷ lệ là
+chân YẾU NHẤT trong ba.**
+
+1. **Cơ chế gọi được tên.** Không phải *"chắc do máy chậm"* mà một câu kiểm chứng được: `pool.end()`
+   là thao tác cục bộ của Node, backend PostgreSQL giữ advisory lock chết **sau đó** và bất đồng
+   bộ, nên một phép **đếm tức thì** đo sai **thời điểm** chứ không đo sai tính chất.
+2. **Bản vá không nới một ngưỡng nào.** Vòng chờ có hạn thay cho phép đếm tức thì **giữ nguyên
+   răng** của lớp canh: một khoá kẹt THẬT vẫn ở lại tới hết hạn và test vẫn đỏ với **đúng con số
+   cũ**. Đây là vế tách *"sửa"* khỏi *"làm cho hết kêu"* — và là vế mà một lần nới ngưỡng sẽ
+   trượt qua trong im lặng.
+3. **Một tỷ lệ đo trên phần cứng CI**, làm chứng cho hai chân trên chứ không thay chúng.
+
+**Hệ quả thứ nhất — thứ tự đóng không tuỳ ý.** Chân thứ ba là một phép đo **còn chạy tiếp sau khi
+vòng kết thúc** (lượt hằng tuần). Một phép đo không ai đọc thì không phải một phép đo, nên **khoản
+nợ 65 phải đóng TRƯỚC khoản nợ 24**. Đảo thứ tự lại thì lời đóng của 24 dựa vào một cái cổng
+fail-lặng.
+
+**Hệ quả thứ hai — "không quan sát được" phải được ghi khác "đã chữa".** Khoản nợ 24 gọi tên hai
+test. `[M10]` có đủ ba chân. `[T10-L]` (`outbox.int.test.ts`) **không phát lần nào trong 10 lượt
+và không nhận một dòng sửa nào** — nó rời sổ vì *không quan sát được*, và hàng sổ phải nói đúng
+chữ ấy. Ngày nó trở lại, một issue mang con số sẽ mở: đó là một **phép đo mới**, không phải khoản
+nợ cũ mở lại.
