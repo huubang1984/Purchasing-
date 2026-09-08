@@ -222,7 +222,7 @@ function batBuoc(giaTri: string, ten: string, gioiHan: number): string {
 
 async function docRfq(client: pg.PoolClient, rfqId: string): Promise<HangRfq> {
   const { rows } = await client.query<HangRfq>(
-    `SELECT ${COT_RFQ} FROM rfq_packages WHERE id = $1`,
+    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
     [rfqId],
   );
   const hang = rows[0];
@@ -249,13 +249,13 @@ export async function createRfq(
   // là mặc định ĐÓNG, và không viết nó ra ở đây làm cho "chỉ `setRfqBudget` hạ được nó" thành một
   // câu đúng theo hình dạng của mã, không phải theo trí nhớ của người đọc.
   const { rows } = await client.query<HangRfq>(
-    `INSERT INTO rfq_packages
+    `INSERT INTO public.rfq_packages
        (org_id, title, deadline_at, created_by, created_by_session_id)
      VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_RFQ}`,
     [orgId, title, input.deadlineAt ?? null, actor.id, actor.sessionId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("INSERT rfq_packages không trả về hàng nào");
+  if (hang === undefined) throw new RfqError("Câu INSERT rfq_packages không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,
@@ -284,13 +284,13 @@ export async function addRfqItem(
   }
 
   const { rows } = await client.query<HangItem>(
-    `INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit,
+    `INSERT INTO public.rfq_items (org_id, rfq_id, line_no, description, quantity, unit,
                             created_by, created_by_session_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COT_ITEM}`,
     [orgId, input.rfqId, input.lineNo, description, input.quantity, unit, actor.id, actor.sessionId],
   );
   const hang = rows[0];
-  if (hang === undefined) throw new RfqError("INSERT rfq_items không trả về hàng nào");
+  if (hang === undefined) throw new RfqError("Câu INSERT rfq_items không trả về hàng nào");
 
   // [C-1 mục 5] Bản S1.2 KHÔNG ghi kiểm toán cho hạng mục, nên bước "thêm 20 dòng sau khi đã có
   // hai phê duyệt" không nhìn thấy được kể cả khi có người đọc sổ. Băm nội dung (011) nay chặn
@@ -314,7 +314,7 @@ export async function getRfq(
 ): Promise<RfqRecord | null> {
   await assertTenantBound(client, orgId, "getRfq");
   const { rows } = await client.query<HangRfq>(
-    `SELECT ${COT_RFQ} FROM rfq_packages WHERE id = $1`,
+    `SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT_RFQ} FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1`,
     [rfqId],
   );
   const hang = rows[0];
@@ -328,7 +328,7 @@ export async function listRfqItems(
 ): Promise<RfqItemRecord[]> {
   await assertTenantBound(client, orgId, "listRfqItems");
   const { rows } = await client.query<HangItem>(
-    `SELECT ${COT_ITEM} FROM rfq_items WHERE rfq_id = $1 ORDER BY line_no`,
+    `SELECT ${COT_ITEM} FROM public.rfq_items WHERE rfq_id OPERATOR(pg_catalog.=) $1 ORDER BY line_no`,
     [rfqId],
   );
   return rows.map(doiItem);
@@ -345,9 +345,9 @@ export async function submitRfqForApproval(
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái
     // đích là một lần ghi đè IM LẶNG — kiểm (a) của trigger bỏ qua vì status không đổi.
-    `UPDATE rfq_packages SET status = 'PENDING_APPROVAL',
+    `UPDATE public.rfq_packages SET status = 'PENDING_APPROVAL',
             submitted_by = $2, submitted_by_session_id = $3
-      WHERE id = $1 AND status = 'DRAFT' RETURNING ${COT_RFQ}`,
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'DRAFT' RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];
@@ -387,7 +387,7 @@ export async function approveRfq(
   const actor = await resolveSessionActor(client, orgId, input.sessionId);
 
   await client.query(
-    `INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
+    `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
      VALUES ($1, $2, $3, $4)`,
     [orgId, input.rfqId, actor.id, actor.sessionId],
   );
@@ -465,9 +465,9 @@ export async function openRfq(
   });
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'OPEN', opened_at = now(),
-            opened_by = $2, opened_by_session_id = $3
-      WHERE id = $1 AND status = 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
+    `UPDATE public.rfq_packages SET status = 'OPEN', opened_at = pg_catalog.now(),
+            opened_by OPERATOR(pg_catalog.=) $2, opened_by_session_id OPERATOR(pg_catalog.=) $3
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];
@@ -508,11 +508,11 @@ export async function closeRfq(
     // [H-4] `early_close_reason` được đặt CHỈ khi đóng trước hạn — trigger (h) của 011 đòi nó
     // tường minh ở đúng ca ấy. Đóng đúng hạn không đòi gì thêm, và hai ca có mức rủi ro khác hẳn
     // nhau nên chúng không được gộp vào một tham số như bản S1.2 đã làm.
-    `UPDATE rfq_packages
-        SET status = 'CLOSED', closed_at = now(),
-            early_close_reason = CASE WHEN now() < deadline_at THEN $2::text ELSE NULL END,
-            closed_by = $3, closed_by_session_id = $4
-      WHERE id = $1 AND status = 'OPEN' RETURNING ${COT_RFQ}`,
+    `UPDATE public.rfq_packages
+        SET status = 'CLOSED', closed_at = pg_catalog.now(),
+            early_close_reason OPERATOR(pg_catalog.=) CASE WHEN pg_catalog.now() OPERATOR(pg_catalog.<) deadline_at THEN $2::pg_catalog.text ELSE NULL END,
+            closed_by OPERATOR(pg_catalog.=) $3, closed_by_session_id OPERATOR(pg_catalog.=) $4
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'OPEN' RETURNING ${COT_RFQ}`,
     [input.rfqId, reason, actor.id, actor.sessionId],
   );
   const hang = rows[0];
@@ -597,7 +597,7 @@ export async function extendRfqDeadline(
   }
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1 RETURNING ${COT_RFQ}`,
+    `UPDATE public.rfq_packages SET deadline_at = $2 WHERE id OPERATOR(pg_catalog.=) $1 RETURNING ${COT_RFQ}`,
     [input.rfqId, input.newDeadlineAt],
   );
   const hang = rows[0];
@@ -634,7 +634,7 @@ export async function extendRfqDeadline(
   // ngoài cho nhà cung cấp.
   const moc = hang.deadline_at?.toISOString() ?? "";
   const { rows: loiMoi } = await client.query<{ id: string }>(
-    "SELECT id FROM rfq_invitations WHERE rfq_id = $1 ORDER BY id",
+    "SELECT id FROM public.rfq_invitations WHERE rfq_id OPERATOR(pg_catalog.=) $1 ORDER BY id",
     [hang.id],
   );
   for (const lm of loiMoi) {
@@ -673,9 +673,9 @@ export async function cancelRfq(
   const reason = batBuoc(input.reason, "reason", 2000);
 
   const { rows } = await client.query<HangRfq>(
-    `UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(),
-            cancelled_by = $2, cancelled_by_session_id = $3
-      WHERE id = $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
+    `UPDATE public.rfq_packages SET status = 'CANCELLED', cancelled_at = pg_catalog.now(),
+            cancelled_by OPERATOR(pg_catalog.=) $2, cancelled_by_session_id OPERATOR(pg_catalog.=) $3
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];

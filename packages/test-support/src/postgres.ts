@@ -78,8 +78,8 @@ async function chuoBackendKhachThoat(connectionString: string): Promise<BackendC
       // `backend_type = 'client backend'` loại autovacuum/walwriter/checkpointer ra — chúng là
       // của chính Postgres và không bao giờ là thứ một bộ test rò rỉ.
       const { rows } = await client.query<BackendConLai>(
-        "SELECT pid, datname, state, application_name FROM pg_stat_activity " +
-          " WHERE pid <> pg_backend_pid() AND backend_type = 'client backend'",
+        "SELECT pid, datname, state, application_name FROM pg_catalog.pg_stat_activity " +
+          " WHERE pid OPERATOR(pg_catalog.<>) pg_catalog.pg_backend_pid() AND backend_type OPERATOR(pg_catalog.=) 'client backend'",
       );
       if (rows.length === 0 || Date.now() >= hetHan) return rows;
       await new Promise((giaiQuyet) => setTimeout(giaiQuyet, 25));

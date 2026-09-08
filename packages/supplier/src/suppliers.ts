@@ -252,14 +252,14 @@ export async function createSupplier(
   }
 
   const { rows } = await client.query<HangSupplier>(
-    `INSERT INTO suppliers (org_id, legal_name, tax_code, level,
+    `INSERT INTO public.suppliers (org_id, legal_name, tax_code, level,
                             created_by, created_by_session_id)
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_SUPPLIER}`,
     [orgId, legalName, taxCode, level, actor.id, actor.sessionId],
   );
 
   const hang = rows[0];
-  if (hang === undefined) throw new SupplierError("INSERT suppliers không trả về hàng nào");
+  if (hang === undefined) throw new SupplierError("Câu INSERT suppliers không trả về hàng nào");
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,
@@ -282,7 +282,7 @@ export async function getSupplier(
   batBuocUuid(supplierId, "supplierId");
 
   const { rows } = await client.query<HangSupplier>(
-    `SELECT ${COT_SUPPLIER} FROM suppliers WHERE id = $1`,
+    `SELECT ${COT_SUPPLIER} FROM public.suppliers WHERE id OPERATOR(pg_catalog.=) $1`,
     [supplierId],
   );
   const hang = rows[0];
@@ -305,7 +305,7 @@ export async function listSuppliers(
   await assertTenantBound(client, orgId, "listSuppliers");
 
   const { rows } = await client.query<HangSupplier>(
-    `SELECT ${COT_SUPPLIER} FROM suppliers ORDER BY created_at, id`,
+    `SELECT ${COT_SUPPLIER} FROM public.suppliers ORDER BY created_at, id`,
   );
   return rows.map(doiSupplier);
 }
@@ -322,7 +322,7 @@ export async function findSupplierByTaxCode(
   if (chuan === null) throw new SupplierError("tax_code không được rỗng");
 
   const { rows } = await client.query<HangSupplier>(
-    `SELECT ${COT_SUPPLIER} FROM suppliers WHERE tax_code = $1`,
+    `SELECT ${COT_SUPPLIER} FROM public.suppliers WHERE tax_code OPERATOR(pg_catalog.=) $1`,
     [chuan],
   );
   const hang = rows[0];
@@ -364,7 +364,7 @@ export async function addSupplierContact(
   }
 
   const { rows } = await client.query<HangContact>(
-    `INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone,
+    `INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone,
                                     created_by, created_by_session_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_CONTACT}`,
     [orgId, input.supplierId, fullName, email, phone, actor.id, actor.sessionId],
@@ -372,7 +372,7 @@ export async function addSupplierContact(
 
   const hang = rows[0];
   if (hang === undefined) {
-    throw new SupplierError("INSERT supplier_contacts không trả về hàng nào");
+    throw new SupplierError("Câu INSERT supplier_contacts không trả về hàng nào");
   }
 
   // `payload` KHÔNG mang họ tên, email hay số điện thoại. Đó là dữ liệu cá nhân, và sổ kiểm toán
@@ -398,7 +398,7 @@ export async function listSupplierContacts(
   batBuocUuid(supplierId, "supplierId");
 
   const { rows } = await client.query<HangContact>(
-    `SELECT ${COT_CONTACT} FROM supplier_contacts WHERE supplier_id = $1 ORDER BY created_at, id`,
+    `SELECT ${COT_CONTACT} FROM public.supplier_contacts WHERE supplier_id OPERATOR(pg_catalog.=) $1 ORDER BY created_at, id`,
     [supplierId],
   );
   return rows.map(doiContact);

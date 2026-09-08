@@ -349,7 +349,7 @@ export async function migrate(
     // KHÔNG chống được đua này: nó chỉ kiểm tra tại thời điểm bắt đầu, không khoá tên kiểu.
     await lockClient.query(
       "CREATE TABLE IF NOT EXISTS schema_migrations (" +
-        "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+        "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT pg_catalog.now())",
     );
 
     const tatCaFile = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
@@ -394,7 +394,7 @@ export async function migrate(
       const checksum = migrationChecksum(sql);
 
       const existing = await lockClient.query<{ checksum: string }>(
-        "SELECT checksum FROM schema_migrations WHERE version = $1",
+        "SELECT checksum FROM public.schema_migrations WHERE version OPERATOR(pg_catalog.=) $1",
         [file],
       );
       if (existing.rowCount !== 0) {
@@ -415,7 +415,7 @@ export async function migrate(
         await lockClient.query("BEGIN");
         await lockClient.query(sql);
         await lockClient.query(
-          "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
+          "INSERT INTO public.schema_migrations (version, checksum) VALUES ($1, $2)",
           [file, checksum],
         );
         await lockClient.query("COMMIT");

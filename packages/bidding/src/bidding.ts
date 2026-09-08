@@ -158,7 +158,7 @@ export async function submitBid(
   }
 
   await client.query(
-    `INSERT INTO bid_receipts (org_id, bid_version_id, canonical_text, signature)
+    `INSERT INTO public.bid_receipts (org_id, bid_version_id, canonical_text, signature)
      VALUES ($1, $2, $3, $4)`,
     [orgId, b.id, canonicalText, Buffer.from(signature)],
   );
@@ -200,7 +200,7 @@ async function layHoacTaoLuong(
   invitationId: string,
 ): Promise<string> {
   const { rows: moi } = await client.query<{ id: string }>(
-    `INSERT INTO vendor_bids (org_id, invitation_id) VALUES ($1, $2)
+    `INSERT INTO public.vendor_bids (org_id, invitation_id) VALUES ($1, $2)
      ON CONFLICT (org_id, invitation_id) DO NOTHING RETURNING id`,
     [orgId, invitationId],
   );
@@ -208,7 +208,7 @@ async function layHoacTaoLuong(
   if (m !== undefined) return m.id;
 
   const { rows: cu } = await client.query<{ id: string }>(
-    "SELECT id FROM vendor_bids WHERE invitation_id = $1",
+    "SELECT id FROM public.vendor_bids WHERE invitation_id OPERATOR(pg_catalog.=) $1",
     [invitationId],
   );
   const c = cu[0];
@@ -261,7 +261,7 @@ export async function getBidReceipt(
   await assertTenantBound(client, orgId, "getBidReceipt");
   batBuocUuid(bidVersionId, "bidVersionId");
   const { rows } = await client.query<{ canonical_text: string; signature: Buffer }>(
-    "SELECT canonical_text, signature FROM bid_receipts WHERE bid_version_id = $1",
+    "SELECT canonical_text, signature FROM public.bid_receipts WHERE bid_version_id OPERATOR(pg_catalog.=) $1",
     [bidVersionId],
   );
   const r = rows[0];

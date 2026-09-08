@@ -139,7 +139,7 @@ export async function requestUnseal(
   }
 
   const { rows } = await client.query<HangYeuCau>(
-    `INSERT INTO unseal_requests
+    `INSERT INTO public.unseal_requests
        (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id,
         break_glass_witness_user_id, break_glass_witness_session_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COT}`,
@@ -219,7 +219,7 @@ export async function approveUnseal(
   // với một `CHECK` bất kỳ. Thông báo thì do chính 019 viết ra và có test đọc nó.
   try {
     await client.query(
-      `INSERT INTO unseal_approvals
+      `INSERT INTO public.unseal_approvals
          (org_id, unseal_request_id, approver_user_id, approver_session_id)
        VALUES ($1, $2, $3, $4)`,
       [orgId, input.unsealRequestId, actor.id, actor.sessionId],
@@ -278,7 +278,7 @@ export async function approveUnseal(
   }
 
   const { rows } = await client.query<HangYeuCau>(
-    `SELECT ${COT} FROM unseal_requests WHERE id = $1`,
+    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
     [input.unsealRequestId],
   );
   const h = rows[0];
@@ -322,8 +322,8 @@ export async function dispatchUnseal(
   // dịch. Không có ba cột này, worker không có gì để hỏi lại vế 2 của D1 lúc giải mã — và mở
   // thầu là hành động DUY NHẤT của hệ thống không thu hồi được.
   const dp = await client.query(
-    "UPDATE unseal_requests SET dispatched_at = now(), dispatched_by = $2, " +
-      "dispatched_by_session_id = $3 WHERE id = $1 AND org_id = $4 AND dispatched_at IS NULL",
+    "UPDATE public.unseal_requests SET dispatched_at = pg_catalog.now(), dispatched_by OPERATOR(pg_catalog.=) $2, " +
+      "dispatched_by_session_id OPERATOR(pg_catalog.=) $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $4 AND dispatched_at IS NULL",
     [bangChung.unsealRequestId, bangChung.userId, bangChung.sessionId, orgId],
   );
   if (dp.rowCount !== 1) {
@@ -388,8 +388,8 @@ export async function cancelUnseal(
   );
 
   const { rows } = await client.query<HangYeuCau>(
-    `UPDATE unseal_requests SET status = 'CANCELLED', cancelled_at = now()
-      WHERE id = $1 AND status IN ('PENDING', 'APPROVED') RETURNING ${COT}`,
+    `UPDATE public.unseal_requests SET status = 'CANCELLED', cancelled_at = pg_catalog.now()
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status IN ('PENDING', 'APPROVED') RETURNING ${COT}`,
     [input.unsealRequestId],
   );
   const h = rows[0];
@@ -416,7 +416,7 @@ export async function getUnsealRequest(
   await assertTenantBound(client, orgId, "getUnsealRequest");
   batBuocUuid(unsealRequestId, "unsealRequestId");
   const { rows } = await client.query<HangYeuCau>(
-    `SELECT ${COT} FROM unseal_requests WHERE id = $1`,
+    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
     [unsealRequestId],
   );
   const h = rows[0];

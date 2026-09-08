@@ -95,11 +95,11 @@ export async function auditStoredCiphertexts(
 
   const { rows } = await client.query<HangKiem>(
     `SELECT v.id, v.envelope, r.canonical_text
-       FROM vendor_bid_versions v
-       JOIN vendor_bids b     ON b.id = v.bid_id        AND b.org_id = v.org_id
-       JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id
-       LEFT JOIN bid_receipts r ON r.bid_version_id = v.id AND r.org_id = v.org_id
-      WHERE i.rfq_id = $1
+       FROM public.vendor_bid_versions v
+       JOIN public.vendor_bids b     ON b.id OPERATOR(pg_catalog.=) v.bid_id        AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+       JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+       LEFT JOIN public.bid_receipts r ON r.bid_version_id OPERATOR(pg_catalog.=) v.id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
+      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
       ORDER BY v.id`,
     [rfqId],
   );
