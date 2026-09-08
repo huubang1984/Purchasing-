@@ -367,8 +367,8 @@ async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise
 async function docToken(client: pg.PoolClient, orgId: string, token: string): Promise<HangToken> {
   const { rows } = await client.query<HangToken>(
     `SELECT t.id AS token_id, i.id AS invitation_id, i.contact_id, i.supplier_id, i.link_channel
-       FROM rfq_invitation_tokens t
-       JOIN rfq_invitations i
+       FROM public.rfq_invitation_tokens t
+       JOIN public.rfq_invitations i
          ON i.id OPERATOR(pg_catalog.=) t.invitation_id
         AND i.org_id OPERATOR(pg_catalog.=) t.org_id
       WHERE t.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
@@ -762,10 +762,11 @@ export async function verifyOtpAndStartSession(
   // TỰ THAM CHIẾU ở câu ghi thất bại bên dưới, thứ đúng kể cả khi không có khoá.
   const { rows } = await client.query<HangThachThuc>(
     `SELECT id, code_hash, pepper_version, contact_id, channel,
-            (expires_at <= now()) AS het_han,
+            (expires_at OPERATOR(pg_catalog.<=) pg_catalog.now()) AS het_han,
             (consumed_at IS NOT NULL) AS da_dung,
-            (locked_until IS NOT NULL AND locked_until > now()) AS dang_khoa
-       FROM invitation_otp_challenges
+            (locked_until IS NOT NULL
+             AND locked_until OPERATOR(pg_catalog.>) pg_catalog.now()) AS dang_khoa
+       FROM public.invitation_otp_challenges
       WHERE invitation_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND token_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
       ORDER BY created_at DESC
@@ -795,11 +796,15 @@ export async function verifyOtpAndStartSession(
     // tức phụ thuộc vào một điều kiện tiên quyết không được viết ra: người gọi phải đang ở trong
     // một transaction. `assertTenantBound` KHÔNG đòi điều đó.
     const { rows: sau } = await client.query<{ locked_until: Date | null }>(
-      `UPDATE invitation_otp_challenges c
-          SET failed_attempts = c.failed_attempts + 1,
-              locked_until = CASE WHEN c.failed_attempts + 1 >= $2::int
-                                  THEN now() + make_interval(secs => $3) ELSE c.locked_until END
-        WHERE c.id = $1
+      `UPDATE public.invitation_otp_challenges c
+          SET failed_attempts = c.failed_attempts OPERATOR(pg_catalog.+) 1,
+              locked_until = CASE WHEN (c.failed_attempts OPERATOR(pg_catalog.+) 1)
+                                       OPERATOR(pg_catalog.>=) $2::pg_catalog.int4
+                                  THEN (pg_catalog.now()
+                                        OPERATOR(pg_catalog.+)
+                                        pg_catalog.make_interval(secs => $3::pg_catalog.float8))
+                                  ELSE c.locked_until END
+        WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         RETURNING c.locked_until`,
       [tt.id, OTP_MAX_FAILED_ATTEMPTS, OTP_LOCKOUT_SECONDS],
     );
@@ -820,23 +825,29 @@ export async function verifyOtpAndStartSession(
   }
 
   const danhDau = await client.query(
-    "UPDATE invitation_otp_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL",
+    "UPDATE public.invitation_otp_challenges SET consumed_at = pg_catalog.now() " +
+      "WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND consumed_at IS NULL",
     [tt.id],
   );
   if (danhDau.rowCount !== 1) return { ok: false, reason: "ALREADY_USED" };
 
   // [H5] Tiêu thụ token cùng lượt.
   await client.query(
-    "UPDATE rfq_invitation_tokens SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL",
+    "UPDATE public.rfq_invitation_tokens SET consumed_at = pg_catalog.now() " +
+      "WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND consumed_at IS NULL",
     [t.token_id],
   );
 
   const sessionToken = randomBytes(GUEST_SESSION_TOKEN_BYTES).toString("base64url");
   const phien = await client.query<{ id: string }>(
-    `INSERT INTO guest_sessions
+    `INSERT INTO public.guest_sessions
        (org_id, invitation_id, challenge_id, token_hash, verified_contact_id, verified_channel,
         expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7)) RETURNING id`,
+     VALUES ($1, $2, $3, $4, $5, $6,
+             (pg_catalog.now()
+              OPERATOR(pg_catalog.+)
+              pg_catalog.make_interval(secs => $7::pg_catalog.float8)))
+     RETURNING id`,
     [orgId, t.invitation_id, tt.id, bam(sessionToken), tt.contact_id, tt.channel, ttl],
   );
   const hangPhien = phien.rows[0];
@@ -918,7 +929,7 @@ export async function clearOtpLockout(
   );
 
   const { rowCount } = await client.query(
-    `UPDATE invitation_otp_challenges SET locked_until = NULL
+    `UPDATE public.invitation_otp_challenges SET locked_until = NULL
       WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND invitation_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
         AND locked_until IS NOT NULL
@@ -1015,8 +1026,8 @@ export async function resolveGuestSessionByToken(
   }
   const { rows } = await client.query<{ id: string; invitation_id: string; rfq_id: string; verified_channel: Channel }>(
     `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel
-       FROM guest_sessions g
-       JOIN rfq_invitations i ON i.id OPERATOR(pg_catalog.=) g.invitation_id
+       FROM public.guest_sessions g
+       JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) g.invitation_id
       WHERE g.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
         AND g.revoked_at IS NULL
         AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()`,

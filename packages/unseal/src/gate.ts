@@ -184,12 +184,15 @@ export async function assertUnsealAllowed(
   // RFQ đổi được ở giữa — và cửa sổ ấy nằm đúng giữa hai vế của một phép hội.
   const { rows } = await client.query<HangYeuCau>(
     `SELECT r.rfq_id, r.status, r.break_glass, p.status AS rfq_status,
-            (SELECT count(*) FROM unseal_approvals a
-              WHERE a.unseal_request_id = r.id AND a.org_id = r.org_id) AS so_phe_duyet,
+            (SELECT pg_catalog.count(*) FROM public.unseal_approvals a
+              WHERE a.unseal_request_id OPERATOR(pg_catalog.=) r.id
+                AND a.org_id OPERATOR(pg_catalog.=) r.org_id) AS so_phe_duyet,
             public.unseal_so_phe_duyet_can(r.rfq_id) AS can_phe_duyet
-       FROM unseal_requests r
-       JOIN rfq_packages p ON p.id = r.rfq_id AND p.org_id = r.org_id
-      WHERE r.id = $1`,
+       FROM public.unseal_requests r
+       JOIN public.rfq_packages p
+         ON p.id OPERATOR(pg_catalog.=) r.rfq_id
+        AND p.org_id OPERATOR(pg_catalog.=) r.org_id
+      WHERE r.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
     [input.unsealRequestId],
   );
   const yc = rows[0];
