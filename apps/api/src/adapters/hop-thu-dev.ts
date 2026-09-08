@@ -24,7 +24,7 @@
 
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assertLocalDevAllowed } from "@trustprocure/crypto-keys";
 import type { InvitationLinkSender, LoginLinkSender, OtpSender } from "../route-types.js";
@@ -66,11 +66,23 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
   // Tên tệp sắp xếp theo THỨ TỰ GỬI kể cả khi hai tin rơi cùng mili-giây: một số thứ tự trong tiến
   // trình đứng trước phần ngẫu nhiên (CI Linux nhanh hơn Windows đủ để ba tin cùng `Date.now()`, và
   // test đọc tệp theo tên đã sort — đỏ ngẫu nhiên ở lượt CI đầu của S1.12).
+  //
+  // [S1.22] GHI PHẢI NGUYÊN TỬ, và đây là một dữ liệu đo được chứ không phải phòng xa. `writeFile`
+  // với `flag: "wx"` TẠO tệp trước rồi mới ghi nội dung, nên có một cửa sổ mà tệp TỒN TẠI và RỖNG.
+  // Người đọc của `composition.int.test.ts` poll cả thư mục mỗi 50 ms và `JSON.parse` MỌI tệp, nên
+  // nó rơi đúng vào cửa sổ ấy: CI lượt S1.22 đỏ với `SyntaxError: Unexpected end of JSON input`,
+  // hai lượt liên tiếp, trong khi máy phát triển xanh — đúng khuôn "đua tranh chỉ hiện dưới tải".
+  //
+  // Ghi vào tên TẠM rồi `rename`: đổi tên trong cùng thư mục là NGUYÊN TỬ, nên người đọc hoặc
+  // không thấy tệp, hoặc thấy nó ĐẦY ĐỦ. Đuôi `.tmp` cũng nằm ngoài phép lọc `.json` của người
+  // đọc, nên ngay cả một tệp tạm sót lại sau một lần ngắt cũng không làm ai vấp.
   let thuTu = 0;
   const ghi = async (tin: TinHopThuDev): Promise<void> => {
     thuTu += 1;
-    const tep = join(tuyChon.thuMuc, `${Date.now()}-${String(thuTu).padStart(6, "0")}-${randomBytes(4).toString("hex")}.json`);
-    await writeFile(tep, JSON.stringify(tin), { mode: 0o600, flag: "wx" });
+    const ten = `${Date.now()}-${String(thuTu).padStart(6, "0")}-${randomBytes(4).toString("hex")}`;
+    const tam = join(tuyChon.thuMuc, `${ten}.tmp`);
+    await writeFile(tam, JSON.stringify(tin), { mode: 0o600, flag: "wx" });
+    await rename(tam, join(tuyChon.thuMuc, `${ten}.json`));
   };
   const luc = (): string => new Date().toISOString();
   return {
