@@ -941,3 +941,70 @@ khi đánh dấu.
 **Và một lớp canh mới phải bị hỏi đúng câu nó dùng để hỏi người khác.** Ba HIGH/MEDIUM của lượt
 này — bộ đọc bỏ sót dòng, cửa `~~` làm im con trỏ chết, cửa `~~` bóc mất lời khai — đều là *chính
 khiếm khuyết mà lớp ấy ra đời để bắt*, tái tạo bên trong lớp ấy.
+
+---
+
+# S1.22 — review lượt 14: khoản nợ 8, và bốn HIGH nói về chính LỚP CANH
+
+## Bảng
+
+| Trường | Giá trị |
+|---|---|
+| Vòng | **S1.22** — đóng khoản nợ 8 (ADR-030, `[INV-H21]`); mở khoản nợ 62 và 63 |
+| Nhánh | `qt3-lop-may`, cắt từ `4caea39` |
+| Phạm vi | `tests/architecture/qt3-{ghim-schema.test,ngu-phap.int.test,tu-vung,doc-sql}.ts`, và 13 câu SQL đã ghim ở `packages/{unseal,invitation,identity,bidding,rfq,tenancy}/src` |
+| Trạng thái được review | **CÂY LÀM VIỆC CHƯA COMMIT** (như lượt 13). Không có SHA *"trước lượt sửa"* |
+| Môi trường của reviewer | **Read/Grep/Glob. KHÔNG Bash, KHÔNG chạy được `git diff`, KHÔNG cơ sở dữ liệu.** Reviewer nói rõ giới hạn ấy ở dòng đầu và đánh dấu chỗ nào kết luận phụ thuộc vào bản trước |
+| Phát hiện | **0 CRITICAL, 6 HIGH, 8 MEDIUM, 5 LOW** |
+| Kết quả | **6/6 HIGH, 8/8 MEDIUM, 5/5 LOW đã xử lý.** Bốn HIGH nói về LỚP CANH chứ không về mã; một HIGH (H14-6) không thuộc QT3 và là phát hiện nặng nhất lượt |
+
+## Sáu HIGH
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **H14-1** | `khoangSet()` miễn TOÀN BỘ toán tử trong mệnh đề `SET`, không chỉ dấu `=` gán — và khi không có `WHERE` theo sau (`ON CONFLICT DO UPDATE SET …`) khoảng ấy kéo tới hết câu. Hình dạng thật đang tồn tại: bộ đếm khoá E3 (`SET failed_attempts = c.failed_attempts + 1, locked_until = CASE WHEN … >= $2 …`) sẽ đi qua **trong im lặng** ngay khi tên bảng của nó được ghim | **ĐÓNG** — chỉ dấu `=` ĐẦU TIÊN ở độ sâu ngoặc 0 của mỗi mục `SET` được miễn; hai mũi đột biến, một cho ca có `WHERE`, một cho ca không |
+| **H14-2** | SQL nối bằng `+`: **chỉ mảnh ĐẦU được đọc**. Bốn ca trong mã sản xuất, hai là đường an ninh — `audit/writer.ts` (đường ghi DUY NHẤT của sổ kiểm toán: `FROM public.audit_append(…)` ở mảnh 2), `tenancy/with-tenant.ts` (cổng phiên khách: `JOIN`/`WHERE`/`expires_at` ở mảnh 2-6), `unseal/requests.ts` (vế `org_id = $4` của lần điều phối) | **ĐÓNG** — bộ đọc thành BỘ TÁCH TỪ một lượt, ghép hằng chuỗi liền kề nối `+`; kèm một test riêng đòi thấy được câu ghi sổ kiểm toán. Đóng luôn hai lỗ nhỏ hơn: chuỗi nháy đơn (M7) và `//` bên trong hằng chuỗi (L4) |
+| **H14-3** | Vế `search_path` chỉ khớp `SET search_path`, bỏ lọt `SET LOCAL`, `SET SESSION`, `set_config('search_path', …)` — trong khi `SET LOCAL` và `set_config` là khuôn ĐANG DÙNG của chính kho | **ĐÓNG** — kiểm theo *"câu có nhắc `search_path` không"*, đọc SQL GỐC (tên nằm trong hằng chuỗi); đối chứng dương ba cú pháp |
+| **H14-4** | `TU_KHOA` miễn `unnest`, `generate_series`, `left`, `right` — **bốn hàm THẬT** của `pg_catalog`. Mã sản xuất thì GHIM `unnest` (`vai-tro.ts`), tức lớp canh và mã nguồn nói ngược nhau | **ĐÓNG** — tách hai danh sách theo vị trí cú pháp, và cả ba nay bị `pg_proc` + `pg_get_keywords()` phán xét |
+| **H14-5** | Câu trên đường ra QUYẾT ĐỊNH AN NINH còn trần **trong chính những tệp vòng này chạm**: bộ đếm khoá E3, hai câu tiêu thụ dùng-một-lần, TTL phiên khách, cổng phiên khách của đường nộp báo giá, chính sách đang hiệu lực, cạnh `PENDING → APPROVED` | **ĐÓNG** — ghim cả bảy trong vòng này, không để vào sổ nợ 62 |
+| **H14-6** | **Không thuộc QT3, và nặng nhất lượt.** `UNIQUE (org_id, email)` so NGUYÊN VĂN; `issueLoginToken` tra `lower(email)` không `LIMIT`, lấy `rows[0]`, rồi trả lại **chuỗi người gọi gửi lên** — `outbox-api.ts` gửi magic link tới đúng chuỗi ấy. Với một cặp biến thể hoa-thường trong cùng tổ chức, xin link cho `alice@corp.com` có thể phát token của `Alice@corp.com` và gửi tới hộp thư của người xin | **ĐÓNG vế chiếm tài khoản** — hàm trả `u.email` đọc từ CSDL. Phần chênh còn lại (`UNIQUE (org_id, lower(email))`, một migration) là **khoản nợ 63**. Reviewer tự xếp HIGH chứ không CRITICAL vì tiền đề (hai hàng biến thể) chưa dựng được từ bên trong sản phẩm |
+
+## Tám MEDIUM
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **M1** | Miễn trừ `search_path` theo TỆP, và lý do chỉ được đo bằng `lyDo.length > 40` — tức mệnh đề chịu lực không được kiểm bởi bất cứ gì | **ĐÓNG** — khẳng định thẳng VĂN BẢN: mọi câu được miễn phải KHÔNG nêu `pg_catalog` |
+| **M2** | `RE_HAM`/`RE_EP_KIEU` thiếu cờ `i` ⇒ `NOW()`, `$1::UUID` không bị bắt | **ĐÓNG** + test cho ca chữ hoa |
+| **M3** | Trục ép kiểu bỏ sót `CAST(x AS t)`; trục toán tử thiếu `~ !~ ~* \| & ^ #` | **ĐÓNG** — thêm cả hai, kèm test |
+| **M4** | `RE_BANG` bỏ sót `USING`/`ONLY`/DDL, và sẽ báo NHẦM tên CTE là bảng chưa ghim | **ĐÓNG** — thêm vị trí, thu thập tên CTE và loại chúng |
+| **M5** | Bộ đọc phụ thuộc chỉ mục git (tệp chưa `git add` là vô hình), và hai sàn quá lỏng | **ĐÓNG một nửa** — sàn đóng đinh sát số đo (148/27); vế "chưa `git add`" ghi ra ở ADR-030 §4, và chính vòng này gặp nó |
+| **M6** | `TRAN_TOI_DA` được chép từ số đo TRƯỚC vòng ⇒ có thể cho không một khe hở | **ĐÓNG** — đo lại trên HEAD sau lượt ghim: **80** |
+| **M7** | SQL viết bằng nháy đơn không bao giờ được đọc, và không lint nào cấm nháy đơn | **ĐÓNG** — bộ tách từ đọc cả ba kiểu dấu nháy |
+| **M8** | Phạm vi loại trừ `.sql` không được nói ra | **ĐÓNG** — ghi ở khối đầu tệp và ADR-030 §5, kèm lý do đo được |
+
+## Năm LOW
+
+| Mã | Tóm tắt | Trạng thái |
+|---|---|---|
+| **L1** | Số liệu trong tiêu đề (19) mâu thuẫn với brief (13) | **ĐÓNG** — 13 là số sau khi bỏ chú thích TypeScript |
+| **L2** | `position` bị bác bỏ nhưng không có răng | **ĐÓNG** — vào danh sách răng |
+| **L3** | Đối chứng dương dùng `String.replace` với chuỗi có thể không tồn tại | **ĐÓNG** — khẳng định neo CÓ MẶT trước khi thay |
+| **L4** | `boChuThich` cắt `//` bên trong hằng chuỗi | **ĐÓNG** bởi bộ tách từ |
+| **L5** | `RE_KHOA_SQL` thiếu `DROP`, `MERGE`, `COPY`, `CALL`, `LOCK`, `EXPLAIN` | **ĐÓNG** |
+
+## Bốn mục reviewer ĐÃ KIỂM và KHÔNG thấy vấn đề
+
+- **Ngữ nghĩa SQL có đổi không:** không tìm thấy ca nào trong 13 câu. Reviewer rà mọi chỗ có hai toán tử ghim cùng cấp và xác nhận cả sáu đã đóng ngoặc đúng; ép kiểu thêm vào không đổi kế hoạch (`db/migrations` **không có** `CREATE TYPE`/`CREATE DOMAIN` nào, nên `OPERATOR(pg_catalog.=)` có đúng một ứng viên); `pg_catalog.lower(email)` không mất chỉ mục nào — trình phân tích lưu `funcid` ĐÃ phân giải, và bảng `users` cũng không có chỉ mục biểu thức nào.
+- **Tiêm SQL qua nội suy `${}`:** mọi chỗ nội suy là hằng đóng; `SET ROLE ${vai}` được chặn bằng danh sách đóng cộng một lần kiểm `current_user`.
+- **Bí mật vào log:** kỷ luật nhất quán ở `withTenant`, `gate.ts`, `procurement-policy.ts`.
+- **Một tính chất tôi đang dựa vào mà chú thích chưa nói:** `OPERATOR(…)` thuộc nhóm *"any other operator"*, **cao hơn** `< > = <= >= <>`, `IS`, `NOT`, `AND`, `OR` — nhờ đó các biểu thức `IS NOT NULL AND … OPERATOR(>) …` vẫn nhóm đúng. Cảnh báo ở `login.ts` chỉ đúng cho cặp hai OPERATOR() cùng cấp.
+
+## Điều đáng mang sang vòng sau
+
+**Một lớp canh mới là MÃ MỚI, và nó phải chịu đúng câu hỏi nó dùng để hỏi người khác.** Bốn trong
+sáu HIGH của lượt này nói về lớp canh: nó không tạo được lượt ĐỎ cho ba hình dạng nó tuyên bố
+canh. Theo quy ước của kho, hàng rào ở trạng thái đó phải sửa hoặc gỡ.
+
+**Và một lớp canh đòi một cách viết thì phải kiểm rằng cách viết ấy HỢP LỆ.** `::pg_catalog.int`
+không tồn tại; lớp canh đòi `::pg_catalog.<t>` mà không kiểm `pg_type` sẽ dạy người ta viết đúng
+cái sai ấy — và chỉ T3 bắt được, sau khi một route đã trả 500 thay vì 401.

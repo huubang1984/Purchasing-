@@ -681,3 +681,31 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
     *"đúng MỘT lời khai `n ADR`"*; chạy lên thì có HAI, ở hai mục của cùng một tệp, khai **28** và
     **27**. Đổi thành *"MỌI lời khai"*. Cùng khuôn với `MIEN_TRU` phải RỖNG của ADR-027: **đừng
     thiết kế phép kiểm quanh số lượng bạn tưởng là có.**
+
+17. **[2026-09-08] S1.22 — KHOẢN NỢ 8 ĐÓNG, và năm dòng dưới đây là thứ đắt nhất vòng.**
+
+    ⑴ **Chọn CHỦ THỂ của một lớp canh là một quyết định an ninh, và nó phải dựa trên một phép
+    đo.** Ba nhóm câu SQL: ghim đủ, ghim không gì, ghim NỬA VỜI. Nhóm thứ hai đông nhất (80 câu)
+    nhưng nhóm thứ ba (13 câu) đắt nhất — vì một câu ghim không gì **trông đúng như nó là**, còn
+    một câu ghim nửa vời **đọc như đã được bảo vệ**. Chọn nhóm ba làm chủ thể, đếm nhóm hai bằng
+    một mốc chỉ-đi-xuống, và nói ra cả hai.
+
+    ⑵ **Một lớp canh đòi ghi tên đủ schema sẽ DẠY người ta viết một cái tên không tồn tại.**
+    `::int` là đường cú pháp; `::pg_catalog.int` ném 42704 (tên thật là `int4`). Vòng sửa viết
+    đúng cái sai ấy, `/guest/otp/verify` trả 500 thay vì 401, và chỉ T3 bắt được. Nếu lớp canh đòi
+    một cách viết thì nó cũng phải kiểm rằng cách viết ấy HỢP LỆ — nay `pg_type` làm việc đó.
+
+    ⑶ **Một mặt nạ phải là thứ bộ dò KHÔNG đọc được.** Che phần đã ghim bằng `#`, rồi thêm `#` vào
+    bảng toán tử ⇒ 44 câu ĐỎ vì chính cái mặt nạ. Và che bằng dấu cách thì `FROM public.t s` thành
+    `FROM   s`, tức bộ dò đi kết tội BÍ DANH. Cách đúng: chỉ che đúng trục cần che, và để ba trục
+    kia tự loại phần đã ghim bằng hình dạng của chúng.
+
+    ⑷ **Danh sách miễn trừ nên để CSDL phán xét, không để người viết.** `pg_proc`,
+    `pg_get_keywords()`, `pg_type` bác chín dòng tôi viết theo trí nhớ — trong đó `unnest` là ca
+    đắt nhất: mã sản xuất đã GHIM nó từ trước, tức lớp canh và mã nguồn nói ngược nhau.
+
+    ⑸ **Bốn trong sáu HIGH của review lượt 14 nói về LỚP CANH, không về mã.** Một lớp canh mới là
+    mã mới, và nó phải chịu đúng câu hỏi nó dùng để hỏi người khác: *xoá một dòng thì cái gì đỏ?*
+    Ba lỗ nặng nhất — miễn cả khoảng `SET`, chỉ đọc mảnh đầu của SQL nối chuỗi, chỉ khớp một cú
+    pháp `search_path` — đều là *"hàng rào không tạo được lượt ĐỎ cho đúng hình dạng nó tuyên bố
+    canh"*.
