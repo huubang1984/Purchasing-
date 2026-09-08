@@ -16,6 +16,7 @@
 | 3 | 2026-08-29 | **Zalo iOS** (`Zalo iOS/260801802`), iPhone | **WKWebView, iOS 18.7** | `https:` | **ĐẠT** | **Nộp thầu được** |
 | 4 | 2026-09-08 | **Chrome iOS** (`CriOS/151.0.7922.112`), iPhone | **WKWebView, iOS 26.6.1** | `https:` | **ĐẠT** | **Nộp thầu được** |
 | **5** | 2026-09-08 | **Zalo Android** (`Zalo android/260802903`), Samsung **SM-A025F** (Galaxy A02s), **Android 12** | **Android System WebView, Chromium 151.0.7922.200** | `https:` | **ĐẠT** | **Nộp thầu được** |
+| **6** | 2026-09-08 | **Messenger Android** (`FB_IAB/FB4A;FBAV/577.0.0.49.89`), **cùng máy** SM-A025F, Android 12 | **Android System WebView, Chromium 151.0.7922.200** — *cùng build với dòng 5* | `https:` | **ĐẠT** | **Nộp thầu được** |
 
 Lần 1 còn chạy thêm ~~**ba đột biến** (`?dot=x25519|aes|rnd`) và cho **bốn phán quyết phân biệt
 được**~~ — đó là phép đo chứng minh **máy dò có răng**, không phải phép đo về thiết bị.
@@ -59,6 +60,20 @@ Nên phải tách hai câu, và chỉ câu thứ nhất là phép đo:
 luận cho MỌI chế độ.** Ghi *"Android: ĐẠT"* mà không kèm **WebView 151** là một câu rộng hơn phép
 đo — đúng như §2 đã nói về *"Zalo iOS"* mà không kèm **iOS 18.7**.
 
+**[2026-09-08] DÒNG 6 ĐIỀN Ô ƯU TIÊN 3, VÀ NÓ BÁC GIẢ ĐỊNH ĐÃ SINH RA CHÍNH Ô ẤY.** Ô 3 tồn tại
+vì một điều nghi: *"Messenger có thể nhúng webview riêng thay vì dùng System WebView"*. Trên máy
+này thì **không**: dòng 5 và dòng 6 báo **cùng một chuỗi build — `Chrome/151.0.7922.200`** — tức
+hai ứng dụng **mượn cùng một Android System WebView**. Đây là lần thứ hai bảng này thu hai ô về
+một phép đo, y như dòng 3 đã phủ luôn Messenger iOS: **trục đúng là engine, không phải tên ứng
+dụng.** Giả định ấy nay đã được **đo** ở cả hai hệ điều hành chứ không còn là suy luận.
+
+**Và dòng 6 dạy một điều về cách ĐỌC `UA:` mà lẽ ra tôi đã đọc sai.** UA của Messenger có token
+`wv` — dấu hiệu kinh điển của Android WebView. UA của Zalo ở dòng 5 **không có** `wv`, dù nó cũng
+là WebView và cùng build. Nghĩa là **`wv` không phải chỗ để nhận dạng**: một ứng dụng sửa được
+chuỗi UA của webview mình nhúng (Zalo còn nối thêm `Zalo android/...`, `ZaloTheme/`,
+`ZaloLanguage/`). Thứ đáng tin là **chuỗi build Chromium** cộng **token định danh ứng dụng** — hai
+thứ khớp nhau giữa hai dòng thì mới kết luận được là cùng engine.
+
 **Dòng 4 còn dạy một quy tắc về chính cách thu kết quả, và nó suýt làm hỏng một dòng trong bảng
 này.** Kết quả đến kèm một **ảnh chụp máy Android** (thanh điều hướng ba nút, thanh công cụ Chrome
 kiểu Android) trong khi **khối văn bản dán về lại mang `UA:` của một iPhone** — clipboard đồng bộ
@@ -101,7 +116,7 @@ Vì vậy §3 dưới đây được viết lại theo trục **engine**, không
 |---|---|---|
 | ~~**1 — cao nhất**~~ **ĐÃ ĐO 2026-09-08 → dòng 5** | ~~**Zalo trên Android**, máy tầm trung hoặc cũ~~ | ~~Android System WebView cập nhật **rời** qua Play Store và trên máy tầm trung cũ thường **tụt lại nhiều phiên bản**. Đây là ô duy nhất còn lại thật sự đáng ngờ, và cũng là phân khúc máy phổ biến nhất của nhà cung cấp nhỏ.~~ **Đo trên Galaxy A02s / Android 12 — đúng phân khúc ô này mô tả — và ĐẠT toàn bộ. Nhưng WebView của máy ấy là 151, tức KHÔNG tụt lại: vế "tụt lại nhiều phiên bản" của chính ô này vẫn CHƯA có mẫu nào.** |
 | **2** | **Zalo trên iPhone chạy iOS CŨ** (16.x hoặc cũ hơn) | Dòng 3 chỉ nói về **iOS 18.7**. `X25519` vào WebCrypto muộn hơn nhiều so với `AES-GCM`; một WebKit cũ là chỗ nó vắng mặt. |
-| 3 | Messenger trên **Android** | Không suy ra được từ Zalo Android: Messenger có thể nhúng webview riêng thay vì dùng System WebView. **Phải đo, không được suy.** |
+| ~~3~~ **ĐÃ ĐO 2026-09-08 → dòng 6** | ~~Messenger trên **Android**~~ | ~~Không suy ra được từ Zalo Android: Messenger có thể nhúng webview riêng thay vì dùng System WebView.~~ **Phải đo, không được suy** — và phép đo BÁC điều nghi ấy: cùng máy, cùng `Chrome/151.0.7922.200`, tức cùng System WebView. Câu "phải đo, không được suy" vẫn đúng: nếu suy, ta đã suy ra một điều SAI theo hướng ngược lại. |
 | — | ~~Messenger trên iOS~~ | **Đã được dòng 3 phủ** — cùng `WKWebView`, cùng iOS 18.7. Vẫn nên chạy một lần để xác nhận giả định "cùng engine" ở trên là đúng. |
 
 > **Không tra bảng tương thích để lấp mấy ô này.** Bảng tương thích nói về *trình duyệt*, còn
