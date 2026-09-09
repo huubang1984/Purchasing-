@@ -231,3 +231,73 @@ describe("oracle xuyên tổ chức qua ràng buộc duy nhất", () => {
     }
   });
 });
+
+// ==============================================================================================
+// [sổ nợ 63] MỘT RÀNG BUỘC DUY NHẤT KHÔNG LÀM ĐƯỢC VIỆC MÀ TÊN NÓ HỨA
+//
+// Cùng họ với `[INV-H14]` ở trên, và đó là lý do khối này ở đây chứ không ở một tệp riêng (mỗi
+// tệp `*.int.test.ts` mới là một container nữa — xem sổ nợ 24): `UNIQUE (org_id, email)` mang cái
+// tên *"một email một người dùng"*, nhưng nó so NGUYÊN VĂN. `Alice@corp.com` và `alice@corp.com`
+// là hai hàng hợp lệ, trong khi `issueLoginToken` tra bằng `lower(email)` rồi lấy `rows[0]` —
+// hàng nào được chọn là KHÔNG XÁC ĐỊNH.
+//
+// `048` đóng nó bằng cách làm CHỮ HOA BẤT KHẢ, không bằng một chỉ mục trên `lower(email)`. Khối
+// chú thích của migration ấy có phép đo cạnh nhau của hai đường; ở đây chỉ ghim KẾT QUẢ, và ghim
+// cả hai chiều — vì một ràng buộc chỉ được đo khi ta thấy nó vừa TỪ CHỐI đúng thứ vừa CHO QUA
+// đúng thứ.
+// ==============================================================================================
+describe("[sổ nợ 63] email của người dùng không mang chữ hoa ASCII", () => {
+  let orgMot = "";
+  let orgHai = "";
+
+  beforeAll(async () => {
+    orgMot = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Cong ty 63 A', 'cong-ty-63-a') RETURNING id",
+      )
+    ).rows[0]!.id;
+    orgHai = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Cong ty 63 B', 'cong-ty-63-b') RETURNING id",
+      )
+    ).rows[0]!.id;
+  });
+
+  const them = (org: string, email: string): Promise<unknown> =>
+    db.pool.query("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi 63')", [org, email]);
+
+  it("[sổ nợ 63] ràng buộc TỒN TẠI và ĐÃ ĐƯỢC KIỂM — không phải NOT VALID", async () => {
+    // Dấu hiệu tích cực. Không có vế này, mọi khẳng định dưới đây vẫn xanh với một CSDL mà
+    // migration `048` chưa chạy — và `convalidated = false` là một ràng buộc nói dối về quá khứ.
+    const { rows } = await db.pool.query<{ convalidated: boolean; dinh_nghia: string }>(
+      "SELECT convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
+        "WHERE conrelid = 'users'::regclass AND conname = 'users_email_chu_thuong'",
+    );
+    expect(rows, "migration 048 chưa chạy, hoặc ràng buộc đã bị đổi tên").toHaveLength(1);
+    expect(rows[0]!.convalidated, "ràng buộc chưa kiểm dữ liệu cũ thì nó không nói gì về quá khứ").toBe(true);
+    expect(rows[0]!.dinh_nghia).toMatch(/lower/u);
+  });
+
+  it("[sổ nợ 63] CHIỀU DƯƠNG ⑴ — một email có chữ hoa bị TỪ CHỐI ngay, dù đứng MỘT MÌNH", async () => {
+    // Đây là vế mà đường `UNIQUE (org_id, lower(email))` KHÔNG đóng: nó chỉ chặn CẶP, còn
+    // `Alice@corp.com` đứng một mình thì nó cho qua.
+    await expect(them(orgMot, "Alice@corp.com")).rejects.toThrow(/users_email_chu_thuong/u);
+  });
+
+  it("[sổ nợ 63] CHIỀU DƯƠNG ⑵ — cặp biến thể hoa-thường không dựng lên được", async () => {
+    // Chính kịch bản của sổ nợ. Nó bất khả vì vế trên đã chặn nửa đầu; ghim lại để phép đo nói
+    // đúng cái mà khoản nợ nói, không bắt người đọc tự suy.
+    await them(orgMot, "bob@corp.com");
+    await expect(them(orgMot, "Bob@corp.com")).rejects.toThrow(/users_email_chu_thuong/u);
+    await expect(them(orgMot, "bob@corp.com")).rejects.toThrow(/duplicate key/u);
+  });
+
+  it("[sổ nợ 63] CHIỀU ÂM — chữ thường vẫn vào được, và CÙNG địa chỉ ở TỔ CHỨC KHÁC cũng vào được", async () => {
+    // Không có vế này, một ràng buộc chặn TẤT CẢ cũng cho ba test trên xanh y hệt.
+    await expect(them(orgHai, "carol@corp.com")).resolves.toBeDefined();
+    // Và ràng buộc duy nhất vẫn THEO TỔ CHỨC, không toàn cục — `002` bác một `UNIQUE` toàn cục
+    // vì chính thông báo lỗi của nó là một oracle xuyên tổ chức (ADR-013). Vế này canh cho lần
+    // sau không ai "cho chặt hơn".
+    await expect(them(orgMot, "carol@corp.com")).resolves.toBeDefined();
+  });
+});
