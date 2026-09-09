@@ -42,7 +42,74 @@ const logLoi: string[] = [];
 // để trần theo người gọi của một test không rơi vào test khác.
 let soIp = 0;
 let ipHienTai = "203.0.113.1";
+// ==============================================================================================
+// [khoản nợ 66] MỘT NGƯỠNG THỜI GIAN TUYỆT ĐỐI KHÔNG ĐO ĐƯỢC TÍNH CHẤT MÀ NÓ MANG TÊN
+//
+// Trước vòng này, `TRE_TEST_MS` gánh BA vai bằng ĐÚNG MỘT con số: ⒜ độ trễ được TIÊM vào
+// dispatcher, ⒝ TRẦN TRÊN của *"được phục vụ ngay"*, ⒞ SÀN DƯỚI của *"bị làm chậm"*. Vai ⒝ là
+// chỗ hỏng: dưới tải — đúng lượt gộp `pnpm evidence` — một lượt BÌNH THƯỜNG mất **1090 ms** và
+// cổng đỏ mà không có gì hỏng: *"lần 61 phải nhanh: expected 1090 to be less than 800"*.
+//
+// VẤN ĐỀ KHÔNG ĐỐI XỨNG, NÊN BẢN VÁ CŨNG KHÔNG ĐỐI XỨNG. Vai ⒞ là một **SÀN** đặt trên một
+// request bị làm chậm CỐ Ý: tải chỉ làm nó LỚN HƠN, nên nó **không đỏ oan được bao giờ** và nó ở
+// lại nguyên vẹn. Chỉ vai ⒝ bị gỡ.
+//
+// THAY VÌ MỘT NGƯỠNG TƯƠNG ĐỐI, BỎ ĐỒNG HỒ ĐI. Tính chất cần chứng minh cho 300 lượt đầu là
+// *"KHÔNG đi vào nhánh làm chậm"* — một câu hỏi PHẠM TRÙ, không phải một phép đo thời gian. Nhánh
+// ấy để lại dấu vết trực tiếp ở `dispatch.ts` (`console.error("... qua tran to chuc ...")`), và
+// `logLoi` đã bắt sẵn mọi `console.error` từ `beforeAll`. Đếm dấu vết ấy thì:
+//   • KHÔNG đỏ oan được — không có đồng hồ nào trong khẳng định;
+//   • MẠNH HƠN phép đo cũ — nó bắt cả một throttle bắn với độ trễ 0 ms, thứ đồng hồ mù hoàn toàn;
+//   • ĐỎ NGAY LƯỢT ĐẦU với thông điệp gọi tên đúng lượt, thay vì chết bằng timeout ở lượt thứ ~73.
+//
+// VÀ NÓ TỰ CHỐNG RỖNG RUỘT. Một khẳng định ÂM (*"số lần làm chậm vẫn là 0"*) sẽ XANH OAN nếu ai
+// đổi chuỗi log — bộ đếm khi ấy đứng yên vì nó không thấy gì nữa. Nên mỗi test có một **ĐỐI CHỨNG
+// DƯƠNG trong cùng lượt chạy**: sau vòng lặp, số ấy phải thành ĐÚNG 1. Kênh quan sát hỏng thì
+// chính khẳng định dương ấy ĐỎ.
+//
+// ----------------------------------------------------------------------------------------------
+// BỐN MŨI ĐỘT BIẾN — BA MŨI ĐỎ SẮC, MŨI THỨ TƯ LÀ MỘT KHOẢN ĐÁNH ĐỔI PHẢI NÓI RA
+// ----------------------------------------------------------------------------------------------
+// Đo ngày 2026-09-08, đối chứng không-đột-biến 27/27 xanh trước mỗi mũi:
+//
+//   M1  xoá `console.error` trong nhánh làm chậm   -> ĐỎ 2/27 ở ĐỐI CHỨNG DƯƠNG
+//                                                     *"nếu 0, kênh quan sát đã hỏng"*
+//   M2  `soLanToChuc > orgLimit` thành `>=`        -> ĐỎ 2/27 *"lần 300 không được đi vào nhánh
+//                                                     làm chậm: expected 1 to be +0"*
+//   M3  xoá `setTimeout` (log mà không làm chậm)   -> ĐỎ 2/27 *"expected 14 to be greater than
+//                                                     or equal to 800"* (SÀN vẫn có răng)
+//   M4  đưa `setTimeout` RA NGOÀI khối `if`        -> ĐỎ 4/27, NHƯNG BẰNG **HẾT GIỜ**
+//       (mọi lượt đều bị làm chậm)                    (120 000 ms / 60 000 ms), lượt chạy mất
+//                                                     **514 giây** thay vì 45.
+//
+// PHẠM VI CHÍNH XÁC, vì khối này dễ đọc rộng hơn thứ nó làm [review an ninh lượt 17, I-5]:
+// vai ⒝ bị gỡ ở HAI test — `[nợ 52]` và `[review H6-2]`, hai chỗ có vòng lặp 300 lượt. Nó KHÔNG
+// bị gỡ ở cả tệp: `:546` (`toBeLessThan(TRE_TEST_MS)`, test H5-1) và `:768`
+// (`toBeLessThan(3000)`) vẫn là khẳng định thời gian tuyệt đối kiểu "phải nhanh". Cả hai đo MỘT
+// lượt chứ không 300, nên cửa sổ đỏ oan của chúng hẹp hơn hẳn — nhưng chúng CÙNG HỌ, và ngày một
+// trong hai đỏ oan dưới tải thì cách sửa là cách ở đây, không phải nới hằng số.
+//
+// M4 LÀ CÁI GIÁ, VÀ ĐÂY LÀ LÝ DO TRẢ NÓ. Trước vòng này, M4 bị bắt trong ~1 giây với một thông
+// điệp gọi đúng tên. Nay nó bị bắt sau 60–120 giây bằng một timeout không nói gì. Đổi lại: **300
+// khẳng định thôi đỏ oan dưới tải**, và cái đỏ oan ấy KHÔNG phải giả thuyết — nó đã xảy ra thật
+// (*"lần 61 phải nhanh: expected 1090 to be less than 800"*).
+//
+// VÌ SAO KHÔNG VÁ M4 BẰNG MỘT TRẦN TÍCH LUỸ cho cả vòng lặp — cách hiển nhiên nhất: 300 lượt dưới
+// đúng lượt tải từng cho ra 1090 ms cho MỘT lượt sẽ chạm bất kỳ trần tích luỹ nào đủ chặt để bắt
+// M4. Tức nó **dựng lại đúng khoản nợ 66 ở một chỗ mới**, chỉ khó thấy hơn. Một mũi đột biến bắt
+// chậm còn hơn một cổng đỏ giả mà người ta học cách chạy lại. M4 vẫn ĐỎ, và nó là một thay đổi mã
+// mà bất kỳ lượt review nào cũng nhìn thấy.
+// ==============================================================================================
 const TRE_TEST_MS = 800;
+
+/**
+ * Số lần nhánh LÀM CHẬM của trần toàn tổ chức đã chạy, đếm bằng DẤU VẾT của chính nhánh ấy
+ * (`apps/api/src/dispatch.ts` — `console.error(... "qua tran to chuc" ...)`), không bằng đồng hồ.
+ * `logLoi` cộng dồn suốt tệp nên mọi chỗ dùng phải so với một MỐC chụp trước đó, không so với 0.
+ */
+function soLanLamCham(): number {
+  return logLoi.filter((d) => d.includes("qua tran to chuc")).length;
+}
 beforeEach(() => {
   soIp += 1;
   ipHienTai = `203.0.${Math.floor(soIp / 250)}.${(soIp % 250) + 1}`;
@@ -414,20 +481,28 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
   it("[nợ 52] trần TOÀN TỔ CHỨC: N địa chỉ KHÁC NHAU cùng tổ chức ⇒ lần N+1 ~~là 429~~ [H5-1] vẫn 200 nhưng bị LÀM CHẬM; tổ chức khác từ cùng địa chỉ vẫn 200 và nhanh", async () => {
     const orgC = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty C', 'cong-ty-c') RETURNING id")).rows[0]?.id ?? "";
     const ipThu = (i: number): string => `2001:db8:52:${(i + 1).toString(16)}::1`; // mỗi lần một /64 khác
+    // [khoản nợ 66] Mốc, không phải 0: `logLoi` cộng dồn suốt tệp.
+    const mocC = soLanLamCham();
     for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
-      const t0 = Date.now();
       const r = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(i) });
       expect(r.status, `lần ${i + 1}`).toBe(200);
-      expect(Date.now() - t0, `lần ${i + 1} phải nhanh`).toBeLessThan(TRE_TEST_MS);
+      // PHẠM TRÙ, không phải đồng hồ: lượt này có đi vào nhánh làm chậm không. Rẻ, tất định, và
+      // đỏ ngay ở lượt ĐẦU TIÊN vi phạm — xem khối [khoản nợ 66] đầu tệp.
+      expect(soLanLamCham(), `lần ${i + 1} không được đi vào nhánh làm chậm`).toBe(mocC);
     }
     const t1 = Date.now();
     const cham = await goi("POST", "/auth/link", { body: { orgId: orgC, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
     expect(cham.status).toBe(200);
+    // ĐỐI CHỨNG DƯƠNG cho kênh quan sát: 300 khẳng định âm ở trên sẽ XANH OAN nếu chuỗi log đổi.
+    // Khẳng định này đỏ khi ấy, trong cùng lượt chạy.
+    expect(soLanLamCham() - mocC, "nhánh làm chậm phải chạy ĐÚNG một lần — nếu 0, kênh quan sát đã hỏng và 300 khẳng định trên là rỗng ruột").toBe(1);
+    // SÀN tuyệt đối, GIỮ NGUYÊN: đặt trên một request bị làm chậm cố ý, nên tải chỉ làm nó lớn hơn.
     expect(Date.now() - t1).toBeGreaterThanOrEqual(TRE_TEST_MS);
-    // Cùng địa chỉ mới ấy, tổ chức A: 200 và nhanh — trần là của tổ chức C, không phải của địa chỉ.
-    const t2 = Date.now();
+    // Cùng địa chỉ mới ấy, tổ chức A: 200 và KHÔNG bị làm chậm — trần là của tổ chức C, không phải
+    // của địa chỉ. Lại là phép đếm, không phải đồng hồ.
+    const mocA = soLanLamCham();
     expect((await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-to-chuc@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) })).status).toBe(200);
-    expect(Date.now() - t2).toBeLessThan(TRE_TEST_MS);
+    expect(soLanLamCham(), "tổ chức A không được đi vào nhánh làm chậm").toBe(mocA);
     // Bucket CSDL của TỔ CHỨC: ~~N+1 bucket theo địa chỉ ở 1~~ [nợ 55] bucket theo địa chỉ nay ở
     // `caller_rate_limits` (không org_id), nên `otp_rate_limits` của tổ chức C còn ĐÚNG MỘT hàng —
     // bucket toàn tổ chức — và nó đếm đủ N+1.
@@ -448,17 +523,21 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
   it("[review H6-2] tổ chức LẠ cũng bị LÀM CHẬM khi vượt trần toàn tổ chức — độ trễ không còn là oracle tồn tại tổ chức", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000cafe";
     const ipThu = (i: number): string => `2001:db8:62:${(i + 1).toString(16)}::1`;
+    const mocLa = soLanLamCham();
     for (let i = 0; i < LOGIN_LINK_MAX_PER_ORG; i += 1) {
-      const t0 = Date.now();
       const r = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "la@vidu.vn" }, ip: ipThu(i) });
       expect(r.status, `lần ${i + 1}`).toBe(200);
-      expect(Date.now() - t0, `lần ${i + 1} phải nhanh`).toBeLessThan(TRE_TEST_MS);
+      expect(soLanLamCham(), `lần ${i + 1} không được đi vào nhánh làm chậm`).toBe(mocLa);
     }
     const t1 = Date.now();
     const cham = await goi("POST", "/auth/link", { body: { orgId: orgLa, email: "la@vidu.vn" }, ip: ipThu(LOGIN_LINK_MAX_PER_ORG) });
     expect(cham.status).toBe(200);
     // RED THẬT trước H6-2: tổ chức lạ ném 23503 ở bucket tổ chức nên KHÔNG BAO GIỜ chậm, và một
     // phép đo thời gian phân biệt được tổ chức thật với tổ chức lạ.
+    //
+    // [khoản nợ 66] Nay vế ấy được đo bằng DẤU VẾT trước, đồng hồ sau — và dấu vết mạnh hơn: nếu
+    // 23503 quay lại, nhánh làm chậm KHÔNG chạy và khẳng định này đỏ ngay, không phụ thuộc tải.
+    expect(soLanLamCham() - mocLa, "tổ chức lạ phải đi vào nhánh làm chậm ĐÚNG một lần, y như tổ chức thật").toBe(1);
     expect(Date.now() - t1, "tổ chức lạ phải chậm y như tổ chức thật").toBeGreaterThanOrEqual(TRE_TEST_MS);
   }, 120_000);
 

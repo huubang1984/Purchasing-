@@ -273,6 +273,30 @@ const CAU_DOC_HO_SO = `
      AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'::pg_catalog.text`;
 
 /**
+ * Cùng phép đọc, nhưng khoá theo `c.id` thay vì `(org_id, user_id)`. Chỉ dùng ở đúng một chỗ:
+ * lượt đọc LẠI sau khi `CAU_DAT_COC` không giành được cọc — xem [review lượt 17, L-2]. Cọc lấy
+ * theo `id`, nên phán quyết phải nói về ĐÚNG hàng ấy; một hồ sơ vừa bị xoá rồi ghi danh lại là
+ * một hàng KHÁC, và trả lời khai của nó ra là một lời khai mượn.
+ */
+const CAU_DOC_HO_SO_THEO_ID = `
+  SELECT c.id,
+         c.secret_wrapped,
+         c.secret_key_version,
+         c.last_used_counter,
+         c.locked_until,
+         (c.locked_until IS NOT NULL
+          AND c.locked_until OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()) IS TRUE
+           AS dang_khoa
+    FROM public.mfa_credentials c
+    JOIN public.users u
+      ON u.id OPERATOR(pg_catalog.=) c.user_id
+     AND u.org_id OPERATOR(pg_catalog.=) c.org_id
+   WHERE c.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+     AND c.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+     AND c.kind OPERATOR(pg_catalog.=) 'TOTP'::pg_catalog.text
+     AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'::pg_catalog.text`;
+
+/**
  * [INV-E3(4)] GHI NHẬN MỘT LẦN THÀNH CÔNG — NGUYÊN TỬ, KHÔNG CÓ CỬA SỔ ĐUA.
  *
  * Đường ĐỌC-RỒI-GHI ngây thơ ("đọc last_used_counter, so, rồi UPDATE") có một cửa sổ TOCTOU
@@ -344,36 +368,86 @@ const CAU_GHI_THANH_CONG = `
  * PHÁT BIỂU ĐÚNG MỨC VỀ THỨ CÂU NÀY MUA ĐƯỢC — VÀ BẢN VÒNG TRƯỚC CỦA CHÍNH ĐOẠN NÀY ĐÃ BỊ ĐO
  * LÀ RỘNG HƠN THỨ ĐO ĐƯỢC.
  *
- * *** CÂU DƯỚI ĐÂY SAI. ĐÃ ĐO. GIỮ NGUYÊN VĂN ĐỂ ĐỐI CHIẾU, KHÔNG XOÁ ***
+ * *** CÂU DƯỚI ĐÂY ĐÃ SAI TỪ S1, VÀ [khoản nợ 2 / S1.26] NAY LẠI ĐÚNG. GIỮ CẢ BA TẦNG ĐỂ ĐỌC
+ *     ĐƯỢC LỊCH SỬ, KHÔNG XOÁ ***
  * >>> "mỗi cửa sổ cho phép đúng `maxFailedAttempts` lần đoán ĐƯỢC PHÁN XÉT trên MỘT hồ sơ,
  * >>>  kể cả khi các lần đoán tới ĐỒNG THỜI."
- * Vế "kể cả khi ĐỒNG THỜI" SAI, và cơ chế nằm ngay trong `verifyTotpAttempt`: `dang_khoa` được
+ * ~~Vế "kể cả khi ĐỒNG THỜI" SAI~~, và cơ chế nằm ngay trong `verifyTotpAttempt`: `dang_khoa` được
  * đọc từ câu SELECT chạy TRƯỚC khi bất kỳ request nào ghi, nên N request chồng nhau đều thấy
- * `locked_until IS NULL` và đều đi TRỌN tới `verifyTotpCode`. Câu UPDATE này chạy SAU đó.
- * ĐO trên PostgreSQL 16, app_api, ngưỡng 5 — hai phép đo độc lập:
+ * `locked_until IS NULL` và đều đi TRỌN tới `verifyTotpCode`. ~~Câu UPDATE này chạy SAU đó.~~
+ * ĐO trên PostgreSQL 16, app_api, ngưỡng 5 — hai phép đo độc lập, GIỮ LẠI vì chúng là mốc đối
+ * chiếu cho vòng vá:
  *   * đồng thời TỰ NHIÊN (vòng xác minh): N=2 -> 2 mã được phán xét, đếm 2; N=8 -> 8, đếm 8;
  *     N=16 -> 8 phán xét + 8 LOCKED_OUT, đếm 8; N=24 -> 16 + 8, đếm 16.
  *   * đồng thời ÉP TẤT ĐỊNH bằng một khoá hàng giữ ngoài (test "[INV-E3] LOẠT ĐẦU dưới đồng
  *     thời 24"): 24 mã được phán xét, 0 LOCKED_OUT, đếm 24, và hồ sơ BỊ KHOÁ sau loạt.
  *
- * PHÁT BIỂU ĐÚNG. Nó MUA:
- *   * MỖI mã được phán xét làm bộ đếm tăng ĐÚNG MỘT. Biên độ (số mã được phán xét ÷ mức tăng bộ
- *     đếm) = 1 ở MỌI mức đồng thời đã đo (2, 8, 16, 24). Bản CTE cho biên độ VÔ HẠN: 24 lần đoán
- *     mỗi đơn vị bộ đếm, LẶP MÃI vì hồ sơ không bao giờ khoá.
- *   * SAU loạt đầu, hồ sơ BỊ KHOÁ. Nên thứ mua được là "C lần đoán MỘT LẦN, rồi khoá", không
- *     phải "C lần đoán mỗi cửa sổ, lặp mãi". Đó là khác biệt đóng lỗ fail-OPEN.
- * Nó KHÔNG mua:
- *   * một trần cho LOẠT ĐẦU. Với độ đồng thời C, loạt đầu cho tới C mã được phán xét thay vì
- *     `maxFailedAttempts` (mặc định 5, C = 24 -> 4,8x). Đóng nó đòi LẤY KHOÁ HÀNG TRƯỚC lời gọi
- *     cổng mở bí mật, tức giữ một khoá hàng qua trọn một round trip mật mã — một đánh đổi DoS
- *     RIÊNG, phải quyết bằng một quyết định nhìn thấy được chứ không trôi. Sổ nợ, chưa quyết.
- *   * một hạn mức theo NGƯỜI GỌI (vế "giới hạn tần suất" của E3 trong docs/TEST-PLAN.md — xem
- *     khối đầu file, vế đó vẫn CHƯA CÓ LỚP NÀO).
+ * ==============================================================================================
+ * [khoản nợ 2 / S1.26] MỘT CÂU ĐÃ TÁCH LÀM HAI, VÀ THỨ TỰ MỚI LÀ TOÀN BỘ BẢN VÁ
+ * ==============================================================================================
+ * Chẩn đoán, nói bằng cơ chế: CỔNG (`dang_khoa`) được đọc từ một ảnh chụp KHÔNG khoá hàng, chạy
+ * TRƯỚC khi bất kỳ request nào ghi. Bộ đếm thì vẫn ĐÚNG (biểu thức tự tham chiếu, EvalPlanQual
+ * tính lại) — nhưng nó chỉ mua BIÊN ĐỘ 1, không mua TRẦN. Trần loạt đầu vì thế bằng **độ đồng
+ * thời của kẻ tấn công**, không phải một hằng số cấu hình.
  *
- * `locked_until` được ĐẶT LẠI VỀ NULL ở nhánh chưa vượt ngưỡng: nếu giữ giá trị cũ, một hồ sơ
+ * Bản vá KHÔNG thêm khoá tường minh và KHÔNG thêm round trip nào so với bản cũ ở đường thất bại.
+ * Nó chỉ ĐƯA CỔNG VÀO MỆNH ĐỀ `WHERE` của một câu UPDATE và CHUYỂN CÂU ẤY LÊN TRƯỚC lời gọi cổng
+ * mở bí mật. Khi ấy N request chồng nhau xếp hàng ở khoá hàng của chính câu UPDATE, được thả
+ * TUẦN TỰ, và request thứ `nguong + 1` đọc được `locked_until` mà request thứ `nguong` vừa đặt.
+ *
+ * HAI CÂU, HAI VIỆC — và ranh giới giữa chúng là chỗ đắt nhất:
+ *   * `CAU_DAT_COC` thu tiền TRƯỚC: nó tăng bộ đếm và mang cổng trong `WHERE`. `rowCount = 0`
+ *     nghĩa là "đang khoá" — một phán quyết CÓ THẨM QUYỀN, đọc trên hàng đã bị chính câu này
+ *     khoá. Nó KHÔNG có `RETURNING`: nếu trả `failed_attempts` ra cho JS so ngưỡng thì phép so
+ *     ngưỡng có HAI chỗ, và một trong hai sẽ không bao giờ đỏ được.
+ *   * `CAU_DAT_KHOA` chỉ chạy khi cổng mở bí mật đã phán "mã sai". Ngưỡng nằm ĐÚNG MỘT chỗ: vế
+ *     `c.failed_attempts >= $3` của nó. `justLocked = rowCount === 1`, nên nó đúng MỘT lần mỗi
+ *     lần CHUYỂN TRẠNG THÁI — trả nốt phát biểu tần suất của ADR-008 §(ii), thứ bản cũ đang phá
+ *     (trong một loạt 24/ngưỡng 5, bản cũ cho 20 bản ghi `MFA_LOCKED`).
+ *
+ * ĐÁNH ĐỔI DoS, NÓI THẲNG VÌ NÓ CÓ THẬT: `withTenant` giữ MỘT giao dịch cho trọn handler, nên
+ * khoá hàng của `CAU_DAT_COC` sống tới `COMMIT` — tức bản vá này CHÍNH LÀ "giữ một khoá hàng qua
+ * trọn lời gọi cổng mở bí mật", đúng thứ vòng trước đòi phải có một quyết định nhìn thấy được.
+ * Quyết định ấy ĐỨNG ĐƯỢC trên ba con số ĐÃ CÓ LỚP, không trên một lời hứa:
+ *   * `idle_in_transaction_session_timeout = 60_000` (`packages/db/src/pool.ts`) — cận CẤU TRÚC:
+ *     người GIỮ khoá nằm "idle in transaction" trong lúc chờ cổng, nên GUC này chặn trên nó bất
+ *     kể composition root nào;
+ *   * `lock_timeout = 15_000` và `statement_timeout = 15_000` (cùng tệp) — người CHỜ chết bằng
+ *     55P03 hoặc 57014 chứ không treo (kho CHƯA đo cái nào bắn trước);
+ *   * `MAX_TOTP_WINDOW = 10` (`totp.ts`) ⇒ ≤ 21 lần HMAC-SHA1 trong tiến trình, chặn TRƯỚC cổng.
+ * Cận CHẶT HƠN nhưng CÓ ĐIỀU KIỆN: `apps/api` bọc services bằng `boiTranKms(5000 ms)`. Nó phụ
+ * thuộc composition root nên KHÔNG được kể là tính chất cấu trúc — mốc chết cho nó là khoản nợ
+ * riêng.
+ *
+ * [review an ninh lượt 17, M-1] HẠNG THỨ TƯ, VÀ BA CON SỐ TRÊN KHÔNG THAY ĐƯỢC NÓ. Ba GUC ấy
+ * chặn THỜI GIAN MỘT PHIÊN; không cái nào chặn SỐ KẾT NỐI BỊ GHIM. Vì bản vá này TUẦN TỰ HOÁ các
+ * request chồng nhau trên cùng một hồ sơ, mỗi người chờ ghim một kết nối pool trong lúc xếp
+ * hàng — trước bản vá chúng chạy SONG SONG nên tổng thời gian rút cạn pool ≈ 1× độ trễ cổng, sau
+ * bản vá ≈ `min(đồng thời, ngưỡng)` lần. Với `dbPoolMax` mặc định 10, một người dùng hợp lệ bắn
+ * 10 lượt `/auth/totp` đồng thời cho CHÍNH hồ sơ mình có thể chạm tới người của tổ chức khác.
+ * Đó là một KHUẾCH ĐẠI DO VÒNG NÀY TẠO RA, và nó phải nằm trong lập luận chứ không ngoài.
+ * Hạng thứ tư đóng nó: `connectionTimeoutMillis = 20 s` ở `packages/db/src/pool.ts` — trước vòng
+ * này hàng đợi `pool.connect()` KHÔNG có mốc chết nào (mặc định `pg-pool` là 0 = chờ vĩnh viễn).
+ * Thứ CHƯA đóng và là khoản nợ riêng: nhả khoá hàng TRƯỚC lời gọi cổng (commit cọc trong một
+ * giao dịch ngắn riêng) — nó bỏ hẳn hạng này thay vì chặn trên nó.
+ *
+ * VÌ SAO KHÔNG DÙNG `SELECT ... FOR UPDATE` Ở CÂU ĐỌC — và lý do KHÔNG phải cái vòng trước tưởng.
+ * ~~Lý do sai: "một request chết giữa chừng vẫn được đoán miễn phí".~~ Đo được là sai: `withTenant`
+ * ROLLBACK cả handler, nên `CAU_DAT_COC` bị cuốn theo y hệt một câu ghi đặt sau cổng — dư lượng
+ * ấy CHUNG cho cả hai phương án và bản vá này KHÔNG đóng nó. Lý do ĐÚNG là một cái khác:
+ * `verifyTotpCode` tự từ chối `khop <= lastUsedCounter` TRONG TIẾN TRÌNH. Nếu câu ĐỌC lấy khoá
+ * hàng, request thua cuộc đua sẽ đọc `last_used_counter` ĐÃ CẬP NHẬT nên hàm thuần bắt trước, và
+ * vế `AND (c.last_used_counter IS NULL OR c.last_used_counter < $3)` của `CAU_GHI_THANH_CONG`
+ * thành MÃ CHẾT — một lớp E3(4) đang có mốc chết mất hẳn mũi. Đặt cọc giữ câu ĐỌC KHÔNG khoá,
+ * nên ảnh chụp cũ còn nguyên và lớp ấy còn đỏ được.
+ *
+ * VẪN KHÔNG MUA: một hạn mức theo NGƯỜI GỌI (vế "giới hạn tần suất" của E3) — đường TOTP có
+ * `callerLimit = 30` mỗi 15 phút ở tầng HTTP (`042`), và đó là một lớp KHÁC, ở một tầng KHÁC.
+ *
+ * `locked_until` được ĐẶT LẠI VỀ NULL ở nhánh hồ sơ đã HẾT khoá: nếu giữ giá trị cũ, một hồ sơ
  * đã hết khoá vẫn mang một mốc quá khứ và mọi phép đọc sau đó phải tự nhớ so nó với hiện tại.
  */
-const CAU_GHI_THAT_BAI = `
+const CAU_DAT_COC = `
   UPDATE public.mfa_credentials c
      SET failed_attempts = CASE
              WHEN c.locked_until IS NOT NULL
@@ -382,17 +456,43 @@ const CAU_GHI_THAT_BAI = `
              ELSE c.failed_attempts OPERATOR(pg_catalog.+) 1
            END,
          locked_until = CASE
-             WHEN (CASE
-                     WHEN c.locked_until IS NOT NULL
-                      AND c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
-                     THEN 1
-                     ELSE c.failed_attempts OPERATOR(pg_catalog.+) 1
-                   END) OPERATOR(pg_catalog.>=) $3::pg_catalog.int4
-             THEN pg_catalog.clock_timestamp() OPERATOR(pg_catalog.+)
-                  pg_catalog.make_interval(secs => $4::pg_catalog.float8)
-             ELSE NULL END
+             WHEN c.locked_until IS NOT NULL
+              AND c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp()
+             THEN NULL
+             ELSE c.locked_until END
    WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
      AND c.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+     AND (c.locked_until IS NULL
+          OR c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())`;
+
+/**
+ * Đặt khoá khi bộ đếm ĐÃ tới ngưỡng. Chạy CHỈ KHI cổng mở bí mật đã phán "mã sai", và chỉ trong
+ * cùng giao dịch vừa giành được cọc — nên `rowCount === 1` là "lần chuyển trạng thái", đúng một
+ * lần mỗi cửa sổ.
+ *
+ * [review an ninh lượt 17, L-1] VẾ `locked_until IS NULL OR đã hết hạn` LÀ MÃ KHÔNG VỚI TỚI ĐƯỢC
+ * HÔM NAY, VÀ NÓ ĐƯỢC GIỮ CÓ CHỦ ĐÍCH — nói thẳng để không ai đọc nhầm nó là một hàng rào đang
+ * hoạt động. Chứng minh nó không với tới được: câu này chỉ chạy sau khi `CAU_DAT_COC` trả
+ * `rowCount = 1`; `WHERE` của `CAU_DAT_COC` đòi `locked_until IS NULL` hoặc đã hết hạn, và nhánh
+ * `CASE` của nó ĐẶT LẠI về NULL ở ca hết hạn; giữa hai câu, giao dịch này giữ khoá hàng nên không
+ * ai xen vào. Vậy tại đây `locked_until` LUÔN là NULL.
+ *
+ * **KHÔNG mũi đột biến nào làm vế này ĐỎ được** — xoá nó đi thì mọi test vẫn xanh. Theo kỷ luật
+ * của kho, một lớp canh chưa từng đỏ thì chưa được đo, nên vế này KHÔNG được kể là một lớp canh.
+ * Nó là bảo hiểm cho một lần sửa tương lai: `lockoutSeconds` cố ý không có cận TRÊN, nên nếu ai
+ * dời `moPhongBiVaSo` lên trước hay gọi câu này từ chỗ khác, một người gọi thứ hai truyền
+ * `0.001` sẽ RÚT NGẮN một cửa sổ khoá đang có hiệu lực. Vế này biến "an toàn nhờ THỨ TỰ LỜI GỌI"
+ * thành "an toàn nhờ CHÍNH CÂU LỆNH", và nó không tốn gì.
+ */
+const CAU_DAT_KHOA = `
+  UPDATE public.mfa_credentials c
+     SET locked_until = pg_catalog.clock_timestamp() OPERATOR(pg_catalog.+)
+                        pg_catalog.make_interval(secs => $4::pg_catalog.float8)
+   WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+     AND c.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+     AND c.failed_attempts OPERATOR(pg_catalog.>=) $3::pg_catalog.int4
+     AND (c.locked_until IS NULL
+          OR c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())
   RETURNING c.locked_until AS khoa_toi`;
 
 /**
@@ -609,19 +709,9 @@ export async function verifyTotpAttempt(
     return { ok: false, reason: "LOCKED_OUT", lockedUntil: hoSo.locked_until, justLocked: false };
   }
 
-  const ghiThatBai = async (lyDo: MfaDenialReason): Promise<MfaAttemptResult> => {
-    const { rows: sau } = await client.query<{ khoa_toi: Date | null }>(CAU_GHI_THAT_BAI, [
-      hoSo.id,
-      orgId,
-      nguong,
-      giaySauKhiKhoa,
-    ]);
-    const khoaToi = sau[0]?.khoa_toi ?? null;
-    return { ok: false, reason: lyDo, lockedUntil: khoaToi, justLocked: khoaToi !== null };
-  };
-
-  // Hình dạng mã được xét TRƯỚC khi mở phong bì: không có lý do gì phải giải mã một bí mật để
-  // từ chối một chuỗi không phải sáu chữ số.
+  // Hình dạng mã được xét TRƯỚC khi mở phong bì VÀ TRƯỚC khi đặt cọc: không có lý do gì phải
+  // giải mã một bí mật — hay tiêu một lần thử của người dùng thật — để từ chối một chuỗi không
+  // phải sáu chữ số.
   if (!isWellFormedTotpCode(code)) {
     return {
       ok: false,
@@ -629,6 +719,31 @@ export async function verifyTotpAttempt(
       lockedUntil: hoSo.locked_until,
       justLocked: false,
     };
+  }
+
+  // [khoản nợ 2] ĐẶT CỌC. Đây là cổng CHỊU LỰC, và nó chạy TRƯỚC `moPhongBiVaSo`. Phép kiểm
+  // `hoSo.dang_khoa` ở trên vẫn còn, nhưng nó là ĐƯỜNG TẮT KHÔNG THẨM QUYỀN: đọc từ ảnh chụp
+  // không khoá hàng, chỉ từ chối THÊM chứ không bao giờ cho qua thêm, và nó giữ nguyên hành vi
+  // mặt tiền cho ca "hồ sơ đang khoá + mã sai hình dạng".
+  const { rowCount: coCho } = await client.query(CAU_DAT_COC, [hoSo.id, orgId]);
+  if ((coCho ?? 0) === 0) {
+    // Không giành được cọc ⇒ hồ sơ ĐANG khoá. Phải đọc LẠI chứ không được trả `hoSo.locked_until`:
+    // ảnh chụp ấy được lấy TRƯỚC khi bất kỳ request nào ghi, nên trong đúng loạt đầu nó là NULL —
+    // trả nó ra là trả một lời khai đã cũ, và `apps/api` sẽ dựng phản hồi LOCKED_OUT không mốc.
+    // READ COMMITTED cấp ảnh chụp mới cho mỗi câu, và câu UPDATE vừa CHỜ XONG người giữ khoá.
+    // [review lượt 17, L-2] Đọc lại theo `hoSo.id`, KHÔNG theo `(orgId, userId)`. Cọc được lấy
+    // theo `id`; nếu hồ sơ bị XOÁ rồi GHI DANH LẠI giữa chừng (đường `approveMfaReset` xoá,
+    // `/auth/redeem` chèn lại) thì đọc theo `(orgId, userId)` sẽ tìm thấy một HÀNG KHÁC với
+    // `locked_until = NULL`, và hàm trả về `LOCKED_OUT` mang mốc `null` — một lời khai mượn của
+    // một hàng không phải hàng đã bị từ chối. Hàng biến mất là `NO_CREDENTIAL`, đúng nghĩa.
+    const { rows: lai } = await client.query<HangHoSo>(CAU_DOC_HO_SO_THEO_ID, [orgId, hoSo.id]);
+    const moi = lai[0];
+    if (moi === undefined) {
+      // Hàng biến mất giữa chừng (đường đặt lại TOTP xoá hồ sơ) — ca ấy là NO_CREDENTIAL, không
+      // phải LOCKED_OUT. Gộp hai ca lại sẽ là một lời khai rộng hơn thứ đo được.
+      return { ok: false, reason: "NO_CREDENTIAL", lockedUntil: null, justLocked: false };
+    }
+    return { ok: false, reason: "LOCKED_OUT", lockedUntil: moi.locked_until, justLocked: false };
   }
 
   const daDung = docBoDem(hoSo.last_used_counter, hoSo.id);
@@ -639,7 +754,14 @@ export async function verifyTotpAttempt(
   });
 
   if (!ketQua.ok) {
-    return await ghiThatBai(ketQua.reason);
+    const { rows: sau } = await client.query<{ khoa_toi: Date | null }>(CAU_DAT_KHOA, [
+      hoSo.id,
+      orgId,
+      nguong,
+      giaySauKhiKhoa,
+    ]);
+    const khoaToi = sau[0]?.khoa_toi ?? null;
+    return { ok: false, reason: ketQua.reason, lockedUntil: khoaToi, justLocked: khoaToi !== null };
   }
 
   const { rowCount } = await client.query(CAU_GHI_THANH_CONG, [hoSo.id, orgId, ketQua.counter]);
@@ -648,11 +770,23 @@ export async function verifyTotpAttempt(
     // hồ sơ vừa bị khoá giữa chừng. Cả hai đều là "mã này không còn dùng được nữa" — gộp về một
     // câu trả lời là fail-CLOSED, và phân biệt hai ca sẽ tốn một round trip để mua đúng một
     // thông tin mà kẻ tấn công quan tâm hơn người dùng thật.
+    // [review lượt 17, L-3] Nhánh này ĐÃ tiêu cọc (`CAU_DAT_COC` chạy trước cổng) nhưng trước
+    // đây bỏ qua phép so ngưỡng, nên `failed_attempts >= max` sống được cùng `locked_until IS
+    // NULL` — bất biến ngầm *"bộ đếm chạm ngưỡng ⟹ hồ sơ bị khoá"* thủng đúng ở đây, và câu
+    // "ngưỡng nằm ĐÚNG MỘT chỗ" ở trên khi ấy không đúng. Không phải đường khuếch đại đoán mã
+    // (muốn tới đây phải gửi một mã ĐÚNG), nhưng nó là một hố trong một lời khai.
+    const { rows: sauKhiTrung } = await client.query<{ khoa_toi: Date | null }>(CAU_DAT_KHOA, [
+      hoSo.id,
+      orgId,
+      nguong,
+      giaySauKhiKhoa,
+    ]);
+    const khoaToiTrung = sauKhiTrung[0]?.khoa_toi ?? null;
     return {
       ok: false,
       reason: "CODE_ALREADY_USED",
-      lockedUntil: hoSo.locked_until,
-      justLocked: false,
+      lockedUntil: khoaToiTrung ?? hoSo.locked_until,
+      justLocked: khoaToiTrung !== null,
     };
   }
 
