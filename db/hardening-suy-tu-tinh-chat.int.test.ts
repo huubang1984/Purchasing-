@@ -103,6 +103,81 @@ async function migrateLai(db: TestDatabase): Promise<string> {
   }
 }
 
+/**
+ * [khoản nợ 60] TỔNG ĐIỀU TRA HÀM TRIGGER — THAY *NHẬN DIỆN THEO HÌNH DẠNG* BẰNG *LIỆT KÊ RỘNG
+ * RỒI BUỘC PHÂN LOẠI*.
+ *
+ * Vị từ ở trên hỏi *`prosrc` có chứa `RETURN` không* — một phép so khớp VĂN BẢN trên thân hàm.
+ * Nó ĐÚNG hôm nay, nhưng một hàm canh viết theo kiểu khác (`IF … THEN RAISE … END IF; RETURN
+ * NULL;`) sẽ **rơi khỏi tập** và bảng của nó thôi được canh, TRONG IM LẶNG. Đó là nguyên văn
+ * khoản nợ 60, và sổ nợ nói đúng mức: *"một khoảng trống đã ĐO chứ chưa phải một lỗ đang mở"*.
+ *
+ * **Đo trên PostgreSQL 16 ngày 2026-09-09, trước khi viết khối này:** tập RỘNG — mọi hàm
+ * `plpgsql` trả `trigger`, gắn `BEFORE … FOR EACH ROW` trên `UPDATE` hoặc `DELETE`, ở lược đồ
+ * không phải hệ thống — có **23 hàm**. Vị từ hình dạng nhận **2**; **21 hàm còn lại đi qua nó
+ * mà không lớp nào nói gì về chúng**.
+ *
+ * Bản vá KHÔNG phải nới vị từ, vì nới thế nào cũng lại là một hình dạng. Nó là: **mỗi hàm trong
+ * tập rộng phải nằm trong ĐÚNG MỘT trong hai danh sách dưới đây.** Một hàm mới — viết theo bất
+ * kỳ kiểu nào — rơi ra ngoài cả hai ⇒ ĐỎ, và cách duy nhất làm nó xanh là ghi nó vào một danh
+ * sách, tức trả lời câu *"đây có phải một hàm canh chỉ-ghi-thêm không"* thành một dòng NHÌN THẤY
+ * ĐƯỢC trong diff. Cùng khuôn với `MIEN_TRU` của ADR-027 và sổ khai của `[INV-H22]`.
+ *
+ * **Và nó đóng theo CẢ HAI CHIỀU.** Chiều thứ hai: một hàm đã khai là KHÔNG-CANH mà về sau bị
+ * viết lại thành không-bao-giờ-trả-về sẽ lọt vào tập của vị từ hình dạng — hai lời khai mâu
+ * thuẫn ⇒ ĐỎ. Không chiều nào trong hai chiều ấy có lớp trước vòng này.
+ *
+ * **Điều khối này KHÔNG làm:** nó không phán xét một phân loại là ĐÚNG. Hai danh sách được sinh
+ * từ trạng thái đo được tại `bebeb41` rồi đóng băng. Nó chặn hàm thứ 24 đi vào lặng lẽ; nó không
+ * kiểm toán 23 hàm có sẵn.
+ */
+const HAM_CANH_CHI_GHI_THEM = ["bid_chi_ghi_them", "chan_sua_xoa"];
+
+/**
+ * Hàm trigger BEFORE-ROW UPDATE/DELETE **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
+ * ĐIỀU KIỆN (máy trạng thái, kiểm quyền, bất biến cột), nên bảng mang chúng vẫn sửa/xoá được ở
+ * những đường hợp lệ. Đo tại `bebeb41`.
+ */
+const HAM_KHONG_PHAI_CANH = [
+  "kiem_danh_tinh_theo_phien",
+  "loi_moi_khong_song_lai",
+  "mfa_credentials_khoa_ho_so_da_xac_nhan",
+  "mfa_credentials_xoa_can_yeu_cau",
+  "mfa_reset_kiem_chuyen_trang_thai",
+  "mfa_reset_kiem_quyen",
+  "otp_go_khoa_khong_xoa_dau_vet",
+  "outbox_jobs_xoa_payload_dang_nhap",
+  "rfq_budgets_chi_sua_khi_soan",
+  "rfq_gia_han_khong_hoi_sinh",
+  "rfq_items_chi_sua_khi_soan",
+  "rfq_key_material_bat_bien",
+  "rfq_khoa_chi_thu_hoi_khi_huy",
+  "rfq_kiem_chuyen_trang_thai",
+  "rfq_kiem_khoa_khi_mo",
+  "rfq_kiem_nguong_phe_duyet_kep",
+  "rfq_kiem_yeu_cau_mo_thau",
+  "thu_hoi_don_dieu",
+  "unseal_dieu_phoi_mot_lan",
+  "unseal_kiem_chuyen_trang_thai",
+  "unseal_kiem_du_phe_duyet",
+];
+
+/** TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên. */
+const CAU_TAP_RONG = `SELECT DISTINCT p.proname AS ten,
+              (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve
+         FROM pg_trigger t
+         JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
+         JOIN pg_class c ON c.oid OPERATOR(pg_catalog.=) t.tgrelid
+         JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+         JOIN pg_language l ON l.oid OPERATOR(pg_catalog.=) p.prolang
+        WHERE NOT t.tgisinternal
+          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND l.lanname OPERATOR(pg_catalog.=) 'plpgsql'
+          AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+          AND (((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19)
+            OR ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11))
+        ORDER BY 1`;
+
 describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ danh sách tên", () => {
   let db: TestDatabase;
 
@@ -462,5 +537,61 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     } finally {
       await db.pool.query("DROP ROLE IF EXISTS ke_gian");
     }
+  }, 180000);
+
+  it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger BEFORE-ROW UPD/DEL phải nằm trong ĐÚNG MỘT danh sách", async () => {
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
+    const that = rows.map((r) => r.ten);
+
+    // Đối chứng chống rỗng ruột: câu truy vấn phải THẤY thứ gì đó, và phải thấy ít nhất hai hàm
+    // canh đã biết. Một câu hỏng cú pháp NÉM; một câu hỏng vị từ trả rỗng và sẽ xanh im lặng.
+    expect(that.length, "tập rộng RỖNG — câu truy vấn đang mù").toBeGreaterThan(0);
+    for (const canh of HAM_CANH_CHI_GHI_THEM) expect(that).toContain(canh);
+
+    const daKhai = new Set([...HAM_CANH_CHI_GHI_THEM, ...HAM_KHONG_PHAI_CANH]);
+    expect(
+      that.filter((t) => !daKhai.has(t)),
+      "Một hàm trigger BEFORE-ROW UPDATE/DELETE vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
+        "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Trả lời " +
+        "bằng cách thêm tên vào HAM_CANH_CHI_GHI_THEM (kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT) " +
+        "hoặc vào HAM_KHONG_PHAI_CANH. Đừng nới vị từ hình dạng — nới thế nào cũng lại là hình dạng.",
+    ).toEqual([]);
+
+    // Chiều ngược: một dòng khai THIU cũng là một lời khai sai, và nó là đối chứng dương thứ hai.
+    expect(
+      [...daKhai].filter((t) => !that.includes(t)),
+      "Danh sách phân loại kể một hàm mà CSDL không còn có.",
+    ).toEqual([]);
+  }, 180000);
+
+  it("[sổ nợ 60] hai cách nói KHÔNG được mâu thuẫn: đã khai KHÔNG-CANH thì phải có đường trả về", async () => {
+    // Chiều hỏng thứ hai của khoản nợ 60, và nó KHÔNG có lớp nào trước vòng này: một hàm đã khai
+    // là không-canh bị viết lại thành không-bao-giờ-trả-về sẽ lọt vào tập của vị từ HÌNH DẠNG,
+    // tức bảng của nó bỗng bị coi là chỉ-ghi-thêm và chịu mọi chốt của hardening — hoặc ngược
+    // lại, một hàm canh bị viết lại thành có đường trả về sẽ RỜI tập trong im lặng.
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
+    const theoTen = new Map(rows.map((r) => [r.ten, r.khong_tra_ve]));
+
+    expect(
+      HAM_KHONG_PHAI_CANH.filter((t) => theoTen.get(t) === true),
+      "Hàm này được khai là KHÔNG phải hàm canh, nhưng thân nó nay không có đường trả về nào — " +
+        "tức vị từ hình dạng đã nhận nó là hàm canh. Hai lời khai mâu thuẫn: sửa một trong hai.",
+    ).toEqual([]);
+
+    expect(
+      HAM_CANH_CHI_GHI_THEM.filter((t) => theoTen.get(t) !== true),
+      "Hàm này được khai là hàm canh chỉ-ghi-thêm, nhưng thân nó nay CÓ đường trả về — nó vừa " +
+        "rời khỏi tập của vị từ hình dạng, và bảng của nó thôi được canh.",
+    ).toEqual([]);
+  }, 180000);
+
+  it("[sổ nợ 60] số hàm KHÔNG-CANH lớn hơn số hàm canh nhiều lần — khoảng trống này có kích thước", async () => {
+    // Không phải một khẳng định trang trí: nó ghim rằng vị từ hình dạng chỉ nói về một PHẦN NHỎ
+    // của các hàm trigger đang chạy, nên "nó đúng hôm nay" không phải một lý do để yên tâm.
+    // Đo tại `bebeb41`: 23 hàm trong tập rộng, vị từ hình dạng nhận 2.
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
+    const nhanBoiHinhDang = rows.filter((r) => r.khong_tra_ve).length;
+    expect(nhanBoiHinhDang).toBe(HAM_CANH_CHI_GHI_THEM.length);
+    expect(rows.length).toBeGreaterThan(nhanBoiHinhDang * 5);
   }, 180000);
 });

@@ -342,6 +342,22 @@ hoặc buộc phải nói đúng mức:
 - `db/migrations/*.sql` NGOÀI phạm vi, và cái giữ chúng là chính vế `search_path` của H21 —
   xem ADR-030 §5.
 
+| **H22** | **Mọi cặp (mã bất biến, tệp test) phải có trong SỔ KHAI — toàn kho.** Bộ sinh gom độ phủ bằng nhãn `[INV-XX]` trong `fullName` của báo cáo vitest, nên một nhãn gắn SAI CHỖ ghi một dòng *"passed"* vào hàng của một bất biến và làm một lỗ trống TRÔNG NHƯ ĐÃ VÁ. Trước H22, `findUnregisteredLabels` chỉ bắt nhãn trỏ tới mã KHÔNG TỒN TẠI, còn `packages/outbox/src/nhan-bat-bien.test.ts` chỉ phủ một gói. H22 đóng theo **CẢ HAI CHIỀU**: một cặp chưa khai là đỏ, và một dòng khai THIU cũng đỏ — chiều thứ hai đồng thời là ĐỐI CHỨNG DƯƠNG dựng sẵn, vì một bộ quét mù làm MỌI cặp đã khai biến mất | `tests/architecture/nhan-bat-bien-cho-dat.test.ts` | **T1** |
+
+**Giới hạn của H22, nói ra thay vì để người đọc tự phát hiện:**
+
+- Nó bảo đảm không cặp nào ra đời hay đổi chỗ trong IM LẶNG. Nó **KHÔNG** bảo đảm một cặp
+  đã khai là ĐÚNG: sổ khai được SINH RA từ trạng thái đo được tại `bebeb41` rồi đóng băng,
+  nên nó chặn cặp thứ 138 chứ không kiểm toán 137 cặp có sẵn. Vế *"test này có thật sự đo
+  bất biến ấy không"* là một PHÁN XÉT, không cơ giới hoá được — y như vế tương ứng của H20.
+- Bộ quét đọc dòng `it(` **và** `describe(`, và vế thứ hai là kết quả của một phép đo: **22
+  cặp (mã, tệp) chỉ tồn tại trên dòng `describe(`** — gồm `H19`, `H20`, `H21` và cả chín mã
+  hook. Một bộ quét chỉ đọc `it(` sẽ mù với chúng trong khi bộ sinh vẫn tính chúng, vì
+  `fullName` là tên describe NỐI tên it. Cùng phép đo ấy bác câu tự khai của lớp outbox
+  (*"đúng thứ bộ sinh gom"*), và câu ấy đã được sửa tại chỗ.
+- Nhãn trong CHÚ THÍCH không bị đọc, và đó là cố ý — chú thích là tài liệu, không phải bằng
+  chứng; chính khối chú thích của các tệp này chứa hàng chục nhãn.
+
 
 **H13 được bổ sung ngày 2026-08-29** (vòng fix 1 của Task 10), và lý do là TẦN SUẤT LẶP LẠI
 chứ không phải một năng lực đang bị hở: đây là LẦN THỨ BA cùng một lớp lỗ (crypto-keys → `g1-`,
