@@ -2851,13 +2851,28 @@ phải được đối chiếu với câu lệnh đó.
 
 **Và phạm vi của lớp ĐẦU TIÊN hẹp hơn phạm vi của quy tắc — nói ra thay vì để người đọc tự phát
 hiện.** `[INV-H20]` phủ `docs/STATE.md` và `docs/DECISIONS.md`. Nó **KHÔNG** phủ `Handoff.md`, và
-S1.21 đo được rằng đó là khoảng trống đắt nhất còn lại: §10 của tệp ấy khai *"22 khoản"* trong khi
+**[S1.28] câu vừa gạch đã hết hiệu lực — xem đoạn cuối mục này.** S1.21 đo được rằng đó là khoảng trống đắt nhất còn lại: §10 của tệp ấy khai *"22 khoản"* trong khi
 sổ có **60**, liệt kê *"năm khoản nặng nhất"* mà **bốn** đã đóng, và §6 *"Cái CHƯA có"* — mục tự
 mở đầu bằng *"đây là phần dễ hiểu sai nhất"* — có **ba** gạch đầu dòng đầu tiên đều sai. Cả hai đã
 sửa tại chỗ ở S1.21 **bằng tay**, tức chúng sẽ trôi lại — và vì thế nó là **khoản nợ 61**, mở
 cố ý ở chính vòng đã sửa chúng. Lý do chưa phủ: `Handoff.md` chưa có một
 hình dạng máy đọc được (nó là văn xuôi có đánh số, không phải bảng), và ép một hình dạng lên nó là
 một vòng riêng. Ghi ra ở đây để nó là một **quyết định**, không phải một chỗ quên.
+
+**[S1.28] VÒNG RIÊNG ẤY ĐÃ CHẠY, VÀ NÓ BÁC CHÍNH CÁCH LÀM MÀ ĐOẠN TRÊN GIẢ ĐỊNH.** Đoạn trên
+cho rằng phủ `Handoff.md` nghĩa là **ép một hình dạng lên tệp**. Đo lại thì không phải: cách
+hiển nhiên — quét mọi đường dẫn trong đấu huyền như P4 — cho **38 phát hiện, 36 trong đó KHÔNG
+phải lỗi** (tên gói, tên team GitHub, đường HTTP, chuỗi phiên bản, mẫu glob đang được TRÍCH,
+một quy ước đặt tên, và một tệp mà câu văn nói thẳng là không vào git). Đọc lại P4 mới thấy nó
+**chưa bao giờ quét văn xuôi**: nó đọc CỘT CON TRỎ của bảng sổ nợ — một **vị trí đã khai**.
+
+Nên quy tắc rút ra, và nó rộng hơn tệp này: **một lớp canh tài liệu phải đọc những VỊ TRÍ ĐÃ
+KHAI, không phải mọi token trông giống thứ nó đi tìm.** Ba trong năm lời khai được phủ hoá ra
+là **bản sao của ba con số ADR này đã bắt suy ra** cho `docs/STATE.md`, nên chúng không cần cơ
+chế mới — chỉ cần tham số hoá cái NHÃN. Đó chính là vế ⑷ đọc theo chiều TỆP thay vì chiều CÂU:
+*mọi nơi lời khai xuất hiện, không phải nơi đầu tiên.* Phần còn lại — văn xuôi khẳng định sự
+tồn tại — vẫn ngoài tầm và là **khoản nợ 72**, vì nó cần một cú pháp tự khai chứ không phải một
+mẫu rộng hơn.
 
 ### 5. Cái giá, nói ra thay vì để người đọc tự phát hiện
 

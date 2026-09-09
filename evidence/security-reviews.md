@@ -1233,3 +1233,45 @@ không tìm được cái nào, thay vì xanh im lặng.
 biểu thức **vẫn đúng** sau khi soi — nhưng ba trong các lý do biện minh cho nó thì sai. Một kết
 luận đúng dựng trên lý do sai sẽ **đổ ở vòng sau**, khi ai đó dựa vào chính lý do ấy để quyết một
 việc khác.
+
+# §S1.28 — khoản nợ 61 (`Handoff.md` vào tầm `[INV-H20]`)
+
+**Phạm vi:** `tests/architecture/so-no-tu-doi-chieu.test.ts`, `Handoff.md`, `docs/TEST-PLAN.md`,
+`docs/DECISIONS.md` ADR-029 §4, so với `origin/master` = `0a3cc6b`.
+
+## Điều phải nói đầu tiên: vòng này KHÔNG có lượt soi đối kháng độc lập
+
+Ba vòng trước (§S1.25, §S1.26, §S1.27) mỗi vòng được **ba lăng kính độc lập** soi, và cả ba vòng
+ấy đều bị bác ít nhất ba lời khai — §S1.27 bị bác **năm**, trong đó một lỗ là do chính bản vá tạo
+ra. Vòng này **chỉ có phép tự soi của người viết**. Đó là một khác biệt về CHẤT, không phải về
+mức độ kỹ lưỡng, và nó được ghi ra đây để không ai đọc gộp bốn vòng thành một hàng.
+
+**Mặt an ninh:** bề mặt của vòng này là **0** — không đụng mã sản xuất, không đụng lược đồ, không
+đụng đường xác thực. Toàn bộ thay đổi nằm ở một tệp test và bốn tệp tài liệu. Rủi ro còn lại đúng
+bằng rủi ro của `[INV-H20]` đã ghi ở ADR-029 §5: lớp này **đọc tài liệu như dữ liệu tin cậy**, và
+vòng này **mở rộng bề mặt ấy thêm một tệp** (`Handoff.md`) — kết luận vẫn đúng ở mức *tự gây
+thương tích*, không ở mức *chống nội dung thù địch*, và giả định ấy vẫn chưa được cưỡng chế vì
+`CODEOWNERS` trỏ tới một team chưa tồn tại (khoản nợ 18).
+
+## Hai chỗ hở do chính phép tự soi tìm ra, và cả hai là chiều ĐỎ OAN
+
+Đây là phần có giá trị nhất của lượt tự soi, vì **chiều đỏ oan đắt hơn chiều bỏ sót**: một phép
+kiểm đỏ oan sẽ bị nới, và nới xong thì nó không còn nói gì.
+
+| chỗ hở | đo được | bản vá |
+|---|---|---|
+| `viPhamCapGach` đếm cả dấu `~~` **nằm trong đoạn mã** | `Handoff.md` 103 dấu — số **LẺ** — mà **không** cặp nào hở, vì §15 có một `` `~~` `` trong đoạn mã đang nói về chính cửa ấy. Và `docs/STATE.md` đang xanh chỉ vì bốn dấu trong đoạn mã của nó **tình cờ CHẴN** | đếm sau khi bỏ đoạn mã (`boDoanMa`), kèm mũi đột biến HAI CHIỀU: dấu trích dẫn không được đỏ, dấu thật vẫn phải đỏ |
+| bộ đọc bảng §13 lọc **mọi** dòng bắt đầu bằng `\|` trong cả mục | một bảng THỨ HAI trong cùng mục — kể cả hàng tiêu đề của nó — bị đọc như hàng dữ liệu: **3 vi phạm giả** | dừng ở dòng đầu tiên không phải hàng bảng; đo lại: **0**. Mũi giữ nó đã được xác nhận **đỏ 3/3** trên bản trước khi vá |
+
+## Điều đáng mang sang vòng sau
+
+**MỘT LỚP CANH TÀI LIỆU PHẢI ĐỌC NHỮNG VỊ TRÍ ĐÃ KHAI, KHÔNG PHẢI MỌI TOKEN TRÔNG GIỐNG THỨ NÓ ĐI
+TÌM.** Cách đóng hiển nhiên của khoản nợ 61 — quét mọi đường dẫn trong đấu huyền như P4 — cho
+**38 phát hiện, 36 trong đó không phải lỗi**. Nếu vòng này tin vào cách ấy, sản phẩm sẽ là một
+danh sách miễn trừ dài bằng chính danh sách phát hiện, tức một danh sách chứ không phải một lớp.
+Thứ cứu nó là đọc lại P4 và thấy nó **chưa bao giờ quét văn xuôi**.
+
+**VÀ MỘT CON SỐ KHÔNG SUY RA ĐƯỢC THÌ ĐỪNG VIẾT.** Hai con số (*"36 mục"*, *"bốn họ quy tắc"*)
+được **gỡ** khỏi tài liệu thay vì cập nhật, vì suy chúng đòi thêm mốc vào nguồn cho vừa bộ đếm.
+Đó là tuân thủ ADR-029 ⑴, không phải né tránh — khác hẳn việc gạch một con trỏ chết để làm im một
+cổng, thứ mà P4 đã có một mũi riêng để chặn.
