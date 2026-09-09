@@ -1385,3 +1385,36 @@ người viết đo lại trên PostgreSQL 16 thật và ghi kết quả ở c�
 đặt đầu tiên tin một lời khai mà nó sinh ra để kiểm* (lần này: tin rằng thân hàm độc lập với bảng,
 và tin hai cái tên viết tay thay cho một tính chất đo được). Ba vòng liên tiếp, cùng một khuôn,
 và ba lần thứ bắt được đều là **một người khác dựng phản ví dụ**, không phải người viết đọc lại.
+
+---
+
+# §S1.31 — khoản nợ 73 + 75: RULE và trigger ngoài hình thức BEFORE-ROW
+
+**Bề mặt an ninh:** **19 dòng `db/migrations/hardening.always.sql` đổi** (17 thêm, 2 bỏ) — một vế `UNION ALL` mới
+trong `CAU_CHI_GHI_THEM_VAT_LY` (phán xét rule trên mọi bảng chỉ-ghi-thêm suy ra) và chú thích;
+không migration đánh số mới, không đụng lược đồ hay đường xác thực. Còn lại: một tệp test
+(`db/hardening-suy-tu-tinh-chat.int.test.ts`, +~190 dòng), năm tệp tài liệu và tệp này.
+
+## Lượt soi đối kháng 21 — chạy TRƯỚC khi §S1.31 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc trọn tệp test 1382 dòng, các
+vùng đổi của hardening, thân 5 hàm AFTER-ROW, hai constraint trigger, bộ đọc qt3, `startPostgres`),
+được giao sáu hướng phá. Mọi phát hiện được người viết đo lại trên PostgreSQL 16 thật.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | CAO → INFO | Rule đặt tên `"_RETURN"` trên BẢNG lách cả ba vế loại theo tên | **PostgreSQL 16 NÉM** *non-view rule for "bid_receipts" must not be named "_RETURN"* — engine giữ tên ấy cho view | ghi phép đo vào chú thích; không đổi vế |
+| 2 | NẶNG | Test *rule trên bảng chỉ-ghi-thêm* không có `finally`: một assert đỏ giữa vòng để `zz_nuot` sống ⇒ mọi `migrate()` sau ném vì chính mục mới ⇒ đỏ dây chuyền | đúng theo đọc | `try/finally` gỡ `DROP RULE IF EXISTS` trên mọi bảng |
+| 3 | NẶNG | Constraint trigger DEFERRED trên UPDATE/DELETE chạy ở COMMIT — sau lần đọc bộ đếm thứ hai — nên đỏ vĩnh viễn với thông điệp SAI (*"hoặc là hàm canh, hoặc thiếu nhân chứng"*) | lập luận đúng; hôm nay 0/46 ca; hai constraint trigger DEFERRED của kho (017, 018) đều `AFTER INSERT` | `tgdeferrable` vào tập rộng theo bảng, thông điệp nói rõ *đổi thành NOT DEFERRABLE*; KHÔNG ép `SET CONSTRAINTS ALL IMMEDIATE` (bản đầu đã thử và 017 tự bắn) |
+| 4 | NHẸ | Tổng điều tra rule không có đối chứng chống rỗng ruột trong chính nó — bằng chứng câu truy vấn *thấy* rule chỉ nằm ở test kế | đúng | dựng một rule tạm ngay trong test và đòi thấy |
+| 5 | NHẸ | RLS `USING (false)` + `FORCE` là cơ chế thứ ba làm bảng chỉ-ghi-thêm: 0 hàng, không lỗi, không trigger, không rule | plausible, đúng về ngữ nghĩa RLS; kho không có policy nào như thế | **khoản nợ 76** |
+| 6 | INFO | Thứ tự mảng hardening: mục gỡ rule bảng sổ (7238) đứng TRƯỚC mục phán xét vật lý (7356) ⇒ rule trên `audit_events` được gỡ, không ném | xác nhận bằng đọc | — |
+| 7 | INFO | Bit `tgtype` PG16 (ROW 1, BEFORE 2, INSERT 4, DELETE 8, UPDATE 16, TRUNCATE 32, INSTEAD 64) — `& 16`/`& 8` đúng; TRUNCATE của hai hàm canh (34) không lọt; INSTEAD OF (64\|16) vào tập nhưng kho không có | xác nhận | — |
+| 8 | INFO | Luật *hàm canh phải BEFORE-ROW* không có dương tính giả: PL/pgSQL ném *control reached end of trigger procedure without RETURN* cho cả AFTER, nên hàm không `RETURN` chỉ có thể ném | xác nhận | — |
+| 9 | INFO | Ba nhân chứng mới: AFTER ROW bắn cho mọi hàng khớp kể cả no-op; `AFTER UPDATE OF status` bắn khi `status` trong SET; BUYER/PM đi qua bốn hàm D2/D3 theo `RETURN NULL`; đình chỉ chỉ thu hồi phiên của người mới | xác nhận bằng đọc thân hàm | — |
+| 10 | INFO | qt3 chỉ đọc `.ts` dưới `packages\|apps\|tools` + `/src/` — hai tệp ngoài phạm vi; văn bản SQL mới trong `$q$…$q$` hợp lệ, cùng khuôn với phần còn lại; không đường đỏ giả trên lược đồ hợp lệ | xác nhận | — |
+
+**Điều đáng mang sang vòng sau:** ba vòng liền, mỗi vòng lộ thêm **một cơ chế của PostgreSQL có thể
+làm một câu ghi trả 0 hàng mà không lỗi** — trigger BEFORE-ROW (S1.29), RULE và trigger khác hình
+thức (S1.31), RLS `USING (false)` (76). Khoản 76 nên được đóng bằng một câu hỏi RỘNG HƠN khoản nợ
+đặt ra: *liệt kê mọi cơ chế ấy một lần*, thay vì đợi lượt soi kế chỉ ra cơ chế thứ tư.
