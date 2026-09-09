@@ -54,7 +54,10 @@ Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự
 
 ## 3. Trong mã có gì
 
-**Bảy migration + một lớp cưỡng chế chạy ở mọi lần `migrate()`:**
+~~**Bảy migration** + một lớp cưỡng chế chạy ở mọi lần `migrate()`:~~
+**[S1.28] 48 migration đánh số** + một lớp cưỡng chế chạy ở mọi lần `migrate()`. Con số ấy
+nay do `[INV-H20]` **suy ra từ `git ls-files`**, không còn chép tay — khoản nợ 61. Bảy tệp
+đầu là nền của S0:
 
 ```
 db/migrations/001_roles_and_functions.sql     roles, hàm nền
@@ -64,10 +67,11 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
              005_identity.sql                 vai trò / quyền / phân tách nhiệm vụ
              006_sessions_and_mfa.sql         phiên + TOTP
              007_outbox.sql                   transactional outbox
-             hardening.always.sql             36 mục tự-sửa hoặc phán-xét, chạy MỌI lần
+             008 … 048                        S1 — xem db/migrations/
+             hardening.always.sql             tự-sửa hoặc phán-xét, chạy MỌI lần
 ```
 
-**Bảy gói + hai công cụ:**
+~~**Bảy gói + hai công cụ:**~~ **[S1.28] 13 gói + 5 công cụ** — cũng suy từ `git ls-files`:
 
 | Gói | Vai trò |
 |---|---|
@@ -78,12 +82,25 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 | `packages/outbox` | Transactional outbox; runner chạy **trong** ngữ cảnh tenant dưới `app_api`, **không** dùng role vượt RLS |
 | `packages/db` | Bộ chạy migration (advisory lock + checksum), pool |
 | `packages/test-support` | Hạ tầng kiểm thử (Testcontainers). **Chỉ devDependencies** |
+| `packages/supplier` | Sổ nhà cung cấp (S1.1) |
+| `packages/invitation` | Lời mời + OTP cho khách (S1.3) |
+| `packages/rfq` | Máy trạng thái RFQ (S1.2) |
+| `packages/sealed-envelope` | Phong bì niêm phong — **hai cửa**, chỉ `index.ts` an toàn cho mọi service; cửa `unseal` tách riêng |
+| `packages/bidding` | Nộp báo giá vào phong bì niêm phong |
+| `packages/unseal` | Cổng chính sách D1 — `assertUnsealAllowed` chỉ có MỘT hình dạng ra ngoài, và nó là hình dạng NÉM |
 | `tools/inv-matrix` | Bộ sinh ma trận bất biến + cổng CI |
 | `tools/bench-keyprovider` | Đo hiệu năng bọc/mở khoá |
+| `tools/bench-kms` | Đếm **số lời gọi mạng tới KMS** trong một lượt mở thầu — trục 3 của ADR-009. Mô phỏng, **không** ở CI |
+| `tools/do-webcrypto` | Trang đo `crypto.subtle` trong webview thật, kèm server đột biến để chính trang đo bị thử |
+| `tools/neo-so-kiem-toan` | Ký mốc neo ngoài cho sổ kiểm toán (ADR-026) |
 
-**Hàng rào kiến trúc:** `dependency-cruiser` với bốn họ quy tắc (`g1-` crypto-keys, `g2-`
-identity, `g3-` identity-không-có-năng-lực-mật-mã, `g4-` outbox), tất cả theo khuôn **"mặc định
-đóng"** — một module MỚI trong thư mục nhạy cảm đã bị chặn sẵn, không ai phải nhớ thêm quy tắc.
+**Hàng rào kiến trúc:** `dependency-cruiser`, tất cả theo khuôn **"mặc định đóng"** — một module
+MỚI trong thư mục nhạy cảm đã bị chặn sẵn, không ai phải nhớ thêm quy tắc.
+~~với bốn họ quy tắc (`g1-` crypto-keys, `g2-` identity, `g3-`
+identity-không-có-năng-lực-mật-mã, `g4-` outbox)~~ **[S1.28] con số ấy đã bị GỠ khỏi đây thay vì
+được cập nhật, và đó là một quyết định:** `[INV-H16]` đã cưỡng chế *mỗi gói trong `packages/` có
+MỘT họ quy tắc biên giới*, nên số họ là **hệ quả của số gói** — chép nó vào đây là dựng thêm một
+bản sao thứ hai để trôi. Theo ADR-029 ⑴, một con số không có lớp suy ra thì không được viết.
 
 ---
 
@@ -237,7 +254,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ ~~**[S1.25] 67 khoản, trong đó 13 còn mở**~~ ~~**[S1.26] 69 khoản, trong đó 13 còn mở**~~ **[S1.27] 71 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ ~~**[S1.25] 67 khoản, trong đó 13 còn mở**~~ ~~**[S1.26] 69 khoản, trong đó 13 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ **[S1.28] 72 khoản, trong đó 14 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
@@ -384,16 +401,16 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 
 | Tài liệu | Vì sao |
 |---|---|
-| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, ~~22 khoản nợ~~ **[S1.21] 61 khoản nợ, 14 còn mở** |
+| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, ~~22 khoản nợ~~ ~~**[S1.21] 61 khoản nợ, 14 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ **[S1.28] 72 khoản, trong đó 14 còn mở** |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về con người và quy trình mà S1 đang cư xử như thật** — mỗi dòng một địa chỉ trong kho và một câu hỏi cho người mua thật. Không thay pilot; nó hạ chi phí buổi đầu |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |
-| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ **Mười tám ADR**: 001–010 và 012–018 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất. **016/017/018** là ba quyết định của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã: cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, chính sách tính `requires_dual_approval`, pepper cho băm đích |
-| `docs/TEST-PLAN.md` | **Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào) — nguồn sự thật duy nhất |
+| `docs/DECISIONS.md` | ~~**Chín ADR** — 001–008 *Đã chấp nhận*, **009 (KMS) *Đang mở*, chặn S1.6**~~ → ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ **[S1.28] 34 ADR**: 001–010 và 012–018 *Đã chấp nhận* (009 chốt **AWS KMS**); **011** ***Đang mở***, chặn S1.4/S1.5. **013/014/015** là ba quyết định của ba hạng mục sớm nhất: phạm vi sổ NCC, nơi cưỡng chế máy trạng thái RFQ, kênh OTP + nền giới hạn tần suất. **016/017/018** là ba quyết định của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã: cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, chính sách tính `requires_dual_approval`, pepper cho băm đích |
+| `docs/TEST-PLAN.md` | ~~**Sổ đăng ký 47 bất biến** (34 nghiệp vụ + 13 hàng rào)~~ **[S1.28] Sổ đăng ký 55 bất biến** (34 nghiệp vụ + 21 hàng rào) — nguồn sự thật duy nhất |
 | `evidence/INV-matrix.md` | Ma trận bất biến; **§3 = danh sách việc của S1**, §4 = phạm vi hẹp |
 | `evidence/security-reviews.md` | Dấu vết review an ninh, kèm giới hạn của chính nó |
-| `db/migrations/hardening.always.sql` | 36 mục cưỡng chế chạy ở **mọi** lần `migrate()` |
-| `docs/superpowers/specs/2026-08-26-…-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |
+| `db/migrations/hardening.always.sql` | ~~36 mục~~ **[S1.28] các mục** cưỡng chế chạy ở **mọi** lần `migrate()` — số mục không có lớp nào suy ra được, nên nó không được viết ra đây |
+| `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md` | Đặc tả thiết kế S0+S1 đã duyệt |
 
 ---
 
