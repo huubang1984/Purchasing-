@@ -175,12 +175,33 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  * hàng"* không phải một phép thử), và hôm nay hình dạng đứng thay: cả hai đều không có `RETURN`.
  */
 /**
- * Hàm trigger UPDATE/DELETE (mọi hình thức) **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
+ * Hàm trigger GHI (INSERT/UPDATE/DELETE, mọi hình thức) **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
  * ĐIỀU KIỆN (máy trạng thái, kiểm quyền, bất biến cột), nên bảng mang chúng vẫn sửa/xoá được ở
  * những đường hợp lệ. Đo tại `bebeb41`.
  */
 const HAM_KHONG_PHAI_CANH = [
   "public.kiem_danh_tinh_theo_phien",
+  // [S1.32] Mười chín hàm chỉ gắn INSERT vào tập rộng khi tập ấy mở ra bit 4. Chúng không thể là hàm
+  // canh chỉ-ghi-thêm (không gắn UPDATE/DELETE); khai ở đây để một hàm INSERT mới không đi vào lặng lẽ.
+  "public.bid_dat_so_phien_ban",
+  "public.bid_kiem_han_nop",
+  "public.bid_kiem_phien_khach",
+  "public.bid_phai_co_bien_nhan",
+  "public.chinh_sach_phien_ban_tang_dan",
+  "public.chot_moc_neo",
+  "public.guest_session_kiem_danh_tinh",
+  "public.noi_chuoi_kiem_toan",
+  "public.otp_kiem_kenh_khac_link",
+  "public.rfq_khoa_chi_sinh_luc_mo",
+  "public.rfq_khoa_phai_di_kem_lan_mo",
+  "public.rfq_kiem_nguoi_duyet",
+  "public.rfq_kiem_nguoi_tao",
+  "public.sessions_kiem_mfa_khi_tao",
+  "public.sessions_kiem_totp_gan_day",
+  "public.unseal_canh_bao_break_glass",
+  "public.unseal_kiem_nguoi_duyet",
+  "public.unseal_kiem_rfq_da_dong",
+  "public.unseal_kiem_yeu_cau_khi_ghi_ban_ro",
   // [S1.31] Năm hàm AFTER-ROW UPDATE vào tập rộng khi tập ấy thôi khoá theo hình thức BEFORE-ROW.
   "public.kiem_tra_ma_tran_quyen",
   "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
@@ -216,6 +237,9 @@ const HAM_KHONG_PHAI_CANH = [
  * kiện cũng làm bảng chỉ-ghi-thêm (đo: `BEFORE UPDATE OR DELETE FOR EACH STATEMENT` với thân `RAISE`
  * ⇒ `migrate()` OK, `TRUNCATE` OK, bảng ngoài `VI_TU_BANG_CHI_GHI_THEM`). Vế `19`/`11` cũ của tập
  * rộng đã loại chúng — đúng cái lỗ ADR-035 §2⑴ cấm: chọn ứng viên bằng một hình dạng.
+ * [S1.32, lượt soi 22] Và cả INSERT (bit 4): một trigger BEFORE INSERT ROW trả `NULL` nuốt hàng
+ * trong im lặng (`INSERT 0 0`, `RETURNING` rỗng) — cơ chế 15 của ADR-036. Tổng điều tra nay buộc
+ * phân loại cả 27 hàm trigger INSERT; nhân chứng hành vi cho INSERT là khoản nợ 77.
  */
 const TU_TAP_RONG = `FROM pg_trigger t
          JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
@@ -228,12 +252,14 @@ const TU_TAP_RONG = `FROM pg_trigger t
           AND l.lanname OPERATOR(pg_catalog.=) 'plpgsql'
           AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
           AND (((t.tgtype OPERATOR(pg_catalog.&) 16::pg_catalog.int2) OPERATOR(pg_catalog.=) 16)
-            OR ((t.tgtype OPERATOR(pg_catalog.&) 8::pg_catalog.int2) OPERATOR(pg_catalog.=) 8))`;
+            OR ((t.tgtype OPERATOR(pg_catalog.&) 8::pg_catalog.int2) OPERATOR(pg_catalog.=) 8)
+            OR ((t.tgtype OPERATOR(pg_catalog.&) 4::pg_catalog.int2) OPERATOR(pg_catalog.=) 4))`;
 
 /** TẬP RỘNG theo HÀM — đơn vị của tổng điều tra. */
 const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ten,
               (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
               pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat,
+              pg_catalog.bool_and(t.tgenabled OPERATOR(pg_catalog.=) 'A') AS luon_bat,
               pg_catalog.bool_and((t.tgtype OPERATOR(pg_catalog.&) 3::pg_catalog.int2) OPERATOR(pg_catalog.=) 3) AS chi_truoc_hang
          ${TU_TAP_RONG}
         GROUP BY 1, 2
@@ -1069,7 +1095,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   }, 180000);
 
   it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger BEFORE-ROW UPD/DEL phải nằm trong ĐÚNG MỘT danh sách", async () => {
-    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean }>(CAU_TAP_RONG);
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean; luon_bat: boolean }>(CAU_TAP_RONG);
     const that = rows.map((r) => r.ten);
     const canhDayDu = HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`);
 
@@ -1093,7 +1119,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     const daKhai = new Set([...canhDayDu, ...HAM_KHONG_PHAI_CANH]);
     expect(
       that.filter((t) => !daKhai.has(t)),
-      "Một hàm trigger UPDATE/DELETE (bất kể BEFORE/AFTER, hàng/câu lệnh) vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
+      "Một hàm trigger GHI (INSERT/UPDATE/DELETE, bất kể BEFORE/AFTER, hàng/câu lệnh) vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
         "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Nếu CÓ: thêm " +
         "tên vào HAM_CANH_CHI_GHI_THEM VÀ vào vị từ trong hardening.always.sql (cổng ở test đầu giữ " +
         "hai bản khớp nhau), kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT — bảng ấy sẽ được H19 canh " +
@@ -1113,6 +1139,24 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       rows.filter((r) => canhDayDu.includes(r.ten) && r.co_trigger_tat).map((r) => r.ten),
       "Một trigger của hàm canh đang bị TẮT — bảng ấy không còn chỉ-ghi-thêm.",
     ).toEqual([]);
+    // [S1.32, ADR-036 ⑹] Chặt hơn 'không TẮT': trigger canh phải ENABLE ALWAYS. `tgenabled = 'O'`
+    // (mặc định) KHÔNG chạy khi `session_replication_role = replica` — một phiên đặt GUC ấy đi qua
+    // mọi hàm canh 'O' mà không lỗi. 047 đã ghim ALWAYS cho chốt TRUNCATE; đây là vế cho UPDATE/DELETE.
+    expect(
+      rows.filter((r) => canhDayDu.includes(r.ten) && !r.luon_bat).map((r) => r.ten),
+      "Một trigger của hàm canh không ở ENABLE ALWAYS — `session_replication_role = replica` tắt nó.",
+    ).toEqual([]);
+    // Đối chứng dương, hoàn tác: hạ một trigger canh về ENABLE thường ('O') ⇒ vế trên phải đỏ.
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("ALTER TABLE public.audit_events ENABLE TRIGGER audit_events_chan_update");
+      const { rows: sau } = await c.query<{ ten: string; luon_bat: boolean }>(CAU_TAP_RONG);
+      expect(sau.find((r) => r.ten === "public.chan_sua_xoa")?.luon_bat).toBe(false);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
   }, 180000);
 
   it("[sổ nợ 60] mâu thuẫn MỘT chiều: thân không có RETURN thì KHÔNG được khai là KHÔNG-CANH", async () => {
@@ -1171,6 +1215,53 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         .toContain("zz_so_moi");
     } finally {
       await db.pool.query(`DROP TABLE public.zz_so_moi; DROP FUNCTION public.${ten}();`);
+    }
+  }, 180000);
+
+  it("[S1.32 / ADR-036] TỔNG ĐIỀU TRA loại quan hệ: mọi quan hệ nhận DML của dự án là BẢNG THƯỜNG, trừ khi khai — view/matview/bảng ngoài/bảng phân mảnh là đường ghi khác mà H19 không nhìn", async () => {
+    // Đích của INSERT/UPDATE/DELETE là r (bảng), p (bảng phân mảnh), v (view), m (matview), f (bảng
+    // ngoài). Chỉ 'r' đi qua đủ các lớp của H19 hôm nay: view nhận trigger INSTEAD OF (trả NULL là
+    // nuốt hàng), bảng ngoài ghi ra một cụm khác, phân mảnh cần chốt trên từng lá (đã đo ở test lá).
+    const LOAI_DA_KHAI: readonly string[] = [];
+    const cau = `SELECT n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname AS ten, c.relkind::pg_catalog.text AS loai
+                   FROM pg_class c JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+                  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                    AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'
+                    AND c.relkind IN ('r', 'p', 'v', 'm', 'f') ORDER BY 1`;
+    const { rows } = await db.pool.query<{ ten: string; loai: string }>(cau);
+    expect(rows.length, "câu truy vấn đang mù").toBeGreaterThan(30);
+    const khac = rows.filter((r) => r.loai !== "r").map((r) => `${r.ten} (${r.loai})`);
+    expect(khac.filter((t) => !LOAI_DA_KHAI.includes(t)), "Một quan hệ nhận DML không phải bảng thường vừa ra đời — khai kèm lý do, hoặc đưa nó qua đủ các lớp của H19.").toEqual([]);
+    expect(LOAI_DA_KHAI.filter((t) => !khac.includes(t)), "khai một quan hệ không còn có").toEqual([]);
+    // Đối chứng chống rỗng ruột: một view tạm phải được THẤY.
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("CREATE VIEW public.zz_v AS SELECT 1 AS mot");
+      const { rows: sau } = await c.query<{ ten: string; loai: string }>(cau);
+      expect(sau.some((r) => r.ten === "public.zz_v" && r.loai === "v")).toBe(true);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[S1.32 / ADR-036 ⑮] ĐO: trigger BEFORE INSERT ROW trả NULL nuốt INSERT im lặng — tập rộng mới THẤY hàm ấy, và tổng điều tra đòi phân loại", async () => {
+    const ten = "zz_nuot_chen";
+    await db.pool.query(`
+      CREATE TABLE public.zz_chen (id int PRIMARY KEY, ghi text);
+      CREATE FUNCTION public.${ten}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER zz_chen_nuot BEFORE INSERT ON public.zz_chen FOR EACH ROW EXECUTE FUNCTION public.${ten}();
+    `);
+    try {
+      const chen = await db.pool.query("INSERT INTO public.zz_chen VALUES (1, 'a') RETURNING id");
+      expect([chen.rowCount, chen.rows.length], "INSERT 0 0, RETURNING rỗng, KHÔNG lỗi").toEqual([0, 0]);
+      const { rows } = await db.pool.query<{ ten: string }>(CAU_TAP_RONG);
+      expect(rows.some((r) => r.ten === `public.${ten}`), "tập rộng phải thấy hàm trigger INSERT").toBe(true);
+      const daKhai = new Set([...HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`), ...HAM_KHONG_PHAI_CANH]);
+      expect(daKhai.has(`public.${ten}`), "chưa khai ⇒ tổng điều tra đỏ").toBe(false);
+    } finally {
+      await db.pool.query(`DROP TABLE IF EXISTS public.zz_chen; DROP FUNCTION IF EXISTS public.${ten}();`);
     }
   }, 180000);
 
