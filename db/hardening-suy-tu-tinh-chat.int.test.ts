@@ -1,8 +1,10 @@
 import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type pg from "pg";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 const HARDENING = readFileSync(
@@ -158,13 +160,19 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  * không thể từ chối có điều kiện ⇒ PHẢI là hàm canh; khai KHÔNG-CANH ⇒ ĐỎ. Hướng ngược (khai
  * CANH nhưng có `RETURN`) là HỢP LỆ — đó chính là ca khoản nợ 60 mô tả.
  *
- * **Thứ vẫn KHÔNG có lớp, nói ra thay vì để người đọc tự phát hiện:** một hàm canh có `RETURN`
+ * ~~**Thứ vẫn KHÔNG có lớp, nói ra thay vì để người đọc tự phát hiện:** một hàm canh có `RETURN`
  * bị khai SAI vào KHÔNG-CANH thì không phép kiểm văn bản nào bắt được — chỉ một phép đo HÀNH VI
- * (thử UPDATE/DELETE trên bảng của từng hàm) mới phân biệt được, và đó là khoản nợ 74.
+ * (thử UPDATE/DELETE trên bảng của từng hàm) mới phân biệt được, và đó là khoản nợ 74.~~
+ * **[S1.30] Phép đo hành vi ấy nay CÓ** — xem khối `NHÂN CHỨNG HÀNH VI` dưới đây: mỗi cặp (hàm,
+ * sự kiện) khai KHÔNG-CANH phải để một hàng thật đi qua, đo bằng `pg_stat_user_functions`.
  *
  * **Điều khối này KHÔNG làm:** nó không phán xét một phân loại là ĐÚNG. Hai danh sách được sinh
  * từ trạng thái đo được tại `bebeb41` rồi đóng băng. Nó chặn hàm thứ 24 đi vào lặng lẽ; nó không
  * kiểm toán 23 hàm có sẵn.
+ * **[S1.30] Nửa KHÔNG-CANH của câu trên nay ĐƯỢC kiểm toán:** khối NHÂN CHỨNG HÀNH VI đòi mỗi cặp
+ * (hàm, sự kiện) khai KHÔNG-CANH để một hàng thật đi qua — 21 hàm ấy không còn là lời khai đóng
+ * băng. Hai hàm khai CANH thì vẫn không kiểm toán được bằng hành vi (chứng minh *"từ chối MỌI
+ * hàng"* không phải một phép thử), và hôm nay hình dạng đứng thay: cả hai đều không có `RETURN`.
  */
 /**
  * Hàm trigger BEFORE-ROW UPDATE/DELETE **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
@@ -195,11 +203,8 @@ const HAM_KHONG_PHAI_CANH = [
   "public.unseal_kiem_du_phe_duyet",
 ];
 
-/** TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên. */
-const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ten,
-              (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
-              pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat
-         FROM pg_trigger t
+/** Nguồn của TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên. */
+const TU_TAP_RONG = `FROM pg_trigger t
          JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
          JOIN pg_namespace np ON np.oid OPERATOR(pg_catalog.=) p.pronamespace
          JOIN pg_class c ON c.oid OPERATOR(pg_catalog.=) t.tgrelid
@@ -210,9 +215,430 @@ const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg
           AND l.lanname OPERATOR(pg_catalog.=) 'plpgsql'
           AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
           AND (((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19)
-            OR ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11))
+            OR ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11))`;
+
+/** TẬP RỘNG theo HÀM — đơn vị của tổng điều tra. */
+const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ten,
+              (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
+              pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat
+         ${TU_TAP_RONG}
         GROUP BY 1, 2
         ORDER BY 1`;
+
+/**
+ * [khoản nợ 74] TẬP RỘNG theo (HÀM, BẢNG, SỰ KIỆN) — đơn vị của nhân chứng hành vi: một câu
+ * UPDATE/DELETE chỉ ghi công được cho hàm CÓ trigger ở đúng bảng và đúng sự kiện của nó.
+ */
+const CAU_TAP_RONG_THEO_BANG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ham,
+              (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname) AS bang,
+              ((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) AS upd,
+              ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) AS del,
+              (p.prosrc OPERATOR(pg_catalog.~*) 'la_duong_ung_dung|current_user|session_user|pg_has_role|rolsuper') AS nhay_vai
+         ${TU_TAP_RONG}`;
+
+/**
+ * [khoản nợ 74] NHÂN CHỨNG HÀNH VI — ĐÓNG CHIỀU NÓI DỐI CỦA TỔNG ĐIỀU TRA.
+ *
+ * Tổng điều tra ở trên bắt được chiều IM LẶNG (hàm mới chưa phân loại ⇒ đỏ) và một nửa chiều
+ * NÓI DỐI (thân không `RETURN` mà khai KHÔNG-CANH ⇒ đỏ). Nửa còn lại — một hàm canh CÓ `RETURN`
+ * (kiểu `IF … RAISE … END IF; RETURN NULL;`) bị khai KHÔNG-CANH — không phép kiểm văn bản nào
+ * bắt được, vì hai lời khai văn bản không mâu thuẫn nhau. Khoản nợ 74 nói đúng: chỉ một phép đo
+ * HÀNH VI mới phân biệt được, và giá của nó là một hàng hợp lệ trên mỗi bảng.
+ *
+ * PHÉP ĐO, và vì sao nó không phải một lời khai thứ ba:
+ *
+ *   ⑴ `track_functions = 'pl'` trên MỘT kết nối, rồi đọc `pg_stat_xact_user_functions` — bộ đếm
+ *      CỤC BỘ của chính backend cho giao dịch hiện tại, đọc được ngay, không cần chờ đẩy ra vùng
+ *      thống kê chung. PostgreSQL chỉ cộng `calls` khi hàm TRẢ VỀ BÌNH THƯỜNG: `ExecCallTriggerFunc`
+ *      gọi `pgstat_end_function_call` SAU khối `PG_TRY`, nên một `RAISE` nhảy qua nó. Đã đo ở test
+ *      đột biến dưới đây: hàm canh ném ⇒ `calls` đứng yên. Vậy "calls tăng" = "hàm này có một
+ *      đường trả về VÀ đường ấy vừa được đi trên một hàng thật".
+ *   ⑵ Mỗi nhân chứng là ĐÚNG MỘT câu UPDATE/DELETE, kẹp giữa hai lần đọc bộ đếm trong CÙNG giao
+ *      dịch — bước chuẩn bị (chèn vật liệu khoá, đổi vai) đứng TRƯỚC lần đọc đầu, nên lời gọi qua
+ *      INSERT trong khối không bao giờ được gán cho câu UPDATE [lượt soi 20, LOW-1].
+ *   ⑶ Ghi công theo BỘ BA (hàm, bảng, sự kiện), không theo hàm: thân một hàm trigger đọc
+ *      `TG_TABLE_NAME`/`TG_ARGV`/`TG_RELID`, nên nó có thể canh vô điều kiện ở bảng này mà có điều
+ *      kiện ở bảng kia — `thu_hoi_don_dieu` gắn 5 bảng với `TG_ARGV` khác nhau là ca thật trong
+ *      kho [lượt soi 20, HIGH-1]. Một câu ghi công cho bộ ba khi ⒜ hàm có trigger BEFORE-ROW ở
+ *      đúng (bảng, sự kiện) theo TẬP RỘNG, ⒝ `calls` tăng trong lúc câu chạy, ⒞ câu chạm ít nhất
+ *      MỘT hàng — vế ⒞ chặn kiểu canh-bằng-im-lặng (`RETURN NULL` bỏ hàng: hàm trả về nhưng không
+ *      hàng nào đổi).
+ *   ⑷ Vai được ĐO chứ không được khai: mỗi nhân chứng ghi lại `current_user` và `rolsuper` của nó.
+ *      Hàm mà thân đọc vai đang chạy (`la_duong_ung_dung`, `current_user`, `pg_has_role`, …) ngắn
+ *      mạch dưới chủ sở hữu — `IF la_duong_ung_dung('app_api') THEN RAISE; END IF; RETURN NEW;` là
+ *      một hàm canh với toàn bộ lưu lượng sản xuất mà chủ sở hữu đi qua tự do — nên nhân chứng của
+ *      nó phải đến từ một vai KHÔNG superuser [lượt soi 20, HIGH-2]. Vế văn bản `nhay_vai` chỉ chọn
+ *      ĐỘ MỊN của phép đo, không phân loại ai.
+ *   ⑸ Mỗi bộ ba mà tập rộng THẤY cho một hàm khai KHÔNG-CANH phải được ghi công hợp lệ sau kịch
+ *      bản — hoặc được khai là CANH MỘT SỰ KIỆN và ĐO được là NÉM từ chính hàm ấy. Một hàm canh
+ *      khai sai thì không câu UPDATE/DELETE nào ghi công được cho nó — nó ném ở mọi hàng — nên lời
+ *      khai sai ĐỎ, và cách duy nhất làm xanh là đổi lời khai. Xoá nhân chứng cũng đỏ: bộ ba ấy thôi
+ *      được ghi công.
+ *
+ * Kịch bản dựng bằng SQL viết tay dưới chủ sở hữu (đúng cách `tests/adversarial` dựng fixture);
+ * nhân chứng của hàm nhạy vai chạy dưới `SET LOCAL ROLE app_api` trong tenant.
+ *
+ * **Thứ phép đo này ĐÃ LỘ RA trước khi nó được viết xong:** `rfq_key_material_bat_bien` từ chối
+ * DELETE VÔ ĐIỀU KIỆN (`IF TG_OP = 'DELETE' THEN RAISE`) và cho UPDATE có điều kiện. Hai danh
+ * sách của tổng điều tra không tả được nó — xem `HAM_CANH_MOT_SU_KIEN`.
+ *
+ * **Giới hạn, nói ra:** ⒜ ghi công theo (hàm, bảng), không theo TRIGGER — `kiem_danh_tinh_theo_phien`
+ * gắn 4 trigger BEFORE-ROW UPDATE trên `rfq_packages` với `WHEN` khác nhau, một lần đi qua là đủ
+ * cho cả bốn, vì thân hàm là một; ⒝ một hàm gọi lồng từ trigger AFTER của cùng bảng, cùng sự kiện,
+ * cùng câu, vẫn được ghi công — kho hôm nay không có ca ấy, và nó đòi hàm ấy CŨNG có trigger
+ * BEFORE-ROW ở đó; ⒞ phép đo nói "có một đường trả về", không nói "mọi điều kiện của hàm đều
+ * đúng"; ⒟ kịch bản là một lời khai về ĐƯỜNG HỢP LỆ của từng bảng — nó không thể tự sinh, nhưng
+ * nó không thể nói dối: một câu không đi qua thì ném, một câu 0 hàng thì không ghi công; ⒠ tập
+ * rộng khoá theo trigger BEFORE cấp HÀNG — một trigger cấp CÂU LỆNH hay AFTER-ROW ném vô điều
+ * kiện cũng làm bảng chỉ-ghi-thêm mà không vào tổng điều tra lẫn nhân chứng: khoản nợ 75.
+ */
+type SuKien = "UPDATE" | "DELETE";
+
+/**
+ * Hàm canh MỘT SỰ KIỆN: từ chối vô điều kiện ở sự kiện nêu tên, có điều kiện ở sự kiện kia.
+ * Không phải hàm canh chỉ-ghi-thêm (bảng vẫn sửa được) nên vẫn đứng ở `HAM_KHONG_PHAI_CANH`;
+ * nhân chứng của nó chỉ có được ở sự kiện kia, và sự kiện nêu tên phải được ĐO là NÉM từ chính
+ * hàm ấy (`where` của lỗi PostgreSQL) — không được im lặng bỏ qua. Mỗi tên phải có trong
+ * `HAM_KHONG_PHAI_CANH` và mang trigger ở đúng sự kiện ấy trong tập rộng; sự kiện ấy mà có một
+ * câu đi qua thì lời khai này là sai và ĐỎ.
+ */
+const HAM_CANH_MOT_SU_KIEN: Readonly<Record<string, SuKien>> = {
+  "public.rfq_key_material_bat_bien": "DELETE",
+};
+
+interface HangTapRong {
+  readonly ham: string;
+  readonly bang: string;
+  readonly upd: boolean;
+  readonly del: boolean;
+  /** Thân hàm đọc vai đang chạy — nhân chứng của nó phải đến từ một vai KHÔNG superuser. */
+  readonly nhay_vai: boolean;
+}
+
+function coSuKien(r: HangTapRong, suKien: SuKien): boolean {
+  return suKien === "UPDATE" ? r.upd : r.del;
+}
+
+/** `calls` của từng hàm plpgsql TRONG GIAO DỊCH HIỆN TẠI — bộ đếm cục bộ của backend, không cần đẩy ra vùng chung. */
+async function demGoiTrongGiaoDich(c: pg.PoolClient): Promise<Map<string, number>> {
+  const { rows } = await c.query<{ ten: string; calls: string }>(
+    "SELECT (schemaname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) funcname) AS ten, " +
+      "calls::pg_catalog.text AS calls FROM pg_catalog.pg_stat_xact_user_functions",
+  );
+  return new Map(rows.map((r) => [r.ten, Number(r.calls)]));
+}
+
+/** Một nhân chứng: bước chuẩn bị (tuỳ chọn) rồi ĐÚNG MỘT câu UPDATE/DELETE, trong cùng giao dịch. */
+interface NhanChung {
+  readonly chuanBi?: (c: pg.PoolClient) => Promise<void>;
+  readonly cau: (c: pg.PoolClient) => Promise<number | null>;
+}
+
+/** Vai đã chạy câu nhân chứng — ĐO bằng `current_user`, không khai. */
+interface VaiDo {
+  readonly ten: string;
+  readonly sieu: boolean;
+}
+
+/** Sổ ghi công nhân chứng: "hàm/bảng/sự kiện" ⇒ các vai đã để một hàng thật đi qua. */
+class SoNhanChung {
+  readonly ghiCong = new Map<string, VaiDo[]>();
+  constructor(
+    private readonly c: pg.PoolClient,
+    private readonly tapRong: readonly HangTapRong[],
+  ) {}
+
+  /** Chạy một nhân chứng. Ném thì ném ra ngoài — kịch bản hỏng phải NHÌN THẤY. */
+  async chung(bang: string, suKien: SuKien, nc: NhanChung): Promise<void> {
+    const c = this.c;
+    await c.query("BEGIN");
+    try {
+      await nc.chuanBi?.(c);
+      const vai = (
+        await c.query<VaiDo>(
+          "SELECT r.rolname AS ten, r.rolsuper AS sieu FROM pg_catalog.pg_roles r " +
+            "WHERE r.rolname OPERATOR(pg_catalog.=) pg_catalog.current_user()",
+        )
+      ).rows[0];
+      if (!vai) throw new Error("không đọc được vai đang chạy");
+      const truoc = await demGoiTrongGiaoDich(c);
+      const soHang = (await nc.cau(c)) ?? 0;
+      const sau = await demGoiTrongGiaoDich(c);
+      await c.query("COMMIT");
+      if (soHang < 1) return; // ⒞ — không hàng nào đổi thì không ai được ghi công
+      for (const r of this.tapRong) {
+        if (r.bang !== bang || !coSuKien(r, suKien)) continue; // ⒜
+        if ((sau.get(r.ham) ?? 0) > (truoc.get(r.ham) ?? 0)) {
+          // ⒝
+          const khoa = `${r.ham}/${bang}/${suKien}`;
+          this.ghiCong.set(khoa, [...(this.ghiCong.get(khoa) ?? []), vai]);
+        }
+      }
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    }
+  }
+
+  /**
+   * Mọi bộ ba (hàm, bảng, sự kiện) tập rộng THẤY cho các hàm đã khai mà chưa có nhân chứng hợp lệ —
+   * với hàm nhạy vai, hợp lệ nghĩa là đến từ một vai KHÔNG superuser — trừ bộ ba đã khai canh-một-sự-kiện.
+   */
+  chuaCoNhanChung(daKhai: readonly string[]): string[] {
+    const thieu = new Set<string>();
+    for (const r of this.tapRong) {
+      if (!daKhai.includes(r.ham)) continue;
+      for (const suKien of ["UPDATE", "DELETE"] as const) {
+        if (!coSuKien(r, suKien) || HAM_CANH_MOT_SU_KIEN[r.ham] === suKien) continue;
+        const vai = this.ghiCong.get(`${r.ham}/${r.bang}/${suKien}`) ?? [];
+        const hopLe = r.nhay_vai ? vai.some((v) => !v.sieu) : vai.length > 0;
+        if (!hopLe) thieu.add(`${r.ham}/${r.bang}/${suKien}${r.nhay_vai ? " (cần vai không superuser)" : ""}`);
+      }
+    }
+    return [...thieu].sort();
+  }
+
+  /** Các bộ ba đã ghi công của một (hàm, sự kiện) — để khẳng định một hàm canh một sự kiện KHÔNG có nhân chứng ở sự kiện ấy. */
+  daGhiCong(ham: string, suKien: SuKien): string[] {
+    return [...this.ghiCong.keys()].filter((k) => k.startsWith(`${ham}/`) && k.endsWith(`/${suKien}`)).sort();
+  }
+}
+
+/** UPDATE/DELETE trần dưới vai của kết nối — trả số hàng chạm. */
+function cau(sql: string, thamSo: readonly unknown[]): NhanChung {
+  return { cau: async (c) => (await c.query(sql, [...thamSo])).rowCount };
+}
+
+/** Cùng câu ấy, có bước chuẩn bị trong cùng giao dịch — chuẩn bị đứng TRƯỚC lần đọc bộ đếm đầu. */
+function cauSauKhi(chuanBi: (c: pg.PoolClient) => Promise<void>, sql: string, thamSo: readonly unknown[]): NhanChung {
+  return { chuanBi, ...cau(sql, thamSo) };
+}
+
+/** Cùng câu ấy nhưng dưới `app_api` trong tenant — cho hàm đọc vai đang chạy. */
+function cauDuoiAppApi(orgId: string, sql: string, thamSo: readonly unknown[]): NhanChung {
+  return cauSauKhi(
+    async (c) => {
+      await c.query("SET LOCAL ROLE app_api");
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgId]);
+    },
+    sql,
+    thamSo,
+  );
+}
+
+/** Lỗi PostgreSQL kèm `where` — để khẳng định lời từ chối đến từ ĐÚNG hàm, không từ một ràng buộc khác. */
+async function loiCua(
+  chay: () => Promise<unknown>,
+): Promise<{ readonly message: string; readonly where: string } | null> {
+  try {
+    await chay();
+    return null;
+  } catch (e) {
+    const err = e as Error & { where?: string };
+    return { message: err.message, where: err.where ?? "" };
+  }
+}
+
+/**
+ * Kịch bản nhân chứng: một đời RFQ (soạn → nộp → mở → gia hạn → mời → đóng → yêu cầu mở thầu →
+ * duyệt → điều phối → mở thầu), một RFQ thứ hai bị huỷ để thu hồi vật liệu khoá, một việc
+ * outbox, một liên kết đăng nhập, và một lượt đặt lại TOTP hai người. Mỗi `so.chung(...)` là một
+ * câu UPDATE/DELETE hợp lệ; các INSERT chỉ dựng trạng thái. Dữ liệu để lại là vô hại với các test
+ * còn lại của tệp — chúng đọc catalog, không đọc dữ liệu — và mọi khoá duy nhất mang một hậu tố
+ * ngẫu nhiên nên kịch bản chạy được nhiều lần trên cùng CSDL.
+ */
+async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonly orgId: string }> {
+  const hex = randomBytes(4).toString("hex");
+  const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+  const XA_HON = new Date(Date.now() + 14 * 24 * 3600 * 1000);
+  const id = async (sql: string, thamSo: readonly unknown[]): Promise<string> => {
+    const { rows } = await c.query<{ id: string }>(sql, [...thamSo]);
+    const v = rows[0]?.id;
+    if (!v) throw new Error(`không có id trả về: ${sql.slice(0, 60)}`);
+    return v;
+  };
+  const org = await id("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [`nc-${hex}`]);
+  const nguoi = async (vai: string): Promise<{ readonly u: string; readonly s: string }> => {
+    const u = await id(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $2) RETURNING id",
+      [org, `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}@vidu.vn`],
+    );
+    await c.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, u, vai]);
+    const s = await id(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [org, u, randomBytes(32)],
+    );
+    return { u, s };
+  };
+  const pm = await nguoi("PROCUREMENT_MANAGER");
+  const pm2 = await nguoi("PROCUREMENT_MANAGER");
+  const gd = await nguoi("DIRECTOR");
+  const nan = await nguoi("BUYER");
+  const cs = await id(
+    "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
+      "created_by, created_by_session_id) VALUES ($1, 1, '100000000.00', 'VND', $2, $3) RETURNING id",
+    [org, pm.u, pm.s],
+  );
+
+  const rfqSoan = async (): Promise<string> => {
+    const r = await id(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, " +
+        "created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
+      [org, MAI_SAU, pm.u, pm.s],
+    );
+    await c.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, " +
+        "created_by_session_id) VALUES ($1, $2, 1, 'Thep tam', '10.0000', 'tam', $3, $4), " +
+        "($1, $2, 2, 'Thep cuon', '5.0000', 'cuon', $3, $4)",
+      [org, r, pm.u, pm.s],
+    );
+    await c.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, " +
+        "created_by_session_id) VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
+      [org, r, cs, pm.u, pm.s],
+    );
+    return r;
+  };
+  /** Nộp duyệt rồi mở — 017 đòi vật liệu khoá sinh TRONG giao dịch mở, nên nó là bước chuẩn bị. */
+  const rfqMo = async (r: string): Promise<void> => {
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      cau("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [r, pm.u, pm.s]),
+    );
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      cauSauKhi(
+        async (cc) => {
+          await cc.query(
+            "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, " +
+              "key_version, created_by, created_by_session_id) VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+            [org, r, Buffer.alloc(91, 1), Buffer.alloc(80, 2), pm.u, pm.s],
+          );
+        },
+        "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+        [r, pm.u, pm.s],
+      ),
+    );
+  };
+
+  // ---- RFQ 1: trọn một đời --------------------------------------------------------------------
+  const rfq1 = await rfqSoan();
+  await so.chung("public.rfq_items", "UPDATE", cau("UPDATE rfq_items SET description = 'Thep tam day 10' WHERE rfq_id = $1 AND line_no = 1", [rfq1]));
+  await so.chung("public.rfq_items", "DELETE", cau("DELETE FROM rfq_items WHERE rfq_id = $1 AND line_no = 2", [rfq1]));
+  await so.chung("public.rfq_budgets", "UPDATE", cau("UPDATE rfq_budgets SET estimated_value = '2000000.00' WHERE rfq_id = $1", [rfq1]));
+  await so.chung("public.rfq_packages", "UPDATE", cau("UPDATE rfq_packages SET title = 'Mua thep tam day' WHERE id = $1", [rfq1]));
+  await rfqMo(rfq1);
+  await so.chung("public.rfq_packages", "UPDATE", cau("UPDATE rfq_packages SET deadline_at = $2 WHERE id = $1", [rfq1, XA_HON]));
+  // Mời một nhà cung cấp trong lúc RFQ đang OPEN.
+  const ncc = await id(
+    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+    [org, `NCC ${hex}`, pm.u, pm.s],
+  );
+  const lh = await id(
+    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+      "VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) RETURNING id",
+    [org, ncc, `${hex}@vidu.vn`, pm.u, pm.s],
+  );
+  const lm = await id(
+    "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+      "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+    [org, rfq1, ncc, lh, pm.u, pm.s],
+  );
+  const tk = await id(
+    "INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at, issued_by, issued_by_session_id) " +
+      "VALUES ($1, $2, $3, 'BID_SUBMISSION', now() + interval '1 day', $4, $5) RETURNING id",
+    [org, lm, randomBytes(32), pm.u, pm.s],
+  );
+  const tt = await id(
+    "INSERT INTO invitation_otp_challenges (org_id, invitation_id, token_id, contact_id, channel, code_hash, " +
+      "destination_hash, pepper_version, expires_at) VALUES ($1, $2, $3, $4, 'SMS', $5, $6, 'test-v1', now() + interval '1 day') RETURNING id",
+    [org, lm, tk, lh, randomBytes(32), randomBytes(32)],
+  );
+  await so.chung("public.invitation_otp_challenges", "UPDATE", cau("UPDATE invitation_otp_challenges SET failed_attempts = failed_attempts + 1 WHERE id = $1", [tt]));
+  // Khách xác minh xong: thách thức được tiêu thụ, một phiên khách ra đời rồi bị thu hồi, token bị thu hồi.
+  await c.query("UPDATE invitation_otp_challenges SET consumed_at = now() WHERE id = $1", [tt]);
+  const pk = await id(
+    "INSERT INTO guest_sessions (org_id, invitation_id, challenge_id, token_hash, verified_contact_id, verified_channel, expires_at) " +
+      "VALUES ($1, $2, $3, $4, $5, 'SMS', now() + interval '1 day') RETURNING id",
+    [org, lm, tt, randomBytes(32), lh],
+  );
+  await so.chung("public.guest_sessions", "UPDATE", cau("UPDATE guest_sessions SET revoked_at = now() WHERE id = $1", [pk]));
+  await so.chung("public.rfq_invitation_tokens", "UPDATE", cau("UPDATE rfq_invitation_tokens SET revoked_at = now() WHERE id = $1", [tk]));
+  await so.chung(
+    "public.rfq_invitations",
+    "UPDATE",
+    cau("UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1", [lm, pm.u, pm.s]),
+  );
+  await so.chung(
+    "public.rfq_packages",
+    "UPDATE",
+    cau("UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som de do', closed_by = $2, closed_by_session_id = $3 WHERE id = $1", [rfq1, pm.u, pm.s]),
+  );
+  const yc = await id(
+    "INSERT INTO unseal_requests (org_id, rfq_id, reason, requested_by, requested_by_session_id) VALUES ($1, $2, 'den gio mo thau', $3, $4) RETURNING id",
+    [org, rfq1, pm.u, pm.s],
+  );
+  await c.query(
+    "INSERT INTO unseal_approvals (org_id, unseal_request_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)",
+    [org, yc, gd.u, gd.s],
+  );
+  await so.chung("public.unseal_requests", "UPDATE", cau("UPDATE unseal_requests SET status = 'APPROVED', approved_at = now() WHERE id = $1", [yc]));
+  await so.chung(
+    "public.unseal_requests",
+    "UPDATE",
+    cau("UPDATE unseal_requests SET dispatched_at = now(), dispatched_by = $2, dispatched_by_session_id = $3 WHERE id = $1", [yc, pm.u, pm.s]),
+  );
+  await so.chung("public.rfq_packages", "UPDATE", cau("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfq1]));
+
+  // ---- RFQ 2: huỷ để thu hồi vật liệu khoá ---------------------------------------------------
+  const rfq2 = await rfqSoan();
+  await rfqMo(rfq2);
+  await so.chung(
+    "public.rfq_packages",
+    "UPDATE",
+    cau("UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = $2, cancelled_by_session_id = $3 WHERE id = $1", [rfq2, pm.u, pm.s]),
+  );
+  await so.chung(
+    "public.rfq_key_material",
+    "UPDATE",
+    cau("UPDATE rfq_key_material SET revoked_at = now(), revoked_reason = 'rfq da huy', revoked_by = $2, revoked_by_session_id = $3 WHERE rfq_id = $1", [rfq2, pm.u, pm.s]),
+  );
+
+  // ---- Outbox: việc gửi liên kết đăng nhập kết thúc thì payload bị xoá; liên kết được tiêu thụ ---
+  const viec = await id("INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1, 'LOGIN_LINK_SEND', $2::jsonb) RETURNING id", [org, JSON.stringify({ email: "x@vidu.vn" })]);
+  await so.chung("public.outbox_jobs", "UPDATE", cau("UPDATE outbox_jobs SET status = 'DONE', finished_at = now() WHERE id = $1", [viec]));
+  const lk = await id(
+    "INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at) VALUES ($1, $2, $3, 'LOGIN', now() + interval '1 hour') RETURNING id",
+    [org, nan.u, randomBytes(32)],
+  );
+  await so.chung("public.user_login_tokens", "UPDATE", cau("UPDATE user_login_tokens SET consumed_at = now() WHERE id = $1", [lk]));
+
+  // ---- TOTP: ghi danh lại khi CHƯA xác nhận (031), rồi đặt lại hai người và xoá (040) ----------
+  await c.query(
+    "INSERT INTO mfa_credentials (org_id, user_id, kind, secret_wrapped, secret_key_version) VALUES ($1, $2, 'TOTP', '\\x01', 'v1')",
+    [org, nan.u],
+  );
+  await so.chung(
+    "public.mfa_credentials",
+    "UPDATE",
+    cauDuoiAppApi(org, "UPDATE mfa_credentials SET secret_wrapped = '\\x02', secret_key_version = 'v2' WHERE org_id = $1 AND user_id = $2", [org, nan.u]),
+  );
+  const yd = await id(
+    "INSERT INTO mfa_reset_requests (org_id, user_id, reason, requested_by, requested_by_session_id) VALUES ($1, $2, 'mat dien thoai', $3, $4) RETURNING id",
+    [org, nan.u, pm.u, pm.s],
+  );
+  await so.chung(
+    "public.mfa_reset_requests",
+    "UPDATE",
+    cau("UPDATE mfa_reset_requests SET status = 'APPROVED', approved_by = $2, approved_by_session_id = $3, approved_at = now() WHERE id = $1", [yd, pm2.u, pm2.s]),
+  );
+  await so.chung("public.mfa_credentials", "DELETE", cauDuoiAppApi(org, "DELETE FROM mfa_credentials WHERE org_id = $1 AND user_id = $2", [org, nan.u]));
+
+  return { orgId: org };
+}
 
 describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ danh sách tên", () => {
   let db: TestDatabase;
@@ -592,7 +1018,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Nếu CÓ: thêm " +
         "tên vào HAM_CANH_CHI_GHI_THEM VÀ vào vị từ trong hardening.always.sql (cổng ở test đầu giữ " +
         "hai bản khớp nhau), kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT — bảng ấy sẽ được H19 canh " +
-        "kể cả khi thân hàm có RETURN. Nếu KHÔNG: thêm vào HAM_KHONG_PHAI_CANH.",
+        "kể cả khi thân hàm có RETURN. Nếu KHÔNG: thêm vào HAM_KHONG_PHAI_CANH VÀ một câu UPDATE/DELETE " +
+        "hợp lệ vào dungKichBan() — nhân chứng hành vi [khoản nợ 74] sẽ đòi nó.",
     ).toEqual([]);
 
     // Chiều ngược: một dòng khai THIU cũng là một lời khai sai, và nó là đối chứng dương thứ hai.
@@ -665,6 +1092,122 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         .toContain("zz_so_moi");
     } finally {
       await db.pool.query(`DROP TABLE public.zz_so_moi; DROP FUNCTION public.${ten}();`);
+    }
+  }, 180000);
+
+  it("[sổ nợ 74] NHÂN CHỨNG HÀNH VI: mỗi bộ ba (hàm, bảng, sự kiện) khai KHÔNG-CANH để một hàng THẬT đi qua — hàm đọc vai thì dưới vai không superuser; hàm canh MỘT sự kiện thì NÉM từ chính nó ở sự kiện ấy", async () => {
+    const c = await db.pool.connect();
+    try {
+      await c.query("SET track_functions = 'pl'");
+      const tapRong = (await c.query<HangTapRong>(CAU_TAP_RONG_THEO_BANG)).rows;
+      expect(tapRong.length, "tập rộng theo bảng RỖNG — câu truy vấn đang mù").toBeGreaterThan(0);
+      // Đối chứng cho vế vai: vị từ `nhay_vai` phải THẤY ít nhất một hàm đã khai — nếu không, đòi hỏi
+      // "vai không superuser" là một vế không ai chịu và xanh rỗng ruột.
+      expect(tapRong.some((r) => r.nhay_vai && HAM_KHONG_PHAI_CANH.includes(r.ham))).toBe(true);
+      const so = new SoNhanChung(c, tapRong);
+
+      // Đối chứng chống rỗng ruột: cơ chế đếm phải THẤY một lời gọi trước khi ai được ghi công.
+      // Nếu track_functions không có tác dụng, mọi bộ ba dưới đây đều thiếu nhân chứng — đỏ ồn ào.
+      const { orgId } = await dungKichBan(c, so);
+      expect(so.ghiCong.size, "kịch bản chạy trọn mà không hàm nào được ghi công — pg_stat_xact_user_functions đang mù").toBeGreaterThan(0);
+
+      // ⑸ mọi bộ ba mà tập rộng thấy cho một hàm khai KHÔNG-CANH phải có nhân chứng hợp lệ.
+      expect(
+        so.chuaCoNhanChung(HAM_KHONG_PHAI_CANH),
+        "Bộ ba (hàm, bảng, sự kiện) này được khai là KHÔNG phải hàm canh, nhưng không câu UPDATE/DELETE " +
+          "nào trong kịch bản đi qua được nó trên một hàng thật (với hàm đọc vai: dưới một vai không " +
+          "superuser). Hoặc nó LÀ hàm canh (khai sai — chuyển sang HAM_CANH_CHI_GHI_THEM, hay " +
+          "HAM_CANH_MOT_SU_KIEN nếu chỉ một sự kiện), hoặc kịch bản chưa có nhân chứng cho nó — thêm " +
+          "một câu hợp lệ vào dungKichBan().",
+      ).toEqual([]);
+
+      // Hàm canh một sự kiện: lời khai phải suy ra được từ tập rộng, sự kiện nêu tên KHÔNG được có
+      // nhân chứng, và phải ĐO được là NÉM từ chính hàm ấy trên một hàng thật của kịch bản.
+      for (const [ham, suKien] of Object.entries(HAM_CANH_MOT_SU_KIEN)) {
+        expect(HAM_KHONG_PHAI_CANH, `${ham} khai canh-một-sự-kiện nhưng không có trong HAM_KHONG_PHAI_CANH`).toContain(ham);
+        const bangCua = [...new Set(tapRong.filter((r) => r.ham === ham && coSuKien(r, suKien)).map((r) => r.bang))];
+        expect(bangCua, `${ham} không có trigger ${suKien} nào — dòng khai thiu`).not.toEqual([]);
+        expect(so.daGhiCong(ham, suKien), `${ham} được khai là từ chối ${suKien} vô điều kiện, nhưng một câu ${suKien} đã đi qua nó`).toEqual([]);
+        for (const bang of bangCua) {
+          const { rows } = await c.query<{ n: string }>(`SELECT pg_catalog.count(*)::pg_catalog.text AS n FROM ${bang} WHERE org_id = $1`, [orgId]);
+          expect(Number(rows[0]?.n), `kịch bản chưa để lại hàng nào ở ${bang} — không có gì để đo lời từ chối`).toBeGreaterThan(0);
+          const thu =
+            suKien === "DELETE"
+              ? `DELETE FROM ${bang} WHERE org_id = $1`
+              : `UPDATE ${bang} SET org_id = org_id WHERE org_id = $1`;
+          const loi = await loiCua(() => c.query(thu, [orgId]));
+          expect(loi, `${suKien} trên ${bang} phải bị từ chối`).not.toBeNull();
+          // `where` của PL/pgSQL là `format_procedure`: bỏ lược đồ khi nó nằm trên search_path.
+          expect(loi?.where, `lời từ chối phải đến từ ${ham}, không từ một ràng buộc khác`).toMatch(
+            new RegExp(`function (public\\.)?${ham.replace(/^public\./, "")}\\(`),
+          );
+        }
+      }
+    } finally {
+      // Huỷ client thay vì trả về pool: GUC phiên (`track_functions`) chết theo, và một RESET ném
+      // không thể giữ client lại làm `pool.end()` treo [lượt soi 20, MEDIUM-3].
+      c.release(true);
+    }
+  }, 180000);
+
+  it("[sổ nợ 74] ĐỘT BIẾN: một hàm canh có `RETURN` khai SAI là KHÔNG-CANH thì không nhân chứng nào ghi công được — vì PostgreSQL không đếm một lời gọi kết thúc bằng RAISE", async () => {
+    // Đúng ca lượt soi 19 dựng: hàm canh kiểu `IF … RAISE … END IF; RETURN NULL` khai vào
+    // KHÔNG-CANH ⇒ ba khẳng định của tổng điều tra đều xanh. Ở đây nó phải ĐỎ, ở đúng hai bộ ba của nó.
+    const ten = "zz_canh_khai_sai";
+    const bangZz = "public.zz_so_khai_sai";
+    const c = await db.pool.connect();
+    try {
+      await c.query(`
+        CREATE TABLE ${bangZz} (id int PRIMARY KEY, org_id uuid, ghi text);
+        CREATE FUNCTION public.${ten}() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            IF TG_OP IN ('UPDATE', 'DELETE') THEN RAISE EXCEPTION 'zz_so_khai_sai chi ghi them'; END IF;
+            RETURN NULL;
+          END $$;
+        CREATE TRIGGER zz_upd BEFORE UPDATE ON ${bangZz} FOR EACH ROW EXECUTE FUNCTION public.${ten}();
+        CREATE TRIGGER zz_del BEFORE DELETE ON ${bangZz} FOR EACH ROW EXECUTE FUNCTION public.${ten}();
+        INSERT INTO ${bangZz} VALUES (1, NULL, 'a');
+      `);
+      await c.query("SET track_functions = 'pl'");
+      const tapRong = (await c.query<HangTapRong>(CAU_TAP_RONG_THEO_BANG)).rows;
+      // So theo TẬP, không theo thứ tự: catalog không hứa thứ tự [lượt soi 20, MEDIUM-2].
+      expect(
+        tapRong.filter((r) => r.ham === `public.${ten}`).map((r) => `${r.bang}/${r.upd ? "UPDATE" : "DELETE"}`).sort(),
+      ).toEqual([`${bangZz}/DELETE`, `${bangZz}/UPDATE`]);
+      const so = new SoNhanChung(c, tapRong);
+      const khaiSai = [...HAM_KHONG_PHAI_CANH, `public.${ten}`];
+
+      // Mọi cách lấy nhân chứng cho nó đều NÉM từ chính nó…
+      for (const [suKien, sql] of [
+        ["UPDATE", `UPDATE ${bangZz} SET ghi = 'b' WHERE id = 1`],
+        ["DELETE", `DELETE FROM ${bangZz} WHERE id = 1`],
+      ] as const) {
+        const loi = await loiCua(() => so.chung(bangZz, suKien, cau(sql, [])));
+        expect(loi?.where ?? "", `${suKien} phải bị chính ${ten} từ chối`).toContain(ten);
+      }
+      // …và `calls` không nhúc nhích, đo TRONG cùng giao dịch quanh chính lời gọi ném — đây là vế
+      // chịu lực của cả phép đo: một hàm ném KHÔNG được đếm, nên "calls tăng" đồng nghĩa "có một
+      // đường trả về đã được đi".
+      await c.query("BEGIN");
+      try {
+        const truoc = (await demGoiTrongGiaoDich(c)).get(`public.${ten}`) ?? 0;
+        await c.query("SAVEPOINT thu");
+        const loi = await loiCua(() => c.query(`UPDATE ${bangZz} SET ghi = 'c' WHERE id = 1`));
+        expect(loi?.where ?? "").toContain(ten);
+        await c.query("ROLLBACK TO SAVEPOINT thu");
+        expect((await demGoiTrongGiaoDich(c)).get(`public.${ten}`) ?? 0).toBe(truoc);
+        expect(truoc).toBe(0);
+      } finally {
+        await c.query("ROLLBACK");
+      }
+
+      // Nên lời khai sai ĐỎ ở đúng hai bộ ba của nó, trong khi kịch bản thật vẫn ghi công đủ 21 hàm kia.
+      await dungKichBan(c, so);
+      expect(so.chuaCoNhanChung(khaiSai)).toEqual([`public.${ten}/${bangZz}/DELETE`, `public.${ten}/${bangZz}/UPDATE`]);
+      expect(so.chuaCoNhanChung(HAM_KHONG_PHAI_CANH)).toEqual([]);
+    } finally {
+      c.release(true);
+      await db.pool.query(`DROP TABLE IF EXISTS ${bangZz}; DROP FUNCTION IF EXISTS public.${ten}();`);
     }
   }, 180000);
 });
