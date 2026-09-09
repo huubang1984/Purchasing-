@@ -1275,3 +1275,42 @@ Thứ cứu nó là đọc lại P4 và thấy nó **chưa bao giờ quét văn 
 được **gỡ** khỏi tài liệu thay vì cập nhật, vì suy chúng đòi thêm mốc vào nguồn cho vừa bộ đếm.
 Đó là tuân thủ ADR-029 ⑴, không phải né tránh — khác hẳn việc gạch một con trỏ chết để làm im một
 cổng, thứ mà P4 đã có một mũi riêng để chặn.
+
+# §S1.29 — khoản nợ 12 và 60 (hai vị từ suy từ hình dạng)
+
+**Phạm vi:** `tests/architecture/nhan-bat-bien-cho-dat.test.ts` (mới),
+`db/hardening-suy-tu-tinh-chat.int.test.ts`, `packages/outbox/src/nhan-bat-bien.test.ts`,
+`docs/TEST-PLAN.md`, `docs/DECISIONS.md` ADR-035, so với `origin/master` = `bebeb41`.
+
+## Vòng này KHÔNG có lượt soi đối kháng độc lập — lần thứ hai liên tiếp
+
+§S1.25, §S1.26, §S1.27 mỗi vòng được **ba lăng kính độc lập** soi và đều bị bác ít nhất ba lời
+khai. §S1.28 và vòng này chỉ có **phép tự soi của người viết**. Ghi ra để không ai đọc gộp năm
+vòng thành một hàng — và để con số *"hai vòng liên tiếp không được soi"* là một thứ nhìn thấy
+được, không phải một chỗ quên.
+
+**Bề mặt an ninh:** 0 mã sản xuất. Thay đổi nằm ở hai tệp test, một tệp test được sửa chú thích,
+và ba tệp tài liệu. Không đụng lược đồ, không đụng đường xác thực, không thêm migration.
+
+## Điều phép tự soi tìm ra, và cả hai đều là lỗi THẬT
+
+| chỗ hở | đo được | bản vá |
+|---|---|---|
+| Lớp mới quét dòng `it(` vì tin vào mô tả *"bộ sinh gom theo tên test"* | Bộ sinh gom theo `fullName` = describe NỐI it. **22 cặp (mã, tệp) chỉ có ở dòng `describe(`** — gồm `H19`, `H20`, `H21`, chín mã hook | quét cả hai dạng dòng; sổ khai 114 → **137** cặp. Câu tự khai của lớp outbox đã gạch |
+| Mũi đột biến *"xoá lời khai ADR"* nhắm vào cụm khớp ĐẦU TIÊN | Sau S1.29 `Handoff.md` có hai cụm — một đã gạch, một sống. Mũi ấy **xanh oan**; `[INV-H20]` bắt được | nhắm vào lời khai còn sống, sau khi bỏ đoạn mã và vùng đã gạch |
+
+Cộng một chỗ thứ ba, nhẹ hơn: một `!` trần làm test **SẬP** với *"Cannot read properties of
+undefined"* dưới mũi *bộ quét mù* thay vì nói ra điều đang sai — hỏng ồn ào vẫn phải hỏng **thành
+một câu**.
+
+## Điều đáng mang sang vòng sau
+
+**MỘT VỊ TỪ NHẬN DIỆN CHỦ THỂ BẰNG HÌNH DẠNG THÌ VẪN LÀ MỘT DANH SÁCH TÊN, CHỈ VIẾT BẰNG REGEX.**
+ADR-028 đã dạy *"suy từ tính chất, đừng dùng danh sách tên"*; ADR-035 nói tiếp phần còn thiếu.
+Cách thoát không phải viết vị từ chặt hơn — mọi cách nới đều lại là một hình dạng — mà là **đổi
+thứ tự**: liệt kê rộng theo một tiêu chí không lách được, rồi buộc phân loại.
+
+**VÀ MỘT DANH SÁCH ĐÓNG BĂNG PHẢI TỰ NÓI RẰNG NÓ KHÔNG PHẢI MỘT LẦN KIỂM TOÁN.** 137 cặp và 23
+hàm được sinh từ trạng thái đo được, không phải từ một lượt xét từng cái. Chúng chặn cái thứ 138
+và cái thứ 24; chúng không phán xét những cái đã có. Viết câu ấy vào chính tệp là rẻ; để người
+đọc tự phát hiện thì đắt.
