@@ -3509,11 +3509,17 @@ lần đọc lại kỹ hơn.
 - **Danh sách sẽ dài ra.** 137 cặp hôm nay; nó lớn theo số test. Nếu về sau nó trở thành gánh nặng,
   đường đi KHÔNG phải bỏ cổng mà là đổi ĐƠN VỊ khai (khai theo thư mục thay vì theo tệp) — và đó
   lại là một quyết định nhìn thấy được.
-- **Tổng điều tra của khoản 60 khoá theo `pg_trigger`.** Một `CREATE RULE … DO INSTEAD NOTHING` cho
+- ~~**Tổng điều tra của khoản 60 khoá theo `pg_trigger`.** Một `CREATE RULE … DO INSTEAD NOTHING` cho
   cùng hiệu lực mà không tạo trigger nào, nên bảng ấy không vào tập ứng viên. Đó là khoản nợ **73**,
-  mở cố ý ở chính vòng đã đóng 60.
+  mở cố ý ở chính vòng đã đóng 60.~~ **[S1.31] 73 đóng bằng hai đường:** sản xuất phán xét rule trên
+  mọi bảng chỉ-ghi-thêm suy ra, và một tổng điều tra `pg_rewrite` với danh sách RỖNG — rỗng là một lời
+  khai. Bài học cho chính ADR: *tập ứng viên* phải được liệt kê theo TỪNG CƠ CHẾ có thể cho cùng hiệu
+  lực, không theo cơ chế người viết nghĩ tới đầu tiên — và RLS `USING (false)` là cơ chế thứ ba
+  (khoản nợ **76**).
 - **[S1.30] Nhân chứng hành vi đòi một KỊCH BẢN viết tay** — 24 câu UPDATE/DELETE trên 13 bảng. Một
   hàm trigger mới ở một bảng mới là thêm một câu vào kịch bản, và đó là cố ý: lời khai KHÔNG-CANH
-  nay có giá là một hàng thật, không còn là một dòng trong danh sách. Và tập ứng viên của cả tổng
+  nay có giá là một hàng thật, không còn là một dòng trong danh sách. ~~Và tập ứng viên của cả tổng
   điều tra lẫn nhân chứng khoá theo trigger BEFORE cấp HÀNG — trigger cấp CÂU LỆNH hay AFTER-ROW ném
-  vô điều kiện đứng ngoài, là khoản nợ **75** (lượt soi 20), cùng lớp với 73.
+  vô điều kiện đứng ngoài, là khoản nợ **75** (lượt soi 20), cùng lớp với 73.~~ **[S1.31] 75 đóng:**
+  tập ứng viên là MỌI trigger trên UPDATE/DELETE, và một hàm canh ngoài hình thức BEFORE-ROW là đỏ —
+  vì đó là hình thức duy nhất vị từ sản xuất nhận. 27 câu nhân chứng thay cho 24.
