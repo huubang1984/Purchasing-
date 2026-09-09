@@ -1697,3 +1697,252 @@ describe("phủ RLS", () => {
     }
   });
 });
+
+// ===============================================================================================
+// [S1.32 / khoản nợ 76] BA TỔNG ĐIỀU TRA CHO CƠ CHẾ THỨ BA LÀM MỘT CÂU GHI TRẢ 0 HÀNG MÀ KHÔNG LỖI
+//
+// ADR-036 liệt kê MỌI cơ chế PostgreSQL có thể làm một câu ghi trả 0 hàng không lỗi. Với RLS có
+// ba đường, và cả ba đều đứng ngoài lớp hình dạng [CR1] — lớp ấy chỉ soi policy PERMISSIVE trên
+// bảng tenant, và cố ý bỏ qua RESTRICTIVE vì *"restrictive chỉ thu hẹp, không phải lỗ rò"*. Đúng
+// cho câu hỏi RÒ; sai cho câu hỏi IM LẶNG:
+//   ⑴ policy RESTRICTIVE `USING (false)` — đo trên PostgreSQL 16: `CREATE POLICY … AS RESTRICTIVE
+//      FOR UPDATE USING (false)` trên `suppliers` ⇒ `migrate()` OK, policy còn nguyên, và app_api
+//      trong tenant UPDATE ra 0 hàng, không lỗi;
+//   ⑵ một bảng bật RLS mà KHÔNG policy PERMISSIVE nào phủ (lệnh, vai) trong khi quyền ĐÃ cấp —
+//      mặc định-từ-chối của RLS: 0 hàng cho UPDATE/DELETE, không lỗi (đo: 87/87 tổ hợp hôm nay có
+//      policy — khoảng trống, chưa phải lỗ);
+//   ⑶ RLS bật trên một bảng NGOÀI tập tenant — lớp hình dạng không soi nó (đo: 2 bảng, một là gốc
+//      tenant, một có mục hardening riêng).
+// Cả ba đóng theo khuôn ADR-035: liệt kê RỘNG theo `pg_policy`/`pg_class`, buộc phân loại, đỏ cả
+// hai chiều. Danh sách khai sinh từ trạng thái đo được tại `22de5fc` rồi đóng băng.
+// ===============================================================================================
+
+/** Vế "không phải phiên khách" — nửa đầu của mọi policy RESTRICTIVE do 027 dựng. */
+const KHACH_NULL = "((NULLIF(current_setting('app.guest_session_id'::text, true), ''::text))::uuid IS NULL)";
+const khachHoac = (ve: string): string =>
+  `(((NULLIF(current_setting('app.guest_session_id'::text, true), ''::text))::uuid IS NULL) OR ${ve})`;
+const veGuest = (cot: string, thietLap: string): string =>
+  `(${cot} = (NULLIF(current_setting('${thietLap}'::text, true), ''::text))::uuid)`;
+
+interface PolicyRestrictiveKhai {
+  readonly lenh: string;
+  readonly vai_tro: string;
+  readonly using: string;
+  readonly with_check: string;
+}
+
+/**
+ * MỌI policy RESTRICTIVE của dự án, khoá theo `lược đồ.bảng.policy` [lượt soi 22] và bốn cột (lệnh, vai, USING, WITH CHECK)
+ * nguyên văn `pg_get_expr`. 21 bảng chỉ mang vế "không phải phiên khách"; 8 bảng khách được đọc
+ * thêm nới theo một cột. Một RESTRICTIVE mới — kể cả `USING (false)` — không có ở đây là ĐỎ.
+ */
+const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>> = (() => {
+  const chiKhach = (bang: string): [string, PolicyRestrictiveKhai] => [
+    `public.${bang}.${bang}_khach`,
+    { lenh: "*", vai_tro: "PUBLIC", using: KHACH_NULL, with_check: KHACH_NULL },
+  ];
+  const khachNoi = (bang: string, using: string, with_check = using): [string, PolicyRestrictiveKhai] => [
+    `public.${bang}.${bang}_khach`,
+    { lenh: "*", vai_tro: "PUBLIC", using, with_check },
+  ];
+  return Object.fromEntries([
+    ...[
+      "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
+      "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
+      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_invitation_tokens", "rfq_unsealed_bids",
+      "sessions", "supplier_contacts", "suppliers", "unseal_approvals", "unseal_requests",
+      "user_login_tokens", "user_roles", "users",
+    ].map(chiKhach),
+    khachNoi("bid_receipts", khachHoac("(bid_version_id IN ( SELECT v.id\n   FROM vendor_bid_versions v))")),
+    khachNoi("guest_sessions", khachHoac(veGuest("id", "app.guest_session_id"))),
+    khachNoi("rfq_invitations", khachHoac(veGuest("id", "app.guest_invitation_id"))),
+    khachNoi("rfq_items", khachHoac(veGuest("rfq_id", "app.guest_rfq_id"))),
+    khachNoi("rfq_key_material", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),
+    khachNoi("rfq_packages", khachHoac(veGuest("id", "app.guest_rfq_id"))),
+    khachNoi("vendor_bid_versions", khachHoac("(bid_id IN ( SELECT b.id\n   FROM vendor_bids b))")),
+    khachNoi("vendor_bids", khachHoac(veGuest("invitation_id", "app.guest_invitation_id"))),
+  ]);
+})();
+
+/** Bảng bật RLS mà KHÔNG thuộc tập tenant (không org_id, không phải gốc) — mỗi tên phải có lý do. */
+const BANG_RLS_NGOAI_TENANT: readonly string[] = [
+  // 6195 của hardening.always.sql ghim riêng: RLS + FORCE + đúng một policy. Không có org_id vì
+  // nó đếm theo NGƯỜI GỌI, xuyên tổ chức.
+  "public.caller_rate_limits",
+];
+
+const CAU_POLICY_RESTRICTIVE =
+  "SELECT n.nspname || '.' || c.relname AS ten_bang, p.polname AS ten_policy, p.polcmd AS lenh, " +
+  CAU_VAI_TRO +
+  "       pg_get_expr(p.polqual, p.polrelid) AS bieu_thuc_using, " +
+  "       pg_get_expr(p.polwithcheck, p.polrelid) AS bieu_thuc_with_check " +
+  "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+  " WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT p.polpermissive ORDER BY 1, 2";
+
+/**
+ * Phủ lệnh: mỗi (bảng RLS, vai ứng dụng, quyền SELECT/INSERT/UPDATE/DELETE đã cấp — ở mức bảng HAY
+ * mức cột) phải có ít nhất một policy PERMISSIVE áp cho vai ấy (hoặc PUBLIC) ở lệnh ấy (hoặc ALL).
+ */
+const CAU_PHU_LENH = `
+  WITH vai AS (SELECT r.rolname, r.oid FROM pg_roles r WHERE r.rolname IN ('app_api', 'app_unseal')),
+  -- [lượt soi 22, H1] grantee = 0 là PUBLIC: không có hàng trong pg_roles, nên một JOIN thẳng LÀM RỚT
+  -- nó — GRANT UPDATE ... TO PUBLIC cấp quyền hiệu dụng cho cả hai vai mà census không thấy. Nay mỗi
+  -- entry PUBLIC nhân ra cho TỪNG vai.
+  quyen AS (
+    SELECT c.oid, n.nspname || '.' || c.relname AS ten_bang, vai.rolname, a.privilege_type
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      CROSS JOIN LATERAL aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+      JOIN vai ON a.grantee = 0 OR a.grantee = vai.oid
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+       AND a.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    UNION
+    SELECT c.oid, n.nspname || '.' || c.relname, vai.rolname, a.privilege_type
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute att ON att.attrelid = c.oid AND att.attnum > 0 AND NOT att.attisdropped
+      CROSS JOIN LATERAL aclexplode(att.attacl) a
+      JOIN vai ON a.grantee = 0 OR a.grantee = vai.oid
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+       AND a.privilege_type IN ('SELECT', 'INSERT', 'UPDATE')
+  )
+  SELECT q.ten_bang, q.rolname AS vai, q.privilege_type AS quyen,
+         -- Khớp vai theo OID đúng tên (không xét kế thừa): policy TO nhom mà app_api là thành viên
+         -- sẽ ĐỎ dù có phủ — chiều an toàn; hardening gỡ mọi tư cách thành viên lạ nên ca ấy chỉ là
+         -- trạng thái tạm giữa hai deploy [lượt soi 22, L2].
+         EXISTS (SELECT 1 FROM pg_policy p
+                  WHERE p.polrelid = q.oid AND p.polpermissive
+                    AND (p.polroles = '{0}'::oid[]
+                         OR (SELECT r.oid FROM pg_roles r WHERE r.rolname = q.rolname) = ANY (p.polroles))
+                    AND (p.polcmd = '*' OR p.polcmd = CASE q.privilege_type
+                           WHEN 'SELECT' THEN 'r' WHEN 'INSERT' THEN 'a' WHEN 'UPDATE' THEN 'w' ELSE 'd' END)) AS co_policy
+    FROM quyen q ORDER BY 1, 2, 3`;
+
+describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả 0 hàng mà không lỗi", () => {
+  it("[INV-F1] TỔNG ĐIỀU TRA policy RESTRICTIVE: mọi policy phải được khai đủ bốn cột, đỏ cả hai chiều", async () => {
+    const { rows } = await db.pool.query<HangPolicy>(CAU_POLICY_RESTRICTIVE);
+    expect(rows.length, "câu truy vấn đang mù — 027 dựng ít nhất 29 policy RESTRICTIVE").toBeGreaterThan(20);
+    const that = new Map(rows.map((r) => [`${r.ten_bang}.${r.ten_policy}`, r]));
+    // Chiều 1: policy có thật mà chưa khai, hoặc khai LỆCH một cột.
+    const lech: string[] = [];
+    for (const [khoa, r] of that) {
+      const khai = POLICY_RESTRICTIVE_DA_KHAI[khoa];
+      if (!khai) {
+        lech.push(`${khoa}: CHƯA KHAI`);
+        continue;
+      }
+      const cot = [
+        ["lenh", r.lenh, khai.lenh],
+        ["vai_tro", r.vai_tro, khai.vai_tro],
+        ["using", r.bieu_thuc_using, khai.using],
+        ["with_check", r.bieu_thuc_with_check, khai.with_check],
+      ].filter(([, a, b]) => a !== b);
+      if (cot.length) lech.push(`${khoa}: lệch ${cot.map(([t, a]) => `${t}=${a}`).join(" | ")}`);
+    }
+    expect(
+      lech,
+      "Một policy RESTRICTIVE chưa khai hoặc đã đổi. RESTRICTIVE chỉ thu hẹp nên [CR1] không soi hình dạng " +
+        "của nó — nhưng `USING (false)` thu hẹp về RỖNG: mọi UPDATE/DELETE của ứng dụng trả 0 hàng, không " +
+        "lỗi, và bảng thành chỉ-ghi-thêm mà H19 không thấy. Khai đủ bốn cột vào POLICY_RESTRICTIVE_DA_KHAI " +
+        "sau khi đọc biểu thức, hoặc gỡ policy.",
+    ).toEqual([]);
+    // Chiều 2: dòng khai thiu.
+    expect(Object.keys(POLICY_RESTRICTIVE_DA_KHAI).filter((k) => !that.has(k)), "khai một policy CSDL không còn có").toEqual([]);
+  });
+
+  it("[INV-F1] ĐO: RESTRICTIVE USING (false) sống qua migrate(), làm app_api ghi ra 0 hàng không lỗi — và tổng điều tra là lớp duy nhất thấy", async () => {
+    const { rows: tc } = await db.pool.query<{ id: string }>("SELECT id FROM organizations ORDER BY slug LIMIT 1");
+    const orgA = tc[0]!.id;
+    // Dọn TRƯỚC (một lần chạy đổ trước có thể để lại) và dọn SAU, trong `finally` [lượt soi 22, M1].
+    const don = async (): Promise<void> => {
+      await db.pool.query("DROP POLICY IF EXISTS zz_chan ON users");
+      await db.pool.query("DELETE FROM users WHERE email = 'zz-76@vidu.vn'");
+    };
+    await don();
+    try {
+      // `users`: app_api có UPDATE (email, full_name, status) từ 002 — một đường sản xuất thật.
+      const { rows: u } = await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'zz-76@vidu.vn', 'zz') RETURNING id", [orgA]);
+      const userId = u[0]!.id;
+      await db.pool.query("CREATE POLICY zz_chan ON users AS RESTRICTIVE FOR UPDATE USING (false)");
+      // (a) hardening không thấy — đúng như [CR1] tự khai (restrictive không bị soi hình dạng).
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toBeDefined();
+      // (b) hành vi dưới app_api trong tenant: đọc được hàng, UPDATE ra 0 hàng, KHÔNG lỗi.
+      const client = await apiPool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        const thay = await client.query("SELECT 1 FROM users WHERE id = $1", [userId]);
+        expect(thay.rowCount, "app_api vẫn ĐỌC được hàng (policy chỉ chặn UPDATE)").toBe(1);
+        const sua = await client.query("UPDATE users SET full_name = 'zz 2' WHERE id = $1", [userId]);
+        expect(sua.rowCount, "UPDATE dưới app_api phải ra 0 hàng — IM LẶNG, không lỗi").toBe(0);
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+      // (c) tổng điều tra thấy nó, ở đúng một tên.
+      const { rows } = await db.pool.query<HangPolicy>(CAU_POLICY_RESTRICTIVE);
+      expect(rows.map((r) => `${r.ten_bang}.${r.ten_policy}`).filter((k) => !(k in POLICY_RESTRICTIVE_DA_KHAI))).toEqual(["public.users.zz_chan"]);
+    } finally {
+      await don();
+    }
+  });
+
+  it("[INV-F1] PHỦ LỆNH: mọi quyền SELECT/INSERT/UPDATE/DELETE đã cấp cho app_api/app_unseal trên bảng RLS đều có policy PERMISSIVE phủ — mặc-định-từ-chối của RLS là 0 hàng không lỗi", async () => {
+    const { rows } = await db.pool.query<{ ten_bang: string; vai: string; quyen: string; co_policy: boolean }>(CAU_PHU_LENH);
+    expect(rows.length, "câu truy vấn đang mù — hôm nay có 87 tổ hợp (bảng, vai, quyền)").toBeGreaterThan(50);
+    expect(
+      rows.filter((r) => !r.co_policy).map((r) => `${r.ten_bang}/${r.vai}/${r.quyen}`),
+      "Quyền đã cấp nhưng không policy PERMISSIVE nào phủ (lệnh, vai): RLS mặc định TỪ CHỐI — SELECT/UPDATE/" +
+        "DELETE trả 0 hàng không lỗi, INSERT ném. Một bảng như thế là chỉ-ghi-thêm (hoặc chỉ-đọc) trong im " +
+        "lặng. Thêm policy cho lệnh ấy, hoặc thu hồi quyền.",
+    ).toEqual([]);
+
+    // Mũi răng, trong một giao dịch rồi hoàn tác: bảng RLS có quyền UPDATE mà không policy.
+    // Hai cách cấp: đích danh app_api, và qua PUBLIC — cách thứ hai từng vô hình [lượt soi 22, H1].
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "CREATE TABLE zz_rong (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+          "ALTER TABLE zz_rong ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_rong FORCE ROW LEVEL SECURITY; " +
+          "GRANT SELECT ON zz_rong TO app_api; GRANT UPDATE ON zz_rong TO PUBLIC",
+      );
+      const { rows: sau } = await client.query<{ ten_bang: string; vai: string; quyen: string; co_policy: boolean }>(CAU_PHU_LENH);
+      expect(sau.filter((r) => !r.co_policy).map((r) => `${r.ten_bang}/${r.vai}/${r.quyen}`).sort()).toEqual([
+        "public.zz_rong/app_api/SELECT",
+        "public.zz_rong/app_api/UPDATE",
+        "public.zz_rong/app_unseal/UPDATE",
+      ]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("[INV-F1] TỔNG ĐIỀU TRA bảng bật RLS ngoài tập tenant: mỗi tên phải có lý do, đỏ cả hai chiều", async () => {
+    const CAU_RLS = "SELECT n.nspname AS luoc_do, c.relname AS ten_bang FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relkind IN ('r', 'p') AND c.relrowsecurity ORDER BY 1, 2";
+    // `bangTenant` chỉ biết tên trần trong `public` — một bảng RLS ở lược đồ khác luôn là "ngoài".
+    const ngoaiTenant = (rs: readonly { luoc_do: string; ten_bang: string }[]): string[] =>
+      rs.filter((r) => !(r.luoc_do === "public" && bangTenant.includes(r.ten_bang))).map((r) => `${r.luoc_do}.${r.ten_bang}`);
+    const { rows } = await db.pool.query<{ luoc_do: string; ten_bang: string }>(CAU_RLS);
+    expect(rows.length, "câu truy vấn đang mù — hôm nay có 30 bảng bật RLS").toBeGreaterThan(20);
+    const ngoai = ngoaiTenant(rows);
+    expect(
+      ngoai.filter((t) => !BANG_RLS_NGOAI_TENANT.includes(t)),
+      "Bảng bật RLS mà không có org_id và không phải gốc tenant: lớp hình dạng [CR1] KHÔNG soi policy của " +
+        "nó, nên một `USING (false)` ở đây vô hình. Khai tên kèm lý do vào BANG_RLS_NGOAI_TENANT.",
+    ).toEqual([]);
+    expect(BANG_RLS_NGOAI_TENANT.filter((t) => !ngoai.includes(t)), "khai một bảng không còn ngoài tenant").toEqual([]);
+    // Đối chứng dương, hoàn tác: một bảng không org_id bật RLS phải rơi vào "ngoài tenant".
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TABLE zz_ngoai (id int PRIMARY KEY); ALTER TABLE zz_ngoai ENABLE ROW LEVEL SECURITY");
+      const { rows: sau } = await client.query<{ luoc_do: string; ten_bang: string }>(CAU_RLS);
+      expect(ngoaiTenant(sau).filter((t) => !BANG_RLS_NGOAI_TENANT.includes(t))).toEqual(["public.zz_ngoai"]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+});

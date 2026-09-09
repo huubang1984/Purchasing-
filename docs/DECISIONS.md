@@ -3523,3 +3523,84 @@ lần đọc lại kỹ hơn.
   vô điều kiện đứng ngoài, là khoản nợ **75** (lượt soi 20), cùng lớp với 73.~~ **[S1.31] 75 đóng:**
   tập ứng viên là MỌI trigger trên UPDATE/DELETE, và một hàm canh ngoài hình thức BEFORE-ROW là đỏ —
   vì đó là hình thức duy nhất vị từ sản xuất nhận. 27 câu nhân chứng thay cho 24.
+
+---
+
+## ADR-036 — Danh mục MỌI cơ chế PostgreSQL làm một câu ghi trả 0 hàng mà không lỗi, và lớp canh từng cơ chế
+
+**Ngày:** 2026-09-09 · **Trạng thái:** Đã chấp nhận · **[S1.32]** · **Khoản nợ liên quan:** 60, 73, 74, 75, 76 ·
+**Liên quan:** ADR-028 (suy từ tính chất), ADR-035 (liệt kê rộng rồi buộc phân loại)
+
+### 1. Vì sao ADR này tồn tại
+
+Ba vòng liền — S1.29, S1.31, và lượt soi 21 — mỗi vòng lộ thêm **một** cơ chế của PostgreSQL có thể
+làm một bảng chỉ-ghi-thêm (hay chỉ-đọc) *trong im lặng*: câu UPDATE/DELETE trả `0 hàng`, không lỗi,
+không dấu vết, và bảng đứng ngoài mọi lớp của `[INV-H19]`. Trigger BEFORE-ROW (60), rồi RULE (73),
+rồi trigger ngoài hình thức BEFORE-ROW (75), rồi RLS `USING (false)` (76). Mỗi lần đóng một cơ chế là
+một vòng, và lần nào cũng đợi **người khác** chỉ ra cơ chế kế.
+
+Khoản nợ 76 vì thế không được đóng như một cơ chế thứ ba. Nó được đóng bằng câu hỏi rộng hơn mà bốn
+khoản nợ kia là bốn câu trả lời rời rạc:
+
+> **Với một câu INSERT/UPDATE/DELETE do vai ứng dụng gửi, PostgreSQL 16 có những cơ chế nào làm nó
+> chạm 0 hàng (hoặc bị nuốt, bị chuyển hướng) mà KHÔNG ném lỗi?**
+
+Trả lời một lần, có địa chỉ cho từng cơ chế, và **cơ chế nào chưa có lớp thì nói ra ở đây** — không
+để lượt soi kế phát hiện.
+
+### 2. Danh mục
+
+Cột *lớp canh* là nơi cơ chế ấy bị THẤY nếu nó xuất hiện; cột *đo* là phép đo trên PostgreSQL 16 đã
+chạy trong kho (không phải suy đoán).
+
+| # | Cơ chế | Hiệu lực | Lớp canh | Đo |
+|---|---|---|---|---|
+| 1 | Trigger BEFORE-ROW trả `NULL` (bỏ hàng) | 0 hàng, không lỗi | nhân chứng hành vi: vế ⒞ *câu chạm ≥ 1 hàng* — hàm trả về mà không hàng nào đổi thì không ai được ghi công (S1.30) | ✓ |
+| 2 | Trigger ném (`RAISE`) — mọi hình thức: BEFORE/AFTER, hàng/câu lệnh | lỗi, nhưng bảng thành chỉ-ghi-thêm | tổng điều tra hàm trigger trên UPDATE/DELETE, hàm canh phải BEFORE-ROW để H19 nhận (S1.29, S1.31); H19 canh LOGGED/TRUNCATE/ACL | ✓ |
+| 3 | `RULE … DO INSTEAD NOTHING` / `DO INSTEAD <khác>` | 0 hàng hoặc chuyển hướng, không lỗi | tổng điều tra `pg_rewrite` (danh sách rỗng) + `migrate()` phán xét rule trên mọi bảng chỉ-ghi-thêm (S1.31) | ✓ |
+| 4 | RLS policy PERMISSIVE với vị từ hằng/lệch (`USING (true)`, `USING (false)`, không ràng buộc tenant) | 0 hàng hoặc rò xuyên tổ chức | danh sách trắng hình dạng [CR1] + ngoại lệ khoá sáu cột, ở cả hardening lẫn `rls-coverage` (S0) | ✓ |
+| 5 | RLS policy RESTRICTIVE `USING (false)` | 0 hàng, không lỗi; `migrate()` OK | **[S1.32]** tổng điều tra policy RESTRICTIVE — khai đủ bốn cột nguyên văn, 29 dòng | ✓ |
+| 6 | RLS bật mà không policy PERMISSIVE nào phủ (lệnh, vai) dù quyền đã cấp — mặc định-từ-chối | SELECT/UPDATE/DELETE 0 hàng không lỗi; INSERT ném | **[S1.32]** tổng điều tra *phủ lệnh*: 87/87 tổ hợp (bảng, vai, quyền) hôm nay có policy | ✓ |
+| 7 | RLS bật trên bảng NGOÀI tập tenant — lớp [CR1] không soi | như 4–6, vô hình | **[S1.32]** tổng điều tra bảng RLS ngoài tenant (khai: `caller_rate_limits`) | ✓ |
+| 8 | `session_replication_role = replica` bỏ qua trigger `ENABLE` thường | hàm canh KHÔNG chạy — fail-open, ngược chiều với 1–7 | **[S1.32]** trigger canh phải `ENABLE ALWAYS` (tổng điều tra, `luon_bat`); 047 đã ghim ALWAYS cho chốt TRUNCATE | ✓ |
+| 9 | `ALTER TABLE … DISABLE TRIGGER` | như 8 | tổng điều tra: trigger canh `tgenabled = 'D'` là vi phạm (S1.29) | ✓ |
+| 10 | VIEW / MATVIEW / bảng ngoài / bảng phân mảnh làm đích ghi (`INSTEAD OF` trả NULL, FDW ghi ra cụm khác, lá phân mảnh không chốt) | 0 hàng hoặc ghi lệch chỗ | **[S1.32]** tổng điều tra `relkind`: mọi đích DML là bảng thường trừ khi khai (rỗng); [I2] hardening bắt view trên bảng tenant; lá phân mảnh đo ở test lá | ✓ |
+| 11 | Constraint trigger DEFERRED trên UPDATE/DELETE | chạy ở COMMIT, ngoài phép đo nhân chứng | không được ghi công ⇒ ĐỎ nhìn thấy được, thông điệp nói rõ; hôm nay 0/46 (S1.31) | ✓ |
+| 12 | Quyền thiếu (bảng hay cột) | **lỗi**, không im lặng | ma trận quyền ghim ở `rls-coverage` | n/a |
+| 13 | `WITH CHECK (false)`, CHECK constraint, cột sinh, định tuyến phân mảnh hụt, `NO INHERIT` | **lỗi**, không im lặng | — | n/a |
+| 14 | `ON CONFLICT DO NOTHING`, mệnh đề `WHERE` không khớp | 0 hàng — nhưng do CHÍNH CÂU LỆNH, không do lược đồ | ngoài phạm vi: ADR này nói về lược đồ | n/a |
+| 15 | Trigger BEFORE INSERT ROW trả `NULL` (nuốt INSERT) — **lượt soi 22 chỉ ra** | `INSERT 0 0`, `RETURNING` rỗng, không lỗi | **[S1.32]** tập rộng của tổng điều tra mở ra bit INSERT: 27 hàm trigger INSERT phải được phân loại (19 khai mới); **chưa có nhân chứng hành vi cho INSERT — khoản nợ 77** | ✓ (đo: `INSERT 0 0`) |
+| 16 | Che tên: `CREATE TEMP TABLE users` trên một kết nối pool (pg_temp đứng trước `public`), hoặc schema `app_api` (`$user`) — **lượt soi 22 chỉ ra** | câu ghi rơi vào bảng khác, 0 dấu vết ở bảng thật | **chưa có — khoản nợ 78** (`REVOKE TEMP ON DATABASE`, cấm schema trùng tên vai); hôm nay vô hại vì mã sản xuất qualify `public.` | đọc, chưa dựng ca |
+
+### 3. Quyết định
+
+⑴ **Bảng ở §2 là NGUỒN, không phải tóm tắt.** Một cơ chế mới (do lượt soi, do đọc release notes
+   PostgreSQL) được thêm vào bảng TRƯỚC khi có lớp — với cột *lớp canh* ghi *"chưa có — khoản nợ
+   N"*. Bảng không được có hàng nào mà cột ấy để trống.
+
+⑵ **Mọi lớp ở §2 theo khuôn ADR-035:** tập ứng viên lấy từ catalog theo tiêu chí không lách được
+   bằng cách viết (`pg_trigger`, `pg_rewrite`, `pg_policy`, `pg_class.relrowsecurity`,
+   `pg_class.relkind`), buộc phân loại, đỏ cả hai chiều, và **mỗi tổng điều tra mang đối chứng dương
+   của riêng nó** (một đối tượng tạm phải được THẤY) — bài học của lượt soi 21.
+
+⑶ **Test là đủ cho các cơ chế 5–10; sản xuất không đổi.** Cùng lập luận với S1.29: migration là
+   đường duy nhất tạo policy/trigger/rule, và CI chặn merge. Ngoại lệ đã có: rule trên bảng chỉ-ghi-thêm
+   (S1.31) — vì bảng ấy có thể tồn tại trên một cụm đã deploy mà tệp hardening chạy ở mọi `migrate()`.
+
+### 4. Cái giá, nói ra
+
+- **Bốn danh sách khai mới** (29 policy RESTRICTIVE, 1 bảng RLS ngoài tenant, 0 quan hệ khác bảng
+  thường, 19 hàm trigger INSERT thêm vào danh sách KHÔNG-CANH). Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
+  và một dòng khai — cố ý, như ADR-035 §4 đã nói cho nhãn test.
+- **Biểu thức policy khai NGUYÊN VĂN `pg_get_expr`.** Đổi phiên bản PostgreSQL có thể đổi cách
+  deparse (khoảng trắng, ngoặc) ⇒ đỏ ồn ào chứ không xanh im lặng; sửa bằng cách chép lại biểu thức
+  mới sau khi đọc nó. Đó là chỗ *"rỗng ruột"* của một lời khai được cố ý đổi lấy sự chắc chắn.
+- **Bảng §2 là một lời khai về tính đầy đủ**, và không cơ giới hoá được. Thứ giữ nó khỏi thiu là ⑴:
+  mỗi phát hiện mới phải đi qua bảng này trước.
+
+### 5. Thứ ADR này KHÔNG làm
+
+Nó không chứng minh danh mục đầy đủ — và **lượt soi 22 đã chứng minh điều đó ngay trong vòng viết ADR**:
+bản đầu có 14 hàng, lượt soi thêm hai (15, 16). Nó biến câu hỏi *"còn cơ chế nào không?"* từ một
+điều bất ngờ ở lượt soi kế thành một hàng phải thêm vào một bảng có địa chỉ — và một hàng mới mà không
+có lớp là một khoản nợ mở, nhìn thấy được ngay trong ADR (hàng 16 hôm nay là một).

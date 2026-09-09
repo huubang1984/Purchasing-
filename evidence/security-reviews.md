@@ -1418,3 +1418,34 @@ vùng đổi của hardening, thân 5 hàm AFTER-ROW, hai constraint trigger, b�
 làm một câu ghi trả 0 hàng mà không lỗi** — trigger BEFORE-ROW (S1.29), RULE và trigger khác hình
 thức (S1.31), RLS `USING (false)` (76). Khoản 76 nên được đóng bằng một câu hỏi RỘNG HƠN khoản nợ
 đặt ra: *liệt kê mọi cơ chế ấy một lần*, thay vì đợi lượt soi kế chỉ ra cơ chế thứ tư.
+
+---
+
+# §S1.32 — khoản nợ 76 bằng câu hỏi rộng: ADR-036, danh mục cơ chế làm câu ghi trả 0 hàng không lỗi
+
+**Bề mặt an ninh:** 0 mã sản xuất. Hai tệp test (`db/rls-coverage.int.test.ts` +~230 dòng,
+`db/hardening-suy-tu-tinh-chat.int.test.ts` +~90 dòng), ADR-036 mới, năm tệp tài liệu và tệp này.
+
+## Lượt soi đối kháng 22 — chạy TRƯỚC khi §S1.32 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc hai khối test mới, hardening,
+`vai-tro.ts`, migration 027/037/045, mã ứng dụng), được giao câu hỏi *"danh mục có đủ không?"* cùng
+sáu hướng phá. Mọi phát hiện được người viết đo lại trên PostgreSQL 16 thật.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | CAO | Tổng điều tra phủ lệnh MÙ với quyền cấp qua `PUBLIC`: `grantee = 0` không có hàng trong `pg_roles`, JOIN thẳng làm rớt — `GRANT UPDATE … TO PUBLIC` cấp quyền cho cả hai vai mà census xanh | đúng theo đọc; đối chứng dương mới `GRANT … TO PUBLIC` trên bảng tạm ⇒ ba bộ ba thiếu | nhân mỗi entry PUBLIC ra từng vai (`JOIN vai ON a.grantee = 0 OR a.grantee = vai.oid`) |
+| 2 | CAO | Trigger BEFORE INSERT ROW trả `NULL` nuốt INSERT im lặng — ngoài mọi census (tập rộng chỉ UPDATE/DELETE); RULE census bắt `ON INSERT DO INSTEAD NOTHING` nhưng không bắt trigger | **đo:** `INSERT 0 0`, `RETURNING` rỗng, không lỗi | tập rộng mở ra bit INSERT: 27 hàm buộc phân loại (19 khai mới); nhân chứng INSERT — **khoản nợ 77**; ADR-036 hàng 15 |
+| 3 | NẶNG | ROLLBACK/dọn dẹp ngoài `finally` ở năm chỗ (ba ở `rls-coverage`, hai ở `hardening`): một `expect` đỏ để giao dịch mở trên client trả về pool ⇒ `SET ROLE` kế ném trong giao dịch aborted ⇒ đỏ dây chuyền; INSERT người + CREATE POLICY ngoài `try` ⇒ rò khi đổ | đúng theo đọc | ROLLBACK vào `finally`; dọn TRƯỚC và SAU (`DROP POLICY IF EXISTS`, `DELETE … WHERE email`) |
+| 4 | NẶNG | Khoá tổng điều tra `bảng.policy` thiếu lược đồ — hai bảng cùng tên khác schema đè nhau | đúng theo đọc; tác động thấp vì mã qualify `public.` | khoá `lược đồ.bảng.policy`; census phủ lệnh và ngoài tenant báo tên đủ lược đồ |
+| 5 | NHẸ | Che tên: `CREATE TEMP TABLE sessions` trên kết nối pool (pg_temp trước `public`), hoặc schema `app_api` — không `REVOKE TEMP ON DATABASE`, không `DISCARD TEMP` | đúng về ngữ nghĩa; hôm nay vô hại vì mã sản xuất qualify `public.` | **khoản nợ 78**; ADR-036 hàng 16 |
+| 6 | NHẸ | Khớp vai theo OID đúng tên, không xét kế thừa: policy `TO nhom` mà app_api là thành viên ⇒ đỏ dù có phủ | chiều an toàn; hardening gỡ mọi tư cách thành viên lạ nên chỉ là trạng thái tạm giữa hai deploy | ghi chú trong câu truy vấn |
+| 7 | NHẸ | Biểu thức `pg_get_expr` nguyên văn phụ thuộc search_path phiên đọc và cách deparse của phiên bản PostgreSQL | đúng; chiều đỏ ồn ào, không xanh im lặng | ghi ở ADR-036 §4 |
+| 8 | NHẸ | Chuỗi *phủ lệnh ↔ [CR1]* cho `FOR ALL USING (false)` PERMISSIVE: census coi là phủ, [CR1] từ chối hình dạng trên bảng tenant, census ngoài tenant bắt bảng mới | xác nhận (một phần plausible ở `caller_rate_limits`, mục 6195 ghim đúng một policy) | — |
+| 9 | INFO | Vế `ENABLE ALWAYS` không thừa: hardening chỉ ghim `'A'` cho trigger có TÊN; test đòi cho MỌI trigger của MỌI hàm canh; `'A'` đúng, `'R'` phải đỏ | xác nhận | — |
+| 10 | INFO | Tổng điều tra `relkind`: không `PARTITION BY` ngoài test; DDL đối chứng đều transactional; cài extension sinh view sẽ đỏ — đúng chủ đích | xác nhận | — |
+
+**Điều đáng mang sang vòng sau:** ADR-036 sinh ra để chấm dứt chuỗi *"mỗi vòng lộ thêm một cơ chế"*
+— và lượt soi 22 thêm hai cơ chế vào chính bản đầu của nó. Đó không phải thất bại của ADR; đó là
+điều ADR §5 nói: danh mục không chứng minh được, nhưng mọi cái thiếu nay có một địa chỉ để đứng.
+Bốn lượt soi liền (19–22) đều bác bản đầu; giá của một lượt soi rẻ hơn giá của một vòng.
