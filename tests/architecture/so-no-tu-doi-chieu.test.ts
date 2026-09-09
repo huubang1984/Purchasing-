@@ -32,7 +32,12 @@
 // **một con số tóm tắt không có ai đọc nó.** Lần thứ ba thì nó thôi là sự trùng hợp.
 //
 // ----------------------------------------------------------------------------------------------
-// NĂM TÍNH CHẤT, VÀ VÌ SAO MỖI CÁI TỒN TẠI
+// ~~NĂM~~ **[S1.28] CÁC** TÍNH CHẤT, VÀ VÌ SAO MỖI CÁI TỒN TẠI
+//
+// Danh sách dưới đây là năm tính chất ĐẦU, viết cho `docs/STATE.md`. P0 và P6 thêm vào sau (xem
+// chú thích tại chỗ), và P7–P10 — phần phủ `Handoff.md`, khoản nợ 61 — có khối lý do RIÊNG ở
+// giữa tệp, ngay trên `demSoNo`. Con số "năm" ở đây từng đúng và nay không; nó được gạch chứ
+// không được xoá, đúng quy ước của kho.
 // ----------------------------------------------------------------------------------------------
 //   P1 **Mọi dòng có ĐÚNG BA CỘT.** Đo trước khi sửa: dòng 59 có MỘT cột nội dung (thiếu hẳn cột
 //      con trỏ) và dòng 52 có BỐN (một `|` trần bên trong một đoạn mã). Markdown vẫn dựng bảng,
@@ -93,13 +98,27 @@ function docTep(duong: string): string {
   return readFileSync(join(GOC, duong), "utf8").replace(/\r\n/g, "\n");
 }
 
-/** Khối văn bản của mục *Nợ kỹ thuật*, cắt tới đầu mục `##` kế tiếp. */
-export function khoiSoNo(state: string): { readonly dong: readonly string[]; readonly tuDong: number } {
-  const dong = state.split("\n");
-  const dau = dong.findIndex((l) => l.startsWith(TIEU_DE_SO_NO));
-  if (dau < 0) throw new Error(`không tìm thấy "${TIEU_DE_SO_NO}" trong docs/STATE.md`);
+/**
+ * Khối văn bản của một mục `##`, cắt tới đầu mục `##` kế tiếp.
+ *
+ * NÉM khi không tìm thấy tiêu đề — một mục bị đổi tên phải làm cổng ĐỎ, không được làm nó xanh
+ * trên một khối rỗng. Đây là cùng kỷ luật fail-closed với vế *"không tìm thấy lời khai nào"* ở P5.
+ */
+function khoiMuc(
+  van: string,
+  tieuDe: string,
+  nhan: string,
+): { readonly dong: readonly string[]; readonly tuDong: number } {
+  const dong = van.split("\n");
+  const dau = dong.findIndex((l) => l.startsWith(tieuDe));
+  if (dau < 0) throw new Error(`không tìm thấy "${tieuDe}" trong ${nhan}`);
   const sau = dong.findIndex((l, i) => i > dau && l.startsWith("## "));
   return { dong: dong.slice(dau, sau < 0 ? dong.length : sau), tuDong: dau + 1 };
+}
+
+/** Khối văn bản của mục *Nợ kỹ thuật*, cắt tới đầu mục `##` kế tiếp. */
+export function khoiSoNo(state: string): { readonly dong: readonly string[]; readonly tuDong: number } {
+  return khoiMuc(state, TIEU_DE_SO_NO, "docs/STATE.md");
 }
 
 /**
@@ -352,29 +371,75 @@ function docSo(chu: string): number | null {
 }
 
 /**
+ * [khoản nợ 61] Một lời khai ĐÃ CẬP NHẬT trong kho này luôn mang tiền tố vòng: `**[S1.28] 34 ADR**`.
+ *
+ * Không nhận tiền tố ấy thì mọi lời khai viết theo đúng quy ước của kho trở nên VÔ HÌNH với lớp
+ * canh — tức lớp canh xanh trên đúng những dòng vừa được sửa. Đo được: cả bốn lời khai mà vòng
+ * này đưa vào `Handoff.md` đều mang tiền tố, và không cái nào khớp mẫu cũ.
+ */
+const TIEN_TO_VONG = String.raw`(?:\[S[\d.]+\]\s*)?`;
+
+/**
+ * [khoản nợ 61] BỎ ĐOẠN MÃ TRƯỚC KHI ĐỌC — và đây là một phép đo, không phải một sở thích.
+ *
+ * Một `` `~~` `` viết trong đoạn mã là một dấu được TRÍCH DẪN, không phải một dấu đang gạch. Đo
+ * ngày 2026-09-09, trước khi viết hàm này:
+ *
+ *   `Handoff.md`     : 89 dấu (**LẺ**) → bỏ đoạn mã còn **88** (chẵn)
+ *   `docs/STATE.md`  : 344 dấu (chẵn) → bỏ đoạn mã còn **340** (chẵn)
+ *
+ * Tức `Handoff.md` KHÔNG có cặp gạch hở nào; số lẻ ấy hoàn toàn do MỘT `` `~~` `` ở §15, nằm
+ * trong một đoạn mã đang **nói về chính cửa `~~` này**. (Số đếm ở trên là số đo TẠI `0a3cc6b`,
+ * trước khi vòng này sửa hai tệp; tính chất thì không đổi — chênh lệch vẫn là một dấu trích dẫn
+ * duy nhất. Cố ý KHÔNG ghi số dòng: một con trỏ dòng trong chú thích là thứ trôi ngay vòng sau.)
+ * Và `docs/STATE.md` đang xanh vì số dấu
+ * nằm trong đoạn mã của nó **tình cờ CHẴN** (bốn dấu) — một lần thêm hoặc bớt MỘT dấu trích dẫn
+ * là cổng đỏ mà không có khiếm khuyết nào. Đây là chiều hỏng ĐẮT HƠN chiều nó đi bắt: một phép
+ * kiểm đỏ oan sẽ bị nới ra, và nới xong thì nó không còn nói gì.
+ *
+ * Bỏ đoạn mã cũng làm phép cắt đoạn ĐÃ GẠCH đúng hơn: `/~~[\s\S]*?~~/` ghép nhầm cặp khi một dấu
+ * trích dẫn xen vào giữa, và khi ấy một lời khai đang SỐNG rơi vào khoảng bị xoá.
+ */
+function boDoanMa(van: string): string {
+  return van
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/``[^`]*``/g, "")
+    .replace(/`[^`\n]*`/g, "");
+}
+
+/** Phần văn bản CÒN HIỆU LỰC: bỏ đoạn mã, rồi bỏ mọi khoảng đã gạch. */
+function conHieuLuc(van: string): string {
+  return boDoanMa(van).replace(/~~[\s\S]*?~~/g, "");
+}
+
+/**
  * [review lượt 13, H13-8] MỘT DẤU `~~` LẺ LÀM LỆCH MỌI CẶP PHÍA SAU.
  *
  * `docs/STATE.md` dùng `~~` hàng trăm lần, có đoạn gạch nhiều dòng. Một `~~` lẻ — kể cả do gõ
  * nhầm — dời mọi cặp sau nó đi một nhịp, và một lời khai đang SỐNG rơi vào một khoảng bị xoá ⇒
  * phép kiểm xanh trên đúng tệp đang sai. Rẻ nhất là đếm: số dấu phải CHẴN.
+ *
+ * [khoản nợ 61] Đếm trên văn bản ĐÃ BỎ ĐOẠN MÃ — xem `boDoanMa`.
  */
-export function viPhamCapGach(state: string): readonly string[] {
-  const n = (state.match(/~~/g) ?? []).length;
-  return n % 2 === 0 ? [] : [`docs/STATE.md có ${n} dấu \`~~\` — số LẺ, tức có một cặp gạch hở`];
+export function viPhamCapGach(van: string, nhan: string): readonly string[] {
+  const n = (boDoanMa(van).match(/~~/g) ?? []).length;
+  return n % 2 === 0
+    ? []
+    : [`${nhan} có ${n} dấu \`~~\` ngoài đoạn mã — số LẺ, tức có một cặp gạch hở`];
 }
 
-export function viPhamSoADR(state: string, quyetDinh: string): readonly string[] {
-  const le = viPhamCapGach(state);
+export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): readonly string[] {
+  const le = viPhamCapGach(van, nhan);
   if (le.length > 0) return le;
-  const conHieuLuc = state.replace(/~~[\s\S]*?~~/g, "");
-  const khai = [...conHieuLuc.matchAll(/\*\*([a-zà-ỹ ]+|\d+) ADR\*\*/gi)];
-  if (khai.length === 0) return ['không tìm thấy lời khai "**<số> ADR**" nào trong docs/STATE.md'];
+  const reADR = new RegExp(`\\*\\*${TIEN_TO_VONG}([a-zà-ỹ ]+|\\d+) ADR\\*\\*`, "gi");
+  const khai = [...conHieuLuc(van).matchAll(reADR)];
+  if (khai.length === 0) return [`không tìm thấy lời khai "**<số> ADR**" nào trong ${nhan}`];
   const that = (quyetDinh.match(/^## ADR-/gm) ?? []).length;
   const loi: string[] = [];
   for (const k of khai) {
     const so = docSo(k[1]!);
     if (so === null) loi.push(`không đọc được số đếm: ${JSON.stringify(k[1])}`);
-    else if (so !== that) loi.push(`docs/STATE.md khai ${so} ADR, docs/DECISIONS.md có ${that} đầu mục`);
+    else if (so !== that) loi.push(`${nhan} khai ${so} ADR, docs/DECISIONS.md có ${that} đầu mục`);
   }
   return loi;
 }
@@ -387,27 +452,212 @@ export function viPhamSoADR(state: string, quyetDinh: string): readonly string[]
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
  * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ.
  */
-export function viPhamSoBatBien(state: string, testPlan: string): readonly string[] {
-  if (viPhamCapGach(state).length > 0) return viPhamCapGach(state);
+export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
+  const le = viPhamCapGach(van, nhan);
+  if (le.length > 0) return le;
   const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-H])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
   const hangRao = ma.filter((n) => n === "H").length;
   const nghiepVu = ma.length - hangRao;
-  const khai = [...state.replace(/~~[\s\S]*?~~/g, "").matchAll(
-    /\*\*Sổ đăng ký (\d+) bất biến\*\*\s*\((\d+) nghiệp vụ \+ \*{0,2}(\d+)\*{0,2} hàng rào/g,
-  )];
+  const reBB = new RegExp(
+    `\\*\\*${TIEN_TO_VONG}Sổ đăng ký (\\d+) bất biến\\*\\*` +
+      String.raw`\s*\((\d+) nghiệp vụ \+ \*{0,2}(\d+)\*{0,2} hàng rào`,
+    "g",
+  );
+  const khai = [...conHieuLuc(van).matchAll(reBB)];
   if (khai.length === 0) {
-    return ['không tìm thấy lời khai "**Sổ đăng ký n bất biến** (x nghiệp vụ + y hàng rào" nào'];
+    return [
+      `không tìm thấy lời khai "**Sổ đăng ký n bất biến** (x nghiệp vụ + y hàng rào" nào trong ${nhan}`,
+    ];
   }
   const loi: string[] = [];
   for (const k of khai) {
     const [tong, nv, hr] = [Number(k[1]), Number(k[2]), Number(k[3])];
     if (tong !== ma.length || nv !== nghiepVu || hr !== hangRao) {
       loi.push(
-        `docs/STATE.md khai ${tong} (${nv} + ${hr}), sổ đăng ký có ` +
+        `${nhan} khai ${tong} (${nv} + ${hr}), sổ đăng ký có ` +
           `${ma.length} (${nghiepVu} + ${hangRao})`,
       );
     }
   }
+  return loi;
+}
+
+// ---- P7 · P8 · P9 — `Handoff.md`, khoản nợ 61 -------------------------------------------------
+//
+// VÌ SAO P4 KHÔNG CHUYỂN SANG ĐƯỢC NGUYÊN XI, VÀ ĐÓ LÀ PHÁT HIỆN CỦA VÒNG NÀY.
+//
+// Cách đóng hiển nhiên là quét mọi đường dẫn trong đấu huyền của `Handoff.md` như P4 làm. **Đã
+// đo trước khi viết: 121 con trỏ chưa gạch, 38 "không giải được" — và 36 trong 38 KHÔNG PHẢI
+// LỖI.** Chúng là tên gói và tên team (`@testcontainers/postgresql`, `@trustprocure/bao-mat` —
+// một team mà chính câu ấy nói CHƯA TỒN TẠI), đường HTTP (`/auth/link`), chuỗi phiên bản
+// (`Chrome/151.0.7922.200`), một mẫu glob đang được TRÍCH (`*.sql` trong câu về `.gitattributes`),
+// một QUY ƯỚC ĐẶT TÊN (`src/index.ts`), và một tệp mà câu văn nói thẳng là **không vào git**
+// (`.superpowers/sdd/.gitignore`). Một phép kiểm sai 36 lần trong lượt chạy đầu không phải một
+// phép kiểm: cách duy nhất làm nó xanh là một danh sách miễn trừ dài bằng chính danh sách phát
+// hiện, và khi ấy nó là một DANH SÁCH, không phải một LỚP.
+//
+// Đọc lại P4 thì thấy nó chưa bao giờ quét văn xuôi: nó đọc **cột con trỏ của bảng sổ nợ** — một
+// VỊ TRÍ ĐÃ KHAI. Nên chuyển P4 sang `Handoff.md` nghĩa là tìm những vị trí đã khai tương đương,
+// không phải quét cả tệp. Có đúng một: bảng của §13 *Đọc gì, theo thứ tự*, cột đầu là tài liệu.
+//
+// Phần còn lại của khoản nợ 61 KHÔNG cần cơ chế mới. Ba con số mà `Handoff.md` khai là **bản sao
+// của ba con số `[INV-H20]` ĐÃ suy ra được** cho `docs/STATE.md`, và cả ba đã trôi (đo 2026-09-09,
+// trước khi sửa):
+//
+//   số ADR         : `Handoff.md` khai **mười tám**, `docs/DECISIONS.md` có **34**
+//   số bất biến    : khai **47** (34 + 13),        sổ đăng ký có **55** (34 + 21)
+//   số khoản nợ    : §13 khai **61 khoản, 14 mở**, sổ có **71 khoản, 14 mở**
+//
+// Đó đúng là thứ ADR-029 gọi tên: *một bản sao không được đối chiếu thì trôi*. Nên P7 và P8 KHÔNG
+// phải hàm mới — chúng là `viPhamSoADR`/`viPhamSoBatBien` gọi trên một tệp thứ hai. Việc phải làm
+// là tham số hoá cái NHÃN, không phải viết lại phép kiểm.
+
+/** Số khoản nợ có trong bảng, và số khoản KHÔNG mang trạng thái `ĐÓNG`. */
+function demSoNo(state: string): { readonly tong: number; readonly mo: number } {
+  const dong = docCacDong(state);
+  return { tong: dong.length, mo: dong.filter((d) => trangThaiCua(d) !== "ĐÓNG").length };
+}
+
+/** `**71 khoản, trong đó 14 còn mở**` và `**[S1.21] 61 khoản nợ, 14 còn mở**` — cùng một lời khai. */
+const RE_KHOAN_NO = new RegExp(
+  `\\*\\*${TIEN_TO_VONG}` + String.raw`(\d+) khoản(?: nợ)?,\s*(?:trong đó\s*)?(\d+) còn mở\*\*`,
+  "g",
+);
+
+export function viPhamSoKhoanNo(van: string, state: string, nhan: string): readonly string[] {
+  const le = viPhamCapGach(van, nhan);
+  if (le.length > 0) return le;
+  const khai = [...conHieuLuc(van).matchAll(RE_KHOAN_NO)];
+  if (khai.length === 0) {
+    return [`không tìm thấy lời khai "**<n> khoản, trong đó <m> còn mở**" nào trong ${nhan}`];
+  }
+  const { tong, mo } = demSoNo(state);
+  const loi: string[] = [];
+  for (const k of khai) {
+    const [kTong, kMo] = [Number(k[1]), Number(k[2])];
+    if (kTong !== tong || kMo !== mo) {
+      loi.push(`${nhan} khai ${kTong} khoản / ${kMo} mở, sổ nợ có ${tong} khoản / ${mo} mở`);
+    }
+  }
+  return loi;
+}
+
+/**
+ * Ba con số về HÌNH DẠNG KHO, suy từ `git ls-files` — không phải từ đĩa (ADR-029 ⑺).
+ *
+ * Đo 2026-09-09: §3 khai *"Bảy migration"* trong khi có **48** tệp đánh số, và *"Bảy gói + hai
+ * công cụ"* trong khi có **13** gói và **5** công cụ. Đây là lời khai trôi XA NHẤT của cả tệp.
+ */
+function hinhDangKho(): { readonly migration: number; readonly goi: number; readonly congCu: number } {
+  const dem = (mau: RegExp): number => {
+    const ten = new Set<string>();
+    for (const t of DUOC_THEO_DOI) {
+      const m = mau.exec(t);
+      if (m !== null) ten.add(m[1]!);
+    }
+    return ten.size;
+  };
+  return {
+    migration: dem(/^db\/migrations\/(\d+)_[^/]*\.sql$/),
+    // Một GÓI là một thư mục TỰ KHAI mình là gói — nguồn chặt hơn "có tệp nào đó bên dưới", và
+    // đo được: cả 13 thư mục con của `packages/` đều có `package.json`, nên hai cách cho cùng
+    // một số HÔM NAY; cách này còn đúng vào cái ngày ai đó để một tệp lạc vào `packages/`.
+    goi: dem(/^packages\/([^/]+)\/package\.json$/),
+    // CÔNG CỤ thì KHÔNG dùng được tiêu chí ấy, và đây là một phép đo chứ không phải một ngoại lệ
+    // cho tiện: `tools/bench-kms` và `tools/do-webcrypto` là một tệp `.mjs` trần, không có
+    // `package.json` (3/5 công cụ có). Đếm theo thư mục là đúng thứ đang được đếm.
+    congCu: dem(/^tools\/([^/]+)\//),
+  };
+}
+
+const RE_MIGRATION = new RegExp(`\\*\\*${TIEN_TO_VONG}(\\d+) migration đánh số\\*\\*`, "g");
+const RE_GOI_CONG_CU = new RegExp(
+  `\\*\\*${TIEN_TO_VONG}(\\d+) gói \\+ (\\d+) công cụ\\*\\*`,
+  "g",
+);
+
+export function viPhamHinhDangKho(van: string, nhan: string): readonly string[] {
+  const le = viPhamCapGach(van, nhan);
+  if (le.length > 0) return le;
+  const song = conHieuLuc(van);
+  const that = hinhDangKho();
+  const loi: string[] = [];
+
+  const kMig = [...song.matchAll(RE_MIGRATION)];
+  if (kMig.length === 0) loi.push(`không tìm thấy lời khai "**<n> migration đánh số**" trong ${nhan}`);
+  for (const k of kMig) {
+    if (Number(k[1]) !== that.migration) {
+      loi.push(`${nhan} khai ${k[1]} migration đánh số, kho có ${that.migration}`);
+    }
+  }
+
+  const kGoi = [...song.matchAll(RE_GOI_CONG_CU)];
+  if (kGoi.length === 0) loi.push(`không tìm thấy lời khai "**<n> gói + <m> công cụ**" trong ${nhan}`);
+  for (const k of kGoi) {
+    if (Number(k[1]) !== that.goi || Number(k[2]) !== that.congCu) {
+      loi.push(
+        `${nhan} khai ${k[1]} gói + ${k[2]} công cụ, kho có ${that.goi} gói + ${that.congCu} công cụ`,
+      );
+    }
+  }
+  return loi;
+}
+
+// ---- P10 — cột tài liệu của một bảng ĐÃ KHAI --------------------------------------------------
+
+/**
+ * Hàng DỮ LIỆU của bảng GFM đầu tiên trong một khối: mọi hàng SAU dòng ngăn cách.
+ *
+ * Dùng chính ngữ nghĩa của GFM (dòng ngăn cách chia đầu bảng với thân) thay vì đoán xem hàng nào
+ * là tiêu đề. Không có dòng ngăn cách thì NÉM — cùng lý do `khoiMuc` ném.
+ */
+function hangDuLieu(
+  dong: readonly string[],
+  nhan: string,
+): readonly { readonly viTri: number; readonly van: string }[] {
+  const nganCach = dong.findIndex((l) => O_NGAN_CACH.test(l.trim()));
+  if (nganCach < 0) throw new Error(`${nhan}: khối này không có bảng nào (thiếu dòng ngăn cách)`);
+  const ra: { viTri: number; van: string }[] = [];
+  // DỪNG ở dòng đầu tiên không phải hàng bảng, thay vì lọc cả khối. Lọc cả khối thì một bảng THỨ
+  // HAI trong cùng mục sẽ bị kéo vào — kể cả hàng TIÊU ĐỀ của nó, thứ không có con trỏ nào — và
+  // cổng đỏ oan. Một phép kiểm đỏ oan sẽ bị nới, và nới xong thì nó không còn nói gì.
+  for (let i = nganCach + 1; i < dong.length; i += 1) {
+    const t = dong[i]!.trim();
+    if (!t.startsWith("|")) break;
+    ra.push({ viTri: i, van: t });
+  }
+  return ra;
+}
+
+/**
+ * [khoản nợ 61] MỌI HÀNG CỦA BẢNG §13 PHẢI TRỎ TỚI MỘT TỆP GIẢI ĐƯỢC TRONG TẬP GIT THEO DÕI.
+ *
+ * Đây là P4 áp lên vị trí tương đương ở tệp thứ hai — một CỘT ĐÃ KHAI, không phải văn xuôi. Đo
+ * trước khi sửa: một hàng trỏ tới `docs/superpowers/specs/2026-08-26-…-design.md`, trong đó `…`
+ * là một chỗ lược bằng mắt người; tệp thật tên `2026-08-26-trustprocure-s0-s1-design.md`.
+ *
+ * Vế *"mọi hàng phải cho ra ít nhất một đường"* là phần fail-closed, và nó học từ P0: một hàng
+ * mất con trỏ mà vẫn được coi là hợp lệ thì cách rẻ nhất để làm xanh một hàng hỏng là **xoá con
+ * trỏ của nó**.
+ */
+export function viPhamConTroTaiLieu(van: string, tieuDe: string, nhan: string): readonly string[] {
+  const { dong, tuDong } = khoiMuc(van, tieuDe, nhan);
+  const hang = hangDuLieu(dong, nhan);
+  const loi: string[] = [];
+  for (const { viTri, van } of hang) {
+    const soDong = tuDong + viTri;
+    const o = cacO(van);
+    const sach = (o[0] ?? "").replace(/~~[\s\S]*?~~/g, "");
+    const duong = cacDuongTrong(sach);
+    if (duong.length === 0) {
+      loi.push(`${nhan} dòng ${soDong}: hàng bảng không có con trỏ SỐNG nào — ${van.slice(0, 60)}`);
+      continue;
+    }
+    for (const d of duong) {
+      if (!giaiDuoc(d)) loi.push(`${nhan} dòng ${soDong}: con trỏ không giải được — ${d}`);
+    }
+  }
+  if (hang.length === 0) loi.push(`${nhan}: bảng của "${tieuDe}" không có hàng dữ liệu nào`);
   return loi;
 }
 
@@ -416,6 +666,8 @@ export function viPhamSoBatBien(state: string, testPlan: string): readonly strin
 const STATE = docTep("docs/STATE.md");
 const QUYET_DINH = docTep("docs/DECISIONS.md");
 const TEST_PLAN = docTep("docs/TEST-PLAN.md");
+const HANDOFF = docTep("Handoff.md");
+const TIEU_DE_DOC_GI = "## 13. Đọc gì, theo thứ tự";
 
 /** Đổi đúng MỘT chỗ trong văn bản thật, và ném nếu chỗ ấy không có — đột biến phải TRÚNG. */
 function dotBien(goc: string, cu: string, moi: string): string {
@@ -495,12 +747,12 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   });
 
   it("P5 — số ADR khai ở STATE bằng số đầu mục ADR ở sổ quyết định", () => {
-    expect(viPhamSoADR(STATE, QUYET_DINH)).toEqual([]);
+    expect(viPhamSoADR(STATE, QUYET_DINH, "docs/STATE.md")).toEqual([]);
   });
 
   it("P5 đột biến — thêm một ADR mà quên sửa con số thì ĐỎ ở MỌI lời khai", () => {
     const them = `${QUYET_DINH}\n## ADR-999 — một quyết định không có ai đếm\n`;
-    const loi = viPhamSoADR(STATE, them);
+    const loi = viPhamSoADR(STATE, them, "docs/STATE.md");
     const soMoi = (them.match(/^## ADR-/gm) ?? []).length;
     // `docs/STATE.md` mang HAI lời khai (mục *Cột mốc* và bảng *Tham chiếu*). Mũi này khẳng định
     // cả hai cùng ĐỎ — vì đúng chiều hỏng đã xảy ra hai lần là *một* trong hai bị bỏ quên.
@@ -524,17 +776,19 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
 
   it("P5 đột biến — một dấu ~~ LẺ làm lệch mọi cặp gạch phía sau, và nó phải ĐỎ", () => {
     const hong = dotBien(STATE, "## Nợ kỹ thuật", "## Nợ kỹ thuật ~~");
-    expect(viPhamCapGach(hong)).toHaveLength(1);
-    expect(viPhamSoADR(hong, QUYET_DINH)).toEqual(viPhamCapGach(hong));
+    expect(viPhamCapGach(hong, "docs/STATE.md")).toHaveLength(1);
+    expect(viPhamSoADR(hong, QUYET_DINH, "docs/STATE.md")).toEqual(
+      viPhamCapGach(hong, "docs/STATE.md"),
+    );
   });
 
   it("P6 — số bất biến khai ở STATE bằng số HÀNG của sổ đăng ký ở TEST-PLAN", () => {
-    expect(viPhamSoBatBien(STATE, TEST_PLAN)).toEqual([]);
+    expect(viPhamSoBatBien(STATE, TEST_PLAN, "docs/STATE.md")).toEqual([]);
   });
 
   it("P6 đột biến — thêm một hàng vào sổ đăng ký mà quên sửa con số thì ĐỎ", () => {
     const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
-    const loi = viPhamSoBatBien(STATE, them);
+    const loi = viPhamSoBatBien(STATE, them, "docs/STATE.md");
     expect(loi).toHaveLength(1);
     // Con số phải SUY từ chính `them`, không chép tay: bản trước ghim "55 (34 + 21)" và nó ĐỎ ở
     // đúng vòng sau, khi sổ đăng ký lớn thêm một hàng — cùng lớp lỗi mà tệp này đi đóng.
@@ -553,5 +807,122 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
       docSoTiengViet("ba mươi"),
       docSoTiengViet("không phải số"),
     ]).toEqual([9, 12, 19, 28, 25, 30, null]);
+  });
+
+  // ---- khoản nợ 61 — `Handoff.md` vào tầm -----------------------------------------------------
+
+  it("cửa `~~` — dấu TRÍCH DẪN trong đoạn mã không làm đỏ, dấu THẬT thì có", () => {
+    // Chiều ĐỎ OAN trước, vì nó là chiều đắt hơn: một phép kiểm đỏ oan sẽ bị nới, và nới xong
+    // thì nó không còn nói gì. Đo được: `Handoff.md` có một `` `~~` `` trong một đoạn mã đang
+    // NÓI VỀ chính cửa này, và đếm thô cho ra số LẺ dù không có cặp nào hở.
+    const trichDan = dotBien(HANDOFF, "## 1. Một câu", "## 1. Một câu\n\nVí dụ: `~~` là dấu gạch.");
+    expect(viPhamCapGach(trichDan, "Handoff.md")).toEqual([]);
+    expect(viPhamCapGach(dotBien(STATE, "## Nợ kỹ thuật", "## Nợ kỹ thuật\n\n`~~`"), "docs/STATE.md"))
+      .toEqual([]);
+
+    // …và chiều ĐỎ THẬT vẫn nguyên: một dấu ngoài đoạn mã là một cặp hở.
+    expect(viPhamCapGach(dotBien(HANDOFF, "## 1. Một câu", "## 1. Một câu ~~"), "Handoff.md"))
+      .toHaveLength(1);
+  });
+
+  it("P7 — số ADR khai ở `Handoff.md` bằng số đầu mục ADR ở sổ quyết định", () => {
+    expect(viPhamSoADR(HANDOFF, QUYET_DINH, "Handoff.md")).toEqual([]);
+  });
+
+  it("P7 đột biến — thêm một ADR mà quên sửa `Handoff.md` thì ĐỎ", () => {
+    const them = `${QUYET_DINH}\n## ADR-999 — một quyết định không có ai đếm\n`;
+    const loi = viPhamSoADR(HANDOFF, them, "Handoff.md");
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain(`có ${(them.match(/^## ADR-/gm) ?? []).length} đầu mục`);
+  });
+
+  it("P7 đột biến — XOÁ lời khai để làm im cổng thì vẫn ĐỎ", () => {
+    const m = /\*\*(\[S[\d.]+\] \d+ ADR)\*\*/.exec(HANDOFF)!;
+    expect(viPhamSoADR(dotBien(HANDOFF, m[0], m[1]!), QUYET_DINH, "Handoff.md")).toEqual([
+      'không tìm thấy lời khai "**<số> ADR**" nào trong Handoff.md',
+    ]);
+  });
+
+  it("P8 — số bất biến khai ở `Handoff.md` bằng số HÀNG của sổ đăng ký", () => {
+    expect(viPhamSoBatBien(HANDOFF, TEST_PLAN, "Handoff.md")).toEqual([]);
+  });
+
+  it("P8 đột biến — thêm một hàng sổ đăng ký mà quên sửa `Handoff.md` thì ĐỎ", () => {
+    const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
+    const loi = viPhamSoBatBien(HANDOFF, them, "Handoff.md");
+    expect(loi).toHaveLength(1);
+    const soHang = (them.match(/^\|\s*\*\*[A-H]\d+\*\*\s*\|/gm) ?? []).length;
+    expect(loi[0]).toContain(`sổ đăng ký có ${soHang}`);
+  });
+
+  it("P9 — số khoản nợ khai ở `Handoff.md` bằng bảng sổ nợ của STATE", () => {
+    expect(viPhamSoKhoanNo(HANDOFF, STATE, "Handoff.md")).toEqual([]);
+  });
+
+  it("P9 đột biến — đóng một khoản trong sổ mà quên sửa `Handoff.md` thì ĐỎ ở MỌI lời khai", () => {
+    const mo = docCacDong(STATE).find((d) => trangThaiCua(d) === "MỞ")!;
+    const hong = dotBien(STATE, `| ${mo.so} | **[MỞ]** `, `| ${mo.so} | **[ĐÓNG]** `);
+    const loi = viPhamSoKhoanNo(HANDOFF, hong, "Handoff.md");
+    // `Handoff.md` mang lời khai này ở HAI chỗ (§10 và §13). Mũi này khẳng định CẢ HAI cùng đỏ —
+    // đúng vế ⑷ của ADR-029: mọi lời khai, không phải lời khai đầu tiên.
+    expect(loi.length).toBeGreaterThanOrEqual(2);
+    const { tong, mo: soMo } = demSoNo(hong);
+    expect(loi.every((l) => l.includes(`sổ nợ có ${tong} khoản / ${soMo} mở`))).toBe(true);
+  });
+
+  it("P9 đột biến — XOÁ mọi lời khai số khoản nợ thì vẫn ĐỎ", () => {
+    const hong = HANDOFF.replace(/\*\*(\[S[\d.]+\]\s*)?(\d+) khoản/g, "$1$2 khoản");
+    expect(viPhamSoKhoanNo(hong, STATE, "Handoff.md")).toHaveLength(1);
+  });
+
+  it("P9b — số migration / gói / công cụ khai ở `Handoff.md` suy từ `git ls-files`", () => {
+    expect(viPhamHinhDangKho(HANDOFF, "Handoff.md")).toEqual([]);
+  });
+
+  it("P9b đột biến — khai thiếu MỘT migration thì ĐỎ, và con số ĐỐI CHỨNG suy từ kho", () => {
+    const khai = /\*\*\[S[\d.]+\] (\d+) migration đánh số\*\*/.exec(HANDOFF)![1]!;
+    const hong = dotBien(HANDOFF, `${khai} migration đánh số`, `${Number(khai) - 1} migration đánh số`);
+    const loi = viPhamHinhDangKho(hong, "Handoff.md");
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain(`kho có ${khai}`);
+  });
+
+  it("P9b đột biến — XOÁ lời khai gói/công cụ thì vẫn ĐỎ", () => {
+    const m = /\*\*(\[S[\d.]+\] \d+ gói \+ \d+ công cụ)\*\*/.exec(HANDOFF)!;
+    const loi = viPhamHinhDangKho(dotBien(HANDOFF, m[0], m[1]!), "Handoff.md");
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("không tìm thấy lời khai");
+  });
+
+  it("P10 — mọi hàng bảng §13 của `Handoff.md` trỏ tới một tệp GIT THEO DÕI", () => {
+    expect(viPhamConTroTaiLieu(HANDOFF, TIEU_DE_DOC_GI, "Handoff.md")).toEqual([]);
+  });
+
+  it("P10 đột biến — một hàng trỏ tới tệp không tồn tại thì ĐỎ", () => {
+    const hong = dotBien(HANDOFF, "| `docs/PRODUCT.md` |", "| `docs/khong-he-co.md` |");
+    const loi = viPhamConTroTaiLieu(hong, TIEU_DE_DOC_GI, "Handoff.md");
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("con trỏ không giải được — docs/khong-he-co.md");
+  });
+
+  it("P10 đột biến — GỠ con trỏ khỏi một hàng, cách 'sửa' rẻ nhất, thì vẫn ĐỎ", () => {
+    const hong = dotBien(HANDOFF, "| `docs/PRODUCT.md` |", "| PRODUCT |");
+    const loi = viPhamConTroTaiLieu(hong, TIEU_DE_DOC_GI, "Handoff.md");
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("không có con trỏ SỐNG nào");
+  });
+
+  it("P10 — một bảng THỨ HAI trong cùng mục KHÔNG bị kéo vào (chiều đỏ oan)", () => {
+    // Bản đầu của `hangDuLieu` lọc MỌI dòng bắt đầu bằng `|` trong cả khối, nên một bảng thứ
+    // hai — kể cả hàng TIÊU ĐỀ của nó, thứ không có con trỏ nào — bị đọc như hàng dữ liệu và
+    // cổng đỏ mà không có khiếm khuyết nào. Mũi này giữ bản vá *dừng ở cuối bảng thứ nhất*.
+    const cuoi = HANDOFF.split("\n").find((l) => l.includes("trustprocure-s0-s1-design.md"))!;
+    const hong = dotBien(HANDOFF, cuoi, `${cuoi}\n\n| Cột | Cột |\n|---|---|\n| không phải con trỏ | gì cả |`);
+    expect(viPhamConTroTaiLieu(hong, TIEU_DE_DOC_GI, "Handoff.md")).toEqual([]);
+  });
+
+  it("P10 đột biến — đổi tên mục §13 thì NÉM, không xanh trên một khối rỗng", () => {
+    const hong = dotBien(HANDOFF, TIEU_DE_DOC_GI, "## 13. Doc gi theo thu tu");
+    expect(() => viPhamConTroTaiLieu(hong, TIEU_DE_DOC_GI, "Handoff.md")).toThrow(/không tìm thấy/);
   });
 });
