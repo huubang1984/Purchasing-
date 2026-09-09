@@ -175,12 +175,17 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  * hàng"* không phải một phép thử), và hôm nay hình dạng đứng thay: cả hai đều không có `RETURN`.
  */
 /**
- * Hàm trigger BEFORE-ROW UPDATE/DELETE **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
+ * Hàm trigger UPDATE/DELETE (mọi hình thức) **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
  * ĐIỀU KIỆN (máy trạng thái, kiểm quyền, bất biến cột), nên bảng mang chúng vẫn sửa/xoá được ở
  * những đường hợp lệ. Đo tại `bebeb41`.
  */
 const HAM_KHONG_PHAI_CANH = [
   "public.kiem_danh_tinh_theo_phien",
+  // [S1.31] Năm hàm AFTER-ROW UPDATE vào tập rộng khi tập ấy thôi khoá theo hình thức BEFORE-ROW.
+  "public.kiem_tra_ma_tran_quyen",
+  "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
+  "public.kiem_tra_nguong_khong_cung_tay_vai_tro",
+  "public.kiem_tra_phan_tach_nhiem_vu",
   "public.loi_moi_khong_song_lai",
   "public.mfa_credentials_khoa_ho_so_da_xac_nhan",
   "public.mfa_credentials_xoa_can_yeu_cau",
@@ -201,9 +206,17 @@ const HAM_KHONG_PHAI_CANH = [
   "public.unseal_dieu_phoi_mot_lan",
   "public.unseal_kiem_chuyen_trang_thai",
   "public.unseal_kiem_du_phe_duyet",
+  "public.users_thu_hoi_phien_khi_dinh_chi",
 ];
 
-/** Nguồn của TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên. */
+/**
+ * Nguồn của TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên.
+ * [S1.31, khoản nợ 75] Tiêu chí là *mọi trigger plpgsql trên UPDATE hoặc DELETE* — bit 16/8 của
+ * `tgtype`, KHÔNG xét bit ROW (1) hay BEFORE (2): một trigger cấp CÂU LỆNH hay AFTER-ROW ném vô điều
+ * kiện cũng làm bảng chỉ-ghi-thêm (đo: `BEFORE UPDATE OR DELETE FOR EACH STATEMENT` với thân `RAISE`
+ * ⇒ `migrate()` OK, `TRUNCATE` OK, bảng ngoài `VI_TU_BANG_CHI_GHI_THEM`). Vế `19`/`11` cũ của tập
+ * rộng đã loại chúng — đúng cái lỗ ADR-035 §2⑴ cấm: chọn ứng viên bằng một hình dạng.
+ */
 const TU_TAP_RONG = `FROM pg_trigger t
          JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
          JOIN pg_namespace np ON np.oid OPERATOR(pg_catalog.=) p.pronamespace
@@ -214,13 +227,14 @@ const TU_TAP_RONG = `FROM pg_trigger t
           AND n.nspname NOT IN ('pg_catalog', 'information_schema')
           AND l.lanname OPERATOR(pg_catalog.=) 'plpgsql'
           AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
-          AND (((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19)
-            OR ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11))`;
+          AND (((t.tgtype OPERATOR(pg_catalog.&) 16::pg_catalog.int2) OPERATOR(pg_catalog.=) 16)
+            OR ((t.tgtype OPERATOR(pg_catalog.&) 8::pg_catalog.int2) OPERATOR(pg_catalog.=) 8))`;
 
 /** TẬP RỘNG theo HÀM — đơn vị của tổng điều tra. */
 const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ten,
               (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
-              pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat
+              pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat,
+              pg_catalog.bool_and((t.tgtype OPERATOR(pg_catalog.&) 3::pg_catalog.int2) OPERATOR(pg_catalog.=) 3) AS chi_truoc_hang
          ${TU_TAP_RONG}
         GROUP BY 1, 2
         ORDER BY 1`;
@@ -231,10 +245,40 @@ const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg
  */
 const CAU_TAP_RONG_THEO_BANG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ham,
               (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname) AS bang,
-              ((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) AS upd,
-              ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) AS del,
+              ((t.tgtype OPERATOR(pg_catalog.&) 16::pg_catalog.int2) OPERATOR(pg_catalog.=) 16) AS upd,
+              ((t.tgtype OPERATOR(pg_catalog.&) 8::pg_catalog.int2) OPERATOR(pg_catalog.=) 8) AS del,
+              ((t.tgtype OPERATOR(pg_catalog.&) 3::pg_catalog.int2) OPERATOR(pg_catalog.=) 3) AS truoc_hang,
+              t.tgdeferrable AS hoan,
               (p.prosrc OPERATOR(pg_catalog.~*) 'la_duong_ung_dung|current_user|session_user|pg_has_role|rolsuper') AS nhay_vai
          ${TU_TAP_RONG}`;
+
+/**
+ * [S1.31, khoản nợ 73] TỔNG ĐIỀU TRA RULE — cùng khuôn ADR-035, cho một cơ chế KHÔNG ĐI QUA TRIGGER.
+ *
+ * `CREATE RULE … AS ON UPDATE TO t DO INSTEAD NOTHING` làm bảng chỉ-ghi-thêm mà không tạo trigger
+ * nào: đo trên PostgreSQL 16 — UPDATE/DELETE trả `0 hàng`, KHÔNG lỗi, hàng còn nguyên, `migrate()`
+ * OK. Bảng ấy đứng ngoài `VI_TU_BANG_CHI_GHI_THEM`, tức ngoài LOGGED / chốt TRUNCATE / ACL của
+ * H19. Và chiều ngược cũng thật: một rule trên một bảng chỉ-ghi-thêm viết lại câu lệnh TRƯỚC khi
+ * hàm canh chạy — `hardening.always.sql` [CR1] gỡ rule khỏi HAI bảng sổ, nhưng đo được: rule trên
+ * `bid_receipts` SỐNG QUA `migrate()`. Vòng này đóng cả hai: sản xuất phán xét rule trên mọi bảng
+ * chỉ-ghi-thêm suy ra (mục *trạng thái vật lý*), còn ở đây MỌI rule trên MỌI quan hệ của dự án
+ * phải nằm trong `RULE_DA_KHAI` — danh sách RỖNG, và rỗng là một lời khai: dự án không dùng RULE.
+ * Tiêu chí ứng viên là `pg_rewrite` trừ `_RETURN` (rule của VIEW), không lách được bằng cách viết.
+ * [lượt soi 21] Vế loại theo TÊN có lách được bằng một rule đặt tên `"_RETURN"` trên BẢNG không? Đo
+ * trên PostgreSQL 16: `CREATE RULE "_RETURN" AS ON DELETE TO bid_receipts …` ⇒ NÉM *non-view rule
+ * for "bid_receipts" must not be named "_RETURN"* — chính PostgreSQL giữ tên ấy cho view.
+ */
+const RULE_DA_KHAI: readonly string[] = [];
+
+const CAU_RULE_RONG = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname
+                OPERATOR(pg_catalog.||) '/' OPERATOR(pg_catalog.||) rw.rulename::pg_catalog.text) AS ten,
+              rw.ev_type::pg_catalog.text AS su_kien, rw.is_instead
+         FROM pg_rewrite rw
+         JOIN pg_class c ON c.oid OPERATOR(pg_catalog.=) rw.ev_class
+         JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND rw.rulename OPERATOR(pg_catalog.<>) '_RETURN'
+        ORDER BY 1`;
 
 /**
  * [khoản nợ 74] NHÂN CHỨNG HÀNH VI — ĐÓNG CHIỀU NÓI DỐI CỦA TỔNG ĐIỀU TRA.
@@ -288,9 +332,11 @@ const CAU_TAP_RONG_THEO_BANG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' O
  * cùng câu, vẫn được ghi công — kho hôm nay không có ca ấy, và nó đòi hàm ấy CŨNG có trigger
  * BEFORE-ROW ở đó; ⒞ phép đo nói "có một đường trả về", không nói "mọi điều kiện của hàm đều
  * đúng"; ⒟ kịch bản là một lời khai về ĐƯỜNG HỢP LỆ của từng bảng — nó không thể tự sinh, nhưng
- * nó không thể nói dối: một câu không đi qua thì ném, một câu 0 hàng thì không ghi công; ⒠ tập
+ * nó không thể nói dối: một câu không đi qua thì ném, một câu 0 hàng thì không ghi công; ⒠ ~~tập
  * rộng khoá theo trigger BEFORE cấp HÀNG — một trigger cấp CÂU LỆNH hay AFTER-ROW ném vô điều
- * kiện cũng làm bảng chỉ-ghi-thêm mà không vào tổng điều tra lẫn nhân chứng: khoản nợ 75.
+ * kiện cũng làm bảng chỉ-ghi-thêm mà không vào tổng điều tra lẫn nhân chứng: khoản nợ 75.~~
+ * **[S1.31] Tập rộng nay là MỌI trigger trên UPDATE/DELETE**; một hàm canh ngoài hình thức
+ * BEFORE-ROW là ĐỎ ở tổng điều tra, và năm hàm AFTER-ROW của kho có nhân chứng như mọi hàm khác.
  */
 type SuKien = "UPDATE" | "DELETE";
 
@@ -311,6 +357,10 @@ interface HangTapRong {
   readonly bang: string;
   readonly upd: boolean;
   readonly del: boolean;
+  /** Trigger BEFORE cấp HÀNG — hình thức DUY NHẤT mà `VI_TU_BANG_CHI_GHI_THEM` nhận. */
+  readonly truoc_hang: boolean;
+  /** Constraint trigger DEFERRABLE — chạy ở COMMIT, sau lần đọc bộ đếm thứ hai: không đo được [lượt soi 21]. */
+  readonly hoan: boolean;
   /** Thân hàm đọc vai đang chạy — nhân chứng của nó phải đến từ một vai KHÔNG superuser. */
   readonly nhay_vai: boolean;
 }
@@ -354,6 +404,12 @@ class SoNhanChung {
     await c.query("BEGIN");
     try {
       await nc.chuanBi?.(c);
+      // Một constraint trigger DEFERRED chạy ở COMMIT — SAU lần đọc bộ đếm thứ hai — nên hàm của nó
+      // không bao giờ được ghi công: ĐỎ nhìn thấy được, không im lặng. Hôm nay 0/46 trigger UPDATE/
+      // DELETE là deferrable (BEFORE không thể là constraint trigger; 5 AFTER-ROW đo được false).
+      // KHÔNG ép `SET CONSTRAINTS ALL IMMEDIATE` ở đây: 017 có một constraint trigger DEFERRED trên
+      // INSERT `rfq_key_material` đòi RFQ được mở TRONG CÙNG giao dịch — ép nó chạy ngay là tự bắn
+      // vào chân, và bản đầu của vòng S1.31 đã đo đúng cú ấy.
       const vai = (
         await c.query<VaiDo>(
           "SELECT r.rolname AS ten, r.rolsuper AS sieu FROM pg_catalog.pg_roles r " +
@@ -367,7 +423,7 @@ class SoNhanChung {
       await c.query("COMMIT");
       if (soHang < 1) return; // ⒞ — không hàng nào đổi thì không ai được ghi công
       for (const r of this.tapRong) {
-        if (r.bang !== bang || !coSuKien(r, suKien)) continue; // ⒜
+        if (r.bang !== bang || !coSuKien(r, suKien)) continue; // ⒜ — mọi hình thức trigger [S1.31]
         if ((sau.get(r.ham) ?? 0) > (truoc.get(r.ham) ?? 0)) {
           // ⒝
           const khoa = `${r.ham}/${bang}/${suKien}`;
@@ -392,7 +448,12 @@ class SoNhanChung {
         if (!coSuKien(r, suKien) || HAM_CANH_MOT_SU_KIEN[r.ham] === suKien) continue;
         const vai = this.ghiCong.get(`${r.ham}/${r.bang}/${suKien}`) ?? [];
         const hopLe = r.nhay_vai ? vai.some((v) => !v.sieu) : vai.length > 0;
-        if (!hopLe) thieu.add(`${r.ham}/${r.bang}/${suKien}${r.nhay_vai ? " (cần vai không superuser)" : ""}`);
+        if (!hopLe)
+          thieu.add(
+            `${r.ham}/${r.bang}/${suKien}` +
+              (r.nhay_vai ? " (cần vai không superuser)" : "") +
+              (r.hoan ? " (trigger DEFERRABLE chạy ở COMMIT — phép đo không với tới; đổi thành NOT DEFERRABLE)" : ""),
+          );
       }
     }
     return [...thieu].sort();
@@ -636,6 +697,12 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     cau("UPDATE mfa_reset_requests SET status = 'APPROVED', approved_by = $2, approved_by_session_id = $3, approved_at = now() WHERE id = $1", [yd, pm2.u, pm2.s]),
   );
   await so.chung("public.mfa_credentials", "DELETE", cauDuoiAppApi(org, "DELETE FROM mfa_credentials WHERE org_id = $1 AND user_id = $2", [org, nan.u]));
+
+  // ---- [S1.31] Năm hàm AFTER-ROW UPDATE: ma trận quyền, phân tách nhiệm vụ, đình chỉ -------------
+  await so.chung("public.user_roles", "UPDATE", cau("UPDATE user_roles SET role_code = role_code WHERE org_id = $1 AND user_id = $2", [org, pm.u]));
+  await so.chung("public.role_permissions", "UPDATE", cau("UPDATE role_permissions SET permission_code = permission_code WHERE role_code = 'BUYER'", []));
+  const dc = await nguoi("BUYER");
+  await so.chung("public.users", "UPDATE", cau("UPDATE users SET status = 'SUSPENDED' WHERE org_id = $1 AND id = $2", [org, dc.u]));
 
   return { orgId: org };
 }
@@ -1002,9 +1069,21 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   }, 180000);
 
   it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger BEFORE-ROW UPD/DEL phải nằm trong ĐÚNG MỘT danh sách", async () => {
-    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean }>(CAU_TAP_RONG);
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean }>(CAU_TAP_RONG);
     const that = rows.map((r) => r.ten);
     const canhDayDu = HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`);
+
+    // [S1.31, khoản nợ 75] Tập rộng nay có cả trigger AFTER và cấp CÂU LỆNH — đối chứng: nó phải
+    // THẤY ít nhất một hàm không ở hình thức BEFORE-ROW, nếu không vế mở rộng là rỗng ruột.
+    expect(rows.some((r) => !r.chi_truoc_hang), "tập rộng không thấy trigger nào ngoài BEFORE-ROW").toBe(true);
+    // Và một hàm canh — theo hình dạng HAY theo khai báo — chỉ được gắn ở hình thức BEFORE-ROW: đó là
+    // hình thức DUY NHẤT `VI_TU_BANG_CHI_GHI_THEM` nhận, nên một hàm canh cấp câu lệnh hay AFTER-ROW
+    // làm bảng chỉ-ghi-thêm mà H19 không canh LOGGED / TRUNCATE / ACL cho nó.
+    expect(
+      rows.filter((r) => (r.khong_tra_ve || canhDayDu.includes(r.ten)) && !r.chi_truoc_hang).map((r) => r.ten),
+      "Hàm canh này gắn ở một trigger KHÔNG phải BEFORE … FOR EACH ROW trên UPDATE/DELETE. H19 chỉ nhận " +
+        "bảng chỉ-ghi-thêm qua hình thức BEFORE-ROW; viết lại trigger theo hình thức ấy.",
+    ).toEqual([]);
 
     // Đối chứng chống rỗng ruột: câu truy vấn phải THẤY thứ gì đó, và phải thấy các hàm canh đã
     // biết. Một câu hỏng cú pháp NÉM; một câu hỏng vị từ trả rỗng và sẽ xanh im lặng.
@@ -1014,7 +1093,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     const daKhai = new Set([...canhDayDu, ...HAM_KHONG_PHAI_CANH]);
     expect(
       that.filter((t) => !daKhai.has(t)),
-      "Một hàm trigger BEFORE-ROW UPDATE/DELETE vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
+      "Một hàm trigger UPDATE/DELETE (bất kể BEFORE/AFTER, hàng/câu lệnh) vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
         "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Nếu CÓ: thêm " +
         "tên vào HAM_CANH_CHI_GHI_THEM VÀ vào vị từ trong hardening.always.sql (cổng ở test đầu giữ " +
         "hai bản khớp nhau), kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT — bảng ấy sẽ được H19 canh " +
@@ -1092,6 +1171,121 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         .toContain("zz_so_moi");
     } finally {
       await db.pool.query(`DROP TABLE public.zz_so_moi; DROP FUNCTION public.${ten}();`);
+    }
+  }, 180000);
+
+  it("[sổ nợ 73] TỔNG ĐIỀU TRA RULE: mọi rule trên mọi quan hệ của dự án phải nằm trong RULE_DA_KHAI — hôm nay rỗng, và rỗng là một lời khai", async () => {
+    const { rows } = await db.pool.query<{ ten: string; su_kien: string; is_instead: boolean }>(CAU_RULE_RONG);
+    // Cả hai chiều: rule chưa khai là đỏ, dòng khai thiu cũng đỏ (ADR-035 §2⑶).
+    expect(
+      rows.map((r) => r.ten).filter((t) => !RULE_DA_KHAI.includes(t)),
+      "Một RULE vừa ra đời. Rule viết lại câu lệnh TRƯỚC khi trigger nào chạy, nên nó đứng ngoài toàn bộ " +
+        "lớp canh của H19: `DO INSTEAD NOTHING` trên UPDATE/DELETE làm bảng chỉ-ghi-thêm mà không lớp nào " +
+        "canh LOGGED/TRUNCATE/ACL; trên INSERT nó nuốt hàng trong im lặng. Dự án không dùng RULE — viết " +
+        "lại thành trigger BEFORE … FOR EACH ROW. Nếu vẫn cần, kê tên vào RULE_DA_KHAI kèm lý do.",
+    ).toEqual([]);
+    expect(RULE_DA_KHAI.filter((t) => !rows.some((r) => r.ten === t)), "RULE_DA_KHAI kể một rule CSDL không còn có").toEqual([]);
+    // Đối chứng chống rỗng ruột NGAY TRONG test này [lượt soi 21]: một câu truy vấn mù (join sai, lọc
+    // sai) trả rỗng và xanh im lặng. Dựng một rule tạm và đòi câu ấy THẤY nó, rồi gỡ.
+    await db.pool.query("CREATE TABLE public.zz_doi_chung (id int); CREATE RULE zz_thay AS ON UPDATE TO public.zz_doi_chung DO INSTEAD NOTHING");
+    try {
+      const { rows: sau } = await db.pool.query<{ ten: string }>(CAU_RULE_RONG);
+      expect(sau.map((r) => r.ten)).toContain("public.zz_doi_chung/zz_thay");
+    } finally {
+      await db.pool.query("DROP TABLE public.zz_doi_chung");
+    }
+  }, 180000);
+
+  it("[sổ nợ 73] ĐO: một RULE làm bảng chỉ-ghi-thêm mà KHÔNG lỗi, KHÔNG trigger, và ngoài tập của H19 — tổng điều tra là lớp duy nhất thấy nó", async () => {
+    await db.pool.query(`
+      CREATE TABLE public.zz_rule (id int PRIMARY KEY, ghi text);
+      INSERT INTO public.zz_rule VALUES (1, 'a');
+      CREATE RULE zz_khong_sua AS ON UPDATE TO public.zz_rule DO INSTEAD NOTHING;
+      CREATE RULE zz_khong_xoa AS ON DELETE TO public.zz_rule DO INSTEAD NOTHING;
+    `);
+    try {
+      // (a) hành vi: chỉ-ghi-thêm THẬT — nhưng bằng im lặng, không bằng lỗi.
+      const u = await db.pool.query("UPDATE public.zz_rule SET ghi = 'b' WHERE id = 1");
+      const d = await db.pool.query("DELETE FROM public.zz_rule WHERE id = 1");
+      expect([u.rowCount, d.rowCount]).toEqual([0, 0]);
+      expect((await db.pool.query<{ ghi: string }>("SELECT ghi FROM public.zz_rule")).rows).toEqual([{ ghi: "a" }]);
+      // (b) không trigger nào ⇒ ngoài tập rộng của tổng điều tra hàm, ngoài vị từ của H19, migrate() OK.
+      const tapRong = (await db.pool.query<{ bang: string }>(CAU_TAP_RONG_THEO_BANG)).rows;
+      expect(tapRong.some((r) => r.bang === "public.zz_rule")).toBe(false);
+      const chiGhiThem = (await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows;
+      expect(chiGhiThem.some((r) => r.relname === "zz_rule")).toBe(false);
+      expect(await migrateLai(db)).toBe("OK");
+      // (c) tổng điều tra rule THẤY nó — ở đúng hai tên.
+      const { rows } = await db.pool.query<{ ten: string }>(CAU_RULE_RONG);
+      expect(rows.map((r) => r.ten).filter((t) => !RULE_DA_KHAI.includes(t))).toEqual([
+        "public.zz_rule/zz_khong_sua",
+        "public.zz_rule/zz_khong_xoa",
+      ]);
+    } finally {
+      await db.pool.query("DROP TABLE public.zz_rule");
+    }
+  }, 180000);
+
+  it("[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm: bảng có TÊN thì hardening TỰ GỠ, bảng SUY RA thì hardening NÉM", async () => {
+    // Đo trước khi viết mục hardening: rule trên bid_receipts SỐNG QUA migrate() — [CR1] chỉ với tới
+    // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
+    const { rows } = await db.pool.query<{ relname: string }>(`${VI_TU_BANG_CHI_GHI_THEM} ORDER BY c.relname`);
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      for (const r of rows) {
+        await db.pool.query(`CREATE RULE zz_nuot AS ON DELETE TO public.${r.relname} DO INSTEAD NOTHING`);
+        const ketQua = await migrateLai(db);
+        const conRule = async (): Promise<string[]> =>
+          (await db.pool.query<{ rulename: string }>(`SELECT rulename FROM pg_rewrite WHERE ev_class = to_regclass('public.${r.relname}')`)).rows.map((x) => x.rulename);
+        if (BANG_CO_TEN.includes(r.relname)) {
+          expect(ketQua, `${r.relname} có tên trong danh sách nên hardening TỰ GỠ rule`).toBe("OK");
+          expect(await conRule(), `${r.relname}: rule phải bị gỡ`).toEqual([]);
+        } else {
+          expect(ketQua, `${r.relname} là bảng SUY RA nên hardening chỉ phán xét`).toMatch(/RULE trên bảng CHỈ-GHI-THÊM/u);
+          expect(await conRule()).toEqual(["zz_nuot"]);
+          await db.pool.query(`DROP RULE zz_nuot ON public.${r.relname}`);
+        }
+      }
+    } finally {
+      // [lượt soi 21] Một assert đỏ giữa vòng để rule sống ⇒ mọi migrate() sau đó ném vì chính mục
+      // hardening mới ⇒ đỏ dây chuyền với thông điệp không liên quan. Gỡ sạch dù đỏ hay xanh.
+      for (const r of rows) await db.pool.query(`DROP RULE IF EXISTS zz_nuot ON public.${r.relname}`);
+    }
+    expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
+    expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
+  }, 180000);
+
+  it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó và tổng điều tra ĐỎ ở cả hai lời khai", async () => {
+    const ten = "zz_canh_cau_lenh";
+    await db.pool.query(`
+      CREATE TABLE public.zz_cau (id int PRIMARY KEY, ghi text);
+      INSERT INTO public.zz_cau VALUES (1, 'a');
+      CREATE FUNCTION public.${ten}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'zz_cau chi ghi them'; END $$;
+      CREATE TRIGGER zz_cau_canh BEFORE UPDATE OR DELETE ON public.zz_cau FOR EACH STATEMENT EXECUTE FUNCTION public.${ten}();
+    `);
+    try {
+      // (a) nó LÀ hàm canh: mọi UPDATE/DELETE ném, kể cả câu chạm 0 hàng.
+      expect(await thu(db, "UPDATE public.zz_cau SET ghi = 'b' WHERE id = 1")).toMatch(/^NÉM/);
+      expect(await thu(db, "DELETE FROM public.zz_cau WHERE id = 99")).toMatch(/^NÉM/);
+      // (b) nhưng H19 không nhận bảng, migrate() OK, và TRUNCATE đi lọt — đúng khoản nợ 75.
+      const chiGhiThem = (await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows;
+      expect(chiGhiThem.some((r) => r.relname === "zz_cau")).toBe(false);
+      expect(await migrateLai(db)).toBe("OK");
+      // (c) tập rộng MỚI thấy nó — hình dạng canh, KHÔNG ở BEFORE-ROW.
+      const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; chi_truoc_hang: boolean }>(CAU_TAP_RONG);
+      const moi = rows.find((r) => r.ten === `public.${ten}`);
+      expect(moi).toMatchObject({ khong_tra_ve: true, chi_truoc_hang: false });
+      const theoBang = (await db.pool.query<HangTapRong>(CAU_TAP_RONG_THEO_BANG)).rows.filter((r) => r.ham === `public.${ten}`);
+      expect(theoBang.map((r) => [r.bang, r.upd, r.del, r.truoc_hang])).toEqual([["public.zz_cau", true, true, false]]);
+      // (d) và tổng điều tra đỏ ở CẢ HAI lời khai có thể có: chưa khai ⇒ đỏ; khai CANH ⇒ đỏ vì không
+      //     BEFORE-ROW; khai KHÔNG-CANH ⇒ đỏ vì thân không RETURN (mâu thuẫn một chiều).
+      const daKhai = new Set([...HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`), ...HAM_KHONG_PHAI_CANH]);
+      expect(daKhai.has(`public.${ten}`)).toBe(false);
+      expect(moi!.khong_tra_ve && !moi!.chi_truoc_hang, "khai CANH thì luật BEFORE-ROW bắt").toBe(true);
+      expect(moi!.khong_tra_ve, "khai KHÔNG-CANH thì mâu thuẫn một chiều bắt").toBe(true);
+    } finally {
+      await db.pool.query(`DROP TABLE public.zz_cau; DROP FUNCTION public.${ten}();`);
     }
   }, 180000);
 

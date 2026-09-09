@@ -1652,7 +1652,12 @@ $ham$;
                            AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                   AND (t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) OPERATOR(pg_catalog.>) 0$q$;
 
-  -- Trạng thái VẬT LÝ của MỌI bảng chỉ-ghi-thêm: LOGGED, và có chốt TRUNCATE.
+  -- Trạng thái VẬT LÝ của MỌI bảng chỉ-ghi-thêm: LOGGED, có chốt TRUNCATE, và [S1.31 / sổ nợ 73]
+  -- KHÔNG một RULE nào. Vế rule của [CR1] chỉ với tới `bang_so` (hai bảng sổ, TỰ GỠ ở mục trước);
+  -- đo ngày 2026-09-09: `CREATE RULE … ON DELETE TO bid_receipts DO INSTEAD NOTHING` SỐNG QUA
+  -- migrate(). Một rule viết lại câu lệnh TRƯỚC khi trigger nào chạy, nên nó đứng NGOÀI toàn bộ
+  -- lớp canh của H19: trên INSERT nó nuốt biên nhận trong im lặng (INSERT 0 0), trên UPDATE/DELETE
+  -- nó biến lời từ chối thành một no-op không dấu vết. Bảng SUY RA chỉ được PHÁN XÉT ([CR4]).
   CAU_CHI_GHI_THEM_VAT_LY constant text :=
     $q$SELECT b.bang_oid::regclass::text || ': bảng CHỈ-GHI-THÊM đang UNLOGGED (relpersistence='
               || b.relpersistence::text || ') — mọi hàng biến mất sau lần crash kế tiếp. [CR5] đã '
@@ -1677,7 +1682,17 @@ $ham$;
                                       AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                              AND t.tgenabled OPERATOR(pg_catalog.=) 'A'
                              AND (t.tgtype OPERATOR(pg_catalog.&) 34::pg_catalog.int2)
-                                 OPERATOR(pg_catalog.=) 34)$q$;
+                                 OPERATOR(pg_catalog.=) 34)
+       UNION ALL
+       SELECT b.bang_oid::regclass::text || '.' || rw.rulename::text || ': RULE trên bảng CHỈ-GHI-THÊM. '
+                 'Một rule viết lại câu lệnh TRƯỚC khi trigger nào chạy — "DO INSTEAD NOTHING" trên '
+                 'INSERT nuốt biên nhận/phiên bản báo giá trong IM LẶNG (INSERT 0 0, không lỗi), trên '
+                 'UPDATE/DELETE thì biến lời từ chối của hàm canh thành một no-op không dấu vết. Dự án '
+                 'không dùng RULE (tổng điều tra pg_rewrite ở db/hardening-suy-tu-tinh-chat.int.test.ts '
+                 'giữ danh sách RỖNG). Sửa: DROP RULE.' AS mo_ta
+         FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
+         JOIN pg_rewrite rw ON rw.ev_class = b.bang_oid
+        WHERE rw.rulename <> '_RETURN'$q$;
 
   -- ACL của MỌI bảng chỉ-ghi-thêm. Đo trước khi viết mục này, để chắc nó không thu hồi một quyền
   -- ĐANG DÙNG: `relacl` của ba bảng S1 chỉ mang `r` (SELECT), `attacl` chỉ mang `r` và `a`
