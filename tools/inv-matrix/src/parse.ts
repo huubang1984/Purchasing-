@@ -52,6 +52,8 @@ export interface LabelUse {
   readonly clause: string | null;
   readonly testName: string;
   readonly status: "passed" | "failed" | "skipped";
+  /** Đường dẫn tệp test đúng như báo cáo ghi (`testResults[].name`) — thường là tuyệt đối. */
+  readonly file: string;
 }
 
 const HANG_BAT_BIEN = /^\|\s*\*\*([A-H]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
@@ -157,11 +159,11 @@ function chuanHoaTrangThai(raw: string | undefined): "passed" | "failed" | "skip
 
 function* moiKhangDinh(
   reportJson: string,
-): Generator<{ name: string; status: "passed" | "failed" | "skipped" }> {
+): Generator<{ name: string; status: "passed" | "failed" | "skipped"; file: string }> {
   const report = JSON.parse(reportJson) as VitestJsonReport;
   for (const file of report.testResults ?? []) {
     for (const assertion of file.assertionResults ?? []) {
-      yield { name: assertion.fullName ?? "", status: chuanHoaTrangThai(assertion.status) };
+      yield { name: assertion.fullName ?? "", status: chuanHoaTrangThai(assertion.status), file: file.name ?? "" };
     }
   }
 }
@@ -206,7 +208,7 @@ export function collectCoverage(reportJson: string): Map<string, TestOutcome[]> 
  */
 export function collectLabelUses(reportJson: string): LabelUse[] {
   const uses: LabelUse[] = [];
-  for (const { name, status } of moiKhangDinh(reportJson)) {
+  for (const { name, status, file } of moiKhangDinh(reportJson)) {
     NHAN_BAT_KY.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = NHAN_BAT_KY.exec(name)) !== null) {
@@ -217,6 +219,7 @@ export function collectLabelUses(reportJson: string): LabelUse[] {
         clause: tach?.[2] ?? null,
         testName: name,
         status,
+        file,
       });
     }
   }
@@ -227,6 +230,47 @@ export function collectLabelUses(reportJson: string): LabelUse[] {
  * Nhãn `[INV-…]` mà mã gốc KHÔNG có trong sổ đăng ký. Mỗi mục là một test đang khẳng định
  * một bất biến KHÔNG TỒN TẠI — hoặc mã sai, hoặc sổ đăng ký thiếu. Cả hai đều phải ồn ào.
  */
+/** Đưa đường dẫn trong báo cáo (tuyệt đối, có thể `\\`) về dạng tương đối trong kho, `/`. */
+export function duongTuongDoi(file: string, goc: string): string {
+  const f = file.replace(/\\/g, "/");
+  const g = goc.replace(/\\/g, "/").replace(/\/$/, "");
+  return f.startsWith(`${g}/`) ? f.slice(g.length + 1) : f;
+}
+
+/**
+ * [INV-H22, khoản nợ 12] MỌI CẶP (mã, tệp) ĐƯỢC TÍNH LÀ ĐỘ PHỦ PHẢI CÓ TRONG SỔ KHAI — VÀ NGƯỢC LẠI.
+ *
+ * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (`[A-H]\d+`, không hậu tố vế) — không hơn,
+ * không kém — lấy từ CHÍNH báo cáo này, nên không có cách viết test nào làm hai bộ đọc lệch
+ * nhau. Chiều thứ hai (khai thiu) đồng thời là ĐỐI CHỨNG DƯƠNG: một báo cáo rỗng hay một sổ đọc
+ * hỏng làm MỌI dòng khai hụt, tức đỏ ồn ào thay vì xanh im lặng.
+ */
+export function findMisplacedLabels(
+  uses: readonly LabelUse[],
+  soKhai: Readonly<Record<string, readonly string[]>>,
+  goc: string,
+): { readonly chuaKhai: readonly string[]; readonly khaiThiu: readonly string[] } {
+  const thay = new Set<string>();
+  const chuaKhai = new Set<string>();
+  for (const u of uses) {
+    if (u.clause !== null || !/^[A-H]\d+$/.test(u.base)) continue;
+    const tep = duongTuongDoi(u.file, goc);
+    thay.add(`${u.base}\u0000${tep}`);
+    if (!(soKhai[u.base] ?? []).includes(tep)) {
+      chuaKhai.add(`[INV-${u.base}] xuất hiện trong tên test ở ${tep} — cặp này CHƯA CÓ trong sổ khai`);
+    }
+  }
+  const khaiThiu: string[] = [];
+  for (const [ma, ds] of Object.entries(soKhai)) {
+    for (const tep of ds) {
+      if (!thay.has(`${ma}\u0000${tep}`)) {
+        khaiThiu.push(`sổ khai kể [INV-${ma}] ở ${tep} — báo cáo không có tên test nào như thế`);
+      }
+    }
+  }
+  return { chuaKhai: [...chuaKhai].sort(), khaiThiu: khaiThiu.sort() };
+}
+
 export function findUnregisteredLabels(
   uses: readonly LabelUse[],
   registryIds: readonly string[],

@@ -2716,8 +2716,11 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 
 ### 6. Cái này KHÔNG đóng
 
-- **Tập hàm canh chỉ-ghi-thêm vẫn suy từ HÌNH DẠNG THÂN HÀM** (`prosrc` không có `RETURN`), tức một
-  phép so khớp văn bản. Nó chặt hơn một danh sách tên và có phản ví dụ thật giữ cho nó không lỏng
+- ~~**Tập hàm canh chỉ-ghi-thêm vẫn suy từ HÌNH DẠNG THÂN HÀM** (`prosrc` không có `RETURN`), tức một
+  phép so khớp văn bản.~~ **[S1.29] Nay là HÌNH DẠNG ∪ KHAI BÁO** — `HAM_CANH_CHI_GHI_THEM` kê tên,
+  khớp nguyên văn `hardening.always.sql`, và một tổng điều tra buộc mọi hàm trigger BEFORE-ROW
+  UPDATE/DELETE phải được phân loại (ADR-035, khoản nợ 60 đóng; phần chưa đóng là 73 và 74). Vế
+  hình dạng vẫn chặt hơn một danh sách tên và vẫn có phản ví dụ thật giữ cho nó không lỏng
   (`rfq_items_chan_truncate` — cùng hình dạng thân, nhưng là trigger TRUNCATE cấp câu lệnh, nên vế
   *"cả UPDATE lẫn DELETE, cấp HÀNG"* loại nó ra). Nó **không** là một tính chất ngữ nghĩa.
 - **Không đóng phần còn lại của khoản nợ 3** — vế *"một hàm plpgsql ngoài danh sách không được
@@ -3418,7 +3421,7 @@ này không đóng nó.
 
 ## ADR-035 — Khi một vị từ nhận diện chủ thể bằng HÌNH DẠNG, hãy đổi sang LIỆT KÊ RỘNG rồi BUỘC PHÂN LOẠI
 
-**Trạng thái:** Đã chấp nhận · **[S1.29]** · **Khoản nợ liên quan:** 12, 60, 73 ·
+**Ngày:** 2026-09-09 · **Trạng thái:** Đã chấp nhận · **[S1.29]** · **Khoản nợ liên quan:** 12, 60, 73, 74 ·
 **Liên quan:** ADR-027 (`MIEN_TRU`), ADR-028 (suy từ tính chất), ADR-029 (lời khai phải suy ra được)
 
 ### 1. Vì sao ADR này tồn tại
@@ -3443,7 +3446,12 @@ bằng regex.**
 ⑴ **Liệt kê RỘNG trước, phân loại sau.** Tập ứng viên phải lấy theo một tiêu chí **không thể lách
    bằng cách viết khác** — mọi tệp test được git theo dõi; mọi hàm `plpgsql` gắn `BEFORE … FOR EACH
    ROW` trên `UPDATE`/`DELETE`. Hình dạng thân hàm, cách đặt tên, phong cách viết đều KHÔNG được
-   dùng để chọn ứng viên.
+   dùng để chọn ứng viên. **[lượt soi 19] Bản đầu của `[INV-H22]` vi phạm chính vế này:** nó chọn
+   ứng viên CẶP bằng hình dạng DÒNG NGUỒN (`it(`/`describe(` ở đầu dòng), trong khi bộ sinh đếm
+   theo `fullName` lúc chạy — `test(`, `it.concurrent(`, tiêu đề ở dòng sau của `it.each` đều nuôi
+   ma trận mà bộ quét mù, và kho đang có 8 tên test như thế. Sửa bằng cách lấy cặp từ CHÍNH báo
+   cáo vitest. Bài học: *tập tệp* lấy từ `git ls-files` đúng vế này, *tập cặp* thì không, và một
+   ADR vừa viết xong đã bị chính bản cài đặt đầu tiên của nó làm trái.
 
 ⑵ **Mọi ứng viên phải nằm trong ĐÚNG MỘT danh sách đã khai.** Rơi ra ngoài mọi danh sách ⇒ ĐỎ. Đây
    là chỗ *"im lặng"* bị đóng: một thứ mới không biến mất, nó **chặn cổng** cho tới khi có người
@@ -3457,7 +3465,15 @@ bằng regex.**
 ⑷ **Nếu vị từ hình dạng vẫn được giữ làm cài đặt, nó phải bị ĐỐI CHIẾU với danh sách khai.** Hai
    cách nói về cùng một tập mà mâu thuẫn nhau ⇒ ĐỎ. Đây là thứ bắt được chiều hỏng ngược: một hàm
    khai KHÔNG-CANH bị viết lại thành không-bao-giờ-trả-về sẽ lọt vào tập hình dạng; một hàm canh bị
-   viết lại thành có đường trả về sẽ rời tập. Cả hai chiều đã có mũi đột biến ĐỎ.
+   viết lại thành có đường trả về sẽ rời tập. ~~Cả hai chiều đã có mũi đột biến ĐỎ.~~ **[lượt soi
+   19 bác vế "cả hai chiều", và bác đúng:** nếu vị từ hình dạng là NGUỒN SỰ THẬT thì chiều thứ
+   hai phạt lời khai đúng — một hàm canh có `RETURN` khai thật là CANH sẽ đỏ, khai sai là
+   KHÔNG-CANH sẽ xanh và bảng không được canh. Nên: ⒜ vị từ chủ thể phải là **hình dạng ∪ khai
+   báo**, để khai thật là đường xanh và bảng ĐƯỢC canh; ⒝ phép đối chiếu chỉ giữ **hướng suy
+   được** — thân không `RETURN` ⇒ phải khai CANH; hướng ngược là hợp lệ. ⒞ Khai SAI một hàm canh
+   có `RETURN` thì không phép kiểm văn bản nào bắt — chỉ một phép đo hành vi mới phân biệt được,
+   và đó là khoản nợ **74**. Đây là ranh giới thật của cả ADR: *liệt kê rộng rồi buộc phân loại*
+   đóng chiều IM LẶNG, không đóng chiều NÓI DỐI.
 
 ⑸ **ĐO cách hiển nhiên TRƯỚC khi chọn nó, và ghi lại nếu nó trượt.** Với khoản 12, đường hiển nhiên
    là dùng cột *nơi cưỡng chế* của `docs/TEST-PLAN.md` làm nguồn khai. Đo: cột ấy nêu tên tệp cho
@@ -3474,7 +3490,7 @@ bằng regex.**
 Đã bị bác bằng đo, hai lần. ⒜ Với khoản 60, mọi cách nới vị từ `prosrc` **lại là một hình dạng
 khác** — nó chỉ dời cái lỗ. ⒝ Với khoản 12, bản đầu của lớp mới quét dòng `it(` vì bộ sinh *"gom
 theo tên test"*; đo lại thì bộ sinh gom theo `fullName` = tên `describe` NỐI tên `it`, và **22 cặp
-(mã, tệp) chỉ tồn tại trên dòng `describe(`** — gồm `H19`, `H20`, `H21` và cả chín mã hook. Lớp mới
+(mã, tệp) chỉ tồn tại trên dòng `describe(`** — gồm `H19`, `H20`, `H21` và cả ~~chín~~ **mười** mã hook (`H1`–`H10` — lượt soi 19 đếm lại). Lớp mới
 **suýt ra đời với đúng cái lỗ nó sinh ra để bịt**, và thứ chặn được là một phép đếm, không phải một
 lần đọc lại kỹ hơn.
 

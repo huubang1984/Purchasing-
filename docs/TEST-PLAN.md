@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ **21** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ **55** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ **55** mã cùng chảy vào `evidence/INV-matrix.md`.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -299,7 +299,7 @@ còn răng hay không.
 | **H16** | **Mọi gói trong `packages/` có một họ quy tắc biên giới đóng `src/` với ĐÚNG tập cửa mà `package.json` của gói khai trong `exports`** — ~~`index.ts` là cửa duy nhất~~ (câu cũ nói chặt hơn thứ được cưỡng chế: `coQuyTacBienGioi` từng chấp nhận tới HAI cửa qua một trần dùng chung, tức cấp không một cửa thứ hai cho mười một gói; sửa ở review lượt 10, H10-2) — suy từ TÍNH CHẤT (đọc thư mục thật + đọc `package.json` thật + đọc cấu hình thật; vị từ *gói* là *thư mục có `package.json`*, không phải *thư mục có `src/index.ts`* — H10-1), không từ danh sách các gói được bảo vệ; danh sách MIỄN TRỪ là đóng, có lý do từng dòng, và **chỉ được co lại**; cộng ba probe chạy depcruise thật cho `packages/rfq` | `tests/architecture/bien-gioi-goi.test.ts` + họ quy tắc `g6-` + `tests/architecture/barrel-exports.test.ts` | **T0** |
 | **H17** | **Mọi route ĐỔI TRẠNG THÁI của người mua trong `apps/api` khai một mã quyền thật của danh mục trong bảng `ROUTES`; bộ điều phối là nơi DUY NHẤT gọi `requirePermission` — đo trên tiến trình HTTP thật: một phiên thiếu quyền nhận 403 kèm bản ghi `PERMISSION_DENIED`, không hàng nào được tạo** — route là DỮ LIỆU liệt kê được (ADR-020), nên vị từ đọc cấu trúc chứ không đọc chuỗi, kèm đối chứng dương trên một bảng giả | `apps/api/src/routes.ts` (`timViPhamBangRoute` + kiểu `BuyerWriteRoute`) + `apps/api/src/routes.test.ts` + `apps/api/src/api.int.test.ts` | **T1**, T3 |
 | **H18** | **Mọi gói trong `packages/` có một danh sách trắng barrel, và MỌI CỬA khai trong `exports` của nó đều được canh** — suy từ TÍNH CHẤT (đọc thư mục thật, đọc `package.json` thật, import cửa thật), không từ một danh sách các gói đã được canh; sổ đăng ký *gói → cửa → danh sách trắng* phải khớp **BỀ MẶT THẬT**, nên một mục trỏ tới mảng rỗng bị bắt; danh sách MIỄN là **RỖNG** | `tests/architecture/barrel-exports.test.ts` | **T0** |
-| **H19** | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | **T3** |
+| **H19** | **Mọi bảng CHỈ-GHI-THÊM trong một schema của dự án — tập suy từ TÍNH CHẤT (mang CẢ HAI trigger BEFORE-ROW-UPDATE và BEFORE-ROW-DELETE mà hàm **plpgsql** của chúng không có `RETURN` nào), không từ một danh sách tên — đều LOGGED, đều MANG một trigger BEFORE TRUNCATE ĐANG BẬT gọi một hàm cùng loại, và không cấp UPDATE/DELETE/TRUNCATE (kể cả UPDATE mức CỘT) cho ai ngoài chủ sở hữu; cộng: bảng sổ CHÍNH TẮC không có cột nào NGOÀI chuỗi hash, và bảng gốc của cây tenant suy từ đích của khoá ngoại `org_id` một cột trỏ vào `id`. `migrate()` TỰ CHỮA thứ có TÊN, và trên tập SUY RA chỉ tự chữa thứ ĐƠN ĐIỆU — còn lại thì PHÁN XÉT (ADR-028 §2⑵) **[S1.29] Vế `RETURN` nay là HÌNH DẠNG ∪ KHAI BÁO: một hàm canh có `RETURN` vào tập bằng cách được kê tên ở `HAM_CANH_CHI_GHI_THEM`, danh sách ấy phải khớp NGUYÊN VĂN `hardening.always.sql`; và một TỔNG ĐIỀU TRA buộc mọi hàm trigger BEFORE-ROW UPDATE/DELETE phải được phân loại — thân không `RETURN` mà khai KHÔNG-CANH là đỏ, trigger canh bị TẮT là đỏ (khoản nợ 60; ADR-035)** | `db/hardening-suy-tu-tinh-chat.int.test.ts` + `db/migrations/hardening.always.sql` + `047` | **T3** |
 | **H20** | **Sổ nợ trong `docs/STATE.md` TỰ ĐỐI CHIẾU, bảy tính chất: mọi HÀNG BẢNG trong khối sổ nợ đều được bộ đọc NHẬN (một dòng thụt vào một dấu cách vẫn là bảng với GFM, và nó từng vô hình); mọi dòng có đúng BA cột và số khoản DUY NHẤT; mọi dòng KHAI trạng thái bằng một từ khoá đóng (`ĐÓNG`/`MỞ`/`NỬA`) đặt ở đầu thân; tập dòng khai MỞ/NỬA BẰNG dòng tổng kết — đỏ theo CẢ HAI chiều; mọi con trỏ chưa bị gạch giải được trong TẬP TỆP GIT THEO DÕI (không phải *"có trên đĩa"* — lượt CI đầu tiên bắt đúng chỗ ấy), và một ô đã gạch một con trỏ thì phải còn ít nhất một con trỏ SỐNG; số dấu `~~` của tệp là CHẴN; mọi lời khai hình dạng `**<số> ADR**` chưa bị gạch bằng số đầu mục `## ADR-` thật; mọi lời khai hình dạng `**Sổ đăng ký <n> bất biến** (<x> nghiệp vụ + <y> hàng rào` bằng số HÀNG của sổ đăng ký này; **[S1.28]** và MỌI lời khai ấy nay được đọc ở CẢ `Handoff.md`, cộng hai lời khai riêng của tệp đó (`**<n> migration đánh số**`, `**<n> gói + <m> công cụ**`) suy từ `git ls-files` và một lời khai số khoản nợ suy từ chính bảng sổ nợ; cộng CỘT TÀI LIỆU của §13 phải giải được trong tập git theo dõi, và mọi hàng của bảng ấy phải còn ít nhất một con trỏ SỐNG; và số dấu `~~` nay được đếm SAU KHI BỎ ĐOẠN MÃ — một `` `~~` `` được TRÍCH DẪN không còn làm cổng đỏ oan** | `tests/architecture/so-no-tu-doi-chieu.test.ts` | **T1** |
 
 **Giới hạn của H20, nói ra thay vì để người đọc tự phát hiện** — cả bốn do review lượt 13 chỉ ra
@@ -326,6 +326,8 @@ hoặc buộc phải nói đúng mức:
   dựng từ tài liệu (`giaiDuoc`) đúng ở mức *tự gây thương tích*, không ở mức *chống nội dung thù
   địch*. Xem ADR-029 §5.
 
+| Mã | Bất biến | Nơi cưỡng chế | Tầng |
+|---|---|---|---|
 | **H21** | **QT3 có lớp máy: ~~một câu SQL trong mã sản xuất đã ghim MỘT trục (`pg_catalog.`/`public.`)~~ [S1.24] MỌI câu SQL trong mã sản xuất phải ghim ĐỦ BỐN — tên hàm, toán tử, ép kiểu, tên bảng; ~~số câu chưa ghim trục nào không được TĂNG;~~ không mã sản xuất nào ngoài `migrate.ts` được chạm `search_path` (mọi cú pháp); và mọi danh sách miễn trừ được PostgreSQL thật phán xét — tên ngữ pháp phải KHÔNG có hàm trong `pg_catalog`, từ khoá phải có trong `pg_get_keywords()`, tên kiểu đã ghim phải có trong `pg_type`** | `tests/architecture/qt3-ghim-schema.test.ts` + `tests/architecture/qt3-ngu-phap.int.test.ts` + **[S1.24]** `tests/architecture/qt3-cu-phap.int.test.ts` (mỗi câu DML được `PREPARE` trên PostgreSQL thật — lớp canh nay HAI CHIỀU: bắt cả **thiếu ghim** lẫn **ghim sai**) | **T1 + T3** |
 
 **Giới hạn của H21, nói ra thay vì để người đọc tự phát hiện:**
@@ -342,7 +344,9 @@ hoặc buộc phải nói đúng mức:
 - `db/migrations/*.sql` NGOÀI phạm vi, và cái giữ chúng là chính vế `search_path` của H21 —
   xem ADR-030 §5.
 
-| **H22** | **Mọi cặp (mã bất biến, tệp test) phải có trong SỔ KHAI — toàn kho.** Bộ sinh gom độ phủ bằng nhãn `[INV-XX]` trong `fullName` của báo cáo vitest, nên một nhãn gắn SAI CHỖ ghi một dòng *"passed"* vào hàng của một bất biến và làm một lỗ trống TRÔNG NHƯ ĐÃ VÁ. Trước H22, `findUnregisteredLabels` chỉ bắt nhãn trỏ tới mã KHÔNG TỒN TẠI, còn `packages/outbox/src/nhan-bat-bien.test.ts` chỉ phủ một gói. H22 đóng theo **CẢ HAI CHIỀU**: một cặp chưa khai là đỏ, và một dòng khai THIU cũng đỏ — chiều thứ hai đồng thời là ĐỐI CHỨNG DƯƠNG dựng sẵn, vì một bộ quét mù làm MỌI cặp đã khai biến mất | `tests/architecture/nhan-bat-bien-cho-dat.test.ts` | **T1** |
+| Mã | Bất biến | Nơi cưỡng chế | Tầng |
+|---|---|---|---|
+| **H22** | **Mọi cặp (mã bất biến, tệp test) phải có trong SỔ KHAI — toàn kho.** Bộ sinh gom độ phủ bằng nhãn `[INV-XX]` trong `fullName` của báo cáo vitest, nên một nhãn gắn SAI CHỖ ghi một dòng *"passed"* vào hàng của một bất biến và làm một lỗ trống TRÔNG NHƯ ĐÃ VÁ. Trước H22, `findUnregisteredLabels` chỉ bắt nhãn trỏ tới mã KHÔNG TỒN TẠI, còn `packages/outbox/src/nhan-bat-bien.test.ts` chỉ phủ một gói. H22 đóng theo **CẢ HAI CHIỀU**: một cặp chưa khai là đỏ, và một dòng khai THIU cũng đỏ — chiều thứ hai đồng thời là ĐỐI CHỨNG DƯƠNG dựng sẵn. **[lượt soi 19]** Cặp được lấy từ CHÍNH báo cáo vitest (`testResults[].name` + `fullName`) — cùng nguồn với độ phủ — chứ KHÔNG từ dòng mã nguồn, nên không cách viết test nào (`test(`, `it.concurrent(`, `it.each` nhiều dòng) làm hai bộ đọc lệch nhau | `tools/inv-matrix/src/parse.ts` (`findMisplacedLabels`, cưỡng chế ở `pnpm evidence`) + `tools/inv-matrix/src/so-khai-nhan.ts` (sổ khai) + `tests/architecture/nhan-bat-bien-cho-dat.test.ts` (hàm thuần, fixture + đột biến) | **T1 + Evidence pack** |
 
 **Giới hạn của H22, nói ra thay vì để người đọc tự phát hiện:**
 
@@ -350,11 +354,15 @@ hoặc buộc phải nói đúng mức:
   đã khai là ĐÚNG: sổ khai được SINH RA từ trạng thái đo được tại `bebeb41` rồi đóng băng,
   nên nó chặn cặp thứ 138 chứ không kiểm toán 137 cặp có sẵn. Vế *"test này có thật sự đo
   bất biến ấy không"* là một PHÁN XÉT, không cơ giới hoá được — y như vế tương ứng của H20.
-- Bộ quét đọc dòng `it(` **và** `describe(`, và vế thứ hai là kết quả của một phép đo: **22
-  cặp (mã, tệp) chỉ tồn tại trên dòng `describe(`** — gồm `H19`, `H20`, `H21` và cả chín mã
-  hook. Một bộ quét chỉ đọc `it(` sẽ mù với chúng trong khi bộ sinh vẫn tính chúng, vì
-  `fullName` là tên describe NỐI tên it. Cùng phép đo ấy bác câu tự khai của lớp outbox
-  (*"đúng thứ bộ sinh gom"*), và câu ấy đã được sửa tại chỗ.
+- ~~Bộ quét đọc dòng `it(` **và** `describe(`~~ **[lượt soi 19] Không còn bộ quét mã nguồn nào.**
+  Bản S1.29 đầu quét dòng nguồn; lượt soi đo được 22 cặp chỉ có ở `describe(` (gồm `H19`–`H21` và
+  cả mười mã hook `H1`–`H10`), rồi đo tiếp: sau khi thêm `describe(`, vẫn còn **8** tên test ở
+  dòng vô hình (`it.each` nhiều dòng) — tức mọi bộ quét theo dòng đều là một vị từ hình dạng, đúng
+  thứ ADR-035 §2⑴ cấm. Nay cặp lấy từ báo cáo vitest, nên chủ thể của H22 BẰNG chủ thể của độ phủ
+  theo cấu tạo, không theo trùng hợp.
+- Vì đọc báo cáo, phép kiểm chỉ chạy khi có báo cáo: ở `pnpm evidence` (job *Evidence pack*, và
+  `evidence:check` trước mỗi lần đẩy). `pnpm test` (T1) chỉ đo HÀM THUẦN bằng fixture. Một nhãn
+  gắn sai chỗ vì thế được bắt ở cổng chặn merge, không ở lượt chạy test cục bộ.
 - Nhãn trong CHÚ THÍCH không bị đọc, và đó là cố ý — chú thích là tài liệu, không phải bằng
   chứng; chính khối chú thích của các tệp này chứa hàng chục nhãn.
 

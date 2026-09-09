@@ -1282,21 +1282,24 @@ cổng, thứ mà P4 đã có một mũi riêng để chặn.
 `db/hardening-suy-tu-tinh-chat.int.test.ts`, `packages/outbox/src/nhan-bat-bien.test.ts`,
 `docs/TEST-PLAN.md`, `docs/DECISIONS.md` ADR-035, so với `origin/master` = `bebeb41`.
 
-## Vòng này KHÔNG có lượt soi đối kháng độc lập — lần thứ hai liên tiếp
+## ~~Vòng này KHÔNG có lượt soi đối kháng độc lập — lần thứ hai liên tiếp~~ Lượt soi 19 đã chạy — xem cuối mục
 
 §S1.25, §S1.26, §S1.27 mỗi vòng được **ba lăng kính độc lập** soi và đều bị bác ít nhất ba lời
 khai. §S1.28 và vòng này chỉ có **phép tự soi của người viết**. Ghi ra để không ai đọc gộp năm
 vòng thành một hàng — và để con số *"hai vòng liên tiếp không được soi"* là một thứ nhìn thấy
 được, không phải một chỗ quên.
 
-**Bề mặt an ninh:** 0 mã sản xuất. Thay đổi nằm ở hai tệp test, một tệp test được sửa chú thích,
-và ba tệp tài liệu. Không đụng lược đồ, không đụng đường xác thực, không thêm migration.
+**Bề mặt an ninh:** ~~0 mã sản xuất. Thay đổi nằm ở hai tệp test, một tệp test được sửa chú thích,
+và ba tệp tài liệu.~~ **[lượt soi 19 bác: diff có 11 tệp, không phải 6]** — và sau lượt soi, vòng này
+đụng **một tệp sản xuất**: `db/migrations/hardening.always.sql` (vị từ bảng chỉ-ghi-thêm thêm vế khai
+báo ở ba chỗ). Đó là hardening, chạy ở mọi `migrate()`; sai ở đó là sai trên mọi deploy, nên chính
+test H19 giữ nó khớp nguyên văn với bản trong test. Không đụng lược đồ, không đụng đường xác thực, không thêm migration.
 
 ## Điều phép tự soi tìm ra, và cả hai đều là lỗi THẬT
 
 | chỗ hở | đo được | bản vá |
 |---|---|---|
-| Lớp mới quét dòng `it(` vì tin vào mô tả *"bộ sinh gom theo tên test"* | Bộ sinh gom theo `fullName` = describe NỐI it. **22 cặp (mã, tệp) chỉ có ở dòng `describe(`** — gồm `H19`, `H20`, `H21`, chín mã hook | quét cả hai dạng dòng; sổ khai 114 → **137** cặp. Câu tự khai của lớp outbox đã gạch |
+| Lớp mới quét dòng `it(` vì tin vào mô tả *"bộ sinh gom theo tên test"* | Bộ sinh gom theo `fullName` = describe NỐI it. **22 cặp (mã, tệp) chỉ có ở dòng `describe(`** — gồm `H19`, `H20`, `H21`, ~~chín~~ **mười** mã hook (`H1`–`H10` — lượt soi 19 đếm lại) | ~~quét cả hai dạng dòng~~ lấy cặp từ CHÍNH báo cáo vitest (lượt soi 19: quét dòng vẫn mù với 8 tên test `it.each` nhiều dòng); sổ khai 114 → **137** cặp (136 tại `bebeb41`, cặp 137 là của H22). Câu tự khai của lớp outbox đã gạch |
 | Mũi đột biến *"xoá lời khai ADR"* nhắm vào cụm khớp ĐẦU TIÊN | Sau S1.29 `Handoff.md` có hai cụm — một đã gạch, một sống. Mũi ấy **xanh oan**; `[INV-H20]` bắt được | nhắm vào lời khai còn sống, sau khi bỏ đoạn mã và vùng đã gạch |
 
 Cộng một chỗ thứ ba, nhẹ hơn: một `!` trần làm test **SẬP** với *"Cannot read properties of
@@ -1314,3 +1317,33 @@ thứ tự**: liệt kê rộng theo một tiêu chí không lách được, r�
 hàm được sinh từ trạng thái đo được, không phải từ một lượt xét từng cái. Chúng chặn cái thứ 138
 và cái thứ 24; chúng không phán xét những cái đã có. Viết câu ấy vào chính tệp là rẻ; để người
 đọc tự phát hiện thì đắt.
+
+## Lượt soi đối kháng 19 — chạy SAU khi §S1.29 được viết, và nó bác hai trụ của vòng
+
+**Hình thức:** workflow 6 lăng kính độc lập (*lời khai rộng hơn phép đo · xanh giả · đỏ oan · có
+đóng được nợ thật không · phá gì · tài liệu mâu thuẫn*), mỗi phát hiện qua ba người phản bác với
+mặc định *bác bỏ nếu không chắc*. Hạn phiên cắt hai lần: 56 phát hiện, **12 sống sót** (hầu hết
+0/3 bác), 10 bị bác, **33 chưa được thẩm định máy** — những cái nặng trong nhóm ấy đã được tự đo
+lại bằng lệnh và ghi ở đây như phát hiện đã xác nhận, không hơn.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | CAO | `[INV-H22]` chọn ứng viên CẶP bằng hình dạng DÒNG — đúng thứ ADR-035 §2⑴ cấm | `test(`, `it.concurrent(`, tiêu đề ở dòng sau `it.each` đều nuôi ma trận mà bộ quét mù; kho có **8** tên test như thế; mũi thật: 7/7 xanh trong khi vitest báo 11 test `[INV-A1]` từ tệp chưa khai | cặp lấy từ CHÍNH báo cáo vitest, cưỡng chế ở `pnpm evidence`; H22 thành test hàm thuần |
+| 2 | CAO | Tổng điều tra khoản 60 **thưởng lời khai sai, phạt lời khai đúng** | hàm canh `RAISE …; RETURN NULL` dựng trên PG thật: khai CANH ⇒ đỏ, khai KHÔNG-CANH ⇒ xanh và bảng không được H19 canh | vị từ = hình dạng ∪ khai báo, khớp nguyên văn hardening; mâu thuẫn một chiều; phép đo trên PG thật |
+| 3 | CAO | Khai SAI một hàm canh có `RETURN` không lớp nào bắt | cùng probe: khai KHÔNG-CANH ⇒ cả ba khẳng định xanh | **không sửa được bằng văn bản** — khoản nợ **74** |
+| 4 | NẶNG | *"chín mã hook"* | đo lại: **mười** (`H1`–`H10`), chép ra sáu chỗ | sửa tại chỗ, gạch nguyên văn |
+| 5 | NHẸ | *"56 mã / 137 cặp tại `bebeb41`"* | tại đó chưa có tệp H22: 55 / 136 | sửa |
+| 6 | NHẸ | biên bản khai bề mặt *"6 tệp"* | diff có 11 | sửa |
+| 7 | CAO | dòng tổng của chính sổ đăng ký còn khai **21** hàng rào | bảng có 22 | sửa; đây là một lời khai `[INV-H20]` không đọc — cùng lớp khoản 61 |
+| 8 | NHẸ | H21/H22 tách khỏi đầu bảng, GFM dựng thành văn bản thô | đúng — bộ đếm vẫn tính nhưng người đọc không thấy hàng | mỗi hàng có đầu bảng riêng |
+| 9 | NHẸ | ADR-028 §6 còn khai nguyên văn tập hàm canh *"suy từ hình dạng"* | đúng | gạch, ghi câu S1.29 |
+| 10 | NHẸ | tổng điều tra định danh hàm không gắn lược đồ | `DISTINCT proname` gộp hai hàm cùng tên khác lược đồ | định danh `lược đồ.tên` |
+| 11 | INFO | vị từ bỏ qua `tgenabled` — trigger canh bị TẮT vẫn được đếm | đúng, có sẵn từ S1.20 | tổng điều tra coi trigger canh tắt là vi phạm |
+| 12 | NHẸ | một mũi đột biến P7 của `[INV-H20]` chép lại nửa `conHieuLuc` | đúng | giữ, ghi ở đây; sửa ở vòng sau nếu chạm tệp ấy |
+
+**Điều đáng mang sang vòng sau — và nó nặng hơn mọi phát hiện đơn lẻ:** cả hai trụ của vòng đều
+bị bác bởi **cùng một khuôn** — *bản cài đặt đầu tiên của một quy tắc vi phạm chính quy tắc ấy*.
+H22 chọn ứng viên bằng hình dạng ngay sau khi ADR-035 cấm hình dạng; tổng điều tra lấy hình dạng
+làm nguồn sự thật ngay sau khi nói hình dạng không đáng tin. Thứ bắt được không phải đọc lại kỹ
+hơn, mà là **một người khác dựng đúng ca phản ví dụ trên hệ thống thật**. Hai vòng trước không có
+lượt soi này, và bây giờ đã rõ cái giá của việc đó.

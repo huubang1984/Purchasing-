@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 // PHẠM VI, nói đúng mức: nó chỉ canh `packages/outbox/src/`. ~~Nó KHÔNG canh việc một task sau
 // gắn thẻ sai ở gói khác — lớp đó chưa tồn tại và được ghi vào sổ nợ.~~ **[S1.29] lớp ấy nay CÓ:
 // `[INV-H22]` ở `tests/architecture/nhan-bat-bien-cho-dat.test.ts` đòi mọi cặp (mã, tệp) của
-// TOÀN KHO phải có trong một sổ khai — khoản nợ 12.** Tệp này KHÔNG bị nó thay thế và cố ý ở
+// TOÀN KHO phải có trong một sổ khai, đọc từ CHÍNH báo cáo vitest ở cổng `pnpm evidence` — khoản nợ 12.** Tệp này KHÔNG bị nó thay thế và cố ý ở
 // lại: H22 chỉ hỏi *"cặp này đã khai chưa"*, còn ba mã C2/D4/B3 ở đây mang một PHÉP ĐO nói
 // chúng **không đo được** ở gói này. Một sổ khai chặn cái mới đi vào lặng lẽ; một danh sách cấm
 // có lý do đo được thì chặn cả cái được khai NHẦM.
@@ -35,7 +35,9 @@ import { describe, expect, it } from "vitest";
 // được đo.** Bộ sinh gom theo `fullName` — tên `describe` NỐI tên `it` — trong khi bộ quét dưới
 // đây chỉ đọc dòng `it(`. Đo toàn kho: **22 cặp (mã, tệp) chỉ tồn tại trên dòng `describe(`**,
 // gồm cả `[INV-H19]`, `[INV-H20]`, `[INV-H21]`. Gói này không có cặp nào như thế nên KẾT QUẢ ở
-// đây không đổi, nhưng CÂU KHAI thì sai và được sửa tại chỗ; `[INV-H22]` đọc cả hai dạng dòng.
+// đây không đổi, nhưng CÂU KHAI thì sai và được sửa tại chỗ. ~~`[INV-H22]` đọc cả hai dạng dòng.~~
+// **[lượt soi 19]** Đọc cả hai dạng dòng vẫn chưa đủ (còn 8 tên test ở `it.each` nhiều dòng);
+// `[INV-H22]` nay không đọc mã nguồn nữa mà đọc `fullName` trong báo cáo vitest.
 // Thẻ xuất hiện trong chú thích (như chính khối này) là tài liệu, không phải bằng chứng, và cố ý
 // không bị chặn.
 // ============================================================================================

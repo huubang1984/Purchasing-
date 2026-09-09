@@ -54,7 +54,28 @@ const HARDENING = readFileSync(
  * thì hai trigger dựng sẵn của PostgreSQL đủ để một bảng bị nhận nhầm là chỉ-ghi-thêm và bị CHẶN
  * DEPLOY.
  */
-const VI_TU_BANG_CHI_GHI_THEM = `SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
+/**
+ * [S1.29, khoản nợ 60] Danh sách KHAI BÁO hàm canh — vế thứ hai của vị từ dưới đây. Tên KHÔNG mang
+ * lược đồ vì vị từ ghim `pronamespace = public`; tổng điều tra thì định danh theo `lược đồ.tên`.
+ * Bất kỳ tên nào thêm vào đây phải xuất hiện NGUYÊN VĂN trong `hardening.always.sql` (cổng ở test
+ * đầu tiên), nên một hàm canh mới là một sửa đổi ở CẢ hai tệp — cố ý.
+ */
+const HAM_CANH_CHI_GHI_THEM = ["bid_chi_ghi_them", "chan_sua_xoa"];
+
+/** Vế "hàm này là hàm canh": HÌNH DẠNG (không bao giờ trả về) HOẶC KHAI BÁO (có tên trong danh sách). */
+function veHamCanh(hamCanh: readonly string[], thut: string): string {
+  const ten = hamCanh.map((h) => `'${h}'`).join(", ");
+  return (
+    `(p.prosrc !~* '\\mRETURN\\M'\n` +
+    `${thut}     OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace\n` +
+    `${thut}         AND p.proname IN (${ten})))`
+  );
+}
+
+/** Vị từ bảng chỉ-ghi-thêm cho một danh sách khai báo — để test đo được CẢ HAI phía của khai báo. */
+function viTuBangChiGhiThem(hamCanh: readonly string[]): string {
+  const T = "                  "; // 18 khoảng trắng — phải BẰNG thụt lề trong hardening.always.sql
+  return `SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
           AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'
@@ -63,14 +84,17 @@ const VI_TU_BANG_CHI_GHI_THEM = `SELECT c.oid AS bang_oid, c.relname, c.relpersi
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-                  AND p.prosrc !~* '\\mRETURN\\M'
+${T}AND ${veHamCanh(hamCanh, T)}
                   AND (t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) OPERATOR(pg_catalog.>) 0
           AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-                  AND p.prosrc !~* '\\mRETURN\\M'
+${T}AND ${veHamCanh(hamCanh, T)}
                   AND (t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) OPERATOR(pg_catalog.>) 0`;
+}
+
+const VI_TU_BANG_CHI_GHI_THEM = viTuBangChiGhiThem(HAM_CANH_CHI_GHI_THEM);
 
 /** Tập bảng chỉ-ghi-thêm ĐO ĐƯỢC hôm nay. Hai tên đầu là bảng sổ (003), ba tên sau là S1 (018/019). */
 const BANG_CHI_GHI_THEM_THAT = [
@@ -117,56 +141,67 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  * không phải hệ thống — có **23 hàm**. Vị từ hình dạng nhận **2**; **21 hàm còn lại đi qua nó
  * mà không lớp nào nói gì về chúng**.
  *
- * Bản vá KHÔNG phải nới vị từ, vì nới thế nào cũng lại là một hình dạng. Nó là: **mỗi hàm trong
- * tập rộng phải nằm trong ĐÚNG MỘT trong hai danh sách dưới đây.** Một hàm mới — viết theo bất
- * kỳ kiểu nào — rơi ra ngoài cả hai ⇒ ĐỎ, và cách duy nhất làm nó xanh là ghi nó vào một danh
- * sách, tức trả lời câu *"đây có phải một hàm canh chỉ-ghi-thêm không"* thành một dòng NHÌN THẤY
- * ĐƯỢC trong diff. Cùng khuôn với `MIEN_TRU` của ADR-027 và sổ khai của `[INV-H22]`.
+ * Bản vá KHÔNG phải nới vị từ hình dạng, vì nới thế nào cũng lại là một hình dạng. Nó là hai
+ * việc: ⑴ vị từ bảng chỉ-ghi-thêm thành **HÌNH DẠNG ∪ KHAI BÁO** — một hàm canh có `RETURN`
+ * vào tập bằng cách được kê tên ở `HAM_CANH_CHI_GHI_THEM`, và tên ấy phải xuất hiện nguyên văn
+ * trong `hardening.always.sql` (cổng ở test đầu tiên) nên SẢN XUẤT canh nó chứ không chỉ test;
+ * ⑵ **mỗi hàm trong tập rộng phải nằm trong ĐÚNG MỘT trong hai danh sách.** Một hàm mới rơi ra
+ * ngoài cả hai ⇒ ĐỎ.
  *
- * **Và nó đóng theo CẢ HAI CHIỀU.** Chiều thứ hai: một hàm đã khai là KHÔNG-CANH mà về sau bị
- * viết lại thành không-bao-giờ-trả-về sẽ lọt vào tập của vị từ hình dạng — hai lời khai mâu
- * thuẫn ⇒ ĐỎ. Không chiều nào trong hai chiều ấy có lớp trước vòng này.
+ * ~~cách duy nhất làm nó xanh là ghi nó vào một danh sách~~ **[lượt soi 19 bác, bác đúng]:** bản
+ * đầu dùng vị từ hình dạng làm nguồn sự thật, nên một hàm canh kiểu `RAISE …; RETURN NULL` khai
+ * THẬT thì đỏ (mâu thuẫn với hình dạng) còn khai SAI vào KHÔNG-CANH thì xanh — cổng thưởng lời
+ * khai sai. Đã đo trên PostgreSQL thật (test *"khai thật thì bảng ĐƯỢC canh"* dưới đây). Nay
+ * khai thật là đường xanh duy nhất SAU KHI bảng đã vào tập.
+ *
+ * **Chiều mâu thuẫn chỉ còn MỘT hướng, và đó là hướng suy được:** thân không có `RETURN` ⇒ hàm
+ * không thể từ chối có điều kiện ⇒ PHẢI là hàm canh; khai KHÔNG-CANH ⇒ ĐỎ. Hướng ngược (khai
+ * CANH nhưng có `RETURN`) là HỢP LỆ — đó chính là ca khoản nợ 60 mô tả.
+ *
+ * **Thứ vẫn KHÔNG có lớp, nói ra thay vì để người đọc tự phát hiện:** một hàm canh có `RETURN`
+ * bị khai SAI vào KHÔNG-CANH thì không phép kiểm văn bản nào bắt được — chỉ một phép đo HÀNH VI
+ * (thử UPDATE/DELETE trên bảng của từng hàm) mới phân biệt được, và đó là khoản nợ 74.
  *
  * **Điều khối này KHÔNG làm:** nó không phán xét một phân loại là ĐÚNG. Hai danh sách được sinh
  * từ trạng thái đo được tại `bebeb41` rồi đóng băng. Nó chặn hàm thứ 24 đi vào lặng lẽ; nó không
  * kiểm toán 23 hàm có sẵn.
  */
-const HAM_CANH_CHI_GHI_THEM = ["bid_chi_ghi_them", "chan_sua_xoa"];
-
 /**
  * Hàm trigger BEFORE-ROW UPDATE/DELETE **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
  * ĐIỀU KIỆN (máy trạng thái, kiểm quyền, bất biến cột), nên bảng mang chúng vẫn sửa/xoá được ở
  * những đường hợp lệ. Đo tại `bebeb41`.
  */
 const HAM_KHONG_PHAI_CANH = [
-  "kiem_danh_tinh_theo_phien",
-  "loi_moi_khong_song_lai",
-  "mfa_credentials_khoa_ho_so_da_xac_nhan",
-  "mfa_credentials_xoa_can_yeu_cau",
-  "mfa_reset_kiem_chuyen_trang_thai",
-  "mfa_reset_kiem_quyen",
-  "otp_go_khoa_khong_xoa_dau_vet",
-  "outbox_jobs_xoa_payload_dang_nhap",
-  "rfq_budgets_chi_sua_khi_soan",
-  "rfq_gia_han_khong_hoi_sinh",
-  "rfq_items_chi_sua_khi_soan",
-  "rfq_key_material_bat_bien",
-  "rfq_khoa_chi_thu_hoi_khi_huy",
-  "rfq_kiem_chuyen_trang_thai",
-  "rfq_kiem_khoa_khi_mo",
-  "rfq_kiem_nguong_phe_duyet_kep",
-  "rfq_kiem_yeu_cau_mo_thau",
-  "thu_hoi_don_dieu",
-  "unseal_dieu_phoi_mot_lan",
-  "unseal_kiem_chuyen_trang_thai",
-  "unseal_kiem_du_phe_duyet",
+  "public.kiem_danh_tinh_theo_phien",
+  "public.loi_moi_khong_song_lai",
+  "public.mfa_credentials_khoa_ho_so_da_xac_nhan",
+  "public.mfa_credentials_xoa_can_yeu_cau",
+  "public.mfa_reset_kiem_chuyen_trang_thai",
+  "public.mfa_reset_kiem_quyen",
+  "public.otp_go_khoa_khong_xoa_dau_vet",
+  "public.outbox_jobs_xoa_payload_dang_nhap",
+  "public.rfq_budgets_chi_sua_khi_soan",
+  "public.rfq_gia_han_khong_hoi_sinh",
+  "public.rfq_items_chi_sua_khi_soan",
+  "public.rfq_key_material_bat_bien",
+  "public.rfq_khoa_chi_thu_hoi_khi_huy",
+  "public.rfq_kiem_chuyen_trang_thai",
+  "public.rfq_kiem_khoa_khi_mo",
+  "public.rfq_kiem_nguong_phe_duyet_kep",
+  "public.rfq_kiem_yeu_cau_mo_thau",
+  "public.thu_hoi_don_dieu",
+  "public.unseal_dieu_phoi_mot_lan",
+  "public.unseal_kiem_chuyen_trang_thai",
+  "public.unseal_kiem_du_phe_duyet",
 ];
 
 /** TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên. */
-const CAU_TAP_RONG = `SELECT DISTINCT p.proname AS ten,
-              (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve
+const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) p.proname) AS ten,
+              (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
+              pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat
          FROM pg_trigger t
          JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
+         JOIN pg_namespace np ON np.oid OPERATOR(pg_catalog.=) p.pronamespace
          JOIN pg_class c ON c.oid OPERATOR(pg_catalog.=) t.tgrelid
          JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
          JOIN pg_language l ON l.oid OPERATOR(pg_catalog.=) p.prolang
@@ -176,6 +211,7 @@ const CAU_TAP_RONG = `SELECT DISTINCT p.proname AS ten,
           AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
           AND (((t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19)
             OR ((t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11))
+        GROUP BY 1, 2
         ORDER BY 1`;
 
 describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ danh sách tên", () => {
@@ -540,21 +576,23 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   }, 180000);
 
   it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger BEFORE-ROW UPD/DEL phải nằm trong ĐÚNG MỘT danh sách", async () => {
-    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean }>(CAU_TAP_RONG);
     const that = rows.map((r) => r.ten);
+    const canhDayDu = HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`);
 
-    // Đối chứng chống rỗng ruột: câu truy vấn phải THẤY thứ gì đó, và phải thấy ít nhất hai hàm
-    // canh đã biết. Một câu hỏng cú pháp NÉM; một câu hỏng vị từ trả rỗng và sẽ xanh im lặng.
+    // Đối chứng chống rỗng ruột: câu truy vấn phải THẤY thứ gì đó, và phải thấy các hàm canh đã
+    // biết. Một câu hỏng cú pháp NÉM; một câu hỏng vị từ trả rỗng và sẽ xanh im lặng.
     expect(that.length, "tập rộng RỖNG — câu truy vấn đang mù").toBeGreaterThan(0);
-    for (const canh of HAM_CANH_CHI_GHI_THEM) expect(that).toContain(canh);
+    for (const canh of canhDayDu) expect(that).toContain(canh);
 
-    const daKhai = new Set([...HAM_CANH_CHI_GHI_THEM, ...HAM_KHONG_PHAI_CANH]);
+    const daKhai = new Set([...canhDayDu, ...HAM_KHONG_PHAI_CANH]);
     expect(
       that.filter((t) => !daKhai.has(t)),
       "Một hàm trigger BEFORE-ROW UPDATE/DELETE vừa ra đời mà chưa được phân loại. Đây KHÔNG " +
-        "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Trả lời " +
-        "bằng cách thêm tên vào HAM_CANH_CHI_GHI_THEM (kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT) " +
-        "hoặc vào HAM_KHONG_PHAI_CANH. Đừng nới vị từ hình dạng — nới thế nào cũng lại là hình dạng.",
+        "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Nếu CÓ: thêm " +
+        "tên vào HAM_CANH_CHI_GHI_THEM VÀ vào vị từ trong hardening.always.sql (cổng ở test đầu giữ " +
+        "hai bản khớp nhau), kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT — bảng ấy sẽ được H19 canh " +
+        "kể cả khi thân hàm có RETURN. Nếu KHÔNG: thêm vào HAM_KHONG_PHAI_CANH.",
     ).toEqual([]);
 
     // Chiều ngược: một dòng khai THIU cũng là một lời khai sai, và nó là đối chứng dương thứ hai.
@@ -562,36 +600,71 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       [...daKhai].filter((t) => !that.includes(t)),
       "Danh sách phân loại kể một hàm mà CSDL không còn có.",
     ).toEqual([]);
+
+    // [lượt soi 19] Một trigger canh BỊ TẮT (tgenabled = 'D') là bảng thôi được canh mà tập vẫn
+    // nhận — vì vị từ đếm trigger, không đếm trigger ĐANG BẬT. Trên hàm canh, đó là vi phạm.
+    expect(
+      rows.filter((r) => canhDayDu.includes(r.ten) && r.co_trigger_tat).map((r) => r.ten),
+      "Một trigger của hàm canh đang bị TẮT — bảng ấy không còn chỉ-ghi-thêm.",
+    ).toEqual([]);
   }, 180000);
 
-  it("[sổ nợ 60] hai cách nói KHÔNG được mâu thuẫn: đã khai KHÔNG-CANH thì phải có đường trả về", async () => {
-    // Chiều hỏng thứ hai của khoản nợ 60, và nó KHÔNG có lớp nào trước vòng này: một hàm đã khai
-    // là không-canh bị viết lại thành không-bao-giờ-trả-về sẽ lọt vào tập của vị từ HÌNH DẠNG,
-    // tức bảng của nó bỗng bị coi là chỉ-ghi-thêm và chịu mọi chốt của hardening — hoặc ngược
-    // lại, một hàm canh bị viết lại thành có đường trả về sẽ RỜI tập trong im lặng.
+  it("[sổ nợ 60] mâu thuẫn MỘT chiều: thân không có RETURN thì KHÔNG được khai là KHÔNG-CANH", async () => {
+    // Hướng suy được: một hàm trigger không bao giờ trả về thì chỉ có thể NÉM, tức từ chối VÔ ĐIỀU
+    // KIỆN — nó không thể là một máy trạng thái. Khai nó là KHÔNG-CANH là một lời khai sai bắt được.
+    // Hướng ngược (khai CANH nhưng thân có RETURN) là HỢP LỆ, và được đo ở test kế tiếp.
     const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
     const theoTen = new Map(rows.map((r) => [r.ten, r.khong_tra_ve]));
-
     expect(
       HAM_KHONG_PHAI_CANH.filter((t) => theoTen.get(t) === true),
-      "Hàm này được khai là KHÔNG phải hàm canh, nhưng thân nó nay không có đường trả về nào — " +
-        "tức vị từ hình dạng đã nhận nó là hàm canh. Hai lời khai mâu thuẫn: sửa một trong hai.",
+      "Hàm này được khai là KHÔNG phải hàm canh, nhưng thân nó không có đường trả về nào — nó " +
+        "chỉ có thể từ chối vô điều kiện. Chuyển sang HAM_CANH_CHI_GHI_THEM.",
     ).toEqual([]);
-
-    expect(
-      HAM_CANH_CHI_GHI_THEM.filter((t) => theoTen.get(t) !== true),
-      "Hàm này được khai là hàm canh chỉ-ghi-thêm, nhưng thân nó nay CÓ đường trả về — nó vừa " +
-        "rời khỏi tập của vị từ hình dạng, và bảng của nó thôi được canh.",
-    ).toEqual([]);
+    // Và mọi hàm hình dạng nhận đều đã được khai CANH — tập hình dạng ⊆ tập khai báo.
+    const hinhDang = rows.filter((r) => r.khong_tra_ve).map((r) => r.ten);
+    for (const h of hinhDang) expect(HAM_CANH_CHI_GHI_THEM.map((x) => `public.${x}`)).toContain(h);
+    // Khoảng trống này có kích thước: hình dạng chỉ nói về một PHẦN NHỎ của các hàm đang chạy.
+    expect(rows.length).toBeGreaterThan(hinhDang.length * 5);
   }, 180000);
 
-  it("[sổ nợ 60] số hàm KHÔNG-CANH lớn hơn số hàm canh nhiều lần — khoảng trống này có kích thước", async () => {
-    // Không phải một khẳng định trang trí: nó ghim rằng vị từ hình dạng chỉ nói về một PHẦN NHỎ
-    // của các hàm trigger đang chạy, nên "nó đúng hôm nay" không phải một lý do để yên tâm.
-    // Đo tại `bebeb41`: 23 hàm trong tập rộng, vị từ hình dạng nhận 2.
-    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
-    const nhanBoiHinhDang = rows.filter((r) => r.khong_tra_ve).length;
-    expect(nhanBoiHinhDang).toBe(HAM_CANH_CHI_GHI_THEM.length);
-    expect(rows.length).toBeGreaterThan(nhanBoiHinhDang * 5);
+  it("[sổ nợ 60] ĐO: một hàm canh kiểu `RAISE …; RETURN NULL` khai THẬT thì bảng của nó ĐƯỢC canh", async () => {
+    // Đúng kịch bản khoản nợ 60 nêu tên, dựng trên PostgreSQL thật. Bốn phép đo, theo thứ tự:
+    //   (a) hàm vào TẬP RỘNG với khong_tra_ve = false — tức vị từ hình dạng KHÔNG nhận nó;
+    //   (b) nó LÀ hàm canh thật: UPDATE và DELETE trên một hàng đều NÉM;
+    //   (c) CHƯA khai ⇒ bảng KHÔNG trong tập của vị từ hiện hành (đây là lỗ, và nó không im: test
+    //       tổng điều tra sẽ đỏ vì hàm chưa phân loại);
+    //   (d) KHAI vào danh sách ⇒ cùng vị từ nhận bảng. Không cần đổi thân hàm.
+    const ten = "zz_canh_kieu_moi";
+    await db.pool.query(`
+      CREATE TABLE public.zz_so_moi (id int PRIMARY KEY, ghi text);
+      CREATE FUNCTION public.${ten}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF TG_OP IN ('UPDATE', 'DELETE') THEN RAISE EXCEPTION 'zz_so_moi chi ghi them'; END IF;
+          RETURN NULL;
+        END $$;
+      CREATE TRIGGER zz_canh_upd BEFORE UPDATE ON public.zz_so_moi FOR EACH ROW EXECUTE FUNCTION public.${ten}();
+      CREATE TRIGGER zz_canh_del BEFORE DELETE ON public.zz_so_moi FOR EACH ROW EXECUTE FUNCTION public.${ten}();
+      INSERT INTO public.zz_so_moi VALUES (1, 'a');
+    `);
+    try {
+      const rong = await db.pool.query<{ ten: string; khong_tra_ve: boolean }>(CAU_TAP_RONG);
+      const moi = rong.rows.find((r) => r.ten === `public.${ten}`);
+      expect(moi, "(a) hàm mới phải vào tập rộng").toBeDefined();
+      expect(moi!.khong_tra_ve, "(a) và vị từ hình dạng KHÔNG nhận nó").toBe(false);
+
+      expect(await thu(db, "UPDATE public.zz_so_moi SET ghi = 'b' WHERE id = 1")).toMatch(/^NÉM/);
+      expect(await thu(db, "DELETE FROM public.zz_so_moi WHERE id = 1")).toMatch(/^NÉM/);
+
+      const chuaKhai = await db.pool.query<{ relname: string }>(`${VI_TU_BANG_CHI_GHI_THEM} ORDER BY c.relname`);
+      expect(chuaKhai.rows.map((r) => r.relname), "(c) chưa khai ⇒ chưa vào tập").not.toContain("zz_so_moi");
+
+      const daKhai = await db.pool.query<{ relname: string }>(
+        `${viTuBangChiGhiThem([...HAM_CANH_CHI_GHI_THEM, ten])} ORDER BY c.relname`,
+      );
+      expect(daKhai.rows.map((r) => r.relname), "(d) khai thật ⇒ bảng vào tập, thân hàm giữ nguyên")
+        .toContain("zz_so_moi");
+    } finally {
+      await db.pool.query(`DROP TABLE public.zz_so_moi; DROP FUNCTION public.${ten}();`);
+    }
   }, 180000);
 });
