@@ -56,7 +56,10 @@ export async function issueLoginToken(
   input: { readonly email: string; readonly ttlSeconds?: number },
 ): Promise<IssueLoginTokenOutcome> {
   await assertTenantBound(client, orgId, "issueLoginToken");
-  const email = input.email.trim().toLowerCase();
+  // [khoản nợ 63 / S1.27] KHÔNG hạ chữ thường ở đây, và đó là toàn bộ bản vá — xem khối chú
+  // thích ngay trên câu truy vấn bên dưới. Hai tầng từng mỗi tầng dùng MỘT hàm hạ chữ thường
+  // riêng, và hai hàm ấy LỆCH NHAU.
+  const email = input.email.trim();
   if (email === "" || email.length > 320) return { ok: false, reason: "NO_USER" };
   const ttl = Math.min(Math.max(input.ttlSeconds ?? LOGIN_TOKEN_TTL_SECONDS, 60), LOGIN_TOKEN_TTL_SECONDS);
 
@@ -65,18 +68,44 @@ export async function issueLoginToken(
   //
   // Hỏng như thế nào nếu trả chuỗi người gọi: ràng buộc duy nhất của `users` là
   // `UNIQUE (org_id, email)` — so NGUYÊN VĂN (`db/migrations/002_organizations_and_users.sql`),
-  // không có chỉ mục nào trên `lower(email)`. Nên một tổ chức CÓ THỂ mang đồng thời
-  // `Alice@corp.com` và `alice@corp.com`; câu dưới khớp CẢ HAI, `rows[0]` là hàng nào thì không
+  // ~~không có chỉ mục nào trên `lower(email)`. Nên một tổ chức CÓ THỂ mang đồng thời
+  // `Alice@corp.com` và `alice@corp.com`;~~ câu dưới khớp CẢ HAI, `rows[0]` là hàng nào thì không
   // xác định, và `apps/api/src/outbox-api.ts` gửi magic link tới **chuỗi người gọi gửi lên**. Đó
   // là chiếm tài khoản: xin link cho `alice@corp.com`, nhận token của `Alice@corp.com`.
   //
   // Trả `u.email` làm link LUÔN đi tới địa chỉ ĐÃ ĐĂNG KÝ của chính chủ token — hàng nào được
-  // chọn thì link đi tới hộp thư của hàng ấy. Phần chênh còn lại (một lời xin có thể trả link cho
-  // hàng biến thể hoa-thường khác) là khoản nợ 63: nó cần một chỉ mục
-  // `UNIQUE (org_id, lower(email))`, tức một migration và một lượt đối chiếu dữ liệu.
+  // chọn thì link đi tới hộp thư của hàng ấy. ~~Phần chênh còn lại (một lời xin có thể trả link
+  // cho hàng biến thể hoa-thường khác) là khoản nợ 63: nó cần một chỉ mục
+  // `UNIQUE (org_id, lower(email))`, tức một migration và một lượt đối chiếu dữ liệu.~~
+  //
+  // **[S1.27] KHOẢN NỢ 63 ĐÓNG, VÀ KHÔNG BẰNG CHỈ MỤC ẤY.** `048` thêm
+  // `CHECK (email = lower(email))` cho `users`, nên một email có chữ hoa KHÔNG CẤT ĐƯỢC — cặp
+  // biến thể vì thế không dựng lên được nữa, và ca `Alice@corp.com` đứng một mình (thứ một chỉ
+  // mục trên `lower(email)` vẫn CHO QUA) cũng đóng theo. Đo cạnh nhau ở chú thích của `048`.
+  //
+  // `pg_catalog.lower(...)` bọc CẢ HAI VẾ, và đó là toàn bộ bản vá. Trước vòng này, vế trái đi
+  // qua `lower()` của PostgreSQL còn vế phải là chuỗi đã được `.toLowerCase()` của JS hạ — HAI
+  // HÀM KHÁC NHAU. Đo được trên `postgres:16-alpine` + Node 24: JS hạ 1488 điểm mã, máy chủ hạ
+  // 1364; phần chênh là điểm BẤT ĐỘNG với máy chủ (nên qua được `CHECK` của `048`) mà JS vẫn hạ,
+  // ví dụ `U+24B6` (Ⓐ) và `U+1C8A` (Ᲊ). Với một địa chỉ như thế, câu này trả **0 hàng** và người
+  // dùng KHÔNG BAO GIỜ nhận được magic link — im lặng, vì `/auth/link` luôn trả cùng một 200.
+  // Có mốc chết: `apps/api/src/auth.int.test.ts`, test `[sổ nợ 63]`, tự tìm điểm mã phân kỳ lúc
+  // chạy thay vì đóng cứng một cái.
+  //
+  // Nay cả hai vế dùng CÙNG một hàm, nên chúng không lệch được — bất kể libc của máy chủ là gì.
+  // Cộng với `CHECK (email = lower(email))` của `048`, vị từ này tương đương `email = lower($1)`,
+  // và `UNIQUE (org_id, email)` bảo đảm **nhiều nhất MỘT hàng khớp**: `rows[0]` tất định. Đó mới
+  // đúng là điều khoản nợ 63 đòi.
+  //
+  // ~~Cái giá là câu này không dùng được tiền tố `(org_id, ...)` của chỉ mục duy nhất.~~ **[đã đo
+  // lại — gọi sai thứ bị mất]** Tiền tố ấy VẪN được dùng: kế hoạch là Bitmap Index Scan trên
+  // `users_org_id_email_key` với `Index Cond: (org_id = ...)`. Thứ mất là cột khoá THỨ HAI —
+  // `lower(email)` tụt xuống thành Filter trên heap, nên câu đọc trọn tập hàng CỦA MỘT TỔ CHỨC
+  // thay vì một lần tra. Dưới RLS tập ấy nhỏ, nên chi phí không đáng một lần đổi; nhưng nói cho
+  // đúng thì đó là mất một cột khoá, không phải mất chỉ mục.
   const { rows } = await client.query<{ id: string; status: string; email: string }>(
     "SELECT id, status, email FROM public.users " +
-      "WHERE pg_catalog.lower(email) OPERATOR(pg_catalog.=) $1",
+      "WHERE pg_catalog.lower(email) OPERATOR(pg_catalog.=) pg_catalog.lower($1::pg_catalog.text)",
     [email],
   );
   const u = rows[0];

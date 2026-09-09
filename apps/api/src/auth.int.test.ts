@@ -219,6 +219,86 @@ afterAll(async () => {
 });
 
 describe("/auth/link — không liệt kê được email", () => {
+  // ==========================================================================================
+  // [sổ nợ 63 / S1.27] HAI TẦNG KHÔNG ĐƯỢC MỖI TẦNG MỘT ĐỊNH NGHĨA "CHỮ THƯỜNG"
+  //
+  // Bản vá đầu của khoản nợ 63 thêm `CHECK (email = lower(email))` rồi khai là *"chữ hoa thành
+  // BẤT KHẢ"*. Lượt soi đối kháng bác câu ấy bằng một phép đo, và phép đo đúng:
+  //
+  //   `.toLowerCase()` của JS hạ **1488** điểm mã. `lower()` của PostgreSQL trên `postgres:16-
+  //   alpine` (đúng ảnh mà `startPostgres()` ghim) hạ **1364**. Phần chênh là những điểm mã
+  //   BẤT ĐỘNG với `lower()` của máy chủ — nên chúng ĐI QUA `CHECK` — mà JS vẫn hạ.
+  //
+  // Hậu quả không phải một vết xước thẩm mỹ: `issueLoginToken` dựng khoá tra cứu bằng hàm của
+  // JS còn hàng nằm trong CSDL là điểm bất động của hàm PostgreSQL ⇒ `WHERE lower(email) = $1`
+  // trả **0 hàng**. Người ấy KHÔNG BAO GIỜ nhận được magic link, kể cả khi gõ đúng nguyên văn
+  // địa chỉ đã đăng ký — và thiết kế *"luôn 200, cùng một thân"* của `/auth/link` (đúng thứ
+  // khối describe này canh) bảo đảm không ai nhìn thấy điều đó. Một cửa khoá câm vĩnh viễn.
+  //
+  // Bản vá: bỏ hẳn MỘT trong hai định nghĩa. `login.ts` thôi gọi `.toLowerCase()`, và câu truy
+  // vấn hạ chữ thường CẢ HAI VẾ bằng `pg_catalog.lower()`. Khi ấy khoá tra cứu và giá trị đã
+  // lưu đi qua CÙNG một hàm, nên chúng không lệch được nữa — bất kể libc của ảnh nền là gì.
+  //
+  // TEST NÀY TỰ HIỆU CHUẨN, có chủ đích: nó KHÔNG đóng cứng một điểm mã, vì tập điểm mã phân
+  // kỳ phụ thuộc libc của máy chủ (đo được: 124 điểm trên musl, 28 trên glibc). Nó hỏi chính
+  // CSDL đang chạy xem điểm mã nào phân kỳ, rồi dùng cái đầu tiên. Không có điểm nào — nghĩa là
+  // hai hàm đã trùng khít — thì test nói thẳng là nó không đo được gì, chứ không xanh im lặng.
+  // ==========================================================================================
+  it("[sổ nợ 63] địa chỉ mà JS và máy chủ hạ chữ thường KHÁC NHAU vẫn tìm ra người dùng", async () => {
+    // Ứng viên: mọi điểm mã mà JS coi là hạ được. Dừng ở BMP cho rẻ.
+    const ungVien: string[] = [];
+    for (let i = 0x21; i < 0x2600; i += 1) {
+      const c = String.fromCodePoint(i);
+      if (c.toLowerCase() !== c && /^[^\s\u0000-\u001f\u007f@]$/u.test(c)) ungVien.push(c);
+    }
+    // ...và trong số đó, cái nào là ĐIỂM BẤT ĐỘNG của `lower()` trên máy chủ NÀY.
+    const { rows: phanKy } = await db.pool.query<{ c: string }>(
+      "SELECT c FROM unnest($1::text[]) AS c WHERE lower(c) = c ORDER BY c LIMIT 1",
+      [ungVien],
+    );
+    if (phanKy.length === 0) {
+      // Dấu hiệu tích cực ngược: không có gì để đo thì phải NÓI RA, không được xanh im lặng.
+      throw new Error(
+        "Không tìm được điểm mã nào phân kỳ giữa `.toLowerCase()` của JS và `lower()` của máy " +
+          "chủ. Nếu hai hàm đã trùng khít thì test này hết ý nghĩa và phải được viết lại — " +
+          "đừng xoá nó đi trong im lặng.",
+      );
+    }
+    const ky = phanKy[0]!.c;
+    const diaChi = `${ky}lice-63@vidu.vn`;
+
+    // TỔ CHỨC RIÊNG, không dùng `orgA`. Test ngay dưới khẳng định `user_login_tokens` của `orgA`
+    // bằng 0 ở một thời điểm cụ thể; phát một token vào đó từ đây là làm đỏ nó — đo được, và đó
+    // đúng là kiểu ràng buộc chéo mà một test mới dễ mang vào mà không ai thấy.
+    const org63 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Cong ty 63', 'cong-ty-63') RETURNING id",
+      )
+    ).rows[0]!.id;
+    // Hàng phải cất được: đây chính là vế mà `CHECK (email = lower(email))` CHO QUA.
+    const nguoi63 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi 63', 'ACTIVE') RETURNING id",
+        [org63, diaChi],
+      )
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [org63, nguoi63]);
+
+    const truoc = dv.linkDaGui.length;
+    const r = await goi("POST", "/auth/link", { body: { orgId: org63, email: diaChi } });
+    expect(r.status).toBe(200);
+    await ob.chay(org63);
+
+    // ĐỎ TRƯỚC BẢN VÁ: khoá tra cứu do JS sinh không khớp hàng, `issueLoginToken` trả NO_USER,
+    // và KHÔNG job nào được xếp hàng — `linkDaGui` đứng yên.
+    expect(
+      dv.linkDaGui.length,
+      `địa chỉ ${JSON.stringify(diaChi)} (điểm mã ${JSON.stringify(ky)}) đã đăng ký nhưng ` +
+        "không sinh được magic link — hai tầng đang dùng hai hàm hạ chữ thường khác nhau",
+    ).toBe(truoc + 1);
+    expect(dv.linkDaGui.at(-1)!.email, "link phải đi tới ĐỊA CHỈ ĐÃ ĐĂNG KÝ").toBe(diaChi);
+  });
+
   // [S1.15] Khối này cũng có một vòng đếm (`LOGIN_MAX_TOKENS_PER_WINDOW + 3`) — cùng lý do.
   beforeEach(choDuCuaSo);
 

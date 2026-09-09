@@ -1,0 +1,132 @@
+-- =============================================================================================
+-- 048 — [sổ nợ 63] `users.email` PHẢI Ở CHỮ THƯỜNG, VÀ ĐÓ LÀ CÁCH ĐÓNG MẠNH HƠN THỨ SỔ NỢ ĐOÁN
+-- =============================================================================================
+-- Khoản nợ 63, nguyên văn: *"`users` không có ràng buộc duy nhất trên `lower(email)`, nên một tổ
+-- chức MANG ĐƯỢC đồng thời `Alice@corp.com` và `alice@corp.com`"*. `UNIQUE (org_id, email)` của
+-- `002` so NGUYÊN VĂN, còn `issueLoginToken` tra bằng `pg_catalog.lower(email)` rồi lấy `rows[0]`
+-- — tức với một cặp biến thể, hàng nào được chọn là KHÔNG XÁC ĐỊNH.
+--
+-- Sổ nợ tự đề ra cách đóng: `UNIQUE (org_id, lower(email))`. File này KHÔNG làm thế, và lý do là
+-- một phép đo chứ không phải một sở thích.
+--
+-- ---------------------------------------------------------------------------------------------
+-- HAI ĐƯỜNG, ĐO CẠNH NHAU TRÊN PostgreSQL 16 (2026-09-09), CÙNG MỘT BẢNG DỰNG SẴN
+-- ---------------------------------------------------------------------------------------------
+--   (a) CREATE UNIQUE INDEX ... ON users (org_id, lower(email))
+--         chèn `Alice@corp.com` rồi `alice@corp.com`  -> ERROR duplicate key       (chặn CẶP)
+--         chèn `Bob@corp.com` MỘT MÌNH                -> INSERT 0 1   ** CHO PHÉP **
+--         số chỉ mục trên bảng: 2 -> 3, và cái thứ ba là CHỈ MỤC BIỂU THỨC ĐẦU TIÊN của kho
+--
+--   (b) ALTER TABLE ... ADD CHECK (email = lower(email))   [cộng `UNIQUE (org_id, email)` SẴN CÓ]
+--         chèn `Alice@corp.com` MỘT MÌNH              -> ERROR check constraint    ** TỪ CHỐI **
+--         chèn `alice@corp.com` hai lần               -> ERROR duplicate key
+--         số chỉ mục trên bảng: 2 -> 2               (không thêm gì)
+--
+-- (a) làm CẶP bất khả. (b) làm CHỮ HOA **ASCII** bất khả — nên cặp ASCII ấy không dựng lên được
+-- nữa, và nó còn đóng cả ca `Alice@corp.com` đứng một mình mà (a) để lọt. Chọn (b).
+--
+-- ---------------------------------------------------------------------------------------------
+-- *** BẢN ĐẦU CỦA FILE NÀY VIẾT "CHỮ HOA BẤT KHẢ". CÂU ẤY SAI, VÀ ĐÃ ĐO. GIỮ ĐỂ ĐỐI CHIẾU ***
+-- ---------------------------------------------------------------------------------------------
+-- ~~(b) làm CHỮ HOA bất khả~~ — đúng cho ASCII, SAI cho phần còn lại của Unicode, và phần sai
+-- rơi thẳng vào đường đăng nhập. Đo trên `postgres:16-alpine` (đúng ảnh mà `startPostgres()`
+-- ghim) và Node 24:
+--
+--     `.toLowerCase()` của JS hạ được    **1488** điểm mã
+--     `lower()` của PostgreSQL/musl hạ   **1364** điểm mã   (Debian/glibc: 1460)
+--
+-- Phần chênh là những điểm mã **BẤT ĐỘNG với `lower()` của máy chủ** — nên chúng ĐI QUA `CHECK`
+-- này — mà JS vẫn hạ. Ví dụ đo được: `U+24B6` (Ⓐ) và `U+1C8A` (Ᲊ).
+--
+-- Hậu quả KHÔNG phải thẩm mỹ: `issueLoginToken` từng dựng khoá tra cứu bằng hàm của **JS** trong
+-- khi hàng nằm trong CSDL là điểm bất động của hàm **PostgreSQL**, nên `WHERE lower(email) = $1`
+-- trả **0 hàng**. Người ấy không bao giờ nhận được magic link, kể cả khi gõ đúng nguyên văn địa
+-- chỉ đã đăng ký — và thiết kế *"luôn 200, cùng một thân"* của `/auth/link` bảo đảm không ai
+-- nhìn thấy. Một cửa khoá câm, vĩnh viễn.
+--
+-- **THỨ ĐÓNG ĐƯỢC ĐIỀU ĐÓ KHÔNG PHẢI SIẾT `CHECK` NÀY, MÀ LÀ BỎ HẲN MỘT TRONG HAI ĐỊNH NGHĨA.**
+-- `packages/identity/src/login.ts` thôi gọi `.toLowerCase()`, và câu truy vấn hạ chữ thường CẢ
+-- HAI VẾ bằng `pg_catalog.lower()`. Khi ấy, với `CHECK` này giữ `email = lower(email)`, vị từ
+-- `lower(email) = lower($1)` tương đương `email = lower($1)` — và `UNIQUE (org_id, email)` bảo
+-- đảm **nhiều nhất MỘT hàng khớp**. Đó mới đúng là tính chất khoản nợ 63 gọi tên (*"`rows[0]` là
+-- hàng nào thì KHÔNG XÁC ĐỊNH"*). Đo được trên bảng mô phỏng: cách cũ ⇒ 0 hàng; cách này ⇒ 1.
+--
+-- **DƯ LƯỢNG, nói thẳng:** hai địa chỉ TRÔNG GIỐNG NHAU vẫn cùng tồn tại được nếu cả hai là điểm
+-- bất động của `lower()` máy chủ — đo được: `ασ@corp.com` và `ας@corp.com` (sigma cuối từ) vào
+-- được cùng một tổ chức. Phép TRA thì vẫn tất định (đúng một hàng khớp mỗi khoá), nên lỗ mà
+-- khoản 63 gọi tên đã đóng; thứ còn lại là **hai người dùng khác nhau trông giống nhau** — một
+-- vấn đề Unicode confusable, có tên riêng: khoản nợ **71**.
+--
+-- **VÀ MỘT RANH GIỚI PHẢI GHI:** tập giá trị mà cột này CHẤP NHẬN phụ thuộc `lower()` của
+-- libc/ICU trên máy chủ — `Ⓐlice@corp.com` qua được trên musl và BỊ TỪ CHỐI trên glibc (đã đo cả
+-- hai). Tính ĐÚNG ĐẮN thì không phụ thuộc: vì cả hai vế của phép tra nay đi qua CÙNG hàm của máy
+-- chủ, chúng không lệch được, dù hàm ấy là hàm nào.
+--
+-- BA LÝ DO NỮA, xếp theo sức nặng:
+--
+-- ⑴ ~~**(a) đẻ ra một LỚP LỖI MỚI cho kho.**~~ **[đã đo lại — câu vừa gạch RỘNG HƠN sự thật]**
+--    Lớp lỗi ấy **KHÔNG mới**: mọi chỉ mục btree trên `text` của lược đồ này đã phụ thuộc
+--    collation của hệ điều hành, `users_org_id_email_key` gồm cả. Và vế *"`UNIQUE (org_id,
+--    email)` — so byte — vẫn đứng"* cũng chỉ đúng một nửa: phép SO SÁNH BẰNG dưới collation tất
+--    định đúng là so byte, nhưng btree ĐI XUỐNG bằng THỨ TỰ của collation, nên một lần nâng
+--    ICU/glibc vẫn là ca hỏng chỉ mục kinh điển của PostgreSQL. **Phát biểu đúng mức, hẹp hơn
+--    nhiều:** (a) thêm MỘT chỉ mục nữa vào tập đã phụ thuộc collation, và nó là chỉ mục mà một
+--    lần lệch làm phép TRA trượt; `CHECK` không nằm trên đường tra cứu nên một lần lệch ở đó
+--    nhiều nhất cho lọt một hàng lẽ ra bị từ chối. Đó là một khác biệt về ĐỘ, không phải về LOẠI.
+--
+-- ⑵ **(a) làm `[INV-H14]` ĐỎ, và đỏ ĐÚNG THIẾT KẾ.** `db/unique-oracle.int.test.ts` khẳng định
+--    vô điều kiện rằng tập chỉ mục duy nhất trên BIỂU THỨC là RỖNG, kèm nguyên văn: *"Hôm nay
+--    chưa có cái nào; ngày có cái đầu tiên, test này đỏ và người viết nó phải quyết định tại
+--    chỗ"* và *"phải xem tay và mở rộng bộ dò, KHÔNG được thêm vào một danh sách ngoại lệ"*. Tức
+--    đường (a) kéo theo một vòng sửa bộ dò. (b) không chạm tới nó — vẫn không chỉ mục biểu thức
+--    nào, nên lời hứa của H14 giữ nguyên giá trị.
+--
+-- ⑶ **(b) biến một điều đang được HY VỌNG thành một điều được CƯỠNG CHẾ.**
+--    `packages/supplier/src/suppliers.ts` hạ chữ thường TRƯỚC KHI GHI và tự viết ra lý do:
+--    *"Không có bước này, `A@x.vn` và `a@x.vn` là HAI hàng khác nhau"*. Nhưng đó là một quy ước
+--    của MÃ, không của LƯỢC ĐỒ — nó đúng chừng nào mọi người ghi đều nhớ. `users` thì hôm nay
+--    KHÔNG CÓ đường ghi nào trong `packages/*/src` (đo được: 0 chỗ `INSERT INTO users` ngoài
+--    tệp test), nên không có chỗ nào để gắn bước ấy vào. Chỗ mạnh nhất còn lại là lược đồ.
+--
+-- ---------------------------------------------------------------------------------------------
+-- CÂU `ALTER` NÀY CHÍNH LÀ "LƯỢT ĐỐI CHIẾU DỮ LIỆU" MÀ SỔ NỢ ĐÒI
+-- ---------------------------------------------------------------------------------------------
+-- Sổ nợ viết: *"Đóng nó cần một migration CỘNG một lượt đối chiếu dữ liệu đang có"*.
+-- `ADD CONSTRAINT ... CHECK` quét toàn bảng ngay khi chạy, nên nó TRẢ LỜI được câu hỏi *"có hàng
+-- nào vi phạm không"* — fail-closed, deploy dừng. Cố ý KHÔNG dùng `NOT VALID`: một ràng buộc
+-- chưa được kiểm là một ràng buộc nói dối về quá khứ.
+--
+-- ~~hoặc ĐỔ và in ra ĐÚNG hàng vi phạm (`DETAIL: Failing row contains (...)`). Fail-closed, và
+-- người vận hành biết chính xác phải sửa cái gì.~~ **[đã đo lại — SAI]** PostgreSQL KHÔNG in
+-- `DETAIL` cho lượt kiểm của `ALTER TABLE`; nó chỉ nói `check constraint "..." of relation "..."
+-- is violated by some row`. Dòng `DETAIL: Failing row contains (...)` chỉ xuất hiện ở
+-- `INSERT`/`UPDATE` — đã đo cạnh nhau. Nên câu ALTER này **KHÔNG** thay được lượt đối chiếu:
+-- nó nói CÓ vi phạm chứ không nói vi phạm Ở ĐÂU. Người vận hành phải tự chạy:
+--
+--     SELECT id, org_id, email FROM public.users WHERE email <> pg_catalog.lower(email);
+--
+-- **MỘT RANH GIỚI NỮA, và nó chạm bảng XÁC THỰC.** `migrate.ts` đặt `SET lock_timeout = 0` cho
+-- phiên migration, nên câu `ALTER` này giữ `ACCESS EXCLUSIVE` trên `users` và **chờ vô hạn** nếu
+-- có truy vấn nào đang mở trên bảng; trong lúc chờ, mọi `SELECT` của đường đăng nhập xếp hàng
+-- phía sau. Đây là tính chất của MỌI migration lấy `ACCESS EXCLUSIVE`, không riêng file này —
+-- nhưng file này là file đầu tiên lấy nó trên `users`, nên chỗ này là chỗ ghi ra.
+--
+-- Đo trước khi viết file này: không tệp `.sql` nào trong `db/` chứa email có chữ hoa, và không
+-- chỗ nào chèn `users` với một email như thế (bốn chuỗi có chữ hoa trong `**/*.ts` đều là chú
+-- thích hoặc ĐẦU VÀO của API — mà `issueLoginToken` hạ chữ thường đầu vào trước khi tra).
+--
+-- ---------------------------------------------------------------------------------------------
+-- THỨ FILE NÀY **KHÔNG** ĐÓNG, nói ra để không ai đọc rộng hơn
+-- ---------------------------------------------------------------------------------------------
+-- * `supplier_contacts.email` VẪN chỉ được bảo vệ bởi quy ước ở tầng mã. Áp cùng ràng buộc cho
+--   nó là một việc riêng, và nó cần một lượt đối chiếu dữ liệu THẬT (bảng ấy CÓ đường ghi).
+-- * Ràng buộc này KHÔNG kiểm định dạng email. `EMAIL_PATTERN` sống ở tầng ứng dụng và file này
+--   không đụng tới nó — thêm một phép kiểm định dạng vào lược đồ là một quyết định khác hẳn.
+-- * Nó là ràng buộc THEO TỔ CHỨC, không toàn cục: `UNIQUE (org_id, email)` giữ nguyên vế đó, và
+--   `002` đã ghi lý do (một ràng buộc duy nhất toàn cục rò rỉ xuyên tổ chức qua chính thông báo
+--   lỗi — ADR-013). Hai tổ chức khác nhau vẫn mang được cùng một địa chỉ.
+-- =============================================================================================
+
+ALTER TABLE public.users
+  ADD CONSTRAINT users_email_chu_thuong
+  CHECK (email OPERATOR(pg_catalog.=) pg_catalog.lower(email));
