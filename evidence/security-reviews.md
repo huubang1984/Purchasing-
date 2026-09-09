@@ -1164,3 +1164,72 @@ không được kể là một lớp canh. Ghi cả hai vế là cách duy nhấ
 đóng ngoặc, `A AND B AND C OR D` phân tích thành `(A AND B AND C) OR D` — cổng mở toang cho mọi
 hàng. Cặp ngoặc có mặt, và `PREPARE` không bắt được lỗi ấy vì nó hợp lệ về cú pháp. Thứ bắt được
 nó là phép đo `soLanMoCong` — nhưng chỉ vì test dựng đúng ca đồng thời.
+
+# §S1.27 — soi đối kháng lượt 18 (khoản nợ 63: `users.email` chỉ ở chữ thường)
+
+**Phạm vi:** `db/migrations/048_email_nguoi_dung_chu_thuong.sql`, `packages/identity/src/login.ts`,
+`db/unique-oracle.int.test.ts`, so với `origin/master` = `ef51f22`.
+**Hình thức:** ba lăng kính độc lập chạy song song — *an ninh*, *có đóng được nợ thật không*,
+*phá gì và khai rộng ở đâu*. Cả ba đều kết luận **CHƯA ĐỦ**.
+
+## Bảng
+
+| Mức | Số | Nội dung |
+|---|---|---|
+| CRITICAL / HIGH | 0 | — |
+| **NẶNG** | **6** | Toàn bộ là **lời khai của chính vòng này rộng hơn phép đo**, và một trong số đó là một **lỗ MỚI do bản vá tạo ra** |
+| NHẸ / INFO | 5 | `ALTER` giữ `ACCESS EXCLUSIVE` dưới `lock_timeout = 0` · các vụn đã có tài liệu |
+
+## Phát hiện nặng nhất: bản vá đầu TẠO RA một cửa khoá câm
+
+Bản vá đầu thêm `CHECK (email = lower(email))` rồi khai *"chữ hoa thành BẤT KHẢ"*. **Câu ấy chỉ
+đúng cho ASCII**, và phần sai rơi thẳng vào đường đăng nhập:
+
+| | đo được |
+|---|---|
+| `.toLowerCase()` của JS (Node 24) hạ | **1488** điểm mã |
+| `lower()` của PostgreSQL trên `postgres:16-alpine` hạ | **1364** |
+| trên `postgres:16` (Debian/glibc) | **1460** |
+| điểm mã phân kỳ (JS hạ, máy chủ giữ nguyên) | **124** trên musl · **28** trên glibc |
+
+Phần chênh là những điểm mã **bất động với hàm của máy chủ** — nên chúng **đi qua `CHECK`** — mà
+JS vẫn hạ. Với `Ⓐlice@corp.com` (U+24B6): hàng cất được, nhưng `issueLoginToken` dựng khoá bằng
+hàm **JS** trong khi hàng đã lưu là điểm bất động của hàm **PostgreSQL**, nên
+`WHERE lower(email) = $1` trả **0 hàng** (đã đo trên bảng mô phỏng). Người ấy **không bao giờ nhận
+được magic link**, dù gõ đúng nguyên văn địa chỉ đã đăng ký — và thiết kế *"luôn 200, cùng một
+thân"* của `/auth/link` bảo đảm **không ai nhìn thấy**.
+
+**Bản vá thật không phải siết ràng buộc mà là bỏ hẳn MỘT trong hai định nghĩa:** `login.ts` thôi
+gọi `.toLowerCase()`, câu truy vấn hạ **cả hai vế** bằng `pg_catalog.lower()`. Cùng một hàm thì
+không lệch được. Đo lại cùng kịch bản: **1** hàng.
+
+## Bốn lời khai khác bị bác, và đều bác bằng phép đo
+
+| lời khai của vòng này | đo lại |
+|---|---|
+| *"câu `ALTER` in ra ĐÚNG hàng vi phạm (`DETAIL: Failing row contains`)"* | **SAI** — `ALTER TABLE ADD CONSTRAINT` chỉ nói `is violated by some row`; `DETAIL` chỉ có ở `INSERT`/`UPDATE`. Đây là **trụ** của lập luận *"không cần lượt đối chiếu riêng"* |
+| *"chỉ mục trên `lower()` đẻ ra một LỚP LỖI MỚI"* | **SAI** — mọi btree trên `text` đã phụ thuộc collation, `users_org_id_email_key` gồm cả; và btree **đi xuống bằng thứ tự** collation nên vế *"so byte vẫn đứng"* chỉ đúng cho phép SO SÁNH |
+| *"câu này không dùng được tiền tố `(org_id, ...)`"* | **SAI** — tiền tố vẫn dùng (Bitmap Index Scan, `Index Cond: org_id = ...`); thứ mất là **cột khoá thứ hai** |
+| hàng sổ nợ về đường (a) | **tự mâu thuẫn trong một câu** — vừa nói (a) *"chặn được cặp"* vừa nói bất biến *"vẫn phụ thuộc việc không ai chèn biến thể thứ hai"* |
+
+**Tất cả đã sửa tại chỗ theo kỷ luật của kho** (gạch nguyên văn, ghi câu đúng bên cạnh).
+Phần Unicode còn lại thành khoản nợ **71**.
+
+## Điều đáng mang sang vòng sau
+
+**⑴ KHI HAI TẦNG CÙNG CHUẨN HOÁ MỘT GIÁ TRỊ, PHẢI CÓ ĐÚNG MỘT HÀM LÀM VIỆC ẤY.** Hai hàm *"cùng
+nghĩa"* ở hai tầng là một cửa khoá câm đang chờ — và nó **không hiện ra trong bất kỳ test ASCII
+nào**. Đây là bài học tổng quát nhất của vòng: `.toLowerCase()`, `.trim()`, chuẩn hoá NFC, cắt
+khoảng trắng — mỗi lần một phép chuẩn hoá tồn tại ở cả hai phía của một phép so sánh là một lần
+phải hỏi *"hai phía có dùng CHUNG một cài đặt không"*.
+
+**⑵ MỘT MỐC CHẾT PHỤ THUỘC MÔI TRƯỜNG PHẢI TỰ HIỆU CHUẨN, KHÔNG ĐƯỢC ĐÓNG CỨNG.** Tập điểm mã
+phân kỳ khác nhau giữa musl và glibc (124 so với 28), nên một test đóng cứng `U+24B6` sẽ xanh trên
+ảnh này và đỏ trên ảnh kia **vì một lý do không liên quan đến tính chất đang đo**. Test của vòng
+này hỏi chính CSDL đang chạy xem điểm nào phân kỳ rồi dùng cái đầu tiên — và **ném ồn ào** nếu
+không tìm được cái nào, thay vì xanh im lặng.
+
+**⑶ MỘT LẬP LUẬN CÓ THỂ ĐÚNG KẾT LUẬN NHƯNG SAI Ở MỌI LÝ DO.** Lựa chọn `CHECK` thay cho chỉ mục
+biểu thức **vẫn đúng** sau khi soi — nhưng ba trong các lý do biện minh cho nó thì sai. Một kết
+luận đúng dựng trên lý do sai sẽ **đổ ở vòng sau**, khi ai đó dựa vào chính lý do ấy để quyết một
+việc khác.
