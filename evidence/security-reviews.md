@@ -1347,3 +1347,41 @@ H22 chọn ứng viên bằng hình dạng ngay sau khi ADR-035 cấm hình dạ
 làm nguồn sự thật ngay sau khi nói hình dạng không đáng tin. Thứ bắt được không phải đọc lại kỹ
 hơn, mà là **một người khác dựng đúng ca phản ví dụ trên hệ thống thật**. Hai vòng trước không có
 lượt soi này, và bây giờ đã rõ cái giá của việc đó.
+
+---
+
+# §S1.30 — khoản nợ 74: nhân chứng hành vi cho tổng điều tra hàm trigger
+
+**Bề mặt an ninh:** 0 mã sản xuất. Diff có 6 tệp: một tệp test (`db/hardening-suy-tu-tinh-chat.int.test.ts`,
++~560 dòng), bốn tệp tài liệu (`STATE`, `DECISIONS`, `TEST-PLAN`, `Handoff`) và tệp này.
+`hardening.always.sql` nguyên vẹn; không migration; không đụng đường xác thực. Lớp mới là một
+phép đo ở tầng T3, cùng tầng với tổng điều tra của S1.29 — nó không đổi thứ production cưỡng chế,
+nó đổi thứ CI từ chối.
+
+## Lượt soi đối kháng 20 — chạy TRƯỚC khi §S1.30 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc trọn tệp 1143 dòng + bảy
+migration + `test-support`), được giao rõ bảy hướng phá: ghi công nhầm qua đường lồng/INSERT/AFTER,
+tính đúng của vế *"RAISE không được đếm"* trên PG16, `SET LOCAL ROLE` trong phiên superuser, đầu dò
+canh-một-sự-kiện, xanh rỗng ruột, flaky, tài nguyên để lại. Không chạy được gì; mọi phát hiện được
+người viết đo lại trên PostgreSQL 16 thật và ghi kết quả ở cột *đo được*.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | CAO | Ghi công theo HÀM, không theo (hàm, BẢNG): thân hàm trigger đọc `TG_TABLE_NAME`/`TG_ARGV`, nên một hàm có thể canh vô điều kiện ở bảng này, có điều kiện ở bảng kia | đúng — `thu_hoi_don_dieu` gắn **5** bảng, kịch bản chạm **2**; ba bảng kia chưa hàng nào đi qua mà cặp vẫn xanh | khoá theo bộ ba (hàm, bảng, sự kiện); thêm 3 câu (`guest_sessions`, `rfq_invitation_tokens`, `user_login_tokens`); đo: bỏ nhân chứng `guest_sessions` ⇒ đỏ đúng một bộ ba |
+| 2 | CAO | Kịch bản chạy dưới superuser ⇒ mọi hàm gated theo vai được ghi công miễn phí; hai hàm chạy dưới `app_api` được chọn theo TÊN viết tay | đúng — `IF la_duong_ung_dung('app_api') THEN RAISE; END IF; RETURN NEW;` là hàm canh với toàn bộ lưu lượng sản xuất, và bản đầu ghi công nó dưới owner | vai ĐO bằng `current_user` + `rolsuper`; hàm mà thân đọc vai (`nhay_vai`, vị từ văn bản chỉ chọn độ mịn) đòi nhân chứng từ vai không superuser; đo: DELETE `mfa_credentials` dưới owner ⇒ đỏ *(cần vai không superuser)* |
+| 3 | NẶNG | Trigger cấp CÂU LỆNH và AFTER-ROW ném vô điều kiện vô hình với cả tổng điều tra lẫn nhân chứng | xác minh bằng đọc bitmask; đo tĩnh: kho có 0 trigger như thế trên UPDATE/DELETE | **không sửa ở vòng này** — khoản nợ **75**, cùng lớp 73 |
+| 4 | NẶNG | Mũi đột biến khẳng định THỨ TỰ hàng catalog (`toEqual([[true,false],[false,true]])`) — đỏ oan sau autovacuum/đổi kế hoạch | đúng về nguyên tắc; chưa thấy xảy ra | so theo tập đã sắp |
+| 5 | NẶNG | `RESET track_functions` ném ⇒ client không `release` ⇒ `pool.end()` treo ⇒ container không dừng; ở mũi đột biến, `zz_*` không được dọn | đúng theo ngữ nghĩa pg-pool + `postgres.ts` | `release(true)` trong `finally`; tạo bảng thử SAU `connect()` và trong `try`; `DROP … IF EXISTS` |
+| 6 | NHẸ | Khối `giaoDich` gom nhiều câu ⇒ `calls` tăng do INSERT trong khối được gán cho câu UPDATE; đề xuất `pg_stat_xact_user_functions` — đọc được TRONG giao dịch, không cần flush | đúng, và đề xuất tốt hơn đường flush | mỗi nhân chứng = bước chuẩn bị + ĐÚNG MỘT câu, kẹp giữa hai lần đọc bộ đếm giao dịch; bỏ `pg_stat_force_next_flush()` |
+| 7 | NHẸ | `pg_stat_force_next_flush()` là `nowait` — flush một phần khi entry bị khoá ⇒ đỏ oan | đúng về nguyên tắc; không có backend nào khác chạm entry | hết liên quan sau #6 |
+| 8 | NHẸ | Đồng hồ host/container lệch | biên 7/14 ngày quá rộng; các hạn khác đều `now()` phía DB | không cần |
+| 9 | INFO | *"RAISE không được đếm"* là ĐÚNG cho PG16: `pgstat_end_function_call` sau `PG_END_TRY`; khối `BEGIN … EXCEPTION` nuốt lỗi rồi `RETURN NULL` ⇒ được đếm nhưng `rowCount = 0` ⇒ vế ⒞ chặn | xác nhận | giữ; mũi *calls = 0* nay đo trong cùng giao dịch qua `SAVEPOINT` |
+| 10 | INFO | `SET LOCAL ROLE app_api` trong phiên superuser: sound — hoàn nguyên ở cả COMMIT lẫn ROLLBACK, RLS dùng `GetUserId()`, `track_functions` là GUC phiên | xác nhận | giữ |
+| 11 | INFO | Đầu dò canh-một-sự-kiện: BEFORE DELETE trên `rfq_key_material` chỉ có một trigger, RI là AFTER nên không chen được; regex `where` không neo khung ngoài cùng; biến thể UPDATE không kích hoạt được trigger `UPDATE OF <cột>` | xác nhận | giữ; ghi ở đây |
+| 12 | INFO | Va chạm khoá duy nhất khi chạy hai lần: không có | xác nhận | — |
+
+**Điều đáng mang sang vòng sau:** hai phát hiện CAO là **cùng một khuôn với lượt 19** — *bản cài
+đặt đầu tiên tin một lời khai mà nó sinh ra để kiểm* (lần này: tin rằng thân hàm độc lập với bảng,
+và tin hai cái tên viết tay thay cho một tính chất đo được). Ba vòng liên tiếp, cùng một khuôn,
+và ba lần thứ bắt được đều là **một người khác dựng phản ví dụ**, không phải người viết đọc lại.

@@ -3472,8 +3472,16 @@ bằng regex.**
    báo**, để khai thật là đường xanh và bảng ĐƯỢC canh; ⒝ phép đối chiếu chỉ giữ **hướng suy
    được** — thân không `RETURN` ⇒ phải khai CANH; hướng ngược là hợp lệ. ⒞ Khai SAI một hàm canh
    có `RETURN` thì không phép kiểm văn bản nào bắt — chỉ một phép đo hành vi mới phân biệt được,
-   và đó là khoản nợ **74**. Đây là ranh giới thật của cả ADR: *liệt kê rộng rồi buộc phân loại*
-   đóng chiều IM LẶNG, không đóng chiều NÓI DỐI.
+   và đó là khoản nợ **74**. ~~Đây là ranh giới thật của cả ADR: *liệt kê rộng rồi buộc phân loại*
+   đóng chiều IM LẶNG, không đóng chiều NÓI DỐI.~~ **[S1.30] Chiều NÓI DỐI nay đóng bằng phép đo
+   HÀNH VI (khoản nợ 74):** mỗi bộ ba (hàm, BẢNG, sự kiện) khai KHÔNG-CANH phải để một hàng thật đi
+   qua, đo bằng `pg_stat_xact_user_functions` — PostgreSQL chỉ đếm lời gọi TRẢ VỀ, nên một hàm canh
+   khai sai không cách nào được ghi công; vai của nhân chứng được ĐO, và hàm mà thân đọc vai đòi một
+   vai không superuser (lượt soi 20 bác bản đầu ở đúng hai vế ấy). Và phép đo lộ ra ca thứ ba mà hai danh sách không tả được: hàm
+   canh MỘT SỰ KIỆN (`rfq_key_material_bat_bien` từ chối DELETE vô điều kiện, cho UPDATE có điều
+   kiện) — nay là một lời khai riêng, và lời khai ấy phải đo được là NÉM từ chính hàm. Ranh giới
+   còn lại của ADR: *liệt kê rộng rồi buộc phân loại* cần một KỊCH BẢN đường hợp lệ do người viết —
+   cổng không tự sinh nhân chứng, nó chỉ từ chối nhân chứng giả.
 
 ⑸ **ĐO cách hiển nhiên TRƯỚC khi chọn nó, và ghi lại nếu nó trượt.** Với khoản 12, đường hiển nhiên
    là dùng cột *nơi cưỡng chế* của `docs/TEST-PLAN.md` làm nguồn khai. Đo: cột ấy nêu tên tệp cho
@@ -3504,3 +3512,8 @@ lần đọc lại kỹ hơn.
 - **Tổng điều tra của khoản 60 khoá theo `pg_trigger`.** Một `CREATE RULE … DO INSTEAD NOTHING` cho
   cùng hiệu lực mà không tạo trigger nào, nên bảng ấy không vào tập ứng viên. Đó là khoản nợ **73**,
   mở cố ý ở chính vòng đã đóng 60.
+- **[S1.30] Nhân chứng hành vi đòi một KỊCH BẢN viết tay** — 24 câu UPDATE/DELETE trên 13 bảng. Một
+  hàm trigger mới ở một bảng mới là thêm một câu vào kịch bản, và đó là cố ý: lời khai KHÔNG-CANH
+  nay có giá là một hàng thật, không còn là một dòng trong danh sách. Và tập ứng viên của cả tổng
+  điều tra lẫn nhân chứng khoá theo trigger BEFORE cấp HÀNG — trigger cấp CÂU LỆNH hay AFTER-ROW ném
+  vô điều kiện đứng ngoài, là khoản nợ **75** (lượt soi 20), cùng lớp với 73.
