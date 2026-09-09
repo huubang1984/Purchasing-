@@ -1623,7 +1623,12 @@ $ham$;
   -- có `prosrc = 'suppress_redundant_updates_trigger'`, `lanname = 'internal'`) — không chứa
   -- `RETURN`, nên không có vế này thì hai trigger dựng sẵn của PostgreSQL đủ để một bảng bị nhận
   -- nhầm là chỉ-ghi-thêm và bị đòi LOGGED + chốt TRUNCATE + ACL sạch, tức CHẶN DEPLOY trên một
-  -- lược đồ hợp lệ. Chiều IM LẶNG (một hàm canh viết kiểu khác rơi khỏi tập) vẫn mở — khoản nợ 60.
+  -- lược đồ hợp lệ. ~~Chiều IM LẶNG (một hàm canh viết kiểu khác rơi khỏi tập) vẫn mở — khoản nợ 60.~~
+  -- [S1.29] Vế thứ hai của OR là KHAI BÁO: một hàm canh viết kiểu khác (có RETURN) vào tập bằng
+  -- cách được KÊ TÊN ở đây — và danh sách này phải BẰNG `HAM_CANH_CHI_GHI_THEM` của
+  -- db/hardening-suy-tu-tinh-chat.int.test.ts, vì test ấy đòi vị từ này xuất hiện NGUYÊN VĂN.
+  -- Tổng điều tra ở cùng tệp bắt MỌI hàm trigger BEFORE-ROW UPDATE/DELETE phải được phân loại,
+  -- nên một hàm canh mới không rơi khỏi tập trong im lặng: nó chặn cổng cho tới khi có tên ở đây.
   VI_TU_BANG_CHI_GHI_THEM constant text :=
     $q$SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -1634,13 +1639,17 @@ $ham$;
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-                  AND p.prosrc !~* '\mRETURN\M'
+                  AND (p.prosrc !~* '\mRETURN\M'
+                       OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
+                           AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                   AND (t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) OPERATOR(pg_catalog.>) 0
           AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-                  AND p.prosrc !~* '\mRETURN\M'
+                  AND (p.prosrc !~* '\mRETURN\M'
+                       OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
+                           AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                   AND (t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) OPERATOR(pg_catalog.>) 0$q$;
 
   -- Trạng thái VẬT LÝ của MỌI bảng chỉ-ghi-thêm: LOGGED, và có chốt TRUNCATE.
@@ -1663,7 +1672,9 @@ $ham$;
                            WHERE t.tgrelid = b.bang_oid AND NOT t.tgisinternal
                              AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                              AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-                             AND p.prosrc !~* '\mRETURN\M'
+                             AND (p.prosrc !~* '\mRETURN\M'
+                                  OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
+                                      AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                              AND t.tgenabled OPERATOR(pg_catalog.=) 'A'
                              AND (t.tgtype OPERATOR(pg_catalog.&) 34::pg_catalog.int2)
                                  OPERATOR(pg_catalog.=) 34)$q$;

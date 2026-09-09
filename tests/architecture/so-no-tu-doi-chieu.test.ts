@@ -837,7 +837,11 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   });
 
   it("P7 đột biến — XOÁ lời khai để làm im cổng thì vẫn ĐỎ", () => {
-    const m = /\*\*(\[S[\d.]+\] \d+ ADR)\*\*/.exec(HANDOFF)!;
+    // Phải nhắm vào lời khai CÒN SỐNG, không phải cụm khớp đầu tiên: từ S1.29 `Handoff.md` mang
+    // hai cụm dạng `**[S…] n ADR**` — một đã GẠCH, một còn sống — và bản trước của mũi này nhắm
+    // vào cụm đã chết, nên nó xanh trong khi đáng lẽ phải đỏ. Chính `[INV-H20]` bắt được.
+    const song = HANDOFF.replace(/`[^`\n]*`/g, "").replace(/~~[\s\S]*?~~/g, "");
+    const m = /\*\*(\[S[\d.]+\] \d+ ADR)\*\*/.exec(song)!;
     expect(viPhamSoADR(dotBien(HANDOFF, m[0], m[1]!), QUYET_DINH, "Handoff.md")).toEqual([
       'không tìm thấy lời khai "**<số> ADR**" nào trong Handoff.md',
     ]);

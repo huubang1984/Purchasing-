@@ -334,7 +334,9 @@ export interface MocGhim {
 // [S1.22] 54 -> 55: H21 vao so dang ky (QT3 co lop may, ADR-030). Hai dong nay THIEU cho
 // toi review luot 13 (H13-15): hang so da nhay hai nhip ma so ghi cua chinh no thi khong —
 // dung lop "ban sao khong duoc doi chieu" ma ADR-029 dat ten, o ngay tep cuong che moc.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 55, coDanhSachToiDa: 0 };
+// [S1.29] 55 -> 56: H22 vao so dang ky (nhan bat bien phai dat o cho DA KHAI, ADR-035). Cong da
+// CHAN dung mot luot truoc khi dong nay duoc viet — do la co che, khong phai su co.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 56, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

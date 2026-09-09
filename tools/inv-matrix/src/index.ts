@@ -38,9 +38,12 @@ import {
   collectCoverage,
   collectLabelUses,
   countAssertions,
+  findMisplacedLabels,
   findUnregisteredLabels,
   parseInvariants,
 } from "./parse.js";
+
+import { SO_KHAI_NHAN } from "./so-khai-nhan.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const TEST_PLAN = resolve(REPO, "docs/TEST-PLAN.md");
@@ -99,6 +102,19 @@ function main(): void {
         `Hoặc đăng ký mã, hoặc sửa nhãn — một nhãn không rơi vào hàng nào là một bất biến ` +
         `tưởng đã được canh mà thật ra không ai đếm.`,
     );
+  }
+
+  // [INV-H22, khoản nợ 12] Chỗ đặt nhãn — đọc từ CHÍNH báo cáo này, cùng nguồn với độ phủ.
+  const lechCho = findMisplacedLabels(uses, SO_KHAI_NHAN, REPO);
+  for (const l of lechCho.chuaKhai) {
+    van.push(
+      `${l}. Nếu tệp ấy thật sự đo được bất biến này, thêm cặp vào ` +
+        "`tools/inv-matrix/src/so-khai-nhan.ts` — một quyết định nhìn thấy được. Nếu không, sửa nhãn: " +
+        "một nhãn gắn sai chỗ ghi một dòng 'passed' vào hàng của một bất biến trống rỗng.",
+    );
+  }
+  for (const l of lechCho.khaiThiu) {
+    van.push(`${l}. Một dòng khai thiu cũng là một lời khai sai — gỡ nó, hoặc tìm xem nhãn đi đâu.`);
   }
 
   // --- Thân ma trận -------------------------------------------------------------------------
