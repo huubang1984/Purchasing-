@@ -2010,6 +2010,69 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
     expect(() => docHangHardening("NEO_003")).toThrow(/cú pháp lạ|không thấy hằng/u);
   });
 
+  it("[INV-F1] [khoản nợ 88 — lượt soi 33a #2, 36 #1/#2] ⑵ tập vai = TÍNH CHẤT ∪ TÊN ĐÃ GHIM, quyền theo kế thừa: vai lạ thành viên app_api + GRANT DELETE trực tiếp ⇒ bản bốn tên IM; app_api_login BỊ GỠ membership + GRANT ⇒ bản chỉ-tính-chất IM; quyền qua NHÓM ⇒ bản grantee-trực-tiếp IM — câu hợp thấy cả ba", async () => {
+    const phu = docHangHardening("CAU_PHU_LENH_SAI");
+    const vai = docHangHardening("VAI_KET_NOI_UNG_DUNG");
+    const veTinhChat = `r.rolname IN (SELECT v.rolname FROM (${vai}) v)`;
+    expect(phu, "⑵ phải lấy tập vai từ VAI_KET_NOI_UNG_DUNG").toContain(veTinhChat);
+    // [lượt soi 36 #1] và HỢP bốn tên đã ghim — qua hằng ROLE_CANH (một bản), không phải bản chép thứ ba.
+    const veTen = `OR r.rolname IN ${docHangHardening("ROLE_CANH")}`;
+    expect(phu, "⑵ phải hợp ROLE_CANH").toContain(veTen);
+    expect(phu.split("'app_api_login'").length, "bốn tên xuất hiện đúng một lần (qua ROLE_CANH)").toBe(2);
+    // Ba bản đối chứng dựng từ chính câu mới (split/join — vế thay không được đi qua `$` của String.replace):
+    //   bản BỐN TÊN (S1.38–S1.43): vế tính chất thay bằng bốn tên; bản CHỈ TÍNH CHẤT (bản đầu S1.44): bỏ vế tên đã ghim;
+    //   bản GRANTEE TRỰC TIẾP: pg_has_role(…) thay bằng a.grantee = vai.oid.
+    const phuCu = phu.split(veTinhChat).join("r.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login')");
+    const phuChiTinhChat = phu.split(veTen).join("");
+    const veKeThua = "OR pg_catalog.pg_has_role(vai.oid, CASE WHEN a.grantee = 0 THEN vai.oid ELSE a.grantee END, 'USAGE')";
+    expect(phu.split(veKeThua).length, "hai nhánh quyen (bảng, cột) đều xét kế thừa").toBe(3);
+    const phuTrucTiep = phu.split(veKeThua).join("OR a.grantee = vai.oid");
+    for (const b of [phuCu, phuChiTinhChat, phuTrucTiep]) expect(b).not.toBe(phu);
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Vai lạ được cấp app_api (điều BƯỚC 1 của hardening gỡ ở lượt SỬA — nhưng ⑵ không được TỰA vào đó): membership
+      // và bảng đều nằm trong giao dịch, ROLLBACK trả mọi thứ.
+      await client.query("CREATE ROLE zz_vai88 NOLOGIN; GRANT app_api TO zz_vai88");
+      await client.query(
+        "CREATE TABLE zz_t88 (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+        "ALTER TABLE zz_t88 ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_t88 FORCE ROW LEVEL SECURITY; " +
+        "CREATE POLICY zz_t88_doc ON zz_t88 FOR SELECT TO app_api USING (true); " +
+        "GRANT SELECT, DELETE ON zz_t88 TO zz_vai88",
+      );
+      const ten = (r: { mo_ta: string }): string => r.mo_ta.split(":")[0]!;
+      const thay = async (cau: string): Promise<string[]> => (await client.query<{ mo_ta: string }>(cau)).rows.map(ten).sort();
+      // (a) SELECT của zz_vai88 được policy cho app_api phủ (has_privs_of_role bắc cầu); DELETE thì không policy nào phủ.
+      expect(await thay(phu), "tính chất: thấy đúng một dòng").toEqual(["public.zz_t88/zz_vai88/DELETE"]);
+      expect(await thay(phuCu), "bốn tên viết tay: IM").toEqual([]);
+      // Tập vai theo tính chất CHỨA hai vai ứng dụng lẫn vai lạ (hai vai đăng nhập không tồn tại ở CSDL test: hardening
+      // CỐ Ý không tạo chúng — xem đầu tệp; dưới đây dựng app_api_login trong giao dịch để đo đúng ca của lượt soi 36 #1).
+      const tap = (await client.query<{ rolname: string }>(vai)).rows.map((r) => r.rolname);
+      for (const t of ["app_api", "app_unseal", "zz_vai88"]) expect(tap, t).toContain(t);
+      // (b) [lượt soi 36 #1 NẶNG] app_api_login BỊ GỠ membership (ADMIN OPTION làm được) rồi nhận GRANT trực tiếp: kết nối
+      //     thật vẫn mang tên ấy, policy TO app_api không phủ ⇒ 0 hàng không lỗi — bản chỉ-tính-chất không còn thấy nó.
+      await client.query("CREATE ROLE app_api_login NOLOGIN; GRANT SELECT ON zz_t88 TO app_api_login");
+      expect(await thay(phu), "tên đã ghim: thấy app_api_login dù không membership").toEqual(["public.zz_t88/app_api_login/SELECT", "public.zz_t88/zz_vai88/DELETE"]);
+      expect(await thay(phuChiTinhChat), "chỉ tính chất: IM về app_api_login").toEqual(["public.zz_t88/zz_vai88/DELETE"]);
+      // đối chứng: cấp lại membership ⇒ policy TO app_api phủ ⇒ dòng biến mất
+      await client.query("GRANT app_api TO app_api_login");
+      expect(await thay(phu), "có membership: policy phủ").toEqual(["public.zz_t88/zz_vai88/DELETE"]);
+      // (c) [lượt soi 36 #2] quyền tới qua NHÓM: GRANT UPDATE cho nhóm mà app_api là thành viên — app_api (và mọi thành viên
+      //     kế thừa của nó: app_api_login, zz_vai88) có UPDATE thật mà không policy UPDATE nào; bản grantee-trực-tiếp im.
+      await client.query("CREATE ROLE zz_nhom88 NOLOGIN; GRANT zz_nhom88 TO app_api; GRANT UPDATE ON zz_t88 TO zz_nhom88");
+      expect(await thay(phu), "kế thừa: thấy UPDATE qua nhóm cho cả ba").toEqual([
+        "public.zz_t88/app_api/UPDATE", "public.zz_t88/app_api_login/UPDATE", "public.zz_t88/zz_vai88/DELETE", "public.zz_t88/zz_vai88/UPDATE",
+      ]);
+      const moTa = (await client.query<{ mo_ta: string }>(phu)).rows.map((r) => r.mo_ta);
+      expect(moTa.find((m) => m.startsWith("public.zz_t88/app_api/UPDATE")), "mô tả nêu đường tới quyền").toContain("(qua zz_nhom88)");
+      expect(moTa.find((m) => m.startsWith("public.zz_t88/zz_vai88/DELETE")), "quyền trực tiếp: không nêu đường").not.toContain("(qua ");
+      expect(await thay(phuTrucTiep), "grantee trực tiếp: IM về quyền qua nhóm").toEqual(["public.zz_t88/zz_vai88/DELETE"]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
   it("[INV-F1] CÂU PHÁN XÉT CỦA HARDENING chạy trong test: hôm nay rỗng cả ba; với fixture trong giao dịch, nó thấy đúng những gì tổng điều tra ở test thấy", async () => {
     const lop = docHangHardening("CAU_POLICY_LOP_SAI");
     const phu = docHangHardening("CAU_PHU_LENH_SAI");

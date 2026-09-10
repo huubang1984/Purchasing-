@@ -622,7 +622,10 @@ DECLARE
 
   -- [S1.40 / lượt soi 31, NHẸ-4] Dời lên đây từ khối hằng của mục (C): VI_TU_CAN_CO_RLS ngay dưới nay
   -- tham chiếu nó, và một hằng PL/pgSQL phải được khai TRƯỚC hằng dùng nó.
-  -- Bộ lọc "schema do dự án quản" — DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.
+  -- Bộ lọc "schema do dự án quản" — MỘT bản cho mọi mục. ~~DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.~~
+  -- [S1.44 / khoản 88 ⑴ — lượt soi 33a #3] Mục (C) (view/matview và SECURITY DEFINER) và VI_TU_BANG_CHI_GHI_THEM từng
+  -- CHÉP bộ lọc này inline — chú thích trên nói "dùng lại" mà (C) không dùng hằng; nay cả ba chỗ khai triển từ đây qua
+  -- format(). Đột biến đo ở biên bản S1.44.
   -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
   MAU_SCHEMA_DU_AN constant text :=
     $q$%1$s.nspname NOT IN ('pg_catalog', 'information_schema')
@@ -696,10 +699,12 @@ DECLARE
   -- nguyên: nguồn (i) đòi PHẢI có ít nhất một policy PERMISSIVE, còn MỌI policy PERMISSIVE vẫn
   -- phải khớp danh sách. Đổi policy cách ly sang RESTRICTIVE để né phép kiểm sẽ làm bảng KHÔNG
   -- còn policy PERMISSIVE nào và bị nguồn (i) bắt — có test đo đường lách đó.
-  -- BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: một policy RESTRICTIVE có thể là no-op
+  -- ~~BẬC TỰ DO CÒN LẠI, nói ra thay vì hứa suông: một policy RESTRICTIVE có thể là no-op
   -- (USING (true)) — không phải lỗ hổng nhưng cũng không phải phòng thủ; và biểu thức của nó
   -- gọi được hàm do người khác viết. Cả hai đòi quyền DDL trên bảng, tức tác nhân đã ở mức
-  -- làm được việc tệ hơn.
+  -- làm được việc tệ hơn.~~ [S1.44 / khoản 88 ⑷ — lượt soi 33b #13] Gạch: từ S1.38 (khoản 83⑴) MỌI policy
+  -- RESTRICTIVE ngoài khuôn `<bảng>_khach` phải được KHAI ở POLICY_RESTRICTIVE_KHAI (CAU_POLICY_LOP_SAI), nên một
+  -- RESTRICTIVE no-op không còn là bậc tự do: nó chặn deploy cho tới khi có tên và lý do.
   --
   -- [vòng fix 2 — CR2 / vòng fix 3 — I2] Vế "biểu thức có được duyệt không" hỏi HAI danh sách,
   -- và danh sách thứ hai khoá theo ĐÚNG (bang, polname, lenh, vai_tro) — xem NGOAI_LE_HINH_DANG.
@@ -775,8 +780,11 @@ DECLARE
   -- Vì sao nới phạm vi QUÉT không làm phình báo nhầm: việc nhận diện "chạm dữ liệu tenant" vẫn
   -- NEO vào bảng tenant trong 'public' (MAU_VI_TU_BANG_TENANT) hoặc vào cột org_id của chính
   -- đầu ra. Một view trong schema khác KHÔNG chạm bảng tenant vẫn không bị nhắc tới.
-  -- BẬC TỰ DO CÒN LẠI: bảng tenant đặt ở schema KHÁC 'public' vẫn không được nhận là bảng
-  -- tenant (xem ghi chú (A)), nên một view đọc bảng đó chỉ bị bắt qua đường cột org_id.
+  -- ~~BẬC TỰ DO CÒN LẠI: bảng tenant đặt ở schema KHÁC 'public' vẫn không được nhận là bảng
+  -- tenant (xem ghi chú (A)), nên một view đọc bảng đó chỉ bị bắt qua đường cột org_id.~~ [S1.44 / khoản 88 ⑷ —
+  -- lượt soi 33b #13] Gạch: bảng có org_id ngoài public nay hoặc treo dưới bảng tenant (mọi bậc — khoản 84,
+  -- VI_TU_CAN_CO_RLS), hoặc bật RLS và khai (83⑶), hoặc PHẢI KHAI (khoản 85 — CAU_ORG_ID_NGOAI_PUBLIC_SAI); view đọc nó
+  -- vẫn bị bắt qua cột org_id của chính view. Bảng ấy không còn đứng ngoài mọi mục.
   CAU_DOC_VONG constant text :=
     $q$SELECT n.nspname || '.' || c.relname || ': ' ||
               CASE WHEN c.relkind = 'm'
@@ -789,8 +797,7 @@ DECLARE
               END AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relkind IN ('v', 'm')
-          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           AND n.nspname || '.' || c.relname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
           AND NOT EXISTS (SELECT 1 FROM pg_depend dx
                            WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
@@ -815,8 +822,7 @@ DECLARE
               'gọi. Bỏ SECURITY DEFINER, hoặc thêm tên này vào NGOAI_LE_DOC_VONG kèm lý do.'
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE p.prosecdef
-          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           AND n.nspname || '.' || p.proname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
           AND NOT EXISTS (SELECT 1 FROM pg_depend d
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
@@ -1651,9 +1657,11 @@ $ham$;
   -- `nspname = 'public'`. Bản đầu của vòng này viết khoá cứng, và đó là **tái lập đúng thứ [CR2a]
   -- đã CỐ Ý gỡ khỏi `bang_so`**: một bảng chỉ-ghi-thêm ra đời ở `app_private` (schema mà chính
   -- file này tạo) sẽ UNLOGGED được, TRUNCATE được, và nhận `GRANT UPDATE` sống qua mọi deploy —
-  -- đúng ba lỗ vòng này vừa tuyên bố đã đóng. Vế dưới đây là `MAU_SCHEMA_DU_AN` đã KHAI TRIỂN cho
-  -- bí danh `n` (`%%` của format() thành `%` thật); `db/hardening-suy-tu-tinh-chat.int.test.ts`
-  -- có một khẳng định so nó với chính hằng ấy, nên hai bên không trôi khỏi nhau được.
+  -- đúng ba lỗ vòng này vừa tuyên bố đã đóng. ~~Vế dưới đây là `MAU_SCHEMA_DU_AN` đã KHAI TRIỂN cho
+  -- bí danh `n` (`%%` của format() thành `%` thật)~~ [S1.44 / khoản 88 ⑴] Vế dưới đây LÀ chính hằng ấy
+  -- qua format() như mọi mục khác — bản chép inline (lượt soi 33a #3) đã bỏ; `db/hardening-suy-tu-tinh-chat.int.test.ts`
+  -- dựng vị từ này qua BỘ GIẢI HẰNG (docHangHardening) và đòi BẰNG bản sinh ở test, nên nguyên văn vẫn được đòi và
+  -- hai bên không trôi khỏi nhau được.
   --
   -- [review lượt 12, M4] `prolang = plpgsql` đóng CHIỀU ỒN ÀO của phép so khớp văn bản: `prosrc`
   -- của một hàm `LANGUAGE internal`/`c` là TÊN SYMBOL (đã đo: `suppress_redundant_updates_trigger`
@@ -1683,8 +1691,7 @@ $ham$;
   VI_TU_BANG_CHI_GHI_THEM constant text :=
     $q$SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-          AND n.nspname NOT LIKE 'pg\_toast%' AND n.nspname NOT LIKE 'pg\_temp%'
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           AND c.relkind IN ('r', 'p')
           AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
@@ -1802,7 +1809,8 @@ $ham$;
   -- (trùng cố ý với vế chốt TRUNCATE ở CAU_CHI_GHI_THEM_VAT_LY — hai lớp cho một ca). Đo: 0 trigger như thế
   -- trong kho hôm nay (045 đã nâng mọi trigger lên ALWAYS; tổng điều tra ở test giữ điều ấy không thiu).
   -- [S1.39, lượt soi 30 NHẸ-2] Vị từ "p là hàm canh" (hình dạng ∪ khai tên, plpgsql) — MỘT bản cho hai mục phán xét
-  -- trigger canh (điều kiện S1.36; hình thức S1.39). VI_TU_BANG_CHI_GHI_THEM giữ bản inline vì test đòi nguyên văn;
+  -- trigger canh (điều kiện S1.36; hình thức S1.39). ~~VI_TU_BANG_CHI_GHI_THEM giữ bản inline vì test đòi nguyên văn;~~
+  -- [S1.44 / khoản 88 ⑴] vị từ ấy nay cũng khai triển hằng qua format(), test đòi nguyên văn qua bộ giải;
   -- danh sách tên ở đây phải bằng danh sách ấy — test H19 đòi hằng này được cả hai mục tham chiếu.
   VI_TU_HAM_CANH_HINH_DANG constant text :=
     $q$(p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
@@ -1811,6 +1819,11 @@ $ham$;
              OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
                  AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa'))))$q$;
 
+  -- [S1.44 / khoản 88 ⑶ — lượt soi 33a #11] NÓI RA CHỖ CHỊU LỰC: trên bảng CÓ TÊN trong BANG_CHI_GHI_THEM, mục này và
+  -- CAU_HAM_CANH_HINH_THUC_SAI chỉ xanh vì D2/CTE_TRIGGER_CHAN ở BƯỚC 2 đã dựng lại trigger đúng hình thức (không WHEN,
+  -- không UPDATE OF, BEFORE … FOR EACH ROW, ENABLE ALWAYS) TRƯỚC khi BƯỚC 3 phán xét — biên bản S1.36 đo: fixture đặt
+  -- WHEN/UPDATE OF lên audit_events_chan_update, migrate() vẫn OK. Hai mục chịu lực cho bảng SUY RA (ba bảng S1 và bảng
+  -- tương lai) và cho bảng có tên chỉ khi D2 không sửa được (42501 nuốt ở BƯỚC 2) — khi ấy mục D2 cũng đỏ cùng lượt.
   CAU_TRIGGER_CANH_CO_DIEU_KIEN constant text :=
     $q$SELECT t.tgrelid::regclass::text || '.' || t.tgname::text || ': trigger của hàm canh '
               || p.oid::regprocedure::text
@@ -1820,7 +1833,7 @@ $ham$;
                    THEN ' có tgenabled=' || t.tgenabled::text
                         || ' (cần A = ENABLE ALWAYS; D và R không chạy, O bị bỏ qua khi session_replication_role = replica)'
                    ELSE '' END
-              || ' — hàm canh chỉ chạy CÓ ĐIỀU KIỆN hay KHÔNG CHẠY, nên câu ghi đi qua (UPDATE cột khác / DELETE / '
+              || ' — hàm canh chỉ chạy CÓ ĐIỀU KIỆN hay KHÔNG CHẠY (khoản nợ 79, ADR-036 hàng 8–9/20), nên câu ghi đi qua (UPDATE cột khác / DELETE / '
                  'UPDATE dưới trigger tắt: 1 hàng, không lỗi — đã đo) trong khi bảng vẫn mang tên hàm canh. Vị từ '
                  'chỉ-ghi-thêm không đếm trigger có WHEN/UPDATE OF (bảng chỉ còn trong tập nếu một trigger canh vô '
                  'điều kiện khác cho cùng sự kiện tồn tại) và vẫn đếm trigger tắt. Sửa: một migration mới dựng lại '
@@ -1909,16 +1922,32 @@ $ham$;
   -- Mỗi hàng: [1] tên mục, [2] tiền điều kiện, [3] câu lệnh cưỡng chế, [4] hậu điều kiện
   -- ("trạng thái đã đúng"), [5] biểu thức mô tả chỗ sai, [6] quyền cần có để sửa.
   -- [2], [4], [5] là biểu thức SQL chạy qua EXECUTE 'SELECT ' || ...
+  -- [CR2-T3] Bốn role được canh. Hai role ứng dụng, và hai role đăng nhập được danh sách
+  -- trắng cho phép làm thành viên của chúng — xem giải thích (a) ở đầu file: không mở rộng
+  -- vùng canh sang hai role đăng nhập thì "GRANT nhom_bat_ky TO app_api_login" và
+  -- "GRANT app_api_login TO ke_tan_cong" đều lọt, mà cả hai đều dẫn quyền của app_api ra
+  -- ngoài bắc cầu.
+  ROLE_CANH constant text :=
+    $q$('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login')$q$;
+
   -- [S1.34 / khoản nợ 78] Tập vai mà một KẾT NỐI ỨNG DỤNG có thể mang làm current_user — theo TÍNH
   -- CHẤT: thành viên BẮC CẦU của app_api/app_unseal (`pg_has_role(r, g, 'MEMBER')` là bắc cầu, và một
   -- role là thành viên của chính nó), trừ superuser — về kỹ thuật là thành viên của mọi role nhưng
   -- không phải một kết nối ứng dụng. [lượt soi 24, INFO-7] Vế thành viên tựa vào BƯỚC 1 (gỡ membership
   -- lạ) để tập này không phình; tự nó vẫn đứng được vì bắc cầu.
+  -- [S1.44 / khoản nợ 88 — lượt soi 36 #3, ĐO] ~~'MEMBER'~~ → 'USAGE' HOẶC 'SET': "kết nối ứng dụng mang được làm
+  -- current_user" nghĩa là KẾ THỪA quyền của app_api/app_unseal (USAGE) hoặc SET ROLE sang được (SET). Membership
+  -- CHỈ-ADMIN (INHERIT FALSE, SET FALSE) không phải kết nối ứng dụng — và PostgreSQL 16 cấp đúng thứ ấy cho vai
+  -- CREATEROLE tạo role (grantor ghi là superuser bootstrap, vai ấy không tự REVOKE được). Đo (hồ sơ N3,
+  -- migrations.int.test.ts): cụm trống, vai deploy CREATEROLE chạy migrate() đầu tiên ⇒ BƯỚC 0 tạo app_api dưới vai
+  -- ấy ⇒ với 'MEMBER' vai deploy lọt tập ⇒ mục "quyền CREATE/TEMP trên database của vai ứng dụng và mọi thành viên"
+  -- THU HỒI CREATE của chính chủ database ⇒ 001 gãy "permission denied for database". Tiền tồn từ S1.34, S1.44 chỉ
+  -- làm nó lộ ra khi ⑵ dùng chung tập.
   VAI_KET_NOI_UNG_DUNG constant text :=
     $q$SELECT r.rolname FROM pg_roles r
         WHERE NOT r.rolsuper
           AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
-                         AND pg_catalog.pg_has_role(r.oid, g.oid, 'MEMBER'))$q$;
+                         AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET')))$q$;
 
   -- [S1.36, lượt soi 25b #13] Thân câu "quan hệ trùng tên public trong một schema mà vai có USAGE" — MỘT
   -- bản, dùng ở cả hậu điều kiện lẫn mô tả của mục ấy; bản S1.34 chép chín dòng hai lần, đúng kiểu trôi mà
@@ -2057,29 +2086,46 @@ $ham$;
                              AND pg_get_expr(p.polqual, c.oid) IS NOT DISTINCT FROM k.bieu_thuc_using
                              AND pg_get_expr(p.polwithcheck, c.oid) IS NOT DISTINCT FROM k.bieu_thuc_with_check)$q$;
 
+  -- [S1.44 / khoản nợ 88 — lượt soi 33a #2 NẶNG; lượt soi 36 #1 NẶNG, #2] Tập vai của ⑵ = TÍNH CHẤT ∪ TÊN ĐÃ GHIM:
+  -- VAI_KET_NOI_UNG_DUNG (thành viên bắc cầu của app_api/app_unseal, trừ superuser) HỢP ROLE_CANH (bốn tên ghim từ S0,
+  -- MỘT bản — không phải bản chép thứ ba). Vì sao không CHỈ tính chất (bản đầu của vòng này): membership là thứ ADMIN
+  -- OPTION đổi được — `REVOKE app_api FROM app_api_login` rồi GRANT trực tiếp lên bảng RLS cho app_api_login ⇒ kết nối
+  -- thật đọc 0 hàng không lỗi (ADR-036 hàng 6) mà tập theo membership không còn chứa nó: "theo tính chất" chỉ đúng khi
+  -- tính chất là thứ kẻ tấn công không đổi được — bài học ADR-037 áp cho VAI (lượt soi 36 #1). Vì sao không CHỈ bốn tên:
+  -- một vai lạ được cấp app_api mang GRANT trực tiếp thì bốn tên im; BƯỚC 1 gỡ membership lạ và CAU_MEMBERSHIP_LA ở
+  -- BƯỚC 3 chặn deploy khi không gỡ được, nhưng ⑵ phải tự nêu đúng dòng của mình, không TỰA vào mục khác. Quyền xét
+  -- theo KẾ THỪA như 83⑧ (pg_has_role … 'USAGE'): GRANT cho một nhóm mà vai là thành viên cũng là quyền của vai, và
+  -- mô tả nêu đường tới quyền. Đo ở db/rls-coverage.int.test.ts: vai lạ + GRANT trực tiếp (bốn tên im); app_api_login
+  -- không membership + GRANT (chỉ-tính-chất im); quyền qua nhóm (bản grantee-trực-tiếp im).
   CAU_PHU_LENH_SAI constant text :=
     $q$WITH vai AS (SELECT r.rolname, r.oid FROM pg_roles r
-                    WHERE r.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login')),
+                    WHERE r.rolname IN (SELECT v.rolname FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v)
+                       OR r.rolname IN $q$ || ROLE_CANH || $q$),
        quyen AS (
-         SELECT c.oid, n.nspname || '.' || c.relname AS ten_bang, vai.rolname, a.privilege_type
+         SELECT c.oid, n.nspname || '.' || c.relname AS ten_bang, vai.rolname, a.privilege_type,
+                CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE (SELECT g.rolname::text FROM pg_roles g WHERE g.oid = a.grantee) END AS qua
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
            CROSS JOIN LATERAL aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
-           JOIN vai ON a.grantee = 0 OR a.grantee = vai.oid
+           JOIN vai ON a.grantee = 0
+                    OR pg_catalog.pg_has_role(vai.oid, CASE WHEN a.grantee = 0 THEN vai.oid ELSE a.grantee END, 'USAGE')
           WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
             AND c.relkind IN ('r', 'p') AND c.relrowsecurity
             AND a.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
          UNION
-         SELECT c.oid, n.nspname || '.' || c.relname, vai.rolname, a.privilege_type
+         SELECT c.oid, n.nspname || '.' || c.relname, vai.rolname, a.privilege_type,
+                CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE (SELECT g.rolname::text FROM pg_roles g WHERE g.oid = a.grantee) END
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
            JOIN pg_attribute att ON att.attrelid = c.oid AND att.attnum > 0 AND NOT att.attisdropped
            CROSS JOIN LATERAL aclexplode(att.attacl) a
-           JOIN vai ON a.grantee = 0 OR a.grantee = vai.oid
+           JOIN vai ON a.grantee = 0
+                    OR pg_catalog.pg_has_role(vai.oid, CASE WHEN a.grantee = 0 THEN vai.oid ELSE a.grantee END, 'USAGE')
           WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
             AND c.relkind IN ('r', 'p') AND c.relrowsecurity
             AND a.privilege_type IN ('SELECT', 'INSERT', 'UPDATE')
        )
        SELECT q.ten_bang || '/' || q.rolname || '/' || q.privilege_type
-              || ': quyền đã cấp mà không policy PERMISSIVE nào phủ (lệnh, vai) (khoản 83⑵) — RLS mặc định TỪ CHỐI: '
+              || ': quyền đã cấp' || CASE WHEN q.qua IS DISTINCT FROM q.rolname THEN ' (qua ' || q.qua || ')' ELSE '' END
+              || ' mà không policy PERMISSIVE nào phủ (lệnh, vai) (khoản 83⑵) — RLS mặc định TỪ CHỐI: '
                  'SELECT/UPDATE/DELETE trả 0 hàng không lỗi, INSERT ném. Sửa: một migration mới thêm policy cho lệnh ấy, '
                  'hoặc thu hồi quyền.' AS mo_ta
          FROM quyen q
@@ -2511,11 +2557,13 @@ $ham$;
           AND NOT EXISTS (SELECT 1 FROM pg_rewrite rw
                            WHERE rw.ev_class = to_regclass(pg_catalog.format('%I.%I', r.nspname, r.relname)) AND rw.rulename = r.rulename)$q$;
 
+  -- [S1.44 / khoản 88 ⑶] Trên bảng có tên, D2 dựng lại trigger trước — xem chú thích ở CAU_TRIGGER_CANH_CO_DIEU_KIEN;
+  -- mục này chịu lực cho bảng suy ra.
   CAU_HAM_CANH_HINH_THUC_SAI constant text :=
     $q$SELECT t.tgrelid::regclass::text || '.' || t.tgname::text || ': trigger của hàm canh ' || p.oid::regprocedure::text
               || ' ở hình thức ' || CASE WHEN (t.tgtype & 64) <> 0 THEN 'INSTEAD OF' WHEN (t.tgtype & 2) = 0 THEN 'AFTER' ELSE 'BEFORE' END
               || ' ' || CASE WHEN (t.tgtype & 1) = 1 THEN 'FOR EACH ROW' ELSE 'FOR EACH STATEMENT' END
-              || ' — hàm canh chỉ được gắn BEFORE … FOR EACH ROW trên INSERT/UPDATE/DELETE (khoản 83⑺, khoản nợ 75): ở hình '
+              || ' — hàm canh chỉ được gắn BEFORE … FOR EACH ROW trên INSERT/UPDATE/DELETE (khoản 83⑺, khoản nợ 75, ADR-036 hàng 2): ở hình '
                  'thức khác nó vẫn chặn mọi câu (bảng thành chỉ-ghi-thêm) nhưng vị từ chỉ-ghi-thêm không nhận bảng, nên '
                  'LOGGED / chốt TRUNCATE / ACL không ai canh (trigger BEFORE TRUNCATE FOR EACH STATEMENT của hàm canh là chốt, hợp lệ, '
                  'không bị mục này phán). Sửa: một migration mới dựng lại trigger đúng hình thức.' AS mo_ta
@@ -8396,13 +8444,8 @@ $ham$;
     ]
   ];
 
-  -- [CR2-T3] Bốn role được canh. Hai role ứng dụng, và hai role đăng nhập được danh sách
-  -- trắng cho phép làm thành viên của chúng — xem giải thích (a) ở đầu file: không mở rộng
-  -- vùng canh sang hai role đăng nhập thì "GRANT nhom_bat_ky TO app_api_login" và
-  -- "GRANT app_api_login TO ke_tan_cong" đều lọt, mà cả hai đều dẫn quyền của app_api ra
-  -- ngoài bắc cầu.
-  ROLE_CANH constant text :=
-    $q$('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login')$q$;
+  -- [S1.44 / khoản nợ 88, lượt soi 36 #1] ROLE_CANH dời lên trước VAI_KET_NOI_UNG_DUNG (một hằng PL/pgSQL phải khai
+  -- TRƯỚC hằng dùng nó): CAU_PHU_LENH_SAI nay hợp bốn tên đã ghim vào tập theo tính chất.
 
   -- Danh sách trắng CẶP (nhóm, thành viên). Đóng, viết tay, không suy ra từ tên.
   CAP_HOP_LE constant text :=
@@ -8631,7 +8674,17 @@ BEGIN
   -- thay vì ở lượt SỬA (nơi nó không tới được). Lỗi bắt được vừa phát ra WARNING ngay tại chỗ,
   -- vừa được giữ lại để BƯỚC 4 nói ra trong cùng một thông báo.
   FOR i IN 1 .. array_length(bang, 1) LOOP
-    EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
+    -- [S1.44 / khoản nợ 88 ⑺] CỘT ĐIỀU KIỆN cũng đọc catalog nên cũng ném được — bản đầu của S1.43 đo đúng điều đó:
+    -- `to_regclass('app_private.…')` ở cột này ném 42501 dưới vai deploy N2 và CẢ LƯỢT SỬA gãy trước vòng migration
+    -- đánh số (12 test đỏ). Bất biến đầu file "BƯỚC 2 KHÔNG GÃY" phải phủ cả cột này: ném ⇒ WARNING, coi như chưa đủ
+    -- điều kiện (không sửa), BƯỚC 3 sẽ báo "không đánh giá được" cho đúng mục ấy.
+    BEGIN
+      EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Hardening: không đánh giá được ĐIỀU KIỆN của mục "%": % (%). Không sửa; BƯỚC 3 sẽ phán xét.',
+                    bang[i][1], SQLERRM, SQLSTATE;
+      du_dieu_kien := false;
+    END;
     CONTINUE WHEN NOT coalesce(du_dieu_kien, false);
 
     -- [vòng fix 1 — IM5] SỬA CHỮA KHÔNG ĐƯỢC IM LẶNG. Trước vòng này, các mục chạy câu lệnh
@@ -8686,36 +8739,63 @@ BEGIN
   END IF;
 
   -- ===== BƯỚC 3: đọc catalog, GOM mọi chỗ còn sai =======================================
-  EXECUTE 'SELECT string_agg(format(''%s -> %s'', ten_nhom, ten_thanh_vien), ''; '') FROM ('
-          || CAU_MEMBERSHIP_LA || ') t'
-    INTO con_sot;
-  IF con_sot IS NOT NULL THEN
-    loi_gom := loi_gom || format(
-      '- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót '
-      '(%s). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.', con_sot);
-  END IF;
-
-  EXECUTE 'SELECT string_agg(format(''%s -> %s'', ten_nhom, ten_thanh_vien), ''; '') FROM ('
-          || CAU_ADMIN_LA || ') t'
-    INTO con_sot;
-  IF con_sot IS NOT NULL THEN
-    loi_gom := loi_gom || format(
-      '- "ADMIN OPTION trên tư cách thành viên hợp lệ": còn sót (%s) — chủ thể đó tự cấp được '
-      'app_api/app_unseal cho bất kỳ ai. Cần quyền: ADMIN OPTION trên các role đó hoặc '
-      'SUPERUSER.', con_sot);
-  END IF;
-
-  FOR i IN 1 .. array_length(bang, 1) LOOP
-    EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
-    CONTINUE WHEN NOT coalesce(du_dieu_kien, false);
-
-    EXECUTE 'SELECT ' || bang[i][4] INTO dung_roi;
-    IF NOT coalesce(dung_roi, false) THEN
-      EXECUTE 'SELECT ' || bang[i][5] INTO chi_tiet;
+  -- [S1.44 / khoản nợ 88 ⑺ — lượt soi 36 #5] Hai câu membership cùng khuôn "không gãy thô" với vòng mục ở dưới.
+  BEGIN
+    EXECUTE 'SELECT string_agg(format(''%s -> %s'', ten_nhom, ten_thanh_vien), ''; '') FROM ('
+            || CAU_MEMBERSHIP_LA || ') t'
+      INTO con_sot;
+    IF con_sot IS NOT NULL THEN
       loi_gom := loi_gom || format(
-        '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.',
-        bang[i][1], chi_tiet, bang[i][6]);
+        '- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót '
+        '(%s). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.', con_sot);
     END IF;
+  EXCEPTION WHEN OTHERS THEN
+    loi_gom := loi_gom || format(
+      '- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": KHÔNG ĐÁNH GIÁ ĐƯỢC — câu kiểm ném %s (%s).',
+      SQLSTATE, SQLERRM);
+  END;
+
+  BEGIN
+    EXECUTE 'SELECT string_agg(format(''%s -> %s'', ten_nhom, ten_thanh_vien), ''; '') FROM ('
+            || CAU_ADMIN_LA || ') t'
+      INTO con_sot;
+    IF con_sot IS NOT NULL THEN
+      loi_gom := loi_gom || format(
+        '- "ADMIN OPTION trên tư cách thành viên hợp lệ": còn sót (%s) — chủ thể đó tự cấp được '
+        'app_api/app_unseal cho bất kỳ ai. Cần quyền: ADMIN OPTION trên các role đó hoặc '
+        'SUPERUSER.', con_sot);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    loi_gom := loi_gom || format(
+      '- "ADMIN OPTION trên tư cách thành viên hợp lệ": KHÔNG ĐÁNH GIÁ ĐƯỢC — câu kiểm ném %s (%s).',
+      SQLSTATE, SQLERRM);
+  END;
+
+  -- [S1.44 / khoản nợ 88 ⑺ — lượt soi 35 "mang sang" ⑶] BƯỚC 3 KHÔNG GÃY THÔ (cả hai câu membership ở trên). Trước vòng
+  -- này ba EXECUTE dưới đây đứng
+  -- trần: một hàm catalog ném theo dữ liệu người khác kiểm soát (lượt soi 35 NẶNG-3: `to_regclass(substr(chú thích))`
+  -- ném 42601/42501 xuyên qua bản gom) làm migrate() chết bằng một lỗi TRẦN không nêu tên mục, và mọi mục còn lại
+  -- không được phán. Nay mỗi mục đứng trong khối con: ném ⇒ một dòng "KHÔNG ĐÁNH GIÁ ĐƯỢC" nêu tên mục, SQLSTATE và
+  -- SQLERRM vào bản gom — mục không được coi là đúng — và vòng đi tiếp. Đo ở db/hardening-suy-tu-tinh-chat.int.test.ts
+  -- bằng một bản hardening chép ra thư mục tạm có ba mục tiêm (điều kiện ném / hậu điều kiện ném / hậu điều kiện sai):
+  -- một thông báo, ba dòng, đúng ba tên.
+  FOR i IN 1 .. array_length(bang, 1) LOOP
+    BEGIN
+      EXECUTE 'SELECT ' || bang[i][2] INTO du_dieu_kien;
+      CONTINUE WHEN NOT coalesce(du_dieu_kien, false);
+
+      EXECUTE 'SELECT ' || bang[i][4] INTO dung_roi;
+      IF NOT coalesce(dung_roi, false) THEN
+        EXECUTE 'SELECT ' || bang[i][5] INTO chi_tiet;
+        loi_gom := loi_gom || format(
+          '- "%s": trạng thái hiện tại SAI (%s). Cần quyền: %s.',
+          bang[i][1], chi_tiet, bang[i][6]);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      loi_gom := loi_gom || format(
+        '- "%s": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném %s (%s); mục không được coi là đúng. Cần quyền: %s.',
+        bang[i][1], SQLSTATE, SQLERRM, bang[i][6]);
+    END;
   END LOOP;
 
   -- ===== [vòng fix 1 — C1] (E3) PHÁN XÉT DỮ LIỆU MA TRẬN QUYỀN — CHỈ WARNING ==============

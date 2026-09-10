@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
@@ -6217,6 +6218,67 @@ describe("migration của dự án", () => {
   // Đối chứng dương ở cuối: CÙNG cơ sở dữ liệu đó, CÙNG vi phạm đó, migrate() bằng role ĐỌC
   // ĐƯỢC bảng thì (E3) bắn đúng cảnh báo — nên (d) không phải vì (E3) rỗng ruột.
   // ==========================================================================
+  it("[khoản nợ 88 — lượt soi 36 #3, ĐO] HỒ SƠ N3 (cụm TRỐNG, vai deploy CREATEROLE không superuser chạy migrate() ĐẦU TIÊN): BƯỚC 0 tạo app_api/app_unseal dưới vai ấy nên PostgreSQL 16 cấp cho nó membership ngầm chỉ-admin (INHERIT FALSE, SET FALSE, grantor là superuser bootstrap) — với tập vai theo USAGE/SET, mọi migration đánh số đi qua và vai deploy KHÔNG lọt tập; deploy dừng ở lượt PHÁN XÉT với đúng một mục có tên (membership lạ không tự gỡ được) và lối ra; superuser REVOKE một lần ⇒ đi qua", async () => {
+    // Trước S1.44 (tập theo 'MEMBER'): vai deploy lọt tập ⇒ mục "quyền CREATE/TEMP trên database của vai ứng dụng và
+    // mọi thành viên" THU HỒI CREATE của chính chủ database ở lượt sửa ⇒ 001 gãy "permission denied for database" — một
+    // lỗi thô, không tên mục (đo: đột biến trả VAI_KET_NOI_UNG_DUNG về 'MEMBER' làm test này đỏ ở 001). Tiền tồn từ
+    // S1.34; S1.44 làm nó lộ ra vì ⑵ dùng chung tập.
+    const db = await startPostgres();
+    try {
+      const { rows } = await db.pool.query<{ ten_db: string }>("SELECT current_database() AS ten_db");
+      await db.pool.query("CREATE ROLE trien_khai LOGIN CREATEROLE PASSWORD 'mat-khau-trien-khai'");
+      await db.pool.query(`ALTER DATABASE "${rows[0]!.ten_db}" OWNER TO trien_khai`);
+      const poolTrienKhai = createPool(doiNguoiDung(db.connectionString, "trien_khai", "mat-khau-trien-khai"), 2);
+      try {
+        // Tiền đề: vai deploy sở hữu database ⇒ có CREATE trên nó (CREATE SCHEMA app_private ở 001 và ở hardening cần).
+        const tienDe = (await db.pool.query<{ chu: string; tao: boolean }>(
+          "SELECT pg_get_userbyid(d.datdba) AS chu, has_database_privilege('trien_khai', d.datname, 'CREATE') AS tao " +
+            "FROM pg_database d WHERE d.datname = current_database()",
+        )).rows[0]!;
+        expect(tienDe).toEqual({ chu: "trien_khai", tao: true });
+        const thongBao: string[] = [];
+        let kq = "OK";
+        try {
+          await migrate(poolTrienKhai, MIGRATIONS_DIR, { onThongBao: (tb) => thongBao.push(`${tb.severity}|${tb.message}`) });
+        } catch (e) {
+          kq = `NÉM: ${(e as Error).message}`;
+        }
+        // (a) Lượt SỬA đi qua và MỌI migration đánh số được áp bởi chính vai deploy — 001 không còn gãy.
+        const daAp = (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM public.schema_migrations")).rows[0]!.n;
+        expect(daAp, "mọi migration đánh số đã áp").toBeGreaterThan(40);
+        expect(tienDe.tao && (await db.pool.query<{ tao: boolean }>("SELECT has_database_privilege('trien_khai', current_database(), 'CREATE') AS tao")).rows[0]!.tao,
+          "vai deploy vẫn còn CREATE trên database — hardening không được thu hồi quyền của chủ database").toBe(true);
+        // (b) Hồ sơ: app_api/app_unseal do trien_khai tạo ⇒ membership ngầm chỉ-admin, và BƯỚC 1 KHÔNG tự gỡ được (grantor là
+        //     superuser bootstrap) — WARNING nói đúng điều ấy.
+        const mem = (await db.pool.query<{ nhom: string; tv: string; admin: boolean; ke_thua: boolean; dat: boolean }>(
+          "SELECT r.rolname AS nhom, m.rolname AS tv, am.admin_option AS admin, am.inherit_option AS ke_thua, am.set_option AS dat " +
+            "FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid JOIN pg_roles m ON m.oid = am.member " +
+            "WHERE r.rolname IN ('app_api', 'app_unseal') ORDER BY 1, 2",
+        )).rows;
+        expect(mem).toEqual([
+          { nhom: "app_api", tv: "trien_khai", admin: true, ke_thua: false, dat: false },
+          { nhom: "app_unseal", tv: "trien_khai", admin: true, ke_thua: false, dat: false },
+        ]);
+        expect(thongBao.some((t) => /has not been granted membership in role "app_api" by role "trien_khai"/u.test(t)), "BƯỚC 1 nói ra việc không gỡ được").toBe(true);
+        // (c) Tập vai theo USAGE/SET KHÔNG chứa vai deploy (membership chỉ-admin không phải kết nối ứng dụng); ⑵ rỗng.
+        const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+        const tap = (await db.pool.query<{ rolname: string }>(docHangHardeningTu(HARDENING, "VAI_KET_NOI_UNG_DUNG"))).rows.map((r) => r.rolname).sort();
+        expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_unseal"]);
+        expect((await db.pool.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_PHU_LENH_SAI"))).rows).toEqual([]);
+        // (d) Deploy DỪNG ở lượt phán xét — đúng MỘT mục, có tên, có lối ra — không phải lỗi thô ở 001.
+        expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 1 mục:/u);
+        expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
+        // (e) Lối ra đúng như thông báo: superuser gỡ hai membership ngầm một lần ⇒ migrate() dưới vai deploy đi qua.
+        await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai");
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
+      } finally {
+        await poolTrienKhai.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
+
   it("[C1-E3-BO-QUA] (E3) dưới role deploy: bỏ qua, KHÔNG ném, và bỏ qua CÓ CÔNG BỐ", async () => {
     const db = await startPostgres();
     try {
