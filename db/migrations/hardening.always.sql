@@ -595,13 +595,33 @@ DECLARE
   -- trong pg_inherits nên nó trở lại là bảng tenant độc lập và PHẢI có policy của chính nó.
   -- Đường sửa là một migration mới (lượt 1 không phán xét nên nó luôn tới được đích) —
   -- có test đo: "[Minor] DETACH PARTITION..." ở db/migrations.int.test.ts.
+  -- [S1.40 / khoản nợ 84, lượt soi 29 INFO-9] ĐỆ QUY trên pg_inherits. Vế này từng chỉ nhìn cặp cha–con TRỰC
+  -- TIẾP với cha là bảng tenant ở public, nên một CHÁU ở schema khác — k.c2 INHERITS (k.c1), k.c1 INHERITS
+  -- (public.bao_gia) — không vào VI_TU_CAN_CO_RLS: mục (A) không bật RLS trên k.c2, ⑶ không thấy (RLS chưa
+  -- bật), ⑵ không thấy (không RLS); GRANT SELECT ON k.c2 TO app_api ⇒ đọc thẳng cháu thấy hàng của MỌI tổ
+  -- chức. Đo ở S1.40 (test "[khoản nợ 84]" trong migrations.int.test.ts): lỗ RÒ thật, không phải 0-hàng.
+  -- Nay "tổ tiên" là bao đóng bắc cầu của pg_inherits: một tổ tiên bất kỳ là bảng tenant ở public thì bảng này
+  -- là con cháu. CTE không tương quan (bảng cặp con–tổ tiên dựng trọn rồi mới lọc theo c.oid) — pg_inherits nhỏ.
   LA_CUA_BANG_TENANT constant text :=
     $q$EXISTS (
-         SELECT 1 FROM pg_inherits ke
-           JOIN pg_class pc ON pc.oid = ke.inhparent
+         WITH RECURSIVE to_tien(con, cha) AS (
+           SELECT ke.inhrelid, ke.inhparent FROM pg_inherits ke
+           UNION
+           SELECT tt.con, ke.inhparent FROM to_tien tt JOIN pg_inherits ke ON ke.inhrelid = tt.cha
+         )
+         SELECT 1 FROM to_tien tt
+           JOIN pg_class pc ON pc.oid = tt.cha
            JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-          WHERE ke.inhrelid = c.oid AND $q$
+          WHERE tt.con = c.oid AND $q$
        || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'pn', 'pc') || $q$)$q$;
+
+  -- [S1.40 / lượt soi 31, NHẸ-4] Dời lên đây từ khối hằng của mục (C): VI_TU_CAN_CO_RLS ngay dưới nay
+  -- tham chiếu nó, và một hằng PL/pgSQL phải được khai TRƯỚC hằng dùng nó.
+  -- Bộ lọc "schema do dự án quản" — DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.
+  -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
+  MAU_SCHEMA_DU_AN constant text :=
+    $q$%1$s.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND %1$s.nspname NOT LIKE 'pg\_toast%%' AND %1$s.nspname NOT LIKE 'pg\_temp%%'$q$;
 
   -- [vòng fix 3 — Minor] Tập bảng mà mục (A) phải bật ENABLE + FORCE. RỘNG HƠN "bảng tenant"
   -- ĐÚNG MỘT VẾ: con cháu (phân mảnh hoặc INHERITS) của một bảng tenant KỂ CẢ KHI NÓ NẰM Ở
@@ -619,10 +639,17 @@ DECLARE
   -- phép. Đọc QUA CHA vẫn đúng.
   -- BẬC TỰ DO CÒN LẠI: bảng có org_id ở schema khác mà KHÔNG treo dưới một bảng tenant nào
   -- vẫn không được nhận diện. Tiền điều kiện của nó là DDL + GRANT tường minh do người của dự
-  -- án viết; nói ra thay vì hứa suông.
+  -- án viết; nói ra thay vì hứa suông. [S1.40 / khoản nợ 84] "treo dưới" nay là MỌI BẬC (đệ quy) —
+  -- cháu ở schema khác từng là một bậc tự do nữa, đã đóng.
+  -- [S1.40 / lượt soi 31, NHẸ-4] Vế con cháu lọc theo MAU_SCHEMA_DU_AN (loại pg_temp): `CREATE TEMP TABLE x ()
+  -- INHERITS (bảng_tenant)` hợp lệ, và mục (A) từng phát ALTER TABLE lên bảng tạm của PHIÊN KHÁC — 0A000 "cannot
+  -- alter temporary tables of other sessions", BƯỚC 2 nuốt, rồi phán xét gọi nó là "bảng tenant thiếu RLS" (đo). Bảng
+  -- tạm là của riêng phiên: PostgreSQL loại bảng tạm của phiên khác khỏi khai triển kế thừa — đo: phiên khác (kể cả
+  -- superuser, app_api gắn đúng tổ chức) đọc qua cha KHÔNG thấy hàng của nó. Không có gì để bật RLS cho ai.
   VI_TU_CAN_CO_RLS constant text :=
     $q$(( $q$ || VI_TU_BANG_TENANT || $q$ )
-        OR (c.relkind IN ('r', 'p') AND $q$ || LA_CUA_BANG_TENANT || $q$))$q$;
+        OR (c.relkind IN ('r', 'p') AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+            AND $q$ || LA_CUA_BANG_TENANT || $q$))$q$;
 
   -- Mọi chỗ SAI KHUÔN về policy trên bảng tenant, mỗi hàng một mô tả đọc được. Hai nguồn:
   --   (i)  bảng tenant KHÔNG có policy PERMISSIVE nào — RLS bật mà không policy nào cho phép
@@ -1301,12 +1328,6 @@ $ham$;
     $q$ARRAY['p_org_id','p_actor_type','p_actor_id','p_action','p_resource_type','p_resource_id',
              'p_payload','p_request_id','p_ip','p_user_agent',
              'id','seq','prev_hash','hash','occurred_at']$q$;
-
-  -- Bộ lọc "schema do dự án quản" — DÙNG LẠI đúng bộ lọc của mục (C), không phát minh lại.
-  -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
-  MAU_SCHEMA_DU_AN constant text :=
-    $q$%1$s.nspname NOT IN ('pg_catalog', 'information_schema')
-       AND %1$s.nspname NOT LIKE 'pg\_toast%%' AND %1$s.nspname NOT LIKE 'pg\_temp%%'$q$;
 
   -- [CR2c] NEO cho vế "bảng sổ biến mất": 003 đã từng chạy trên lược đồ này chưa.
   -- Phải quyết định Ở ĐÂY (lúc DECLARE) chứ không phải trong câu SQL: PostgreSQL PHÂN TÍCH cả
@@ -2111,6 +2132,34 @@ $ham$;
   RULE_KHAI constant text :=
     $q$(VALUES ('', '', '')) AS r(nspname, relname, rulename)$q$;
 
+  -- ---- [S1.40 / khoản nợ 82⑴] MỤC PHÁN XÉT THỨ SÁU: TIỀN ĐỀ CỦA `NO INHERIT` (ADR-036 hàng 22) ----------
+  -- Hàng 22: `ALTER TABLE con NO INHERIT cha` (chủ bảng con làm được) đưa hàng đang ở con ra khỏi tầm câu ghi
+  -- qua cha — UPDATE/DELETE qua cha 0 hàng, không lỗi (đo S1.35, đo lại S1.40). SAU cú tách catalog không còn
+  -- dấu vết: con là `relkind 'r'` hợp lệ, không hàng pg_inherits, mọi tổng điều tra xanh. Thứ phân biệt được
+  -- TĨNH là TIỀN ĐỀ — một cặp kế thừa cổ điển đang tồn tại — cùng khuôn ⑧ (tiền đề SUSET của hàng 8). Khai
+  -- đích danh (con, cha) ở KE_THUA_KHAI; RỖNG là một lời khai: dự án không dùng INHERITS. Chiều ngược — khai mà
+  -- không còn cặp — chỉ khi CẢ HAI bảng còn (bài học lượt soi 29): đó là dấu vết của một NO INHERIT trên cặp đã
+  -- khai KHI TÊN KHÔNG ĐƯỢC TÁI DÙNG. [lượt soi 31, NHẸ-1] Khai theo TÊN chỉ đóng băng lời khai, không đóng băng
+  -- đối tượng: chủ bảng (sở hữu cả cha lẫn con) làm được NO INHERIT → RENAME con cũ → CREATE con mới cùng tên
+  -- INHERITS cha (rỗng) → DISABLE RLS trên con cũ; cả hai chiều im, hàng cũ nằm ở con cũ ngoài mọi mục — đúng bậc
+  -- tự do "bảng org_id ngoài public không treo dưới tenant" ghi ở VI_TU_CAN_CO_RLS. Kẽ này NGỦ chừng nào
+  -- KE_THUA_KHAI rỗng; một dòng khai INHERITS là một quyết định an ninh cùng hạng NGOAI_LE_HINH_DANG, không phải
+  -- một dòng cấu hình. Phân mảnh (relispartition — lá lẫn chỉ mục phân mảnh) không xét, và DETACH PARTITION là
+  -- CÙNG CƠ CHẾ hàng 22 ở vị trí khác [lượt soi 31, NHẸ-3] với ba tầng: lá ở public ⇒ bảng tenant độc lập, [CR1]
+  -- bắt (test [Minor] DETACH); lá ngoài public đã có RLS (mục (A) lần trước) ⇒ 83⑶ bắt; lá ngoài public tạo-và-
+  -- tách giữa hai lần deploy ⇒ bậc tự do đã khai ở trên. Bảng TẠM kế thừa bảng thật không xét [lượt soi 31,
+  -- NHẸ-4]: nó là của riêng phiên (xem VI_TU_CAN_CO_RLS), cha không thể là bảng tạm ("cannot inherit from
+  -- temporary relation"), nên lọc theo CON là đủ. GIỚI HẠN NÓI THẲNG: mục này canh tiền đề, không canh cú tách —
+  -- cặp CHƯA KHAI bị tách thì mục im (không còn gì để phán); lớp cho trường hợp ấy là chính việc cặp chưa khai đã
+  -- chặn deploy từ trước. §3⑶ ⒜ [lượt soi 31, INFO-6]: hàng 22 đã được §3⑶ (S1.37) đặt ở khoản 82 — một khoản mở
+  -- có địa chỉ, không phải sót; S1.39 nói "trọn" khi 82 còn mở, và cái catalog phân biệt được ở 22 là TIỀN ĐỀ,
+  -- không phải cơ chế. HỆ QUẢ ĐO ĐƯỢC: hai fixture INHERITS của migrations.int.test.ts (con_khac, con_tt) trước
+  -- mong migrate() đi qua, nay NÉM ở mục này. Bằng chứng "miễn policy riêng còn nguyên" là con_tt và `public.g`
+  -- của test khoản 84 (cả hai ở public) — [CR1] không soi ngoài public nên con_khac không phải bằng chứng
+  -- [lượt soi 31, NHẸ-2].
+  KE_THUA_KHAI constant text :=
+    $q$(VALUES ('', '', '', '')) AS k(con_nspname, con_relname, cha_nspname, cha_relname)$q$;
+
   CAU_QUAN_HE_KHAC_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || ': '
               || CASE c.relkind WHEN 'f' THEN 'BẢNG NGOÀI (ghi ra cụm khác)'
@@ -2217,6 +2266,37 @@ $ham$;
            OR EXISTS (SELECT 1 FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
                         JOIN pg_roles vr ON vr.rolname = v.rolname
                        WHERE pg_catalog.pg_has_role(vr.oid, a.grantee, 'USAGE'))$q$;
+
+  CAU_KE_THUA_SAI constant text :=
+    $q$SELECT cn.nspname || '.' || cc.relname || ' INHERITS ' || pn.nspname || '.' || pc.relname
+              || ': cặp kế thừa cổ điển (không phải phân mảnh) trong lược đồ dự án chưa khai (khoản 82⑴, ADR-036 hàng 22) — '
+                 'ALTER TABLE con NO INHERIT cha (chủ bảng con làm được) đưa hàng ở con ra khỏi tầm câu ghi qua cha: UPDATE/DELETE '
+                 'qua cha 0 hàng không lỗi, con vẫn là bảng thường hợp lệ với mọi tổng điều tra (đo). Dự án không dùng INHERITS. '
+                 'Sửa: một migration mới bỏ kế thừa, hoặc khai (con, cha) vào KE_THUA_KHAI kèm lý do và bản ở '
+                 'db/hardening-suy-tu-tinh-chat.int.test.ts.' AS mo_ta
+         FROM pg_inherits ke
+         JOIN pg_class cc ON cc.oid = ke.inhrelid
+         JOIN pg_namespace cn ON cn.oid = cc.relnamespace
+         JOIN pg_class pc ON pc.oid = ke.inhparent
+         JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+        WHERE NOT cc.relispartition
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'cn') || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || KE_THUA_KHAI || $q$
+                           WHERE k.con_nspname = cn.nspname AND k.con_relname = cc.relname
+                             AND k.cha_nspname = pn.nspname AND k.cha_relname = pc.relname)
+       UNION ALL
+       SELECT 'khai ' || k.con_nspname || '.' || k.con_relname || ' INHERITS ' || k.cha_nspname || '.' || k.cha_relname
+              || ' (khoản 82⑴) mà CSDL không còn cặp kế thừa như thế — dòng khai thiu, hoặc chính cơ chế ADR-036 hàng 22 '
+                 'đã xảy ra (con đã NO INHERIT)' AS mo_ta
+         FROM $q$ || KE_THUA_KHAI || $q$
+        WHERE k.con_relname <> ''
+          AND to_regclass(pg_catalog.format('%I.%I', k.con_nspname, k.con_relname)) IS NOT NULL
+          AND to_regclass(pg_catalog.format('%I.%I', k.cha_nspname, k.cha_relname)) IS NOT NULL
+          -- [lượt soi 31, INFO-7] đối xứng với chiều xuôi: một dòng khai trỏ vào cặp PHÂN MẢNH là dòng khai thiu.
+          AND NOT EXISTS (SELECT 1 FROM pg_inherits ke JOIN pg_class cc ON cc.oid = ke.inhrelid
+                           WHERE NOT cc.relispartition
+                             AND ke.inhrelid = to_regclass(pg_catalog.format('%I.%I', k.con_nspname, k.con_relname))
+                             AND ke.inhparent = to_regclass(pg_catalog.format('%I.%I', k.cha_nspname, k.cha_relname)))$q$;
 
   CAU_QUAN_HE_TRUNG_TEN constant text :=
     $q$FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -6907,7 +6987,8 @@ $ham$;
     --       `SET search_path` trong phiên không bị chặn và không được tái khẳng định; đường ấy chỉ che
     --       được tên khi vai có USAGE ở một schema KHÁC chứa quan hệ TRÙNG TÊN với public. Bản đầu phán
     --       xét "không USAGE ngoài public" và đo được là quá rộng: hai fixture hợp lệ của chính tệp test
-    --       (schema `khac` chứa con INHERITS của bảng tenant, USAGE cho app_api; schema `gia` chứa một
+    --       (schema `khac` chứa con INHERITS của bảng tenant — [S1.40] nay bị mục 82⑴ phán vì cặp chưa
+    --       khai, nhưng vẫn hợp lệ với mục (d) này — USAGE cho app_api; schema `gia` chứa một
     --       HÀM giả, USAGE cho PUBLIC) đều bị gãy. Vế đúng là vế ĐÚNG CƠ CHẾ: quan hệ (r/p/v/m/f) cùng
     --       tên. Hàm trùng tên KHÔNG thuộc hàng 16 (câu ghi rơi vào bảng khác) — [CR1] đã đo riêng rằng
     --       danh sách trắng không bị vượt bằng hàm giả trên search_path. Không tự thu hồi: USAGE có thể
@@ -7222,6 +7303,15 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_PARAMETER_ACL_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_PARAMETER_ACL_SAI || $q$) t)$q$,
       $q$SUPERUSER (REVOKE … ON PARAMETER)$q$
+    ],
+    -- ---- [S1.40 / khoản nợ 82⑴] Mục PHÁN XÉT cho ADR-036 hàng 22 — tiền đề của NO INHERIT ----
+    ARRAY[
+      $q$không cặp kế thừa cổ điển (INHERITS) nào trong lược đồ dự án, trừ khi khai (khoản 82⑴)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_KE_THUA_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_KE_THUA_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng con (ALTER TABLE … NO INHERIT / DROP TABLE) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
     ],
 
     -- ---- (C) Đường đọc vòng qua RLS: VIEW · MATVIEW · SECURITY DEFINER ------------------

@@ -2123,5 +2123,5 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
       await db.pool.query("ALTER POLICY caller_rate_limits_khach ON caller_rate_limits TO PUBLIC");
     }
     expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: về PUBLIC ⇒ đi qua").toBeNull();
-  });
+  }, 180000); // [S1.40] sáu lần migrate(): hạn 180 s như các test ĐO ở hardening-suy-tu-tinh-chat — hạn mặc định 30 s chạm ngưỡng dưới tải song song của evidence (đo: 30014 ms)
 });

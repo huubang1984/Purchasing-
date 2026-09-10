@@ -339,6 +339,8 @@ const RULE_DA_KHAI: readonly string[] = [];
  */
 const TRIGGER_NGOAI_PLPGSQL_DA_KHAI: readonly string[] = [];
 const QUAN_HE_KHAC_DA_KHAI: readonly string[] = [];
+/** [S1.40 / khoản nợ 82⑴] cặp kế thừa cổ điển (không phân mảnh) — `con_schema.con INHERITS cha_schema.cha`; RỖNG là lời khai: dự án không dùng INHERITS. Bản hardening: KE_THUA_KHAI. */
+const KE_THUA_DA_KHAI: readonly string[] = [];
 const docHangHardening = (ten: string): string => docHangHardeningTu(HARDENING, ten);
 
 const CAU_RULE_RONG = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname
@@ -1850,13 +1852,16 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
-  it("[khoản nợ 83⑷⑸⑹] HAI BẢN KHỚP: ba danh sách khai ở hardening bằng bản ở test, và bộ giải hằng giải được cả năm câu phán xét", () => {
+  it("[khoản nợ 83⑷⑸⑹ + 82⑴] HAI BẢN KHỚP: ~~ba~~ [S1.40] bốn danh sách khai ở hardening bằng bản ở test, và bộ giải hằng giải được cả ~~năm~~ sáu câu phán xét", () => {
     expect(docHangHardening("QUAN_HE_KHAC_KHAI")).toBe(khoiValues(QUAN_HE_KHAC_DA_KHAI.map((t) => t.split(".") as [string, string]), "q", ["nspname", "relname"]));
+    expect(docHangHardening("KE_THUA_KHAI")).toBe(khoiValues(
+      KE_THUA_DA_KHAI.map((t) => { const [con, cha] = t.split(" INHERITS "); return [...con!.split("."), ...cha!.split(".")] as [string, string, string, string]; }),
+      "k", ["con_nspname", "con_relname", "cha_nspname", "cha_relname"]));
     expect(docHangHardening("TRIGGER_NGOAI_PLPGSQL_KHAI")).toBe(khoiValues(
       TRIGGER_NGOAI_PLPGSQL_DA_KHAI.map((t) => t.replace(/ \(.*\)$/u, "").split(".") as [string, string, string]), "g", ["nspname", "relname", "tgname"]));
     expect(docHangHardening("RULE_KHAI")).toBe(khoiValues(
       RULE_DA_KHAI.map((t) => { const [bang, rule] = t.split("/"); return [...bang!.split("."), rule!] as [string, string, string]; }), "r", ["nspname", "relname", "rulename"]));
-    for (const ten of ["CAU_QUAN_HE_KHAC_SAI", "CAU_TRIGGER_NGOAI_PLPGSQL_SAI", "CAU_RULE_SAI", "CAU_HAM_CANH_HINH_THUC_SAI", "CAU_PARAMETER_ACL_SAI"]) {
+    for (const ten of ["CAU_QUAN_HE_KHAC_SAI", "CAU_TRIGGER_NGOAI_PLPGSQL_SAI", "CAU_RULE_SAI", "CAU_HAM_CANH_HINH_THUC_SAI", "CAU_PARAMETER_ACL_SAI", "CAU_KE_THUA_SAI"]) {
       expect(docHangHardening(ten).length, ten).toBeGreaterThan(200);
     }
     // [lượt soi 30, NHẸ-2] vị từ hàm canh là MỘT hằng, cả hai mục trigger-canh (S1.36, S1.39) tham chiếu nó — và danh
@@ -1963,6 +1968,55 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, đi qua").toBe("OK");
     expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_db_role_setting s WHERE s.setrole = 0 AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\\_replication\\_role=%')")).rows[0]?.n, "GUC mức database đã bị RESET").toBe("0");
     expect(await migrateLai(db), "đối chứng: gỡ hết ⇒ đi qua").toBe("OK");
+  }, 180000);
+
+  it("[khoản nợ 82⑴] TỔNG ĐIỀU TRA kế thừa cổ điển — câu phán xét của hardening chạy trong test: rỗng hôm nay; một cặp INHERITS được THẤY, lá và chỉ mục phân mảnh không; NO INHERIT làm câu ghi qua cha ra 0 hàng (ADR-036 hàng 22) rồi cặp biến khỏi catalog — chiều ngược bắt cặp ĐÃ KHAI", async () => {
+    const cau = docHangHardening("CAU_KE_THUA_SAI");
+    const ten = async (c: pg.PoolClient | pg.Pool, q: string): Promise<string[]> =>
+      (await c.query<{ mo_ta: string }>(q)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+    expect(await ten(db.pool, cau), "lược đồ thật của dự án không có INHERITS").toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(`
+        CREATE TABLE public.zz_cha (id int, gia int);
+        CREATE TABLE public.zz_con () INHERITS (public.zz_cha);
+        CREATE TABLE public.zz_pm (id int, org_id uuid) PARTITION BY LIST (org_id);
+        CREATE TABLE public.zz_pm_a PARTITION OF public.zz_pm DEFAULT;
+        CREATE INDEX zz_pm_idx ON public.zz_pm (id);
+        INSERT INTO public.zz_con VALUES (1, 10);
+      `);
+      expect(await ten(c, cau), "cặp INHERITS bị thấy; lá phân mảnh và chỉ mục phân mảnh (cũng nằm ở pg_inherits) thì không").toEqual(["public.zz_con INHERITS public.zz_cha"]);
+      // Chiều ngược: giả lập MỘT dòng khai đúng cặp ấy bằng cách thay khối VALUES rỗng (xuất hiện ở cả hai chiều) của
+      // câu đã giải — danh sách thật hôm nay rỗng nên không có cách nào khác để chạy nhánh này trên CSDL thật.
+      const khai = cau.replaceAll("(VALUES ('', '', '', '')) AS k(", "(VALUES ('public', 'zz_con', 'public', 'zz_cha')) AS k(");
+      expect(khai.split("'zz_con'").length - 1, "khối khai phải được thay ở CẢ HAI chiều").toBe(2);
+      expect(await ten(c, khai), "khai đúng cặp đang có ⇒ im cả hai chiều").toEqual([]);
+      // ADR-036 hàng 22, đo lại tại chỗ: trước 1 hàng, sau NO INHERIT 0 hàng — không lỗi, con vẫn là bảng thường.
+      expect((await c.query("UPDATE public.zz_cha SET gia = 11 WHERE id = 1")).rowCount).toBe(1);
+      await c.query("ALTER TABLE public.zz_con NO INHERIT public.zz_cha");
+      expect((await c.query("UPDATE public.zz_cha SET gia = 12 WHERE id = 1")).rowCount, "cơ chế hàng 22: 0 hàng, không lỗi").toBe(0);
+      expect(await ten(c, cau), "sau NO INHERIT catalog không còn dấu vết — chiều xuôi im: mục này canh TIỀN ĐỀ, không canh cú tách").toEqual([]);
+      expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta), "cặp ĐÃ KHAI mà bị tách ⇒ chiều ngược kêu").toEqual([
+        expect.stringContaining("khai public.zz_con INHERITS public.zz_cha (khoản 82⑴) mà CSDL không còn cặp kế thừa như thế"),
+      ]);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[khoản nợ 82⑴] ĐO: migrate() NÉM ở mục kế thừa cho một cặp INHERITS chưa khai; đối chứng: NO INHERIT làm cặp biến mất và migrate() đi qua — đúng giới hạn nói thẳng của mục (canh tiền đề)", async () => {
+    await db.pool.query("CREATE TABLE public.zz_cha82 (id int, gia int); CREATE TABLE public.zz_con82 () INHERITS (public.zz_cha82)");
+    try {
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      expect(kq).toContain("public.zz_con82 INHERITS public.zz_cha82: cặp kế thừa cổ điển (không phải phân mảnh) trong lược đồ dự án chưa khai (khoản 82⑴");
+      await db.pool.query("ALTER TABLE public.zz_con82 NO INHERIT public.zz_cha82");
+      expect(await migrateLai(db), "đối chứng: không còn cặp ⇒ đi qua").toBe("OK");
+    } finally {
+      await db.pool.query("DROP TABLE IF EXISTS public.zz_con82; DROP TABLE IF EXISTS public.zz_cha82");
+    }
   }, 180000);
 
   it("[sổ nợ 74] NHÂN CHỨNG HÀNH VI: mỗi bộ ba (hàm, bảng, sự kiện) khai KHÔNG-CANH để một hàng THẬT đi qua — hàm đọc vai thì dưới vai không superuser; hàm canh MỘT sự kiện thì NÉM từ chính nó ở sự kiện ấy", async () => {
