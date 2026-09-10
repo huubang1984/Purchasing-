@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
@@ -1967,42 +1968,8 @@ describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả
 
 const HARDENING_SQL = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
 
-/**
- * Giải một hằng `NAME constant text := <expr>;` của hardening thành SQL: `$q$…$q$` là nguyên văn,
- * `|| NAME ||` là hằng khác (đệ quy), `pg_catalog.format(NAME, 'a', 'b')` thay `%1$s`/`%2$s`, `%%` → `%`.
- * Dấu `;` chỉ kết thúc khi đứng NGOÀI literal. Cố ý không hiểu gì khác — một hằng dùng cú pháp lạ
- * làm hàm này NÉM, tức test đỏ ồn ào chứ không xanh mù.
- */
-function docHangHardening(ten: string): string {
-  const dau = HARDENING_SQL.indexOf(`\n  ${ten} constant text :=`);
-  if (dau < 0) throw new Error(`không thấy hằng ${ten} trong hardening.always.sql`);
-  let i = HARDENING_SQL.indexOf(":=", dau) + 2;
-  let ra = "";
-  for (;;) {
-    while (/\s/u.test(HARDENING_SQL[i]!)) i++;
-    if (HARDENING_SQL.startsWith("$q$", i)) {
-      const cuoi = HARDENING_SQL.indexOf("$q$", i + 3);
-      ra += HARDENING_SQL.slice(i + 3, cuoi);
-      i = cuoi + 3;
-    } else if (HARDENING_SQL.startsWith("||", i)) {
-      i += 2;
-    } else if (HARDENING_SQL.startsWith("pg_catalog.format(", i)) {
-      const cuoi = HARDENING_SQL.indexOf(")", i);
-      const [mau, ...thamSo] = HARDENING_SQL.slice(i + "pg_catalog.format(".length, cuoi).split(",").map((t) => t.trim().replace(/^'|'$/gu, ""));
-      let van = docHangHardening(mau!);
-      thamSo.forEach((t, k) => { van = van.replaceAll(`%${k + 1}$s`, t); });
-      ra += van.replaceAll("%%", "%");
-      i = cuoi + 1;
-    } else if (HARDENING_SQL[i] === ";") {
-      return ra;
-    } else {
-      const m = /^[A-Z_0-9]+/u.exec(HARDENING_SQL.slice(i));
-      if (!m) throw new Error(`cú pháp lạ ở hằng ${ten}: ${HARDENING_SQL.slice(i, i + 40)}`);
-      ra += docHangHardening(m[0]);
-      i += m[0].length;
-    }
-  }
-}
+/** [S1.39] Bộ giải hằng nay ở `db/hardening-hang.ts` (dùng chung với `hardening-suy-tu-tinh-chat.int.test.ts`). */
+const docHangHardening = (ten: string): string => docHangHardeningTu(HARDENING_SQL, ten);
 
 const lit = (v: string): string => `'${v.replaceAll("'", "''")}'`;
 

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
+import { docHangHardening as docHangHardeningTu, khoiValues } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 const HARDENING = readFileSync(
@@ -329,6 +330,16 @@ const CAU_TAP_RONG_THEO_BANG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' O
  * for "bid_receipts" must not be named "_RETURN"* — chính PostgreSQL giữ tên ấy cho view.
  */
 const RULE_DA_KHAI: readonly string[] = [];
+
+/**
+ * [S1.39 / khoản nợ 83⑷⑸] Hai danh sách khai còn lại của nửa catalog — đều RỖNG, và rỗng là một lời khai.
+ * Khuôn: `lược đồ.tên.trigger (ngôn ngữ)` cho trigger ngoài plpgsql; `lược đồ.tên` cho quan hệ khác bảng thường
+ * mà hardening phán (bảng ngoài, matview, view có trigger INSTEAD OF — hẹp hơn census `LOAI_DA_KHAI` ở test,
+ * vốn đếm cả view trơn và bảng phân mảnh; xem chú thích ở hardening). Bản ở hardening phải BẰNG — cổng dưới.
+ */
+const TRIGGER_NGOAI_PLPGSQL_DA_KHAI: readonly string[] = [];
+const QUAN_HE_KHAC_DA_KHAI: readonly string[] = [];
+const docHangHardening = (ten: string): string => docHangHardeningTu(HARDENING, ten);
 
 const CAU_RULE_RONG = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname
                 OPERATOR(pg_catalog.||) '/' OPERATOR(pg_catalog.||) rw.rulename::pg_catalog.text) AS ten,
@@ -1563,7 +1574,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
-  it("[sổ nợ 73] ĐO: một RULE làm bảng chỉ-ghi-thêm mà KHÔNG lỗi, KHÔNG trigger, và ngoài tập của H19 — tổng điều tra là lớp duy nhất thấy nó", async () => {
+  it("[sổ nợ 73] ĐO: một RULE làm bảng chỉ-ghi-thêm mà KHÔNG lỗi, KHÔNG trigger, và ngoài tập của H19 — ~~tổng điều tra là lớp duy nhất thấy nó~~ [S1.39] tổng điều tra thấy, và migrate() NÉM ở mục khoản 83⑹", async () => {
     await db.pool.query(`
       CREATE TABLE public.zz_rule (id int PRIMARY KEY, ghi text);
       INSERT INTO public.zz_rule VALUES (1, 'a');
@@ -1576,18 +1587,26 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       const d = await db.pool.query("DELETE FROM public.zz_rule WHERE id = 1");
       expect([u.rowCount, d.rowCount]).toEqual([0, 0]);
       expect((await db.pool.query<{ ghi: string }>("SELECT ghi FROM public.zz_rule")).rows).toEqual([{ ghi: "a" }]);
-      // (b) không trigger nào ⇒ ngoài tập rộng của tổng điều tra hàm, ngoài vị từ của H19, migrate() OK.
+      // (b) không trigger nào ⇒ ngoài tập rộng của tổng điều tra hàm, ngoài vị từ của H19 — và ~~migrate() OK~~
+      //     [S1.39 / khoản nợ 83⑹] migrate() NÉM: rule trên MỌI quan hệ của dự án nay là mục phán xét (đo trước
+      //     S1.39: đi qua — chỉ rule trên bảng sổ/bảng chỉ-ghi-thêm suy ra bị soi).
       const tapRong = (await db.pool.query<{ bang: string }>(CAU_TAP_RONG_THEO_BANG)).rows;
       expect(tapRong.some((r) => r.bang === "public.zz_rule")).toBe(false);
       const chiGhiThem = (await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows;
       expect(chiGhiThem.some((r) => r.relname === "zz_rule")).toBe(false);
-      expect(await migrateLai(db)).toBe("OK");
+      const kqRule = await migrateLai(db);
+      expect(kqRule).toMatch(/^NÉM/);
+      expect(kqRule).toContain("public.zz_rule.zz_khong_sua: RULE trên một quan hệ của dự án (khoản 83⑹");
+      expect(kqRule).toContain("public.zz_rule.zz_khong_xoa: RULE");
       // (c) tổng điều tra rule THẤY nó — ở đúng hai tên.
       const { rows } = await db.pool.query<{ ten: string }>(CAU_RULE_RONG);
       expect(rows.map((r) => r.ten).filter((t) => !RULE_DA_KHAI.includes(t))).toEqual([
         "public.zz_rule/zz_khong_sua",
         "public.zz_rule/zz_khong_xoa",
       ]);
+      // (d) [lượt soi 30, NHẸ-6] đối chứng dương: gỡ rule ⇒ đi qua.
+      await db.pool.query("DROP RULE zz_khong_sua ON public.zz_rule; DROP RULE zz_khong_xoa ON public.zz_rule");
+      expect(await migrateLai(db)).toBe("OK");
     } finally {
       await db.pool.query("DROP TABLE public.zz_rule");
     }
@@ -1622,7 +1641,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
   }, 180000);
 
-  it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó và tổng điều tra ĐỎ ở cả hai lời khai", async () => {
+  it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";
     await db.pool.query(`
       CREATE TABLE public.zz_cau (id int PRIMARY KEY, ghi text);
@@ -1639,10 +1658,15 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       // (a) nó LÀ hàm canh: mọi UPDATE/DELETE ném, kể cả câu chạm 0 hàng.
       expect(await thu(db, "UPDATE public.zz_cau SET ghi = 'b' WHERE id = 1")).toMatch(/^NÉM/);
       expect(await thu(db, "DELETE FROM public.zz_cau WHERE id = 99")).toMatch(/^NÉM/);
-      // (b) nhưng H19 không nhận bảng, migrate() OK, và TRUNCATE đi lọt — đúng khoản nợ 75.
+      // (b) nhưng H19 không nhận bảng và TRUNCATE đi lọt — đúng khoản nợ 75; ~~migrate() OK~~ [S1.39 / khoản nợ
+      //     83⑺] migrate() NÉM: hàm canh (hình dạng) gắn ngoài BEFORE … FOR EACH ROW nay là mục phán xét (đo trước
+      //     S1.39: đi qua — tổng điều tra ở test là lớp duy nhất).
       const chiGhiThem = (await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows;
       expect(chiGhiThem.some((r) => r.relname === "zz_cau")).toBe(false);
-      expect(await migrateLai(db)).toBe("OK");
+      const kq75 = await migrateLai(db);
+      expect(kq75).toMatch(/^NÉM/);
+      // regprocedure::text bỏ `public.` khi schema ấy ở search_path — không ghim tiền tố.
+      expect(kq75).toMatch(new RegExp(`zz_cau\\.zz_cau_canh: trigger của hàm canh (public\\.)?${ten}\\(\\) ở hình thức BEFORE FOR EACH STATEMENT`, "u"));
       // (c) tập rộng MỚI thấy nó — hình dạng canh, KHÔNG ở BEFORE-ROW.
       const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; chi_truoc_hang: boolean }>(CAU_TAP_RONG);
       const moi = rows.find((r) => r.ten === `public.${ten}`);
@@ -1655,6 +1679,10 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       expect(daKhai.has(`public.${ten}`)).toBe(false);
       expect(moi!.khong_tra_ve && !moi!.chi_truoc_hang, "khai CANH thì luật BEFORE-ROW bắt").toBe(true);
       expect(moi!.khong_tra_ve, "khai KHÔNG-CANH thì mâu thuẫn một chiều bắt").toBe(true);
+      // (e) [lượt soi 30, NHẸ-6] đối chứng dương: gỡ trigger ⇒ đi qua (dựng lại BEFORE ROW thì bảng thành chỉ-ghi-thêm
+      //     và H19 đòi chốt TRUNCATE — chuyện của một test khác).
+      await db.pool.query("DROP TRIGGER zz_cau_canh ON public.zz_cau");
+      expect(await migrateLai(db)).toBe("OK");
     } finally {
       await db.pool.query(`DROP TABLE public.zz_cau; DROP FUNCTION public.${ten}();`);
     }
@@ -1781,7 +1809,6 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // 28] BÁC: chỉ TẠO hàm C cần superuser; GẮN hàm C có sẵn thì không — built-in ở trên, và extension tin
     // cậy `tcn` (hàm trigger C) chủ DB thường cài được (đo); plperl là extension tin cậy, plpython3u thì
     // không. Mục hardening `prolang` là khoản nợ 83⑸.
-    const TRIGGER_NGOAI_PLPGSQL_DA_KHAI: readonly string[] = [];
     const cau = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) t.tgname) AS ten,
                         l.lanname::pg_catalog.text AS ngon_ngu
                    FROM pg_trigger t
@@ -1821,6 +1848,121 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       await c.query("ROLLBACK");
       c.release();
     }
+  }, 180000);
+
+  it("[khoản nợ 83⑷⑸⑹] HAI BẢN KHỚP: ba danh sách khai ở hardening bằng bản ở test, và bộ giải hằng giải được cả năm câu phán xét", () => {
+    expect(docHangHardening("QUAN_HE_KHAC_KHAI")).toBe(khoiValues(QUAN_HE_KHAC_DA_KHAI.map((t) => t.split(".") as [string, string]), "q", ["nspname", "relname"]));
+    expect(docHangHardening("TRIGGER_NGOAI_PLPGSQL_KHAI")).toBe(khoiValues(
+      TRIGGER_NGOAI_PLPGSQL_DA_KHAI.map((t) => t.replace(/ \(.*\)$/u, "").split(".") as [string, string, string]), "g", ["nspname", "relname", "tgname"]));
+    expect(docHangHardening("RULE_KHAI")).toBe(khoiValues(
+      RULE_DA_KHAI.map((t) => { const [bang, rule] = t.split("/"); return [...bang!.split("."), rule!] as [string, string, string]; }), "r", ["nspname", "relname", "rulename"]));
+    for (const ten of ["CAU_QUAN_HE_KHAC_SAI", "CAU_TRIGGER_NGOAI_PLPGSQL_SAI", "CAU_RULE_SAI", "CAU_HAM_CANH_HINH_THUC_SAI", "CAU_PARAMETER_ACL_SAI"]) {
+      expect(docHangHardening(ten).length, ten).toBeGreaterThan(200);
+    }
+    // [lượt soi 30, NHẸ-2] vị từ hàm canh là MỘT hằng, cả hai mục trigger-canh (S1.36, S1.39) tham chiếu nó — và danh
+    // sách tên trong hằng ấy bằng HAM_CANH_CHI_GHI_THEM.
+    for (const ten of ["CAU_TRIGGER_CANH_CO_DIEU_KIEN", "CAU_HAM_CANH_HINH_THUC_SAI"]) {
+      expect(HARDENING, `${ten} phải tham chiếu VI_TU_HAM_CANH_HINH_DANG`).toMatch(new RegExp(`${ten} constant text :=[\\s\\S]*?VI_TU_HAM_CANH_HINH_DANG[\\s\\S]*?\\$q\\$;`, "u"));
+    }
+    expect(docHangHardening("VI_TU_HAM_CANH_HINH_DANG")).toContain(`p.proname IN (${HAM_CANH_CHI_GHI_THEM.map((h) => `'${h}'`).join(", ")})`);
+  });
+
+  it("[khoản nợ 83⑷⑸⑹⑺⑧] CÂU PHÁN XÉT CỦA HARDENING chạy trong test: hôm nay rỗng cả năm; fixture trong giao dịch cho mỗi cơ chế được THẤY đúng tên, và cái hợp lệ không bị phán", async () => {
+    const cau = Object.fromEntries(["CAU_QUAN_HE_KHAC_SAI", "CAU_TRIGGER_NGOAI_PLPGSQL_SAI", "CAU_RULE_SAI", "CAU_HAM_CANH_HINH_THUC_SAI", "CAU_PARAMETER_ACL_SAI"].map((t) => [t, docHangHardening(t)]));
+    const ten = async (c: pg.PoolClient | pg.Pool, t: string): Promise<string[]> =>
+      (await c.query<{ mo_ta: string }>(cau[t]!)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+    for (const t of Object.keys(cau)) expect(await ten(db.pool, t), `${t} phải rỗng trên lược đồ hợp lệ`).toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      // ⑷ — view TRƠN (kể cả security_invoker) và bảng phân mảnh KHÔNG bị phán; view có INSTEAD OF, matview, bảng ngoài thì bị.
+      await c.query(`
+        CREATE VIEW public.zz_v_tron WITH (security_invoker = true) AS SELECT 1 AS mot;
+        CREATE TABLE public.zz_p (id int, org_id uuid) PARTITION BY LIST (org_id);
+        CREATE VIEW public.zz_v_nuot AS SELECT 1 AS mot;
+        CREATE FUNCTION public.zz_instead() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+        CREATE TRIGGER zz_io INSTEAD OF UPDATE ON public.zz_v_nuot FOR EACH ROW EXECUTE FUNCTION public.zz_instead();
+        CREATE MATERIALIZED VIEW public.zz_m AS SELECT 1 AS mot;
+      `);
+      // [lượt soi 30, INFO-10] fixture bảng ngoài tựa vào contrib `file_fdw` — nói rõ khi image thiếu.
+      expect((await c.query("SELECT 1 FROM pg_available_extensions WHERE name = 'file_fdw'")).rowCount, "image PostgreSQL thiếu contrib file_fdw — fixture bảng ngoài không dựng được").toBe(1);
+      await c.query(`
+        CREATE EXTENSION IF NOT EXISTS file_fdw;
+        CREATE SERVER zz_srv FOREIGN DATA WRAPPER file_fdw;
+        CREATE FOREIGN TABLE public.zz_f (a int) SERVER zz_srv OPTIONS (filename '/dev/null');
+      `);
+      expect(await ten(c, "CAU_QUAN_HE_KHAC_SAI")).toEqual(["public.zz_f", "public.zz_m", "public.zz_v_nuot"]);
+      // ⑸ — hàm built-in `internal` gắn được không cần tạo hàm; hàm plpgsql thì không bị phán.
+      await c.query("CREATE TABLE public.zz_t (id int PRIMARY KEY, g text); CREATE TRIGGER s BEFORE UPDATE ON public.zz_t FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()");
+      expect(await ten(c, "CAU_TRIGGER_NGOAI_PLPGSQL_SAI")).toEqual(["public.zz_t.s"]);
+      // ⑹ — rule trên bảng KHÔNG chỉ-ghi-thêm (sessions của dự án) bị phán; `_RETURN` của view thì không.
+      await c.query("CREATE RULE zz_r AS ON UPDATE TO public.sessions DO INSTEAD NOTHING");
+      expect(await ten(c, "CAU_RULE_SAI")).toEqual(["public.sessions.zz_r"]);
+      // ⑺ — hàm canh (hình dạng) gắn AFTER ROW và cấp câu lệnh bị phán; trigger TRUNCATE của nó thì không.
+      await c.query(`
+        CREATE FUNCTION public.zz_canh() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'canh'; END $$;
+        CREATE TRIGGER zz_sau AFTER UPDATE ON public.zz_t FOR EACH ROW EXECUTE FUNCTION public.zz_canh();
+        CREATE TRIGGER zz_cau BEFORE DELETE ON public.zz_t FOR EACH STATEMENT EXECUTE FUNCTION public.zz_canh();
+        CREATE TRIGGER zz_chot BEFORE TRUNCATE ON public.zz_t FOR EACH STATEMENT EXECUTE FUNCTION public.zz_canh();
+        CREATE TRIGGER zz_dung BEFORE INSERT ON public.zz_t FOR EACH ROW EXECUTE FUNCTION public.zz_canh();
+      `);
+      expect(await ten(c, "CAU_HAM_CANH_HINH_THUC_SAI")).toEqual(["zz_t.zz_cau", "zz_t.zz_sau"]);
+      // ⑧ — quyền trên tham số cho vai ứng dụng, đích danh hay qua PUBLIC.
+      await c.query("GRANT SET ON PARAMETER session_replication_role TO app_api; GRANT ALTER SYSTEM ON PARAMETER work_mem TO PUBLIC");
+      expect(await ten(c, "CAU_PARAMETER_ACL_SAI")).toEqual(["session_replication_role", "work_mem"]);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[khoản nợ 83⑷⑸⑧] ĐO: migrate() NÉM ở đúng mục — view có INSTEAD OF (⑷), trigger gọi hàm built-in (⑸), GRANT SET ON PARAMETER cho app_api (⑧); đối chứng đi qua sau khi gỡ", async () => {
+    await db.pool.query(`
+      CREATE VIEW public.zz_v83 AS SELECT 1 AS mot;
+      CREATE FUNCTION public.zz_io83() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER zz_io INSTEAD OF UPDATE ON public.zz_v83 FOR EACH ROW EXECUTE FUNCTION public.zz_io83();
+    `);
+    try {
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      expect(kq).toContain("public.zz_v83: VIEW có trigger INSTEAD OF (trả NULL là nuốt hàng) trong lược đồ dự án chưa khai (khoản 83⑷");
+      await db.pool.query("DROP TRIGGER zz_io ON public.zz_v83");
+      expect(await migrateLai(db), "view trơn không bị phán").toBe("OK");
+    } finally {
+      await db.pool.query("DROP VIEW IF EXISTS public.zz_v83; DROP FUNCTION IF EXISTS public.zz_io83()");
+    }
+    await db.pool.query("CREATE TABLE public.zz_t83 (id int PRIMARY KEY, g text); CREATE TRIGGER s BEFORE UPDATE ON public.zz_t83 FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()");
+    try {
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      expect(kq).toContain("public.zz_t83.s: trigger gọi hàm suppress_redundant_updates_trigger() ngôn ngữ internal — không phải plpgsql (khoản 83⑸");
+    } finally {
+      await db.pool.query("DROP TABLE public.zz_t83");
+    }
+    await db.pool.query("GRANT SET ON PARAMETER session_replication_role TO app_api");
+    try {
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      expect(kq).toContain("session_replication_role: quyền SET trên tham số cấp cho app_api (khoản 83⑧");
+    } finally {
+      await db.pool.query("REVOKE SET ON PARAMETER session_replication_role FROM app_api");
+    }
+    // [lượt soi 30, NHẸ-3] quyền đến QUA NHÓM: cấp cho một role thứ ba rồi cho app_api làm thành viên — BƯỚC 1 gỡ tư cách
+    // thành viên lạ ở lượt sửa, nên migrate() vẫn NÉM nhưng ở mục membership; câu phán xét ⑧ chạy riêng TRƯỚC khi gỡ
+    // phải tự thấy (has_parameter_privilege), không tựa vào BƯỚC 1.
+    await db.pool.query("CREATE ROLE zz_nhom83; GRANT SET ON PARAMETER work_mem TO zz_nhom83; GRANT zz_nhom83 TO app_api");
+    try {
+      const thay = (await db.pool.query<{ mo_ta: string }>(docHangHardening("CAU_PARAMETER_ACL_SAI"))).rows.map((r) => r.mo_ta.split(":")[0]);
+      expect(thay, "⑧ phải thấy quyền hiệu dụng qua nhóm").toEqual(["work_mem"]);
+    } finally {
+      await db.pool.query("REVOKE zz_nhom83 FROM app_api; DROP OWNED BY zz_nhom83; DROP ROLE zz_nhom83");
+    }
+    // [lượt soi 30, NHẸ-4] mức database (superuser) — mục tự chữa RESET.
+    const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+    await db.pool.query(`ALTER DATABASE "${tenDb}" SET session_replication_role = replica`);
+    expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, đi qua").toBe("OK");
+    expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_db_role_setting s WHERE s.setrole = 0 AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\\_replication\\_role=%')")).rows[0]?.n, "GUC mức database đã bị RESET").toBe("0");
+    expect(await migrateLai(db), "đối chứng: gỡ hết ⇒ đi qua").toBe("OK");
   }, 180000);
 
   it("[sổ nợ 74] NHÂN CHỨNG HÀNH VI: mỗi bộ ba (hàm, bảng, sự kiện) khai KHÔNG-CANH để một hàng THẬT đi qua — hàm đọc vai thì dưới vai không superuser; hàm canh MỘT sự kiện thì NÉM từ chính nó ở sự kiện ấy", async () => {

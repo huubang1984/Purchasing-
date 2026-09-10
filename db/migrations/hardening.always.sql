@@ -1764,6 +1764,16 @@ $ham$;
   -- VI_TU_BANG_CHI_GHI_THEM (hình dạng ∪ khai báo, plpgsql); không lọc tgtype nên phủ cả trigger TRUNCATE
   -- (trùng cố ý với vế chốt TRUNCATE ở CAU_CHI_GHI_THEM_VAT_LY — hai lớp cho một ca). Đo: 0 trigger như thế
   -- trong kho hôm nay (045 đã nâng mọi trigger lên ALWAYS; tổng điều tra ở test giữ điều ấy không thiu).
+  -- [S1.39, lượt soi 30 NHẸ-2] Vị từ "p là hàm canh" (hình dạng ∪ khai tên, plpgsql) — MỘT bản cho hai mục phán xét
+  -- trigger canh (điều kiện S1.36; hình thức S1.39). VI_TU_BANG_CHI_GHI_THEM giữ bản inline vì test đòi nguyên văn;
+  -- danh sách tên ở đây phải bằng danh sách ấy — test H19 đòi hằng này được cả hai mục tham chiếu.
+  VI_TU_HAM_CANH_HINH_DANG constant text :=
+    $q$(p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+        AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+        AND (p.prosrc !~* '\mRETURN\M'
+             OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
+                 AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa'))))$q$;
+
   CAU_TRIGGER_CANH_CO_DIEU_KIEN constant text :=
     $q$SELECT t.tgrelid::regclass::text || '.' || t.tgname::text || ': trigger của hàm canh '
               || p.oid::regprocedure::text
@@ -1783,11 +1793,7 @@ $ham$;
          JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE NOT t.tgisinternal
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
-          AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
-          AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-          AND (p.prosrc !~* '\mRETURN\M'
-               OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
-                   AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
+          AND $q$ || VI_TU_HAM_CANH_HINH_DANG || $q$
           AND (t.tgqual IS NOT NULL OR t.tgattr::text <> '' OR t.tgenabled <> 'A')$q$;
 
   -- [S1.20 / sổ nợ 16] BẢNG SỔ KHÔNG ĐƯỢC CÓ CỘT NÀO NGOÀI CHUỖI HASH.
@@ -1992,7 +1998,7 @@ $ham$;
        SELECT 'khai public.' || g.bang || '.' || g.polname || ' (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy '
               'đúng sáu cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
-        WHERE to_regclass('public.' || g.bang) IS NOT NULL
+        WHERE to_regclass(pg_catalog.format('%I.%I', 'public', g.bang)) IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = 'public' AND c.relname = g.bang AND p.polname = g.polname
@@ -2004,7 +2010,7 @@ $ham$;
        SELECT 'khai public.' || k.bang || '.' || k.polname || ' (' || k.loai || ', khoản 83⑴) mà CSDL không có policy '
               'đúng bảy cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_KHAC_KHAI || $q$
-        WHERE to_regclass('public.' || k.bang) IS NOT NULL
+        WHERE to_regclass(pg_catalog.format('%I.%I', 'public', k.bang)) IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = 'public' AND c.relname = k.bang AND p.polname = k.polname
@@ -2067,11 +2073,150 @@ $ham$;
        SELECT 'khai ' || b.nspname || '.' || b.relname || ' là bảng RLS ngoài tenant (khoản 83⑶) mà CSDL không có bảng '
               'bật RLS như thế ngoài tập tenant — dòng khai thiu' AS mo_ta
          FROM $q$ || BANG_RLS_NGOAI_TENANT_KHAI || $q$
-        WHERE to_regclass(b.nspname || '.' || b.relname) IS NOT NULL
+        WHERE to_regclass(pg_catalog.format('%I.%I', b.nspname, b.relname)) IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = b.nspname AND c.relname = b.relname
                              AND c.relkind IN ('r', 'p') AND c.relrowsecurity
                              AND NOT $q$ || VI_TU_CAN_CO_RLS || $q$)$q$;
+
+  -- ---- [S1.39 / khoản nợ 83 — nửa catalog ⑷⑸⑹⑺⑧] NĂM MỤC PHÁN XÉT CÒN LẠI CỦA ADR-036 §3⑶ -----------
+  -- Tiêu chí §3⑶ (S1.37): cơ chế mà chủ bảng không superuser tạo được và catalog phân biệt được tĩnh thì
+  -- PHẢI có mục hardening. Năm cơ chế còn lại chỉ có tổng điều tra ở test (`hardening-suy-tu-tinh-chat`):
+  --   ⑷ ADR-036 hàng 10 — VIEW mang trigger INSTEAD OF (trả NULL là nuốt hàng), MATERIALIZED VIEW, BẢNG
+  --      NGOÀI (ghi ra cụm khác) trong lược đồ dự án — khai đích danh ở QUAN_HE_KHAC_KHAI (rỗng). View
+  --      KHÔNG có trigger INSTEAD OF không bị phán: DML đi thẳng xuống bảng gốc (view `security_invoker`
+  --      hợp lệ của [I2] đi qua); bảng phân mảnh (`p`) không bị phán: lá được H19 canh riêng ([review lượt
+  --      12, H1]) và fixture [CR2] là khuôn PostgreSQL chuẩn.
+  --   ⑸ hàng 21 — trigger gọi hàm KHÔNG plpgsql (`internal`/C/PL khác): vô hình với tổng điều tra hàm, vị từ
+  --      chỉ-ghi-thêm và nhân chứng (đều lọc `lanname = 'plpgsql'`). Đo (S1.37): chủ bảng thường gắn được
+  --      `suppress_redundant_updates_trigger()` không cần tạo hàm, và extension tin cậy `tcn` cài được.
+  --      Khai đích danh ở TRIGGER_NGOAI_PLPGSQL_KHAI (rỗng). FK `RI_FKey_*` là tgisinternal — không xét.
+  --   ⑹ hàng 3 TỔNG QUÁT — RULE trên MỌI quan hệ của dự án (không chỉ bảng sổ/bảng chỉ-ghi-thêm suy ra):
+  --      `DO INSTEAD NOTHING` trên `sessions` sống qua migrate() (đo, S1.37). Trừ `_RETURN` của view. Khai
+  --      đích danh ở RULE_KHAI (rỗng). Rule trên bảng sổ được BƯỚC 2 tự gỡ trước khi mục này đọc catalog.
+  --   ⑺ hàng 2 / khoản nợ 75 — hàm canh (hình dạng: thân không RETURN, hoặc khai tên) gắn ở hình thức KHÁC
+  --      `BEFORE … FOR EACH ROW` trên INSERT/UPDATE/DELETE: bảng thành chỉ-ghi-thêm mà vị từ không nhận, nên
+  --      LOGGED/chốt TRUNCATE/ACL không ai canh. Trigger TRUNCATE (cấp câu lệnh) của hàm canh là chốt, hợp lệ.
+  --   ⑧ tiền đề SUSET của hàng 8 — `pg_parameter_acl`: một `GRANT SET ON PARAMETER session_replication_role TO
+  --      app_api` lúc bootstrap sống qua mọi migrate() và biến `ENABLE ALWAYS` thành lớp duy nhất (lượt soi
+  --      28 NHẸ-5). Không danh sách khai: vai ứng dụng không bao giờ được cấp quyền trên tham số.
+  -- Cả năm PHÁN XÉT (ADR-028 §2⑵). Chiều ngược (khai mà không còn) chỉ khi đối tượng cha tồn tại — bài học
+  -- lượt soi 29 CAO-1. Bản test giữ cùng ba danh sách và một cổng đòi hai bản khớp qua bộ giải hằng.
+  QUAN_HE_KHAC_KHAI constant text :=
+    $q$(VALUES ('', '')) AS q(nspname, relname)$q$;
+
+  TRIGGER_NGOAI_PLPGSQL_KHAI constant text :=
+    $q$(VALUES ('', '', '')) AS g(nspname, relname, tgname)$q$;
+
+  RULE_KHAI constant text :=
+    $q$(VALUES ('', '', '')) AS r(nspname, relname, rulename)$q$;
+
+  CAU_QUAN_HE_KHAC_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname || ': '
+              || CASE c.relkind WHEN 'f' THEN 'BẢNG NGOÀI (ghi ra cụm khác)'
+                                WHEN 'm' THEN 'MATERIALIZED VIEW (không phải đích DML — vật liệu hoá đọc, xem cả mục (C))'
+                                WHEN 'v' THEN CASE WHEN EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.oid
+                                                                    AND NOT t.tgisinternal AND (t.tgtype & 64) <> 0)
+                                                   THEN 'VIEW có trigger INSTEAD OF (trả NULL là nuốt hàng)'
+                                                   ELSE 'VIEW có trigger cấp câu lệnh' END
+                                ELSE c.relkind::text END
+              || ' trong lược đồ dự án chưa khai (khoản 83⑷, ADR-036 hàng 10) — một đích DML không phải bảng thường '
+                 'đứng ngoài mọi lớp của H19. Sửa: một migration mới bỏ nó, hoặc khai (nspname, relname) vào '
+                 'QUAN_HE_KHAC_KHAI kèm lý do và bản ở db/hardening-suy-tu-tinh-chat.int.test.ts.' AS mo_ta
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND (c.relkind IN ('f', 'm')
+               OR (c.relkind = 'v' AND EXISTS (SELECT 1 FROM pg_trigger t
+                                                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal)))
+          AND NOT EXISTS (SELECT 1 FROM $q$ || QUAN_HE_KHAC_KHAI || $q$
+                           WHERE q.nspname = n.nspname AND q.relname = c.relname)
+       UNION ALL
+       SELECT 'khai ' || q.nspname || '.' || q.relname || ' (khoản 83⑷) mà CSDL không có quan hệ như thế — dòng khai thiu' AS mo_ta
+         FROM $q$ || QUAN_HE_KHAC_KHAI || $q$
+        WHERE q.relname <> ''
+          -- [lượt soi 30, NHẸ-1] "cha" của một quan hệ là schema: chỉ kêu khi schema đã có (tập migration rút gọn).
+          AND EXISTS (SELECT 1 FROM pg_namespace ns WHERE ns.nspname = q.nspname)
+          AND to_regclass(pg_catalog.format('%I.%I', q.nspname, q.relname)) IS NULL$q$;
+
+  CAU_TRIGGER_NGOAI_PLPGSQL_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname || '.' || t.tgname || ': trigger gọi hàm ' || p.oid::regprocedure::text
+              || ' ngôn ngữ ' || l.lanname::text
+              || ' — không phải plpgsql (khoản 83⑸, ADR-036 hàng 21): vô hình với tổng điều tra hàm, vị từ chỉ-ghi-thêm '
+                 'và nhân chứng hành vi (đo: suppress_redundant_updates_trigger làm UPDATE ra 0 hàng không lỗi). Sửa: '
+                 'một migration mới viết lại bằng plpgsql, hoặc khai (nspname, relname, tgname) vào TRIGGER_NGOAI_PLPGSQL_KHAI '
+                 'kèm lý do và bản ở db/hardening-suy-tu-tinh-chat.int.test.ts.' AS mo_ta
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_proc p ON p.oid = t.tgfoid
+         JOIN pg_language l ON l.oid = p.prolang
+        WHERE NOT t.tgisinternal
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND l.lanname <> 'plpgsql'
+          AND NOT EXISTS (SELECT 1 FROM $q$ || TRIGGER_NGOAI_PLPGSQL_KHAI || $q$
+                           WHERE g.nspname = n.nspname AND g.relname = c.relname AND g.tgname = t.tgname)
+       UNION ALL
+       SELECT 'khai ' || g.nspname || '.' || g.relname || '.' || g.tgname || ' (khoản 83⑸) mà CSDL không có trigger như thế — dòng khai thiu' AS mo_ta
+         FROM $q$ || TRIGGER_NGOAI_PLPGSQL_KHAI || $q$
+        WHERE g.tgname <> ''
+          AND to_regclass(pg_catalog.format('%I.%I', g.nspname, g.relname)) IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgrelid = to_regclass(pg_catalog.format('%I.%I', g.nspname, g.relname)) AND t.tgname = g.tgname)$q$;
+
+  CAU_RULE_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname || '.' || rw.rulename || ': RULE trên một quan hệ của dự án (khoản 83⑹, ADR-036 hàng 3) — '
+                 'một rule viết lại câu lệnh TRƯỚC khi trigger nào chạy: DO INSTEAD NOTHING làm câu ghi ra 0 hàng không lỗi '
+                 'ở MỌI bảng, không chỉ bảng chỉ-ghi-thêm (đo: rule trên sessions sống qua migrate()). Dự án không dùng RULE. '
+                 'Sửa: một migration mới DROP RULE, hoặc khai (nspname, relname, rulename) vào RULE_KHAI kèm lý do.' AS mo_ta
+         FROM pg_rewrite rw
+         JOIN pg_class c ON c.oid = rw.ev_class
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND rw.rulename <> '_RETURN'
+          AND NOT EXISTS (SELECT 1 FROM $q$ || RULE_KHAI || $q$
+                           WHERE r.nspname = n.nspname AND r.relname = c.relname AND r.rulename = rw.rulename)
+       UNION ALL
+       SELECT 'khai ' || r.nspname || '.' || r.relname || '.' || r.rulename || ' (khoản 83⑹) mà CSDL không có rule như thế — dòng khai thiu' AS mo_ta
+         FROM $q$ || RULE_KHAI || $q$
+        WHERE r.rulename <> ''
+          AND to_regclass(pg_catalog.format('%I.%I', r.nspname, r.relname)) IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_rewrite rw
+                           WHERE rw.ev_class = to_regclass(pg_catalog.format('%I.%I', r.nspname, r.relname)) AND rw.rulename = r.rulename)$q$;
+
+  CAU_HAM_CANH_HINH_THUC_SAI constant text :=
+    $q$SELECT t.tgrelid::regclass::text || '.' || t.tgname::text || ': trigger của hàm canh ' || p.oid::regprocedure::text
+              || ' ở hình thức ' || CASE WHEN (t.tgtype & 64) <> 0 THEN 'INSTEAD OF' WHEN (t.tgtype & 2) = 0 THEN 'AFTER' ELSE 'BEFORE' END
+              || ' ' || CASE WHEN (t.tgtype & 1) = 1 THEN 'FOR EACH ROW' ELSE 'FOR EACH STATEMENT' END
+              || ' — hàm canh chỉ được gắn BEFORE … FOR EACH ROW trên INSERT/UPDATE/DELETE (khoản 83⑺, khoản nợ 75): ở hình '
+                 'thức khác nó vẫn chặn mọi câu (bảng thành chỉ-ghi-thêm) nhưng vị từ chỉ-ghi-thêm không nhận bảng, nên '
+                 'LOGGED / chốt TRUNCATE / ACL không ai canh (trigger BEFORE TRUNCATE FOR EACH STATEMENT của hàm canh là chốt, hợp lệ, '
+                 'không bị mục này phán). Sửa: một migration mới dựng lại trigger đúng hình thức.' AS mo_ta
+         FROM pg_trigger t
+         JOIN pg_proc p ON p.oid = t.tgfoid
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE NOT t.tgisinternal
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND $q$ || VI_TU_HAM_CANH_HINH_DANG || $q$
+          AND (t.tgtype & 28) <> 0
+          AND (t.tgtype & 3) <> 3$q$;
+
+  CAU_PARAMETER_ACL_SAI constant text :=
+    $q$SELECT pa.parname::text || ': quyền ' || a.privilege_type || ' trên tham số cấp cho '
+              || CASE WHEN r.rolname IS NULL THEN 'PUBLIC' ELSE r.rolname::text END
+              || ' (khoản 83⑧) — tiền đề SUSET của ADR-036 hàng 8: vai ứng dụng đặt được session_replication_role = replica '
+                 'thì mọi trigger ENABLE thường bị bỏ qua; lớp ENABLE ALWAYS tựa vào việc tham số ấy chỉ superuser đặt được. '
+                 'Sửa: REVOKE … ON PARAMETER (superuser).' AS mo_ta
+         FROM pg_parameter_acl pa
+         CROSS JOIN LATERAL aclexplode(pa.paracl) a
+         LEFT JOIN pg_roles r ON r.oid = a.grantee
+        -- [lượt soi 30, NHẸ-3] tập vai theo tính chất (VAI_KET_NOI_UNG_DUNG); một dòng ACL bị phán khi grantee là PUBLIC,
+        -- là vai ứng dụng, hay là một NHÓM mà vai ứng dụng là thành viên (pg_has_role bắc cầu) — thấy cả quyền đến qua
+        -- nhóm mà BƯỚC 1 chưa gỡ, và không kê dòng của người cấp (superuser).
+        WHERE a.grantee = 0
+           OR EXISTS (SELECT 1 FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                        JOIN pg_roles vr ON vr.rolname = v.rolname
+                       WHERE pg_catalog.pg_has_role(vr.oid, a.grantee, 'USAGE'))$q$;
 
   CAU_QUAN_HE_TRUNG_TEN constant text :=
     $q$FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -6861,6 +7006,22 @@ $ham$;
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
     ],
+    -- [S1.39, lượt soi 30 NHẸ-4] `ALTER DATABASE … SET session_replication_role = replica` (superuser) áp cho MỌI
+    -- phiên kể cả app_api và sống qua migrate(): cùng tiền đề SUSET mà mục ⑧ giữ ở mức role/PUBLIC. Cùng khuôn hai
+    -- mục kề — RESET là đơn điệu nên TỰ CHỮA.
+    ARRAY[
+      $q$session_replication_role đặt ở mức database$q$,
+      $q$true$q$,
+      pg_catalog.format('ALTER DATABASE %I RESET session_replication_role', pg_catalog.current_database()),
+      $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
+                     WHERE s.setrole = 0
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
+                       AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\_replication\_role=%'))$q$,
+      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
+                   WHERE s.setrole = 0
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
+      $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
+    ],
     ARRAY[
       $q$search_path đặt ở mức database$q$,
       $q$true$q$,
@@ -7020,6 +7181,47 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_RLS_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_RLS_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (ALTER TABLE … DISABLE ROW LEVEL SECURITY) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    -- ---- [S1.39 / khoản nợ 83 ⑷⑸⑹⑺⑧] Năm mục PHÁN XÉT cho ADR-036 hàng 10, 21, 3 (tổng quát), 2/75, tiền đề 8 ----
+    ARRAY[
+      $q$bảng ngoài / matview / view có trigger INSTEAD OF trong lược đồ dự án phải được khai (khoản 83⑷)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUAN_HE_KHAC_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_QUAN_HE_KHAC_SAI || $q$) t)$q$,
+      $q$quyền sở hữu quan hệ đó (DROP) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    ARRAY[
+      $q$mọi trigger của dự án gọi hàm plpgsql, trừ khi khai (khoản 83⑸)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_NGOAI_PLPGSQL_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_TRIGGER_NGOAI_PLPGSQL_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (DROP TRIGGER) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    ARRAY[
+      $q$không RULE nào trên quan hệ của dự án, trừ khi khai (khoản 83⑹)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_RULE_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_RULE_SAI || $q$) t)$q$,
+      $q$quyền sở hữu quan hệ đó (DROP RULE) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    ARRAY[
+      $q$hàm canh chỉ được gắn BEFORE … FOR EACH ROW trên INSERT/UPDATE/DELETE (khoản 83⑺)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_HAM_CANH_HINH_THUC_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_HAM_CANH_HINH_THUC_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (DROP TRIGGER / CREATE TRIGGER) hoặc SUPERUSER$q$
+    ],
+    ARRAY[
+      $q$không vai ứng dụng nào được cấp quyền trên tham số (pg_parameter_acl) (khoản 83⑧)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_PARAMETER_ACL_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_PARAMETER_ACL_SAI || $q$) t)$q$,
+      $q$SUPERUSER (REVOKE … ON PARAMETER)$q$
     ],
 
     -- ---- (C) Đường đọc vòng qua RLS: VIEW · MATVIEW · SECURITY DEFINER ------------------
