@@ -1777,8 +1777,10 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // census, vị từ và nhân chứng. Tổng điều tra này đếm CHIỀU NGƯỢC: mọi trigger của dự án phải plpgsql,
     // trừ khai đích danh (rỗng). Vế plpgsql ở VI_TU giữ nguyên — lý do đo được của nó vẫn đúng.
     // [lượt soi 27, INFO-5] Vì sao CHỈ Ở TEST trong khi WHEN/UPDATE OF/tgenabled (cùng vòng) vào hardening:
-    // tạo hàm `internal`/C cần superuser, và một PL tin cậy khác (plperl, plpython) chưa được cài — đường
-    // này nằm ngoài mô hình đe doạ của hardening (chủ bảng không superuser); cụm đã deploy chờ khoản 81.
+    // ~~tạo hàm internal/C cần superuser, PL tin cậy khác chưa cài — ngoài mô hình đe doạ~~ [S1.37, lượt soi
+    // 28] BÁC: chỉ TẠO hàm C cần superuser; GẮN hàm C có sẵn thì không — built-in ở trên, và extension tin
+    // cậy `tcn` (hàm trigger C) chủ DB thường cài được (đo); plperl là extension tin cậy, plpython3u thì
+    // không. Mục hardening `prolang` là khoản nợ 83⑸.
     const TRIGGER_NGOAI_PLPGSQL_DA_KHAI: readonly string[] = [];
     const cau = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) t.tgname) AS ten,
                         l.lanname::pg_catalog.text AS ngon_ngu
