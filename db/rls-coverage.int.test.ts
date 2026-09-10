@@ -2240,7 +2240,7 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
         new RegExp(`FROM \\$q\\$ \\|\\| ${danhSach} \\|\\| \\$q\\$\\n(?:\\s*--[^\\n]*\\n)*\\s+WHERE ${biDanh}\\.(?:${cot}) <> ''`, "u"),
       );
     }
-    expect(soRong, "hôm nay năm danh sách rỗng").toBe(5);
+    expect(soRong, "hôm nay sáu danh sách rỗng (S1.46 thêm BANG_KHOA_NGOAI_TENANT_KHAI)").toBe(6);
     expect(await ten(db.pool, cau), "lược đồ thật không có bảng org_id ngoài public").toEqual([]);
     const c = await db.pool.connect();
     try {
@@ -2308,6 +2308,143 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
       expect(loiRls!.message, "bật RLS: 83⑶ đòi khai").toContain("zz_s85.t: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
     } finally {
       await db.pool.query("DROP SCHEMA IF EXISTS zz_s85 CASCADE");
+    }
+    expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: gỡ ⇒ đi qua").toBeNull();
+  }, 180000);
+});
+
+// ===============================================================================================
+// [S1.46 / khoản nợ 86 — nửa gốc] BẢNG ĐA TỔ CHỨC ĐẶT TÊN CỘT KHÁC org_id — ĐÓNG BẰNG ĐƯỜNG TÍNH CHẤT
+//
+// Vị từ tenant ghim TÊN cột org_id (public); khoản 85 cũng ghim tên ấy (ngoài public). Bảng MỚI `(gia int, to_chuc uuid
+// REFERENCES public.organizations(id))` — ở k hay ở public — không thuộc vị từ nào: (A) không bật, [CR1] không soi, 85
+// không thấy, 83⑵/83⑶ không thấy; một GRANT mở hàng của mọi tổ chức. S1.43 (ADR-037) chỉ đóng nửa ĐO ĐƯỢC (bảng đã khai
+// rời tập); nửa GỐC cần tính chất: khoá ngoại MỘT cột — của chính bảng hay của một tổ tiên INHERITS (lượt soi 38 A2) — tới
+// một BẢNG TENANT theo tính chất (không chỉ gốc: `nguoi uuid REFERENCES users(id)` buộc hàng vào tổ chức gián tiếp, lượt soi
+// 38 A1 — bản đầu chỉ nhận gốc và gọi users là "bảng thường") trên bảng KHÔNG có cột org_id, không RLS, ngoài tập tenant ⇒
+// CAU_KHOA_NGOAI_TENANT_SAI + BANG_KHOA_NGOAI_TENANT_KHAI (rỗng). Ba mục 85 / 86 / 83⑶ rời nhau theo (có org_id, có khoá ngoại
+// tới bảng tenant, relrowsecurity). Ranh giới nói ra: cột uuid TRẦN (không khoá ngoại), khoá ngoại nhiều cột, và khoá ngoại tới
+// một bảng đã khai ở 85/86 (bậc kế trên đồ thị khoá ngoại) không tính — không tính chất catalog nào nhận diện (33a #13 cùng lớp).
+// ===============================================================================================
+
+/** [S1.46] `schema.bảng` không org_id, có khoá ngoại tới bảng tenant, không RLS — RỖNG là lời khai; bản hardening: BANG_KHOA_NGOAI_TENANT_KHAI. */
+const BANG_KHOA_NGOAI_TENANT_DA_KHAI: readonly string[] = [];
+
+describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có khoá ngoại tới bảng tenant", () => {
+  const ten = async (c: pg.PoolClient | pg.Pool, q: string): Promise<string[]> =>
+    (await c.query<{ mo_ta: string }>(q)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+
+  it("[INV-F1] HAI BẢN KHỚP, đích khoá ngoại là vị từ tenant (một hằng, khai triển gn/g); câu phán xét chạy trong test: rỗng hôm nay; fixture — khoá ngoại tới organizations LẪN tới users bị thấy ở k LẪN public, con INHERITS thừa cột không thừa khoá ngoại vẫn bị thấy, có org_id sang 85, bật RLS sang 83⑶, uuid trần thì không; đổi tên cột thành org_id là cửa ra; chiều ngược bắt dòng khai thiu", async () => {
+    expect(docHangHardening("BANG_KHOA_NGOAI_TENANT_KHAI")).toBe(
+      khoiValues(BANG_KHOA_NGOAI_TENANT_DA_KHAI.map((t) => t.split(".") as [string, string]), "kt", ["nspname", "relname"]),
+    );
+    const cau = docHangHardening("CAU_KHOA_NGOAI_TENANT_SAI");
+    const cau85 = docHangHardening("CAU_ORG_ID_NGOAI_PUBLIC_SAI");
+    const ngoai = docHangHardening("CAU_RLS_NGOAI_TENANT_SAI");
+    expect(cau.length).toBeGreaterThan(400);
+    // Hình dạng 86 là MỘT hằng, hai chiều cùng tham chiếu (bài học lượt 30 NHẸ-2 / 32 NHẸ-3).
+    expect(HARDENING_SQL).toMatch(/\n  CAU_KHOA_NGOAI_TENANT_SAI constant text :=[\s\S]*?VI_TU_HINH_DANG_86[\s\S]*?VI_TU_HINH_DANG_86[\s\S]*?\$q\$;/u);
+    const hinhDang = docHangHardening("VI_TU_HINH_DANG_86");
+    expect(cau.split(hinhDang).length - 1, "hai chiều cùng một hình dạng").toBe(2);
+    // Vế "có cột org_id" phủ định — cùng hằng với vị từ tenant và với 85: ba mục rời nhau nhờ cùng một văn bản.
+    const coOrgId = docHangHardening("MAU_VI_TU_CO_ORG_ID").replaceAll("%1$s", "c");
+    expect(hinhDang).toContain(`NOT ${coOrgId}`);
+    expect(docHangHardening("VI_TU_HINH_DANG_85")).toContain(coOrgId);
+    // Đích khoá ngoại = vị từ BẢNG TENANT (public, có org_id hay là gốc) khai triển với bí danh gn/g — cùng hằng với
+    // VI_TU_BANG_TENANT (n/c): nới định nghĩa "bảng tenant" thì đích của mục này đi theo.
+    const mauTenant = docHangHardening("MAU_VI_TU_BANG_TENANT");
+    expect(docHangHardening("VI_TU_BANG_TENANT")).toBe(mauTenant.replaceAll("%1$s", "n").replaceAll("%2$s", "c"));
+    const toiTenant = docHangHardening("CAU_KHOA_NGOAI_TOI_TENANT");
+    expect(toiTenant).toContain(mauTenant.replaceAll("%1$s", "gn").replaceAll("%2$s", "g"));
+    expect(toiTenant, "xét cả khoá ngoại của tổ tiên INHERITS").toContain("WITH RECURSIVE to_tien(con, cha)");
+    expect(hinhDang).toContain(`EXISTS (${toiTenant})`);
+    expect(cau.split(toiTenant).length - 1, "câu tới bảng tenant dùng ở cả hai chiều (vị từ) và ở mô tả").toBe(3);
+    expect(await ten(db.pool, cau), "lược đồ thật không có bảng khoá ngoại tới bảng tenant mà thiếu org_id").toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(`
+        CREATE SCHEMA zz_s;
+        CREATE TABLE zz_s.t (gia int, to_chuc uuid NOT NULL REFERENCES public.organizations(id));
+        CREATE TABLE public.zz_t86 (gia int, to_chuc uuid REFERENCES public.organizations(id));
+        CREATE TABLE zz_s.t_org (gia int, org_id uuid NOT NULL, to_chuc uuid REFERENCES public.organizations(id));
+        CREATE TABLE zz_s.t_rls (gia int, to_chuc uuid REFERENCES public.organizations(id));
+        ALTER TABLE zz_s.t_rls ENABLE ROW LEVEL SECURITY;
+        CREATE TABLE zz_s.t_users (gia int, nguoi uuid REFERENCES public.users(id));
+        CREATE TABLE zz_s.t_tran (gia int, to_chuc uuid NOT NULL);
+        CREATE TABLE zz_s.t2 (gia int, to_chuc uuid, CONSTRAINT t2_goc FOREIGN KEY (to_chuc) REFERENCES public.organizations(id));
+        CREATE TABLE zz_s.con86 (them int) INHERITS (zz_s.t2);
+      `);
+      // Ở public LẪN ngoài public — vị từ tenant không nhận nên cả hai đều là việc của mục này. Khoá ngoại tới users (bảng
+      // tenant, không phải gốc) cùng lớp (38 A1). con86 thừa cột to_chuc mà không thừa khoá ngoại (38 A2) — thấy qua tổ tiên.
+      expect(await ten(c, cau), "bảng không org_id có khoá ngoại tới bảng tenant, không RLS").toEqual([
+        "public.zz_t86", "zz_s.con86", "zz_s.t", "zz_s.t2", "zz_s.t_users",
+      ]);
+      const moTa = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
+      expect(moTa).toEqual(expect.arrayContaining([
+        expect.stringContaining("zz_s.t: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)"),
+        expect.stringContaining("zz_s.t_users: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua nguoi -> public.users) và không bật RLS"),
+        expect.stringContaining("zz_s.con86: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations)"),
+      ]));
+      expect(await ten(c, cau85), "có cột org_id ⇒ khoản 85, không phải 86").toEqual(["zz_s.t_org"]);
+      expect(await ten(c, ngoai), "bật RLS ⇒ 83⑶").toContain("zz_s.t_rls");
+      // Cửa ra hợp lệ: đổi tên cột thành org_id — ngoài public rơi sang 85, ở public thành bảng tenant ([CR1] đòi policy).
+      await c.query("ALTER TABLE zz_s.t RENAME COLUMN to_chuc TO org_id; ALTER TABLE public.zz_t86 RENAME COLUMN to_chuc TO org_id");
+      expect(await ten(c, cau)).toEqual(["zz_s.con86", "zz_s.t2", "zz_s.t_users"]);
+      expect(await ten(c, cau85)).toEqual(["zz_s.t", "zz_s.t_org"]);
+      const { rows: tenant } = await c.query<{ t: string }>(
+        `SELECT c.relname AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${docHangHardening("VI_TU_BANG_TENANT")} AND c.relname = 'zz_t86'`,
+      );
+      expect(tenant.map((r) => r.t), "public + org_id = bảng tenant theo tính chất").toEqual(["zz_t86"]);
+      // Chiều ngược: giả lập một dòng khai (danh sách thật rỗng) — khai zz_s.t2 khi nó đang đúng hình dạng ⇒ hết dòng t2 (con86
+      // là đối tượng riêng, vẫn phải khai); gỡ khoá ngoại ⇒ dòng khai thiu, và cả t2 lẫn con86 rơi về cột uuid trần — ranh giới
+      // nói ra: không mục nào thấy nữa.
+      const khai = cau.replaceAll("(VALUES ('', '')) AS kt(", "(VALUES ('zz_s', 't2')) AS kt(");
+      expect(khai.split("'t2'").length - 1, "khối khai phải được thay ở CẢ HAI chiều").toBe(2);
+      expect(await ten(c, khai)).toEqual(["zz_s.con86", "zz_s.t_users"]);
+      await c.query("ALTER TABLE zz_s.t2 DROP CONSTRAINT t2_goc");
+      expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta.split(":")[0]!).sort()).toEqual(["khai zz_s.t2 là bảng không org_id có khoá ngoại tới bảng tenant, không RLS (khoản 86) mà CSDL không có bảng như thế — dòng khai thiu (bảng đã có cột org_id, đã bật RLS, hay đã bỏ khoá ngoại)", "zz_s.t_users"]);
+      expect(await ten(c, cau), "cột uuid trần (t2 và con86): ngoài tầm mọi mục (ranh giới nói ra)").toEqual(["zz_s.t_users"]);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: bảng không org_id có khoá ngoại tới bảng tenant, ở k và ở public — app_api gắn tổ chức A đọc được hàng của B qua một GRANT (lỗ RÒ), và migrate() NÉM ở mục khoản 86 cho CẢ HAI; bật RLS ⇒ mục im, 83⑶ kêu; DROP ⇒ đi qua", async () => {
+    const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+    const { rows: tc } = await db.pool.query<{ id: string }>("SELECT id FROM organizations ORDER BY slug");
+    const [orgA, orgB] = [tc[0]!.id, tc[1]!.id];
+    expect(orgA).not.toBe(orgB);
+    await db.pool.query("DROP SCHEMA IF EXISTS zz_s86 CASCADE; DROP TABLE IF EXISTS public.zz_t86");
+    await db.pool.query(
+      "CREATE SCHEMA zz_s86; CREATE TABLE zz_s86.t (gia int, to_chuc uuid NOT NULL REFERENCES public.organizations(id)); " +
+        "CREATE TABLE public.zz_t86 (gia int, to_chuc uuid NOT NULL REFERENCES public.organizations(id)); " +
+        "GRANT USAGE ON SCHEMA zz_s86 TO app_api; GRANT SELECT ON zz_s86.t TO app_api; GRANT SELECT ON public.zz_t86 TO app_api",
+    );
+    try {
+      await db.pool.query("INSERT INTO zz_s86.t VALUES (777, $1)", [orgB]);
+      await db.pool.query("INSERT INTO public.zz_t86 VALUES (778, $1)", [orgB]);
+      const client = await apiPool.connect();
+      try {
+        await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+        expect((await client.query<{ gia: number }>("SELECT gia FROM zz_s86.t")).rows.map((r) => r.gia), "lỗ RÒ ngoài public có thật").toEqual([777]);
+        expect((await client.query<{ gia: number }>("SELECT gia FROM public.zz_t86")).rows.map((r) => r.gia), "lỗ RÒ ở public có thật").toEqual([778]);
+      } finally {
+        client.release();
+      }
+      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi, "bảng khoá ngoại tới bảng tenant không org_id không RLS phải bị khoản 86 bắt").not.toBeNull();
+      expect(loi!.message).toContain("zz_s86.t: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
+      expect(loi!.message).toContain("public.zz_t86: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
+      expect(loi!.message, "không dòng 85").not.toContain("(khoản 85)");
+      await db.pool.query("ALTER TABLE zz_s86.t ENABLE ROW LEVEL SECURITY; DROP TABLE public.zz_t86");
+      const loiRls = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loiRls).not.toBeNull();
+      expect(loiRls!.message, "bật RLS: mục 86 im").not.toContain("(khoản 86)");
+      expect(loiRls!.message, "bật RLS: 83⑶ đòi khai").toContain("zz_s86.t: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
+    } finally {
+      await db.pool.query("DROP SCHEMA IF EXISTS zz_s86 CASCADE; DROP TABLE IF EXISTS public.zz_t86");
     }
     expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: gỡ ⇒ đi qua").toBeNull();
   }, 180000);

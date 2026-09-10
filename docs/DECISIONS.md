@@ -3689,7 +3689,7 @@ xét, nói ra. Ranh giới còn lại theo TÊN CỘT `org_id` (ở mọi schema
 
 ## ADR-037 — Danh tính của đối tượng được canh không phải là tên hay hình dạng: ba kênh — chú thích neo theo `oid`, tên đã khai kèm migration khai sinh, hình dạng sổ
 
-**Ngày:** 2026-09-10 · **Trạng thái:** Đã chấp nhận · **[S1.43]** · **Khoản nợ liên quan:** 89 (đóng), 86 (nửa đo được đóng; nửa gốc còn mở) ·
+**Ngày:** 2026-09-10 · **Trạng thái:** Đã chấp nhận · **[S1.43]** · **Khoản nợ liên quan:** 89 (đóng), 86 (~~nửa đo được đóng; nửa gốc còn mở~~ **[S1.46]** đóng trọn — nửa gốc bằng đường tính chất, mục khoản 86) ·
 **Liên quan:** ADR-028 (suy từ tính chất; §2⑵ tự chữa chỉ khi đơn điệu), ADR-036 (danh mục 0-hàng), lượt soi ngang 33 (33a #5/#6), lượt soi 34/35
 
 ### 1. Vì sao ADR này tồn tại
@@ -3760,7 +3760,15 @@ Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ
   thích neo của chính nó (nếu có) bằng tên hiện tại, và không quan hệ khác mang neo nêu tên ấy — nên bản sao cùng tên
   không được chữa khi bảng gốc còn giữ danh tính (đo: 0 trigger); ranh giới như ①: chủ bảng gỡ chú thích ⇒ D2 lại chữa bản
   sao, kênh ③ vẫn chặn. Chưa có neo ⇒ vế ⒜ đi qua (deploy đầu, N2).
-- Khoản 86 **nửa gốc còn mở**: bảng đa tổ chức *mới* đặt tên cột khác `org_id` không thuộc vị từ nào nên không bao giờ
-  được khai hay neo.
+- Khoản 86 ~~**nửa gốc còn mở**: bảng đa tổ chức *mới* đặt tên cột khác `org_id` không thuộc vị từ nào nên không bao giờ
+  được khai hay neo.~~ **[S1.46] Nửa gốc đóng bằng đường TÍNH CHẤT, không nới vị từ tenant:** mục phán xét khoản 86 bắt bảng
+  KHÔNG có cột `org_id` nhưng có khoá ngoại MỘT cột — của nó hay của một tổ tiên INHERITS — tới một BẢNG TENANT theo tính chất
+  (`MAU_VI_TU_BANG_TENANT` khai triển với bí danh riêng: gốc lẫn bảng có `org_id`; lượt soi 38 A1 bác bản chỉ nhận gốc), ngoài
+  tập tenant, không RLS — ở MỌI schema kể cả `public` — phải khai (`BANG_KHOA_NGOAI_TENANT_KHAI`, rỗng). Ba mục 85 / 86 / 83⑶
+  rời nhau theo (có `org_id`, có khoá ngoại tới bảng tenant, `relrowsecurity`). Đo: lỗ rò thật ở `k` lẫn `public`, `migrate()`
+  NÉM cho cả hai. Mục này cũng độc lập đóng đường đo S1.42 trên `users` (khoá ngoại `to_chuc` vẫn một cột ⇒ kêu kể cả khi
+  kênh ①② bị gỡ). Ranh giới: cột uuid trần và khoá ngoại nhiều cột không nhận diện được bằng catalog — DDL cố ý bỏ ràng
+  buộc tham chiếu, vế ⒝ §3⑶ ADR-036; khoá ngoại tới bảng đã khai ở 85/86 là bậc kế, vòng khác. Cửa ra "bật RLS ⇒ 83⑶" là cửa
+  yếu (không FORCE, view không `security_invoker` vô hình với (C)) — khoản 91.
 - Đổi tên/schema/dựng lại một bảng đã khai là việc của migration có chủ ý: cùng migration ấy sửa dòng khai và đặt lại chú
   thích neo — thông điệp lỗi nói đúng câu ấy.

@@ -2160,3 +2160,50 @@ vẫn là sổ, phải chữa) với *bản sao chiếm tên* (oid khác, neo c�
 ⑵ lớp SỬA gồm cả lượt ghi neo — cùng vị từ, cùng ranh giới; ⑶ mọi thay đổi vào `bang_so` phải chạy trọn
 `migrations.int.test.ts` (CR2a/CR2b/I3 đều đọc CTE ấy) và ghi mã thoát; ⑷ tài liệu ADR-037 nêu dạng neo ngắn — mọi vế nay so
 phần tên nên hai dạng đều hợp lệ, attnum là việc riêng của ⑵′.
+
+# §S1.46 — khoản nợ 86 nửa gốc: bảng đa tổ chức đặt tên cột khác `org_id` nhận diện theo tính chất (khoá ngoại một cột tới bảng tenant) — MÃ SẢN XUẤT, vòng nhỏ; khoản 91 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — mục phán xét mới `CAU_KHOA_NGOAI_TENANT_SAI` với `VI_TU_HINH_DANG_86` (r/p,
+không RLS, KHÔNG có cột `org_id`, có khoá ngoại MỘT cột — của chính bảng hay của một tổ tiên INHERITS qua CTE `to_tien` — tới một bảng
+tenant theo tính chất: `CAU_KHOA_NGOAI_TOI_TENANT` khai triển `MAU_VI_TU_BANG_TENANT` với bí danh `gn`/`g`, ngoài `VI_TU_CAN_CO_RLS`),
+hai chiều, lọc `MAU_SCHEMA_DU_AN`, `BANG_KHOA_NGOAI_TENANT_KHAI` rỗng; một mục `bang` ngay sau mục 85. `MAU_VI_TU_BANG_TENANT` không
+đổi. Test: `db/rls-coverage.int.test.ts` describe S1.46 — hai bản khớp, đích là vị từ tenant (một hằng), fixture trong giao dịch
+(k LẪN public bị thấy; khoá ngoại tới `users` bị thấy; con INHERITS bị thấy qua cha; có `org_id` ⇒ 85; RLS ⇒ 83⑶; uuid trần ⇒
+không; đổi tên cột ⇒ cửa ra; chiều ngược), test ĐO (lỗ rò thật, `migrate()` NÉM cho cả hai, bật RLS ⇒ 83⑶, DROP ⇒ đi qua);
+meta-test sentinel nay đòi sáu danh sách rỗng. Không migration đánh số, không GRANT, không bảng mới.
+
+**Đo:** `(gia int, to_chuc uuid REFERENCES organizations(id))` + GRANT SELECT cho app_api ở `zz_s86` và ở `public` — app_api gắn
+tổ chức A đọc thấy hàng của B ở CẢ HAI (trước S1.46: `migrate()` đi qua — đột biến M1 tái hiện); nay `migrate()` NÉM một dòng cho
+mỗi bảng, nêu `(qua to_chuc -> public.organizations)`, không dòng 85; bật RLS ⇒ mục 86 im, 83⑶ đòi khai; DROP ⇒ đi qua. Lược đồ
+thật: câu phán xét rỗng (khớp quy ước khoá ngoại hợp thành `(org_id, x)` của kho).
+
+**Đỏ đo được, cô lập:** M1 bỏ mục ⇒ test ĐO đỏ "expected null not to be null"; M2 bỏ vế ¬có `org_id` ⇒ test 1 đỏ ở khẳng định văn
+bản `NOT <có org_id>`; M3 bỏ vế ¬`relrowsecurity` ⇒ cả hai test đỏ (`zz_s.t_rls` lọt vào 86; "bật RLS: mục 86 im" đỏ); M4 bỏ vế tổ
+tiên ⇒ test 1 đỏ (thiếu `zz_s.con86`); M5 đích chỉ `organizations` (bản đầu) ⇒ test 1 đỏ ở khẳng định "đích = vị từ tenant".
+
+### Lượt soi đối kháng 38 (trên bản đầu của S1.46 — đích chỉ là GỐC tenant, không xét tổ tiên): 1 NẶNG, 5 NHẸ, 5 INFO — NẶNG và bốn NHẸ xử lý trong bản hai, A3 thành khoản 91
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| A1 | NẶNG | Khoá ngoại một cột tới bảng tenant KHÔNG phải gốc (`rfq uuid REFERENCES rfq_packages(id)`, `nguoi uuid REFERENCES users(id)`) ở bất kỳ schema, không `org_id`, không RLS ⇒ 85 im, 86 (bản đầu, đích = gốc) im, 83⑵/⑶ im, 82⑴/84 im ⇒ `migrate()` đi qua, app_api đọc mọi tổ chức; cùng lớp 86 (chuỗi khoá ngoại tới `org_id` của bảng đích, chỉ khác một bậc); `008_suppliers.sql` đã gọi hình dạng ấy là "LỖ THẬT"; test bản đầu ghim `users` là "bảng thường" — lời khai đóng băng lỗ | đúng theo đọc — fixture `t_users` trên bản đầu không bị thấy (đột biến M5 tái hiện) | đích = `format(MAU_VI_TU_BANG_TENANT, 'gn', 'g')` (tập con nghiêm ngặt của thay đổi; `VI_TU_BANG_TENANT` không nới); bỏ hằng `MAU_VI_TU_GOC_TENANT` (hết người dùng); fixture `t_users` phải bị thấy `(qua nguoi -> public.users)`; lược đồ thật vẫn rỗng; bậc kế (khoá ngoại tới bảng đã khai 85/86) nói ra là ranh giới |
+| A2 | NHẸ | Con INHERITS của bảng hình dạng 86: PostgreSQL không kế thừa khoá ngoại ⇒ con thừa cột `to_chuc` mà không ràng buộc ⇒ "uuid trần" tự động, 86 im; cha bật RLS (khai 83⑶) + cặp khai 82⑴ ⇒ đọc thẳng con thấy mọi tổ chức — cần hai dòng khai nên không lặng, nhưng chú thích chưa nói | đúng theo đọc | `CAU_KHOA_NGOAI_TOI_TENANT` xét khoá ngoại của c HAY của tổ tiên (CTE `to_tien` cùng khuôn `LA_CUA_BANG_TENANT`); fixture `con86 () INHERITS (t2)` bị thấy; đột biến M4; lá phân mảnh AN TOÀN vì ràng buộc nhân bản (`conparentid`) — ghi vào chú thích |
+| A3 | NHẸ | Cửa ra "bật RLS ⇒ 83⑶" mà thông điệp 86 khuyên là cửa yếu: không FORCE, chủ bảng bỏ qua RLS; view không `security_invoker` lên bảng ấy không bị (C) thấy (`CAU_DOC_VONG` chỉ neo vào vị từ tenant hoặc cột `org_id` của view) ⇒ app_api đọc mọi tổ chức qua view; tiền tồn ở 83⑶ | đúng theo đọc, chưa đo bằng test | **khoản 91** mở (DDL tái hiện ghi ở hàng 91; hai hình dạng mã: (C) thêm vế bảng đã khai 83⑶/85/86, hoặc 83⑶ đòi `relforcerowsecurity`); thông điệp 86 nói rõ "không FORCE" |
+| B1 | NHẸ | Bảng phân mảnh đã khai ở 86: mỗi lá mới mang khoá ngoại nhân bản ⇒ phải khai TỪNG lá ⇒ migration "thêm phân mảnh" chặn deploy; câu hướng dẫn `RENAME COLUMN` không áp được lên lá | đúng theo đọc | GIỮ, nói ra lý do: cùng khuôn 85, và đúng vì lá có `relrowsecurity` riêng — đọc THẲNG lá theo policy của lá, khai cha không nói gì về lá; câu hướng dẫn: "trên lá phân mảnh thì đổi ở bảng gốc phân mảnh" |
+| E1 | NHẸ | Chiều ngược nói "hay đã DROP" nhưng lọc `to_regclass(...) IS NOT NULL` ⇒ bảng DROP thì im, không dòng nào | đúng theo đọc | bỏ cụm ấy (khớp 85) |
+| E2 | NHẸ | "RANH GIỚI NÓI THẲNG" chỉ nêu uuid trần và khoá ngoại nhiều cột, hàm ý phần còn lại đã phủ — A1/A2 ở ngoài | đúng theo đọc | A1/A2 đóng; ranh giới viết lại: uuid trần, nhiều cột, bậc kế trên đồ thị khoá ngoại, lá phân mảnh khai riêng |
+| B2 | INFO | Thứ tự (A)/86 không tạo kẽ: vị từ loại `VI_TU_CAN_CO_RLS` nên dù `day_du` hay hai lượt, 86 không đọc bảng mà (A) sắp bật RLS; danh sách rỗng nên chiều ngược không kêu oan; bảng quan hệ hai tổ chức có khoá ngoại tới `organizations` sẽ phải khai — đúng thiết kế | xác nhận | một dòng chú thích |
+| C1/C2 | INFO | 85 / 86 / 83⑶ rời nhau (kiểm vị từ); `org_id` đã `attisdropped` + khoá ngoại cột khác rơi đúng vào 86; **C2:** 86 độc lập đóng đường đo S1.42 (`users RENAME COLUMN org_id TO to_chuc; DISABLE RLS; DROP POLICY ×2`) — khoá ngoại `to_chuc` vẫn một cột, 27 khoá ngoại `org_id` khác giữ `organizations` là gốc ⇒ kêu kể cả khi ADR-037 ①② bị gỡ | xác nhận | C2 ghi vào chú thích, biên bản 61 và hàng 86 |
+| D1 | INFO | Bộ giải hằng và PostgreSQL hiểu giống nhau ở hằng kết thúc bằng `|| pg_catalog.format(...)` (cùng tiền lệ `VI_TU_HINH_DANG_85` kết thúc bằng tên hằng); bí danh `fk` ở câu ngoài bị CHE bởi `fk` trong vế gốc lồng — hợp lệ nhưng dễ lấy nhầm về sau | xác nhận | bí danh ngoài đổi thành `kn_fk` |
+| E3 | INFO | Cửa ra "ở public thành bảng tenant" còn kéo theo `BANG_TENANT_KHAI` + neo ADR-037 (cổng rls-coverage đỏ tiếp) | xác nhận | nêu trong thông điệp |
+| F1 | INFO | Sáu danh sách sentinel; regex chiều ngược khớp `WHERE kt.relname <> ''`; đếm 3 / 2 đúng cấu trúc | xác nhận | — |
+
+**Khớp — người soi kiểm bằng đọc:** khoá ngoại `NOT VALID` / `DEFERRABLE` / mọi `ON DELETE` vẫn là `contype = 'f'`; `relkind` f/v không mang
+khoá ngoại; `pg_temp` bị `MAU_SCHEMA_DU_AN` loại và vế đích đòi `nspname = 'public'`; cột `attisdropped` kéo khoá ngoại rơi theo; nhiều
+gốc và RENAME gốc đi theo oid (ADR-037 ⑴ canh tên đã khai); khoá ngoại nhiều cột là ranh giới đã nói; thứ tự sửa/phán xét không ảnh
+hưởng.
+
+**Điều đáng mang sang vòng sau:** ⑴ "tới gốc" là một tập con GIẢ của "tới bảng tenant" — mọi khoá ngoại tới một bảng có `org_id`
+đều buộc hàng vào tổ chức, chỉ gián tiếp hơn một bậc; đường tính chất phải lấy tập lớn nhất mà lược đồ thật còn rỗng; ⑵ một
+fixture "đối chứng âm" phải được đặt tên theo lý do nó âm — `t_thuong` cho `users` là lời khai sai đóng băng lỗ; ⑶ kế thừa
+INHERITS mang cột mà không mang ràng buộc: mọi vị từ dựa trên `pg_constraint` phải hỏi tổ tiên; ⑷ khoản 91: cửa ra "bật RLS rồi
+khai" chỉ mạnh bằng FORCE và bằng việc (C) nhìn thấy bảng đã khai.
