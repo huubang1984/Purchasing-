@@ -39,7 +39,12 @@ export function laVaiUngDung(giaTri: string): giaTri is VaiUngDung {
  * ràng nếu SET ROLE không có hiệu lực thật.
  */
 async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<void> {
-  await client.query(`SET ROLE ${vai}`);
+  // [S1.34 / khoản nợ 78] `DISCARD TEMP` cùng câu với SET ROLE, không thêm vòng đi-về nào. Hardening
+  // thu hồi TEMP trên database khỏi mọi vai ứng dụng, nhưng một bảng tạm tạo TRƯỚC lần deploy mang lớp
+  // ấy sống hết đời kết nối pool và vẫn che tên (đo trên PostgreSQL 16: sau REVOKE, cùng kết nối,
+  // `sessions` trần vẫn đếm 0). Xoá nó ở MỖI lần giao client đóng cửa sổ ấy. Không phải DISCARD ALL:
+  // DISCARD ALL đụng cả vai và cấu hình phiên.
+  await client.query(`SET ROLE ${vai}; DISCARD TEMP`);
   // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết sẵn chữ thường —
   // viết hoa ở đây sẽ đọc ra "undefined" một cách âm thầm.
   const { rows } = await client.query<{ current_role_name: string }>(

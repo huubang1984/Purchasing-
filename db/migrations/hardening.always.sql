@@ -1809,6 +1809,17 @@ $ham$;
   -- Mỗi hàng: [1] tên mục, [2] tiền điều kiện, [3] câu lệnh cưỡng chế, [4] hậu điều kiện
   -- ("trạng thái đã đúng"), [5] biểu thức mô tả chỗ sai, [6] quyền cần có để sửa.
   -- [2], [4], [5] là biểu thức SQL chạy qua EXECUTE 'SELECT ' || ...
+  -- [S1.34 / khoản nợ 78] Tập vai mà một KẾT NỐI ỨNG DỤNG có thể mang làm current_user — theo TÍNH
+  -- CHẤT: thành viên BẮC CẦU của app_api/app_unseal (`pg_has_role(r, g, 'MEMBER')` là bắc cầu, và một
+  -- role là thành viên của chính nó), trừ superuser — về kỹ thuật là thành viên của mọi role nhưng
+  -- không phải một kết nối ứng dụng. [lượt soi 24, INFO-7] Vế thành viên tựa vào BƯỚC 1 (gỡ membership
+  -- lạ) để tập này không phình; tự nó vẫn đứng được vì bắc cầu.
+  VAI_KET_NOI_UNG_DUNG constant text :=
+    $q$SELECT r.rolname FROM pg_roles r
+        WHERE NOT r.rolsuper
+          AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
+                         AND pg_catalog.pg_has_role(r.oid, g.oid, 'MEMBER'))$q$;
+
   bang text[][] := ARRAY[
 
     -- ---- Đối tượng phải TỒN TẠI (R3/R4: phục hồi được, không chỉ phát hiện) -------------
@@ -6450,6 +6461,136 @@ $ham$;
                    WHERE r.rolname = 'app_unseal_login'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
+    ],
+
+    -- ---- [S1.34 / khoản nợ 78] CHE TÊN qua search_path: bảng tạm, schema, và đường tìm tên ----------
+    -- `rolconfig` của vai ứng dụng về NULL (các mục trên) ⇒ search_path mặc định `"$user", public`,
+    -- và `pg_temp` NGẦM đứng trước cả hai. Đo trên PostgreSQL 16 (lượt soi 22, L1; dựng ca ở S1.34):
+    --     app_api: CREATE TEMP TABLE sessions (id int)      -> OK (TEMP đến từ PUBLIC, datacl NULL)
+    --              SELECT count(*) FROM sessions             -> 0   (public.sessions có 1 hàng)
+    --              UPDATE sessions SET ...                    -> 0 hàng, KHÔNG lỗi
+    --     CREATE SCHEMA app_api; CREATE TABLE app_api.sessions -> SELECT count(*) FROM sessions -> 0
+    --     và migrate() ĐI QUA cả hai.
+    -- Một bảng tạm sống hết đời KẾT NỐI pool, nên nó che tên cho MỌI request sau trên kết nối ấy;
+    -- một schema trùng tên che cho MỌI kết nối. Mã sản xuất qualify `public.` và ghim `pg_catalog.`
+    -- (QT3/H21) nên hôm nay vô hại; lớp này đóng đường ấy Ở CSDL, để bảo đảm không phụ thuộc vào
+    -- việc mọi câu SQL tương lai nhớ qualify.
+    -- Sáu mục, ba cặp:
+    --   (a) TEMP — TỰ CHỮA, hai mục: PUBLIC (mặc định của PostgreSQL khi datacl rỗng — hậu điều kiện
+    --       đọc qua `acldefault` nên thấy được cả trạng thái "chưa vật chất hoá"), và mọi vai kết nối
+    --       ứng dụng theo tính chất. Thu hồi một quyền là đơn điệu (ADR-028 §2⑵). Đo: sau REVOKE,
+    --       CREATE TEMP TABLE/VIEW/SEQUENCE đều 42501 "permission denied for schema pg_temp_N".
+    --       [lượt soi 24, NHẸ-4] Mỗi vai một câu REVOKE riêng (vòng DO), không gộp: một role vắng
+    --       làm cả câu gộp ném 42704 và PUBLIC không được thu hồi.
+    --   (b) CREATE ON DATABASE — TỰ CHỮA, cùng khuôn. [lượt soi 24, NẶNG-1] Đây là tiền đề của (c):
+    --       CREATE trôi ⇒ app_api tự dựng `CREATE SCHEMA app_api` — che BỀN, cho mọi kết nối, kéo tới
+    --       deploy sau (đo: dưới app_api có CREATE, schema dựng được và `sessions` trần đếm 0).
+    --   (c) Schema trùng tên một vai kết nối ứng dụng — PHÁN XÉT (`"$user"` phân giải theo current_user:
+    --       app_api/app_unseal sau SET ROLE; role đăng nhập chỉ khi kết nối KHÔNG ở SET ROLE — phòng
+    --       thủ chiều sâu). Cố ý KHÔNG tự DROP: schema có thể chứa đối tượng, và xoá trong im lặng là
+    --       chế độ hỏng [vòng fix 1 — I1] đã phải sửa.
+    --   (d) Quan hệ TRÙNG TÊN trong một schema mà vai có USAGE — PHÁN XÉT. [lượt soi 24, NHẸ-3]
+    --       `SET search_path` trong phiên không bị chặn và không được tái khẳng định; đường ấy chỉ che
+    --       được tên khi vai có USAGE ở một schema KHÁC chứa quan hệ TRÙNG TÊN với public. Bản đầu phán
+    --       xét "không USAGE ngoài public" và đo được là quá rộng: hai fixture hợp lệ của chính tệp test
+    --       (schema `khac` chứa con INHERITS của bảng tenant, USAGE cho app_api; schema `gia` chứa một
+    --       HÀM giả, USAGE cho PUBLIC) đều bị gãy. Vế đúng là vế ĐÚNG CƠ CHẾ: quan hệ (r/p/v/m/f) cùng
+    --       tên. Hàm trùng tên KHÔNG thuộc hàng 16 (câu ghi rơi vào bảng khác) — [CR1] đã đo riêng rằng
+    --       danh sách trắng không bị vượt bằng hàm giả trên search_path. Không tự thu hồi: USAGE có thể
+    --       cấp qua PUBLIC cho schema của người khác.
+    -- Dư lượng ở tầng app (ADR-036 ⑯): bảng tạm tạo TRƯỚC lần deploy mang lớp này sống hết đời kết nối
+    -- pool (đo) — `packages/db/src/vai-tro.ts` `DISCARD TEMP` cùng câu SET ROLE ở mỗi lần giao client.
+    ARRAY[
+      $q$quyền TEMP trên database cấp cho PUBLIC$q$,
+      $q$true$q$,
+      pg_catalog.format('REVOKE TEMP ON DATABASE %I FROM PUBLIC', pg_catalog.current_database()),
+      $q$NOT coalesce((SELECT bool_or(x.grantee = 0 AND x.privilege_type = 'TEMPORARY')
+                          FROM pg_database d,
+                               pg_catalog.aclexplode(coalesce(d.datacl, pg_catalog.acldefault('d', d.datdba))) x
+                         WHERE d.datname = pg_catalog.current_database()), false)$q$,
+      $q$'PUBLIC còn TEMP trên database (mặc định của PostgreSQL khi datacl rỗng) — một CREATE TEMP TABLE <tên bảng> trên một kết nối pool che bảng thật cho mọi request sau (ADR-036 ⑯)'$q$,
+      $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
+    ],
+    ARRAY[
+      $q$quyền TEMP trên database của vai ứng dụng và mọi thành viên$q$,
+      $q$true$q$,
+      $q$DO $vai$ DECLARE v record; BEGIN
+          FOR v IN $q$ || VAI_KET_NOI_UNG_DUNG || $q$ LOOP
+            EXECUTE pg_catalog.format('REVOKE TEMP ON DATABASE %I FROM %I', pg_catalog.current_database(), v.rolname);
+          END LOOP;
+        END $vai$$q$,
+      $q$coalesce((SELECT bool_and(NOT pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'TEMP'))
+                    FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v), true)$q$,
+      $q$'còn TEMP trên database: ' || (SELECT string_agg(v.rolname, ', ' ORDER BY v.rolname)
+                                       FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                                      WHERE pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'TEMP'))
+        || ' (cấp đích danh, hoặc qua một nhóm mà BƯỚC 1 chưa gỡ)'$q$,
+      $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
+    ],
+    ARRAY[
+      $q$quyền CREATE trên database cấp cho PUBLIC$q$,
+      $q$true$q$,
+      pg_catalog.format('REVOKE CREATE ON DATABASE %I FROM PUBLIC', pg_catalog.current_database()),
+      $q$NOT coalesce((SELECT bool_or(x.grantee = 0 AND x.privilege_type = 'CREATE')
+                          FROM pg_database d,
+                               pg_catalog.aclexplode(coalesce(d.datacl, pg_catalog.acldefault('d', d.datdba))) x
+                         WHERE d.datname = pg_catalog.current_database()), false)$q$,
+      $q$'PUBLIC còn CREATE trên database — ai cũng dựng được một schema trùng tên vai ứng dụng (ADR-036 ⑯)'$q$,
+      $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
+    ],
+    ARRAY[
+      $q$quyền CREATE trên database của vai ứng dụng và mọi thành viên$q$,
+      $q$true$q$,
+      $q$DO $vai$ DECLARE v record; BEGIN
+          FOR v IN $q$ || VAI_KET_NOI_UNG_DUNG || $q$ LOOP
+            EXECUTE pg_catalog.format('REVOKE CREATE ON DATABASE %I FROM %I', pg_catalog.current_database(), v.rolname);
+          END LOOP;
+        END $vai$$q$,
+      $q$coalesce((SELECT bool_and(NOT pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'CREATE'))
+                    FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v), true)$q$,
+      $q$'còn CREATE trên database: ' || (SELECT string_agg(v.rolname, ', ' ORDER BY v.rolname)
+                                         FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                                        WHERE pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'CREATE'))
+        || ' — vai ấy tự dựng được CREATE SCHEMA <tên vai> che public cho mọi kết nối'$q$,
+      $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
+    ],
+    ARRAY[
+      $q$schema trùng tên một vai mà kết nối ứng dụng có thể mang ("$user" che public)$q$,
+      $q$true$q$,
+      -- Cố ý no-op: xem (c) ở trên — mục này đi đúng khuôn bốn bước nhưng chỉ phán xét.
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname IN ($q$ || VAI_KET_NOI_UNG_DUNG || $q$))$q$,
+      $q$'schema che public qua "$user": ' || (SELECT string_agg(n.nspname, ', ' ORDER BY n.nspname) FROM pg_namespace n
+                                              WHERE n.nspname IN ($q$ || VAI_KET_NOI_UNG_DUNG || $q$))
+        || ' — một bảng cùng tên trong schema ấy đứng TRƯỚC public trong search_path mặc định của vai'$q$,
+      $q$viết một migration mới DROP SCHEMA ấy (hardening cố ý không tự xoá một schema có thể chứa đối tượng)$q$
+    ],
+    ARRAY[
+      $q$quan hệ trùng tên public trong một schema mà vai kết nối ứng dụng có USAGE$q$,
+      $q$true$q$,
+      -- Cố ý no-op: xem (d) ở trên.
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
+                                ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                       AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+                       AND n.nspname NOT LIKE 'pg\_%'
+                       AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
+                       AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
+                                    WHERE pn.nspname = 'public' AND p.relname = c.relname
+                                      AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))$q$,
+      $q$'quan hệ trùng tên public: ' || (SELECT string_agg(v.rolname || ' -> ' || n.nspname || '.' || c.relname, ', ' ORDER BY v.rolname, n.nspname, c.relname)
+                                         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
+                                              ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                                        WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                                          AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+                                          AND n.nspname NOT LIKE 'pg\_%'
+                                          AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
+                                          AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
+                                                       WHERE pn.nspname = 'public' AND p.relname = c.relname
+                                                         AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))
+        || ' — SET search_path trong phiên tới schema ấy làm câu viết trần rơi vào quan hệ này thay vì public'$q$,
+      $q$viết một migration mới đổi tên hay xoá quan hệ ấy, hoặc REVOKE USAGE ON SCHEMA ấy khỏi vai (hardening cố ý không tự thu hồi: USAGE có thể cấp qua PUBLIC cho một schema của người khác)$q$
     ],
 
     -- [fix round 5 — Minor] setrole = 0: "ALTER DATABASE d SET ..." áp cho MỌI role, kể cả

@@ -1465,6 +1465,10 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // ngoài). Chỉ 'r' đi qua đủ các lớp của H19 hôm nay: view nhận trigger INSTEAD OF (trả NULL là
     // nuốt hàng), bảng ngoài ghi ra một cụm khác, phân mảnh cần chốt trên từng lá (đã đo ở test lá).
     const LOAI_DA_KHAI: readonly string[] = [];
+    // [S1.34 / khoản nợ 78] Vì sao loại `pg_temp%`: bảng tạm là của PHIÊN, không phải của lược đồ, và
+    // một bảng tạm trùng tên đứng TRƯỚC public trong search_path — đúng cơ chế che tên của ADR-036 ⑯.
+    // Tổng điều tra này không nhìn thấy nó theo thiết kế; thứ đóng đường ấy là hardening thu hồi TEMP
+    // trên database khỏi PUBLIC và các vai ứng dụng (đo ở `migrations.int.test.ts`, khoản 78).
     const cau = `SELECT n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname AS ten, c.relkind::pg_catalog.text AS loai
                    FROM pg_class c JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
                   WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')

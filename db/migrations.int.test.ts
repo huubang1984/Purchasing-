@@ -1401,6 +1401,193 @@ describe("migration của dự án", () => {
     }
   });
 
+  // [S1.34 / khoản nợ 78] CHE TÊN qua search_path — ADR-036 hàng 16. Đo trước khi vá (PostgreSQL 16):
+  // app_api tạo được bảng tạm (TEMP đến từ PUBLIC, `datacl` NULL), và `sessions` trần rơi vào bảng
+  // tạm: SELECT đếm 0 khi public.sessions có 1 hàng, UPDATE 0 hàng không lỗi; bảng tạm sống hết đời
+  // KẾT NỐI pool. Test này đo CẢ cơ chế lẫn lớp, cùng một CSDL: lớp đã đóng ⇒ mở lại bằng tay ⇒ cơ
+  // chế lộ ra ⇒ migrate() đóng lại ⇒ 42501.
+  it("[khoản nợ 78] app_api không tạo được bảng tạm che tên — hardening thu hồi TEMP trên database, và thu hồi lại khi bị cấp lại (PUBLIC hay đích danh)", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('no78', 'no78') RETURNING id")).rows[0]!.id;
+      const nguoi = (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'a@no78.vn', 'a') RETURNING id", [org])).rows[0]!.id;
+      await db.pool.query(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+        [org, nguoi, Buffer.alloc(32, 7)],
+      );
+      const api = db.poolAs("app_api");
+      const loiCua = async (chay: () => Promise<unknown>): Promise<string | null> => {
+        try {
+          await chay();
+          return null;
+        } catch (e) {
+          return (e as { code?: string }).code ?? "?";
+        }
+      };
+      const quyenTemp = async (): Promise<Record<string, boolean>> => {
+        const { rows } = await db.pool.query<{ vai: string; temp: boolean }>(
+          "SELECT r.rolname AS vai, pg_catalog.has_database_privilege(r.rolname, pg_catalog.current_database(), 'TEMP') AS temp " +
+            "FROM pg_roles r WHERE r.rolname IN ('app_api', 'app_unseal') ORDER BY 1",
+        );
+        return Object.fromEntries(rows.map((r) => [r.vai, r.temp]));
+      };
+
+      // (1) Lớp đã đóng ngay sau migrate(): không vai ứng dụng nào còn TEMP, và CREATE TEMP là 42501.
+      expect(await quyenTemp()).toEqual({ app_api: false, app_unseal: false });
+      const c = await api.connect();
+      try {
+        await c.query("SELECT set_config('app.org_id', $1, false)", [org]);
+        expect(await loiCua(() => c.query("CREATE TEMP TABLE sessions (id int)")), "TEMP đã bị thu hồi").toBe("42501");
+        expect((await c.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n).toBe("1");
+
+        // (2) Mở lại bằng tay đúng như trước khi có lớp (mặc định của PostgreSQL: PUBLIC có TEMP) — và
+        //     cơ chế lộ ra: bảng tạm che `sessions` cho mọi câu viết trần trên kết nối này.
+        await db.pool.query(`GRANT TEMP ON DATABASE "${tenDb}" TO PUBLIC`);
+        expect(await quyenTemp()).toEqual({ app_api: true, app_unseal: true });
+        expect(await loiCua(() => c.query("CREATE TEMP TABLE sessions (id int)"))).toBeNull();
+        expect((await c.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "bảng tạm che bảng thật").toBe("0");
+        expect((await c.query<{ n: string }>("SELECT count(*)::text AS n FROM public.sessions")).rows[0]?.n, "qualify thì thấy").toBe("1");
+        expect((await c.query("UPDATE sessions SET id = id")).rowCount, "UPDATE trần: 0 hàng, không lỗi").toBe(0);
+        await c.query("DROP TABLE pg_temp.sessions");
+      } finally {
+        c.release();
+      }
+
+      // (3) migrate() thu hồi lại — cả cấp qua PUBLIC lẫn cấp đích danh — và WARNING nói rõ đang tự chữa.
+      await db.pool.query(`GRANT TEMP ON DATABASE "${tenDb}" TO app_api`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await quyenTemp()).toEqual({ app_api: false, app_unseal: false });
+      const c2 = await api.connect();
+      try {
+        expect(await loiCua(() => c2.query("CREATE TEMP TABLE sessions (id int)"))).toBe("42501");
+        expect(await loiCua(() => c2.query("CREATE TEMP VIEW zz AS SELECT 1"))).toBe("42501");
+        expect(await loiCua(() => c2.query("CREATE TEMP SEQUENCE zz_s"))).toBe("42501");
+      } finally {
+        c2.release();
+      }
+
+      // (4) [lượt soi 24, NHẸ-2] Bảng tạm tạo TRƯỚC khi lớp thu hồi TEMP sống hết đời kết nối: đo — cùng
+      //     kết nối, sau REVOKE, `sessions` trần vẫn đếm 0. Cửa sổ ấy đóng ở tầng app: mỗi lần giao client,
+      //     vai-tro.ts `DISCARD TEMP` cùng câu với SET ROLE — client lấy lại từ pool (cùng kết nối vật lý,
+      //     đo bằng pg_backend_pid) không còn bảng tạm.
+      await db.pool.query(`GRANT TEMP ON DATABASE "${tenDb}" TO PUBLIC`);
+      const c3 = await api.connect();
+      const pid = (await c3.query<{ p: string }>("SELECT pg_backend_pid()::text AS p")).rows[0]?.p;
+      await c3.query("SELECT set_config('app.org_id', $1, false)", [org]);
+      await c3.query("CREATE TEMP TABLE sessions (id int)");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await quyenTemp()).toEqual({ app_api: false, app_unseal: false });
+      expect((await c3.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "bảng tạm có sẵn SỐNG qua REVOKE trên cùng kết nối").toBe("0");
+      c3.release();
+      const c4 = await api.connect();
+      try {
+        expect((await c4.query<{ p: string }>("SELECT pg_backend_pid()::text AS p")).rows[0]?.p, "cùng kết nối vật lý").toBe(pid);
+        await c4.query("SELECT set_config('app.org_id', $1, false)", [org]);
+        expect((await c4.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "DISCARD TEMP lúc giao client đã xoá bảng tạm").toBe("1");
+      } finally {
+        c4.release();
+      }
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // Nửa PHÁN XÉT của khoản 78: `"$user"` đứng trước `public` trong search_path mặc định, nên một schema
+  // trùng tên vai — app_api, app_unseal, hay một role đăng nhập là thành viên của chúng — che bảng thật
+  // y như bảng tạm. Đo: schema `app_api` chứa `sessions` ⇒ SELECT trần đếm 0. Hardening cố ý KHÔNG tự
+  // DROP (schema có thể chứa đối tượng); nó gãy và nêu tên.
+  it("[khoản nợ 78] schema trùng tên vai ứng dụng hay role đăng nhập thành viên làm migrate() GÃY nêu tên — và không tự xoá", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('no78b', 'no78b') RETURNING id")).rows[0]!.id;
+      const nguoi = (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'b@no78.vn', 'b') RETURNING id", [org])).rows[0]!.id;
+      await db.pool.query(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+        [org, nguoi, Buffer.alloc(32, 8)],
+      );
+      await db.pool.query("CREATE SCHEMA app_api; CREATE TABLE app_api.sessions (id int); GRANT USAGE ON SCHEMA app_api TO app_api; GRANT SELECT ON app_api.sessions TO app_api");
+      // Cơ chế: đúng cái tên `sessions` rơi vào schema "$user".
+      const c = await db.poolAs("app_api").connect();
+      try {
+        await c.query("SELECT set_config('app.org_id', $1, false)", [org]);
+        expect((await c.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "schema app_api che public").toBe("0");
+        expect((await c.query<{ n: string }>("SELECT count(*)::text AS n FROM public.sessions")).rows[0]?.n).toBe("1");
+      } finally {
+        c.release();
+      }
+      // Lớp: gãy, nêu tên, không xoá.
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain('schema trùng tên một vai');
+      expect(loi!.message).toContain("schema che public qua \"$user\": app_api —");
+      expect((await db.pool.query("SELECT 1 FROM pg_namespace WHERE nspname = 'app_api'")).rowCount, "hardening không được tự DROP schema").toBe(1);
+      await db.pool.query("DROP SCHEMA app_api CASCADE");
+
+      // Theo TÍNH CHẤT thành viên (bắc cầu), không theo tên: một role đăng nhập là thành viên hợp lệ của
+      // app_api (cặp trong danh sách trắng của hardening) mà có schema trùng tên cũng bị nêu — "$user" chỉ
+      // trỏ tới nó khi kết nối KHÔNG ở SET ROLE (RESET ROLE do injection, phiên trực tiếp): phòng thủ chiều sâu.
+      await db.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'x'; GRANT app_api TO app_api_login; CREATE SCHEMA app_api_login");
+      const loi2 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi2?.message ?? "").toContain("schema che public qua \"$user\": app_api_login —");
+      await db.pool.query("DROP SCHEMA app_api_login");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // [lượt soi 24, NẶNG-1] Tiền đề "app_api không tạo được schema" nay được GIỮ, không chỉ đo: CREATE ON
+      // DATABASE trôi ⇒ app_api TỰ dựng schema trùng tên (che BỀN, cho mọi kết nối) — migrate() thu hồi
+      // CREATE ngay ở lượt sửa dù lượt phán xét gãy vì schema; gỡ schema bằng tay xong, app_api không dựng
+      // lại được nữa.
+      const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+      const loiCua = async (chay: () => Promise<unknown>): Promise<string | null> => {
+        try {
+          await chay();
+          return null;
+        } catch (e) {
+          return (e as { code?: string }).code ?? "?";
+        }
+      };
+      const coCreate = async (): Promise<boolean> =>
+        (await db.pool.query<{ c: boolean }>("SELECT pg_catalog.has_database_privilege('app_api', pg_catalog.current_database(), 'CREATE') AS c")).rows[0]!.c;
+      expect(await coCreate()).toBe(false);
+      await db.pool.query(`GRANT CREATE ON DATABASE "${tenDb}" TO app_api`);
+      const cApi = await db.poolAs("app_api").connect();
+      try {
+        expect(await loiCua(() => cApi.query("CREATE SCHEMA app_api; CREATE TABLE app_api.sessions (id int)")), "có CREATE thì tự dựng được").toBeNull();
+        await cApi.query("SELECT set_config('app.org_id', $1, false)", [org]);
+        expect((await cApi.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "schema tự dựng che public").toBe("0");
+      } finally {
+        cApi.release();
+      }
+      const loi3 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi3?.message ?? "").toContain("schema che public qua \"$user\": app_api —");
+      expect(await coCreate(), "CREATE bị thu hồi ở lượt sửa dù lượt phán xét gãy").toBe(false);
+      await db.pool.query("DROP SCHEMA app_api CASCADE");
+      const cApi2 = await db.poolAs("app_api").connect();
+      try {
+        expect(await loiCua(() => cApi2.query("CREATE SCHEMA app_api"))).toBe("42501");
+      } finally {
+        cApi2.release();
+      }
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // [lượt soi 24, NHẸ-3] Đường `SET search_path` trong phiên chỉ che được tên khi vai có USAGE ở một
+      // schema KHÁC chứa quan hệ TRÙNG TÊN với public. Phán xét đúng cơ chế ấy — không phải "không USAGE
+      // ngoài public" (bản đầu, gãy hai fixture hợp lệ của chính tệp này: `khac`, `gia`). Đối chứng: schema
+      // có USAGE mà không quan hệ trùng tên thì đi qua.
+      await db.pool.query("CREATE SCHEMA zz_khac; CREATE TABLE zz_khac.khong_trung (id int); GRANT USAGE ON SCHEMA zz_khac TO app_api");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "USAGE không trùng tên không phải lỗi").resolves.toEqual([]);
+      await db.pool.query("CREATE TABLE zz_khac.sessions (id int)");
+      const loi4 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi4?.message ?? "").toContain("quan hệ trùng tên public: app_api -> zz_khac.sessions");
+      await db.pool.query("DROP SCHEMA zz_khac CASCADE");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  });
+
   // [fix round 5 — R3] Test PHÁT HIỆN, tách khỏi test PHỤC HỒI ở trên. Cần cả hai vì hai
   // test đó canh hai nửa khác nhau của bản vá và một nửa không suy ra nửa kia:
   //   - test phục hồi canh CÂU LỆNH (CREATE OR REPLACE chạy vô điều kiện ở BƯỚC 2);
