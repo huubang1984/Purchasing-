@@ -1684,3 +1684,49 @@ Mọi phát hiện đo được được người viết đo lại trên Postgre
 **Khớp — người soi kiểm bằng đọc:** mọi đường khác làm hàm canh không chạy mà giữ tên hàm quy về khoản 75 (constraint trigger/AFTER/cấp câu lệnh), `RENAME` vô hại, transition table chỉ AFTER, trigger trả `NULL` là cơ chế ADR-036 khác, kế thừa là khoản 82, phân mảnh clone giữ `tgqual`/`tgattr` trên lá; FK `ON DELETE CASCADE` vẫn qua BEFORE ROW của bảng con — theo hiểu biết PostgreSQL, **chưa đo**. Mọi `WHEN (`/`UPDATE OF` của kho (013, 014, 016, 017, 019, 022, 026, 034, 040, 041) gọi hàm có RETURN trong `HAM_KHONG_PHAI_CANH` ⇒ mục mới không phán sai; `rfq_items_cam_truncate` (thân không RETURN) không có WHEN; fixture T5 đặt WHEN/UPDATE OF lên `audit_events_chan_update` vẫn OK vì BƯỚC 2 dựng lại trước BƯỚC 3 — **đã chạy:** `migrations.int.test.ts` 94/94 với hardening mới. Tổng điều tra ngôn ngữ: `SET LANGUAGE` không tồn tại, `ALTER FUNCTION` không đổi ngôn ngữ, `internal`/C cần superuser và ghim thân hàm dựng lại, hàm plpgsql bọc không gọi được hàm trigger, `tgisinternal` chỉ do FK/constraint sinh; khẳng định hai chiều + đối chứng dương `internal` + đối chứng âm tập rộng đầy đủ. `replaceAll` không rỗng ruột: hằng nội suy nguyên văn ở cả hai vế, `.gitattributes` `*.sql text eol=lf`, guard `not.toBe`. Ba test: `DROP TABLE` trong `finally`, CREATE nhiều câu là một giao dịch ngầm, test 3 `ROLLBACK` + `release`, tên `zz_dk`/`zz_tr`/`zz_srut`/`zz_dk_tap` không trùng. `CAU_QUAN_HE_TRUNG_TEN` so từng vế với hai bản chép — không đổi ngữ nghĩa, bí danh `c`/`n`/`v` giữ nguyên nên `string_agg` vẫn phân giải. Không kiểm được bằng đọc: mọi con số 1 hàng / 0 hàng, số test.
 
 **Điều đáng mang sang vòng sau:** khoản 79 mở vì hai bài học S0 (WHEN/UPDATE OF, ngôn ngữ) không sang được vị từ suy ra; lượt soi 27 cho thấy bài học THỨ BA cùng chỗ (`tgenabled`, S1.29 và S1.32 đã canh ở test) cũng suýt không sang hardening — người viết chép hai cột từ `CTE_TRIGGER_CHAN` mà bỏ cột thứ ba đứng ngay dưới. Câu hỏi đúng cho một mục "suy từ tính chất" là *"bảng có tên được canh những CỘT nào, và bảng suy ra thiếu cột nào"*, không phải *"lượt soi vừa nêu cột nào"*. Tám lượt soi liền (19–27, trừ 26) bác bản đầu.
+
+# §S1.37 — khoản nợ 81: ADR-036 §3⑶ quyết bằng một tiêu chí đo được; khoản 83 mở
+
+**Bề mặt an ninh:** 0 mã sản xuất. Ba tệp tài liệu (`docs/DECISIONS.md` ADR-036 §3⑶ + hàng 5–7, 10, 21;
+`docs/STATE.md` hàng 81/83, biên bản 52; `docs/TEST-PLAN.md` H19), `Handoff.md`, tệp này. Phép đo nền chạy
+bằng một test nháp (`db/zz-do-81.int.test.ts`, đã xoá; kết quả nguyên văn ở biên bản 52 ⑴) dưới vai
+`trien_khai` không superuser — đúng hồ sơ deploy — trên PostgreSQL 16 sạch đã `migrate()`.
+
+**Điều được quyết:** *cơ chế nào mà chủ database không superuser tạo được trên cụm đã deploy thì PHẢI có
+mục hardening; chỉ cơ chế cần superuser mới được để ở test.* Đo: 5, 6, 7, 10, 21, 9, 22 đều tạo được bởi
+chủ bảng thường (`trien_khai` sở hữu `sessions` — khác N2 cho bảng bootstrap) và `migrate()` đi qua dưới cả superuser lẫn `trien_khai`; TẠO hàm `internal`/C, `file_fdw`, `session_replication_role` (mọi cửa, kể cả `ALTER ROLE` chính mình) cần superuser;
+`plperl` là extension TIN CẬY (chỉ gãy vì image thiếu `libperl.so`) — vế *PL khác chưa cài* của S1.36 bị bác.
+
+## Lượt soi đối kháng 28 — chạy trên chính QUYẾT ĐỊNH, trước commit
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc §3⑶ mới, bảng §2, hàng 81/83, biên bản 52,
+`dungRoleTrienKhaiThuong`, hardening quanh `rolconfig`/`pg_rewrite`/`pg_parameter_acl`, 18 chỗ `CREATE POLICY`
+của `migrations.int.test.ts`), được giao sáu câu: ranh giới của tiêu chí; phép đo có đủ không; khoản 83 có làm
+được theo khuôn không; lời khai rộng hơn đo; đếm; 25a #3 / 27 INFO-5 còn gì. Mọi câu *cần đo* được người viết
+đo lại trong cùng lượt (bản nháp `db/zz-do-81{,b,c}.int.test.ts`, đã xoá).
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | **CAO** | Tiêu chí *không bỏ phiếu từng cơ chế* mà hệ quả bỏ phiếu ngầm: chủ bảng thường tạo được bằng plpgsql mọi cơ chế trigger (1, 2, 15, 17–19) và RULE trên bảng không chỉ-ghi-thêm (3 tổng quát) — không cơ chế nào cần superuser — nhưng hệ quả chỉ nêu 5, 6, 7, 10, 21 (những gì đã có census tĩnh ở test) | **đo, đúng:** chủ bảng gắn trigger plpgsql `RETURN NULL` và RULE `DO INSTEAD NOTHING` lên `sessions`; `migrate()` dưới `trien_khai` đi qua cả hai | tiêu chí thành BA vế (catalog phân biệt được ⇒ hardening; chỉ nhân chứng phân biệt được ⇒ giới hạn có địa chỉ, nói thẳng; cần superuser ⇒ test); 83 thêm ⑹ rule rỗng mọi quan hệ và ⑺ hàm canh hình dạng ngoài BEFORE-ROW; §5 ghi giới hạn |
+| 2 | **NẶNG** | *"đúng hồ sơ deploy N2"* sai ở vế chủ bảng: N2 chỉ cho `trien_khai` sở hữu database, bảng bootstrap thuộc superuser; `CREATE POLICY`/`TRIGGER`/`DISABLE`/`NO INHERIT` đòi CHỦ BẢNG — phép đo đã cho `trien_khai` sở hữu `sessions`, tức đo dưới *chủ bảng không superuser*, không phải N2 | **đo, đúng:** dưới N2 nguyên bản `CREATE POLICY ON sessions` ⇒ 42501 *must be owner*, `CREATE TRIGGER` ⇒ 42501 | ⑴ viết lại: chủ DB + được cho sở hữu `sessions` (khác N2 cho bảng bootstrap, giống mọi bảng migration tạo sau); tiêu chí nói *chủ bảng hay chủ database* |
+| 3 | **NẶNG** | Thiết kế 83⑴ *[CR1] hai chiều — không policy nào ngoài danh sách ghim theo TÊN trên mọi bảng RLS* đảo nguyên lý *suy từ tính chất* của chính [CR1]; ≥ 10 test tạo policy fixture rồi mong `migrate()` OK sẽ gãy; ghim `pg_get_expr` ở hardening biến rủi ro deparse thành *chặn deploy vĩnh viễn* — cái bẫy hardening tự cảnh báo | đúng theo đọc (18 chỗ `CREATE POLICY` ở `migrations.int.test.ts`) | 83⑴ viết lại theo ADR-035 ⑵: mọi policy thuộc ĐÚNG MỘT lớp (khuôn [CR1], khuôn 027, khai đích danh); giá deparse ghi ra; số fixture sửa |
+| 4 | NHẸ | Ba lời khai về cùng phép đo lệch nhau (STATE 81 có *Đo thêm*, biên bản 52 ⑴ không, ADR viết *`migrate()` (superuser)*, §S1.37 không nêu vai); `ALTER ROLE app_api SET …` 42501 không phân biệt SUSET với thiếu ADMIN OPTION | **đo:** `ALTER ROLE trien_khai SET session_replication_role` (chính mình) ⇒ 42501 — ranh giới SUSET đứng bằng đo | một đoạn ⑴ dùng chung ở cả ba chỗ; *dưới superuser VÀ dưới chính `trien_khai`* |
+| 5 | NHẸ | *"8 và hàm C là ranh giới superuser — test là đủ"* rộng hơn sự thật: lớp của 8 là ENABLE ALWAYS Ở HARDENING; tiền đề SUSET tựa vào `pg_parameter_acl` mà hardening không ghim (`GRANT SET ON PARAMETER … TO app_api` lúc bootstrap sống qua `migrate()`); *hàm C cần superuser* chỉ đúng vế TẠO — GẮN thì không (built-in; extension tin cậy mang hàm trigger C) | **đo:** `CREATE EXTENSION tcn` (hàm trigger C) dưới chủ DB ⇒ OK; `moddatetime` ⇒ 42501 (không tin cậy) | ⒞ viết đúng: chỉ TẠO hàm C và SUSET; 83⑻ `pg_parameter_acl`; ADR-036 hàng 21 sửa vế S1.36 |
+| 6 | NHẸ | Hai con trỏ chết sau quyết định: chú thích test *PL tin cậy khác (plperl, plpython) chưa được cài … chờ khoản 81* (plpython3u KHÔNG tin cậy); §5 *chờ khoản 81* không có [S1.37] | đúng | sửa cả hai (chú thích test là chuỗi, 0 mã sản xuất) |
+| 7 | NHẸ | 83⑷ *`relkind ∉ ('r','p')`* nguyên văn sẽ đỏ trên sequence/index/composite; view `security_invoker` hợp lệ của [I2] sẽ gãy nếu *khai rỗng*; 83⑸ không ghi ba bộ lọc (`NOT tgisinternal`, `pg_temp%`/`pg_toast%`, `MAU_SCHEMA_DU_AN`) | đúng theo đọc | thân 83 ghi `v/m/f`, phân loại view I2, ba bộ lọc |
+| 8 | NHẸ | 83⑴ bao trùm 82⑵ (ghim `caller_rate_limits_khach`) mà hai khoản không trỏ nhau | đúng | liên kết chéo ở cả hai |
+| 9 | INFO | Đầu ADR-036 *Khoản nợ liên quan* thiếu `[S1.37] 83` | đúng | thêm |
+| 10 | INFO | *"chủ DB được cài plperl"* suy từ thứ tự kiểm tra của `CREATE EXTENSION` (trusted trước khi nạp `.so`) — đúng theo mã nguồn PostgreSQL nhưng là suy luận | đúng | viết: *qua kiểm tra quyền; chưa cài thành công; suy ra cài được nếu có thư viện* |
+| 11 | INFO | (6)/(10) đo trên đối tượng MỚI; ca có thật trên cụm là `DROP POLICY` trên bảng đang có / thay bảng bằng view cùng tên — chưa đo | **đo:** `DROP POLICY sessions_tenant_isolation` ⇒ `migrate()` NÉM ([CR1]); đổi tên `sessions` + `CREATE VIEW sessions` ⇒ NÉM 4 mục — hardening đã bắt ca theo tên | ghi vào ⑴: lỗ nằm ở đối tượng MỚI và ở thứ thêm vào bảng có tên mà [CR1] không đếm |
+| 12 | INFO | Hai chỗ trống chờ biên bản lượt soi này còn trong tệp | đúng | thay |
+| 13 | INFO | Hàng 83 đứng trước hàng 82 | đúng | dời |
+
+**28 kiểm và thấy KHỚP:** `CÒN MỞ` 15 số trùng 14 `[MỞ]` + 1 `[NỬA]`; 4 + 11 = 15 đúng từng tên; Handoff hai
+chỗ; hàng 83 ba cột, năm con trỏ giải được; các cặp `~~` mới đóng; tám mục 83 đều phán xét — không mâu thuẫn
+ADR-028; `prolang` không phán FK (`tgisinternal`); BƯỚC 1 `rolconfig` RESET ALL phủ cả `session_replication_role`
+nếu ai đặt được; hardening :281 tự khai hồ sơ deploy khớp N2 về vai. Không kiểm được bằng đọc: mọi mã lỗi ở ⑴.
+
+**Điều đáng mang sang vòng sau:** một tiêu chí viết để *thôi bỏ phiếu từng cơ chế* đã bỏ phiếu ngầm ngay ở bản
+đầu — bằng cách chỉ liệt kê những cơ chế đã có census: cái đã đo được gọi tên, cái chưa đo được im lặng. Bản
+thân phép đo cũng chọn mô hình (cho `trien_khai` sở hữu bảng) mà không ghi là đã chọn. Cả hai đều là cùng một
+lỗi: lời khai rộng đúng bằng cái người viết đã nhìn. Chín lượt soi liền (19–28, trừ 26) bác bản đầu.
