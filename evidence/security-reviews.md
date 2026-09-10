@@ -1640,3 +1640,47 @@ biến không đổi; ADR-036 1–22 liên tục; số `~~` chẵn ở cả năm
 `migrations.int.test.ts:2847`; `zz_chan` ở `rls-coverage:1865`; `LIKE '%app.guest_session_id%'` ở
 hardening 6220. Không kiểm được bằng đọc: mọi con số kết quả đo, số test, thống kê `git diff --stat`, và
 việc `db.stop()` treo thật.
+
+# §S1.36 — khoản nợ 79: trigger canh có điều kiện và trigger ngoài plpgsql — MÃ SẢN XUẤT lần thứ hai từ S1.29
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `VI_TU_BANG_CHI_GHI_THEM` thêm một vế ở cả hai
+vế đếm (`tgqual IS NULL AND tgattr = ''`, nguyên văn với test); chốt TRUNCATE trong `CAU_CHI_GHI_THEM_VAT_LY`
+thêm `tgqual IS NULL`; hằng `CAU_TRIGGER_CANH_CO_DIEU_KIEN` + một mục PHÁN XÉT mới (mọi trigger của hàm canh
+ở mọi bảng dự án không được có WHEN/UPDATE OF, và phải ENABLE ALWAYS — vế thứ ba do lượt soi 27); hằng `CAU_QUAN_HE_TRUNG_TEN` gộp câu chép hai lần (lượt soi
+25b #13); thông điệp hai mục TEMP/CREATE theo vai (25b #12, 25a #11). Không migration đánh số, không đụng
+lược đồ hay đường xác thực. Còn lại: `db/hardening-suy-tu-tinh-chat.int.test.ts` (`[INV-H19]` 22 → 25: hằng
+`VE_TRIGGER_VO_DIEU_KIEN`, cột `co_when`/`co_cot`, ba test `[khoản nợ 79]`), năm tệp tài liệu và tệp này.
+
+**Đo trước khi viết (PostgreSQL 16):** `WHEN (false)` trên trigger TRUNCATE cấp câu lệnh là hợp lệ và
+TRUNCATE đi lọt (bảng về 0 hàng) — kẽ cùng cơ chế hàng 20 ở chốt TRUNCATE, chưa ai nêu; `UPDATE OF` trên
+trigger cấp câu lệnh cũng hợp lệ; 85 trigger plpgsql, 0 trigger ngôn ngữ khác.
+
+**Đỏ đo được, cô lập từng mục:** vế vô điều kiện bỏ khỏi cả hai bản ⇒ đỏ ở guard *vế phải nằm trong vị
+từ*; vế có mặt nguyên văn mà vô hiệu (`OR true`) ⇒ đỏ ở *vị từ MỚI thả bảng*; mục phán xét mới no-op ⇒
+đỏ ở *migrate() NÉM*; mục bỏ vế `tgenabled` ⇒ đỏ ở `tgenabled=D`; đảo hai nhánh CASE ⇒ đỏ ở regex ghép
+tên với vế; tổng điều tra ngôn ngữ lọc lại plpgsql ⇒ đỏ ở đối chứng dương; chốt TRUNCATE bỏ
+`tgqual` ⇒ `migrate()` vẫn ném đúng một mục (mục phán xét mới bắt cả trigger TRUNCATE có WHEN) — hai lớp
+chồng nhau, test đỏ ở khẳng định thông điệp. **Evidence bác bản đầu của vế `tgenabled`:** hai fixture của
+chính tệp H19 (`so_pm` phân mảnh, `zz_cau` khoản 75) tạo trigger canh ở ENABLE thường — mục mới NÉM đúng;
+fixture nâng lên ALWAYS. `[evidence] vitest thoát mã 1` trong khi cổng vẫn báo 56/56 — đúng bài học S1.34.
+
+## Lượt soi đối kháng 27 — chạy TRƯỚC khi §S1.36 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc diff hai tệp, `CTE_TRIGGER_CHAN`,
+`MAU_SCHEMA_DU_AN`, các mục S1.34, `db/migrations/*.sql`), được giao bảy hướng phá: đường khác làm hàm canh
+không chạy; mục phán xét mới phán sai trigger hợp lệ; lách tổng điều tra ngôn ngữ; vị từ CŨ dựng bằng
+`replaceAll` có rỗng ruột không; ba test mới; lời khai rộng hơn mã; hằng gộp có đổi ngữ nghĩa không.
+Mọi phát hiện đo được được người viết đo lại trên PostgreSQL 16.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | **NẶNG** | Mục phán xét mới đọc `tgqual`/`tgattr` mà KHÔNG đọc `tgenabled`; vị từ vẫn đếm trigger canh bất kể `tgenabled`. Trên bảng SUY RA: `DISABLE TRIGGER`, `ENABLE REPLICA`, hay ENABLE thường + `session_replication_role = replica` giữ tên hàm, bảng vẫn trong tập (LOGGED/chốt TRUNCATE/ACL xanh) mà UPDATE/DELETE đi qua, `migrate()` OK — đúng chế độ *rơi trong im lặng* mà chú thích tuyên bố đã đóng cho cột bên cạnh. Lớp duy nhất hôm nay là tổng điều tra ở test (`luon_bat`), tức chính vế khoản 81 đang treo | **đo, đúng:** `zz_dk` với `u` DISABLE ⇒ `UPDATE … SET a` **1 hàng**, bảng vẫn trong tập, `migrate()` OK (bản đầu); `u` ở 'O' + `SET LOCAL session_replication_role = replica` ⇒ UPDATE **1 hàng** | vế thứ ba `OR t.tgenabled <> 'A'` vào `CAU_TRIGGER_CANH_CO_DIEU_KIEN`, nhánh CASE nêu `tgenabled=…`, tên mục đổi; vị từ cố ý KHÔNG đọc `tgenabled` (bảng ở lại tập để LOGGED/ACL vẫn được phán), chú thích nói rõ; test (f): hai biến thể + đối chứng ENABLE ALWAYS ⇒ OK; đột biến bỏ vế ⇒ đỏ ở `tgenabled=D` |
+| 2 | NHẸ | Thông điệp mục mới *"vị từ chỉ-ghi-thêm đã thả bảng này"* sai khi bảng còn một trigger canh VÔ điều kiện khác cho cùng sự kiện (vị từ đếm `> 0` nên bảng vẫn trong tập): chặn đúng, lời sai | đúng theo đọc | viết lại: *vị từ không đếm trigger có WHEN/UPDATE OF (bảng chỉ còn trong tập nếu một trigger canh vô điều kiện khác cho cùng sự kiện tồn tại) và vẫn đếm trigger tắt* |
+| 3 | NHẸ | Bốn `toContain("zz_dk.u")`/`("UPDATE OF")`/`("zz_dk.d")`/`("WHEN")` không buộc chuỗi nào đi với trigger nào — BƯỚC 4 gom mọi mô tả, nên đảo hai nhánh CASE vẫn xanh | **đo:** đảo CASE trước khi sửa — theo đọc vẫn xanh; sau khi sửa ⇒ đỏ ở regex `zz_dk\.u: … có UPDATE OF` | regex ghép tên với vế + phủ định (`không có mệnh đề WHEN` cho `u`, `không có UPDATE OF <cột>` cho `d`) + `không sửa được 1 mục`; bản đầu của phủ định dùng `[^;]*WHEN` và tự đỏ vì phần hướng dẫn sửa trong mô tả cũng có chữ WHEN — siết về đúng cụm của nhánh CASE |
+| 4 | NHẸ | Chú thích test khoản 79 khai *"mọi vế cũ của H19 (LOGGED, chốt TRUNCATE, ACL, ALWAYS) đều xanh"* — ALWAYS không phải vế hardening cho bảng suy ra (xem #1), và test không khẳng định bốn vế ấy | đúng theo đọc | chú thích viết lại; test khẳng định *thông điệp NÉM đúng 1 mục* (ba vế hardening cũ không có gì để phán) |
+| 5 | INFO | Tổng điều tra ngôn ngữ chỉ ở test, hardening không có mục `prolang` — nhất quán với ADR-036 ㉑ và cách đọc §3⑶; nhưng cùng vòng, khoản 79 đưa WHEN/UPDATE OF vào hardening với lập luận *cụm đã deploy* — vòng đứng ở phía ⒜ của khoản 81 cho một cơ chế và ⒝ cho cơ chế kề bên; cần một câu nói vì sao | — | ranh giới ghi ở chú thích test và ADR-036 ㉑: tạo hàm `internal`/C cần superuser, PL tin cậy khác (plperl, plpython) chưa cài — ngoài mô hình đe doạ của hardening (chủ bảng không superuser); cụm đã deploy chờ khoản 81 |
+| 6 | INFO | Mục mới không lọc `tgtype` nên cũng phán trigger TRUNCATE có WHEN — trùng với vế `tgqual IS NULL` ở chốt TRUNCATE; test B chỉ khẳng định *chốt TRUNCATE* nên hai lớp không được đo cô lập nhau | **đo (đột biến m3):** bỏ `tgqual` ở chốt ⇒ `migrate()` vẫn ném đúng 1 mục (mục mới) — test B đỏ ở khẳng định thông điệp | trùng là cố ý, ghi ở chú thích hằng; test B đòi cả hai lớp nêu tên (`zz_tr.t: … có mệnh đề WHEN`, *không sửa được 2 mục*) |
+
+**Khớp — người soi kiểm bằng đọc:** mọi đường khác làm hàm canh không chạy mà giữ tên hàm quy về khoản 75 (constraint trigger/AFTER/cấp câu lệnh), `RENAME` vô hại, transition table chỉ AFTER, trigger trả `NULL` là cơ chế ADR-036 khác, kế thừa là khoản 82, phân mảnh clone giữ `tgqual`/`tgattr` trên lá; FK `ON DELETE CASCADE` vẫn qua BEFORE ROW của bảng con — theo hiểu biết PostgreSQL, **chưa đo**. Mọi `WHEN (`/`UPDATE OF` của kho (013, 014, 016, 017, 019, 022, 026, 034, 040, 041) gọi hàm có RETURN trong `HAM_KHONG_PHAI_CANH` ⇒ mục mới không phán sai; `rfq_items_cam_truncate` (thân không RETURN) không có WHEN; fixture T5 đặt WHEN/UPDATE OF lên `audit_events_chan_update` vẫn OK vì BƯỚC 2 dựng lại trước BƯỚC 3 — **đã chạy:** `migrations.int.test.ts` 94/94 với hardening mới. Tổng điều tra ngôn ngữ: `SET LANGUAGE` không tồn tại, `ALTER FUNCTION` không đổi ngôn ngữ, `internal`/C cần superuser và ghim thân hàm dựng lại, hàm plpgsql bọc không gọi được hàm trigger, `tgisinternal` chỉ do FK/constraint sinh; khẳng định hai chiều + đối chứng dương `internal` + đối chứng âm tập rộng đầy đủ. `replaceAll` không rỗng ruột: hằng nội suy nguyên văn ở cả hai vế, `.gitattributes` `*.sql text eol=lf`, guard `not.toBe`. Ba test: `DROP TABLE` trong `finally`, CREATE nhiều câu là một giao dịch ngầm, test 3 `ROLLBACK` + `release`, tên `zz_dk`/`zz_tr`/`zz_srut`/`zz_dk_tap` không trùng. `CAU_QUAN_HE_TRUNG_TEN` so từng vế với hai bản chép — không đổi ngữ nghĩa, bí danh `c`/`n`/`v` giữ nguyên nên `string_agg` vẫn phân giải. Không kiểm được bằng đọc: mọi con số 1 hàng / 0 hàng, số test.
+
+**Điều đáng mang sang vòng sau:** khoản 79 mở vì hai bài học S0 (WHEN/UPDATE OF, ngôn ngữ) không sang được vị từ suy ra; lượt soi 27 cho thấy bài học THỨ BA cùng chỗ (`tgenabled`, S1.29 và S1.32 đã canh ở test) cũng suýt không sang hardening — người viết chép hai cột từ `CTE_TRIGGER_CHAN` mà bỏ cột thứ ba đứng ngay dưới. Câu hỏi đúng cho một mục "suy từ tính chất" là *"bảng có tên được canh những CỘT nào, và bảng suy ra thiếu cột nào"*, không phải *"lượt soi vừa nêu cột nào"*. Tám lượt soi liền (19–27, trừ 26) bác bản đầu.
