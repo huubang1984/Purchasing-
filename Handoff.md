@@ -254,7 +254,7 @@ và file 475 byte chứa thông báo lỗi vẫn cho kết luận *"0 lỗi"* �
 
 ## 10. Nợ kỹ thuật
 
-~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ ~~**[S1.25] 67 khoản, trong đó 13 còn mở**~~ ~~**[S1.26] 69 khoản, trong đó 13 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ ~~**[S1.28] 72 khoản, trong đó 14 còn mở**~~ ~~**[S1.29] 73 khoản, trong đó 13 còn mở**~~ ~~**[S1.29] 74 khoản, trong đó 14 còn mở**~~ ~~**[S1.30] 75 khoản, trong đó 14 còn mở**~~ ~~**[S1.31] 76 khoản, trong đó 13 còn mở**~~ ~~**[S1.32] 78 khoản, trong đó 14 còn mở**~~ ~~**[S1.33] 78 khoản, trong đó 13 còn mở**~~ **[S1.34] 78 khoản, trong đó 12 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
+~~**22 khoản**~~ ~~**[S1.21] 61 khoản, trong đó 14 còn mở**~~ ~~**[S1.23] 63 khoản, trong đó 14 còn mở**~~ ~~**[S1.24] 65 khoản, trong đó 14 còn mở**~~ ~~**[S1.25] 67 khoản, trong đó 13 còn mở**~~ ~~**[S1.26] 69 khoản, trong đó 13 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ ~~**[S1.28] 72 khoản, trong đó 14 còn mở**~~ ~~**[S1.29] 73 khoản, trong đó 13 còn mở**~~ ~~**[S1.29] 74 khoản, trong đó 14 còn mở**~~ ~~**[S1.30] 75 khoản, trong đó 14 còn mở**~~ ~~**[S1.31] 76 khoản, trong đó 13 còn mở**~~ ~~**[S1.32] 78 khoản, trong đó 14 còn mở**~~ ~~**[S1.33] 78 khoản, trong đó 13 còn mở**~~ ~~**[S1.34] 78 khoản, trong đó 12 còn mở**~~ **[S1.35] 82 khoản, trong đó 16 còn mở** — đầy đủ ở `docs/STATE.md` §*Nợ kỹ
 thuật*, và dòng `**CÒN MỞ TÍNH TỚI HEAD:**` ở đó là lời khai DUY NHẤT được `[INV-H20]` đối
 chiếu với bảng. Mỗi khoản là một **khoảng trống đã đo**, không phải linh cảm.
 
@@ -401,7 +401,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 
 | Tài liệu | Vì sao |
 |---|---|
-| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, ~~22 khoản nợ~~ ~~**[S1.21] 61 khoản nợ, 14 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ ~~**[S1.28] 72 khoản, trong đó 14 còn mở**~~ ~~**[S1.29] 73 khoản, trong đó 13 còn mở**~~ ~~**[S1.29] 74 khoản, trong đó 14 còn mở**~~ ~~**[S1.30] 75 khoản, trong đó 14 còn mở**~~ ~~**[S1.31] 76 khoản, trong đó 13 còn mở**~~ ~~**[S1.32] 78 khoản, trong đó 14 còn mở**~~ ~~**[S1.33] 78 khoản, trong đó 13 còn mở**~~ **[S1.34] 78 khoản, trong đó 12 còn mở** |
+| `docs/STATE.md` | **Đọc đầu tiên.** Sổ trạng thái đầy đủ: điều kiện hoàn thành, điểm chặn, ~~22 khoản nợ~~ ~~**[S1.21] 61 khoản nợ, 14 còn mở**~~ ~~**[S1.27] 71 khoản, trong đó 14 còn mở**~~ ~~**[S1.28] 72 khoản, trong đó 14 còn mở**~~ ~~**[S1.29] 73 khoản, trong đó 13 còn mở**~~ ~~**[S1.29] 74 khoản, trong đó 14 còn mở**~~ ~~**[S1.30] 75 khoản, trong đó 14 còn mở**~~ ~~**[S1.31] 76 khoản, trong đó 13 còn mở**~~ ~~**[S1.32] 78 khoản, trong đó 14 còn mở**~~ ~~**[S1.33] 78 khoản, trong đó 13 còn mở**~~ ~~**[S1.34] 78 khoản, trong đó 12 còn mở**~~ **[S1.35] 82 khoản, trong đó 16 còn mở** |
 | `docs/PRODUCT.md` | Định vị, phạm vi, **những điều không được tuyên bố** |
 | `docs/TIEN-DE-CHUA-DO.md` | **17 tiền đề về con người và quy trình mà S1 đang cư xử như thật** — mỗi dòng một địa chỉ trong kho và một câu hỏi cho người mua thật. Không thay pilot; nó hạ chi phí buổi đầu |
 | `docs/ARCHITECTURE.md` | Kiến trúc: modular monolith, `unseal-worker` giữ độc quyền giải mã, RLS đa tổ chức |

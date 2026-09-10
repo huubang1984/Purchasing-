@@ -1405,7 +1405,7 @@ vùng đổi của hardening, thân 5 hàm AFTER-ROW, hai constraint trigger, b�
 |---|---|---|---|---|
 | 1 | CAO → INFO | Rule đặt tên `"_RETURN"` trên BẢNG lách cả ba vế loại theo tên | **PostgreSQL 16 NÉM** *non-view rule for "bid_receipts" must not be named "_RETURN"* — engine giữ tên ấy cho view | ghi phép đo vào chú thích; không đổi vế |
 | 2 | NẶNG | Test *rule trên bảng chỉ-ghi-thêm* không có `finally`: một assert đỏ giữa vòng để `zz_nuot` sống ⇒ mọi `migrate()` sau ném vì chính mục mới ⇒ đỏ dây chuyền | đúng theo đọc | `try/finally` gỡ `DROP RULE IF EXISTS` trên mọi bảng |
-| 3 | NẶNG | Constraint trigger DEFERRED trên UPDATE/DELETE chạy ở COMMIT — sau lần đọc bộ đếm thứ hai — nên đỏ vĩnh viễn với thông điệp SAI (*"hoặc là hàm canh, hoặc thiếu nhân chứng"*) | lập luận đúng; hôm nay 0/46 ca; hai constraint trigger DEFERRED của kho (017, 018) đều `AFTER INSERT` | `tgdeferrable` vào tập rộng theo bảng, thông điệp nói rõ *đổi thành NOT DEFERRABLE*; KHÔNG ép `SET CONSTRAINTS ALL IMMEDIATE` (bản đầu đã thử và 017 tự bắn) |
+| 3 | NẶNG | Constraint trigger DEFERRED trên UPDATE/DELETE chạy ở COMMIT — sau lần đọc bộ đếm thứ hai — nên đỏ vĩnh viễn với thông điệp SAI (*"hoặc là hàm canh, hoặc thiếu nhân chứng"*) | lập luận đúng; hôm nay 0/46 ca; hai constraint trigger DEFERRED của kho (017, 018) đều `AFTER INSERT` | ~~`tgdeferrable` vào tập rộng theo bảng, thông điệp nói rõ *đổi thành NOT DEFERRABLE*; KHÔNG ép `SET CONSTRAINTS ALL IMMEDIATE` (bản đầu đã thử và 017 tự bắn)~~ **[S1.33] đảo cả hai:** `tginitdeferred` (không phải `tgdeferrable`), và CÓ ép `SET CONSTRAINTS ALL IMMEDIATE` — SAU câu nhân chứng và `hoanTat`, đọc bộ đếm lần ba — xem lượt soi 23 #4; lượt soi 25b #11 bắt dòng này chưa gạch |
 | 4 | NHẸ | Tổng điều tra rule không có đối chứng chống rỗng ruột trong chính nó — bằng chứng câu truy vấn *thấy* rule chỉ nằm ở test kế | đúng | dựng một rule tạm ngay trong test và đòi thấy |
 | 5 | NHẸ | RLS `USING (false)` + `FORCE` là cơ chế thứ ba làm bảng chỉ-ghi-thêm: 0 hàng, không lỗi, không trigger, không rule | plausible, đúng về ngữ nghĩa RLS; kho không có policy nào như thế | **khoản nợ 76** |
 | 6 | INFO | Thứ tự mảng hardening: mục gỡ rule bảng sổ (7238) đứng TRƯỚC mục phán xét vật lý (7356) ⇒ rule trên `audit_events` được gỡ, không ném | xác nhận bằng đọc | — |
@@ -1450,6 +1450,14 @@ sáu hướng phá. Mọi phát hiện được người viết đo lại trên 
 điều ADR §5 nói: danh mục không chứng minh được, nhưng mọi cái thiếu nay có một địa chỉ để đứng.
 Bốn lượt soi liền (19–22) đều bác bản đầu; giá của một lượt soi rẻ hơn giá của một vòng.
 
+# §S1.33 — khoản nợ 77: nhân chứng INSERT, và vế *hàng thật* đo ở mức bảng
+
+**Bề mặt an ninh:** 0 mã sản xuất. Một tệp test (`db/hardening-suy-tu-tinh-chat.int.test.ts`, `[INV-H19]`
+19 → 22 test: sự kiện INSERT vào `SoNhanChung`, ba mốc `pg_stat_xact_user_tables`, cửa sổ đo thứ hai sau
+`SET CONSTRAINTS ALL IMMEDIATE`, `RE_NHAY_VAI` + bao đóng bậc một), ADR-036 hàng 11/15 cập nhật và hàng
+17/18 mới, năm tệp tài liệu và tệp này. **[S1.35] Mục này viết BÙ ở vòng S1.35** — lượt soi 25b NẶNG-2:
+lượt soi 23 từng treo dưới `# §S1.32`, không có dòng bề mặt riêng.
+
 ## Lượt soi đối kháng 23 — chạy TRƯỚC khi §S1.33 được viết, trên bản đầu của lớp
 
 **Hình thức:** một `security-reviewer` độc lập, không có shell (đọc diff của vòng, khối nhân chứng,
@@ -1470,13 +1478,25 @@ văn bản còn lại, rò rỉ/lặp lại. Mọi phát hiện được ngườ
 | 9 | INFO | `SET CONSTRAINTS ALL IMMEDIATE` vô hại: kho không có khoá ngoại DEFERRABLE, chỉ hai constraint trigger 017/018, cả hai thoả theo cách dựng | xác nhận | — |
 | 10 | INFO | Break-glass: `unseal_canh_bao_break_glass` chèn `outbox_jobs` trong cửa sổ đầu nhưng lọc `r.bang` không ghi công lệch; CANCELLED rồi yêu cầu thường không bỏ sót đường nào | xác nhận | — |
 | 11 | INFO | `ROLLBACK` trong `catch` ném đè lỗi gốc nếu kết nối chết | đúng | bọc `try/catch` |
-| 12 | INFO | Các cơ chế nuốt khác đã có lớp riêng (`INSTEAD OF`/phân mảnh ⇒ `relkind`; `RULE` ⇒ `pg_rewrite`; đổi `NEW.org_id` ⇒ hàng vẫn vào bảng) — chỉ 1 và 2 còn hở | xác nhận | ghi cả hai vào ADR-036 §2 để bảng là NGUỒN |
+| 12 | INFO | Các cơ chế nuốt khác đã có lớp riêng (`INSTEAD OF`/phân mảnh ⇒ `relkind`; `RULE` ⇒ `pg_rewrite`; đổi `NEW.org_id` ⇒ hàng vẫn vào bảng) — ~~chỉ 1 và 2 còn hở~~ **[S1.35] bác — lượt soi 25a #4, ADR-036 hàng 19:** hàng vào bảng nhưng KHÔNG PHẢI hàng đã gửi | ~~xác nhận~~ | ghi cả hai vào ADR-036 §2 để bảng là NGUỒN |
 
 **Điều đáng mang sang vòng sau:** vế ⒞ từng tin một con số — `rowCount` — mà PostgreSQL đếm TRƯỚC khi
 trigger AFTER chạy. Cùng một CSDL cho một con số khác, `n_tup_*`, đếm hàng THẬT, cùng giao dịch, cùng
 khuôn với bộ đếm hàm; hỏi *"con số này đếm cái gì, lúc nào"* là câu hỏi đóng luôn ba mục (1, 2, 5). Vế
 `nhay_vai` là lời khai văn bản cuối cùng còn chọn độ mịn của phép đo, và nó nay có đối chứng dương như
 mọi tổng điều tra khác theo ADR-036 §3⑵. Năm lượt soi liền (19–23) đều bác bản đầu.
+
+# §S1.34 — khoản nợ 78: che tên qua `search_path` — VÒNG ĐẦU TIÊN TỪ S1.29 CHẠM MÃ SẢN XUẤT
+
+**Bề mặt an ninh:** **141 dòng `db/migrations/hardening.always.sql`** (hằng `VAI_KET_NOI_UNG_DUNG` — thành
+viên bắc cầu của `app_api`/`app_unseal` trừ superuser — và sáu mục `[S1.34 / khoản nợ 78]`: REVOKE TEMP và
+CREATE ON DATABASE khỏi PUBLIC và khỏi mọi vai kết nối ứng dụng — tự chữa; schema trùng tên vai kết nối,
+và quan hệ trùng tên public trong một schema vai có USAGE — phán xét) và **1 dòng mã
+`packages/db/src/vai-tro.ts`** (`SET ROLE …; DISCARD TEMP` một câu ở mỗi lần giao client). Cả hai chạy ở
+mọi `migrate()` / mọi lần cầm client của sản xuất; không migration đánh số, không đụng lược đồ hay đường
+xác thực. Còn lại: `db/migrations.int.test.ts` (+2 test `[khoản nợ 78]`), sáu tệp tài liệu và tệp này.
+**[S1.35] Mục này viết BÙ ở vòng S1.35** — lượt soi 25b NẶNG-2: lượt soi 24 từng treo dưới `# §S1.32` vốn
+khai *0 mã sản xuất*, nên vòng đầu tiên chạm mã sản xuất từ S1.29 không có dòng bề mặt an ninh.
 
 ## Lượt soi đối kháng 24 — chạy TRƯỚC khi §S1.34 được viết, trên bản đầu của lớp
 
@@ -1497,7 +1517,7 @@ Mọi phát hiện được người viết đo lại trên PostgreSQL 16 thật
 | 8 | INFO | `"$user"` phân giải theo current_user: schema trùng tên role ĐĂNG NHẬP chỉ che khi kết nối không ở SET ROLE | xác nhận | một câu điều kiện vào chú thích và test |
 | 9 | INFO | Vận hành: chủ DB (`trien_khai`) giữ TEMP qua `acldefault`, superuser bỏ qua, pg_dump không cần; mọi role khác của cụm mất TEMP | xác nhận | ghi ở ADR-036 ⑯ như ràng buộc thiết kế |
 | 10 | INFO | Dollar-quote lồng `"$user"` trong `$q$` trong `$khoi$`, `%I` với tên DB lạ — an toàn | xác nhận | — |
-| 11 | INFO | Test không rò pool; container riêng mỗi test; `toContain(': app_api')` khớp cả tiền tố `app_api_login` | xác nhận | assert kèm đuôi ` —` |
+| 11 | INFO | ~~Test không rò pool~~ **[S1.35] bác — lượt soi 25b #1:** client `c3` của test khoản 78 nằm ngoài `try/finally`; container riêng mỗi test; `toContain(': app_api')` khớp cả tiền tố `app_api_login` | xác nhận | assert kèm đuôi ` —` |
 
 **Điều đáng mang sang vòng sau:** lớp đầu đóng nửa *bảng tạm* bằng cưỡng chế nhưng nửa *schema* chỉ phán
 xét trong khi tiền đề đỡ nó chưa được giữ — một lớp phải nêu cả thứ nó TỰA VÀO (ADR-036 §3⑴ nay áp cho
@@ -1507,3 +1527,116 @@ có quan hệ trùng tên nào để trỏ tới* thay vì bằng một câu SET
 vế ấy nói quá, evidence bác nó trước khi PR mở. Sáu lượt soi liền (19–24) đều
 bác bản đầu.
 
+# §S1.35 — lượt soi NGANG 25 trên sáu vòng đã hợp nhất (S1.29–S1.34): sổ nợ 79–82
+
+**Bề mặt an ninh:** 0 mã sản xuất. Hai tệp test đổi CHỈ ở chuỗi và một `finally`
+(`db/migrations.int.test.ts`: client `c3` vào `try/finally`; `db/hardening-suy-tu-tinh-chat.int.test.ts`:
+hai tiêu đề, hai chú thích, một thông điệp đỏ). Sổ sách: `docs/STATE.md` (hàng 79–82, biên bản 50, gạch
+tại chỗ hàng 77/78 và tiêu đề biên bản 49), `docs/DECISIONS.md` (ADR-035 §2⑴/§4; ADR-036 hàng 2, 13, 16
+sửa, hàng 19–22 mới, §3⑶ và §5), `docs/TEST-PLAN.md` (H19), `Handoff.md`, tệp này (hai mục §S1.33/§S1.34
+viết bù, lượt soi 21 #3 gạch).
+
+## Lượt soi 25 — lượt NGANG đầu tiên, chạy trên master `0b1d41c` SAU khi sáu vòng đã hợp nhất
+
+**Hình thức:** hai người soi độc lập, không có shell, chạy song song, không đọc kết quả của nhau.
+**25a** soi năm lớp CSDL (vị từ suy ra, tổng điều tra hàm/rule/RLS/relkind, nhân chứng, hardening
+S1.34, `vai-tro.ts`) với câu hỏi *"đặt sáu lớp cạnh nhau thì cái nào lách được cái nào"*; **25b** soi
+nhất quán tài liệu/mã trên `git diff bebeb41..0b1d41c` (six merge) với câu hỏi *"lời khai nào rộng hơn
+mã ngay dưới nó"*. Mọi phát hiện ĐO ĐƯỢC của 25a được người viết đo lại trên một PostgreSQL 16 sạch đã
+`migrate()` (bản nháp `db/zz-do-soi25.int.test.ts`, đã xoá; kết quả nguyên văn ở cột *đo được*). Khác sáu
+lượt trước: lượt này KHÔNG sửa lớp nào — mọi phát hiện đi vào sổ nợ hay vào chỗ gạch, và vòng vá là vòng
+kế (khoản 79–82).
+
+### 25a — lớp CSDL: 1 CAO, 4 NẶNG, 3 NHẸ, 4 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | **CAO** | Trigger canh có `WHEN (…)` hay `UPDATE OF <cột>` giữ nguyên tên hàm: bảng SUY RA vào tập chỉ-ghi-thêm (H19: LOGGED/TRUNCATE/ACL đều xanh) mà UPDATE cột khác và mọi DELETE đi qua. Hardening chỉ đọc `tgqual`/`tgattr` cho bảng CÓ TÊN (`CTE_TRIGGER_CHAN`); vị từ (cả hai bản) và tập rộng chỉ đọc `tgtype`/`tgenabled` | **xác nhận:** `zz1` với `BEFORE UPDATE OF a`, `BEFORE DELETE … WHEN (false)`, TRUNCATE — ba trigger `bid_chi_ghi_them`, ENABLE ALWAYS: `migrate()` OK; `UPDATE … SET b` **1 hàng**; `UPDATE … SET a` 23514; `DELETE` **1 hàng**; catalog `d.tgqual` có, `u.tgattr = '2'`; vị từ mô phỏng NHẬN `zz1` | **khoản nợ 79**; ADR-036 hàng 20 |
+| 2 | NẶNG | Mọi tổng điều tra lọc `lanname = 'plpgsql'` — lý do ấy đúng cho vị từ HÌNH DẠNG (prosrc của hàm C là tên symbol) nhưng được kế thừa sang tổng điều tra, nơi tiêu chí phải *không lách được bằng cách viết*; trigger gọi hàm `internal`/C/PL khác vô hình với census, vị từ, nhân chứng; bài học *ngôn ngữ đã đổi* của `audit_append` không sang census | **xác nhận:** `suppress_redundant_updates_trigger()` trên `zz2` ⇒ UPDATE cùng giá trị `rowCount` **0**, không lỗi; `lanname = 'internal'`; `migrate()` OK; hôm nay 0 trigger không-plpgsql trong dự án ngoài fixture | **khoản nợ 79**; ADR-036 hàng 21 |
+| 3 | NẶNG | ADR-036 §3⑶ *"test là đủ cho 5–10"* ↔ S1.31 cho hàng 3 lớp sản xuất *"vì bảng ấy có thể tồn tại trên cụm đã deploy"* — cùng tác nhân, cùng cụm; RESTRICTIVE `USING (false)` sau deploy sống qua mọi `migrate()`; *lớp canh: tổng điều tra* chỉ đứng trong CI | **đã đo sẵn trong kho:** `[INV-F1] ĐO` ở `rls-coverage` — `migrate()` OK với `zz_chan` còn nguyên | **khoản nợ 81** (một quyết định: hardening phán xét, hay sửa §3⑶ nói thẳng); §3⑶ ghi chú cách đọc tạm |
+| 4 | NẶNG | Cơ chế THIẾU trong ADR-036: trigger BEFORE ROW trả về hàng ĐÃ SỬA (`RETURN OLD`; gán lại `NEW.cột`) — cả ba vế ⒜⒝⒞ và ⒞′ của nhân chứng xanh mà giá trị không đổi; lượt soi 23 INFO-12 gạt *"hàng vẫn vào bảng"* quá nhanh | **xác nhận:** `zz_dao` `RETURN OLD` BEFORE UPDATE: `rowCount` 1, `RETURNING` `g = 'a'` (giá trị CŨ), `n_tup_upd` 1, `calls` 1, `g` sau câu vẫn `'a'` | **khoản nợ 80** (vế ⒠ so giá trị); ADR-036 hàng 19 |
+| 5 | NẶNG | `nhay_vai` là danh sách ĐEN (regex + bao đóng bậc một) ⇒ mặc định của nhân chứng là superuser, chiều nguy hiểm; lách rẻ không cần bọc: `pg_stat_activity.usename`, `current_setting('is_superuser')`, `current_setting('session_authorization')`, `pg_get_userbyid(…)`, `application_name`, bọc HAI bậc — lần thứ ba (lượt 20, 23, 25) và hai lần trước chỉ nới regex | **xác nhận:** `RE_NHAY_VAI` không khớp cả bốn chuỗi thử: `SELECT a.usename FROM pg_catalog.pg_stat_activity a …`, `current_setting('is_superuser')`, `current_setting('session_authorization')`, `pg_get_userbyid(1)` (`application_name` và bọc hai bậc: theo đọc, không đo) | **khoản nợ 80** (đảo thành danh sách TRẮNG: kịch bản chạy toàn bộ dưới `app_api`, superuser chỉ cho bộ ba khai đích danh) |
+| 6 | NHẸ | ADR-036 hàng 13 xếp `NO INHERIT` vào *lỗi*; `ALTER TABLE con NO INHERIT cha` thành công và từ đó câu ghi qua cha không chạm hàng ở con; không census nào đọc `pg_inherits`; kho có fixture con INHERITS (`khac`) | **xác nhận:** `UPDATE cha` trước: 1 hàng; sau `NO INHERIT`: **0 hàng**, không lỗi | hàng 13 sửa tại chỗ (tách `CHECK … NO INHERIT` khỏi `ALTER TABLE … NO INHERIT`); hàng 22 mới; lớp là **khoản nợ 82** |
+| 7 | NHẸ | Mục hardening ghim `caller_rate_limits_khach` bằng `pg_get_expr(polqual) = pg_get_expr(polwithcheck)` và `LIKE '%app.guest_session_id%'` — so theo CHUỖI CON, đúng kiểu [CR1] đã bác; [CR1] không soi (ngoài tenant), census RESTRICTIVE không (permissive), phủ lệnh thấy có policy; hệ quả: bộ đếm tốc độ không tăng — fail-open | **xác nhận:** `ALTER POLICY … USING (false AND NULLIF(…) IS NULL) WITH CHECK (cùng vế)` ⇒ `migrate()` OK; policy sau migrate vẫn mang `false AND` | **khoản nợ 82** (ghim NGUYÊN VĂN như `otp_rate_limits`) |
+| 8 | NHẸ → **bác** | `poolAs` của test-support đăng nhập superuser rồi `SET ROLE` ⇒ `"$user"` = `postgres`; một schema `postgres` chứa `sessions` che bảng thật cho MỌI phép đo dưới app_api trong CI, hardening *"cố ý không phán xét"* | **bác:** với schema `postgres.sessions` (USAGE + SELECT cho app_api), `current_schemas(false)` dưới `poolAs` = **`{public}`** — `"$user"` phân giải theo `current_user` (`app_api`), không theo session_user (`postgres`), nên KHÔNG che (đếm `sessions` trần ra 0 trong CSDL nháp chỉ vì bảng rỗng — không phải bằng chứng che; lượt soi 24 #8 đã nói đúng điều này); và **mục *quan hệ trùng tên* của S1.34 BẮT** cả schema ấy: `migrate()` gãy nêu *quan hệ trùng tên public trong một schema mà vai kết nối ứng dụng có USAGE* — lời khai *hardening cố ý không phán xét* cũng sai | không mở nợ; ghi ở ADR-036 §5 là *đã xét, không thêm* |
+| 9 | INFO | Triage ứng viên còn lại của ADR-036: MERGE/COPY/`ON CONFLICT … WHERE`/`SKIP LOCKED`/timeout — câu lệnh hay ném (12–14); statement trigger xoá lại qua transition table — ⒞′ bắt; event trigger re-GRANT — BƯỚC 3 đọc sau BƯỚC 2; `session_replication_role` — hàng 8; `SET LOCAL row_security = off` dưới app_api — lỗi; policy gọi hàm VOLATILE — ghim nguyên văn; `INSERT … RETURNING` bị policy SELECT lọc — *cần đo*; DEFAULT partition — hàng 10 | **đo phần cần đo:** policy `FOR SELECT USING (false)` + INSERT `WITH CHECK (true)`: `INSERT … RETURNING id` dưới `app_api` ⇒ **42501** *new row violates row-level security policy* — ồn ào; không RETURNING ⇒ OK, 1 hàng | ghi vào ADR-036 §5 *đã xét, không thêm* |
+| 10 | INFO | Kịch bản nhân chứng: mọi UPDATE trên `rfq_packages`/`rfq_items`/`unseal_requests` chạy dưới superuser trong khi ở sản xuất các hàm ấy SELECT bảng khác dưới RLS — *"đi đường hợp lệ"* chỉ đúng với đường owner; hai nhân chứng AFTER-ROW là UPDATE no-op `SET role_code = role_code` | xác nhận bằng đọc (`cau(...)` không SET LOCAL ROLE) | tự siết khi khoản 80 đảo mặc định vai; đo lại số bộ ba còn dưới owner khi ấy |
+| 11 | INFO | Hậu điều kiện `has_database_privilege(v, db, 'TEMP'/'CREATE')` với CHỦ database luôn true: nếu một vai kết nối ứng dụng là `datdba` (cấu hình sai) thì hai mục theo vai gãy vĩnh viễn với thông điệp sai hướng — chặn deploy đúng chiều, thông điệp không | lập luận đúng về ngữ nghĩa quyền chủ sở hữu; chưa dựng ca | ghi ở ADR-036 ⑯; sửa thông điệp / mục phán xét *không vai kết nối nào là datdba* đi cùng khoản 79/82 khi tệp mở lại |
+| 12 | INFO | `SET ROLE …; DISCARD TEMP` một câu đúng (chỉ `DISCARD ALL` bị cấm trong giao dịch); `DISCARD TEMP` xoá cả bảng tạm do secdef của chủ DB tạo trong phiên ấy — thu hẹp giới hạn ⑯ về *trong một lần cầm client*; không tác dụng phụ với pool/pg_dump/extension | xác nhận bằng đọc | một câu vào ADR-036 ⑯ |
+
+**Điều 25a nói mà không thành hàng:** mọi danh sách khai (`HAM_CANH_CHI_GHI_THEM`, `HAM_KHONG_PHAI_CANH`,
+`HAM_CANH_MOT_SU_KIEN`, `RULE_DA_KHAI`, `LOAI_DA_KHAI`, `POLICY_RESTRICTIVE_DA_KHAI`,
+`BANG_RLS_NGOAI_TENANT`) đều có đối chứng dương và đỏ hai chiều — cách lách rẻ nhất cho từng cái quy về
+ba chỗ: lách bằng NGÔN NGỮ (#2) thoát mọi danh sách hàm; lách bằng `WHEN`/`UPDATE OF` (#1) thoát vị từ;
+lách bằng *trả về hàng đã sửa* (#4) thoát nhân chứng. `RE_NHAY_VAI` là lời khai duy nhất chọn CHIỀU MẶC
+ĐỊNH nguy hiểm (#5).
+
+### 25b — nhất quán tài liệu/mã: 3 NẶNG, 9 NHẸ, 4 INFO
+
+| # | mức | phát hiện | kiểm | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | `db/migrations.int.test.ts` test khoản 78 (4): client `c3` không trong `try/finally`; một `expect` đỏ ⇒ client không trả ⇒ `db.stop()` treo tới timeout — khuôn lượt soi 20 #5 đã sửa ở tệp hardening, và mâu thuẫn lượt soi 24 #11 *"test không rò pool — xác nhận"* | đúng bằng đọc | **sửa:** bọc `try/finally`, `pid` lên `let` |
+| 2 | NẶNG | `evidence/security-reviews.md` không có `# §S1.33`/`# §S1.34`; lượt soi 23/24 treo dưới `# §S1.32` khai *0 mã sản xuất* trong khi S1.34 đổi 141 dòng hardening + `vai-tro.ts`; STATE §Tham chiếu mô tả tệp này là *một dòng mỗi task* — hai task không có dòng | đúng: `git diff 0b1d41c^1..0b1d41c --stat` | **sửa:** hai mục viết bù, ghi rõ *viết bù ở S1.35* |
+| 3 | NẶNG | Tiêu đề biên bản 49 khai lớp *PHÁN XÉT … USAGE NGOÀI PUBLIC* — bản đầu bị evidence bác (chính ⑶⒞ của biên bản nói vậy); mã thật phán xét *quan hệ trùng tên public trong schema vai có USAGE* | đúng | **sửa:** gạch tại chỗ, thêm câu vì sao |
+| 4 | NHẸ | Tiêu đề test tổng điều tra còn *BEFORE-ROW UPD/DEL* (thiu từ S1.31/S1.32); thông điệp đỏ bảo thêm *"một câu UPDATE/DELETE hợp lệ"* (thiu từ S1.33) | đúng | **sửa** cả hai chuỗi |
+| 5 | NHẸ | Chú thích *"Năm hàm AFTER-ROW UPDATE vào tập rộng"* đứng đầu một khối **25** tên (20 hàm S1.29 trộn 5 hàm S1.31, sắp theo tên) | đúng | **sửa** chú thích |
+| 6 | NHẸ | *"MỌI câu ghi của kịch bản là một nhân chứng"* / *"MỌI INSERT của kịch bản là nhân chứng"* rộng hơn mã: INSERT/DELETE `roles`, INSERT `mfa_credentials` cho `tt`, UPDATE `consumed_at` chạy trần ngoài `chung()` | đúng | **sửa** chú thích và biên bản 48: *mọi câu ghi trên bảng có trigger ở sự kiện ấy*; `chuaCoNhanChung` vẫn đòi đủ bộ ba nên không mất phủ |
+| 7 | NHẸ | Tiêu đề *"khai THẬT thì bảng của nó ĐƯỢC canh"* rộng hơn phép đo (d): chỉ chứng minh vị từ TRONG TEST nhận bảng; hardening ghim cứng hai tên nên `migrate()` KHÔNG canh `zz_so_moi` | đúng | **sửa** tiêu đề: *VÀO TẬP của vị từ*; phép đo đột biến với hardening đã chèn tên — không làm, ghi ở đây |
+| 8 | NHẸ | Hàng nợ 77/78 đã `[ĐÓNG]` nhưng tiền đề chưa gạch (*CHƯA CÓ NHÂN CHỨNG*; *Không dòng nào REVOKE TEMP…*) | đúng | **sửa:** gạch tại chỗ |
+| 9 | NHẸ | ADR-035 §2⑴ vẫn nêu *"mọi hàm plpgsql gắn BEFORE … FOR EACH ROW trên UPDATE/DELETE"* làm ví dụ tiêu chí *không lách được* — khoản 75 đã lách; §4 *"27 câu nhân chứng thay cho 24"* thiu sau S1.33 | đúng | **sửa:** gạch, ghi tiêu chí hiện tại; nối với 25a #2 |
+| 10 | NHẸ | ADR-036 hàng 2 thiếu INSERT (S1.32); §5 *"(hàng 16 hôm nay là một)"* chưa gạch dù câu kế nói 16 đóng | đúng | **sửa** cả hai |
+| 11 | NHẸ | Lượt soi 21 #3 cột *sửa* khai hai quyết định sau bị S1.33 đảo (`tginitdeferred`; nay CÓ ép IMMEDIATE) — không gạch, không con trỏ | đúng | **sửa:** gạch, trỏ lượt 23 #4 |
+| 12 | NHẸ | Hardening mục 2/4 (`has_database_privilege` đếm cả PUBLIC): nếu mục 1/3 không thu hồi được thì 2/4 cũng gãy nhưng thông điệp chỉ nói *cấp đích danh hoặc qua nhóm* — sai hướng | đúng bằng đọc | **chưa sửa** — đụng `hardening.always.sql`, đi cùng khoản 79/82; ghi ở ADR-036 ⑯ cùng 25a #11 |
+| 13 | INFO | Cặp mục 1/3 và 2/4 giống hệt trừ tên quyền; mục 6 chép một câu 9 dòng ở cả hậu điều kiện lẫn mô tả — hai bản sẽ trôi | đúng | **chưa sửa** — cùng lý do #12 |
+| 14 | INFO | TEST-PLAN H19 `[S1.32] … nhân chứng INSERT là khoản nợ 77` chưa gạch dù `[S1.33]` kế bên đóng nó (INV-matrix theo) | đúng | **sửa:** gạch; ma trận tái sinh |
+| 15 | INFO | *"chưa khai ⇒ tổng điều tra đỏ"* chỉ kiểm `daKhai.has(tên_mới) === false` trên hằng — đúng với bất kỳ tên mới nào; vế lọc thật của tổng điều tra không chạy lại | đúng | **chưa sửa** — INFO của test, ghi ở đây |
+| 16 | INFO | `db.poolAs("app_api")` gọi ba lần trong một test ⇒ ba pool; `stop()` đóng được nên chỉ lãng phí | đúng | **chưa sửa** — INFO |
+
+**25b kiểm và thấy KHỚP** (bằng đọc và `git diff --stat`, không chạy test): `[INV-H19]` 8→11→13→17→19→22
+đúng từng bước, INV-matrix H19 = 22; `rls-coverage` 21→25, F1 46→50; `migrations.int.test.ts` 94; 36 ADR ở
+ba chỗ; sổ nợ 78/12 mở ở STATE và Handoff, chuỗi 13/14/14/13/14/13/12 khớp biên bản 46–49;
+`HAM_KHONG_PHAI_CANH` 45 + 2 = 47 = 28 + 19; *0 mã sản xuất* S1.30/S1.32/S1.33, S1.31 17+/2− = *19 dòng*,
+S1.34 141 dòng + 1 dòng mã; *đỏ cả hai chiều* có thật ở RULE, F1 RESTRICTIVE, ngoài tenant, relkind;
+`RE_NHAY_VAI` khớp lượt 23 #3, `hoan = tginitdeferred` khớp #4, vai tạm trong `finally` khớp #6, hàng rào
+INSERT khớp #7; vị từ ở test và ba chỗ trong hardening cùng vế `proname IN (…)`; hai fixture `khac`/`gia`
+và mục 6 chỉ đếm trùng tên — khớp; `postgres:16-alpine`. Các con số KẾT QUẢ ĐO (30/35/38 bộ ba, 41/46
+trigger, 87 tổ hợp, 29 policy, `calls`, `n_tup_*`) là thứ đọc không kiểm được.
+
+**Điều đáng mang sang vòng sau:** sáu lượt soi dọc mỗi lượt bác bản đầu của một lớp mới, và không lượt nào
+đối chiếu lớp mới với lớp CŨ đã biết cùng một bài học — hai kẽ nặng nhất (#1, #2) là hai bài học S0 chưa
+sang được S1.29. Cái lưới nhân chứng được siết bốn lần bằng cùng một câu hỏi; câu hỏi khác (*hàng chạm có
+phải hàng đã gửi không*) chỉ hiện ra khi đặt bốn lần sửa cạnh nhau. Lượt soi ngang vì thế không thay lượt
+soi dọc — nó là thứ lượt soi dọc không làm được, và nên có sau mỗi năm-sáu vòng. Bảy lượt soi liền (19–25)
+đều bác một lời khai của người viết.
+
+## Lượt soi đối kháng 26 — chạy TRÊN chính bản sổ sách này, trước commit
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc mọi đoạn `[S1.35]`/`lượt soi 25` trong
+bảy tệp, bộ đọc của `[INV-H20]`, khối `c3`/`c4`), được giao sáu câu: lời khai rộng hơn nguồn; nhất quán đếm;
+quy ước gạch (số `~~` chẵn, không lồng); hình dạng bảng; test; mục nào của 25 chưa có địa chỉ. **Không
+NẶNG** — lượt đầu tiên từ 19. Sáu NHẸ, sáu INFO; sửa mười một, chấp nhận một.
+
+| # | mức | phát hiện | xử lý |
+|---|---|---|---|
+| 1 | NHẸ | Hàng nợ 77 còn nguyên *"MỌI INSERT của kịch bản là nhân chứng"* — lời khai 25b #6 bác được gạch ở biên bản 48 và chú thích test nhưng sót bản thứ ba | gạch tại chỗ |
+| 2 | NHẸ | Lượt soi 24 #11 *"test không rò pool — xác nhận"* và 23 #12 *"chỉ 1 và 2 còn hở"* bị chính lượt 25 bác mà không gạch, không con trỏ — trong khi cùng vòng đã gạch 21 #3 vì đúng lý do ấy | gạch cả hai, trỏ 25b #1 và 25a #4 |
+| 3 | NHẸ | Chú thích khối vị từ (`hardening-suy-tu-tinh-chat` :156) trích NGUYÊN VĂN tiêu đề test vừa đổi — con trỏ chết trong chính tệp, lặp lời khai 25b #7 đã bác | trích tiêu đề mới kèm nhãn `[sổ nợ 60] ĐO` |
+| 4 | NHẸ | 25b #12 khai *ghi ở ADR-036 ⑯* nhưng ⑯ chỉ mang nguyên nhân của 25a #11/#12, không có vế PUBLIC; ba mục hẹn *đi cùng khoản 79/82* (25a #11, 25b #12, #13) không có địa chỉ trong thân hai khoản ấy | ⑯ thêm vế PUBLIC; thân hàng 82 thêm câu *kèm khi mở tệp* |
+| 5 | NHẸ | ADR-036 §5 *"bốn hàng, ba có khoản nợ"* đọc như một hàng không có nợ — trái §3⑴; thực tế 20 và 21 cùng trỏ 79 | viết lại: *cả bốn chưa có lớp — 80 (19), 79 (20–21), 82 (22)* |
+| 6 | NHẸ | Hàng 79 ⑵ *"không tổng điều tra nào thấy, vị từ và nhân chứng cũng không"* và hàng 80 ⑴ *"⇒ cả ba vế ghi công"* đứng sau chữ *Đo* nhưng là SUY từ đọc bộ lọc/`chung()` — chưa chạy census trên `zz2`, chưa chạy `chung()` trên `zz_dao` | tách *đo* khỏi *theo đọc* ở STATE 79/80 và ADR-036 hàng 19 |
+| 7 | INFO | Hàng 81 nói *5–10* mà thân liệt kê 5, 6, 7, 10 — bỏ 8, 9 | thêm: 8/9 có phần hardening (047) nhưng phần tổng điều tra cũng test-only |
+| 8 | INFO | 25b #2 trỏ sai tệp: *"một dòng mỗi task"* là câu của STATE §Tham chiếu, không phải Handoff | sửa |
+| 9 | INFO | Đầu ADR-036 khai *khoản nợ liên quan: 60, 73–76* trong khi bảng nay trỏ 77–82 | thêm 77–82 với nhãn vòng |
+| 10 | INFO | Biên bản 50 ⑶ nói *gạch* cho cả chuỗi test — chuỗi test là THAY | sửa chữ |
+| 11 | INFO | Cột đo 25a #5 *"không khớp cả bốn chuỗi thử"* không nêu bốn chuỗi; STATE/TEST-PLAN nêu đích danh mà nguồn không tự đứng; người soi đọc `RE_NHAY_VAI` và xác nhận cả bốn đúng là không khớp | ghi bốn chuỗi vào cột đo, tách hai ứng viên chỉ đọc |
+| 12 | INFO | `db/zz-do-soi25.int.test.ts` nhắc ba chỗ là bản nháp đã xoá: kết quả đo 25a không tái lập được từ kho | **chấp nhận** — đã nói rõ là nháp; khoản 79/80/82 khi đóng phải dựng `zz1`/`zz2`/`zz_dao`/`NO INHERIT` thành test thật |
+
+**26 kiểm và thấy KHỚP:** 82 hàng mang nhãn trạng thái, 16 `[MỞ]` = {4, 10, 15, 18, 19, 30, 67–72, 79–82}
+trùng dòng tổng kết; 5 + 11 = 16 đúng từng tên; Handoff hai chỗ đúng khuôn `RE_KHOAN_NO`; 36 ADR, 56 bất
+biến không đổi; ADR-036 1–22 liên tục; số `~~` chẵn ở cả năm tệp sau khi bỏ trích dẫn trong đoạn mã; hàng
+79–82 đúng ba cột, con trỏ giải được; `pid` dùng được ở `c4`; 27 `.connect()` khác của `migrations.int.test.ts`
+đều có `try`; chuỗi tiêu đề cũ không còn ở `docs/`/`evidence/`/INV-matrix; biên bản 50 ⑴⒜ khớp
+`hardening.always.sql` 1329/1404–1406/1281 và `003_audit_events.sql:302–303`; fixture `khac` ở
+`migrations.int.test.ts:2847`; `zz_chan` ở `rls-coverage:1865`; `LIKE '%app.guest_session_id%'` ở
+hardening 6220. Không kiểm được bằng đọc: mọi con số kết quả đo, số test, thống kê `git diff --stat`, và
+việc `db.stop()` treo thật.
