@@ -2161,18 +2161,23 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
     // [lượt soi 32, NHẸ-2 + điều 2 mang sang] KHUÔN SENTINEL: mọi danh sách khai RỖNG là một hàng toàn chuỗi rỗng, và
     // chiều ngược của mục dùng nó PHẢI chắn `<> ''` — to_regclass('""."" ') im trên PG 16 nhờ đường soft-error, ném 42601
     // trên PG ≤ 15; xanh phải nhờ mã. Kiểm bằng văn bản trên cả năm danh sách của tệp hardening, không cần chạy SQL.
-    for (const [danhSach, biDanh, cot] of [
-      ["QUAN_HE_KHAC_KHAI", "q", "relname"],
-      ["TRIGGER_NGOAI_PLPGSQL_KHAI", "g", "tgname"],
-      ["RULE_KHAI", "r", "rulename"],
-      ["KE_THUA_KHAI", "k", "con_relname"],
-      ["BANG_ORG_ID_NGOAI_PUBLIC_KHAI", "oi", "relname"],
-    ] as const) {
-      expect(docHangHardening(danhSach), `${danhSach} hôm nay rỗng`).toMatch(/^\(VALUES \(''(?:, '')*\)\) AS /u);
+    // [lượt soi 33a, INFO-9] quét MỌI hằng `*_KHAI` của tệp thay vì ghim năm tên: danh sách nào RỖNG (hàng sentinel) thì chiều
+    // ngược của mục dùng nó phải chắn `<> ''` trên một cột của chính khối VALUES ấy; danh sách có hàng thì không cần.
+    const tatCaKhai = [...HARDENING_SQL.matchAll(/\n  ([A-Z_]+_KHAI) constant text :=/gu)].map((m) => m[1]!);
+    expect(tatCaKhai.length, "câu quét đang mù").toBeGreaterThanOrEqual(8);
+    let soRong = 0;
+    for (const danhSach of tatCaKhai) {
+      const khoi = docHangHardening(danhSach);
+      const sentinel = /^\(VALUES \(''(?:, '')*\)\) AS (\w+)\(([^)]*)\)$/u.exec(khoi);
+      if (!sentinel) continue;
+      soRong++;
+      const [, biDanh, cotChuoi] = sentinel;
+      const cot = cotChuoi!.split(",").map((t) => t.trim()).join("|");
       expect(HARDENING_SQL, `${danhSach}: chiều ngược phải chắn hàng sentinel`).toMatch(
-        new RegExp(`FROM \\$q\\$ \\|\\| ${danhSach} \\|\\| \\$q\\$\\n(?:\\s*--[^\\n]*\\n)*\\s+WHERE ${biDanh}\\.${cot} <> ''`, "u"),
+        new RegExp(`FROM \\$q\\$ \\|\\| ${danhSach} \\|\\| \\$q\\$\\n(?:\\s*--[^\\n]*\\n)*\\s+WHERE ${biDanh}\\.(?:${cot}) <> ''`, "u"),
       );
     }
+    expect(soRong, "hôm nay năm danh sách rỗng").toBe(5);
     expect(await ten(db.pool, cau), "lược đồ thật không có bảng org_id ngoài public").toEqual([]);
     const c = await db.pool.connect();
     try {

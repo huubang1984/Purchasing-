@@ -1810,7 +1810,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // ~~tạo hàm internal/C cần superuser, PL tin cậy khác chưa cài — ngoài mô hình đe doạ~~ [S1.37, lượt soi
     // 28] BÁC: chỉ TẠO hàm C cần superuser; GẮN hàm C có sẵn thì không — built-in ở trên, và extension tin
     // cậy `tcn` (hàm trigger C) chủ DB thường cài được (đo); plperl là extension tin cậy, plpython3u thì
-    // không. Mục hardening `prolang` là khoản nợ 83⑸.
+    // không. ~~Mục hardening `prolang` là khoản nợ 83⑸.~~ [S1.39, ghi ở S1.42 / lượt soi 33b #12] mục hardening
+    // `CAU_TRIGGER_NGOAI_PLPGSQL_SAI` đã có — vế "CHỈ Ở TEST" ở trên hết hiệu lực; census này là bản test của nó.
     const cau = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) t.tgname) AS ten,
                         l.lanname::pg_catalog.text AS ngon_ngu
                    FROM pg_trigger t
@@ -1896,6 +1897,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         CREATE SERVER zz_srv FOREIGN DATA WRAPPER file_fdw;
         CREATE FOREIGN TABLE public.zz_f (a int) SERVER zz_srv OPTIONS (filename '/dev/null');
       `);
+      // [lượt soi 33a, INFO-12] hành vi trước hình dạng: trigger INSTEAD OF trả NULL nuốt hàng — UPDATE qua view 0 hàng, không lỗi.
+      expect((await c.query("UPDATE public.zz_v_nuot SET mot = 2")).rowCount, "INSTEAD OF trả NULL ⇒ 0 hàng không lỗi").toBe(0);
       expect(await ten(c, "CAU_QUAN_HE_KHAC_SAI")).toEqual(["public.zz_f", "public.zz_m", "public.zz_v_nuot"]);
       // ⑸ — hàm built-in `internal` gắn được không cần tạo hàm; hàm plpgsql thì không bị phán.
       await c.query("CREATE TABLE public.zz_t (id int PRIMARY KEY, g text); CREATE TRIGGER s BEFORE UPDATE ON public.zz_t FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()");
@@ -1945,13 +1948,26 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       await db.pool.query("DROP TABLE public.zz_t83");
     }
     await db.pool.query("GRANT SET ON PARAMETER session_replication_role TO app_api");
+    const datReplica = async (): Promise<string> => {
+      const c = await db.pool.connect();
+      try {
+        await c.query("SET ROLE app_api");
+        return await c.query("SET session_replication_role = replica").then(() => "OK", (e: Error & { code?: string }) => e.code ?? "LỖI");
+      } finally {
+        await c.query("RESET ROLE; RESET session_replication_role");
+        c.release();
+      }
+    };
     try {
+      // [lượt soi 33a, INFO-12] hành vi trước hình dạng: có GRANT thì app_api đặt được replica — tiền đề của ADR-036 hàng 8.
+      expect(await datReplica(), "app_api đặt được replica sau GRANT").toBe("OK");
       const kq = await migrateLai(db);
       expect(kq).toMatch(/^NÉM/);
       expect(kq).toContain("session_replication_role: quyền SET trên tham số cấp cho app_api (khoản 83⑧");
     } finally {
       await db.pool.query("REVOKE SET ON PARAMETER session_replication_role FROM app_api");
     }
+    expect(await datReplica(), "đối chứng: sau REVOKE là 42501").toBe("42501");
     // [lượt soi 30, NHẸ-3] quyền đến QUA NHÓM: cấp cho một role thứ ba rồi cho app_api làm thành viên — BƯỚC 1 gỡ tư cách
     // thành viên lạ ở lượt sửa, nên migrate() vẫn NÉM nhưng ở mục membership; câu phán xét ⑧ chạy riêng TRƯỚC khi gỡ
     // phải tự thấy (has_parameter_privilege), không tựa vào BƯỚC 1.
@@ -1964,9 +1980,15 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     // [lượt soi 30, NHẸ-4] mức database (superuser) — mục tự chữa RESET.
     const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+    // [lượt soi 33a, NHẸ-4] fixture mức DATABASE trên CSDL dùng chung của tệp: một `expect` đỏ mà không RESET thì mọi kết
+    // nối mới của tệp chạy ở `replica` — trigger ENABLE thường im, các test sau đỏ dây chuyền sai hướng. Bọc lại.
     await db.pool.query(`ALTER DATABASE "${tenDb}" SET session_replication_role = replica`);
-    expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, đi qua").toBe("OK");
-    expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_db_role_setting s WHERE s.setrole = 0 AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\\_replication\\_role=%')")).rows[0]?.n, "GUC mức database đã bị RESET").toBe("0");
+    try {
+      expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, đi qua").toBe("OK");
+      expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_db_role_setting s WHERE s.setrole = 0 AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\\_replication\\_role=%')")).rows[0]?.n, "GUC mức database đã bị RESET").toBe("0");
+    } finally {
+      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET session_replication_role`);
+    }
     expect(await migrateLai(db), "đối chứng: gỡ hết ⇒ đi qua").toBe("OK");
   }, 180000);
 

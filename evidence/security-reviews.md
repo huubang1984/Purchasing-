@@ -1918,3 +1918,82 @@ không bị.
 sót một ở cùng tệp là bằng chứng; ⑵ ~~khuôn sentinel cần meta-test~~ làm trong vòng; ⑶ ranh giới theo tên cột
 `org_id` — khoản 86, đường tính-chất là đổi `MAU_VI_TU_BANG_TENANT`, cần vòng riêng có đo trên lược đồ thật; ⑷ cửa
 sổ giữa hai lần deploy: "phát hiện ở deploy kế" là mức bảo đảm của mọi mục phán xét — ghi ở ADR-036 §5.
+
+# §S1.42 — lượt soi NGANG 33 trên S1.35–S1.41: khoản 87–89 mở, hai NẶNG tài liệu sửa tại chỗ, lời "(đo)" của S1.40 thành test — 0 MÃ SẢN XUẤT
+
+**Bề mặt an ninh:** không đổi một dòng `hardening.always.sql`. Đổi ở test: `db/hardening-suy-tu-tinh-chat.int.test.ts`
+(fixture GUC mức database vào `try/finally`; hai dòng đo hành vi ⑷/⑧), `db/migrations.int.test.ts` (96 → 97: test bảng
+tạm kế thừa; đối chứng dương [CR1] ở `con_tt`; hai tiêu đề), `db/rls-coverage.int.test.ts` (meta-test sentinel quét mọi
+`*_KHAI`), năm tệp tài liệu và tệp này.
+
+## Lượt soi 33 — lượt NGANG thứ hai, chạy trên master `3811d37` SAU khi bảy vòng đã hợp nhất
+
+**Hình thức:** như lượt 25 — hai người soi độc lập, không shell, song song, không đọc nhau. **33a** đặt mười bốn mục
+phán xét/sửa mới (S1.36–S1.41) cạnh các lớp cũ ((A), [CR1], `CTE_TRIGGER_CHAN`, vị từ chỉ-ghi-thêm, trùng tên,
+TEMP/CREATE, sổ kiểm toán, nhân chứng) với câu hỏi *"cái nào lách được cái nào"*; **33b** soi lời khai vs mã và con số
+vs con số trên `git diff 0b1d41c..3811d37` (bảy merge). Ba phát hiện đo được của 33a được người viết đo lại trên
+PostgreSQL 16 sạch đã `migrate()` (bản nháp `db/zz-do-soi33.int.test.ts`, đã xoá). Như lượt 25: không sửa lớp nào.
+
+### 33a — lớp CSDL: 1 CAO (đo hạ), 1 NẶNG, 5 NHẸ, 6 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | CAO → **NHẸ (đo hạ)** | `ALTER DATABASE … SET app.org_id / app.guest_session_id` bởi chủ database không superuser: ba mục GUC mức database ghim TÊN, ranh giới tenant/khách là năm GUC `app.*` ⇒ [INV-F1] *chưa gắn ⇒ 0 hàng* lật thành *⇒ tổ chức B* ngoài `withTenant`; mọi phiên thành phiên khách ⇒ 21 policy `_khach` thu hẹp ⇒ câu ghi 0 hàng | **bác ở mức:** chủ DB `zz_chu` (không superuser) ⇒ **42501** cho cả hai GUC (PG 16: placeholder chỉ superuser đặt ở mức database); `migrate()` OK; `pg_db_role_setting` rỗng; app_api không gắn ⇒ `app_current_org_id()` NULL, `count(users)` 0; gắn A ⇒ 1 | vế ⒞ §3⑶; phần theo tính chất + `withTenant` → **khoản 87** |
+| 2 | NẶNG | `CAU_PHU_LENH_SAI` (83⑵) ghim bốn tên vai — bản chép thứ ba — trong khi ⑧ đã đổi sang `VAI_KET_NOI_UNG_DUNG` vì đúng lý do này; tựa BƯỚC 1 gỡ membership mà không nói ra | đúng theo đọc | **khoản 88** |
+| 3 | NHẸ | `MAU_SCHEMA_DU_AN` còn ba bản chép inline (mục (C) ×2, `VI_TU_BANG_CHI_GHI_THEM`); chú thích nói "dùng lại bộ lọc của (C)" mà (C) không dùng hằng | đúng theo đọc | khoản 88 ⑴ |
+| 4 | NHẸ | Fixture `ALTER DATABASE … SET session_replication_role` trên CSDL chung của H19 không `try/finally` — một `expect` đỏ ⇒ mọi kết nối mới chạy `replica`, đỏ dây chuyền sai hướng | đúng theo đọc | **sửa:** bọc `try/finally` RESET |
+| 5 | NHẸ → **NẶNG (đo)** | `BANG_CHI_GHI_THEM` khai theo TÊN: RENAME sổ + DROP bốn trigger + CREATE TABLE cùng tên cùng hình dạng + policy đúng khuôn + GRANT ⇒ D2 dựng sáu trigger lên bảng mới rỗng, lịch sử ở bảng cũ không mục nào canh | **đo:** bản đầu NÉM ở **83⑴** (`audit_events_cu.audit_events_khach` RESTRICTIVE chưa khai — chặn nhờ danh sách theo TÊN khác); thêm `DROP POLICY audit_events_khach ON audit_events_cu` ⇒ `migrate()` **OK**, bảng mới 0 hàng với 4 trigger, bảng cũ 1 hàng không trigger | **khoản 89** |
+| 6 | NHẸ | Khoản 86 đường hai câu: `RENAME COLUMN org_id TO to_chuc` + `DISABLE ROW LEVEL SECURITY` trên `users` | **đo:** hai câu ⇒ NÉM ở 83⑴ (`to_chuc = …` không thuộc lớp nào); thêm `DROP POLICY` ×2 ⇒ `migrate()` **OK**, app_api gắn A đọc thấy `a@a`, `b1@b` | ghi số vào khoản 86; cùng bài học 89 |
+| 7 | NHẸ | `not.toContain("con_tt: không có policy PERMISSIVE")` là bằng chứng duy nhất còn lại cho "miễn policy riêng", không có đối chứng cùng test rằng [CR1] CÓ THỂ kêu | đúng theo đọc | **sửa:** `zz_doc` ở public không policy ⇒ NÉM `zz_doc: không có policy PERMISSIVE`, `con_tt` không |
+| 8 | INFO | Bộ giải hằng: tham số `format` chứa `$`, `,`, `(`, `)` cho SQL sai mà có thể vẫn chạy; hôm nay `'%2$s'` đúng vì `$s` không phải mẫu thay thế JS | đúng theo đọc | khoản 88 ⑸ |
+| 9 | INFO | Meta-test sentinel ghim năm tên — danh sách thứ sáu bị làm rỗng sau này không được kiểm | đúng | **sửa:** quét mọi `*_KHAI`, đếm rỗng = 5 |
+| 10 | INFO | Hai thông điệp thiếu nhãn khoản/hàng ADR (`CAU_TRIGGER_CANH_CO_DIEU_KIEN`, `CAU_HAM_CANH_HINH_THUC_SAI`) | đúng | khoản 88 ⑵ |
+| 11 | INFO | 79/⑺ chỉ xanh trên bảng sổ vì D2 sửa ở BƯỚC 2 trước — biên bản có, chú thích hằng không | đúng | khoản 88 ⑶ |
+| 12 | INFO | Test đo hình dạng, lời nói hành vi: ⑷ không UPDATE nào lên view INSTEAD OF; ⑧ không đo app_api đặt được `replica` | đúng | **sửa:** UPDATE ⇒ 0 hàng; `SET ROLE app_api; SET … = replica` OK sau GRANT, 42501 sau REVOKE |
+| 13 | INFO | Trigger plpgsql có RETURN chép NEW sang bảng không `org_id` rồi GRANT — không mục nào kêu; vế ⒝ §3⑶ | đúng theo đọc | nối vào khoản 86 |
+
+**33a kiểm và thấy KHỚP:** chiều ngược bảy danh sách khai neo cha tồn tại và `to_regclass(format('%I.%I'))`; lọc
+`pg_temp` ở mười hai mục mới; phân hoạch 85/83⑶ kín; bí danh không va kể cả lồng ba bậc; bộ giải: `NEO_003` ném, cổng
+hai bản so với chính hằng; các đường lách khác đều rơi vào một mục — `ALTER POLICY … TO` ⇒ 83⑵; RENAME policy đã khai ⇒
+đỏ hai chiều; `NO FORCE` ⇒ (A) bật lại mỗi lượt; `DISABLE TRIGGER USER` ⇒ 41 trigger có tên ghim `'A'` + 79 cho hàm canh
+suy ra; `ALTER FUNCTION app_current_org_id() SET search_path` ⇒ `proconfig IS NULL` và R3 dựng lại; DROP FUNCTION CASCADE
+⇒ [CR1]; event trigger cần superuser; SECDEF ngoài public ⇒ (C); DETACH/ATTACH/INHERIT ⇒ 82⑴/83⑶/85; bảng tạm ⇒ loại
+đúng; SET SCHEMA qua lại ⇒ 83⑶ rồi 85 rồi [CR1].
+
+### 33b — nhất quán tài liệu/mã: 2 NẶNG, 11 NHẸ, 6 INFO
+
+| # | mức | phát hiện | kiểm | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Sổ đăng ký F1 (TEST-PLAN:99, và INV-matrix sinh từ nó) khai *"phủ lệnh (miễn con của bảng tenant)"* — mã KHÔNG miễn (lượt 29 NẶNG-2 bỏ trước khi S1.38 hợp nhất); sống bốn vòng qua ba lượt dọc | đúng: `CAU_PHU_LENH_SAI` không có `LA_CUA_BANG_TENANT`; test `[Minor] con INHERITS` mong NÉM ở ⑵ | **sửa:** gạch + nhãn, tái sinh ma trận |
+| 2 | NẶNG | Lời *"(đo)"* về bộ lọc `pg_temp` (S1.40) ở sáu tài liệu mà kho không tái lập: không test `CREATE TEMP TABLE … INHERITS`, ba đột biến S1.40 không chạm bộ lọc — gỡ hai bộ lọc thì không test nào đỏ | đúng: grep diff test | **sửa:** test thật ở `migrations.int.test.ts` + **hai đột biến đo** (bỏ lọc ở vế con cháu ⇒ (A) phán `pg_temp_N.zz_tam`; bỏ ở 82⑴ ⇒ cặp `pg_temp` chưa khai) — đỏ cả hai |
+| 3 | NHẸ | S1.39 khai *"năm mục ARRAY"* — diff có SÁU (năm phán xét + mục tự chữa RESET GUC mức database) | đếm `ARRAY[` | **sửa** biên bản 54 |
+| 4 | NHẸ | Câu *"§3⑶ thực hiện trọn"* (biên bản 54, ADR-036 §5) bị lượt 31 INFO-6 bác mà S1.40 chỉ viết thêm, không gạch | đúng | **sửa:** gạch + nhãn ở hai nơi |
+| 5 | NHẸ | ADR-036 hàng 9 chỉ nói tổng điều tra (S1.29) dù S1.36 có lớp sản xuất (`tgenabled <> 'A'`) | đúng | **sửa** |
+| 6 | NHẸ | Hàng 21 *"CHỈ Ở TEST"* chưa gạch; hàng 22 *"⇒ khoản 85"* ×2 như còn mở | đúng | **sửa** |
+| 7 | NHẸ | ADR-036 §4 *"bốn danh sách khai mới"* thiu (nay tám); giá deparse chỉ nói ở test dù đã ở hardening | đúng | **sửa** |
+| 8 | NHẸ | Sổ nợ 82/83/84: tiền đề đã đóng chưa gạch | đúng | **sửa** |
+| 9 | NHẸ | Sổ nợ 79: hai vế bị bác chưa gạch (*CHỈ Ở TEST*; ranh giới superuser) | đúng | **sửa** vế thứ nhất; vế thứ hai đã có nhãn 81 kề bên |
+| 10 | NHẸ | TEST-PLAN đoạn *Giới hạn của H19* còn *"tổng điều tra ấy chỉ ở test"* | đúng | **sửa** |
+| 11 | NHẸ | STATE §Tham chiếu mô tả `security-reviews.md` là *"một dòng mỗi task"* (25b #2 đã bắt, lượt 26 chỉ sửa con trỏ) | đúng | **sửa** |
+| 12 | NHẸ | Chú thích test H19 *"Vì sao CHỈ Ở TEST … Mục hardening prolang là khoản nợ 83⑸"* — cùng tệp có test 83⑸ NÉM | đúng | **sửa** |
+| 13 | NHẸ | Hai chú thích *BẬC TỰ DO CÒN LẠI* cũ trong hardening chưa gạch (RESTRICTIVE no-op; bảng tenant ngoài public) | đúng | khoản 88 ⑷ — không đụng hardening ở vòng này |
+| 14 | INFO | Biên bản 53 thiếu vế *"N có hình dạng mã nguồn"* | đúng | **sửa** (mười hai) |
+| 15 | INFO | Tiêu đề test 84/85 nói *"trước … migrate() đi qua"* mà test không đo bản cũ (chỉ đột biến) | đúng | **sửa** tiêu đề |
+| 16 | INFO | Biên bản 51/53/54 tiêu đề ⑷ lặp hai lần | đúng | **sửa** 53/54 |
+| 17 | INFO | ADR-036 hàng 11 (constraint trigger DEFERRED) không nằm ở vế nào của §3⑶ | đúng | **sửa:** một câu — điều kiện đo, không phải cơ chế |
+| 18 | INFO | Hai lời hẹn không địa chỉ: nhịp lượt ngang; FK CASCADE qua BEFORE ROW *chưa đo* từ lượt 27 | đúng | nhịp → Handoff; FK → khoản 88 ⑹ |
+| 19 | INFO | *Chép vị từ thay vì dùng chung* chưa có lớp máy (chỉ cổng từng ca) | đúng | ghi nhận — mang sang |
+
+**33b kiểm và thấy KHỚP:** H19 22→25→28→30 và INV-matrix 30; rls-coverage 25→28→30, F1 50→55; migrations 94→95→96;
+Handoff hai dòng khớp biên bản 50–56; CÒN MỞ 14 = 13 [MỞ] + 1 [NỬA]; hai câu đếm khớp từng vòng; hàng 79–86 ba cột,
+không `||` trần; mọi tên hằng ở STATE/ADR-036/§S1.3x tồn tại đúng chữ trong diff; *0 mã sản xuất* S1.35/S1.37 đúng;
+36 ADR; §S1.35–§S1.41 đủ bảy; lượt 26–32 đủ *kiểm và thấy khớp*; các kỳ vọng lật đều mang gạch + nhãn; lượt 26 #12
+đã được 79 và 82⑴ thi hành.
+
+**Điều đáng mang sang vòng sau:** ⑴ *"(đo)"* phải có địa chỉ test hoặc tự khai là nháp — lần này nó lọt vào cả sổ
+đăng ký bất biến; ⑵ lượt soi dọc phải nhận diff TEST-PLAN/INV-matrix trong phạm vi bắt buộc — câu sai sống bốn vòng
+vì không ai đọc hàng F1; ⑶ bảng ADR-036 tự khai là NGUỒN nhưng chỉ hàng MỚI được cập nhật — meta-test rẻ: mọi
+`CAU_*_SAI` phải được nhắc ở một hàng §2 và ngược lại (khuôn `[INV-H20]` P4); ⑷ con số "N mục" đếm cơ khí; ⑸ bài học
+không tự quay lại mục TRƯỚC (83⑵) lẫn danh sách CŨ NHẤT (`BANG_CHI_GHI_THEM`) — và bài học thứ năm: *danh tính theo
+tên hay hình dạng đều tái tạo được, chỉ `oid` là không*; ⑹ câu hỏi ngang kế: *mọi thứ policy/hàm ghim ĐỌC VÀO là gì,
+và ai đặt được nó trước khi phiên bắt đầu* — GUC, `pg_db_role_setting` mọi setdatabase, `options=` trên chuỗi kết nối.
