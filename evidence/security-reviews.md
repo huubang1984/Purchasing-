@@ -2062,3 +2062,59 @@ gãy thô" như BƯỚC 2 — hàm catalog ném theo dữ liệu người khác 
 BƯỚC 3 ghi "mục X không đánh giá được" là rẻ và đóng cả lớp (khoản 88 kèm); ⑷ ghi-lấp im lặng là chỗ oid đổi mà không ai
 được báo — WARNING có chủ đích là lớp nhìn thấy rẻ nhất trước khi D2 chuyển sang danh tính; ⑸ bộ test bác bản đầu
 TRƯỚC người soi — lượt chạy trọn tệp sau mỗi mục sửa mới là phép đo rẻ nhất của vòng, không phải bước cuối.
+
+# §S1.44 — khoản nợ 88: mục 83⑵ lấy tập vai theo tính chất, sáu việc "kèm khi mở tệp hardening", BƯỚC 2/3 không gãy thô — MÃ SẢN XUẤT; khoản 90 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `CAU_PHU_LENH_SAI` (tập vai = `VAI_KET_NOI_UNG_DUNG` ∪ `ROLE_CANH`,
+quyền theo kế thừa; `ROLE_CANH` dời lên trước), `VAI_KET_NOI_UNG_DUNG` (`'MEMBER'` → `'USAGE' OR 'SET'` — hồ sơ N3 đo),
+`CAU_DOC_VONG` hai nhánh và `VI_TU_BANG_CHI_GHI_THEM` khai triển `MAU_SCHEMA_DU_AN` qua `format()` (hết ba bản chép inline),
+hai thông điệp thêm nhãn, hai chú thích gạch, hai chú thích "D2 sửa trước", BƯỚC 2 (cột điều kiện) và BƯỚC 3 (trọn mục)
+bọc `EXCEPTION WHEN OTHERS`. `db/hardening-hang.ts` — văn phạm tham số `format()`, split/join, kiểm thiếu tham số trước
+khi thay, tên hằng có đệm. Test: `db/hardening-hang.test.ts` (T1, mới), `db/rls-coverage.int.test.ts` (31 → 32),
+`db/hardening-suy-tu-tinh-chat.int.test.ts` (30 → 32), `db/migrations.int.test.ts` (101 → 102: hồ sơ N3). Không migration
+đánh số, không GRANT, không bảng mới.
+
+**Đo:** vai lạ thành viên app_api + GRANT DELETE trên bảng RLS chỉ có policy SELECT ⇒ bản bốn tên (dựng lại từ câu mới)
+IM, tính chất kêu đúng một dòng. FK `ON DELETE CASCADE`/`SET NULL`/`TRUNCATE … CASCADE` từ cha ⇒ trigger hàng/TRUNCATE của
+con NÉM, hàng còn nguyên; đối chứng không hàm canh ⇒ hàng mất; FK từ năm bảng chỉ-ghi-thêm đều NO ACTION. Hardening chép
+ra thư mục tạm với ba mục tiêm ⇒ lượt sửa đi qua, một thông báo `(phan_xet)` gom ba dòng đúng ba tên với SQLSTATE 22012.
+Bộ giải nghiêm bắt ngay `MAU_VI_TU_BANG_TENANT` truyền `'%2$s'` (mẫu chuyền tiếp — nay là một hình dạng được nhận) và
+`COT_NEO` khai có đệm khoảng trắng (từng vô hình). Hồ sơ N3 (lượt soi 36 #3): với `'MEMBER'` lượt sửa thu hồi CREATE của
+chính chủ database và 001 gãy thô; với `'USAGE' OR 'SET'` 49 migration đi qua, vai deploy ngoài tập, deploy dừng ở phán xét
+với một mục có tên và lối ra. Trọn tệp: `rls-coverage` 32/32, H19 32/32, `hardening-hang` 4/4, `migrations.int.test.ts`
+102/102, T1 724/724; t0 210 / 0.
+
+**Đỏ đo được, cô lập (năm đột biến, khôi phục trước mỗi ca):** M1 bốn tên ⇒ đỏ test 88; M2 khoá cứng `public` ở VI_TU ⇒ đỏ
+"phải BẰNG qua bộ giải"; M3 bỏ khối BƯỚC 3 ⇒ `division by zero` trần; M4 bỏ khối BƯỚC 2 ⇒ lượt SỬA gãy `(sua)`; M5 khoá cứng
+`public` ở nhánh SECDEF ⇒ `[I3] SECDEF ở schema khác` lọt `migrate()`; M6 (sau lượt soi 36) `VAI_KET_NOI_UNG_DUNG` về
+`'MEMBER'` ⇒ hồ sơ N3 đỏ ở 001 `permission denied for database`.
+
+### Lượt soi đối kháng 36 (trên bản đầu của S1.44 — "chỉ tính chất"): 1 NẶNG, 4 NHẸ, 4 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Tập theo tính chất là TẬP CON theo membership: `REVOKE app_api FROM app_api_login` (ADMIN OPTION làm được — chính vai đã GRANT lúc dựng cụm) + `GRANT SELECT ON users TO app_api_login` ⇒ kết nối thật (INHERIT) đọc 0 hàng không lỗi (ADR-036 hàng 6); bản bốn tên kêu, bản tính chất IM; test 88 chỉ khẳng định "không mất gì" cho ba vai CÓ MẶT — hai role đăng nhập không tồn tại ở CSDL test | đúng theo đọc, **đo** | tập vai = `VAI_KET_NOI_UNG_DUNG` ∪ `ROLE_CANH` (hằng đã có, dời lên — không bản chép thứ ba); test dựng `app_api_login` không membership trong giao dịch: bản chỉ-tính-chất IM, câu hợp thấy; GRANT membership lại ⇒ dòng biến mất |
+| 2 | NHẸ | ⑵ chỉ thấy grantee TRỰC TIẾP (`a.grantee = vai.oid`) trong khi 83⑧ cùng tập vai thấy bắc cầu; quyền tới `app_api` qua NHÓM ⇒ ⑵ im, lớp chịu lực vẫn là membership lạ ở BƯỚC 1/3 — và chú thích "BƯỚC 1 không gỡ được ⇒ bốn tên IM" nói quá: `CAU_MEMBERSHIP_LA` ở BƯỚC 3 đã chặn `migrate()` | đúng theo đọc, **đo** | JOIN theo `pg_has_role(vai.oid, grantee, 'USAGE')` (CASE cho PUBLIC), mô tả nêu `(qua <nhóm>)`; chú thích viết lại; test: GRANT UPDATE cho nhóm mà app_api là thành viên ⇒ ba dòng (app_api, app_api_login, zz_vai88), bản grantee-trực-tiếp IM |
+| 3 | NHẸ | Vai deploy CREATEROLE tự chạy BƯỚC 0 ⇒ PostgreSQL 16 cấp membership ngầm `WITH ADMIN OPTION` (INHERIT FALSE, SET FALSE, grantor superuser bootstrap) ⇒ `pg_has_role(…, 'MEMBER')` TRUE ⇒ vai deploy ∈ tập với tư cách CHỦ bảng ⇒ ⑵ đỏ trên mọi bảng RLS — trừ khi BƯỚC 1 gỡ được (grantor không phải nó thì không); hồ sơ N2 hiện có không chạm ca này | cần đo → **đo: tệ hơn người soi đoán** — chưa tới ⑵: mục "quyền CREATE/TEMP trên database của vai ứng dụng và mọi thành viên" ở LƯỢT SỬA đã thu hồi CREATE của chính chủ database ⇒ 001 gãy `permission denied for database` (tiền tồn từ S1.34); BƯỚC 1 WARNING "has not been granted membership … by role trien_khai" | `VAI_KET_NOI_UNG_DUNG`: `'MEMBER'` → `'USAGE' OR 'SET'` (kế thừa hoặc SET ROLE được — membership chỉ-admin không phải kết nối ứng dụng); test hồ sơ N3 mới: 49 migration đi qua, vai deploy ngoài tập, ⑵ rỗng, deploy dừng ở phán xét với đúng một mục có tên (membership lạ) + lối ra (superuser REVOKE ⇒ đi qua); đột biến M6 về `'MEMBER'` ⇒ đỏ ở 001 |
+| 4 | NHẸ | Bộ giải chỉ biết `%n$s` và `%%`; `%s`/`%I`/`%L`/`%` lẻ đi qua nguyên văn — `%s` cho ra SQL KHÁC PG mà vẫn hợp lệ; T1 miễn kiểm mẫu còn sót cho MỌI `MAU_*` theo tiền tố tên | đúng theo đọc | ném khi còn `%` ngoài văn phạm sau khi thay; T1 thêm `%s`, `%I`, `%` lẻ ⇒ ném; miễn mẫu tính từ chính tệp (`pg_catalog.format(NAME`), không theo tiền tố |
+| 5 | NHẸ | Bất biến "BƯỚC 3 không gãy thô" chưa phủ hai EXECUTE membership đầu BƯỚC 3 | đúng theo đọc | bọc cùng khuôn, dòng gom "KHÔNG ĐÁNH GIÁ ĐƯỢC — câu kiểm ném" |
+| 6 | INFO | BƯỚC 2 "điều kiện ném = chưa đủ điều kiện" đổi mục tự chữa thành mục chặn deploy dưới vai thiếu quyền — đúng chiều (ném ở lượt sửa thì ném lại ở lượt phán xét cùng vai ⇒ dòng gom ⇒ RAISE BƯỚC 4), nhưng test chỉ tiêm 22012 dưới superuser; ca thúc đẩy (42501 dưới N2) chưa có test tiêm | xác nhận chiều fail-closed | ranh giới ghi ở biên bản 59 ⑸ — tiêm 42501 dưới vai N2 là việc của một vòng có hồ sơ N2 ở tệp H19 |
+| 7 | INFO | Nhãn `CAU_TRIGGER_CANH_CO_DIEU_KIEN` chỉ nêu hàng 20 trong khi vế `tgenabled <> 'A'` là hàng 8–9; hàng 2 của ⑺ đúng; chú thích ⑶ có thật (`migrations.int.test.ts` + §S1.36) | đúng theo đọc | nhãn "hàng 8–9/20" |
+| 8 | INFO | Test ⑹ đo đúng câu lượt 27 hỏi, có đối chứng dương, census đo trước fixture; nhưng `Set(fk.bang) == năm bảng` đòi MỌI bảng chỉ-ghi-thêm có FK — bảng tương lai không FK làm test đỏ vì lý do lạ | xác nhận | ⊆ + không rỗng |
+| 9 | INFO | Test ⑺ không để lại gì trên CSDL chung: `.always.sql` không vào `schema_migrations`, bản sao byte-giống ⇒ checksum khớp, GUC phạm vi giao dịch, lượt phán xét ROLLBACK; mốc chèn tựa LF — `.gitattributes` + khẳng định tĩnh cấm CR giữ | xác nhận | — |
+
+**Khớp — người soi kiểm bằng đọc:** phủ policy `pg_has_role(vr, o, 'USAGE')` ≡ `has_privs_of_role` mà RLS dùng (NOINHERIT
+nhất quán hai phía); PUBLIC ở cả policy lẫn GRANT; `NOT rolsuper` đúng; BYPASSRLS không superuser bị phán dư (fail-closed).
+`MAU_SCHEMA_DU_AN` khai trước mọi hằng dùng nó trong một khối DO; `%%`→`%` và `\_` giữ nguyên byte; 83 hằng không trùng
+tên. Văn phạm tham số `format()` chặn `)`, `,`, khoảng trắng, `$&`/`$1`; chuyền tiếp `'%2$s'` kiểm ở mức format() bọc
+ngoài; `[ ]+` tìm được `COT_NEO`; `CASE` vẫn ném; 29 lời gọi `format()` trong tệp đều thuộc hai hình dạng. Khối con BƯỚC 3:
+biến PL/pgSQL không rollback nhưng `loi_gom` chỉ nối sau `chi_tiet` thành công; cột 4/5 toàn SELECT; `CONTINUE WHEN` trong
+khối con hợp lệ; không mục nào dùng `RAISE` ở cột 4/5 để chặn deploy — mọi mục trước đây "chặn bằng lỗi thô" nay vẫn chặn
+qua BƯỚC 4; chế độ `day_du` đi cùng đường. Hai chú thích BẬC TỰ DO gạch đúng địa chỉ.
+
+**Điều đáng mang sang vòng sau:** ⑴ "theo tính chất" chỉ đúng khi tính chất là thứ kẻ tấn công KHÔNG đổi được — membership
+là thứ ADMIN OPTION đổi được, nên tập kết nối ứng dụng cần một vế neo (tên đã ghim ở `ROLE_CANH`; hoặc một mục đòi cặp
+`CAP_HOP_LE` tồn tại — chiều THIẾU của danh sách trắng, chưa có); ⑵ mọi test "không mất gì so với bản chép" phải dựng cả
+những chủ thể mà CSDL test CỐ Ý không có, trong giao dịch; ⑶ hồ sơ N3 là hồ sơ nâng cấp thứ hai (sau N2 nhánh 4) mà chỉ
+một test dựng — mỗi mục "vai ứng dụng và mọi thành viên" phải được hỏi "thành viên KIỂU gì" (admin-only / NOINHERIT /
+SET); ⑷ bộ giải hằng nay đóng — mọi `%` ngoài văn phạm ném; ⑸ D2/`CTE_TRIGGER_CHAN` theo tên — khoản 90.

@@ -1,7 +1,9 @@
 import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -84,13 +86,19 @@ function veHamCanh(hamCanh: readonly string[], thut: string): string {
  */
 const VE_TRIGGER_VO_DIEU_KIEN = "                  AND t.tgqual IS NULL AND t.tgattr::pg_catalog.text OPERATOR(pg_catalog.=) ''\n";
 
+/**
+ * [S1.44 / khoản nợ 88 ⑴ — lượt soi 33a #3] Vế schema của vị từ là `MAU_SCHEMA_DU_AN` KHAI TRIỂN cho bí danh `n` —
+ * đọc từ chính hardening qua bộ giải hằng, không chép tay: hardening nay cũng khai triển hằng ấy qua `format()`
+ * (hết bản chép inline), và test đòi vị từ hardening (qua bộ giải) BẰNG bản sinh ở đây.
+ */
+const VE_SCHEMA_DU_AN = docHangHardeningTu(HARDENING, "MAU_SCHEMA_DU_AN").split("%1$s").join("n").split("%%").join("%");
+
 /** Vị từ bảng chỉ-ghi-thêm cho một danh sách khai báo — để test đo được CẢ HAI phía của khai báo. */
 function viTuBangChiGhiThem(hamCanh: readonly string[]): string {
   const T = "                  "; // 18 khoảng trắng — phải BẰNG thụt lề trong hardening.always.sql
   return `SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-          AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'
+        WHERE ${VE_SCHEMA_DU_AN}
           AND c.relkind IN ('r', 'p')
           AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
@@ -1028,24 +1036,19 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
 
     // Và vị từ này phải là CÙNG MỘT VĂN BẢN với vị từ trong hardening — hai bản sao trôi khỏi
     // nhau tái tạo đúng cái mù mà test này tồn tại để đóng (khuôn BANG_GOC_TENANT của Task 3-4).
-    expect(
-      HARDENING.includes(VI_TU_BANG_CHI_GHI_THEM),
-      "vị từ trong test phải xuất hiện NGUYÊN VĂN trong hardening.always.sql",
-    ).toBe(true);
+    // [S1.44 / khoản 88 ⑴] Nguyên văn nay được đòi QUA BỘ GIẢI HẰNG: hardening khai triển `MAU_SCHEMA_DU_AN`
+    // bằng `format()` (hết bản chép inline), nên `HARDENING.includes(...)` không còn đúng — thứ phải bằng nhau
+    // là vị từ ĐÃ GIẢI. Đột biến đo: khoá cứng `nspname = 'public'` trong hằng ⇒ đỏ ở đây.
+    expect(docHangHardening("VI_TU_BANG_CHI_GHI_THEM"), "vị từ hardening (qua bộ giải hằng) phải BẰNG vị từ ở test").toBe(VI_TU_BANG_CHI_GHI_THEM);
 
-    // [review lượt 12, H2] Và vế SCHEMA của nó phải là `MAU_SCHEMA_DU_AN` đã khai triển, không phải
-    // một `nspname = 'public'` viết cứng — bản đầu của vòng này viết khoá cứng, tức tái lập đúng
-    // thứ [CR2a] đã CỐ Ý gỡ khỏi `bang_so`. Đọc thẳng hằng ấy từ file rồi so, để hai bên không trôi.
-    const mauSchema = /MAU_SCHEMA_DU_AN constant text :=\s*\$q\$([\s\S]*?)\$q\$;/.exec(HARDENING);
-    expect(mauSchema, "không tìm thấy MAU_SCHEMA_DU_AN").not.toBeNull();
-    // So sau khi gộp khoảng trắng: hai chỗ có mức thụt lề khác nhau, và thụt lề không phải thứ
-    // đang được đo.
-    const gonTrang = (t: string): string => t.replace(/\s+/gu, " ").trim();
-    const khaiTrien = gonTrang(mauSchema![1]!.replaceAll("%1$s", "n").replaceAll("%%", "%"));
-    expect(
-      gonTrang(VI_TU_BANG_CHI_GHI_THEM).includes(khaiTrien),
-      "vế schema phải BẰNG MAU_SCHEMA_DU_AN khai triển cho bí danh `n`",
-    ).toBe(true);
+    // [review lượt 12, H2] Và vế SCHEMA của nó phải là `MAU_SCHEMA_DU_AN`, không phải một `nspname = 'public'`
+    // viết cứng — bản đầu của vòng ấy viết khoá cứng, tức tái lập đúng thứ [CR2a] đã CỐ Ý gỡ khỏi `bang_so`.
+    // [S1.44] Đọc NGUỒN của hằng: phải tham chiếu hằng qua format(), và không còn bản chép inline nào.
+    const nguon = /\n  VI_TU_BANG_CHI_GHI_THEM constant text :=([\s\S]*?);\n/u.exec(HARDENING);
+    expect(nguon, "không tìm thấy VI_TU_BANG_CHI_GHI_THEM").not.toBeNull();
+    expect(nguon![1]!, "vế schema phải là MAU_SCHEMA_DU_AN qua format(), không chép inline").toContain("pg_catalog.format(MAU_SCHEMA_DU_AN, 'n')");
+    expect(nguon![1]!).not.toContain("'pg_catalog', 'information_schema'");
+    expect(VI_TU_BANG_CHI_GHI_THEM, "vị từ đã giải phải chứa vế schema khai triển").toContain("n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'");
   });
 
   it("mọi bảng chỉ-ghi-thêm đều LOGGED — bảng có TÊN thì hardening TỰ CHỮA, bảng SUY RA thì hardening NÉM", async () => {
@@ -1798,6 +1801,100 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       await db.pool.query("DROP TABLE public.zz_tr");
     }
   }, 180000);
+
+  it("[khoản nợ 88 ⑹ — lượt soi 27 'chưa đo'] ĐO: FK ON DELETE CASCADE / SET NULL và TRUNCATE … CASCADE từ bảng cha KHÔNG đi vòng qua hàm canh của bảng con — trigger BEFORE ROW / TRUNCATE của con vẫn chạy và NÉM, hàng con còn nguyên; đối chứng: con không hàm canh thì hàng mất; và FK trỏ ra từ năm bảng chỉ-ghi-thêm hôm nay đều NO ACTION", async () => {
+    // Lượt soi 27 (S1.36) viết "FK ON DELETE CASCADE vẫn qua BEFORE ROW của bảng con — theo hiểu biết PostgreSQL, CHƯA
+    // ĐO"; lượt 33b #18 bắt lời hẹn sáu vòng không địa chỉ. Đo trên PostgreSQL 16: câu xoá/cắt ở CHA được PostgreSQL
+    // thi hành trên CON bằng đúng câu DELETE/UPDATE/TRUNCATE nội bộ (ri_triggers), nên trigger hàng và trigger TRUNCATE
+    // của con chạy như với câu do người gõ.
+    //
+    // (e) Tổng điều tra hôm nay — đo TRƯỚC khi dựng fixture, vì hai bảng con có hàm canh ở dưới cũng lọt vào tập chỉ-ghi-thêm:
+    //     mọi FK trỏ RA từ năm bảng chỉ-ghi-thêm là NO ACTION (a) hay RESTRICT (r) — không CASCADE/SET NULL/SET DEFAULT.
+    //     Hai lớp cho một ca: hàm canh chặn (đo ở dưới) VÀ lược đồ không có đường ấy.
+    const fk = (await db.pool.query<{ bang: string; xoa: string; sua: string }>(
+      `SELECT k.conrelid::regclass::text AS bang, k.confdeltype AS xoa, k.confupdtype AS sua
+         FROM pg_constraint k WHERE k.contype = 'f' AND k.conrelid IN (SELECT b.bang_oid FROM (${VI_TU_BANG_CHI_GHI_THEM}) b)
+        ORDER BY 1`,
+    )).rows;
+    // [lượt soi 36 #8] ⊆ chứ không =: một bảng chỉ-ghi-thêm tương lai KHÔNG có FK không được làm test này đỏ vì lý do lạ.
+    expect(fk.length, "hôm nay năm bảng đều có FK org_id → organizations").toBeGreaterThan(0);
+    for (const b of new Set(fk.map((r) => r.bang))) expect(BANG_CHI_GHI_THEM_THAT, b).toContain(b);
+    expect(fk.filter((r) => !["a", "r"].includes(r.xoa) || !["a", "r"].includes(r.sua)), "FK từ bảng chỉ-ghi-thêm có CASCADE/SET NULL/SET DEFAULT").toEqual([]);
+    await db.pool.query(`
+      CREATE TABLE public.zz_cha88 (id int PRIMARY KEY);
+      CREATE TABLE public.zz_con88  (id int PRIMARY KEY, cha int REFERENCES public.zz_cha88 (id) ON DELETE CASCADE);
+      CREATE TABLE public.zz_con88n (id int PRIMARY KEY, cha int REFERENCES public.zz_cha88 (id) ON DELETE SET NULL);
+      CREATE TABLE public.zz_con88k (id int PRIMARY KEY, cha int REFERENCES public.zz_cha88 (id) ON DELETE CASCADE);
+      INSERT INTO public.zz_cha88 VALUES (1), (2), (3);
+      INSERT INTO public.zz_con88 VALUES (1, 1); INSERT INTO public.zz_con88n VALUES (1, 2); INSERT INTO public.zz_con88k VALUES (1, 3);
+      CREATE TRIGGER zz_con88_chan_update   BEFORE UPDATE   ON public.zz_con88  FOR EACH ROW       EXECUTE FUNCTION public.chan_sua_xoa();
+      CREATE TRIGGER zz_con88_chan_delete   BEFORE DELETE   ON public.zz_con88  FOR EACH ROW       EXECUTE FUNCTION public.chan_sua_xoa();
+      CREATE TRIGGER zz_con88_chan_truncate BEFORE TRUNCATE ON public.zz_con88  FOR EACH STATEMENT EXECUTE FUNCTION public.chan_sua_xoa();
+      CREATE TRIGGER zz_con88n_chan_update  BEFORE UPDATE   ON public.zz_con88n FOR EACH ROW       EXECUTE FUNCTION public.chan_sua_xoa();
+      CREATE TRIGGER zz_con88n_chan_delete  BEFORE DELETE   ON public.zz_con88n FOR EACH ROW       EXECUTE FUNCTION public.chan_sua_xoa();
+      ALTER TABLE public.zz_con88  ENABLE ALWAYS TRIGGER zz_con88_chan_update;
+      ALTER TABLE public.zz_con88  ENABLE ALWAYS TRIGGER zz_con88_chan_delete;
+      ALTER TABLE public.zz_con88  ENABLE ALWAYS TRIGGER zz_con88_chan_truncate;
+      ALTER TABLE public.zz_con88n ENABLE ALWAYS TRIGGER zz_con88n_chan_update;
+      ALTER TABLE public.zz_con88n ENABLE ALWAYS TRIGGER zz_con88n_chan_delete;
+    `);
+    try {
+      const dem = async (bang: string): Promise<number> =>
+        (await db.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${bang}`)).rows[0]!.n;
+      // (a) ON DELETE CASCADE: câu xoá nội bộ trên con gặp BEFORE DELETE ROW của con — NÉM từ chính hàm canh, nêu tên con.
+      expect(await thu(db, "DELETE FROM public.zz_cha88 WHERE id = 1"), "CASCADE qua BEFORE DELETE ROW của con")
+        .toMatch(/^NÉM: Bảng zz_con88 là bảng chỉ-ghi-thêm .* thao tác DELETE bị từ chối/u);
+      // (b) ON DELETE SET NULL là một UPDATE nội bộ trên con — BEFORE UPDATE ROW chạy.
+      expect(await thu(db, "DELETE FROM public.zz_cha88 WHERE id = 2"), "SET NULL là UPDATE trên con")
+        .toMatch(/^NÉM: Bảng zz_con88n là bảng chỉ-ghi-thêm .* thao tác UPDATE bị từ chối/u);
+      // (c) TRUNCATE … CASCADE gọi trigger TRUNCATE của mọi bảng bị cắt theo — chốt TRUNCATE của con chạy.
+      expect(await thu(db, "TRUNCATE public.zz_cha88 CASCADE"), "TRUNCATE CASCADE gọi trigger TRUNCATE của con")
+        .toMatch(/^NÉM: Bảng zz_con88 là bảng chỉ-ghi-thêm .* thao tác TRUNCATE bị từ chối/u);
+      expect([await dem("public.zz_cha88"), await dem("public.zz_con88"), await dem("public.zz_con88n"), await dem("public.zz_con88k")],
+        "ba câu NÉM đều huỷ trọn — không hàng nào mất ở cha lẫn con").toEqual([3, 1, 1, 1]);
+      // (d) Đối chứng: con KHÔNG có hàm canh thì CASCADE xoá hàng con thật — phép đo ở trên không xanh vì FK không chạy.
+      expect(await thu(db, "DELETE FROM public.zz_cha88 WHERE id = 3"), "cha của con không hàm canh").toBe("OK");
+      expect(await dem("public.zz_con88k"), "CASCADE xoá hàng con không hàm canh").toBe(0);
+    } finally {
+      await db.pool.query("DROP TABLE IF EXISTS public.zz_con88, public.zz_con88n, public.zz_con88k, public.zz_cha88");
+    }
+  });
+
+  it("[khoản nợ 88 ⑺ — lượt soi 35 'mang sang' ⑶] BƯỚC 2/3 KHÔNG GÃY THÔ: hardening chép ra thư mục tạm với ba mục tiêm (điều kiện ném 1/0, hậu điều kiện ném 1/0, hậu điều kiện sai) ⇒ lượt sửa vẫn đi qua, một thông báo gom ba dòng nêu đúng ba tên với SQLSTATE — không phải một 'division by zero' trần; kho thật vẫn đi qua", async () => {
+    // Đột biến đo: bỏ khối BEGIN/EXCEPTION quanh BƯỚC 3 ⇒ migrate() ném "division by zero" trần, không tên mục, các mục
+    // sau không được phán — test này đỏ ở khẳng định thứ hai. Bỏ khối quanh cột điều kiện ở BƯỚC 2 ⇒ lượt SỬA gãy
+    // trước vòng migration đánh số (đúng ngõ cụt QT1 mà bản đầu S1.43 đo với to_regclass dưới N2).
+    const tam = mkdtempSync(join(tmpdir(), "tp-hardening-88-"));
+    try {
+      cpSync(MIGRATIONS_DIR, tam, { recursive: true });
+      const moc = "  bang text[][] := ARRAY[\n";
+      expect(HARDENING.split(moc).length, "mốc chèn phải duy nhất").toBe(2);
+      const tiem =
+        moc +
+        "    ARRAY[$q$mục thử 88 điều kiện ném$q$, $q$(SELECT 1/0) = 1$q$, $q$SELECT 1$q$, $q$true$q$, $q$'x'$q$, $q$không gì$q$],\n" +
+        "    ARRAY[$q$mục thử 88 hậu điều kiện ném$q$, $q$true$q$, $q$SELECT 1$q$, $q$(SELECT 1/0) = 1$q$, $q$'x'$q$, $q$không gì$q$],\n" +
+        "    ARRAY[$q$mục thử 88 sai$q$, $q$true$q$, $q$SELECT 1$q$, $q$false$q$, $q$'cố ý sai'$q$, $q$không gì$q$],\n";
+      // split/join, KHÔNG `String.replace`: vế thay chứa `$q$'x'$q$`, và `$'` là mẫu "phần sau chỗ khớp" của JS — đúng
+      // cái bẫy khoản 88 ⑸ vừa đóng ở bộ giải hằng, đo được ngay ở bản đầu của chính test này (syntax error giữa tệp).
+      writeFileSync(join(tam, "hardening.always.sql"), HARDENING.split(moc).join(tiem));
+      let kq: string;
+      try {
+        await migrate(db.pool, tam);
+        kq = "OK";
+      } catch (e) {
+        kq = `NÉM: ${(e as Error).message}`;
+      }
+      // Tiền tố `(phan_xet)` là của migrate(): lỗi đến từ lượt PHÁN XÉT — tức lượt SỬA (mục điều kiện ném) đã đi qua.
+      expect(kq, "lượt sửa đi qua, lượt phán xét gom đúng ba mục").toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 3 mục:/u);
+      expect(kq).toContain('- "mục thử 88 điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
+      expect(kq).toContain('- "mục thử 88 hậu điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
+      expect(kq).toContain('- "mục thử 88 sai": trạng thái hiện tại SAI (cố ý sai). Cần quyền: không gì.');
+      // Đối chứng: kho thật (không mục tiêm) đi qua trên cùng CSDL — ba mục tiêm không để lại gì.
+      expect(await migrateLai(db)).toBe("OK");
+    } finally {
+      rmSync(tam, { recursive: true, force: true });
+    }
+  });
 
   it("[khoản nợ 79] TỔNG ĐIỀU TRA ngôn ngữ trigger: mọi trigger của dự án gọi hàm plpgsql, trừ khi khai — hàm internal/C vô hình với mọi tổng điều tra khác (ADR-036 ㉑)", async () => {
     // [lượt soi 25a #2] Mọi tổng điều tra ở tệp này lọc `lanname = 'plpgsql'`. Lý do ấy đúng cho vị từ HÌNH
