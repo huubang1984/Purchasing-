@@ -2329,3 +2329,42 @@ phải có `it` đếm — "21", "11", "10" cùng một thứ ở bốn văn b�
 (H2 "nhiều cột không tính" là ranh giới tự khai, sai); ⑷ mọi chiều ngược của tệp hardening phải chạy được dưới vai N2 — `to_regclass`
 là hàm phân giải tên, không phải hàm đọc catalog; ⑸ dòng trống trong bảng GFM là lỗi vô hình với regex mà hữu hình với người đọc
 suốt hai mươi vòng — cổng phải đòi thứ người đọc thấy, không chỉ thứ máy đọc; ⑹ khoản 93: §2 phải là bảng thật, có cổng.
+
+# §S1.49 — khoản nợ 93: một cổng đòi MỌI phán xét của hardening có dòng lý do trong ADR — CỔNG + TÀI LIỆU, không mã sản xuất
+
+**Bề mặt an ninh:** không đổi một dòng SQL sản xuất nào. Cổng mới `tests/architecture/hardening-co-ly-do.test.ts` ([INV-H19])
+dựng lại mảng `bang` của `hardening.always.sql` thành 107 hàng × 6 ô, nhận diện MỤC PHÁN XÉT theo tính chất *ô câu sửa no-op*
+(ADR-028 §2⑵), và đòi mỗi phán xét — kể cả hai phán xét sống ngoài `bang` — có một khoá tra cứu trong ADR-028/036/037 sau khi
+bỏ mọi vùng đã gạch. Tài liệu: ADR-036 §2 hàng 24 và 25, tên hằng vào hàng 2/4/6/10/12/16, §1 nói ra phạm vi; ADR-028 §7 viết
+lại theo đúng ranh giới tự chữa/phán xét; ADR-037 §4 nêu tên ba hằng của lớp danh tính.
+
+**Đo:** trước vòng, 11 khoá tra cứu không có dòng lý do — trong đó mục *không có overload lạ của bốn hàm chuỗi kiểm toán*
+CHẶN ĐƯỢC DEPLOY mà `DECISIONS.md` không có một chữ nào về nó; sau vòng, 28/28 khoá có lý do. Bản đầu của vòng khai "24/24"
+là tính đầy đủ giả: mẫu số sai (lượt soi 41 CAO-1).
+
+**Đỏ đo được, cô lập (5 đột biến):** M1 bỏ khoá TÊN MỤC · M2 bỏ vế ngoài `bang` · M3 bỏ việc loại vùng đã gạch · M4 bỏ NÉM khi
+bộ đọc mù · M5 bỏ NÉM khuôn no-op lạ — mỗi đột biến làm đúng MỘT `it` đỏ.
+
+### Lượt soi đối kháng 41 (trên bản đầu của S1.49): 2 CAO, 4 NẶNG, 4 NHẸ, 4 INFO — xử lý hết trong bản ba
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| CAO-1 | CAO | Bản đầu lấy trục là HÌNH DẠNG CHUỖI của ô hậu điều kiện — chỉ đổi trục của "theo tên": mù với 2 mục phán xét thật viết thẳng SQL (`schema trùng tên một vai…`, `không có overload lạ…`) và đếm dư 4 hàng TỰ CHỮA; mục "overload lạ" chặn deploy mà DECISIONS không có chữ nào ⇒ lời đo "24/24" là đầy đủ giả | đo: 22 mục phán xét theo ô câu sửa, cổng thấy 19 | trục đổi sang **ô CÂU SỬA no-op** (ADR-028 §2⑵); bộ đọc 107×6; khoá tra cứu = hằng ở vị trí QUAN HỆ, ngược lại TÊN MỤC; đột biến M1 |
+| CAO-2 | CAO | `CAU_MEMBERSHIP_LA` và `CAU_ADMIN_LA` chặn deploy qua `loi_gom` ở BƯỚC 3 nhưng sống NGOÀI `bang` ⇒ chủ thể loại chúng theo cấu tạo; cả hai không có trong DECISIONS | đúng theo đọc | vế ⒟ quét khuôn `EXECUTE … || CAU_X || … INTO con_sot; … loi_gom := loi_gom`; `CAU_CAP_PHU_CHUOI` chỉ RAISE WARNING nên cố ý nằm ngoài — nói ra; đột biến M2 |
+| NẶNG-1 | NẶNG | `includes` trên cả tệp là rỗng ruột: `CAU_DOC_VONG` chỉ được nhắc như một dấu ngoặc phụ; tên bỏ trong `~~…~~` hay trong §5 "Thứ ADR này KHÔNG làm" cũng qua; `includes` không biên từ | đúng — ca thật | vùng tra cứu = ba khối ADR có thẩm quyền, bỏ mọi `~~…~~`; định danh so biên từ, tên mục so nguyên văn; `CAU_DOC_VONG` có dòng lý do thật ở hàng 10; đột biến M3 |
+| NẶNG-2 | NẶNG | Bốn chỗ ngữ nghĩa sai ở tài liệu, một chỗ NGƯỢC ADR-028 §2⑵: đoạn §7 gọi cả bảy mục là "phán xét" rồi khai `REVOKE` không đơn điệu; hàng 12 lật nghĩa cột "Lớp canh" và giữ Đo `n/a`; hàng 10 nhận nhầm hai hằng hình dạng cột; hàng 2 gán lớp DỰNG vào cơ chế THẤY | đúng theo đọc, đối chiếu mã | §7 viết lại (4 phán xét / 3 tự chữa, bỏ mệnh đề trái §2⑵); hàng 12 ghi rõ "lớp ĐÒI" + sửa cột Đo; hàng 25 mới cho trôi hình dạng cột; hàng 2 ghi rõ chiều ngược |
+| NẶNG-3 | NẶNG | Sàn `SO_MUC_PHAN_XET = 24` ghim tay, chỉ chặn đổi khuôn TOÀN CỤC chứ không chặn "mọc thêm một mục khuôn khác" — đúng ca sinh ra khoản 93; thông điệp khi số mục GIẢM chẩn đoán ngược | đúng theo đọc | bỏ hằng; sàn suy từ chính tệp (số hàng `ARRAY[`, mỗi hàng 6 ô) và NÉM khi parse hỏng; đột biến M4 |
+| NẶNG-4 | NẶNG | Đổi trục là đúng nhưng chỗ THU HẸP không khai: `CAU_QUYEN_BANG_SO_SAI` mang hậu tố `_SAI`, không có trong DECISIONS, ra ngoài cổng | đúng | nói ra ở chú thích cổng và ở thân khoản 93: chín hằng chỉ dùng ở ô CÂU SỬA không bị đòi, kèm lý do |
+| NHẸ-1 | NHẸ | inv-matrix gán bất biến theo TỆP: cổng hardening↔ADR nằm trong tệp của H20 ⇒ H20 đỏ được vì một tệp SQL 9317 dòng | đúng — đọc `so-khai-nhan.ts` | tệp mới `hardening-co-ly-do.test.ts`, đăng ký vào **H19** |
+| NHẸ-2 | NHẸ | Ba `it` đột biến chỉ phủ RENAME và REFORMAT toàn cục, không phủ ca "mọc thêm một mục"; một `it` dùng `replaceAll` nên không tự khẳng định trúng | đúng | `it` chèn hẳn một hàng `ARRAY[…]` phán xét mới; mọi đột biến khẳng định `not.toBe(...)` |
+| NHẸ-3/4 | NHẸ | Regex quét toàn tệp chứ không neo vào ô ⇒ sàn nuôi được bằng chú thích; `includes` không biên từ | đúng | đóng luôn khi parse theo ô; so bằng biên từ |
+| INFO-1..4 | INFO | Chi phí đọc 9317 dòng không đáng kể; §2 đã rộng hơn câu hỏi §1; ADR-037 §4 kết bằng câu tự quy chiếu; đã có `docHangHardening` fail-closed dùng chung | xác nhận | §1 nói ra phạm vi; bỏ câu tự quy chiếu; bộ đọc riêng vì cần Ô, không cần giải hằng — nói ra |
+
+**Ba lỗi tự tìm khi cài bản hai, ghi để không gặp lại:** ⑴ regex `\$(\w*)\$…\$\1\$` khớp LỆCH trên thân hàm plpgsql mang
+`$1` và `$than$` lồng — phải duyệt ký tự như bộ tách ô; ⑵ `String.replace` với chuỗi thay thế chứa `$'` ăn mất một ô (cùng bẫy
+đã đo ở S1.44 — dùng hàm thay thế); ⑶ `'[^']*'` trong regex vấp dấu nháy của `string_agg(x, ', ')`; ⑷ `dotBien` của cổng sổ nợ dùng CHUỖI thay thế — hàng sổ nợ mới mang `$x$` làm hai đột biến P0/P1 xanh giả, sửa sang hàm thay thế.
+
+**Điều đáng mang sang vòng sau:** ⑴ "theo tính chất" phải hỏi *tính chất NÀO của đối tượng nói lên vai trò của nó* — hình
+dạng chuỗi ở một ô là một cái tên khác của "theo tên"; ⑵ một cổng tra cứu tài liệu phải nói rõ VÙNG và loại vùng đã gạch,
+nếu không nó chỉ đo "chuỗi có tồn tại trong 4000 dòng"; ⑶ khi đổi trục so với hình dạng ghi ở khoản nợ, phải khai chỗ thu hẹp
+ngay trong vòng ấy.
