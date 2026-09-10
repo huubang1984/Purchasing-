@@ -2836,7 +2836,7 @@ describe("migration của dự án", () => {
   // Vòng 2 gỡ bộ lọc nspname cho view/matview/SECDEF nhưng GIỮ NGUYÊN cho bảng. Bất đối xứng
   // đó là một lỗ thật. Test đo cả hai nửa: hàng của tổ chức B đọc được qua con ở schema khác
   // TRƯỚC khi mục (A) chạm tới nó, và fail-closed sau đó.
-  it("[Minor] con INHERITS ở schema KHÁC public cũng được bật ENABLE/FORCE", async () => {
+  it("[Minor] con INHERITS ở schema KHÁC public cũng được bật ENABLE/FORCE — [S1.40] cặp INHERITS chưa khai bị mục 82⑴ NÉM, miễn policy riêng còn nguyên", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -2895,10 +2895,19 @@ describe("migration của dự án", () => {
       const loiCon = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
       expect(loiCon, "GRANT trực tiếp lên con không policy phải bị khoản 83⑵ bắt").not.toBeNull();
       expect(loiCon!.message).toContain("khac.con_khac/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
+      expect(loiCon!.message, "[S1.40 / khoản nợ 82⑴] cặp INHERITS chưa khai bị mục kế thừa bắt cùng lượt").toContain(
+        "khac.con_khac INHERITS public.bao_gia: cặp kế thừa cổ điển",
+      );
       expect(await co()).toEqual({ bat: true, cuong_che: true });
       expect(await docThangCon(orgA)).toEqual([]);
       await db.pool.query("REVOKE SELECT ON khac.con_khac FROM app_api");
-      await expect(migrate(db.pool, MIGRATIONS_DIR), "con không quyền riêng: đi qua").resolves.toEqual([]);
+      // ~~con không quyền riêng: đi qua~~ [S1.40 / khoản nợ 82⑴] kỳ vọng LẬT có chủ đích: 83⑵ im, nhưng cặp INHERITS
+      // chưa khai vẫn bị mục kế thừa NÉM. ([lượt soi 31, NHẸ-2] [CR1] không soi ngoài public, nên "không dòng [CR1] cho
+      // con_khac" là khẳng định rỗng ruột — bằng chứng miễn policy riêng nằm ở test con_tt và ở `public.g` của khoản 84.)
+      const loiKeThua = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiKeThua, "cặp INHERITS chưa khai phải bị mục 82⑴ bắt").not.toBeNull();
+      expect(loiKeThua!.message).not.toContain("con_khac/app_api");
+      expect(loiKeThua!.message).toContain("khac.con_khac INHERITS public.bao_gia: cặp kế thừa cổ điển");
 
       // (c) Đường đọc THẬT — qua CHA — vẫn đúng: tổ chức B thấy hàng của mình, A không thấy.
       const quaCha = async (org: string): Promise<number[]> => {
@@ -2913,6 +2922,92 @@ describe("migration của dự án", () => {
       };
       expect(await quaCha(orgB)).toEqual([777]);
       expect(await quaCha(orgA)).toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [S1.40 / khoản nợ 84, lượt soi 29 INFO-9] CHÁU HAI BẬC Ở SCHEMA KHÁC — LA_CUA_BANG_TENANT ĐỆ QUY
+  // ==========================================================================================
+  // Vế "con của bảng tenant" từng chỉ nhìn cặp cha–con TRỰC TIẾP. Người soi 29 viết đường đo, chưa ai chạy:
+  // k.c2 INHERITS (k.c1), k.c1 INHERITS (public.bao_gia) — mục (A) không bật RLS trên k.c2, GRANT SELECT lên
+  // k.c2 ⇒ đọc thẳng cháu thấy hàng mọi tổ chức. Test đo cả hai nửa: lỗ RÒ có thật trước khi mục (A) chạm,
+  // và fail-closed sau đó nhờ vế đệ quy.
+  it("[khoản nợ 84] cháu HAI BẬC ở schema khác public (k.c2 INHERITS k.c1 INHERITS public.bao_gia) cũng được bật ENABLE/FORCE — LA_CUA_BANG_TENANT đệ quy; trước S1.40 đọc thẳng cháu thấy hàng của tổ chức khác", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query(
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
+      );
+      await db.pool.query(
+        "CREATE TABLE bao_gia (gia int, org_id uuid NOT NULL);" +
+          "ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY;" +
+          "ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY;" +
+          "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "  USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());" +
+          "GRANT SELECT ON bao_gia TO app_api;" +
+          "CREATE SCHEMA k;" +
+          "CREATE TABLE k.c1 () INHERITS (public.bao_gia);" +
+          "CREATE TABLE k.c2 () INHERITS (k.c1);" +
+          "CREATE TABLE public.g () INHERITS (k.c1);" +
+          "GRANT USAGE ON SCHEMA k TO app_api;" +
+          "GRANT SELECT ON k.c2 TO app_api;",
+      );
+      await db.pool.query("INSERT INTO k.c2 (gia, org_id) VALUES (777, $1)", [orgB]);
+
+      const co = async (bang: string): Promise<{ bat: boolean; cuong_che: boolean }> =>
+        (
+          await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
+            "SELECT c.relrowsecurity AS bat, c.relforcerowsecurity AS cuong_che " +
+              "  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+              " WHERE n.nspname = 'k' AND c.relname = $1",
+            [bang],
+          )
+        ).rows[0]!;
+      expect(await co("c2"), "CREATE TABLE ... INHERITS đã tự bật RLS — phép đo dưới đây rỗng ruột").toEqual({ bat: false, cuong_che: false });
+
+      const apiPool = db.poolAs("app_api");
+      const docThang = async (org: string, bang: string): Promise<number[]> => {
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [org]);
+          const { rows } = await client.query<{ gia: number }>(`SELECT gia FROM ${bang}`);
+          return rows.map((r) => r.gia);
+        } finally {
+          client.release();
+        }
+      };
+      // (a) Lỗ RÒ có thật: gắn tổ chức A đọc thẳng CHÁU thấy hàng 777 CỦA TỔ CHỨC B.
+      expect(await docThang(orgA, "k.c2")).toEqual([777]);
+
+      // (b) migrate(): BƯỚC 2 (mục A) bật cờ trên CẢ con lẫn cháu nhờ vế đệ quy; lượt phán xét NÉM ở 82⑴ (ba cặp chưa
+      //     khai) và 83⑵ (quyền trên cháu không policy phủ). [lượt soi 31, NHẸ-2] [CR1] không soi ngoài public nên "không
+      //     dòng [CR1] cho k.c1/k.c2" là rỗng ruột; ca chịu lực của vế đệ quy ở nguồn (i) là `public.g INHERITS (k.c1)` —
+      //     bảng tenant ở public (có org_id) không policy riêng: trước S1.40 [CR1] NÉM "g: không có policy PERMISSIVE"
+      //     (cha trực tiếp k.c1 không phải bảng tenant public), nay được miễn vì tổ tiên public.bao_gia là bảng tenant.
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi).not.toBeNull();
+      expect(await co("c1")).toEqual({ bat: true, cuong_che: true });
+      expect(await co("c2"), "cháu HAI BẬC phải được mục (A) bật — vế đệ quy của LA_CUA_BANG_TENANT").toEqual({ bat: true, cuong_che: true });
+      expect(loi!.message).toContain("k.c2/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
+      expect(loi!.message).toContain("k.c1 INHERITS public.bao_gia: cặp kế thừa cổ điển");
+      expect(loi!.message).toContain("k.c2 INHERITS k.c1: cặp kế thừa cổ điển");
+      expect(loi!.message).toContain("public.g INHERITS k.c1: cặp kế thừa cổ điển");
+      expect(loi!.message, "cháu ở public được miễn policy riêng nhờ vế đệ quy — đột biến một bậc đỏ ở đây").not.toContain(
+        "g: không có policy PERMISSIVE",
+      );
+      // (ràng buộc yếu — chỉ có nghĩa khi cháu đã bật RLS: 83⑶ không gọi cháu là "ngoài tập tenant")
+      expect(loi!.message).not.toContain("bảng bật RLS ngoài tập tenant");
+      expect(await docThang(orgA, "k.c2"), "đọc thẳng cháu nay fail-closed").toEqual([]);
+
+      // (c) Đường đọc THẬT — qua GỐC — vẫn đúng: B thấy hàng của mình ở cháu, A không.
+      expect(await docThang(orgB, "public.bao_gia")).toEqual([777]);
+      expect(await docThang(orgA, "public.bao_gia")).toEqual([]);
     } finally {
       await db.stop();
     }
@@ -3165,7 +3260,7 @@ describe("migration của dự án", () => {
   //   (b) DETACH PARTITION lấy relispartition đi -> bảng tách ra KHÔNG còn được miễn, và đó là
   //       ĐÚNG: nó đã là một bảng tenant độc lập. Nhưng phải chứng minh nó không thành ngõ cụt
   //       "sửa tay trên cụm" — đường ra là một migration MỚI, đúng như khuôn ba lượt hứa.
-  it("[Minor] con cháu INHERITS được miễn policy riêng; DETACH PARTITION thì không, và vá được bằng migration mới", async () => {
+  it("[Minor] con cháu INHERITS được miễn policy riêng; DETACH PARTITION thì không, và vá được bằng migration mới — [S1.40] cặp INHERITS chưa khai bị mục 82⑴ NÉM, miễn policy riêng còn nguyên", async () => {
     const db = await startPostgres();
     const thuMucTam = await mkdtemp(join(tmpdir(), "tp-ke-thua-"));
     try {
@@ -3209,11 +3304,16 @@ describe("migration của dự án", () => {
         }
       };
 
-      await expect(
-        migrate(db.pool, thuMucTam),
-        "con cháu INHERITS làm hardening GÃY — một lược đồ PostgreSQL coi là hợp lệ đang chặn " +
-          "deploy vĩnh viễn, đúng triệu chứng (3) của I3 lặp lại ở nhánh kế thừa",
-      ).resolves.toEqual([]);
+      // ~~migrate() đi qua: "con cháu INHERITS làm hardening GÃY — một lược đồ PostgreSQL coi là hợp lệ đang chặn deploy
+      // vĩnh viễn"~~ [S1.40 / khoản nợ 82⑴] kỳ vọng LẬT có chủ đích: migrate() nay NÉM — nhưng ở MỤC KẾ THỪA (cặp INHERITS
+      // chưa khai), KHÔNG ở [CR1] "không có policy PERMISSIVE". Miễn policy riêng cho con cháu (LA_CUA_BANG_TENANT) — điều
+      // test này đo từ vòng fix 2 — còn nguyên. Khác "chặn vĩnh viễn": cửa ra là khai cặp vào KE_THUA_KHAI kèm lý do.
+      const loiKeThua = await migrate(db.pool, thuMucTam).then(() => null, (e: Error) => e);
+      expect(loiKeThua, "cặp INHERITS chưa khai phải bị mục 82⑴ bắt").not.toBeNull();
+      expect(loiKeThua!.message).toContain("public.con_tt INHERITS public.cha_tt: cặp kế thừa cổ điển");
+      expect(loiKeThua!.message, "miễn policy riêng cho con cháu vẫn còn — [CR1] không kêu về con_tt").not.toContain(
+        "con_tt: không có policy PERMISSIVE",
+      );
       const co = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
         "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
           "WHERE relname = 'con_tt'",
@@ -3232,7 +3332,13 @@ describe("migration của dự án", () => {
       expect(loiCon!.message).toContain("public.con_tt/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
       expect(await doc("con_tt"), "đọc THẲNG con là fail-closed — đúng cái mục 83⑵ bắt").toEqual([]);
       await db.pool.query("REVOKE SELECT ON con_tt FROM app_api");
-      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([]);
+      const loiSauThuHoi = await migrate(db.pool, thuMucTam).then(() => null, (e: Error) => e);
+      expect(loiSauThuHoi, "[S1.40] thu hồi quyền: 83⑵ im, 82⑴ vẫn kêu").not.toBeNull();
+      expect(loiSauThuHoi!.message).not.toContain("con_tt/app_api");
+      expect(loiSauThuHoi!.message).toContain("public.con_tt INHERITS public.cha_tt");
+      // Dọn cặp kế thừa trước nửa (b) để các lượt migrate() của (b) đo đúng DETACH PARTITION, không kèm mục 82⑴.
+      await db.pool.query("DROP TABLE con_tt");
+      await expect(migrate(db.pool, thuMucTam), "đối chứng: không còn cặp ⇒ đi qua").resolves.toEqual([]);
 
       // ---- (b) DETACH PARTITION ------------------------------------------------------------
       await db.pool.query(
