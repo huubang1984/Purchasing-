@@ -2240,7 +2240,7 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
         new RegExp(`FROM \\$q\\$ \\|\\| ${danhSach} \\|\\| \\$q\\$\\n(?:\\s*--[^\\n]*\\n)*\\s+WHERE ${biDanh}\\.(?:${cot}) <> ''`, "u"),
       );
     }
-    expect(soRong, "hôm nay sáu danh sách rỗng (S1.46 thêm BANG_KHOA_NGOAI_TENANT_KHAI)").toBe(6);
+    expect(soRong, "hôm nay bảy danh sách rỗng (S1.46 thêm BANG_KHOA_NGOAI_TENANT_KHAI, S1.47 thêm GUC_TUY_BIEN_KHAI — lượt soi 39 NẶNG-1)").toBe(7);
     expect(await ten(db.pool, cau), "lược đồ thật không có bảng org_id ngoài public").toEqual([]);
     const c = await db.pool.connect();
     try {

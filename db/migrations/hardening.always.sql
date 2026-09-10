@@ -1979,6 +1979,159 @@ $ham$;
           AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
                          AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET')))$q$;
 
+  -- ---- [S1.47 / khoản nợ 87] GUC TUỲ BIẾN (app.*) GẮN SẴN CHO PHIÊN ỨNG DỤNG — PHÁN XÉT, KHÔNG TỰ SỬA ----------------
+  -- Lượt soi ngang 33a #1: toàn bộ ranh giới tenant/khách từ 001/027/042/044 là NĂM GUC `app.*` mà policy đọc qua
+  -- `current_setting(..., true)` — chưa gắn ⇒ NULL ⇒ 0 hàng (fail-closed). Ba mục "đặt ở mức database" ở trên chỉ ghim
+  -- TÊN row_security / session_replication_role / search_path; `ALTER DATABASE … SET app.org_id = <B>` lật [INV-F1]
+  -- "chưa gắn ⇒ 0 hàng" thành "⇒ tổ chức B" cho MỌI câu ngoài withTenant (pool.query trần, job, migrate), và
+  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ 11 policy RESTRICTIVE `_khach` thu hẹp ⇒ câu ghi
+  -- của người mua 0 hàng không lỗi (ADR-036). Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
+  -- khi SET lẫn RESET một GUC placeholder ở mức database — trừ khi được `GRANT SET ON PARAMETER` (PG15+, nhánh ⒟) —
+  -- và `ALTER ROLE … RESET ALL` dưới vai không superuser GIỮ IM LẶNG phần tử placeholder (guc.c skipIfNoPermissions):
+  -- bốn mục RESET ALL ở dưới chỉ "tự chữa" trọn khi vai deploy là superuser hay có SET trên tham số; nếu không, mục
+  -- RESET ALL và mục này cùng đỏ, một nguyên nhân (lượt soi 39 NHẸ-3, đo). Vì thế mục này PHÁN XÉT: một mục tự sửa
+  -- dưới vai deploy thường sẽ chặn deploy vĩnh viễn (cùng bài học T10-E4). Theo TÍNH CHẤT, không ghim tên `app.`:
+  -- GUC tuỳ biến (tên có dấu chấm — placeholder) là thứ duy nhất một policy/hàm của dự án đọc vào. Năm nhánh, cùng
+  -- danh sách trắng GUC_TUY_BIEN_KHAI (rỗng):
+  --   ⒜ pg_db_role_setting mức database của database hiện tại (setrole = 0) — `ALTER DATABASE … SET`;
+  --   ⒝ pg_db_role_setting của một vai kết nối ứng dụng (VAI_KET_NOI_UNG_DUNG ∪ ROLE_CANH), toàn cụm hay IN DATABASE —
+  --      dây an toàn kề bốn mục RESET ALL và BƯỚC 1 (chạy TRƯỚC, ở lượt sửa); hàng (setrole 0, setdatabase 0) là
+  --      `ALTER ROLE ALL SET` — áp cho mọi vai mọi database, tên riêng trong thông điệp (lượt soi 39 NHẸ-1; ba mục kề
+  --      không thấy hàng ấy — khoản 92);
+  --   ⒞ CHÍNH phiên deploy: `ALTER SYSTEM SET app.org_id` (postgresql.auto.conf) hay một dòng trong postgresql.conf áp
+  --      cho MỌI phiên MỌI database mà pg_db_role_setting sạch (lượt soi 39 NẶNG-2; đo trên PG16: phải SET placeholder
+  --      trong phiên trước rồi ALTER SYSTEM + pg_reload_conf). ĐO (thăm dò S1.47): GUC placeholder KHÔNG BAO GIỜ có mặt ở
+  --      pg_settings (GUC_NO_SHOW_ALL) — không đọc được `source`/`reset_val`; pg_file_settings thấy postgresql.auto.conf
+  --      nhưng chỉ superuser/pg_read_all_settings đọc được (vai deploy N2 thì không). Thứ MỌI vai đọc được là chính giá
+  --      trị: `current_setting(tên, true)` trong phiên deploy — nên nhánh này lấy TẬP TÊN theo tính chất (mọi
+  --      `current_setting('x.y'…)` trong thân hàm của lược đồ dự án và trong biểu thức policy — CAU_TEN_GUC_DU_AN_DOC),
+  --      trừ `app.hardening_che_do` (migrate() đặt trong phiên), và hỏi từng tên: khác rỗng mà không hàng catalog
+  --      ⒜/⒝ nào mang nó ⇒ cụm / dòng lệnh / `options=` của chuỗi kết nối deploy. Bắt luôn `options=-c` trên chuỗi kết
+  --      nối của CHÍNH phiên deploy; tên có dấu chấm KHÔNG được policy/hàm nào đọc thì nhánh này không hỏi (không
+  --      liệt kê được placeholder chưa biết tên — ranh giới của catalog, nói ra);
+  --   ⒟ pg_parameter_acl cho một tham số có dấu chấm — bất kể grantee: `GRANT SET ON PARAMETER app.org_id TO vai` cho vai
+  --      thường SET/RESET ở mức database và vai (đo), một năng lực BỀN lật [INV-F1] lặp lại; không vai nào cần quyền
+  --      bền trên GUC tenant (lượt soi 39 NHẸ-2; CAU_PARAMETER_ACL_SAI chỉ soi grantee PUBLIC/vai ứng dụng);
+  --   ⒠ proconfig của hàm trong lược đồ dự án: `CREATE FUNCTION … SET app.org_id = <B>` làm mọi policy trong thân hàm
+  --      thấy B, SECURITY INVOKER cũng đủ (lượt soi 39 NHẸ-5) — đòi CREATE trên schema.
+  -- GUC vận hành KHÔNG dấu chấm (DateStyle, TimeZone, log_*…) cố ý KHÔNG thuộc mục này — [I3] đòi "một GUC hàng xóm
+  -- không được chặn deploy vĩnh viễn". QUYẾT ĐỊNH NÓI RA (lượt soi 39 INFO-1): GUC của extension (pgaudit.log,
+  -- auto_explain.*, pg_trgm.*…) đặt ở mức database/vai ứng dụng CŨNG bị mục này bắt cho tới khi khai tên vào
+  -- GUC_TUY_BIEN_KHAI — "dấu chấm" là đại diện đo được của tính chất "policy/hàm dự án đọc vào", và mỗi dòng khai là
+  -- một câu trả lời nhìn thấy được; giá là một lần sửa mã cho một GUC hàng xóm có dấu chấm. Giá trị KHÔNG in vào
+  -- thông điệp (chỉ tên): thông điệp deploy đi vào log.
+  -- RANH GIỚI NÓI THẲNG: `options=-c app.org_id=…` trên chuỗi kết nối của PHIÊN ỨNG DỤNG không để lại dấu vết ở đâu
+  -- hardening đọc được — ai kiểm soát chuỗi kết nối kiểm soát tiến trình ứng dụng; vai deploy bị `ALTER ROLE
+  -- trien_khai SET app.org_id` (superuser) không thuộc tập vai ứng dụng nên không bị thấy — migration backfill dưới
+  -- FORCE RLS chạy dưới B (lượt soi 39 INFO-5); trigger gọi `set_config(…, true)` giữa giao dịch lật các câu SAU trong
+  -- cùng giao dịch — lớp code review; `app.hardening_che_do` gắn sẵn: migrate() đặt lại bằng set_config trong phiên
+  -- nên miễn nhiễm, và tên ấy có dấu chấm nên chính mục này bắt (INFO-2). Lớp ứng dụng (S1.47 ⑵): withTenant xoá ba
+  -- GUC khách trong MỌI giao dịch và TỪ CHỐI phục vụ khi một trong bốn GUC đã có giá trị lúc mở giao dịch (mặc định
+  -- phiên) — ồn ào thay vì im lặng, không tựa vào deploy kế. Mục này chỉ đọc catalog của database hiện tại: `ALTER ROLE app_api
+  -- IN DATABASE khac SET` là việc của database ấy.
+  GUC_TUY_BIEN_KHAI constant text :=
+    $q$(VALUES ('')) AS gk(ten)$q$;
+
+  -- Tập vai mà một hàng pg_db_role_setting "thuộc về phiên ứng dụng": mức database, ALTER ROLE ALL, hay vai kết nối.
+  VI_TU_HANG_CAU_HINH_UNG_DUNG constant text :=
+    $q$(s.setdatabase = 0 OR d.datname = pg_catalog.current_database())
+       AND (s.setrole = 0
+            OR r.rolname IN $q$ || ROLE_CANH || $q$
+            OR r.rolname IN ($q$ || VAI_KET_NOI_UNG_DUNG || $q$))$q$;
+
+  -- (coalesce viết TRẦN cố ý: COALESCE là cú pháp, `pg_catalog.coalesce(...)` ném 42883 — đo, cùng bài học NULLIF ở 001/027.)
+  -- Tập tên GUC mà mã của dự án ĐỌC VÀO — suy từ văn bản: `current_setting('x.y'…)` trong prosrc của hàm trong lược đồ dự
+  -- án và trong biểu thức USING/WITH CHECK của mọi policy (pg_get_expr in ra `current_setting('app.x'::text, true)`).
+  CAU_TEN_GUC_DU_AN_DOC constant text :=
+    $q$SELECT DISTINCT m[1] AS ten
+         FROM (SELECT pg_catalog.regexp_matches(pp.prosrc, 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g') AS m
+                 FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$ AND pp.prosrc IS NOT NULL
+               UNION ALL
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g')
+                 FROM pg_policy pol WHERE pol.polqual IS NOT NULL
+               UNION ALL
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g')
+                 FROM pg_policy pol WHERE pol.polwithcheck IS NOT NULL) x$q$;
+
+  CAU_GUC_TUY_BIEN_GAN_SAN constant text :=
+    $q$SELECT CASE WHEN s.setrole = 0 AND s.setdatabase = 0 THEN 'mọi vai, mọi database (ALTER ROLE ALL)'
+                   WHEN s.setrole = 0 THEN 'database ' || pg_catalog.quote_ident(d.datname)
+                   ELSE 'vai ' || pg_catalog.quote_ident(r.rolname)
+                        || CASE WHEN s.setdatabase = 0 THEN ' (toàn cụm)' ELSE ' IN DATABASE ' || pg_catalog.quote_ident(d.datname) END
+              END
+              || ': GUC tuỳ biến ' || g.ten || ' gắn sẵn — mọi phiên mở sau nó (kể cả câu ngoài withTenant, job, migrate) '
+                 'khởi đầu với giá trị ấy thay vì NULL; policy tenant/khách đọc GUC này (khoản 87). Sửa: ALTER DATABASE … RESET / '
+                 'ALTER ROLE … RESET / ALTER ROLE ALL RESET bằng SUPERUSER hay vai được GRANT SET ON PARAMETER (chủ database thường bị '
+                 '42501, và RESET ALL dưới vai thường giữ im lặng phần tử này — đo); hoặc khai tên vào GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
+         FROM pg_db_role_setting s
+         LEFT JOIN pg_database d ON d.oid = s.setdatabase
+         LEFT JOIN pg_roles r ON r.oid = s.setrole
+         CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten FROM pg_catalog.unnest(s.setconfig) c) g
+        WHERE g.ten LIKE '%.%'
+          AND $q$ || VI_TU_HANG_CAU_HINH_UNG_DUNG || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = g.ten)
+       UNION ALL
+       SELECT 'phiên deploy hiện tại: GUC ' || t.ten || ' có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó '
+              '— cụm (postgresql.conf, ALTER SYSTEM/postgresql.auto.conf), dòng lệnh, options= của chuỗi kết nối deploy, hay phiên này '
+              'mở trong lúc một cấu hình đã bị RESET sau đó (giá trị mức database/vai áp lúc mở phiên và sống tới khi kết nối lại): mọi '
+              'phiên cùng nguồn khởi đầu với giá trị ấy; policy/hàm dự án đọc GUC này (khoản 87). Sửa: ALTER SYSTEM RESET rồi '
+              'pg_reload_conf(), gỡ dòng cấu hình / tham số kết nối, hay chạy lại migrate() trên kết nối mới; hoặc khai tên vào '
+              'GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
+         FROM ($q$ || CAU_TEN_GUC_DU_AN_DOC || $q$) t
+        WHERE t.ten <> 'app.hardening_che_do'
+          AND coalesce(pg_catalog.current_setting(t.ten, true), '') <> ''
+          AND NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
+                            LEFT JOIN pg_database d ON d.oid = s.setdatabase
+                            LEFT JOIN pg_roles r ON r.oid = s.setrole
+                           WHERE $q$ || VI_TU_HANG_CAU_HINH_UNG_DUNG || $q$
+                             AND EXISTS (SELECT 1 FROM pg_catalog.unnest(s.setconfig) c WHERE pg_catalog.split_part(c, '=', 1) = t.ten))
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = t.ten)
+       UNION ALL
+       -- Chỉ grantee KHÔNG superuser (hay PUBLIC): aclexplode in cả quyền của chủ tham số (superuser bootstrap) — đo.
+       SELECT 'quyền trên tham số ' || pa.parname || ' cấp cho '
+              || (SELECT pg_catalog.string_agg(DISTINCT CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(gr.rolname) END, ', ')
+                    FROM pg_catalog.aclexplode(pa.paracl) x LEFT JOIN pg_roles gr ON gr.oid = x.grantee
+                   WHERE x.grantee = 0 OR NOT gr.rolsuper)
+              || ' (pg_parameter_acl): GUC tuỳ biến đặt được ở mức database/vai bởi vai không superuser — năng lực bền lật ranh giới '
+                 'tenant/khách (khoản 87). Sửa: REVOKE SET, ALTER SYSTEM ON PARAMETER … FROM … bằng SUPERUSER; hoặc khai tên vào '
+                 'GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
+         FROM pg_catalog.pg_parameter_acl pa
+        WHERE pa.parname LIKE '%.%'
+          AND EXISTS (SELECT 1 FROM pg_catalog.aclexplode(pa.paracl) x LEFT JOIN pg_roles gr ON gr.oid = x.grantee
+                       WHERE x.grantee = 0 OR NOT gr.rolsuper)
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = pa.parname)
+       UNION ALL
+       SELECT 'hàm ' || pn.nspname || '.' || pp.proname || '(' || pg_catalog.pg_get_function_identity_arguments(pp.oid) || ') (proconfig)'
+              || ': GUC tuỳ biến ' || h.ten || ' gắn sẵn cho thân hàm — mọi policy trong thân hàm thấy giá trị ấy, SECURITY INVOKER '
+                 'cũng đủ (khoản 87). Sửa: ALTER FUNCTION … RESET ' || h.ten || ' trong một migration mới (chủ hàm); hoặc khai tên vào '
+                 'GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
+         FROM pg_proc pp
+         JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+         CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten FROM pg_catalog.unnest(pp.proconfig) c) h
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$
+          AND h.ten LIKE '%.%'
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = h.ten)
+       UNION ALL
+       SELECT 'khai GUC tuỳ biến ' || gk.ten || ' (khoản 87) mà không hàng nào ở pg_db_role_setting của phiên ứng dụng, phiên deploy '
+              'không thấy giá trị, không pg_parameter_acl hay proconfig hàm dự án nào mang nó — dòng khai thiu' AS mo_ta
+         FROM $q$ || GUC_TUY_BIEN_KHAI || $q$
+        -- chắn hàng sentinel ('') — cùng khuôn lượt soi 32 NHẸ-2.
+        WHERE gk.ten <> ''
+          AND NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
+                            LEFT JOIN pg_database d ON d.oid = s.setdatabase
+                            LEFT JOIN pg_roles r ON r.oid = s.setrole
+                           WHERE $q$ || VI_TU_HANG_CAU_HINH_UNG_DUNG || $q$
+                             AND EXISTS (SELECT 1 FROM pg_catalog.unnest(s.setconfig) c WHERE pg_catalog.split_part(c, '=', 1) = gk.ten))
+          AND coalesce(pg_catalog.current_setting(gk.ten, true), '') = ''
+          AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_parameter_acl pa
+                           WHERE pa.parname = gk.ten
+                             AND EXISTS (SELECT 1 FROM pg_catalog.aclexplode(pa.paracl) x LEFT JOIN pg_roles gr ON gr.oid = x.grantee
+                                          WHERE x.grantee = 0 OR NOT gr.rolsuper))
+          AND NOT EXISTS (SELECT 1 FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+                           WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$
+                             AND EXISTS (SELECT 1 FROM pg_catalog.unnest(pp.proconfig) c WHERE pg_catalog.split_part(c, '=', 1) = gk.ten))$q$;
+
   -- [S1.36, lượt soi 25b #13] Thân câu "quan hệ trùng tên public trong một schema mà vai có USAGE" — MỘT
   -- bản, dùng ở cả hậu điều kiện lẫn mô tả của mục ấy; bản S1.34 chép chín dòng hai lần, đúng kiểu trôi mà
   -- BANG_GOC_TENANT đã đo.
@@ -7575,6 +7728,18 @@ $ham$;
                    WHERE s.setrole = 0
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.47 / khoản nợ 87] GUC tuỳ biến gắn sẵn cho phiên ứng dụng (năm nhánh) — PHÁN XÉT ----
+    -- Ba mục kề trên tự chữa (RESET là đơn điệu và chủ database làm được với GUC thường); GUC placeholder thì chủ
+    -- database thường không SET/RESET được (đo) nên mục này phán xét — xem chú thích ở CAU_GUC_TUY_BIEN_GAN_SAN.
+    ARRAY[
+      $q$GUC tuỳ biến (app.*) không được gắn sẵn cho phiên ứng dụng: mức database, ALTER ROLE ALL, vai kết nối, cụm/options= (phiên deploy thấy giá trị), pg_parameter_acl, proconfig hàm (khoản 87)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_GUC_TUY_BIEN_GAN_SAN || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_GUC_TUY_BIEN_GAN_SAN || $q$) t)$q$,
+      $q$SUPERUSER hay vai được GRANT SET ON PARAMETER (ALTER DATABASE / ALTER ROLE / ALTER ROLE ALL … RESET <guc>; ALTER SYSTEM RESET + pg_reload_conf(); REVOKE … ON PARAMETER); chủ hàm (ALTER FUNCTION … RESET); hoặc khai tên vào GUC_TUY_BIEN_KHAI trong chính file này$q$
     ],
 
     -- ---- Quyền trên schema ---------------------------------------------------------------

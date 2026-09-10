@@ -2207,3 +2207,55 @@ hưởng.
 fixture "đối chứng âm" phải được đặt tên theo lý do nó âm — `t_thuong` cho `users` là lời khai sai đóng băng lỗ; ⑶ kế thừa
 INHERITS mang cột mà không mang ràng buộc: mọi vị từ dựa trên `pg_constraint` phải hỏi tổ tiên; ⑷ khoản 91: cửa ra "bật RLS rồi
 khai" chỉ mạnh bằng FORCE và bằng việc (C) nhìn thấy bảng đã khai.
+
+# §S1.47 — khoản nợ 87: GUC `app.*` gắn sẵn cho phiên ứng dụng — mục phán xét năm nhánh theo tính chất; `withTenant` từ chối phục vụ khi mặc định phiên bị đầu độc — MÃ SẢN XUẤT; khoản 92 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `CAU_GUC_TUY_BIEN_GAN_SAN` (tính chất "tên GUC có dấu chấm"): ⒜ `ALTER
+DATABASE … SET`; ⒝ hàng của vai kết nối ứng dụng và `ALTER ROLE ALL SET`; ⒞ chính phiên deploy — `current_setting(tên, true)` trên tập
+tên suy từ prosrc hàm lược đồ dự án + biểu thức policy (`CAU_TEN_GUC_DU_AN_DOC`), khác rỗng mà không hàng catalog nào mang; ⒟
+`pg_parameter_acl` với grantee không superuser; ⒠ `proconfig` hàm lược đồ dự án; danh sách trắng `GUC_TUY_BIEN_KHAI` rỗng, chiều
+ngược bắt dòng khai thiu; mục `bang` phán xét, không tự RESET. `packages/tenancy/src/with-tenant.ts` — `BEGIN; SELECT` một round-trip
+đọc bốn GUC trước khi đặt: có giá trị ⇒ `TenantError` trước `fn`, không huỷ kết nối; rồi đặt `app.org_id` + xoá ba GUC khách; `finally`
+đọc bốn trục. Test: `db/migrations.int.test.ts` "[khoản nợ 87]" (mười vế), `packages/tenancy/src/with-tenant.int.test.ts` describe
+S1.47 (hai), meta-test sentinel 7. Không migration đánh số, không GRANT, không bảng mới.
+
+**Đo (PostgreSQL 16):** chủ database thường 42501 ở SET lẫn RESET placeholder mức database; `GRANT SET ON PARAMETER app.org_id TO
+trien_khai` ⇒ vai thường SET/RESET được (REVOKE ⇒ 42501 lại); `ALTER ROLE app_api RESET ALL` dưới vai thường giữ im lặng phần tử
+placeholder (rolconfig còn nguyên — hai mục cùng đỏ); placeholder KHÔNG có ở `pg_settings` kể cả sau SET (không `source`/`reset_val`),
+`pg_file_settings` thấy postgresql.auto.conf nhưng chỉ superuser/pg_read_all_settings đọc; `ALTER SYSTEM SET app.org_id` (sau SET trong
+phiên) + `pg_reload_conf` ⇒ kết nối mới mang giá trị, catalog sạch ⇒ ⒞ NÉM; phiên mở trong cửa sổ `ALTER DATABASE SET` giữ giá trị sau
+RESET (migrate() huỷ client mỗi lượt nên lượt kế là phiên mới) ⇒ ⒞ kêu đúng, kết nối mới ⇒ qua; `pg_catalog.nullif`/`pg_catalog.coalesce`
+ném 42883 (cú pháp, không phải hàm); `ALTER DATABASE SET app.guest_session_id` ⇒ câu ngoài withTenant 0 hàng không lỗi (ADR-036),
+withTenant từ chối trước `fn`, pid ổn định; lượt evidence đầu đỏ hai test cũ (CR3/IM4) vì chúng để `app.org_id` phạm vi PHIÊN trên
+`db.pool` rồi `migrate()` cùng pool — ⒞ phán đúng, test sửa huỷ client trước `migrate()` (kỳ vọng lật có chủ đích).
+
+**Đỏ đo được, cô lập (9 đột biến):** M1 bỏ mục · M2 bỏ vế dấu chấm · M3 bỏ nhánh setrole 0 · M6 bỏ ⒞ · M7 bỏ ⒟ · M8 bỏ ⒠ · M5
+`finally` chỉ đọc org_id · M9 bỏ từ chối — tám ca đỏ đúng khẳng định. **M4 bỏ câu xoá ba GUC khách: SỐNG** — phép từ chối đứng trước
+nên câu xoá chỉ là lớp hai, không đo riêng được; ghi thẳng, không khẳng định hơn.
+
+### Lượt soi đối kháng 39 (trên bản đầu của S1.47 — một nhánh catalog, `withTenant` chỉ xoá): 2 NẶNG, 5 NHẸ, 5 INFO — xử lý hết trong bản ba (một NHẸ thành khoản 92)
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Meta-test sentinel ở rls-coverage ghim `toBe(6)`; `GUC_TUY_BIEN_KHAI` là sentinel thứ bảy ⇒ cổng đỏ | đúng — rls-coverage chưa được chạy trên bản đầu | `toBe(7)`, chạy rls-coverage (xanh) |
+| NẶNG-2 | NẶNG | `ALTER SYSTEM SET app.org_id` / dòng postgresql.conf: cùng tác nhân, cùng hậu quả, `pg_db_role_setting` sạch ⇒ mục mù; ranh giới chỉ nói chuỗi kết nối; đề xuất đọc `pg_settings.source` | đúng theo đọc; ĐO: đề xuất không dùng được — placeholder không có ở `pg_settings` (GUC_NO_SHOW_ALL), `pg_file_settings` chỉ superuser đọc | nhánh ⒞ đọc thẳng `current_setting` trên tập tên suy từ policy/hàm dự án (mọi vai đọc được); test (c′) đo `ALTER SYSTEM` trên PG16 (cần SET placeholder trong phiên trước); đột biến M6 |
+| NHẸ-1 | NHẸ | Hàng `ALTER ROLE ALL SET` (0, 0) bị bắt nhưng `mo_ta` NULL ⇒ "SAI ()", hướng dẫn RESET sai; ba mục kề không thấy hàng ấy | đúng theo đọc | nhánh CASE riêng "mọi vai, mọi database (ALTER ROLE ALL)", test (a′); ba mục kề → **khoản 92** |
+| NHẸ-2 | NHẸ | "Chỉ superuser" nói quá: `GRANT SET ON PARAMETER` (PG15+) cho vai thường SET/RESET placeholder ở mức database/vai; `CAU_PARAMETER_ACL_SAI` chỉ soi grantee PUBLIC/vai ứng dụng | ĐO: qua sau GRANT, 42501 sau REVOKE | nhánh ⒟ bất kể grantee (lọc superuser — aclexplode in cả chủ, đo); câu chữ sửa; test (d); đột biến M7 |
+| NHẸ-3 | NHẸ | Non-superuser `RESET ALL` giữ im lặng phần tử placeholder ⇒ "bốn mục RESET ALL tự chữa" chỉ đúng khi superuser; chưa đo | ĐO: rolconfig còn nguyên, hai mục cùng đỏ | chú thích + cột quyền của mục 87; test (b′) |
+| NHẸ-4 | NHẸ | Dưới GUC gắn sẵn, `finally` thấy giá trị mặc định sau COMMIT ⇒ huỷ kết nối MỖI lượt với chẩn đoán "fn đặt phạm vi phiên"; đề xuất phân biệt qua `pg_settings.source` | đúng theo đọc (pid đổi — đo); đề xuất không dùng được (đo) | đọc bốn GUC trong `BEGIN; SELECT` trước khi đặt ⇒ từ chối trước `fn`, cờ bỏ qua `finally`; test pid ổn định; đột biến M9 |
+| NHẸ-5 | NHẸ | `proconfig` hàm dự án có `app.*` không ai canh; trigger `set_config(…, true)` ngoài tầm `finally` | đúng theo đọc | nhánh ⒠, test (e), đột biến M8; trigger — ranh giới nói ra |
+| INFO-1 | INFO | Extension (pgaudit, auto_explain, pg_trgm…) ở mức DB/vai ứng dụng chặn deploy tới khi khai — trái tinh thần [I3] cho hàng xóm | xác nhận | quyết định nói ra trong chú thích và biên bản: "dấu chấm" là đại diện đo được; cửa khai có |
+| INFO-2 | INFO | `app.hardening_che_do` gắn sẵn: migrate() miễn nhiễm, mục 87 bắt; chỉ `psql -f` bị | xác nhận | một dòng chú thích; nhánh ⒞ loại tên này (migrate() đặt trong phiên) |
+| INFO-3 | INFO | `LIKE '%.%'` không qua `format()` ⇒ bộ giải an toàn | xác nhận | — |
+| INFO-4 | INFO | Docstring nói `rfq_packages`, test đo `user_login_tokens` | xác nhận | sửa docstring |
+| INFO-5 | INFO | Vai deploy bị `ALTER ROLE trien_khai SET app.org_id` (superuser) ngoài tập ⇒ backfill dưới B | xác nhận | ranh giới nói ra |
+
+**Khớp — người soi kiểm bằng đọc:** thứ tự BƯỚC 1 / bốn mục RESET ALL (lượt sửa) trước mục 87 (phán xét) — không chồng; vai thuộc tập
+qua SET không USAGE — `pg_has_role(…, 'SET')` thấy; `'' ≡ chưa gắn` ở mọi điểm đọc (NULLIF); `withGuestSession` đặt ba GUC sau câu
+xoá; `concat_ws` bốn NULLIF không có âm tính giả; round-trip không tăng.
+
+**Điều đáng mang sang vòng sau:** ⑴ `pg_settings` không phải nguồn sự thật cho GUC tuỳ biến — thứ mọi vai đọc được là chính giá trị,
+trên tập tên rút từ văn bản policy/hàm; ⑵ `pg_catalog.` chỉ ghim được HÀM — `NULLIF`/`COALESCE`/`CASE` là cú pháp, ghim vào là ném
+42883 và một `catch` bọc ngoài biến lỗi ấy thành phép kiểm mù; ⑶ một lớp ứng dụng "xoá rồi chạy tiếp" dưới mặc định bị đầu độc là
+im lặng — từ chối trước `fn` mới ồn ào; ⑷ `migrate()` huỷ client mỗi lượt: phép đo "sau RESET" phải trên kết nối mới; ⑸ khoản 92:
+ba mục kề lọc `setdatabase = <db>` nên mù với `ALTER ROLE ALL`.

@@ -68,6 +68,17 @@ export interface WithTenantOptions {
  *
  * Bảo đảm hiện tại, phát biểu đúng phạm vi: kết nối trả về pool KHÔNG mang theo `app.org_id`
  * — hoặc vì nó chưa bao giờ vượt ra khỏi transaction, hoặc vì kết nối đã bị huỷ thay vì trả về.
+ * [S1.47 / khoản nợ 87 ⑵] Cùng bảo đảm ấy cho BA GUC khách (`app.guest_session_id`,
+ * `app.guest_invitation_id`, `app.guest_rfq_id`): khối `finally` đọc cả bốn trục. Và một vế MỚI ở
+ * đầu giao dịch: hàm này XOÁ ba GUC khách về '' (phạm vi transaction) trước khi chạy `fn` — một
+ * giá trị gắn sẵn ở mức database (`ALTER DATABASE … SET app.guest_session_id`, chỉ superuser) hay
+ * trên chuỗi kết nối (`options=-c …`) không biến giao dịch của người mua thành phiên khách. Đo ở
+ * with-tenant.int.test.ts "[khoản nợ 87]": trước bản vá, `withTenant(orgA)` đọc `user_login_tokens`
+ * ra 0 hàng không lỗi dưới GUC ấy. [lượt soi 39 NHẸ-4] Và hơn thế: hàm này TỪ CHỐI phục vụ (TenantError,
+ * trước `fn`, không thay đổi nào được ghi) khi một trong bốn GUC đã có giá trị lúc mở giao dịch — tức
+ * MẶC ĐỊNH PHIÊN (placeholder không có mặt ở `pg_settings`, đo — nên đọc thẳng giá trị) khác rỗng — vì mọi câu NGOÀI withTenant của cùng tiến trình đang chạy dưới tổ chức/phiên
+ * khách do người khác chọn, và xoá trong giao dịch không chữa được điều đó: ồn ào thay vì im lặng.
+ * Lớp bắt ở catalog là mục phán xét khoản 87 của hardening; hàm này là lớp không chờ deploy kế.
  *
  * Mọi truy cập dữ liệu có org_id BẮT BUỘC đi qua hàm này. Đây là điểm duy nhất gắn tenant
  * context, để không có đường vòng nào bỏ qua RLS (bất biến F1).
@@ -135,13 +146,58 @@ export async function withTenant<T>(
   // huỷ nó khi release(err), còn release() trần thì trả nó về cho người dùng kế tiếp. Xem
   // cùng bài học ở packages/db/src/migrate.ts [fix round 5 — M10].
   let loiLamHongClient: Error | undefined;
+  // [S1.47] Đã từ chối vì mặc định phiên: khối `finally` không được đọc lại rồi huỷ kết nối (kết nối kế mang cùng mặc định).
+  let tuChoiMacDinh = false;
   try {
-    await client.query("BEGIN");
+    // [S1.47 / khoản nợ 87 ⑵ — lượt soi 39 NHẸ-4] BEGIN và, trong CÙNG round-trip (một câu nhiều lệnh, không tham số),
+    // đọc bốn GUC TRƯỚC khi hàm này đặt gì: một giá trị đã có sẵn lúc mở giao dịch là MẶC ĐỊNH PHIÊN (`ALTER
+    // DATABASE/ROLE … SET`, postgresql.conf/ALTER SYSTEM, `options=-c` trên chuỗi kết nối) — kết nối rò từ lần dùng
+    // trước đã bị `finally` huỷ, không quay lại đây. Mặc định ấy khác rỗng nghĩa là MỌI câu ngoài withTenant của tiến
+    // trình này đang chạy dưới một tổ chức/phiên khách do người khác chọn, và xoá trong giao dịch không chữa được điều
+    // đó: hàm này TỪ CHỐI phục vụ TRƯỚC `fn` (ROLLBACK, không thay đổi nào được ghi) — ồn ào thay vì im lặng, không tựa
+    // vào deploy kế (mục phán xét khoản 87 của hardening bắt cùng cấu hình ở catalog/phiên deploy). Vì sao không đọc
+    // pg_settings.reset_val/source: GUC placeholder KHÔNG có mặt ở pg_settings (đo, thăm dò S1.47). Bản đầu chỉ xoá rồi
+    // chạy tiếp: `finally` thấy giá trị mặc định, tưởng `fn` để lại, HUỶ kết nối mỗi lượt với chẩn đoán sai.
+    const ketQuaMo = (await client.query(
+      "BEGIN; " +
+        "SELECT pg_catalog.concat_ws(', ', " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS mac_dinh",
+    )) as unknown as pg.QueryResult<{ mac_dinh: string | null }>[];
+    const macDinh = ketQuaMo[1]?.rows[0]?.mac_dinh;
+    if (macDinh) {
+      tuChoiMacDinh = true;
+      // Chỉ TÊN, không giá trị — cùng lý do với nhánh UUID ở trên.
+      throw new TenantError(
+        `mặc định phiên của GUC tenant/khách bị gắn sẵn ngoài withTenant — ${macDinh}. Mọi câu không qua withTenant ` +
+          "của tiến trình này đang chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, " +
+          "postgresql.conf/ALTER SYSTEM, options= trên chuỗi kết nối); từ chối phục vụ cho tới khi RESET " +
+          "(mục phán xét khoản 87 của hardening).",
+      );
+    }
     // [vòng fix 3 — I1] pg_catalog.set_config, KHÔNG phải set_config trần. Xem khối
     // "GHIM TÊN HÀM" ở docstring: đây là đường DUY NHẤT trong repo chạy dưới một
     // search_path mà dự án không kiểm soát, nên nó là chỗ DUY NHẤT lời gọi trần thật sự
     // cướp được.
-    await client.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [orgId]);
+    // [S1.47 / khoản nợ 87 ⑵] MỘT câu, BỐN GUC: gắn tổ chức VÀ xoá tường minh ba GUC khách về '' (phạm vi
+    // transaction). Vì sao xoá thứ mình không đặt: `ALTER DATABASE … SET app.guest_session_id = <uuid>` (chỉ
+    // superuser đặt được — đo) làm MỌI phiên mở sau nó khởi đầu như một phiên khách, và 11 policy RESTRICTIVE
+    // `_khach` của 027 thu hẹp mọi câu của người mua về 0 hàng KHÔNG LỖI — đúng cơ chế ADR-036 đo ở
+    // with-tenant.int.test.ts "[khoản nợ 87]". Hardening có mục phán xét cho catalog (S1.47 ⑴), nhưng lớp ứng
+    // dụng không tựa vào deploy kế: mỗi giao dịch của người mua tự đứng trên bốn GUC nó biết. '' là "không có"
+    // với mọi hàm đọc của 001/027 (NULLIF(…, '')). withGuestSession đặt lại ba GUC ấy SAU câu này, trong `fn`.
+    // Không thêm round-trip: bốn set_config trong một SELECT.
+    // Câu xoá vẫn giữ làm lớp thứ hai (phép kiểm ở trên mù thì giao dịch này vẫn không là phiên khách). NÓI RA: đột biến
+    // bỏ riêng ba set_config('', true) này SỐNG (phép từ chối đứng trước bắt cùng ca) — lớp hai, không phải lớp được đo.
+    await client.query(
+      "SELECT pg_catalog.set_config('app.org_id', $1, true), " +
+        "       pg_catalog.set_config('app.guest_session_id', '', true), " +
+        "       pg_catalog.set_config('app.guest_invitation_id', '', true), " +
+        "       pg_catalog.set_config('app.guest_rfq_id', '', true)",
+      [orgId],
+    );
     const ketQua = await fn(client);
 
     // Đã đo trên PostgreSQL 16.15 (pg@8.23.0): COMMIT trên một transaction ĐANG HỎNG không ném
@@ -170,17 +226,29 @@ export async function withTenant<T>(
     // [vòng fix 1 — I1] Xem giải thích dài ở docstring. Chạy trên CẢ HAI đường ra (trả về
     // bình thường và ném lỗi) vì `fn` để lại trạng thái phiên được ở cả hai.
     try {
-      const { rows } = await client.query<{ con_sot: string | null }>(
+      const { rows } = tuChoiMacDinh
+        ? { rows: [{ con_sot: null }] }
+        : await client.query<{ con_sot: string | null }>(
         // [vòng fix 3 — I1] pg_catalog.current_setting: một doc.current_setting(text, boolean)
         // trả '' luôn luôn sẽ làm phép kiểm này MÙ, và kết nối còn sót app.org_id được trả
         // về pool như thể sạch. Đây là nửa "âm tính giả" của cùng một lỗ.
-        "SELECT pg_catalog.current_setting('app.org_id', true) AS con_sot",
+        // [S1.47 / khoản nợ 87 ⑵] Đọc CẢ BỐN trục, không chỉ app.org_id: `fn` đặt một GUC khách ở phạm vi
+        // PHIÊN thì kết nối trả về pool biến người dùng kế tiếp thành phiên khách ấy — cùng cơ chế I1.
+        // NULLIF viết TRẦN và cố ý: nó là cú pháp, không phải hàm — `pg_catalog.nullif(...)` ném "function
+        // does not exist" (đã ghi ở 001/027) và lỗi ấy bị `catch` dưới nuốt ⇒ phép kiểm MÙ (đo: bốn test I1 đỏ).
+        // [lượt soi 39 NHẸ-4] Giá trị còn lại ở đây chỉ có thể là của `fn` (phạm vi PHIÊN): mặc định phiên đã bị từ
+        // chối ở đầu giao dịch nên không tới được đây — huỷ là đúng chẩn đoán.
+        "SELECT pg_catalog.concat_ws(',', " +
+          "  NULLIF(pg_catalog.current_setting('app.org_id', true), ''), " +
+          "  NULLIF(pg_catalog.current_setting('app.guest_session_id', true), ''), " +
+          "  NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), ''), " +
+          "  NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '')) AS con_sot",
       );
       // Cố ý KHÔNG nội suy giá trị còn sót vào thông báo — cùng lý do với nhánh UUID ở trên.
       if (rows[0]?.con_sot) {
         loiLamHongClient ??= new TenantError(
-          "app.org_id còn sót sau transaction — `fn` đã đặt biến ở phạm vi PHIÊN. Kết nối bị " +
-            "huỷ thay vì trả về pool.",
+          "app.org_id hay một GUC khách còn sót sau transaction — `fn` đã đặt biến ở phạm vi PHIÊN. " +
+            "Kết nối bị huỷ thay vì trả về pool.",
         );
       }
     } catch {
