@@ -3116,6 +3116,13 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
     t0 209 module / 0 vi phạm; hardening: `MAU_NEO`, `BANG_TENANT_KHAI`, `VI_TU_PHAI_NEO`, `CAU_NEO_SUA`, `CAU_NEO_SAI`
     + một mục; **37 ADR**. Sổ nợ **89 khoản, 16 còn mở** — đóng 89, đóng nửa 86; mười hai có hình dạng mã nguồn.
 
+    **Ghi chú CI (sau khi mở PR #41):** job T0 đỏ ở bước `gitleaks` — hai dòng khai `rfq_key_material` và
+    `user_login_tokens` trong `BANG_TENANT_KHAI` bị luật `generic-api-key` đọc tên tệp migration kề bên
+    (`017_rfq_key_material`, `029_dang_nhap_nguoi_mua`) thành bí mật; `pnpm t0` cục bộ không chạy gitleaks nên
+    xanh cục bộ không nói gì về bước này. Sửa ở cấu hình, không sửa SQL: `.gitleaks.toml` giữ toàn bộ luật mặc
+    định, chỉ miễn phần-bị-coi-là-bí-mật khớp đúng hình dạng tên tệp migration (`^\d{3}_[a-z0-9_]{1,60}$`) —
+    không miễn tệp, không miễn luật. Không đo được tại chỗ; đo bằng chính lượt CI.
+
 ## Tham chiếu
 
 | Tài liệu | Nội dung |
