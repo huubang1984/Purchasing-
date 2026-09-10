@@ -2368,3 +2368,41 @@ bộ đọc mù · M5 bỏ NÉM khuôn no-op lạ — mỗi đột biến làm �
 dạng chuỗi ở một ô là một cái tên khác của "theo tên"; ⑵ một cổng tra cứu tài liệu phải nói rõ VÙNG và loại vùng đã gạch,
 nếu không nó chỉ đo "chuỗi có tồn tại trong 4000 dòng"; ⑶ khi đổi trục so với hình dạng ghi ở khoản nợ, phải khai chỗ thu hẹp
 ngay trong vòng ấy.
+
+# §S1.50 — khoản nợ 91: cửa ra "bật RLS ⇒ khai 83⑶" hết yếu — mọi view/matview phải `security_invoker`, hardening FORCE mọi bảng bật RLS — MÃ SẢN XUẤT; khoản 94 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `CAU_DOC_VONG` bỏ VẾ ĐÍCH cho nhánh view/matview (đối xứng nhánh
+SECDEF) và nhận đủ bộ boolean của `security_invoker`; hằng mới `VI_TU_FORCE_THIEU` + một mục TỰ CHỮA bật `FORCE ROW LEVEL
+SECURITY` trên mọi bảng bật RLS của lược đồ dự án, trừ đối tượng thuộc extension. Test: `db/rls-coverage.int.test.ts`
+describe S1.50, fixture dựng dưới vai chủ KHÔNG superuser.
+
+**Đo:** chủ bảng thường + bảng chỉ ENABLE ⇒ app_api đọc `[777, 888]` qua view non-invoker, `[777]` khi đọc thẳng bảng (lỗ ở
+đường view, không ở quyền); sau lượt SỬA của `migrate()` ⇒ `relforcerowsecurity` bật ⇒ view trả `[777]`. (C) thấy view thường,
+view LỒNG, view ĐỌC QUA HÀM và matview; `v1` đã invoker được tha; `migrate()` NÉM nêu nguyên văn; `security_invoker = yes`
+được nhận.
+
+**Kỳ vọng LẬT có chủ đích (thấy ở lượt evidence):** `db/hardening-suy-tu-tinh-chat.int.test.ts` `[khoản nợ 83⑷⑸⑧]` khẳng định *"view trơn không bị phán"*; bỏ vế đích làm một view hằng cũng bị đòi cờ — lật kỳ vọng và ghi lý do tại chỗ, cùng lý lẽ đối xứng với nhánh SECDEF.
+
+**Đỏ đo được, cô lập (4 đột biến):** M1 bỏ mục FORCE · M2 chủ thể FORCE quay lại danh sách khai (bản đầu) — cùng một khẳng
+định đỏ, đây là bằng chứng cho CAO-1 · M3 trả lại vế đích của (C) ⇒ `[]` · M4 regex `true|on|1` ⇒ `= yes` bị kêu oan.
+
+### Lượt soi đối kháng 42 (trên bản đầu của S1.50): 2 CAO, 4 NẶNG, 4 NHẸ, 4 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| CAO-1 | CAO | Mục FORCE lấy chủ thể là `BANG_RLS_NGOAI_TENANT_KHAI` — đúng một hàng `caller_rate_limits`, bảng đã được mục S1.14 ENABLE+FORCE vô điều kiện ⇒ mục mới NO-OP, không đột biến CSDL nào làm đỏ (ADR-028 §2⑷ cấm) | đúng — đột biến M2 tái hiện | chủ thể theo TÍNH CHẤT: mọi bảng bật RLS của lược đồ dự án, trừ extension |
+| CAO-2 | CAO | Fixture thuộc `postgres` (SUPERUSER): superuser bỏ qua RLS ở MỌI cấu hình ⇒ lỗ rò đo được không do thiếu FORCE; chú thích quy sai nguyên nhân; không mục nào canh chủ sở hữu quan hệ | đúng theo đọc | fixture dựng dưới vai `zz_chu91` NOSUPERUSER NOBYPASSRLS; thêm đối chứng "đọc thẳng bảng ⇒ [777]" |
+| NẶNG-1 | NẶNG | Vế đích mới vẫn hụt: chuỗi view LỒNG (`pg_depend` chỉ nối tham chiếu trực tiếp) và view ĐỌC QUA HÀM; với đích là bảng RLS ngoài tenant thì nhánh "cột org_id" không bao giờ cháy | đúng — hai DDL tái hiện | bỏ hẳn vế đích cho nhánh view/matview, đối xứng nhánh SECDEF; test đo cả hai đường |
+| NẶNG-2 | NẶNG | Chủ thể là danh sách tên không kèm lý do (§2⑴); bảng RLS ngoài tenant CHƯA khai không được FORCE trong cửa sổ giữa hai deploy | đúng | vị từ `VI_TU_FORCE_THIEU`; test đo đúng ca "83⑶ còn đang chặn mà lượt SỬA vẫn FORCE" |
+| NẶNG-3 | NẶNG | Sau FORCE, bảng có policy chỉ `TO app_api` làm chủ bảng đọc/ghi 0 hàng im lặng (ADR-036 hàng 4/6); 83⑵ không soi vai chủ. Hôm nay chưa có ca nào | đúng — đọc policy 042/044 và hai lượt dọn | **khoản 94**; ranh giới ghi ở chú thích mục và ở hàng 91 |
+| NẶNG-4 | NẶNG | Cổng khoản 93 mù với mục mới: hằng đứng sau `JOIN` ngoài regex, và hàng TỰ CHỮA không có khoá tra cứu dù hậu điều kiện chặn được deploy | đúng | nói ra (nới cổng sang mọi hàng tự chữa sẽ đòi ~80 dòng lý do — không làm trong vòng này); dòng lý do cho cơ chế FORCE viết tay vào ADR-036 hàng 7 |
+| NHẸ-1 | NHẸ | Thông điệp nói "83⑶/85/86" nhưng 85/86 đòi `NOT relrowsecurity` ⇒ không bao giờ khớp | đúng | thông điệp viết lại theo phạm vi mới (không còn vế đích) |
+| NHẸ-2 | NHẸ | `NGOAI_LE_DOC_VONG` là cửa ra yếu nhất tệp: một trục, chung không gian tên quan hệ/hàm (miễn mọi overload), không bản test, không chiều khai thiu, `NOT IN` gặp NULL làm cả mục im | đúng — đối chiếu bốn danh sách khai khác | chưa sửa; ghi vào "điều mang sang" của biên bản 65 ⑹ — cửa ra nay áp cho MỌI view nên phải siết ở vòng sau |
+| NHẸ-3 | NHẸ | Regex chỉ nhận `true\|on\|1`; `yes/y/t` là boolean hợp lệ ⇒ chặn deploy trên view ĐÚNG (chiều hỏng ADR-028 §3) | đúng | nới regex; test đặt `= yes`; đột biến M4 |
+| NHẸ-4 | NHẸ | Test không đo lớp sản xuất (`migrate()` NÉM) cho vế (C), lệch chuẩn tự đặt của tệp | đúng | thêm khẳng định `migrate()` NÉM nêu nguyên văn hai thông điệp |
+| INFO-1..4 | INFO | Nhánh SECDEF không có vế đích (xác nhận — là lý lẽ cho NẶNG-1); FOREIGN TABLE sống nhờ 83⑷, `RULE … DO INSTEAD SELECT` biến thành view nên rơi vào (C), matview lồng là lỗ ngủ; đòi `security_invoker` cho view trên `caller_rate_limits` là ĐÚNG (policy khách fail-close); ca `security_invoker = true` đo đúng, không xanh vì thiếu quyền | xác nhận | ghi vào biên bản |
+
+**Điều đáng mang sang:** ⑴ một mục hardening mới phải được thử bằng câu hỏi "đột biến CSDL nào làm nó đỏ" TRƯỚC khi viết —
+mục bị một mục cũ che là mục không đo được (ADR-028 §2⑷); ⑵ mọi phép đo về RLS phải chạy dưới vai chủ KHÔNG superuser, vì
+superuser bỏ qua RLS ở mọi cấu hình và làm hai trạng thái khác nhau trông giống nhau; ⑶ `pg_depend` chỉ nối một cạnh — mọi vị
+từ "đối tượng này chạm dữ liệu kia" phải hoặc lấy bao đóng, hoặc bỏ hẳn vế đích.
