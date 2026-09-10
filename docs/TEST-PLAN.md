@@ -96,7 +96,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 
 | ID | Bất biến | Cưỡng chế | Tầng test |
 |---|---|---|---|
-| **F1** | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng **[S1.32] — và RLS không được là một đường làm câu ghi trả 0 hàng im lặng (ADR-036): mọi policy RESTRICTIVE khai đủ bốn cột nguyên văn; mọi quyền SELECT/INSERT/UPDATE/DELETE đã cấp cho vai ứng dụng (đích danh hay qua PUBLIC) có policy PERMISSIVE phủ; bảng bật RLS ngoài tập tenant phải khai kèm lý do** | **Postgres RLS** + `db/rls-coverage.int.test.ts` | **T3**, T5 |
+| **F1** | Mọi truy vấn bị ràng buộc `org_id` ở tầng DB qua RLS, không chỉ tầng ứng dụng **[S1.32] — và RLS không được là một đường làm câu ghi trả 0 hàng im lặng (ADR-036): mọi policy RESTRICTIVE khai đủ bốn cột nguyên văn; mọi quyền SELECT/INSERT/UPDATE/DELETE đã cấp cho vai ứng dụng (đích danh hay qua PUBLIC) có policy PERMISSIVE phủ; bảng bật RLS ngoài tập tenant phải khai kèm lý do** **[S1.38] và ba tổng điều tra ấy nay có mục hardening (khoản 83⑴⑵⑶): mọi policy trên bảng RLS thuộc đúng một lớp — RESTRICTIVE ngoài khuôn 027 khai sáu cột nguyên văn ở hardening, bản test đòi khớp; phủ lệnh (miễn con của bảng tenant); RLS ngoài tenant khai — `migrate()` NÉM trên cụm đã deploy, và câu phán xét của hardening chạy trong chính test này** | **Postgres RLS** + `db/rls-coverage.int.test.ts` + `db/migrations/hardening.always.sql` | **T3**, T5 |
 | **F2** | Không IDOR — và quyền truy cập không bao giờ dựa vào việc ID khó đoán | Kiểm tra quyền tường minh | T2, T5 |
 | **F3** | Khóa của tổ chức A không giải mã được dữ liệu tổ chức B | Phân cấp khóa theo tổ chức | T1, T3 |
 
