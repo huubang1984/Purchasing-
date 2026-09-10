@@ -57,7 +57,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 |---|---|---|---|
 | **B1** | Mỗi lần nộp tạo version mới; không UPDATE, không DELETE | DB trigger | T3, T5 |
 | **B2** | Mỗi lần nộp sinh biên nhận: `sha256(ciphertext)` + thời gian DB + số version + mã RFQ, có chữ ký hệ thống; nhà cung cấp kiểm chứng độc lập được | Ứng dụng + chữ ký | T1, T3, T4 |
-| **B3** | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** **[S1.43] — và danh tính của chính bảng sổ: đổi tên rồi dựng bảng cùng tên cùng hình dạng (lịch sử rời sổ) làm `migrate()` NÉM ở mục danh tính (chú thích neo theo oid + hình dạng sổ ngoài tên sổ, ADR-037)** | Lược đồ + bộ kiểm chứng + `db/migrations/hardening.always.sql` | **T1**, T3 |
+| **B3** | `audit_events` là chuỗi hash; bộ kiểm chứng phát hiện được chèn, sửa, xóa, và **cắt đuôi** **[S1.43] — và danh tính của chính bảng sổ: đổi tên rồi dựng bảng cùng tên cùng hình dạng (lịch sử rời sổ) làm `migrate()` NÉM ở mục danh tính (chú thích neo theo oid + hình dạng sổ ngoài tên sổ, ADR-037)** **[S1.45] và lớp SỬA D2 của sổ không chạm bản sao khi bảng gốc còn giữ danh tính theo kênh ① (0 trigger; chủ bảng gỡ chú thích ⇒ ranh giới nói ra — khoản 90)** | Lược đồ + bộ kiểm chứng + `db/migrations/hardening.always.sql` | **T1**, T3 |
 | **B4** | Không đường code nào xóa/sửa audit; role ứng dụng bị REVOKE UPDATE, DELETE | Quyền DB | T3, T5 |
 | **B5** | Ciphertext lưu trữ luôn khớp hash trong biên nhận tại mọi thời điểm về sau | Job kiểm tra định kỳ | T3, T6 |
 
