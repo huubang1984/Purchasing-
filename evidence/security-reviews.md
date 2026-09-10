@@ -1449,3 +1449,32 @@ sáu hướng phá. Mọi phát hiện được người viết đo lại trên 
 — và lượt soi 22 thêm hai cơ chế vào chính bản đầu của nó. Đó không phải thất bại của ADR; đó là
 điều ADR §5 nói: danh mục không chứng minh được, nhưng mọi cái thiếu nay có một địa chỉ để đứng.
 Bốn lượt soi liền (19–22) đều bác bản đầu; giá của một lượt soi rẻ hơn giá của một vòng.
+
+## Lượt soi đối kháng 23 — chạy TRƯỚC khi §S1.33 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc diff của vòng, khối nhân chứng,
+ADR-036, migration 017/018/029/037/039/005/033/019), được giao sáu hướng phá: cửa sổ đo thứ hai, cơ chế
+nuốt INSERT ngoài `RETURN NULL`, tác dụng phụ của `SET CONSTRAINTS ALL IMMEDIATE`, kịch bản, lời khai
+văn bản còn lại, rò rỉ/lặp lại. Mọi phát hiện được người viết đo lại trên PostgreSQL 16 thật.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | NẶNG | Vế ⒞ hỏi *câu báo ≥ 1 hàng*, không hỏi *hàng còn nằm trong bảng không*: trigger AFTER INSERT ROW `DELETE … WHERE id = NEW.id; RETURN NULL` cho `INSERT 0 1`, `RETURNING` đầy đủ, `calls` tăng ⇒ ghi công, bảng rỗng — cơ chế chưa có trong ADR-036 | **đo:** `rowCount` 1, `rows` 1, `n_tup_ins` 1, `n_tup_del` 1 | đọc `pg_stat_xact_user_tables` của bảng nhân chứng ở ba mốc: cửa sổ đầu bộ đếm đúng sự kiện = `rowCount`, hai bộ đếm kia = 0; cửa sổ sau = 0/0/0; lệch thì NÉM; đối chứng trong test đột biến; ADR-036 hàng 17 |
+| 2 | NẶNG | Nuốt CÓ ĐIỀU KIỆN trong cùng câu: `rfq_items` chèn hai hàng, nuốt một ⇒ `rowCount = 1 ≥ 1` vẫn ghi công; `chenKhongId` bỏ hẳn kết quả | đúng theo đọc | `chen`/`chenKhongId` đòi số hàng mong (mặc định 1, `rfq_items` 2) bằng đúng `rowCount`; ADR-036 hàng 18 |
+| 3 | NẶNG | `nhay_vai` là regex năm tên: sót `current_role`, `USER` trần, `current_setting('role')`, `has_*_privilege`, `pg_authid`, và mọi vị từ BỌC tên khác — đúng khuôn 037 đã dùng; HIGH-2 của lượt soi 20 quay lại | **đo:** 4 hàm của kho gọi `la_duong_ung_dung`, đều khớp trực tiếp; regex rộng bắt thêm `mfa_reset_kiem_quyen` qua `'user.mfa_reset'` (dương tính giả) | regex rộng hơn + bao đóng bậc một (`p.prosrc ~ '\m<q.proname>\s*\('` với `q.prosrc` khớp regex); đối chứng dương: hàm gọi vị từ bọc `current_role` phải bị THẤY, regex trực tiếp không thấy; nhân chứng `mfa_reset_requests` chạy dưới `app_api` |
+| 4 | NHẸ | Cửa sổ chọn theo `tgdeferrable`, không theo `tginitdeferred`: `DEFERRABLE INITIALLY IMMEDIATE` chạy cuối câu nhưng bị phán ở cửa sổ hai ⇒ đỏ giả | **đo:** `calls` = 1 ngay sau câu | cột `hoan := tginitdeferred`; test DEFERRED có thêm ca INITIALLY IMMEDIATE (ghi công cửa sổ đầu) |
+| 5 | NHẸ | Tiền đề "hàm DEFERRED gắn đúng một trigger" đếm HÀNG tập rộng: một trigger `AFTER INSERT OR UPDATE` là một hàng, hai sự kiện; `hoanTat` UPDATE chính bảng làm hàm cháy vì UPDATE mà ghi công cho INSERT | suy đoán, đúng về ngữ nghĩa; hôm nay 017/018 chỉ INSERT | tiền đề thêm `ins + upd + del = 1`; và vế cửa sổ sau = 0/0/0 (mục 1) cấm `hoanTat` chạm bảng nhân chứng |
+| 6 | NHẸ | Vai tạm `roles` chèn/xoá TRẦN ngoài giao dịch nhân chứng — ném giữa chừng thì vai ở lại danh mục toàn cục | đúng theo đọc | xoá vai trong `finally` (không đưa vào `hoanTat`: CASCADE xoá `role_permissions` là `n_tup_del` trên bảng nhân chứng ở cửa sổ sau) |
+| 7 | NHẸ | Hàng rào `HAM_CANH_MOT_SU_KIEN` với INSERT đứng SAU các khẳng định khác, thông điệp hứa "hàng mẫu" chưa có | đúng theo đọc | hàng rào lên đầu vòng, thông điệp nói rõ: INSERT không khai được cho tới khi có phép đo |
+| 8 | INFO | Nhân chứng `sessions` dưới `app_api` đi qua ĐỦ hai vế (029 `la_duong_ung_dung` = TRUE rồi `mfa_verified_at IS NULL` = FALSE; 039 `NOT EXISTS` chạy thật trên hồ sơ TOTP); hai mốc thời gian cùng `clock_timestamp()` của CSDL, lật là NÉM | xác nhận | — |
+| 9 | INFO | `SET CONSTRAINTS ALL IMMEDIATE` vô hại: kho không có khoá ngoại DEFERRABLE, chỉ hai constraint trigger 017/018, cả hai thoả theo cách dựng | xác nhận | — |
+| 10 | INFO | Break-glass: `unseal_canh_bao_break_glass` chèn `outbox_jobs` trong cửa sổ đầu nhưng lọc `r.bang` không ghi công lệch; CANCELLED rồi yêu cầu thường không bỏ sót đường nào | xác nhận | — |
+| 11 | INFO | `ROLLBACK` trong `catch` ném đè lỗi gốc nếu kết nối chết | đúng | bọc `try/catch` |
+| 12 | INFO | Các cơ chế nuốt khác đã có lớp riêng (`INSTEAD OF`/phân mảnh ⇒ `relkind`; `RULE` ⇒ `pg_rewrite`; đổi `NEW.org_id` ⇒ hàng vẫn vào bảng) — chỉ 1 và 2 còn hở | xác nhận | ghi cả hai vào ADR-036 §2 để bảng là NGUỒN |
+
+**Điều đáng mang sang vòng sau:** vế ⒞ từng tin một con số — `rowCount` — mà PostgreSQL đếm TRƯỚC khi
+trigger AFTER chạy. Cùng một CSDL cho một con số khác, `n_tup_*`, đếm hàng THẬT, cùng giao dịch, cùng
+khuôn với bộ đếm hàm; hỏi *"con số này đếm cái gì, lúc nào"* là câu hỏi đóng luôn ba mục (1, 2, 5). Vế
+`nhay_vai` là lời khai văn bản cuối cùng còn chọn độ mịn của phép đo, và nó nay có đối chứng dương như
+mọi tổng điều tra khác theo ADR-036 §3⑵. Năm lượt soi liền (19–23) đều bác bản đầu.
+
