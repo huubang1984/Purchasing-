@@ -2079,6 +2079,9 @@ describe("migration của dự án", () => {
         "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
           "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
       );
+      // [S1.38 / khoản nợ 83⑵, lượt soi 29 NẶNG-2] GRANT lên LÁ chỉ có nghĩa cho đọc THẲNG lá — và sau khi
+      // mục (A) bật RLS trên lá, đọc thẳng là 0 hàng không lỗi: đúng ca hardening nay phán xét. Fixture giữ
+      // GRANT trên lá để ĐO điều ấy (nửa (b)), rồi thu hồi để đối chứng đi qua.
       await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a, bao_gia_b TO app_api");
       await db.pool.query(
         `INSERT INTO bao_gia VALUES (1,'${orgA}',100), (2,'${orgB}',999)`,
@@ -2113,8 +2116,13 @@ describe("migration của dự án", () => {
           "cả nửa (b) của test này là thừa. Đo lại trước khi kết luận.",
       ).toEqual([999]);
 
-      // (b) hardening: PHẢI qua (lá không policy riêng là khuôn ĐÚNG) và PHẢI bật RLS cho lá.
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // (b) hardening: bật RLS cho lá (BƯỚC 2 tự chữa) — và [S1.38] PHÁN XÉT quyền SELECT trực tiếp trên lá
+      //     không policy nào phủ (khoản 83⑵): lá không policy riêng là khuôn ĐÚNG chừng nào không ai cấp quyền
+      //     đọc thẳng nó. Thu hồi quyền trên lá ⇒ đi qua.
+      const loiLa = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiLa, "GRANT trực tiếp lên lá không policy phải bị khoản 83⑵ bắt").not.toBeNull();
+      expect(loiLa!.message).toContain("public.bao_gia_b/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
+      expect(loiLa!.message).not.toContain("bao_gia/app_api");
       const sau = await db.pool.query<{ ten: string; bat: boolean; cuong_che: boolean }>(
         "SELECT relname AS ten, relrowsecurity AS bat, relforcerowsecurity AS cuong_che " +
           "FROM pg_class WHERE relname LIKE 'bao_gia%' ORDER BY 1",
@@ -2126,6 +2134,10 @@ describe("migration của dự án", () => {
       ]);
       expect(await doc("bao_gia_b"), "đọc thẳng lá của tổ chức khác phải trả 0 hàng").toEqual([]);
       expect(await doc("bao_gia"), "đường đọc thật (qua CHA) không được hỏng").toEqual([100]);
+      await db.pool.query("REVOKE SELECT ON bao_gia_a, bao_gia_b FROM app_api");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "lá không quyền riêng: khuôn chuẩn đi qua").resolves.toEqual([]);
+      await expect(doc("bao_gia_b"), "không quyền ⇒ ồn ào, không im lặng").rejects.toThrow(/permission denied/u);
+      expect(await doc("bao_gia"), "đường đọc thật (qua CHA) vẫn đúng").toEqual([100]);
       await apiPool.end();
     } finally {
       await db.stop();
@@ -2877,10 +2889,16 @@ describe("migration của dự án", () => {
       // (a) Lỗ HÀNH VI có thật: gắn tổ chức A đọc thẳng con thấy hàng 777 CỦA TỔ CHỨC B.
       expect(await docThangCon(orgA)).toEqual([777]);
 
-      // (b) migrate() bật cờ, và đọc thẳng con trở thành fail-closed.
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // (b) migrate() bật cờ (BƯỚC 2), đọc thẳng con trở thành fail-closed — và [S1.38 / khoản nợ 83⑵, lượt soi
+      //     29 NẶNG-2] chính trạng thái ấy (quyền SELECT trên con mà RLS từ chối tất cả) bị PHÁN XÉT: 0 hàng
+      //     không lỗi là cơ chế ADR-036 hàng 6, không phải thiết kế. Thu hồi quyền trên con ⇒ đi qua.
+      const loiCon = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiCon, "GRANT trực tiếp lên con không policy phải bị khoản 83⑵ bắt").not.toBeNull();
+      expect(loiCon!.message).toContain("khac.con_khac/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
       expect(await co()).toEqual({ bat: true, cuong_che: true });
       expect(await docThangCon(orgA)).toEqual([]);
+      await db.pool.query("REVOKE SELECT ON khac.con_khac FROM app_api");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "con không quyền riêng: đi qua").resolves.toEqual([]);
 
       // (c) Đường đọc THẬT — qua CHA — vẫn đúng: tổ chức B thấy hàng của mình, A không thấy.
       const quaCha = async (org: string): Promise<number[]> => {
@@ -3014,10 +3032,18 @@ describe("migration của dự án", () => {
           )
         ).rows[0]!.n,
       ).toBe("7");
-      await expect(
-        migrate(db.pool, MIGRATIONS_DIR),
-        "policy RESTRICTIVE hợp lệ bị chặn — hàng rào đang cấm một lớp phòng thủ CHẶT HƠN",
-      ).resolves.toEqual([]);
+      // ~~migrate() phải đi qua — "hàng rào đang cấm một lớp phòng thủ CHẶT HƠN"~~ [S1.38 / khoản nợ 83⑴]
+      // Ý gốc GIỮ NGUYÊN: [CR1] không được chặn RESTRICTIVE vì hình dạng — thông điệp không có nhánh
+      // "thiếu vế". Nhưng ADR-036 hàng 5 (S1.32) đã quyết: một RESTRICTIVE CHƯA KHAI có thể là
+      // `USING (false)` — câu ghi của app_api ra 0 hàng không lỗi — nên mục "policy thuộc đúng một lớp"
+      // chặn deploy cho tới khi bảy policy này được khai đủ sáu cột (hoặc theo khuôn 027). Đo: trước
+      // S1.38 migrate() đi qua với cả bảy.
+      const loiA = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiA, "RESTRICTIVE chưa khai phải bị mục khoản 83⑴ chặn").not.toBeNull();
+      expect(loiA!.message, "[CR1] không phải mục chặn").not.toContain("thiếu vế");
+      for (const [ten] of hinhDang) {
+        expect(loiA!.message).toContain(`public.users.${ten}: policy RESTRICTIVE không thuộc lớp nào (khoản 83⑴)`);
+      }
 
       // (b) Đường lách: biến chính policy cách ly thành RESTRICTIVE để biểu thức khỏi bị soi.
       for (const [ten] of hinhDang) {
@@ -3068,11 +3094,14 @@ describe("migration của dự án", () => {
         "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
           "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
       );
-      await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a TO app_api");
+      await db.pool.query("GRANT SELECT ON bao_gia TO app_api");
       await db.pool.query(`INSERT INTO bao_gia VALUES (1,'${orgA}',100)`);
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       // Job vận hành xoay vòng phân mảnh: tạo lá RỜI rồi ATTACH — SAU khi migrate() đã xong.
+      // [S1.38 / khoản nợ 83⑵] GRANT lên lá vừa gắn chỉ để ĐO cửa sổ phơi (đọc thẳng lá thấy 999); sau khi
+      // mục (A) bật RLS cho lá, chính GRANT ấy là ca "quyền không policy nào phủ" và bị phán xét — thu hồi
+      // ⇒ đi qua.
       await db.pool.query("CREATE TABLE bao_gia_b (id int, org_id uuid NOT NULL, gia int)");
       await db.pool.query(`INSERT INTO bao_gia_b VALUES (2,'${orgB}',999)`);
       await db.pool.query(
@@ -3104,8 +3133,11 @@ describe("migration của dự án", () => {
           "ghi chú (A) về trục thời gian phải viết lại. Đo lại trước khi kết luận.",
       ).toEqual([999]);
 
-      // (b) TÍNH CHẤT GIẢM NHẸ THẬT SỰ CÓ: lần deploy kế tiếp tự chữa, không cần ai nhớ gì.
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // (b) TÍNH CHẤT GIẢM NHẸ THẬT SỰ CÓ: lần deploy kế tiếp tự chữa (BƯỚC 2 bật RLS cho lá) — và [S1.38]
+      //     PHÁN XÉT quyền đọc thẳng lá không policy nào phủ (khoản 83⑵), vì sau khi bật RLS nó là 0 hàng im lặng.
+      const loiLa = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiLa, "GRANT trực tiếp lên lá vừa gắn phải bị khoản 83⑵ bắt").not.toBeNull();
+      expect(loiLa!.message).toContain("public.bao_gia_b/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
       const sau = await db.pool.query<{ bat: boolean; cuong_che: boolean }>(
         "SELECT relrowsecurity AS bat, relforcerowsecurity AS cuong_che FROM pg_class " +
           "WHERE relname = 'bao_gia_b'",
@@ -3113,6 +3145,9 @@ describe("migration của dự án", () => {
       expect(sau.rows[0]).toEqual({ bat: true, cuong_che: true });
       expect(await doc("bao_gia_b"), "đọc thẳng lá của tổ chức khác phải trả 0 hàng").toEqual([]);
       expect(await doc("bao_gia"), "đường đọc thật (qua CHA) không được hỏng").toEqual([100]);
+      await db.pool.query("REVOKE SELECT ON bao_gia_b FROM app_api");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "lá không quyền riêng: đi qua").resolves.toEqual([]);
+      await expect(doc("bao_gia_b"), "không quyền ⇒ ồn ào").rejects.toThrow(/permission denied/u);
     } finally {
       await db.stop();
     }
@@ -3158,7 +3193,7 @@ describe("migration của dự án", () => {
           "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
       );
       await db.pool.query("CREATE TABLE con_tt () INHERITS (cha_tt)");
-      await db.pool.query("GRANT SELECT ON cha_tt, con_tt TO app_api");
+      await db.pool.query("GRANT SELECT ON cha_tt TO app_api");
       await db.pool.query(`INSERT INTO cha_tt VALUES (1,'${orgA}',100)`);
       await db.pool.query(`INSERT INTO con_tt VALUES (2,'${orgB}',999)`);
 
@@ -3188,7 +3223,16 @@ describe("migration của dự án", () => {
         cuong_che: true,
       });
       expect(await doc("cha_tt"), "đọc QUA CHA phải chỉ thấy hàng của tổ chức A").toEqual([100]);
-      expect(await doc("con_tt"), "đọc THẲNG con phải fail-closed").toEqual([]);
+      await expect(doc("con_tt"), "con không quyền riêng: đọc thẳng ồn ào").rejects.toThrow(/permission denied/u);
+      // [S1.38 / khoản nợ 83⑵, lượt soi 29 NẶNG-2] cấp quyền thẳng lên con ⇒ đọc thẳng fail-closed 0 hàng
+      // không lỗi ⇒ hardening PHÁN XÉT; thu hồi ⇒ đi qua.
+      await db.pool.query("GRANT SELECT ON con_tt TO app_api");
+      const loiCon = await migrate(db.pool, thuMucTam).then(() => null, (e: Error) => e);
+      expect(loiCon).not.toBeNull();
+      expect(loiCon!.message).toContain("public.con_tt/app_api/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ");
+      expect(await doc("con_tt"), "đọc THẲNG con là fail-closed — đúng cái mục 83⑵ bắt").toEqual([]);
+      await db.pool.query("REVOKE SELECT ON con_tt FROM app_api");
+      await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([]);
 
       // ---- (b) DETACH PARTITION ------------------------------------------------------------
       await db.pool.query(
@@ -3201,7 +3245,7 @@ describe("migration của dự án", () => {
         "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
           "USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())",
       );
-      await db.pool.query("GRANT SELECT ON bao_gia, bao_gia_a TO app_api");
+      await db.pool.query("GRANT SELECT ON bao_gia TO app_api");
       await expect(migrate(db.pool, thuMucTam)).resolves.toEqual([]);
 
       await db.pool.query("ALTER TABLE bao_gia DETACH PARTITION bao_gia_a");
