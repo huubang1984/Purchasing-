@@ -9,6 +9,7 @@ import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type pg from "pg";
 import { describe, expect, it } from "vitest";
 import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
 
@@ -2745,6 +2746,45 @@ describe("migration của dự án", () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.48 / lượt soi ngang 40a H1] migrate() TỪ CHỐI TRƯỚC LƯỢT SỬA khi phiên deploy mang GUC app.*
+  // ==========================================================================================
+  it("[S1.48 / 40a H1] ALTER DATABASE … SET app.org_id ⇒ migrate() trên kết nối mới từ chối TRƯỚC lượt sửa: migration đánh số mới KHÔNG chạy, không dòng schema_migrations, thông điệp nêu tên không nêu giá trị; RESET ⇒ kết nối mới chạy, bảng có", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-h1-"));
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+      await writeFile(join(tmp, "999_zz_h1.sql"), "CREATE TABLE public.zz_h1 (x int);\n", "utf8");
+      const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+      const guc = "00000000-0000-4000-8000-000000000048";
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+      const poolMoi = createPool(db.connectionString, 1);
+      try {
+        const loi = await migrate(poolMoi, tmp).then(() => null, (e: Error) => e);
+        expect(loi, "phiên deploy mang app.org_id phải bị từ chối").not.toBeNull();
+        expect(loi!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
+        expect(loi!.message).not.toContain(guc);
+        // Bản trước S1.48: 999 đã chạy dưới B và đã ghi checksum, rồi mục 87 mới NÉM.
+        expect((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = 'zz_h1'")).rowCount, "migration đánh số không được chạy").toBe(0);
+        expect((await db.pool.query("SELECT 1 FROM schema_migrations WHERE version LIKE '999%'")).rowCount).toBe(0);
+      } finally {
+        await poolMoi.end();
+      }
+      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      const poolSau = createPool(db.connectionString, 1);
+      try {
+        await expect(migrate(poolSau, tmp)).resolves.toEqual(["999_zz_h1.sql"]);
+        expect((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = 'zz_h1'")).rowCount).toBe(1);
+      } finally {
+        await poolSau.end();
+      }
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 240_000);
+
+  // ==========================================================================================
   // [S1.47 / khoản nợ 87] GUC TUỲ BIẾN (app.*) GẮN SẴN Ở MỨC DATABASE — PHÁN XÉT, KHÔNG TỰ RESET
   // ==========================================================================================
   // Lượt soi ngang 33a #1: `ALTER DATABASE d SET app.org_id = <B>` lật [INV-F1] "chưa gắn ⇒ 0 hàng" thành
@@ -2760,13 +2800,28 @@ describe("migration của dự án", () => {
         (await db.pool.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
       const guc = "00000000-0000-4000-8000-000000000087";
       const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const CAU87 = docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN");
+      // [S1.48 / 40a H1] migrate() nay TỪ CHỐI SỚM khi CHÍNH phiên deploy mang một trong bốn GUC lõi (kết nối mở sau ALTER
+      // DATABASE SET thừa kế giá trị; migrate() huỷ client mỗi lượt nên lượt kế thường là phiên mới). Với bốn tên ấy, lớp bắt là
+      // phép từ chối sớm HAY mục 87 ở BƯỚC 3 — tuỳ phiên có thừa kế hay không; nhánh ⒜/⒜′ được đo bằng câu phán xét chạy
+      // trực tiếp (không phụ thuộc phiên). `bat87` chấp nhận một trong hai thông điệp cho tên `app.org_id`.
+      const TU_CHOI_SOM = "migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id";
+      const bat87 = (loi: Error | null, doanA: string, ghiChu: string): void => {
+        expect(loi, ghiChu).not.toBeNull();
+        expect(loi!.message.includes(TU_CHOI_SOM) || loi!.message.includes(doanA), `${ghiChu}: ${loi!.message.slice(0, 300)}`).toBe(true);
+        expect(loi!.message, "không in giá trị").not.toContain(guc);
+      };
+      const nhanhA = async (pool: pg.Pool | pg.PoolClient, doan: string, ghiChu: string): Promise<void> => {
+        const rows = (await pool.query<{ mo_ta: string }>(CAU87)).rows.map((r) => r.mo_ta);
+        expect(rows.some((m) => m.startsWith(doan)), `${ghiChu}; đã thấy: ${JSON.stringify(rows)}`).toBe(true);
+        expect(rows.join(" | "), "không in giá trị").not.toContain(guc);
+      };
 
       // (a) mức database — phán xét, không tự RESET, không in giá trị.
       await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
       const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      expect(loi, "GUC tuỳ biến gắn sẵn ở mức database phải bị khoản 87 bắt").not.toBeNull();
-      expect(loi!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
-      expect(loi!.message, "thông điệp không in giá trị GUC").not.toContain(guc);
+      bat87(loi, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "GUC tuỳ biến gắn sẵn ở mức database phải bị bắt");
+      await nhanhA(db.pool, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ (câu phán xét chạy trực tiếp)");
       expect(await setconfigDb(), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
       await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
       await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: RESET ⇒ đi qua").resolves.toEqual([]);
@@ -2791,7 +2846,8 @@ describe("migration của dự án", () => {
       //      thông điệp "SAI ()"); ba mục kề (row_security/…) không thấy hàng ấy — khoản 92.
       await db.pool.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
       const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      expect(loiAll!.message).toContain("mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn");
+      bat87(loiAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "ALTER ROLE ALL phải bị bắt");
+      await nhanhA(db.pool, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "nhánh ⒜′ (câu phán xét chạy trực tiếp)");
       await db.pool.query("ALTER ROLE ALL RESET app.org_id");
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
@@ -2820,10 +2876,15 @@ describe("migration của dự án", () => {
         );
         expect(nguon[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới, và placeholder vắng ở pg_settings (đo)").toEqual({ v: guc, ps: 0 });
         expect(await setconfigDb(), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
+        // [S1.48 / 40a H1] migrate() nay TỪ CHỐI SỚM (trước lượt sửa) cho bốn GUC lõi; nhánh ⒞ ở BƯỚC 3 vẫn đứng cho tập tên
+        // rộng hơn — đo bằng câu phán xét chạy trực tiếp trên chính phiên ấy.
         const loiSys = await loiCua(migrate(poolSys, MIGRATIONS_DIR));
-        expect(loiSys, "ALTER SYSTEM SET app.org_id phải bị nhánh ⒞ (phiên deploy) bắt").not.toBeNull();
-        expect(loiSys!.message).toContain("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó");
+        expect(loiSys, "ALTER SYSTEM SET app.org_id phải bị từ chối").not.toBeNull();
+        expect(loiSys!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
         expect(loiSys!.message).not.toContain(guc);
+        const cauSys = (await poolSys.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"))).rows.map((r) => r.mo_ta);
+        expect(cauSys.some((m) => m.startsWith("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó")), `nhánh ⒞ phải thấy; đã thấy: ${JSON.stringify(cauSys)}`).toBe(true);
+        expect(cauSys.join(" | ")).not.toContain(guc);
         await poolSys.query("ALTER SYSTEM RESET app.org_id");
         await poolSys.query("SELECT pg_reload_conf()");
       } finally {
@@ -2853,16 +2914,19 @@ describe("migration của dự án", () => {
         expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "chủ database thường SET placeholder").toBe("42501");
         await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
         expect(await ma(`ALTER DATABASE "${tenDb}" RESET app.org_id`), "chủ database thường RESET placeholder").toBe("42501");
-        // Deploy dưới vai ấy: NÉM ở mục 87 với thông điệp chỉ đường — không gãy thô.
+        // Deploy dưới vai ấy: từ chối sớm (phiên mới thừa kế) hay NÉM ở mục 87 — không gãy thô; ⒜ đo trực tiếp dưới vai thường.
         const loiTk = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
-        expect(loiTk).not.toBeNull();
-        expect(loiTk!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
+        bat87(loiTk, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "dưới vai deploy thường phải bị bắt");
+        await nhanhA(poolTk, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ dưới vai deploy thường");
         await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
         expect(await ma(`ALTER DATABASE "${tenDb}" SET DateStyle = 'ISO, DMY'`), "GUC thường: chủ database đặt được").toBeNull();
         expect(await ma(`ALTER DATABASE "${tenDb}" RESET DateStyle`)).toBeNull();
-        // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ nhánh ⒞ kêu (đúng); kết nối mới ⇒ đi qua.
+        // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ migrate() từ chối sớm (S1.48 H1); nhánh ⒞ cũng thấy — đo
+        // trực tiếp; kết nối mới ⇒ đi qua.
         const loiCu = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
-        expect(loiCu!.message).toContain("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào");
+        expect(loiCu!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
+        const cauCu = (await poolTk.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"))).rows.map((r) => r.mo_ta);
+        expect(cauCu.some((m) => m.startsWith("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào")), "nhánh ⒞ dưới vai deploy thường").toBe(true);
         await ketNoiMoi();
         await expect(migrate(poolTk, MIGRATIONS_DIR), "đối chứng dưới vai deploy thường (kết nối mới)").resolves.toEqual([]);
 
@@ -2884,7 +2948,8 @@ describe("migration của dự án", () => {
         expect(loiAcl!.message).toContain("quyền trên tham số app.org_id cấp cho trien_khai (pg_parameter_acl)");
         expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "được GRANT SET: chủ database thường ĐẶT được placeholder").toBeNull();
         const loiCaHai = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
-        expect(loiCaHai!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
+        bat87(loiCaHai, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "sau GRANT + SET của vai thường phải bị bắt");
+        await nhanhA(poolTk, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ sau SET của vai thường");
         expect(await ma(`ALTER DATABASE "${tenDb}" RESET app.org_id`), "được GRANT SET: RESET được").toBeNull();
         await db.pool.query("REVOKE SET ON PARAMETER app.org_id FROM trien_khai");
         expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "sau REVOKE: lại 42501").toBe("42501");
@@ -3436,6 +3501,25 @@ describe("migration của dự án", () => {
       expect(await demTrigger("public.audit_events"), "[khoản 90 ⒜] D2 không chữa dưới chú thích lạ").toBe(3);
       await db.pool.query(`COMMENT ON TABLE public.audit_events IS '${neoSo}'`);
       await expect(migrate(db.pool, MIGRATIONS_DIR), "đặt lại neo ⇒ D2 chữa, đi qua").resolves.toEqual([]);
+      expect(await demTrigger("public.audit_events")).toBe(4);
+
+      // (f) [S1.48 / lượt soi ngang 40a I5] DECOY cùng tên ở schema khác chép NGUYÊN chú thích neo của sổ thật: đi qua ⒜
+      //     (dạng `public.<sổ>`) và ⒝ (không ai mang `neo: zz_kho.audit_events`) trong khi ⒝ loại sổ THẬT ⇒ bản S1.45 D2 chữa
+      //     decoy, đứng yên trên sổ thật. Nay ⒝′ (không quan hệ khác mang ĐÚNG chuỗi neo của mình): cả hai đứng yên — decoy
+      //     0 trigger, sổ thật giữ nguyên số trigger đang thiếu (3), ⑴ chặn nêu decoy.
+      const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+      await db.pool.query("CREATE SCHEMA zz_kho; CREATE TABLE zz_kho.audit_events (LIKE public.audit_events INCLUDING ALL)");
+      const neoThat = (await db.pool.query<{ n: string }>("SELECT obj_description('public.audit_events'::regclass, 'pg_class') AS n")).rows[0]!.n;
+      expect(neoThat).toMatch(/^neo: public\.audit_events/u);
+      await db.pool.query(`COMMENT ON TABLE zz_kho.audit_events IS '${neoThat.replaceAll("'", "''")}'`);
+      await db.pool.query("DROP TRIGGER audit_events_chan_delete ON public.audit_events");
+      const loiDecoy = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loiDecoy, "decoy cùng neo phải bị ⑴ chặn").not.toBeNull();
+      expect(loiDecoy!.message).toContain("zz_kho.audit_events: mang neo");
+      expect(await demTrigger("zz_kho.audit_events"), "D2 không được chữa decoy (bản S1.45: 4)").toBe(0);
+      expect(await demTrigger("public.audit_events"), "sổ thật cũng đứng yên (⒝ loại vì decoy mang neo nêu tên nó)").toBe(3);
+      await db.pool.query("DROP SCHEMA zz_kho CASCADE");
+      expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "gỡ decoy ⇒ đi qua, D2 chữa sổ thật").toBeNull();
       expect(await demTrigger("public.audit_events")).toBe(4);
     } finally {
       await db.stop();

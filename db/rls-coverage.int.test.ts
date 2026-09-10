@@ -2269,6 +2269,12 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
       const khai = cau.replaceAll("(VALUES ('', '')) AS oi(", "(VALUES ('zz_s', 'la')) AS oi(");
       expect(khai.split("'la'").length - 1, "khối khai phải được thay ở CẢ HAI chiều").toBe(2);
       expect(await ten(c, khai)).toEqual([]);
+      // [S1.48 / lượt soi ngang 40a H3] Chiều ngược chạy được dưới vai KHÔNG có USAGE trên zz_s: "bảng còn tồn tại" đọc bằng
+      // JOIN catalog, không bằng to_regclass (phân giải tên ⇒ 42501 dưới N2 ⇒ "KHÔNG ĐÁNH GIÁ ĐƯỢC" mãi). Đột biến trả lại
+      // to_regclass ⇒ đỏ 42501 ở đây.
+      await c.query("CREATE ROLE zz_khong_usage; SET ROLE zz_khong_usage");
+      expect(await ten(c, khai), "vai không USAGE trên schema vẫn đánh giá được chiều ngược").toEqual([]);
+      await c.query("RESET ROLE");
       await c.query("ALTER TABLE zz_s.la ENABLE ROW LEVEL SECURITY");
       expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta)).toEqual([
         expect.stringContaining("khai zz_s.la là bảng org_id ngoài public không RLS (khoản 85) mà CSDL không có bảng như thế"),
@@ -2374,23 +2380,27 @@ describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có kho
         CREATE TABLE zz_s.t_tran (gia int, to_chuc uuid NOT NULL);
         CREATE TABLE zz_s.t2 (gia int, to_chuc uuid, CONSTRAINT t2_goc FOREIGN KEY (to_chuc) REFERENCES public.organizations(id));
         CREATE TABLE zz_s.con86 (them int) INHERITS (zz_s.t2);
+        CREATE TABLE zz_s.t_hop (gia int, to_chuc uuid, nguoi uuid, FOREIGN KEY (to_chuc, nguoi) REFERENCES public.users (org_id, id));
       `);
       // Ở public LẪN ngoài public — vị từ tenant không nhận nên cả hai đều là việc của mục này. Khoá ngoại tới users (bảng
       // tenant, không phải gốc) cùng lớp (38 A1). con86 thừa cột to_chuc mà không thừa khoá ngoại (38 A2) — thấy qua tổ tiên.
+      // [S1.48 / lượt soi ngang 40a H2] khoá ngoại HỢP THÀNH (to_chuc, nguoi) → users (org_id, id) — đúng quy ước khoá ngoại của
+      // kho — cũng buộc hàng vào tổ chức; bản S1.46 miễn nhiều cột và gọi là ranh giới: sai.
       expect(await ten(c, cau), "bảng không org_id có khoá ngoại tới bảng tenant, không RLS").toEqual([
-        "public.zz_t86", "zz_s.con86", "zz_s.t", "zz_s.t2", "zz_s.t_users",
+        "public.zz_t86", "zz_s.con86", "zz_s.t", "zz_s.t2", "zz_s.t_hop", "zz_s.t_users",
       ]);
       const moTa = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
       expect(moTa).toEqual(expect.arrayContaining([
-        expect.stringContaining("zz_s.t: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)"),
-        expect.stringContaining("zz_s.t_users: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua nguoi -> public.users) và không bật RLS"),
-        expect.stringContaining("zz_s.con86: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations)"),
+        expect.stringContaining("zz_s.t: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)"),
+        expect.stringContaining("zz_s.t_users: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua nguoi -> public.users) và không bật RLS"),
+        expect.stringContaining("zz_s.con86: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua to_chuc -> public.organizations)"),
+        expect.stringContaining("zz_s.t_hop: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua (to_chuc, nguoi) -> public.users)"),
       ]));
       expect(await ten(c, cau85), "có cột org_id ⇒ khoản 85, không phải 86").toEqual(["zz_s.t_org"]);
       expect(await ten(c, ngoai), "bật RLS ⇒ 83⑶").toContain("zz_s.t_rls");
       // Cửa ra hợp lệ: đổi tên cột thành org_id — ngoài public rơi sang 85, ở public thành bảng tenant ([CR1] đòi policy).
       await c.query("ALTER TABLE zz_s.t RENAME COLUMN to_chuc TO org_id; ALTER TABLE public.zz_t86 RENAME COLUMN to_chuc TO org_id");
-      expect(await ten(c, cau)).toEqual(["zz_s.con86", "zz_s.t2", "zz_s.t_users"]);
+      expect(await ten(c, cau)).toEqual(["zz_s.con86", "zz_s.t2", "zz_s.t_hop", "zz_s.t_users"]);
       expect(await ten(c, cau85)).toEqual(["zz_s.t", "zz_s.t_org"]);
       const { rows: tenant } = await c.query<{ t: string }>(
         `SELECT c.relname AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${docHangHardening("VI_TU_BANG_TENANT")} AND c.relname = 'zz_t86'`,
@@ -2401,10 +2411,10 @@ describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có kho
       // nói ra: không mục nào thấy nữa.
       const khai = cau.replaceAll("(VALUES ('', '')) AS kt(", "(VALUES ('zz_s', 't2')) AS kt(");
       expect(khai.split("'t2'").length - 1, "khối khai phải được thay ở CẢ HAI chiều").toBe(2);
-      expect(await ten(c, khai)).toEqual(["zz_s.con86", "zz_s.t_users"]);
+      expect(await ten(c, khai)).toEqual(["zz_s.con86", "zz_s.t_hop", "zz_s.t_users"]);
       await c.query("ALTER TABLE zz_s.t2 DROP CONSTRAINT t2_goc");
-      expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta.split(":")[0]!).sort()).toEqual(["khai zz_s.t2 là bảng không org_id có khoá ngoại tới bảng tenant, không RLS (khoản 86) mà CSDL không có bảng như thế — dòng khai thiu (bảng đã có cột org_id, đã bật RLS, hay đã bỏ khoá ngoại)", "zz_s.t_users"]);
-      expect(await ten(c, cau), "cột uuid trần (t2 và con86): ngoài tầm mọi mục (ranh giới nói ra)").toEqual(["zz_s.t_users"]);
+      expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta.split(":")[0]!).sort()).toEqual(["khai zz_s.t2 là bảng không org_id có khoá ngoại tới bảng tenant, không RLS (khoản 86) mà CSDL không có bảng như thế — dòng khai thiu (bảng đã có cột org_id, đã bật RLS, hay đã bỏ khoá ngoại)", "zz_s.t_hop", "zz_s.t_users"]);
+      expect(await ten(c, cau), "cột uuid trần (t2 và con86): ngoài tầm mọi mục (ranh giới nói ra)").toEqual(["zz_s.t_hop", "zz_s.t_users"]);
     } finally {
       await c.query("ROLLBACK");
       c.release();
@@ -2435,8 +2445,8 @@ describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có kho
       }
       const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
       expect(loi, "bảng khoá ngoại tới bảng tenant không org_id không RLS phải bị khoản 86 bắt").not.toBeNull();
-      expect(loi!.message).toContain("zz_s86.t: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
-      expect(loi!.message).toContain("public.zz_t86: bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
+      expect(loi!.message).toContain("zz_s86.t: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
+      expect(loi!.message).toContain("public.zz_t86: bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua to_chuc -> public.organizations) và không bật RLS — chưa khai (khoản 86)");
       expect(loi!.message, "không dòng 85").not.toContain("(khoản 85)");
       await db.pool.query("ALTER TABLE zz_s86.t ENABLE ROW LEVEL SECURITY; DROP TABLE public.zz_t86");
       const loiRls = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
@@ -2483,6 +2493,56 @@ describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () =>
       const thayCot = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
       expect(thayCot).toHaveLength(1);
       expect(thayCot[0]).toMatch(/^public\.mfa_credentials: cột org_id đã neo là attnum \d+ nhưng cột org_id hiện tại là attnum \d+/u);
+      // [S1.48 / lượt soi ngang 40a I6] bản sao PHÂN MẢNH của sổ (relkind 'p') mang bộ ba cột chuỗi: ⑷ thấy cha (bản S1.43 chỉ 'r').
+      await c.query("CREATE SCHEMA zz_s; CREATE TABLE zz_s.so_pm (seq bigint, prev_hash bytea, hash bytea, k int) PARTITION BY RANGE (seq)");
+      const thayPm = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
+      expect(thayPm.some((m) => m.startsWith("zz_s.so_pm: mang bộ ba cột chuỗi sổ")), `⑷ phải thấy bản sao phân mảnh; đã thấy: ${JSON.stringify(thayPm)}`).toBe(true);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[S1.48 / lượt soi ngang 40b #2] số policy `_khach` đếm từ CATALOG, không từ lời khai: RESTRICTIVE = MỘT cho MỖI bảng tenant theo tính chất (khuôn 027 — hardening dựng, không phải chỉ các CREATE POLICY trong migration: 21/11/10 đều là con số thiu) + 1 PERMISSIVE (042 caller_rate_limits)", async () => {
+    const viTuTenant = docHangHardening("VI_TU_BANG_TENANT");
+    const { rows } = await db.pool.query<{ restrictive: number; permissive: number; tenant: number }>(
+      "SELECT count(*) FILTER (WHERE NOT polpermissive)::int AS restrictive, count(*) FILTER (WHERE polpermissive)::int AS permissive, " +
+        `       (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${viTuTenant}) AS tenant ` +
+        "  FROM pg_policy WHERE polname LIKE '%\\_khach'",
+    );
+    expect(rows[0]!.permissive).toBe(1);
+    expect(rows[0]!.restrictive, "một policy RESTRICTIVE _khach cho mỗi bảng tenant").toBe(rows[0]!.tenant);
+    expect(rows[0]!.tenant).toBeGreaterThanOrEqual(29);
+  });
+});
+
+// ===============================================================================================
+// [S1.48 / lượt soi ngang 40a H4] TẬP TÊN GUC MÀ MÃ DỰ ÁN ĐỌC VÀO (nhánh ⒞ khoản 87) — census + regex
+// ===============================================================================================
+describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
+  const RX_LITERAL = /current_setting\s*\(\s*'([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)'/giu;
+
+  it("[INV-F1] CENSUS: mọi literal current_setting('x.y' trong db/migrations/*.sql thuộc tập trên lược đồ thật; regex nhận hoa/thường, khoảng trắng, chữ số; BEGIN ATOMIC, DEFAULT cột và CHECK cũng vào tập", async () => {
+    const trongTep = new Set<string>();
+    for (const f of readdirSync(MIGRATIONS_DIR).filter((x) => /^\d{3}_.*\.sql$/u.test(x))) {
+      for (const m of readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8").matchAll(RX_LITERAL)) trongTep.add(m[1]!.toLowerCase());
+    }
+    expect(trongTep.size, "câu quét đang mù").toBeGreaterThanOrEqual(4);
+    const cau = docHangHardening("CAU_TEN_GUC_DU_AN_DOC");
+    const tapThat = new Set((await db.pool.query<{ ten: string }>(cau)).rows.map((r) => r.ten));
+    for (const t of trongTep) expect(tapThat.has(t), `literal ${t} trong migrations không thuộc tập của hardening`).toBe(true);
+    expect(tapThat.has("app.org_id")).toBe(true);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(`
+        CREATE SCHEMA zz_s;
+        CREATE FUNCTION zz_s.f_hoa() RETURNS text LANGUAGE sql AS $$ SELECT CURRENT_SETTING ( 'app.rfq_v2', true ) $$;
+        CREATE FUNCTION zz_s.f_atomic() RETURNS text BEGIN ATOMIC SELECT current_setting('app.atomic_x', true); END;
+        CREATE TABLE zz_s.d (x text DEFAULT current_setting('app.mac_dinh_x', true), y text CHECK (y <> current_setting('app.check_x', true)));
+      `);
+      const sau = new Set((await c.query<{ ten: string }>(cau)).rows.map((r) => r.ten));
+      for (const t of ["app.rfq_v2", "app.atomic_x", "app.mac_dinh_x", "app.check_x"]) expect(sau.has(t), `thiếu ${t}`).toBe(true);
     } finally {
       await c.query("ROLLBACK");
       c.release();

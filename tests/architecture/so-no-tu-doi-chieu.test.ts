@@ -151,6 +151,8 @@ export function docCacDong(state: string): readonly DongSoNo[] {
 // ---- P0 --------------------------------------------------------------------------------------
 const O_TIEU_DE = /^\|\s*#\s*\|/;
 const O_NGAN_CACH = /^\|[\s:|-]+\|$/;
+/** [S1.48] Hàng DỮ LIỆU của sổ nợ (`| <số> |`) — dòng trống giữa hai hàng như thế mới là bảng bị cắt; giữa hai BẢNG khác nhau thì không. */
+const O_HANG_NO = /^\|\s*\d+\s*\|/;
 
 /**
  * [review lượt 13, H13-3] MỌI HÀNG BẢNG TRONG KHỐI SỔ NỢ PHẢI ĐƯỢC `docCacDong` NHẬN.
@@ -168,6 +170,13 @@ export function viPhamNhanDien(state: string): readonly string[] {
   const loi: string[] = [];
   for (const [i, l] of dong.entries()) {
     const t = l.trim();
+    // [S1.48 / lượt soi ngang 40b #12] KHỐI BẢNG PHẢI LIỀN MẠCH: một dòng TRỐNG giữa hai hàng bảng kết thúc bảng với GFM —
+    // mọi hàng sau nó thành đoạn văn với người đọc (đo: hàng 84–92 rời khỏi bảng qua chín vòng) trong khi bộ đọc theo regex
+    // vẫn "nhận" chúng. Cùng lớp với dấu cách đầu dòng: hợp lệ với GFM, vô hình với lớp canh.
+    if (t === "" && i > 0 && i + 1 < dong.length && O_HANG_NO.test(dong[i - 1]!.trim()) && O_HANG_NO.test(dong[i + 1]!.trim())) {
+      loi.push(`dòng ${tuDong + i}: dòng TRỐNG giữa hai hàng bảng — GFM kết thúc bảng ở đây, các hàng sau thành đoạn văn`);
+      continue;
+    }
     if (!t.startsWith("|") || O_TIEU_DE.test(t) || O_NGAN_CACH.test(t)) continue;
     if (!daNhan.has(tuDong + i)) {
       loi.push(`dòng ${tuDong + i}: là một hàng bảng nhưng KHÔNG được nhận diện — ${t.slice(0, 50)}`);
@@ -679,6 +688,14 @@ function dotBien(goc: string, cu: string, moi: string): string {
 describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   it("P0 — mọi hàng bảng trong khối sổ nợ đều được bộ đọc NHẬN", () => {
     expect(viPhamNhanDien(STATE)).toEqual([]);
+  });
+
+  it("[S1.48 / 40b #12] P0 đột biến — một dòng TRỐNG chen giữa hai hàng của khối sổ nợ thì ĐỎ (GFM kết thúc bảng)", () => {
+    const dong = STATE.split("\n");
+    const i = dong.findIndex((l) => /^\| 84 \|/u.test(l));
+    expect(i, "không thấy hàng 84").toBeGreaterThan(0);
+    const hong = [...dong.slice(0, i), "", ...dong.slice(i)].join("\n");
+    expect(viPhamNhanDien(hong)).toEqual([expect.stringContaining("dòng TRỐNG giữa hai hàng bảng")]);
   });
 
   it("P0 đột biến — một dòng nợ thụt vào MỘT dấu cách (GFM vẫn dựng bảng) thì ĐỎ", () => {

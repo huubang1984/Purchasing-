@@ -1408,6 +1408,15 @@ $ham$;
                                AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'kn') || $q$
                                AND pg_catalog.split_part(pg_catalog.obj_description(k.oid, 'pg_class'), ' org_id#', 1)
                                    = 'neo: ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(c.relname))
+            -- [S1.48 / lượt soi ngang 40a I5] ⒝′: không quan hệ KHÁC nào mang ĐÚNG chuỗi neo của chính bảng này. Decoy
+            -- `kho.audit_events` chép nguyên chú thích `neo: public.audit_events org_id#2` đi qua ⒜ (dạng `public.<sổ>`) và ⒝
+            -- (không ai mang `neo: kho.audit_events`) trong khi ⒝ loại sổ THẬT ⇒ D2/D3/D4 chữa decoy, đứng yên trên sổ thật
+            -- (⑴ + ⑷ chặn cùng lượt — phát hiện trễ, không mất). Nay cả hai đứng yên: lớp SỬA chỉ chạm thứ danh tính nhất quán.
+            AND NOT EXISTS (SELECT 1 FROM pg_class k2 JOIN pg_namespace kn2 ON kn2.oid = k2.relnamespace
+                             WHERE k2.oid <> c.oid AND k2.relkind IN ('r', 'p')
+                               AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'kn2') || $q$
+                               AND pg_catalog.obj_description(k2.oid, 'pg_class') IS NOT NULL
+                               AND pg_catalog.obj_description(k2.oid, 'pg_class') = pg_catalog.obj_description(c.oid, 'pg_class'))
        ),
        bang_al AS (
          SELECT bang_oid, relname, true AS trong_ds FROM bang_so
@@ -1984,7 +1993,8 @@ $ham$;
   -- `current_setting(..., true)` — chưa gắn ⇒ NULL ⇒ 0 hàng (fail-closed). Ba mục "đặt ở mức database" ở trên chỉ ghim
   -- TÊN row_security / session_replication_role / search_path; `ALTER DATABASE … SET app.org_id = <B>` lật [INV-F1]
   -- "chưa gắn ⇒ 0 hàng" thành "⇒ tổ chức B" cho MỌI câu ngoài withTenant (pool.query trần, job, migrate), và
-  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ 11 policy RESTRICTIVE `_khach` thu hẹp ⇒ câu ghi
+  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` (một mỗi bảng tenant — đếm
+  -- từ catalog ở rls-coverage, S1.48; "11" là số CREATE POLICY trong migration, con số thiu) thu hẹp ⇒ câu ghi
   -- của người mua 0 hàng không lỗi (ADR-036). Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
   -- khi SET lẫn RESET một GUC placeholder ở mức database — trừ khi được `GRANT SET ON PARAMETER` (PG15+, nhánh ⒟) —
   -- và `ALTER ROLE … RESET ALL` dưới vai không superuser GIỮ IM LẶNG phần tử placeholder (guc.c skipIfNoPermissions):
@@ -2021,9 +2031,11 @@ $ham$;
   -- một câu trả lời nhìn thấy được; giá là một lần sửa mã cho một GUC hàng xóm có dấu chấm. Giá trị KHÔNG in vào
   -- thông điệp (chỉ tên): thông điệp deploy đi vào log.
   -- RANH GIỚI NÓI THẲNG: `options=-c app.org_id=…` trên chuỗi kết nối của PHIÊN ỨNG DỤNG không để lại dấu vết ở đâu
-  -- hardening đọc được — ai kiểm soát chuỗi kết nối kiểm soát tiến trình ứng dụng; vai deploy bị `ALTER ROLE
-  -- trien_khai SET app.org_id` (superuser) không thuộc tập vai ứng dụng nên không bị thấy — migration backfill dưới
-  -- FORCE RLS chạy dưới B (lượt soi 39 INFO-5); trigger gọi `set_config(…, true)` giữa giao dịch lật các câu SAU trong
+  -- hardening đọc được — ai kiểm soát chuỗi kết nối kiểm soát tiến trình ứng dụng; ~~vai deploy bị `ALTER ROLE
+  -- trien_khai SET app.org_id` (superuser) không thuộc tập vai ứng dụng nên không bị thấy~~ [S1.48 / 40a I1] SAI CHIỀU: hàng
+  -- ấy không thuộc ⒝ nên nhánh ⒞ (phiên deploy thấy giá trị) KÊU — nhưng chỉ ở BƯỚC 3, SAU khi các migration đánh số cùng
+  -- lượt đã chạy dưới B và ghi checksum (40a H1) ⇒ migrate() nay đọc bốn GUC và TỪ CHỐI trước lượt sửa (packages/db/src/
+  -- migrate.ts); trigger gọi `set_config(…, true)` giữa giao dịch lật các câu SAU trong
   -- cùng giao dịch — lớp code review; `app.hardening_che_do` gắn sẵn: migrate() đặt lại bằng set_config trong phiên
   -- nên miễn nhiễm, và tên ấy có dấu chấm nên chính mục này bắt (INFO-2). Lớp ứng dụng (S1.47 ⑵): withTenant xoá ba
   -- GUC khách trong MỌI giao dịch và TỪ CHỐI phục vụ khi một trong bốn GUC đã có giá trị lúc mở giao dịch (mặc định
@@ -2040,19 +2052,39 @@ $ham$;
             OR r.rolname IN ($q$ || VAI_KET_NOI_UNG_DUNG || $q$))$q$;
 
   -- (coalesce viết TRẦN cố ý: COALESCE là cú pháp, `pg_catalog.coalesce(...)` ném 42883 — đo, cùng bài học NULLIF ở 001/027.)
-  -- Tập tên GUC mà mã của dự án ĐỌC VÀO — suy từ văn bản: `current_setting('x.y'…)` trong prosrc của hàm trong lược đồ dự
-  -- án và trong biểu thức USING/WITH CHECK của mọi policy (pg_get_expr in ra `current_setting('app.x'::text, true)`).
+  -- Tập tên GUC mà mã của dự án ĐỌC VÀO — suy từ văn bản: `current_setting('x.y'…)` trong prosrc/prosqlbody của hàm trong
+  -- lược đồ dự án (KHÔNG thuộc extension — pg_depend deptype 'e', như (C); lượt soi ngang 40a I3: PostGIS trong public không
+  -- được nạp tên vào tập), trong biểu thức USING/WITH CHECK của mọi policy (pg_get_expr in ra `current_setting('app.x'::text,
+  -- true)`), DEFAULT cột và CHECK. [S1.48 / 40a H4] Regex không phân biệt hoa/thường, nhận chữ số và khoảng trắng — bản
+  -- S1.47 bỏ sót `app.rfq_v2`, `CURRENT_SETTING (`; tên gộp về chữ thường (PostgreSQL gấp tên GUC). Census ở rls-coverage:
+  -- mọi literal `current_setting('x.y'` trong db/migrations/*.sql phải thuộc tập này trên lược đồ thật — tập không thiu im.
   CAU_TEN_GUC_DU_AN_DOC constant text :=
-    $q$SELECT DISTINCT m[1] AS ten
-         FROM (SELECT pg_catalog.regexp_matches(pp.prosrc, 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g') AS m
+    $q$SELECT DISTINCT pg_catalog.lower(m[1]) AS ten
+         FROM (SELECT pg_catalog.regexp_matches(pp.prosrc, 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi') AS m
                  FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
                 WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$ AND pp.prosrc IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND dp.objid = pp.oid AND dp.deptype = 'e')
                UNION ALL
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g')
+               -- [S1.48 / 40a H4] thân `BEGIN ATOMIC` (PG14+) nằm ở prosqlbody, prosrc rỗng
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_function_sqlbody(pp.oid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+                 FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$ AND pp.prosqlbody IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND dp.objid = pp.oid AND dp.deptype = 'e')
+               UNION ALL
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
                  FROM pg_policy pol WHERE pol.polqual IS NOT NULL
                UNION ALL
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), 'current_setting\(''([A-Za-z_]+\.[A-Za-z_]+)''', 'g')
-                 FROM pg_policy pol WHERE pol.polwithcheck IS NOT NULL) x$q$;
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+                 FROM pg_policy pol WHERE pol.polwithcheck IS NOT NULL
+               UNION ALL
+               -- [S1.48 / 40a H4] DEFAULT cột và CHECK trong lược đồ dự án
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(ad.adbin, ad.adrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+                 FROM pg_attrdef ad JOIN pg_class ac ON ac.oid = ad.adrelid JOIN pg_namespace an ON an.oid = ac.relnamespace
+                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'an') || $q$
+               UNION ALL
+               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_constraintdef(con.oid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+                 FROM pg_constraint con JOIN pg_namespace cn ON cn.oid = con.connamespace
+                WHERE con.contype = 'c' AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'cn') || $q$) x$q$;
 
   CAU_GUC_TUY_BIEN_GAN_SAN constant text :=
     $q$SELECT CASE WHEN s.setrole = 0 AND s.setdatabase = 0 THEN 'mọi vai, mọi database (ALTER ROLE ALL)'
@@ -2062,8 +2094,9 @@ $ham$;
               END
               || ': GUC tuỳ biến ' || g.ten || ' gắn sẵn — mọi phiên mở sau nó (kể cả câu ngoài withTenant, job, migrate) '
                  'khởi đầu với giá trị ấy thay vì NULL; policy tenant/khách đọc GUC này (khoản 87). Sửa: ALTER DATABASE … RESET / '
-                 'ALTER ROLE … RESET / ALTER ROLE ALL RESET bằng SUPERUSER hay vai được GRANT SET ON PARAMETER (chủ database thường bị '
-                 '42501, và RESET ALL dưới vai thường giữ im lặng phần tử này — đo); hoặc khai tên vào GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
+                 'ALTER ROLE … RESET / ALTER ROLE ALL RESET bằng SUPERUSER (hay GRANT SET ON PARAMETER TẠM cho một vai, RESET, rồi '
+                 'REVOKE trong cùng phiên — quyền bền bị nhánh pg_parameter_acl của chính mục này phán; chủ database thường bị 42501, và '
+                 'RESET ALL dưới vai thường giữ im lặng phần tử này — đo); hoặc khai tên vào GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
          FROM pg_db_role_setting s
          LEFT JOIN pg_database d ON d.oid = s.setdatabase
          LEFT JOIN pg_roles r ON r.oid = s.setrole
@@ -2073,8 +2106,9 @@ $ham$;
           AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = g.ten)
        UNION ALL
        SELECT 'phiên deploy hiện tại: GUC ' || t.ten || ' có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó '
-              '— cụm (postgresql.conf, ALTER SYSTEM/postgresql.auto.conf), dòng lệnh, options= của chuỗi kết nối deploy, hay phiên này '
-              'mở trong lúc một cấu hình đã bị RESET sau đó (giá trị mức database/vai áp lúc mở phiên và sống tới khi kết nối lại): mọi '
+              '— cụm (postgresql.conf, ALTER SYSTEM/postgresql.auto.conf), dòng lệnh, options= của chuỗi kết nối deploy, ALTER ROLE '
+              '<vai deploy> SET, hay phiên này mở trong lúc một cấu hình đã bị RESET sau đó (giá trị mức database/vai áp lúc mở phiên và '
+              'sống tới khi kết nối lại): mọi '
               'phiên cùng nguồn khởi đầu với giá trị ấy; policy/hàm dự án đọc GUC này (khoản 87). Sửa: ALTER SYSTEM RESET rồi '
               'pg_reload_conf(), gỡ dòng cấu hình / tham số kết nối, hay chạy lại migrate() trên kết nối mới; hoặc khai tên vào '
               'GUC_TUY_BIEN_KHAI kèm lý do' AS mo_ta
@@ -2110,6 +2144,7 @@ $ham$;
          JOIN pg_namespace pn ON pn.oid = pp.pronamespace
          CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten FROM pg_catalog.unnest(pp.proconfig) c) h
         WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$
+          AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND dp.objid = pp.oid AND dp.deptype = 'e')
           AND h.ten LIKE '%.%'
           AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_TUY_BIEN_KHAI || $q$ WHERE gk.ten = h.ten)
        UNION ALL
@@ -2247,7 +2282,7 @@ $ham$;
        SELECT 'khai public.' || g.bang || '.' || g.polname || ' (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy '
               'đúng sáu cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
-        WHERE to_regclass(pg_catalog.format('%I.%I', 'public', g.bang)) IS NOT NULL
+        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = 'public' AND zc.relname = g.bang)
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = 'public' AND c.relname = g.bang AND p.polname = g.polname
@@ -2259,7 +2294,7 @@ $ham$;
        SELECT 'khai public.' || k.bang || '.' || k.polname || ' (' || k.loai || ', khoản 83⑴) mà CSDL không có policy '
               'đúng bảy cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_KHAC_KHAI || $q$
-        WHERE to_regclass(pg_catalog.format('%I.%I', 'public', k.bang)) IS NOT NULL
+        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = 'public' AND zc.relname = k.bang)
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = 'public' AND c.relname = k.bang AND p.polname = k.polname
@@ -2339,7 +2374,7 @@ $ham$;
        SELECT 'khai ' || b.nspname || '.' || b.relname || ' là bảng RLS ngoài tenant (khoản 83⑶) mà CSDL không có bảng '
               'bật RLS như thế ngoài tập tenant — dòng khai thiu' AS mo_ta
          FROM $q$ || BANG_RLS_NGOAI_TENANT_KHAI || $q$
-        WHERE to_regclass(pg_catalog.format('%I.%I', b.nspname, b.relname)) IS NOT NULL
+        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = b.nspname AND zc.relname = b.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = b.nspname AND c.relname = b.relname
                              AND c.relkind IN ('r', 'p') AND c.relrowsecurity
@@ -2391,8 +2426,12 @@ $ham$;
          FROM $q$ || BANG_ORG_ID_NGOAI_PUBLIC_KHAI || $q$
         -- [lượt soi 32, NHẸ-2] chắn hàng sentinel ('', '') như bốn chiều ngược khác của tệp — to_regclass('""."" ')
         -- im trên PG 16 nhờ đường soft-error, ném 42601 trên PG ≤ 15: xanh nhờ mã, không nhờ phiên bản.
+        -- [S1.48 / lượt soi ngang 40a H3] "bảng còn tồn tại" đọc bằng JOIN pg_class/pg_namespace ở MƯỜI BỐN chỗ của tệp (mọi chiều ngược),
+        -- KHÔNG bằng to_regclass(): to_regclass phân giải tên nên đòi USAGE trên schema — dưới hồ sơ N2 (lượt soi 34 #1 đo
+        -- 42501 với app_private) một dòng khai trỏ schema vai deploy không có USAGE làm mục "KHÔNG ĐÁNH GIÁ ĐƯỢC" mãi (BƯỚC 3
+        -- bọc EXCEPTION), không lối ra ngoài GRANT — đúng lớp T10-E4. Đo ở rls-coverage bằng vai không USAGE.
         WHERE oi.relname <> ''
-          AND to_regclass(pg_catalog.format('%I.%I', oi.nspname, oi.relname)) IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = oi.nspname AND zc.relname = oi.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = oi.nspname AND c.relname = oi.relname
                              AND $q$ || VI_TU_HINH_DANG_85 || $q$)$q$;
@@ -2419,7 +2458,8 @@ $ham$;
   -- DISABLE RLS + DROP policy): khoá ngoại `to_chuc -> organizations` vẫn một cột ⇒ kêu, kể cả khi ADR-037 ①② bị gỡ (38 C2).
   -- RANH GIỚI NÓI THẲNG: bảng đa tổ chức có cột uuid TRẦN (không khoá ngoại) tới tổ chức thì không tính chất catalog
   -- nào nhận diện — kể cả bảng đích của trigger plpgsql chép NEW (lượt soi 33a #13); đó là DDL cố ý bỏ ràng buộc tham
-  -- chiếu, vế ⒝ của ADR-036 §3⑶, nhân chứng chỉ ở CI. Khoá ngoại NHIỀU cột không tính (cùng vế array_length = 1 của gốc).
+  -- chiếu, vế ⒝ của ADR-036 §3⑶, nhân chứng chỉ ở CI. ~~Khoá ngoại NHIỀU cột không tính (cùng vế array_length = 1 của gốc).~~
+  -- [S1.48 / lượt soi ngang 40a H2] Gạch: khoá ngoại nhiều cột tới bảng tenant CŨNG tính (xem CAU_KHOA_NGOAI_TOI_TENANT).
   -- Khoá ngoại tới một bảng ĐÃ KHAI ở mục này hay ở 85 (bậc kế: `k.t2 (t_id REFERENCES k.t(id))`) không tính — đích
   -- không là bảng tenant theo tính chất; bao đóng trên đồ thị khoá ngoại là vòng khác. Lá phân mảnh: ràng buộc được nhân
   -- bản xuống lá (conparentid) nên TỪNG LÁ bị thấy và phải khai riêng — cùng khuôn 85, và đúng: lá có relrowsecurity
@@ -2427,16 +2467,23 @@ $ham$;
   BANG_KHOA_NGOAI_TENANT_KHAI constant text :=
     $q$(VALUES ('', '')) AS kt(nspname, relname)$q$;
 
-  -- Câu tương quan theo `c`: mỗi khoá ngoại một cột của c HAY của một tổ tiên INHERITS của c trỏ tới một bảng tenant — dùng
-  -- ở CẢ vị từ (EXISTS) lẫn mô tả (string_agg), một văn bản. Bí danh `kn_fk` cố ý khác `fk` bên trong vế gốc lồng (38 D1).
+  -- Câu tương quan theo `c`: mỗi khoá ngoại của c HAY của một tổ tiên INHERITS của c trỏ tới một bảng tenant — dùng ở CẢ
+  -- vị từ (EXISTS) lẫn mô tả (string_agg), một văn bản. Bí danh `kn_fk` cố ý khác `fk` bên trong vế gốc lồng (38 D1).
+  -- [S1.48 / lượt soi ngang 40a H2] KHÔNG đòi một cột: vế `array_length = 1` là của vị từ GỐC (phải biết cột nào là org_id);
+  -- ở đây mọi khoá ngoại tới bảng tenant — kể cả hợp thành `(to_chuc, nguoi) REFERENCES users (org_id, id)`, đúng quy ước
+  -- khoá ngoại của kho — đều buộc hàng vào một tổ chức. Bản S1.46 miễn nhiều cột và gọi đó là ranh giới: sai — đo ở
+  -- rls-coverage (`zz_s.t_hop`). Cột in ra theo thứ tự conkey, nhiều cột thì trong ngoặc.
   CAU_KHOA_NGOAI_TOI_TENANT constant text :=
-    $q$SELECT a.attname AS cot, gn.nspname AS dich_nsp, g.relname AS dich_rel
+    $q$SELECT kc.cot, gn.nspname AS dich_nsp, g.relname AS dich_rel
          FROM pg_constraint kn_fk
          JOIN pg_class g ON g.oid = kn_fk.confrelid
          JOIN pg_namespace gn ON gn.oid = g.relnamespace
-         JOIN pg_attribute a ON a.attrelid = kn_fk.conrelid AND a.attnum = kn_fk.conkey[1] AND NOT a.attisdropped
+         CROSS JOIN LATERAL (
+           SELECT CASE WHEN pg_catalog.array_length(kn_fk.conkey, 1) > 1 THEN '(' || x.ds || ')' ELSE x.ds END AS cot
+             FROM (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname), ', ' ORDER BY k.ord) AS ds
+                     FROM pg_catalog.unnest(kn_fk.conkey) WITH ORDINALITY k(attnum, ord)
+                     JOIN pg_attribute a ON a.attrelid = kn_fk.conrelid AND a.attnum = k.attnum) x) kc
         WHERE kn_fk.contype = 'f'
-          AND pg_catalog.array_length(kn_fk.conkey, 1) = 1
           AND kn_fk.conrelid IN (
                 WITH RECURSIVE to_tien(con, cha) AS (
                   SELECT ke.inhrelid, ke.inhparent FROM pg_inherits ke
@@ -2454,8 +2501,8 @@ $ham$;
 
   CAU_KHOA_NGOAI_TENANT_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname
-              || ': bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua '
-              || (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(kn.cot) || ' -> ' || kn.dich_nsp || '.' || kn.dich_rel, ', ' ORDER BY kn.cot)
+              || ': bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant (qua '
+              || (SELECT pg_catalog.string_agg(kn.cot || ' -> ' || kn.dich_nsp || '.' || kn.dich_rel, ', ' ORDER BY kn.cot)
                     FROM ($q$ || CAU_KHOA_NGOAI_TOI_TENANT || $q$) kn)
               || ') và không bật RLS — chưa khai (khoản 86). Vị từ bảng tenant ghim TÊN cột org_id nên mục (A) không bật RLS, '
                  '[CR1] không soi, 85 không thấy, 83⑵/83⑶ không thấy: một GRANT cho vai ứng dụng mở hàng của mọi tổ chức (đo). '
@@ -2475,7 +2522,7 @@ $ham$;
          FROM $q$ || BANG_KHOA_NGOAI_TENANT_KHAI || $q$
         -- chắn hàng sentinel ('', '') — cùng khuôn lượt soi 32 NHẸ-2 (to_regclass trên tên rỗng ném 42601 ở PG ≤ 15).
         WHERE kt.relname <> ''
-          AND to_regclass(pg_catalog.format('%I.%I', kt.nspname, kt.relname)) IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = kt.nspname AND zc.relname = kt.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = kt.nspname AND c.relname = kt.relname
                              AND $q$ || VI_TU_HINH_DANG_86 || $q$)$q$;
@@ -2628,7 +2675,9 @@ $ham$;
                 (SELECT pg_catalog.count(*) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
                    AND a.attname IN ('seq', 'hash', 'anchored_at')) AS moc
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE c.relkind = 'r' AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$)
+          -- [S1.48 / lượt soi ngang 40a I6] 'p' cùng 'r': bản sao PHÂN MẢNH của sổ (`… PARTITION BY RANGE (seq)`) mang bộ ba cột
+          -- ở cha lẫn lá; bản S1.43 chỉ 'r' nên cha vô hình với ⑷ (lá vẫn bị) — nhất quán với `q` ở trên.
+          WHERE c.relkind IN ('r', 'p') AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$)
        SELECT x.ten || ': ' || x.mo_ta
               || ' (khoản 89/86, ADR-037). Sửa: một migration mới đổi lại; hoặc — nếu đổi có chủ ý — cùng migration ấy '
                  'sửa dòng khai và đặt lại chú thích neo (COMMENT ON TABLE … IS NULL rồi migrate() ghi lại).' AS mo_ta
@@ -2637,7 +2686,8 @@ $ham$;
            --    thích (chuỗi do chủ bảng đặt — to_regclass ném 42601/42501 thô): đối chiếu catalog để tìm quan hệ đang
            --    mang đúng tên đã neo.
            SELECT q.nspname || '.' || q.relname AS ten,
-                  'mang neo "' || q.neo || '" nhưng tên hiện tại là ' || q.nspname || '.' || q.relname
+                  -- [S1.48 / lượt soi ngang 40a I7] chuỗi do chủ bảng đặt: cắt 80 ký tự, lọc ký tự điều khiển — thông điệp đi vào log.
+                  'mang neo "' || pg_catalog.left(pg_catalog.regexp_replace(q.neo, '[[:cntrl:]]', ' ', 'g'), 80) || '" nhưng tên hiện tại là ' || q.nspname || '.' || q.relname
                   || ' — đổi tên hay đổi schema ngoài migration'
                   || coalesce((SELECT '; tên đã neo hiện do oid ' || q2.oid::text || ' giữ — một trong hai là bản sao'
                                  FROM q q2
@@ -2796,7 +2846,7 @@ $ham$;
         WHERE q.relname <> ''
           -- [lượt soi 30, NHẸ-1] "cha" của một quan hệ là schema: chỉ kêu khi schema đã có (tập migration rút gọn).
           AND EXISTS (SELECT 1 FROM pg_namespace ns WHERE ns.nspname = q.nspname)
-          AND to_regclass(pg_catalog.format('%I.%I', q.nspname, q.relname)) IS NULL$q$;
+          AND NOT EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = q.nspname AND zc.relname = q.relname)$q$;
 
   CAU_TRIGGER_NGOAI_PLPGSQL_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '.' || t.tgname || ': trigger gọi hàm ' || p.oid::regprocedure::text
@@ -2819,9 +2869,9 @@ $ham$;
        SELECT 'khai ' || g.nspname || '.' || g.relname || '.' || g.tgname || ' (khoản 83⑸) mà CSDL không có trigger như thế — dòng khai thiu' AS mo_ta
          FROM $q$ || TRIGGER_NGOAI_PLPGSQL_KHAI || $q$
         WHERE g.tgname <> ''
-          AND to_regclass(pg_catalog.format('%I.%I', g.nspname, g.relname)) IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = g.nspname AND zc.relname = g.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_trigger t
-                           WHERE t.tgrelid = to_regclass(pg_catalog.format('%I.%I', g.nspname, g.relname)) AND t.tgname = g.tgname)$q$;
+                           WHERE t.tgrelid = (SELECT zc.oid FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = g.nspname AND zc.relname = g.relname) AND t.tgname = g.tgname)$q$;
 
   CAU_RULE_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '.' || rw.rulename || ': RULE trên một quan hệ của dự án (khoản 83⑹, ADR-036 hàng 3) — '
@@ -2839,9 +2889,9 @@ $ham$;
        SELECT 'khai ' || r.nspname || '.' || r.relname || '.' || r.rulename || ' (khoản 83⑹) mà CSDL không có rule như thế — dòng khai thiu' AS mo_ta
          FROM $q$ || RULE_KHAI || $q$
         WHERE r.rulename <> ''
-          AND to_regclass(pg_catalog.format('%I.%I', r.nspname, r.relname)) IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = r.nspname AND zc.relname = r.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_rewrite rw
-                           WHERE rw.ev_class = to_regclass(pg_catalog.format('%I.%I', r.nspname, r.relname)) AND rw.rulename = r.rulename)$q$;
+                           WHERE rw.ev_class = (SELECT zc.oid FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = r.nspname AND zc.relname = r.relname) AND rw.rulename = r.rulename)$q$;
 
   -- [S1.44 / khoản 88 ⑶] Trên bảng có tên, D2 dựng lại trigger trước — xem chú thích ở CAU_TRIGGER_CANH_CO_DIEU_KIEN;
   -- mục này chịu lực cho bảng suy ra.
@@ -2867,6 +2917,9 @@ $ham$;
     $q$SELECT pa.parname::text || ': quyền ' || a.privilege_type || ' trên tham số cấp cho '
               || CASE WHEN r.rolname IS NULL THEN 'PUBLIC' ELSE r.rolname::text END
               || ' (khoản 83⑧) — tiền đề SUSET của ADR-036 hàng 8: vai ứng dụng đặt được session_replication_role = replica '
+                 -- [S1.48 / lượt soi ngang 40b #17] "chỉ superuser đặt được" là ranh giới nói ra: superuser GRANT SET ON PARAMETER
+                 -- session_replication_role cho một vai thứ ba thì 83⑧ (chỉ soi PUBLIC/vai ứng dụng) lẫn nhánh ⒟ của 87 (chỉ tham số có
+                 -- dấu chấm) đều không thấy — tiền tồn, chưa có khoản.
                  'thì mọi trigger ENABLE thường bị bỏ qua; lớp ENABLE ALWAYS tựa vào việc tham số ấy chỉ superuser đặt được. '
                  'Sửa: REVOKE … ON PARAMETER (superuser).' AS mo_ta
          FROM pg_parameter_acl pa
@@ -2903,13 +2956,13 @@ $ham$;
                  'đã xảy ra (con đã NO INHERIT)' AS mo_ta
          FROM $q$ || KE_THUA_KHAI || $q$
         WHERE k.con_relname <> ''
-          AND to_regclass(pg_catalog.format('%I.%I', k.con_nspname, k.con_relname)) IS NOT NULL
-          AND to_regclass(pg_catalog.format('%I.%I', k.cha_nspname, k.cha_relname)) IS NOT NULL
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = k.con_nspname AND zc.relname = k.con_relname)
+          AND EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = k.cha_nspname AND zc.relname = k.cha_relname)
           -- [lượt soi 31, INFO-7] đối xứng với chiều xuôi: một dòng khai trỏ vào cặp PHÂN MẢNH là dòng khai thiu.
           AND NOT EXISTS (SELECT 1 FROM pg_inherits ke JOIN pg_class cc ON cc.oid = ke.inhrelid
                            WHERE NOT cc.relispartition
-                             AND ke.inhrelid = to_regclass(pg_catalog.format('%I.%I', k.con_nspname, k.con_relname))
-                             AND ke.inhparent = to_regclass(pg_catalog.format('%I.%I', k.cha_nspname, k.cha_relname)))$q$;
+                             AND ke.inhrelid = (SELECT zc.oid FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = k.con_nspname AND zc.relname = k.con_relname)
+                             AND ke.inhparent = (SELECT zc.oid FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = k.cha_nspname AND zc.relname = k.cha_relname))$q$;
 
   CAU_QUAN_HE_TRUNG_TEN constant text :=
     $q$FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -7899,14 +7952,14 @@ $ham$;
     ],
     -- ---- [S1.46 / khoản nợ 86 — nửa gốc] Bảng không org_id có khoá ngoại tới bảng tenant, ngoài tập tenant, không RLS — PHÁN XÉT ----
     ARRAY[
-      $q$bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant, ngoài tập tenant và không RLS phải được khai (khoản 86)$q$,
+      $q$bảng không có cột org_id nhưng có khoá ngoại tới bảng tenant, ngoài tập tenant và không RLS phải được khai (khoản 86)$q$,
       $q$true$q$,
       $q$SELECT 1$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_KHOA_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_KHOA_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (ALTER TABLE … RENAME COLUMN … TO org_id, DROP; bật RLS thì chỉ chuyển lời khai sang 83⑶) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
     ],
-    -- ---- [S1.43 / khoản nợ 89 + 86] Danh tính: chú thích neo theo oid + tên đã khai + hình dạng sổ — SỬA (ghi neo) + PHÁN XÉT (sáu vế) ----
+    -- ---- [S1.43 / khoản nợ 89 + 86] Danh tính: chú thích neo theo oid + tên đã khai + hình dạng sổ — SỬA (ghi neo) + PHÁN XÉT (tám vế ⑴⑵⑵′⑶⑷⑷′⑸⑹ — [S1.48 / 40b #7] "sáu" là con số thiu) ----
     ARRAY[
       $q$danh tính đối tượng canh: bảng sổ và bảng tenant đã khai còn đúng tên, đúng tính chất, mang neo; không bản sao sổ ngoài tên sổ (khoản 89/86, ADR-037)$q$,
       $q$pg_catalog.to_regclass('public.schema_migrations') IS NOT NULL$q$,

@@ -19,7 +19,7 @@ export class TenantError extends Error {
  * Tuỳ chọn của `withTenant()`.
  *
  * [vòng fix 1 Task 10 — MỤC 2] `destroyConnectionWhenDone` tồn tại vì một phép đo, không vì sự cẩn
- * thận chung chung. Khối `finally` của hàm này chỉ đọc lại MỘT trục (`app.org_id`), trong khi
+ * thận chung chung. ~~Khối `finally` của hàm này chỉ đọc lại MỘT trục (`app.org_id`)~~ [S1.47] nay đọc cả bốn trục — trong khi
  * chính docstring dưới đây TỰ LIỆT KÊ `SET ROLE`, `search_path`, `statement_timeout` là những
  * thứ "cũng đi theo kết nối". Đo được trên PostgreSQL 16 / pg@8.23.0:
  *     withTenant(pool, P, fn) với fn chạy `SET search_path = doc, pg_catalog, public`
@@ -71,7 +71,8 @@ export interface WithTenantOptions {
  * [S1.47 / khoản nợ 87 ⑵] Cùng bảo đảm ấy cho BA GUC khách (`app.guest_session_id`,
  * `app.guest_invitation_id`, `app.guest_rfq_id`): khối `finally` đọc cả bốn trục. Và một vế MỚI ở
  * đầu giao dịch: hàm này XOÁ ba GUC khách về '' (phạm vi transaction) trước khi chạy `fn` — một
- * giá trị gắn sẵn ở mức database (`ALTER DATABASE … SET app.guest_session_id`, chỉ superuser) hay
+ * giá trị gắn sẵn ở mức database (`ALTER DATABASE … SET app.guest_session_id`, superuser hay vai được
+ * GRANT SET ON PARAMETER — PG15+, đo S1.47) hay
  * trên chuỗi kết nối (`options=-c …`) không biến giao dịch của người mua thành phiên khách. Đo ở
  * with-tenant.int.test.ts "[khoản nợ 87]": trước bản vá, `withTenant(orgA)` đọc `user_login_tokens`
  * ra 0 hàng không lỗi dưới GUC ấy. [lượt soi 39 NHẸ-4] Và hơn thế: hàm này TỪ CHỐI phục vụ (TenantError,
@@ -147,12 +148,14 @@ export async function withTenant<T>(
   // cùng bài học ở packages/db/src/migrate.ts [fix round 5 — M10].
   let loiLamHongClient: Error | undefined;
   // [S1.47] Đã từ chối vì mặc định phiên: khối `finally` không được đọc lại rồi huỷ kết nối (kết nối kế mang cùng mặc định).
+  // [S1.48 / 40a NẶNG-1] … trừ khi khối catch đã phân biệt được đó là RÒ PHIÊN (RESET xoá sạch) — khi ấy `loiLamHongClient` đã đặt.
   let tuChoiMacDinh = false;
   try {
     // [S1.47 / khoản nợ 87 ⑵ — lượt soi 39 NHẸ-4] BEGIN và, trong CÙNG round-trip (một câu nhiều lệnh, không tham số),
     // đọc bốn GUC TRƯỚC khi hàm này đặt gì: một giá trị đã có sẵn lúc mở giao dịch là MẶC ĐỊNH PHIÊN (`ALTER
-    // DATABASE/ROLE … SET`, postgresql.conf/ALTER SYSTEM, `options=-c` trên chuỗi kết nối) — kết nối rò từ lần dùng
-    // trước đã bị `finally` huỷ, không quay lại đây. Mặc định ấy khác rỗng nghĩa là MỌI câu ngoài withTenant của tiến
+    // DATABASE/ROLE … SET`, postgresql.conf/ALTER SYSTEM, `options=-c` trên chuỗi kết nối) — ~~kết nối rò từ lần dùng
+    // trước đã bị `finally` huỷ, không quay lại đây~~ [S1.48 / 40a NẶNG-1] chỉ đúng cho rò QUA withTenant; rò từ mã ngoài
+    // withTenant được khối catch phân biệt bằng RESET và huỷ kết nối. Mặc định ấy khác rỗng nghĩa là MỌI câu ngoài withTenant của tiến
     // trình này đang chạy dưới một tổ chức/phiên khách do người khác chọn, và xoá trong giao dịch không chữa được điều
     // đó: hàm này TỪ CHỐI phục vụ TRƯỚC `fn` (ROLLBACK, không thay đổi nào được ghi) — ồn ào thay vì im lặng, không tựa
     // vào deploy kế (mục phán xét khoản 87 của hardening bắt cùng cấu hình ở catalog/phiên deploy). Vì sao không đọc
@@ -166,6 +169,11 @@ export async function withTenant<T>(
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS mac_dinh",
     )) as unknown as pg.QueryResult<{ mac_dinh: string | null }>[];
+    // [S1.48 / lượt soi ngang 40a I8] Hình dạng kết quả câu nhiều lệnh được ĐÒI, không được tin: driver/pooler trả về một
+    // kết quả thay vì hai thì `macDinh` là undefined và phép từ chối MÙ (fail-open).
+    if (!Array.isArray(ketQuaMo) || ketQuaMo.length !== 2) {
+      throw new TenantError("BEGIN; SELECT phải trả về đúng hai kết quả — driver hay pooler không hỗ trợ câu nhiều lệnh; phép kiểm mặc định phiên không chạy được.");
+    }
     const macDinh = ketQuaMo[1]?.rows[0]?.mac_dinh;
     if (macDinh) {
       tuChoiMacDinh = true;
@@ -173,8 +181,8 @@ export async function withTenant<T>(
       throw new TenantError(
         `mặc định phiên của GUC tenant/khách bị gắn sẵn ngoài withTenant — ${macDinh}. Mọi câu không qua withTenant ` +
           "của tiến trình này đang chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, " +
-          "postgresql.conf/ALTER SYSTEM, options= trên chuỗi kết nối); từ chối phục vụ cho tới khi RESET " +
-          "(mục phán xét khoản 87 của hardening).",
+          "postgresql.conf/ALTER SYSTEM, options= trên chuỗi kết nối, hay withTenant lồng trên CÙNG kết nối); từ chối " +
+          "phục vụ cho tới khi RESET (mục phán xét khoản 87 của hardening).",
       );
     }
     // [vòng fix 3 — I1] pg_catalog.set_config, KHÔNG phải set_config trần. Xem khối
@@ -183,8 +191,8 @@ export async function withTenant<T>(
     // cướp được.
     // [S1.47 / khoản nợ 87 ⑵] MỘT câu, BỐN GUC: gắn tổ chức VÀ xoá tường minh ba GUC khách về '' (phạm vi
     // transaction). Vì sao xoá thứ mình không đặt: `ALTER DATABASE … SET app.guest_session_id = <uuid>` (chỉ
-    // superuser đặt được — đo) làm MỌI phiên mở sau nó khởi đầu như một phiên khách, và 11 policy RESTRICTIVE
-    // `_khach` của 027 thu hẹp mọi câu của người mua về 0 hàng KHÔNG LỖI — đúng cơ chế ADR-036 đo ở
+    // superuser hay vai được GRANT SET ON PARAMETER đặt được — đo) làm MỌI phiên mở sau nó khởi đầu như một phiên khách, và 29 policy RESTRICTIVE
+    // `_khach` (một mỗi bảng tenant, khuôn 027 — hardening dựng; đếm từ catalog ở rls-coverage, S1.48) thu hẹp mọi câu của người mua về 0 hàng KHÔNG LỖI — đúng cơ chế ADR-036 đo ở
     // with-tenant.int.test.ts "[khoản nợ 87]". Hardening có mục phán xét cho catalog (S1.47 ⑴), nhưng lớp ứng
     // dụng không tựa vào deploy kế: mỗi giao dịch của người mua tự đứng trên bốn GUC nó biết. '' là "không có"
     // với mọi hàm đọc của 001/027 (NULLIF(…, '')). withGuestSession đặt lại ba GUC ấy SAU câu này, trong `fn`.
@@ -220,6 +228,36 @@ export async function withTenant<T>(
       // đã đứt. Ưu tiên ném lỗi GỐC (cùng nguyên tắc với migrate() [fix I1]); lỗi của chính
       // ROLLBACK chỉ dùng để đánh dấu client là hỏng, không được thay thế nguyên nhân thật.
       loiLamHongClient = loiKhiRollback as Error;
+    }
+    // [S1.48 / lượt soi ngang 40a NẶNG-1] Giá trị thấy lúc BEGIN có HAI nguồn mà lúc ấy không phân biệt được: mặc định
+    // phiên thật (ALTER DATABASE/ROLE/SYSTEM, options=) — hay RÒ PHẠM VI PHIÊN từ mã NGOÀI withTenant (`pool.connect()` +
+    // `set_config(…, false)` rồi release). Bản S1.47 gộp hai ca vào "mặc định phiên", tắt phép kiểm ở `finally` và trả kết
+    // nối nhiễm về pool — hồi quy so với I1 (trước S1.47 kết nối ấy bị huỷ sau một lượt). Phân biệt bằng chính PostgreSQL:
+    // RESET bốn GUC (RESET phạm vi phiên của placeholder là USERSET, vai nào cũng làm được; ngoài giao dịch nên không bị
+    // hoàn) rồi đọc lại — RỖNG ⇒ là rò phiên ⇒ huỷ kết nối như I1, thông điệp nói đúng nguồn; CÒN ⇒ mặc định thật ⇒ giữ
+    // kết nối (kết nối kế mang cùng mặc định — lượt soi 39 NHẸ-4).
+    if (tuChoiMacDinh && loiLamHongClient === undefined) {
+      try {
+        const { rows } = await client.query<{ con_lai: string | null }>(
+          "RESET app.org_id; RESET app.guest_session_id; RESET app.guest_invitation_id; RESET app.guest_rfq_id; " +
+            "SELECT pg_catalog.concat_ws(',', " +
+            "  NULLIF(pg_catalog.current_setting('app.org_id', true), ''), " +
+            "  NULLIF(pg_catalog.current_setting('app.guest_session_id', true), ''), " +
+            "  NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), ''), " +
+            "  NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '')) AS con_lai",
+        ).then((r) => (Array.isArray(r) ? (r as pg.QueryResult<{ con_lai: string | null }>[])[4]! : r));
+        if (!rows[0]?.con_lai) {
+          // RESET xoá sạch ⇒ giá trị là của PHIÊN này, do mã ngoài withTenant để lại. Kết nối bị huỷ; lỗi ném ra nói đúng.
+          loiLamHongClient = new TenantError(
+            "GUC tenant/khách còn sót ở phạm vi PHIÊN trên kết nối lấy từ pool — mã NGOÀI withTenant đã set_config(…, false) " +
+              "rồi trả kết nối về pool. Kết nối bị huỷ thay vì trả về pool; giao dịch này không chạy.",
+          );
+          throw loiLamHongClient;
+        }
+      } catch (loiPhanBiet) {
+        if (loiPhanBiet === loiLamHongClient) throw loiPhanBiet;
+        // Kết nối đã chết — release(loiLamHongClient) ở finally xử lý nốt.
+      }
     }
     throw loi;
   } finally {
