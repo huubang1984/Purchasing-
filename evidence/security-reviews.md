@@ -1478,3 +1478,32 @@ khuôn với bộ đếm hàm; hỏi *"con số này đếm cái gì, lúc nào"
 `nhay_vai` là lời khai văn bản cuối cùng còn chọn độ mịn của phép đo, và nó nay có đối chứng dương như
 mọi tổng điều tra khác theo ADR-036 §3⑵. Năm lượt soi liền (19–23) đều bác bản đầu.
 
+## Lượt soi đối kháng 24 — chạy TRƯỚC khi §S1.34 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc sáu mục hardening mới, hai test,
+`vai-tro.ts`, `rbac.ts`, khối `[CR2-T3]`, `dungRoleTrienKhaiThuong`), được giao sáu hướng phá: đường che
+tên còn lại, tác dụng phụ vận hành của `REVOKE TEMP`, cấp qua nhóm/bậc hai, dollar-quote, test, lời khai.
+Mọi phát hiện được người viết đo lại trên PostgreSQL 16 thật.
+
+| # | mức | phát hiện | đo được | sửa |
+|---|---|---|---|---|
+| 1 | NẶNG | Thiếu thu hồi **CREATE ON DATABASE**: tiền đề *app_api không tạo được schema* chỉ được ĐO ở ACL mặc định, không mục nào GIỮ; CREATE trôi ⇒ app_api tự `CREATE SCHEMA app_api` — che BỀN cho mọi kết nối, kéo tới deploy sau | **đo:** với CREATE, app_api dựng được schema + bảng, `sessions` trần đếm 0; migrate() chỉ phán xét, không gỡ CREATE | cặp mục CREATE cùng khuôn TEMP (PUBLIC + vai theo tính chất); test: CREATE bị thu hồi ở lượt sửa dù lượt phán xét gãy, sau đó `CREATE SCHEMA` 42501; đột biến no-op ⇒ đỏ đúng khẳng định |
+| 2 | NHẸ | Bảng tạm tạo TRƯỚC lần deploy mang lớp không bị REVOKE gỡ — namespace tạm đã khởi tạo vẫn còn USAGE | **đo:** đúng — cùng kết nối, sau REVOKE, đếm 0, INSERT vẫn vào; `DISCARD TEMP` xoá; ghép được cùng SET ROLE một câu, chạy được trong giao dịch | `vai-tro.ts`: `SET ROLE …; DISCARD TEMP` một câu ở mỗi lần giao client; test: cùng `pg_backend_pid`, lấy lại đã sạch |
+| 3 | NHẸ | `SET search_path` trong phiên không bị chặn/tái khẳng định; phán xét chỉ soi schema TRÙNG TÊN vai, không soi schema khác mà vai có USAGE | suy đoán đúng về ngữ nghĩa; **đo:** hôm nay không vai nào có USAGE ngoài public | mục phán xét *quan hệ trùng tên public trong schema vai có USAGE* — bản đầu *không USAGE ngoài public* bị evidence bác ngay (hai fixture hợp lệ `khac`, `gia` gãy), thu hẹp về đúng cơ chế; test: `zz_khac.khong_trung` đi qua, `zz_khac.sessions` ⇒ gãy nêu `app_api -> zz_khac.sessions` |
+| 4 | NHẸ | Mục gộp ba grantee trong một REVOKE + hậu điều kiện gọi thẳng `has_database_privilege('app_unseal')`: role vắng ⇒ 42704 ở lượt sửa (PUBLIC không được thu hồi) và lỗi thô ở lượt phán xét | đúng theo đọc | PUBLIC tách riêng; vai qua vòng DO mỗi vai một REVOKE; hậu điều kiện `coalesce(bool_and(…) FROM pg_roles, true)` |
+| 5 | NHẸ | Hàm SECURITY DEFINER thuộc chủ DB tạo được bảng tạm trong PHIÊN app (TEMP kiểm theo chủ hàm) | đúng về ngữ nghĩa; grep: không hàm nào dùng TEMP; `CAU_DOC_VONG` canh mọi secdef ngoài `NGOAI_LE_DOC_VONG` | ghi ở ADR-036 ⑯ là giới hạn |
+| 6 | NHẸ | Tài liệu chưa đổi ở bản đầu (ADR-036 hàng 16, STATE 78) | đúng | đã viết ở vòng này; câu *"vô hại vì qualify public."* giữ như lớp 3, không còn chịu lực |
+| 7 | INFO | `has_database_privilege` đếm quyền kế thừa + PUBLIC; `GRANT g TO app_api WITH INHERIT FALSE, SET TRUE` lách được hậu điều kiện — đóng bởi BƯỚC 1 (membership hai chiều), không bởi mục này; phán xét schema nên bắc cầu | xác nhận | `VAI_KET_NOI_UNG_DUNG` dùng `pg_has_role(r, g, 'MEMBER')` (bắc cầu), chú thích nêu sự tựa vào BƯỚC 1 |
+| 8 | INFO | `"$user"` phân giải theo current_user: schema trùng tên role ĐĂNG NHẬP chỉ che khi kết nối không ở SET ROLE | xác nhận | một câu điều kiện vào chú thích và test |
+| 9 | INFO | Vận hành: chủ DB (`trien_khai`) giữ TEMP qua `acldefault`, superuser bỏ qua, pg_dump không cần; mọi role khác của cụm mất TEMP | xác nhận | ghi ở ADR-036 ⑯ như ràng buộc thiết kế |
+| 10 | INFO | Dollar-quote lồng `"$user"` trong `$q$` trong `$khoi$`, `%I` với tên DB lạ — an toàn | xác nhận | — |
+| 11 | INFO | Test không rò pool; container riêng mỗi test; `toContain(': app_api')` khớp cả tiền tố `app_api_login` | xác nhận | assert kèm đuôi ` —` |
+
+**Điều đáng mang sang vòng sau:** lớp đầu đóng nửa *bảng tạm* bằng cưỡng chế nhưng nửa *schema* chỉ phán
+xét trong khi tiền đề đỡ nó chưa được giữ — một lớp phải nêu cả thứ nó TỰA VÀO (ADR-036 §3⑴ nay áp cho
+cột *lớp canh*). Và `ganVaiChoClient` từng chỉ khẳng định VAI của một client; nay nó khẳng định cả một
+phần ĐƯỜNG TÌM TÊN (`DISCARD TEMP`); vế còn lại (`search_path` của phiên) được giữ bằng tính chất *không
+có quan hệ trùng tên nào để trỏ tới* thay vì bằng một câu SET mỗi lần giao client — và bản đầu của
+vế ấy nói quá, evidence bác nó trước khi PR mở. Sáu lượt soi liền (19–24) đều
+bác bản đầu.
+
