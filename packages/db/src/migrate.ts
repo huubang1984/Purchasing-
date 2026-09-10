@@ -390,6 +390,28 @@ export async function migrate(
 
     // [fix vòng 1 — I3] LƯỢT 1: chỉ SỬA, không phán xét. Bắt buộc chạy TRƯỚC migration đánh
     // số vì 001 GRANT cho app_api/app_unseal nên hai role đó phải tồn tại trước.
+    // [S1.48 / lượt soi ngang 40a H1] Mục phán xét khoản 87 chỉ hỏi ở BƯỚC 3 — SAU khi các migration đánh số của CÙNG
+    // lượt đã chạy dưới một GUC `app.*` gắn sẵn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, options= của chính chuỗi kết nối
+    // này) và đã ghi checksum: một backfill dưới vai deploy N2 (FORCE RLS áp) chỉ sửa hàng của tổ chức B, COMMIT, rồi 87
+    // mới NÉM — deploy kế không chạy lại migration ấy. Nên migrate() hỏi bốn GUC NGAY ĐÂY, trước lượt sửa, và từ chối:
+    // cùng phép đọc như withTenant (placeholder không có ở pg_settings — đo S1.47), không cần quyền, một round-trip.
+    // Mục 87 ở BƯỚC 3 vẫn giữ làm lớp catalog (mức database/vai/pg_parameter_acl/proconfig là thứ phiên này không thấy hết).
+    const { rows: gucGanSan } = await lockClient.query<{ ten: string | null }>(
+      "SELECT pg_catalog.concat_ws(', ', " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS ten",
+    );
+    if (gucGanSan[0]?.ten) {
+      // Chỉ TÊN, không giá trị — thông điệp đi vào log deploy.
+      throw new Error(
+        `migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — ${gucGanSan[0].ten}. ` +
+          "Mọi migration đánh số sẽ chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, " +
+          "options= trên chuỗi kết nối deploy). RESET rồi chạy lại trên kết nối mới (mục phán xét khoản 87 của hardening).",
+      );
+    }
+
     await chayFileLuonChay("sua");
 
     const applied: string[] = [];

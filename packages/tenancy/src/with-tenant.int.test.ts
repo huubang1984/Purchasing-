@@ -438,6 +438,32 @@ describe("[S1.47 / khoản nợ 87] GUC app.* gắn sẵn ở mức database", (
     }
   });
 
+  it("[S1.48 / lượt soi ngang 40a NẶNG-1] RÒ PHẠM VI PHIÊN từ mã NGOÀI withTenant (pool.connect + set_config(false) + release): withTenant phân biệt với mặc định phiên bằng RESET — từ chối với thông điệp đúng nguồn, HUỶ kết nối (pid đổi, app.org_id không còn), lượt kế phục vụ", async () => {
+    const poolMotClient = createPool(db.connectionString, 1);
+    try {
+      const c = await poolMotClient.connect();
+      let pid: number;
+      try {
+        await c.query("SELECT set_config('app.org_id', $1, false)", [orgB]);
+        pid = (await c.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid")).rows[0]!.pid;
+      } finally {
+        c.release(); // trả kết nối NHIỄM về pool — đúng ca I1 bị S1.47 làm hồi quy
+      }
+      let fnDaChay = false;
+      const loi = await withTenant(poolMotClient, orgA, () => { fnDaChay = true; return Promise.resolve(); }).then(() => null, (e: Error) => e);
+      expect(loi).toBeInstanceOf(TenantError);
+      expect(loi!.message).toContain("còn sót ở phạm vi PHIÊN trên kết nối lấy từ pool");
+      expect(loi!.message, "không được gọi nhầm là mặc định phiên").not.toContain("mặc định phiên");
+      expect(fnDaChay).toBe(false);
+      const { rows } = await poolMotClient.query<{ org: string | null; pid: number }>("SELECT app_current_org_id() AS org, pg_backend_pid()::int AS pid");
+      expect(rows[0]?.org, "bản S1.47 trả kết nối nhiễm về pool: câu trần chạy dưới org lạ").toBeNull();
+      expect(rows[0]?.pid, "kết nối phải THẬT SỰ bị huỷ").not.toBe(pid);
+      await expect(withTenant(poolMotClient, orgA, (cl) => cl.query("SELECT 1").then(() => 1))).resolves.toBe(1);
+    } finally {
+      await poolMotClient.end();
+    }
+  });
+
   it("[I1] fn đặt một GUC KHÁCH ở phạm vi PHIÊN: kết nối bị huỷ thay vì trả về pool — khối finally đọc cả bốn trục", async () => {
     const poolMotClient = createPool(db.connectionString, 1);
     try {

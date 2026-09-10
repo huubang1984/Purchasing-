@@ -3582,6 +3582,7 @@ chạy trong kho (không phải suy đoán).
 | 20 | Trigger canh có `WHEN (…)` hay `UPDATE OF <cột>` — hàm canh KHÔNG CHẠY cho một phần câu, tên hàm và tên trigger giữ nguyên — **lượt soi 25a chỉ ra**; cùng lớp hàng 8–9 (hàm canh không chạy), và `003_audit_events.sql` đã biết nó từ S0 | UPDATE cột khác / mọi DELETE đi qua với 1 hàng, không lỗi; bảng vẫn "chỉ-ghi-thêm" theo vị từ suy ra (LOGGED/TRUNCATE/ACL đều xanh) | bảng CÓ TÊN: hardening soi `tgqual`/`tgattr` từ S0 (`CTE_TRIGGER_CHAN`); bảng SUY RA: ~~**chưa có — khoản nợ 79**~~ **[S1.36]** vị từ (cả hai bản) chỉ đếm trigger canh khi `tgqual IS NULL AND tgattr = ''` — bảng rơi khỏi tập; mục phán xét `CAU_TRIGGER_CANH_CO_DIEU_KIEN` ở hardening chặn deploy khi bất kỳ trigger nào của hàm canh có WHEN/UPDATE OF hay không ENABLE ALWAYS (`tgenabled` — lượt soi 27; hàng 8–9 cho bảng suy ra nay cũng có lớp sản xuất) — để không rơi trong im lặng; chốt TRUNCATE cũng phải `tgqual IS NULL` — **đo mới:** `WHEN (false)` trên trigger TRUNCATE hợp lệ và TRUNCATE đi lọt; tập rộng mang `co_when`/`co_cot` | ✓ (đo: `zz_dk` — vị từ cũ nhận, vị từ mới thả, `migrate()` NÉM nêu `zz_dk.u`/`zz_dk.d`; `zz_tr` — TRUNCATE lọt qua chốt có WHEN, `migrate()` NÉM) |
 | 21 | Trigger gọi hàm KHÔNG plpgsql (`internal`/C/PL khác — vd `suppress_redundant_updates_trigger()` có sẵn, hay `CREATE FUNCTION … LANGUAGE <khác>`) — **lượt soi 25a chỉ ra** | `UPDATE 0`, không lỗi; vô hình với mọi tổng điều tra (đều lọc `lanname = 'plpgsql'`), với vị từ và với nhân chứng | ~~**chưa có — khoản nợ 79**~~ **[S1.36]** tổng điều tra NGÔN NGỮ trigger ở `[INV-H19]`: mọi trigger của dự án gọi hàm plpgsql trừ `TRIGGER_NGOAI_PLPGSQL_DA_KHAI` (rỗng), đối chứng dương là chính hàm built-in ấy; vế plpgsql ở vị từ GIỮ vì lý do đo được của nó vẫn đúng. ~~**Giới hạn ghi ra:** lớp này CHỈ Ở TEST — trên cụm đã deploy chưa có mục hardening, theo cách đọc §3⑶ cho tới khi khoản 81 quyết;~~ **[S1.39, ghi ở S1.42]** mục hardening `CAU_TRIGGER_NGOAI_PLPGSQL_SAI`; ~~ranh giới (lượt soi 27 INFO-5): tạo hàm `internal`/C cần superuser và PL tin cậy khác chưa cài, nên đường này ngoài mô hình đe doạ của hardening (chủ bảng không superuser)~~ **[S1.37] bác:** chỉ TẠO hàm C cần superuser; GẮN hàm C có sẵn thì không (built-in; extension tin cậy `tcn`), và `plperl` là extension tin cậy — đo; hôm nay 85 trigger plpgsql, 0 trigger ngôn ngữ khác **[S1.37]** đo: chủ DB thường gắn được trigger gọi hàm built-in KHÔNG cần tạo hàm, và `plperl` là extension tin cậy — ranh giới *cần superuser* SAI cho hàng này ⇒ mục hardening `prolang` là **khoản nợ 83** **[S1.39]** lớp sản xuất: `CAU_TRIGGER_NGOAI_PLPGSQL_SAI` — mọi trigger không nội bộ trong lược đồ dự án gọi hàm plpgsql trừ khai (`TRIGGER_NGOAI_PLPGSQL_KHAI`, rỗng); đo: `suppress_redundant_updates_trigger` ⇒ `migrate()` NÉM — giới hạn *chỉ ở test* của S1.36 hết | ✓ (đo: UPDATE cùng giá trị ⇒ 0 hàng; `lanname = 'internal'`; tập rộng không thấy nó) |
 | 22 | `ALTER TABLE con NO INHERIT cha` — hàng đang nằm ở bảng con rời tầm của câu ghi qua bảng cha — **lượt soi 25a chỉ ra** (hàng 13 từng xếp nhầm vào *lỗi*) | UPDATE/DELETE qua cha 0 hàng, không lỗi; con vẫn là `relkind 'r'` hợp lệ với tổng điều tra; ~~không census nào đọc `pg_inherits`~~ **[S1.40]** 82⑴ đọc | ~~**chưa có — khoản nợ 82** (tổng điều tra `pg_inherits` ngoài phân mảnh, danh sách khai rỗng + đối chứng dương); kho có fixture con INHERITS ở schema `khac` nên là ca có thật~~ **[S1.40] mục hardening `CAU_KE_THUA_SAI`** — mọi cặp `pg_inherits` không phân mảnh có con trong lược đồ dự án (loại `pg_temp`: bảng tạm là của riêng phiên, đo) phải khai ở `KE_THUA_KHAI` (rỗng); canh TIỀN ĐỀ như 83⑧ vì sau cú tách catalog không còn dấu vết; chiều ngược khi cả hai bảng còn. Giới hạn: cặp đã khai bị tách rồi tái dùng tên — ~~khoản 85~~ **[S1.41]** con cũ tắt RLS bị `CAU_ORG_ID_NGOAI_PUBLIC_SAI` phán (đo). DETACH PARTITION là cùng cơ chế ở vị trí khác: lá public ⇒ [CR1]; lá ngoài public đã RLS ⇒ 83⑶; tạo-và-tách giữa hai deploy ⇒ ~~khoản 85~~ **[S1.41]** `CAU_ORG_ID_NGOAI_PUBLIC_SAI` ở deploy kế — mức bảo đảm "phát hiện ở deploy kế" (§5). Fixture `khac`/`con_tt` của kho nay NÉM ở mục này (kỳ vọng lật) | ✓ (đo: trước 1 hàng, sau `NO INHERIT` 0 hàng) |
+| 23 | GUC `app.*` gắn sẵn cho phiên ứng dụng — `ALTER DATABASE/ROLE/ROLE ALL … SET`, `ALTER SYSTEM`/postgresql.conf, `options=` trên chuỗi kết nối, `GRANT SET ON PARAMETER`, `proconfig` hàm — **lượt soi ngang 33a #1; hàng thêm ở S1.48 (40b #1) vì §2 tự khai là nguồn** | mọi câu ngoài `withTenant` chạy dưới tổ chức do người khác chọn; mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` thu hẹp ⇒ câu ghi của người mua 0 hàng không lỗi | **[S1.47]** mục phán xét `CAU_GUC_TUY_BIEN_GAN_SAN` năm nhánh (không tự RESET — chủ database thường 42501, RESET ALL im lặng placeholder, đo); `withTenant` từ chối trước `fn` khi bốn GUC đã có giá trị lúc mở giao dịch; **[S1.48]** `migrate()` từ chối trước lượt sửa (40a H1), `withTenant` phân biệt rò phiên bằng RESET (40a NẶNG-1) | ✓ (đo: test khoản 87, H1; with-tenant S1.47/S1.48) |
 
 ### 3. Quyết định
 
@@ -3627,10 +3628,10 @@ chạy trong kho (không phải suy đoán).
 ### 4. Cái giá, nói ra
 
 - ~~**Bốn danh sách khai mới** (29 policy RESTRICTIVE, 1 bảng RLS ngoài tenant, 0 quan hệ khác bảng
-  thường, 19 hàm trigger INSERT thêm vào danh sách KHÔNG-CANH).~~ **[S1.42]** Hardening nay mang TÁM danh
-  sách khai, bản test giữ cùng danh sách và một cổng đòi hai bản khớp: ba có hàng (`POLICY_RESTRICTIVE_KHAI`
-  tám biến thể của 027, `POLICY_KHAC_KHAI` một, `BANG_RLS_NGOAI_TENANT_KHAI`), năm rỗng có meta-test sentinel
-  (`QUAN_HE_KHAC_KHAI`, `TRIGGER_NGOAI_PLPGSQL_KHAI`, `RULE_KHAI`, `KE_THUA_KHAI`, `BANG_ORG_ID_NGOAI_PUBLIC_KHAI`);
+  thường, 19 hàm trigger INSERT thêm vào danh sách KHÔNG-CANH).~~ **[S1.42]** Hardening nay mang ~~TÁM~~ **[S1.48 / 40b #8] MƯỜI MỘT** danh
+  sách khai, bản test giữ cùng danh sách và một cổng đòi hai bản khớp: ~~ba~~ bốn có hàng (`POLICY_RESTRICTIVE_KHAI`
+  tám biến thể của 027, `POLICY_KHAC_KHAI` một, `BANG_RLS_NGOAI_TENANT_KHAI`, `BANG_TENANT_KHAI` 29 tên [S1.43]), ~~năm~~ bảy rỗng có meta-test sentinel
+  (`QUAN_HE_KHAC_KHAI`, `TRIGGER_NGOAI_PLPGSQL_KHAI`, `RULE_KHAI`, `KE_THUA_KHAI`, `BANG_ORG_ID_NGOAI_PUBLIC_KHAI`, `BANG_KHOA_NGOAI_TENANT_KHAI` [S1.46], `GUC_TUY_BIEN_KHAI` [S1.47]);
   cộng ở test: `HAM_KHONG_PHAI_CANH`, `RULE_DA_KHAI`, `LOAI_DA_KHAI`. Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
   và một dòng khai — cố ý, như ADR-035 §4 đã nói cho nhãn test.
 - **Biểu thức policy khai NGUYÊN VĂN `pg_get_expr`.** Đổi phiên bản PostgreSQL có thể đổi cách
@@ -3675,12 +3676,12 @@ văn bản: lần đầu một lớp CI và một lớp cụm-đã-deploy đo b�
 khoản 82, cái catalog phân biệt được ở đó là tiền đề, không phải cơ chế. Cùng vòng, khoản 84 (`LA_CUA_BANG_TENANT`
 đệ quy) đóng lỗ RÒ cháu hai bậc ngoài public; ba kẽ của lượt 31 cùng đổ về một bậc tự do đã ghi từ vòng fix 3
 — khoản 85, mở thay vì tiếp tục *nói ra*. **[S1.42, lượt soi ngang 33a]** Ba phép đo: ⑴ `ALTER DATABASE … SET app.org_id`
-bởi CHỦ database không superuser ⇒ **42501** trên PostgreSQL 16 (placeholder GUC chỉ superuser đặt được ở mức database) —
-đường "mặc định phiên cho mọi kết nối app_api" thuộc vế ⒞, test là đủ; ba mục GUC mức database ghim tên và `withTenant`
+bởi CHỦ database không superuser ⇒ **42501** trên PostgreSQL 16 ~~(placeholder GUC chỉ superuser đặt được ở mức database)~~ **[S1.47]** vai được `GRANT SET ON PARAMETER` cũng đặt được (đo) —
+~~đường "mặc định phiên cho mọi kết nối app_api" thuộc vế ⒞, test là đủ~~ **[S1.47]** có mục sản xuất, hàng 23 ở §2 (S1.48); ba mục GUC mức database ghim tên và `withTenant`
 không đặt lại GUC khách ở phiên thường là khoản 87. **[S1.47] Khoản 87 đóng:** mục phán xét theo tính chất "GUC tuỳ biến (tên có dấu chấm) gắn sẵn cho phiên ứng dụng" — năm nhánh (mức database; vai kết nối/ALTER ROLE ALL; chính phiên deploy đọc thẳng giá trị trên tập tên policy/hàm đọc — vì placeholder không có ở `pg_settings`, đo; `pg_parameter_acl`; `proconfig` hàm), không tự RESET (chủ database thường 42501, RESET ALL dưới vai thường giữ im lặng placeholder — đo; `GRANT SET ON PARAMETER` cho vai thường đặt được — đo, nên câu "chỉ superuser" ở trên là nói quá trên PG15+); `withTenant` từ chối phục vụ trước `fn` khi một trong bốn GUC đã có giá trị lúc mở giao dịch (mặc định phiên) và xoá ba GUC khách trong mọi giao dịch. Ba mục kề không thấy hàng `ALTER ROLE ALL` — khoản 92. ⑵ Sổ kiểm toán khai theo TÊN: `RENAME` bảng sổ + `DROP` bốn trigger +
 `CREATE TABLE audit_events (LIKE …)` cùng hình dạng + policy đúng khuôn + `DROP POLICY audit_events_khach` trên bảng cũ ⇒
-`migrate()` **đi qua**, D2 dựng sáu trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ không mục nào canh — khoản 89 (bản đầu
-không xoá policy sót thì 83⑴ bắt, nhờ danh sách khai theo tên). ⑶ Khoản 86 có số: `RENAME COLUMN org_id TO to_chuc` +
+`migrate()` **đi qua**, D2 dựng ~~sáu~~ bốn trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ không mục nào canh — khoản 89 **[S1.43] đóng ở ADR-037** (bản đầu
+không xoá policy sót thì 83⑴ bắt, nhờ danh sách khai theo tên). ⑶ Khoản 86 có số **[S1.43 nửa đo được, S1.46 nửa gốc — đóng]**: `RENAME COLUMN org_id TO to_chuc` +
 `DISABLE ROW LEVEL SECURITY` + xoá hai policy trên `users` ⇒ `migrate()` đi qua, app_api gắn A đọc thấy B. Hai phép đo ⑵⑶
 cùng một bài học: danh tính đối tượng neo theo TÊN/HÌNH DẠNG chứ không theo `oid` — cùng lớp bài học 31 #1. **[S1.41]** Khoản 85 đóng bằng một mục phán xét (bảng `org_id` ngoài public,
 ngoài tập tenant, không RLS ⇒ khai) — kề với 83⑶ theo `relrowsecurity`, không nới vị từ tenant; hàng 22 nay có
@@ -3698,7 +3699,7 @@ Lượt soi ngang 33 đo hai đường đi qua **mọi** lớp của hardening t
 
 - `ALTER TABLE audit_events RENAME TO audit_events_cu; DROP TRIGGER …` ×4; `CREATE TABLE audit_events (LIKE … INCLUDING
   ALL)` + RLS + policy đúng khuôn + GRANT; `DROP POLICY audit_events_khach ON audit_events_cu` ⇒ `migrate()` **đi qua**,
-  D2 dựng sáu trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ mà không mục nào canh — khoản 89.
+  D2 dựng ~~sáu~~ bốn trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ mà không mục nào canh — khoản 89.
 - `ALTER TABLE users RENAME COLUMN org_id TO to_chuc; DISABLE ROW LEVEL SECURITY; DROP POLICY` ×2 ⇒ `migrate()` **đi qua**,
   app_api gắn tổ chức A đọc thấy hàng của B — đường đo của khoản 86.
 
@@ -3717,7 +3718,7 @@ Danh tính của một bảng được canh là **ba kênh**, mỗi kênh chịu
 | ③ hình dạng **không bỏ được mà còn giá trị**: bộ ba cột chuỗi (`seq`, `prev_hash`, `hash`) ngoài `public.audit_events`; bộ ba mốc neo (`seq`, `hash`, `anchored_at`) ngoài `public.audit_chain_anchors` | nhận diện **bản sao sổ / bản sao mốc neo** ở bất kỳ tên/schema nào — bản đầu dùng "đủ 15 cột" và bị lượt soi 35 CAO-1 lách bằng một `RENAME COLUMN user_agent`; bộ ba chuỗi thì bỏ là hết giá trị sổ | — | ⑷ ⑷′ đổi tên rồi dựng lại, hay chép |
 
 Một mục hardening (S1.43): lượt SỬA ghi neo ① cho bảng tenant theo tính chất và bảng sổ chưa có chú thích (đơn điệu:
-chỉ thêm, không bao giờ xoá); lượt PHÁN XÉT sáu vế ⑴–⑹. Chú thích bảng của bảng tenant/bảng sổ là **kênh dành riêng**
+chỉ thêm, không bao giờ xoá); lượt PHÁN XÉT ~~sáu vế ⑴–⑹~~ **[S1.48 / 40b #7]** tám vế ⑴⑵⑵′⑶⑷⑷′⑸⑹. Chú thích bảng của bảng tenant/bảng sổ là **kênh dành riêng**
 — migration muốn chú thích thì chú thích cột.
 
 ### 3. Bị bác trước khi chọn — bản đầu của vòng, và vì sao
@@ -3754,12 +3755,17 @@ Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ
   thông điệp — chạy `migrate()` một lần bằng chủ bảng/superuser; test N2 nhánh 4 ghim hành vi ấy.
 - Bảng tenant **không khai** (fixture, bảng tương lai chưa khai) DROP rồi dựng lại cùng tên đi qua — tên không khai thì
   không ai đòi; cổng hai bản khớp buộc migration tạo bảng tenant mới phải khai tên.
-- D2/`CTE_TRIGGER_CHAN` (lớp SỬA của sổ) vẫn theo tên: sau đổi tên, trigger được dựng lên bảng giả; lớp PHÁN XÉT chặn
-  deploy — chưa đổi lớp sửa sang danh tính (lượt soi 34 #8; ~~khoản 88 kèm~~ **[S1.44]** khoản 88 đóng mà không đổi D2 —
-  tách thành **khoản 90**). **[S1.45] Khoản 90 đóng:** `bang_so` của lớp SỬA đòi danh tính NHẤT QUÁN theo kênh ① — chú
-  thích neo của chính nó (nếu có) bằng tên hiện tại, và không quan hệ khác mang neo nêu tên ấy — nên bản sao cùng tên
+- ~~D2/`CTE_TRIGGER_CHAN` (lớp SỬA của sổ) vẫn theo tên: sau đổi tên, trigger được dựng lên bảng giả; lớp PHÁN XÉT chặn
+  deploy — chưa đổi lớp sửa sang danh tính~~ (lượt soi 34 #8; ~~khoản 88 kèm~~ **[S1.44]** khoản 88 đóng mà không đổi D2 —
+  tách thành **khoản 90**). **[S1.45] Khoản 90 đóng:** `bang_so` của lớp SỬA đòi danh tính NHẤT QUÁN theo kênh ① — ⒜ chú
+  thích neo của chính nó (nếu có) nêu tên hiện tại HOẶC nêu `public.<sổ>` (bảng sổ thật bị `SET SCHEMA` vẫn là sổ theo oid —
+  giữ [CR2a]; lượt soi 37 CAO-1 bác bản "bằng tên hiện tại"; 40b #6 sửa lời ở đây), ⒝ không quan hệ khác mang neo nêu tên ấy — nên bản sao cùng tên
   không được chữa khi bảng gốc còn giữ danh tính (đo: 0 trigger); ranh giới như ①: chủ bảng gỡ chú thích ⇒ D2 lại chữa bản
-  sao, kênh ③ vẫn chặn. Chưa có neo ⇒ vế ⒜ đi qua (deploy đầu, N2).
+  sao, kênh ③ vẫn chặn. Chưa có neo ⇒ vế ⒜ đi qua (deploy đầu, N2). **[S1.48 / 40a I5]** ⒝′: không quan hệ khác mang ĐÚNG chuỗi neo
+  của mình — decoy cùng tên ở schema khác chép nguyên neo không còn được chữa (đo test 89 (f)). **[S1.48 / 40a I4 — runbook]** lượt ghi neo
+  `COMMENT ON TABLE` lấy ShareUpdateExclusiveLock với `lock_timeout = 0` của `migrate()`: deploy ĐẦU của S1.43 trên cụm sống chờ sau
+  một giao dịch dài trên bất kỳ bảng nào trong 31 bảng; khối EXCEPTION chỉ bắt 42501 — lỗi khác thoát khỏi `DO $neo$`, BƯỚC 2 nuốt,
+  các bảng còn lại của lượt không được neo, ⑶ chặn lượt ấy và tự lành lượt sau. Chạy deploy đầu lúc vắng.
 - Khoản 86 ~~**nửa gốc còn mở**: bảng đa tổ chức *mới* đặt tên cột khác `org_id` không thuộc vị từ nào nên không bao giờ
   được khai hay neo.~~ **[S1.46] Nửa gốc đóng bằng đường TÍNH CHẤT, không nới vị từ tenant:** mục phán xét khoản 86 bắt bảng
   KHÔNG có cột `org_id` nhưng có khoá ngoại MỘT cột — của nó hay của một tổ tiên INHERITS — tới một BẢNG TENANT theo tính chất
