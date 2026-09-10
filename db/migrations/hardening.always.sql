@@ -2207,6 +2207,9 @@ $ham$;
   -- đóng ba kẽ. GIỚI HẠN NÓI THẲNG: chỉ nhận cột TÊN org_id — bảng đa tổ chức đặt tên cột khác (to_chuc, tenant_id)
   -- không thuộc mục này, và cũng không thuộc vị từ tenant ở public: đó là ranh giới của MAU_VI_TU_BANG_TENANT ở
   -- MỌI schema, không phải bậc tự do 85 mở lại [lượt soi 32, INFO-6]; gốc tenant theo vế khoá ngoại cũng vậy.
+  -- [S1.46 / khoản nợ 86 — nửa gốc] Ranh giới ấy nay có lớp KỀ BÊN: bảng KHÔNG có cột org_id nhưng có khoá ngoại một cột
+  -- (của nó hay của tổ tiên INHERITS) trỏ tới một BẢNG TENANT, ở MỌI schema kể cả public, không RLS ⇒ CAU_KHOA_NGOAI_TENANT_SAI
+  -- (dưới). Ba mục 85 / 86 / 83⑶ rời nhau theo (có org_id, có khoá ngoại tới bảng tenant, relrowsecurity).
   -- Mỗi dòng khai ở đây là một GRANT đọc xuyên tổ chức có điều kiện — cùng hạng NGOAI_LE_HINH_DANG, phải kèm lý do
   -- và bản test; khai theo TÊN chỉ đóng băng lời khai: DROP rồi CREATE lại cùng tên là qua [lượt soi 32, INFO-7].
   -- Mục PHÁN XÉT ở migrate(): cửa sổ giữa hai lần deploy vẫn mở cho cả ba kẽ — mức bảo đảm là "phát hiện ở deploy
@@ -2240,6 +2243,89 @@ $ham$;
           AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                            WHERE n.nspname = oi.nspname AND c.relname = oi.relname
                              AND $q$ || VI_TU_HINH_DANG_85 || $q$)$q$;
+
+  -- ---- [S1.46 / khoản nợ 86 — nửa gốc] BẢNG ĐA TỔ CHỨC ĐẶT TÊN CỘT KHÁC org_id: KHOÁ NGOẠI MỘT CỘT TỚI BẢNG TENANT ------
+  -- Lượt soi 32 INFO-6 nêu địa chỉ: `CREATE TABLE k.t (gia int, to_chuc uuid REFERENCES public.organizations(id)); GRANT
+  -- … TO app_api` — và `public.t` cùng hình dạng — không thuộc vị từ nào: không cột TÊN org_id nên không là bảng tenant
+  -- (public) và không thuộc khoản 85 (ngoài public); không RLS nên 83⑵/83⑶ im; (A)/[CR1]/(C) im. Một GRANT mở hàng của
+  -- MỌI tổ chức (đo ở rls-coverage). S1.43 (ADR-037) đóng NỬA ĐO ĐƯỢC — bảng tenant ĐÃ KHAI rời tập theo hình dạng bị
+  -- ⑴⑵⑸⑹ bắt; nửa GỐC (bảng MỚI chưa từng được khai hay neo) cần một đường TÍNH CHẤT, là mục này: bảng (r/p) trong
+  -- lược đồ dự án, KHÔNG có cột org_id, có ít nhất một khoá ngoại MỘT CỘT — của chính nó hay của một TỔ TIÊN INHERITS
+  -- (PostgreSQL không kế thừa khoá ngoại: con thừa cột mà không thừa ràng buộc, lượt soi 38 A2) — trỏ tới một BẢNG TENANT
+  -- theo tính chất (MAU_VI_TU_BANG_TENANT: public, có org_id hay là gốc; cột đích nào cũng tính — mọi khoá ngoại tới bảng
+  -- tenant đều buộc hàng vào một tổ chức, trực tiếp qua gốc hay gián tiếp qua org_id của bảng đích: `rfq uuid REFERENCES
+  -- rfq_packages(id)` là cùng lớp, lượt soi 38 A1 — 008_suppliers.sql đã gọi `REFERENCES suppliers(id)` một cột là "LỖ
+  -- THẬT" và mọi khoá ngoại thật của kho là hợp thành `(org_id, x)`), không thuộc VI_TU_CAN_CO_RLS và KHÔNG bật RLS ⇒
+  -- PHẢI KHAI. Cùng cấu trúc và cùng mức bảo đảm với khoản 85 ("phát hiện ở deploy kế"); ba mục 85 / 86 / 83⑶ rời nhau:
+  -- có org_id ⇒ 85 (ngoài public) hay vị từ tenant (public); bật RLS ⇒ 83⑶. Thứ tự (A)/86 không tạo kẽ: vị từ loại
+  -- VI_TU_CAN_CO_RLS nên mục này không bao giờ đọc một bảng mà (A) sắp bật RLS (lượt soi 38 B2). KHÔNG nới
+  -- VI_TU_BANG_TENANT (bán kính nổ ghi ở chú thích VI_TU_CAN_CO_RLS): mục này chỉ bắt hình dạng phải KHAI; cửa ra hợp lệ là
+  -- đổi tên cột thành org_id (ở public thành bảng tenant — [CR1] đòi policy đúng khuôn, BANG_TENANT_KHAI + neo ADR-037 đòi
+  -- khai; ngoài public — khoản 85), DROP, bật RLS (83⑶ — [CR1] không soi policy của bảng ấy, không FORCE: cửa yếu hơn,
+  -- lượt soi 38 A3 → khoản 91), hay khai. Mục này cũng độc lập đóng đường đo S1.42 trên `users` (RENAME COLUMN org_id +
+  -- DISABLE RLS + DROP policy): khoá ngoại `to_chuc -> organizations` vẫn một cột ⇒ kêu, kể cả khi ADR-037 ①② bị gỡ (38 C2).
+  -- RANH GIỚI NÓI THẲNG: bảng đa tổ chức có cột uuid TRẦN (không khoá ngoại) tới tổ chức thì không tính chất catalog
+  -- nào nhận diện — kể cả bảng đích của trigger plpgsql chép NEW (lượt soi 33a #13); đó là DDL cố ý bỏ ràng buộc tham
+  -- chiếu, vế ⒝ của ADR-036 §3⑶, nhân chứng chỉ ở CI. Khoá ngoại NHIỀU cột không tính (cùng vế array_length = 1 của gốc).
+  -- Khoá ngoại tới một bảng ĐÃ KHAI ở mục này hay ở 85 (bậc kế: `k.t2 (t_id REFERENCES k.t(id))`) không tính — đích
+  -- không là bảng tenant theo tính chất; bao đóng trên đồ thị khoá ngoại là vòng khác. Lá phân mảnh: ràng buộc được nhân
+  -- bản xuống lá (conparentid) nên TỪNG LÁ bị thấy và phải khai riêng — cùng khuôn 85, và đúng: lá có relrowsecurity
+  -- riêng, đọc THẲNG lá theo policy của lá. Danh sách khai rỗng: lược đồ thật không có bảng như thế (cổng ở rls-coverage đo).
+  BANG_KHOA_NGOAI_TENANT_KHAI constant text :=
+    $q$(VALUES ('', '')) AS kt(nspname, relname)$q$;
+
+  -- Câu tương quan theo `c`: mỗi khoá ngoại một cột của c HAY của một tổ tiên INHERITS của c trỏ tới một bảng tenant — dùng
+  -- ở CẢ vị từ (EXISTS) lẫn mô tả (string_agg), một văn bản. Bí danh `kn_fk` cố ý khác `fk` bên trong vế gốc lồng (38 D1).
+  CAU_KHOA_NGOAI_TOI_TENANT constant text :=
+    $q$SELECT a.attname AS cot, gn.nspname AS dich_nsp, g.relname AS dich_rel
+         FROM pg_constraint kn_fk
+         JOIN pg_class g ON g.oid = kn_fk.confrelid
+         JOIN pg_namespace gn ON gn.oid = g.relnamespace
+         JOIN pg_attribute a ON a.attrelid = kn_fk.conrelid AND a.attnum = kn_fk.conkey[1] AND NOT a.attisdropped
+        WHERE kn_fk.contype = 'f'
+          AND pg_catalog.array_length(kn_fk.conkey, 1) = 1
+          AND kn_fk.conrelid IN (
+                WITH RECURSIVE to_tien(con, cha) AS (
+                  SELECT ke.inhrelid, ke.inhparent FROM pg_inherits ke
+                  UNION
+                  SELECT tt.con, ke.inhparent FROM to_tien tt JOIN pg_inherits ke ON ke.inhrelid = tt.cha
+                )
+                SELECT c.oid UNION SELECT tt.cha FROM to_tien tt WHERE tt.con = c.oid)
+          AND $q$ || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'gn', 'g');
+
+  VI_TU_HINH_DANG_86 constant text :=
+    $q$c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+       AND NOT $q$ || pg_catalog.format(MAU_VI_TU_CO_ORG_ID, 'c') || $q$
+       AND EXISTS ($q$ || CAU_KHOA_NGOAI_TOI_TENANT || $q$)
+       AND NOT $q$ || VI_TU_CAN_CO_RLS;
+
+  CAU_KHOA_NGOAI_TENANT_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname
+              || ': bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant (qua '
+              || (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(kn.cot) || ' -> ' || kn.dich_nsp || '.' || kn.dich_rel, ', ' ORDER BY kn.cot)
+                    FROM ($q$ || CAU_KHOA_NGOAI_TOI_TENANT || $q$) kn)
+              || ') và không bật RLS — chưa khai (khoản 86). Vị từ bảng tenant ghim TÊN cột org_id nên mục (A) không bật RLS, '
+                 '[CR1] không soi, 85 không thấy, 83⑵/83⑶ không thấy: một GRANT cho vai ứng dụng mở hàng của mọi tổ chức (đo). '
+                 'Sửa: một migration mới đổi tên cột ấy thành org_id (ở public thành bảng tenant — [CR1] đòi policy đúng khuôn, '
+                 'BANG_TENANT_KHAI và neo ADR-037 đòi khai; ngoài public — khoản 85 đòi khai hay treo dưới bảng tenant; trên lá phân '
+                 'mảnh thì đổi ở bảng gốc phân mảnh), hay DROP; hoặc khai (nspname, relname) vào BANG_KHOA_NGOAI_TENANT_KHAI kèm lý do '
+                 'và bản ở db/rls-coverage.int.test.ts — mỗi dòng khai là một GRANT đọc xuyên tổ chức có điều kiện, cùng hạng '
+                 'NGOAI_LE_HINH_DANG. Bật RLS lên nó chỉ chuyển lời khai sang 83⑶ ([CR1] không soi policy của bảng ấy, không FORCE).' AS mo_ta
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND $q$ || VI_TU_HINH_DANG_86 || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || BANG_KHOA_NGOAI_TENANT_KHAI || $q$
+                           WHERE kt.nspname = n.nspname AND kt.relname = c.relname)
+       UNION ALL
+       SELECT 'khai ' || kt.nspname || '.' || kt.relname || ' là bảng không org_id có khoá ngoại tới bảng tenant, không RLS (khoản 86) '
+              'mà CSDL không có bảng như thế — dòng khai thiu (bảng đã có cột org_id, đã bật RLS, hay đã bỏ khoá ngoại)' AS mo_ta
+         FROM $q$ || BANG_KHOA_NGOAI_TENANT_KHAI || $q$
+        -- chắn hàng sentinel ('', '') — cùng khuôn lượt soi 32 NHẸ-2 (to_regclass trên tên rỗng ném 42601 ở PG ≤ 15).
+        WHERE kt.relname <> ''
+          AND to_regclass(pg_catalog.format('%I.%I', kt.nspname, kt.relname)) IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                           WHERE n.nspname = kt.nspname AND c.relname = kt.relname
+                             AND $q$ || VI_TU_HINH_DANG_86 || $q$)$q$;
 
   -- ---- [S1.43 / khoản nợ 89 + 86] DANH TÍNH ĐỐI TƯỢNG CANH: NEO THEO oid QUA CHÚ THÍCH BẢNG + TÊN ĐÃ KHAI (ADR-037) ----
   -- Lượt soi ngang 33 đo hai đường đi qua mọi lớp: (a) RENAME bảng sổ + DROP trigger + CREATE TABLE cùng tên cùng
@@ -7645,6 +7731,15 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (DROP, ALTER TABLE … SET SCHEMA public, ATTACH PARTITION; bật RLS thì chỉ chuyển lời khai sang 83⑶) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    -- ---- [S1.46 / khoản nợ 86 — nửa gốc] Bảng không org_id có khoá ngoại tới bảng tenant, ngoài tập tenant, không RLS — PHÁN XÉT ----
+    ARRAY[
+      $q$bảng không có cột org_id nhưng có khoá ngoại một cột tới bảng tenant, ngoài tập tenant và không RLS phải được khai (khoản 86)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_KHOA_NGOAI_TENANT_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_KHOA_NGOAI_TENANT_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (ALTER TABLE … RENAME COLUMN … TO org_id, DROP; bật RLS thì chỉ chuyển lời khai sang 83⑶) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
     ],
     -- ---- [S1.43 / khoản nợ 89 + 86] Danh tính: chú thích neo theo oid + tên đã khai + hình dạng sổ — SỬA (ghi neo) + PHÁN XÉT (sáu vế) ----
     ARRAY[
