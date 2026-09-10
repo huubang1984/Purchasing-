@@ -153,7 +153,7 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  * ~~cách duy nhất làm nó xanh là ghi nó vào một danh sách~~ **[lượt soi 19 bác, bác đúng]:** bản
  * đầu dùng vị từ hình dạng làm nguồn sự thật, nên một hàm canh kiểu `RAISE …; RETURN NULL` khai
  * THẬT thì đỏ (mâu thuẫn với hình dạng) còn khai SAI vào KHÔNG-CANH thì xanh — cổng thưởng lời
- * khai sai. Đã đo trên PostgreSQL thật (test *"khai thật thì bảng ĐƯỢC canh"* dưới đây). Nay
+ * khai sai. Đã đo trên PostgreSQL thật (test `[sổ nợ 60] ĐO` *"khai THẬT thì bảng của nó VÀO TẬP của vị từ"* dưới đây). Nay
  * khai thật là đường xanh duy nhất SAU KHI bảng đã vào tập.
  *
  * **Chiều mâu thuẫn chỉ còn MỘT hướng, và đó là hướng suy được:** thân không có `RETURN` ⇒ hàm
@@ -204,7 +204,9 @@ const HAM_KHONG_PHAI_CANH = [
   "public.unseal_kiem_nguoi_duyet",
   "public.unseal_kiem_rfq_da_dong",
   "public.unseal_kiem_yeu_cau_khi_ghi_ban_ro",
-  // [S1.31] Năm hàm AFTER-ROW UPDATE vào tập rộng khi tập ấy thôi khoá theo hình thức BEFORE-ROW.
+  // [S1.31] Khối dưới là 20 hàm BEFORE-ROW UPDATE/DELETE của S1.29 CỘNG 5 hàm AFTER-ROW UPDATE vào tập rộng
+  // khi tập ấy thôi khoá theo hình thức BEFORE-ROW (kiem_tra_*, users_thu_hoi_phien_khi_dinh_chi), sắp theo tên.
+  // [lượt soi 25b #5] Chú thích cũ nói "năm hàm" đứng đầu một khối 25 tên.
   "public.kiem_tra_ma_tran_quyen",
   "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
   "public.kiem_tra_nguong_khong_cung_tay_vai_tro",
@@ -636,9 +638,11 @@ async function loiCua(
  * minh → NỘP BÁO GIÁ kèm biên nhận → đóng → yêu cầu mở thầu → duyệt → ghi bản rõ → điều phối → mở
  * thầu), một RFQ thứ hai bị huỷ để thu hồi vật liệu khoá, một việc outbox, một liên kết đăng nhập,
  * một lượt đặt lại TOTP hai người, một sự kiện kiểm toán và một mốc neo, một vai tạm nhận một quyền,
- * và một phiên mở dưới `app_api` sau một lần TOTP đúng. [S1.33] MỌI câu ghi của kịch bản là một nhân
- * chứng — INSERT cũng như UPDATE/DELETE; bảng không có trigger ở sự kiện ấy thì không ai được ghi công,
- * và thế là đúng. Dữ liệu để lại là vô hại với các test còn lại của tệp — chúng đọc catalog, không
+ * và một phiên mở dưới `app_api` sau một lần TOTP đúng. [S1.33] Mọi câu ghi của kịch bản TRÊN MỘT BẢNG CÓ
+ * TRIGGER Ở SỰ KIỆN ẤY là một nhân chứng — INSERT cũng như UPDATE/DELETE; vài câu dựng dữ liệu (vai tạm,
+ * TOTP của người thứ hai, `consumed_at` của OTP) chạy trần ngoài `chung()` và không ai được ghi công vì
+ * chúng — `chuaCoNhanChung` vẫn đòi đủ mọi bộ ba, nên bảng nào có trigger ở sự kiện ấy thì một nhân chứng
+ * khác phải phủ [lượt soi 25b #6: lời khai cũ "MỌI câu ghi" rộng hơn mã]. Dữ liệu để lại là vô hại với các test còn lại của tệp — chúng đọc catalog, không
  * đọc dữ liệu — và mọi khoá duy nhất mang một hậu tố ngẫu nhiên nên kịch bản chạy được nhiều lần
  * trên cùng CSDL (vai tạm được xoá ngay, CASCADE).
  */
@@ -1336,7 +1340,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
-  it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger BEFORE-ROW UPD/DEL phải nằm trong ĐÚNG MỘT danh sách", async () => {
+  it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger ghi (INSERT/UPDATE/DELETE, mọi hình thức) phải nằm trong ĐÚNG MỘT danh sách", async () => {
     const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean; luon_bat: boolean }>(CAU_TAP_RONG);
     const that = rows.map((r) => r.ten);
     const canhDayDu = HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`);
@@ -1365,7 +1369,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         "phải lỗi cú pháp: nó là câu hỏi 'đây có phải một hàm canh chỉ-ghi-thêm không'. Nếu CÓ: thêm " +
         "tên vào HAM_CANH_CHI_GHI_THEM VÀ vào vị từ trong hardening.always.sql (cổng ở test đầu giữ " +
         "hai bản khớp nhau), kèm bảng của nó vào BANG_CHI_GHI_THEM_THAT — bảng ấy sẽ được H19 canh " +
-        "kể cả khi thân hàm có RETURN. Nếu KHÔNG: thêm vào HAM_KHONG_PHAI_CANH VÀ một câu UPDATE/DELETE " +
+        "kể cả khi thân hàm có RETURN. Nếu KHÔNG: thêm vào HAM_KHONG_PHAI_CANH VÀ một câu INSERT/UPDATE/DELETE " +
         "hợp lệ vào dungKichBan() — nhân chứng hành vi [khoản nợ 74] sẽ đòi nó.",
     ).toEqual([]);
 
@@ -1419,7 +1423,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(rows.length).toBeGreaterThan(hinhDang.length * 5);
   }, 180000);
 
-  it("[sổ nợ 60] ĐO: một hàm canh kiểu `RAISE …; RETURN NULL` khai THẬT thì bảng của nó ĐƯỢC canh", async () => {
+  it("[sổ nợ 60] ĐO: một hàm canh kiểu `RAISE …; RETURN NULL` khai THẬT thì bảng của nó VÀO TẬP của vị từ", async () => {
     // Đúng kịch bản khoản nợ 60 nêu tên, dựng trên PostgreSQL thật. Bốn phép đo, theo thứ tự:
     //   (a) hàm vào TẬP RỘNG với khong_tra_ve = false — tức vị từ hình dạng KHÔNG nhận nó;
     //   (b) nó LÀ hàm canh thật: UPDATE và DELETE trên một hàng đều NÉM;

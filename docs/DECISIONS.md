@@ -3444,9 +3444,12 @@ bằng regex.**
 ### 2. Quyết định
 
 ⑴ **Liệt kê RỘNG trước, phân loại sau.** Tập ứng viên phải lấy theo một tiêu chí **không thể lách
-   bằng cách viết khác** — mọi tệp test được git theo dõi; mọi hàm `plpgsql` gắn `BEFORE … FOR EACH
-   ROW` trên `UPDATE`/`DELETE`. Hình dạng thân hàm, cách đặt tên, phong cách viết đều KHÔNG được
-   dùng để chọn ứng viên. **[lượt soi 19] Bản đầu của `[INV-H22]` vi phạm chính vế này:** nó chọn
+   bằng cách viết khác** — mọi tệp test được git theo dõi; ~~mọi hàm `plpgsql` gắn `BEFORE … FOR EACH
+   ROW` trên `UPDATE`/`DELETE`~~ **[S1.35, lượt soi 25b #9]** ví dụ ấy đã bị khoản 75 lách bằng
+   `FOR EACH STATEMENT`/AFTER ngay hai vòng sau — nay: mọi trigger `plpgsql` trên
+   `INSERT`/`UPDATE`/`DELETE`, không xét bit ROW/BEFORE (S1.31, S1.32); và lượt soi 25a #2 chỉ ra vế
+   `plpgsql` cũng là một chỗ lách (khoản nợ 79). Hình dạng thân hàm, cách đặt tên, phong cách viết đều
+   KHÔNG được dùng để chọn ứng viên. **[lượt soi 19] Bản đầu của `[INV-H22]` vi phạm chính vế này:** nó chọn
    ứng viên CẶP bằng hình dạng DÒNG NGUỒN (`it(`/`describe(` ở đầu dòng), trong khi bộ sinh đếm
    theo `fullName` lúc chạy — `test(`, `it.concurrent(`, tiêu đề ở dòng sau của `it.each` đều nuôi
    ma trận mà bộ quét mù, và kho đang có 8 tên test như thế. Sửa bằng cách lấy cặp từ CHÍNH báo
@@ -3522,13 +3525,15 @@ lần đọc lại kỹ hơn.
   điều tra lẫn nhân chứng khoá theo trigger BEFORE cấp HÀNG — trigger cấp CÂU LỆNH hay AFTER-ROW ném
   vô điều kiện đứng ngoài, là khoản nợ **75** (lượt soi 20), cùng lớp với 73.~~ **[S1.31] 75 đóng:**
   tập ứng viên là MỌI trigger trên UPDATE/DELETE, và một hàm canh ngoài hình thức BEFORE-ROW là đỏ —
-  vì đó là hình thức duy nhất vị từ sản xuất nhận. 27 câu nhân chứng thay cho 24.
+  vì đó là hình thức duy nhất vị từ sản xuất nhận. ~~27 câu nhân chứng thay cho 24.~~ **[S1.33]** Kịch bản
+  nay gồm cả INSERT (38 bộ ba INSERT cộng các bộ ba UPDATE/DELETE); con số câu đổi theo kịch bản và
+  không còn được khai ở đây — lượt soi 25b #9.
 
 ---
 
 ## ADR-036 — Danh mục MỌI cơ chế PostgreSQL làm một câu ghi trả 0 hàng mà không lỗi, và lớp canh từng cơ chế
 
-**Ngày:** 2026-09-09 · **Trạng thái:** Đã chấp nhận · **[S1.32]** · **Khoản nợ liên quan:** 60, 73, 74, 75, 76 ·
+**Ngày:** 2026-09-09 · **Trạng thái:** Đã chấp nhận · **[S1.32]** · **Khoản nợ liên quan:** 60, 73, 74, 75, 76, [S1.33–S1.34] 77, 78, [S1.35] 79, 80, 81, 82 ·
 **Liên quan:** ADR-028 (suy từ tính chất), ADR-035 (liệt kê rộng rồi buộc phân loại)
 
 ### 1. Vì sao ADR này tồn tại
@@ -3556,7 +3561,7 @@ chạy trong kho (không phải suy đoán).
 | # | Cơ chế | Hiệu lực | Lớp canh | Đo |
 |---|---|---|---|---|
 | 1 | Trigger BEFORE-ROW trả `NULL` (bỏ hàng) | 0 hàng, không lỗi | nhân chứng hành vi: vế ⒞ *câu chạm ≥ 1 hàng* — hàm trả về mà không hàng nào đổi thì không ai được ghi công (S1.30) | ✓ |
-| 2 | Trigger ném (`RAISE`) — mọi hình thức: BEFORE/AFTER, hàng/câu lệnh | lỗi, nhưng bảng thành chỉ-ghi-thêm | tổng điều tra hàm trigger trên UPDATE/DELETE, hàm canh phải BEFORE-ROW để H19 nhận (S1.29, S1.31); H19 canh LOGGED/TRUNCATE/ACL | ✓ |
+| 2 | Trigger ném (`RAISE`) — mọi hình thức: BEFORE/AFTER, hàng/câu lệnh | lỗi, nhưng bảng thành chỉ-ghi-thêm | tổng điều tra hàm trigger trên ~~UPDATE/DELETE~~ INSERT/UPDATE/DELETE [S1.32], hàm canh phải BEFORE-ROW để H19 nhận (S1.29, S1.31); H19 canh LOGGED/TRUNCATE/ACL | ✓ |
 | 3 | `RULE … DO INSTEAD NOTHING` / `DO INSTEAD <khác>` | 0 hàng hoặc chuyển hướng, không lỗi | tổng điều tra `pg_rewrite` (danh sách rỗng) + `migrate()` phán xét rule trên mọi bảng chỉ-ghi-thêm (S1.31) | ✓ |
 | 4 | RLS policy PERMISSIVE với vị từ hằng/lệch (`USING (true)`, `USING (false)`, không ràng buộc tenant) | 0 hàng hoặc rò xuyên tổ chức | danh sách trắng hình dạng [CR1] + ngoại lệ khoá sáu cột, ở cả hardening lẫn `rls-coverage` (S0) | ✓ |
 | 5 | RLS policy RESTRICTIVE `USING (false)` | 0 hàng, không lỗi; `migrate()` OK | **[S1.32]** tổng điều tra policy RESTRICTIVE — khai đủ bốn cột nguyên văn, 29 dòng | ✓ |
@@ -3567,12 +3572,16 @@ chạy trong kho (không phải suy đoán).
 | 10 | VIEW / MATVIEW / bảng ngoài / bảng phân mảnh làm đích ghi (`INSTEAD OF` trả NULL, FDW ghi ra cụm khác, lá phân mảnh không chốt) | 0 hàng hoặc ghi lệch chỗ | **[S1.32]** tổng điều tra `relkind`: mọi đích DML là bảng thường trừ khi khai (rỗng); [I2] hardening bắt view trên bảng tenant; lá phân mảnh đo ở test lá | ✓ |
 | 11 | Constraint trigger DEFERRED (`INITIALLY DEFERRED`) trên INSERT/UPDATE/DELETE | chạy ở COMMIT, ~~ngoài phép đo nhân chứng~~ | ~~không được ghi công ⇒ ĐỎ nhìn thấy được, thông điệp nói rõ; hôm nay 0/46 (S1.31)~~ **[S1.33]** ĐO ĐƯỢC: `chung()` ép `SET CONSTRAINTS ALL IMMEDIATE` SAU câu nhân chứng và sau `hoanTat`, đọc bộ đếm lần thứ ba — hàm DEFERRED chỉ ghi công ở cửa sổ ấy (2/2 của kho: 017, 018); `DEFERRABLE INITIALLY IMMEDIATE` chạy cuối câu, cửa sổ đầu | ✓ |
 | 12 | Quyền thiếu (bảng hay cột) | **lỗi**, không im lặng | ma trận quyền ghim ở `rls-coverage` | n/a |
-| 13 | `WITH CHECK (false)`, CHECK constraint, cột sinh, định tuyến phân mảnh hụt, `NO INHERIT` | **lỗi**, không im lặng | — | n/a |
+| 13 | `WITH CHECK (false)`, CHECK constraint (kể cả `CHECK … NO INHERIT`), cột sinh, định tuyến phân mảnh hụt~~, `NO INHERIT`~~ | **lỗi**, không im lặng — **[S1.35]** `ALTER TABLE … NO INHERIT` KHÔNG thuộc hàng này: nó im lặng, xem hàng 22 (lượt soi 25a #6 chỉ ra; đo) | — | n/a |
 | 14 | `ON CONFLICT DO NOTHING`, mệnh đề `WHERE` không khớp | 0 hàng — nhưng do CHÍNH CÂU LỆNH, không do lược đồ | ngoài phạm vi: ADR này nói về lược đồ | n/a |
 | 15 | Trigger BEFORE INSERT ROW trả `NULL` (nuốt INSERT) — **lượt soi 22 chỉ ra** | `INSERT 0 0`, `RETURNING` rỗng, không lỗi | **[S1.32]** tập rộng của tổng điều tra mở ra bit INSERT: 27 hàm trigger INSERT phải được phân loại (19 khai mới); ~~**chưa có nhân chứng hành vi cho INSERT — khoản nợ 77**~~ **[S1.33]** nhân chứng hành vi cho 38 bộ ba (hàm, bảng, INSERT) — vế ⒞ *câu chạm ≥ 1 hàng* là lớp, vì hàm nuốt TRẢ VỀ và ĐƯỢC đếm (khác hàm canh ném) | ✓ (đo: `INSERT 0 0`, `calls` +1) |
-| 16 | Che tên: `CREATE TEMP TABLE users` trên một kết nối pool (pg_temp đứng trước `public`), hoặc schema `app_api` (`$user`), hoặc `SET search_path` trong phiên tới một schema vai có USAGE — **lượt soi 22 chỉ ra** | câu ghi rơi vào bảng khác, 0 dấu vết ở bảng thật; bảng tạm che một KẾT NỐI pool hết đời nó, schema che MỌI kết nối | ~~**chưa có — khoản nợ 78** (`REVOKE TEMP ON DATABASE`, cấm schema trùng tên vai); hôm nay vô hại vì mã sản xuất qualify `public.`~~ **[S1.34]** lớp 1 — `hardening.always.sql`: TEMP và CREATE ON DATABASE thu hồi khỏi PUBLIC và mọi vai kết nối ứng dụng (thành viên bắc cầu của `app_api`/`app_unseal`, theo tính chất) — tự chữa; schema trùng tên vai kết nối, và quan hệ trùng tên public trong một schema vai có USAGE — phán xét; lớp 2 — `vai-tro.ts` `DISCARD TEMP` cùng câu SET ROLE ở mỗi lần giao client (bảng tạm tạo trước deploy sống qua REVOKE); lớp 3 — mã sản xuất qualify `public.` (QT3/H21), nay không còn là lớp chịu lực. **Giới hạn ghi ra:** hàm SECURITY DEFINER thuộc chủ DB tạo được bảng tạm trong phiên app (hôm nay không hàm nào dùng TEMP; `CAU_DOC_VONG` canh secdef); mọi role khác của cụm mất TEMP — ràng buộc thiết kế: *vai ứng dụng không bao giờ dùng bảng tạm; role phụ trợ cần TEMP phải được GRANT đích danh* | ✓ (đo: đếm 0 / UPDATE 0 hàng trước lớp; 42501 sau; bảng tạm có sẵn sống qua REVOKE; `migrations.int.test.ts` ×2) |
+| 16 | Che tên: `CREATE TEMP TABLE users` trên một kết nối pool (pg_temp đứng trước `public`), hoặc schema `app_api` (`$user`), hoặc `SET search_path` trong phiên tới một schema vai có USAGE — **lượt soi 22 chỉ ra** | câu ghi rơi vào bảng khác, 0 dấu vết ở bảng thật; bảng tạm che một KẾT NỐI pool hết đời nó, schema che MỌI kết nối | ~~**chưa có — khoản nợ 78** (`REVOKE TEMP ON DATABASE`, cấm schema trùng tên vai); hôm nay vô hại vì mã sản xuất qualify `public.`~~ **[S1.34]** lớp 1 — `hardening.always.sql`: TEMP và CREATE ON DATABASE thu hồi khỏi PUBLIC và mọi vai kết nối ứng dụng (thành viên bắc cầu của `app_api`/`app_unseal`, theo tính chất) — tự chữa; schema trùng tên vai kết nối, và quan hệ trùng tên public trong một schema vai có USAGE — phán xét; lớp 2 — `vai-tro.ts` `DISCARD TEMP` cùng câu SET ROLE ở mỗi lần giao client (bảng tạm tạo trước deploy sống qua REVOKE); lớp 3 — mã sản xuất qualify `public.` (QT3/H21), nay không còn là lớp chịu lực. **Giới hạn ghi ra:** hàm SECURITY DEFINER thuộc chủ DB tạo được bảng tạm trong phiên app (hôm nay không hàm nào dùng TEMP; `CAU_DOC_VONG` canh secdef); mọi role khác của cụm mất TEMP — ràng buộc thiết kế: *vai ứng dụng không bao giờ dùng bảng tạm; role phụ trợ cần TEMP phải được GRANT đích danh*. **[S1.35, lượt soi 25a #11/#12]** `DISCARD TEMP` xoá cả bảng tạm do secdef tạo — trong phạm vi một lần cầm client, nên giới hạn secdef ở trên thu hẹp về *trong một lần cầm*; và nếu một vai kết nối ứng dụng là CHỦ database (cấu hình sai) thì `has_database_privilege` luôn true — hai mục theo vai gãy vĩnh viễn với thông điệp sai hướng; cùng thông điệp ấy cũng im về đường PUBLIC — nếu mục PUBLIC không thu hồi được thì mục theo vai gãy theo (`has_database_privilege` đếm cả PUBLIC) mà chỉ nói *đích danh hoặc qua nhóm* (lượt soi 25b #12): chặn deploy là đúng chiều, thông điệp thì chưa (chưa sửa; địa chỉ ở thân khoản nợ 82) | ✓ (đo: đếm 0 / UPDATE 0 hàng trước lớp; 42501 sau; bảng tạm có sẵn sống qua REVOKE; `migrations.int.test.ts` ×2) |
 | 17 | Nuốt SAU KHI ĐẾM: trigger AFTER ROW xoá (hay sửa) đúng hàng vừa đi qua rồi trả `NULL` — **lượt soi 23 chỉ ra** | `INSERT 0 1`, `RETURNING` đầy đủ, `calls` tăng, bảng rỗng — ba vế ⒜⒝⒞ của nhân chứng đều xanh | **[S1.33]** vế *hàng thật* đo ở mức BẢNG: `pg_stat_xact_user_tables` ở ba mốc — bộ đếm của đúng sự kiện bằng `rowCount`, hai bộ đếm kia bằng 0, cửa sổ sau không chạm bảng nhân chứng; lệch thì nhân chứng NÉM | ✓ (đo: `n_tup_ins` 1, `n_tup_del` 1) |
 | 18 | Nuốt MỘT trong nhiều hàng của cùng một câu (trigger BEFORE ROW trả `NULL` có điều kiện theo giá trị hàng) — **lượt soi 23 chỉ ra** | `rowCount ≥ 1` — vế ⒞ vẫn xanh | **[S1.33]** mỗi INSERT của kịch bản khai SỐ HÀNG nó mong, phải bằng đúng `rowCount`; nuốt theo dữ liệu NGOÀI câu (một `org_id` thuộc tập cố định) vẫn là giới hạn ⒞ ⒟ đã khai của khối nhân chứng | ✓ (đọc: `rowCount` đếm hàng đi qua BEFORE) |
+| 19 | Trigger BEFORE ROW trả về hàng ĐÃ SỬA (`RETURN OLD` trên UPDATE; `NEW.cột := OLD.cột` hay `NULL` trên INSERT/UPDATE) — **lượt soi 25a chỉ ra** | `UPDATE 1`, `n_tup_upd` 1, `calls` +1, `RETURNING` có hàng — nhưng giá trị KHÔNG đổi hoặc bị cắt cột: theo đọc `chung()`, bốn con số ấy đúng là những gì ba vế ⒜⒝⒞ và ⒞′ so — nhân chứng ghi công; hàng vào bảng nhưng không phải hàng đã gửi | **chưa có — khoản nợ 80** (vế ⒠: mỗi câu khai cặp (cột, giá trị) đã SET và `RETURNING` chúng, `chung()` so bằng, lệch thì NÉM); ghim thân ở hardening chỉ đóng băng lời khai, không phán hành vi | ✓ (đo: `RETURN OLD` ⇒ `rowCount` 1, `n_tup_upd` 1, `RETURNING` trả giá trị cũ) |
+| 20 | Trigger canh có `WHEN (…)` hay `UPDATE OF <cột>` — hàm canh KHÔNG CHẠY cho một phần câu, tên hàm và tên trigger giữ nguyên — **lượt soi 25a chỉ ra**; cùng lớp hàng 8–9 (hàm canh không chạy), và `003_audit_events.sql` đã biết nó từ S0 | UPDATE cột khác / mọi DELETE đi qua với 1 hàng, không lỗi; bảng vẫn "chỉ-ghi-thêm" theo vị từ suy ra (LOGGED/TRUNCATE/ACL đều xanh) | bảng CÓ TÊN: hardening soi `tgqual`/`tgattr` từ S0 (`CTE_TRIGGER_CHAN`); bảng SUY RA: **chưa có — khoản nợ 79** (vị từ, cả hai bản, chỉ đếm trigger canh khi `tgqual IS NULL AND tgattr = ''`; tập rộng mang hai cột ấy, khẳng định = false cho mọi trigger của hàm canh) | ✓ (đo: `zz1` — `UPDATE b` 1, `DELETE` 1, `migrate()` OK, vị từ mô phỏng nhận) |
+| 21 | Trigger gọi hàm KHÔNG plpgsql (`internal`/C/PL khác — vd `suppress_redundant_updates_trigger()` có sẵn, hay `CREATE FUNCTION … LANGUAGE <khác>`) — **lượt soi 25a chỉ ra** | `UPDATE 0`, không lỗi; vô hình với mọi tổng điều tra (đều lọc `lanname = 'plpgsql'`), với vị từ và với nhân chứng | **chưa có — khoản nợ 79** (tổng điều tra `prolang`: mọi trigger của dự án gọi hàm plpgsql trừ khai, rỗng; đối chứng dương là chính hàm built-in ấy; vế plpgsql ở vị từ GIỮ vì lý do đo được của nó vẫn đúng); hôm nay 0 trigger như thế ngoài fixture | ✓ (đo: UPDATE cùng giá trị ⇒ 0 hàng; `lanname = 'internal'`) |
+| 22 | `ALTER TABLE con NO INHERIT cha` — hàng đang nằm ở bảng con rời tầm của câu ghi qua bảng cha — **lượt soi 25a chỉ ra** (hàng 13 từng xếp nhầm vào *lỗi*) | UPDATE/DELETE qua cha 0 hàng, không lỗi; con vẫn là `relkind 'r'` hợp lệ với tổng điều tra; không census nào đọc `pg_inherits` | **chưa có — khoản nợ 82** (tổng điều tra `pg_inherits` ngoài phân mảnh, danh sách khai rỗng + đối chứng dương); kho có fixture con INHERITS ở schema `khac` nên là ca có thật | ✓ (đo: trước 1 hàng, sau `NO INHERIT` 0 hàng) |
 
 ### 3. Quyết định
 
@@ -3588,6 +3597,10 @@ chạy trong kho (không phải suy đoán).
 ⑶ **Test là đủ cho các cơ chế 5–10; sản xuất không đổi.** Cùng lập luận với S1.29: migration là
    đường duy nhất tạo policy/trigger/rule, và CI chặn merge. Ngoại lệ đã có: rule trên bảng chỉ-ghi-thêm
    (S1.31) — vì bảng ấy có thể tồn tại trên một cụm đã deploy mà tệp hardening chạy ở mọi `migrate()`.
+   **[S1.35, lượt soi 25a #3]** Mệnh đề *ngoại lệ* bác mệnh đề *đủ* cho mọi cơ chế cùng lớp: một
+   RESTRICTIVE `USING (false)` trên `sessions` sau deploy sống qua mọi `migrate()` (đã đo ở `[INV-F1]
+   ĐO`, `zz_chan` còn nguyên). Cho tới khi **khoản nợ 81** quyết, đọc ⑶ là *"trong CI là đủ; trên cụm
+   đã deploy, 5–10 chưa có lớp"* — không phải *"test là đủ"*.
 
 ### 4. Cái giá, nói ra
 
@@ -3605,10 +3618,18 @@ chạy trong kho (không phải suy đoán).
 Nó không chứng minh danh mục đầy đủ — và **lượt soi 22 đã chứng minh điều đó ngay trong vòng viết ADR**:
 bản đầu có 14 hàng, lượt soi thêm hai (15, 16). Nó biến câu hỏi *"còn cơ chế nào không?"* từ một
 điều bất ngờ ở lượt soi kế thành một hàng phải thêm vào một bảng có địa chỉ — và một hàng mới mà không
-có lớp là một khoản nợ mở, nhìn thấy được ngay trong ADR (hàng 16 hôm nay là một). **[S1.33]** Lượt soi 23
+có lớp là một khoản nợ mở, nhìn thấy được ngay trong ADR ~~(hàng 16 hôm nay là một)~~. **[S1.33]** Lượt soi 23
 thêm hàng 17, 18 — lần thứ hai liên tiếp một lượt soi thêm hàng vào danh mục, và lần này cả hai hàng
 có lớp ngay trong vòng. Thứ đáng ghi: hàng 17 nằm ở khoảng cách giữa hai con số của cùng PostgreSQL
 (`rowCount` đếm trước AFTER trigger, `n_tup_*` đếm hàng thật) — một cơ chế chỉ nhìn thấy khi hỏi
 *"con số này đếm cái gì, và ở lúc nào"*. **[S1.34]** Hàng 16 đóng; lượt soi 24 không thêm hàng mới
 mà thêm một **tiền đề** vào lớp của hàng 16 (CREATE ON DATABASE) — nhắc rằng cột *lớp canh* phải nêu
-cả thứ lớp ấy tựa vào.
+cả thứ lớp ấy tựa vào. **[S1.35]** Lượt soi 25 — lượt NGANG đầu tiên, trên sáu vòng đã hợp nhất — thêm
+BỐN hàng (19–22), cả bốn chưa có lớp — ba khoản nợ: 80 (hàng 19), 79 (hàng 20–21), 82 (hàng 22) — và sửa một hàng sai ngữ nghĩa (13: `ALTER TABLE … NO
+INHERIT` không ném). Đã xét, KHÔNG thêm — ghi để danh mục là nguồn cả cho cái đã loại: `INSERT …
+RETURNING` bị policy `FOR SELECT USING (false)` lọc ⇒ 42501 ồn ào (đo); schema trùng tên superuser cho
+`poolAs` của test ⇒ mục *quan hệ trùng tên* của hàng 16 bắt, `"$user"` theo `current_user` (đo);
+MERGE/COPY/`ON CONFLICT … WHERE`/`SKIP LOCKED`/timeout thuộc câu lệnh hay ném (hàng 12–14); statement
+trigger xoá lại qua transition table — ⒞′ bắt ở mức bảng; `session_replication_role = replica` — hàng 8.
+Lần thứ ba liên tiếp một lượt soi thêm hàng, và lần này là bốn: danh mục lớn theo số GÓC NHÌN đã đọc
+nó, không theo số vòng.
