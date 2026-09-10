@@ -1870,3 +1870,51 @@ có ba kẽ tựa vào — thành khoản 85 có địa chỉ; ⑶ khẳng đị
 của mục là kiểu rỗng ruột mới, khác đối chứng dương lượt 21 dạy: đối chứng ÂM cũng phải chứng minh mục *có thể*
 kêu ở đó; ⑷ (người viết) một số đo bất thường phải được đo cô lập trước khi đặt tên cho nó — 23,8 s hoá ra là tải
 máy, không phải CTE.
+
+# §S1.41 — khoản nợ 85: bậc tự do "bảng có `org_id` ngoài `public` không treo dưới bảng tenant" thành mục phán xét — MÃ SẢN XUẤT; khoản 86 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `MAU_VI_TU_CO_ORG_ID` (vế "có cột org_id", dùng chung với
+`MAU_VI_TU_BANG_TENANT`), `VI_TU_HINH_DANG_85` (hình dạng, hai chiều cùng tham chiếu), `BANG_ORG_ID_NGOAI_PUBLIC_KHAI`
+(rỗng), `CAU_ORG_ID_NGOAI_PUBLIC_SAI`, một mục ARRAY sau 83⑶. Không nới `VI_TU_BANG_TENANT`. Không migration đánh
+số, không đụng lược đồ. Còn lại: `db/rls-coverage.int.test.ts` (28 → 30), `db/migrations.int.test.ts` (95 → 96; ba
+fixture lật), năm tệp tài liệu và tệp này.
+
+**Đo:** `zz_s85.t (gia, org_id)` ngoài public + GRANT ⇒ app_api gắn A đọc thấy hàng của B; `migrate()` NÉM ở 85; bật
+RLS ⇒ 85 im, 83⑶ kêu; DROP ⇒ đi qua. Census trong giao dịch: thấy `zz_s.t`; không thấy bảng không org_id / bật RLS /
+con INHERITS `users` / lá phân mảnh của bảng tenant; NO INHERIT + DETACH ⇒ cả hai rơi vào mục; SET SCHEMA public ⇒ ra
+khỏi mục; chiều ngược qua dòng khai giả lập. Hai đường thời gian ở `migrations.int.test.ts`: tách trước `migrate()`
+⇒ 85, tách sau (A) ⇒ 83⑶; chuỗi RENAME + tái dùng tên + DISABLE RLS ⇒ 85 kêu đúng con cũ. Ba fixture cũ NÉM đúng
+MỘT mục, lượt sửa vẫn trọn (thông báo, trigger, INSERT còn nguyên). Trọn tệp: `migrations.int.test.ts` 96/96, H19
+30/30, `rls-coverage` 30/30; t0 209 / 0. **Đỏ đo được, cô lập (hai đột biến, chạy lại sau bản vá lượt 32):** chiều
+xuôi no-op ⇒ census + ĐO + ba fixture lật; chiều ngược no-op ⇒ *dòng khai thiu*.
+
+## Lượt soi đối kháng 32 — chạy TRƯỚC khi §S1.41 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc diff, tám hằng liên quan, mục (A)/BƯỚC 2–4, bộ giải
+hằng, STATE 82/84/85, §31, quét fixture `CREATE TABLE <schema>.<bảng>` có `org_id`/INHERITS/PARTITION/SET SCHEMA/NO
+INHERIT/DETACH trong `db/`, `packages/`, `tests/`), giao năm hướng: đường lách; phân hoạch 85/83⑶, bí danh, bộ giải,
+thứ tự hằng; fixture khác; lời vs mã; bốn bài học cũ.
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Fixture `[vòng fix 1 — IM2]` (`bao_cao.audit_events`, org_id ngoài public, không RLS) bị 85 phán mà bản đầu không lật — cùng hình dạng `kho.*` đã lật, cùng tệp, sót một | **đo:** lượt chạy trọn tệp đỏ đúng test ấy, cùng lúc người soi báo | lật như `kho.*`: NÉM đúng một mục, giữ nguyên phép đo trigger/INSERT; điều 1 mang sang: census fixture phải là cơ khí |
+| 2 | NHẸ | Chiều ngược 85 không chắn sentinel `('', '')` — bốn tiền lệ đều chắn; `to_regclass('""."" ')` im trên PG 16 nhờ soft-error, 42601 trên PG ≤ 15 | đúng theo đọc | `WHERE oi.relname <> ''`; meta-test sentinel cho cả năm danh sách khai rỗng (điều 2 mang sang, làm luôn) |
+| 3 | NHẸ | Vế `org_id` chép bốn bản (`MAU_VI_TU_BANG_TENANT`, hai chiều 85) và hình dạng 85 chép hai chiều — bài học lượt 30 NHẸ-2 tái xuất | đúng theo đọc | `MAU_VI_TU_CO_ORG_ID` dùng chung với vị từ tenant; `VI_TU_HINH_DANG_85` dùng ở hai chiều; test đòi hai tham chiếu và cùng vế org_id |
+| 4 | INFO | Lời sửa: "treo dưới bảng tenant (rồi (A) bật RLS)" bỏ qua 82⑴ đòi khai với INHERITS; cột quyền đặt "bật RLS rồi khai 83⑶" lên đầu — chỉ chuyển lời khai, [CR1] không soi policy bảng ấy | đúng | viết lại theo thứ tự DROP / SET SCHEMA public / ATTACH PARTITION; bật RLS = chuyển lời khai |
+| 5 | INFO | Chú thích nói "đo: con cũ sau NO INHERIT + RENAME" mà test chỉ NO INHERIT | đúng | thêm nửa (d): RENAME + CREATE cùng tên INHERITS + DISABLE RLS con cũ ⇒ 83⑶ rồi 85 đúng tên con cũ (đo) |
+| 6 | INFO | "ĐÓNG" là đóng theo TÊN CỘT: bảng đa tổ chức đặt tên cột khác im ở mọi schema kể cả public — ranh giới sẵn có của vị từ tenant, không phải 85 mở lại | đúng theo đọc | ghi vào chú thích; **khoản 86** có địa chỉ |
+| 7 | INFO | Danh sách mới chưa có câu "dòng khai là quyết định an ninh cùng hạng `NGOAI_LE_HINH_DANG`" (bài học 31 #1) | đúng | thêm vào chú thích và thông điệp |
+
+**Kiểm và thấy KHỚP (người soi):** phân hoạch 85/83⑶ kín và không chồng (cùng ba vế nền, tách bằng `relrowsecurity`);
+bảng thuộc `VI_TU_CAN_CO_RLS` chưa RLS là việc của (A), 85 không kêu nhầm lên con/cháu đang treo; bí danh không va;
+bộ giải giải được (`format` một lần, `VI_TU_CAN_CO_RLS` lồng ba bậc, `%I.%I` trong literal); thứ tự khai đúng; chiều
+ngược neo đối tượng tồn tại; `org_id` kiểu khác uuid vẫn bắt; DROP COLUMN rồi ADD lại bắt; bảng tạm loại; DEFAULT
+partition có test; cha phân mảnh ngoài public bị bắt cùng lá; bảng ngoài ⇒ 83⑷; view ⇒ (C); schema không USAGE vẫn
+phán (chặt hơn hàng 16); ba `not.toContain("(khoản 85)")` đều đứng sau khẳng định dương của chính mục trên cùng hình
+dạng; fixture khác (`khac.con_khac`, `k.*`, `con_tt`, `[CR2]`, `[I6]`, `kho_toi`, `[I3]`, `doc.*`, `gia`, `ke9/ke10`)
+không bị.
+
+**Điều đáng mang sang vòng sau:** ⑴ census fixture phải là cơ khí (grep mẫu cố định trước mỗi mục phán xét mới) —
+sót một ở cùng tệp là bằng chứng; ⑵ ~~khuôn sentinel cần meta-test~~ làm trong vòng; ⑶ ranh giới theo tên cột
+`org_id` — khoản 86, đường tính-chất là đổi `MAU_VI_TU_BANG_TENANT`, cần vòng riêng có đo trên lược đồ thật; ⑷ cửa
+sổ giữa hai lần deploy: "phát hiện ở deploy kế" là mức bảo đảm của mọi mục phán xét — ghi ở ADR-036 §5.

@@ -428,11 +428,16 @@ DECLARE
   -- CHIỀU GIẢ MẠO: thêm một khoá ngoại `org_id` một cột trỏ tới bảng X là THÊM X vào vùng canh,
   -- không phải gỡ. Gỡ X ra khỏi vùng canh đòi gỡ MỌI khoá ngoại `org_id` trỏ tới nó — tức phá
   -- chính ràng buộc tham chiếu của cây tenant, và đó là một thay đổi lược đồ nhìn thấy được.
+  -- [S1.41 / lượt soi 32, NHẸ-3] Vế "có cột org_id" là MỘT hằng, dùng ở vị từ tenant (public) và ở mục khoản 85
+  -- (ngoài public): nới định nghĩa ở một nơi thì nơi kia đi theo, không trôi ngầm. %1$s = bí danh pg_class.
+  MAU_VI_TU_CO_ORG_ID constant text :=
+    $q$EXISTS (SELECT 1 FROM pg_attribute a
+                WHERE a.attrelid = %1$s.oid AND a.attname = 'org_id'
+                  AND a.attnum > 0 AND NOT a.attisdropped)$q$;
+
   MAU_VI_TU_BANG_TENANT constant text :=
     $q$%1$s.nspname = 'public' AND %2$s.relkind IN ('r', 'p')
-       AND (EXISTS (SELECT 1 FROM pg_attribute a
-                     WHERE a.attrelid = %2$s.oid AND a.attname = 'org_id'
-                       AND a.attnum > 0 AND NOT a.attisdropped)
+       AND ($q$ || pg_catalog.format(MAU_VI_TU_CO_ORG_ID, '%2$s') || $q$
             OR EXISTS (SELECT 1 FROM pg_constraint fk
                         JOIN pg_class fkb ON fkb.oid = fk.conrelid
                         JOIN pg_namespace fkn ON fkn.oid = fkb.relnamespace
@@ -640,7 +645,11 @@ DECLARE
   -- BẬC TỰ DO CÒN LẠI: bảng có org_id ở schema khác mà KHÔNG treo dưới một bảng tenant nào
   -- vẫn không được nhận diện. Tiền điều kiện của nó là DDL + GRANT tường minh do người của dự
   -- án viết; nói ra thay vì hứa suông. [S1.40 / khoản nợ 84] "treo dưới" nay là MỌI BẬC (đệ quy) —
-  -- cháu ở schema khác từng là một bậc tự do nữa, đã đóng.
+  -- cháu ở schema khác từng là một bậc tự do nữa, đã đóng. [S1.41 / khoản nợ 85] Bậc tự do ấy ĐÓNG — không
+  -- bằng cách nới VI_TU_BANG_TENANT (bán kính nổ ở trên), mà bằng một mục PHÁN XÉT: bảng có cột org_id,
+  -- trong lược đồ dự án, ngoài tập này và không bật RLS thì PHẢI KHAI (CAU_ORG_ID_NGOAI_PUBLIC_SAI). Ba kẽ
+  -- của lượt soi 31 (con cũ sau NO INHERIT + RENAME; lá phân mảnh ngoài public tạo-và-DETACH giữa hai lần
+  -- deploy; nhận diện tenant ngoài public chỉ qua pg_inherits) đều là hình dạng ấy — đo ở migrations.int.test.ts.
   -- [S1.40 / lượt soi 31, NHẸ-4] Vế con cháu lọc theo MAU_SCHEMA_DU_AN (loại pg_temp): `CREATE TEMP TABLE x ()
   -- INHERITS (bảng_tenant)` hợp lệ, và mục (A) từng phát ALTER TABLE lên bảng tạm của PHIÊN KHÁC — 0A000 "cannot
   -- alter temporary tables of other sessions", BƯỚC 2 nuốt, rồi phán xét gọi nó là "bảng tenant thiếu RLS" (đo). Bảng
@@ -650,6 +659,13 @@ DECLARE
     $q$(( $q$ || VI_TU_BANG_TENANT || $q$ )
         OR (c.relkind IN ('r', 'p') AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
             AND $q$ || LA_CUA_BANG_TENANT || $q$))$q$;
+
+  -- [S1.41 / lượt soi 32, NHẸ-3] Hình dạng của khoản 85 — MỘT hằng, hai chiều của CAU_ORG_ID_NGOAI_PUBLIC_SAI
+  -- cùng tham chiếu (bài học lượt 30 NHẸ-2: chép vị từ là trôi ngầm; test đòi đúng hai tham chiếu).
+  VI_TU_HINH_DANG_85 constant text :=
+    $q$c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+       AND $q$ || pg_catalog.format(MAU_VI_TU_CO_ORG_ID, 'c') || $q$
+       AND NOT $q$ || VI_TU_CAN_CO_RLS;
 
   -- Mọi chỗ SAI KHUÔN về policy trên bảng tenant, mỗi hàng một mô tả đọc được. Hai nguồn:
   --   (i)  bảng tenant KHÔNG có policy PERMISSIVE nào — RLS bật mà không policy nào cho phép
@@ -2099,6 +2115,55 @@ $ham$;
                            WHERE n.nspname = b.nspname AND c.relname = b.relname
                              AND c.relkind IN ('r', 'p') AND c.relrowsecurity
                              AND NOT $q$ || VI_TU_CAN_CO_RLS || $q$)$q$;
+
+  -- ---- [S1.41 / khoản nợ 85] BẬC TỰ DO "BẢNG CÓ org_id NGOÀI public KHÔNG TREO DƯỚI BẢNG TENANT" ---------------
+  -- Ghi ở chú thích VI_TU_CAN_CO_RLS từ vòng fix 3 là "nói ra thay vì hứa suông"; lượt soi 31 đọc ra ba kẽ cùng
+  -- đổ về đó: con cũ của một cặp INHERITS sau NO INHERIT + RENAME (82⑴ im vì tên đã được tái dùng); lá phân
+  -- mảnh ngoài public tạo-và-DETACH giữa hai lần deploy (cùng cơ chế ADR-036 hàng 22, không hàng pg_inherits);
+  -- và bảng ngoài public chỉ được nhận là tenant qua pg_inherits. Hình dạng chung: bảng (r/p) có cột org_id,
+  -- trong MAU_SCHEMA_DU_AN, KHÔNG thuộc VI_TU_CAN_CO_RLS (tức ngoài public và không treo dưới bảng tenant) và
+  -- KHÔNG bật RLS — mục (A) không bật, [CR1] không soi (vị từ tenant chỉ nhận public), 83⑵/83⑶ không thấy (không
+  -- RLS): một GRANT cho vai ứng dụng mở hàng của MỌI tổ chức (đo, S1.41). Bật RLS lên nó thì rơi sang 83⑶ —
+  -- hai mục kề nhau, không chồng: mục này cố ý đòi NOT relrowsecurity. Khai đích danh ở
+  -- BANG_ORG_ID_NGOAI_PUBLIC_KHAI (rỗng: lược đồ thật không có bảng org_id ngoài public). Chiều ngược khi bảng
+  -- còn mà không còn hình dạng ấy (như 83⑶). Không nới VI_TU_BANG_TENANT: đổi định nghĩa "bảng tenant" kéo
+  -- theo nguồn (i)/(ii) và mục (C) — bán kính nổ ghi ở chú thích ấy; mục này bắt hình dạng phải KHAI, đủ để
+  -- đóng ba kẽ. GIỚI HẠN NÓI THẲNG: chỉ nhận cột TÊN org_id — bảng đa tổ chức đặt tên cột khác (to_chuc, tenant_id)
+  -- không thuộc mục này, và cũng không thuộc vị từ tenant ở public: đó là ranh giới của MAU_VI_TU_BANG_TENANT ở
+  -- MỌI schema, không phải bậc tự do 85 mở lại [lượt soi 32, INFO-6]; gốc tenant theo vế khoá ngoại cũng vậy.
+  -- Mỗi dòng khai ở đây là một GRANT đọc xuyên tổ chức có điều kiện — cùng hạng NGOAI_LE_HINH_DANG, phải kèm lý do
+  -- và bản test; khai theo TÊN chỉ đóng băng lời khai: DROP rồi CREATE lại cùng tên là qua [lượt soi 32, INFO-7].
+  -- Mục PHÁN XÉT ở migrate(): cửa sổ giữa hai lần deploy vẫn mở cho cả ba kẽ — mức bảo đảm là "phát hiện ở deploy
+  -- kế", không hơn (test (b) khoản 85 nói ra).
+  BANG_ORG_ID_NGOAI_PUBLIC_KHAI constant text :=
+    $q$(VALUES ('', '')) AS oi(nspname, relname)$q$;
+
+  CAU_ORG_ID_NGOAI_PUBLIC_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname
+              || ': bảng có cột org_id ngoài public, không treo dưới bảng tenant nào và không bật RLS — chưa khai (khoản 85). '
+                 'Vị từ bảng tenant chỉ nhận public, nên mục (A) không bật RLS, [CR1] không soi, 83⑵/83⑶ không thấy: một GRANT '
+                 'cho vai ứng dụng mở hàng của mọi tổ chức (đo: con cũ sau NO INHERIT; lá phân mảnh ngoài public sau DETACH). '
+                 'Sửa: một migration mới DROP, hay ALTER TABLE … SET SCHEMA public (thành bảng tenant — [CR1] đòi policy đúng '
+                 'khuôn), hay ATTACH PARTITION dưới bảng tenant (INHERITS thì 82⑴ đòi khai); hoặc khai (nspname, relname) vào '
+                 'BANG_ORG_ID_NGOAI_PUBLIC_KHAI kèm lý do và bản ở db/rls-coverage.int.test.ts — mỗi dòng khai là một GRANT đọc '
+                 'xuyên tổ chức có điều kiện, cùng hạng NGOAI_LE_HINH_DANG. Bật RLS lên nó chỉ chuyển lời khai sang 83⑶ ([CR1] '
+                 'không soi policy của bảng ấy).' AS mo_ta
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND $q$ || VI_TU_HINH_DANG_85 || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || BANG_ORG_ID_NGOAI_PUBLIC_KHAI || $q$
+                           WHERE oi.nspname = n.nspname AND oi.relname = c.relname)
+       UNION ALL
+       SELECT 'khai ' || oi.nspname || '.' || oi.relname || ' là bảng org_id ngoài public không RLS (khoản 85) mà CSDL không có bảng '
+              'như thế — dòng khai thiu (bảng đã về public, đã treo dưới bảng tenant, đã bật RLS, hay đã bỏ cột)' AS mo_ta
+         FROM $q$ || BANG_ORG_ID_NGOAI_PUBLIC_KHAI || $q$
+        -- [lượt soi 32, NHẸ-2] chắn hàng sentinel ('', '') như bốn chiều ngược khác của tệp — to_regclass('""."" ')
+        -- im trên PG 16 nhờ đường soft-error, ném 42601 trên PG ≤ 15: xanh nhờ mã, không nhờ phiên bản.
+        WHERE oi.relname <> ''
+          AND to_regclass(pg_catalog.format('%I.%I', oi.nspname, oi.relname)) IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                           WHERE n.nspname = oi.nspname AND c.relname = oi.relname
+                             AND $q$ || VI_TU_HINH_DANG_85 || $q$)$q$;
 
   -- ---- [S1.39 / khoản nợ 83 — nửa catalog ⑷⑸⑹⑺⑧] NĂM MỤC PHÁN XÉT CÒN LẠI CỦA ADR-036 §3⑶ -----------
   -- Tiêu chí §3⑶ (S1.37): cơ chế mà chủ bảng không superuser tạo được và catalog phân biệt được tĩnh thì
@@ -7262,6 +7327,15 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_RLS_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_RLS_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (ALTER TABLE … DISABLE ROW LEVEL SECURITY) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    -- ---- [S1.41 / khoản nợ 85] Bảng org_id ngoài public, ngoài tập tenant, không RLS — PHÁN XÉT ----
+    ARRAY[
+      $q$bảng có org_id ngoài public không treo dưới bảng tenant và không RLS phải được khai (khoản 85)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (DROP, ALTER TABLE … SET SCHEMA public, ATTACH PARTITION; bật RLS thì chỉ chuyển lời khai sang 83⑶) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
     ],
     -- ---- [S1.39 / khoản nợ 83 ⑷⑸⑹⑺⑧] Năm mục PHÁN XÉT cho ADR-036 hàng 10, 21, 3 (tổng quát), 2/75, tiền đề 8 ----
     ARRAY[

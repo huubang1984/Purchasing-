@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
+import { docHangHardening as docHangHardeningTu, khoiValues } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
@@ -2124,4 +2124,123 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
     }
     expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: về PUBLIC ⇒ đi qua").toBeNull();
   }, 180000); // [S1.40] sáu lần migrate(): hạn 180 s như các test ĐO ở hardening-suy-tu-tinh-chat — hạn mặc định 30 s chạm ngưỡng dưới tải song song của evidence (đo: 30014 ms)
+});
+
+// ===============================================================================================
+// [S1.41 / khoản nợ 85] BẬC TỰ DO "BẢNG CÓ org_id NGOÀI public KHÔNG TREO DƯỚI BẢNG TENANT" — ĐÓNG
+//
+// Vị từ bảng tenant chỉ nhận public; con cháu ngoài public vào tập qua pg_inherits (S1.40 đệ quy). Còn lại một
+// hình dạng không lớp nào chạm: bảng có cột org_id, ngoài public, không treo dưới bảng tenant, KHÔNG bật RLS —
+// (A) không bật, [CR1] không soi, 83⑵/83⑶ không thấy. Lượt soi 31 đọc ra ba kẽ cùng đổ về đó. Mục hardening
+// CAU_ORG_ID_NGOAI_PUBLIC_SAI + BANG_ORG_ID_NGOAI_PUBLIC_KHAI (rỗng): bắt hình dạng ấy phải khai — không nới
+// VI_TU_BANG_TENANT (bán kính nổ). Bật RLS lên nó thì rơi sang 83⑶: hai mục kề nhau, không chồng.
+// ===============================================================================================
+
+/** [S1.41] `schema.bảng` có org_id ngoài public, ngoài tập tenant, không RLS — RỖNG là lời khai; bản hardening: BANG_ORG_ID_NGOAI_PUBLIC_KHAI. */
+const BANG_ORG_ID_NGOAI_PUBLIC_DA_KHAI: readonly string[] = [];
+
+describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo dưới bảng tenant", () => {
+  const ten = async (c: pg.PoolClient | pg.Pool, q: string): Promise<string[]> =>
+    (await c.query<{ mo_ta: string }>(q)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+
+  it("[INV-F1] HAI BẢN KHỚP và CÂU PHÁN XÉT chạy trong test: rỗng hôm nay; fixture trong giao dịch — bảng org_id ngoài public bị thấy, không org_id / bật RLS (sang 83⑶) / treo dưới tenant thì không; NO INHERIT và DETACH PARTITION làm bảng rơi vào mục; chiều ngược bắt dòng khai thiu", async () => {
+    expect(docHangHardening("BANG_ORG_ID_NGOAI_PUBLIC_KHAI")).toBe(
+      khoiValues(BANG_ORG_ID_NGOAI_PUBLIC_DA_KHAI.map((t) => t.split(".") as [string, string]), "oi", ["nspname", "relname"]),
+    );
+    const cau = docHangHardening("CAU_ORG_ID_NGOAI_PUBLIC_SAI");
+    const ngoai = docHangHardening("CAU_RLS_NGOAI_TENANT_SAI");
+    expect(cau.length).toBeGreaterThan(400);
+    // [lượt soi 32, NHẸ-3] hình dạng 85 là MỘT hằng, hai chiều cùng tham chiếu; vế "có cột org_id" là MỘT hằng dùng
+    // chung với vị từ tenant — nới một nơi thì nơi kia đi theo.
+    expect(HARDENING_SQL).toMatch(/\n  CAU_ORG_ID_NGOAI_PUBLIC_SAI constant text :=[\s\S]*?VI_TU_HINH_DANG_85[\s\S]*?VI_TU_HINH_DANG_85[\s\S]*?\$q\$;/u);
+    const hinhDang = docHangHardening("VI_TU_HINH_DANG_85");
+    expect(cau.split(hinhDang).length - 1, "hai chiều cùng một hình dạng").toBe(2);
+    const coOrgId = docHangHardening("MAU_VI_TU_CO_ORG_ID").replaceAll("%1$s", "c");
+    expect(hinhDang).toContain(coOrgId);
+    expect(docHangHardening("VI_TU_BANG_TENANT"), "vị từ tenant dùng cùng vế org_id").toContain(coOrgId);
+    // [lượt soi 32, NHẸ-2 + điều 2 mang sang] KHUÔN SENTINEL: mọi danh sách khai RỖNG là một hàng toàn chuỗi rỗng, và
+    // chiều ngược của mục dùng nó PHẢI chắn `<> ''` — to_regclass('""."" ') im trên PG 16 nhờ đường soft-error, ném 42601
+    // trên PG ≤ 15; xanh phải nhờ mã. Kiểm bằng văn bản trên cả năm danh sách của tệp hardening, không cần chạy SQL.
+    for (const [danhSach, biDanh, cot] of [
+      ["QUAN_HE_KHAC_KHAI", "q", "relname"],
+      ["TRIGGER_NGOAI_PLPGSQL_KHAI", "g", "tgname"],
+      ["RULE_KHAI", "r", "rulename"],
+      ["KE_THUA_KHAI", "k", "con_relname"],
+      ["BANG_ORG_ID_NGOAI_PUBLIC_KHAI", "oi", "relname"],
+    ] as const) {
+      expect(docHangHardening(danhSach), `${danhSach} hôm nay rỗng`).toMatch(/^\(VALUES \(''(?:, '')*\)\) AS /u);
+      expect(HARDENING_SQL, `${danhSach}: chiều ngược phải chắn hàng sentinel`).toMatch(
+        new RegExp(`FROM \\$q\\$ \\|\\| ${danhSach} \\|\\| \\$q\\$\\n(?:\\s*--[^\\n]*\\n)*\\s+WHERE ${biDanh}\\.${cot} <> ''`, "u"),
+      );
+    }
+    expect(await ten(db.pool, cau), "lược đồ thật không có bảng org_id ngoài public").toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(`
+        CREATE SCHEMA zz_s;
+        CREATE TABLE zz_s.t (id int, org_id uuid NOT NULL);
+        CREATE TABLE zz_s.t_khong (id int);
+        CREATE TABLE zz_s.t_rls (id int, org_id uuid NOT NULL);
+        ALTER TABLE zz_s.t_rls ENABLE ROW LEVEL SECURITY;
+        CREATE TABLE zz_s.con () INHERITS (public.users);
+        CREATE TABLE public.zz_pp (id int, org_id uuid NOT NULL) PARTITION BY LIST (org_id);
+        CREATE TABLE zz_s.la PARTITION OF public.zz_pp DEFAULT;
+      `);
+      expect(await ten(c, cau), "chỉ bảng org_id ngoài public, không RLS, không treo dưới tenant").toEqual(["zz_s.t"]);
+      expect(await ten(c, ngoai), "bảng org_id ngoài public ĐÃ bật RLS là việc của 83⑶").toEqual(["zz_s.t_rls"]);
+      // Kẽ ⑴ (lượt soi 31 NHẸ-1) và ⑵ (NHẸ-3): tách khỏi cây tenant là rơi vào mục — cùng cơ chế ADR-036 hàng 22.
+      await c.query("ALTER TABLE zz_s.con NO INHERIT public.users; ALTER TABLE public.zz_pp DETACH PARTITION zz_s.la");
+      expect(await ten(c, cau)).toEqual(["zz_s.con", "zz_s.la", "zz_s.t"]);
+      // Cửa ra hợp lệ: đưa về public (thành bảng tenant, [CR1] đòi policy) hay bật RLS (83⑶ đòi khai).
+      await c.query("ALTER TABLE zz_s.t SET SCHEMA public; ALTER TABLE zz_s.con ENABLE ROW LEVEL SECURITY");
+      expect(await ten(c, cau)).toEqual(["zz_s.la"]);
+      expect(await ten(c, ngoai)).toEqual(["zz_s.con", "zz_s.t_rls"]);
+      // Chiều ngược: giả lập một dòng khai (danh sách thật rỗng) — khai zz_s.la khi nó đang đúng hình dạng ⇒ im;
+      // bật RLS lên nó ⇒ dòng khai thiu.
+      const khai = cau.replaceAll("(VALUES ('', '')) AS oi(", "(VALUES ('zz_s', 'la')) AS oi(");
+      expect(khai.split("'la'").length - 1, "khối khai phải được thay ở CẢ HAI chiều").toBe(2);
+      expect(await ten(c, khai)).toEqual([]);
+      await c.query("ALTER TABLE zz_s.la ENABLE ROW LEVEL SECURITY");
+      expect((await c.query<{ mo_ta: string }>(khai)).rows.map((r) => r.mo_ta)).toEqual([
+        expect.stringContaining("khai zz_s.la là bảng org_id ngoài public không RLS (khoản 85) mà CSDL không có bảng như thế"),
+      ]);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: bảng org_id ngoài public không RLS — app_api gắn tổ chức A đọc được hàng của B qua một GRANT (lỗ RÒ), và migrate() NÉM ở mục khoản 85; bật RLS ⇒ mục im, 83⑶ kêu; DROP ⇒ đi qua", async () => {
+    const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+    const orgA = "00000000-0000-4000-8000-00000000008a";
+    const orgB = "00000000-0000-4000-8000-00000000008b";
+    await db.pool.query("DROP SCHEMA IF EXISTS zz_s85 CASCADE");
+    await db.pool.query(
+      "CREATE SCHEMA zz_s85; CREATE TABLE zz_s85.t (gia int, org_id uuid NOT NULL); " +
+        "GRANT USAGE ON SCHEMA zz_s85 TO app_api; GRANT SELECT ON zz_s85.t TO app_api",
+    );
+    try {
+      await db.pool.query("INSERT INTO zz_s85.t VALUES (777, $1)", [orgB]);
+      const apiPool = db.poolAs("app_api");
+      const client = await apiPool.connect();
+      try {
+        await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+        expect((await client.query<{ gia: number }>("SELECT gia FROM zz_s85.t")).rows.map((r) => r.gia), "lỗ RÒ có thật").toEqual([777]);
+      } finally {
+        client.release();
+      }
+      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
+      expect(loi!.message).toContain("zz_s85.t: bảng có cột org_id ngoài public, không treo dưới bảng tenant nào và không bật RLS — chưa khai (khoản 85)");
+      await db.pool.query("ALTER TABLE zz_s85.t ENABLE ROW LEVEL SECURITY");
+      const loiRls = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loiRls).not.toBeNull();
+      expect(loiRls!.message, "bật RLS: mục 85 im").not.toContain("(khoản 85)");
+      expect(loiRls!.message, "bật RLS: 83⑶ đòi khai").toContain("zz_s85.t: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
+    } finally {
+      await db.pool.query("DROP SCHEMA IF EXISTS zz_s85 CASCADE");
+    }
+    expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: gỡ ⇒ đi qua").toBeNull();
+  }, 180000);
 });
