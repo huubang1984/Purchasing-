@@ -3565,12 +3565,14 @@ chạy trong kho (không phải suy đoán).
 | 8 | `session_replication_role = replica` bỏ qua trigger `ENABLE` thường | hàm canh KHÔNG chạy — fail-open, ngược chiều với 1–7 | **[S1.32]** trigger canh phải `ENABLE ALWAYS` (tổng điều tra, `luon_bat`); 047 đã ghim ALWAYS cho chốt TRUNCATE | ✓ |
 | 9 | `ALTER TABLE … DISABLE TRIGGER` | như 8 | tổng điều tra: trigger canh `tgenabled = 'D'` là vi phạm (S1.29) | ✓ |
 | 10 | VIEW / MATVIEW / bảng ngoài / bảng phân mảnh làm đích ghi (`INSTEAD OF` trả NULL, FDW ghi ra cụm khác, lá phân mảnh không chốt) | 0 hàng hoặc ghi lệch chỗ | **[S1.32]** tổng điều tra `relkind`: mọi đích DML là bảng thường trừ khi khai (rỗng); [I2] hardening bắt view trên bảng tenant; lá phân mảnh đo ở test lá | ✓ |
-| 11 | Constraint trigger DEFERRED trên UPDATE/DELETE | chạy ở COMMIT, ngoài phép đo nhân chứng | không được ghi công ⇒ ĐỎ nhìn thấy được, thông điệp nói rõ; hôm nay 0/46 (S1.31) | ✓ |
+| 11 | Constraint trigger DEFERRED (`INITIALLY DEFERRED`) trên INSERT/UPDATE/DELETE | chạy ở COMMIT, ~~ngoài phép đo nhân chứng~~ | ~~không được ghi công ⇒ ĐỎ nhìn thấy được, thông điệp nói rõ; hôm nay 0/46 (S1.31)~~ **[S1.33]** ĐO ĐƯỢC: `chung()` ép `SET CONSTRAINTS ALL IMMEDIATE` SAU câu nhân chứng và sau `hoanTat`, đọc bộ đếm lần thứ ba — hàm DEFERRED chỉ ghi công ở cửa sổ ấy (2/2 của kho: 017, 018); `DEFERRABLE INITIALLY IMMEDIATE` chạy cuối câu, cửa sổ đầu | ✓ |
 | 12 | Quyền thiếu (bảng hay cột) | **lỗi**, không im lặng | ma trận quyền ghim ở `rls-coverage` | n/a |
 | 13 | `WITH CHECK (false)`, CHECK constraint, cột sinh, định tuyến phân mảnh hụt, `NO INHERIT` | **lỗi**, không im lặng | — | n/a |
 | 14 | `ON CONFLICT DO NOTHING`, mệnh đề `WHERE` không khớp | 0 hàng — nhưng do CHÍNH CÂU LỆNH, không do lược đồ | ngoài phạm vi: ADR này nói về lược đồ | n/a |
-| 15 | Trigger BEFORE INSERT ROW trả `NULL` (nuốt INSERT) — **lượt soi 22 chỉ ra** | `INSERT 0 0`, `RETURNING` rỗng, không lỗi | **[S1.32]** tập rộng của tổng điều tra mở ra bit INSERT: 27 hàm trigger INSERT phải được phân loại (19 khai mới); **chưa có nhân chứng hành vi cho INSERT — khoản nợ 77** | ✓ (đo: `INSERT 0 0`) |
+| 15 | Trigger BEFORE INSERT ROW trả `NULL` (nuốt INSERT) — **lượt soi 22 chỉ ra** | `INSERT 0 0`, `RETURNING` rỗng, không lỗi | **[S1.32]** tập rộng của tổng điều tra mở ra bit INSERT: 27 hàm trigger INSERT phải được phân loại (19 khai mới); ~~**chưa có nhân chứng hành vi cho INSERT — khoản nợ 77**~~ **[S1.33]** nhân chứng hành vi cho 38 bộ ba (hàm, bảng, INSERT) — vế ⒞ *câu chạm ≥ 1 hàng* là lớp, vì hàm nuốt TRẢ VỀ và ĐƯỢC đếm (khác hàm canh ném) | ✓ (đo: `INSERT 0 0`, `calls` +1) |
 | 16 | Che tên: `CREATE TEMP TABLE users` trên một kết nối pool (pg_temp đứng trước `public`), hoặc schema `app_api` (`$user`) — **lượt soi 22 chỉ ra** | câu ghi rơi vào bảng khác, 0 dấu vết ở bảng thật | **chưa có — khoản nợ 78** (`REVOKE TEMP ON DATABASE`, cấm schema trùng tên vai); hôm nay vô hại vì mã sản xuất qualify `public.` | đọc, chưa dựng ca |
+| 17 | Nuốt SAU KHI ĐẾM: trigger AFTER ROW xoá (hay sửa) đúng hàng vừa đi qua rồi trả `NULL` — **lượt soi 23 chỉ ra** | `INSERT 0 1`, `RETURNING` đầy đủ, `calls` tăng, bảng rỗng — ba vế ⒜⒝⒞ của nhân chứng đều xanh | **[S1.33]** vế *hàng thật* đo ở mức BẢNG: `pg_stat_xact_user_tables` ở ba mốc — bộ đếm của đúng sự kiện bằng `rowCount`, hai bộ đếm kia bằng 0, cửa sổ sau không chạm bảng nhân chứng; lệch thì nhân chứng NÉM | ✓ (đo: `n_tup_ins` 1, `n_tup_del` 1) |
+| 18 | Nuốt MỘT trong nhiều hàng của cùng một câu (trigger BEFORE ROW trả `NULL` có điều kiện theo giá trị hàng) — **lượt soi 23 chỉ ra** | `rowCount ≥ 1` — vế ⒞ vẫn xanh | **[S1.33]** mỗi INSERT của kịch bản khai SỐ HÀNG nó mong, phải bằng đúng `rowCount`; nuốt theo dữ liệu NGOÀI câu (một `org_id` thuộc tập cố định) vẫn là giới hạn ⒞ ⒟ đã khai của khối nhân chứng | ✓ (đọc: `rowCount` đếm hàng đi qua BEFORE) |
 
 ### 3. Quyết định
 
@@ -3603,4 +3605,8 @@ chạy trong kho (không phải suy đoán).
 Nó không chứng minh danh mục đầy đủ — và **lượt soi 22 đã chứng minh điều đó ngay trong vòng viết ADR**:
 bản đầu có 14 hàng, lượt soi thêm hai (15, 16). Nó biến câu hỏi *"còn cơ chế nào không?"* từ một
 điều bất ngờ ở lượt soi kế thành một hàng phải thêm vào một bảng có địa chỉ — và một hàng mới mà không
-có lớp là một khoản nợ mở, nhìn thấy được ngay trong ADR (hàng 16 hôm nay là một).
+có lớp là một khoản nợ mở, nhìn thấy được ngay trong ADR (hàng 16 hôm nay là một). **[S1.33]** Lượt soi 23
+thêm hàng 17, 18 — lần thứ hai liên tiếp một lượt soi thêm hàng vào danh mục, và lần này cả hai hàng
+có lớp ngay trong vòng. Thứ đáng ghi: hàng 17 nằm ở khoảng cách giữa hai con số của cùng PostgreSQL
+(`rowCount` đếm trước AFTER trigger, `n_tup_*` đếm hàng thật) — một cơ chế chỉ nhìn thấy khi hỏi
+*"con số này đếm cái gì, và ở lúc nào"*.
