@@ -3677,7 +3677,7 @@ khoản 82, cái catalog phân biệt được ở đó là tiền đề, không
 — khoản 85, mở thay vì tiếp tục *nói ra*. **[S1.42, lượt soi ngang 33a]** Ba phép đo: ⑴ `ALTER DATABASE … SET app.org_id`
 bởi CHỦ database không superuser ⇒ **42501** trên PostgreSQL 16 (placeholder GUC chỉ superuser đặt được ở mức database) —
 đường "mặc định phiên cho mọi kết nối app_api" thuộc vế ⒞, test là đủ; ba mục GUC mức database ghim tên và `withTenant`
-không đặt lại GUC khách ở phiên thường là khoản 87. ⑵ Sổ kiểm toán khai theo TÊN: `RENAME` bảng sổ + `DROP` bốn trigger +
+không đặt lại GUC khách ở phiên thường là khoản 87. **[S1.47] Khoản 87 đóng:** mục phán xét theo tính chất "GUC tuỳ biến (tên có dấu chấm) gắn sẵn cho phiên ứng dụng" — năm nhánh (mức database; vai kết nối/ALTER ROLE ALL; chính phiên deploy đọc thẳng giá trị trên tập tên policy/hàm đọc — vì placeholder không có ở `pg_settings`, đo; `pg_parameter_acl`; `proconfig` hàm), không tự RESET (chủ database thường 42501, RESET ALL dưới vai thường giữ im lặng placeholder — đo; `GRANT SET ON PARAMETER` cho vai thường đặt được — đo, nên câu "chỉ superuser" ở trên là nói quá trên PG15+); `withTenant` từ chối phục vụ trước `fn` khi một trong bốn GUC đã có giá trị lúc mở giao dịch (mặc định phiên) và xoá ba GUC khách trong mọi giao dịch. Ba mục kề không thấy hàng `ALTER ROLE ALL` — khoản 92. ⑵ Sổ kiểm toán khai theo TÊN: `RENAME` bảng sổ + `DROP` bốn trigger +
 `CREATE TABLE audit_events (LIKE …)` cùng hình dạng + policy đúng khuôn + `DROP POLICY audit_events_khach` trên bảng cũ ⇒
 `migrate()` **đi qua**, D2 dựng sáu trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ không mục nào canh — khoản 89 (bản đầu
 không xoá policy sót thì 83⑴ bắt, nhờ danh sách khai theo tên). ⑶ Khoản 86 có số: `RENAME COLUMN org_id TO to_chuc` +
