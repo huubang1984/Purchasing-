@@ -2118,3 +2118,45 @@ là thứ ADMIN OPTION đổi được, nên tập kết nối ứng dụng cầ
 những chủ thể mà CSDL test CỐ Ý không có, trong giao dịch; ⑶ hồ sơ N3 là hồ sơ nâng cấp thứ hai (sau N2 nhánh 4) mà chỉ
 một test dựng — mỗi mục "vai ứng dụng và mọi thành viên" phải được hỏi "thành viên KIỂU gì" (admin-only / NOINHERIT /
 SET); ⑷ bộ giải hằng nay đóng — mọi `%` ngoài văn phạm ném; ⑸ D2/`CTE_TRIGGER_CHAN` theo tên — khoản 90.
+
+# §S1.45 — khoản nợ 90: lớp SỬA D2 của sổ đòi danh tính nhất quán (ADR-037 kênh ①) — MÃ SẢN XUẤT, vòng nhỏ
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `bang_so` trong `CTE_TRIGGER_CHAN` thêm hai vế danh tính, so PHẦN TÊN
+của neo (⒜ chú thích neo của chính nó — nếu có — nêu tên hiện tại hoặc nêu tên sổ ở `public`; ⒝ không quan hệ khác mang neo
+nêu tên này); `CAU_NEO_SUA` cùng vế ⒝ (không trao neo cho bản chiếm tên, WARNING); thông điệp "KHÔNG TỒN TẠI" của
+`CAU_TRIGGER_CHAN_SAI` thêm nguyên nhân thứ tư; ⑵′ hết in NULL. Test: `db/migrations.int.test.ts` test 89 thêm (b) bản sao
+không neo, 0 trigger, thông điệp nguyên nhân thứ tư; (c) 4 sau khi gỡ chú thích; (e) đo riêng ⒜ (chú thích lạ trên sổ thật ⇒
+D2 không chữa, 3; đặt lại neo ⇒ 4). Không migration đánh số, không GRANT, không bảng mới.
+
+**Đo:** kịch bản 89 — bản sao cùng tên KHÔNG nhận neo lẫn trigger khi bảng gốc còn giữ danh tính; chủ bảng gỡ chú thích bảng
+gốc ⇒ danh tính rơi ⇒ lượt ghi neo trao neo, D2 chữa bản sao (ranh giới nói ra, kênh ③ vẫn chặn deploy); đối chứng đi qua với
+4 trigger; CR2a (`SET SCHEMA` cả hai sổ) vẫn 8 trigger ở schema mới.
+
+**Đỏ đo được, cô lập:** bỏ riêng ⒝ ⇒ test 89 (b) đỏ ở dòng "KHÔNG TỒN TẠI" (bản sao lại là `bang_so`); bỏ riêng ⒜ ⇒ (e) đỏ ở
+cùng dòng; bỏ cả hai (bản đầu) ⇒ (b) đỏ "expected 4 to be 0".
+
+### Lượt soi đối kháng 37 (trên bản đầu của S1.45): 1 CAO, 5 NHẸ, 3 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| 1 | CAO | Vế ⒜ (neo bằng TÊN HIỆN TẠI) loại cả bảng sổ THẬT đã `SET SCHEMA` khỏi `bang_so` (neo `public.audit_events` theo oid ≠ `kho_toi.audit_events`), và nhánh hai của `bang_al` đòi tên ngoài danh sách nên nó ra khỏi cả hai ⇒ D2/D3/D4 và [CR1] không chạm lịch sử thật ở schema mới — đảo đánh đổi [CR2a] ("cái giá để nhìn thấy SET SCHEMA"); test CR2a đòi 8 trigger, theo đọc còn 7; không test nào đo riêng ⒜ | đúng theo đọc | ⒜ so PHẦN TÊN và nhận cả `neo: public.<sổ>` dù bảng ở schema nào (bảng mang neo ấy LÀ sổ theo oid); ⒝ vẫn loại bản sao vì bảng đã dời còn giữ neo; chạy CR2a + test 89: xanh; (e) đo riêng ⒜; đột biến bỏ riêng ⒜ ⇒ (e) đỏ |
+| 2 | NHẸ | Thông điệp "KHÔNG TỒN TẠI như một BẢNG THẬT … DROP / SET SCHEMA / VIEW" nay bắn SAI nguyên nhân ở mọi ca hai vế loại bảng (bản sao chiếm tên, chú thích khác, attnum lệch, decoy) — bảng vẫn ở đó | đúng theo đọc | nguyên nhân thứ tư "[khoản 90] quan hệ đang mang tên ấy KHÔNG giữ danh tính nhất quán theo kênh ①"; test 89 (b) và (e) ghim |
+| 3 | NHẸ | ⒝ mở nút bấm cho vai chỉ cần CREATE trên một schema dự án: `COMMENT ON TABLE bao_cao.x IS 'neo: public.audit_events'` ⇒ sổ thật rời `bang_so`, D2/D3/D4 và [CR1] đứng yên; lớp bắt: ⑴ kêu đúng `bao_cao.x` kèm oid sổ + vế KHÔNG TỒN TẠI ⇒ deploy chặn, phát hiện trễ chứ không mất; `pg_temp` đã bị loại | đúng theo đọc | nói ra ở chú thích `bang_so` (ai làm được, lớp nào bắt; kẻ ấy vốn chặn được deploy bằng bảng có `org_id` không policy); không thu hẹp ⒝ theo hình dạng — bảng decoy đúng hình dạng thì ⑷ bắt, không đúng thì ⑴ bắt: cùng kết quả |
+| 4 | NHẸ | `CAU_NEO_SUA` vẫn TRAO neo cho bản sao khi bảng gốc còn giữ danh tính ("lớp SỬA đứng yên" nói quá); khi bảng gốc mất neo/bị DROP sau đó, bản sao đã sẵn neo hợp lệ ⇒ ⑴⑵⑶⑷ im, chuỗi hash bắt đầu lại trên sổ rỗng, dấu vết chỉ là một WARNING deploy trước | đúng theo đọc | `CAU_NEO_SUA` cùng vế ⒝: bỏ qua + WARNING nêu oid đang giữ tên; bản sao ở lại ⑶ tới quyết định có chủ ý; test 89 (b) khẳng định bản sao không neo |
+| 5 | NHẸ | ⒜ so TOÀN chuỗi (kèm attnum) trong khi tài liệu nêu dạng ngắn; ⑵′ in `nullif` NULL ⇒ dòng gom trống | đúng theo đọc | ⒜ và ⒝ đều so phần tên (`split_part … ' org_id#'`), attnum để ⑵′ phán; ⑵′ `coalesce(…, '(không có)')` |
+| 6 | NHẸ | STATE tự mâu thuẫn (hàng 90 còn MỞ, danh sách CÒN MỞ còn 90, hàng 89 còn "D2 theo tên") | đúng theo đọc — người soi đọc trước khi tài liệu S1.45 ghi | ba chỗ đã khớp trong cùng commit biên bản; hàng 89 gạch |
+| 7 | INFO | Deploy đầu/N2/cụm cũ: mục neo đứng trước D2 trong cùng lượt sửa; `IS NULL` đi qua; phân mảnh `p` không bao giờ được neo (⑶ đỏ vĩnh viễn — tiền tồn, ngoài phạm vi); chú thích CỘT không ảnh hưởng | xác nhận | — |
+| 8 | INFO | (b) "bảng gốc 0 trigger" không phân biệt với hành vi cũ — tài liệu, không phải chứng cứ; 0 trên bản sao đo "không thử" nhờ đột biến ⇒ 4 | xác nhận | ghi chú ở test |
+| 9 | INFO | "sáu trigger lên bản sao" — bản sao chỉ nhận bốn; ⑶ của biên bản 60 thiếu vế ⑶/⑵′ | xác nhận | sửa số, liệt kê đủ vế |
+
+**Khớp — người soi kiểm bằng đọc:** ⒝ so bằng đúng chuỗi, `k.oid <> c.oid`, `MAU_SCHEMA_DU_AN` cho `kn` loại `pg_temp`;
+`split_part(NULL)` ⇒ NULL ⇒ `NOT EXISTS` an toàn, không hàm nào ném theo dữ liệu người khác kiểm soát; `bang_al` nhánh hai không
+đổi — `kho.audit_events` phân mảnh và `bao_cao.audit_events` (không neo) vẫn trong `bang_so`, hai test ấy không đổi kỳ vọng; vế
+"KHÔNG TỒN TẠI" bảo đảm mọi lần sổ `public` rơi khỏi `bang_so` đều đỏ D2 cùng lượt — "không thả trong im lặng" đứng được;
+`CAU_QUYEN_BANG_SO_SAI`/`CAU_BANG_SO_VAT_LY`/D3/D4 đọc cùng CTE nên cùng lùi khỏi bảng bị loại — đúng ý với bản sao.
+
+**Điều đáng mang sang vòng sau:** ⑴ vị từ "danh tính nhất quán" phải phân biệt *bảng thật đổi chỗ* (oid giữ neo nêu tên sổ —
+vẫn là sổ, phải chữa) với *bản sao chiếm tên* (oid khác, neo của người khác nêu tên nó — không chữa) — bản đầu gộp hai ca;
+⑵ lớp SỬA gồm cả lượt ghi neo — cùng vị từ, cùng ranh giới; ⑶ mọi thay đổi vào `bang_so` phải chạy trọn
+`migrations.int.test.ts` (CR2a/CR2b/I3 đều đọc CTE ấy) và ghi mã thoát; ⑷ tài liệu ADR-037 nêu dạng neo ngắn — mọi vế nay so
+phần tên nên hai dạng đều hợp lệ, attnum là việc riêng của ⑵′.

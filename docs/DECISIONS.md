@@ -3756,7 +3756,10 @@ Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ
   không ai đòi; cổng hai bản khớp buộc migration tạo bảng tenant mới phải khai tên.
 - D2/`CTE_TRIGGER_CHAN` (lớp SỬA của sổ) vẫn theo tên: sau đổi tên, trigger được dựng lên bảng giả; lớp PHÁN XÉT chặn
   deploy — chưa đổi lớp sửa sang danh tính (lượt soi 34 #8; ~~khoản 88 kèm~~ **[S1.44]** khoản 88 đóng mà không đổi D2 —
-  tách thành **khoản 90**).
+  tách thành **khoản 90**). **[S1.45] Khoản 90 đóng:** `bang_so` của lớp SỬA đòi danh tính NHẤT QUÁN theo kênh ① — chú
+  thích neo của chính nó (nếu có) bằng tên hiện tại, và không quan hệ khác mang neo nêu tên ấy — nên bản sao cùng tên
+  không được chữa khi bảng gốc còn giữ danh tính (đo: 0 trigger); ranh giới như ①: chủ bảng gỡ chú thích ⇒ D2 lại chữa bản
+  sao, kênh ③ vẫn chặn. Chưa có neo ⇒ vế ⒜ đi qua (deploy đầu, N2).
 - Khoản 86 **nửa gốc còn mở**: bảng đa tổ chức *mới* đặt tên cột khác `org_id` không thuộc vị từ nào nên không bao giờ
   được khai hay neo.
 - Đổi tên/schema/dựng lại một bảng đã khai là việc của migration có chủ ý: cùng migration ấy sửa dòng khai và đặt lại chú

@@ -1373,6 +1373,25 @@ $ham$;
   --
   -- `bang_so` (bảng sổ THẬT, nhận theo tên, ở MỌI schema của dự án) tách khỏi `bang_al` (bang_so
   -- HỢP bảng lạ đang mang trigger chan_sua_xoa()). Chỉ `bang_so` được TỰ CHỮA — xem [CR4].
+  --
+  -- [S1.45 / khoản nợ 90 — lượt soi 34 #8, ADR-037 §5] `bang_so` đòi DANH TÍNH NHẤT QUÁN (kênh ①), không chỉ tên. Kịch
+  -- bản khoản 89 (RENAME sổ, dựng bảng cùng tên): bảng gốc mang chú thích neo theo oid nên nó "giữ" danh tính
+  -- `neo: public.audit_events`; bảng cùng tên dựng sau là bản sao — trước S1.45, D2 ở BƯỚC 2 dựng bốn trigger lên bản
+  -- sao ấy TRƯỚC khi BƯỚC 3 (CAU_NEO_SAI ⑴⑷) chặn deploy: chặn được, nhưng lớp SỬA đã chạm một bảng không phải sổ.
+  -- Nay `bang_so` ⊂ tên đã khai với hai vế, cả hai so PHẦN TÊN của neo (trước ` org_id#`; attnum là việc của ⑵′):
+  --   ⒜ chú thích neo của chính nó — nếu có — nêu tên hiện tại HOẶC nêu tên sổ ở `public`: bảng sổ thật bị
+  --      `SET SCHEMA` đẩy đi vẫn LÀ sổ theo oid và vẫn được chữa ở schema mới — giữ nguyên đánh đổi [CR2a] (bản đầu
+  --      của vòng đòi bằng tên hiện tại, bị lượt soi 37 CAO-1 bác: nó đảo CR2a, bỏ mặc lịch sử thật ở schema mới);
+  --   ⒝ không quan hệ KHÁC nào trong lược đồ dự án mang neo nêu đúng tên này (bảng gốc còn giữ danh tính thì bản sao
+  --      cùng tên không được chữa).
+  -- Chưa có chú thích (deploy đầu; cụm N2 bảng thuộc superuser) thì ⒜ đi qua — kênh ① mạnh bằng quyền sở hữu, như
+  -- ADR-037 §5: chủ bảng gỡ chú thích bảng gốc ⇒ danh tính rơi ⇒ D2 lại chữa bản sao (đo ở migrations.int.test.ts,
+  -- khoản 89 (c)); thứ còn giữ khi ấy là kênh ③ (hình dạng) ở lớp phán xét. [lượt soi 37 NHẸ-3] Ai làm được điều ngược:
+  -- chủ một bảng BẤT KỲ trong schema dự án đặt `COMMENT ON TABLE x IS 'neo: public.audit_events'` (chỉ cần CREATE
+  -- trên schema) làm sổ thật rời `bang_so` — lớp SỬA đứng yên, nhưng CAU_NEO_SAI ⑴ nêu đúng `x` kèm oid sổ và vế
+  -- "KHÔNG TỒN TẠI" của CAU_TRIGGER_CHAN_SAI đỏ cùng lượt ⇒ deploy chặn, phát hiện trễ chứ không mất; kẻ ấy trước đây
+  -- đã chặn được deploy bằng một bảng có org_id không policy. Lớp SỬA chỉ chạm thứ danh tính nhất quán; thứ không
+  -- nhất quán thì lớp PHÁN XÉT chặn deploy — hai lớp không tựa nhau. `bang_al` (bảng lạ mang trigger canh) không đổi.
   CTE_TRIGGER_CHAN constant text :=
     $q$WITH bang_so AS (
          SELECT c.oid AS bang_oid, n.nspname, c.relname, c.relpersistence, c.relowner
@@ -1380,6 +1399,15 @@ $ham$;
           WHERE c.relkind IN ('r', 'p')
             AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
             AND c.relname IN (SELECT ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)
+            AND (pg_catalog.obj_description(c.oid, 'pg_class') IS NULL
+                 OR pg_catalog.split_part(pg_catalog.obj_description(c.oid, 'pg_class'), ' org_id#', 1)
+                    IN ('neo: ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(c.relname),
+                        'neo: public.' || pg_catalog.quote_ident(c.relname)))
+            AND NOT EXISTS (SELECT 1 FROM pg_class k JOIN pg_namespace kn ON kn.oid = k.relnamespace
+                             WHERE k.oid <> c.oid AND k.relkind IN ('r', 'p')
+                               AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'kn') || $q$
+                               AND pg_catalog.split_part(pg_catalog.obj_description(k.oid, 'pg_class'), ' org_id#', 1)
+                                   = 'neo: ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(c.relname))
        ),
        bang_al AS (
          SELECT bang_oid, relname, true AS trong_ds FROM bang_so
@@ -1520,8 +1548,10 @@ $ham$;
      -- nó nói về một bảng KHÔNG TỒN TẠI trong public nên không có oid nào để in ra. Thông báo
      -- đã nêu tường minh "trong schema public" nên nó vẫn không mơ hồ.
      SELECT b.ten || ': bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI như một BẢNG THẬT (relkind r/p) trong '
-            'schema public — nó đã bị DROP, bị ALTER TABLE ... SET SCHEMA đẩy đi, hoặc bị thay '
-            'bằng một VIEW cùng tên. Sửa bằng một migration mới.' AS mo_ta
+            'schema public — nó đã bị DROP, bị ALTER TABLE ... SET SCHEMA đẩy đi, bị thay '
+            'bằng một VIEW cùng tên, hoặc [khoản 90] quan hệ đang mang tên ấy KHÔNG giữ danh tính nhất quán theo '
+            'kênh ① (bản sao chiếm tên trong khi bảng gốc còn neo; chú thích khác trên sổ) — xem dòng của mục danh '
+            'tính (ADR-037). Sửa bằng một migration mới.' AS mo_ta
        FROM $q$ || BANG_CHI_GHI_THEM || $q$
       WHERE NOT EXISTS (SELECT 1 FROM bang_so bs
                          WHERE bs.relname = b.ten AND bs.nspname = 'public')
@@ -2293,6 +2323,11 @@ $ham$;
 
   -- Lượt SỬA: ghi neo cho bảng phải neo mà CHƯA CÓ chú thích nào (chú thích khác chiếm chỗ thì không ghi đè — ⑶ nêu
   -- ra). 42501 (không sở hữu) nuốt từng bảng, BƯỚC 3 phán xét. Đơn điệu: chỉ thêm, không bao giờ xoá.
+  -- [S1.45 / khoản nợ 90 — lượt soi 37 NHẸ-4] Cùng vế ⒝ của `bang_so`: tên hiện tại đang được một quan hệ KHÁC giữ
+  -- danh tính (neo theo oid) thì KHÔNG trao neo cho bản chiếm tên — nếu trao, sau khi bảng gốc mất neo/bị DROP bản sao
+  -- đã sẵn neo hợp lệ và ⑴⑵⑶ im, chuỗi hash "bắt đầu lại" trên sổ rỗng mà dấu vết duy nhất là một WARNING của deploy
+  -- trước. Bản sao ở lại ⑶ ("chưa mang neo", lối ra trong thông điệp) cho tới một quyết định có chủ ý; WARNING nêu oid
+  -- đang giữ tên.
   CAU_NEO_SUA constant text :=
     $q$DO $neo$
        DECLARE r record;
@@ -2300,11 +2335,23 @@ $ham$;
          FOR r IN SELECT n.nspname, c.relname,
                          $q$ || pg_catalog.format(MAU_NEO, 'n', 'c') || $q$ AS neo_moi,
                          EXISTS (SELECT 1 FROM $q$ || BANG_TENANT_KHAI || $q$
-                                  WHERE bt.nspname = n.nspname AND bt.relname = c.relname) AS da_khai
+                                  WHERE bt.nspname = n.nspname AND bt.relname = c.relname) AS da_khai,
+                         (SELECT k.oid::regclass::text FROM pg_class k JOIN pg_namespace kn ON kn.oid = k.relnamespace
+                           WHERE k.oid <> c.oid AND k.relkind IN ('r', 'p')
+                             AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'kn') || $q$
+                             AND pg_catalog.split_part(pg_catalog.obj_description(k.oid, 'pg_class'), ' org_id#', 1)
+                                 = 'neo: ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(c.relname)
+                           LIMIT 1) AS giu_boi
                     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                    WHERE $q$ || VI_TU_PHAI_NEO || $q$
                      AND pg_catalog.obj_description(c.oid, 'pg_class') IS NULL
          LOOP
+           IF r.giu_boi IS NOT NULL THEN
+             RAISE WARNING 'Hardening: KHÔNG ghi neo cho %.% — tên ấy đang được % giữ danh tính (neo theo oid, khoản 90); quan hệ '
+                           'mang tên là bản chiếm tên cho tới một migration có chủ ý (dòng ⑶ của mục danh tính nêu lối ra).',
+                           r.nspname, r.relname, r.giu_boi;
+             CONTINUE;
+           END IF;
            BEGIN
              EXECUTE pg_catalog.format('COMMENT ON TABLE %I.%I IS %L', r.nspname, r.relname, r.neo_moi);
              -- [lượt soi 35, NHẸ-7] tên ĐÃ KHAI nhận neo MỚI là dấu vết duy nhất của một oid đổi (bảng dựng lại/chép đè)
@@ -2373,7 +2420,7 @@ $ham$;
            -- ⑵′ [lượt soi 35, NẶNG-5] cùng tên, còn là tenant, nhưng CỘT org_id không còn là cột đã neo (attnum khác):
            --    đổi tên cột rồi thêm cột org_id mới — policy đúng khuôn trên cột mới, hàng mọi tổ chức mang cùng giá trị
            SELECT q.nspname || '.' || q.relname,
-                  'cột org_id đã neo là attnum ' || nullif(pg_catalog.split_part(q.neo, ' org_id#', 2), '')
+                  'cột org_id đã neo là attnum ' || coalesce(nullif(pg_catalog.split_part(q.neo, ' org_id#', 2), ''), '(không có)')
                   || ' nhưng cột org_id hiện tại là attnum '
                   || coalesce(nullif(pg_catalog.split_part(q.neo_dung, ' org_id#', 2), ''), '(không có)')
                   || ' — cột đã bị đổi tên rồi thay bằng cột mới: RLS trỏ vào một cột không phải cột dữ liệu đã neo'

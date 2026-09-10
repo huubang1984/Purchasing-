@@ -3224,10 +3224,21 @@ describe("migration của dự án", () => {
       expect(loiB, "xoá policy sót: 83⑴ im, mục danh tính phải là lớp còn lại").not.toBeNull();
       expect(loiB!.message).not.toContain("(khoản 83⑴)");
       expect(loiB!.message).toContain(`public.audit_events_cu: mang neo "${neoSo}" nhưng tên hiện tại là public.audit_events_cu`);
-      // Nói ra: lượt sửa vẫn chạy trọn — bảng MỚI được ghi neo và D2 dựng trigger lên nó; lịch sử ở bảng cũ. Mục PHÁN XÉT,
-      // không tự chữa: đường ra là một migration có chủ ý.
-      expect(await neoCua(db.pool, "public.audit_events")).toBe(await neoMong(db.pool, "public.audit_events"));
+      // Lượt sửa vẫn chạy trọn; lịch sử ở bảng cũ. ~~bảng MỚI được ghi neo và D2 dựng trigger lên nó~~ [S1.45 / khoản nợ 90]
+      // LỚP SỬA ĐỨNG YÊN TRÊN BẢN SAO ở cả hai mục: bảng gốc còn giữ danh tính `neo: public.audit_events` (chú thích theo oid)
+      // nên (i) lượt ghi neo KHÔNG trao neo cho bản sao (lượt soi 37 NHẸ-4 — nếu trao, sau khi bảng gốc mất neo bản sao đã sẵn
+      // neo hợp lệ và mọi vế im), bản sao ở lại ⑶; (ii) bản sao không thuộc `bang_so` nên D2 không dựng trigger. Lớp PHÁN XÉT
+      // chặn; thông điệp "KHÔNG TỒN TẠI như một BẢNG THẬT" nêu đúng nguyên nhân thứ tư (lượt soi 37 NHẸ-2).
+      // Đột biến (bỏ hai vế danh tính khỏi `bang_so`) ⇒ bản sao nhận đủ bốn trigger — đúng hành vi trước S1.45.
+      expect(await neoCua(db.pool, "public.audit_events"), "[khoản 90] lượt ghi neo không trao neo cho bản chiếm tên").toBeNull();
+      expect(loiB!.message).toContain("audit_events: bảng sổ chỉ-ghi-thêm KHÔNG TỒN TẠI như một BẢNG THẬT");
+      expect(loiB!.message).toContain("[khoản 90] quan hệ đang mang tên ấy KHÔNG giữ danh tính nhất quán theo kênh ①");
       expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM public.audit_events_cu")).rows[0]!.n).toBe("1");
+      const demTrigger = async (bang: string): Promise<number> =>
+        (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = $1::regclass AND NOT tgisinternal", [bang])).rows[0]!.n;
+      expect(await demTrigger("public.audit_events"), "[khoản 90] D2 không dựng trigger lên bản sao khi bảng gốc còn giữ danh tính").toBe(0);
+      // (dòng dưới là tài liệu, không phải chứng cứ của vòng: bảng gốc đã ngoài danh sách tên từ trước và fixture tự gỡ trigger)
+      expect(await demTrigger("public.audit_events_cu"), "bảng gốc không còn tên đã khai, không trigger canh: ngoài bang_so lẫn bang_al").toBe(0);
       // (c) ranh giới nói thẳng: chủ bảng gỡ chú thích của bảng cũ ⇒ vế ⑴ im, nhưng vế ⑷ (hình dạng sổ) vẫn bắt.
       await db.pool.query("COMMENT ON TABLE public.audit_events_cu IS NULL");
       const loiC = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
@@ -3237,6 +3248,11 @@ describe("migration của dự án", () => {
       // Ranh giới nói ra: lượt sửa ghi-lấp neo cho bảng cũ DƯỚI TÊN HIỆN TẠI (nó là bảng tenant theo tính chất) — kênh ①
       // mạnh bằng quyền sở hữu; thứ còn giữ ca này là kênh ③ (hình dạng) ở trên và kênh ② (tên đã khai) cho bảng tenant.
       expect(await neoCua(db.pool, "public.audit_events_cu")).toBe(await neoMong(db.pool, "public.audit_events_cu"));
+      // [S1.45 / khoản nợ 90] Cùng ranh giới ấy ở lớp SỬA: bảng gốc thôi giữ danh tính `public.audit_events` (neo ghi-lấp dưới
+      // tên mới) ⇒ không ai giữ tên nữa ⇒ lượt ghi neo trao neo cho bản sao và nó LÀ `bang_so` theo hai vế ⇒ D2 dựng đủ bốn
+      // trigger lên nó. Kênh ① mạnh bằng quyền sở hữu ở cả hai lớp; deploy vẫn bị kênh ③ chặn ở trên.
+      expect(await neoCua(db.pool, "public.audit_events")).toBe(await neoMong(db.pool, "public.audit_events"));
+      expect(await demTrigger("public.audit_events"), "[khoản 90] ranh giới: danh tính rơi ⇒ D2 chữa bản sao").toBe(4);
       // (c2) [lượt soi 35, CAO-1] đổi tên một cột PHỤ của bản sao: "đủ 15 cột" thoát, bộ ba chuỗi thì không.
       await db.pool.query("ALTER TABLE public.audit_events_cu RENAME COLUMN user_agent TO ua");
       const loiC2 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
@@ -3254,6 +3270,19 @@ describe("migration của dự án", () => {
       await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: danh tính về đúng chỗ ⇒ đi qua").resolves.toEqual([]);
       expect(await neoCua(db.pool, "public.audit_events")).toBe(neoSo);
       expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_trigger WHERE tgrelid = 'public.audit_events'::regclass AND NOT tgisinternal")).rows[0]!.n).toBe("4");
+      // (e) [S1.45 / khoản nợ 90 — vế ⒜ đo riêng, lượt soi 37 CAO-1] Chú thích KHÁC trên chính bảng sổ thật (kênh dành riêng
+      //     bị chiếm) + một trigger canh bị gỡ: danh tính không nhất quán ⇒ D2 KHÔNG tự chữa (3 trigger còn nguyên), deploy bị
+      //     chặn ở ⑶ ("chưa mang neo"/chú thích chiếm chỗ) và ở vế "KHÔNG TỒN TẠI" của D2. Đột biến bỏ riêng ⒜ ⇒ D2 dựng lại
+      //     trigger (4) dưới một chú thích lạ. Đối chứng: đặt lại neo ⇒ D2 chữa, đi qua. Trái lại, SET SCHEMA giữ neo
+      //     `public.` thì vẫn được chữa — test [vòng fix 1 — CR2a] (8 trigger ở schema mới) giữ đánh đổi ấy.
+      await db.pool.query("COMMENT ON TABLE public.audit_events IS 'ghi chú lạ'; DROP TRIGGER audit_events_chan_delete ON public.audit_events");
+      const loiE = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiE, "chú thích lạ trên sổ thật: phải NÉM").not.toBeNull();
+      expect(loiE!.message).toContain("[khoản 90] quan hệ đang mang tên ấy KHÔNG giữ danh tính nhất quán theo kênh ①");
+      expect(await demTrigger("public.audit_events"), "[khoản 90 ⒜] D2 không chữa dưới chú thích lạ").toBe(3);
+      await db.pool.query(`COMMENT ON TABLE public.audit_events IS '${neoSo}'`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đặt lại neo ⇒ D2 chữa, đi qua").resolves.toEqual([]);
+      expect(await demTrigger("public.audit_events")).toBe(4);
     } finally {
       await db.stop();
     }
