@@ -3014,6 +3014,97 @@ describe("migration của dự án", () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.41 / khoản nợ 85] BẢNG org_id NGOÀI public, KHÔNG TREO DƯỚI TENANT, KHÔNG RLS — hai kẽ của lượt soi 31
+  // ==========================================================================================
+  // Kẽ ⑴: con INHERITS của bảng tenant bị NO INHERIT giữa hai lần deploy — không hàng pg_inherits (82⑴ im), chưa
+  // từng qua mục (A) nên không RLS. Kẽ ⑵: lá phân mảnh ngoài public tạo-và-DETACH giữa hai lần deploy — cùng
+  // hình dạng. Trước S1.41: migrate() đi qua, app_api gắn tổ chức A đọc thẳng thấy hàng của B. Nay: NÉM ở khoản 85.
+  it("[khoản nợ 85] con NO INHERIT và lá DETACH ngoài public giữa hai lần deploy: trước là lỗ RÒ với migrate() đi qua — nay migrate() NÉM ở mục khoản 85; con đã qua mục (A) (có RLS) thì là việc của 83⑶", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query(
+        "INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')",
+        [orgA, orgB],
+      );
+      await db.pool.query(
+        "CREATE TABLE bao_gia (gia int, org_id uuid NOT NULL) PARTITION BY LIST (org_id);" +
+          "ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY; ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY;" +
+          "CREATE POLICY bao_gia_tenant_isolation ON bao_gia " +
+          "  USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());" +
+          "CREATE TABLE cha_ke (gia int, org_id uuid NOT NULL);" +
+          "ALTER TABLE cha_ke ENABLE ROW LEVEL SECURITY; ALTER TABLE cha_ke FORCE ROW LEVEL SECURITY;" +
+          "CREATE POLICY cha_ke_tenant_isolation ON cha_ke " +
+          "  USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());" +
+          "CREATE SCHEMA k; GRANT USAGE ON SCHEMA k TO app_api;" +
+          // kẽ ⑵: lá ngoài public, tạo rồi DETACH trước khi migrate() nào chạm tới
+          "CREATE TABLE k.la PARTITION OF bao_gia DEFAULT;" +
+          "ALTER TABLE bao_gia DETACH PARTITION k.la;" +
+          // kẽ ⑴: con ngoài public, INHERITS rồi NO INHERIT trước khi migrate() nào chạm tới
+          "CREATE TABLE k.con () INHERITS (cha_ke);" +
+          "ALTER TABLE k.con NO INHERIT cha_ke;" +
+          "GRANT SELECT ON k.la, k.con TO app_api;",
+      );
+      await db.pool.query("INSERT INTO k.la (gia, org_id) VALUES (777, $1)", [orgB]);
+      await db.pool.query("INSERT INTO k.con (gia, org_id) VALUES (888, $1)", [orgB]);
+
+      const apiPool = db.poolAs("app_api");
+      const docThang = async (org: string, bang: string): Promise<number[]> => {
+        const client = await apiPool.connect();
+        try {
+          await client.query("SELECT set_config('app.org_id', $1, false)", [org]);
+          const { rows } = await client.query<{ gia: number }>(`SELECT gia FROM ${bang}`);
+          return rows.map((r) => r.gia);
+        } finally {
+          client.release();
+        }
+      };
+      // (a) Lỗ RÒ có thật ở cả hai kẽ: tổ chức A đọc thẳng thấy hàng của B.
+      expect(await docThang(orgA, "k.la")).toEqual([777]);
+      expect(await docThang(orgA, "k.con")).toEqual([888]);
+
+      // (b) migrate(): không mục nào trước S1.41 chạm hai bảng này (không pg_inherits, không RLS, ngoài public) —
+      //     nay khoản 85 NÉM đúng cả hai; không dòng 82⑴, không dòng 83⑶.
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi, "hai bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
+      expect(loi!.message).toContain("Hardening không sửa được 1 mục");
+      expect(loi!.message).toContain("k.la: bảng có cột org_id ngoài public, không treo dưới bảng tenant nào và không bật RLS — chưa khai (khoản 85)");
+      expect(loi!.message).toContain("k.con: bảng có cột org_id ngoài public");
+      // Lỗ vẫn mở cho tới khi ai đó sửa — mục này PHÁN XÉT, không tự chữa (ADR-028 §2⑵): nói ra.
+      expect(await docThang(orgA, "k.la")).toEqual([777]);
+
+      // (c) Biến thể "đã qua mục (A)": con còn treo khi migrate() chạy ⇒ (A) bật RLS ⇒ sau NO INHERIT nó là bảng RLS
+      //     ngoài tenant — 83⑶ bắt, 85 im. Hai mục kề nhau phủ kín hai đường thời gian.
+      await db.pool.query("DROP TABLE k.la; DROP TABLE k.con; CREATE TABLE k.con2 () INHERITS (cha_ke)");
+      const loiTreo = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiTreo!.message, "còn treo: 82⑴ kêu, 85 im").toContain("k.con2 INHERITS public.cha_ke");
+      expect(loiTreo!.message).not.toContain("(khoản 85)");
+      await db.pool.query("ALTER TABLE k.con2 NO INHERIT cha_ke");
+      const loiSau = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiSau!.message, "đã qua (A) rồi tách: 83⑶").toContain("k.con2: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
+      expect(loiSau!.message).not.toContain("(khoản 85)");
+      // (d) [lượt soi 32, INFO-5] Chuỗi đầy đủ của lượt soi 31 NHẸ-1, đo chứ không suy: RENAME con cũ, dựng con mới CÙNG
+      //     TÊN kế thừa cha (tái dùng tên), rồi DISABLE RLS con cũ — con cũ mang RLS thì 83⑶, tắt RLS thì 85; con mới là
+      //     cặp chưa khai nên 82⑴ (danh sách thật rỗng; với cặp đã khai, 82⑴ im và con cũ là thứ duy nhất còn lộ).
+      await db.pool.query("ALTER TABLE k.con2 RENAME TO con2_cu; CREATE TABLE k.con2 () INHERITS (cha_ke)");
+      const loiTen = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiTen!.message).toContain("k.con2_cu: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
+      expect(loiTen!.message).toContain("k.con2 INHERITS public.cha_ke");
+      expect(loiTen!.message).not.toContain("(khoản 85)");
+      await db.pool.query("ALTER TABLE k.con2_cu DISABLE ROW LEVEL SECURITY");
+      const loiTat = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiTat!.message, "con cũ tắt RLS: đúng hình dạng 85").toContain("k.con2_cu: bảng có cột org_id ngoài public");
+      expect(loiTat!.message).not.toContain("k.con2_cu: bảng bật RLS");
+      await db.pool.query("DROP TABLE k.con2; DROP TABLE k.con2_cu");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: gỡ ⇒ đi qua").resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
   // [vòng fix 2 — I3] MỤC (C) KHÔNG ĐƯỢC TỰ GIỚI HẠN VÀO 'public'
   // ==========================================================================================
   // Vòng 1 sinh ra mục (C) kèm sẵn bộ lọc tự làm mù mình. Test đo cả HAI nửa cho mỗi đường:
@@ -4608,7 +4699,7 @@ describe("migration của dự án", () => {
    * lỗi không warning — rồi mọi INSERT vào bảng đó ném 'record "new" has no field "occurred_at"'
    * VĨNH VIỄN. Đây là chiều hỏng mà [CR4] cấm: migrate() tự tay đổi ngữ nghĩa một bảng.
    */
-  it("[vòng fix 1 — IM2] bảng trùng tên QUA MỌI PHÉP KIỂM Task 5 vẫn GHI ĐƯỢC sau migrate()", async () => {
+  it("[vòng fix 1 — IM2] bảng trùng tên QUA MỌI PHÉP KIỂM Task 5 vẫn GHI ĐƯỢC sau migrate() — [S1.41] fixture có org_id ngoài public bị mục 85 NÉM, lượt sửa vẫn trọn", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -4618,7 +4709,13 @@ describe("migration của dự án", () => {
           "org_id uuid NOT NULL, seq bigint NOT NULL, UNIQUE (org_id, seq))",
       );
 
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // ~~migrate() đi qua~~ [S1.41 / khoản nợ 85] kỳ vọng LẬT có chủ đích: bao_cao.audit_events có cột org_id, ngoài
+      // public, không treo dưới bảng tenant, không RLS — đúng hình dạng khoản 85 ⇒ NÉM ở ĐÚNG MỘT mục ấy. Lượt SỬA
+      // vẫn chạy trọn trước lượt phán xét, nên hai phép đo dưới (ba trigger cưỡng chế, INSERT ghi được) còn nguyên.
+      const loiBc = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiBc, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
+      expect(loiBc!.message).toContain("Hardening không sửa được 1 mục");
+      expect(loiBc!.message).toContain("bao_cao.audit_events: bảng có cột org_id ngoài public");
 
       // Lớp C VẪN cưỡng chế ba trigger chỉ-ghi-thêm cho bảng trùng tên (đó là đánh đổi CÓ CHỦ Ý
       // của việc bỏ khoá cứng nspname='public' — xem BANG_CHI_GHI_THEM)...
@@ -5083,7 +5180,7 @@ describe("migration của dự án", () => {
   // Nửa thứ hai canh bộ lọc `tgparentid = 0`: bản sao trigger trên PHÂN MẢNH phải được để yên, vì
   // DROP TRIGGER trên nó ném 2BP01 — tức bỏ bộ lọc là tự tái tạo bẫy CR3. Trước vòng này chính bộ
   // lọc ấy KHÔNG có test nào canh (đột biến X2 sống sót).
-  it("[vòng fix 2 — I1] gỡ trigger/rule lạ khỏi bảng sổ luôn ỒN ÀO, và bản sao trigger phân mảnh được để yên", async () => {
+  it("[vòng fix 2 — I1] gỡ trigger/rule lạ khỏi bảng sổ luôn ỒN ÀO, và bản sao trigger phân mảnh được để yên — [S1.41] fixture kho.* có org_id ngoài public bị mục 85 NÉM, lượt sửa vẫn trọn", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -5130,7 +5227,14 @@ describe("migration của dự án", () => {
         });
       });
       try {
-        await expect(migrate(poolBat, MIGRATIONS_DIR)).resolves.toEqual([]);
+        // ~~migrate() đi qua~~ [S1.41 / khoản nợ 85] kỳ vọng LẬT có chủ đích: kho.cha và kho.audit_events có cột org_id,
+        // ngoài public, không treo dưới bảng tenant, không RLS — đúng hình dạng khoản 85 ⇒ NÉM ở ĐÚNG MỘT mục ấy.
+        // Lượt SỬA vẫn chạy trọn trước lượt phán xét, nên mọi phép đo dưới đây (thông báo, trigger, INSERT) còn nguyên.
+        const loiKho = await migrate(poolBat, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+        expect(loiKho, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
+        expect(loiKho!.message).toContain("Hardening không sửa được 1 mục");
+        expect(loiKho!.message).toContain("kho.cha: bảng có cột org_id ngoài public");
+        expect(loiKho!.message).toContain("kho.audit_events: bảng có cột org_id ngoài public");
       } finally {
         await poolBat.end();
       }
