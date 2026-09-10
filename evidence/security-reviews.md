@@ -1807,3 +1807,66 @@ chuỗi rỗng; bộ giải hằng; fixture và lược đồ hợp lệ; lời 
 **30 kiểm và thấy KHỚP:** view có rule `DO INSTEAD` ⇒ ⑹ bắt; `_RETURN` kín hai chiều (bảng: PostgreSQL cấm; view: đã chiếm chỗ, chỉ mục duy nhất); view trơn không updatable ném 55000, `WITH CHECK OPTION` ném 44000; bảng phân mảnh/DEFAULT partition không im lặng; `MAU_SCHEMA_DU_AN` phủ mọi schema kể cả `app_private`; `LANGUAGE sql` không viết được hàm trigger, hàm C kiểm `CALLED_AS_TRIGGER`, event trigger cần superuser, bản sao trigger trên lá `tgisinternal = false` nên ⑸⑺ thấy cả bản sao; mặt nạ bit đúng bốn góc, constraint trigger luôn AFTER ⇒ ⑺ phán (đúng ý D2); ⑧ `grantee 0`, `paracl NULL`, N2 đọc được `pg_parameter_acl`; chiều ngược ⑸⑹ neo đúng; fixture ngoài giao dịch dọn đủ; lược đồ thật của kho không có view/rule/bảng ngoài/`GRANT ON PARAMETER`, mọi `FOR EACH STATEMENT` là TRUNCATE, mọi AFTER có RETURN; fixture ở test khác mong `migrate()` OK là view trơn hoặc rule bảng sổ (BƯỚC 2 gỡ). Không kiểm được bằng đọc: kết quả chạy — đã chạy (94/94, 28/28).
 
 **Điều đáng mang sang vòng sau:** lần đầu từ S1.29 một bản đầu không bị bác ở mức NẶNG — nhưng cả sáu NHẸ đều là cùng ba bài học cũ (chiều ngược theo cha tồn tại — lượt 29; chép vị từ thay vì dùng chung — 25b #13; ghim tên vai thay vì tính chất — ADR-028) tái xuất ở mục mới. Bài học không tự sang mục kế; người viết phải chép chúng cùng lúc chép khuôn.
+
+# §S1.40 — khoản nợ 84 + 82⑴ trên `pg_inherits`: `LA_CUA_BANG_TENANT` đệ quy và mục phán xét kế thừa cổ điển — MÃ SẢN XUẤT; khoản 85 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `LA_CUA_BANG_TENANT` thành bao đóng bắc cầu của
+`pg_inherits` (`WITH RECURSIVE` không tương quan); `VI_TU_CAN_CO_RLS` lọc `MAU_SCHEMA_DU_AN` ở vế con cháu (loại
+`pg_temp`), `MAU_SCHEMA_DU_AN` dời lên trước nó; một hằng khai rỗng (`KE_THUA_KHAI`), một câu phán xét
+(`CAU_KE_THUA_SAI`), một mục ARRAY sau tám mục của khoản 83. Không migration đánh số, không đụng lược đồ. Còn lại:
+`db/hardening-suy-tu-tinh-chat.int.test.ts` (28 → 30), `db/migrations.int.test.ts` (94 → 95; hai fixture INHERITS lật
+kỳ vọng), `db/rls-coverage.int.test.ts` (một hạn test 30 s → 180 s, xem #11), năm tệp tài liệu và tệp này.
+
+**Đo:** khoản 84 — đường người soi 29 viết, chạy lần đầu: cháu hai bậc ngoài public, GRANT SELECT ⇒ trước
+`migrate()` app_api gắn tổ chức A đọc thẳng cháu thấy hàng của B; sau: mục (A) bật ENABLE+FORCE cả con lẫn cháu,
+đọc thẳng `[]`; `public.g INHERITS (k.c1)` được [CR1] miễn policy riêng. 82⑴ — hàng 22 đo lại: 1 → 0 hàng sau
+NO INHERIT, cặp biến khỏi catalog; census thấy cặp INHERITS, không thấy lá/chỉ mục phân mảnh; chiều ngược bắt cặp
+đã khai bị tách; `migrate()` NÉM ngoài giao dịch, NO INHERIT ⇒ đi qua. Bảng tạm kế thừa bảng tenant (lượt 31
+NHẸ-4): bản đầu — mục (A) ALTER bảng tạm phiên khác ⇒ 0A000 "cannot alter temporary tables of other sessions", BƯỚC
+2 nuốt, phán xét gọi `pg_temp_3.zz_tam` là bảng tenant thiếu RLS, 82⑴ cũng kêu; phiên khác (superuser, app_api gắn
+đúng tổ chức) đọc qua cha KHÔNG thấy hàng của bảng tạm ⇒ nó là của riêng phiên ⇒ lọc `pg_temp` ở hai chỗ ⇒ đi
+qua (đo lại). Trọn tệp trên cây cuối: `migrations.int.test.ts` 95/95, H19 30/30, `rls-coverage` 28/28; t0 209 module /
+0 vi phạm. Một lần `rls-coverage` đỏ hết hạn 30 s khi ba vitest chạy chung máy — đo thẳng `migrate()` trên ba bản
+hardening (hiện tại / một bậc / tắt mục kế thừa) ≈ 600 ms cả ba: không hồi quy. **Đỏ đo được, cô lập từng mục (ba
+đột biến, khôi phục bản gốc trước mỗi ca, chạy lại sau bản vá lượt 31):** m1 một bậc ⇒ đỏ ở cờ RLS của cháu; tắt
+hai khẳng định đứng trước ⇒ đỏ ở `g: không có policy PERMISSIVE`; m2 chiều xuôi no-op ⇒ đỏ ở census, ở
+`migrate()` NÉM (`OK`), ở hai fixture lật; m3 chiều ngược no-op ⇒ đỏ ở *cặp đã khai mà bị tách*.
+
+## Lượt soi đối kháng 31 — chạy TRƯỚC khi §S1.40 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc diff, ba hằng chung, mọi chỗ dùng
+`LA_CUA_BANG_TENANT`/`VI_TU_CAN_CO_RLS`, bộ giải hằng, ADR-036 hàng 22 và §3⑶, STATE 82/84, quét INHERITS/PARTITION
+trong test và migration), được giao năm hướng: đường lách cho hàng 22 và khoản 84; đúng đắn CTE đệ quy và bí danh;
+hệ quả lên fixture khác; lời vs mã; ba bài học cũ tái xuất. Mọi phát hiện đo được được người viết đo lại trên
+PostgreSQL 16.
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NHẸ | Chiều ngược 82⑴ ghim TÊN, và tên tái tạo được: cặp đã khai — NO INHERIT → RENAME con cũ → CREATE con mới cùng tên INHERITS cha → DISABLE RLS con cũ ⇒ cả hai chiều im, [CR1] không soi ngoài public, 83⑵/⑶ im; "dấu vết duy nhất" là nói quá | đúng theo đọc; ngủ vì `KE_THUA_KHAI` rỗng | sửa lời (dấu vết *khi tên không được tái dùng*; một dòng khai INHERITS là quyết định an ninh cùng hạng `NGOAI_LE_HINH_DANG`); mở khoản 85 |
+| 2 | NHẸ | Ba khẳng định `not.toContain` [CR1] trên fixture NGOÀI public (`con_khac`, `k.c1`, `k.c2`) rỗng ruột — [CR1] lọc `nspname = 'public'` nên xanh với mọi phiên bản; bằng chứng miễn policy riêng thật chỉ có `con_tt` | đúng theo đọc | bỏ khẳng định rỗng; thêm ca chịu lực `public.g INHERITS (k.c1)` — **đo:** m1 đỏ ở `g: không có policy PERMISSIVE` khi tắt hai khẳng định đứng trước; sửa lời ở hardening và test |
+| 3 | NHẸ | Lời biện minh "phân mảnh không xét vì DETACH làm lá thành tenant độc lập và [CR1] bắt" chỉ đúng cho lá public; lá ngoài public: đã RLS ⇒ 83⑶, tạo-và-tách giữa hai deploy ⇒ không mục nào — cùng cơ chế hàng 22 | đúng theo đọc | ba tầng trong chú thích; ADR-036 hàng 22 ghi DETACH cùng cơ chế; tầng ba vào khoản 85 |
+| 4 | NHẸ | `CREATE TEMP TABLE x () INHERITS (bảng_tenant)` hợp lệ; `VI_TU_CAN_CO_RLS` không lọc `pg_temp` nên mục (A) ALTER bảng tạm phiên khác — gãy thô hay bật được, chưa đo | **đo:** 0A000 bị BƯỚC 2 nuốt, phán xét gọi nó là bảng tenant thiếu RLS (không gãy thô); phiên khác đọc qua cha không thấy hàng của nó | lọc `MAU_SCHEMA_DU_AN` ở vế con cháu của `VI_TU_CAN_CO_RLS` và ở 82⑴ (theo con; cha không thể là bảng tạm); dời `MAU_SCHEMA_DU_AN` lên; đo lại: đi qua |
+| 5 | INFO | Chưa có đột biến cô lập cho vế đệ quy; "trước S1.40 hardening PASS mà cháu vẫn rò" là suy luận đọc | **đo:** m1 ⇒ `co("c2")` `{false,false}` | ghi ⑷ |
+| 6 | INFO | "S1.39 tuyên bố … hụt đúng một hàng" đúng nhưng nghiêng: §3⑶ đã đặt 22 ở khoản 82; cái phân biệt được là tiền đề | đúng | sửa lời ở hardening và DECISIONS §5 |
+| 7 | INFO | Chiều ngược không lọc `relispartition`: khai một cặp phân mảnh ⇒ hai chiều im, dòng khai chết không bị gọi thiu | đúng, vô hại | thêm `NOT cc.relispartition` vào chiều ngược |
+| 8 | INFO | Cổng hai bản tách bằng `.` và ` INHERITS ` — cùng lớp lượt 30 #12 | đúng | ghi nhận |
+| 9 | INFO | Docs chưa theo diff (bản đầu): hàng 22, STATE 82/84, CÒN MỞ, chú thích 6970 về fixture `khac` | đúng | vòng này |
+| 10 | INFO | Test ĐO 82⑴ dùng CSDL chung của tệp, dọn trong finally — cùng khuôn các test ĐO khác | đúng | không sửa |
+| 11 | tự tìm | Một test `rls-coverage` hết hạn 30 s (S1.39 chạy đơn 6 s) ⇒ nghi CTE đệ quy làm `migrate()` chậm | **đo:** `migrate()` trên ba bản hardening qua thư mục tạm — ≈ 600 ms cả ba; chạy đơn 28/28 | không phải hồi quy; nguyên nhân là tải máy (lượt chạy đơn có tải: mọi test của tệp chậm 3–4 lần, kể cả test không gọi `migrate()`). Evidence lần đầu trên cây cuối đỏ cùng test ấy (30014 ms) ⇒ test ĐO sáu lần `migrate()` được đặt hạn 180 s như các test ĐO ở H19; evidence chạy lại — đo trước khi đoán |
+
+**Kiểm và thấy KHỚP (người soi):** CTE đúng và dừng (UNION khử trùng; PostgreSQL cấm kế thừa vòng); nhiều cha
+leo từng nhánh; chuỗi chỉ mục phân mảnh không lai sang chuỗi bảng và bị `relkind IN ('r','p')` loại; bí danh
+`ke/tt/pc/pn` không va với `c/n/p/e/h/b` ở sáu chỗ dùng; bộ giải hằng giải được hai lần `format` và
+`to_regclass(format('%I.%I'))` trong literal; `NOT relispartition` chính xác là kế thừa cổ điển vì PostgreSQL cấm mọi
+phép lai phân mảnh–kế thừa; bảng ngoài làm con: 82⑴ và 83⑷ thấy, không vào (A); NO INHERIT rồi INHERIT lại/sang
+cha khác ⇒ chiều xuôi hoặc chiều ngược NÉM; fixture phân mảnh của kho ([CR2], [I6], `kho.audit_events`, `so_pm_a`,
+`bang_cha_quen_rls_a`) đều `relispartition`; `zz_con` ở rls-coverage trong giao dịch không gọi `migrate()`; lược đồ
+thật, `tests/`, `packages/` không có INHERITS.
+
+**Điều đáng mang sang vòng sau:** ⑴ hai lớp "danh sách khai" liên tiếp (83⑷⑸⑹, 82⑴) neo chiều ngược đúng nhưng
+khai theo TÊN, và tên là thứ chủ bảng tái tạo được — bài học thứ tư bên cạnh ba bài cũ: *dòng khai theo tên chỉ
+đóng băng lời khai, không đóng băng đối tượng*; ⑵ bậc tự do "bảng `org_id` ngoài public không treo dưới tenant" nay
+có ba kẽ tựa vào — thành khoản 85 có địa chỉ; ⑶ khẳng định PHỦ ĐỊNH (`not.toContain`) trên fixture ngoài phạm vi
+của mục là kiểu rỗng ruột mới, khác đối chứng dương lượt 21 dạy: đối chứng ÂM cũng phải chứng minh mục *có thể*
+kêu ở đó; ⑷ (người viết) một số đo bất thường phải được đo cô lập trước khi đặt tên cho nó — 23,8 s hoá ra là tải
+máy, không phải CTE.
