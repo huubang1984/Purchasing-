@@ -1573,11 +1573,15 @@ describe("migration của dự án", () => {
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       // [lượt soi 24, NHẸ-3] Đường `SET search_path` trong phiên chỉ che được tên khi vai có USAGE ở một
-      // schema KHÁC public. Hôm nay không có; hardening giữ điều ấy bằng phán xét, nêu đúng cặp vai -> schema.
-      await db.pool.query("CREATE SCHEMA zz_khac; GRANT USAGE ON SCHEMA zz_khac TO app_api");
+      // schema KHÁC chứa quan hệ TRÙNG TÊN với public. Phán xét đúng cơ chế ấy — không phải "không USAGE
+      // ngoài public" (bản đầu, gãy hai fixture hợp lệ của chính tệp này: `khac`, `gia`). Đối chứng: schema
+      // có USAGE mà không quan hệ trùng tên thì đi qua.
+      await db.pool.query("CREATE SCHEMA zz_khac; CREATE TABLE zz_khac.khong_trung (id int); GRANT USAGE ON SCHEMA zz_khac TO app_api");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "USAGE không trùng tên không phải lỗi").resolves.toEqual([]);
+      await db.pool.query("CREATE TABLE zz_khac.sessions (id int)");
       const loi4 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
-      expect(loi4?.message ?? "").toContain("USAGE ngoài public: app_api -> zz_khac");
-      await db.pool.query("DROP SCHEMA zz_khac");
+      expect(loi4?.message ?? "").toContain("quan hệ trùng tên public: app_api -> zz_khac.sessions");
+      await db.pool.query("DROP SCHEMA zz_khac CASCADE");
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
     } finally {
       await db.stop();

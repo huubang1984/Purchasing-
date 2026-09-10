@@ -6489,10 +6489,15 @@ $ham$;
     --       app_api/app_unseal sau SET ROLE; role đăng nhập chỉ khi kết nối KHÔNG ở SET ROLE — phòng
     --       thủ chiều sâu). Cố ý KHÔNG tự DROP: schema có thể chứa đối tượng, và xoá trong im lặng là
     --       chế độ hỏng [vòng fix 1 — I1] đã phải sửa.
-    --   (d) USAGE trên schema ngoài public — PHÁN XÉT. [lượt soi 24, NHẸ-3] `SET search_path` trong
-    --       phiên không bị chặn và không được tái khẳng định; đường ấy chỉ che được tên khi vai có USAGE
-    --       ở một schema KHÁC chứa quan hệ trùng tên. Hôm nay không có schema nào như thế (đo), và mục
-    --       này giữ điều ấy. Không tự thu hồi: USAGE có thể cấp qua PUBLIC cho schema của người khác.
+    --   (d) Quan hệ TRÙNG TÊN trong một schema mà vai có USAGE — PHÁN XÉT. [lượt soi 24, NHẸ-3]
+    --       `SET search_path` trong phiên không bị chặn và không được tái khẳng định; đường ấy chỉ che
+    --       được tên khi vai có USAGE ở một schema KHÁC chứa quan hệ TRÙNG TÊN với public. Bản đầu phán
+    --       xét "không USAGE ngoài public" và đo được là quá rộng: hai fixture hợp lệ của chính tệp test
+    --       (schema `khac` chứa con INHERITS của bảng tenant, USAGE cho app_api; schema `gia` chứa một
+    --       HÀM giả, USAGE cho PUBLIC) đều bị gãy. Vế đúng là vế ĐÚNG CƠ CHẾ: quan hệ (r/p/v/m/f) cùng
+    --       tên. Hàm trùng tên KHÔNG thuộc hàng 16 (câu ghi rơi vào bảng khác) — [CR1] đã đo riêng rằng
+    --       danh sách trắng không bị vượt bằng hàm giả trên search_path. Không tự thu hồi: USAGE có thể
+    --       cấp qua PUBLIC cho schema của người khác.
     -- Dư lượng ở tầng app (ADR-036 ⑯): bảng tạm tạo TRƯỚC lần deploy mang lớp này sống hết đời kết nối
     -- pool (đo) — `packages/db/src/vai-tro.ts` `DISCARD TEMP` cùng câu SET ROLE ở mỗi lần giao client.
     ARRAY[
@@ -6561,21 +6566,31 @@ $ham$;
       $q$viết một migration mới DROP SCHEMA ấy (hardening cố ý không tự xoá một schema có thể chứa đối tượng)$q$
     ],
     ARRAY[
-      $q$vai ứng dụng và mọi thành viên không có USAGE trên schema nào ngoài public$q$,
+      $q$quan hệ trùng tên public trong một schema mà vai kết nối ứng dụng có USAGE$q$,
       $q$true$q$,
       -- Cố ý no-op: xem (d) ở trên.
       $q$SELECT 1$q$,
-      $q$NOT EXISTS (SELECT 1 FROM pg_namespace n, ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
-                     WHERE n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+      $q$NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
+                                ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                       AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
                        AND n.nspname NOT LIKE 'pg\_%'
-                       AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE'))$q$,
-      $q$'USAGE ngoài public: ' || (SELECT string_agg(v.rolname || ' -> ' || n.nspname, ', ' ORDER BY v.rolname, n.nspname)
-                                   FROM pg_namespace n, ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
-                                  WHERE n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
-                                    AND n.nspname NOT LIKE 'pg\_%'
-                                    AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE'))
-        || ' — SET search_path trong phiên tới schema ấy che được tên của public'$q$,
-      $q$viết một migration mới REVOKE USAGE ON SCHEMA ấy khỏi vai (hardening cố ý không tự thu hồi: USAGE có thể cấp qua PUBLIC cho một schema của người khác)$q$
+                       AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
+                       AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
+                                    WHERE pn.nspname = 'public' AND p.relname = c.relname
+                                      AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))$q$,
+      $q$'quan hệ trùng tên public: ' || (SELECT string_agg(v.rolname || ' -> ' || n.nspname || '.' || c.relname, ', ' ORDER BY v.rolname, n.nspname, c.relname)
+                                         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
+                                              ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+                                        WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                                          AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+                                          AND n.nspname NOT LIKE 'pg\_%'
+                                          AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
+                                          AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
+                                                       WHERE pn.nspname = 'public' AND p.relname = c.relname
+                                                         AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))
+        || ' — SET search_path trong phiên tới schema ấy làm câu viết trần rơi vào quan hệ này thay vì public'$q$,
+      $q$viết một migration mới đổi tên hay xoá quan hệ ấy, hoặc REVOKE USAGE ON SCHEMA ấy khỏi vai (hardening cố ý không tự thu hồi: USAGE có thể cấp qua PUBLIC cho một schema của người khác)$q$
     ],
 
     -- [fix round 5 — Minor] setrole = 0: "ALTER DATABASE d SET ..." áp cho MỌI role, kể cả
