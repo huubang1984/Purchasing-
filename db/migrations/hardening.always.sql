@@ -663,6 +663,14 @@ DECLARE
         OR (c.relkind IN ('r', 'p') AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
             AND $q$ || LA_CUA_BANG_TENANT || $q$))$q$;
 
+  -- [S1.50 / khoản nợ 91] Bảng đang BẬT RLS mà thiếu FORCE, trong lược đồ dự án, không thuộc extension. MỘT hằng, ba chỗ
+  -- dùng (câu sửa, hậu điều kiện, mô tả) — bài học lượt 30 NHẸ-2: chép vị từ là trôi ngầm.
+  VI_TU_FORCE_THIEU constant text :=
+    $q$c.relkind IN ('r', 'p') AND c.relrowsecurity AND NOT c.relforcerowsecurity
+       AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+       AND NOT EXISTS (SELECT 1 FROM pg_depend de
+                        WHERE de.classid = 'pg_class'::regclass AND de.objid = c.oid AND de.deptype = 'e')$q$;
+
   -- [S1.41 / lượt soi 32, NHẸ-3] Hình dạng của khoản 85 — MỘT hằng, hai chiều của CAU_ORG_ID_NGOAI_PUBLIC_SAI
   -- cùng tham chiếu (bài học lượt 30 NHẸ-2: chép vị từ là trôi ngầm; test đòi đúng hai tham chiếu).
   VI_TU_HINH_DANG_85 constant text :=
@@ -788,11 +796,12 @@ DECLARE
   CAU_DOC_VONG constant text :=
     $q$SELECT n.nspname || '.' || c.relname || ': ' ||
               CASE WHEN c.relkind = 'm'
-                   THEN 'MATERIALIZED VIEW trên dữ liệu tenant — matview KHÔNG chịu RLS ở bất '
-                        'kỳ cấu hình nào. Bỏ nó đi, hoặc thêm tên này vào NGOAI_LE_DOC_VONG '
-                        'kèm lý do.'
-                   ELSE 'VIEW trên dữ liệu tenant mà thiếu "WITH (security_invoker = true)" — '
-                        'RLS đang được kiểm theo CHỦ SỞ HỮU view, không theo người gọi. Sửa '
+                   THEN 'MATERIALIZED VIEW trong lược đồ dự án — matview KHÔNG chịu RLS ở bất kỳ cấu hình nào, '
+                        'nên nó là một bản sao dữ liệu đứng ngoài mọi policy (khoản 91). Bỏ nó đi, hoặc thêm tên '
+                        'này vào NGOAI_LE_DOC_VONG kèm lý do.'
+                   ELSE 'VIEW trong lược đồ dự án mà thiếu "WITH (security_invoker = true)" — RLS và quyền được '
+                        'kiểm theo CHỦ SỞ HỮU view, không theo người gọi; nếu view chạm dữ liệu có RLS (trực tiếp, '
+                        'qua một view khác, hay qua một hàm) thì người gọi mượn trọn quyền của chủ (khoản 91). Sửa '
                         'bằng migration mới: ALTER VIEW ... SET (security_invoker = true).'
               END AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -802,20 +811,22 @@ DECLARE
           AND NOT EXISTS (SELECT 1 FROM pg_depend dx
                            WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
                              AND dx.deptype = 'e')
-          AND (EXISTS (SELECT 1 FROM pg_depend d
-                         JOIN pg_rewrite rw ON rw.oid = d.objid
-                         JOIN pg_class tc ON tc.oid = d.refobjid
-                         JOIN pg_namespace tn ON tn.oid = tc.relnamespace
-                        WHERE d.classid = 'pg_rewrite'::regclass
-                          AND d.refclassid = 'pg_class'::regclass
-                          AND rw.ev_class = c.oid AND tc.oid <> c.oid
-                          AND $q$ || pg_catalog.format(MAU_VI_TU_BANG_TENANT, 'tn', 'tc') || $q$)
-               OR EXISTS (SELECT 1 FROM pg_attribute a
-                           WHERE a.attrelid = c.oid AND a.attname = 'org_id'
-                             AND a.attnum > 0 AND NOT a.attisdropped))
+          -- [S1.50 / khoản nợ 91 — lượt soi 42 NẶNG-1] KHÔNG CÒN VẾ ĐÍCH. Bản S1.46 chỉ soi view đọc BẢNG TENANT; bản đầu của
+          -- vòng này nới sang "mọi bảng bật RLS" và vẫn hụt hai đường mà người soi dựng được: ⑴ CHUỖI VIEW LỒNG (`v2` không
+          -- invoker trên `v1` invoker trên bảng — `pg_depend` chỉ nối view với quan hệ THAM CHIẾU TRỰC TIẾP, nên đích của `v2`
+          -- là một view, không phải bảng); ⑵ VIEW ĐỌC QUA HÀM (`SELECT gia FROM public.f()` — rule phụ thuộc `pg_proc`, không
+          -- phụ thuộc bảng), và nhánh "cột org_id của chính view" cũng im khi view không chiếu `org_id`. Đuổi theo bằng bao đóng
+          -- đệ quy `pg_rewrite`→`pg_depend`→`pg_proc` là một vị từ nữa để trôi; vế ĐỐI XỨNG với nhánh SECDEF ngay dưới — vốn
+          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (sáu migration ghi "mục (C) CẤM mọi SECURITY DEFINER") — thì
+          -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một
+          -- view trên bảng tra cứu KHÔNG có dữ liệu tenant cũng phải đặt cờ; cửa ra là một dòng `ALTER VIEW` hoặc
+          -- `NGOAI_LE_DOC_VONG`. Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.
+          -- [S1.50 / lượt soi 42 NHẸ-3] `reloptions` giữ NGUYÊN VĂN chuỗi người dùng gõ, và `parse_bool` của PostgreSQL nhận
+          -- cả `yes`, `y`, `t`, `tr`, `tru`. Bản cũ chỉ nhận `true|on|1` nên `SET (security_invoker = yes)` — một view THẬT SỰ
+          -- invoker — bị mục này kêu và CHẶN DEPLOY trên lược đồ hợp lệ, đúng chiều hỏng ADR-028 §3 cấm.
           AND (c.relkind = 'm'
                OR coalesce(array_to_string(c.reloptions, ','), '')
-                    !~* '\msecurity_invoker\s*=\s*(true|on|1)\M')
+                    !~* '\msecurity_invoker\s*=\s*(t|tr|tru|true|y|ye|yes|on|1)\M')
        UNION ALL
        SELECT n.nspname || '.' || p.proname || ': hàm SECURITY DEFINER — nó chạy dưới quyền '
               'CHỦ SỞ HỮU nên mọi RLS bên trong được kiểm theo chủ sở hữu, không theo người '
@@ -7941,6 +7952,48 @@ $ham$;
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_RLS_NGOAI_TENANT_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (ALTER TABLE … DISABLE ROW LEVEL SECURITY) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
     ],
+    -- ---- [S1.50 / khoản nợ 91] FORCE RLS trên MỌI bảng bật RLS của lược đồ dự án — TỰ CHỮA (FORCE là đơn điệu, ADR-028 §2⑵) ----
+    -- Cửa ra mà thông điệp của 85 và 86 chỉ cho người sửa là "bật RLS rồi khai ở 83⑶". Cửa ấy YẾU nếu dừng ở `ENABLE`:
+    -- `ENABLE` không áp cho CHỦ BẢNG, nên chủ bảng — người vừa tạo nó trong migration, và cũng là người tạo view lên nó —
+    -- đọc/ghi bỏ qua mọi policy. Mục (A) chỉ FORCE tập tenant (`VI_TU_CAN_CO_RLS`), nên bảng đi cửa ra ấy nằm ngoài.
+    -- [lượt soi 42 CAO-1] Bản đầu của vòng lấy chủ thể là DANH SÁCH KHAI `BANG_RLS_NGOAI_TENANT_KHAI` — hôm nay đúng một
+    -- hàng `public.caller_rate_limits`, mà bảng ấy đã được mục "RLS + policy khách của caller_rate_limits (042)" ENABLE +
+    -- FORCE vô điều kiện từ S1.14: mục mới thành NO-OP trên mọi trạng thái đạt tới được, và KHÔNG đột biến CSDL nào làm nó
+    -- đỏ — đúng thứ ADR-028 §2⑷ cấm thêm vào tệp này. Nay chủ thể là TÍNH CHẤT (§2⑴): MỌI bảng (r/p) bật RLS trong lược đồ
+    -- dự án, trừ đối tượng thuộc EXTENSION (vai deploy không sở hữu chúng ⇒ 42501 bị BƯỚC 2 nuốt ⇒ hậu điều kiện sẽ chặn
+    -- deploy vĩnh viễn). Tập ấy trên lược đồ thật = bảng tenant (đã FORCE ở (A)) ∪ `caller_rate_limits` (đã FORCE ở S1.14)
+    -- ⇒ không đổi một bit nào; nhưng một bảng RLS ngoài tenant MỚI — kể cả trong cửa sổ giữa hai deploy, khi 83⑶ chưa được
+    -- khai nên còn đang chặn — được FORCE ngay ở lượt SỬA. Đo: fixture `zz_s91.t` ở rls-coverage.
+    -- CÁI GIÁ NÓI RA: sau FORCE, CHỦ BẢNG chịu RLS. Với một bảng có policy chỉ áp cho vai ứng dụng, chủ bảng đọc/ghi ra
+    -- 0 hàng KHÔNG LỖI — đúng cơ chế ADR-036 hàng 4/6, và 83⑵ không soi vai chủ (nó chỉ soi vai ứng dụng). Hôm nay không
+    -- ca nào như thế: policy duy nhất của `caller_rate_limits` là PERMISSIVE `TO PUBLIC`, và hai lượt dọn cửa sổ cũ chạy
+    -- dưới `app_api`. Vế "bảng đã khai ở 83⑶ phải có một policy PERMISSIVE phủ chủ bảng" là **khoản 94** (lượt soi 42 NẶNG-3).
+    -- FORCE là ĐƠN ĐIỆU (chỉ thu hẹp — ADR-028 §2⑵ xếp cùng nhóm `ENABLE`), nên nó thuộc lượt SỬA, không phải phán xét.
+    ARRAY[
+      $q$FORCE ROW LEVEL SECURITY trên mọi bảng bật RLS của lược đồ dự án (khoản 91)$q$,
+      $q$true$q$,
+      $q$DO $frc$
+         DECLARE ten_bang regclass;
+         BEGIN
+           FOR ten_bang IN
+             SELECT c.oid::regclass FROM pg_class c
+               JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE $q$ || VI_TU_FORCE_THIEU || $q$
+           LOOP
+             EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', ten_bang);
+           END LOOP;
+         END
+         $frc$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                      WHERE $q$ || VI_TU_FORCE_THIEU || $q$)$q$,
+      $q$(SELECT string_agg(n.nspname || '.' || c.relname, ', ')
+            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE $q$ || VI_TU_FORCE_THIEU || $q$)
+        || ' — bảng bật RLS mà chỉ ENABLE: CHỦ BẢNG đọc/ghi bỏ qua mọi policy, và một VIEW không security_invoker '
+           'lên nó (chủ view thường chính là chủ bảng) mở đúng đường ấy cho vai ứng dụng (khoản 91)'$q$,
+      $q$quyền sở hữu bảng đó (ALTER TABLE … FORCE ROW LEVEL SECURITY) hoặc SUPERUSER$q$
+    ],
+
     -- ---- [S1.41 / khoản nợ 85] Bảng org_id ngoài public, ngoài tập tenant, không RLS — PHÁN XÉT ----
     ARRAY[
       $q$bảng có org_id ngoài public không treo dưới bảng tenant và không RLS phải được khai (khoản 85)$q$,

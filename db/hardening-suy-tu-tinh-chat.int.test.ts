@@ -2032,7 +2032,16 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       expect(kq).toMatch(/^NÉM/);
       expect(kq).toContain("public.zz_v83: VIEW có trigger INSTEAD OF (trả NULL là nuốt hàng) trong lược đồ dự án chưa khai (khoản 83⑷");
       await db.pool.query("DROP TRIGGER zz_io ON public.zz_v83");
-      expect(await migrateLai(db), "view trơn không bị phán").toBe("OK");
+      // ~~view trơn không bị phán~~ [S1.50 / khoản nợ 91] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: mục (C) nay bỏ VẾ ĐÍCH —
+      // MỌI view của lược đồ dự án phải `security_invoker`, kể cả view không chạm bảng nào. Lý do ở lượt soi 42
+      // NẶNG-1: `pg_depend` chỉ nối view với quan hệ tham chiếu TRỰC TIẾP, nên chuỗi view lồng và view đọc qua
+      // hàm lọt MỌI vế đích; vế đối xứng với nhánh SECURITY DEFINER — vốn cấm mọi hàm SECDEF kể cả hàm không
+      // chạm dữ liệu — thì không lọt. Cái giá là đúng dòng dưới đây: một view hằng cũng phải đặt cờ.
+      const kqTron = await migrateLai(db);
+      expect(kqTron).toMatch(/^NÉM/u);
+      expect(kqTron).toContain("public.zz_v83: VIEW trong lược đồ dự án mà thiếu");
+      await db.pool.query("ALTER VIEW public.zz_v83 SET (security_invoker = true)");
+      expect(await migrateLai(db), "view đã đặt cờ thì đi qua").toBe("OK");
     } finally {
       await db.pool.query("DROP VIEW IF EXISTS public.zz_v83; DROP FUNCTION IF EXISTS public.zz_io83()");
     }

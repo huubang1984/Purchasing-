@@ -2517,6 +2517,107 @@ describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () =>
 });
 
 // ===============================================================================================
+// [S1.50 / khoản nợ 91] CỬA RA "BẬT RLS ⇒ KHAI 83⑶" KHÔNG CÒN LÀ CỬA YẾU
+//
+// Thông điệp của 85 và 86 chỉ người sửa vào cửa ra "bật RLS rồi khai ở 83⑶". Lượt soi 38 A3 đọc ra hai chỗ
+// hở của cửa ấy: ⑴ `ENABLE` không áp cho CHỦ BẢNG, và mục (A) chỉ FORCE tập tenant, nên bảng đi cửa ra đọc
+// /ghi được trọn bởi chính chủ nó; ⑵ mục (C) chỉ soi view/matview đọc BẢNG TENANT, nên một VIEW không
+// `security_invoker` trên bảng đã khai là vô hình — và view chạy dưới quyền CHỦ VIEW, thường là chủ bảng.
+// Hai chỗ ấy gặp nhau thành một đường đọc xuyên tổ chức cho vai ứng dụng. Nay: (C) nhận đích là MỌI bảng
+// bật RLS trong lược đồ dự án, và một mục TỰ CHỮA bật FORCE trên bảng đã khai (FORCE là đơn điệu).
+// ===============================================================================================
+describe("[S1.50 / khoản nợ 91] cửa ra 83⑶: FORCE và view không security_invoker", () => {
+  // [lượt soi 42 CAO-2] Chủ bảng và chủ view phải là một vai KHÔNG superuser: superuser (và BYPASSRLS) bỏ
+  // qua RLS ở MỌI cấu hình, nên một fixture thuộc `postgres` không phân biệt được ENABLE với FORCE — bản đầu
+  // của vòng đo dưới superuser và quy sai nguyên nhân của lỗ rò. Hồ sơ thật của dự án là chủ bảng THƯỜNG
+  // (vai deploy `trien_khai`), nên fixture phải giống nó.
+  const CHU = "zz_chu91";
+  const orgA = "00000000-0000-4000-8000-000000000091";
+  const orgB = "00000000-0000-4000-8000-000000000092";
+
+  const dungFixture = async (): Promise<void> => {
+    await db.pool.query(`DROP SCHEMA IF EXISTS zz_s91 CASCADE; DROP ROLE IF EXISTS ${CHU}`);
+    await db.pool.query(`CREATE ROLE ${CHU} NOSUPERUSER NOBYPASSRLS`);
+    await db.pool.query(`CREATE SCHEMA zz_s91 AUTHORIZATION ${CHU}`);
+    await db.pool.query(
+      `SET ROLE ${CHU}; ` +
+        "CREATE TABLE zz_s91.t (gia int, to_chuc uuid NOT NULL); " +
+        "ALTER TABLE zz_s91.t ENABLE ROW LEVEL SECURITY; " +
+        "CREATE POLICY p ON zz_s91.t USING (to_chuc = public.app_current_org_id()); " +
+        "CREATE VIEW zz_s91.v AS SELECT * FROM zz_s91.t; " +
+        "GRANT USAGE ON SCHEMA zz_s91 TO app_api; " +
+        // GRANT cả trên BẢNG: lỗ rò dưới đây không phải chuyện "mượn quyền chủ view" mà đúng chuyện BỎ QUA RLS.
+        "GRANT SELECT ON zz_s91.v, zz_s91.t TO app_api; RESET ROLE",
+    );
+    await db.pool.query("INSERT INTO zz_s91.t VALUES (777, $1), (888, $2)", [orgA, orgB]);
+  };
+  const doQuaView = async (bang: string): Promise<number[]> => {
+    const c = await db.poolAs("app_api").connect();
+    try {
+      await c.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+      return (await c.query<{ gia: number }>(`SELECT gia FROM ${bang} ORDER BY gia`)).rows.map((r) => r.gia);
+    } finally {
+      c.release(true);
+    }
+  };
+
+  it("[INV-F1] ĐO: bảng RLS của một chủ KHÔNG superuser chỉ ENABLE — app_api đọc thấy hàng của MỌI tổ chức qua view non-invoker (lỗ RÒ); hardening TỰ BẬT FORCE ở lượt SỬA ⇒ cùng view chỉ còn trả hàng của tổ chức đang gắn", async () => {
+    await dungFixture();
+    try {
+      expect(await doQuaView("zz_s91.v"), "lỗ RÒ có thật: ENABLE không áp cho chủ bảng, view chạy dưới quyền chủ").toEqual([777, 888]);
+      expect(await doQuaView("zz_s91.t"), "đọc THẲNG bảng thì RLS áp — lỗ nằm ở đường view, không ở quyền").toEqual([777]);
+      // migrate() NÉM ở 83⑶ (bảng RLS ngoài tenant chưa khai) — nhưng lượt SỬA đã COMMIT trước đó và FORCE đã bật.
+      await migrate(db.pool, MIGRATIONS_DIR).catch(() => undefined);
+      const { rows } = await db.pool.query<{ f: boolean }>(
+        "SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'zz_s91.t'::regclass",
+      );
+      expect(rows[0]!.f, "lượt SỬA phải FORCE bảng RLS ngoài tenant — kể cả khi 83⑶ còn đang chặn").toBe(true);
+      expect(await doQuaView("zz_s91.v"), "sau FORCE: chủ bảng cũng chịu RLS ⇒ view non-invoker hết rò").toEqual([777]);
+    } finally {
+      await db.pool.query(`DROP SCHEMA IF EXISTS zz_s91 CASCADE; DROP ROLE IF EXISTS ${CHU}`);
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: mục (C) thấy MỌI view/matview của lược đồ dự án — kể cả CHUỖI VIEW LỒNG và VIEW ĐỌC QUA HÀM mà vế đích cũ bỏ sót; migrate() NÉM nêu đúng tên; security_invoker ⇒ im", async () => {
+    const cauC = docHangHardening("CAU_DOC_VONG");
+    const ten = async (): Promise<string[]> =>
+      (await db.pool.query<{ mo_ta: string }>(cauC)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+    const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+    expect(await ten(), "lược đồ thật không có view/matview nào").toEqual([]);
+    await dungFixture();
+    try {
+      await db.pool.query(
+        `SET ROLE ${CHU}; ` +
+          // ⑴ chuỗi view lồng: v1 ĐÃ invoker, v2 thì không — vế đích cũ nhìn thấy đích của v2 là một VIEW nên im.
+          "CREATE VIEW zz_s91.v1 WITH (security_invoker = true) AS SELECT * FROM zz_s91.t; " +
+          "CREATE VIEW zz_s91.v2 AS SELECT * FROM zz_s91.v1; " +
+          // ⑵ view đọc qua HÀM: rule phụ thuộc pg_proc, không phụ thuộc bảng; view không chiếu org_id.
+          "CREATE FUNCTION zz_s91.f() RETURNS SETOF zz_s91.t LANGUAGE sql AS 'SELECT * FROM zz_s91.t'; " +
+          "CREATE VIEW zz_s91.v3 AS SELECT gia FROM zz_s91.f(); " +
+          "CREATE MATERIALIZED VIEW zz_s91.mv AS SELECT * FROM zz_s91.t; RESET ROLE",
+      );
+      expect(await ten(), "(C) phải thấy cả bốn — v1 đã invoker nên được tha").toEqual([
+        "zz_s91.mv", "zz_s91.v", "zz_s91.v2", "zz_s91.v3",
+      ]);
+      // Lớp SẢN XUẤT: migrate() NÉM và nêu nguyên văn thông điệp (chuẩn của tệp này, lượt soi 42 NHẸ-4).
+      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain("zz_s91.v3: VIEW trong lược đồ dự án mà thiếu \"WITH (security_invoker = true)\"");
+      expect(loi!.message).toContain("zz_s91.mv: MATERIALIZED VIEW trong lược đồ dự án");
+      // Cửa ra: đặt cờ ⇒ mục im. `yes` là boolean hợp lệ của PostgreSQL và phải được nhận (lượt soi 42 NHẸ-3).
+      await db.pool.query(
+        `SET ROLE ${CHU}; ALTER VIEW zz_s91.v SET (security_invoker = yes); ` +
+          "ALTER VIEW zz_s91.v2 SET (security_invoker = true); " +
+          "ALTER VIEW zz_s91.v3 SET (security_invoker = true); DROP MATERIALIZED VIEW zz_s91.mv; RESET ROLE",
+      );
+      expect(await ten(), "cờ đặt rồi thì mục im — kể cả khi viết `= yes`").toEqual([]);
+    } finally {
+      await db.pool.query(`DROP SCHEMA IF EXISTS zz_s91 CASCADE; DROP ROLE IF EXISTS ${CHU}`);
+    }
+  }, 180000);
+});
+
+// ===============================================================================================
 // [S1.48 / lượt soi ngang 40a H4] TẬP TÊN GUC MÀ MÃ DỰ ÁN ĐỌC VÀO (nhánh ⒞ khoản 87) — census + regex
 // ===============================================================================================
 describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
