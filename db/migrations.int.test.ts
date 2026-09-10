@@ -2745,6 +2745,160 @@ describe("migration của dự án", () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.47 / khoản nợ 87] GUC TUỲ BIẾN (app.*) GẮN SẴN Ở MỨC DATABASE — PHÁN XÉT, KHÔNG TỰ RESET
+  // ==========================================================================================
+  // Lượt soi ngang 33a #1: `ALTER DATABASE d SET app.org_id = <B>` lật [INV-F1] "chưa gắn ⇒ 0 hàng" thành
+  // "⇒ tổ chức B" cho mọi câu ngoài withTenant; ba mục "đặt ở mức database" chỉ ghim ba tên. Mục khoản 87 phán
+  // xét theo tính chất (tên GUC có dấu chấm) và KHÔNG tự RESET vì vai deploy thường không làm được — vế (c) đo.
+  it("[khoản nợ 87] ALTER DATABASE … SET app.org_id (superuser) ⇒ migrate() NÉM ở mục khoản 87 mà không in giá trị, GUC còn nguyên (không tự RESET); RESET ⇒ đi qua; ALTER ROLE app_api SET app.* ⇒ RESET ALL tự chữa, mục im; vai deploy thường (chủ database, CREATEROLE, không superuser) bị 42501 ở SET lẫn RESET GUC placeholder — lý do mục không tự sửa — trong khi GUC thường thì được", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+      const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+      const setconfigDb = async (): Promise<string[] | null> =>
+        (await db.pool.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
+      const guc = "00000000-0000-4000-8000-000000000087";
+      const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+
+      // (a) mức database — phán xét, không tự RESET, không in giá trị.
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi, "GUC tuỳ biến gắn sẵn ở mức database phải bị khoản 87 bắt").not.toBeNull();
+      expect(loi!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
+      expect(loi!.message, "thông điệp không in giá trị GUC").not.toContain(guc);
+      expect(await setconfigDb(), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
+      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: RESET ⇒ đi qua").resolves.toEqual([]);
+
+      // (b) vai có tên: bốn mục RESET ALL đứng TRƯỚC và tự chữa — mục 87 im (kề nhau, không chồng).
+      await db.pool.query(`ALTER ROLE app_api SET app.guest_session_id = '${guc}'`);
+      await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect((await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c).toBeNull();
+      expect((await db.pool.query("SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole WHERE r.rolname = 'app_api'")).rowCount).toBe(0);
+      // Câu phán xét chạy trong test: nhánh (b) THẤY hàng của vai khi chưa ai RESET (chống rỗng ruột cho dây an toàn).
+      await db.pool.query(`ALTER ROLE app_api SET app.guest_rfq_id = '${guc}'`);
+      const { rows: thay } = await db.pool.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"));
+      expect(thay.map((r) => r.mo_ta.split(" —")[0])).toEqual(["vai app_api (toàn cụm): GUC tuỳ biến app.guest_rfq_id gắn sẵn"]);
+      await db.pool.query("ALTER ROLE app_api RESET ALL");
+      // GUC vận hành KHÔNG dấu chấm không thuộc mục (I3: hàng xóm không được chặn deploy vĩnh viễn).
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET DateStyle = 'ISO, DMY'`);
+      expect(await db.pool.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN")).then((r) => r.rows)).toEqual([]);
+      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET DateStyle`);
+
+      // (a′) [lượt soi 39 NHẸ-1] `ALTER ROLE ALL SET` — hàng (setrole 0, setdatabase 0): bị bắt VÀ có tên riêng (bản đầu: mo_ta NULL,
+      //      thông điệp "SAI ()"); ba mục kề (row_security/…) không thấy hàng ấy — khoản 92.
+      await db.pool.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
+      const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loiAll!.message).toContain("mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn");
+      await db.pool.query("ALTER ROLE ALL RESET app.org_id");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // (e) [lượt soi 39 NHẸ-5] proconfig của hàm trong lược đồ dự án.
+      await db.pool.query(`CREATE FUNCTION public.zz_f87(x int) RETURNS int LANGUAGE sql SET app.org_id = '${guc}' AS 'SELECT 1'`);
+      const loiHam = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loiHam!.message).toContain("hàm public.zz_f87(x integer) (proconfig): GUC tuỳ biến app.org_id gắn sẵn cho thân hàm");
+      await db.pool.query("DROP FUNCTION public.zz_f87(int)");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // (c′) [lượt soi 39 NẶNG-2] ALTER SYSTEM: postgresql.auto.conf — pg_db_role_setting SẠCH; placeholder KHÔNG có ở
+      //      pg_settings (thăm dò S1.47) nên nhánh ⒞ đọc current_setting trên tập tên policy/hàm dự án đọc, trong phiên
+      //      deploy (kết nối MỚI sau pg_reload_conf). PG16: placeholder phải có trong phiên trước khi ALTER SYSTEM.
+      const c1 = await db.pool.connect();
+      try {
+        await c1.query(`SET app.org_id = '${guc}'`);
+        await c1.query(`ALTER SYSTEM SET app.org_id = '${guc}'`);
+        await c1.query("SELECT pg_reload_conf()");
+      } finally {
+        c1.release();
+      }
+      const poolSys = createPool(db.connectionString, 1);
+      try {
+        const { rows: nguon } = await poolSys.query<{ v: string | null; ps: number }>(
+          "SELECT current_setting('app.org_id', true) AS v, (SELECT count(*)::int FROM pg_settings WHERE name = 'app.org_id') AS ps",
+        );
+        expect(nguon[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới, và placeholder vắng ở pg_settings (đo)").toEqual({ v: guc, ps: 0 });
+        expect(await setconfigDb(), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
+        const loiSys = await loiCua(migrate(poolSys, MIGRATIONS_DIR));
+        expect(loiSys, "ALTER SYSTEM SET app.org_id phải bị nhánh ⒞ (phiên deploy) bắt").not.toBeNull();
+        expect(loiSys!.message).toContain("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó");
+        expect(loiSys!.message).not.toContain(guc);
+        await poolSys.query("ALTER SYSTEM RESET app.org_id");
+        await poolSys.query("SELECT pg_reload_conf()");
+      } finally {
+        await poolSys.end();
+      }
+      const poolSau = createPool(db.connectionString, 1);
+      try {
+        await expect(migrate(poolSau, MIGRATIONS_DIR), "kết nối mới sau ALTER SYSTEM RESET: đi qua").resolves.toEqual([]);
+      } finally {
+        await poolSau.end();
+      }
+
+      // (c) vai deploy thường: 42501 ở SET lẫn RESET GUC placeholder — lý do mục phán xét thay vì tự sửa; GUC thường thì được.
+      // migrate() huỷ client sau mỗi lượt, nên lượt kế mở PHIÊN MỚI — mở trong cửa sổ `ALTER DATABASE SET` thì mang giá trị ấy
+      // cả sau RESET (giá trị mức database áp lúc mở phiên; đo — nhánh ⒞ kêu đúng). Đối chứng vì thế phải trên kết nối mới,
+      // như một lượt deploy thật.
+      const urlTk = await dungRoleTrienKhaiThuong(db);
+      let poolTk = createPool(urlTk, 1);
+      const ketNoiMoi = async (): Promise<void> => {
+        await poolTk.end();
+        poolTk = createPool(urlTk, 1);
+      };
+      try {
+        const ma = async (q: string): Promise<string | null> => {
+          try { await poolTk.query(q); return null; } catch (e) { return (e as { code?: string }).code ?? "?"; }
+        };
+        expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "chủ database thường SET placeholder").toBe("42501");
+        await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+        expect(await ma(`ALTER DATABASE "${tenDb}" RESET app.org_id`), "chủ database thường RESET placeholder").toBe("42501");
+        // Deploy dưới vai ấy: NÉM ở mục 87 với thông điệp chỉ đường — không gãy thô.
+        const loiTk = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiTk).not.toBeNull();
+        expect(loiTk!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
+        await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+        expect(await ma(`ALTER DATABASE "${tenDb}" SET DateStyle = 'ISO, DMY'`), "GUC thường: chủ database đặt được").toBeNull();
+        expect(await ma(`ALTER DATABASE "${tenDb}" RESET DateStyle`)).toBeNull();
+        // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ nhánh ⒞ kêu (đúng); kết nối mới ⇒ đi qua.
+        const loiCu = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiCu!.message).toContain("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào");
+        await ketNoiMoi();
+        await expect(migrate(poolTk, MIGRATIONS_DIR), "đối chứng dưới vai deploy thường (kết nối mới)").resolves.toEqual([]);
+
+        // (b′) [lượt soi 39 NHẸ-3] RESET ALL dưới vai thường GIỮ IM LẶNG phần tử placeholder: mục "rolconfig toàn cụm của app_api"
+        //      và mục 87 cùng đỏ, một nguyên nhân; rolconfig còn nguyên. Superuser RESET ⇒ đi qua.
+        await db.pool.query(`ALTER ROLE app_api SET app.org_id = '${guc}'`);
+        const loiReset = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiReset, "vai deploy thường không RESET được placeholder trên app_api").not.toBeNull();
+        expect(loiReset!.message).toContain("rolconfig toàn cụm của app_api");
+        expect(loiReset!.message).toContain("vai app_api (toàn cụm): GUC tuỳ biến app.org_id gắn sẵn");
+        expect((await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c).toEqual([`app.org_id=${guc}`]);
+        await db.pool.query("ALTER ROLE app_api RESET ALL");
+        await expect(migrate(poolTk, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+        // (d) [lượt soi 39 NHẸ-2] GRANT SET ON PARAMETER (PG15+): vai thường SET/RESET được placeholder ở mức database ⇒ năng lực bền,
+        //     bị nhánh pg_parameter_acl bắt bất kể grantee; sau REVOKE lại 42501.
+        await db.pool.query("GRANT SET ON PARAMETER app.org_id TO trien_khai");
+        const loiAcl = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiAcl!.message).toContain("quyền trên tham số app.org_id cấp cho trien_khai (pg_parameter_acl)");
+        expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "được GRANT SET: chủ database thường ĐẶT được placeholder").toBeNull();
+        const loiCaHai = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiCaHai!.message).toContain(`database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`);
+        expect(await ma(`ALTER DATABASE "${tenDb}" RESET app.org_id`), "được GRANT SET: RESET được").toBeNull();
+        await db.pool.query("REVOKE SET ON PARAMETER app.org_id FROM trien_khai");
+        expect(await ma(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`), "sau REVOKE: lại 42501").toBe("42501");
+        await ketNoiMoi();
+        await expect(migrate(poolTk, MIGRATIONS_DIR), "đối chứng cuối (kết nối mới)").resolves.toEqual([]);
+      } finally {
+        await poolTk.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300000);
+
+  // ==========================================================================================
   // [vòng fix 3 — I3] GHIM CẢ MÔI TRƯỜNG LEX/SO KHỚP, KHÔNG CHỈ search_path
   // ==========================================================================================
   // Vòng 2 ghim search_path và DỪNG. Đo được: "ALTER DATABASE d SET
@@ -4774,13 +4928,21 @@ describe("migration của dự án", () => {
         "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
       );
       const orgId = org[0]!.id;
+      // [S1.47 / khoản nợ 87 ⒞] app.org_id đặt ở phạm vi PHIÊN trên chính db.pool rồi migrate() cùng pool ⇒ phiên deploy
+      // mang app.org_id ⇒ mục 87 phán (đúng — đo trong lượt evidence S1.47). Deploy thật không đặt GUC ấy; test dùng client
+      // riêng và HUỶ nó trước khi trả về pool.
       const ghi = async (hanhDong: string): Promise<void> => {
-        await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
-        await db.pool.query(
-          "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'T', NULL, '{}'::jsonb, " +
-            "NULL, NULL, NULL)",
-          [orgId, hanhDong],
-        );
+        const cGhi = await db.pool.connect();
+        try {
+          await cGhi.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+          await cGhi.query(
+            "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'T', NULL, '{}'::jsonb, " +
+              "NULL, NULL, NULL)",
+            [orgId, hanhDong],
+          );
+        } finally {
+          cGhi.release(true);
+        }
       };
       await ghi("BINH_THUONG_1");
 
@@ -4812,13 +4974,18 @@ describe("migration của dự án", () => {
       );
 
       // (a) fixture thật sự tấn công được: người gọi THẤY một lần ghi audit thành công...
-      await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
-      const { rows: nuot } = await db.pool.query<{ seq: string }>(
-        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'BI_MAT_XOA_THAU', 'T', NULL, " +
-          "'{}'::jsonb, NULL, NULL, NULL)",
-        [orgId],
-      );
-      expect(nuot[0]!.seq).toBe("999");
+      const cNuot = await db.pool.connect();
+      try {
+        await cNuot.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+        const { rows: nuot } = await cNuot.query<{ seq: string }>(
+          "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'BI_MAT_XOA_THAU', 'T', NULL, " +
+            "'{}'::jsonb, NULL, NULL, NULL)",
+          [orgId],
+        );
+        expect(nuot[0]!.seq).toBe("999");
+      } finally {
+        cNuot.release(true); // [S1.47] phiên mang app.org_id không được trở về pool trước migrate()
+      }
       // ...trong khi KHÔNG có gì được ghi.
       const { rows: dem } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1",
@@ -4906,12 +5073,18 @@ describe("migration của dự án", () => {
         "INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id",
       );
       const orgId = org[0]!.id;
-      await db.pool.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
-      await db.pool.query(
-        "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'X', 'T', NULL, '{}'::jsonb, " +
-          "NULL, NULL, NULL)",
-        [orgId],
-      );
+      // [S1.47 / khoản nợ 87 ⒞] client riêng, huỷ trước migrate() — xem chú thích ở test CR3 ngay trên.
+      const cGhi = await db.pool.connect();
+      try {
+        await cGhi.query("SELECT set_config('app.org_id', $1, false)", [orgId]);
+        await cGhi.query(
+          "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'X', 'T', NULL, '{}'::jsonb, " +
+            "NULL, NULL, NULL)",
+          [orgId],
+        );
+      } finally {
+        cGhi.release(true);
+      }
 
       await db.pool.query(
         "CREATE OR REPLACE FUNCTION public.chot_moc_neo() RETURNS trigger " +

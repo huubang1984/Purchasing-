@@ -372,6 +372,93 @@ describe("cô lập tổ chức", () => {
 // tài khoản đó, không có đường quay về superuser. Nó chỉ chạy được sau bản vá CR2-T3 — trước
 // bản vá, migrate() xoá membership ở mỗi lần gọi nên role này không có quyền gì.
 // ============================================================================================
+// ==============================================================================================
+// [S1.47 / khoản nợ 87 ⑵] GUC KHÁCH GẮN SẴN Ở MỨC DATABASE — withTenant xoá trong MỌI giao dịch
+// ==============================================================================================
+describe("[S1.47 / khoản nợ 87] GUC app.* gắn sẵn ở mức database", () => {
+  const tenDb = async (): Promise<string> =>
+    (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+
+  it("[INV-F1] ĐO: ALTER DATABASE … SET app.guest_session_id (superuser) biến mọi phiên mới thành phiên khách — câu NGOÀI withTenant thấy 0 hàng không lỗi (nói ra); withTenant(orgA) TỪ CHỐI phục vụ trước fn, nêu tên và nguồn, không huỷ kết nối (pid ổn định); RESET ⇒ phục vụ lại, ba GUC khách rỗng trong giao dịch", async () => {
+    const { rows: nguoi } = await db.pool.query<{ id: string }>("SELECT id FROM users WHERE org_id = $1", [orgA]);
+    // user_login_tokens: có policy `_khach` (027) và không trigger đòi phiên tạo — fixture rẻ nhất mang mặt khách.
+    await db.pool.query(
+      "INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at) " +
+        "VALUES ($1, $2, decode(repeat('87', 32), 'hex'), 'LOGIN', now() + interval '1 hour')",
+      [orgA, nguoi[0]!.id],
+    );
+    const d = await tenDb();
+    await db.pool.query(`ALTER DATABASE "${d}" SET app.guest_session_id = '00000000-0000-4000-8000-000000000087'`);
+    const poolMoi = createPool(db.connectionString, 1);
+    try {
+      // GUC mức database chỉ áp cho kết nối MỚI — pool một client để đo pid.
+      const { rows: hieuLuc } = await poolMoi.query<{ v: string | null; pid: number }>(
+        "SELECT app_current_guest_session_id()::text AS v, pg_backend_pid()::int AS pid",
+      );
+      expect(hieuLuc[0]?.v, "GUC gắn sẵn không có hiệu lực trên kết nối mới — phép đo dưới đây rỗng ruột")
+        .toBe("00000000-0000-4000-8000-000000000087");
+      const pid = hieuLuc[0]!.pid;
+      // Câu ngoài withTenant: 11 policy `_khach` thu hẹp — 0 hàng, KHÔNG lỗi (ADR-036). Nói ra, không sửa ở đây.
+      const client = await poolMoi.connect();
+      try {
+        await client.query("SET ROLE app_api");
+        await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        expect((await client.query("SELECT id FROM user_login_tokens")).rowCount, "phiên khách gắn sẵn: 0 hàng không lỗi").toBe(0);
+        await client.query("RESET ROLE");
+      } finally {
+        client.release();
+      }
+      // withTenant: từ chối TRƯỚC fn — fn không chạy, thông điệp nêu tên + nguồn, không giá trị; kết nối KHÔNG bị huỷ.
+      let fnDaChay = false;
+      const loi = await withTenant(poolMoi, orgA, () => { fnDaChay = true; return Promise.resolve(); }).then(() => null, (e: Error) => e);
+      expect(loi).toBeInstanceOf(TenantError);
+      expect(loi!.message).toContain("bị gắn sẵn ngoài withTenant — app.guest_session_id.");
+      expect(loi!.message, "không in giá trị GUC").not.toContain("000000000087");
+      expect(fnDaChay, "fn không được chạy dưới mặc định phiên bị đầu độc").toBe(false);
+      const { rows: sau } = await poolMoi.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid");
+      expect(sau[0]?.pid, "bản đầu huỷ kết nối mỗi lượt với chẩn đoán sai (lượt soi 39 NHẸ-4) — nay giữ").toBe(pid);
+    } finally {
+      await poolMoi.end();
+      await db.pool.query(`ALTER DATABASE "${d}" RESET app.guest_session_id`);
+    }
+    // Sau RESET: phục vụ lại; trong giao dịch ba GUC khách rỗng (lớp xoá) và người mua đọc được token của tổ chức mình.
+    const poolSach = db.poolAs("app_api");
+    try {
+      const soHang = await withTenant(poolSach, orgA, async (c) => {
+        const { rows } = await c.query<{ khach: string | null; loi_moi: string | null; goi: string | null }>(
+          "SELECT app_current_guest_session_id()::text AS khach, app_current_guest_invitation_id()::text AS loi_moi, " +
+            "NULLIF(current_setting('app.guest_rfq_id', true), '') AS goi",
+        );
+        expect(rows[0]).toEqual({ khach: null, loi_moi: null, goi: null });
+        return (await c.query("SELECT id FROM user_login_tokens")).rowCount;
+      });
+      expect(soHang).toBe(1);
+    } finally {
+      await db.pool.query("DELETE FROM user_login_tokens WHERE org_id = $1", [orgA]);
+    }
+  });
+
+  it("[I1] fn đặt một GUC KHÁCH ở phạm vi PHIÊN: kết nối bị huỷ thay vì trả về pool — khối finally đọc cả bốn trục", async () => {
+    const poolMotClient = createPool(db.connectionString, 1);
+    try {
+      const truoc = await poolMotClient.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid");
+      await expect(
+        withTenant(poolMotClient, orgA, async (client) => {
+          await client.query("COMMIT");
+          await client.query("SELECT set_config('app.guest_session_id', $1, false)", ["00000000-0000-4000-8000-000000000088"]);
+        }),
+      ).resolves.toBeUndefined();
+      const { rows } = await poolMotClient.query<{ khach: string | null; pid: number }>(
+        "SELECT app_current_guest_session_id()::text AS khach, pg_backend_pid()::int AS pid",
+      );
+      expect(rows[0]?.khach, "GUC khách của lần dùng trước còn sống trên kết nối trả về pool").toBeNull();
+      expect(rows[0]?.pid, "kết nối phải THẬT SỰ bị thay").not.toBe(truoc.rows[0]!.pid);
+    } finally {
+      await poolMotClient.end();
+    }
+  });
+});
+
 describe("[CR2-T3] cô lập tổ chức dưới role đăng nhập thật, không phải SET ROLE từ superuser", () => {
   it("[INV-F1] app_api_login chỉ đọc được hàng của tổ chức đang gắn", async () => {
     await db.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'mk-api' IN ROLE app_api");
