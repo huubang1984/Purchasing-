@@ -3686,3 +3686,77 @@ cùng một bài học: danh tính đối tượng neo theo TÊN/HÌNH DẠNG ch
 ngoài tập tenant, không RLS ⇒ khai) — kề với 83⑶ theo `relrowsecurity`, không nới vị từ tenant; hàng 22 nay có
 lớp cho cả cửa sổ *tạo-và-tách giữa hai deploy* ở mức "phát hiện ở deploy kế" — mức bảo đảm của mọi mục phán
 xét, nói ra. Ranh giới còn lại theo TÊN CỘT `org_id` (ở mọi schema) thành khoản 86.
+
+## ADR-037 — Danh tính của đối tượng được canh không phải là tên hay hình dạng: ba kênh — chú thích neo theo `oid`, tên đã khai kèm migration khai sinh, hình dạng sổ
+
+**Ngày:** 2026-09-10 · **Trạng thái:** Đã chấp nhận · **[S1.43]** · **Khoản nợ liên quan:** 89 (đóng), 86 (nửa đo được đóng; nửa gốc còn mở) ·
+**Liên quan:** ADR-028 (suy từ tính chất; §2⑵ tự chữa chỉ khi đơn điệu), ADR-036 (danh mục 0-hàng), lượt soi ngang 33 (33a #5/#6), lượt soi 34/35
+
+### 1. Vì sao ADR này tồn tại
+
+Lượt soi ngang 33 đo hai đường đi qua **mọi** lớp của hardening trên PostgreSQL 16 sạch:
+
+- `ALTER TABLE audit_events RENAME TO audit_events_cu; DROP TRIGGER …` ×4; `CREATE TABLE audit_events (LIKE … INCLUDING
+  ALL)` + RLS + policy đúng khuôn + GRANT; `DROP POLICY audit_events_khach ON audit_events_cu` ⇒ `migrate()` **đi qua**,
+  D2 dựng sáu trigger lên bảng mới rỗng, lịch sử nằm ở bảng cũ mà không mục nào canh — khoản 89.
+- `ALTER TABLE users RENAME COLUMN org_id TO to_chuc; DISABLE ROW LEVEL SECURITY; DROP POLICY` ×2 ⇒ `migrate()` **đi qua**,
+  app_api gắn tổ chức A đọc thấy hàng của B — đường đo của khoản 86.
+
+Cả hai đi qua vì lớp nào cũng nhận diện đối tượng bằng thứ chủ bảng **tái tạo được**: `BANG_CHI_GHI_THEM` là hai cái tên,
+`VI_TU_BANG_TENANT` là một hình dạng (cột `org_id` ở public). Bản đầu chặn được (83⑴ bắt policy sót) chỉ vì một danh
+sách khai theo tên *khác* còn nhắc tới bảng cũ — thêm một `DROP POLICY` là hết.
+
+### 2. Quyết định
+
+Danh tính của một bảng được canh là **ba kênh**, mỗi kênh chịu một đường tấn công, không kênh nào là "nguồn duy nhất":
+
+| kênh | mang gì | ai ghi | chịu đường nào |
+|---|---|---|---|
+| ① chú thích bảng `neo: <schema>.<bảng> org_id#<attnum>` (`pg_description`, `objsubid = 0`) | danh tính theo **oid của bảng và attnum của cột `org_id`** — sống qua RENAME / SET SCHEMA / RENAME COLUMN, mất khi DROP, **không** được `CREATE TABLE (LIKE … INCLUDING ALL)` chép, được `pg_dump` chép theo bảng | lượt sửa của hardening (chủ bảng), chỉ khi bảng **chưa có** chú thích nào; WARNING khi tên đã khai nhận neo mới | ⑴ mang neo mà tên hiện tại lệch (đối chiếu catalog, không parse chú thích — kèm oid đang giữ tên đã neo); ⑵ mang neo mà hết là tenant theo tính chất; ⑵′ cột `org_id` hiện tại không phải cột đã neo (đổi tên cột rồi thêm cột mới DEFAULT — lượt soi 35 NẶNG-5) |
+| ② tên đã khai trong kho: `BANG_TENANT_KHAI` (29 tên kèm **migration khai sinh**), `BANG_CHI_GHI_THEM` cho sổ | danh tính theo **tên**, sống trong git, không cần quyền, không mất theo đối tượng; chỉ phán khi migration khai sinh đã áp (tập rút gọn đi qua) | người viết migration; cổng ở `rls-coverage` đòi bản khai **bằng** tập theo tính chất trên lược đồ thật và mỗi dòng trỏ đúng migration `CREATE TABLE` | ⑸ tên không còn phân giải; ⑹ tên còn mà hết là tenant theo tính chất — kể cả **chép bảng bỏ cột `org_id` rồi đè tên** (lượt soi 34 NẶNG-3, dữ liệu không mất); ⑶ tên còn mà chưa mang neo |
+| ③ hình dạng **không bỏ được mà còn giá trị**: bộ ba cột chuỗi (`seq`, `prev_hash`, `hash`) ngoài `public.audit_events`; bộ ba mốc neo (`seq`, `hash`, `anchored_at`) ngoài `public.audit_chain_anchors` | nhận diện **bản sao sổ / bản sao mốc neo** ở bất kỳ tên/schema nào — bản đầu dùng "đủ 15 cột" và bị lượt soi 35 CAO-1 lách bằng một `RENAME COLUMN user_agent`; bộ ba chuỗi thì bỏ là hết giá trị sổ | — | ⑷ ⑷′ đổi tên rồi dựng lại, hay chép |
+
+Một mục hardening (S1.43): lượt SỬA ghi neo ① cho bảng tenant theo tính chất và bảng sổ chưa có chú thích (đơn điệu:
+chỉ thêm, không bao giờ xoá); lượt PHÁN XÉT sáu vế ⑴–⑹. Chú thích bảng của bảng tenant/bảng sổ là **kênh dành riêng**
+— migration muốn chú thích thì chú thích cột.
+
+### 3. Bị bác trước khi chọn — bản đầu của vòng, và vì sao
+
+Bản đầu neo `oid` vào một bảng `app_private.neo_danh_tinh` do migration 049 tạo và gieo. Bộ test bác nó trước cả lượt
+soi: **12 test đỏ** dưới hồ sơ N2 (bootstrap bằng superuser, vai deploy `trien_khai` không superuser, không GRANT thêm) —
+`to_regclass('app_private.…')` ở cột điều kiện ném 42501 vì vai deploy không có USAGE trên `app_private`, và cả lượt sửa
+gãy trước vòng migration đánh số (đúng ngõ cụt QT1 mà 003 từng đo với `to_regprocedure`). Lượt soi 34 bác tiếp ba điều
+mà kể cả sửa quyền cũng không đóng: **chìa nằm cạnh ổ khoá** (bảng neo do chính chủ thể bị canh sở hữu — DROP nó là
+mục im, `UPDATE oid` là im); **khôi phục logic** (`pg_dump | psql`) cấp oid mới cho mọi bảng nhưng giữ dữ liệu bảng neo
+⇒ mọi dòng neo lệch đúng lúc DR; **tự gỡ dòng tenant** là hành động không đơn điệu (ADR-028 §2⑵) và mở đường chép bảng.
+Ba kênh ở §2 không có ba lỗi ấy: ① được dump theo bảng, không cần quyền, không có "bảng neo" để xoá; ② sống trong git;
+③ không tựa vào gì ngoài catalog.
+
+### 4. Đo bằng gì
+
+`db/migrations.int.test.ts` (97 → 101): [khoản nợ 89] đúng kịch bản 33a #5 — NÉM ở ⑴ (nêu tên cũ, oid bảng lạ) và ⑷,
+kể cả sau khi xoá policy sót (83⑴ im), sau khi gỡ chú thích (⑴ im, ⑷ còn; lượt sửa ghi-lấp neo cho bảng cũ dưới tên
+hiện tại — nói ra) và sau khi đổi tên một cột phụ của bản sao (bộ ba chuỗi vẫn bắt); đối chứng đổi lại + đặt lại chú
+thích ⇒ đi qua. [khoản nợ 86 — nửa đo được] đổi tên cột ⇒ ⑵+⑹; đổi tên bảng ⇒ ⑴+⑸; đổi tên cột rồi **thêm cột
+`org_id` mới DEFAULT A** + policy đúng khuôn ⇒ ⑵′ (attnum), lỗ rò thật tới khi deploy sửa; **chép bảng bỏ `org_id` đè
+tên** ⇒ ⑹; đối chứng ⇒ đi qua. [N2 nhánh 4] cụm bootstrap trước S1.43 + vai deploy không sở hữu ⇒ GÃY đúng ⑶ nêu lối
+ra; chủ bảng chạy một lần ⇒ vai deploy đi qua. [ranh giới] bảng tenant không khai DROP + dựng lại đi qua; chú thích khác chiếm chỗ ⇒ ⑶; bản sao sổ ở
+schema khác ⇒ ⑷; tập rút gọn 001/002 chỉ phán tên của migration đã áp. `rls-coverage` (30 → 31): hai bản khớp (bản khai theo TÊN TỆP migration — khớp tiền tố ba chữ số bị test viết
+migration tạm `003_policy_…` bác, đo) + câu phán xét chạy trong test (đổi tên cột ⇒ ⑵⑹; thêm cột `org_id` mới ⇒ ⑵′).
+Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ ⑹; bỏ ⑷. Bốn test N2 và mọi tập rút gọn xanh.
+
+### 5. Ranh giới nói thẳng, và khoản nợ
+
+- ① mạnh bằng quyền sở hữu bảng: chủ bảng cố ý gỡ chú thích thì lượt sửa ghi-lấp (kèm WARNING cho tên đã khai) và
+  ⑴⑵⑵′ im — còn lại ②③; ③ giữ tới khi chủ bảng phá chính bộ ba chuỗi của bản sao (dữ liệu còn, nhưng không còn là sổ).
+  Dưới hồ sơ N2 bảng sổ thuộc superuser nên vai deploy không gỡ được chú thích của sổ — và **cũng không ghi được**
+  (lượt soi 35 CAO-2): cụm đã bootstrap trước S1.43 deploy lần đầu bằng vai không sở hữu sẽ GÃY ở ⑶ với lối ra trong
+  thông điệp — chạy `migrate()` một lần bằng chủ bảng/superuser; test N2 nhánh 4 ghim hành vi ấy.
+- Bảng tenant **không khai** (fixture, bảng tương lai chưa khai) DROP rồi dựng lại cùng tên đi qua — tên không khai thì
+  không ai đòi; cổng hai bản khớp buộc migration tạo bảng tenant mới phải khai tên.
+- D2/`CTE_TRIGGER_CHAN` (lớp SỬA của sổ) vẫn theo tên: sau đổi tên, trigger được dựng lên bảng giả; lớp PHÁN XÉT chặn
+  deploy — chưa đổi lớp sửa sang danh tính (lượt soi 34 #8; khoản 88 kèm).
+- Khoản 86 **nửa gốc còn mở**: bảng đa tổ chức *mới* đặt tên cột khác `org_id` không thuộc vị từ nào nên không bao giờ
+  được khai hay neo.
+- Đổi tên/schema/dựng lại một bảng đã khai là việc của migration có chủ ý: cùng migration ấy sửa dòng khai và đặt lại chú
+  thích neo — thông điệp lỗi nói đúng câu ấy.

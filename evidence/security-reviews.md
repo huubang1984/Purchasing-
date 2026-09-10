@@ -1997,3 +1997,68 @@ vì không ai đọc hàng F1; ⑶ bảng ADR-036 tự khai là NGUỒN nhưng c
 không tự quay lại mục TRƯỚC (83⑵) lẫn danh sách CŨ NHẤT (`BANG_CHI_GHI_THEM`) — và bài học thứ năm: *danh tính theo
 tên hay hình dạng đều tái tạo được, chỉ `oid` là không*; ⑹ câu hỏi ngang kế: *mọi thứ policy/hàm ghim ĐỌC VÀO là gì,
 và ai đặt được nó trước khi phiên bắt đầu* — GUC, `pg_db_role_setting` mọi setdatabase, `options=` trên chuỗi kết nối.
+
+# §S1.43 — khoản nợ 89 + 86: danh tính đối tượng canh là ba kênh (ADR-037) — MÃ SẢN XUẤT; bốn bản, hai lượt soi, bộ test bác bản đầu trước người soi
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `MAU_NEO` (chú thích `neo: <schema>.<bảng> org_id#<attnum>`),
+`BANG_TENANT_KHAI` (29 tên kèm tên tệp migration khai sinh), `VI_TU_PHAI_NEO`, `CAU_NEO_SUA` (lượt sửa ghi neo, WARNING
+cho tên đã khai), `CAU_NEO_SAI` (bảy vế), một mục ARRAY. Không migration đánh số, không bảng mới, không GRANT — hồ sơ N2
+giữ nguyên. Còn lại: `db/migrations.int.test.ts` (97 → 101: ba test neo + N2 nhánh 4), `db/rls-coverage.int.test.ts`
+(30 → 31: hai bản khớp + câu phán xét chạy trong test), sáu tệp tài liệu và tệp này.
+
+**Đo:** hai kịch bản 33a #5/#6 nay NÉM ở mục danh tính — kể cả sau khi xoá policy sót (83⑴ im), gỡ chú thích (⑷ còn),
+đổi tên cột phụ của bản sao (bộ ba chuỗi còn); chép bảng bỏ `org_id` đè tên ⇒ ⑹; đổi tên cột rồi thêm cột `org_id` mới
+DEFAULT A ⇒ ⑵′; N2 nhánh 4 (cụm cũ + vai deploy không sở hữu) ⇒ GÃY đúng ⑶, chủ bảng chạy một lần ⇒ đi qua. Trọn tệp:
+`migrations.int.test.ts` 101/101, `rls-coverage` 31/31, H19 30/30, audit 22/22; t0 209 / 0. **Bản đầu** (bảng neo +
+049) làm 12 test hồ sơ N2 đỏ ở lượt chạy trọn tệp — bộ test bác trước người soi. **Đỏ đo được, cô lập (bốn đột biến,
+chạy lại trên bản bốn):** phán xét no-op ⇒ 89(a)/86(a)/ranh giới; lượt sửa no-op ⇒ khẳng định neo đầu; bỏ ⑹ ⇒ chép bảng;
+bỏ ⑷ ⇒ 89(c) + `kho.so_chep`.
+
+## Lượt soi đối kháng 34 — chạy TRÊN BẢN ĐẦU (bảng `app_private.neo_danh_tinh` + migration 049), bản ấy bị bỏ
+
+**Hình thức:** một `security-reviewer` độc lập, không shell. Bản đầu đã bị 12 test N2 bác trước khi kết quả về; bảng dưới
+ghi để đối chiếu điều người soi thấy bằng đọc với điều bộ test thấy bằng chạy, và điều nào SỬA QUYỀN cũng không đóng.
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | CAO | `to_regclass('app_private.neo_danh_tinh')` ở cột điều kiện ném 42501 dưới vai deploy N2 (không USAGE `app_private`) ⇒ lượt sửa gãy trước vòng migration đánh số; 049 chạy dưới vai deploy cũng không CREATE được trong schema thuộc superuser | **đo:** 12 test đỏ, "permission denied for schema app_private" ở lượt sửa | bỏ bảng neo; kênh ① không cần quyền ngoài sở hữu bảng |
+| 2 | CAO | Chìa nằm cạnh ổ khoá: bảng neo do chủ thể bị canh sở hữu — DROP/SET SCHEMA/UPDATE oid ⇒ mục im; không mục nào canh tiền đề "049 đã chạy ⇒ bảng neo tồn tại" | đúng theo đọc | không còn bảng neo; ② sống trong git |
+| 3 | NẶNG | Tự gỡ dòng tenant không đơn điệu (ADR-028 §2⑵) và mở đường CHÉP bảng bỏ `org_id` đè tên — dữ liệu không mất, "DROP là mất dữ liệu nhìn thấy được" sai | **đo (bản ba/bốn):** chép bảng ⇒ ⑹ NÉM | ② tên đã khai + ⑹; lượt sửa chỉ thêm |
+| 4 | NẶNG | Handoff "48 migration" và danh sách `applied` ghim tay đỏ với 049 | **đo:** hai test đỏ | không còn 049 |
+| 5 | NẶNG | Khôi phục logic cấp oid mới, giữ dữ liệu bảng neo ⇒ mọi dòng neo lệch đúng lúc DR | đúng theo đọc | ① được `pg_dump` chép theo bảng; ② không phụ thuộc oid |
+| 6 | NHẸ | Khoản 86 chưa đóng trọn — nửa gốc (bảng mới tên cột khác) không được neo | đúng | STATE 86: nửa đo được đóng, nửa gốc mở |
+| 7 | NHẸ | CTE data-modifying: INSERT không thấy DELETE cùng câu — DROP+dựng lại trong một migration cần hai lượt sửa | đúng | không còn CTE ấy |
+| 8 | NHẸ | Lớp SỬA (D2/`CTE_TRIGGER_CHAN`) vẫn theo tên | đúng | khoản 88 kèm; ADR-037 §5 |
+| 9 | NHẸ | Không census qua bộ giải; không đột biến cho vế ⑶/tự gỡ; ADR-037 chưa tồn tại | đúng | census ở rls-coverage; bốn đột biến; ADR-037 viết trong vòng |
+| 10 | INFO | 049 neo theo tên lúc chạy — bảng giả đã dựng trước 049 được neo | đúng | ranh giới ghi ở chú thích (lượt sửa đầu tiên cũng vậy) |
+| 11 | INFO | WARNING BƯỚC 2 khi tự gỡ chưa được test khẳng định; chủ DB DoS deploy bằng bảng `org_id` lạ + RENAME | đúng | tự gỡ bỏ; WARNING ghi-lấp thêm ở bản bốn |
+
+## Lượt soi đối kháng 35 — chạy trên BẢN BA (chú thích neo + tên đã khai + hình dạng "đủ 15 cột")
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | CAO | Kênh ③ "đủ 15 cột" đổ bằng một `RENAME COLUMN user_agent` trên bản sổ cũ sau khi gỡ chú thích ⇒ `migrate()` OK, lịch sử ở bản cũ sửa xoá tự do; "còn lại ②③" rỗng cho sổ | **đo:** thêm bước (c2) vào test 89 — bản bốn NÉM | ③ = bộ ba chuỗi `seq/prev_hash/hash` (bỏ là hết giá trị sổ); ranh giới nói thẳng: chủ bảng phá bộ ba của bản sao |
+| 2 | CAO | Cụm bootstrap trước S1.43 + vai deploy không sở hữu bảng: lượt sửa không ghi được neo ⇒ ⑶ chặn deploy đầu tiên; ba test N2 xanh chỉ vì bootstrap của chúng đã chạy hardening S1.43 bằng superuser | **đo:** test N2 nhánh 4 — gỡ mọi neo rồi migrate bằng `trien_khai` ⇒ GÃY đúng ⑶ (1 mục), chủ bảng chạy một lần ⇒ đi qua | nói ra ở ADR-037 §5, thông điệp ⑶ nêu lối ra, test ghim |
+| 3 | NẶNG | `to_regclass(substr(chú thích, 6))` chạy trên chuỗi do chủ bảng bất kỳ đặt: `'neo: '`, `'neo: a b'` ⇒ 42601; schema không USAGE ⇒ 42501 — BƯỚC 3 không bọc ⇒ lỗi thô xuyên bản gom | đúng theo đọc | ⑴ đối chiếu catalog (`split_part` trên marker của chính catalog), không parse |
+| 4 | NẶNG | `audit_chain_anchors` không có kênh hình dạng — đổi tên + dựng lại + gỡ chú thích ⇒ đi qua | đúng theo đọc | ⑷′ bộ ba mốc neo `seq/hash/anchored_at`; test `kho.moc_chep` |
+| 5 | NẶNG | Danh tính CỘT `org_id` vẫn là cái tên: đổi tên cột rồi `ADD COLUMN org_id DEFAULT A` + policy đúng khuôn ⇒ tên ✓ tenant ✓ [CR1] ✓ ⇒ app_api gắn A đọc mọi hàng | **đo:** test 86 (e) — bản bốn NÉM ⑵′ (attnum) | ① neo attnum của `org_id`; census rls thêm ca thêm cột |
+| 6 | NHẸ | Hai bảng sổ khai hai lần (BANG_TENANT_KHAI + nhánh sổ) ⇒ dòng đôi | đúng | nhánh sổ chỉ thêm tên chưa khai |
+| 7 | NHẸ | ⑶ khẳng định nguyên nhân "không ghi được" cả khi oid đổi/chú thích bị gỡ; ghi-lấp im lặng là chỗ oid đổi mà không ai biết | đúng | ⑶ trung tính, nêu ba nguyên nhân + lối ra; `CAU_NEO_SUA` WARNING cho tên đã khai |
+| 8 | NHẸ | ⑴ nhầm bảng thật là bản sao trong lời; `q` không lọc `MAU_SCHEMA_DU_AN` | đúng | lời "một trong hai là bản sao"; lọc schema |
+| 9 | INFO | `pg_dump --no-comments`, logical replication, DR thủ công không chép chú thích | đúng | ADR-037 §5 / runbook |
+| 10 | INFO | Lá phân mảnh: cổng hai bản đòi khai từng lá; lá động làm cổng đỏ | đúng | ghi ở ADR-037 (khai theo cha khi có bảng phân mảnh đầu tiên) |
+
+**35 kiểm và thấy KHỚP:** escape LIKE trong `$khoi$` (bản bốn bỏ LIKE, khớp `=` tên tệp); nhãn `$neo$` lồng `$q$` không va;
+cột điều kiện chắn `schema_migrations`; bootstrap sạch không đỏ ⑶ (lượt sửa chạy lại sau migration đánh số); bộ giải hằng
+giải năm hằng mới; regex bản khai so tập, không xanh mù; SET SCHEMA + dựng cùng tên + gỡ chú thích ⇒ 83⑶/85; VIEW/FOREIGN
+thay bảng ⇒ ⑸; TEMP cùng tên không rơi vào `to_regclass` (bản bốn không còn to_regclass); `objsubid ≠ 0` không đụng kênh;
+tên chữ hoa/dấu chấm hai phía cùng `quote_ident`; fixture khác (`k.con2`, CR2a `toContain`, không test nào đếm
+`pg_description`) không bị.
+
+**Điều đáng mang sang vòng sau:** ⑴ danh tính theo hình dạng phải là *hình dạng không bỏ được mà còn giá trị* (bộ ba
+chuỗi, attnum) — không phải "đủ N cột"; ⑵ đường NÂNG CẤP là một hồ sơ cần test riêng: mọi mục "lượt sửa ghi thứ chỉ chủ
+bảng ghi được" phải có test "cụm cũ + vai deploy không sở hữu" (N2 nhánh 4 là khuôn); ⑶ BƯỚC 3 chưa có bất biến "không
+gãy thô" như BƯỚC 2 — hàm catalog ném theo dữ liệu người khác kiểm soát xuyên qua bản gom; một `EXCEPTION` quanh vòng
+BƯỚC 3 ghi "mục X không đánh giá được" là rẻ và đóng cả lớp (khoản 88 kèm); ⑷ ghi-lấp im lặng là chỗ oid đổi mà không ai
+được báo — WARNING có chủ đích là lớp nhìn thấy rẻ nhất trước khi D2 chuyển sang danh tính; ⑸ bộ test bác bản đầu
+TRƯỚC người soi — lượt chạy trọn tệp sau mỗi mục sửa mới là phép đo rẻ nhất của vòng, không phải bước cuối.
