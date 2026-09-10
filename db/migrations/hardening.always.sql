@@ -1629,6 +1629,20 @@ $ham$;
   -- db/hardening-suy-tu-tinh-chat.int.test.ts, vì test ấy đòi vị từ này xuất hiện NGUYÊN VĂN.
   -- Tổng điều tra ở cùng tệp bắt MỌI hàm trigger BEFORE-ROW UPDATE/DELETE phải được phân loại,
   -- nên một hàm canh mới không rơi khỏi tập trong im lặng: nó chặn cổng cho tới khi có tên ở đây.
+  --
+  -- [S1.36 / khoản nợ 79 — lượt soi 25a #1 CAO] `tgqual IS NULL AND tgattr = ''`: một trigger canh mang
+  -- `WHEN (…)` hay `UPDATE OF <cột>` giữ nguyên tên hàm, nhưng hàm canh KHÔNG CHẠY cho một phần câu. Đo
+  -- trên PostgreSQL 16: bảng có `BEFORE UPDATE OF a` + `BEFORE DELETE … WHEN (false)` gọi bid_chi_ghi_them()
+  -- ⇒ UPDATE cột khác 1 hàng, DELETE 1 hàng, không lỗi — mà vị từ cũ vẫn nhận bảng là chỉ-ghi-thêm
+  -- (LOGGED/chốt TRUNCATE/ACL đều xanh). CTE_TRIGGER_CHAN đã soi đúng hai cột ấy từ S0 cho bảng CÓ TÊN;
+  -- vị từ SUY RA thì không — bài học không sang được, và sáu lượt soi dọc (19–24) không thấy vì không
+  -- lượt nào đối chiếu lớp mới với lớp cũ. Nay vị từ chỉ ĐẾM trigger canh vô điều kiện, nên bảng ấy
+  -- rơi khỏi tập; và để nó không rơi TRONG IM LẶNG, mục phán xét CAU_TRIGGER_CANH_CO_DIEU_KIEN (dưới)
+  -- chặn deploy khi một trigger canh có điều kiện — hay [lượt soi 27] không ở ENABLE ALWAYS — tồn tại ở bất
+  -- kỳ bảng nào của dự án. Vị từ này cố ý KHÔNG đọc tgenabled: bảng có trigger canh tắt vẫn trong tập để
+  -- LOGGED/chốt TRUNCATE/ACL vẫn được phán; cột ấy chặn deploy qua mục phán xét, không qua vị từ.
+  -- `db/hardening-suy-tu-tinh-chat.int.test.ts` giữ vế này NGUYÊN VĂN (VE_TRIGGER_VO_DIEU_KIEN) và đo
+  -- vị từ CŨ bằng cách bỏ vế ấy ra.
   VI_TU_BANG_CHI_GHI_THEM constant text :=
     $q$SELECT c.oid AS bang_oid, c.relname, c.relpersistence, c.relowner
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -1639,6 +1653,7 @@ $ham$;
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+                  AND t.tgqual IS NULL AND t.tgattr::pg_catalog.text OPERATOR(pg_catalog.=) ''
                   AND (p.prosrc !~* '\mRETURN\M'
                        OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
                            AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
@@ -1647,6 +1662,7 @@ $ham$;
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+                  AND t.tgqual IS NULL AND t.tgattr::pg_catalog.text OPERATOR(pg_catalog.=) ''
                   AND (p.prosrc !~* '\mRETURN\M'
                        OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
                            AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
@@ -1666,7 +1682,9 @@ $ham$;
          FROM ($q$ || VI_TU_BANG_CHI_GHI_THEM || $q$) b
         WHERE b.relpersistence <> 'p'
        UNION ALL
-       SELECT b.bang_oid::regclass::text || ': bảng CHỈ-GHI-THÊM không có chốt TRUNCATE ĐANG BẬT. '
+       SELECT b.bang_oid::regclass::text || ': bảng CHỈ-GHI-THÊM không có chốt TRUNCATE ĐANG BẬT và VÔ ĐIỀU KIỆN '
+                 '([S1.36 / khoản nợ 79] đo: WHEN (false) trên trigger TRUNCATE cấp câu lệnh là HỢP LỆ với '
+                 'PostgreSQL 16 và TRUNCATE đi lọt — chốt có WHEN không phải chốt). '
                  'Trigger cấp HÀNG không bao giờ chạy cho TRUNCATE — một câu lệnh xoá sạch bảng '
                  'trong khi UPDATE và DELETE đều bị chặn. Sửa: một migration đánh số MỚI thêm '
                  'trigger BEFORE TRUNCATE FOR EACH STATEMENT gọi cùng hàm canh, kèm ENABLE ALWAYS '
@@ -1681,6 +1699,7 @@ $ham$;
                                   OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
                                       AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
                              AND t.tgenabled OPERATOR(pg_catalog.=) 'A'
+                             AND t.tgqual IS NULL
                              AND (t.tgtype OPERATOR(pg_catalog.&) 34::pg_catalog.int2)
                                  OPERATOR(pg_catalog.=) 34)
        UNION ALL
@@ -1732,6 +1751,44 @@ $ham$;
          CROSS JOIN LATERAL aclexplode(att.attacl) a
          LEFT JOIN pg_roles vai ON vai.oid = a.grantee
         WHERE a.grantee <> c.relowner AND a.privilege_type = 'UPDATE'$q$;
+
+  -- [S1.36 / khoản nợ 79] Trigger của HÀM CANH mang `WHEN`, `UPDATE OF`, hay KHÔNG ở ENABLE ALWAYS — ở MỌI
+  -- bảng của dự án, không chỉ bảng có tên. Ba cột của pg_trigger giữ nguyên tên hàm mà làm hàm canh không
+  -- chạy (cả câu hay một phần câu): tgqual, tgattr, tgenabled. Với hai cột đầu, vị từ ở trên đã THẢ bảng khỏi
+  -- tập chỉ-ghi-thêm (đúng: nó không chỉ-ghi-thêm); với cột thứ ba vị từ CỐ Ý vẫn đếm (để LOGGED/ACL vẫn
+  -- được phán) — [lượt soi 27, NẶNG-1] bản đầu của mục này bỏ sót cột ấy: DISABLE TRIGGER hay ENABLE thường
+  -- + session_replication_role = replica trên bảng suy ra cho UPDATE đi qua mà migrate() OK. Cả ba trường
+  -- hợp đều là "thả trong im lặng" — chế độ hỏng đắt nhất của lớp này (ADR-035 §2⑴): một bảng vừa mang tên
+  -- hàm canh vừa cho UPDATE/DELETE đi qua là một lời khai sai bằng lược đồ. Mục này PHÁN XÉT (ADR-028 §2⑵)
+  -- — cách sửa là một migration mới dựng lại trigger, hoặc đổi hàm. Tập hàm canh là CÙNG vị từ hàm của
+  -- VI_TU_BANG_CHI_GHI_THEM (hình dạng ∪ khai báo, plpgsql); không lọc tgtype nên phủ cả trigger TRUNCATE
+  -- (trùng cố ý với vế chốt TRUNCATE ở CAU_CHI_GHI_THEM_VAT_LY — hai lớp cho một ca). Đo: 0 trigger như thế
+  -- trong kho hôm nay (045 đã nâng mọi trigger lên ALWAYS; tổng điều tra ở test giữ điều ấy không thiu).
+  CAU_TRIGGER_CANH_CO_DIEU_KIEN constant text :=
+    $q$SELECT t.tgrelid::regclass::text || '.' || t.tgname::text || ': trigger của hàm canh '
+              || p.oid::regprocedure::text
+              || CASE WHEN t.tgqual IS NOT NULL THEN ' có mệnh đề WHEN' ELSE '' END
+              || CASE WHEN t.tgattr::text <> '' THEN ' có UPDATE OF <cột>' ELSE '' END
+              || CASE WHEN t.tgenabled <> 'A'
+                   THEN ' có tgenabled=' || t.tgenabled::text
+                        || ' (cần A = ENABLE ALWAYS; D và R không chạy, O bị bỏ qua khi session_replication_role = replica)'
+                   ELSE '' END
+              || ' — hàm canh chỉ chạy CÓ ĐIỀU KIỆN hay KHÔNG CHẠY, nên câu ghi đi qua (UPDATE cột khác / DELETE / '
+                 'UPDATE dưới trigger tắt: 1 hàng, không lỗi — đã đo) trong khi bảng vẫn mang tên hàm canh. Vị từ '
+                 'chỉ-ghi-thêm không đếm trigger có WHEN/UPDATE OF (bảng chỉ còn trong tập nếu một trigger canh vô '
+                 'điều kiện khác cho cùng sự kiện tồn tại) và vẫn đếm trigger tắt. Sửa: một migration mới dựng lại '
+                 'trigger KHÔNG WHEN, KHÔNG UPDATE OF, ENABLE ALWAYS (hoặc gọi hàm khác nếu bảng không phải '
+                 'chỉ-ghi-thêm).' AS mo_ta
+         FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+         JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE NOT t.tgisinternal
+          AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
+          AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
+          AND (p.prosrc !~* '\mRETURN\M'
+               OR (p.pronamespace OPERATOR(pg_catalog.=) 'public'::pg_catalog.regnamespace
+                   AND p.proname IN ('bid_chi_ghi_them', 'chan_sua_xoa')))
+          AND (t.tgqual IS NOT NULL OR t.tgattr::text <> '' OR t.tgenabled <> 'A')$q$;
 
   -- [S1.20 / sổ nợ 16] BẢNG SỔ KHÔNG ĐƯỢC CÓ CỘT NÀO NGOÀI CHUỖI HASH.
   --
@@ -1819,6 +1876,20 @@ $ham$;
         WHERE NOT r.rolsuper
           AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
                          AND pg_catalog.pg_has_role(r.oid, g.oid, 'MEMBER'))$q$;
+
+  -- [S1.36, lượt soi 25b #13] Thân câu "quan hệ trùng tên public trong một schema mà vai có USAGE" — MỘT
+  -- bản, dùng ở cả hậu điều kiện lẫn mô tả của mục ấy; bản S1.34 chép chín dòng hai lần, đúng kiểu trôi mà
+  -- BANG_GOC_TENANT đã đo.
+  CAU_QUAN_HE_TRUNG_TEN constant text :=
+    $q$FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
+            ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+      WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+        AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
+        AND n.nspname NOT LIKE 'pg\_%'
+        AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
+        AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
+                     WHERE pn.nspname = 'public' AND p.relname = c.relname
+                       AND p.relkind IN ('r', 'p', 'v', 'm', 'f'))$q$;
 
   bang text[][] := ARRAY[
 
@@ -6524,7 +6595,7 @@ $ham$;
       $q$'còn TEMP trên database: ' || (SELECT string_agg(v.rolname, ', ' ORDER BY v.rolname)
                                        FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
                                       WHERE pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'TEMP'))
-        || ' (cấp đích danh, hoặc qua một nhóm mà BƯỚC 1 chưa gỡ)'$q$,
+        || ' (cấp đích danh; qua một nhóm mà BƯỚC 1 chưa gỡ; qua PUBLIC nếu mục trước không thu hồi được — has_database_privilege đếm cả PUBLIC; hoặc vai ấy là CHỦ database — quyền chủ là ngầm, REVOKE không tước được, đổi chủ DB)'$q$,
       $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
     ],
     ARRAY[
@@ -6551,7 +6622,7 @@ $ham$;
       $q$'còn CREATE trên database: ' || (SELECT string_agg(v.rolname, ', ' ORDER BY v.rolname)
                                          FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
                                         WHERE pg_catalog.has_database_privilege(v.rolname, pg_catalog.current_database(), 'CREATE'))
-        || ' — vai ấy tự dựng được CREATE SCHEMA <tên vai> che public cho mọi kết nối'$q$,
+        || ' — vai ấy tự dựng được CREATE SCHEMA <tên vai> che public cho mọi kết nối (cấp đích danh; qua nhóm; qua PUBLIC nếu mục trước không thu hồi được; hoặc vai ấy là CHỦ database — đổi chủ DB)'$q$,
       $q$chủ sở hữu database hiện tại hoặc SUPERUSER (REVOKE ON DATABASE)$q$
     ],
     ARRAY[
@@ -6570,25 +6641,9 @@ $ham$;
       $q$true$q$,
       -- Cố ý no-op: xem (d) ở trên.
       $q$SELECT 1$q$,
-      $q$NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
-                                ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
-                     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
-                       AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
-                       AND n.nspname NOT LIKE 'pg\_%'
-                       AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
-                       AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
-                                    WHERE pn.nspname = 'public' AND p.relname = c.relname
-                                      AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))$q$,
+      $q$NOT EXISTS (SELECT 1 $q$ || CAU_QUAN_HE_TRUNG_TEN || $q$)$q$,
       $q$'quan hệ trùng tên public: ' || (SELECT string_agg(v.rolname || ' -> ' || n.nspname || '.' || c.relname, ', ' ORDER BY v.rolname, n.nspname, c.relname)
-                                         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace,
-                                              ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
-                                        WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
-                                          AND n.nspname NOT IN ('public', 'pg_catalog', 'information_schema')
-                                          AND n.nspname NOT LIKE 'pg\_%'
-                                          AND pg_catalog.has_schema_privilege(v.rolname, n.oid, 'USAGE')
-                                          AND EXISTS (SELECT 1 FROM pg_class p JOIN pg_namespace pn ON pn.oid = p.relnamespace
-                                                       WHERE pn.nspname = 'public' AND p.relname = c.relname
-                                                         AND p.relkind IN ('r', 'p', 'v', 'm', 'f')))
+                                         $q$ || CAU_QUAN_HE_TRUNG_TEN || $q$)
         || ' — SET search_path trong phiên tới schema ấy làm câu viết trần rơi vào quan hệ này thay vì public'$q$,
       $q$viết một migration mới đổi tên hay xoá quan hệ ấy, hoặc REVOKE USAGE ON SCHEMA ấy khỏi vai (hardening cố ý không tự thu hồi: USAGE có thể cấp qua PUBLIC cho một schema của người khác)$q$
     ],
@@ -7509,6 +7564,15 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_CHI_GHI_THEM_QUYEN || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_CHI_GHI_THEM_QUYEN || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (hoặc là grantor của chính quyền cần thu hồi) hoặc SUPERUSER$q$
+    ],
+    -- [S1.36 / khoản nợ 79] Chỉ PHÁN XÉT — xem CAU_TRIGGER_CANH_CO_DIEU_KIEN.
+    ARRAY[
+      $q$trigger của hàm canh có WHEN, UPDATE OF, hay không ENABLE ALWAYS (suy từ tính chất, mọi bảng)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_CANH_CO_DIEU_KIEN || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_TRIGGER_CANH_CO_DIEU_KIEN || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (DROP TRIGGER / CREATE TRIGGER) hoặc SUPERUSER$q$
     ],
     ARRAY[
       $q$bảng sổ không có cột ngoài chuỗi hash$q$,
