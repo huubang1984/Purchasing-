@@ -2002,7 +2002,7 @@ và ai đặt được nó trước khi phiên bắt đầu* — GUC, `pg_db_rol
 
 **Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `MAU_NEO` (chú thích `neo: <schema>.<bảng> org_id#<attnum>`),
 `BANG_TENANT_KHAI` (29 tên kèm tên tệp migration khai sinh), `VI_TU_PHAI_NEO`, `CAU_NEO_SUA` (lượt sửa ghi neo, WARNING
-cho tên đã khai), `CAU_NEO_SAI` (bảy vế), một mục ARRAY. Không migration đánh số, không bảng mới, không GRANT — hồ sơ N2
+cho tên đã khai), `CAU_NEO_SAI` (~~bảy~~ tám vế ⑴⑵⑵′⑶⑷⑷′⑸⑹ — 40b #7), một mục ARRAY. Không migration đánh số, không bảng mới, không GRANT — hồ sơ N2
 giữ nguyên. Còn lại: `db/migrations.int.test.ts` (97 → 101: ba test neo + N2 nhánh 4), `db/rls-coverage.int.test.ts`
 (30 → 31: hai bản khớp + câu phán xét chạy trong test), sáu tệp tài liệu và tệp này.
 
@@ -2084,7 +2084,7 @@ chính chủ database và 001 gãy thô; với `'USAGE' OR 'SET'` 49 migration �
 với một mục có tên và lối ra. Trọn tệp: `rls-coverage` 32/32, H19 32/32, `hardening-hang` 4/4, `migrations.int.test.ts`
 102/102, T1 724/724; t0 210 / 0.
 
-**Đỏ đo được, cô lập (năm đột biến, khôi phục trước mỗi ca):** M1 bốn tên ⇒ đỏ test 88; M2 khoá cứng `public` ở VI_TU ⇒ đỏ
+**Đỏ đo được, cô lập (~~năm~~ sáu đột biến — 40b #11, khôi phục trước mỗi ca):** M1 bốn tên ⇒ đỏ test 88; M2 khoá cứng `public` ở VI_TU ⇒ đỏ
 "phải BẰNG qua bộ giải"; M3 bỏ khối BƯỚC 3 ⇒ `division by zero` trần; M4 bỏ khối BƯỚC 2 ⇒ lượt SỬA gãy `(sua)`; M5 khoá cứng
 `public` ở nhánh SECDEF ⇒ `[I3] SECDEF ở schema khác` lọt `migrate()`; M6 (sau lượt soi 36) `VAI_KET_NOI_UNG_DUNG` về
 `'MEMBER'` ⇒ hồ sơ N3 đỏ ở 001 `permission denied for database`.
@@ -2259,3 +2259,73 @@ trên tập tên rút từ văn bản policy/hàm; ⑵ `pg_catalog.` chỉ ghim 
 42883 và một `catch` bọc ngoài biến lỗi ấy thành phép kiểm mù; ⑶ một lớp ứng dụng "xoá rồi chạy tiếp" dưới mặc định bị đầu độc là
 im lặng — từ chối trước `fn` mới ồn ào; ⑷ `migrate()` huỷ client mỗi lượt: phép đo "sau RESET" phải trên kết nối mới; ⑸ khoản 92:
 ba mục kề lọc `setdatabase = <db>` nên mù với `ALTER ROLE ALL`.
+
+## Lượt soi 40 — lượt NGANG thứ ba, chạy trên HEAD `1309379` (master + #44 khoản 86 + #45 khoản 87, chưa hợp nhất) SAU năm vòng S1.43–S1.47
+
+**Hình thức:** như lượt 25/33 — hai người soi độc lập, không shell, song song, không đọc nhau. **40a** đặt các lớp mới của năm
+vòng (ADR-037 ba kênh + `bang_so` danh tính, 88 tập vai/kế thừa/BƯỚC 2-3 bọc EXCEPTION, 86 khoá ngoại tới bảng tenant, 87 GUC
+năm nhánh + `withTenant`) cạnh các lớp cũ với câu hỏi *"cái nào lách được cái nào"*; **40b** soi lời khai vs mã và con số vs con
+số trên `git diff 3811d37..1309379`. Khác lượt 33: các phát hiện có hình dạng mã rẻ được SỬA ngay trong S1.48 (một vòng), đo bằng
+tám đột biến; phần còn lại thành khoản 93 hoặc ghi vào hàng 92.
+
+### 40a — lớp CSDL: 0 CAO, 1 NẶNG, 5 NHẸ, 10 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| N1 | NẶNG | `withTenant` S1.47 từ chối "mặc định phiên" không phân biệt với RÒ PHẠM VI PHIÊN từ mã ngoài withTenant (`pool.connect` + `set_config(…, false)` + release); `tuChoiMacDinh` tắt kiểm `finally` ⇒ kết nối nhiễm TRẢ VỀ POOL (1/N yêu cầu đỏ mãi, câu trần dưới org lạ) — hồi quy I1 | **đo:** app_current_org_id() = orgB còn trên pool, pid không đổi (bản S1.47) | sau ROLLBACK: RESET bốn GUC rồi đọc lại — rỗng ⇒ rò phiên ⇒ HUỶ kết nối, thông điệp "còn sót ở phạm vi PHIÊN"; còn ⇒ mặc định thật ⇒ giữ; test hai chiều; đột biến M7 |
+| H1 | NHẸ | Mục 87 phán xét ở BƯỚC 3 — SAU khi migration đánh số cùng lượt đã chạy dưới GUC gắn sẵn và ghi checksum ⇒ backfill lệch vĩnh viễn | **đo:** migration tạm `999_zz_h1.sql` — bản trước chạy và ghi dòng | `migrate()` đọc bốn GUC ngay sau `SET search_path`, từ chối trước lượt sửa; đột biến M6; test 87 chấp nhận "từ chối sớm" ở phiên thừa kế và đo ⒜/⒜′ trực tiếp |
+| H2 | NHẸ | Khoản 86 miễn khoá ngoại NHIỀU cột — quy ước kho là `(org_id, x)`: `k.t (to_chuc, nguoi) REFERENCES users (org_id, id)` vô hình với mọi mục | **đo:** fixture `zz_s.t_hop` không bị thấy (bản S1.46) | bỏ `array_length = 1` ở `CAU_KHOA_NGOAI_TOI_TENANT`, mô tả `(to_chuc, nguoi) -> public.users`; đột biến M1; gạch ranh giới ở hàng 86 |
+| H3 | NHẸ | `to_regclass(format('%I.%I'))` ở chiều ngược 85/86/RULE (thực đếm: MƯỜI BỐN chỗ) đòi USAGE trên schema ⇒ dưới N2 dòng khai trỏ schema không USAGE ⇒ 42501 ⇒ "KHÔNG ĐÁNH GIÁ ĐƯỢC" mãi, lối ra duy nhất là GRANT | **đo:** vai không USAGE chạy chiều ngược 85 — bản cũ 42501 | JOIN `pg_class`/`pg_namespace` ở cả 14 chỗ; đột biến M2 |
+| H4 | NHẸ | `CAU_TEN_GUC_DU_AN_DOC` regex phân biệt hoa/thường, không chữ số, chỉ literal ngay sau `(`, chỉ `prosrc` (bỏ `BEGIN ATOMIC`, DEFAULT, CHECK) — GUC tương lai đặt bằng ALTER SYSTEM vô hình với ⒞ | **đo:** `CURRENT_SETTING ( 'app.rfq_v2'` không vào tập (bản S1.47) | regex `gi` + chữ số + khoảng trắng; thêm `pg_get_function_sqlbody`, `pg_attrdef`, CHECK; census literal migrations ⊆ tập; đột biến M3 |
+| H5 | NHẸ | Khoản 92 chưa đủ (ALTER SYSTEM/conf/options= với GUC không dấu chấm) và có hình dạng rẻ hơn: `pg_settings.reset_val` đọc được cho GUC thường | đúng theo đọc | ghi vào hàng 92 (hình dạng `reset_val IS DISTINCT FROM boot_val`), chưa đóng |
+| I1 | INFO | Ranh giới "`ALTER ROLE trien_khai SET` không bị thấy" ghi SAI CHIỀU — ⒞ thấy (sau migration; H1 đóng sớm) | đúng theo đọc | sửa lời ở chú thích và hàng 87; thông điệp ⒞ thêm nguồn |
+| I2 | INFO | Lối ra "vai được GRANT SET" ở thông điệp ⒜/⒝ bị chính ⒟ phán | đúng | thông điệp: GRANT tạm — RESET — REVOKE cùng phiên |
+| I3 | INFO | Hàm extension trong `public` (PostGIS) nạp tên vào tập ⒞/⒠ ⇒ chặn deploy tới khi khai — trái [I3] hàng xóm | đúng theo đọc | loại `pg_depend deptype 'e'` ở ⒞ và ⒠ như (C) |
+| I4 | INFO | `CAU_NEO_SUA`: `COMMENT` khoá SUE với `lock_timeout = 0`; EXCEPTION chỉ bắt 42501 | đúng theo đọc | runbook ở ADR-037 §5 |
+| I5 | INFO | `bang_so` ⒜ dạng `public.<sổ>`: decoy CÙNG TÊN ở schema khác chép nguyên neo được D2 chữa, sổ thật đứng yên (⑴⑷ chặn cùng lượt — trễ, không mất) | **đo:** test 89 (f) — bản S1.45 decoy 4 trigger | ⒝′ không quan hệ khác mang ĐÚNG chuỗi neo của mình ⇒ cả hai đứng yên (decoy 0, sổ thật 3); đột biến M4 |
+| I6 | INFO | ⑷/⑷′ chỉ `relkind = 'r'` — bản sao phân mảnh (`p`) của sổ vô hình ở cha (lá vẫn bị) | **đo:** `zz_s.so_pm` | thêm `'p'`; đột biến M5 |
+| I7 | INFO | ⑴ in TRỌN chú thích do chủ bảng đặt (tiêm log) | đúng | `left(…, 80)` + lọc ký tự điều khiển |
+| I8 | INFO | Hình dạng kết quả `BEGIN; SELECT` được tin qua cast — pooler trả một kết quả ⇒ phép từ chối mù | đúng | đòi `length === 2`, ném nếu khác |
+| I9 | INFO | Chi phí phán xét mới (regexp trên `pg_proc`, CTE đệ quy 86) không đáng kể; không khoá bảng người dùng | xác nhận | — |
+| I10 | INFO | `withTenant` lồng trên cùng client: nay fail-closed với chẩn đoán "mặc định phiên" | đúng | thông điệp thêm nguồn "withTenant lồng" |
+
+**40a kiểm và thấy KHỚP:** bảng 86 + cột `org_id` giả ⇒ 85 / (A)+[CR1] / ⑵′; đổi tên cột khoá ngoại của bảng đã neo ⇒ ⑵+⑹+86;
+`organizations.id → ident` ⇒ ⑵+⑹; chép bảng mang neo ⇒ ⑴ kèm oid; sửa attnum ⇒ ⑵′; `SET SCHEMA` bảng khai ⇒ ⑴+⑸+83⑶;
+`withGuestSession` không từ chối sai; `SET`/`set_config(false)` trong giao dịch bị ROLLBACK cũng hoàn; hàm catalog của mục mới
+ngoài `to_regclass` không đòi quyền; membership `SET`-không-USAGE bị BƯỚC 1 gỡ; DoS `withTenant` bởi không-superuser chỉ còn rò
+phiên (N1); BƯỚC 3 fail-closed với mọi SQLSTATE; `ALTER ROLE ALL IN DATABASE d` ⇒ ⒜; bộ giải hằng đối chứng trên tệp thật.
+
+### 40b — nhất quán tài liệu/mã: 1 NẶNG, 11 NHẸ, 6 INFO
+
+| # | mức | phát hiện | kiểm | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | ADR-036 §2 tự khai là NGUỒN mà cơ chế khoản 87 không có hàng; §5 hai câu bị S1.47 bác chưa gạch ("chỉ superuser", "test là đủ"); cổng `CAU_*_SAI` ↔ §2 (33b đề xuất) vẫn chưa có — ba mục mới, ba vòng | grep §2 tới 22; grep `CAU_*_SAI` trong DECISIONS: 1 | thêm hàng 23; gạch + nhãn; cổng ⇒ **khoản 93** |
+| 2 | NHẸ | "21" (STATE 87) / "11" (hardening, with-tenant) policy RESTRICTIVE `_khach` — người soi đếm CREATE POLICY: 10 + 1 PERMISSIVE | **đo catalog:** 29 RESTRICTIVE (một mỗi bảng tenant — hardening dựng theo khuôn 027) + 1 PERMISSIVE — cả ba con số đều thiu | ba chỗ sửa "29 theo catalog"; `it` đếm từ catalog bằng số bảng tenant |
+| 3 | NHẸ | Hàng 87: "Còn mở, có hình dạng mã ⑴⑵⑶", "chỉ superuser", "test là đủ", "bốn GUC khách" chưa gạch | đúng | gạch kèm `[S1.47]`; ⑵ là ba GUC |
+| 4 | NHẸ | Hàng 86: "Nửa gốc VẪN MỞ", "đường tính-chất khả dĩ … đổi `MAU_VI_TU_BANG_TENANT` … vòng riêng" chưa gạch (S1.46 đóng không đổi vị từ) | đúng | gạch kèm `[S1.46]` |
+| 5 | NHẸ | Hàng 90: "VẪN DỰNG TRIGGER THEO TÊN", "Đường đóng: … neo khớp", "sáu trigger" chưa gạch | đúng | gạch kèm `[S1.45]`; sáu → bốn |
+| 6 | NHẸ | ADR-037 §5: gạch đầu dòng D2 "vẫn theo tên" chưa gạch; ⒜ mô tả bản ĐẦU (tên hiện tại) mà lượt 37 CAO-1 bác | đúng | gạch; ⒜ viết lại đủ hai nhánh |
+| 7 | NHẸ | `CAU_NEO_SAI`: "sáu vế" (ADR-037 §2, chú thích `bang`), "bảy vế" (§S1.43), mã có TÁM nhánh | đếm UNION | "tám vế ⑴⑵⑵′⑶⑷⑷′⑸⑹" ở bốn nơi |
+| 8 | NHẸ | ADR-036 §4 "TÁM danh sách … năm rỗng" — nay 11 / 4 có hàng / 7 rỗng; F1 (TEST-PLAN, INV-matrix) còn "năm" | grep `_KHAI constant` = 11 | sửa §4; F1 "~~năm~~ bảy"; ma trận tái sinh |
+| 9 | NHẸ | `with-tenant.ts` docstring: "chỉ đọc lại MỘT trục" chưa gạch (mã đọc bốn) | đúng | gạch kèm `[S1.47]` |
+| 10 | NHẸ | `with-tenant.ts` hai chỗ "chỉ superuser" dù S1.47 đo GRANT SET ON PARAMETER | đúng | sửa |
+| 11 | NHẸ | S1.44: "năm đột biến" rồi liệt kê M1–M6; §S1.44 cũng vậy | đúng | "sáu (M6 sau lượt 36)" |
+| 12 | NHẸ | Dòng TRỐNG giữa hàng 83 và 84 của bảng sổ nợ ⇒ hàng 84–92 thành đoạn văn với GFM; P0 (regex) mù | **đo:** không một mà SÁU dòng trống (trước 66, 67, 68, 69, 71, 84) — bảng đứt từ hàng 66 | xoá cả sáu; P0 thêm vế "khối liền mạch" + đột biến; M8 |
+| 13 | INFO | "sáu trigger" còn ở ADR-036 §5 và ADR-037 §1 | đúng | sáu → bốn |
+| 14 | INFO | "(mười vế)" test 87 không đếm cơ khí được — 8 nhãn | đúng | "tám vế có nhãn" ở STATE 87 và 62 |
+| 15 | INFO | "audit-append-only 22/22" — 21 `it(` theo grep | báo cáo vitest ghi 22 `assertionResults` cho tệp ấy | giữ 22 (số theo báo cáo), không sửa |
+| 16 | INFO | Handoff: điều kiện "ba lần liên tiếp" đã thoả từ S1.45 mà lượt kế ghi "sau S1.47" | đúng | ghi rõ lịch thắng điều kiện, lý do gộp năm vòng |
+| 17 | INFO | hardening ENABLE ALWAYS: "tham số ấy chỉ superuser đặt được" — GRANT SET cho vai thứ ba không mục nào thấy | đúng | chú thích ranh giới tại chỗ (chưa có khoản) |
+| 18 | INFO | ADR-036 §5 ⑵/⑶ không nhãn đóng | đúng | thêm `[S1.43]`/`[S1.46]` |
+
+**40b kiểm và thấy KHỚP:** CÒN MỞ ↔ nhãn (máy); chuỗi đếm 89/16 → 92/15 khớp từng nấc; số ADR 37 ba nơi; số test 103/34/32/4/18
+khớp tệp; "27 khoá ngoại org_id" ✓; sentinel 7 ✓; số mức lượt soi 34–39 khớp bảng; tên hằng ở STATE/ADR/§S1.43–47 tồn tại đúng
+chữ; mọi hunk mã mang nhãn `[S1.4x / khoản nợ N]` đúng số lượt soi; lời khai "(đo)" đều có test có tên; "M4 sống" ghi đủ ba nơi;
+việc 33b #1/#2/#4–#7/#10–#15/#18 đã thi hành.
+
+**Điều đáng mang sang:** ⑴ một lớp ỨNG DỤNG mới có thể là hồi quy của lớp cũ ngay cả khi test của cả hai xanh — test I1 cũ đo rò
+QUA withTenant, không đo rò NGOÀI nó; lượt ngang là chỗ duy nhất đặt hai lớp cạnh nhau; ⑵ con số đếm được từ catalog/migration
+phải có `it` đếm — "21", "11", "10" cùng một thứ ở bốn văn bản, catalog nói 29; ⑶ lời "(đo)" về một ranh giới cũng phải có test
+(H2 "nhiều cột không tính" là ranh giới tự khai, sai); ⑷ mọi chiều ngược của tệp hardening phải chạy được dưới vai N2 — `to_regclass`
+là hàm phân giải tên, không phải hàm đọc catalog; ⑸ dòng trống trong bảng GFM là lỗi vô hình với regex mà hữu hình với người đọc
+suốt hai mươi vòng — cổng phải đòi thứ người đọc thấy, không chỉ thứ máy đọc; ⑹ khoản 93: §2 phải là bảng thật, có cổng.
