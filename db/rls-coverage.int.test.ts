@@ -1848,7 +1848,7 @@ describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả
     expect(Object.keys(POLICY_RESTRICTIVE_DA_KHAI).filter((k) => !that.has(k)), "khai một policy CSDL không còn có").toEqual([]);
   });
 
-  it("[INV-F1] ĐO: RESTRICTIVE USING (false) sống qua migrate(), làm app_api ghi ra 0 hàng không lỗi — và tổng điều tra là lớp duy nhất thấy", async () => {
+  it("[INV-F1] ĐO: RESTRICTIVE USING (false) làm app_api ghi ra 0 hàng không lỗi — ~~sống qua migrate(), tổng điều tra là lớp duy nhất thấy~~ [S1.38] migrate() NÉM ở mục khoản 83⑴, và tổng điều tra vẫn thấy", async () => {
     const { rows: tc } = await db.pool.query<{ id: string }>("SELECT id FROM organizations ORDER BY slug LIMIT 1");
     const orgA = tc[0]!.id;
     // Dọn TRƯỚC (một lần chạy đổ trước có thể để lại) và dọn SAU, trong `finally` [lượt soi 22, M1].
@@ -1863,8 +1863,13 @@ describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả
         "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'zz-76@vidu.vn', 'zz') RETURNING id", [orgA]);
       const userId = u[0]!.id;
       await db.pool.query("CREATE POLICY zz_chan ON users AS RESTRICTIVE FOR UPDATE USING (false)");
-      // (a) hardening không thấy — đúng như [CR1] tự khai (restrictive không bị soi hình dạng).
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toBeDefined();
+      // (a) ~~hardening không thấy — đúng như [CR1] tự khai~~ [S1.38 / khoản nợ 83⑴] [CR1] vẫn không soi
+      //     RESTRICTIVE (đúng cho câu hỏi RÒ), nhưng mục "policy thuộc đúng một lớp" nay chặn deploy: một
+      //     RESTRICTIVE chưa khai là đúng cơ chế 0-hàng-không-lỗi này. Đo: trước S1.38 migrate() đi qua.
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi, "RESTRICTIVE chưa khai phải làm migrate() NÉM").not.toBeNull();
+      expect(loi!.message).toContain("public.users.zz_chan: policy RESTRICTIVE không thuộc lớp nào (khoản 83⑴)");
+      expect(loi!.message, "[CR1] không phải mục chặn — nó cố ý không soi RESTRICTIVE").not.toContain("thiếu vế");
       // (b) hành vi dưới app_api trong tenant: đọc được hàng, UPDATE ra 0 hàng, KHÔNG lỗi.
       const client = await apiPool.connect();
       try {
@@ -1944,5 +1949,212 @@ describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả
       await client.query("ROLLBACK");
       client.release();
     }
+  });
+});
+
+// ===============================================================================================
+// [S1.38 / khoản nợ 83 — nửa RLS ⑴⑵⑶] BA TỔNG ĐIỀU TRA Ở TRÊN NAY CÓ MỤC HARDENING
+//
+// ADR-036 §3⑶ (S1.37): cơ chế mà chủ bảng không superuser tạo được và catalog phân biệt được tĩnh thì
+// PHẢI có mục hardening. Ba mục ở `hardening.always.sql` cùng nhãn. Khối này giữ HAI thứ:
+//   (a) HAI BẢN KHỚP — danh sách khai trong hardening (POLICY_RESTRICTIVE_KHAI, POLICY_KHAC_KHAI,
+//       BANG_RLS_NGOAI_TENANT_KHAI) bằng bản ở đây, đo bằng văn bản (cùng khuôn meta-test [CR1]/[CR2]);
+//   (b) CÂU PHÁN XÉT CỦA HARDENING chạy TRONG test — `docHangHardening` giải các hằng `$q$…$q$ ||
+//       NAME || pg_catalog.format(…)` thành SQL rồi chạy trên cùng CSDL: hôm nay rỗng, và với fixture
+//       trong giao dịch nó phải thấy ĐÚNG những gì tổng điều tra ở test thấy. Rồi `migrate()` NÉM với
+//       fixture ngoài giao dịch — lớp sản xuất, đỏ đo được từng mục.
+// ===============================================================================================
+
+const HARDENING_SQL = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "utf8");
+
+/**
+ * Giải một hằng `NAME constant text := <expr>;` của hardening thành SQL: `$q$…$q$` là nguyên văn,
+ * `|| NAME ||` là hằng khác (đệ quy), `pg_catalog.format(NAME, 'a', 'b')` thay `%1$s`/`%2$s`, `%%` → `%`.
+ * Dấu `;` chỉ kết thúc khi đứng NGOÀI literal. Cố ý không hiểu gì khác — một hằng dùng cú pháp lạ
+ * làm hàm này NÉM, tức test đỏ ồn ào chứ không xanh mù.
+ */
+function docHangHardening(ten: string): string {
+  const dau = HARDENING_SQL.indexOf(`\n  ${ten} constant text :=`);
+  if (dau < 0) throw new Error(`không thấy hằng ${ten} trong hardening.always.sql`);
+  let i = HARDENING_SQL.indexOf(":=", dau) + 2;
+  let ra = "";
+  for (;;) {
+    while (/\s/u.test(HARDENING_SQL[i]!)) i++;
+    if (HARDENING_SQL.startsWith("$q$", i)) {
+      const cuoi = HARDENING_SQL.indexOf("$q$", i + 3);
+      ra += HARDENING_SQL.slice(i + 3, cuoi);
+      i = cuoi + 3;
+    } else if (HARDENING_SQL.startsWith("||", i)) {
+      i += 2;
+    } else if (HARDENING_SQL.startsWith("pg_catalog.format(", i)) {
+      const cuoi = HARDENING_SQL.indexOf(")", i);
+      const [mau, ...thamSo] = HARDENING_SQL.slice(i + "pg_catalog.format(".length, cuoi).split(",").map((t) => t.trim().replace(/^'|'$/gu, ""));
+      let van = docHangHardening(mau!);
+      thamSo.forEach((t, k) => { van = van.replaceAll(`%${k + 1}$s`, t); });
+      ra += van.replaceAll("%%", "%");
+      i = cuoi + 1;
+    } else if (HARDENING_SQL[i] === ";") {
+      return ra;
+    } else {
+      const m = /^[A-Z_0-9]+/u.exec(HARDENING_SQL.slice(i));
+      if (!m) throw new Error(`cú pháp lạ ở hằng ${ten}: ${HARDENING_SQL.slice(i, i + 40)}`);
+      ra += docHangHardening(m[0]);
+      i += m[0].length;
+    }
+  }
+}
+
+const lit = (v: string): string => `'${v.replaceAll("'", "''")}'`;
+
+/** Policy KHÁC (không PERMISSIVE-trên-tenant, không RESTRICTIVE): bảy cột nguyên văn — bản ở hardening phải bằng. */
+const POLICY_KHAC_DA_KHAI: readonly (readonly [string, string, string, string, string, string, string])[] = [
+  ["caller_rate_limits", "caller_rate_limits_khach", "PERMISSIVE", "*", "PUBLIC", KHACH_NULL, KHACH_NULL],
+];
+
+describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có mục hardening", () => {
+  it("[INV-F1] HAI BẢN KHỚP: POLICY_RESTRICTIVE_KHAI trong hardening bằng các biến thể ngoài khuôn chuẩn của POLICY_RESTRICTIVE_DA_KHAI; POLICY_KHAC_KHAI và BANG_RLS_NGOAI_TENANT_KHAI bằng bản ở đây", () => {
+    // Khuôn chuẩn (b1) — `<bảng>_khach`, ALL, PUBLIC, hai vế = "không phải phiên khách" — hardening nhận
+    // theo TÍNH CHẤT, không cần khai; chỉ tám biến thể nới theo cột mới phải khai đủ sáu cột.
+    const bienThe = Object.entries(POLICY_RESTRICTIVE_DA_KHAI)
+      .filter(([, k]) => k.using !== KHACH_NULL || k.with_check !== KHACH_NULL)
+      .map(([khoa, k]) => {
+        const [, bang, polname] = khoa.split(".");
+        return [bang!, polname!, k.lenh, k.vai_tro, k.using, k.with_check] as const;
+      })
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    expect(bienThe.length, "027 nới tám bảng khách").toBe(8);
+    const khoiRestrictive =
+      "(VALUES\n" + bienThe.map((r) => "         (" + r.map(lit).join(", ") + ")").join(",\n") +
+      "\n       ) AS g(bang, polname, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
+    // [lượt soi 29, NHẸ-5] so với CHÍNH hằng (qua bộ giải), không phải văn bản thô cả tệp — một bản sao thiu
+    // trong chú thích không thoả được cổng này.
+    expect(docHangHardening("POLICY_RESTRICTIVE_KHAI"), "POLICY_RESTRICTIVE_KHAI phải BẰNG bản sinh từ test").toBe(khoiRestrictive);
+    const khoiKhac =
+      "(VALUES\n" + POLICY_KHAC_DA_KHAI.map((r) => "         (" + r.map(lit).join(", ") + ")").join(",\n") +
+      "\n       ) AS k(bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
+    expect(docHangHardening("POLICY_KHAC_KHAI"), "POLICY_KHAC_KHAI phải BẰNG bản ở test").toBe(khoiKhac);
+    const khoiNgoai = "(VALUES " + BANG_RLS_NGOAI_TENANT.map((t) => { const [n, r] = t.split("."); return `(${lit(n!)}, ${lit(r!)})`; }).join(", ") + ") AS b(nspname, relname)";
+    expect(docHangHardening("BANG_RLS_NGOAI_TENANT_KHAI"), "BANG_RLS_NGOAI_TENANT_KHAI phải BẰNG bản ở test").toBe(khoiNgoai);
+    // Bộ giải hằng phải giải được cả ba câu phán xét — và phải NÉM trước cú pháp nó không hiểu (đối chứng:
+    // NEO_003 định nghĩa bằng CASE), để một hằng viết kiểu khác là đỏ ồn ào chứ không xanh mù [lượt soi 29, INFO-11].
+    for (const ten of ["CAU_POLICY_LOP_SAI", "CAU_PHU_LENH_SAI", "CAU_RLS_NGOAI_TENANT_SAI"]) {
+      expect(docHangHardening(ten).length).toBeGreaterThan(200);
+    }
+    expect(() => docHangHardening("NEO_003")).toThrow(/cú pháp lạ|không thấy hằng/u);
+  });
+
+  it("[INV-F1] CÂU PHÁN XÉT CỦA HARDENING chạy trong test: hôm nay rỗng cả ba; với fixture trong giao dịch, nó thấy đúng những gì tổng điều tra ở test thấy", async () => {
+    const lop = docHangHardening("CAU_POLICY_LOP_SAI");
+    const phu = docHangHardening("CAU_PHU_LENH_SAI");
+    const ngoai = docHangHardening("CAU_RLS_NGOAI_TENANT_SAI");
+    for (const [ten, cau] of [["⑴", lop], ["⑵", phu], ["⑶", ngoai]] as const) {
+      expect((await db.pool.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta), `hardening ${ten} phải rỗng trên lược đồ hợp lệ`).toEqual([]);
+    }
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // ⑴ RESTRICTIVE chưa khai, và một PERMISSIVE trên bảng RLS ngoài tenant chưa khai.
+      await client.query("CREATE POLICY zz_r ON users AS RESTRICTIVE FOR UPDATE USING (false)");
+      await client.query("CREATE POLICY zz_p ON caller_rate_limits FOR SELECT USING (true)");
+      const l1 = (await client.query<{ mo_ta: string }>(lop)).rows.map((r) => r.mo_ta.split(":")[0]);
+      expect(l1.sort()).toEqual(["public.caller_rate_limits.zz_p", "public.users.zz_r"]);
+      // ⑴ và khuôn chuẩn (b1): một `<bảng>_khach` mới đúng khuôn 027 KHÔNG cần khai.
+      await client.query("CREATE TABLE zz_moi (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+        "CREATE POLICY zz_moi_khach ON zz_moi AS RESTRICTIVE USING " + KHACH_NULL + " WITH CHECK " + KHACH_NULL);
+      expect((await client.query<{ mo_ta: string }>(lop)).rows.map((r) => r.mo_ta.split(":")[0]).sort()).toEqual(["public.caller_rate_limits.zz_p", "public.users.zz_r"]);
+      // ⑴ [lượt soi 29, NHẸ-3] `<bảng>_khach` THIẾU một vế (WITH CHECK-only) không được nhận là khuôn chuẩn.
+      await client.query("CREATE TABLE zz_moi2 (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+        "CREATE POLICY zz_moi2_khach ON zz_moi2 AS RESTRICTIVE WITH CHECK " + KHACH_NULL);
+      expect((await client.query<{ mo_ta: string }>(lop)).rows.map((r) => r.mo_ta.split(":")[0]).sort()).toEqual(["public.caller_rate_limits.zz_p", "public.users.zz_r", "public.zz_moi2.zz_moi2_khach"]);
+      // ⑵ [lượt soi 29, NHẸ-6] thu hẹp VAI của policy cách ly trên bảng THẬT: [CR1] không khoá vai — đi qua;
+      //    ⑵ là thứ bắt (mọi quyền của app_api trên users mất phủ).
+      await client.query("ALTER POLICY users_tenant_isolation ON users TO app_unseal");
+      // (zz_moi/zz_moi2 ở trên là bảng tenant chưa có policy PERMISSIVE — nguồn (i) của [CR1] kêu, đúng; chỉ soi users.)
+      expect((await client.query<{ mo_ta: string }>(docHangHardening("CAU_POLICY_SAI"))).rows.map((r) => r.mo_ta).filter((m) => m.startsWith("users")), "[CR1] không khoá vai").toEqual([]);
+      const phuUsers = (await client.query<{ mo_ta: string }>(phu)).rows.map((r) => r.mo_ta.split(":")[0]);
+      expect(phuUsers).toContain("public.users/app_api/SELECT");
+      expect(phuUsers).toContain("public.users/app_api/UPDATE");
+      await client.query("ALTER POLICY users_tenant_isolation ON users TO PUBLIC");
+      // ⑵ [lượt soi 29, NẶNG-2] con INHERITS của bảng tenant CÓ GRANT riêng KHÔNG được miễn: đọc thẳng con là
+      //    truy cập duy nhất cần quyền ấy, và RLS (mục A bật) từ chối trong im lặng.
+      await client.query("CREATE TABLE zz_con () INHERITS (users); ALTER TABLE zz_con ENABLE ROW LEVEL SECURITY; GRANT SELECT ON zz_con TO app_api");
+      expect((await client.query<{ mo_ta: string }>(phu)).rows.map((r) => r.mo_ta.split(":")[0])).toEqual(["public.zz_con/app_api/SELECT"]);
+      await client.query("DROP TABLE zz_con");
+      // ⑵ cùng fixture với tổng điều tra PHỦ LỆNH ở trên: ba tổ hợp, cả đích danh lẫn qua PUBLIC.
+      await client.query("CREATE TABLE zz_rong (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+        "ALTER TABLE zz_rong ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_rong FORCE ROW LEVEL SECURITY; " +
+        "GRANT SELECT ON zz_rong TO app_api; GRANT UPDATE ON zz_rong TO PUBLIC");
+      expect((await client.query<{ mo_ta: string }>(phu)).rows.map((r) => r.mo_ta.split(":")[0]).sort()).toEqual([
+        "public.zz_rong/app_api/SELECT", "public.zz_rong/app_api/UPDATE", "public.zz_rong/app_unseal/UPDATE",
+      ]);
+      // ⑶ cùng fixture với tổng điều tra NGOÀI TENANT ở trên.
+      await client.query("CREATE TABLE zz_ngoai (id int PRIMARY KEY); ALTER TABLE zz_ngoai ENABLE ROW LEVEL SECURITY");
+      expect((await client.query<{ mo_ta: string }>(ngoai)).rows.map((r) => r.mo_ta.split(":")[0])).toEqual(["public.zz_ngoai"]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("[INV-F1] ĐO: migrate() NÉM ở đúng mục cho từng cơ chế — bảng RLS có quyền mà không policy (⑵), bảng RLS ngoài tenant (⑶); và khoản 82⑵: policy caller_rate_limits ghim NGUYÊN VĂN, `false AND …` không còn đi qua", async () => {
+    const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+    // ⑵ — fixture NGOÀI giao dịch để migrate() (kết nối khác) thấy được; dọn trong finally.
+    await db.pool.query("DROP TABLE IF EXISTS zz_rong83");
+    await db.pool.query("CREATE TABLE zz_rong83 (id int PRIMARY KEY, org_id uuid NOT NULL); " +
+      "ALTER TABLE zz_rong83 ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_rong83 FORCE ROW LEVEL SECURITY; " +
+      "CREATE POLICY zz_rong83_tenant_isolation ON zz_rong83 USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+      "GRANT SELECT ON zz_rong83 TO app_unseal");
+    try {
+      // Bảng tenant hợp lệ với [CR1] (policy đúng khuôn) nhưng app_unseal có SELECT mà policy chỉ cho PUBLIC?
+      // Không — policy PUBLIC phủ cả app_unseal. Thu hẹp policy về app_api để app_unseal hụt phủ:
+      await db.pool.query("ALTER POLICY zz_rong83_tenant_isolation ON zz_rong83 TO app_api");
+      const loi2 = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi2, "quyền SELECT của app_unseal không policy nào phủ phải làm migrate() NÉM").not.toBeNull();
+      expect(loi2!.message).toContain("public.zz_rong83/app_unseal/SELECT: quyền đã cấp mà không policy PERMISSIVE nào phủ (lệnh, vai) (khoản 83⑵)");
+      await db.pool.query("REVOKE SELECT ON zz_rong83 FROM app_unseal");
+      // [lượt soi 29, NHẸ-6] [CR1] KHÔNG khoá vai (HINH_DANG_CHUAN toàn cục) — policy TO app_api đi qua [CR1];
+      // dựng lại về PUBLIC chỉ để đối chứng đi qua sạch cả ⑵.
+      await db.pool.query("ALTER POLICY zz_rong83_tenant_isolation ON zz_rong83 TO PUBLIC");
+      expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: thu hồi quyền ⇒ đi qua").toBeNull();
+    } finally {
+      await db.pool.query("DROP TABLE IF EXISTS zz_rong83");
+    }
+    // ⑶
+    await db.pool.query("DROP TABLE IF EXISTS zz_ngoai83");
+    await db.pool.query("CREATE TABLE zz_ngoai83 (id int PRIMARY KEY); ALTER TABLE zz_ngoai83 ENABLE ROW LEVEL SECURITY");
+    try {
+      const loi3 = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi3, "bảng RLS ngoài tenant chưa khai phải làm migrate() NÉM").not.toBeNull();
+      expect(loi3!.message).toContain("public.zz_ngoai83: bảng bật RLS ngoài tập tenant chưa khai (khoản 83⑶)");
+      await db.pool.query("ALTER TABLE zz_ngoai83 DISABLE ROW LEVEL SECURITY");
+      expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: tắt RLS ⇒ đi qua").toBeNull();
+    } finally {
+      await db.pool.query("DROP TABLE IF EXISTS zz_ngoai83");
+    }
+    // 82⑵ — [lượt soi 25a #7] bản cũ ghim bằng LIKE '%app.guest_session_id%' nên `false AND …` đi qua (đo, S1.35).
+    const veGia = "(false AND NULLIF(current_setting('app.guest_session_id', true), '') IS NULL)";
+    await db.pool.query(`ALTER POLICY caller_rate_limits_khach ON caller_rate_limits USING ${veGia} WITH CHECK ${veGia}`);
+    try {
+      const loi4 = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi4, "policy caller_rate_limits bị đổi thành false AND … phải làm migrate() NÉM").not.toBeNull();
+      expect(loi4!.message).toContain("RLS/policy của caller_rate_limits lệch");
+      // và mục ⑴ cũng thấy nó (không còn khớp bảy cột đã khai) — hai lớp cho một ca, nêu tên cả hai.
+      expect(loi4!.message).toContain("public.caller_rate_limits.caller_rate_limits_khach: policy PERMISSIVE không thuộc lớp nào (khoản 83⑴)");
+    } finally {
+      // Mục caller_rate_limits chỉ DỰNG khi policy vắng: xoá rồi để migrate() dựng lại bản chuẩn.
+      await db.pool.query("DROP POLICY IF EXISTS caller_rate_limits_khach ON caller_rate_limits");
+      await migrate(db.pool, MIGRATIONS_DIR);
+    }
+    expect((await db.pool.query<{ mo_ta: string }>(docHangHardening("CAU_POLICY_LOP_SAI"))).rows, "sau khi dựng lại, ⑴ phải rỗng").toEqual([]);
+    // [lượt soi 29, NHẸ-7] giữ nguyên hai vế mà đổi VAI: mục riêng phải tự bắt (không tựa vào ⑴/⑵).
+    await db.pool.query("ALTER POLICY caller_rate_limits_khach ON caller_rate_limits TO app_unseal");
+    try {
+      const loi5 = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi5, "đổi vai của policy caller_rate_limits phải làm migrate() NÉM").not.toBeNull();
+      expect(loi5!.message).toContain("RLS/policy của caller_rate_limits lệch");
+    } finally {
+      await db.pool.query("ALTER POLICY caller_rate_limits_khach ON caller_rate_limits TO PUBLIC");
+    }
+    expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: về PUBLIC ⇒ đi qua").toBeNull();
   });
 });
