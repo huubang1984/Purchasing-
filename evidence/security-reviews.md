@@ -1768,3 +1768,42 @@ lời khai rộng hơn mã. Mọi phát hiện đo được được người vi
 **29 kiểm và thấy KHỚP:** mọi đường lách ⑴ (PERMISSIVE `USING (false)` trên/ngoài tenant, RESTRICTIVE `FOR SELECT USING (false)`, `polroles` lạ, schema ≠ public, `_khach` PERMISSIVE) đều rơi vào một nhánh bắt; 29 policy RESTRICTIVE của kho: 21 chuẩn → (b1), 8 nới → (b2), `otp_rate_limits_don_cua_so_cu` → (a); `BIEU_THUC_VAI_TRO` và `CAU_VAI_TRO` cùng thân; search_path phiên phán xét ghim `pg_catalog, public` nên deparse `FROM vendor_bids b` trần khớp; ⑵ phủ quyền mức cột, PUBLIC, `acldefault`; ⑶ lọc `relkind` đúng, chiều ngược đúng; ba test ngoài giao dịch dọn đủ, mục `caller_rate_limits` dựng lại đúng bảy cột; mọi fixture khác gọi `migrate()` với lược đồ đầy đủ không bị ba mục mới phán sai. Không kiểm được bằng đọc: mọi kết quả đo.
 
 **Điều đáng mang sang vòng sau:** một mục hardening có chiều ngược phải hỏi *"lược đồ nào hardening sẽ gặp"* — không chỉ lược đồ đầy đủ; hai mục tiền lệ đã trả lời bằng `to_regclass`, người viết chép câu phán xét mà không chép điều kiện. Và một vế "miễn" viết cho câu hỏi này (RÒ) được mang sang câu hỏi kia (IM LẶNG) mà không đo lại — đúng lỗi 25a #1 ở dạng khác. Mười lượt soi liền (19–29, trừ 26) bác bản đầu.
+
+# §S1.39 — khoản nợ 83 nửa catalog ⑷⑸⑹⑺⑧: năm mục phán xét — MÃ SẢN XUẤT; khoản 83 đóng trọn
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — ba hằng khai rỗng (`QUAN_HE_KHAC_KHAI`,
+`TRIGGER_NGOAI_PLPGSQL_KHAI`, `RULE_KHAI`), năm câu phán xét (`CAU_QUAN_HE_KHAC_SAI`,
+`CAU_TRIGGER_NGOAI_PLPGSQL_SAI`, `CAU_RULE_SAI`, `CAU_HAM_CANH_HINH_THUC_SAI`, `CAU_PARAMETER_ACL_SAI`), năm mục
+ARRAY sau ba mục nửa RLS. Không migration đánh số, không đụng lược đồ. Còn lại: `db/hardening-hang.ts` (MỚI — bộ
+giải hằng và `khoiValues`, dùng chung hai tệp test), `db/hardening-suy-tu-tinh-chat.int.test.ts` (25 → 28),
+`db/rls-coverage.int.test.ts` (đổi import), năm tệp tài liệu và tệp này.
+
+**Đo:** hardening mới trên CSDL sạch đi qua; trên tệp H19 đúng hai test đỏ (`zz_rule`, `zz_cau`) — kỳ vọng cũ
+*migrate() OK* mà §3⑶ đã bác. `migrations.int.test.ts` 94/94 với năm mục mới — không fixture nào của kho (view, rule trên bảng sổ, trigger, phân mảnh) bị phán sai; `rls-coverage` 28/28 với module chung. **Đỏ đo được, cô lập từng mục (năm đột biến, mỗi ca khôi phục bản gốc trước khi áp):** ⑷ thành no-op ⇒ đỏ ở *migrate() NÉM* của ca view có INSTEAD OF; ⑸ no-op ⇒ đỏ ở ca trigger `suppress_redundant_updates_trigger`; ⑹ no-op ⇒ đỏ ở test `zz_rule` (khoản 73, kỳ vọng lật); ⑺ no-op ⇒ đỏ ở test `zz_cau` (khoản 75, kỳ vọng lật); ⑧ no-op ⇒ đỏ ở ca `GRANT SET ON PARAMETER … TO app_api`. Mỗi ca đỏ đúng một khẳng định `toMatch(/^NÉM/)`, các khẳng định trước nó vẫn xanh.
+
+## Lượt soi đối kháng 30 — chạy TRƯỚC khi §S1.39 được viết, trên bản đầu của lớp
+
+**Hình thức:** một `security-reviewer` độc lập, không có shell (đọc năm hằng và năm mục mới, module chung, ba test
+mới, hai test lật, `db/migrations/0*.sql`), được giao chín hướng phá: lách từng mục ⑷⑸⑹⑺⑧; chiều ngược với hàng
+chuỗi rỗng; bộ giải hằng; fixture và lược đồ hợp lệ; lời khai rộng hơn mã. Mọi phát hiện đo được được người viết
+đo lại trên PostgreSQL 16.
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NHẸ | Chiều ngược ⑷ không neo vào đối tượng cha tồn tại — cha của quan hệ là SCHEMA; ⑸⑹ neo `to_regclass(bảng)`, ⑷ chỉ có `IS NULL` ⇒ ngày nào khai một matview do migration 05x tạo, tập rút gọn đỏ *thiu* — cùng lớp lượt 29 CAO-1, tiềm ẩn vì danh sách rỗng | đúng theo đọc | `AND EXISTS (SELECT 1 FROM pg_namespace ns WHERE ns.nspname = q.nspname)` |
+| 2 | NHẸ | Vị từ "hàm canh theo hình dạng" chép nguyên văn lần hai cho ⑺ thay vì dùng chung với mục S1.36 — đúng kiểu trôi 25b #13 | đúng theo đọc (grep: hai bản) | tách `VI_TU_HAM_CANH_HINH_DANG`; test đòi cả hai mục tham chiếu hằng và danh sách tên bằng `HAM_CANH_CHI_GHI_THEM` |
+| 3 | NHẸ | ⑧ ghim bốn tên vai lần hai (thay vì `VAI_KET_NOI_UNG_DUNG`/`ROLE_CANH`) và đọc ACL thô ⇒ không thấy quyền đến qua nhóm — hôm nay BƯỚC 1 che, tức ⑧ tựa vào mục khác không nói ra | **đo:** `zz_nhom83` được `GRANT SET ON PARAMETER work_mem`, `GRANT zz_nhom83 TO app_api` ⇒ ⑧ mới thấy `work_mem`; bản sửa đầu (`has_parameter_privilege` gắn từng dòng ACL) kê cả dòng của người cấp — 4 hàng thay vì 2 ⇒ đổi sang `pg_has_role(vai, grantee, 'USAGE')` | tập vai theo tính chất, quyền qua nhóm bắc cầu, không kê dòng superuser |
+| 4 | NHẸ | Mục `setrole = 0` chỉ RESET `row_security`/`search_path`; `ALTER DATABASE … SET session_replication_role = replica` (superuser) áp cho mọi phiên, sống qua `migrate()` — cùng tiền đề SUSET mà ⑧ tuyên bố đóng | **đo:** sau khi thêm mục: `ALTER DATABASE … SET …` ⇒ `migrate()` OK và `pg_db_role_setting` không còn dòng ấy (tự chữa) | mục thứ ba cùng khuôn, RESET (đơn điệu) |
+| 5 | NHẸ | `to_regclass(nspname \|\| '.' \|\| relname)` không quote: dòng khai có chữ hoa/dấu chấm bị phán *thiu* vĩnh viễn (đỏ ồn ào, nhưng cửa khai không mở được); kế thừa từ S1.38 | đúng theo đọc | `to_regclass(pg_catalog.format('%I.%I', …))` ở sáu chỗ (bốn mới + hai S1.38) |
+| 6 | NHẸ | Chưa có biên bản/đột biến cho ⑷–⑧; ⑹⑺ thiếu đối chứng dương trong cùng test | **đo:** năm đột biến no-op — mỗi ca đỏ đúng một `toMatch(/^NÉM/)`; đối chứng ⑹ (DROP RULE ⇒ OK), ⑺ (DROP TRIGGER ⇒ OK — dựng lại BEFORE ROW thì bảng thành chỉ-ghi-thêm thiếu chốt, NÉM ở mục khác; đo) | ghi vào §S1.39; đối chứng vào hai test |
+| 7 | INFO | Nhãn ⑷ nói quá: matview không phải đích DML (INSERT ném 42809) — lý do phán thực ra là đường đọc vòng (mục C); view có trigger BEFORE/AFTER cấp câu lệnh bị dán nhãn *INSTEAD OF* | đúng theo đọc | nhánh riêng theo bit 64; matview đổi lời |
+| 8 | INFO | ⑺ dán nhãn INSTEAD OF (bit 64, bit 2 = 0) là *AFTER FOR EACH ROW* — không lách, view ấy đã bị ⑷ | đúng | thêm nhánh INSTEAD OF |
+| 9 | INFO | Lời ⑺ hẹp hơn mã — không nói trigger TRUNCATE của hàm canh hợp lệ | đúng | thêm vào thông điệp |
+| 10 | INFO | Fixture bảng ngoài tựa `file_fdw` (contrib) — image thiếu thì đỏ ở fixture | đúng | guard `pg_available_extensions` nêu tên |
+| 11 | INFO | Bộ giải hằng cắt `pg_catalog.format(` ở `)` đầu; không rỗng ruột với năm câu hôm nay | đúng | không sửa (đã ghi ở lượt 29) |
+| 12 | INFO | Cổng ⑷ tách tên bằng `.` — `relname` có dấu chấm sẽ vỡ (danh sách rỗng) | đúng | ghi nhận |
+| 13 | INFO | Fixture [Task 6] dựng `audit_events_chan_delete` thành CONSTRAINT TRIGGER AFTER DELETE của `chan_sua_xoa()` rồi mong `migrate()` OK — ⑺ thấy hình dạng ấy, nhưng D2 dựng lại ở lượt sửa trước khi ⑺ đọc ở lượt phán xét | **đo:** `migrations.int.test.ts` 94/94 — đúng như suy luận | ghi vào biên bản |
+
+**30 kiểm và thấy KHỚP:** view có rule `DO INSTEAD` ⇒ ⑹ bắt; `_RETURN` kín hai chiều (bảng: PostgreSQL cấm; view: đã chiếm chỗ, chỉ mục duy nhất); view trơn không updatable ném 55000, `WITH CHECK OPTION` ném 44000; bảng phân mảnh/DEFAULT partition không im lặng; `MAU_SCHEMA_DU_AN` phủ mọi schema kể cả `app_private`; `LANGUAGE sql` không viết được hàm trigger, hàm C kiểm `CALLED_AS_TRIGGER`, event trigger cần superuser, bản sao trigger trên lá `tgisinternal = false` nên ⑸⑺ thấy cả bản sao; mặt nạ bit đúng bốn góc, constraint trigger luôn AFTER ⇒ ⑺ phán (đúng ý D2); ⑧ `grantee 0`, `paracl NULL`, N2 đọc được `pg_parameter_acl`; chiều ngược ⑸⑹ neo đúng; fixture ngoài giao dịch dọn đủ; lược đồ thật của kho không có view/rule/bảng ngoài/`GRANT ON PARAMETER`, mọi `FOR EACH STATEMENT` là TRUNCATE, mọi AFTER có RETURN; fixture ở test khác mong `migrate()` OK là view trơn hoặc rule bảng sổ (BƯỚC 2 gỡ). Không kiểm được bằng đọc: kết quả chạy — đã chạy (94/94, 28/28).
+
+**Điều đáng mang sang vòng sau:** lần đầu từ S1.29 một bản đầu không bị bác ở mức NẶNG — nhưng cả sáu NHẸ đều là cùng ba bài học cũ (chiều ngược theo cha tồn tại — lượt 29; chép vị từ thay vì dùng chung — 25b #13; ghim tên vai thay vì tính chất — ADR-028) tái xuất ở mục mới. Bài học không tự sang mục kế; người viết phải chép chúng cùng lúc chép khuôn.
