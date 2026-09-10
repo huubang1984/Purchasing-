@@ -74,6 +74,15 @@ function veHamCanh(hamCanh: readonly string[], thut: string): string {
   );
 }
 
+/**
+ * [S1.36, khoản nợ 79 — lượt soi 25a #1 CAO] Vế "trigger canh VÔ ĐIỀU KIỆN": `WHEN (…)` hay `UPDATE OF <cột>`
+ * giữ nguyên tên hàm nhưng hàm canh không chạy cho một phần câu (đo: UPDATE cột khác 1 hàng, DELETE 1 hàng,
+ * không lỗi — mà vị từ cũ vẫn nhận bảng). Hardening soi hai cột này từ S0 cho bảng CÓ TÊN (CTE_TRIGGER_CHAN);
+ * vị từ suy ra thì không, và sáu lượt soi dọc không thấy. Giữ thành một hằng riêng để test khoản 79 đo được
+ * vị từ CŨ bằng cách bỏ nó ra — đối chứng rằng vế này là thứ chịu lực.
+ */
+const VE_TRIGGER_VO_DIEU_KIEN = "                  AND t.tgqual IS NULL AND t.tgattr::pg_catalog.text OPERATOR(pg_catalog.=) ''\n";
+
 /** Vị từ bảng chỉ-ghi-thêm cho một danh sách khai báo — để test đo được CẢ HAI phía của khai báo. */
 function viTuBangChiGhiThem(hamCanh: readonly string[]): string {
   const T = "                  "; // 18 khoảng trắng — phải BẰNG thụt lề trong hardening.always.sql
@@ -86,13 +95,13 @@ function viTuBangChiGhiThem(hamCanh: readonly string[]): string {
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-${T}AND ${veHamCanh(hamCanh, T)}
+${VE_TRIGGER_VO_DIEU_KIEN}${T}AND ${veHamCanh(hamCanh, T)}
                   AND (t.tgtype OPERATOR(pg_catalog.&) 19::pg_catalog.int2) OPERATOR(pg_catalog.=) 19) OPERATOR(pg_catalog.>) 0
           AND (SELECT pg_catalog.count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
                 WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
                   AND p.prorettype OPERATOR(pg_catalog.=) 'pg_catalog.trigger'::regtype
                   AND p.prolang OPERATOR(pg_catalog.=) (SELECT l.oid FROM pg_language l WHERE l.lanname OPERATOR(pg_catalog.=) 'plpgsql')
-${T}AND ${veHamCanh(hamCanh, T)}
+${VE_TRIGGER_VO_DIEU_KIEN}${T}AND ${veHamCanh(hamCanh, T)}
                   AND (t.tgtype OPERATOR(pg_catalog.&) 11::pg_catalog.int2) OPERATOR(pg_catalog.=) 11) OPERATOR(pg_catalog.>) 0`;
 }
 
@@ -264,6 +273,8 @@ const CAU_TAP_RONG = `SELECT (np.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg
               (p.prosrc OPERATOR(pg_catalog.!~*) '\\mRETURN\\M') AS khong_tra_ve,
               pg_catalog.bool_or(t.tgenabled OPERATOR(pg_catalog.=) 'D') AS co_trigger_tat,
               pg_catalog.bool_and(t.tgenabled OPERATOR(pg_catalog.=) 'A') AS luon_bat,
+              pg_catalog.bool_or(t.tgqual IS NOT NULL) AS co_when,
+              pg_catalog.bool_or(t.tgattr::pg_catalog.text OPERATOR(pg_catalog.<>) '') AS co_cot,
               pg_catalog.bool_and((t.tgtype OPERATOR(pg_catalog.&) 3::pg_catalog.int2) OPERATOR(pg_catalog.=) 3) AS chi_truoc_hang
          ${TU_TAP_RONG}
         GROUP BY 1, 2
@@ -1230,6 +1241,10 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         "CREATE TRIGGER so_pm_chan BEFORE DELETE OR UPDATE ON public.so_pm " +
           "FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them()",
       );
+      // [S1.36, khoản nợ 79] Fixture này từng để so_pm_chan ở ENABLE thường ('O') và evidence bắt ngay khi mục
+      // phán xét "trigger canh không ENABLE ALWAYS" ra đời (lượt soi 27 NẶNG-1): lược đồ ấy KHÔNG hợp lệ —
+      // session_replication_role = replica đi qua nó. Nâng lên ALWAYS như 047 làm cho bảng có tên.
+      await db.pool.query("ALTER TABLE public.so_pm ENABLE ALWAYS TRIGGER so_pm_chan");
       expect(
         await thu(
           db,
@@ -1341,7 +1356,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   }, 180000);
 
   it("[sổ nợ 60] TỔNG ĐIỀU TRA: mọi hàm trigger ghi (INSERT/UPDATE/DELETE, mọi hình thức) phải nằm trong ĐÚNG MỘT danh sách", async () => {
-    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean; luon_bat: boolean }>(CAU_TAP_RONG);
+    const { rows } = await db.pool.query<{ ten: string; khong_tra_ve: boolean; co_trigger_tat: boolean; chi_truoc_hang: boolean; luon_bat: boolean; co_when: boolean; co_cot: boolean }>(CAU_TAP_RONG);
     const that = rows.map((r) => r.ten);
     const canhDayDu = HAM_CANH_CHI_GHI_THEM.map((h) => `public.${h}`);
 
@@ -1392,13 +1407,24 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       rows.filter((r) => canhDayDu.includes(r.ten) && !r.luon_bat).map((r) => r.ten),
       "Một trigger của hàm canh không ở ENABLE ALWAYS — `session_replication_role = replica` tắt nó.",
     ).toEqual([]);
-    // Đối chứng dương, hoàn tác: hạ một trigger canh về ENABLE thường ('O') ⇒ vế trên phải đỏ.
+    // [S1.36, khoản nợ 79 / ADR-036 ⑳] Và trigger canh phải VÔ ĐIỀU KIỆN: `WHEN (…)` hay `UPDATE OF <cột>`
+    // giữ nguyên tên hàm nhưng hàm canh không chạy cho một phần câu (đo ở test khoản 79 dưới đây). Vị từ
+    // nay đã THẢ bảng ấy; vế này giữ cho việc thả không xảy ra trong im lặng — cùng với mục phán xét ở hardening.
+    expect(
+      rows.filter((r) => canhDayDu.includes(r.ten) && (r.co_when || r.co_cot)).map((r) => r.ten),
+      "Một trigger của hàm canh có WHEN hay UPDATE OF — hàm canh chỉ chạy có điều kiện, bảng ấy không chỉ-ghi-thêm.",
+    ).toEqual([]);
+    // Đối chứng dương, hoàn tác: hạ một trigger canh về ENABLE thường ('O') ⇒ vế ALWAYS phải đỏ; và một
+    // trigger `WHEN (false)` gọi hàm canh ⇒ vế vô điều kiện phải đỏ.
     const c = await db.pool.connect();
     try {
       await c.query("BEGIN");
       await c.query("ALTER TABLE public.audit_events ENABLE TRIGGER audit_events_chan_update");
       const { rows: sau } = await c.query<{ ten: string; luon_bat: boolean }>(CAU_TAP_RONG);
       expect(sau.find((r) => r.ten === "public.chan_sua_xoa")?.luon_bat).toBe(false);
+      await c.query("CREATE TABLE public.zz_dk_tap (id int); CREATE TRIGGER zz_dk BEFORE DELETE ON public.zz_dk_tap FOR EACH ROW WHEN (false) EXECUTE FUNCTION public.chan_sua_xoa()");
+      const { rows: sau2 } = await c.query<{ ten: string; co_when: boolean; co_cot: boolean }>(CAU_TAP_RONG);
+      expect(sau2.find((r) => r.ten === "public.chan_sua_xoa"), "tập rộng phải THẤY mệnh đề WHEN trên hàm canh").toMatchObject({ co_when: true, co_cot: false });
     } finally {
       await c.query("ROLLBACK");
       c.release();
@@ -1604,7 +1630,11 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       CREATE FUNCTION public.${ten}() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN RAISE EXCEPTION 'zz_cau chi ghi them'; END $$;
       CREATE TRIGGER zz_cau_canh BEFORE UPDATE OR DELETE ON public.zz_cau FOR EACH STATEMENT EXECUTE FUNCTION public.${ten}();
+      ALTER TABLE public.zz_cau ENABLE ALWAYS TRIGGER zz_cau_canh;
     `);
+    // [S1.36] ENABLE ALWAYS ở trên là do evidence bác bản đầu của khoản 79: mục phán xét mới bắt trigger canh
+    // (hình dạng: thân không RETURN) ở ENABLE thường — đúng, và phép đo (b) dưới đây nói về H19 KHÔNG NHẬN
+    // bảng vì hình thức cấp câu lệnh, không nói về tgenabled.
     try {
       // (a) nó LÀ hàm canh: mọi UPDATE/DELETE ném, kể cả câu chạm 0 hàng.
       expect(await thu(db, "UPDATE public.zz_cau SET ghi = 'b' WHERE id = 1")).toMatch(/^NÉM/);
@@ -1627,6 +1657,167 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       expect(moi!.khong_tra_ve, "khai KHÔNG-CANH thì mâu thuẫn một chiều bắt").toBe(true);
     } finally {
       await db.pool.query(`DROP TABLE public.zz_cau; DROP FUNCTION public.${ten}();`);
+    }
+  }, 180000);
+
+  it("[khoản nợ 79] ĐO: trigger canh có WHEN / UPDATE OF giữ tên hàm mà hàm canh KHÔNG chạy cho một phần câu — vị từ CŨ nhận bảng là chỉ-ghi-thêm, vị từ MỚI thả, tổng điều tra thấy, migrate() NÉM", async () => {
+    // Đúng ca lượt soi 25a #1 dựng, đo lại trên PostgreSQL 16. Ba trigger cùng gọi hàm canh, cùng ENABLE ALWAYS —
+    // ba vế hardening cũ (LOGGED, chốt TRUNCATE, ACL) không có gì để phán trên bảng này (khẳng định ở (d):
+    // thông điệp NÉM chỉ nêu mục mới), vế ALWAYS của tổng điều tra cũng xanh.
+    await db.pool.query(`
+      CREATE TABLE public.zz_dk (id int PRIMARY KEY, a text, b text);
+      INSERT INTO public.zz_dk VALUES (1, 'a', 'b');
+      CREATE TRIGGER u BEFORE UPDATE OF a ON public.zz_dk FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+      CREATE TRIGGER d BEFORE DELETE ON public.zz_dk FOR EACH ROW WHEN (false) EXECUTE FUNCTION public.bid_chi_ghi_them();
+      CREATE TRIGGER t BEFORE TRUNCATE ON public.zz_dk FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+      ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER u;
+      ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER d;
+      ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER t;
+    `);
+    try {
+      // (a) cơ chế: hàm canh KHÔNG chạy cho UPDATE cột ngoài UPDATE OF và cho mọi DELETE — 1 hàng, không lỗi.
+      expect((await db.pool.query("UPDATE public.zz_dk SET b = 'x' WHERE id = 1")).rowCount, "UPDATE cột ngoài UPDATE OF đi qua").toBe(1);
+      expect(await thu(db, "UPDATE public.zz_dk SET a = 'x' WHERE id = 1"), "UPDATE đúng cột thì hàm canh chạy").toMatch(/^NÉM/);
+      expect((await db.pool.query("DELETE FROM public.zz_dk WHERE id = 1")).rowCount, "DELETE với WHEN (false) đi qua").toBe(1);
+      await db.pool.query("INSERT INTO public.zz_dk VALUES (1, 'a', 'b')");
+      // (b) vị từ CŨ (bỏ vế vô điều kiện) NHẬN bảng — đúng lỗ lượt soi 25a #1; vị từ MỚI thả nó.
+      const viTuCu = VI_TU_BANG_CHI_GHI_THEM.replaceAll(VE_TRIGGER_VO_DIEU_KIEN, "");
+      expect(viTuCu, "vế vô điều kiện phải NẰM trong vị từ").not.toBe(VI_TU_BANG_CHI_GHI_THEM);
+      expect((await db.pool.query<{ relname: string }>(viTuCu)).rows.some((r) => r.relname === "zz_dk"), "vị từ CŨ nhận bảng có trigger canh điều kiện").toBe(true);
+      expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_dk"), "vị từ MỚI thả bảng").toBe(false);
+      // (c) tập rộng thấy điều kiện trên hàm canh ⇒ vế mới của tổng điều tra đỏ đúng tên.
+      const { rows } = await db.pool.query<{ ten: string; co_when: boolean; co_cot: boolean }>(CAU_TAP_RONG);
+      expect(rows.find((r) => r.ten === "public.bid_chi_ghi_them")).toMatchObject({ co_when: true, co_cot: true });
+      // (d) và migrate() NÉM nêu tên cả hai trigger — lớp SẢN XUẤT, để bảng không rơi khỏi tập trong im lặng.
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      // [lượt soi 27, NHẸ-3] ghép TÊN trigger với VẾ: đảo hai nhánh CASE trong hardening phải đỏ.
+      expect(kq).toMatch(/zz_dk\.u: [^;]*có UPDATE OF/u);
+      expect(kq).not.toMatch(/zz_dk\.u: [^;]*có mệnh đề WHEN/u);
+      expect(kq).toMatch(/zz_dk\.d: [^;]*có mệnh đề WHEN/u);
+      expect(kq).not.toMatch(/zz_dk\.d: [^;]*có UPDATE OF <cột>/u);
+      expect(kq).toContain("không sửa được 1 mục");
+      // (e) đối chứng: dựng lại hai trigger vô điều kiện ⇒ bảng vào tập, migrate() đi qua.
+      await db.pool.query(`
+        DROP TRIGGER u ON public.zz_dk; DROP TRIGGER d ON public.zz_dk;
+        CREATE TRIGGER u BEFORE UPDATE ON public.zz_dk FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+        CREATE TRIGGER d BEFORE DELETE ON public.zz_dk FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+        ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER u; ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER d;
+      `);
+      expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_dk")).toBe(true);
+      expect(await migrateLai(db)).toBe("OK");
+      // (f) [lượt soi 27, NẶNG-1] Cột thứ ba giữ tên hàm mà hàm canh không chạy: tgenabled. Trigger canh bị
+      //     DISABLE ('D') hay ở ENABLE thường ('O') — bảng VẪN trong tập (vị từ cố ý không đọc tgenabled), và
+      //     UPDATE đi qua: 'D' luôn; 'O' khi session_replication_role = replica (ADR-036 ⑧). Bản đầu của mục phán
+      //     xét bỏ sót cột này — lớp duy nhất là tổng điều tra ở test, tức chính vế khoản 81 đang treo.
+      await db.pool.query("ALTER TABLE public.zz_dk DISABLE TRIGGER u");
+      expect((await db.pool.query("UPDATE public.zz_dk SET a = 'y' WHERE id = 1")).rowCount, "trigger canh DISABLE ⇒ UPDATE đi qua").toBe(1);
+      expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_dk"), "bảng vẫn trong tập").toBe(true);
+      expect(await migrateLai(db)).toMatch(/zz_dk\.u: [^;]*tgenabled=D/u);
+      await db.pool.query("ALTER TABLE public.zz_dk ENABLE TRIGGER u");
+      const cr = await db.pool.connect();
+      try {
+        await cr.query("BEGIN");
+        await cr.query("SET LOCAL session_replication_role = replica");
+        expect((await cr.query("UPDATE public.zz_dk SET a = 'z' WHERE id = 1")).rowCount, "ENABLE thường + replica ⇒ UPDATE đi qua").toBe(1);
+      } finally {
+        await cr.query("ROLLBACK");
+        cr.release();
+      }
+      expect(await migrateLai(db)).toMatch(/zz_dk\.u: [^;]*tgenabled=O/u);
+      await db.pool.query("ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER u");
+      expect(await migrateLai(db)).toBe("OK");
+    } finally {
+      await db.pool.query("DROP TABLE public.zz_dk");
+    }
+  }, 180000);
+
+  it("[khoản nợ 79] ĐO: chốt TRUNCATE mang WHEN (false) là HỢP LỆ với PostgreSQL 16 và TRUNCATE đi lọt — hardening đòi chốt VÔ ĐIỀU KIỆN", async () => {
+    // Cùng cơ chế ADR-036 ⑳ trên vế TRUNCATE: bảng LÀ chỉ-ghi-thêm (hai trigger canh vô điều kiện), chốt
+    // TRUNCATE tồn tại, ENABLE ALWAYS, đúng tgtype 34 — chỉ khác một mệnh đề WHEN.
+    await db.pool.query(`
+      CREATE TABLE public.zz_tr (id int PRIMARY KEY);
+      INSERT INTO public.zz_tr VALUES (1);
+      CREATE TRIGGER u BEFORE UPDATE ON public.zz_tr FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+      CREATE TRIGGER d BEFORE DELETE ON public.zz_tr FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+      CREATE TRIGGER t BEFORE TRUNCATE ON public.zz_tr FOR EACH STATEMENT WHEN (false) EXECUTE FUNCTION public.bid_chi_ghi_them();
+      ALTER TABLE public.zz_tr ENABLE ALWAYS TRIGGER u;
+      ALTER TABLE public.zz_tr ENABLE ALWAYS TRIGGER d;
+      ALTER TABLE public.zz_tr ENABLE ALWAYS TRIGGER t;
+    `);
+    try {
+      expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_tr"), "bảng LÀ chỉ-ghi-thêm").toBe(true);
+      expect(await thu(db, "UPDATE public.zz_tr SET id = 2")).toMatch(/^NÉM/);
+      expect(await thu(db, "TRUNCATE public.zz_tr"), "TRUNCATE đi lọt qua chốt có WHEN (false)").toBe("OK");
+      expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM public.zz_tr")).rows[0]?.n).toBe("0");
+      const kq = await migrateLai(db);
+      expect(kq).toMatch(/^NÉM/);
+      expect(kq).toContain("chốt TRUNCATE");
+      // [lượt soi 27, INFO-6] hai lớp cho một ca: vế chốt TRUNCATE và mục phán xét mới đều nêu tên trigger.
+      expect(kq).toMatch(/zz_tr\.t: [^;]*có mệnh đề WHEN/u);
+      expect(kq).toContain("không sửa được 2 mục");
+      // Đối chứng: chốt vô điều kiện ⇒ migrate() đi qua.
+      await db.pool.query(`
+        DROP TRIGGER t ON public.zz_tr;
+        CREATE TRIGGER t BEFORE TRUNCATE ON public.zz_tr FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+        ALTER TABLE public.zz_tr ENABLE ALWAYS TRIGGER t;
+      `);
+      expect(await migrateLai(db)).toBe("OK");
+      expect(await thu(db, "TRUNCATE public.zz_tr")).toMatch(/^NÉM/);
+    } finally {
+      await db.pool.query("DROP TABLE public.zz_tr");
+    }
+  }, 180000);
+
+  it("[khoản nợ 79] TỔNG ĐIỀU TRA ngôn ngữ trigger: mọi trigger của dự án gọi hàm plpgsql, trừ khi khai — hàm internal/C vô hình với mọi tổng điều tra khác (ADR-036 ㉑)", async () => {
+    // [lượt soi 25a #2] Mọi tổng điều tra ở tệp này lọc `lanname = 'plpgsql'`. Lý do ấy đúng cho vị từ HÌNH
+    // DẠNG (prosrc của hàm C là tên symbol, không có RETURN), nhưng nó được kế thừa sang tổng điều tra — nơi
+    // tiêu chí phải "không lách được bằng cách viết" (ADR-036 §3⑵). Một trigger gọi hàm KHÔNG plpgsql
+    // (built-in `suppress_redundant_updates_trigger`, hàm C từ extension, `LANGUAGE <khác>`) vô hình với
+    // census, vị từ và nhân chứng. Tổng điều tra này đếm CHIỀU NGƯỢC: mọi trigger của dự án phải plpgsql,
+    // trừ khai đích danh (rỗng). Vế plpgsql ở VI_TU giữ nguyên — lý do đo được của nó vẫn đúng.
+    // [lượt soi 27, INFO-5] Vì sao CHỈ Ở TEST trong khi WHEN/UPDATE OF/tgenabled (cùng vòng) vào hardening:
+    // tạo hàm `internal`/C cần superuser, và một PL tin cậy khác (plperl, plpython) chưa được cài — đường
+    // này nằm ngoài mô hình đe doạ của hardening (chủ bảng không superuser); cụm đã deploy chờ khoản 81.
+    const TRIGGER_NGOAI_PLPGSQL_DA_KHAI: readonly string[] = [];
+    const cau = `SELECT (n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) t.tgname) AS ten,
+                        l.lanname::pg_catalog.text AS ngon_ngu
+                   FROM pg_trigger t
+                   JOIN pg_proc p ON p.oid OPERATOR(pg_catalog.=) t.tgfoid
+                   JOIN pg_language l ON l.oid OPERATOR(pg_catalog.=) p.prolang
+                   JOIN pg_class c ON c.oid OPERATOR(pg_catalog.=) t.tgrelid
+                   JOIN pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+                  WHERE NOT t.tgisinternal
+                    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                    AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'
+                  ORDER BY 1`;
+    const { rows } = await db.pool.query<{ ten: string; ngon_ngu: string }>(cau);
+    expect(rows.filter((r) => r.ngon_ngu === "plpgsql").length, "câu truy vấn đang mù").toBeGreaterThan(30);
+    const khac = rows.filter((r) => r.ngon_ngu !== "plpgsql").map((r) => `${r.ten} (${r.ngon_ngu})`);
+    expect(
+      khac.filter((t) => !TRIGGER_NGOAI_PLPGSQL_DA_KHAI.includes(t)),
+      "Một trigger gọi hàm KHÔNG plpgsql vừa ra đời — nó vô hình với tổng điều tra hàm, vị từ chỉ-ghi-thêm và nhân " +
+        "chứng. Khai đích danh kèm lý do, hoặc viết lại bằng plpgsql.",
+    ).toEqual([]);
+    expect(TRIGGER_NGOAI_PLPGSQL_DA_KHAI.filter((t) => !khac.includes(t)), "khai một trigger không còn có").toEqual([]);
+    // Đối chứng dương + cơ chế, hoàn tác: chính hàm built-in của PostgreSQL.
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(
+        "CREATE TABLE public.zz_srut (id int PRIMARY KEY, g text); INSERT INTO public.zz_srut VALUES (1, 'a'); " +
+          "CREATE TRIGGER s BEFORE UPDATE ON public.zz_srut FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()",
+      );
+      expect((await c.query("UPDATE public.zz_srut SET g = 'a' WHERE id = 1")).rowCount, "UPDATE cùng giá trị: 0 hàng, KHÔNG lỗi").toBe(0);
+      expect((await c.query("UPDATE public.zz_srut SET g = 'b' WHERE id = 1")).rowCount).toBe(1);
+      const { rows: sau } = await c.query<{ ten: string; ngon_ngu: string }>(cau);
+      expect(sau.find((r) => r.ten === "public.zz_srut.s")?.ngon_ngu, "tổng điều tra ngôn ngữ phải THẤY nó").toBe("internal");
+      // Và tập rộng (lọc plpgsql) KHÔNG thấy — đúng lý do tổng điều tra này tồn tại.
+      const rong = await c.query<{ ten: string }>(CAU_TAP_RONG);
+      expect(rong.rows.some((r) => r.ten.includes("suppress_redundant_updates_trigger"))).toBe(false);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
     }
   }, 180000);
 
