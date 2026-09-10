@@ -3668,4 +3668,7 @@ Tiêu chí §3⑶ nay thực hiện trọn — mọi hàng của danh mục mà 
 đề) — và lượt soi 31 chỉ ra câu *thực hiện trọn* của S1.39 nói khi 82 còn mở: hàng 22 đã được §3⑶ đặt ở
 khoản 82, cái catalog phân biệt được ở đó là tiền đề, không phải cơ chế. Cùng vòng, khoản 84 (`LA_CUA_BANG_TENANT`
 đệ quy) đóng lỗ RÒ cháu hai bậc ngoài public; ba kẽ của lượt 31 cùng đổ về một bậc tự do đã ghi từ vòng fix 3
-— khoản 85, mở thay vì tiếp tục *nói ra*.
+— khoản 85, mở thay vì tiếp tục *nói ra*. **[S1.41]** Khoản 85 đóng bằng một mục phán xét (bảng `org_id` ngoài public,
+ngoài tập tenant, không RLS ⇒ khai) — kề với 83⑶ theo `relrowsecurity`, không nới vị từ tenant; hàng 22 nay có
+lớp cho cả cửa sổ *tạo-và-tách giữa hai deploy* ở mức "phát hiện ở deploy kế" — mức bảo đảm của mọi mục phán
+xét, nói ra. Ranh giới còn lại theo TÊN CỘT `org_id` (ở mọi schema) thành khoản 86.
