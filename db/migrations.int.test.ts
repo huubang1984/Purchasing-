@@ -1474,13 +1474,19 @@ describe("migration của dự án", () => {
       //     đo bằng pg_backend_pid) không còn bảng tạm.
       await db.pool.query(`GRANT TEMP ON DATABASE "${tenDb}" TO PUBLIC`);
       const c3 = await api.connect();
-      const pid = (await c3.query<{ p: string }>("SELECT pg_backend_pid()::text AS p")).rows[0]?.p;
-      await c3.query("SELECT set_config('app.org_id', $1, false)", [org]);
-      await c3.query("CREATE TEMP TABLE sessions (id int)");
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
-      expect(await quyenTemp()).toEqual({ app_api: false, app_unseal: false });
-      expect((await c3.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "bảng tạm có sẵn SỐNG qua REVOKE trên cùng kết nối").toBe("0");
-      c3.release();
+      let pid: string | undefined;
+      try {
+        pid = (await c3.query<{ p: string }>("SELECT pg_backend_pid()::text AS p")).rows[0]?.p;
+        await c3.query("SELECT set_config('app.org_id', $1, false)", [org]);
+        await c3.query("CREATE TEMP TABLE sessions (id int)");
+        await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+        expect(await quyenTemp()).toEqual({ app_api: false, app_unseal: false });
+        expect((await c3.query<{ n: string }>("SELECT count(*)::text AS n FROM sessions")).rows[0]?.n, "bảng tạm có sẵn SỐNG qua REVOKE trên cùng kết nối").toBe("0");
+      } finally {
+        // [lượt soi 25b, NẶNG-1] Bản S1.34 để c3 ngoài finally: một assert đỏ ở trên giữ client lại và
+        // db.stop() (pool.end() chờ client) treo tới timeout — trái lời khai "không rò pool" của lượt soi 24 #11.
+        c3.release();
+      }
       const c4 = await api.connect();
       try {
         expect((await c4.query<{ p: string }>("SELECT pg_backend_pid()::text AS p")).rows[0]?.p, "cùng kết nối vật lý").toBe(pid);
