@@ -2165,6 +2165,220 @@ $ham$;
                            WHERE n.nspname = oi.nspname AND c.relname = oi.relname
                              AND $q$ || VI_TU_HINH_DANG_85 || $q$)$q$;
 
+  -- ---- [S1.43 / khoản nợ 89 + 86] DANH TÍNH ĐỐI TƯỢNG CANH: NEO THEO oid QUA CHÚ THÍCH BẢNG + TÊN ĐÃ KHAI (ADR-037) ----
+  -- Lượt soi ngang 33 đo hai đường đi qua mọi lớp: (a) RENAME bảng sổ + DROP trigger + CREATE TABLE cùng tên cùng
+  -- hình dạng + DROP policy sót ⇒ migrate() OK, D2 dựng trigger lên bảng mới rỗng, lịch sử ở bảng cũ; (b) RENAME
+  -- COLUMN org_id + DISABLE RLS + DROP hai policy trên users ⇒ migrate() OK, app_api đọc xuyên tổ chức. Cả hai vì
+  -- mọi lớp nhận diện đối tượng bằng TÊN (BANG_CHI_GHI_THEM) hay HÌNH DẠNG (VI_TU_BANG_TENANT) — thứ chủ bảng tái
+  -- tạo được. Ba kênh danh tính, mỗi kênh chịu một đường:
+  --   ① CHÚ THÍCH BẢNG `neo: <schema>.<bảng>` (pg_description, objsubid 0) — sống theo OID qua RENAME / SET SCHEMA /
+  --     RENAME COLUMN, mất khi DROP, KHÔNG được `CREATE TABLE (LIKE … INCLUDING ALL)` chép, được pg_dump chép theo
+  --     bảng (sống qua khôi phục logic), đọc được qua catalog bởi mọi vai, ghi được bởi chủ bảng — không cần quyền nào
+  --     khác. Bắt: bảng mang neo mà tên hiện tại lệch (⑴); mang neo mà hết là tenant theo tính chất (⑵).
+  --   ② TÊN ĐÃ KHAI trong kho (BANG_TENANT_KHAI, kèm migration khai sinh; BANG_CHI_GHI_THEM cho sổ) — sống trong
+  --     git, không cần quyền, không mất theo đối tượng. Bắt: tên đã khai không còn phân giải (⑸ — RENAME/SET
+  --     SCHEMA/DROP không qua migration), tên còn mà hết là tenant theo tính chất (⑹ — đường CHÉP BẢNG bỏ cột org_id
+  --     rồi đổi tên đè: dữ liệu không mất, lượt soi 34 NẶNG-3), tên còn mà chưa mang neo (⑶).
+  --   ③ HÌNH DẠNG KHÔNG BỎ ĐƯỢC: bộ ba cột chuỗi (seq, prev_hash, hash) ngoài public.audit_events (⑷) và bộ ba mốc
+  --     neo (seq, hash, anchored_at) ngoài public.audit_chain_anchors (⑷′) — bản sao do đổi tên hay chép, độc lập ①②.
+  --     [lượt soi 35, CAO-1] "đủ 15 cột" (MAU_HINH_DANG_SO) là hình dạng BỎ ĐƯỢC: đổi tên một cột phụ là bản sao
+  --     thoát; bộ ba chuỗi thì bỏ là hết giá trị sổ. Đổi tên một trong ba cột ấy là ranh giới nói thẳng (chủ bảng phá
+  --     hình dạng sổ của chính bản sao — dữ liệu còn nhưng không còn là sổ).
+  -- Bản đầu của vòng dùng một bảng app_private.neo_danh_tinh (migration 049) và bị chính bộ test bác: dưới hồ sơ N2
+  -- (bootstrap superuser, vai deploy không superuser, không GRANT thêm) `to_regclass('app_private.…')` ném 42501 ở cột
+  -- điều kiện và cả lượt sửa gãy; lượt soi 34 còn chỉ ra bảng neo do chính chủ thể bị canh sở hữu (DROP nó là mục im)
+  -- và khôi phục logic cấp oid mới (mọi dòng neo lệch đúng lúc DR). Ba kênh trên không có ba lỗi ấy.
+  -- Ranh giới nói thẳng: ① mạnh bằng quyền sở hữu bảng — chủ bảng cố ý gỡ chú thích thì lượt sửa ghi lại (kèm WARNING
+  -- cho tên đã khai) và ⑴⑵ im, còn lại ②③; [lượt soi 35, CAO-2] CỤM ĐÃ BOOTSTRAP TRƯỚC S1.43 dưới hồ sơ N2 (bảng
+  -- thuộc superuser, vai deploy không sở hữu): lượt sửa không ghi được neo ⇒ ⑶ chặn deploy đầu tiên — nói ra, không
+  -- phải lỗi: chạy migrate() một lần bằng chủ bảng/superuser để ghi neo (test N2 nhánh 4 ghim hành vi này); DROP bảng tenant KHÔNG khai (fixture) rồi dựng lại cùng tên đi qua (tên không khai, dữ liệu mất nhìn
+  -- thấy được); migration tạo bảng tenant mới PHẢI thêm tên vào BANG_TENANT_KHAI — cổng ở rls-coverage đòi bản khai
+  -- bằng tập theo tính chất trên lược đồ thật; đổi tên/schema/dựng lại một bảng đã khai là việc của migration có chủ
+  -- ý: cùng migration ấy sửa dòng khai và đặt lại chú thích neo. Chú thích bảng của bảng tenant/bảng sổ là KÊNH DÀNH
+  -- RIÊNG — migration muốn chú thích thì chú thích cột.
+  -- [lượt soi 35, NẶNG-5] Neo cả DANH TÍNH CỘT org_id (attnum): đổi tên cột rồi ADD COLUMN org_id mới DEFAULT <A> làm bảng
+  -- vẫn "tenant theo tính chất" với policy đúng khuôn trên cột mới — mà hàng của mọi tổ chức nay mang cùng org_id. attnum
+  -- của cột mới luôn khác cột cũ (attnum không tái dùng trong đời một bảng). %1$s = pg_namespace, %2$s = pg_class.
+  MAU_NEO constant text :=
+    $q$'neo: ' || pg_catalog.quote_ident(%1$s.nspname) || '.' || pg_catalog.quote_ident(%2$s.relname)
+       || coalesce((SELECT ' org_id#' || a.attnum::text FROM pg_attribute a
+                     WHERE a.attrelid = %2$s.oid AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped), '')$q$;
+
+  -- Tập bảng tenant ĐÃ BIẾT ở S1.43, kèm TÊN TỆP migration khai sinh (chỉ phán xét khi đúng tệp ấy đã áp — tập rút gọn
+  -- đi qua; khớp tiền tố ba chữ số là chưa đủ: test viết migration tạm `003_policy_…`, `005_…` — đo).
+  BANG_TENANT_KHAI constant text :=
+    $q$(VALUES
+         ('public', 'audit_chain_anchors', '003_audit_events'),
+         ('public', 'audit_events', '003_audit_events'),
+         ('public', 'bid_receipts', '018_vendor_bids'),
+         ('public', 'guest_sessions', '010_invitations'),
+         ('public', 'invitation_otp_challenges', '010_invitations'),
+         ('public', 'mfa_credentials', '006_sessions_and_mfa'),
+         ('public', 'mfa_reset_requests', '040_dat_lai_totp_hai_nguoi'),
+         ('public', 'org_procurement_policies', '014_procurement_policy'),
+         ('public', 'organizations', '002_organizations_and_users'),
+         ('public', 'otp_rate_limits', '010_invitations'),
+         ('public', 'outbox_jobs', '007_outbox'),
+         ('public', 'rfq_approvals', '009_rfq'),
+         ('public', 'rfq_budgets', '014_procurement_policy'),
+         ('public', 'rfq_invitation_tokens', '010_invitations'),
+         ('public', 'rfq_invitations', '010_invitations'),
+         ('public', 'rfq_items', '009_rfq'),
+         ('public', 'rfq_key_material', '017_rfq_key_material'),
+         ('public', 'rfq_packages', '009_rfq'),
+         ('public', 'rfq_unsealed_bids', '019_unseal'),
+         ('public', 'sessions', '006_sessions_and_mfa'),
+         ('public', 'supplier_contacts', '008_suppliers'),
+         ('public', 'suppliers', '008_suppliers'),
+         ('public', 'unseal_approvals', '019_unseal'),
+         ('public', 'unseal_requests', '019_unseal'),
+         ('public', 'user_login_tokens', '029_dang_nhap_nguoi_mua'),
+         ('public', 'user_roles', '005_identity'),
+         ('public', 'users', '002_organizations_and_users'),
+         ('public', 'vendor_bid_versions', '018_vendor_bids'),
+         ('public', 'vendor_bids', '018_vendor_bids')
+       ) AS bt(nspname, relname, mig)$q$;
+
+  -- Tập lượt SỬA ghi neo: bảng tenant theo tính chất, và hai bảng sổ (tên ở BANG_CHI_GHI_THEM, ở public).
+  VI_TU_PHAI_NEO constant text :=
+    $q$(($q$ || VI_TU_BANG_TENANT || $q$)
+        OR (n.nspname = 'public' AND c.relkind = 'r'
+            AND c.relname IN (SELECT b.ten FROM $q$ || BANG_CHI_GHI_THEM || $q$)))$q$;
+
+  -- Lượt SỬA: ghi neo cho bảng phải neo mà CHƯA CÓ chú thích nào (chú thích khác chiếm chỗ thì không ghi đè — ⑶ nêu
+  -- ra). 42501 (không sở hữu) nuốt từng bảng, BƯỚC 3 phán xét. Đơn điệu: chỉ thêm, không bao giờ xoá.
+  CAU_NEO_SUA constant text :=
+    $q$DO $neo$
+       DECLARE r record;
+       BEGIN
+         FOR r IN SELECT n.nspname, c.relname,
+                         $q$ || pg_catalog.format(MAU_NEO, 'n', 'c') || $q$ AS neo_moi,
+                         EXISTS (SELECT 1 FROM $q$ || BANG_TENANT_KHAI || $q$
+                                  WHERE bt.nspname = n.nspname AND bt.relname = c.relname) AS da_khai
+                    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE $q$ || VI_TU_PHAI_NEO || $q$
+                     AND pg_catalog.obj_description(c.oid, 'pg_class') IS NULL
+         LOOP
+           BEGIN
+             EXECUTE pg_catalog.format('COMMENT ON TABLE %I.%I IS %L', r.nspname, r.relname, r.neo_moi);
+             -- [lượt soi 35, NHẸ-7] tên ĐÃ KHAI nhận neo MỚI là dấu vết duy nhất của một oid đổi (bảng dựng lại/chép đè)
+             -- hay một chú thích bị gỡ: nói ra, đừng ghi im.
+             IF r.da_khai THEN
+               RAISE WARNING 'Hardening: bảng đã khai %.% nhận neo MỚI (%) — oid đổi (dựng lại/chép đè) hay chú thích neo bị gỡ; '
+                             'nếu không phải deploy đầu của S1.43 thì đây là một lần TRÔI phải điều tra.', r.nspname, r.relname, r.neo_moi;
+             END IF;
+           EXCEPTION WHEN insufficient_privilege THEN NULL;
+           END;
+         END LOOP;
+       END $neo$$q$;
+
+  CAU_NEO_SAI constant text :=
+    $q$WITH q AS (
+         SELECT c.oid, n.nspname, c.relname,
+                pg_catalog.obj_description(c.oid, 'pg_class') AS neo,
+                $q$ || pg_catalog.format(MAU_NEO, 'n', 'c') || $q$ AS neo_dung,
+                ($q$ || VI_TU_BANG_TENANT || $q$) AS la_tenant
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind IN ('r', 'p') AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$),
+       khai AS (
+         SELECT bt.nspname, bt.relname, 'bảng tenant đã khai (migration ' || bt.mig || ')' AS loai
+           FROM $q$ || BANG_TENANT_KHAI || $q$
+          WHERE EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = bt.mig || '.sql')
+         UNION ALL
+         SELECT 'public', b.ten, 'bảng sổ'
+           FROM $q$ || BANG_CHI_GHI_THEM || $q$
+          WHERE EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = '003_audit_events.sql')
+            AND NOT EXISTS (SELECT 1 FROM $q$ || BANG_TENANT_KHAI || $q$ WHERE bt.nspname = 'public' AND bt.relname = b.ten)),
+       hd AS (
+         SELECT c.oid, n.nspname, c.relname,
+                (SELECT pg_catalog.count(*) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                   AND a.attname IN ('seq', 'prev_hash', 'hash')) AS chuoi,
+                (SELECT pg_catalog.count(*) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                   AND a.attname IN ('seq', 'hash', 'anchored_at')) AS moc
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$)
+       SELECT x.ten || ': ' || x.mo_ta
+              || ' (khoản 89/86, ADR-037). Sửa: một migration mới đổi lại; hoặc — nếu đổi có chủ ý — cùng migration ấy '
+                 'sửa dòng khai và đặt lại chú thích neo (COMMENT ON TABLE … IS NULL rồi migrate() ghi lại).' AS mo_ta
+         FROM (
+           -- ⑴ mang neo mà TÊN hiện tại lệch: RENAME / SET SCHEMA ngoài migration. [lượt soi 35, NẶNG-3] không parse chú
+           --    thích (chuỗi do chủ bảng đặt — to_regclass ném 42601/42501 thô): đối chiếu catalog để tìm quan hệ đang
+           --    mang đúng tên đã neo.
+           SELECT q.nspname || '.' || q.relname AS ten,
+                  'mang neo "' || q.neo || '" nhưng tên hiện tại là ' || q.nspname || '.' || q.relname
+                  || ' — đổi tên hay đổi schema ngoài migration'
+                  || coalesce((SELECT '; tên đã neo hiện do oid ' || q2.oid::text || ' giữ — một trong hai là bản sao'
+                                 FROM q q2
+                                WHERE pg_catalog.split_part(q2.neo_dung, ' org_id#', 1) = pg_catalog.split_part(q.neo, ' org_id#', 1)
+                                  AND q2.oid <> q.oid LIMIT 1), '') AS mo_ta
+             FROM q
+            WHERE q.neo LIKE 'neo: %'
+              AND pg_catalog.split_part(q.neo, ' org_id#', 1) <> pg_catalog.split_part(q.neo_dung, ' org_id#', 1)
+           UNION ALL
+           -- ⑵ mang neo mà không còn là tenant theo tính chất
+           SELECT q.nspname || '.' || q.relname,
+                  'mang neo nhưng KHÔNG CÒN là bảng tenant theo tính chất (mất cột org_id hay khoá ngoại org_id trỏ tới nó) — '
+                  'mọi lớp RLS rời khỏi nó trong khi dữ liệu còn nguyên'
+             FROM q
+            WHERE q.neo LIKE 'neo: %'
+              AND pg_catalog.split_part(q.neo, ' org_id#', 1) = pg_catalog.split_part(q.neo_dung, ' org_id#', 1)
+              AND NOT q.la_tenant
+           UNION ALL
+           -- ⑵′ [lượt soi 35, NẶNG-5] cùng tên, còn là tenant, nhưng CỘT org_id không còn là cột đã neo (attnum khác):
+           --    đổi tên cột rồi thêm cột org_id mới — policy đúng khuôn trên cột mới, hàng mọi tổ chức mang cùng giá trị
+           SELECT q.nspname || '.' || q.relname,
+                  'cột org_id đã neo là attnum ' || nullif(pg_catalog.split_part(q.neo, ' org_id#', 2), '')
+                  || ' nhưng cột org_id hiện tại là attnum '
+                  || coalesce(nullif(pg_catalog.split_part(q.neo_dung, ' org_id#', 2), ''), '(không có)')
+                  || ' — cột đã bị đổi tên rồi thay bằng cột mới: RLS trỏ vào một cột không phải cột dữ liệu đã neo'
+             FROM q
+            WHERE q.neo LIKE 'neo: %'
+              AND pg_catalog.split_part(q.neo, ' org_id#', 1) = pg_catalog.split_part(q.neo_dung, ' org_id#', 1)
+              AND q.la_tenant
+              AND pg_catalog.split_part(q.neo, ' org_id#', 2) <> pg_catalog.split_part(q.neo_dung, ' org_id#', 2)
+           UNION ALL
+           -- ⑶ tên đã khai/bảng sổ còn đó mà chưa mang neo — lời trung tính [lượt soi 35, NHẸ-7]: chú thích bị gỡ, oid mới
+           --    (bảng dựng lại/chép đè), hay lượt sửa không sở hữu bảng (cụm bootstrap trước S1.43, vai deploy không sở
+           --    hữu — lượt soi 35 CAO-2: deploy đầu của S1.43 trên cụm cũ phải chạy hardening MỘT LẦN bằng chủ bảng/superuser)
+           SELECT q.nspname || '.' || q.relname,
+                  k.loai || ' CHƯA MANG NEO'
+                  || CASE WHEN q.neo IS NULL
+                          THEN ' — chú thích neo bị gỡ, oid mới (bảng dựng lại/chép đè), hay lượt sửa không sở hữu bảng '
+                               '(cụm bootstrap trước S1.43: chạy migrate() một lần bằng chủ bảng/superuser để ghi neo)'
+                          ELSE ' (chú thích hiện tại: "' || pg_catalog.left(q.neo, 60)
+                               || '" — chú thích bảng là kênh neo, dòng khác đang chiếm chỗ)' END
+             FROM khai k JOIN q ON q.nspname = k.nspname AND q.relname = k.relname
+            WHERE q.neo IS NULL OR q.neo NOT LIKE 'neo: %'
+           UNION ALL
+           -- ⑷ [lượt soi 35, CAO-1] hình dạng là thứ KHÔNG BỎ ĐƯỢC mà còn giá trị: bộ ba cột chuỗi (seq, prev_hash, hash)
+           --    ngoài public.audit_events — bản sao sổ do đổi tên hay chép; không tựa vào chú thích lẫn tên
+           SELECT hd.nspname || '.' || hd.relname,
+                  'mang bộ ba cột chuỗi sổ (seq, prev_hash, hash) nhưng không phải public.audit_events — một bản sao sổ '
+                  'ngoài tên sổ (đổi tên rồi dựng lại, hay chép); mục này không tựa vào chú thích'
+             FROM hd
+            WHERE hd.chuoi = 3 AND NOT (hd.nspname = 'public' AND hd.relname = 'audit_events')
+           UNION ALL
+           -- ⑷′ [lượt soi 35, NẶNG-4] bộ ba mốc neo (seq, hash, anchored_at) ngoài public.audit_chain_anchors
+           SELECT hd.nspname || '.' || hd.relname,
+                  'mang bộ ba cột mốc neo (seq, hash, anchored_at) nhưng không phải public.audit_chain_anchors — một bản sao '
+                  'bảng mốc neo ngoài tên'
+             FROM hd
+            WHERE hd.moc = 3 AND NOT (hd.nspname = 'public' AND hd.relname = 'audit_chain_anchors')
+           UNION ALL
+           -- ⑸ tên đã khai không còn phân giải thành bảng
+           SELECT k.nspname || '.' || k.relname,
+                  k.loai || ' KHÔNG CÒN dưới tên ấy (đổi tên, đổi schema hay DROP ngoài migration)'
+             FROM khai k
+            WHERE NOT EXISTS (SELECT 1 FROM q WHERE q.nspname = k.nspname AND q.relname = k.relname)
+           UNION ALL
+           -- ⑹ tên đã khai còn đó mà không còn là tenant theo tính chất — kể cả bảng CHÉP đè lên tên cũ
+           SELECT q.nspname || '.' || q.relname,
+                  k.loai || ' KHÔNG CÒN là bảng tenant theo tính chất (mất cột org_id — đổi tên cột, hay một bảng chép '
+                  'bỏ cột ấy được dựng đè lên tên cũ) — mọi lớp RLS rời khỏi nó trong khi dữ liệu còn nguyên'
+             FROM khai k JOIN q ON q.nspname = k.nspname AND q.relname = k.relname
+            WHERE NOT q.la_tenant
+         ) x$q$;
+
   -- ---- [S1.39 / khoản nợ 83 — nửa catalog ⑷⑸⑹⑺⑧] NĂM MỤC PHÁN XÉT CÒN LẠI CỦA ADR-036 §3⑶ -----------
   -- Tiêu chí §3⑶ (S1.37): cơ chế mà chủ bảng không superuser tạo được và catalog phân biệt được tĩnh thì
   -- PHẢI có mục hardening. Năm cơ chế còn lại chỉ có tổng điều tra ở test (`hardening-suy-tu-tinh-chat`):
@@ -7336,6 +7550,15 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_ORG_ID_NGOAI_PUBLIC_SAI || $q$) t)$q$,
       $q$quyền sở hữu bảng đó (DROP, ALTER TABLE … SET SCHEMA public, ATTACH PARTITION; bật RLS thì chỉ chuyển lời khai sang 83⑶) hoặc SUPERUSER; hoặc sửa danh sách khai trong chính file này$q$
+    ],
+    -- ---- [S1.43 / khoản nợ 89 + 86] Danh tính: chú thích neo theo oid + tên đã khai + hình dạng sổ — SỬA (ghi neo) + PHÁN XÉT (sáu vế) ----
+    ARRAY[
+      $q$danh tính đối tượng canh: bảng sổ và bảng tenant đã khai còn đúng tên, đúng tính chất, mang neo; không bản sao sổ ngoài tên sổ (khoản 89/86, ADR-037)$q$,
+      $q$pg_catalog.to_regclass('public.schema_migrations') IS NOT NULL$q$,
+      CAU_NEO_SUA,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_NEO_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_NEO_SAI || $q$) t)$q$,
+      $q$quyền sở hữu bảng đó (COMMENT ON TABLE / ALTER TABLE / DROP) hoặc SUPERUSER; đổi có chủ ý thì sửa dòng khai và đặt lại chú thích neo trong cùng migration$q$
     ],
     -- ---- [S1.39 / khoản nợ 83 ⑷⑸⑹⑺⑧] Năm mục PHÁN XÉT cho ADR-036 hàng 10, 21, 3 (tổng quát), 2/75, tiền đề 8 ----
     ARRAY[

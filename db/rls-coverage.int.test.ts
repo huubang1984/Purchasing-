@@ -1,6 +1,6 @@
 import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -2247,5 +2247,45 @@ describe("[S1.41 / khoản nợ 85] bảng có org_id ngoài public không treo 
       await db.pool.query("DROP SCHEMA IF EXISTS zz_s85 CASCADE");
     }
     expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: gỡ ⇒ đi qua").toBeNull();
+  }, 180000);
+});
+
+// ===============================================================================================
+// [S1.43 / khoản nợ 89 + 86] DANH TÍNH ĐỐI TƯỢNG CANH — bản khai tên bảng tenant phải bằng tập theo tính chất
+// ===============================================================================================
+describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () => {
+  it("[INV-F1] HAI BẢN KHỚP: BANG_TENANT_KHAI của hardening bằng tập VI_TU_BANG_TENANT trên lược đồ thật, mỗi dòng trỏ đúng migration đã CREATE TABLE bảng ấy; câu phán xét chạy trong test — rỗng hôm nay, thấy đúng bảng đổi tên cột", async () => {
+    const khai = docHangHardening("BANG_TENANT_KHAI");
+    const dong = [...khai.matchAll(/\('(\w+)', '(\w+)', '(\d{3}_\w+)'\)/gu)].map((m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }));
+    expect(dong.length, "bản khai đang rỗng — bộ đọc mù").toBeGreaterThan(20);
+    const { rows } = await db.pool.query<{ t: string }>(
+      `SELECT n.nspname || '.' || c.relname AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${docHangHardening("VI_TU_BANG_TENANT")} ORDER BY 1`,
+    );
+    expect(dong.map((d) => `${d.nsp}.${d.ten}`).sort(), "bảng tenant theo tính chất phải được khai đủ, và không khai thừa").toEqual(rows.map((r) => r.t).sort());
+    const tep = readdirSync(MIGRATIONS_DIR);
+    for (const d of dong) {
+      const f = tep.find((x) => x === `${d.mig}.sql`);
+      expect(f, `${d.ten}: tệp migration ${d.mig}.sql phải tồn tại — khai theo TÊN TỆP, không theo tiền tố`).toBeDefined();
+      expect(readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8"), `${d.ten}: migration ${d.mig} phải là nơi CREATE TABLE`).toMatch(
+        new RegExp(`^CREATE TABLE (public\\.)?${d.ten}\\b`, "mu"),
+      );
+    }
+    const cau = docHangHardening("CAU_NEO_SAI");
+    expect((await db.pool.query<{ mo_ta: string }>(cau)).rows, "lược đồ thật: không dòng nào").toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("ALTER TABLE public.mfa_credentials RENAME COLUMN org_id TO to_chuc");
+      const thay = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta.split(":")[0]).sort();
+      expect(thay, "đổi tên cột org_id: vế ⑵ (chú thích: hết là tenant) và ⑹ (tên đã khai) cùng thấy; ⑵′ chỉ có nghĩa khi còn là tenant").toEqual(["public.mfa_credentials", "public.mfa_credentials"]);
+      // [lượt soi 35, NẶNG-5] thêm cột org_id MỚI: bảng lại là tenant theo tính chất (⑵/⑹ im) — chỉ attnum đã neo còn thấy.
+      await c.query("ALTER TABLE public.mfa_credentials ADD COLUMN org_id uuid");
+      const thayCot = (await c.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
+      expect(thayCot).toHaveLength(1);
+      expect(thayCot[0]).toMatch(/^public\.mfa_credentials: cột org_id đã neo là attnum \d+ nhưng cột org_id hiện tại là attnum \d+/u);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
   }, 180000);
 });

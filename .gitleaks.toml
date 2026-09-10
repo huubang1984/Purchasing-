@@ -1,0 +1,29 @@
+# ==============================================================================================
+# CAU HINH GITLEAKS CHO BUOC "Quet bi mat" TRONG JOB T0 (.github/workflows/ci.yml)
+# ==============================================================================================
+# [S1.43, sau khi mo PR #41] Luat mac dinh `generic-api-key` doc hai dong khai bang tenant trong
+# `db/migrations/hardening.always.sql` (`BANG_TENANT_KHAI`, ADR-037) thanh bi mat:
+#
+#   ('public', 'rfq_key_material',  '017_rfq_key_material'),
+#   ('public', 'user_login_tokens', '029_dang_nhap_nguoi_mua'),
+#
+# Ten bang mang chu `key`/`token`; gia tri ke ben la TEN TEP migration khai sinh — khong phai bi mat.
+# `pnpm t0` cuc bo KHONG chay gitleaks (khong cai tai cho), nen xanh cuc bo khong noi gi ve buoc nay:
+# buoc nay chi do duoc bang chinh luot CI.
+#
+# Sua o cau hinh, khong sua SQL. Giu TOAN BO luat mac dinh; chi mien phan-bi-coi-la-bi-mat khi no
+# co dung HINH DANG ten tep migration cua du an (`NNN_ten_khong_dau`): ba chu so, gach duoi, chu
+# thuong/so/gach duoi. Khong mien tep, khong mien luat, khong mien theo commit — mot khoa API that
+# khong co hinh dang nay.
+
+title = "TrustProcure — gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ten tep migration (NNN_ten) trong BANG_TENANT_KHAI khong phai bi mat"
+regexTarget = "secret"
+regexes = [
+  '''^\d{3}_[a-z0-9_]{1,60}$''',
+]
