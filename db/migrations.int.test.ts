@@ -3164,6 +3164,272 @@ describe("migration của dự án", () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.43 / khoản nợ 89 + 86] DANH TÍNH ĐỐI TƯỢNG CANH — chú thích neo theo oid + tên đã khai + hình dạng sổ (ADR-037)
+  // ==========================================================================================
+  // Lượt soi ngang 33 đo hai đường đi qua MỌI lớp vì lớp nào cũng nhận diện đối tượng bằng thứ chủ bảng tái tạo
+  // được — tên hay hình dạng. Bản đầu của vòng (bảng app_private.neo_danh_tinh + migration 049) bị hồ sơ N2 của
+  // chính tệp này bác (12 test đỏ: vai deploy không USAGE app_private) và lượt soi 34 bác thêm (bảng neo do chủ thể
+  // bị canh sở hữu; khôi phục logic cấp oid mới; tự gỡ mở đường chép bảng). Bản này: ba kênh — xem chú thích hardening.
+  const KHACH_NULL_027 = "((NULLIF(current_setting('app.guest_session_id', true), ''))::uuid IS NULL)";
+  const neoCua = async (pool: TestDatabase["pool"], bang: string): Promise<string | null> =>
+    (await pool.query<{ n: string | null }>("SELECT obj_description($1::regclass, 'pg_class') AS n", [bang])).rows[0]!.n;
+  /** Chú thích neo ĐÚNG của một bảng, dựng từ catalog bằng cùng công thức MAU_NEO (kèm attnum cột org_id nếu có). */
+  const neoMong = async (pool: TestDatabase["pool"], bang: string): Promise<string> =>
+    (await pool.query<{ n: string }>(
+      "SELECT 'neo: ' || quote_ident(n.nspname) || '.' || quote_ident(c.relname) || coalesce((SELECT ' org_id#' || a.attnum::text FROM pg_attribute a " +
+        "WHERE a.attrelid = c.oid AND a.attname = 'org_id' AND a.attnum > 0 AND NOT a.attisdropped), '') AS n " +
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = $1::regclass",
+      [bang],
+    )).rows[0]!.n;
+
+  it("[khoản nợ 89] đổi tên bảng sổ, gỡ trigger, dựng bảng cùng tên cùng hình dạng: migrate() NÉM ở mục danh tính — chú thích theo oid nêu tên cũ và oid bảng lạ, vế hình dạng sổ bắt bản sao — kể cả khi policy sót đã xoá (83⑴ im) và khi chú thích đã bị gỡ; đối chứng: đổi lại ⇒ đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const neoSo = await neoMong(db.pool, "public.audit_events");
+      expect(neoSo).toMatch(/^neo: public\.audit_events org_id#\d+$/u);
+      expect(await neoCua(db.pool, "public.audit_events"), "lượt sửa đã ghi neo cho bảng sổ").toBe(neoSo);
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('A','a') RETURNING id")).rows[0]!.id;
+      await db.pool.query(
+        "INSERT INTO audit_events (org_id, seq, actor_type, action, resource_type, prev_hash, hash) " +
+          "VALUES ($1, 1, 'SYSTEM', 'TEST', 'TEST', decode(repeat('00',32),'hex'), sha256('x'::bytea))",
+        [org],
+      );
+      await db.pool.query(`
+        ALTER TABLE public.audit_events RENAME TO audit_events_cu;
+        DROP TRIGGER audit_events_chan_update ON public.audit_events_cu;
+        DROP TRIGGER audit_events_chan_delete ON public.audit_events_cu;
+        DROP TRIGGER audit_events_chan_truncate ON public.audit_events_cu;
+        DROP TRIGGER audit_events_noi_chuoi ON public.audit_events_cu;
+        CREATE TABLE public.audit_events (LIKE public.audit_events_cu INCLUDING ALL);
+        ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY; ALTER TABLE public.audit_events FORCE ROW LEVEL SECURITY;
+        CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());
+        GRANT SELECT ON public.audit_events TO app_api, app_unseal;
+      `);
+      expect(await neoCua(db.pool, "public.audit_events_cu"), "chú thích đi theo oid").toBe(neoSo);
+      expect(await neoCua(db.pool, "public.audit_events"), "LIKE … INCLUDING ALL không chép chú thích bảng").toBeNull();
+      const oidMoi = (await db.pool.query<{ o: string }>("SELECT 'public.audit_events'::regclass::oid::text AS o")).rows[0]!.o;
+
+      // (a) còn policy sót trên bảng cũ: 83⑴ kêu, và mục danh tính cũng kêu — hai lớp độc lập.
+      const loiA = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiA).not.toBeNull();
+      expect(loiA!.message).toContain(`public.audit_events_cu: mang neo "${neoSo}" nhưng tên hiện tại là public.audit_events_cu`);
+      expect(loiA!.message).toContain(`tên đã neo hiện do oid ${oidMoi} giữ — một trong hai là bản sao`);
+      expect(loiA!.message).toContain("public.audit_events_cu: mang bộ ba cột chuỗi sổ (seq, prev_hash, hash) nhưng không phải public.audit_events");
+      expect(loiA!.message).toContain("(khoản 83⑴)");
+      // (b) xoá policy sót — đường đo của lượt soi 33a #5: TRƯỚC S1.43 migrate() đi qua; nay còn mục danh tính.
+      await db.pool.query("DROP POLICY audit_events_khach ON public.audit_events_cu");
+      const loiB = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiB, "xoá policy sót: 83⑴ im, mục danh tính phải là lớp còn lại").not.toBeNull();
+      expect(loiB!.message).not.toContain("(khoản 83⑴)");
+      expect(loiB!.message).toContain(`public.audit_events_cu: mang neo "${neoSo}" nhưng tên hiện tại là public.audit_events_cu`);
+      // Nói ra: lượt sửa vẫn chạy trọn — bảng MỚI được ghi neo và D2 dựng trigger lên nó; lịch sử ở bảng cũ. Mục PHÁN XÉT,
+      // không tự chữa: đường ra là một migration có chủ ý.
+      expect(await neoCua(db.pool, "public.audit_events")).toBe(await neoMong(db.pool, "public.audit_events"));
+      expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM public.audit_events_cu")).rows[0]!.n).toBe("1");
+      // (c) ranh giới nói thẳng: chủ bảng gỡ chú thích của bảng cũ ⇒ vế ⑴ im, nhưng vế ⑷ (hình dạng sổ) vẫn bắt.
+      await db.pool.query("COMMENT ON TABLE public.audit_events_cu IS NULL");
+      const loiC = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiC, "gỡ chú thích: vế hình dạng sổ phải còn").not.toBeNull();
+      expect(loiC!.message).not.toContain("nhưng tên hiện tại là public.audit_events_cu");
+      expect(loiC!.message).toContain("public.audit_events_cu: mang bộ ba cột chuỗi sổ (seq, prev_hash, hash)");
+      // Ranh giới nói ra: lượt sửa ghi-lấp neo cho bảng cũ DƯỚI TÊN HIỆN TẠI (nó là bảng tenant theo tính chất) — kênh ①
+      // mạnh bằng quyền sở hữu; thứ còn giữ ca này là kênh ③ (hình dạng) ở trên và kênh ② (tên đã khai) cho bảng tenant.
+      expect(await neoCua(db.pool, "public.audit_events_cu")).toBe(await neoMong(db.pool, "public.audit_events_cu"));
+      // (c2) [lượt soi 35, CAO-1] đổi tên một cột PHỤ của bản sao: "đủ 15 cột" thoát, bộ ba chuỗi thì không.
+      await db.pool.query("ALTER TABLE public.audit_events_cu RENAME COLUMN user_agent TO ua");
+      const loiC2 = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiC2, "hình dạng không bỏ được: bộ ba chuỗi vẫn bắt bản sao").not.toBeNull();
+      expect(loiC2!.message).toContain("public.audit_events_cu: mang bộ ba cột chuỗi sổ (seq, prev_hash, hash)");
+      await db.pool.query("ALTER TABLE public.audit_events_cu RENAME COLUMN ua TO user_agent");
+      // (d) đối chứng: bỏ bảng lạ, đổi lại tên, dựng lại policy khuôn 027 (b1), và — đúng như thông điệp bảo khi đổi có
+      //     chủ ý — đặt lại chú thích neo ⇒ D2 dựng lại trigger, đi qua.
+      await db.pool.query(`
+        DROP TABLE public.audit_events;
+        ALTER TABLE public.audit_events_cu RENAME TO audit_events;
+        COMMENT ON TABLE public.audit_events IS NULL;
+        CREATE POLICY audit_events_khach ON public.audit_events AS RESTRICTIVE USING ${KHACH_NULL_027} WITH CHECK ${KHACH_NULL_027};
+      `);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: danh tính về đúng chỗ ⇒ đi qua").resolves.toEqual([]);
+      expect(await neoCua(db.pool, "public.audit_events")).toBe(neoSo);
+      expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_trigger WHERE tgrelid = 'public.audit_events'::regclass AND NOT tgisinternal")).rows[0]!.n).toBe("4");
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  it("[khoản nợ 86 — nửa đo được] users: đổi tên cột org_id/tắt RLS/xoá policy ⇒ NÉM (chú thích ⑵ và tên đã khai ⑹); đổi tên bảng ⇒ NÉM (⑴ và ⑸); CHÉP bảng bỏ cột org_id rồi đè lên tên cũ (dữ liệu không mất — lượt soi 34 NẶNG-3) ⇒ NÉM (⑹); đối chứng đổi lại ⇒ đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const neoUsers = await neoMong(db.pool, "public.users");
+      expect(await neoCua(db.pool, "public.users"), "bảng tenant được ghi neo ở lượt sửa").toBe(neoUsers);
+      const orgA = "00000000-0000-4000-8000-00000000000a";
+      const orgB = "00000000-0000-4000-8000-00000000000b";
+      await db.pool.query("INSERT INTO organizations (id, name, slug) VALUES ($1,'A','a'), ($2,'B','b')", [orgA, orgB]);
+      await db.pool.query("INSERT INTO users (org_id, email, full_name) VALUES ($1,'a@a','A'), ($2,'b1@b','B1')", [orgA, orgB]);
+      const docApi = async (): Promise<string[]> => {
+        const api = await db.poolAs("app_api").connect();
+        try {
+          await api.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
+          return (await api.query<{ email: string }>("SELECT email FROM users ORDER BY 1")).rows.map((r) => r.email);
+        } finally {
+          api.release();
+        }
+      };
+
+      // (a) đường đo của lượt soi 33a #6 — TRƯỚC S1.43 migrate() đi qua và app_api gắn A đọc thấy B.
+      await db.pool.query(
+        "ALTER TABLE public.users RENAME COLUMN org_id TO to_chuc; ALTER TABLE public.users DISABLE ROW LEVEL SECURITY; " +
+          "DROP POLICY users_tenant_isolation ON public.users; DROP POLICY users_khach ON public.users",
+      );
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loi, "bảng tenant mang neo rời tập theo hình dạng phải bị bắt").not.toBeNull();
+      expect(loi!.message).toContain("public.users: mang neo nhưng KHÔNG CÒN là bảng tenant theo tính chất");
+      expect(loi!.message).toContain("public.users: bảng tenant đã khai (migration 002_organizations_and_users) KHÔNG CÒN là bảng tenant theo tính chất");
+      // Nói ra: mục PHÁN XÉT — lỗ vẫn mở tới khi có migration sửa; deploy bị chặn là lớp.
+      expect(await docApi()).toEqual(["a@a", "b1@b"]);
+      // (b) đối chứng: đổi lại tên cột, dựng lại hai policy ⇒ (A) bật lại RLS, đi qua.
+      await db.pool.query(`
+        ALTER TABLE public.users RENAME COLUMN to_chuc TO org_id;
+        CREATE POLICY users_tenant_isolation ON public.users USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());
+        CREATE POLICY users_khach ON public.users AS RESTRICTIVE USING ${KHACH_NULL_027} WITH CHECK ${KHACH_NULL_027};
+      `);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: đổi lại ⇒ đi qua").resolves.toEqual([]);
+      expect(await docApi()).toEqual(["a@a"]);
+
+      // (c) đổi TÊN bảng tenant đã khai (giữ oid): trước S1.43 users_cu là bảng tenant hợp lệ với mọi lớp — nay NÉM hai vế.
+      await db.pool.query("ALTER TABLE public.users RENAME TO users_cu");
+      const loiTen = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiTen!.message).toContain(`public.users_cu: mang neo "${neoUsers}" nhưng tên hiện tại là public.users_cu`);
+      expect(loiTen!.message).toContain("public.users: bảng tenant đã khai (migration 002_organizations_and_users) KHÔNG CÒN dưới tên ấy");
+      await db.pool.query("ALTER TABLE public.users_cu RENAME TO users");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+
+      // (e) [lượt soi 35, NẶNG-5] đổi tên cột org_id rồi ADD cột org_id MỚI mang cùng một giá trị, dựng lại policy đúng
+      //     khuôn trên cột mới: tên ✓, tenant theo tính chất ✓, [CR1] ✓ — trước bản bốn đi qua, app_api gắn A thấy mọi hàng.
+      //     Kênh ① nay neo cả attnum của cột org_id ⇒ ⑵′.
+      await db.pool.query(`
+        ALTER TABLE public.users RENAME COLUMN org_id TO to_chuc;
+        ALTER TABLE public.users ADD COLUMN org_id uuid NOT NULL DEFAULT '${orgA}';
+        DROP POLICY users_tenant_isolation ON public.users; DROP POLICY users_khach ON public.users;
+        CREATE POLICY users_tenant_isolation ON public.users USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());
+        CREATE POLICY users_khach ON public.users AS RESTRICTIVE USING ${KHACH_NULL_027} WITH CHECK ${KHACH_NULL_027};
+      `);
+      const loiCot = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiCot, "cột org_id bị thay bằng cột mới phải bị bắt").not.toBeNull();
+      expect(loiCot!.message).toMatch(/public\.users: cột org_id đã neo là attnum \d+ nhưng cột org_id hiện tại là attnum \d+/u);
+      expect(await docApi(), "lỗ RÒ có thật cho tới khi deploy sửa").toEqual(["a@a", "b1@b"]);
+      await db.pool.query(`
+        DROP POLICY users_tenant_isolation ON public.users; DROP POLICY users_khach ON public.users;
+        ALTER TABLE public.users DROP COLUMN org_id; ALTER TABLE public.users RENAME COLUMN to_chuc TO org_id;
+        CREATE POLICY users_tenant_isolation ON public.users USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());
+        CREATE POLICY users_khach ON public.users AS RESTRICTIVE USING ${KHACH_NULL_027} WITH CHECK ${KHACH_NULL_027};
+      `);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: cột dữ liệu về đúng attnum ⇒ đi qua").resolves.toEqual([]);
+
+      // (d) CHÉP bảng bỏ cột org_id rồi đè lên tên cũ — dữ liệu KHÔNG mất, chú thích không đi theo (bảng mới), bảng mới
+      //     không org_id nên không vị từ nào nhận. Chỉ tên đã khai (⑹) còn nhìn thấy nó.
+      await db.pool.query(
+        "CREATE TABLE public.users_moi AS SELECT id, org_id AS to_chuc, email, full_name, status, created_at FROM public.users; " +
+          "DROP TABLE public.users CASCADE; ALTER TABLE public.users_moi RENAME TO users; GRANT SELECT ON public.users TO app_api",
+      );
+      expect(await neoCua(db.pool, "public.users")).toBeNull();
+      const loiChep = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiChep, "bảng chép đè lên tên đã khai phải bị bắt").not.toBeNull();
+      expect(loiChep!.message).toContain("public.users: bảng tenant đã khai (migration 002_organizations_and_users) KHÔNG CÒN là bảng tenant theo tính chất");
+      expect(await docApi(), "lỗ RÒ có thật cho tới khi deploy sửa — phán xét, không tự chữa").toEqual(["a@a", "b1@b"]);
+    } finally {
+      await db.stop();
+    }
+  }, 240_000);
+
+  it("[khoản nợ 89 — ranh giới] bảng tenant KHÔNG khai (fixture): được ghi neo, DROP rồi dựng lại cùng tên đi qua (cố ý); chú thích khác chiếm chỗ trên bảng đã khai ⇒ NÉM; bản sao sổ ở schema khác ⇒ NÉM theo hình dạng; tập rút gọn 001/002 chỉ phán tên của migration đã áp và đi qua", async () => {
+    const db = await startPostgres();
+    const thuMucTam = await mkdtemp(join(tmpdir(), "tp-neo-"));
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const dungBaoGia = "CREATE TABLE bao_gia (gia int, org_id uuid NOT NULL); ALTER TABLE bao_gia ENABLE ROW LEVEL SECURITY; ALTER TABLE bao_gia FORCE ROW LEVEL SECURITY; " +
+        "CREATE POLICY bao_gia_tenant_isolation ON bao_gia USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id())";
+      await db.pool.query(dungBaoGia);
+      expect(await neoCua(db.pool, "public.bao_gia")).toBeNull();
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await neoCua(db.pool, "public.bao_gia"), "bảng tenant theo tính chất được ghi neo dù không khai").toBe(await neoMong(db.pool, "public.bao_gia"));
+      const oid1 = (await db.pool.query<{ o: string }>("SELECT 'public.bao_gia'::regclass::oid::text AS o")).rows[0]!.o;
+      await db.pool.query("DROP TABLE bao_gia");
+      await db.pool.query(dungBaoGia);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "tên KHÔNG khai: DROP + dựng lại cùng tên đi qua (ranh giới nói ra — bảng khai thì ⑸/⑹)").resolves.toEqual([]);
+      expect((await db.pool.query<{ o: string }>("SELECT 'public.bao_gia'::regclass::oid::text AS o")).rows[0]!.o).not.toBe(oid1);
+      expect(await neoCua(db.pool, "public.bao_gia")).toBe(await neoMong(db.pool, "public.bao_gia"));
+      // Chú thích khác chiếm chỗ trên bảng ĐÃ KHAI: lượt sửa không ghi đè, vế ⑶ nêu ra.
+      await db.pool.query("COMMENT ON TABLE public.users IS 'người dùng'");
+      const loiChu = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiChu!.message).toContain('public.users: bảng tenant đã khai (migration 002_organizations_and_users) CHƯA MANG NEO (chú thích hiện tại: "người dùng" — chú thích bảng là kênh neo');
+      await db.pool.query("COMMENT ON TABLE public.users IS NULL");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "gỡ chú thích lạ ⇒ lượt sửa neo lại ⇒ đi qua").resolves.toEqual([]);
+      // Bản sao sổ ở schema khác (đủ 15 cột) — vế ⑷ không tựa vào chú thích lẫn tên.
+      await db.pool.query("CREATE SCHEMA kho; CREATE TABLE kho.so_chep (LIKE public.audit_events INCLUDING ALL)");
+      const loiChep = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiChep!.message).toContain("kho.so_chep: mang bộ ba cột chuỗi sổ (seq, prev_hash, hash) nhưng không phải public.audit_events");
+      await db.pool.query("DROP TABLE kho.so_chep");
+      // [lượt soi 35, NẶNG-4] bản sao bảng mốc neo cũng có vế hình dạng riêng.
+      await db.pool.query("CREATE TABLE kho.moc_chep (LIKE public.audit_chain_anchors INCLUDING ALL)");
+      const loiMoc = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+      expect(loiMoc!.message).toContain("kho.moc_chep: mang bộ ba cột mốc neo (seq, hash, anchored_at) nhưng không phải public.audit_chain_anchors");
+      await db.pool.query("DROP TABLE kho.moc_chep");
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // Tập rút gọn (001/002): chỉ users/organizations có migration đã áp — hai bảng ấy được neo, các tên khác im — đi qua.
+      const db2 = await startPostgres();
+      try {
+        for (const f of ["hardening.always.sql", "001_roles_and_functions.sql", "002_organizations_and_users.sql"]) {
+          await copyFile(join(MIGRATIONS_DIR, f), join(thuMucTam, f));
+        }
+        await migrate(db2.pool, thuMucTam);
+        await expect(migrate(db2.pool, thuMucTam)).resolves.toEqual([]);
+        expect(await neoCua(db2.pool, "public.users")).toBe(await neoMong(db2.pool, "public.users"));
+        expect(await neoCua(db2.pool, "public.organizations"), "gốc tenant (đích khoá ngoại org_id) cũng mang neo, không attnum").toBe("neo: public.organizations");
+      } finally {
+        await db2.stop();
+      }
+    } finally {
+      await rm(thuMucTam, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 240_000);
+
+  // [lượt soi 35, CAO-2] Đường NÂNG CẤP là một hồ sơ cần test riêng: cụm đã bootstrap TRƯỚC S1.43 (bảng thuộc superuser),
+  // deploy bằng vai không sở hữu ⇒ lượt sửa không ghi được neo ⇒ ⑶ chặn deploy đầu tiên, nêu đúng lối ra. Ba test N2 cũ xanh
+  // vì bootstrap của chúng đã chạy hardening S1.43 bằng superuser; test này gỡ neo để mô phỏng cụm cũ.
+  it("[fix round 4 — N2] nhánh 4 · S1.43: cụm bootstrap trước S1.43 + vai deploy không sở hữu bảng ⇒ migrate() GÃY ở đúng vế ⑶ (chưa mang neo, nêu lối ra); chủ bảng chạy một lần ⇒ vai deploy đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      // Mô phỏng cụm cũ: gỡ mọi chú thích neo do bootstrap vừa ghi.
+      const { rows: bang } = await db.pool.query<{ t: string }>(
+        "SELECT (quote_ident(n.nspname) || '.' || quote_ident(c.relname)) AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+          "WHERE obj_description(c.oid, 'pg_class') LIKE 'neo: %'",
+      );
+      expect(bang.length, "bootstrap đã ghi neo cho mọi bảng tenant/sổ").toBeGreaterThanOrEqual(29);
+      for (const b of bang) await db.pool.query(`COMMENT ON TABLE ${b.t} IS NULL`);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
+        expect(loi, "vai deploy không sở hữu bảng: không ghi được neo ⇒ phải GÃY nói ra, không im").not.toBeNull();
+        expect(loi!.message).toContain("Hardening không sửa được 1 mục");
+        expect(loi!.message).toContain("public.users: bảng tenant đã khai (migration 002_organizations_and_users) CHƯA MANG NEO — chú thích neo bị gỡ, oid mới (bảng dựng lại/chép đè), hay lượt sửa không sở hữu bảng (cụm bootstrap trước S1.43: chạy migrate() một lần bằng chủ bảng/superuser để ghi neo)");
+        // Lối ra đúng như thông điệp: chủ bảng (superuser) chạy một lần ⇒ neo được ghi ⇒ vai deploy đi qua.
+        await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR), "sau khi chủ bảng ghi neo, vai deploy đi qua").resolves.toEqual([]);
+      } finally {
+        await poolTrienKhai.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
   // [vòng fix 2 — I3] MỤC (C) KHÔNG ĐƯỢC TỰ GIỚI HẠN VÀO 'public'
   // ==========================================================================================
   // Vòng 1 sinh ra mục (C) kèm sẵn bộ lọc tự làm mù mình. Test đo cả HAI nửa cho mỗi đường:
