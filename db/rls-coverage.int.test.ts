@@ -2177,7 +2177,7 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
       await client.query("ROLLBACK");
       client.release();
     }
-  });
+  }, 180000); // [S1.56] hạn 180 s như khuôn S1.40 — dưới tải song song của evidence test này quá hạn 30023 ms (chạy riêng ~5 s); ba câu phán xét nó chạy không đổi so với khoản 98 — không phải hồi quy
 
   it("[INV-F1] ĐO: migrate() NÉM ở đúng mục cho từng cơ chế — bảng RLS có quyền mà không policy (⑵), bảng RLS ngoài tenant (⑶); và khoản 82⑵: policy caller_rate_limits ghim NGUYÊN VĂN, `false AND …` không còn đi qua", async () => {
     const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
@@ -3069,6 +3069,221 @@ describe("[S1.53 / khoản nợ 94] chủ bảng sau FORCE: mọi lệnh phải 
       await donDep();
     }
   }, 180000);
+});
+
+// ===============================================================================================
+// [S1.56 / khoản nợ 97] MỤC 94, CHỦ THỂ THỨ HAI — VAI CHẠY MIGRATION KHÔNG PHẢI CHỦ, KHÔNG THỪA KẾ CHỦ
+//
+// RLS áp cho mọi vai không được coi là chủ bất kể FORCE. Đo (thăm dò S1.56, PostgreSQL 16): chủ `zz_chu97` không superuser,
+// bảng có 2 hàng, policy duy nhất `TO zz_chu97`; vai `zz_trien97` không thừa kế chủ, có SELECT và UPDATE ⇒ đọc 0 hàng, UPDATE 0
+// hàng KHÔNG LỖI, cả khi NO FORCE; mục 94 (chủ thể chủ bảng) và 83⑵ im. Hardening phán xét dưới vai của kết nối deploy (migrate.ts
+// không SET ROLE), nên test chạy câu phán xét dưới `SET LOCAL ROLE` của một vai thường — CI chạy migrate() bằng superuser, vốn
+// đứng ngoài chủ thể này. Tầng sản xuất (hồ sơ N2: migrate() dưới vai deploy NÉM) ở db/migrations.int.test.ts.
+// ===============================================================================================
+describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải chủ, không thừa kế chủ", () => {
+  const CHU = "zz_chu97";
+  const TRIEN = "zz_trien97";
+  const NHOM = "zz_nhom97";
+  const HAI_LENH = ["zz_s97.t/zz_trien97 (vai chạy migration)/SELECT", "zz_s97.t/zz_trien97 (vai chạy migration)/UPDATE"];
+  const trongGiaoDich = async (viec: (c: pg.PoolClient) => Promise<void>): Promise<void> => {
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await viec(c);
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  };
+  const dung = async (c: pg.PoolClient): Promise<void> => {
+    await c.query(`CREATE ROLE ${CHU} NOSUPERUSER NOBYPASSRLS; CREATE ROLE ${TRIEN} NOSUPERUSER NOBYPASSRLS; CREATE ROLE ${NHOM} NOLOGIN`);
+    await c.query(`CREATE SCHEMA zz_s97 AUTHORIZATION ${CHU}`);
+    await c.query(
+      `SET ROLE ${CHU}; CREATE TABLE zz_s97.t (id int); INSERT INTO zz_s97.t VALUES (1), (2); ` +
+        "ALTER TABLE zz_s97.t ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_s97.t FORCE ROW LEVEL SECURITY; " +
+        `CREATE POLICY p_chu ON zz_s97.t TO ${CHU} USING (true) WITH CHECK (true); ` +
+        `GRANT USAGE ON SCHEMA zz_s97 TO ${TRIEN}; GRANT SELECT, UPDATE ON zz_s97.t TO ${TRIEN}; RESET ROLE`,
+    );
+  };
+  /** Chạy một câu dưới vai (null = vai của pool test, superuser) trong savepoint — SET LOCAL ROLE lùi cùng savepoint. */
+  const duoi = async <T extends pg.QueryResultRow>(c: pg.PoolClient, vai: string | null, sql: string): Promise<pg.QueryResult<T>> => {
+    await c.query("SAVEPOINT d");
+    try {
+      if (vai) await c.query(`SET LOCAL ROLE ${vai}`);
+      return await c.query<T>(sql);
+    } finally {
+      await c.query("ROLLBACK TO SAVEPOINT d");
+    }
+  };
+  const nhan = async (c: pg.PoolClient, vai: string | null): Promise<string[]> =>
+    (await duoi<{ mo_ta: string }>(c, vai, docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
+      .map((r) => r.mo_ta.split(":")[0]!)
+      .filter((m) => m.startsWith("zz_s97."))
+      .sort();
+  const dem = async (c: pg.PoolClient, vai: string, bang: string): Promise<number> =>
+    (await duoi<{ n: number }>(c, vai, `SELECT count(*)::int AS n FROM ${bang}`)).rows[0]!.n;
+
+  it("[INV-F1] ĐO: vai không phải chủ, không thừa kế chủ, có SELECT và UPDATE trên bảng RLS mà policy chỉ TO chủ ⇒ đọc 0 hàng, UPDATE 0 hàng không lỗi, cả khi NO FORCE; mục 94 dưới vai ấy nêu đúng hai lệnh đã cấp, dưới superuser im", async () => {
+    await trongGiaoDich(async (c) => {
+      await dung(c);
+      expect(await dem(c, CHU, "zz_s97.t"), "đối chứng: chủ đọc 2").toBe(2);
+      expect(await dem(c, TRIEN, "zz_s97.t"), "vai chạy migration đọc 0 — không lỗi").toBe(0);
+      expect((await duoi(c, TRIEN, "UPDATE zz_s97.t SET id = id + 10")).rowCount, "UPDATE 0 hàng — không lỗi").toBe(0);
+      expect(await nhan(c, TRIEN), "mục 94 dưới vai ấy nêu đúng hai lệnh đã cấp").toEqual(HAI_LENH);
+      expect(await nhan(c, null), "dưới superuser (vai của CI) chủ thể thứ hai đứng ngoài; chủ zz_chu97 được p_chu phủ").toEqual([]);
+      await c.query("ALTER TABLE zz_s97.t NO FORCE ROW LEVEL SECURITY");
+      expect(await dem(c, TRIEN, "zz_s97.t"), "NO FORCE: vẫn 0 — RLS áp cho vai không phải chủ bất kể FORCE").toBe(0);
+      expect(await nhan(c, TRIEN), "NO FORCE: vẫn nêu — vế FORCE không thuộc chủ thể này").toEqual(HAI_LENH);
+    });
+  }, 120000);
+
+  it("[INV-F1] ĐO: các vế lọc của chủ thể thứ hai chịu lực — policy phủ theo lệnh và qua nhóm, RESTRICTIVE không tính là phủ; vai thừa kế chủ (kể cả khi không policy nào phủ nó), superuser, BYPASSRLS, bảng tắt RLS, bảng thuộc extension, lệnh đã REVOKE, bảng con của cha bật RLS thì im; thành viên NOINHERIT của chủ thì nêu", async () => {
+    await trongGiaoDich(async (c) => {
+      await dung(c);
+      expect(await nhan(c, TRIEN), "phép đo không rỗng ruột").toEqual(HAI_LENH);
+      await c.query("CREATE POLICY p_doc ON zz_s97.t FOR SELECT USING (true)");
+      expect(await nhan(c, TRIEN), "FOR SELECT TO PUBLIC phủ SELECT, không phủ UPDATE").toEqual([HAI_LENH[1]]);
+      await c.query("DROP POLICY p_doc ON zz_s97.t");
+      await c.query(`GRANT ${NHOM} TO ${TRIEN}; CREATE POLICY p_nhom ON zz_s97.t FOR UPDATE TO ${NHOM} USING (true) WITH CHECK (true)`);
+      expect(await nhan(c, TRIEN), "policy cho nhóm mà vai là thành viên phủ đúng lệnh ấy").toEqual([HAI_LENH[0]]);
+      await c.query(`DROP POLICY p_nhom ON zz_s97.t; REVOKE ${NHOM} FROM ${TRIEN}`);
+      await c.query("CREATE POLICY r_all ON zz_s97.t AS RESTRICTIVE USING (true) WITH CHECK (true)");
+      expect(await nhan(c, TRIEN), "RESTRICTIVE TO PUBLIC không tính là phủ — một mình nó không trao hàng nào").toEqual(HAI_LENH);
+      await c.query("DROP POLICY r_all ON zz_s97.t");
+      await c.query(`GRANT ${CHU} TO ${TRIEN}`);
+      expect(await nhan(c, TRIEN), "thừa kế chủ, bảng FORCE: p_chu TO chủ phủ luôn thành viên (USAGE) ⇒ im").toEqual([]);
+      await c.query(`REVOKE ${CHU} FROM ${TRIEN}`);
+      await c.query(`ALTER ROLE ${TRIEN} BYPASSRLS`);
+      expect(await nhan(c, TRIEN), "BYPASSRLS bỏ qua RLS ở mọi cấu hình").toEqual([]);
+      await c.query(`ALTER ROLE ${TRIEN} NOBYPASSRLS`);
+      // [bản hai — tự bắt: bỏ vế superuser SỐNG] trên fixture này p_chu phủ luôn superuser (pg_has_role của superuser với mọi vai là
+      // true). [bản ba] Vế superuser chịu lực ở bảng FORCE không policy nào phủ superuser — xem it lượt soi 49 ⒟ (đo).
+      await c.query("CREATE ROLE zz_su97 SUPERUSER NOBYPASSRLS");
+      expect(await nhan(c, "zz_su97"), "SUPERUSER NOBYPASSRLS: RLS coi nó là chủ mọi bảng").toEqual([]);
+      // [bản hai — tự bắt: bỏ vế thừa kế chủ SỐNG] vế cũ thử thành viên của chủ khi p_chu còn phủ nó, nên vế phủ che mất vế thừa kế.
+      // Nay: bảng NO FORCE, không policy nào phủ chủ hay vai ấy — thành viên INHERIT đọc đủ hàng vì RLS coi nó là chủ, mục phải im;
+      // thành viên NOINHERIT không được coi là chủ, đọc 0, mục phải nêu.
+      await c.query(`ALTER TABLE zz_s97.t NO FORCE ROW LEVEL SECURITY; ALTER POLICY p_chu ON zz_s97.t TO ${NHOM}; GRANT ${CHU} TO ${TRIEN}`);
+      expect(await dem(c, TRIEN, "zz_s97.t"), "thành viên INHERIT của chủ đọc 2 — RLS coi nó là chủ").toBe(2);
+      expect(await nhan(c, TRIEN), "và mục im dù không policy nào phủ nó").toEqual([]);
+      await c.query(`REVOKE ${CHU} FROM ${TRIEN}; GRANT ${CHU} TO ${TRIEN} WITH INHERIT FALSE`);
+      expect(await dem(c, TRIEN, "zz_s97.t"), "thành viên NOINHERIT không được coi là chủ: đọc 0").toBe(0);
+      expect(await nhan(c, TRIEN), "và mục nêu — thừa kế theo USAGE, không theo MEMBER").toEqual(HAI_LENH);
+      await c.query(`REVOKE ${CHU} FROM ${TRIEN}; ALTER POLICY p_chu ON zz_s97.t TO ${CHU}; ALTER TABLE zz_s97.t FORCE ROW LEVEL SECURITY`);
+      expect(await nhan(c, TRIEN), "trả fixture ⇒ lại đủ hai lệnh").toEqual(HAI_LENH);
+      await c.query("ALTER TABLE zz_s97.t DISABLE ROW LEVEL SECURITY");
+      expect(await nhan(c, TRIEN), "bảng tắt RLS").toEqual([]);
+      await c.query("ALTER TABLE zz_s97.t ENABLE ROW LEVEL SECURITY");
+      await c.query("ALTER EXTENSION plpgsql ADD TABLE zz_s97.t");
+      expect(await nhan(c, TRIEN), "bảng thuộc extension là việc của extension").toEqual([]);
+      await c.query("ALTER EXTENSION plpgsql DROP TABLE zz_s97.t");
+      await c.query(`REVOKE UPDATE ON zz_s97.t FROM ${TRIEN}`);
+      expect(await nhan(c, TRIEN), "lệnh đã REVOKE ⇒ không đòi (ồn 42501, không im)").toEqual([HAI_LENH[0]]);
+      await c.query(
+        `SET ROLE ${CHU}; CREATE TABLE zz_s97.p (id int, k int) PARTITION BY LIST (k); ` +
+          "CREATE TABLE zz_s97.p_a PARTITION OF zz_s97.p FOR VALUES IN (1); " +
+          "ALTER TABLE zz_s97.p ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_s97.p_a ENABLE ROW LEVEL SECURITY; " +
+          `CREATE POLICY p_all ON zz_s97.p USING (true) WITH CHECK (true); GRANT SELECT ON zz_s97.p, zz_s97.p_a TO ${TRIEN}; RESET ROLE`,
+      );
+      const cuaP = async (): Promise<string[]> => (await nhan(c, TRIEN)).filter((m) => m.startsWith("zz_s97.p"));
+      expect(await cuaP(), "lá của cha bật RLS đi qua cha ⇒ đứng ngoài").toEqual([]);
+      await c.query("ALTER TABLE zz_s97.p DETACH PARTITION zz_s97.p_a");
+      expect(await cuaP(), "tách lá ⇒ bảng đứng riêng không policy ⇒ nêu").toEqual(["zz_s97.p_a/zz_trien97 (vai chạy migration)/SELECT"]);
+    });
+  }, 120000);
+
+  it("[INV-F1] [lượt soi 49] gương check_enable_rls: thành viên INHERIT của chủ BYPASSRLS, hay của chủ đã tự REVOKE, trên bảng FORCE đọc 0 và UPDATE 0 không lỗi ⇒ nêu; cùng thành viên trên bảng NO FORCE đọc đủ ⇒ im; SUPERUSER NOBYPASSRLS và chính chủ không ở chủ thể này; nhóm NOINHERIT không phủ; GRANT mức cột bị nêu; INSERT không xét; thiếu USAGE lược đồ thì im; bảng tenant chuẩn không EXECUTE thì ồn — ranh giới khoản 101", async () => {
+    const nhanVai = async (c: pg.PoolClient, vai: string, tien: string): Promise<string[]> =>
+      (await duoi<{ mo_ta: string }>(c, vai, docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
+        .map((r) => r.mo_ta.split(":")[0]!)
+        .filter((m) => m.startsWith(tien) && m.includes("(vai chạy migration)"))
+        .sort();
+    const baLenh = (bang: string, vai: string): string[] =>
+      ["DELETE", "SELECT", "UPDATE"].map((l) => `${bang}/${vai} (vai chạy migration)/${l}`);
+    const ma = async (c: pg.PoolClient, vai: string, sql: string): Promise<string | null> =>
+      duoi(c, vai, sql).then(
+        () => null,
+        (e: { code?: string }) => e.code ?? "khong-ma",
+      );
+    await trongGiaoDich(async (c) => {
+      // ⒜ chủ BYPASSRLS — chủ thể thứ nhất loại chủ ấy, bản hai loại mọi thành viên thừa kế chủ: không ai soi thành viên.
+      await c.query(
+        "CREATE ROLE zz_chua97 NOLOGIN BYPASSRLS; CREATE ROLE zz_tra97 NOSUPERUSER NOBYPASSRLS; GRANT zz_chua97 TO zz_tra97; " +
+          "CREATE SCHEMA zz_sa97 AUTHORIZATION zz_chua97",
+      );
+      await c.query(
+        "SET ROLE zz_chua97; CREATE TABLE zz_sa97.t (id int); INSERT INTO zz_sa97.t VALUES (1), (2); " +
+          "ALTER TABLE zz_sa97.t ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_sa97.t FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY p_api ON zz_sa97.t TO app_api USING (true) WITH CHECK (true); RESET ROLE",
+      );
+      expect(await dem(c, "zz_tra97", "zz_sa97.t"), "⒜ thành viên INHERIT của chủ BYPASSRLS, bảng FORCE: đọc 0").toBe(0);
+      expect((await duoi(c, "zz_tra97", "UPDATE zz_sa97.t SET id = id + 10")).rowCount, "⒜ UPDATE 0 hàng không lỗi").toBe(0);
+      expect(await nhanVai(c, "zz_tra97", "zz_sa97."), "⒜ mục nêu ba lệnh thành viên có quyền").toEqual(baLenh("zz_sa97.t", "zz_tra97"));
+      await c.query("ALTER TABLE zz_sa97.t NO FORCE ROW LEVEL SECURITY");
+      expect(await dem(c, "zz_tra97", "zz_sa97.t"), "⒞ NO FORCE: thành viên thừa kế chủ đọc 2").toBe(2);
+      expect(await nhanVai(c, "zz_tra97", "zz_sa97."), "⒞ và mục im").toEqual([]);
+      // ⒝ chủ thường tự REVOKE ALL; thành viên INHERIT có GRANT trực tiếp. Bảng d: chỉ policy FOR SELECT TO app_api.
+      await c.query(
+        "CREATE ROLE zz_chub97 NOSUPERUSER NOBYPASSRLS; CREATE ROLE zz_trb97 NOSUPERUSER NOBYPASSRLS; GRANT zz_chub97 TO zz_trb97; " +
+          "CREATE SCHEMA zz_sb97 AUTHORIZATION zz_chub97",
+      );
+      await c.query(
+        "SET ROLE zz_chub97; CREATE TABLE zz_sb97.t (id int); INSERT INTO zz_sb97.t VALUES (1), (2); " +
+          "ALTER TABLE zz_sb97.t ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_sb97.t FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY p_api ON zz_sb97.t TO app_api USING (true) WITH CHECK (true); " +
+          "REVOKE ALL ON zz_sb97.t FROM zz_chub97; GRANT SELECT, UPDATE ON zz_sb97.t TO zz_trb97; " +
+          "CREATE TABLE zz_sb97.d (id int); INSERT INTO zz_sb97.d VALUES (1), (2); " +
+          "ALTER TABLE zz_sb97.d ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_sb97.d FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY p_doc ON zz_sb97.d FOR SELECT TO app_api USING (true); RESET ROLE",
+      );
+      expect(await dem(c, "zz_trb97", "zz_sb97.t"), "⒝ đọc 0").toBe(0);
+      expect((await duoi(c, "zz_trb97", "UPDATE zz_sb97.t SET id = id + 10")).rowCount, "⒝ UPDATE 0 không lỗi").toBe(0);
+      expect(await nhanVai(c, "zz_trb97", "zz_sb97.t"), "⒝ mục nêu hai lệnh đã cấp").toEqual([
+        "zz_sb97.t/zz_trb97 (vai chạy migration)/SELECT",
+        "zz_sb97.t/zz_trb97 (vai chạy migration)/UPDATE",
+      ]);
+      // ⒟ SUPERUSER NOBYPASSRLS trên bảng FORCE mà không policy nào phủ nó ở UPDATE/DELETE: bỏ qua RLS — vế superuser giữ nó ngoài.
+      await c.query("CREATE ROLE zz_sud97 SUPERUSER NOBYPASSRLS");
+      expect((await duoi(c, "zz_sud97", "UPDATE zz_sb97.d SET id = id + 10")).rowCount, "⒟ superuser ghi đủ 2 hàng").toBe(2);
+      expect(await nhanVai(c, "zz_sud97", "zz_sb97.d"), "⒟ và mục im").toEqual([]);
+      // ⒠ chính chủ không lặp lại ở chủ thể thứ hai — chủ thể thứ nhất nêu nó.
+      expect(await nhanVai(c, "zz_chub97", "zz_sb97.d"), "⒠ chủ không ở chủ thể thứ hai").toEqual([]);
+      expect(
+        (await duoi<{ mo_ta: string }>(c, "zz_chub97", docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
+          .map((r) => r.mo_ta.split(":")[0]!)
+          .filter((m) => m.startsWith("zz_sb97.d"))
+          .sort(),
+        "⒠ đối chứng: chủ thể thứ nhất nêu chủ ở bốn lệnh chưa phủ",
+      ).toEqual([
+        "zz_sb97.d/zz_chub97 (chủ bảng)/DELETE",
+        "zz_sb97.d/zz_chub97 (chủ bảng)/INSERT",
+        "zz_sb97.d/zz_chub97 (chủ bảng)/SELECT",
+        "zz_sb97.d/zz_chub97 (chủ bảng)/UPDATE",
+      ]);
+      // ⒡ nhóm NOINHERIT không phủ: phủ theo USAGE, không theo MEMBER.
+      await dung(c);
+      await c.query(`GRANT ${NHOM} TO ${TRIEN} WITH INHERIT FALSE; CREATE POLICY p_nhom ON zz_s97.t FOR UPDATE TO ${NHOM} USING (true) WITH CHECK (true)`);
+      expect((await duoi(c, TRIEN, "UPDATE zz_s97.t SET id = id + 10")).rowCount, "⒡ policy cho nhóm NOINHERIT không áp: UPDATE 0").toBe(0);
+      expect(await nhan(c, TRIEN), "⒡ và mục vẫn nêu UPDATE").toEqual(HAI_LENH);
+      await c.query(`DROP POLICY p_nhom ON zz_s97.t; REVOKE ${NHOM} FROM ${TRIEN}`);
+      // ⒢ GRANT UPDATE mức cột vẫn là quyền UPDATE.
+      await c.query(`REVOKE UPDATE ON zz_s97.t FROM ${TRIEN}; GRANT UPDATE (id) ON zz_s97.t TO ${TRIEN}`);
+      expect(await nhan(c, TRIEN), "⒢ GRANT UPDATE (id) bị nêu").toEqual(HAI_LENH);
+      // ⒣ INSERT không xét: không phủ thì ném — ồn.
+      await c.query(`GRANT INSERT ON zz_s97.t TO ${TRIEN}`);
+      expect(await ma(c, TRIEN, "INSERT INTO zz_s97.t VALUES (3)"), "⒣ INSERT không phủ ném 42501").toBe("42501");
+      expect(await nhan(c, TRIEN), "⒣ và mục không nêu INSERT").toEqual(HAI_LENH);
+      // ⒤ thiếu USAGE trên lược đồ: mọi truy cập ném — ồn — mục im.
+      await c.query(`REVOKE USAGE ON SCHEMA zz_s97 FROM ${TRIEN}`);
+      expect(await ma(c, TRIEN, "SELECT count(*) FROM zz_s97.t"), "⒤ thiếu USAGE ném 42501").toBe("42501");
+      expect(await nhan(c, TRIEN), "⒤ và mục im").toEqual([]);
+      await c.query(`GRANT USAGE ON SCHEMA zz_s97 TO ${TRIEN}`);
+      // ⒥ ranh giới có ghim (NHẸ-4 — khoản 101): bảng tenant chuẩn, policy TO PUBLIC tính là phủ; ồn chỉ nhờ EXECUTE của hàm ngữ cảnh.
+      await c.query(`GRANT SELECT, UPDATE ON public.suppliers TO ${TRIEN}`);
+      expect(await ma(c, TRIEN, "SELECT count(*) FROM public.suppliers"), "⒥ không EXECUTE trên app_current_org_id() ⇒ 42501").toBe("42501");
+      expect(await nhanVai(c, TRIEN, "public.suppliers"), "⒥ policy tenant TO PUBLIC tính là phủ — ranh giới, khoản 101").toEqual([]);
+    });
+  }, 120000);
 });
 
 // ===============================================================================================
