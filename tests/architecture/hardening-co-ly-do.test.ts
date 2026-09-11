@@ -76,7 +76,10 @@ const RE_HANG_QUAN_HE =
  * một phán xét và cổng không đòi dòng lý do cho nó.
  */
 const RE_NGOAI_BANG =
-  /EXECUTE [\s\S]{0,300}?\|\| (CAU_[A-Z_0-9]+) \|\|[\s\S]{0,300}?INTO con_sot;[\s\S]{0,600}?loi_gom := loi_gom/gu;
+  /EXECUTE [\s\S]{0,300}?\|\| (CAU_[A-Z_0-9]+) \|\|[\s\S]{0,300}?INTO con_sot;[\s\S]{0,600}?(?:loi_gom := loi_gom|RAISE EXCEPTION USING ERRCODE)/gu;
+// [S1.57 / khoản nợ 100 — lượt soi 50 NHẸ-3] Vế `RAISE EXCEPTION USING ERRCODE`: lượt `truoc_vong` chạy một câu thẳng rồi
+// RAISE — chặn deploy TRƯỚC vòng đánh số, cũng ngoài `bang`, và không qua `loi_gom`. Bản đầu của vòng chỉ đòi vế `loi_gom`
+// nên phán xét duy nhất của hardening chạy trước vòng không bị cổng đòi dòng lý do nào. (E3) `RAISE WARNING` vẫn đứng ngoài.
 
 /**
  * Tách một hàng của `bang` thành các Ô: dấu phẩy ở mức ngoặc 0, ngoài mọi dollar-quote.
@@ -206,7 +209,7 @@ export function viPhamPhanXetKhongCoLyDo(hardening: string, quyetDinh: string): 
     }
   }
   for (const m of hardening.matchAll(RE_NGOAI_BANG)) {
-    canTra.set(m[1]!, "phán xét chạy thẳng vào `loi_gom` ở BƯỚC 3, ngoài mảng `bang`");
+    canTra.set(m[1]!, "phán xét chạy thẳng ngoài mảng `bang` — vào `loi_gom` ở BƯỚC 3, hay RAISE … ERRCODE ở lượt `truoc_vong`");
   }
   if (canTra.size < 20) {
     loi.push(`chỉ thu được ${canTra.size} khoá tra cứu, phải ≥ 20 — bộ đọc ô hay khuôn hậu điều kiện đã đổi, cổng đang MÙ`);
@@ -260,6 +263,14 @@ describe("[INV-H19] hardening: mọi phán xét có một dòng lý do trong ADR
     expect(hong).not.toBe(QUYET_DINH);
     expect(viPhamPhanXetKhongCoLyDo(HARDENING, hong)).toEqual([
       expect.stringContaining("CAU_MEMBERSHIP_LA"),
+    ]);
+  });
+
+  it("[S1.57 / khoản nợ 100 — lượt soi 50 NHẸ-3] đột biến — phán xét NGOÀI `bang` chặn bằng RAISE … ERRCODE (lượt truoc_vong) mất dòng lý do thì ĐỎ", () => {
+    const hong = QUYET_DINH.replaceAll("CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI", "CAU_PHU_LENH_VAI_CHAY_MIGRATION_XX");
+    expect(hong).not.toBe(QUYET_DINH);
+    expect(viPhamPhanXetKhongCoLyDo(HARDENING, hong)).toEqual([
+      expect.stringContaining("CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI"),
     ]);
   });
 

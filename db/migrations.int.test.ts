@@ -1,4 +1,4 @@
-import { TU_CHOI_GUC_SOM, createPool, migrate } from "@trustprocure/db";
+import { TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, createPool, migrate } from "@trustprocure/db";
 import {
   startPostgres,
   withMigratedDatabase,
@@ -542,6 +542,8 @@ describe("migration của dự án", () => {
         expect(loi!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/UPDATE");
         expect(loi!.message, "chỉ hai lệnh đã cấp").not.toContain("public.suppliers/trien_khai (vai chạy migration)/DELETE");
         expect(loi!.message, "[lượt soi 49 NẶNG-1] thông điệp nói backfill của CHÍNH lượt đã ghi checksum").toContain("đã ghi checksum");
+        // [S1.57 / khoản nợ 100] Không tệp đánh số nào chờ ⇒ migrate() KHÔNG hỏi trước vòng: lượt phán xét sau vòng nêu trọn mọi mục.
+        expect(loi!.message, "[khoản nợ 100] không tệp nào chờ ⇒ không có phép từ chối trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
         await db.pool.query("REVOKE SELECT, UPDATE ON suppliers FROM trien_khai");
         await expect(migrate(poolTrienKhai, MIGRATIONS_DIR), "thu hồi quyền ⇒ đi qua").resolves.toEqual([]);
       } finally {
@@ -551,6 +553,199 @@ describe("migration của dự án", () => {
       await db.stop();
     }
   }, 300000);
+
+  // [S1.57 / khoản nợ 100 — lượt soi 49 NẶNG-1] MỤC 94 PHÁN XÉT SAU VÒNG ĐÁNH SỐ nên, khi chủ thể "vai chạy migration" đỏ, backfill
+  // của CHÍNH lượt đã chạy dưới cấu hình ấy, ra 0 hàng, COMMIT và ghi checksum — deploy sau không chạy lại (đo S1.56 ⒣). Chủ thể ấy
+  // nay được hỏi TRƯỚC vòng (lượt `truoc_vong` của hardening, chỉ khi còn tệp chưa áp) và migrate() từ chối trước khi tệp nào chạy.
+  // Mọi lối ra của chủ thể này nằm ngoài tầm của chính vai ấy (REVOKE do người cấp, chủ bảng hay SUPERUSER; chạy dưới chủ bảng; policy
+  // do chủ bảng thêm), nên chặn sớm không lấy mất lối ra nào mà một migration chạy dưới vai ấy làm được — trừ migration tự SET ROLE
+  // sang chủ, ranh giới nói ra.
+  it("[INV-F1] [khoản nợ 100] hồ sơ N2 với một backfill đang chờ: trien_khai có SELECT, UPDATE trên suppliers mà policy chỉ TO app_api ⇒ migrate() dưới trien_khai TỪ CHỐI TRƯỚC vòng đánh số — backfill không chạy, không dòng schema_migrations, hàng giữ nguyên, thông điệp nêu bảng/vai/lệnh; chạy dưới chủ bảng ⇒ backfill áp đủ hàng", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k100-"));
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+      await writeFile(
+        join(tmp, "999_zz_backfill100.sql"),
+        "UPDATE public.suppliers SET legal_name = legal_name || ' (da sua 100)';\n",
+        "utf8",
+      );
+      // Một nhà cung cấp thật, dựng dưới superuser theo đúng chuỗi danh tính của `dungKichBan` (hardening-suy-tu-tinh-chat).
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz100', 'zz100') RETURNING id")).rows[0]!.id;
+      const nguoi = (
+        await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'pm100@vidu.vn', 'pm100') RETURNING id", [org])
+      ).rows[0]!.id;
+      await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, nguoi]);
+      const phien = (
+        await db.pool.query<{ id: string }>(
+          "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+          [org, nguoi, Buffer.alloc(32, 100)],
+        )
+      ).rows[0]!.id;
+      await db.pool.query("INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC 100', $2, $3)", [org, nguoi, phien]);
+      const tenNcc = async (): Promise<string[]> =>
+        (await db.pool.query<{ legal_name: string }>("SELECT legal_name FROM suppliers WHERE org_id = $1", [org])).rows.map((r) => r.legal_name);
+      const daGhi999 = async (): Promise<number> =>
+        (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = '999_zz_backfill100.sql'")).rowCount ?? 0;
+
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      await db.pool.query("ALTER POLICY suppliers_tenant_isolation ON suppliers TO app_api");
+      await db.pool.query("GRANT SELECT, UPDATE ON suppliers TO trien_khai");
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        const loi = await migrate(poolTrienKhai, tmp).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, "vai deploy sẽ backfill 0 hàng im lặng — migrate() phải từ chối").not.toBeNull();
+        // Hai khẳng định DỮ LIỆU đứng trước thông điệp: tác hại của khoản 100 là tệp đã bị tiêu, không phải chữ của lỗi.
+        expect(await daGhi999(), "S1.56 ⒣: bản trước ghi 999 là đã áp dù backfill ra 0 hàng").toBe(0);
+        expect(await tenNcc(), "backfill không chạy — hàng giữ nguyên").toEqual(["NCC 100"]);
+        expect(loi!.message, `thông điệp: ${loi!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+        // [lượt soi 50 NHẸ-2] Mỗi dòng nêu đường tới quyền — lời khuyên "gỡ đường tới quyền" chỉ làm được khi biết đường ấy.
+        expect(loi!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/SELECT (cấp thẳng cho vai này)");
+        expect(loi!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/UPDATE (cấp thẳng cho vai này)");
+        expect(loi!.message, "chỉ hai lệnh đã cấp").not.toContain("public.suppliers/trien_khai (vai chạy migration)/DELETE");
+
+        // [lượt soi 50 NẶNG-1 — đối chứng cho `tu_sua_duoc`] Quyền đến qua một NHÓM mà vai deploy nhận membership KÈM ADMIN OPTION từ
+        // superuser: PG16 chỉ thu hồi grant của chính người thu hồi, nên vai ấy KHÔNG tự cắt được (đo, thăm dò S1.57) — dòng vẫn bị
+        // chặn trước vòng, và thông điệp nêu đường qua nhóm.
+        await db.pool.query("REVOKE SELECT, UPDATE ON suppliers FROM trien_khai");
+        await db.pool.query(
+          "CREATE ROLE zz_nhom100 NOLOGIN; GRANT zz_nhom100 TO trien_khai WITH ADMIN OPTION; GRANT SELECT, UPDATE ON suppliers TO zz_nhom100",
+        );
+        const loiNhom = await migrate(poolTrienKhai, tmp).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loiNhom, "quyền qua nhóm mà vai deploy không tự cắt được — vẫn chặn trước vòng").not.toBeNull();
+        expect(await daGhi999()).toBe(0);
+        expect(loiNhom!.message, `thông điệp: ${loiNhom!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+        expect(loiNhom!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/SELECT (qua nhóm zz_nhom100)");
+      } finally {
+        await poolTrienKhai.end();
+      }
+      // Lối ra "chạy migrate() dưới một vai mà RLS không áp" — superuser bootstrap: tệp chưa bị tiêu nên backfill tới được đích.
+      await expect(migrate(db.pool, tmp)).resolves.toEqual(["999_zz_backfill100.sql"]);
+      expect(await tenNcc(), "backfill áp đủ hàng").toEqual(["NCC 100 (da sua 100)"]);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [S1.57 / khoản nợ 100 — lượt soi 50 NẶNG-1] HỎI TRƯỚC VÒNG KHÔNG ĐƯỢC CHẶN DÒNG MÀ MỘT MIGRATION DƯỚI CHÍNH VAI DEPLOY SỬA ĐƯỢC.
+  // Bản đầu của vòng chặn mọi dòng của chủ thể "vai chạy migration" — kể cả thành viên thừa kế chủ trên bảng FORCE, vốn tự thêm được
+  // policy vì kiểm chủ là has_privs_of_role (đo): migration vá lỗi không bao giờ tới đích, một ngõ cụt ADR-028 §3. Và test "chủ bảng
+  // không bị hỏi trước" của bản đầu chạy migrate() bằng superuser — vốn đứng ngoài chủ thể thứ hai — nên che đúng ca ấy. Nay mọi pha
+  // chạy dưới vai deploy KHÔNG superuser (hồ sơ N2): dựng một cấu hình, đo "không tệp chờ ⇒ NÉM ở mục 94, không từ chối trước vòng",
+  // rồi đặt một migration vá lỗi chạy dưới chính `trien_khai` và đo nó tới đích.
+  it("[INV-F1] [khoản nợ 100] hỏi trước vòng KHÔNG chặn dòng mà một migration dưới chính vai deploy sửa được — chính chủ bảng, thành viên INHERIT của chủ thường và của chủ BYPASSRLS, vai có ADMIN OPTION trên chủ, vai tự cấp membership nhóm mang quyền: không tệp chờ thì NÉM ở mục 94, có migration vá lỗi đang chờ thì nó tới đích", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k100b-"));
+    let poolTrienKhai: pg.Pool | undefined;
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      const p = createPool(csTrienKhai, 2);
+      poolTrienKhai = p;
+      const vaiGoc = (await db.pool.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]!.vai;
+      let so = 0;
+      const pha = async (
+        ten: string,
+        dung: () => Promise<void>,
+        phaiCo: readonly string[],
+        khongCo: readonly string[],
+        vaLoi: string,
+        go: string,
+      ): Promise<void> => {
+        await dung();
+        const loi = await migrate(p, tmp).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, `${ten}: đối chứng — cấu hình này đỏ ở mục 94`).not.toBeNull();
+        for (const doan of phaiCo) expect(loi!.message, `${ten}: ${loi!.message.slice(0, 400)}`).toContain(doan);
+        expect(loi!.message, `${ten}: không tệp chờ ⇒ không hỏi trước vòng`).not.toContain(TU_CHOI_TRUOC_VONG);
+        for (const doan of khongCo) expect(loi!.message, `${ten}: không được có ${doan}`).not.toContain(doan);
+        so += 1;
+        const tep = `99${so}_zz_va_loi100.sql`;
+        await writeFile(join(tmp, tep), vaLoi, "utf8");
+        await expect(migrate(p, tmp), `${ten}: migration vá lỗi chạy dưới chính trien_khai phải tới được đích`).resolves.toEqual([tep]);
+        await db.pool.query(go);
+      };
+      const TRA_POLICY = "ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC;\n";
+      const CHI_APP_API = "ALTER POLICY suppliers_tenant_isolation ON suppliers TO app_api";
+      /** Dạng dòng của chủ thể thứ hai trong thông điệp SAU vòng: `ten: RLS áp … lệnh này (đường tới quyền) mà …`. */
+      const dongSauVong = (duong: string): string =>
+        `public.suppliers/trien_khai (vai chạy migration)/SELECT: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (${duong})`;
+
+      await pha(
+        "⑴ vai deploy LÀ chủ bảng",
+        async () => {
+          await db.pool.query(`ALTER TABLE suppliers OWNER TO trien_khai; ${CHI_APP_API}`);
+        },
+        ["public.suppliers/trien_khai (chủ bảng)/SELECT", "cố ý KHÔNG soi chủ thể này"],
+        ["public.suppliers/trien_khai (vai chạy migration)"],
+        TRA_POLICY,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}`,
+      );
+      await pha(
+        "⑵ thành viên INHERIT của chủ thường, bảng FORCE",
+        async () => {
+          await db.pool.query(
+            `CREATE ROLE zz_chu100a NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100a; GRANT zz_chu100a TO trien_khai; ${CHI_APP_API}`,
+          );
+        },
+        [dongSauVong("thừa kế quyền chủ bảng zz_chu100a"), "cố ý KHÔNG chặn nó"],
+        [],
+        TRA_POLICY,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100a FROM trien_khai`,
+      );
+      await pha(
+        "⑶ thành viên INHERIT của chủ BYPASSRLS — chủ thể thứ nhất im",
+        async () => {
+          await db.pool.query(
+            `CREATE ROLE zz_chu100b NOLOGIN NOSUPERUSER BYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100b; GRANT zz_chu100b TO trien_khai; ${CHI_APP_API}`,
+          );
+        },
+        [dongSauVong("thừa kế quyền chủ bảng zz_chu100b"), "cố ý KHÔNG chặn nó"],
+        ["(chủ bảng)"],
+        TRA_POLICY,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100b FROM trien_khai`,
+      );
+      await pha(
+        "⑷ vai có ADMIN OPTION (không INHERIT, không SET) trên chủ",
+        async () => {
+          await db.pool.query(
+            "CREATE ROLE zz_chu100c NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100c; " +
+              `GRANT zz_chu100c TO trien_khai WITH ADMIN TRUE, INHERIT FALSE, SET FALSE; GRANT SELECT, UPDATE ON suppliers TO trien_khai; ${CHI_APP_API}`,
+          );
+        },
+        [dongSauVong("cấp thẳng cho vai này"), "cố ý KHÔNG chặn nó"],
+        [],
+        `GRANT zz_chu100c TO trien_khai WITH INHERIT TRUE;\n${TRA_POLICY}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE SELECT, UPDATE ON suppliers FROM trien_khai`,
+      );
+      await pha(
+        "⑸ vai tự cấp membership nhóm mang quyền — tự cắt được",
+        async () => {
+          await p.query("CREATE ROLE zz_nhom100b NOLOGIN; GRANT zz_nhom100b TO trien_khai");
+          await db.pool.query(`GRANT SELECT, UPDATE ON suppliers TO zz_nhom100b; ${CHI_APP_API}`);
+        },
+        [dongSauVong("qua nhóm zz_nhom100b"), "cố ý KHÔNG chặn nó"],
+        [],
+        "REVOKE zz_nhom100b FROM trien_khai;\n",
+        `REVOKE SELECT, UPDATE ON suppliers FROM zz_nhom100b; ${TRA_POLICY}`,
+      );
+    } finally {
+      await poolTrienKhai?.end();
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
 
   // [fix round 4] Ba đường trôi mà vòng 3 để hở. Đo trước khi vá: cả ba đều SỐNG SÓT qua
   // migrate() lần hai. Gộp vào một test vì chúng là cùng một lớp lỗ hổng (GRANT sau triển

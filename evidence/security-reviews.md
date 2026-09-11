@@ -2992,3 +2992,120 @@ chủ hay thừa kế chủ trừ khi FORCE; tách "chủ" và "không chủ" b�
 của describe khoản 94 cũng thiếu membership `WITH INHERIT FALSE` và GRANT mức cột: đột biến `USAGE`→`MEMBER` và
 `has_any_column_privilege`→`has_table_privilege` ở chủ thể chủ bảng nhiều khả năng cũng sống (suy ra, chưa đo). ⑷ Tiền đề của một
 ranh giới ("hôm nay ồn nhờ EXECUTE") phải có test ghim và có khoản — nếu không, một GRANT gỡ lỗi lặng lẽ xoá nó (khoản 101).
+
+# §S1.57 — khoản nợ 100: mục 94 hỏi TRƯỚC vòng đánh số — lượt `truoc_vong` bỏ qua dòng tự sửa được, và vai cuối mỗi tệp so với vai mở vòng
+
+**Bề mặt an ninh:** `packages/db/src/migrate.ts` — lượt hardening `truoc_vong` chạy khi còn tệp chưa áp (phép từ chối
+`TU_CHOI_TRUOC_VONG`), phép so `current_user` cuối tệp trong giao dịch của tệp (phép từ chối `TU_CHOI_DOI_VAI`), tệp hỏng thì huỷ
+kết nối; `db/migrations/hardening.always.sql` — hằng `MAU_ACL_CUA_BANG` và `CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI` (`ten`, `duong`,
+`tu_sua_duoc`), `CAU_PHU_LENH_CHU_BANG_SAI` bọc chủ thể thứ hai và nói checksum ở cả hai chủ thể, khối `truoc_vong` trong thân DO,
+khối "BA LƯỢT" và DECLARE `che_do`. Barrel `@trustprocure/db` xuất thêm hai hằng. Test: `db/migrations.int.test.ts` (hai `it`
+khoản 100, một khẳng định thêm ở test khoản 97); `packages/db/src/migrate.int.test.ts` (ba kỳ vọng số lượt lật có chủ đích, describe
+khoản 100 sáu `it`); `db/migration-shape.test.ts` (lớp tĩnh, bốn `it`); `tests/architecture/hardening-co-ly-do.test.ts` (cổng thấy
+khuôn `RAISE … ERRCODE`, một `it` đột biến).
+
+**Đo trước khi viết (bản đầu, cụm test):** ⑴ hồ sơ N2 — `trien_khai` có SELECT, UPDATE trên `suppliers`, policy tenant thu về
+`TO app_api`, một nhà cung cấp thật dựng theo chuỗi danh tính, một migration `999_zz_backfill100.sql` chạy
+`UPDATE public.suppliers SET legal_name = …` đang chờ ⇒ dưới bản S1.56, `migrate()` dưới `trien_khai` NÉM ở lượt phán xét nhưng
+khẳng định dữ liệu đỏ đúng chỗ: `schema_migrations` đã ghi `999` (1 thay vì 0) — backfill bị tiêu. ⑵ Tệp `SET LOCAL ROLE zz_x100`
+và tệp `COMMIT; SET ROLE zz_x100; BEGIN;` (vai lạ có SELECT, INSERT trên `schema_migrations`, để không bị 42501 che) ⇒ bản S1.56 đi
+qua và ghi checksum dưới vai lạ; tệp `SET ROLE` phạm vi phiên không trả lại ⇒ tệp sau chạy dưới vai lạ và ném 42501. ⑶ Ba test
+đếm lượt `.always.sql` đỏ đúng con số cũ (3 thay vì 4; thứ tự thiếu `truoc_vong`).
+
+**Hình dạng (bản hai):** ⒜ Chủ thể thứ hai của mục 94 (gương `check_enable_rls`, S1.56) tách thành
+`CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI`, trả `ten`, `duong` và `tu_sua_duoc`. `duong` đọc từ ACL mức bảng (ACL mặc định khi `relacl`
+NULL) và mức cột: cấp thẳng, qua PUBLIC, qua nhóm, thừa kế quyền chủ bảng. `tu_sua_duoc` có ba vế: thừa kế chủ theo USAGE; ADMIN
+OPTION trên một vai thừa kế chủ; một cạnh membership INHERIT trên đường tới grantee giữ quyền mà vai ấy thu hồi được, tức grantor là
+vai nó thừa kế. ⒝ Mục 94 bọc hằng ấy thành `mo_ta`: nêu đường tới quyền, nói checksum, và chia lời khuyên theo `tu_sua_duoc`.
+Thông điệp chủ thể thứ nhất cũng nói checksum và nói nó cố ý không được hỏi trước vòng. ⒞ Thân DO: chế độ `truoc_vong` hỏi hằng ấy
+trừ dòng `tu_sua_duoc`, RAISE SQLSTATE TP100 kèm `ten (duong)`, rồi RETURN; không bọc EXCEPTION. ⒟ `migrate.ts`: sau lượt sửa đầu
+và hai phép hàng mức database, đọc `schema_migrations`. Còn tệp chưa áp thì chạy `truoc_vong`: lỗi TP100 thành
+`TU_CHOI_TRUOC_VONG — <dòng (đường)>` kèm lối ra ít quyền nhất trước, lỗi khác ném nguyên; rồi chụp `current_user`. Với mỗi tệp,
+sau SQL của tệp và trong chính giao dịch: `current_user` lệch vai mở vòng ⇒ `TU_CHOI_DOI_VAI`, ROLLBACK, huỷ kết nối. Mọi tệp hỏng
+đều huỷ kết nối. ⒠ Lớp tĩnh: mọi `.sql` không phải `.always.sql` không được viết thẳng câu đổi vai; bộ bỏ chú thích biết chuỗi,
+định danh `"…"` và dollar-quote, và quét cả chuỗi lẫn thân dollar-quote.
+
+**Đo cho bản hai (thăm dò, PostgreSQL 16.15, hai container riêng, đã xoá):** ⒜ thành viên INHERIT của chủ, trên bảng FORCE mà
+policy không phủ chủ, đọc 0 hàng; `ALTER POLICY … TO PUBLIC` và `CREATE POLICY … TO <nó>` đều được, đọc lại ra 2. ⒟ Thành viên
+NOINHERIT có SET: `ALTER POLICY` báo "must be owner of table". ⒝ Vai do một vai CREATEROLE tạo: `pg_auth_members` ghi admin t,
+inherit f, set f, grantor là superuser bootstrap. Vai tạo ra nó tự `GRANT` cho mình rồi `ALTER POLICY` được trong cùng giao dịch.
+ADMIN trên một vai trung gian (không INHERIT, không SET) thừa kế chủ cũng tự cấp được, và ADMIN có qua một nhóm mà vai thừa kế cũng
+vậy. ⒞ Membership nhóm do superuser cấp kèm ADMIN OPTION: tự `REVOKE` chỉ báo WARNING "role … has not been granted membership in
+role … by role …", quyền còn nguyên. Membership do chính vai tự cấp thì tự `REVOKE` được, quyền mất ngay. Vị từ theo `grantor`
+cho t ở ca sau, f ở ca trước. Thêm: `acldefault('r', chủ)` thay được `relacl` NULL, và `string_agg(DISTINCT … ORDER BY …)` chạy.
+
+**Test (bản hai):**
+- **`migrations.int`, hồ sơ N2 với backfill đang chờ.** Hai khẳng định dữ liệu đứng trước thông điệp: `999` không được ghi, hàng
+  giữ nguyên. Thông điệp mang `TU_CHOI_TRUOC_VONG` và nêu `…/SELECT (cấp thẳng cho vai này)` cùng `…/UPDATE`, không DELETE.
+- **Đối chứng `tu_sua_duoc`.** Quyền chuyển sang một nhóm mà `trien_khai` nhận membership kèm ADMIN từ superuser: vẫn bị chặn,
+  và thông điệp nêu `(qua nhóm zz_nhom100)`. Chạy dưới superuser thì backfill áp đủ hàng.
+- **`migrations.int`, test nhiều pha dưới vai deploy KHÔNG superuser.** Pha ⑴: vai deploy LÀ chủ bảng. Pha ⑵: thành viên INHERIT
+  của chủ thường. Pha ⑶: thành viên INHERIT của chủ BYPASSRLS. Pha ⑷: ADMIN OPTION (không INHERIT, không SET) trên chủ. Pha ⑸:
+  vai tự cấp membership nhóm mang quyền.
+  - Với mỗi pha, lượt không tệp chờ phải NÉM ở mục 94, không mang nhãn từ chối trước vòng. Pha ⑴ nói "cố ý KHÔNG soi chủ thể
+    này" và không có dòng "(vai chạy migration)" cho chính chủ. Các pha còn lại nêu dòng sau vòng kèm đường tới quyền và "cố ý
+    KHÔNG chặn nó".
+  - Sau đó một migration vá lỗi chạy dưới chính `trien_khai` phải tới được đích.
+- **Khoản 97.** Không tệp chờ thì thông điệp không mang nhãn từ chối trước vòng.
+- **`migrate.int`, describe khoản 100.**
+  - `SET LOCAL ROLE` cuối tệp: ROLLBACK, không ghi.
+  - `SET ROLE` phạm vi phiên: tệp sau không chạy.
+  - Tệp tự COMMIT rồi `SET ROLE` ở cuối (câu ấy được commit cùng khối ngầm): kết nối bị huỷ, và bảng dựng trước COMMIT đã được
+    commit (ranh giới).
+  - Tệp `COMMIT; SET ROLE; COMMIT; SELECT 1/0`: kết nối bị huỷ.
+  - Ranh giới: đổi vai rồi `RESET ROLE` thì đi qua.
+  - Một `.always.sql` giả ném TP999 ở lượt `truoc_vong`: tệp chờ không chạy, lỗi nổi nguyên, không mang nhãn TP100.
+- **Kỳ vọng lật có chủ đích.** Bốn lượt khi còn tệp chờ, và thứ tự `sua → truoc_vong → danh_so → sua → phan_xet`; lần gọi hai
+  không tệp chờ thì ba lượt.
+- **`migration-shape`.**
+  - Mọi tệp đánh số sạch câu đổi vai.
+  - Mười bảy cách viết bị bắt, kể cả `EXECUTE 'SET ROLE x'` trong DO và câu đứng sau một chuỗi mang `--` hay `/*`.
+  - Chú thích lồng và câu SET/RESET khác không bị bắt.
+  - Ranh giới ghim: tên ghép lúc chạy thì bộ dò không thấy.
+- **`hardening-co-ly-do`.** Gỡ tên hằng mới khỏi ADR thì cổng đỏ.
+
+**Tự bắt, không phải lượt soi:** ⑴ Lượt đo trước khi sửa của bản đầu đỏ một vế bằng `ReferenceError`, vì test quên import
+`TU_CHOI_DOI_VAI`. Đỏ ấy không phải khẳng định; import bù, và hành vi trước bản vá của vế ấy được đo lại bằng đột biến M5 trên mã cuối.
+⑵ Bản hai ghim pha đối chứng bằng dạng dòng TRƯỚC vòng `ten (đường)`, trong khi pha ấy đo thông điệp SAU vòng `ten: … lệnh này
+(đường) …`, nên pha ⑵ đỏ ở khẳng định. Sửa chuỗi ghim bằng một hàm dựng dòng sau vòng, rồi chạy lại cả năm pha. ⑶ Lượt đột biến bản
+hai bác một câu của chính test: đột biến bỏ CẢ HAI chỗ huỷ kết nối mà vế "tệp tự COMMIT rồi SET ROLE" vẫn xanh. Tệp của vế ấy kết thúc
+bằng `BEGIN`, và BEGIN biến khối ngầm của câu nhiều lệnh thành giao dịch tường minh, nên ROLLBACK gỡ luôn SET ROLE đứng trước nó — câu
+"ROLLBACK không gỡ được vai" ở tên test và ở chú thích `migrate.ts` là sai. Sửa: tệp của vế dừng ngay sau SET ROLE (câu ấy được commit
+cùng khối ngầm); lời từ chối đổi vai dồn về một chỗ huỷ kết nối duy nhất (khối catch cho mọi lỗi tệp); bỏ đột biến "M6b" vì không còn
+chỗ huỷ thứ hai. ⑷ Sau lượt đột biến, một dấu vết của M20 (`goc?.code !== undefined`) còn nằm trong `migrate.ts` dù script có assert
+khôi phục sau từng đột biến; nguyên nhân chưa xác định được. Lượt chạy `migrate.int` kế tiếp đỏ đúng vế TP999. Một phép kiểm toàn vẹn
+cơ khí (với mỗi đột biến: chuỗi gốc khớp đúng một lần, chuỗi đột biến vắng) chỉ ra đúng một chỗ ấy. Đã sửa, chạy lại `migrate.int`
+21/21, và script đột biến nay sao lưu byte mọi tệp đích trước lượt rồi so lại sau lượt; M5, M6, M20, M21 chạy lại trên mã cuối kèm
+bước so ấy.
+
+**Đỏ đo được, cô lập (bản hai, mã cuối, chạy một-một):**
+Hai mươi ba đột biến trên mã cuối, chạy một-một, không đột biến nào đỏ do lỗi dựng. Bốn đột biến chạm `migrate.ts` (M5, M6, M20, M21) chạy lại sau hai lần sửa mã cuối (vế C, dấu vết M20), kèm bước so byte với bản sao lưu: khớp cả bốn tệp. M1 bỏ lời gọi `truoc_vong` ⇒ đỏ ở khẳng định dữ liệu của hồ sơ N2 (`999` được ghi) · M2 hỏi trước vòng cả khi không tệp chờ ⇒ đỏ ở test khoản 97 (thông điệp mất câu checksum) và ở hai test đếm lượt · M3 `truoc_vong` chặn cả dòng `tu_sua_duoc` (đúng bản đầu) ⇒ đỏ ở test nhiều pha: migration vá lỗi bị từ chối trước vòng · M3b `truoc_vong` hỏi cả chủ thể chủ bảng ⇒ đỏ ở cùng khẳng định · M4 `truoc_vong` thiếu RETURN, rơi xuống BƯỚC 3 ⇒ đỏ ở cùng khẳng định · M5 bỏ phép so vai ⇒ ba vế đổi vai đỏ · M6 tệp hỏng không huỷ kết nối ⇒ đỏ ở vế tự COMMIT rồi SET ROLE và vế ném lỗi sau khi commit SET ROLE (client kế mang vai lạ) · M7 SQLSTATE của hardening lệch ⇒ đỏ ở thông điệp hồ sơ N2 · M8 thông điệp mất danh sách ⇒ đỏ ở dòng bảng/vai/lệnh · M9 bộ dò bỏ tiền tố SESSION/LOCAL ⇒ đỏ ở `SET LOCAL ROLE x` · M10 bộ dò dùng bộ bỏ chú thích không biết chuỗi ⇒ đỏ ở `SELECT '--'; SET ROLE x` · M10b bộ dò không bỏ chú thích ⇒ đỏ ở vế chú thích và ở census tệp thật · M11 mục 94 sau vòng mất nhánh vai chạy migration ⇒ đỏ ở test khoản 97 và ba test rls-coverage · M12 bỏ vế thừa kế chủ ⇒ đỏ ở pha ⑵ · M13 bỏ vế ADMIN ⇒ đỏ ở pha ⑷ · M14 bỏ vế tự cắt đường qua nhóm ⇒ đỏ ở pha ⑸ · M15 vế tự cắt không hỏi grantor ⇒ đỏ ở pha nhóm có ADMIN do superuser cấp (`999` được ghi) · M16 nhãn đường sai ⇒ đỏ ở `(cấp thẳng cho vai này)` · M17 thông điệp chủ thể chủ bảng mất câu checksum ⇒ đỏ ở pha ⑴ · M18 cổng H19 không thấy khuôn RAISE ⇒ đỏ ở đột biến của cổng · M19 chủ thể thứ hai không loại chính chủ ⇒ đỏ ở pha ⑴ (dòng vai chạy migration cho chính chủ) · M20 mọi lỗi của lượt hỏi trước vòng mang nhãn TP100 ⇒ đỏ ở vế TP999 · M21 nuốt lỗi khác TP100 ⇒ đỏ ở vế TP999.
+
+**Ranh giới NÓI RA:** ⑴ Dòng `tu_sua_duoc` và chủ thể chủ bảng không được hỏi trước. Backfill trên chúng vẫn có thể bị tiêu trước khi
+migration vá lỗi chạy; hai thông điệp sau vòng nói checksum. ⑵ Ba vế `tu_sua_duoc` xấp xỉ về phía bỏ qua nhiều hơn (cắt một đường
+khi còn đường khác; ADMIN trên một vai superuser). Chiều ấy chỉ trả dòng về lượt phán xét sau vòng, không tạo ngõ cụt. ⑶ Phép so vai
+chỉ thấy trạng thái cuối tệp: tệp đổi vai rồi `RESET ROLE` thì đi qua (test ghim). Lớp tĩnh chỉ bắt cách viết thẳng trong migration
+của kho; tên ghép lúc chạy, escape Unicode trong `U&'…'` và hàm SECURITY DEFINER của vai khác đều lọt; chiều đỏ oan đã biết là cột tên
+`role`. ⑷ Tệp tự COMMIT: phần trước lần COMMIT cuối của nó đã được commit, tệp không được ghi checksum nên lần sau chạy lại (test ghim).
+⑸ Lượt hỏi trước vòng thấy cấu hình TRƯỚC vòng; cấu hình mọc ra trong vòng chỉ lượt phán xét sau vòng thấy. ⑹ Khi còn tệp chờ,
+`migrate()` đọc và chạy thêm một lượt tệp hardening. ⑺ Khoản 101 (policy tenant TO PUBLIC tính là phủ vai deploy) nằm trong chính hằng
+dùng chung, nên sửa nó là sửa cả hai lớp.
+
+### Lượt soi đối kháng 50 (trên bản đầu của S1.57): 0 CAO, 1 NẶNG, 6 NHẸ, 1 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Chặn trước vòng tạo ngõ cụt ADR-028 §3 ở dòng mà một migration dưới chính vai ấy sửa được: thành viên thừa kế chủ trên bảng FORCE, vai có ADMIN OPTION trên chủ hay trên nhóm mang quyền. Test "chủ bảng không bị hỏi trước" chạy dưới superuser nên che ca ấy | **đúng một phần — đo ⒜ ⒝ ⒞ ⒟** (người soi chỉ đọc): thành viên INHERIT `ALTER POLICY` được; ADMIN trên chủ hay trên vai trung gian thì tự cấp rồi `ALTER POLICY` được; thành viên NOINHERIT có SET thì "must be owner". Riêng vế nhóm SAI một nửa: ADMIN trên nhóm do superuser cấp KHÔNG tự thu hồi được; chỉ membership do chính vai tự cấp mới được | cột `tu_sua_duoc` ba vế theo đúng các đường đo được, và lượt `truoc_vong` bỏ qua chúng. Test nhiều pha dưới vai deploy không superuser, cộng pha đối chứng: nhóm có ADMIN do superuser cấp vẫn bị chặn. Đột biến M3, M3b, M12–M15, M19 |
+| NHẸ-2 | NHẸ | Lời khuyên "REVOKE khỏi vai này" vô tác dụng khi quyền đến qua PUBLIC, qua nhóm, hay do thừa kế chủ | đúng — đọc; ⒞ đo thêm vế nhóm | cột `duong` nêu mọi đường tới quyền; hai thông điệp khuyên gỡ đúng đường ấy; test ghim ba nhãn "cấp thẳng", "qua nhóm", "thừa kế quyền chủ bảng"; đột biến M16 |
+| NHẸ-3 | NHẸ | Cổng [INV-H19] không thấy phán xét mới (RAISE … ERRCODE ngoài `bang`), và ADR không có dòng lý do | đúng — đọc | `RE_NGOAI_BANG` nhận thêm khuôn `RAISE EXCEPTION USING ERRCODE`; dòng lý do ở ADR-036 hàng 27 và ADR-028 §3; một `it` đột biến của cổng; đột biến M18 |
+| NHẸ-4 | NHẸ | Tệp tự COMMIT: ⑴ thông điệp nói "Tệp đã ROLLBACK" trong khi phần trước COMMIT đã được commit; ⑵ tệp commit một SET ROLE rồi ném lỗi thì client về pool dưới vai lạ | ⑴ đúng — test; ⑵ **đúng — đo** bằng đột biến M6 | ⑴ thông điệp nói "phần sau lần COMMIT cuối"; test có DDL trước COMMIT. ⑵ mọi tệp hỏng đều huỷ kết nối; test tệp `COMMIT; SET ROLE; COMMIT; SELECT 1/0` |
+| NHẸ-5 | NHẸ | `RE_DOI_VAI` bỏ sót: chuỗi mang `--` hay `/*`, `SET "role"`, `E''`/`U&''`/`$$`, tên ghép, SECURITY DEFINER. Phạm vi `^\d{3}_` hẹp hơn tập tệp migrate() chạy. Chú thích nói "đóng" và "fail-closed" | đúng — đọc | bộ bỏ chú thích biết chuỗi; thêm `"role"`, `E''`, `U&''`, `$$`; phạm vi mọi `.sql` không phải `.always.sql`. Chú thích thu về "thu hẹp", ranh giới nêu tên ghép, escape Unicode, SECURITY DEFINER và đỏ oan cột `role`. Test ghim ranh giới; đột biến M9, M10, M10b |
+| NHẸ-6 | NHẸ | Chủ thể chủ bảng vẫn để backfill bị tiêu mà thông điệp không nói checksum; đóng khoản 100 mà không ghi ranh giới là nói quá | đúng — đọc | thông điệp chủ thể thứ nhất nói checksum và nói nó cố ý không được hỏi trước; ranh giới ghi ở biên bản, ở hàng 100 và ở ADR-036 hàng 27; đột biến M17 |
+| NHẸ-7 | NHẸ | Đột biến sống: nuốt lỗi khác TP100; gắn nhãn TP100 cho mọi lỗi; "chạy dưới chủ bảng ⇒ áp đủ" thực chất là chạy dưới superuser, bỏ `v.oid <> relowner` vẫn xanh ở tầng migrate() | đúng — đọc | test `.always.sql` giả ném TP999 ở lượt `truoc_vong`; pha ⑴ chạy dưới vai deploy LÀ chủ bảng; thông điệp nói "một vai mà RLS không áp"; đột biến M19, M20, M21 |
+| INFO-8 | INFO | "Ngoại lệ DUY NHẤT" sai phạm vi; ranh giới "trừ migration tự SET ROLE sang chủ" mâu thuẫn với lớp tĩnh | đúng — đọc | câu giới hạn vào các lượt của hardening; ranh giới SET ROLE thay bằng ranh giới `tu_sua_duoc` |
+
+**Điều đáng mang sang vòng sau:** ⑴ "Mọi lối ra nằm ngoài tầm vai bị nêu" là một tính chất phải đo TỪNG ĐƯỜNG (thừa kế chủ, ADMIN,
+grantor của membership), không phải một câu. Bản đầu tin câu ấy, và nó sai ở ba đường. ⑵ Test cho một lớp soi "vai chạy migration"
+phải chạy `migrate()` dưới vai KHÔNG superuser: superuser đứng ngoài chủ thể nên che đúng ca cần đo. ⑶ PG16 chỉ thu hồi membership
+mà chính người thu hồi đã cấp; ADMIN OPTION không đủ để tự cắt đường. Người soi suy sai vế này bằng đọc, và phép đo bác nó. ⑷ Khoản
+101 sửa hằng dùng chung, nên phải đo cả hai lớp: lượt hỏi trước vòng và lượt phán xét sau vòng.

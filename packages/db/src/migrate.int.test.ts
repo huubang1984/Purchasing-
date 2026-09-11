@@ -4,7 +4,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { migrate } from "./migrate.js";
+import { TU_CHOI_DOI_VAI, TU_CHOI_TRUOC_VONG, migrate } from "./migrate.js";
 import { createPool } from "./pool.js";
 
 let db: TestDatabase;
@@ -373,6 +373,9 @@ describe("bộ chạy migration", () => {
   // db/migrations/hardening.always.sql). Con số đó được khoá ở đây có chủ đích — nó là thứ
   // biến "always.sql phải idempotent" từ một lời khuyên thành một ràng buộc đo được: fixture
   // dưới đây cố ý KHÔNG idempotent (INSERT trần) nên nó đếm được đúng số lượt.
+  // [S1.57 / khoản nợ 100] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: khi còn tệp đánh số chưa áp, migrate() chạy thêm lượt `truoc_vong`
+  // (hỏi chủ thể "vai chạy migration" của mục 94 TRƯỚC vòng đánh số) — lần gọi đầu có 080 chờ nên BỐN lượt; lần gọi hai không
+  // tệp nào chờ nên vẫn BA. Tên test giữ nguyên văn cũ vì nó là bằng chứng kiểm toán; con số đúng nằm ở khẳng định.
   it("[fix I3 — cơ chế chung] file *.always.sql chạy lại BA lượt mỗi lần migrate(), không ghi vào schema_migrations", async () => {
     const dir = migrationDir({
       "080_binh_thuong.sql": "CREATE TABLE mig_j (id int);",
@@ -386,7 +389,10 @@ describe("bộ chạy migration", () => {
     const demSauLan1 = await db.pool.query<{ dem: string }>(
       "SELECT count(*) AS dem FROM mig_j_dem",
     );
-    expect(Number(demSauLan1.rows[0]?.dem), "một lần migrate() = ba lượt always.sql").toBe(3);
+    expect(
+      Number(demSauLan1.rows[0]?.dem),
+      "[S1.57] một lần migrate() CÒN TỆP CHỜ = bốn lượt always.sql (sua, truoc_vong, sua, phan_xet)",
+    ).toBe(4);
 
     const ketQua2 = await migrate(db.pool, dir);
     expect(ketQua2).toEqual([]); // 080 đã áp dụng — nhưng always.sql vẫn chạy lại
@@ -394,7 +400,7 @@ describe("bộ chạy migration", () => {
     const { rows } = await db.pool.query<{ dem: string }>(
       "SELECT count(*) AS dem FROM mig_j_dem",
     );
-    expect(Number(rows[0]?.dem)).toBe(6);
+    expect(Number(rows[0]?.dem), "[S1.57] lần gọi hai không tệp nào chờ: đúng ba lượt nữa").toBe(7);
   });
 
   // [vòng fix 1 — I3] Lượt 'sua' phải chạy TRƯỚC vòng migration đánh số, và lượt 'phan_xet'
@@ -415,7 +421,26 @@ describe("bộ chạy migration", () => {
     const { rows } = await db.pool.query<{ buoc: string }>(
       "SELECT buoc FROM mig_k_nhat_ky ORDER BY thu_tu",
     );
-    expect(rows.map((r) => r.buoc)).toEqual(["sua", "danh_so", "sua", "phan_xet"]);
+    // [S1.57 / khoản nợ 100] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: còn tệp chờ ⇒ lượt `truoc_vong` đứng giữa lượt sửa đầu và vòng đánh số.
+    expect(rows.map((r) => r.buoc), "[S1.57] còn tệp chờ ⇒ hỏi trước vòng").toEqual([
+      "sua",
+      "truoc_vong",
+      "danh_so",
+      "sua",
+      "phan_xet",
+    ]);
+
+    // [S1.57 / khoản nợ 100] Không tệp nào chờ ⇒ KHÔNG hỏi trước vòng — lượt phán xét sau vòng nêu trọn mọi mục, không bị một
+    // phép từ chối sớm che.
+    await migrate(db.pool, dir);
+    const { rows: sau } = await db.pool.query<{ buoc: string }>(
+      "SELECT buoc FROM mig_k_nhat_ky ORDER BY thu_tu",
+    );
+    expect(sau.map((r) => r.buoc).slice(5), "[S1.57] không tệp nào chờ ⇒ không lượt truoc_vong").toEqual([
+      "sua",
+      "sua",
+      "phan_xet",
+    ]);
   });
 
   /**
@@ -455,9 +480,11 @@ describe("bộ chạy migration", () => {
     const { rows } = await db.pool.query<{ lock_timeout: string; idle_tx: string }>(
       "SELECT lock_timeout, idle_tx FROM mig_l_guc ORDER BY thu_tu",
     );
-    expect(rows.length, "một lần migrate() = ba lượt always.sql").toBe(3);
-    expect(rows.map((r) => r.lock_timeout)).toEqual(["0", "0", "0"]);
-    expect(rows.map((r) => r.idle_tx)).toEqual(["0", "0", "0"]);
+    // [S1.57 / khoản nợ 100] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: 082 đang chờ nên có thêm lượt `truoc_vong` — và nó cũng chạy trên đúng
+    // `lockClient` mang hai giá trị 0.
+    expect(rows.length, "[S1.57] một lần migrate() còn tệp chờ = bốn lượt always.sql").toBe(4);
+    expect(rows.map((r) => r.lock_timeout)).toEqual(["0", "0", "0", "0"]);
+    expect(rows.map((r) => r.idle_tx)).toEqual(["0", "0", "0", "0"]);
   });
 
   // [fix round 4 — N1] pool.connect() trả về CÙNG MỘT đối tượng Client khi client đó được
@@ -609,5 +636,144 @@ describe("bộ chạy migration", () => {
     // Cùng lý do như test trên: đặt NGOÀI `finally` để không nuốt lỗi gốc.
     expect(ketNoiConLai, `còn ${ketNoiConLai} kết nối bám vào ${TEN_DB} sau khi đã end() cả hai pool`).toBe(0);
     expect(loiPool).toEqual([]);
+  });
+});
+
+// =====================================================================================
+// [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] MỘT TỆP ĐỔI VAI THÌ LƯỢT PHÁN XÉT SOI NHẦM VAI
+//
+// Lượt phán xét của hardening (mục 94, chủ thể "vai chạy migration") soi `current_user` của phiên deploy. Một tệp `SET ROLE x`
+// không trả lại làm mọi tệp sau VÀ các lượt hardening sau vòng chạy dưới x, rồi client về pool vẫn mang x; `SET LOCAL ROLE x`
+// làm phần cuối tệp chạy dưới x trong khi lượt phán xét soi vai đăng nhập. migrate() nay chụp `current_user` trước vòng đánh số
+// và so NGAY TRONG giao dịch của mỗi tệp, trước khi ghi checksum: lệch ⇒ ROLLBACK, không dòng schema_migrations, kết nối bị huỷ.
+// Vai lạ được cấp SELECT, INSERT trên schema_migrations để bản trước bản vá ĐI QUA và ghi checksum dưới vai ấy — đúng hình dạng
+// lỗi, không bị một lỗi 42501 che mất.
+// Ranh giới ghim bằng test: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc thì phép so không thấy (chỉ so trạng thái cuối tệp).
+// =====================================================================================
+describe("[S1.57 / khoản nợ 100] tệp migration kết thúc dưới vai khác vai đã mở vòng đánh số", () => {
+  const VAI_LA = "zz_x100";
+  let vaiGoc = "";
+
+  beforeAll(async () => {
+    await migrate(db.pool, migrationDir({})); // bảo đảm schema_migrations tồn tại
+    await db.pool.query(`CREATE ROLE ${VAI_LA} NOSUPERUSER NOBYPASSRLS`);
+    await db.pool.query(`GRANT SELECT, INSERT ON public.schema_migrations TO ${VAI_LA}`);
+    vaiGoc = (await db.pool.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]!.vai;
+  });
+
+  const daGhi = async (tep: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0) > 0;
+  const coBang = async (ten: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = $1", [ten])).rowCount ?? 0) > 0;
+
+  it("SET LOCAL ROLE ở cuối tệp ⇒ migrate() TỪ CHỐI: tệp ROLLBACK (bảng của nó không còn), không dòng schema_migrations, thông điệp nêu tệp và vai lạ", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({ "120_doi_vai_cuc_bo.sql": `CREATE TABLE mig_v100a (x int); SET LOCAL ROLE ${VAI_LA};` });
+      const loi = await migrate(pool1, dir).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "bản trước bản vá: tệp đi qua và ghi checksum dưới vai lạ").not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_VAI);
+      expect(loi!.message).toContain("120_doi_vai_cuc_bo.sql");
+      expect(loi!.message).toContain(VAI_LA);
+      expect(await coBang("mig_v100a"), "tệp phải ROLLBACK").toBe(false);
+      expect(await daGhi("120_doi_vai_cuc_bo.sql")).toBe(false);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("SET ROLE phạm vi phiên không trả lại ⇒ migrate() TỪ CHỐI, tệp ROLLBACK, không dòng schema_migrations, tệp sau KHÔNG chạy", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "121_doi_vai_phien.sql": `CREATE TABLE mig_v100b (x int); SET ROLE ${VAI_LA};`,
+        "122_sau_doi_vai.sql": "CREATE TABLE mig_v100c (x int);",
+      });
+      const loi = await migrate(pool1, dir).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_VAI);
+      expect(await coBang("mig_v100b")).toBe(false);
+      expect(await coBang("mig_v100c"), "tệp sau không được chạy dưới vai lạ").toBe(false);
+      expect(await daGhi("121_doi_vai_phien.sql")).toBe(false);
+      expect(await daGhi("122_sau_doi_vai.sql")).toBe(false);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  // [lượt đột biến S1.57] Bản đầu của vế này kết thúc tệp bằng `BEGIN`: BEGIN biến khối ngầm của câu nhiều lệnh thành giao dịch tường
+  // minh, nên ROLLBACK gỡ luôn `SET ROLE` đứng trước nó — vế ấy KHÔNG chịu lực cho việc huỷ kết nối (đo: đột biến bỏ mọi chỗ huỷ vẫn
+  // xanh). Tệp dừng ngay sau `SET ROLE` thì câu ấy được commit cùng khối ngầm và chỉ việc huỷ kết nối mới gỡ được vai.
+  it("tệp tự COMMIT rồi SET ROLE ở cuối ⇒ câu ấy được commit cùng khối ngầm, ROLLBACK không gỡ được vai; migrate() TỪ CHỐI và HUỶ kết nối — client kế của pool max 1 mang lại vai gốc; phần tệp đứng TRƯỚC lần COMMIT của chính nó đã được commit (ranh giới)", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "123_doi_vai_ngoai_giao_dich.sql": `CREATE TABLE mig_v100e (x int); COMMIT; SET ROLE ${VAI_LA};`,
+      });
+      const loi = await migrate(pool1, dir).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_VAI);
+      expect(await daGhi("123_doi_vai_ngoai_giao_dich.sql")).toBe(false);
+      // [lượt soi 50 NHẸ-4 ⑴] ROLLBACK chỉ lùi được phần sau lần COMMIT cuối của chính tệp — thông điệp nói đúng như vậy.
+      expect(await coBang("mig_v100e"), "phần trước COMMIT của tệp đã commit — ROLLBACK không lùi được nó").toBe(true);
+      const { rows } = await pool1.query<{ vai: string }>("SELECT current_user AS vai");
+      expect(rows[0]!.vai, "kết nối mang vai lạ phải bị huỷ, không quay về pool").toBe(vaiGoc);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("[lượt soi 50 NHẸ-4 ⑵] tệp tự COMMIT, SET ROLE, COMMIT rồi NÉM ⇒ migrate() thất bại và HUỶ kết nối — client kế của pool max 1 mang lại vai gốc, lượt kế không chụp vai lạ làm vai mở vòng", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({ "126_doi_vai_roi_nem.sql": `COMMIT; SET ROLE ${VAI_LA}; COMMIT; SELECT 1/0;` });
+      const loi = await migrate(pool1, dir).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain("126_doi_vai_roi_nem.sql");
+      expect(await daGhi("126_doi_vai_roi_nem.sql")).toBe(false);
+      const { rows } = await pool1.query<{ vai: string }>("SELECT current_user AS vai");
+      expect(rows[0]!.vai, "tệp ném lỗi sau khi đã commit một SET ROLE — kết nối phải bị huỷ").toBe(vaiGoc);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("RANH GIỚI: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc thì phép so KHÔNG thấy — migrate() đi qua", async () => {
+    const dir = migrationDir({
+      "124_doi_vai_tra_lai.sql": `SET ROLE ${VAI_LA}; SELECT 1; RESET ROLE; CREATE TABLE mig_v100d (x int);`,
+    });
+    await expect(migrate(db.pool, dir)).resolves.toEqual(["124_doi_vai_tra_lai.sql"]);
+    expect(await coBang("mig_v100d")).toBe(true);
+  });
+
+  it("[lượt soi 50 NHẸ-7] lượt truoc_vong ném một lỗi KHÁC TP100 ⇒ migrate() dừng trước vòng với lỗi thật — tệp chờ không chạy, thông điệp không mang nhãn từ chối trước vòng", async () => {
+    const dir = migrationDir({
+      "125_cho_sau_loi_truoc_vong.sql": "CREATE TABLE mig_v100f (x int);",
+      "loi_truoc_vong.always.sql":
+        "DO $$ BEGIN IF current_setting('app.hardening_che_do', true) = 'truoc_vong' THEN " +
+        "RAISE EXCEPTION USING ERRCODE = 'TP999', MESSAGE = 'loi gia o luot truoc_vong'; END IF; END $$;",
+    });
+    const loi = await migrate(db.pool, dir).then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(loi, "lỗi của lượt hỏi trước vòng không được bị nuốt").not.toBeNull();
+    expect(loi!.message).toContain("(truoc_vong) thất bại");
+    expect(loi!.message).toContain("loi gia o luot truoc_vong");
+    expect(loi!.message, "lỗi khác TP100 không được mang nhãn từ chối trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+    expect(await coBang("mig_v100f")).toBe(false);
+    expect(await daGhi("125_cho_sau_loi_truoc_vong.sql")).toBe(false);
   });
 });
