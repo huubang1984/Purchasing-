@@ -20,7 +20,7 @@ export const TU_CHOI_GUC_SOM =
  * ghim MỘT bản, cùng lý do với `TU_CHOI_GUC_SOM`.
  */
 export const TU_CHOI_TRUOC_VONG =
-  "migrate() từ chối chạy vòng migration đánh số: RLS áp cho vai chạy migration trên bảng nó có quyền mà không policy PERMISSIVE nào phủ nó";
+  "migrate() từ chối chạy vòng migration đánh số: RLS áp cho vai chạy migration trên bảng nó có quyền mà không policy PERMISSIVE nào cho nó thấy hàng";
 
 /**
  * [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc dưới vai khác vai đã
@@ -591,7 +591,9 @@ export async function migrate(
     // không đổi). Cùng khuôn với phép từ chối sớm của khoản 87 ở trên. Lượt `truoc_vong` của hardening hỏi ĐÚNG câu ấy — một bản,
     // `CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI` — và RAISE SQLSTATE TP100 kèm danh sách bảng/vai/lệnh.
     // Chặn sớm không lấy mất lối ra: hardening bỏ qua ở lượt này mọi dòng mà một migration chạy dưới chính vai ấy sửa được — thừa
-    // kế hay tự lấy được quyền chủ bảng, tự cắt được đường tới quyền (`tu_sua_duoc`; lượt soi 50 NẶNG-1: bản đầu chặn cả chúng, một
+    // kế hay tự lấy được quyền chủ bảng, tự cắt được đường tới quyền — [S1.58 / khoản nợ 101] với dòng mà policy phụ thuộc hàm ngữ
+    // cảnh lọc hết thì chỉ tính tự cắt được EXECUTE hay đường tới quyền, lượt soi 51 NẶNG-1 — (`tu_sua_duoc`; lượt soi 50 NẶNG-1: bản
+    // đầu chặn cả chúng, một
     // ngõ cụt) — nên dòng còn lại chỉ có lối ra ngoài tầm vai ấy (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy
     // migrate() dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng thêm). Chủ thể CHỦ BẢNG cũng KHÔNG được hỏi trước:
     // lối ra của nó là chính một migration (ADR-028 §3). Test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
@@ -614,12 +616,14 @@ export async function migrate(
           throw new Error(
             `${TU_CHOI_TRUOC_VONG} — ${String(goc.message)}. ` +
               "Không migration đánh số nào chạy ở lượt này: các tệp chưa áp vẫn chờ, không tệp nào được ghi checksum. Một backfill chạy " +
-              "dưới vai này sẽ đọc/ghi 0 hàng KHÔNG LỖI rồi được ghi là đã áp (mục 94 của hardening, khoản 97 và 100). Sửa, ít quyền " +
+              "dưới vai này sẽ đọc/ghi 0 hàng KHÔNG LỖI rồi được ghi là đã áp (mục 94 của hardening, khoản 97, 100 và 101). Sửa, ít quyền " +
               "nhất trước — cả ba nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền nêu trong ngoặc " +
-              "(REVOKE khỏi đúng grantee ấy, hay gỡ membership nhóm); hoặc chạy migrate() dưới một vai mà RLS không áp (SUPERUSER, " +
+              "(đường cấp thẳng: REVOKE khỏi vai này; đường qua nhóm: gỡ membership của vai này trên đường ấy — KHÔNG REVOKE khỏi nhóm, nhất là " +
+              "vai ứng dụng); hoặc chạy migrate() dưới một vai mà RLS không áp (SUPERUSER, " +
               "BYPASSRLS) hay có policy phủ trên bảng ấy; hoặc chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này (một quyền đọc/ghi " +
-              "THƯỜNG TRỰC của vai deploy, trên bảng tenant còn phải qua [CR1]). Dòng mà một migration dưới chính vai này sửa được thì " +
-              "không bị nêu ở đây — lượt phán xét sau vòng nêu nó.",
+              "THƯỜNG TRỰC của vai deploy, trên bảng tenant còn phải qua [CR1]). Dòng nêu EXECUTE trên app_current_org_id() (khoản 101) có " +
+              "lối ra theo từng đường ở cuối danh sách; gỡ xong thì câu chạm bảng dưới vai này ném 42501 thay vì ra 0 hàng. Dòng mà một " +
+              "migration dưới chính vai này sửa được thì không bị nêu ở đây — lượt phán xét sau vòng nêu nó.",
             { cause: loi },
           );
         }

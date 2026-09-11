@@ -2812,9 +2812,29 @@ $ham$;
   -- chịu lực: SUPERUSER NOBYPASSRLS trên bảng FORCE mà policy chỉ FOR SELECT — bỏ vế thì nêu UPDATE, DELETE dù superuser ghi đủ hàng
   -- (đo). Thừa kế theo USAGE (INHERIT), không theo MEMBER: thành viên NOINHERIT không được RLS coi là chủ — đọc 0 (đo). [lượt soi 49
   -- NHẸ-5] Chủ thể này KHÔNG xét INSERT — INSERT không phủ thì ném 42501, rollback, không ghi checksum (đo) — và loại vai thiếu USAGE
-  -- trên lược đồ, vì mọi truy cập ném 42501 (đo). [lượt soi 49 NHẸ-4] Chỉ xét danh sách vai: policy tenant `TO PUBLIC USING (org_id =
+  -- trên lược đồ, vì mọi truy cập ném 42501 (đo). [lượt soi 49 NHẸ-4] ~~Chỉ xét danh sách vai: policy tenant `TO PUBLIC USING (org_id =
   -- app_current_org_id())` tính là phủ dù migrate() không gắn app.org_id — hôm nay ồn nhờ EXECUTE của hàm ấy chỉ app_api/app_unseal có
-  -- (đo: 42501), còn GRANT EXECUTE cho vai deploy thì backfill ra 0 hàng im, mục im, và migrate() không thu hồi (đo) — khoản 101.
+  -- (đo: 42501), còn GRANT EXECUTE cho vai deploy thì backfill ra 0 hàng im, mục im, và migrate() không thu hồi (đo) — khoản 101.~~
+  -- [S1.58 / khoản nợ 101] Policy PHỤ THUỘC `app_current_org_id()` (pg_depend) thôi tính là phủ vai chạy migration có EXECUTE trên hàm ấy
+  -- mà RLS không coi là chủ: migrate() không gắn app.org_id nên vị từ là NULL ở mọi hàng. Không EXECUTE thì câu ném 42501 — ồn — nên
+  -- policy vẫn tính là phủ. Đo (thăm dò S1.58, hồ sơ N2, PostgreSQL 16): vai có SELECT, UPDATE trên suppliers mà không EXECUTE ⇒ đếm ném
+  -- 42501, migrate() ném ở `999_…`; thêm EXECUTE ⇒ đếm ra 0 không lỗi, migrate() bản trước ghi `999_…` là đã áp mà hàng không đổi.
+  -- Cột `vi_tu_loc_het` đánh dấu dòng chỉ có vì vế ấy, `duong_execute` nêu đường tới EXECUTE, `loi_ra_execute` nêu lối ra theo từng đường;
+  -- `tu_sua_duoc` của dòng ấy = tự cắt được EXECUTE (ba vế cùng khuôn ba vế trên bảng) HOẶC cắt được đường tới quyền trên bảng — đo từng
+  -- đường: vai thừa kế chủ hàm tự `REVOKE EXECUTE … FROM <chủ>` được và mất EXECUTE (app_api vẫn giữ); vai có ADMIN (không INHERIT, không
+  -- SET) trên chủ hàm tự cấp thừa kế rồi thu hồi của chủ và của chính nó được; vai tự cắt cạnh membership nhóm mang EXECUTE do chính nó cấp
+  -- thì mất EXECUTE; EXECUTE do superuser cấp thẳng khi chủ hàm là vai bootstrap thì tự thu hồi là no-op.
+  -- [lượt soi 51] Bản đầu của vòng khớp NGUYÊN VĂN HINH_DANG_CHUAN và áp cho mọi vai không phải chính chủ. Người soi chỉ ra, đo lại được:
+  -- ⑴ NẶNG-1 — hồ sơ N3′ (vai deploy thừa kế một vai NOLOGIN sở hữu cả bảng lẫn hàm, bảng FORCE): bản đầu đỏ ở MỌI lần deploy mà backfill
+  -- vẫn bị tiêu (đo: `999` được ghi, hàng không đổi, lần hai không tệp chờ vẫn đỏ), vì hai vế quyền chủ bảng tính là tự sửa được trong khi
+  -- lối vá của chúng không qua được cổng của kho; nay vai mà RLS coi là chủ đứng ngoài vế loại (chủ thể giống chủ — khoản 102), và hai vế
+  -- quyền chủ bảng không tính cho dòng khoản 101. ⑵ NẶNG-2 — vai deploy là thành viên app_api (superuser cấp): dòng "qua nhóm app_api" với
+  -- lời khuyên chung "gỡ EXECUTE khỏi đường ấy" dẫn tới thu hồi khỏi app_api (đo: TP100 nêu hàng loạt bảng "qua nhóm app_api"); nay lối ra
+  -- theo từng đường, đường qua nhóm nói KHÔNG thu hồi khỏi nhóm, và nhóm là vai ứng dụng thì nói thẳng. ⑶ NHẸ-5 — khớp nguyên văn im lặng
+  -- với hình dạng ngoại lệ đã tiên liệu (khuôn "đấu thầu kín"); nay theo phụ thuộc — hàm bọc lấy hàm ngữ cảnh vẫn lọt (ranh giới). ⑷ NHẸ-3 —
+  -- dòng tự sửa được không bị chặn trước vòng nên backfill cùng lượt vẫn bị tiêu — ranh giới, test ghim. Xấp xỉ theo CẢ HAI chiều, nói ra:
+  -- cắt một đường khi còn đường khác (EXECUTE cấp thẳng cộng một nhóm tự cấp) tính là tự sửa được — chiều bỏ qua; ADMIN trên một vai giữ
+  -- GRANT OPTION đã cấp EXECUTE thẳng thì không đọc — chiều chặn (lượt soi 51 INFO-8, cùng điểm mù với vế bảng).
   -- [lượt soi 49 NẶNG-1] Mục phán xét SAU vòng đánh số: khi mục đỏ, backfill 0 hàng của CHÍNH lượt đã COMMIT và ghi checksum, REVOKE
   -- rồi chạy lại thì đi qua mà backfill không chạy lại (đo) — thông điệp nói ra; ~~lớp hỏi TRƯỚC vòng (và chụp vai quanh vòng, NHẸ-1)
   -- là khoản 100.~~ [S1.57 / khoản nợ 100] Lớp hỏi TRƯỚC vòng nay có: chủ thể thứ hai tách thành CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI,
@@ -2846,7 +2866,14 @@ $ham$;
          WHERE att.attrelid = %1$s.oid AND att.attnum > 0 AND NOT att.attisdropped)$q$;
 
   CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI constant text :=
-    $q$SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh AS ten,
+    $q$SELECT k.ten, k.duong, k.vi_tu_loc_het, k.duong_execute, k.loi_ra_execute,
+              -- [S1.58 / khoản nợ 101 — lượt soi 51 NẶNG-1] Dòng chỉ có vì policy phụ thuộc hàm ngữ cảnh lọc hết thì tự sửa được khi vai ấy tự
+              -- cắt được EXECUTE hay cắt được đường tới quyền trên bảng (vế cạnh membership). Hai vế quyền chủ bảng (thừa kế, ADMIN trên vai thừa
+              -- kế chủ) KHÔNG tính cho dòng ấy: lối vá của chúng là thêm policy — cổng migration-shape và [CR1] không cho qua nếu không có dòng
+              -- ngoại lệ đọc xuyên tổ chức — hay tự lấy quyền chủ, thứ chỉ dời dòng sang chủ thể giống chủ (khoản 102) chứ không sửa gì.
+              CASE WHEN k.vi_tu_loc_het THEN k.tu_cat_execute OR k.tu_sua_canh
+                   ELSE k.tu_sua_chu OR k.tu_sua_canh END AS tu_sua_duoc
+         FROM (SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh AS ten,
               coalesce((SELECT pg_catalog.string_agg(DISTINCT d.mo_ta, ', ' ORDER BY d.mo_ta)
                           FROM (SELECT CASE WHEN a.grantee = 0 THEN 'qua PUBLIC'
                                             WHEN a.grantee = v.oid THEN 'cấp thẳng cho vai này'
@@ -2858,22 +2885,82 @@ $ham$;
                                    AND CASE WHEN a.grantee = 0 THEN true
                                             ELSE pg_catalog.pg_has_role(v.oid, a.grantee, 'USAGE') END) d),
                        'không đọc được đường tới quyền') AS duong,
-              -- [lượt soi 50 NẶNG-1] ba vế tự sửa được — xem khối đo ở trên.
+              -- [S1.58 / khoản nợ 101] Có policy PERMISSIVE phủ lệnh này theo danh sách vai mà dòng vẫn tới đây ⇒ chính policy ấy đã bị vế
+              -- cuối câu loại: nó phụ thuộc hàm ngữ cảnh trong khi vai có EXECUTE trên hàm ấy và RLS không coi vai là chủ.
+              EXISTS (SELECT 1 FROM pg_policy p
+                       WHERE p.polrelid = c.oid AND p.polpermissive
+                         AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
+                         AND (p.polroles = '{0}'::oid[]
+                              OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
+                                          WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE')))) AS vi_tu_loc_het,
+              coalesce((SELECT pg_catalog.string_agg(DISTINCT d.mo_ta, ', ' ORDER BY d.mo_ta)
+                          FROM (SELECT CASE WHEN a.grantee = 0 THEN 'qua PUBLIC'
+                                            WHEN a.grantee = f.proowner THEN 'quyền chủ hàm ' || pg_catalog.quote_ident(fo.rolname)
+                                            WHEN a.grantee = v.oid THEN 'cấp thẳng cho vai này'
+                                            ELSE 'qua nhóm ' || pg_catalog.quote_ident(gr.rolname) END AS mo_ta
+                                  FROM pg_catalog.aclexplode(coalesce(f.proacl, pg_catalog.acldefault('f', f.proowner))) a
+                                  LEFT JOIN pg_roles gr ON gr.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE'
+                                   AND CASE WHEN a.grantee = 0 THEN true
+                                            ELSE pg_catalog.pg_has_role(v.oid, a.grantee, 'USAGE') END) d),
+                       'không đọc được đường tới EXECUTE') AS duong_execute,
+              -- [S1.58 / khoản nợ 101 — lượt soi 51 NẶNG-2] Lối ra theo TỪNG đường tới EXECUTE. Đường qua nhóm KHÔNG được khuyên thu hồi khỏi
+              -- nhóm: đo — vai deploy là thành viên app_api (superuser cấp) cho ra "qua nhóm app_api", mà REVOKE khỏi app_api làm ứng dụng ném
+              -- 42501. Đường quyền chủ hàm: thu hồi EXECUTE của chính chủ hàm làm kiểm khoá ngoại ban đầu trên bảng FORCE mà nó sở hữu ném 42501
+              -- (đo ở hồ sơ N3, khoản 102).
+              coalesce((SELECT pg_catalog.string_agg(DISTINCT d.loi_ra, '; ' ORDER BY d.loi_ra)
+                          FROM (SELECT CASE WHEN a.grantee = 0
+                                            THEN 'chủ hàm hay SUPERUSER: REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM PUBLIC'
+                                            WHEN a.grantee = f.proowner
+                                            THEN 'người cấp hay SUPERUSER gỡ membership của vai này vào chủ hàm ' || pg_catalog.quote_ident(fo.rolname)
+                                                 || ' — thu hồi EXECUTE của chính chủ hàm thì kiểm khoá ngoại ban đầu trên bảng FORCE mà nó sở hữu ném 42501'
+                                            WHEN a.grantee = v.oid
+                                            THEN 'chủ hàm hay SUPERUSER: REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM '
+                                                 || pg_catalog.quote_ident(v.rolname)
+                                            ELSE 'người cấp hay SUPERUSER gỡ membership của vai này trên đường tới ' || pg_catalog.quote_ident(gr.rolname)
+                                                 || ' — KHÔNG thu hồi EXECUTE khỏi ' || pg_catalog.quote_ident(gr.rolname)
+                                                 || CASE WHEN gr.rolname IN $q$ || ROLE_CANH || $q$
+                                                         THEN ': đó là vai ứng dụng, thu hồi của nó làm ứng dụng ném 42501; vai deploy là thành viên vai '
+                                                              'ứng dụng là cấu hình lạ mà mục membership của hardening cũng chặn'
+                                                         ELSE '' END
+                                       END AS loi_ra
+                                  FROM pg_catalog.aclexplode(coalesce(f.proacl, pg_catalog.acldefault('f', f.proowner))) a
+                                  LEFT JOIN pg_roles gr ON gr.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE'
+                                   AND CASE WHEN a.grantee = 0 THEN true
+                                            ELSE pg_catalog.pg_has_role(v.oid, a.grantee, 'USAGE') END) d),
+                       'không đọc được đường tới EXECUTE') AS loi_ra_execute,
+              -- [lượt soi 50 NẶNG-1] ba vế tự sửa được — xem khối đo ở trên; [S1.58] tách thành hai cột: quyền chủ bảng, và cạnh membership.
               (pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE')
                OR EXISTS (SELECT 1 FROM pg_roles x
                            WHERE pg_catalog.pg_has_role(v.oid, x.oid, 'MEMBER WITH ADMIN OPTION')
-                             AND pg_catalog.pg_has_role(x.oid, c.relowner, 'USAGE'))
-               OR EXISTS (SELECT 1 FROM $q$ || pg_catalog.format(MAU_ACL_CUA_BANG, 'c') || $q$ a
+                             AND pg_catalog.pg_has_role(x.oid, c.relowner, 'USAGE'))) AS tu_sua_chu,
+              EXISTS (SELECT 1 FROM $q$ || pg_catalog.format(MAU_ACL_CUA_BANG, 'c') || $q$ a
+                        JOIN pg_auth_members am ON am.inherit_option
+                       WHERE a.privilege_type = g.ten_lenh
+                         AND pg_catalog.pg_has_role(v.oid, am.member, 'USAGE')
+                         AND pg_catalog.pg_has_role(v.oid, am.grantor, 'USAGE')
+                         AND CASE WHEN a.grantee = 0 OR a.grantee = v.oid THEN false
+                                  ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END) AS tu_sua_canh,
+              -- [S1.58 / khoản nợ 101] cùng ba vế trên hàm ngữ cảnh: thừa kế chủ hàm (tự thu hồi EXECUTE của chủ), ADMIN trên một vai thừa kế
+              -- chủ hàm (tự cấp thừa kế rồi thu hồi), cạnh membership INHERIT trên đường tới EXECUTE mà vai ấy thu hồi được — xem khối đo ở trên.
+              (pg_catalog.pg_has_role(v.oid, f.proowner, 'USAGE')
+               OR EXISTS (SELECT 1 FROM pg_roles x
+                           WHERE pg_catalog.pg_has_role(v.oid, x.oid, 'MEMBER WITH ADMIN OPTION')
+                             AND pg_catalog.pg_has_role(x.oid, f.proowner, 'USAGE'))
+               OR EXISTS (SELECT 1 FROM pg_catalog.aclexplode(coalesce(f.proacl, pg_catalog.acldefault('f', f.proowner))) a
                             JOIN pg_auth_members am ON am.inherit_option
-                           WHERE a.privilege_type = g.ten_lenh
+                           WHERE a.privilege_type = 'EXECUTE'
                              AND pg_catalog.pg_has_role(v.oid, am.member, 'USAGE')
                              AND pg_catalog.pg_has_role(v.oid, am.grantor, 'USAGE')
                              AND CASE WHEN a.grantee = 0 OR a.grantee = v.oid THEN false
-                                      ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END)) AS tu_sua_duoc
+                                      ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END)) AS tu_cat_execute
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_roles r ON r.oid = c.relowner
          JOIN pg_roles v ON v.rolname = current_user
+         LEFT JOIN pg_proc f ON f.oid = pg_catalog.to_regprocedure('public.app_current_org_id()')
+         LEFT JOIN pg_roles fo ON fo.oid = f.proowner
          CROSS JOIN (VALUES ('r', 'SELECT'), ('w', 'UPDATE'), ('d', 'DELETE')) AS g(ma, ten_lenh)
         WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           AND c.relkind IN ('r', 'p') AND c.relrowsecurity
@@ -2895,7 +2982,18 @@ $ham$;
                              AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
                              AND (p.polroles = '{0}'::oid[]
                                   OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
-                                              WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE'))))$q$;
+                                              WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE')))
+                             -- [S1.58 / khoản nợ 101] Policy PHỤ THUỘC hàm ngữ cảnh (pg_depend — mọi hình dạng, không chỉ HINH_DANG_CHUAN: lượt soi
+                             -- 51 NHẸ-5) KHÔNG phủ vai có EXECUTE trên hàm ấy mà RLS không coi là chủ: migrate() không gắn app.org_id nên vị từ lọc
+                             -- hết mọi hàng — đọc/ghi 0 hàng không lỗi. Không EXECUTE thì câu ném 42501 (ồn) nên policy vẫn tính là phủ. Vai mà RLS
+                             -- coi là chủ (thừa kế chủ trên bảng FORCE; chính chủ đã bị loại ở trên) đứng ngoài vế này — chủ thể giống chủ, khoản
+                             -- 102 (lượt soi 51 NẶNG-1, đo: hồ sơ N3′). Hàm chưa tồn tại thì f.oid NULL, vế EXISTS rỗng và policy vẫn tính là phủ.
+                             AND NOT (pg_catalog.has_function_privilege(v.oid, f.oid, 'EXECUTE')
+                                      AND NOT pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE')
+                                      AND EXISTS (SELECT 1 FROM pg_depend dp
+                                                   WHERE dp.classid = 'pg_policy'::regclass AND dp.objid = p.oid
+                                                     AND dp.refclassid = 'pg_proc'::regclass AND dp.refobjid = f.oid)))
+              ) k$q$;
 
   CAU_PHU_LENH_CHU_BANG_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(r.rolname) || ' (chủ bảng)/' || g.ten_lenh
@@ -2933,19 +3031,33 @@ $ham$;
        -- [S1.56 / khoản nợ 97] chủ thể thứ hai — xem ⑸ ở trên. [S1.57 / khoản nợ 100] Thân câu nay ở CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI
        -- (một bản, dùng chung với lượt truoc_vong); ở đây bọc ten/duong/tu_sua_duoc thành mo_ta.
        SELECT t.ten
-              || ': RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (' || t.duong || ') mà không policy '
-                 'PERMISSIVE nào phủ nó (khoản 97) — SELECT/UPDATE/DELETE của một migration backfill chạy dưới vai này trả 0 hàng KHÔNG '
+              || ': RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (' || t.duong || ') mà '
+              || CASE WHEN t.vi_tu_loc_het
+                      THEN 'policy PERMISSIVE phủ nó theo danh sách vai phụ thuộc app_current_org_id() — migrate() không gắn app.org_id nên '
+                           'vị từ ấy lọc hết mọi hàng, và vai này có EXECUTE trên hàm ấy (' || t.duong_execute || ') nên câu không ném '
+                           '42501 (khoản 101)'
+                      ELSE 'không policy PERMISSIVE nào phủ nó (khoản 97)' END
+              || ' — SELECT/UPDATE/DELETE của một migration backfill chạy dưới vai này trả 0 hàng KHÔNG '
                  'LỖI. Migration đánh số nào đã chạy ở lượt này đều đã ghi checksum, deploy sau không chạy lại chúng: kiểm backfill của '
                  'lượt này, chạy lại bằng một migration mới nếu nó ra 0 hàng. '
-              || CASE WHEN t.tu_sua_duoc
+              || CASE WHEN t.vi_tu_loc_het
+                      THEN 'Lối ra cho dòng này, theo từng đường tới EXECUTE: ' || t.loi_ra_execute || '. Gỡ xong thì câu chạm bảng dưới vai '
+                           'này ném 42501 thay vì ra 0 hàng; backfill theo tổ chức thì chạy dưới một vai mà RLS không áp, với điều kiện org_id '
+                           'tường minh. '
+                      ELSE '' END
+              || CASE WHEN t.tu_sua_duoc AND t.vi_tu_loc_het
+                      THEN 'Vai này tự cắt được đường tới EXECUTE hay đường tới quyền đã nêu, nên phép hỏi trước vòng của migrate() (khoản '
+                           '100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: gỡ đường ấy.'
+                      WHEN t.tu_sua_duoc
                       THEN 'Vai này mang hay tự lấy được quyền chủ bảng, hoặc tự cắt được đường tới quyền, nên phép hỏi trước vòng của '
                            'migrate() (khoản 100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: thêm policy '
                            'PERMISSIVE cho lệnh ấy TO chủ bảng hay TO vai này (một quyền đọc/ghi THƯỜNG TRỰC của vai deploy, trên bảng '
                            'tenant còn phải qua [CR1]), hay gỡ đường tới quyền đã nêu.'
                       ELSE 'Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này khi nó có sẵn TRƯỚC vòng đánh số, nên tới được '
                            'đây thì hoặc lượt này không tệp nào chờ, hoặc cấu hình mọc ra TRONG vòng. Sửa, ít quyền nhất trước — cả ba '
-                           'nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền đã nêu (REVOKE khỏi '
-                           'đúng grantee ấy, hay gỡ membership nhóm); hoặc chạy migrate() dưới một vai mà RLS không áp hay có policy phủ '
+                           'nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền đã nêu (đường cấp thẳng: '
+                           'REVOKE khỏi vai này; đường qua nhóm: gỡ membership của vai này trên đường ấy — KHÔNG REVOKE khỏi nhóm, nhất là '
+                           'vai ứng dụng); hoặc chạy migrate() dưới một vai mà RLS không áp hay có policy phủ '
                            'trên bảng này; hoặc chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này (một quyền đọc/ghi THƯỜNG TRỰC '
                            'của vai deploy, trên bảng tenant còn phải qua [CR1]).' END AS mo_ta
          FROM ($q$ || CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI || $q$) t$q$;
@@ -9657,14 +9769,22 @@ BEGIN
   -- hàng mức database (lượt soi 50 INFO-8; bản đầu viết "ngoại lệ DUY NHẤT" không kèm phạm vi). Vì sao dòng còn lại được chặn TRƯỚC
   -- vòng mà không phá lời hứa "migration vá lỗi luôn tới được đích": mọi lối ra của chúng nằm ngoài tầm của chính vai chạy migration
   -- (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng
-  -- thêm), nên một migration chạy dưới vai ấy không vá được — còn một backfill chạy dưới nó thì ra 0 hàng không lỗi rồi được ghi
+  -- thêm; [S1.58 / khoản nợ 101] với dòng mà policy phụ thuộc hàm ngữ cảnh lọc hết: gỡ đường tới EXECUTE theo lối ra của từng đường),
+  -- nên một migration chạy dưới vai ấy không vá được — còn một backfill chạy dưới nó thì ra 0 hàng không lỗi rồi được ghi
   -- checksum (đo S1.56 ⒣; hồ sơ N2 ở db/migrations.int.test.ts). Dòng `tu_sua_duoc` thì một migration dưới chính vai ấy SỬA ĐƯỢC (khối
   -- đo trên CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI) nên KHÔNG chặn ở đây — lượt soi 50 NẶNG-1: bản đầu chặn cả chúng, một ngõ cụt ADR-028
   -- §3. Chủ thể CHỦ BẢNG của cùng mục cũng KHÔNG hỏi ở đây, cùng lý do — test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
   -- Không bọc EXCEPTION: câu hỏi ném thì migrate() dừng trước vòng với lỗi thật (test ghim bằng một tệp .always.sql giả); nuốt để "đi
   -- tiếp" là một nhánh không đột biến nào làm đỏ được (ADR-028 §2⑷), và lượt phán xét sau vòng cũng sẽ không đánh giá được cùng câu ấy.
   IF che_do = 'truoc_vong' THEN
-    EXECUTE $e$SELECT pg_catalog.string_agg(t.ten || ' (' || t.duong || ')', '; ' ORDER BY t.ten) FROM ($e$
+    EXECUTE $e$SELECT pg_catalog.string_agg(t.ten || ' (' || t.duong
+                                            || CASE WHEN t.vi_tu_loc_het
+                                                    THEN ' — policy phụ thuộc app_current_org_id() lọc hết vì vai này có EXECUTE trên hàm ấy: '
+                                                         || t.duong_execute
+                                                    ELSE '' END || ')', '; ' ORDER BY t.ten)
+                   || coalesce('. Lối ra theo đường tới EXECUTE (khoản 101): '
+                               || pg_catalog.string_agg(DISTINCT CASE WHEN t.vi_tu_loc_het THEN t.loi_ra_execute END, '; '), '')
+                 FROM ($e$
             || CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI || $e$) t WHERE NOT t.tu_sua_duoc$e$
       INTO con_sot;
     IF con_sot IS NOT NULL THEN

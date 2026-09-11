@@ -3192,7 +3192,7 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
     });
   }, 120000);
 
-  it("[INV-F1] [lượt soi 49] gương check_enable_rls: thành viên INHERIT của chủ BYPASSRLS, hay của chủ đã tự REVOKE, trên bảng FORCE đọc 0 và UPDATE 0 không lỗi ⇒ nêu; cùng thành viên trên bảng NO FORCE đọc đủ ⇒ im; SUPERUSER NOBYPASSRLS và chính chủ không ở chủ thể này; nhóm NOINHERIT không phủ; GRANT mức cột bị nêu; INSERT không xét; thiếu USAGE lược đồ thì im; bảng tenant chuẩn không EXECUTE thì ồn — ranh giới khoản 101", async () => {
+  it("[INV-F1] [lượt soi 49] gương check_enable_rls: thành viên INHERIT của chủ BYPASSRLS, hay của chủ đã tự REVOKE, trên bảng FORCE đọc 0 và UPDATE 0 không lỗi ⇒ nêu; cùng thành viên trên bảng NO FORCE đọc đủ ⇒ im; SUPERUSER NOBYPASSRLS và chính chủ không ở chủ thể này; nhóm NOINHERIT không phủ; GRANT mức cột bị nêu; INSERT không xét; thiếu USAGE lược đồ thì im; bảng tenant chuẩn: không EXECUTE thì ồn và mục im, có EXECUTE thì mục nêu (khoản 101)", async () => {
     const nhanVai = async (c: pg.PoolClient, vai: string, tien: string): Promise<string[]> =>
       (await duoi<{ mo_ta: string }>(c, vai, docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
         .map((r) => r.mo_ta.split(":")[0]!)
@@ -3278,10 +3278,202 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
       expect(await ma(c, TRIEN, "SELECT count(*) FROM zz_s97.t"), "⒤ thiếu USAGE ném 42501").toBe("42501");
       expect(await nhan(c, TRIEN), "⒤ và mục im").toEqual([]);
       await c.query(`GRANT USAGE ON SCHEMA zz_s97 TO ${TRIEN}`);
-      // ⒥ ranh giới có ghim (NHẸ-4 — khoản 101): bảng tenant chuẩn, policy TO PUBLIC tính là phủ; ồn chỉ nhờ EXECUTE của hàm ngữ cảnh.
+      // ⒥ ~~ranh giới có ghim (NHẸ-4 — khoản 101): bảng tenant chuẩn, policy TO PUBLIC tính là phủ; ồn chỉ nhờ EXECUTE của hàm ngữ cảnh.~~
+      // [S1.58 / khoản nợ 101] Không EXECUTE ⇒ câu ném 42501 và policy tenant chuẩn vẫn tính là phủ (mục im). CÓ EXECUTE ⇒ câu đọc không
+      // lỗi mà vị từ lọc hết, và policy ấy thôi tính là phủ — mục nêu đúng hai lệnh đã cấp.
       await c.query(`GRANT SELECT, UPDATE ON public.suppliers TO ${TRIEN}`);
       expect(await ma(c, TRIEN, "SELECT count(*) FROM public.suppliers"), "⒥ không EXECUTE trên app_current_org_id() ⇒ 42501").toBe("42501");
-      expect(await nhanVai(c, TRIEN, "public.suppliers"), "⒥ policy tenant TO PUBLIC tính là phủ — ranh giới, khoản 101").toEqual([]);
+      expect(await nhanVai(c, TRIEN, "public.suppliers"), "⒥ không EXECUTE ⇒ policy tenant TO PUBLIC tính là phủ — câu ồn").toEqual([]);
+      await c.query(`GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO ${TRIEN}`);
+      expect(await ma(c, TRIEN, "SELECT count(*) FROM public.suppliers"), "⒥ có EXECUTE ⇒ đọc không lỗi").toBeNull();
+      expect(await nhanVai(c, TRIEN, "public.suppliers"), "⒥ có EXECUTE ⇒ policy tenant chuẩn thôi tính là phủ (khoản 101)").toEqual([
+        "public.suppliers/zz_trien97 (vai chạy migration)/SELECT",
+        "public.suppliers/zz_trien97 (vai chạy migration)/UPDATE",
+      ]);
+    });
+  }, 120000);
+
+  // [S1.58 / khoản nợ 101] Dòng chỉ có vì policy phụ thuộc hàm ngữ cảnh lọc hết thì còn TỰ SỬA ĐƯỢC khi vai ấy tự cắt được EXECUTE — ba vế
+  // cùng khuôn ba vế trên bảng của lượt soi 50 NẶNG-1, đo trên PostgreSQL 16 (thăm dò S1.58): thừa kế chủ hàm thì tự thu hồi EXECUTE của chủ;
+  // ADMIN (không INHERIT, không SET) trên chủ hàm thì tự cấp thừa kế rồi thu hồi; membership nhóm tự cấp mang EXECUTE thì tự cắt cạnh ấy.
+  // EXECUTE do superuser cấp thẳng khi chủ hàm là vai bootstrap thì tự thu hồi là no-op (đo) ⇒ không tự sửa được ⇒ chặn trước vòng.
+  // [lượt soi 51] Đối chứng cho mọi vế lọc: ⒠ policy không phụ thuộc hàm vẫn phủ; ⒣ hình dạng ngoài HINH_DANG_CHUAN mà phụ thuộc hàm vẫn bị
+  // loại (pg_depend, NHẸ-5); ⒢ dòng khoản 97 (không policy nào phủ) không được tha nhờ vế EXECUTE (NHẸ-4⒜); ⒡ membership do superuser cấp
+  // bị chặn và lời khuyên không thu hồi khỏi nhóm (vế grantor, NẶNG-2); ⒦ ADMIN trên vai sở hữu bảng không tính là tự sửa cho dòng khoản
+  // 101 (NẶNG-1); ⒤ vai thừa kế chủ bảng đứng ngoài — chủ thể giống chủ, khoản 102 (NẶNG-1). Mọi pha trong một giao dịch ROLLBACK, kể cả
+  // `ALTER FUNCTION … OWNER`.
+  it("[INV-F1] [S1.58 / khoản nợ 101] policy phụ thuộc app_current_org_id() không phủ vai chạy migration có EXECUTE trên hàm ấy mà RLS không coi là chủ: mục nêu kèm đường tới EXECUTE và lối ra theo từng đường; EXECUTE do superuser cấp thẳng hay qua nhóm do superuser cấp ⇒ chặn trước vòng; vai tự cắt được EXECUTE — membership nhóm tự cấp, thừa kế chủ hàm, ADMIN trên chủ hàm — ⇒ 'cố ý KHÔNG chặn nó'; đối chứng: policy không phụ thuộc hàm vẫn phủ, hình dạng khác phụ thuộc hàm vẫn bị loại, dòng khoản 97 không được tha nhờ vế EXECUTE, ADMIN trên vai sở hữu bảng không tính, vai thừa kế chủ bảng đứng ngoài (khoản 102)", async () => {
+    const V = "zz_trien101";
+    const HAI = ["SELECT", "UPDATE"].map((l) => `public.suppliers/${V} (vai chạy migration)/${l}`);
+    const nhanBang = async (c: pg.PoolClient, bang: string): Promise<string[]> =>
+      (await duoi<{ mo_ta: string }>(c, V, docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
+        .map((r) => r.mo_ta)
+        .filter((m) => m.startsWith(`${bang}/${V} (vai chạy migration)/`))
+        .sort();
+    const chanTruocVong = async (c: pg.PoolClient, bang: string): Promise<string[]> =>
+      (
+        await duoi<{ ten: string }>(
+          c,
+          V,
+          `SELECT t.ten FROM (${docHangHardening("CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI")}) t WHERE NOT t.tu_sua_duoc`,
+        )
+      ).rows
+        .map((r) => r.ten)
+        .filter((m) => m.startsWith(`${bang}/${V} (vai chạy migration)/`))
+        .sort();
+    const nhan = (dong: string[]): string[] => dong.map((m) => m.split(":")[0]!);
+    await trongGiaoDich(async (c) => {
+      await c.query(`CREATE ROLE ${V} NOSUPERUSER NOBYPASSRLS; GRANT SELECT, UPDATE ON public.suppliers TO ${V}`);
+
+      // ⒜ EXECUTE do superuser cấp thẳng, chủ hàm là vai bootstrap.
+      await c.query(`GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO ${V}`);
+      const a = await nhanBang(c, "public.suppliers");
+      expect(nhan(a), "⒜ hai lệnh đã cấp").toEqual(HAI);
+      expect(a[0]).toContain("phủ nó theo danh sách vai phụ thuộc app_current_org_id()");
+      expect(a[0]).toContain("có EXECUTE trên hàm ấy (cấp thẳng cho vai này)");
+      expect(a[0]).toContain(
+        `Lối ra cho dòng này, theo từng đường tới EXECUTE: chủ hàm hay SUPERUSER: REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM ${V}`,
+      );
+      expect(a[0]).toContain("Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này");
+      expect(await chanTruocVong(c, "public.suppliers"), "⒜ không tự sửa được ⇒ chặn trước vòng").toEqual(HAI);
+
+      // ⒠ đối chứng không đỏ oan: policy PERMISSIVE KHÔNG phụ thuộc hàm ngữ cảnh (USING true) vẫn phủ vai có EXECUTE.
+      await c.query(
+        "CREATE TABLE public.zz_k101e (id int); ALTER TABLE public.zz_k101e ENABLE ROW LEVEL SECURITY; ALTER TABLE public.zz_k101e FORCE ROW LEVEL SECURITY; " +
+          `CREATE POLICY zz_k101e_p ON public.zz_k101e USING (true) WITH CHECK (true); GRANT SELECT, UPDATE ON public.zz_k101e TO ${V}`,
+      );
+      expect(nhan(await nhanBang(c, "public.zz_k101e")), "⒠ policy USING (true) vẫn phủ vai có EXECUTE").toEqual([]);
+
+      // ⒣ [lượt soi 51 NHẸ-5] hình dạng NGOÀI HINH_DANG_CHUAN mà vẫn phụ thuộc hàm ngữ cảnh (khuôn "đấu thầu kín") ⇒ vẫn bị loại.
+      await c.query(
+        "CREATE TABLE public.zz_k101h (org_id uuid, trang_thai text); ALTER TABLE public.zz_k101h ENABLE ROW LEVEL SECURITY; " +
+          "ALTER TABLE public.zz_k101h FORCE ROW LEVEL SECURITY; CREATE POLICY zz_k101h_p ON public.zz_k101h " +
+          "USING (org_id = app_current_org_id() AND trang_thai <> 'NIEM_PHONG') WITH CHECK (org_id = app_current_org_id()); " +
+          `GRANT SELECT ON public.zz_k101h TO ${V}`,
+      );
+      expect(nhan(await nhanBang(c, "public.zz_k101h")), "⒣ khuôn đấu thầu kín phụ thuộc hàm ⇒ không phủ").toEqual([
+        `public.zz_k101h/${V} (vai chạy migration)/SELECT`,
+      ]);
+
+      // ⒝ EXECUTE qua một nhóm mà vai tự cấp membership (cạnh superuser chỉ-admin, không INHERIT).
+      await c.query(
+        `REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM ${V}; CREATE ROLE zz_nh101 NOLOGIN; ` +
+          `GRANT zz_nh101 TO ${V} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO zz_nh101`,
+      );
+      await c.query(`SET LOCAL ROLE ${V}; GRANT zz_nh101 TO ${V}; RESET ROLE`);
+      const b = await nhanBang(c, "public.suppliers");
+      expect(nhan(b), "⒝ hai lệnh đã cấp").toEqual(HAI);
+      expect(b[0]).toContain("có EXECUTE trên hàm ấy (qua nhóm zz_nh101)");
+      expect(b[0]).toContain("cố ý KHÔNG chặn nó");
+      expect(await chanTruocVong(c, "public.suppliers"), "⒝ tự cắt được cạnh membership ⇒ không chặn trước vòng").toEqual([]);
+
+      // ⒞ vai thừa kế CHỦ HÀM.
+      await c.query(
+        `REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM zz_nh101; CREATE ROLE zz_ch101 NOLOGIN; ` +
+          `ALTER FUNCTION public.app_current_org_id() OWNER TO zz_ch101; GRANT zz_ch101 TO ${V}`,
+      );
+      const cc = await nhanBang(c, "public.suppliers");
+      expect(nhan(cc), "⒞ hai lệnh đã cấp").toEqual(HAI);
+      expect(cc[0]).toContain("có EXECUTE trên hàm ấy (quyền chủ hàm zz_ch101)");
+      expect(cc[0]).toContain("cố ý KHÔNG chặn nó");
+      expect(await chanTruocVong(c, "public.suppliers"), "⒞ thừa kế chủ hàm ⇒ không chặn trước vòng").toEqual([]);
+
+      // ⒢ [lượt soi 51 NHẸ-4⒜] dòng khoản 97 (không policy nào phủ theo danh sách vai) KHÔNG được tha nhờ vế EXECUTE — cắt EXECUTE không vá
+      // được policy thiếu.
+      await c.query(
+        "CREATE TABLE public.zz_k101g (id int); ALTER TABLE public.zz_k101g ENABLE ROW LEVEL SECURITY; ALTER TABLE public.zz_k101g FORCE ROW LEVEL SECURITY; " +
+          `CREATE POLICY zz_k101g_p ON public.zz_k101g TO app_api USING (true) WITH CHECK (true); GRANT SELECT ON public.zz_k101g TO ${V}`,
+      );
+      expect(await chanTruocVong(c, "public.zz_k101g"), "⒢ dòng khoản 97 vẫn bị chặn trước vòng").toEqual([
+        `public.zz_k101g/${V} (vai chạy migration)/SELECT`,
+      ]);
+
+      // ⒟ ADMIN (không INHERIT, không SET) trên chủ hàm, EXECUTE cấp thẳng bởi superuser.
+      await c.query(
+        `REVOKE zz_ch101 FROM ${V}; GRANT zz_ch101 TO ${V} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE; ` +
+          `GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO ${V}`,
+      );
+      const d = await nhanBang(c, "public.suppliers");
+      expect(nhan(d), "⒟ hai lệnh đã cấp").toEqual(HAI);
+      expect(d[0]).toContain("có EXECUTE trên hàm ấy (cấp thẳng cho vai này)");
+      expect(d[0]).toContain("cố ý KHÔNG chặn nó");
+      expect(await chanTruocVong(c, "public.suppliers"), "⒟ ADMIN trên chủ hàm ⇒ không chặn trước vòng").toEqual([]);
+
+      // ⒡ đối chứng cho vế grantor: EXECUTE qua một nhóm mà membership do SUPERUSER cấp (có INHERIT) — vai ấy KHÔNG tự thu hồi được cạnh
+      // của người khác (PostgreSQL 16, đo ở S1.57) ⇒ không tự sửa được ⇒ chặn trước vòng; lời khuyên không thu hồi khỏi nhóm (lượt soi 51 NẶNG-2).
+      await c.query(
+        `REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM ${V}; REVOKE zz_ch101 FROM ${V}; CREATE ROLE zz_nh101b NOLOGIN; ` +
+          `GRANT zz_nh101b TO ${V}; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO zz_nh101b`,
+      );
+      const f = await nhanBang(c, "public.suppliers");
+      expect(nhan(f), "⒡ hai lệnh đã cấp").toEqual(HAI);
+      expect(f[0]).toContain("có EXECUTE trên hàm ấy (qua nhóm zz_nh101b)");
+      expect(f[0]).toContain("người cấp hay SUPERUSER gỡ membership của vai này trên đường tới zz_nh101b — KHÔNG thu hồi EXECUTE khỏi zz_nh101b");
+      expect(f[0]).toContain("Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này");
+      expect(await chanTruocVong(c, "public.suppliers"), "⒡ membership do superuser cấp ⇒ chặn trước vòng").toEqual(HAI);
+
+      // ⒦ [lượt soi 51 NẶNG-1] ADMIN (không INHERIT) trên vai SỞ HỮU bảng không tính là tự sửa được cho dòng khoản 101: lối vá của nó là thêm
+      // policy (cổng migration-shape và [CR1] không cho qua) hay tự lấy quyền chủ — thứ chỉ dời dòng sang chủ thể giống chủ.
+      await c.query(
+        "CREATE ROLE zz_chu101k NOLOGIN; CREATE TABLE public.zz_k101k (org_id uuid); ALTER TABLE public.zz_k101k ENABLE ROW LEVEL SECURITY; " +
+          "ALTER TABLE public.zz_k101k FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY zz_k101k_p ON public.zz_k101k USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+          `GRANT SELECT ON public.zz_k101k TO ${V}; ALTER TABLE public.zz_k101k OWNER TO zz_chu101k; ` +
+          `GRANT zz_chu101k TO ${V} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+      );
+      expect(await chanTruocVong(c, "public.zz_k101k"), "⒦ ADMIN trên chủ bảng không tha dòng khoản 101").toEqual([
+        `public.zz_k101k/${V} (vai chạy migration)/SELECT`,
+      ]);
+
+      // ⒤ [lượt soi 51 NẶNG-1] vai THỪA KẾ CHỦ BẢNG (RLS coi là chủ) đứng ngoài vế loại — chủ thể giống chủ, khoản 102 (đo: hồ sơ N3′ với bản
+      // đầu đỏ ở mọi lần deploy mà backfill vẫn bị tiêu).
+      await c.query(
+        "CREATE ROLE zz_chu101i NOLOGIN; CREATE TABLE public.zz_k101i (org_id uuid); ALTER TABLE public.zz_k101i ENABLE ROW LEVEL SECURITY; " +
+          "ALTER TABLE public.zz_k101i FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY zz_k101i_p ON public.zz_k101i USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+          `ALTER TABLE public.zz_k101i OWNER TO zz_chu101i; GRANT zz_chu101i TO ${V}`,
+      );
+      expect(nhan(await nhanBang(c, "public.zz_k101i")), "⒤ vai thừa kế chủ bảng: policy vẫn tính là phủ (khoản 102)").toEqual([]);
+    });
+  }, 120000);
+
+  // [S1.58 / khoản nợ 102 — lượt soi 51 NHẸ-6⒝] RANH GIỚI GHIM: kiểm ban đầu của khoá ngoại (`ALTER TABLE … ADD FOREIGN KEY`) chạy một câu
+  // SELECT DƯỚI chủ bảng, và FORCE làm RLS áp cho chủ: chủ có EXECUTE trên hàm ngữ cảnh ⇒ vị từ tenant lọc hết ⇒ ràng buộc được đánh dấu HỢP
+  // LỆ trên dữ liệu chưa kiểm (một hàng con treo sống sót); không EXECUTE ⇒ 42501; superuser ⇒ 23503 (đo, thăm dò S1.58). Cùng gốc với khoản
+  // 102 — test này lật khi khoản ấy đóng.
+  it("RANH GIỚI khoản 102: ADD FOREIGN KEY dưới chủ bảng FORCE có EXECUTE trên app_current_org_id() đánh dấu ràng buộc hợp lệ mà không kiểm hàng — hàng con treo sống sót; chủ không EXECUTE ⇒ 42501; superuser ⇒ 23503", async () => {
+    const DUNG =
+      "CREATE ROLE zz_chu102fk NOLOGIN; " +
+      "CREATE TABLE public.zz_cha102fk (id uuid PRIMARY KEY, org_id uuid NOT NULL); " +
+      "CREATE TABLE public.zz_con102fk (id uuid PRIMARY KEY, org_id uuid NOT NULL, cha_id uuid NOT NULL); " +
+      "ALTER TABLE public.zz_cha102fk ENABLE ROW LEVEL SECURITY; ALTER TABLE public.zz_cha102fk FORCE ROW LEVEL SECURITY; " +
+      "ALTER TABLE public.zz_con102fk ENABLE ROW LEVEL SECURITY; ALTER TABLE public.zz_con102fk FORCE ROW LEVEL SECURITY; " +
+      "CREATE POLICY zz_cha102fk_t ON public.zz_cha102fk USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+      "CREATE POLICY zz_con102fk_t ON public.zz_con102fk USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+      "INSERT INTO public.zz_con102fk VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid()); " +
+      "ALTER TABLE public.zz_cha102fk OWNER TO zz_chu102fk; ALTER TABLE public.zz_con102fk OWNER TO zz_chu102fk";
+    const FK = "ALTER TABLE public.zz_con102fk ADD CONSTRAINT zz_con102fk_cha_fk FOREIGN KEY (cha_id) REFERENCES public.zz_cha102fk (id)";
+    const maLoi = async (c: pg.PoolClient, sql: string): Promise<string | null> =>
+      c.query(sql).then(
+        () => null,
+        (e: { code?: string }) => e.code ?? "khong-ma",
+      );
+    await trongGiaoDich(async (c) => {
+      await c.query(DUNG);
+      await c.query("SAVEPOINT s");
+      expect(await maLoi(c, FK), "đối chứng superuser ⇒ 23503").toBe("23503");
+      await c.query("ROLLBACK TO SAVEPOINT s");
+      expect(await maLoi(c, `SET LOCAL ROLE zz_chu102fk; ${FK}`), "chủ không EXECUTE ⇒ 42501").toBe("42501");
+      await c.query("ROLLBACK TO SAVEPOINT s");
+      await c.query("GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO zz_chu102fk");
+      expect(await maLoi(c, `SET LOCAL ROLE zz_chu102fk; ${FK}`), "chủ có EXECUTE ⇒ đi qua").toBeNull();
+      await c.query("RESET ROLE");
+      const { rows: rb } = await c.query<{ hop_le: boolean }>("SELECT convalidated AS hop_le FROM pg_constraint WHERE conname = 'zz_con102fk_cha_fk'");
+      expect(rb[0]?.hop_le, "ràng buộc được đánh dấu hợp lệ").toBe(true);
+      const { rows: rt } = await c.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM public.zz_con102fk con WHERE NOT EXISTS (SELECT 1 FROM public.zz_cha102fk cha WHERE cha.id = con.cha_id)",
+      );
+      expect(rt[0]!.n, "hàng con treo sống sót").toBe(1);
     });
   }, 120000);
 });
