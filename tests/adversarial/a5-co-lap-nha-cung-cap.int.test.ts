@@ -31,6 +31,21 @@ import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
+/**
+ * [khoản nợ 29 — vế ⑶] Bảng bật RLS mà không có policy `<bảng>_khach`. [S1.55 / lượt soi 48 INFO-5] Phủ MỌI lược đồ dự án
+ * (cùng khuôn lọc MAU_SCHEMA_DU_AN của hardening), không riêng public: sau khoản 98, policy trên bảng RLS ngoài public khai được
+ * ở 83⑴ — đo, `zz98g.t` với `USING (true)` cho phiên khách (app_api + app.guest_session_id) đọc 2 hàng, và bản chỉ-public không
+ * thấy bảng ấy.
+ */
+const CAU_BANG_RLS_THIEU_KHACH = `SELECT n.nspname || '.' || c.relname AS ten
+   FROM pg_class c
+   JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%'
+    AND c.relkind = 'r' AND c.relrowsecurity
+    AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                     WHERE p.polrelid = c.oid AND p.polname = c.relname || '_khach')
+  ORDER BY 1`;
+
 const boBocTest = {
   name: "doi-xung-cua-test",
   wrap: (_orgId: string, banRo: Uint8Array) =>
@@ -380,17 +395,9 @@ describe("[INV-A5] phiên khách bị cô lập ở tầng CSDL, không chỉ �
     // Vế chống-mù. `027` lấp một lượt cho lược đồ hôm nay; thứ làm cho bảng TIẾP THEO phải được
     // quyết định là chính khẳng định này. Suy từ TÍNH CHẤT (`pg_class.relrowsecurity`), không từ
     // một danh sách tên — cùng bài học đã phải học ba lần ở dự án này.
-    const { rows } = await db.pool.query<{ relname: string }>(
-      `SELECT c.relname
-         FROM pg_class c
-         JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
-          AND NOT EXISTS (SELECT 1 FROM pg_policy p
-                           WHERE p.polrelid = c.oid AND p.polname = c.relname || '_khach')
-        ORDER BY c.relname`,
-    );
+    const { rows } = await db.pool.query<{ ten: string }>(CAU_BANG_RLS_THIEU_KHACH);
     expect(
-      rows.map((h) => h.relname),
+      rows.map((h) => h.ten),
       "Bảng có RLS nhưng KHÔNG có policy khách. Nếu khách được đọc nó, viết một policy " +
         "`<bảng>_khach AS RESTRICTIVE` với vị từ đúng; nếu không, vị từ đóng " +
         "`app_current_guest_session_id() IS NULL`. Bỏ qua nghĩa là bảng ấy MỞ TOANG với mọi " +
@@ -403,6 +410,25 @@ describe("[INV-A5] phiên khách bị cô lập ở tầng CSDL, không chỉ �
         WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity`,
     );
     expect(Number(tong[0]?.n ?? "0")).toBeGreaterThan(10);
+  });
+
+  it("[khoản nợ 29] [S1.55 / lượt soi 48 INFO-5] vế chống-mù phủ mọi lược đồ dự án: bảng RLS ngoài public không có `<bảng>_khach` bị thấy, có thì thôi", async () => {
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "CREATE SCHEMA zz_a5; CREATE TABLE zz_a5.t (id int); ALTER TABLE zz_a5.t ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY cho ON zz_a5.t USING (true) WITH CHECK (true)",
+      );
+      const thieu = async (): Promise<string[]> =>
+        (await client.query<{ ten: string }>(CAU_BANG_RLS_THIEU_KHACH)).rows.map((h) => h.ten);
+      expect(await thieu(), "bảng RLS ngoài public thiếu policy khách phải bị thấy").toEqual(["zz_a5.t"]);
+      await client.query("CREATE POLICY t_khach ON zz_a5.t AS RESTRICTIVE USING (true)");
+      expect(await thieu(), "đối chứng: có `<bảng>_khach` thì thôi").toEqual([]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
   });
 
   it("[khoản nợ 29] `withGuestSession` từ chối một GUC KHÔNG có hiệu lực", async () => {
