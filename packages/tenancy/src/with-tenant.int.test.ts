@@ -646,3 +646,208 @@ describe("[I1] withTenant dưới search_path thù địch", () => {
     }
   }, 180_000);
 });
+
+// ============================================================================================
+// [S1.54 / khoản nợ 96] BA GUC VẬN HÀNH GHI VÀO PHIÊN TRONG GIAO DỊCH CỦA withTenant
+// ============================================================================================
+// Đo S1.54 (PostgreSQL 16, dưới app_api): một hàm SECURITY DEFINER của superuser chạy set_config('session_replication_role',
+// 'replica', false) ⇒ phiên người gọi Ở LẠI replica sau khi hàm trả về — trigger ENABLE thường không chạy, khoá ngoại tới hàng
+// không tồn tại đi qua — và app_api không tự SET/RESET về origin được (42501). Hardening quét văn bản tĩnh (nhánh ⒡ của
+// CAU_GUC_VAN_HANH_GAN_SAN); tên dựng lúc chạy thì chỉ withTenant thấy. Mỗi it dưới đây đo một vế của hai phép kiểm ⑴⑵ ở
+// docstring của withTenant; pool một kết nối để đo pid.
+// ============================================================================================
+describe("[S1.54 / khoản nợ 96] GUC vận hành ghi vào phiên trong giao dịch của withTenant", () => {
+  interface TrangThaiPhien {
+    pid: number;
+    vai: string;
+    luoc_do: string;
+    rls: string;
+  }
+  const trangThai = async (pool: pg.Pool): Promise<TrangThaiPhien> =>
+    (
+      await pool.query<TrangThaiPhien>(
+        "SELECT pg_backend_pid()::int AS pid, current_setting('session_replication_role') AS vai, " +
+          "current_schemas(false)::text AS luoc_do, current_setting('row_security') AS rls",
+      )
+    ).rows[0]!;
+
+  beforeAll(async () => {
+    await db.pool.query(`
+      CREATE SCHEMA zz96;
+      GRANT USAGE ON SCHEMA zz96 TO app_api;
+      CREATE FUNCTION zz96.dat_replica() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+        AS $$BEGIN PERFORM set_config('session_replication_role', 'replica', false); END$$;
+      REVOKE EXECUTE ON FUNCTION zz96.dat_replica() FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION zz96.dat_replica() TO app_api;
+      CREATE TABLE zz96.cha (id int PRIMARY KEY);
+      CREATE TABLE zz96.con (cha_id int REFERENCES zz96.cha);
+      GRANT SELECT, INSERT ON zz96.cha, zz96.con TO app_api;
+    `);
+  });
+
+  afterAll(async () => {
+    await db.pool.query("DROP SCHEMA IF EXISTS zz96 CASCADE");
+  });
+
+  it("⑴ fn gọi hàm SECURITY DEFINER đặt replica phạm vi PHIÊN rồi ghi hàng vi phạm khoá ngoại: withTenant NÉM TenantError, COMMIT không chạy nên không hàng nào được ghi; ROLLBACK gỡ replica nên kết nối được GIỮ", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const truoc = await trangThai(pool1);
+      let vaiTrongGiaoDich = "";
+      let khoaNgoaiDiQua = false;
+      const loi = await withTenant(pool1, orgA, async (c) => {
+        await c.query("INSERT INTO zz96.cha VALUES (1)");
+        await c.query("SELECT zz96.dat_replica()");
+        vaiTrongGiaoDich = (await c.query<{ v: string }>("SELECT current_setting('session_replication_role') AS v")).rows[0]!.v;
+        // Khoá ngoại tới hàng KHÔNG tồn tại: dưới replica trigger RI bị bỏ qua nên câu này đi qua — đúng thứ sắp được commit.
+        await c.query("INSERT INTO zz96.con VALUES (999)");
+        khoaNgoaiDiQua = true;
+      }).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(vaiTrongGiaoDich, "tiền đề: hàm THẬT đặt replica cho phiên người gọi — không thì vế dưới rỗng ruột").toBe("replica");
+      expect(khoaNgoaiDiQua, "tiền đề: dưới replica khoá ngoại bị bỏ qua (đo)").toBe(true);
+      expect(loi).toBeInstanceOf(TenantError);
+      expect(loi!.message).toContain("session_replication_role không phải origin/local lúc COMMIT");
+      const { rows } = await db.pool.query<{ cha: number; con: number }>(
+        "SELECT (SELECT count(*) FROM zz96.cha WHERE id = 1)::int AS cha, " +
+          "(SELECT count(*) FROM zz96.con WHERE cha_id = 999)::int AS con",
+      );
+      expect(rows[0], "không hàng nào của giao dịch chạy dưới replica được commit").toEqual({ cha: 0, con: 0 });
+      const sau = await trangThai(pool1);
+      expect(sau.vai, "ROLLBACK gỡ giá trị phạm vi phiên đặt trong giao dịch (đo)").toBe("origin");
+      expect(sau.pid, "kết nối đã sạch sau ROLLBACK nên được giữ").toBe(truoc.pid);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("⑵ khuôn I1 — fn tự COMMIT rồi gọi hàm đặt replica NGOÀI giao dịch: withTenant NÉM, và kết nối nhiễm bị HUỶ (pid đổi, phiên kế ở origin)", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const truoc = await trangThai(pool1);
+      const loi = await withTenant(pool1, orgA, async (c) => {
+        await c.query("COMMIT");
+        await c.query("SELECT zz96.dat_replica()");
+      }).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).toBeInstanceOf(TenantError);
+      const sau = await trangThai(pool1);
+      expect(sau.vai, "replica của lần dùng trước còn sống trên kết nối trả về pool").toBe("origin");
+      expect(sau.pid, "kết nối phải THẬT SỰ bị thay").not.toBe(truoc.pid);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("⑴⑵ kết nối lấy từ pool đã nhiễm replica bởi mã NGOÀI withTenant: withTenant NÉM trước khi commit bất cứ gì, và huỷ kết nối", async () => {
+    const poolSu = createPool(db.connectionString, 1);
+    try {
+      await poolSu.query("SET session_replication_role = replica");
+      const truoc = await trangThai(poolSu);
+      expect(truoc.vai, "tiền đề: kết nối trong pool đang nhiễm").toBe("replica");
+      const loi = await withTenant(poolSu, orgA, (c) => c.query("INSERT INTO zz96.cha VALUES (2)")).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi).toBeInstanceOf(TenantError);
+      expect((await db.pool.query("SELECT 1 FROM zz96.cha WHERE id = 2")).rowCount, "không commit dưới replica").toBe(0);
+      const sau = await trangThai(poolSu);
+      expect(sau.vai).toBe("origin");
+      expect(sau.pid, "kết nối nhiễm từ trước cũng bị huỷ").not.toBe(truoc.pid);
+    } finally {
+      await poolSu.end();
+    }
+  });
+
+  it("⑵ fn đặt search path phạm vi PHIÊN sang một schema đọc được: withTenant trả về bình thường, kết nối bị HUỶ (pid đổi, phiên kế ở search path mặc định)", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const truoc = await trangThai(pool1);
+      await expect(
+        withTenant(pool1, orgA, async (c) => {
+          await c.query("SET search_path = zz96, public");
+          return 7;
+        }),
+      ).resolves.toBe(7);
+      const sau = await trangThai(pool1);
+      expect(sau.luoc_do, "search path của lần dùng trước còn sống trên kết nối trả về pool").toBe(truoc.luoc_do);
+      expect(sau.pid).not.toBe(truoc.pid);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("⑵ fn đặt row_security = off phạm vi PHIÊN: kết nối bị HUỶ", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const truoc = await trangThai(pool1);
+      await expect(
+        withTenant(pool1, orgA, async (c) => {
+          await c.query("SET row_security = off");
+        }),
+      ).resolves.toBeUndefined();
+      const sau = await trangThai(pool1);
+      expect(sau.rls).toBe("on");
+      expect(sau.pid).not.toBe(truoc.pid);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("⑵ kết nối lấy từ pool đã nhiễm row_security = off bởi mã NGOÀI withTenant: kết nối bị HUỶ — row_security xét theo tính chất, không so với lúc mở giao dịch (lượt soi 47 NHẸ-1)", async () => {
+    const poolSu = createPool(db.connectionString, 1);
+    try {
+      await poolSu.query("SET row_security = off");
+      const truoc = await trangThai(poolSu);
+      expect(truoc.rls, "tiền đề: kết nối trong pool đang nhiễm").toBe("off");
+      await expect(withTenant(poolSu, orgA, (c) => c.query("SELECT 1").then(() => 1))).resolves.toBe(1);
+      const sau = await trangThai(poolSu);
+      expect(sau.rls, "row_security của lần dùng trước còn sống trên kết nối trả về pool").toBe("on");
+      expect(sau.pid, "kết nối nhiễm từ trước cũng bị huỷ").not.toBe(truoc.pid);
+    } finally {
+      await poolSu.end();
+    }
+  });
+
+  it("⑵ phép đọc lại ở finally NÉM — fn đặt pg_temp đầu search path dưới vai không có TEMP (đo 42501): kết nối bị HUỶ thay vì trả về pool", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const truoc = await trangThai(pool1);
+      await expect(
+        withTenant(pool1, orgA, async (c) => {
+          await c.query("SET search_path = pg_temp, public");
+        }),
+      ).resolves.toBeUndefined();
+      const sau = await trangThai(pool1);
+      expect(sau.pid, "bản trước nuốt lỗi của phép đọc rồi trả kết nối nhiễm về pool").not.toBe(truoc.pid);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("ĐỐI CHỨNG: SET LOCAL search path và row_security, bảng tạm ON COMMIT DROP dưới vai có TEMP, kết nối ở session_replication_role = local — withTenant commit bình thường và kết nối được GIỮ", async () => {
+    const poolSu = createPool(db.connectionString, 1);
+    try {
+      await poolSu.query("SET session_replication_role = local");
+      const truoc = await trangThai(poolSu);
+      await expect(
+        withTenant(poolSu, orgA, async (c) => {
+          await c.query("SET LOCAL search_path = zz96, public");
+          await c.query("SET LOCAL row_security = off");
+          // Bảng tạm dưới vai có TEMP: current_schemas(true) lệch vì pg_temp_N ngầm (đo) — mốc dùng false nên không huỷ oan.
+          await c.query("CREATE TEMP TABLE zz_tam96 (x int) ON COMMIT DROP");
+          await c.query("INSERT INTO zz96.cha VALUES (3)");
+          return 1;
+        }),
+      ).resolves.toBe(1);
+      expect((await db.pool.query("SELECT 1 FROM zz96.cha WHERE id = 3")).rowCount, "local không phải replica: commit").toBe(1);
+      expect(await trangThai(poolSu), "cùng kết nối, cùng ba GUC").toEqual(truoc);
+    } finally {
+      await poolSu.end();
+    }
+  });
+});
