@@ -3330,3 +3330,103 @@ lượt soi; NẶNG-1 sống qua test đích và trọn lượt tích hợp. ⑵
 chọn cách đọc không chạm cổng và ghim cái giá bằng test ranh giới — không nới cổng để chứa lựa chọn. ⑶ Đột biến phải đỏ vì HÀNH VI: đọc lý do
 đỏ, không chỉ đếm — một đột biến làm cạn pool một kết nối đỏ vì lý do khác. ⑷ Mục "mang sang" của lượt soi vào sổ nợ sau một thăm dò riêng:
 khoản 103 và 104 mỗi khoản có một vế đo trước khi ghi.
+
+# §S1.60 — khoản nợ 80: nhân chứng hành vi so GIÁ TRỊ (vế ⒠) và đo dưới vai ứng dụng theo danh sách trắng — lượt soi 53
+
+**Bề mặt:** chỉ mã test — harness nhân chứng của `[INV-H19]` trong `db/hardening-suy-tu-tinh-chat.int.test.ts`; không dòng mã sản xuất, không
+migration. `SoNhanChung.chung` (tiền điều kiện khai và vế ⒠ sau ⒞′), `NhanChung.khai`/`docLai`, `KHAC_NULL`/`giaTriKhop`/`jsonOnDinh`/
+`hienGiaTri`, `SoNhanChung.chuaCoNhanChung` (danh sách trắng thay danh sách đen), `NHAN_CHUNG_DUOI_CHU`, `kiemDanhSachDuoiChu`,
+`cauDuoiAppUnseal`, `cauDuoiPhienKhach`, `dungKichBan` (viết lại). Lớp này là cổng đo của hardening: một nhân chứng ghi công sai thì một hàm
+canh khai sai là KHÔNG-CANH đi qua tổng điều tra — khoản 74 dựng nó để chặn đúng chiều ấy.
+
+**Đo trước khi viết (test viết trước, chạy trên harness cũ, PostgreSQL 16):** trọn tệp 35 test, 4 đỏ. ⒜ `it` vế ⒠ — trigger BEFORE ROW
+`RETURN OLD` trên UPDATE, dưới `app_api`, câu RETURNING `g` và khai `g = 'b'` ⇒ `chung()` KHÔNG ném (đỏ ở "bản trước bản vá: RETURN OLD cho
+rowCount 1 và nhân chứng ghi công"). ⒝ `it` danh sách trắng — hàm từ chối khi `current_setting('is_superuser') <> 'on'`, vị từ `nhay_vai`
+không thấy nó (tiền đề khẳng định trong test) ⇒ nhân chứng dưới superuser đi qua ngắn mạch và `chuaCoNhanChung` trả rỗng (đỏ ở "bản trước
+bản vá: superuser được ghi công cho hàm lách regex"). ⒞ test nhân chứng chính và `it` tự đối chiếu đỏ vì `ReferenceError` (`VAI_UNG_DUNG`,
+`NHAN_CHUNG_DUOI_CHU` chưa có) — đỏ cấu trúc, không phải hành vi; hành vi của hai vế ấy đo bằng đột biến. ⒟ Thăm dò catalog trước khi viết
+kịch bản: quyền ghi theo cột của `app_api`/`app_unseal` trên 27 bảng có trigger, quyền SELECT theo cột (cột mà RETURNING chạm được), policy
+khách RESTRICTIVE, và thân các hàm của tập rộng.
+
+**Hình dạng:** ⒜ Vế ⒠ nằm TRONG `chung()`, không ở kịch bản: INSERT/UPDATE thiếu `khai` thì ném trước `BEGIN`; sau ⒞′, số hàng để so phải
+bằng `rowCount`, mỗi cột khai phải có mặt trong mỗi hàng, `giaTriKhop` so từng hàng — lệch thì ném trong giao dịch, ROLLBACK, không ai được
+ghi công. Hàng để so là RETURNING của câu; khi vai nhân chứng không SELECT được bảng (`app_unseal` trên `rfq_unsealed_bids`), `docLai` chạy
+sau `SET LOCAL ROLE NONE` trong cùng giao dịch. `giaTriKhop` so theo kiểu `pg` đọc ra: `Buffer` so byte, `Date` so mốc, đối tượng so JSON sắp
+khoá, NULL chỉ bằng NULL, `KHAC_NULL` chỉ đòi khác NULL, còn lại so chuỗi. ⒝ Danh sách TRẮNG vai: hợp lệ khi một nhân chứng có
+`current_user` thuộc `VAI_UNG_DUNG` (hằng của `@trustprocure/db`, cùng nguồn với `ganVaiTroChoPool`); chủ sở hữu chỉ được cho cặp (bảng, sự
+kiện) khai kèm lý do trong `NHAN_CHUNG_DUOI_CHU`, và không bao giờ cho hàm `nhay_vai` — vị từ regex thành đối chứng, không còn là cổng.
+⒞ Danh sách tự kiểm hai chiều: `kiemDanhSachDuoiChu` — mỗi cặp có trigger trong tập rộng, và không vai ứng dụng nào có quyền ghi ở cặp ấy
+(`has_any_column_privilege`/`has_table_privilege`, tính cả thừa kế); test nhân chứng chính — bộ ba chỉ có nhân chứng dưới chủ sở hữu thì cặp
+của nó phải được khai, và mỗi cặp khai phải có bộ ba như thế. ⒟ `dungKichBan`: nhân chứng dưới `app_api` + `app.org_id` (đường `withTenant`),
+dưới `app_unseal` cho bản rõ và UNSEALED (đường `unseal-worker`), dưới `app_api` + ba GUC khách cho phiên bản báo giá (đường
+`withGuestSession`); cột đặt là cột vai ấy được cấp, RETURNING là cột vai ấy SELECT được; câu trên bảng không có trigger ở sự kiện ấy (tổ
+chức, người dùng, luồng báo giá, việc outbox, liên kết đăng nhập, hồ sơ TOTP) và phiên của từng người (đường `app_api` đòi TOTP đã xác
+nhận) là câu dựng dưới chủ sở hữu, ngoài `chung()`.
+
+**Test (`db/hardening-suy-tu-tinh-chat.int.test.ts`, describe `[INV-H19]`):**
+- **`[khoản nợ 80] VẾ ⒠`** — bảng tạm với hàm đảo (UPDATE `RETURN OLD`; INSERT gán lại `g` ở hàng id chẵn), dưới `app_api`: UPDATE ⇒ ném nêu
+  "vế ⒠" và "cột g"; INSERT ⇒ ném; `luc = now()` khai `KHAC_NULL` mà `RETURN OLD` giữ NULL ⇒ ném nêu "cột luc trả về null, khai khác NULL";
+  câu hai hàng mà chỉ hàng THỨ HAI bị sửa ⇒ ném; không ai được ghi công; bảng chỉ còn hàng mẫu. ĐỐI CHỨNG: hàm trả `NEW` nguyên vẹn ⇒ ghi
+  công ở INSERT và UPDATE. Câu thiếu khai ⇒ "thiếu vế ⒠"; khai mà không RETURNING ⇒ nêu RETURNING; RETURNING bỏ sót một cột khai NULL ⇒
+  "không RETURNING cột luc".
+- **`[khoản nợ 80] vế ⒠ so theo kiểu pg`** — bảng chân trị cho `giaTriKhop`: bytea, timestamptz, jsonb không theo thứ tự khoá, numeric như
+  chuỗi, NULL/undefined, `KHAC_NULL`.
+- **`[khoản nợ 80] DANH SÁCH TRẮNG VAI`** — ⑴ hàm lách regex: superuser không được ghi công, dưới `app_api` chính hàm ấy từ chối (`where`);
+  ⑵ hàm không đọc vai: superuser không đủ, cặp khai thì đủ, `app_api` thì đủ; ⑶ hàm nhạy vai trên cặp đã khai vẫn bị nêu.
+- **`[khoản nợ 80] danh sách trắng TỰ ĐỐI CHIẾU`** — danh sách thật sạch; khai `rfq_budgets/UPDATE` (app_api ghi được),
+  `rfq_unsealed_bids/INSERT` (app_unseal ghi được), `organizations/INSERT` (không trigger) ⇒ mỗi cặp đúng một dòng.
+- **Test nhân chứng chính** — kịch bản mới xanh, `chuaCoNhanChung` rỗng, danh sách trắng khít hai chiều, tự đối chiếu sạch.
+- **Ba test đột biến cũ** (`[sổ nợ 74] ĐỘT BIẾN`, `[khoản nợ 77]` nuốt INSERT, `[khoản nợ 77]` DEFERRED) khai vế ⒠ và, với bảng tạm, danh
+  sách trắng cục bộ — chúng đo ⒞, ⒞′ và cửa sổ, không đo vai; kỳ vọng chuỗi của `[sổ nợ 74] ĐỘT BIẾN` mang hậu tố vai mới.
+
+**Tự bắt, không phải lượt soi:** ⑴ Lượt đo đầu sau bản vá: `it` vế ⒠ đỏ ở tiền đề "RETURN OLD giữ giá trị cũ" — hàng mẫu chèn SAU khi gắn
+trigger nên chính nhánh INSERT của hàm đảo đã sửa nó; mọi khẳng định vế ⒠ trước đó xanh ⇒ chèn hàng mẫu trước trigger. ⑵ Khi dựng danh sách
+đột biến: bỏ kiểm cột có mặt, cho `KHAC_NULL` khớp mọi giá trị, chỉ so hàng đầu, và năm nhánh kiểu của `giaTriKhop` đều KHÔNG có test nào
+bắt ⇒ thêm ba khẳng định vào `it` vế ⒠ và `it` bảng chân trị TRƯỚC khi chạy lượt đột biến (khai thiếu cột với giá trị NULL là ca `undefined`
+"khớp" NULL — lỗ thật nếu không kiểm có mặt). ⑶ Kịch bản dưới vai ứng dụng xanh ở lượt đo đầu: mọi câu đặt đúng cột đã cấp và RETURNING đúng
+cột SELECT được, theo bảng thăm dò.
+
+**Đỏ đo được, cô lập (mã cuối, chạy một-một, nhóm test khoản 80 cộng test nhân chứng chính):**
+Hai mươi ba đột biến trên mã cuối, chạy một-một trên nhóm test khoản 80 cộng test nhân chứng chính (lọc tên); đối chứng không đột biến xanh trước lượt; không đột biến nào đỏ do lỗi dựng; sau lượt, sha256 của tệp đích khớp bản gốc. M1 bỏ đòi khai vế ⒠ ⇒ đỏ ở `it` vế ⒠ (câu thiếu khai không ném) · M2 bỏ khối so giá trị ⇒ đỏ ở `it` vế ⒠ (`RETURN OLD` được ghi công) · M3 bỏ phép so số hàng để so ⇒ đỏ ở `it` vế ⒠ (khai mà không RETURNING vẫn qua) · M4 bỏ kiểm cột khai có mặt ⇒ đỏ ở `it` vế ⒠ (cột khai NULL mà RETURNING bỏ sót vẫn qua) · M5 `KHAC_NULL` khớp mọi giá trị ⇒ đỏ ở `it` vế ⒠ (`RETURN OLD` giữ NULL) và ở bảng chân trị · M6 chỉ so hàng đầu ⇒ đỏ ở `it` vế ⒠ (hàng thứ hai bị sửa) · M7 bytea so kiểu, không so byte · M8 bỏ nhánh Date · M9 JSON không sắp khoá · M10 bỏ so lỏng chuỗi-số · M11 NULL khớp mọi giá trị ⇒ mỗi đột biến đỏ ở đúng dòng của bảng chân trị · M12 vai nào cũng tính là vai ứng dụng ⇒ đỏ ở `it` danh sách trắng ⑴ (superuser được ghi công cho hàm lách regex) · M13 danh sách trắng miễn hàm nhạy vai ⇒ đỏ ở `it` danh sách trắng ⑶ · M14 bỏ danh sách trắng ⇒ đỏ ở test nhân chứng chính (tám bộ ba của năm cặp thiếu nhân chứng hợp lệ) và ở `it` danh sách trắng ⑵ · M15 thêm cặp `rfq_budgets/UPDATE` ⇒ đỏ ở test nhân chứng chính (mục chết) và ở `it` tự đối chiếu · M16 bỏ cặp `user_roles/UPDATE` ⇒ đỏ ở test nhân chứng chính (hai bộ ba chỉ có nhân chứng dưới chủ sở hữu) · M17 đối chiếu catalog không hỏi quyền · M18 chỉ hỏi `app_api` · M19 bỏ vế mục chết ⇒ mỗi đột biến đỏ ở đúng khẳng định của `it` tự đối chiếu · M20 nhân chứng `rfq_budgets/UPDATE` về chủ sở hữu · M21 bản rõ ghi dưới chủ sở hữu thay vì `app_unseal` ⇒ đỏ ở test nhân chứng chính (bộ ba ấy thiếu nhân chứng hợp lệ) · M22 `docLai` không trả vai về chủ sở hữu ⇒ đỏ ở test nhân chứng chính (`permission denied for table rfq_unsealed_bids`) · M23 bỏ qua `docLai` ⇒ đỏ ở test nhân chứng chính (câu báo 1 hàng, 0 hàng để so). **Đo ranh giới, không phải đột biến đỏ:** M24 — `cauDuoiPhienKhach` chỉ đặt `app.org_id`, bỏ ba GUC khách ⇒ XANH: không hàm trigger nào của `vendor_bid_versions` đọc GUC khách, và policy RESTRICTIVE khách chỉ thu hẹp; ba GUC giữ để kịch bản giống đường `withGuestSession`, không chịu lực cho phép đo.
+
+**Đo lại INFO-10 (lượt soi 25a):** trước bản vá 72 bộ ba được ghi công, 63 chỉ dưới superuser, 9 có nhân chứng dưới `app_api`. Sau bản vá (bản sao tạm không track của tệp in sổ ghi công ngay sau khẳng định khít, chạy riêng test nhân chứng chính, xoá bản sao): vẫn 72 bộ ba được ghi công; đúng 8 chỉ dưới chủ sở hữu — `rfq_items_chi_sua_khi_soan` ở `rfq_items` UPDATE và DELETE, `kiem_tra_ma_tran_quyen` và `kiem_tra_nguong_khong_cung_tay_vai_tro` ở `role_permissions` INSERT và UPDATE, `kiem_tra_nguong_khong_cung_tay_nguoi_dung` và `kiem_tra_phan_tach_nhiem_vu` ở `user_roles` UPDATE, tức tám bộ ba của năm cặp khai; 64 có nhân chứng từ vai ứng dụng — 62 dưới `app_api`, 4 dưới `app_unseal`, hai bộ ba có cả hai.
+
+**Ranh giới NÓI RA:** ⑴ Giá trị máy chủ sinh khai `KHAC_NULL`: bắt `RETURN OLD` giữ NULL (đo), không bắt một giá trị khác NULL bị thay bằng
+giá trị khác NULL khác. ⑵ UPDATE không đổi giá trị (`SET role_code = role_code`, `SET permission_code = permission_code` — hai nhân chứng AFTER
+ROW của danh sách trắng) không có gì để so; vế ⒠ ở đó chỉ nói hàng trả về là hàng câu nhắm tới. ⑶ Cột khác nhau giữa các hàng của một câu
+nhiều hàng (`rfq_items` hai dòng) không khai; cột vai nhân chứng không SELECT được (`wrapped_private_key`, `envelope`) không khai. ⑷ `docLai`
+đọc theo khoá kịch bản nêu, dưới chủ sở hữu. ⑸ Vế ⒠ so cột ĐÃ KHAI — một trigger sửa một cột mà câu không đặt (hay đặt mà không khai) thì vế
+⒠ không nói gì về cột ấy. ⑹ Danh sách trắng dựa trên quyền catalog của hai vai ứng dụng; đường ghi qua hàm SECURITY DEFINER không hiện ở
+`has_*_privilege`. ⑺ Ba GUC khách của nhân chứng phiên bản báo giá không chịu lực — đo (M24): bỏ cả ba, kịch bản vẫn xanh; chúng giữ để kịch bản giống đường `withGuestSession`.
+
+**Lượt soi đối kháng 53** — một người soi độc lập, CHỈ ĐỌC, trên bản chụp của tệp test (bản trong worktree đang bị lượt đột biến sửa rồi
+trả), cùng diff, danh sách đột biến, bảng thăm dò catalog và mã sản xuất: **0 CAO, 0 NẶNG, 3 NHẸ, 3 INFO**. Người soi không tìm được thay
+đổi có hại nào mà không test nào bắt.
+
+| Mã | Phát hiện | Xử lý |
+|---|---|---|
+| NHẸ-1 | Tên `it` của test nhân chứng chính còn nói "hàm đọc vai thì dưới vai không superuser" — mô tả luật danh sách đen cũ, không phải luật đang kiểm | **Sửa:** tên `it` nói nhân chứng dưới một vai ứng dụng, chủ sở hữu chỉ cho cặp khai trong danh sách trắng, hàm nhạy vai không được miễn |
+| NHẸ-2 | `VaiDo.sieu` (`rolsuper`) vẫn được đo mà không dòng nào đọc; docstring ⑷ vẫn nói nhân chứng ghi lại `rolsuper` — người soi sau dễ tưởng còn một tầng theo superuser | **Sửa:** bỏ trường khỏi `VaiDo` và cột khỏi câu đo vai; gạch vế ấy ở ⑷ |
+| NHẸ-3 | Chú thích "kịch bản thật vẫn ghi công đủ 21 hàm kia" thiu từ khi tập hàm mở ra INSERT (S1.32) | **Sửa:** gạch con số cứng |
+| INFO-1 | Vế ⒠ không canh được cột mà một hàm KHÔNG-CANH sửa hợp lệ: `outbox_jobs_xoa_payload_dang_nhap` gán `payload := '{}'`, nên nhân chứng không khai được `payload`, và một thân hàm thôi xoá payload vẫn xanh ở test này | **Không đổi — đối chiếu độ phủ:** việc xoá payload có test riêng ở `apps/api/src/auth.int.test.ts` (job LOGIN_LINK_SEND đã xong không còn payload khác `{}`, không còn địa chỉ trong payload; gỡ trigger thì payload giữ nguyên) và `db/migrations.int.test.ts` (khôi phục trigger ⇒ payload về `{}`). `[INV-H19]` chỉ đòi phân loại KHÔNG-CANH, và phân loại ấy đúng |
+| INFO-2 | Chú thích "dưới app_api, như tiến trình ghi sổ" nói quá: sản xuất ghi sổ qua hàm `audit_append()`, kịch bản INSERT thẳng | **Sửa:** chú thích nói cùng vai và cùng trigger, không cùng câu |
+| INFO-3 | Vế so lỏng chuỗi-số của `giaTriKhop` — người soi xác nhận không khai thác được: kiểu do cột quyết định, và bảng chân trị ghim `"100000000.00"` khác `"100000000"` | **Không đổi** |
+
+**Người soi đã soi mà không ra lỗ (lời của người soi, đọc mã):**
+- Hàm trigger SECURITY DEFINER: không có — hardening cấm `prosecdef`, nên đòi vai ứng dụng có nghĩa (trigger chạy dưới đúng vai ghi).
+- `VAI_UNG_DUNG` phủ mọi vai sản xuất: hai vai đăng nhập `SET ROLE` về `app_api`/`app_unseal`.
+- `kiemDanhSachDuoiChu` tính cả quyền qua PUBLIC và qua membership.
+- Mọi cột mà câu kịch bản đặt đều được khai, trừ cột do trigger dẫn xuất.
+- Mọi `SET LOCAL`/`set_config(…, true)` có phạm vi giao dịch, nên GUC khách không rò sang nhân chứng sau.
+- Thứ tự tiền điều kiện → ⒞′ → ⒠ → COMMIT → ghi công đúng; `chiDuoiChu` khít hai chiều.
+- Vai và GUC của kịch bản khớp `unseal-worker`, `withGuestSession`, `permissions.ts`, `procurement-policy.ts`.
+
+**Mang sang của người soi:**
+- Độ phủ việc xoá payload — đã đối chiếu, xem INFO-1.
+- Ba GUC khách không chịu lực — đã đo (M24), ghi ở ranh giới ⑺.
+
+**Đo lại sau vòng sửa, trên mã cuối:** trọn tệp H19 xanh 36/36; hai mươi ba đột biến chạy lại một-một cho đúng kết quả của lượt trước vòng sửa — M1–M23 đỏ ở đúng test, M24 xanh — đối chứng không đột biến xanh, sha256 của tệp đích khớp bản gốc sau lượt.
+
+**Điều đáng mang sang vòng sau:** ⑴ Viết danh sách đột biến TRƯỚC khi coi test là đủ: ba vế và năm nhánh kiểu lộ ra không có test nào bắt
+chỉ nhờ tự hỏi "đột biến này đỏ ở đâu". ⑵ Fixture của một test về trigger phải dựng hàng mẫu trước khi gắn trigger — nếu không, tiền đề đọc
+lại chính hành vi đang đo. ⑶ Thăm dò quyền cột và SELECT trước khi đổi vai kịch bản giúp kịch bản dưới vai ứng dụng xanh ngay lượt đầu.
