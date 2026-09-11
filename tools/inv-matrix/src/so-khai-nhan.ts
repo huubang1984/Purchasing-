@@ -234,6 +234,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   H19: [
     "db/hardening-suy-tu-tinh-chat.int.test.ts",
+    "tests/architecture/hardening-co-ly-do.test.ts",
   ],
   H2: [
     "tests/hooks/git-safety.test.ts",

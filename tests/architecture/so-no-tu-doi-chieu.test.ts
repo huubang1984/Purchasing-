@@ -682,7 +682,10 @@ const TIEU_DE_DOC_GI = "## 13. Đọc gì, theo thứ tự";
 function dotBien(goc: string, cu: string, moi: string): string {
   const dem = goc.split(cu).length - 1;
   if (dem !== 1) throw new Error(`neo đột biến khớp ${dem} lần, phải là 1: ${cu.slice(0, 60)}`);
-  return goc.replace(cu, moi);
+  // [S1.49] HÀM thay thế, không chuỗi: `$&`, `` $` ``, `$'`, `$1` trong `moi` là MẪU THAY THẾ của JS.
+  // Đo: khi hàng sổ nợ cuối cùng mang `$x$ BEGIN END $x$` (khoản 93), bản chuỗi cắt mất phần chèn và
+  // hai đột biến P0/P1 lặng lẽ XANH — cùng bẫy đã đo ở S1.44 và ở chính vòng này.
+  return goc.replace(cu, () => moi);
 }
 
 describe("[INV-H20] sổ nợ tự đối chiếu", () => {
