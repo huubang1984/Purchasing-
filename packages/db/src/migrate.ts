@@ -21,19 +21,29 @@ export const TU_CHOI_GUC_SOM =
  * `pg_catalog` là hai tên duy nhất được phép đứng trước. Nên cụm đặt `search_path = 'public'` — cấu hình AN TOÀN HƠN mặc
  * định của PostgreSQL, và là cách một cụm tự chữa khoản 78 — vẫn deploy được. Bản đầu so nguyên văn `'"$user", public'`
  * và CHẶN VĨNH VIỄN cụm ấy, không cửa ra nào (ADR-028 §3, chiều hỏng).
- * Phát biểu chính xác của tính chất: KHÔNG schema nào ngoài `"$user"`/`pg_catalog` được đứng TRƯỚC `public`. Thứ đứng
- * SAU `public` thì không nằm trong tính chất ấy — `public` vẫn thắng ở mọi tên có trong nó, và câu tạo đối tượng không ghi
- * schema vẫn rơi vào schema ĐẦU — nên `'"$user", public, extensions'` (khuôn của Supabase/PostGIS) deploy được. Cố ý KHÔNG
- * có cửa ra cho ca schema lạ đứng TRƯỚC `public`: ca ấy CHÍNH LÀ mối nguy của khoản 78.
- * Giữ ĐỒNG BỘ với `GUC_VAN_HANH_DOI` trong `hardening.always.sql` — hai lớp cố ý, cùng một quy tắc.
+ * ~~Phát biểu chính xác của tính chất: KHÔNG schema nào ngoài `"$user"`/`pg_catalog` được đứng TRƯỚC `public`. Thứ đứng
+ * SAU `public` thì không nằm trong tính chất ấy~~ — **[S1.52 / khoản nợ 95]** SAI ở vế sau, và vế ấy là tiền đề cướp: nêu
+ * `pg_catalog` ở vị trí SAU thì schema đứng trước che mọi hàm hệ thống cùng chữ ký (đo: `public, pg_catalog` cộng
+ * `public.lower(text)` ⇒ `lower('ABC')` ra `CUOP` — đúng tiền đề [INV-H21] canh). Phát biểu nay: `pg_catalog`, nếu được
+ * nêu, chỉ ở vị trí ĐẦU; trước `public` chỉ có `pg_catalog` rồi `"$user"`; thứ đứng sau `public` tuỳ ý trừ `pg_catalog`.
+ * `pg_catalog` đứng một mình và chuỗi rỗng là hai dạng an toàn nhất (mọi tên phải phân giải ở pg_catalog hay ghi schema)
+ * — cùng `pg_catalog, pg_temp`, khuyến nghị của tài liệu PostgreSQL cho SECURITY DEFINER (pg_temp nêu CUỐI nên không che gì) —
+ * nên cũng được nhận. `'"$user", public, extensions'` (khuôn Supabase/PostGIS) vẫn deploy được. Cố ý KHÔNG có cửa ra cho
+ * schema lạ đứng TRƯỚC `public` hay pg_catalog nêu SAU: hai ca ấy CHÍNH LÀ mối nguy.
+ * `"$user"` đứng một mình và `pg_catalog, "$user"` cũng được nhận (lượt soi 45 NHẸ-1 — bản đầu đòi có `public`).
+ * Giữ ĐỒNG BỘ với `GUC_VAN_HANH_DOI` (cột `mau` và `cam`) trong `hardening.always.sql` — hai lớp cố ý, cùng CHUỖI regex.
+ * Cùng một QUY TẮC chỉ trên miền ASCII không xuống dòng (lượt soi 45 INFO-1): `\s` của `/u` nhận khoảng trắng Unicode,
+ * `.` của ARE nhận xuống dòng; ngoài miền ấy bản này NGHIÊM hơn — chỉ có thể chặn oan, không thể để lọt dạng cướp.
  */
+const MAU_SEARCH_PATH_DUNG = /^\s*(""|pg_catalog(\s*,\s*pg_temp)?|(pg_catalog\s*,\s*)?(("\$user"|\$user)(\s*,\s*public(\s*,.*)?)?|public(\s*,.*)?))\s*$/u;
+const CAM_SEARCH_PATH = /,\s*"?pg_catalog"?\s*(,|$)/u;
+const searchPathDung = (giaTri: string): boolean => MAU_SEARCH_PATH_DUNG.test(giaTri) && !CAM_SEARCH_PATH.test(giaTri);
+
 /**
  * [S1.51 / khoản nợ 92] Ba GUC VẬN HÀNH, cùng bộ với `GUC_VAN_HANH_DOI` của `hardening.always.sql`. `search_path` đứng
  * cuối và được gọi bằng chỉ số ở phép đọc trước lúc ghim — lý do ở ngay đó.
  */
 const TEN_GUC_VAN_HANH = ["row_security", "session_replication_role", "search_path"];
-
-const MAU_SEARCH_PATH_DUNG = /^\s*(("\$user"|\$user)\s*,)?\s*(pg_catalog\s*,)?\s*public(\s*,|\s*$)/u;
 
 // [fix I3] Tên file cưỡng chế chạy LẠI mỗi lần migrate() được gọi (vd. thuộc tính role),
 // không qua schema_migrations. Xem db/migrations/hardening.always.sql để biết lý do.
@@ -390,7 +400,7 @@ export async function migrate(
     const NGUON_AP_MOI_PHIEN = ["configuration file", "command line", "environment variable", "global"];
     const spDocNgoai =
       spTruocGhim[0] !== undefined &&
-      !MAU_SEARCH_PATH_DUNG.test(spTruocGhim[0].reset_val) &&
+      !searchPathDung(spTruocGhim[0].reset_val) &&
       NGUON_AP_MOI_PHIEN.includes(spTruocGhim[0].nguon);
 
     await lockClient.query("SET search_path = public");

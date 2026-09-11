@@ -2489,3 +2489,78 @@ chuỗi mà mã khác ghim phải chạy TRỌN tệp trước khi tin (NẶNG-1
 GỠ MẤT lớp giảm nhẹ của người vận hành — mỗi mục tự chữa phải được hỏi "cái nó xoá có đang che gì không"; ⑶ một cổng an ninh
 so NGUYÊN VĂN một giá trị mặc định là một cổng chặn nhầm cụm an toàn hơn: so theo TÍNH CHẤT; ⑷ thông điệp lỗi deploy là bề mặt
 rò dữ liệu — tên thì được, giá trị thì không, và chuẩn ấy phải áp cho MỌI mục cùng lớp chứ không chỉ mục của vòng đang làm.
+
+# §S1.52 — khoản nợ 95: ba GUC vận hành qua `proconfig` của hàm và qua `pg_parameter_acl` — hai nhánh phán xét mới, và tính chất `search_path` của khoản 92 cấm `pg_catalog` đứng sau
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `CAU_GUC_VAN_HANH_GAN_SAN` thêm nhánh ⒟ (`pg_parameter_acl`,
+vị từ `VI_TU_ACL_GUC_VAN_HANH_SAI`) và nhánh ⒠ (`proconfig` của hàm trong lược đồ dự án, vị từ
+`VI_TU_HAM_GUC_VAN_HANH_SAI`); nhánh dòng khai thiu dùng lại nguyên vẹn cả hai vị từ; `GUC_VAN_HANH_DOI` thêm cột `cam`;
+tên và ô quyền của mục trong `bang` nay nói "(khoản 92, 95)". `packages/db/src/migrate.ts` — `searchPathDung` =
+`MAU_SEARCH_PATH_DUNG` và không `CAM_SEARCH_PATH`, dùng ở phép đọc `search_path` trước lúc ghim. Test:
+`db/migrations.int.test.ts` `[khoản nợ 95]`, các vế (a)…(g).
+
+**Đo trước khi viết (PostgreSQL 16):**
+⑴ Lược đồ thật chỉ có hai dạng proconfig cho ba tên: `search_path=pg_catalog, public` (42 hàm) và `search_path=pg_catalog`
+(18 hàm); không hàm nào mang `row_security` hay `session_replication_role`. `pg_parameter_acl` rỗng sau `migrate()`.
+⑵ Vai KHÔNG superuser tạo được hàm mang `SET search_path = 'ke_gian, public'` và `SET row_security = off`;
+`SET session_replication_role = replica` thì 42501, cả khi tạo hàm lẫn khi SET trong phiên.
+⑶ Sau `GRANT SET ON PARAMETER session_replication_role`: vai ấy SET được replica trong phiên và tạo được hàm mang nó.
+`ALTER SYSTEM SET session_replication_role` vẫn 42501 cho tới `GRANT ALTER SYSTEM ON PARAMETER`, rồi chạy được.
+`aclexplode(paracl)` in cả hai dòng của chủ tham số (`postgres`: SET và ALTER SYSTEM).
+⑷ Hàm SECURITY DEFINER của superuser mang `SET session_replication_role = replica`: người gọi thường đọc ra `replica`
+trong thân hàm. Bản SECURITY INVOKER: người gọi thường ăn 42501.
+⑸ `pg_settings.context`: `row_security` = user, `search_path` = user, `session_replication_role` = superuser.
+`GRANT SET ON PARAMETER` trên hai tham số USERSET hợp lệ nhưng không trao gì. `GRANT ALTER SYSTEM ON PARAMETER search_path`
+cho vai thường ⇒ vai ấy chạy được `ALTER SYSTEM SET search_path`.
+⑹ **Lỗ của chính khoản 92:** với `public.lower(text)` trả `CUOP`, `lower('ABC')` ra `abc` dưới `"$user", public`, `public`
+và `pg_catalog, public`, nhưng ra `CUOP` dưới `public, pg_catalog` và `"$user", public, pg_catalog` — và cả trong thân một
+hàm mang `search_path=public, pg_catalog`. Tính chất merge ở S1.51 nhận mọi thứ sau `public`, nên nhận cả hai dạng cướp.
+
+**Hình dạng (bản hai, sau lượt soi 45):** ⒟ `pg_parameter_acl` — grantee PUBLIC hay vai không superuser; quyền `ALTER SYSTEM`
+trên cả ba tên, `SET` chỉ trên tham số có `pg_settings.context = 'superuser'`. ⒠ `proconfig` của hàm trong lược đồ dự án (trừ
+extension; không lọc `prokind` nên thủ tục cũng được soi) mang giá trị trái tính chất. Tính chất ở `GUC_VAN_HANH_DOI`, dùng
+chung cho phiên và hàm: `search_path` khớp `mau` và không khớp `cam` (`pg_catalog` chỉ ở vị trí đầu; trước `public` chỉ
+`pg_catalog` rồi `"$user"`; nhận `pg_catalog`, `""`, `pg_catalog, pg_temp`, `"$user"`, `pg_catalog, "$user"`);
+`row_security` nhận mọi cách viết TRUE không phân biệt hoa/thường; `session_replication_role` nhận `origin`/`local` không
+phân biệt hoa/thường. Nhánh dòng khai thiu dùng lại nguyên vẹn cả hai vị từ mới. Hai lớp (hardening và `searchPathDung`)
+dùng cùng CHUỖI regex; cùng QUY TẮC chỉ trên miền ASCII không xuống dòng, ngoài miền ấy bản TypeScript nghiêm hơn.
+
+**Đo thêm sau lượt soi 45:** ⑺ `proconfig` lưu NGUYÊN cách viết boolean: `SET row_security = true` ⇒ `row_security=true`,
+cả `yes`, `1`, `t` (`TRUE` hạ thành `true`); `ALTER SYSTEM SET row_security = true` ⇒ `pg_settings.reset_val = on`.
+⑻ PostgreSQL bỏ nháy thừa khi lưu: `"$user", "public"` ⇒ `"$user", public`, `"public"` ⇒ `public`, `PUBLIC` ⇒ `public`;
+`"PUBLIC"` giữ nháy (schema khác); `'$user, public'` thành MỘT phần tử `"$user, public"`. ⑼ Thân hàm `set_config(…, false)`:
+hàm SECURITY DEFINER của superuser đặt replica ⇒ phiên người gọi thường Ở LẠI replica sau khi trả về; có mệnh đề `SET
+search_path = pg_catalog` cũng không khôi phục; hàm INVOKER của vai thường đặt `search_path` ⇒ phiên người gọi giữ nó; bản
+INVOKER đặt replica thì 42501. Đây là **khoản 96**.
+
+**Đỏ đo được, cô lập (mười đột biến):** M1 nhánh ⒟ mù ⇒ (g) · M2 nhánh ⒠ mù ⇒ (c) · M3 bỏ vế `context` ⇒ vế đối chứng
+`GRANT SET` trên tham số USERSET bị nêu oan · M4 nhánh ⒠ bỏ `cam` ⇒ (d) · M5 `searchPathDung` bỏ `CAM_SEARCH_PATH` ⇒ (e) ·
+M6 bỏ dạng `pg_catalog` đơn ⇒ 18 hàm thật bị nêu oan nên `migrate()` NÉM ngay lượt đầu của test, trước cả vế (a) · M7 bỏ dạng `""` ⇒ vế chuỗi rỗng · M8 bỏ dạng `pg_catalog, pg_temp`
+⇒ vế pg_temp · M9 quay về ĐÒI `public` ⇒ vế `pg_catalog, "$user"` · M10 `row_security` quay về `^on$` ⇒ vế `row_security = true`.
+
+**Ranh giới NÓI RA:** ⑴ thân hàm `set_config` / `SET` — khoản 96 (đo ⑼); `EXECUTE` động không quét được bằng văn bản, nên
+lớp chịu lực còn lại là ứng dụng. ⑵ grantee là SUPERUSER trực tiếp và một vai thường là thành viên kế thừa của nó — ⒟ không
+bắc cầu; ngoài mô hình vì làm thành viên một superuser đã là leo thang tối đa (lượt soi 45 INFO-3). ⑶ hàm `pg_temp` và hàm
+thuộc extension đứng ngoài `MAU_SCHEMA_DU_AN` / vế `deptype 'e'` — cố ý (INFO-4). ⑷ `options=`/`PGOPTIONS` phía ứng dụng —
+như S1.51.
+
+**Tự bắt, không phải lượt soi:** ⑹ lỗ của tính chất khoản 92 (`public, pg_catalog`); và ca chặn oan `pg_catalog, pg_temp`
+(sửa trước khi lượt soi trả về — người soi được báo trước để không tốn công).
+
+### Lượt soi đối kháng 45 (trên bản đầu của S1.52): 0 CAO, 0 NẶNG, 3 NHẸ, 4 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NHẸ-1 | NHẸ | Tính chất `search_path` ĐÒI có `public` ⇒ `"$user"` đứng một mình và `pg_catalog, "$user"` bị chặn oan — nay lan sang `proconfig` | đúng — đo: PG lưu đúng hai dạng ấy | nhận cả hai; vế test `pg_catalog, "$user"`; đột biến M9 |
+| NHẸ-2 | NHẸ | Thân hàm `set_config` / `SET LOCAL` là ranh giới ⒠ không thấy; bất đối xứng với máy quét ĐỌC `CAU_TEN_GUC_DU_AN_DOC` | **đúng, và nặng hơn người soi phỏng đoán** — đo ⑼: phiên người gọi Ở LẠI giá trị sau khi hàm trả về, kể cả hàm có mệnh đề SET | **chưa sửa — khoản 96**, kèm bốn phép đo và hình dạng mã |
+| NHẸ-3 | NHẸ | `^on$` giả định `row_security` được chuẩn hoá; `proconfig` có thể lưu `true` ⇒ chặn oan (phỏng đoán) | **đúng — đo ⑺** | so không phân biệt hoa/thường với mọi cách viết TRUE; `session_replication_role` cũng không phân biệt hoa/thường; vế test `row_security = true` (và `= off` bị nêu); đột biến M10 |
+| INFO-1 | INFO | Regex ARE ↔ JavaScript khác ở `\s` (Unicode) và `.` (xuống dòng); phân kỳ fail-closed — bản TypeScript nghiêm hơn | đúng — đọc | hạ giọng chú thích "cùng một quy tắc" ở cả hai lớp về miền ASCII |
+| INFO-2 | INFO | `"public"` có nháy: PG có bỏ nháy thừa không (phỏng đoán) | đo ⑻: có bỏ; `"PUBLIC"` là schema khác | không đổi |
+| INFO-3 | INFO | ⒟ xét `rolsuper` của grantee trực tiếp, không bắc cầu qua nhóm superuser | đúng — ngoài mô hình | ghi thành ranh giới ⑵ |
+| INFO-4 | INFO | `pg_temp`/extension bị loại; `prokind` KHÔNG lọc nên thủ tục có SET cũng bị soi | đúng — xác nhận | ghi thành ranh giới ⑶ |
+
+**Điều đáng mang sang vòng sau:** ⑴ một tính chất regex đặt ở hai engine phải khai MIỀN mà nó đúng — "cùng một chuỗi" không
+phải "cùng một quy tắc"; ⑵ catalog lưu giá trị theo CÁCH VIẾT, không theo NGHĨA (`proconfig` giữ `true`, `pg_settings` in
+`on`) — so giá trị phải so theo ngữ nghĩa kiểu; ⑶ một tính chất "chỉ quan tâm thứ đứng TRƯỚC" phải được đo bằng một phép
+cướp thật, vì PostgreSQL phân giải khác nhau tuỳ `pg_catalog` có được NÊU TÊN hay không; ⑷ phỏng đoán của người soi về giới
+hạn khai thác ("phiên sẽ được khôi phục") cũng phải đo — lần này nó sai theo chiều nguy hiểm.
