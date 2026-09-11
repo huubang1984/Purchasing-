@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { migrate } from "./migrate.js";
 import { createPool } from "./pool.js";
-import { khangDinhPhienDangNhapUngDung } from "./vai-tro.js";
+import { KetNoiNhiemError, TU_CHOI_KET_NOI_NHIEM, khangDinhPhienDangNhapUngDung } from "./vai-tro.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -172,6 +172,194 @@ describe("[S1.11] createPool({ role }) — mọi client giao ra ĐANG là vai �
     // Client bị `release(err)` — huỷ, không nằm lại trong pool dưới danh tính sai.
     expect(p.idleCount).toBe(0);
     expect(p.waitingCount).toBe(0);
+  });
+});
+
+// ==============================================================================================
+// [S1.59 / khoản nợ 99] MỖI LẦN LẤY CLIENT CỦA POOL CÓ VAI ĐỌC LẠI BA GUC VẬN HÀNH — VÀ TỪ CHỐI KẾT NỐI CÒN MỞ GIAO DỊCH
+//
+// `withTenant` đọc lại ba GUC vận hành sau giao dịch của nó (khoản 96 ⑵), nhưng mã chạy câu trên pool NGOÀI hàm ấy — hai bộ dọn nền,
+// phép kiểm vai của auditPool, phép kiểm lúc khởi động — không có lớp nào, và kết nối mà mã ấy để nhiễm quay về pool rồi giao cho
+// người dùng kế tiếp. Lớp mới đặt ở chỗ MỌI đường đều đi qua: `ganVaiTroChoPool`, cùng câu `current_user` đã có ở mỗi lần lấy client —
+// không thêm vòng đi-về. `session_replication_role` và `row_security` xét theo TÍNH CHẤT; search path HIỆU LỰC (`current_schemas(false)`,
+// cùng cách đọc của withTenant — [INV-H21] chỉ cho migrate.ts nêu tên GUC ấy trong SQL, lượt soi 52 NẶNG-1) so với mốc đọc ở lần lấy
+// ĐẦU TIÊN của chính kết nối vật lý ấy, nên mặc định phiên hợp lệ khác mặc định máy chủ vẫn qua; trạng thái giao dịch đọc từ client
+// (không vòng đi-về) phải là rảnh. Kết nối nhiễm bị huỷ và lời gọi NÉM `KetNoiNhiemError` — người gọi không bao giờ nhận nó. Đo trên kết
+// nối đăng nhập thật (`app_api_login`), pool một kết nối để đo pid.
+// ==============================================================================================
+describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai đọc lại ba GUC vận hành — kết nối nhiễm bị huỷ, lời gọi NÉM", () => {
+  interface TrangThai {
+    pid: number;
+    vai: string;
+    rls: string;
+    luoc_do: string;
+  }
+  const poolMot = (): pg.Pool => {
+    const p = createPool(urlLogin, 1, { role: "app_api" });
+    poolMo.push(p);
+    return p;
+  };
+  const trangThai = async (p: pg.Pool): Promise<TrangThai> =>
+    (
+      await p.query<TrangThai>(
+        "SELECT pg_backend_pid()::int AS pid, current_setting('session_replication_role') AS vai, " +
+          "current_setting('row_security') AS rls, current_schemas(false)::text AS luoc_do",
+      )
+    ).rows[0]!;
+  /** Lấy client, chạy câu làm nhiễm, trả client về pool — đúng hình dạng của một đường ngoài withTenant. */
+  const nhiemRoiTra = async (p: pg.Pool, cau: string): Promise<number> => {
+    const c = await p.connect();
+    try {
+      await c.query(cau);
+      return (await c.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid")).rows[0]!.pid;
+    } finally {
+      c.release();
+    }
+  };
+  const loiKhiLay = (lan: Promise<unknown>): Promise<Error | null> =>
+    lan.then(
+      (kq) => {
+        (kq as { release?: () => void }).release?.();
+        return null;
+      },
+      (e: Error) => e,
+    );
+
+  beforeAll(async () => {
+    await db.pool.query(`
+      CREATE SCHEMA zz99;
+      GRANT USAGE ON SCHEMA zz99 TO app_api;
+      CREATE FUNCTION zz99.dat_vai_sao_chep(gia_tri text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+        AS $$BEGIN PERFORM set_config('session_replication_role', gia_tri, false); END$$;
+      REVOKE EXECUTE ON FUNCTION zz99.dat_vai_sao_chep(text) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION zz99.dat_vai_sao_chep(text) TO app_api;
+    `);
+  });
+
+  afterAll(async () => {
+    await db.pool.query("DROP SCHEMA IF EXISTS zz99 CASCADE");
+  });
+
+  it("row_security = off để lại trên kết nối ⇒ lần lấy kế (pool.connect) NÉM KetNoiNhiemError nêu row_security, kết nối bị huỷ; lần sau là kết nối mới, sạch", async () => {
+    const p = poolMot();
+    const pid = await nhiemRoiTra(p, "SET row_security = off");
+    const loi = await loiKhiLay(p.connect());
+    expect(loi, "bản trước bản vá: client nhiễm được giao ra").not.toBeNull();
+    expect(loi).toBeInstanceOf(KetNoiNhiemError);
+    expect(loi!.name, "tên riêng — log chỉ ghi tên lỗi (lượt soi 52 NHẸ-2)").toBe("KetNoiNhiemError");
+    expect(loi!.message).toContain(TU_CHOI_KET_NOI_NHIEM);
+    expect(loi!.message).toContain("row_security");
+    const sau = await trangThai(p);
+    expect(sau.pid, "kết nối nhiễm bị huỷ").not.toBe(pid);
+    expect(sau.rls).toBe("on");
+  });
+
+  it("session_replication_role = replica do hàm SECURITY DEFINER để lại ⇒ lần lấy kế qua pool.query (đường callback) NÉM nêu session_replication_role, kết nối bị huỷ", async () => {
+    const p = poolMot();
+    const pid = await nhiemRoiTra(p, "SELECT zz99.dat_vai_sao_chep('replica')");
+    const loi = await loiKhiLay(p.query("SELECT 1"));
+    expect(loi, "bản trước bản vá: câu chạy dưới replica").not.toBeNull();
+    expect(loi).toBeInstanceOf(KetNoiNhiemError);
+    expect(loi!.message).toContain(TU_CHOI_KET_NOI_NHIEM);
+    expect(loi!.message).toContain("session_replication_role");
+    const sau = await trangThai(p);
+    expect(sau.pid).not.toBe(pid);
+    expect(sau.vai).toBe("origin");
+  });
+
+  it("search path phạm vi phiên sang một schema đọc được ⇒ lần lấy kế NÉM nêu search path hiệu lực, kết nối bị huỷ; kết nối mới về đúng mốc", async () => {
+    const p = poolMot();
+    const truoc = await trangThai(p);
+    const pid = await nhiemRoiTra(p, "SET search_path = zz99, public");
+    expect(pid, "tiền đề: cùng kết nối vật lý").toBe(truoc.pid);
+    const loi = await loiKhiLay(p.connect());
+    expect(loi, "bản trước bản vá: client giao ra dưới search path lạ").not.toBeNull();
+    expect(loi).toBeInstanceOf(KetNoiNhiemError);
+    expect(loi!.message).toContain(TU_CHOI_KET_NOI_NHIEM);
+    expect(loi!.message).toContain("search path hiệu lực");
+    const sau = await trangThai(p);
+    expect(sau.pid).not.toBe(pid);
+    expect(sau.luoc_do).toBe(truoc.luoc_do);
+  });
+
+  it("kết nối trả về pool khi ĐANG MỞ GIAO DỊCH ⇒ lần lấy kế NÉM trước khi SET ROLE chạy trong giao dịch của người trước, kết nối bị huỷ (lượt soi 52 INFO-2)", async () => {
+    const p = poolMot();
+    const c = await p.connect();
+    let pid = 0;
+    try {
+      pid = (await c.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid")).rows[0]!.pid;
+      await c.query("BEGIN");
+      await c.query("SELECT 1");
+    } finally {
+      c.release();
+    }
+    const loi = await loiKhiLay(p.connect());
+    expect(loi, "bản trước bản vá: SET ROLE chạy bên trong giao dịch cũ và client được giao ra").not.toBeNull();
+    expect(loi).toBeInstanceOf(KetNoiNhiemError);
+    expect(loi!.message).toContain("đang mở giao dịch");
+    const sau = await trangThai(p);
+    expect(sau.pid, "kết nối còn mở giao dịch bị huỷ").not.toBe(pid);
+  });
+
+  it("ĐỐI CHỨNG: SET LOCAL row_security và search path trong giao dịch đã COMMIT, session_replication_role = local — lần lấy kế giao client bình thường, kết nối được GIỮ", async () => {
+    const p = poolMot();
+    const truoc = await trangThai(p);
+    const c = await p.connect();
+    try {
+      await c.query("BEGIN; SET LOCAL row_security = off; SET LOCAL search_path = zz99, public; COMMIT");
+      await c.query("SELECT zz99.dat_vai_sao_chep('local')");
+    } finally {
+      c.release();
+    }
+    const sau = await trangThai(p);
+    expect(sau.pid, "kết nối sạch theo tính chất không bị huỷ").toBe(truoc.pid);
+    expect(sau.vai).toBe("local");
+    expect(sau.rls).toBe("on");
+    expect(sau.luoc_do).toBe(truoc.luoc_do);
+  });
+
+  it("mặc định phiên của vai đăng nhập đặt row_security = off ⇒ lần lấy ĐẦU của kết nối mới NÉM, và chẩn đoán nói MẶC ĐỊNH PHIÊN chứ không nói nhiễm phạm vi phiên (lượt soi 52 NHẸ-1)", async () => {
+    await db.pool.query("ALTER ROLE app_api_login SET row_security = off");
+    try {
+      const p = poolMot();
+      const loi = await loiKhiLay(p.connect());
+      expect(loi, "tính chất xét cả ở lần lấy đầu — chưa câu nào chạy trên kết nối").not.toBeNull();
+      expect(loi).toBeInstanceOf(KetNoiNhiemError);
+      expect(loi!.message).toContain("row_security");
+      expect(loi!.message).toContain("MẶC ĐỊNH PHIÊN");
+    } finally {
+      await db.pool.query("ALTER ROLE app_api_login RESET row_security");
+    }
+  });
+
+  it("mặc định phiên của vai đăng nhập đặt search path hợp lệ khác mặc định máy chủ ⇒ mốc là của CHÍNH kết nối: các lần lấy kế giữ kết nối", async () => {
+    await db.pool.query("ALTER ROLE app_api_login SET search_path = zz99, public");
+    try {
+      const p = poolMot();
+      const a = await trangThai(p);
+      const b = await trangThai(p);
+      expect(a.luoc_do, "tiền đề: mặc định phiên có hiệu lực").toBe("{zz99,public}");
+      expect(b.pid, "so với một hằng thay vì mốc của kết nối thì kết nối hợp lệ này bị huỷ oan").toBe(a.pid);
+    } finally {
+      await db.pool.query("ALTER ROLE app_api_login RESET search_path");
+    }
+  });
+
+  it('RANH GIỚI, ghim: DDL đổi search path HIỆU LỰC của mọi kết nối — schema trùng tên vai mà "$user" trỏ tới, GRANT USAGE — thì lần lấy kế của mỗi kết nối pool NÉM một lần và huỷ nó (cùng cách so của withTenant ⑵); kết nối mới lấy mốc mới và được giữ', async () => {
+    const p = poolMot();
+    const truoc = await trangThai(p);
+    await db.pool.query("CREATE SCHEMA app_api; GRANT USAGE ON SCHEMA app_api TO app_api");
+    try {
+      const loi = await loiKhiLay(p.connect());
+      expect(loi, "so search path hiệu lực nên DDL đổi nó là lệch mốc").toBeInstanceOf(KetNoiNhiemError);
+      expect(loi!.message).toContain("search path hiệu lực");
+      const moi = await trangThai(p);
+      expect(moi.pid).not.toBe(truoc.pid);
+      expect(moi.luoc_do, "tiền đề: search path hiệu lực đổi thật").toBe("{app_api,public}");
+      expect((await trangThai(p)).pid, "kết nối mới lấy mốc mới và được giữ").toBe(moi.pid);
+    } finally {
+      await db.pool.query("DROP SCHEMA app_api CASCADE");
+    }
   });
 });
 

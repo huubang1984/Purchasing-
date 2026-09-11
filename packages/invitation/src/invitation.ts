@@ -486,11 +486,62 @@ export async function tangBucketNguoiGoi(
  * thuộc giao dịch của một yêu cầu nào.
  */
 export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<number> {
-  const kq = await pool.query(
-    "DELETE FROM public.caller_rate_limits WHERE window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $1::pg_catalog.float8))",
-    [OTP_RATE_WINDOW_SECONDS * soCuaSo],
-  );
-  return kq.rowCount ?? 0;
+  // [S1.59 / khoản nợ 99] Giao dịch TƯỜNG MINH thay vì một `pool.query` tự commit: câu tự commit không có COMMIT nào để gác, nên một
+  // trigger hay hàm đặt replica ở phạm vi phiên giữa câu dọn thì thay đổi của câu ấy được commit (đo: bản trước trả số hàng và hàng
+  // biến mất). Giá: hai vòng đi-về thêm cho một việc nền năm phút một lần.
+  const client = await pool.connect();
+  let loiHuy: Error | undefined;
+  try {
+    await client.query("BEGIN");
+    const kq = await client.query(
+      "DELETE FROM public.caller_rate_limits WHERE window_start OPERATOR(pg_catalog.<) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $1::pg_catalog.float8))",
+      [OTP_RATE_WINDOW_SECONDS * soCuaSo],
+    );
+    await commitKhongDuoiReplica(client, "bộ dọn caller_rate_limits");
+    return kq.rowCount ?? 0;
+  } catch (loi) {
+    loiHuy = loi as Error;
+    // Không nuốt: `ROLLBACK` kết thúc giao dịch ở máy chủ ngay, không chờ socket đóng; lỗi THẬT vẫn bay lên.
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw loi;
+  } finally {
+    // [S1.59 / lượt soi 52 INFO-1] Lỗi thì HUỶ kết nối, không trả về pool — xem `CAU_COMMIT_CHAN_REPLICA`.
+    client.release(loiHuy);
+  }
+}
+
+/**
+ * [S1.59 / khoản nợ 99] Câu kết thúc giao dịch của hai bộ dọn nền: khối DO ném SQLSTATE `TP096` khi `session_replication_role` không
+ * phải origin/local, và COMMIT, trong CÙNG một câu nhiều lệnh — nguyên văn ⑴ của `withTenant` (khoản 96). DO ném thì PostgreSQL bỏ
+ * phần còn lại của câu nên COMMIT không chạy; ROLLBACK ở `catch` của bộ dọn hoàn cả thay đổi lẫn giá trị replica đặt trong giao dịch,
+ * rồi bộ dọn HUỶ kết nối — trên mọi lỗi, vì ROLLBACK không hoàn giá trị đặt TRƯỚC giao dịch (replica nhiễm sẵn trên một pool không vai)
+ * và một ROLLBACK hỏng để lại kết nối không rõ trạng thái (lượt soi 52 INFO-1). Hai bộ dọn chạy trên pool, NGOÀI `withTenant`, nên không
+ * lớp nào khác gác commit của chúng: một hàm hay trigger đặt replica ở phạm vi phiên giữa câu dọn (tên dựng lúc chạy — hardening quét
+ * tĩnh không thấy) thì phần còn lại của giao dịch bỏ qua trigger ENABLE thường và khoá ngoại. Chép chứ không import: một hàm dùng chung
+ * với withTenant đòi một cạnh gói mới (`invitation` không phụ thuộc `tenancy`, `tenancy` không phụ thuộc `@trustprocure/db`) cho một hằng
+ * và một phép ánh xạ lỗi (lượt soi 52 INFO-7). Hai bản không trôi được mà không đỏ: census
+ * `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` vế ⒝ đòi MỌI lệnh COMMIT của mã sản xuất đi sau đúng khối này, và tệp mang
+ * khối có nhánh so SQLSTATE với TP096.
+ */
+const CAU_COMMIT_CHAN_REPLICA =
+  "DO $kiem_khoan_96$BEGIN " +
+  "IF pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.<>) 'origin' " +
+  "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.<>) 'local' " +
+  "THEN RAISE SQLSTATE 'TP096'; END IF; END$kiem_khoan_96$; COMMIT";
+
+/** Kết thúc giao dịch của một bộ dọn bằng `CAU_COMMIT_CHAN_REPLICA`; TP096 thành `InvitationError` nêu tên GUC, không giá trị. */
+async function commitKhongDuoiReplica(client: pg.PoolClient, boDon: string): Promise<void> {
+  try {
+    await client.query(CAU_COMMIT_CHAN_REPLICA);
+  } catch (loi) {
+    if ((loi as { code?: unknown }).code === "TP096") {
+      throw new InvitationError(
+        `${boDon}: session_replication_role không phải origin/local lúc COMMIT (TP096) — một hàm hay trigger đã ghi GUC ấy vào phiên ` +
+          "trong giao dịch dọn. COMMIT không chạy: không hàng nào bị xoá, và kết nối bị huỷ.",
+      );
+    }
+    throw loi;
+  }
 }
 
 /**
@@ -517,6 +568,7 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
  */
 export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
   const client = await pool.connect();
+  let loiHuy: Error | undefined;
   try {
     // [review H7-6] MỘT giao dịch, và có TRẦN THỜI GIAN. Câu dọn quét TOÀN BẢNG (vế lọc là OR của
     // hai policy trên hai cột nên không chỉ số nào phục vụ được — đã đo bằng EXPLAIN, xem `044`),
@@ -535,14 +587,17 @@ export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
       );
     }
     const kq = await client.query("DELETE FROM public.otp_rate_limits");
-    await client.query("COMMIT");
+    // [S1.59 / khoản nợ 99] COMMIT mang khối chặn replica — xem `CAU_COMMIT_CHAN_REPLICA`.
+    await commitKhongDuoiReplica(client, "bộ dọn otp_rate_limits");
     return kq.rowCount ?? 0;
   } catch (loi) {
-    // Không nuốt: `ROLLBACK` chỉ để kết nối về trạng thái dùng lại được, lỗi THẬT vẫn bay lên.
+    loiHuy = loi as Error;
+    // Không nuốt: `ROLLBACK` kết thúc giao dịch ở máy chủ ngay, không chờ socket đóng; lỗi THẬT vẫn bay lên.
     await client.query("ROLLBACK").catch(() => undefined);
     throw loi;
   } finally {
-    client.release();
+    // [S1.59 / lượt soi 52 INFO-1] Lỗi thì HUỶ kết nối, không trả về pool — xem `CAU_COMMIT_CHAN_REPLICA`.
+    client.release(loiHuy);
   }
 }
 

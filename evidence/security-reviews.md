@@ -3224,3 +3224,109 @@ hàng nào. ⑵ Một vế lọc mới trên lược đồ thật cho ra dòng �
 NOLOGIN) — phải chạy vế ấy qua các hồ sơ vai deploy có thật trước khi viết lời khuyên. ⑶ Lời khuyên sửa phải rẽ theo đường: một câu chung
 "REVOKE khỏi đường ấy" đúng cho đường cấp thẳng và PHÁ ứng dụng ở đường qua nhóm. ⑷ Hồ sơ N3 là role deploy thật theo 005; mọi bản vá quanh
 RLS của vai deploy phải đo ở đó — khoản 102 là hệ quả trực tiếp của khoản 91 và chưa có hình dạng sửa không tạo ngõ cụt.
+
+# §S1.59 — khoản nợ 99: lần lấy client của pool có vai từ chối kết nối không sạch, hai bộ dọn nền không commit dưới replica, census đường SQL ngoài withTenant — lượt soi 52, khoản 103 và 104 mở
+
+**Bề mặt an ninh:** `packages/db/src/vai-tro.ts` — `ganVaiChoClient`, chạy ở MỌI lần lấy client của pool có vai qua `ganVaiTroChoPool`
+(đường promise lẫn đường callback mà `pool.query` dùng): đọc `getTransactionStatus()` trước `SET ROLE`; câu kiểm `current_user` đọc thêm
+`session_replication_role`, `row_security` và `current_schemas(false)`; mốc search path hiệu lực theo client ở lần lấy đầu (WeakMap);
+lệch ⇒ ném `KetNoiNhiemError` và `ganVaiTroChoPool` huỷ kết nối (`release(loi)`); lớp lỗi và tiền tố `TU_CHOI_KET_NOI_NHIEM` xuất qua barrel
+`@trustprocure/db`. `packages/invitation/src/invitation.ts` — `donBucketNguoiGoiCu` đổi từ một `pool.query` tự commit sang giao dịch
+tường minh; cả hai bộ dọn kết thúc bằng `CAU_COMMIT_CHAN_REPLICA` (khối DO ⑴ của khoản 96, chép nguyên văn), TP096 thành `InvitationError`,
+huỷ kết nối trên mọi lỗi. Test: `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` (census ⒜ ⒝ ⒞ cộng đối chứng trên văn bản giả);
+`packages/db/src/vai-tro.int.test.ts` (một describe tám `it`); `packages/invitation/src/invitation.int.test.ts` (một describe ba `it`);
+`tests/architecture/barrel-exports.test.ts` (danh sách trắng của `@trustprocure/db` thêm hai tên).
+
+**Đo trước khi viết (test viết trước, chạy trên mã cũ, PostgreSQL 16):** ⒜ `vai-tro.int` — pool một kết nối đăng nhập `app_api_login`, gắn
+vai `app_api`: `SET row_security = off` rồi trả client ⇒ lần `pool.connect()` kế giao ra đúng client ấy; hàm SECURITY DEFINER của superuser
+đặt `session_replication_role = replica` ở phạm vi phiên ⇒ lần `pool.query` kế chạy dưới replica; `SET search_path = zz99, public` ⇒ client
+giao ra dưới search path lạ; `BEGIN` rồi trả client ⇒ lần lấy kế chạy `SET ROLE` bên trong giao dịch cũ và giao client ra. ⒝ `invitation.int`
+— một trigger AFTER DELETE cấp câu gọi hàm SECURITY DEFINER đặt replica ⇒ `donOtpRateLimitsCu` COMMIT dưới replica và trả số hàng,
+`donBucketNguoiGoiCu` (câu tự commit) cũng vậy; và kết nối pool Ở LẠI replica: `it` kế tiếp của tệp — một đột biến policy dọn chạy
+`withTenant` trên cùng pool — ném TenantError của TP096. Tác hại lan sang người dùng khác của pool được đo, không suy ra. ⒞ census — ⒝
+nêu COMMIT trần của `invitation.ts`, ⒞ nêu `invitation.ts` lấy 1 / câu 1 so với khai 2 / 0. ⒟ Lượt đo trước bản vá của vòng sửa sau lượt
+soi 52: `it` giao dịch bỏ ngỏ đỏ ở hành vi (lời gọi không ném); ba `it` bộ dọn đỏ ở pid giữ nguyên sau lỗi và ở chữ thông điệp cũ; các chỗ
+ghim lớp `KetNoiNhiemError` đỏ vì lớp chưa tồn tại — hành vi bản đầu ở vế DDL đo bằng đột biến M11, không bằng lượt ấy.
+
+**Hình dạng:** ⒜ Lớp ⑵ ở chỗ MỌI đường của pool có vai đi qua — `ganVaiChoClient`: trạng thái giao dịch đọc từ client, không vòng đi-về,
+phải là rảnh; ba GUC trong cùng câu `current_user` đã có — `session_replication_role` và `row_security` theo TÍNH CHẤT (origin hay local; on),
+cùng quy tắc withTenant ⑵, kể cả ở lần lấy đầu, khi giá trị xấu chỉ có thể đến từ mặc định phiên và thông báo nói đúng nguồn ấy; search path
+HIỆU LỰC (`current_schemas(false)`) so với mốc lần lấy đầu của chính kết nối — tương đối, nên mặc định phiên hợp lệ khác mặc định máy chủ
+vẫn qua; đọc qua hàm chứ không qua tên GUC vì [INV-H21] (lượt soi 52 NẶNG-1). Lệch ⇒ ném `KetNoiNhiemError` (tên riêng — mọi chỗ ghi log chỉ
+ghi tên lỗi), huỷ kết nối, không thử lại. ⒝ Lớp ⑴ cho mã ngoài withTenant: mọi giao dịch tường minh kết thúc bằng khối chặn; câu ghi tự commit
+đổi thành giao dịch tường minh; bộ dọn huỷ kết nối trên mọi lỗi. ⒞ Census kiến trúc thay cho "hàm dùng chung" mà sổ nợ gợi ý: ⒜ mọi
+`createPool(` sản xuất truyền `role` (không `role: undefined`, không đổi tên khi import), số chỗ dựng `new pg.Pool(` / `new pg.Client(` theo
+tệp; ⒝ số lệnh COMMIT/END không chặn theo tệp (bộ quét SQL trái-sang-phải bỏ chú thích, hằng nháy đơn và thân dollar-quote; bỏ toán hạng
+phép so command tag; `end` viết thường chỉ khi là đối số đầu của `.query(`), tệp mang khối chặn có nhánh so TP096; ⒞ số chỗ `.connect()`
+và `…pool.query(` theo tệp — mọi con số khớp danh sách khai kèm lý do, miễn theo SỐ LƯỢNG, mục khai chết cũng đỏ.
+
+**Test:**
+- **`vai-tro.int`, describe khoản 99 (pool một kết nối, đo pid).** `row_security = off` ⇒ `pool.connect()` kế ném `KetNoiNhiemError` (ghim
+  `name`) nêu `row_security`, kết nối mới ở `on`; replica do hàm SECURITY DEFINER ⇒ `pool.query` kế (đường callback) ném nêu
+  `session_replication_role`, kết nối mới ở `origin`; search path phạm vi phiên ⇒ ném nêu search path hiệu lực, kết nối mới về đúng mốc;
+  giao dịch bỏ ngỏ ⇒ ném nêu "đang mở giao dịch", kết nối bị huỷ; ĐỐI CHỨNG SET LOCAL + `local` ⇒ giữ kết nối; mặc định phiên
+  `row_security = off` của vai đăng nhập ⇒ lần lấy ĐẦU ném, chẩn đoán MẶC ĐỊNH PHIÊN; mặc định phiên search path hợp lệ khác mặc định máy chủ
+  ⇒ giữ kết nối; RANH GIỚI ghim — DDL (`CREATE SCHEMA app_api`, `GRANT USAGE`) đổi search path hiệu lực ⇒ lần lấy kế ném một lần, kết nối
+  mới lấy mốc mới và được giữ.
+- **`invitation.int`, describe khoản 99 (pool có vai một kết nối, đo pid).** Mỗi bộ dọn: trigger đặt replica giữa câu dọn ⇒ `InvitationError`
+  nêu `session_replication_role` và "COMMIT không chạy", không còn chữ "đã bị bỏ qua", hàng cũ còn nguyên, kết nối bị huỷ; gỡ trigger ⇒ dọn
+  bình thường. ĐỐI CHỨNG ánh xạ lỗi: constraint trigger DEFERRED ném lúc COMMIT ⇒ lỗi ấy đi ra nguyên dạng, không phải `InvitationError`,
+  hàng cũ còn nguyên, kết nối bị huỷ.
+- **Census** ⒜ ⒝ ⒞ trên mã sản xuất, cộng đối chứng văn bản giả cho từng vế của bộ dò.
+- **Không đổi, chạy lại:** trọn `pnpm test:int` trên bản đầu (39 tệp, 862 test xanh — lớp lấy client không làm vỡ đường nào có sẵn, gồm
+  tám `it` khoản 96 của withTenant); trọn `pnpm test` (bắt NẶNG-1); sau vòng sửa: census, [INV-H21], barrel, `vai-tro.int`, `invitation.int`.
+
+**Tự bắt, không phải lượt soi:** ⑴ Lần chạy đầu của census nêu hai dương tính giả — so command tag `ketThuc?.command !== "COMMIT"` ở
+`with-tenant.ts`, và chuỗi `"end"` (tên sự kiện stream) ở `apps/api/src/server.ts` ⇒ bỏ toán hạng của phép so, END viết thường chỉ tính ở
+đối số `.query(`; mỗi vế có một đối chứng văn bản giả. ⑵ Lượt đo đầu sau bản vá: census ⒝ và `it` của `donOtpRateLimitsCu` vẫn đỏ — bản vá
+mới đổi `donBucketNguoiGoiCu`, COMMIT trần của bộ dọn kia còn sót; và `it` của `donBucketNguoiGoiCu` nhận lỗi của lớp lấy client thay vì
+`InvitationError` — replica mà bộ dọn chưa vá để lại bị lớp mới bắt ở lần lấy kế. ⑶ Đối chứng văn bản giả của census bản viết lại bắt hai
+chỗ sai của chính người viết: hằng khối chặn của hai bộ dọn là MỘT (khẳng định chống rỗng ruột đòi ba), và bộ đọc chung đọc `\n` viết thoát
+thành chữ `n` (ghi thành ranh giới). ⑷ Lượt đo trước vòng sửa để lại một hàng `otp_rate_limits` khi khẳng định giữa chừng đỏ, làm đỏ lây
+"[sổ nợ 57] GỠ HẲN policy" (2 hàng thay vì 1) ⇒ mỗi `it` khoản 99 dọn hàng cũ ở `finally`. ⑸ Bản đầu của đột biến M16 giữ client rồi gọi
+`pool.query` trên pool một kết nối — đỏ vì cạn pool, không vì hành vi; viết lại để trả thân hàm về đúng bản trước bản vá. NÓI RA: lựa chọn
+"so giá trị GUC để tránh huỷ oan khi DDL" của bản đầu KHÔNG được tự bắt — nó làm [INV-H21] đỏ, và test đích cùng trọn lượt tích hợp đều
+không chạy cổng ấy; chỉ lượt soi 52 thấy.
+
+**Đỏ đo được, cô lập (mã cuối, chạy một-một):**
+Hai mươi hai đột biến trên mã cuối, chạy một-một, không đột biến nào đỏ do lỗi dựng; bước so byte với bản sao lưu sau lượt khớp cả bốn tệp đích. M1 lớp lấy client không xét `session_replication_role` ⇒ đỏ ở `it` replica · M2 không nhận `local` ⇒ đỏ ở đối chứng SET LOCAL + `local` · M3 không xét `row_security` ⇒ đỏ ở `it` row_security và `it` mặc định phiên · M4 không so search path hiệu lực ⇒ đỏ ở `it` search path và ranh giới DDL · M5 so với hằng `{public}` thay vì mốc của chính kết nối (Đ1) ⇒ đỏ ở `it` mặc định phiên search path và ranh giới DDL · M6 kết nối nhiễm trả về pool ⇒ đỏ ở năm `it` (lần lấy sau gặp lại kết nối nhiễm) · M7 không kiểm trạng thái giao dịch ⇒ đỏ ở `it` giao dịch bỏ ngỏ · M8 lần lấy đầu không xét tính chất (Đ2) ⇒ đỏ ở `it` mặc định phiên row_security · M9 chẩn đoán lần lấy đầu không nói mặc định phiên ⇒ đỏ ở chỗ ghim chữ · M10 lỗi là `Error` trần ⇒ đỏ ở năm chỗ ghim lớp lỗi · M11 đọc search path qua TÊN GUC (bản đầu) ⇒ đỏ ở [INV-H21] (`vai-tro.ts:111`) và ở ranh giới DDL — phép đo hành vi của bản đầu trên vế DDL · M12 bộ dọn bỏ khối chặn ⇒ đỏ ở hai `it` replica và census ⒝ · M13 khối chặn nhận replica ⇒ đỏ ở hai `it` replica và census ⒝ · M14 TP096 không thành `InvitationError` ⇒ đỏ ở hai `it` replica và census ⒝ (tệp mang khối chặn thiếu nhánh TP096) · M15 mọi lỗi COMMIT đội tên replica (Đ3) ⇒ đỏ ở đối chứng ánh xạ lỗi · M16 `donBucketNguoiGoiCu` về đúng thân bản trước bản vá (một `pool.query` tự commit) ⇒ đỏ ở `it` của nó (câu DELETE tự commit dưới replica, bộ dọn trả số hàng) và census ⒞ — bản đầu của đột biến này giữ client rồi gọi `pool.query` trên pool một kết nối và đỏ vì cạn pool, không vì hành vi, nên đã viết lại và chạy lại · M17 `donOtpRateLimitsCu` về COMMIT trần ⇒ đỏ ở `it` của nó và census ⒝ · M18 bộ dọn trả kết nối về pool sau lỗi ⇒ đỏ ở ba chỗ đo pid · M19 thông điệp TP096 quay về câu khai hại chưa xảy ra ⇒ đỏ ở chỗ ghim chữ · M20 một `createPool` sản xuất không truyền `role` ⇒ đỏ ở census ⒜ · M21 dựng `pg.Pool` ngoài nơi đã khai ⇒ đỏ ở census ⒜ · M22 thêm một COMMIT trần vào `migrate.ts` ⇒ đỏ ở census ⒝ (3 so với 2 đã khai).
+
+**Ranh giới NÓI RA:** ⑴ Lỗi rơi vào lần lấy KẾ TIẾP của kết nối nhiễm — có thể là một yêu cầu khác, không phải mã đã làm nhiễm; không thử
+lại (lượt soi 52 NHẸ-2). ⑵ Một câu TỰ commit chạy trọn trước khi lớp lấy client thấy gì; census ⒞ biến mỗi đường như thế thành một dòng khai
+— hôm nay chỉ một câu CHỈ ĐỌC ở `rbac.ts`. ⑶ Search path so TƯƠNG ĐỐI qua `current_schemas(false)`: DDL đổi search path hiệu lực làm mỗi kết
+nối pool bị huỷ một lần (test ghim), cấu hình máy chủ nạp lại cũng vậy (suy luận, chưa đo), và kết nối mới nhận mốc mới kể cả khi giá trị
+mới là giá trị xấu — nguồn cấu hình do hardening khoản 92 canh lúc deploy; schema chưa tồn tại hay không có USAGE không đổi search path hiệu
+lực nên không bị bắt (cùng ranh giới withTenant ⑵). ⑷ Pool không vai (`migrate()`, pool superuser của test-support) đứng ngoài lớp lấy
+client; hai bộ dọn huỷ kết nối trên lỗi nên không trả kết nối hỏng về một pool như thế. ⑸ Census là bộ dò cách viết — đầu tệp liệt kê điểm
+mù: biến pool không mang chữ "pool", lệnh dựng lúc chạy, nội suy template, `\n` viết thoát, tệp chưa track, đếm số lượng không đếm danh tính.
+⑹ Khối chặn chép ở hai tệp; census ghim văn bản và nhánh TP096, không ghim phần còn lại của xử lý lỗi (lượt soi 52 INFO-7). ⑺ GUC phiên khác
+ba GUC này và trạng thái phiên ngoài GUC không được đọc — khoản 104 (đo: ba GUC thời gian IM7 đi theo kết nối); pool ứng dụng không có listener
+`'error'` — khoản 103 (đo: tiến trình thoát khi kết nối rảnh bị ngắt).
+
+**Thăm dò cho hai khoản mở (S1.59, PostgreSQL 16, pg 8.23.0, tệp thăm dò xoá ngay sau khi chạy):** ⑴ pool một kết nối mang `options` ba GUC
+IM7 của `createPool`; một lần lấy `SET` cả ba về `0` ở phạm vi phiên ⇒ lần lấy kế, cùng pid, đọc `0/0/0` thay vì `15s/15s/1min`. ⑵ tiến
+trình con dựng `pg.Pool` một kết nối, lấy rồi trả client; superuser `pg_terminate_backend` backend rảnh ấy ⇒ tiến trình con thoát mã 1 với
+`Unhandled 'error' event`; cùng kịch bản có `pool.on('error', …)` ⇒ tiến trình sống, listener nhận 57P01. Cả hai đo trên `pg.Pool` trần cùng
+tuỳ chọn, không trên tiến trình `api` thật; phần "`createPool` và composition không gắn listener" là đọc mã.
+
+### Lượt soi đối kháng 52 (trên bản đầu): 0 CAO, 1 NẶNG, 3 NHẸ, 7 INFO — mọi phát hiện có xử lý; ba đề xuất không theo, một đề xuất ghi thành khoản mới, lý do trong bảng
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Câu kiểm mới đọc `pg_catalog.current_setting('search_path')` ⇒ [INV-H21] đỏ — cổng chỉ cho `migrate.ts` nêu tên ấy, và câu được miễn không được nêu `pg_catalog`. Hai lối sửa nhanh đều hỏng: bỏ `pg_catalog.` thì phép kiểm mù dưới đúng search path nhiễm; truyền tên qua tham số là lách lint bằng cách viết che tên. `pnpm t0` không thấy; test đích và lượt tích hợp đầy đủ của vòng này cũng không chạy cổng ấy | **đúng — đo** (`pnpm test`: một đỏ duy nhất, `packages/db/src/vai-tro.ts:84`) | đọc search path HIỆU LỰC qua `current_schemas(false)` — cùng cách đọc của withTenant ⑵, không nêu tên GUC; [INV-H21] xanh; đột biến M11 (đọc lại tên GUC) đỏ ở [INV-H21] và ở test ranh giới DDL. **Không theo đề xuất tách [INV-H21] thành vế đọc/vế ghi**: nới một cổng đang giữ tiền đề của cả lớp ca cướp để chứa một câu đọc, trong khi đã có cách đọc không chạm cổng; cái giá — search path hiệu lực đổi theo DDL — ghim thành ranh giới bằng test |
+| NHẸ-1 | NHẸ | Mốc theo lần lấy đầu không phân biệt nguồn: cấu hình máy chủ nạp lại làm mỗi kết nối pool ném một lần kèm chẩn đoán "phạm vi phiên"; mặc định phiên xấu (`ALTER ROLE app_api_login SET row_security = off`) làm mọi lần lấy đầu ném kèm chẩn đoán sai; đề xuất phán theo `pg_settings.source`/`reset_val` | đúng — đọc; vế mặc định phiên đo | lần lấy đầu mà tính chất xấu ⇒ thông điệp nói MẶC ĐỊNH PHIÊN, chưa câu nào chạy trên kết nối (test ghim, đột biến M9); lần lấy sau thì thông điệp nêu cả nguồn DDL / cấu hình nạp lại; mặc định phiên search path hợp lệ khác mặc định máy chủ giữ kết nối (test ghim, đột biến M5). **Không theo trong vòng này đề xuất phán theo nguồn**: một lần quét `pg_show_all_settings()` ở MỖI lần lấy client chưa được đo giá, và cơ chế ấy phủ rộng hơn ba GUC — ghi thành khoản 104 |
+| NHẸ-2 | NHẸ | Lỗi là `Error` trần mà mọi chỗ ghi log chỉ ghi tên lỗi ⇒ tín hiệu vô hình; không thử lại nên người gọi vô tội chịu lỗi | đúng — đọc | lớp `KetNoiNhiemError` (tên riêng, xuất qua barrel; test ghim `name`; đột biến M10). **Không theo đề xuất thử lại một lần**: lần thử lại im lặng xoá đúng tín hiệu mà lớp tồn tại để phát ra; lỗi giới hạn một lời gọi mỗi kết nối nhiễm |
+| NHẸ-3 | NHẸ | Census ⒝ miễn theo TỆP cho `migrate.ts` (khuôn H14-M1); `COMMIT -- ghi chú`, `/* … */ COMMIT`, `end` viết thường lọt bộ dò | đúng — đọc | miễn theo SỐ LƯỢNG cho ⒜ và ⒝ (đột biến M22: thêm một COMMIT trần vào `migrate.ts` ⇒ đỏ); bộ quét SQL trái-sang-phải bỏ chú thích, hằng nháy đơn và thân dollar-quote; `end` viết thường tính khi hằng là đối số đầu của `.query(`; mỗi vế một đối chứng văn bản giả |
+| INFO-1 | INFO | Hai bộ dọn trả kết nối về pool sau lỗi — replica đặt trước BEGIN trên pool không vai sống tiếp | đúng — đọc; bản trước đo được (pid giữ nguyên sau lỗi) | bộ dọn huỷ kết nối trên mọi lỗi (test đo pid ở cả ba `it`; đột biến M18) |
+| INFO-2 | INFO | Lần lấy client không phát hiện kết nối trả về khi đang mở giao dịch — `SET ROLE` chạy bên trong giao dịch cũ | đúng — bản trước đo được (lời gọi không ném) | `getTransactionStatus()` đọc trước `SET ROLE`, không vòng đi-về (test ghim; đột biến M7) |
+| INFO-3 | INFO | Lần lấy client không đọc bốn GUC `app.*` — bộ dọn `caller_rate_limits` xoá 0 hàng dưới GUC khách rò | đúng — đọc | gộp vào khoản 104: phép phân biệt mặc định phiên / rò phiên của withTenant (RESET rồi đọc lại, khoản 87) không đặt được ở lần lấy client mà không đổi hành vi ấy; withTenant bắt rò ở BEGIN kế trên cùng kết nối |
+| INFO-4 | INFO | Đột biến sống: so với một hằng (Đ1); bỏ tính chất ở lần lấy đầu (Đ2); mọi lỗi COMMIT đội tên replica (Đ3); tách DO và COMMIT làm hai lời gọi (Đ4) | đúng — đọc | ba test mới giết Đ1 (M5), Đ2 (M8), Đ3 (M15). Đ4 để census canh: ở hai bộ dọn, tách DO và COMMIT làm hai lời gọi TƯƠNG ĐƯƠNG về hành vi (DO ném thì COMMIT không được gọi) — "cùng câu" chỉ chịu lực khi có mã xen giữa hai lời gọi, nên census ghim văn bản |
+| INFO-5 | INFO | Điểm mù census: tệp chưa track, `role: undefined`, đổi tên import, đếm số lượng không đếm danh tính | đúng — đọc | `role: undefined` và đổi tên import nay đỏ (đối chứng văn bản giả); tệp chưa track, đếm số lượng không đếm danh tính, và hằng viết `\n` thoát ghi thành ranh giới ở đầu tệp census |
+| INFO-6 | INFO | Thông điệp TP096 khai "đã bị bỏ qua" một hại chưa xảy ra | đúng — đọc | thông điệp mới; test ghim chữ cũ không còn (đột biến M19) |
+| INFO-7 | INFO | Hai bản chép ⑴ và hai ngữ nghĩa ⑵ đã trôi nhau ở phần xử lý lỗi | đúng một phần — đọc | ⑵ nay cùng cách đọc search path với withTenant (NẶNG-1); census ⒝ đòi tệp mang khối chặn có nhánh so TP096 (đột biến M14 đỏ cả ở census); bộ dọn huỷ kết nối trên mọi lỗi (INFO-1). **Không theo đề xuất hàm dùng chung**: đòi một cạnh gói mới (`invitation` không phụ thuộc `tenancy`, `tenancy` không phụ thuộc `@trustprocure/db`) cho một hằng và một phép ánh xạ lỗi |
+
+**Điều đáng mang sang vòng sau:** ⑴ `pnpm test:int` không gồm cổng kiến trúc — một câu SQL sản xuất mới phải qua trọn `pnpm test` trước
+lượt soi; NẶNG-1 sống qua test đích và trọn lượt tích hợp. ⑵ Khi một lựa chọn thiết kế (so giá trị GUC để tránh huỷ oan) va một cổng có sẵn,
+chọn cách đọc không chạm cổng và ghim cái giá bằng test ranh giới — không nới cổng để chứa lựa chọn. ⑶ Đột biến phải đỏ vì HÀNH VI: đọc lý do
+đỏ, không chỉ đếm — một đột biến làm cạn pool một kết nối đỏ vì lý do khác. ⑷ Mục "mang sang" của lượt soi vào sổ nợ sau một thăm dò riêng:
+khoản 103 và 104 mỗi khoản có một vế đo trước khi ghi.

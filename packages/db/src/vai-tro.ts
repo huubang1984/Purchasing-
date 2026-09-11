@@ -35,10 +35,65 @@ export function laVaiUngDung(giaTri: string): giaTri is VaiUngDung {
 }
 
 /**
+ * [S1.59 / khoản nợ 99] Tiền tố của lỗi khi client lấy từ pool có vai không sạch — xuất ra để test ghim MỘT bản, cùng lý do với
+ * `TU_CHOI_GUC_SOM` của migrate.ts.
+ */
+export const TU_CHOI_KET_NOI_NHIEM =
+  "ganVaiTroChoPool: kết nối lấy từ pool không sạch — kết nối bị huỷ, không giao cho người gọi";
+
+/**
+ * [S1.59 / khoản nợ 99, lượt soi 52 NHẸ-2] Lỗi của lần lấy client gặp kết nối không sạch. Mang TÊN riêng vì mọi chỗ ghi log của tiến
+ * trình (`dispatch`, runner outbox, bộ dọn) chỉ ghi `name` của lỗi — một `Error` trần thì kết nối nhiễm không phân biệt được với mọi lỗi
+ * lập trình khác. Không thử lại: kết nối nhiễm đã bị huỷ, và một lần thử lại im lặng xoá đúng tín hiệu mà lớp này tồn tại để phát ra.
+ */
+export class KetNoiNhiemError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KetNoiNhiemError";
+  }
+}
+
+/**
+ * [S1.59 / khoản nợ 99] Mốc search path HIỆU LỰC của từng kết nối vật lý, đọc ở lần lấy ĐẦU TIÊN. pg-pool giao lại CÙNG đối tượng
+ * client cho cùng một kết nối vật lý (`release` gắn lên chính nó), nên WeakMap theo client là mốc theo kết nối — và tự dọn khi kết nối
+ * bị huỷ.
+ */
+const mocLuocDo = new WeakMap<pg.PoolClient, string>();
+
+/**
  * Tái khẳng định vai trên MỘT client cụ thể ngay trước khi giao cho người gọi, và ném lỗi rõ
  * ràng nếu SET ROLE không có hiệu lực thật.
+ *
+ * [S1.59 / khoản nợ 99] VÀ TỪ CHỐI KẾT NỐI KHÔNG SẠCH. `withTenant` đọc lại ba GUC vận hành sau giao dịch của nó (khoản 96 ⑵); mã chạy
+ * câu trên pool NGOÀI hàm ấy — hai bộ dọn nền, phép kiểm vai của auditPool, phép kiểm lúc khởi động; census ở
+ * `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` — thì không, và kết nối nó để nhiễm quay về pool rồi giao cho người kế tiếp:
+ * dưới `replica` trigger ENABLE thường và khoá ngoại bị bỏ qua (đo S1.54), dưới `row_security = off` câu chạm bảng RLS ném thay vì lọc,
+ * dưới một search path lạ tên trần phân giải sang schema khác, và trong một giao dịch còn mở thì `SET ROLE` của lần lấy này chạy bên
+ * trong giao dịch của người trước. Đây là chỗ MỌI đường của pool có vai đi qua:
+ *   - trạng thái giao dịch đọc từ client (`getTransactionStatus`, không vòng đi-về), TRƯỚC `SET ROLE`, phải là rảnh (lượt soi 52 INFO-2);
+ *   - ba GUC đọc trong CÙNG câu với `current_user`, không thêm vòng đi-về. `session_replication_role` và `row_security` xét theo TÍNH
+ *     CHẤT (origin hay local; on) — cùng quy tắc withTenant ⑵ — kể cả ở lần lấy đầu, khi giá trị xấu chỉ có thể đến từ MẶC ĐỊNH PHIÊN,
+ *     và thông báo nói đúng nguồn ấy (lượt soi 52 NHẸ-1);
+ *   - search path HIỆU LỰC (`current_schemas(false)`) so với mốc đọc ở lần lấy ĐẦU TIÊN của chính kết nối — tương đối, nên mặc định phiên
+ *     hợp lệ khác mặc định máy chủ vẫn qua (test ghim). Đọc qua hàm chứ không qua tên GUC vì [INV-H21] chỉ cho `migrate.ts` nêu tên ấy
+ *     trong SQL — bản đầu đọc tên GUC và làm cổng ấy đỏ (lượt soi 52 NẶNG-1, đo) — và đây cũng là cách đọc của withTenant ⑵.
+ * Lệch ⇒ NÉM `KetNoiNhiemError`, và `ganVaiTroChoPool` huỷ kết nối (`release(loi)`) — người gọi không bao giờ nhận nó; kết nối mới mở
+ * thay, nên sửa xong mặc định phiên thì pool tự lành. Chỉ TÊN GUC vào thông báo.
+ * RANH GIỚI, nói ra: lỗi rơi vào lần lấy KẾ TIẾP của kết nối ấy — có thể là một yêu cầu khác, không phải mã đã làm nhiễm; DDL đổi search
+ * path hiệu lực của MỌI kết nối như nhau thì mỗi kết nối pool bị huỷ một lần, mỗi lần một lời gọi ném (test ghim), rồi kết nối mới lấy
+ * mốc mới — cấu hình máy chủ nạp lại cũng vậy (suy luận, lượt soi 52 NHẸ-1, chưa đo), kể cả khi giá trị mới là giá trị xấu, vì mốc là
+ * tương đối (nguồn cấu hình do hardening khoản 92 canh lúc deploy); một câu TỰ commit (`pool.query` ghi) chạy trọn trước khi lớp này thấy
+ * gì — lớp chặn commit của mã ngoài withTenant là giao dịch tường minh kết thúc bằng khối DO của khoản 96 (⑴), census vế ⒝; GUC phiên
+ * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.
  */
 async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<void> {
+  const trangThaiGiaoDich = client.getTransactionStatus();
+  if (trangThaiGiaoDich !== "I") {
+    throw new KetNoiNhiemError(
+      `${TU_CHOI_KET_NOI_NHIEM} — kết nối trả về pool khi đang mở giao dịch (trạng thái ${String(trangThaiGiaoDich)}): SET ROLE ` +
+        "của lần lấy này sẽ chạy bên trong giao dịch của người trước, và COMMIT kế tiếp commit cả việc dở của họ.",
+    );
+  }
   // [S1.34 / khoản nợ 78] `DISCARD TEMP` cùng câu với SET ROLE, không thêm vòng đi-về nào. Hardening
   // thu hồi TEMP trên database khỏi mọi vai ứng dụng, nhưng một bảng tạm tạo TRƯỚC lần deploy mang lớp
   // ấy sống hết đời kết nối pool và vẫn che tên (đo trên PostgreSQL 16: sau REVOKE, cùng kết nối,
@@ -47,13 +102,40 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
   await client.query(`SET ROLE ${vai}; DISCARD TEMP`);
   // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết sẵn chữ thường —
   // viết hoa ở đây sẽ đọc ra "undefined" một cách âm thầm.
-  const { rows } = await client.query<{ current_role_name: string }>(
-    "SELECT current_user AS current_role_name",
+  const { rows } = await client.query<{
+    current_role_name: string;
+    vai_sao_chep: string;
+    rls: string;
+    luoc_do: string;
+  }>(
+    "SELECT current_user AS current_role_name, " +
+      "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
+      "pg_catalog.current_setting('row_security') AS rls, " +
+      "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do",
   );
-  if (rows[0]?.current_role_name !== vai) {
+  const hang = rows[0];
+  if (hang === undefined || hang.current_role_name !== vai) {
     throw new Error(
       `ganVaiTroChoPool("${vai}"): SET ROLE không có hiệu lực — current_user vẫn là ` +
-        `"${rows[0]?.current_role_name}". Không giao client này cho bất kỳ ai dùng.`,
+        `"${hang?.current_role_name}". Không giao client này cho bất kỳ ai dùng.`,
+    );
+  }
+  const moc = mocLuocDo.get(client);
+  if (moc === undefined) mocLuocDo.set(client, hang.luoc_do);
+  const lech = [
+    hang.vai_sao_chep !== "origin" && hang.vai_sao_chep !== "local" ? "session_replication_role" : null,
+    hang.rls !== "on" ? "row_security" : null,
+    moc !== undefined && hang.luoc_do !== moc ? "search path hiệu lực" : null,
+  ].filter((x): x is string => x !== null);
+  if (lech.length > 0) {
+    throw new KetNoiNhiemError(
+      `${TU_CHOI_KET_NOI_NHIEM} — ${lech.join(", ")}. session_replication_role phải là origin hay local, row_security phải là on` +
+        (moc === undefined
+          ? ". Đây là lần lấy ĐẦU TIÊN của kết nối — chưa câu nào chạy trên nó — nên giá trị đến từ MẶC ĐỊNH PHIÊN (ALTER ROLE … SET, " +
+            "ALTER DATABASE … SET, cấu hình máy chủ), không phải từ mã."
+          : ", search path hiệu lực phải bằng lần lấy đầu tiên của chính kết nối này. Nguồn thường gặp: mã chạy trên pool NGOÀI " +
+            "withTenant đã đổi chúng ở phạm vi phiên rồi trả kết nối về pool (khoản nợ 99); DDL hay cấu hình máy chủ nạp lại đổi search " +
+            "path hiệu lực cũng làm mỗi kết nối pool bị huỷ một lần."),
     );
   }
 }
@@ -104,7 +186,8 @@ export async function khangDinhPhienDangNhapUngDung(client: pg.PoolClient, vai: 
 
 /**
  * Bọc `pool.connect()` để MỌI lần lấy client — kết nối mới hay client rảnh được tái dùng — đều
- * `SET ROLE <vai>` rồi kiểm `current_user` trước khi giao ra. Trả về chính `pool` đã bọc.
+ * `SET ROLE <vai>` rồi kiểm `current_user` — và [S1.59 / khoản nợ 99] ba GUC vận hành, xem `ganVaiChoClient` — trước khi giao ra.
+ * Trả về chính `pool` đã bọc.
  *
  * `pool.query()` gọi `connect()` nội bộ ở dạng CALLBACK (đã đọc source pg-pool:
  * `query(text, values, cb) { ... this.connect((err, client) => {...}) }`), nên bản bọc phải hỗ

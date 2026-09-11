@@ -909,6 +909,10 @@ const DANH_SACH_TRANG_DB = [
   // đổi vai. Test ghim nguyên văn chúng — cùng lý do với dòng trên.
   "TU_CHOI_TRUOC_VONG",
   "TU_CHOI_DOI_VAI",
+  // [S1.59 / khoản nợ 99] Tiền tố của lỗi khi client lấy từ pool có vai không sạch — cùng lý do; và lớp lỗi mang TÊN riêng, vì mọi
+  // chỗ ghi log của tiến trình chỉ ghi tên lỗi (lượt soi 52 NHẸ-2).
+  "TU_CHOI_KET_NOI_NHIEM",
+  "KetNoiNhiemError",
   "VAI_UNG_DUNG",
   "createPool",
   "ganVaiTroChoPool",

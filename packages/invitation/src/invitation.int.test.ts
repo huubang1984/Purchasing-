@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { migrate } from "@trustprocure/db";
+import { createPool, migrate } from "@trustprocure/db";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -1619,6 +1619,151 @@ describe("[sổ nợ 57] bộ dọn otp_rate_limits (044)", () => {
     expect(await con(cuaA)).toBe(false);
     expect(await con(cuaB), "hàng của tổ chức B phải còn nguyên").toBe(true);
     await db.pool.query("DELETE FROM otp_rate_limits WHERE bucket_hash = $1", [cuaB]);
+  });
+});
+
+// ============================================================================================
+// [S1.59 / khoản nợ 99] HAI BỘ DỌN NỀN KHÔNG COMMIT DƯỚI replica — VÀ HUỶ KẾT NỐI TRÊN MỌI LỖI
+//
+// Hai bộ dọn chạy trên pool, ngoài `withTenant`, nên phép chặn ⑴ của khoản 96 (khối DO ném TP096 trong CÙNG câu với COMMIT) không
+// phủ chúng — `donOtpRateLimitsCu` tự BEGIN/COMMIT, còn `donBucketNguoiGoiCu` là một câu `pool.query` TỰ commit, không có COMMIT nào
+// để gác. Dựng hình dạng mà hardening quét tĩnh không thấy khi tên dựng lúc chạy: một trigger AFTER DELETE cấp câu của bảng gọi hàm
+// SECURITY DEFINER của superuser đặt `session_replication_role = replica` ở phạm vi phiên giữa câu dọn. Bộ dọn phải NÉM, không commit:
+// hàng cũ còn nguyên. Mỗi test dùng một pool có vai MỘT kết nối để đo pid: lỗi thì bộ dọn huỷ kết nối thay vì trả về pool (lượt soi 52
+// INFO-1 — replica đặt TRƯỚC BEGIN trên pool không vai thì ROLLBACK không hoàn), và lỗi COMMIT khác TP096 đi ra nguyên dạng.
+// ============================================================================================
+describe("[S1.59 / khoản nợ 99] hai bộ dọn nền không commit dưới replica", () => {
+  const datTriggerReplica = (bang: string): Promise<unknown> =>
+    db.pool.query(`
+      CREATE SCHEMA zz99i;
+      CREATE FUNCTION zz99i.dat_replica() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+        AS $$BEGIN PERFORM set_config('session_replication_role', 'replica', false); RETURN NULL; END$$;
+      CREATE TRIGGER zz99i_dat_replica AFTER DELETE ON ${bang} FOR EACH STATEMENT EXECUTE FUNCTION zz99i.dat_replica();
+    `);
+  const datTriggerNemLucCommit = (bang: string): Promise<unknown> =>
+    db.pool.query(`
+      CREATE SCHEMA zz99i;
+      CREATE FUNCTION zz99i.nem_luc_commit() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog
+        AS $$BEGIN RAISE EXCEPTION 'zz99i: tu choi luc COMMIT'; END$$;
+      CREATE CONSTRAINT TRIGGER zz99i_nem_luc_commit AFTER DELETE ON ${bang} DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION zz99i.nem_luc_commit();
+    `);
+  const goFixture = (bang: string): Promise<unknown> =>
+    db.pool.query(
+      `DROP TRIGGER IF EXISTS zz99i_dat_replica ON ${bang}; DROP TRIGGER IF EXISTS zz99i_nem_luc_commit ON ${bang}; ` +
+        "DROP SCHEMA IF EXISTS zz99i CASCADE",
+    );
+  const loiCua = (lan: Promise<unknown>): Promise<Error | null> =>
+    lan.then(
+      () => null,
+      (e: Error) => e,
+    );
+  const pidCua = async (p: pg.Pool): Promise<number> =>
+    (await p.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid")).rows[0]!.pid;
+  const chenBucketCu = async (): Promise<Buffer> => {
+    const bam = randomBytes(32);
+    await db.pool.query(
+      "INSERT INTO caller_rate_limits (bucket_hash, window_start, hits) VALUES ($1, now() - interval '3 hours', 1)",
+      [bam],
+    );
+    return bam;
+  };
+  const conBucket = async (bam: Buffer): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM caller_rate_limits WHERE bucket_hash = $1", [bam])).rowCount ?? 0) > 0;
+
+  it("donOtpRateLimitsCu: một trigger của bảng đặt replica ở phạm vi phiên giữa giao dịch dọn ⇒ bộ dọn NÉM, COMMIT không chạy, hàng quá sàn còn nguyên, kết nối bị huỷ; gỡ trigger ⇒ dọn bình thường", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const bam = randomBytes(32);
+      await db.pool.query(
+        "INSERT INTO otp_rate_limits (org_id, bucket_kind, bucket_hash, window_start, hits) " +
+          "VALUES ($1, 'DEST', $2, now() - make_interval(mins => 90), 1)",
+        [orgA, bam],
+      );
+      const con = async (): Promise<boolean> =>
+        ((await db.pool.query("SELECT 1 FROM otp_rate_limits WHERE bucket_hash = $1", [bam])).rowCount ?? 0) > 0;
+      const pidTruoc = await pidCua(pool1);
+      await datTriggerReplica("otp_rate_limits");
+      try {
+        const loi = await loiCua(donOtpRateLimitsCu(pool1));
+        expect(loi, "bản trước bản vá: COMMIT chạy dưới replica, bộ dọn trả số hàng").not.toBeNull();
+        expect(loi).toBeInstanceOf(InvitationError);
+        expect(loi!.message).toContain("session_replication_role");
+        expect(loi!.message).toContain("COMMIT không chạy");
+        expect(loi!.message, "lượt soi 52 INFO-6: không câu ghi nào chạy sau khi replica bị đặt — không khai một hại chưa xảy ra").not.toContain("đã bị bỏ qua");
+        expect(await con(), "COMMIT không chạy — hàng quá sàn còn nguyên").toBe(true);
+        expect(await pidCua(pool1), "lỗi thì bộ dọn huỷ kết nối thay vì trả về pool").not.toBe(pidTruoc);
+      } finally {
+        await goFixture("otp_rate_limits");
+      }
+      expect(await donOtpRateLimitsCu(pool1), "gỡ trigger ⇒ dọn bình thường").toBeGreaterThanOrEqual(1);
+      expect(await con()).toBe(false);
+    } finally {
+      await pool1.end();
+      // Hàng cũ của test không được sống sang describe sau khi một khẳng định giữa chừng đỏ — đo: lượt đo trước bản vá để lại một hàng
+      // otp_rate_limits và làm đỏ "[sổ nợ 57] GỠ HẲN policy" (2 hàng thay vì 1).
+      await db.pool.query(
+        "DELETE FROM otp_rate_limits WHERE window_start < now() - interval '60 minutes'; " +
+          "DELETE FROM caller_rate_limits WHERE window_start < now() - interval '2 hours'",
+      );
+    }
+  });
+
+  it("donBucketNguoiGoiCu: một trigger của caller_rate_limits đặt replica giữa câu dọn ⇒ bộ dọn NÉM, hàng cũ còn nguyên, kết nối bị huỷ — bản trước là câu tự commit, không có COMMIT nào để gác; gỡ trigger ⇒ dọn bình thường", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const bam = await chenBucketCu();
+      const pidTruoc = await pidCua(pool1);
+      await datTriggerReplica("caller_rate_limits");
+      try {
+        const loi = await loiCua(donBucketNguoiGoiCu(pool1));
+        expect(loi, "bản trước bản vá: câu DELETE tự commit dưới replica, bộ dọn trả số hàng").not.toBeNull();
+        expect(loi).toBeInstanceOf(InvitationError);
+        expect(loi!.message).toContain("session_replication_role");
+        expect(await conBucket(bam), "không commit — hàng cũ còn nguyên").toBe(true);
+        expect(await pidCua(pool1), "lỗi thì bộ dọn huỷ kết nối thay vì trả về pool").not.toBe(pidTruoc);
+      } finally {
+        await goFixture("caller_rate_limits");
+      }
+      expect(await donBucketNguoiGoiCu(pool1), "gỡ trigger ⇒ dọn bình thường").toBeGreaterThanOrEqual(1);
+      expect(await conBucket(bam)).toBe(false);
+    } finally {
+      await pool1.end();
+      // Hàng cũ của test không được sống sang describe sau khi một khẳng định giữa chừng đỏ — đo: lượt đo trước bản vá để lại một hàng
+      // otp_rate_limits và làm đỏ "[sổ nợ 57] GỠ HẲN policy" (2 hàng thay vì 1).
+      await db.pool.query(
+        "DELETE FROM otp_rate_limits WHERE window_start < now() - interval '60 minutes'; " +
+          "DELETE FROM caller_rate_limits WHERE window_start < now() - interval '2 hours'",
+      );
+    }
+  });
+
+  it("ĐỐI CHỨNG ánh xạ lỗi: COMMIT hỏng vì lý do KHÁC TP096 (constraint trigger DEFERRED ném lúc COMMIT) ⇒ bộ dọn ném NGUYÊN lỗi ấy, không đội tên replica; hàng cũ còn nguyên; kết nối bị huỷ", async () => {
+    const pool1 = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const bam = await chenBucketCu();
+      const pidTruoc = await pidCua(pool1);
+      await datTriggerNemLucCommit("caller_rate_limits");
+      try {
+        const loi = await loiCua(donBucketNguoiGoiCu(pool1));
+        expect(loi, "tiền đề: COMMIT hỏng thật").not.toBeNull();
+        expect(loi!.message).toContain("zz99i: tu choi luc COMMIT");
+        expect(loi, "chỉ SQLSTATE TP096 được đổi thành lời từ chối replica").not.toBeInstanceOf(InvitationError);
+        expect(await conBucket(bam), "COMMIT hỏng — hàng cũ còn nguyên").toBe(true);
+        expect(await pidCua(pool1), "lỗi thì bộ dọn huỷ kết nối thay vì trả về pool").not.toBe(pidTruoc);
+      } finally {
+        await goFixture("caller_rate_limits");
+      }
+      expect(await donBucketNguoiGoiCu(pool1)).toBeGreaterThanOrEqual(1);
+    } finally {
+      await pool1.end();
+      // Hàng cũ của test không được sống sang describe sau khi một khẳng định giữa chừng đỏ — đo: lượt đo trước bản vá để lại một hàng
+      // otp_rate_limits và làm đỏ "[sổ nợ 57] GỠ HẲN policy" (2 hàng thay vì 1).
+      await db.pool.query(
+        "DELETE FROM otp_rate_limits WHERE window_start < now() - interval '60 minutes'; " +
+          "DELETE FROM caller_rate_limits WHERE window_start < now() - interval '2 hours'",
+      );
+    }
   });
 });
 
