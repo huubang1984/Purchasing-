@@ -2618,6 +2618,239 @@ describe("[S1.50 / khoản nợ 91] cửa ra 83⑶: FORCE và view không securi
 });
 
 // ===============================================================================================
+// [S1.53 / khoản nợ 94] 83⑵ CHO CHỦ BẢNG — SAU FORCE, CHỦ BẢNG ĐỌC/GHI 0 HÀNG KHÔNG LỖI
+//
+// Khoản 91 FORCE mọi bảng bật RLS của lược đồ dự án, nên CHỦ BẢNG chịu RLS như mọi vai; 83⑵ chỉ soi tập vai ứng dụng.
+// ĐO trước khi viết (thăm dò S1.53, PostgreSQL 16): chủ KHÔNG superuser, bảng FORCE, policy duy nhất `TO app_api` ⇒
+// SELECT ra 0 dù bảng có 2 hàng, UPDATE và DELETE báo 0 hàng không lỗi, INSERT ném 42501; policy cấp cho một NHÓM mà chủ
+// là thành viên thì phủ. Lược đồ thật: cả 30 bảng RLS có policy PERMISSIVE `TO PUBLIC` ở mọi lệnh ⇒ mục không chặn gì.
+// ===============================================================================================
+describe("[S1.53 / khoản nợ 94] chủ bảng sau FORCE: mọi lệnh phải có policy PERMISSIVE phủ chủ bảng", () => {
+  // Chủ bảng KHÔNG superuser — cùng bài học lượt soi 42 CAO-2: superuser/BYPASSRLS bỏ qua RLS ở mọi cấu hình.
+  const CHU = "zz_chu94";
+  const NHOM = "zz_nhom94";
+  const donDep = async (): Promise<void> => {
+    await db.pool.query(
+      `DROP SCHEMA IF EXISTS zz_s94 CASCADE; DROP ROLE IF EXISTS ${CHU}; DROP ROLE IF EXISTS ${NHOM}; DROP ROLE IF EXISTS zz_su94`,
+    );
+  };
+  const dungFixture = async (): Promise<void> => {
+    await donDep();
+    await db.pool.query(`CREATE ROLE ${CHU} NOSUPERUSER NOBYPASSRLS; CREATE ROLE ${NHOM} NOLOGIN`);
+    await db.pool.query(`CREATE SCHEMA zz_s94 AUTHORIZATION ${CHU}`);
+    await db.pool.query(
+      `SET ROLE ${CHU}; ` +
+        "CREATE TABLE zz_s94.t (id int); INSERT INTO zz_s94.t VALUES (1), (2); " +
+        "ALTER TABLE zz_s94.t ENABLE ROW LEVEL SECURITY; " +
+        "CREATE POLICY p_api ON zz_s94.t TO app_api USING (true) WITH CHECK (true); RESET ROLE",
+    );
+  };
+  const nhan = async (): Promise<string[]> =>
+    (await db.pool.query<{ mo_ta: string }>(docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows
+      .map((r) => r.mo_ta.split(":")[0]!)
+      .sort();
+  const duoiChu = async <T extends pg.QueryResultRow>(sql: string): Promise<pg.QueryResult<T>> => {
+    const c = await db.pool.connect();
+    try {
+      await c.query(`SET ROLE ${CHU}`);
+      return await c.query<T>(sql);
+    } finally {
+      await c.query("RESET ROLE");
+      c.release();
+    }
+  };
+  const BON_LENH = [
+    "zz_s94.t/zz_chu94 (chủ bảng)/DELETE",
+    "zz_s94.t/zz_chu94 (chủ bảng)/INSERT",
+    "zz_s94.t/zz_chu94 (chủ bảng)/SELECT",
+    "zz_s94.t/zz_chu94 (chủ bảng)/UPDATE",
+  ];
+
+  it("[INV-F1] ĐO: chủ bảng KHÔNG superuser, bảng FORCE, policy chỉ TO app_api ⇒ SELECT/UPDATE/DELETE 0 hàng không lỗi, INSERT ném; mục 94 nêu đủ bốn lệnh và migrate() NÉM nêu nó", async () => {
+    // [lượt soi 46 NHẸ-4a] Trên cụm test mọi bảng thật thuộc `postgres` (superuser), nên `nhan()` rỗng ở đây là RỖNG RUỘT —
+    // mục loại chủ superuser. Khẳng định chịu lực là census KHÔNG phụ thuộc chủ bảng ngay dưới: mọi bảng RLS của lược đồ thật
+    // có policy PERMISSIVE `TO PUBLIC` ở cả bốn lệnh, nên chủ bảng nào cũng được phủ — kể cả vai deploy thường của hồ sơ N3
+    // (test N3 ở migrations.int.test.ts: `trien_khai` sở hữu cả lược đồ và migrate() đi qua).
+    const { rows: thieuPublic } = await db.pool.query<{ thieu: string }>(
+      "SELECT n.nspname || '.' || c.relname || '/' || g.lenh AS thieu FROM pg_class c " +
+        "JOIN pg_namespace n ON n.oid = c.relnamespace CROSS JOIN (VALUES ('r'), ('a'), ('w'), ('d')) g(lenh) " +
+        "WHERE c.relrowsecurity AND c.relkind IN ('r', 'p') AND n.nspname NOT IN ('pg_catalog', 'information_schema') " +
+        "AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname NOT LIKE 'zz%' " +
+        "AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polpermissive " +
+        "AND p.polcmd::text IN (g.lenh, '*') AND p.polroles = '{0}')",
+    );
+    expect(thieuPublic.map((r) => r.thieu), "census: mọi bảng RLS thật có policy PERMISSIVE TO PUBLIC ở cả bốn lệnh").toEqual([]);
+    expect(await nhan(), "và mục im trên lược đồ thật").toEqual([]);
+    await dungFixture();
+    try {
+      // Lượt SỬA của khoản 91 bật FORCE; migrate() vẫn NÉM — ở 83⑶ (bảng ngoài tenant chưa khai) VÀ ở mục 94.
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      const { rows } = await db.pool.query<{ f: boolean }>(
+        "SELECT relforcerowsecurity AS f FROM pg_class WHERE oid = 'zz_s94.t'::regclass",
+      );
+      expect(rows[0]!.f, "phép đo không rỗng ruột: lượt SỬA phải FORCE bảng").toBe(true);
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.t")).rows[0]!.n,
+        "chủ bảng đọc 0 hàng dù bảng có 2 — không lỗi",
+      ).toBe(0);
+      expect((await duoiChu("UPDATE zz_s94.t SET id = id")).rowCount, "UPDATE 0 hàng không lỗi").toBe(0);
+      expect((await duoiChu("DELETE FROM zz_s94.t WHERE id > 0")).rowCount, "DELETE 0 hàng không lỗi").toBe(0);
+      const maInsert = await duoiChu("INSERT INTO zz_s94.t VALUES (3)").then(
+        () => null,
+        (e: { code?: string }) => e.code,
+      );
+      expect(maInsert, "INSERT thì ném").toBe("42501");
+      expect(await nhan(), "mục 94 nêu đủ bốn lệnh").toEqual(BON_LENH);
+      expect(loi, "migrate() phải NÉM").not.toBeNull();
+      expect(loi!.message, "lớp sản xuất nêu nguyên văn").toContain("zz_s94.t/zz_chu94 (chủ bảng)/SELECT");
+    } finally {
+      await donDep();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: policy cho NHÓM mà chủ là thành viên thì phủ ĐÚNG lệnh ấy (has_privs_of_role); policy TO PUBLIC phủ hết; chủ superuser đứng ngoài", async () => {
+    await dungFixture();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR).catch(() => undefined);
+      expect(await nhan(), "phép đo không rỗng ruột: đủ bốn lệnh trước khi phủ").toEqual(BON_LENH);
+      await db.pool.query(`GRANT ${NHOM} TO ${CHU}`);
+      await db.pool.query(`SET ROLE ${CHU}; CREATE POLICY p_nhom ON zz_s94.t FOR SELECT TO ${NHOM} USING (true); RESET ROLE`);
+      expect(await nhan(), "SELECT được phủ QUA NHÓM; ba lệnh còn lại vẫn nêu").toEqual(
+        BON_LENH.filter((d) => !d.endsWith("/SELECT")),
+      );
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.t")).rows[0]!.n,
+        "và RLS đồng ý: chủ đọc thấy 2 hàng qua nhóm",
+      ).toBe(2);
+      await db.pool.query(`SET ROLE ${CHU}; CREATE POLICY p_all ON zz_s94.t USING (true) WITH CHECK (true); RESET ROLE`);
+      expect(await nhan(), "policy TO PUBLIC phủ mọi lệnh").toEqual([]);
+      await db.pool.query(
+        `SET ROLE ${CHU}; DROP POLICY p_all ON zz_s94.t; DROP POLICY p_nhom ON zz_s94.t; DROP POLICY p_api ON zz_s94.t; RESET ROLE`,
+      );
+      expect(await nhan(), "gỡ hết policy ⇒ lại đủ bốn").toEqual(BON_LENH);
+      // [lượt soi 46 NHẸ-4b] Gỡ CẢ p_api trước khi đổi chủ: với chủ superuser, pg_has_role(chủ, app_api) luôn đúng nên p_api
+      // đã "phủ" bốn lệnh và vế loại superuser không còn gì để chịu lực — bản đầu rỗng ruột đúng ở vế nó mang tên.
+      // Và chủ mới phải là SUPERUSER **NOBYPASSRLS**: vai bootstrap mang CẢ BYPASSRLS, nên đổi chủ sang nó thì vế BYPASSRLS che
+      // mất vế superuser — lượt đột biến đầu của bản hai cho thấy bỏ vế superuser vẫn XANH (bắt ở lượt đột biến, không ở lượt soi).
+      expect(
+        (await db.pool.query<{ bp: boolean }>("SELECT rolbypassrls AS bp FROM pg_roles WHERE rolname = current_user")).rows[0]!.bp,
+        "vì sao phải dựng vai riêng: vai bootstrap mang cả BYPASSRLS",
+      ).toBe(true);
+      await db.pool.query("DROP ROLE IF EXISTS zz_su94; CREATE ROLE zz_su94 SUPERUSER NOBYPASSRLS");
+      expect(
+        (await db.pool.query<{ su: boolean; bp: boolean }>("SELECT rolsuper AS su, rolbypassrls AS bp FROM pg_roles WHERE rolname = 'zz_su94'")).rows[0],
+        "phép đo không rỗng ruột: superuser KHÔNG BYPASSRLS",
+      ).toEqual({ su: true, bp: false });
+      await db.pool.query("ALTER TABLE zz_s94.t OWNER TO zz_su94");
+      expect(await nhan(), "chủ superuser bỏ qua RLS ở mọi cấu hình — không có 0 hàng nào để báo").toEqual([]);
+    } finally {
+      await donDep();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: các vế lọc chịu lực — RESTRICTIVE không tính là phủ; chủ BYPASSRLS, bảng NO FORCE, bảng tắt RLS (cờ FORCE còn), bảng thuộc extension đứng ngoài", async () => {
+    await dungFixture();
+    await db.pool.query("ALTER TABLE zz_s94.t FORCE ROW LEVEL SECURITY");
+    try {
+      expect(await nhan(), "phép đo không rỗng ruột: đủ bốn lệnh").toEqual(BON_LENH);
+      // [lượt soi 46 NHẸ-4c] RESTRICTIVE một mình không trao hàng nào — PostgreSQL chỉ lấy hàng khi có một PERMISSIVE đi qua.
+      await db.pool.query(`SET ROLE ${CHU}; CREATE POLICY r_all ON zz_s94.t AS RESTRICTIVE USING (true) WITH CHECK (true); RESET ROLE`);
+      expect(await nhan(), "RESTRICTIVE TO PUBLIC không phủ").toEqual(BON_LENH);
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.t")).rows[0]!.n,
+        "và RLS đồng ý: vẫn 0 hàng",
+      ).toBe(0);
+      await db.pool.query(`SET ROLE ${CHU}; DROP POLICY r_all ON zz_s94.t; RESET ROLE`);
+
+      await db.pool.query("DROP ROLE IF EXISTS zz_bp94; CREATE ROLE zz_bp94 NOSUPERUSER BYPASSRLS");
+      await db.pool.query("ALTER TABLE zz_s94.t OWNER TO zz_bp94");
+      expect(await nhan(), "chủ BYPASSRLS bỏ qua RLS — không có 0 hàng nào để báo").toEqual([]);
+      await db.pool.query(`ALTER TABLE zz_s94.t OWNER TO ${CHU}`);
+      await db.pool.query("DROP OWNED BY zz_bp94; DROP ROLE zz_bp94");
+      expect(await nhan(), "trả chủ ⇒ lại đủ bốn").toEqual(BON_LENH);
+
+      await db.pool.query("ALTER TABLE zz_s94.t NO FORCE ROW LEVEL SECURITY");
+      expect(await nhan(), "không FORCE ⇒ chủ bỏ qua RLS").toEqual([]);
+      await db.pool.query("ALTER TABLE zz_s94.t FORCE ROW LEVEL SECURITY");
+
+      await db.pool.query("ALTER TABLE zz_s94.t DISABLE ROW LEVEL SECURITY");
+      const { rows: co } = await db.pool.query<{ rls: boolean; force: boolean }>(
+        "SELECT relrowsecurity AS rls, relforcerowsecurity AS force FROM pg_class WHERE oid = 'zz_s94.t'::regclass",
+      );
+      expect(co[0], "phép đo không rỗng ruột: tắt RLS mà cờ FORCE vẫn còn").toEqual({ rls: false, force: true });
+      expect(await nhan(), "tắt RLS ⇒ không có RLS nào để áp").toEqual([]);
+      await db.pool.query("ALTER TABLE zz_s94.t ENABLE ROW LEVEL SECURITY");
+      expect(await nhan(), "bật lại ⇒ lại đủ bốn").toEqual(BON_LENH);
+
+      await db.pool.query("ALTER EXTENSION plpgsql ADD TABLE zz_s94.t");
+      try {
+        expect(await nhan(), "bảng thuộc extension là việc của extension").toEqual([]);
+      } finally {
+        await db.pool.query("ALTER EXTENSION plpgsql DROP TABLE zz_s94.t");
+      }
+      expect(await nhan(), "gỡ khỏi extension ⇒ lại đủ bốn").toEqual(BON_LENH);
+    } finally {
+      await donDep();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO: bảng CON của cha bật RLS đi qua cha nên đứng ngoài (qua cha ra hàng, thẳng lá ra 0 — ranh giới nói ra); lệnh chủ bảng đã tự REVOKE thì không bị đòi (ném 42501, ồn)", async () => {
+    await dungFixture();
+    try {
+      await db.pool.query(
+        `SET ROLE ${CHU}; ` +
+          "CREATE TABLE zz_s94.p (id int, k int) PARTITION BY LIST (k); " +
+          "CREATE TABLE zz_s94.p_a PARTITION OF zz_s94.p FOR VALUES IN (1); " +
+          "INSERT INTO zz_s94.p VALUES (1, 1), (2, 1); " +
+          "ALTER TABLE zz_s94.p ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_s94.p FORCE ROW LEVEL SECURITY; " +
+          "ALTER TABLE zz_s94.p_a ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_s94.p_a FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY p_all ON zz_s94.p USING (true) WITH CHECK (true); RESET ROLE",
+      );
+      const cuaP = async (): Promise<string[]> => (await nhan()).filter((d) => d.startsWith("zz_s94.p"));
+      expect(await cuaP(), "[lượt soi 46 NẶNG-1] cha có policy TO PUBLIC, lá đi qua cha ⇒ không nêu").toEqual([]);
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.p")).rows[0]!.n,
+        "chủ đọc QUA CHA ra 2",
+      ).toBe(2);
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.p_a")).rows[0]!.n,
+        "ranh giới nói ra: đọc THẲNG lá ra 0",
+      ).toBe(0);
+      await db.pool.query("ALTER TABLE zz_s94.p DETACH PARTITION zz_s94.p_a");
+      expect(await cuaP(), "tách lá thành bảng đứng riêng ⇒ vế loại bảng con là vế chịu lực").toEqual([
+        "zz_s94.p_a/zz_chu94 (chủ bảng)/DELETE",
+        "zz_s94.p_a/zz_chu94 (chủ bảng)/INSERT",
+        "zz_s94.p_a/zz_chu94 (chủ bảng)/SELECT",
+        "zz_s94.p_a/zz_chu94 (chủ bảng)/UPDATE",
+      ]);
+
+      await db.pool.query(
+        `SET ROLE ${CHU}; ` +
+          "CREATE TABLE zz_s94.s (id int); INSERT INTO zz_s94.s VALUES (1); " +
+          "ALTER TABLE zz_s94.s ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_s94.s FORCE ROW LEVEL SECURITY; " +
+          "CREATE POLICY s_doc ON zz_s94.s FOR SELECT USING (true); " +
+          "CREATE POLICY s_ghi ON zz_s94.s FOR INSERT WITH CHECK (true); " +
+          `REVOKE UPDATE, DELETE ON zz_s94.s FROM ${CHU}; RESET ROLE`,
+      );
+      const cuaS = async (): Promise<string[]> => (await nhan()).filter((d) => d.startsWith("zz_s94.s/"));
+      expect(await cuaS(), "[lượt soi 46 NHẸ-2] chủ đã tự REVOKE UPDATE, DELETE ⇒ hai lệnh ấy không bị đòi").toEqual([]);
+      const maUpdate = await duoiChu("UPDATE zz_s94.s SET id = id").then(
+        () => null,
+        (e: { code?: string }) => e.code,
+      );
+      expect(maUpdate, "và lệnh bị thu hồi thì ném — ồn, không im").toBe("42501");
+      await db.pool.query(`GRANT UPDATE ON zz_s94.s TO ${CHU}`);
+      expect(await cuaS(), "cấp lại UPDATE mà không policy phủ ⇒ UPDATE bị nêu").toEqual(["zz_s94.s/zz_chu94 (chủ bảng)/UPDATE"]);
+    } finally {
+      await donDep();
+    }
+  }, 180000);
+});
+
+// ===============================================================================================
 // [S1.48 / lượt soi ngang 40a H4] TẬP TÊN GUC MÀ MÃ DỰ ÁN ĐỌC VÀO (nhánh ⒞ khoản 87) — census + regex
 // ===============================================================================================
 describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
