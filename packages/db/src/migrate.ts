@@ -9,6 +9,32 @@ import type pg from "pg";
 // tránh trùng ngẫu nhiên với khoá advisory khác mà hệ thống có thể dùng sau này.
 const MIGRATION_LOCK_KEY = 727_100_003;
 
+/**
+ * [S1.51 / khoản nợ 92] Tiền tố của phép TỪ CHỐI SỚM — xuất ra để test ghim MỘT bản (lượt soi 44 NẶNG-1).
+ */
+export const TU_CHOI_GUC_SOM =
+  "migrate() từ chối chạy: GUC tenant/khách hay GUC vận hành đã bị gắn sẵn trên phiên deploy TRƯỚC lượt sửa";
+
+/**
+ * [S1.51 / khoản nợ 92 — lượt soi 44 NẶNG-3] `search_path` được xét theo TÍNH CHẤT, không theo một chuỗi.
+ * Tính chất an ninh thật là *không schema nào của người khác đứng trước `public`* (khoản 78 — che tên); `"$user"` và
+ * `pg_catalog` là hai tên duy nhất được phép đứng trước. Nên cụm đặt `search_path = 'public'` — cấu hình AN TOÀN HƠN mặc
+ * định của PostgreSQL, và là cách một cụm tự chữa khoản 78 — vẫn deploy được. Bản đầu so nguyên văn `'"$user", public'`
+ * và CHẶN VĨNH VIỄN cụm ấy, không cửa ra nào (ADR-028 §3, chiều hỏng).
+ * Phát biểu chính xác của tính chất: KHÔNG schema nào ngoài `"$user"`/`pg_catalog` được đứng TRƯỚC `public`. Thứ đứng
+ * SAU `public` thì không nằm trong tính chất ấy — `public` vẫn thắng ở mọi tên có trong nó, và câu tạo đối tượng không ghi
+ * schema vẫn rơi vào schema ĐẦU — nên `'"$user", public, extensions'` (khuôn của Supabase/PostGIS) deploy được. Cố ý KHÔNG
+ * có cửa ra cho ca schema lạ đứng TRƯỚC `public`: ca ấy CHÍNH LÀ mối nguy của khoản 78.
+ * Giữ ĐỒNG BỘ với `GUC_VAN_HANH_DOI` trong `hardening.always.sql` — hai lớp cố ý, cùng một quy tắc.
+ */
+/**
+ * [S1.51 / khoản nợ 92] Ba GUC VẬN HÀNH, cùng bộ với `GUC_VAN_HANH_DOI` của `hardening.always.sql`. `search_path` đứng
+ * cuối và được gọi bằng chỉ số ở phép đọc trước lúc ghim — lý do ở ngay đó.
+ */
+const TEN_GUC_VAN_HANH = ["row_security", "session_replication_role", "search_path"];
+
+const MAU_SEARCH_PATH_DUNG = /^\s*(("\$user"|\$user)\s*,)?\s*(pg_catalog\s*,)?\s*public(\s*,|\s*$)/u;
+
 // [fix I3] Tên file cưỡng chế chạy LẠI mỗi lần migrate() được gọi (vd. thuộc tính role),
 // không qua schema_migrations. Xem db/migrations/hardening.always.sql để biết lý do.
 const HAU_TO_LUON_CHAY = ".always.sql";
@@ -222,7 +248,13 @@ export async function migrate(
   // pg_advisory_unlock(bigint) FROM PUBLIC" rồi chạy migrate() dưới role non-superuser cho
   // ra "migrate -> QUA" trong khi unlock đã ném 42501 — lỗi biến mất hoàn toàn.
   let daDonDep = false;
-  const nhaKhoaVaTraClient = async (): Promise<Error | null> => {
+  /**
+   * [S1.51 / lượt soi 44 NẶNG-1] Thông điệp của phép TỪ CHỐI SỚM là BẰNG CHỨNG của khoản nợ 87 và của 40a H1 — test ghim
+   * nguyên văn nó. Bản S1.51 đổi chữ (thêm "hay GUC vận hành") và BỐN chỗ ghim trong test im lặng hỏng: ba `toContain`
+   * đỏ, và một hằng dùng trong `bat87` thoái hoá thành no-op vì vế trái không bao giờ đúng nữa. Nên chuỗi nay sống MỘT
+   * bản, ở đây, và test import nó — đổi chữ lần sau không làm rỗng ruột phép đo nào.
+   */
+  const nhaKhoaVaTraClient = async (huyClient?: Error): Promise<Error | null> => {
     // Chốt chạy-một-lần: nhánh catch bên dưới gọi lại hàm này sau khi nhánh thành công đã
     // gọi rồi (lỗi "không nhả được khoá" ném ra TỪ TRONG try). Gọi release() hai lần trên
     // cùng một client là lỗi của pg-pool, nên chặn ở đây thay vì nhân đôi luồng điều khiển.
@@ -242,7 +274,10 @@ export async function migrate(
       // nhánh — client quay lại pool là cùng một đối tượng sẽ được lần migrate() sau lấy lại.
       lockClient.off("error", boQuaLoiKetNoi);
       if (nghenThongBao !== undefined) lockClient.off("notice", nghenThongBao);
-      lockClient.release();
+      // [S1.51 / lượt soi 44 NẶNG-2] `huyClient` cho nhánh "chạy lại trên KẾT NỐI MỚI": lời khuyên ấy KHÔNG thực hiện
+      // được nếu chính phiên độc quay lại pool — một lượt thử lại trong cùng tiến trình (nhất là pool max 1) lấy lại
+      // đúng backend ấy và kẹt mãi. `release(err)` bảo pg-pool HUỶ client (đo ở [fix round 5 — M10]).
+      lockClient.release(huyClient);
       return null;
     } catch (loiKhiMoKhoa) {
       // [fix I1] Bản trước: "await lockClient.query(unlock); lockClient.release();" — nếu
@@ -261,6 +296,17 @@ export async function migrate(
       lockClient.release(loiKhiMoKhoa as Error);
       return loiKhiMoKhoa as Error;
     }
+  };
+
+  /**
+   * [S1.51 / lượt soi 44 NẶNG-2] Ba phép từ chối SAU lượt sửa đều nói "chạy lại trên KẾT NỐI MỚI" — lời khuyên ấy chỉ
+   * thực hiện được nếu phiên độc KHÔNG quay lại pool. Đánh dấu để nhánh dọn dẹp huỷ hẳn client.
+   */
+  let phaiHuyPhien: Error | undefined;
+  const tuChoiVaHuyPhien = async (thongDiep: string): Promise<Error> => {
+    const loi = new Error(thongDiep);
+    phaiHuyPhien = loi;
+    return await Promise.resolve(loi);
   };
 
   try {
@@ -323,6 +369,30 @@ export async function migrate(
     //     bảng ở một schema còn SELECT đọc schema khác. Nay CREATE cũng ghi schema. VẪN phụ
     //     thuộc dòng này: toàn bộ DDL không ghi schema trong
     //     001/002, và tính ổn định của pg_get_expr mà hardening.always.sql phán xét.
+    // [S1.51 / khoản nợ 92] ĐỌC TRƯỚC KHI GHIM. `search_path` là một trong ba GUC vận hành, nhưng dòng ngay dưới đây biến
+    // `pg_settings.source` của nó thành `session` VĨNH VIỄN cho phiên này trong khi `reset_val` vẫn giữ giá trị độc (đo
+    // S1.51, PG16) — tới lượt phán xét của hardening thì hàng "đặt ở mức database, ba mục kề vừa chữa xong" và hàng
+    // "postgresql.conf / ALTER SYSTEM" trông HỆT nhau. Đây là chỗ DUY NHẤT còn phân biệt được, nên đọc ở đây.
+    // Tên GUC đi qua THAM SỐ, không nằm trong văn bản câu: [INV-H21] cấm mọi câu có chữ `search_path` nêu tên
+    // `pg_catalog` — đó đúng là tiền đề của ca cướp — mà câu này thì phải ghim đủ bốn trục. Hai đòi hỏi ấy chỉ cùng
+    // thoả được khi cái tên không còn là chữ trong câu.
+    const { rows: spTruocGhim } = await lockClient.query<{ nguon: string; reset_val: string }>(
+      "SELECT st.source AS nguon, st.reset_val FROM pg_catalog.pg_settings st " +
+        "WHERE st.name OPERATOR(pg_catalog.=) $1::pg_catalog.text",
+      [TEN_GUC_VAN_HANH[2]],
+    );
+    // Chỉ những NGUỒN mà không lớp nào khác với tới. Cố ý ĐỨNG NGOÀI: `database` (ba mục kề tự chữa, và phép đọc
+    // hàng catalog dưới đây lo nốt phần phiên), `user`/`database user` (rolconfig của vai DEPLOY — dự án đã tuyên bố
+    // đây là vùng "chặn 0%" và có hai test ghim rằng migrate() chạy được dưới search_path thù địch: nó GHIM search_path
+    // ngay dòng dưới, nên không migration nào phân giải tên qua schema lạ), `session` và `client` (`createPool` cấm
+    // `options=`). Còn lại — postgresql.conf / ALTER SYSTEM / dòng lệnh / biến môi trường / ALTER ROLE ALL — là những
+    // nguồn áp cho MỌI phiên ỨNG DỤNG mà nhánh catalog của mục 92 không thấy hết.
+    const NGUON_AP_MOI_PHIEN = ["configuration file", "command line", "environment variable", "global"];
+    const spDocNgoai =
+      spTruocGhim[0] !== undefined &&
+      !MAU_SEARCH_PATH_DUNG.test(spTruocGhim[0].reset_val) &&
+      NGUON_AP_MOI_PHIEN.includes(spTruocGhim[0].nguon);
+
     await lockClient.query("SET search_path = public");
 
     // [vòng fix 1 — IM7] VÔ HIỆU HOÁ hai timeout mà createPool đặt cho POOL ỨNG DỤNG. Chúng
@@ -396,23 +466,93 @@ export async function migrate(
     // mới NÉM — deploy kế không chạy lại migration ấy. Nên migrate() hỏi bốn GUC NGAY ĐÂY, trước lượt sửa, và từ chối:
     // cùng phép đọc như withTenant (placeholder không có ở pg_settings — đo S1.47), không cần quyền, một round-trip.
     // Mục 87 ở BƯỚC 3 vẫn giữ làm lớp catalog (mức database/vai/pg_parameter_acl/proconfig là thứ phiên này không thấy hết).
+    //
+    // [S1.51 / khoản nợ 92 — lượt soi 43 NẶNG-3] Hai GUC VẬN HÀNH đọc được GIÁ TRỊ HIỆN HÀNH, và chúng phải được hỏi ở
+    // ĐÂY chứ không chỉ ở BƯỚC 3: `session_replication_role = replica` làm cả vòng migration đánh số chạy KHÔNG trigger
+    // RI và không trigger `ENABLE` thường, `row_security = off` làm mọi câu chạm bảng RLS của vai thường báo lỗi — cả hai
+    // COMMIT và ghi checksum xong rồi hardening mới ném, và deploy sau KHÔNG chạy lại migration ấy.
+    // Nguồn `database` ĐỨNG NGOÀI phép từ chối SỚM này, và đó là điều kiện sống của ba mục "… đặt ở mức database": chúng
+    // chữa đúng hàng ấy bằng `ALTER DATABASE … RESET` ở LƯỢT SỬA — từ chối TRƯỚC lượt sửa thì lượt sửa không bao giờ
+    // chạy, ba mục thành mã chết và một cụm dính `ALTER DATABASE … SET` KHÔNG lượt deploy nào gỡ được nữa (ADR-028 §2⑷
+    // và §3). Hai phép đọc hàng catalog ngay sau lượt sửa lo nốt phần ấy.
+    // [lượt soi 44 NHẸ-5] `local` bắn ĐÚNG tập trigger như `origin` (chỉ `replica` bỏ qua trigger `ENABLE` thường): chặn
+    // deploy vì `local` là chặn không có lý do an ninh.
+    // KHÔNG được chèn chú thích vào GIỮA chuỗi nối bằng `+` ở dưới: bộ đọc SQL của [INV-H21] ngắt chuỗi ở đó và câu bị
+    // cắt cụt (đo — PREPARE báo 42601 "syntax error at end of input").
     const { rows: gucGanSan } = await lockClient.query<{ ten: string | null }>(
       "SELECT pg_catalog.concat_ws(', ', " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
-        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS ten",
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END, " +
+        "  (SELECT pg_catalog.string_agg(st.name, ', ' ORDER BY st.name) " +
+        "     FROM pg_catalog.pg_settings st " +
+        "    WHERE st.source OPERATOR(pg_catalog.<>) 'default' AND st.source OPERATOR(pg_catalog.<>) 'database' " +
+        "      AND ((st.name OPERATOR(pg_catalog.=) 'session_replication_role' " +
+        "              AND st.setting OPERATOR(pg_catalog.<>) 'origin' AND st.setting OPERATOR(pg_catalog.<>) 'local') " +
+        "        OR (st.name OPERATOR(pg_catalog.=) 'row_security' " +
+        "              AND st.setting OPERATOR(pg_catalog.<>) 'on'))), " +
+        "  $1::pg_catalog.text) AS ten",
+      [spDocNgoai ? "search_path" : null],
     );
     if (gucGanSan[0]?.ten) {
       // Chỉ TÊN, không giá trị — thông điệp đi vào log deploy.
       throw new Error(
-        `migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — ${gucGanSan[0].ten}. ` +
+        `${TU_CHOI_GUC_SOM} — ${gucGanSan[0].ten}. ` +
           "Mọi migration đánh số sẽ chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, " +
           "options= trên chuỗi kết nối deploy). RESET rồi chạy lại trên kết nối mới (mục phán xét khoản 87 của hardening).",
       );
     }
 
+    // [S1.51 / khoản nợ 92 — lượt soi 44 CAO-1] Chụp hàng mức database của ba GUC vận hành TRƯỚC lượt sửa. Vì sao bắt
+    // buộc: ba mục kề chạy `ALTER DATABASE … RESET <guc>` VÔ ĐIỀU KIỆN, và một hàng mức database mang GIÁ TRỊ ĐÚNG là một
+    // biện pháp giảm nhẹ hợp lệ — nó CHE một độc ở tầng thấp hơn (`postgresql.conf` / `ALTER SYSTEM` / `ALTER ROLE ALL`),
+    // thứ mà PostgreSQL xếp dưới `database` trong ưu tiên nguồn. Lượt sửa gỡ hàng che ⇒ phiên deploy vẫn thấy giá trị
+    // ĐÚNG (chốt lúc mở kết nối) ⇒ mọi phép đọc trong phiên này im ⇒ deploy XANH, và MỌI phiên ứng dụng mở sau đó chạy
+    // dưới độc ấy. Không phiên nào đang mở đọc được giá trị THẬT sau khi hàng che biến mất — nên khi lượt sửa có gỡ hàng
+    // nào, lượt này DỪNG và đòi một phiên mới: lượt sau mở sạch, và phép từ chối SỚM ở trên đọc đúng nguồn còn lại.
+    const docHangMucDatabase = async (): Promise<string[]> =>
+      (
+        await lockClient.query<{ ten: string }>(
+          "SELECT DISTINCT pg_catalog.split_part(c, '=', 1) AS ten " +
+            "  FROM pg_catalog.pg_db_role_setting s, pg_catalog.unnest(s.setconfig) c " +
+            " WHERE s.setrole OPERATOR(pg_catalog.=) 0 " +
+            "   AND s.setdatabase OPERATOR(pg_catalog.=) " +
+            "       (SELECT d.oid FROM pg_catalog.pg_database d " +
+            "         WHERE d.datname OPERATOR(pg_catalog.=) pg_catalog.current_database()) " +
+            "   AND pg_catalog.split_part(c, '=', 1) OPERATOR(pg_catalog.=) ANY ($1::pg_catalog.text[]) " +
+            " ORDER BY 1",
+          [TEN_GUC_VAN_HANH],
+        )
+      ).rows.map((r) => r.ten);
+    const hangDbTruoc = await docHangMucDatabase();
+
     await chayFileLuonChay("sua");
+
+    const hangDbSau = await docHangMucDatabase();
+    if (hangDbSau.length > 0) {
+      // [lượt soi 44 NẶNG-2] Lượt sửa KHÔNG gỡ được (vai deploy không sở hữu database ⇒ 42501, hardening nuốt thành
+      // WARNING). Bản đầu vẫn in "đã gỡ … chạy lại trên kết nối mới" — hai vế đều sai, và nó chỉ người vận hành vào một
+      // vòng lặp vô hạn. Nói đúng nguyên nhân và đúng quyền cần có.
+      throw await tuChoiVaHuyPhien(
+        `migrate() từ chối chạy tiếp: cấu hình mức database của GUC vận hành VẪN CÒN sau lượt sửa — ${hangDbSau.join(", ")}. ` +
+          "Lượt sửa đã thử `ALTER DATABASE … RESET` và KHÔNG làm được (cần quyền sở hữu database hiện tại hoặc SUPERUSER). " +
+          "Gỡ bằng vai có quyền rồi chạy lại migrate() trên KẾT NỐI MỚI.",
+      );
+    }
+    if (hangDbTruoc.length > 0) {
+      throw await tuChoiVaHuyPhien(
+        `migrate() từ chối chạy tiếp: lượt sửa vừa gỡ cấu hình mức database của GUC vận hành — ${hangDbTruoc.join(", ")}. ` +
+          "Phiên này mở TRƯỚC lúc gỡ nên vẫn mang giá trị cũ, và giá trị THẬT sau khi gỡ (postgresql.conf, ALTER SYSTEM, " +
+          "ALTER ROLE ALL — những nguồn mà hàng vừa gỡ có thể đang che) chỉ đọc được trên một phiên MỚI: chạy lại " +
+          "migrate() trên KẾT NỐI MỚI. Không migration đánh số nào chạy ở lượt này.",
+      );
+    }
+
+    // [S1.51 / lượt soi 44] Bản trước còn một phép đọc thứ ba ở đây — `current_setting` của hai GUC vận hành sau lượt
+    // sửa. Nó nay là MÃ CHẾT và đã bị bỏ: mọi nguồn làm giá trị phiên sai đều đã bị chặn TRƯỚC lượt sửa (`source` ngoài
+    // `default`/`database`) hay bởi hai phép đọc hàng catalog ngay trên (`database`), và không migration đánh số nào chạy
+    // giữa chúng. Giữ lại thì nó là một lớp không đột biến nào làm đỏ được — đúng thứ ADR-028 §2⑷ cấm ở `bang`.
 
     const applied: string[] = [];
 
@@ -490,7 +630,7 @@ export async function migrate(
     // Lỗi GỐC luôn thắng: nếu thân hàm đã hỏng thì lỗi dọn dẹp không được che nó. Kết quả
     // của nhaKhoaVaTraClient() ở đây cố ý bỏ qua — nhưng client vẫn được trả về pool đúng
     // cách trên cả hai nhánh của nó, nên không rò rỉ.
-    await nhaKhoaVaTraClient();
+    await nhaKhoaVaTraClient(phaiHuyPhien);
     throw loiGoc;
   }
 }

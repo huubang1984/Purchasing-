@@ -1,4 +1,4 @@
-import { createPool, migrate } from "@trustprocure/db";
+import { TU_CHOI_GUC_SOM, createPool, migrate } from "@trustprocure/db";
 import {
   startPostgres,
   withMigratedDatabase,
@@ -1392,12 +1392,23 @@ describe("migration của dự án", () => {
       );
       expect(truoc.rows[0]?.s).toEqual(["row_security=off", "search_path=ke_gian, public"]);
 
-      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      // [S1.51 / khoản nợ 92 — lượt soi 44 CAO-1] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH. Bản trước: lượt deploy ấy chữa xong rồi ĐI
+      // THẲNG. Nay nó chữa xong rồi DỪNG, và lượt sau mới đi thẳng. Lý do: một hàng mức database mang GIÁ TRỊ ĐÚNG là
+      // biện pháp giảm nhẹ hợp lệ CHE một độc ở tầng thấp hơn (`postgresql.conf`/`ALTER SYSTEM`, xếp dưới `database`);
+      // lượt sửa gỡ hàng che vô điều kiện, còn phiên deploy thì vẫn thấy giá trị cũ (chốt lúc mở kết nối) ⇒ phiên này
+      // KHÔNG đọc được giá trị thật sau khi gỡ. Vế "chữa được" thì không đổi — nó vẫn được đo, ngay dưới.
+      const loiLan1 = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiLan1, "lượt sửa gỡ hàng mức database ⇒ lượt ấy dừng, đòi kết nối mới").not.toBeNull();
+      expect(loiLan1!.message).toContain("lượt sửa vừa gỡ cấu hình mức database của GUC vận hành");
 
       const sau = await db.pool.query<{ s: string[] | null }>(
         "SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0",
       );
-      expect(sau.rows[0]?.s ?? null).toBeNull();
+      expect(sau.rows[0]?.s ?? null, "lượt SỬA vẫn chạy và vẫn reset — đó là điều mục này đo").toBeNull();
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "lượt kế trên kết nối mới đi thẳng").resolves.toEqual([]);
     } finally {
       await db.stop();
     }
@@ -2746,6 +2757,301 @@ describe("migration của dự án", () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.51 / khoản nợ 92] BA GUC VẬN HÀNH GẮN SẴN TỪ NGUỒN NGOÀI MỨC DATABASE — PHÁN XÉT
+  // ==========================================================================================
+  it("[khoản nợ 92] GUC vận hành gắn sẵn: ALTER ROLE ALL / ALTER ROLE <vai> / IN DATABASE / ALTER SYSTEM đều bị bắt — kể cả khi một hàng ưu tiên CAO che hàng ấy (lượt soi 43 NẶNG-1); nguồn database vẫn do ba mục kề TỰ CHỮA rồi migrate() mới chặn ĐÚNG lượt ấy và đi thẳng ở lượt sau; ALTER SYSTEM SET search_path chặn ở phép đọc TRƯỚC lúc ghim; câu SET còn sót trong phiên do vế setting bắt; giá trị ĐÚNG thì đi qua; migrate() từ chối SỚM (NẶNG-3)", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
+      const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const CAU92 = docHangHardeningTu(HARDENING, "CAU_GUC_VAN_HANH_GAN_SAN");
+      const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+      const chayMoi = async (): Promise<Error | null> => {
+        // GUC vận hành áp lúc MỞ PHIÊN, nên mỗi phép đo phải trên một kết nối mới — cùng bài học S1.47 (c).
+        const p = createPool(db.connectionString, 1);
+        try {
+          return await loiCua(migrate(p, MIGRATIONS_DIR));
+        } finally {
+          await p.end();
+        }
+      };
+      const TU_CHOI_SOM = TU_CHOI_GUC_SOM;
+      /** Lớp bắt là phép TỪ CHỐI SỚM (hai GUC đọc được) HAY mục 92 ở BƯỚC 3 — tuỳ phiên deploy có thừa kế giá trị không. */
+      const bat92 = (loi: Error | null, ghiChu: string): void => {
+        expect(loi, ghiChu).not.toBeNull();
+        expect(
+          loi!.message.includes(TU_CHOI_SOM) || loi!.message.includes("(khoản 92)"),
+          `${ghiChu}: ${loi!.message.slice(0, 200)}`,
+        ).toBe(true);
+      };
+      /** Nhánh CATALOG của mục 92, chạy trực tiếp — không phụ thuộc phiên deploy thấy gì. */
+      const nhanh92 = async (doan: string, ghiChu: string): Promise<void> => {
+        const rows = (await db.pool.query<{ mo_ta: string }>(CAU92)).rows.map((r) => r.mo_ta);
+        expect(
+          rows.some((m) => m.startsWith(doan)),
+          `${ghiChu}; đã thấy: ${JSON.stringify(rows.map((m) => m.slice(0, 80)))}`,
+        ).toBe(true);
+      };
+      const sach92 = async (ghiChu: string): Promise<void> => {
+        expect((await db.pool.query<{ mo_ta: string }>(CAU92)).rows.map((r) => r.mo_ta), ghiChu).toEqual([]);
+      };
+      await sach92("lược đồ thật sau migrate(): không hàng nào");
+
+      // (a) ALTER ROLE ALL SET — hàng (setrole 0, setdatabase 0): ba mục kề lọc `setdatabase = <db>` nên mù.
+      await db.pool.query("ALTER ROLE ALL SET row_security = off");
+      await nhanh92("mọi vai, mọi database (ALTER ROLE ALL): GUC vận hành row_security", "nhánh catalog phải thấy ALTER ROLE ALL");
+      bat92(await chayMoi(), "ALTER ROLE ALL SET row_security phải bị chặn");
+
+      // (a') [lượt soi 43 NẶNG-1] HÀNG CHE: một hàng ưu tiên CAO HƠN mang cùng tên làm `pg_settings` của phiên chỉ thấy
+      //      hàng ấy. Bản đầu (chỉ có nhánh `pg_settings`) ĐI QUA và tàn dư `global` sống sót; nhánh catalog vẫn thấy cả hai.
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET row_security = on`);
+      await nhanh92("mọi vai, mọi database (ALTER ROLE ALL): GUC vận hành row_security", "hàng che không được giấu hàng ALL");
+      // Hàng che là hàng mức database ⇒ lượt sửa gỡ nó ⇒ lượt ấy DỪNG trước vòng migration đánh số (lượt soi 44 CAO-1);
+      // hàng `ALTER ROLE ALL` thì không ai gỡ, nên lượt KẾ mới là lượt nêu tên nó ra.
+      const loiChe1 = await chayMoi();
+      expect(loiChe1, "hàng che bị gỡ ⇒ lượt ấy phải dừng").not.toBeNull();
+      expect(loiChe1!.message, `hàng che: ${loiChe1!.message.slice(0, 200)}`).toContain(
+        "lượt sửa vừa gỡ cấu hình mức database của GUC vận hành",
+      );
+      bat92(await chayMoi(), "hàng che: lượt kế phải nêu hàng ALTER ROLE ALL còn lại");
+      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET row_security`);
+      await db.pool.query("ALTER ROLE ALL RESET row_security");
+      expect(await chayMoi(), "đối chứng: RESET cả hai ⇒ đi qua").toBeNull();
+
+      // (a'') [lượt soi 43 NHẸ-5] nguồn `user` và `database user` — hai nguồn khả dĩ nhất trong đời thật; và `search_path`
+      //       chỉ được canh ở nhánh catalog (nhánh pg_settings không bao giờ thấy nó — NẶNG-2).
+      // Hàng của VAI ỨNG DỤNG — phạm vi của nhánh ⒜ sau lượt soi 44 NẶNG-4 (đúng tập `VI_TU_HANG_CAU_HINH_UNG_DUNG` mà
+      // mục khoản 87 dùng). Hai điều cùng đúng ở đây, và vế này tồn tại để nói rõ ai là lớp nào: nhánh catalog THẤY hàng
+      // ấy, CÒN bốn mục `RESET ALL` từ S0 thì CHỮA nó ngay ở lượt SỬA nên `migrate()` đi qua. Tức mục 92 là lớp catalog
+      // cho hàng mà bốn mục kia không với tới — `ALTER ROLE ALL` ở vế (a) — chứ không phải lớp duy nhất.
+      await db.pool.query("ALTER ROLE app_api SET search_path = ke_gian, public");
+      await nhanh92("vai app_api (toàn cụm): GUC vận hành search_path", "nhánh catalog phải thấy ALTER ROLE <vai ứng dụng> SET");
+      expect(await chayMoi(), "bốn mục RESET ALL tự chữa hàng của vai ứng dụng ở lượt SỬA").toBeNull();
+      expect(
+        (await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c,
+        "phép đo không rỗng ruột: lượt SỬA thật sự đã dọn rolconfig",
+      ).toBeNull();
+      await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET session_replication_role = replica`);
+      await nhanh92(`vai app_api IN DATABASE ${tenDb}: GUC vận hành session_replication_role`, "nhánh catalog phải thấy IN DATABASE");
+      expect(await chayMoi(), "mục `cấu hình IN DATABASE của app_api` tự chữa hàng ấy").toBeNull();
+      await sach92("gỡ hết ⇒ nhánh catalog rỗng");
+
+      // (b) ALTER DATABASE SET — nguồn `database`: ba mục kề TỰ CHỮA, mục 92 cố ý im ở CẢ HAI nhánh, và phép từ chối
+      //     SỚM cũng cố ý MÙ nguồn này: từ chối trước lượt sửa thì `ALTER DATABASE … RESET` không bao giờ chạy, ba mục
+      //     thành mã chết (ADR-028 §2⑷) và cụm dính vĩnh viễn. Phiên deploy vẫn mang `replica` (giá trị mức database áp
+      //     lúc MỞ kết nối, RESET giữa phiên không gỡ) nên phép đọc THỨ HAI — sau lượt sửa, trước vòng migration đánh
+      //     số — mới là chỗ chặn. Ba điều phải cùng đúng: chữa xong, chặn đúng lượt ấy, lượt sau đi thẳng.
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET session_replication_role = replica`);
+      const pDb = createPool(db.connectionString, 1);
+      try {
+        expect(
+          (await pDb.query<{ source: string }>("SELECT source FROM pg_settings WHERE name = 'session_replication_role'")).rows[0],
+          "phép đo không rỗng ruột: kết nối mới phải thấy nguồn `database`",
+        ).toEqual({ source: "database" });
+        expect(
+          (await pDb.query<{ mo_ta: string }>(CAU92)).rows.map((r) => r.mo_ta),
+          "nguồn `database` là việc của ba mục kề — mục 92 không nhận, kể cả trên phiên đang dính",
+        ).toEqual([]);
+      } finally {
+        await pDb.end();
+      }
+      const loiDb = await chayMoi();
+      expect(loiDb, "nguồn database: phải chặn vòng migration đánh số SAU lượt sửa").not.toBeNull();
+      expect(loiDb!.message, `nguồn database: ${loiDb!.message.slice(0, 200)}`).toContain(
+        "lượt sửa vừa gỡ cấu hình mức database của GUC vận hành",
+      );
+      expect(
+        (await db.pool.query(`SELECT 1 FROM pg_db_role_setting WHERE setrole = 0 AND setdatabase = (SELECT oid FROM pg_database WHERE datname = '${tenDb}')`)).rowCount,
+        "ba mục kề đã RESET hàng mức database — lượt sửa CÓ chạy, không bị phép từ chối sớm cắt",
+      ).toBe(0);
+      expect(await chayMoi(), "đã chữa ⇒ lượt deploy kế trên kết nối mới đi thẳng, không kẹt vĩnh viễn").toBeNull();
+
+      // (c) ALTER SYSTEM + pg_reload_conf: nguồn `configuration file`, KHÔNG để lại hàng catalog nào ⇒ nhánh pg_settings bắt.
+      await db.pool.query("ALTER SYSTEM SET session_replication_role = replica");
+      await db.pool.query("SELECT pg_reload_conf()");
+      const pSys = createPool(db.connectionString, 1);
+      try {
+        const { rows } = await pSys.query<{ reset_val: string; source: string }>(
+          "SELECT reset_val, source FROM pg_settings WHERE name = 'session_replication_role'",
+        );
+        expect(rows[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới — không thì phép đo rỗng ruột").toEqual({
+          reset_val: "replica",
+          source: "configuration file",
+        });
+        bat92(await loiCua(migrate(pSys, MIGRATIONS_DIR)), "ALTER SYSTEM SET session_replication_role phải bị chặn");
+      } finally {
+        await pSys.end();
+      }
+      await db.pool.query("ALTER SYSTEM RESET session_replication_role");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "đối chứng: ALTER SYSTEM RESET ⇒ đi qua").toBeNull();
+
+      // (d) [lượt soi 43 NHẸ-4] GIÁ TRỊ ĐÚNG thì đi qua — vế "khác giá trị dự án đòi" là load-bearing, không phải trang trí.
+      await db.pool.query("ALTER SYSTEM SET row_security = on");
+      await db.pool.query("SELECT pg_reload_conf()");
+      const pOn = createPool(db.connectionString, 1);
+      try {
+        const { rows } = await pOn.query<{ reset_val: string; source: string }>(
+          "SELECT reset_val, source FROM pg_settings WHERE name = 'row_security'",
+        );
+        expect(rows[0], "phép đo không rỗng ruột: nguồn đã đổi, giá trị vẫn đúng").toEqual({
+          reset_val: "on",
+          source: "configuration file",
+        });
+        expect(await loiCua(migrate(pOn, MIGRATIONS_DIR)), "giá trị ĐÚNG dự án đòi ⇒ đi qua dù nguồn lạ").toBeNull();
+      } finally {
+        await pOn.end();
+      }
+      await db.pool.query("ALTER SYSTEM RESET row_security");
+      await db.pool.query("SELECT pg_reload_conf()");
+
+      // (f) [S1.51 — đo mới] `ALTER SYSTEM SET search_path`: KHÔNG để lại hàng catalog (nhánh ⒜ mù) và migrate() ghim
+      //     search_path ngay khi mở phiên nên tới BƯỚC 3 `source` đã hoá `session` còn `reset_val` vẫn độc — nhánh ⒝ cũng
+      //     không phân biệt được nó với hàng mức database vừa chữa xong. Chỗ duy nhất còn phân biệt được là phép đọc
+      //     TRƯỚC lúc ghim trong migrate(). Nếu phép đọc ấy biến mất, ca này lọt hoàn toàn.
+      await db.pool.query("ALTER SYSTEM SET search_path = 'ke_gian, public'");
+      await db.pool.query("SELECT pg_reload_conf()");
+      const pSp = createPool(db.connectionString, 1);
+      try {
+        expect(
+          (await pSp.query<{ reset_val: string; source: string }>("SELECT reset_val, source FROM pg_settings WHERE name = 'search_path'")).rows[0],
+          "phép đo không rỗng ruột: kết nối mới phải mở với search_path độc",
+        ).toEqual({ reset_val: '"ke_gian, public"', source: "configuration file" });
+      } finally {
+        await pSp.end();
+      }
+      const loiSp = await chayMoi();
+      expect(loiSp, "ALTER SYSTEM SET search_path phải bị chặn").not.toBeNull();
+      expect(loiSp!.message, `search_path: ${loiSp!.message.slice(0, 200)}`).toContain("search_path");
+      await db.pool.query("ALTER SYSTEM RESET search_path");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "đối chứng: ALTER SYSTEM RESET search_path ⇒ đi qua").toBeNull();
+
+      // (g) [S1.51 — đo mới] VẾ SETTING của nhánh ⒝: một câu `SET` còn sót trong CHÍNH phiên deploy. `reset_val` KHÔNG đổi
+      //     theo `SET` (đo) nên vế reset_val mù hẳn ca này — ca nguy hiểm nhất là một migration đánh số chạy
+      //     `SET session_replication_role = replica` rồi quên `RESET`, và lượt phán xét cuối của migrate() chạy sau nó,
+      //     trong cùng phiên. Đo trực tiếp trên một kết nối riêng vì migrate() không nhận được câu SET từ bên ngoài.
+      const pSot = createPool(db.connectionString, 1);
+      try {
+        await pSot.query("SET session_replication_role = replica");
+        expect(
+          (await pSot.query<{ reset_val: string; setting: string }>("SELECT reset_val, setting FROM pg_settings WHERE name = 'session_replication_role'")).rows[0],
+          "phép đo không rỗng ruột: SET đổi setting mà không đụng reset_val",
+        ).toEqual({ reset_val: "origin", setting: "replica" });
+        const moTa = (await pSot.query<{ mo_ta: string }>(CAU92)).rows.map((r) => r.mo_ta);
+        expect(
+          moTa.some((m) => m.startsWith("phiên deploy hiện tại (nguồn session)") && m.includes("session_replication_role")),
+          `vế setting phải thấy câu SET còn sót; đã thấy: ${JSON.stringify(moTa.map((m) => m.slice(0, 60)))}`,
+        ).toBe(true);
+      } finally {
+        await pSot.end();
+      }
+      await sach92("phiên khác không dính câu SET của phiên kia");
+
+      // (h) [S1.51 — đo mới] PHẠM VI của nhánh ⒜: một hàng `IN DATABASE <db khác>` KHÔNG phiên nào của database này nhận
+      //     được, nên nêu nó ra là chặn deploy trên một cụm HỢP LỆ (ADR-028 §3). Bản đầu không có vế phạm vi và ĐÃ nêu nó.
+      await db.pool.query("DROP DATABASE IF EXISTS zz_db_khac92");
+      await db.pool.query("CREATE DATABASE zz_db_khac92");
+      await db.pool.query("DROP ROLE IF EXISTS zz_vai_khac92; CREATE ROLE zz_vai_khac92 NOLOGIN");
+      try {
+        await db.pool.query("ALTER ROLE zz_vai_khac92 IN DATABASE zz_db_khac92 SET row_security = off");
+        expect(
+          (await db.pool.query("SELECT 1 FROM pg_db_role_setting s JOIN pg_database d ON d.oid = s.setdatabase WHERE d.datname = 'zz_db_khac92'")).rowCount,
+          "phép đo không rỗng ruột: hàng catalog của database kia phải tồn tại",
+        ).toBe(1);
+        await sach92("hàng IN DATABASE của database KHÁC không áp được cho phiên nào ở đây ⇒ không được nêu");
+        expect(await chayMoi(), "hàng của database khác không được chặn deploy").toBeNull();
+      } finally {
+        await db.pool.query("ALTER ROLE zz_vai_khac92 IN DATABASE zz_db_khac92 RESET row_security");
+        await db.pool.query("DROP DATABASE IF EXISTS zz_db_khac92");
+        await db.pool.query("DROP ROLE IF EXISTS zz_vai_khac92");
+      }
+
+      // (i) [lượt soi 44 CAO-1] HÀNG CHE Ở MỨC DATABASE MANG GIÁ TRỊ ĐÚNG. `ALTER SYSTEM` đặt độc ở tầng `file`;
+      //     `ALTER DATABASE … SET <giá trị đúng>` — một biện pháp giảm nhẹ HỢP LỆ của người vận hành — che nó, vì
+      //     PostgreSQL xếp `database` trên `file`. Phiên deploy thấy giá trị ĐÚNG ⇒ mọi phép đọc trong phiên im; lượt SỬA
+      //     thì gỡ hàng che VÔ ĐIỀU KIỆN ⇒ bản đầu deploy XANH và mọi phiên ứng dụng mở sau đó chạy dưới `replica`.
+      //     Lớp chặn là: lượt sửa có gỡ hàng mức database nào thì DỪNG và đòi phiên mới — phiên mới đọc được nguồn thật.
+      await db.pool.query("ALTER SYSTEM SET session_replication_role = replica");
+      await db.pool.query("SELECT pg_reload_conf()");
+      await db.pool.query(`ALTER DATABASE "${tenDb}" SET session_replication_role = origin`);
+      const pChe = createPool(db.connectionString, 1);
+      try {
+        expect(
+          (await pChe.query<{ setting: string; source: string }>("SELECT setting, source FROM pg_settings WHERE name = 'session_replication_role'")).rows[0],
+          "phép đo không rỗng ruột: hàng che phải thắng hàng file",
+        ).toEqual({ setting: "origin", source: "database" });
+        expect(
+          (await pChe.query<{ mo_ta: string }>(CAU92)).rows.map((r) => r.mo_ta),
+          "mục 92 nhìn phiên này thấy mọi thứ đúng — đó chính là lý do lớp chặn không thể là mục 92",
+        ).toEqual([]);
+      } finally {
+        await pChe.end();
+      }
+      const loiChe = await chayMoi();
+      expect(loiChe, "hàng che bị lượt sửa gỡ ⇒ phải DỪNG, không được đi tiếp").not.toBeNull();
+      expect(loiChe!.message, `hàng che: ${loiChe!.message.slice(0, 220)}`).toContain(
+        "lượt sửa vừa gỡ cấu hình mức database của GUC vận hành",
+      );
+      const pSau = createPool(db.connectionString, 1);
+      try {
+        expect(
+          (await pSau.query<{ setting: string; source: string }>("SELECT setting, source FROM pg_settings WHERE name = 'session_replication_role'")).rows[0],
+          "sau khi hàng che bị gỡ, độc ở tầng file lộ ra — đây là thứ lượt deploy kế phải thấy",
+        ).toEqual({ setting: "replica", source: "configuration file" });
+      } finally {
+        await pSau.end();
+      }
+      bat92(await chayMoi(), "lượt kế: độc ALTER SYSTEM lộ ra và phải bị chặn");
+      await db.pool.query("ALTER SYSTEM RESET session_replication_role");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "đối chứng: gỡ hết ⇒ đi qua").toBeNull();
+
+      // (k) [lượt soi 44 NẶNG-3] `search_path = 'public'` — cấu hình AN TOÀN HƠN mặc định, và là cách một cụm tự chữa
+      //     khoản 78 — phải deploy được. Bản đầu so nguyên văn `'"$user", public'` nên chặn nó VĨNH VIỄN, không cửa ra.
+      await db.pool.query("ALTER SYSTEM SET search_path = 'public'");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "search_path = 'public' là hợp lệ ⇒ không được chặn deploy").toBeNull();
+      // ĐO: `ALTER SYSTEM SET search_path = 'a, b'` (một chuỗi) tạo ra MỘT schema tên `"a, b"`, không phải hai phần tử —
+      // muốn hai phần tử phải viết danh sách trần. Đây cũng là lý do độc ở vế (f) ăn được: nó đẩy `public` ra khỏi đường.
+      await db.pool.query("ALTER SYSTEM SET search_path = pg_catalog, public");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "search_path = pg_catalog, public cũng hợp lệ").toBeNull();
+      await db.pool.query("ALTER SYSTEM RESET search_path");
+      await db.pool.query("SELECT pg_reload_conf()");
+
+      // (l) [lượt soi 44 NHẸ-5] `session_replication_role = local` bắn ĐÚNG tập trigger như `origin` ⇒ không được chặn.
+      await db.pool.query("ALTER SYSTEM SET session_replication_role = local");
+      await db.pool.query("SELECT pg_reload_conf()");
+      expect(await chayMoi(), "`local` không đổi hành vi trigger ⇒ không được chặn deploy").toBeNull();
+      await db.pool.query("ALTER SYSTEM RESET session_replication_role");
+      await db.pool.query("SELECT pg_reload_conf()");
+
+      // (m) [lượt soi 44 NẶNG-4] Vai THỨ BA (không phải vai ứng dụng, không phải `ALTER ROLE ALL`) đặt search_path riêng:
+      //     một quy ước cá nhân không chạm phiên ứng dụng nào ⇒ không được chặn deploy.
+      await db.pool.query("DROP ROLE IF EXISTS zz_dba92; CREATE ROLE zz_dba92 NOLOGIN");
+      try {
+        await db.pool.query("ALTER ROLE zz_dba92 SET search_path = dba, public");
+        await sach92("vai thứ ba có search_path riêng không phải việc của mục 92");
+        expect(await chayMoi(), "vai thứ ba không được chặn deploy").toBeNull();
+      } finally {
+        await db.pool.query("ALTER ROLE zz_dba92 RESET search_path");
+        await db.pool.query("DROP ROLE IF EXISTS zz_dba92");
+      }
+
+      // (e) options= trên chuỗi kết nối: `createPool` của dự án TỪ CHỐI thẳng tham số ấy — hàng rào có sẵn, và là lý do
+      //     đường này không mở cho tiến trình nào của kho. Nguồn `client` không đo được ở tầng test này (`pg` chỉ là
+      //     import kiểu, không dựng nổi pool ngoài `createPool`) — nói ra thay vì khẳng định suông.
+      const url = new URL(db.connectionString);
+      url.searchParams.set("options", "-c row_security=off");
+      expect(() => createPool(url.toString(), 1), "createPool cấm `options` trong chuỗi kết nối").toThrow(/options/u);
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
+
+  // ==========================================================================================
   // [S1.48 / lượt soi ngang 40a H1] migrate() TỪ CHỐI TRƯỚC LƯỢT SỬA khi phiên deploy mang GUC app.*
   // ==========================================================================================
   it("[S1.48 / 40a H1] ALTER DATABASE … SET app.org_id ⇒ migrate() trên kết nối mới từ chối TRƯỚC lượt sửa: migration đánh số mới KHÔNG chạy, không dòng schema_migrations, thông điệp nêu tên không nêu giá trị; RESET ⇒ kết nối mới chạy, bảng có", async () => {
@@ -2762,7 +3068,7 @@ describe("migration của dự án", () => {
       try {
         const loi = await migrate(poolMoi, tmp).then(() => null, (e: Error) => e);
         expect(loi, "phiên deploy mang app.org_id phải bị từ chối").not.toBeNull();
-        expect(loi!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
+        expect(loi!.message).toContain(`${TU_CHOI_GUC_SOM} — app.org_id`);
         expect(loi!.message).not.toContain(guc);
         // Bản trước S1.48: 999 đã chạy dưới B và đã ghi checksum, rồi mục 87 mới NÉM.
         expect((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = 'zz_h1'")).rowCount, "migration đánh số không được chạy").toBe(0);
@@ -2805,7 +3111,7 @@ describe("migration của dự án", () => {
       // DATABASE SET thừa kế giá trị; migrate() huỷ client mỗi lượt nên lượt kế thường là phiên mới). Với bốn tên ấy, lớp bắt là
       // phép từ chối sớm HAY mục 87 ở BƯỚC 3 — tuỳ phiên có thừa kế hay không; nhánh ⒜/⒜′ được đo bằng câu phán xét chạy
       // trực tiếp (không phụ thuộc phiên). `bat87` chấp nhận một trong hai thông điệp cho tên `app.org_id`.
-      const TU_CHOI_SOM = "migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id";
+      const TU_CHOI_SOM = `${TU_CHOI_GUC_SOM} — app.org_id`;
       const bat87 = (loi: Error | null, doanA: string, ghiChu: string): void => {
         expect(loi, ghiChu).not.toBeNull();
         expect(loi!.message.includes(TU_CHOI_SOM) || loi!.message.includes(doanA), `${ghiChu}: ${loi!.message.slice(0, 300)}`).toBe(true);
@@ -2880,7 +3186,7 @@ describe("migration của dự án", () => {
         // rộng hơn — đo bằng câu phán xét chạy trực tiếp trên chính phiên ấy.
         const loiSys = await loiCua(migrate(poolSys, MIGRATIONS_DIR));
         expect(loiSys, "ALTER SYSTEM SET app.org_id phải bị từ chối").not.toBeNull();
-        expect(loiSys!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
+        expect(loiSys!.message).toContain(`${TU_CHOI_GUC_SOM} — app.org_id`);
         expect(loiSys!.message).not.toContain(guc);
         const cauSys = (await poolSys.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"))).rows.map((r) => r.mo_ta);
         expect(cauSys.some((m) => m.startsWith("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào của phiên ứng dụng mang nó")), `nhánh ⒞ phải thấy; đã thấy: ${JSON.stringify(cauSys)}`).toBe(true);
@@ -2924,7 +3230,7 @@ describe("migration của dự án", () => {
         // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ migrate() từ chối sớm (S1.48 H1); nhánh ⒞ cũng thấy — đo
         // trực tiếp; kết nối mới ⇒ đi qua.
         const loiCu = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
-        expect(loiCu!.message).toContain("migrate() từ chối chạy: GUC tenant/khách đã có giá trị trên phiên deploy TRƯỚC lượt sửa — app.org_id");
+        expect(loiCu!.message).toContain(`${TU_CHOI_GUC_SOM} — app.org_id`);
         const cauCu = (await poolTk.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"))).rows.map((r) => r.mo_ta);
         expect(cauCu.some((m) => m.startsWith("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào")), "nhánh ⒞ dưới vai deploy thường").toBe(true);
         await ketNoiMoi();
@@ -2937,6 +3243,10 @@ describe("migration của dự án", () => {
         expect(loiReset, "vai deploy thường không RESET được placeholder trên app_api").not.toBeNull();
         expect(loiReset!.message).toContain("rolconfig toàn cụm của app_api");
         expect(loiReset!.message).toContain("vai app_api (toàn cụm): GUC tuỳ biến app.org_id gắn sẵn");
+        // [S1.51 / lượt soi 44 NHẸ-3] Thông điệp deploy đi vào log CI: TÊN thì được, GIÁ TRỊ thì không. Trước vòng này ô
+        // mô tả của mục "rolconfig toàn cụm" in nguyên `app.org_id=<uuid>` — định danh tổ chức rò ra một nơi lưu lâu hơn
+        // và đọc được bởi nhiều người hơn chính CSDL. Khẳng định này là thứ giữ cho nó không quay lại.
+        expect(loiReset!.message, "thông điệp chỉ mang TÊN GUC, không mang giá trị").not.toContain(guc);
         expect((await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c).toEqual([`app.org_id=${guc}`]);
         await db.pool.query("ALTER ROLE app_api RESET ALL");
         await expect(migrate(poolTk, MIGRATIONS_DIR)).resolves.toEqual([]);

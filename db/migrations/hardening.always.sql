@@ -2097,6 +2097,136 @@ $ham$;
                  FROM pg_constraint con JOIN pg_namespace cn ON cn.oid = con.connamespace
                 WHERE con.contype = 'c' AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'cn') || $q$) x$q$;
 
+  -- ---- [S1.51 / khoản nợ 92] BA GUC VẬN HÀNH GẮN SẴN CHO PHIÊN, TỪ MỌI NGUỒN NGOÀI MỨC DATABASE — PHÁN XÉT ------------
+  -- Ba mục "… đặt ở mức database" ở dưới lọc `setrole = 0 AND setdatabase = <db hiện tại>` nên chỉ thấy `ALTER DATABASE …
+  -- SET`. Lượt soi 39 NHẸ-1 và lượt soi ngang 40a H5 chỉ ra bốn nguồn khác cùng hiệu lực mà chúng mù: `ALTER ROLE ALL SET`
+  -- (hàng `setrole = 0, setdatabase = 0` — áp cho MỌI vai MỌI database), `ALTER ROLE <vai> SET` (kể cả `IN DATABASE`),
+  -- postgresql.conf / `ALTER SYSTEM`, và `options=` trên chuỗi kết nối. Hậu quả đã cân: `row_security = off` biến mọi câu
+  -- chạm bảng RLS của một vai thường thành LỖI (sự cố sẵn sàng, [fix round 4]); `session_replication_role = replica` bỏ qua
+  -- trigger `ENABLE` thường (ADR-036 hàng 8 — lớp ENABLE ALWAYS vẫn giữ); `search_path` là che tên (khoản 78).
+  --
+  -- HAI NHÁNH, và nhánh CATALOG là nhánh chịu lực (lượt soi 43 NẶNG-1 bác bản đầu chỉ có nhánh `pg_settings`):
+  --   ⒜ CATALOG — mọi hàng `pg_db_role_setting` mang một trong ba tên, TRỪ đúng hàng `(setrole = 0, setdatabase = <db hiện
+  --      tại>)` mà ba mục kề sở hữu và tự chữa. Vì sao phải có: `pg_settings` cho GIÁ TRỊ HIỆU LỰC, và PostgreSQL xếp ưu
+  --      tiên nguồn (`file < argv < global < database < user < database user < client`), nên một hàng ưu tiên CAO CHE hoàn
+  --      toàn một hàng thấp — `ALTER DATABASE d SET row_security = off` che `ALTER ROLE ALL SET row_security = off`, và
+  --      `ALTER ROLE <vai deploy> SET row_security = on` (đúng `boot_val`, vai deploy TỰ làm được vì USERSET) che luôn tàn
+  --      dư `global`. Lượt sửa xoá hàng che SAU khi `source` của phiên đã chốt ⇒ bản đầu vẫn xanh, và đặt lại hàng che
+  --      trước mỗi deploy là mù VĨNH VIỄN. Nhánh catalog không hỏi `source`, không hỏi giá trị hiệu lực, nên miễn nhiễm cả
+  --      ưu tiên nguồn lẫn tuổi kết nối — và nó phủ `search_path` mà nhánh ⒝ không bao giờ phủ được.
+  --   ⒝ PHIÊN DEPLOY — `pg_settings` cho conf / `ALTER SYSTEM` / dòng lệnh / biến môi trường / `options=`, những nguồn
+  --      KHÔNG để lại hàng catalog nào. So với GIÁ TRỊ DỰ ÁN ĐÒI (`GUC_VAN_HANH_DOI`), không so `boot_val`: neo cổng an
+  --      ninh vào mặc định BIÊN DỊCH của PostgreSQL là để nó trôi theo bản trong im lặng (lượt soi 43 NHẸ-3).
+  --      Nhánh này có HAI vế, vì `reset_val` và `setting` trả lời hai câu khác nhau — ĐO (S1.51, PG16): một câu `SET x = v`
+  --      trong phiên đổi `setting` và `source` (hoá `session`) mà KHÔNG đụng `reset_val`; `reset_val` là giá trị phiên
+  --      NHẬN LÚC MỞ, tức gộp mọi nguồn đặt TRƯỚC khi phiên bắt đầu.
+  --        • vế RESET_VAL = "gắn sẵn lúc mở phiên": `reset_val` khác giá trị dự án đòi.
+  --        • vế SETTING = "một câu SET còn sót trong CHÍNH phiên deploy" (`source = 'session'`) — ca nguy hiểm nhất là một
+  --          migration đánh số chạy `SET session_replication_role = replica` rồi quên `RESET`: lượt phán xét cuối của
+  --          migrate() chạy sau nó, trong cùng phiên. Vế này KHÔNG áp cho `search_path`: chính hardening ghim nó ở BƯỚC 0.
+  -- Nguồn `'database'` cố ý đứng ngoài vế RESET_VAL: ba mục kề đã tự chữa nó, và `reset_val` của phiên đang chạy không đổi
+  -- theo lượt chữa ấy — bắt luôn thì mọi lượt deploy vừa chữa xong sẽ tự phán mình (đo). Nhánh ⒜ thì vẫn thấy mọi hàng khác,
+  -- và `migrate()` đọc lại hai GUC ấy NGAY SAU lượt sửa để chặn vòng migration đánh số của chính lượt này.
+  -- `search_path` bị loại khỏi vế RESET_VAL khi `source = 'session'`, và đây là một RANH GIỚI ĐO ĐƯỢC chứ không phải chỗ
+  -- trống: sau khi migrate() và BƯỚC 0 ghim `search_path`, `source` hoá `session` trong khi `reset_val` GIỮ NGUYÊN giá trị
+  -- độc (đo) — tới BƯỚC 3 thì hàng "mức database vừa được ba mục kề chữa xong" và hàng "postgresql.conf / ALTER SYSTEM"
+  -- trông HỆT nhau, không phân biệt được. Nên ca ALTER SYSTEM của `search_path` được chặn ở `migrate()`, nơi đọc được
+  -- `source` TRƯỚC lúc ghim; nhánh ⒜ giữ mọi hàng catalog của `search_path`.
+  -- Mục PHÁN XÉT, không tự chữa: `ALTER ROLE ALL RESET` và `ALTER SYSTEM RESET` là SUSET — một mục tự sửa sẽ có hậu điều
+  -- kiện không bao giờ đúng lại và chặn deploy vĩnh viễn (cùng bài học T10-E4). Cửa ra `GUC_VAN_HANH_KHAI` dùng được NGAY cả
+  -- khi lượt trước đã đỏ: tệp `.always` không vào `schema_migrations`, không checksum, đọc lại từ đĩa mỗi lượt.
+  -- [lượt soi 44 NẶNG-3 + NHẸ-5] Cột `mau` là phép thử THẬT; `gia_tri` chỉ còn để in ra cho người đọc. Vì sao không so
+  -- nguyên văn: ⒜ `session_replication_role = local` bắn ĐÚNG tập trigger như `origin` (chỉ `replica` bỏ qua trigger
+  -- `ENABLE` thường) nên chặn deploy vì `local` là chặn không có lý do an ninh; ⒝ tính chất an ninh của `search_path` là
+  -- *không schema của người khác đứng TRƯỚC `public`* (khoản 78 — che tên), chứ không phải "bằng đúng mặc định của
+  -- PostgreSQL". Bản đầu so nguyên văn `'"$user", public'` và chặn VĨNH VIỄN mọi cụm đặt `search_path = 'public'` —
+  -- cấu hình AN TOÀN HƠN, và là chính cách một cụm tự chữa khoản 78 — mà không cửa ra nào (ADR-028 §3, chiều hỏng).
+  -- Thứ đứng SAU `public` không thuộc tính chất ấy (`public` thắng ở mọi tên có trong nó, và câu tạo đối tượng không ghi
+  -- schema rơi vào schema ĐẦU), nên `'"$user", public, extensions'` đi qua. Giữ ĐỒNG BỘ với `MAU_SEARCH_PATH_DUNG` của
+  -- `packages/db/src/migrate.ts` — hai lớp cố ý, cùng một quy tắc, phải sửa cùng nhau.
+  GUC_VAN_HANH_DOI constant text :=
+    $q$(VALUES ('row_security', 'on', '^on$'),
+               ('session_replication_role', 'origin', '^(origin|local)$'),
+               ('search_path', '"$user", public', '^\s*(("\$user"|\$user)\s*,)?\s*(pg_catalog\s*,)?\s*public(\s*,|\s*$)'))
+         AS gd(ten, gia_tri, mau)$q$;
+
+  GUC_VAN_HANH_KHAI constant text :=
+    $q$(VALUES ('')) AS gv(ten)$q$;
+
+  -- [lượt soi 44 NẶNG-4] Phạm vi hàng catalog của nhánh ⒜ — ĐÚNG tập mà mục khoản 87 dùng (`VI_TU_HANG_CAU_HINH_UNG_DUNG`),
+  -- không rộng hơn. Bản đầu soi MỌI vai MỌI database: `ALTER ROLE dba SET search_path = dba, public` — một quy ước cá nhân
+  -- không chạm phiên ứng dụng nào (PostgreSQL chỉ áp `pg_db_role_setting` cho vai ĐĂNG NHẬP của phiên và database đang nối)
+  -- — cũng chặn deploy, và cửa ra duy nhất là khai TÊN GUC ⇒ khai xong thì mù luôn với `ALTER ROLE ALL SET search_path`.
+  -- Một cửa thoát thô làm hỏng cả phép kiểm là cửa thoát sẽ được dùng. Vế NOT(...) chừa đúng hàng ba mục kề tự chữa.
+  VI_TU_HANG_GUC_VAN_HANH constant text :=
+    VI_TU_HANG_CAU_HINH_UNG_DUNG || $q$
+          AND NOT (s.setrole = 0 AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$;
+
+  -- Vị từ của nhánh ⒝, dùng lại NGUYÊN VẸN ở nhánh ⒞ — bản đầu chép tay và chép THIẾU vế SETTING, nên một dòng khai đang
+  -- chịu lực bị báo "thiu" (lượt soi 44 NHẸ-6).
+  VI_TU_PHIEN_GUC_VAN_HANH_SAI constant text :=
+    $q$(
+                -- vế RESET_VAL — gắn sẵn lúc MỞ phiên, từ nguồn ngoài mức database.
+                (st.reset_val !~ gd.mau
+                   AND st.source NOT IN ('default', 'database')
+                   -- Ranh giới đo được, xem chú thích ở trên: sau khi search_path bị ghim thì `source` hoá `session` và
+                   -- hàng "mức database vừa chữa xong" không phân biệt được với hàng ALTER SYSTEM — ca sau chặn ở migrate().
+                   AND NOT (st.source = 'session' AND st.name = 'search_path'))
+                -- vế SETTING — một câu SET còn sót trong CHÍNH phiên deploy (`reset_val` không hề đổi theo SET — đo).
+                OR (st.source = 'session' AND st.name <> 'search_path' AND st.setting !~ gd.mau)
+              )$q$;
+
+  CAU_GUC_VAN_HANH_GAN_SAN constant text :=
+    $q$SELECT coalesce(
+                CASE WHEN s.setrole = 0 AND s.setdatabase = 0 THEN 'mọi vai, mọi database (ALTER ROLE ALL)'
+                     WHEN s.setrole = 0 THEN 'database ' || pg_catalog.quote_ident(d.datname)
+                     ELSE 'vai ' || pg_catalog.quote_ident(r.rolname)
+                          || CASE WHEN s.setdatabase = 0 THEN ' (toàn cụm)' ELSE ' IN DATABASE ' || pg_catalog.quote_ident(d.datname) END
+                END,
+                -- [lượt soi 44 INFO-4] Một vế NULL làm cả `mo_ta` NULL và `string_agg` nuốt hàng ⇒ BƯỚC 3 in "SAI ()" —
+                -- đúng chế độ hỏng mà lượt soi 39 NHẸ-1 đã bắt một lần. Không xảy ra với catalog nhất quán; vẫn chắn.
+                'hàng pg_db_role_setting (setrole=' || s.setrole || ', setdatabase=' || s.setdatabase || ')')
+              || ': GUC vận hành ' || g.ten || ' gắn sẵn ở catalog — mọi phiên mở sau nó khởi đầu với giá trị ấy, và ba mục '
+                 '"đặt ở mức database" chỉ tự chữa đúng hàng (setrole = 0, database hiện tại) nên hàng này sống qua mọi lượt '
+                 'deploy (khoản 92). row_security=off làm mọi câu chạm bảng RLS của vai thường báo LỖI; '
+                 'session_replication_role=replica bỏ qua trigger ENABLE thường; search_path là che tên (khoản 78). '
+                 'Sửa: ALTER ROLE ALL RESET <guc> / ALTER ROLE <vai> [IN DATABASE <db>] RESET <guc>; hoặc khai tên vào '
+                 'GUC_VAN_HANH_KHAI kèm lý do' AS mo_ta
+         FROM pg_db_role_setting s
+         LEFT JOIN pg_database d ON d.oid = s.setdatabase
+         LEFT JOIN pg_roles r ON r.oid = s.setrole
+         CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten FROM pg_catalog.unnest(s.setconfig) c) g
+        WHERE g.ten IN (SELECT gd.ten FROM $q$ || GUC_VAN_HANH_DOI || $q$)
+          -- Chỉ hàng ÁP ĐƯỢC cho một phiên ỨNG DỤNG của database này — xem `VI_TU_HANG_GUC_VAN_HANH`. ĐO (S1.51): bản
+          -- đầu không có vế phạm vi database và `ALTER ROLE r IN DATABASE <db khác> SET row_security = off` — một hàng
+          -- KHÔNG phiên nào ở đây nhận được — vẫn bị nêu ⇒ chặn deploy trên một cụm hợp lệ (ADR-028 §3).
+          AND $q$ || VI_TU_HANG_GUC_VAN_HANH || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_VAN_HANH_KHAI || $q$ WHERE gv.ten = g.ten)
+       UNION ALL
+       SELECT 'phiên deploy hiện tại (nguồn ' || st.source || ')'
+              || ': GUC vận hành ' || st.name || ' không mang giá trị dự án đòi — nguồn không để lại hàng catalog nào '
+                 '(postgresql.conf, ALTER SYSTEM, dòng lệnh, biến môi trường, options= trên chuỗi kết nối), hay một câu SET '
+                 'còn sót trong phiên (khoản 92). Sửa: ALTER SYSTEM RESET <guc> + pg_reload_conf(), gỡ dòng cấu hình / tham '
+                 'số kết nối rồi chạy lại trên kết nối mới, hoặc RESET câu SET ấy; hoặc khai tên vào GUC_VAN_HANH_KHAI' AS mo_ta
+         FROM pg_catalog.pg_settings st
+         JOIN $q$ || GUC_VAN_HANH_DOI || $q$ ON gd.ten = st.name
+        WHERE $q$ || VI_TU_PHIEN_GUC_VAN_HANH_SAI || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_VAN_HANH_KHAI || $q$ WHERE gv.ten = st.name)
+       UNION ALL
+       SELECT 'khai GUC vận hành ' || gv.ten || ' được gắn sẵn (khoản 92) mà không hàng catalog nào mang nó và phiên deploy '
+              'thấy nó đúng giá trị dự án đòi — dòng khai thiu' AS mo_ta
+         FROM $q$ || GUC_VAN_HANH_KHAI || $q$
+        -- chắn hàng sentinel ('') — cùng khuôn lượt soi 32 NHẸ-2.
+        WHERE gv.ten <> ''
+          AND NOT EXISTS (SELECT 1 FROM pg_db_role_setting s
+                           LEFT JOIN pg_database d ON d.oid = s.setdatabase
+                           LEFT JOIN pg_roles r ON r.oid = s.setrole
+                           WHERE $q$ || VI_TU_HANG_GUC_VAN_HANH || $q$
+                             AND EXISTS (SELECT 1 FROM pg_catalog.unnest(s.setconfig) c WHERE pg_catalog.split_part(c, '=', 1) = gv.ten))
+          AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_settings st
+                           JOIN $q$ || GUC_VAN_HANH_DOI || $q$ ON gd.ten = st.name
+                          WHERE st.name = gv.ten AND $q$ || VI_TU_PHIEN_GUC_VAN_HANH_SAI || $q$)$q$;
+
   CAU_GUC_TUY_BIEN_GAN_SAN constant text :=
     $q$SELECT CASE WHEN s.setrole = 0 AND s.setdatabase = 0 THEN 'mọi vai, mọi database (ALTER ROLE ALL)'
                    WHEN s.setrole = 0 THEN 'database ' || pg_catalog.quote_ident(d.datname)
@@ -7533,7 +7663,12 @@ $ham$;
       $q$true$q$,
       $q$ALTER ROLE app_api RESET ALL$q$,
       $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_api')$q$,
-      $q$coalesce((SELECT array_to_string(rolconfig, ', ') FROM pg_roles WHERE rolname = 'app_api'),
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_api'),
                   'role app_api không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api$q$
     ],
@@ -7542,7 +7677,12 @@ $ham$;
       $q$true$q$,
       $q$ALTER ROLE app_unseal RESET ALL$q$,
       $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_unseal')$q$,
-      $q$coalesce((SELECT array_to_string(rolconfig, ', ') FROM pg_roles WHERE rolname = 'app_unseal'),
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_unseal'),
                   'role app_unseal không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
     ],
@@ -7568,8 +7708,12 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_api'
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
-                    JOIN pg_roles r ON r.oid = s.setrole
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
                    WHERE r.rolname = 'app_api'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api$q$
@@ -7581,8 +7725,12 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_unseal'
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
-                    JOIN pg_roles r ON r.oid = s.setrole
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
                    WHERE r.rolname = 'app_unseal'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
@@ -7594,7 +7742,12 @@ $ham$;
       $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_api_login')$q$,
       $q$ALTER ROLE app_api_login RESET ALL$q$,
       $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_api_login')$q$,
-      $q$coalesce((SELECT array_to_string(rolconfig, ', ') FROM pg_roles WHERE rolname = 'app_api_login'),
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_api_login'),
                   'role app_api_login không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api_login$q$
     ],
@@ -7603,7 +7756,12 @@ $ham$;
       $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_unseal_login')$q$,
       $q$ALTER ROLE app_unseal_login RESET ALL$q$,
       $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_unseal_login')$q$,
-      $q$coalesce((SELECT array_to_string(rolconfig, ', ') FROM pg_roles WHERE rolname = 'app_unseal_login'),
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_unseal_login'),
                   'role app_unseal_login không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
     ],
@@ -7614,8 +7772,12 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_api_login'
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
-                    JOIN pg_roles r ON r.oid = s.setrole
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
                    WHERE r.rolname = 'app_api_login'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_api_login$q$
@@ -7627,8 +7789,12 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
                      WHERE r.rolname = 'app_unseal_login'
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
-                    JOIN pg_roles r ON r.oid = s.setrole
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
                    WHERE r.rolname = 'app_unseal_login'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
@@ -7759,7 +7925,10 @@ $ham$;
                      WHERE s.setrole = 0
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
                        AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'row\_security=%'))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
+      -- [S1.51 / lượt soi 43 INFO-3] Chỉ TÊN, không giá trị: `setconfig` của hàng mức database có thể mang `app.org_id=<uuid>`
+      -- hay một GUC extension mang bí mật, và thông điệp lỗi deploy đi vào log. Cùng chuẩn với mục khoản 87 và 92.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s,
+                        pg_catalog.unnest(s.setconfig) c
                    WHERE s.setrole = 0
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
@@ -7775,7 +7944,10 @@ $ham$;
                      WHERE s.setrole = 0
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
                        AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\_replication\_role=%'))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
+      -- [S1.51 / lượt soi 43 INFO-3] Chỉ TÊN, không giá trị: `setconfig` của hàng mức database có thể mang `app.org_id=<uuid>`
+      -- hay một GUC extension mang bí mật, và thông điệp lỗi deploy đi vào log. Cùng chuẩn với mục khoản 87 và 92.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s,
+                        pg_catalog.unnest(s.setconfig) c
                    WHERE s.setrole = 0
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
@@ -7788,10 +7960,25 @@ $ham$;
                      WHERE s.setrole = 0
                        AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())
                        AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'search\_path=%'))$q$,
-      $q$coalesce((SELECT array_to_string(s.setconfig, ', ') FROM pg_db_role_setting s
+      -- [S1.51 / lượt soi 43 INFO-3] Chỉ TÊN, không giá trị: `setconfig` của hàng mức database có thể mang `app.org_id=<uuid>`
+      -- hay một GUC extension mang bí mật, và thông điệp lỗi deploy đi vào log. Cùng chuẩn với mục khoản 87 và 92.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s,
+                        pg_catalog.unnest(s.setconfig) c
                    WHERE s.setrole = 0
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$quyền sở hữu database hiện tại hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.51 / khoản nợ 92] Ba GUC vận hành gắn sẵn từ nguồn NGOÀI mức database — PHÁN XÉT ----
+    -- Xem chú thích ở CAU_GUC_VAN_HANH_GAN_SAN: ba mục kề trên tự chữa nguồn `database`; mục này bắt bốn nguồn còn lại
+    -- bằng `pg_settings.reset_val` của chính phiên deploy, và KHÔNG tự sửa (RESET ở mức vai/cụm là SUSET).
+    ARRAY[
+      $q$ba GUC vận hành (row_security, session_replication_role, search_path) không được gắn sẵn cho phiên từ nguồn ngoài mức database (khoản 92)$q$,
+      $q$true$q$,
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_GUC_VAN_HANH_GAN_SAN || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_GUC_VAN_HANH_GAN_SAN || $q$) t)$q$,
+      $q$SUPERUSER (ALTER ROLE ALL RESET / ALTER ROLE … RESET / ALTER SYSTEM RESET + pg_reload_conf()), hay gỡ options= trên chuỗi kết nối rồi chạy lại trên kết nối mới; hoặc sửa danh sách khai trong chính file này$q$
     ],
 
     -- ---- [S1.47 / khoản nợ 87] GUC tuỳ biến gắn sẵn cho phiên ứng dụng (năm nhánh) — PHÁN XÉT ----

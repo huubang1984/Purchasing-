@@ -2406,3 +2406,86 @@ view LỒNG, view ĐỌC QUA HÀM và matview; `v1` đã invoker được tha; `
 mục bị một mục cũ che là mục không đo được (ADR-028 §2⑷); ⑵ mọi phép đo về RLS phải chạy dưới vai chủ KHÔNG superuser, vì
 superuser bỏ qua RLS ở mọi cấu hình và làm hai trạng thái khác nhau trông giống nhau; ⑶ `pg_depend` chỉ nối một cạnh — mọi vị
 từ "đối tượng này chạm dữ liệu kia" phải hoặc lấy bao đóng, hoặc bỏ hẳn vế đích.
+
+# §S1.51 — khoản nợ 92: ba GUC vận hành gắn sẵn cho phiên từ MỌI nguồn ngoài mức database — mục phán xét ba nhánh, và `migrate()` đọc BA LẦN
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `GUC_VAN_HANH_DOI` (ba tên kèm TÍNH CHẤT phải thoả, dạng regex),
+`GUC_VAN_HANH_KHAI` (cửa ra, rỗng), `VI_TU_HANG_GUC_VAN_HANH`, `VI_TU_PHIEN_GUC_VAN_HANH_SAI`, `CAU_GUC_VAN_HANH_GAN_SAN`
+ba nhánh và MỘT mục PHÁN XÉT trong `bang`; tám ô mô tả của các mục GUC mức VAI hết in giá trị. `packages/db/src/migrate.ts` —
+`TU_CHOI_GUC_SOM` và `MAU_SEARCH_PATH_DUNG` xuất ra để test ghim một bản, phép đọc `search_path` TRƯỚC lúc ghim, phép TỪ CHỐI
+SỚM (trước lượt sửa), và phép đọc SAU lượt sửa gồm cả ảnh chụp hàng mức database trước/sau. Test: `db/migrations.int.test.ts`
+`[khoản nợ 92]`, mười bốn vế có nhãn a, a′, a″, b, c, d, e, f, g, h, i, k, l, m.
+
+**Đo (PostgreSQL 16, lượt này):**
+⑴ `ALTER ROLE ALL SET row_security = off` ⇒ kết nối mới có `source = 'global'`, `reset_val = 'off'`; hàng
+`pg_db_role_setting` là `(setrole = 0, setdatabase = 0)` — ba mục kề lọc `setdatabase = <db>` nên mù.
+⑵ HÀNG CHE: thêm `ALTER DATABASE d SET row_security = on` ⇒ `pg_settings` của phiên chỉ thấy `source = 'database'`,
+`reset_val = 'on'` — ĐÚNG giá trị dự án đòi. Bản chỉ-`pg_settings` ĐI QUA và tàn dư `global` sống sót.
+⑶ Một câu `SET x = v` trong phiên đổi `setting` và `source` (hoá `session`) mà KHÔNG đụng `reset_val`
+(`session_replication_role`: `setting = replica`, `reset_val = origin`). Hai vế của nhánh ⒝ trả lời hai câu khác nhau.
+⑷ `ALTER SYSTEM SET search_path` ⇒ kết nối mới có `reset_val = '"ke_gian, public"'`, `source = 'configuration file'`; SAU khi
+hardening/migrate ghim `search_path` thì `source` hoá `session` còn `reset_val` GIỮ NGUYÊN giá trị độc — tới BƯỚC 3, hàng "mức
+database vừa được ba mục kề chữa xong" và hàng "ALTER SYSTEM" trông HỆT nhau.
+⑸ `ALTER ROLE app_api SET search_path = …` KHÔNG làm `migrate()` đỏ: bốn mục `RESET ALL` từ S0 tự chữa đúng bốn vai ứng dụng ở
+lượt SỬA. Lỗ thật nằm ở hàng `ALTER ROLE ALL` — test giữ vế đối chứng trên `app_api` để lời ấy có phép đo.
+⑹ `ALTER ROLE r IN DATABASE <db khác> SET row_security = off` — hàng KHÔNG phiên nào của database này nhận được — vẫn bị bản
+đầu nêu ra ⇒ chặn deploy trên một cụm hợp lệ.
+⑺ **Hàng che mang giá trị ĐÚNG** (lượt soi 44 CAO-1): `ALTER SYSTEM SET session_replication_role = replica` +
+`ALTER DATABASE d SET session_replication_role = origin` ⇒ phiên deploy đo được `setting = origin`, `source = database`, mục 92
+im **đúng như thiết kế**; lượt SỬA gỡ hàng che VÔ ĐIỀU KIỆN ⇒ kết nối mở sau đó đo được `setting = replica`,
+`source = configuration file`. Tức bản đầu deploy XANH và tự tay gỡ lớp giảm nhẹ của người vận hành.
+⑻ Nguồn `client` (`options=` trên chuỗi kết nối) KHÔNG đo được ở tầng test: `createPool` của dự án từ chối thẳng tham số ấy
+(có khẳng định), và `pg` chỉ là import kiểu nên không dựng nổi pool ngoài `createPool`. Nói ra thay vì khẳng định suông.
+
+**Hình dạng cuối — ba nhánh và BA phép đọc:**
+⒜ CATALOG: mọi hàng `pg_db_role_setting` mang một trong ba tên, trong phạm vi `VI_TU_HANG_CAU_HINH_UNG_DUNG` (đúng tập của
+khoản 87 — mức database, `ALTER ROLE ALL`, vai kết nối ứng dụng), trừ đúng hàng `(setrole = 0, db hiện tại)` mà ba mục kề sở
+hữu. Không hỏi `source`, không hỏi giá trị hiệu lực ⇒ miễn nhiễm ƯU TIÊN NGUỒN lẫn tuổi kết nối, và là nhánh duy nhất phủ
+`search_path`. ⒝ PHIÊN DEPLOY, hai vế `reset_val` / `setting`. ⒞ dòng khai thiu, dùng LẠI nguyên vẹn hai vị từ của ⒜ và ⒝.
+Phép đọc ⑴ TRƯỚC lượt sửa — bốn GUC `app.*`, hai GUC vận hành đọc được, và `search_path` (đọc trước lúc ghim); nguồn
+`database` cố ý ĐỨNG NGOÀI, vì từ chối trước lượt sửa thì `ALTER DATABASE … RESET` của ba mục kề không bao giờ chạy và ba mục
+thành mã chết (ADR-028 §2⑷). Phép đọc ⑵ và ⑶ NGAY SAU lượt sửa, trước vòng migration đánh số: hàng mức database CÒN (lượt sửa
+không đủ quyền ⇒ nói đúng quyền cần có) hay VỪA BỊ GỠ (⇒ đòi kết nối mới, vì giá trị thật sau khi gỡ chỉ đọc được trên phiên
+mới). Cả ba nhánh từ chối đều HUỶ client thay vì trả về pool.
+
+**Đỏ đo được, cô lập (TÁM đột biến, mỗi cái đỏ ở MỘT vế khác nhau):** M1 nhánh ⒜ mù ⇒ (a) `ALTER ROLE ALL` · M2 phép từ chối SỚM bắt cả nguồn `database` ⇒ lượt sửa không bao giờ chạy, (b) đỏ · M3 bỏ phép chụp hàng mức database trước/sau lượt sửa ⇒ (i) hàng che đỏ · M4 bỏ vế SETTING ⇒ (g) câu SET còn sót · M5 vế RESET_VAL hết so giá trị ⇒ (d) giá trị ĐÚNG bị kêu oan · M6 bỏ phép đọc `search_path` trước lúc ghim ⇒ (f) `ALTER SYSTEM SET search_path` lọt · M7 nhánh ⒜ hết thu hẹp phạm vi ⇒ (h) hàng của database KHÁC bị nêu · M8 `search_path` so nguyên văn ⇒ (k) `search_path = 'public'` bị chặn oan.
+
+**Ranh giới NÓI RA:** ⑴ nguồn `client`/`PGOPTIONS` phía ứng dụng không có hàng catalog nào và không phiên nào của deploy thấy
+— hàng rào duy nhất là `createPool` từ chối `options=`; ⑵ `proconfig` của một hàm MỚI và `pg_parameter_acl` cho ba tên không
+dấu chấm vẫn chưa ai soi — **khoản 95**; ⑶ vế RESET_VAL của nhánh ⒝ chưa có đột biến nào làm nó đỏ QUA `migrate()` (phép từ
+chối SỚM bao trùm nó ở mọi ca hai GUC đọc được), nó chịu lực ở ca "`SET` đúng giá trị trong phiên che một độc ở conf".
+
+### Lượt soi đối kháng 43 (trên bản đầu của S1.51): 3 NẶNG, 5 NHẸ, 3 INFO — xử lý hết trong bản hai
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Bản đầu chỉ có nhánh `pg_settings`: một hàng ưu tiên CAO hơn CHE hoàn toàn hàng thấp (`file < argv < global < database < user < database user < client`), và lượt sửa xoá hàng che SAU khi `source` của phiên đã chốt ⇒ tàn dư `global` sống qua mọi lượt deploy | đúng — đo được | thêm nhánh ⒜ CATALOG, không hỏi `source`, không hỏi giá trị hiệu lực |
+| NẶNG-2 | NẶNG | `search_path` không bao giờ tới được nhánh `pg_settings`: hardening tự ghim nó ở BƯỚC 0 | đúng — đo được | nhánh ⒜ phủ `search_path`; ca `ALTER SYSTEM` chặn ở `migrate()` trước lúc ghim (bản ba) |
+| NẶNG-3 | NẶNG | Mục 92 chỉ hỏi ở BƯỚC 3 — SAU khi migration đánh số của cùng lượt đã chạy dưới `replica` và ghi checksum (cùng khuôn 40a H1) | đúng | `migrate()` hỏi hai GUC đọc được NGAY trước lượt sửa |
+| NHẸ-1 | NHẸ | Loại `source = 'session'` cho cả ba tên là loại luôn ca một migration `SET` rồi quên `RESET` | đúng | chỉ loại cho `search_path`; bản ba thay hẳn bằng vế SETTING có phép đo |
+| NHẸ-3 | NHẸ | So `reset_val` với `boot_val` là neo cổng an ninh vào mặc định BIÊN DỊCH của PostgreSQL ⇒ trôi theo bản trong im lặng | đúng | `GUC_VAN_HANH_DOI` — giá trị dự án tự khai |
+| NHẸ-4 | NHẸ | Không vế nào đo "giá trị ĐÚNG thì đi qua" ⇒ vế so giá trị có thể là trang trí | đúng | vế (d): `ALTER SYSTEM SET row_security = on` ⇒ nguồn đổi, deploy vẫn qua |
+| NHẸ-5 | NHẸ | Không đo nguồn `user` / `database user` — hai nguồn khả dĩ nhất đời thật | đúng | vế (a″): `ALTER ROLE … SET` và `ALTER ROLE … IN DATABASE … SET` |
+| INFO-1..3 | INFO | `ALTER ROLE ALL RESET` là SUSET nên mục phải PHÁN XÉT (xác nhận); `.always` không vào `schema_migrations` nên cửa ra dùng được ngay cả sau một lượt đỏ (xác nhận); ba mục kề in nguyên `setconfig` — có thể mang `app.org_id=<uuid>` | đúng | INFO-3: ba mục kề in TÊN, không giá trị (bản ba mở rộng ra tám mục mức vai) |
+
+### Lượt soi đối kháng 44 (trên bản HAI, tức bản đã xử lý xong lượt 43): 1 CAO, 4 NẶNG, 6 NHẸ, 5 INFO — xử lý hết trong bản ba
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| CAO-1 | CAO | Hàng che ở MỨC DATABASE mang GIÁ TRỊ ĐÚNG che một độc `ALTER SYSTEM`/conf: phiên deploy thấy mọi thứ đúng ⇒ cả ba nhánh và cả hai phép đọc đều im, còn lượt SỬA thì gỡ hàng che VÔ ĐIỀU KIỆN ⇒ deploy XANH và mọi phiên ứng dụng sau đó chạy dưới độc | **đúng — đã đo lại** (⑺ ở trên) | `migrate()` chụp hàng mức database TRƯỚC và SAU lượt sửa; gỡ được hàng nào thì DỪNG và đòi kết nối mới — lượt kế mở phiên sạch và phép từ chối SỚM đọc đúng nguồn còn lại. Vế (i) đo cả ba bước. **Kỳ vọng LẬT có chủ đích ở hai test cũ** — `[fix round 5] cấu hình đặt ở MỨC DATABASE` (`migrations.int.test.ts`) và `[khoản nợ 83⑷⑸⑧]` (`hardening-suy-tu-tinh-chat.int.test.ts`, vế mức database) — từng khẳng định lượt chữa xong thì đi thẳng; nay dừng một lượt rồi đi thẳng. Test thứ hai do lượt evidence bắt, không phải lượt soi |
+| NẶNG-1 | NẶNG | Bốn chỗ trong test còn ghim THÔNG ĐIỆP CŨ của phép từ chối sớm: ba `toContain` đỏ, và hằng `TU_CHOI_SOM` của `bat87` thoái hoá thành no-op vì vế trái không bao giờ đúng nữa ⇒ bằng chứng của khoản 87 và 40a H1 rỗng ruột | **đúng — tệp đang ĐỎ**, em chỉ chạy `-t "khoản nợ 92"` nên không thấy | chuỗi sống MỘT bản: `TU_CHOI_GUC_SOM` xuất từ `@trustprocure/db`, bốn chỗ import nó |
+| NẶNG-2 | NẶNG | Phép đọc sau lượt sửa in "lượt sửa đã gỡ …" cả khi lượt sửa ăn 42501 và KHÔNG gỡ được ⇒ chỉ người vận hành vào vòng lặp vô hạn; và `release()` trần trả chính phiên độc về pool nên "chạy lại trên kết nối mới" không thực hiện được trong cùng tiến trình | đúng | tách hai ca theo hàng catalog còn/hết, nói đúng quyền cần có; cả ba nhánh từ chối gọi `release(err)` để huỷ client |
+| NẶNG-3 | NẶNG | `search_path` bị so NGUYÊN VĂN `'"$user", public'` ⇒ cụm đặt `search_path = 'public'` — cấu hình AN TOÀN HƠN, và là cách tự chữa khoản 78 — bị chặn VĨNH VIỄN, không cửa ra (migrate() không đọc `GUC_VAN_HANH_KHAI`) | đúng | xét theo TÍNH CHẤT: không schema nào ngoài `"$user"`/`pg_catalog` được đứng TRƯỚC `public`; vế (k) đo `'public'` và `'pg_catalog, public'` |
+| NẶNG-4 | NẶNG | Nhánh ⒜ soi MỌI vai MỌI database trong khi mục anh em (khoản 87) thu hẹp bằng `VI_TU_HANG_CAU_HINH_UNG_DUNG` ⇒ `ALTER ROLE dba SET search_path` chặn deploy, và cửa ra chỉ theo TÊN GUC nên khai xong là mù luôn với `ALTER ROLE ALL` | đúng | dùng đúng `VI_TU_HANG_CAU_HINH_UNG_DUNG`; vế (m) đo vai thứ ba không bị chặn |
+| NHẸ-3 | NHẸ | Chuẩn "chỉ TÊN, không giá trị" của chính vòng này mới áp cho ba mục; tám mục mức VAI vẫn in nguyên `rolconfig`/`setconfig`, và test 87 dựng `app.org_id = <uuid>` rồi khẳng định thông điệp chứa tên mục ⇒ UUID đi vào log CI | đúng | tám ô mô tả đổi sang `split_part(c, '=', 1)`; thêm `not.toContain(guc)` vào đúng chỗ ấy |
+| NHẸ-5 | NHẸ | `session_replication_role = local` bắn ĐÚNG tập trigger như `origin` ⇒ chặn deploy vì `local` là chặn không lý do | đúng | tính chất nhận `^(origin\|local)$`; vế (l) đo |
+| NHẸ-6 | NHẸ | Nhánh ⒞ chép tay vị từ của ⒝ và chép THIẾU vế SETTING ⇒ một dòng khai đang chịu lực bị báo "thiu" | đúng | hai vị từ tách thành hằng, ⒞ dùng lại nguyên vẹn |
+| NHẸ-1, NHẸ-2 | NHẸ | `proconfig` của hàm MỚI (nhánh ⒠ của 87 lọc `LIKE '%.%'` nên loại ba tên không dấu chấm) và `GRANT SET ON PARAMETER session_replication_role` cho vai không superuser — hai đường lật tiền đề "chỉ superuser đặt được", không mục nào hỏi | đúng | **chưa sửa — khoản nợ 95**, kèm hình dạng mã người soi đã nêu |
+| NHẸ-4 | NHẸ | Vế RESET_VAL của nhánh ⒝ không có đột biến nào làm nó đỏ QUA `migrate()`: phép từ chối SỚM bao trùm nó ở mọi ca hai GUC đọc được, còn `search_path` thì bị loại | đúng | ghi thành ranh giới ⑶ ở trên; vế (c) giữ nguyên nhưng chú thích nói đúng lớp bắt |
+| INFO-1..5 | INFO | `options=`/PGOPTIONS phía ứng dụng còn ngoài tầm (ghi vào ranh giới ⑴); `SET ROLE` KHÔNG áp lại `pg_db_role_setting` nên không phải lỗ (xác nhận, trục đóng); so `search_path` là so nguyên văn nên `'$user, public'` trong conf khác chuỗi ghim (cùng lớp NẶNG-3, đã sửa cùng); `mo_ta` NULL làm `string_agg` nuốt hàng ⇒ thêm `coalesce`; test khớp tên database thô — chưa sửa, ghi ra | đúng | bốn xử lý như cột trái; INFO-5 để nguyên (tên database của fixture luôn thường) |
+
+**Điều đáng mang sang vòng sau:** ⑴ chạy `vitest -t "<tên vế>"` là chạy MỘT test và bỏ qua 104 test còn lại — mọi vòng đổi một
+chuỗi mà mã khác ghim phải chạy TRỌN tệp trước khi tin (NẶNG-1 là ca đắt nhất của bài học này); ⑵ một lượt SỬA tự chữa có thể
+GỠ MẤT lớp giảm nhẹ của người vận hành — mỗi mục tự chữa phải được hỏi "cái nó xoá có đang che gì không"; ⑶ một cổng an ninh
+so NGUYÊN VĂN một giá trị mặc định là một cổng chặn nhầm cụm an toàn hơn: so theo TÍNH CHẤT; ⑷ thông điệp lỗi deploy là bề mặt
+rò dữ liệu — tên thì được, giá trị thì không, và chuẩn ấy phải áp cho MỌI mục cùng lớp chứ không chỉ mục của vòng đang làm.

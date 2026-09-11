@@ -901,6 +901,10 @@ const DANH_SACH_TRANG_AUDIT = [
 // một đường mở kết nối "tiện tay" — `g9-api-routes-khong-cham-tenancy-va-db` cấm handler của
 // `apps/api` chạm gói này HOÀN TOÀN, kể cả qua cửa.
 const DANH_SACH_TRANG_DB = [
+  // [S1.51 / lượt soi 44 NẶNG-1] Một CHUỖI, không phải một năng lực: tiền tố của phép từ chối sớm trong `migrate()`. Nó
+  // ra cửa vì test ghim nguyên văn nó làm bằng chứng của khoản nợ 87 — bốn bản chép tay đã im lặng hỏng một lần khi
+  // chuỗi đổi chữ. Không mở kết nối, không chạm quyền.
+  "TU_CHOI_GUC_SOM",
   "VAI_UNG_DUNG",
   "createPool",
   "ganVaiTroChoPool",
