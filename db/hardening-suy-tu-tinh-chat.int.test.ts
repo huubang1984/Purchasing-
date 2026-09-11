@@ -2090,8 +2090,15 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // nối mới của tệp chạy ở `replica` — trigger ENABLE thường im, các test sau đỏ dây chuyền sai hướng. Bọc lại.
     await db.pool.query(`ALTER DATABASE "${tenDb}" SET session_replication_role = replica`);
     try {
-      expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, đi qua").toBe("OK");
+      // [S1.51 / khoản nợ 92 — lượt soi 44 CAO-1] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH, cùng lý do với `[fix round 5]` ở
+      // `migrations.int.test.ts`: lượt sửa vẫn RESET (khẳng định kế dưới giữ nguyên), nhưng lượt ấy nay DỪNG trước vòng
+      // migration đánh số và đòi kết nối mới — một hàng mức database có thể đang CHE một độc ở tầng thấp hơn, và phiên
+      // mở trước lúc gỡ không đọc được giá trị thật. Lượt kế trên cùng pool đi thẳng vì phiên độc đã bị huỷ, không trả về.
+      expect(await migrateLai(db), "mục tự chữa: RESET ở lượt sửa, rồi dừng lượt ấy").toMatch(
+        /^NÉM: migrate\(\) từ chối chạy tiếp: lượt sửa vừa gỡ cấu hình mức database của GUC vận hành/u,
+      );
       expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM pg_db_role_setting s WHERE s.setrole = 0 AND EXISTS (SELECT 1 FROM unnest(s.setconfig) c WHERE c LIKE 'session\\_replication\\_role=%')")).rows[0]?.n, "GUC mức database đã bị RESET").toBe("0");
+      expect(await migrateLai(db), "lượt kế trên cùng pool đi thẳng — phiên độc đã bị huỷ, không quay lại pool").toBe("OK");
     } finally {
       await db.pool.query(`ALTER DATABASE "${tenDb}" RESET session_replication_role`);
     }
