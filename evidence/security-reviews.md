@@ -3109,3 +3109,118 @@ grantor của membership), không phải một câu. Bản đầu tin câu ấy,
 phải chạy `migrate()` dưới vai KHÔNG superuser: superuser đứng ngoài chủ thể nên che đúng ca cần đo. ⑶ PG16 chỉ thu hồi membership
 mà chính người thu hồi đã cấp; ADMIN OPTION không đủ để tự cắt đường. Người soi suy sai vế này bằng đọc, và phép đo bác nó. ⑷ Khoản
 101 sửa hằng dùng chung, nên phải đo cả hai lớp: lượt hỏi trước vòng và lượt phán xét sau vòng.
+
+# §S1.58 — khoản nợ 101: policy phụ thuộc hàm ngữ cảnh thôi tính là phủ vai chạy migration có EXECUTE mà RLS không coi là chủ — một hướng đo và bác, lượt soi 51, khoản 102 mở
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — hằng `CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI` (bọc ngoài; vế phủ loại policy
+PERMISSIVE PHỤ THUỘC `public.app_current_org_id()` qua `pg_depend` khi vai có EXECUTE trên hàm ấy và RLS không coi vai là chủ; cột
+`vi_tu_loc_het`, `duong_execute`, `loi_ra_execute`; `tu_sua_duoc` tách vế quyền chủ bảng và vế cạnh membership), nhánh thứ hai của
+`CAU_PHU_LENH_CHU_BANG_SAI` (thông điệp rẽ nhánh, lối ra theo từng đường, lời khuyên chung cho đường tới quyền tách cấp thẳng / qua nhóm),
+chuỗi của lượt `truoc_vong` (nêu đường và lối ra), chú thích NHẸ-4 và khối `truoc_vong`. `packages/db/src/migrate.ts` — chữ của
+`TU_CHOI_TRUOC_VONG` và lời khuyên của thông điệp từ chối trước vòng. Test: `db/rls-coverage.int.test.ts` (vế ⒥ lật; một `it` mười pha;
+một `it` ghim ranh giới khoản 102); `db/migrations.int.test.ts` (một `it` sáu pha).
+
+**Đo trước khi viết (thăm dò S1.58, PostgreSQL 16, cụm test đã xoá):** hồ sơ N2 — `trien_khai` CREATEROLE, sở hữu database; một nhà
+cung cấp thật dựng theo chuỗi danh tính; `999_zz_backfill101.sql` (`UPDATE public.suppliers SET legal_name = …`) đang chờ.
+⒜ `trien_khai` có SELECT, UPDATE mà không EXECUTE ⇒ `SELECT count(*)` ném 42501 "permission denied for function app_current_org_id",
+`migrate()` ném ở `999`, không ghi. ⒝ Thêm `GRANT EXECUTE ON FUNCTION app_current_org_id() TO trien_khai` ⇒ đếm ra 0 không lỗi;
+`migrate()` QUA, `999` được ghi, hàng không đổi — mục 94 im vì policy tenant `TO PUBLIC` tính là phủ. ⒞ `trien_khai` là CHỦ `suppliers`
+(FORCE) có EXECUTE ⇒ y như ⒝. Ở cả ba cấu hình, `SET row_security = off` làm câu đếm ném "query would be affected by row-level security
+policy for table "suppliers"" (⒞ kèm gợi ý NO FORCE).
+
+**Hướng đầu — `row_security = off` trong vòng đánh số — đo và BÁC:** bản đầu đặt `row_security = off` ở phạm vi phiên trước BEGIN của
+mỗi tệp đánh số, so ở cuối tệp, RESET sau COMMIT, kèm một lớp tĩnh cấm migration ghi GUC ấy — một cơ chế đóng cả lớp "RLS lọc im lặng
+trong migration" cho mọi chủ thể, mọi vị từ. Test riêng của nó xanh (cơ chế ở migrate.int; ⒜ ⒝ ⒞ ở hồ sơ N2 ném đúng lỗi RLS), nhưng
+test hồ sơ N3 sẵn có đỏ: chỉ 3 migration được áp. Thăm dò chỉ ra ⑴ `004_audit_chain_functions.sql`, `CREATE FUNCTION audit_append …
+LANGUAGE sql` — kiểm thân hàm (`check_function_bodies`) phân tích và VIẾT LẠI câu dưới vai tạo, RLS áp ở bước viết lại, nên ném dù không
+câu nào đọc hàng; ⑵ tắt kiểm thân hàm cho vai không bỏ qua RLS thì gãy tiếp ở `011_rfq_hardening.sql` — kiểm ban đầu của khoá ngoại
+(`ALTER TABLE … ADD FOREIGN KEY`) chạy một SELECT dưới chủ bảng FORCE và ném. Migration đã áp không sửa được, nên cài mới N3 thành ngõ
+cụt; migration sau này thêm khoá ngoại trên bảng FORCE mà vai deploy sở hữu cũng vậy. Bản đầu lưu thành patch ở vùng nháp, không vào
+kho. Thăm dò thêm: chủ ở N3 tự thu hồi EXECUTE của mình ngay sau 001 ⇒ 011 gãy với 42501 (kiểm khoá ngoại gọi vị từ policy).
+
+**Bản hai (mức phán xét, trước lượt soi 51):** vế phủ loại policy khớp NGUYÊN VĂN `HINH_DANG_CHUAN` khi vai có EXECUTE, áp cho mọi vai
+không phải chính chủ; `tu_sua_duoc = tu_sua_bang OR (vi_tu_loc_het AND tu_cat_execute)`; một lời khuyên chung "gỡ EXECUTE khỏi đường đã
+nêu". Đo cho bản ấy (thăm dò, mỗi đường một giao dịch ROLLBACK): thừa kế chủ hàm ⇒ `REVOKE EXECUTE … FROM <chủ>` dưới chính vai ấy làm nó
+mất EXECUTE, `app_api` vẫn giữ; ADMIN (không INHERIT, không SET) trên chủ hàm cộng EXECUTE cấp thẳng bởi superuser (grantor ghi là chủ) ⇒
+tự cấp thừa kế rồi thu hồi của chủ và của chính nó ⇒ mất EXECUTE; EXECUTE cấp thẳng bởi superuser khi chủ hàm là vai bootstrap ⇒ tự thu
+hồi là no-op; membership nhóm tự cấp (cạnh superuser chỉ-admin không INHERIT) ⇒ tự cắt cạnh của mình ⇒ mất EXECUTE.
+
+**Đo cho các phát hiện của lượt soi 51 (thăm dò, trên bản hai):** ⑴ hồ sơ N3′ — `trien_khai` thừa kế một vai NOLOGIN `zz_chu102` sở hữu
+`suppliers` và `app_current_org_id()`, `999` đang chờ ⇒ `migrate()` NÉM ở lượt phán xét (dòng "(thừa kế quyền chủ bảng zz_chu102) mà policy
+PERMISSIVE phủ nó theo danh sách vai chỉ là policy tenant chuẩn"), `999` được ghi, hàng không đổi; lần hai không tệp chờ vẫn NÉM. ⑵ vai
+deploy là thành viên `app_api` (superuser cấp, cạnh còn nguyên sau BƯỚC 1) cộng một tệp chờ ⇒ TP100 nêu hàng loạt bảng "(qua nhóm app_api —
+… : qua nhóm app_api)" dưới lời khuyên chung "gỡ EXECUTE khỏi đường ấy". ⑶ kiểm khoá ngoại ban đầu — hai bảng FORCE có policy tenant chuẩn,
+một hàng con treo do superuser chèn, chủ NOLOGIN: chủ có EXECUTE ⇒ `ADD FOREIGN KEY` đi qua, `convalidated = true`, hàng treo sống sót;
+chủ không EXECUTE ⇒ 42501; superuser ⇒ 23503.
+
+**Hình dạng (bản ba):** ⒜ Vế phủ loại policy PERMISSIVE PHỤ THUỘC hàm ngữ cảnh (`pg_depend`: `pg_policy` → `pg_proc`) khi vai có EXECUTE
+trên hàm ấy VÀ RLS không coi vai là chủ (`NOT pg_has_role(vai, chủ bảng, 'USAGE')`); không EXECUTE thì câu ném 42501 nên policy vẫn tính
+là phủ; hàm chưa tồn tại thì vế `pg_depend` rỗng. Hằng dùng chung, nên lượt hỏi trước vòng (khoản 100) và lượt phán xét sau vòng cùng thấy
+dòng mới. ⒝ Cột `vi_tu_loc_het` (có policy phủ theo danh sách vai mà dòng vẫn tới ⇒ chính policy ấy bị loại), `duong_execute` (qua PUBLIC,
+quyền chủ hàm, cấp thẳng, qua nhóm) và `loi_ra_execute` — lối ra theo từng đường: cấp thẳng thì REVOKE khỏi vai này; qua PUBLIC thì
+REVOKE FROM PUBLIC; qua nhóm thì gỡ membership của vai này, KHÔNG thu hồi khỏi nhóm, và nhóm thuộc `ROLE_CANH` thì nói thẳng đó là vai ứng
+dụng; quyền chủ hàm thì gỡ membership vào chủ hàm, kèm cảnh báo thu hồi EXECUTE của chủ làm kiểm khoá ngoại ban đầu ném. ⒞ `tu_sua_duoc`
+của dòng khoản 101 = tự cắt được EXECUTE (ba vế trên hàm ngữ cảnh) HOẶC cắt được đường tới quyền trên bảng (vế cạnh membership); hai vế
+quyền chủ bảng chỉ còn tính cho dòng khoản 97. ⒟ Thông điệp: lượt `truoc_vong` nêu đường tới EXECUTE ở từng dòng và lối ra theo đường một
+lần ở cuối; thông điệp sau vòng nói policy phủ theo danh sách vai phụ thuộc hàm ngữ cảnh, và nêu lối ra theo đường; lời khuyên chung cho
+đường tới quyền trên bảng — ở thông điệp sau vòng và ở `migrate.ts` — tách cấp thẳng / qua nhóm; `TU_CHOI_TRUOC_VONG` đổi chữ ("không
+policy PERMISSIVE nào cho nó thấy hàng").
+
+**Test:**
+- **`rls-coverage`, vế ⒥ (lật có chủ đích).** Không EXECUTE ⇒ câu ném 42501, mục im; có EXECUTE ⇒ câu đọc không lỗi, mục nêu SELECT và
+  UPDATE.
+- **`rls-coverage`, `it` khoản 101 (một giao dịch ROLLBACK).** ⒜ EXECUTE cấp thẳng bởi superuser ⇒ hai dòng, đường tới EXECUTE, lối ra
+  REVOKE khỏi vai này, chặn trước vòng; ⒠ policy `USING (true)` vẫn phủ; ⒣ khuôn "đấu thầu kín" phụ thuộc hàm vẫn bị loại; ⒝ nhóm tự cấp,
+  ⒞ thừa kế chủ hàm, ⒟ ADMIN trên chủ hàm ⇒ "cố ý KHÔNG chặn nó"; ⒢ dòng khoản 97 của vai tự cắt được EXECUTE vẫn bị chặn; ⒡ membership nhóm
+  do superuser cấp ⇒ chặn, lối ra không thu hồi khỏi nhóm; ⒦ ADMIN trên vai sở hữu bảng không tha dòng khoản 101; ⒤ vai thừa kế chủ bảng
+  đứng ngoài (khoản 102).
+- **`rls-coverage`, ranh giới khoản 102.** Kiểm khoá ngoại ban đầu dưới chủ FORCE có EXECUTE đánh dấu ràng buộc hợp lệ, hàng con treo sống
+  sót; không EXECUTE ⇒ 42501; superuser ⇒ 23503.
+- **`migrations.int`, `it` khoản 101, hồ sơ N2.** ⒜ từ chối trước vòng — hai khẳng định dữ liệu đứng trước thông điệp (`999` không được
+  ghi, hàng giữ nguyên), thông điệp nêu dòng kèm đường tới EXECUTE và lối ra REVOKE khỏi `trien_khai`; ⒝ gỡ EXECUTE ⇒ không chặn trước vòng,
+  backfill ném 42501, không ghi; ⒝′ thành viên `app_api` ⇒ chặn trước vòng, lối ra "KHÔNG thu hồi EXECUTE khỏi app_api: đó là vai ứng
+  dụng", không lời khuyên nào chứa "FROM app_api"; ⒞ EXECUTE qua nhóm tự cấp ⇒ không chặn trước vòng, `999` đang chờ bị tiêu (ranh giới
+  ghim), phán xét sau vòng nêu dòng kèm "cố ý KHÔNG chặn nó", migration vá lỗi dưới chính vai deploy tới đích; ⒟⑴ chủ bảng FORCE có EXECUTE
+  và ⒟⑵ hồ sơ N3′ ⇒ deploy xanh, backfill bị tiêu (ranh giới khoản 102).
+- **Không đổi, chạy lại:** khoản 97, hai `it` khoản 100, hồ sơ N3, migrate.int, QT3, cổng H19.
+
+**Tự bắt, không phải lượt soi:** ⑴ Hướng `row_security = off` bị chính test hồ sơ N3 sẵn có bác — một test không viết cho vòng này;
+chỉ chạy test mới của vòng thì bản ấy đã đi tiếp. ⑵ Lượt đo trước khi viết của bản đầu chỉ tới pha ⒜, vì ⒜ vốn đã ồn (bằng 42501); tác
+hại thật (⒝ ⒞) được đo bằng một thăm dò riêng ghi cả dữ liệu lẫn thông điệp. ⑶ Soạn lượt đột biến của bản hai chỉ ra ba đột biến không
+khẳng định nào chạm tới — vế loại bỏ điều kiện khớp hình dạng, vế nhóm bỏ grantor, lời khuyên gỡ EXECUTE — nên thêm đối chứng ⒠ ⒡ và hai
+chỗ ghim trước khi chạy. ⑷ Lượt đo trước bản vá của bản ba dừng ở chỗ ghim thông điệp đầu tiên đổi chữ; hành vi trước bản vá của các pha sâu
+hơn (⒝′, ⒟⑵, ⒣, ⒦, ⒤) được đo bằng thăm dò của lượt soi 51 và bằng đột biến M3, M5, M11, M16 trên mã cuối, không bằng chính lượt ấy.
+
+**Đỏ đo được, cô lập (mã cuối, chạy một-một):**
+Hai mươi đột biến trên mã cuối, chạy một-một, không đột biến nào đỏ do lỗi dựng; bước so byte với bản sao lưu sau lượt khớp cả hai tệp đích. M1 bỏ vế loại (bản trước bản vá) ⇒ đỏ ở vế ⒥ có EXECUTE, pha ⒜ của `it` khoản 101 và pha ⒜ hồ sơ N2 (`999` đi qua) · M2 vế loại không hỏi EXECUTE ⇒ đỏ ở vế ⒥ không EXECUTE và pha ⒝ hồ sơ N2 (bị chặn trước vòng thay vì ném 42501) · M3 vế loại không trừ vai mà RLS coi là chủ (bản hai) ⇒ đỏ ở ⒤ và ở ⒟⑵ hồ sơ N3′ (phán xét sau vòng ném) · M4 vế loại không hỏi phụ thuộc ⇒ đỏ ở ⒠ (policy `USING (true)` thôi phủ) · M5 quay về khớp nguyên văn `HINH_DANG_CHUAN` (bản hai) ⇒ đỏ ở ⒣ (khuôn đấu thầu kín im) · M6 `vi_tu_loc_het` luôn false ⇒ đỏ ở thông điệp ⒜ của cả hai test · M7 bỏ vế thừa kế chủ hàm ⇒ đỏ ở ⒞ · M8 bỏ vế ADMIN trên vai thừa kế chủ hàm ⇒ đỏ ở ⒟ · M9 bỏ vế cạnh membership trên đường tới EXECUTE ⇒ đỏ ở ⒝ và ở pha ⒞ hồ sơ N2 (migration vá lỗi bị chặn trước vòng) · M10 vế cạnh không hỏi grantor ⇒ đỏ ở ⒡ và ở pha ⒝′ hồ sơ N2 (`999` bị tiêu dưới thành viên app_api) · M11 dòng khoản 101 lại tính hai vế quyền chủ bảng ⇒ đỏ ở ⒦ · M12 vế tự cắt EXECUTE tha cả dòng khoản 97 ⇒ đỏ ở ⒢ · M13 lượt `truoc_vong` không nêu đường tới EXECUTE ⇒ đỏ ở dòng ⒜ hồ sơ N2 · M14 lượt `truoc_vong` không nêu lối ra ⇒ đỏ ở chỗ ghim lối ra ⒜ · M15 thông điệp sau vòng mất nhánh khoản 101 ⇒ đỏ ở ⒜ của `it` khoản 101 và ⒞ hồ sơ N2 · M16 lối ra đường qua nhóm khuyên thu hồi khỏi nhóm ⇒ đỏ ở ⒡ và ⒝′ · M17 lối ra quên nói nhóm là vai ứng dụng ⇒ đỏ ở ⒝′ · M18 nhãn quyền chủ hàm sai ⇒ đỏ ở ⒞ · M19 thông điệp từ chối trước vòng quay về lời khuyên chung ⇒ đỏ ở ⒝′ · M20 thông điệp sau vòng mất lối ra theo đường ⇒ đỏ ở chỗ ghim lối ra ⒜.
+
+**Ranh giới NÓI RA:** ⑴ Theo phụ thuộc: hàm bọc lấy `app_current_org_id()` lọt; policy phụ thuộc hàm mà vị từ vẫn đúng khi phiên chưa gắn
+tổ chức (vd. `app_current_org_id() IS NULL AND …`) bị tính là không phủ — chiều chặn; hôm nay không policy PERMISSIVE nào như thế (dòng
+ngoại lệ duy nhất đọc `current_setting` trực tiếp). ⑵ Vai mà RLS coi là chủ (chính chủ; thừa kế chủ trên bảng FORCE) đứng ngoài — khoản
+102: backfill dưới N3 và N3′ vẫn bị tiêu, và kiểm khoá ngoại ban đầu dưới chủ FORCE có EXECUTE đánh dấu ràng buộc hợp lệ mà không kiểm hàng
+(đo, test ghim). ⑶ Dòng tự sửa được không bị chặn trước vòng — backfill cùng lượt bị tiêu (test ghim ⒞), cùng hạng ranh giới S1.57. ⑷ Xấp
+xỉ theo CẢ HAI chiều: cắt một đường khi còn đường khác (EXECUTE cấp thẳng cộng một nhóm tự cấp) tính là tự sửa được — chiều bỏ qua; ADMIN
+trên một vai giữ GRANT OPTION đã cấp EXECUTE thẳng thì không đọc — chiều chặn; EXECUTE tự cấp nhờ GRANT OPTION không tính là tự cắt được.
+⑸ Backfill theo tổ chức bằng `SET LOCAL app.org_id` hay `set_config` dưới vai deploy thường có EXECUTE nay bị chặn — chạy dưới vai mà RLS
+không áp, với điều kiện org_id tường minh. ⑹ Lời cảnh báo "thu hồi EXECUTE của chủ hàm làm kiểm khoá ngoại ban đầu ném" lấy từ phép đo hồ sơ
+N3 và phép đo ⑶ ở trên, chưa đo trên từng cấu hình chủ hàm khác.
+
+### Lượt soi đối kháng 51 (trên bản hai): 0 CAO, 2 NẶNG, 4 NHẸ, 2 INFO — mọi phát hiện có xử lý trong bản ba; hai đề xuất không theo, lý do trong bảng
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Hồ sơ N3′ (vai deploy thừa kế một vai NOLOGIN sở hữu cả bảng lẫn hàm, bảng FORCE): bản hai đỏ ở mọi lần deploy mà backfill vẫn bị tiêu — vế thừa kế chủ bảng tính là tự sửa được nên không chặn trước vòng, còn lối ra được chỉ (gỡ EXECUTE của chủ; thêm policy) thì gãy hay không qua cổng migration-shape và [CR1]; ranh giới 101/102 cắt theo OID chủ, không theo cơ chế RLS | **đúng — đo ⑴** | vai mà RLS coi là chủ đứng ngoài vế loại — cùng lớp với N3, dồn vào khoản 102; với dòng khoản 101, hai vế quyền chủ bảng không tính là tự sửa được; test ⒟⑵ (migrations.int), ⒤ và ⒦ (rls-coverage); đột biến M3, M11. **Không theo đề xuất chặn N3′ trước vòng**: chặn N3′ mà để N3 im là đúng sự lệch người soi chỉ ra, còn chặn cả hai là quyết định về mô hình triển khai mà khoản 102 để ngỏ (lối ra duy nhất đã đo là chạy migrate() dưới vai BYPASSRLS) |
+| NẶNG-2 | NẶNG | Vai deploy là thành viên app_api (superuser cấp): dòng "qua nhóm app_api" với lời khuyên "gỡ EXECUTE khỏi đường ấy" và "REVOKE khỏi đúng grantee ấy" dẫn tới thu hồi khỏi app_api — ứng dụng ném 42501; TP100 còn che nguyên nhân gốc (membership lạ) | **đúng — đo ⑵** | cột `loi_ra_execute` — lối ra theo từng đường, đường qua nhóm KHÔNG thu hồi khỏi nhóm, nhóm thuộc `ROLE_CANH` thì nói thẳng là vai ứng dụng và nhắc mục membership; lời khuyên chung cho đường tới quyền trên bảng tách cấp thẳng / qua nhóm ở cả `migrate.ts` và thông điệp sau vòng; test ⒝′ ghim; đột biến M16, M17, M19 |
+| NHẸ-3 | NHẸ | Dòng tự sửa được qua vế EXECUTE vẫn để backfill cùng lượt bị tiêu, không test ghim; vế cạnh là xấp xỉ (EXECUTE cấp thẳng cộng một nhóm tự cấp) | đúng — đọc; ⒞ đo | ranh giới ghim: ⒞ giữ `999` đang chờ — không chặn trước vòng, `999` được ghi, hàng không đổi; chú thích nói xấp xỉ theo cả hai chiều. **Không theo đề xuất hỏi lại hằng trong giao dịch của từng tệp**: nó lật ranh giới đã chấp nhận của S1.57 (dòng tự sửa được không bị chặn) cho mọi dòng, không riêng khoản 101 — để một vòng riêng nếu cần |
+| NHẸ-4 | NHẸ | Ba đột biến sống: bỏ `vi_tu_loc_het AND`; `polqual` → `polwithcheck`; vế `f.oid IS NOT NULL` không tới được (ADR-028 §2⑷) | đúng — đọc | ⒢ dòng khoản 97 của vai tự cắt được EXECUTE vẫn bị chặn (đột biến M12); vế loại nay theo `pg_depend` nên không còn so `polqual`; bỏ vế `f.oid IS NOT NULL` |
+| NHẸ-5 | NHẸ | Khớp nguyên văn hỏng theo hướng IM với hình dạng ngoại lệ đã tiên liệu ("đấu thầu kín") | đúng — đọc | vế loại theo phụ thuộc `pg_depend`; ⒣ khuôn đấu thầu kín bị loại (đột biến M5); ranh giới: hàm bọc vẫn lọt |
+| NHẸ-6 | NHẸ | Tách khoản 102 nói thiếu: ⒜ theo 005, N3 là "role deploy thật" nên EXECUTE và backfill rỗng là mặc định; ⒝ kiểm khoá ngoại ban đầu dưới chủ FORCE có EXECUTE quét 0 hàng và đánh dấu ràng buộc hợp lệ (cần đo); ⒞ STATE chưa có hàng 102 | ⒝ **đúng — đo ⑶** | hàng 102 nêu N3 là hồ sơ tham chiếu theo 005, gồm N3′ và kiểm khoá ngoại rỗng; test ghim ranh giới khoản 102 |
+| INFO-7 | INFO | Backfill theo tổ chức với id ghi cứng nay bị chặn khi vai deploy có EXECUTE, chưa ghi giá | đúng — đọc | ghi giá ở ranh giới ⑸ và ADR-036 hàng 27 |
+| INFO-8 | INFO | Không đọc `grantor` của mục ACL ⇒ có xấp xỉ về phía CHẶN, trái lời khai "ba vế đều xấp xỉ về phía bỏ qua" | phỏng đoán, ca gượng ép | sửa lời khai: xấp xỉ theo cả hai chiều (ranh giới ⑷); không thêm vế |
+
+**Điều đáng mang sang vòng sau:** ⑴ Một cơ chế đóng "cả lớp" phải chạy qua MỌI hồ sơ triển khai đã có test trước khi tin —
+`row_security = off` đúng với DML, nhưng PostgreSQL áp RLS cả ở kiểm thân hàm SQL và kiểm ban đầu của khoá ngoại, hai chỗ không đọc
+hàng nào. ⑵ Một vế lọc mới trên lược đồ thật cho ra dòng ở những đường mà thông điệp và `tu_sua_duoc` chưa từng đo (nhóm app_api, vai chủ
+NOLOGIN) — phải chạy vế ấy qua các hồ sơ vai deploy có thật trước khi viết lời khuyên. ⑶ Lời khuyên sửa phải rẽ theo đường: một câu chung
+"REVOKE khỏi đường ấy" đúng cho đường cấp thẳng và PHÁ ứng dụng ở đường qua nhóm. ⑷ Hồ sơ N3 là role deploy thật theo 005; mọi bản vá quanh
+RLS của vai deploy phải đo ở đó — khoản 102 là hệ quả trực tiếp của khoản 91 và chưa có hình dạng sửa không tạo ngõ cụt.
