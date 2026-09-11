@@ -565,12 +565,18 @@ DECLARE
 
   -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
   -- nó xuất hiện ở cả vế so khớp lẫn (tương lai) thông báo lỗi.
+  -- [S1.55 / lượt soi 48 CAO-1] PUBLIC nhận theo OID 0, vai thật qua quote_ident. Bản cũ `coalesce(rolname, 'PUBLIC')` cho một
+  -- vai THẬT tên "PUBLIC" ra cùng chuỗi với PUBLIC — PostgreSQL 16 nhận `CREATE ROLE "PUBLIC"` (chỉ `public` chữ thường là tên
+  -- dành riêng). Đo: `ALTER POLICY vendor_bids_khach ON vendor_bids TO "PUBLIC"` ⇒ policy RESTRICTIVE thôi áp cho app_api (bảng
+  -- thử: đếm 3 thay vì 0) mà 83⑴ im vì bảy cột vẫn khớp. quote_ident cho `"PUBLIC"` (có nháy) và giữ nguyên tên thường
+  -- (`app_api`), nên mọi dòng khai hiện có không đổi (đo trên lược đồ thật); tên chứa dấu phẩy cũng hết mơ hồ. Cùng khuôn CASE
+  -- của CAU_QUYEN_BANG_SO_SAI và nhánh ⒟. Bản ở db/rls-coverage.int.test.ts (CAU_VAI_TRO) có cổng đòi khớp.
   BIEU_THUC_VAI_TRO constant text :=
     $q$array_to_string(ARRAY(
-         SELECT coalesce(r.rolname::text, 'PUBLIC')
+         SELECT CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(r.rolname) END
            FROM unnest(p.polroles) AS o(oid)
            LEFT JOIN pg_roles r ON r.oid = o.oid
-          ORDER BY coalesce(r.rolname::text, 'PUBLIC') COLLATE "C"), ',')$q$;
+          ORDER BY (CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(r.rolname) END) COLLATE "C"), ',')$q$;
 
   -- [vòng fix 1 — I2] Ngoại lệ viết tay cho hai thứ KHÔNG có cửa kỹ thuật: MATERIALIZED VIEW
   -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. Tên viết đủ schema
@@ -2553,11 +2559,19 @@ $ham$;
   --        — thứ bắt nó là ⑵ (quyền của app_api không còn policy nào phủ);
   --    (b1) RESTRICTIVE khuôn 027: `<bảng>_khach`, FOR ALL, PUBLIC, USING = WITH CHECK = "không phải
   --        phiên khách" — tự nó không mở thêm hàng nào cho ai, nên hợp lệ toàn cục không cần khai;
-  --    (b2) RESTRICTIVE khác — SÁU cột nguyên văn ở POLICY_RESTRICTIVE_KHAI (tám biến thể của 027 nới
+  --    (b2) RESTRICTIVE khác — ~~SÁU~~ [S1.55] BẢY cột nguyên văn, thêm `nspname` (khoản 98), ở POLICY_RESTRICTIVE_KHAI (tám biến thể của 027 nới
   --        theo một cột cho phiên khách); [CR1] cố ý không soi RESTRICTIVE vì "chỉ thu hẹp" — đúng cho câu
   --        hỏi RÒ, sai cho câu hỏi IM LẶNG: `AS RESTRICTIVE FOR UPDATE USING (false)` làm mọi UPDATE của
   --        app_api ra 0 hàng không lỗi và [CR1] xanh (đo, S1.32);
-  --    (c) mọi policy khác (PERMISSIVE trên bảng RLS NGOÀI tenant, …) — BẢY cột ở POLICY_KHAC_KHAI.
+  --    (c) mọi policy khác (PERMISSIVE trên bảng RLS NGOÀI tenant, …) — ~~BẢY~~ [S1.55] TÁM cột, thêm `nspname`, ở POLICY_KHAC_KHAI.
+  --        [lượt soi 48 NẶNG-3] TRỪ PERMISSIVE thuộc VI_TU_PERMISSIVE_CR1_SE_SOI — không khai được, xem hằng ấy.
+  --    [S1.55 / khoản nợ 98] (b2) và (c) khớp theo (lược đồ, bảng, policy). Bản trước ghim `public` ở vị từ và hai danh sách
+  --    không có cột lược đồ, nên policy trên một bảng RLS ngoài `public` — bảng ấy khai được ở 83⑶ theo (nspname, relname) —
+  --    bị nêu mà khai không cứu được: đo, cả PERMISSIVE, RESTRICTIVE lẫn RESTRICTIVE đúng khuôn 027, là ngõ cụt ADR-028 §3.
+  --    Gỡ ghim mà KHÔNG thêm cột thì một dòng khai cho `public.x` che luôn policy cùng tên trên `zz.x` — cột lược đồ là bắt
+  --    buộc, không phải trang trí — đo: bỏ vế lược đồ ở (b2) hay (c) thì dòng khai của `zz98` che policy cùng tên của `zz98b`.
+  --    (b1) vẫn chỉ nhận khuôn 027 ở `public`, nơi 027 dựng nó (đọc: 027 chỉ dựng `<bảng>_khach` ở public); ngoài `public` khuôn ấy
+  --    đi đường khai (b2) — [lượt soi 48 NẶNG-1/2] cổng ở rls-coverage nay soi gương đúng vị từ (b1) và sinh được NULL, nên lối ấy đi được.
   --    Đỏ cả hai chiều: một dòng khai mà CSDL không còn policy như thế cũng chặn deploy.
   --    GIÁ (ADR-036 §4 chỉ nhận ở test, nay ở cả hardening): biểu thức khai NGUYÊN VĂN `pg_get_expr` —
   --    đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại biểu thức. Cố ý.
@@ -2582,27 +2596,39 @@ $ham$;
   -- xuống dòng là LF ở mọi máy. [lượt soi 29, INFO-10]
   POLICY_RESTRICTIVE_KHAI constant text :=
     $q$(VALUES
-         ('bid_receipts', 'bid_receipts_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
+         ('public', 'bid_receipts', 'bid_receipts_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
    FROM vendor_bid_versions v)))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
    FROM vendor_bid_versions v)))'),
-         ('guest_sessions', 'guest_sessions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))'),
-         ('rfq_invitations', 'rfq_invitations_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))'),
-         ('rfq_items', 'rfq_items_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
-         ('rfq_key_material', 'rfq_key_material_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
-         ('rfq_packages', 'rfq_packages_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
-         ('vendor_bid_versions', 'vendor_bid_versions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_id IN ( SELECT b.id
+         ('public', 'guest_sessions', 'guest_sessions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))'),
+         ('public', 'rfq_invitations', 'rfq_invitations_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))'),
+         ('public', 'rfq_items', 'rfq_items_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
+         ('public', 'rfq_key_material', 'rfq_key_material_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
+         ('public', 'rfq_packages', 'rfq_packages_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
+         ('public', 'vendor_bid_versions', 'vendor_bid_versions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_id IN ( SELECT b.id
    FROM vendor_bids b)))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_id IN ( SELECT b.id
    FROM vendor_bids b)))'),
-         ('vendor_bids', 'vendor_bids_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (invitation_id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (invitation_id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))')
-       ) AS g(bang, polname, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
+         ('public', 'vendor_bids', 'vendor_bids_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (invitation_id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (invitation_id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))')
+       ) AS g(nspname, bang, polname, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
 
   POLICY_KHAC_KHAI constant text :=
     $q$(VALUES
-         ('caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
-       ) AS k(bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
+         ('public', 'caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
+       ) AS k(nspname, bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
 
   BANG_RLS_NGOAI_TENANT_KHAI constant text :=
     $q$(VALUES ('public', 'caller_rate_limits')) AS b(nspname, relname)$q$;
+
+  -- [S1.55 / lượt soi 48 NẶNG-3] PERMISSIVE trên bảng mà [CR1] SẼ soi nếu nó ở public — con cháu của bảng tenant (VI_TU_CAN_CO_RLS)
+  -- hay bảng có cột org_id — KHÔNG khai được ở (c). Bản đầu S1.55 gỡ ghim public cho (c) và mở luôn một lối lách [CR1]. Đo: lá
+  -- `luu98.zz98pm_1` (PARTITION OF public.zz98pm, ngoài public) mang `USING (true)` cùng một dòng (c) ⇒ 83⑴ im, bảy mục kề im
+  -- ([CR1], 83⑵, 83⑶, 94, 85, 86, 82⑴), app_api gắn tổ chức A đọc THẲNG lá ra 2 hàng của hai tổ chức (qua cha: 1); bảng có org_id
+  -- ngoài public bật RLS, khai kép 83⑶ + (c) ⇒ cũng 2. Bản HEAD không có lối khai nào — fail-closed. Lối ra: policy đặt trên
+  -- bảng cha (khuôn dự án: lá không policy), hay chuyển bảng về public để [CR1] soi hình dạng. Bảng chỉ có khoá ngoại tới bảng
+  -- tenant (khoản 86) KHÔNG thuộc vế này: [CR1] không soi nó cả ở public, nên khai kép 83⑶ + (c) là cùng chuẩn với public.
+  -- RESTRICTIVE không thuộc vế này (chỉ thu hẹp). Policy thuộc vế (a) không tới được đây. Hôm nay lược đồ thật không có policy
+  -- nào thuộc vế này (đo). Hai chỗ dùng trong CAU_POLICY_LOP_SAI: thông điệp và vế chặn của (c).
+  VI_TU_PERMISSIVE_CR1_SE_SOI constant text :=
+    $q$(p.polpermissive AND (($q$ || VI_TU_CAN_CO_RLS || $q$) OR $q$ || pg_catalog.format(MAU_VI_TU_CO_ORG_ID, 'c') || $q$))$q$;
 
   CAU_POLICY_LOP_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '.' || p.polname || ': policy '
@@ -2610,10 +2636,15 @@ $ham$;
               || ' không thuộc lớp nào (khoản 83⑴) — lệnh=' || p.polcmd::text || ' vai=' || $q$ || BIEU_THUC_VAI_TRO || $q$
               || ' USING: ' || coalesce(pg_get_expr(p.polqual, c.oid), '(không có)')
               || ' | WITH CHECK: ' || coalesce(pg_get_expr(p.polwithcheck, c.oid), '(không có)')
-              || '. Một RESTRICTIVE chưa khai có thể là USING (false): câu ghi của app_api ra 0 hàng không lỗi. '
-                 'Sửa: một migration mới sửa/xoá policy, HOẶC khai đủ sáu cột vào POLICY_RESTRICTIVE_KHAI '
-                 '(RESTRICTIVE) / bảy cột vào POLICY_KHAC_KHAI (khác) trong chính file này kèm bản ở '
-                 'db/rls-coverage.int.test.ts — cổng ở đó đòi hai bản khớp.' AS mo_ta
+              || CASE WHEN $q$ || VI_TU_PERMISSIVE_CR1_SE_SOI || $q$
+                      THEN '. Bảng mang dữ liệu tenant mà [CR1] không soi ở đây (con cháu của bảng tenant, hay có cột org_id, ngoài '
+                           'vế (a)): PERMISSIVE trên nó KHÔNG khai được (khoản 98, lượt soi 48) — một dòng khai sẽ là một đường đọc '
+                           'thẳng xuyên tổ chức. Sửa: một migration mới đặt policy trên bảng cha (lá không policy) hay chuyển bảng về '
+                           'public để [CR1] soi hình dạng, rồi xoá policy này.'
+                      ELSE '. Một RESTRICTIVE chưa khai có thể là USING (false): câu ghi của app_api ra 0 hàng không lỗi. '
+                           'Sửa: một migration mới sửa/xoá policy, HOẶC khai đủ bảy cột, có lược đồ, vào POLICY_RESTRICTIVE_KHAI '
+                           '(RESTRICTIVE) / tám cột vào POLICY_KHAC_KHAI (khác) trong chính file này kèm bản ở '
+                           'db/rls-coverage.int.test.ts — cổng ở đó đòi hai bản khớp.' END AS mo_ta
          FROM pg_policy p
          JOIN pg_class c ON c.oid = p.polrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -2629,14 +2660,15 @@ $ham$;
                    AND pg_get_expr(p.polqual, c.oid) = $q$ || KHACH_KHONG_PHIEN_LIT || $q$
                    AND pg_get_expr(p.polwithcheck, c.oid) = $q$ || KHACH_KHONG_PHIEN_LIT || $q$)
           AND NOT EXISTS (SELECT 1 FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
-                           WHERE NOT p.polpermissive AND n.nspname = 'public'
+                           WHERE NOT p.polpermissive AND g.nspname = n.nspname
                              AND g.bang = c.relname AND g.polname = p.polname
                              AND g.lenh = p.polcmd::text
                              AND g.vai_tro = $q$ || BIEU_THUC_VAI_TRO || $q$
                              AND g.bieu_thuc_using IS NOT DISTINCT FROM pg_get_expr(p.polqual, c.oid)
                              AND g.bieu_thuc_with_check IS NOT DISTINCT FROM pg_get_expr(p.polwithcheck, c.oid))
           AND NOT EXISTS (SELECT 1 FROM $q$ || POLICY_KHAC_KHAI || $q$
-                           WHERE n.nspname = 'public'
+                           WHERE NOT $q$ || VI_TU_PERMISSIVE_CR1_SE_SOI || $q$
+                             AND k.nspname = n.nspname
                              AND k.bang = c.relname AND k.polname = p.polname
                              AND k.loai = CASE WHEN p.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END
                              AND k.lenh = p.polcmd::text
@@ -2647,25 +2679,25 @@ $ham$;
        -- Chiều ngược chỉ có nghĩa khi BẢNG tồn tại: migrations.int.test.ts migrate() những tập migration RÚT GỌN
        -- (tới 003, tới 0xx…) mà hardening chạy ở mọi lần — đo: bản đầu kêu "khai thiu" về 027/042 chưa có
        -- và làm 13 test đỏ. Cùng khuôn điều kiện áp dụng `to_regclass(...) IS NOT NULL` của mục caller_rate_limits.
-       SELECT 'khai public.' || g.bang || '.' || g.polname || ' (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy '
-              'đúng sáu cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
+       SELECT 'khai ' || g.nspname || '.' || g.bang || '.' || g.polname || ' (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy '
+              'đúng bảy cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
-        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = 'public' AND zc.relname = g.bang)
+        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = g.nspname AND zc.relname = g.bang)
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
-                           WHERE n.nspname = 'public' AND c.relname = g.bang AND p.polname = g.polname
+                           WHERE n.nspname = g.nspname AND c.relname = g.bang AND p.polname = g.polname
                              AND NOT p.polpermissive AND p.polcmd::text = g.lenh
                              AND $q$ || BIEU_THUC_VAI_TRO || $q$ = g.vai_tro
                              AND pg_get_expr(p.polqual, c.oid) IS NOT DISTINCT FROM g.bieu_thuc_using
                              AND pg_get_expr(p.polwithcheck, c.oid) IS NOT DISTINCT FROM g.bieu_thuc_with_check)
        UNION ALL
-       SELECT 'khai public.' || k.bang || '.' || k.polname || ' (' || k.loai || ', khoản 83⑴) mà CSDL không có policy '
-              'đúng bảy cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
+       SELECT 'khai ' || k.nspname || '.' || k.bang || '.' || k.polname || ' (' || k.loai || ', khoản 83⑴) mà CSDL không có policy '
+              'đúng tám cột như thế — dòng khai thiu, hoặc policy đã bị đổi/xoá sau deploy' AS mo_ta
          FROM $q$ || POLICY_KHAC_KHAI || $q$
-        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = 'public' AND zc.relname = k.bang)
+        WHERE EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace WHERE zn.nspname = k.nspname AND zc.relname = k.bang)
           AND NOT EXISTS (SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
                             JOIN pg_namespace n ON n.oid = c.relnamespace
-                           WHERE n.nspname = 'public' AND c.relname = k.bang AND p.polname = k.polname
+                           WHERE n.nspname = k.nspname AND c.relname = k.bang AND p.polname = k.polname
                              AND (CASE WHEN p.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END) = k.loai
                              AND p.polcmd::text = k.lenh
                              AND $q$ || BIEU_THUC_VAI_TRO || $q$ = k.vai_tro
@@ -2744,8 +2776,9 @@ $ham$;
   -- [lượt soi 46 — bản hai] ⑴ Bảng CON (phân vùng hay INHERITS) của một cha bật RLS đứng ngoài (NẶNG-1). Đo: chủ bảng đọc QUA
   -- CHA ra 2 hàng nhờ policy của cha, đọc THẲNG lá ra 0 và UPDATE thẳng lá báo 0 hàng. Bản đầu nêu oan mọi lá phân vùng của
   -- bảng tenant dưới chủ thường — đúng hồ sơ sản xuất — trong khi dự án đã chọn khuôn "policy đặt trên cha, lá không policy"
-  -- ở ba lớp ([CR1] nguồn (i), migration-shape, test phân vùng); lá ngoài `public` còn thành ngõ cụt vì 83⑴ nêu mọi policy
-  -- ngoài `public` mà không có đường khai (khoản 98). Cha vẫn bị mục này soi; DML THẲNG lên lá là ranh giới nói ra.
+  -- ở ba lớp ([CR1] nguồn (i), migration-shape, test phân vùng); ~~lá ngoài `public` còn thành ngõ cụt vì 83⑴ nêu mọi policy
+  -- ngoài `public` mà không có đường khai (khoản 98)~~ [S1.55] ngõ cụt ấy đóng ở khoản 98: policy ngoài `public` nay khai được
+  -- kèm lược đồ. Cha vẫn bị mục này soi; DML THẲNG lên lá là ranh giới nói ra.
   -- ⑵ Chỉ lệnh mà chủ bảng CÒN QUYỀN (NHẸ-2), cùng chuẩn 83⑵ xét quyền đã cấp. Đo: chủ tự `REVOKE UPDATE, DELETE` thì
   -- `has_table_privilege(chủ, bảng, 'UPDATE')` ra false và UPDATE của chủ ném 42501 — ồn, không im. Bản đầu đòi policy cho
   -- cả lệnh ấy, và thông điệp gợi `TO PUBLIC` trước tiên — lối ra phủ LUÔN mọi vai ứng dụng.

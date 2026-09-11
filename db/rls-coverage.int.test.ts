@@ -155,13 +155,15 @@ interface HangPhuRls {
 
 /**
  * [vòng fix 3 — I2] Bản sao TypeScript của BIEU_THUC_VAI_TRO trong hardening.always.sql.
+ * [S1.55 / lượt soi 48 CAO-1] PUBLIC theo OID 0, vai thật qua quote_ident — vai thật tên "PUBLIC" không còn trùng chuỗi với
+ * PUBLIC. Cổng HAI BẢN KHỚP đòi bản này bằng hằng ở hardening.
  * COLLATE "C" để thứ tự không phụ thuộc collation của database.
  */
 const CAU_VAI_TRO =
-  "       array_to_string(ARRAY(SELECT coalesce(r.rolname::text, 'PUBLIC') " +
+  "       array_to_string(ARRAY(SELECT CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(r.rolname) END " +
   "                               FROM unnest(p.polroles) AS o(oid) " +
   "                               LEFT JOIN pg_roles r ON r.oid = o.oid " +
-  "                              ORDER BY coalesce(r.rolname::text, 'PUBLIC') COLLATE \"C\"), ',') " +
+  "                              ORDER BY (CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(r.rolname) END) COLLATE \"C\"), ',') " +
   "         AS vai_tro, ";
 
 interface HangPolicy {
@@ -1728,8 +1730,9 @@ const veGuest = (cot: string, thietLap: string): string =>
 interface PolicyRestrictiveKhai {
   readonly lenh: string;
   readonly vai_tro: string;
-  readonly using: string;
-  readonly with_check: string;
+  /** [S1.55 / lượt soi 48 NẶNG-2] `null` = policy không có vế ấy (FOR SELECT/DELETE không WITH CHECK, FOR INSERT không USING). */
+  readonly using: string | null;
+  readonly with_check: string | null;
 }
 
 /**
@@ -1890,7 +1893,7 @@ describe("[S1.32 / khoản nợ 76] RLS như một cơ chế làm câu ghi trả
     } finally {
       await don();
     }
-  });
+  }, 180000); // [S1.55] hạn 180 s như khuôn S1.40 — gọi migrate() dưới tải song song của evidence. Đo S1.55: test này quá hạn 30019 ms (chạy riêng 9339 ms) và kéo test câu phán xét đỏ dây chuyền; hardening HEAD, bản đầu và bản hai cùng ~1,2 s mỗi migrate() — không phải hồi quy
 
   it("[INV-F1] PHỦ LỆNH: mọi quyền SELECT/INSERT/UPDATE/DELETE đã cấp cho app_api/app_unseal trên bảng RLS đều có policy PERMISSIVE phủ — mặc-định-từ-chối của RLS là 0 hàng không lỗi", async () => {
     const { rows } = await db.pool.query<{ ten_bang: string; vai: string; quyen: string; co_policy: boolean }>(CAU_PHU_LENH);
@@ -1971,35 +1974,85 @@ const HARDENING_SQL = readFileSync(`${MIGRATIONS_DIR}/hardening.always.sql`, "ut
 /** [S1.39] Bộ giải hằng nay ở `db/hardening-hang.ts` (dùng chung với `hardening-suy-tu-tinh-chat.int.test.ts`). */
 const docHangHardening = (ten: string): string => docHangHardeningTu(HARDENING_SQL, ten);
 
-const lit = (v: string): string => `'${v.replaceAll("'", "''")}'`;
+/** [S1.55 / lượt soi 48 NẶNG-2] `null` sinh `NULL` — hardening so bằng IS NOT DISTINCT FROM, nên policy một vế khai được. */
+const lit = (v: string | null): string => (v === null ? "NULL" : `'${v.replaceAll("'", "''")}'`);
 
-/** Policy KHÁC (không PERMISSIVE-trên-tenant, không RESTRICTIVE): bảy cột nguyên văn — bản ở hardening phải bằng. */
-const POLICY_KHAC_DA_KHAI: readonly (readonly [string, string, string, string, string, string, string])[] = [
-  ["caller_rate_limits", "caller_rate_limits_khach", "PERMISSIVE", "*", "PUBLIC", KHACH_NULL, KHACH_NULL],
+/** Policy KHÁC (không PERMISSIVE-trên-tenant, không RESTRICTIVE): ~~bảy~~ [S1.55] tám cột nguyên văn, cột đầu là lược đồ — bản ở hardening phải bằng. */
+type DongKhac = readonly [string, string, string, string, string, string, string | null, string | null];
+const POLICY_KHAC_DA_KHAI: readonly DongKhac[] = [
+  ["public", "caller_rate_limits", "caller_rate_limits_khach", "PERMISSIVE", "*", "PUBLIC", KHACH_NULL, KHACH_NULL],
 ];
+
+/** [S1.55 / lượt soi 48 INFO-2] Khoá `lược đồ.bảng.policy` phải đúng ba phần — tên chứa dấu chấm làm split gán sai cột. */
+const tachKhoa = (khoa: string): [string, string, string] => {
+  const phan = khoa.split(".");
+  if (phan.length !== 3) throw new Error(`khoá khai phải đúng ba phần lược đồ.bảng.policy: ${khoa}`);
+  return [phan[0]!, phan[1]!, phan[2]!];
+};
+
+/** [S1.55 / lượt soi 48 NẶNG-1] ẢNH GƯƠNG đúng vị từ (b1) của CAU_POLICY_LOP_SAI: public, `<bảng>_khach`, ALL, PUBLIC, hai vế KHACH_NULL. */
+const laKhuonB1 = (khoa: string, k: PolicyRestrictiveKhai): boolean => {
+  const [nspname, bang, polname] = tachKhoa(khoa);
+  return (
+    nspname === "public" && polname === `${bang}_khach` && k.lenh === "*" && k.vai_tro === "PUBLIC" &&
+    k.using === KHACH_NULL && k.with_check === KHACH_NULL
+  );
+};
+
+/** [S1.55 / lượt soi 48 NHẸ-3] Thứ tự theo bộ (lược đồ, bảng, policy), trả 0 khi bằng — không phụ thuộc thứ tự đầu vào. */
+const soBo = (a: readonly (string | null)[], b: readonly (string | null)[]): number => {
+  for (let i = 0; i < 3; i++) {
+    const x = String(a[i]);
+    const y = String(b[i]);
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+};
+
+/**
+ * [S1.55 / lượt soi 48, mang sang ⑵] Bộ sinh DUY NHẤT của hai khối khai của 83⑴ — cổng HAI BẢN KHỚP và test khoản 98 cùng dùng,
+ * nên một lối khai mà bộ sinh không biểu diễn được (NULL, khuôn 027 ngoài public, nhiều policy trên một bảng) lộ ra ở test.
+ */
+const khoiRestrictiveTu = (dong: readonly (readonly [string, PolicyRestrictiveKhai])[]): string =>
+  "(VALUES\n" +
+  dong
+    .filter(([khoa, k]) => !laKhuonB1(khoa, k))
+    .map(([khoa, k]) => [...tachKhoa(khoa), k.lenh, k.vai_tro, k.using, k.with_check])
+    .sort(soBo)
+    .map((r) => "         (" + r.map(lit).join(", ") + ")")
+    .join(",\n") +
+  "\n       ) AS g(nspname, bang, polname, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
+const khoiKhacTu = (dong: readonly DongKhac[]): string =>
+  "(VALUES\n" +
+  [...dong]
+    .sort(soBo)
+    .map((r) => "         (" + r.map(lit).join(", ") + ")")
+    .join(",\n") +
+  "\n       ) AS k(nspname, bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
 
 describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có mục hardening", () => {
   it("[INV-F1] HAI BẢN KHỚP: POLICY_RESTRICTIVE_KHAI trong hardening bằng các biến thể ngoài khuôn chuẩn của POLICY_RESTRICTIVE_DA_KHAI; POLICY_KHAC_KHAI và BANG_RLS_NGOAI_TENANT_KHAI bằng bản ở đây", () => {
-    // Khuôn chuẩn (b1) — `<bảng>_khach`, ALL, PUBLIC, hai vế = "không phải phiên khách" — hardening nhận
-    // theo TÍNH CHẤT, không cần khai; chỉ tám biến thể nới theo cột mới phải khai đủ sáu cột.
-    const bienThe = Object.entries(POLICY_RESTRICTIVE_DA_KHAI)
-      .filter(([, k]) => k.using !== KHACH_NULL || k.with_check !== KHACH_NULL)
-      .map(([khoa, k]) => {
-        const [, bang, polname] = khoa.split(".");
-        return [bang!, polname!, k.lenh, k.vai_tro, k.using, k.with_check] as const;
-      })
-      .sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    expect(bienThe.length, "027 nới tám bảng khách").toBe(8);
-    const khoiRestrictive =
-      "(VALUES\n" + bienThe.map((r) => "         (" + r.map(lit).join(", ") + ")").join(",\n") +
-      "\n       ) AS g(bang, polname, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
+    // Khuôn chuẩn (b1) — `public.<bảng>_khach`, ALL, PUBLIC, hai vế = "không phải phiên khách" — hardening nhận theo TÍNH CHẤT,
+    // không cần khai; mọi RESTRICTIVE khác (hôm nay: tám biến thể nới theo cột) phải khai đủ ~~sáu~~ [S1.55] bảy cột, có lược đồ.
+    // [lượt soi 48 NẶNG-1] Bộ lọc là ẢNH GƯƠNG đúng vị từ (b1) (laKhuonB1) — bản cũ gạt MỌI mục có hai vế KHACH_NULL bất kể lược
+    // đồ, tên, lệnh, vai, nên khuôn 027 ngoài public không khai được qua cổng; số tám cứng cũng bỏ — phép bằng với hằng ở hardening
+    // đã chống rỗng ruột.
+    const khoiRestrictive = khoiRestrictiveTu(Object.entries(POLICY_RESTRICTIVE_DA_KHAI));
     // [lượt soi 29, NHẸ-5] so với CHÍNH hằng (qua bộ giải), không phải văn bản thô cả tệp — một bản sao thiu
     // trong chú thích không thoả được cổng này.
     expect(docHangHardening("POLICY_RESTRICTIVE_KHAI"), "POLICY_RESTRICTIVE_KHAI phải BẰNG bản sinh từ test").toBe(khoiRestrictive);
-    const khoiKhac =
-      "(VALUES\n" + POLICY_KHAC_DA_KHAI.map((r) => "         (" + r.map(lit).join(", ") + ")").join(",\n") +
-      "\n       ) AS k(bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)";
-    expect(docHangHardening("POLICY_KHAC_KHAI"), "POLICY_KHAC_KHAI phải BẰNG bản ở test").toBe(khoiKhac);
+    expect(docHangHardening("POLICY_KHAC_KHAI"), "POLICY_KHAC_KHAI phải BẰNG bản ở test").toBe(khoiKhacTu(POLICY_KHAC_DA_KHAI));
+    // [S1.55 / lượt soi 48 CAO-1] bản TypeScript của biểu thức vai phải bằng hằng ở hardening, so sau khi chuẩn hoá khoảng trắng.
+    const chuanHoa = (x: string): string => x.replace(/\s+/gu, " ").replace(/\( /gu, "(").replace(/ \)/gu, ")").trim();
+    expect(chuanHoa(CAU_VAI_TRO.replace(/AS vai_tro, $/u, "")), "CAU_VAI_TRO phải BẰNG BIEU_THUC_VAI_TRO").toBe(
+      chuanHoa(docHangHardening("BIEU_THUC_VAI_TRO")),
+    );
+    // [lượt soi 48 NHẸ-3, INFO-2] bộ sinh không phụ thuộc thứ tự đầu vào, và từ chối khoá không đúng ba phần.
+    const mau: PolicyRestrictiveKhai = { lenh: "*", vai_tro: "PUBLIC", using: "true", with_check: null };
+    const hai: [string, PolicyRestrictiveKhai][] = [["zz.t.b", mau], ["zz.t.a", mau]];
+    expect(khoiRestrictiveTu(hai), "hai policy trên cùng một bảng: thứ tự theo tên policy").toBe(khoiRestrictiveTu([...hai].reverse()));
+    expect(khoiRestrictiveTu(hai).indexOf("'a'"), "a đứng trước b").toBeLessThan(khoiRestrictiveTu(hai).indexOf("'b'"));
+    expect(() => khoiRestrictiveTu([["zz.t.x.y", mau]])).toThrow(/ba phần/u);
     const khoiNgoai = "(VALUES " + BANG_RLS_NGOAI_TENANT.map((t) => { const [n, r] = t.split("."); return `(${lit(n!)}, ${lit(r!)})`; }).join(", ") + ") AS b(nspname, relname)";
     expect(docHangHardening("BANG_RLS_NGOAI_TENANT_KHAI"), "BANG_RLS_NGOAI_TENANT_KHAI phải BẰNG bản ở test").toBe(khoiNgoai);
     // Bộ giải hằng phải giải được cả ba câu phán xét — và phải NÉM trước cú pháp nó không hiểu (đối chứng:
@@ -2168,7 +2221,7 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
       const loi4 = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
       expect(loi4, "policy caller_rate_limits bị đổi thành false AND … phải làm migrate() NÉM").not.toBeNull();
       expect(loi4!.message).toContain("RLS/policy của caller_rate_limits lệch");
-      // và mục ⑴ cũng thấy nó (không còn khớp bảy cột đã khai) — hai lớp cho một ca, nêu tên cả hai.
+      // và mục ⑴ cũng thấy nó (không còn khớp ~~bảy~~ [S1.55] tám cột đã khai) — hai lớp cho một ca, nêu tên cả hai.
       expect(loi4!.message).toContain("public.caller_rate_limits.caller_rate_limits_khach: policy PERMISSIVE không thuộc lớp nào (khoản 83⑴)");
     } finally {
       // Mục caller_rate_limits chỉ DỰNG khi policy vắng: xoá rồi để migrate() dựng lại bản chuẩn.
@@ -2187,6 +2240,174 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
     }
     expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: về PUBLIC ⇒ đi qua").toBeNull();
   }, 180000); // [S1.40] sáu lần migrate(): hạn 180 s như các test ĐO ở hardening-suy-tu-tinh-chat — hạn mặc định 30 s chạm ngưỡng dưới tải song song của evidence (đo: 30014 ms)
+});
+
+// ===============================================================================================
+// [S1.55 / khoản nợ 98] 83⑴ CÓ ĐƯỜNG KHAI CHO POLICY NGOÀI `public`, KHỚP THEO LƯỢC ĐỒ
+//
+// Đo (S1.53 + S1.55, PostgreSQL 16): bảng `zz98.t` ngoài public, bật RLS, ba policy — PERMISSIVE, RESTRICTIVE, và RESTRICTIVE đúng
+// khuôn 027. Chưa khai: 83⑴ nêu cả ba, 83⑶ nêu bảng, migrate() từ chối. Khai bảng vào BANG_RLS_NGOAI_TENANT_KHAI: 83⑶ im. Khai ba
+// policy vào hai danh sách của 83⑴ theo khuôn CŨ (không cột lược đồ, vị từ ghim `public`): 83⑴ VẪN nêu cả ba — khai không cứu được,
+// ngõ cụt ADR-028 §3. Bản sửa: cột `nspname` ở POLICY_RESTRICTIVE_KHAI và POLICY_KHAC_KHAI; vị từ và hai nhánh dòng khai thiu khớp
+// theo (lược đồ, bảng, policy). Câu phán xét chạy qua bộ giải hằng trên một bản hardening có thêm dòng khai — đúng câu hardening chạy.
+// [lượt soi 48] Dòng khai sinh bằng CHÍNH bộ sinh của cổng HAI BẢN KHỚP (khoiRestrictiveTu, khoiKhacTu) — không vá tay neo. Bốn vế:
+// đường khai (NHẸ-1: `zz98b` sống tới hết để vế lược đồ ở hai nhánh thiu có đối chứng; NHẸ-2: bảng cùng tên với bảng đã khai ở
+// public), vai thật tên "PUBLIC" (CAO-1), policy một vế (NẶNG-2), PERMISSIVE trên dữ liệu tenant mà [CR1] không soi (NẶNG-3).
+// ===============================================================================================
+describe("[S1.55 / khoản nợ 98] 83⑴ khai được policy ngoài public, khớp theo lược đồ", () => {
+  /** Bản hardening thêm dòng khai: mỗi khối khai của hardening phải bằng bộ sinh đúng một lần, dòng mới đi qua bộ sinh. */
+  const hardeningCoKhai = (
+    themRestrictive: readonly (readonly [string, PolicyRestrictiveKhai])[],
+    themKhac: readonly DongKhac[],
+  ): string => {
+    const cap: [string, string][] = [
+      [
+        khoiRestrictiveTu(Object.entries(POLICY_RESTRICTIVE_DA_KHAI)),
+        khoiRestrictiveTu([...Object.entries(POLICY_RESTRICTIVE_DA_KHAI), ...themRestrictive]),
+      ],
+      [khoiKhacTu(POLICY_KHAC_DA_KHAI), khoiKhacTu([...POLICY_KHAC_DA_KHAI, ...themKhac])],
+    ];
+    let ra = HARDENING_SQL;
+    for (const [cu, moi] of cap) {
+      expect(ra.split(cu).length, "khối khai của hardening bằng bộ sinh đúng một lần — không thì mọi vế dưới rỗng ruột").toBe(2);
+      ra = ra.split(cu).join(moi);
+    }
+    return ra;
+  };
+  const khaiZz98 = (): string =>
+    hardeningCoKhai(
+      [
+        ["zz98.t.r", { lenh: "*", vai_tro: "PUBLIC", using: "true", with_check: "true" }],
+        // khuôn 027 ngoài public: (b1) chỉ nhận ở public, nên đi đường khai (b2) — bộ lọc cũ của cổng gạt mất dòng này (NẶNG-1).
+        ["zz98.t.t_khach", { lenh: "*", vai_tro: "PUBLIC", using: KHACH_NULL, with_check: KHACH_NULL }],
+      ],
+      [["zz98", "t", "p", "PERMISSIVE", "*", "PUBLIC", "true", "true"]],
+    );
+  const moTa = async (client: pg.PoolClient, hardening: string): Promise<string[]> =>
+    (await client.query<{ mo_ta: string }>(docHangHardeningTu(hardening, "CAU_POLICY_LOP_SAI"))).rows.map((r) => r.mo_ta);
+  const nhan = async (client: pg.PoolClient, hardening: string): Promise<string[]> =>
+    (await moTa(client, hardening)).map((m) => (m.startsWith("khai ") ? m.split(" (")[0]! : m.split(":")[0]!)).sort();
+  const dungBang = (luocDo: string): string =>
+    `CREATE SCHEMA ${luocDo}; CREATE TABLE ${luocDo}.t (id int PRIMARY KEY); ALTER TABLE ${luocDo}.t ENABLE ROW LEVEL SECURITY; ` +
+    `CREATE POLICY p ON ${luocDo}.t USING (true) WITH CHECK (true); ` +
+    `CREATE POLICY r ON ${luocDo}.t AS RESTRICTIVE USING (true) WITH CHECK (true); ` +
+    `CREATE POLICY t_khach ON ${luocDo}.t AS RESTRICTIVE USING ${KHACH_NULL} WITH CHECK ${KHACH_NULL}`;
+  const trongGiaoDich = async (viec: (client: pg.PoolClient) => Promise<void>): Promise<void> => {
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await viec(client);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  };
+
+  it("[INV-F1] policy PERMISSIVE, RESTRICTIVE và RESTRICTIVE khuôn 027 trên bảng RLS ngoài public: chưa khai thì 83⑴ nêu cả ba; khai kèm lược đồ qua bộ sinh của cổng thì im; dòng khai cho lược đồ này không che bảng CÙNG TÊN ở lược đồ khác, kể cả bảng cùng tên với bảng đã khai ở public; gỡ policy thì dòng khai thiu nêu đúng lược đồ; bảng khai không tồn tại thì không nêu — mọi vế chạy khi bảng cùng tên ở lược đồ khác còn sống", async () => {
+    const lopKhai = khaiZz98();
+    await trongGiaoDich(async (client) => {
+      await client.query(dungBang("zz98"));
+      // (a) chưa khai: cả ba bị nêu — kể cả khuôn 027, vì (b1) chỉ nhận khuôn ấy ở public.
+      expect(await nhan(client, HARDENING_SQL), "chưa khai: 83⑴ nêu cả ba").toEqual(["zz98.t.p", "zz98.t.r", "zz98.t.t_khach"]);
+      // (b) khai kèm lược đồ: im — đường khai cho policy ngoài public có thật, và đi được qua cổng.
+      expect(await nhan(client, lopKhai), "khai (lược đồ, bảng, policy): 83⑴ im").toEqual([]);
+      // (c) bẫy cùng tên: zz98b.t mang đúng ba policy ấy và SỐNG tới hết test [lượt soi 48 NHẸ-1].
+      await client.query(dungBang("zz98b"));
+      const zz98b = ["zz98b.t.p", "zz98b.t.r", "zz98b.t.t_khach"];
+      expect(await nhan(client, lopKhai), "dòng khai cho zz98 không che bảng cùng tên ở zz98b").toEqual(zz98b);
+      // [lượt soi 48 NHẸ-2] bảng cùng tên, cùng policy với bảng đã khai ở public — dòng khai của public không che nó.
+      await client.query(
+        "CREATE SCHEMA zz98c; CREATE TABLE zz98c.caller_rate_limits (id int); " +
+          "ALTER TABLE zz98c.caller_rate_limits ENABLE ROW LEVEL SECURITY; " +
+          `CREATE POLICY caller_rate_limits_khach ON zz98c.caller_rate_limits USING ${KHACH_NULL} WITH CHECK ${KHACH_NULL}`,
+      );
+      expect(await nhan(client, lopKhai), "dòng khai public.caller_rate_limits không che zz98c.caller_rate_limits").toEqual([
+        ...zz98b,
+        "zz98c.caller_rate_limits.caller_rate_limits_khach",
+      ]);
+      await client.query("DROP SCHEMA zz98c CASCADE");
+      // (d) gỡ policy đã khai: dòng khai thiu nêu đúng lược đồ ở cả hai danh sách — zz98b cùng hình dạng không che.
+      await client.query("DROP POLICY p ON zz98.t; DROP POLICY r ON zz98.t");
+      expect(await nhan(client, lopKhai), "dòng khai thiu nêu đúng lược đồ").toEqual(["khai zz98.t.p", "khai zz98.t.r", ...zz98b]);
+      // (e) bảng khai không tồn tại: chiều ngược im — bảng cùng tên ở zz98b không làm zz98.t "tồn tại".
+      await client.query("DROP SCHEMA zz98 CASCADE");
+      expect(await nhan(client, lopKhai), "bảng khai không tồn tại: không nêu").toEqual(zz98b);
+    });
+  }, 120000);
+
+  it("[INV-F1] [lượt soi 48 CAO-1] vai thật tên PUBLIC viết hoa không giả được PUBLIC: policy đã khai chuyển sang vai ấy thì 83⑴ nêu cả policy lẫn dòng khai thiu — ở bảng thử ngoài public và ở vendor_bids_khach thật", async () => {
+    const lopKhai = khaiZz98();
+    await trongGiaoDich(async (client) => {
+      await client.query(dungBang("zz98"));
+      expect(await nhan(client, lopKhai), "đối chứng: khai đúng thì im").toEqual([]);
+      // Đo: PostgreSQL 16 nhận tên có nháy "PUBLIC" (chỉ `public` chữ thường là tên dành riêng); policy TO vai ấy thôi áp cho app_api.
+      await client.query('CREATE ROLE "PUBLIC" NOLOGIN');
+      await client.query('ALTER POLICY r ON zz98.t TO "PUBLIC"; ALTER POLICY vendor_bids_khach ON public.vendor_bids TO "PUBLIC"');
+      expect(await nhan(client, lopKhai), "cột vai PUBLIC không khớp vai thật tên PUBLIC").toEqual([
+        "khai public.vendor_bids.vendor_bids_khach",
+        "khai zz98.t.r",
+        "public.vendor_bids.vendor_bids_khach",
+        "zz98.t.r",
+      ]);
+    });
+  }, 120000);
+
+  it("[INV-F1] [lượt soi 48 NẶNG-2] policy một vế ngoài public khai được qua bộ sinh: vế vắng khai NULL thì im, ở cả hai danh sách; khai một chuỗi thay NULL thì nêu cả policy lẫn dòng khai thiu", async () => {
+    await trongGiaoDich(async (client) => {
+      await client.query(
+        "CREATE SCHEMA zz98n; CREATE TABLE zz98n.t (id int); ALTER TABLE zz98n.t ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY doc ON zz98n.t FOR SELECT USING (true); " +
+          "CREATE POLICY xoa ON zz98n.t AS RESTRICTIVE FOR DELETE USING (false)",
+      );
+      const xoa: [string, PolicyRestrictiveKhai] = ["zz98n.t.xoa", { lenh: "d", vai_tro: "PUBLIC", using: "false", with_check: null }];
+      expect(
+        await nhan(client, hardeningCoKhai([xoa], [["zz98n", "t", "doc", "PERMISSIVE", "r", "PUBLIC", "true", null]])),
+        "hai policy một vế khai NULL: im",
+      ).toEqual([]);
+      expect(
+        await nhan(client, hardeningCoKhai([xoa], [["zz98n", "t", "doc", "PERMISSIVE", "r", "PUBLIC", "true", "(không có)"]])),
+        "chuỗi thay NULL: nêu",
+      ).toEqual(["khai zz98n.t.doc", "zz98n.t.doc"]);
+    });
+  }, 120000);
+
+  it("[INV-F1] [lượt soi 48 NẶNG-3] PERMISSIVE trên dữ liệu tenant mà [CR1] không soi — lá phân vùng ngoài public của bảng tenant, con INHERITS của bảng gốc (không có org_id), bảng có org_id ngoài public — KHÔNG khai được ở (c): khai rồi vẫn nêu, với thông điệp riêng; RESTRICTIVE trên lá khai được; bỏ org_id thì dòng khai có hiệu lực", async () => {
+    await trongGiaoDich(async (client) => {
+      await client.query(
+        "CREATE TABLE public.zz98pm (id int NOT NULL, org_id uuid NOT NULL) PARTITION BY RANGE (id); " +
+          "ALTER TABLE public.zz98pm ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY zz98pm_tenant ON public.zz98pm USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id()); " +
+          "CREATE SCHEMA luu98; CREATE TABLE luu98.zz98pm_1 PARTITION OF public.zz98pm FOR VALUES FROM (0) TO (1000); " +
+          "ALTER TABLE luu98.zz98pm_1 ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY mo ON luu98.zz98pm_1 USING (true) WITH CHECK (true); " +
+          "CREATE POLICY hep ON luu98.zz98pm_1 AS RESTRICTIVE USING (true) WITH CHECK (true); " +
+          "CREATE SCHEMA luu98b; CREATE TABLE luu98b.t (id int, org_id uuid); ALTER TABLE luu98b.t ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY mo ON luu98b.t USING (true) WITH CHECK (true); " +
+          // con cháu KHÔNG có cột org_id (con của bảng gốc organizations): chỉ vế VI_TU_CAN_CO_RLS của hằng chặn chặn nó —
+          // lá phân vùng thừa hưởng org_id nên một mình nó không làm vế ấy chịu lực (tự bắt khi thiết kế đột biến).
+          "CREATE TABLE luu98.org_con () INHERITS (public.organizations); ALTER TABLE luu98.org_con ENABLE ROW LEVEL SECURITY; " +
+          "CREATE POLICY mo ON luu98.org_con USING (true) WITH CHECK (true)",
+      );
+      const khai = hardeningCoKhai(
+        [["luu98.zz98pm_1.hep", { lenh: "*", vai_tro: "PUBLIC", using: "true", with_check: "true" }]],
+        [
+          ["luu98", "org_con", "mo", "PERMISSIVE", "*", "PUBLIC", "true", "true"],
+          ["luu98", "zz98pm_1", "mo", "PERMISSIVE", "*", "PUBLIC", "true", "true"],
+          ["luu98b", "t", "mo", "PERMISSIVE", "*", "PUBLIC", "true", "true"],
+        ],
+      );
+      const moTaKhai = await moTa(client, khai);
+      expect(moTaKhai.map((m) => m.split(":")[0]).sort(), "hai PERMISSIVE vẫn bị nêu dù đã khai; RESTRICTIVE trên lá đã khai thì im").toEqual([
+        "luu98.org_con.mo",
+        "luu98.zz98pm_1.mo",
+        "luu98b.t.mo",
+      ]);
+      for (const m of moTaKhai) expect(m, "thông điệp riêng, không bảo khai thêm").toContain("KHÔNG khai được (khoản 98, lượt soi 48)");
+      // đối chứng: bỏ cột org_id — luu98b.t thôi là dữ liệu tenant, cùng hình dạng policy, dòng khai có hiệu lực.
+      await client.query("ALTER TABLE luu98b.t DROP COLUMN org_id");
+      expect(await nhan(client, khai), "bỏ org_id: còn con của organizations và lá phân vùng").toEqual(["luu98.org_con.mo", "luu98.zz98pm_1.mo"]);
+    });
+  }, 120000);
 });
 
 // ===============================================================================================

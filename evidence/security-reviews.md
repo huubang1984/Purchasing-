@@ -2745,3 +2745,129 @@ cùng một định nghĩa "khoảng cách giữa token", và khuôn ĐỌC `CAU
 thì so theo tính chất, không thì nhiễm-từ-trước lọt; ⑶ một lớp ứng dụng được gọi là "lớp chịu lực còn lại" phải kèm danh sách
 đường KHÔNG đi qua nó; ⑷ một ranh giới liệt kê bằng ví dụ ("thoát ký tự, U&, ghép chuỗi") mời người soi tìm dạng ngoài danh sách
 — liệt kê bằng tính chất (tên còn nguyên văn hay không) thì mới kiểm được.
+
+# §S1.55 — khoản nợ 98: 83⑴ có đường khai cho policy ngoài `public` — hai danh sách khai mang cột lược đồ, vai so theo OID, và dữ liệu tenant mà [CR1] không soi thì không khai được
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `POLICY_RESTRICTIVE_KHAI` (tám hàng) và `POLICY_KHAC_KHAI` (một hàng)
+thêm cột `nspname` đứng đầu; `BIEU_THUC_VAI_TRO` nhận PUBLIC theo OID 0 và vai thật qua `quote_ident`; hằng mới
+`VI_TU_PERMISSIVE_CR1_SE_SOI`; mục phán xét `CAU_POLICY_LOP_SAI` (83⑴): vị từ (b2), (c) và hai nhánh dòng khai thiu khớp theo
+lược đồ thay vì ghim `public`, (c) không nhận dòng khai thuộc hằng mới, thông điệp nêu `khai <lược đồ>.<bảng>.<policy>` và có nhánh
+riêng cho hằng mới; chú thích của `CAU_PHU_LENH_CHU_BANG_SAI` gạch câu "ngõ cụt khoản 98". Test: `db/rls-coverage.int.test.ts` —
+`CAU_VAI_TRO` theo khuôn mới; cổng HAI BẢN KHỚP dùng một bộ sinh (`khoiRestrictiveTu`, `khoiKhacTu`) soi gương vị từ (b1), sinh
+được NULL, sắp theo bộ ba, và đòi biểu thức vai hai bản khớp; describe `[S1.55 / khoản nợ 98]` (bốn `it`).
+`tests/adversarial/a5-co-lap-nha-cung-cap.int.test.ts` — census `<bảng>_khach` phủ mọi lược đồ dự án (hằng
+`CAU_BANG_RLS_THIEU_KHACH`) và một `it` có fixture. Chú thích ở `db/migrations.int.test.ts`.
+
+**Đo trước khi viết (PostgreSQL 16, tệp thăm dò trong worktree, đã xoá):** bảng `zz98.t` ngoài `public`, bật RLS, ba policy — `p`
+PERMISSIVE `USING (true) WITH CHECK (true)`, `r` RESTRICTIVE cùng biểu thức, `t_khach` RESTRICTIVE đúng khuôn 027 (FOR ALL,
+PUBLIC, hai vế "không phải phiên khách").
+⑴ Chưa khai: `CAU_POLICY_LOP_SAI` nêu cả ba "không thuộc lớp nào (khoản 83⑴)" — kể cả `t_khach`, vì (b1) chỉ nhận khuôn 027 ở
+`public`; `CAU_RLS_NGOAI_TENANT_SAI` nêu `zz98.t` (83⑶); `migrate()` từ chối với hai mục.
+⑵ Khai `zz98.t` vào `BANG_RLS_NGOAI_TENANT_KHAI` — khoá (nspname, relname) — và khai ba policy vào hai danh sách của 83⑴ theo khuôn
+CŨ: 83⑶ im, 83⑴ VẪN nêu cả ba. Ngõ cụt rộng hơn vế đọc của S1.53: không chỉ `POLICY_KHAC_KHAI` mà cả (b2) `POLICY_RESTRICTIVE_KHAI`
+ghim `public`, và RESTRICTIVE khuôn 027 ngoài `public` cũng không có đường nào.
+⑶ Chín dòng khai hiện có đều ở `public`; khoá của `POLICY_RESTRICTIVE_DA_KHAI` ở test vốn đã mang lược đồ — thêm cột không đổi
+phán xét trên lược đồ thật.
+
+**Hình dạng (bản hai):** ⒜ Cột `nspname` đứng đầu ở cả hai danh sách — `POLICY_RESTRICTIVE_KHAI` bảy cột, `POLICY_KHAC_KHAI` tám
+cột. ⒝ Vị từ (b2), (c) khớp theo (lược đồ, bảng, policy). ⒞ Hai nhánh dòng khai thiu: bảng khai tồn tại xét ở đúng lược đồ khai,
+policy tìm ở đúng lược đồ ấy; thông điệp nêu lược đồ. ⒟ (b1) giữ `public`: khuôn 027 được nhận theo tính chất ở nơi 027 dựng nó
+(đọc); ngoài `public` nó đi đường khai (b2). ⒠ Gỡ ghim mà KHÔNG thêm cột thì dòng khai của lược đồ này che policy cùng tên của lược
+đồ khác (đo: K1, K2 của lượt đột biến đầu). ⒡ [CAO-1] Cột vai: `CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE quote_ident(rolname) END` —
+cùng khuôn `CAU_QUYEN_BANG_SO_SAI`; dòng khai hiện có không đổi. ⒢ [NẶNG-3] `VI_TU_PERMISSIVE_CR1_SE_SOI` = PERMISSIVE trên bảng
+thuộc `VI_TU_CAN_CO_RLS` hay có cột org_id — đúng tập bảng mà [CR1] SẼ soi nếu nó ở `public`. (c) không nhận dòng khai của nó; 83⑴
+nêu với thông điệp riêng chỉ lối ra (policy trên bảng cha — khuôn dự án, lá không policy — hay chuyển bảng về `public`).
+Fail-closed như trước S1.55. Bảng chỉ có khoá ngoại tới bảng tenant không thuộc vế này: [CR1] không soi nó cả ở `public`, nên khai
+kép 83⑶ + (c) là cùng chuẩn. ⒣ [NẶNG-1, NẶNG-2, NHẸ-3, INFO-2] Một bộ sinh cho hai khối khai: bộ lọc soi gương đúng vị từ (b1),
+`null` sinh `NULL`, thứ tự theo bộ (lược đồ, bảng, policy), khoá phải đúng ba phần. ⒤ [INFO-5] Census `<bảng>_khach` của A5 phủ mọi
+lược đồ dự án — 027 là migration đã chạy, không sửa.
+
+**Test (bản hai):** describe `[S1.55 / khoản nợ 98]` dựng fixture trong giao dịch và chạy câu phán xét của hardening qua bộ giải
+hằng, trên bản thật và trên bản có dòng khai sinh bằng bộ sinh của cổng: ⑴ đường khai — chưa khai nêu cả ba; khai kèm lược đồ thì
+im; bẫy cùng tên `zz98b` sống tới hết; `zz98c.caller_rate_limits` cùng tên, cùng policy với bảng đã khai ở `public` bị nêu; gỡ `p`
+và `r` thì dòng khai thiu nêu đúng lược đồ; xoá lược đồ khai thì im; ⑵ vai "PUBLIC" — `ALTER POLICY … TO "PUBLIC"` trên bảng thử và
+trên `vendor_bids_khach` thật ⇒ nêu cả policy lẫn dòng khai thiu; ⑶ policy một vế — FOR SELECT và RESTRICTIVE FOR DELETE khai NULL
+thì im, khai chuỗi thì nêu; ⑷ dữ liệu tenant mà [CR1] không soi — lá phân vùng ngoài `public`, con INHERITS của `organizations`, bảng
+có org_id ngoài `public`, cùng khai ở (c), vẫn bị nêu với thông điệp riêng; RESTRICTIVE trên lá khai được; bỏ org_id thì dòng khai
+có hiệu lực. Cổng HAI BẢN KHỚP thêm: biểu thức vai hai bản khớp, bộ sinh không phụ thuộc thứ tự đầu vào, khoá bốn phần bị từ chối.
+A5: bảng RLS ngoài `public` không có `<bảng>_khach` bị census thấy, có thì thôi.
+
+**Đo thêm sau lượt soi 48 (tệp thăm dò thứ hai, đã xoá):** M1 — PostgreSQL 16 nhận `CREATE ROLE "PUBLIC"`, từ chối `CREATE ROLE
+public` ("role name "public" is reserved"); `AS RESTRICTIVE TO "PUBLIC" USING (false)` ⇒ `polroles = {17541}`, biểu thức cũ ra
+`PUBLIC`, biểu thức mới ra `"PUBLIC"`, app_api đếm 3 hàng — TO PUBLIC thật thì 0; `ALTER POLICY vendor_bids_khach … TO "PUBLIC"` ⇒
+83⑴ thật im, bản `quote_ident` nêu cả policy lẫn dòng khai thiu. M2 — lá `luu98.zz98pm_1` (PARTITION OF public.zz98pm) với
+`USING (true)`: 83⑴ bản đầu nêu khi chưa khai, IM khi có một dòng (c); bản HEAD nêu; [CR1], 83⑵, 83⑶, 94, 85, 86, 82⑴ đều im với
+bản có dòng khai; app_api gắn tổ chức A đọc thẳng lá ra 2 hàng, qua cha ra 1. M2b — bảng có org_id ngoài `public`, bật RLS, khai kép
+83⑶ + (c) ⇒ 83⑴ và 83⑶ im, app_api đọc 2 hàng. M3 — FOR SELECT: `polwithcheck` NULL; dòng khai NULL ⇒ im; `''` hay `'(không có)'`
+⇒ nêu. M4 — `zz98g.t` với `USING (true)`: census chỉ-public không thấy, bản phủ lược đồ dự án thấy; phiên khách đọc 2 hàng. M5 —
+bảng RLS ngoài `VI_TU_BANG_TENANT` duy nhất của lược đồ thật là `public.caller_rate_limits` (không org_id, không khoá ngoại tới
+tenant, không con cháu). M6 — biểu thức vai mới trên lược đồ thật cho đúng hai chuỗi cũ; 83⑴ và [CR1] rỗng. M7 — không policy
+PERMISSIVE thật nào thuộc vế chặn mới. Và K11–K14 (bỏ hẳn vế lược đồ ở hai nhánh dòng khai thiu) SỐNG trên test bản đầu.
+
+**Tự bắt, không phải lượt soi:** khi thiết kế đột biến "bỏ nhánh con cháu" của vế chặn, lá phân vùng thừa hưởng cột org_id nên một
+mình nó không làm nhánh ấy chịu lực — vế test NẶNG-3 thêm con INHERITS của `organizations` (không org_id), khai ở (c).
+
+**Evidence bắt, không phải lượt soi:** lần đo evidence đầu trên cây của vòng này — `[evidence] vitest thoát mã 1`, cổng báo
+`F1` đỏ — hỏng hai test của `db/rls-coverage.int.test.ts`. Test [S1.32] "RESTRICTIVE USING (false) làm app_api ghi ra 0 hàng"
+quá hạn mặc định 30 s (30019 ms; chạy riêng 9339 ms). Test [S1.38] "câu phán xét chạy trong test: hôm nay rỗng cả ba" thấy 83⑴
+trả một hàng — đọc: vitest không huỷ thân test quá hạn, nên `zz_chan` của test trước còn nằm đó khi test sau đọc; test ấy xanh
+khi chạy riêng. Đo trước khi sửa (cụm riêng, `migrate()` luân phiên năm lượt): hardening HEAD, bản đầu và bản hai cùng ~1,2 s mỗi
+lượt, cả đường hợp lệ lẫn đường NÉM có `zz_chan` — không phải hồi quy của vòng này. Riêng câu `CAU_POLICY_LOP_SAI` đo từ client
+tăng từ ~9 ms lên ~63 ms (thực thi 2,7 → 6,3 ms, lập kế hoạch 4,1 → 9,5 ms: vế chặn khai triển `VI_TU_CAN_CO_RLS` hai lần) —
+không đáng kể so với một lượt `migrate()`. Sửa: test [S1.32] — test duy nhất của tệp gọi `migrate()` thật mà còn dùng hạn mặc
+định (đếm theo lời gọi, không theo chữ `migrate()` trong chú thích) — nhận hạn 180 s, đúng khuôn S1.40 đã ghi cho nguyên nhân này.
+
+**Đỏ đo được, cô lập (bản đầu — mười đột biến):** K1 bỏ vế lược đồ ở (c) và K2 ở (b2) ⇒ vế bẫy cùng tên · K3 ghim lại `public` ở
+(c) và K4 ở (b2) ⇒ vế khai kèm lược đồ · K5 xét bảng khai tồn tại ở `public`, nhánh dòng khai thiu của (c), và K7 của (b2) ⇒ vế dòng
+khai thiu · K6 tìm policy ở `public`, nhánh dòng khai thiu của (c), và K8 của (b2) ⇒ vế khai kèm lược đồ · K9 lược đồ của dòng khai
+`caller_rate_limits_khach` ở HARDENING thành `zz_sai` ⇒ đỏ ở TẦNG SẢN XUẤT: `migrate()` của globalSetup từ chối ("Hardening không
+sửa được 1 mục"), 43 test bị bỏ qua · K10 cùng thay đổi ở BẢN TEST, hardening giữ nguyên ⇒ cổng HAI BẢN KHỚP.
+
+**Đỏ đo được, cô lập (bản hai — hai mươi lăm đột biến, gồm mười của bản đầu chạy lại trên mã bản hai):** K1 bỏ vế lược đồ ở (c)
+và K2 ở (b2) ⇒ vế bẫy cùng tên · K3 ghim lại `public` ở (c) và K4 ở (b2) ⇒ vế khai kèm lược đồ (và vế đối chứng của CAO-1) · K5,
+K7 xét bảng khai tồn tại ở `public`, K6, K8 tìm policy ở `public`, ở hai nhánh dòng khai thiu ⇒ vế dòng khai thiu hay vế khai kèm
+lược đồ · K9 lược đồ dòng khai ở hardening lệch ⇒ `migrate()` của globalSetup từ chối · K10 lược đồ ở bản test lệch ⇒ HAI BẢN
+KHỚP · K11–K14 BỎ HẲN vế lược đồ ở hai nhánh dòng khai thiu — SỐNG trên test bản đầu (NHẸ-1) — nay đỏ ở vế (d) hay (e) nhờ `zz98b`
+sống tới hết · K15 biểu thức vai `coalesce` ở CẢ hardening lẫn bản test (cổng biểu thức vai xanh) ⇒ vế vai "PUBLIC" · K16 chỉ bản
+test lệch ⇒ cổng biểu thức vai · K17 bỏ vế chặn ở (c) ⇒ vế NẶNG-3 im · K18 thông điệp riêng thành chung ⇒ vế thông điệp · K19 vế
+chặn bỏ nhánh org_id ⇒ `luu98b.t` im · K20 vế chặn bỏ nhánh con cháu ⇒ `luu98.org_con` im · K21 bộ lọc của cổng như bản cũ ⇒ vế
+khai kèm lược đồ (`zz98.t.t_khach` rơi khỏi khối sinh) · K22 `lit(null)` sinh `''` ⇒ vế policy một vế · K23 so bộ bỏ tên policy ⇒
+vế thứ tự · K24 khoá bốn phần không ném ⇒ vế khoá · K25 census khách ghim lại `public` ⇒ vế A5 ngoài public.
+
+**Ranh giới NÓI RA:** ⑴ (b1) chỉ nhận khuôn 027 theo tính chất ở `public`; ngoài `public` khuôn ấy phải khai — chiều kêu nhầm, có
+cửa ra. ⑵ Khoá của lời khai là TÊN lược đồ: `ALTER SCHEMA … RENAME` làm policy mất khai ⇒ 83⑴ nêu, còn dòng khai cũ im vì bảng khai
+không tồn tại; dựng lại lược đồ đúng tên thì chiếm luôn dòng khai — cùng hạng với đổi tên bảng ở `public`. ⑶ Test chạy câu phán xét
+qua bộ giải hằng trong giao dịch; `migrate()` với bảng khai ngoài `public` không lặp lại ở vòng này — tầng sản xuất đọc cùng hằng
+(K9 đo tầng ấy). Nhánh dòng khai thiu không lọc `MAU_SCHEMA_DU_AN`: dòng khai trỏ `pg_temp_N` lúc nêu lúc không. ⑷ PERMISSIVE trên
+dữ liệu tenant mà [CR1] không soi không có lối khai nào — có chủ đích, như trước S1.55. Bảng chỉ có khoá ngoại tới bảng tenant mà
+bật RLS thì khai kép 83⑶ + (c) mở đọc xuyên tổ chức, ở `public` lẫn ngoài `public`: cùng một chuẩn có từ S1.38, chưa lượt soi nào
+nhìn riêng. ⑸ Khoá in ra nối bằng dấu chấm, không `%I`: tên chứa dấu chấm hay chữ hoa in thô; cổng từ chối khoá không đúng ba
+phần. ⑹ 83⑴ không loại bảng thuộc extension (91 và 94 có loại): extension mang policy thì phải khai. ⑺ Bản hai chưa qua một lượt soi
+đối kháng riêng; mọi thay đổi của nó có vế test và đột biến đỏ.
+
+### Lượt soi đối kháng 48 (trên bản đầu của S1.55): 1 CAO, 3 NẶNG, 4 NHẸ, 5 INFO — xử lý trong bản hai, không mở khoản mới
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| CAO-1 | CAO | Cột vai của (b2), (c), hai nhánh dòng khai thiu và `NGOAI_LE_HINH_DANG` của [CR1] so bằng chuỗi `coalesce(rolname, 'PUBLIC')`: một vai THẬT tên "PUBLIC" cho ra cùng chuỗi với PUBLIC (OID 0). Chủ bảng có CREATEROLE chuyển một policy RESTRICTIVE đã khai sang vai ấy thì policy thôi áp cho app_api mà 83⑴ im; lỗ có từ S1.38, bản đầu S1.55 áp cùng phép so cho dòng khai ngoài public | **đúng — đo M1** (người soi chỉ đọc mã): PostgreSQL 16 nhận `CREATE ROLE "PUBLIC"`, chỉ `public` chữ thường là tên dành riêng; `AS RESTRICTIVE TO "PUBLIC" USING (false)` ⇒ app_api đếm 3 hàng, TO PUBLIC thật ⇒ 0; `ALTER POLICY vendor_bids_khach … TO "PUBLIC"` ⇒ `polroles = {17541}`, 83⑴ thật im, bản quote_ident nêu cả policy lẫn dòng khai thiu. Đo M6: trên lược đồ thật bản mới cho đúng hai chuỗi cũ (`PUBLIC`, `app_api`), 83⑴ và [CR1] rỗng | `BIEU_THUC_VAI_TRO` và `CAU_VAI_TRO`: `CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE quote_ident(rolname) END` — khuôn đã có ở `CAU_QUYEN_BANG_SO_SAI` và nhánh ⒟; cổng mới đòi hai bản khớp; vế test vai "PUBLIC" ở bảng thử và ở `vendor_bids_khach` thật; đột biến K15, K16 |
+| NẶNG-1 | NẶNG | Lối ra "khuôn 027 ngoài public đi đường khai (b2)" không đi được: bộ lọc của cổng HAI BẢN KHỚP gạt mọi mục có hai vế KHACH_NULL bất kể lược đồ, tên, lệnh, vai, trong khi (b1) ghim public; vế (b) của test vá tay một bản sao hardening nên không qua cổng; `toBe(8)` đỏ ngay ở biến thể thứ chín | đúng — đọc (mã tất định); đột biến K21 (bộ lọc cũ) đỏ ở vế khai kèm lược đồ | `laKhuonB1` soi gương đúng vị từ (b1); bỏ số tám cứng — phép bằng với hằng ở hardening đã chống rỗng ruột; một bộ sinh (`khoiRestrictiveTu`, `khoiKhacTu`) cho cả cổng lẫn test khoản 98, test sinh dòng khai qua nó và đòi khối khai của hardening bằng bộ sinh đúng một lần |
+| NẶNG-2 | NẶNG | Hardening so hai vế biểu thức bằng IS NOT DISTINCT FROM, nhưng cổng chỉ sinh chuỗi có nháy ⇒ policy một vế (FOR SELECT, FOR DELETE, FOR INSERT) không khai được qua cổng — mà ngoài public mọi policy đều phải khai | **đúng — đo M3**: FOR SELECT có `polwithcheck` NULL; dòng khai NULL ⇒ 83⑴ im; `''` hay `'(không có)'` ⇒ nêu cả policy lẫn dòng khai thiu | kiểu cho phép null ở hai vế, `lit(null)` sinh `NULL`; vế test FOR SELECT (danh sách khác) và RESTRICTIVE FOR DELETE (danh sách RESTRICTIVE) khai NULL thì im, khai chuỗi thì nêu; đột biến K22 |
+| NẶNG-3 | NẶNG | Gỡ ghim public cho (c) mở một lối lách [CR1]: PERMISSIVE trên bảng mang dữ liệu tenant ngoài public khai được bằng một dòng (c), không qua `HINH_DANG_CHUAN`; trước S1.55, 83⑴ chặn cấu hình ấy | **đúng — đo M2, M2b; hồi quy do chính bản đầu**: lá `luu98.zz98pm_1` (PARTITION OF public.zz98pm) `USING (true)` cùng một dòng (c) ⇒ 83⑴ im, bảy mục kề im ([CR1], 83⑵, 83⑶, 94, 85, 86, 82⑴), app_api gắn tổ chức A đọc thẳng lá ra 2 hàng của hai tổ chức (qua cha: 1); bản HEAD nêu và không có lối khai; bảng có org_id ngoài public bật RLS, khai kép 83⑶ + (c) ⇒ cũng 2. M7: không policy thật nào thuộc vế chặn; M5: bảng RLS ngoài tập tenant duy nhất là `public.caller_rate_limits` — không org_id, không khoá ngoại tới tenant | hằng `VI_TU_PERMISSIVE_CR1_SE_SOI` — PERMISSIVE trên bảng thuộc `VI_TU_CAN_CO_RLS` hay có cột org_id: (c) không nhận dòng khai của nó, 83⑴ nêu với thông điệp riêng chỉ lối ra (policy trên bảng cha, hay chuyển bảng về public); vế test lá phân vùng, con INHERITS của `organizations` không org_id (tự bắt khi thiết kế K20 — lá thừa hưởng org_id nên một mình nó không làm vế con cháu chịu lực), bảng org_id, và đối chứng bỏ org_id; đột biến K17–K20 |
+| NHẸ-1 | NHẸ | Bốn vế lược đồ ở hai nhánh dòng khai thiu không có đối chứng: `zz98b` bị xoá trước (d) và (e) | **đúng — đo**: K11–K14 (bỏ hẳn vế) SỐNG trên test bản đầu | `zz98b` sống tới hết; kỳ vọng (d), (e) gồm ba dòng của `zz98b`; K11–K14 chạy lại trên bản hai |
+| NHẸ-2 | NHẸ | Câu "gỡ ghim mà không thêm cột thì dòng khai che bảng cùng tên" chưa đo; câu về 027 là đọc mà không ghi | đúng: lượt đột biến đầu K1, K2 (bỏ vế lược đồ) đỏ đúng ở vế bẫy cùng tên — chính là phép đo câu ấy; câu 027 là đọc | ghi "(đo)" và "(đọc)" ở chú thích hardening; vế rẻ `zz98c.caller_rate_limits` cùng tên, cùng policy với bảng đã khai ở public ⇒ 83⑴ nêu |
+| NHẸ-3 | NHẸ | Hàm so sánh của cổng không bao giờ trả 0 và khoá thiếu tên policy — thứ tự hai biến thể trên một bảng do engine quyết | đúng — đọc | `soBo` so bộ (lược đồ, bảng, policy), trả 0 khi bằng; vế test đảo thứ tự đầu vào; đột biến K23 |
+| NHẸ-4 | NHẸ | Chữ thiu: "sáu cột", "bảy cột" ở chú thích test và migrations.int.test.ts, ADR-036 hàng 5 và 27, STATE hàng 83 và 98 | đúng — đọc | sửa trong vòng; biên bản cũ giữ nguyên văn |
+| INFO-1 | INFO | Hai hằng khai chỉ được đọc theo tên cột qua bí danh; không còn khuôn cột cũ | đúng — đọc | không đổi |
+| INFO-2 | INFO | Tên chứa dấu chấm làm khoá `lược đồ.bảng.policy` mơ hồ và `split(".")` gán sai cột | đúng — đọc | bộ sinh ném khi khoá không đúng ba phần; vế test; đột biến K24; in khoá bằng `%I` để lại — ranh giới ⑸ |
+| INFO-3 | INFO | Nhánh dòng khai thiu không lọc `MAU_SCHEMA_DU_AN`; 83⑴ không loại bảng extension; `ALTER SCHEMA … RENAME` | đúng — đọc | ranh giới ⑶, ⑹; mang sang |
+| INFO-4 | INFO | RESTRICTIVE khai được ở hai danh sách ((b2), và (c) với `loai`) mà thông điệp không nói | đúng — đọc | không đổi: hai lối cùng đòi đủ cột nguyên văn, không lối nào mở thêm quyền; mang sang |
+| INFO-5 | INFO | Census `<bảng>_khach` của A5 và vòng lấp của 027 đều ghim public; sau khoản 98, bảng RLS ngoài public có policy deploy được mà không lớp nào đòi policy khách | **đúng — đo M4**: `zz98g.t` với `USING (true)` — census chỉ-public không thấy, bản phủ lược đồ dự án thấy; phiên khách (app_api + `app.guest_session_id`) đọc 2 hàng | census của A5 thành hằng `CAU_BANG_RLS_THIEU_KHACH` phủ mọi lược đồ dự án; vế có fixture ngoài public; đột biến K25; 027 là migration đã chạy nên không sửa |
+
+**Điều đáng mang sang vòng sau:** ⑴ Một phép so theo CHUỖI trên danh tính (vai, lược đồ, tên) cần một đại diện không va chạm
+— OID hay `quote_ident`: PUBLIC là giá trị giả trong không gian tên vai, và một tên thật trùng chuỗi được. ⑵ Gỡ một chỗ ghim là
+nới TẬP CHỦ THỂ của một lối khai: phải hỏi lại mọi lớp mà chỗ ghim ấy từng đỡ gián tiếp — [CR1] chỉ soi public, nên gỡ ghim
+public ở 83⑴ lấy mất lớp chặn cuối của dữ liệu tenant ngoài public. Bản đầu tự nói "khai không cứu được" là ngõ cụt mà không
+hỏi ngõ cụt ấy đang CHẶN gì. ⑶ Một cổng "hai bản khớp" phải biểu diễn được MỌI thứ vị từ phía kia nhận (NULL, khuôn ngoài
+public), và test nào cần dòng khai phải đi qua chính bộ sinh ấy — vá tay một bản sao là thứ hai không ai đối chiếu. ⑷ Bảng chỉ có
+khoá ngoại tới bảng tenant (khoản 86) mà bật RLS: khai kép 83⑶ + (c) mở đọc xuyên tổ chức ở public lẫn ngoài public — cùng một
+chuẩn, nhưng chưa lượt soi nào nhìn riêng cặp khai ấy.

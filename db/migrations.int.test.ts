@@ -4469,7 +4469,7 @@ describe("migration của dự án", () => {
       // Ý gốc GIỮ NGUYÊN: [CR1] không được chặn RESTRICTIVE vì hình dạng — thông điệp không có nhánh
       // "thiếu vế". Nhưng ADR-036 hàng 5 (S1.32) đã quyết: một RESTRICTIVE CHƯA KHAI có thể là
       // `USING (false)` — câu ghi của app_api ra 0 hàng không lỗi — nên mục "policy thuộc đúng một lớp"
-      // chặn deploy cho tới khi bảy policy này được khai đủ sáu cột (hoặc theo khuôn 027). Đo: trước
+      // chặn deploy cho tới khi bảy policy này được khai đủ ~~sáu~~ [S1.55] bảy cột, có lược đồ, (hoặc theo khuôn 027). Đo: trước
       // S1.38 migrate() đi qua với cả bảy.
       const loiA = await migrate(db.pool, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
       expect(loiA, "RESTRICTIVE chưa khai phải bị mục khoản 83⑴ chặn").not.toBeNull();
