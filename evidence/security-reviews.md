@@ -2564,3 +2564,69 @@ phải "cùng một quy tắc"; ⑵ catalog lưu giá trị theo CÁCH VIẾT, k
 `on`) — so giá trị phải so theo ngữ nghĩa kiểu; ⑶ một tính chất "chỉ quan tâm thứ đứng TRƯỚC" phải được đo bằng một phép
 cướp thật, vì PostgreSQL phân giải khác nhau tuỳ `pg_catalog` có được NÊU TÊN hay không; ⑷ phỏng đoán của người soi về giới
 hạn khai thác ("phiên sẽ được khôi phục") cũng phải đo — lần này nó sai theo chiều nguy hiểm.
+
+# §S1.53 — khoản nợ 94: 83⑵ cho CHỦ BẢNG — sau khi khoản 91 FORCE mọi bảng RLS, mọi lệnh của chủ bảng phải có policy PERMISSIVE phủ
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — hằng mới `CAU_PHU_LENH_CHU_BANG_SAI` và MỘT mục PHÁN XÉT trong
+`bang`, đặt ngay sau mục 83⑵. Test: `db/rls-coverage.int.test.ts` describe `[S1.53 / khoản nợ 94]`, hai `it`, fixture dựng
+dưới vai chủ KHÔNG superuser (`zz_chu94`) cùng khuôn S1.50.
+
+**Đo trước khi viết (PostgreSQL 16):**
+⑴ Lược đồ thật: cả 30 bảng bật RLS thuộc `postgres` (superuser) trên cụm test, và CẢ 30 đều có policy PERMISSIVE `TO PUBLIC`
+ở mọi lệnh (SELECT, INSERT, UPDATE, DELETE) — không bảng nào, không lệnh nào, thiếu. Nên mục mới không chặn cụm hợp lệ nào,
+kể cả khi chủ bảng là vai deploy thường (hồ sơ sản xuất).
+⑵ Chủ KHÔNG superuser, bảng có 2 hàng, ENABLE + FORCE, policy duy nhất `TO app_api USING (true) WITH CHECK (true)`: chủ bảng
+`SELECT count(*)` ra 0; `UPDATE … SET id = id` báo 0 hàng; `DELETE … WHERE id > 0` báo 0 hàng — cả ba KHÔNG LỖI; `INSERT`
+ném 42501 "new row violates row-level security policy".
+⑶ Thêm `CREATE POLICY p_nhom … TO zz_nhom94` rồi `GRANT zz_nhom94 TO zz_chu94`: chủ bảng đọc ra 2 hàng. `pg_has_role(chủ,
+nhóm, 'USAGE')` = true, `pg_has_role(chủ, app_api, 'USAGE')` = false — khớp `has_privs_of_role` mà RLS dùng.
+
+**Hình dạng:** chủ thể theo TÍNH CHẤT — mọi bảng (r/p) bật RLS và FORCE trong lược đồ dự án, trừ đối tượng extension, tenant
+hay không; chủ superuser hay BYPASSRLS đứng ngoài vì RLS không áp cho họ ở cấu hình nào. Với mỗi lệnh trong bốn lệnh, đòi
+một policy PERMISSIVE có `polcmd` là lệnh ấy hoặc `*`, và danh sách vai là `PUBLIC` hoặc chứa một vai mà chủ bảng có quyền
+của nó (`pg_has_role … 'USAGE'`). Vế phủ chỉ hỏi DANH SÁCH VAI, không hỏi biểu thức USING — policy tenant `TO PUBLIC USING
+(org_id = …)` được tính là phủ, vì 0 hàng khi chưa gắn tổ chức là [INV-F1] fail-closed có chủ đích. PHÁN XÉT, không tự chữa.
+
+
+**Đo thêm sau lượt soi 46:** ⑷ chủ bảng tự `REVOKE UPDATE, DELETE` ⇒ `has_table_privilege(chủ, bảng, 'UPDATE')` và
+`has_any_column_privilege(…, 'UPDATE')` ra false, SELECT vẫn true; UPDATE của chủ ném 42501. ⑸ bảng phân vùng của chủ thường,
+cha và lá cùng ENABLE + FORCE, policy `TO PUBLIC` chỉ trên cha: chủ đọc QUA CHA ra 2, đọc THẲNG lá ra 0, UPDATE thẳng lá báo 0
+hàng; bản đầu của mục nêu lá đủ bốn lệnh. ⑹ bảng ngoài `public` bật RLS với policy PERMISSIVE `TO PUBLIC`: `CAU_POLICY_LOP_SAI`
+(83⑴) nêu "không thuộc lớp nào" — khoản 98.
+
+**Hình dạng (bản hai):** chủ thể = mọi bảng (r/p) bật RLS và FORCE trong lược đồ dự án, trừ extension, trừ chủ
+superuser/BYPASSRLS, trừ bảng con của một cha bật RLS; với mỗi lệnh chủ bảng còn quyền (`has_any_column_privilege` cho
+SELECT/INSERT/UPDATE, `has_table_privilege` cho DELETE), đòi một policy PERMISSIVE có `polcmd` là lệnh ấy hay `*` và danh sách
+vai là PUBLIC hay chứa một vai chủ bảng có quyền của nó. Thông điệp đặt `TO <chủ bảng>` trước, cảnh báo `TO PUBLIC`.
+
+**Đỏ đo được, cô lập (mười hai đột biến):** M1 mục mù ⇒ `it` thứ nhất · M2 bỏ phủ QUA NHÓM ⇒ vế nhóm · M3 bỏ vế loại chủ
+superuser ⇒ vế chủ superuser — cần HAI sửa: gỡ p_api trước khi đổi chủ, VÀ chủ mới là vai SUPERUSER NOBYPASSRLS (lượt đột biến đầu của bản hai cho thấy M3 SỐNG: vai bootstrap mang cả BYPASSRLS nên vế BYPASSRLS che vế superuser — có khẳng định trong test) · M4 bỏ vế khớp LỆNH ⇒ policy `FOR SELECT` phủ oan cả
+bốn lệnh · M5 gỡ mục khỏi `bang` ⇒ "migrate() NÉM nêu nguyên văn" · M6 RESTRICTIVE được tính là phủ ⇒ vế RESTRICTIVE · M7 bỏ vế
+BYPASSRLS ⇒ vế chủ BYPASSRLS · M8 bỏ vế FORCE ⇒ vế NO FORCE · M9 bỏ vế `relrowsecurity` ⇒ vế tắt RLS còn cờ FORCE · M10 bỏ vế
+extension ⇒ vế `ALTER EXTENSION plpgsql ADD TABLE` · M11 bỏ vế loại bảng con ⇒ vế lá phân vùng · M12 bỏ vế quyền ⇒ vế chủ đã
+tự REVOKE.
+
+**Ranh giới NÓI RA:** ⑴ DML THẲNG lên bảng con dưới chủ bảng cho 0 hàng như mọi vai (đo ⑸) — đường đúng là qua cha, và cha vẫn bị
+soi. ⑵ Mức bảo đảm là trạng thái tại lượt phán xét: gỡ policy, backfill 0 hàng, dựng lại policy trong cùng một lượt thì xanh. ⑶
+USING của bảng tenant khi chưa gắn tổ chức ([INV-F1] fail-closed có chủ đích); RESTRICTIVE đã khai loại chủ bảng; `OWNER TO` một
+vai BYPASSRLS. ⑷ Vai chạy migration không thừa kế chủ — khoản 97. ⑸ Policy ngoài `public` không có đường khai ở 83⑴ — khoản 98.
+
+### Lượt soi đối kháng 46 (trên bản đầu của S1.53): 1 NẶNG, 3 NHẸ, 5 INFO — xử lý trong bản hai, hai phát hiện thành khoản 97 và 98
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Lá phân vùng của bảng tenant bị nêu oan khi chủ không superuser — đúng hồ sơ N2/N3; dự án đã chọn khuôn "policy trên cha, lá không policy" ở ba lớp; lá ngoài `public` là ngõ cụt vì 83⑴ nêu mọi policy ngoài `public` mà không có đường khai | **đúng — đo ⑸ và ⑹** (người soi chỉ đọc mã) | loại bảng con của cha bật RLS; vế test lá phân vùng + tách lá làm đối chứng; đột biến M11; phần 83⑴ thành **khoản 98** |
+| NHẸ-2 | NHẸ | Mục không xét quyền như 83⑵: đòi policy cho lệnh chủ đã tự REVOKE; thông điệp gợi `TO PUBLIC` trước — lối ra phủ luôn vai ứng dụng | **đúng — đo ⑷** | chỉ lệnh chủ còn quyền; thông điệp đặt `TO <chủ bảng>` trước; vế test REVOKE rồi GRANT lại; đột biến M12 |
+| NHẸ-3 | NHẸ | "tức của mọi migration chạy dưới vai deploy" sai ở N2: vai chạy migration không phải chủ và không thừa kế chủ thì không được soi | đúng — đọc | sửa câu chữ ở thông điệp và ADR-036 hàng 27; chủ thể `current_user` là **khoản 97** |
+| NHẸ-4 | NHẸ | Hai khẳng định rỗng ruột ("lược đồ thật", "chủ superuser đứng ngoài") và năm vế lọc không đối chứng (`polpermissive`, BYPASSRLS, FORCE, `relrowsecurity`, extension) | **đúng — không có các sửa này thì M3 và M6–M10 sẽ SỐNG; M3 còn sống qua lượt đột biến đầu của bản hai vì vai bootstrap mang cả BYPASSRLS (đo)** | census độc lập chủ bảng; gỡ p_api trước khi đổi chủ; `it` mới cho năm vế lọc; đột biến M6–M10 |
+| INFO-5 | INFO | Thứ tự: không chặn oan, nhưng gỡ policy / backfill 0 hàng / dựng lại trong cùng một lượt thì lượt phán xét cuối không thấy | đúng — đọc `migrate.ts` | ghi mức bảo đảm vào ADR-036 hàng 27 |
+| INFO-6 | INFO | Các đường 0 hàng khác của chủ bảng ngoài phạm vi mục (USING tenant, RESTRICTIVE đã khai, `OWNER TO` BYPASSRLS) | đúng | ghi vào ADR-036 hàng 27 |
+| INFO-7 | INFO | Policy `TO M` với M thừa kế chủ O vẫn nêu O; bảng extension tạo lúc chạy (chunk) cùng lớp NẶNG-1 | đúng — lối ra rẻ `TO M, O`; chunk là bảng con nên đã được bản hai loại | không đổi thêm |
+| INFO-8 | INFO | `pg_has_role … 'USAGE'` khớp `has_privs_of_role` của RLS; oid lạ trả false (fail-closed); lối tắt superuser là gốc NHẸ-4b | đúng | không đổi |
+| INFO-9 | INFO | ADR-036 hàng 27 (và hàng 26 của S1.51) thiếu ô "Đo" — bảng §2 có năm cột | **đúng — đếm dấu `\|`: năm cột ở tiêu đề, bốn ở hai hàng ấy** | thêm ô "Đo" cho cả hai hàng |
+
+**Điều đáng mang sang vòng sau:** ⑴ một mục phán xét mới phải được thử trên HỒ SƠ SẢN XUẤT (chủ bảng thường), không chỉ trên
+cụm test nơi mọi bảng thuộc superuser — vế loại superuser làm cả lược đồ thật im và che mọi chặn oan; ⑵ một khẳng định "đứng
+ngoài" phải được dựng sao cho KHÔNG vế nào khác cũng cho cùng kết quả — với superuser, `pg_has_role` luôn đúng, và vai bootstrap mang CẢ BYPASSRLS nên che luôn vế superuser (lượt đột biến bắt, không phải lượt soi); ⑶ mục kề phải
+cùng chuẩn cả ở những vế không hiện lên trong tên mục — 83⑵ xét quyền đã cấp, 94 bản đầu thì không; ⑷ khi thêm hàng vào một
+bảng tài liệu, đếm cột theo tiêu đề.
