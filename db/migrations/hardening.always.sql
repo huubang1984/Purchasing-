@@ -204,6 +204,13 @@
 --     lượt 1  che_do='sua'      TRƯỚC vòng migration đánh số — chỉ SỬA, không phán xét gì.
 --                               Bắt buộc phải có: 001 GRANT cho app_api/app_unseal nên hai
 --                               role đó phải tồn tại trước khi 001 chạy.
+--     [S1.57 / khoản nợ 100] lượt 1b che_do='truoc_vong' — CHỈ khi còn tệp đánh số chưa áp, sau lượt 1,
+--                               trước vòng: hỏi chủ thể "vai chạy migration" của mục 94, TRỪ dòng mà một
+--                               migration dưới chính vai ấy sửa được, rồi RAISE TP100 nếu còn dòng. Ngoại
+--                               lệ duy nhất trong các LƯỢT của hardening đối với "không phán xét trước
+--                               vòng" (migrate() có thêm ba phép từ chối trước vòng của riêng nó); lý do ở
+--                               khối cùng nhãn trong thân DO. Nên câu "BA lượt" ở trên nay đúng khi không
+--                               tệp nào chờ; còn tệp chờ thì là BỐN.
 --     (vòng migration đánh số chạy ở giữa — 00N nào cũng tới được, kể cả migration vá lỗi)
 --     lượt 2  che_do='sua'      SAU vòng đó — sửa nốt những gì migration mới vừa tạo ra
 --                               (vd. bật RLS trên bảng vừa sinh), COMMIT riêng.
@@ -381,6 +388,7 @@ DO $khoi$
 DECLARE
   -- [vòng fix 1 — I3] Chế độ chạy. Xem khối "BA LƯỢT" ở đầu file.
   --   'sua'      : chỉ BƯỚC 0/1/1b/2 (tạo role, gỡ membership lạ, chạy câu lệnh cưỡng chế).
+  --   'truoc_vong' : [S1.57 / khoản nợ 100] chỉ một câu hỏi — CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI — rồi RAISE TP100 hoặc trả về.
   --   'phan_xet' : chỉ BƯỚC 3/4 (đọc catalog, gom lỗi, gãy một lần).
   --   'day_du'   : cả hai — mặc định khi GUC không được đặt, để chạy file này bằng tay
   --                (psql -f) vẫn giữ đúng ngữ nghĩa cũ.
@@ -2808,13 +2816,95 @@ $ham$;
   -- app_current_org_id())` tính là phủ dù migrate() không gắn app.org_id — hôm nay ồn nhờ EXECUTE của hàm ấy chỉ app_api/app_unseal có
   -- (đo: 42501), còn GRANT EXECUTE cho vai deploy thì backfill ra 0 hàng im, mục im, và migrate() không thu hồi (đo) — khoản 101.
   -- [lượt soi 49 NẶNG-1] Mục phán xét SAU vòng đánh số: khi mục đỏ, backfill 0 hàng của CHÍNH lượt đã COMMIT và ghi checksum, REVOKE
-  -- rồi chạy lại thì đi qua mà backfill không chạy lại (đo) — thông điệp nói ra; lớp hỏi TRƯỚC vòng (và chụp vai quanh vòng, NHẸ-1)
-  -- là khoản 100.
+  -- rồi chạy lại thì đi qua mà backfill không chạy lại (đo) — thông điệp nói ra; ~~lớp hỏi TRƯỚC vòng (và chụp vai quanh vòng, NHẸ-1)
+  -- là khoản 100.~~ [S1.57 / khoản nợ 100] Lớp hỏi TRƯỚC vòng nay có: chủ thể thứ hai tách thành CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI,
+  -- và lượt `truoc_vong` — migrate() gọi nó sau lượt sửa đầu, TRƯỚC vòng đánh số, chỉ khi còn tệp chưa áp — hỏi đúng hằng ấy rồi
+  -- RAISE SQLSTATE TP100: một bản câu cho hai lớp. Hằng trả ba cột: `ten` (bảng/vai/lệnh); `duong` — đường tới quyền (lượt soi 50
+  -- NHẸ-2: lời khuyên "REVOKE khỏi vai này" không có tác dụng khi quyền đến qua PUBLIC, qua nhóm hay do thừa kế chủ); và `tu_sua_duoc`.
+  -- [lượt soi 50 NẶNG-1] `tu_sua_duoc` là dòng mà MỘT MIGRATION CHẠY DƯỚI CHÍNH VAI ẤY sửa được — lượt `truoc_vong` bỏ qua chúng,
+  -- lượt phán xét sau vòng vẫn nêu. Bản đầu của vòng chặn cả chúng trước vòng: một ngõ cụt ADR-028 §3, vì migration vá lỗi không bao
+  -- giờ tới được đích. Đo (thăm dò S1.57, PostgreSQL 16.15): ⒜ thành viên INHERIT của chủ trên bảng FORCE đọc 0 mà vẫn `ALTER POLICY`
+  -- và `CREATE POLICY` được — kiểm chủ là has_privs_of_role — rồi đọc lại ra 2; ⒝ vai có ADMIN OPTION trên chủ, hay trên một vai trung
+  -- gian thừa kế chủ (kể cả ADMIN có được qua một nhóm mà nó thừa kế), tự `GRANT` cho mình rồi `ALTER POLICY` được trong cùng giao
+  -- dịch; ⒞ vai tự cấp membership nhóm mang quyền thì tự `REVOKE` được và quyền mất ngay, còn membership do vai khác cấp — kể cả kèm
+  -- ADMIN OPTION — thì KHÔNG (PG16 chỉ thu hồi grant của chính người thu hồi: WARNING "has not been granted … by role"), nên vế ba
+  -- hỏi `grantor` của cạnh membership; ⒟ thành viên NOINHERIT mà có SET thì "must be owner" nếu không `SET ROLE` — và migration của kho
+  -- không được viết câu đổi vai (db/migration-shape.test.ts), nên dòng ấy KHÔNG thuộc `tu_sua_duoc`. Ba vế đều là xấp xỉ về phía
+  -- BỎ QUA nhiều hơn (cắt một đường khi còn đường khác; ADMIN trên một vai superuser) — chiều ấy chỉ trả dòng về lượt phán xét sau
+  -- vòng, không tạo ngõ cụt. Ranh giới: backfill trên dòng `tu_sua_duoc` vẫn có thể bị tiêu trước khi migration vá lỗi chạy — cùng
+  -- hạng với chủ thể thứ nhất; hai thông điệp sau vòng nói ra.
+  -- Chủ thể thứ nhất (chủ bảng) KHÔNG được hỏi trước: lối ra của nó là chính một migration. Chụp vai quanh vòng ở migrate.ts (so trong
+  -- giao dịch của mỗi tệp, trước khi ghi checksum). Đo: hồ sơ N2 với `999_zz_backfill100.sql` đang chờ — bản S1.56 ghi tệp là đã áp,
+  -- hàng không đổi; bản này từ chối trước vòng, tệp còn chờ, chạy lại dưới superuser thì backfill áp đủ hàng.
+  -- Mọi mục ACL của một bảng — mức bảng (ACL mặc định khi relacl NULL) và mức cột — dạng (grantee, privilege_type); grantee 0 là PUBLIC.
+  MAU_ACL_CUA_BANG constant text :=
+    $q$(SELECT x.grantee, x.privilege_type
+          FROM pg_catalog.aclexplode(coalesce(%1$s.relacl, pg_catalog.acldefault('r', %1$s.relowner))) x
+        UNION ALL
+        SELECT x.grantee, x.privilege_type
+          FROM pg_attribute att, pg_catalog.aclexplode(att.attacl) x
+         WHERE att.attrelid = %1$s.oid AND att.attnum > 0 AND NOT att.attisdropped)$q$;
+
+  CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh AS ten,
+              coalesce((SELECT pg_catalog.string_agg(DISTINCT d.mo_ta, ', ' ORDER BY d.mo_ta)
+                          FROM (SELECT CASE WHEN a.grantee = 0 THEN 'qua PUBLIC'
+                                            WHEN a.grantee = v.oid THEN 'cấp thẳng cho vai này'
+                                            WHEN a.grantee = c.relowner THEN 'thừa kế quyền chủ bảng ' || pg_catalog.quote_ident(r.rolname)
+                                            ELSE 'qua nhóm ' || pg_catalog.quote_ident(gr.rolname) END AS mo_ta
+                                  FROM $q$ || pg_catalog.format(MAU_ACL_CUA_BANG, 'c') || $q$ a
+                                  LEFT JOIN pg_roles gr ON gr.oid = a.grantee
+                                 WHERE a.privilege_type = g.ten_lenh
+                                   AND CASE WHEN a.grantee = 0 THEN true
+                                            ELSE pg_catalog.pg_has_role(v.oid, a.grantee, 'USAGE') END) d),
+                       'không đọc được đường tới quyền') AS duong,
+              -- [lượt soi 50 NẶNG-1] ba vế tự sửa được — xem khối đo ở trên.
+              (pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE')
+               OR EXISTS (SELECT 1 FROM pg_roles x
+                           WHERE pg_catalog.pg_has_role(v.oid, x.oid, 'MEMBER WITH ADMIN OPTION')
+                             AND pg_catalog.pg_has_role(x.oid, c.relowner, 'USAGE'))
+               OR EXISTS (SELECT 1 FROM $q$ || pg_catalog.format(MAU_ACL_CUA_BANG, 'c') || $q$ a
+                            JOIN pg_auth_members am ON am.inherit_option
+                           WHERE a.privilege_type = g.ten_lenh
+                             AND pg_catalog.pg_has_role(v.oid, am.member, 'USAGE')
+                             AND pg_catalog.pg_has_role(v.oid, am.grantor, 'USAGE')
+                             AND CASE WHEN a.grantee = 0 OR a.grantee = v.oid THEN false
+                                      ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END)) AS tu_sua_duoc
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_roles r ON r.oid = c.relowner
+         JOIN pg_roles v ON v.rolname = current_user
+         CROSS JOIN (VALUES ('r', 'SELECT'), ('w', 'UPDATE'), ('d', 'DELETE')) AS g(ma, ten_lenh)
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+          -- [lượt soi 49 NẶNG-2] gương check_enable_rls — xem ⑸.
+          AND NOT v.rolsuper
+          AND NOT v.rolbypassrls
+          AND v.oid <> c.relowner
+          AND (c.relforcerowsecurity OR NOT pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE'))
+          -- [lượt soi 49 NHẸ-5] thiếu USAGE trên lược đồ thì mọi truy cập ném 42501 — ồn, không im.
+          AND pg_catalog.has_schema_privilege(v.oid, n.oid, 'USAGE')
+          AND NOT EXISTS (SELECT 1 FROM pg_depend de
+                           WHERE de.classid = 'pg_class'::regclass AND de.objid = c.oid AND de.deptype = 'e')
+          AND NOT EXISTS (SELECT 1 FROM pg_inherits ih JOIN pg_class pc ON pc.oid = ih.inhparent
+                           WHERE ih.inhrelid = c.oid AND pc.relrowsecurity)
+          AND CASE g.ma WHEN 'd' THEN pg_catalog.has_table_privilege(v.oid, c.oid, 'DELETE')
+                        ELSE pg_catalog.has_any_column_privilege(v.oid, c.oid, g.ten_lenh) END
+          AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                           WHERE p.polrelid = c.oid AND p.polpermissive
+                             AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
+                             AND (p.polroles = '{0}'::oid[]
+                                  OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
+                                              WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE'))))$q$;
+
   CAU_PHU_LENH_CHU_BANG_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(r.rolname) || ' (chủ bảng)/' || g.ten_lenh
               || ': bảng FORCE ROW LEVEL SECURITY mà chủ bảng CÒN QUYỀN lệnh này nhưng không policy PERMISSIVE nào phủ vai chủ '
                  '(khoản 94) — RLS mặc định TỪ CHỐI: SELECT/UPDATE/DELETE của chủ bảng và của mọi vai thừa kế quyền chủ bảng trả 0 '
-                 'hàng KHÔNG LỖI, INSERT ném. Sửa: một migration mới thêm policy PERMISSIVE cho lệnh ấy TO chủ bảng (hay TO một nhóm '
+                 'hàng KHÔNG LỖI, INSERT ném. Migration đánh số nào đã chạy ở lượt này dưới chủ bảng hay dưới một vai thừa kế quyền '
+                 'chủ đều đã ghi checksum, deploy sau không chạy lại chúng — phép hỏi trước vòng của migrate() (khoản 100) cố ý KHÔNG '
+                 'soi chủ thể này vì lối ra của nó là chính một migration: kiểm backfill của lượt này, chạy lại bằng một migration mới '
+                 'nếu nó ra 0 hàng. Sửa: một migration mới thêm policy PERMISSIVE cho lệnh ấy TO chủ bảng (hay TO một nhóm '
                  'mà chủ bảng là thành viên); TO PUBLIC cũng phủ nhưng phủ LUÔN mọi vai ứng dụng có quyền — chỉ dùng khi đó là ý '
                  'định; hoặc REVOKE lệnh ấy khỏi chủ bảng nếu chủ không bao giờ cần.' AS mo_ta
          FROM pg_class c
@@ -2840,40 +2930,25 @@ $ham$;
                                   OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
                                               WHERE pg_catalog.pg_has_role(c.relowner, o.oid, 'USAGE'))))
        UNION ALL
-       -- [S1.56 / khoản nợ 97] chủ thể thứ hai — xem ⑸ ở trên.
-       SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh
-              || ': RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này mà không policy PERMISSIVE nào phủ nó '
-                 '(khoản 97) — SELECT/UPDATE/DELETE của một migration backfill chạy dưới vai này trả 0 hàng KHÔNG LỖI. Các migration '
-                 'đánh số của CHÍNH lượt này đã chạy dưới cấu hình ấy và đã ghi checksum — deploy sau không chạy lại chúng: kiểm backfill '
-                 'của lượt này, chạy lại bằng một migration mới nếu nó ra 0 hàng. Sửa, ít quyền nhất trước — cả ba nằm ngoài tầm của '
-                 'chính vai này: người cấp, chủ bảng hay SUPERUSER REVOKE lệnh ấy khỏi vai này; hoặc chạy migration dưới chủ bảng; hoặc '
-                 'chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này — một quyền đọc/ghi THƯỜNG TRỰC của vai deploy, trên bảng tenant '
-                 'còn phải qua [CR1].' AS mo_ta
-         FROM pg_class c
-         JOIN pg_namespace n ON n.oid = c.relnamespace
-         JOIN pg_roles v ON v.rolname = current_user
-         CROSS JOIN (VALUES ('r', 'SELECT'), ('w', 'UPDATE'), ('d', 'DELETE')) AS g(ma, ten_lenh)
-        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
-          AND c.relkind IN ('r', 'p') AND c.relrowsecurity
-          -- [lượt soi 49 NẶNG-2] gương check_enable_rls — xem ⑸.
-          AND NOT v.rolsuper
-          AND NOT v.rolbypassrls
-          AND v.oid <> c.relowner
-          AND (c.relforcerowsecurity OR NOT pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE'))
-          -- [lượt soi 49 NHẸ-5] thiếu USAGE trên lược đồ thì mọi truy cập ném 42501 — ồn, không im.
-          AND pg_catalog.has_schema_privilege(v.oid, n.oid, 'USAGE')
-          AND NOT EXISTS (SELECT 1 FROM pg_depend de
-                           WHERE de.classid = 'pg_class'::regclass AND de.objid = c.oid AND de.deptype = 'e')
-          AND NOT EXISTS (SELECT 1 FROM pg_inherits ih JOIN pg_class pc ON pc.oid = ih.inhparent
-                           WHERE ih.inhrelid = c.oid AND pc.relrowsecurity)
-          AND CASE g.ma WHEN 'd' THEN pg_catalog.has_table_privilege(v.oid, c.oid, 'DELETE')
-                        ELSE pg_catalog.has_any_column_privilege(v.oid, c.oid, g.ten_lenh) END
-          AND NOT EXISTS (SELECT 1 FROM pg_policy p
-                           WHERE p.polrelid = c.oid AND p.polpermissive
-                             AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
-                             AND (p.polroles = '{0}'::oid[]
-                                  OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
-                                              WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE'))))$q$;
+       -- [S1.56 / khoản nợ 97] chủ thể thứ hai — xem ⑸ ở trên. [S1.57 / khoản nợ 100] Thân câu nay ở CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI
+       -- (một bản, dùng chung với lượt truoc_vong); ở đây bọc ten/duong/tu_sua_duoc thành mo_ta.
+       SELECT t.ten
+              || ': RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (' || t.duong || ') mà không policy '
+                 'PERMISSIVE nào phủ nó (khoản 97) — SELECT/UPDATE/DELETE của một migration backfill chạy dưới vai này trả 0 hàng KHÔNG '
+                 'LỖI. Migration đánh số nào đã chạy ở lượt này đều đã ghi checksum, deploy sau không chạy lại chúng: kiểm backfill của '
+                 'lượt này, chạy lại bằng một migration mới nếu nó ra 0 hàng. '
+              || CASE WHEN t.tu_sua_duoc
+                      THEN 'Vai này mang hay tự lấy được quyền chủ bảng, hoặc tự cắt được đường tới quyền, nên phép hỏi trước vòng của '
+                           'migrate() (khoản 100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: thêm policy '
+                           'PERMISSIVE cho lệnh ấy TO chủ bảng hay TO vai này (một quyền đọc/ghi THƯỜNG TRỰC của vai deploy, trên bảng '
+                           'tenant còn phải qua [CR1]), hay gỡ đường tới quyền đã nêu.'
+                      ELSE 'Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này khi nó có sẵn TRƯỚC vòng đánh số, nên tới được '
+                           'đây thì hoặc lượt này không tệp nào chờ, hoặc cấu hình mọc ra TRONG vòng. Sửa, ít quyền nhất trước — cả ba '
+                           'nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền đã nêu (REVOKE khỏi '
+                           'đúng grantee ấy, hay gỡ membership nhóm); hoặc chạy migrate() dưới một vai mà RLS không áp hay có policy phủ '
+                           'trên bảng này; hoặc chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này (một quyền đọc/ghi THƯỜNG TRỰC '
+                           'của vai deploy, trên bảng tenant còn phải qua [CR1]).' END AS mo_ta
+         FROM ($q$ || CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI || $q$) t$q$;
 
   CAU_RLS_NGOAI_TENANT_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname
@@ -9570,8 +9645,32 @@ BEGIN
 
   -- [vòng fix 1 — I3] Chế độ lạ là LỖI, không phải "coi như mặc định". Một lỗi chính tả trong
   -- packages/db/src/migrate.ts sẽ làm lượt phán xét im lặng biến mất nếu ở đây khoan dung.
-  IF che_do NOT IN ('sua', 'phan_xet', 'day_du') THEN
-    RAISE EXCEPTION 'app.hardening_che_do = % không hợp lệ (chỉ nhận sua/phan_xet/day_du)', che_do;
+  IF che_do NOT IN ('sua', 'truoc_vong', 'phan_xet', 'day_du') THEN
+    RAISE EXCEPTION 'app.hardening_che_do = % không hợp lệ (chỉ nhận sua/truoc_vong/phan_xet/day_du)', che_do;
+  END IF;
+
+  -- ===== [S1.57 / khoản nợ 100] LƯỢT HỎI TRƯỚC VÒNG ĐÁNH SỐ ==============================
+  -- migrate() chạy lượt này sau lượt sửa đầu, TRƯỚC vòng migration đánh số, CHỈ khi còn tệp chưa áp (packages/db/src/migrate.ts).
+  -- Nó hỏi đúng MỘT câu — chủ thể "vai chạy migration" của mục 94, trừ dòng `tu_sua_duoc` — rồi RAISE SQLSTATE TP100 kèm danh sách
+  -- bảng/vai/lệnh và đường tới quyền, hoặc trả về: không sửa gì, không phán xét mục nào khác. Là ngoại lệ duy nhất TRONG CÁC LƯỢT CỦA
+  -- HARDENING đối với "không phán xét trước vòng" — migrate() còn ba phép từ chối trước vòng của riêng nó: TU_CHOI_GUC_SOM và hai phép
+  -- hàng mức database (lượt soi 50 INFO-8; bản đầu viết "ngoại lệ DUY NHẤT" không kèm phạm vi). Vì sao dòng còn lại được chặn TRƯỚC
+  -- vòng mà không phá lời hứa "migration vá lỗi luôn tới được đích": mọi lối ra của chúng nằm ngoài tầm của chính vai chạy migration
+  -- (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng
+  -- thêm), nên một migration chạy dưới vai ấy không vá được — còn một backfill chạy dưới nó thì ra 0 hàng không lỗi rồi được ghi
+  -- checksum (đo S1.56 ⒣; hồ sơ N2 ở db/migrations.int.test.ts). Dòng `tu_sua_duoc` thì một migration dưới chính vai ấy SỬA ĐƯỢC (khối
+  -- đo trên CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI) nên KHÔNG chặn ở đây — lượt soi 50 NẶNG-1: bản đầu chặn cả chúng, một ngõ cụt ADR-028
+  -- §3. Chủ thể CHỦ BẢNG của cùng mục cũng KHÔNG hỏi ở đây, cùng lý do — test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
+  -- Không bọc EXCEPTION: câu hỏi ném thì migrate() dừng trước vòng với lỗi thật (test ghim bằng một tệp .always.sql giả); nuốt để "đi
+  -- tiếp" là một nhánh không đột biến nào làm đỏ được (ADR-028 §2⑷), và lượt phán xét sau vòng cũng sẽ không đánh giá được cùng câu ấy.
+  IF che_do = 'truoc_vong' THEN
+    EXECUTE $e$SELECT pg_catalog.string_agg(t.ten || ' (' || t.duong || ')', '; ' ORDER BY t.ten) FROM ($e$
+            || CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI || $e$) t WHERE NOT t.tu_sua_duoc$e$
+      INTO con_sot;
+    IF con_sot IS NOT NULL THEN
+      RAISE EXCEPTION USING ERRCODE = 'TP100', MESSAGE = con_sot;
+    END IF;
+    RETURN;
   END IF;
 
   IF che_do IN ('sua', 'day_du') THEN

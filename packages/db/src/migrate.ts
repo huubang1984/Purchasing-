@@ -16,6 +16,20 @@ export const TU_CHOI_GUC_SOM =
   "migrate() từ chối chạy: GUC tenant/khách hay GUC vận hành đã bị gắn sẵn trên phiên deploy TRƯỚC lượt sửa";
 
 /**
+ * [S1.57 / khoản nợ 100] Tiền tố của phép TỪ CHỐI TRƯỚC VÒNG ĐÁNH SỐ (lượt `truoc_vong` của hardening) — xuất ra để test
+ * ghim MỘT bản, cùng lý do với `TU_CHOI_GUC_SOM`.
+ */
+export const TU_CHOI_TRUOC_VONG =
+  "migrate() từ chối chạy vòng migration đánh số: RLS áp cho vai chạy migration trên bảng nó có quyền mà không policy PERMISSIVE nào phủ nó";
+
+/**
+ * [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc dưới vai khác vai đã
+ * mở vòng đánh số.
+ */
+export const TU_CHOI_DOI_VAI =
+  "migrate() từ chối ghi migration: tệp kết thúc dưới một vai khác vai đã mở vòng migration đánh số";
+
+/**
  * [S1.51 / khoản nợ 92 — lượt soi 44 NẶNG-3] `search_path` được xét theo TÍNH CHẤT, không theo một chuỗi.
  * Tính chất an ninh thật là *không schema nào của người khác đứng trước `public`* (khoản 78 — che tên); `"$user"` và
  * `pg_catalog` là hai tên duy nhất được phép đứng trước. Nên cụm đặt `search_path = 'public'` — cấu hình AN TOÀN HƠN mặc
@@ -53,8 +67,11 @@ const HAU_TO_LUON_CHAY = ".always.sql";
  * [fix vòng 1 — I3] Chế độ chạy của file ".always.sql", truyền qua GUC `app.hardening_che_do`.
  * Giá trị lạ làm chính file SQL đó RAISE — cố ý, để một lỗi chính tả ở đây không âm thầm biến
  * lượt phán xét thành no-op. Xem khối "BA LƯỢT" ở đầu db/migrations/hardening.always.sql.
+ *
+ * [S1.57 / khoản nợ 100] `truoc_vong`: lượt hỏi TRƯỚC vòng đánh số, chỉ khi còn tệp chưa áp — hardening hỏi đúng chủ thể "vai
+ * chạy migration" của mục 94 và RAISE SQLSTATE TP100 nếu có dòng. Xem khối hỏi trước vòng trong `migrate()`.
  */
-type CheDoHardening = "sua" | "phan_xet";
+type CheDoHardening = "sua" | "truoc_vong" | "phan_xet";
 
 /**
  * [vòng fix 2 — MỤC C] Một thông báo do PostgreSQL phát ra trong lúc `migrate()` chạy.
@@ -197,6 +214,10 @@ export function migrationChecksum(sql: string): string {
  * tại (001 GRANT cho các role), lượt sau-vòng là lượt DUY NHẤT nhìn thấy migration vừa được
  * đưa vào, và tách phán xét sang transaction riêng để một phán xét hỏng không rollback các
  * sửa chữa đã thành công.
+ *
+ * [S1.57 / khoản nợ 100] Khi còn tệp đánh số chưa áp, thêm một lượt `truoc_vong` giữa lượt `sua` đầu và vòng đánh số — lượt ấy chỉ
+ * hỏi chủ thể "vai chạy migration" của mục 94 và từ chối trước khi tệp nào chạy; mỗi tệp còn được so vai cuối tệp với vai đã mở
+ * vòng, trong chính giao dịch của tệp. Không tệp nào chờ thì vẫn đúng BA lượt.
  *
  * [fix round 4 — Minor] RÀNG BUỘC của ".always.sql": giống mọi migration đánh số, nội dung
  * file được chạy TRONG một BEGIN/COMMIT tường minh, nên KHÔNG dùng được lệnh không chạy
@@ -564,6 +585,49 @@ export async function migrate(
     // `default`/`database`) hay bởi hai phép đọc hàng catalog ngay trên (`database`), và không migration đánh số nào chạy
     // giữa chúng. Giữ lại thì nó là một lớp không đột biến nào làm đỏ được — đúng thứ ADR-028 §2⑷ cấm ở `bang`.
 
+    // [S1.57 / khoản nợ 100 — lượt soi 49 NẶNG-1] HỎI TRƯỚC VÒNG ĐÁNH SỐ, chỉ khi còn tệp chưa áp. Mục 94 của hardening phán xét
+    // chủ thể "vai chạy migration" ở LƯỢT 3, SAU vòng: khi nó đỏ, một backfill của CHÍNH lượt đã chạy dưới vai ấy, ra 0 hàng
+    // không lỗi, COMMIT và ghi checksum — deploy sau không chạy lại (đo S1.57 trên hồ sơ N2: `999_…` được ghi là đã áp, hàng
+    // không đổi). Cùng khuôn với phép từ chối sớm của khoản 87 ở trên. Lượt `truoc_vong` của hardening hỏi ĐÚNG câu ấy — một bản,
+    // `CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI` — và RAISE SQLSTATE TP100 kèm danh sách bảng/vai/lệnh.
+    // Chặn sớm không lấy mất lối ra: hardening bỏ qua ở lượt này mọi dòng mà một migration chạy dưới chính vai ấy sửa được — thừa
+    // kế hay tự lấy được quyền chủ bảng, tự cắt được đường tới quyền (`tu_sua_duoc`; lượt soi 50 NẶNG-1: bản đầu chặn cả chúng, một
+    // ngõ cụt) — nên dòng còn lại chỉ có lối ra ngoài tầm vai ấy (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy
+    // migrate() dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng thêm). Chủ thể CHỦ BẢNG cũng KHÔNG được hỏi trước:
+    // lối ra của nó là chính một migration (ADR-028 §3). Test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
+    // Chỉ khi còn tệp chưa áp: không tệp nào chờ thì không backfill nào bị tiêu, và lượt phán xét sau vòng nêu TRỌN mọi mục thay
+    // vì một phép từ chối sớm che các mục khác. Không huỷ kết nối ở phép từ chối này (khác hai phép ngay trên): câu hỏi đọc catalog
+    // và mỗi giao dịch mới thấy catalog mới — phiên không mang trạng thái nào mà một lần sửa quyền cần kết nối mới mới thấy.
+    const { rows: daGhiTruocVong } = await lockClient.query<{ version: string }>(
+      "SELECT version FROM public.schema_migrations WHERE version OPERATOR(pg_catalog.=) ANY ($1::pg_catalog.text[])",
+      [fileDanhSo],
+    );
+    const conTepChuaAp = daGhiTruocVong.length < fileDanhSo.length;
+    /** [lượt soi 49 NHẸ-1] Vai đã mở vòng đánh số — mỗi tệp được so với nó trong chính giao dịch của tệp, trước khi ghi checksum. */
+    let vaiMoVong: string | undefined;
+    if (conTepChuaAp) {
+      try {
+        await chayFileLuonChay("truoc_vong");
+      } catch (loi) {
+        const goc = (loi as Error).cause as { code?: unknown; message?: unknown } | undefined;
+        if (goc?.code === "TP100") {
+          throw new Error(
+            `${TU_CHOI_TRUOC_VONG} — ${String(goc.message)}. ` +
+              "Không migration đánh số nào chạy ở lượt này: các tệp chưa áp vẫn chờ, không tệp nào được ghi checksum. Một backfill chạy " +
+              "dưới vai này sẽ đọc/ghi 0 hàng KHÔNG LỖI rồi được ghi là đã áp (mục 94 của hardening, khoản 97 và 100). Sửa, ít quyền " +
+              "nhất trước — cả ba nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền nêu trong ngoặc " +
+              "(REVOKE khỏi đúng grantee ấy, hay gỡ membership nhóm); hoặc chạy migrate() dưới một vai mà RLS không áp (SUPERUSER, " +
+              "BYPASSRLS) hay có policy phủ trên bảng ấy; hoặc chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này (một quyền đọc/ghi " +
+              "THƯỜNG TRỰC của vai deploy, trên bảng tenant còn phải qua [CR1]). Dòng mà một migration dưới chính vai này sửa được thì " +
+              "không bị nêu ở đây — lượt phán xét sau vòng nêu nó.",
+            { cause: loi },
+          );
+        }
+        throw loi;
+      }
+      vaiMoVong = (await lockClient.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]?.vai;
+    }
+
     const applied: string[] = [];
 
     for (const file of fileDanhSo) {
@@ -591,6 +655,23 @@ export async function migrate(
       try {
         await lockClient.query("BEGIN");
         await lockClient.query(sql);
+        // [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] Tệp đổi vai (`SET ROLE`, `SET LOCAL ROLE`, `SET SESSION AUTHORIZATION`) mà
+        // không trả lại thì phần cuối tệp — và với phạm vi phiên, mọi tệp sau cùng các lượt hardening sau vòng — chạy dưới một vai
+        // mà lượt phán xét không soi, rồi client về pool vẫn mang vai ấy. So NGAY TRONG giao dịch của tệp, trước khi ghi checksum:
+        // lệch ⇒ ROLLBACK tệp, từ chối, huỷ kết nối — khối catch ngay dưới huỷ kết nối cho MỌI lỗi của tệp, kể cả lỗi này. ROLLBACK
+        // không gỡ được vai khi tệp tự COMMIT rồi SET ROLE ở cuối: câu ấy chạy trong khối ngầm của câu nhiều lệnh và được commit
+        // cùng khối; còn khi tệp mở lại BEGIN sau SET ROLE thì BEGIN biến khối ngầm thành giao dịch tường minh và ROLLBACK gỡ được
+        // (đo ở lượt đột biến S1.57 — bản đầu của test viết ngược lại). Ranh giới: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc
+        // thì phép so không thấy — nó chỉ thấy trạng thái cuối tệp (test ghim).
+        const vaiCuoiTep = (await lockClient.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]?.vai;
+        if (vaiCuoiTep !== vaiMoVong) {
+          throw new Error(
+            `${TU_CHOI_DOI_VAI} — ${file} kết thúc dưới vai ${String(vaiCuoiTep)} thay vì ${String(vaiMoVong)}. ` +
+              "Phần tệp chạy sau lần COMMIT cuối của chính nó (cả tệp, nếu tệp không tự COMMIT) đã ROLLBACK; tệp không được ghi " +
+              "checksum, không tệp sau nào chạy; kết nối bị huỷ. Lượt phán xét của hardening soi vai của kết nối deploy, không soi " +
+              "vai mà phần cuối tệp đã chạy dưới nó. Trả vai ở cuối tệp (RESET ROLE), hoặc chạy migrate() dưới đúng vai mà tệp ấy cần.",
+          );
+        }
         await lockClient.query(
           "INSERT INTO public.schema_migrations (version, checksum) VALUES ($1, $2)",
           [file, checksum],
@@ -608,6 +689,11 @@ export async function migrate(
           // encountered a connection error" của ROLLBACK sẽ thay thế lỗi gốc, che mất tên
           // migration thật sự gây lỗi).
         }
+        // [S1.57 / khoản nợ 100 — lượt soi 50 NHẸ-4 ⑵] Tệp hỏng thì HUỶ kết nối, không trả về pool. Một tệp tự COMMIT rồi
+        // `SET ROLE` (hay `SET search_path`) và COMMIT lần nữa, rồi mới ném, để lại trạng thái phiên mà ROLLBACK ở trên không
+        // lùi được — client về pool dưới vai lạ, và lượt migrate() kế trên pool max 1 chụp chính vai ấy làm "vai mở vòng" (đo
+        // ở migrate.int.test.ts). Giá: một kết nối mới sau một lần deploy hỏng.
+        phaiHuyPhien ??= error as Error;
         throw new Error(`Migration ${file} thất bại: ${(error as Error).message}`, {
           cause: error,
         });

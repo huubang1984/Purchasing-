@@ -678,3 +678,149 @@ describe("lớp tĩnh không mù với các cách viết hợp lệ", () => {
     ]);
   });
 });
+
+// ============================================================================================
+// [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] MIGRATION CỦA KHO KHÔNG VIẾT THẲNG MỘT CÂU ĐỔI VAI
+//
+// migrate() so `current_user` cuối mỗi tệp với vai đã mở vòng đánh số, trong chính giao dịch của tệp
+// (packages/db/src/migrate.ts): tệp kết thúc dưới vai khác bị ROLLBACK và từ chối. Phép so ấy chỉ thấy
+// TRẠNG THÁI CUỐI tệp — tệp đổi vai, chạy backfill, rồi tự RESET ROLE thì đi qua, trong khi lượt phán xét
+// của hardening soi vai đăng nhập chứ không soi vai mà backfill đã chạy dưới nó (ranh giới ghim ở
+// packages/db/src/migrate.int.test.ts). Lớp này THU HẸP ca ấy cho migration của kho, trước khi commit: không
+// tệp nào mà migrate() coi là migration đánh số (mọi `.sql` không mang hậu tố `.always.sql` — cùng phép lọc với
+// `fileDanhSo`) được chứa CÁCH VIẾT THẲNG của một câu đổi vai: SET [SESSION|LOCAL] ROLE (kể cả `"role"`), SET …
+// SESSION AUTHORIZATION, RESET ROLE / SESSION AUTHORIZATION, hay set_config với tên 'role' / 'session_authorization'
+// viết thẳng trong '…', E'…', U&'…' hay $$…$$ (`role` là một GUC: set_config đổi vai y như SET ROLE). Chuỗi ký tự và
+// thân dollar-quote VẪN được quét — `EXECUTE 'SET ROLE …'` trong khối DO chạy ngay trong migration; chỉ chú thích
+// NGOÀI chuỗi bị bỏ, bằng một bộ tách biết chuỗi (lượt soi 50 NHẸ-5 ⑴: bản đầu dùng `boChuThich`, và `SELECT '--';
+// SET ROLE x;` làm nó cắt mất câu sau — chiều FAIL-OPEN, ngược với lời khai "cùng hướng fail-closed" của bản đầu).
+// Đo trước khi viết: mọi chữ "SET ROLE" trong db/migrations nằm trong chú thích.
+// RANH GIỚI, nói ra: đây là bộ dò CÁCH VIẾT, không phải bộ phân tích SQL — tên ghép lúc chạy (`'ro' || 'le'`,
+// `format()`, EXECUTE một chuỗi dựng), escape Unicode trong `U&'…'`, và hàm SECURITY DEFINER của vai khác mà tệp gọi
+// (ranh giới ⑸ của S1.56) đều lọt; chúng còn lại phép so vai cuối tệp của migrate(). Chiều đỏ oan đã biết: một cột
+// tên `role` trong `UPDATE … SET role = …` (hôm nay không có). Cố ý không có danh sách miễn: cần chạy một tệp dưới vai
+// khác thì chạy migrate() dưới vai ấy.
+// ============================================================================================
+const RE_DOI_VAI =
+  /\b(?:RE)?SET\s+(?:(?:SESSION|LOCAL)\s+)?(?:"role"|ROLE\b|SESSION\s+AUTHORIZATION\b)|\bset_config\s*\(\s*(?:[Ee]|[Uu]&)?(?:'\s*(?:role|session_authorization)\s*'|\$[A-Za-z_0-9]*\$\s*(?:role|session_authorization)\s*\$[A-Za-z_0-9]*\$)/giu;
+
+/**
+ * Bỏ chú thích NGOÀI chuỗi, giữ nguyên chuỗi '…' (E'…' có escape gạch chéo ngược), định danh "…" và thân dollar-quote.
+ * Chú thích khối lồng được như PostgreSQL. `$1` là tham số chứ không phải dollar-quote.
+ */
+function boChuThichNgoaiChuoi(pSql: string): string {
+  let ra = "";
+  let i = 0;
+  while (i < pSql.length) {
+    const c = pSql[i]!;
+    const ke = pSql[i + 1];
+    if (c === "-" && ke === "-") {
+      const j = pSql.indexOf("\n", i);
+      i = j < 0 ? pSql.length : j;
+      ra += " ";
+      continue;
+    }
+    if (c === "/" && ke === "*") {
+      let sau = 1;
+      i += 2;
+      while (i < pSql.length && sau > 0) {
+        if (pSql[i] === "/" && pSql[i + 1] === "*") {
+          sau += 1;
+          i += 2;
+        } else if (pSql[i] === "*" && pSql[i + 1] === "/") {
+          sau -= 1;
+          i += 2;
+        } else {
+          i += 1;
+        }
+      }
+      ra += " ";
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      const escapeGachCheo = c === "'" && /[Ee]/u.test(pSql[i - 1] ?? "") && !/[A-Za-z0-9_]/u.test(pSql[i - 2] ?? "");
+      let j = i + 1;
+      while (j < pSql.length) {
+        if (escapeGachCheo && pSql[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (pSql[j] === c) {
+          if (pSql[j + 1] === c) {
+            j += 2;
+            continue;
+          }
+          break;
+        }
+        j += 1;
+      }
+      ra += pSql.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    if (c === "$" && !/[A-Za-z0-9_]/u.test(pSql[i - 1] ?? "")) {
+      const the = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/u.exec(pSql.slice(i))?.[0];
+      if (the !== undefined) {
+        const k = pSql.indexOf(the, i + the.length);
+        const cuoi = k < 0 ? pSql.length : k + the.length;
+        ra += pSql.slice(i, cuoi);
+        i = cuoi;
+        continue;
+      }
+    }
+    ra += c;
+    i += 1;
+  }
+  return ra;
+}
+
+/** Mọi cách viết thẳng của một câu đổi vai trong văn bản một tệp migration, sau khi bỏ chú thích ngoài chuỗi. */
+function timDoiVai(pNoiDung: string): string[] {
+  return [...boChuThichNgoaiChuoi(pNoiDung).matchAll(RE_DOI_VAI)].map((m) => m[0].replace(/\s+/gu, " "));
+}
+
+describe("[S1.57 / khoản nợ 100] migration của kho không viết thẳng một câu đổi vai", () => {
+  it("[INV-F1] mọi tệp migration đánh số (mọi `.sql` không phải `.always.sql`): không cách viết đổi vai nào ngoài chú thích", () => {
+    const viPham: string[] = [];
+    const cacTep = [...docCacFile()].filter(([tenFile]) => !tenFile.endsWith(".always.sql"));
+    expect(cacTep.length, "phép quét không rỗng ruột").toBeGreaterThanOrEqual(48);
+    for (const [tenFile, noiDung] of cacTep) {
+      for (const cau of timDoiVai(noiDung)) viPham.push(`${tenFile}: ${cau}`);
+    }
+    expect(viPham).toEqual([]);
+  });
+
+  it("bộ dò thấy mười bảy cách viết đổi vai — kể cả trong chuỗi EXECUTE của khối DO và sau một chuỗi mang '--' hay '/*' — đối chứng trên văn bản giả", () => {
+    const cacCau = [
+      "SET ROLE x",
+      "SET LOCAL ROLE x",
+      "set session role x",
+      "SET role TO x",
+      'SET "role" TO x',
+      'SET LOCAL "ROLE" = x',
+      "SET SESSION AUTHORIZATION x",
+      "RESET ROLE",
+      "reset session authorization",
+      "SELECT set_config('role', 'x', false)",
+      "SELECT pg_catalog.set_config( 'session_authorization', 'x', true)",
+      "SELECT set_config(E'role', 'x', true)",
+      "SELECT set_config(U&'role', 'x', true)",
+      "SELECT set_config($$role$$, 'x', true)",
+      "DO $d$ BEGIN EXECUTE 'SET ROLE x'; END $d$",
+      "SELECT '--'; SET ROLE x",
+      "SELECT '/*'; RESET ROLE",
+    ];
+    for (const cau of cacCau) expect(timDoiVai(cau), cau).toHaveLength(1);
+  });
+
+  it("không đỏ oan: chữ trong chú thích (kể cả chú thích khối lồng), câu SET/RESET khác, set_config của GUC khác", () => {
+    expect(timDoiVai("-- SET ROLE app_api\n/* ngoài /* SET LOCAL ROLE x */ vẫn là chú thích RESET ROLE */ SELECT 1; -- RESET ROLE")).toEqual([]);
+    expect(
+      timDoiVai("CREATE ROLE x; ALTER ROLE x NOLOGIN; GRANT x TO y; SET search_path = public; RESET search_path; SELECT set_config('app.org_id', '', true);"),
+    ).toEqual([]);
+  });
+
+  it("RANH GIỚI ghim: tên ghép lúc chạy thì bộ dò KHÔNG thấy — phần ấy còn lại phép so vai cuối tệp của migrate()", () => {
+    expect(timDoiVai("SELECT set_config('ro' || 'le', 'x', true); DO $d$ BEGIN EXECUTE format('SET %s x', 'ROLE'); END $d$")).toEqual([]);
+  });
+});

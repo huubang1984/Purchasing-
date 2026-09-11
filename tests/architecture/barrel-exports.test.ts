@@ -905,6 +905,10 @@ const DANH_SACH_TRANG_DB = [
   // ra cửa vì test ghim nguyên văn nó làm bằng chứng của khoản nợ 87 — bốn bản chép tay đã im lặng hỏng một lần khi
   // chuỗi đổi chữ. Không mở kết nối, không chạm quyền.
   "TU_CHOI_GUC_SOM",
+  // [S1.57 / khoản nợ 100] Hai chuỗi cùng hạng: tiền tố của phép từ chối trước vòng đánh số và của phép từ chối khi một tệp
+  // đổi vai. Test ghim nguyên văn chúng — cùng lý do với dòng trên.
+  "TU_CHOI_TRUOC_VONG",
+  "TU_CHOI_DOI_VAI",
   "VAI_UNG_DUNG",
   "createPool",
   "ganVaiTroChoPool",
