@@ -2105,7 +2105,7 @@ $ham$;
   -- chạm bảng RLS của một vai thường thành LỖI (sự cố sẵn sàng, [fix round 4]); `session_replication_role = replica` bỏ qua
   -- trigger `ENABLE` thường (ADR-036 hàng 8 — lớp ENABLE ALWAYS vẫn giữ); `search_path` là che tên (khoản 78).
   --
-  -- HAI NHÁNH, và nhánh CATALOG là nhánh chịu lực (lượt soi 43 NẶNG-1 bác bản đầu chỉ có nhánh `pg_settings`):
+  -- ~~HAI NHÁNH~~ [S1.52: BỐN nhánh phán — ⒜⒝ dưới, ⒟⒠ của khoản 95 — cộng nhánh dòng khai thiu], và nhánh CATALOG là nhánh chịu lực (lượt soi 43 NẶNG-1 bác bản đầu chỉ có nhánh `pg_settings`):
   --   ⒜ CATALOG — mọi hàng `pg_db_role_setting` mang một trong ba tên, TRỪ đúng hàng `(setrole = 0, setdatabase = <db hiện
   --      tại>)` mà ba mục kề sở hữu và tự chữa. Vì sao phải có: `pg_settings` cho GIÁ TRỊ HIỆU LỰC, và PostgreSQL xếp ưu
   --      tiên nguồn (`file < argv < global < database < user < database user < client`), nên một hàng ưu tiên CAO CHE hoàn
@@ -2141,14 +2141,36 @@ $ham$;
   -- *không schema của người khác đứng TRƯỚC `public`* (khoản 78 — che tên), chứ không phải "bằng đúng mặc định của
   -- PostgreSQL". Bản đầu so nguyên văn `'"$user", public'` và chặn VĨNH VIỄN mọi cụm đặt `search_path = 'public'` —
   -- cấu hình AN TOÀN HƠN, và là chính cách một cụm tự chữa khoản 78 — mà không cửa ra nào (ADR-028 §3, chiều hỏng).
-  -- Thứ đứng SAU `public` không thuộc tính chất ấy (`public` thắng ở mọi tên có trong nó, và câu tạo đối tượng không ghi
-  -- schema rơi vào schema ĐẦU), nên `'"$user", public, extensions'` đi qua. Giữ ĐỒNG BỘ với `MAU_SEARCH_PATH_DUNG` của
-  -- `packages/db/src/migrate.ts` — hai lớp cố ý, cùng một quy tắc, phải sửa cùng nhau.
+  -- ~~Thứ đứng SAU `public` không thuộc tính chất ấy (`public` thắng ở mọi tên có trong nó, và câu tạo đối tượng không
+  -- ghi schema rơi vào schema ĐẦU), nên `'"$user", public, extensions'` đi qua.~~ **[S1.52 / khoản nợ 95]** SAI một vế, và
+  -- vế ấy là tiền đề cướp: `public` chỉ thắng ở tên có trong nó KHI pg_catalog không được nêu tên — nêu pg_catalog ở vị
+  -- trí SAU thì mọi hàm hệ thống cùng chữ ký bị schema đứng trước che (đo: `SET search_path = public, pg_catalog` cộng
+  -- `public.lower(text)` ⇒ `lower('ABC')` ra `CUOP`; cùng tiền đề mà [INV-H21] canh ở mã TypeScript). Nên cột `cam` cấm
+  -- pg_catalog ở mọi vị trí trừ vị trí ĐẦU; `'"$user", public, extensions'` vẫn đi qua.
+  -- MỘT tính chất cho PHIÊN và cho `proconfig` của hàm (nhánh ⒠): `pg_catalog` đứng một mình và chuỗi rỗng `""` là hai
+  -- dạng AN TOÀN NHẤT — mọi tên phải phân giải ở pg_catalog hay phải ghi schema — và 18 hàm của dự án mang đúng dạng đầu
+  -- (đo). Ở phiên, hai dạng ấy làm câu viết trần LỖI ồn ào — không che tên, không 0 hàng — nên nằm ngoài ADR-036.
+  -- `pg_catalog, pg_temp` cũng được nhận: đó là khuyến nghị của tài liệu PostgreSQL cho SECURITY DEFINER — pg_temp nêu
+  -- CUỐI nên không che gì, còn pg_temp không nêu thì được tìm ĐẦU TIÊN cho quan hệ. `pg_temp` đứng trước bị loại.
+  -- [lượt soi 45 NHẸ-1] `"$user"` đứng một mình và `pg_catalog, "$user"` cũng được nhận: không schema lạ nào đứng trước
+  -- chỗ tên phân giải, và hardening đã cấm schema trùng tên vai kết nối. Bản đầu ĐÒI có `public` nên chặn oan cả hai (đo: PG
+  -- lưu đúng `"$user"` và `pg_catalog, "$user"`; còn `"public"` có nháy thì được bỏ nháy thành `public`).
+  -- Giữ ĐỒNG BỘ với `searchPathDung` của `packages/db/src/migrate.ts` — hai lớp cố ý, cùng CHUỖI regex, phải sửa cùng nhau.
+  -- [lượt soi 45 INFO-1] "Cùng một quy tắc" chỉ đúng trên miền ASCII không xuống dòng: `\s` của JavaScript `/u` nhận cả
+  -- khoảng trắng Unicode, còn `.` của ARE nhận cả xuống dòng. Ngoài miền ấy bản TypeScript là bản NGHIÊM hơn — chỉ có thể
+  -- chặn oan một giá trị lạ, không thể để lọt dạng cướp (schema lạ trước public trượt `mau` ở cả hai; pg_catalog nêu sau
+  -- luôn bị `cam` bắt).
+  -- [lượt soi 45 NHẸ-3] `row_security` và `session_replication_role` so KHÔNG phân biệt hoa/thường, và `row_security`
+  -- nhận mọi cách viết TRUE mà PostgreSQL chấp nhận: `proconfig` lưu NGUYÊN cách viết (đo: `SET row_security = true` ⇒
+  -- `row_security=true`; cả `yes`, `1`, `t`), còn `pg_settings` chuẩn hoá về `on`. Bản đầu so `^on$` nên chặn oan một hàm
+  -- đang BẬT row_security.
   GUC_VAN_HANH_DOI constant text :=
-    $q$(VALUES ('row_security', 'on', '^on$'),
-               ('session_replication_role', 'origin', '^(origin|local)$'),
-               ('search_path', '"$user", public', '^\s*(("\$user"|\$user)\s*,)?\s*(pg_catalog\s*,)?\s*public(\s*,|\s*$)'))
-         AS gd(ten, gia_tri, mau)$q$;
+    $q$(VALUES ('row_security', 'on', '(?i)^(on|t|tr|tru|true|y|ye|yes|1)$', NULL),
+               ('session_replication_role', 'origin', '(?i)^(origin|local)$', NULL),
+               ('search_path', '"$user", public',
+                '^\s*(""|pg_catalog(\s*,\s*pg_temp)?|(pg_catalog\s*,\s*)?(("\$user"|\$user)(\s*,\s*public(\s*,.*)?)?|public(\s*,.*)?))\s*$',
+                ',\s*"?pg_catalog"?\s*(,|$)'))
+         AS gd(ten, gia_tri, mau, cam)$q$;
 
   GUC_VAN_HANH_KHAI constant text :=
     $q$(VALUES ('')) AS gv(ten)$q$;
@@ -2167,14 +2189,34 @@ $ham$;
   VI_TU_PHIEN_GUC_VAN_HANH_SAI constant text :=
     $q$(
                 -- vế RESET_VAL — gắn sẵn lúc MỞ phiên, từ nguồn ngoài mức database.
-                (st.reset_val !~ gd.mau
+                ((st.reset_val !~ gd.mau OR (gd.cam IS NOT NULL AND st.reset_val ~ gd.cam))
                    AND st.source NOT IN ('default', 'database')
                    -- Ranh giới đo được, xem chú thích ở trên: sau khi search_path bị ghim thì `source` hoá `session` và
                    -- hàng "mức database vừa chữa xong" không phân biệt được với hàng ALTER SYSTEM — ca sau chặn ở migrate().
                    AND NOT (st.source = 'session' AND st.name = 'search_path'))
                 -- vế SETTING — một câu SET còn sót trong CHÍNH phiên deploy (`reset_val` không hề đổi theo SET — đo).
-                OR (st.source = 'session' AND st.name <> 'search_path' AND st.setting !~ gd.mau)
+                OR (st.source = 'session' AND st.name <> 'search_path'
+                    AND (st.setting !~ gd.mau OR (gd.cam IS NOT NULL AND st.setting ~ gd.cam)))
               )$q$;
+
+  -- [S1.52 / khoản nợ 95] Vị từ của hai nhánh mới, dùng lại NGUYÊN VẸN ở nhánh dòng khai thiu (bài học lượt soi 44 NHẸ-6).
+  -- ⒟ `pg_parameter_acl` — một dòng ACL là NĂNG LỰC khi grantee là PUBLIC hay vai không superuser VÀ quyền ấy trao thứ vai
+  --    đó chưa có: `ALTER SYSTEM` trên cả ba tên (ghi độc vào postgresql.auto.conf cho MỌI phiên của cụm — đo), còn `SET`
+  --    chỉ trên tham số SUSET, suy từ `pg_settings.context = 'superuser'` chứ không ghim tên (đo: chỉ
+  --    `session_replication_role`; `GRANT SET` trên `search_path`/`row_security` hợp lệ nhưng không trao gì — ai cũng SET
+  --    được chúng). aclexplode in cả quyền của chủ tham số (superuser bootstrap) — vế `NOT rolsuper` loại nó (đo; cùng khuôn
+  --    nhánh ⒟ của khoản 87). Chồng lấn với 83⑧ ở grantee PUBLIC/vai ứng dụng là CỐ Ý: tách hai tập theo vị từ của mục kia
+  --    thì một thay đổi ở 83⑧ mở lỗ ở đây mà không đột biến nào của mục này đỏ.
+  VI_TU_ACL_GUC_VAN_HANH_SAI constant text :=
+    $q$(x.grantee = 0 OR NOT gr.rolsuper)
+       AND (x.privilege_type = 'ALTER SYSTEM' OR (x.privilege_type = 'SET' AND ps.context = 'superuser'))$q$;
+
+  -- ⒠ `proconfig` — giá trị gắn cho thân hàm trái tính chất ở `GUC_VAN_HANH_DOI`, cùng `mau` và `cam` với phiên. Đo: vai KHÔNG
+  --    superuser tạo được hàm mang `search_path = 'ke_gian, public'` hay `row_security = off`; `session_replication_role =
+  --    replica` thì 42501 trừ khi được GRANT SET ON PARAMETER; hàm SECURITY DEFINER của superuser mang replica trao nó cho
+  --    MỌI người gọi (người gọi thường đọc ra `replica`), bản SECURITY INVOKER thì người gọi thường ăn 42501.
+  VI_TU_HAM_GUC_VAN_HANH_SAI constant text :=
+    $q$(h.gia_tri !~ gd.mau OR (gd.cam IS NOT NULL AND h.gia_tri ~ gd.cam))$q$;
 
   CAU_GUC_VAN_HANH_GAN_SAN constant text :=
     $q$SELECT coalesce(
@@ -2213,8 +2255,48 @@ $ham$;
         WHERE $q$ || VI_TU_PHIEN_GUC_VAN_HANH_SAI || $q$
           AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_VAN_HANH_KHAI || $q$ WHERE gv.ten = st.name)
        UNION ALL
+       -- ⒟ [S1.52 / khoản nợ 95] pg_parameter_acl — xem VI_TU_ACL_GUC_VAN_HANH_SAI.
+       SELECT 'quyền ' || x.privilege_type || ' trên tham số ' || pa.parname || ' cấp cho '
+              || CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(gr.rolname) END
+              || ' (pg_parameter_acl): GUC vận hành đặt được bởi vai không superuser — '
+              || CASE WHEN x.privilege_type = 'ALTER SYSTEM'
+                      THEN 'ALTER SYSTEM ghi vào postgresql.auto.conf, áp cho MỌI phiên của cụm sau pg_reload_conf()'
+                      ELSE 'SET trên tham số SUSET lật tiền đề "chỉ superuser đặt được" mà lớp ENABLE ALWAYS tựa vào (ADR-036 hàng 8)'
+                 END
+              || ' (khoản 95). Sửa: REVOKE ' || x.privilege_type || ' ON PARAMETER ' || pa.parname || ' FROM … bằng SUPERUSER; '
+                 'hoặc khai tên vào GUC_VAN_HANH_KHAI kèm lý do' AS mo_ta
+         FROM pg_catalog.pg_parameter_acl pa
+         CROSS JOIN LATERAL pg_catalog.aclexplode(pa.paracl) x
+         LEFT JOIN pg_roles gr ON gr.oid = x.grantee
+         JOIN pg_catalog.pg_settings ps ON ps.name = pa.parname
+        WHERE pa.parname IN (SELECT gd.ten FROM $q$ || GUC_VAN_HANH_DOI || $q$)
+          AND $q$ || VI_TU_ACL_GUC_VAN_HANH_SAI || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_VAN_HANH_KHAI || $q$ WHERE gv.ten = pa.parname)
+       UNION ALL
+       -- ⒠ [S1.52 / khoản nợ 95] proconfig của hàm trong lược đồ dự án — xem VI_TU_HAM_GUC_VAN_HANH_SAI.
+       SELECT 'hàm ' || pn.nspname || '.' || pp.proname || '(' || pg_catalog.pg_get_function_identity_arguments(pp.oid) || ') (proconfig)'
+              || ': GUC vận hành ' || h.ten || ' gắn cho thân hàm với giá trị trái tính chất dự án đòi — '
+              || CASE h.ten
+                   WHEN 'search_path' THEN 'tên viết trần trong thân hàm phân giải qua schema lạ (che tên, khoản 78), hay pg_catalog nêu sau là tiền đề cướp hàm hệ thống'
+                   WHEN 'session_replication_role' THEN 'thân hàm chạy dưới replica nên trigger ENABLE thường bị bỏ qua, và hàm SECURITY DEFINER của superuser trao nó cho MỌI người gọi'
+                   ELSE 'row_security=off làm câu chạm bảng RLS trong thân hàm báo LỖI thay vì lọc'
+                 END
+              || ' (khoản 95). Sửa: ALTER FUNCTION … RESET ' || h.ten || ' hay SET về giá trị đúng trong một migration mới (chủ hàm); '
+                 'hoặc khai tên vào GUC_VAN_HANH_KHAI kèm lý do' AS mo_ta
+         FROM pg_proc pp
+         JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+         CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten,
+                                    pg_catalog.substr(c, pg_catalog.strpos(c, '=') + 1) AS gia_tri
+                               FROM pg_catalog.unnest(pp.proconfig) c) h
+         JOIN $q$ || GUC_VAN_HANH_DOI || $q$ ON gd.ten = h.ten
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$
+          AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass
+                                                       AND dp.objid = pp.oid AND dp.deptype = 'e')
+          AND $q$ || VI_TU_HAM_GUC_VAN_HANH_SAI || $q$
+          AND NOT EXISTS (SELECT 1 FROM $q$ || GUC_VAN_HANH_KHAI || $q$ WHERE gv.ten = h.ten)
+       UNION ALL
        SELECT 'khai GUC vận hành ' || gv.ten || ' được gắn sẵn (khoản 92) mà không hàng catalog nào mang nó và phiên deploy '
-              'thấy nó đúng giá trị dự án đòi — dòng khai thiu' AS mo_ta
+              'thấy nó đúng giá trị dự án đòi, và không pg_parameter_acl hay proconfig hàm nào trái tính chất mang nó — dòng khai thiu' AS mo_ta
          FROM $q$ || GUC_VAN_HANH_KHAI || $q$
         -- chắn hàng sentinel ('') — cùng khuôn lượt soi 32 NHẸ-2.
         WHERE gv.ten <> ''
@@ -2225,7 +2307,23 @@ $ham$;
                              AND EXISTS (SELECT 1 FROM pg_catalog.unnest(s.setconfig) c WHERE pg_catalog.split_part(c, '=', 1) = gv.ten))
           AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_settings st
                            JOIN $q$ || GUC_VAN_HANH_DOI || $q$ ON gd.ten = st.name
-                          WHERE st.name = gv.ten AND $q$ || VI_TU_PHIEN_GUC_VAN_HANH_SAI || $q$)$q$;
+                          WHERE st.name = gv.ten AND $q$ || VI_TU_PHIEN_GUC_VAN_HANH_SAI || $q$)
+          AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_parameter_acl pa
+                           CROSS JOIN LATERAL pg_catalog.aclexplode(pa.paracl) x
+                           LEFT JOIN pg_roles gr ON gr.oid = x.grantee
+                           JOIN pg_catalog.pg_settings ps ON ps.name = pa.parname
+                          WHERE pa.parname = gv.ten AND $q$ || VI_TU_ACL_GUC_VAN_HANH_SAI || $q$)
+          AND NOT EXISTS (SELECT 1 FROM pg_proc pp
+                           JOIN pg_namespace pn ON pn.oid = pp.pronamespace
+                           CROSS JOIN LATERAL (SELECT pg_catalog.split_part(c, '=', 1) AS ten,
+                                                      pg_catalog.substr(c, pg_catalog.strpos(c, '=') + 1) AS gia_tri
+                                                 FROM pg_catalog.unnest(pp.proconfig) c) h
+                           JOIN $q$ || GUC_VAN_HANH_DOI || $q$ ON gd.ten = h.ten
+                          WHERE h.ten = gv.ten
+                            AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$
+                            AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass
+                                                                         AND dp.objid = pp.oid AND dp.deptype = 'e')
+                            AND $q$ || VI_TU_HAM_GUC_VAN_HANH_SAI || $q$)$q$;
 
   CAU_GUC_TUY_BIEN_GAN_SAN constant text :=
     $q$SELECT CASE WHEN s.setrole = 0 AND s.setdatabase = 0 THEN 'mọi vai, mọi database (ALTER ROLE ALL)'
@@ -3060,7 +3158,7 @@ $ham$;
               || ' (khoản 83⑧) — tiền đề SUSET của ADR-036 hàng 8: vai ứng dụng đặt được session_replication_role = replica '
                  -- [S1.48 / lượt soi ngang 40b #17] "chỉ superuser đặt được" là ranh giới nói ra: superuser GRANT SET ON PARAMETER
                  -- session_replication_role cho một vai thứ ba thì 83⑧ (chỉ soi PUBLIC/vai ứng dụng) lẫn nhánh ⒟ của 87 (chỉ tham số có
-                 -- dấu chấm) đều không thấy — tiền tồn, chưa có khoản.
+                 -- dấu chấm) đều không thấy — ~~tiền tồn, chưa có khoản.~~ [S1.52] khoản 95 đóng: nhánh ⒟ của CAU_GUC_VAN_HANH_GAN_SAN.
                  'thì mọi trigger ENABLE thường bị bỏ qua; lớp ENABLE ALWAYS tựa vào việc tham số ấy chỉ superuser đặt được. '
                  'Sửa: REVOKE … ON PARAMETER (superuser).' AS mo_ta
          FROM pg_parameter_acl pa
@@ -7973,12 +8071,12 @@ $ham$;
     -- Xem chú thích ở CAU_GUC_VAN_HANH_GAN_SAN: ba mục kề trên tự chữa nguồn `database`; mục này bắt bốn nguồn còn lại
     -- bằng `pg_settings.reset_val` của chính phiên deploy, và KHÔNG tự sửa (RESET ở mức vai/cụm là SUSET).
     ARRAY[
-      $q$ba GUC vận hành (row_security, session_replication_role, search_path) không được gắn sẵn cho phiên từ nguồn ngoài mức database (khoản 92)$q$,
+      $q$ba GUC vận hành (row_security, session_replication_role, search_path) không được gắn sẵn cho phiên từ nguồn ngoài mức database, cho thân hàm qua proconfig, hay trao cho vai không superuser qua pg_parameter_acl (khoản 92, 95)$q$,
       $q$true$q$,
       $q$SELECT 1$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_GUC_VAN_HANH_GAN_SAN || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_GUC_VAN_HANH_GAN_SAN || $q$) t)$q$,
-      $q$SUPERUSER (ALTER ROLE ALL RESET / ALTER ROLE … RESET / ALTER SYSTEM RESET + pg_reload_conf()), hay gỡ options= trên chuỗi kết nối rồi chạy lại trên kết nối mới; hoặc sửa danh sách khai trong chính file này$q$
+      $q$SUPERUSER (ALTER ROLE ALL RESET / ALTER ROLE … RESET / ALTER SYSTEM RESET + pg_reload_conf() / REVOKE … ON PARAMETER), chủ hàm (ALTER FUNCTION … RESET trong một migration mới), hay gỡ options= trên chuỗi kết nối rồi chạy lại trên kết nối mới; hoặc sửa danh sách khai trong chính file này$q$
     ],
 
     -- ---- [S1.47 / khoản nợ 87] GUC tuỳ biến gắn sẵn cho phiên ứng dụng (năm nhánh) — PHÁN XÉT ----

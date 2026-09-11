@@ -3052,6 +3052,154 @@ describe("migration của dự án", () => {
   }, 300_000);
 
   // ==========================================================================================
+  // [S1.52 / khoản nợ 95] GUC VẬN HÀNH QUA `proconfig` CỦA HÀM VÀ QUA `pg_parameter_acl`
+  //
+  // Hai đường mà mục khoản 92 bỏ ngỏ, cả hai ĐO trước khi viết (thăm dò S1.52, PostgreSQL 16):
+  //   ⑴ vai KHÔNG superuser tạo được hàm mang `SET search_path = 'ke_gian, public'` hay `SET row_security = off`;
+  //      `SET session_replication_role = replica` thì 42501 — trừ khi được `GRANT SET ON PARAMETER`; và hàm SECURITY
+  //      DEFINER của superuser mang replica trao nó cho MỌI người gọi (đo: người gọi thường đọc ra `replica`).
+  //   ⑵ `GRANT SET ON PARAMETER session_replication_role` cho vai thường ⇒ vai ấy SET được replica; `GRANT ALTER SYSTEM
+  //      ON PARAMETER search_path` ⇒ vai ấy ghi độc vào postgresql.auto.conf cho MỌI phiên của cụm. `GRANT SET` trên hai
+  //      tham số USERSET (`search_path`, `row_security`) thì không trao gì — ai cũng SET được chúng.
+  // Và một lỗ của CHÍNH khoản 92, lộ ra trong lúc đo: tính chất `search_path` nhận mọi thứ đứng sau `public`, kể cả
+  // `public, pg_catalog` — nêu pg_catalog ở vị trí SAU là tiền đề cướp mà [INV-H21] canh (đo: `lower('ABC')` ra `CUOP`).
+  // ==========================================================================================
+  it("[khoản nợ 95] GUC vận hành qua proconfig của hàm và pg_parameter_acl: search_path lạ, pg_catalog nêu sau, replica trên hàm bị bắt; SET trên tham số SUSET và ALTER SYSTEM trên ba tên cho vai không superuser bị bắt, SET trên tham số USERSET thì không; tính chất search_path của khoản 92 nay cấm pg_catalog đứng sau (đo: lower() bị cướp)", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const CAU = docHangHardeningTu(HARDENING, "CAU_GUC_VAN_HANH_GAN_SAN");
+      const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+      const chayMoi = async (): Promise<Error | null> => {
+        // GUC áp lúc MỞ PHIÊN nên mỗi phép đo trên một kết nối mới — cùng bài học khoản 87 (c) và 92.
+        const p = createPool(db.connectionString, 1);
+        try {
+          return await loiCua(migrate(p, MIGRATIONS_DIR));
+        } finally {
+          await p.end();
+        }
+      };
+      const moTa = async (): Promise<string[]> =>
+        (await db.pool.query<{ mo_ta: string }>(CAU)).rows.map((r) => r.mo_ta);
+      const coDong = async (dau: string, ghiChu: string): Promise<void> => {
+        const rows = await moTa();
+        expect(
+          rows.some((m) => m.startsWith(dau)),
+          `${ghiChu}; đã thấy: ${JSON.stringify(rows.map((m) => m.slice(0, 90)))}`,
+        ).toBe(true);
+      };
+      /** Chặn bởi CHÍNH nhánh khoản 95 — không nhận lời từ chối của mục khác (thông điệp phải mang "(khoản 95)"). */
+      const bat95 = (loi: Error | null, ghiChu: string): void => {
+        expect(loi, ghiChu).not.toBeNull();
+        expect(loi!.message.includes("(khoản 95)"), `${ghiChu}: ${loi!.message.slice(0, 220)}`).toBe(true);
+      };
+
+      // (a) LƯỢC ĐỒ THẬT: 60 hàm mang `search_path=pg_catalog` hay `search_path=pg_catalog, public`, không hàm nào mang
+      //     hai tên còn lại. Tính chất phải nhận CẢ HAI dạng — `pg_catalog` đứng một mình là dạng AN TOÀN NHẤT.
+      const { rows: cfg } = await db.pool.query<{ c: string }>(
+        "SELECT DISTINCT c FROM pg_proc p CROSS JOIN LATERAL unnest(p.proconfig) c " +
+          "WHERE split_part(c, '=', 1) IN ('row_security', 'session_replication_role', 'search_path') ORDER BY c",
+      );
+      expect(cfg.map((r) => r.c), "phép đo không rỗng ruột: lược đồ thật có đúng hai dạng proconfig").toEqual([
+        "search_path=pg_catalog",
+        "search_path=pg_catalog, public",
+      ]);
+      expect(await moTa(), "lược đồ thật sạch ở mọi nhánh").toEqual([]);
+
+      await db.pool.query("CREATE SCHEMA zz95; DROP ROLE IF EXISTS zz_thu95; CREATE ROLE zz_thu95 NOLOGIN");
+      try {
+        // (b) ĐỐI CHỨNG DƯƠNG: một hàm MỚI ghim search_path đúng ⇒ không nhánh nào nêu và deploy đi qua. Vế này cũng là thứ
+        //     chứng minh không mục cũ nào vướng một hàm lạ trong lược đồ riêng — không có nó, mọi vế "chặn" dưới đây mơ hồ.
+        await db.pool.query("CREATE FUNCTION zz95.f() RETURNS int LANGUAGE sql SET search_path = pg_catalog AS 'SELECT 1'");
+        expect(await moTa(), "hàm ghim pg_catalog là dạng an toàn").toEqual([]);
+        expect(await chayMoi(), "đối chứng dương: hàm đúng không chặn deploy").toBeNull();
+        await db.pool.query("ALTER FUNCTION zz95.f() SET search_path = ''");
+        expect(await moTa(), "search_path rỗng — mọi tên phải ghi schema — cũng là dạng an toàn").toEqual([]);
+        await db.pool.query("ALTER FUNCTION zz95.f() SET search_path = pg_catalog, pg_temp");
+        expect(
+          await moTa(),
+          "pg_catalog, pg_temp — khuyến nghị của tài liệu PostgreSQL cho SECURITY DEFINER — không được chặn oan (ADR-028 §3)",
+        ).toEqual([]);
+        await db.pool.query('ALTER FUNCTION zz95.f() SET search_path = pg_catalog, "$user"');
+        expect(await moTa(), 'pg_catalog, "$user" — không schema lạ nào đứng trước chỗ tên phân giải (lượt soi 45 NHẸ-1)').toEqual([]);
+        // [lượt soi 45 NHẸ-3] proconfig lưu NGUYÊN cách viết của giá trị (đo: `true` ⇒ `row_security=true`), pg_settings thì
+        // chuẩn hoá về `on`. So `^on$` là chặn oan một hàm đang BẬT row_security.
+        await db.pool.query("ALTER FUNCTION zz95.f() SET row_security = true");
+        expect(await moTa(), "row_security = true trên hàm nghĩa là BẬT — không được chặn oan").toEqual([]);
+        await db.pool.query("ALTER FUNCTION zz95.f() SET row_security = off");
+        await coDong("hàm zz95.f() (proconfig): GUC vận hành row_security", "nhánh ⒠ phải thấy row_security = off");
+        await db.pool.query("ALTER FUNCTION zz95.f() RESET row_security");
+
+        // (c) search_path LẠ trên hàm.
+        await db.pool.query("ALTER FUNCTION zz95.f() SET search_path = 'ke_gian, public'");
+        await coDong("hàm zz95.f() (proconfig): GUC vận hành search_path", "nhánh ⒠ phải thấy search_path lạ");
+        bat95(await chayMoi(), "search_path lạ trên hàm phải chặn deploy");
+
+        // (d) pg_catalog nêu SAU public — ĐO cướp trước khi khẳng định nó là mối nguy.
+        await db.pool.query("CREATE FUNCTION public.lower(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT 'CUOP'::text$$");
+        try {
+          await db.pool.query(
+            "CREATE FUNCTION zz95.g() RETURNS text LANGUAGE sql SET search_path = public, pg_catalog AS $$SELECT lower('ABC')$$",
+          );
+          expect(
+            (await db.pool.query<{ v: string }>("SELECT zz95.g() AS v")).rows[0]!.v,
+            "phép đo cướp: pg_catalog nêu sau ⇒ public.lower thắng pg_catalog.lower",
+          ).toBe("CUOP");
+          await coDong("hàm zz95.g() (proconfig): GUC vận hành search_path", "nhánh ⒠ phải thấy pg_catalog nêu sau");
+          await db.pool.query("DROP FUNCTION zz95.g()");
+        } finally {
+          await db.pool.query("DROP FUNCTION IF EXISTS public.lower(text)");
+        }
+        await db.pool.query("ALTER FUNCTION zz95.f() SET search_path = pg_catalog");
+
+        // (e) CÙNG LỖ ở phía PHIÊN (khoản 92 vá trong vòng này): ALTER SYSTEM SET search_path = public, pg_catalog.
+        await db.pool.query("ALTER SYSTEM SET search_path = public, pg_catalog");
+        await db.pool.query("SELECT pg_reload_conf()");
+        const loiSp = await chayMoi();
+        expect(loiSp, "search_path phiên nêu pg_catalog sau public phải bị chặn").not.toBeNull();
+        expect(loiSp!.message, `phiên: ${loiSp!.message.slice(0, 200)}`).toContain(TU_CHOI_GUC_SOM);
+        await db.pool.query("ALTER SYSTEM RESET search_path");
+        await db.pool.query("SELECT pg_reload_conf()");
+        expect(await chayMoi(), "đối chứng: RESET ⇒ đi qua").toBeNull();
+
+        // (f) replica trên hàm. SECURITY INVOKER cố ý: nhánh SECDEF của mục (C) cũng bắt một hàm DEFINER mới, và vế này
+        //     phải đo RIÊNG nhánh ⒠. Hạng nguy hiểm thật là bản DEFINER của superuser (đo ở thăm dò) — cùng một vị từ.
+        await db.pool.query(
+          "CREATE FUNCTION zz95.h() RETURNS text LANGUAGE sql SET session_replication_role = replica " +
+            "AS $$SELECT current_setting('session_replication_role')$$",
+        );
+        await coDong("hàm zz95.h() (proconfig): GUC vận hành session_replication_role", "nhánh ⒠ phải thấy replica");
+        bat95(await chayMoi(), "hàm mang replica phải chặn deploy");
+        await db.pool.query("DROP FUNCTION zz95.h()");
+        expect(await chayMoi(), "đối chứng: gỡ hàm ⇒ đi qua").toBeNull();
+
+        // (g) pg_parameter_acl. SET trên tham số USERSET trước — không trao năng lực nào nên KHÔNG được nêu.
+        await db.pool.query("GRANT SET ON PARAMETER search_path TO zz_thu95");
+        expect(await moTa(), "SET trên tham số USERSET không trao gì — ai cũng SET được — nên không bị nêu").toEqual([]);
+        expect(await chayMoi(), "và không chặn deploy").toBeNull();
+        await db.pool.query("GRANT SET ON PARAMETER session_replication_role TO zz_thu95");
+        await coDong(
+          "quyền SET trên tham số session_replication_role cấp cho zz_thu95",
+          "nhánh ⒟ phải thấy SET trên tham số SUSET",
+        );
+        bat95(await chayMoi(), "SET trên session_replication_role cho vai thường phải chặn deploy");
+        await db.pool.query("REVOKE SET ON PARAMETER session_replication_role FROM zz_thu95");
+        await db.pool.query("GRANT ALTER SYSTEM ON PARAMETER search_path TO zz_thu95");
+        await coDong("quyền ALTER SYSTEM trên tham số search_path cấp cho zz_thu95", "nhánh ⒟ phải thấy ALTER SYSTEM");
+        bat95(await chayMoi(), "ALTER SYSTEM trên search_path cho vai thường phải chặn deploy");
+        await db.pool.query("REVOKE ALTER SYSTEM, SET ON PARAMETER search_path FROM zz_thu95");
+        expect(await moTa(), "REVOKE hết ⇒ nhánh ⒟ rỗng (hàng pg_parameter_acl còn lại chỉ mang quyền của superuser)").toEqual([]);
+        expect(await chayMoi(), "đối chứng: REVOKE ⇒ đi qua").toBeNull();
+      } finally {
+        await db.pool.query("DROP SCHEMA IF EXISTS zz95 CASCADE; DROP OWNED BY zz_thu95; DROP ROLE IF EXISTS zz_thu95");
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
+
+  // ==========================================================================================
   // [S1.48 / lượt soi ngang 40a H1] migrate() TỪ CHỐI TRƯỚC LƯỢT SỬA khi phiên deploy mang GUC app.*
   // ==========================================================================================
   it("[S1.48 / 40a H1] ALTER DATABASE … SET app.org_id ⇒ migrate() trên kết nối mới từ chối TRƯỚC lượt sửa: migration đánh số mới KHÔNG chạy, không dòng schema_migrations, thông điệp nêu tên không nêu giá trị; RESET ⇒ kết nối mới chạy, bảng có", async () => {
