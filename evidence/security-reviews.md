@@ -2630,3 +2630,118 @@ cụm test nơi mọi bảng thuộc superuser — vế loại superuser làm c�
 ngoài" phải được dựng sao cho KHÔNG vế nào khác cũng cho cùng kết quả — với superuser, `pg_has_role` luôn đúng, và vai bootstrap mang CẢ BYPASSRLS nên che luôn vế superuser (lượt đột biến bắt, không phải lượt soi); ⑶ mục kề phải
 cùng chuẩn cả ở những vế không hiện lên trong tên mục — 83⑵ xét quyền đã cấp, 94 bản đầu thì không; ⑷ khi thêm hàng vào một
 bảng tài liệu, đếm cột theo tiêu đề.
+
+# §S1.54 — khoản nợ 96: mã của lược đồ dự án GHI ba GUC vận hành vào phiên người gọi — hardening quét văn bản tĩnh, `withTenant` không commit dưới replica và huỷ kết nối nhiễm
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — hằng mới `CAU_MA_GHI_GUC_VAN_HANH`, nhánh ⒡ của
+`CAU_GUC_VAN_HANH_GAN_SAN` (mục phán xét nay mang tên "(khoản 92, 95, 96)") và một vế mới ở nhánh dòng khai thiu;
+`packages/tenancy/src/with-tenant.ts` — câu COMMIT thành `DO …; COMMIT`, phép đọc lại ở khối `finally` thêm ba GUC. Test:
+`db/migrations.int.test.ts` `[khoản nợ 96]`; `packages/tenancy/src/with-tenant.int.test.ts` describe `[S1.54 / khoản nợ 96]`
+(tám `it`).
+
+**Đo trước khi viết (PostgreSQL 16, người gọi `app_api`):**
+⑴ Lược đồ thật: không đối tượng nào ngoài `pg_catalog`/`information_schema` nhắc tới ba tên ở thân hàm, BEGIN ATOMIC, policy,
+DEFAULT, CHECK hay rule; không hàm dự án nào chứa `set_config`, `pg_settings` hay `SET SESSION|LOCAL`.
+⑵ Hàm SECURITY DEFINER của superuser, thân `set_config('session_replication_role', 'replica', false)`: `app_api` gọi xong thì
+CHÍNH phiên nó ở `replica`; trigger BEFORE INSERT (`ENABLE` thường) không chạy; khoá ngoại tới một hàng không tồn tại đi qua;
+`app_api` chạy `SET session_replication_role = origin` hay `RESET` đều 42501 — không tự thoát được.
+⑶ Thêm mệnh đề `SET search_path = pg_catalog` vào hàm ấy: phiên vẫn ở replica. `SET LOCAL … = replica` trong thân (không mệnh
+đề): replica tới hết giao dịch rồi về origin. Hàm có mệnh đề `SET session_replication_role = origin`: `SET LOCAL` trong thân bị
+khôi phục khi trả về, còn `SET` không LOCAL thì SỐNG sau khi trả về.
+⑷ `EXECUTE format('SET %s = %s', 'session' || '_replication_role', 'replica')`: phiên ở lại replica — không văn bản nào mang tên.
+⑸ Hàm SECURITY INVOKER của vai thường đặt `search_path = 'ke_gian, public'` bằng `set_config`, bằng `SET` trong plpgsql, và bằng
+`SET` trong thân LANGUAGE sql: phiên người gọi giữ giá trị. Bản đặt replica: 42501.
+⑹ Bề mặt khác, cùng hiệu ứng trên phiên `app_api`: `UPDATE pg_settings SET setting = … WHERE name = 'search_path'`; view
+`SELECT set_config(…)`; DEFAULT của cột; policy USING; CHECK của bảng; thân BEGIN ATOMIC. Deparse ra
+`set_config('search_path'::text, …)`. Trigger nhận `WHEN (set_config(…) IS NOT NULL)`; CHECK của domain nằm ở `pg_constraint` với
+`connamespace` của domain. Biểu thức chỉ mục và cột sinh không mang được `set_config` (42P17); `set_config` không có tên tham số
+(đối số có tên ném 42883). Bí danh `LANGUAGE internal AS 'set_config_by_name'`: superuser tạo được và nó ghi vào phiên
+(`prosrc = set_config_by_name`); vai thường 42501.
+⑺ Tên GUC không phân biệt hoa/thường, kể cả có nháy kép: `set_config('SESSION_REPLICATION_ROLE', …)`, `SET
+"session_replication_role" = replica`, `SET Session_Replication_Role TO replica`, `SET "SEARCH_PATH" = …` đều có hiệu lực; `prosrc`
+giữ nguyên cách viết.
+⑻ `withTenant`: `app_api` có USAGE trên plpgsql, không có TEMP. Trong giao dịch có hàm đặt replica, câu nhiều lệnh `DO … RAISE
+SQLSTATE 'TP096' …; COMMIT` ném TP096, câu kế báo 25P02 (COMMIT không chạy), ROLLBACK xoá hàng đã chèn VÀ đưa phiên về origin;
+giao dịch sạch ⇒ `["DO","COMMIT"]` và hàng được ghi; giao dịch đã hỏng ⇒ DO ném 25P02. `current_schemas` bỏ schema chưa tồn tại
+hay không có USAGE; `public, pg_catalog` ⇒ `{public,pg_catalog}`; `SET search_path = pg_temp, public` dưới vai không TEMP ⇒
+`current_schemas` ném 42501.
+⑼ 34 mẫu thử cho ba khuôn ARE (22 dương, 12 âm) trên PostgreSQL thật — không mẫu nào sai.
+
+**Hình dạng (bản hai):** ⒜ HARDENING — nhánh ⒡ quét văn bản tĩnh của mọi mã lược đồ dự án (lọc `MAU_SCHEMA_DU_AN`, loại đối
+tượng extension theo lớp của đối tượng chủ) trên tám bề mặt: `prosrc`, BEGIN ATOMIC, policy USING, policy WITH CHECK, DEFAULT,
+CHECK của bảng và của domain, `pg_rewrite` (rule/view), WHEN của trigger; ba khuôn ARE không phân biệt hoa/thường, tên lấy từ
+`GUC_VAN_HANH_DOI`: `set_config(` với tên nguyên văn là đối số đầu (viết `'…'`, `E'…'`, `U&'…'` hay dollar-quote); `SET
+[SESSION|LOCAL] <tên> =|TO` và `RESET <tên>|ALL` (tên trần, có nháy hay `U&"…"`); `UPDATE [pg_catalog.]pg_settings` cùng thân với
+tên nguyên văn ở bất kỳ chỗ nào sau nó. Khoảng cách giữa hai token là khoảng trắng HOẶC chú thích, kể cả chú thích lồng; không
+lột gì khỏi văn bản. Tôn trọng `GUC_VAN_HANH_KHAI`; nhánh dòng khai thiu dùng lại cùng hằng. PHÁN XÉT, không tự chữa: sửa là viết
+lại mã. ⒝ `withTenant` — ⑴ COMMIT đi cùng câu với một khối DO ném TP096 khi `session_replication_role` không phải origin/local ⇒
+không commit dưới replica, kể cả khi kết nối nhiễm từ trước; TP096 và 25P02 đổi thành `TenantError`; ⑵ `finally` đọc lại
+`session_replication_role` và `row_security` theo TÍNH CHẤT (origin/local; on), và `current_schemas(false)` so với mốc đọc trong
+round-trip BEGIN (mốc thiếu cũng tính là lệch) ⇒ lệch thì huỷ kết nối; phép đọc ném thì cũng huỷ. Không thêm round-trip.
+
+**Tự bắt, không phải lượt soi:** bản đầu của `withTenant` so `current_schemas(true)`. Đo: sau `CREATE TEMP TABLE` dưới vai có
+TEMP, `true` đổi `{pg_catalog,public}` thành `{pg_temp_3,pg_catalog,public}` còn `false` giữ `{public}` ⇒ bản đầu huỷ oan kết nối
+mỗi lượt `fn` tạo bảng tạm. Nay so `false`; vế đối chứng thêm bảng tạm ON COMMIT DROP; đột biến W10.
+
+**Đo thêm sau lượt soi 47:** ⑽ PostgreSQL nhận trong thân plpgsql, và dạng nào cũng GHI vào phiên: `set_config/**/(…)`,
+`set_config` + chú thích dòng + `(…)`, `SET/* a /* b */ c */search_path = …`, `RESET/**/search_path`,
+`UPDATE/**/pg_catalog.pg_settings /* ; */ SET …`, tên `$x$search_path$x$`, `U&'search_path'`, `U&"search_path"`. ⑾ Khuôn bản hai
+đúng cả 55 mẫu thử (34 mẫu cũ trừ một mẫu đổi có chủ đích, cộng 21 dạng lách và mẫu âm mới); thân ~100 KB với 20 000 dòng chú
+thích quét ba khuôn trong 48 ms. ⑿ Test bản hai chạy trên bản đầu: test `[khoản nợ 96]` bản hai chạy với hardening của bản đầu ĐỎ ở vế `cm_khoi` ("thiếu dòng hàm zz96.cm_khoi(): ghi GUC vận hành session_replication_role bằng set_config"); vế nhiễm `row_security` từ trước chạy với `with-tenant.ts` của bản đầu ĐỎ (`expected 'off' to be 'on'` — kết nối nhiễm quay lại pool).
+
+**Đỏ đo được, cô lập (bản hai — bốn mươi ba đột biến):** hardening — H1 nhánh ⒡ mù và H2 bỏ bề mặt `prosrc` ⇒ vế thân hàm · H3
+bỏ BEGIN ATOMIC · H4 bỏ policy USING · H5 bỏ WITH CHECK · H6 bỏ DEFAULT · H7 bỏ CHECK ⇒ vế CHECK của bảng · H8 chỉ còn CHECK của
+bảng ⇒ vế domain · H9 bỏ rule/view · H10 bỏ trigger WHEN · H11 bỏ khuôn set_config · H12 bỏ khuôn SET · H13 bỏ khuôn RESET · H14
+bỏ `all` ở khuôn và H14b bỏ `OR w.ten = 'all'` ở nhánh ⒡ ⇒ vế RESET ALL · H15 bỏ khuôn UPDATE pg_settings · H16 bỏ cờ `i` và H18
+bỏ `E` ⇒ vế `Set_Config(E'Row_Security'…)` · H17 bỏ nháy quanh tên ở SET ⇒ vế `SET "SEARCH_PATH"` · H17b bỏ nháy sau `set_config`
+⇒ vế `pg_catalog."set_config"(` · H19 bỏ vế extension và H19b chỉ xét lớp `pg_proc` ⇒ vế đối chứng hàm/view extension · H20 bỏ
+lọc lược đồ dự án ⇒ vế hàm `pg_temp` · H21 bỏ miễn khai ở nhánh ⒡ ⇒ vế khai miễn · H22 bỏ vế ⒡ ở nhánh dòng khai thiu ⇒ vế "không
+thiu" · H23 khoảng cách không nhận chú thích ⇒ vế `cm_khoi` · H24 không nhận chú thích dòng ⇒ vế `cm_dong` · H25 chú thích không
+lồng ⇒ vế `cm_long` · H26 bỏ tên dollar-quote ⇒ vế `ten_dollar` · H27 bỏ `U&'…'` và H27b bỏ `U&"…"` ⇒ vế `ten_uamp` · H28 khuôn
+UPDATE dừng ở `;` như bản đầu ⇒ vế `cm_upd`. `withTenant` — W1 bỏ khối DO ⇒ vế ⑴ (không lỗi, hàng được commit) · W2 không đổi
+TP096 ⇒ vế ⑴ (lỗi thô) · W3 finally bỏ `session_replication_role` ⇒ vế khuôn I1 · W4 bỏ so search path ⇒ vế search path · W5 bỏ
+`row_security` ⇒ vế row_security · W6 nuốt lỗi phép đọc ⇒ vế pg_temp (kết nối nhiễm quay lại pool, câu kế trên pool ném) · W7
+không đổi 25P02 ⇒ test cũ "báo lỗi khi transaction đã hỏng" · W8 DO chỉ nhận origin và W8b finally chỉ nhận origin ⇒ vế đối chứng
+`local` · W9 không đọc mốc search path ⇒ vế giữ kết nối (mốc thiếu tính là lệch — lượt soi 47 INFO-2) · W10 mốc dùng
+`current_schemas(true)` ⇒ vế đối chứng bảng tạm.
+
+**Evidence bắt, không phải lượt soi:** lần đo evidence đầu trên cây của vòng này — `[evidence] vitest thoát mã 1` dù cổng báo
+56/56 — đỏ hai test `[T10-L]` của `packages/outbox/src/outbox.int.test.ts`: handler của tổ chức P đặt `SET statement_timeout = 1`
+ở phạm vi phiên, và câu kết thúc `DO …; COMMIT` mới bị huỷ (57014) ngay trong giao dịch của P. Đo (máy rảnh, `app_api`, 400
+lượt): COMMIT trần trung vị 0,298 ms, p95 0,708 ms, tối đa 1,880 ms; `DO …; COMMIT` 0,390 / 0,862 / 1,266 ms; dạng không-plpgsql
+`int4div(1, (… <> 'replica')::int4); COMMIT` 0,357 / 0,659 / 1,751 ms; dưới `statement_timeout = 1` cả ba 0/200 lượt bị huỷ. Tức
+hạn 1 ms vốn thấp hơn độ trễ tối đa của chính COMMIT trần — hai test phụ thuộc thời gian từ trước, và câu DO đẩy xác suất lên khi
+evidence chạy mọi tệp song song. Sửa: hạn trong hai test thành 100 ms — `pg_sleep(0.2)` của Q vẫn dài hơn hạn, nên phép đo "trạng
+thái phiên của P làm hỏng việc của Q" giữ nguyên nghĩa; giữ `DO` vì `int4div` không nhanh hơn thấy rõ mà mất SQLSTATE riêng. Kỳ
+vọng đổi có chủ đích, ghi ở chỗ. Cùng lần đo: cột mô tả F1 của `evidence/INV-matrix.md` do bộ sinh chép từ TEST-PLAN — bản viết
+tay ngắn hơn của vòng này sai khuôn và được thay bằng bản sinh.
+
+**Ranh giới NÓI RA:** ⑴ Tên dựng lúc chạy (đo ⑷) và cách viết khác của cùng tên — thoát ký tự trong `E'…'`/`U&'…'`, ghép chuỗi,
+bí danh LANGUAGE internal (đo ⑹, cần superuser) — không quét được bằng văn bản; lớp đỡ là `withTenant`, và nó chỉ đỡ giao dịch của
+chính nó: mã dùng pool ngoài `withTenant` không có lớp nào cho các cách viết ấy — **khoản 99**. ⑵ Một hàm đặt replica, ghi, rồi tự
+đặt lại origin trước khi trả về thì phép kiểm ⑴ không thấy — đó là mã của chủ hàm, lớp chặn là hardening. ⑶ Search path hiệu lực
+đọc qua `current_schemas(false)` vì [INV-H21] cấm nêu tên GUC ấy trong SQL ngoài migrate.ts, và so TƯƠNG ĐỐI vì giá trị hợp lệ
+không bất biến: schema chưa tồn tại hay không USAGE không đổi search path hiệu lực nên không bị bắt (và cũng chưa che được tên),
+và search path đã nhiễm TỪ TRƯỚC giao dịch không bị bắt. ⑷ `statement_timeout` và `SET ROLE` vẫn đi theo kết nối —
+`destroyConnectionWhenDone` vẫn là hàng rào của chúng. ⑸ Chuỗi hay chú thích trùng khuôn, `SET … TO DEFAULT` và `RESET` bị nêu dù
+không ghi giá trị lạ, và một thân vừa UPDATE pg_settings vừa mang tên nguyên văn ở câu khác cũng bị nêu — chiều kêu nhầm, cửa ra là
+viết lại; khai tên vào `GUC_VAN_HANH_KHAI` tắt MỌI phát hiện ghi của tên ấy nên là cửa cuối.
+
+### Lượt soi đối kháng 47 (trên bản đầu của S1.54): 1 CAO, 1 NẶNG, 3 NHẸ, 2 INFO — xử lý trong bản hai, một phát hiện thành khoản 99
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| CAO-1 | CAO | Ba khuôn chỉ nhận KHOẢNG TRẮNG giữa các token, trong khi `prosrc` là văn bản thô: chèn chú thích (`set_config/**/(`, `SET/**/search_path`, `RESET/**/`, `UPDATE/**/pg_settings`) làm khuôn trượt mà tên vẫn nguyên văn ⇒ deploy xanh, và đường ngoài `withTenant` không lớp nào đỡ | **đúng — đo ⑽ ⑿** (người soi chỉ đọc mã): PostgreSQL nhận mọi dạng và dạng nào cũng ghi vào phiên; test bản hai chạy trên bản đầu đỏ | khoảng cách giữa token = khoảng trắng hoặc chú thích, kể cả lồng, không lột gì; khuôn UPDATE quét tới hết thân; năm vế test; đột biến H23, H24, H25, H28; đường ngoài `withTenant` thành **khoản 99** |
+| NẶNG-1 | NẶNG | Tên viết dollar-quote (`set_config($$search_path$$, …)`) thoát khuôn set_config ở `prosrc`; deparse thì chuẩn hoá nên chỉ `prosrc` thủng | **đúng — đo ⑽**, và thêm hai dạng người soi không nêu: `U&'search_path'`, `U&"search_path"` | nhận tên `'…'`/`E'…'`/`U&'…'`/dollar-quote ở set_config và UPDATE, `U&"…"` ở SET/RESET; vế test `ten_dollar`, `ten_uamp`; đột biến H26, H27, H27b |
+| NHẸ-1 | NHẸ | `row_security` so TƯƠNG ĐỐI với lúc mở giao dịch ⇒ kết nối đã nhiễm `off` từ trước quay lại pool | **đúng — đo ⑿**: vế mới chạy trên bản đầu đỏ | `row_security` xét theo tính chất (`on`) như replica; vế test nhiễm-từ-trước; search path giữ tương đối — ranh giới ⑶ |
+| NHẸ-2 | NHẸ | Chuỗi hay chú thích trùng khuôn bị nêu oan; cửa "khai tên" tắt mọi phát hiện ghi của tên ấy | đúng — đọc | ranh giới ⑸; chú thích hằng nói cửa ra ưu tiên là viết lại, khai tên là cửa cuối |
+| NHẸ-3 | NHẸ | `[^;]*` của khuôn UPDATE bắt tên CUỐI trong câu ⇒ nhãn sai (vẫn đỏ) | đúng — đọc; bản hai quét tới hết thân nên nhãn vẫn có thể lệch | nói ra trong chú thích hằng; không đổi tính đúng của cổng |
+| INFO-1 | INFO | Nhánh `tuChoiMacDinh` bỏ qua ba phép kiểm vận hành ⇒ kết nối nhiễm replica cùng mặc định `app.*` thật được giữ | đúng — đọc; không có ghi sai: mọi giao dịch kế trên kết nối ấy vẫn qua phép kiểm ⑴ trước COMMIT, và hardening cấm mặc định `app.*` ở catalog | không đổi |
+| INFO-2 | INFO | Mốc search path `undefined` thì phép so bị bỏ (fail-open hẹp) | đúng — đọc | mốc thiếu tính là lệch ⇒ huỷ kết nối; đột biến W9 đỏ ở vế giữ kết nối |
+
+**Điều đáng mang sang vòng sau:** ⑴ `prosrc` là bề mặt THÔ duy nhất trong các bề mặt quét: mọi khuôn văn bản trên thân hàm cần
+cùng một định nghĩa "khoảng cách giữa token", và khuôn ĐỌC `CAU_TEN_GUC_DU_AN_DOC` của khoản 87 hôm nay vẫn chỉ nhận khoảng trắng
+(đọc, chưa đo tác động); ⑵ một phép so "như lúc mở" chỉ đúng cho trục KHÔNG có giá trị an toàn bất biến — trục có giá trị bất biến
+thì so theo tính chất, không thì nhiễm-từ-trước lọt; ⑶ một lớp ứng dụng được gọi là "lớp chịu lực còn lại" phải kèm danh sách
+đường KHÔNG đi qua nó; ⑷ một ranh giới liệt kê bằng ví dụ ("thoát ký tự, U&, ghép chuỗi") mời người soi tìm dạng ngoài danh sách
+— liệt kê bằng tính chất (tên còn nguyên văn hay không) thì mới kiểm được.

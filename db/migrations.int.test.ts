@@ -3200,6 +3200,202 @@ describe("migration của dự án", () => {
   }, 300_000);
 
   // ==========================================================================================
+  // [S1.54 / khoản nợ 96] MÃ CỦA LƯỢC ĐỒ DỰ ÁN GHI GUC VẬN HÀNH VÀO PHIÊN NGƯỜI GỌI
+  //
+  // Nhánh ⒠ của khoản 95 đọc `proconfig` — giá trị PostgreSQL KHÔI PHỤC khi hàm trả về. Câu GHI trong thân thì không ai khôi
+  // phục: đo S1.54 ghi ở chú thích của CAU_MA_GHI_GUC_VAN_HANH (hàm SECURITY DEFINER của superuser đặt replica ⇒ phiên app_api
+  // ở lại replica, trigger và khoá ngoại bị bỏ qua — bản đo đầu-cuối nằm ở with-tenant.int.test.ts [S1.54 / khoản nợ 96]).
+  // Test này đo NHÁNH ⒡: mỗi bề mặt, mỗi khuôn và mỗi vế lọc có một vế riêng, để đột biến bỏ một thứ thì đúng vế ấy đỏ.
+  // ==========================================================================================
+  it("[khoản nợ 96] mã của lược đồ dự án ghi GUC vận hành vào phiên người gọi: thân hàm (set_config, SET, SET LOCAL/SESSION, RESET, RESET ALL, UPDATE pg_settings, EXECUTE chuỗi nguyên văn, hoa/thường, có nháy, chú thích giữa token kể cả lồng, tên dollar-quote và U&), BEGIN ATOMIC, policy USING và WITH CHECK, DEFAULT, CHECK của bảng và của domain, view, trigger WHEN đều bị bắt và chặn deploy; đọc GUC, set_config GUC khác, mệnh đề SET của hàm, đối tượng extension, hàm pg_temp thì không; dòng khai miễn đúng tên và không bị báo thiu; tên dựng lúc chạy là ranh giới nói ra", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const CAU = docHangHardeningTu(HARDENING, "CAU_GUC_VAN_HANH_GAN_SAN");
+      const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+      const chayMoi = async (): Promise<Error | null> => {
+        const p = createPool(db.connectionString, 1);
+        try {
+          return await loiCua(migrate(p, MIGRATIONS_DIR));
+        } finally {
+          await p.end();
+        }
+      };
+      const moTa = async (cau: string): Promise<string[]> =>
+        (await db.pool.query<{ mo_ta: string }>(cau)).rows.map((r) => r.mo_ta);
+      const dong96 = async (): Promise<string[]> => (await moTa(CAU)).filter((m) => m.includes("(khoản 96)"));
+      const coDong = (rows: readonly string[], dau: string): void => {
+        expect(
+          rows.some((m) => m.startsWith(dau)),
+          `thiếu dòng "${dau}"; đã thấy: ${JSON.stringify(rows.map((m) => m.slice(0, 110)))}`,
+        ).toBe(true);
+      };
+
+      // (a) LƯỢC ĐỒ THẬT, census ĐỘC LẬP với câu của hardening: không đối tượng nào ngoài pg_catalog/information_schema nhắc
+      //     tới ba tên ở thân hàm, BEGIN ATOMIC, policy, DEFAULT, CHECK, rule/view hay trigger. Không có vế này thì "không chặn
+      //     cụm hợp lệ" là khẳng định rỗng ruột, và một dòng có sẵn làm mọi vế "bị bắt" dưới đây đỏ vì lý do khác.
+      const { rows: census } = await db.pool.query<{ n: number }>(String.raw`
+        SELECT count(*)::int AS n FROM (
+          SELECT p.prosrc AS t FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          UNION ALL
+          SELECT pg_get_function_sqlbody(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE p.prosqlbody IS NOT NULL AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          UNION ALL SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
+          UNION ALL SELECT pg_get_expr(polwithcheck, polrelid) FROM pg_policy
+          UNION ALL
+          SELECT pg_get_expr(ad.adbin, ad.adrelid) FROM pg_attrdef ad JOIN pg_class c ON c.oid = ad.adrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          UNION ALL
+          SELECT pg_get_constraintdef(con.oid) FROM pg_constraint con JOIN pg_namespace n ON n.oid = con.connamespace
+           WHERE con.contype = 'c' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          UNION ALL
+          SELECT pg_get_ruledef(r.oid) FROM pg_rewrite r JOIN pg_class c ON c.oid = r.ev_class
+            JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          UNION ALL SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t WHERE NOT t.tgisinternal) s
+         WHERE s.t ~* '(row_security|session_replication_role|search_path)'`);
+      expect(census[0]!.n, "lược đồ thật: không mã nào của dự án nhắc ba tên").toBe(0);
+      expect(await moTa(CAU), "lược đồ thật sạch ở mọi nhánh").toEqual([]);
+
+      await db.pool.query("CREATE SCHEMA zz96");
+      const giuTam = await db.pool.connect();
+      try {
+        // (b) ĐỐI CHỨNG DƯƠNG TRƯỚC: đọc GUC; set_config một GUC KHÁC nhận tên GUC vận hành làm GIÁ TRỊ; mệnh đề SET của hàm;
+        //     hàm và view thuộc extension; hàm pg_temp — không dòng khoản 96 nào, và deploy đi qua. Không có vế này, mọi vế
+        //     "bị bắt" dưới đây không phân biệt được với một nhánh nêu MỌI thứ.
+        await db.pool.query(String.raw`
+          CREATE FUNCTION zz96.doc() RETURNS text LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config/* c */('app.zz96', 'search_path', true); RETURN current_setting('session_replication_role'); END$$;
+          CREATE FUNCTION zz96.ext_ham() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config('search_path', 'ke_gian', false); END$$;
+          ALTER EXTENSION plpgsql ADD FUNCTION zz96.ext_ham();
+          CREATE VIEW zz96.ext_view WITH (security_invoker = true) AS SELECT pg_catalog.set_config('row_security', 'off', false) AS x;
+          ALTER EXTENSION plpgsql ADD VIEW zz96.ext_view;`);
+        await giuTam.query(
+          "CREATE FUNCTION pg_temp.tam96() RETURNS void LANGUAGE plpgsql AS $$BEGIN SET search_path = ke_gian; END$$",
+        );
+        expect(await dong96(), "đọc GUC, set_config GUC khác, mệnh đề SET, extension, pg_temp: không bị nêu").toEqual([]);
+        expect(await chayMoi(), "đối chứng dương: deploy đi qua").toBeNull();
+
+        // (c) THÂN HÀM — mỗi khuôn, mỗi cách viết một hàm. Hàm đầu SECURITY DEFINER vì đó là hạng nguy hiểm đã đo (⑴).
+        await db.pool.query(String.raw`
+          CREATE FUNCTION zz96.sc_nhay() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+            AS $$BEGIN PERFORM pg_catalog."set_config"('session_replication_role', 'replica', false); END$$;
+          CREATE FUNCTION zz96.sc_hoa() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM Set_Config(E'Row_Security', 'off', false); END$$;
+          CREATE FUNCTION zz96.set_nhay() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN SET "SEARCH_PATH" = ke_gian, public; END$$;
+          CREATE FUNCTION zz96.set_local() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN SET LOCAL row_security = off; END$$;
+          CREATE FUNCTION zz96.set_sql() RETURNS void LANGUAGE sql SET search_path = pg_catalog
+            AS $$SET SESSION search_path TO ke_gian, public$$;
+          CREATE FUNCTION zz96.reset_ten() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN RESET search_path; END$$;
+          CREATE FUNCTION zz96.reset_all() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN RESET ALL; END$$;
+          CREATE FUNCTION zz96.exec_chuoi() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN EXECUTE 'SET session_replication_role = replica'; END$$;
+          CREATE FUNCTION zz96.upd_settings() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN UPDATE pg_catalog.pg_settings SET setting = 'ke_gian' WHERE name = 'search_path'; END$$;
+          CREATE FUNCTION zz96.dong() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN EXECUTE format('SET %s = %s', 'session' || '_replication_role', 'replica'); END$$;
+          -- [lượt soi 47 CAO-1 + NẶNG-1] chú thích giữa token (khối, dòng, lồng) và tên viết dollar-quote hay U& — đo: PostgreSQL
+          -- nhận cả tám dạng và dạng nào cũng ghi vào phiên; bản đầu của khuôn không thấy dạng nào.
+          CREATE FUNCTION zz96.cm_khoi() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config/**/('session_replication_role', 'replica', false); END$$;
+          CREATE FUNCTION zz96.cm_dong() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config -- chú thích dòng
+            ('row_security', 'off', false); END$$;
+          CREATE FUNCTION zz96.cm_long() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN SET/* a /* b */ c */search_path = ke_gian; END$$;
+          CREATE FUNCTION zz96.cm_reset() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN RESET/**/row_security; END$$;
+          CREATE FUNCTION zz96.cm_upd() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN UPDATE/**/pg_catalog.pg_settings /* ; */ SET setting = 'replica' WHERE name = 'session_replication_role'; END$$;
+          CREATE FUNCTION zz96.ten_dollar() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config($x$search_path$x$, 'ke_gian', false); END$$;
+          CREATE FUNCTION zz96.ten_uamp() RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog
+            AS $$BEGIN PERFORM set_config(U&'row_security', 'off', false); SET U&"session_replication_role" = replica; END$$;`);
+        const than = await dong96();
+        coDong(than, "hàm zz96.sc_nhay(): ghi GUC vận hành session_replication_role bằng set_config");
+        coDong(than, "hàm zz96.sc_hoa(): ghi GUC vận hành row_security bằng set_config");
+        coDong(than, "hàm zz96.set_nhay(): ghi GUC vận hành search_path bằng SET");
+        coDong(than, "hàm zz96.set_local(): ghi GUC vận hành row_security bằng SET");
+        coDong(than, "hàm zz96.set_sql(): ghi GUC vận hành search_path bằng SET");
+        coDong(than, "hàm zz96.reset_ten(): ghi GUC vận hành search_path bằng RESET");
+        for (const ten of ["row_security", "session_replication_role", "search_path"]) {
+          coDong(than, `hàm zz96.reset_all(): ghi GUC vận hành ${ten} bằng RESET`);
+        }
+        coDong(than, "hàm zz96.exec_chuoi(): ghi GUC vận hành session_replication_role bằng SET");
+        coDong(than, "hàm zz96.upd_settings(): ghi GUC vận hành search_path bằng UPDATE pg_settings");
+        coDong(than, "hàm zz96.cm_khoi(): ghi GUC vận hành session_replication_role bằng set_config");
+        coDong(than, "hàm zz96.cm_dong(): ghi GUC vận hành row_security bằng set_config");
+        coDong(than, "hàm zz96.cm_long(): ghi GUC vận hành search_path bằng SET");
+        coDong(than, "hàm zz96.cm_reset(): ghi GUC vận hành row_security bằng RESET");
+        coDong(than, "hàm zz96.cm_upd(): ghi GUC vận hành session_replication_role bằng UPDATE pg_settings");
+        coDong(than, "hàm zz96.ten_dollar(): ghi GUC vận hành search_path bằng set_config");
+        coDong(than, "hàm zz96.ten_uamp(): ghi GUC vận hành row_security bằng set_config");
+        coDong(than, "hàm zz96.ten_uamp(): ghi GUC vận hành session_replication_role bằng SET");
+        // RANH GIỚI nói ra: tên dựng lúc chạy — không văn bản nào mang tên, và phiên người gọi vẫn ở lại replica (đo S1.54).
+        // Lớp chịu lực cho ca này là withTenant, không phải mục này.
+        expect(than.filter((m) => m.startsWith("hàm zz96.dong()")), "ranh giới: tên dựng lúc chạy không quét được").toEqual([]);
+        // Chặn deploy bằng CHÍNH nhánh ⒡ — BƯỚC 3 gom mọi mục sai, thông điệp phải mang "(khoản 96)".
+        const loiThan = await chayMoi();
+        expect(loiThan, "mã ghi GUC vận hành phải chặn deploy").not.toBeNull();
+        expect(loiThan!.message.includes("(khoản 96)"), loiThan!.message.slice(0, 240)).toBe(true);
+
+        // (d) KHAI: một tên trong GUC_VAN_HANH_KHAI miễn ĐÚNG tên ấy ở nhánh ⒡, và nhánh dòng khai thiu KHÔNG báo nó khi mã
+        //     đang ghi nó — cùng hằng CAU_MA_GHI_GUC_VAN_HANH, không chép tay (bài học lượt soi 44 NHẸ-6).
+        const HARDENING_KHAI = HARDENING.replace(
+          "$q$(VALUES ('')) AS gv(ten)$q$",
+          "$q$(VALUES ('search_path')) AS gv(ten)$q$",
+        );
+        expect(HARDENING_KHAI, "hằng khai đúng khuôn — không thì vế này rỗng ruột").not.toBe(HARDENING);
+        const CAU_KHAI = docHangHardeningTu(HARDENING_KHAI, "CAU_GUC_VAN_HANH_GAN_SAN");
+        const khai = await moTa(CAU_KHAI);
+        expect(khai.filter((m) => m.includes("ghi GUC vận hành search_path")), "khai search_path miễn nhánh ⒡ cho search_path").toEqual([]);
+        coDong(khai, "hàm zz96.sc_nhay(): ghi GUC vận hành session_replication_role");
+        expect(khai.filter((m) => m.startsWith("khai GUC vận hành")), "tên khai đang được mã ghi thì không thiu").toEqual([]);
+        await db.pool.query(
+          "DROP FUNCTION zz96.set_nhay(), zz96.set_sql(), zz96.reset_ten(), zz96.reset_all(), zz96.upd_settings(), zz96.cm_long(), zz96.ten_dollar()",
+        );
+        coDong(await moTa(CAU_KHAI), "khai GUC vận hành search_path");
+
+        // (e) BỀ MẶT KHÔNG PHẢI THÂN HÀM — mỗi bề mặt một đối tượng, mỗi cái đã đo là chạy set_config dưới phiên người gọi.
+        await db.pool.query(String.raw`
+          CREATE FUNCTION zz96.atomic() RETURNS text LANGUAGE sql
+            BEGIN ATOMIC SELECT pg_catalog.set_config('search_path', 'ke_gian, public', false); END;
+          CREATE TABLE zz96.t (id int, x text DEFAULT pg_catalog.set_config('session_replication_role', 'replica', false),
+                               CONSTRAINT ck96 CHECK (pg_catalog.set_config('row_security', 'off', false) IS NOT NULL));
+          CREATE DOMAIN zz96.dm AS text CHECK (pg_catalog.set_config('search_path', 'ke_gian', false) IS NOT NULL);
+          CREATE TABLE zz96.p (id int);
+          ALTER TABLE zz96.p ENABLE ROW LEVEL SECURITY;
+          CREATE POLICY p_using ON zz96.p FOR SELECT USING (pg_catalog.set_config('search_path', 'ke_gian', false) IS NOT NULL);
+          CREATE POLICY p_check ON zz96.p FOR INSERT WITH CHECK (pg_catalog.set_config('row_security', 'off', false) IS NOT NULL);
+          CREATE VIEW zz96.v WITH (security_invoker = true)
+            AS SELECT pg_catalog.set_config('session_replication_role', 'replica', false) AS x;
+          CREATE FUNCTION zz96.tgf() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog AS $$BEGIN RETURN NEW; END$$;
+          CREATE TRIGGER tg_when BEFORE INSERT ON zz96.p FOR EACH ROW
+            WHEN (pg_catalog.set_config('search_path', 'ke_gian', false) IS NOT NULL) EXECUTE FUNCTION zz96.tgf();`);
+        const beMat = await dong96();
+        coDong(beMat, "hàm zz96.atomic() (BEGIN ATOMIC): ghi GUC vận hành search_path bằng set_config");
+        coDong(beMat, "DEFAULT của cột zz96.t.x: ghi GUC vận hành session_replication_role bằng set_config");
+        coDong(beMat, "CHECK ck96 của bảng zz96.t: ghi GUC vận hành row_security bằng set_config");
+        coDong(beMat, "CHECK dm_check của domain zz96.dm: ghi GUC vận hành search_path bằng set_config");
+        coDong(beMat, "policy p_using trên zz96.p (USING): ghi GUC vận hành search_path bằng set_config");
+        coDong(beMat, "policy p_check trên zz96.p (WITH CHECK): ghi GUC vận hành row_security bằng set_config");
+        coDong(beMat, "view zz96.v: ghi GUC vận hành session_replication_role bằng set_config");
+        coDong(beMat, "trigger tg_when trên zz96.p (WHEN): ghi GUC vận hành search_path bằng set_config");
+      } finally {
+        giuTam.release(true);
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
+
+  // ==========================================================================================
   // [S1.48 / lượt soi ngang 40a H1] migrate() TỪ CHỐI TRƯỚC LƯỢT SỬA khi phiên deploy mang GUC app.*
   // ==========================================================================================
   it("[S1.48 / 40a H1] ALTER DATABASE … SET app.org_id ⇒ migrate() trên kết nối mới từ chối TRƯỚC lượt sửa: migration đánh số mới KHÔNG chạy, không dòng schema_migrations, thông điệp nêu tên không nêu giá trị; RESET ⇒ kết nối mới chạy, bảng có", async () => {

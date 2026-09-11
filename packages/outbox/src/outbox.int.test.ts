@@ -1447,7 +1447,11 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
     // để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).
     const poolDoiChung = db.poolAs("app_api");
     try {
-      await withTenant(poolDoiChung, orgId, (client) => client.query("SET statement_timeout = 1"));
+      // [S1.54 / khoản nợ 96] 100 ms, không còn 1 ms: 1 ms THẤP HƠN độ trễ của chính các câu `withTenant` phát ra — đo trên
+      // máy rảnh dưới app_api (400 lượt), COMMIT trần có trung vị 0,30 ms nhưng tối đa 1,88 ms, và khi evidence chạy mọi tệp
+      // song song thì câu kết thúc `DO …; COMMIT` của khoản 96 (trung vị 0,39 ms) bị huỷ ngay trong giao dịch của P. Điều test
+      // này đo là trạng thái phiên của P làm hỏng việc của Q — `pg_sleep(0.2)` của Q vẫn dài hơn hạn, nên phép đo giữ nghĩa.
+      await withTenant(poolDoiChung, orgId, (client) => client.query("SET statement_timeout = 100"));
       let loi: { code?: string } | undefined;
       try {
         await withTenant(poolDoiChung, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)"));
@@ -1465,7 +1469,8 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
     const pool = db.poolAs("app_api");
     try {
-      await withTenant(pool, orgId, (client) => client.query("SET statement_timeout = 1"), {
+      // [S1.54 / khoản nợ 96] 100 ms — lý do và phép đo ở vế đối chứng ngay trên.
+      await withTenant(pool, orgId, (client) => client.query("SET statement_timeout = 100"), {
         destroyConnectionWhenDone: true,
       });
       await expect(

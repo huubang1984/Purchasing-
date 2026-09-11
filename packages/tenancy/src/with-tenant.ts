@@ -2,6 +2,14 @@ import type pg from "pg";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** [S1.54 / khoản nợ 96] Một hàng của phép đọc lại ở khối `finally` của `withTenant`. */
+interface DocLaiSauGiaoDich {
+  con_sot: string | null;
+  vai_sao_chep: string;
+  luoc_do: string;
+  rls: string;
+}
+
 /**
  * Lỗi thuộc về GIAO THỨC của withTenant(), phân biệt với lỗi do chính `fn` hay Postgres ném.
  * Hai trường hợp, cả hai đều nghĩa là KHÔNG có thay đổi nào được ghi:
@@ -29,6 +37,12 @@ export class TenantError extends Error {
  * cả khi người dùng kế tiếp là một TỔ CHỨC KHÁC. `SET statement_timeout = 1` (phạm vi PHIÊN)
  * do handler của tổ chức P để lại làm job của tổ chức Q trên cùng kết nối chết vì
  * "canceling statement due to statement timeout".
+ *
+ * [S1.54 / khoản nợ 96] MỘT PHẦN đoạn trên nay có lớp tự động: khối `finally` đọc thêm ba GUC vận hành và huỷ kết nối khi
+ * `session_replication_role` không còn `origin`/`local` hay `row_security` không còn `on`, hoặc search path HIỆU LỰC
+ * (`current_schemas(false)`) khác lúc mở giao dịch — nên ca `SET search_path = doc, pg_catalog, public` ở trên bị bắt khi `doc` tồn tại
+ * và đọc được (schema chưa có hay không có USAGE thì search path hiệu lực không đổi, và cũng chưa che được tên — đo S1.54).
+ * `statement_timeout` và `SET ROLE` thì vẫn đi theo kết nối: cờ này vẫn là hàng rào của chúng.
  *
  * Ai phải bật cờ này: MỌI người gọi giao `client` cho MÃ KHÔNG THUỘC QUYỀN KIỂM SOÁT CỦA MÌNH
  * (điểm mở rộng công khai). Trước Task 10 điều đó là một tai nạn; từ `JobHandler` nó là một
@@ -114,6 +128,32 @@ export interface WithTenantOptions {
  * `statement_timeout`, `SET ROLE` — đi theo kết nối tới người dùng kế tiếp, kể cả sang tổ chức
  * khác. Người gọi giao `client` cho mã của người khác PHẢI bật `destroyConnectionWhenDone`. Xem
  * docstring của `WithTenantOptions`.
+ *
+ * [S1.54 / khoản nợ 96] BA GUC VẬN HÀNH GHI VÀO PHIÊN. Một hàm mà `fn` gọi có thể GHI `session_replication_role`,
+ * `search_path` hay `row_security` vào PHIÊN (`set_config(…, false)`, `SET`) và phiên giữ giá trị sau khi hàm trả về —
+ * đo S1.54 dưới `app_api`: hàm SECURITY DEFINER của superuser đặt `replica` ⇒ trigger `ENABLE` thường không chạy và khoá
+ * ngoại tới hàng không tồn tại đi qua cho mọi câu sau đó, và `app_api` không tự SET/RESET về `origin` được (42501).
+ * Hardening quét văn bản tĩnh của mã lược đồ dự án (nhánh ⒡ của `CAU_GUC_VAN_HANH_GAN_SAN`); tên dựng lúc chạy thì chỉ
+ * lớp này thấy. Hai phép kiểm, không thêm round-trip nào:
+ *   ⑴ trong CÙNG câu với `COMMIT`, một khối `DO` ném SQLSTATE `TP096` khi `session_replication_role` không phải
+ *     `origin`/`local` ⇒ PostgreSQL bỏ phần còn lại của câu nên `COMMIT` không chạy, giao dịch ROLLBACK, và ROLLBACK gỡ
+ *     luôn giá trị phạm vi phiên đặt trong giao dịch (đo) — ghi dưới replica không được commit qua hàm này, kể cả khi kết
+ *     nối lấy từ pool đã nhiễm sẵn. Giá, đo (400 lượt dưới `app_api`): câu kết thúc có trung vị 0,39 ms thay vì 0,30 ms của
+ *     COMMIT trần; dạng không cần plpgsql — `int4div` chia cho 0 khi replica — đo ra 0,36 ms, không nhanh hơn thấy rõ mà mất
+ *     SQLSTATE riêng, nên giữ `DO`;
+ *   ⑵ khối `finally` đọc lại ba GUC: replica còn lại (khuôn I1 — `fn` tự COMMIT rồi ghi ngoài giao dịch — hay nhiễm từ
+ *     trước), `row_security` khác `on` — theo TÍNH CHẤT như replica, vì nhiễm từ trước giao dịch cũng là nhiễm (lượt soi
+ *     47 NHẸ-1) — hay search path hiệu lực khác lúc mở giao dịch ⇒ huỷ kết nối; và nếu chính phép đọc ấy NÉM
+ *     (đo: `pg_temp` đứng đầu search path dưới vai không có TEMP ⇒ 42501) thì cũng huỷ — không kiểm được thì không trả về pool.
+ *     Search path hiệu lực là `current_schemas(false)`: bỏ pg_catalog và pg_temp NGẦM, nên bảng tạm của một vai có TEMP không
+ *     làm lệch mốc (đo: sau `CREATE TEMP TABLE`, `current_schemas(true)` thành `{pg_temp_3,pg_catalog,public}` còn `false` giữ
+ *     `{public}`), trong khi pg_catalog nêu TƯỜNG MINH vẫn hiện đúng vị trí (đo: `public, pg_catalog` ⇒ `{public,pg_catalog}`).
+ * Ranh giới, nói ra: một hàm đặt replica, ghi, rồi tự đặt lại `origin` trước khi trả về thì ⑴ không thấy — đó là mã của
+ * chính chủ hàm, lớp chặn là hardening; search path đọc qua `current_schemas(false)` chứ không qua tên GUC vì [INV-H21] chỉ
+ * cho `migrate.ts` nêu tên ấy trong SQL — schema chưa tồn tại hay không có USAGE không đổi search path hiệu lực nên không
+ * bị bắt (và cũng chưa che được tên nào); search path so TƯƠNG ĐỐI vì giá trị hợp lệ không bất biến, nên search path đã
+ * nhiễm TỪ TRƯỚC giao dịch (mã ngoài `withTenant`) không bị bắt ở đây; `withTenant` chỉ bảo vệ giao dịch của chính nó,
+ * không phủ mã dùng pool ngoài nó (khoản 99).
  */
 export async function withTenant<T>(
   pool: pg.Pool,
@@ -150,6 +190,8 @@ export async function withTenant<T>(
   // [S1.47] Đã từ chối vì mặc định phiên: khối `finally` không được đọc lại rồi huỷ kết nối (kết nối kế mang cùng mặc định).
   // [S1.48 / 40a NẶNG-1] … trừ khi khối catch đã phân biệt được đó là RÒ PHIÊN (RESET xoá sạch) — khi ấy `loiLamHongClient` đã đặt.
   let tuChoiMacDinh = false;
+  // [S1.54 / khoản nợ 96] Mốc so của khối `finally`, đọc TRƯỚC `fn` trong round-trip BEGIN — xem ⑵ ở docstring.
+  let truocLuocDo: string | undefined;
   try {
     // [S1.47 / khoản nợ 87 ⑵ — lượt soi 39 NHẸ-4] BEGIN và, trong CÙNG round-trip (một câu nhiều lệnh, không tham số),
     // đọc bốn GUC TRƯỚC khi hàm này đặt gì: một giá trị đã có sẵn lúc mở giao dịch là MẶC ĐỊNH PHIÊN (`ALTER
@@ -161,20 +203,23 @@ export async function withTenant<T>(
     // vào deploy kế (mục phán xét khoản 87 của hardening bắt cùng cấu hình ở catalog/phiên deploy). Vì sao không đọc
     // pg_settings.reset_val/source: GUC placeholder KHÔNG có mặt ở pg_settings (đo, thăm dò S1.47). Bản đầu chỉ xoá rồi
     // chạy tiếp: `finally` thấy giá trị mặc định, tưởng `fn` để lại, HUỶ kết nối mỗi lượt với chẩn đoán sai.
+    // [S1.54 / khoản nợ 96] Cùng câu này đọc mốc search path hiệu lực cho khối `finally`.
     const ketQuaMo = (await client.query(
       "BEGIN; " +
         "SELECT pg_catalog.concat_ws(', ', " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
         "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
-        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS mac_dinh",
-    )) as unknown as pg.QueryResult<{ mac_dinh: string | null }>[];
+        "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS mac_dinh, " +
+        "  pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do",
+    )) as unknown as pg.QueryResult<{ mac_dinh: string | null; luoc_do: string }>[];
     // [S1.48 / lượt soi ngang 40a I8] Hình dạng kết quả câu nhiều lệnh được ĐÒI, không được tin: driver/pooler trả về một
     // kết quả thay vì hai thì `macDinh` là undefined và phép từ chối MÙ (fail-open).
     if (!Array.isArray(ketQuaMo) || ketQuaMo.length !== 2) {
       throw new TenantError("BEGIN; SELECT phải trả về đúng hai kết quả — driver hay pooler không hỗ trợ câu nhiều lệnh; phép kiểm mặc định phiên không chạy được.");
     }
     const macDinh = ketQuaMo[1]?.rows[0]?.mac_dinh;
+    truocLuocDo = ketQuaMo[1]?.rows[0]?.luoc_do;
     if (macDinh) {
       tuChoiMacDinh = true;
       // Chỉ TÊN, không giá trị — cùng lý do với nhánh UUID ở trên.
@@ -212,10 +257,40 @@ export async function withTenant<T>(
     // lỗi — nó trả về command tag "ROLLBACK". Không kiểm ở đây thì withTenant() báo THÀNH CÔNG
     // cho người gọi trong khi mọi thay đổi đã bị vứt: một try/catch phòng thủ đặt sai chỗ bên
     // trong `fn` là đủ để dựng ra ca đó.
-    const ketThuc = await client.query("COMMIT");
-    if (ketThuc.command !== "COMMIT") {
+    // [S1.54 / khoản nợ 96] ⑴ ở docstring: khối DO và COMMIT đi CÙNG một câu nhiều lệnh (giao thức đơn giản, không tham
+    // số) — DO ném thì PostgreSQL bỏ phần còn lại của câu, nên COMMIT không bao giờ chạy dưới replica. Giao dịch đã hỏng
+    // thì chính DO ném 25P02 (đo) — cùng nghĩa với tag "ROLLBACK" mà phép kiểm dưới vẫn giữ làm lớp hai.
+    let ketQuaKetThuc: unknown;
+    try {
+      ketQuaKetThuc = await client.query(
+        "DO $kiem_khoan_96$BEGIN " +
+          "IF pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.<>) 'origin' " +
+          "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.<>) 'local' " +
+          "THEN RAISE SQLSTATE 'TP096'; END IF; END$kiem_khoan_96$; COMMIT",
+      );
+    } catch (loiKetThuc) {
+      const ma = (loiKetThuc as { code?: unknown }).code;
+      if (ma === "TP096") {
+        throw new TenantError(
+          "session_replication_role không phải origin/local lúc COMMIT — trigger ENABLE thường và khoá ngoại đã bị bỏ qua " +
+            "cho các câu của giao dịch này (một hàm fn gọi đã ghi GUC ấy vào phiên, hay kết nối lấy từ pool đã nhiễm sẵn). " +
+            "COMMIT không chạy: không thay đổi nào được ghi.",
+        );
+      }
+      if (ma === "25P02") {
+        throw new TenantError(
+          "Transaction không commit được: giao dịch đã hỏng (25P02) — một truy vấn bên trong đã lỗi và lỗi đó bị nuốt. " +
+            "Không thay đổi nào được ghi.",
+        );
+      }
+      throw loiKetThuc;
+    }
+    // Câu nhiều lệnh trả về một kết quả cho MỖI lệnh — kết quả cần xét là của lệnh cuối, COMMIT.
+    const cacKetQua = (Array.isArray(ketQuaKetThuc) ? ketQuaKetThuc : [ketQuaKetThuc]) as pg.QueryResult[];
+    const ketThuc = cacKetQua[cacKetQua.length - 1];
+    if (ketThuc?.command !== "COMMIT") {
       throw new TenantError(
-        `Transaction không commit được: Postgres trả về "${ketThuc.command}" thay vì COMMIT — ` +
+        `Transaction không commit được: Postgres trả về "${String(ketThuc?.command)}" thay vì COMMIT — ` +
           "một truy vấn bên trong đã lỗi và lỗi đó bị nuốt. Không thay đổi nào được ghi.",
       );
     }
@@ -265,8 +340,8 @@ export async function withTenant<T>(
     // bình thường và ném lỗi) vì `fn` để lại trạng thái phiên được ở cả hai.
     try {
       const { rows } = tuChoiMacDinh
-        ? { rows: [{ con_sot: null }] }
-        : await client.query<{ con_sot: string | null }>(
+        ? { rows: [] as DocLaiSauGiaoDich[] }
+        : await client.query<DocLaiSauGiaoDich>(
         // [vòng fix 3 — I1] pg_catalog.current_setting: một doc.current_setting(text, boolean)
         // trả '' luôn luôn sẽ làm phép kiểm này MÙ, và kết nối còn sót app.org_id được trả
         // về pool như thể sạch. Đây là nửa "âm tính giả" của cùng một lỗ.
@@ -280,7 +355,10 @@ export async function withTenant<T>(
           "  NULLIF(pg_catalog.current_setting('app.org_id', true), ''), " +
           "  NULLIF(pg_catalog.current_setting('app.guest_session_id', true), ''), " +
           "  NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), ''), " +
-          "  NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '')) AS con_sot",
+          "  NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '')) AS con_sot, " +
+          "  pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
+          "  pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do, " +
+          "  pg_catalog.current_setting('row_security') AS rls",
       );
       // Cố ý KHÔNG nội suy giá trị còn sót vào thông báo — cùng lý do với nhánh UUID ở trên.
       if (rows[0]?.con_sot) {
@@ -289,8 +367,26 @@ export async function withTenant<T>(
             "Kết nối bị huỷ thay vì trả về pool.",
         );
       }
-    } catch {
-      // Kết nối đã chết — release(loiLamHongClient) bên dưới xử lý nốt.
+      // [S1.54 / khoản nợ 96] ⑵ ở docstring. `session_replication_role` và `row_security` xét theo TÍNH CHẤT — nhiễm từ
+      // trước giao dịch cũng là nhiễm (lượt soi 47 NHẸ-1); search path hiệu lực so với mốc đọc lúc BEGIN, và mốc THIẾU (BEGIN
+      // không xong) cũng tính là lệch (lượt soi 47 INFO-2 — bản đầu bỏ qua phép so). Chỉ TÊN vào thông báo, không giá trị.
+      const sau = rows[0];
+      if (sau !== undefined) {
+        const lech: string[] = [];
+        if (sau.vai_sao_chep !== "origin" && sau.vai_sao_chep !== "local") lech.push("session_replication_role");
+        if (sau.rls !== "on") lech.push("row_security");
+        if (sau.luoc_do !== truocLuocDo) lech.push("search path hiệu lực");
+        if (lech.length > 0) {
+          loiLamHongClient ??= new TenantError(
+            `GUC vận hành sai hay bị đổi ở phạm vi PHIÊN sau giao dịch — ${lech.join(", ")}. Kết nối bị huỷ thay vì trả về pool.`,
+          );
+        }
+      }
+    } catch (loiDocLai) {
+      // Kết nối đã chết — release(loiLamHongClient) bên dưới xử lý nốt. [S1.54 / khoản nợ 96] Và mọi lỗi KHÁC của phép đọc
+      // cũng huỷ kết nối: bản trước nuốt lỗi rồi trả kết nối về pool, nên làm phép đọc NÉM là đủ để kết nối nhiễm quay lại
+      // pool (đo: `pg_temp` đứng đầu search path dưới vai không có TEMP ⇒ `current_schemas` ném 42501).
+      loiLamHongClient ??= loiDocLai as Error;
     }
     client.off("error", boQuaLoiKetNoi);
     // [vòng fix 1 Task 10 — MỤC 2] `true` huỷ kết nối mà KHÔNG dán nhãn "lỗi" lên nó: pg-pool
