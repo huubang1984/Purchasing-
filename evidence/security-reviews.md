@@ -2871,3 +2871,124 @@ hỏi ngõ cụt ấy đang CHẶN gì. ⑶ Một cổng "hai bản khớp" ph�
 public), và test nào cần dòng khai phải đi qua chính bộ sinh ấy — vá tay một bản sao là thứ hai không ai đối chiếu. ⑷ Bảng chỉ có
 khoá ngoại tới bảng tenant (khoản 86) mà bật RLS: khai kép 83⑶ + (c) mở đọc xuyên tổ chức ở public lẫn ngoài public — cùng một
 chuẩn, nhưng chưa lượt soi nào nhìn riêng cặp khai ấy.
+
+# §S1.56 — khoản nợ 97: mục 94 soi thêm vai chạy migration — gương `check_enable_rls` cho `current_user` của phiên phán xét
+
+**Bề mặt an ninh:** `db/migrations/hardening.always.sql` — `CAU_PHU_LENH_CHU_BANG_SAI` (mục 94) thêm nhánh `UNION ALL` cho chủ thể
+thứ hai là `current_user` của phiên phán xét; mô tả mục và ô "cần quyền" trong bảng hardening đổi theo; chú thích ⑷ gạch, ⑸ mới.
+Test: `db/rls-coverage.int.test.ts` describe `[S1.56 / khoản nợ 97]` (ba `it`, câu phán xét dưới `SET LOCAL ROLE`);
+`db/migrations.int.test.ts` một `it` hồ sơ N2 (container riêng).
+
+**Đo trước khi viết (PostgreSQL 16, tệp thăm dò trong worktree, đã xoá):**
+⑴ Chủ `zz_chu97` không superuser, bảng bật RLS và FORCE có 2 hàng, policy duy nhất `TO zz_chu97`; vai `zz_trien97` không thừa kế
+chủ, được GRANT USAGE trên lược đồ và SELECT, UPDATE trên bảng: chủ đọc 2; `zz_trien97` đọc 0 và UPDATE báo 0 hàng, KHÔNG LỖI; NO
+FORCE vẫn 0; mục 94 (chủ thể chủ bảng) và 83⑵ (tập vai ứng dụng) im.
+⑵ Nguyên mẫu câu chủ thể thứ hai dưới `zz_trien97` nêu SELECT và UPDATE — đúng hai lệnh đã cấp; thêm policy `FOR SELECT TO PUBLIC`
+⇒ chỉ còn UPDATE; vai là thành viên của chủ, hay bảng tắt RLS ⇒ im; dưới superuser im.
+⑶ Hồ sơ N2 (bootstrap bằng superuser; `trien_khai` CREATEROLE, sở hữu database, GRANT ALL trên `schema_migrations`): fixture ở một
+lược đồ riêng, khai ở 83⑴ và 83⑶, `trien_khai` được GRANT SELECT, UPDATE; một migration `999_zz_backfill97.sql` chạy `UPDATE
+zz_s97.t SET id = id + 10`. `migrate()` dưới pool `trien_khai` ĐI QUA và ghi migration là đã áp — hàng vẫn 1, 2.
+⑷ Lược đồ thật: nguyên mẫu dưới superuser và dưới một vai CREATEROLE không GRANT đều rỗng — rỗng theo cấu tạo; bảo đảm thật là census
+ở rls-coverage: mọi bảng RLS thật có policy PERMISSIVE TO PUBLIC ở cả bốn lệnh (lượt soi 49 INFO-1).
+⑸ `migrate.ts` không `SET ROLE`: câu phán xét chạy dưới vai của kết nối deploy (pool `trien_khai` ⇒ `current_user = trien_khai`).
+
+**Hình dạng (bản ba):** ⒜ Chủ thể thứ hai là `current_user` của phiên phán xét khi RLS áp cho nó — gương `check_enable_rls`: không
+superuser, không BYPASSRLS, không phải chính chủ, và bảng FORCE hay vai không thừa kế chủ (`pg_has_role(vai, relowner, 'USAGE')`,
+thừa kế theo INHERIT). ⒝ Có USAGE trên lược đồ; lệnh SELECT, UPDATE, DELETE — INSERT không phủ thì ném nên đứng ngoài. ⒞ Cùng loại
+trừ với chủ thể thứ nhất: extension, bảng con của cha bật RLS, lệnh vai ấy không có quyền (`has_table_privilege` cho DELETE,
+`has_any_column_privilege` cho SELECT và UPDATE — GRANT mức cột được tính). ⒟ Phủ theo danh sách vai của policy PERMISSIVE ở lệnh ấy
+hay `*`: PUBLIC, hay vai mà `pg_has_role(vai, o, 'USAGE')` — nhóm NOINHERIT không phủ; RESTRICTIVE không tính; không xét USING, cùng
+chuẩn mục 94. ⒠ Khi chủ cũng thiếu phủ, thành viên thừa kế chủ trên bảng FORCE ra dòng riêng bên cạnh dòng của chủ. ⒡ Thông điệp:
+RLS áp cho vai này mà không policy nào phủ; các migration đánh số của chính lượt đã chạy dưới cấu hình ấy và đã ghi checksum — kiểm và
+chạy lại backfill bằng migration mới; lối ra ít quyền nhất trước, nói ai chạy: người cấp, chủ bảng hay SUPERUSER REVOKE; chạy
+migration dưới chủ bảng; policy do chủ thêm là quyền đọc/ghi thường trực của vai deploy.
+
+**Test (bản ba):** rls-coverage — ⑴ đo: chủ đọc 2, vai đọc 0, UPDATE 0 không lỗi; mục dưới vai ấy nêu đúng hai lệnh, dưới superuser
+im; NO FORCE vẫn 0 và vẫn nêu. ⑵ vế lọc: FOR SELECT TO PUBLIC ⇒ chỉ UPDATE; policy cho nhóm ⇒ chỉ SELECT; RESTRICTIVE TO PUBLIC không
+phủ; thành viên của chủ trên bảng FORCE khi `p_chu TO chủ` còn phủ nó ⇒ im; BYPASSRLS ⇒ im; SUPERUSER NOBYPASSRLS mà `p_chu` phủ ⇒ im;
+bảng NO FORCE không policy nào phủ — thành viên INHERIT đọc 2 và mục im, thành viên NOINHERIT đọc 0 và mục nêu; bảng tắt RLS ⇒ im;
+bảng thuộc extension ⇒ im; REVOKE UPDATE ⇒ chỉ SELECT; lá phân vùng của cha bật RLS ⇒ im, DETACH ⇒ nêu. ⑶ lượt soi 49: ⒜ thành viên
+INHERIT của chủ BYPASSRLS trên bảng FORCE đọc 0, UPDATE 0 ⇒ nêu ba lệnh; ⒞ cùng thành viên trên bảng NO FORCE đọc 2 ⇒ im; ⒝ thành viên
+INHERIT của chủ đã tự REVOKE ALL, có GRANT trực tiếp ⇒ đọc 0, UPDATE 0, nêu hai lệnh; ⒟ SUPERUSER NOBYPASSRLS trên bảng FORCE chỉ có
+policy FOR SELECT ghi đủ 2 hàng ⇒ im; ⒠ chính chủ không ở chủ thể thứ hai, chủ thể thứ nhất nêu nó ở bốn lệnh; ⒡ nhóm NOINHERIT với
+policy FOR UPDATE không áp ⇒ UPDATE 0 và vẫn nêu; ⒢ GRANT UPDATE (id) ⇒ nêu; ⒣ INSERT không phủ ném 42501 và không bị nêu; ⒤ thiếu
+USAGE lược đồ ném 42501 và im; ⒥ ranh giới có ghim — vai có GRANT trên `suppliers` mà không EXECUTE trên `app_current_org_id()` ném
+42501, policy tenant TO PUBLIC tính là phủ. migrations — hồ sơ N2: `ALTER POLICY suppliers_tenant_isolation … TO app_api` cộng `GRANT
+SELECT, UPDATE ON suppliers TO trien_khai` ⇒ `migrate()` dưới `trien_khai` NÉM nêu `public.suppliers/trien_khai (vai chạy
+migration)/SELECT` và `/UPDATE`, không DELETE, và nói các migration của chính lượt đã ghi checksum; REVOKE ⇒ đi qua. Trọn hai tệp: 157/157.
+
+**Đo thêm sau lượt đột biến đầu (tệp thăm dò thứ hai, đã xoá):** vai `SUPERUSER NOBYPASSRLS` — `pg_has_role` với chủ và với nhóm đều
+true, đếm 2 hàng cả NO FORCE lẫn FORCE. Thành viên INHERIT của chủ trên bảng NO FORCE mà không policy nào phủ chủ hay nó —
+`pg_has_role … USAGE` true, đọc 2; cùng thành viên khi bảng FORCE — đọc 0. Thành viên NOINHERIT — USAGE false, MEMBER true, đọc 0;
+nó `SET ROLE` sang chủ thì đọc 2.
+
+**Đo thêm sau lượt soi 49 (tệp thăm dò thứ ba, đã xoá):** ⒜ chủ BYPASSRLS có thành viên INHERIT, bảng FORCE, policy chỉ TO app_api ⇒
+thành viên đọc 0, UPDATE 0 không lỗi; mục bản hai im; gương nêu DELETE, SELECT, UPDATE. ⒝ chủ thường tự REVOKE ALL, thành viên INHERIT
+có GRANT SELECT, UPDATE trực tiếp ⇒ đọc 0, UPDATE 0; mục bản hai im; gương nêu SELECT, UPDATE. ⒞ thành viên trên bảng NO FORCE ⇒ đọc
+2, gương im. ⒟ SUPERUSER NOBYPASSRLS trên bảng FORCE có policy chỉ FOR SELECT TO app_api ⇒ đọc 2, UPDATE 2; gương có vế superuser im,
+gương không vế nêu UPDATE, DELETE. ⒠ INSERT không phủ ⇒ 42501 "new row violates row-level security policy"; thiếu USAGE lược đồ ⇒
+42501 "permission denied for schema", gương im. ⒡ CREATE POLICY dưới vai không phải chủ ⇒ 42501 "must be owner of table"; REVOKE do
+chính vai ⇒ không lỗi, chỉ WARNING "no privileges could be revoked". ⒢ vai có SELECT, UPDATE trên `suppliers`, không EXECUTE ⇒ đọc
+ném 42501 "permission denied for function app_current_org_id"; GRANT EXECUTE ⇒ đọc 0 không lỗi, mục bản hai im; `migrate()` bằng
+superuser đi qua và không thu hồi EXECUTE ấy. ⒣ hồ sơ N2 với một backfill đang chờ, dưới hardening bản hai ⇒ `migrate()` NÉM ở mục 94
+(vai chạy migration) nhưng hàng vẫn 1, 2 và `schema_migrations` đã ghi `999_zz_backfill97c.sql`; REVOKE rồi chạy lại ⇒ đi qua, hàng
+vẫn 1, 2.
+
+**Tự bắt, không phải lượt soi:** ⑴ Lượt đột biến đầu: bỏ vế superuser SỐNG — vai bootstrap của cụm test mang BYPASSRLS, và
+`pg_has_role` của superuser với mọi vai là true — nên bản hai bỏ vế ấy vì "thừa". Lý do "thừa" dựa trên vế thừa kế chủ loại MỌI thành
+viên — chính chỗ hở NẶNG-2 của lượt soi 49; bản ba đưa vế superuser trở lại, và nó chịu lực. ⑵ Bỏ vế thừa kế chủ SỐNG — vế đối chứng
+cũ thử thành viên của chủ khi `p_chu TO chủ` còn phủ nó ⇒ bản hai thêm vế bảng NO FORCE không policy nào phủ, và vế NOINHERIT. ⑶ Đột
+biến "phủ không tính nhóm" đỏ ở cả bản đầu lẫn lượt đầu của bản hai vì chính phép thay dư một dấu ngoặc: SQL của hardening sai cú
+pháp, `migrate()` của globalSetup hỏng, 48 test bị bỏ qua — đỏ giả. Sửa phép thay, đo lại: đỏ đúng ở vế nhóm. Script đột biến nay
+gắn nhãn đỏ-do-setup khi mọi test bị bỏ qua.
+
+**Evidence bắt, không phải lượt soi:** lần đo evidence đầu trên cây của vòng này — `[evidence] vitest thoát mã 1`, cổng báo
+`F1` đỏ — hỏng đúng một test: [S1.38] "câu phán xét của hardening chạy trong test: hôm nay rỗng cả ba" quá hạn mặc định 30 s (30023
+ms) dưới tải song song (cùng lượt, `db/migrations.int.test.ts` chạy 874 s và test [S1.32] 54,5 s). Đo trước khi sửa: ba câu phán
+xét test ấy chạy (83⑴, 83⑵, 83⑶) cùng mọi hằng chúng dùng không đổi so với HEAD `fff0a17` — thay đổi của vòng chỉ nằm ở
+`CAU_PHU_LENH_CHU_BANG_SAI`, chú thích và dòng mục; chạy riêng, tệp lọc về test ấy xong trong 5,5 s. Không phải hồi quy. Rà theo thời
+gian đo được trên báo cáo của chính lượt ấy: đó là test duy nhất của `rls-coverage` và `migrations` còn dùng hạn mặc định mà dưới tải
+vượt 15 s — lượt rà S1.55 theo lời gọi `migrate()` không thấy nó vì nó không gọi `migrate()`. Sửa: hạn 180 s như khuôn S1.40.
+
+**Đỏ đo được, cô lập (ba bản):** Bản đầu — mười bốn đột biến: mười một đỏ; bỏ vế superuser và bỏ vế thừa kế chủ SỐNG; "phủ không
+tính nhóm" đỏ giả vì lỗi dựng (phần tự bắt). Bản hai — mười bốn đột biến đều đỏ, "phủ không tính nhóm" đo lại sau khi sửa phép thay.
+**Bản ba — hai mươi mốt đột biến trên mã cuối, chạy một-một, không đột biến nào đỏ do lỗi dựng:** R1 bỏ cả nhánh chủ thể thứ hai ⇒
+đỏ ở TẦNG SẢN XUẤT (hồ sơ N2: `migrate()` dưới `trien_khai` đi qua) · R1b cùng đột biến ⇒ vế đo dưới `SET LOCAL ROLE` · R2 gương bỏ
+"FORCE hoặc" ⇒ vế ⒜ (thành viên thừa kế chủ trên bảng FORCE) · R3 gương chỉ còn FORCE ⇒ vế NO FORCE và vế NOINHERIT · R4 thừa kế theo
+MEMBER ⇒ vế thành viên NOINHERIT của chủ · R5 bỏ vế superuser ⇒ vế ⒟ · R6 bỏ vế BYPASSRLS ⇒ vế BYPASSRLS · R7 bỏ vế chính chủ ⇒ vế ⒠
+· R8 bỏ vế USAGE lược đồ ⇒ vế ⒤ · R9 bỏ vế extension ⇒ vế extension · R10 bỏ vế bảng con ⇒ vế lá phân vùng · R11 quyền luôn đúng ⇒
+vế hai lệnh · R12 quyền mức bảng thay mức cột ⇒ vế ⒢ · R13 xét lại INSERT ⇒ vế ⒜ (thêm dòng INSERT) · R14 phủ bỏ qua lệnh ⇒ vế FOR
+SELECT · R15 phủ không tính nhóm ⇒ vế nhóm · R16 phủ theo MEMBER ⇒ vế ⒡ · R17 RESTRICTIVE tính là phủ ⇒ vế RESTRICTIVE · R18 đổi nhãn
+⇒ thông điệp ở tầng sản xuất · R19 bỏ câu checksum ⇒ vế thông điệp NẶNG-1 ở tầng sản xuất · R20 `current_user` thành `session_user` ⇒
+vế đo dưới `SET LOCAL ROLE`.
+
+**Ranh giới NÓI RA:** ⑴ Mức bảo đảm là trạng thái tại lượt phán xét, SAU vòng đánh số: khi mục đỏ, backfill 0 hàng của chính lượt
+đã ghi checksum (đo ⒣) — thông điệp nói ra; lớp hỏi trước vòng, và chụp vai quanh vòng khi một migration tự `SET ROLE`, là khoản 100.
+⑵ Chỉ danh sách vai, không biểu thức USING: policy tenant TO PUBLIC tính là phủ vai deploy dù `migrate()` không gắn tổ chức; hôm nay
+ồn nhờ EXECUTE của hàm ngữ cảnh (đo ⒢, ghim bằng vế ⒥) — khoản 101. ⑶ CI chạy `migrate()` bằng superuser nên chủ thể này chỉ chịu lực
+ở hồ sơ N2; vai sở hữu mọi bảng (hồ sơ N3) là chính chủ nên đứng ngoài. ⑷ Thành viên NOINHERIT của chủ bị nêu dù migration có thể `SET
+ROLE` sang chủ trước khi backfill (đo: đọc 2) — chiều kêu nhầm, lối ra `GRANT … WITH INHERIT TRUE`, REVOKE hay policy. ⑸ Hàm SECURITY
+DEFINER mà backfill gọi chạy dưới chủ hàm — phép kiểm không soi đường ấy (đọc). ⑹ Hồ sơ hạ tầng (RDS) chưa có trong DECISIONS — mang
+sang (lượt soi 49 INFO-2).
+
+### Lượt soi đối kháng 49 (trên bản đầu của S1.56): 0 CAO, 2 NẶNG, 5 NHẸ, 3 INFO — xử lý trong bản ba, hai phát hiện thành khoản 100 và 101
+
+| # | Mức | Phát hiện | Kiểm | Xử lý |
+|---|---|---|---|---|
+| NẶNG-1 | NẶNG | Chủ thể thứ hai chỉ phán xét SAU vòng migration đánh số: khi mục đỏ, backfill 0 hàng của chính lượt đã COMMIT và ghi checksum, deploy sau không chạy lại — thông điệp không nói, và số đo "đi qua, hàng không đổi" là số đo trước bản vá | **đúng — đo H1–H4** (người soi chỉ đọc mã): dưới hardening bản hai, hồ sơ N2 với một backfill đang chờ ⇒ `migrate()` NÉM nhưng hàng vẫn 1, 2 và `schema_migrations` đã ghi tệp; REVOKE rồi chạy lại ⇒ đi qua, backfill không chạy lại | thông điệp nói các migration đánh số của chính lượt đã chạy dưới cấu hình ấy và đã ghi checksum, và cách chạy lại; lớp hỏi TRƯỚC vòng đánh số (khuôn khoản 87) cho phần vai chạy migration là **khoản 100** — một lớp của `migrate.ts`, cùng hình dạng cho chủ thể chủ bảng; đột biến R19 |
+| NẶNG-2 | NẶNG | Hở giữa hai chủ thể: bản đầu loại mọi vai thừa kế chủ "vì thuộc chủ thể thứ nhất", nhưng chủ thể thứ nhất loại chủ superuser/BYPASSRLS và chỉ xét quyền của chính chủ, còn khoản 91 FORCE mọi bảng ⇒ thành viên thừa kế chủ chịu RLS mà không ai soi | **đúng — đo ⒜ ⒝ ⒞**: chủ BYPASSRLS có thành viên INHERIT, bảng FORCE, policy chỉ TO app_api ⇒ thành viên đọc 0, UPDATE 0 không lỗi, cả hai chủ thể im; chủ thường tự REVOKE ALL, thành viên có GRANT trực tiếp ⇒ như thế; đối chứng NO FORCE ⇒ thành viên đọc 2 | chủ thể thứ hai là gương `check_enable_rls`: không superuser, không BYPASSRLS, không phải chính chủ, và bảng FORCE hay vai không thừa kế chủ; vế superuser trở lại và nay chịu lực (đo: SUPERUSER NOBYPASSRLS trên bảng FORCE — bỏ vế thì nêu UPDATE, DELETE dù superuser ghi đủ hàng); vế test ⒜ đến ⒠; đột biến R2, R3, R5, R7 |
+| NHẸ-1 | NHẸ | `current_user` lúc phán xét không bảo đảm là vai đã chạy backfill: migration `SET ROLE x` không RESET, hay `SET LOCAL ROLE x` rồi backfill; `migrate.ts` không chụp hay so vai quanh vòng | đúng — đọc; hôm nay không migration nào có `SET ROLE` thật | ranh giới nói ra; chụp vai quanh vòng thuộc **khoản 100** |
+| NHẸ-2 | NHẸ | Đột biến có thể sống: bỏ vế thừa kế chủ (vế đối chứng rỗng ruột vì `p_chu` phủ luôn thành viên), bỏ vế superuser (tương đương), `USAGE` đổi thành `MEMBER`, `has_any_column_privilege` đổi thành `has_table_privilege` | **đúng — đo**: hai đột biến đầu SỐNG ở lượt đột biến bản đầu (tự bắt trước khi lượt soi về); hai đột biến sau chưa có vế nào | vế INHERIT trên bảng NO FORCE không policy phủ, vế NOINHERIT của chủ và của nhóm, vế GRANT mức cột, vế superuser trên bảng FORCE; đột biến R4, R12, R16 |
+| NHẸ-3 | NHẸ | Mọi lối ra nằm ngoài tầm vai bị nêu mà thông điệp đặt policy lên đầu; REVOKE do chính vai chạy là no-op; ô "cần quyền" của mục chưa đổi | **đúng — đo**: CREATE POLICY dưới vai không phải chủ ⇒ 42501 "must be owner"; REVOKE do chính vai ⇒ không lỗi, WARNING "no privileges could be revoked" | thông điệp: REVOKE trước và nói ai chạy (người cấp, chủ bảng, SUPERUSER), rồi chạy migration dưới chủ, policy cuối cùng kèm cảnh báo quyền đọc/ghi thường trực của vai deploy và [CR1]; ô cần quyền nêu người chạy |
+| NHẸ-4 | NHẸ | Policy tenant `TO PUBLIC USING (org_id = app_current_org_id())` tính là phủ vai deploy dù `migrate()` không gắn `app.org_id`; hôm nay ồn chỉ nhờ EXECUTE của hàm ấy | **đúng — đo G1–G5**: không EXECUTE ⇒ 42501; GRANT EXECUTE ⇒ 0 hàng im, mục im; `migrate()` không thu hồi EXECUTE ấy | ranh giới có ghim (vế ⒥); **khoản 101** |
+| NHẸ-5 | NHẸ | Mục kêu ở những ca ỒN: INSERT (ném, rollback, không ghi checksum) và vai thiếu USAGE trên lược đồ (mọi truy cập 42501) | **đúng — đo**: INSERT không phủ ⇒ 42501; thiếu USAGE ⇒ 42501 | chủ thể thứ hai không xét INSERT và đòi USAGE lược đồ; vế ⒣ ⒤; đột biến R8, R13 |
+| INFO-1 | INFO | Chú thích nói hơn mã: phép đo dưới superuser và vai CREATEROLE rỗng theo cấu tạo; vế đối chứng "thành viên của chủ ⇒ im" im vì `p_chu` phủ; mô tả mục thiếu hai vế loại; tài liệu còn ghi 97 mở | đúng — đọc | chú thích trỏ vào census; thông điệp vế đối chứng nói đúng lý do; mô tả mục nêu gương, USAGE lược đồ, extension, bảng con; tài liệu cập nhật ở commit tài liệu |
+| INFO-2 | INFO | Hồ sơ hạ tầng RDS được dùng làm căn cứ mà không có trong DECISIONS; trên RDS, bảng của một vai do master tạo cho master membership chỉ-admin ⇒ master rơi vào chủ thể thứ hai nếu có quyền | đúng — đọc: tiền đề nằm ở đề bài của lượt soi, không ở mã hay tài liệu | mang sang: ghi hồ sơ hạ tầng vào DECISIONS trước khi dùng làm căn cứ ADR-028 §3; đo ca "master cộng bảng của vai do master tạo" |
+| INFO-3 | INFO | Đã soi, không thấy lỗi: EXECUTE trong khối DO chạy dưới vai của phiên, một kết nối, `pg_has_role … USAGE` khớp `has_privs_of_role`, fixture N2 không che mục khác, không trùng dòng, hiệu năng không đáng kể | đúng — đọc | không đổi |
+
+**Điều đáng mang sang vòng sau:** ⑴ Một mục canh cơ chế làm backfill im phải hỏi TRƯỚC vòng đánh số — phán xét sau vòng chỉ
+báo mất, không ngăn mất (khoản 87, nay khoản 100). ⑵ Mọi vế "ai chịu RLS" phải là gương `check_enable_rls` — superuser, BYPASSRLS,
+chủ hay thừa kế chủ trừ khi FORCE; tách "chủ" và "không chủ" bằng riêng `pg_has_role` để hở đúng những vai mà FORCE kéo vào. ⑶ Fixture
+của describe khoản 94 cũng thiếu membership `WITH INHERIT FALSE` và GRANT mức cột: đột biến `USAGE`→`MEMBER` và
+`has_any_column_privilege`→`has_table_privilege` ở chủ thể chủ bảng nhiều khả năng cũng sống (suy ra, chưa đo). ⑷ Tiền đề của một
+ranh giới ("hôm nay ồn nhờ EXECUTE") phải có test ghim và có khoản — nếu không, một GRANT gỡ lỗi lặng lẽ xoá nó (khoản 101).

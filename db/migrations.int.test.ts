@@ -519,6 +519,39 @@ describe("migration của dự án", () => {
     }
   });
 
+  // [S1.56 / khoản nợ 97] HỒ SƠ N2 — vai deploy không sở hữu bảng, không thừa kế chủ, có quyền trên một bảng RLS mà policy không
+  // phủ nó ⇒ migration backfill dưới vai ấy đọc/ghi 0 hàng không lỗi (đo, thăm dò S1.56: migrate() áp `UPDATE … SET id = id + 10`
+  // rồi ĐI QUA, hàng không đổi). Chủ thể thứ hai của mục 94 phán xét dưới CHÍNH vai của kết nối deploy. Fixture: policy tenant của
+  // suppliers thu về `TO app_api` — chỉ app_api có quyền trên suppliers nên 83⑵ im; chủ bảng là superuser bootstrap nên chủ thể
+  // thứ nhất đứng ngoài; [CR1] không khoá vai.
+  it("[INV-F1] [khoản nợ 97] hồ sơ N2: trien_khai có SELECT, UPDATE trên suppliers mà policy tenant chỉ TO app_api ⇒ migrate() dưới trien_khai NÉM nêu (vai chạy migration) ở đúng hai lệnh; thu hồi quyền thì đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const csTrienKhai = await dungRoleTrienKhaiThuong(db);
+      await db.pool.query("ALTER POLICY suppliers_tenant_isolation ON suppliers TO app_api");
+      await db.pool.query("GRANT SELECT, UPDATE ON suppliers TO trien_khai");
+      const poolTrienKhai = createPool(csTrienKhai, 2);
+      try {
+        const loi = await migrate(poolTrienKhai, MIGRATIONS_DIR).then(
+          () => null,
+          (e: Error) => e,
+        );
+        expect(loi, "vai deploy đọc/ghi 0 hàng im lặng trên suppliers — migrate() phải NÉM").not.toBeNull();
+        expect(loi!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/SELECT");
+        expect(loi!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/UPDATE");
+        expect(loi!.message, "chỉ hai lệnh đã cấp").not.toContain("public.suppliers/trien_khai (vai chạy migration)/DELETE");
+        expect(loi!.message, "[lượt soi 49 NẶNG-1] thông điệp nói backfill của CHÍNH lượt đã ghi checksum").toContain("đã ghi checksum");
+        await db.pool.query("REVOKE SELECT, UPDATE ON suppliers FROM trien_khai");
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR), "thu hồi quyền ⇒ đi qua").resolves.toEqual([]);
+      } finally {
+        await poolTrienKhai.end();
+      }
+    } finally {
+      await db.stop();
+    }
+  }, 300000);
+
   // [fix round 4] Ba đường trôi mà vòng 3 để hở. Đo trước khi vá: cả ba đều SỐNG SÓT qua
   // migrate() lần hai. Gộp vào một test vì chúng là cùng một lớp lỗ hổng (GRANT sau triển
   // khai không bị thu hồi lại) và cùng một bản vá (các dòng mới trong hardening.always.sql).

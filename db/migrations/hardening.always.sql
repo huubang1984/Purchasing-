@@ -2783,8 +2783,33 @@ $ham$;
   -- `has_table_privilege(chủ, bảng, 'UPDATE')` ra false và UPDATE của chủ ném 42501 — ồn, không im. Bản đầu đòi policy cho
   -- cả lệnh ấy, và thông điệp gợi `TO PUBLIC` trước tiên — lối ra phủ LUÔN mọi vai ứng dụng.
   -- ⑶ Mức bảo đảm là trạng thái TẠI LƯỢT PHÁN XÉT (INFO-5): migration A gỡ policy, B backfill 0 hàng, C dựng lại policy
-  -- trong CÙNG lượt ⇒ lượt phán xét xanh. ⑷ Mục soi CHỦ BẢNG và mọi vai thừa kế quyền chủ (RLS coi họ là chủ), KHÔNG soi
-  -- vai chạy migration mà không thừa kế chủ — hồ sơ N2 là đúng ca ấy (NHẸ-3): khoản 97.
+  -- trong CÙNG lượt ⇒ lượt phán xét xanh. ⑷ ~~Mục soi CHỦ BẢNG và mọi vai thừa kế quyền chủ (RLS coi họ là chủ), KHÔNG soi
+  -- vai chạy migration mà không thừa kế chủ — hồ sơ N2 là đúng ca ấy (NHẸ-3): khoản 97.~~ [S1.56] Nay soi cả vai ấy — xem ⑸.
+  -- ⑸ [S1.56 / khoản nợ 97] CHỦ THỂ THỨ HAI: `current_user` của phiên phán xét — chính phiên vừa chạy vòng migration đánh số.
+  -- RLS áp cho mọi vai không được coi là chủ (`pg_has_role(vai, relowner, 'USAGE')` sai) BẤT KỂ FORCE, nên vế FORCE bỏ với chủ
+  -- thể này. Đo (thăm dò S1.56, PostgreSQL 16): chủ `zz_chu97` không superuser, bảng bật RLS có 2 hàng, policy duy nhất
+  -- `TO zz_chu97`; vai `zz_trien97` không thừa kế chủ, được GRANT SELECT, UPDATE ⇒ đọc 0 hàng và UPDATE 0 hàng KHÔNG LỖI, cả khi
+  -- NO FORCE; mục 94 và 83⑵ im. Hồ sơ N2 (`trien_khai` CREATEROLE, sở hữu database, không sở hữu bảng) cùng hình dạng: migrate()
+  -- dưới `trien_khai` áp một migration `UPDATE … SET id = id + 10` rồi ĐI QUA, hàng không đổi. Đối chứng: thêm policy FOR SELECT
+  -- TO PUBLIC ⇒ chỉ còn UPDATE; vai là thành viên của chủ, hay bảng tắt RLS ⇒ im. Hôm nay im trên lược đồ thật với MỌI vai: mọi
+  -- bảng RLS thật có policy PERMISSIVE TO PUBLIC ở cả bốn lệnh (census ở rls-coverage) — phép đo dưới superuser và dưới một vai
+  -- CREATEROLE không GRANT rỗng theo cấu tạo [lượt soi 49 INFO-1]. CI chạy migrate() bằng superuser nên chủ thể này chỉ chịu lực ở hồ sơ N2; vai sở hữu
+  -- mọi bảng (hồ sơ N3) thừa kế chủ nên đứng ngoài. Cùng các vế lọc của chủ thể thứ nhất: extension, bảng con của cha bật RLS,
+  -- lệnh vai ấy không có quyền. [lượt soi 49 NẶNG-2 — bản ba] Vế "RLS áp cho vai này" là GƯƠNG của check_enable_rls: superuser và
+  -- BYPASSRLS bỏ qua; chủ và vai thừa kế chủ (USAGE) bỏ qua TRỪ KHI FORCE; chính chủ thuộc chủ thể thứ nhất. Bản hai loại MỌI vai
+  -- thừa kế chủ với lý do "hai chủ thể rời nhau" — sai: chủ thể thứ nhất loại chủ superuser/BYPASSRLS và chỉ xét quyền của CHÍNH chủ,
+  -- còn khoản 91 FORCE mọi bảng. Đo: chủ BYPASSRLS có thành viên INHERIT, bảng FORCE, policy chỉ TO app_api ⇒ thành viên đọc 0, UPDATE
+  -- 0 không lỗi, cả hai chủ thể im; chủ thường tự REVOKE ALL, thành viên INHERIT có GRANT trực tiếp ⇒ như thế. Đối chứng: cùng thành
+  -- viên trên bảng NO FORCE đọc 2 và mục im. Khi chủ cũng thiếu phủ thì ra hai dòng (chủ và thành viên) — chấp nhận. Vế superuser nay
+  -- chịu lực: SUPERUSER NOBYPASSRLS trên bảng FORCE mà policy chỉ FOR SELECT — bỏ vế thì nêu UPDATE, DELETE dù superuser ghi đủ hàng
+  -- (đo). Thừa kế theo USAGE (INHERIT), không theo MEMBER: thành viên NOINHERIT không được RLS coi là chủ — đọc 0 (đo). [lượt soi 49
+  -- NHẸ-5] Chủ thể này KHÔNG xét INSERT — INSERT không phủ thì ném 42501, rollback, không ghi checksum (đo) — và loại vai thiếu USAGE
+  -- trên lược đồ, vì mọi truy cập ném 42501 (đo). [lượt soi 49 NHẸ-4] Chỉ xét danh sách vai: policy tenant `TO PUBLIC USING (org_id =
+  -- app_current_org_id())` tính là phủ dù migrate() không gắn app.org_id — hôm nay ồn nhờ EXECUTE của hàm ấy chỉ app_api/app_unseal có
+  -- (đo: 42501), còn GRANT EXECUTE cho vai deploy thì backfill ra 0 hàng im, mục im, và migrate() không thu hồi (đo) — khoản 101.
+  -- [lượt soi 49 NẶNG-1] Mục phán xét SAU vòng đánh số: khi mục đỏ, backfill 0 hàng của CHÍNH lượt đã COMMIT và ghi checksum, REVOKE
+  -- rồi chạy lại thì đi qua mà backfill không chạy lại (đo) — thông điệp nói ra; lớp hỏi TRƯỚC vòng (và chụp vai quanh vòng, NHẸ-1)
+  -- là khoản 100.
   CAU_PHU_LENH_CHU_BANG_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(r.rolname) || ' (chủ bảng)/' || g.ten_lenh
               || ': bảng FORCE ROW LEVEL SECURITY mà chủ bảng CÒN QUYỀN lệnh này nhưng không policy PERMISSIVE nào phủ vai chủ '
@@ -2813,7 +2838,42 @@ $ham$;
                              AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
                              AND (p.polroles = '{0}'::oid[]
                                   OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
-                                              WHERE pg_catalog.pg_has_role(c.relowner, o.oid, 'USAGE'))))$q$;
+                                              WHERE pg_catalog.pg_has_role(c.relowner, o.oid, 'USAGE'))))
+       UNION ALL
+       -- [S1.56 / khoản nợ 97] chủ thể thứ hai — xem ⑸ ở trên.
+       SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh
+              || ': RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này mà không policy PERMISSIVE nào phủ nó '
+                 '(khoản 97) — SELECT/UPDATE/DELETE của một migration backfill chạy dưới vai này trả 0 hàng KHÔNG LỖI. Các migration '
+                 'đánh số của CHÍNH lượt này đã chạy dưới cấu hình ấy và đã ghi checksum — deploy sau không chạy lại chúng: kiểm backfill '
+                 'của lượt này, chạy lại bằng một migration mới nếu nó ra 0 hàng. Sửa, ít quyền nhất trước — cả ba nằm ngoài tầm của '
+                 'chính vai này: người cấp, chủ bảng hay SUPERUSER REVOKE lệnh ấy khỏi vai này; hoặc chạy migration dưới chủ bảng; hoặc '
+                 'chủ bảng thêm policy PERMISSIVE cho lệnh ấy TO vai này — một quyền đọc/ghi THƯỜNG TRỰC của vai deploy, trên bảng tenant '
+                 'còn phải qua [CR1].' AS mo_ta
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_roles v ON v.rolname = current_user
+         CROSS JOIN (VALUES ('r', 'SELECT'), ('w', 'UPDATE'), ('d', 'DELETE')) AS g(ma, ten_lenh)
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+          -- [lượt soi 49 NẶNG-2] gương check_enable_rls — xem ⑸.
+          AND NOT v.rolsuper
+          AND NOT v.rolbypassrls
+          AND v.oid <> c.relowner
+          AND (c.relforcerowsecurity OR NOT pg_catalog.pg_has_role(v.oid, c.relowner, 'USAGE'))
+          -- [lượt soi 49 NHẸ-5] thiếu USAGE trên lược đồ thì mọi truy cập ném 42501 — ồn, không im.
+          AND pg_catalog.has_schema_privilege(v.oid, n.oid, 'USAGE')
+          AND NOT EXISTS (SELECT 1 FROM pg_depend de
+                           WHERE de.classid = 'pg_class'::regclass AND de.objid = c.oid AND de.deptype = 'e')
+          AND NOT EXISTS (SELECT 1 FROM pg_inherits ih JOIN pg_class pc ON pc.oid = ih.inhparent
+                           WHERE ih.inhrelid = c.oid AND pc.relrowsecurity)
+          AND CASE g.ma WHEN 'd' THEN pg_catalog.has_table_privilege(v.oid, c.oid, 'DELETE')
+                        ELSE pg_catalog.has_any_column_privilege(v.oid, c.oid, g.ten_lenh) END
+          AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                           WHERE p.polrelid = c.oid AND p.polpermissive
+                             AND (p.polcmd = '*' OR p.polcmd = g.ma::"char")
+                             AND (p.polroles = '{0}'::oid[]
+                                  OR EXISTS (SELECT 1 FROM unnest(p.polroles) AS o(oid)
+                                              WHERE pg_catalog.pg_has_role(v.oid, o.oid, 'USAGE'))))$q$;
 
   CAU_RLS_NGOAI_TENANT_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname
@@ -8448,13 +8508,14 @@ $ham$;
       $q$quyền sở hữu bảng đó (CREATE POLICY / REVOKE) hoặc SUPERUSER$q$
     ],
     -- [S1.53 / khoản nợ 94] 83⑵ cho CHỦ BẢNG — sau khi khoản 91 FORCE mọi bảng RLS, chủ bảng chịu RLS như mọi vai. PHÁN XÉT.
+    -- [S1.56 / khoản nợ 97] và cho vai chạy migration mà RLS áp trên bảng (gương check_enable_rls — lượt soi 49).
     ARRAY[
-      $q$mọi lệnh mà chủ bảng (không superuser, không BYPASSRLS) còn quyền trên bảng FORCE RLS — trừ bảng con của cha bật RLS — đều có policy PERMISSIVE phủ (khoản 94)$q$,
+      $q$mọi lệnh mà chủ bảng (không superuser, không BYPASSRLS) còn quyền trên bảng FORCE RLS — trừ bảng con của cha bật RLS — đều có policy PERMISSIVE phủ (khoản 94); và mọi lệnh SELECT/UPDATE/DELETE mà vai chạy migration — vai RLS áp trên bảng bật RLS (gương check_enable_rls), có USAGE lược đồ, trừ bảng thuộc extension và bảng con của cha bật RLS — còn quyền cũng thế (khoản 97)$q$,
       $q$true$q$,
       $q$SELECT 1$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_PHU_LENH_CHU_BANG_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_PHU_LENH_CHU_BANG_SAI || $q$) t)$q$,
-      $q$quyền sở hữu bảng đó (CREATE POLICY trong một migration mới) hoặc SUPERUSER$q$
+      $q$quyền sở hữu bảng đó (CREATE POLICY trong một migration mới) hoặc SUPERUSER; với vai chạy migration: người cấp, chủ bảng hay SUPERUSER — REVOKE quyền của vai ấy trước tiên, rồi chạy migration dưới chủ bảng, rồi policy do chủ bảng thêm — không lối nào chạy được dưới chính vai ấy$q$
     ],
     ARRAY[
       $q$bảng bật RLS ngoài tập tenant phải được khai (khoản 83⑶)$q$,
