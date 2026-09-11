@@ -747,6 +747,131 @@ describe("migration của dự án", () => {
     }
   }, 300_000);
 
+  // [S1.58 / khoản nợ 101 — lượt soi 49 NHẸ-4, lượt soi 51] POLICY TENANT CHUẨN "PHỦ" VAI DEPLOY MÀ VẪN LỌC HẾT. migrate() không gắn
+  // `app.org_id` nên `org_id = app_current_org_id()` là NULL ở mọi hàng: vai deploy KHÔNG có EXECUTE trên hàm ngữ cảnh thì câu ném 42501 (ồn),
+  // CÓ EXECUTE thì backfill ra 0 hàng KHÔNG LỖI và được ghi checksum — mà mục 94 im vì policy TO PUBLIC tính là phủ (đo trước bản vá, thăm dò
+  // S1.58). Nay policy phụ thuộc hàm ngữ cảnh thôi tính là phủ vai chạy migration có EXECUTE mà RLS không coi là chủ, ở cả lượt hỏi trước
+  // vòng lẫn lượt phán xét sau vòng. Lượt soi 51: ⒝′ vai deploy là thành viên app_api — thông điệp không được khuyên thu hồi khỏi app_api
+  // (NẶNG-2, đo); ⒞ dòng tự sửa được thì backfill cùng lượt vẫn bị tiêu — ranh giới ghim (NHẸ-3); ⒟ RANH GIỚI khoản 102: vai deploy là chủ
+  // bảng FORCE, hay thừa kế một vai sở hữu cả bảng lẫn hàm (hồ sơ N3′ — bản đầu đỏ ở mọi lần deploy mà backfill vẫn bị tiêu, NẶNG-1, đo),
+  // thì backfill bị tiêu và deploy xanh.
+  it("[INV-F1] [khoản nợ 101] hồ sơ N2: vai deploy có SELECT, UPDATE trên suppliers và EXECUTE trên app_current_org_id() do superuser cấp, một backfill đang chờ ⇒ migrate() TỪ CHỐI TRƯỚC vòng — backfill không chạy, hàng giữ nguyên, thông điệp nêu đường tới EXECUTE và lối ra theo từng đường; gỡ EXECUTE ⇒ backfill NÉM 42501; thành viên app_api ⇒ chặn, lời khuyên không thu hồi khỏi app_api; EXECUTE qua nhóm tự cấp ⇒ không chặn trước vòng, backfill cùng lượt bị tiêu (ranh giới), migration vá lỗi tới đích; RANH GIỚI khoản 102: chủ bảng FORCE và vai thừa kế chủ bảng có EXECUTE thì backfill bị tiêu, deploy xanh", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k101-"));
+    let poolTrienKhai: pg.Pool | undefined;
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+      const TEP = "999_zz_backfill101.sql";
+      const BACKFILL = "UPDATE public.suppliers SET legal_name = legal_name || ' (da sua 101)';\n";
+      await writeFile(join(tmp, TEP), BACKFILL, "utf8");
+      // Một nhà cung cấp thật, dựng dưới superuser — cùng chuỗi danh tính với test khoản 100 ở trên.
+      const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz101', 'zz101') RETURNING id")).rows[0]!.id;
+      const nguoi = (
+        await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'pm101@vidu.vn', 'pm101') RETURNING id", [org])
+      ).rows[0]!.id;
+      await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, nguoi]);
+      const phien = (
+        await db.pool.query<{ id: string }>(
+          "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+          [org, nguoi, Buffer.alloc(32, 101)],
+        )
+      ).rows[0]!.id;
+      await db.pool.query("INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC 101', $2, $3)", [org, nguoi, phien]);
+      const tenNcc = async (): Promise<string[]> =>
+        (await db.pool.query<{ legal_name: string }>("SELECT legal_name FROM suppliers WHERE org_id = $1", [org])).rows.map((r) => r.legal_name);
+      const daGhi = async (tep: string): Promise<number> =>
+        (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0;
+      const loiCua = (lan: Promise<unknown>): Promise<Error | null> =>
+        lan.then(
+          () => null,
+          (e: Error) => e,
+        );
+
+      const p = createPool(await dungRoleTrienKhaiThuong(db), 2);
+      poolTrienKhai = p;
+
+      // ⒜ khoản 101: người vận hành gỡ 42501 bằng GRANT EXECUTE — bản trước bản vá ghi 999 là đã áp mà hàng không đổi (thăm dò S1.58).
+      await db.pool.query("GRANT SELECT, UPDATE ON public.suppliers TO trien_khai; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai");
+      const loiA = await loiCua(migrate(p, tmp));
+      expect(loiA, "⒜ bản trước bản vá: 999 đi qua, được ghi checksum, hàng không đổi").not.toBeNull();
+      // Hai khẳng định DỮ LIỆU đứng trước thông điệp: tác hại là tệp bị tiêu, không phải chữ của lỗi.
+      expect(await daGhi(TEP), "⒜ backfill không được ghi checksum").toBe(0);
+      expect(await tenNcc(), "⒜ hàng giữ nguyên").toEqual(["NCC 101"]);
+      expect(loiA!.message, `⒜ ${loiA!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiA!.message).toContain(
+        "public.suppliers/trien_khai (vai chạy migration)/SELECT (cấp thẳng cho vai này — policy phụ thuộc app_current_org_id() lọc hết vì vai này có EXECUTE trên hàm ấy: cấp thẳng cho vai này)",
+      );
+      expect(loiA!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/UPDATE (cấp thẳng cho vai này — policy phụ thuộc");
+      expect(loiA!.message, "⒜ chỉ hai lệnh đã cấp").not.toContain("public.suppliers/trien_khai (vai chạy migration)/DELETE");
+      expect(loiA!.message, "⒜ lối ra theo đường cấp thẳng").toContain(
+        "Lối ra theo đường tới EXECUTE (khoản 101): chủ hàm hay SUPERUSER: REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai",
+      );
+
+      // ⒝ đối chứng: gỡ EXECUTE ⇒ policy tenant chuẩn lại tính là phủ, không chặn trước vòng; backfill NÉM 42501 và không được ghi.
+      await db.pool.query("REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai");
+      const loiB = await loiCua(migrate(p, tmp));
+      expect(loiB, "⒝ không EXECUTE ⇒ backfill ồn").not.toBeNull();
+      expect(await daGhi(TEP)).toBe(0);
+      expect(await tenNcc()).toEqual(["NCC 101"]);
+      expect(loiB!.message, `⒝ ${loiB!.message.slice(0, 300)}`).not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiB!.message).toContain(`Migration ${TEP} thất bại: permission denied for function app_current_org_id`);
+
+      // ⒝′ [lượt soi 51 NẶNG-2] vai deploy là thành viên app_api (superuser cấp — BƯỚC 1 không gỡ được): chặn trước vòng, và lời khuyên KHÔNG
+      // được dẫn tới thu hồi khỏi app_api (đo: bản đầu nêu "qua nhóm app_api" kèm lời khuyên chung "gỡ EXECUTE khỏi đường ấy").
+      await db.pool.query("GRANT app_api TO trien_khai");
+      const loiB2 = await loiCua(migrate(p, tmp));
+      expect(loiB2, "⒝′ thành viên app_api có EXECUTE ⇒ chặn").not.toBeNull();
+      expect(await daGhi(TEP)).toBe(0);
+      expect(loiB2!.message, `⒝′ ${loiB2!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiB2!.message).toContain(
+        "public.audit_events/trien_khai (vai chạy migration)/SELECT (qua nhóm app_api — policy phụ thuộc app_current_org_id() lọc hết vì vai này có EXECUTE trên hàm ấy: qua nhóm app_api)",
+      );
+      expect(loiB2!.message).toContain("KHÔNG thu hồi EXECUTE khỏi app_api: đó là vai ứng dụng");
+      expect(loiB2!.message).toContain("KHÔNG REVOKE khỏi nhóm, nhất là vai ứng dụng");
+      expect(loiB2!.message, "⒝′ không một lời khuyên nào thu hồi khỏi app_api").not.toContain("FROM app_api");
+      await db.pool.query("REVOKE app_api FROM trien_khai");
+
+      // ⒞ EXECUTE qua một nhóm mà chính vai deploy tạo và tự cấp membership (cạnh CREATEROLE chỉ-admin không INHERIT) ⇒ tự cắt được: không
+      // chặn trước vòng. RANH GIỚI (lượt soi 51 NHẸ-3): backfill đang chờ của CÙNG lượt vì thế vẫn chạy, ra 0 hàng, được ghi checksum.
+      await p.query("CREATE ROLE zz_exec101 NOLOGIN; GRANT zz_exec101 TO trien_khai");
+      await db.pool.query("GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO zz_exec101");
+      const loiC = await loiCua(migrate(p, tmp));
+      expect(loiC, "⒞ phán xét sau vòng nêu dòng").not.toBeNull();
+      expect(loiC!.message, "⒞ dòng tự sửa được ⇒ không chặn trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(await daGhi(TEP), "⒞ RANH GIỚI: backfill cùng lượt bị tiêu").toBe(1);
+      expect(await tenNcc(), "⒞ RANH GIỚI: hàng không đổi").toEqual(["NCC 101"]);
+      expect(loiC!.message, `⒞ ${loiC!.message.slice(0, 400)}`).toContain(
+        "public.suppliers/trien_khai (vai chạy migration)/SELECT: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (cấp thẳng cho vai này) mà policy PERMISSIVE phủ nó theo danh sách vai phụ thuộc app_current_org_id()",
+      );
+      expect(loiC!.message).toContain("có EXECUTE trên hàm ấy (qua nhóm zz_exec101)");
+      expect(loiC!.message).toContain("cố ý KHÔNG chặn nó");
+      const VA = "998_zz_va_loi101.sql";
+      await writeFile(join(tmp, VA), "REVOKE zz_exec101 FROM trien_khai;\n", "utf8");
+      await expect(migrate(p, tmp), "⒞ migration vá lỗi dưới chính trien_khai tới đích").resolves.toEqual([VA]);
+
+      // ⒟ RANH GIỚI khoản 102 — ⑴ vai deploy là CHỦ bảng FORCE có EXECUTE.
+      const TEP_D1 = "9991_zz_backfill102a.sql";
+      await writeFile(join(tmp, TEP_D1), BACKFILL, "utf8");
+      await db.pool.query("ALTER TABLE public.suppliers OWNER TO trien_khai; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai");
+      await expect(migrate(p, tmp), "⒟⑴ ranh giới khoản 102: chủ bảng FORCE có EXECUTE — deploy xanh").resolves.toEqual([TEP_D1]);
+      expect(await tenNcc(), "⒟⑴ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+      // ⒟ ⑵ hồ sơ N3′: vai deploy thừa kế một vai NOLOGIN sở hữu cả bảng lẫn hàm (lượt soi 51 NẶNG-1 — bản đầu đỏ ở phán xét mọi lần deploy).
+      const TEP_D2 = "9992_zz_backfill102b.sql";
+      await writeFile(join(tmp, TEP_D2), BACKFILL, "utf8");
+      await db.pool.query(
+        "CREATE ROLE zz_chu102 NOLOGIN; ALTER TABLE public.suppliers OWNER TO zz_chu102; ALTER FUNCTION public.app_current_org_id() OWNER TO zz_chu102; " +
+          "REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai; GRANT zz_chu102 TO trien_khai",
+      );
+      await expect(migrate(p, tmp), "⒟⑵ hồ sơ N3′: deploy xanh (khoản 102)").resolves.toEqual([TEP_D2]);
+      expect(await tenNcc(), "⒟⑵ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+    } finally {
+      await poolTrienKhai?.end();
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
   // [fix round 4] Ba đường trôi mà vòng 3 để hở. Đo trước khi vá: cả ba đều SỐNG SÓT qua
   // migrate() lần hai. Gộp vào một test vì chúng là cùng một lớp lỗ hổng (GRANT sau triển
   // khai không bị thu hồi lại) và cùng một bản vá (các dòng mới trong hardening.always.sql).
