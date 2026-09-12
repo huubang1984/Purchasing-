@@ -43,3 +43,17 @@
 # GHIM HEP DUNG MOT FILE, khong phai `*.md`: ban kinh no cua mot quy tac rong hon la mot lan
 # renormalize rong hon, va khong file .md nao khac duoc so byte.
 evidence/INV-matrix.md text eol=lf
+
+# [khoản nợ 10] `*.ts` LÀ VĂN BẢN LF KHI GIT GHI TỆP RA CÂY LÀM VIỆC
+# Hai dòng trên ghim đúng thứ được BĂM hay SO BYTE. `.ts` không bị băm, nhưng cổng kiến trúc ĐỌC CHUỖI của nó; với
+# `core.autocrlf=true` (mặc định của Git for Windows), một checkout MỚI cho `.ts` dạng CRLF (đo trên clone mới: 181 tệp).
+# Hôm nay mọi bộ đọc `.ts` đã soi đều tự chuẩn hoá xuống dòng, nên đây KHÔNG phải một lần đỏ đã đo mà là việc làm byte
+# của checkout TẤT ĐỊNH (run 33978573210 từng được dẫn làm chứng cứ, nhưng lần đỏ ấy là `ci.yml` CRLF — lượt soi 56 N1).
+# Blob `.ts` đều đã là LF nên dòng dưới không đổi blob nào (đo: renormalize trên clone không stage tệp nào). Nó có hiệu
+# lực khi Git GHI tệp — clone mới, hay một commit làm tệp đổi; một cây làm việc CRLF có sẵn giữ nguyên byte tới lúc đó.
+# Cùng vòng: `apps/unseal-worker/src/index.ts` từng mang MỘT byte NUL thô trong regex gỡ U+0000, nên phép dò xuống dòng
+# của Git (`ls-files --eol` báo `-text`) và ripgrep coi nó là nhị phân — nay là một escape.
+# `tests/architecture/xuong-dong-ts.test.ts` canh cả hai, và đòi cả `.mts`, `.cts`, `.tsx` mang cùng thuộc tính nếu kho
+# có: tệp đầu tiên của một đuôi ấy sẽ đỏ tới khi dòng tương ứng được thêm ở đây.
+# VẪN KHÔNG `* text=auto`, và không ghim `.md`, `.json`, `.yml`: các bộ đọc của chúng tự chuẩn hoá xuống dòng.
+*.ts text eol=lf
