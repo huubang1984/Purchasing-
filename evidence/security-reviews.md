@@ -3783,3 +3783,124 @@ Mười lăm đột biến trên bản hai, chạy lần lượt từng cái. Ha
 - ⑵ Một bản vá an ninh không kèm test đi qua đường của nó thì không ai biết nó đóng tới đâu. Ở đây nó mới đóng nửa đường, và lượt soi còn tìm ra thêm ba loại đầu vào cùng hậu quả.
 - ⑶ Lời khai của một khoản về một môi trường (checkout mới) phải được đo ở đúng môi trường ấy — ở đây bằng một vế chỉ chạy trên CI.
 - ⑷ Chứng cứ dẫn phải được đọc lại: run 33978573210 là ca `ci.yml`, không phải `.ts`.
+
+# §S1.64 — khoản nợ 106: bản rõ JSON hợp lệ mà `jsonb` hay `JSON.stringify` không nhận không còn chặn lượt mở thầu — cất dưới `{ raw }`; bản hai phân tích văn bản gốc — lượt soi 57; khoản 107 mở (số tiền kiểu số JSON bị làm tròn qua `double` — đo)
+
+**Bề mặt:**
+- `apps/unseal-worker/src/index.ts`:
+  - thêm `jsonbNhanDuoc` — đi cây sau `JSON.parse` bằng vòng lặp trên ngăn xếp tường minh. Chuỗi hay khoá mang U+0000 hoặc surrogate đơn lẻ (`/\p{Surrogate}/u`), hay độ sâu vượt `DO_SAU_JSON_TOI_DA` = 64, thì cất `{ raw }`;
+  - `thanhJson` (bản hai, lượt soi 57 NẶNG-1): phân tích văn bản GỐC; U+0000 THÔ chỉ gỡ khỏi `raw`; chỉ còn một chỗ dựng `raw`;
+  - chú thích: gạch câu "làm CẢ lượt mở thầu rollback ở mọi lần thử", ghi đóng khoản kèm lập luận đường `{ raw }` và các ranh giới.
+- `apps/unseal-worker/src/unseal-worker.int.test.ts`: chín `it` `[khoản nợ 106]` cùng ba helper `moThauCungBaoGiaSach`, `longSau`, `doiTuongLongSau`; `it` JSON của khoản 10 đổi tên và LẬT kỳ vọng có chủ đích.
+
+**Đo trước khi viết:**
+- ⒜ **Regex surrogate (Node 24.18 cục bộ):** `/\p{Surrogate}/u` khớp surrogate cao, thấp, ngược thứ tự, và cao ở cuối chuỗi; KHÔNG khớp cặp hợp lệ. `isWellFormed` có ở runtime, nhưng lib TypeScript của kho là `ES2023` nên không có trong kiểu — chọn regex thay vì đổi lib cho cả kho.
+- ⒝ **`JSON.stringify` của mảng lồng** (ngăn xếp nông, ngoài worker): chạy tới 4 743 tầng, ném `RangeError` từ 4 744; 64, 1 000, 3 000 tầng chạy được; 5 000 và 20 000 ném.
+- ⒞ **Bên đọc payload:** `packages/unseal/src/comparison.ts` chỉ đọc `payload->>'totalAmount'` và `payload->>'currency'`, nên `{ raw }` cho số tiền `null` — hàng vẫn nằm trong bảng và được đếm `unparsed`. Cột `payload jsonb NOT NULL` không có CHECK hình dạng (019); phong bì chặn 32..8 388 608 byte (018).
+- ⒟ **Bản một — bảy `it` mới (viết trước) trên mã cũ:** sáu ĐỎ.
+  - ⑴ và ⑵ ném `unsupported Unicode escape sequence`;
+  - ⑶ và ca soi hết cây ném `invalid input syntax for type json`;
+  - ⑷ ném `RangeError: Maximum call stack size exceeded`;
+  - ca ngưỡng đỏ ở assertion: 65 tầng vẫn cất nguyên hình dạng.
+
+  `it` đối chứng XANH — đúng vai của nó. Không `it` nào ghim mã lỗi: chúng đòi lượt mở thầu chạy trọn.
+- ⒠ **`JSON.parse` với U+0000 THÔ (Node 24.18):** ném `SyntaxError` ở cả sáu vị trí thử — trong chuỗi, trong khoá, giữa hai chữ số, đầu văn bản, cuối văn bản, giữa hai token. Văn bản ĐÃ GỠ thì phân tích được: `{"a":1,"a":2}` thành `{"a":2}`, `{"totalAmount":15}` thành số 15 — đúng cơ chế của lượt soi 57 NẶNG-1.
+- ⒡ **Bản hai — test viết trước trên mã bản một:** 21 test, ĐÚNG hai đỏ, cả hai ở assertion.
+  - `it` U+0000 thô nhận `{ a: 2 }` thay cho `{ raw }`;
+  - `it` JSON của khoản 10 nhận `{donGia, ghiChu: "ab"}`.
+
+  `it` đối tượng lồng xanh, vì phép đi cây của bản một đã tính đối tượng; răng của nó đo bằng đột biến M13.
+- ⒢ **Số tiền kiểu số JSON qua `double` (Node 24.18):** bảy ca ghi ở khoản 107.
+
+**Sau bản vá:**
+- **`index.ts`:** 359 → 425 dòng; 0 NUL, 0 CR; đúng ba dấu gạch chéo ngược (regex gỡ U+0000, regex surrogate, chú thích của regex surrogate). eslint và typecheck thoát mã 0.
+- **Trọn `unseal-worker.int.test.ts`:** 21/21 xanh.
+- **Trọn `apps/unseal-worker`** (bốn tệp tích hợp: `unseal-worker`, `composition`, hai kịch bản 41): 57/57 xanh.
+- **`pnpm test`:** 50 tệp / 748 test + 1 bỏ qua (vế chỉ chạy trên CI), thoát mã 0 — không đổi so với S1.63, vì test tích hợp không thuộc lệnh này. Không còn tệp `zzprobe-*`.
+
+**Test:**
+- **Helper `moThauCungBaoGiaSach`:** một RFQ, một báo giá sạch cộng các bản rõ cần đo, mở thầu MỘT lần. Đòi `opened` bằng số báo giá, không phong bì hỏng, báo giá sạch giữ nguyên hình dạng, yêu cầu `EXECUTED`, RFQ `UNSEALED`; trả payload theo thứ tự.
+- **⑴** escape U+0000 trong một chuỗi ⇒ `{ raw }` nguyên văn.
+- **⑵** escape U+0000 trong một khoá, cạnh khoá cùng tên sau khi gỡ ⇒ `{ raw }`, không gộp khoá.
+- **⑶** surrogate đơn lẻ — cao, thấp, ngược thứ tự, trong khoá ⇒ bốn `{ raw }`.
+- **⑷** mảng lồng 5 000 và 20 000 tầng ⇒ hai `{ raw }`.
+- **Soi hết cây:** U+0000 trong chuỗi của đối tượng nằm trong mảng; surrogate trong mảng lồng; U+0000 trong khoá của đối tượng lồng ⇒ ba `{ raw }`.
+- **Ngưỡng:** mảng lồng 64 tầng ⇒ nguyên hình dạng; 65 tầng ⇒ `{ raw }`. Test ghi số, không import hằng: đổi hằng thì test đỏ (M7), không trôi theo.
+- **Đối chứng:** cặp surrogate hợp lệ trong chuỗi và khoá; escape U+0001, U+001F trong chuỗi và U+0007 trong khoá; gạch chéo ngược THẬT đứng trước `u0000` trong chuỗi và khoá ⇒ nguyên hình dạng.
+- **[lượt soi 57] U+0000 THÔ:** khoá gộp `{"a␀":1,"a":2}`, số đổi `{"totalAmount":1␀5,"currency":"VND"}`, và U+0000 thô trộn với escape ⇒ ba `{ raw }` đã gỡ U+0000 (␀ là U+0000 thô).
+- **[lượt soi 57] Đối tượng lồng:** 64 tầng ⇒ nguyên hình dạng; 65 và 5 000 tầng ⇒ `{ raw }`.
+- **`it` JSON của khoản 10:** U+0000 thô trong một chuỗi ⇒ `{ raw: '{"donGia":1234567,"ghiChu":"ab"}' }`; trước bản hai là `{donGia, ghiChu: "ab"}`.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Bẫy công cụ ghi tệp (S1.62):** dòng regex cũ mang escape sáu ký tự của U+0000, nên không lệnh Edit hay Write nào được chạm vào nó. Bản một đi bằng script Python dựng dấu gạch chéo ngược bằng `chr(92)`, kiểm đủ ba mốc neo trước khi ghi, đếm dấu gạch chéo ngược trước (1) và sau (3).
+- ⑵ **Lib `ES2023` không có `isWellFormed`:** chọn regex cờ `u`, đo trước khi dùng (⒜).
+- ⑶ **Bản hai đi bằng khối thay thế, không bằng lệnh sửa:** một script áp chung đọc cặp khối cũ và mới, viết dấu gạch chéo ngược là `@@BS@@`, kiểm mọi mốc neo trên bản gốc trước khi ghi, và đếm dấu gạch chéo ngược sau khi áp (`index.ts` vẫn 3). Dòng `nopBaoGia` mang escape của khoản 10 không bị chạm.
+- ⑷ **Khoá "ngưỡng độ sâu" của script đột biến** khớp cả `it` đối tượng lồng mới, nên một đột biến có thể bị chấm thiếu test. Khoá đã được thu hẹp thành "ngưỡng độ sâu — 64 tầng" trước khi chạy.
+
+**Đỏ đo được, cô lập:**
+Mười lăm đột biến trên bản hai, mỗi đột biến một lượt chạy trọn `unseal-worker.int.test.ts` (reporter json). Sau mỗi lượt `index.ts` trả về nguyên bản theo sha256, và `git diff` sau cả lượt trùng bản chụp trước lượt. Lượt gốc 21/21 xanh. Mọi đột biến đỏ ĐÚNG tập test dự kiến; M11 đỏ thêm ba test cũ đòi payload dạng đối tượng, đúng dự kiến.
+
+| Đột biến | Đỏ |
+|---|---|
+| M1 bỏ kiểm U+0000 | ⑴, ⑵, soi hết cây |
+| M2 bỏ kiểm surrogate đơn lẻ | ⑶, soi hết cây |
+| M3 bỏ kiểm khoá | ⑵, ⑶, soi hết cây |
+| M4 bỏ kiểm chuỗi giá trị | ⑴, ⑶, soi hết cây |
+| M5 bỏ kiểm độ sâu | ⑷, ngưỡng mảng, ngưỡng đối tượng |
+| M6 lệch một ở ngưỡng (`>=`) | ngưỡng mảng, ngưỡng đối tượng |
+| M7 ngưỡng 65 | ngưỡng mảng, ngưỡng đối tượng |
+| M8 không đi xuống con của mảng | ⑷, soi hết cây, ngưỡng mảng |
+| M9 không đẩy đối tượng lồng vào ngăn xếp | soi hết cây, ngưỡng đối tượng |
+| M10 regex surrogate không cờ `u` | đối chứng |
+| M11 luôn cất `raw` | chín `it` khoản 106, và ba test cũ đòi payload dạng đối tượng (A1 sau mở thầu, phiên bản cuối, phong bì không mở được) |
+| M12 bỏ gọi `jsonbNhanDuoc` | ⑴, ⑵, ⑶, ⑷, soi hết cây, ngưỡng mảng, ngưỡng đối tượng |
+| M13 độ sâu chỉ tăng với mảng (lượt soi 57 NHẸ-1) | ngưỡng đối tượng |
+| M14 phân tích văn bản đã gỡ U+0000 — tức cách của bản một (NẶNG-1) | U+0000 thô, `it` JSON của khoản 10 |
+| M15 `raw` không gỡ U+0000 (NHẸ-2) | U+0000 thô, cả hai `it` của khoản 10 |
+
+**Lượt soi đối kháng 57** — reviewer đọc kho (chỉ dùng lệnh git đọc) cùng nguồn PostgreSQL REL_16 (`jsonapi.c`, `jsonb_util.c`), `pg-protocol` và MDN; không chạy Node hay test. Kết quả: **0 CAO, 1 NẶNG, 4 NHẸ, 3 INFO.** Reviewer không tìm được bản rõ nào còn làm `JSON.stringify` ném hay làm `jsonb` từ chối, trong ranh giới đã nêu.
+
+| Mức | Phát hiện | Xử lý |
+|---|---|---|
+| NẶNG-1 | Chú thích mới "KHOÁ không bị gỡ U+0000 … một giá trị mất âm thầm" sai với U+0000 THÔ. Bước gỡ chạy trên văn bản TRƯỚC `JSON.parse`, nên `{"a␀":1,"a":2}` thành `{"a":2}` và `{"totalAmount":1␀5}` thành `15`, không có `raw` (␀ là U+0000 thô; có từ S1.6 H1) | **ĐO** (Node 24.18): `JSON.parse` ném `SyntaxError` với U+0000 thô ở cả sáu vị trí thử; văn bản đã gỡ thì phân tích thành `{"a":2}` và `15`. **Sửa (bản hai):** `thanhJson` phân tích văn bản GỐC, U+0000 chỉ gỡ khỏi `raw`, chỉ còn một chỗ dựng `raw`. `it` mới (khoá gộp, số đổi, trộn với escape) và `it` JSON của khoản 10 với kỳ vọng LẬT có chủ đích ĐỎ trên mã bản một, xanh trên bản hai. Đột biến M14 (phân tích văn bản đã gỡ) và M15 (`raw` không gỡ) đỏ đúng các `it` ấy. Chú thích sửa thành "escape của U+0000 trong khoá" |
+| NHẸ-1 | Độ sâu mới chỉ được đo bằng MẢNG lồng: đột biến "chỉ tăng độ sâu khi con là mảng" giữ bảy `it` xanh, trong khi đối tượng lồng 5 000 tầng mở lại `RangeError` | `it` mới: đối tượng lồng 64 tầng giữ hình dạng, 65 và 5 000 tầng cất `raw`. Xanh trên mã bản một, vì phép đi cây đã tính đối tượng. Đột biến M13 (độ sâu chỉ tăng với mảng) đỏ đúng `it` ấy |
+| NHẸ-2 | Nhánh `raw` sau `jsonbNhanDuoc` chưa có ca mang U+0000 thô: nếu nhánh ấy dùng văn bản chưa gỡ thì test vẫn xanh mà `22P05` mở lại | Bản hai chỉ còn MỘT chỗ dựng `raw`, và văn bản mang U+0000 thô không tới được phép đi cây vì `JSON.parse` văn bản gốc ném trước. `it` mới mang ca trộn U+0000 thô với escape. Đột biến M15 (`raw` không gỡ) đỏ đúng các `it` mang U+0000 thô |
+| NHẸ-3 | Chú thích nói quá ở bốn chỗ: ngăn xếp trong worker "sâu hơn" (chưa đo); `jsonbNhanDuoc` được tả như điều kiện cần và đủ; "nguyên văn" của `raw` bỏ qua BOM và U+FFFD; "64 tầng đo được" chỉ đúng với mảng | Viết lại cả bốn: ngăn xếp lúc gọi `JSON.stringify` sau `await` KHÔNG đo; `jsonbNhanDuoc` là điều kiện ĐỦ, cố ý chặt hơn; `raw` là văn bản ĐÃ GIẢI MÃ (`TextDecoder` bỏ BOM đầu, thay byte hỏng bằng U+FFFD) rồi gỡ U+0000 thô; 64 tầng nay đo cho cả mảng lẫn đối tượng |
+| NHẸ-4 | Escape U+0000 hay surrogate đơn lẻ trong một GIÁ TRỊ — đúng dạng `JSON.stringify` của trình duyệt sinh ra — đẩy CẢ báo giá sang `raw`. `totalAmount` khi ấy là NULL, nên báo giá xuống cuối bảng và ra khỏi min, max, trung bình, dưới ngân sách. Một client lành tính cắt chuỗi giữa cặp surrogate làm giá của chính họ biến khỏi phép tổng hợp | **QUYẾT:** giữ hình dạng đóng đã ghi ở hàng 106 — payload có cấu trúc chỉ khi bản rõ là JSON hợp lệ mà `jsonb` lưu được đúng từng ký tự; mọi thứ khác là `raw`. Bản hai còn làm quy tắc ấy đồng nhất: U+0000 THÔ nay cũng đi `raw`. Hàng vẫn nằm trong bảng so sánh và được đếm `unparsed` (022); hệ quả nói ra ở ranh giới ⑹. Hướng thay thế — thay surrogate đơn lẻ trong GIÁ TRỊ bằng U+FFFD — đổi nội dung báo giá, nên để người chủ sản phẩm quyết |
+| INFO-1 | Số tiền kiểu số JSON đi qua `double`: `99999999999999.99` thành `…98`, `9007199254740993` thành `…992`, `1e400` thành `null`, trong khi `bid_so_tien` vẫn nhận hai số đầu. Có từ S1.6 | **ĐO** trên Node 24.18, và đọc `bid_so_tien` (022): hai số đầu nằm trong miền `numeric(18, 2)`, nên vào bảng so sánh với con số đã đổi. Mở khoản 107 kèm hình dạng đóng đề xuất: reviver đọc `context.source` (Node 24.18 có, đo) hoặc đòi chuỗi thập phân |
+| INFO-2 | Đường `raw` còn ba ranh giới chưa nói: `client_encoding` đổi theo phiên trong pool (khoản 104); `JSON.parse` dựng trọn cây trước phép đi cây, và hết bộ nhớ không phải ngoại lệ bắt được; trần 8 MiB là một `CHECK`, đúng lớp khoản 105 | Ghi cả ba vào chú thích `thanhJson` và vào ranh giới của biên bản này |
+| INFO-3 | Hai chỗ khác ghi chuỗi do người gọi cung cấp vào `jsonb`: email của `/auth/link` vào `outbox_jobs.payload` (regex `[^…]` cờ `u` vẫn khớp surrogate đơn lẻ; `catch` chỉ nuốt `23503`), và `reason` do người mua nhập vào `audit_events.payload` | Chỉ nêu, không mở khoản. Theo đọc mã của reviewer, cả hai chỉ hỏng yêu cầu của chính người gọi. `/auth/link` ghi outbox cho MỌI email hình dạng đúng, nên phản hồi không đổi theo việc tài khoản có tồn tại hay không. Chưa đo |
+
+**Các hướng reviewer đã soi mà SẠCH:**
+- **Escape của U+0000 ở mọi tầng:** đã đóng — `jsonapi.c` chỉ từ chối điểm mã 0, và phép đi cây bắt mọi U+0000.
+- **Các escape khác mà `JSON.stringify` xuất ra** (`\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`, `\u0001`–`\u001f`): PostgreSQL nhận hết; nó chỉ đòi ký tự từ 31 trở xuống phải được escape.
+- **Surrogate:** đã đóng — với cờ `u`, `\p{Surrogate}` chỉ khớp surrogate đơn lẻ, và `JSON.stringify` cũng chỉ escape surrogate đơn lẻ.
+- **Độ sâu và stack:** đã đóng ở tối đa 64 tầng — `parse_object`, `parse_array` và `convertJsonbValue` đều gọi `check_stack_depth()`; lỗi của `JSON.parse` nằm trong `try`.
+- **Kích thước:** không chạm tới — phong bì tối đa 8 388 608 byte phình tối đa khoảng sáu lần (escape `\u00XX`), vẫn dưới trần `JENTRY_OFFLENMASK` và `JSONB_MAX_ELEMS` (định nghĩa đọc thấy, con số suy luận).
+- **Số:** `Infinity` và `NaN` ra `null`; bộ phân tích của PostgreSQL nhận dấu của số mũ.
+- **`toJSON`, BigInt, chu trình, độ dài chuỗi:** `JSON.parse` không sinh hàm, BigInt hay chu trình; độ dài chuỗi bị trần 8 MiB chặn.
+- **Phạm vi đi cây:** khoá `__proto__` là thuộc tính riêng, nên `Object.keys` và `Object.values` đều thấy; khoá dạng số vẫn là khoá chuỗi; số, bool, null không cần soi; regex không có cờ `g` hay `y`, nên không dính `lastIndex`.
+- **Ngưỡng:** gốc là tầng 1; `longSau(63)` là 64 tầng và giữ hình dạng, `longSau(64)` là 65 tầng và thành `raw`.
+- **Đối chứng:** cặp surrogate hợp lệ, escape điều khiển khác U+0000, gạch chéo ngược thật đứng trước `u0000`, và ký tự ngoài BMP trong khoá đều giữ hình dạng.
+- **Test:** không `it` nào ghim mã lỗi; sáu `it` đỏ-trước khớp cơ chế đọc được, không `it` nào xanh giả; khối 106 không mang dấu gạch chéo ngược nào.
+- **Migration 019:** không `CHECK` hay trigger nào đọc `payload`.
+- **Chú thích về Node 24.18, 4 744 tầng, và "ngưỡng của PostgreSQL CHƯA đo":** đúng phạm vi đã đo.
+
+**Ranh giới NÓI RA:**
+- ⑴ **Mã hoá của cụm:** lập luận "đường `{ raw }` luôn cất được" giả định cụm UTF8. Kho không có chốt nào đọc `server_encoding`.
+- ⑵ **Kích thước:** phong bì tối đa 8 MiB (018), nên giới hạn kích thước của `jsonb` không chạm tới. Đây là lập luận, không phải phép đo.
+- ⑶ **Ngưỡng độ sâu:** ngưỡng stack của bộ phân tích JSON PostgreSQL chưa đo; 64 tầng — mảng lẫn đối tượng — đo được là nhận. Ngưỡng của `JSON.stringify` đo trên Node 24.18 cục bộ; CI chạy Node 22 và chỉ đo 64 tầng qua test.
+- ⑷ **Báo giá hợp lệ sâu hơn 64 tầng** nay thành `{ raw }`, nên bảng so sánh đọc số tiền `null` cho báo giá ấy.
+- ⑸ **U+0000 THÔ** bị gỡ khỏi `raw` không để lại dấu — nhưng bản rõ mang nó nay luôn là `raw`, không còn thành JSON có cấu trúc (lượt soi 57 NẶNG-1).
+- ⑹ **Surrogate đơn lẻ hay escape U+0000 trong một GIÁ TRỊ** đẩy CẢ báo giá sang `{ raw }` — quyết định có chủ ý (lượt soi 57 NHẸ-4). Hàng vẫn nằm trong bảng so sánh, nhưng số tiền là NULL: nó được đếm `unparsed`, xuống cuối bảng, và ra khỏi min, max, trung bình, dưới ngân sách.
+- ⑺ **`client_encoding`:** `pg-protocol` gửi UTF8 lúc khởi động, nhưng một `SET` phạm vi phiên đi theo kết nối trong pool (khoản 104).
+- ⑻ **Trần 8 MiB là một `CHECK` (018)**, thuộc đúng lớp của khoản 105.
+- ⑼ **Bộ nhớ:** `JSON.parse` dựng trọn cây trước phép đi cây, và hết bộ nhớ không phải một ngoại lệ bắt được. Chưa đo.
+- ⑽ **Số tiền kiểu số JSON đi qua `double`:** mang sang khoản 107.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Lưới chặn một lớp lỗi phải đứng SAU phép biến đổi cuối cùng trước chỗ ghi. Bản vá S1.6 gỡ trên văn bản trước `JSON.parse`, nên escape đi qua.
+- ⑵ Một hàm đệ quy không được là lưới chặn lỗi độ sâu — nó ném đúng lỗi nó được viết ra để chặn.
+- ⑶ Test ngưỡng ghi số chứ không import hằng, để đổi hằng là một thay đổi phải đi qua đỏ.
+- ⑷ Một bước "làm sạch" chạy TRƯỚC bộ phân tích có thể biến một đầu vào KHÔNG hợp lệ thành một đầu vào hợp lệ mang nghĩa khác. Làm sạch sau khi phân tích, và chỉ trên thứ đã chắc là không cất được có cấu trúc.
+- ⑸ Một test ngưỡng độ sâu chỉ dựng MỘT kiểu lồng để lọt đột biến trên kiểu kia — ngưỡng phải đo trên mọi kiểu vùng chứa.

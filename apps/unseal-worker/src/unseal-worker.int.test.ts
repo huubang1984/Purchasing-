@@ -328,7 +328,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
   // rollback. Bản vá của S1.6 gỡ NUL trước `JSON.parse` nhưng không kèm test nào đi qua đường ấy; tới S1.63 regex còn mang một
   // byte NUL thô, nên phép dò xuống dòng của Git coi tệp là nhị phân và ripgrep quét theo thư mục bỏ qua nó.
   // ===========================================================================================
-  it("[khoản nợ 10] một U+0000 THÔ trong chuỗi của bản rõ JSON bị gỡ — lượt mở thầu không hỏng, payload cất được", async () => {
+  it("[khoản nợ 10] một U+0000 THÔ trong chuỗi của bản rõ JSON — [S1.64, lượt soi 57] văn bản ấy KHÔNG phải JSON hợp lệ: cất dưới raw đã gỡ U+0000, lượt mở thầu không hỏng", async () => {
     const rfqId = await taoRfqMo();
     await nopBaoGia(rfqId, '{"donGia":1234567,"ghiChu":"a\u0000b"}');
     const requestId = await dongVaXinMoThau(rfqId);
@@ -340,7 +340,9 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const { rows } = await withTenant(apiPool, orgA, (c) =>
       c.query<{ payload: unknown }>("SELECT payload FROM rfq_unsealed_bids WHERE unseal_request_id = $1", [requestId]),
     );
-    expect(rows.map((r) => r.payload)).toEqual([{ donGia: 1234567, ghiChu: "ab" }]);
+    // [S1.64, lượt soi 57 NẶNG-1] Kỳ vọng LẬT có chủ đích — ~~`[{ donGia: 1234567, ghiChu: "ab" }]`~~. Gỡ U+0000 TRƯỚC khi phân tích
+    // biến một văn bản KHÔNG hợp lệ thành JSON hợp lệ: ở ca này vô hại, nhưng `{"a␀":1,"a":2}` thành `{"a":2}` và `1␀5` thành `15`.
+    expect(rows.map((r) => r.payload)).toEqual([{ raw: '{"donGia":1234567,"ghiChu":"ab"}' }]);
   });
 
   it("[khoản nợ 10] một U+0000 THÔ trong bản rõ KHÔNG phải JSON bị gỡ — cất dưới raw, và CHỈ U+0000 bị gỡ (xuống dòng còn nguyên)", async () => {
@@ -356,6 +358,130 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
       c.query<{ payload: unknown }>("SELECT payload FROM rfq_unsealed_bids WHERE unseal_request_id = $1", [requestId]),
     );
     expect(rows.map((r) => r.payload)).toEqual([{ raw: "rac\nrac" }]);
+  });
+
+  // ===========================================================================================
+  // [khoản nợ 106] MỘT BẢN RÕ JSON HỢP LỆ MÀ `jsonb` HAY `JSON.stringify` KHÔNG NHẬN KHÔNG ĐƯỢC CHẶN CẢ LƯỢT MỞ THẦU.
+  // Bản vá [S1.6 H1] gỡ U+0000 THÔ trước `JSON.parse`, nhưng bốn loại đầu vào đi qua bước gỡ ấy (đo ở S1.63): escape của U+0000
+  // trong một chuỗi hay một khoá và escape surrogate đơn lẻ (`jsonb` từ chối), mảng lồng quá sâu (`JSON.stringify` ném). Mỗi ca
+  // làm CẢ giao dịch rollback ở mọi lần thử, và báo giá sạch cùng RFQ cũng không mở được.
+  // Mỗi `it` dưới đây dựng một RFQ có một báo giá sạch rồi mở thầu MỘT lần. Nó đòi lượt mở thầu chạy trọn, báo giá sạch giữ nguyên
+  // hình dạng, và mỗi bản rõ `jsonb` không nhận được cất dưới `raw` NGUYÊN VĂN. Không `it` nào ghim mã lỗi. Escape được dựng bằng
+  // `String.fromCharCode(92)`, nên khối này không mang một dấu gạch chéo ngược nào.
+  // ===========================================================================================
+  const BS = String.fromCharCode(92);
+  const BAN_RO_SACH = JSON.stringify({ donGia: 111, tienTe: "VND" });
+
+  /** Mảng lồng `n` tầng dưới khoá `a`. Tính cả đối tượng gốc, độ sâu là `n + 1`. */
+  function longSau(n: number): string {
+    return '{"a":' + "[".repeat(n) + "]".repeat(n) + "}";
+  }
+
+  /** [lượt soi 57] Đối tượng lồng `n` tầng dưới khoá `a`, trong cùng là số 1. Độ sâu là `n`. */
+  function doiTuongLongSau(n: number): string {
+    return '{"a":'.repeat(n) + "1" + "}".repeat(n);
+  }
+
+  /**
+   * Một RFQ gồm một báo giá sạch và các bản rõ `cacBanRo`, mở thầu MỘT lần. Đòi lượt mở thầu chạy trọn — không phong bì nào
+   * hỏng, báo giá sạch giữ nguyên hình dạng, yêu cầu `EXECUTED`, RFQ `UNSEALED` — rồi trả payload theo đúng thứ tự `cacBanRo`.
+   */
+  async function moThauCungBaoGiaSach(cacBanRo: readonly string[]): Promise<unknown[]> {
+    const rfqId = await taoRfqMo();
+    const idSach = await nopBaoGia(rfqId, BAN_RO_SACH);
+    const cacId: string[] = [];
+    for (const banRo of cacBanRo) cacId.push(await nopBaoGia(rfqId, banRo));
+    const requestId = await dongVaXinMoThau(rfqId);
+
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+    );
+    expect(ketQua.opened).toBe(cacBanRo.length + 1);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
+
+    const { rows } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ bid_version_id: string; payload: unknown }>(
+        "SELECT bid_version_id, payload FROM rfq_unsealed_bids WHERE unseal_request_id = $1",
+        [requestId],
+      ),
+    );
+    const theoId = new Map(rows.map((r) => [r.bid_version_id, r.payload] as const));
+    expect(theoId.get(idSach), "báo giá sạch phải giữ nguyên hình dạng").toEqual({ donGia: 111, tienTe: "VND" });
+    const { rows: tt } = await db.pool.query<{ rfq: string; yc: string }>(
+      "SELECT p.status AS rfq, r.status AS yc FROM rfq_packages p JOIN unseal_requests r ON r.rfq_id = p.id WHERE r.id = $1",
+      [requestId],
+    );
+    expect(tt).toEqual([{ rfq: "UNSEALED", yc: "EXECUTED" }]);
+    return cacId.map((id) => theoId.get(id));
+  }
+
+  it("[khoản nợ 106] ⑴ escape của U+0000 trong một CHUỖI — lượt mở thầu chạy trọn, bản rõ ấy cất dưới raw nguyên văn", async () => {
+    const banRo = '{"donGia":222,"ghiChu":"a' + BS + 'u0000b"}';
+    expect(await moThauCungBaoGiaSach([banRo])).toEqual([{ raw: banRo }]);
+  });
+
+  it("[khoản nợ 106] ⑵ escape của U+0000 trong một KHOÁ — cất dưới raw, không gộp với khoá cùng tên sau khi gỡ", async () => {
+    const banRo = '{"donGia":333,"a' + BS + 'u0000":1,"a":2}';
+    expect(await moThauCungBaoGiaSach([banRo])).toEqual([{ raw: banRo }]);
+  });
+
+  it("[khoản nợ 106] ⑶ escape surrogate đơn lẻ — cao, thấp, ngược thứ tự, trong khoá — mỗi bản rõ cất dưới raw", async () => {
+    const cacBanRo = [
+      '{"ghiChu":"a' + BS + 'ud800b"}',
+      '{"ghiChu":"' + BS + 'udc00"}',
+      '{"ghiChu":"' + BS + "udc00" + BS + 'ud800"}',
+      '{"a' + BS + 'udbff":1}',
+    ];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 106] ⑷ mảng lồng 5 000 và 20 000 tầng — cất dưới raw, lượt mở thầu không ném", async () => {
+    const cacBanRo = [longSau(5000), longSau(20000)];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 106] phép soi đi HẾT cây — U+0000 và surrogate đơn lẻ nằm sâu trong mảng, đối tượng và khoá lồng nhau cũng cất dưới raw", async () => {
+    const cacBanRo = [
+      '{"hang":[{"dong":1,"ghiChu":"x' + BS + 'u0000"}]}',
+      '{"hang":[1,[2,["' + BS + 'ud800"]]]}',
+      '{"hang":{"con":{"' + BS + 'u0000":true}}}',
+    ];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 106] ngưỡng độ sâu — 64 tầng giữ nguyên hình dạng, 65 tầng cất dưới raw", async () => {
+    const sau64 = longSau(63);
+    const sau65 = longSau(64);
+    const doc64: unknown = JSON.parse(sau64);
+    expect(await moThauCungBaoGiaSach([sau64, sau65])).toEqual([doc64, { raw: sau65 }]);
+  });
+
+  it("[khoản nợ 106] ĐỐI CHỨNG — cặp surrogate hợp lệ, escape ký tự điều khiển khác U+0000, gạch chéo ngược THẬT đứng trước u0000 — giữ nguyên hình dạng", async () => {
+    const cacBanRo = [
+      '{"ghiChu":"' + BS + "ud83d" + BS + 'ude00","' + BS + "ud83d" + BS + 'ude00":1}',
+      '{"ghiChu":"a' + BS + "u0001b" + BS + 'u001fc","' + BS + 'u0007":1}',
+      '{"ghiChu":"a' + BS + BS + 'u0000b","k' + BS + BS + 'u0000":2}',
+    ];
+    const cacDoc = cacBanRo.map((b): unknown => JSON.parse(b));
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacDoc);
+  });
+
+  it("[khoản nợ 106] [lượt soi 57] U+0000 THÔ không còn biến một văn bản KHÔNG hợp lệ thành JSON mang nội dung khác — khoá gộp, số đổi, trộn với escape: cất dưới raw đã gỡ U+0000", async () => {
+    const NUL = String.fromCharCode(0);
+    const cacBanRo = [
+      '{"a' + NUL + '":1,"a":2}',
+      '{"totalAmount":1' + NUL + '5,"currency":"VND"}',
+      '{"ghiChu":"x' + NUL + '","khac":"' + BS + 'u0000"}',
+    ];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((b) => ({ raw: b.split(NUL).join("") })));
+  });
+
+  it("[khoản nợ 106] [lượt soi 57] ngưỡng độ sâu tính cả ĐỐI TƯỢNG lồng — 64 tầng giữ nguyên hình dạng, 65 và 5 000 tầng cất dưới raw", async () => {
+    const sau64 = doiTuongLongSau(64);
+    const sau65 = doiTuongLongSau(65);
+    const sau5000 = doiTuongLongSau(5000);
+    const doc64: unknown = JSON.parse(sau64);
+    expect(await moThauCungBaoGiaSach([sau64, sau65, sau5000])).toEqual([doc64, { raw: sau65 }, { raw: sau5000 }]);
   });
 
   it("[INV-G4] mở bọc khoá SINH AUDIT — vế thứ tư của mệnh đề, thứ S1.4 không có", async () => {

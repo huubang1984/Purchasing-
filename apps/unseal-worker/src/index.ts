@@ -123,6 +123,60 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
 }
 
 /**
+ * [khoản nợ 106] Độ sâu lồng tối đa của một bản rõ JSON được cất NGUYÊN hình dạng. Sâu hơn thì cất dưới `{ raw }`.
+ *
+ * Đây là một biên an toàn, không phải một giới hạn sản phẩm. `JSON.stringify` của V8 đệ quy: đo cục bộ trên Node 24.18 ở một
+ * ngăn xếp nông, mảng lồng 4 744 tầng đã ném `RangeError`. Ngăn xếp lúc worker gọi `JSON.stringify` — sau một `await` — thì KHÔNG
+ * đo. Bộ phân tích JSON của PostgreSQL cũng đệ quy (`check_stack_depth`), và ngưỡng của nó CHƯA đo. Một báo giá thật chỉ lồng vài
+ * tầng; 64 tầng — mảng lồng lẫn đối tượng lồng — đo được là cất nguyên hình dạng (`unseal-worker.int.test.ts`). Bản rõ sâu hơn KHÔNG
+ * mất: nó nằm trong `raw`.
+ */
+const DO_SAU_JSON_TOI_DA = 64;
+
+const KY_TU_NUL = String.fromCharCode(0);
+
+/** Ở chế độ `u`, một cặp surrogate hợp lệ là MỘT điểm mã, nên `\p{Surrogate}` chỉ khớp surrogate ĐƠN LẺ. */
+const SURROGATE_DON_LE = /\p{Surrogate}/u;
+
+/** Một chuỗi — giá trị hay khoá — mà `jsonb` nhận: không mang U+0000, không mang surrogate đơn lẻ. */
+function chuoiJsonbNhan(chuoi: string): boolean {
+  return !chuoi.includes(KY_TU_NUL) && !SURROGATE_DON_LE.test(chuoi);
+}
+
+/**
+ * [khoản nợ 106] `true` thì `JSON.stringify(goc)` chạy xong VÀ `jsonb` nhận văn bản nó sinh ra. Đây là điều kiện ĐỦ, cố ý chặt hơn
+ * điều kiện cần: cây 65 tầng thì cả hai vẫn nhận, nhưng hàm trả `false` — biên an toàn của `DO_SAU_JSON_TOI_DA`.
+ *
+ * Đi cây bằng VÒNG LẶP trên ngăn xếp tường minh: một hàm đệ quy ở đây sẽ ném đúng cái `RangeError` nó được viết ra để tránh.
+ * Ba lớp bị loại, lớp nào cũng đã đo làm CẢ lượt mở thầu rollback:
+ *   ⑴⑵ chuỗi hay KHOÁ mang U+0000 — `JSON.stringify` xuất lại escape của nó, `jsonb` từ chối (`22P05`);
+ *   ⑶ chuỗi hay khoá mang surrogate đơn lẻ — `JSON.stringify` xuất escape, `jsonb` từ chối (`22P02`);
+ *   ⑷ độ sâu vượt `DO_SAU_JSON_TOI_DA` — `JSON.stringify` ném `RangeError`.
+ * Escape của U+0000 trong KHOÁ không bị gỡ: hai khoá chỉ khác nhau ở U+0000 sẽ gộp làm một, và một giá trị mất âm thầm (lượt soi 56
+ * C1). U+0000 THÔ không tới được đây: `JSON.parse` của văn bản gốc đã ném trước (lượt soi 57 NẶNG-1, xem `thanhJson`).
+ */
+function jsonbNhanDuoc(goc: object): boolean {
+  const ngan: object[] = [goc];
+  const doSau: number[] = [1];
+  for (;;) {
+    const nut = ngan.pop();
+    const sau = doSau.pop();
+    if (nut === undefined || sau === undefined) return true;
+    if (sau > DO_SAU_JSON_TOI_DA) return false;
+    if (!Array.isArray(nut) && !Object.keys(nut).every((khoa) => chuoiJsonbNhan(khoa))) return false;
+    const cacCon: readonly unknown[] = Array.isArray(nut) ? nut : Object.values(nut);
+    for (const con of cacCon) {
+      if (typeof con === "string") {
+        if (!chuoiJsonbNhan(con)) return false;
+      } else if (typeof con === "object" && con !== null) {
+        ngan.push(con);
+        doSau.push(sau + 1);
+      }
+    }
+  }
+}
+
+/**
  * Chuyển bản rõ thành `jsonb`.
  *
  * MỘT QUYẾT ĐỊNH VỀ SẴN SÀNG, không phải về định dạng: nếu bản rõ không phải một đối tượng JSON
@@ -132,7 +186,16 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
  * ~~Bản rõ không bao giờ bị VỨT ĐI: nó luôn tới được `rfq_unsealed_bids`, chỉ khác hình dạng.~~
  * [lượt soi 56 I2, C1, N2 — ĐO] Nói quá: một bản rõ JSON HỢP LỆ mà `jsonb` hay `JSON.stringify` không nhận — escape của
  * U+0000 trong một chuỗi hay một khoá (`22P05`), escape surrogate đơn lẻ (`22P02`), mảng lồng từ 5 000 tầng (`RangeError`)
- * — làm CẢ lượt mở thầu rollback ở mọi lần thử, báo giá sạch cũng không mở được. Khoản nợ 106.
+ * ~~— làm CẢ lượt mở thầu rollback ở mọi lần thử, báo giá sạch cũng không mở được. Khoản nợ 106.~~
+ * **[S1.64, khoản nợ 106 ĐÓNG]** Nay `jsonbNhanDuoc` nhận ra các bản rõ ấy sau `JSON.parse`, và chúng được cất dưới `{ raw }`;
+ * lượt mở thầu chạy trọn. `raw` là văn bản ĐÃ GIẢI MÃ, không phải byte của bản rõ: `TextDecoder` bỏ BOM đầu và thay byte hỏng
+ * bằng U+FFFD, rồi U+0000 THÔ bị gỡ (lượt soi 57). Đường `{ raw }` cất được với mọi bản rõ: văn bản ấy không mang surrogate đơn
+ * lẻ (`TextDecoder` không sinh ra) cũng không mang U+0000, `JSON.stringify` thoát gạch chéo ngược lẫn ký tự điều khiển, và độ sâu
+ * là 1. Ranh giới nói ra: ⑴ cụm mã hoá UTF8, và `client_encoding` của phiên là UTF8 — một `SET` phạm vi phiên đi theo kết nối
+ * trong pool (khoản 104); ⑵ phong bì tối đa 8 MiB nên giới hạn kích thước của `jsonb` không chạm tới — nhưng trần ấy là một
+ * `CHECK` (018), đúng lớp của khoản 105; ⑶ `JSON.parse` dựng trọn cây trước phép đi cây, và hết bộ nhớ không phải một ngoại lệ
+ * bắt được (chưa đo). Câu gạch đầu đoạn vẫn gạch: U+0000 THÔ bị gỡ khỏi `raw` không để lại dấu — nhưng một bản rõ mang nó không
+ * còn thành JSON có cấu trúc (lượt soi 57 NẶNG-1).
  *
  * [REVIEW AN NINH S1.6 — HIGH-1] `U+0000` BỊ GỠ, VÀ ĐÓ LÀ MỘT LỖ HỔNG SẴN SÀNG CÓ THẬT.
  * Kiểu `jsonb` của PostgreSQL KHÔNG biểu diễn được `U+0000` trong chuỗi — nó ném `22P05`. Câu
@@ -143,18 +206,21 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
  * Gỡ ở đây, chứ không chỉ bắt lỗi ở chỗ ghi: một `payload` không cất được là dữ liệu đã MẤT, còn
  * ~~một `payload` đã gỡ NUL là dữ liệu đã cất được kèm một sai lệch đọc được từ chính nó.~~ một `payload` đã gỡ NUL
  * là dữ liệu đã cất được — nhưng sai lệch ấy KHÔNG đọc được từ chính nó: U+0000 bị gỡ không để lại dấu (lượt soi 56 I2).
+ * **[S1.64, lượt soi 57 NẶNG-1]** Bước gỡ nay chạy SAU `JSON.parse` và chỉ trên `raw`. Gỡ TRƯỚC khi phân tích — như bản S1.6 —
+ * biến một văn bản KHÔNG hợp lệ thành JSON hợp lệ mang nội dung khác mà không để lại dấu: `{"a␀":1,"a":2}` thành `{"a":2}`, và
+ * `{"totalAmount":1␀5}` thành số 15 (␀ là U+0000 THÔ; đo trên Node 24.18).
  */
 function thanhJson(banRo: Uint8Array): unknown {
-  const van = new TextDecoder("utf-8", { fatal: false })
-    .decode(banRo)
-    .replace(/\u0000/gu, "");
+  const van = new TextDecoder("utf-8", { fatal: false }).decode(banRo);
   try {
+    // Phân tích văn bản GỐC. JSON không cho U+0000 THÔ đứng ở bất kỳ đâu — trong chuỗi, trong khoá, giữa hai token, đầu hay cuối
+    // văn bản — nên bản rõ mang nó ném ở đây (đo trên Node 24.18 ở cả sáu vị trí) và đi vào `raw`.
     const doc: unknown = JSON.parse(van);
-    if (typeof doc === "object" && doc !== null && !Array.isArray(doc)) return doc;
-    return { raw: van };
+    if (typeof doc === "object" && doc !== null && !Array.isArray(doc) && jsonbNhanDuoc(doc)) return doc;
   } catch {
-    return { raw: van };
+    // Không phải JSON hợp lệ.
   }
+  return { raw: van.replace(/\u0000/gu, "") };
 }
 
 /**
