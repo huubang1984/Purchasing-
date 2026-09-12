@@ -267,6 +267,49 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
 const RE_GOI_CREATE_POOL = /\bcreatePool\s*\(/gu;
 const RE_LAY_CLIENT = /\.connect\s*\(\s*\)/gu;
 const RE_CAU_TREN_POOL = /\b\w*[Pp]ool\s*\.\s*query\s*[<(]/gu;
+const RE_GAN_LISTENER = /\.on\s*\(\s*["'`]/gu;
+const RE_TEN_CONNECT_BIND = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[\w$.]+\.connect\.bind\s*\(/gu;
+const RE_GOI_KHONG_DOI_SO = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(\s*\)/gu;
+
+/**
+ * [S1.66 / lượt soi ngang 59b-2] Vế ⒟: số listener 'error' gắn bằng `.on(` trong MÃ, không trong chú thích hay chuỗi. Bộ bỏ chuỗi
+ * thay NỘI DUNG chuỗi bằng khoảng trắng và giữ nguyên độ dài, nên tên sự kiện đọc ở văn bản gốc, đúng vị trí ngay sau dấu nháy mở.
+ * `.once(` và `.off(` không tính: `server.once("error")` của cổng HTTP không phải listener của một client mượn từ pool, và tính nó
+ * thì một client thiếu listener ở cùng tệp vẫn xanh.
+ */
+function soListenerLoi(ma: string): number {
+  const sach = boChuThichVaChuoi(ma);
+  let so = 0;
+  for (const m of sach.matchAll(RE_GAN_LISTENER)) {
+    const sau = (m.index ?? 0) + m[0].length;
+    if (ma.startsWith("error", sau) && ma[sau + 5] === ma[sau - 1]) so += 1;
+  }
+  return so;
+}
+
+/**
+ * [S1.66 / lượt soi 60a-3] Số chỗ LẤY client trong một văn bản đã bỏ chú thích và chuỗi: `.connect()` trần, CỘNG lời gọi không đối số
+ * của mọi tên gán từ `<x>.connect.bind(…)` — khuôn của bộ bọc vai (`const connectGoc = pool.connect.bind(pool)` rồi `connectGoc()`),
+ * chỗ bản đầu của vế ⒟ không thấy. Điểm mù còn lại, nói ra: dạng callback `connect(cb)`, truyền `pool.connect` như một giá trị, và
+ * `.bind` qua một biến trung gian khác.
+ */
+function soLanLayClient(sach: string): number {
+  let so = [...sach.matchAll(RE_LAY_CLIENT)].length;
+  for (const m of sach.matchAll(RE_TEN_CONNECT_BIND)) {
+    for (const k of sach.matchAll(RE_GOI_KHONG_DOI_SO)) if (k[1] === m[1]) so += 1;
+  }
+  return so;
+}
+
+/** Vế ⒟: số chỗ lấy client KHÔNG có listener 'error' tương ứng được phép theo tệp, kèm lý do. */
+const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyDo: string }> = {
+  "packages/test-support/src/postgres.ts": {
+    so: 1,
+    lyDo:
+      "hạ tầng test — pg.Client một lần của phép đo backend còn sót ngay trước khi dừng container; kết nối đứt ở đó làm bộ test đỏ, " +
+      "không có tiến trình sản xuất nào để chết",
+  },
+};
 
 /** Vế ⒜ trên một văn bản: dòng của mỗi lời gọi createPool mà danh sách đối số không có thuộc tính `role` mang giá trị. */
 function createPoolThieuVai(ma: string): number[] {
@@ -354,6 +397,24 @@ describe("[S1.59 / khoản nợ 99] đường chạy SQL trên pool ứng dụng
     expect(thucTe, "một đường mới chạy SQL trên pool ngoài withTenant phải được khai kèm lý do").toEqual(khai);
   });
 
+  it("⒟ [S1.66 / lượt soi ngang 59b-2, lượt soi 60a-3] trong mỗi tệp mã sản xuất, số listener 'error' gắn bằng `.on(` không ít hơn số chỗ lấy client — `.connect()` trần và lời gọi của tên gán từ `.connect.bind(` — khuôn [fix I1]; tệp thiếu phải khai kèm lý do (một phép ĐẾM theo tệp, không ghép từng cặp)", () => {
+    const thieu: Record<string, number> = {};
+    let soNghe = 0;
+    for (const t of tep) {
+      const ma = docTep(t);
+      const lay = soLanLayClient(boChuThichVaChuoi(ma));
+      const nghe = soListenerLoi(ma);
+      soNghe += nghe;
+      if (lay > nghe) thieu[t] = lay - nghe;
+    }
+    expect(soNghe, "chống rỗng ruột: withTenant, migrate(), hai bộ dọn và phép kiểm lúc khởi động gắn listener").toBeGreaterThanOrEqual(5);
+    expect(
+      thieu,
+      "client mượn không listener 'error' làm tiến trình chết khi kết nối đứt (đo: lượt soi 59, bo-don-ngat-ket-noi.int.test.ts); " +
+        "một mục khai thừa là ngoại lệ chết",
+    ).toEqual(Object.fromEntries(Object.entries(LAY_KHONG_NGHE_DA_KHAI).map(([t, d]) => [t, d.so])));
+  });
+
   it("đối chứng trên văn bản giả: bộ dò thấy createPool thiếu vai hay đổi tên, COMMIT/END không chặn, nhánh TP096 thiếu; bỏ qua chú thích, chuỗi, phép so command tag, thân dollar-quote", () => {
     expect(createPoolThieuVai('const p = createPool(url, 2);\nconst q = createPool(url, 2, { role: "app_api" });')).toEqual([1]);
     expect(createPoolThieuVai("const q = createPool(url, 2, { role });")).toEqual([]);
@@ -396,5 +457,12 @@ describe("[S1.59 / khoản nợ 99] đường chạy SQL trên pool ứng dụng
     expect([...boChuThichVaChuoi('// pool.query(x)\nconst a = "pool.connect()";').matchAll(RE_CAU_TREN_POOL)]).toHaveLength(0);
     expect([...boChuThichVaChuoi("await auditPool.query<{ a: string }>(x);").matchAll(RE_CAU_TREN_POOL)]).toHaveLength(1);
     expect([...boChuThichVaChuoi("const kq = new pg.Client({ x });").matchAll(RE_DUNG_TRUC_TIEP)]).toHaveLength(1);
+
+    expect(soListenerLoi(`c.on("error", f);\n// c.on("error", g)\nconst s = "c.on('error', h)";`), "chú thích và chuỗi không tính").toBe(1);
+    expect(soListenerLoi("c.on('error', f); c.on(`error`, g);"), "ba kiểu nháy").toBe(2);
+    expect(soListenerLoi('c.once("error", f); c.off("error", f); c.on("close", f); c.on("errors", f);'), "once/off, sự kiện khác, tên dài hơn").toBe(0);
+    expect(soLanLayClient("const connectGoc = pool.connect.bind(pool);\nfunction lay() { return connectGoc().then((c) => c); }"), "[60a-3] lời gọi của tên gán từ .connect.bind").toBe(1);
+    expect(soLanLayClient("const c = await pool.connect();\nconst d = await pool.connect ();"), ".connect() trần, kể cả có khoảng trắng").toBe(2);
+    expect(soLanLayClient("const goc = pool.connect.bind(pool);\ngoc(cb);\nobj.goc();"), "gọi có đối số, hay qua thuộc tính, không tính").toBe(0);
   });
 });

@@ -154,7 +154,10 @@ function chuoiJsonbNhan(chuoi: string): boolean {
  *
  * Đi cây bằng VÒNG LẶP trên ngăn xếp tường minh: một hàm đệ quy ở đây ~~sẽ ném đúng cái `RangeError` nó được viết ra để tránh~~ có thể
  * ném `RangeError` trên một cây RẤT sâu — lượt soi 58 đo trên Node 24.18, ngoài worker: một phép đi cây đệ quy không chặn độ sâu chạy xong
- * 5 000 tầng và ném ở 20 000 tầng. Ba lớp bị loại, lớp nào cũng đã đo làm CẢ lượt mở thầu rollback:
+ * 5 000 tầng và ném ở 20 000 tầng. Ba lớp bị loại, ~~lớp nào cũng đã đo làm CẢ lượt mở thầu rollback:~~ **[S1.66 / lượt soi ngang 59c
+ * NHẸ-17]** mỗi lớp đã đo làm CẢ lượt mở thầu rollback ở ca đo của nó — lớp ⑷ chỉ ở độ sâu mà PostgreSQL từ chối (đo, một mảng lồng
+ * đứng riêng: 20 000 tầng ném `54001`, 5 000 tầng nhận — xem `DO_SAU_JSON_TOI_DA`), KHÔNG ở mọi độ sâu vượt biên 64: cây 65 tới 5 000
+ * tầng `jsonb` vẫn nhận, và hàm trả `null` cho nó là biên an toàn chứ không phải một lỗi đã đo:
  *   ⑴⑵ chuỗi hay KHOÁ mang U+0000 — ~~`JSON.stringify` xuất lại escape của nó,~~ `jsonb` từ chối escape của nó (`22P05`);
  *   ⑶ chuỗi hay khoá mang surrogate đơn lẻ — ~~`JSON.stringify` xuất escape,~~ `jsonb` từ chối escape của nó (`22P02`);
  *   ⑷ độ sâu vượt `DO_SAU_JSON_TOI_DA` — ~~`JSON.stringify` ném `RangeError`.~~ [S1.65] bộ phân tích JSON của PostgreSQL ném `54001`

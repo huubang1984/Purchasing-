@@ -1592,8 +1592,10 @@ describe("[sổ nợ 57] bộ dọn otp_rate_limits (044)", () => {
       await c.query("SELECT pg_catalog.set_config('app.org_id', $1, false)", [orgA]);
       // Pool GIẢ giao ra đúng client đã gắn ấy. `release` là no-op để vòng đời kết nối vẫn thuộc
       // về test — hàm dọn gọi `release()` trong `finally` của nó, và một client bị trả hai lần ném.
+      // [S1.66 / lượt soi ngang 59b-2] Bộ dọn gắn rồi gỡ listener 'error' trên client mượn (khuôn [fix I1]), nên pool giả giao đủ
+      // `on`/`off` của chính client thật — thiếu chúng thì bộ dọn ném TypeError trước phép kiểm mà ca này đo.
       const poolGia = {
-        connect: () => Promise.resolve({ query: c.query.bind(c), release: () => undefined }),
+        connect: () => Promise.resolve({ query: c.query.bind(c), release: () => undefined, on: c.on.bind(c), off: c.off.bind(c) }),
       } as unknown as pg.Pool;
       await expect(donOtpRateLimitsCu(poolGia)).rejects.toThrow(/ĐÃ gắn tổ chức/u);
     } finally {

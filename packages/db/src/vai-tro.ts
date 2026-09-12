@@ -42,8 +42,10 @@ export const TU_CHOI_KET_NOI_NHIEM =
   "ganVaiTroChoPool: kết nối lấy từ pool không sạch — kết nối bị huỷ, không giao cho người gọi";
 
 /**
- * [S1.59 / khoản nợ 99, lượt soi 52 NHẸ-2] Lỗi của lần lấy client gặp kết nối không sạch. Mang TÊN riêng vì mọi chỗ ghi log của tiến
- * trình (`dispatch`, runner outbox, bộ dọn) chỉ ghi `name` của lỗi — một `Error` trần thì kết nối nhiễm không phân biệt được với mọi lỗi
+ * [S1.59 / khoản nợ 99, lượt soi 52 NHẸ-2] Lỗi của lần lấy client gặp kết nối không sạch. Mang TÊN riêng vì ~~mọi chỗ ghi log của tiến
+ * trình (`dispatch`, runner outbox, bộ dọn) chỉ ghi `name` của lỗi~~ [S1.66 / lượt soi ngang 59b-1, lượt soi 60a-7] chỗ ghi log của
+ * `dispatch` chỉ ghi `name` của lỗi (cộng mã cố định của `TenantError`) — đường khách của nó từng gói lỗi này thành một 401 không log,
+ * sửa ở S1.66; runner outbox chỉ in `kind`/`reason`, không in tên lỗi — khoản 118 — nên một `Error` trần thì kết nối nhiễm không phân biệt được với mọi lỗi
  * lập trình khác. Không thử lại: kết nối nhiễm đã bị huỷ, và một lần thử lại im lặng xoá đúng tín hiệu mà lớp này tồn tại để phát ra.
  */
 export class KetNoiNhiemError extends Error {
@@ -75,14 +77,17 @@ const mocLuocDo = new WeakMap<pg.PoolClient, string>();
  *     CHẤT (origin hay local; on) — cùng quy tắc withTenant ⑵ — kể cả ở lần lấy đầu, khi giá trị xấu chỉ có thể đến từ MẶC ĐỊNH PHIÊN,
  *     và thông báo nói đúng nguồn ấy (lượt soi 52 NHẸ-1);
  *   - search path HIỆU LỰC (`current_schemas(false)`) so với mốc đọc ở lần lấy ĐẦU TIÊN của chính kết nối — tương đối, nên mặc định phiên
- *     hợp lệ khác mặc định máy chủ vẫn qua (test ghim). Đọc qua hàm chứ không qua tên GUC vì [INV-H21] chỉ cho `migrate.ts` nêu tên ấy
+ *     hợp lệ khác mặc định máy chủ vẫn qua (test ghim). [S1.66 / lượt soi ngang 59a-4] Phần CẤM thì bất biến mà chưa kiểm tuyệt đối —
+ *     không schema nào ngoài `"$user"`/`pg_catalog` đứng trước `public`, `pg_catalog` không đứng sau `public` — nên mặc định vai
+ *     `public, pg_catalog` đặt giữa hai lần deploy đi qua lớp này (đo) — khoản 109. Đọc qua hàm chứ không qua tên GUC vì [INV-H21] chỉ cho `migrate.ts` nêu tên ấy
  *     trong SQL — bản đầu đọc tên GUC và làm cổng ấy đỏ (lượt soi 52 NẶNG-1, đo) — và đây cũng là cách đọc của withTenant ⑵.
  * Lệch ⇒ NÉM `KetNoiNhiemError`, và `ganVaiTroChoPool` huỷ kết nối (`release(loi)`) — người gọi không bao giờ nhận nó; kết nối mới mở
  * thay, nên sửa xong mặc định phiên thì pool tự lành. Chỉ TÊN GUC vào thông báo.
  * RANH GIỚI, nói ra: lỗi rơi vào lần lấy KẾ TIẾP của kết nối ấy — có thể là một yêu cầu khác, không phải mã đã làm nhiễm; DDL đổi search
  * path hiệu lực của MỌI kết nối như nhau thì mỗi kết nối pool bị huỷ một lần, mỗi lần một lời gọi ném (test ghim), rồi kết nối mới lấy
  * mốc mới — cấu hình máy chủ nạp lại cũng vậy (suy luận, lượt soi 52 NHẸ-1, chưa đo), kể cả khi giá trị mới là giá trị xấu, vì mốc là
- * tương đối (nguồn cấu hình do hardening khoản 92 canh lúc deploy); một câu TỰ commit (`pool.query` ghi) chạy trọn trước khi lớp này thấy
+ * tương đối ~~(nguồn cấu hình do hardening khoản 92 canh lúc deploy)~~ [S1.66 / lượt soi ngang 59a-2, 59a-4: hardening canh nguồn mức
+ * database và catalog, KHÔNG canh hàng che mức vai hay mặc định vai đặt giữa hai lần deploy — đo, khoản 109]; một câu TỰ commit (`pool.query` ghi) chạy trọn trước khi lớp này thấy
  * gì — lớp chặn commit của mã ngoài withTenant là giao dịch tường minh kết thúc bằng khối DO của khoản 96 (⑴), census vế ⒝; GUC phiên
  * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.
  */
@@ -204,12 +209,20 @@ export function ganVaiTroChoPool(pool: pg.Pool, vai: VaiUngDung): pg.Pool {
 
   function layVaGanVai(): Promise<pg.PoolClient> {
     return connectGoc().then(async (client) => {
+      // [S1.66 / lượt soi 60a-3] Client mượn khỏi pool không còn listener 'error' nào (pg-pool gỡ listener rảnh), người gọi chỉ gắn
+      // listener của mình SAU lần lấy này, và `pg` phát 'error' khi kết nối kết thúc ngoài ý muốn — kể cả lúc không câu nào đang chạy.
+      // Hai vòng đi-về của `ganVaiChoClient` là cửa sổ ấy: không ai nghe thì tiến trình chết (đo: `vai-ngat-ket-noi.int.test.ts`). Gắn
+      // trong lúc gán vai, gỡ trước khi giao client hay huỷ nó — lỗi thật vẫn đi ra qua promise của câu lệnh.
+      const boQuaLoiKetNoi = (): void => {};
+      client.on("error", boQuaLoiKetNoi);
       try {
         await ganVaiChoClient(client, vaiDaXacThuc);
       } catch (loi) {
+        client.off("error", boQuaLoiKetNoi);
         client.release(loi as Error);
         throw loi;
       }
+      client.off("error", boQuaLoiKetNoi);
       return client;
     });
   }

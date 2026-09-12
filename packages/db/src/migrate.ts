@@ -30,6 +30,13 @@ export const TU_CHOI_DOI_VAI =
   "migrate() từ chối ghi migration: tệp kết thúc dưới một vai khác vai đã mở vòng migration đánh số";
 
 /**
+ * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
+ * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, bốn GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm.
+ */
+export const TU_CHOI_DOI_TRANG_THAI =
+  "migrate() từ chối ghi migration: tệp kết thúc với trạng thái phiên khác lúc mở vòng migration đánh số";
+
+/**
  * [S1.51 / khoản nợ 92 — lượt soi 44 NẶNG-3] `search_path` được xét theo TÍNH CHẤT, không theo một chuỗi.
  * Tính chất an ninh thật là *không schema nào của người khác đứng trước `public`* (khoản 78 — che tên); `"$user"` và
  * `pg_catalog` là hai tên duy nhất được phép đứng trước. Nên cụm đặt `search_path = 'public'` — cấu hình AN TOÀN HƠN mặc
@@ -528,7 +535,10 @@ export async function migrate(
     );
     if (gucGanSan[0]?.ten) {
       // Chỉ TÊN, không giá trị — thông điệp đi vào log deploy.
-      throw new Error(
+      // [S1.66 / lượt soi ngang 59a-1] HUỶ kết nối, như ba phép từ chối sau lượt sửa: một GUC đặt ở phạm vi PHIÊN trên chính kết nối
+      // này (mã của người gọi, hay một tệp của lượt trước) quay lại pool thì lần gọi kế trên pool một kết nối nhận lại đúng phiên ấy và
+      // bị từ chối MÃI (đo: lượt soi 59). Nguồn thật (ALTER DATABASE/ROLE … SET, ALTER SYSTEM) vẫn làm kết nối mới bị từ chối.
+      throw await tuChoiVaHuyPhien(
         `${TU_CHOI_GUC_SOM} — ${gucGanSan[0].ten}. ` +
           "Mọi migration đánh số sẽ chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, " +
           "options= trên chuỗi kết nối deploy). RESET rồi chạy lại trên kết nối mới (mục phán xét khoản 87 của hardening).",
@@ -590,13 +600,18 @@ export async function migrate(
     // không lỗi, COMMIT và ghi checksum — deploy sau không chạy lại (đo S1.57 trên hồ sơ N2: `999_…` được ghi là đã áp, hàng
     // không đổi). Cùng khuôn với phép từ chối sớm của khoản 87 ở trên. Lượt `truoc_vong` của hardening hỏi ĐÚNG câu ấy — một bản,
     // `CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI` — và RAISE SQLSTATE TP100 kèm danh sách bảng/vai/lệnh.
-    // Chặn sớm không lấy mất lối ra: hardening bỏ qua ở lượt này mọi dòng mà một migration chạy dưới chính vai ấy sửa được — thừa
+    // ~~Chặn sớm không lấy mất lối ra:~~ [S1.66 / lượt soi ngang 59c NẶNG-3] Chặn sớm không lấy mất lối ra mà `tu_sua_duoc` NHẬN RA:
+    // hardening bỏ qua ở lượt này mọi dòng mà một migration chạy dưới chính vai ấy sửa được — thừa
     // kế hay tự lấy được quyền chủ bảng, tự cắt được đường tới quyền — [S1.58 / khoản nợ 101] với dòng mà policy phụ thuộc hàm ngữ
     // cảnh lọc hết thì chỉ tính tự cắt được EXECUTE hay đường tới quyền, lượt soi 51 NẶNG-1 — (`tu_sua_duoc`; lượt soi 50 NẶNG-1: bản
     // đầu chặn cả chúng, một
-    // ngõ cụt) — nên dòng còn lại chỉ có lối ra ngoài tầm vai ấy (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy
+    // ngõ cụt) — nên dòng còn lại ~~chỉ có lối ra ngoài tầm vai ấy~~ [S1.66] chỉ có lối ra ngoài tầm vai ấy TRỪ chỗ `tu_sua_duoc` xấp xỉ về
+    // phía CHẶN (xem dưới) (gỡ đường tới quyền do người cấp, chủ bảng hay SUPERUSER; chạy
     // migrate() dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng thêm). Chủ thể CHỦ BẢNG cũng KHÔNG được hỏi trước:
     // lối ra của nó là chính một migration (ADR-028 §3). Test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
+    // [S1.66] `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều (hardening, lượt soi 51 INFO-8). Chiều bỏ qua — cắt một đường khi còn đường khác —
+    // chỉ trả dòng về lượt phán xét sau vòng. Chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng không được đọc — để
+    // một dòng tự sửa được qua đường ấy bị chặn trước vòng: ngõ cụt kiểu ADR-028 §3, CHƯA đo (khoản nợ 113).
     // Chỉ khi còn tệp chưa áp: không tệp nào chờ thì không backfill nào bị tiêu, và lượt phán xét sau vòng nêu TRỌN mọi mục thay
     // vì một phép từ chối sớm che các mục khác. Không huỷ kết nối ở phép từ chối này (khác hai phép ngay trên): câu hỏi đọc catalog
     // và mỗi giao dịch mới thấy catalog mới — phiên không mang trạng thái nào mà một lần sửa quyền cần kết nối mới mới thấy.
@@ -607,6 +622,53 @@ export async function migrate(
     const conTepChuaAp = daGhiTruocVong.length < fileDanhSo.length;
     /** [lượt soi 49 NHẸ-1] Vai đã mở vòng đánh số — mỗi tệp được so với nó trong chính giao dịch của tệp, trước khi ghi checksum. */
     let vaiMoVong: string | undefined;
+    /** [S1.66 / lượt soi ngang 59a-1] Trạng thái phiên đã mở vòng — chụp cùng câu, so cùng chỗ với vai. */
+    let phienMoVong: Readonly<Record<string, string | null>> | undefined;
+    /**
+     * [S1.66 / lượt soi ngang 59a-1] Vai và trạng thái phiên trong MỘT round-trip. Khoá của `phien` là tên đi vào thông điệp — tên,
+     * không bao giờ giá trị. `session_replication_role` và `row_security` đổi cách mọi câu sau chạy (replica bỏ trigger ENABLE thường
+     * và khoá ngoại; tắt RLS làm câu của vai thường báo lỗi); bốn GUC tenant/khách thu hẹp câu sau về một tổ chức; search path hiệu lực
+     * đổi cách tên trần phân giải — đọc qua hàm, cùng cách withTenant đọc. [S1.66 / lượt soi 60a-5] Và SỐ quan hệ trong lược đồ tạm
+     * của phiên: bảng tạm che tên bảng thật cho câu tên trần ở tệp sau, trong khi `current_schemas(false)` cố ý bỏ pg_temp ngầm, và
+     * `migrate()` không `DISCARD TEMP` giữa các tệp.
+     */
+    const docTrangThaiPhien = async (): Promise<{ readonly vai: string | undefined; readonly phien: Readonly<Record<string, string | null>> }> => {
+      const { rows } = await lockClient.query<{
+        vai: string;
+        vai_sao_chep: string;
+        rls: string;
+        luoc_do: string;
+        to_chuc: string | null;
+        phien_khach: string | null;
+        loi_moi: string | null;
+        goi_thau: string | null;
+        doi_tuong_tam: string;
+      }>(
+        "SELECT current_user AS vai, " +
+          "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
+          "pg_catalog.current_setting('row_security') AS rls, " +
+          "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do, " +
+          "NULLIF(pg_catalog.current_setting('app.org_id', true), '') AS to_chuc, " +
+          "NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') AS phien_khach, " +
+          "NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') AS loi_moi, " +
+          "NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau, " +
+          "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema())::pg_catalog.text AS doi_tuong_tam",
+      );
+      const h = rows[0];
+      return {
+        vai: h?.vai,
+        phien: {
+          session_replication_role: h?.vai_sao_chep ?? null,
+          row_security: h?.rls ?? null,
+          "search path hiệu lực": h?.luoc_do ?? null,
+          "app.org_id": h?.to_chuc ?? null,
+          "app.guest_session_id": h?.phien_khach ?? null,
+          "app.guest_invitation_id": h?.loi_moi ?? null,
+          "app.guest_rfq_id": h?.goi_thau ?? null,
+          "đối tượng tạm": h?.doi_tuong_tam ?? null,
+        },
+      };
+    };
     if (conTepChuaAp) {
       try {
         await chayFileLuonChay("truoc_vong");
@@ -629,7 +691,9 @@ export async function migrate(
         }
         throw loi;
       }
-      vaiMoVong = (await lockClient.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]?.vai;
+      const moVong = await docTrangThaiPhien();
+      vaiMoVong = moVong.vai;
+      phienMoVong = moVong.phien;
     }
 
     const applied: string[] = [];
@@ -667,13 +731,37 @@ export async function migrate(
         // cùng khối; còn khi tệp mở lại BEGIN sau SET ROLE thì BEGIN biến khối ngầm thành giao dịch tường minh và ROLLBACK gỡ được
         // (đo ở lượt đột biến S1.57 — bản đầu của test viết ngược lại). Ranh giới: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc
         // thì phép so không thấy — nó chỉ thấy trạng thái cuối tệp (test ghim).
-        const vaiCuoiTep = (await lockClient.query<{ vai: string }>("SELECT current_user AS vai")).rows[0]?.vai;
+        // [S1.66 / lượt soi ngang 59a-1] Cùng round-trip đọc cả trạng thái phiên — xem `docTrangThaiPhien` và phép so ngay dưới.
+        const cuoiTep = await docTrangThaiPhien();
+        const vaiCuoiTep = cuoiTep.vai;
         if (vaiCuoiTep !== vaiMoVong) {
           throw new Error(
             `${TU_CHOI_DOI_VAI} — ${file} kết thúc dưới vai ${String(vaiCuoiTep)} thay vì ${String(vaiMoVong)}. ` +
-              "Phần tệp chạy sau lần COMMIT cuối của chính nó (cả tệp, nếu tệp không tự COMMIT) đã ROLLBACK; tệp không được ghi " +
+              "Tệp không tự COMMIT thì cả tệp đã ROLLBACK; tệp tự COMMIT thì phần trước lần COMMIT ấy — và phần sau nó, nếu tệp không mở lại " +
+              "BEGIN — ĐÃ được commit, kiểm dữ liệu trước khi chạy lại; tệp không được ghi " +
               "checksum, không tệp sau nào chạy; kết nối bị huỷ. Lượt phán xét của hardening soi vai của kết nối deploy, không soi " +
               "vai mà phần cuối tệp đã chạy dưới nó. Trả vai ở cuối tệp (RESET ROLE), hoặc chạy migrate() dưới đúng vai mà tệp ấy cần.",
+          );
+        }
+        // [S1.66 / lượt soi ngang 59a-1] Trạng thái phiên do tệp để lại áp cho MỌI tệp sau cùng lượt và các lượt hardening sau vòng,
+        // rồi đi theo kết nối về pool. Đo (lượt soi 59, lược đồ thật, trước bản vá): tệp đặt replica ⇒ tệp sau chèn được một hàng treo
+        // khoá ngoại, cả ba tệp được ghi checksum, lượt phán xét sau vòng mới NÉM; tệp `set_config('app.org_id', …, false)` ⇒ tệp sau đọc
+        // đúng tổ chức ấy. Cùng khuôn phép so vai ngay trên: so NGAY TRONG giao dịch của tệp, trước khi ghi checksum; lệch ⇒ ROLLBACK, từ
+        // chối, huỷ kết nối (khối catch dưới). Ranh giới giữ nguyên của phép so vai: tệp đổi rồi TỰ trả lại trước khi kết thúc thì đi qua
+        // (test ghim); ~~phần tệp đứng trước lần COMMIT cuối của chính nó đã commit~~ [S1.66 / lượt soi 60a-4] tệp tự COMMIT thì phần trước
+        // lần COMMIT ấy, và phần sau nó nếu tệp không mở lại BEGIN, đã commit (test ghim). Phép so chạy TRONG giao dịch nên bắt cả trạng thái
+        // phạm vi giao dịch theo chiều chặt (test ghim). Trigger trên schema_migrations hay constraint trigger hoãn đổi được trạng thái SAU
+        // phép so — đối kháng, chưa đo.
+        const lechPhien = Object.keys(cuoiTep.phien).filter((ten) => cuoiTep.phien[ten] !== phienMoVong?.[ten]);
+        if (lechPhien.length > 0) {
+          throw new Error(
+            `${TU_CHOI_DOI_TRANG_THAI} — ${file} kết thúc với ${lechPhien.join(", ")} khác lúc mở vòng. ` +
+              "Trạng thái phạm vi phiên đi theo sang tệp sau và các lượt hardening sau vòng (replica: không trigger ENABLE thường, không " +
+              "khoá ngoại; GUC tenant đặt sẵn: chỉ chạm hàng của một tổ chức; bảng tạm: che tên bảng thật). Phép so chạy TRONG giao dịch " +
+              "của tệp, nên nó bắt cả trạng thái phạm vi giao dịch (SET LOCAL, set_config(…, true)) — thứ chết lúc COMMIT — theo chiều chặt. " +
+              "Tệp không tự COMMIT thì cả tệp đã ROLLBACK; tệp tự COMMIT thì phần trước lần COMMIT ấy — và phần sau nó, nếu tệp không mở " +
+              "lại BEGIN — ĐÃ được commit, kiểm dữ liệu trước khi chạy lại. Tệp không được ghi checksum, không tệp sau nào chạy; kết nối bị " +
+              "huỷ. Trả lại trạng thái ở cuối tệp (RESET, SET … TO DEFAULT, DROP bảng tạm), hoặc tách việc cần trạng thái ấy khỏi vòng migration.",
           );
         }
         await lockClient.query(

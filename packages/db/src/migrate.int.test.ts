@@ -4,7 +4,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { TU_CHOI_DOI_VAI, TU_CHOI_TRUOC_VONG, migrate } from "./migrate.js";
+import { TU_CHOI_DOI_TRANG_THAI, TU_CHOI_DOI_VAI, TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, migrate } from "./migrate.js";
 import { createPool } from "./pool.js";
 
 let db: TestDatabase;
@@ -375,8 +375,10 @@ describe("bộ chạy migration", () => {
   // dưới đây cố ý KHÔNG idempotent (INSERT trần) nên nó đếm được đúng số lượt.
   // [S1.57 / khoản nợ 100] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: khi còn tệp đánh số chưa áp, migrate() chạy thêm lượt `truoc_vong`
   // (hỏi chủ thể "vai chạy migration" của mục 94 TRƯỚC vòng đánh số) — lần gọi đầu có 080 chờ nên BỐN lượt; lần gọi hai không
-  // tệp nào chờ nên vẫn BA. Tên test giữ nguyên văn cũ vì nó là bằng chứng kiểm toán; con số đúng nằm ở khẳng định.
-  it("[fix I3 — cơ chế chung] file *.always.sql chạy lại BA lượt mỗi lần migrate(), không ghi vào schema_migrations", async () => {
+  // tệp nào chờ nên vẫn BA. ~~Tên test giữ nguyên văn cũ vì nó là bằng chứng kiểm toán; con số đúng nằm ở khẳng định.~~
+  // [S1.66 / lượt soi ngang 59c NHẸ-10] Tên test gạch tại chỗ theo quy ước của kho — nguyên văn cũ vẫn đọc được trong dấu gạch (tiền lệ
+  // `db/rls-coverage.int.test.ts`, test "[INV-F1] ĐO: RESTRICTIVE USING (false) …").
+  it("[fix I3 — cơ chế chung] file *.always.sql chạy lại ~~BA lượt mỗi lần migrate()~~ [S1.57, gạch ở S1.66] BỐN lượt khi còn tệp chờ, BA khi không, không ghi vào schema_migrations", async () => {
     const dir = migrationDir({
       "080_binh_thuong.sql": "CREATE TABLE mig_j (id int);",
       "hardening_gia_lap.always.sql":
@@ -407,7 +409,7 @@ describe("bộ chạy migration", () => {
   // SAU. Không có khẳng định này thì hai lượt có thể bị đảo hoặc gộp mà không test nào đỏ —
   // trong khi toàn bộ giá trị của thiết kế nằm ở đúng thứ tự đó: 001 GRANT cho app_api nên
   // lượt trước-vòng phải tồn tại, và chỉ lượt sau-vòng mới NHÌN THẤY migration vừa đưa vào.
-  it("[vòng fix 1 — I3] always.sql chạy quanh vòng migration đánh số theo đúng thứ tự sua → (đánh số) → sua → phan_xet", async () => {
+  it("[vòng fix 1 — I3] always.sql chạy quanh vòng migration đánh số theo đúng thứ tự ~~sua → (đánh số) → sua → phan_xet~~ [S1.57, gạch ở S1.66] sua → truoc_vong (khi còn tệp chờ) → (đánh số) → sua → phan_xet", async () => {
     const dir = migrationDir({
       "081_ghi_dau.sql": "INSERT INTO mig_k_nhat_ky (buoc) VALUES ('danh_so');",
       "nhat_ky.always.sql":
@@ -640,6 +642,220 @@ describe("bộ chạy migration", () => {
 });
 
 // =====================================================================================
+// [S1.66 / lượt soi ngang 59a-1] TRẠNG THÁI PHIÊN DO MỘT TỆP ĐẶT ĐI THEO SANG CÁC TỆP SAU
+//
+// Phép so cuối tệp của S1.57 chỉ so `current_user`. Đo trên PostgreSQL 16 (bản nháp của lượt soi 59, lược đồ thật, trước bản vá):
+// tệp 998 `SET session_replication_role = replica` ⇒ tệp 999 chèn được một hàng con treo khoá ngoại, CẢ BA tệp được ghi
+// checksum, lượt phán xét sau vòng mới NÉM; lần gọi kế trên pool một kết nối nhận lại đúng phiên ấy và `TU_CHOI_GUC_SOM` lặp mãi.
+// Tệp 998 `set_config('app.org_id', …, false)` ⇒ tệp 999 đọc được đúng tổ chức ấy — dưới hồ sơ N3 là "chỉ sửa hàng của tổ chức B".
+// migrate() nay chụp CÙNG LÚC với vai: `session_replication_role`, `row_security`, bốn GUC tenant/khách, search path hiệu lực —
+// và so ngay trong giao dịch của tệp, trước khi ghi checksum. Lệch ⇒ ROLLBACK, từ chối, huỷ kết nối.
+// =====================================================================================
+describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với trạng thái phiên khác lúc mở vòng đánh số", () => {
+  const daGhi = async (tep: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0) > 0;
+  const coBang = async (ten: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = $1", [ten])).rowCount ?? 0) > 0;
+  const loiCua = (p: Promise<unknown>): Promise<Error | null> =>
+    p.then(
+      () => null,
+      (e: Error) => e,
+    );
+
+  beforeAll(async () => {
+    await migrate(db.pool, migrationDir({})); // bảo đảm schema_migrations tồn tại
+  });
+
+  it("replica đặt ở tệp giữa ⇒ TỪ CHỐI ngay ở tệp ấy: tệp ROLLBACK, không dòng schema_migrations, tệp sau KHÔNG chạy nên không hàng treo khoá ngoại; kết nối kế của pool max 1 về origin", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "130_zz_bang_59.sql": "CREATE TABLE mig_59_cha (id int PRIMARY KEY); CREATE TABLE mig_59_con (cha_id int REFERENCES mig_59_cha (id));",
+        "131_zz_replica_59.sql": "SET session_replication_role = replica;",
+        "132_zz_mo_coi_59.sql": "INSERT INTO mig_59_con VALUES (42);",
+      });
+      const loi = await loiCua(migrate(pool1, dir));
+      expect(loi, "bản trước bản vá: ba tệp đi qua và hàng treo khoá ngoại được ghi dưới replica").not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain("131_zz_replica_59.sql");
+      expect(loi!.message).toContain("session_replication_role");
+      expect(await daGhi("130_zz_bang_59.sql")).toBe(true);
+      expect(await daGhi("131_zz_replica_59.sql")).toBe(false);
+      expect(await daGhi("132_zz_mo_coi_59.sql")).toBe(false);
+      expect((await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM mig_59_con")).rows[0]!.n).toBe(0);
+      const { rows } = await pool1.query<{ v: string }>("SELECT pg_catalog.current_setting('session_replication_role') AS v");
+      expect(rows[0]!.v).toBe("origin");
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("set_config('app.org_id', …, false) ở tệp giữa ⇒ TỪ CHỐI ở tệp ấy, nêu TÊN app.org_id không nêu giá trị; tệp sau không chạy dưới tổ chức ấy", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "133_zz_org_59.sql": "SELECT pg_catalog.set_config('app.org_id', '00000000-0000-4000-8000-00000000059a', false);",
+        "134_zz_doc_59.sql": "CREATE TABLE mig_59_thay AS SELECT pg_catalog.current_setting('app.org_id', true) AS gia_tri;",
+      });
+      const loi = await loiCua(migrate(pool1, dir));
+      expect(loi, "bản trước bản vá: tệp 134 đọc được tổ chức do tệp 133 đặt").not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain("133_zz_org_59.sql");
+      expect(loi!.message).toContain("app.org_id");
+      expect(loi!.message).not.toContain("00000000-0000-4000-8000-00000000059a");
+      expect(await daGhi("133_zz_org_59.sql")).toBe(false);
+      expect(await coBang("mig_59_thay"), "tệp sau không được chạy").toBe(false);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("row_security = off, hay search path hiệu lực đổi, ở cuối tệp ⇒ TỪ CHỐI, nêu đúng tên, không dòng schema_migrations", async () => {
+    for (const [tep, sql, ten] of [
+      ["135_zz_rls_59.sql", "SET row_security = off;", "row_security"],
+      ["136_zz_sp_59.sql", "SET search_path = pg_catalog, public;", "search path hiệu lực"],
+    ] as const) {
+      const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+      try {
+        const loi = await loiCua(migrate(pool1, migrationDir({ [tep]: sql })));
+        expect(loi, tep).not.toBeNull();
+        expect(loi!.message, tep).toContain(TU_CHOI_DOI_TRANG_THAI);
+        expect(loi!.message, tep).toContain(ten);
+        expect(await daGhi(tep), tep).toBe(false);
+      } finally {
+        await pool1.end();
+      }
+    }
+  });
+
+  it("ba GUC khách đặt ở phạm vi phiên cuối tệp ⇒ TỪ CHỐI, nêu đúng TÊN không nêu giá trị, không dòng schema_migrations", async () => {
+    const giaTri = "00000000-0000-4000-8000-00000000059b";
+    for (const [tep, ten] of [
+      ["139_zz_khach_phien_59.sql", "app.guest_session_id"],
+      ["140_zz_khach_loi_moi_59.sql", "app.guest_invitation_id"],
+      ["141_zz_khach_goi_thau_59.sql", "app.guest_rfq_id"],
+    ] as const) {
+      const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+      try {
+        const loi = await loiCua(migrate(pool1, migrationDir({ [tep]: `SELECT pg_catalog.set_config('${ten}', '${giaTri}', false);` })));
+        expect(loi, tep).not.toBeNull();
+        expect(loi!.message, tep).toContain(TU_CHOI_DOI_TRANG_THAI);
+        expect(loi!.message, tep).toContain(ten);
+        expect(loi!.message, tep).not.toContain(giaTri);
+        expect(await daGhi(tep), tep).toBe(false);
+      } finally {
+        await pool1.end();
+      }
+    }
+  });
+
+  it("ranh giới ghim: tệp đổi trạng thái rồi TỰ trả lại trước khi kết thúc thì đi qua — phép so chỉ thấy trạng thái cuối tệp", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "137_zz_tra_lai_59.sql":
+          "SET LOCAL session_replication_role = replica; CREATE TABLE mig_59_tra (x int); SET LOCAL session_replication_role = origin;",
+      });
+      expect(await migrate(pool1, dir)).toEqual(["137_zz_tra_lai_59.sql"]);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("phiên deploy nhiễm replica TRƯỚC lượt sửa ⇒ TU_CHOI_GUC_SOM và HUỶ kết nối — lần gọi kế trên pool max 1 mở kết nối sạch và chạy được, không từ chối mãi", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const c = await pool1.connect();
+      await c.query("SET session_replication_role = replica");
+      c.release();
+      const dir = migrationDir({ "138_zz_sau_nhiem_59.sql": "CREATE TABLE mig_59_sau (x int);" });
+      const loi = await loiCua(migrate(pool1, dir));
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_GUC_SOM);
+      const { rows } = await pool1.query<{ v: string }>("SELECT pg_catalog.current_setting('session_replication_role') AS v");
+      expect(rows[0]!.v, "kết nối nhiễm phải bị huỷ, không quay về pool").toBe("origin");
+      expect(await migrate(pool1, dir)).toEqual(["138_zz_sau_nhiem_59.sql"]);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("[lượt soi 60a-4 ⒜] tệp tự COMMIT rồi đặt replica ⇒ TỪ CHỐI, và thông điệp nói đúng: phần sau lần COMMIT ấy ĐÃ được commit — hàng treo khoá ngoại còn đó", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const tep = "142_zz_commit_giua_60.sql";
+      const loi = await loiCua(
+        migrate(
+          pool1,
+          migrationDir({
+            [tep]:
+              "CREATE TABLE mig_60_cha (id int PRIMARY KEY); CREATE TABLE mig_60_con (cha_id int REFERENCES mig_60_cha (id)); " +
+              "COMMIT; SET session_replication_role = replica; INSERT INTO mig_60_con VALUES (7);",
+          }),
+        ),
+      );
+      expect(loi, tep).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain("session_replication_role");
+      expect(loi!.message, "thông điệp không được nói phần sau COMMIT đã rollback").toContain("ĐÃ được commit");
+      expect(await daGhi(tep)).toBe(false);
+      expect(
+        (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM mig_60_con")).rows[0]!.n,
+        "phần sau COMMIT chạy trong khối ngầm của câu nhiều lệnh và được commit cùng khối",
+      ).toBe(1);
+      const { rows } = await pool1.query<{ v: string }>("SELECT pg_catalog.current_setting('session_replication_role') AS v");
+      expect(rows[0]!.v, "kết nối nhiễm bị huỷ").toBe("origin");
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("[lượt soi 60a-4 ⒝] set_config('app.org_id', …, true) ở cuối tệp ⇒ TỪ CHỐI theo chiều chặt dù trạng thái phạm vi giao dịch chết lúc COMMIT; thông điệp nói ra chiều ấy", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const tep = "143_zz_org_cuc_bo_60.sql";
+      const loi = await loiCua(
+        migrate(pool1, migrationDir({ [tep]: "SELECT pg_catalog.set_config('app.org_id', '00000000-0000-4000-8000-00000000060b', true);" })),
+      );
+      expect(loi, tep).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain("app.org_id");
+      expect(loi!.message).toContain("phạm vi giao dịch");
+      expect(loi!.message).not.toContain("00000000-0000-4000-8000-00000000060b");
+      expect(await daGhi(tep)).toBe(false);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it("[lượt soi 60a-5] bảng TẠM tạo ở một tệp che tên bảng thật cho tệp sau ⇒ TỪ CHỐI ở tệp ấy, nêu trục đối tượng tạm; tệp sau không chạy, bảng thật giữ nguyên", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const loi = await loiCua(
+        migrate(
+          pool1,
+          migrationDir({
+            "145_zz_bang_that_60.sql": "CREATE TABLE mig_60_t (x int); INSERT INTO mig_60_t VALUES (1);",
+            "146_zz_bang_tam_60.sql": "CREATE TEMP TABLE mig_60_t (x int);",
+            "147_zz_ghi_ten_tran_60.sql": "UPDATE mig_60_t SET x = 2;",
+          }),
+        ),
+      );
+      expect(loi, "bản trước bản vá: cả ba tệp được ghi, câu UPDATE tên trần trúng bảng tạm").not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain("146_zz_bang_tam_60.sql");
+      expect(loi!.message).toContain("đối tượng tạm");
+      expect(await daGhi("145_zz_bang_that_60.sql")).toBe(true);
+      expect(await daGhi("146_zz_bang_tam_60.sql")).toBe(false);
+      expect(await daGhi("147_zz_ghi_ten_tran_60.sql")).toBe(false);
+      expect((await db.pool.query<{ x: number }>("SELECT x FROM public.mig_60_t")).rows.map((r) => r.x)).toEqual([1]);
+    } finally {
+      await pool1.end();
+    }
+  });
+});
+
+// =====================================================================================
 // [S1.57 / khoản nợ 100 — lượt soi 49 NHẸ-1] MỘT TỆP ĐỔI VAI THÌ LƯỢT PHÁN XÉT SOI NHẦM VAI
 //
 // Lượt phán xét của hardening (mục 94, chủ thể "vai chạy migration") soi `current_user` của phiên deploy. Một tệp `SET ROLE x`
@@ -723,7 +939,8 @@ describe("[S1.57 / khoản nợ 100] tệp migration kết thúc dưới vai kh�
       expect(loi).not.toBeNull();
       expect(loi!.message).toContain(TU_CHOI_DOI_VAI);
       expect(await daGhi("123_doi_vai_ngoai_giao_dich.sql")).toBe(false);
-      // [lượt soi 50 NHẸ-4 ⑴] ROLLBACK chỉ lùi được phần sau lần COMMIT cuối của chính tệp — thông điệp nói đúng như vậy.
+      // [lượt soi 50 NHẸ-4 ⑴] ROLLBACK chỉ lùi được phần sau lần COMMIT cuối của chính tệp~~ — thông điệp nói đúng như vậy~~ [S1.66 / lượt
+      // soi 60a-4] — và cả phần ấy cũng không, nếu tệp không mở lại BEGIN (test ⒜ của describe S1.66). Thông điệp nay nói đúng cả hai ca.
       expect(await coBang("mig_v100e"), "phần trước COMMIT của tệp đã commit — ROLLBACK không lùi được nó").toBe(true);
       const { rows } = await pool1.query<{ vai: string }>("SELECT current_user AS vai");
       expect(rows[0]!.vai, "kết nối mang vai lạ phải bị huỷ, không quay về pool").toBe(vaiGoc);

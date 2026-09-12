@@ -129,9 +129,14 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       // BYPASSRLS, CREATEROLE, thành viên app_unseal) — SET ROLE không giấu được một RESET ROLE.
       for (const p of [pool, auditPool]) {
         const c = await p.connect();
+        // [S1.66 / lượt soi ngang 59b-2] Cùng khuôn [fix I1]: một client mượn không có listener 'error' nào, nên kết nối đứt giữa phép
+        // kiểm làm tiến trình chết với một thông điệp không nói gì. Census vế ⒟ đòi listener ở mọi chỗ lấy client.
+        const boQuaLoiKetNoi = (): void => {};
+        c.on("error", boQuaLoiKetNoi);
         try {
           await khangDinhPhienDangNhapUngDung(c, "app_api");
         } finally {
+          c.off("error", boQuaLoiKetNoi);
           c.release();
         }
       }

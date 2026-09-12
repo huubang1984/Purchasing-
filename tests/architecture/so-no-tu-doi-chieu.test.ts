@@ -351,7 +351,8 @@ const DON_VI: Record<string, number> = {
 /** Đọc số đếm tiếng Việt 1–99. Trả `null` khi không đọc được — người gọi phải xử ca ấy. */
 export function docSoTiengViet(chu: string): number | null {
   const t = chu.trim().toLowerCase().split(/\s+/);
-  if (t.length === 1) return DON_VI[t[0]!] ?? null;
+  // [S1.66 / lượt soi ngang 59c NHẸ-5] "mười" đứng một mình là 10 — đoạn đếm dưới dòng tổng kết khai đúng dạng ấy ("**mười** thì có").
+  if (t.length === 1) return t[0] === "mười" ? 10 : (DON_VI[t[0]!] ?? null);
   if (t[0] === "mười") {
     const dv = DON_VI[t[1]!];
     return t.length === 2 && dv !== undefined ? 10 + dv : null;
@@ -670,12 +671,130 @@ export function viPhamConTroTaiLieu(van: string, tieuDe: string, nhan: string): 
   return loi;
 }
 
+// ---- P11 · P12 — lượt soi ngang 59c ------------------------------------------------------------
+
+/**
+ * Số của mọi mục nhật ký đánh số của STATE: dòng mở bằng `N. ` trong khối `## Hành động tiếp theo`. [S1.66 / lượt soi 60a-8] Bản đầu
+ * đòi `N. **[`, mà mục 1–13 viết không nhãn vòng (`4. Tiếp cận …`, và `10.` mở bằng một đoạn đã gạch) nên con trỏ tới chúng đỏ oan. Khoanh theo KHỐI thay vì
+ * theo hình dạng dòng: các danh sách đánh số khác của STATE đứng ngoài khối ấy. Không thấy khối thì tập rỗng — mọi con trỏ đỏ.
+ */
+function mucNhatKy(state: string): ReadonlySet<number> {
+  const dau = state.indexOf("\n## Hành động tiếp theo");
+  if (dau < 0) return new Set();
+  const sau = state.indexOf("\n## ", dau + 1);
+  const khoi = state.slice(dau, sau < 0 ? state.length : sau);
+  return new Set([...khoi.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1])));
+}
+
+/** Tên mọi mục biên bản vòng của `evidence/security-reviews.md`: đầu mục `# §S1.xx`. */
+function mucBienBanVong(securityReviews: string): ReadonlySet<string> {
+  return new Set([...securityReviews.matchAll(/^# §(S\d+\.\d+)(?!\d)/gm)].map((m) => m[1]!));
+}
+
+/**
+ * [S1.66 / lượt soi ngang 59c NẶNG-1] CON TRỎ TRONG THÂN HÀNG SỔ NỢ PHẢI TRỎ TỚI MỘT THỨ CÓ THẬT.
+ *
+ * P4 giải con trỏ TỆP ở cột con trỏ; nó không đọc thân. Mười lăm hàng (92–107) dẫn "(biên bản 66…80)" cho lời "N đột biến đỏ cô
+ * lập" trong khi nhật ký đánh số của STATE dừng ở mục 65 — biên bản của S1.51–S1.65 chỉ nằm ở `evidence/security-reviews.md`. Người
+ * soi 59c đếm được, không cổng nào thấy suốt mười lăm vòng. Hai dạng con trỏ, đọc trên phần CÒN HIỆU LỰC của thân (bỏ đoạn mã và
+ * đoạn đã gạch): "biên bản N" phải là một mục nhật ký đánh số của STATE; "§S1.xx" phải là một đầu mục của security-reviews.
+ */
+export function viPhamConTroBienBan(state: string, securityReviews: string): readonly string[] {
+  const nhatKy = mucNhatKy(state);
+  const bienBan = mucBienBanVong(securityReviews);
+  const loi: string[] = [];
+  for (const d of docCacDong(state)) {
+    const song = conHieuLuc(d.than);
+    for (const m of song.matchAll(/biên bản (\d+)/g)) {
+      if (!nhatKy.has(Number(m[1]))) {
+        loi.push(`khoản ${d.so} (dòng ${d.dongTep}): "biên bản ${m[1]}" không trỏ tới mục nhật ký đánh số nào của docs/STATE.md`);
+      }
+    }
+    for (const m of song.matchAll(/§(S\d+\.\d+)(?!\d)/g)) {
+      if (!bienBan.has(m[1]!)) {
+        loi.push(`khoản ${d.so} (dòng ${d.dongTep}): "§${m[1]}" không phải đầu mục nào của evidence/security-reviews.md`);
+      }
+    }
+  }
+  return loi;
+}
+
+interface DoanDem {
+  readonly chuTong: string;
+  readonly chuNgoaiMa: string;
+  readonly ngoac: string;
+  readonly chuCoMa: string;
+}
+
+/**
+ * Đoạn đếm ngay dưới dòng tổng kết — "Trong **‹tổng›** khoản ấy, **‹ngoài mã›** không phải việc của mã nguồn (‹danh sách›), và
+ * **‹có mã›** thì có …" — đọc trên phần CÒN HIỆU LỰC (bỏ lịch sử đã gạch). `null` khi không đọc được hình dạng ấy.
+ */
+function docDoanDem(state: string): DoanDem | null {
+  const { dong } = khoiSoNo(state);
+  const i = dong.findIndex((l) => l.startsWith(NHAN_TONG_KET));
+  if (i < 0) return null;
+  const doan: string[] = [];
+  for (let k = i + 1; k < dong.length; k += 1) {
+    if (dong[k]!.trim() === "") {
+      if (doan.length > 0) break;
+      continue;
+    }
+    doan.push(dong[k]!);
+  }
+  const m = /Trong\s+\*\*([^*]+)\*\*\s+khoản ấy,\s*\*\*([^*]+)\*\*\s+không phải việc của mã nguồn\s*\(([\s\S]*?)\),\s*và\s+\*\*([^*]+)\*\*\s+thì có/u.exec(
+    conHieuLuc(doan.join("\n")),
+  );
+  return m === null ? null : { chuTong: m[1]!.trim(), chuNgoaiMa: m[2]!.trim(), ngoac: m[3]!, chuCoMa: m[4]!.trim() };
+}
+
+/**
+ * [S1.66 / lượt soi ngang 59c NHẸ-5] ĐOẠN ĐẾM DƯỚI DÒNG TỔNG KẾT SUY TỪ SỔ, KHÔNG CHÉP TAY.
+ *
+ * Đoạn này đứng yên ở "mười lăm … mười một" từ S1.49 tới S1.64 trong khi số khoản mở đi 15 → 16 → 15 → 16 → 15 → 14 (lịch sử lời
+ * khai của `Handoff.md` ghi đủ từng nấc), và lời tự bắt của S1.65 còn nói sai phạm vi thiu. P3 đối chiếu dòng tổng kết, không đọc
+ * đoạn này. Ba con số phải đúng: tổng = số khoản ở dòng tổng kết; ngoài mã = số khoản ĐANG MỞ được kể trong ngoặc (số của khoản đã
+ * đóng — "81 đã quyết" — và nhãn vòng không tính); có mã = tổng − ngoài mã.
+ */
+export function viPhamDoanDem(state: string): readonly string[] {
+  const d = docDoanDem(state);
+  if (d === null) {
+    return ['không đọc được đoạn đếm "Trong **…** khoản ấy, **…** không phải việc của mã nguồn (…), và **…** thì có" dưới dòng tổng kết'];
+  }
+  const { dong } = khoiSoNo(state);
+  const tongKet = dong.find((l) => l.startsWith(NHAN_TONG_KET)) ?? "";
+  const mo = new Set(
+    tongKet
+      .slice(NHAN_TONG_KET.length)
+      .split("·")
+      .map((x) => Number(x.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0),
+  );
+  const ngoaiMaThat = new Set(
+    // Nhãn vòng (`[S1.37]`) không lọt vào phép đếm: chữ số của nó dính dấu chấm, và lookaround của mẫu số loại đúng những chữ số ấy.
+    // Bản đầu còn gỡ nhãn bằng một `replace` trước — đột biến bỏ bước ấy xanh ở mọi test (đo, lượt đột biến S1.66): không chịu lực, đã bỏ.
+    [...d.ngoac.matchAll(/(?<![\d.])(\d{1,3})(?![\d.])/g)].map((m) => Number(m[1])).filter((n) => mo.has(n)),
+  );
+  const tong = docSoTiengViet(d.chuTong);
+  const ngoaiMa = docSoTiengViet(d.chuNgoaiMa);
+  const coMa = docSoTiengViet(d.chuCoMa);
+  if (tong === null || ngoaiMa === null || coMa === null) {
+    return [`không đọc được số đếm của đoạn đếm: ${JSON.stringify([d.chuTong, d.chuNgoaiMa, d.chuCoMa])}`];
+  }
+  const loi: string[] = [];
+  if (tong !== mo.size) loi.push(`đoạn đếm khai ${tong} khoản, dòng tổng kết có ${mo.size}`);
+  if (ngoaiMa !== ngoaiMaThat.size) loi.push(`đoạn đếm khai ${ngoaiMa} khoản ngoài mã, ngoặc kể ${ngoaiMaThat.size} khoản đang mở`);
+  if (coMa !== tong - ngoaiMa) loi.push(`đoạn đếm khai ${coMa} khoản có hình dạng mã, phải là ${tong} − ${ngoaiMa} = ${tong - ngoaiMa}`);
+  return loi;
+}
+
 // ==============================================================================================
 
 const STATE = docTep("docs/STATE.md");
 const QUYET_DINH = docTep("docs/DECISIONS.md");
 const TEST_PLAN = docTep("docs/TEST-PLAN.md");
 const HANDOFF = docTep("Handoff.md");
+const SECURITY_REVIEWS = docTep("evidence/security-reviews.md");
 const TIEU_DE_DOC_GI = "## 13. Đọc gì, theo thứ tự";
 
 /** Đổi đúng MỘT chỗ trong văn bản thật, và ném nếu chỗ ấy không có — đột biến phải TRÚNG. */
@@ -820,13 +939,14 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   it("P5 — bộ đọc số đếm tiếng Việt đọc đúng cả bốn dạng đã từng xuất hiện ở STATE", () => {
     expect([
       docSoTiengViet("chín"),
+      docSoTiengViet("mười"),
       docSoTiengViet("mười hai"),
       docSoTiengViet("mười chín"),
       docSoTiengViet("hai mươi tám"),
       docSoTiengViet("hai mươi lăm"),
       docSoTiengViet("ba mươi"),
       docSoTiengViet("không phải số"),
-    ]).toEqual([9, 12, 19, 28, 25, 30, null]);
+    ]).toEqual([9, 10, 12, 19, 28, 25, 30, null]);
   });
 
   // ---- khoản nợ 61 — `Handoff.md` vào tầm -----------------------------------------------------
@@ -948,5 +1068,73 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   it("P10 đột biến — đổi tên mục §13 thì NÉM, không xanh trên một khối rỗng", () => {
     const hong = dotBien(HANDOFF, TIEU_DE_DOC_GI, "## 13. Doc gi theo thu tu");
     expect(() => viPhamConTroTaiLieu(hong, TIEU_DE_DOC_GI, "Handoff.md")).toThrow(/không tìm thấy/);
+  });
+
+  // ---- lượt soi ngang 59c -----------------------------------------------------------------------
+
+  it("P11 — con trỏ \"biên bản N\" và \"§S1.xx\" trong thân sổ nợ trỏ tới một mục có thật", () => {
+    expect(viPhamConTroBienBan(STATE, SECURITY_REVIEWS)).toEqual([]);
+  });
+
+  it("P11 đột biến — con trỏ tới một mục nhật ký không tồn tại, hay tới một §S1.xx không có đầu mục, thì ĐỎ", () => {
+    const cuoi = docCacDong(STATE).at(-1)!;
+    const soLon = Math.max(...mucNhatKy(STATE)) + 1;
+    const hong = dotBien(STATE, `| ${cuoi.so} | ${cuoi.than} |`, `| ${cuoi.so} | ${cuoi.than} (biên bản ${soLon}; §S9.99) |`);
+    const loi = viPhamConTroBienBan(hong, SECURITY_REVIEWS);
+    expect(loi).toHaveLength(2);
+    expect(loi.join(" ")).toContain(`"biên bản ${soLon}"`);
+    expect(loi.join(" ")).toContain('"§S9.99"');
+  });
+
+  it("P11 — con trỏ gãy đã GẠCH thì không đỏ: đoạn gạch là nguyên văn đã bị bác", () => {
+    const cuoi = docCacDong(STATE).at(-1)!;
+    const hong = dotBien(STATE, `| ${cuoi.so} | ${cuoi.than} |`, `| ${cuoi.so} | ${cuoi.than} ~~(biên bản 999; §S9.99)~~ |`);
+    expect(viPhamConTroBienBan(hong, SECURITY_REVIEWS)).toEqual([]);
+  });
+
+  it("P11 — [lượt soi 60a-8] mục nhật ký viết không nhãn vòng (mục 4, mục 10) cũng là mục có thật: con trỏ tới chúng không đỏ", () => {
+    const cuoi = docCacDong(STATE).at(-1)!;
+    const hong = dotBien(STATE, `| ${cuoi.so} | ${cuoi.than} |`, `| ${cuoi.so} | ${cuoi.than} (biên bản 4; biên bản 10) |`);
+    expect(viPhamConTroBienBan(hong, SECURITY_REVIEWS)).toEqual([]);
+  });
+
+  it("P11 — [lượt soi 60a-8, khối] dòng đánh số NGOÀI khối `## Hành động tiếp theo`, trước hay sau khối, không phải mục nhật ký: con trỏ tới nó ĐỎ", () => {
+    // Đối chứng cho phạm vi khối của `mucNhatKy`. Đo (lượt đột biến S1.66): trước ca này, bỏ khoanh khối, bỏ mép trước hay bỏ mép sau
+    // của khối đều sống — các test P11 khác chỉ dùng số có trong khối, hay số lớn hơn mọi số hàm đọc được.
+    const cuoi = docCacDong(STATE).at(-1)!;
+    const lon = Math.max(...mucNhatKy(STATE));
+    const truoc = lon + 1000;
+    const sau = lon + 2000;
+    let hong = dotBien(STATE, "\n## Trạng thái triển khai\n", `\n## Trạng thái triển khai\n\n${truoc}. dòng giả trước khối\n`);
+    hong = dotBien(hong, "\n## Tham chiếu\n", `\n## Tham chiếu\n\n${sau}. dòng giả sau khối\n`);
+    hong = dotBien(hong, `| ${cuoi.so} | ${cuoi.than} |`, `| ${cuoi.so} | ${cuoi.than} (biên bản ${truoc}; biên bản ${sau}) |`);
+    const loi = viPhamConTroBienBan(hong, SECURITY_REVIEWS);
+    expect(loi).toHaveLength(2);
+    expect(loi.join(" ")).toContain(`"biên bản ${truoc}"`);
+    expect(loi.join(" ")).toContain(`"biên bản ${sau}"`);
+  });
+
+  it("P12 — đoạn đếm dưới dòng tổng kết: tổng, số ngoài mã, số có mã suy từ sổ", () => {
+    expect(viPhamDoanDem(STATE)).toEqual([]);
+  });
+
+  it("P12 đột biến — con số tổng của đoạn đếm không theo dòng tổng kết thì ĐỎ (đúng hình dạng thiu S1.49–S1.64)", () => {
+    const d = docDoanDem(STATE)!;
+    const hong = dotBien(STATE, `**${d.chuTong}** khoản ấy`, `**${d.chuTong === "một" ? "hai" : "một"}** khoản ấy`);
+    // Đòi ĐÚNG thông điệp của vế tổng: lệch tổng cũng làm vế "có mã" lệch và phát ra "đoạn đếm khai …", nên khẳng định cũ chỉ đòi
+    // chuỗi chung ấy thì đột biến tắt vế tổng vẫn xanh (đo, lượt đột biến S1.66).
+    expect(viPhamDoanDem(hong).join(" ")).toContain("khoản, dòng tổng kết có");
+  });
+
+  it("P12 đột biến — số ngoài mã lệch với ngoặc, hay số có mã không bằng hiệu, thì ĐỎ", () => {
+    const d = docDoanDem(STATE)!;
+    const lechNgoai = dotBien(
+      STATE,
+      `**${d.chuNgoaiMa}** không phải việc của mã nguồn`,
+      `**${d.chuNgoaiMa === "một" ? "hai" : "một"}** không phải việc của mã nguồn`,
+    );
+    expect(viPhamDoanDem(lechNgoai).join(" ")).toContain("ngoài mã");
+    const lechCo = dotBien(STATE, `**${d.chuCoMa}** thì có`, `**${d.chuCoMa === "một" ? "hai" : "một"}** thì có`);
+    expect(viPhamDoanDem(lechCo).join(" ")).toContain("có hình dạng mã");
   });
 });

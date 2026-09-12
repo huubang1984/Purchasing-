@@ -490,6 +490,11 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
   // trigger hay hàm đặt replica ở phạm vi phiên giữa câu dọn thì thay đổi của câu ấy được commit (đo: bản trước trả số hàng và hàng
   // biến mất). Giá: hai vòng đi-về thêm cho một việc nền năm phút một lần.
   const client = await pool.connect();
+  // [S1.66 / lượt soi ngang 59b-2] Listener 'error' suốt đoạn mượn — khuôn [fix I1] của withTenant và migrate(). `pool.query` của bản
+  // trước S1.59 gắn `client.once('error')` hộ; `pool.connect()` thì không, và `pg` phát 'error' khi kết nối đứt ngoài ý muốn — không ai
+  // nghe thì tiến trình chết (đo: lượt soi 59, `bo-don-ngat-ket-noi.int.test.ts`). Lỗi thật vẫn đi ra qua promise của câu đang chạy.
+  const boQuaLoiKetNoi = (): void => {};
+  client.on("error", boQuaLoiKetNoi);
   let loiHuy: Error | undefined;
   try {
     await client.query("BEGIN");
@@ -506,6 +511,7 @@ export async function donBucketNguoiGoiCu(pool: pg.Pool, soCuaSo = 2): Promise<n
     throw loi;
   } finally {
     // [S1.59 / lượt soi 52 INFO-1] Lỗi thì HUỶ kết nối, không trả về pool — xem `CAU_COMMIT_CHAN_REPLICA`.
+    client.off("error", boQuaLoiKetNoi);
     client.release(loiHuy);
   }
 }
@@ -568,6 +574,9 @@ async function commitKhongDuoiReplica(client: pg.PoolClient, boDon: string): Pro
  */
 export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
   const client = await pool.connect();
+  // [S1.66 / lượt soi ngang 59b-2] Cùng listener với `donBucketNguoiGoiCu` — hình dạng này có từ trước S1.59 (đo cùng test).
+  const boQuaLoiKetNoi = (): void => {};
+  client.on("error", boQuaLoiKetNoi);
   let loiHuy: Error | undefined;
   try {
     // [review H7-6] MỘT giao dịch, và có TRẦN THỜI GIAN. Câu dọn quét TOÀN BẢNG (vế lọc là OR của
@@ -597,6 +606,7 @@ export async function donOtpRateLimitsCu(pool: pg.Pool): Promise<number> {
     throw loi;
   } finally {
     // [S1.59 / lượt soi 52 INFO-1] Lỗi thì HUỶ kết nối, không trả về pool — xem `CAU_COMMIT_CHAN_REPLICA`.
+    client.off("error", boQuaLoiKetNoi);
     client.release(loiHuy);
   }
 }

@@ -186,7 +186,8 @@
 -- biết và có chủ đích: các GUC nhạy cảm KHÁC ở mức database vẫn không được canh — xem mục
 -- đường trôi còn lại trong task-3-report.md.
 
--- [vòng fix 1 — I3] BA LƯỢT: SỬA · (migration đánh số) · SỬA · PHÁN XÉT
+-- [vòng fix 1 — I3] ~~BA LƯỢT: SỬA · (migration đánh số) · SỬA · PHÁN XÉT~~ [S1.66 / lượt soi ngang 59c NHẸ-10] BA LƯỢT khi không tệp
+-- nào chờ; BỐN khi còn tệp chờ: SỬA · TRƯỚC VÒNG · (migration đánh số) · SỬA · PHÁN XÉT — lượt 1b bên dưới, khoản nợ 100 (S1.57)
 -- ============================================================================
 -- Vòng trước để file này chạy MỘT lần, TRƯỚC vòng migration đánh số. Ba triệu chứng đo được,
 -- tất cả đều là biến thể của cùng một cái bẫy mà Task 3 đã mắc hai lần:
@@ -730,6 +731,10 @@ DECLARE
   --
   -- [vòng fix 2 — CR2 / vòng fix 3 — I2] Vế "biểu thức có được duyệt không" hỏi HAI danh sách,
   -- và danh sách thứ hai khoá theo ĐÚNG (bang, polname, lenh, vai_tro) — xem NGOAI_LE_HINH_DANG.
+  -- [S1.66 / lượt soi ngang 59a-8] Thông điệp nêu policy bằng TÊN, không in biểu thức: hằng trong USING/WITH CHECK có thể là
+  -- UUID của một tổ chức hay một địa chỉ email, và thông điệp đi thẳng vào log deploy (bài học S1.51 ⑷). Đo trước bản vá:
+  -- policy `USING (org_id = '<uuid>'::uuid)` trên `suppliers` ⇒ thông điệp mang nguyên UUID. Người sửa đọc biểu thức ở catalog.
+  -- Test: db/thong-diep-khong-gia-tri.int.test.ts.
   CAU_POLICY_SAI constant text :=
     $q$SELECT c.relname || ': không có policy PERMISSIVE nào (RLS đang từ chối tất cả)' AS mo_ta
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -743,10 +748,7 @@ DECLARE
                 WHEN p.polcmd <> 'a' AND p.polqual IS NULL THEN 'thiếu vế USING'
                 WHEN p.polcmd IN ('*', 'a', 'w') AND p.polwithcheck IS NULL
                   THEN 'thiếu vế WITH CHECK'
-                ELSE 'hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt — USING: '
-                     || coalesce(pg_get_expr(p.polqual, p.polrelid), '(không có)')
-                     || ' | WITH CHECK: '
-                     || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '(không có)')
+                ELSE 'hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt (biểu thức USING/WITH CHECK không in ra — đọc pg_get_expr(polqual, polrelid) và pg_get_expr(polwithcheck, polrelid) của policy này trong pg_policy)'
               END AS mo_ta
          FROM pg_policy p
          JOIN pg_class c ON c.oid = p.polrelid
@@ -2638,12 +2640,15 @@ $ham$;
   VI_TU_PERMISSIVE_CR1_SE_SOI constant text :=
     $q$(p.polpermissive AND (($q$ || VI_TU_CAN_CO_RLS || $q$) OR $q$ || pg_catalog.format(MAU_VI_TU_CO_ORG_ID, 'c') || $q$))$q$;
 
+  -- [S1.66 / lượt soi ngang 59a-8] Thông điệp nêu lược đồ, bảng, policy, lệnh và vai — đều là TÊN — và không in biểu thức USING /
+  -- WITH CHECK (bài học S1.51 ⑷). Bản cũ in nguyên văn cả hai vế, và S1.55 mở tầm của mục ra mọi lược đồ dự án. Đo trước bản
+  -- vá: policy ngoài public mang một UUID trong USING và một email trong WITH CHECK ⇒ thông điệp mang nguyên cả hai. Người
+  -- khai một dòng đọc biểu thức ở catalog. Test: db/thong-diep-khong-gia-tri.int.test.ts.
   CAU_POLICY_LOP_SAI constant text :=
     $q$SELECT n.nspname || '.' || c.relname || '.' || p.polname || ': policy '
               || CASE WHEN p.polpermissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END
               || ' không thuộc lớp nào (khoản 83⑴) — lệnh=' || p.polcmd::text || ' vai=' || $q$ || BIEU_THUC_VAI_TRO || $q$
-              || ' USING: ' || coalesce(pg_get_expr(p.polqual, c.oid), '(không có)')
-              || ' | WITH CHECK: ' || coalesce(pg_get_expr(p.polwithcheck, c.oid), '(không có)')
+              || ' (biểu thức USING/WITH CHECK không in ra — đọc pg_get_expr(polqual, polrelid) và pg_get_expr(polwithcheck, polrelid) trong pg_policy)'
               || CASE WHEN $q$ || VI_TU_PERMISSIVE_CR1_SE_SOI || $q$
                       THEN '. Bảng mang dữ liệu tenant mà [CR1] không soi ở đây (con cháu của bảng tenant, hay có cột org_id, ngoài '
                            'vế (a)): PERMISSIVE trên nó KHÔNG khai được (khoản 98, lượt soi 48) — một dòng khai sẽ là một đường đọc '
@@ -8084,8 +8089,9 @@ $ham$;
            FROM pg_class c WHERE c.oid = to_regclass('public.caller_rate_limits'))$q$,
       $q$coalesce((SELECT 'RLS/policy của caller_rate_limits lệch — rls=' || c.relrowsecurity::text
                           || ' force=' || c.relforcerowsecurity::text
-                          || ' policy=' || coalesce((SELECT string_agg(p.polname || ':' || pg_get_expr(p.polqual, c.oid), '; ' ORDER BY p.polname)
+                          || ' policy=' || coalesce((SELECT string_agg(p.polname::text, '; ' ORDER BY p.polname)
                                                        FROM pg_policy p WHERE p.polrelid = c.oid), '(KHÔNG CÓ)')
+                          || ' (chỉ nêu tên — biểu thức, vai, lệnh không in ra; so với 042 trong pg_policy)'
                      FROM pg_class c WHERE c.oid = to_regclass('public.caller_rate_limits')),
                   'bảng public.caller_rate_limits không tồn tại')$q$,
       $q$quyền sở hữu bảng public.caller_rate_limits hoặc SUPERUSER$q$
@@ -8100,6 +8106,10 @@ $ham$;
     -- Cùng khuôn mục `caller_rate_limits` ở trên, và cùng lý do dùng `EXECUTE format(...)`:
     -- `db/migration-shape.test.ts` cấm một file tạo policy cho bảng do file KHÁC tạo, và mọi mục
     -- tự chữa RLS trong file này đi qua idiom động ấy.
+    -- [S1.66 / lượt soi ngang 59a-8] Mô tả nêu lệnh và vai (tên), không in biểu thức USING — mục 042 ở trên cùng khuôn, chỉ nêu
+    -- tên policy. Và `p.polcmd::text`: bản cũ nối `'…' || p.polcmd` (kiểu "char"), nên mỗi lần policy TỒN TẠI mà lệch, mô tả
+    -- ném 42725 (`operator is not unique: unknown || "char"`, đo) và mục chỉ báo "KHÔNG ĐÁNH GIÁ ĐƯỢC" — thông điệp riêng của
+    -- mục chưa từng in ra được. Vẫn fail-closed, nhưng người sửa không được biết lệch ở đâu.
     ARRAY[
       $q$policy dọn cửa sổ cũ của otp_rate_limits (044)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '044_don_bucket_otp.sql')$q$,
@@ -8125,10 +8135,10 @@ $ham$;
              AND (SELECT array_agg(r.rolname::text ORDER BY r.rolname COLLATE "C")
                     FROM pg_roles r WHERE r.oid = ANY(p.polroles)) = ARRAY['app_api']
              AND pg_get_expr(p.polqual, p.polrelid) = $than57$((NULLIF(current_setting('app.org_id'::text, true), ''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))$than57$)$q$,
-      $q$coalesce((SELECT 'policy dọn của otp_rate_limits lệch — lệnh=' || p.polcmd
+      $q$coalesce((SELECT 'policy dọn của otp_rate_limits lệch — lệnh=' || p.polcmd::text
                           || ' vai=' || coalesce((SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C")
                                                     FROM pg_roles r WHERE r.oid = ANY(p.polroles)), '(không có)')
-                          || ' using=' || coalesce(pg_get_expr(p.polqual, p.polrelid), '(không có)')
+                          || ' — biểu thức USING không in ra (so với bản 044 bằng pg_get_expr(polqual, polrelid) trong pg_policy)'
                      FROM pg_policy p
                     WHERE p.polrelid = to_regclass('public.otp_rate_limits')
                       AND p.polname = 'otp_rate_limits_don_cua_so_cu'),
