@@ -68,26 +68,58 @@ on:
 # sinh ra tu no tu khai minh la mot mui do, khong phai mot phep do.
 # =============================================================================================
 
-permissions:
-  contents: read
-  issues: write
+# =============================================================================================
+# [khoan no 67] TOKEN GHI ISSUE KHONG DUOC NAM CUNG JOB VOI MA BEN THU BA
+# =============================================================================================
+# Ban truoc khai `permissions` o muc WORKFLOW (`contents: read` + `issues: write`), nen token cua
+# CHINH job chay `pnpm install --frozen-lockfile` (script vong doi cua CA cay phu thuoc) va
+# `pnpm test:int` mang `issues: write`. `persist-credentials: false` (review an ninh luot 16, M3)
+# chan duong `.git/config`, nhung token van thuoc job ay, va moi buoc cua mot job chay cung may,
+# cung tai khoan. Nay mac dinh cua workflow la RONG va quyen khai o muc JOB:
+#   - `lap`      : `contents: read`; chay ma cua kho; ghi ket qua ra outputs; ~~KHONG cam quyen ghi.~~
+#                  [luot soi 55 L5] KHONG cam quyen ghi nao cua GITHUB_TOKEN — nhung van ghi duoc cache va
+#                  artifact qua token runtime cua runner, thu `permissions` khong dieu khien (co tu truoc).
+#   - `bao-dong` : `issues: write`; `needs: lap`; KHONG checkout, KHONG cai dat, chi goi `gh` co san
+#                  tren runner. Chay khi `lap` KHONG xanh HOAC so do khac 0 (xem `if:`). Du lieu qua bien
+#                  gioi la bon output va KET QUA cua `lap` — va vi `lap` chay ma ben thu ba, `bao-dong` coi
+#                  chung la du lieu KHONG TIN: kiem hinh dang TRON CHUOI tung gia tri truoc khi dua vao
+#                  issue; thieu hay sai hinh dang so do thi VAN mo issue, tieu de "KHONG HOAN TAT" — nuot
+#                  bao dong la dung che do hong ma khoan no 65 dung ra de dong. Nhan "mui dot bien" lay
+#                  tu SU KIEN `workflow_dispatch`, khong tu output cua `lap`.
+# RANH GIOI [luot soi 55 L4]: kiem hinh dang bao ve KENH ISSUE, khong bao ve TINH DUNG cua phep do. Ma ben thu
+# ba trong `lap` van tat duoc bao dong — ghi `so_do=0`, hay lam buoc bao dong khong khoi dong duoc (output qua
+# lon cho env) — khoan no 67 dong viec CAM TOKEN GHI, khong dong viec tin ket qua do.
+# Fail-closed tach thanh buoc rieng o cuoi `lap`: buoc dem ghi xong outputs roi ket thuc xanh.
+# Hinh dang nay duoc GHIM boi `tests/architecture/hinh-dang-do-lap.test.ts` — sua job `bao-dong` la sua ca test.
+# =============================================================================================
+
+permissions: {}
 
 jobs:
   lap:
     name: Lap tang tich hop de do ty le flaky
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    permissions:
+      contents: read
+    outputs:
+      ty_le: ${{ steps.do.outputs.ty_le }}
+      so_do: ${{ steps.do.outputs.so_do }}
+      so_do_that: ${{ steps.do.outputs.so_do_that }}
+      ten_do: ${{ steps.do.outputs.ten_do }}
     steps:
       - uses: actions/checkout@v4
         with:
           # [review an ninh luot 16, M3] Job nay KHONG day git gi ca. Mac dinh
-          # `persist-credentials: true` ghi GITHUB_TOKEN — nay mang `issues: write` — vao
-          # `.git/config` duoi dang `http.<url>.extraheader`. Ngay sau do job chay
+          # `persist-credentials: true` ghi GITHUB_TOKEN — ~~nay mang `issues: write`~~ [khoan no 67] nay chi
+          # con `contents: read` — vao `.git/config` duoi dang `http.<url>.extraheader`. Ngay sau do job chay
           # `pnpm install --frozen-lockfile` (script vong doi cua CA CAY PHU THUOC) roi
-          # `pnpm test:int`. Bat ky ma nao thuc thi trong hai buoc ay ma doc duoc `.git/config` la
+          # `pnpm test:int`. ~~Bat ky ma nao thuc thi trong hai buoc ay ma doc duoc `.git/config` la
           # cam duoc mot token ghi issue: mo issue mao danh kho, sua binh luan tren ca PR, dong
           # issue an ninh dang mo. `contents: read` chan duong ghi MA, nhung khong chan kenh giao
-          # tiep — va kenh giao tiep la thu ca doi du an tin.
+          # tiep — va kenh giao tiep la thu ca doi du an tin.~~ [khoan no 67, luot soi 55 I1] Token
+          # cua job nay nay chi DOC; dong duoi van giu — mot token doc cung khong co ly do nam trong
+          # `.git/config` truoc ma ben thu ba.
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -148,56 +180,8 @@ jobs:
           ra so_do_that "$do_that"
           ra ten_do   "$(printf '%s' "$ten_do" | tr -s ' ' | cut -c1-400)"
           ra dot_bien "${DOT_BIEN}"
-          # Fail-closed. Mot ty le khac 0 la mot ket qua CAN DOC, khong phai mot thu de xanh cho qua.
-          test "$do" -eq 0
-
-      # [khoan no 65] Duong di cua ket qua. Chay CA khi buoc tren da do — do la toan bo diem cua no.
-      - name: Bao dong — mo hoac binh luan mot issue mang con so
-        if: always() && steps.do.outputs.so_do != '0' && steps.do.outputs.so_do != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TY_LE: ${{ steps.do.outputs.ty_le }}
-          TEN_DO: ${{ steps.do.outputs.ten_do }}
-          LA_DOT_BIEN: ${{ steps.do.outputs.dot_bien }}
-          SO_DO_THAT: ${{ steps.do.outputs.so_do_that }}
-        run: |
-          moc="[flaky-tang-tich-hop]"
-          nhan="flaky-tang-tich-hop"
-          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          them=""
-          # Chi duoc dan nhan "khong phai mot phep do" khi KHONG co luot do that nao. Nguoc lai,
-          # day la mot bao dong THAT co kem mot mui do — va tieu de phai noi dieu quan trong hon.
-          if [ "$LA_DOT_BIEN" = "true" ] && [ "${SO_DO_THAT:-0}" = "0" ]; then
-            dau="MUI DOT BIEN (khoan no 65) — day KHONG phai mot phep do"
-          else
-            dau="Ty le flaky cua tang tich hop KHAC 0"
-            if [ "$LA_DOT_BIEN" = "true" ]; then
-              # Phai dung `printf` chu khong phai mot chuoi co "\n": `$them` di vao mot doi so `%s`
-              # cua printf ben duoi, va printf KHONG dien giai escape trong DOI SO — mot "\n" viet
-              # thang se hien nguyen chu `\n` trong than issue.
-              them="$(printf '\n\n> **Luot nay CO kem mot mui dot bien**, nhung so luot do THAT la `%s` — day la mot bao dong that.' "${SO_DO_THAT}")"
-            fi
-          fi
-          than="$(printf '%s\n\n- **Ty le do:** `%s`\n- **Tep do:** `%s`\n- **Luot chay:** %s\n- **Commit:** `%s`\n\n%s\n' \
-            "$dau" "$TY_LE" "${TEN_DO:-khong doc duoc ten}" "$url" "$GITHUB_SHA" \
-            "Job \`do-lap\` la fail-closed CO CHU DICH. Issue nay ton tai vi mot lan do ma khong ai doc thi chi la fail-lang — xem khoan no 65 trong docs/STATE.md.$them")"
-          # [review an ninh luot 16, L2] Neo vao thu CHI workflow nay tao duoc. Ban dau tim bang
-          # `--search "$moc in:title"` — mot phep khop token tren tieu de TU DO, khong loc tac gia.
-          # Tren kho cong khai, bat ky ai co quyen DOC cung mo duoc mot issue tua
-          # "[flaky-tang-tich-hop] ..."; tu luc do moi bao dong cua khoan no 65 roi vao luong do HO
-          # mo, ho dat khung cau chuyen o binh luan dau, va nguoi truc doc con so trong boi canh ho
-          # dung. Nhan chi gan duoc boi nguoi co quyen triage/write, va kiem them tac gia thi phai
-          # co quyen write moi gia mao duoc.
-          gh label create "$nhan" --color B60205 \
-            --description "Bao dong ty le flaky tang tich hop (khoan no 65)" 2>/dev/null || true
-          cu="$(gh issue list --state open --label "$nhan" --json number,author \
-                  --jq 'map(select(.author.login == "github-actions")) | .[0].number // empty' || true)"
-          if [ -n "$cu" ]; then
-            gh issue comment "$cu" --body "$than"
-            echo "da binh luan vao issue #$cu"
-          else
-            gh issue create --title "$moc $dau" --body "$than" --label "$nhan"
-          fi
+          # [khoan no 67] Buoc nay ghi xong outputs roi ket thuc xanh; buoc "Fail-closed" o cuoi job doc lai
+          # so_do va lam job DO — outputs cua job khong phu thuoc vao cach GitHub xu ly output cua mot buoc do.
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -212,3 +196,97 @@ jobs:
           # che thi da dung san. RANG BUOC di kem, viet ra de lan sau co cho ma doc: buoc "Chay lap
           # va dem so luot do" KHONG duoc nhan mot `secrets.*` nao chung nao con chuyen huong ra tep.
           retention-days: 7
+
+      - name: Fail-closed — ty le khac 0 thi job DO
+        env:
+          SO_DO: ${{ steps.do.outputs.so_do }}
+        # Mot ty le khac 0 la mot ket qua CAN DOC, khong phai mot thu de xanh cho qua. ~~output rong (buoc dem hong
+        # truoc khi ghi) cung DO.~~ [luot soi 55 N2] Buoc dem hong truoc khi ghi thi CHINH NO do va buoc nay bi BO
+        # QUA — job van DO, va `bao-dong` bat ca ca ay qua `needs.lap.result`.
+        run: test "${SO_DO:-x}" = "0"
+
+  bao-dong:
+    name: Bao dong — mo hoac binh luan mot issue mang con so
+    needs: lap
+    # [khoan no 65] Chay CA khi `lap` do — do la toan bo diem cua no.
+    # [luot soi 55 N2] Dieu kien la "`lap` KHONG xanh, HOAC so do khac 0". Ban mot viet "so do khac 0 VA khac rong": khi
+    # `lap` chet TRUOC khi ghi outputs (qua han, buoc dem hong, runner mat trong luc tai log), khoa `so_do` VANG, va phep so
+    # sanh cua bieu thuc ep gia tri vang ve 0 — `so_do != '0'` SAI, nen bao dong im lang dung luc can nhat. `always()`, khong
+    # phai `!cancelled()`: mot luot bi huy cung mo issue "KHONG HOAN TAT" — on hon mot lan qua han im lang.
+    if: always() && (needs.lap.result != 'success' || needs.lap.outputs.so_do != '0')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Bao dong — mo hoac binh luan mot issue mang con so
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Khong checkout nen `gh` khong suy ra kho tu `.git` — neu thang.
+          GH_REPO: ${{ github.repository }}
+          TY_LE_THO: ${{ needs.lap.outputs.ty_le }}
+          SO_DO_THO: ${{ needs.lap.outputs.so_do }}
+          SO_DO_THAT_THO: ${{ needs.lap.outputs.so_do_that }}
+          TEN_DO_THO: ${{ needs.lap.outputs.ten_do }}
+          KET_QUA_LAP_THO: ${{ needs.lap.result }}
+          # [luot soi 55 L4] Nhan "mui dot bien" lay tu SU KIEN (input kieu boolean cua `workflow_dispatch`), khong tu output
+          # cua `lap`: ma ben thu ba trong `lap` khong duoc tu dan nhan "khong phai mot phep do" len mot bao dong that.
+          DOT_BIEN_SU_KIEN: ${{ github.event.inputs.dot_bien || 'false' }}
+        run: |
+          # [khoan no 67] Cac gia tri *_THO do job `lap` ghi, hay do GitHub ghi ve `lap` — job chay ma ben thu ba — nen la du
+          # lieu KHONG TIN: moi gia tri qua env (khong noi suy vao than script) va bi kiem hinh dang TRON CHUOI truoc khi dung:
+          # `[[ =~ ^...$ ]]` va `case`, khong `grep -x` — grep so THEO DONG, nen "2/10<xuong dong>rac" van lot (do tren bash
+          # 5.2 cua runner ubuntu va Git Bash 5.3, §S1.62). Kiem hinh dang bao ve KENH ISSUE, khong bao ve TINH DUNG cua phep do.
+          khong_hop_le=""
+          if [[ "$TY_LE_THO" =~ ^[0-9]{1,3}/[0-9]{1,3}$ ]]; then TY_LE="$TY_LE_THO"; else TY_LE="khong hop le"; khong_hop_le=1; fi
+          if [[ "$SO_DO_THO" =~ ^[0-9]{1,3}$ ]]; then co_so_do=1; else co_so_do=""; khong_hop_le=1; fi
+          if [[ "$SO_DO_THAT_THO" =~ ^[0-9]{1,3}$ ]]; then SO_DO_THAT="$SO_DO_THAT_THO"; else SO_DO_THAT="khong hop le"; khong_hop_le=1; fi
+          case "$KET_QUA_LAP_THO" in success|failure|cancelled|skipped) KET_QUA_LAP="$KET_QUA_LAP_THO" ;; *) KET_QUA_LAP="khong hop le" ;; esac
+          case "$DOT_BIEN_SU_KIEN" in true) LA_DOT_BIEN="true" ;; *) LA_DOT_BIEN="false" ;; esac
+          TEN_DO="$(printf '%s' "$TEN_DO_THO" | tr -c 'A-Za-z0-9._/() -' '?' | cut -c1-400)"
+          moc="[flaky-tang-tich-hop]"
+          nhan="flaky-tang-tich-hop"
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          them=""
+          if [ -z "$co_so_do" ]; then
+            # [luot soi 55 N2] `lap` khong de lai so do dung duoc: qua han, buoc dem hong, runner mat, hay output sai hinh dang.
+            dau="Luot do KHONG HOAN TAT — khong co so do dung duoc (job lap: ${KET_QUA_LAP})"
+          # Chi duoc dan nhan "khong phai mot phep do" khi KHONG co luot do that nao. Nguoc lai,
+          # day la mot bao dong THAT co kem mot mui do — va tieu de phai noi dieu quan trong hon.
+          elif [ "$LA_DOT_BIEN" = "true" ] && [ "${SO_DO_THAT:-0}" = "0" ]; then
+            dau="MUI DOT BIEN (khoan no 65) — day KHONG phai mot phep do"
+          else
+            dau="Ty le flaky cua tang tich hop KHAC 0"
+            if [ "$LA_DOT_BIEN" = "true" ]; then
+              # Phai dung `printf` chu khong phai mot chuoi co "\n": `$them` di vao mot doi so `%s`
+              # cua printf ben duoi, va printf KHONG dien giai escape trong DOI SO — mot "\n" viet
+              # thang se hien nguyen chu `\n` trong than issue.
+              them="$(printf '\n\n> **Luot nay CO kem mot mui dot bien**, nhung so luot do THAT la `%s` — day la mot bao dong that.' "${SO_DO_THAT}")"
+            fi
+          fi
+          if [ -n "$khong_hop_le" ]; then
+            them="$them$(printf '\n\n> Mot gia tri tu job `lap` sai hinh dang hay vang — da thay bang `khong hop le`. Doc log luot chay.')"
+          fi
+          than="$(printf '%s\n\n- **Ty le do:** `%s`\n- **Ket qua job lap:** `%s`\n- **Tep do:** `%s`\n- **Luot chay:** %s\n- **Commit:** `%s`\n\n%s\n' \
+            "$dau" "$TY_LE" "$KET_QUA_LAP" "${TEN_DO:-khong doc duoc ten}" "$url" "$GITHUB_SHA" \
+            "Job \`do-lap\` la fail-closed CO CHU DICH. Issue nay ton tai vi mot lan do ma khong ai doc thi chi la fail-lang — xem khoan no 65 trong docs/STATE.md.$them")"
+          # [review an ninh luot 16, L2] Neo vao thu CHI workflow nay tao duoc. Ban dau tim bang
+          # `--search "$moc in:title"` — mot phep khop token tren tieu de TU DO, khong loc tac gia.
+          # Tren kho cong khai, bat ky ai co quyen DOC cung mo duoc mot issue tua
+          # "[flaky-tang-tich-hop] ..."; tu luc do moi bao dong cua khoan no 65 roi vao luong do HO
+          # mo, ho dat khung cau chuyen o binh luan dau, va nguoi truc doc con so trong boi canh ho
+          # dung. Nhan chi gan duoc boi nguoi co quyen triage/write, va kiem them tac gia thi phai
+          # co quyen write moi gia mao duoc.
+          # [luot soi 55 I4 — DO] `gh` 2.98 tra `author.login` cua issue do GITHUB_TOKEN mo la `app/github-actions`, KHONG phai
+          # `github-actions`: issue #22 (workflow nay mo o S1.25) mang dung `app/github-actions`, loc cu tren 50 issue gan nhat
+          # ra rong, va `--app github-actions` cung ra rong — nhanh binh luan KHONG THE chay, moi bao dong mo mot issue moi.
+          gh label create "$nhan" --color B60205 \
+            --description "Bao dong ty le flaky tang tich hop (khoan no 65)" 2>/dev/null || true
+          cu="$(gh issue list --state open --label "$nhan" --json number,author \
+                  --jq 'map(select(.author.login == "app/github-actions")) | .[0].number // empty' || true)"
+          if [ -n "$cu" ]; then
+            gh issue comment "$cu" --body "$than"
+            echo "da binh luan vao issue #$cu"
+          else
+            gh issue create --title "$moc $dau" --body "$than" --label "$nhan"
+          fi
