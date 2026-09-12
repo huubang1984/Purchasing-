@@ -3277,6 +3277,7 @@ phân biệt *"cổng này nói gì"* với *"cổng này lại thế thôi"*.
 | khoá có đóng được đỏ giả không | chạy lại **đúng bối cảnh** từng đỏ: lượt gộp `pnpm evidence` | `boundaries.test.ts` **XANH** |
 | đường báo động có chạy không | `dot_bien=true`, `so_luot=1` trên nhánh | **issue #22** được mở, mang tỷ lệ + link + commit; đã đóng kèm giải thích |
 | bản vá `[M10]` có hạ được tỷ lệ đỏ không | 10 lượt `pnpm test:int` trên **phần cứng CI**, nhánh đã vá `33af790` (lượt 34225703897, 87 phút) | **`TỶ LỆ ĐỎ: 0 / 10`** — trước vòng: 2/10 trên master, trong đó **một** thuộc khoản nợ 24. Đọc kèm §5 |
+| [S1.62, khoản nợ 67] đường báo động còn chạy khi tách thành job riêng không | workflow thăm dò riêng trên nhánh tạm, KHÔNG ghi gì: job `a` ghi output rồi ĐỎ, job `b` `needs: a` với `if: always()` và chỉ `issues: read` (lượt 34663968157); thêm harness chạy thân `bao-dong` trên bash thật với `gh` giả | job `b` **chạy** và thấy `so_do=[2]` của một job đỏ; `gh` không checkout đọc được issue qua `GH_REPO`; bảy kịch bản harness ra đúng tiêu đề và nhánh. Lệnh GHI issue dưới quyền mức job chưa đo — §S1.62 |
 
 ### 4. Cái ADR này KHÔNG quyết, và một khoản nợ MỚI phải nói ra
 
