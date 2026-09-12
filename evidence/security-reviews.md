@@ -3904,3 +3904,134 @@ Mười lăm đột biến trên bản hai, mỗi đột biến một lượt ch
 - ⑶ Test ngưỡng ghi số chứ không import hằng, để đổi hằng là một thay đổi phải đi qua đỏ.
 - ⑷ Một bước "làm sạch" chạy TRƯỚC bộ phân tích có thể biến một đầu vào KHÔNG hợp lệ thành một đầu vào hợp lệ mang nghĩa khác. Làm sạch sau khi phân tích, và chỉ trên thứ đã chắc là không cất được có cấu trúc.
 - ⑸ Một test ngưỡng độ sâu chỉ dựng MỘT kiểu lồng để lọt đột biến trên kiểu kia — ngưỡng phải đo trên mọi kiểu vùng chứa.
+
+# §S1.65 — khoản nợ 107: số JSON trong bản rõ giữ nguyên giá trị đã niêm phong — `jsonb` phân tích chính văn bản gốc; khoá trùng và số ngoài biên cất dưới `{ raw }` — lượt soi 58; khoản 108 mở (payload phía đọc lại qua `double` — đo)
+
+**Bề mặt:**
+- `apps/unseal-worker/src/index.ts`:
+  - `thanhJson` nay trả VĂN BẢN để ghi — văn bản gốc khi đủ ba vế, `JSON.stringify({ raw })` khi không — và người gọi thôi bọc nó trong `JSON.stringify`;
+  - `jsonbNhanDuoc` thành `demKhoaJsonbNhan`: cùng phép đi cây, trả số khoá của cây hoặc `null`;
+  - thêm `demKhoaVanBan` (quét văn bản một lượt, không cấp phát: đếm token khoá, soát biên từng số), `soTrongBien`, `laKhoangTrangJson`, `laKyTuCuaSo`, cùng hai hằng `DO_DAI_SO_TOI_DA` = 1 000 và `SO_MU_TOI_DA` = 324;
+  - chú thích: gạch các câu về `JSON.stringify` ở `DO_SAU_JSON_TOI_DA` và `demKhoaJsonbNhan`, gạch "ngưỡng của nó CHƯA đo", ghi đóng khoản kèm ba vế, lý do loại reviver và ranh giới.
+- `apps/unseal-worker/src/unseal-worker.int.test.ts`: bảy `it` `[khoản nợ 107]`; helper `moThauCungBaoGiaSachTheoId` (trả thêm id RFQ và id phiên bản) và `payloadBangBanRo` (so bằng `jsonb =` của PostgreSQL); import `buildComparisonTable`.
+
+**Đo trước khi viết:**
+- ⒜ **Reviver `context.source` (Node 24.18 cục bộ, V8 13.6):** có cho mọi số và chuỗi; `JSON.rawJSON` cùng `JSON.stringify` xuất đúng `99999999999999.99`, `1234567.10`, `-0`, `1e400`, `9007199254740993`; với khoá trùng, reviver chỉ thấy giá trị cuối. Lib `ES2023` của TypeScript 5.9.3 không khai `JSON.rawJSON`.
+- ⒝ **Giá của reviver** (bản rõ khoảng 8 MiB dạng `{"a":[…]}`, `node --expose-gc`, ngoài worker; heap trước 11,8 MiB):
+
+  | Ca | `JSON.parse` trơn | Reviver |
+  |---|---|---|
+  | 4 194 268 số `0` | 29 ms · heap 51,8 MiB · RSS 84 MiB | 2 941 ms · 346 MiB · 604 MiB (kèm `JSON.rawJSON`) |
+  | 2 097 134 số `1.5` | 48 ms · 35,8 MiB · 68 MiB | 1 879 ms · 323 MiB · 496 MiB (kèm `JSON.rawJSON`) |
+  | 2 097 134 chuỗi `"x"` | 27 ms · 35,8 MiB · 68 MiB | 1 208 ms · 204 MiB · 370 MiB (không tạo `rawJSON` nào) |
+  | 466 029 số `99999999999999.99` | 20 ms · 23,4 MiB · 56 MiB — văn bản KHÔNG khớp sau `JSON.stringify` | 416 ms · 77 MiB · 168 MiB — khớp |
+
+  Chi phí nằm ở chính cơ chế theo dõi văn bản nguồn: ca chuỗi không tạo `rawJSON` nào vẫn lên 370 MiB. ⇒ loại hướng reviver.
+- ⒞ **Trần của `numeric`** (PostgreSQL 16.15, UTF8, testcontainers `postgres:16-alpine`): nhận số nguyên 131 072 chữ số, `1e131071`, `1e-16383`, `0.` cùng 16 383 chữ số, `1e1000`, `1e-1001`; ném `22003 value overflows numeric format` với 131 073 chữ số, `1e131072`, `1e-16384`, 16 384 chữ số thập phân, `1e2147483647`. Độ phình khi đọc: `1e131071` (8 ký tự) đọc lại qua `->>` là 131 072 ký tự; `1e324` là 325. Giá trị, không chữ viết: `99999999999999.99`, `9007199254740993`, `1234567.10` giữ nguyên; `-0` ra `0`, `1E2` ra `100`, `1.50e1` ra `15.0`.
+- ⒟ **Khác biệt bộ phân tích khi gửi văn bản gốc:** `{"a":1,"a":2}` ra `{"a": 2}`; giá trị BỊ GHI ĐÈ mang escape surrogate đơn lẻ ném `22P02`, mang escape U+0000 ném `22P05` — trong khi cây của `JSON.parse` chỉ giữ giá trị sau. Khoảng trắng trước dấu hai chấm được nhận. Mảng lồng đứng riêng: 1 000 và 5 000 tầng nhận; 20 000, 100 000, 1 000 000 tầng ném `54001 stack depth limit exceeded` (`max_stack_depth` 2MB).
+- ⒠ **Phía đọc:** `pg` đọc `'{"a":99999999999999.99}'::jsonb` ra `a` = `99999999999999.98`. `jsonb =` so số theo giá trị: `{"a":1.10}` bằng `{"a":1.1}`; `.99` khác `.98`.
+- ⒡ **Nguyên mẫu hướng chọn** (Node 24.18, ngoài worker), cùng bốn ca 8 MiB: `JSON.parse` 23–48 ms, đi cây 7–50 ms, quét 22–34 ms; heap tối đa 46,2 MiB, RSS tối đa 95,5 MiB. Trên mười sáu mẫu, nguyên mẫu quyết đúng dự kiến: số chính xác, khoảng trắng trước dấu hai chấm, dấu nháy đã thoát, gạch chéo ngược đã thoát ở cuối chuỗi, `1e324`, `1e-324`, `1E+0000324`, 1 000 chữ số ⇒ văn bản gốc; khoá trùng ở gốc, lồng, ghi đè escape surrogate, `1e325`, `1e-325`, 1 001 chữ số, 16 384 chữ số thập phân ⇒ `raw`.
+- ⒢ **Test viết trước, trên mã cũ:** 28 test, sáu ĐỎ, cả sáu ở assertion — `it` số tiền nhận `'99999999999999.98'`; `it` mọi số trong cây nhận `[false, false, false]`; `it` biên nhận năm `false`; `it` trần `numeric` nhận `{ a: null }`; `it` khoá trùng nhận payload có cấu trúc; `it` bảng so sánh nhận `'99999999999999.98'`. `it` đối chứng của phép quét XANH — đúng vai. Ca thứ tư của `it` trần `numeric` (số vượt biên cùng escape U+0000) được thêm TRƯỚC bản vá rồi đo lại: vẫn sáu đỏ, cùng tập.
+
+**Sau bản vá:**
+- **`index.ts`:** 425 → 538 dòng; 0 NUL, 0 CR; vẫn đúng ba dấu gạch chéo ngược. eslint và `pnpm typecheck` thoát mã 0.
+- **Trọn `unseal-worker.int.test.ts`:** 28/28 xanh.
+- **Trọn `apps/unseal-worker`** (bốn tệp tích hợp: `unseal-worker`, `composition`, hai kịch bản 41): 64/64 xanh.
+- **`pnpm test`:** 50 tệp / 748 test + 1 bỏ qua (vế chỉ chạy trên CI), thoát mã 0 — không đổi so với S1.64, vì test tích hợp không thuộc lệnh này. Không còn tệp `zzprobe-*`.
+
+**Test:**
+- **Helper:** `moThauCungBaoGiaSachTheoId` giữ mọi đòi hỏi của `moThauCungBaoGiaSach` (một báo giá sạch, mở thầu MỘT lần, không phong bì hỏng, `EXECUTED`, `UNSEALED`) và trả thêm id RFQ, id phiên bản; `payloadBangBanRo` so `payload` với bản rõ bằng `jsonb =` sau khi PostgreSQL TỰ phân tích bản rõ ấy. Không `it` nào so giá trị một số qua payload mà `pg` trả về.
+- **Số tiền:** `99999999999999.99`, `9007199254740993`, `1234567.10` ⇒ `bid_so_tien(payload->>'totalAmount')` đọc đúng từng con số, và payload bằng bản rõ.
+- **Mọi số trong cây:** hơn 15 chữ số có nghĩa, số nguyên vượt 2^53, `1e-7`, `1E+21`, `-0`, `0.30000000000000001`, `1.7976931348623159e308` (tràn `double`), `1e-324` (hụt `double`), trong mảng và đối tượng lồng ⇒ payload bằng bản rõ.
+- **Biên:** 1 000 ký tự (không dấu và có dấu), `1e324`, `-1E-324`, `0.5e+0000324` ⇒ payload bằng bản rõ; 1 001 ký tự (không dấu và có dấu), `1e325`, `1E-325`, `0.5e+0000325` ⇒ `raw`.
+- **Trần `numeric`:** 131 073 chữ số, `1e131072`, 16 384 chữ số thập phân, `1e131072` cùng escape U+0000, và `1e131072` làm phần tử mảng (lượt soi 58 NHẸ-1) ⇒ năm `raw`, lượt mở thầu không hỏng.
+- **Khoá trùng:** ở gốc; lồng trong mảng; trùng sau khi giải escape (`"a"` và escape của `a`); giá trị bị ghi đè mang escape surrogate đơn lẻ, mang escape U+0000, mang mảng lồng 20 000 tầng; khoá `b` đứng sau một dấu nháy đã thoát (lượt một của đột biến); khoá trùng tách khỏi dấu hai chấm bởi CR, bởi LF (lượt soi 58 NHẸ-2) ⇒ chín `raw`, lượt mở thầu không hỏng.
+- **Đối chứng của phép quét:** dấu cách và tab trước dấu hai chấm, CRLF quanh nó; CR riêng, LF riêng, CRLF cùng tab và dấu cách GIỮA khoá và dấu hai chấm (lượt soi 58 NHẸ-2); dấu nháy đã thoát theo sau là `:1`, và theo sau là một ký tự thường; gạch chéo ngược đã thoát ở cuối chuỗi; `true`, `false`, `null`, số âm, chuỗi `"1e999"`, khoá `khoa1e999`, chuỗi 2 000 chữ số; ký tự không-phải-ký-tự U+FFFE, U+FFFF, U+FDD0 dạng escape trong chuỗi, trong khoá, và dạng thô (lượt soi 58 NHẸ-4) ⇒ nguyên hình dạng.
+- **Bảng so sánh:** `buildComparisonTable` với hai báo giá gửi số tiền kiểu số ⇒ `totalAmount` là `99999999999999.99` và `9007199254740993`; min và max đúng hai số ấy; trung bình `4553599627370496.50`; báo giá sạch không có số tiền được đếm `unparsed`.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Hình dạng đóng đề xuất ở hàng 107 bị bác bằng phép đo, không bằng sở thích:** reviver giữ đúng văn bản số, nhưng nhân bộ nhớ lên khoảng bảy lần ở ca xấu nhất (⒝). Đòi `totalAmount` là chuỗi thập phân thì đổi hợp đồng với client mà vẫn để các số KHÁC trong payload qua `double`.
+- ⑵ **Gửi văn bản gốc mở một khác biệt bộ phân tích — tìm bằng thăm dò TRƯỚC khi viết (⒟):** giá trị bị ghi đè của khoá trùng không có trong cây, nên phép đi cây không thấy, mà `jsonb` vẫn phân tích nó. ⇒ vế ⑵.
+- ⑶ **Trần `numeric` và độ phình khi đọc (⒞):** gửi văn bản số không chặn thì một bản rõ `1e131072` làm cả lượt mở thầu rollback — đúng lớp khoản 106. ⇒ vế ⑶, với số mũ 324 thay cho trần 131 072 để độ phình khi đọc gần đường cũ.
+- ⑷ **Một đột biến sẽ sống sót:** `null` là tín hiệu thất bại chung của phép đi cây và phép quét, nên bỏ vế `soKhoa !== null` chỉ lộ khi CẢ HAI cùng từ chối. Ca "`1e131072` cùng escape U+0000" được thêm vào `it` trần `numeric` trước bản vá (⒢); đột biến M14 đỏ đúng `it` ấy.
+- ⑸ **Test so số không đi qua `pg`:** `pg` phân tích `jsonb` bằng `JSON.parse`, nên một test so `payload.totalAmount` bằng số JavaScript sẽ xanh cả trên mã cũ (⒠). Mọi phép so giá trị số chạy trong PostgreSQL.
+- ⑹ **Bẫy công cụ ghi tệp (S1.62):** tệp ghi chú thăm dò trong scratchpad dính bẫy (escape sáu ký tự thành ký tự thật) và đã được viết lại. Khối test mới dựng dấu gạch chéo ngược, tab, CRLF bằng `String.fromCharCode`; số dấu gạch chéo ngược đếm trước và sau khi áp: tệp test giữ 22, `index.ts` giữ 3.
+- ⑺ **Lời khai cũ ở STATE:** đoạn ngay dưới dòng CÒN MỞ ghi "**mười lăm** khoản ấy … **mười một** thì có hình dạng mã nguồn" từ S1.49 — khớp với 15 khoản ở S1.61, sai từ S1.62 khi khoản 67 đóng. Gạch và sửa thành **mười bốn** và **mười**.
+
+**Đỏ đo được, cô lập:**
+Ba lượt; mỗi đột biến một lượt chạy trọn `unseal-worker.int.test.ts` (reporter json), và sau mỗi lượt `index.ts` trả về đúng bản vá theo sha256.
+- **Lượt một** (19 đột biến): 17 đỏ đúng tập dự kiến, M12 đạt tập chứa, và **M10 SỐNG SÓT**. Ca đối chứng `{"ghiChu":"x\":1","k":[1,"]:{"]}` làm phép quét hỏng đếm THỪA một khoá — dấu hai chấm ngay sau dấu nháy đã thoát — rồi nuốt mất khoá thật `k`; hai lỗi bù nhau nên số khoá vẫn bằng. Lần theo đó ra một ca nguy hiểm: `{"a":"<escape surrogate đơn lẻ>","a":"x\"y","b":1}` — phép quét hỏng nuốt khoá `b`, bù đúng một khoá trùng, văn bản gốc được gửi đi và `jsonb` ném `22P02`, tức cả lượt mở thầu rollback. Ca ấy vào `it` khoá trùng; `{"ghiChu":"a\"b","k":1}` vào `it` đối chứng.
+- **Lượt hai** (20 đột biến, thêm M0): lượt gốc 28/28 xanh; mọi đột biến ĐẠT.
+- **Lượt ba** (25 đột biến, sau lượt soi 58 — thêm M20 tới M24 và các ca mới, M11 đổi tập dự kiến): lượt gốc 28/28 xanh; mọi đột biến ĐẠT. M0 vẫn đỏ đúng sáu `it` trên tệp test cuối; M20 đỏ đúng `it` trần `numeric`, M21 và M22 đỏ đúng `it` khoá trùng cùng `it` đối chứng, M23 và M24 đỏ `it` đối chứng; M17 được driver gắn cờ "còn chạy" đúng như chẩn đoán ở dưới.
+
+| Đột biến | Đỏ |
+|---|---|
+| M0 cả `index.ts` về `origin/master` — đo đỏ-trước lại trên tệp test cuối | số tiền, mọi số trong cây, biên, trần `numeric`, khoá trùng, bảng so sánh; đối chứng xanh |
+| M1 ghi `JSON.stringify(doc)` — số qua `double` như cũ | số tiền, mọi số trong cây, biên, bảng so sánh |
+| M2 bỏ vế khoá trùng (chỉ đòi phép quét khác `null`) | khoá trùng |
+| M3 bỏ soát biên số trong phép quét | biên, trần `numeric` |
+| M4 biên độ dài lệch một (`>=`) | biên |
+| M5 biên số mũ lệch một (`>=`) | mọi số trong cây (`1e-324`), biên |
+| M6 bỏ biên độ dài | biên, trần `numeric` |
+| M7 bỏ biên số mũ | biên, trần `numeric` |
+| M8 chỉ nhận `e` thường làm dấu số mũ | biên |
+| M9 chỉ nhận `E` hoa | biên, trần `numeric` |
+| M10 gạch chéo ngược không thoát ký tự kế (lượt một: SỐNG SÓT) | khoá trùng, đối chứng |
+| M11 không bỏ khoảng trắng trước dấu hai chấm | khoá trùng (ca CR, LF), đối chứng |
+| M12 phép quét không đếm khoá — tập chứa | mọi `it` đòi payload có cấu trúc: bảy `it` khoản 107, chín `it` khoản 106, A1 sau mở thầu, phiên bản cuối, phong bì không mở được |
+| M13 phép đi cây chỉ đếm khoá ở gốc | mọi số trong cây, ngưỡng đối tượng |
+| M14 bỏ vế `soKhoa !== null` | trần `numeric` (ca vượt biên cùng escape U+0000) |
+| M15 phép đi cây không soát chuỗi giá trị | ⑴, ⑶, soi hết cây |
+| M16 phép đi cây không soát khoá | ⑵, ⑶, soi hết cây |
+| M17 phép đi cây bỏ ngưỡng độ sâu (×1 000) — tập chứa | ⑷ (`stack depth limit exceeded`), ngưỡng mảng; rồi mọi `it` còn lại của khối từ ngưỡng đối tượng trở đi báo đỏ 0 ms, không thông báo — chạy lại M17 với reporter mặc định: vitest báo `Failed Suites 1` với `RangeError: Maximum call stack size exceeded` ở cấp khối `describe` — lỗi của tiến trình Node chạy test, không phải lỗi `pg` — và chỉ 14 trên 28 test được chạy. Reporter JSON ghi báo cáo khi 14 test kia CHƯA chạy, và tự cảnh báo `Some tests are still running when generating the JSON report`. Chỗ ném chính xác không đo; khả năng cao là phép so sâu của `expect` trên một đối tượng lồng hàng nghìn tầng đã lọt qua ngưỡng (suy luận) |
+| M18 độ dài không tính dấu âm | biên |
+| M19 token số không gồm `e`, `E` | biên, trần `numeric` |
+| M20 chỉ soát số đứng ngay sau dấu hai chấm (lượt soi 58 NHẸ-1) | trần `numeric` (ca phần tử mảng) |
+| M21 khoảng trắng không gồm CR (lượt soi 58 NHẸ-2) | khoá trùng, đối chứng |
+| M22 khoảng trắng không gồm LF (lượt soi 58 NHẸ-2) | khoá trùng, đối chứng |
+| M23 khoảng trắng không gồm tab | đối chứng |
+| M24 khoảng trắng không gồm dấu cách | đối chứng |
+
+**Lượt soi đối kháng 58** — reviewer đọc bản sao đã vá (sha256 `2293c472b687c323`) và diff; trích khối hàm khỏi bản sao để chạy trên Node 24.18 ngoài worker, và viết một bản tham chiếu `jsonb` cùng `numeric_in` theo mã nguồn PostgreSQL; không chạy vitest, không có PostgreSQL. Kết quả: **0 CAO, 0 NẶNG, 4 NHẸ, 4 INFO.** Fuzz vi sai khoảng 3,7 triệu đầu vào không ra ca nào ghi văn bản gốc mà có khoá trùng thật, ca nào phép quét lệch một bộ đếm token độc lập, hay ca nào phép đi cây lệch số khoá `jsonb` lưu.
+
+| Mức | Phát hiện | Xử lý |
+|---|---|---|
+| NHẸ-1 | Không `it` nào có số ngoài biên làm PHẦN TỬ MẢNG. Đột biến "chỉ soát số đứng ngay sau dấu hai chấm" xanh ở mọi test, trong khi dưới nó `{"a":[1e131072]}` đi văn bản gốc và `jsonb` sẽ ném `22003` | Thêm `{"totalAmount":1,"hang":[2,1e131072]}` vào `it` trần `numeric`. Đột biến M20 đỏ đúng `it` ấy |
+| NHẸ-2 | Không `it` nào có CR hay LF GIỮA khoá và dấu hai chấm. Đột biến bỏ CR hay LF khỏi `laKhoangTrangJson` xanh ở mọi test, trong khi dưới nó một khoá trùng tách bởi CR, mà giá trị bị ghi đè mang escape surrogate đơn lẻ, đi văn bản gốc và `jsonb` ném `22P02` | Thêm hai ca khoá trùng tách bởi CR, bởi LF vào `it` khoá trùng; thêm CR riêng, LF riêng, CRLF cùng tab và dấu cách vào `it` đối chứng. Đột biến M21 (bỏ CR) và M22 (bỏ LF) đỏ đúng hai `it` ấy; M23 (bỏ tab), M24 (bỏ dấu cách) đỏ `it` đối chứng |
+| NHẸ-3 | Chú thích "một hàm đệ quy ở đây sẽ ném `RangeError` trên chính cây quá sâu mà nó phải loại" nói quá: một phép đi cây đệ quy không chặn độ sâu chạy xong 5 000 tầng và chỉ ném ở 20 000 tầng (đo trên Node 24.18) | Sửa thành "có thể ném `RangeError` trên một cây RẤT sâu", kèm số đo |
+| NHẸ-4 | Ký tự không-phải-ký-tự U+FFFE, U+FFFF, U+FDD0 — dạng escape và dạng thô, trong chuỗi và trong khoá — đi văn bản gốc, mà `jsonb` có nhận hay không thì chưa đo. Nếu không nhận, một nhà cung cấp khoá cả lượt mở thầu | **ĐO** qua worker trên PostgreSQL 16.15: ca ấy vào `it` đối chứng; lượt mở thầu chạy trọn và payload giữ nguyên hình dạng (28/28 xanh) |
+| INFO-1 | Khoản 108 có thật: `pg-types` đăng ký `JSON.parse` cho OID 3802, và `server.ts` viết thân bằng `JSON.stringify`. `totalAmount`, min, max, trung bình đọc bằng SQL nên không dính; kỳ vọng `4553599627370496.50` đúng số học | Mở khoản 108 |
+| INFO-2 | Câu "giữ độ phình ở cỡ bản cũ" không chính xác: ở ca xấu nhất hơn khoảng 5% (tính theo `numeric_out`, khớp mười số đo của thăm dò) | Sửa chữ ở chú thích, hàng 107 và ranh giới ⑷ |
+| INFO-3 | Tài nguyên đường mới không thua đường cũ (8 MiB, mỗi phép một tiến trình): 4,19 triệu số `0` — mới 93 ms, RSS tối đa +34,9 MiB; cũ 81 ms, +49,4 MiB. Đối tượng rỗng `{}` — mới 420 ms, +376 MiB; cũ 452 ms, +427 MiB. Khoá phân biệt — mới 754 ms, cũ 972 ms. Một số dài 8 MiB chữ số: mới cất `raw` nguyên văn, cũ ghi `null` | Ghi vào ranh giới ⑾ |
+| INFO-4 | Số mũ 325 tới 16 383 bị đẩy sang `raw` dù `jsonb` nhận | Bảo thủ có chủ đích — biên an toàn, đã nói ở chú thích và ranh giới ⑶ |
+
+**Các hướng reviewer đã soi mà SẠCH:**
+- **Khoá trùng qua mọi ngả:** trùng sau khi giải escape (gạch chéo thoát, `\u0022`, `__proto__` thô và escape, `1` với `01`), trùng lồng trong mảng và đối tượng, trùng ghi đè một escape `jsonb` từ chối. `__proto__` là khoá riêng của `JSON.parse`, trùng với cách `jsonb` lưu.
+- **Phép quét:** dấu nháy đã thoát, gạch chéo ngược cuối chuỗi, dấu hai chấm, ngoặc và chữ số nằm trong chuỗi, CR, LF, tab quanh dấu hai chấm — khớp một lexer JSON độc lập trên mọi văn bản hợp lệ có số trong biên.
+- **Chuỗi và khoá:** U+0000 và surrogate đơn lẻ (cao, thấp, ngược thứ tự, escape cao cùng ký tự astral thô) đều vào `raw`; cặp surrogate hợp lệ, escape `\/ \b \f \n \r \t`, escape U+0001 tới U+001F, DEL, U+FFFD, U+2028 và U+2029 thô giữ hình dạng.
+- **Số ở biên:** `1e324`, `-1E-324`, `0.5e+0000324`, 1 000 chữ số giữ; `1e325`, 1 001 chữ số, 16 384 chữ số thập phân, `1e131072`, số mũ nhiều số 0 đứng đầu vượt biên vào `raw`; `soMu` không tràn.
+- **Khoảng trắng và BOM:** FF, VT, NBSP, U+2028, U+0085, U+3000 hay BOM ở giữa văn bản làm `JSON.parse` ném, nên vào `raw`; một BOM đầu bị `TextDecoder` bỏ; BOM thứ hai làm `JSON.parse` ném.
+- **Độ sâu:** `JSON.parse` của V8 chạy tới 1 000 000 tầng không ném; phép đi cây loại trên 64 tầng; đường `raw` sâu một tầng; không đường nào để `RangeError` thoát khỏi `thanhJson`.
+- **Giá trị đổi thầm:** không payload có cấu trúc nào lưu khác giá trị niêm phong — `1E2` ra `100`, `-0` ra `0` là đổi chữ viết, không đổi giá trị.
+
+**Ranh giới NÓI RA:**
+- ⑴ **Giá trị, không chữ viết:** `jsonb` giữ giá trị số chính xác nhưng in lại theo `numeric` — `1E2` ra `100`, `1.50e1` ra `15.0`, `-0` ra `0`.
+- ⑵ **Thay đổi hành vi:** bản rõ có khoá trùng, hay có một số ngoài biên, nay cất dưới `{ raw }` — trước là có cấu trúc với giá trị cuối, `null`, `0` hay số đã làm tròn. Bảng so sánh đếm báo giá ấy `unparsed`, và nó ra khỏi min, max, trung bình, dưới ngân sách.
+- ⑶ **Biên là biên an toàn:** 1 000 ký tự và số mũ 324 phủ mọi số mà `JSON.stringify` của JavaScript viết ra và mọi con số của một báo giá; một số hợp lệ vượt biên đẩy cả báo giá sang `raw`.
+- ⑷ **Độ phình khi đọc:** với biên 324, `1e324` đọc lại 325 ký tự (đo). Ở ca xấu nhất, một bản rõ 8 MiB toàn phần tử `1e324,` đọc lại khoảng 436 MiB, so với khoảng 415 MiB của đường cũ với toàn `1e308,` — hơn khoảng 5% (lượt soi 58, tính theo `numeric_out`, chưa đo). Lớp phình này có từ trước bản vá.
+- ⑸ **`demKhoaVanBan` chỉ đúng với văn bản JSON hợp lệ** mà `JSON.parse` vừa nhận; lập luận của nó dựa hẳn vào điều ấy.
+- ⑹ **Ngưỡng stack của PostgreSQL:** nằm giữa 5 000 và 20 000 tầng với mảng lồng đứng riêng; biên 64 không đổi.
+- ⑺ **Bộ nhớ và thời gian** đo bằng script Node ngoài worker, trên Node 24.18; CI chạy Node 22 và đo hành vi qua test, không đo tài nguyên.
+- ⑻ **Phía đọc:** `payload` qua `pg` lại đi qua `double` — mang sang khoản 108.
+- ⑼ **Mã hoá:** cụm UTF8 và `client_encoding` UTF8, như đường `{ raw }` (khoản 104).
+- ⑽ **Ký tự không-phải-ký-tự:** U+FFFE, U+FFFF, U+FDD0 giữ hình dạng — đo qua worker (lượt soi 58 NHẸ-4). Các điểm mã không-phải-ký-tự khác (U+FDD1 tới U+FDEF, cặp cuối mỗi mặt phẳng ngoài BMP) chưa đo; cùng lớp theo bản tham chiếu của reviewer (suy luận).
+- ⑾ **Bộ nhớ của bản rõ nhiều đối tượng nhỏ:** 8 MiB đối tượng rỗng `{}` đẩy RSS lên khoảng +376 MiB ở đường mới và +427 MiB ở đường cũ (lượt soi 58, đo ngoài worker) — lớp có từ trước, bản vá không làm xấu thêm.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Một hình dạng đóng đề xuất phải được đo GIÁ trên kích thước đầu vào xấu nhất trước khi dùng — một cơ chế đúng về ngữ nghĩa vẫn có thể là một lỗ hổng sẵn sàng.
+- ⑵ Khi chuyển văn bản gốc cho một bộ phân tích thứ hai, lưới chặn phải thấy MỌI thứ bộ thứ hai thấy — kể cả thứ bộ thứ nhất vứt đi, như giá trị của khoá trùng.
+- ⑶ Test về tính chính xác của số không được đọc qua một bộ phân tích làm tròn; so trong miền chính xác.
+- ⑷ Một biên che bộ phân tích phía sau cũng phải tính độ phình khi đọc lại.
+- ⑸ Hai lưới chặn dùng CHUNG một tín hiệu thất bại cần một ca mà cả hai cùng từ chối; không thì đột biến bỏ phép kiểm tín hiệu ấy sống sót.
+- ⑹ Một lưới chặn đọc ký tự theo TẬP (khoảng trắng, dấu số mũ) cần một ca cho TỪNG phần tử của tập, ở đúng vị trí phần tử ấy chịu lực: CR và LF đã có trong test, nhưng chỉ ở chỗ không chịu lực (lượt soi 58 NHẸ-2).
+- ⑺ Một lưới chặn đọc số phải được đo ở MỌI vị trí một số đứng được — giá trị của khoá, phần tử mảng, sau khoảng trắng — không chỉ ở vị trí test đầu tiên nghĩ tới (lượt soi 58 NHẸ-1).
