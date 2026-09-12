@@ -322,6 +322,42 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     expect(tt[0]?.yc).toBe("EXECUTED");
   });
 
+  // ===========================================================================================
+  // [khoản nợ 10] ĐƯỜNG GỠ U+0000 CỦA `thanhJson` CÓ PHÉP ĐO — trước khi byte NUL THÔ trong regex của nó thành một escape.
+  // [S1.6 H1] `jsonb` không biểu diễn được U+0000 (22P05), nên MỘT byte trong bản rõ của MỘT nhà cung cấp làm cả lượt mở thầu
+  // rollback. Bản vá của S1.6 gỡ NUL trước `JSON.parse` nhưng không kèm test nào đi qua đường ấy; tới S1.63 regex còn mang một
+  // byte NUL thô, nên phép dò xuống dòng của Git coi tệp là nhị phân và ripgrep quét theo thư mục bỏ qua nó.
+  // ===========================================================================================
+  it("[khoản nợ 10] một U+0000 THÔ trong chuỗi của bản rõ JSON bị gỡ — lượt mở thầu không hỏng, payload cất được", async () => {
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, '{"donGia":1234567,"ghiChu":"a\u0000b"}');
+    const requestId = await dongVaXinMoThau(rfqId);
+
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+    );
+    expect(ketQua.opened).toBe(1);
+    const { rows } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ payload: unknown }>("SELECT payload FROM rfq_unsealed_bids WHERE unseal_request_id = $1", [requestId]),
+    );
+    expect(rows.map((r) => r.payload)).toEqual([{ donGia: 1234567, ghiChu: "ab" }]);
+  });
+
+  it("[khoản nợ 10] một U+0000 THÔ trong bản rõ KHÔNG phải JSON bị gỡ — cất dưới raw, và CHỈ U+0000 bị gỡ (xuống dòng còn nguyên)", async () => {
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, "rac\u0000\nrac");
+    const requestId = await dongVaXinMoThau(rfqId);
+
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+    );
+    expect(ketQua.opened).toBe(1);
+    const { rows } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ payload: unknown }>("SELECT payload FROM rfq_unsealed_bids WHERE unseal_request_id = $1", [requestId]),
+    );
+    expect(rows.map((r) => r.payload)).toEqual([{ raw: "rac\nrac" }]);
+  });
+
   it("[INV-G4] mở bọc khoá SINH AUDIT — vế thứ tư của mệnh đề, thứ S1.4 không có", async () => {
     const rfqId = await taoRfqMo();
     await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 }));

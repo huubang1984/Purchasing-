@@ -129,7 +129,10 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
  * thì nó được cất dưới `{ "raw": "..." }` thay vì làm cả lượt mở thầu hỏng. Một nhà cung cấp gửi
  * rác — cố ý hay do lỗi trình duyệt — KHÔNG được phép chặn việc mở báo giá của những người khác.
  *
- * Bản rõ không bao giờ bị VỨT ĐI: nó luôn tới được `rfq_unsealed_bids`, chỉ khác hình dạng.
+ * ~~Bản rõ không bao giờ bị VỨT ĐI: nó luôn tới được `rfq_unsealed_bids`, chỉ khác hình dạng.~~
+ * [lượt soi 56 I2, C1, N2 — ĐO] Nói quá: một bản rõ JSON HỢP LỆ mà `jsonb` hay `JSON.stringify` không nhận — escape của
+ * U+0000 trong một chuỗi hay một khoá (`22P05`), escape surrogate đơn lẻ (`22P02`), mảng lồng từ 5 000 tầng (`RangeError`)
+ * — làm CẢ lượt mở thầu rollback ở mọi lần thử, báo giá sạch cũng không mở được. Khoản nợ 106.
  *
  * [REVIEW AN NINH S1.6 — HIGH-1] `U+0000` BỊ GỠ, VÀ ĐÓ LÀ MỘT LỖ HỔNG SẴN SÀNG CÓ THẬT.
  * Kiểu `jsonb` của PostgreSQL KHÔNG biểu diễn được `U+0000` trong chuỗi — nó ném `22P05`. Câu
@@ -138,12 +141,13 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
  * lại y hệt ở mọi lần thử lại. Tức một nhà cung cấp khoá được cả cuộc thầu bằng một byte.
  *
  * Gỡ ở đây, chứ không chỉ bắt lỗi ở chỗ ghi: một `payload` không cất được là dữ liệu đã MẤT, còn
- * một `payload` đã gỡ NUL là dữ liệu đã cất được kèm một sai lệch đọc được từ chính nó.
+ * ~~một `payload` đã gỡ NUL là dữ liệu đã cất được kèm một sai lệch đọc được từ chính nó.~~ một `payload` đã gỡ NUL
+ * là dữ liệu đã cất được — nhưng sai lệch ấy KHÔNG đọc được từ chính nó: U+0000 bị gỡ không để lại dấu (lượt soi 56 I2).
  */
 function thanhJson(banRo: Uint8Array): unknown {
   const van = new TextDecoder("utf-8", { fatal: false })
     .decode(banRo)
-    .replace(/ /gu, "");
+    .replace(/\u0000/gu, "");
   try {
     const doc: unknown = JSON.parse(van);
     if (typeof doc === "object" && doc !== null && !Array.isArray(doc)) return doc;
