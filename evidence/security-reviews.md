@@ -3528,3 +3528,129 @@ ninh — thăm dò đo — gỡ hai ràng buộc chữ thường và hạ ràng 
 mà RLS áp, câu đọc ra 0 hàng — nói thật về điều ấy thay vì im lặng. ⑵ Một chốt dữ liệu cá nhân chỉ cấm một mẩu (tên miền) là chốt rỗng ruột:
 so NGUYÊN VĂN. ⑶ Fixture luôn làm nhánh lỗi chạy thì mọi khẳng định "không tự sửa" đều không đỏ được — cần một fixture nơi chỉ vế ấy giữ kết
 quả. ⑷ `ORDER BY <số> COLLATE` không phải thứ tự theo cột.
+
+# §S1.62 — khoản nợ 67: `do-lap.yml` tách hai job — token ghi issue không nằm cùng job với mã bên thứ ba; báo động chạy cả khi `lap` chết trước khi có số đo; test GHIM thay vì dò mẫu — lượt soi 55
+
+**Bề mặt:** `.github/workflows/do-lap.yml` và test mới `tests/architecture/hinh-dang-do-lap.test.ts`. Không đổi dòng mã sản xuất nào.
+- **Workflow:** `permissions: {}`.
+- **Job `lap`** (`contents: read`):
+  - chạy `pnpm install --frozen-lockfile` và `pnpm test:int`, đưa bốn giá trị ra `outputs`;
+  - bước đếm ghi xong outputs thì xanh;
+  - bước cuối "Fail-closed" `test "${SO_DO:-x}" = "0"`.
+- **Job `bao-dong`** (`needs: lap`, `issues: write`):
+  - chạy khi `always()` VÀ (`needs.lap.result` khác `success` HOẶC `so_do` khác `0`);
+  - không `uses:`, không checkout, không cài đặt; gọi `gh` kèm `GH_REPO`;
+  - năm giá trị `*_THO` (bốn output cùng kết quả job) đi qua env và được kiểm hình dạng TRỌN CHUỖI;
+  - thiếu số đo thì mở issue "KHÔNG HOÀN TẤT";
+  - nhãn mũi đột biến lấy từ sự kiện;
+  - bộ lọc tác giả là `app/github-actions`.
+
+**Đo trước khi viết** (test viết trước, hai lần):
+- ⒜ **Bản một của test, trên workflow CŨ:** `it` workflow thật ĐỎ với năm lỗi:
+  - quyền mức workflow là `contents: read` + `issues: write`;
+  - thiếu job `bao-dong`;
+  - `lap` không khai quyền mức job;
+  - `lap` không đưa `so_do` ra outputs;
+  - `lap` không có bước fail-closed riêng.
+- ⒝ **Bản hai của test, sau lượt soi 55, trên workflow bản MỘT:** hai `it` ĐỎ — thân `bao-dong` và khối outputs lệch chỗ ghim, còn `it` đột biến ném vì neo của bản hai chưa có. Chép YAML bản hai vào thì 2/2 xanh.
+- ⒞ **Qua API:** `default_workflow_permissions` của kho là `read`, tức khối cũ là một lần NỚI thêm `issues: write`.
+
+**Thăm dò trên runner GitHub** (không ghi gì):
+- **Cách dựng:** workflow thăm dò riêng, commit mồ côi `666c5f3` dựng bằng plumbing với index tạm, nhánh tạm `zz-tham-do-67` không mang `ci.yml`, xoá sau khi đọc log.
+- **Run 34663968157:** job `a` failure (đúng thiết kế), job `b` success.
+- ⑴ **Output của một job ĐỎ tới được job `needs`:** `ket_qua_a=[failure] so_do=[2] ten_do=[…]`.
+- ⑵ **Shell:** `run:` không khai `shell` chạy bash 5.2.21 với cờ `ehB`.
+- ⑶ **Kiểm hình dạng:** `[[ "$v" =~ ^[0-9]{1,3}/[0-9]{1,3}$ ]]` CHẶN `2/10<xuống dòng>rac`; đối chứng `grep -Eqx` để LỌT.
+- ⑷ **Lọc tên:** `tr -c 'A-Za-z0-9._/() -' '?'` biến backtick, `@` và xuống dòng thành `?`, còn `é` (2 byte) thành `??`.
+- ⑸ **`gh` không checkout:** với `issues: read` và `GH_REPO`, `gh issue list` vẫn đọc được issue của kho.
+
+**Đo bộ lọc tác giả** (API thật, chỉ đọc; lượt soi 55 INFO-4):
+- Issue #22, do workflow này mở ở S1.25, mang `author.login` = `app/github-actions`.
+- Bộ lọc cũ `== "github-actions"` trên 50 issue gần nhất ra `[]`; `--app github-actions` cũng ra `[]`; bộ lọc sửa ra `[22]`.
+- Tức nhánh "bình luận vào issue cũ" của bản cũ KHÔNG THỂ chạy. Lỗi có từ S1.25.
+
+**Harness hành vi:** chạy thân `run` của `bao-dong`, trích từ YAML bản hai, dưới `bash -e`, với một `gh` GIẢ đặt đầu PATH chỉ ghi lại lệnh. Bảy kịch bản, cả bảy thoát mã 0, và `bash -n` sạch:
+
+| Kịch bản | Kết quả |
+|---|---|
+| Bình thường | issue "KHÁC 0", thân có dòng kết quả job |
+| Vắng output, `lap` `failure` hay `cancelled` | "KHÔNG HOÀN TẤT … (job lap: failure)" / "(job lap: cancelled)" |
+| Mũi đột biến, 0 lượt đỏ thật | nhãn "không phải một phép đo" |
+| Mũi đột biến + 2 lượt đỏ thật | báo động thật, kèm ghi chú |
+| Giá trị rác (xuống dòng, `@team`, backtick, `;id`) | "KHÔNG HOÀN TẤT … (job lap: khong hop le)"; tên tệp thành `?id? ?team?? tieu de` |
+| Đã có issue #7 | `gh issue comment 7` |
+
+**Test** (`tests/architecture/hinh-dang-do-lap.test.ts`, hai `it`, bản hai — GHIM):
+- ⑴ **Cấu trúc theo tập khoá:**
+  - mức cao nhất đúng {name, on, permissions, jobs} với `permissions: {}`;
+  - sự kiện đúng {schedule, workflow_dispatch};
+  - mọi dòng thụt 2 dưới `jobs:` là khai báo job hợp lệ, và tập job đúng `[lap, bao-dong]`.
+- ⑵ **`lap`:**
+  - tập khoá mức job, khối quyền, khối outputs và bước fail-closed cuối đều ghim nguyên văn;
+  - checkout giữ `persist-credentials: false`;
+  - không `secrets`, `github.token` hay `GITHUB_TOKEN` ở dòng nào không phải chú thích.
+- ⑶ **`bao-dong`:** thân ghim NGUYÊN VĂN tới hết tệp. Hằng ghim sinh từ YAML bằng `json.dumps`, không gõ tay.
+- **Cách đọc:** phần cấu trúc chỉ bỏ chú thích NGUYÊN DÒNG.
+- **`it` thứ hai:** mười bảy đột biến trên CHÍNH tệp thật, mỗi đột biến đỏ đúng vế của nó; một chú thích nguyên dòng chèn vào `lap` thì không đỏ.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Kiểm theo dòng:** bản nháp đầu kiểm hình dạng bằng `grep -Eqx`, mà grep so THEO DÒNG → đo, đổi sang `[[ =~ ]]` và `case`.
+- ⑵ **Bộ đọc `permissions` mức job** của bản một đọc `write-all` một dòng thành Map rỗng.
+- ⑶ **`bao-dong`** dùng một `uses:` bên thứ ba thì lọt.
+- ⑷ **Mất `always()`** không có vế nào canh.
+- ⑸ **Mẫu chỉ đòi neo `^…$`,** nên `^.*$` lọt.
+- ⑹ **Bộ dò chỉ đọc khối `run: |` đầu tiên.**
+- Các lỗ ⑵ tới ⑹ được vá ngay ở bản một; ở bản hai, cả lối dò mẫu bị thay bằng lối ghim.
+- ⑺ **eslint `no-unsafe-return`** ở `expect.stringContaining` trong `map`.
+- ⑻ **Hook `git-safety`** chặn nhầm một chuỗi có `rm -f` cùng dòng với `git push`.
+- ⑼ **Công cụ Write** biến escape sáu ký tự của U+0000 trong nội dung thành byte NUL thật (đo bằng `grep -a -c -P`) — đã ghi vào bộ nhớ.
+
+**Đỏ đo được, cô lập:**
+Mười hai đột biến qua vitest trên tệp thật `do-lap.yml` (bản hai), chạy một-một; đối chứng M00 xanh; mỗi đột biến làm `it` workflow thật ĐỎ (dòng `×` của chính `it` ấy); sau lượt, sha256 của tệp khớp bản gốc. M01 `env:` mức workflow mang PAT · M02 thêm sự kiện `pull_request_target` · M03 job id viết hoa chen giữa `lap` và `bao-dong` · M04 `lap` cầm `issues: write` · M05 `lap` thêm `container:` · M06 `lap` mất `so_do` ở outputs · M07 bước fail-closed đọc hằng `"0"` · M08 bỏ `persist-credentials: false` · M09 một bước của `lap` dùng `github.token` · M10 `if:` của `bao-dong` bỏ nhánh `lap` không xanh · M11 đổi một chú thích trong `bao-dong` · M12 giá trị thô cùng dòng với phép kiểm. Cộng mười bảy đột biến trong chính `it` thứ hai (mỗi đột biến đỏ đúng vế); ở bản một, hai mươi đột biến chạy qua Node trên bản YAML thử cùng hai mươi văn bản giả — lối dò mẫu ấy nay đã thay bằng lối ghim.
+
+**Lượt soi đối kháng 55** — reviewer đọc kho, bản YAML thử và bản nháp test; đọc được tài liệu GitHub và mã nguồn runner; không chạy Node. Kết quả: **0 CAO, 6 NẶNG, 5 NHẸ, 5 INFO.** Không phát hiện nào làm bản vá sai ngay hôm nay. Chỗ yếu nằm ở ba nhóm: đường báo động chưa đo lại, lời khai về output rỗng nói quá, và test hình dạng xanh giả với cách viết hợp lệ.
+
+| Mức | Phát hiện | Xử lý ở bản hai |
+|---|---|---|
+| NẶNG-1 | Đường báo động của khoản 65 đổi bốn mắt xích (output qua job đỏ, bộ che bí mật trên output của job, `gh` không `.git`, mất `contents: read`) mà chưa chạy lần nào; issue #22 không còn là chứng cứ; `so_luot` tối thiểu 5 nên phép đo kiểu #22 không gọi lại được | **ĐO một phần.** Thăm dò runner: output của job đỏ tới được job `needs`; `gh` không checkout đọc được issue qua `GH_REPO`. Harness bash với `gh` giả chạy bảy kịch bản của chính thân `bao-dong`. Bộ lọc tác giả đo trên API thật. **CHƯA ĐO:** các lệnh GHI issue dưới quyền mức job — một lượt `dot_bien=true` mở issue thật nên em không tự chạy; ghi thành ranh giới |
+| NẶNG-2 | `so_do` vắng thì không báo động: quá hạn, bước đếm hỏng, hay runner mất SAU khi đếm (ca cuối là hồi quy do tách job). Chú thích lại khai ngược. Giá trị vắng ép về 0 nên `so_do != '0'` sai | `if:` đổi thành: `always()` VÀ (`needs.lap.result` khác `success` HOẶC `so_do` khác `0`). Thêm `SO_DO_THO` và `KET_QUA_LAP_THO`; thiếu hay sai hình dạng số đo thì mở issue "KHÔNG HOÀN TẤT" kèm kết quả job (harness: `failure`, `cancelled`). Chú thích sửa, lời cũ gạch |
+| NẶNG-3 | Bộ tách job không fail-closed: job id viết hoa, `_`, ngoặc kép hay dấu cách cuối dòng thì tàng hình, bị gộp vào thân `lap` | Test ghim: mọi dòng thụt 2 dưới `jobs:` phải là một khai báo job hợp lệ; tập job đúng `[lap, bao-dong]` theo thứ tự. Đột biến "job id viết hoa chen giữa" và "job id có ngoặc kép" đỏ |
+| NẶNG-4 | Kiểm tra output không tin chỉ áp cho job tên `bao-dong`; một job thứ ba cầm `issues: write` nội suy output thì lọt | Tập job ghim đúng hai, nên mọi job thứ ba đều đỏ |
+| NẶNG-5 | `env:` mức workflow (ví dụ một PAT) lọt: kiểm tra bí mật chỉ quét thân job | Mức cao nhất ghim đúng {name, on, permissions, jobs}. Đột biến "env mức workflow mang PAT" đỏ |
+| NẶNG-6 | Theo dõi output bằng chuỗi con và theo dòng: `needs['lap'].outputs[…]`, `toJSON(needs)`, giá trị thô cùng dòng với phép kiểm, bước dạng `- run:`, chú thích ` #` cắt mất phần sau | Thân `bao-dong` ghim NGUYÊN VĂN tới hết tệp, kể cả chú thích. Phần cấu trúc chỉ bỏ chú thích NGUYÊN DÒNG, không cắt giữa dòng. Đột biến `toJSON(needs)`, giá trị thô cùng dòng, và đổi chữ sau dấu `#` giữa dòng đều đỏ |
+| NHẸ-1 | `if:` của `bao-dong` và env của bước fail-closed không ghim — một `SO_DO: "0"` làm job luôn xanh | `if:` nằm trong thân `bao-dong` đã ghim; bước fail-closed cuối của `lap` ghim nguyên văn. Đột biến "bỏ nhánh lap đỏ" và "fail-closed đọc hằng 0" đỏ |
+| NHẸ-2 | Danh sách đen lệnh chạy mã bỏ sót `container:`, `services:`, alias YAML, `gh extension install`, `python3 -m pip`, `docker run` | Bỏ danh sách đen. `lap` được chạy mã theo thiết kế: thứ canh là quyền, tập khoá mức job (`container`, `services`, `env` đều đỏ) và bí mật. `bao-dong` ghim nguyên văn |
+| NHẸ-3 | Mẫu trắng cho `tr -c` kiểm từng ký tự chứ không kiểm dải (`)-_` phủ 0x29–0x5F) | Chuỗi `tr` nằm trong thân `bao-dong` đã ghim |
+| NHẸ-4 | Ranh giới chưa nói: mã bên thứ ba trong `lap` vẫn tắt được báo động (`so_do=0`, `::add-mask::`, output quá lớn cho env); nhãn "mũi đột biến" lấy từ output của `lap` | Nói ra ở khối đầu `do-lap.yml` và ở biên bản: kiểm hình dạng bảo vệ KÊNH ISSUE, không bảo vệ tính đúng của phép đo. Dưới `if:` mới, output bị che hay vắng cho ra issue "KHÔNG HOÀN TẤT"; còn `so_do=0` hay output quá lớn cho env thì vẫn tắt được. `DOT_BIEN_SU_KIEN` lấy từ `github.event.inputs.dot_bien` |
+| NHẸ-5 | "`lap` KHÔNG cầm quyền ghi" nói quá: token runtime của runner vẫn ghi cache và artifact (có từ trước) | Chú thích sửa, lời cũ gạch |
+| INFO-1 | Chú thích checkout vẫn nói đọc `.git/config` là cầm token ghi issue | Lời cũ gạch; ghi lại: token nay chỉ đọc, `persist-credentials: false` vẫn giữ |
+| INFO-2 | Test ghi "đo trên bash thật" nhưng khi ấy mới đo Git Bash | Đã đo trên runner ubuntu (bash 5.2.21, run 34663968157); chú thích nêu cả hai |
+| INFO-3 | Test đỏ có chủ đích nằm trong kho trong lúc `pnpm evidence` chạy | Không xảy ra: không lượt evidence nào chạy khi test còn đỏ; evidence của vòng chạy trên bản xanh |
+| INFO-4 | Nhánh "bình luận vào issue cũ" chưa từng chạy; `.author.login == "github-actions"` có thể không bao giờ khớp | **ĐO:** `author.login` của issue #22 là `app/github-actions`; bộ lọc cũ ra rỗng trên 50 issue gần nhất; `--app github-actions` cũng rỗng; bộ lọc sửa ra `[22]`. Harness chạy tới nhánh bình luận với issue giả #7. Lỗi có từ S1.25 |
+| INFO-5 | Test không ghim `on:`, nên tiền đề "chỉ `schedule` + `workflow_dispatch`" của lượt soi 16 không có gì canh | Sự kiện ghim đúng {schedule, workflow_dispatch}. Đột biến `pull_request_target` đỏ |
+
+**Hướng reviewer đã soi mà SẠCH:**
+- `FinalizeJob` đánh giá outputs bất kể kết quả job.
+- `permissions: {}` cộng quyền mức job đúng với tài liệu cho `schedule` và `workflow_dispatch`.
+- `GH_REPO` thay được `.git`, và `gh` có sẵn trên runner.
+- Mỗi job có VM riêng, nên không có kênh hệ tệp.
+- `[[ =~ ^…$ ]]` neo trọn chuỗi; `tr`/`cut` không eval.
+- Không `${{ }}` nào nội suy vào thân `run`.
+- Không đường nào để `lap` xanh mà `so_do` khác 0.
+- Test thật sự chạy ở T1+T2 trên cả hai hệ điều hành.
+
+**Ranh giới NÓI RA:**
+- ⑴ **`so_do` do `lap` ghi, và `lap` chạy mã bên thứ ba.** Một `lap` bị chiếm vẫn TẮT được báo động: ghi `so_do=0`, hoặc làm bước báo động không khởi động được bằng một output quá lớn cho env. Khoản này đóng việc CẦM TOKEN GHI và làm kênh issue chịu được dữ liệu rác; nó không đóng việc tin kết quả đo.
+- ⑵ **Chưa đo trên runner:** `gh label create`, `gh issue create --label` và `gh issue comment` dưới `issues: write` MỨC JOB, không có `contents: read`.
+  - Tài liệu GitHub có ví dụ đúng tổ hợp ấy (reviewer dẫn).
+  - Phép đo cần một lượt `dot_bien=true`, lượt ấy mở issue thật, nên em không tự chạy.
+  - `so_luot` nhỏ nhất là 5, nên lượt ấy tốn khoảng 45 phút.
+- ⑶ **`lap` quá hạn** thì mất số đỏ của các lượt đã xong; issue "KHÔNG HOÀN TẤT" vẫn được mở.
+- ⑷ **Token runtime của `lap`** vẫn ghi được cache và artifact. Việc này có từ trước.
+- ⑸ **Test GHIM:** sửa `bao-dong`, hay khối quyền, outputs hoặc bước fail-closed của `lap`, là phải sửa cả test — có chủ đích.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Một đường báo động tách sang job khác phải được đo lại ĐÚNG ngữ nghĩa bị đổi — ở đây là output của một job đỏ — trên runner thật, bằng một phép đo không ghi gì.
+- ⑵ Với một job nhỏ cầm quyền ghi, ghim nguyên văn mạnh hơn mọi bộ dò mẫu: mỗi bộ dò mẫu của bản một đều có một văn bản hợp lệ đi vòng.
+- ⑶ Theo tài liệu biểu thức (reviewer dẫn, chưa đo), giá trị vắng bị ép về 0, nên `x != '0'` ra SAI khi `x` vắng. Một điều kiện báo động không được dựa vào sự có mặt của output.
+- ⑷ Kiểm hình dạng dữ liệu không tin trong bash phải so TRỌN CHUỖI.
