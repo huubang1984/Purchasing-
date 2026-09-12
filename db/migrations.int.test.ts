@@ -67,6 +67,60 @@ async function dungRoleTrienKhaiThuong(db: TestDatabase): Promise<string> {
   return url.toString();
 }
 
+/**
+ * [khoản nợ 70] Dựng một CSDL đã áp mọi migration TRỪ `049`, với chuỗi danh tính (tổ chức, người mua có vai và phiên) và hai nhà cung cấp —
+ * để đo `049` trên dữ liệu có từ trước. `lienHe` chèn người liên hệ dưới superuser (vai của `db.pool`), nên chèn được cả chữ hoa.
+ */
+async function truoc049(
+  db: TestDatabase,
+  tmp: string,
+): Promise<{
+  readonly ten049: string;
+  readonly nccA: string;
+  readonly nccB: string;
+  readonly lienHe: (ncc: string, email: string) => Promise<string>;
+  readonly daGhi049: () => Promise<number>;
+  readonly emailCua: (id: string) => Promise<string | undefined>;
+}> {
+  const tep049 = (await readdir(MIGRATIONS_DIR)).filter((f) => f.startsWith("049_"));
+  expect(tep049, "chưa có migration 049 trong kho").toHaveLength(1);
+  const ten049 = tep049[0]!;
+  for (const f of await readdir(MIGRATIONS_DIR)) if (f !== ten049) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+  await migrate(db.pool, tmp);
+  const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz70', 'zz70') RETURNING id")).rows[0]!.id;
+  const nguoi = (
+    await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'pm70@vidu.vn', 'pm70') RETURNING id", [org])
+  ).rows[0]!.id;
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, nguoi]);
+  const phien = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [org, nguoi, Buffer.alloc(32, 70)],
+    )
+  ).rows[0]!.id;
+  const ncc = async (ten: string): Promise<string> =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        [org, ten, nguoi, phien],
+      )
+    ).rows[0]!.id;
+  const nccA = await ncc("NCC 70 A");
+  const nccB = await ncc("NCC 70 B");
+  const lienHe = async (nccId: string, email: string): Promise<string> =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi 70', $3, $4, $5) RETURNING id",
+        [org, nccId, email, nguoi, phien],
+      )
+    ).rows[0]!.id;
+  const daGhi049 = async (): Promise<number> =>
+    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [ten049])).rowCount ?? 0;
+  const emailCua = async (id: string): Promise<string | undefined> =>
+    (await db.pool.query<{ email: string }>("SELECT email FROM supplier_contacts WHERE id = $1", [id])).rows[0]?.email;
+  return { ten049, nccA, nccB, lienHe, daGhi049, emailCua };
+}
+
 /** Đổi user/password của một connection string, giữ nguyên host/port/database. */
 function doiNguoiDung(pChuoiKetNoi: string, pTenRole: string, pMatKhau: string): string {
   const url = new URL(pChuoiKetNoi);
@@ -630,6 +684,126 @@ describe("migration của dự án", () => {
       await expect(migrate(db.pool, tmp)).resolves.toEqual(["999_zz_backfill100.sql"]);
       expect(await tenNcc(), "backfill áp đủ hàng").toEqual(["NCC 100 (da sua 100)"]);
     } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [khoản nợ 70] `049` thêm `CHECK (email = lower(email))` cho `supplier_contacts` — bảng CÓ đường ghi nên có thể đã có dữ liệu. `048` đã
+  // đo: lượt kiểm của `ALTER TABLE … ADD CHECK` chỉ nói CÓ vi phạm, không nói Ở ĐÂU. Nên `049` đối chiếu TRƯỚC và dừng deploy với định danh,
+  // KHÔNG in email (thông báo lỗi migration đi vào log deploy). [lượt soi 54 NHẸ-1, NHẸ-4, NHẸ-5] Thông báo so NGUYÊN VĂN — một con số sai, một
+  // id thừa hay một mẩu dữ liệu cá nhân chen vào đều đỏ; hai mươi mốt hàng chữ hoa ghim giới hạn 20 id; nhóm va khoá nêu MỌI id của nhóm.
+  it("[khoản nợ 70] người liên hệ có email chữ hoa từ trước 049 ⇒ migrate() NÉM với thông báo NGUYÊN VĂN — số hàng, 20 id đầu, từng nhóm sẽ va khoá kèm mọi id, không một mẩu dữ liệu cá nhân — và 049 không được ghi; sửa tay ⇒ đi qua, ràng buộc đã kiểm", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k70-"));
+    try {
+      const { ten049, nccA, nccB, lienHe, daGhi049, emailCua } = await truoc049(db, tmp);
+      // Hai mươi hàng chữ hoa đứng một mình; một cặp chỉ khác hoa-thường (nửa hoa là hàng chữ hoa thứ 21); và cùng địa chỉ chữ thường ở nhà
+      // cung cấp THỨ HAI — khoá duy nhất theo (tổ chức, nhà cung cấp, email) nên hàng ấy KHÔNG thuộc nhóm va khoá.
+      const motMinh: string[] = [];
+      for (let i = 0; i < 20; i += 1) motMinh.push(await lienHe(nccA, `Solo${i}-70@vidu.vn`));
+      const idCapThuong = await lienHe(nccA, "cap70@vidu.vn");
+      const idCapHoa = await lienHe(nccA, "Cap70@vidu.vn");
+      await lienHe(nccB, "cap70@vidu.vn");
+
+      await copyFile(join(MIGRATIONS_DIR, ten049), join(tmp, ten049));
+      const loi = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "dữ liệu vi phạm mà 049 vẫn đi qua").not.toBeNull();
+      // Khẳng định DỮ LIỆU đứng trước chữ.
+      expect(await daGhi049(), "049 NÉM thì không được ghi checksum").toBe(0);
+      expect(await emailCua(motMinh[0]!), "hàng giữ nguyên").toBe("Solo0-70@vidu.vn");
+      // Thứ tự uuid của PostgreSQL là thứ tự byte, trùng thứ tự chuỗi hex chữ thường của JS.
+      const hoa = [...motMinh, idCapHoa].sort();
+      expect(loi!.message).toBe(
+        `Migration ${ten049} thất bại: supplier_contacts: 21 hang co email chua o chu thuong — id (toi da 20): ${hoa.slice(0, 20).join(", ")}; ` +
+          `1 nhom se trung khoa (org_id, supplier_id, email) neu ha chu thuong — id tung nhom (toi da 10 nhom): [${[idCapThuong, idCapHoa].sort().join(", ")}] — ` +
+          "sua tay duoi mot vai ma RLS khong ap, moi thay doi kem mot su kien kiem toan, roi deploy lai (049, khoan no 70)",
+      );
+
+      // Sửa tay như thông báo chỉ, dưới vai mà RLS không áp (superuser): hạ hai mươi hàng đứng một mình; với nhóm va khoá thì phải CHỌN người
+      // liên hệ được giữ — nửa hoa ở đây chưa có lời mời nên xoá được (có lời mời thì khoá ngoại chặn: thu hồi lời mời theo đường sản phẩm trước).
+      await db.pool.query("UPDATE supplier_contacts SET email = lower(email) WHERE id = ANY($1::uuid[])", [motMinh]);
+      await db.pool.query("DELETE FROM supplier_contacts WHERE id = $1", [idCapHoa]);
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([ten049]);
+      const { rows } = await db.pool.query<{ convalidated: boolean }>(
+        "SELECT convalidated FROM pg_constraint WHERE conrelid = 'supplier_contacts'::regclass AND conname = 'supplier_contacts_email_chu_thuong'",
+      );
+      expect(rows.map((r) => r.convalidated), "ràng buộc tồn tại và đã kiểm dữ liệu cũ").toEqual([true]);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [khoản nợ 70 — lượt soi 54 NẶNG-2] Fixture của `it` trên luôn có một nhóm va khoá, nên khối đối chiếu luôn NÉM và ROLLBACK giữ mọi hàng
+  // nguyên văn bất kể `049` làm gì trước đó — một bản "tự hạ những hàng không va khoá" vẫn xanh ở đó. Ở đây CHỈ có một hàng chữ hoa đứng một
+  // mình cạnh một hàng chữ thường: `049` phải vẫn NÉM và địa chỉ phải vẫn nguyên văn. Cũng ghim ngưỡng đếm: một hàng đã là vi phạm.
+  it("[khoản nợ 70] chỉ MỘT hàng chữ hoa đứng một mình, không nhóm va khoá nào ⇒ 049 vẫn NÉM, địa chỉ nguyên văn, 049 không được ghi — migration không tự hạ chữ thường hàng nào", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k70b-"));
+    try {
+      const { ten049, nccA, lienHe, daGhi049, emailCua } = await truoc049(db, tmp);
+      const idHoa = await lienHe(nccA, "Mot70@vidu.vn");
+      await lienHe(nccA, "thuong70@vidu.vn");
+      await copyFile(join(MIGRATIONS_DIR, ten049), join(tmp, ten049));
+      const loi = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "một hàng chữ hoa mà 049 vẫn đi qua — nó đã tự hạ, hay ngưỡng đếm sai").not.toBeNull();
+      expect(await daGhi049()).toBe(0);
+      expect(await emailCua(idHoa), "địa chỉ nguyên văn — đổi đích magic link không phải việc của migration").toBe("Mot70@vidu.vn");
+      expect(loi!.message).toBe(
+        `Migration ${ten049} thất bại: supplier_contacts: 1 hang co email chua o chu thuong — id (toi da 20): ${idHoa}; ` +
+          "0 nhom se trung khoa (org_id, supplier_id, email) neu ha chu thuong — id tung nhom (toi da 10 nhom): - — sua tay duoi mot vai ma RLS khong ap, moi thay doi kem mot su kien kiem toan, roi deploy lai (049, khoan no 70)",
+      );
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [khoản nợ 70 — lượt soi 54 NẶNG-1] Hồ sơ N3 — vai deploy là CHỦ bảng FORCE có EXECUTE trên hàm ngữ cảnh, hình dạng mặc định theo `005`
+  // (khoản 102): policy tenant lọc hết hàng nên khối đối chiếu đếm 0. Đo (thăm dò S1.61): lượt kiểm của `ALTER … ADD CHECK` và của `VALIDATE
+  // CONSTRAINT` KHÔNG chịu RLS và vẫn ném 23514 — fail-closed giữ — nhưng thông điệp trần của nó không nói gì, và câu đối chiếu người vận hành
+  // chạy dưới cùng vai cũng ra 0. `049` bắt đúng lỗi ấy và nói thật: vai nào, thấy mấy hàng, RLS có áp không, và phải chạy lại dưới vai nào.
+  it("[khoản nợ 70] hồ sơ N3: vai deploy là chủ bảng FORCE có EXECUTE ⇒ khối đối chiếu thấy 0 hàng, nhưng 049 vẫn NÉM với thông báo nêu vai, số hàng thấy được và row_security_active — không ghi 049, không có ràng buộc, địa chỉ nguyên văn; chạy lại dưới vai mà RLS không áp ⇒ thông báo định danh", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k70c-"));
+    let p: pg.Pool | undefined;
+    try {
+      const { ten049, nccA, lienHe, daGhi049, emailCua } = await truoc049(db, tmp);
+      const idHoa = await lienHe(nccA, "N3hoa70@vidu.vn");
+      p = createPool(await dungRoleTrienKhaiThuong(db), 2);
+      await db.pool.query("ALTER TABLE public.supplier_contacts OWNER TO trien_khai; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai");
+      await copyFile(join(MIGRATIONS_DIR, ten049), join(tmp, ten049));
+      const loi = await migrate(p, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "hồ sơ N3: dữ liệu vi phạm mà 049 đi qua").not.toBeNull();
+      expect(await daGhi049()).toBe(0);
+      expect(
+        (await db.pool.query("SELECT 1 FROM pg_constraint WHERE conrelid = 'supplier_contacts'::regclass AND conname = 'supplier_contacts_email_chu_thuong'"))
+          .rowCount,
+        "không có ràng buộc",
+      ).toBe(0);
+      expect(await emailCua(idHoa)).toBe("N3hoa70@vidu.vn");
+      expect(loi!.message).toBe(
+        `Migration ${ten049} thất bại: supplier_contacts: co hang email chua o chu thuong nhung vai chay migration trien_khai chi thay 0 hang ` +
+          "(row_security_active = true) — RLS da loc khoi doi chieu; chay lai migrate() duoi mot vai ma RLS khong ap de thay dinh danh (049, khoan no 70)",
+      );
+      // Lối ra thông báo chỉ: dưới một vai mà RLS không áp (superuser bootstrap) khối đối chiếu nêu định danh như thường.
+      const loiSu = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiSu?.message ?? "").toContain(`supplier_contacts: 1 hang co email chua o chu thuong — id (toi da 20): ${idHoa};`);
+    } finally {
+      await p?.end();
       await rm(tmp, { recursive: true, force: true });
       await db.stop();
     }
@@ -2883,6 +3057,7 @@ describe("migration của dự án", () => {
           "046_chi_so_cua_so_otp.sql",
           "047_chi_ghi_them_chan_truncate.sql",
           "048_email_nguoi_dung_chu_thuong.sql",
+          "049_email_lien_he_chu_thuong.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7219,6 +7394,7 @@ describe("migration của dự án", () => {
         "046_chi_so_cua_so_otp.sql",
         "047_chi_ghi_them_chan_truncate.sql",
         "048_email_nguoi_dung_chu_thuong.sql",
+        "049_email_lien_he_chu_thuong.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7487,6 +7663,7 @@ describe("migration của dự án", () => {
         "046_chi_so_cua_so_otp.sql",
         "047_chi_ghi_them_chan_truncate.sql",
         "048_email_nguoi_dung_chu_thuong.sql",
+        "049_email_lien_he_chu_thuong.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
