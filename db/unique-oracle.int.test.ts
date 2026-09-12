@@ -301,3 +301,135 @@ describe("[sổ nợ 63] email của người dùng không mang chữ hoa ASCII"
     await expect(them(orgMot, "carol@corp.com")).resolves.toBeDefined();
   });
 });
+
+// ==============================================================================================
+// [khoản nợ 70] `supplier_contacts.email` — CÙNG RÀNG BUỘC VỚI `048`, trên một bảng CÓ đường ghi.
+//
+// `addSupplierContact` hạ chữ thường TRƯỚC khi ghi, nhưng đó là quy ước của MÃ: một câu INSERT viết
+// tay, một đường ghi thứ hai hay một lần refactor quên bước ấy là đủ để `A@x.vn` và `a@x.vn` thành
+// HAI người liên hệ dưới `UNIQUE (org_id, supplier_id, email)` — hai magic link hợp lệ tới cùng hộp
+// thư. `049` chuyển quy ước ấy xuống LƯỢC ĐỒ. Ghim cả hai chiều như khối `[sổ nợ 63]` phía trên; lượt
+// đối chiếu dữ liệu có sẵn của `049` được đo ở `db/migrations.int.test.ts`.
+// ==============================================================================================
+describe("[khoản nợ 70] email của người liên hệ nhà cung cấp không mang chữ hoa mà lower() của máy chủ gấp được", () => {
+  let org = "";
+  let nguoi = "";
+  let phien = "";
+  let nccA = "";
+  let nccB = "";
+
+  beforeAll(async () => {
+    org = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Cong ty 70', 'cong-ty-70') RETURNING id",
+      )
+    ).rows[0]!.id;
+    nguoi = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, 'pm70@corp.com', 'Nguoi 70') RETURNING id",
+        [org],
+      )
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, nguoi]);
+    // Trigger `kiem_danh_tinh_theo_phien` của `suppliers`/`supplier_contacts` đòi một phiên THẬT của người ghi.
+    phien = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+          "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+        [org, nguoi, Buffer.alloc(32, 70)],
+      )
+    ).rows[0]!.id;
+    const ncc = async (ten: string): Promise<string> =>
+      (
+        await db.pool.query<{ id: string }>(
+          "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+          [org, ten, nguoi, phien],
+        )
+      ).rows[0]!.id;
+    nccA = await ncc("NCC 70 A");
+    nccB = await ncc("NCC 70 B");
+  });
+
+  const them = (ncc: string, email: string): Promise<unknown> =>
+    db.pool.query(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Nguoi lien he 70', $3, $4, $5)",
+      [org, ncc, email, nguoi, phien],
+    );
+
+  it("[khoản nợ 70] ràng buộc TỒN TẠI và ĐÃ ĐƯỢC KIỂM — không phải NOT VALID", async () => {
+    // Dấu hiệu tích cực: ba khẳng định dưới chỉ nói "có thứ gì đó chặn"; vế này nói thứ ấy là đúng ràng buộc của `049` và nó đã kiểm
+    // dữ liệu cũ — `convalidated = false` là một ràng buộc nói dối về quá khứ.
+    const { rows } = await db.pool.query<{ convalidated: boolean; dinh_nghia: string }>(
+      "SELECT convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
+        "WHERE conrelid = 'supplier_contacts'::regclass AND conname = 'supplier_contacts_email_chu_thuong'",
+    );
+    expect(rows, "migration 049 chưa chạy, hoặc ràng buộc đã bị đổi tên").toHaveLength(1);
+    expect(rows[0]!.convalidated, "ràng buộc chưa kiểm dữ liệu cũ thì nó không nói gì về quá khứ").toBe(true);
+    expect(rows[0]!.dinh_nghia).toMatch(/lower/u);
+  });
+
+  it("[khoản nợ 70] CHIỀU DƯƠNG ⑴ — một email có chữ hoa bị TỪ CHỐI ngay, dù đứng MỘT MÌNH", async () => {
+    await expect(them(nccA, "Solo@corp.com")).rejects.toThrow(/supplier_contacts_email_chu_thuong/u);
+  });
+
+  it("[khoản nợ 70] CHIỀU DƯƠNG ⑵ — cặp biến thể hoa-thường của cùng một nhà cung cấp không dựng lên được", async () => {
+    await them(nccA, "cap@corp.com");
+    await expect(them(nccA, "Cap@corp.com")).rejects.toThrow(/supplier_contacts_email_chu_thuong/u);
+    await expect(them(nccA, "cap@corp.com")).rejects.toThrow(/duplicate key/u);
+  });
+
+  it("[khoản nợ 70] CHIỀU ÂM — chữ thường vào được, và CÙNG địa chỉ ở NHÀ CUNG CẤP KHÁC cũng vào được", async () => {
+    // Không có vế này, một ràng buộc chặn TẤT CẢ cũng cho ba test trên xanh y hệt; và khoá vẫn theo
+    // (org_id, supplier_id, email) — một địa chỉ làm người liên hệ cho hai nhà cung cấp là hợp lệ.
+    await expect(them(nccA, "am@corp.com")).resolves.toBeDefined();
+    await expect(them(nccB, "am@corp.com")).resolves.toBeDefined();
+  });
+
+  it("[khoản nợ 70] [lượt soi 54 NHẸ-2] một chữ hoa NGOÀI ASCII mà máy chủ gấp được cũng bị từ chối — ràng buộc không co về ASCII (tự hiệu chuẩn)", async () => {
+    // Ứng viên: điểm mã BMP ngoài ASCII mà JS hạ, đúng hình dạng ký tự email; chọn cái đầu tiên mà `lower()` của máy chủ NÀY hạ ra CÙNG kết
+    // quả với JS — không đóng cứng một điểm mã, vì tập ấy phụ thuộc libc (khuôn `[sổ nợ 63]` ở `apps/api/src/auth.int.test.ts`). Không tìm
+    // được thì NÓI RA, không xanh im lặng. Một ràng buộc viết `lower(email COLLATE "C")` chỉ gấp ASCII và đỏ ở đây.
+    const ungVien: string[] = [];
+    for (let i = 0x80; i < 0x2600; i += 1) {
+      const c = String.fromCodePoint(i);
+      if (c.toLowerCase() !== c && /^[^\s\u0000-\u001f\u007f@]$/u.test(c)) ungVien.push(c);
+    }
+    const { rows } = await db.pool.query<{ c: string; l: string }>(
+      "SELECT c, lower(c) AS l FROM unnest($1::text[]) AS c WHERE lower(c) <> c ORDER BY c LIMIT 50",
+      [ungVien],
+    );
+    const chon = rows.find((r) => r.c.toLowerCase() === r.l);
+    if (chon === undefined) {
+      throw new Error("Không tìm được chữ hoa ngoài ASCII mà máy chủ và JS cùng hạ ra một kết quả — test không đo được gì, phải viết lại.");
+    }
+    await expect(them(nccA, `${chon.c}u70@corp.com`)).rejects.toThrow(/supplier_contacts_email_chu_thuong/u);
+    await expect(them(nccA, `${chon.l}u70@corp.com`)).resolves.toBeDefined();
+  });
+
+  it("[khoản nợ 70] [lượt soi 54 NHẸ-2, NHẸ-3] đường ghi addSupplierContact (hạ bằng .toLowerCase() của JS) không vấp ràng buộc trên máy chủ ĐANG CHẠY — không điểm mã nào máy chủ hạ mà JS để nguyên, không chuỗi nào JS đã hạ mà máy chủ còn hạ tiếp, và máy chủ gấp được ngoài ASCII", async () => {
+    // Thăm dò S1.61 đo điều này một lần trên postgres:16-alpine với Node 24; test này đo lại trên CHÍNH môi trường đang chạy — CI chạy Node 22.
+    // Đỏ ở vế một hay hai: `addSupplierContact` sẽ ném 23514 với đầu vào chứa điểm mã ấy, và `suppliers.ts` phải hạ bằng `pg_catalog.lower()`
+    // trong câu INSERT (khuôn `login.ts` của khoản 63). Đỏ ở vế ba: CSDL đang ở ctype C/POSIX, `lower()` chỉ gấp ASCII và ràng buộc co lại.
+    const { rows: mayHa } = await db.pool.query<{ cp: number }>(
+      "SELECT cp FROM pg_catalog.generate_series(1, 1114111) AS cp " +
+        "WHERE (cp < 55296 OR cp > 57343) AND pg_catalog.lower(pg_catalog.chr(cp)) <> pg_catalog.chr(cp)",
+    );
+    const maHien = (s: string): string => [...s].map((ch) => `U+${ch.codePointAt(0)!.toString(16).toUpperCase()}`).join(" ");
+    const deNguyen = mayHa.map((r) => String.fromCodePoint(r.cp)).filter((s) => s.toLowerCase() === s);
+    expect(deNguyen.map(maHien), "điểm mã máy chủ hạ mà .toLowerCase() của JS để nguyên").toEqual([]);
+    const jsHa: string[] = [];
+    for (let cp = 1; cp <= 0x10ffff; cp += 1) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue;
+      const s = String.fromCodePoint(cp);
+      const h = s.toLowerCase();
+      if (h !== s) jsHa.push(h);
+    }
+    const { rows: conHa } = await db.pool.query<{ s: string }>(
+      "SELECT s FROM pg_catalog.unnest($1::pg_catalog.text[]) AS s WHERE pg_catalog.lower(s) <> s",
+      [jsHa],
+    );
+    expect(conHa.map((r) => maHien(r.s)), "chuỗi .toLowerCase() của JS trả về mà lower() của máy chủ còn hạ tiếp").toEqual([]);
+    expect(mayHa.length, "lower() của máy chủ chỉ gấp ASCII — ctype C/POSIX, ràng buộc chỉ còn chặn chữ hoa ASCII").toBeGreaterThan(26);
+  }, 120000);
+});
