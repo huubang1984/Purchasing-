@@ -19,6 +19,7 @@ import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
+import { buildComparisonTable } from "@trustprocure/unseal";
 import { executeUnsealRequest, UnsealWorkerError } from "./index.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -384,9 +385,13 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
 
   /**
    * Một RFQ gồm một báo giá sạch và các bản rõ `cacBanRo`, mở thầu MỘT lần. Đòi lượt mở thầu chạy trọn — không phong bì nào
-   * hỏng, báo giá sạch giữ nguyên hình dạng, yêu cầu `EXECUTED`, RFQ `UNSEALED` — rồi trả payload theo đúng thứ tự `cacBanRo`.
+   * hỏng, báo giá sạch giữ nguyên hình dạng, yêu cầu `EXECUTED`, RFQ `UNSEALED` — rồi trả id của RFQ, id phiên bản của từng bản rõ
+   * theo đúng thứ tự `cacBanRo`, và payload theo id. [khoản nợ 107] Payload ở đây đã qua `JSON.parse` của `pg`, tức mọi số trong nó
+   * đã qua `double`: đừng dùng nó để so giá trị của một số.
    */
-  async function moThauCungBaoGiaSach(cacBanRo: readonly string[]): Promise<unknown[]> {
+  async function moThauCungBaoGiaSachTheoId(
+    cacBanRo: readonly string[],
+  ): Promise<{ rfqId: string; cacId: string[]; theoId: Map<string, unknown> }> {
     const rfqId = await taoRfqMo();
     const idSach = await nopBaoGia(rfqId, BAN_RO_SACH);
     const cacId: string[] = [];
@@ -412,6 +417,12 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
       [requestId],
     );
     expect(tt).toEqual([{ rfq: "UNSEALED", yc: "EXECUTED" }]);
+    return { rfqId, cacId, theoId };
+  }
+
+  /** Như `moThauCungBaoGiaSachTheoId`, nhưng chỉ trả payload theo đúng thứ tự `cacBanRo`. */
+  async function moThauCungBaoGiaSach(cacBanRo: readonly string[]): Promise<unknown[]> {
+    const { cacId, theoId } = await moThauCungBaoGiaSachTheoId(cacBanRo);
     return cacId.map((id) => theoId.get(id));
   }
 
@@ -482,6 +493,153 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const sau5000 = doiTuongLongSau(5000);
     const doc64: unknown = JSON.parse(sau64);
     expect(await moThauCungBaoGiaSach([sau64, sau65, sau5000])).toEqual([doc64, { raw: sau65 }, { raw: sau5000 }]);
+  });
+
+  // ===========================================================================================
+  // [khoản nợ 107] SỐ JSON TRONG BẢN RÕ GIỮ NGUYÊN GIÁ TRỊ ĐÃ NIÊM PHONG.
+  // Tới S1.64, `thanhJson` cất đối tượng mà `JSON.parse` dựng ra, nên mọi số đi qua `double` trước khi vào `jsonb`:
+  // `99999999999999.99` thành `…98`, và `bid_so_tien` nhận con số đã đổi (đo ở S1.64). Các `it` dưới đây so `payload` với CHÍNH
+  // bản rõ khi PostgreSQL tự phân tích nó — `jsonb =` so số theo `numeric` — và đọc số tiền bằng đúng biểu thức của bảng so sánh.
+  // Không `it` nào so giá trị một số qua payload mà `pg` trả về: `pg` phân tích cột `jsonb` bằng `JSON.parse`. Như khối trên,
+  // khối này không mang một dấu gạch chéo ngược nào.
+  // ===========================================================================================
+
+  /**
+   * [khoản nợ 107] Với từng phiên bản trong `cacId`: `payload` có BẰNG bản rõ cùng vị trí trong `cacBanRo` không, khi PostgreSQL tự
+   * phân tích bản rõ ấy thành `jsonb`. Chỉ gọi cho bản rõ mà `jsonb` nhận.
+   */
+  async function payloadBangBanRo(cacId: readonly string[], cacBanRo: readonly string[]): Promise<boolean[]> {
+    expect(cacId).toHaveLength(cacBanRo.length);
+    const ketQua: boolean[] = [];
+    for (const [i, id] of cacId.entries()) {
+      const { rows } = await withTenant(apiPool, orgA, (c) =>
+        c.query<{ khop: boolean }>("SELECT payload = $2::jsonb AS khop FROM rfq_unsealed_bids WHERE bid_version_id = $1", [
+          id,
+          cacBanRo[i],
+        ]),
+      );
+      expect(rows).toHaveLength(1);
+      ketQua.push(rows[0]?.khop === true);
+    }
+    return ketQua;
+  }
+
+  it("[khoản nợ 107] số tiền kiểu SỐ JSON giữ nguyên giá trị đã niêm phong — biểu thức của bảng so sánh đọc đúng con số", async () => {
+    const cacBanRo = [
+      '{"totalAmount":99999999999999.99,"currency":"VND"}',
+      '{"totalAmount":9007199254740993,"currency":"VND"}',
+      '{"totalAmount":1234567.10,"currency":"VND"}',
+    ];
+    const { cacId } = await moThauCungBaoGiaSachTheoId(cacBanRo);
+    const { rows } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ bid_version_id: string; so_tien: string | null }>(
+        "SELECT bid_version_id, bid_so_tien(payload ->> 'totalAmount')::text AS so_tien FROM rfq_unsealed_bids " +
+          " WHERE bid_version_id = ANY($1::uuid[])",
+        [cacId],
+      ),
+    );
+    const soTienTheoId = new Map(rows.map((r) => [r.bid_version_id, r.so_tien] as const));
+    expect(cacId.map((id) => soTienTheoId.get(id))).toEqual(["99999999999999.99", "9007199254740993", "1234567.10"]);
+    expect(await payloadBangBanRo(cacId, cacBanRo)).toEqual([true, true, true]);
+  });
+
+  it("[khoản nợ 107] MỌI số trong cây giữ nguyên giá trị — hơn 15 chữ số có nghĩa, số nguyên vượt 2^53, số mũ, tràn và hụt của double, trong mảng và đối tượng lồng", async () => {
+    const cacBanRo = [
+      '{"hang":[{"soLuong":12345678901234567890,"donGia":123456789012.345678}],"tyLe":[1e-7,1E+21,-0,0.1]}',
+      '{"a":{"b":{"c":[0.30000000000000001,-9007199254740993]}}}',
+      '{"tran":1.7976931348623159e308,"hut":1e-324}',
+    ];
+    const { cacId } = await moThauCungBaoGiaSachTheoId(cacBanRo);
+    expect(await payloadBangBanRo(cacId, cacBanRo)).toEqual([true, true, true]);
+  });
+
+  it("[khoản nợ 107] biên văn bản của MỘT số — 1 000 ký tự và số mũ ±324 giữ nguyên giá trị; 1 001 ký tự hay số mũ ±325 thì cả bản rõ cất dưới raw", async () => {
+    const trongBien = [
+      '{"a":' + "9".repeat(1000) + "}",
+      '{"a":-' + "9".repeat(999) + "}",
+      '{"a":1e324}',
+      '{"a":-1E-324}',
+      '{"a":0.5e+0000324}',
+    ];
+    const ngoaiBien = [
+      '{"a":' + "9".repeat(1001) + "}",
+      '{"a":-' + "9".repeat(1000) + "}",
+      '{"a":1e325}',
+      '{"a":1E-325}',
+      '{"a":0.5e+0000325}',
+    ];
+    const { cacId, theoId } = await moThauCungBaoGiaSachTheoId([...trongBien, ...ngoaiBien]);
+    expect(await payloadBangBanRo(cacId.slice(0, trongBien.length), trongBien)).toEqual(trongBien.map(() => true));
+    expect(cacId.slice(trongBien.length).map((id) => theoId.get(id))).toEqual(ngoaiBien.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 107] số mà `numeric` của PostgreSQL không chứa nổi — 131 073 chữ số, số mũ 131 072, 16 384 chữ số thập phân — cất dưới raw, lượt mở thầu không hỏng", async () => {
+    const cacBanRo = [
+      '{"a":' + "1".repeat(131073) + "}",
+      '{"a":1e131072}',
+      '{"a":0.' + "1".repeat(16384) + "}",
+      // Vượt biên số VÀ mang escape U+0000: phép đi cây lẫn phép quét văn bản cùng từ chối, và bản rõ vẫn phải vào raw.
+      '{"a":1e131072,"ghiChu":"' + BS + 'u0000"}',
+      // [lượt soi 58 NHẸ-1] Số vượt `numeric` là PHẦN TỬ MẢNG, không đứng ngay sau dấu hai chấm.
+      '{"totalAmount":1,"hang":[2,1e131072]}',
+    ];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 107] KHOÁ TRÙNG — ở gốc, lồng trong mảng, trùng sau khi giải escape, ghi đè một escape `jsonb` không nhận hay một cây quá sâu — cả bản rõ cất dưới raw, lượt mở thầu không hỏng", async () => {
+    const cacBanRo = [
+      '{"totalAmount":"1000.00","currency":"VND","totalAmount":"2000.00"}',
+      '{"hang":[{"dong":1,"ghiChu":"x","dong":2}]}',
+      '{"a":1,"' + BS + 'u0061":2}',
+      '{"ghiChu":"' + BS + 'ud800","ghiChu":"ok"}',
+      '{"ghiChu":"' + BS + 'u0000","ghiChu":"ok"}',
+      '{"a":' + "[".repeat(20000) + "]".repeat(20000) + ',"a":1}',
+      // Khoá `b` đứng sau một dấu nháy ĐÃ THOÁT: một phép quét đọc sai escape nuốt mất nó, bù đúng một khoá trùng, rồi gửi văn bản gốc.
+      '{"a":"' + BS + 'ud800","a":"x' + BS + '"y","b":1}',
+      // [lượt soi 58 NHẸ-2] Khoá trùng với CR hay LF đứng giữa khoá và dấu hai chấm: một phép quét không coi CR, LF là khoảng trắng bỏ
+      // sót đúng khoá trùng ấy, rồi gửi văn bản gốc mang escape `jsonb` từ chối.
+      '{"ghiChu":"' + BS + 'ud800","ghiChu"' + String.fromCharCode(13) + ':"ok"}',
+      '{"ghiChu":"' + BS + 'ud800","ghiChu"' + String.fromCharCode(10) + ':"ok"}',
+    ];
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacBanRo.map((raw) => ({ raw })));
+  });
+
+  it("[khoản nợ 107] ĐỐI CHỨNG của phép quét văn bản — khoảng trắng quanh dấu hai chấm (dấu cách, tab, CR, LF), dấu nháy và gạch chéo ngược đã thoát, số và ngoặc nằm trong chuỗi, true/false/null, ký tự không-phải-ký-tự — giữ nguyên hình dạng", async () => {
+    const TAB = String.fromCharCode(9);
+    const CRLF = String.fromCharCode(13, 10);
+    const cacBanRo = [
+      '{"a" :  1 ,' + CRLF + ' "b"' + TAB + ":" + CRLF + "[ 2 ] }",
+      '{"ghiChu":"x' + BS + '":1","k":[1,"]:{"]}',
+      '{"ghiChu":"a' + BS + '"b","k":1}',
+      '{"ghiChu":"a' + BS + BS + '","b":2}',
+      '{"dung":true,"sai":false,"rong":null,"am":-12.5,"ma":"1e999","khoa1e999":0,"so":"' + "9".repeat(2000) + '"}',
+      // [lượt soi 58 NHẸ-2] CR riêng, LF riêng, rồi CRLF cùng tab và dấu cách, giữa khoá và dấu hai chấm.
+      '{"a"' + String.fromCharCode(13) + ':1,"b"' + String.fromCharCode(10) + ':2,"c"' + CRLF + TAB + " :3}",
+      // [lượt soi 58 NHẸ-4] Ký tự không-phải-ký-tự U+FFFE, U+FFFF, U+FDD0: dạng escape trong một chuỗi và trong một khoá, và dạng thô.
+      '{"a":"' + BS + "uFFFE" + BS + 'uFFFF","' + BS + 'uFDD0":1,"tho":"' + String.fromCharCode(0xfffe, 0xffff, 0xfdd0) + '"}',
+    ];
+    const cacDoc = cacBanRo.map((b): unknown => JSON.parse(b));
+    expect(await moThauCungBaoGiaSach(cacBanRo)).toEqual(cacDoc);
+  });
+
+  it("[khoản nợ 107] bảng so sánh đọc ĐÚNG con số đã niêm phong — số tiền, min, max và trung bình của báo giá gửi số tiền kiểu SỐ", async () => {
+    const { rfqId } = await moThauCungBaoGiaSachTheoId([
+      '{"totalAmount":99999999999999.99,"currency":"VND"}',
+      '{"totalAmount":9007199254740993,"currency":"VND"}',
+    ]);
+    const bang = await withTenant(apiPool, orgA, (c) =>
+      buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(bang.rows.map((r) => r.totalAmount)).toEqual(["99999999999999.99", "9007199254740993", null]);
+    expect(bang.aggregates).toMatchObject({
+      parsed: 2,
+      unparsed: 1,
+      currency: "VND",
+      currencyMismatch: false,
+      min: "99999999999999.99",
+      max: "9007199254740993",
+      average: "4553599627370496.50",
+    });
   });
 
   it("[INV-G4] mở bọc khoá SINH AUDIT — vế thứ tư của mệnh đề, thứ S1.4 không có", async () => {

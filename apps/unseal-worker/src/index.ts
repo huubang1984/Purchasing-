@@ -126,10 +126,13 @@ function laThuatToanBiet(x: string): x is KeyAgreementAlgorithm {
  * [khoản nợ 106] Độ sâu lồng tối đa của một bản rõ JSON được cất NGUYÊN hình dạng. Sâu hơn thì cất dưới `{ raw }`.
  *
  * Đây là một biên an toàn, không phải một giới hạn sản phẩm. `JSON.stringify` của V8 đệ quy: đo cục bộ trên Node 24.18 ở một
- * ngăn xếp nông, mảng lồng 4 744 tầng đã ném `RangeError`. Ngăn xếp lúc worker gọi `JSON.stringify` — sau một `await` — thì KHÔNG
- * đo. Bộ phân tích JSON của PostgreSQL cũng đệ quy (`check_stack_depth`), và ngưỡng của nó CHƯA đo. Một báo giá thật chỉ lồng vài
+ * ngăn xếp nông, mảng lồng 4 744 tầng đã ném `RangeError`. ~~Ngăn xếp lúc worker gọi `JSON.stringify` — sau một `await` — thì KHÔNG
+ * đo. Bộ phân tích JSON của PostgreSQL cũng đệ quy (`check_stack_depth`), và ngưỡng của nó CHƯA đo.~~ Một báo giá thật chỉ lồng vài
  * tầng; 64 tầng — mảng lồng lẫn đối tượng lồng — đo được là cất nguyên hình dạng (`unseal-worker.int.test.ts`). Bản rõ sâu hơn KHÔNG
  * mất: nó nằm trong `raw`.
+ * **[S1.65, khoản nợ 107]** Đường có cấu trúc nay KHÔNG gọi `JSON.stringify` (xem `thanhJson`): văn bản gốc đi thẳng vào bộ phân tích
+ * JSON của PostgreSQL, và bộ ấy đệ quy (`check_stack_depth`). Đo trên PostgreSQL 16.15, `max_stack_depth` 2MB, một mảng lồng đứng riêng:
+ * 5 000 tầng nhận, 20 000 tầng ném `54001`. Biên 64 đứng rất xa khoảng ấy.
  */
 const DO_SAU_JSON_TOI_DA = 64;
 
@@ -144,36 +147,123 @@ function chuoiJsonbNhan(chuoi: string): boolean {
 }
 
 /**
- * [khoản nợ 106] `true` thì `JSON.stringify(goc)` chạy xong VÀ `jsonb` nhận văn bản nó sinh ra. Đây là điều kiện ĐỦ, cố ý chặt hơn
- * điều kiện cần: cây 65 tầng thì cả hai vẫn nhận, nhưng hàm trả `false` — biên an toàn của `DO_SAU_JSON_TOI_DA`.
+ * [khoản nợ 106] ~~`true` thì `JSON.stringify(goc)` chạy xong VÀ `jsonb` nhận văn bản nó sinh ra.~~ **[S1.65, khoản nợ 107]** Số khoá
+ * của cây `goc`, cộng trên mọi đối tượng, khi mọi chuỗi, mọi khoá và độ sâu của cây đều trong miền `jsonb` nhận; `null` khi không. Đây
+ * là vế ⑴ của điều kiện ĐỦ để `jsonb` nhận văn bản gốc (xem `thanhJson`), cố ý chặt hơn điều kiện cần: cây 65 tầng thì `jsonb` vẫn
+ * nhận, nhưng hàm trả `null` — biên an toàn của `DO_SAU_JSON_TOI_DA`.
  *
- * Đi cây bằng VÒNG LẶP trên ngăn xếp tường minh: một hàm đệ quy ở đây sẽ ném đúng cái `RangeError` nó được viết ra để tránh.
- * Ba lớp bị loại, lớp nào cũng đã đo làm CẢ lượt mở thầu rollback:
- *   ⑴⑵ chuỗi hay KHOÁ mang U+0000 — `JSON.stringify` xuất lại escape của nó, `jsonb` từ chối (`22P05`);
- *   ⑶ chuỗi hay khoá mang surrogate đơn lẻ — `JSON.stringify` xuất escape, `jsonb` từ chối (`22P02`);
- *   ⑷ độ sâu vượt `DO_SAU_JSON_TOI_DA` — `JSON.stringify` ném `RangeError`.
+ * Đi cây bằng VÒNG LẶP trên ngăn xếp tường minh: một hàm đệ quy ở đây ~~sẽ ném đúng cái `RangeError` nó được viết ra để tránh~~ có thể
+ * ném `RangeError` trên một cây RẤT sâu — lượt soi 58 đo trên Node 24.18, ngoài worker: một phép đi cây đệ quy không chặn độ sâu chạy xong
+ * 5 000 tầng và ném ở 20 000 tầng. Ba lớp bị loại, lớp nào cũng đã đo làm CẢ lượt mở thầu rollback:
+ *   ⑴⑵ chuỗi hay KHOÁ mang U+0000 — ~~`JSON.stringify` xuất lại escape của nó,~~ `jsonb` từ chối escape của nó (`22P05`);
+ *   ⑶ chuỗi hay khoá mang surrogate đơn lẻ — ~~`JSON.stringify` xuất escape,~~ `jsonb` từ chối escape của nó (`22P02`);
+ *   ⑷ độ sâu vượt `DO_SAU_JSON_TOI_DA` — ~~`JSON.stringify` ném `RangeError`.~~ [S1.65] bộ phân tích JSON của PostgreSQL ném `54001`
+ *      ở đâu đó giữa 5 000 và 20 000 tầng (xem `DO_SAU_JSON_TOI_DA`).
  * Escape của U+0000 trong KHOÁ không bị gỡ: hai khoá chỉ khác nhau ở U+0000 sẽ gộp làm một, và một giá trị mất âm thầm (lượt soi 56
  * C1). U+0000 THÔ không tới được đây: `JSON.parse` của văn bản gốc đã ném trước (lượt soi 57 NẶNG-1, xem `thanhJson`).
  */
-function jsonbNhanDuoc(goc: object): boolean {
+function demKhoaJsonbNhan(goc: object): number | null {
   const ngan: object[] = [goc];
   const doSau: number[] = [1];
+  let soKhoa = 0;
   for (;;) {
     const nut = ngan.pop();
     const sau = doSau.pop();
-    if (nut === undefined || sau === undefined) return true;
-    if (sau > DO_SAU_JSON_TOI_DA) return false;
-    if (!Array.isArray(nut) && !Object.keys(nut).every((khoa) => chuoiJsonbNhan(khoa))) return false;
+    if (nut === undefined || sau === undefined) return soKhoa;
+    if (sau > DO_SAU_JSON_TOI_DA) return null;
+    if (!Array.isArray(nut)) {
+      const cacKhoa = Object.keys(nut);
+      if (!cacKhoa.every((khoa) => chuoiJsonbNhan(khoa))) return null;
+      soKhoa += cacKhoa.length;
+    }
     const cacCon: readonly unknown[] = Array.isArray(nut) ? nut : Object.values(nut);
     for (const con of cacCon) {
       if (typeof con === "string") {
-        if (!chuoiJsonbNhan(con)) return false;
+        if (!chuoiJsonbNhan(con)) return null;
       } else if (typeof con === "object" && con !== null) {
         ngan.push(con);
         doSau.push(sau + 1);
       }
     }
   }
+}
+
+/**
+ * [khoản nợ 107] Biên của văn bản MỘT số JSON được cất nguyên giá trị: dài tối đa `DO_DAI_SO_TOI_DA` ký tự kể cả dấu, trị tuyệt đối của
+ * số mũ tối đa `SO_MU_TOI_DA`. Một số ngoài biên đẩy CẢ bản rõ sang `{ raw }`.
+ *
+ * Hai biên an toàn, không phải giới hạn sản phẩm; mỗi biên canh một thứ đã đo trên PostgreSQL 16.15:
+ *   ⑴ trần của `numeric` — số nguyên 131 072 chữ số và `0.` cùng 16 383 chữ số thập phân thì nhận; thêm một chữ số, hay `1e131072`,
+ *      `1e-16384`, thì ném `22003`, tức CẢ lượt mở thầu rollback. Trong hai biên, phần nguyên lẫn phần thập phân của giá trị không quá
+ *      1 324 chữ số;
+ *   ⑵ độ phình khi ĐỌC — `numeric` in ra đủ mọi chữ số: `1e131071`, tám ký tự, đọc lại qua `payload::text` là 131 072 ký tự. Số mũ 324
+ *      phủ mọi số mà `JSON.stringify` của JavaScript viết ra (`5e-324` tới `1.7976931348623157e+308`), và giữ độ phình gần bản cũ: bản
+ *      cũ đi qua `double` vốn đã cất được số 309 chữ số phần nguyên, còn `1e324` nay đọc lại 325 ký tự (đo). Ở ca xấu nhất — bản rõ toàn
+ *      phần tử `1e324,` so với toàn `1e308,` của bản cũ — độ phình hơn khoảng 5% (lượt soi 58, tính theo `numeric_out`, chưa đo).
+ * Văn bản dài 1 000 ký tự gấp nhiều lần mọi con số của một báo giá.
+ */
+const DO_DAI_SO_TOI_DA = 1000;
+const SO_MU_TOI_DA = 324;
+
+/** Khoảng trắng của ngữ pháp JSON: dấu cách, tab, xuống dòng, về đầu dòng. */
+function laKhoangTrangJson(ma: number): boolean {
+  return ma === 0x20 || ma === 0x09 || ma === 0x0a || ma === 0x0d;
+}
+
+/** Ký tự có thể đứng trong văn bản một số JSON: chữ số, `.`, `+`, `-`, `e`, `E`. */
+function laKyTuCuaSo(ma: number): boolean {
+  return (ma >= 0x30 && ma <= 0x39) || ma === 0x2e || ma === 0x2b || ma === 0x2d || ma === 0x65 || ma === 0x45;
+}
+
+/**
+ * [khoản nợ 107] Văn bản số `van[dau, cuoi)` nằm trong biên của `DO_DAI_SO_TOI_DA` và `SO_MU_TOI_DA`. Số mũ đọc theo trị tuyệt đối,
+ * số 0 đứng đầu nó không tính, và phép đọc dừng ngay khi vượt biên — nên một số mũ dài bao nhiêu cũng không tràn.
+ */
+function soTrongBien(van: string, dau: number, cuoi: number): boolean {
+  if (cuoi - dau > DO_DAI_SO_TOI_DA) return false;
+  let i = dau;
+  while (i < cuoi && van.charCodeAt(i) !== 0x65 && van.charCodeAt(i) !== 0x45) i += 1;
+  let soMu = 0;
+  for (i += 1; i < cuoi; i += 1) {
+    const ma = van.charCodeAt(i);
+    if (ma >= 0x30 && ma <= 0x39) {
+      soMu = soMu * 10 + (ma - 0x30);
+      if (soMu > SO_MU_TOI_DA) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * [khoản nợ 107] Quét MỘT lượt văn bản JSON mà `JSON.parse` VỪA nhận: trả số token KHOÁ — chuỗi mà ký tự khác khoảng trắng kế tiếp là
+ * dấu hai chấm — hoặc `null` khi văn bản của một số vượt biên (`soTrongBien`). Không cấp phát gì trên đường đi.
+ *
+ * Chỉ đúng với văn bản JSON HỢP LỆ, và lập luận dựa hẳn vào điều ấy: ngoài chuỗi, dấu trừ và chữ số chỉ mở đầu một số; trong chuỗi,
+ * gạch chéo ngược thoát đúng MỘT ký tự kế nó, nên dấu nháy đứng sau nó không đóng chuỗi. Chữ số, ngoặc và dấu hai chấm nằm TRONG chuỗi
+ * bị bỏ qua. Với một đối tượng JSON hợp lệ, phép so `i < van.length` ở vòng chuỗi và vòng khoảng trắng không bao giờ sai trước khi gặp
+ * dấu nháy đóng hay một ký tự khác khoảng trắng; chúng ở đó để một lỗi ở chỗ khác không thành một vòng lặp vô tận.
+ */
+function demKhoaVanBan(van: string): number | null {
+  let soKhoa = 0;
+  let i = 0;
+  while (i < van.length) {
+    const ma = van.charCodeAt(i);
+    if (ma === 0x22) {
+      i += 1;
+      while (i < van.length && van.charCodeAt(i) !== 0x22) i += van.charCodeAt(i) === 0x5c ? 2 : 1;
+      i += 1;
+      while (i < van.length && laKhoangTrangJson(van.charCodeAt(i))) i += 1;
+      if (van.charCodeAt(i) === 0x3a) soKhoa += 1;
+    } else if (ma === 0x2d || (ma >= 0x30 && ma <= 0x39)) {
+      let cuoi = i + 1;
+      while (cuoi < van.length && laKyTuCuaSo(van.charCodeAt(cuoi))) cuoi += 1;
+      if (!soTrongBien(van, i, cuoi)) return null;
+      i = cuoi;
+    } else {
+      i += 1;
+    }
+  }
+  return soKhoa;
 }
 
 /**
@@ -187,7 +277,8 @@ function jsonbNhanDuoc(goc: object): boolean {
  * [lượt soi 56 I2, C1, N2 — ĐO] Nói quá: một bản rõ JSON HỢP LỆ mà `jsonb` hay `JSON.stringify` không nhận — escape của
  * U+0000 trong một chuỗi hay một khoá (`22P05`), escape surrogate đơn lẻ (`22P02`), mảng lồng từ 5 000 tầng (`RangeError`)
  * ~~— làm CẢ lượt mở thầu rollback ở mọi lần thử, báo giá sạch cũng không mở được. Khoản nợ 106.~~
- * **[S1.64, khoản nợ 106 ĐÓNG]** Nay `jsonbNhanDuoc` nhận ra các bản rõ ấy sau `JSON.parse`, và chúng được cất dưới `{ raw }`;
+ * **[S1.64, khoản nợ 106 ĐÓNG]** Nay ~~`jsonbNhanDuoc`~~ `demKhoaJsonbNhan` (tên từ S1.65) nhận ra các bản rõ ấy sau `JSON.parse`, và
+ * chúng được cất dưới `{ raw }`;
  * lượt mở thầu chạy trọn. `raw` là văn bản ĐÃ GIẢI MÃ, không phải byte của bản rõ: `TextDecoder` bỏ BOM đầu và thay byte hỏng
  * bằng U+FFFD, rồi U+0000 THÔ bị gỡ (lượt soi 57). Đường `{ raw }` cất được với mọi bản rõ: văn bản ấy không mang surrogate đơn
  * lẻ (`TextDecoder` không sinh ra) cũng không mang U+0000, `JSON.stringify` thoát gạch chéo ngược lẫn ký tự điều khiển, và độ sâu
@@ -209,18 +300,40 @@ function jsonbNhanDuoc(goc: object): boolean {
  * **[S1.64, lượt soi 57 NẶNG-1]** Bước gỡ nay chạy SAU `JSON.parse` và chỉ trên `raw`. Gỡ TRƯỚC khi phân tích — như bản S1.6 —
  * biến một văn bản KHÔNG hợp lệ thành JSON hợp lệ mang nội dung khác mà không để lại dấu: `{"a␀":1,"a":2}` thành `{"a":2}`, và
  * `{"totalAmount":1␀5}` thành số 15 (␀ là U+0000 THÔ; đo trên Node 24.18).
+ *
+ * **[S1.65, khoản nợ 107 ĐÓNG] SỐ GIỮ NGUYÊN GIÁ TRỊ — `jsonb` PHÂN TÍCH CHÍNH VĂN BẢN GỐC.** Tới S1.64 hàm này trả đối tượng mà
+ * `JSON.parse` dựng ra và người gọi ghi `JSON.stringify` của nó, nên mọi số đi qua `double`: `99999999999999.99` thành `…98`,
+ * `9007199254740993` thành `…992`, và `bid_so_tien` nhận con số đã đổi (đo S1.64). Nay hàm trả VĂN BẢN để ghi: văn bản gốc khi `jsonb`
+ * nhận nó, `{ raw }` khi không. `numeric` của PostgreSQL là số thập phân chính xác, nên số giữ nguyên GIÁ TRỊ — không giữ nguyên chữ
+ * viết: `1E2` đọc lại là `100`, `1.50e1` là `15.0`, `-0` là `0` (đo trên PostgreSQL 16.15).
+ * Văn bản gốc chỉ được ghi khi đủ BA vế, mỗi vế chặn một thứ `JSON.parse` nhận mà `jsonb` từ chối hay đọc khác:
+ *   ⑴ `demKhoaJsonbNhan` trả một số — chuỗi, khoá và độ sâu của cây trong miền `jsonb` (khoản 106);
+ *   ⑵ `demKhoaVanBan` trả ĐÚNG số ấy — không có khoá trùng. `JSON.parse` và `jsonb` cùng giữ giá trị SAU CÙNG của khoá trùng, nhưng
+ *      `jsonb` vẫn phân tích giá trị bị ghi đè: escape surrogate đơn lẻ ở đó ném `22P02`, escape U+0000 ném `22P05` (đo) — mà cây của
+ *      `JSON.parse` không còn giá trị ấy, nên vế ⑴ không thấy. Cất dưới `{ raw }`, khoá trùng giữ được CẢ HAI giá trị thay vì mất một
+ *      giá trị không dấu vết (cùng hướng lượt soi 56 C1);
+ *   ⑶ văn bản của mọi số trong biên (`soTrongBien`) — ngoài biên, `numeric` ném `22003` hay phình khi đọc.
+ * Không đọc số bằng reviver của `JSON.parse` kèm `context.source` và `JSON.rawJSON`: đo trên Node 24.18, bản rõ 8 MiB gồm 4,19 triệu số
+ * `0` mất 2 941 ms và 604 MiB RSS với reviver, 29 ms và 84 MiB không reviver; `JSON.parse` trơn cộng phép đi cây và phép quét mất khoảng
+ * 90 ms và 96 MiB. Reviver nhân bộ nhớ của worker lên khoảng bảy lần bằng đúng một báo giá.
+ * Ranh giới nói ra: `demKhoaVanBan` chỉ đúng với văn bản `JSON.parse` VỪA nhận; `payload` đọc qua `pg` lại đi qua `JSON.parse`, nên số
+ * trong nó lại qua `double` ở phía người đọc (khoản 108); cụm mã hoá và `client_encoding` UTF8 như đường `{ raw }`.
  */
-function thanhJson(banRo: Uint8Array): unknown {
+function thanhJson(banRo: Uint8Array): string {
   const van = new TextDecoder("utf-8", { fatal: false }).decode(banRo);
   try {
     // Phân tích văn bản GỐC. JSON không cho U+0000 THÔ đứng ở bất kỳ đâu — trong chuỗi, trong khoá, giữa hai token, đầu hay cuối
     // văn bản — nên bản rõ mang nó ném ở đây (đo trên Node 24.18 ở cả sáu vị trí) và đi vào `raw`.
     const doc: unknown = JSON.parse(van);
-    if (typeof doc === "object" && doc !== null && !Array.isArray(doc) && jsonbNhanDuoc(doc)) return doc;
+    if (typeof doc === "object" && doc !== null && !Array.isArray(doc)) {
+      // [khoản nợ 107] Ba vế ở chú thích hàm. Đủ cả ba thì `jsonb` phân tích chính văn bản gốc, và mọi số giữ nguyên giá trị.
+      const soKhoa = demKhoaJsonbNhan(doc);
+      if (soKhoa !== null && demKhoaVanBan(van) === soKhoa) return van;
+    }
   } catch {
     // Không phải JSON hợp lệ.
   }
-  return { raw: van.replace(/\u0000/gu, "") };
+  return JSON.stringify({ raw: van.replace(/\u0000/gu, "") });
 }
 
 /**
@@ -355,7 +468,7 @@ export async function executeUnsealRequest(
         await client.query(
           `INSERT INTO public.rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload)
            VALUES ($1, $2, $3, $4)`,
-          [orgId, input.unsealRequestId, pb.id, JSON.stringify(thanhJson(banRo))],
+          [orgId, input.unsealRequestId, pb.id, thanhJson(banRo)],
         );
         opened += 1;
       } finally {
