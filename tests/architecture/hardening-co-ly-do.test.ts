@@ -190,6 +190,9 @@ export function vungTraCuu(quyetDinh: string): string {
   return ["## ADR-028", "## ADR-036", "## ADR-037"].map(khoi).join("\n").replaceAll(/~~[\s\S]*?~~/gu, "");
 }
 
+// [S1.66 / lượt soi ngang 59a-6] Cổng đo SỰ CÓ MẶT của khoá tra cứu trong vùng chưa gạch — không đo câu văn quanh khoá tả đúng cơ
+// chế. Đọc được: ADR-036 hàng 8 tả bản đầu đã bị lượt soi 43 bác của `CAU_GUC_VAN_HANH_GAN_SAN` (so `reset_val` với `boot_val`) từ
+// S1.51 tới S1.65, và cổng vẫn xanh vì hàng 8 lẫn hàng 26 đều nêu tên hằng. Câu tả đúng hay sai vẫn là việc của lượt soi.
 export function viPhamPhanXetKhongCoLyDo(hardening: string, quyetDinh: string): readonly string[] {
   const vung = vungTraCuu(quyetDinh);
   // Định danh hằng so bằng BIÊN TỪ (`CAU_POLICY_SAI_2` không được làm `CAU_POLICY_SAI` xanh giả);

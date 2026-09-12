@@ -611,9 +611,11 @@ describe("migration của dự án", () => {
   // [S1.57 / khoản nợ 100 — lượt soi 49 NẶNG-1] MỤC 94 PHÁN XÉT SAU VÒNG ĐÁNH SỐ nên, khi chủ thể "vai chạy migration" đỏ, backfill
   // của CHÍNH lượt đã chạy dưới cấu hình ấy, ra 0 hàng, COMMIT và ghi checksum — deploy sau không chạy lại (đo S1.56 ⒣). Chủ thể ấy
   // nay được hỏi TRƯỚC vòng (lượt `truoc_vong` của hardening, chỉ khi còn tệp chưa áp) và migrate() từ chối trước khi tệp nào chạy.
-  // Mọi lối ra của chủ thể này nằm ngoài tầm của chính vai ấy (REVOKE do người cấp, chủ bảng hay SUPERUSER; chạy dưới chủ bảng; policy
+  // ~~Mọi lối ra của chủ thể này nằm ngoài tầm của chính vai ấy (REVOKE do người cấp, chủ bảng hay SUPERUSER; chạy dưới chủ bảng; policy
   // do chủ bảng thêm), nên chặn sớm không lấy mất lối ra nào mà một migration chạy dưới vai ấy làm được — trừ migration tự SET ROLE
-  // sang chủ, ranh giới nói ra.
+  // sang chủ, ranh giới nói ra.~~ [S1.66 / lượt soi ngang 59c NẶNG-3, lượt soi 60b] Lượt hỏi trước vòng bỏ qua dòng mà `tu_sua_duoc`
+  // nhận ra là tự sửa được (S1.57; lượt soi 50 INFO-8 thay vế SET ROLE); `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều — chiều CHẶN chưa đo,
+  // khoản 113.
   it("[INV-F1] [khoản nợ 100] hồ sơ N2 với một backfill đang chờ: trien_khai có SELECT, UPDATE trên suppliers mà policy chỉ TO app_api ⇒ migrate() dưới trien_khai TỪ CHỐI TRƯỚC vòng đánh số — backfill không chạy, không dòng schema_migrations, hàng giữ nguyên, thông điệp nêu bảng/vai/lệnh; chạy dưới chủ bảng ⇒ backfill áp đủ hàng", async () => {
     const db = await startPostgres();
     const tmp = await mkdtemp(join(tmpdir(), "tp-k100-"));
@@ -2923,7 +2925,11 @@ describe("migration của dự án", () => {
           (e: Error) => e,
         );
         expect(loi, "policy gọi hàm của schema lạ đi lọt qua migrate()").not.toBeNull();
-        expect(loi!.message).toContain("gia.app_current_org_id()");
+        // ~~expect(loi!.message).toContain("gia.app_current_org_id()")~~ [S1.66 / lượt soi ngang 59a-8] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: thông
+        // điệp [CR1] nay nêu tên policy, không in biểu thức. Phép đo giữ nguyên nghĩa: dưới search_path thù địch `pg_get_expr` in trần
+        // `(org_id = app_current_org_id())` — chuỗi thuộc danh sách trắng (đo ở (a)) — nên policy chỉ bị nêu khi phiên phán xét ghim
+        // search_path và kết xuất tên hàm kèm lược đồ `gia`.
+        expect(loi!.message).toContain("users.users_tenant_isolation: hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt");
 
         // (c) LỚP GHIM THỨ HAI, đo riêng: chạy hardening.always.sql BẰNG TAY (psql -f) trên
         // một phiên có search_path thù địch — đường đi KHÔNG qua migrate.ts nên nó không được
@@ -2969,12 +2975,15 @@ describe("migration của dự án", () => {
           bangTay.release();
           await poolTay.end();
         }
+        // ~~.toContain("gia.app_current_org_id()")~~ [S1.66 / lượt soi ngang 59a-8] Kỳ vọng LẬT CÓ CHỦ ĐÍCH, cùng lý do vế (b): thông
+        // điệp nêu tên policy, không in biểu thức. Không có lần ghim thì biểu thức in trần và khớp danh sách trắng (đo ở (a)), nên
+        // policy chỉ bị nêu khi lần ghim trong chính tệp SQL còn hiệu lực.
         expect(
           loiBangTay,
           "chạy hardening.always.sql bằng tay dưới search_path thù địch KHÔNG bắt được policy " +
             "gọi hàm của schema lạ — lần ghim trong chính file SQL, hoặc phần ghi đủ " +
             '"pg_catalog." trong khối DECLARE, đã mất tác dụng.',
-        ).toContain("gia.app_current_org_id()");
+        ).toContain("users.users_tenant_isolation: hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt");
 
         await db.pool.query("DROP FUNCTION gia.current_setting(text, boolean)");
         await db.pool.query(`ALTER ROLE ${ai[0]!.u} SET search_path = gia, public`);
@@ -4099,14 +4108,15 @@ describe("migration của dự án", () => {
         await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
         expect(await ma(`ALTER DATABASE "${tenDb}" SET DateStyle = 'ISO, DMY'`), "GUC thường: chủ database đặt được").toBeNull();
         expect(await ma(`ALTER DATABASE "${tenDb}" RESET DateStyle`)).toBeNull();
-        // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ migrate() từ chối sớm (S1.48 H1); nhánh ⒞ cũng thấy — đo
-        // trực tiếp; kết nối mới ⇒ đi qua.
-        const loiCu = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
-        expect(loiCu!.message).toContain(`${TU_CHOI_GUC_SOM} — app.org_id`);
+        // Phiên mở trong cửa sổ SET vẫn mang app.org_id sau RESET ⇒ nhánh ⒞ thấy — đo trực tiếp TRƯỚC khi migrate() chạm phiên ấy;
+        // migrate() từ chối sớm (S1.48 H1). ~~kết nối mới ⇒ đi qua~~ [S1.66 / lượt soi ngang 59a-1] Kỳ vọng LẬT CÓ CHỦ ĐÍCH: phép từ
+        // chối sớm nay HUỶ kết nối nhiễm, nên lượt kế trên CÙNG pool mở phiên sạch và đi qua, không cần `ketNoiMoi()`. Bản trước đo
+        // nhánh ⒞ SAU migrate(), trên chính phiên nhiễm vẫn còn trong pool.
         const cauCu = (await poolTk.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN"))).rows.map((r) => r.mo_ta);
         expect(cauCu.some((m) => m.startsWith("phiên deploy hiện tại: GUC app.org_id có giá trị mà không hàng pg_db_role_setting nào")), "nhánh ⒞ dưới vai deploy thường").toBe(true);
-        await ketNoiMoi();
-        await expect(migrate(poolTk, MIGRATIONS_DIR), "đối chứng dưới vai deploy thường (kết nối mới)").resolves.toEqual([]);
+        const loiCu = await loiCua(migrate(poolTk, MIGRATIONS_DIR));
+        expect(loiCu!.message).toContain(`${TU_CHOI_GUC_SOM} — app.org_id`);
+        await expect(migrate(poolTk, MIGRATIONS_DIR), "đối chứng dưới vai deploy thường: CÙNG pool — kết nối nhiễm đã bị huỷ").resolves.toEqual([]);
 
         // (b′) [lượt soi 39 NHẸ-3] RESET ALL dưới vai thường GIỮ IM LẶNG phần tử placeholder: mục "rolconfig toàn cụm của app_api"
         //      và mục 87 cùng đỏ, một nguyên nhân; rolconfig còn nguyên. Superuser RESET ⇒ đi qua.
@@ -4212,18 +4222,61 @@ describe("migration của dự án", () => {
           (e: Error) => e,
         );
         expect(loi, "policy ngoài danh sách trắng đi lọt").not.toBeNull();
-        for (const mong of [
-          "'2020-01-02'::date",
-          "'2020-01-02 03:04:05+00'",
-          "'1 day 02:00:00'::interval",
-          "'\\x01'::bytea",
-        ]) {
-          expect(
-            loi!.message,
-            "pg_get_expr kết xuất hằng theo GUC của cụm — chuỗi mà danh sách trắng so khớp " +
-              "đổi theo cấu hình mà kẻ khác chọn",
-          ).toContain(mong);
+        const DONG_CR1_BG = "bao_gia.bg: hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt";
+        expect(loi!.message).toContain(DONG_CR1_BG);
+        // ~~Thông điệp mang chuỗi kết xuất của bốn hằng theo ISO/UTC/postgres/hex~~ [S1.66 / lượt soi ngang 59a-8] Kỳ vọng LẬT CÓ
+        // CHỦ ĐÍCH: thông điệp [CR1] nay nêu tên policy, không in biểu thức — hằng trong một policy có thể là UUID hay email. Tính
+        // chất cần đo vẫn là "chuỗi mà danh sách trắng SO KHỚP không đổi theo GUC của cụm", nên đo nó qua CHÍNH phép so khớp: bản sao
+        // tạm của hardening mở `NGOAI_LE_HINH_DANG` cho `bao_gia.bg` bằng chuỗi kết xuất dưới năm GUC mà hardening ghim ⇒ [CR1] im với
+        // `bg`; mở bằng chuỗi kết xuất dưới GUC thù địch của cụm ⇒ [CR1] vẫn nêu `bg`.
+        const ketXuat = async (ghim: boolean): Promise<string> => {
+          const c = await poolMoi.connect();
+          try {
+            await c.query("BEGIN");
+            if (ghim) {
+              await c.query(
+                "SELECT pg_catalog.set_config('standard_conforming_strings', 'on', true), " +
+                  "pg_catalog.set_config('DateStyle', 'ISO, MDY', true), pg_catalog.set_config('IntervalStyle', 'postgres', true), " +
+                  "pg_catalog.set_config('TimeZone', 'UTC', true), pg_catalog.set_config('bytea_output', 'hex', true)",
+              );
+            }
+            const { rows } = await c.query<{ e: string }>(
+              "SELECT pg_catalog.pg_get_expr(polqual, polrelid) AS e FROM pg_catalog.pg_policy WHERE polname = 'bg'",
+            );
+            return rows[0]!.e;
+          } finally {
+            await c.query("ROLLBACK");
+            c.release();
+          }
+        };
+        const chuoiGhim = await ketXuat(true);
+        const chuoiCum = await ketXuat(false);
+        for (const mong of ["'2020-01-02'::date", "'2020-01-02 03:04:05+00'", "'1 day 02:00:00'::interval", "'\\x01'::bytea"]) {
+          expect(chuoiGhim, "chuỗi kết xuất dưới năm GUC mà hardening ghim").toContain(mong);
         }
+        expect(chuoiCum, "GUC thù địch của cụm phải đổi chuỗi kết xuất — không thì phép đo dưới đây rỗng ruột").not.toBe(chuoiGhim);
+        const moCuaVoi = async (bieuThuc: string): Promise<string> => {
+          const tam = await mkdtemp(join(tmpdir(), "tp-i3-deparse-"));
+          try {
+            for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tam, f));
+            const tepH = join(tam, "hardening.always.sql");
+            const sqlGoc = await readFile(tepH, "utf8");
+            const sqlMo = sqlGoc.replace(
+              /\(VALUES \('', '', '', '', '', ''\),/,
+              () => `(VALUES ('', '', '', '', '', ''), ('bao_gia', 'bg', '*', 'PUBLIC', 'co_org_id', '${bieuThuc.replaceAll("'", "''")}'),`,
+            );
+            expect(sqlMo, "không tìm thấy NGOAI_LE_HINH_DANG trong bản sao tạm").not.toBe(sqlGoc);
+            await writeFile(tepH, sqlMo, "utf8");
+            return await migrate(poolMoi, tam).then(
+              () => "",
+              (e: Error) => e.message,
+            );
+          } finally {
+            await rm(tam, { recursive: true, force: true });
+          }
+        };
+        expect(await moCuaVoi(chuoiGhim), "cửa mang chuỗi kết xuất ghim ⇒ phép so khớp của [CR1] thấy đúng chuỗi ấy").not.toContain(DONG_CR1_BG);
+        expect(await moCuaVoi(chuoiCum), "đối chứng: cửa mang chuỗi kết xuất dưới GUC của cụm ⇒ [CR1] vẫn nêu bg").toContain(DONG_CR1_BG);
       } finally {
         await poolMoi.end();
       }

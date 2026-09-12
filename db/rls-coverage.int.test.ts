@@ -2932,13 +2932,22 @@ describe("[S1.53 / khoản nợ 94] chủ bảng sau FORCE: mọi lệnh phải 
     }
   }, 180000);
 
-  it("[INV-F1] ĐO: policy cho NHÓM mà chủ là thành viên thì phủ ĐÚNG lệnh ấy (has_privs_of_role); policy TO PUBLIC phủ hết; chủ superuser đứng ngoài", async () => {
+  it("[INV-F1] ĐO: policy cho NHÓM mà chủ là thành viên thì phủ ĐÚNG lệnh ấy (has_privs_of_role) — thành viên KHÔNG thừa kế thì không; policy TO PUBLIC phủ hết; chủ superuser đứng ngoài", async () => {
     await dungFixture();
     try {
       await migrate(db.pool, MIGRATIONS_DIR).catch(() => undefined);
       expect(await nhan(), "phép đo không rỗng ruột: đủ bốn lệnh trước khi phủ").toEqual(BON_LENH);
-      await db.pool.query(`GRANT ${NHOM} TO ${CHU}`);
+      // [S1.66 / lượt soi ngang 59c NHẸ-15] Membership KHÔNG thừa kế trước. RLS áp policy `TO nhóm` cho vai CÓ QUYỀN CỦA nhóm
+      // (has_privs_of_role), không cho mọi thành viên — và đột biến 'USAGE' → 'MEMBER' ở vế vai của chủ thể chủ bảng xanh ở mọi test
+      // của tệp trước fixture này (đo: lượt đột biến S1.66).
+      await db.pool.query(`GRANT ${NHOM} TO ${CHU} WITH INHERIT FALSE`);
       await db.pool.query(`SET ROLE ${CHU}; CREATE POLICY p_nhom ON zz_s94.t FOR SELECT TO ${NHOM} USING (true); RESET ROLE`);
+      expect(await nhan(), "thành viên KHÔNG thừa kế: policy của nhóm không phủ chủ — vẫn đủ bốn lệnh").toEqual(BON_LENH);
+      expect(
+        (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_s94.t")).rows[0]!.n,
+        "và RLS đồng ý: chủ là thành viên không thừa kế của nhóm, đọc 0 hàng",
+      ).toBe(0);
+      await db.pool.query(`REVOKE ${NHOM} FROM ${CHU}; GRANT ${NHOM} TO ${CHU} WITH INHERIT TRUE`);
       expect(await nhan(), "SELECT được phủ QUA NHÓM; ba lệnh còn lại vẫn nêu").toEqual(
         BON_LENH.filter((d) => !d.endsWith("/SELECT")),
       );
@@ -3018,7 +3027,7 @@ describe("[S1.53 / khoản nợ 94] chủ bảng sau FORCE: mọi lệnh phải 
     }
   }, 180000);
 
-  it("[INV-F1] ĐO: bảng CON của cha bật RLS đi qua cha nên đứng ngoài (qua cha ra hàng, thẳng lá ra 0 — ranh giới nói ra); lệnh chủ bảng đã tự REVOKE thì không bị đòi (ném 42501, ồn)", async () => {
+  it("[INV-F1] ĐO: bảng CON của cha bật RLS đi qua cha nên đứng ngoài (qua cha ra hàng, thẳng lá ra 0 — ranh giới nói ra); lệnh chủ bảng đã tự REVOKE thì không bị đòi (ném 42501, ồn), còn giữ quyền mức CỘT thì vẫn bị đòi", async () => {
     await dungFixture();
     try {
       await db.pool.query(
@@ -3065,6 +3074,12 @@ describe("[S1.53 / khoản nợ 94] chủ bảng sau FORCE: mọi lệnh phải 
       expect(maUpdate, "và lệnh bị thu hồi thì ném — ồn, không im").toBe("42501");
       await db.pool.query(`GRANT UPDATE ON zz_s94.s TO ${CHU}`);
       expect(await cuaS(), "cấp lại UPDATE mà không policy phủ ⇒ UPDATE bị nêu").toEqual(["zz_s94.s/zz_chu94 (chủ bảng)/UPDATE"]);
+      // [S1.66 / lượt soi ngang 59c NHẸ-15] GRANT mức CỘT: chủ mất UPDATE mức bảng nhưng giữ UPDATE trên một cột ⇒ UPDATE của chủ vẫn
+      // chạy và ra 0 hàng không lỗi, nên mục phải nêu. Đột biến `has_any_column_privilege` → `has_table_privilege` ở chủ thể chủ bảng
+      // xanh ở mọi test của tệp trước fixture này (đo: lượt đột biến S1.66).
+      await db.pool.query(`REVOKE UPDATE ON zz_s94.s FROM ${CHU}; GRANT UPDATE (id) ON zz_s94.s TO ${CHU}`);
+      expect(await cuaS(), "chỉ còn UPDATE mức cột mà không policy phủ ⇒ UPDATE vẫn bị nêu").toEqual(["zz_s94.s/zz_chu94 (chủ bảng)/UPDATE"]);
+      expect((await duoiChu("UPDATE zz_s94.s SET id = id")).rowCount, "và RLS đồng ý: UPDATE qua quyền cột ra 0 hàng không lỗi").toBe(0);
     } finally {
       await donDep();
     }

@@ -37,12 +37,16 @@
 // ---------------------------------------------------------------------------------------------
 // ÁNH XẠ LỖI → MÃ HTTP, và vì sao có HAI GIAI ĐOẠN
 // ---------------------------------------------------------------------------------------------
-// Giai đoạn 1 (xác thực): mọi lỗi ⇒ 401 với CÙNG MỘT thân, bất kể là thiếu cookie, sai hình dạng,
+// Giai đoạn 1 (xác thực): ~~mọi lỗi~~ [S1.66] lỗi XÁC THỰC ⇒ 401 với CÙNG MỘT thân, bất kể là thiếu cookie, sai hình dạng,
 // token không khớp, phiên hết hạn, hay tổ chức không tồn tại. Phân biệt chúng là một oracle trên
 // tập phiên — cùng lý do `resolveSessionActor` và `docToken` ném một thông điệp cho bốn ca.
+// [S1.66 / lượt soi ngang 59b-1, lượt soi 60a-1, 60a-2] Chưa trọn. Nhánh khách chỉ gói lỗi xác thực, và lỗi giao thức MANG TÊN
+// (`TenantError` loại protocol, `KetNoiNhiemError`) đi 500 có log; nhưng nhánh người mua còn gói MỌI lỗi của `resolveSessionByToken`
+// thành 401, và lỗi Postgres của lần lấy client rơi vào bảng ánh xạ của giai đoạn 2. Đo: vai đăng nhập mất membership app_api ⇒ 403
+// không log ở cả hai nhánh; EXECUTE trên app_current_org_id() bị thu hồi ⇒ người mua 401, khách 403, không log — khoản 118.
 // Giai đoạn 2 (handler): `PermissionDeniedError` ⇒ 403; `HttpError` ⇒ mã của nó; lỗi nghiệp vụ
 // có tên (`SupplierError`, `RfqError`, …) ⇒ 422 kèm thông điệp — các lớp ấy đã chịu kỷ luật
-// "không nội suy dữ liệu vào message"; MỌI lỗi khác ⇒ 500 với thân cố định, và chỉ TÊN lỗi được
+// "không nội suy dữ liệu vào message"; MỌI lỗi khác ⇒ 500 với thân cố định, và chỉ TÊN lỗi — [S1.66] cùng MÃ cố định của `TenantError` — được
 // ghi ra `console.error` — không stack có payload, không thân yêu cầu (A2).
 // ==============================================================================================
 
@@ -206,7 +210,10 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
   }
   // Chỉ TÊN lỗi và mã yêu cầu. Không `err` nguyên, không `cause`: `cause` của một lỗi Postgres
   // mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
-  console.error(`[api] ${requestId} ${err instanceof Error ? err.name : "loi khong ro"}`);
+  // [S1.66 / lượt soi ngang 59b-1] Và MÃ cố định của một TenantError giao thức: tên lỗi một mình không phân biệt được mặc định phiên
+  // gắn sẵn với rò phạm vi phiên hay replica lúc COMMIT. Mã là hằng của `@trustprocure/tenancy`, không mang giá trị nào.
+  const ma = err instanceof TenantError ? ` ${err.code}` : "";
+  console.error(`[api] ${requestId} ${err instanceof Error ? err.name : "loi khong ro"}${ma}`);
   return { status: 500, body: THAN_500 };
 }
 
@@ -376,7 +383,11 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               resolveGuestSessionByToken(client, cookie.orgId, cookie.token),
             );
           } catch (e) {
-            throw new LoiXacThuc({ cause: e });
+            // [S1.66 / lượt soi ngang 59b-1] Chỉ lỗi XÁC THỰC thành 401: token khách hỏng, lạ, thu hồi hay hết hạn (`InvitationError`
+            // của resolveGuestSessionByToken) và lỗi ĐẦU VÀO của withTenant. Bản trước gói MỌI lỗi — mặc định phiên gắn sẵn, rò phạm
+            // vi phiên, `KetNoiNhiemError` của lần lấy client — thành một 401 câm (đo: lượt soi 59, `loi-giao-thuc.int.test.ts`).
+            if (e instanceof InvitationError || (e instanceof TenantError && e.kind === "input")) throw new LoiXacThuc({ cause: e });
+            throw e;
           }
           const goiHandler = (client: pg.PoolClient): Promise<ApiResponse> =>
             route.handler({
@@ -399,10 +410,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (err instanceof LoiXacThuc) return { status: 401, body: THAN_401 };
       // `withTenant` ném TenantError cho một orgId SAI HÌNH DẠNG (nó KHÔNG tra `organizations` —
       // một orgId lạ nhưng đúng UUID đi qua và RLS lọc thành 0 hàng), và `withGuestSession` ném
-      // TenantError cho một phiên khách hỏng — cả hai thuộc giai đoạn xác thực, không phải lỗi handler. `SessionInvalidError` và
+      // TenantError cho một phiên khách hỏng ~~— cả hai thuộc giai đoạn xác thực, không phải lỗi handler~~. [S1.66 / lượt soi ngang
+      // 59b-1] Không chỉ hai ca ấy: withTenant còn ném TenantError khi TỪ CHỐI PHỤC VỤ — mặc định phiên gắn sẵn, rò phạm vi phiên,
+      // replica lúc COMMIT, giao dịch hỏng, GUC khách không hiệu lực (đo: lượt soi 59 — cả nhóm từng ra 401 không log). Chỉ loại
+      // `input` thuộc giai đoạn xác thực; loại `protocol` rơi xuống `anhXaLoiHandler` — 500 thân cố định, một dòng log mang tên và
+      // mã. `SessionInvalidError` và
       // `InvitationError` KHÔNG bao giờ tới đây từ giai đoạn 1 (đã bọc), nên nếu thấy chúng thì
       // đó là lỗi nghiệp vụ của handler và rơi vào bảng 422 ở dưới.
-      if (err instanceof TenantError) return { status: 401, body: THAN_401 };
+      if (err instanceof TenantError && err.kind === "input") return { status: 401, body: THAN_401 };
       if (err instanceof SessionInvalidError) return { status: 401, body: THAN_401 };
       if (err instanceof InvitationError) return { status: 422, body: { error: err.message } };
       return anhXaLoiHandler(err, requestId);

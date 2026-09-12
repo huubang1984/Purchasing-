@@ -12,14 +12,51 @@ interface DocLaiSauGiaoDich {
 
 /**
  * Lỗi thuộc về GIAO THỨC của withTenant(), phân biệt với lỗi do chính `fn` hay Postgres ném.
- * Hai trường hợp, cả hai đều nghĩa là KHÔNG có thay đổi nào được ghi:
+ * ~~Hai trường hợp, cả hai đều nghĩa là KHÔNG có thay đổi nào được ghi:
  *   - `orgId` không phải UUID hợp lệ (từ chối trước khi mở kết nối);
- *   - transaction đã hỏng nên COMMIT bị Postgres âm thầm chuyển thành ROLLBACK.
+ *   - transaction đã hỏng nên COMMIT bị Postgres âm thầm chuyển thành ROLLBACK.~~
+ * [S1.66 / lượt soi ngang 59b-1] Không còn là hai trường hợp: từ S1.47–S1.54 hàm này còn TỪ CHỐI PHỤC VỤ khi mặc định phiên bị gắn
+ * sẵn, khi GUC tenant/khách rò ở phạm vi phiên, khi replica còn lúc COMMIT, khi GUC khách không có hiệu lực. Mỗi lỗi mang một MÃ cố
+ * định (`code`) và một LOẠI suy từ mã (`kind`):
+ *   - `input` — lỗi của NGƯỜI GỌI: orgId hay guestSessionId sai hình dạng, phiên khách không tồn tại, đã thu hồi hay hết hạn;
+ *   - `protocol` — lớp cô lập từ chối phục vụ hay huỷ kết nối: mọi mã còn lại, và là MẶC ĐỊNH của một mã mới.
+ * Tầng HTTP trước vòng này gộp mọi TenantError thành một 401 không log, nên cả nhóm `protocol` câm với người vận hành (đo: lượt soi
+ * 59 — `ALTER DATABASE … SET app.guest_session_id` làm mọi route ra 401 không một dòng log). Mọi lỗi của lớp này vẫn nghĩa là KHÔNG
+ * thay đổi nào được ghi, trừ `SESSION_STATE_LEFT`: nó chỉ đi vào `release()` để huỷ kết nối sau một giao dịch ĐÃ commit, không ném.
+ * Thông điệp không mang giá trị (UUID, GUC) — thứ được ghi log là `code`.
  */
+export type TenantErrorCode =
+  | "INVALID_ORG_ID"
+  | "INVALID_GUEST_SESSION_ID"
+  | "GUEST_SESSION_NOT_FOUND"
+  | "MULTI_STATEMENT_UNSUPPORTED"
+  | "SESSION_DEFAULT_PRESET"
+  | "REPLICA_AT_COMMIT"
+  | "TRANSACTION_ABORTED"
+  | "COMMIT_NOT_APPLIED"
+  | "SESSION_SCOPE_LEAK"
+  | "SESSION_STATE_LEFT"
+  | "GUEST_SETTINGS_INEFFECTIVE";
+
+/** Ba mã của lỗi ĐẦU VÀO. Mọi mã khác là giao thức — một mã thêm sau này không lặng lẽ thành 401. */
+const MA_LOI_DAU_VAO: ReadonlySet<TenantErrorCode> = new Set<TenantErrorCode>([
+  "INVALID_ORG_ID",
+  "INVALID_GUEST_SESSION_ID",
+  "GUEST_SESSION_NOT_FOUND",
+]);
+
 export class TenantError extends Error {
-  constructor(message: string) {
+  readonly code: TenantErrorCode;
+
+  constructor(code: TenantErrorCode, message: string) {
     super(message);
     this.name = "TenantError";
+    this.code = code;
+  }
+
+  /** `input`: lỗi của người gọi — tầng HTTP trả 401 không log. `protocol`: lớp cô lập từ chối — 500 kèm một dòng log mang `code`. */
+  get kind(): "input" | "protocol" {
+    return MA_LOI_DAU_VAO.has(this.code) ? "input" : "protocol";
   }
 }
 
@@ -151,7 +188,8 @@ export interface WithTenantOptions {
  * Ranh giới, nói ra: một hàm đặt replica, ghi, rồi tự đặt lại `origin` trước khi trả về thì ⑴ không thấy — đó là mã của
  * chính chủ hàm, lớp chặn là hardening; search path đọc qua `current_schemas(false)` chứ không qua tên GUC vì [INV-H21] chỉ
  * cho `migrate.ts` nêu tên ấy trong SQL — schema chưa tồn tại hay không có USAGE không đổi search path hiệu lực nên không
- * bị bắt (và cũng chưa che được tên nào); search path so TƯƠNG ĐỐI vì giá trị hợp lệ không bất biến, nên search path đã
+ * bị bắt (và cũng chưa che được tên nào); search path so TƯƠNG ĐỐI ~~vì giá trị hợp lệ không bất biến~~ [S1.66 / lượt soi ngang 59a-4:
+ * phần CẤM của nó thì bất biến mà chưa kiểm tuyệt đối — khoản 109], nên search path đã
  * nhiễm TỪ TRƯỚC giao dịch (mã ngoài `withTenant`) không bị bắt ở đây; `withTenant` chỉ bảo vệ giao dịch của chính nó,
  * không phủ mã dùng pool ngoài nó (khoản 99).
  */
@@ -165,7 +203,7 @@ export async function withTenant<T>(
     // Cố ý KHÔNG nội suy giá trị bị từ chối vào thông báo: thông báo lỗi đi vào log, và khuôn
     // "ném dữ liệu đầu vào vào message" là thứ được sao chép sang chỗ mà dữ liệu ĐÚNG LÀ bí
     // mật (giá thầu, token, mã OTP). Giữ khuôn an toàn ngay từ nơi vô hại nhất.
-    throw new TenantError("orgId không phải UUID hợp lệ");
+    throw new TenantError("INVALID_ORG_ID", "orgId không phải UUID hợp lệ");
   }
 
   const client = await pool.connect();
@@ -216,7 +254,7 @@ export async function withTenant<T>(
     // [S1.48 / lượt soi ngang 40a I8] Hình dạng kết quả câu nhiều lệnh được ĐÒI, không được tin: driver/pooler trả về một
     // kết quả thay vì hai thì `macDinh` là undefined và phép từ chối MÙ (fail-open).
     if (!Array.isArray(ketQuaMo) || ketQuaMo.length !== 2) {
-      throw new TenantError("BEGIN; SELECT phải trả về đúng hai kết quả — driver hay pooler không hỗ trợ câu nhiều lệnh; phép kiểm mặc định phiên không chạy được.");
+      throw new TenantError("MULTI_STATEMENT_UNSUPPORTED", "BEGIN; SELECT phải trả về đúng hai kết quả — driver hay pooler không hỗ trợ câu nhiều lệnh; phép kiểm mặc định phiên không chạy được.");
     }
     const macDinh = ketQuaMo[1]?.rows[0]?.mac_dinh;
     truocLuocDo = ketQuaMo[1]?.rows[0]?.luoc_do;
@@ -224,6 +262,7 @@ export async function withTenant<T>(
       tuChoiMacDinh = true;
       // Chỉ TÊN, không giá trị — cùng lý do với nhánh UUID ở trên.
       throw new TenantError(
+        "SESSION_DEFAULT_PRESET",
         `mặc định phiên của GUC tenant/khách bị gắn sẵn ngoài withTenant — ${macDinh}. Mọi câu không qua withTenant ` +
           "của tiến trình này đang chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, " +
           "postgresql.conf/ALTER SYSTEM, options= trên chuỗi kết nối, hay withTenant lồng trên CÙNG kết nối); từ chối " +
@@ -272,6 +311,7 @@ export async function withTenant<T>(
       const ma = (loiKetThuc as { code?: unknown }).code;
       if (ma === "TP096") {
         throw new TenantError(
+          "REPLICA_AT_COMMIT",
           "session_replication_role không phải origin/local lúc COMMIT — trigger ENABLE thường và khoá ngoại đã bị bỏ qua " +
             "cho các câu của giao dịch này (một hàm fn gọi đã ghi GUC ấy vào phiên, hay kết nối lấy từ pool đã nhiễm sẵn). " +
             "COMMIT không chạy: không thay đổi nào được ghi.",
@@ -279,6 +319,7 @@ export async function withTenant<T>(
       }
       if (ma === "25P02") {
         throw new TenantError(
+          "TRANSACTION_ABORTED",
           "Transaction không commit được: giao dịch đã hỏng (25P02) — một truy vấn bên trong đã lỗi và lỗi đó bị nuốt. " +
             "Không thay đổi nào được ghi.",
         );
@@ -290,6 +331,7 @@ export async function withTenant<T>(
     const ketThuc = cacKetQua[cacKetQua.length - 1];
     if (ketThuc?.command !== "COMMIT") {
       throw new TenantError(
+        "COMMIT_NOT_APPLIED",
         `Transaction không commit được: Postgres trả về "${String(ketThuc?.command)}" thay vì COMMIT — ` +
           "một truy vấn bên trong đã lỗi và lỗi đó bị nuốt. Không thay đổi nào được ghi.",
       );
@@ -324,6 +366,7 @@ export async function withTenant<T>(
         if (!rows[0]?.con_lai) {
           // RESET xoá sạch ⇒ giá trị là của PHIÊN này, do mã ngoài withTenant để lại. Kết nối bị huỷ; lỗi ném ra nói đúng.
           loiLamHongClient = new TenantError(
+            "SESSION_SCOPE_LEAK",
             "GUC tenant/khách còn sót ở phạm vi PHIÊN trên kết nối lấy từ pool — mã NGOÀI withTenant đã set_config(…, false) " +
               "rồi trả kết nối về pool. Kết nối bị huỷ thay vì trả về pool; giao dịch này không chạy.",
           );
@@ -363,6 +406,7 @@ export async function withTenant<T>(
       // Cố ý KHÔNG nội suy giá trị còn sót vào thông báo — cùng lý do với nhánh UUID ở trên.
       if (rows[0]?.con_sot) {
         loiLamHongClient ??= new TenantError(
+          "SESSION_STATE_LEFT",
           "app.org_id hay một GUC khách còn sót sau transaction — `fn` đã đặt biến ở phạm vi PHIÊN. " +
             "Kết nối bị huỷ thay vì trả về pool.",
         );
@@ -378,6 +422,7 @@ export async function withTenant<T>(
         if (sau.luoc_do !== truocLuocDo) lech.push("search path hiệu lực");
         if (lech.length > 0) {
           loiLamHongClient ??= new TenantError(
+            "SESSION_STATE_LEFT",
             `GUC vận hành sai hay bị đổi ở phạm vi PHIÊN sau giao dịch — ${lech.join(", ")}. Kết nối bị huỷ thay vì trả về pool.`,
           );
         }
@@ -450,7 +495,7 @@ export async function withGuestSession<T>(
 ): Promise<T> {
   if (!UUID_RE.test(guestSessionId)) {
     // Cố ý KHÔNG nội suy giá trị vào thông báo — cùng lý do với nhánh `orgId` của `withTenant`.
-    throw new TenantError("guestSessionId không phải UUID hợp lệ");
+    throw new TenantError("INVALID_GUEST_SESSION_ID", "guestSessionId không phải UUID hợp lệ");
   }
   return withTenant(
     pool,
@@ -471,6 +516,7 @@ export async function withGuestSession<T>(
         // Cố ý KHÔNG phân biệt "không có phiên" với "phiên đã chết": một thông điệp phân biệt
         // được hai ca ấy là một oracle cho người cầm một token đã hết hạn.
         throw new TenantError(
+          "GUEST_SESSION_NOT_FOUND",
           "phiên khách không tồn tại trong tổ chức đang gắn, hoặc đã thu hồi/hết hạn",
         );
       }
@@ -499,6 +545,7 @@ export async function withGuestSession<T>(
         rows[0]?.goi_thau !== rfqId
       ) {
         throw new TenantError(
+          "GUEST_SETTINGS_INEFFECTIVE",
           "GUC phiên khách KHÔNG có hiệu lực sau khi đặt. Mọi policy khách của 027 sẽ đọc NULL " +
             "và mở lại đúng khoảng trống A5, nên không truy vấn nào được phép chạy tiếp.",
         );
