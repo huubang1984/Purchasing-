@@ -3430,3 +3430,101 @@ trả), cùng diff, danh sách đột biến, bảng thăm dò catalog và mã s
 **Điều đáng mang sang vòng sau:** ⑴ Viết danh sách đột biến TRƯỚC khi coi test là đủ: ba vế và năm nhánh kiểu lộ ra không có test nào bắt
 chỉ nhờ tự hỏi "đột biến này đỏ ở đâu". ⑵ Fixture của một test về trigger phải dựng hàng mẫu trước khi gắn trigger — nếu không, tiền đề đọc
 lại chính hành vi đang đo. ⑶ Thăm dò quyền cột và SELECT trước khi đổi vai kịch bản giúp kịch bản dưới vai ứng dụng xanh ngay lượt đầu.
+
+# §S1.61 — khoản nợ 70: `supplier_contacts.email` ở chữ thường — CHECK của 048 cộng một lượt đối chiếu fail-closed, nói thật cả dưới vai deploy mà RLS áp — lượt soi 54, khoản 105 mở
+
+**Bề mặt:** `db/migrations/049_email_lien_he_chu_thuong.sql` — một khối DO đối chiếu dữ liệu có sẵn, rồi (trong khối con bắt
+`check_violation`) `ALTER TABLE public.supplier_contacts ADD CONSTRAINT supplier_contacts_email_chu_thuong CHECK (email = lower(email))`.
+Không đổi dòng TypeScript sản xuất nào. Test: `db/unique-oracle.int.test.ts` (describe `[khoản nợ 70]`, sáu `it`), `db/migrations.int.test.ts`
+(hàm `truoc049` và ba `it` `[khoản nợ 70]`, cộng `049_…` vào ba danh sách migration mong đợi). Đích của cột: địa chỉ nhận magic link của
+người liên hệ nhà cung cấp — hai hàng biến thể hoa-thường là hai đường link hợp lệ tới cùng một hộp thư.
+
+**Đo trước khi viết (test viết trước, kho chưa có 049, PostgreSQL 16):** ⒜ ba `it` ràng buộc đỏ theo HÀNH VI — ràng buộc không tồn tại;
+`INSERT` `Solo@corp.com` đứng một mình VÀO; `Cap@corp.com` cạnh `cap@corp.com` của cùng nhà cung cấp VÀO; `it` đối chứng xanh. ⒝ `it` đối
+chiếu đỏ CẤU TRÚC (chưa có `049`). ⒞ Thăm dò (tệp test tạm không track, xoá ngay) trên đúng ảnh `startPostgres()` ghim — PostgreSQL 16.15,
+Alpine/musl, `en_US.utf8`; Node 24.18, ICU 78.3 — mọi điểm mã 1…0x10FFFF trừ surrogate: `lower()` máy chủ hạ 1364, `.toLowerCase()` hạ
+1488; máy chủ hạ mà JS không hạ: 0; chuỗi JS hạ mà máy chủ còn hạ tiếp: 0; cùng hạ mà khác kết quả: 1 (`U+0130`, kết quả JS vẫn là điểm
+bất động của máy chủ).
+
+**Bản một và lượt soi 54.** Bản một: khối DO đếm hàng chưa ở chữ thường và hàng va khoá, RAISE với tối đa 20 id, rồi `ALTER` trần. Xanh trên
+trọn `migrations.int` 112/112, `unique-oracle` 11/11, `suppliers.int` 19/19, `pnpm test` 742/742; bảy đột biến đỏ. Lượt soi 54 (bảng dưới)
+tìm ra hai NẶNG trên chính bản ấy.
+
+**Đo cho NẶNG-1 (thăm dò S1.61, tệp tạm):** bảng do vai `zz_chu70` sở hữu, `ENABLE` + `FORCE`, policy lọc hết khi không gắn `app.org_id`;
+dưới `SET LOCAL ROLE zz_chu70` (`row_security_active` = true): câu đếm vi phạm ra 0 (superuser thấy 1); `ALTER … ADD CHECK` NÉM 23514
+`is violated by some row`; `ADD … NOT VALID` rồi `VALIDATE CONSTRAINT` cũng NÉM 23514; khối DO bắt `check_violation` và ném lại được. Nên
+lượt kiểm ràng buộc KHÔNG chịu RLS — fail-closed ở hồ sơ N3 giữ, NẶNG-1 không lên CAO — nhưng thông điệp trần không nói gì. Test N3 thật
+(`dungRoleTrienKhaiThuong`, `trien_khai` là chủ `supplier_contacts` có EXECUTE trên `app_current_org_id()`) chạy trên bản một nhận đúng
+thông điệp trần ấy (đỏ ở khẳng định nguyên văn của bản hai).
+
+**Hình dạng (bản hai):** ⒜ ĐỐI CHIẾU TRƯỚC `ALTER`, cùng giao dịch tệp: hàng `email <> lower(email)`; nếu có — tối đa 20 id theo thứ tự uuid;
+số NHÓM (tổ chức, nhà cung cấp, `lower(email)`) có từ hai hàng và ít nhất một hàng chưa ở chữ thường, mỗi nhóm kèm mọi id (tối đa 10 nhóm);
+RAISE `check_violation` — không email, không dữ liệu cá nhân nào, và kèm lối ra: sửa tay dưới vai mà RLS không áp, mỗi thay đổi một sự kiện
+kiểm toán. ⒝ KHÔNG tự hạ, kể cả hàng không va khoá: đổi đích magic link đã lưu là quyết định có người chịu. ⒞ `ALTER` trong khối con bắt đúng
+`check_violation` và ném lại: vai đang chạy, số hàng vai ấy thấy, `row_security_active`, và phải chạy lại dưới vai nào — đúng ca N3 mà khối
+đối chiếu đếm 0. ⒟ `CHECK` không `NOT VALID`. ⒠ `049` ghi đánh đổi phần trước `@` thành quyết định của sản phẩm (S1.3) và quy trình sửa tay.
+
+**Test:**
+- **`db/unique-oracle.int.test.ts`, describe `[khoản nợ 70]` (sáu `it`):** ràng buộc TỒN TẠI và `convalidated`; chữ hoa đứng một mình bị từ
+  chối; cặp hoa-thường không dựng được, chữ thường lần hai `duplicate key`; đối chứng chữ thường và cùng địa chỉ ở nhà cung cấp khác; [lượt
+  soi 54] một chữ hoa NGOÀI ASCII mà máy chủ gấp được bị từ chối — TỰ HIỆU CHUẨN; [lượt soi 54] tính chất trên CHÍNH môi trường đang chạy:
+  không điểm mã nào máy chủ hạ mà JS để nguyên, không chuỗi JS đã hạ mà máy chủ còn hạ, và `lower()` máy chủ gấp được nhiều hơn ASCII.
+- **`db/migrations.int.test.ts` (ba `it`, dựng qua `truoc049`):** ⑴ hai mươi hàng chữ hoa đứng một mình, một cặp hoa-thường, cùng địa chỉ chữ
+  thường ở nhà cung cấp thứ hai ⇒ `migrate()` NÉM với thông báo so NGUYÊN VĂN (21 hàng, đúng 20 id đầu, một nhóm kèm hai id), `049` không
+  được ghi, hàng giữ nguyên; sửa tay ⇒ đi qua, ràng buộc `convalidated`; ⑵ CHỈ một hàng chữ hoa đứng một mình cạnh một hàng chữ thường ⇒
+  NÉM nguyên văn (1 hàng, 0 nhóm), địa chỉ nguyên văn, không ghi; ⑶ hồ sơ N3 ⇒ NÉM nguyên văn nêu `trien_khai`, 0 hàng, `row_security_active
+  = true`, không ghi, không ràng buộc, địa chỉ nguyên văn; chạy lại dưới superuser ⇒ thông báo định danh.
+- **Chạy lại trên bản hai:** trọn `db/migrations.int.test.ts` 114/114 (ba `it` khoản 70 và ba danh sách migration mong đợi), `db/unique-oracle.int.test.ts` cùng `packages/supplier/src/suppliers.int.test.ts` 32/32, trọn `pnpm test` 48 tệp / 742 test (cổng kiến trúc, hình dạng migration); eslint và tsc thoát mã 0.
+
+**Tự bắt, không phải lượt soi:** ⑴ Script chèn test đầu tiên dừng ở mốc thứ hai (thụt 8 dấu cách so với 6) SAU khi đã ghi tệp thứ nhất —
+nửa chừng; chèn phần còn lại bằng script riêng; bài học đã ghi vào bộ nhớ: kiểm mọi mốc ở mọi tệp trước khi ghi tệp nào (script bản hai làm
+đúng như vậy). ⑵ Một heredoc Python dài hỏng ở bước bash dịch lệnh — đo lại, không tệp nào đổi. ⑶ Khi dựng đột biến bản một: vị từ va khoá
+quên `supplier_id` sẽ SỐNG với fixture một nhà cung cấp ⇒ thêm nhà cung cấp thứ hai TRƯỚC lượt đột biến. ⑷ Bản hai lần chạy đầu NÉM
+`collations are not supported by type integer`: `ORDER BY 1 COLLATE "C"` biến số thứ tự cột thành một hằng số nguyên — sắp theo
+`min(id::text) COLLATE "C"`, cùng thứ tự với chuỗi nhóm. ⑸ `pnpm evidence` lần đầu ĐỎ ở `[INV-H20]` (vitest thoát mã 1): P4 giải
+con trỏ sổ nợ TRONG TẬP TỆP GIT THEO DÕI, mà `049` khi ấy chưa track ⇒ ba hàng 70, 71, 105 trỏ vào khoảng không. Track xong thì P9b đỏ
+tiếp: `Handoff.md` vẫn khai `48 migration đánh số` trong khi kho có 49 — bộ tài liệu S1.61 đã quên lời khai ấy. Sửa: lời khai `[S1.61] 49`,
+lời cũ gạch NGOÀI mẫu `**… migration đánh số**`. Đo: gạch CẢ CỤM (`~~**[S1.28] 48 migration đánh số**~~ **[S1.61] 49 …**`) thì đột biến
+P9b đỏ oan — nó lấy lời khai ĐẦU TIÊN bằng regex trần, sửa vào đoạn đã gạch, và bộ kiểm (bỏ đoạn gạch) không thấy gì. Commit feat trước
+lượt evidence thứ hai.
+
+**Đỏ đo được, cô lập (bản hai, chạy một-một):**
+Mười bốn đột biến trên `049` bản hai, chạy một-một trên sáu `it` của `unique-oracle` và ba `it` của `migrations.int` (lọc tên); đối chứng không đột biến xanh (9/9); không đột biến nào đỏ do lỗi dựng; sau lượt, sha256 của tệp đích khớp bản gốc. M1 bỏ khối đối chiếu, chỉ còn `ALTER` trong khối con ⇒ đỏ ở ba `it` của `migrations.int` (thông báo chỉ còn câu của khối con — vai `postgres` thấy 21 hàng, `row_security_active = false` — không id; test N3 đỏ ở lượt chạy lại dưới superuser) · M2 thông báo in email thay vì id ⇒ đỏ ở ba `it` (địa chỉ vào log deploy) · M3 tự hạ vô điều kiện trước khối DO ⇒ đỏ ở ba `it` (câu hạ va khoá duy nhất của cặp; một hàng đứng một mình thì `049` đi qua; lượt chạy lại dưới superuser của test N3 đi qua) · M4 `CHECK … NOT VALID` ⇒ đỏ ở `it` ràng buộc đã kiểm, `it` thông báo nguyên văn và test N3 — dưới hồ sơ N3 `049` ĐI QUA, vì `NOT VALID` không quét bảng · M5 bỏ khối con `ALTER` ⇒ đỏ ở bốn `it` của `unique-oracle` (kể cả vectơ ngoài ASCII) và hai `it` của `migrations.int` · M6 nhóm va khoá quên `supplier_id` ⇒ đỏ ở `it` thông báo nguyên văn (nhóm kéo thêm hàng của nhà cung cấp thứ hai) · M7 tự hạ những hàng KHÔNG va khoá trước khối DO (lượt soi 54 NẶNG-2) ⇒ đỏ ở ba `it`; ở `it` một hàng đứng một mình, `049` đi qua · M8 nuốt `check_violation` của `ALTER` ⇒ đỏ ở test N3 (`049` đi qua dưới N3 mà không có ràng buộc) · M9 `CHECK` dưới `COLLATE "C"` ⇒ đỏ ở vectơ chữ hoa ngoài ASCII (chữ hoa ấy vào được) · M10 ngưỡng đếm `> 1` ⇒ đỏ ở `it` một hàng và ở lượt chạy lại của test N3 · M11 bỏ `LIMIT 20` ⇒ đỏ ở `it` hai mươi mốt hàng · M12 danh sách id không lọc hàng chưa ở chữ thường ⇒ đỏ ở `it` thông báo nguyên văn và `it` một hàng · M13 thông báo N3 chung chung ⇒ đỏ ở test N3 · M14 id kèm phần trước `@` của email ⇒ đỏ ở ba `it`.
+
+**Thăm dò cho khoản 105 (S1.61, tệp tạm):** sau `migrate()` trọn kho — `DROP CONSTRAINT users_email_chu_thuong`, `DROP CONSTRAINT
+supplier_contacts_email_chu_thuong`, thay `supplier_contacts_email_hinh_dang` bằng bản `NOT VALID` ⇒ `migrate()` lại ĐI QUA, không ràng buộc
+nào được phục hồi hay phán xét, và một người dùng `Alice105@corp.com` VÀO.
+
+**Ranh giới NÓI RA:** ⑴ Tập mà ràng buộc gấp là tập của `lower()` máy chủ: ctype C/POSIX chỉ gấp ASCII; 124 cặp hoa-thường trên musl mà máy
+chủ không gấp là cặp THẬT — khoản 71 (ghi thêm ở S1.61). ⑵ glibc chưa đo theo phép thăm dò; test tính chất đo trên môi trường chạy nó. ⑶
+`ALTER` giữ `ACCESS EXCLUSIVE` trên `supplier_contacts` lúc kiểm; `migrate.ts` đặt `lock_timeout = 0`. ⑷ Thông báo nêu tối đa 20 id và 10
+nhóm. ⑸ Ràng buộc bị gỡ hay hạ `NOT VALID` sau deploy thì không lượt nào thấy — khoản 105. ⑹ Không kiểm định dạng email (011); tên miền IDN
+và dấu chấm cuối — khoản 71.
+
+**Lượt soi đối kháng 54** — một người soi độc lập, CHỈ ĐỌC, trên bản chụp bản một của `049`, diff test, log thăm dò và mã sản xuất:
+**0 CAO, 2 NẶNG, 5 NHẸ, 2 INFO**. Người soi không tìm được đường nào cất chữ hoa (theo `lower()` của máy chủ) vào `supplier_contacts.email` sau
+`049` mà không bỏ ràng buộc; một trụ fail-closed ở hồ sơ deploy mặc định chỉ được đọc từ mã nguồn PostgreSQL — NẶNG-1, nay đã đo.
+
+| Mã | Phát hiện | Xử lý |
+|---|---|---|
+| NẶNG-1 | Ở hồ sơ N3 (vai deploy là chủ bảng FORCE có EXECUTE — mặc định theo `005`), khối đối chiếu đếm 0 vì policy tenant lọc hết; deploy chỉ dừng nhờ thông điệp trần của `ALTER`, câu đối chiếu người vận hành chạy dưới cùng vai cũng ra 0; lời khai "lượt kiểm của ALTER không chịu RLS" chưa đo — sai thì thành CAO | **Đo:** thăm dò S1.61 — dưới chủ bảng FORCE câu đếm ra 0 (superuser thấy 1), `ALTER … ADD CHECK` và `NOT VALID` + `VALIDATE CONSTRAINT` đều NÉM 23514: fail-closed giữ, không lên CAO; test N3 thật (`dungRoleTrienKhaiThuong`, chủ `supplier_contacts` có EXECUTE) trên bản một nhận đúng thông điệp trần. **Sửa:** `ALTER` vào khối con bắt đúng `check_violation`, ném lại nêu vai, số hàng vai ấy thấy, `row_security_active` và lối ra; chú thích `049` viết lại — test N3 đỏ trên bản một, xanh trên bản hai; đột biến nuốt lỗi và thông báo chung chung đỏ ở nó (đo) |
+| NẶNG-2 | Khẳng định "049 không tự hạ" của T2 không thể đỏ: fixture luôn có một cặp va khoá nên khối đối chiếu luôn NÉM và ROLLBACK giữ mọi hàng; bản "tự hạ những hàng không va khoá" lọt T1, T2 và cả bảy đột biến | **Sửa:** T2b — CHỈ một hàng chữ hoa đứng một mình cạnh một hàng chữ thường: `049` phải NÉM, địa chỉ nguyên văn, `049` không được ghi; đột biến "hạ có điều kiện" đỏ ở ba `it`, trong đó `it` một hàng: `049` đi qua (đo) |
+| NHẸ-1 | Chốt dữ liệu cá nhân của T2 chỉ cấm tên miền: id kèm phần trước `@` hay họ tên vẫn xanh | **Sửa:** T2, T2b, T3 so thông báo NGUYÊN VĂN; đột biến "id kèm phần trước @" đỏ ở ba `it` (đo) |
+| NHẸ-2 | Không vectơ ngoài ASCII nào được ghim; lời khai Unicode dựa trên một thăm dò tạm không ghi phiên bản Node | **Sửa:** T1 thêm vectơ chữ hoa ngoài ASCII TỰ HIỆU CHUẨN (khuôn `[sổ nợ 63]`) và một test tính chất trên CHÍNH môi trường đang chạy — không điểm mã nào máy chủ hạ mà JS để nguyên, không chuỗi JS đã hạ mà máy chủ còn hạ, máy chủ gấp được ngoài ASCII; `049` ghi Node 24.18 / ICU 78.3 cho thăm dò, CI đo lại trên Node 22; đột biến `COLLATE "C"` đỏ ở vectơ ngoài ASCII (đo) |
+| NHẸ-3 | Hai ranh giới không khai: ctype C/POSIX làm `lower()` chỉ gấp ASCII; các điểm mã JS hạ mà máy chủ không hạ là cặp hoa-thường THẬT, không chỉ confusable | **Sửa:** `049` khai cả hai (124 điểm mã trên musl, ví dụ `U+24B6`); test tính chất đỏ khi `lower()` của máy chủ chỉ gấp ASCII; hàng khoản 71 ghi thêm "cặp hoa-thường mà `lower()` máy chủ không gấp" |
+| NHẸ-4 | "Sửa tay" không định nghĩa được cho nhóm va khoá (xoá bị khoá ngoại chặn khi đã mời, hạ thì va khoá), mọi lối sửa đều đổi đích magic link ngoài sổ kiểm toán; con số va khoá và danh sách id nói về hai tập khác nhau | **Sửa:** thông báo nêu từng NHÓM va khoá kèm MỌI id (tối đa 10 nhóm) cạnh danh sách hàng chưa ở chữ thường; chú thích `049` ghi quy trình — vai mà RLS không áp, người quản lý mua hàng chọn người liên hệ được giữ, thu hồi lời mời trước, mỗi thay đổi một sự kiện kiểm toán; sửa chú thích T2 |
+| NHẸ-5 | Năm biến thể có hại khác lọt: nuốt `check_violation` của `ALTER`, ngưỡng `> 1`, bỏ `LIMIT 20`, danh sách id không lọc, con số đếm sai | **Sửa:** T3 bắt nuốt lỗi (dưới N3 `049` sẽ được ghi không ràng buộc) đỏ ở test N3 (đo); T2b bắt ngưỡng đỏ (đo); T2 dùng 21 hàng chữ hoa bắt bỏ `LIMIT` đỏ (đo); so nguyên văn bắt danh sách không lọc đỏ (đo) và mọi con số sai |
+| INFO-1 | Lý do "phần trước `@` được phép phân biệt hoa-thường" tự mâu thuẫn với chính ràng buộc | **Sửa:** `049` ghi đánh đổi thành quyết định của sản phẩm (S1.3), không phải lý do kỹ thuật |
+| INFO-2 | Chưa có log trọn `migrations.int`, `pnpm test`, đột biến | **Đã có sau bản chụp:** trọn `migrations.int` 112/112, `unique-oracle` 11/11, `suppliers.int` 19/19, `pnpm test` 742/742 trên bản một; bảy đột biến bản một đỏ; bản hai chạy lại trọn — trọn `migrations.int` 114/114, `unique-oracle` cộng `suppliers.int` 32/32, `pnpm test` 742/742; mười bốn đột biến bản hai đỏ |
+
+**Mang sang của người soi:** ⑴ hộp thư trùng nhau theo cách KHÁC hoa-thường (dấu chấm cuối tên miền, IDN) — ghi vào khoản 71; ⑵ kiểm độ dài
+trước khi hạ — đo bằng Node: `İ`, `Ⱥ`, `Ⱦ` tăng từ 2 lên 3 byte khi `.toLowerCase()`, trong khi `suppliers.ts:355` kiểm 320 trước khi hạ ⇒ đầu vào
+sát 320 byte vấp `CHECK` độ dài của 008 thành 23514 (thân lỗi cố định) — ghi vào khoản 71; ⑶ hardening không phán xét ràng buộc `CHECK` an
+ninh — thăm dò đo — gỡ hai ràng buộc chữ thường và hạ ràng buộc hình dạng về `NOT VALID` rồi `migrate()` lại vẫn đi qua ⇒ mở khoản 105; ⑷ log máy chủ PostgreSQL mang `DETAIL: Failing row contains (…)` khi vi phạm dưới vai mà RLS không áp — tiền tồn cho mọi
+`CHECK` của bảng này, ngoài phạm vi, chưa đo; ⑸ khuôn cho migration sau: khối đối chiếu hay backfill đọc bảng tenant phải xét
+`row_security_active` (khoản 102) — ghi ở "điều đáng mang sang"; ⑹ `CHECK` dựa trên `lower()` không di động giữa libc — ranh giới đã khai.
+
+**Điều đáng mang sang vòng sau:** ⑴ Một migration đọc bảng tenant trong khối DO (đối chiếu, backfill) phải tính tới hồ sơ N3: dưới vai deploy
+mà RLS áp, câu đọc ra 0 hàng — nói thật về điều ấy thay vì im lặng. ⑵ Một chốt dữ liệu cá nhân chỉ cấm một mẩu (tên miền) là chốt rỗng ruột:
+so NGUYÊN VĂN. ⑶ Fixture luôn làm nhánh lỗi chạy thì mọi khẳng định "không tự sửa" đều không đỏ được — cần một fixture nơi chỉ vế ấy giữ kết
+quả. ⑷ `ORDER BY <số> COLLATE` không phải thứ tự theo cột.
