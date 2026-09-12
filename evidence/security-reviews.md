@@ -3654,3 +3654,132 @@ Mười hai đột biến qua vitest trên tệp thật `do-lap.yml` (bản hai)
 - ⑵ Với một job nhỏ cầm quyền ghi, ghim nguyên văn mạnh hơn mọi bộ dò mẫu: mỗi bộ dò mẫu của bản một đều có một văn bản hợp lệ đi vòng.
 - ⑶ Theo tài liệu biểu thức (reviewer dẫn, chưa đo), giá trị vắng bị ép về 0, nên `x != '0'` ra SAI khi `x` vắng. Một điều kiện báo động không được dựa vào sự có mặt của output.
 - ⑷ Kiểm hình dạng dữ liệu không tin trong bash phải so TRỌN CHUỖI.
+
+# §S1.63 — khoản nợ 10: `*.ts text eol=lf`; tệp mang byte NUL thô trở lại là văn bản — lượt soi 56; khoản 106 mở (bốn loại bản rõ JSON hợp lệ khoá lượt mở thầu — đo)
+
+**Bề mặt:**
+- `.gitattributes`: thêm `*.ts text eol=lf`, kèm khối lý do.
+- `apps/unseal-worker/src/index.ts`:
+  - byte NUL thô trong regex của `thanhJson` thành escape `\u0000` (một byte thành sáu);
+  - chú thích của `thanhJson` gạch hai lời hứa quá, dẫn tới khoản 106.
+- Test mới `tests/architecture/xuong-dong-ts.test.ts`: năm `it`, trong đó một vế chỉ chạy trên CI.
+- Hai `it` `[khoản nợ 10]` trong `apps/unseal-worker/src/unseal-worker.int.test.ts`.
+
+**Đo trước khi viết:**
+- ⒜ **Clone MỚI với `core.autocrlf=true` tại `1934d61`:** 181 `.ts` là `i/lf w/crlf`, 1 là `i/-text w/-text` (`index.ts`). Worktree cũ chỉ có 17 `w/crlf` + 2 `w/mixed`, vì lịch sử checkout của nó. Câu sổ nợ đúng trên checkout mới.
+- ⒝ **`index.ts` mang MỘT byte NUL thô:**
+  - Phép dò xuống dòng của Git báo `-text`, và ripgrep quét theo thư mục BỎ QUA tệp: tìm `thanhJson` cả kho không ra `index.ts`; trỏ thẳng vào tệp thì khớp, kèm cảnh báo "binary file matches".
+  - `git diff` thì vẫn in hunk văn bản (lượt soi 56 NHẸ-4). Nhiều khả năng vì byte NUL nằm sau vùng đầu tệp mà phép dò nhị phân của diff đọc (suy luận).
+- ⒞ **Không test nào đi qua đường gỡ U+0000 của `thanhJson`:** tìm `22P05`, `U+0000`, `thanhJson` trong mọi `*.test.ts` ra 0. Commit đóng [S1.6 H1] (`0f30b16`) chỉ đổi khẳng định thuật toán trong test.
+- ⒟ **Test kiến trúc mới (viết trước) ĐỎ** trên nhánh `khoan-10-ts-eol-lf` (tách từ `7045951`):
+  - vế ⑴ với đủ 183 tệp `.ts` mang `text=unspecified eol=unspecified`;
+  - vế ⑵ với đúng một mục `apps/unseal-worker/src/index.ts: i/-text w/-text`;
+  - vế bộ đọc và vế ⑶ xanh.
+
+  Hai `it` hành vi XANH trên mã cũ — chúng là lưới giữ hành vi, không phải test đỏ-trước.
+- ⒠ **Thử bản vá trên clone:** `git add --renormalize -- '*.ts'` không stage tệp nào; `git status` chỉ báo `.gitattributes`.
+
+**Sau bản vá:** 
+- **`.gitattributes`:** khối lý do cùng dòng `*.ts text eol=lf`. Lý do là làm byte của checkout TẤT ĐỊNH, không phải một lần đỏ đã đo; dòng này có hiệu lực khi Git GHI tệp.
+- **`index.ts`:** regex — byte NUL thô thành escape `\u0000` (blob +5 byte). Chú thích `thanhJson` — gạch hai lời hứa quá, dẫn tới khoản 106 (+628 byte, chỉ đổi chú thích).
+- **Test kiến trúc:** cục bộ bốn vế xanh, vế ⑷ bỏ qua; với `CI=true` cục bộ, vế ⑷ đỏ đúng 19 mục (17 `w/crlf`, 2 `w/mixed`).
+- **Hai `it` hành vi:** xanh; ca raw đòi ký tự xuống dòng còn nguyên.
+- **eslint:** thoát mã 0. **`git status`:** không có sửa đổi giả sau khi thêm thuộc tính.
+- **`pnpm test`:** 50 tệp / 748 test + 1 bỏ qua (vế chỉ chạy trên CI), thoát mã 0.
+- **Clone mới SAU bản vá:** clone `core.autocrlf=true` tại `5dda180` ⇒ 184 tệp TypeScript đều `i/lf w/lf`, tổng 0 byte CR (đếm theo byte); `index.ts` mang `text=set eol=lf`, 0 byte NUL.
+
+**Thăm dò cho khoản 106** (`it` tạm, không commit). Mỗi ca dựng một RFQ có một báo giá sạch và một báo giá xấu, rồi thử mở thầu hai lần:
+
+| Đầu vào (bản rõ JSON) | Lần 1 và lần 2 | Hàng bản rõ / yêu cầu |
+|---|---|---|
+| escape `\u0000` trong một chuỗi (S1.62) | NÉM `22P05 unsupported Unicode escape sequence` | 0 / `APPROVED` |
+| escape `\u0000` trong một KHOÁ (S1.63, lượt soi 56) | NÉM `22P05` | 0 / `APPROVED` |
+| escape surrogate đơn lẻ `\ud800` trong một chuỗi (S1.63, lượt soi 56 CAO-1) | NÉM `22P02 invalid input syntax for type json` | 0 / `APPROVED` |
+| mảng lồng 5 000 tầng, 10 KB (S1.63, lượt soi 56 NẶNG-2) | NÉM `RangeError: Maximum call stack size exceeded` | 0 / `APPROVED` |
+| mảng lồng 20 000 tầng, 40 KB | NÉM `RangeError: Maximum call stack size exceeded` | 0 / `APPROVED` |
+
+- **Cơ chế:** bước gỡ chạy trên văn bản TRƯỚC `JSON.parse`, nên các escape đi qua. `JSON.parse` tạo ra U+0000 hay surrogate đơn lẻ thật, `JSON.stringify` xuất lại escape, và `jsonb` từ chối.
+- **Về `RangeError`:** lỗi ném ra khỏi `executeUnsealRequest`, tức SAU `thanhJson`, vì `catch` của `thanhJson` bắt mọi lỗi của `JSON.parse`. Nhiều khả năng lỗi đến từ `JSON.stringify` (suy luận).
+- **Báo giá sạch** trong cùng RFQ cũng không mở được ở mọi ca.
+- **Cách dựng escape:** bằng `String.fromCharCode(92)` trong TS, để không dính bẫy của công cụ Write.
+
+**Test** (bản hai):
+- **`tests/architecture/xuong-dong-ts.test.ts`:**
+  - bộ đọc không rỗng ruột: hơn 100 tệp, có `index.ts`, hai bộ đọc cùng số lượng;
+  - ⑴ mọi tệp TypeScript theo dõi (`.ts`, `.mts`, `.cts`, `.tsx`) mang `text` và `eol=lf` (`git check-attr -z --stdin`);
+  - ⑵ không blob nào `crlf`, `mixed` hay `-text`, và không cây làm việc nào `-text` (`git ls-files --eol -z`);
+  - ⑶ `docs/STATE.md` và `.github/workflows/ci.yml` không mang `text` hay `eol`, còn `*.sql` vẫn `eol=lf`;
+  - ⑷ chỉ khi `CI=true`: mọi tệp TypeScript có `w/` là `lf` hoặc `none`.
+- **Hai `it` hành vi:**
+  - U+0000 thô trong một chuỗi của bản rõ JSON bị gỡ ⇒ payload `{donGia, ghiChu: "ab"}`;
+  - U+0000 thô trong bản rõ không phải JSON bị gỡ, và CHỈ U+0000 bị gỡ ⇒ `{ raw }` giữ nguyên ký tự xuống dòng.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Công cụ Write** biến escape sáu ký tự của U+0000 trong nội dung thành byte NUL thật. Bốn dòng của bản nháp test mang NUL thô (đo `grep -a -c -P`) — đúng lỗi của khoản này. Mọi bản nháp nay dựng escape bằng `chr(92)`, và được kiểm NUL trước khi chép vào kho.
+- ⑵ **M09 và M10 đỏ nhưng log không có `AssertionError`.** Hai đột biến ở bước gỡ đỏ vì ngoại lệ `unsupported Unicode escape sequence` của lệnh INSERT vào `jsonb`. Đã đọc log để xác nhận đúng lý do, không phải lỗi dựng.
+- ⑶ **Đếm nhầm tệp nhị phân.** Khi đếm tệp `-text` trên clone, `grep -- '-text'` khớp nhầm hai tệp `anchor-text`; đã đếm lại theo cột `i/`.
+- ⑷ **Vế bộ đọc không rỗng ruột ban đầu chưa có đột biến.** Ở bản một đã đo bằng một bản sao tạm với pathspec `*.tsx`: đúng vế ấy đỏ, ba vế còn lại xanh vì đếm trên tập rỗng. Ở bản hai là M15.
+
+**Đỏ đo được, cô lập:**
+Mười lăm đột biến trên bản hai, chạy lần lượt từng cái. Hai lệnh đối chứng xanh: test kiến trúc (bốn xanh, một bỏ qua) và hai `it` gỡ U+0000. Sau lượt, sha256 của `.gitattributes` và `index.ts` khớp bản gốc, `git status` không đổi, không còn tệp tạm.
+
+| Đột biến | Kết quả |
+|---|---|
+| M01 bỏ dòng `*.ts text eol=lf` | đỏ đúng vế ⑴ |
+| M02 `*.ts text eol=crlf` | đỏ vế ⑴ |
+| M03 `*.ts -text` | đỏ vế ⑴ |
+| M04 `* text=auto eol=lf` thay dòng `*.ts` | đỏ vế ⑴ và vế ⑶ |
+| M05 thêm dòng `apps/unseal-worker/src/index.ts -text` | đỏ vế ⑴ |
+| M06 ghim thêm `*.md text eol=lf` | đỏ vế ⑶ |
+| M07 bỏ ghim `*.sql` | đỏ vế ⑶ |
+| M08 đưa byte NUL thô trở lại cây làm việc | đỏ vế ⑵ |
+| M09 bỏ bước gỡ U+0000 | cả hai `it` hành vi đỏ với `unsupported Unicode escape sequence` (`22P05`) |
+| M10 gỡ nhầm U+0001 | như M09 |
+| M11 `* text=auto` ở ĐẦU tệp, giữ dòng `*.ts` (lượt soi 56 NHẸ-1) | đỏ đúng vế ⑶ |
+| M12 regex gỡ thừa U+0000–U+001F (INFO-2) | đỏ đúng `it` raw — ký tự xuống dòng bị gỡ |
+| M13 thêm một tệp `.mts` được theo dõi qua `git add -N`, rồi gỡ lại (INFO-1) | đỏ đúng vế ⑴ |
+| M14 `CI=true` trên cây làm việc CRLF sẵn có (NHẸ-3) | đỏ đúng vế ⑷ — 19 mục |
+| M15 bộ đọc rỗng ruột: bản sao tạm của test với pathspec `*.zzz` | đỏ đúng vế bộ đọc |
+
+**Lượt soi đối kháng 56** — reviewer đọc kho (chỉ dùng lệnh git đọc) cùng tài liệu git-scm, PostgreSQL và MDN; không chạy Node hay test. Kết quả: **1 CAO, 2 NẶNG, 4 NHẸ, 3 INFO.** Bản vá khoản 10 không sai về cơ chế. Các phát hiện nằm ở ba chỗ: phạm vi khai của khoản 106, chứng cứ được dẫn, và độ chặt của test.
+
+| Mức | Phát hiện | Xử lý |
+|---|---|---|
+| CAO-1 | Khoản 106 khai hẹp: escape surrogate đơn lẻ trong bản rõ JSON khoá lượt mở thầu y như escape của U+0000. Hình dạng đóng đề xuất ("gỡ U+0000 khỏi mọi chuỗi và khoá sau `JSON.parse`") không đóng được ca ấy, lại còn gộp khoá làm mất giá trị | **ĐO** (PostgreSQL thật, `it` tạm, escape dựng bằng `String.fromCharCode(92)`): surrogate đơn lẻ ⇒ `22P02`; escape U+0000 trong KHOÁ ⇒ `22P05`. Cả hai lần thử đều ném, 0 hàng bản rõ, yêu cầu `APPROVED`. Hàng 106 viết lại với bốn loại đầu vào và hình dạng đóng mới: đi cây sau `JSON.parse`; gặp U+0000, chuỗi không well-formed hay cây quá sâu thì cất `{ raw }`; không ghim mã lỗi. Vòng này không sửa |
+| NẶNG-1 | Chứng cứ dẫn cho `.ts` (run 33978573210) thực ra là lần đỏ của `ci.yml` CRLF, đã đóng ở bộ đọc; mọi bộ đọc `.ts` đã soi đều tự chuẩn hoá | Viết lại khối chú thích `.gitattributes` và phần đầu test: lý do ghim `.ts` là làm byte của checkout TẤT ĐỊNH, không phải một lần đỏ đã đo; run ấy được nêu đúng là ca `ci.yml` |
+| NẶNG-2 | Giả thuyết: JSON lồng sâu có thể khoá lượt mở thầu, vì `JSON.stringify` đệ quy nằm ngoài mọi `catch` | **ĐO:** mảng lồng 5 000 tầng (10 KB) và 20 000 tầng (40 KB) ⇒ `RangeError: Maximum call stack size exceeded` ném ra khỏi `executeUnsealRequest` ở cả hai lần thử; 0 hàng bản rõ; yêu cầu `APPROVED`. Ghi vào khoản 106 |
+| NHẸ-1 | Vế phạm vi không canh `* text=auto` đặt ở ĐẦU tệp: dòng `*.ts` phía sau ghi đè `text` cho `.ts`, nên test vẫn 4/4 xanh | Vế ⑶ đọc cả `text` lẫn `eol` của `docs/STATE.md` và `.github/workflows/ci.yml`, đòi `unspecified`. Đột biến M11 (`* text=auto` ở đầu tệp, giữ dòng `*.ts`) đỏ đúng vế ⑶ |
+| NHẸ-2 | "Đổi byte của cây làm việc từ lần checkout kế tiếp" nói quá: một `.ts` CRLF không đổi giữa hai commit sẽ giữ CRLF qua mọi lần checkout | Sửa thành "khi Git GHI tệp — clone mới, hay một commit làm tệp đổi". Đo trên worktree: sau khi thuộc tính đã áp, vẫn còn 17 tệp `i/lf w/crlf attr/text eol=lf` |
+| NHẸ-3 | Lời khai đóng khoản ("checkout mới ra LF") chưa được đo, và test không đo cây làm việc | Thêm vế ⑷ chỉ chạy khi `CI=true`: mọi tệp TypeScript phải có `w/` là `lf` hoặc `none`. Job CI checkout mới, kể cả trên windows-latest. Cục bộ với `CI=true` (M14), vế ⑷ đỏ đúng 19 mục (17 `w/crlf`, 2 `w/mixed`). Clone mới SAU bản vá (`core.autocrlf=true`, tại `5dda180`): 184 tệp TypeScript đều `i/lf w/lf`, tổng 0 byte CR (đếm theo byte); `index.ts` mang `text=set eol=lf`, 0 byte NUL |
+| NHẸ-4 | "Git coi là nhị phân" rộng hơn cơ chế thật: `git diff` vẫn in hunk văn bản cho blob cũ mang NUL; `-text` chỉ là phép dò xuống dòng | Sửa thành "phép dò xuống dòng của Git (`ls-files --eol` báo `-text`) và ripgrep"; đổi tên vế ⑵ |
+| INFO-1 | Mẫu `*.ts` bỏ sót `.mts`, `.cts`, `.tsx`, trong khi hai bộ quét của kho đã liệt kê `*.mts` | Pathspec của test gồm cả bốn đuôi; tệp đầu tiên của một đuôi chưa có dòng trong `.gitattributes` sẽ đỏ. Đột biến M13 (một tệp `.mts` được theo dõi qua `git add -N`) đỏ đúng vế ⑴ |
+| INFO-2 | Hai `it` hành vi không ghim ca gỡ thừa: regex gỡ cả U+0000–U+001F vẫn xanh. Chú thích `thanhJson` hứa quá ("không bao giờ bị VỨT ĐI", "sai lệch đọc được từ chính nó") | Ca raw mang thêm một ký tự xuống dòng và đòi nó còn nguyên; đột biến M12 (gỡ thừa ký tự điều khiển) đỏ đúng `it` ấy. Hai câu hứa được gạch và viết lại theo số đo của khoản 106 |
+| INFO-3 | Hai lưới test chưa vào index: commit chỉ phần đã stage sẽ mang luật mà không mang test | Cả bốn tệp được stage và commit cùng nhau |
+
+**Các hướng reviewer đã soi mà SẠCH:**
+- `core.autocrlf` và `core.eol` không quyết định khi `eol` đã đặt.
+- Kho không có `.gitattributes` lồng, cũng không có `info/attributes`.
+- Một `.ts` có CR đơn lẻ cho `-text`, nên vế ⑵ đỏ.
+- Ngoài `index.ts` không blob nào đổi; regex chỉ thêm đúng 5 byte.
+- `ls-files` và `check-attr` không cần lịch sử, nên clone nông vẫn an toàn.
+- `.gitattributes` chưa stage vẫn được `check-attr` đọc.
+- Tên tệp lạ an toàn nhờ `-z`.
+- `git` vắng thì tệp FAIL, không xanh giả.
+- Escape trong regex cờ `u` tương đương byte thô.
+- Kho không còn byte điều khiển thô nào khác.
+- Hai `it` hành vi đi đúng đường TextEncoder → `sealBid` → `unsealBid` → `thanhJson` → INSERT.
+- Đường `{ raw }` không dính.
+- `.json`, `.yml` và `.md` hôm nay đều được chuẩn hoá xuống dòng hoặc đi qua `JSON.parse`.
+
+**Ranh giới NÓI RA:**
+- ⑴ **Hiệu lực của `eol`:** chỉ khi Git GHI tệp — clone mới, hay một commit làm tệp đổi. Cây làm việc CRLF có sẵn giữ nguyên byte, và test cục bộ không phán xét nó.
+- ⑵ **Vế ⑷ chỉ đo trên CI:** một lượt cục bộ xanh không nói gì về byte của checkout mới.
+- ⑶ **Không ghim:** `.md`, `.json`, `.yml`, `.mjs`, `.cjs`. Hôm nay các bộ đọc của chúng tự chuẩn hoá xuống dòng.
+- ⑷ **Đuôi TypeScript khác:** tệp `.mts`, `.cts` hay `.tsx` đầu tiên sẽ làm đỏ vế ⑴ cho tới khi `.gitattributes` có dòng cho đuôi ấy.
+- ⑸ **Khoản 106 đã đo nhưng chưa sửa:** bốn loại bản rõ JSON HỢP LỆ vẫn khoá lượt mở thầu — escape của U+0000 trong chuỗi hay khoá, escape surrogate đơn lẻ, và mảng lồng sâu.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Một byte NUL thô trong mã nguồn đổi phân loại của tệp với phép dò xuống dòng của Git và với ripgrep — hãy viết escape.
+- ⑵ Một bản vá an ninh không kèm test đi qua đường của nó thì không ai biết nó đóng tới đâu. Ở đây nó mới đóng nửa đường, và lượt soi còn tìm ra thêm ba loại đầu vào cùng hậu quả.
+- ⑶ Lời khai của một khoản về một môi trường (checkout mới) phải được đo ở đúng môi trường ấy — ở đây bằng một vế chỉ chạy trên CI.
+- ⑷ Chứng cứ dẫn phải được đọc lại: run 33978573210 là ca `ci.yml`, không phải `.ts`.
