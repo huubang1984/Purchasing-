@@ -188,6 +188,10 @@ const DANH_SACH_TRANG_IDENTITY = [
   "PERMISSIONS",
   "PermissionAuditFailedError",
   "PermissionDeniedError",
+  // [S1.68 / khoản 119] Lần từ chối ngoài requirePermission: ghi sổ rồi ném chính nó, hoặc ném lớp lỗi khi không ghi được — không có
+  // đường trả về.
+  "DenialAuditFailedError",
+  "throwAuditedDenial",
   "SEPARATION_OF_DUTIES_CHAIN",
   "SessionInvalidError",
   "assertFreshMfa",

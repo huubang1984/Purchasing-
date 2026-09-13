@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -622,6 +623,8 @@ describe("dispatchUnseal", () => {
 // sinh ra CON SỐ KHÔNG bản ghi. Và một lần THỬ vi phạm D2 còn tệ hơn: trigger chặn đúng, nhưng
 // lời từ chối của nó ROLLBACK cả bản ghi `UNSEAL_APPROVED` — nên không còn dấu vết nào.
 // ===============================================================================================
+// [S1.68 / lượt soi 62a-9] "Mọi" rộng hơn thứ đo ở đây: yêu cầu không tìm thấy trong tổ chức ⇒ `UnsealDeniedError` POLICY_GATE ném TRƯỚC
+// mọi lần ghi và không để lại dấu vết (đọc, `gate.ts`) — khoản nợ 121.
 describe("[INV-D5] mọi lần từ chối của cổng mở thầu đều để lại dấu vết", () => {
   async function demTuChoi(requestId: string, action: string): Promise<number> {
     const { rows } = await db.pool.query<{ n: string }>(
@@ -738,5 +741,125 @@ describe("[INV-D5] mọi lần từ chối của cổng mở thầu đều để
       assertUnsealAllowed(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
     );
     expect(await demTuChoi(requestId, "UNSEAL_DENIED")).toBe(0);
+  });
+});
+
+// ===============================================================================================
+// [S1.68 / khoản 119] LẦN GHI SỔ TỪ CHỐI HỎNG THÌ GÃY ỒN ÀO — LỖI CỦA LẦN GHI KHÔNG ĐƯỢC THAY CHỖ LẦN TỪ CHỐI
+//
+// Đo trên master 749f925, trước bản vá (biên bản §S1.68): trigger chặn lần ghi `UNSEAL_DENIED` bằng TP119 ⇒ `assertUnsealAllowed` ném
+// lỗi Postgres trần `{ name: "error", code: "TP119" }`, không mang lần từ chối; `auditPool` siêu người dùng ⇒ bản ghi được nhận không một
+// lời. `auditPool` đầy TẠM THỜI thì lần ghi xếp hàng rồi ghi được — trước bản vá cũng thế; bản đầu của vòng này làm vỡ điều ấy bằng một
+// phép kiểm "pool còn chỗ" tức thì, và test thứ hai dưới đây ghim lại (lượt soi 62a-1).
+// ===============================================================================================
+describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng mở thầu và của D2 hỏng ⇒ DenialAuditFailedError giữ lần từ chối", () => {
+  async function demTuChoi(requestId: string, action: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3",
+      [orgA, action, requestId],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ; mọi lần ghi khác đi qua. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k119_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k119 thong diep noi bo' USING ERRCODE = 'TP119'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k119_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k119_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k119_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k119_chan_ghi_so()");
+    }
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  async function yeuCauChoDuyet(lyDo: string): Promise<string> {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: lyDo, actorSessionId: sYc }, auditPool),
+    );
+    return yc.id;
+  }
+
+  it("[INV-D5] vế 4 của cổng, lần ghi `UNSEAL_DENIED` ném TP119 ⇒ DenialAuditFailedError: lần từ chối POLICY_GATE nằm trong `denial`, lỗi của lần ghi trong `cause`, thông điệp không mang thông điệp của lỗi gốc; không hàng sổ nào", async () => {
+    const id = await yeuCauChoDuyet("k119 cong");
+    const loi = await voiGhiSoBiChan("UNSEAL_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => assertUnsealAllowed(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.action).toBe("UNSEAL_DENIED");
+    expect(x.denial).toBeInstanceOf(UnsealDeniedError);
+    expect((x.denial as UnsealDeniedError).clause).toBe("POLICY_GATE");
+    expect((x.cause as { code?: unknown }).code).toBe("TP119");
+    expect(x.message).not.toContain("k119 thong diep noi bo");
+    expect(await demTuChoi(id, "UNSEAL_DENIED")).toBe(0);
+  });
+
+  it("[INV-D5] `auditPool` đầy TẠM THỜI ⇒ cổng CHỜ kết nối rồi vẫn ghi được lần từ chối — `UnsealDeniedError` POLICY_GATE và đúng một hàng (lượt soi 62a-1: bản đầu của vòng này gãy ngay, không hàng sổ)", async () => {
+    const id = await yeuCauChoDuyet("k119 pool day tam thoi");
+    const poolNho = db.poolAs("app_api");
+    const giu: pg.PoolClient[] = [];
+    try {
+      for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
+      const theoDoi = { xong: false };
+      const hua = loiCua(withTenant(apiPool, orgA, (c) => assertUnsealAllowed(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, poolNho)));
+      void hua.then(() => {
+        theoDoi.xong = true;
+      });
+      const hanCho = Date.now() + 5000;
+      while (poolNho.waitingCount === 0 && !theoDoi.xong && Date.now() < hanCho) {
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+      const daXepHang = poolNho.waitingCount > 0;
+      for (const c of giu.splice(0)) c.release();
+      const loi = await hua;
+      expect(daXepHang, "lần ghi phải xếp hàng chờ kết nối của auditPool, không gãy ngay").toBe(true);
+      expect((loi as Error).name).toBe("UnsealDeniedError");
+      expect((loi as UnsealDeniedError).clause).toBe("POLICY_GATE");
+      expect(await demTuChoi(id, "UNSEAL_DENIED")).toBe(1);
+    } finally {
+      for (const c of giu) c.release();
+      await poolNho.end();
+    }
+  });
+
+  it("[INV-D5] `auditPool` chạy dưới siêu người dùng ⇒ cổng từ chối ghi — cùng lớp canh [F9] của requirePermission — DenialAuditFailedError nêu SUPERUSER trong `cause`; không hàng sổ nào", async () => {
+    const id = await yeuCauChoDuyet("k119 sieu nguoi dung");
+    const loi = await loiCua(withTenant(apiPool, orgA, (c) => assertUnsealAllowed(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, db.pool)));
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(((loi as DenialAuditFailedError).cause as Error).message).toMatch(/SUPERUSER|BYPASSRLS/);
+    expect(((loi as DenialAuditFailedError).denial as UnsealDeniedError).clause).toBe("POLICY_GATE");
+    expect(await demTuChoi(id, "UNSEAL_DENIED")).toBe(0);
+  });
+
+  it("[INV-D5] [INV-D2] lần THỬ tự phê duyệt, lần ghi `UNSEAL_APPROVAL_DENIED` ném TP119 ⇒ DenialAuditFailedError: vi phạm D2 (23514 của trigger 019) nằm trong `denial`; không hàng sổ nào", async () => {
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "k119 tu duyet", actorSessionId: sD1 }, auditPool),
+    );
+    const loi = await voiGhiSoBiChan("UNSEAL_APPROVAL_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    const x = loi as DenialAuditFailedError;
+    expect(x.action).toBe("UNSEAL_APPROVAL_DENIED");
+    expect((x.denial as { code?: unknown }).code).toBe("23514");
+    expect(x.denial.message).toMatch(/tu phe duyet/i);
+    expect((x.cause as { code?: unknown }).code).toBe("TP119");
+    expect(await demTuChoi(yc.id, "UNSEAL_APPROVAL_DENIED")).toBe(0);
   });
 });

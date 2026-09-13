@@ -5,11 +5,13 @@ import { createPool, migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
+  DenialAuditFailedError,
   PERMISSIONS,
   PermissionAuditFailedError,
   PermissionDeniedError,
   SEPARATION_OF_DUTIES_CHAIN,
   requirePermission,
+  throwAuditedDenial,
 } from "./index.js";
 // [vòng fix 1 — F6] `hasPermission` CỐ Ý không còn ở barrel công khai (xem khối chú thích ở
 // ./index.ts). Nó vẫn là hợp đồng nội bộ của gói và vẫn phải có test, nên import THẲNG từ
@@ -1381,5 +1383,91 @@ describe("[INV-D2] [033] policy.manage không đứng cùng rfq.create / rfq.app
       await db.pool.query("ALTER TABLE user_roles ENABLE ALWAYS TRIGGER user_roles_nguong_khong_cung_tay");
     }
     await expect(ganFinance(buyer)).rejects.toMatchObject({ code: "42501" });
+  });
+});
+
+// ==============================================================================================
+// [S1.68 / khoản 119] `throwAuditedDenial` — LẦN TỪ CHỐI NGOÀI `requirePermission`
+//
+// Vế 2–4 của cổng mở thầu và lần THỬ vi phạm D2 của phê duyệt mở thầu và của đặt lại TOTP ghi sổ lần từ chối qua `auditPool` ngay
+// trong handler. Trước khoản 119 ba chỗ ấy tự gọi `withTenant(auditPool, …)` và KHÔNG bọc lỗi của lần ghi (đo ở §S1.68). Hàm này là
+// đường chung của chúng: kiểm hình dạng `action`/`resourceType`, một lớp canh không cần client người gọi (pool bỏ qua RLS), lần ghi ở
+// giao dịch độc lập, rồi ném CHÍNH lần từ chối — hoặc `DenialAuditFailedError` giữ lần từ chối khi lần ghi hỏng. Không kiểm "pool còn chỗ"
+// tức thì (lượt soi 62a-1). Ca pool đầy tạm thời và ca siêu người dùng đo ở cổng mở thầu (packages/unseal/src/unseal.int.test.ts).
+// ==============================================================================================
+describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ chối ở giao dịch độc lập rồi ném CHÍNH nó; ghi hỏng ⇒ DenialAuditFailedError", () => {
+  const suKien = (action: string) => ({
+    actorType: "USER" as const,
+    actorId: uid("BUYER"),
+    action,
+    resourceType: "RFQ",
+    resourceId: null,
+    payload: { k119: true },
+  });
+
+  it("[INV-D5] ghi được ⇒ ném ĐÚNG đối tượng từ chối đã truyền vào, và đúng một hàng sổ mang action ấy trong tổ chức", async () => {
+    const tuChoi = Object.assign(new Error("tu choi k119"), { name: "K119DeniedError" });
+    await expect(throwAuditedDenial(auditPool, orgId, suKien("K119_GHI_DUOC"), tuChoi)).rejects.toBe(tuChoi);
+    const { rows } = await db.pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND action = 'K119_GHI_DUOC'",
+      [orgId],
+    );
+    expect(rows[0]?.n).toBe(1);
+  });
+
+  it("[INV-D5] [MỤC E] tầng dưới ném thứ KHÔNG phải Error ⇒ DenialAuditFailedError: `cause` nêu KIỂU, giá trị gốc chỉ ở `cause.cause`; thông điệp của lớp bọc và của `cause` không mang giá trị; lần từ chối giữ nguyên", async () => {
+    const biMat = "OTP 448120 token abc gia 1500000";
+    const poolGia = {
+      idleCount: 1,
+      totalCount: 0,
+      options: { max: 5 },
+      waitingCount: 0,
+      query: (): never => {
+        // CỐ Ý ném thứ KHÔNG phải Error — cùng fixture với [MỤC E] của requirePermission ở trên.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw biMat;
+      },
+    } as unknown as pg.Pool;
+    const tuChoi = new Error("tu choi k119");
+    const loi = await throwAuditedDenial(poolGia, orgId, suKien("K119_GIA_TRI_LA"), tuChoi).catch((e: unknown) => e);
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBe(tuChoi);
+    expect(x.action).toBe("K119_GIA_TRI_LA");
+    expect((x.cause as Error).message).toMatch(/typeof = string/);
+    expect((x.cause as Error).cause).toBe(biMat);
+    for (const manh of [biMat, "448120", "1500000", "token abc"]) {
+      expect(x.message, `mảnh "${manh}" lọt vào thông điệp của lớp bọc`).not.toContain(manh);
+      expect((x.cause as Error).message, `mảnh "${manh}" lọt vào thông điệp của cause`).not.toContain(manh);
+    }
+  });
+
+  it("[INV-D5] `action` hay `resourceType` sai hình dạng ⇒ DenialAuditFailedError trước khi chạm pool, lần từ chối giữ nguyên, không nội suy giá trị (lượt soi 62a-15)", async () => {
+    // Pool giả ném ngay khi bị chạm: `cause` nêu hình dạng chứ không nêu "khong duoc cham pool" là bằng chứng phép kiểm đứng TRƯỚC pool.
+    const poolKhongDuocCham = {
+      idleCount: 1,
+      totalCount: 0,
+      options: { max: 5 },
+      waitingCount: 0,
+      query: (): never => {
+        throw new Error("khong duoc cham pool");
+      },
+      connect: (): never => {
+        throw new Error("khong duoc cham pool");
+      },
+    } as unknown as pg.Pool;
+    const tuChoi = new Error("tu choi k119");
+    for (const [action, resourceType] of [
+      ["K119 gia 1500000", "RFQ"],
+      ["K119_HINH_DANG", "gia 1500000"],
+    ] as const) {
+      const loi = await throwAuditedDenial(poolKhongDuocCham, orgId, { ...suKien(action), resourceType }, tuChoi).catch((e: unknown) => e);
+      expect((loi as Error).name, `${action} / ${resourceType}`).toBe("DenialAuditFailedError");
+      const x = loi as DenialAuditFailedError;
+      expect(x.denial).toBe(tuChoi);
+      expect((x.cause as Error).message).toMatch(/MÃ ĐỊNH DANH/u);
+      expect(`${x.message} ${(x.cause as Error).message}`).not.toContain("1500000");
+    }
   });
 });
