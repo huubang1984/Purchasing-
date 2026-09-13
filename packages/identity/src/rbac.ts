@@ -245,6 +245,8 @@ const HINH_DANG_LOAI_TAI_NGUYEN = /^[A-Z][A-Z0-9_]{0,63}$/;
  * Vế này KHÔNG đổi kết cục — nó biến một lần treo dài bằng `lock_timeout` (mặc định 15 giây,
  * xem packages/db/src/pool.ts) thành một lỗi TỨC THÌ có chẩn đoán chính xác. Hợp đồng mà nó
  * cưỡng chế: gọi `requirePermission` TRƯỚC mọi lần ghi sổ trong cùng một transaction.
+ * [S1.71 / khoản 123, lượt soi 65a-11] Lần treo ấy nay tối đa 2 s ở mọi pool — trần `lock_timeout` trên chính `noi_chuoi_kiem_toan()`
+ * (050) — rồi gãy 55P03; vế này vẫn cho chẩn đoán đúng NGAY (test rbac đòi thông điệp của vế và dưới 1 s).
  *
  * Khoá được so theo (classid, objid) tách rời thay vì dựng lại số 64 bit: `classid::int8 << 32`
  * TRÀN với mọi khoá có bit cao bằng 1 (một nửa không gian băm), và một lỗi "bigint out of
@@ -285,7 +287,8 @@ const CAU_KHOA_TU_VAN =
  * kết nối nghiệp vụ của nó tới `statement_timeout` 15 s. Đo lặp ba lượt trên tiến trình thật với `TRUSTPROCURE_DB_POOL_MAX` 3, `/me` của
  * tổ chức khác gửi 1 s sau yêu cầu cuối (biên bản §S1.69): ba lần từ chối tới tuần tự ⇒ `/me` đứng 13 620–13 647 ms, mã trước khoản 120
  * 16–17 ms; tới cùng lúc ⇒ 13 999–14 016 ms, mã trước khoản 120 14 002–14 018 ms; ba lần GHI hợp lệ ⇒ khoảng 14 s ở cả hai bản. Chủ dự án
- * chọn giữ cỡ này ngày 2026-09-13 — khoản 123, 124.
+ * chọn giữ cỡ này ngày 2026-09-13 — khoản 123, 124. [S1.71 / khoản 123] Lần chờ khoá ghi sổ ấy nay tối đa 2 s (050, trần trên
+ * `noi_chuoi_kiem_toan()`): lần từ chối gãy 55P03 thay vì giữ kết nối tới 15 s — ADR-016 tiểu mục [S1.71 / khoản 123].
  */
 const TRAN_CHO_KET_NOI_AUDIT_MS = 5_000;
 
@@ -513,8 +516,8 @@ export async function requirePermission(
  *
  * KHÔNG giữ vế khoá tư vấn của `khangDinhGhiDuocDocLap`: phép kiểm ấy chạy trên client NGƯỜI GỌI, mà hai chỗ D2 đến đây SAU một câu đã
  * hỏng — giao dịch aborted, câu kiểm ném 25P02 (đo bằng đột biến chế độ đo, §S1.68). Người gọi đã ghi sổ trong cùng giao dịch trước khi
- * gọi hàm này thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy — vẫn ồn ào; dưới
- * pool không đặt `lock_timeout` thì treo không hạn. Các đường sản xuất không ghi sổ trước lần từ chối của chúng (đọc: `dispatchUnseal`,
+ * gọi hàm này thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: ~~dưới `createPool` tới `lock_timeout` 15 s rồi gãy — vẫn ồn ào; dưới~~
+ * ~~pool không đặt `lock_timeout` thì treo không hạn~~ [S1.71 / khoản 123] tối đa 2 s ở mọi pool rồi gãy 55P03 (050). Các đường sản xuất không ghi sổ trước lần từ chối của chúng (đọc: `dispatchUnseal`,
  * `approveUnseal`, `approveMfaReset`); `apps/unseal-worker/src/kich-ban-41.int.test.ts` bước 9 từng có hình dạng ấy nhưng dừng ở
  * `requirePermission` (lượt soi 62a-3, 62a-14).
  */

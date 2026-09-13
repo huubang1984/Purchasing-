@@ -536,7 +536,10 @@ describe("[INV-D5] [S1.69 / khoản 120] tiến trình dựng từ môi trườn
       const rA = await goi("POST", "/suppliers", { cookie: cookieA, body: { legalName: "NCC k120 A" } });
       const daCho = Date.now() - batDau;
       expect(rA.status, rA.text).toBe(403);
-      expect(daCho, "lần từ chối ở A không được chờ X nhả khoá").toBeLessThan(2000);
+      // [S1.71 / khoản 123, lượt soi 65a-4, 65c-6] Hai lần ghi sổ của X đang chờ khoá gãy 55P03 sau 2 s (050), và lần từ chối ở A chạy
+      // trong lúc ấy. Lần chờ của X = độ trễ tới lúc dò thấy đủ hai + thời gian của A + COMMIT: cận của A để phần lớn 2 s cho hai phần kia
+      // nhưng không chặn trọn lần chờ ấy — một máy rất chậm vẫn có thể biến [403, 403] của X thành 500.
+      expect(daCho, "lần từ chối ở A không được chờ X nhả khoá").toBeLessThan(1000);
       await giuKhoa.query("COMMIT");
       dangGiuKhoa = false;
       expect((await Promise.all(haiX)).map((r) => r.status)).toEqual([403, 403]);

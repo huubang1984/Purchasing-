@@ -8993,6 +8993,12 @@ $ham$;
     -- public.audit_compute_hash chưa tồn tại — KHÔNG xảy ra: plpgsql chỉ kiểm cú pháp lúc tạo,
     -- không phân giải tên bảng/hàm trong thân (đã đo). Mọi lỗi khác vẫn bị BƯỚC 2 nuốt và BƯỚC 3
     -- phán xét.
+    -- [S1.71 / khoản 123] Hàm mang THÊM mệnh đề `SET lock_timeout = '2s'` (050): mọi lần ghi sổ chờ khoá tư vấn của tổ chức tối đa 2 s rồi
+    -- gãy 55P03, thay vì chờ tới `lock_timeout` / `statement_timeout` 15 s của phiên trong khi giữ kết nối nghiệp vụ. PostgreSQL áp mệnh
+    -- đề khi hàm bắt đầu và khôi phục khi hàm trả về hay ném, nên trần không rò sang câu sau. Quyết định của chủ dự án ngày 2026-09-14
+    -- (ADR-016 tiểu mục [S1.71 / khoản 123]); hậu điều kiện đòi đúng hai mệnh đề, theo thứ tự PostgreSQL lưu — gỡ trần thì mục này tạo lại
+    -- hàm ở lần deploy kế khi vai chạy `migrate()` sở hữu hàm (đo: db/tran-cho-khoa-ghi-so.int.test.ts); vai không sở hữu hàm thì nhận
+    -- 42501 và lượt phán xét chặn deploy (đọc, lượt soi 65a-10, 65c-7).
     ARRAY[
       $q$định nghĩa hàm public.noi_chuoi_kiem_toan()$q$,
       $q$true$q$,
@@ -9004,7 +9010,7 @@ $ham$;
              DROP FUNCTION public.noi_chuoi_kiem_toan();
            END IF;
            CREATE OR REPLACE FUNCTION public.noi_chuoi_kiem_toan() RETURNS trigger
-           LANGUAGE plpgsql SET search_path = pg_catalog AS $tnc$$q$ || THAN_NOI_CHUOI || $q$$tnc$;
+           LANGUAGE plpgsql SET search_path = pg_catalog SET lock_timeout = '2s' AS $tnc$$q$ || THAN_NOI_CHUOI || $q$$tnc$;
          END
          $fn$$q$,
       -- Hai vế so sánh cùng đi qua một phép chuẩn hoá khoảng trắng, nên không ai phải viết tay
@@ -9012,7 +9018,7 @@ $ham$;
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
                 = btrim(regexp_replace($q$ || pg_catalog.quote_literal(THAN_NOI_CHUOI) || $q$, '\s+', ' ', 'g'))
             AND p.prosecdef IS FALSE
-            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.proconfig = ARRAY['search_path=pg_catalog', 'lock_timeout=2s']
             AND p.pronargs = 0
             AND p.prorettype = 'pg_catalog.trigger'::regtype
             AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')

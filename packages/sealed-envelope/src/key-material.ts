@@ -136,9 +136,20 @@ export async function issueRfqKeyPair(
     );
   }
 
-  const ra: RfqPublicKeyRecord[] = [];
+  // [S1.71 / khoản 123] BỌC MỌI cặp khoá TRƯỚC lần INSERT và lần ghi sổ đầu tiên. Lần bọc là lời gọi KMS (ADR-009); lần ghi sổ đầu của giao
+  // dịch lấy khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`) và giữ nó tới COMMIT. Bản trước bọc X25519 SAU lần ghi sổ của
+  // ECDH_P256, nên trong lúc gọi KMS lần hai mọi lần ghi sổ khác của tổ chức — hợp lệ lẫn từ chối — chờ theo nó, và mỗi yêu cầu chờ giữ một
+  // kết nối nghiệp vụ. Đo trên tiến trình `api` thật, bộ bọc chậm 3 s, `TRUSTPROCURE_DB_POOL_MAX` 3, ba lượt (§S1.71): một lần ghi hợp lệ
+  // của tổ chức gửi lúc lần bọc thứ hai đang chạy 2 842–2 852 ms ⇒ 66–69 ms; `/me` của tổ chức khác 2 012–2 027 ms ⇒ 6–9 ms. Hỏng ở lần
+  // bọc nào thì giao dịch chưa có hàng hay bản ghi nào của lần sinh khoá. Khoá riêng dạng rõ vẫn bị xoá ngay trong `sinhVaBoc`; giữa hai
+  // vòng dưới đây chỉ còn bản đã bọc và khoá công khai.
+  const daBoc: { algorithm: KeyAgreementAlgorithm; publicKey: Uint8Array; wrapped: Uint8Array; keyVersion: string }[] = [];
   for (const algorithm of thuatToan) {
-    const { publicKey, wrapped, keyVersion } = await sinhVaBoc(input.wrapper, orgId, algorithm);
+    daBoc.push({ algorithm, ...(await sinhVaBoc(input.wrapper, orgId, algorithm)) });
+  }
+
+  const ra: RfqPublicKeyRecord[] = [];
+  for (const { algorithm, publicKey, wrapped, keyVersion } of daBoc) {
     const { rows } = await client.query<HangKhoa>(
       `INSERT INTO public.rfq_key_material
          (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version,

@@ -1,0 +1,48 @@
+-- =============================================================================================
+-- 050 — [khoản nợ 123] TRẦN CHỜ KHOÁ GHI SỔ CỦA TỔ CHỨC: `public.noi_chuoi_kiem_toan()` MANG `lock_timeout = '2s'`
+-- =============================================================================================
+-- Hàm trigger nối chuỗi (004) mở đầu bằng `pg_advisory_xact_lock(hashtextextended(org_id, 0))`: mọi lần ghi sổ của một tổ chức nối
+-- tiếp nhau, và khoá sống tới hết giao dịch của lần ghi. Một giao dịch giữ khoá ấy lâu — giao dịch treo, hay `app_api` bị chiếm (IM7) —
+-- làm mọi lần ghi sổ khác của tổ chức chờ tới `lock_timeout` / `statement_timeout` 15 s của `createPool` (packages/db/src/pool.ts; cùng
+-- 15 s thì 57014 bắn trước — đo, lượt soi 63b-4); mỗi yêu cầu đang chờ giữ một kết nối nghiệp vụ, nên yêu cầu của tổ chức KHÁC đứng khi
+-- pool cạn.
+--
+-- ĐO trên tiến trình `api` thật (`TRUSTPROCURE_DB_POOL_MAX` 3; superuser giữ khoá của tổ chức X tới mốc 15 s; `/me` của tổ chức A gửi
+-- 1 000 ms sau yêu cầu cuối của X; ba lượt mỗi ô — evidence/security-reviews.md §S1.71): trước — `/me` 13 641–14 015 ms ở cả ba kịch
+-- bản (ba lần từ chối tuần tự, ba lần từ chối cùng lúc, ba lần ghi hợp lệ); sau, xen kẽ bản trước trong cùng lượt — `/me` 627–1 007 ms
+-- (bản trước 13 633–14 015 ms), mọi lần ghi sổ đang chờ của X gãy 55P03 ở 2 022–2 044 ms (bản trước: chờ tới khoảng 15 s).
+--
+-- QUYẾT ĐỊNH (chủ dự án, 2026-09-14 — DECISIONS.md, ADR-016 tiểu mục [S1.71 / khoản 123]): trần 2 s cho MỌI lần ghi sổ chờ khoá ấy.
+-- Bác: trần 1 s chỉ cho lần ghi sổ từ chối (kịch bản ghi hợp lệ vẫn đứng ~14 s); thêm trần đồng thời theo tổ chức (không hơn trong số
+-- đo); giữ nguyên.
+--
+-- VÌ SAO ĐẶT TRÊN HÀM, không ở `appendAuditEvent`: PostgreSQL áp mệnh đề `SET` của hàm khi hàm bắt đầu và khôi phục khi hàm trả về hay
+-- ném — trần chỉ sống trong lúc hàm chạy, không rò sang câu sau của giao dịch; nó áp cho mọi người gọi, kể cả đường không đi qua
+-- `appendAuditEvent`; và không thêm câu SQL nào vào đường ghi. Nguyên mẫu đặt ở ứng dụng tốn thêm hai câu, ~1,1 ms trung vị mỗi giao
+-- dịch có một lần ghi sổ; bản này không đo thấy chi phí thêm — 400 giao dịch tuần tự, sáu cặp ở hai thứ tự chạy: hiệu trung vị mỗi giao
+-- dịch (bản này − bản trước) từ −0,632 tới +0,121 ms; loại được chi phí cỡ 1,1 ms, không loại được chi phí dưới khoảng 0,5 ms (đo, §S1.71).
+--
+-- HỆ QUẢ, NÓI RA:
+-- * Lần ghi sổ chờ khoá TỐI ĐA 2 s rồi gãy 55P03 tại dòng `pg_advisory_xact_lock`; nếu `statement_timeout` còn lại của câu ngắn hơn thì
+--   57014 bắn trước. Qua `apps/api`: thao tác ghi sổ ra 500; lần ghi sổ từ chối thành `PermissionAuditFailedError` /
+--   `DenialAuditFailedError` (500) và không để lại bản ghi.
+-- * Mệnh đề SET THAY giá trị của phiên trong lúc hàm chạy: phiên đặt `lock_timeout` nhỏ hơn 2 s nay chờ tới 2 s ở lần ghi sổ, và phiên đặt
+--   0 (không hạn) cũng chỉ chờ tới 2 s. Không đường sản xuất nào đặt `lock_timeout` dưới 2 s (đọc, lượt soi 65a-5).
+-- * Job của outbox (`packages/outbox/src/runner.ts`): lần ghi sổ trong job chờ quá 2 s ⇒ lỗi của handler, đốt một lượt thử; hết
+--   `maxAttempts` (mặc định 5) thì job FAILED và không tự quay lại. Job mở thầu rollback trọn lượt giải mã; job cảnh báo break-glass gửi
+--   cảnh báo TRƯỚC lần ghi sổ, nên lượt thử lại gửi thêm một lần. Trước 050, mỗi lượt chịu được tới 15 s (đọc, lượt soi 65a-6).
+-- * Một giao dịch HỢP LỆ giữ khoá ghi sổ quá 2 s làm lần ghi sổ đồng thời của tổ chức ấy hỏng. Đo ở §S1.71, bộ thăm dò chu kỳ khoảng
+--   31 ms: mở RFQ sau khi bọc khoá trước lần ghi sổ đầu — khoá thấy ở tối đa hai lần thăm dò liền nhau; gia hạn RFQ 400 lời mời, xếp job
+--   trước lần ghi sổ và đọc lại lời mời sau lần ghi sổ — tối đa một lần thăm dò (bản trước, cùng lượt: 226–265 ms). Câu chờ khoá HÀNG sau
+--   lần ghi sổ đầu — khoản 126; người giữ khoá không có cận dưới IM7 — khoản 128.
+-- * Khối chú thích của 004 phía trên `noi_chuoi_kiem_toan()` vẫn nói người chờ chết ở `lock_timeout` của pool — 004 đã ghi checksum nên
+--   không sửa; bản đúng là tệp này (lượt soi 65a-11).
+--
+-- HARDENING: mục (D1b) tạo lại hàm với CÙNG hai mệnh đề ở mỗi lần `migrate()` — BƯỚC 2 chạy mọi câu cưỡng chế — và đòi `proconfig =
+-- {search_path=pg_catalog, lock_timeout=2s}`. Khi vai chạy `migrate()` SỞ HỮU hàm, gỡ hay đổi trần thì lượt sửa tạo lại hàm (đo:
+-- db/tran-cho-khoa-ghi-so.int.test.ts); vai chạy `migrate()` KHÔNG sở hữu hàm thì (D1b) nhận 42501 và lượt phán xét chặn deploy —
+-- fail-closed, không tự chữa —, và câu `ALTER FUNCTION` dưới đây cũng gãy 42501 ở vòng đánh số (đọc, lượt soi 65a-10, 65c-7). Tệp này và
+-- (D1b) mang cùng giá trị — db/tran-cho-khoa-ghi-so-dong-bo.test.ts.
+-- =============================================================================================
+
+ALTER FUNCTION public.noi_chuoi_kiem_toan() SET lock_timeout = '2s';

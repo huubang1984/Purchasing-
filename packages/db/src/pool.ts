@@ -86,6 +86,10 @@ function laKetNoiCucBo(host: string | null | undefined): boolean {
  *     tổ chức KHÁC -> ghi bình thường (cô lập xuyên tổ chức giữ được, đúng thiết kế)
  * Dưới G4 ("mọi thao tác khoá sinh audit"), không ghi được audit = KHÔNG LÀM ĐƯỢC thao tác
  * khoá. Không có lock_timeout thì nạn nhân treo VÔ HẠN thay vì lỗi.
+ * [S1.71 / khoản 123, lượt soi 65a-11] Với khoá GHI SỔ, vế "chỉ khi nạn nhân CÓ lock_timeout" nay không còn: `noi_chuoi_kiem_toan()`
+ * mang `SET lock_timeout = '2s'` (050), nên nạn nhân của khoá ấy gãy sau tối đa 2 s bất kể GUC của phiên. Hai GUC dưới:
+ * `lock_timeout` vẫn là trần chờ của mọi khoá khác; `idle_in_transaction_session_timeout` vẫn đuổi giao dịch rảnh ĐANG GIỮ khoá — kể
+ * cả khoá ghi sổ (lượt soi 65c-7).
  *
  * Vì sao ĐẶT Ở ĐÂY chứ không bằng `ALTER ROLE app_api SET ...`: hardening.always.sql phát
  * "ALTER ROLE app_api RESET ALL" MỖI DEPLOY với hậu điều kiện `rolconfig IS NULL`, nên biện
