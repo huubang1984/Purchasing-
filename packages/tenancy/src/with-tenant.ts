@@ -19,7 +19,9 @@ interface DocLaiSauGiaoDich {
  * sẵn, khi GUC tenant/khách rò ở phạm vi phiên, khi replica còn lúc COMMIT, khi GUC khách không có hiệu lực. Mỗi lỗi mang một MÃ cố
  * định (`code`) và một LOẠI suy từ mã (`kind`):
  *   - `input` — lỗi của NGƯỜI GỌI: orgId hay guestSessionId sai hình dạng, phiên khách không tồn tại, đã thu hồi hay hết hạn;
- *   - `protocol` — lớp cô lập từ chối phục vụ hay huỷ kết nối: mọi mã còn lại, và là MẶC ĐỊNH của một mã mới.
+ *   - `protocol` — lớp cô lập từ chối phục vụ hay huỷ kết nối: mọi mã còn lại, và là MẶC ĐỊNH của một mã mới. [S1.69 / khoản 120,
+ *     lượt soi 63a-9] `CONNECT_WAIT_EXCEEDED` không thuộc hai ca ấy — hết trần chờ lấy kết nối mà NGƯỜI GỌI đặt — mà vẫn là loại protocol:
+ *     500 có log, không phải lỗi đầu vào.
  * Tầng HTTP trước vòng này gộp mọi TenantError thành một 401 không log, nên cả nhóm `protocol` câm với người vận hành (đo: lượt soi
  * 59 — `ALTER DATABASE … SET app.guest_session_id` làm mọi route ra 401 không một dòng log). Mọi lỗi của lớp này vẫn nghĩa là KHÔNG
  * thay đổi nào được ghi, trừ `SESSION_STATE_LEFT`: nó chỉ đi vào `release()` để huỷ kết nối sau một giao dịch ĐÃ commit, không ném.
@@ -38,7 +40,8 @@ export type TenantErrorCode =
   | "COMMIT_NOT_APPLIED"
   | "SESSION_SCOPE_LEAK"
   | "SESSION_STATE_LEFT"
-  | "GUEST_SETTINGS_INEFFECTIVE";
+  | "GUEST_SETTINGS_INEFFECTIVE"
+  | "CONNECT_WAIT_EXCEEDED";
 
 /** Ba mã của lỗi ĐẦU VÀO. Mọi mã khác là giao thức — một mã thêm sau này không lặng lẽ thành 401. */
 const MA_LOI_DAU_VAO: ReadonlySet<TenantErrorCode> = new Set<TenantErrorCode>([
@@ -56,7 +59,7 @@ export class TenantError extends Error {
     this.code = code;
   }
 
-  /** `input`: lỗi của người gọi — tầng HTTP trả 401 không log khi withTenant hay withGuestSession ném nó ngoài handler [S1.67 / khoản 118: handler ném thì 500 có log]. `protocol`: lớp cô lập từ chối — 500 kèm một dòng log mang `code`. */
+  /** `input`: lỗi của người gọi — tầng HTTP trả 401 không log khi withTenant hay withGuestSession ném nó ngoài handler [S1.67 / khoản 118: handler ném thì 500 có log]. `protocol`: lớp cô lập từ chối — 500 kèm một dòng log mang `code` [S1.69 / khoản 120: kể cả hết trần chờ kết nối, `CONNECT_WAIT_EXCEEDED`]. */
   get kind(): "input" | "protocol" {
     return MA_LOI_DAU_VAO.has(this.code) ? "input" : "protocol";
   }
@@ -95,6 +98,62 @@ export interface WithTenantOptions {
    * nguyên hành vi của Task 7/8 cho mọi người gọi cũ).
    */
   readonly destroyConnectionWhenDone?: boolean;
+  /**
+   * [S1.69 / khoản 120] Trần chờ lấy kết nối từ `pool`, mili-giây, số nguyên dương. Không đặt ⇒ `pool.connect()` như cũ: pool của
+   * `createPool` tự ném sau `connectionTimeoutMillis` 20 s với một `Error` không tên, pool không đặt hạn thì chờ không hạn (đọc pg-pool; đo: quá 12 s, biên bản
+   * §S1.69). Đặt ⇒ quá trần mà chưa có kết nối thì ném `TenantError` CONNECT_WAIT_EXCEEDED trước khi `fn` chạy, và kết nối tới muộn được
+   * trả ngay về pool; lỗi của `pool.connect()` trong trần đi ra nguyên vẹn.
+   *
+   * Người dùng hôm nay: lần ghi sổ từ chối của `requirePermission` và `throwAuditedDenial` (`@trustprocure/identity`) — một lần từ chối
+   * không được chờ kết nối kiểm toán vô hạn trong khi giữ giao dịch của người gọi, và cũng không được gãy chỉ vì pool đầy tạm thời.
+   */
+  readonly maxConnectWaitMs?: number;
+}
+
+/** [S1.69 / khoản 120, lượt soi 63a-7] Trần của `setTimeout`: quá nó Node hạ độ trễ về 1 ms, tức một "trần" thành gãy ngay. */
+const TRAN_CHO_TOI_DA_MS = 2_147_483_647;
+
+/**
+ * [S1.69 / khoản 120] Chờ lần lấy kết nối `layKetNoi` có trần — xem `WithTenantOptions.maxConnectWaitMs`. Nhận LỜI HỨA của lần lấy chứ không
+ * nhận pool: `withTenant` giữ MỘT chỗ gọi `pool.connect()`, nên listener 'error' của nó phủ mọi client nó giao cho `fn` (lượt soi 63a-1 —
+ * bản đầu gọi `connect` lần hai ở đây, và census khoản 99 đỏ).
+ *
+ * pg-pool không có trần cho TỪNG lần gọi (`connectionTimeoutMillis` là của cả pool), nên trần đứng ở đây: một hẹn giờ chạy đua với lần lấy.
+ *   ⑴ Hết trần thì lời gọi của pg-pool VẪN nằm trong hàng đợi của nó — kết nối tới sau đó được `release()` ngay. Chịu lực, đo: bỏ lệnh nhả thì
+ *     kết nối rời pool mãi mãi, và bộ test để lại hai kết nối khách sống lúc dừng container (đột biến M3, khoản nợ 28).
+ *   ⑵ Hẹn giờ nằm ở một promise riêng chỉ từ chối bằng `TenantError`, và `Promise.race` đăng ký phản ứng lên nó — không có lời từ chối nào
+ *     không ai bắt. ~~`finally` huỷ hẹn giờ … điểm chịu lực~~ `clearTimeout` trong `finally` là vệ sinh — hẹn giờ không giữ tiến trình sau khi
+ *     cuộc đua xong —, không phải điểm chịu lực: bỏ nó thì hẹn giờ nổ muộn, lần nhả đã chạy với `hetTran` sai và lời từ chối đã có người nghe
+ *     (lượt soi 63a-6).
+ *   ⑶ Lỗi của lần lấy TRONG trần đi ra qua `Promise.race`, nguyên vẹn kể cả khi không phải Error. Lỗi tới SAU trần bị nuốt ở nhánh rỗng —
+ *     không dòng log nào; với pool có vai, kết nối nhiễm đã bị `ganVaiTroChoPool` huỷ trước khi lỗi ấy tới đây (lượt soi 63a-4 — nói ra, chưa
+ *     làm).
+ */
+function choKetNoiCoTran(layKetNoi: Promise<pg.PoolClient>, tranMs: number): Promise<pg.PoolClient> {
+  let hetTran = false;
+  let henGio: ReturnType<typeof setTimeout> | undefined;
+  const hetTranHua = new Promise<never>((_, tuChoi) => {
+    henGio = setTimeout(() => {
+      hetTran = true;
+      tuChoi(
+        new TenantError(
+          "CONNECT_WAIT_EXCEEDED",
+          `không lấy được kết nối từ pool trong ${String(tranMs)} ms — pool bão hoà, pool dùng chung với chính giao dịch đang chờ nó, hay kết nối ` +
+            "mới chưa mở xong. Giao dịch này không chạy.",
+        ),
+      );
+    }, tranMs);
+  });
+  // ⑴ Kết nối tới SAU trần: trả ngay về pool. ⑶ Nhánh lỗi để trống có chủ đích — lỗi trong trần đi ra qua `Promise.race` bên dưới.
+  void layKetNoi.then(
+    (client) => {
+      if (hetTran) client.release();
+    },
+    () => {},
+  );
+  return Promise.race([layKetNoi, hetTranHua]).finally(() => {
+    clearTimeout(henGio);
+  });
 }
 
 /**
@@ -207,8 +266,16 @@ export async function withTenant<T>(
     // mật (giá thầu, token, mã OTP). Giữ khuôn an toàn ngay từ nơi vô hại nhất.
     throw new TenantError("INVALID_ORG_ID", "orgId không phải UUID hợp lệ");
   }
+  const tranCho = tuyChon.maxConnectWaitMs;
+  if (tranCho !== undefined && !(Number.isSafeInteger(tranCho) && tranCho > 0 && tranCho <= TRAN_CHO_TOI_DA_MS)) {
+    // [S1.69 / khoản 120] Lỗi của NGƯỜI GỌI — một hằng viết sai —, không phải giao thức: `Error` thường, ném trước khi chạm pool.
+    throw new Error("withTenant: maxConnectWaitMs phải là số nguyên dương, không quá 2147483647 (mili-giây).");
+  }
 
-  const client = await pool.connect();
+  // [S1.69 / khoản 120, lượt soi 63a-1] MỘT chỗ lấy client cho cả hai đường — có trần hay không —, nên listener 'error' ngay dưới đây phủ mọi
+  // client hàm này giao cho `fn` (census khoản 99 ⒟ đếm theo tệp).
+  const layKetNoi = pool.connect();
+  const client = tranCho === undefined ? await layKetNoi : await choKetNoiCoTran(layKetNoi, tranCho);
 
   // Trong lúc client đang CHECKED-OUT, pg-pool KHÔNG gắn listener 'error' nào lên nó (chỉ gắn
   // khi client rảnh nằm trong pool). Nếu kết nối chết giữa chừng — backend bị terminate, mất

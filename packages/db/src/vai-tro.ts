@@ -68,7 +68,8 @@ const mocLuocDo = new WeakMap<pg.PoolClient, string>();
  * ràng nếu SET ROLE không có hiệu lực thật.
  *
  * [S1.59 / khoản nợ 99] VÀ TỪ CHỐI KẾT NỐI KHÔNG SẠCH. `withTenant` đọc lại ba GUC vận hành sau giao dịch của nó (khoản 96 ⑵); mã chạy
- * câu trên pool NGOÀI hàm ấy — hai bộ dọn nền, phép kiểm vai của auditPool, phép kiểm lúc khởi động; census ở
+ * câu trên pool NGOÀI hàm ấy — hai bộ dọn nền, ~~phép kiểm vai của auditPool,~~ [S1.69 / khoản 120: nay chạy trong withTenant, trên kết
+ * nối của lần ghi sổ] phép kiểm lúc khởi động; census ở
  * `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` — thì không, và kết nối nó để nhiễm quay về pool rồi giao cho người kế tiếp:
  * dưới `replica` trigger ENABLE thường và khoá ngoại bị bỏ qua (đo S1.54), dưới `row_security = off` câu chạm bảng RLS ném thay vì lọc,
  * dưới một search path lạ tên trần phân giải sang schema khác, và trong một giao dịch còn mở thì `SET ROLE` của lần lấy này chạy bên

@@ -229,7 +229,9 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
   "packages/tenancy/src/with-tenant.ts": {
     lay: 1,
     cau: 0,
-    lyDo: "withTenant — chính lớp ⑴⑵ của khoản 96; withGuestSession gọi lại withTenant",
+    lyDo:
+      "withTenant — chính lớp ⑴⑵ của khoản 96; withGuestSession gọi lại withTenant; [S1.69 / khoản 120] lần lấy có trần chờ CHÍNH lời hứa " +
+      "của lần lấy này (choKetNoiCoTran), không gọi connect lần hai",
   },
   "packages/invitation/src/invitation.ts": {
     lay: 2,
@@ -238,13 +240,8 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "hai bộ dọn nền chạy ngoài giao dịch của một yêu cầu: giao dịch tường minh kết thúc bằng COMMIT mang khối DO (⑴, vế ⒝), " +
       "huỷ kết nối trên mọi lỗi; ⑵ ở ganVaiTroChoPool (khoản 99)",
   },
-  "packages/identity/src/rbac.ts": {
-    lay: 0,
-    cau: 1,
-    lyDo:
-      "khangDinhAuditPoolDungQuyen đọc thuộc tính vai của auditPool — một câu CHỈ ĐỌC tự commit, không ghi gì để commit dưới " +
-      "replica; ⑵ ở ganVaiTroChoPool",
-  },
+  // [S1.69 / khoản 120] `packages/identity/src/rbac.ts` (cau 1 — `auditPool.query()` của khangDinhAuditPoolDungQuyen, "một câu CHỈ ĐỌC tự
+  // commit") rời danh sách: câu kiểm vai nay chạy trên CHÍNH kết nối của lần ghi sổ, bên trong withTenant, sau lần lấy có trần.
   "apps/api/src/composition.ts": {
     lay: 1,
     cau: 0,

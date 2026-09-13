@@ -851,3 +851,122 @@ describe("[S1.54 / khoản nợ 96] GUC vận hành ghi vào phiên trong giao d
     }
   });
 });
+
+// ==============================================================================================
+// [S1.69 / khoản 120] TRẦN CHỜ LẤY KẾT NỐI — `maxConnectWaitMs`
+//
+// `requirePermission` và `throwAuditedDenial` ghi sổ lần từ chối qua `withTenant(auditPool, …)`. Trước khoản 120 `requirePermission` chụp
+// "pool còn chỗ" tức thì rồi gãy khi pool đầy — mất bản ghi cả khi pool chỉ đầy tạm thời (đo trên b8d38c7, biên bản §S1.69). Gỡ phép chụp
+// mà không có trần thì lần lấy kết nối chờ tới `connectionTimeoutMillis` 20 s của `createPool` với một `Error` không tên (đo), hay không bao
+// giờ trên pool không đặt hạn. Tuỳ chọn này là trần của CHÍNH lời gọi: hết trần ⇒ `TenantError` CONNECT_WAIT_EXCEEDED, và kết nối tới muộn
+// được trả ngay về pool.
+// ==============================================================================================
+describe("[S1.69 / khoản 120] withTenant: maxConnectWaitMs", () => {
+  /** Chặn phép đo khỏi treo trên mã chưa có trần: quá `ms` thì trả chuỗi thay vì chờ tiếp. */
+  const trongHan = <T>(p: Promise<T>, ms: number): Promise<T | "QUA_HAN_PHEP_DO"> =>
+    Promise.race([
+      p,
+      new Promise<"QUA_HAN_PHEP_DO">((xong) => {
+        // [lượt soi 63a-10] `unref`: chốt chặn không giữ tiến trình khi cuộc đua đã xong.
+        setTimeout(() => xong("QUA_HAN_PHEP_DO"), ms).unref();
+      }),
+    ]);
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => "KHONG_NEM",
+      (e: unknown) => e,
+    );
+
+  it("pool hết chỗ suốt lời gọi ⇒ TenantError CONNECT_WAIT_EXCEEDED (loại protocol) ở trần; `fn` không chạy; thông báo không mang orgId", async () => {
+    const pool = createPool(db.connectionString, 1);
+    const giu = await pool.connect();
+    try {
+      let daChay = false;
+      const batDau = Date.now();
+      const loi = await trongHan(
+        loiCua(
+          withTenant(
+            pool,
+            orgA,
+            () => {
+              daChay = true;
+              return Promise.resolve();
+            },
+            { maxConnectWaitMs: 300 },
+          ),
+        ),
+        3000,
+      );
+      const daCho = Date.now() - batDau;
+      expect(loi).toBeInstanceOf(TenantError);
+      expect((loi as TenantError).code).toBe("CONNECT_WAIT_EXCEEDED");
+      expect((loi as TenantError).kind).toBe("protocol");
+      expect((loi as TenantError).message).not.toContain(orgA);
+      expect(daChay).toBe(false);
+      expect(daCho).toBeGreaterThanOrEqual(280);
+      expect(daCho).toBeLessThan(2000);
+    } finally {
+      giu.release();
+      await pool.end();
+    }
+  });
+
+  it("kết nối tới SAU trần được trả ngay về pool — không rò: nhả kết nối đang giữ thì pool rảnh lại đủ, và lời gọi kế lấy được trong trần", async () => {
+    const pool = createPool(db.connectionString, 1);
+    const giu = await pool.connect();
+    let daNha = false;
+    try {
+      const loi = await trongHan(loiCua(withTenant(pool, orgA, () => Promise.resolve("khong chay"), { maxConnectWaitMs: 200 })), 3000);
+      expect((loi as TenantError).code).toBe("CONNECT_WAIT_EXCEEDED");
+      giu.release();
+      daNha = true;
+      // Lời chờ đã bỏ vẫn nằm trong hàng đợi của pg-pool: nó nhận kết nối vừa nhả và phải trả lại ngay.
+      const han = Date.now() + 2000;
+      while (!(pool.waitingCount === 0 && pool.idleCount === pool.totalCount) && Date.now() < han) {
+        await new Promise<void>((xong) => setTimeout(xong, 10));
+      }
+      expect({ cho: pool.waitingCount, ranh: pool.idleCount, tong: pool.totalCount }).toEqual({ cho: 0, ranh: 1, tong: 1 });
+      expect(await trongHan(withTenant(pool, orgA, () => Promise.resolve("chay duoc"), { maxConnectWaitMs: 1000 }), 3000)).toBe("chay duoc");
+    } finally {
+      if (!daNha) giu.release();
+      await pool.end();
+    }
+  });
+
+  it("kết nối rảnh ra TRONG trần ⇒ `fn` chạy bình thường trên kết nối ấy", async () => {
+    const pool = createPool(db.connectionString, 1);
+    const giu = await pool.connect();
+    try {
+      setTimeout(() => giu.release(), 100);
+      const ketQua = await trongHan(
+        withTenant(pool, orgA, async (c) => (await c.query<{ n: string }>("SELECT 1::text AS n")).rows[0]!.n, { maxConnectWaitMs: 3000 }),
+        5000,
+      );
+      expect(ketQua).toBe("1");
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("maxConnectWaitMs không phải số nguyên dương, hay quá trần 2147483647 của setTimeout ⇒ ném TRƯỚC khi chạm pool, thông báo nêu tên tuỳ chọn", async () => {
+    const poolKhongDuocCham = {
+      connect: (): never => {
+        throw new Error("khong duoc cham pool");
+      },
+    } as unknown as pg.Pool;
+    for (const giaTri of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648]) {
+      const loi = await loiCua(withTenant(poolKhongDuocCham, orgA, () => Promise.resolve(), { maxConnectWaitMs: giaTri }));
+      expect(loi, String(giaTri)).toBeInstanceOf(Error);
+      expect((loi as Error).message, String(giaTri)).toMatch(/maxConnectWaitMs/u);
+    }
+  });
+
+  it("pool.connect() hỏng TRONG trần ⇒ chính lỗi ấy đi ra, không bị đổi thành CONNECT_WAIT_EXCEEDED", async () => {
+    const loiGoc = new Error("ket noi hong k120");
+    const poolHong = { connect: () => Promise.reject(loiGoc) } as unknown as pg.Pool;
+    const batDau = Date.now();
+    const loi = await loiCua(withTenant(poolHong, orgA, () => Promise.resolve(), { maxConnectWaitMs: 2000 }));
+    expect(loi).toBe(loiGoc);
+    expect(Date.now() - batDau).toBeLessThan(1000);
+  });
+});

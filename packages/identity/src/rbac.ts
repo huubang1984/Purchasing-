@@ -265,6 +265,31 @@ const CAU_KHOA_TU_VAN =
    ) AS dang_giu`;
 
 /**
+ * [S1.69 / khoản 120] Trần chờ lấy kết nối `auditPool` cho MỌI lần ghi sổ từ chối — `requirePermission` và `throwAuditedDenial`.
+ *
+ * Thay cho phép chụp "pool còn chỗ" tức thì của `khangDinhGhiDuocDocLap`. Đo trên b8d38c7 (biên bản §S1.69), `auditPool` 2 kết nối như sản
+ * xuất trước vòng này: phép chụp làm lần từ chối gãy NGAY khi pool đầy tạm thời — giữ 2/2 kết nối trong 300 ms ⇒ `PermissionAuditFailedError`
+ * sau 16 ms, không hàng sổ; 10 lần từ chối song song mất 5 bản ghi; khoá tư vấn ghi sổ của một tổ chức ghim cả hai kết nối ⇒ lần từ chối
+ * của tổ chức KHÁC gãy sau 15 ms. Trong khi đó 100 lần ghi sổ xếp hàng trên cùng pool xả hết trong 177 ms.
+ *
+ * Vì sao 5 giây: gấp khoảng 28 lần thời gian xả đo được của 100 lần ghi xếp hàng, nên pool đầy ~~tạm thời~~ DƯỚI 5 s không còn làm mất bản
+ * ghi — lần ghi đã có kết nối vẫn chờ khoá tư vấn tới `lock_timeout`/`statement_timeout` (lượt soi 63a-6); và NGẮN
+ * hơn `connectionTimeoutMillis` 20 s của `createPool`, nên thứ người trực đọc là lỗi có tên của trần — `TenantError` CONNECT_WAIT_EXCEEDED —
+ * chứ không phải `Error` không tên của pg-pool (đo: 20006 ms, "timeout exceeded when trying to connect"). Ca cấu hình sai mà phép chụp
+ * sinh ra để bắt — `auditPool` trùng pool đang giữ giao dịch người gọi — vẫn gãy ồn ào: sau 5 s thay vì 17 ms, và không treo trên pool
+ * không đặt hạn.
+ *
+ * Nói ra: khi `auditPool` không có chỗ, lần ghi giữ giao dịch và kết nối nghiệp vụ của người gọi tới 5 s. Ở `apps/api`, `auditPool` có cỡ
+ * bằng pool nghiệp vụ (composition.ts), nên nhu cầu đồng thời của tiến trình ấy không vượt cỡ của nó (đọc; một ca đo ở
+ * composition.int.test.ts). [lượt soi 63a-2, 63b-3] Và khi khoá tư vấn ghi sổ của MỘT tổ chức bị giữ lâu, mỗi lần từ chối của tổ chức ấy giữ
+ * kết nối nghiệp vụ của nó tới `statement_timeout` 15 s. Đo lặp ba lượt trên tiến trình thật với `TRUSTPROCURE_DB_POOL_MAX` 3, `/me` của
+ * tổ chức khác gửi 1 s sau yêu cầu cuối (biên bản §S1.69): ba lần từ chối tới tuần tự ⇒ `/me` đứng 13 620–13 647 ms, mã trước khoản 120
+ * 16–17 ms; tới cùng lúc ⇒ 13 999–14 016 ms, mã trước khoản 120 14 002–14 018 ms; ba lần GHI hợp lệ ⇒ khoảng 14 s ở cả hai bản. Chủ dự án
+ * chọn giữ cỡ này ngày 2026-09-13 — khoản 123, 124.
+ */
+const TRAN_CHO_KET_NOI_AUDIT_MS = 5_000;
+
+/**
  * [vòng fix 1 — F9] Những pool đã được kiểm QUYỀN rồi — mỗi pool đúng một lần cho cả vòng đời
  * tiến trình.
  *
@@ -294,11 +319,15 @@ const poolDaKiemQuyen = new WeakSet<pg.Pool>();
  * phiên (`session_user`) do composition root chứng minh lúc khởi động —
  * `khangDinhPhienDangNhapUngDung` ở `@trustprocure/db` — không phải ở đây, vì `poolAs` của
  * test-support cố ý đăng nhập bằng superuser rồi `SET ROLE`.
+ *
+ * [S1.69 / khoản 120] Câu kiểm chạy trên `client` — CHÍNH kết nối mà lần ghi sổ đã lấy có trần — chứ không qua `auditPool.query()`: câu ấy
+ * lấy một kết nối KHÔNG trần, nên ở lần đầu của một pool (chưa có bộ nhớ đệm) trên pool đã cạn nó chờ tới `connectionTimeoutMillis` hay
+ * không bao giờ. Kết cục của lớp canh không đổi: vai bỏ qua RLS ⇒ ném trước khi ghi, giao dịch của lần ghi ROLLBACK.
  */
-async function khangDinhAuditPoolDungQuyen(auditPool: pg.Pool): Promise<void> {
+async function khangDinhAuditPoolDungQuyen(auditPool: pg.Pool, client: pg.PoolClient): Promise<void> {
   if (poolDaKiemQuyen.has(auditPool)) return;
 
-  const { rows } = await auditPool.query<{
+  const { rows } = await client.query<{
     ten: string;
     sieu_nguoi_dung: boolean;
     bo_qua_rls: boolean;
@@ -326,25 +355,16 @@ async function khangDinhAuditPoolDungQuyen(auditPool: pg.Pool): Promise<void> {
   poolDaKiemQuyen.add(auditPool);
 }
 
-async function khangDinhGhiDuocDocLap(
-  client: pg.PoolClient,
-  auditPool: pg.Pool,
-  orgId: string,
-): Promise<void> {
-  // Pool cạn kiệt: `pool.connect()` KHÔNG có timeout mặc định, nên `withTenant` trên một pool
+async function khangDinhGhiDuocDocLap(client: pg.PoolClient, orgId: string): Promise<void> {
+  // ~~Pool cạn kiệt: `pool.connect()` KHÔNG có timeout mặc định, nên `withTenant` trên một pool
   // hết chỗ treo VĨNH VIỄN. Đây đúng là lớp lỗi [fix I4] mà migrate() đã vấp ("với pool max: 1
   // ... migrate() treo VĨNH VIỄN, không timeout"). Phép đo có tính đua, và nó đua theo hướng
   // AN TOÀN: dương tính giả chỉ đổi một lần từ chối thành một lỗi ồn ào (vẫn fail-closed), âm
-  // tính giả rơi lại đúng hành vi cũ.
-  if (auditPool.idleCount === 0 && auditPool.totalCount >= auditPool.options.max) {
-    throw new Error(
-      `pool ghi kiểm toán đã hết chỗ (max=${String(auditPool.options.max)}, ` +
-        `total=${String(auditPool.totalCount)}, idle=0, ` +
-        `waiting=${String(auditPool.waitingCount)}). Lấy thêm kết nối sẽ CHỜ VÔ HẠN. ` +
-        "`auditPool` phải là pool RIÊNG, không dùng chung với pool đang giữ transaction gọi.",
-    );
-  }
-
+  // tính giả rơi lại đúng hành vi cũ.~~
+  // [S1.69 / khoản 120] Phép chụp "pool còn chỗ" tức thì đã gỡ. Câu "dương tính giả CHỈ đổi một lần từ chối thành một lỗi ồn ào" sai ở chữ
+  // CHỈ: lỗi ồn ào ấy là một lần từ chối không vào sổ, trong khi chờ vài chục mili-giây thì ghi được — đo trên b8d38c7: 10 lần từ chối song
+  // song trên `auditPool` 2 kết nối mất 5 bản ghi; khoá tư vấn của một tổ chức ghim cả hai kết nối làm lần từ chối của tổ chức khác gãy sau
+  // 15 ms. Lỗ [fix I4] nay đóng bằng trần của chính lần lấy kết nối — `TRAN_CHO_KET_NOI_AUDIT_MS`.
   const { rows } = await client.query<{ dang_giu: boolean }>(CAU_KHOA_TU_VAN, [orgId]);
   if (rows[0]?.dang_giu === true) {
     throw new Error(
@@ -383,9 +403,10 @@ async function khangDinhGhiDuocDocLap(
  * ĐIỀU NÀY KHÔNG MUA ĐƯỢC, nói ra thay vì hứa suông: một kẻ gọi API sai quyền liên tục vẫn nối
  * tiếp hoá việc ghi sổ của tổ chức đó, vì mỗi lần từ chối vẫn là một lần lấy khoá. Cái nó mua
  * là bỏ đi bậc tự do NGUY HIỂM (giữ khoá suốt một transaction nghiệp vụ dài). Hạn mức theo
- * người gọi thuộc tầng API, không thuộc S0 — ghi vào sổ nợ.
+ * người gọi thuộc tầng API, không thuộc S0 — ~~ghi vào sổ nợ~~ [S1.69] khoản 122.
  *
- * `auditPool` PHẢI là pool riêng — xem `khangDinhGhiDuocDocLap`.
+ * `auditPool` PHẢI là pool riêng — ~~xem `khangDinhGhiDuocDocLap`~~ [S1.69 / khoản 120] pool trùng với pool đang giữ giao dịch người gọi
+ * gãy ở trần chờ, xem `TRAN_CHO_KET_NOI_AUDIT_MS`.
  */
 export async function requirePermission(
   client: pg.PoolClient,
@@ -411,26 +432,34 @@ export async function requirePermission(
   const tuChoi = new PermissionDeniedError(requirement.userId, requirement.permission);
 
   try {
-    // THỨ TỰ HAI DÒNG NÀY LÀ LOAD-BEARING, và bản đầu viết ngược. `khangDinhAuditPoolDungQuyen`
+    // ~~THỨ TỰ HAI DÒNG NÀY LÀ LOAD-BEARING, và bản đầu viết ngược. `khangDinhAuditPoolDungQuyen`
     // chạy một `auditPool.query()`, mà `pool.connect()` KHÔNG có timeout mặc định — nên trên
     // một auditPool ĐÃ CẠN nó treo VĨNH VIỄN, tức nó biến chính lỗ [fix I4] mà
     // `khangDinhGhiDuocDocLap` sinh ra để đóng thành lỗ của riêng nó. Tự bắt được bằng hai test
     // hồi quy có sẵn ("auditPool hết chỗ..." và "PermissionAuditFailedError giữ nguyên...") —
-    // cả hai treo tới timeout 30 s. Phép kiểm nào KHÔNG chạm pool thì phải đứng trước.
-    await khangDinhGhiDuocDocLap(client, auditPool, requirement.orgId);
-    await khangDinhAuditPoolDungQuyen(auditPool);
-    await withTenant(auditPool, requirement.orgId, (c) =>
-      appendAuditEvent(c, requirement.orgId, {
-        actorType: "USER",
-        actorId: requirement.userId,
-        action: "PERMISSION_DENIED",
-        resourceType: requirement.resourceType,
-        resourceId: requirement.resourceId ?? null,
-        requestId: requirement.requestId ?? null,
-        // KHÔNG BAO GIỜ đưa giá/bí mật vào đây. `permission` là một mã trong danh sách đóng
-        // PERMISSIONS, không phải chuỗi tự do của người dùng.
-        payload: { permission: requirement.permission },
-      }),
+    // cả hai treo tới timeout 30 s. Phép kiểm nào KHÔNG chạm pool thì phải đứng trước.~~
+    // [S1.69 / khoản 120] Không câu nào chạm `auditPool` ngoài lần lấy kết nối có trần: phép kiểm khoá tư vấn chạy trên client người gọi,
+    // lớp canh quyền chạy trên CHÍNH kết nối lần ghi đã lấy. Pool cạn — kể cả ở lần đầu, khi lớp canh chưa có bộ nhớ đệm — gãy ở trần với
+    // `TenantError` CONNECT_WAIT_EXCEEDED, không treo.
+    await khangDinhGhiDuocDocLap(client, requirement.orgId);
+    await withTenant(
+      auditPool,
+      requirement.orgId,
+      async (c) => {
+        await khangDinhAuditPoolDungQuyen(auditPool, c);
+        return appendAuditEvent(c, requirement.orgId, {
+          actorType: "USER",
+          actorId: requirement.userId,
+          action: "PERMISSION_DENIED",
+          resourceType: requirement.resourceType,
+          resourceId: requirement.resourceId ?? null,
+          requestId: requirement.requestId ?? null,
+          // KHÔNG BAO GIỜ đưa giá/bí mật vào đây. `permission` là một mã trong danh sách đóng
+          // PERMISSIONS, không phải chuỗi tự do của người dùng.
+          payload: { permission: requirement.permission },
+        });
+      },
+      { maxConnectWaitMs: TRAN_CHO_KET_NOI_AUDIT_MS },
     );
   } catch (loi) {
     // [vòng fix 1 — M4] `loi as Error` trần MẤT CHẨN ĐOÁN khi tầng dưới `throw` thứ không phải
@@ -469,16 +498,18 @@ export async function requirePermission(
  * Làm theo thứ tự:
  *   ⑴ `action` và `resourceType` phải là MÃ ĐỊNH DANH viết hoa — cùng hình dạng F7 của `requirePermission`, vì cả hai đi vào sổ bất biến
  *      (lượt soi 62a-15); kiểm trước khi chạm pool;
- *   ⑵ `auditPool` không được bỏ qua RLS — cùng lớp canh [F9]. Đo trước bản vá với SUPERUSER: bản ghi được nhận không một lời;
+ *   ⑵ `auditPool` không được bỏ qua RLS — cùng lớp canh [F9]. Đo trước bản vá với SUPERUSER: bản ghi được nhận không một lời. [S1.69 /
+ *      khoản 120] Lớp canh chạy trên CHÍNH kết nối của lần ghi, lấy với trần chờ `TRAN_CHO_KET_NOI_AUDIT_MS`;
  *   ⑶ lần ghi ở giao dịch ĐỘC LẬP — bản ghi sống qua rollback của người gọi (khoản nợ 32).
  * Lỗi ở bất kỳ bước nào ⇒ `DenialAuditFailedError` giữ lần từ chối; không lỗi ⇒ ném `denial`. Không có đường trả về.
  *
- * KHÔNG kiểm "pool còn chỗ" tức thì như `khangDinhGhiDuocDocLap` (lượt soi 62a-1). Bản đầu của vòng này có kiểm ấy, và nó đổi hành vi cả
- * khi lần ghi lẽ ra thành công: `auditPool` sản xuất có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ
- * chối của người khác gãy ngay — 500, không hàng sổ — trong khi chờ thì ghi được. Không kiểm ấy, lần lấy kết nối xếp hàng: pool dựng bằng
+ * KHÔNG kiểm "pool còn chỗ" tức thì như ~~`khangDinhGhiDuocDocLap`~~ `requirePermission` trước khoản 120 (lượt soi 62a-1, 63a-6). Bản đầu của vòng này có kiểm ấy, và nó đổi hành vi cả
+ * khi lần ghi lẽ ra thành công: `auditPool` sản xuất khi ấy (S1.68) có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ
+ * chối của người khác gãy ngay — 500, không hàng sổ — trong khi chờ thì ghi được. Không kiểm ấy, lần lấy kết nối xếp hàng: ~~pool dựng bằng
  * `createPool` chờ tối đa `connectionTimeoutMillis` 20 s rồi ném, và lỗi ấy thành `DenialAuditFailedError` (đọc); pool không đặt thời
  * hạn — pool của test — chờ không hạn (đo ở cổng mở thầu trên bản trước khoản 119: quá 4000 ms). Kiểm tức thì của `requirePermission`
- * giữ nguyên — khoản nợ 120.
+ * giữ nguyên — khoản nợ 120.~~ [S1.69 / khoản 120] tới trần `TRAN_CHO_KET_NOI_AUDIT_MS` trên MỌI pool, rồi `TenantError`
+ * CONNECT_WAIT_EXCEEDED thành `cause` của `DenialAuditFailedError` (đo ở rbac.int.test.ts); `requirePermission` cũng đã gỡ phép chụp.
  *
  * KHÔNG giữ vế khoá tư vấn của `khangDinhGhiDuocDocLap`: phép kiểm ấy chạy trên client NGƯỜI GỌI, mà hai chỗ D2 đến đây SAU một câu đã
  * hỏng — giao dịch aborted, câu kiểm ném 25P02 (đo bằng đột biến chế độ đo, §S1.68). Người gọi đã ghi sổ trong cùng giao dịch trước khi
@@ -500,8 +531,15 @@ export async function throwAuditedDenial(
           "sổ kiểm toán bất biến. Cố ý KHÔNG nội suy giá trị nhận được vào thông báo này.",
       );
     }
-    await khangDinhAuditPoolDungQuyen(auditPool);
-    await withTenant(auditPool, orgId, (c) => appendAuditEvent(c, orgId, event));
+    await withTenant(
+      auditPool,
+      orgId,
+      async (c) => {
+        await khangDinhAuditPoolDungQuyen(auditPool, c);
+        return appendAuditEvent(c, orgId, event);
+      },
+      { maxConnectWaitMs: TRAN_CHO_KET_NOI_AUDIT_MS },
+    );
   } catch (loi) {
     // Cùng khuôn [vòng fix 2 — MỤC E] của `requirePermission`: nêu KIỂU của thứ lạ bị ném, không nội suy GIÁ TRỊ; giá trị gốc ở `cause`.
     throw new DenialAuditFailedError(

@@ -466,6 +466,92 @@ describe("[S1.67 / khoản 118] tiến trình dựng từ môi trường: dòng 
 });
 
 // ----------------------------------------------------------------------------------------------
+// [S1.69 / khoản 120] CỠ `auditPool` CỦA COMPOSITION ROOT — đo trên `taoTienTrinhApi` thật.
+//
+// Mỗi lần ghi sổ từ chối của tiến trình chạy khi yêu cầu ĐANG GIỮ một kết nối của pool nghiệp vụ: `requirePermission` của bộ điều phối
+// và mọi handler nhận `auditPool` đều nằm trong `withTenant(deps.pool, …)` (`dispatch.ts`). Nên số lần ghi sổ từ chối đồng thời của một
+// tiến trình không vượt `TRUSTPROCURE_DB_POOL_MAX`, và một `auditPool` cùng cỡ không là chỗ hẹp hơn cho nhu cầu ấy. Trước bản vá `auditPool` có 2
+// kết nối dùng chung mọi tổ chức; đo trên b8d38c7 ở mức gói (biên bản §S1.69): khoá tư vấn ghi sổ của một tổ chức ghim cả hai kết nối, lần
+// từ chối của tổ chức KHÁC gãy sau 15 ms, không hàng sổ. Ở đây `TRUSTPROCURE_DB_POOL_MAX` là 3: khoá của tổ chức X ghim hai lần ghi, lần
+// từ chối ở tổ chức A đi trên kết nối nghiệp vụ thứ ba và phải có kết nối `auditPool` ngay — trước khi X nhả khoá.
+//
+// [lượt soi 63a-5] Test ghim CẬN DƯỚI — `auditPool` không nhỏ hơn 3 khi `TRUSTPROCURE_DB_POOL_MAX` là 3: `dbPoolMax + 2` hay
+// `Math.max(dbPoolMax, 10)` cũng xanh. Cận trên không đo được bằng hành vi của tiến trình, vì nhu cầu của nó không vượt `dbPoolMax`.
+// ----------------------------------------------------------------------------------------------
+describe("[INV-D5] [S1.69 / khoản 120] tiến trình dựng từ môi trường: auditPool KHÔNG nhỏ hơn TRUSTPROCURE_DB_POOL_MAX", () => {
+  it("[INV-D5] khoá tư vấn ghi sổ của tổ chức X ghim hai lần ghi sổ từ chối ⇒ lần từ chối ở tổ chức A vẫn ghi được ngay: 403 khi X còn giữ khoá, rồi đủ ba hàng sổ", async () => {
+    const orgX = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty X k120', 'cong-ty-x-k120') RETURNING id")).rows[0]!
+      .id;
+    const phien = async (toChuc: string, email: string): Promise<string> => {
+      const id = (
+        await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'K120', 'ACTIVE') RETURNING id", [
+          toChuc,
+          email,
+        ])
+      ).rows[0]!.id;
+      await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [toChuc, id]);
+      const token = randomBytes(32).toString("base64url");
+      await db.pool.query(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+        [toChuc, id, createHash("sha256").update(token, "utf8").digest()],
+      );
+      return `${COOKIE_PHIEN_NGUOI_MUA}=${toChuc}.${token}`;
+    };
+    const cookieX1 = await phien(orgX, "x1-k120@vidu.vn");
+    const cookieX2 = await phien(orgX, "x2-k120@vidu.vn");
+    const cookieA = await phien(org, "a-k120@vidu.vn");
+    const demTuChoi = async (toChuc: string): Promise<number> =>
+      Number(
+        rows0((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED'", [toChuc])).rows),
+      );
+    const truocX = await demTuChoi(orgX);
+    const truocA = await demTuChoi(org);
+
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong({ TRUSTPROCURE_DB_POOL_MAX: "3" })));
+    const giuKhoa = await db.pool.connect();
+    let dangGiuKhoa = false;
+    let haiX: Promise<PhanHoi>[] = [];
+    try {
+      const dc = await tt.batDau();
+      goc = `http://${dc.host}:${dc.port}`;
+      await giuKhoa.query("BEGIN");
+      // Cùng khoá mà mỗi lần ghi sổ của tổ chức lấy (ĐO-5a ở docstring của `CAU_KHOA_TU_VAN`, packages/identity/src/rbac.ts).
+      await giuKhoa.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::text, 0))", [orgX]);
+      dangGiuKhoa = true;
+      // BUYER không có supplier.manage: mỗi yêu cầu là một lần ghi PERMISSION_DENIED qua auditPool (D5), và lần ghi của X chờ khoá.
+      haiX = [cookieX1, cookieX2].map((cookie) => goi("POST", "/suppliers", { cookie, body: { legalName: "NCC k120 X" } }));
+      const han = Date.now() + 10000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted " +
+            "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+            "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+          [orgX],
+        );
+        if (rows0(rows) === "2") break;
+        if (Date.now() > han) throw new Error(`het 10000ms, so lan ghi so cua X dang cho khoa: ${rows0(rows)}`);
+        await new Promise((xong) => setTimeout(xong, 20));
+      }
+      const batDau = Date.now();
+      const rA = await goi("POST", "/suppliers", { cookie: cookieA, body: { legalName: "NCC k120 A" } });
+      const daCho = Date.now() - batDau;
+      expect(rA.status, rA.text).toBe(403);
+      expect(daCho, "lần từ chối ở A không được chờ X nhả khoá").toBeLessThan(2000);
+      await giuKhoa.query("COMMIT");
+      dangGiuKhoa = false;
+      expect((await Promise.all(haiX)).map((r) => r.status)).toEqual([403, 403]);
+      expect(await demTuChoi(orgX)).toBe(truocX + 2);
+      expect(await demTuChoi(org)).toBe(truocA + 1);
+    } finally {
+      if (dangGiuKhoa) await giuKhoa.query("ROLLBACK").catch(() => {});
+      await Promise.allSettled(haiX);
+      giuKhoa.release();
+      await tt.dung();
+    }
+  }, 60000);
+});
+
+// ----------------------------------------------------------------------------------------------
 // `main.ts` THẬT, chạy như `pnpm api:dev` (tiến trình con, cùng lệnh với script ở package.json gốc).
 // Hai ca: cấu hình hỏng ⇒ thoát mã 1, thông điệp nêu TÊN biến và không nêu giá trị; cấu hình đúng
 // ⇒ dòng "dang nghe" ra stderr, /health trả 200, rồi bị dừng. Tín hiệu SIGTERM trên Windows là
