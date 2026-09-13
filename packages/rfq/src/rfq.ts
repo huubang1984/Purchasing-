@@ -607,19 +607,6 @@ export async function extendRfqDeadline(
     );
   }
 
-  await appendAuditEvent(client, orgId, {
-    actorType: actor.type,
-    actorId: actor.id,
-    action: "RFQ_DEADLINE_EXTENDED",
-    resourceType: "rfq_package",
-    resourceId: hang.id,
-    payload: {
-      reason,
-      truoc: truoc.deadline_at?.toISOString() ?? null,
-      sau: hang.deadline_at?.toISOString() ?? null,
-    },
-  });
-
   // [C4 vế 5] MỘT job cho MỖI lời mời, trong CÙNG giao dịch. Đọc danh sách người nhận từ CSDL
   // ngay tại đây chứ không nhận nó làm tham số: một tham số `recipients` là một danh sách mà
   // người gọi có thể rút ngắn, và lúc ấy mệnh đề *"toàn bộ nhà cung cấp đã mời"* thành một lời
@@ -643,6 +630,44 @@ export async function extendRfqDeadline(
       payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
       dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
     });
+  }
+
+  // [S1.71 / khoản 123, lượt soi 65a-7] Xếp job TRƯỚC lần ghi sổ: lần ghi sổ đầu của giao dịch lấy khoá tư vấn ghi sổ của tổ chức
+  // (`noi_chuoi_kiem_toan()`) và giữ nó tới COMMIT, nên mỗi lời mời xếp SAU lần ghi sổ kéo dài thời gian giữ khoá — đo trên tiến trình
+  // `api` thật, bản trước: 50 / 200 / 400 lời mời giữ khoá 21 / 104 / 225 ms (§S1.71) —, trong khi mọi lần ghi sổ khác của tổ chức
+  // chờ khoá ấy tối đa 2 s (050). Job và bản ghi vẫn cùng giao dịch: hỏng ở đâu thì cả hai cùng rollback.
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "RFQ_DEADLINE_EXTENDED",
+    resourceType: "rfq_package",
+    resourceId: hang.id,
+    payload: {
+      reason,
+      truoc: truoc.deadline_at?.toISOString() ?? null,
+      sau: hang.deadline_at?.toISOString() ?? null,
+    },
+  });
+
+  // [S1.71 / khoản 123, lượt soi 65c-1] ĐỌC LẠI lời mời SAU lần ghi sổ. Câu SELECT ở trên chạy TRƯỚC lúc chờ khoá ghi sổ, nên nó không
+  // thấy một lời mời mà giao dịch tạo ra đã ghi sổ (`createInvitation` ghi `INVITATION_CREATED` trong cùng giao dịch) nhưng chỉ COMMIT
+  // trong lúc lần ghi sổ ở trên chờ khoá — bản trước ghi sổ rồi mới đọc nên thấy nó. Từ lúc lần ghi sổ ở trên lấy được khoá, giao dịch
+  // này giữ khoá tới COMMIT: lời mời nào đã ghi sổ trước lúc ấy thì đã COMMIT và câu đọc dưới thấy; lời mời nào tới lần ghi sổ sau lúc ấy
+  // thì chờ giao dịch này COMMIT, hay gãy ở trần 2 s — cùng bảo đảm với bản trước (đọc). Bình thường không có hàng mới, nên phần giữ khoá
+  // chỉ thêm một câu đọc.
+  const daXep = new Set(loiMoi.map((lm) => lm.id));
+  const { rows: loiMoiSauGhiSo } = await client.query<{ id: string }>(
+    "SELECT id FROM public.rfq_invitations WHERE rfq_id OPERATOR(pg_catalog.=) $1 ORDER BY id",
+    [hang.id],
+  );
+  for (const lm of loiMoiSauGhiSo) {
+    if (!daXep.has(lm.id)) {
+      await enqueueJob(client, orgId, {
+        kind: RFQ_DEADLINE_NOTICE_KIND,
+        payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
+        dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
+      });
+    }
   }
 
   return doiRfq(hang);

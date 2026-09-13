@@ -3067,6 +3067,7 @@ describe("migration của dự án", () => {
           "047_chi_ghi_them_chan_truncate.sql",
           "048_email_nguoi_dung_chu_thuong.sql",
           "049_email_lien_he_chu_thuong.sql",
+          "050_tran_cho_khoa_ghi_so.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -6221,7 +6222,8 @@ describe("migration của dự án", () => {
       const { rows: sau } = await db.pool.query<{ proconfig: string[] }>(
         "SELECT p.proconfig FROM pg_proc p WHERE p.proname = 'noi_chuoi_kiem_toan'",
       );
-      expect(sau[0]!.proconfig).toEqual(["search_path=pg_catalog"]);
+      // [S1.71 / khoản 123] Hàm nối chuỗi mang thêm trần chờ khoá ghi sổ 2 s (050, hardening (D1b)) — lượt tự chữa tạo lại cả hai mệnh đề.
+      expect(sau[0]!.proconfig).toEqual(["search_path=pg_catalog", "lock_timeout=2s"]);
     } finally {
       await db.stop();
     }
@@ -6673,11 +6675,13 @@ describe("migration của dự án", () => {
    * Bốn vế:
    *   (a) khoá THẬT SỰ nối tiếp hoá: nạn nhân CÙNG tổ chức bị chặn;
    *   (b) lock_timeout của createPool biến "treo vô hạn" thành một lỗi ồn ào ở đúng dòng khoá;
+   *       [S1.71 / khoản 123, lượt soi 65a-3] với khoá GHI SỔ, trần 2 s trên chính `noi_chuoi_kiem_toan()` (050) làm việc ấy bất kể pool:
+   *       pool dưới đây đặt 3 s, và nạn nhân phải gãy ở khoảng 2 s;
    *   (c) cô lập xuyên tổ chức GIỮ ĐƯỢC — tổ chức khác ghi bình thường (đúng thiết kế);
    *   (d) migrate() vô hiệu hoá hai timeout cho kết nối của nó rồi TRẢ LẠI trước khi nhả client
    *       — không có vế (d) thì một client mang lock_timeout=0 nằm lại trong pool ứng dụng.
    */
-  it("[vòng fix 1 — IM7] khoá tư vấn theo tổ chức: lock_timeout của pool biến treo vô hạn thành lỗi ồn ào", async () => {
+  it("[vòng fix 1 — IM7] khoá tư vấn theo tổ chức: treo vô hạn thành lỗi ồn ào — với khoá ghi sổ, trần 2 s của hàm nối chuỗi gãy trước lock_timeout của pool (S1.71)", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -6689,14 +6693,14 @@ describe("migration của dự án", () => {
 
       // (d) nửa đầu: pool ứng dụng mang hai GUC, và migrate() vừa chạy trên chính pool đó
       // KHÔNG được để lại lock_timeout = 0.
-      const poolUngDung = createPool(db.connectionString, 4, { lockTimeoutMs: 2_000 });
+      const poolUngDung = createPool(db.connectionString, 4, { lockTimeoutMs: 3_000 });
       try {
         await expect(migrate(poolUngDung, MIGRATIONS_DIR)).resolves.toEqual([]);
         const { rows: guc } = await poolUngDung.query<{ lock_timeout: string }>(
           "SHOW lock_timeout",
         );
         expect(guc[0]!.lock_timeout, "migrate() để lại lock_timeout=0 trên client của pool").toBe(
-          "2s",
+          "3s",
         );
 
         // (a) + (b): kẻ chiếm giữ khoá của orgA.
@@ -6714,6 +6718,7 @@ describe("migration của dự án", () => {
           try {
             await nanNhan.query("BEGIN");
             await nanNhan.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+            const batDauNanNhan = Date.now();
             const loi = await nanNhan
               .query(
                 "SELECT * FROM public.audit_append($1, 'SYSTEM', NULL, 'NAN_NHAN', 'T', NULL, " +
@@ -6724,6 +6729,9 @@ describe("migration của dự án", () => {
             expect(loi, "khoá tư vấn không nối tiếp hoá được hai lần ghi cùng tổ chức").toMatch(
               /lock timeout/i,
             );
+            const msNanNhan = Date.now() - batDauNanNhan;
+            expect(msNanNhan, "nạn nhân gãy ở trần 2 s của hàm nối chuỗi, không ở lock_timeout 3 s của pool").toBeGreaterThanOrEqual(1_500);
+            expect(msNanNhan).toBeLessThan(2_900);
             await nanNhan.query("ROLLBACK");
           } finally {
             nanNhan.release();
@@ -7448,6 +7456,7 @@ describe("migration của dự án", () => {
         "047_chi_ghi_them_chan_truncate.sql",
         "048_email_nguoi_dung_chu_thuong.sql",
         "049_email_lien_he_chu_thuong.sql",
+        "050_tran_cho_khoa_ghi_so.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7717,6 +7726,7 @@ describe("migration của dự án", () => {
         "047_chi_ghi_them_chan_truncate.sql",
         "048_email_nguoi_dung_chu_thuong.sql",
         "049_email_lien_he_chu_thuong.sql",
+        "050_tran_cho_khoa_ghi_so.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

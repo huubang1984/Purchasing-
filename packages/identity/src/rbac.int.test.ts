@@ -496,23 +496,29 @@ describe("ai sửa được ma trận quyền", () => {
 describe("requirePermission không treo khi không ghi sổ độc lập được", () => {
   it("transaction người gọi ĐANG GIỮ khoá ghi sổ của tổ chức -> lỗi tức thì, không chờ lock_timeout", async () => {
     const batDau = Date.now();
-    await expect(
-      withTenant(apiPool, orgId, async (c) => {
-        // Người gọi ghi sổ TRƯỚC khi kiểm quyền -> nắm pg_advisory_xact_lock của tổ chức.
-        await c.query(
-          "SELECT * FROM public.audit_append($1,'USER',NULL,'VIEC_KHAC','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)",
-          [orgId],
-        );
-        await requirePermission(
-          c,
-          { userId: uid("BUYER"), orgId, permission: PERMISSIONS.PO_APPROVE, resourceType: "RFQ" },
-          auditPool,
-        );
-      }),
-    ).rejects.toBeInstanceOf(PermissionAuditFailedError);
-    // Không có vế canh, lời gọi này chờ tới `lock_timeout` (mặc định 15 giây của createPool) —
-    // hoặc VÔ HẠN trên một pool không đặt lock_timeout, đúng như pool của test này.
-    expect(Date.now() - batDau).toBeLessThan(5000);
+    const loi = await withTenant(apiPool, orgId, async (c) => {
+      // Người gọi ghi sổ TRƯỚC khi kiểm quyền -> nắm pg_advisory_xact_lock của tổ chức.
+      await c.query(
+        "SELECT * FROM public.audit_append($1,'USER',NULL,'VIEC_KHAC','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)",
+        [orgId],
+      );
+      await requirePermission(
+        c,
+        { userId: uid("BUYER"), orgId, permission: PERMISSIONS.PO_APPROVE, resourceType: "RFQ" },
+        auditPool,
+      );
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const daCho = Date.now() - batDau;
+    expect(loi).toBeInstanceOf(PermissionAuditFailedError);
+    // ~~Không có vế canh, lời gọi này chờ tới `lock_timeout` (mặc định 15 giây của createPool) —~~
+    // ~~hoặc VÔ HẠN trên một pool không đặt lock_timeout, đúng như pool của test này.~~
+    // [S1.71 / khoản 123, lượt soi 65a-2] Lần chờ ấy nay tối đa 2 s ở MỌI pool — trần trên chính `noi_chuoi_kiem_toan()` (050) — nên
+    // "dưới 5 s" không còn phân biệt vế canh với trần: đòi thông điệp của CHÍNH vế canh làm `cause`, và dưới 1 s.
+    expect(((loi as Error).cause as Error | undefined)?.message ?? "").toContain("ĐANG GIỮ khoá tư vấn ghi sổ");
+    expect(daCho).toBeLessThan(1000);
   });
 
   it("[S1.69 / khoản 120] auditPool hết chỗ KÉO DÀI -> PermissionAuditFailedError ở trần chờ, `cause` là TenantError CONNECT_WAIT_EXCEEDED — không treo ở pool.connect(), không gãy tức thì, không hàng sổ", async () => {
@@ -719,12 +725,14 @@ describe("[INV-D5] [S1.69 / khoản 120] auditPool bão hoà tạm thời: lần
         await new Promise<void>((xong) => setTimeout(xong, 20));
       }
       expect({ tong: poolSo.totalCount, ranh: poolSo.idleCount }).toEqual({ tong: 2, ranh: 0 });
-      setTimeout(thaKhoa, 1500);
+      // [S1.71 / khoản 123, lượt soi 65a-4] Hai lần ghi sổ của B đang chờ khoá gãy 55P03 sau 2 s (trần trên hàm nối chuỗi, 050): nhả khoá
+      // sau 600 ms thay vì 1 500 ms, để lần chờ của B đứng xa trần cả khi test chạy dưới tải.
+      setTimeout(thaKhoa, 600);
       const batDau = Date.now();
       const ketQuaA = await tuChoi(orgId, uid("BUYER"));
       const daCho = Date.now() - batDau;
       expect(ketQuaA).toBe("PermissionDeniedError");
-      expect(daCho, "lần từ chối ở A phải chờ kết nối mà B đang giữ, không gãy ngay").toBeGreaterThanOrEqual(1000);
+      expect(daCho, "lần từ chối ở A phải chờ kết nối mà B đang giữ, không gãy ngay").toBeGreaterThanOrEqual(400);
       expect(await Promise.all(haiB)).toEqual(["PermissionDeniedError", "PermissionDeniedError"]);
       await giuKhoa;
       expect(await demTuChoi(orgId)).toBe(truocA + 1);

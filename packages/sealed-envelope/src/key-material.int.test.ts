@@ -932,3 +932,91 @@ describe("[khoản nợ 26] xoá mật mã vật liệu khoá — bốn điều 
     expect(await conKhoa(rfqId)).toBeGreaterThan(0);
   });
 });
+
+// ===============================================================================================
+// [S1.71 / khoản 123] SINH KHOÁ KHÔNG GIỮ KHOÁ GHI SỔ CỦA TỔ CHỨC TRONG LÚC GỌI KMS
+//
+// Lần bọc khoá riêng là lời gọi KMS (ADR-009) — ở `apps/api` có trần 5 s (`boiTranKms`). Khoá tư vấn ghi sổ của tổ chức, lấy ở lần ghi
+// sổ đầu tiên của giao dịch (`noi_chuoi_kiem_toan()`), giữ tới COMMIT. Trước bản vá, vòng lặp bọc ECDH_P256, ghi sổ, rồi mới bọc X25519 —
+// nên trong lúc bọc khoá thứ hai, MỌI lần ghi sổ khác của tổ chức, hợp lệ lẫn từ chối, chờ theo nó (đo trên tiến trình `api` thật, §S1.71).
+// Không nhãn INV: đây là tính chất cô lập của chuỗi ghi sổ, không phải một vế của C5.
+// ===============================================================================================
+describe("[S1.71 / khoản 123] sinh khoá không giữ khoá ghi sổ của tổ chức trong lúc gọi KMS", () => {
+  const CAU_KHOA_GHI_SO_DA_CAP =
+    "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND granted " +
+    "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+    "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid";
+
+  it("bọc MỌI cặp khoá TRƯỚC lần ghi sổ đầu tiên: trong lúc bọc, giao dịch chưa giữ khoá ghi sổ của tổ chức và chưa ghi hàng vật liệu khoá nào", async () => {
+    const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    const khoaKhiBoc: number[] = [];
+    // [lượt soi 65a-8 ⑴] Khoá ghi sổ chỉ nói lần GHI SỔ chưa chạy; vế này nói lần INSERT cũng chưa chạy: một câu INSERT vào
+    // `rfq_key_material` để lại RowExclusiveLock trên bảng tới hết giao dịch, đếm theo pid của chính giao dịch.
+    const hangKhiBoc: number[] = [];
+    let pidGiaoDich = 0;
+    const CAU_HANG_VAT_LIEU_DA_CAP =
+      "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE pid = $1 " +
+      "AND relation = 'public.rfq_key_material'::regclass AND mode = 'RowExclusiveLock' AND granted";
+    let khoaSauSinhKhoa = -1;
+    let hangSauSinhKhoa = -1;
+    const boBocDemKhoa = {
+      name: "doi-xung-dem-khoa",
+      wrap: async (orgId: string, plaintext: Uint8Array) => {
+        const { rows } = await db.pool.query<{ n: number }>(CAU_KHOA_GHI_SO_DA_CAP, [orgA]);
+        khoaKhiBoc.push(rows[0]?.n ?? -1);
+        const { rows: hang } = await db.pool.query<{ n: number }>(CAU_HANG_VAT_LIEU_DA_CAP, [pidGiaoDich]);
+        hangKhiBoc.push(hang[0]?.n ?? -1);
+        return boBocTest.wrap(orgId, plaintext);
+      },
+    };
+    await withTenant(apiPool, orgA, async (c) => {
+      pidGiaoDich = (await c.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocDemKhoa });
+      // [lượt soi 65c-3] Đối chứng dương của hai phép dò: sau lần sinh khoá, chính giao dịch này giữ khoá ghi sổ và RowExclusiveLock trên
+      // bảng vật liệu khoá — hai phép dò phải thấy chúng. Không vế này thì một phép dò hỏng (luôn ra 0) làm test xanh rỗng.
+      khoaSauSinhKhoa = (await db.pool.query<{ n: number }>(CAU_KHOA_GHI_SO_DA_CAP, [orgA])).rows[0]?.n ?? -1;
+      hangSauSinhKhoa = (await db.pool.query<{ n: number }>(CAU_HANG_VAT_LIEU_DA_CAP, [pidGiaoDich])).rows[0]?.n ?? -1;
+      await c.query(
+        "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+        [rfqId, uA, sA],
+      );
+    });
+    expect(khoaSauSinhKhoa, "đối chứng dương: phép dò không thấy khoá ghi sổ mà lần sinh khoá vừa lấy").toBe(1);
+    expect(hangSauSinhKhoa, "đối chứng dương: phép dò không thấy RowExclusiveLock mà lần INSERT vật liệu khoá vừa lấy").toBe(1);
+    expect(khoaKhiBoc, "khoá ghi sổ của tổ chức đã bị giữ trong lúc bọc khoá").toEqual([0, 0]);
+    expect(pidGiaoDich).toBeGreaterThan(0);
+    expect(hangKhiBoc, "giao dịch đã INSERT vật liệu khoá trong lúc còn bọc").toEqual([0, 0]);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_KEY_MATERIAL_ISSUED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    expect(rows[0]?.n).toBe("2");
+  });
+
+  it("lần bọc thứ hai hỏng ⇒ không vật liệu khoá, không bản ghi sổ nào của RFQ, RFQ vẫn chờ duyệt", async () => {
+    const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    let lan = 0;
+    const boBocHongLanHai = {
+      name: "doi-xung-hong-lan-hai",
+      wrap: (orgId: string, plaintext: Uint8Array) => {
+        lan += 1;
+        return lan === 2
+          ? Promise.reject(Object.assign(new Error("kms gia lap hong"), { name: "KmsGiaLapHong" }))
+          : boBocTest.wrap(orgId, plaintext);
+      },
+    };
+    await expect(
+      withTenant(apiPool, orgA, (c) => issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocHongLanHai })),
+    ).rejects.toThrow("kms gia lap hong");
+    expect(lan).toBe(2);
+    const khoa = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_key_material WHERE rfq_id = $1", [rfqId]);
+    expect(khoa.rows[0]?.n).toBe("0");
+    const so = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND resource_id = $2 AND action = 'RFQ_KEY_MATERIAL_ISSUED'",
+      [orgA, rfqId],
+    );
+    expect(so.rows[0]?.n).toBe("0");
+    const rfq = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(rfq.rows[0]?.status).toBe("PENDING_APPROVAL");
+  });
+});
