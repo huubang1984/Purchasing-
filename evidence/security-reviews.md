@@ -4448,17 +4448,17 @@ Driver `k118_dot_bien.py` (scratchpad): mỗi đột biến thay đúng MỘT ch
   - ③ `InvitationError` ném ngoài handler (nhánh phòng thủ của bộ đếm hạn mức; `DO UPDATE … RETURNING` luôn trả một hàng) ⇒ 500 thay vì 422; `TenantError` loại input do handler ném (không đường nào hôm nay) ⇒ 500 thay vì 401 (đọc);
   - ④ 42501 do handler gây ra ⇒ vẫn 403, nay kèm một dòng log (đo — ⒠);
   - ⑤ lỗi mang mã ngoài bảng ném ngoài handler (08006, 57014 ở lần lấy client) vốn đã ra 500 có log — dòng log nay mang thêm SQLSTATE (đọc); việc sau commit hỏng — dòng `sau-commit` mang thêm mã (đo — ⒩).
-- ⑸ **Handler dùng pool thứ hai:** `requirePermission`, dù bộ điều phối gọi trước handler hay một gói gọi bên trong handler, gói lỗi của lần ghi sổ trên `auditPool` thành `PermissionAuditFailedError` — 500 có log (đọc, lượt soi 61b-9). Ba chỗ gọi `withTenant(auditPool, …)` trực tiếp bên trong handler — `tuChoi` của unseal, D2 của yêu cầu mở thầu, D2 của đặt lại MFA — không bọc: lỗi của lần ghi thay chỗ lỗi từ chối và lần từ chối không vào sổ — khoản 119; 42501 của chúng nay kèm một dòng log.
+- ⑸ **Handler dùng pool thứ hai:** `requirePermission`, dù bộ điều phối gọi trước handler hay một gói gọi bên trong handler, gói lỗi của lần ghi sổ trên `auditPool` thành `PermissionAuditFailedError` — 500 có log (đọc, lượt soi 61b-9). Ba chỗ gọi `withTenant(auditPool, …)` trực tiếp bên trong handler — `tuChoi` của unseal, D2 của yêu cầu mở thầu, D2 của đặt lại MFA — không bọc: lỗi của lần ghi thay chỗ lỗi từ chối và lần từ chối không vào sổ — khoản 119; 42501 của chúng nay kèm một dòng log. **[S1.68] Đóng — §S1.68.**
 - ⑹ **Bộ nghe `release` nghe đúng một mã:** ⒜ phép đọc lại sau giao dịch của `withTenant` NÉM — kết nối vừa đứt, `pg_temp` đứng đầu search path dưới vai không có TEMP — thì kết nối bị huỷ bằng lỗi gốc, không dòng log; ⒝ ROLLBACK hỏng thì `release()` nhận lỗi của ROLLBACK và bộ nghe không ghi — lỗi gốc mà bảng trả 4xx thì không dòng nào nhắc tới kết nối ấy, và một `SESSION_STATE_LEFT` phát hiện sau đó bị che (lượt soi 61b-10, đọc); ⒞ câu `BEGIN; SELECT` của `withTenant` không xong (`MULTI_STATEMENT_UNSUPPORTED`, câu bị huỷ) thì mốc search path thiếu, phép đọc lại tính là lệch, và bộ nghe ghi một dòng `SESSION_STATE_LEFT` SAI nguyên nhân cạnh dòng 500 của lỗi thật (lượt soi 61a-7, đọc). Dòng `ket noi huy` không mang `requestId`.
 - ⑺ **Nối dây đo tới đâu:** bộ nghe của `pool` (composition ⑴; K2 M1, M7), bộ nghe của `auditPool` (⑷; K2 M6), `onJobFailure` (⑵) và lời đánh thức (⑶) đo trên tiến trình dựng như sản xuất. `onPollError` và bộ dọn đổi cùng helper — đột biến chế độ đo SỐNG (K2 M8, M9). Giao dịch của runner đi qua cùng bộ nghe của `pool` (đọc). Runner của `apps/unseal-worker` không có bộ nghe — chưa có điểm vào tiến trình (khoản 116).
-- ⑻ **Mã năm ký tự** khớp SQLSTATE; mã hệ thống năm chữ (`EPIPE`) cũng khớp — hằng, không mang giá trị (đọc). Lỗi bọc — `PermissionAuditFailedError` — ra dòng log không SQLSTATE: helper không đọc `cause` (lượt soi 61a-8).
+- ⑻ **Mã năm ký tự** khớp SQLSTATE; mã hệ thống năm chữ (`EPIPE`) cũng khớp — hằng, không mang giá trị (đọc). Lỗi bọc — `PermissionAuditFailedError` — ra dòng log không SQLSTATE: helper không đọc `cause` (lượt soi 61a-8). **[S1.68] Đóng — §S1.68.**
 - ⑼ **Hai đột biến tương đương** — bỏ vế tên `error` của `laLoiToanVen`; đặt `daTraVe` trước `await` — SỐNG (M31, M32, đo) mà không mở lỗ: không lỗi không-Postgres nào mang mã lớp 23 ném sau handler, và `chay` chỉ chạy sau xác thực và phân quyền (lượt soi 61a-11, đọc).
 - ⑽ **`main.ts`** in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, ngoài mọi yêu cầu — ngoại lệ có chủ đích của chuẩn "tên và mã"; test `[S1.11] main.ts` đo stderr không mang giá trị của biến nào và không mang mật khẩu CSDL.
 - ⑾ **Dấu vết của fixture trong cụm test của tệp:** vai `dang_nhap_118` còn lại; ACL của `app_current_org_id()` và của `plpgsql` dựng lại tương đương về quyền, có thể thành tường minh thay NULL; bảng `hoan_118` còn lại, rỗng (đọc).
 
 **Mang sang, không vào sổ:**
 - 61a-7 ⒝: khi mốc search path thiếu vì câu `BEGIN; SELECT` không xong, `withTenant` có thể truyền chính lỗi đã ném cho `release()` thay cho `SESSION_STATE_LEFT` — kết nối vẫn bị huỷ, bộ nghe hết chẩn đoán sai. Chưa làm: đổi mã của `withTenant` cho một đường hiếm, cần đo bằng một client giả.
-- 61a-8: với lớp lỗi bọc đã biết, `moTaLoiKhongGiaTri` có thể nối tên và mã của `cause` đúng một tầng.
+- 61a-8: với lớp lỗi bọc đã biết, `moTaLoiKhongGiaTri` có thể nối tên và mã của `cause` đúng một tầng. **[S1.68] Đã làm — §S1.68.**
 - 60a (S1.66, còn đó): `GUEST_SESSION_NOT_FOUND` từ `withGuestSession` là một cuộc đua dưới mili-giây — không test nào ghim được 401 của nó.
 
 **Điều đáng mang sang vòng sau:**
@@ -4467,3 +4467,201 @@ Driver `k118_dot_bien.py` (scratchpad): mỗi đột biến thay đúng MỘT ch
 - ⑶ Lỗi chỉ đi vào `release()` không tới người gọi nào: nghe nó ở pool, và nghe đúng mã ấy để một sự cố không thành hai dòng.
 - ⑷ Khi một câu trả lời nghiệp vụ và một lỗi hạ tầng dùng chung một mã, giữ mã HTTP của câu trả lời nhưng cho người vận hành một dòng — im lặng vì "có thể là nghiệp vụ" là cửa để hạ tầng hỏng câm (lượt soi 61a-1).
 - ⑸ Một lời khai về đột biến phải nói nhóm tệp nó chạy trên: suy từ một nhóm ra cả kho sai được — một test ở tệp khác đã giết đột biến mà biên bản khai sẽ sống (lượt soi 61b-2).
+
+# §S1.68 — khoản nợ 119: lần ghi sổ từ chối ngoài `requirePermission` đi qua MỘT đường chung — lỗi của lần ghi không thay chỗ lần từ chối, `auditPool` bỏ qua RLS thì gãy ồn ào, dòng log của lớp bọc nêu lỗi gốc — lượt soi 62; khoản 120 và 121 mở
+
+**Bề mặt (bản cuối):**
+- `packages/identity/src/rbac.ts`:
+  - `DenialAuditFailedError(action, denial, cause)` — lớp lỗi của một lần từ chối ngoài `requirePermission` không ghi được sổ; thông điệp cố định, không nối `cause.message`.
+  - `throwAuditedDenial(auditPool, orgId, event, denial): Promise<never>` — kiểm `action` và `resourceType` là mã định danh viết hoa (hình dạng F7, trước khi chạm pool), kiểm pool không SUPERUSER/BYPASSRLS, ghi `withTenant(auditPool, …) → appendAuditEvent`, rồi ném CHÍNH `denial`; lỗi ở bất kỳ bước nào ⇒ `DenialAuditFailedError`, thứ lạ không phải `Error` ⇒ `cause` nêu KIỂU (khuôn MỤC E). Docstring nêu vì sao KHÔNG kiểm "pool còn chỗ" tức thì (lượt soi 62a-1) và KHÔNG giữ vế khoá tư vấn.
+  - `khangDinhGhiDuocDocLap` không đổi so với `749f925` — bản đầu tách một vế của nó, bản hai hoàn tác.
+- `packages/identity/src/index.ts`: xuất `DenialAuditFailedError`, `throwAuditedDenial`, kèm lý do theo tiêu chí của cửa (hàm ném ở mọi nhánh); `tests/architecture/barrel-exports.test.ts` thêm hai tên vào danh sách trắng.
+- `packages/unseal/src/gate.ts`: `tuChoi` trả về `throwAuditedDenial(…)` với `UnsealDeniedError(clause, message)`; bỏ import `withTenant`, `appendAuditEvent`; docstring [S1.68] kể phép đo trước bản vá.
+- `packages/unseal/src/requests.ts`: nhánh D2 của `approveUnseal` gọi `throwAuditedDenial(…, loi)`; điều kiện gộp thành `loi instanceof Error && /…/i.test(loi.message)`; bỏ import `withTenant`.
+- `packages/identity/src/mfa-reset.ts`: nhánh CHECK `khong_tu_duyet`/`phien_khac` của `approveMfaReset` cùng khuôn; bỏ import `withTenant`.
+- `apps/api/src/mo-ta-loi.ts`: `moTaMotTang` giữ luật tên và mã cũ; `moTaLoiKhongGiaTri` nêu thêm `<- tên và mã của cause` khi lỗi KHÔNG có trường `code` và `cause` là `Error`; đầu tệp gạch "`cause` — lỗi lồng mang câu lệnh và tham số", thêm đoạn [S1.68] nói luật áp cho mọi chỗ gọi (lượt soi 62a-8).
+- Chú thích, không đổi mã: `apps/api/src/dispatch.ts` (khối đầu tệp gạch "chỉ TÊN lỗi" và vế "kể cả lần ghi sổ từ chối … (khoản 119)" của 42501 ⇒ 403, thêm câu hậu tố `cause`; chú thích `loiNoiBo` gạch "Chỉ TÊN lỗi và mã yêu cầu" và "`cause`"), `apps/api/src/composition.ts` (`AUDIT_POOL_MAX` gạch "chỉ ghi một hàng cho mỗi lần 403"), `packages/identity/src/mfa-credentials.ts` (docstring [CẤM LOG] gạch "không phải đường đi vào một dòng log" — lượt soi 62b-2).
+- `tools/inv-matrix/src/so-khai-nhan.ts`: ba cặp `[INV-D5]` khai thêm — `apps/api/src/loi-giao-thuc.int.test.ts`, `packages/identity/src/mfa-reset.int.test.ts`, `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`. Dòng khai trần; tệp ấy đo D5 bằng cách nào ghi ở tự bắt ⑸.
+- Test:
+  - `packages/unseal/src/unseal.int.test.ts` — describe `[INV-D5] [S1.68 / khoản 119]` bốn `it`; chú thích [S1.68] trên describe "mọi lần từ chối … để lại dấu vết" (lượt soi 62a-9);
+  - `packages/identity/src/mfa-reset.int.test.ts` — một `it`;
+  - `packages/identity/src/rbac.int.test.ts` — ba `it`;
+  - `apps/api/src/mo-ta-loi.test.ts` — một `it`, tiêu đề tệp gạch "KHÔNG CAUSE";
+  - `apps/api/src/loi-giao-thuc.int.test.ts` — describe `[INV-D5] [S1.68 / khoản 119]` bốn `it` ⒫–⒮, `dungServer` nhận `auditPool` riêng;
+  - `apps/unseal-worker/src/kich-ban-41.int.test.ts` — bước 9 (lượt soi 62a-14);
+  - `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` (mới, một `it`).
+- Tài liệu: STATE (hàng 119 đóng; hàng 120, 121 mở; ghi chú [S1.68] ở hàng 69 và 118; dòng CÒN MỞ; đoạn đếm), DECISIONS (ADR-016 tiểu mục `[S1.68 / khoản 119]` và "Đo bằng gì" ⑷; ADR-020 tiểu mục `[S1.67 / khoản 118]` mục 4 và "Phần KHÔNG đóng"), Handoff (§10, §13), tệp này (§S1.67 ranh giới ⑸ ⑻ và mang sang 61a-8).
+
+**Đo trước khi viết:**
+- ⒜ **Phép đo tạm** trên `749f925`: tệp `apps/api/src/k119-do-truoc.int.test.ts` (xoá ngay sau khi đo, bản lưu ở scratchpad), PostgreSQL 16, HTTP thật qua `createApiServer(createDispatcher({ pool: app_api, auditPool: app_api }))`. Lần ghi bị chặn theo đúng `action` của route: ⑴ thu hồi EXECUTE trên `public.audit_append(…)` khỏi PUBLIC và `app_api`; ⑵ trigger `BEFORE INSERT` trên `audit_events` RAISE `TP119`; ⑶ cùng trigger RAISE 23514.
+
+  | Route | đối chứng | thu hồi EXECUTE | trigger TP119 | trigger 23514 |
+  |---|---|---|---|---|
+  | `POST /unseal/:id/dispatch` (yêu cầu PENDING ⇒ vế POLICY_GATE) | 422 thông điệp của vế, 0 log, 1 hàng, 0 job | 403, `error 42501`, 0 hàng, 0 job | 500, `error TP119`, 0 hàng, 0 job | **422 mang thông điệp của trigger, 0 log**, 0 hàng, 0 job |
+  | `POST /unseal/:id/approve` (tự duyệt ⇒ D2 của 019) | 422 `…khong duoc tu phe duyet (D2, D3)`, 0 log, 1 hàng | 403, `error 42501`, 0 hàng | 500, `error TP119`, 0 hàng | **422 mang thông điệp của trigger, 0 log**, 0 hàng |
+  | `POST /mfa-resets/:id/approve` (tự duyệt ⇒ CHECK 040) | 422 `du lieu vi pham rang buoc`, 0 log, 1 hàng | 403, `error 42501`, 0 hàng | 500, `error TP119`, 0 hàng | **422 mang thông điệp của trigger, 0 log**, 0 hàng |
+
+  Gọi thẳng gói với trigger TP119 — `assertUnsealAllowed`, `approveUnseal`, `approveMfaReset` — cả ba ném lỗi Postgres trần `{ name: "error", code: "TP119" }`, không mang lần từ chối. Mã khác của lần ghi không đo — theo `anhXaLoiPostgres` của bộ điều phối (đọc): CHECK thường ⇒ 422 thân cố định, 23505 ⇒ 409, 23503 và lớp 22 ⇒ 422 thân cố định, mã ngoài bảng ⇒ 500. Ở cổng mở thầu: `auditPool` superuser ⇒ ghi 1 hàng và ném `UnsealDeniedError`, không một lời từ chối; `auditPool` cạn (`poolAs` max 3, giữ cả ba kết nối — pool không đặt `connectionTimeoutMillis`) ⇒ `assertUnsealAllowed` chờ — hết 4000 ms chưa xong; trả kết nối thì xong sau 4061 ms, ghi 1 hàng và ném `UnsealDeniedError`. Pool dựng bằng `createPool` chờ tối đa 20 s (đọc).
+- ⒝ **Đỏ-trước.** Test của bản đầu viết trước, chạy trên mã của `749f925`, năm tệp một lượt, reporter JSON: 100 test, 12 đỏ ĐÚNG tập ghi trước, 88 xanh. Đỏ ở khẳng định: bốn test gói nhận tên `error` hay `UnsealDeniedError` thay cho `DenialAuditFailedError`; test pool cạn của bản đầu nhận chuỗi `treo quá 5000 ms`; hai test `rbac` nhận `throwAuditedDenial is not a function`; ⒫ nhận 422, ⒬ nhận `[403, khong co quyen]`, ⒭ ⒮ nhận dòng log không có `<-`; `mo-ta-loi` nhận mảng không hậu tố. Sau lượt ấy test `mo-ta-loi` S1.68 đổi tên và thêm ca `ECONNREFUSED` (tự bắt ⑴); test viết hay đổi sau lượt soi 62 — pool đầy tạm thời, sai hình dạng, cổng văn bản, ⒮, kich-ban-41 — chứng bằng đột biến, không bằng đỏ-trước.
+- ⒞ **Đọc:** trên `749f925` mã sản xuất chỉ có bốn chỗ `withTenant(auditPool, …)` — `rbac.ts:398` (đã bọc), `gate.ts:140`, `requests.ts:233`, `mfa-reset.ts:184`; mã sản xuất của `packages/unseal/src` chỉ import `@trustprocure/tenancy` ở `gate.ts` và `requests.ts` (hai tệp test `unseal.int.test.ts`, `comparison.int.test.ts` cũng import).
+- ⒟ **Bẫy của phép đo tạm:** ACL gốc của `audit_append` là `{=X/postgres, postgres=X/postgres, app_api=X/postgres, app_unseal=X/postgres}` — PUBLIC có EXECUTE. Bản đo khôi phục chỉ `app_api`, nên các ca sau ca thu hồi đầu chạy thiếu PUBLIC; đối chứng của hai route sau vẫn ghi được 1 hàng vì `app_api` có quyền riêng. Test cuối không thu hồi quyền — chặn bằng trigger.
+
+**Sau bản vá:**
+- **Bản đầu, trước khi sửa luật dòng log:** `pnpm t0` thoát mã 0 — typecheck, lint, depcruise 222 module, 939 phụ thuộc (S1.67: 941 — bỏ ba cạnh tới `@trustprocure/tenancy` ở `gate.ts`, `requests.ts`, `mfa-reset.ts`, thêm cạnh `unseal.int.test.ts → @trustprocure/identity`; đọc), 0 vi phạm. Sáu tệp (năm tệp trên cùng `barrel-exports.test.ts`) 130 test: 129 xanh, 1 đỏ — test S1.67 `mo-ta-loi` "mã không mang hình dạng SQLSTATE thì không được ghi — chỉ tên" nhận `error <- Error` (tự bắt ⑴).
+- **Sửa luật thành "không có trường `code`":** `mo-ta-loi.test.ts` và `loi-giao-thuc.int.test.ts` 23/23; `pnpm test` 53 tệp / 769 test + 1 bỏ qua, thoát mã 0 (S1.67: 768 + 1), số tệp `zzprobe-*` đếm ở dòng cuối log: 0; trọn `packages/identity`, `packages/unseal`, `apps/api`, `apps/unseal-worker` 418/418, thoát mã 0.
+- **Bản hai, sau lượt soi 62a và 62b:** `pnpm t0` thoát mã 0 — typecheck, lint, depcruise 223 module, 943 phụ thuộc, 0 vi phạm (thêm tệp cổng văn bản: một module, bốn phụ thuộc — đọc); tám tệp (năm tệp trên, `barrel-exports.test.ts`, `ghi-so-tu-choi-mot-duong.test.ts`, `kich-ban-41.int.test.ts`) 147/147, thoát mã 0; `pnpm test` 54 tệp / 770 test + 1 bỏ qua, thoát mã 0, dòng đếm `zzprobe-*` có nhãn: 0; trọn bốn thư mục 419/419, thoát mã 0, dòng đếm cảnh báo `still running` có nhãn: 0. Trước lượt này một lượt áp bản hai đã dừng ở kiểm tra CR, và số của lượt ấy bỏ (tự bắt ⑷).
+
+**Test:**
+- `unseal.int.test.ts`, mỗi `it` một yêu cầu mở thầu mới; trigger `k119_chan_ghi_so` chặn đúng một `action`, tạo và gỡ (`IF EXISTS`) trong cùng `try/finally`:
+  - vế 4 của cổng (RFQ cần phê duyệt kép, yêu cầu PENDING), lần ghi `UNSEAL_DENIED` ném TP119 ⇒ `DenialAuditFailedError`: `action` `UNSEAL_DENIED`, `denial` là `UnsealDeniedError` vế POLICY_GATE, `cause.code` TP119, thông điệp không mang thông điệp của trigger; 0 hàng;
+  - `auditPool` đầy TẠM THỜI (`poolAs` max 3, giữ ba kết nối): đợi tới khi lần ghi xếp hàng (`waitingCount > 0`, trần 5000 ms), trả kết nối ⇒ `UnsealDeniedError` POLICY_GATE và đúng 1 hàng; đòi cả "đã xếp hàng" để test không xanh khi lời gọi gãy trước khi chạm pool (lượt soi 62a-1);
+  - `auditPool` là `db.pool` (superuser) ⇒ `DenialAuditFailedError`, `cause.message` nêu SUPERUSER hay BYPASSRLS, `denial` vế POLICY_GATE; 0 hàng;
+  - lần THỬ tự phê duyệt của giám đốc đã yêu cầu, lần ghi `UNSEAL_APPROVAL_DENIED` ném TP119 ⇒ `DenialAuditFailedError`: `denial.code` 23514 và thông điệp `tu phe duyet`, `cause.code` TP119; 0 hàng.
+- `mfa-reset.int.test.ts`: PM tự duyệt yêu cầu của chính mình, lần ghi `MFA_RESET_APPROVAL_DENIED` ném TP119 ⇒ `DenialAuditFailedError`: `denial.code` 23514, `cause.code` TP119; 0 hàng; hồ sơ TOTP còn.
+- `rbac.int.test.ts`:
+  - `throwAuditedDenial` ghi được ⇒ ném ĐÚNG đối tượng đã truyền, đúng 1 hàng mang action ấy;
+  - `auditPool` giả ném một chuỗi mang OTP, token, giá ⇒ `DenialAuditFailedError`: `denial` là đối tượng đã truyền, `action` đúng, `cause.message` nêu `typeof = string`, `cause.cause` là chuỗi gốc, không mảnh nào của chuỗi ấy nằm trong thông điệp của lớp bọc hay của `cause`;
+  - `action` hay `resourceType` sai hình dạng, với một pool giả ném ngay khi bị chạm ⇒ `DenialAuditFailedError`, `denial` giữ nguyên, `cause.message` nêu MÃ ĐỊNH DANH (không phải lỗi của pool — phép kiểm đứng trước pool), không mang giá trị (lượt soi 62a-15).
+- `mo-ta-loi.test.ts`: lớp bọc không trường `code` với cause là lỗi Postgres ⇒ `DenialAuditFailedError <- error 42501`; hai tầng bọc ⇒ chỉ một tầng; cause là chuỗi ⇒ không hậu tố; cause là `TenantError` ⇒ `<- TenantError SESSION_STATE_LEFT`; `TenantError`, lỗi Postgres, lỗi mã `ECONNREFUSED` — đều có trường `code` — mang cause ⇒ không hậu tố; không dòng nào mang giá trị.
+- `loi-giao-thuc.int.test.ts`, bộ điều phối với `auditPool` RIÊNG (lượt soi 62a-10), RFQ dưới ngưỡng đã CLOSED dựng bằng SQL, yêu cầu mở thầu tạo qua HTTP:
+  - ⒫ đối chứng không chặn ⇒ `POST /unseal/:id/dispatch` 422, 0 log, 1 hàng; chặn `UNSEAL_DENIED` bằng 23514 ⇒ 500 `loi noi bo`, đúng MỘT dòng `[api] <requestId> DenialAuditFailedError <- error 23514`, 0 hàng, 0 job;
+  - ⒬ tự phê duyệt, chặn `UNSEAL_APPROVAL_DENIED` bằng 42501 ⇒ 500, một dòng `… DenialAuditFailedError <- error 42501`, 0 hàng;
+  - ⒭ PM tự duyệt đặt lại TOTP, chặn bằng TP119 ⇒ 500, một dòng `… DenialAuditFailedError <- error TP119`, 0 hàng;
+  - ⒮ phiên không vai trò gọi `POST /suppliers`, chặn `PERMISSION_DENIED` bằng 42501 ⇒ 500, một dòng `… PermissionAuditFailedError <- error 42501`, 0 hàng `PERMISSION_DENIED` của người ấy, 0 nhà cung cấp `K119` (lượt soi 62a-7).
+- `kich-ban-41.int.test.ts` bước 9: người yêu cầu (PROCUREMENT_MANAGER, không giữ `rfq.unseal.approve`) tự duyệt ở giao dịch RIÊNG ⇒ `PermissionDeniedError`; bản trước gọi trong cùng giao dịch với `requestUnseal`, dừng ở khoá tư vấn và `.rejects.toThrow()` không phân biệt được (lượt soi 62a-14).
+- `ghi-so-tu-choi-mot-duong.test.ts`: đọc mọi `.ts` không phải test dưới `packages/*/src` và `apps/*/src`, bỏ dòng chú thích; tệp có dòng `withTenant(` với đối số đầu mang tên `auditPool` phải đúng là `["packages/identity/src/rbac.ts"]`; chống rỗng ruột: hơn 50 tệp được đọc.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Luật đầu tiên của dòng log xét "lỗi không ra mã" và làm đỏ một test S1.67:** lỗi mang trường `code` không đúng hình dạng SQLSTATE cộng `cause` ra `error <- Error` thay cho `error`. Đổi thành "lỗi không có trường `code`" — lớp bọc của lần ghi sổ không có trường ấy, lỗi Postgres, `TenantError` và lỗi hệ thống của Node có. M17 — hậu tố cả cho lỗi có trường `code` — đỏ đúng hai test S1.67 đầu của `mo-ta-loi` và test S1.68.
+- ⑵ **Lớp canh bỏ-qua-RLS vắng ở cổng mở thầu** không nằm trong hàng 119: phép đo trước bản vá tìm ra (superuser được nhận im lặng), và hàm chung mang nó.
+- ⑶ **Kịch bản đo của hàng 119 không dựng được qua đường thường:** "RFQ chưa đóng" — một yêu cầu mở thầu chỉ tạo được khi RFQ đã CLOSED (C3 của 019); đo trên vế POLICY_GATE với yêu cầu PENDING.
+- ⑷ **Bẫy công cụ:** lượt áp đầu tiên của bản hai dừng ở kiểm tra CR, trước khi ghi tệp nào — bản làm việc của `packages/identity/src/mfa-credentials.ts` mang CRLF (794) dù `.gitattributes` ghim `*.ts` eol=lf. Nhưng chuỗi lệnh chạy nền nối bằng `;` bỏ t0 và vẫn chạy ba lượt test trên mã CHƯA vá, ra 145/145, 769 + 1, 418/418 — số ấy bỏ. Tệp được chuẩn hoá LF (`git diff --stat` không đổi), chuỗi chạy lại với bước áp là cổng chặn.
+- ⑸ **Cổng evidence chặn ba cặp nhãn chưa khai:** `pnpm evidence` lượt đầu trên cây đã stage `081185a` — vitest thoát mã 0, 1714 khẳng định, 56/56 — thoát mã 1 với ba vấn đề CHẶN MERGE: `[INV-D5]` ở ba tệp dưới đây chưa có trong `tools/inv-matrix/src/so-khai-nhan.ts` ([INV-H22]). Khai cả ba, dòng khai trần như tiền lệ `hardening-co-ly-do.test.ts` ở H19, rồi chạy lại evidence trên cây mới. Câu trả lời cho *"tệp ấy đo bất biến này bằng cách nào"* mà đầu sổ khai đòi:
+  - `apps/api/src/loi-giao-thuc.int.test.ts` — ⒫–⒮ qua HTTP thật, `auditPool` riêng: trigger chặn đúng lần ghi sổ của lần từ chối ⇒ 500 thân cố định, MỘT dòng log `<lớp bọc> <- error <mã>`, 0 hàng sổ. ⒫ thêm 0 job và một đối chứng không chặn (422, không log, một hàng); ⒮ thêm 0 nhà cung cấp — thao tác bị từ chối không xảy ra.
+  - `packages/identity/src/mfa-reset.int.test.ts` — gọi thẳng gói, lần ghi `MFA_RESET_APPROVAL_DENIED` bị chặn bằng TP119 ⇒ `DenialAuditFailedError` với 23514 trong `denial` và TP119 trong `cause`; 0 hàng sổ; hồ sơ TOTP còn nguyên.
+  - `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` — cổng văn bản: trong mã sản xuất chỉ `rbac.ts` gọi `withTenant` trên `auditPool`, nên lần ghi sổ từ chối không mọc lại ngoài `requirePermission`/`throwAuditedDenial`. Cùng hạng với `barrel-exports.test.ts` đã khai ở D5; là phép đọc văn bản theo tên, không đo hành vi.
+
+**Đỏ đo được, cô lập:**
+Driver `k119_dot_bien.py` (scratchpad, chép từ `k118_dot_bien.py`, đổi nhóm): mỗi đột biến thay đúng MỘT chỗ (mốc khớp đúng một lần trên bản gốc), chạy trọn nhóm tệp với reporter JSON, trả tệp về theo sha256 lúc bắt đầu lượt, so tập `it` đỏ với tập ghi TRƯỚC. Nhóm: G1 `unseal.int.test.ts`; G2 `mfa-reset.int.test.ts`; G3 `rbac.int.test.ts`; G4 `mo-ta-loi.test.ts`; G5 `loi-giao-thuc.int.test.ts`; G6 `barrel-exports.test.ts`; G7 `ghi-so-tu-choi-mot-duong.test.ts` (bản hai); G13 = G1 + G3; G15 = G1 + G5; G25 = G2 + G5; G45 = G4 + G5. Lượt gốc mỗi nhóm xanh trọn.
+- **Bản đầu** (21 đột biến): 19 đỏ ĐÚNG tập ghi trước, không test ngoài khoá nào đỏ. Hai SAI theo chế độ `dung` — cả hai đỏ đủ tập ghi trước và đỏ THÊM: M10 (`requirePermission` bỏ vế còn-chỗ ở hàm đã tách) kéo theo hai test sau của `rbac.int.test.ts` — mức VAI TRÒ và mức NGƯỜI DÙNG của D2 `policy.manage` — hết giờ 30 000 ms, dây chuyền của hai test treo còn giữ kết nối `apiPool` (vitest không huỷ test quá hạn), cùng một hook hết giờ 180 000 ms; M21 đỏ cùng `[INV-H18]` "danh sách trắng của MỌI cửa khớp bề mặt THẬT" — một lớp canh thứ hai mà tập ghi trước bỏ sót. Không lượt nào báo `still running` (31 log); driver trả bảy tệp nó đổi về sha256 lúc bắt đầu lượt ("moi tep tra nguyen ban"); so tay 13 tệp với sha256 của bản chụp, không lưu log.
+
+| Đột biến (bản đầu) | Nhóm | Đỏ |
+|---|---|---|
+| M1 `throwAuditedDenial` ném lại lỗi của lần ghi thay cho lớp bọc | G13 | vế 4 TP119, pool cạn, siêu người dùng, D2 mở thầu, [MỤC E] |
+| M2 bỏ kiểm pool còn chỗ | G1 | pool cạn |
+| M3 đảo thứ tự hai lớp canh | G1 | pool cạn |
+| M4 bỏ kiểm SUPERUSER/BYPASSRLS | G13 | siêu người dùng, [MỤC E] |
+| M5 ghi được mà không ném `denial` | G3 | ghi được ⇒ ném đúng đối tượng |
+| M6 thông điệp lớp bọc nối `cause.message` | G1 | vế 4 TP119 |
+| M7 lớp bọc mất lần từ chối | G3 | [MỤC E] |
+| M8 lớp bọc mất `action` | G3 | [MỤC E] |
+| M9 `cause` là thứ bị ném, không chuẩn hoá | G3 | [MỤC E] |
+| M10 `requirePermission` bỏ vế còn-chỗ ở hàm đã tách | G3 | auditPool hết chỗ, giữ nguyên lần từ chối gốc — cộng hai test dây chuyền hết giờ |
+| M11 cổng mở thầu gỡ lớp bọc, ném lỗi gốc | G15 | vế 4 TP119, pool cạn, siêu người dùng, ⒫ |
+| M12 D2 mở thầu gỡ lớp bọc | G15 | D2 mở thầu, ⒬ |
+| M13 D2 mở thầu không nhận ra vi phạm | G1 | D2 mở thầu, `[INV-D2]` tự phê duyệt để lại bản ghi |
+| M14 D2 đặt lại TOTP gỡ lớp bọc | G25 | tự duyệt TOTP TP119, ⒭ |
+| M15 D2 đặt lại TOTP không nhận ra vi phạm | G2 | tự duyệt TOTP TP119, tự duyệt ⇒ 23514 và bản ghi sống qua rollback |
+| M16 dòng log bỏ hậu tố `cause` | G45 | `mo-ta-loi` S1.68, ⒫, ⒬, ⒭, ⒮ |
+| M17 hậu tố cả cho lỗi có trường `code` | G4 | `mo-ta-loi` hai test S1.67 đầu, `mo-ta-loi` S1.68 |
+| M18 đi theo cả chuỗi `cause` | G4 | `mo-ta-loi` S1.68 |
+| M19 nhận `cause` không phải `Error` | G4 | `mo-ta-loi` S1.68 |
+| M20 `DenialAuditFailedError` vào danh sách 422 | G5 | ⒫, ⒬, ⒭ |
+| M21 rút `throwAuditedDenial` khỏi cửa `@trustprocure/identity` | G6 | danh sách trắng identity, `[INV-H18]` |
+
+- **Bản hai** (sau lượt soi 62 — mã và test đổi, mọi đột biến chạy lại trên mã cuối): 23 đột biến. M10 bỏ vì vế tách đã hoàn tác; tập ghi trước cập nhật TRƯỚC khi chạy cho ba test mới — pool đầy tạm thời, sai hình dạng, cổng văn bản — và ba đột biến mới của lượt soi 62a-13; driver đếm lỗi cấp tệp vào "thiếu". Kết quả: 21 đỏ ĐÚNG tập ghi trước ở chế độ `dung`, không test ngoài khoá nào đỏ. M22 ở chế độ `chua` đỏ đủ tập ghi trước và đỏ thêm — mười test trên 33 của tệp: ba vế SAI MỘT MÌNH của `[INV-D1]` (vế 2, 3, 4), "KHÔNG đặt job nào khi cổng từ chối", ba vế `[INV-D5]` cũ, vế 4 TP119, pool đầy tạm thời, siêu người dùng — cổng im lặng thì cả cụm cổng đỏ. M23 chế độ đo: câu `SELECT 1` chen vào nhánh D2 trước lần ghi ném "current transaction is aborted" (25P02), đỏ hai test D2 — lời khai của docstring đứng. Không lượt nào báo `still running` (34 log); driver trả mọi tệp nó đổi về sha256 lúc bắt đầu lượt ("moi tep tra nguyen ban").
+
+| Đột biến (bản hai) | Nhóm | Chế độ | Đỏ |
+|---|---|---|---|
+| M1 `throwAuditedDenial` ném lại lỗi của lần ghi thay cho lớp bọc | G13 | dung | vế 4 TP119, siêu người dùng, D2 mở thầu, [MỤC E], sai hình dạng |
+| M2 thêm lại phép kiểm "pool còn chỗ" tức thì — hình dạng bản đầu | G1 | dung | pool đầy tạm thời |
+| M3 bỏ kiểm hình dạng `action`/`resourceType` | G3 | dung | sai hình dạng |
+| M4 bỏ kiểm SUPERUSER/BYPASSRLS | G13 | dung | siêu người dùng, [MỤC E] |
+| M5 ghi được mà không ném `denial` | G3 | dung | ghi được ⇒ ném đúng đối tượng |
+| M6 thông điệp lớp bọc nối `cause.message` | G1 | dung | vế 4 TP119 |
+| M7 lớp bọc mất lần từ chối | G3 | dung | [MỤC E], sai hình dạng |
+| M8 lớp bọc mất `action` | G3 | dung | [MỤC E] |
+| M9 `cause` là thứ bị ném, không chuẩn hoá | G3 | dung | [MỤC E] |
+| M11 cổng mở thầu gỡ lớp bọc, ném lỗi gốc | G15 | dung | vế 4 TP119, siêu người dùng, ⒫ |
+| M12 D2 mở thầu gỡ lớp bọc | G15 | dung | D2 mở thầu, ⒬ |
+| M13 D2 mở thầu không nhận ra vi phạm | G1 | dung | D2 mở thầu, `[INV-D2]` tự phê duyệt để lại bản ghi |
+| M14 D2 đặt lại TOTP gỡ lớp bọc | G25 | dung | tự duyệt TOTP TP119, ⒭ |
+| M15 D2 đặt lại TOTP không nhận ra vi phạm | G2 | dung | tự duyệt TOTP TP119, tự duyệt ⇒ 23514 và bản ghi sống qua rollback |
+| M16 dòng log bỏ hậu tố `cause` — tức hành vi của `749f925` — trên văn bản test cuối (lượt soi 62a-12) | G45 | dung | `mo-ta-loi` S1.68, ⒫, ⒬, ⒭, ⒮ |
+| M17 hậu tố cả cho lỗi có trường `code` | G4 | dung | `mo-ta-loi` hai test S1.67 đầu, `mo-ta-loi` S1.68 |
+| M18 đi theo cả chuỗi `cause` | G4 | dung | `mo-ta-loi` S1.68 |
+| M19 nhận `cause` không phải `Error` | G4 | dung | `mo-ta-loi` S1.68 |
+| M20 `DenialAuditFailedError` vào danh sách 422 | G5 | dung | ⒫, ⒬, ⒭ |
+| M21 rút `throwAuditedDenial` khỏi cửa `@trustprocure/identity` | G6 | dung | danh sách trắng identity, `[INV-H18]` |
+| M22 `tuChoi` bỏ `return` — lời hứa trôi đi (lượt soi 62a-13) | G1 | chua | vế 2 và vế 4 `[INV-D5]` cũ (tập ghi trước), cộng tám test khác của cổng |
+| M23 chen `client.query` vào nhánh D2 trước lần ghi — chế độ đo (lượt soi 62a-3, 62a-13) | G1 | do | D2 mở thầu, `[INV-D2]` tự phê duyệt — "current transaction is aborted" (25P02) |
+| M24 một dòng `withTenant(auditPool, …)` trong `gate.ts` | G7 | dung | cổng văn bản |
+
+**Lượt soi đối kháng 62** — hai người soi độc lập, không shell, song song, không đọc nhau: **62a** mã và test của bản đầu, đọc trên bản chụp (driver đột biến chạy trong kho cùng lúc); **62b** tài liệu của bản đầu — hàng sổ, ADR-016, ADR-020, Handoff, bản nháp biên bản — trên bản sao đã áp script, đối chiếu với bản chụp, log đo và log đột biến bản đầu.
+
+### 62a — mã và test của bản đầu: 0 CAO, 1 NẶNG, 6 NHẸ, 9 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Phép kiểm "pool còn chỗ" tức thì mà bản đầu đưa vào `throwAuditedDenial` đổi hành vi cả khi lần ghi lẽ ra thành công: `auditPool` sản xuất có hai kết nối, dùng chung mọi tổ chức, route người mua không có hạn mức theo người gọi — một loạt `PERMISSION_DENIED` song song làm lần từ chối của người khác gãy ngay, 500, không hàng sổ; trên `749f925` lần ghi xếp hàng (tối đa 20 s) rồi ghi được | suy luận | **sửa:** gỡ phép kiểm khỏi đường chung; test "pool đầy tạm thời ⇒ chờ rồi ghi đúng một hàng" — M2 thêm lại phép kiểm ⇒ đỏ; chú thích `AUDIT_POOL_MAX` gạch; phép kiểm của `requirePermission`, cỡ pool, tên lỗi riêng, hạn mức ⇒ **khoản 120** |
+| 2 | NHẸ | "lần ghi ném lớp 23 ⇒ 422 mang thông điệp NỘI BỘ … mã khác ⇒ 500" rộng hơn số đo và sai theo mã; "bỏ qua RLS … đo" chỉ đo SUPERUSER | đọc | **sửa** ở năm chú thích mã và ba bản tài liệu: trigger RAISE 23514 ⇒ 422 (đo), TP119 ⇒ 500 (đo), EXECUTE thu hồi ⇒ 403 (đo), mã khác theo `anhXaLoiPostgres` (đọc); "đo với SUPERUSER" |
+| 3 | NHẸ | Docstring bỏ vế khoá tư vấn khai quá: `kich-ban-41` bước 9 có hình dạng "ghi sổ trước lần từ chối" trong cùng giao dịch; "chờ tới `lock_timeout`" chỉ đúng với `createPool` — pool của test treo không hạn | đọc | **sửa lời** (điều kiện `lock_timeout`, các đường sản xuất, `kich-ban-41`); câu "25P02" đo bằng M23; vế khoá tư vấn cho `tuChoi` qua client tuỳ chọn — mang sang |
+| 4 | NHẸ | Lời cũ thiu không gạch: `dispatch.ts` "42501 ⇒ 403 … kể cả lần ghi sổ từ chối … (khoản 119)"; khối "chỉ TÊN … cùng MÃ" không nhắc hậu tố; `AUDIT_POOL_MAX` "mỗi lần 403" | đọc | **sửa** cả ba tại chỗ, nhãn [S1.68] |
+| 5 | NHẸ | `MFA_LOCKED` cùng lớp, biến thể giao dịch người gọi: lần ghi hỏng thay chỗ 401 `LOCKED_OUT` và rollback trạng thái khoá E3 | đọc | đã có ở **khoản 69** — ghi chú [S1.68] ở hàng 69 (cùng 62b-3) |
+| 6 | NHẸ | Không gì giữ đường chung: `withTenant(auditPool, …)` mọc lại được ngoài `rbac.ts`; `packages/unseal` còn khai `@trustprocure/tenancy` ở `dependencies` | đọc; suy luận | **sửa:** cổng `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` — M24 ⇒ đỏ; chuyển tenancy sang `devDependencies` — mang sang (đổi lockfile) |
+| 7 | NHẸ | Nhãn `[INV-D5]` trên ⒮ khai quá: ⒮ chỉ đo dòng log | đọc | **sửa:** ⒮ đòi thêm 0 hàng `PERMISSION_DENIED` và 0 nhà cung cấp |
+| 8 | INFO | Luật hậu tố `cause` rộng hơn chú thích: áp cho mọi chỗ gọi — outbox, `sau-commit`, `onPollError`, bộ dọn, dòng 500 | đọc | **sửa lời** ở `mo-ta-loi.ts`, `dispatch.ts`; phạm vi đủ ở ranh giới ⑹④ |
+| 9 | INFO | Ba lần từ chối không ghi sổ gì: `ComparisonDeniedError`, cổng khi không tìm thấy yêu cầu, worker lúc giải mã | đọc | **khoản 121**; chú thích [S1.68] trên describe "mọi lần từ chối …" |
+| 10 | INFO | Fixture HTTP dùng chung một pool cho giao dịch và `auditPool` — khác sản xuất, không thấy được #1 | đọc | **sửa:** describe ⒫–⒮ dựng bộ điều phối với `auditPool` riêng |
+| 11 | INFO | `CREATE FUNCTION`/`CREATE TRIGGER` đứng trước `try`; timer 5000 ms không huỷ | đọc | **sửa:** hai lệnh vào `try`, `DROP … IF EXISTS`; test pool đầy của bản hai không dùng timer đua |
+| 12 | INFO | Đỏ-trước chạy trên văn bản test `mo-ta-loi` cũ | đọc | **đo lại:** M16 — bỏ hậu tố, tức hành vi của `749f925` — chạy trên văn bản cuối ở bản hai |
+| 13 | INFO | Driver không xét lỗi cấp tệp; ba lớp chưa có đỏ: câu 25P02, dương tính giả của #1, `return` của `tuChoi` | suy luận | **sửa driver** (lỗi cấp tệp vào "thiếu"); M22 bỏ `return`, M23 đo 25P02, M2 thêm lại phép kiểm tức thì |
+| 14 | INFO | `kich-ban-41` bước 9 xanh vì lý do khác lời khai: tự duyệt dừng ở khoá tư vấn trong cùng giao dịch | đọc | **sửa:** giao dịch riêng, đòi `PermissionDeniedError`, gạch lời cũ |
+| 15 | INFO | `throwAuditedDenial` nhận `AuditEventInput` tuỳ ý, không kiểm hình dạng F7 | đọc | **sửa:** kiểm `action` và `resourceType` trước khi chạm pool, lỗi bọc giữ lần từ chối; test mới — M3 ⇒ đỏ |
+| 16 | INFO | "TREO" chỉ đúng với pool của test; `createPool` có `connectionTimeoutMillis` 20 s | đọc | **sửa lời** (cùng #1) |
+
+**62a kiểm và thấy KHỚP:** không CAO — ở ba chỗ gọi, không đường nào lần từ chối không vào sổ mà cũng không gãy ồn ào, không đường nào lỗi của lần ghi còn thay chỗ; `throwAuditedDenial` ném ở mọi nhánh, đồng bộ hay bất đồng bộ, thông điệp lớp bọc là hằng; thứ tự kiểm không-chạm-pool trước kiểm chạm-pool; `tuChoi` trả về lời hứa, hai nhánh D2 `await` rồi `throw loi`, phân loại tương đương `749f925`; không route nào bắt lỗi, nên khi ghi được mã HTTP và hàng sổ giữ nguyên (⒫ có đối chứng); `DenialAuditFailedError` không nằm trong `LOI_NGHIEP_VU_422`; `"code" in loi` giữ ca `code: undefined` của test S1.67; `no-floating-promises` bật; danh sách trắng barrel so theo tập; chỉ có bốn action `_DENIED` trong mã sản xuất và mọi lần từ chối khác qua `requirePermission`; ba route sản xuất không giữ khoá tư vấn khi tới `throwAuditedDenial`; census SQL ngoài `withTenant` của `rbac.ts` giữ nguyên; fixture gỡ trong `finally`, đếm lọc theo `resource_id`, ⒫–⒭ tự tạo RFQ và yêu cầu riêng; dự đoán tập đỏ của 21 đột biến khớp phép đọc.
+
+### 62b — tài liệu của bản đầu: 0 CAO, 1 NẶNG, 7 NHẸ, 5 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | "lớp 23 ⇒ 422 mang thông điệp NỘI BỘ" và "mã khác ⇒ 500" rộng hơn phép đo — chỉ trigger RAISE 23514 được đo — và trái với `anhXaLoiPostgres`; ⑹① tự gọi "danh sách đủ" mà bỏ sót 23503, lớp 22; hàng 119 còn câu đọc "500 cho lỗi khác" chưa gạch | đọc | **sửa** (cùng 62a-2) ở hàng 119, ADR-016, ⑹①, "Điều đáng mang sang ⑵" và năm chú thích mã; gạch "500 cho lỗi khác" kèm nhãn [S1.68: đo] |
+| 2 | NHẸ | ⑹④ sai phạm vi: lỗi bọc cổng mở bí mật của `/auth/totp` (`new Error(…, { cause })`) cũng đổi dòng 500; docstring [CẤM LOG] ở `mfa-credentials.ts` ("không phải đường đi vào một dòng log") thiu nửa | đọc | **sửa lời** ⑹④; gạch docstring kèm [S1.68]; đo dòng `/auth/totp` — mang sang |
+| 3 | NHẸ | Hàng 69 "Đường đóng" trỏ "đúng khuôn `PERMISSION_DENIED` và `MFA_RESET_APPROVAL_DENIED` đang dùng" — khuôn vừa thay, và `throwAuditedDenial` chỉ dùng cho lần từ chối ném | đọc | **sửa:** gạch, ghi chú [S1.68] ba điều lần ghi `MFA_LOCKED` phải mang |
+| 4 | NHẸ | Lời cũ chưa gạch: hàng 118 "Còn mở ở khoản 119"; `dispatch.ts` vế khoản 119 của 42501 ⇒ 403 và hai chỗ "chỉ TÊN lỗi" — chèn nhãn cạnh lời cũ, cùng khuôn 61b-8; tiêu đề `mo-ta-loi.test.ts` "KHÔNG CAUSE" | đọc | **sửa** cả bốn tại chỗ |
+| 5 | NHẸ | Ba bản kể lệch: ⑹② ⑹③ vắng ở hàng 119 và ADR-016, không bản nào trỏ về ⑹; hàng 119 không nói lớp canh chỉ đo ở cổng mở thầu | đọc | **sửa:** hàng 119 và ADR-016 kể đủ bốn mục và trỏ "(đủ ở §S1.68 ranh giới ⑹)"; hàng 119 nói "ở cổng mở thầu — hai chỗ D2 dùng chung hàm" |
+| 6 | NHẸ | Ranh giới ⑷ "chỉ `unseal.int.test.ts` dùng" — `comparison.int.test.ts` cũng import `withTenant`; "Đo ⒞" thiếu "mã sản xuất" | đọc | **sửa lời** |
+| 7 | NHẸ | Ranh giới khoá tư vấn thiếu điều kiện: "chờ tới `lock_timeout` rồi gãy" chỉ đúng khi phiên `auditPool` có `lock_timeout` | đọc | **sửa lời** ở docstring, ADR-016, ranh giới ⑴ |
+| 8 | NHẸ | "13 tệp khớp sha256 của bản chụp" và "không tệp `zzprobe-*`" không có log đi kèm | đọc | **sửa lời:** driver trả bảy tệp nó đổi về sha256 đầu lượt (log driver); so tay 13 tệp không lưu log; số đếm `zzprobe-*` là dòng cuối của log `pnpm test`; bản hai ghi log có nhãn |
+| 9 | INFO | 941 → 939 giải thích sai cơ chế: bỏ BA cạnh tới tenancy, thêm cạnh `unseal.int.test.ts → identity` | đọc | **sửa lời** |
+| 10 | INFO | Đỏ-trước chạy trên văn bản đầu của test `mo-ta-loi` S1.68 | đọc | **ghi rõ** ở ⒝; đo lại qua M16 (cùng 62a-12) |
+| 11 | INFO | Dòng log không phân biệt lỗi của lớp canh: siêu người dùng, sai hình dạng, thứ lạ bị ném cùng ra `DenialAuditFailedError <- Error` | đọc | ranh giới ⑸ |
+| 12 | INFO | Dấu vết fixture ⑺ kể thiếu | đọc | **bổ sung** ⑺ |
+| 13 | INFO | M10 chuyển chế độ `chua` mất phép kiểm "không test ngoài khoá nào đỏ"; hook hết giờ 180 000 ms không kể | đọc | M10 bỏ ở bản hai — vế tách đã hoàn tác; hook 180 000 ms kể ở dòng bản đầu |
+
+**62b kiểm và thấy KHỚP:** dòng CÒN MỞ đúng tập hàng `[MỞ]`/`[NỬA]` của ba bảng, đoạn đếm khớp, lời cũ gạch; Handoff §10 §13; con trỏ của hàng 119 là tệp đã có; `§S1.68` có tiêu đề thật, số dấu gạch chẵn; đỏ-trước 100/12/88 phân rã đúng theo năm tệp, thông điệp của mười hai test khớp; bản đầu 130/129/1; `pnpm test` 769 + 1; lượt rộng 418/418; t0 222/939/0; bảng ⒜ khớp `do-truoc.log` từng ca, D1 và D2 khớp, ACL ở ⒟ khớp dòng cảnh báo; 21 dòng đột biến khớp log, tổng số test mỗi nhóm khớp, khoá tên khớp đúng một test; chữ ký hàm, thứ tự kiểm, luật dòng log, số `it`, route, mã HTTP khớp mã; C3 ở `019_unseal.sql`; ba điểm khác đề xuất trùng giữa hàng 119 và ADR-016; TEST-PLAN, README, ARCHITECTURE và các hàng 32, 40 không có lời khai cần sửa.
+
+**Ranh giới NÓI RA:**
+- ⑴ **Vế khoá tư vấn của `requirePermission` không áp cho đường chung:** phép kiểm chạy trên client người gọi; hai chỗ D2 đến sau một câu đã hỏng, giao dịch aborted, câu kiểm ném 25P02 (M23). Một người gọi đã ghi sổ trong cùng giao dịch trước khi gọi `throwAuditedDenial` thì lần ghi chờ khoá mà chính giao dịch ấy giữ: phiên `auditPool` có `lock_timeout` (`createPool`: 15 s) thì gãy sau thời hạn ấy; pool không đặt `lock_timeout` — pool của test — thì treo không hạn. Các đường sản xuất không làm thế (đọc).
+- ⑵ **Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng mở thầu:** hai chỗ D2 dùng chung hàm — test bọc lỗi của từng chỗ chứng việc dùng hàm, không đo riêng lớp canh ở từng chỗ.
+- ⑶ **Pool đầy thì lần ghi chờ:** `createPool` chờ tối đa `connectionTimeoutMillis` 20 s rồi ném, và lỗi ấy thành `DenialAuditFailedError` (đọc); pool không đặt thời hạn chờ không hạn (đo trước bản vá: quá 4000 ms). Phép kiểm tức thì của `requirePermission` giữ nguyên — khoản 120.
+- ⑷ **`packages/unseal/package.json`** vẫn khai `@trustprocure/tenancy` trong `dependencies` dù mã sản xuất của gói không còn import; hai tệp test `unseal.int.test.ts`, `comparison.int.test.ts` dùng. `pham-vi-san-xuat.test.ts` ⑵ xếp một gói vào rổ chỉ-dùng-cho-test theo toàn kho, nên không cổng nào kêu; không đổi để khỏi đụng lockfile (đọc).
+- ⑸ **Dòng log nêu đúng một tầng `cause`,** chỉ cho lỗi không có trường `code`; lỗi có trường `code` — kể cả mã không mang hình dạng được ghi — không nêu cause. Ba lỗi không phải lỗi Postgres của đường chung — `auditPool` bỏ qua RLS, sai hình dạng, thứ lạ bị ném — cùng ra `DenialAuditFailedError <- Error`; phân biệt chúng phải đọc `cause.message` (lượt soi 62b-11).
+- ⑹ **Thay đổi hợp đồng — danh sách đủ:**
+  - ① lần từ chối ở ba chỗ mà lần ghi sổ hỏng ⇒ 500 có log. Trước: lỗi của lần ghi đi bảng giai đoạn handler — trigger RAISE 23514 ⇒ 422 mang thông điệp của trigger (đo), 42501 ⇒ 403 kèm log (đo), mã ngoài bảng ⇒ 500 (đo với TP119); CHECK thường ⇒ 422 thân cố định, 23505 ⇒ 409, 23503 và lớp 22 ⇒ 422 thân cố định (đọc);
+  - ② gọi thẳng gói: lỗi ném ra là `DenialAuditFailedError` thay cho lỗi của lần ghi (đo);
+  - ③ `auditPool` siêu người dùng ở ba chỗ ⇒ `DenialAuditFailedError`; trước: ghi dưới superuser (đo ở cổng mở thầu); `auditPool` đầy tạm thời — không đổi, lần ghi chờ (đo ở cổng mở thầu);
+  - ④ dòng log của MỌI lỗi không có trường `code` mang `cause` là `Error` thêm `<- tên [mã]` — ở dòng 500, `sau-commit`, dòng outbox, `onPollError`, bộ dọn: hôm nay `PermissionAuditFailedError`, `DenialAuditFailedError` (đo ở ⒫–⒮), và lỗi bọc cổng mở bí mật của `/auth/totp` (đọc).
+- ⑺ **Cổng văn bản `ghi-so-tu-choi-mot-duong.test.ts`** bắt đúng hình dạng đã mọc ba lần — `withTenant(` với đối số đầu mang tên `auditPool`; nó không bắt bí danh, pool tên khác, hay lần ghi sổ từ chối trên client người gọi (khoản 69), và bỏ qua dòng chú thích.
+- ⑻ **Dấu vết của fixture** (đọc): trigger và hàm `k119_chan_ghi_so` gỡ trong `finally`. Ở lại trong cụm test của mỗi tệp: hàng sổ `K119_GHI_DUOC` của `rbac.int.test.ts` (sổ chỉ-ghi-thêm); RFQ, yêu cầu mở thầu PENDING và hàng `UNSEAL_DENIED` của `unseal.int.test.ts`; người dùng, hồ sơ TOTP, yêu cầu đặt lại của `mfa-reset.int.test.ts`; người dùng, chính sách phiên bản 1, RFQ, yêu cầu mở thầu và yêu cầu đặt lại của describe ⒫–⒮.
+
+**Mang sang, không vào sổ:**
+- 62a-3: cho `tuChoi` của cổng mở thầu giữ vế khoá tư vấn qua một client tuỳ chọn — client của cổng lành, khác hai chỗ D2.
+- 62a-6: chuyển `@trustprocure/tenancy` của `packages/unseal` sang `devDependencies` — đổi lockfile.
+- 62b-2: đo dòng 500 của `/auth/totp` khi cổng mở bí mật ném — dự đoán `Error <- <tên lỗi của adapter>`.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Một khuôn an ninh chép sang chỗ thứ hai phải mang theo lớp canh — và lớp canh chép theo phải được soi lại ở chỗ mới: phép kiểm pool cạn tức thì đúng cho một `auditPool` dùng chung với pool của người gọi, sai cho một `auditPool` dùng chung giữa các tổ chức (lượt soi 62a-1).
+- ⑵ Phép đo trước khi viết nên tiêm lỗi ở nhiều lớp mã: chỉ ca trigger RAISE 23514 lộ ra 422 mang thông điệp của trigger với 0 dòng log — ca mà bản đọc của hàng 119 không nêu. Và lời kể phép đo phải nói đúng mã đã tiêm: "lớp 23" rộng hơn 23514, và hai người soi độc lập cùng bắt câu ấy (62a-2, 62b-1).
+- ⑶ Một luật dòng log xét "không có trường" khác với "không ra giá trị": một test cũ ghim đúng ranh ấy, và nó bắt được bản đầu.

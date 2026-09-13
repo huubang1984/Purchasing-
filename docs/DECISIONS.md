@@ -1124,6 +1124,52 @@ làm một việc — **phát biểu cái khuôn ấy thành quy tắc chung** t
    gác dựng bằng nó vi phạm D5 trong im lặng, và điều đó đã được đo (11 mã quyền dò qua
    `hasPermission` → sổ kiểm toán trước = 3, sau = 3).
 
+### [S1.68 / khoản 119] Lần từ chối NGOÀI `requirePermission`: một đường ghi sổ chung, và lỗi của lần ghi không được thay chỗ lần từ chối
+
+**Bối cảnh.** Quyết định 1 đặt `requirePermission` — cùng lần ghi sổ `PERMISSION_DENIED` ở giao dịch độc lập trên `auditPool` — ở tầng
+ứng dụng. Ba lần từ chối khác ghi sổ theo cùng khuôn nhưng tự gọi `withTenant(auditPool, …)` bên trong handler: vế 2–4 của cổng mở thầu
+(`UNSEAL_DENIED`), lần THỬ vi phạm D2 của phê duyệt mở thầu (`UNSEAL_APPROVAL_DENIED`) và của đặt lại TOTP (`MFA_RESET_APPROVAL_DENIED`).
+Chúng không bọc lỗi của lần ghi và không kiểm `auditPool` bỏ qua RLS. Đo trên master 749f925 (`evidence/security-reviews.md` §S1.68),
+trigger chặn lần ghi: RAISE 23514 ⇒ 422 mang thông điệp của trigger, 0 dòng log; RAISE TP119 ⇒ 500; EXECUTE trên `audit_append` thu hồi
+⇒ 403; không ca nào để lại hàng sổ; `auditPool` siêu người dùng ⇒ bản ghi được nhận không một lời. Mã khác đi bảng `anhXaLoiPostgres`
+của bộ điều phối (đọc: CHECK thường ⇒ 422 thân cố định, 23505 ⇒ 409, 23503 và lớp 22 ⇒ 422) — khoản 119.
+
+**Quyết định.** Hình dạng đề xuất ở hàng 119 của sổ nợ và ở báo cáo cuối S1.67; chủ dự án chọn làm khoản 119 ngày 2026-09-13. Bản cài ở
+S1.68:
+1. `@trustprocure/identity` xuất `throwAuditedDenial(auditPool, orgId, event, denial)` — đường ghi sổ chung của mọi lần từ chối ngoài
+   `requirePermission`: kiểm `action` và `resourceType` là mã định danh viết hoa (hình dạng F7), kiểm `auditPool` không bỏ qua RLS (lớp
+   canh [F9]), ghi ở giao dịch độc lập, rồi ném CHÍNH `denial`. Hàm không có đường trả về, nên nó ra cửa công khai cùng tiêu chí với
+   `requirePermission` (danh sách trắng ở `tests/architecture/barrel-exports.test.ts`). `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`
+   giữ để `withTenant` trên `auditPool` không mọc lại ngoài `rbac.ts` — một phép đọc văn bản theo tên, không bắt bí danh.
+2. Lần ghi hỏng ở bất kỳ bước nào ⇒ `DenialAuditFailedError`: `denial` giữ lần từ chối, `cause` giữ lỗi của lần ghi, `action` là mã sự
+   kiện kiểm toán. Thông điệp không nối thông điệp của lỗi gốc — khác `PermissionAuditFailedError`, vì lỗi gốc ở đây có thể là thông điệp
+   do một trigger viết. Thứ lạ không phải `Error` bị ném ⇒ `cause` nêu KIỂU, không nội suy giá trị (khuôn MỤC E của `requirePermission`).
+3. KHÔNG kiểm "pool còn chỗ" tức thì. Bản đầu của S1.68 có kiểm ấy; lượt soi 62a-1 chỉ ra nó đổi hành vi cả khi lần ghi lẽ ra thành công:
+   `auditPool` sản xuất có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ chối của người khác gãy ngay,
+   không hàng sổ. Không kiểm ấy, lần lấy kết nối xếp hàng: `createPool` chờ tối đa 20 s rồi ném, và lỗi ấy thành `DenialAuditFailedError`
+   (đọc). Kiểm tức thì của `requirePermission` giữ nguyên — khoản nợ 120.
+4. Qua HTTP, `DenialAuditFailedError` không nằm trong danh sách lỗi nghiệp vụ 422 ⇒ 500 thân cố định với MỘT dòng log. Dòng ấy nêu thêm
+   tên và mã của MỘT tầng `cause` cho mọi lỗi không có trường `code` — `DenialAuditFailedError <- error 42501` —, và
+   `PermissionAuditFailedError` được mô tả cùng luật (mang sang 61a-8 của §S1.67; ADR-020 tiểu mục [S1.67 / khoản 118] mục 4).
+
+Bản cài khác đề xuất ở ba điểm: ⒜ một hàm chung thay cho ba chỗ bọc riêng; ⒝ thêm kiểm hình dạng và lớp canh bỏ-qua-RLS — đề xuất chỉ nói
+bọc lỗi, và phép đo trước bản vá tìm ra `auditPool` siêu người dùng được nhận không một lời; ⒞ dòng log của lớp bọc nêu lỗi gốc.
+
+**Hệ quả.** Một lần từ chối không vào sổ nay gãy ồn ào ở cả bốn đường ghi sổ từ chối, với cùng một mã HTTP và cùng một hình dạng dòng log;
+máy khách không còn đọc được thông điệp của một trigger hạ tầng như một câu trả lời nghiệp vụ. Thay đổi hợp đồng, đủ ở
+`evidence/security-reviews.md` §S1.68 ranh giới ⑹: lần từ chối của ba chỗ ấy mà lần ghi sổ hỏng ⇒ 500 có log; gọi thẳng gói nhận
+`DenialAuditFailedError` thay cho lỗi của lần ghi; `auditPool` siêu người dùng ở ba chỗ ⇒ ném thay vì ghi; dòng log của mọi lỗi không có
+trường `code` mang `cause` Error nêu thêm lỗi gốc — gồm cả lỗi bọc cổng mở bí mật của `/auth/totp` (đọc). `packages/unseal` không còn
+import `@trustprocure/tenancy` ở mã sản xuất.
+
+**Phần KHÔNG đóng.** Vế khoá tư vấn của `requirePermission` không áp cho đường chung: phép kiểm ấy chạy trên client người gọi, mà hai chỗ D2
+đến SAU một câu đã hỏng — giao dịch aborted, câu kiểm ném 25P02. Một người gọi đã ghi sổ trong cùng giao dịch trước khi gọi
+`throwAuditedDenial` thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy, dưới pool
+không đặt `lock_timeout` thì treo không hạn; các đường sản xuất không làm thế (đọc). Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng
+mở thầu; hai chỗ D2 dùng chung hàm, chứng bằng test bọc lỗi của từng chỗ. Kiểm pool còn chỗ tức thì của `requirePermission` — khoản 120;
+ba lần từ chối không ghi sổ gì — bảng so sánh, cổng khi không tìm thấy yêu cầu, worker lúc giải mã — khoản 121; lần ghi `MFA_LOCKED` trên
+giao dịch người gọi — khoản 69. Chi tiết ở `evidence/security-reviews.md` §S1.68.
+
 ### Điều ADR này KHÔNG đóng
 
 - **Nó không làm `app_api` bị chiếm trở nên vô hại.** Một tiến trình `api` đã bị chiếm đặt được
@@ -1143,6 +1189,12 @@ làm một việc — **phát biểu cái khuôn ấy thành quy tắc chung** t
    biết lỗ có thật.
 2. **Đột biến:** gỡ trigger đòi `sessions.user_id = actor_id` → test phải **ĐỎ THẬT**.
 3. **Lớp canh của mục 4** đo bằng chính nó: thêm một route không nêu mã quyền → CI phải đỏ.
+4. **[S1.68 / khoản 119] Lần từ chối ngoài `requirePermission`:** trigger chặn đúng lần ghi `UNSEAL_DENIED`, `UNSEAL_APPROVAL_DENIED`,
+   `MFA_RESET_APPROVAL_DENIED` ⇒ gọi thẳng gói ra `DenialAuditFailedError` giữ đúng lần từ chối, 0 hàng sổ; qua HTTP ra 500 với MỘT dòng
+   `DenialAuditFailedError <- error <mã>`; `auditPool` siêu người dùng ⇒ từ chối ghi; `auditPool` đầy tạm thời ⇒ chờ rồi ghi đúng một hàng;
+   `action` hay `resourceType` sai hình dạng ⇒ ném trước khi chạm pool. Đột biến bỏ lớp bọc, bỏ kiểm hình dạng hay lớp canh bỏ-qua-RLS, thêm lại phép kiểm pool còn chỗ tức thì,
+   cho cổng hay một nhánh D2 gỡ lớp bọc, cho cổng bỏ `return`, bỏ hậu tố `cause` của dòng log, đưa lớp bọc vào danh sách 422, rút hàm
+   khỏi cửa, chen một dòng `withTenant(auditPool, …)` vào `gate.ts` ⇒ đỏ (§S1.68).
 
 ---
 
@@ -1601,8 +1653,8 @@ gói MỌI lỗi của câu xác thực thành 401 (đo S1.66, lượt soi 60a-1
    log mang tên lỗi và mã cố định (mã `TenantError` hay SQLSTATE). Khung giữ ba câu trả lời có tên: `TenantError` loại input ⇒ 401,
    `PermissionDeniedError` ⇒ 403, `HttpError` do chính bộ điều phối ném ⇒ mã của nó.
 4. Các chỗ ghi log lỗi của bộ điều phối và composition root — dòng 500, dòng 42501, dòng `sau-commit`, dòng lỗi job outbox, lời đánh
-   thức, `onPollError`, bộ dọn, bộ nghe `release` — mô tả lỗi bằng MỘT hàm, `moTaLoiKhongGiaTri`: tên cộng mã, không message, không
-   cause (A2). Ngoại lệ có chủ đích: `main.ts` in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, ngoài mọi yêu cầu; test
+   thức, `onPollError`, bộ dọn, bộ nghe `release` — mô tả lỗi bằng MỘT hàm, `moTaLoiKhongGiaTri`: tên cộng mã, không message, ~~không
+   cause~~ [S1.68 / khoản 119] không cause nguyên — lỗi không có trường `code` nêu thêm tên và mã của MỘT tầng cause (A2). Ngoại lệ có chủ đích: `main.ts` in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, ngoài mọi yêu cầu; test
    `[S1.11] main.ts` đo stderr không mang giá trị của biến nào và không mang mật khẩu CSDL (lượt soi 61b-1).
 
 Bản cài khác đề xuất ở ba điểm: ⒜ đề xuất đưa mọi lỗi ngoài xác thực và handler ra 500 — khung giữ ba câu trả lời có tên ở ⑶;
@@ -1620,7 +1672,7 @@ do handler ném nay 500; 42501 do handler gây ra kèm một dòng log.
 
 **Phần KHÔNG đóng.** GRANT thu hồi mà chỉ câu của handler chạm vẫn là 403 — nay kèm một dòng log, nhưng mã không phân biệt được nó với
 câu trả lời nghiệp vụ. Lần ghi sổ từ chối lồng trong handler (unseal, D2 của yêu cầu mở thầu và của đặt lại MFA) không bọc lỗi của
-chính nó như `PermissionAuditFailedError` — khoản 119. Lỗi chỉ đi vào `release()` được nghe ở pool cho đúng một mã
+chính nó như `PermissionAuditFailedError` — khoản 119. **[S1.68] Đóng — ADR-016 tiểu mục [S1.68 / khoản 119].** Lỗi chỉ đi vào `release()` được nghe ở pool cho đúng một mã
 (`SESSION_STATE_LEFT`). Chi tiết ở `evidence/security-reviews.md` §S1.67.
 
 ### Đo bằng gì
