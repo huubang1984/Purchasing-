@@ -81,8 +81,31 @@ export interface PublicContext {
  * một kết nối pool suốt độ trễ của nhà cung cấp, và một lần gửi hỏng làm rollback cả bộ đếm hạn mức.
  * Handler xếp việc ấy vào đây; bộ điều phối chạy SAU khi giao dịch đã commit, và một lỗi ở đó không
  * đổi phản hồi (đã quyết) — chỉ được ghi tên ra log.
+ * [S1.70 / lượt soi 64a-8] Việc ấy chạy khi kết nối của handler đã trả về pool: closure không được dùng `ctx.client`.
  */
 export type AfterCommit = (viec: () => Promise<void>) => void;
+
+/**
+ * [S1.70 / khoản 124] Việc SAU COMMIT mà KẾT QUẢ quyết phản hồi — chỉ route NGƯỜI MUA có, và TỐI ĐA MỘT việc cho mỗi yêu cầu: đăng ký lần
+ * hai ném `ViecCoBuThuHai` ngay trong handler, tức giao dịch rollback (lượt soi 64a-2). Bộ điều phối chạy `viec` khi giao dịch đã commit,
+ * với cùng trần như `AfterCommit`, và TRƯỚC mọi việc sau commit thường. `viec` ném hay quá trần ⇒ MỘT dòng log `sau-commit`; `bu` chạy
+ * trong một giao dịch MỚI đã gắn tổ chức, lần lấy kết nối có trần 5 s; rồi `phanHoiKhiHong` thay cho phản hồi của handler và việc sau
+ * commit thường bị bỏ. `bu` cũng hỏng ⇒ `phanHoiKhiBuHong` — không khai thì `500` thân cố định — với một dòng log `bu-sau-commit` (lượt soi
+ * 64a-1). Đường VÔ DANH không có kiểu này: ở đó một lần gửi hỏng không được đổi phản hồi (review M-1, H2-7).
+ *
+ * `viec` và `bu` chạy SAU khi `withTenant` của handler đã trả kết nối về pool: closure KHÔNG được dùng `ctx.client` — kết nối ấy đã rảnh,
+ * hay đã ở trong giao dịch của một yêu cầu khác; `bu` dùng `client` được truyền vào (lượt soi 64a-8). Phần bù không đi qua cổng quyền lần
+ * nữa: nó chạy dưới mã quyền route đã kiểm, nên chỉ được làm việc mà chính mã quyền ấy cho phép — không lớp nào canh điều này (64a-7).
+ */
+export interface ViecSauCommitCoBu {
+  readonly viec: () => Promise<void>;
+  readonly bu: (client: pg.PoolClient) => Promise<void>;
+  readonly phanHoiKhiHong: ApiResponse;
+  /** Phản hồi khi `bu` cũng hỏng. Không khai ⇒ `500` thân cố định của bộ điều phối. */
+  readonly phanHoiKhiBuHong?: ApiResponse;
+}
+
+export type AfterCommitCoBu = (viec: ViecSauCommitCoBu) => void;
 
 /**
  * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
@@ -134,6 +157,8 @@ export interface BuyerContext {
   readonly auditPool: pg.Pool;
   readonly services: ApiServices;
   readonly afterCommit: AfterCommit;
+  /** [S1.70 / khoản 124] Việc sau commit mà kết quả quyết phản hồi — xem `ViecSauCommitCoBu`. */
+  readonly afterCommitCoBu: AfterCommitCoBu;
 }
 
 interface RouteBase {

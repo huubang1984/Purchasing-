@@ -492,12 +492,28 @@ const ghi: readonly BuyerWriteRoute[] = [
       });
       const t = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
       // Token đi tới bộ gửi TIÊM vào và KHÔNG về client.
-      await ctx.services.invitationLinkSender.send({
-        orgId: ctx.orgId,
-        invitationId: loi.id,
-        channel: loi.linkChannel,
-        destination: loi.linkChannel === "EMAIL" ? lienHe.email : (lienHe.phone ?? ""),
-        token: t.token,
+      // [S1.70 / khoản 124] Trước khoản này bộ gửi được `await` ngay tại đây, TRONG giao dịch — hai lần `appendAuditEvent` ở trên giữ khoá tư
+      // vấn ghi sổ của tổ chức tới hết giao dịch, nên lần gửi giữ khoá ấy suốt độ trễ của bộ gửi (đo, biên bản §S1.70: bộ gửi chậm 3 s ⇒
+      // khoá khoảng 3,0 s; treo ⇒ 60 s). Nay gửi SAU commit: bộ gửi nhận một token đã tồn tại, không giao dịch nào đứng chờ nó. Gửi hỏng hay
+      // quá trần ⇒ lời mời bị thu hồi trong giao dịch mới và phản hồi là `502` — `201` vẫn nghĩa là bộ gửi đã báo xong trong trần (lượt soi
+      // 64b-21), và người mua gọi lại được ngay (024: một lời mời CÒN SỐNG cho mỗi nhà cung cấp) — TRỪ khi lần thu hồi bù cũng hỏng (phiên người mời vừa bị thu hồi, pool
+      // đầy quá 5 s, mất kết nối): khi ấy lời mời còn sống mà link chưa đi, và phản hồi `500` mang `invitationId` để người mua thu hồi bằng
+      // `POST /invitations/:invitationId/revoke` rồi mời lại — không route đọc nào khác trả id ấy (lượt soi 64a-1). Chủ dự án chọn hai hợp
+      // đồng này ngày 2026-09-13 — ADR-020 tiểu mục [S1.70 / khoản 124].
+      ctx.afterCommitCoBu({
+        viec: () =>
+          ctx.services.invitationLinkSender.send({
+            orgId: ctx.orgId,
+            invitationId: loi.id,
+            channel: loi.linkChannel,
+            destination: loi.linkChannel === "EMAIL" ? lienHe.email : (lienHe.phone ?? ""),
+            token: t.token,
+          }),
+        bu: async (client) => {
+          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
+        },
+        phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, loi moi da thu hoi" } },
+        phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc loi moi", invitationId: loi.id } },
       });
       return { status: 201, body: { invitation: loi } };
     },

@@ -18,7 +18,8 @@
 //           route ĐỌC: `withGuestSession` (giao dịch thứ hai, đặt ba GUC) → handler;
 //           route GHI: `withTenant` (KHÔNG GUC) → handler. Vì sao rẽ nhánh — xem khối dưới.
 //   BUYER   cookie `__Host-tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
-//           `requirePermission` → handler. Tất cả trong MỘT `withTenant`.
+//           `requirePermission` → handler. Tất cả trong MỘT `withTenant` — [S1.70 / khoản 124, lượt soi 64a-4] trừ phần bù của một việc
+//           sau commit có bù, chạy trong một `withTenant` MỚI sau commit.
 //
 // ---------------------------------------------------------------------------------------------
 // [S1.10.3] ĐƯỜNG GHI CỦA KHÁCH KHÔNG ĐI QUA `withGuestSession` — ĐO ĐƯỢC, KHÔNG PHẢI LỰA CHỌN TIỆN
@@ -68,6 +69,9 @@
 // chỉ-ghi-thêm) vừa là GRANT hay EXECUTE bị thu hồi mà chỉ câu của handler chạm ~~— kể cả lần ghi sổ từ chối qua `auditPool` lồng trong
 // handler (khoản 119) —~~ và mã không phân biệt được hai ca. [S1.68 / khoản 119, lượt soi 62a-4] Lần ghi sổ từ chối lồng trong handler
 // nay bọc lỗi của nó thành `DenialAuditFailedError` ⇒ 500 với dòng `DenialAuditFailedError <- error 42501`, không còn là một 403.
+// [S1.70 / khoản 124, lượt soi 64a-4] Một pha nữa, SAU commit: việc sau commit có bù của route người mua. Nó hỏng hay quá trần ⇒ dòng
+// `sau-commit`, phần bù, rồi `phanHoiKhiHong` của route (link mời: 502); phần bù cũng hỏng ⇒ dòng `bu-sau-commit` và `phanHoiKhiBuHong`
+// (link mời: 500 kèm `invitationId`). Không lỗi nào của pha này đi qua bảng của giai đoạn 2.
 // ==============================================================================================
 
 import { randomUUID } from "node:crypto";
@@ -88,7 +92,7 @@ import { coHan } from "./co-han.js";
 import { diaChiPhanGiaiDuoc, khoaNguoiGoi } from "./dia-chi.js";
 import { moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
-import type { ApiServices, Route } from "./route-types.js";
+import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -113,7 +117,12 @@ export interface DispatcherDeps {
    * [review H2-7] Trần thời gian cho MỖI việc sau commit (gửi mail/SMS). Việc ấy chạy TRƯỚC khi
    * phản hồi được ghi, và `requestTimeout` của máy chủ không phủ pha này — một bộ gửi treo làm
    * `/auth/link` treo cho email CÓ THẬT và về ngay cho email lạ (oracle M-1 ở dạng vô hạn).
-   * Mặc định 5 000 ms; quá trần chỉ ghi TÊN lỗi, không đổi phản hồi.
+   * Mặc định 5 000 ms; quá trần ~~chỉ ghi TÊN lỗi, không đổi phản hồi~~ [S1.70 / khoản 124, lượt soi 64a-4] với việc THƯỜNG chỉ ghi
+   * TÊN lỗi, không đổi phản hồi; với việc CÓ BÙ thì bù và phản hồi đổi thành `phanHoiKhiHong` — link mời: lời mời bị thu hồi, `502`.
+   * [64a-6] Một trần, hai hợp đồng: cận của oracle thời gian trên đường vô danh (OTP, H2-7), và ngưỡng mà quá nó một lần gửi link mời
+   * bị tính là hỏng. Hạ trần để siết oracle thì bộ gửi chậm hơn trần làm mọi lần mời thành `502` và để lại một link chết mỗi lần gọi lại;
+   * nâng trần để chịu bộ gửi chậm thì nới cận H2-7. [S1.12 / lượt soi 64b-6] Ví dụ `/auth/link` ở trên thuộc về trước S1.12 — nay route
+   * ấy chỉ đặt job outbox; việc sau commit thường còn lại trên đường vô danh là gửi OTP (`routes/anon.ts`).
    */
   readonly afterCommitTimeoutMs?: number;
   /**
@@ -125,6 +134,13 @@ export interface DispatcherDeps {
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
+/**
+ * [S1.70 / khoản 124, lượt soi 64a-3] Trần chờ lấy kết nối của phần bù (`ViecSauCommitCoBu.bu`). Không trần thì pool đầy làm phần bù chờ
+ * `connectionTimeoutMillis` 20 s của `createPool` rồi nhận một `Error` không tên — đo trên bản đầu: 500 sau 20 004 ms, dòng
+ * `bu-sau-commit Error`. Có trần thì gãy sau 5 s với `TenantError` CONNECT_WAIT_EXCEEDED, cùng con số với lần ghi sổ từ chối (khoản 120).
+ * Cái giá: dưới pool đầy, phần bù hỏng sớm hơn — và bù hỏng thì phản hồi mang `invitationId` để người mua tự thu hồi (64a-1).
+ */
+const TRAN_CHO_KET_NOI_BU_MS = 5_000;
 
 export type Dispatcher = (req: Omit<ApiRequest, "params" | "requestId">) => Promise<ApiResponse>;
 
@@ -324,18 +340,47 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     const route = tim.route;
     // [review M-7] Việc SAU COMMIT: chạy khi giao dịch đã đóng và phản hồi đã quyết. Một lỗi ở đây
     // ~~chỉ được ghi TÊN~~ [S1.67 / lượt soi 61a-2, 61b-8] chỉ được ghi TÊN cùng mã cố định — không đổi mã trạng thái, không mang nội
-    // dung (A2).
+    // dung (A2). [S1.70 / khoản 124] Hai câu ấy nói về việc THƯỜNG; việc CÓ BÙ của route người mua đổi được phản hồi — xem dưới.
     const sauCommit: (() => Promise<void>)[] = [];
     const afterCommit = (viec: () => Promise<void>): void => {
       sauCommit.push(viec);
     };
-    const chaySauCommit = async (r: ApiResponse): Promise<ApiResponse> => {
+    // [S1.70 / khoản 124] Việc sau commit CÓ BÙ (`ViecSauCommitCoBu`) — chỉ nhánh BUYER giao hàm này cho handler; nhánh ANON không có nó,
+    // nên ở đó không bao giờ có việc có bù: một lần gửi OTP hỏng vẫn không đổi được phản hồi (review M-1, H2-7). Tối đa MỘT việc cho mỗi yêu
+    // cầu (lượt soi 64a-2): lần đăng ký thứ hai ném ngay trong handler, giao dịch rollback — thay vì trả `phanHoiKhiHong` của việc đầu trong
+    // khi việc sau đã commit mà không ai bù.
+    let viecCoBu: ViecSauCommitCoBu | undefined;
+    const afterCommitCoBu = (viec: ViecSauCommitCoBu): void => {
+      if (viecCoBu !== undefined) throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
+      viecCoBu = viec;
+    };
+    const tranSauCommitMs = deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH;
+    const chaySauCommit = async (r: ApiResponse, orgId: string): Promise<ApiResponse> => {
       // [review H2-7] Chỉ chạy khi phản hồi là thành công: một handler xếp việc rồi trả 4xx (sau
       // này) không được gửi gì đi. Và mỗi việc có TRẦN thời gian — xem `afterCommitTimeoutMs`.
       if (r.status >= 400) return r;
+      // [S1.70 / khoản 124] Việc có bù chạy TRƯỚC việc thường — kết quả của nó có thể thay phản hồi, và một việc thường không được chạy cho
+      // một phản hồi sắp bị thay. Việc có bù hỏng hay quá trần ⇒ một dòng `sau-commit`, bù trong giao dịch MỚI của cùng tổ chức (lần lấy kết
+      // nối có trần `TRAN_CHO_KET_NOI_BU_MS`), rồi `phanHoiKhiHong`; việc thường bị bỏ. Bù cũng hỏng ⇒ `phanHoiKhiBuHong` — mặc định 500 thân
+      // cố định — với một dòng `bu-sau-commit`.
+      const v = viecCoBu;
+      if (v !== undefined) {
+        try {
+          await coHan(v.viec, tranSauCommitMs, "SauCommitQuaHan");
+        } catch (e) {
+          console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(e)}`);
+          try {
+            await withTenant(deps.pool, orgId, v.bu, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+          } catch (loiBu) {
+            console.error(`[api] ${requestId} bu-sau-commit ${moTaLoiKhongGiaTri(loiBu)}`);
+            return v.phanHoiKhiBuHong ?? { status: 500, body: THAN_500 };
+          }
+          return v.phanHoiKhiHong;
+        }
+      }
       for (const viec of sauCommit) {
         try {
-          await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH, "SauCommitQuaHan");
+          await coHan(viec, tranSauCommitMs, "SauCommitQuaHan");
         } catch (e) {
           console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(e)}`);
         }
@@ -432,6 +477,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 handler.chay(() => route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox })),
               ),
             ),
+            orgId,
           );
           // [sổ nợ 38] Job đã nằm trong CSDL (commit xong) và phản hồi đã quyết: đánh thức, không đợi.
           if (danhThuc && phanHoi.status < 400) deps.outboxNudge?.(orgId);
@@ -470,10 +516,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               );
             }
             return handler.chay(() =>
-              route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit }),
+              route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu }),
             );
           };
-          return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then(chaySauCommit);
+          return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then((r) => chaySauCommit(r, cookie.orgId));
         }
 
         case "GUEST": {

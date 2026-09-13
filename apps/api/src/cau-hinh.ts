@@ -71,6 +71,11 @@ export interface CauHinhApi {
   readonly receiptSigningKeys: VongKhoaKy;
   readonly senderAdapter: "dev-mailbox";
   readonly devMailboxDir: string;
+  /**
+   * Trần cho mỗi việc sau commit, ms (`TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS`, 100–60 000; không khai ⇒ 5 000 của bộ điều phối).
+   * [S1.70 / khoản 124, lượt soi 64a-6] Một trần, hai hợp đồng: cận oracle thời gian của đường vô danh (OTP, H2-7), và ngưỡng mà quá nó
+   * một lần gửi link mời bị tính là hỏng — lời mời bị thu hồi, `502`. Xem docstring `afterCommitTimeoutMs` ở `dispatch.ts`.
+   */
   readonly afterCommitTimeoutMs: number | undefined;
 }
 
