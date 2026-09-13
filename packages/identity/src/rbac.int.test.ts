@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, migrate } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { TenantError, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   DenialAuditFailedError,
@@ -67,6 +67,13 @@ afterAll(async () => {
   await apiPool?.end().catch(() => {});
   await db?.stop();
 });
+
+/** [S1.69 / khoản 120, lượt soi 63a-10] Chốt chặn giờ 12 s của phép đo; hẹn giờ `unref` nên không giữ tiến trình khi cuộc đua đã xong. */
+function chanGio12s(): Promise<"TREO_QUA_12_GIAY"> {
+  return new Promise((xong) => {
+    setTimeout(() => xong("TREO_QUA_12_GIAY"), 12000).unref();
+  });
+}
 
 function uid(role: string): string {
   const id = userIds.get(role);
@@ -482,7 +489,9 @@ describe("ai sửa được ma trận quyền", () => {
 
 // ============================================================================================
 // HAI CẠM BẪY CỦA VIỆC GHI SỔ Ở TRANSACTION ĐỘC LẬP — cả hai đều là "treo vĩnh viễn" nếu không
-// canh, và cả hai đều được biến thành một lỗi TỨC THÌ có chẩn đoán.
+// canh, và cả hai đều được biến thành một lỗi ~~TỨC THÌ~~ có chẩn đoán. [S1.69 / khoản 120] Cạm bẫy thứ nhất (khoá tư vấn) vẫn gãy
+// tức thì; cạm bẫy thứ hai (pool hết chỗ) nay gãy ở TRẦN CHỜ với `TenantError` CONNECT_WAIT_EXCEEDED — phép chụp "pool còn chỗ" tức
+// thì làm mất bản ghi cả khi pool chỉ đầy tạm thời (biên bản §S1.69).
 // ============================================================================================
 describe("requirePermission không treo khi không ghi sổ độc lập được", () => {
   it("transaction người gọi ĐANG GIỮ khoá ghi sổ của tổ chức -> lỗi tức thì, không chờ lock_timeout", async () => {
@@ -506,46 +515,67 @@ describe("requirePermission không treo khi không ghi sổ độc lập đượ
     expect(Date.now() - batDau).toBeLessThan(5000);
   });
 
-  it("auditPool hết chỗ -> lỗi tức thì thay vì chờ vô hạn ở pool.connect()", async () => {
+  it("[S1.69 / khoản 120] auditPool hết chỗ KÉO DÀI -> PermissionAuditFailedError ở trần chờ, `cause` là TenantError CONNECT_WAIT_EXCEEDED — không treo ở pool.connect(), không gãy tức thì, không hàng sổ", async () => {
+    // ~~"auditPool hết chỗ -> lỗi tức thì thay vì chờ vô hạn ở pool.connect()"~~ — tên cũ của test này, ghim phép chụp "pool còn chỗ"
+    // tức thì. Đo trên b8d38c7 (biên bản §S1.69): phép chụp ấy làm lần từ chối gãy NGAY cả khi pool chỉ đầy tạm thời, không hàng sổ. Pool
+    // đầy KÉO DÀI thì nay lần ghi chờ tới trần rồi mới gãy — và không treo, kể cả trên pool không đặt hạn chờ như pool của test này.
     const poolNho = db.poolAs("app_api");
     const giu: pg.PoolClient[] = [];
     try {
-      // Rút cạn pool (poolAs dựng pool với max: 3).
+      // Rút cạn pool (poolAs dựng pool với max: 3) và giữ suốt phép đo.
       for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
       expect(poolNho.idleCount).toBe(0);
+      const truoc = await demTuChoi(orgId);
 
       const batDau = Date.now();
-      await expect(
+      const loi = await Promise.race([
         withTenant(apiPool, orgId, (c) =>
           requirePermission(
             c,
             { userId: uid("BUYER"), orgId, permission: PERMISSIONS.PO_APPROVE, resourceType: "RFQ" },
             poolNho,
           ),
+        ).then(
+          () => null,
+          (e: unknown) => e,
         ),
-      ).rejects.toBeInstanceOf(PermissionAuditFailedError);
-      expect(Date.now() - batDau).toBeLessThan(5000);
+        chanGio12s(),
+      ]);
+      const daCho = Date.now() - batDau;
+      expect(loi).toBeInstanceOf(PermissionAuditFailedError);
+      const nguyenNhan = (loi as PermissionAuditFailedError).cause;
+      expect(nguyenNhan).toBeInstanceOf(TenantError);
+      expect((nguyenNhan as TenantError).code).toBe("CONNECT_WAIT_EXCEEDED");
+      expect((loi as PermissionAuditFailedError).denial.permission).toBe(PERMISSIONS.PO_APPROVE);
+      expect(daCho, "phải CHỜ tới trần, không gãy tức thì").toBeGreaterThanOrEqual(4500);
+      expect(daCho, "phải gãy ở trần, không treo").toBeLessThan(9000);
+      expect(await demTuChoi(orgId)).toBe(truoc);
     } finally {
       for (const c of giu) c.release();
       await poolNho.end();
     }
-  });
+  }, 20000);
 
   it("PermissionAuditFailedError giữ nguyên lần từ chối gốc — không nuốt mất nó", async () => {
     const poolNho = db.poolAs("app_api");
     const giu: pg.PoolClient[] = [];
     try {
       for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
-      const loi = await withTenant(apiPool, orgId, (c) =>
-        requirePermission(
-          c,
-          { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ" },
-          poolNho,
+      // [S1.69 / khoản 120] Pool hết chỗ nay gãy ở trần chờ 5 s thay vì tức thì. Chốt chặn giờ: một hồi quy làm lần lấy kết nối mất trần thì
+      // test ĐỎ ở đây, và `finally` vẫn nhả kết nối và đóng pool — thay vì treo tới quá hạn test và để pool sống qua `db.stop()`.
+      const loi = await Promise.race([
+        withTenant(apiPool, orgId, (c) =>
+          requirePermission(
+            c,
+            { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ" },
+            poolNho,
+          ),
+        ).then(
+          () => null,
+          (e: unknown) => e,
         ),
-      ).then(
-        () => null,
-        (e: unknown) => e,
-      );
+        chanGio12s(),
+      ]);
       expect(loi).toBeInstanceOf(PermissionAuditFailedError);
       expect((loi as PermissionAuditFailedError).denial).toBeInstanceOf(PermissionDeniedError);
       expect((loi as PermissionAuditFailedError).denial.permission).toBe(PERMISSIONS.RFQ_UNSEAL);
@@ -553,6 +583,156 @@ describe("requirePermission không treo khi không ghi sổ độc lập đượ
     } finally {
       for (const c of giu) c.release();
       await poolNho.end();
+    }
+  });
+
+  it("[S1.69 / khoản 120] cấu hình sai — auditPool TRÙNG pool đang giữ giao dịch người gọi, max 1 -> PermissionAuditFailedError ở trần chờ, `cause` là TenantError CONNECT_WAIT_EXCEEDED, không treo", async () => {
+    // Đây là ca phép chụp tức thì sinh ra để bắt — đo trên b8d38c7: gãy sau 17 ms. Không phép chụp, lần ghi chờ một kết nối mà chính người
+    // gọi đang giữ: dưới `createPool` tới `connectionTimeoutMillis` 20 s với một `Error` không tên (đo: 20006 ms, "timeout exceeded when
+    // trying to connect"), dưới pool không đặt hạn thì không bao giờ. Trần chờ đổi nó thành lỗi có tên, trước cả hai.
+    const poolMot = createPool(db.connectionString, 1, { role: "app_api" });
+    try {
+      const batDau = Date.now();
+      const loi = await withTenant(poolMot, orgId, (c) =>
+        requirePermission(
+          c,
+          { userId: uid("BUYER"), orgId, permission: PERMISSIONS.PO_APPROVE, resourceType: "RFQ" },
+          poolMot,
+        ),
+      ).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      const daCho = Date.now() - batDau;
+      expect(loi).toBeInstanceOf(PermissionAuditFailedError);
+      expect((loi as PermissionAuditFailedError).cause).toBeInstanceOf(TenantError);
+      expect(((loi as PermissionAuditFailedError).cause as TenantError).code).toBe("CONNECT_WAIT_EXCEEDED");
+      expect(daCho, "phải CHỜ tới trần, không gãy tức thì").toBeGreaterThanOrEqual(4500);
+      expect(daCho, "phải gãy ở trần, trước connectionTimeoutMillis 20 s của createPool").toBeLessThan(9000);
+    } finally {
+      await poolMot.end();
+    }
+  }, 30000);
+});
+
+// ============================================================================================
+// [S1.69 / khoản 120] AUDITPOOL BÃO HOÀ TẠM THỜI: LẦN TỪ CHỐI CHỜ KẾT NỐI (CÓ TRẦN) RỒI VẪN GHI SỔ
+//
+// Đo trên b8d38c7, trước bản vá (biên bản §S1.69): phép chụp "pool còn chỗ" tức thì của `requirePermission` làm lần từ chối gãy NGAY khi
+// `auditPool` đầy tạm thời — giữ 2/2 kết nối trong 300 ms ⇒ `PermissionAuditFailedError` sau 16 ms, không hàng sổ; 10 lần từ chối song song
+// trên pool 2 kết nối mất 5 bản ghi; khoá tư vấn ghi sổ của một tổ chức ghim cả hai kết nối ⇒ lần từ chối của tổ chức KHÁC gãy sau 15 ms.
+// Trong khi đó 100 lần ghi sổ xếp hàng trên cùng pool xả hết trong 177 ms.
+// ============================================================================================
+describe("[INV-D5] [S1.69 / khoản 120] auditPool bão hoà tạm thời: lần từ chối CHỜ kết nối rồi vẫn ghi sổ — không mất bản ghi", () => {
+  const TU_CHOI = { permission: PERMISSIONS.PO_APPROVE, resourceType: "RFQ" } as const;
+
+  it("[INV-D5] auditPool đầy TẠM THỜI ⇒ requirePermission CHỜ kết nối rồi ghi đúng một hàng PERMISSION_DENIED", async () => {
+    const poolNho = db.poolAs("app_api");
+    const giu: pg.PoolClient[] = [];
+    try {
+      for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
+      const truoc = await demTuChoi(orgId);
+      const theoDoi = { xong: false };
+      const hua = withTenant(apiPool, orgId, (c) => requirePermission(c, { userId: uid("BUYER"), orgId, ...TU_CHOI }, poolNho)).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      void hua.then(() => {
+        theoDoi.xong = true;
+      });
+      const hanCho = Date.now() + 3000;
+      while (poolNho.waitingCount === 0 && !theoDoi.xong && Date.now() < hanCho) {
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+      const daXepHang = poolNho.waitingCount > 0;
+      for (const c of giu.splice(0)) c.release();
+      const loi = await hua;
+      expect(daXepHang, "lần ghi phải xếp hàng chờ kết nối của auditPool, không gãy ngay").toBe(true);
+      expect((loi as Error).name).toBe("PermissionDeniedError");
+      expect(await demTuChoi(orgId)).toBe(truoc + 1);
+    } finally {
+      for (const c of giu) c.release();
+      await poolNho.end();
+    }
+  });
+
+  it("[INV-D5] 10 lần từ chối song song trên auditPool 2 kết nối ⇒ đủ 10 PermissionDeniedError và 10 hàng sổ", async () => {
+    const poolGoi = createPool(db.connectionString, 12, { role: "app_api" });
+    const poolSo = createPool(db.connectionString, 2, { role: "app_api" });
+    try {
+      const truoc = await demTuChoi(orgId);
+      const ketQua = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          withTenant(poolGoi, orgId, (c) => requirePermission(c, { userId: uid("BUYER"), orgId, ...TU_CHOI }, poolSo)).then(
+            () => "KHONG_NEM",
+            (e: unknown) => (e as Error).name,
+          ),
+        ),
+      );
+      expect(ketQua).toEqual(Array.from({ length: 10 }, () => "PermissionDeniedError"));
+      expect(await demTuChoi(orgId)).toBe(truoc + 10);
+    } finally {
+      await poolSo.end();
+      await poolGoi.end();
+    }
+  });
+
+  it("[INV-D5] khoá tư vấn ghi sổ của tổ chức B ghim cả hai kết nối auditPool ⇒ lần từ chối ở tổ chức A CHỜ rồi ghi được — bão hoà do một tổ chức không xoá bản ghi của tổ chức khác", async () => {
+    const nguoiB = (
+      await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'K120 B') RETURNING id", [
+        orgB,
+        `k120-b-${String(Date.now())}@example.com`,
+      ])
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [orgB, nguoiB]);
+    const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
+    const poolGoi = createPool(db.connectionString, 4, { role: "app_api" });
+    const poolSo = createPool(db.connectionString, 2, { role: "app_api" });
+    let thaKhoa: () => void = () => {};
+    const choTha = new Promise<void>((xong) => {
+      thaKhoa = xong;
+    });
+    const tuChoi = (org: string, user: string): Promise<string> =>
+      withTenant(poolGoi, org, (c) => requirePermission(c, { userId: user, orgId: org, ...TU_CHOI }, poolSo)).then(
+        () => "KHONG_NEM",
+        (e: unknown) => (e as Error).name,
+      );
+    try {
+      const truocA = await demTuChoi(orgId);
+      const giuKhoa = withTenant(poolGiuKhoa, orgB, async (c) => {
+        await c.query("SELECT * FROM public.audit_append($1,'USER',NULL,'K120_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)", [orgB]);
+        await choTha;
+      });
+      // Hai lần từ chối ở B giữ cả hai kết nối của poolSo, chờ khoá tư vấn mà giao dịch trên đang giữ.
+      const haiB = [tuChoi(orgB, nguoiB), tuChoi(orgB, nguoiB)];
+      const han = Date.now() + 5000;
+      for (;;) {
+        // [lượt soi 63a-10] Chỉ đếm khoá tư vấn ghi sổ của tổ chức B, và hết hạn thì ném thay vì đi tiếp im lặng.
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted " +
+            "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+            "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+          [orgB],
+        );
+        if ((rows[0]?.n ?? 0) >= 2) break;
+        if (Date.now() > han) throw new Error(`het 5000ms, so lan ghi so cua B dang cho khoa: ${String(rows[0]?.n)}`);
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+      expect({ tong: poolSo.totalCount, ranh: poolSo.idleCount }).toEqual({ tong: 2, ranh: 0 });
+      setTimeout(thaKhoa, 1500);
+      const batDau = Date.now();
+      const ketQuaA = await tuChoi(orgId, uid("BUYER"));
+      const daCho = Date.now() - batDau;
+      expect(ketQuaA).toBe("PermissionDeniedError");
+      expect(daCho, "lần từ chối ở A phải chờ kết nối mà B đang giữ, không gãy ngay").toBeGreaterThanOrEqual(1000);
+      expect(await Promise.all(haiB)).toEqual(["PermissionDeniedError", "PermissionDeniedError"]);
+      await giuKhoa;
+      expect(await demTuChoi(orgId)).toBe(truocA + 1);
+    } finally {
+      thaKhoa();
+      await poolSo.end();
+      await poolGoi.end();
+      await poolGiuKhoa.end();
     }
   });
 });
@@ -892,8 +1072,10 @@ describe("[vòng fix 1] mặt tiền requirePermission", () => {
     // file ("cố ý KHÔNG nội suy giá trị nhận được: nó có thể chính là thứ không được phép ghi
     // ra"). Bán kính nhỏ (chỉ giá trị do pg/withTenant/mã người gọi ném) nhưng cùng một lớp.
     //
-    // Fixture: một `auditPool` GIẢ ném một chuỗi nguyên thuỷ mang đúng thứ bị cấm log. Nó phải
-    // đi lọt qua `khangDinhGhiDuocDocLap` (không cạn chỗ) rồi ném ở `khangDinhAuditPoolDungQuyen`.
+    // Fixture: một `auditPool` GIẢ ném một chuỗi nguyên thuỷ mang đúng thứ bị cấm log. ~~Nó phải
+    // đi lọt qua `khangDinhGhiDuocDocLap` (không cạn chỗ) rồi ném ở `khangDinhAuditPoolDungQuyen`.~~ [S1.69 / khoản 120] Không còn phép
+    // chụp "pool còn chỗ", và lớp canh quyền chạy trên kết nối lấy có trần: thứ lạ bị ném ở `connect()`. `query()` ném cùng thứ ấy cho
+    // đường của mã trước S1.69, để fixture đo đúng một ca trên cả hai bản.
     const biMat = "OTP 448120 token abc gia 1500000";
     const poolGia = {
       idleCount: 1,
@@ -906,6 +1088,11 @@ describe("[vòng fix 1] mặt tiền requirePermission", () => {
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw biMat;
       },
+      connect: (): Promise<never> =>
+        Promise.resolve().then(() => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw biMat;
+        }),
     } as unknown as pg.Pool;
 
     const loi = await withTenant(apiPool, orgId, (c) =>
@@ -1394,6 +1581,7 @@ describe("[INV-D2] [033] policy.manage không đứng cùng rfq.create / rfq.app
 // đường chung của chúng: kiểm hình dạng `action`/`resourceType`, một lớp canh không cần client người gọi (pool bỏ qua RLS), lần ghi ở
 // giao dịch độc lập, rồi ném CHÍNH lần từ chối — hoặc `DenialAuditFailedError` giữ lần từ chối khi lần ghi hỏng. Không kiểm "pool còn chỗ"
 // tức thì (lượt soi 62a-1). Ca pool đầy tạm thời và ca siêu người dùng đo ở cổng mở thầu (packages/unseal/src/unseal.int.test.ts).
+// [S1.69 / khoản 120] Ca pool hết chỗ KÉO DÀI trên pool không đặt hạn chờ — gãy ở trần chờ thay vì chờ không hạn — đo ở cuối describe.
 // ==============================================================================================
 describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ chối ở giao dịch độc lập rồi ném CHÍNH nó; ghi hỏng ⇒ DenialAuditFailedError", () => {
   const suKien = (action: string) => ({
@@ -1427,6 +1615,12 @@ describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ 
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw biMat;
       },
+      // [S1.69 / khoản 120] Đường của bản vá: lớp canh quyền chạy trên kết nối lấy có trần, nên thứ lạ bị ném ở `connect()`.
+      connect: (): Promise<never> =>
+        Promise.resolve().then(() => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw biMat;
+        }),
     } as unknown as pg.Pool;
     const tuChoi = new Error("tu choi k119");
     const loi = await throwAuditedDenial(poolGia, orgId, suKien("K119_GIA_TRI_LA"), tuChoi).catch((e: unknown) => e);
@@ -1470,4 +1664,34 @@ describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ 
       expect(`${x.message} ${(x.cause as Error).message}`).not.toContain("1500000");
     }
   });
+
+  it("[INV-D5] [S1.69 / khoản 120] auditPool hết chỗ KÉO DÀI trên pool không đặt hạn chờ ⇒ DenialAuditFailedError ở trần chờ, `cause` là TenantError CONNECT_WAIT_EXCEEDED, lần từ chối giữ nguyên, không hàng sổ (trước bản vá: chờ không hạn)", async () => {
+    const poolNho = db.poolAs("app_api");
+    const giu: pg.PoolClient[] = [];
+    try {
+      for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
+      const tuChoi = new Error("tu choi k120");
+      const batDau = Date.now();
+      const loi = await Promise.race([
+        throwAuditedDenial(poolNho, orgId, suKien("K120_HET_CHO"), tuChoi).catch((e: unknown) => e),
+        chanGio12s(),
+      ]);
+      const daCho = Date.now() - batDau;
+      expect((loi as Error).name).toBe("DenialAuditFailedError");
+      const x = loi as DenialAuditFailedError;
+      expect(x.denial).toBe(tuChoi);
+      expect(x.cause).toBeInstanceOf(TenantError);
+      expect((x.cause as TenantError).code).toBe("CONNECT_WAIT_EXCEEDED");
+      expect(daCho, "phải CHỜ tới trần, không gãy tức thì").toBeGreaterThanOrEqual(4500);
+      expect(daCho, "phải gãy ở trần, không treo").toBeLessThan(9000);
+      const { rows } = await db.pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND action = 'K120_HET_CHO'",
+        [orgId],
+      );
+      expect(rows[0]?.n).toBe(0);
+    } finally {
+      for (const c of giu) c.release();
+      await poolNho.end();
+    }
+  }, 20000);
 });

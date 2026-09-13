@@ -49,12 +49,6 @@ export interface TienTrinhApi {
   dung(): Promise<void>;
 }
 
-/**
- * Số kết nối của pool ~~sổ từ chối quyền — nhỏ, vì nó chỉ ghi một hàng cho mỗi lần 403~~ [S1.68 / lượt soi 62a-4] ghi sổ MỌI lần từ chối ở
- * giao dịch độc lập — `PERMISSION_DENIED` (403), `UNSEAL_DENIED` và hai lần thử vi phạm D2 (422) — dùng chung mọi tổ chức. Cỡ của nó và
- * phép kiểm "pool còn chỗ" tức thì của `requirePermission`: khoản nợ 120.
- */
-const AUDIT_POOL_MAX = 2;
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
 /**
@@ -72,7 +66,24 @@ const DON_BUCKET_ON_AO = 1000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
-  const auditPool = createPool(ch.databaseUrl, AUDIT_POOL_MAX, { role: "app_api" });
+  // [S1.69 / khoản 120] Chú thích dời từ hằng `AUDIT_POOL_MAX` đã gỡ, giữ nguyên văn: "Số kết nối của pool ~~sổ từ chối quyền — nhỏ, vì nó chỉ
+  // ghi một hàng cho mỗi lần 403~~ [S1.68 / lượt soi 62a-4] ghi sổ MỌI lần từ chối ở giao dịch độc lập — `PERMISSION_DENIED` (403),
+  // `UNSEAL_DENIED` và hai lần thử vi phạm D2 (422) — dùng chung mọi tổ chức. ~~Cỡ của nó và phép kiểm "pool còn chỗ" tức thì của
+  // `requirePermission`: khoản nợ 120.~~" — ~~`AUDIT_POOL_MAX = 2`~~ nay cỡ bằng `dbPoolMax`: mỗi lần ghi sổ từ chối của tiến trình này chạy khi
+  // yêu cầu đang giữ một kết nối của `pool` — `requirePermission` của bộ điều phối và mọi handler nhận `auditPool` nằm trong
+  // `withTenant(deps.pool, …)` (dispatch.ts, đọc) —, nên nhu cầu đồng thời của `auditPool` không vượt `dbPoolMax`, và cùng cỡ thì với nhu cầu
+  // ấy nó không là chỗ hẹp hơn. Với 2 kết nối, đo trên b8d38c7 (biên bản §S1.69): khoá tư vấn ghi sổ của một tổ chức ghim cả hai kết nối, và
+  // lần từ chối của tổ chức KHÁC gãy sau 15 ms, không hàng sổ. Giá, nói ra:
+  //   ⑴ tối đa `2 × dbPoolMax` kết nối CSDL mỗi tiến trình thay vì `dbPoolMax + 2` — mặc định 20 thay vì 12, ở trần cấu hình 100 là 200 (lượt
+  //     soi 63a-3); `batDau` mở một kết nối `auditPool` để kiểm vai, còn lại mở khi có lần từ chối, và đóng sau `idleTimeoutMillis` 10 s mặc
+  //     định của pg-pool (`createPool` không đặt);
+  //   ⑵ không còn vách ngăn 2 kết nối trước các lần từ chối nằm chờ khoá tư vấn ghi sổ của một tổ chức (lượt soi 63a-2, 63b-3). Đo lặp ba
+  //     lượt, `TRUSTPROCURE_DB_POOL_MAX` 3, `/me` của tổ chức A gửi 1 s sau yêu cầu cuối của X (biên bản §S1.69): ba lần từ chối của X tới
+  //     tuần tự ⇒ `/me` đứng 13 620–13 647 ms, trước bản vá 16–17 ms; tới cùng lúc ⇒ 13 999–14 016 ms, trước bản vá 14 002–14 018 ms; ba
+  //     lần GHI hợp lệ ⇒ khoảng 14 s ở cả hai bản — vách ngăn cũ chưa bao giờ che đường ghi. Chủ dự án chọn giữ cỡ này ngày 2026-09-13 để
+  //     lần từ chối chéo tổ chức không mất bản ghi — khoản 123; đường gửi link mời giữ khoá ấy suốt lần gửi — khoản 124. Hạn mức theo
+  //     người gọi cho lần từ chối — khoản 122.
+  const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
   // [S1.67 / khoản 118] Kết nối bị `withTenant` huỷ vì trạng thái phiên còn sót sau giao dịch: lỗi ấy không được ném cho ai, nên đây là
   // chỗ duy nhất nó thành một dòng log — xem `ghiLogKetNoiHuy`.
   ghiLogKetNoiHuy(pool, "pool");

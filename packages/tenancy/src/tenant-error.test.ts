@@ -21,6 +21,8 @@ const LOAI_THEO_MA: Readonly<Record<TenantErrorCode, "input" | "protocol">> = {
   SESSION_SCOPE_LEAK: "protocol",
   SESSION_STATE_LEFT: "protocol",
   GUEST_SETTINGS_INEFFECTIVE: "protocol",
+  // [S1.69 / khoản 120] Hết trần chờ lấy kết nối (`maxConnectWaitMs`) mà chưa có kết nối — lỗi hạ tầng, không phải lỗi của người gọi.
+  CONNECT_WAIT_EXCEEDED: "protocol",
 };
 
 describe("[S1.66 / lượt soi ngang 59b-1] loại của TenantError suy từ mã", () => {

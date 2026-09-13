@@ -672,3 +672,71 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     expect(ncc[0]?.n).toBe("0");
   });
 });
+
+// ==============================================================================================
+// [S1.69 / khoản 120] `auditPool` HẾT CHỖ KÉO DÀI ⇒ 500 VỚI MỘT DÒNG LOG PHÂN BIỆT ĐƯỢC VỚI `auditPool` SAI QUYỀN
+//
+// Đo trên b8d38c7, trước bản vá (biên bản §S1.69): `requirePermission` gãy NGAY khi `auditPool` không còn kết nối rảnh — phép chụp "pool còn
+// chỗ" tức thì — và lỗi của phép chụp là một `Error` không tên, nên pool hết chỗ và `auditPool` chạy dưới siêu người dùng cho CÙNG dòng
+// `PermissionAuditFailedError <- Error`. Sau bản vá lần ghi chờ kết nối tới trần; hết trần mới gãy, với `TenantError` CONNECT_WAIT_EXCEEDED.
+// ==============================================================================================
+describe("[INV-D5] [S1.69 / khoản 120] auditPool hết chỗ kéo dài ⇒ 500 với MỘT dòng log `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED`", () => {
+  async function phienKhongVaiTro(): Promise<{ readonly id: string; readonly cookie: string }> {
+    const id = (
+      await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'K120') RETURNING id", [
+        orgA,
+        `k120-${randomBytes(3).toString("hex")}@vidu.vn`,
+      ])
+    ).rows[0]!.id;
+    const token = randomBytes(32).toString("base64url");
+    await db.pool.query(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+      [orgA, id, createHash("sha256").update(token, "utf8").digest()],
+    );
+    return { id, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}` };
+  }
+
+  async function demSoVaNcc(actorId: string, tenNcc: string): Promise<readonly [string, string]> {
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [orgA, actorId],
+    );
+    const { rows: ncc } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM suppliers WHERE org_id = $1 AND legal_name = $2", [
+      orgA,
+      tenNcc,
+    ]);
+    return [so[0]?.n ?? "?", ncc[0]?.n ?? "?"];
+  }
+
+  it("[INV-D5] ⒰ phiên không vai trò gọi route ghi khi `auditPool` hết chỗ suốt yêu cầu ⇒ 500 thân cố định với MỘT dòng `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED`, không hàng sổ, không nhà cung cấp; đối chứng `auditPool` siêu người dùng vẫn cho `<- Error` (trước bản vá: cả hai cho `<- Error`)", async () => {
+    const poolNho = db.poolAs("app_api");
+    const giu: pg.PoolClient[] = [];
+    try {
+      for (let i = 0; i < poolNho.options.max; i += 1) giu.push(await poolNho.connect());
+      const goc = await dungServer(apiPool, undefined, poolNho);
+      const nguoi = await phienKhongVaiTro();
+      // Chốt chặn giờ: một hồi quy làm lần lấy kết nối mất trần thì yêu cầu treo — test ĐỎ ở 12 s, và `finally` nhả kết nối cho yêu cầu ấy xong.
+      const r = await Promise.race([
+        goi(goc, "/suppliers", nguoi.cookie, { method: "POST", body: { legalName: "K120 HET CHO" } }),
+        new Promise<PhanHoiCoLog>((xong) => {
+          setTimeout(() => xong({ status: -1, body: "TREO_QUA_12_GIAY", log: [] }), 12000).unref();
+        }),
+      ]);
+      expect(r.status, r.body).toBe(500);
+      expect(JSON.parse(r.body)).toEqual({ error: "loi noi bo" });
+      expect(r.log).toHaveLength(1);
+      expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED$/u);
+      expect(await demSoVaNcc(nguoi.id, "K120 HET CHO")).toEqual(["0", "0"]);
+
+      const gocSieu = await dungServer(apiPool, undefined, db.pool);
+      const nguoiSieu = await phienKhongVaiTro();
+      const rSieu = await goi(gocSieu, "/suppliers", nguoiSieu.cookie, { method: "POST", body: { legalName: "K120 SIEU" } });
+      expect(rSieu.status).toBe(500);
+      expect(rSieu.log).toHaveLength(1);
+      expect(rSieu.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} PermissionAuditFailedError <- Error$/u);
+    } finally {
+      for (const c of giu) c.release();
+      await poolNho.end();
+    }
+  }, 20000);
+});
