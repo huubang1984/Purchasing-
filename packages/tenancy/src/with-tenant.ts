@@ -23,6 +23,8 @@ interface DocLaiSauGiaoDich {
  * Tầng HTTP trước vòng này gộp mọi TenantError thành một 401 không log, nên cả nhóm `protocol` câm với người vận hành (đo: lượt soi
  * 59 — `ALTER DATABASE … SET app.guest_session_id` làm mọi route ra 401 không một dòng log). Mọi lỗi của lớp này vẫn nghĩa là KHÔNG
  * thay đổi nào được ghi, trừ `SESSION_STATE_LEFT`: nó chỉ đi vào `release()` để huỷ kết nối sau một giao dịch ĐÃ commit, không ném.
+ * [S1.67 / khoản 118] Sau một giao dịch hỏng cũng vậy — khi ấy thứ được ném là lỗi gốc. Không ai nhận nó qua `throw`, nên chỗ duy nhất
+ * thấy nó là sự kiện `release` của pool (pg-pool phát kèm đối số của `release()`); composition root của `apps/api` ghi một dòng cho nó.
  * Thông điệp không mang giá trị (UUID, GUC) — thứ được ghi log là `code`.
  */
 export type TenantErrorCode =
@@ -54,7 +56,7 @@ export class TenantError extends Error {
     this.code = code;
   }
 
-  /** `input`: lỗi của người gọi — tầng HTTP trả 401 không log. `protocol`: lớp cô lập từ chối — 500 kèm một dòng log mang `code`. */
+  /** `input`: lỗi của người gọi — tầng HTTP trả 401 không log khi withTenant hay withGuestSession ném nó ngoài handler [S1.67 / khoản 118: handler ném thì 500 có log]. `protocol`: lớp cô lập từ chối — 500 kèm một dòng log mang `code`. */
   get kind(): "input" | "protocol" {
     return MA_LOI_DAU_VAO.has(this.code) ? "input" : "protocol";
   }

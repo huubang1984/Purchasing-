@@ -44,8 +44,9 @@ export const TU_CHOI_KET_NOI_NHIEM =
 /**
  * [S1.59 / khoản nợ 99, lượt soi 52 NHẸ-2] Lỗi của lần lấy client gặp kết nối không sạch. Mang TÊN riêng vì ~~mọi chỗ ghi log của tiến
  * trình (`dispatch`, runner outbox, bộ dọn) chỉ ghi `name` của lỗi~~ [S1.66 / lượt soi ngang 59b-1, lượt soi 60a-7] chỗ ghi log của
- * `dispatch` chỉ ghi `name` của lỗi (cộng mã cố định của `TenantError`) — đường khách của nó từng gói lỗi này thành một 401 không log,
- * sửa ở S1.66; runner outbox chỉ in `kind`/`reason`, không in tên lỗi — khoản 118 — nên một `Error` trần thì kết nối nhiễm không phân biệt được với mọi lỗi
+ * `dispatch` chỉ ghi `name` của lỗi (cộng mã cố định của `TenantError` [S1.67 / khoản 118: hay SQLSTATE]) — đường khách của nó từng gói lỗi này thành một 401 không log,
+ * sửa ở S1.66; ~~runner outbox chỉ in `kind`/`reason`, không in tên lỗi — khoản 118 —~~ [S1.67 / khoản 118] dòng lỗi job outbox của
+ * composition root nay in tên cùng mã cố định của lỗi gốc, và lỗi này không mang mã — nên một `Error` trần thì kết nối nhiễm không phân biệt được với mọi lỗi
  * lập trình khác. Không thử lại: kết nối nhiễm đã bị huỷ, và một lần thử lại im lặng xoá đúng tín hiệu mà lớp này tồn tại để phát ra.
  */
 export class KetNoiNhiemError extends Error {

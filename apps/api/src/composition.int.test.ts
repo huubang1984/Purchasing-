@@ -19,7 +19,7 @@
 //   ⑷ `dung()` đóng cổng và cả hai pool — `db.stop()` (khoản nợ 28) đo không còn backend nào sót.
 // ==============================================================================================
 import { spawn, type ChildProcess } from "node:child_process";
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -330,6 +330,140 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
 function rows0(rows: ReadonlyArray<{ n: string }>): string {
   return rows[0]?.n ?? "?";
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.67 / khoản 118] CHỖ GHI LOG CỦA COMPOSITION ROOT MANG TÊN VÀ MÃ CỐ ĐỊNH CỦA LỖI — đo trên `taoTienTrinhApi` thật, mỗi `it` một
+// tiến trình dừng trong `finally`. Lỗi được gây bằng một trigger tạm của superuser trên bảng thật, gỡ ngay sau phép đo:
+//   ⑴ kết nối bị huỷ vì `SESSION_STATE_LEFT` sau một giao dịch đã commit — bộ nghe `release` mà composition gắn vào pool;
+//   ⑵ handler của job outbox hỏng vì lỗi Postgres — `onJobFailure` (trước khoản 118: chỉ kind và lý do);
+//   ⑶ lượt chạy của runner cho một tổ chức ném — dòng của lời đánh thức (trước khoản 118: chỉ tên lỗi);
+//   ⑷ lần ghi sổ từ chối quyền qua `auditPool` để lại trạng thái phiên — bộ nghe `release` composition gắn vào `auditPool` (lượt soi 61a-3).
+// Mỗi ca gọi `/auth/link` từ một địa chỉ riêng (proxy đã khai) với một email không có người dùng: bộ đếm theo người gọi của các test
+// trên không đổi, và không tin nào vào hộp thư.
+// ----------------------------------------------------------------------------------------------
+describe("[S1.67 / khoản 118] tiến trình dựng từ môi trường: dòng log mang tên lỗi và mã cố định, không mang giá trị", () => {
+  async function voiTienTrinh(viec: (log: readonly string[]) => Promise<void>): Promise<void> {
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong()));
+    try {
+      const dc = await tt.batDau();
+      goc = `http://${dc.host}:${dc.port}`;
+      await viec(log);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+    }
+  }
+
+  async function doiDongLog(log: readonly string[], mau: RegExp, hanMs = 5000): Promise<string> {
+    const het = Date.now() + hanMs;
+    for (;;) {
+      const dong = log.find((d) => mau.test(d));
+      if (dong !== undefined) return dong;
+      if (Date.now() > het) throw new Error(`het ${hanMs}ms, khong co dong log khop ${String(mau)}: ${JSON.stringify(log)}`);
+      await new Promise((x) => setTimeout(x, 25));
+    }
+  }
+
+  it("⑴ kết nối bị huỷ vì SESSION_STATE_LEFT sau một giao dịch đã commit ⇒ bộ nghe release mà composition gắn vào pool ghi MỘT dòng `ket noi huy` cho MỖI kết nối — hai giao dịch bộ đếm của /auth/link, hai dòng — không mang giá trị; phản hồi không đổi", async () => {
+    await db.pool.query(
+      "CREATE FUNCTION public.k118_de_lai_guc() RETURNS trigger LANGUAGE plpgsql AS " +
+        "$$BEGIN PERFORM pg_catalog.set_config('app.guest_rfq_id', '00000000-0000-4000-8000-000000000118', false); RETURN NULL; END$$",
+    );
+    await db.pool.query(
+      "CREATE TRIGGER k118_de_lai_guc AFTER INSERT OR UPDATE ON public.caller_rate_limits FOR EACH ROW EXECUTE FUNCTION public.k118_de_lai_guc()",
+    );
+    try {
+      await voiTienTrinh(async (log) => {
+        const r = await goi("POST", "/auth/link", { body: { orgId: org, email: "k118-a@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.18" } });
+        expect(r.status, r.text).toBe(200);
+        // Hai giao dịch của bộ điều phối ghi `caller_rate_limits` cho `/auth/link` (`callerLimit` và `orgLimit`, routes/auth.ts): mỗi giao
+        // dịch một kết nối bị huỷ, mỗi kết nối MỘT dòng — gắn bộ nghe hai lần thì bốn dòng (lượt soi 61a-3).
+        const huy = log.filter((d) => d.includes("ket noi huy"));
+        expect(huy, JSON.stringify(log)).toEqual([
+          "[api] ket noi huy pool TenantError SESSION_STATE_LEFT",
+          "[api] ket noi huy pool TenantError SESSION_STATE_LEFT",
+        ]);
+        expect(log.join("\n")).not.toContain("000000000118");
+      });
+    } finally {
+      await db.pool.query("DROP TRIGGER k118_de_lai_guc ON public.caller_rate_limits");
+      await db.pool.query("DROP FUNCTION public.k118_de_lai_guc()");
+    }
+  });
+
+  it("⑵ handler của job outbox hỏng vì lỗi Postgres ⇒ dòng `outbox` mang kind, lý do, TÊN và SQLSTATE của lỗi gốc — không mang email (trước khoản 118: chỉ kind và lý do)", async () => {
+    await db.pool.query(
+      "CREATE FUNCTION public.k118_chan_xong() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'k118' USING ERRCODE = 'TP118'; END$$",
+    );
+    await db.pool.query(
+      "CREATE TRIGGER k118_chan_xong BEFORE UPDATE ON public.outbox_jobs FOR EACH ROW WHEN (NEW.status = 'DONE') EXECUTE FUNCTION public.k118_chan_xong()",
+    );
+    try {
+      await voiTienTrinh(async (log) => {
+        const r = await goi("POST", "/auth/link", { body: { orgId: org, email: "k118-b@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.19" } });
+        expect(r.status, r.text).toBe(200);
+        expect(await doiDongLog(log, /^\[api\] outbox /u)).toBe("[api] outbox LOGIN_LINK_SEND HANDLER_ERROR error TP118");
+        expect(log.join("\n")).not.toContain("k118-b@vidu.vn");
+      });
+    } finally {
+      await db.pool.query("DROP TRIGGER k118_chan_xong ON public.outbox_jobs");
+      await db.pool.query("DROP FUNCTION public.k118_chan_xong()");
+    }
+  });
+
+  it("⑶ lượt chạy của runner cho một tổ chức ném ⇒ dòng `outbox` của lời đánh thức mang TÊN và SQLSTATE (trước khoản 118: chỉ tên lỗi)", async () => {
+    await db.pool.query(
+      "CREATE FUNCTION public.k118_chan_nhan() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'k118' USING ERRCODE = 'TP118'; END$$",
+    );
+    await db.pool.query(
+      "CREATE TRIGGER k118_chan_nhan BEFORE UPDATE ON public.outbox_jobs FOR EACH ROW WHEN (NEW.status = 'RUNNING') EXECUTE FUNCTION public.k118_chan_nhan()",
+    );
+    try {
+      await voiTienTrinh(async (log) => {
+        const r = await goi("POST", "/auth/link", { body: { orgId: org, email: "k118-c@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.20" } });
+        expect(r.status, r.text).toBe(200);
+        expect(await doiDongLog(log, /^\[api\] outbox (?!poll )/u)).toBe("[api] outbox error TP118");
+      });
+    } finally {
+      await db.pool.query("DROP TRIGGER k118_chan_nhan ON public.outbox_jobs");
+      await db.pool.query("DROP FUNCTION public.k118_chan_nhan()");
+    }
+  });
+
+  it("⑷ [lượt soi 61a-3] lần ghi sổ từ chối quyền qua auditPool để lại GUC phạm vi phiên ⇒ bộ nghe release mà composition gắn vào auditPool ghi MỘT dòng `ket noi huy auditPool`, không mang giá trị; phản hồi vẫn 403", async () => {
+    const token = randomBytes(32).toString("base64url");
+    await db.pool.query(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+      [org, nguoi, createHash("sha256").update(token, "utf8").digest()],
+    );
+    await db.pool.query(
+      "CREATE FUNCTION public.k118_de_lai_guc_so() RETURNS trigger LANGUAGE plpgsql AS " +
+        "$$BEGIN PERFORM pg_catalog.set_config('app.guest_rfq_id', '00000000-0000-4000-8000-000000000118', false); RETURN NULL; END$$",
+    );
+    await db.pool.query(
+      "CREATE TRIGGER k118_de_lai_guc_so AFTER INSERT ON public.audit_events FOR EACH ROW EXECUTE FUNCTION public.k118_de_lai_guc_so()",
+    );
+    try {
+      await voiTienTrinh(async (log) => {
+        // BUYER không có supplier.manage: `requirePermission` từ chối và ghi PERMISSION_DENIED qua auditPool (D5).
+        const r = await goi("POST", "/suppliers", { cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}`, body: { legalName: "NCC k118" } });
+        expect(r.status, r.text).toBe(403);
+        expect(log.filter((d) => d.includes("ket noi huy")), JSON.stringify(log)).toEqual([
+          "[api] ket noi huy auditPool TenantError SESSION_STATE_LEFT",
+        ]);
+        expect(log.join("\n")).not.toContain("000000000118");
+      });
+    } finally {
+      await db.pool.query("DROP TRIGGER k118_de_lai_guc_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION public.k118_de_lai_guc_so()");
+    }
+  });
+});
 
 // ----------------------------------------------------------------------------------------------
 // `main.ts` THẬT, chạy như `pnpm api:dev` (tiến trình con, cùng lệnh với script ở package.json gốc).
