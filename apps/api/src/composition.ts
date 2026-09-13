@@ -81,7 +81,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   //     lượt, `TRUSTPROCURE_DB_POOL_MAX` 3, `/me` của tổ chức A gửi 1 s sau yêu cầu cuối của X (biên bản §S1.69): ba lần từ chối của X tới
   //     tuần tự ⇒ `/me` đứng 13 620–13 647 ms, trước bản vá 16–17 ms; tới cùng lúc ⇒ 13 999–14 016 ms, trước bản vá 14 002–14 018 ms; ba
   //     lần GHI hợp lệ ⇒ khoảng 14 s ở cả hai bản — vách ngăn cũ chưa bao giờ che đường ghi. Chủ dự án chọn giữ cỡ này ngày 2026-09-13 để
-  //     lần từ chối chéo tổ chức không mất bản ghi — khoản 123; đường gửi link mời giữ khoá ấy suốt lần gửi — khoản 124. Hạn mức theo
+  //     lần từ chối chéo tổ chức không mất bản ghi — khoản 123; ~~đường gửi link mời giữ khoá ấy suốt lần gửi — khoản 124~~ [S1.70] khoản 124 đóng: link mời gửi sau commit. Hạn mức theo
   //     người gọi cho lần từ chối — khoản 122.
   const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
   // [S1.67 / khoản 118] Kết nối bị `withTenant` huỷ vì trạng thái phiên còn sót sau giao dịch: lỗi ấy không được ném cho ai, nên đây là

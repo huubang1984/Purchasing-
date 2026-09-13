@@ -1015,12 +1015,29 @@ export async function clearOtpLockout(
   return { cleared: rowCount ?? 0 };
 }
 
+/** [S1.70 / lượt soi 64a-9] Lý do thu hồi do hệ thống đặt — kiểm LÚC CHẠY, không chỉ ở kiểu. */
+const LY_DO_THU_HOI: ReadonlySet<string> = new Set(["LINK_SEND_FAILED"]);
+
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly invitationId: string; readonly actorSessionId: string },
+  input: {
+    readonly invitationId: string;
+    readonly actorSessionId: string;
+    /**
+     * [S1.70 / khoản 124] Lý do do HỆ THỐNG đặt khi thu hồi dưới danh nghĩa phiên người mời — hôm nay một giá trị: `LINK_SEND_FAILED`, lần
+     * thu hồi bù của `apps/api` khi link mời không gửi được sau commit. Người mua tự thu hồi thì không có lý do. Đi vào `payload` của
+     * `INVITATION_REVOKED`, để sổ phân biệt lần người mua bấm thu hồi với lần hệ thống thu hồi thay họ.
+     */
+    readonly reason?: "LINK_SEND_FAILED";
+  },
 ): Promise<boolean> {
   await assertTenantBound(client, orgId, "revokeInvitation");
+  // [S1.70 / lượt soi 64a-9] `reason` là danh sách đóng ở KIỂU, nhưng một lời gọi từ JS hay một lần ép kiểu vẫn đưa được chuỗi tuỳ ý vào
+  // payload của sổ nối chuỗi băm — vĩnh viễn. Kiểm trước mọi câu ghi; thông điệp không nội suy giá trị.
+  if (input.reason !== undefined && !LY_DO_THU_HOI.has(input.reason)) {
+    throw new InvitationError("Lý do thu hồi không nằm trong danh sách cho phép.");
+  }
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   // [ADR-016] Hai cột người thu hồi đi TRONG CÙNG câu lệnh đặt `revoked_at`, không phải một
@@ -1056,6 +1073,7 @@ export async function revokeInvitation(
     action: "INVITATION_REVOKED",
     resourceType: "RFQ_INVITATION",
     resourceId: input.invitationId,
+    ...(input.reason === undefined ? {} : { payload: { reason: input.reason } }),
   });
   return true;
 }

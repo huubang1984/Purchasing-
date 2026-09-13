@@ -4879,3 +4879,224 @@ Người soi 63b đối chiếu và không bác: mọi số đo trước bản v
 - ⑴ Một cổng văn bản so theo DÒNG mù trước chính định dạng của mã nó canh: đổi cách xuống dòng là đủ. Cổng văn bản cần test mẫu cho các dạng viết khác nhau của cùng một lời gọi, không chỉ một phép đếm tệp.
 - ⑵ Một phép "gãy nhanh cho an toàn" phải được hỏi nó gãy CHO AI: phép chụp tức thì bảo vệ một ca cấu hình sai của người gọi, và trả bằng bản ghi của người khác dưới tải thật. Câu "dương tính giả chỉ đổi thành lỗi ồn ào" đứng từ S0 vì chưa ai đo lỗi ồn ào ấy là bản ghi của ai.
 - ⑶ Cỡ của một pool phụ thuộc có đáp án đọc được từ mã khi mọi lần dùng nó đều lồng trong pool khác: `auditPool` chỉ được lấy khi đang giữ kết nối nghiệp vụ, nên cỡ bằng pool nghiệp vụ là cỡ không bao giờ hẹp hơn — một con số chọn tay (2) thì có.
+
+# §S1.70 — khoản nợ 124: link mời gửi SAU commit qua việc sau commit CÓ BÙ của bộ điều phối — khoá ghi sổ của tổ chức không còn bị giữ suốt lần gửi; gửi hỏng hay quá trần thì lời mời bị thu hồi trong giao dịch mới và phản hồi là `502`, thu hồi bù cũng hỏng thì `500` kèm `invitationId` — lượt soi 64; khoản 125 mở
+
+**Bề mặt (bản cuối):**
+- `apps/api/src/route-types.ts`: `ViecSauCommitCoBu { viec, bu, phanHoiKhiHong, phanHoiKhiBuHong? }` và `AfterCommitCoBu`; `BuyerContext.afterCommitCoBu`. `AnonContext` và `GuestContext` không có trường ấy. Doc của `ViecSauCommitCoBu` nói tối đa một việc cho mỗi yêu cầu, closure không dùng `ctx.client`, phần bù không đi qua cổng quyền lần nữa (lượt soi 64a-7, 64a-8); doc `AfterCommit` thêm cảnh báo `ctx.client`.
+- `apps/api/src/dispatch.ts`:
+  - hằng `TRAN_CHO_KET_NOI_BU_MS` 5 000 (lượt soi 64a-3);
+  - mỗi yêu cầu một biến `viecCoBu` và hàm `afterCommitCoBu` — đăng ký lần hai ném `ViecCoBuThuHai` ngay trong handler (64a-2); nhánh BUYER giao hàm ấy cho handler, nhánh ANON không;
+  - `chaySauCommit(r, orgId)`: phản hồi ≥ 400 ⇒ không chạy gì; việc có bù chạy TRƯỚC việc thường, trần `afterCommitTimeoutMs` qua `coHan`; hỏng hay quá trần ⇒ dòng `sau-commit`, `withTenant(deps.pool, orgId, v.bu, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS })`, trả `phanHoiKhiHong`, bỏ việc thường; bù hỏng ⇒ dòng `bu-sau-commit`, trả `phanHoiKhiBuHong` hay `500` thân cố định;
+  - chú thích: đầu tệp nhánh BUYER và khối ánh xạ lỗi thêm pha sau commit; docstring `afterCommitTimeoutMs` gạch "quá trần chỉ ghi TÊN lỗi, không đổi phản hồi", nêu một trần hai hợp đồng và ghi chú [S1.12] cho ví dụ `/auth/link` (64a-4, 64a-6, 64b-6); chú thích [review M-7] ghi "phản hồi đã quyết" chỉ nói về việc thường.
+- `apps/api/src/routes/buyer.ts`: `POST /rfqs/:rfqId/invitations` đăng ký `afterCommitCoBu` — `viec` gửi link; `bu` gọi `revokeInvitation(…, reason: "LINK_SEND_FAILED")` dưới phiên người mời; `phanHoiKhiHong` là `502` `{"error":"khong gui duoc link moi, loi moi da thu hoi"}`; `phanHoiKhiBuHong` là `500` `{"error":"khong gui duoc link moi va chua thu hoi duoc loi moi","invitationId":…}`. Chú thích nêu số đo trước bản vá, hai hợp đồng chủ dự án chọn và vế bù hỏng (64a-5, 64b-21).
+- `packages/invitation/src/invitation.ts`: `revokeInvitation` nhận `reason?: "LINK_SEND_FAILED"`, kiểm lúc chạy bằng `LY_DO_THU_HOI` trước mọi câu ghi — lạ thì `InvitationError` không nội suy giá trị (64a-9); có thì payload `INVITATION_REVOKED` là `{ reason }`, không thì như cũ.
+- `apps/api/src/cau-hinh.ts` và `apps/api/.env.example`: docstring và chú thích của `TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS` nêu một trần hai hợp đồng (64a-6).
+- `apps/api/src/composition.ts`: chú thích ⑵ gạch "đường gửi link mời giữ khoá ấy suốt lần gửi — khoản 124", ghi khoản 124 đóng.
+- Test: `apps/api/src/loi-moi-sau-commit.int.test.ts` (mới) — hai describe, chín `it` (mục Test).
+- Tài liệu: STATE (hàng 124 đóng; hàng 125 mở; ghi chú [S1.70] ở hàng 120 và hàng 123; dòng CÒN MỞ), DECISIONS (ADR-020 tiểu mục `[S1.70 / khoản 124]`, "Đo bằng gì" ⑻, câu [S1.11] ở "Phần KHÔNG đóng"; ghi chú đóng ở ADR-016 tiểu mục [S1.69 / khoản 120]), Handoff (§10, §13), tệp này.
+
+**Đo trước khi viết:**
+- ⒜ **Phép đo tạm trên `a936f4a`:** tệp `apps/api/src/k124-do-truoc.int.test.ts` (driver đặt vào kho một lần trước lượt đầu và dời đi khi dừng; bản lưu ở scratchpad), PostgreSQL 16, tiến trình `api` dựng từ môi trường qua `taoTienTrinhApi(docCauHinh(…))`, `TRUSTPROCURE_DB_POOL_MAX` 3. Composition không nhận bộ gửi tiêm, nên lần ghi tệp của hộp thư dev bị làm chậm 3 000 ms, ném, hay treo bằng `vi.mock("node:fs/promises")` — chỉ tin `INVITATION_LINK`. BUYER của tổ chức X mời; mốc tính từ lúc bộ gửi được gọi: +500 ms một PROCUREMENT_MANAGER của X tạo nhà cung cấp (ghi hợp lệ) và một BUYER của X tạo nhà cung cấp (lần từ chối, ghi sổ qua `auditPool`); +1 000 ms chụp số khoá tư vấn chưa cấp của X và `pg_stat_activity`, rồi `/me` của BUYER tổ chức A. Một bộ theo dõi — câu truy vấn rồi ngủ 20 ms — ghi từng khoảng một backend `app_api_login` giữ khoá tư vấn ghi sổ của X, theo pid. Ba biến thể xen kẽ trong mỗi lần lặp: bản cũ; vA — `ctx.afterCommit(send)`; vB — lần gửi trong giao dịch với trần 5 s (`Promise.race`) — tạm thay `routes/buyer.ts`, trả về theo sha256. Driver `k124_do_truoc.py`: 15 lượt, mỗi lượt thoát mã 0 và ghi đúng một dòng; tệp trả nguyên bản; `git status` khớp lúc đầu; tệp `zzprobe-*`: 0.
+
+  | Kịch bản | `a936f4a` | vA — `afterCommit` | vB — trần 5 s trong giao dịch |
+  |---|---|---|---|
+  | CHẬM 3 s — khoá X do lần mời giữ, ba lượt | 3 050 / 3 023 / 3 054 ms | thấy ở một lần thăm dò mỗi lượt — ngắn hơn hai khoảng thăm dò | 3 048 / 2 998 / 3 045 ms |
+  | ghi hợp lệ của X | 201 sau 2 545 / 2 548 / 2 566 ms | 201 sau 39 / 61 / 65 ms | 201 sau 2 559 / 2 504 / 2 550 ms |
+  | từ chối của X | 403 sau 2 552 / 2 542 / 2 572 ms | 403 sau 24 / 56 / 61 ms | 403 sau 2 554 / 2 511 / 2 544 ms |
+  | `/me` của A | 2 043 / 2 037 / 2 055 ms | 22 / 8 / 24 ms | 2 027 / 1 995 / 2 032 ms |
+  | ở mốc +1 000 ms | 2 khoá chờ; 2 kết nối chờ khoá, 2 đứng trong giao dịch | 0 khoá chờ; 3 kết nối rảnh | như `a936f4a` |
+  | yêu cầu mời | 201 sau 3 088 / 3 083 / 3 102 ms | 201 sau 3 041 / 3 084 / 3 077 ms | 201 sau 3 082 / 3 046 / 3 078 ms |
+  | HỎNG — bộ gửi ném | 500 sau 36 ms, log `LoiGuiGiaLap`; 0 lời mời, 0 token, 0 hàng sổ; gọi lại 201 | 201 sau 34 ms với `status: "SENT"`, log `sau-commit LoiGuiGiaLap`; 1 lời mời, 1 token, 2 hàng sổ, hộp thư 0; gọi lại 409; thu hồi 200 rồi mời lại 201 | 500 sau 38 ms, log `LoiGuiGiaLap`, 0 hàng; gọi lại 201 |
+  | TREO — khoá X do lần mời giữ | 59 994 ms | thấy ở một lần thăm dò | 4 996 ms |
+  | yêu cầu mời | chưa trả sau 68 003 ms | 201 sau 5 039 ms, log `sau-commit SauCommitQuaHan`, lời mời sống, hộp thư 0 | 500 sau 5 046 ms, log `BoGuiQuaHan`, 0 hàng |
+  | ghi hợp lệ / từ chối của X | 500 / 500 sau 15 033 ms — log `error 57014`, `PermissionAuditFailedError <- error 57014` | 201 sau 44 ms / 403 sau 27 ms | 201 sau 4 509 ms / 403 sau 4 517 ms |
+  | `/me` của A | 14 522 ms | 17 ms | 3 997 ms |
+
+  Đọc kết quả: ⑴ bản cũ giữ khoá ghi sổ của tổ chức đúng bằng thời gian gửi, và ba kết nối nghiệp vụ bị ghim làm `/me` của tổ chức khác chờ theo; ⑵ bộ gửi treo giữ khoá tới `idle_in_transaction_session_timeout` 60 s — ở cuối cửa sổ 68 s không còn backend `app_api_login` nào, còn yêu cầu HTTP vẫn chưa trả; ⑶ vB chỉ bó cửa sổ tới trần, không bỏ nó; ⑷ vA bỏ việc giữ khoá nhưng biến gửi hỏng thành một `201` im lặng. ⇒ trình chủ dự án ba phương án — gửi sau commit và thu hồi khi gửi hỏng; gửi sau commit chỉ ghi log; trong giao dịch trần 5 s —, chủ dự án chọn phương án đầu ngày 2026-09-13 (ADR-020 tiểu mục [S1.70 / khoản 124]).
+- ⒝ **Đỏ-trước, ba lượt.** Log của cả ba gộp stdout và stderr.
+  - *Test bản đầu trên `a936f4a`*, cùng `buyer.int.test.ts` và `loi-giao-thuc.int.test.ts`, reporter JSON: 33 test, 7 đỏ ĐÚNG tập ghi trước, 26 xanh, thoát mã 1, `still running` 0. Lý do đỏ khớp cơ chế ghi trước: ⑴ bộ gửi nhận token khi 0 token đã commit; ⑵ 500 thay cho 502; ⑶ 1 khoá ghi sổ của tổ chức bị giữ trong lúc bộ gửi treo; ⑷ một dòng log thay cho hai; ⑸ ⑹ ⑺ 500 vì `afterCommitCoBu` chưa tồn tại. Sau khi ⑵ thêm vế tự thu hồi (tự bắt ⑶), chạy lại trên mã cũ — năm tệp nguồn tạm thay bằng `origin/master`, trả theo sha256: 7/7 đỏ đúng tập, `git status` khớp.
+  - *Test bản hai trên mã bản đầu* (sau lượt soi 64a, trước khi sửa mã): 9 test, 4 đỏ ĐÚNG tập ghi trước — ⑷ thân 500 không có `invitationId`; ⑹ đăng ký lần hai trả 502 của việc đầu thay cho 500; ⑻ `revokeInvitation` nhận `reason` lạ và thu hồi; ⑼ phần bù chờ 20 s, chặn 12 s trả rỗng —, 5 xanh, thoát mã 1, `still running` 0.
+  - *Test bản hai trên `origin/master`* (năm tệp nguồn tạm thay, trả theo sha256): 9/9 đỏ đúng tập, `git status` khớp, `still running` 0.
+- ⒞ **Đọc:**
+  - `git log -S invitationLinkSender` trên `routes/buyer.ts`: lời gọi trong handler từ `214a741` (S1.10.5), không commit nào đưa nó qua `afterCommit` — câu [S1.11] của ADR-020 viết ngược lại (tự bắt ⑴).
+  - `rfq_invitations.status` mặc định `SENT` lúc INSERT (010) — không mang nghĩa "đã giao link"; chỉ mục `rfq_invitations_mot_loi_moi_con_song` trên `(org_id, rfq_id, supplier_id)` WHERE `revoked_at IS NULL` (024).
+  - `revokeInvitation` thu hồi lời mời, token, thách thức OTP và phiên khách, ghi `INVITATION_REVOKED` chỉ khi có hàng đổi; `resolveSessionActor` ném `SessionInvalidError` khi phiên đã thu hồi.
+  - Các dịch vụ tiêm khác được gọi trong giao dịch: `/auth/redeem` bọc bí mật TOTP trước `MFA_ENROLLED`; `/auth/totp` mở bí mật trước `MFA_LOCKED`; `submitBid` ký biên nhận trước `BID_SUBMITTED`; `openRfq` → `issueRfqKeyPair` bọc khoá của thuật toán THỨ HAI sau `RFQ_KEY_MATERIAL_ISSUED` của thuật toán đầu — `KEY_AGREEMENT_ALGORITHMS` là `ECDH_P256`, `X25519` — tức một lời gọi KMS khi đang giữ khoá ghi sổ, trần 5 s `KmsQuaHan` (tự bắt ⑷, khoản 123 ⑶).
+- ⒟ **Đo bù hỏng trên mã bản đầu (lượt soi 64a-1, 64a-3):** tệp thăm dò tạm `apps/api/src/k124-do-bu.int.test.ts` dựng từ fixture của tệp test mới (dời khỏi kho sau lượt), bộ điều phối trên pool `createPool(…, 4, { role: "app_api" })`. ⑴ Bộ gửi thu hồi phiên người mời rồi ném ⇒ 500 `loi noi bo`, hai dòng `sau-commit LoiGuiGiaLap` và `bu-sau-commit SessionInvalidError`; một người mua KHÁC mời lại ⇒ 409 `xung dot du lieu`; người mời gọi lại ⇒ 401; cuối lượt 1 lời mời và 1 token còn sống, hộp thư 0 — không route đọc nào trả id lời mời, nên không thu hồi được qua API. ⑵ Bộ gửi chờ, test lấy cả 4 kết nối của pool, rồi thả bộ gửi cho nó ném ⇒ 500 sau 20 004 ms tính từ lúc thả, dòng `bu-sau-commit Error` không tên, lời mời còn sống. Driver thoát mã 0, `git status` khớp, `zzprobe-*`: 0. ⇒ trình chủ dự án ba phương án, chủ dự án chọn trả `invitationId` (lượt soi 64a, bảng dưới).
+
+**Sau bản vá:**
+- **Bản đầu:** eslint sáu tệp thoát mã 0 và `tsc` thoát mã 0 — cả hai chạy trước khi ⑵ thêm vế tự thu hồi; bảy tệp test đích — `loi-moi-sau-commit`, `buyer`, `loi-giao-thuc`, `auth`, `guest`, `packages/invitation` `invitation.int`, `apps/unseal-worker` `kich-ban-41-http` — 159/159, thoát mã 0, `still running` 0; tệp mới sau khi ⑵ đổi 7/7, thoát mã 0; `pnpm test` 54 tệp / 771 test + 1 bỏ qua, thoát mã 0; tệp `zzprobe-*`: 0; `git status` đúng sáu tệp.
+- **Bản hai, sau lượt soi 64:** áp 14 chỗ thay trên sáu tệp; eslint bảy tệp thoát mã 0; `tsc` thoát mã 0; tám tệp test đích — bảy tệp trên cộng `cau-hinh.test.ts` — 185/185, thoát mã 0, `still running` 0; `pnpm test` 54 tệp / 771 test + 1 bỏ qua, thoát mã 0; tệp `zzprobe-*`: 0; `git status` đúng tám tệp — bảy sửa, một mới.
+- **Sau lượt đột biến bản hai:** `pnpm vitest run apps/api packages/invitation apps/unseal-worker` 22 tệp / 318 test, thoát mã 0, `still running` 0; `git status` đúng tám tệp; tệp `zzprobe-*`: 0.
+
+**Đo sau bản vá — cùng tệp thăm dò, cùng tiến trình:** tệp `apps/api/src/k124-do-sau.int.test.ts` (chép nguyên tệp thăm dò của lượt đo trước; driver đặt vào kho một lần và dời đi khi dừng). Hai bản xen kẽ trong mỗi lần lặp: bản vá, và `origin/master` — năm tệp nguồn tạm thay, trả theo sha256. Chậm ba lượt; hỏng và treo một lượt. Driver `k124_do_sau.py`: 10 lượt, mỗi lượt thoát mã 0 và ghi đúng một dòng; tệp trả nguyên bản; `git status` khớp lúc đầu; tệp `zzprobe-*`: 0; dòng `exit=0` của driver lưu trong log. Mã của lượt đo này là bản đầu; bản hai chỉ đổi đường bù hỏng, đăng ký lần hai và phép kiểm `reason` — đường gửi thành công và đường bù thành công giữ nguyên (đọc), và ⑴ ⑵ ⑶ của tệp test chạy xanh trên bản hai (đo).
+
+| Kịch bản | Bản vá | `origin/master`, cùng lần lặp |
+|---|---|---|
+| CHẬM 3 s — khoá X do lần mời giữ, ba lượt | thấy ở một lần thăm dò mỗi lượt (29–30 ms sau khi gửi yêu cầu) | 3 066 / 3 010 / 3 000 ms |
+| ghi hợp lệ của X | 201 sau 38 / 64 / 35 ms | 201 sau 2 579 / 2 507 / 2 502 ms |
+| từ chối của X | 403 sau 24 / 60 / 29 ms | 403 sau 2 573 / 2 513 / 2 507 ms |
+| `/me` của A | 18 / 20 / 21 ms | 2 061 / 1 993 / 1 991 ms |
+| ở mốc +1 000 ms | 0 khoá chờ; 3 kết nối rảnh — yêu cầu mời vẫn đang đợi bộ gửi | 2 khoá chờ; 2 kết nối chờ khoá, 2 đứng trong giao dịch |
+| yêu cầu mời | 201 sau 3 040 / 3 040 / 3 039 ms | 201 sau 3 103 / 3 049 / 3 050 ms |
+| HỎNG — bộ gửi ném | 502 sau 53 ms, thân cố định, log `sau-commit LoiGuiGiaLap`; 1 lời mời và 1 token, cả hai đã thu hồi; sổ `INVITATION_CREATED`, `MAGIC_LINK_TOKEN_ISSUED`, `INVITATION_REVOKED`; hộp thư 0; gọi lại 201 — 2 lời mời, 1 sống, hộp thư 1 | 500 sau 42 ms, log `LoiGuiGiaLap`, 0 hàng; gọi lại 201 |
+| TREO — yêu cầu mời | 502 sau 5 089 ms, log `sau-commit SauCommitQuaHan`; lời mời và token thu hồi; hộp thư 0 | chưa trả sau 68 001 ms; 0 hàng; hộp thư 0 |
+| khoá X | thấy ở một lần thăm dò lúc mời (29 ms) và một lần lúc bù (5 073 ms) | 59 981 ms |
+| ghi hợp lệ / từ chối của X | 201 sau 40 ms / 403 sau 26 ms | 500 / 500 sau 15 032 ms — log `error 57014`, `PermissionAuditFailedError <- error 57014` |
+| `/me` của A | 18 ms | 14 525 ms |
+
+Đọc kết quả: ⑴ ở cả ba lượt chậm, bản vá không để lần gửi giữ khoá hay kết nối CSDL nào — yêu cầu mời vẫn đợi bộ gửi 3 s, còn lần ghi khác của tổ chức và `/me` của tổ chức khác không đợi; ⑵ gửi hỏng và treo cho đúng hợp đồng đã chọn — `502`, lời mời và token thu hồi, sổ ghi đủ ba hàng, gọi lại được; ⑶ `origin/master` trong cùng lượt tái hiện số của lượt đo trước.
+
+**Test** — `loi-moi-sau-commit.int.test.ts`: PostgreSQL 16, pool `createPool(…, 4, { role: "app_api" })` cho giao dịch và cho `auditPool`; RFQ OPEN có khoá theo công thức của `guest.int.test.ts`; bộ gửi link mời do test điều khiển đếm token của lời mời TỪ MỘT KẾT NỐI KHÁC ngay khi được gọi và ghi lại đích, kênh; ba máy chủ: trần mặc định, `afterCommitTimeoutMs` 800 ms, năm route giả.
+- ⑴ đối chứng — một kết nối của pool ứng dụng giữ khoá tư vấn của X ⇒ bộ đếm thấy 1; rồi bộ gửi CHỜ: token đã commit (1), 0 khoá của X được cấp cho kết nối `application_name = 'trustprocure'`, `POST /suppliers` của PM xong 201 trong lúc gửi còn chờ (chặn 3 s); thả ⇒ 201, đúng một link tới đúng đích và kênh, thân không mang token, 1 lời mời và 1 token còn sống;
+- ⑵ bộ gửi NÉM với thông điệp mang token và email ⇒ 502 thân cố định; MỘT dòng `[api] <requestId> sau-commit LoiGuiGiaLap`; lời mời và token thu hồi; sổ của lời mời: `INVITATION_CREATED`, `MAGIC_LINK_TOKEN_ISSUED`, `INVITATION_REVOKED` với payload `{ reason: "LINK_SEND_FAILED" }` và `actor_id` của người mời; gọi lại ⇒ 201; người mua tự thu hồi lời mời mới ⇒ 200 và payload `{}`;
+- ⑶ bộ gửi TREO, trần 800 ms ⇒ 0 khoá của X bị giữ trong lúc treo; 502 trong [700, 5 000) ms (chặn 6 s); MỘT dòng `sau-commit SauCommitQuaHan`; lời mời thu hồi; gọi lại ⇒ 201;
+- ⑷ bộ gửi thu hồi phiên người mời rồi ném ⇒ 500 kèm `invitationId` của lời mời còn sống; hai dòng `sau-commit LoiGuiGiaLap`, `bu-sau-commit SessionInvalidError`; một người mua khác mời lại ⇒ 409, thu hồi bằng id ⇒ 200, mời lại ⇒ 201;
+- ⑻ lời mời qua route, rồi `revokeInvitation` với `reason` lạ ⇒ `InvitationError`; lời mời và token còn sống; sổ không có `INVITATION_REVOKED`;
+- ⑼ bộ gửi chờ, test lấy cả 4 kết nối của pool, rồi thả bộ gửi cho nó ném ⇒ 500 kèm `invitationId` trong [4 500, 9 000) ms (chặn 12 s); hai dòng `sau-commit LoiGuiGiaLap`, `bu-sau-commit TenantError CONNECT_WAIT_EXCEEDED`; lời mời còn sống;
+- ⑸ route giả trả 422 sau khi đăng ký việc có bù ⇒ 422, việc và bù không chạy, không log;
+- ⑹ route giả xếp việc thường TRƯỚC việc có bù ⇒ chạy `viec-1` rồi `thuong`; route giả với việc có bù ném ⇒ 502 của nó, chỉ `bu-1` chạy, việc thường không, MỘT dòng `sau-commit LoiViecMot`; route giả đăng ký hai việc có bù ⇒ 500 `loi noi bo`, không việc nào chạy, MỘT dòng `ViecCoBuThuHai`;
+- ⑺ route giả ghi `txid_current()` trong handler, việc có bù ném ⇒ `bu` thấy `app.org_id` là tổ chức của phiên và một `txid` khác; 502; MỘT dòng `sau-commit`.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Câu [S1.11] của ADR-020 sai với `InvitationLinkSender` từ S1.10.5:** "ba cổng gửi SAU commit qua `afterCommit`" — lời gọi luôn nằm trong handler. Gạch phần ấy tại chỗ.
+- ⑵ **Câu hỏi trình chủ dự án viết "khoá ≤ 26 ms" cho nguyên mẫu `afterCommit`:** đoạn 26 ms là của một backend — một trong hai lần ghi gửi ở +500 ms; khoá của chính lần mời chỉ thấy ở một lần thăm dò mỗi lượt (lượt soi 64b-19). Bảng trên ghi đúng; lựa chọn không phụ thuộc chỗ lệch này — hai phương án sau commit cùng số khoá.
+- ⑶ **Kế hoạch đột biến lộ một khe trước khi chạy:** "`revokeInvitation` luôn đặt lý do" không test nào bắt — ⑵ thêm vế tự thu hồi đòi payload rỗng, đỏ-trước chạy lại, M17 vào kế hoạch.
+- ⑷ **`issueRfqKeyPair` gọi KMS lần hai khi đang giữ khoá ghi sổ** (đọc, khi liệt kê các lời gọi ra ngoài trong giao dịch): ghi vào hàng 123 và ADR-020 "Phần KHÔNG đóng" ⑺.
+
+**Đỏ đo được, cô lập:**
+Driver `k124_dot_bien.py` (scratchpad, chép từ `k120_dot_bien.py`, đổi nhóm và khoá): mỗi đột biến thay đúng MỘT chỗ (mốc khớp đúng một lần trên bản gốc), chạy trọn nhóm tệp với reporter JSON, trả tệp về theo sha256 lấy lúc driver khởi động, so tập `it` đỏ với tập ghi TRƯỚC; lỗi cấp tệp và báo cáo sinh khi còn test đang chạy đếm vào "thiếu". Nhóm: GM `loi-moi-sau-commit.int.test.ts`; GML = GM + `loi-giao-thuc.int.test.ts`; GMD = GM + census khoản 99 `duong-sql-ngoai-with-tenant.test.ts`; GMG = GM + `guest.int.test.ts`; GMS = GM + cổng `ghi-so-tu-choi-mot-duong.test.ts` (bản hai).
+- **Bản đầu** (17 đột biến, chạy cùng lúc với lượt soi 64a — người soi đọc bản chụp): lượt gốc của bốn nhóm xanh trọn — 7, 27, 13, 16 test. 15 đỏ ĐÚNG tập ghi trước ở chế độ `dung`, không test ngoài khoá nào đỏ. M9 ở chế độ `chua` — phần bù chạy trên kết nối lấy thẳng từ pool — đỏ đủ tập ghi trước, cộng hai vế ⒞ ⒟ của census khoản 99. M16 ở chế độ `chua` — đối chứng rằng đường vô danh vẫn giao việc sau commit thường — đỏ test OTP, cộng sáu test khách đi qua cùng đường OTP. 21 lượt, không lượt nào báo "thiếu"; mọi tệp trả nguyên bản; `git status` sau lượt đúng sáu tệp của bản vá; dòng `exit=0` của driver lưu trong log.
+
+| Đột biến (bản đầu) | Nhóm | Chế độ | Đỏ |
+|---|---|---|---|
+| M1 route gửi link TRONG giao dịch (bản cũ) | GM | dung | ⑴ ⑵ ⑶ ⑷ |
+| M2 bộ điều phối không chạy phần bù | GM | dung | ⑵ ⑶ ⑷ ⑹ ⑺ |
+| M3 phản hồi không đổi khi việc có bù hỏng | GM | dung | ⑵ ⑶ ⑹ ⑺ |
+| M4 việc có bù không có trần | GM | dung | ⑶ |
+| M5 lỗi của phần bù không được bắt | GM | dung | ⑷ |
+| M6 việc sau commit chạy cả khi handler trả 4xx | GM | dung | ⑸ |
+| M7 việc thường chạy trước việc có bù | GM | dung | ⑹ |
+| M8 việc còn lại vẫn chạy sau khi việc có bù đầu tiên hỏng | GM | dung | ⑹ |
+| M9 phần bù chạy trên kết nối lấy thẳng từ pool, không qua `withTenant` | GMD | chua | ⑵ ⑶ ⑷ ⑺, census ⒞ ⒟ |
+| M10 route thu hồi không mang lý do | GM | dung | ⑵ |
+| M11 `revokeInvitation` bỏ payload lý do | GM | dung | ⑵ |
+| M12 phản hồi khi gửi hỏng là 500 | GM | dung | ⑵ ⑶ |
+| M13 việc sau commit thường không chạy | GML | dung | ⑹, ⒩ của `loi-giao-thuc` |
+| M14 việc có bù hỏng không ghi dòng `sau-commit` | GM | dung | ⑵ ⑶ ⑷ ⑹ ⑺ |
+| M15 route: phần bù không thu hồi gì | GM | dung | ⑵ ⑶ ⑷ |
+| M16 đường vô danh nhận `afterCommit` rỗng — đối chứng OTP | GMG | chua | `[INV-E6] redeem cho biết kênh…`, cộng sáu test khách |
+| M17 `revokeInvitation` luôn đặt lý do | GM | dung | ⑵ |
+
+- **Bản hai** (26 đột biến trên mã cuối, sau lượt soi 64 — bản hai đổi tệp của mọi nhóm, nên M1–M17 chạy lại, M8 đổi theo quy tắc tối đa một việc có bù, cùng chín đột biến mới M18–M26): lượt gốc của năm nhóm xanh trọn — 9, 29, 15, 18, 11 test. 22 đột biến ở chế độ `dung` đỏ ĐÚNG tập ghi trước, không test ngoài khoá nào đỏ; trong đó M19 — phần bù chạy trên `auditPool` — đỏ ⑼ cùng cổng `ghi-so-tu-choi-mot-duong.test.ts`. Bốn ở chế độ `chua`: M1 đỏ đúng tập ghi trước, không test ngoài khoá nào đỏ; M9 đỏ đủ tập ghi trước, cộng hai vế ⒞ ⒟ của census khoản 99; M16 đỏ test OTP, cộng sáu test khách đi qua cùng đường OTP; M18 — phần bù bắn-rồi-quên — đỏ đủ ⑷ ⑼ ghi trước, cộng ⑵ ⑶ ⑹ ⑺: phản hồi về trước khi phần bù xong, và thông điệp đỏ của bốn test ấy là lời mời còn sống hay `bu` chưa chạy. 31 lượt, không lượt nào báo "thiếu"; mọi tệp trả nguyên bản; `git status` sau lượt đúng tám tệp của bản vá; dòng `exit=0` của driver lưu trong log.
+
+| Đột biến (bản hai) | Nhóm | Chế độ | Đỏ |
+|---|---|---|---|
+| M1 route gửi link TRONG giao dịch (bản cũ) | GM | chua | ⑴ ⑵ ⑶ ⑷ ⑼ |
+| M2 bộ điều phối không chạy phần bù | GM | dung | ⑵ ⑶ ⑷ ⑹ ⑺ ⑼ |
+| M3 phản hồi không đổi khi việc có bù hỏng | GM | dung | ⑵ ⑶ ⑹ ⑺ |
+| M4 việc có bù không có trần | GM | dung | ⑶ |
+| M5 lỗi của phần bù không được bắt | GM | dung | ⑷ ⑼ |
+| M6 việc sau commit chạy cả khi handler trả 4xx | GM | dung | ⑸ |
+| M7 việc thường chạy trước việc có bù | GM | dung | ⑹ |
+| M8 cho phép đăng ký việc có bù lần hai | GM | dung | ⑹ |
+| M9 phần bù chạy trên kết nối lấy thẳng từ pool, không qua `withTenant` | GMD | chua | ⑵ ⑶ ⑷ ⑺ ⑼, census ⒞ ⒟ |
+| M10 route thu hồi không mang lý do | GM | dung | ⑵ |
+| M11 `revokeInvitation` bỏ payload lý do | GM | dung | ⑵ |
+| M12 phản hồi khi gửi hỏng là 500 | GM | dung | ⑵ ⑶ |
+| M13 việc sau commit thường không chạy | GML | dung | ⑹, ⒩ của `loi-giao-thuc` |
+| M14 việc có bù hỏng không ghi dòng `sau-commit` | GM | dung | ⑵ ⑶ ⑷ ⑹ ⑺ ⑼ |
+| M15 route: phần bù không thu hồi gì | GM | dung | ⑵ ⑶ ⑷ |
+| M16 đường vô danh nhận `afterCommit` rỗng — đối chứng OTP | GMG | chua | `[INV-E6] redeem cho biết kênh…`, cộng sáu test khách |
+| M17 `revokeInvitation` luôn đặt lý do | GM | dung | ⑵ |
+| M18 phần bù bắn-rồi-quên, không đổi kết quả | GM | chua | ⑵ ⑶ ⑷ ⑹ ⑺ ⑼ |
+| M19 phần bù chạy trên `auditPool` | GMS | dung | ⑼, cổng `ghi-so-tu-choi-mot-duong` (chỉ `rbac.ts` gọi `withTenant` trên `auditPool`) |
+| M20 trần của việc có bù cứng 5 000 ms | GM | dung | ⑶ |
+| M21 phần bù chạy cả khi việc thành công | GM | dung | ⑴ ⑵ ⑶ ⑷ ⑹ ⑻ |
+| M22 route gửi link tới sai đích | GM | dung | ⑴ |
+| M23 bỏ trần lấy kết nối của phần bù | GM | dung | ⑼ |
+| M24 bộ điều phối bỏ qua `phanHoiKhiBuHong` | GM | dung | ⑷ ⑼ |
+| M25 `revokeInvitation` bỏ kiểm `reason` lúc chạy | GM | dung | ⑻ |
+| M26 route không khai `phanHoiKhiBuHong` | GM | dung | ⑷ ⑼ |
+
+**Lượt soi đối kháng 64** — hai người soi độc lập, không chạy test, không đọc nhau: **64a** mã và test của bản đầu, đọc trên bản chụp (driver đột biến bản đầu chạy trong kho cùng lúc); **64b** tài liệu — tiểu mục ADR-020, hàng 124 và 123, Handoff, bản nháp biên bản — trên bản sao đã áp script, đối chiếu với bản chụp, jsonl đo trước và sau, báo cáo đỏ-trước và log đột biến.
+
+### 64a — mã và test của bản đầu: 0 CAO, 1 NẶNG, 8 NHẸ, 5 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Lần gửi hỏng VÀ lần thu hồi bù cũng hỏng ⇒ lời mời còn sống mà link chưa đi; id lời mời chỉ từng có trong thân 201 và không route đọc nào trả nó; mời lại dính chỉ mục một-lời-mời-còn-sống ⇒ nhà cung cấp kẹt khỏi RFQ tới khi vận hành sửa CSDL — hồi quy so với trước bản vá (500, không lưu gì) | **đo** trên mã bản đầu, tệp thăm dò `apps/api/src/k124-do-bu.int.test.ts` (dời khỏi kho sau lượt): phiên người mời bị thu hồi giữa lúc gửi ⇒ 500 `loi noi bo`, hai dòng `sau-commit LoiGuiGiaLap`, `bu-sau-commit SessionInvalidError`; người mua khác mời lại ⇒ 409; người mời gọi lại ⇒ 401; 1 lời mời và 1 token còn sống, hộp thư 0. Pool nghiệp vụ bị giữ hết lúc bù ⇒ 500 sau 20 004 ms, dòng `bu-sau-commit Error` | **quyết:** trình chủ dự án ba phương án — trả `invitationId` khi bù hỏng; thêm route đọc lời mời ngay; giữ nguyên và mở khoản —, chủ dự án chọn trả `invitationId` ngày 2026-09-13; **sửa (bản hai):** `ViecSauCommitCoBu.phanHoiKhiBuHong`, route mời trả 500 `{"error":"khong gui duoc link moi va chua thu hoi duoc loi moi","invitationId":…}`; ⑷ đo đường phục hồi — mời lại 409, người mua khác thu hồi bằng id 200, mời lại 201; **mở khoản 125** — route đọc lời mời của RFQ |
+| 2 | NHẸ | Hai việc có bù trong một yêu cầu: việc đầu hỏng thì trả ngay, việc sau đã commit mà không được bù; ⑹ ghim đúng ngữ nghĩa ấy | đọc | **sửa (bản hai):** tối đa MỘT việc có bù cho mỗi yêu cầu — đăng ký lần hai ném `ViecCoBuThuHai` ngay trong handler, giao dịch rollback; ⑹ đo 500 và không việc nào chạy |
+| 3 | NHẸ | Phần bù lấy kết nối không trần: pool đầy ⇒ chờ 20 s rồi `Error` không tên; mỗi câu của phần bù còn chờ khoá tới 15 s | **đo** như #1: 20 004 ms, `bu-sau-commit Error` | **sửa (bản hai):** `withTenant(…, { maxConnectWaitMs: 5 000 })` — hằng `TRAN_CHO_KET_NOI_BU_MS`; ⑼ đo 500 kèm `invitationId` trong [4 500, 9 000) ms, dòng `bu-sau-commit TenantError CONNECT_WAIT_EXCEEDED`; phần chờ khoá ghi vào Ranh giới ⑵ |
+| 4 | NHẸ | Ba chú thích của `dispatch.ts` nay sai: docstring `afterCommitTimeoutMs` ("quá trần chỉ ghi TÊN lỗi, không đổi phản hồi"), đầu tệp BUYER ("Tất cả trong MỘT `withTenant`"), khối ánh xạ lỗi thiếu pha sau commit | đọc; ⑶ đo quá trần ⇒ 502 | **sửa (bản hai)** cả ba chỗ, câu cũ gạch tại chỗ |
+| 5 | NHẸ | Chú thích route khai vô điều kiện "gửi hỏng hay quá trần ⇒ thu hồi, 502, gọi lại được ngay" — sai khi bù hỏng; "gọi lại được ngay" mới đo sau NÉM | đọc | **sửa (bản hai):** chú thích route thêm vế bù hỏng; ⑶ thêm lượt gọi lại sau trần (201) |
+| 6 | NHẸ | Một núm `afterCommitTimeoutMs` phục vụ hai hợp đồng: cận oracle thời gian của OTP vô danh (H2-7) và ngưỡng thu hồi lời mời | đọc | **sửa (bản hai):** docstring ở `dispatch.ts`, `cau-hinh.ts`, `.env.example` nêu hệ quả của hạ và nâng trần; không tách núm — ADR "Phần KHÔNG đóng" |
+| 7 | NHẸ | Phần bù không đi qua cổng quyền; không lớp nào ràng hàm ghi trong `bu` với mã quyền của route | đọc | **ghi** vào doc `ViecSauCommitCoBu` (bản hai) và ADR "Phần KHÔNG đóng"; không thêm cổng tĩnh |
+| 8 | NHẸ | `ctx.client` đã nhả vẫn nằm trong tầm với của closure `viec`/`bu` | đọc | **ghi** cảnh báo ở doc `ViecSauCommitCoBu` và `AfterCommit` (bản hai) và ADR "Phần KHÔNG đóng"; không thêm cổng tĩnh |
+| 9 | NHẸ | `reason` chỉ đóng ở kiểu; một lời gọi JS ghi chuỗi tuỳ ý vào payload của sổ vĩnh viễn | đọc | **sửa (bản hai):** kiểm lúc chạy trước mọi câu ghi, ném `InvitationError` không nội suy giá trị; ⑻ đo |
+| 10 | INFO | Hệ quả của trần: link chết khi bộ gửi báo xong sau trần; bộ gửi chậm đều ⇒ mọi lần mời hỏng; phiên khách mở trong cửa sổ bị thu hồi; dòng `sau-commit` và hàng `INVITATION_REVOKED` không nối được bằng id | đọc | **ghi** vào Ranh giới và ADR "Phần KHÔNG đóng"; không truyền `requestId` vào sự kiện |
+| 11 | INFO | Cổng kiến trúc chưa chạy trong lượt 159 test | log | **không đổi:** `pnpm test` 54 tệp / 771 test + 1 bỏ qua chạy sau lượt ấy trên bản đầu (`exit=0`); bản hai chạy lại |
+| 12 | INFO | Con trỏ §S1.70 và tiểu mục ADR-020 chưa có; `composition.ts` ghi "khoản 124 đóng" khi hàng 124 còn [MỞ] | đọc | **sửa** trong commit tài liệu |
+| 13 | INFO | Kế hoạch đột biến thiếu: bù bắn-rồi-quên, bù trên `auditPool`, trần cứng 5 000 ms, bù chạy cả khi gửi xong, sai đích hay kênh | đọc | **sửa:** bản hai thêm M18–M22 (⑴ thêm khẳng định đích và kênh), cùng M23–M26 cho phần của bản hai |
+| 14 | INFO | Ghi chú test: cửa sổ đếm khoá ở ⑶; `not.toContain(email)` luôn đúng với thân cố định; bộ gửi treo được thả muộn | đọc | **ghi nhận;** giữ trần 800 ms |
+
+### 64b — tài liệu: 0 CAO, 0 NẶNG, 15 NHẸ, 6 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NHẸ | Chỗ gạch ở câu [S1.11] trải qua hai dòng — mỗi dòng mang một nửa cặp dấu gạch | đọc | **sửa:** xuống dòng sau "S1.10 gọi", chỗ gạch nằm trọn một dòng |
+| 2 | NHẸ | ADR-016 tiểu mục [S1.69 / khoản 120] còn coi 124 là đường đang giữ khoá | đọc | **sửa:** ghi chú [S1.70] đóng ở ba chỗ |
+| 3 | NHẸ | Hàng 120 còn liệt kê 124 trong "Mở:" không gạch | đọc | **sửa:** gạch, ghi [S1.70] Đóng — §S1.70 |
+| 4 | NHẸ | Hàng 123 còn đề nghị đo bằng bộ gửi lời mời giả chậm — sau bản vá cách đo ấy không đo được gì | đo: `do-sau.jsonl` moi cham, 0 khoá chờ | **sửa:** gạch, thay bằng bộ bọc KMS giả chậm ở `openRfq` |
+| 5 | NHẸ | Đuôi câu [S1.11] "sổ nợ 38 — chưa làm" thiu từ S1.12 | đọc | **sửa:** gạch, ghi [S1.12] outbox cho `LoginLinkSender`, hôm nay chỉ OTP qua `afterCommit` |
+| 6 | NHẸ | Chú thích `dispatch.ts` không sửa: docstring `afterCommitTimeoutMs` (kể cả ví dụ `/auth/link`), đầu tệp BUYER | đọc | **sửa (bản hai)** — trùng 64a-4; thêm ghi chú [S1.12] cho ví dụ `/auth/link` |
+| 7 | NHẸ | "mỗi phương án đo trên nguyên mẫu" sai cho (c); hàng 124 "ba phương án" lệch ADR "(a) và (b)" | đọc | **sửa** hai chỗ |
+| 8 | NHẸ | "(dưới 20 ms)" quá mức đo — vòng thăm dò là câu truy vấn cộng 20 ms ngủ | đọc tệp thăm dò | **sửa:** "ngắn hơn hai khoảng thăm dò" |
+| 9 | NHẸ | "ba route giả" — tệp có bốn route giả trong ba test | đọc | **sửa** theo tệp cuối: năm route giả trong ba test |
+| 10 | NHẸ | Mô tả driver đo lệch script: tệp thăm dò đặt vào kho một lần; "lượt" hai nghĩa | đọc | **sửa** |
+| 11 | NHẸ | Ranh giới ⑵ và ADR ⑵ bỏ vế phần bù còn chờ khoá ghi sổ của tổ chức | đọc | **sửa:** thêm vế, trỏ khoản 123 |
+| 12 | NHẸ | Ranh giới ⑷ (OTP) không gắn nhãn — test ⒩ đo trên route người mua giả | đọc | **sửa:** ghi "đọc" |
+| 13 | NHẸ | Outbox — đề xuất gốc của hàng 124 — không có trong "Phương án đã cân" | đọc | **sửa:** thêm một dòng, đọc |
+| 14 | NHẸ | Biên bản thiếu "Mang sang" và "Điều đáng mang sang vòng sau"; gạch đầu dòng đôi, dòng trống thừa | đọc | **sửa** |
+| 15 | NHẸ | "Thay đổi hợp đồng" thiếu thay đổi ở mức hàng dữ liệu: hàng REVOKED ký tên người mời và token thu hồi nằm lại | đo + đọc | **sửa:** thêm gạch đầu dòng |
+| 16 | INFO | Các câu đã điền phụ thuộc phần còn chờ (đếm, bề mặt, số đột biến) | đọc | **sửa:** suy lại sau bản hai — khoản 125 mở, 125 khoản, 27 còn mở |
+| 17 | INFO | Con trỏ tệp test mới chưa track | `git ls-files` | **làm:** stage trước evidence |
+| 18 | INFO | Vài lời khai "Sau bản vá" không kiểm trọn được từ log: eslint/tsc chạy trước khi ⑵ đổi; "`still running` 0" ở hai log; "sha256 lúc bắt đầu lượt" | đọc log | **sửa:** ghi log gộp stdout và stderr; "lúc driver khởi động"; bản hai và `pnpm t0` trên HEAD phủ phần chạy trước |
+| 19 | INFO | Đoạn 26 ms là một backend — một trong hai lần ghi, không phải cả hai | `do-truoc.jsonl` | **sửa** chữ ở tự bắt ⑵ |
+| 20 | INFO | Hàng (b) của ADR bỏ hai số có lợi cho (b): gọi lại 201, lần ghi khác và `/me` lúc treo | `do-truoc.jsonl` | **sửa:** thêm vào hàng (b) |
+| 21 | INFO | Ranh giới ⑹ ghi "đọc" cho trần mặc định đã đo; chú thích `buyer.ts` "`201` nghĩa là link đã tới bộ gửi" lệch ADR | `do-sau.jsonl` | **sửa:** ⑹ ghi "đo"; `buyer.ts` "bộ gửi đã báo xong trong trần" (bản hai) |
+
+Người soi 64b đối chiếu và không bác: mọi ô của hai bảng đo khớp `do-truoc.jsonl` và `do-sau.jsonl` tới từng ms và mã; mọi khoảng gộp đúng min–max; sha của tệp nguồn khớp log driver; đỏ-trước, 159/159, `pnpm test`, 21 lượt đột biến khớp log; cơ chế đọc trên bản chụp; sổ nợ và dấu gạch của STATE, Handoff, security-reviews.
+
+**Thay đổi hợp đồng — danh sách đủ:**
+- `BuyerContext` thêm trường bắt buộc `afterCommitCoBu`; `route-types.ts` xuất thêm `ViecSauCommitCoBu`, `AfterCommitCoBu`. Chỉ `dispatch.ts` dựng `BuyerContext` (đọc; `tsc` xanh). Đăng ký việc có bù lần hai trong một yêu cầu ⇒ lỗi của handler, 500, giao dịch rollback.
+- Việc sau commit THƯỜNG của một route người mua nay chạy sau việc có bù, và bị bỏ khi việc có bù hỏng. Hôm nay không route người mua nào dùng `afterCommit` thường — lời gọi duy nhất ở `routes/` là OTP của `routes/anon.ts` (đọc).
+- `POST /rfqs/:rfqId/invitations`, bộ gửi ném ⇒ `502` `{"error":"khong gui duoc link moi, loi moi da thu hoi"}` và dòng `sau-commit <tên lỗi>`; sổ giữ `INVITATION_CREATED`, `MAGIC_LINK_TOKEN_ISSUED`, `INVITATION_REVOKED` với `{ "reason": "LINK_SEND_FAILED" }`; gọi lại ⇒ `201` (trước: `500` `loi noi bo`, dòng `<tên lỗi>`, không hàng nào — đo).
+- Ở mức hàng dữ liệu: gửi hỏng ⇒ một hàng `rfq_invitations` REVOKED ký tên người mời (`revoked_by`, `revoked_by_session_id`) và token đã thu hồi nằm lại; chỉ payload của `INVITATION_REVOKED` phân biệt lần hệ thống thu hồi với lần người mua bấm (đo + đọc, lượt soi 64b-15).
+- Bộ gửi treo ⇒ `502` sau `afterCommitTimeoutMs` (mặc định 5 000 ms, `TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS`) với dòng `sau-commit SauCommitQuaHan`, lời mời thu hồi (trước: yêu cầu không trả, khoá của tổ chức giữ tới `idle_in_transaction_session_timeout` 60 s — đo).
+- Lần bù cũng hỏng ⇒ `500` `{"error":"khong gui duoc link moi va chua thu hoi duoc loi moi","invitationId":…}`, hai dòng `sau-commit` và `bu-sau-commit`, lời mời và token còn sống — mời lại 409, thu hồi bằng id rồi mời lại 201 (ca mới, đo). Pool nghiệp vụ đầy lúc bù ⇒ gãy sau 5 s với `TenantError` CONNECT_WAIT_EXCEEDED (đo; bản đầu: 20 s, `Error` không tên).
+- Bộ gửi nhận token khi lời mời và token đã commit (trước: trong giao dịch chưa commit — đo ở đỏ-trước ⑴).
+- `revokeInvitation` nhận `reason?: "LINK_SEND_FAILED"`; không truyền thì payload như cũ; giá trị lạ ⇒ `InvitationError` trước mọi câu ghi.
+
+**Ranh giới NÓI RA:**
+- ⑴ Trần của lần gửi là `afterCommitTimeoutMs`: bộ gửi báo xong SAU trần thì link đã tới nhà cung cấp trỏ một lời mời đã thu hồi — fail-closed; người mua gọi lại thì nhà cung cấp nhận link thứ hai (đọc).
+- ⑵ Phần bù có trần 5 s cho lần lấy kết nối, nhưng lần ghi `INVITATION_REVOKED` của nó còn chờ khoá ghi sổ của tổ chức tới `statement_timeout` 15 s trong lúc giữ kết nối ấy — khoản 123 (đọc, lượt soi 64b-11).
+- ⑶ Phản hồi của một lần mời thành công vẫn đợi lần gửi, tới trần — không kết nối CSDL và không khoá nào bị giữ trong lúc ấy (đo: ở mốc +1 000 ms của ba lượt chậm, 0 khoá chờ và ba kết nối `app_api_login` rảnh trong khi yêu cầu mời còn đợi bộ gửi).
+- ⑷ Việc có bù chỉ có ở route người mua; đường vô danh giữ việc sau commit thường: gửi OTP hỏng ⇒ `200` và một dòng log, không đổi (đọc: `routes/anon.ts` dòng 111, nhánh ANON của `dispatch.ts`; test ⒩ đo trên route người mua giả).
+- ⑸ Phản hồi lỗi của ca bù hỏng bị mất — đứt mạng, client bỏ qua thân lỗi — thì lời mời vẫn kẹt: không route đọc nào trả id lời mời (đọc) — khoản 125.
+- ⑹ Closure `viec`/`bu` với tới được `ctx.client` đã nhả, và phần bù không đi qua cổng quyền lần nữa — hai điều chỉ nằm trong doc của `ViecSauCommitCoBu`, không lớp nào canh (lượt soi 64a-7, 64a-8).
+- ⑺ Một trần `afterCommitTimeoutMs` phục vụ hai hợp đồng: cận oracle thời gian của OTP vô danh (H2-7) và ngưỡng một lần gửi link mời bị tính là hỏng (64a-6).
+- ⑻ `openRfq` → `issueRfqKeyPair` vẫn gọi KMS lần hai khi đang giữ khoá ghi sổ của tổ chức, trần 5 s `KmsQuaHan` (đọc) — khoản 123 ⑶.
+- ⑼ Chưa có bộ gửi thật (ADR-009): độ trễ đo được là giả lập trên hộp thư dev. Trần mặc định 5 s đã đo trên tiến trình thật (lượt treo sau bản vá, 5 089 ms); test ⑶ dùng trần 800 ms.
+
+**Mang sang, không vào sổ:**
+- 64a-8: cổng tĩnh cấm `ctx.client` trong thân một việc sau commit — hôm nay chỉ có doc.
+- 64a-7: cổng tĩnh ràng hàm ghi trong `bu` với mã quyền của route.
+- 64a-10: đưa `requestId` vào sự kiện của lần thu hồi bù, để nối dòng `sau-commit` với hàng sổ không phải bằng thời gian.
+- 64a-6: cân nhắc tách trần của việc có bù khỏi trần của việc thường khi có bộ gửi thật.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Một phép bù sau commit phải trả lời được câu "nếu chính lần bù hỏng thì sao". "Thu hồi trong giao dịch mới" bịt được gửi hỏng; lượt soi 64a-1 hỏi tiếp một tầng và phép đo cho ra một nhà cung cấp kẹt khỏi RFQ — cùng họ "chặn người khác dự thầu" mà hợp đồng vừa sinh ra để tránh.
+- ⑵ Một khoảng đo từ vòng thăm dò phải gắn với pid và mốc bắt đầu, và đơn vị của nó là khoảng thăm dò, không phải mili-giây: đoạn 26 ms thuộc một lần ghi khác (tự bắt ⑵, lượt soi 64b-8, 64b-19).
+- ⑶ Một câu trong ADR đã chấp nhận có thể sai từ ngày viết: `git log -S` trên đúng lời gọi trước khi dựa vào nó để định hình bản vá (tự bắt ⑴).
