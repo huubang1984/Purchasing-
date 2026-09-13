@@ -1195,7 +1195,7 @@ không đặt hạn thì không có trần (đọc pg-pool; đo: quá 12 s) — 
    ⒜ `auditPool` 2 kết nối cùng trần 5 s — `/me` đứng 4 010–4 034 ms, nhưng lần ghi hợp lệ vẫn đứng 14 s, và khi hai lần từ chối của tổ chức bị khoá nằm chờ
    từ 5 s trở lên thì lần từ chối của tổ chức KHÁC chờ 5 s rồi mất bản ghi (đọc); ⒝ `lock_timeout` ngắn cho `auditPool` — cần đo trước thời
    gian giữ khoá hợp lệ (khoản 69), để lại khoản 123. Lý do giữ: D5 đòi mọi lần từ chối vào sổ; vách ngăn cũ chỉ đứng trước lần từ chối tới
-   tuần tự; đường sản xuất đã biết giữ khoá lâu — gửi link mời trong giao dịch — sửa ở gốc, khoản 124.
+   tuần tự; đường sản xuất đã biết giữ khoá lâu — gửi link mời trong giao dịch — sửa ở gốc, khoản 124. **[S1.70] Đã sửa — ADR-020 tiểu mục [S1.70 / khoản 124].**
 4. Qua HTTP, pool hết chỗ kéo dài ⇒ 500 với MỘT dòng `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED` — phân biệt được với
    `<- Error` của `auditPool` sai quyền.
 
@@ -1209,12 +1209,12 @@ hạn ⇒ gãy sau 5 s thay vì chờ không hạn. Tiến trình `api` mở t�
 12, ở trần cấu hình 100 là 200; `batDau` mở một kết nối `auditPool`, còn lại mở khi có lần từ chối (lượt soi 63a-3). Và khoá tư vấn ghi sổ của
 một tổ chức bị giữ lâu thì các lần từ chối của tổ chức ấy có thể cùng giữ mọi kết nối nghiệp vụ tới `statement_timeout` 15 s — số đo lặp và hai phương án bác ở
 Quyết định 3; lần ghi hợp lệ của tổ chức ấy vốn đã giữ kết nối như vậy, trước và sau bản vá (lượt soi 63b-6, đo) — khoản 123; một đường sản
-xuất giữ khoá ấy lâu — khoản 124.
+xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**.
 
 **Phần KHÔNG đóng.** Trần là của lần lấy kết nối, không của lần ghi: lần ghi đã có kết nối vẫn chờ khoá tư vấn của tổ chức tới `statement_timeout` 15 s (đo: 57014).
 Khi `auditPool` không có chỗ, lần từ chối giữ giao dịch và kết nối nghiệp vụ của người gọi tới 5 s. Lập luận cỡ đọc từ mã hôm nay và đo một kịch
 bản trên tiến trình thật; một đường mới dùng `auditPool` ngoài giao dịch nghiệp vụ làm nó sai. Hạn mức theo người gọi cho lần từ chối —
-khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
+khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
 
 ### Điều ADR này KHÔNG đóng
 
@@ -1667,10 +1667,10 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
   trace **không** đo — A2 vào ô ✅ **kèm cờ §4** nếu vào, và §4 phải nói đúng ba vế đã đo.
 - ~~**Email gửi link** là một handler outbox (ADR-010) — vòng này chỉ **đặt job** kèm hash; bộ gửi
   thật (SMTP/SES) là hạ tầng chưa có (ADR-009 chưa triển khai). Kịch bản E2E đọc token từ job.~~
-  **[S1.11] Câu trên KHÔNG đúng với thứ đã cài:** S1.10 gọi ba cổng gửi (`LoginLinkSender`,
-  `InvitationLinkSender`, `OtpSender`) SAU commit qua `afterCommit`, không đặt job outbox; test đọc
+  **[S1.11] Câu trên KHÔNG đúng với thứ đã cài:** S1.10 gọi
+  ~~ba cổng gửi (`LoginLinkSender`, `InvitationLinkSender`, `OtpSender`)~~ hai cổng gửi (`LoginLinkSender`, `OtpSender`) SAU commit qua `afterCommit` — [S1.70 / khoản 124] `InvitationLinkSender` được gọi TRONG giao dịch từ `214a741`, nay sau commit qua việc sau commit có bù (tiểu mục [S1.70 / khoản 124]) —, không đặt job outbox; test đọc
   token từ bộ gửi ghi lại, và tiến trình thật (ADR-021) đọc từ hộp thư dev. Vế outbox vẫn là cách
-  đóng đúng của **sổ nợ 38** — chưa làm.
+  đóng đúng của **sổ nợ 38** ~~— chưa làm~~ — [S1.12] đã làm cho `LoginLinkSender` (ADR-022); [S1.70] hôm nay chỉ `OtpSender` đi qua `afterCommit`.
 - **CSRF** đóng bằng `SameSite=Strict` cộng kiểm `Origin` trên mọi POST; **không** có CSRF token
   riêng. Đủ cho một API JSON không có form HTML; phải xét lại khi có form POST cổ điển.
   **[S1.10.7] Câu trên đã có lúc SAI:** từ S1.10.2 tới `214a741` không một dòng nào kiểm `Origin` —
@@ -1727,6 +1727,58 @@ câu trả lời nghiệp vụ. Lần ghi sổ từ chối lồng trong handler 
 chính nó như `PermissionAuditFailedError` — khoản 119. **[S1.68] Đóng — ADR-016 tiểu mục [S1.68 / khoản 119].** Lỗi chỉ đi vào `release()` được nghe ở pool cho đúng một mã
 (`SESSION_STATE_LEFT`). Chi tiết ở `evidence/security-reviews.md` §S1.67.
 
+### [S1.70 / khoản 124] Link mời gửi SAU commit; gửi hỏng thì lời mời bị thu hồi và phản hồi nói ra bằng `502`
+
+**Bối cảnh.** `POST /rfqs/:rfqId/invitations` ghi sổ hai lần — `createInvitation`, `issueMagicLinkToken` — rồi `await` bộ gửi link mời
+TRONG giao dịch của bộ điều phối, nên khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`) bị giữ suốt lần gửi. Câu [S1.11] ở mục
+"Phần KHÔNG đóng" viết ba cổng gửi chạy sau commit qua `afterCommit`; với `InvitationLinkSender` câu ấy chưa bao giờ đúng — lời gọi nằm
+trong handler từ `214a741` (S1.10.5). Đo trên tiến trình `api` dựng từ môi trường, `TRUSTPROCURE_DB_POOL_MAX` 3, lần ghi tệp của hộp thư
+dev bị làm chậm hay treo bằng `vi.mock` (`evidence/security-reviews.md` §S1.70): bộ gửi chậm 3 s ⇒ khoá của tổ chức giữ 3 023–3 054 ms,
+một lần ghi hợp lệ và một lần từ chối của tổ chức ấy chờ 2 542–2 572 ms, `/me` của một tổ chức khác chờ 2 037–2 055 ms vì pool bị ghim;
+bộ gửi treo ⇒ khoá giữ 59 994 ms (`idle_in_transaction_session_timeout`), hai lần ghi kia 500 (57014) sau 15 033 ms, `/me` của tổ chức
+khác 14 522 ms, yêu cầu mời chưa trả sau 68 s.
+
+**Phương án đã cân — (a), (b) đo trên nguyên mẫu; (c) đo trên bản vá — cùng tệp thăm dò, cùng tiến trình, cùng mốc.**
+
+| # | Phương án | Đo | Kết luận |
+|---|---|---|---|
+| a | Gửi sau commit qua `afterCommit`, gửi hỏng chỉ ghi log — khuôn của OTP | khoá của lần mời thấy ở đúng một lần thăm dò; lần ghi khác 24–65 ms; `/me` 8–24 ms. Gửi hỏng ⇒ 201 với `status: "SENT"`, lời mời và token nằm lại, hộp thư không nhận gì, một dòng `sau-commit`; gọi lại ⇒ 409, phải thu hồi rồi mời lại. Treo ⇒ 201 sau 5 039 ms | bác — nhà cung cấp bị bỏ khỏi cuộc thầu mà người mua không biết, cùng họ "chặn người khác dự thầu" của migration 024 |
+| — | Outbox như link đăng nhập (đề xuất gốc của hàng 124) | không đo — đọc: lần gửi chạy sau phản hồi, nên gửi hỏng không đổi được phản hồi | bác cùng lý do với (a) |
+| b | Giữ lần gửi trong giao dịch, trần 5 s | bộ gửi 3 s: khoá 2 998–3 048 ms, lần ghi khác 2 504–2 559 ms, `/me` 1 995–2 032 ms — như bản cũ. Treo ⇒ 500 sau 5 046 ms, khoá giữ 4 996 ms, lần ghi khác 4 509–4 517 ms, `/me` 3 997 ms. Gửi hỏng ⇒ 500, không lưu gì, gọi lại 201 | bác — khoá vẫn bị giữ suốt lần gửi, tới trần |
+| c | **Gửi sau commit; gửi hỏng hay quá trần ⇒ lời mời bị thu hồi trong giao dịch MỚI, `502`** | bộ gửi 3 s, ba lượt: khoá của lần mời thấy ở một lần thăm dò; lần ghi hợp lệ 35–64 ms, lần từ chối 24–60 ms, `/me` của tổ chức khác 18–21 ms; ở mốc +1 000 ms 0 khoá chờ, 3 kết nối rảnh. Gửi hỏng ⇒ 502 sau 53 ms, lời mời và token thu hồi, sổ ba hàng, gọi lại 201. Treo ⇒ 502 sau 5 089 ms; lần ghi khác 26–40 ms, `/me` 18 ms | **chọn** |
+
+**Quyết định.** Chủ dự án chọn (c) ngày 2026-09-13, trên bảng số của hai nguyên mẫu (a) và (b). Bản cài:
+1. `BuyerContext.afterCommitCoBu({ viec, bu, phanHoiKhiHong, phanHoiKhiBuHong? })` — một việc sau commit mà kết quả quyết phản hồi. Chỉ route
+   người mua có; `AnonContext` không có trường ấy, nên trên đường vô danh một lần gửi hỏng vẫn không đổi được phản hồi (M-1, H2-7). Tối đa
+   MỘT việc cho mỗi yêu cầu: đăng ký lần hai ném `ViecCoBuThuHai` ngay trong handler, giao dịch rollback (lượt soi 64a-2).
+2. Bộ điều phối chạy việc có bù khi phản hồi của handler thành công, TRƯỚC việc sau commit thường, với trần `afterCommitTimeoutMs`. Hỏng hay
+   quá trần ⇒ một dòng `sau-commit`; `bu` chạy trong một `withTenant` MỚI của cùng tổ chức, lần lấy kết nối có trần 5 s
+   (`TRAN_CHO_KET_NOI_BU_MS`, lượt soi 64a-3); phản hồi thành `phanHoiKhiHong`; việc thường bị bỏ. `bu` cũng hỏng ⇒ một dòng `bu-sau-commit`
+   và `phanHoiKhiBuHong` — không khai thì `500` thân cố định.
+3. Route mời: `viec` là lần gửi; `bu` là `revokeInvitation(…, reason: "LINK_SEND_FAILED")` dưới phiên người mời — thu hồi lời mời, token,
+   thách thức OTP và phiên khách của nó; `phanHoiKhiHong` là `502` thân cố định. `revokeInvitation` kiểm `reason` lúc chạy (lượt soi 64a-9)
+   và ghi nó vào payload của `INVITATION_REVOKED`; người mua tự thu hồi thì payload rỗng.
+4. **[lượt soi 64a-1] Lần thu hồi bù cũng hỏng** — phiên người mời vừa bị thu hồi, pool đầy quá 5 s, mất kết nối — thì lời mời còn sống mà
+   link chưa đi, và không route đọc nào trả id lời mời: đo trên bản đầu, người mua khác mời lại ⇒ 409, nhà cung cấp kẹt khỏi RFQ. Ba phương
+   án trình chủ dự án: trả `invitationId` trong phản hồi của ca ấy; thêm route đọc lời mời của RFQ ngay; giữ nguyên và mở khoản. Chủ dự án
+   chọn phương án đầu ngày 2026-09-13: `phanHoiKhiBuHong` của route mời là `500`
+   `{"error":"khong gui duoc link moi va chua thu hoi duoc loi moi","invitationId":…}` — người mua, hay một người khác có `rfq.invite` khi
+   phiên đã mất, thu hồi bằng `POST /invitations/:invitationId/revoke` rồi mời lại. Route đọc lời mời — khoản 125.
+
+**Hệ quả.** Đo trên bản vá, xen kẽ với `origin/master` trong cùng lần lặp (§S1.70): lần gửi không còn giữ khoá ghi sổ của tổ chức — ba lượt bộ gửi chậm 3 s cho lần ghi hợp lệ 35–64 ms và `/me` của tổ chức khác 18–21 ms, trong khi `origin/master` cùng lần lặp cho 2 502–2 579 ms và 1 991–2 061 ms. `201` vẫn nghĩa là bộ gửi đã báo xong trong trần, và phản hồi của lần mời vẫn đợi lần gửi — nhưng không kết nối CSDL, không khoá nào đứng chờ nó. Thay đổi hợp đồng, đủ ở `evidence/security-reviews.md` §S1.70: gửi hỏng ⇒ `502` thay cho `500`, sổ giữ `INVITATION_CREATED`, `MAGIC_LINK_TOKEN_ISSUED`, `INVITATION_REVOKED` mang lý do thay cho không hàng nào; treo ⇒ `502` ở trần thay cho không trả; lần bù cũng hỏng ⇒ `500` kèm `invitationId`, lời mời và token còn sống — mời lại 409, thu hồi bằng id rồi mời lại 201 (đo); pool đầy lúc bù ⇒ gãy ở trần 5 s với `TenantError` CONNECT_WAIT_EXCEEDED (đo); đăng ký hai việc có bù ⇒ 500 và rollback.
+
+**Phần KHÔNG đóng.** ⑴ Bộ gửi báo xong SAU trần: link đã tới nhà cung cấp trỏ một lời mời đã thu hồi — fail-closed; người mua gọi lại
+thì nhà cung cấp nhận link thứ hai (đọc). ⑵ Phần bù có trần 5 s cho lần lấy kết nối, nhưng lần ghi `INVITATION_REVOKED` của nó còn chờ
+khoá ghi sổ của tổ chức tới `statement_timeout` 15 s trong lúc giữ một kết nối nghiệp vụ — khoản 123 (đọc). ⑶ Phản hồi lỗi của ca bù hỏng
+bị mất thì lời mời vẫn kẹt — khoản 125. ⑷ Closure `viec`/`bu` với tới được `ctx.client` đã nhả; phần bù không đi qua cổng quyền lần nữa và
+không lớp nào ràng nó với mã quyền của route — hai điều chỉ nằm trong doc của `ViecSauCommitCoBu` (lượt soi 64a-7, 64a-8). ⑸ Một trần
+`afterCommitTimeoutMs` phục vụ hai hợp đồng: cận oracle thời gian của OTP vô danh (H2-7) và ngưỡng một lần gửi link mời bị tính là hỏng —
+hạ trần thì bộ gửi chậm làm mọi lần mời thành `502`, nâng trần thì nới cận H2-7 (lượt soi 64a-6). ⑹ Dòng `sau-commit` và hàng
+`INVITATION_REVOKED` không mang id chung — nối bằng thời gian (lượt soi 64a-10). ⑺ Một đường hợp lệ khác vẫn gọi KMS khi đang giữ khoá ghi
+sổ: `openRfq` → `issueRfqKeyPair` bọc khoá của thuật toán thứ hai (`X25519`, `KEY_AGREEMENT_ALGORITHMS`) SAU lần ghi sổ
+`RFQ_KEY_MATERIAL_ISSUED` của thuật toán đầu, trần 5 s `KmsQuaHan` (đọc) — khoản 123 ⑶. ⑻ Chưa có bộ gửi thật (ADR-009): độ trễ đo được
+là giả lập trên hộp thư dev. Chi tiết ở `evidence/security-reviews.md` §S1.70.
+
 ### Đo bằng gì
 
 1. **Cổng quyền:** một route ghi thêm vào `ROUTES` mà thiếu `permission` → T1 đỏ **không cần khởi
@@ -1752,6 +1804,13 @@ chính nó như `PermissionAuditFailedError` — khoản 119. **[S1.68] Đóng �
    ⇒ 500 kèm MỘT dòng `error <SQLSTATE>`; 42501 do câu của handler ⇒ 403 kèm MỘT dòng trên năm nhánh (PUBLIC giả lập); ràng buộc
    hoãn ⇒ 422 không log trên bốn nhánh có giao dịch; đột biến bỏ `giaoDich` ở từng nhánh có giao dịch, và bỏ dấu ở PUBLIC, ANON,
    GUEST (một đột biến cho cả hai đường), BUYER ⇒ đỏ.
+8. **[S1.70 / khoản 124] Link mời sau commit:** qua HTTP thật (`loi-moi-sau-commit.int.test.ts`) — bộ gửi chờ ⇒ token đã commit khi bộ
+   gửi nhận nó, 0 khoá ghi sổ của tổ chức bị giữ, một lần ghi sổ khác xong trong lúc gửi, link tới đúng đích và kênh; bộ gửi ném ⇒ 502, lời
+   mời và token thu hồi, `INVITATION_REVOKED` mang lý do, gọi lại 201, tự thu hồi thì không lý do; treo ⇒ 502 ở trần, gọi lại 201; bù hỏng
+   ⇒ 500 kèm `invitationId`, mời lại 409, thu hồi bằng id rồi mời lại 201; pool đầy lúc bù ⇒ gãy ở trần 5 s với `CONNECT_WAIT_EXCEEDED`;
+   `reason` lạ ⇒ `InvitationError`; năm route giả trong ba test cho 4xx, thứ tự, đăng ký lần hai và giao dịch của phần bù. Đột biến cô
+   lập (§S1.70, bản hai trên mã cuối): 26/26 đạt theo tập đỏ ghi trước — phần bù chạy ngoài `withTenant` đỏ cả census khoản 99, phần bù
+   chạy trên `auditPool` đỏ cả cổng `ghi-so-tu-choi-mot-duong`.
 
 ## ADR-021 — Tiến trình `api` chạy thật: **composition root trong `apps/api`, cấu hình từ môi trường fail-closed, pool `SET ROLE` mỗi kết nối, và "đường ứng dụng" ở CSDL là mọi thành viên kế thừa của `app_api`**
 
