@@ -4261,7 +4261,7 @@ Bản hai (lượt soi 60) — nhóm mới trên các lớp mới, và F1–F5 c
 | | F5 M1–M7, M9 (`so-no-tu-doi-chieu` 45, trên tài liệu cuối) · F11 M1–M4 | như bản đầu, cộng: F5 M1 thêm `it` đối chứng khối, M3 thêm cả hai `it` mới của P11; F11 như lượt hai — đúng |
 
 **Ranh giới NÓI RA:**
-- ⑴ **Lỗi Postgres của giai đoạn xác thực và nửa sau của 59b-1 — khoản 118:** lỗi Postgres ở lần lấy client ra 403 câm, nhánh người mua gói mọi lỗi thành 401 câm (đo ⒪); `SESSION_STATE_LEFT` huỷ kết nối sau một giao dịch ĐÃ commit mà không log; runner outbox chỉ in `kind`/`reason`; dòng log 500 của lỗi Postgres không mang SQLSTATE.
+- ⑴ **Lỗi Postgres của giai đoạn xác thực và nửa sau của 59b-1 — khoản 118:** lỗi Postgres ở lần lấy client ra 403 câm, nhánh người mua gói mọi lỗi thành 401 câm (đo ⒪); `SESSION_STATE_LEFT` huỷ kết nối sau một giao dịch ĐÃ commit mà không log; runner outbox chỉ in `kind`/`reason`; dòng log 500 của lỗi Postgres không mang SQLSTATE. **[S1.67] Đóng — §S1.67.**
 - ⑵ **Listener `'error'`:** gắn quanh đoạn mượn của hai bộ dọn, vòng khởi động và hai vòng đi-về của bộ bọc vai. Census ⒟ đếm số `.on(…'error'…)` so với số `.connect()` trần cộng số lời gọi không đối số của tên gán từ `.connect.bind(` trong từng tệp — một phép đếm, không ghép từng cặp; `packages/test-support/src/postgres.ts` khai một chỗ. Điểm mù khai ở đầu census: `connect(cb)`, `pool.connect` truyền như một giá trị, `.bind` qua biến trung gian. Client RẢNH trong pool — nửa pool của khoản 103 — còn mở.
 - ⑶ **Phép chụp của `migrate()`:** chỉ thấy trạng thái CUỐI tệp (test ranh giới ghim), và chạy TRONG giao dịch của tệp nên bắt cả trạng thái phạm vi giao dịch theo chiều chặt (test ghim ⒝). Tệp tự COMMIT rồi đổi trạng thái thì ROLLBACK không gỡ được phần đã commit — thông điệp nói ra (test ghim ⒜) — và kết nối bị huỷ, cùng khuôn S1.57. GUC phiên ngoài tám trục không được đọc; phép chụp đứng trước INSERT vào `schema_migrations` và COMMIT; lỗi của lượt hardening sau vòng không huỷ kết nối — ba vế ở hàng 104, đọc, chưa đo.
 - ⑷ **Thông điệp nêu tên:** người sửa đọc biểu thức ở `pg_policy`. Lớp thân hàm vẫn in giá trị — khoản 117.
@@ -4287,3 +4287,183 @@ Bản hai (lượt soi 60) — nhóm mới trên các lớp mới, và F1–F5 c
 - ⑹ Mọi con trỏ trong văn xuôi của sổ cần một vị từ giải nó — mười lăm hàng dẫn tới mục không tồn tại, con trỏ cũ nhất sống mười lăm vòng (S1.51–S1.65).
 - ⑺ Khoản mới bác một lời khai thì vòng mở khoản gạch MỌI bản sao của lời khai — mã, ADR, biên bản cũ, chú thích test — không chỉ ở sổ (lượt soi 60b-1, 60b-5).
 - ⑻ Đổi một thông điệp thì chạy trọn mọi tệp test đọc nó, không tin lượt grep theo nhãn — lượt grep sót hai chỗ ghim nội dung.
+
+# §S1.67 — khoản nợ 118: lỗi của tầng HTTP phân loại theo NGUỒN, không theo tên — lỗi Postgres của lần lấy client, của câu xác thực và của câu kết thúc ra 500 kèm tên và SQLSTATE; lỗi của handler giữ bảng ánh xạ, 42501 kèm một dòng log; kết nối bị huỷ vì trạng thái phiên còn sót có một dòng log — lượt soi 61; khoản 119 mở (lần ghi sổ từ chối lồng trong handler không bọc lỗi của chính nó — đọc)
+
+**Bề mặt:**
+- `apps/api/src/dispatch.ts`:
+  - `LoiHandler` — dấu đặt TẠI nguồn cho lỗi của handler — và `nguonHandler()`: `chay` bọc `route.handler`, `giaoDich` bọc giao dịch chứa handler; lỗi lớp 23 ném SAU khi handler đã trả về (ràng buộc hoãn tới COMMIT) cũng mang dấu. Áp ở cả năm nhánh: PUBLIC, ANON, GUEST ghi, GUEST đọc, BUYER.
+  - Khối catch: `LoiXacThuc` ⇒ 401; `LoiHandler` ⇒ `anhXaLoiHandler` trên nguyên nhân; mọi lỗi còn lại không qua bảng — `TenantError` loại input ⇒ 401, `PermissionDeniedError` ⇒ 403, `HttpError` ⇒ mã của nó, lỗi khác ⇒ `loiNoiBo` (500 thân cố định, MỘT dòng log `[api] <requestId> <tên>[ <mã>]`). Hai nhánh cũ của khối catch — `SessionInvalidError` ⇒ 401, `InvitationError` ⇒ 422 — bỏ; `SessionInvalidError` ⇒ 401 chuyển vào `anhXaLoiHandler`.
+  - `anhXaLoiHandler`: 42501 của PostgreSQL vẫn ⇒ 403, kèm MỘT dòng log mang tên và mã (lượt soi 61a-1).
+  - Nhánh BUYER chỉ gói `SessionInvalidError` thành `LoiXacThuc`. Dòng `sau-commit` đi qua `moTaLoiKhongGiaTri` (lượt soi 61a-2).
+  - Chú thích: khối đầu tệp gạch "Chưa trọn…", thêm bốn nguồn, câu đo cũ ghi "trên bản trước S1.67"; khối catch gạch hai câu cũ và nói vì sao kiểm tên ở đó chỉ an toàn sau khi nguồn đã tách; chú thích việc sau commit gạch "chỉ được ghi TÊN".
+- `apps/api/src/mo-ta-loi.ts` (mới): `moTaLoiKhongGiaTri` — tên lỗi cộng mã `TenantError` hay mã đúng năm ký tự chữ số và chữ hoa; `ghiLogKetNoiHuy(pool, tenPool)` — nghe sự kiện `release`, ghi một dòng cho `TenantError` mã `SESSION_STATE_LEFT`. Đầu tệp nêu `main.ts` là ngoại lệ có chủ đích; docstring bộ nghe nói đúng mức và kể ranh giới (lượt soi 61a-7).
+- `apps/api/src/composition.ts`: gắn bộ nghe cho `pool` và `auditPool`; dòng `onJobFailure` in thêm tên và mã của lỗi gốc; `onPollError`, lời đánh thức, bộ dọn in tên cùng mã; chú thích `[CẤM LOG]` và hai chú thích bộ dọn gạch "chỉ … TÊN".
+- Chú thích ngoài `apps/api`: `packages/tenancy/src/with-tenant.ts` (docstring `TenantError`: `SESSION_STATE_LEFT` cả sau giao dịch hỏng, chỗ duy nhất thấy nó là sự kiện `release`; docstring `kind`: 401 khi ném ngoài handler), `packages/tenancy/src/tenant-error.test.ts` (đầu tệp), `packages/db/src/vai-tro.ts` (docstring `KetNoiNhiemError`), `packages/db/src/vai-tro.int.test.ts` và `tests/architecture/barrel-exports.test.ts` (lý do tên riêng của `KetNoiNhiemError` — lượt soi 61b-7).
+- Test: `apps/api/src/loi-giao-thuc.int.test.ts` — describe `[S1.67 / khoản 118]` mười một `it` ⒠–⒪, đầu tệp gạch "khoản 118"; `apps/api/src/composition.int.test.ts` — describe `[S1.67 / khoản 118]` bốn `it` ⑴–⑷; `apps/api/src/mo-ta-loi.test.ts` (mới, ba `it`).
+- Tài liệu: STATE (hàng 118 đóng, hàng 119 mở, dòng CÒN MỞ), DECISIONS (ADR-020 tiểu mục `[S1.67 / khoản 118]` và "Đo bằng gì" ⑺; ADR-024 dòng bộ dọn), Handoff (§10, §13 — hai lời khai số khoản), tệp này (§S1.66 ranh giới ⑴).
+
+**Đo trước khi viết:**
+- ⒜ **Đỏ-trước.** Test viết trước, chạy trên mã của `ad175b7`: một lượt hai tệp tích hợp, reporter JSON — 23 test, BẢY đỏ, 16 xanh. Đỏ ở khẳng định: ⒢ `/me` nhận 403; ⒣ `/me` nhận 403; ⒤ `/me` nhận 401; composition ⑴ không dòng `ket noi huy` nào; ⑵ dòng `[api] outbox LOGIN_LINK_SEND HANDLER_ERROR` không mã; ⑶ dòng `[api] outbox error` không mã. ⒥ đỏ vì mô-đun `mo-ta-loi.js` chưa có (import động, để một `it` hỏng không kéo cả tệp). Hai đối chứng ⒠ và ⒡ XANH trên mã cũ — đúng vai: bản vá không được đổi chúng. Log của lượt không có cảnh báo `still running`.
+- ⒝ **Đọc migration:** hai constraint trigger `DEFERRABLE INITIALLY DEFERRED` (017 `rfq_key_material_phai_di_kem_lan_mo`, 018 `vendor_bid_versions_phai_co_bien_nhan`), cả hai ném `check_violation`; không khoá ngoại `DEFERRABLE` nào. Trigger ném `insufficient_privilege` như câu trả lời nghiệp vụ: 003, 005 (hai), 011 (TRUNCATE), 033 (hai — D2), hardening (bảng chỉ-ghi-thêm) ⇒ bảng của giai đoạn handler giữ 42501 ⇒ 403.
+- ⒞ **Đọc pg-pool 3.14.0:** `_release(client, idleListener, err)` phát `'release'` kèm đối số của `release()` TRƯỚC khi gỡ client; `@types/pg` 8.23.1 khai listener `(err: Error, client: PoolClient)`.
+- ⒟ **Đọc `rbac.ts`:** `PermissionAuditFailedError` không kế thừa `PermissionDeniedError` — trước và sau bản vá đều 500 có log.
+
+**Sau bản vá:**
+- **Bản đầu:** hai tệp tích hợp 23/23; thêm ⒦ ⒧ ⒨ và `mo-ta-loi.test.ts` — ba tệp 29/29. `pnpm test` 53 tệp / 768 test + 1 bỏ qua, thoát mã 0 (S1.66: 52 / 765); depcruise 222 module, 941 phụ thuộc, 0 vi phạm; trọn `apps/api` 14 tệp, 158/158.
+- **Bản hai, sau lượt soi 61a:** bốn tệp (`loi-giao-thuc` 15, composition 14, `mo-ta-loi` 3, `tenant-error` 1) 33/33; trọn `apps/api` 14 tệp, 161/161, thoát mã 0, không cảnh báo `still running`; `pnpm test` 53 tệp / 768 + 1 bỏ qua, thoát mã 0 — không đổi, vì test tích hợp không thuộc lệnh này; depcruise 222 / 941 / 0; không tệp `zzprobe-*`.
+- **Bản ba, sau lượt soi 61b:** chỉ đổi chú thích ở `dispatch.ts`, `composition.ts`, `vai-tro.int.test.ts`, `barrel-exports.test.ts`. Mọi đột biến chạy lại trên bản này (dưới).
+
+**Test:**
+- ⒠ Lỗi do câu của HANDLER giữ bảng giai đoạn 2 trên năm nhánh: `SELECT 1 FROM pg_catalog.pg_authid` (42501) ở BUYER, GUEST đọc, GUEST ghi, ANON, và một lỗi mang hình dạng lỗi Postgres do handler PUBLIC tự ném ⇒ 403 kèm MỘT dòng `error 42501` không mang thông điệp; bộ đếm chứng câu của handler ném, không chạy xong.
+- ⒡ Ràng buộc HOÃN: bảng `hoan_118` có khoá ngoại tự tham chiếu `DEFERRABLE INITIALLY DEFERRED`; handler chèn hàng treo ở bốn nhánh có giao dịch ⇒ 422 `tham chieu khong hop le`, 0 dòng log, 0 hàng; bộ đếm chứng CẢ BỐN handler chạy xong câu chèn — lỗi đến sau khi handler trả về.
+- ⒢ USAGE trên plpgsql thu hồi khỏi PUBLIC (fixture tự chứng: `has_language_privilege` sai) ⇒ khối DO của câu kết thúc ném 42501 ⇒ `/me` và một route có câu vô hại ra 500, mỗi yêu cầu một dòng `error 42501`; bộ đếm chứng handler của route vô hại chạy xong trước câu kết thúc (lượt soi 61a-5); cấp lại ⇒ 200.
+- ⒣ [lượt soi 60a-1 ⑴] Vai đăng nhập `dang_nhap_118` (LOGIN, `IN ROLE app_api`) mất membership ⇒ `/me` và `/guest/session` ra 500, mỗi yêu cầu một dòng `error 42501`; đối chứng trước thu hồi 200; cấp lại ⇒ 200.
+- ⒤ [lượt soi 60a-1 ⑵, 60a-2] EXECUTE trên `app_current_org_id()` thu hồi khỏi PUBLIC và `app_api` (fixture tự chứng) ⇒ cả hai route 500, một dòng `error 42501`; ACL dựng lại từ `aclexplode` đọc trước, quyền đọc lại đúng; `/me` 200.
+- ⒥ Handler để lại `app.org_id` ở phạm vi PHIÊN ⇒ 200 và đúng MỘT dòng `[api] ket noi huy pool TenantError SESSION_STATE_LEFT`, không mang giá trị; yêu cầu kế 200 không log; kết nối nhiễm `row_security = off` bị lần lấy client huỷ bằng `KetNoiNhiemError` ⇒ 500 và đúng một dòng — bộ nghe không ghi lại lỗi đã được ném.
+- ⒦ Thân `app_current_org_id()` thay bằng một thân ném 23505 (định nghĩa gốc dựng lại từ `pg_get_functiondef`) ⇒ lỗi lớp 23 ném ở câu xác thực, TRƯỚC khi handler chạy ⇒ `/me` 500 với một dòng `error 23505`, không 409.
+- ⒧ `SessionInvalidError` do handler ném ⇒ 401 `phien khong hop le`, 0 dòng log.
+- ⒨ `HttpError` của bộ điều phối: route vô danh thiếu `orgId` ⇒ 422; `/rfqs/khong-phai-uuid/approve` ⇒ 404; 0 dòng log.
+- ⒩ Việc sau commit reject bằng một lỗi mang hình dạng lỗi Postgres mã 08006 ⇒ phản hồi 200 không đổi, MỘT dòng `sau-commit error 08006`, không mang thông điệp (lượt soi 61a-2).
+- ⒪ Thân `app_current_guest_invitation_id()` thay bằng một thân ném 42501 khi `app.guest_session_id` đã đặt ⇒ phép đọc lại ba GUC của `withGuestSession` — trước handler — ném ⇒ route đọc của khách 500 với một dòng `error 42501`, bộ đếm chứng handler không chạy; định nghĩa gốc dựng lại, route 200 (lượt soi 61a-4).
+- Composition, mỗi `it` một tiến trình dựng như sản xuất, lỗi gây bằng trigger tạm của superuser gỡ trong `finally`:
+  - ⑴ trigger `AFTER INSERT OR UPDATE` trên `caller_rate_limits` đặt `app.guest_rfq_id` ở phạm vi phiên ⇒ `/auth/link` 200 và đúng HAI dòng `[api] ket noi huy pool TenantError SESSION_STATE_LEFT` — hai giao dịch bộ đếm, hai kết nối (lượt soi 61a-3);
+  - ⑵ trigger chặn `outbox_jobs` sang `DONE` với SQLSTATE `TP118` ⇒ dòng `[api] outbox LOGIN_LINK_SEND HANDLER_ERROR error TP118`, không mang email;
+  - ⑶ trigger chặn sang `RUNNING` ⇒ dòng `[api] outbox error TP118`;
+  - ⑷ phiên người mua vai BUYER gọi `POST /suppliers` (thiếu `supplier.manage`), trigger `AFTER INSERT` trên `audit_events` đặt GUC phạm vi phiên ⇒ 403 và đúng MỘT dòng `[api] ket noi huy auditPool TenantError SESSION_STATE_LEFT` (lượt soi 61a-3).
+- `mo-ta-loi.test.ts`: lỗi Postgres ⇒ tên và SQLSTATE (cả `TP096`), `TenantError` ⇒ tên và mã, không message, không cause; mã không mang hình dạng SQLSTATE (bốn chữ số, sáu chữ số, chữ thường, `ECONNREFUSED`, chuỗi có giá trị, số, null, undefined) ⇒ chỉ tên; thứ không phải `Error` ⇒ `loi khong ro`.
+
+**Tự bắt, không phải lượt soi:**
+- ⑴ **Vế `daTraVe` không chịu lực trên đường nào có sẵn:** không câu nào của khung ném lỗi lớp 23 trong giao dịch chứa handler, nên đột biến bỏ vế ấy sẽ xanh ở ⒠–⒥. ⒦ dựng đúng ca ấy — thân `app_current_org_id()` ném 23505 ở câu xác thực — và M2 đỏ đúng ⒦.
+- ⑵ **Nửa 404 của `HttpError` ở khung và vế "không log" không có test nào:** trong nhóm K1 không `it` nào chạm nhánh ấy; nửa 422 (thiếu `orgId`) có sẵn ở `guest.int.test.ts` (lượt soi 61b-2 — K4 M1 đo). ⒨ thêm nửa 404 và vế không log; M23 đỏ đúng ⒨ trên K1.
+- ⑶ **`SessionInvalidError` do handler ném từng được khối catch ngoài cùng trả 401:** tách nguồn làm nó rơi xuống 500 nếu không chuyển vào bảng giai đoạn 2. ⒧ ghim; M22 đỏ đúng ⒧.
+- ⑷ **Hình dạng mã chỉ đo được ở mức hàm:** mọi lỗi của test tích hợp mang SQLSTATE thật hay mã `TenantError`; `mo-ta-loi.test.ts` thêm, M10 đỏ đúng nó trên K1, và M10 chạy riêng trên hai tệp tích hợp thì SỐNG, không test nào đỏ trong 29 (K6 M1, lượt soi 61b-5).
+- ⑸ **Bộ nghe `release` nghe mọi lỗi thì một sự cố thành hai dòng:** `KetNoiNhiemError` đã được ném và ghi ở `dispatch`. ⒥ đòi đúng một dòng với kết nối nhiễm; M12 đỏ đúng ⒥.
+- ⑹ **Test composition không đổi trạng thái của test khác:** mỗi `it` một tiến trình riêng, gọi `/auth/link` từ một địa chỉ riêng (proxy đã khai) với email không có người dùng — bộ đếm theo người gọi và hộp thư của các test S1.11 không đổi; job của ⑵ trở về `PENDING` với số lần thử tăng, job của ⑶ ở lại `PENDING` (đọc), và không tiến trình nào về sau phục vụ tổ chức ấy (các test `main.ts` không gọi `/auth/link`).
+- ⑺ ⒦ ⒧ ⒨ và `mo-ta-loi.test.ts` viết SAU bản đầu; ⒩ ⒪ và composition ⑷ viết SAU lượt soi 61a — răng của chúng chứng bằng đột biến (M2, M22, M23, M10, M11, M29, M30, K2 M6), không bằng đỏ-trước trên mã cũ.
+- ⑻ **Bẫy công cụ:** script sửa tài liệu đòi số dấu gạch bỏ CHẴN trên cả tệp và dừng ở STATE — tệp gốc đã lẻ (STATE 571, Handoff 279, DECISIONS 185, vì dấu gạch bỏ vắt qua dòng); đổi thành đòi phần THÊM VÀO chẵn. Và một phép vá script chạy qua heredoc của Bash dừng ở mốc mang gạch chéo ngược dạng chữ (công cụ gộp hai gạch chéo thành một); viết lại thành tệp `.py` với `chr(92)`. Cả hai dừng trước khi ghi tệp nào.
+
+**Đỏ đo được, cô lập:**
+Driver `k118_dot_bien.py` (scratchpad): mỗi đột biến thay đúng MỘT chỗ (mốc khớp đúng một lần trên bản gốc), chạy trọn nhóm tệp với reporter JSON, trả tệp về theo sha256 lúc bắt đầu lượt, so tập `it` đỏ với tập ghi TRƯỚC. Nhóm: K1 — `loi-giao-thuc.int.test.ts` + `mo-ta-loi.test.ts`; K2 — `composition.int.test.ts`; K3 — `api.int.test.ts`; K4 — `guest.int.test.ts`; K5 — trọn `apps/api`; K6 — riêng `loi-giao-thuc.int.test.ts` + `composition.int.test.ts`. Lượt gốc mỗi nhóm xanh trọn.
+- **Bản đầu** (33 đột biến: K1 27, K2 5, K3 1): 32 đỏ ĐÚNG tập ghi trước, không test ngoài khoá nào đỏ; M24 chế độ đo SỐNG. Sau lượt, ba tệp nguồn khớp sha256 của bản chụp (so tay).
+- **Bản hai** (42 đột biến: K1 32, K2 9, K3 1 — tập dự kiến cập nhật TRƯỚC khi chạy cho ⒠, ⒩, ⒪, composition ⑷ và mười đột biến mới): 37 đỏ ĐÚNG tập ghi trước; năm chạy chế độ đo và SỐNG — M24, M31, M32, K2 M8, K2 M9.
+- **Bản ba** (chỉ chú thích — mã sẽ commit): 42 đột biến chạy lại, từng dòng cùng tập đỏ, cùng số test khác đỏ và cùng kết quả như bản hai — 37 ĐÚNG, năm SỐNG ở chế độ đo; cộng ba nhóm đo phạm vi theo lượt soi 61b (K4, K5, K6 — ba dòng cuối bảng). Không lượt nào báo `still running` (51 log).
+
+| Đột biến | Đỏ (bản hai) |
+|---|---|
+| M1 `chay` ném lỗi trần, không dấu `LoiHandler` | ⒠, ⒧ |
+| M2 bỏ vế `daTraVe` | ⒦ |
+| M3 `laLoiToanVen` luôn sai | ⒡ |
+| M4 mọi lỗi sau khi handler trả về là lỗi handler | ⒢ |
+| M5 nhánh người mua gói mọi lỗi (bản trước) | ⒤, ⒦ |
+| M6 khối catch bỏ nhánh `LoiHandler` | ⒠, ⒡, ⒧ |
+| M7 dòng 500 chỉ mang tên | ⒜, ⒞, ⒢, ⒣, ⒤, ⒦, ⒪ |
+| M8 helper bỏ nhánh SQLSTATE | ⒠, ⒢, ⒣, ⒤, ⒦, ⒩, ⒪, `mo-ta-loi` ① |
+| M9 helper bỏ nhánh `TenantError` | ⒜, ⒞, ⒥, `mo-ta-loi` ① |
+| M10 helper nhận mọi mã khác rỗng | `mo-ta-loi` ② |
+| M11 helper nội suy thứ không phải `Error` | `mo-ta-loi` ③ |
+| M12 bộ nghe ghi mọi lỗi của `release` | ⒥ |
+| M13 bộ nghe không ghi | ⒥ |
+| M14 PUBLIC không bọc handler | ⒠ |
+| M15 ANON không bọc handler | ⒠, ⒡ |
+| M16 ANON bỏ `giaoDich` | ⒡ |
+| M17 GUEST ghi bỏ `giaoDich` | ⒡ |
+| M18 GUEST đọc bỏ `giaoDich` | ⒡ |
+| M19 GUEST không bọc handler (một đột biến cho cả hai đường) | ⒠, ⒡ |
+| M20 BUYER không bọc handler | ⒠, ⒡, ⒧ |
+| M21 BUYER bỏ `giaoDich` | ⒡ |
+| M22 bảng giai đoạn 2 bỏ `SessionInvalidError` | ⒧ |
+| M23 khung bỏ `HttpError` | ⒨ |
+| M24 khung bỏ `TenantError` loại input — chế độ đo | SỐNG |
+| M25–M27 ba đột biến F1 của S1.66 chạy lại: GUEST gói mọi `TenantError`; GUEST gói mọi lỗi; khung trả 401 cho mọi `TenantError` | ⒜ ⒞; ⒜ ⒞ ⒟ ⒣ ⒤; ⒜ ⒞ |
+| M28 bảng giai đoạn 2 không ghi dòng cho 42501 | ⒠ |
+| M29 GUEST đọc: dấu handler bọc cả `withGuestSession` | ⒠, ⒪ |
+| M30 dòng `sau-commit` chỉ in tên | ⒩ |
+| M31 `laLoiToanVen` bỏ vế tên `error` — chế độ đo | SỐNG — tương đương |
+| M32 `daTraVe` đặt trước `await` — chế độ đo | SỐNG — tương đương |
+| K2 M1 composition không gắn bộ nghe cho `pool` | ⑴ |
+| K2 M2 `onJobFailure` không in lỗi | ⑵ |
+| K2 M3 lời đánh thức chỉ in tên | ⑶ |
+| K2 M4 helper bỏ nhánh SQLSTATE | ⑵, ⑶ |
+| K2 M5 helper bỏ nhánh `TenantError` | ⑴, ⑷ |
+| K2 M6 không gắn bộ nghe cho `auditPool` | ⑷ |
+| K2 M7 gắn bộ nghe cho `pool` hai lần | ⑴ |
+| K2 M8 `onPollError` chỉ in tên — chế độ đo | SỐNG |
+| K2 M9 bộ dọn chỉ in tên — chế độ đo | SỐNG |
+| K3 M1 khung bỏ `PermissionDeniedError` — tập chứa | `[INV-H17] [INV-D5] BUYER … POST /suppliers ⇒ 403` |
+| K4 M1 khung bỏ `HttpError`, trên `guest.int.test.ts` — tập chứa (lượt soi 61b-2) | `thiếu orgId ⇒ 422; orgId lạ với token thật ⇒ 422` |
+| K5 M1 khung bỏ `TenantError` loại input, trên trọn `apps/api` — chế độ đo (lượt soi 61b-5) | SỐNG — 161 test, không test nào đỏ |
+| K6 M1 helper nhận mọi mã khác rỗng, trên riêng hai tệp tích hợp — chế độ đo (lượt soi 61b-5) | SỐNG — 29 test, không test nào đỏ |
+
+**Lượt soi đối kháng 61** — hai người soi độc lập, không shell, song song, không đọc nhau: **61a** mã và test của bản đầu, đọc trên bản chụp (driver đột biến chạy trong kho cùng lúc); **61b** tài liệu của bản đầu — hàng sổ, ADR-020, Handoff, bản nháp biên bản, trên bản sao đã áp script — đối chiếu với mã, log đo và log đột biến.
+
+### 61a — mã và test của bản đầu: 0 CAO, 1 NẶNG, 6 NHẸ, 5 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | NẶNG | Lỗi hạ tầng lộ ra BÊN TRONG handler vẫn là 4xx câm: ⒜ GRANT hay EXECUTE thiếu trên đối tượng mà chỉ câu của handler chạm ⇒ 403 không log — ⒠ của bản đầu ghim ca ấy làm hợp đồng; ⒝ `withTenant(auditPool, …)` lồng trong handler (`tuChoi` của unseal, D2 của yêu cầu mở thầu và của đặt lại MFA): lỗi của lần ghi sổ từ chối thay chỗ lỗi từ chối, ra 403 không log, và lần từ chối không vào sổ — đúng hình dạng mà `PermissionAuditFailedError` sinh ra để chặn | đọc | **sửa ⒜:** bảng giai đoạn handler giữ 403 cho 42501 nhưng ghi MỘT dòng mang tên và mã; ⒠ đòi dòng ấy; M28 bỏ dòng ⇒ ⒠ đỏ. **⒝ ⇒ khoản 119** |
+| 2 | NHẸ | "Một hàm cho mọi chỗ ghi log lỗi" khai quá: dòng `sau-commit` của `dispatch` vẫn in `e.name`; `main.ts` in `tên: thông điệp` | đọc | **sửa:** `sau-commit` đi qua `moTaLoiKhongGiaTri`; lời khai thu về bộ điều phối và composition root, `main.ts` nêu là ngoại lệ có chủ đích; ⒩ ghim; M30 đỏ |
+| 3 | NHẸ | Ba chỗ đổi của composition không test nào đỏ khi hoàn tác — `onPollError`, bộ dọn, bộ nghe của `auditPool`; ⑴ gộp dòng bằng một tập nên gắn bộ nghe hai lần lên `pool` vẫn xanh | suy luận | **sửa:** ⑴ đòi đúng HAI dòng (hai giao dịch bộ đếm của `/auth/link`), K2 M7 gắn hai lần ⇒ ⑴ đỏ; ⑷ mới đo bộ nghe của `auditPool` qua lần ghi sổ từ chối quyền, K2 M6 ⇒ ⑷ đỏ; `onPollError` và bộ dọn chạy chế độ đo (K2 M8, M9) — ranh giới |
+| 4 | NHẸ | ⒜ Nhánh `TenantError` loại input của khung chỉ tới được qua cuộc đua sau lần resolve — đột biến bỏ nó sống; ⒝ chỗ đặt dấu handler ở nhánh GUEST đọc không được ghim: dời `chay` ra bọc cả callback của `withGuestSession` thì lỗi của câu riêng ấy thành 403 câm | ⒜ đo (M24 SỐNG); ⒝ suy luận | ⒜ ranh giới; ⒝ **sửa:** ⒪ thay thân `app_current_guest_invitation_id()` ném 42501 khi GUC phiên khách đã đặt ⇒ 500, handler không chạy; M29 dời dấu ⇒ ⒪ đỏ |
+| 5 | NHẸ | ⒢ không ghim vị trí lỗi: một 42501 ở câu nào của khung TRƯỚC handler cũng cho cùng kết quả | đọc | **sửa:** ⒢ chạy thêm một route có câu vô hại và đòi bộ đếm handler +1 |
+| 6 | NHẸ | Lời khai cũ nay sai: docstring `kind` của `TenantError` và đầu `tenant-error.test.ts` ("`input` thành 401 câm" — do handler ném thì nay 500); ADR-024 "lỗi chỉ ghi TÊN"; câu "Đo: … 403 không log" ở đầu `dispatch.ts` đứng ngoài đoạn gạch, đọc như hiện trạng | đọc | **sửa** cả bốn tại chỗ, nhãn [S1.67] |
+| 7 | NHẸ | Docstring bộ nghe khai quá: ⒜ lỗi của ROLLBACK đi kèm một lỗi gốc mà bảng trả 4xx thì không dòng nào ghi; ⒝ câu `BEGIN; SELECT` của `withTenant` không xong (`MULTI_STATEMENT_UNSUPPORTED`) ⇒ mốc search path thiếu ⇒ `SESSION_STATE_LEFT` ⇒ bộ nghe ghi một dòng SAI nguyên nhân cạnh dòng 500 | ⒜ đọc; ⒝ suy luận | **sửa lời** thành "đi cùng một lỗi đã được ném"; ⒜ ⒝ vào ranh giới |
+| 8 | INFO | Lỗi bọc (`PermissionAuditFailedError`) ra dòng log không SQLSTATE — `moTaLoiKhongGiaTri` không đọc `cause` | đọc | ranh giới |
+| 9 | INFO | Phép đọc lại ném trên đường thành công ⇒ kết nối huỷ không dòng log (đã khai); runner của `apps/unseal-worker` không có bộ nghe (chưa có điểm vào tiến trình — khoản 116) | đọc | ranh giới |
+| 10 | INFO | Nhãn "khung" cho lỗi ngoài lớp 23 ở câu kết thúc mà chính handler gây ra (`TRANSACTION_ABORTED`, `COMMIT_NOT_APPLIED`, `REPLICA_AT_COMMIT`) | đọc | **sửa lời:** "không qua bảng", kể cả khi handler gây ra |
+| 11 | INFO | Hai đột biến tương đương sẽ sống: bỏ vế `name === "error"` của `laLoiToanVen`; đặt `daTraVe` trước `await` | suy luận | chạy chế độ đo (M31, M32) — ghi ra là tương đương |
+| 12 | INFO | Dấu gạch bỏ đứng sau chữ và trước dấu câu không mở được đoạn gạch (đầu `loi-giao-thuc.int.test.ts`); hàng 118 kê `runner.ts` và "runner in tên lỗi" trong khi bản vá in ở composition root; dòng bề mặt `dispatch.ts` của §S1.66 chưa có con trỏ [S1.67] | đọc | **sửa** dấu gạch; lời đóng khoản nói runner giữ hợp đồng CẤM LOG; ghi chú [S1.67] ở ranh giới ⑴ của §S1.66 |
+
+**61a kiểm và thấy KHỚP:** bốn nguồn ở cả năm nhánh, `daTraVe` chỉ đúng sau khi handler trả về; nhánh người mua — mọi ca hỏng của phiên ném đúng `SessionInvalidError`, `assertTenantBound` ném `Error` trần nên ra 500 có log; không oracle mới (cookie đã qua UUID và `TOKEN_RE`, token chỉ vào SQL dưới dạng băm, 401 hay 500 chỉ phụ thuộc trạng thái hạ tầng); không câu trả lời nghiệp vụ nào thành 500 — `GUEST_SESSION_NOT_FOUND` vẫn 401, `InvitationError` của bộ đếm ra 500 thay vì 422 kèm thông điệp nội bộ; quy tắc lớp 23 — trong giao dịch chứa handler bộ điều phối chỉ SELECT và `set_config`, `requirePermission` ghi sổ ở giao dịch riêng, hai ràng buộc hoãn đều ném `check_violation`, không khoá ngoại DEFERRABLE, không gói nào đặt SERIALIZABLE; `moTaLoiKhongGiaTri` không message, không cause, regex neo hai đầu; pg-pool 3.14 — `_releaseOnce` ném trước khi phát sự kiện ở lần release thứ hai, `_release` phát trước khi gỡ client, đối số `true` và `undefined` bị bỏ qua; `SESSION_STATE_LEFT` sau giao dịch hỏng chỉ còn ở khuôn I1, nhiễm từ trước hay mốc thiếu; test composition — dòng ⑴ phát đồng bộ trước phản hồi, ⑵ ⑶ do lời đánh thức chứ không do vòng poll, `doiDongLog` có hạn, trigger tạm gỡ trong `finally`; phục hồi fixture (`pg_get_functiondef`, ACL tương đương); `dispatch` không bao giờ reject nên khối catch của `server.ts` chỉ gặp lỗi đọc thân.
+
+### 61b — tài liệu của bản đầu: 1 CAO, 1 NẶNG, 9 NHẸ, 4 INFO
+
+| # | mức | phát hiện | đo được | xử lý |
+|---|---|---|---|---|
+| 1 | CAO | ADR-020 Quyết định 4 khai "mọi chỗ ghi log lỗi của tiến trình … không message" — `main.ts` in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, dòng `sau-commit` còn in tên trần; ai thêm chỗ log mới sẽ tựa vào một bảo đảm không có | đọc | **sửa:** Quyết định 4 kể đúng các chỗ ghi log của bộ điều phối và composition root, nêu `main.ts` là ngoại lệ có chủ đích (đo ở test `[S1.11] main.ts`); `sau-commit` đi qua helper (61a-2) |
+| 2 | NẶNG | "Tự bắt" ⑵ khai đột biến bỏ `HttpError` ở khung "sẽ sống" — `guest.int.test.ts` "thiếu orgId ⇒ 422" phủ nửa 422; M23 chỉ chạy trên K1 | đọc | **sửa lời** theo phạm vi; **đo:** K4 M1 — `it` "thiếu orgId ⇒ 422" đỏ (tập chứa) |
+| 3 | NHẸ | Hàng 118 "Hình dạng đã áp dụng" mâu thuẫn với chính đoạn ĐÓNG — bản cài khác đề xuất ở ba điểm; "runner in tên lỗi" chưa gạch; con trỏ `runner.ts` trỏ tệp không đổi | đọc | **sửa:** "khác đề xuất ở ba điểm — xem đoạn ĐÓNG", gạch "runner in tên lỗi", gạch con trỏ `runner.ts` kèm lý do, thêm `mo-ta-loi.test.ts`; ADR-020 ghi ba điểm |
+| 4 | NHẸ | Ba danh sách thay đổi hợp đồng thiếu và lệch nhau: thiếu lỗi Postgres của `hasPermission` trong `requirePermission` của bộ điều phối, của bộ đếm hạn mức, phép từ chối gắn tổ chức ở nhánh người mua; hàng 118 thiếu `TenantError` input do handler ném; "(trước: 403 hay 401 không log)" sai với mã ngoài bảng | đọc | **sửa:** MỘT danh sách đủ ở ranh giới ⑷; hàng 118 và ADR-020 trỏ về |
+| 5 | NHẸ | Phạm vi đột biến viết như toàn kho: M10 "sống qua hai tệp tích hợp", M24 "SỐNG (đo)" — cả hai chỉ chạy trên K1 | đọc | **sửa lời; đo:** K5 M1 SỐNG trên trọn `apps/api` (161 test), K6 M1 SỐNG trên riêng hai tệp tích hợp (29 test) |
+| 6 | NHẸ | "`pnpm typecheck` và `pnpm lint` thoát mã 0" không có log đi kèm; "không `it` nào báo `still running`" không có chỗ dựa | đọc | **sửa:** bỏ lời khai typecheck và lint khỏi biên bản — t0 trên HEAD đo ở PR; lời `still running` dựa vào log của lượt |
+| 7 | NHẸ | Bản sao lời khai cũ chưa gạch: đầu `tenant-error.test.ts` và docstring `kind` ("`input` thành 401 câm"); `barrel-exports.test.ts` và `vai-tro.int.test.ts` ("log chỉ ghi tên lỗi") | đọc | **sửa** cả bốn tại chỗ, nhãn [S1.67] |
+| 8 | NHẸ | Nhãn chèn mà không gạch: ADR-024 "lỗi chỉ ghi TÊN [S1.67 …]", cùng khuôn ở `composition.ts` và `dispatch.ts` | đọc | **sửa:** gạch tại chỗ |
+| 9 | NHẸ | Ranh giới ⑸ nêu lý do sai: `requirePermission` còn được gói gọi BÊN TRONG handler (unseal, comparison, invitation, rfq, mfa-reset, key-material) | đọc | **sửa lý do:** lỗi `auditPool` của nó bị gói thành `PermissionAuditFailedError` dù gọi ở đâu |
+| 10 | NHẸ | Ranh giới ⑹ thiếu đường ROLLBACK hỏng: `release()` nhận lỗi ROLLBACK, bộ nghe không ghi; lỗi gốc ra 4xx thì không dòng nào | đọc | **thêm** vào ⑹ |
+| 11 | NHẸ | "403 và 422 không log trên mọi nhánh"; "bỏ dấu hay bỏ `giaoDich` ở từng nhánh ⇒ đỏ" — ⒡ chỉ đo bốn nhánh có giao dịch, PUBLIC là giả lập, GUEST hai đường chung một đột biến bỏ dấu | đọc | **sửa lời** ở hàng 118 và ADR-020 ⑺ |
+| 12 | INFO | Bảng đột biến gộp K2 M4, K2 M5 vào dòng M8, M9 | đọc | **tách** dòng |
+| 13 | INFO | "khớp sha256 của bản chụp" và "việc sau commit là gửi mail" lệch nguồn | đọc | **sửa:** bản đầu so tay với bản chụp, driver so với tệp lúc bắt đầu lượt; ranh giới cũ về `sau-commit` bỏ — dòng ấy nay qua helper |
+| 14 | INFO | "(hình dạng chủ dự án duyệt …)" không có nguồn | đọc | **sửa:** ghi nguồn — hàng 118 và báo cáo cuối S1.66 — cùng ngày chủ dự án chọn làm khoản |
+| 15 | INFO | Job của ⑵ ⑶ "ở lại `PENDING`" — runner đặt lại trạng thái và tăng số lần thử | đọc | **sửa:** "(đọc)", job ⑵ trở về `PENDING` với số lần thử tăng |
+
+**61b kiểm và thấy KHỚP:** đỏ-trước (23 test, 7 đỏ đúng tên và đúng thông điệp, ⒠ ⒡ xanh); `ad175b7` đúng là điểm tạo nhánh; số `it` mỗi tệp; bảng đột biến bản đầu khớp log từng dòng, khoá tên test khớp tên `it`, lời khai "sau khi handler trả về" (⒢) và "ở câu xác thực" (⒦) có đột biến chứng; mô tả từng test khớp mã test; các mục "Đo trước khi viết" khớp migration, pg-pool và `rbac.ts`; lời khai "không oracle mới trên tập phiên" đứng được với mã (đọc); các ranh giới ⑶ ⑷ ⑺ ⑻ khớp mã; [INV-H20] trên bản sao — hàng 118 ba cột, `§S1.67` có tiêu đề thật, dòng CÒN MỞ và đoạn đếm khớp; TEST-PLAN, INV-matrix, README, ADR-021/022/023, Handoff §3/§11/§12 không có lời khai nào về ánh xạ lỗi hay nội dung dòng log cần sửa.
+
+**Ranh giới NÓI RA:**
+- ⑴ **Bảng giai đoạn 2 vẫn phân loại lỗi CỦA HANDLER theo SQLSTATE:** một GRANT hay EXECUTE thu hồi mà chỉ câu của handler chạm ra 403 — nay kèm một dòng log (lượt soi 61a-1), nhưng mã không phân biệt được nó với trigger D2 hay bảng chỉ-ghi-thêm; `hasPermission` chạy trên client chính bên trong handler cùng lớp này.
+- ⑵ **Lỗi ở câu kết thúc:** hôm nay chỉ ràng buộc hoãn sinh lỗi lớp 23 ở đó (hai constraint trigger ném 23514; không khoá ngoại `DEFERRABLE`). Một constraint trigger hoãn ném mã ngoài lớp 23 sẽ không qua bảng — 500 có log (đọc). Lỗi ngoài lớp 23 ở câu kết thúc mà chính handler gây ra (`TRANSACTION_ABORTED`, `COMMIT_NOT_APPLIED`, `REPLICA_AT_COMMIT`) cũng không qua bảng — trước và sau bản vá đều 500 có log mang mã (lượt soi 61a-10).
+- ⑶ **`TenantError` loại input ở khung:** chỉ `GUEST_SESSION_NOT_FOUND` của `withGuestSession` tới được — một cuộc đua sau lần resolve (mang sang từ S1.66, 60a). Đột biến bỏ nhánh ấy SỐNG trên K1 (M24) và trên trọn `apps/api` (K5 M1, 161 test) — đo.
+- ⑷ **Thay đổi hợp đồng — danh sách đủ** (lượt soi 61b-4):
+  - ① lỗi Postgres mà bảng giai đoạn handler từng ánh xạ — 42501 ⇒ 403; 23505 ⇒ 409; 23503, 23514 và lớp 22 ⇒ 422 — ném NGOÀI handler: lần lấy client, câu riêng của `withTenant`/`withGuestSession`, câu xác thực của khách, `hasPermission` trong `requirePermission` của bộ điều phối, bộ đếm hạn mức, câu kết thúc ngoài lớp 23 ⇒ nay 500 có log; trước: mã của bảng, không log (đo ở 42501 — ⒢ ⒣ ⒤ ⒪; mã khác đọc);
+  - ② nhánh người mua: mọi lỗi của câu xác thực không phải `SessionInvalidError` — lỗi Postgres kể cả mã ngoài bảng, phép từ chối gắn tổ chức của `assertTenantBound` ⇒ nay 500 có log; trước: 401 không log (đo ở 42501 và 23505 — ⒤ ⒦; phép từ chối đọc);
+  - ③ `InvitationError` ném ngoài handler (nhánh phòng thủ của bộ đếm hạn mức; `DO UPDATE … RETURNING` luôn trả một hàng) ⇒ 500 thay vì 422; `TenantError` loại input do handler ném (không đường nào hôm nay) ⇒ 500 thay vì 401 (đọc);
+  - ④ 42501 do handler gây ra ⇒ vẫn 403, nay kèm một dòng log (đo — ⒠);
+  - ⑤ lỗi mang mã ngoài bảng ném ngoài handler (08006, 57014 ở lần lấy client) vốn đã ra 500 có log — dòng log nay mang thêm SQLSTATE (đọc); việc sau commit hỏng — dòng `sau-commit` mang thêm mã (đo — ⒩).
+- ⑸ **Handler dùng pool thứ hai:** `requirePermission`, dù bộ điều phối gọi trước handler hay một gói gọi bên trong handler, gói lỗi của lần ghi sổ trên `auditPool` thành `PermissionAuditFailedError` — 500 có log (đọc, lượt soi 61b-9). Ba chỗ gọi `withTenant(auditPool, …)` trực tiếp bên trong handler — `tuChoi` của unseal, D2 của yêu cầu mở thầu, D2 của đặt lại MFA — không bọc: lỗi của lần ghi thay chỗ lỗi từ chối và lần từ chối không vào sổ — khoản 119; 42501 của chúng nay kèm một dòng log.
+- ⑹ **Bộ nghe `release` nghe đúng một mã:** ⒜ phép đọc lại sau giao dịch của `withTenant` NÉM — kết nối vừa đứt, `pg_temp` đứng đầu search path dưới vai không có TEMP — thì kết nối bị huỷ bằng lỗi gốc, không dòng log; ⒝ ROLLBACK hỏng thì `release()` nhận lỗi của ROLLBACK và bộ nghe không ghi — lỗi gốc mà bảng trả 4xx thì không dòng nào nhắc tới kết nối ấy, và một `SESSION_STATE_LEFT` phát hiện sau đó bị che (lượt soi 61b-10, đọc); ⒞ câu `BEGIN; SELECT` của `withTenant` không xong (`MULTI_STATEMENT_UNSUPPORTED`, câu bị huỷ) thì mốc search path thiếu, phép đọc lại tính là lệch, và bộ nghe ghi một dòng `SESSION_STATE_LEFT` SAI nguyên nhân cạnh dòng 500 của lỗi thật (lượt soi 61a-7, đọc). Dòng `ket noi huy` không mang `requestId`.
+- ⑺ **Nối dây đo tới đâu:** bộ nghe của `pool` (composition ⑴; K2 M1, M7), bộ nghe của `auditPool` (⑷; K2 M6), `onJobFailure` (⑵) và lời đánh thức (⑶) đo trên tiến trình dựng như sản xuất. `onPollError` và bộ dọn đổi cùng helper — đột biến chế độ đo SỐNG (K2 M8, M9). Giao dịch của runner đi qua cùng bộ nghe của `pool` (đọc). Runner của `apps/unseal-worker` không có bộ nghe — chưa có điểm vào tiến trình (khoản 116).
+- ⑻ **Mã năm ký tự** khớp SQLSTATE; mã hệ thống năm chữ (`EPIPE`) cũng khớp — hằng, không mang giá trị (đọc). Lỗi bọc — `PermissionAuditFailedError` — ra dòng log không SQLSTATE: helper không đọc `cause` (lượt soi 61a-8).
+- ⑼ **Hai đột biến tương đương** — bỏ vế tên `error` của `laLoiToanVen`; đặt `daTraVe` trước `await` — SỐNG (M31, M32, đo) mà không mở lỗ: không lỗi không-Postgres nào mang mã lớp 23 ném sau handler, và `chay` chỉ chạy sau xác thực và phân quyền (lượt soi 61a-11, đọc).
+- ⑽ **`main.ts`** in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, ngoài mọi yêu cầu — ngoại lệ có chủ đích của chuẩn "tên và mã"; test `[S1.11] main.ts` đo stderr không mang giá trị của biến nào và không mang mật khẩu CSDL.
+- ⑾ **Dấu vết của fixture trong cụm test của tệp:** vai `dang_nhap_118` còn lại; ACL của `app_current_org_id()` và của `plpgsql` dựng lại tương đương về quyền, có thể thành tường minh thay NULL; bảng `hoan_118` còn lại, rỗng (đọc).
+
+**Mang sang, không vào sổ:**
+- 61a-7 ⒝: khi mốc search path thiếu vì câu `BEGIN; SELECT` không xong, `withTenant` có thể truyền chính lỗi đã ném cho `release()` thay cho `SESSION_STATE_LEFT` — kết nối vẫn bị huỷ, bộ nghe hết chẩn đoán sai. Chưa làm: đổi mã của `withTenant` cho một đường hiếm, cần đo bằng một client giả.
+- 61a-8: với lớp lỗi bọc đã biết, `moTaLoiKhongGiaTri` có thể nối tên và mã của `cause` đúng một tầng.
+- 60a (S1.66, còn đó): `GUEST_SESSION_NOT_FOUND` từ `withGuestSession` là một cuộc đua dưới mili-giây — không test nào ghim được 401 của nó.
+
+**Điều đáng mang sang vòng sau:**
+- ⑴ Phân loại lỗi theo NGUỒN cần một dấu đặt TẠI nguồn — tên lỗi không mang nguồn; và quy tắc "lỗi ở bước sau handler thuộc về handler" phải hẹp theo mã, không theo thời điểm, vì bước kết thúc còn chạy mã của khung (khối DO của khoản 96).
+- ⑵ Một vế phòng thủ không chịu lực trên mọi đường có sẵn thì phải dựng ca làm nó chịu lực trước khi tin — hay bỏ nó kèm lý do.
+- ⑶ Lỗi chỉ đi vào `release()` không tới người gọi nào: nghe nó ở pool, và nghe đúng mã ấy để một sự cố không thành hai dòng.
+- ⑷ Khi một câu trả lời nghiệp vụ và một lỗi hạ tầng dùng chung một mã, giữ mã HTTP của câu trả lời nhưng cho người vận hành một dòng — im lặng vì "có thể là nghiệp vụ" là cửa để hạ tầng hỏng câm (lượt soi 61a-1).
+- ⑸ Một lời khai về đột biến phải nói nhóm tệp nó chạy trên: suy từ một nhóm ra cả kho sai được — một test ở tệp khác đã giết đột biến mà biên bản khai sẽ sống (lượt soi 61b-2).

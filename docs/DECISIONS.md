@@ -1582,6 +1582,47 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
   ngoài bảng thì không lớp nào thấy — lớp canh `g9-` cấm `node:http` ngoài `server.ts` để đóng
   đúng khe ấy, và đó là phần chênh phải ghi.
 
+### [S1.67 / khoản 118] Ánh xạ lỗi theo NGUỒN của lỗi, không theo TÊN
+
+**Bối cảnh.** Lựa chọn C trả giá bằng một bảng ánh xạ lỗi → mã HTTP tự viết ở `dispatch.ts`, hai giai đoạn: xác thực ⇒ MỘT 401
+câm; handler ⇒ bảng (403, 409, 422, 500 có log). Tới S1.66 khối catch chọn giai đoạn theo TÊN lỗi, mà tên không mang nguồn: 42501
+của `SET ROLE` ở lần lấy client và 42501 của trigger D2 trong handler cùng là lỗi `error` mã 42501 ⇒ 403 không log; nhánh người mua
+gói MỌI lỗi của câu xác thực thành 401 (đo S1.66, lượt soi 60a-1, 60a-2 — khoản 118).
+
+**Quyết định.** Hình dạng đề xuất ở hàng 118 của sổ nợ và ở báo cáo cuối S1.66; chủ dự án chọn làm khoản 118 ngày 2026-09-13. Bản cài
+ở S1.67:
+1. Lỗi mà `route.handler` ném mang một dấu đặt tại nguồn (`LoiHandler`); lỗi lớp 23 ném ở câu kết thúc của giao dịch SAU khi handler
+   đã trả về cũng mang dấu — ràng buộc hoãn tới COMMIT là việc ghi của handler. Chỉ lỗi mang dấu đi qua bảng của giai đoạn handler; ở
+   bảng ấy 42501 vẫn là 403 nhưng kèm MỘT dòng log, vì mã ấy vừa là câu trả lời nghiệp vụ (trigger D2, bảng chỉ-ghi-thêm) vừa là GRANT
+   hay EXECUTE bị thu hồi mà chỉ câu của handler chạm (lượt soi 61a-1).
+2. Giai đoạn xác thực chỉ gói lỗi xác thực CÓ TÊN: `SessionInvalidError`, `InvitationError`, `TenantError` loại input.
+3. Mọi lỗi khác không qua bảng — lần lấy client, câu riêng của `withTenant`/`withGuestSession`, câu kết thúc ném lỗi ngoài lớp 23 (kể
+   cả khi handler gây ra nó), bộ đếm hạn mức, lỗi của `requirePermission` ngoài `PermissionDeniedError`: 500 thân cố định với MỘT dòng
+   log mang tên lỗi và mã cố định (mã `TenantError` hay SQLSTATE). Khung giữ ba câu trả lời có tên: `TenantError` loại input ⇒ 401,
+   `PermissionDeniedError` ⇒ 403, `HttpError` do chính bộ điều phối ném ⇒ mã của nó.
+4. Các chỗ ghi log lỗi của bộ điều phối và composition root — dòng 500, dòng 42501, dòng `sau-commit`, dòng lỗi job outbox, lời đánh
+   thức, `onPollError`, bộ dọn, bộ nghe `release` — mô tả lỗi bằng MỘT hàm, `moTaLoiKhongGiaTri`: tên cộng mã, không message, không
+   cause (A2). Ngoại lệ có chủ đích: `main.ts` in `tên: thông điệp` của lỗi cấu hình, khởi động và dừng, ngoài mọi yêu cầu; test
+   `[S1.11] main.ts` đo stderr không mang giá trị của biến nào và không mang mật khẩu CSDL (lượt soi 61b-1).
+
+Bản cài khác đề xuất ở ba điểm: ⒜ đề xuất đưa mọi lỗi ngoài xác thực và handler ra 500 — khung giữ ba câu trả lời có tên ở ⑶;
+⒝ "lỗi ràng buộc hoãn lúc COMMIT vẫn là lỗi handler" nhận theo MÃ (lớp 23) cộng thời điểm (sau khi handler trả về), không theo thời
+điểm một mình, vì câu kết thúc còn chạy mã của khung; ⒞ "runner in tên lỗi" cài ở `onJobFailure` của composition root — runner giữ
+hợp đồng CẤM LOG của nó.
+
+**Hệ quả.** Lỗi hạ tầng và cấu hình trên đường xác thực nay ồn — 500 kèm log — thay vì bảo máy khách "đăng nhập lại" hay "không có
+quyền". Không oracle mới trên tập phiên: lỗi của khung đứng trước phép so token (lần lấy client, `assertTenantBound`) đến với mọi
+phiên như nhau, còn lỗi của khung đứng sau phép so chỉ tới được với một phiên đã hợp lệ (đọc). Mã HTTP của bảng giai đoạn handler giữ
+nguyên, kể cả 42501 ⇒ 403 — trigger D2 và bảng chỉ-ghi-thêm dùng mã ấy làm câu trả lời nghiệp vụ. Thay đổi hợp đồng, đủ ở
+`evidence/security-reviews.md` §S1.67 ranh giới ⑷: lỗi Postgres ném ngoài handler mà bảng từng ánh xạ nay 500 có log; nhánh người mua
+trả 500 cho mọi lỗi của câu xác thực không phải `SessionInvalidError`; `InvitationError` ném ngoài handler và `TenantError` loại input
+do handler ném nay 500; 42501 do handler gây ra kèm một dòng log.
+
+**Phần KHÔNG đóng.** GRANT thu hồi mà chỉ câu của handler chạm vẫn là 403 — nay kèm một dòng log, nhưng mã không phân biệt được nó với
+câu trả lời nghiệp vụ. Lần ghi sổ từ chối lồng trong handler (unseal, D2 của yêu cầu mở thầu và của đặt lại MFA) không bọc lỗi của
+chính nó như `PermissionAuditFailedError` — khoản 119. Lỗi chỉ đi vào `release()` được nghe ở pool cho đúng một mã
+(`SESSION_STATE_LEFT`). Chi tiết ở `evidence/security-reviews.md` §S1.67.
+
 ### Đo bằng gì
 
 1. **Cổng quyền:** một route ghi thêm vào `ROUTES` mà thiếu `permission` → T1 đỏ **không cần khởi
@@ -1602,6 +1643,11 @@ và bộ điều phối là nơi DUY NHẤT gọi `requirePermission`"*.
    điệp lỗi; **đối chứng dương**: cùng bộ quét bắt được khi một route cố ý trả bản rõ.
 6. **Phạm vi sản xuất KHÔNG đổi:** `NGOAI_DUOC_PHEP_O_SAN_XUAT` vẫn đúng hai dòng sau khi
    `apps/api` ra đời — đó là phép đo của lựa chọn C.
+7. **[S1.67 / khoản 118] Nguồn của lỗi:** qua HTTP thật (`loi-giao-thuc.int.test.ts`) — vai đăng nhập mất membership, EXECUTE trên
+   `app_current_org_id()` thu hồi, USAGE trên plpgsql thu hồi, lỗi lớp 23 ném ở câu xác thực, phép đọc lại của `withGuestSession` ném
+   ⇒ 500 kèm MỘT dòng `error <SQLSTATE>`; 42501 do câu của handler ⇒ 403 kèm MỘT dòng trên năm nhánh (PUBLIC giả lập); ràng buộc
+   hoãn ⇒ 422 không log trên bốn nhánh có giao dịch; đột biến bỏ `giaoDich` ở từng nhánh có giao dịch, và bỏ dấu ở PUBLIC, ANON,
+   GUEST (một đột biến cho cả hai đường), BUYER ⇒ đỏ.
 
 ## ADR-021 — Tiến trình `api` chạy thật: **composition root trong `apps/api`, cấu hình từ môi trường fail-closed, pool `SET ROLE` mỗi kết nối, và "đường ứng dụng" ở CSDL là mọi thành viên kế thừa của `app_api`**
 
@@ -1965,7 +2011,7 @@ danh sách viết tay, sổ nợ 54 (một test "mọi hàm trigger có mặt tr
   đây là vế khách (khoản nợ 29), nên nó là policy chứ không phải một lớp thứ hai.
 - **Số hàng do người gọi VÔ DANH quyết** — khác `otp_rate_limits`, nơi khoá ngoại buộc phải có một
   tổ chức thật. Đường bịt là DỌN: `app_api` có DELETE mức bảng, tiến trình `api` chạy
-  `donBucketNguoiGoiCu` mỗi 5 phút (`setInterval` có `unref`, lỗi chỉ ghi TÊN), xoá mọi cửa sổ cũ
+  `donBucketNguoiGoiCu` mỗi 5 phút (`setInterval` có `unref`, lỗi ~~chỉ ghi TÊN~~ [S1.67 / khoản 118, lượt soi 61b-8] ghi TÊN cùng mã cố định), xoá mọi cửa sổ cũ
   hơn HAI cửa sổ — không bao giờ chạm cửa sổ đang đếm. Giữa hai lần dọn, một kẻ xoay /64 vẫn tạo
   được hàng; hàng nhỏ và cửa sổ 15 phút, đó là phần chênh còn lại. **[review H6-8]** Đường bịt duy
   nhất không được hỏng trong im lặng: mỗi lượt dọn ồn ào ghi SỐ hàng, hai lượt hỏng liên tiếp ghi rõ
