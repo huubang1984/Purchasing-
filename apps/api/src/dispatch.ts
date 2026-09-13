@@ -40,14 +40,30 @@
 // Giai đoạn 1 (xác thực): ~~mọi lỗi~~ [S1.66] lỗi XÁC THỰC ⇒ 401 với CÙNG MỘT thân, bất kể là thiếu cookie, sai hình dạng,
 // token không khớp, phiên hết hạn, hay tổ chức không tồn tại. Phân biệt chúng là một oracle trên
 // tập phiên — cùng lý do `resolveSessionActor` và `docToken` ném một thông điệp cho bốn ca.
-// [S1.66 / lượt soi ngang 59b-1, lượt soi 60a-1, 60a-2] Chưa trọn. Nhánh khách chỉ gói lỗi xác thực, và lỗi giao thức MANG TÊN
+// [S1.66 / lượt soi ngang 59b-1, lượt soi 60a-1, 60a-2] ~~Chưa trọn. Nhánh khách chỉ gói lỗi xác thực, và lỗi giao thức MANG TÊN
 // (`TenantError` loại protocol, `KetNoiNhiemError`) đi 500 có log; nhưng nhánh người mua còn gói MỌI lỗi của `resolveSessionByToken`
-// thành 401, và lỗi Postgres của lần lấy client rơi vào bảng ánh xạ của giai đoạn 2. Đo: vai đăng nhập mất membership app_api ⇒ 403
+// thành 401, và lỗi Postgres của lần lấy client rơi vào bảng ánh xạ của giai đoạn 2.~~ Đo trên bản trước S1.67: vai đăng nhập mất membership app_api ⇒ 403
 // không log ở cả hai nhánh; EXECUTE trên app_current_org_id() bị thu hồi ⇒ người mua 401, khách 403, không log — khoản 118.
+// [S1.67 / khoản 118] Lỗi phân loại theo NGUỒN, không theo tên — trước vòng này mọi lỗi không mang tên riêng rơi vào bảng của giai
+// đoạn 2, dù nó đến từ handler hay từ lần lấy client. Bốn nguồn:
+//   ⑴ xác thực — chỉ lỗi xác thực CÓ TÊN thành 401: `SessionInvalidError` (người mua), `InvitationError` (khách), `TenantError` loại
+//     input; mọi lỗi khác của câu xác thực — lỗi Postgres, phép từ chối gắn tổ chức của `assertTenantBound` — thuộc ⑷;
+//   ⑵ phân quyền — `PermissionDeniedError` của `requirePermission` ⇒ 403; lỗi khác của nó thuộc ⑷;
+//   ⑶ handler — lỗi mà `route.handler` ném (mang dấu `LoiHandler`), cộng lỗi LỚP 23 ném ở câu kết thúc của giao dịch SAU khi handler
+//     đã trả về: ràng buộc hoãn tới COMMIT là việc ghi của handler. Chỉ nguồn này đi qua bảng của giai đoạn 2;
+//   ⑷ khung — lần lấy client, câu riêng của withTenant/withGuestSession, bộ đếm hạn mức, và mọi lỗi ngoài lớp 23 của câu kết thúc —
+//     kể cả khi handler gây ra nó (handler nuốt một câu lỗi ⇒ TRANSACTION_ABORTED, hàm handler gọi đặt replica ⇒ REPLICA_AT_COMMIT;
+//     lượt soi 61a-10), nên đúng hơn là "không qua bảng": 500 thân cố định với MỘT dòng log mang tên lỗi và mã cố định; `HttpError` do
+//     chính bộ điều phối ném (thiếu `orgId`, tham số đường dẫn sai hình dạng) giữ mã của nó.
+// Đo: `loi-giao-thuc.int.test.ts` describe [S1.67 / khoản 118].
 // Giai đoạn 2 (handler): `PermissionDeniedError` ⇒ 403; `HttpError` ⇒ mã của nó; lỗi nghiệp vụ
 // có tên (`SupplierError`, `RfqError`, …) ⇒ 422 kèm thông điệp — các lớp ấy đã chịu kỷ luật
 // "không nội suy dữ liệu vào message"; MỌI lỗi khác ⇒ 500 với thân cố định, và chỉ TÊN lỗi — [S1.66] cùng MÃ cố định của `TenantError` — được
-// ghi ra `console.error` — không stack có payload, không thân yêu cầu (A2).
+// ghi ra `console.error` — không stack có payload, không thân yêu cầu (A2). [S1.67 / khoản 118] Mã cố định gồm cả SQLSTATE của lỗi
+// Postgres (`moTaLoiKhongGiaTri`); `SessionInvalidError` do handler ném (một gói gọi `resolveSessionActor` giữa chừng) ⇒ 401.
+// [S1.67 / lượt soi 61a-1] 42501 của PostgreSQL vẫn ⇒ 403, nhưng kèm MỘT dòng log: mã ấy vừa là câu trả lời nghiệp vụ (trigger D2, bảng
+// chỉ-ghi-thêm) vừa là GRANT hay EXECUTE bị thu hồi mà chỉ câu của handler chạm — kể cả lần ghi sổ từ chối qua `auditPool` lồng trong
+// handler (khoản 119) — và mã không phân biệt được hai ca.
 // ==============================================================================================
 
 import { randomUUID } from "node:crypto";
@@ -66,6 +82,7 @@ import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
 import { diaChiPhanGiaiDuoc, khoaNguoiGoi } from "./dia-chi.js";
+import { moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
 import type { ApiServices, Route } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
@@ -153,6 +170,59 @@ class LoiXacThuc extends Error {
   }
 }
 
+/**
+ * [S1.67 / khoản 118] Lỗi mà HANDLER gây ra — bọc để bảng ánh xạ của giai đoạn 2 chỉ nhận lỗi của handler. Trước vòng này khối catch
+ * phân loại theo TÊN, nên một lỗi Postgres của lần lấy client (42501 ở `SET ROLE`) và một lỗi Postgres của handler (42501 do trigger
+ * D2 hay GRANT thiếu) là cùng một thứ: 403 không log.
+ */
+class LoiHandler extends Error {
+  constructor(cause: unknown) {
+    super("handler that bai", { cause });
+    this.name = "LoiHandler";
+  }
+}
+
+/** Lỗi Postgres lớp 23 (toàn vẹn). Ở câu kết thúc của giao dịch, đó là phép kiểm của một ràng buộc HOÃN tới COMMIT. */
+function laLoiToanVen(loi: unknown): boolean {
+  if (!(loi instanceof Error) || loi.name !== "error") return false;
+  const ma = (loi as { code?: unknown }).code;
+  return typeof ma === "string" && ma.startsWith("23");
+}
+
+interface NguonHandler {
+  /** Chạy handler; lỗi nó ném mang dấu `LoiHandler`. */
+  chay<T>(viec: () => Promise<T>): Promise<T>;
+  /**
+   * Đợi giao dịch chứa handler. Lỗi mà withTenant/withGuestSession ném SAU khi handler đã trả về đến từ câu kết thúc: lớp 23 là ràng
+   * buộc hoãn — việc ghi của handler — nên mang dấu `LoiHandler`; mọi lỗi khác ở đó (khối DO của khoản 96, phép kiểm command tag,
+   * kết nối đứt) không qua bảng — kể cả khi chính handler gây ra nó (lượt soi 61a-10).
+   */
+  giaoDich<T>(p: Promise<T>): Promise<T>;
+}
+
+/** Một bộ theo dõi cho MỘT lần gọi handler: `chay` bọc handler, `giaoDich` bọc giao dịch chứa nó. */
+function nguonHandler(): NguonHandler {
+  let daTraVe = false;
+  async function chay<T>(viec: () => Promise<T>): Promise<T> {
+    try {
+      const ketQua = await viec();
+      daTraVe = true;
+      return ketQua;
+    } catch (loi) {
+      throw new LoiHandler(loi);
+    }
+  }
+  async function giaoDich<T>(p: Promise<T>): Promise<T> {
+    try {
+      return await p;
+    } catch (loi) {
+      if (daTraVe && laLoiToanVen(loi)) throw new LoiHandler(loi);
+      throw loi;
+    }
+  }
+  return { chay, giaoDich };
+}
+
 function timRoute(
   routes: readonly Route[],
   method: ApiRequest["method"],
@@ -201,19 +271,33 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
   if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
   if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
   if (err instanceof MfaRequiredError) return { status: 401, body: THAN_401 };
+  // [S1.67 / khoản 118] Trước vòng này khối catch ngoài cùng trả 401 cho MỌI `SessionInvalidError`. Nay nhánh người mua bọc lỗi của
+  // chính nó thành `LoiXacThuc`, nên tới đây chỉ còn `SessionInvalidError` do handler ném — một gói gọi `resolveSessionActor` khi phiên
+  // vừa bị thu hồi hay người dùng vừa bị đình chỉ — và hợp đồng của ca ấy giữ nguyên.
+  if (err instanceof SessionInvalidError) return { status: 401, body: THAN_401 };
   if (err instanceof Error && LOI_NGHIEP_VU_422.has(err.name)) {
     return { status: 422, body: { error: err.message } };
   }
   if (err instanceof Error && err.name === "error" && "code" in err) {
+    // [S1.67 / lượt soi 61a-1] 42501 ⇒ 403 như cũ, kèm MỘT dòng log mang tên và mã — xem khối đầu tệp. Lớp 22 và 23 không ghi: người
+    // gọi gây ra được.
+    if (err.code === "42501") console.error(`[api] ${requestId} ${moTaLoiKhongGiaTri(err)}`);
     const pg = anhXaLoiPostgres(err);
     if (pg !== null) return pg;
   }
+  return loiNoiBo(err, requestId);
+}
+
+/** 500 thân cố định với MỘT dòng log — đích chung của lỗi handler ngoài bảng và của mọi lỗi thuộc KHUNG. */
+function loiNoiBo(err: unknown, requestId: string): ApiResponse {
   // Chỉ TÊN lỗi và mã yêu cầu. Không `err` nguyên, không `cause`: `cause` của một lỗi Postgres
   // mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
   // [S1.66 / lượt soi ngang 59b-1] Và MÃ cố định của một TenantError giao thức: tên lỗi một mình không phân biệt được mặc định phiên
   // gắn sẵn với rò phạm vi phiên hay replica lúc COMMIT. Mã là hằng của `@trustprocure/tenancy`, không mang giá trị nào.
-  const ma = err instanceof TenantError ? ` ${err.code}` : "";
-  console.error(`[api] ${requestId} ${err instanceof Error ? err.name : "loi khong ro"}${ma}`);
+  // [S1.67 / khoản 118] Và SQLSTATE của một lỗi Postgres: tên `error` một mình không phân biệt được 42501 ở `SET ROLE` với 08006 kết
+  // nối đứt hay 57014 câu bị huỷ. Cả hai loại mã đi qua `moTaLoiKhongGiaTri` — một hàm cho mọi chỗ ghi log lỗi của bộ điều phối và
+  // composition root (`main.ts` in thông điệp của lỗi cấu hình và khởi động — có chủ đích; lượt soi 61a-2).
+  console.error(`[api] ${requestId} ${moTaLoiKhongGiaTri(err)}`);
   return { status: 500, body: THAN_500 };
 }
 
@@ -234,7 +318,8 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     const req: ApiRequest = { ...vao, params: tim.params, requestId };
     const route = tim.route;
     // [review M-7] Việc SAU COMMIT: chạy khi giao dịch đã đóng và phản hồi đã quyết. Một lỗi ở đây
-    // chỉ được ghi TÊN — không đổi mã trạng thái, không mang nội dung (A2).
+    // ~~chỉ được ghi TÊN~~ [S1.67 / lượt soi 61a-2, 61b-8] chỉ được ghi TÊN cùng mã cố định — không đổi mã trạng thái, không mang nội
+    // dung (A2).
     const sauCommit: (() => Promise<void>)[] = [];
     const afterCommit = (viec: () => Promise<void>): void => {
       sauCommit.push(viec);
@@ -247,7 +332,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         try {
           await coHan(viec, deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH, "SauCommitQuaHan");
         } catch (e) {
-          console.error(`[api] ${requestId} sau-commit ${e instanceof Error ? e.name : "loi khong ro"}`);
+          console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(e)}`);
         }
       }
       return r;
@@ -256,7 +341,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     try {
       switch (route.audience) {
         case "PUBLIC":
-          return await route.handler({ req });
+          return await nguonHandler().chay(() => route.handler({ req }));
 
         case "ANON": {
           const orgId = orgIdTuThan(req.body);
@@ -335,9 +420,12 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           const nudgeOutbox = (): void => {
             danhThuc = true;
           };
+          const handler = nguonHandler();
           const phanHoi = await chaySauCommit(
-            await withTenant(deps.pool, orgId, (client) =>
-              route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox }),
+            await handler.giaoDich(
+              withTenant(deps.pool, orgId, (client) =>
+                handler.chay(() => route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox })),
+              ),
             ),
           );
           // [sổ nợ 38] Job đã nằm trong CSDL (commit xong) và phản hồi đã quyết: đánh thức, không đợi.
@@ -348,12 +436,18 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "BUYER": {
           const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_NGUOI_MUA]);
           if (cookie === null) return { status: 401, body: THAN_401 };
-          return await withTenant(deps.pool, cookie.orgId, async (client) => {
+          const handler = nguonHandler();
+          const trongGiaoDich = async (client: pg.PoolClient): Promise<ApiResponse> => {
             let actor: SessionActor;
             try {
               actor = await resolveSessionByToken(client, cookie.orgId, cookie.token);
             } catch (e) {
-              throw new LoiXacThuc({ cause: e });
+              // [S1.67 / khoản 118 — lượt soi 60a-2] Chỉ lỗi xác thực CÓ TÊN thành 401: mọi ca hỏng của phiên — token sai hình dạng hay
+              // không khớp, thu hồi, hết hạn, chưa MFA, người dùng bị đình chỉ — ném cùng một `SessionInvalidError`. Bản trước gói MỌI
+              // lỗi, cả lỗi Postgres của câu xác thực (đo: EXECUTE trên app_current_org_id() thu hồi ⇒ 401 không log) lẫn phép từ chối
+              // gắn tổ chức của `assertTenantBound`.
+              if (e instanceof SessionInvalidError) throw new LoiXacThuc({ cause: e });
+              throw e;
             }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
             if (route.mutates && route.self !== true) {
@@ -370,8 +464,11 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 deps.auditPool,
               );
             }
-            return route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit });
-          }).then(chaySauCommit);
+            return handler.chay(() =>
+              route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit }),
+            );
+          };
+          return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then(chaySauCommit);
         }
 
         case "GUEST": {
@@ -389,38 +486,47 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             if (e instanceof InvitationError || (e instanceof TenantError && e.kind === "input")) throw new LoiXacThuc({ cause: e });
             throw e;
           }
+          const handler = nguonHandler();
           const goiHandler = (client: pg.PoolClient): Promise<ApiResponse> =>
-            route.handler({
-              req,
-              orgId: cookie.orgId,
-              client,
-              guestSessionId: phien.guestSessionId,
-              invitationId: phien.invitationId,
-              rfqId: phien.rfqId,
-              services: deps.services,
-            });
+            handler.chay(() =>
+              route.handler({
+                req,
+                orgId: cookie.orgId,
+                client,
+                guestSessionId: phien.guestSessionId,
+                invitationId: phien.invitationId,
+                rfqId: phien.rfqId,
+                services: deps.services,
+              }),
+            );
           // Đường GHI: `withTenant`, không GUC — xem khối [S1.10.3] ở đầu file.
-          if (route.mutates) return await withTenant(deps.pool, cookie.orgId, goiHandler);
+          if (route.mutates) return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, goiHandler));
           // Đường ĐỌC: `withGuestSession` tự đọc lại hàng phiên, từ chối phiên thu hồi/hết hạn, và
           // đặt CẢ BA GUC. Handler nhận `client` khi mọi việc ấy đã xong — hoặc không nhận gì cả.
-          return await withGuestSession(deps.pool, cookie.orgId, phien.guestSessionId, goiHandler);
+          return await handler.giaoDich(withGuestSession(deps.pool, cookie.orgId, phien.guestSessionId, goiHandler));
         }
       }
     } catch (err) {
       if (err instanceof LoiXacThuc) return { status: 401, body: THAN_401 };
+      // [S1.67 / khoản 118] Nguồn ⑶ ở đầu tệp: chỉ lỗi của handler đi qua bảng của giai đoạn 2.
+      if (err instanceof LoiHandler) return anhXaLoiHandler(err.cause, requestId);
       // `withTenant` ném TenantError cho một orgId SAI HÌNH DẠNG (nó KHÔNG tra `organizations` —
       // một orgId lạ nhưng đúng UUID đi qua và RLS lọc thành 0 hàng), và `withGuestSession` ném
       // TenantError cho một phiên khách hỏng ~~— cả hai thuộc giai đoạn xác thực, không phải lỗi handler~~. [S1.66 / lượt soi ngang
       // 59b-1] Không chỉ hai ca ấy: withTenant còn ném TenantError khi TỪ CHỐI PHỤC VỤ — mặc định phiên gắn sẵn, rò phạm vi phiên,
       // replica lúc COMMIT, giao dịch hỏng, GUC khách không hiệu lực (đo: lượt soi 59 — cả nhóm từng ra 401 không log). Chỉ loại
-      // `input` thuộc giai đoạn xác thực; loại `protocol` rơi xuống `anhXaLoiHandler` — 500 thân cố định, một dòng log mang tên và
-      // mã. `SessionInvalidError` và
+      // `input` thuộc giai đoạn xác thực; loại `protocol` rơi xuống ~~`anhXaLoiHandler`~~ [S1.67] `loiNoiBo` — 500 thân cố định, một dòng
+      // log mang tên và mã. ~~`SessionInvalidError` và
       // `InvitationError` KHÔNG bao giờ tới đây từ giai đoạn 1 (đã bọc), nên nếu thấy chúng thì
-      // đó là lỗi nghiệp vụ của handler và rơi vào bảng 422 ở dưới.
+      // đó là lỗi nghiệp vụ của handler và rơi vào bảng 422 ở dưới.~~ [S1.67 / khoản 118] Lỗi của handler không còn tới đây trần (đã mang
+      // dấu `LoiHandler`), nên mọi thứ dưới dòng này là lỗi của nguồn ⑴ ⑵ ⑷ — kiểm TÊN ở đây chỉ an toàn VÌ nguồn đã được tách:
+      // `TenantError` loại input chỉ đến từ withTenant/withGuestSession, `PermissionDeniedError` chỉ từ `requirePermission`, `HttpError`
+      // từ `orgIdTuThan` và `resourceId` của route. Hệ quả: `InvitationError` ném ngoài handler (bộ đếm hạn mức không trả số lần — nhánh
+      // phòng thủ) nay là 500 có log, không còn 422.
       if (err instanceof TenantError && err.kind === "input") return { status: 401, body: THAN_401 };
-      if (err instanceof SessionInvalidError) return { status: 401, body: THAN_401 };
-      if (err instanceof InvitationError) return { status: 422, body: { error: err.message } };
-      return anhXaLoiHandler(err, requestId);
+      if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
+      if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
+      return loiNoiBo(err, requestId);
     }
   };
 }

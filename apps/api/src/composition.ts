@@ -32,6 +32,7 @@ import type { CauHinhApi } from "./cau-hinh.js";
 import { KMS_TIMEOUT_MS_MAC_DINH, boiTranKms } from "./co-han.js";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
+import { ghiLogKetNoiHuy, moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
@@ -68,6 +69,10 @@ const DON_BUCKET_ON_AO = 1000;
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
   const auditPool = createPool(ch.databaseUrl, AUDIT_POOL_MAX, { role: "app_api" });
+  // [S1.67 / khoản 118] Kết nối bị `withTenant` huỷ vì trạng thái phiên còn sót sau giao dịch: lỗi ấy không được ném cho ai, nên đây là
+  // chỗ duy nhất nó thành một dòng log — xem `ghiLogKetNoiHuy`.
+  ghiLogKetNoiHuy(pool, "pool");
+  ghiLogKetNoiHuy(auditPool, "auditPool");
 
   const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
   const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
@@ -95,15 +100,18 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
     pollIntervalMs: OUTBOX_POLL_MS,
     listOrganizations: () => [...toChucDaThay],
     onJobFailure: (bao) => {
-      // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — chỉ tên lý do và kind.
-      console.error(`[api] outbox ${bao.kind} ${bao.reason}${bao.gaveUp ? " (bo cuoc)" : ""}`);
+      // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — ~~chỉ tên lý do và kind~~ [S1.67 / khoản 118] tên lý do, kind, và TÊN cùng MÃ
+      // cố định của lỗi gốc (`moTaLoiKhongGiaTri`) — không message. Trước vòng này dòng này không nói lỗi gì: job hỏng vì kết nối nhiễm
+      // hay vì 42501 trông như nhau.
+      const loi = bao.cause === undefined ? "" : ` ${moTaLoiKhongGiaTri(bao.cause)}`;
+      console.error(`[api] outbox ${bao.kind} ${bao.reason}${bao.gaveUp ? " (bo cuoc)" : ""}${loi}`);
     },
-    onPollError: (e) => console.error(`[api] outbox poll ${e instanceof Error ? e.name : "loi khong ro"}`),
+    onPollError: (e) => console.error(`[api] outbox poll ${moTaLoiKhongGiaTri(e)}`),
   });
   const outboxNudge = (orgId: string): void => {
     toChucDaThay.add(orgId);
     setImmediate(() => {
-      runner.runOnceForOrg(orgId).catch((e: unknown) => console.error(`[api] outbox ${e instanceof Error ? e.name : "loi khong ro"}`));
+      runner.runOnceForOrg(orgId).catch((e: unknown) => console.error(`[api] outbox ${moTaLoiKhongGiaTri(e)}`));
     });
   };
 
@@ -148,12 +156,14 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         });
       });
       runner.start();
-      // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó chỉ ghi
-      // TÊN — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng khuôn `onPollError`).
+      // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó ~~chỉ ghi
+      // TÊN~~ [S1.67 / khoản 118, lượt soi 61b-8] ghi TÊN cùng mã cố định — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng
+      // khuôn `onPollError`).
       // [review H6-8] Bộ dọn là ĐƯỜNG BỊT DUY NHẤT của một bảng mà số hàng do người gọi vô danh
       // quyết, nên nó không được hỏng trong im lặng: mỗi lượt xoá được nhiều hơn `DON_BUCKET_ON_AO`
       // hàng là một tín hiệu tải bất thường, và hai lượt hỏng LIÊN TIẾP là một tín hiệu bộ dọn chết.
-      // Cả hai chỉ ghi SỐ và TÊN lỗi — không giá trị nào của bảng đi vào log.
+      // Cả hai ~~chỉ ghi SỐ và TÊN lỗi~~ [S1.67 / khoản 118, lượt soi 61b-8] ghi SỐ, TÊN lỗi và mã cố định — không giá trị nào của bảng
+      // đi vào log.
       //
       // [sổ nợ 57 / 044] Từ nay có HAI bảng phải dọn, và mỗi bảng giữ bộ đếm "hỏng liên tiếp"
       // RIÊNG: gộp chúng vào một biến thì một bộ dọn khoẻ sẽ đặt lại bộ đếm của bộ dọn đã chết,
@@ -169,7 +179,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
             .catch((e: unknown) => {
               hongLienTiep += 1;
               console.error(
-                `[api] don ${ten} ${e instanceof Error ? e.name : "loi khong ro"}` +
+                `[api] don ${ten} ${moTaLoiKhongGiaTri(e)}` +
                   (hongLienTiep >= 2 ? ` (hong ${hongLienTiep} luot lien tiep — bang chi lon len)` : ""),
               );
             });

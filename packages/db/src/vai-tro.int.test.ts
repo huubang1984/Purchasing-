@@ -246,7 +246,7 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
     const loi = await loiKhiLay(p.connect());
     expect(loi, "bản trước bản vá: client nhiễm được giao ra").not.toBeNull();
     expect(loi).toBeInstanceOf(KetNoiNhiemError);
-    expect(loi!.name, "tên riêng — log chỉ ghi tên lỗi (lượt soi 52 NHẸ-2)").toBe("KetNoiNhiemError");
+    expect(loi!.name, "tên riêng — ~~log chỉ ghi tên lỗi~~ [S1.67] lớp này không mang mã nên dòng log chỉ có tên (lượt soi 52 NHẸ-2)").toBe("KetNoiNhiemError");
     expect(loi!.message).toContain(TU_CHOI_KET_NOI_NHIEM);
     expect(loi!.message).toContain("row_security");
     const sau = await trangThai(p);

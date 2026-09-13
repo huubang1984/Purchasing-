@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.66 / lượt soi ngang 59b-1] LOẠI CỦA TenantError SUY TỪ MÃ — `input` thành 401 câm, `protocol` thành 500 có log
+// [S1.66 / lượt soi ngang 59b-1] LOẠI CỦA TenantError SUY TỪ MÃ — `input` thành 401 câm, `protocol` thành 500 có log [S1.67 / khoản 118: `input` do handler ném thì 500 có log]
 //
 // `apps/api/src/loi-giao-thuc.int.test.ts` đo hai đầu của hợp đồng qua HTTP: lỗi giao thức ra 500 có log, lỗi đầu vào ra 401 câm.
 // Nhưng đối chứng đầu vào ở đó (cookie hỏng, token khách lạ) không bắt buộc phải đi qua một TenantError, nên bảng phân loại mã cần
