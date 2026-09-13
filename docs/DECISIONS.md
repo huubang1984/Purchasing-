@@ -1165,7 +1165,7 @@ import `@trustprocure/tenancy` ở mã sản xuất.
 **Phần KHÔNG đóng.** Vế khoá tư vấn của `requirePermission` không áp cho đường chung: phép kiểm ấy chạy trên client người gọi, mà hai chỗ D2
 đến SAU một câu đã hỏng — giao dịch aborted, câu kiểm ném 25P02. Một người gọi đã ghi sổ trong cùng giao dịch trước khi gọi
 `throwAuditedDenial` thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy, dưới pool
-không đặt `lock_timeout` thì treo không hạn; các đường sản xuất không làm thế (đọc). Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng
+không đặt `lock_timeout` thì treo không hạn **[S1.71: tối đa 2 s ở mọi pool rồi gãy 55P03 — tiểu mục [S1.71 / khoản 123]]**; các đường sản xuất không làm thế (đọc). Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng
 mở thầu; hai chỗ D2 dùng chung hàm, chứng bằng test bọc lỗi của từng chỗ. ~~Kiểm pool còn chỗ tức thì của `requirePermission` — khoản 120~~ [S1.69: đóng — tiểu mục [S1.69 / khoản 120]];
 ba lần từ chối không ghi sổ gì — bảng so sánh, cổng khi không tìm thấy yêu cầu, worker lúc giải mã — khoản 121; lần ghi `MFA_LOCKED` trên
 giao dịch người gọi — khoản 69. Chi tiết ở `evidence/security-reviews.md` §S1.68.
@@ -1194,7 +1194,7 @@ không đặt hạn thì không có trần (đọc pg-pool; đo: quá 12 s) — 
    (`b8d38c7`: 16–17 ms); tới cùng lúc ⇒ 13 999–14 016 ms (`b8d38c7`: 14 002–14 018 ms); ba lần ghi hợp lệ ⇒ khoảng 14 s ở cả hai bản. Hai phương án bác:
    ⒜ `auditPool` 2 kết nối cùng trần 5 s — `/me` đứng 4 010–4 034 ms, nhưng lần ghi hợp lệ vẫn đứng 14 s, và khi hai lần từ chối của tổ chức bị khoá nằm chờ
    từ 5 s trở lên thì lần từ chối của tổ chức KHÁC chờ 5 s rồi mất bản ghi (đọc); ⒝ `lock_timeout` ngắn cho `auditPool` — cần đo trước thời
-   gian giữ khoá hợp lệ (khoản 69), để lại khoản 123. Lý do giữ: D5 đòi mọi lần từ chối vào sổ; vách ngăn cũ chỉ đứng trước lần từ chối tới
+   gian giữ khoá hợp lệ (khoản 69), để lại khoản 123 **[S1.71: đóng — ADR-016 tiểu mục [S1.71 / khoản 123]]**. Lý do giữ: D5 đòi mọi lần từ chối vào sổ; vách ngăn cũ chỉ đứng trước lần từ chối tới
    tuần tự; đường sản xuất đã biết giữ khoá lâu — gửi link mời trong giao dịch — sửa ở gốc, khoản 124. **[S1.70] Đã sửa — ADR-020 tiểu mục [S1.70 / khoản 124].**
 4. Qua HTTP, pool hết chỗ kéo dài ⇒ 500 với MỘT dòng `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED` — phân biệt được với
    `<- Error` của `auditPool` sai quyền.
@@ -1208,13 +1208,71 @@ người gọi cho lần từ chối không làm — khoản 122.
 hạn ⇒ gãy sau 5 s thay vì chờ không hạn. Tiến trình `api` mở tối đa `2 × dbPoolMax` kết nối CSDL thay vì `dbPoolMax + 2` — mặc định 20 thay vì
 12, ở trần cấu hình 100 là 200; `batDau` mở một kết nối `auditPool`, còn lại mở khi có lần từ chối (lượt soi 63a-3). Và khoá tư vấn ghi sổ của
 một tổ chức bị giữ lâu thì các lần từ chối của tổ chức ấy có thể cùng giữ mọi kết nối nghiệp vụ tới `statement_timeout` 15 s — số đo lặp và hai phương án bác ở
-Quyết định 3; lần ghi hợp lệ của tổ chức ấy vốn đã giữ kết nối như vậy, trước và sau bản vá (lượt soi 63b-6, đo) — khoản 123; một đường sản
+Quyết định 3; lần ghi hợp lệ của tổ chức ấy vốn đã giữ kết nối như vậy, trước và sau bản vá (lượt soi 63b-6, đo) — khoản 123 **[S1.71: đóng — ADR-016 tiểu mục [S1.71 / khoản 123]]**; một đường sản
 xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**.
 
 **Phần KHÔNG đóng.** Trần là của lần lấy kết nối, không của lần ghi: lần ghi đã có kết nối vẫn chờ khoá tư vấn của tổ chức tới `statement_timeout` 15 s (đo: 57014).
 Khi `auditPool` không có chỗ, lần từ chối giữ giao dịch và kết nối nghiệp vụ của người gọi tới 5 s. Lập luận cỡ đọc từ mã hôm nay và đo một kịch
 bản trên tiến trình thật; một đường mới dùng `auditPool` ngoài giao dịch nghiệp vụ làm nó sai. Hạn mức theo người gọi cho lần từ chối —
-khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
+khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123 **[S1.71: đóng — ADR-016 tiểu mục [S1.71 / khoản 123]]**; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
+
+### [S1.71 / khoản 123] Mọi lần ghi sổ chờ khoá ghi sổ của tổ chức tối đa 2 s — và lần sinh khoá RFQ không gọi KMS khi đang giữ khoá ấy
+
+**Bối cảnh.** Khoá tư vấn ghi sổ của tổ chức — `pg_advisory_xact_lock` ở đầu `noi_chuoi_kiem_toan()` (004) — sống tới hết giao dịch của lần
+ghi. Tiểu mục [S1.69 / khoản 120] Quyết định 3 để lại: khi khoá ấy bị giữ lâu, các lần ghi sổ của tổ chức, hợp lệ lẫn từ chối, giữ kết nối
+nghiệp vụ tới 15 s và yêu cầu của tổ chức KHÁC đứng khi pool cạn — khoản 123. Đo lại trên `d2f0ecd` (`evidence/security-reviews.md` §S1.71),
+tiến trình `api` thật, `TRUSTPROCURE_DB_POOL_MAX` 3, superuser giữ khoá của tổ chức X tới mốc 15 s, `/me` của tổ chức A gửi 1 s sau yêu cầu cuối
+của X, ba lượt mỗi ô: ba lần từ chối tuần tự ⇒ `/me` 13 641–13 644 ms; cùng lúc ⇒ 13 996–14 008 ms; ba lần ghi hợp lệ ⇒ 14 000–14 015 ms.
+Một lượt rà mã chỉ đọc tìm đường sản xuất gọi ra ngoài SAU lần ghi sổ đầu trong cùng giao dịch: chỉ `openRfq` → `issueRfqKeyPair` — lần bọc
+khoá X25519 (KMS, trần 5 s `KmsQuaHan`) chạy sau lần ghi sổ `RFQ_KEY_MATERIAL_ISSUED` của ECDH_P256. Bộ bọc chậm 3 s ⇒ một lần ghi hợp lệ của
+tổ chức gửi lúc ấy 2 842–2 852 ms, `/me` của tổ chức khác 2 012–2 027 ms. Thời gian giữ khoá hợp lệ còn lại đo được (khoản 69): gia hạn RFQ
+50 / 200 / 400 lời mời giữ khoá 21 / 104 / 225 ms — mỗi lời mời thêm một lần xếp job sau lần ghi sổ.
+
+**Phương án đã cân** — nguyên mẫu trơ khi không đặt biến môi trường, cùng tiến trình, bản xen kẽ, ba lượt mỗi ô, khoá giữ tới mốc 15 s:
+| Phương án | `/me` — từ chối tuần tự | `/me` — từ chối cùng lúc | `/me` — ghi hợp lệ | Giá đo được |
+|---|---|---|---|---|
+| giữ nguyên | 13 641–13 644 ms | 13 996–14 008 ms | 14 000–14 015 ms | — |
+| A: `lock_timeout` 1 s cho `auditPool` | 14–16 ms | 8–14 ms | 13 997–14 013 ms | lần từ chối chờ quá 1 s ⇒ 500, không bản ghi |
+| A + tối đa một lần ghi sổ từ chối đồng thời mỗi tổ chức | 5–22 ms | 7–11 ms | không đo | như A; thêm trạng thái trong tiến trình |
+| B: `lock_timeout` 2 s quanh câu `audit_append` | 635–647 ms | 1 000–1 008 ms | 1 000–1 006 ms | mọi lần ghi sổ chờ quá 2 s ⇒ 500, lần từ chối không bản ghi; +1,1 ms trung vị mỗi giao dịch có một lần ghi sổ (không tranh chấp: 3,96–4,21 ⇒ 5,11–5,34 ms) |
+
+**Quyết định.** Chủ dự án chọn B ngày 2026-09-14 (câu hỏi mang bảng trên; bác A, A + trần đồng thời, giữ nguyên). Bản cài ở S1.71:
+1. `issueRfqKeyPair` sinh và bọc MỌI cặp khoá trước lần INSERT và lần ghi sổ đầu tiên — không đánh đổi đo được, làm trong mọi phương án. Cùng
+   bộ bọc chậm 3 s, ba lượt: lần ghi hợp lệ của tổ chức 66–69 ms, `/me` của tổ chức khác 6–9 ms; phản hồi của lần mở RFQ không đổi
+   (6 050–6 085 ms). Lần bọc nào hỏng thì giao dịch chưa có hàng hay bản ghi nào của lần sinh khoá. Đổi lại, một lời gọi mở RFQ không ở
+   PENDING_APPROVAL — chỉ trigger 017 bắt lúc INSERT — nay bọc đủ hai cặp khoá (hai lời gọi KMS) rồi mới gãy, lỗi KMS đứng trước lỗi CSDL;
+   chỉ người có `rfq.open` gặp, không giữ khoá ghi sổ (đọc, lượt soi 65a-9).
+2. Trần 2 s cho mọi lần ghi sổ chờ khoá ghi sổ của tổ chức, đặt trên CHÍNH hàm nối chuỗi: `ALTER FUNCTION public.noi_chuoi_kiem_toan() SET
+   lock_timeout = '2s'` (migration 050); hardening mục (D1b) tạo lại hàm với cả hai mệnh đề và đòi `proconfig = {search_path=pg_catalog,
+   lock_timeout=2s}` — gỡ trần thì `migrate()` kế tự chữa khi vai chạy nó sở hữu hàm (vai không sở hữu thì deploy dừng — đọc, lượt soi 65a-10). Bản cài khác nguyên mẫu ở chỗ đặt: PostgreSQL áp mệnh đề khi hàm bắt đầu và khôi
+   phục khi hàm trả về hay ném, nên trần chỉ sống trong lúc hàm chạy; áp cho mọi người gọi; không thêm câu SQL nào, và không đo thấy chi phí thêm (loại được chi phí cỡ 1,1 ms của nguyên mẫu). Thân hàm
+   không đổi, nên §R3 (004 ↔ `THAN_NOI_CHUOI`) không đổi; ba GUC mà nhánh ⒠ ⒡ của hardening canh không gồm `lock_timeout`.
+   **Đánh đổi đã chọn:** khi khoá ghi sổ của một tổ chức bị giữ quá 2 s, mọi thao tác ghi sổ của tổ chức ấy hỏng 500 ở 2 s thay vì 15 s, và
+   lần từ chối không vào sổ — D5 nhường khả dụng của các tổ chức khác trong đúng ca ấy. Một giao dịch hợp lệ giữ khoá quá 2 s làm lần ghi
+   đồng thời của tổ chức ấy hỏng; đường hợp lệ đã biết dài nhất sau khi bọc trước và trước lần đảo thứ tự gia hạn là gia hạn RFQ — 225 ms ở 400 lời mời, một lượt đo — mục 3.
+3. `extendRfqDeadline` xếp job thông báo cho mọi lời mời đọc được TRƯỚC lần ghi sổ `RFQ_DEADLINE_EXTENDED` (lượt soi 65a-7), rồi đọc lại
+   lời mời SAU lần ghi sổ và xếp job cho phần còn thiếu (lượt soi 65c-1 — bản đầu chỉ đọc trước lần ghi sổ và bỏ sót lời mời COMMIT trong
+   lúc chờ khoá). Thời gian giữ khoá không còn tăng theo số lời mời; tập job của một lần gia hạn như bản trước. Cùng tiến trình, 400 lời mời, trên bản cuối: khoá ghi sổ của tổ chức thấy ở tối đa một lần thăm dò (chu kỳ khoảng 31 ms; bản trước,
+   cùng lượt, 226–265 ms), lần ghi đồng thời 28–32 ms (bản trước 250–303 ms).
+
+**Hệ quả.** Cùng tiến trình, xen kẽ bản trước, ba lượt: `/me` của tổ chức khác 13 633–14 015 ms ⇒ 627–1 007 ms ở cả ba kịch bản; lần ghi sổ đang
+chờ của tổ chức bị khoá gãy 55P03 ở 2 022–2 044 ms, lần từ chối ra 500 không bản ghi; bộ bọc chậm 3 s ⇒ lần ghi hợp lệ 72–78 ms, `/me` 7–21 ms;
+gia hạn 400 lời mời, trên bản cuối ⇒ lần ghi đồng thời 28–32 ms (bản trước 250–303 ms). Trên đường không tranh chấp: 400 giao dịch tuần tự, sáu cặp ở hai thứ tự chạy, hiệu trung vị mỗi giao dịch (bản cài − bản trước) từ
+−0,632 tới +0,121 ms — không đo thấy chi phí thêm; loại được chi phí cỡ 1,1 ms, không loại được chi phí dưới khoảng 0,5 ms. Phiên đặt `lock_timeout` nhỏ hơn 2 s hay bằng 0 chờ tới 2 s ở lần
+ghi sổ (mệnh đề SET thay giá trị trong lúc hàm chạy). `statement_timeout` không đổi. Hệ quả cụ thể của đánh đổi đã chọn mà câu hỏi trình ngày 2026-09-14 không nêu riêng (lượt soi 65a-6, 65b-1, đọc): một job outbox mà lần ghi sổ
+chờ quá 2 s đốt một lượt thử — hết `maxAttempts` (mặc định 5) thì FAILED, không tự quay lại; job cảnh báo break-glass gửi cảnh báo trước lần
+ghi sổ nên lượt thử lại gửi thêm một lần —; phần bù thu hồi lời mời của khoản 124 gãy ở 2 s thay vì chờ tới 15 s, nên ca lời mời kẹt của
+khoản 125 dễ xảy ra hơn. Test tự chữa (D1a/D1b) của `db/migrations.int.test.ts`
+đòi `proconfig` mới; ba danh sách migration của tệp ấy thêm 050; test IM7 dựng pool `lock_timeout` 3 s và đòi nạn nhân gãy ở trần 2 s của hàm; hai
+test giữ khoá ghi sổ ở `rbac.int.test.ts` và `composition.int.test.ts` nhả khoá hay đặt cận dưới trần mới.
+
+**Phần KHÔNG đóng.** Trần này bảo vệ NGƯỜI CHỜ, không đuổi người giữ: `idle_in_transaction_session_timeout` 60 s chỉ đuổi giao dịch đứng
+yên; một giao dịch còn phát câu hay một khoá tư vấn mức phiên trên cùng khoá giữ không có cận — khoản 128 (đọc, lượt soi 65b-2). Trong 2 s
+đầu, các lần ghi sổ của tổ chức bị khoá vẫn giữ kết nối nghiệp vụ: đo với ba yêu cầu của tổ chức ấy và pool 3, `/me` của tổ chức khác
+635–1 008 ms ở nguyên mẫu, 627–1 007 ms ở bản cài; hàng đợi dài hơn pool thì lần chờ cộng dồn (đọc). Ba đường có thể chờ khoá hàng sau lần ghi sổ đầu trong cùng giao dịch — worker mở thầu, huỷ RFQ
+thu hồi vật liệu khoá, runner outbox đánh DONE (lượt rà chỉ đọc, chưa đo; đường yêu cầu đặt lại MFA đọc ra không chờ được — lượt soi 65c-4) —
+khoản 126. Bảo đảm "lời mời COMMIT trước khi lần gia hạn COMMIT thì có job" dựa vào khoá ghi sổ của tổ chức, như bản trước, không vào một
+khoá hàng — tuần tự hoá tường minh chưa làm (lượt soi 65c-1). Hai lần gia hạn đồng thời tới cùng hạn lách phép kiểm MED-1 — có từ trước, khoản 127. Hạn mức theo người gọi cho lần từ chối — khoản 122. Chi tiết ở `evidence/security-reviews.md` §S1.71.
 
 ### Điều ADR này KHÔNG đóng
 
@@ -1247,6 +1305,13 @@ khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ 
    `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED`; `throwAuditedDenial` trên pool không đặt hạn ⇒ gãy ở trần; tiến trình `api`
    thật với `TRUSTPROCURE_DB_POOL_MAX` 3 ⇒ lần từ chối ở tổ chức A vẫn 403 khi khoá của tổ chức X ghim hai lần ghi. Đột biến bỏ trần ở `withTenant`, ở `requirePermission` hay ở `throwAuditedDenial`, trần 25 s, mã lỗi hết trần khác CONNECT_WAIT_EXCEEDED, phép chụp tức thì trở lại, `auditPool` về 2 kết nối, kết nối tới sau trần không về pool, `withTenant` gọi `connect` lần hai, cổng một đường quay về so từng dòng ⇒ đỏ
    (§S1.69).
+6. **[S1.71 / khoản 123] Trần chờ khoá ghi sổ:** trên PostgreSQL thật (`db/tran-cho-khoa-ghi-so.int.test.ts`) — một giao dịch giữ khoá của tổ
+   chức A ⇒ lần ghi sổ của A dưới pool `createPool` mặc định vai `app_api` gãy 55P03 ở 2 s (bản đỏ-trước năm test, dưới superuser: 57014 sau 15 s); sau một lần ghi sổ, `lock_timeout` của
+   giao dịch vẫn là giá trị phiên, cả khi hàm ném và người gọi bắt lỗi bằng SAVEPOINT hay khối EXCEPTION; tổ chức B ghi xong ngay; `proconfig` của hàm có đúng hai mệnh đề; gỡ trần thì `migrate()` kế tự chữa khi vai chạy nó sở hữu hàm. Sinh
+   khoá (`key-material.int.test.ts`): trong lúc bọc, giao dịch chưa giữ khoá ghi sổ của tổ chức (trước: `[0, 1]`) và chưa INSERT vật liệu khoá; lần bọc thứ hai hỏng ⇒ không
+   để lại gì. Gia hạn RFQ (`packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts`): mỗi lần xếp job, giao dịch gia hạn chưa giữ
+   khoá ghi sổ của tổ chức (trước: `[1, 1, 1]`), và lời mời COMMIT trong lúc gia hạn chờ khoá vẫn có job (bản đầu của S1.71: 2 job
+   thay cho 3). Đột biến cô lập (§S1.71): đổi hay gỡ trần ở 050 ⇒ chỉ test đồng bộ tĩnh đỏ, (D1b) chữa; ở (D1b) ⇒ `migrate()` đầu tiên gãy ở lượt phán xét; bọc xen kẽ ghi sổ, giữ RowExclusiveLock trên vật liệu khoá trước lần bọc, gỡ vế canh của `requirePermission`, gia hạn ghi sổ trước khi xếp job, vòng đọc lại không xếp job nào, 050 còn chỗ trống, phép dò khoá hỏng ⇒ mỗi đột biến đỏ đúng test của nó.
 
 ---
 
@@ -1769,14 +1834,14 @@ khác 14 522 ms, yêu cầu mời chưa trả sau 68 s.
 
 **Phần KHÔNG đóng.** ⑴ Bộ gửi báo xong SAU trần: link đã tới nhà cung cấp trỏ một lời mời đã thu hồi — fail-closed; người mua gọi lại
 thì nhà cung cấp nhận link thứ hai (đọc). ⑵ Phần bù có trần 5 s cho lần lấy kết nối, nhưng lần ghi `INVITATION_REVOKED` của nó còn chờ
-khoá ghi sổ của tổ chức tới `statement_timeout` 15 s trong lúc giữ một kết nối nghiệp vụ — khoản 123 (đọc). ⑶ Phản hồi lỗi của ca bù hỏng
+khoá ghi sổ của tổ chức tới `statement_timeout` 15 s trong lúc giữ một kết nối nghiệp vụ — khoản 123 (đọc) **[S1.71: chờ tối đa 2 s — ADR-016 tiểu mục [S1.71 / khoản 123]]**. ⑶ Phản hồi lỗi của ca bù hỏng
 bị mất thì lời mời vẫn kẹt — khoản 125. ⑷ Closure `viec`/`bu` với tới được `ctx.client` đã nhả; phần bù không đi qua cổng quyền lần nữa và
 không lớp nào ràng nó với mã quyền của route — hai điều chỉ nằm trong doc của `ViecSauCommitCoBu` (lượt soi 64a-7, 64a-8). ⑸ Một trần
 `afterCommitTimeoutMs` phục vụ hai hợp đồng: cận oracle thời gian của OTP vô danh (H2-7) và ngưỡng một lần gửi link mời bị tính là hỏng —
 hạ trần thì bộ gửi chậm làm mọi lần mời thành `502`, nâng trần thì nới cận H2-7 (lượt soi 64a-6). ⑹ Dòng `sau-commit` và hàng
 `INVITATION_REVOKED` không mang id chung — nối bằng thời gian (lượt soi 64a-10). ⑺ Một đường hợp lệ khác vẫn gọi KMS khi đang giữ khoá ghi
 sổ: `openRfq` → `issueRfqKeyPair` bọc khoá của thuật toán thứ hai (`X25519`, `KEY_AGREEMENT_ALGORITHMS`) SAU lần ghi sổ
-`RFQ_KEY_MATERIAL_ISSUED` của thuật toán đầu, trần 5 s `KmsQuaHan` (đọc) — khoản 123 ⑶. ⑻ Chưa có bộ gửi thật (ADR-009): độ trễ đo được
+`RFQ_KEY_MATERIAL_ISSUED` của thuật toán đầu, trần 5 s `KmsQuaHan` (đọc) — khoản 123 ⑶ **[S1.71: đã sửa — `issueRfqKeyPair` bọc mọi cặp khoá trước lần ghi sổ đầu]**. ⑻ Chưa có bộ gửi thật (ADR-009): độ trễ đo được
 là giả lập trên hộp thư dev. Chi tiết ở `evidence/security-reviews.md` §S1.70.
 
 ### Đo bằng gì
