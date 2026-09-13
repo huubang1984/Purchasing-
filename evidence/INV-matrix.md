@@ -64,7 +64,7 @@ Hôm nay: **34/34** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 | 26 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 35 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 47 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 61 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 11 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 26 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |

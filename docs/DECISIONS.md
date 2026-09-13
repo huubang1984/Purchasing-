@@ -1147,7 +1147,7 @@ S1.68:
 3. KHÔNG kiểm "pool còn chỗ" tức thì. Bản đầu của S1.68 có kiểm ấy; lượt soi 62a-1 chỉ ra nó đổi hành vi cả khi lần ghi lẽ ra thành công:
    `auditPool` sản xuất có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ chối của người khác gãy ngay,
    không hàng sổ. Không kiểm ấy, lần lấy kết nối xếp hàng: `createPool` chờ tối đa 20 s rồi ném, và lỗi ấy thành `DenialAuditFailedError`
-   (đọc). Kiểm tức thì của `requirePermission` giữ nguyên — khoản nợ 120.
+   (đọc). ~~Kiểm tức thì của `requirePermission` giữ nguyên — khoản nợ 120.~~ **[S1.69] Cả mục 3 nói về S1.68: nay lần lấy kết nối của `throwAuditedDenial` có trần 5 s (`TenantError` CONNECT_WAIT_EXCEEDED), và `auditPool` của `apps/api` cỡ `dbPoolMax` — tiểu mục [S1.69 / khoản 120].**
 4. Qua HTTP, `DenialAuditFailedError` không nằm trong danh sách lỗi nghiệp vụ 422 ⇒ 500 thân cố định với MỘT dòng log. Dòng ấy nêu thêm
    tên và mã của MỘT tầng `cause` cho mọi lỗi không có trường `code` — `DenialAuditFailedError <- error 42501` —, và
    `PermissionAuditFailedError` được mô tả cùng luật (mang sang 61a-8 của §S1.67; ADR-020 tiểu mục [S1.67 / khoản 118] mục 4).
@@ -1166,9 +1166,55 @@ import `@trustprocure/tenancy` ở mã sản xuất.
 đến SAU một câu đã hỏng — giao dịch aborted, câu kiểm ném 25P02. Một người gọi đã ghi sổ trong cùng giao dịch trước khi gọi
 `throwAuditedDenial` thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy, dưới pool
 không đặt `lock_timeout` thì treo không hạn; các đường sản xuất không làm thế (đọc). Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng
-mở thầu; hai chỗ D2 dùng chung hàm, chứng bằng test bọc lỗi của từng chỗ. Kiểm pool còn chỗ tức thì của `requirePermission` — khoản 120;
+mở thầu; hai chỗ D2 dùng chung hàm, chứng bằng test bọc lỗi của từng chỗ. ~~Kiểm pool còn chỗ tức thì của `requirePermission` — khoản 120~~ [S1.69: đóng — tiểu mục [S1.69 / khoản 120]];
 ba lần từ chối không ghi sổ gì — bảng so sánh, cổng khi không tìm thấy yêu cầu, worker lúc giải mã — khoản 121; lần ghi `MFA_LOCKED` trên
 giao dịch người gọi — khoản 69. Chi tiết ở `evidence/security-reviews.md` §S1.68.
+
+### [S1.69 / khoản 120] Lần ghi sổ từ chối CHỜ kết nối có trần — pool đầy dưới 5 s không xoá bản ghi, và `auditPool` của `apps/api` không hẹp hơn pool nghiệp vụ
+
+**Bối cảnh.** Tiểu mục [S1.68 / khoản 119] để lại phép chụp "pool còn chỗ" tức thì của `requirePermission` — sinh ra để một `auditPool` dùng chung
+với pool đang giữ giao dịch người gọi gãy ồn ào thay vì treo trên `pool.connect()`. Đo trên b8d38c7 (`evidence/security-reviews.md` §S1.69),
+`auditPool` 2 kết nối như `apps/api`: giữ 2/2 kết nối 300 ms ⇒ `PermissionAuditFailedError` sau 16 ms, không hàng sổ; 10 lần từ chối song song
+mất 5 bản ghi; khoá tư vấn ghi sổ của một tổ chức ghim cả hai kết nối ⇒ lần từ chối của tổ chức KHÁC gãy sau 15 ms, không hàng sổ; trong khi
+100 lần ghi xếp hàng trên cùng pool xả hết trong 177 ms. Pool hết chỗ và `auditPool` siêu người dùng cho cùng dòng
+`PermissionAuditFailedError <- Error`. Không có phép chụp, lần lấy kết nối của `createPool` chờ 20 s rồi ném một `Error` không tên (đo), của pool
+không đặt hạn thì không có trần (đọc pg-pool; đo: quá 12 s) — khoản 120.
+
+**Quyết định.** Hình dạng đề xuất ở hàng 120 của sổ nợ; chủ dự án chọn làm khoản 120 ngày 2026-09-13, và chốt cỡ `auditPool` cùng ngày sau số đo lặp — Quyết định 3. Bản cài ở S1.69:
+1. `withTenant` nhận `maxConnectWaitMs` — trần chờ lấy kết nối của chính lời gọi. Hết trần ⇒ `TenantError` CONNECT_WAIT_EXCEEDED (loại
+   protocol) trước khi `fn` chạy; kết nối tới muộn được trả ngay về pool; lỗi của `connect` trong trần đi ra nguyên vẹn.
+2. `requirePermission` gỡ phép chụp. Nó và `throwAuditedDenial` ghi sổ với trần `TRAN_CHO_KET_NOI_AUDIT_MS` 5 s: gấp khoảng 28 lần thời gian
+   xả đo được của 100 lần ghi xếp hàng, và ngắn hơn `connectionTimeoutMillis` 20 s của `createPool` nên lỗi có tên tới trước `Error` không tên
+   của pg-pool. Lớp canh bỏ-qua-RLS chạy trên chính kết nối của lần ghi — không câu nào chạm `auditPool` ngoài lần lấy có trần.
+3. `apps/api` dựng `auditPool` với `dbPoolMax` kết nối: mọi lần ghi sổ từ chối của tiến trình chạy khi yêu cầu đang giữ một kết nối nghiệp vụ
+   (đọc: `dispatch.ts`, `routes/buyer.ts`), nên nhu cầu đồng thời của `auditPool` không vượt cỡ ấy.
+   **Đánh đổi đã chọn** (lượt soi 63a-2, 63b-2, 63b-3; chủ dự án chọn ngày 2026-09-13): khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu, các
+   lần từ chối của tổ chức ấy — như lần ghi hợp lệ của nó — giữ kết nối nghiệp vụ tới `statement_timeout` 15 s. Đo lặp ba lượt trên tiến
+   trình thật, `TRUSTPROCURE_DB_POOL_MAX` 3, `/me` của tổ chức khác gửi 1 s sau yêu cầu cuối: ba lần từ chối tới tuần tự ⇒ `/me` đứng 13 620–13 647 ms
+   (`b8d38c7`: 16–17 ms); tới cùng lúc ⇒ 13 999–14 016 ms (`b8d38c7`: 14 002–14 018 ms); ba lần ghi hợp lệ ⇒ khoảng 14 s ở cả hai bản. Hai phương án bác:
+   ⒜ `auditPool` 2 kết nối cùng trần 5 s — `/me` đứng 4 010–4 034 ms, nhưng lần ghi hợp lệ vẫn đứng 14 s, và khi hai lần từ chối của tổ chức bị khoá nằm chờ
+   từ 5 s trở lên thì lần từ chối của tổ chức KHÁC chờ 5 s rồi mất bản ghi (đọc); ⒝ `lock_timeout` ngắn cho `auditPool` — cần đo trước thời
+   gian giữ khoá hợp lệ (khoản 69), để lại khoản 123. Lý do giữ: D5 đòi mọi lần từ chối vào sổ; vách ngăn cũ chỉ đứng trước lần từ chối tới
+   tuần tự; đường sản xuất đã biết giữ khoá lâu — gửi link mời trong giao dịch — sửa ở gốc, khoản 124.
+4. Qua HTTP, pool hết chỗ kéo dài ⇒ 500 với MỘT dòng `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED` — phân biệt được với
+   `<- Error` của `auditPool` sai quyền.
+
+Bản cài khác đề xuất ở ba điểm: ⒜ trần là tuỳ chọn của `withTenant`, dùng chung cho hai đường ghi sổ, nên kết nối tới muộn được trả về đúng
+pool đã lấy; ⒝ tên lỗi là một mã `TenantError` chứ không phải một lớp mới — bộ điều phối đã có hợp đồng cho loại protocol; ⒞ hạn mức theo
+người gọi cho lần từ chối không làm — khoản 122.
+
+**Hệ quả.** Pool đầy dưới 5 s ⇒ lần từ chối chờ rồi ghi được (trước: 500, không hàng sổ). Pool đầy kéo dài ⇒ 500 sau 5 s với dòng log có tên
+(trước: sau vài mili-giây, `<- Error`). `auditPool` trùng pool người gọi ⇒ gãy sau 5 s thay vì 17 ms. `throwAuditedDenial` trên pool không đặt
+hạn ⇒ gãy sau 5 s thay vì chờ không hạn. Tiến trình `api` mở tối đa `2 × dbPoolMax` kết nối CSDL thay vì `dbPoolMax + 2` — mặc định 20 thay vì
+12, ở trần cấu hình 100 là 200; `batDau` mở một kết nối `auditPool`, còn lại mở khi có lần từ chối (lượt soi 63a-3). Và khoá tư vấn ghi sổ của
+một tổ chức bị giữ lâu thì các lần từ chối của tổ chức ấy có thể cùng giữ mọi kết nối nghiệp vụ tới `statement_timeout` 15 s — số đo lặp và hai phương án bác ở
+Quyết định 3; lần ghi hợp lệ của tổ chức ấy vốn đã giữ kết nối như vậy, trước và sau bản vá (lượt soi 63b-6, đo) — khoản 123; một đường sản
+xuất giữ khoá ấy lâu — khoản 124.
+
+**Phần KHÔNG đóng.** Trần là của lần lấy kết nối, không của lần ghi: lần ghi đã có kết nối vẫn chờ khoá tư vấn của tổ chức tới `statement_timeout` 15 s (đo: 57014).
+Khi `auditPool` không có chỗ, lần từ chối giữ giao dịch và kết nối nghiệp vụ của người gọi tới 5 s. Lập luận cỡ đọc từ mã hôm nay và đo một kịch
+bản trên tiến trình thật; một đường mới dùng `auditPool` ngoài giao dịch nghiệp vụ làm nó sai. Hạn mức theo người gọi cho lần từ chối —
+khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
 
 ### Điều ADR này KHÔNG đóng
 
@@ -1195,6 +1241,12 @@ giao dịch người gọi — khoản 69. Chi tiết ở `evidence/security-rev
    `action` hay `resourceType` sai hình dạng ⇒ ném trước khi chạm pool. Đột biến bỏ lớp bọc, bỏ kiểm hình dạng hay lớp canh bỏ-qua-RLS, thêm lại phép kiểm pool còn chỗ tức thì,
    cho cổng hay một nhánh D2 gỡ lớp bọc, cho cổng bỏ `return`, bỏ hậu tố `cause` của dòng log, đưa lớp bọc vào danh sách 422, rút hàm
    khỏi cửa, chen một dòng `withTenant(auditPool, …)` vào `gate.ts` ⇒ đỏ (§S1.68).
+5. **[S1.69 / khoản 120] Lần ghi sổ từ chối chờ kết nối có trần:** `auditPool` đầy tạm thời ⇒ `requirePermission` chờ rồi ghi đúng một hàng;
+   10 lần từ chối song song trên `auditPool` 2 kết nối ⇒ đủ mười hàng; khoá tư vấn của tổ chức B ghim `auditPool` ⇒ lần từ chối ở A chờ rồi ghi;
+   pool hết chỗ kéo dài hay trùng pool người gọi ⇒ gãy ở trần với `TenantError` CONNECT_WAIT_EXCEEDED, qua HTTP 500 với MỘT dòng
+   `PermissionAuditFailedError <- TenantError CONNECT_WAIT_EXCEEDED`; `throwAuditedDenial` trên pool không đặt hạn ⇒ gãy ở trần; tiến trình `api`
+   thật với `TRUSTPROCURE_DB_POOL_MAX` 3 ⇒ lần từ chối ở tổ chức A vẫn 403 khi khoá của tổ chức X ghim hai lần ghi. Đột biến bỏ trần ở `withTenant`, ở `requirePermission` hay ở `throwAuditedDenial`, trần 25 s, mã lỗi hết trần khác CONNECT_WAIT_EXCEEDED, phép chụp tức thì trở lại, `auditPool` về 2 kết nối, kết nối tới sau trần không về pool, `withTenant` gọi `connect` lần hai, cổng một đường quay về so từng dòng ⇒ đỏ
+   (§S1.69).
 
 ---
 
