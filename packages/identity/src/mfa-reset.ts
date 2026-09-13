@@ -16,9 +16,8 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { withTenant } from "@trustprocure/tenancy";
 import { PERMISSIONS } from "./permissions.js";
-import { requirePermission } from "./rbac.js";
+import { requirePermission, throwAuditedDenial } from "./rbac.js";
 import { resolveSessionActor } from "./session-actor.js";
 
 export const MFA_RESET_TTL_HOURS = 24;
@@ -179,17 +178,20 @@ export async function approveMfaReset(
   } catch (loi) {
     // CHECK `khong_tu_duyet` / `phien_khac` (040): một lần THỬ vi phạm phải để lại dấu vết dù giao dịch
     // này rollback — cùng khuôn `UNSEAL_APPROVAL_DENIED`. Phân loại theo tên ràng buộc trong thông điệp.
-    const van = loi instanceof Error ? loi.message : "";
-    if (/khong_tu_duyet|phien_khac/u.test(van)) {
-      await withTenant(auditPool, orgId, (c) =>
-        appendAuditEvent(c, orgId, {
+    // [S1.68 / khoản 119] Qua `throwAuditedDenial`: lần ghi hỏng ⇒ `DenialAuditFailedError` giữ vi phạm, không để lỗi của lần ghi thay chỗ.
+    if (loi instanceof Error && /khong_tu_duyet|phien_khac/u.test(loi.message)) {
+      await throwAuditedDenial(
+        auditPool,
+        orgId,
+        {
           actorType: actor.type,
           actorId: actor.id,
           action: "MFA_RESET_APPROVAL_DENIED",
           resourceType: "MFA_RESET_REQUEST",
           resourceId: input.requestId,
           payload: { viPham: "D2" },
-        }),
+        },
+        loi,
       );
     }
     throw loi;

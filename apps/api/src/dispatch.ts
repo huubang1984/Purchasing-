@@ -58,12 +58,16 @@
 // Đo: `loi-giao-thuc.int.test.ts` describe [S1.67 / khoản 118].
 // Giai đoạn 2 (handler): `PermissionDeniedError` ⇒ 403; `HttpError` ⇒ mã của nó; lỗi nghiệp vụ
 // có tên (`SupplierError`, `RfqError`, …) ⇒ 422 kèm thông điệp — các lớp ấy đã chịu kỷ luật
-// "không nội suy dữ liệu vào message"; MỌI lỗi khác ⇒ 500 với thân cố định, và chỉ TÊN lỗi — [S1.66] cùng MÃ cố định của `TenantError` — được
+// "không nội suy dữ liệu vào message"; MỌI lỗi khác ⇒ 500 với thân cố định, và ~~chỉ TÊN lỗi~~ [S1.68 / lượt soi 62b-4] TÊN lỗi — [S1.66]
+// cùng MÃ cố định của `TenantError` — được
 // ghi ra `console.error` — không stack có payload, không thân yêu cầu (A2). [S1.67 / khoản 118] Mã cố định gồm cả SQLSTATE của lỗi
 // Postgres (`moTaLoiKhongGiaTri`); `SessionInvalidError` do handler ném (một gói gọi `resolveSessionActor` giữa chừng) ⇒ 401.
+// [S1.68 / khoản 119] Lỗi không có trường `code` mà `cause` là Error — hôm nay chủ yếu hai lớp bọc của lần ghi sổ từ chối — được nêu
+// thêm tên và mã của MỘT tầng cause.
 // [S1.67 / lượt soi 61a-1] 42501 của PostgreSQL vẫn ⇒ 403, nhưng kèm MỘT dòng log: mã ấy vừa là câu trả lời nghiệp vụ (trigger D2, bảng
-// chỉ-ghi-thêm) vừa là GRANT hay EXECUTE bị thu hồi mà chỉ câu của handler chạm — kể cả lần ghi sổ từ chối qua `auditPool` lồng trong
-// handler (khoản 119) — và mã không phân biệt được hai ca.
+// chỉ-ghi-thêm) vừa là GRANT hay EXECUTE bị thu hồi mà chỉ câu của handler chạm ~~— kể cả lần ghi sổ từ chối qua `auditPool` lồng trong
+// handler (khoản 119) —~~ và mã không phân biệt được hai ca. [S1.68 / khoản 119, lượt soi 62a-4] Lần ghi sổ từ chối lồng trong handler
+// nay bọc lỗi của nó thành `DenialAuditFailedError` ⇒ 500 với dòng `DenialAuditFailedError <- error 42501`, không còn là một 403.
 // ==============================================================================================
 
 import { randomUUID } from "node:crypto";
@@ -290,8 +294,9 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
 
 /** 500 thân cố định với MỘT dòng log — đích chung của lỗi handler ngoài bảng và của mọi lỗi thuộc KHUNG. */
 function loiNoiBo(err: unknown, requestId: string): ApiResponse {
-  // Chỉ TÊN lỗi và mã yêu cầu. Không `err` nguyên, không `cause`: `cause` của một lỗi Postgres
-  // mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
+  // ~~Chỉ TÊN lỗi và mã yêu cầu.~~ [S1.68 / lượt soi 62b-4] TÊN lỗi, mã cố định và mã yêu cầu — cộng tên và mã của MỘT tầng `cause` cho lỗi
+  // không có trường `code` (hôm nay chủ yếu hai lớp bọc của lần ghi sổ từ chối), xem `moTaLoiKhongGiaTri`. Không `err` nguyên, không
+  // ~~`cause`~~ `cause` nguyên: `cause` của một lỗi Postgres mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
   // [S1.66 / lượt soi ngang 59b-1] Và MÃ cố định của một TenantError giao thức: tên lỗi một mình không phân biệt được mặc định phiên
   // gắn sẵn với rò phạm vi phiên hay replica lúc COMMIT. Mã là hằng của `@trustprocure/tenancy`, không mang giá trị nào.
   // [S1.67 / khoản 118] Và SQLSTATE của một lỗi Postgres: tên `error` một mình không phân biệt được 42501 ở `SET ROLE` với 08006 kết

@@ -476,12 +476,18 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       );
       trangThai.unsealRequestId = yc.id;
       expect(yc.status).toBe("PENDING");
-
-      // Người yêu cầu tự duyệt -> bị từ chối. Đây là D3/D2 ở dạng chạy được.
-      await expect(
-        approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sMua }, apiPool),
-      ).rejects.toThrow();
     });
+
+    // ~~Người yêu cầu tự duyệt -> bị từ chối. Đây là D3/D2 ở dạng chạy được.~~ [S1.68 / lượt soi 62a-14] Người yêu cầu ở kịch bản này là
+    // PROCUREMENT_MANAGER, không giữ `rfq.unseal.approve`, nên lần tự duyệt dừng ở CỔNG QUYỀN, không tới trigger D2 của 019. Bản trước gọi
+    // nó trong CÙNG giao dịch với `requestUnseal`: `UNSEAL_REQUESTED` vừa ghi giữ khoá tư vấn của tổ chức, nên `requirePermission` ném
+    // `PermissionAuditFailedError` ("đang giữ khoá tư vấn") và `.rejects.toThrow()` không phân biệt được. Nay gọi ở giao dịch riêng và đòi
+    // đúng `PermissionDeniedError`; D2 của trigger — người yêu cầu có quyền duyệt tự duyệt — đo ở packages/unseal/src/unseal.int.test.ts.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        approveUnseal(c, orgA, { unsealRequestId: trangThai.unsealRequestId, actorSessionId: sMua }, apiPool),
+      ),
+    ).rejects.toMatchObject({ name: "PermissionDeniedError" });
 
     await withTenant(apiPool, orgA, async (c) => {
       const mot = await approveUnseal(

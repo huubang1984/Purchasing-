@@ -57,9 +57,9 @@ interface PhanHoiCoLog {
   readonly log: readonly string[];
 }
 
-async function dungServer(pool: pg.Pool, routes?: readonly Route[]): Promise<string> {
+async function dungServer(pool: pg.Pool, routes?: readonly Route[], auditPool: pg.Pool = apiPool): Promise<string> {
   const server = createApiServer(
-    createDispatcher({ pool, auditPool: apiPool, services: dichVuTest().services, ...(routes === undefined ? {} : { routes }) }),
+    createDispatcher({ pool, auditPool, services: dichVuTest().services, ...(routes === undefined ? {} : { routes }) }),
     { maxBodyBytes: 2048 },
   );
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
@@ -493,5 +493,182 @@ describe("[S1.67 / khoản 118] lỗi phân loại theo NGUỒN: lỗi của han
     }
     const sau = await goi(gocK118, "/k118/khach-doc/vo-hai", cookieKhach);
     expect([sau.status, sau.log]).toEqual([200, []]);
+  });
+});
+
+// ==============================================================================================
+// [S1.68 / khoản 119] LẦN GHI SỔ CỦA MỘT LẦN TỪ CHỐI HỎNG ⇒ 500 VỚI MỘT DÒNG LOG MANG TÊN LỚP BỌC VÀ MÃ CỦA LỖI GỐC
+//
+// Đo trên master 749f925, trước bản vá, trigger chặn lần ghi `UNSEAL_DENIED`, `UNSEAL_APPROVAL_DENIED`, `MFA_RESET_APPROVAL_DENIED`: RAISE
+// 23514 ⇒ 422 mang thông điệp của trigger và 0 dòng log; RAISE TP119 ⇒ 500 với `error TP119`; EXECUTE trên `audit_append` thu hồi ⇒ 403
+// với `error 42501`. Không ca nào để lại hàng sổ. Và `PermissionAuditFailedError` của cổng quyền ở bộ điều phối chỉ ghi TÊN — không nói
+// lần ghi hỏng vì sao. Bộ điều phối của describe này dùng `auditPool` RIÊNG, như composition root (lượt soi 62a-10).
+// ==============================================================================================
+describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ chối hỏng ⇒ 500 với MỘT dòng log `<lớp bọc> <- <lỗi gốc>` — không 403, không 422 mang thông điệp nội bộ", () => {
+  interface NguoiK119 {
+    readonly id: string;
+    readonly cookie: string;
+    readonly sessionId: string;
+  }
+  let gocK119: string;
+  let pmK119: NguoiK119;
+  let gdK119: NguoiK119;
+  let chinhSachK119: string;
+
+  async function nguoiK119(email: string, vaiTro: readonly string[]): Promise<NguoiK119> {
+    const id = (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'K119') RETURNING id", [orgA, email])).rows[0]!.id;
+    for (const v of vaiTro) await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgA, id, v]);
+    const token = randomBytes(32).toString("base64url");
+    const sessionId = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+        [orgA, id, createHash("sha256").update(token, "utf8").digest()],
+      )
+    ).rows[0]!.id;
+    return { id, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}`, sessionId };
+  }
+
+  /** RFQ dưới ngưỡng, đã CLOSED — điểm xuất phát hợp lệ của một yêu cầu mở thầu (cùng fixture với packages/unseal). */
+  async function rfqDaDongK119(): Promise<string> {
+    const nguoiTao = [pmK119.id, pmK119.sessionId] as const;
+    const rfqId = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) VALUES ($1, 'K119', now() + interval '7 days', false, $2, $3) RETURNING id",
+        [orgA, ...nguoiTao],
+      )
+    ).rows[0]!.id;
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) VALUES ($1, $2, 1, 'Thep', '10.0000', 'tam', $3, $4)",
+      [orgA, rfqId, ...nguoiTao],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
+      [orgA, rfqId, chinhSachK119, ...nguoiTao],
+    );
+    await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqId, ...nguoiTao]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(
+        "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+        [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), ...nguoiTao],
+      );
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqId, ...nguoiTao]);
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som k119', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+      [rfqId, ...nguoiTao],
+    );
+    return rfqId;
+  }
+
+  /** Yêu cầu mở thầu PENDING, không phê duyệt nào, do giám đốc tạo qua HTTP. */
+  async function yeuCauMoThauK119(): Promise<string> {
+    const rfqId = await rfqDaDongK119();
+    const r = await goi(gocK119, `/rfqs/${rfqId}/unseal`, gdK119.cookie, { method: "POST", body: { reason: "den gio mo thau" } });
+    expect(r.status, r.body).toBe(201);
+    return (JSON.parse(r.body) as { unsealRequest: { id: string } }).unsealRequest.id;
+  }
+
+  async function demSoK119(action: string, resourceId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3", [orgA, action, resourceId]);
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ, RAISE với `sqlstate`; mọi lần ghi khác đi qua. */
+  async function voiGhiSoBiChanK119<T>(action: string, sqlstate: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        `CREATE FUNCTION public.k119_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'k119 thong diep noi bo' USING ERRCODE = '${sqlstate}'; END$$`,
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k119_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') EXECUTE FUNCTION public.k119_chan_ghi_so()`,
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k119_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k119_chan_ghi_so()");
+    }
+  }
+
+  beforeAll(async () => {
+    // [lượt soi 62a-10] `auditPool` RIÊNG, như composition root — `dungServer` mặc định dùng chung `apiPool` cho cả hai.
+    const auditPoolK119 = db.poolAs("app_api");
+    canDong.push(() => auditPoolK119.end());
+    gocK119 = await dungServer(apiPool, undefined, auditPoolK119);
+    pmK119 = await nguoiK119("pm-k119@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    gdK119 = await nguoiK119("gd-k119@vidu.vn", ["DIRECTOR"]);
+    chinhSachK119 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) VALUES ($1, 1, '100000000.00', 'VND', $2, $3) RETURNING id",
+        [orgA, pmK119.id, pmK119.sessionId],
+      )
+    ).rows[0]!.id;
+  });
+
+  it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log `DenialAuditFailedError <- error 23514`, không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
+    const doiChung = await yeuCauMoThauK119();
+    const dc = await goi(gocK119, `/unseal/${doiChung}/dispatch`, gdK119.cookie, { method: "POST" });
+    expect([dc.status, dc.log]).toEqual([422, []]);
+    expect(await demSoK119("UNSEAL_DENIED", doiChung)).toBe(1);
+
+    const id = await yeuCauMoThauK119();
+    const r = await voiGhiSoBiChanK119("UNSEAL_DENIED", "23514", () => goi(gocK119, `/unseal/${id}/dispatch`, gdK119.cookie, { method: "POST" }));
+    expect(r.status).toBe(500);
+    expect(JSON.parse(r.body)).toEqual({ error: "loi noi bo" });
+    expect(r.log).toHaveLength(1);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} DenialAuditFailedError <- error 23514$/u);
+    expect(await demSoK119("UNSEAL_DENIED", id)).toBe(0);
+    expect((await db.pool.query("SELECT 1 FROM outbox_jobs WHERE dedupe_key = $1", [`unseal:${id}`])).rows).toHaveLength(0);
+  });
+
+  it("[INV-D5] ⒬ lần THỬ tự phê duyệt mở thầu, lần ghi `UNSEAL_APPROVAL_DENIED` ném 42501 ⇒ 500 với MỘT dòng log `DenialAuditFailedError <- error 42501` (trước bản vá: 403 với `error 42501`), không hàng sổ", async () => {
+    const id = await yeuCauMoThauK119();
+    const r = await voiGhiSoBiChanK119("UNSEAL_APPROVAL_DENIED", "42501", () => goi(gocK119, `/unseal/${id}/approve`, gdK119.cookie, { method: "POST" }));
+    expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
+    expect(r.log).toHaveLength(1);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} DenialAuditFailedError <- error 42501$/u);
+    expect(await demSoK119("UNSEAL_APPROVAL_DENIED", id)).toBe(0);
+  });
+
+  it("[INV-D5] ⒭ lần THỬ tự duyệt đặt lại TOTP, lần ghi `MFA_RESET_APPROVAL_DENIED` ném TP119 ⇒ 500 với MỘT dòng log `DenialAuditFailedError <- error TP119` (trước bản vá: `error TP119` — không phân biệt được với một lỗi bất kỳ của handler), không hàng sổ", async () => {
+    const nan = await nguoiK119(`nan-k119-${randomBytes(3).toString("hex")}@vidu.vn`, ["BUYER"]);
+    const yc = await goi(gocK119, `/users/${nan.id}/mfa-reset`, pmK119.cookie, { method: "POST", body: { reason: "mat may" } });
+    expect(yc.status, yc.body).toBe(201);
+    const id = (JSON.parse(yc.body) as { mfaReset: { id: string } }).mfaReset.id;
+    const r = await voiGhiSoBiChanK119("MFA_RESET_APPROVAL_DENIED", "TP119", () =>
+      goi(gocK119, `/mfa-resets/${id}/approve`, pmK119.cookie, { method: "POST", body: {} }),
+    );
+    expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
+    expect(r.log).toHaveLength(1);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} DenialAuditFailedError <- error TP119$/u);
+    expect(await demSoK119("MFA_RESET_APPROVAL_DENIED", id)).toBe(0);
+  });
+
+  it("[INV-D5] ⒮ `PermissionAuditFailedError` của cổng quyền ở bộ điều phối cũng nêu lỗi gốc: phiên không vai trò gọi một route ghi, lần ghi `PERMISSION_DENIED` ném 42501 ⇒ 500 với MỘT dòng log `PermissionAuditFailedError <- error 42501` (trước bản vá: chỉ tên lớp)", async () => {
+    const khong = await nguoiK119(`khong-k119-${randomBytes(3).toString("hex")}@vidu.vn`, []);
+    const r = await voiGhiSoBiChanK119("PERMISSION_DENIED", "42501", () =>
+      goi(gocK119, "/suppliers", khong.cookie, { method: "POST", body: { legalName: "K119" } }),
+    );
+    expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
+    expect(r.log).toHaveLength(1);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} PermissionAuditFailedError <- error 42501$/u);
+    // D5 thật, không chỉ dòng log (lượt soi 62a-7): lần từ chối không vào sổ, và thao tác bị từ chối không xảy ra.
+    const { rows: soHang } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [orgA, khong.id],
+    );
+    expect(soHang[0]?.n).toBe("0");
+    const { rows: ncc } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM suppliers WHERE org_id = $1 AND legal_name = 'K119'",
+      [orgA],
+    );
+    expect(ncc[0]?.n).toBe("0");
   });
 });

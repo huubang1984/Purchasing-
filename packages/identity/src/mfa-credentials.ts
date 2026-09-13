@@ -569,8 +569,10 @@ function docBoDem(tho: string | null, hoSo: string): number | null {
  *     hằng do COMPOSITION ROOT viết ra (hợp đồng của `TotpSecretUnsealer` ghi rõ "KHÔNG được
  *     chứa bí mật"), còn `message` của một adapter đến từ một thư viện và mang giá trị nó đang
  *     xử lý. Không có `name`, một người điều tra không biết cổng NÀO hỏng.
- *   * nguyên nhân gốc đi tiếp qua `cause` — đường dành cho người điều tra, không phải đường đi
- *     vào một dòng log. Và một test [CẤM LOG] bơm ĐÚNG adapter của phép đo trên để khẳng định
+ *   * nguyên nhân gốc đi tiếp qua `cause` — đường dành cho người điều tra, ~~không phải đường đi
+ *     vào một dòng log~~ [S1.68 / lượt soi 62b-2] và dòng log 500 của bộ điều phối nêu thêm TÊN cùng mã của nó một
+ *     tầng (`Error <- <tên>`, `moTaLoiKhongGiaTri` ở apps/api) — không message, không giá trị (đọc). Và một test [CẤM LOG] bơm ĐÚNG
+ *     adapter của phép đo trên để khẳng định
  *     điều đó thay vì tin nó.
  *
  * VẾ THỨ HAI CỦA BẢN TRƯỚC CŨNG RỘNG HƠN THỰC TẾ, sửa tại chỗ: nó viết "có test quét đúng điều

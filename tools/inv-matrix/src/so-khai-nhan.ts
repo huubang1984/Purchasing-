@@ -121,11 +121,14 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   D5: [
     "apps/api/src/api.int.test.ts",
     "apps/api/src/buyer.int.test.ts",
+    "apps/api/src/loi-giao-thuc.int.test.ts",
+    "packages/identity/src/mfa-reset.int.test.ts",
     "packages/identity/src/rbac.int.test.ts",
     "packages/invitation/src/invitation.int.test.ts",
     "packages/rfq/src/rfq.int.test.ts",
     "packages/unseal/src/unseal.int.test.ts",
     "tests/architecture/barrel-exports.test.ts",
+    "tests/architecture/ghi-so-tu-choi-mot-duong.test.ts",
   ],
   E1: [
     "apps/api/src/auth.int.test.ts",

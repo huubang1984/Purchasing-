@@ -33,10 +33,15 @@ export {
   SEPARATION_OF_DUTIES_CHAIN,
   type Permission,
 } from "./permissions.js";
+// [S1.68 / khoản 119] `throwAuditedDenial` và lớp lỗi của nó ra cửa cùng tiêu chí với `requirePermission`: hàm NÉM ở MỌI nhánh — lần từ
+// chối đã ghi sổ, hoặc `DenialAuditFailedError` khi không ghi được — nên không dựng ra được một cổng gác im lặng. Người gọi ngoài gói:
+// cổng mở thầu và `approveUnseal` của `@trustprocure/unseal`.
 export {
+  DenialAuditFailedError,
   PermissionAuditFailedError,
   PermissionDeniedError,
   requirePermission,
+  throwAuditedDenial,
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";

@@ -18,8 +18,7 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { withTenant } from "@trustprocure/tenancy";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
 
@@ -225,13 +224,14 @@ export async function approveUnseal(
       [orgId, input.unsealRequestId, actor.id, actor.sessionId],
     );
   } catch (loi) {
-    const van = loi instanceof Error ? loi.message : "";
-    const viPhamD2 = /khong duoc tu phe duyet|phai o mot PHIEN khac|mot lan tren mot yeu cau/i.test(
-      van,
-    );
-    if (viPhamD2) {
-      await withTenant(auditPool, orgId, (c) =>
-        appendAuditEvent(c, orgId, {
+    // [S1.68 / khoản 119] Lần ghi đi qua `throwAuditedDenial`: ghi được ⇒ ném lại chính vi phạm D2; không ghi được ⇒
+    // `DenialAuditFailedError` giữ vi phạm trong `denial`. Bản trước để lỗi của lần ghi thay chỗ vi phạm — đo qua HTTP, trigger chặn lần
+    // ghi: RAISE 23514 ⇒ 422 mang thông điệp của trigger, RAISE TP119 ⇒ 500, EXECUTE thu hồi ⇒ 403, không hàng sổ nào (biên bản §S1.68).
+    if (loi instanceof Error && /khong duoc tu phe duyet|phai o mot PHIEN khac|mot lan tren mot yeu cau/i.test(loi.message)) {
+      await throwAuditedDenial(
+        auditPool,
+        orgId,
+        {
           actorType: actor.type,
           actorId: actor.id,
           action: "UNSEAL_APPROVAL_DENIED",
@@ -239,7 +239,8 @@ export async function approveUnseal(
           resourceId: input.unsealRequestId,
           // KHÔNG mang `reason` của yêu cầu: với break-glass đó là chỗ chi tiết sự cố nằm.
           payload: { viPham: "D2" },
-        }),
+        },
+        loi,
       );
     }
     throw loi;

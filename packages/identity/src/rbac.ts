@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound, type AuditEventInput } from "@trustprocure/audit";
 import { withTenant } from "@trustprocure/tenancy";
 import type { Permission } from "./permissions.js";
 
@@ -41,6 +41,30 @@ export class PermissionAuditFailedError extends Error {
       { cause },
     );
     this.name = "PermissionAuditFailedError";
+  }
+}
+
+/**
+ * [S1.68 / khoản 119] Ném khi một lần TỪ CHỐI ngoài `requirePermission` đã xảy ra nhưng bản ghi kiểm toán của nó KHÔNG ghi được.
+ *
+ * Cùng lý do tồn tại với `PermissionAuditFailedError`, cho các lần từ chối còn lại: vế 2–4 của cổng mở thầu (`UnsealDeniedError`), lần THỬ
+ * vi phạm D2 của phê duyệt mở thầu và của đặt lại TOTP (lỗi 23514 của CSDL). Trước lớp này ba chỗ ấy để lỗi của lần ghi THAY CHỖ lần từ
+ * chối. Đo trên master 749f925 qua HTTP (biên bản §S1.68), trigger chặn lần ghi: RAISE 23514 ⇒ 422 mang thông điệp của trigger, 0 dòng
+ * log; RAISE TP119 ⇒ 500; EXECUTE trên `audit_append` thu hồi ⇒ 403 — không ca nào để lại hàng sổ, và không ca nào cho người gọi biết
+ * một lần từ chối vừa không vào sổ. Mã khác đi theo bảng `anhXaLoiPostgres` của bộ điều phối (đọc: 23505 ⇒ 409; 23503 và lớp 22 ⇒ 422).
+ *
+ * Vẫn fail-CLOSED: `denial` giữ lần từ chối, `cause` giữ lỗi của lần ghi, `action` là mã sự kiện đã không ghi được (hằng của người gọi).
+ * KHÁC `PermissionAuditFailedError` ở một điểm, có chủ đích: thông điệp KHÔNG nối `cause.message` — lỗi gốc ở đây có thể là thông điệp do
+ * một trigger viết, và lớp này không biết thông điệp ấy mang gì. Người điều tra đọc `cause`.
+ */
+export class DenialAuditFailedError extends Error {
+  constructor(
+    readonly action: string,
+    readonly denial: Error,
+    cause: Error,
+  ) {
+    super("Một lần từ chối KHÔNG ghi được bản ghi kiểm toán (bất biến D5).", { cause });
+    this.name = "DenialAuditFailedError";
   }
 }
 
@@ -434,4 +458,59 @@ export async function requirePermission(
   }
 
   throw tuChoi;
+}
+
+/**
+ * [S1.68 / khoản 119] Ghi sổ một lần TỪ CHỐI ngoài `requirePermission` rồi ném CHÍNH nó (bất biến D5).
+ *
+ * Người gọi hôm nay: `tuChoi` của cổng mở thầu (packages/unseal/src/gate.ts), nhánh D2 của `approveUnseal` (packages/unseal/src/requests.ts)
+ * và của `approveMfaReset` (./mfa-reset.ts). Trước khoản 119 cả ba tự gọi `withTenant(auditPool, …)` và không bọc lỗi của lần ghi.
+ *
+ * Làm theo thứ tự:
+ *   ⑴ `action` và `resourceType` phải là MÃ ĐỊNH DANH viết hoa — cùng hình dạng F7 của `requirePermission`, vì cả hai đi vào sổ bất biến
+ *      (lượt soi 62a-15); kiểm trước khi chạm pool;
+ *   ⑵ `auditPool` không được bỏ qua RLS — cùng lớp canh [F9]. Đo trước bản vá với SUPERUSER: bản ghi được nhận không một lời;
+ *   ⑶ lần ghi ở giao dịch ĐỘC LẬP — bản ghi sống qua rollback của người gọi (khoản nợ 32).
+ * Lỗi ở bất kỳ bước nào ⇒ `DenialAuditFailedError` giữ lần từ chối; không lỗi ⇒ ném `denial`. Không có đường trả về.
+ *
+ * KHÔNG kiểm "pool còn chỗ" tức thì như `khangDinhGhiDuocDocLap` (lượt soi 62a-1). Bản đầu của vòng này có kiểm ấy, và nó đổi hành vi cả
+ * khi lần ghi lẽ ra thành công: `auditPool` sản xuất có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ
+ * chối của người khác gãy ngay — 500, không hàng sổ — trong khi chờ thì ghi được. Không kiểm ấy, lần lấy kết nối xếp hàng: pool dựng bằng
+ * `createPool` chờ tối đa `connectionTimeoutMillis` 20 s rồi ném, và lỗi ấy thành `DenialAuditFailedError` (đọc); pool không đặt thời
+ * hạn — pool của test — chờ không hạn (đo ở cổng mở thầu trên bản trước khoản 119: quá 4000 ms). Kiểm tức thì của `requirePermission`
+ * giữ nguyên — khoản nợ 120.
+ *
+ * KHÔNG giữ vế khoá tư vấn của `khangDinhGhiDuocDocLap`: phép kiểm ấy chạy trên client NGƯỜI GỌI, mà hai chỗ D2 đến đây SAU một câu đã
+ * hỏng — giao dịch aborted, câu kiểm ném 25P02 (đo bằng đột biến chế độ đo, §S1.68). Người gọi đã ghi sổ trong cùng giao dịch trước khi
+ * gọi hàm này thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy — vẫn ồn ào; dưới
+ * pool không đặt `lock_timeout` thì treo không hạn. Các đường sản xuất không ghi sổ trước lần từ chối của chúng (đọc: `dispatchUnseal`,
+ * `approveUnseal`, `approveMfaReset`); `apps/unseal-worker/src/kich-ban-41.int.test.ts` bước 9 từng có hình dạng ấy nhưng dừng ở
+ * `requirePermission` (lượt soi 62a-3, 62a-14).
+ */
+export async function throwAuditedDenial(
+  auditPool: pg.Pool,
+  orgId: string,
+  event: AuditEventInput,
+  denial: Error,
+): Promise<never> {
+  try {
+    if (!HINH_DANG_LOAI_TAI_NGUYEN.test(event.action) || !HINH_DANG_LOAI_TAI_NGUYEN.test(event.resourceType)) {
+      throw new Error(
+        "action và resourceType của lần ghi sổ từ chối phải là MÃ ĐỊNH DANH viết hoa (^[A-Z][A-Z0-9_]{0,63}$) vì chúng đi thẳng vào " +
+          "sổ kiểm toán bất biến. Cố ý KHÔNG nội suy giá trị nhận được vào thông báo này.",
+      );
+    }
+    await khangDinhAuditPoolDungQuyen(auditPool);
+    await withTenant(auditPool, orgId, (c) => appendAuditEvent(c, orgId, event));
+  } catch (loi) {
+    // Cùng khuôn [vòng fix 2 — MỤC E] của `requirePermission`: nêu KIỂU của thứ lạ bị ném, không nội suy GIÁ TRỊ; giá trị gốc ở `cause`.
+    throw new DenialAuditFailedError(
+      event.action,
+      denial,
+      loi instanceof Error
+        ? loi
+        : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, { cause: loi }),
+    );
+  }
+  throw denial;
 }

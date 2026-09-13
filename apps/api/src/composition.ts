@@ -49,7 +49,11 @@ export interface TienTrinhApi {
   dung(): Promise<void>;
 }
 
-/** Số kết nối của pool sổ từ chối quyền — nhỏ, vì nó chỉ ghi một hàng cho mỗi lần 403. */
+/**
+ * Số kết nối của pool ~~sổ từ chối quyền — nhỏ, vì nó chỉ ghi một hàng cho mỗi lần 403~~ [S1.68 / lượt soi 62a-4] ghi sổ MỌI lần từ chối ở
+ * giao dịch độc lập — `PERMISSION_DENIED` (403), `UNSEAL_DENIED` và hai lần thử vi phạm D2 (422) — dùng chung mọi tổ chức. Cỡ của nó và
+ * phép kiểm "pool còn chỗ" tức thì của `requirePermission`: khoản nợ 120.
+ */
 const AUDIT_POOL_MAX = 2;
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;

@@ -18,7 +18,7 @@ import { migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { withTenant } from "@trustprocure/tenancy";
 import { MfaResetError, approveMfaReset, cancelMfaReset, requestMfaReset } from "./mfa-reset.js";
-import { PermissionDeniedError } from "./rbac.js";
+import { DenialAuditFailedError, PermissionDeniedError } from "./rbac.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -286,5 +286,46 @@ describe("[040] đặt lại TOTP — hai người", () => {
       );
     }
     await expect(chenTho(b1)).rejects.toMatchObject({ code: "23514" });
+  });
+});
+
+// ==============================================================================================
+// [S1.68 / khoản 119] LẦN GHI `MFA_RESET_APPROVAL_DENIED` HỎNG ⇒ GÃY ỒN ÀO, VI PHẠM KHÔNG BỊ LỖI CỦA LẦN GHI THAY CHỖ
+//
+// Trước bản vá (đo trên master 749f925): trigger chặn lần ghi bằng TP119 ⇒ `approveMfaReset` ném lỗi Postgres trần TP119 — vi phạm 23514
+// biến mất; qua HTTP ra 500 với dòng `error TP119`, còn nếu trigger RAISE 23514 thì ra 422 mang thông điệp của trigger, 0 dòng log.
+// ==============================================================================================
+describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của lần thử tự duyệt hỏng ⇒ DenialAuditFailedError", () => {
+  it("[INV-D5] trigger chặn lần ghi `MFA_RESET_APPROVAL_DENIED` bằng TP119 ⇒ DenialAuditFailedError: vi phạm 23514 trong `denial`, TP119 trong `cause`; không hàng sổ, hồ sơ TOTP còn nguyên", async () => {
+    const pm1 = await nguoi(["PROCUREMENT_MANAGER"]);
+    const nan = await nguoi(["BUYER"]);
+    await hoSoTotp(nan.id);
+    const r = await yeuCau(pm1, nan.id);
+    let loi: unknown;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k119_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k119 thong diep noi bo' USING ERRCODE = 'TP119'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k119_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW " +
+          "WHEN (NEW.action = 'MFA_RESET_APPROVAL_DENIED') EXECUTE FUNCTION public.k119_chan_ghi_so()",
+      );
+      loi = await duyet(pm1, r.id).then(
+        () => null,
+        (e: unknown) => e,
+      );
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k119_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k119_chan_ghi_so()");
+    }
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.action).toBe("MFA_RESET_APPROVAL_DENIED");
+    expect((x.denial as { code?: unknown }).code).toBe("23514");
+    expect((x.cause as { code?: unknown }).code).toBe("TP119");
+    expect(await demSo("MFA_RESET_APPROVAL_DENIED", r.id)).toBe(0);
+    expect(await coHoSo(nan.id)).toBe(true);
   });
 });

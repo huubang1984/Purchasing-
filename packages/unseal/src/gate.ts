@@ -52,8 +52,7 @@
 // ==============================================================================================
 
 import type pg from "pg";
-import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { withTenant } from "@trustprocure/tenancy";
+import { assertTenantBound } from "@trustprocure/audit";
 import {
   MfaRequiredError,
   PERMISSIONS,
@@ -61,6 +60,7 @@ import {
   assertFreshMfa,
   requirePermission,
   resolveSessionActor,
+  throwAuditedDenial,
 } from "@trustprocure/identity";
 
 /** Bốn vế của D1, theo đúng thứ tự chúng xuất hiện trong mệnh đề. */
@@ -128,6 +128,13 @@ export interface UnsealGateReport {
  *
  * PAYLOAD chỉ mang `clause`. KHÔNG mang `reason` của yêu cầu mở thầu — với break-glass, đó chính
  * là chỗ chi tiết sự cố nằm, và sổ kiểm toán không phải chỗ để nó rò ra một lần nữa.
+ *
+ * [S1.68 / khoản 119] LẦN GHI HỎNG KHÔNG ĐƯỢC THAY CHỖ LẦN TỪ CHỐI. Bản trước tự gọi `withTenant(auditPool, …)`: lần ghi ném thì lỗi của
+ * nó đi ra thay `UnsealDeniedError`. Đo trên master 749f925 qua `POST /unseal/:id/dispatch` (biên bản §S1.68), trigger chặn lần ghi:
+ * RAISE 23514 ⇒ 422 mang thông điệp của trigger, 0 dòng log; RAISE TP119 ⇒ 500; EXECUTE trên `audit_append` thu hồi ⇒ 403; không ca nào
+ * để lại hàng sổ. Và `auditPool` siêu người dùng được nhận không một lời. Nay đi qua `throwAuditedDenial`: ghi được ⇒ ném
+ * `UnsealDeniedError` như cũ; không ghi được ⇒ `DenialAuditFailedError` giữ nó trong `denial`. `return` là chịu lực: bỏ nó thì lời hứa
+ * trôi đi và cổng đi tiếp như đã cho qua.
  */
 async function tuChoi(
   auditPool: pg.Pool,
@@ -137,17 +144,19 @@ async function tuChoi(
   clause: UnsealClause,
   message: string,
 ): Promise<never> {
-  await withTenant(auditPool, orgId, (c) =>
-    appendAuditEvent(c, orgId, {
+  return throwAuditedDenial(
+    auditPool,
+    orgId,
+    {
       actorType: actorId === null ? "SERVICE" : "USER",
       actorId,
       action: "UNSEAL_DENIED",
       resourceType: "UNSEAL_REQUEST",
       resourceId: unsealRequestId,
       payload: { clause },
-    }),
+    },
+    new UnsealDeniedError(clause, message),
   );
-  throw new UnsealDeniedError(clause, message);
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
