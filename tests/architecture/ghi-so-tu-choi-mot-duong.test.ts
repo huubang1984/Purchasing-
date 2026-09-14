@@ -43,7 +43,8 @@
 // rồi `await`, bọc `as`, nằm trong `Promise.all([…])` hay trong một nhánh ba ngôi, và hàm bọc gọi qua biến. `void tuChoi(…)` lọt cả cổng lẫn
 // lint: `@typescript-eslint/no-floating-promises` bỏ qua `void` theo mặc định (đọc; `eslint.config.js` bật luật mà không đặt tuỳ chọn).
 // ==============================================================================================
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -261,26 +262,19 @@ const CHO_TRAN_DUOC_PHEP: readonly { readonly tep: string; readonly ham: string;
   },
 ];
 
-function tepTs(thuMuc: string): string[] {
-  const ra: string[] = [];
-  for (const ten of readdirSync(thuMuc)) {
-    if (ten === "node_modules" || ten === "dist") continue;
-    const duong = join(thuMuc, ten);
-    if (statSync(duong).isDirectory()) ra.push(...tepTs(duong));
-    else if (ten.endsWith(".ts") && !ten.endsWith(".test.ts")) ra.push(duong);
-  }
-  return ra;
-}
-
+/**
+ * Tệp mã sản xuất dưới `packages/<gói>/src` và `apps/<gói>/src`: tệp `.ts` ĐÃ TRACK, trừ tệp test. [S1.72 / CI của PR #71] Bản trước đi cây
+ * thư mục bằng `readdirSync`, nên đọc cả tệp dò mà test khác tạo tạm: `boundaries.test.ts` dựng rồi xoá `apps/tmp-probe/src/leak.ts`, và
+ * T1+T2 trên ubuntu lẫn windows gãy `ENOENT` ở lần đọc một tệp đã bị xoá sau khi được liệt kê (suy luận: cửa sổ rộng ra vì phép đọc cây cú
+ * pháp chậm hơn và test lời tạo `…DeniedError` đi cây thêm một lần). Đo cục bộ: một tệp chưa track gọi `withTenant(auditPool, …)` dưới
+ * `apps/` làm test "chỉ rbac.ts" đỏ với bản đi cây thư mục, xanh với bản này. Ranh giới: tệp mã mới chưa `git add` thì cổng không đọc khi
+ * chạy cục bộ — trên CI mọi tệp đều đã track.
+ */
 function maSanXuat(): string[] {
-  const ra: string[] = [];
-  for (const vung of ["packages", "apps"]) {
-    for (const goi of readdirSync(join(GOC, vung))) {
-      const src = join(GOC, vung, goi, "src");
-      if (statSync(join(GOC, vung, goi)).isDirectory() && readdirSync(join(GOC, vung, goi)).includes("src")) ra.push(...tepTs(src));
-    }
-  }
-  return ra;
+  return execFileSync("git", ["ls-files", "*.ts"], { cwd: GOC, encoding: "utf8" })
+    .split(/\r?\n/u)
+    .filter((t) => /^(?:packages|apps)\/[^/]+\/src\/.+\.ts$/u.test(t) && !t.endsWith(".test.ts"))
+    .map((t) => join(GOC, t));
 }
 
 describe("[INV-D5] [S1.68 / khoản 119] một đường ghi sổ từ chối ở giao dịch độc lập", () => {
