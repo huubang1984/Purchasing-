@@ -107,6 +107,33 @@ describe("[S1.71 / khoản 123] trần chờ khoá ghi sổ của tổ chức", 
     }
   }, 60_000);
 
+  it("[S1.72 / lượt soi ngang 66a-3] giao dịch đặt lock_timeout NHỎ HƠN trần (500 ms) vẫn chờ tới trần 2 s ở lần ghi sổ — mệnh đề SET của hàm ghi đè giá trị của giao dịch trong lúc hàm chạy", async () => {
+    // Đo (§S1.72): cùng giao dịch `SET LOCAL lock_timeout = '500ms'` khi khoá bị giữ ⇒ 55P03 sau 2 008 ms dưới trần của hàm; hàm đã RESET
+    // lock_timeout ⇒ 55P03 sau 511 ms. Tức một đường muốn gãy sớm hơn 2 s trên khoá ghi sổ không làm được — hệ quả đã ghi ở ADR-016 [S1.71].
+    const giu = await moGiaoDichDaGhiSo(orgA, "GIU_KHOA_66A3");
+    try {
+      const nanNhan = await pool.connect();
+      try {
+        await nanNhan.query("BEGIN");
+        await nanNhan.query("SET LOCAL lock_timeout = '500ms'");
+        // [S1.72 / lượt soi 67a-7] Tiền đề: giao dịch thật sự mang 500 ms trước lần ghi sổ — đọc ở đây, khẳng định sau ROLLBACK, để một lần
+        // khẳng định hỏng không trả kết nối về pool giữa giao dịch (đột biến M28 lộ ra: test sau đỏ theo trên cùng kết nối).
+        const tienDe = (await nanNhan.query<{ lock_timeout: string }>("SHOW lock_timeout")).rows[0]?.lock_timeout;
+        await nanNhan.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        const kq = await doLoi(() => nanNhan.query(GHI_SO, [orgA, "NAN_NHAN_66A3"]));
+        await nanNhan.query("ROLLBACK");
+        expect(tienDe, "tiền đề: giao dịch mang lock_timeout 500 ms").toBe("500ms");
+        expect(kq.ma, `lần ghi sổ phải gãy vì chờ khoá, thực tế: ${kq.thongDiep}`).toBe("55P03");
+        expect(kq.ms, "lần ghi sổ phải chờ tới trần của hàm, không gãy ở 500 ms của giao dịch").toBeGreaterThanOrEqual(1_500);
+        expect(kq.ms, "[lượt soi 67a-7] chờ tới trần 2 s, không tới 3 s").toBeLessThan(3_000);
+      } finally {
+        nanNhan.release();
+      }
+    } finally {
+      await ketThuc(giu);
+    }
+  }, 60_000);
+
   it("trần chỉ sống trong lúc hàm chạy: sau một lần ghi sổ, lock_timeout của giao dịch vẫn là giá trị phiên", async () => {
     const c = await moGiaoDichDaGhiSo(orgB, "KHONG_TRANH_CHAP");
     try {

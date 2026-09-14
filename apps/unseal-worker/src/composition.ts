@@ -79,6 +79,12 @@ export interface UnsealWorkerDeps {
   readonly unwrapper: KeyUnwrapper;
   readonly alertSink: BreakGlassAlertSink;
   /**
+   * [S1.72 / khoản 121] BẮT BUỘC. Pool ghi sổ cho lần TỪ CHỐI lúc giải mã: `executeUnsealRequest` ghi `UNSEAL_EXECUTION_DENIED` ở giao dịch
+   * độc lập trên pool này rồi mới ném. Là pool của vai `app_unseal` — vai duy nhất tiến trình này có — và phải còn kết nối rảnh trong khi
+   * job giữ một kết nối (đọc, chưa đo trên pool một kết nối).
+   */
+  readonly auditPool: pg.Pool;
+  /**
    * BẮT BUỘC, và đó là điểm của khoản nợ 34.
    *
    * `JobRunnerOptions.onJobFailure` là TUỲ CHỌN và mặc định IM LẶNG — hợp lý cho một thư viện
@@ -107,10 +113,15 @@ export function buildUnsealWorkerHandlers(
 ): Readonly<Record<string, JobHandler>> {
   return {
     [UNSEAL_JOB_KIND]: async (job, client) => {
-      await executeUnsealRequest(client, job.orgId, {
-        unsealRequestId: docChuoi(job.payload, "unsealRequestId"),
-        unwrapper: deps.unwrapper,
-      });
+      await executeUnsealRequest(
+        client,
+        job.orgId,
+        {
+          unsealRequestId: docChuoi(job.payload, "unsealRequestId"),
+          unwrapper: deps.unwrapper,
+        },
+        deps.auditPool,
+      );
     },
     [BREAK_GLASS_ALERT_KIND]: async (job, client) => {
       const alert: BreakGlassAlert = {

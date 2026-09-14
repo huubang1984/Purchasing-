@@ -627,7 +627,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   });
 
   it("bước 11 — worker (KHÔNG qua HTTP, và đó là điểm mấu chốt) mở năm phong bì, lấy PHIÊN BẢN CUỐI", async () => {
-    const kq = await withTenant(unsealPool, orgA, (c) => executeUnsealRequest(c, orgA, { unsealRequestId: trangThai.unsealRequestId, unwrapper: boMoBoc }));
+    const kq = await withTenant(unsealPool, orgA, (c) => executeUnsealRequest(c, orgA, { unsealRequestId: trangThai.unsealRequestId, unwrapper: boMoBoc }, unsealPool));
     expect(kq.opened).toBe(5);
     expect(kq.failedBidVersionIds).toEqual([]);
   });

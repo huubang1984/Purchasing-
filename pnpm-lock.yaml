@@ -96,6 +96,9 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@trustprocure/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
@@ -112,9 +115,6 @@ importers:
       '@trustprocure/bidding':
         specifier: workspace:*
         version: link:../../packages/bidding
-      '@trustprocure/identity':
-        specifier: workspace:*
-        version: link:../../packages/identity
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
@@ -276,12 +276,13 @@ importers:
       '@trustprocure/outbox':
         specifier: workspace:*
         version: link:../outbox
-      '@trustprocure/tenancy':
-        specifier: workspace:*
-        version: link:../tenancy
       pg:
         specifier: ^8.13.0
         version: 8.23.0
+    devDependencies:
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
 
   tools/bench-keyprovider:
     dependencies:

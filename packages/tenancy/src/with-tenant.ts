@@ -127,7 +127,7 @@ const TRAN_CHO_TOI_DA_MS = 2_147_483_647;
  *     (lượt soi 63a-6).
  *   ⑶ Lỗi của lần lấy TRONG trần đi ra qua `Promise.race`, nguyên vẹn kể cả khi không phải Error. Lỗi tới SAU trần bị nuốt ở nhánh rỗng —
  *     không dòng log nào; với pool có vai, kết nối nhiễm đã bị `ganVaiTroChoPool` huỷ trước khi lỗi ấy tới đây (lượt soi 63a-4 — nói ra, chưa
- *     làm).
+ *     làm; [S1.72 / lượt soi ngang 66b-1] đo: lỗi ấy tới SAU khi `withTenant` đã ném CONNECT_WAIT_EXCEEDED, không ai nhận nó — khoản 129).
  */
 function choKetNoiCoTran(layKetNoi: Promise<pg.PoolClient>, tranMs: number): Promise<pg.PoolClient> {
   let hetTran = false;

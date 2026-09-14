@@ -532,7 +532,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       executeUnsealRequest(c, orgA, {
         unsealRequestId: trangThai.unsealRequestId,
         unwrapper: boMoBoc,
-      }),
+      }, unsealPool),
     );
     expect(ketQua.opened, "năm luồng báo giá, năm bản rõ").toBe(5);
     expect(ketQua.failedBidVersionIds).toEqual([]);

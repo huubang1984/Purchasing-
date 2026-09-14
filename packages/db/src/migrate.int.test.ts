@@ -844,7 +844,8 @@ describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với tr
       expect(loi, "bản trước bản vá: cả ba tệp được ghi, câu UPDATE tên trần trúng bảng tạm").not.toBeNull();
       expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
       expect(loi!.message).toContain("146_zz_bang_tam_60.sql");
-      expect(loi!.message).toContain("đối tượng tạm");
+      // [S1.72 / lượt soi 67c-2] Phần thông điệp do mã sinh ra — tên trục đi qua `lechPhien`; lời khuyên tĩnh của mọi lần từ chối cũng mang cụm "đối tượng tạm".
+      expect(loi!.message).toContain("146_zz_bang_tam_60.sql kết thúc với đối tượng tạm khác lúc mở vòng");
       expect(await daGhi("145_zz_bang_that_60.sql")).toBe(true);
       expect(await daGhi("146_zz_bang_tam_60.sql")).toBe(false);
       expect(await daGhi("147_zz_ghi_ten_tran_60.sql")).toBe(false);
@@ -852,6 +853,80 @@ describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với tr
     } finally {
       await pool1.end();
     }
+  });
+
+  /**
+   * [S1.72 / lượt soi 67c-2, 67c-9] Một tệp tạo đối tượng tạm ⇒ `migrate()` từ chối ở tệp ấy vì ĐÚNG trục đối tượng tạm — so phần thông điệp do
+   * mã sinh ra (tên trục đi qua `lechPhien`), không so cụm "đối tượng tạm" mà lời khuyên tĩnh của mọi lần từ chối cũng mang —; tệp ấy lẫn tệp sau
+   * không được ghi.
+   */
+  async function tuChoiVeDoiTuongTam(tep: string, cau: string, neuDuocGhi: string): Promise<void> {
+    const sau = tep.replace(/^(\d+)/u, (so) => String(Number(so) + 1)).replace(".sql", "_sau.sql");
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const loi = await loiCua(migrate(pool1, migrationDir({ [tep]: cau, [sau]: "SELECT 1;" })));
+      expect(loi?.message ?? "(không lỗi — tệp được ghi)", neuDuocGhi).toContain(
+        `${TU_CHOI_DOI_TRANG_THAI} — ${tep} kết thúc với đối tượng tạm khác lúc mở vòng`,
+      );
+      expect([await daGhi(tep), await daGhi(sau)]).toEqual([false, false]);
+    } finally {
+      await pool1.end();
+    }
+  }
+
+  // [S1.72 / lượt soi ngang 66b-7] Đo trên master 298cd4e, trước bản vá (§S1.72): trục đối tượng tạm chỉ đếm `pg_class`, nên `CREATE DOMAIN
+  // pg_temp.x` qua phép so và được ghi; tệp sau khai `public.f(x ma_tam)` phân giải tên trần sang kiểu tạm, và hàm ấy — cùng cột của bảng thật
+  // khai bằng ENUM tạm — biến mất khoảng 200 ms sau khi phiên deploy đóng, trong khi cả hai tệp nằm trong `schema_migrations`. [lượt soi 67c-9]
+  // Mỗi ca một test: đột biến bỏ một catalog đỏ đúng ca của nó.
+  it.each([
+    ["150_zz_mien_tam_66.sql", "CREATE DOMAIN pg_temp.ma_zz_66 AS text;"],
+    ["152_zz_enum_tam_66.sql", "CREATE TYPE pg_temp.e_zz_66 AS ENUM ('a', 'b');"],
+    ["154_zz_ham_tam_66.sql", "CREATE FUNCTION pg_temp.f_zz_66() RETURNS int LANGUAGE sql AS 'SELECT 1';"],
+  ])(
+    "[S1.72 / lượt soi ngang 66b-7] KIỂU tạm (DOMAIN, ENUM) hay HÀM tạm tạo ở một tệp ⇒ TỪ CHỐI ở tệp ấy, nêu trục đối tượng tạm; tệp sau không chạy — %s",
+    async (tep, cau) => {
+      await tuChoiVeDoiTuongTam(tep, cau, "bản trước bản vá: tệp được ghi, kiểu hay hàm tạm đi theo sang tệp sau");
+    },
+  );
+
+  describe("[S1.72 / lượt soi 67a-5] toán tử, lớp và họ toán tử, collation, conversion, đối tượng tìm kiếm văn bản tạm", () => {
+    // Bản đầu của S1.72 đếm quan hệ, kiểu và hàm trong `pg_temp` (lượt soi ngang 66b-7); các đối tượng tạm dưới đây không thêm hàng nào vào ba
+    // catalog ấy — toán tử và lớp toán tử dựng trên hàm có sẵn, họ của lớp toán tử là một họ bền dựng trước (lượt soi 67a-5). Hệ quả như ⒠ của
+    // §S1.72 — đối tượng bền của tệp sau phụ thuộc đối tượng tạm, biến mất khi phiên deploy đóng — là suy luận; test ghim phép từ chối. ~~Mỗi ca~~
+    // ~~ghi một dòng kết quả rồi so cả bảng, để một câu CREATE hỏng vì lý do khác hiện ra cùng lúc với các ca còn lại.~~ [lượt soi 67c-9] Mỗi ca
+    // một test — một câu CREATE hỏng vì lý do khác vẫn hiện riêng từng ca, và đột biến bỏ một catalog đỏ đúng ca của nó; họ bền dựng lại từ đầu
+    // nếu một lượt trước chết giữa chừng.
+    beforeAll(async () => {
+      await db.pool.query("DROP OPERATOR FAMILY IF EXISTS public.of_ben_zz_67 USING hash CASCADE");
+      await db.pool.query("CREATE OPERATOR FAMILY public.of_ben_zz_67 USING hash");
+    });
+
+    afterAll(async () => {
+      await db.pool.query("DROP OPERATOR FAMILY IF EXISTS public.of_ben_zz_67 USING hash CASCADE");
+    });
+
+    it.each([
+      ["156_zz_toan_tu_tam_67.sql", "CREATE OPERATOR pg_temp.=== (LEFTARG = int4, RIGHTARG = int4, FUNCTION = int4eq);"],
+      ["158_zz_ho_toan_tu_tam_67.sql", "CREATE OPERATOR FAMILY pg_temp.of_zz_67 USING btree;"],
+      [
+        "160_zz_lop_toan_tu_tam_67.sql",
+        "CREATE OPERATOR CLASS pg_temp.oc_zz_67 FOR TYPE int4 USING hash FAMILY public.of_ben_zz_67 AS OPERATOR 1 =, FUNCTION 1 hashint4(int4);",
+      ],
+      ["162_zz_collation_tam_67.sql", 'CREATE COLLATION pg_temp.c_zz_67 FROM "C";'],
+      ["164_zz_conversion_tam_67.sql", "CREATE CONVERSION pg_temp.cv_zz_67 FOR 'LATIN1' TO 'UTF8' FROM iso8859_1_to_utf8;"],
+      ["166_zz_cau_hinh_tim_kiem_tam_67.sql", "CREATE TEXT SEARCH CONFIGURATION pg_temp.tc_zz_67 (COPY = pg_catalog.simple);"],
+      ["168_zz_tu_dien_tim_kiem_tam_67.sql", "CREATE TEXT SEARCH DICTIONARY pg_temp.td_zz_67 (TEMPLATE = pg_catalog.simple);"],
+      [
+        "170_zz_bo_phan_tich_tim_kiem_tam_67.sql",
+        "CREATE TEXT SEARCH PARSER pg_temp.tp_zz_67 (START = prsd_start, GETTOKEN = prsd_nexttoken, END = prsd_end, LEXTYPES = prsd_lextype);",
+      ],
+      ["172_zz_mau_tim_kiem_tam_67.sql", "CREATE TEXT SEARCH TEMPLATE pg_temp.tt_zz_67 (LEXIZE = dsimple_lexize);"],
+    ])(
+      "[S1.72 / lượt soi 67a-5] TOÁN TỬ, LỚP hay HỌ TOÁN TỬ, COLLATION, CONVERSION hay đối tượng TÌM KIẾM VĂN BẢN tạm tạo ở một tệp ⇒ TỪ CHỐI ở tệp ấy, nêu trục đối tượng tạm; tệp sau không chạy — %s",
+      async (tep, cau) => {
+        await tuChoiVeDoiTuongTam(tep, cau, "bản đầu của S1.72: tệp được ghi, đối tượng tạm đi theo sang tệp sau");
+      },
+    );
   });
 });
 

@@ -11,16 +11,17 @@
 // depcruise quét, và sẽ KHÔNG BAO GIỜ CHẠY — tức luôn xanh.
 // =============================================================================================
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable } from "@trustprocure/unseal";
-import { executeUnsealRequest, UnsealWorkerError } from "./index.js";
+import { executeUnsealRequest, UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS, UnsealWorkerError } from "./index.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -59,6 +60,8 @@ const boMoBocTest = {
 let db: TestDatabase;
 let apiPool: pg.Pool;
 let unsealPool: pg.Pool;
+/** [S1.72 / khoản 121] Pool ghi sổ của worker: cùng vai `app_unseal`, kết nối riêng để lần ghi từ chối sống qua rollback của job. */
+let auditUnsealPool: pg.Pool;
 let orgA: string;
 let uYc: string, uD1: string;
 let sYc: string, sD1: string;
@@ -259,6 +262,7 @@ beforeAll(async () => {
   orgA = orgs.rows[0]?.id ?? "";
   apiPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
+  auditUnsealPool = db.poolAs("app_unseal");
 
   uYc = await taoNguoi("yc@vidu.vn", "PROCUREMENT_MANAGER");
   uD1 = await taoNguoi("d1@vidu.vn", "DIRECTOR");
@@ -276,6 +280,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await apiPool?.end().catch(() => undefined);
   await unsealPool?.end().catch(() => undefined);
+  await auditUnsealPool?.end().catch(() => undefined);
   await db?.stop();
 });
 
@@ -299,7 +304,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const requestId = await dongVaXinMoThau(rfqId);
 
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(1);
     expect(ketQua.failedBidVersionIds).toEqual([]);
@@ -335,7 +340,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const requestId = await dongVaXinMoThau(rfqId);
 
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(1);
     const { rows } = await withTenant(apiPool, orgA, (c) =>
@@ -352,7 +357,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const requestId = await dongVaXinMoThau(rfqId);
 
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(1);
     const { rows } = await withTenant(apiPool, orgA, (c) =>
@@ -399,7 +404,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const requestId = await dongVaXinMoThau(rfqId);
 
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(cacBanRo.length + 1);
     expect(ketQua.failedBidVersionIds).toEqual([]);
@@ -647,7 +652,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 }));
     const requestId = await dongVaXinMoThau(rfqId);
     await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
 
     const { rows } = await db.pool.query<{
@@ -710,7 +715,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
         executeUnsealRequest(c, orgA, {
           unsealRequestId: rows[0]?.id ?? "",
           unwrapper: boMoBocTest,
-        }),
+        }, auditUnsealPool),
       ),
     ).rejects.toBeInstanceOf(UnsealWorkerError);
   });
@@ -771,7 +776,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     const requestId = await dongVaXinMoThau(rfqId);
 
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(2);
     expect(ketQua.failedBidVersionIds.length).toBe(1);
@@ -824,7 +829,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
 
     const requestId = await dongVaXinMoThau(rfqId);
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(1);
 
@@ -910,11 +915,206 @@ describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới
     await nopBaoGia(rfqId, JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA }));
     const requestId = await dongVaXinMoThau(rfqId);
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
-      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }),
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
     );
     expect(ketQua.opened).toBe(1);
 
     const { dinh } = await quetRoRi(MOC_GIA);
     expect(dinh, "bản rõ chỉ được phép tồn tại ở rfq_unsealed_bids").toEqual(["rfq_unsealed_bids"]);
   }, 120000);
+});
+
+// ===============================================================================================
+// [S1.72 / khoản 121] WORKER TỪ CHỐI LÚC GIẢI MÃ THÌ GHI SỔ — DƯỚI VAI CỦA NÓ, Ở GIAO DỊCH ĐỘC LẬP
+//
+// Đo trên master 298cd4e, trước bản vá (§S1.72), gọi thẳng `executeUnsealRequest` dưới `app_unseal`: yêu cầu không tìm thấy, chưa APPROVED,
+// thiếu phiên điều phối ⇒ `UnsealWorkerError`; phiên điều phối có MFA quá cửa sổ hay bị thu hồi ⇒ `MfaRequiredError` — cả năm nhánh 0 hàng
+// sổ. Đây là lần kiểm lại D1 ở hành động DUY NHẤT không thu hồi được, và lần nó từ chối là thứ người kiểm toán cần thấy nhất.
+// ===============================================================================================
+describe("[INV-D5] [S1.72 / khoản 121] worker từ chối lúc giải mã thì ghi `UNSEAL_EXECUTION_DENIED` dưới vai `app_unseal`", () => {
+  /** Tham số thứ tư là pool ghi sổ của worker. */
+  const chayWorker = (c: pg.PoolClient, unsealRequestId: string): Promise<unknown> =>
+    executeUnsealRequest(c, orgA, { unsealRequestId, unwrapper: boMoBocTest }, auditUnsealPool);
+
+  async function hangTuChoi(requestId: string): Promise<{ actor_type: string; actor_id: string | null; clause: unknown }[]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: Record<string, unknown> }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'UNSEAL_EXECUTION_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, requestId],
+    );
+    // [S1.72 / lượt soi 67a-8] Loại tài nguyên và HÌNH DẠNG trọn của payload ở mọi hàng — lời hứa "payload chỉ mang vế" có mốc chết.
+    for (const r of rows) {
+      expect(r.resource_type).toBe("UNSEAL_REQUEST");
+      expect(Object.keys(r.payload)).toEqual(["clause"]);
+    }
+    return rows.map((r) => ({ actor_type: r.actor_type, actor_id: r.actor_id, clause: r.payload.clause }));
+  }
+
+  /** RFQ đã CLOSED kèm một yêu cầu mở thầu PENDING — chưa ai duyệt, chưa điều phối. */
+  async function yeuCauChuaDuyet(): Promise<string> {
+    const rfqId = await taoRfqMo();
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), " +
+        "early_close_reason = 'dong som', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+      [rfqId, uYc, sYc],
+    );
+    const { rows } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ id: string }>(
+        "INSERT INTO unseal_requests (org_id, rfq_id, reason, requested_by, requested_by_session_id) " +
+          "VALUES ($1, $2, 'k121 tu choi luc giai ma', $3, $4) RETURNING id",
+        [orgA, rfqId, uYc, sYc],
+      ),
+    );
+    return rows[0]?.id ?? "";
+  }
+
+  async function duyet(requestId: string): Promise<void> {
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query(
+        "INSERT INTO unseal_approvals (org_id, unseal_request_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)",
+        [orgA, requestId, uD1, sD1],
+      );
+      await c.query("UPDATE unseal_requests SET status = 'APPROVED', approved_at = now() WHERE id = $1", [requestId]);
+    });
+  }
+
+  async function dieuPhoiBang(requestId: string, sessionId: string): Promise<void> {
+    await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "UPDATE unseal_requests SET dispatched_at = now(), dispatched_by = $2, dispatched_by_session_id = $3 WHERE id = $1",
+        [requestId, uYc, sessionId],
+      ),
+    );
+  }
+
+  async function phienMoi(mfaTuoiGiay: number): Promise<string> {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now() - make_interval(secs => $4)) RETURNING id",
+      [orgA, uYc, randomBytes(32), mfaTuoiGiay],
+    );
+    return rows[0]?.id ?? "";
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  it("[INV-D5] worker: yêu cầu KHÔNG tìm thấy trong tổ chức ⇒ `UnsealWorkerError` như cũ và đúng một hàng (SERVICE, vế POLICY_GATE) — sống qua rollback của giao dịch job", async () => {
+    const id = randomUUID();
+    const loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    expect(loi).toBeInstanceOf(UnsealWorkerError);
+    expect(await hangTuChoi(id)).toEqual([{ actor_type: "SERVICE", actor_id: null, clause: "POLICY_GATE" }]);
+  });
+
+  it("[INV-D5] worker: yêu cầu chưa APPROVED ⇒ `UnsealWorkerError` như cũ và đúng một hàng, vế POLICY_GATE", async () => {
+    const id = await yeuCauChuaDuyet();
+    const loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    expect(loi).toBeInstanceOf(UnsealWorkerError);
+    expect(await hangTuChoi(id)).toEqual([{ actor_type: "SERVICE", actor_id: null, clause: "POLICY_GATE" }]);
+  });
+
+  it("[INV-D5] worker: yêu cầu APPROVED mà không mang phiên điều phối ⇒ `UnsealWorkerError` như cũ và đúng một hàng, vế MFA_FRESH", async () => {
+    const id = await yeuCauChuaDuyet();
+    await duyet(id);
+    const loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    expect(loi).toBeInstanceOf(UnsealWorkerError);
+    expect(await hangTuChoi(id)).toEqual([{ actor_type: "SERVICE", actor_id: null, clause: "MFA_FRESH" }]);
+  });
+
+  it("[INV-D5] worker: phiên điều phối có MFA quá cửa sổ giải mã ⇒ `UnsealWorkerError` vế MFA_FRESH giữ `MfaRequiredError` ở `cause`, và đúng một hàng", async () => {
+    const id = await yeuCauChuaDuyet();
+    await duyet(id);
+    await dieuPhoiBang(id, await phienMoi(UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS + 600));
+    const loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    expect(loi).toBeInstanceOf(UnsealWorkerError);
+    expect((loi as { clause?: unknown }).clause).toBe("MFA_FRESH");
+    expect(((loi as Error).cause as Error | undefined)?.name).toBe("MfaRequiredError");
+    expect(await hangTuChoi(id)).toEqual([{ actor_type: "SERVICE", actor_id: null, clause: "MFA_FRESH" }]);
+  });
+
+  it("[INV-D5] worker: phiên điều phối bị THU HỒI sau điều phối ⇒ `UnsealWorkerError` vế MFA_FRESH và đúng một hàng", async () => {
+    // Trigger của unseal_requests không nhận một phiên ĐÃ thu hồi làm phiên điều phối (đo ở bản nháp của §S1.72): điều phối bằng phiên còn
+    // hiệu lực, rồi thu hồi phiên ấy — đúng thứ tự của ca thật.
+    const id = await yeuCauChuaDuyet();
+    await duyet(id);
+    const phien = await phienMoi(0);
+    await dieuPhoiBang(id, phien);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [phien]);
+    const loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    expect(loi).toBeInstanceOf(UnsealWorkerError);
+    expect((loi as { clause?: unknown }).clause).toBe("MFA_FRESH");
+    expect(await hangTuChoi(id)).toEqual([{ actor_type: "SERVICE", actor_id: null, clause: "MFA_FRESH" }]);
+  });
+
+  it("[INV-D5] [S1.72 / lượt soi 67a-8] worker: lỗi KHÔNG phải `MfaRequiredError` từ phép kiểm MFA đi nguyên — không thành lần từ chối, không vào sổ", async () => {
+    // `assertFreshMfa` kiểm tham số trước câu SQL: `maxMfaAgeSeconds` 0 ⇒ `Error` thường, ném TRONG khối try của worker — đúng chỗ phép phân
+    // loại đứng. Nới phép phân loại thành mọi `Error` thì lỗi vận hành (42501, 57014) thành hàng MFA_FRESH sai nguyên nhân.
+    const id = await yeuCauChuaDuyet();
+    await duyet(id);
+    await dieuPhoiBang(id, await phienMoi(0));
+    const loi = await loiCua(
+      withTenant(unsealPool, orgA, (c) =>
+        executeUnsealRequest(c, orgA, { unsealRequestId: id, unwrapper: boMoBocTest, maxMfaAgeSeconds: 0 }, auditUnsealPool),
+      ),
+    );
+    expect(loi).toBeInstanceOf(Error);
+    expect(loi).not.toBeInstanceOf(UnsealWorkerError);
+    expect((loi as Error).message).toContain("maxAgeSeconds");
+    expect(await hangTuChoi(id)).toEqual([]);
+  });
+
+  it("[INV-D5] [S1.72 / lượt soi 67c-6] worker: lỗi MANG SQLSTATE từ câu SQL của phép kiểm MFA đi nguyên — không thành lần từ chối, không vào sổ", async () => {
+    // Lỗi của test trên không mang `code`: nới phép phân loại thành "`MfaRequiredError` hay lỗi mang `code`" thì nó vẫn xanh. `maxMfaAgeSeconds`
+    // 1e12 qua được phép kiểm tham số; mốc `clock_timestamp() - 1e12 giây` ra ngoài miền timestamp — lỗi của PostgreSQL ném TRONG khối try.
+    const id = await yeuCauChuaDuyet();
+    await duyet(id);
+    await dieuPhoiBang(id, await phienMoi(0));
+    const loi = await loiCua(
+      withTenant(unsealPool, orgA, (c) =>
+        executeUnsealRequest(c, orgA, { unsealRequestId: id, unwrapper: boMoBocTest, maxMfaAgeSeconds: 1e12 }, auditUnsealPool),
+      ),
+    );
+    expect(loi).not.toBeInstanceOf(UnsealWorkerError);
+    expect((loi as { code?: unknown } | null)?.code, String((loi as Error | null)?.message)).toBe("22008");
+    expect(await hangTuChoi(id)).toEqual([]);
+  });
+
+  it("[INV-D5] worker: ĐỐI CHỨNG DƯƠNG — một lượt mở thầu hợp lệ KHÔNG ghi `UNSEAL_EXECUTION_DENIED` nào", async () => {
+    // Không có vế này, năm khẳng định trên xanh kể cả khi worker ghi bản ghi từ chối ở MỌI lượt gọi.
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 }));
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = (await withTenant(unsealPool, orgA, (c) => chayWorker(c, requestId))) as { opened: number };
+    expect(ketQua.opened).toBe(1);
+    expect(await hangTuChoi(requestId)).toEqual([]);
+  });
+
+  it("[INV-D5] worker: lần ghi `UNSEAL_EXECUTION_DENIED` ném TP121 ⇒ `DenialAuditFailedError` giữ lần từ chối vế POLICY_GATE, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const id = randomUUID();
+    let loi: unknown;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k121_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k121 thong diep noi bo' USING ERRCODE = 'TP121'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k121_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW " +
+          "WHEN (NEW.action = 'UNSEAL_EXECUTION_DENIED') EXECUTE FUNCTION public.k121_chan_ghi_so()",
+      );
+      loi = await loiCua(withTenant(unsealPool, orgA, (c) => chayWorker(c, id)));
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k121_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k121_chan_ghi_so()");
+    }
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(UnsealWorkerError);
+    expect((x.denial as { clause?: unknown }).clause).toBe("POLICY_GATE");
+    expect((x.cause as { code?: unknown }).code).toBe("TP121");
+    expect(await hangTuChoi(id)).toEqual([]);
+  });
 });

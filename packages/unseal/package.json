@@ -11,7 +11,9 @@
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/outbox": "workspace:*",
-    "@trustprocure/tenancy": "workspace:*",
     "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@trustprocure/tenancy": "workspace:*"
   }
 }

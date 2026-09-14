@@ -46,7 +46,10 @@ function moTaMotTang(loi: Error): string {
  * phát `'release'` trước khi gỡ client).
  *
  * Nghe đúng MỘT mã. Các lỗi khác đi vào `release()` — `KetNoiNhiemError` hay lỗi của `SET ROLE` ở lần lấy client, `SESSION_SCOPE_LEAK`,
- * lỗi của ROLLBACK, lỗi của bộ dọn — đều đi cùng một lỗi đã được NÉM cho người gọi; bộ nghe không ghi chúng để một sự cố không thành
+ * lỗi của ROLLBACK, lỗi của bộ dọn — ~~đều đi cùng một lỗi đã được NÉM cho người gọi~~ [S1.72 / lượt soi ngang 66b-1] đi cùng một lỗi đã được
+ * NÉM cho người gọi, TRỪ khi lần lấy client tới SAU trần `maxConnectWaitMs` của `withTenant`: kết nối nhiễm bị bộ bọc vai huỷ bằng
+ * `release(KetNoiNhiemError)` trong khi lời hứa của lần lấy đã bị bỏ, nên không ai nhận lỗi ấy — đo (§S1.72): `withTenant` ném
+ * CONNECT_WAIT_EXCEEDED, sự kiện `release` mang `KetNoiNhiemError`, 0 dòng log (khoản 129); bộ nghe không ghi chúng để một sự cố không thành
  * hai dòng. Nói đúng mức (lượt soi 61a-7): lỗi được ném không nhất thiết được ghi — lỗi của ROLLBACK đi kèm một lỗi gốc mà bảng giai
  * đoạn handler trả 401, 409, 422 hay 403 không phải 42501 thì không dòng nào nhắc tới nó.
  * RANH GIỚI, nói ra: khi chính phép đọc lại của `withTenant` ném (kết nối vừa đứt; search path có `pg_temp` đứng đầu dưới vai không có

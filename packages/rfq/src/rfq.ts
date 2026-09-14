@@ -590,6 +590,8 @@ export async function extendRfqDeadline(
   //
   // Đây là phép kiểm ở tầng ỨNG DỤNG cho một điều CSDL cố ý không nói: CSDL cấm LÙI, nó không
   // định nghĩa "gia hạn" là gì. Định nghĩa ấy là của hàm này.
+  // [S1.72 / lượt soi ngang 66c-5] Phép kiểm này đọc hàng KHÔNG khoá: hai lần gia hạn ĐỒNG THỜI tới cùng một hạn cùng qua, lần sau chờ khoá
+  // hàng ở câu UPDATE rồi ghi `RFQ_DEADLINE_EXTENDED` cho một lần gia hạn không đổi gì (đọc, lượt soi 65c-8) — khoản 127.
   if (truoc.deadline_at !== null && input.newDeadlineAt.getTime() <= truoc.deadline_at.getTime()) {
     throw new RfqError(
       "gia hạn phải đẩy hạn nộp RA XA hơn hạn hiện tại; hạn bằng nhau không phải một lần gia hạn",

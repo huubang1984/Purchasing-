@@ -13,6 +13,7 @@
 // =============================================================================================
 
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -37,6 +38,7 @@ const GOC = fileURLToPath(new URL("../../../", import.meta.url));
 let db: TestDatabase;
 let apiPool: pg.Pool;
 let unsealPool: pg.Pool;
+let auditUnsealPool: pg.Pool;
 let orgA: string;
 
 /** Bộ mở bọc giả — không lượt nào của file này chạy tới đường mở thầu thật. */
@@ -54,12 +56,14 @@ beforeAll(async () => {
   orgA = orgs.rows[0]?.id ?? "";
   apiPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
+  auditUnsealPool = db.poolAs("app_unseal");
   expect(orgA).not.toBe("");
 }, 180000);
 
 afterAll(async () => {
   await apiPool?.end().catch(() => undefined);
   await unsealPool?.end().catch(() => undefined);
+  await auditUnsealPool?.end().catch(() => undefined);
   await db?.stop();
 });
 
@@ -71,6 +75,7 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       unsealPool,
       {
         unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
         alertSink: {
           name: "adapter-cua-test",
           deliver: (a) => {
@@ -123,6 +128,7 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       unsealPool,
       {
         unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
         alertSink: {
           name: "adapter-hong",
           deliver: () => Promise.reject(new Error("SMTP tu choi")),
@@ -205,6 +211,7 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       Object.keys(
         buildUnsealWorkerHandlers({
           unwrapper: boMoBocGia,
+          auditPool: auditUnsealPool,
           alertSink: { name: "x", deliver: () => Promise.resolve() },
           onJobFailure: () => undefined,
         }),
@@ -226,10 +233,60 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
     const coHandler = Object.keys(
       buildUnsealWorkerHandlers({
         unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
         alertSink: { name: "x", deliver: () => Promise.resolve() },
         onJobFailure: () => undefined,
       }),
     );
     for (const k of coHandler) expect(Object.hasOwn(KIND_KHONG_NHAN, k)).toBe(false);
+  });
+});
+
+// ===============================================================================================
+// [S1.72 / khoản 121] ĐƯỜNG CHẠY THẬT CỦA LẦN TỪ CHỐI LÚC GIẢI MÃ: MỖI LƯỢT THỬ MỘT HÀNG SỔ
+//
+// Đo trên master 298cd4e, trước bản vá (§S1.72): job UNSEAL_RFQ trên một yêu cầu bị từ chối — ba lượt thử, ba báo cáo `onJobFailure`, job
+// FAILED, 0 hàng sổ. Runner không phân biệt lần từ chối với lỗi hạ tầng (khối `HANDLER_ERROR` của `runner.ts`), nên một lần từ chối xác
+// định vẫn đốt đủ `maxAttempts` lượt — và từ khoản 121 mỗi lượt để lại một `UNSEAL_EXECUTION_DENIED`. Test ghim hệ quả ấy.
+// ===============================================================================================
+describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối để lại dấu vết ở mỗi lượt thử", () => {
+  it("[INV-D5] job UNSEAL_RFQ trên yêu cầu không tìm thấy ⇒ mỗi lượt thử một `UNSEAL_EXECUTION_DENIED` và một báo cáo `onJobFailure`; hết lượt thì job FAILED", async () => {
+    const id = randomUUID();
+    const hong: JobFailureReport[] = [];
+    const runner = createUnsealWorkerRunner(
+      unsealPool,
+      {
+        unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
+        alertSink: { name: "khong-dung-toi", deliver: () => Promise.resolve() },
+        onJobFailure: (r) => hong.push(r),
+      },
+      { maxAttempts: 2 },
+    );
+    const jobId = await withTenant(apiPool, orgA, (c) =>
+      enqueueJob(c, orgA, { kind: UNSEAL_JOB_KIND, payload: { unsealRequestId: id }, dedupeKey: `unseal:${id}` }),
+    );
+    const dem = async (): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_EXECUTION_DENIED' AND resource_id = $2",
+        [orgA, id],
+      );
+      return Number(rows[0]?.n ?? "-1");
+    };
+
+    await runner.runOnceForOrg(orgA);
+    expect(hong.length).toBe(1);
+    expect(await dem(), "lượt thử đầu bị từ chối mà không vào sổ").toBe(1);
+
+    // Lượt thử lại chờ `retryDelaySeconds` (30 s mặc định): kéo `run_after` về hiện tại thay vì chờ.
+    await db.pool.query("UPDATE outbox_jobs SET run_after = now() WHERE id = $1", [jobId]);
+    await runner.runOnceForOrg(orgA);
+    expect(hong.length).toBe(2);
+    expect(await dem(), "mỗi lượt thử là một lần từ chối — và một hàng sổ").toBe(2);
+    const { rows } = await db.pool.query<{ status: string; attempts: number }>(
+      "SELECT status, attempts FROM outbox_jobs WHERE id = $1",
+      [jobId],
+    );
+    expect(rows[0]).toEqual({ status: "FAILED", attempts: 2 });
   });
 });

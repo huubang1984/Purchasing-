@@ -27,7 +27,7 @@
 
 import type pg from "pg";
 import { assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 
 /**
  * Hai trạng thái mà một bảng so sánh được phép tồn tại.
@@ -239,9 +239,21 @@ export async function buildComparisonTable(
 
   const trangThai = await docTrangThai(client, rfqId);
   if (!(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(trangThai)) {
-    throw new ComparisonDeniedError(
-      trangThai,
-      `Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở ${trangThai} (A4).`,
+    // [S1.72 / khoản 121, lượt soi 62a-9] Lần từ chối A4 vào sổ ở giao dịch độc lập rồi mới ném. Đo trên master 298cd4e (§S1.72): trước bản
+    // vá, CLOSED và OPEN đều ném mà 0 hàng sổ, và `GET /rfqs/:rfqId/comparison` là 422 — nên một người giữ `bid.view` dò "RFQ đã mở thầu
+    // chưa" không để lại gì. Payload mang trạng thái RFQ: nó đã nằm trong thông điệp trả cho chính người gọi, và không phải giá.
+    return throwAuditedDenial(
+      auditPool,
+      orgId,
+      {
+        actorType: "USER",
+        actorId: nguoiXem.id,
+        action: "COMPARISON_DENIED",
+        resourceType: "RFQ",
+        resourceId: rfqId,
+        payload: { rfqStatus: trangThai },
+      },
+      new ComparisonDeniedError(trangThai, `Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở ${trangThai} (A4).`),
     );
   }
 
