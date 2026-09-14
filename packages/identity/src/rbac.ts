@@ -275,7 +275,8 @@ const CAU_KHOA_TU_VAN =
  * của tổ chức KHÁC gãy sau 15 ms. Trong khi đó 100 lần ghi sổ xếp hàng trên cùng pool xả hết trong 177 ms.
  *
  * Vì sao 5 giây: gấp khoảng 28 lần thời gian xả đo được của 100 lần ghi xếp hàng, nên pool đầy ~~tạm thời~~ DƯỚI 5 s không còn làm mất bản
- * ghi — lần ghi đã có kết nối vẫn chờ khoá tư vấn tới `lock_timeout`/`statement_timeout` (lượt soi 63a-6); và NGẮN
+ * ghi — lần ghi đã có kết nối vẫn chờ khoá tư vấn tới ~~`lock_timeout`/`statement_timeout`~~ [S1.72 / lượt soi ngang 66c-1] trần 2 s của 050
+ * (lượt soi 63a-6); và NGẮN
  * hơn `connectionTimeoutMillis` 20 s của `createPool`, nên thứ người trực đọc là lỗi có tên của trần — `TenantError` CONNECT_WAIT_EXCEEDED —
  * chứ không phải `Error` không tên của pg-pool (đo: 20006 ms, "timeout exceeded when trying to connect"). Ca cấu hình sai mà phép chụp
  * sinh ra để bắt — `auditPool` trùng pool đang giữ giao dịch người gọi — vẫn gãy ồn ào: sau 5 s thay vì 17 ms, và không treo trên pool
@@ -497,6 +498,8 @@ export async function requirePermission(
  *
  * Người gọi hôm nay: `tuChoi` của cổng mở thầu (packages/unseal/src/gate.ts), nhánh D2 của `approveUnseal` (packages/unseal/src/requests.ts)
  * và của `approveMfaReset` (./mfa-reset.ts). Trước khoản 119 cả ba tự gọi `withTenant(auditPool, …)` và không bọc lỗi của lần ghi.
+ * [S1.72 / khoản 121] Thêm hai người gọi: lần từ chối A4 của `buildComparisonTable` (packages/unseal/src/comparison.ts), và lần từ chối lúc
+ * giải mã của worker (apps/unseal-worker/src/index.ts) — worker ghi dưới vai `app_unseal` của nó.
  *
  * Làm theo thứ tự:
  *   ⑴ `action` và `resourceType` phải là MÃ ĐỊNH DANH viết hoa — cùng hình dạng F7 của `requirePermission`, vì cả hai đi vào sổ bất biến
@@ -518,7 +521,7 @@ export async function requirePermission(
  * hỏng — giao dịch aborted, câu kiểm ném 25P02 (đo bằng đột biến chế độ đo, §S1.68). Người gọi đã ghi sổ trong cùng giao dịch trước khi
  * gọi hàm này thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: ~~dưới `createPool` tới `lock_timeout` 15 s rồi gãy — vẫn ồn ào; dưới~~
  * ~~pool không đặt `lock_timeout` thì treo không hạn~~ [S1.71 / khoản 123] tối đa 2 s ở mọi pool rồi gãy 55P03 (050). Các đường sản xuất không ghi sổ trước lần từ chối của chúng (đọc: `dispatchUnseal`,
- * `approveUnseal`, `approveMfaReset`); `apps/unseal-worker/src/kich-ban-41.int.test.ts` bước 9 từng có hình dạng ấy nhưng dừng ở
+ * `approveUnseal`, `approveMfaReset`; [S1.72 / lượt soi 67a-9] `buildComparisonTable`, và `executeUnsealRequest` trong giao dịch job của runner); `apps/unseal-worker/src/kich-ban-41.int.test.ts` bước 9 từng có hình dạng ấy nhưng dừng ở
  * `requirePermission` (lượt soi 62a-3, 62a-14).
  */
 export async function throwAuditedDenial(

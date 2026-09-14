@@ -83,6 +83,8 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   //     lần GHI hợp lệ ⇒ khoảng 14 s ở cả hai bản — vách ngăn cũ chưa bao giờ che đường ghi. Chủ dự án chọn giữ cỡ này ngày 2026-09-13 để
   //     lần từ chối chéo tổ chức không mất bản ghi — khoản 123; ~~đường gửi link mời giữ khoá ấy suốt lần gửi — khoản 124~~ [S1.70] khoản 124 đóng: link mời gửi sau commit. Hạn mức theo
   //     người gọi cho lần từ chối — khoản 122.
+  //     [S1.72 / lượt soi ngang 66b-8, 66c-1] Số đo ⑵ là của trước S1.71: từ S1.71 lần ghi sổ chờ khoá ghi sổ của tổ chức tối đa 2 s (050),
+  //     `/me` của tổ chức khác 627–1 007 ms ở cả ba kịch bản, và khoản 123 đã đóng (§S1.71).
   const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
   // [S1.67 / khoản 118] Kết nối bị `withTenant` huỷ vì trạng thái phiên còn sót sau giao dịch: lỗi ấy không được ném cho ai, nên đây là
   // chỗ duy nhất nó thành một dòng log — xem `ghiLogKetNoiHuy`.

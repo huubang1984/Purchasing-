@@ -206,7 +206,14 @@ export async function assertUnsealAllowed(
   );
   const yc = rows[0];
   if (yc === undefined) {
-    throw new UnsealDeniedError(
+    // [S1.72 / khoản 121, lượt soi 62a-9] Nhánh này từng ném TRƯỚC mọi lần ghi. Đo trên master 298cd4e (§S1.72): 0 hàng sổ qua
+    // `assertUnsealAllowed`, qua `dispatchUnseal` và qua `POST /unseal/:id/dispatch` (422) — với UUID ngẫu nhiên lẫn id có thật của tổ chức
+    // khác, mà RLS giấu. Nay đi qua `tuChoi` như ba vế còn lại: `resourceId` là id NGƯỜI GỌI gửi, và lần dò vào sổ của tổ chức người gọi.
+    return tuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.unsealRequestId,
       "POLICY_GATE",
       "không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn",
     );

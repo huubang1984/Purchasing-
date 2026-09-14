@@ -413,7 +413,8 @@ const CAU_GHI_THANH_CONG = `
  *     người GIỮ khoá nằm "idle in transaction" trong lúc chờ cổng, nên GUC này chặn trên nó bất
  *     kể composition root nào;
  *   * `lock_timeout = 15_000` và `statement_timeout = 15_000` (cùng tệp) — người CHỜ chết bằng
- *     55P03 hoặc 57014 chứ không treo (kho CHƯA đo cái nào bắn trước);
+ *     55P03 hoặc 57014 chứ không treo (~~kho CHƯA đo cái nào bắn trước~~ [lượt soi 63b-4: đo trên khoá tư vấn — cùng 15 s thì 57014 bắn
+ *     trước; S1.72 / lượt soi ngang 66c-9: từ S1.71 lần chờ khoá GHI SỔ gãy 55P03 ở trần 2 s của 050]);
  *   * `MAX_TOTP_WINDOW = 10` (`totp.ts`) ⇒ ≤ 21 lần HMAC-SHA1 trong tiến trình, chặn TRƯỚC cổng.
  * Cận CHẶT HƠN nhưng CÓ ĐIỀU KIỆN: `apps/api` bọc services bằng `boiTranKms(5000 ms)`. Nó phụ
  * thuộc composition root nên KHÔNG được kể là tính chất cấu trúc — mốc chết cho nó là khoản nợ

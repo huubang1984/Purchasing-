@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -629,5 +630,107 @@ describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trướ
       ),
     );
     expect(rows[0]?.n, "nếu dòng này ĐỎ thì A6 đã lên được tầng quyền — cập nhật §4").toBe("2");
+  });
+});
+
+// ===============================================================================================
+// [S1.72 / khoản 121] LẦN TỪ CHỐI A4 CỦA BẢNG SO SÁNH VÀO SỔ
+//
+// Đo trên master 298cd4e, trước bản vá (§S1.72): `buildComparisonTable` qua cổng quyền rồi ném `ComparisonDeniedError` ở CLOSED và OPEN mà
+// không ghi hàng sổ nào; qua `GET /rfqs/:rfqId/comparison` là 422 mang trạng thái RFQ, cũng 0 hàng. Một người giữ `bid.view` gọi liên tục
+// để dò "RFQ đã mở thầu chưa" sinh CON SỐ KHÔNG bản ghi — đúng hình dạng khoản nợ 32 đã đóng cho cổng mở thầu.
+// ===============================================================================================
+describe("[INV-D5] [S1.72 / khoản 121] bảng so sánh từ chối vì A4 thì ghi sổ — ở giao dịch độc lập, và lần cho qua không ghi", () => {
+  let auditPool: pg.Pool;
+
+  beforeAll(() => {
+    auditPool = db.poolAs("app_api");
+  });
+
+  afterAll(async () => {
+    await auditPool?.end().catch(() => undefined);
+  });
+
+  async function demTuChoiSoSanh(rfqId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'COMPARISON_DENIED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ — cùng khuôn `voiGhiSoBiChan` của unseal.int.test.ts. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k121_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k121 thong diep noi bo' USING ERRCODE = 'TP121'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k121_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k121_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k121_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k121_chan_ghi_so()");
+    }
+  }
+
+  it("[INV-D5] năm trạng thái bị từ chối ⇒ `ComparisonDeniedError` như cũ và mỗi lần đúng một `COMPARISON_DENIED` mang trạng thái RFQ và người xem; hai trạng thái được phép không thêm hàng nào", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const biTuChoi = MOI_TRANG_THAI.filter((t) => !(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(t));
+    for (const [i, trangThai] of biTuChoi.entries()) {
+      await epTrangThai(rfqId, trangThai);
+      const loi = await loiCua(
+        withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool)),
+      );
+      expect(loi, `bảng so sánh dựng được khi RFQ đang ở ${trangThai}`).toBeInstanceOf(ComparisonDeniedError);
+      expect(await demTuChoiSoSanh(rfqId), `lần từ chối ở ${trangThai} không vào sổ`).toBe(i + 1);
+    }
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'COMPARISON_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    // [S1.72 / lượt soi 67a-8] Loại tài nguyên và HÌNH DẠNG trọn của payload.
+    expect(rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload])).toEqual(biTuChoi.map((t) => ["USER", uYc, "RFQ", { rfqStatus: t }]));
+
+    for (const trangThai of COMPARISON_ALLOWED_STATUSES) {
+      await epTrangThai(rfqId, trangThai);
+      await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool));
+    }
+    expect(await demTuChoiSoSanh(rfqId), "lần cho qua KHÔNG được ghi bản ghi từ chối").toBe(biTuChoi.length);
+  });
+
+  it("[INV-D5] bản ghi `COMPARISON_DENIED` sống qua rollback của người gọi", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const CHAN = new Error("chan-lai-de-do-rollback");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool).catch(() => undefined);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+    expect(await demTuChoiSoSanh(rfqId), "bản ghi từ chối biến mất cùng rollback — nó phải ở một giao dịch ĐỘC LẬP").toBe(1);
+  });
+
+  it("[INV-D5] lần ghi `COMPARISON_DENIED` ném TP121 ⇒ `DenialAuditFailedError` giữ `ComparisonDeniedError` mang trạng thái RFQ, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const loi = await voiGhiSoBiChan("COMPARISON_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(ComparisonDeniedError);
+    expect((x.denial as ComparisonDeniedError).rfqStatus).toBe("OPEN");
+    expect((x.cause as { code?: unknown }).code).toBe("TP121");
+    expect(await demTuChoiSoSanh(rfqId)).toBe(0);
   });
 });

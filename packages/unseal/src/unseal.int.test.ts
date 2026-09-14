@@ -10,7 +10,7 @@
 // giữ `packages/unseal` không có một cạnh phụ thuộc nào nó không cần lúc chạy.
 // =============================================================================================
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -623,8 +623,9 @@ describe("dispatchUnseal", () => {
 // sinh ra CON SỐ KHÔNG bản ghi. Và một lần THỬ vi phạm D2 còn tệ hơn: trigger chặn đúng, nhưng
 // lời từ chối của nó ROLLBACK cả bản ghi `UNSEAL_APPROVED` — nên không còn dấu vết nào.
 // ===============================================================================================
-// [S1.68 / lượt soi 62a-9] "Mọi" rộng hơn thứ đo ở đây: yêu cầu không tìm thấy trong tổ chức ⇒ `UnsealDeniedError` POLICY_GATE ném TRƯỚC
-// mọi lần ghi và không để lại dấu vết (đọc, `gate.ts`) — khoản nợ 121.
+// ~~[S1.68 / lượt soi 62a-9] "Mọi" rộng hơn thứ đo ở đây: yêu cầu không tìm thấy trong tổ chức ⇒ `UnsealDeniedError` POLICY_GATE ném TRƯỚC~~
+// ~~mọi lần ghi và không để lại dấu vết (đọc, `gate.ts`) — khoản nợ 121.~~ [S1.72 / khoản 121] Nhánh ấy nay đi qua `tuChoi`: đo trước bản vá,
+// 0 hàng sổ qua `assertUnsealAllowed`, `dispatchUnseal` và `POST /unseal/:id/dispatch`; test [S1.72] đầu tiên dưới đây ghim đúng một hàng.
 describe("[INV-D5] mọi lần từ chối của cổng mở thầu đều để lại dấu vết", () => {
   async function demTuChoi(requestId: string, action: string): Promise<number> {
     const { rows } = await db.pool.query<{ n: string }>(
@@ -711,6 +712,49 @@ describe("[INV-D5] mọi lần từ chối của cổng mở thầu đều để
       ),
     ).rejects.toBeInstanceOf(UnsealDeniedError);
     expect(await demTuChoi(yc.id, "UNSEAL_DENIED")).toBe(1);
+  });
+
+  it("[INV-D5] [S1.72 / khoản 121] yêu cầu KHÔNG tìm thấy trong tổ chức ⇒ `UnsealDeniedError` POLICY_GATE và đúng một `UNSEAL_DENIED` mang vế POLICY_GATE, người gọi và id đã gửi — qua `assertUnsealAllowed` lẫn `dispatchUnseal`", async () => {
+    // Đo trước bản vá (§S1.72): nhánh này ném TRƯỚC mọi lần ghi — 0 hàng sổ qua cả hai hàm và qua `POST /unseal/:id/dispatch` (422). Một id
+    // có thật của tổ chức khác cũng rơi vào nhánh này (RLS giấu nó) và cũng 0 hàng ở cả hai sổ.
+    const id = randomUUID();
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      assertUnsealAllowed(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, auditPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi).toBeInstanceOf(UnsealDeniedError);
+    expect((loi as UnsealDeniedError).clause).toBe("POLICY_GATE");
+    const { rows } = await db.pool.query<{ actor_id: string | null; resource_type: string; payload: Record<string, unknown> }>(
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_DENIED' AND resource_id = $2",
+      [orgA, id],
+    );
+    // [S1.72 / lượt soi 67c-6] Loại tài nguyên và HÌNH DẠNG trọn của payload — cùng mốc chết mà lượt soi 67a-8 đặt cho worker và bảng so sánh.
+    expect(rows.map((r) => [r.actor_id, r.resource_type, r.payload])).toEqual([[uYc, "UNSEAL_REQUEST", { clause: "POLICY_GATE" }]]);
+
+    const idQuaDieuPhoi = randomUUID();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        dispatchUnseal(c, orgA, { unsealRequestId: idQuaDieuPhoi, actorSessionId: sYc }, auditPool),
+      ),
+    ).rejects.toBeInstanceOf(UnsealDeniedError);
+    expect(await demTuChoi(idQuaDieuPhoi, "UNSEAL_DENIED")).toBe(1);
+  });
+
+  it("[INV-D5] [S1.72 / lượt soi 67c-6] vế 2: lỗi MANG SQLSTATE từ câu SQL của phép kiểm MFA đi nguyên — không thành `UnsealDeniedError`, không vào sổ", async () => {
+    // Phép phân loại của vế 2 chưa có ca "lỗi khác": nới nó thành mọi lỗi thì một lỗi vận hành (42501, 57014) thành hàng MFA_FRESH sai nguyên
+    // nhân. `maxMfaAgeSeconds` 1e12 qua được phép kiểm tham số của `assertFreshMfa`; mốc `clock_timestamp() - 1e12 giây` ra ngoài miền timestamp.
+    const { requestId } = await yeuCauDaDuyet();
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      assertUnsealAllowed(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc, maxMfaAgeSeconds: 1e12 }, auditPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi).not.toBeInstanceOf(UnsealDeniedError);
+    expect((loi as { code?: unknown } | null)?.code, String((loi as Error | null)?.message)).toBe("22008");
+    expect(await demTuChoi(requestId, "UNSEAL_DENIED")).toBe(0);
   });
 
   it("[INV-D2] một lần THỬ tự phê duyệt để lại `UNSEAL_APPROVAL_DENIED`", async () => {
@@ -835,6 +879,19 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
       for (const c of giu) c.release();
       await poolNho.end();
     }
+  });
+
+  it("[INV-D5] [S1.72 / khoản 121] yêu cầu KHÔNG tìm thấy, lần ghi `UNSEAL_DENIED` ném TP119 ⇒ DenialAuditFailedError: `UnsealDeniedError` POLICY_GATE nằm trong `denial`, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const id = randomUUID();
+    const loi = await voiGhiSoBiChan("UNSEAL_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => assertUnsealAllowed(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(UnsealDeniedError);
+    expect((x.denial as UnsealDeniedError).clause).toBe("POLICY_GATE");
+    expect((x.cause as { code?: unknown }).code).toBe("TP119");
+    expect(await demTuChoi(id, "UNSEAL_DENIED")).toBe(0);
   });
 
   it("[INV-D5] `auditPool` chạy dưới siêu người dùng ⇒ cổng từ chối ghi — cùng lớp canh [F9] của requirePermission — DenialAuditFailedError nêu SUPERUSER trong `cause`; không hàng sổ nào", async () => {

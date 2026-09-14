@@ -31,7 +31,9 @@ export const TU_CHOI_DOI_VAI =
 
 /**
  * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
- * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, bốn GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm.
+ * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, bốn GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm —
+ * [S1.72 / lượt soi ngang 66b-7] quan hệ, KIỂU và HÀM trong `pg_temp`; [lượt soi 67a-5] cả toán tử, lớp và họ toán tử, collation, conversion
+ * và bốn loại đối tượng tìm kiếm văn bản.
  */
 export const TU_CHOI_DOI_TRANG_THAI =
   "migrate() từ chối ghi migration: tệp kết thúc với trạng thái phiên khác lúc mở vòng migration đánh số";
@@ -633,6 +635,13 @@ export async function migrate(
      * `migrate()` không `DISCARD TEMP` giữa các tệp.
      */
     const docTrangThaiPhien = async (): Promise<{ readonly vai: string | undefined; readonly phien: Readonly<Record<string, string | null>> }> => {
+      // [S1.72 / lượt soi ngang 66b-7] Trục đối tượng tạm (cột `doi_tuong_tam` của câu dưới) đếm cả KIỂU và HÀM trong `pg_temp`, không chỉ quan
+      // hệ. Đo trước bản vá (§S1.72): `CREATE DOMAIN pg_temp.x` qua phép so chỉ-`pg_class` và được ghi; tệp sau phân giải tên trần sang kiểu tạm,
+      // và hàm hay cột thật phụ thuộc nó biến mất khi phiên deploy đóng. ~~Ranh giới: toán tử, collation, cấu hình tìm kiếm văn bản tạm vẫn không đếm.~~
+      // [S1.72 / lượt soi 67a-5] Đếm cả toán tử, lớp và họ toán tử, collation, conversion, cấu hình, từ điển, bộ phân tích và mẫu tìm kiếm văn bản
+      // — mỗi loại một ca ở `migrate.int.test.ts`. Ranh giới: thống kê mở rộng tạm không đếm. [S1.72 / tự bắt ⑼] Chú thích này đứng NGOÀI chuỗi
+      // nối: bộ đọc SQL của [INV-H21] (`tests/architecture/qt3-doc-sql.ts`) chỉ ghép hai hằng chuỗi cách nhau bởi `+` và khoảng trắng, nên một
+      // chú thích chen giữa cắt câu thành mảnh cụt — PREPARE của `qt3-cu-phap.int.test.ts` báo 42601 ở mảnh đầu.
       const { rows } = await lockClient.query<{
         vai: string;
         vai_sao_chep: string;
@@ -652,7 +661,18 @@ export async function migrate(
           "NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') AS phien_khach, " +
           "NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') AS loi_moi, " +
           "NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau, " +
-          "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema())::pg_catalog.text AS doi_tuong_tam",
+          "((SELECT pg_catalog.count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_type t WHERE t.typnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc p WHERE p.pronamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_operator o WHERE o.oprnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opclass oc WHERE oc.opcnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opfamily ofa WHERE ofa.opfnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_collation co WHERE co.collnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_conversion cv WHERE cv.connamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_config tc WHERE tc.cfgnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_dict td WHERE td.dictnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_parser tp WHERE tp.prsnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_template tt WHERE tt.tmplnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()))::pg_catalog.text AS doi_tuong_tam",
       );
       const h = rows[0];
       return {
@@ -757,11 +777,13 @@ export async function migrate(
           throw new Error(
             `${TU_CHOI_DOI_TRANG_THAI} — ${file} kết thúc với ${lechPhien.join(", ")} khác lúc mở vòng. ` +
               "Trạng thái phạm vi phiên đi theo sang tệp sau và các lượt hardening sau vòng (replica: không trigger ENABLE thường, không " +
-              "khoá ngoại; GUC tenant đặt sẵn: chỉ chạm hàng của một tổ chức; bảng tạm: che tên bảng thật). Phép so chạy TRONG giao dịch " +
+              "khoá ngoại; GUC tenant đặt sẵn: chỉ chạm hàng của một tổ chức; bảng tạm: che tên bảng thật; kiểu, hàm, toán tử hay đối tượng tạm " +
+              "khác: đối tượng bền của tệp sau phụ thuộc nó biến mất khi phiên deploy đóng). Phép so chạy TRONG giao dịch " +
               "của tệp, nên nó bắt cả trạng thái phạm vi giao dịch (SET LOCAL, set_config(…, true)) — thứ chết lúc COMMIT — theo chiều chặt. " +
               "Tệp không tự COMMIT thì cả tệp đã ROLLBACK; tệp tự COMMIT thì phần trước lần COMMIT ấy — và phần sau nó, nếu tệp không mở " +
               "lại BEGIN — ĐÃ được commit, kiểm dữ liệu trước khi chạy lại. Tệp không được ghi checksum, không tệp sau nào chạy; kết nối bị " +
-              "huỷ. Trả lại trạng thái ở cuối tệp (RESET, SET … TO DEFAULT, DROP bảng tạm), hoặc tách việc cần trạng thái ấy khỏi vòng migration.",
+              "huỷ. Trả lại trạng thái ở cuối tệp (RESET, SET … TO DEFAULT, DROP mọi đối tượng tạm đã tạo), hoặc tách việc cần trạng thái ấy khỏi vòng " +
+              "migration.",
           );
         }
         await lockClient.query(

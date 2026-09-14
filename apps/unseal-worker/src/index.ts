@@ -43,7 +43,7 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { assertFreshMfa } from "@trustprocure/identity";
+import { MfaRequiredError, assertFreshMfa, throwAuditedDenial } from "@trustprocure/identity";
 import type { KeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import {
   KEY_AGREEMENT_ALGORITHMS,
@@ -56,6 +56,27 @@ export class UnsealWorkerError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
     this.name = "UnsealWorkerError";
+  }
+}
+
+/** [S1.72 / khoản 121] Vế của D1 mà lần kiểm lại lúc giải mã đã chặn. */
+export type UnsealExecutionClause = "POLICY_GATE" | "MFA_FRESH";
+
+/**
+ * [S1.72 / khoản 121] Worker TỪ CHỐI một yêu cầu lúc giải mã — lớp con của `UnsealWorkerError`, nên chỗ bắt lớp cha vẫn bắt được.
+ *
+ * Tách khỏi `UnsealWorkerError` vì hai thứ ấy khác nhau về sổ: một lần TỪ CHỐI (không tìm thấy, chưa APPROVED, phiên điều phối không còn MFA
+ * hợp lệ) vào sổ trước khi ném; một lần HỎNG vận hành (hai vật liệu khoá, trạng thái đổi giữa chừng) thì không. Cổng ở
+ * `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đọc theo tên `…DeniedError`, nên lớp này nằm trong tầm của nó.
+ */
+export class UnsealExecutionDeniedError extends UnsealWorkerError {
+  constructor(
+    readonly clause: UnsealExecutionClause,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "UnsealExecutionDeniedError";
   }
 }
 
@@ -340,15 +361,55 @@ function thanhJson(banRo: Uint8Array): string {
 }
 
 /**
+ * [S1.72 / khoản 121] Ghi sổ một lần từ chối lúc giải mã rồi ném nó — qua `throwAuditedDenial`, dưới vai của worker.
+ *
+ * Đo trên master 298cd4e, trước bản vá (§S1.72): năm nhánh từ chối của `executeUnsealRequest` — không tìm thấy, chưa APPROVED, thiếu phiên
+ * điều phối, MFA quá cửa sổ, phiên bị thu hồi — đều 0 hàng sổ; qua runner outbox, ba lượt thử, ba báo cáo `onJobFailure`, 0 hàng. Lần ghi ở
+ * giao dịch ĐỘC LẬP trên `auditPool`, vì giao dịch job rollback khi handler ném. `auditPool` là pool của CHÍNH vai `app_unseal`: 003/004 cấp
+ * cho vai ấy quyền ghi sổ, và lớp canh [F9] của `throwAuditedDenial` nhận nó vì vai ấy không SUPERUSER, không BYPASSRLS. Lần ghi hỏng ⇒
+ * `DenialAuditFailedError` giữ lần từ chối, và job vẫn hỏng như trước.
+ *
+ * Hệ quả nói ra: runner không phân biệt lần từ chối với lỗi hạ tầng (khối `HANDLER_ERROR` của `runner.ts`), nên một lần từ chối xác định đốt
+ * đủ `maxAttempts` lượt và MỖI lượt để lại một hàng (ghim ở `composition.int.test.ts`). Payload chỉ mang vế — không `reason` của yêu cầu,
+ * không id phiên.
+ */
+function tuChoiLucGiaiMa(
+  auditPool: pg.Pool,
+  orgId: string,
+  unsealRequestId: string,
+  clause: UnsealExecutionClause,
+  message: string,
+  cause?: unknown,
+): Promise<never> {
+  return throwAuditedDenial(
+    auditPool,
+    orgId,
+    {
+      actorType: "SERVICE",
+      actorId: null,
+      action: "UNSEAL_EXECUTION_DENIED",
+      resourceType: "UNSEAL_REQUEST",
+      resourceId: unsealRequestId,
+      payload: { clause },
+    },
+    new UnsealExecutionDeniedError(clause, message, cause === undefined ? undefined : { cause }),
+  );
+}
+
+/**
  * [D1 vế 2+3+4, C3, D2, G4] Chạy một yêu cầu mở thầu ĐÃ ĐƯỢC PHÊ DUYỆT.
  *
  * Người gọi phải mở transaction và phải nối bằng role `app_unseal`. Hàm này KHÔNG tự `BEGIN`:
  * bản rõ, mốc `EXECUTED` và trạng thái `UNSEALED` phải cùng sống hoặc cùng chết.
+ *
+ * [S1.72 / khoản 121] `auditPool` ghi lần TỪ CHỐI ở giao dịch độc lập — xem `tuChoiLucGiaiMa`. Nó phải còn một kết nối rảnh trong khi giao
+ * dịch job giữ một kết nối (đọc, chưa đo trên pool một kết nối).
  */
 export async function executeUnsealRequest(
   client: pg.PoolClient,
   orgId: string,
   input: ExecuteUnsealInput,
+  auditPool: pg.Pool,
 ): Promise<UnsealOutcome> {
   await assertTenantBound(client, orgId, "executeUnsealRequest");
   if (!UUID_PATTERN.test(input.unsealRequestId)) {
@@ -362,12 +423,16 @@ export async function executeUnsealRequest(
   );
   const r = yc[0];
   if (r === undefined) {
-    throw new UnsealWorkerError("không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn");
+    return tuChoiLucGiaiMa(auditPool, orgId, input.unsealRequestId, "POLICY_GATE", "không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn");
   }
   if (r.status !== "APPROVED") {
     // Lớp này KHÔNG phải lớp có thẩm quyền — trigger `rfq_unsealed_bids_kiem_yeu_cau` (019) mới
     // là lớp ấy. Nó ở đây để thông báo nói được VÌ SAO, và để không tốn một lần mở bọc khoá.
-    throw new UnsealWorkerError(
+    return tuChoiLucGiaiMa(
+      auditPool,
+      orgId,
+      input.unsealRequestId,
+      "POLICY_GATE",
       `yêu cầu mở thầu phải ở trạng thái APPROVED để chạy; đang ở ${r.status}`,
     );
   }
@@ -375,16 +440,35 @@ export async function executeUnsealRequest(
   // [D1 vế 2, đo LẠI ở thời điểm GIẢI MÃ] Xem khối [HIGH-3] ở đầu file. Một phiên bị thu hồi
   // ngay sau khi điều phối KHÔNG còn dẫn tới một lượt mở thầu chạy trọn.
   if (r.dispatched_by_session_id === null || r.dispatched_by === null) {
-    throw new UnsealWorkerError(
+    return tuChoiLucGiaiMa(
+      auditPool,
+      orgId,
+      input.unsealRequestId,
+      "MFA_FRESH",
       "yêu cầu mở thầu không mang phiên đã điều phối — không kiểm lại được MFA (D1 vế 2)",
     );
   }
-  await assertFreshMfa(client, {
-    sessionId: r.dispatched_by_session_id,
-    userId: r.dispatched_by,
-    orgId,
-    maxAgeSeconds: input.maxMfaAgeSeconds ?? UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS,
-  });
+  try {
+    await assertFreshMfa(client, {
+      sessionId: r.dispatched_by_session_id,
+      userId: r.dispatched_by,
+      orgId,
+      maxAgeSeconds: input.maxMfaAgeSeconds ?? UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS,
+    });
+  } catch (loi) {
+    // [S1.72 / khoản 121] Cùng khuôn vế 2 của cổng (`gate.ts`): `MfaRequiredError` thành một lần từ chối có vế và vào sổ; lỗi khác đi nguyên.
+    if (loi instanceof MfaRequiredError) {
+      return tuChoiLucGiaiMa(
+        auditPool,
+        orgId,
+        input.unsealRequestId,
+        "MFA_FRESH",
+        "phiên đã điều phối không còn MFA hợp lệ ở thời điểm giải mã (D1 vế 2)",
+        loi,
+      );
+    }
+    throw loi;
+  }
 
   // [REVIEW AN NINH S1.6 — LOW-3] Lấy MỌI khoá còn hiệu lực, và ném nếu một thuật toán có HAI
   // hàng. Bản trước lấy `khoa[0]` không `ORDER BY`: hai hàng còn hiệu lực làm mọi phong bì rơi
