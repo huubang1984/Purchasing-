@@ -1140,7 +1140,7 @@ S1.68:
    `requirePermission`: kiểm `action` và `resourceType` là mã định danh viết hoa (hình dạng F7), kiểm `auditPool` không bỏ qua RLS (lớp
    canh [F9]), ghi ở giao dịch độc lập, rồi ném CHÍNH `denial`. Hàm không có đường trả về, nên nó ra cửa công khai cùng tiêu chí với
    `requirePermission` (danh sách trắng ở `tests/architecture/barrel-exports.test.ts`). `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`
-   giữ để `withTenant` trên `auditPool` không mọc lại ngoài `rbac.ts` — một phép đọc văn bản theo tên, không bắt bí danh.
+   giữ để `withTenant` trên `auditPool` không mọc lại ngoài `rbac.ts` — một phép đọc văn bản theo tên, không bắt bí danh **[S1.72 / lượt soi 67a-3, 67a-4, 67d-7: cổng nay đọc cây cú pháp — bí danh import được nhận, bí danh qua biến thì không; tiểu mục [S1.72 / khoản 121]]**.
 2. Lần ghi hỏng ở bất kỳ bước nào ⇒ `DenialAuditFailedError`: `denial` giữ lần từ chối, `cause` giữ lỗi của lần ghi, `action` là mã sự
    kiện kiểm toán. Thông điệp không nối thông điệp của lỗi gốc — khác `PermissionAuditFailedError`, vì lỗi gốc ở đây có thể là thông điệp
    do một trigger viết. Thứ lạ không phải `Error` bị ném ⇒ `cause` nêu KIỂU, không nội suy giá trị (khuôn MỤC E của `requirePermission`).
@@ -1167,7 +1167,7 @@ import `@trustprocure/tenancy` ở mã sản xuất.
 `throwAuditedDenial` thì lần ghi chờ khoá tư vấn mà chính giao dịch ấy giữ: dưới `createPool` tới `lock_timeout` 15 s rồi gãy, dưới pool
 không đặt `lock_timeout` thì treo không hạn **[S1.71: tối đa 2 s ở mọi pool rồi gãy 55P03 — tiểu mục [S1.71 / khoản 123]]**; các đường sản xuất không làm thế (đọc). Lớp canh bỏ-qua-RLS và ca pool đầy tạm thời đo ở cổng
 mở thầu; hai chỗ D2 dùng chung hàm, chứng bằng test bọc lỗi của từng chỗ. ~~Kiểm pool còn chỗ tức thì của `requirePermission` — khoản 120~~ [S1.69: đóng — tiểu mục [S1.69 / khoản 120]];
-ba lần từ chối không ghi sổ gì — bảng so sánh, cổng khi không tìm thấy yêu cầu, worker lúc giải mã — khoản 121; lần ghi `MFA_LOCKED` trên
+ba lần từ chối không ghi sổ gì — bảng so sánh, cổng khi không tìm thấy yêu cầu, worker lúc giải mã — khoản 121 **[S1.72: đóng — tiểu mục [S1.72 / khoản 121]]**; lần ghi `MFA_LOCKED` trên
 giao dịch người gọi — khoản 69. Chi tiết ở `evidence/security-reviews.md` §S1.68.
 
 ### [S1.69 / khoản 120] Lần ghi sổ từ chối CHỜ kết nối có trần — pool đầy dưới 5 s không xoá bản ghi, và `auditPool` của `apps/api` không hẹp hơn pool nghiệp vụ
@@ -1211,7 +1211,7 @@ một tổ chức bị giữ lâu thì các lần từ chối của tổ chức 
 Quyết định 3; lần ghi hợp lệ của tổ chức ấy vốn đã giữ kết nối như vậy, trước và sau bản vá (lượt soi 63b-6, đo) — khoản 123 **[S1.71: đóng — ADR-016 tiểu mục [S1.71 / khoản 123]]**; một đường sản
 xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**.
 
-**Phần KHÔNG đóng.** Trần là của lần lấy kết nối, không của lần ghi: lần ghi đã có kết nối vẫn chờ khoá tư vấn của tổ chức tới `statement_timeout` 15 s (đo: 57014).
+**Phần KHÔNG đóng.** Trần là của lần lấy kết nối, không của lần ghi: lần ghi đã có kết nối vẫn chờ khoá tư vấn của tổ chức tới `statement_timeout` 15 s (đo: 57014) **[S1.71: tối đa 2 s rồi gãy 55P03 — tiểu mục [S1.71 / khoản 123]; lượt soi ngang 66c-1]**.
 Khi `auditPool` không có chỗ, lần từ chối giữ giao dịch và kết nối nghiệp vụ của người gọi tới 5 s. Lập luận cỡ đọc từ mã hôm nay và đo một kịch
 bản trên tiến trình thật; một đường mới dùng `auditPool` ngoài giao dịch nghiệp vụ làm nó sai. Hạn mức theo người gọi cho lần từ chối —
 khoản 122. Vách ngăn kết nối nghiệp vụ khi khoá tư vấn ghi sổ của một tổ chức bị giữ lâu — khoản 123 **[S1.71: đóng — ADR-016 tiểu mục [S1.71 / khoản 123]]**; gửi link mời trong giao dịch đã ghi sổ, một đường sản xuất giữ khoá ấy lâu — khoản 124 **[S1.70: đóng — ADR-020 tiểu mục [S1.70 / khoản 124]]**. Lỗi của lần lấy tới SAU trần bị nuốt không dấu vết (lượt soi 63a-4). Chi tiết ở `evidence/security-reviews.md` §S1.69.
@@ -1262,7 +1262,7 @@ gia hạn 400 lời mời, trên bản cuối ⇒ lần ghi đồng thời 28–
 ghi sổ (mệnh đề SET thay giá trị trong lúc hàm chạy). `statement_timeout` không đổi. Hệ quả cụ thể của đánh đổi đã chọn mà câu hỏi trình ngày 2026-09-14 không nêu riêng (lượt soi 65a-6, 65b-1, đọc): một job outbox mà lần ghi sổ
 chờ quá 2 s đốt một lượt thử — hết `maxAttempts` (mặc định 5) thì FAILED, không tự quay lại; job cảnh báo break-glass gửi cảnh báo trước lần
 ghi sổ nên lượt thử lại gửi thêm một lần —; phần bù thu hồi lời mời của khoản 124 gãy ở 2 s thay vì chờ tới 15 s, nên ca lời mời kẹt của
-khoản 125 dễ xảy ra hơn. Test tự chữa (D1a/D1b) của `db/migrations.int.test.ts`
+khoản 125 dễ xảy ra hơn **[S1.72: chủ dự án chấp nhận các hệ quả này ngày 2026-09-14; hệ quả ở `/auth/totp` chờ xác nhận lại — đoạn [S1.72] cuối tiểu mục]**. Test tự chữa (D1a/D1b) của `db/migrations.int.test.ts`
 đòi `proconfig` mới; ba danh sách migration của tệp ấy thêm 050; test IM7 dựng pool `lock_timeout` 3 s và đòi nạn nhân gãy ở trần 2 s của hàm; hai
 test giữ khoá ghi sổ ở `rbac.int.test.ts` và `composition.int.test.ts` nhả khoá hay đặt cận dưới trần mới.
 
@@ -1273,6 +1273,70 @@ yên; một giao dịch còn phát câu hay một khoá tư vấn mức phiên t
 thu hồi vật liệu khoá, runner outbox đánh DONE (lượt rà chỉ đọc, chưa đo; đường yêu cầu đặt lại MFA đọc ra không chờ được — lượt soi 65c-4) —
 khoản 126. Bảo đảm "lời mời COMMIT trước khi lần gia hạn COMMIT thì có job" dựa vào khoá ghi sổ của tổ chức, như bản trước, không vào một
 khoá hàng — tuần tự hoá tường minh chưa làm (lượt soi 65c-1). Hai lần gia hạn đồng thời tới cùng hạn lách phép kiểm MED-1 — có từ trước, khoản 127. Hạn mức theo người gọi cho lần từ chối — khoản 122. Chi tiết ở `evidence/security-reviews.md` §S1.71.
+
+**[S1.72] Quyết định về các hệ quả chưa nêu riêng.** Ngày 2026-09-14 chủ dự án chọn phương án "Chấp nhận, ghi ADR" cho một câu hỏi nêu
+bốn mục; trích nguyên văn: "Trần 2 s của S1.71 có ba hệ quả mà câu hỏi hôm trước chưa nêu riêng, lượt soi 66c tìm thêm một: ⑻ job outbox chờ
+ghi sổ quá 2 s thì đốt lượt thử, hết 5 lượt thành FAILED; job mở thầu FAILED thì không điều phối lại được; cảnh báo break-glass bị gửi lặp.
+⑼ phần bù thu hồi lời mời gãy ở 2 s, nên lời mời kẹt (khoản 125) dễ xảy ra hơn. ⑽ mở RFQ sai trạng thái thì bọc đủ hai cặp khoá (hai lần
+gọi KMS) rồi mới gãy. ⑾ /auth/totp: khi khoá bị giữ quá 2 s, lần ghi khoá MFA gãy nên ngưỡng khoá E3 không chạm; ai giữ được khoá quá 2 s
+thì đã ở IM7 (khoản 128) và vốn tự đặt lại được bộ đếm." Phương án ấy ghi chấp nhận cả bốn vào ADR này và mở một khoản cho đường phục hồi job
+mở thầu FAILED — khoản 130. Mức chắc của từng mục, tách khỏi lời câu hỏi: ⑻ và ⑽ đọc; ⑼ đo ở `evidence/security-reviews.md` §S1.72 (lượt
+soi ngang 66a-1): khoá ghi sổ của tổ chức giữ 6 s ⇒ dưới trần, `revokeInvitation` gãy 55P03 sau 2 008–2 026 ms và lời mời còn `SENT`; hàm
+bỏ trần, như trước S1.71, chờ 6 047 ms rồi thu hồi; ⑾ — mục lượt soi ngang 66c-2 thêm, không có trong ranh giới §S1.71 — đọc: lần ghi
+`MFA_LOCKED` ở ngưỡng gãy và rollback cả bộ đếm lẫn khoá, còn lần đoán đúng không cần khoá ghi sổ (`packages/identity/src/login.ts`), nên
+trong lúc ấy ngưỡng E3 không chặn lần đoán. **[S1.72 / lượt soi 67b-1]** Tiền đề của ⑾ rộng hơn phép đo: người giữ khoá quá 2 s ĐÃ BIẾT
+chỉ có dưới IM7, còn người giữ ngoài IM7 chưa loại trừ — ba đường chờ khoá hàng sau lần ghi sổ đầu của khoản 126 chưa đo, và phép đo 66a-1
+dựng người giữ bằng superuser. Việc chấp nhận ⑾ chờ chủ dự án xác nhận lại trên tiền đề đã sửa; con trỏ bền ở hàng 126. Lời "phiên đặt
+`lock_timeout` nhỏ hơn 2 s chờ tới 2 s ở lần ghi sổ" nay đo (lượt soi ngang 66a-3, test ở `db/tran-cho-khoa-ghi-so.int.test.ts`): giao dịch
+`SET LOCAL lock_timeout = '500ms'` ⇒ 55P03 sau 2 008–2 009 ms dưới trần, 511 ms khi hàm bỏ trần.
+
+### [S1.72 / khoản 121] Ba lần từ chối từng không ghi sổ nay vào sổ — cổng mở thầu khi không tìm thấy yêu cầu, bảng so sánh vì A4, worker lúc giải mã
+
+**Bối cảnh.** D5 đòi lần từ chối vì thiếu quyền cũng vào sổ; khoản 32 cho mọi `UnsealDeniedError` của bốn vế cổng mở thầu ghi `UNSEAL_DENIED`,
+khoản 119 đưa mọi lần ghi sổ từ chối ngoài `requirePermission` qua `throwAuditedDenial`. Lượt soi 62a-9 đọc ra ba đường vẫn từ chối mà không ghi
+gì — khoản 121. Đo trên master `298cd4e` (`evidence/security-reviews.md` §S1.72), gọi thẳng gói và qua HTTP thật, đếm hàng sổ của tổ chức người
+gọi quanh mỗi lần từ chối — ở các ca gọi thẳng gói `unseal` đếm cả sổ của một tổ chức khác: cổng không tìm thấy yêu cầu — UUID ngẫu nhiên, id có
+thật của tổ chức khác, qua `dispatchUnseal`, qua `POST /unseal/:id/dispatch` (422) — 0 hàng; bảng so sánh ở CLOSED và OPEN —
+`ComparisonDeniedError`, qua `GET /rfqs/:rfqId/comparison` 422 — 0 hàng; worker — không tìm thấy, chưa APPROVED, thiếu phiên điều phối
+(`UnsealWorkerError`), MFA quá cửa sổ, phiên bị thu hồi (`MfaRequiredError`) — 0 hàng; qua runner outbox ba lượt thử, ba báo cáo `onJobFailure`,
+job FAILED, 0 hàng. Mốc so: lần từ chối đã ghi sổ của cổng (chưa đủ phê duyệt) trung vị 10,8 ms, lần từ chối không tìm thấy chưa ghi sổ 5,5 ms.
+
+**Quyết định.** Chủ dự án chọn ghi sổ cả ba đường ngày 2026-09-14, trên câu hỏi mang giá đo được (bác "cổng và bảng so sánh, worker miễn ở D5"
+và "chỉ cổng"). Bản cài:
+1. Cổng: nhánh không tìm thấy đi qua `tuChoi` — `UNSEAL_DENIED`, vế `POLICY_GATE`, `resourceId` là id người gọi gửi; lớp lỗi và thông điệp
+   không đổi.
+2. Bảng so sánh: lần từ chối A4 đi qua `throwAuditedDenial` — `COMPARISON_DENIED`, `resourceType` `RFQ`, payload `{ rfqStatus }` (trạng thái
+   đã nằm trong thông điệp trả cho người gọi); lớp lỗi và thân 422 không đổi.
+3. Worker: lớp `UnsealExecutionDeniedError` — con của `UnsealWorkerError`, mang vế `POLICY_GATE` hay `MFA_FRESH`; bốn nhánh — không tìm thấy,
+   chưa APPROVED, thiếu phiên điều phối, `MfaRequiredError` của `assertFreshMfa` (giữ ở `cause`) — ghi `UNSEAL_EXECUTION_DENIED` (SERVICE,
+   payload chỉ mang vế) qua `throwAuditedDenial` trên `auditPool` của CHÍNH vai `app_unseal`, tham số mới bắt buộc của `executeUnsealRequest` và
+   của `UnsealWorkerDeps`. Lỗi khác của phép kiểm MFA và hỏng vận hành (hai vật liệu khoá, trạng thái đổi giữa chừng, UUID sai hình dạng) đi
+   nguyên, không ghi.
+4. Cổng một đường ghi sổ từ chối thêm vế: mọi lời tạo `…DeniedError` trong mã sản xuất nằm trong đối số của `throwAuditedDenial(`, trừ hai chỗ
+   mà lần từ chối đã vào sổ qua `requirePermission` — danh sách kèm lý do. [S1.72 / lượt soi 67a-3, 67a-4] Cả hai phép đọc của cổng đi trên cây
+   cú pháp của TypeScript: bộ bỏ chú thích và chuỗi viết tay của bản đầu không biết biểu thức chính quy, nên một dấu nháy trong `/"/u` xoá mã
+   thật phía sau khỏi phép đọc; lời hứa của `throwAuditedDenial` phải được `return` hay `await`; hai chỗ miễn ghim theo tệp, hàm bao và lớp.
+   [S1.72 / lượt soi 67c-1] Hàm gọi qua thuộc tính mang đúng tên gốc cũng tính.
+5. `apps/unseal-worker` khai `@trustprocure/identity` ở `dependencies`: mã chạy import gói ấy từ S1.6 mà khai ở `devDependencies`, và t0 không
+   thấy vì quy tắc depcruise chỉ xét cạnh `npm-dev`, không thấy gói workspace. Cổng phạm vi sản xuất thêm vế import lúc chạy. [S1.72 / lượt soi
+   67a-1, 67a-2] Ngoặc chỉ mang kiểu nội tuyến (`import { type A } from …`) vẫn tính — đo: dưới `node --experimental-transform-types` câu import
+   còn lại và gói vẫn được nạp —, và rổ miễn của vế ấy không chứa gói dưới `apps/` — [lượt soi 67c-5, 67c-7] hay `tools/`; phép đọc import cũng
+   đọc cây cú pháp. `packages/unseal` chuyển `@trustprocure/tenancy`, chỉ test
+   dùng, sang `devDependencies` (lượt soi 62a-6 mang sang).
+
+**Hệ quả.** Đo sau bản vá, cùng bản nháp: mỗi lần từ chối trên ba đường để lại đúng một hàng ở sổ của tổ chức người gọi; ở các ca gọi thẳng gói
+`unseal`, sổ của một tổ chức khác 0 hàng (các ca worker và HTTP không đếm sổ tổ chức khác); thân HTTP 422 không đổi. Giá, trung vị một lượt
+mười lăm lần mỗi ô: cổng không tìm thấy 5,5 ⇒ 9,8 ms, bảng so sánh A4 6,9 ⇒ 10,2 ms, worker chưa APPROVED 2,7 ⇒ 8,3 ms ở mức hàm; qua HTTP bảng so
+sánh 15,2 ⇒ 15,9 ms, điều phối không tìm thấy 16,8 ⇒ 27,9 ms. Lần ghi sổ hỏng ⇒ `DenialAuditFailedError`, qua HTTP 500 thay 422; khoá ghi sổ của
+tổ chức bị giữ quá 2 s ⇒ lần từ chối gãy ở 2 s (tiểu mục [S1.71]). Worker: runner đốt lượt thử như trước, và mỗi lượt để lại một hàng — ba
+lượt, ba hàng (đo; test ghim hai lượt). Một người giữ `bid.view` gọi bảng so sánh liên tục trước mở thầu sinh một hàng mỗi lần — hạn mức theo
+người gọi, khoản 122.
+
+**Phần KHÔNG đóng.** Lần từ chối không mang lớp `…DeniedError` trên cùng bề mặt — "không tìm thấy" ở bảng so sánh, số báo giá, lần huỷ; lần
+điều phối thứ hai; phê duyệt yêu cầu không tồn tại ném 23503 trần — vẫn 0 hàng (đo) — khoản 133. Job mở thầu FAILED không điều phối lại được —
+khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc
+`throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào
+tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
 
 ### Điều ADR này KHÔNG đóng
 
@@ -1312,6 +1376,17 @@ khoá hàng — tuần tự hoá tường minh chưa làm (lượt soi 65c-1). H
    để lại gì. Gia hạn RFQ (`packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts`): mỗi lần xếp job, giao dịch gia hạn chưa giữ
    khoá ghi sổ của tổ chức (trước: `[1, 1, 1]`), và lời mời COMMIT trong lúc gia hạn chờ khoá vẫn có job (bản đầu của S1.71: 2 job
    thay cho 3). Đột biến cô lập (§S1.71): đổi hay gỡ trần ở 050 ⇒ chỉ test đồng bộ tĩnh đỏ, (D1b) chữa; ở (D1b) ⇒ `migrate()` đầu tiên gãy ở lượt phán xét; bọc xen kẽ ghi sổ, giữ RowExclusiveLock trên vật liệu khoá trước lần bọc, gỡ vế canh của `requirePermission`, gia hạn ghi sổ trước khi xếp job, vòng đọc lại không xếp job nào, 050 còn chỗ trống, phép dò khoá hỏng ⇒ mỗi đột biến đỏ đúng test của nó.
+7. **[S1.72 / khoản 121] Ba lần từ chối từng không ghi sổ:** cổng không tìm thấy yêu cầu ⇒ `UnsealDeniedError` POLICY_GATE và đúng một
+   `UNSEAL_DENIED` mang vế, người gọi, id đã gửi, loại tài nguyên `UNSEAL_REQUEST` và payload chỉ `{ clause }` — qua `assertUnsealAllowed` lẫn
+   `dispatchUnseal`; bảng so sánh ở năm trạng thái bị từ chối ⇒ mỗi lần một `COMPARISON_DENIED` với loại tài nguyên `RFQ` và payload đúng
+   `{ rfqStatus }`, bản ghi sống qua rollback; worker ở năm ca của bốn nhánh ⇒ mỗi ca một `UNSEAL_EXECUTION_DENIED` đúng vế, loại tài nguyên
+   `UNSEAL_REQUEST`, payload chỉ `{ clause }`; lần mở thầu hợp lệ không ghi; lỗi không phải `MfaRequiredError` từ phép kiểm MFA — không mang
+   hay mang SQLSTATE — đi nguyên, không ghi, ở worker lẫn vế 2 của cổng; job trên yêu cầu bị từ chối ⇒ mỗi lượt thử một hàng; trigger chặn lần
+   ghi ⇒ `DenialAuditFailedError` giữ lần từ chối, 0 hàng, ở cả ba đường. Cổng lời tạo `…DeniedError` và cổng lời gọi trên `auditPool` đọc
+   cây cú pháp, văn bản mẫu có biểu thức chính quy mang dấu nháy, `!.`, `#auditPool`, ép kiểu, `.call`, `.apply`, bí danh import, hàm gọi qua
+   thuộc tính, pool qua `??` hay ba ngôi, lớp bọc ở tầng ngoài, lời hứa không `return`/`await` và lời tạo trong hàm mũi tên; cổng import lúc
+   chạy đọc cây cú pháp, tính ngoặc chỉ mang kiểu nội tuyến, rổ miễn không chứa app hay tool, và mỗi app và tool có mã sản xuất phải có tệp
+   được đọc. Đột biến cô lập (§S1.72): cổng, bảng so sánh hay một nhánh worker ném trần, ghi sai vế hay sai loại tài nguyên — cả ở hàng của cổng —, payload rỗng hay thừa trường, ghi sổ trong giao dịch người gọi hay của job, ghi sổ cả khi cho qua, mọi lỗi hay lỗi mang `code` thành lần từ chối ở worker hay ở vế 2 của cổng, composition không truyền `auditPool`, `@trustprocure/identity` rời `dependencies`, phép đọc lời tạo `…DeniedError`, phép đọc lời gọi trên `auditPool` hay phép đọc import mù một dạng viết, rổ miễn nhận app hay tool ⇒ mỗi đột biến đỏ đúng tập ghi trước.
 
 ---
 
