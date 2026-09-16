@@ -1155,3 +1155,96 @@ describe("[INV-D2] [035] version chính sách không chọn được, không ghi
     await expect(tao(2147483647, nguong)).rejects.toMatchObject({ code: "23514" });
   });
 });
+
+// =============================================================================================
+// [S1.73 / khoản 126 ⑵] HUỶ RFQ — LẦN HUỶ THỨ HAI CHỜ KHOÁ HÀNG **TRƯỚC** LẦN GHI SỔ ĐẦU CỦA NÓ
+//
+// `cancelRfq` chạy `UPDATE rfq_packages` (lấy khoá hàng), RỒI ghi sổ `RFQ_CANCELLED` (lấy khoá tư vấn ghi sổ của tổ chức, giữ tới COMMIT),
+// RỒI `revokeRfqKeyMaterial` cập nhật `rfq_key_material` và ghi sổ từng hàng. Hàng 126 ⑵ hỏi: có đường sản xuất nào GIỮ hàng
+// `rfq_key_material` đủ lâu để lần huỷ đứng chờ TRONG KHI đang giữ khoá ghi sổ không?
+//
+// Chỉ hai đường ghi `rfq_key_material`: `issueRfqKeyPair` (INSERT, ở `openRfq` — hàng mới, không đụng hàng cũ) và `revokeRfqKeyMaterial`
+// (chỉ `cancelRfq` gọi). Test này đo vế còn lại: lần huỷ THỨ HAI của cùng RFQ dừng ở `UPDATE rfq_packages`, tức TRƯỚC lần ghi sổ đầu của
+// nó — nên nó không bao giờ là kẻ vừa giữ khoá ghi sổ vừa chờ `rfq_key_material`. Hai vế cộng lại: ⑵ không dựng được người giữ từ đường
+// sản xuất (§S1.73).
+//
+// [tự bắt ⑵] Bản đầu chỉ đếm khoá tư vấn mà lần huỷ thứ hai ĐANG GIỮ lúc bị chặn. Đột biến M6 — dời lần ghi sổ lên TRƯỚC câu UPDATE —
+// sống qua bản ấy: lúc ấy lần huỷ thứ hai CHỜ khoá tư vấn chứ không giữ nó, nên phép đếm vẫn ra 0. Test nay đọc LOẠI khoá nó đang chờ.
+//
+// Không nhãn INV: đo vách ngăn khả dụng bên trong một tổ chức.
+// =============================================================================================
+describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng trước lần ghi sổ đầu của nó", () => {
+  async function demKhoaGhiSoK126(pid: number): Promise<number> {
+    const { rows } = await db.pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND granted AND pid = $2 " +
+        "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+        "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+      [orgA, pid],
+    );
+    return rows[0]?.n ?? -1;
+  }
+
+  /** Loại khoá mà backend `pid` đang CHỜ, sắp xếp và nối bằng dấu phẩy. */
+  async function loaiKhoaDangCho(pid: number): Promise<string> {
+    const { rows } = await db.pool.query<{ locktype: string }>(
+      "SELECT DISTINCT locktype FROM pg_catalog.pg_locks WHERE pid = $1 AND NOT granted ORDER BY locktype",
+      [pid],
+    );
+    return rows.map((r) => r.locktype).join(",");
+  }
+
+  async function choToiKhiBiChanK126(layPid: () => number, hanMs: number): Promise<number> {
+    const batDau = Date.now();
+    for (;;) {
+      const pid = layPid();
+      if (pid > 0) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT cardinality(pg_catalog.pg_blocking_pids($1))::int AS n",
+          [pid],
+        );
+        if ((rows[0]?.n ?? 0) > 0) return Date.now() - batDau;
+      }
+      if (Date.now() - batDau > hanMs) return -1;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  }
+
+  it("lần huỷ thứ hai bị chặn ở KHOÁ HÀNG của `UPDATE rfq_packages`, chưa giữ và cũng chưa chờ khoá tư vấn ghi sổ nào", async () => {
+    const rfqId = await rfqNhap();
+    let thaA: () => void = () => undefined;
+    const choA = new Promise<void>((r) => {
+      thaA = r;
+    });
+    let aDaHuy = false;
+    let pidB = -1;
+
+    const huyA = withTenant(apiPool, orgA, async (c) => {
+      await cancelRfq(c, orgA, { rfqId, reason: "huy lan mot", actorSessionId: s1 }, apiPool);
+      aDaHuy = true;
+      await choA;
+    });
+    for (let i = 0; i < 400 && !aDaHuy; i += 1) await new Promise((r) => setTimeout(r, 10));
+    expect(aDaHuy, "tiền đề: lần huỷ thứ nhất đã chạy xong và đang giữ giao dịch mở").toBe(true);
+
+    const huyB = withTenant(apiPool, orgA, async (c) => {
+      pidB = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      return cancelRfq(c, orgA, { rfqId, reason: "huy lan hai", actorSessionId: s1 }, apiPool);
+    }).then(
+      () => "xong",
+      (e: unknown) => (e as Error).message.slice(0, 40),
+    );
+
+    const msB = await choToiKhiBiChanK126(() => pidB, 8_000);
+    const dangCho = await loaiKhoaDangCho(pidB);
+    const khoaB = await demKhoaGhiSoK126(pidB);
+    thaA();
+    await huyA;
+    const ketCucB = await huyB;
+
+    const ke = `lần huỷ thứ hai bị chặn sau ${msB} ms, đang chờ khoá loại "${dangCho}", giữ ${khoaB} khoá ghi sổ, kết cục "${ketCucB}"`;
+    expect(msB, `tiền đề: lần huỷ thứ hai phải bị chặn — ${ke}`).toBeGreaterThanOrEqual(0);
+    expect(dangCho, `phải chờ khoá HÀNG của câu UPDATE — ${ke}`).toContain("transactionid");
+    expect(dangCho, `không được chờ khoá tư vấn ghi sổ: thế thì nó đã ghi sổ TRƯỚC khi khoá hàng — ${ke}`).not.toContain("advisory");
+    expect(khoaB, ke).toBe(0);
+  }, 60_000);
+});

@@ -10,7 +10,10 @@ import { startPostgres, withMigratedDatabase } from "./postgres.js";
 // Không tự gọi .end() trên pool trả về từ poolAs() trong các test này: pool đó đã được
 // `db`/`withMigratedDatabase` theo dõi và tự đóng khi kết thúc — gọi .end() thêm lần nữa
 // ném lỗi "Called end on pool more than once" (tự kiểm chứng khi viết test này).
-describe("poolAs — pool chạy dưới role khác", () => {
+// [S1.73] HẠN 120 s CHO CẢ NHÓM: mỗi test dưới đây dựng một cụm Postgres riêng và phần lớn chạy `migrate()` thật — chạy
+// riêng mất 2,0–5,8 s, nhưng ở lượt evidence song song của S1.73 test "5 câu lệnh tuần tự" (chạy riêng 5 814 ms) chạm
+// hạn mặc định 30 s. 120 s là hạn mà hai test nặng ở cuối tệp này vẫn khai.
+describe("poolAs — pool chạy dưới role khác", { timeout: 120_000 }, () => {
   it("từ chối vai trò không nằm trong danh sách cho phép, không chạm DB", async () => {
     const db = await startPostgres();
     try {

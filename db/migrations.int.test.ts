@@ -174,7 +174,14 @@ const CAU_TRUY_VAN_TROI =
 // Gắn [INV-F1] hoặc [INV-B4] ở đây sẽ là bằng chứng giả — đúng loại sự cố mà Task 7 mắc
 // phải khi gắn [INV-G2] cho một test kiểm chứng thứ khác. Test thật cho F1/B4 thuộc về các
 // migration tạo bảng nghiệp vụ đầu tiên.
-describe("migration của dự án", () => {
+// [S1.73] HẠN 180 s CHO CẢ TỆP. 110 trong 114 test ở đây gọi `migrate()` THẬT — chạy riêng mỗi test mất 4–6 s; bốn cái
+// còn lại chỉ so văn bản, không chạm CSDL. Trong số ấy 31 test vẫn đứng ở hạn mặc định 30 s, và ở lượt evidence song song
+// của S1.73 bốn test chạm hạn ấy: [fix I3] (chạy riêng 5 498 ms), [fix I5] "xoá cấu hình IN DATABASE" (4 269 ms), [fix I2]
+// (5 541 ms), [fix S2] "PUBLIC không còn EXECUTE" (5 412 ms) — TẢI, không phải hồi quy: cả bốn chạy riêng đều xanh, và không
+// đường mã nào của chúng đi qua bản vá khoản 126. Hệ số giãn đo được ở lượt ấy là 5,2–9,5 lần (cả tệp chạy riêng 972 s,
+// trong lượt song song 1 198 s). 180 s là hạn mà các test nặng trong chính tệp này vẫn khai. Test nào khai hạn riêng (120 s,
+// 300 s) GIỮ hạn của nó: tuỳ chọn của test đè tuỳ chọn của suite (`Object.assign({}, suiteOptions, options)` trong @vitest/runner).
+describe("migration của dự án", { timeout: 180_000 }, () => {
   it("áp dụng sạch trên cơ sở dữ liệu trống", async () => {
     await withMigratedDatabase(async (db) => {
       const { rows } = await db.pool.query<{ rolname: string }>(

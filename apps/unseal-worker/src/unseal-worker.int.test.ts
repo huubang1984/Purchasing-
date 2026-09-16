@@ -20,7 +20,7 @@ import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
-import { buildComparisonTable } from "@trustprocure/unseal";
+import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
 import { executeUnsealRequest, UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS, UnsealWorkerError } from "./index.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -1117,4 +1117,278 @@ describe("[INV-D5] [S1.72 / khoản 121] worker từ chối lúc giải mã thì
     expect((x.cause as { code?: unknown }).code).toBe("TP121");
     expect(await hangTuChoi(id)).toEqual([]);
   });
+});
+
+// =============================================================================================
+// [S1.73 / khoản 126] WORKER MỞ THẦU CHỜ KHOÁ HÀNG CỦA RFQ SAU LẦN GHI SỔ ĐẦU — ĐO TRÊN POSTGRES THẬT
+//
+// `executeUnsealRequest` ghi sổ `RFQ_KEY_MATERIAL_UNWRAPPED` — lần ghi sổ ĐẦU của giao dịch, tức lúc lấy khoá tư vấn ghi sổ của tổ chức
+// (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT — RỒI mới phát `UPDATE public.unseal_requests` (kt1) và `UPDATE public.rfq_packages
+// SET status = 'UNSEALED'` (kt2). kt2 chờ khoá hàng RFQ. Từ S1.71, mọi lần ghi sổ KHÁC của cùng tổ chức chờ khoá tư vấn ấy tối đa 2 s rồi
+// gãy 55P03 (050) — nên mỗi mili-giây worker chờ khoá hàng SAU lần ghi sổ đầu là một mili-giây cả tổ chức không ghi sổ được.
+//
+// NGƯỜI GIỮ dựng từ ĐƯỜNG SẢN XUẤT dưới vai `app_api`, không superuser, không cần IM7 (khoản 128). Chỉ một hình dạng dựng được: một giao
+// dịch LẤY ĐƯỢC khoá hàng rồi CHỜ TIẾP. Giao dịch HỎNG không dựng được — PostgreSQL thả khoá ngay lúc abort, trước cả khi tiến trình gửi
+// ROLLBACK (đo ở test thứ hai dưới đây).
+//
+// Hình dạng dựng được: `requestUnseal` của người thứ hai rơi vào cửa sổ GIỮA kt1 và kt2. Trigger 019 `unseal_requests_kiem_rfq_da_dong`
+// lấy `FOR SHARE` trên hàng RFQ (RFQ đã CLOSED nên phép kiểm qua), rồi câu INSERT vướng chỉ mục riêng phần `unseal_requests_mot_yeu_cau
+// _dang_mo`: hàng cũ vừa được kt1 đổi sang EXECUTED nhưng CHƯA commit, nên PostgreSQL bắt nó CHỜ giao dịch worker — trong lúc nó đang giữ
+// `FOR SHARE`. Worker chờ khoá hàng ấy ở kt2. Vòng khép kín.
+//
+// [tự bắt ⑴] Bản đo đầu đặt các phép thăm dò BÊN TRONG hàm gọi của `withTenant`, nên chính chúng giữ giao dịch worker mở quá lâu và con
+// số đọc ra là của phép đo chứ không của đường sản xuất. Bản này chạy worker như một lời hứa và thăm dò SONG SONG bên ngoài.
+//
+// Không nhãn INV: đây là vách ngăn khả dụng bên trong một tổ chức, cùng loại với `db/tran-cho-khoa-ghi-so.int.test.ts`.
+// =============================================================================================
+
+const GHI_SO_K126 =
+  "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
+
+/** Số khoá tư vấn ghi sổ của `orgA` mà backend `pid` ĐANG GIỮ — đọc từ một kết nối khác. */
+async function demKhoaGhiSo(pid: number): Promise<number> {
+  const { rows } = await db.pool.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND granted AND pid = $2 " +
+      "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+      "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+    [orgA, pid],
+  );
+  return rows[0]?.n ?? -1;
+}
+
+/** Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ, -1 nếu quá hạn hay `dungSom()` báo dừng. */
+async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: () => boolean): Promise<number> {
+  const batDau = Date.now();
+  for (;;) {
+    const pid = layPid();
+    if (pid > 0) {
+      const { rows } = await db.pool.query<{ n: number }>(
+        "SELECT cardinality(pg_catalog.pg_blocking_pids($1))::int AS n",
+        [pid],
+      );
+      if ((rows[0]?.n ?? 0) > 0) return Date.now() - batDau;
+    }
+    if (dungSom?.() === true || Date.now() - batDau > hanMs) return -1;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+/** Một lần ghi sổ của `orgA` trên một kết nối `app_api` riêng: mã lỗi PostgreSQL (null nếu xong) và số ms. */
+async function ghiSoDongThoiCuaToChuc(): Promise<{ ma: string | null; ms: number }> {
+  const c = await apiPool.connect();
+  const batDau = Date.now();
+  try {
+    await c.query("BEGIN");
+    await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+    const loi = await c.query(GHI_SO_K126, [orgA, "K126_DONG_THOI"]).then(
+      () => null,
+      (e: unknown) => e as { code?: string },
+    );
+    return { ma: loi === null ? null : (loi.code ?? "?"), ms: Date.now() - batDau };
+  } finally {
+    // ROLLBACK trong finally: một lần ném ở giữa mà trả kết nối đang mở giao dịch về pool làm mọi test sau đỏ lan
+    // (`KetNoiNhiemError`, evidence lượt đầu của vòng — tự bắt ⑷).
+    await c.query("ROLLBACK").catch(() => undefined);
+    c.release();
+  }
+}
+
+/**
+ * Bọc client của worker để chạy `truoc` NGAY TRƯỚC câu SQL đầu tiên chứa `moc`, rồi mới phát câu ấy. Chỉ `query` bị bọc — `executeUnseal
+ * Request` không dùng gì khác của client. Cách này dựng đúng CỬA SỔ mà một yêu cầu mở thầu thứ hai rơi vào, thay vì quay xổ số thời điểm.
+ */
+function bocChanTruocCau(c: pg.PoolClient, moc: string, truoc: () => Promise<void>): pg.PoolClient {
+  let daChay = false;
+  const boc = {
+    query: async (...thamSo: unknown[]): Promise<unknown> => {
+      const dau = thamSo[0];
+      const sql = typeof dau === "string" ? dau : ((dau as { text?: string } | null)?.text ?? "");
+      if (!daChay && sql.includes(moc)) {
+        daChay = true;
+        await truoc();
+      }
+      return (c.query as (...x: unknown[]) => Promise<unknown>).apply(c, thamSo);
+    },
+  };
+  return boc as unknown as pg.PoolClient;
+}
+
+interface KetQuaDoK126 {
+  readonly msWorkerBiChan: number;
+  readonly khoaKhiCho: number;
+  readonly dongThoi: { ma: string | null; ms: number };
+  readonly ketCucNguoiGiu: string[];
+  readonly opened: number;
+  readonly loiWorker: string;
+  readonly msTong: number;
+}
+
+/**
+ * Chạy một lượt mở thầu thật, thả `soNguoiGiu` yêu cầu mở thầu thứ hai vào cửa sổ giữa kt1 và kt2 (cách nhau `cachNhauMs`), rồi đo từ
+ * BÊN NGOÀI giao dịch: worker có bị chặn không, lúc ấy nó giữ mấy khoá ghi sổ, và một lần ghi sổ khác của cùng tổ chức đi tới đâu.
+ */
+async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<KetQuaDoK126> {
+  const rfqId = await taoRfqMo();
+  await nopBaoGia(rfqId, JSON.stringify({ donGia: 1234567, tienTe: "VND" }));
+  const requestId = await dongVaXinMoThau(rfqId);
+
+  let pidWorker = -1;
+  let pidGiuDau = -1;
+  let daXong = false;
+  const ketCuc: string[] = [];
+  const viecGiu: Promise<void>[] = [];
+
+  const motNguoiGiu = async (dau: boolean): Promise<void> => {
+    const kq = await withTenant(apiPool, orgA, async (c) => {
+      if (dau) pidGiuDau = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      return requestUnseal(c, orgA, { rfqId, reason: "nguoi thu hai xin mo thau", actorSessionId: sYc }, apiPool);
+    }).then(
+      () => null,
+      (e: unknown) => e as { code?: string; message?: string },
+    );
+    ketCuc.push(kq === null ? "xong" : (kq.code ?? (kq.message ?? "?").slice(0, 24)));
+  };
+
+  const truocKt2 = async (): Promise<void> => {
+    viecGiu.push(motNguoiGiu(true));
+    await choToiKhiBiChan(() => pidGiuDau, 5_000);
+    for (let i = 1; i < soNguoiGiu; i++) {
+      viecGiu.push(new Promise<void>((r) => setTimeout(r, i * cachNhauMs)).then(motNguoiGiu.bind(null, false)));
+    }
+  };
+
+  const batDau = Date.now();
+  const chayWorker = withTenant(unsealPool, orgA, async (c) => {
+    pidWorker = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+    const boc = bocChanTruocCau(c, "UPDATE public.rfq_packages", truocKt2);
+    return executeUnsealRequest(boc, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool);
+  }).then(
+    (x) => {
+      daXong = true;
+      return { opened: x.opened, loi: "" };
+    },
+    (e: unknown) => {
+      daXong = true;
+      return { opened: -1, loi: (e as { code?: string }).code ?? (e as Error).message };
+    },
+  );
+
+  const msWorkerBiChan = await choToiKhiBiChan(() => pidWorker, 8_000, () => daXong);
+  const khoaKhiCho = await demKhoaGhiSo(pidWorker);
+  const dongThoi = await ghiSoDongThoiCuaToChuc();
+  const kq = await chayWorker;
+  await Promise.all(viecGiu);
+  return {
+    msWorkerBiChan,
+    khoaKhiCho,
+    dongThoi,
+    ketCucNguoiGiu: ketCuc,
+    opened: kq.opened,
+    loiWorker: kq.loi,
+    msTong: Date.now() - batDau,
+  };
+}
+
+function ke(d: KetQuaDoK126): string {
+  return (
+    `worker bị chặn sau ${d.msWorkerBiChan} ms và giữ ${d.khoaKhiCho} khoá ghi sổ lúc ấy; ` +
+    `lần ghi sổ đồng thời của tổ chức: ${d.dongThoi.ma ?? "xong"} sau ${d.dongThoi.ms} ms; ` +
+    `người giữ: [${d.ketCucNguoiGiu.join(",")}]; worker mở ${d.opened} phong bì, lỗi "${d.loiWorker}"; cả lượt ${d.msTong} ms`
+  );
+}
+
+describe("[S1.73 / khoản 126] worker mở thầu chờ khoá hàng RFQ sau lần ghi sổ đầu", () => {
+  it("đối chứng dương của phép dò: giao dịch vừa ghi sổ thì phép dò thấy ĐÚNG một khoá tư vấn ghi sổ của tổ chức", async () => {
+    const c = await apiPool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      const pid = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      expect(await demKhoaGhiSo(pid), "trước lần ghi sổ").toBe(0);
+      await c.query(GHI_SO_K126, [orgA, "K126_DOI_CHUNG"]);
+      expect(await demKhoaGhiSo(pid), "sau lần ghi sổ, giao dịch giữ khoá tới COMMIT").toBe(1);
+    } finally {
+      await c.query("ROLLBACK").catch(() => undefined);
+      c.release();
+    }
+  });
+
+  it("giao dịch HỎNG không dựng được người giữ: lần nộp báo giá tới RFQ đã CLOSED lấy `FOR SHARE` rồi ném, và khoá được thả NGAY lúc abort — trước cả ROLLBACK", async () => {
+    const rfqId = await taoRfqMo();
+    const versionId = await nopBaoGia(rfqId, JSON.stringify({ donGia: 1 }));
+    await dongVaXinMoThau(rfqId);
+    const { rows: v } = await db.pool.query<{ bid_id: string; envelope: Buffer; sid: string }>(
+      "SELECT bid_id, envelope, submitted_by_guest_session_id AS sid FROM vendor_bid_versions WHERE id = $1",
+      [versionId],
+    );
+    const h = v[0]!;
+    const c = await apiPool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      const pidGiu = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      const loi = await c
+        .query(
+          "INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id) VALUES ($1, $2, $3, $4)",
+          [orgA, h.bid_id, h.envelope, h.sid],
+        )
+        .then(
+          () => null,
+          (e: unknown) => e as { code?: string },
+        );
+      expect(loi?.code, "RFQ đã CLOSED nên trigger 018 phải từ chối").toBe("23514");
+      // Lời hứa của driver xong khi ErrorResponse tới, còn việc thả khoá của `AbortTransaction` xong TRƯỚC `ReadyForQuery`:
+      // đọc `pg_locks` ngay có thể thấy khoá chưa kịp thả. Dưới tải song song của evidence, lượt đầu của vòng đỏ đúng chỗ này
+      // (tự bắt ⑷). Chờ backend về trạng thái nghỉ rồi mới đọc.
+      for (let i = 0; i < 300; i += 1) {
+        const { rows: tt } = await db.pool.query<{ state: string | null }>(
+          "SELECT state FROM pg_catalog.pg_stat_activity WHERE pid = $1",
+          [pidGiu],
+        );
+        if ((tt[0]?.state ?? "") === "idle in transaction (aborted)") break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      const { rows: khoa } = await db.pool.query<{ mode: string }>(
+        "SELECT mode FROM pg_catalog.pg_locks WHERE pid = $1 AND relation = 'public.rfq_packages'::regclass",
+        [pidGiu],
+      );
+      expect(
+        khoa.map((r) => r.mode),
+        "giao dịch đang ở trạng thái hỏng KHÔNG còn giữ khoá nào trên rfq_packages",
+      ).toEqual([]);
+      const t = await apiPool.connect();
+      try {
+        await t.query("BEGIN");
+        await t.query("SET LOCAL lock_timeout = '1500ms'");
+        await t.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        const e = await t
+          .query("SELECT 1 FROM rfq_packages WHERE id = $1 AND org_id = $2 FOR NO KEY UPDATE", [rfqId, orgA])
+          .then(
+            () => null,
+            (x: unknown) => x as { code?: string },
+          );
+        expect(e, "kết nối khác khoá được hàng RFQ ngay, tức người giữ đã thả").toBeNull();
+      } finally {
+        await t.query("ROLLBACK").catch(() => undefined);
+        t.release();
+      }
+    } finally {
+      await c.query("ROLLBACK").catch(() => undefined);
+      c.release();
+    }
+  }, 60_000);
+
+  it("MỘT yêu cầu mở thầu thứ hai trong cửa sổ kt1–kt2: worker không được chờ khoá hàng trong lúc giữ khoá ghi sổ, và lần ghi sổ đồng thời của tổ chức phải xong", async () => {
+    const d = await doCuaSoKt1Kt2(1, 0);
+    expect(d.khoaKhiCho, ke(d)).toBe(0);
+    expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.opened, ke(d)).toBe(1);
+  }, 90_000);
+
+  it("BỐN yêu cầu mở thầu cách nhau 500 ms trong cùng cửa sổ: lần ghi sổ đồng thời của tổ chức vẫn phải xong", async () => {
+    const d = await doCuaSoKt1Kt2(4, 500);
+    expect(d.khoaKhiCho, ke(d)).toBe(0);
+    expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.opened, ke(d)).toBe(1);
+  }, 120_000);
 });
