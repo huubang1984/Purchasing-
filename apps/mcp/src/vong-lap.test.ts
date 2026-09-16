@@ -64,7 +64,9 @@ describe("vòng lặp giao thức", () => {
     expect(JSON.parse(l.raGiaoThuc[1] ?? "")).toMatchObject({ id: 5 });
   });
 
-  it("⑴ quá trần lời gọi cùng lúc ⇒ -32603 NGAY, và api không được gọi thêm lần nào", async () => {
+  // KHÔNG `async`: mọi khẳng định ở đây là ĐỒNG BỘ, và đó chính là điều đang được đo — lời gọi quá
+  // trần phải bị từ chối NGAY trong lượt `nhan`, không phải sau một vòng vi-tác-vụ nào.
+  it("⑴ quá trần lời gọi cùng lúc ⇒ -32603 NGAY, và api không được gọi thêm lần nào", () => {
     // `goiApi` không bao giờ giải quyết: ba lời gọi đầu chiếm trọn trần và ở đó.
     const api = vi.fn().mockReturnValue(new Promise(() => {}));
     const l = dung(api, { tranDongThoi: 3 });
