@@ -5613,3 +5613,86 @@ Người soi đọc bản chụp bốn tệp tài liệu sau khi điền bản b
 - Cổng một đường ghi sổ từ chối: lời tạo `…DeniedError` phải nằm trong một lời gọi `throwAuditedDenial` được `return` hay `await`; chỗ miễn theo tệp, hàm bao và lớp; phép đọc lời gọi trên `auditPool` nhận thêm các dạng viết của lượt soi 67a-4. Cổng phạm vi sản xuất: ngoặc chỉ mang kiểu nội tuyến tính là import lúc chạy; gói dưới `apps/` không được miễn. Bản bốn (lượt soi 67c): cổng một đường nhận hàm gọi qua thuộc tính và pool qua `??`, `||` hay ba ngôi; cổng phạm vi sản xuất đọc cây cú pháp và không miễn gói dưới `tools/`.
 - `evidence/INV-matrix.md`: ghi chú D5 thêm đường `throwAuditedDenial`.
 - Mỗi lần từ chối trên ba đường chậm thêm, trung vị: 4,3 ms ở cổng, 3,3 ms ở bảng so sánh, 5,6 ms ở worker (mức hàm); 0,7 ms và 11,1 ms qua HTTP (bảng ⒝).
+
+# §S1.73 — khoản nợ 126: câu chờ khoá hàng sau lần ghi sổ đầu — worker mở thầu khoá hàng RFQ TRƯỚC khi ghi sổ; và hệ quả E3 của trần 2 s thành số đo
+
+**Bề mặt (bản cuối):**
+- `apps/unseal-worker/src/index.ts`: `executeUnsealRequest` thêm một câu `SELECT id FROM public.rfq_packages … FOR NO KEY UPDATE` ngay trước phần đọc vật liệu khoá, tức TRƯỚC lần ghi sổ đầu. Vị trí hai câu `UPDATE` và thứ tự seq của hai bản ghi sổ giữ nguyên.
+- Test: `apps/unseal-worker/src/unseal-worker.int.test.ts` — bốn test mới (đối chứng dương của phép dò khoá tư vấn; giao dịch HỎNG không dựng được người giữ; một yêu cầu mở thầu thứ hai trong cửa sổ; bốn yêu cầu cách nhau 500 ms). `packages/rfq/src/rfq.int.test.ts` — đường ⑵. `packages/identity/src/mfa.int.test.ts` — hệ quả ⑾ ở `/auth/totp`.
+- Tài liệu: STATE (hàng 126 đóng; hàng 139 và 140 mở; dòng CÒN MỞ; đoạn đếm 38 / 5 / 33 thành 39 / 5 / 34), Handoff §10 và bảng §13, DECISIONS ADR-016 (tiểu mục [S1.73 / khoản 126]; đoạn ⑾ của tiểu mục [S1.71 / khoản 123]), biên bản này.
+
+**Đo trước khi vá — Postgres thật, vai `app_api` và `app_unseal`, không superuser:**
+
+Người giữ phải là giao dịch LẤY ĐƯỢC khoá hàng rồi CHỜ TIẾP. Một giao dịch HỎNG không dựng được người giữ: lần nộp báo giá tới RFQ đã CLOSED lấy `FOR SHARE` trong trigger 018 rồi ném `check_violation`, nhưng PostgreSQL thả khoá NGAY lúc abort — đo: 0 khoá quan hệ trên `rfq_packages` của backend ấy, và một kết nối khác lấy được `FOR NO KEY UPDATE` trên đúng hàng ấy ngay. Hình dạng dựng được là một yêu cầu mở thầu THỨ HAI rơi vào cửa sổ giữa `kt1` và `kt2`: trigger 019 lấy `FOR SHARE` (RFQ đã CLOSED nên phép kiểm qua), rồi câu INSERT phải chờ giao dịch worker ở chỉ mục riêng phần `unseal_requests_mot_yeu_cau_dang_mo` vì `kt1` vừa đổi hàng cũ sang EXECUTED mà chưa commit.
+
+| Kịch bản | Bản `70075e8` | Bản vá |
+|---|---|---|
+| một yêu cầu mở thầu thứ hai | worker bị chặn sau 81 ms, ĐANG GIỮ 1 khoá tư vấn ghi sổ; người giữ chết 40P01; lần ghi sổ đồng thời của tổ chức XONG sau 966 ms; cả lượt 1 063 ms | worker không bị chặn khi giữ khoá ghi sổ; lần ghi sổ đồng thời xong; worker mở 1 phong bì |
+| bốn yêu cầu, cách nhau 500 ms | worker bị chặn sau 74 và 111 ms, ĐANG GIỮ 1 khoá tư vấn ghi sổ; cả bốn người giữ chết 40P01; lần ghi sổ đồng thời GÃY 55P03 sau 2 011 và 2 005 ms (hai lượt); cả lượt 2 610 và 2 632 ms | như trên; lần ghi sổ đồng thời xong |
+
+| Giá | Bản `70075e8` | Bản vá |
+|---|---|---|
+| giao dịch worker, 1 phong bì | 91 ms | 45 ms |
+| giao dịch worker, 8 phong bì | 37 ms | 26 ms |
+| yêu cầu mở thầu phát cùng lúc với worker | `23505` sau 24 ms (HTTP 409) | `23514` sau 20 ms (HTTP 422, thông điệp "RFQ đang ở UNSEALED") |
+
+Hệ quả ⑾ của trần 2 s — trước vòng này mới là ĐỌC — nay đo ở `packages/identity/src/mfa.int.test.ts`: giữ khoá ghi sổ của tổ chức bằng một giao dịch đã ghi sổ, rồi đoán SAI ở đúng ngưỡng ba lần liên tiếp qua `verifyTotpForLogin` (hàm mà route `/auth/totp` gọi). Cả ba lần đều gãy 55P03 và giao dịch request rollback: sau mỗi lần, `failed_attempts` vẫn là ngưỡng trừ một và `locked_until` vẫn NULL — hồ sơ KHÔNG bị khoá. Lần đoán ĐÚNG ngay sau đó vẫn mở được phiên, vì đường đúng không ghi sổ. Tức trong lúc một giao dịch của tổ chức giữ khoá ghi sổ, số lần đoán TOTP không có trần.
+
+**Trình chủ dự án trước khi commit.** Hai câu hỏi, ngày 2026-09-16: ⑴ xử lý ⑾ thế nào khi tiền đề "ai giữ được khoá quá 2 s thì đã ở IM7" bị phép đo bác — chủ dự án chọn "vá 126, mở khoản cho E3" (khoản 139); ⑵ giá của bản vá (đổi 409 thành 422 trong cửa sổ đua) — chủ dự án chọn "nhận đổi mã lỗi, ghi ADR".
+
+**Đỏ-trước, tập đỏ ghi trước.** Kế hoạch đo viết trước khi chạy (scratchpad `ke-hoach-do.md`): T1 và T2 phải ĐỎ trên mã chưa vá, T4 (⑾) phải XANH vì nó đo một hệ quả đang có, Đ1 (đường ⑵) phải XANH. Kết quả đúng tập ấy: hai test worker đỏ ba lượt liên tiếp trên `70075e8` (81 / 74 / 111 ms tới lúc bị chặn, 1 khoá ghi sổ, 966 ms hay 55P03), test ⑾ và test ⑵ xanh ngay từ bản chưa vá.
+
+**Đột biến đỏ, cô lập (`k126_dot_bien.py`, mỗi mốc khớp đúng một lần, mỗi tệp trả nguyên bản theo sha256):**
+
+| Đột biến | Tệp | Phải đỏ | Kết quả |
+|---|---|---|---|
+| M1 gỡ hẳn câu khoá hàng | `apps/unseal-worker/src/index.ts` | K1, K4 | ĐẠT, đúng tập |
+| M2 hạ mức khoá xuống `FOR KEY SHARE` | `apps/unseal-worker/src/index.ts` | K1, K4 | ĐẠT, đúng tập |
+| M3 khoá nhầm hàng (id yêu cầu thay id RFQ) | `apps/unseal-worker/src/index.ts` | K1, K4 | ĐẠT, đúng tập |
+| M4 bỏ lần ghi `MFA_LOCKED` | `packages/identity/src/login.ts` | E3 | ĐẠT, đúng tập |
+| M6 huỷ RFQ ghi sổ trước khi khoá hàng | `packages/rfq/src/rfq.ts` | HUY | ĐẠT, chế độ chứa |
+
+**Bốn lần tự bắt trước merge, và một việc dọn bên lề:**
+- ⑴ **Phép đo đầu tự làm hỏng số của mình.** Bản đầu đặt các phép thăm dò BÊN TRONG hàm gọi của `withTenant`, nên chính chúng giữ giao dịch worker mở trong lúc đo; con số "55P03 sau 2 006 ms" của ba lượt đầu là của phép đo chứ không của đường sản xuất. Bản sửa chạy worker như một lời hứa và thăm dò song song bên ngoài; số thật của một người giữ là 966 ms rồi XONG, và chỉ bốn người giữ so le mới đẩy qua trần.
+- ⑵ **Test đường ⑵ rỗng ruột, đột biến M6 bắt được.** Bản đầu chỉ đếm khoá tư vấn mà lần huỷ thứ hai ĐANG GIỮ lúc bị chặn — nhưng khi dời lần ghi sổ lên trước câu UPDATE thì nó CHỜ khoá ấy chứ không giữ, nên phép đếm vẫn ra 0 và đột biến sống. Test nay đọc LOẠI khoá đang chờ và đòi `transactionid`, không được có `advisory`; chạy lại M6: đỏ đúng khoá.
+- ⑶ **Test ⑾ để lại trạng thái hồ sơ MFA** ở ngưỡng trừ một (lượt soi 68a-3) — thêm bước trả `failed_attempts`, `locked_until` và `last_used_counter` về giá trị sạch, đặt TRƯỚC khối khẳng định để nó chạy cả khi một khẳng định hỏng. Chạy lại nhóm đột biến MFA sau khi sửa: vẫn ĐẠT.
+
+- ⑷ **Ba lượt evidence đỏ, và chúng bắt bốn thứ.** ⒜ Lượt đầu: test "giao dịch HỎNG không dựng được người giữ" đỏ dưới tải song song với `['RowShareLock']` — lời hứa của driver xong khi `ErrorResponse` tới, còn `AbortTransaction` thả khoá xong trước `ReadyForQuery`, nên phép dò đọc `pg_locks` ngay có thể thấy khoá chưa kịp thả. Test nay chờ backend về `idle in transaction (aborted)` rồi mới đọc. ⒝ Cũng lượt ấy, test kế ĐỎ LAN với `KetNoiNhiemError`: khẳng định ⒜ hỏng giữa BEGIN và ROLLBACK nên kết nối về pool khi giao dịch còn mở — ba chỗ trong tệp chuyển `ROLLBACK` vào `finally`. ⒞ Lượt hai: test `[fix I3]` của `db/migrations.int.test.ts` chạm hạn MẶC ĐỊNH 30 s; đo trước khi nới, test ấy chạy riêng mất 5 498 ms (cả tệp 972 s). ⒟ Lượt ba: **sáu test đỏ, không cái nào là test của vòng này** — `[fix I5]` "xoá cấu hình IN DATABASE", `[fix I2]`, `[fix S2]` "PUBLIC không còn EXECUTE" (cùng tệp migrations) và "5 câu lệnh tuần tự" của `packages/test-support/src/postgres.int.test.ts` chạm hạn mặc định 30 s; `[nợ 52]` của `apps/api/src/auth.int.test.ts` chạm hạn 60 s, và vì vitest KHÔNG huỷ lượt chạy quá hạn nên những lần gọi còn lại của nó cộng tiếp vào bộ đếm `soLanLamCham`, làm `[review H6-2]` đỏ theo — đỏ dây chuyền, không phải hai lỗi. Đo từng cái khi chạy RIÊNG trước khi nới: 4 269 / 5 541 / 5 412 / 5 814 / 6 304 ms, tất cả đều XANH — hệ số giãn của lượt song song là 5,2–9,5 lần. **TẢI, không phải hồi quy của vòng này**, ba cớ: không đường mã nào của sáu test ấy đi qua `executeUnsealRequest`; tập test đỏ ĐỔI giữa lượt hai và lượt ba trên cây chỉ khác nhau ở hạn của `[fix I3]` và ở tài liệu; tệp migrations chạy riêng mất 972 s nhưng trong lượt ba mất 1 198 s trên tổng 1 200 s của cả lượt — nó là đường tới hạn, mọi tệp khác chạy chồng lên nó. **Cách sửa:** đặt hạn ở MỨC SUITE thay vì sửa từng test — `describe("migration của dự án", { timeout: 180_000 }, …)` (110/114 test trong tệp gọi `migrate()` thật, 31 cái còn ở hạn mặc định) và `describe("poolAs …", { timeout: 120_000 }, …)`; hạn khai riêng cho từng test (120 s, 300 s) VẪN THẮNG — đo bằng một tệp test tạm: suite đặt 200 ms thì test không khai hạn đỏ ở 200 ms, test khai 5 s vẫn xanh ở 615 ms. Riêng `[nợ 52]` nâng lên 120 s — đúng hạn của hai test cùng độ dài vòng lặp trong chính describe của nó. Ba tệp này không thuộc khoản 126: chúng vào vòng vì lượt evidence của vòng bắt được, và cổng evidence không đi qua được nếu để nguyên.
+- ⑸ **Ngoài lề, không do evidence bắt:** lượt soi phát hiện mười hai tệp `.ts` đã theo dõi còn mang CRLF trong cây làm việc (`eol=lf` chỉ áp lúc Git GHI tệp). Cổng `[khoản nợ 10] ⑷` chỉ chạy khi `CI=true` nên lượt cục bộ BỎ QUA nó, và trên CI checkout mới nên nó xanh. Đã chuẩn hoá cả mười hai về LF: byte trùng đúng blob trong index nên `git diff` không đổi.
+
+**Ranh giới (điều bản vá KHÔNG nói):**
+- ⑴ Bản vá chỉ đổi THỨ TỰ lấy khoá của worker. Nó không rút ngắn thời gian worker giữ khoá tư vấn ghi sổ của tổ chức: từ lần ghi sổ đầu tới COMMIT, khoá ấy vẫn bị giữ, và mọi lần ghi sổ khác của tổ chức vẫn chờ tối đa 2 s.
+- ⑵ Worker nay giữ khoá hàng RFQ suốt giao dịch, kể cả một lượt mở thầu HỎNG giữa chừng (trước vá thì lượt hỏng không giữ hàng ấy). Người chịu là các đường ghi lên chính hàng RFQ ấy — đo: yêu cầu mở thầu đồng thời vẫn có trả lời sau khoảng 20 ms.
+- ⑶ Đường ⑶ của hàng 126 (runner outbox đánh DONE) vẫn là ĐỌC: người giữ hàng job là lần nhận lại của một runner khác, một câu `UPDATE … SKIP LOCKED` trong giao dịch riêng. Vòng này không đo nó.
+- ⑷ Phép đo dựng cửa sổ giữa `kt1` và `kt2` bằng một lớp bọc quanh `client.query` của test. Cửa sổ ấy trong sản xuất hẹp bằng đúng thời gian một câu `UPDATE`; vòng này KHÔNG đo xác suất một yêu cầu mở thầu thật rơi trúng vào đó.
+- ⑸ Lời "giao dịch hỏng thả khoá ngay lúc abort" đo SAU khi backend về trạng thái `idle in transaction (aborted)`; từ phía tiến trình gọi, khoảng giữa lúc nhận lỗi và lúc khoá được thả là có thật.
+- ⑹ Hệ quả ⑾ đo với người giữ khoá là một giao dịch của test. Nó nói điều gì XẢY RA khi khoá bị giữ, không nói ai giữ được bao lâu sau bản vá.
+
+**Điều mang sang:**
+- ⑹ `approveUnseal` mang đúng hình dạng của khoản 126 — khoản 140, đọc, chưa đo.
+- ⑺ Ngưỡng khoá MFA phụ thuộc lần ghi sổ — khoản 139, đo.
+- ⑻ Trần 2 s không đuổi người giữ (khoản 128) và hạn mức theo người gọi cho lần từ chối (khoản 122) vẫn mở, không đổi trong vòng này.
+
+**Lượt chạy cuối trước evidence:** `pnpm test` 55 tệp, 788 xanh, 1 bỏ qua; tám tệp int liên quan (`apps/unseal-worker`, `packages/unseal`, `mfa.int`, `rfq.int`) 223 xanh; `tests/architecture/qt3-cu-phap.int.test.ts` và `qt3-ngu-phap.int.test.ts` 8 xanh — câu SQL mới đi qua cổng cú pháp và ngữ pháp QT3. Sau khi nới hạn (tự bắt ⑷⒟), chạy lại trên cây đã áp tài liệu: `pnpm t0` thoát mã 0 (depcruise 228 module, 980 phụ thuộc, 0 vi phạm) và `pnpm test` 55 tệp, 788 xanh, 1 bỏ qua. **Lượt evidence thứ tư trên cây đã stage: vitest thoát mã 0**, 101 tệp, 1 797 test xanh, 1 bỏ qua (cổng xuống dòng chỉ chạy khi `CI=true`), 1 024 s — số đo đầy đủ ở thông điệp commit tài liệu.
+
+## Lượt soi 68 — lượt DỌC trên bản vá của khoản 126 và hai phép đo của nó
+
+### 68a — mã và test: 0 CAO, 1 NẶNG, 3 NHẸ, 2 INFO
+
+| # | Mức | Phát hiện | Đúng? | Xử lý |
+|---|---|---|---|---|
+| 68a-1 | NẶNG | Lượt quét thứ tự câu trong mọi hàm nghiệp vụ tìm ba hàm có câu ghi đứng SAU lần ghi sổ đầu: `executeUnsealRequest` (vòng này vá), `requestMfaReset` (hàng 126 đã đọc là an toàn) và `approveUnseal` — hàng 126 không nêu hàm thứ ba | đúng | **khoản 140** — đọc, chưa đo; hình dạng sửa giống khoản 126 |
+| 68a-2 | NHẸ | Phép đo đầu đặt thăm dò trong giao dịch worker nên tự giữ giao dịch ấy mở; số đọc ra là của phép đo | đúng | sửa trong vòng — xem tự bắt ⑴ |
+| 68a-3 | NHẸ | Test ⑾ để lại `failed_attempts` ở ngưỡng trừ một cho các test sau trong cùng tệp | đúng | thêm bước dọn dẹp, đặt trước khối khẳng định |
+| 68a-4 | NHẸ | Một lượt mở thầu HỎNG nay cũng giữ khoá hàng RFQ tới cuối giao dịch — hành vi mới, không có test nào nói ra | đúng | ghi ở ranh giới ⑵ và ở ADR-016 |
+| 68a-5 | INFO | Phép đếm khoá tư vấn có bản sao ở hai tệp test | đúng | giữ — test int trong kho này tự chứa đồ gá của nó |
+| 68a-6 | INFO | Lớp bọc client chỉ bọc `query`; hàm dùng phương thức khác của client sẽ ném `TypeError` | đúng | giữ — hỏng ồn ào, không im lặng |
+
+### 68b — tài liệu: 0 CAO, 0 NẶNG, 2 NHẸ, 2 INFO
+
+| # | Mức | Phát hiện | Đúng? | Xử lý |
+|---|---|---|---|---|
+| 68b-1 | NHẸ | Đoạn ⑾ của ADR-016 vẫn nói tiền đề "chờ xác nhận lại" mà không nói phép đo đã BÁC nó | đúng | thêm đoạn [S1.73] kèm số đo và quyết định ngày 2026-09-16 |
+| 68b-2 | NHẸ | Hàng 126 kể ba đường; sau lượt soi 68a phải nói ra rằng hình dạng còn ở một hàm thứ tư | đúng | hàng 126 trỏ khoản 140; khoản 140 kể đủ ba hàm |
+| 68b-3 | INFO | Con số 2 006 ms từng ghi trong chú thích bản vá là số của phép đo hỏng | đúng | chú thích bản vá và biên bản dùng số của kịch bản bốn người giữ (2 005 / 2 011 ms) |
+| 68b-4 | INFO | Đường ⑶ vẫn là ĐỌC sau vòng này | đúng | ghi ở ranh giới ⑶ và ở hàng 126 |
