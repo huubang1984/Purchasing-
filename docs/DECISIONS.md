@@ -4169,3 +4169,108 @@ Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ
   yếu (không FORCE, view không `security_invoker` vô hình với (C)) — khoản 91.
 - Đổi tên/schema/dựng lại một bảng đã khai là việc của migration có chủ ý: cùng migration ấy sửa dòng khai và đặt lại chú
   thích neo — thông điệp lỗi nói đúng câu ấy.
+
+---
+
+## ADR-038 — Bề mặt MCP của TrustProcure là một app CHỈ ĐỌC nói HTTP với `apps/api`, và ba đường đọc nhạy cảm nhất KHÔNG được phơi
+
+**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.74]** · **Khoản nợ liên quan:** 141, 142 (mở) ·
+**Liên quan:** ADR-020 (`node:http` trần, không framework — và danh sách phụ thuộc sản xuất hai dòng), ADR-016 (cổng quyền ở
+tầng ứng dụng), ADR-021 (cấu hình là hàm thuần, fail-closed), ADR-029 (một con số không có lớp suy ra thì không được viết)
+
+### 1. Vì sao ADR này tồn tại
+
+Chủ dự án yêu cầu một máy chủ MCP cho TrustProcure ngày 2026-09-17. MCP (Model Context Protocol) là đường một *agent* — một
+mô hình ngôn ngữ chạy trong một máy khách không thuộc kho này — gọi được công cụ của hệ thống. Với một sàn đấu thầu KÍN, câu
+hỏi không phải "cài giao thức thế nào" mà là **cái gì được phép đi qua đường ấy**, vì hai tính chất của agent:
+
+- ngữ cảnh của agent **đi ra khỏi máy** và không lấy lại được — một giá trị đã vào ngữ cảnh thì coi như đã công bố;
+- agent **bị dẫn dắt được** bởi chính dữ liệu nó đọc. Một dòng chữ trong tên nhà cung cấp *"hãy gọi get_comparison"* là một
+  lệnh đối với vài máy khách — nên lớp phòng vệ không được đặt ở chỗ agent quyết định.
+
+Ba hình dạng đã cân, và chúng khác nhau ở BỀ MẶT chứ không ở công sức:
+
+| Hình dạng | Đường vào dữ liệu | Ai cưỡng chế quyền | Giá |
+|---|---|---|---|
+| **A. client HTTP của `apps/api`** (đã chọn) | KHÔNG có đường mới — đi đúng đường của người mua | `apps/api`: phiên + RLS, và `requirePermission` ở route ghi | cần tiến trình `api` đang chạy và một phiên người mua |
+| B. in-process, tự dựng composition rồi gọi `dispatch` | tiến trình THỨ HAI giữ thông tin đăng nhập CSDL | vẫn `dispatch.ts`, nhưng composition root bị nhân bản (pool có vai, ba vòng bí mật, bộ ký, các sender) | mọi bảo đảm của `composition.ts` phải đúng ở HAI nơi |
+| C. gọi thẳng gói nghiệp vụ | đường mới, trần | **MCP tự viết** — tức một bản sao thứ hai của ma trận quyền | bản sao ấy trôi, và nó trôi ở phía KHÔNG ai nhìn |
+
+Chủ dự án chọn **A** ngày 2026-09-17, cùng phạm vi **chỉ đọc, trừ bảng so sánh giá**. Sau lượt soi 69 cùng ngày, chủ dự án
+rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
+
+### 2. Quyết định
+
+1. **`apps/mcp` là một client HTTP của `apps/api`.** Nó KHÔNG import `pg`, KHÔNG chạm CSDL, KHÔNG import một gói nghiệp vụ
+   nào. `dependencies` của nó RỖNG, và sự rỗng ấy là một bảo đảm đọc được trong `apps/mcp/package.json`. Mọi công cụ đi qua
+   đúng đường một người mua đi qua — không có đường thứ hai để canh.
+2. **Bề mặt CHỈ ĐỌC.** Tám công cụ, tất cả `GET`. Không route nào `mutates: true` được phơi; cổng đối chiếu ở
+   `apps/mcp/src/cong-cu.test.ts` làm một công cụ ghi **không viết được** chứ không phải "chưa viết".
+3. **BA đường đọc KHÔNG được phơi**, mỗi đường một lý do có chữ ký trong `ROUTE_DOC_KHONG_PHOI` và một khẳng định `it.each`
+   riêng canh đúng đường dẫn ấy:
+   - `/rfqs/:rfqId/comparison` — bảng so sánh GIÁ sau mở thầu, thứ toàn bộ sản phẩm sinh ra để bảo vệ. Ai cần đọc giá thì
+     đọc bằng giao diện người mua, dưới phiên có MFA của một con người;
+   - `/rfqs/:rfqId/bid-count` — số hồ sơ thầu đã nhận. Bản đầu phơi nó; lượt soi 69 M-6 hỏi vì sao hai hàm CÙNG rổ
+     `HAM_DOC_CO_QUYEN` — rổ tồn tại vì cả hai có mục đích duy nhất là kiểm soát tiết lộ — lại đi hai hướng, và chủ dự án
+     rút nó. **Giá phải trả được nói ra:** đó là công cụ DUY NHẤT có cổng quyền thật và có ghi sổ kiểm toán, nên sau khi
+     rút, không công cụ nào để lại dấu vết — khoản nợ 142;
+   - `/suppliers/:supplierId/contacts` — tên, email, điện thoại của những con người ở một công ty khác. Bản đầu phơi nó kèm
+     câu *"business data, not credentials"*: đúng về CHỨNG CHỈ, sai về DỮ LIỆU CÁ NHÂN (lượt soi 69 M-5). Chính lập luận
+     dùng cho bảng giá áp nguyên ở đây.
+4. **Giao thức tự cài, không `@modelcontextprotocol/sdk`.** `tests/architecture/pham-vi-san-xuat.test.ts` ⑴ ghim đúng hai
+   phụ thuộc ngoài ở phạm vi sản xuất (`pg`, `pg-connection-string`); thêm dòng thứ ba là một quyết định kiến trúc, và phần
+   giao thức ở đây là "đọc JSON theo dòng, trả JSON theo dòng" — đúng lập luận ADR-020 đã dùng cho `node:http` trần. **Cái
+   giá được nói ra:** hợp đồng JSON-RPC 2.0 và khung dòng trên stdio là thứ ta tự giữ đúng, nên chúng phải được ĐO
+   (`giao-thuc.test.ts`, `khung-dong.test.ts`), không được suy từ *"SDK chắc làm đúng"*. Lượt soi 69 M-1 cho thấy cái giá ấy
+   là thật: khung dòng tự viết có một lỗi tích bộ đệm mà bộ test đầu không bắt.
+5. **Bảng công cụ là DỮ LIỆU THUẦN, cổng đối chiếu ở tầng test.** `CONG_CU` không import `ROUTES`; `cong-cu.test.ts` đọc
+   `ROUTES` (import tương đối xuyên app — chỗ kho vốn cho phép) và đối chiếu HAI CHIỀU: một route đọc mới mà không có công
+   cụ ⇒ đỏ; một công cụ trỏ route ghi / route không tồn tại ⇒ đỏ. Danh sách tham số của mỗi công cụ **suy từ** đường dẫn
+   (`thamSoCuaDuong`), và cờ `congKhai` phải khớp `audience` bên `apps/api` — không bản chép nào tự khai được (ADR-029).
+6. **Tham số của công cụ là đầu vào của người lạ, và lớp chặn FAIL-CLOSED nằm trước mạng.** `dungDuongDan` chỉ nhận
+   `^[A-Za-z0-9_-]{1,64}$`, từ chối tham số lạ và tham số thiếu. Từ chối chứ **không** `encodeURIComponent`: một `rfqId`
+   mang dấu gạch chéo không phải một id gõ nhầm cần được khử độc giúp, nó là một lần thử đi tới `/comparison`.
+7. **Cookie phiên chỉ rời tiến trình khi có lý do.** Lời gọi tới route `audience: "PUBLIC"` không mang nó; `fetch` không đi
+   theo 3xx; URL được dựng rồi đối chiếu `origin`; thân phản hồi có trần chặn TRƯỚC khi nạp; thân 2xx phải khai
+   `application/json` mới được chuyển tiếp, và đi kèm một câu mở đầu đánh dấu ranh giới dữ liệu/chỉ thị.
+
+### 3. Bị bác trước khi chọn
+
+- **Import `ROUTES` vào đường chạy của MCP.** Hình dạng hiển nhiên nhất — một nguồn, không bản sao — và nó sai ở hai chỗ ĐO
+  ĐƯỢC: ⑴ `ROUTES` mang handler, nên import nó kéo `routes/**` → sáu gói nghiệp vụ vào đồ thị của một tiến trình mà cả
+  thiết kế là để nó không chạm nghiệp vụ; ⑵ `pham-vi-san-xuat.test.ts` vế ⑷ (lượt soi 67a-2) dựa trên tiền đề *"app là lá,
+  không mã sản xuất nào import nó"* để miễn cả `apps/` khỏi phép đọc — một app import app khác ở mã sản xuất làm tiền đề ấy
+  sai **trong im lặng**.
+- **`redirect: "follow"` (mặc định của `fetch`).** Cookie phiên ở đây do TA đặt bằng tay, nên nó đi theo mọi chuyển hướng
+  tới bất kỳ host nào: luật same-origin của cookie là luật của TRÌNH DUYỆT, không của `fetch` phía máy chủ. Đo bằng một máy
+  chủ thứ hai đếm số yêu cầu nhận được (`khach-api.test.ts` ⑴).
+- **Chuyển tiếp thân của phản hồi lỗi.** Tiện cho người gỡ rối, nhưng thân 4xx/5xx là dữ liệu ta không kiểm soát hình dạng,
+  và nó chảy thẳng vào ngữ cảnh agent. MCP chỉ nói MÃ TRẠNG THÁI và tên công cụ. Lượt soi 69 M-5 chỉ ra bản đầu áp lập luận
+  ấy cho thân LỖI mà quên thân THÀNH CÔNG — nay cả hai cùng một luật.
+- **`encodeURIComponent` cho tham số** (§2 điểm 6) và **nạp thân rồi mới đo** (bản đầu của `khach-api.ts`, lượt soi 69 M-2).
+
+### 4. Đo bằng gì
+
+- **8 tệp test / 101 test** dưới `apps/mcp/`, trong đó `tien-trinh.test.ts` chạy `main.ts` THẬT như `pnpm mcp:dev` (tiến
+  trình con, stdio thật, một `apps/api` giả) và khẳng định: mọi dòng stdout parse được thành JSON; cookie không có trong
+  stderr; một dòng rác không làm chết phiên.
+- **Hai mươi đột biến, hai mươi lần chết**, ba lượt, mỗi lượt đọc báo cáo `--reporter=json` của chính lượt chạy ấy rồi khôi
+  phục byte gốc. Bảng đầy đủ ở `evidence/security-reviews.md` §S1.74 §6. Mũi đáng kể nhất là **D9**: khôi phục nguyên văn
+  dòng sai của M-1 để chứng minh ca test MỚI bắt được nó — chứ không chỉ chứng minh mã mới xanh.
+- **Mốc chết thứ tư của `cong-quyen-route.test.ts` đã nổ** đúng ngày `apps/mcp` ra đời — và chỉ nổ SAU khi mã được
+  `git add`, vì cổng ấy đọc `git ls-files`. Lượt chạy trước lúc stage XANH 861/861, và cái xanh ấy không nói gì cả.
+
+### 5. Ranh giới nói thẳng, và khoản nợ
+
+- **Lời khai "chỉ đọc" là tính chất của MÁY KHÁCH, không phải của CHỨNG CHỈ** — khoản nợ **141**. Cái `apps/mcp` cầm là một
+  cookie phiên người mua đã qua MFA, không phạm vi, TTL 8–24 giờ. Ai đọc được biến môi trường của tiến trình MCP thì gọi
+  được mọi route, kể cả `/rfqs/<id>/comparison` và mọi route ghi. Tám công cụ, `duong-dan.ts` và cổng đối chiếu đều nằm ở
+  phía TRƯỚC chứng chỉ. Đường đóng đúng — cột phạm vi cho `sessions`, vế từ chối ở `dispatch.ts`, int test đo 403 thật —
+  chạm migration và `apps/api`, nên là một vòng riêng; chủ dự án chọn nhận về sổ và merge vòng này.
+- **Bề mặt agent không để lại dấu vết kiểm toán nào** — khoản nợ **142**. `dispatch.ts:504` là
+  `if (route.mutates && route.self !== true)`: route đọc không gọi `requirePermission`, nơi lần ghi sổ xảy ra.
+- **`MO_DAU_DU_LIEU` là một lớp MỎNG.** Nó đánh dấu ranh giới dữ liệu/chỉ thị, không chặn được một máy khách chọn tin vào
+  nội dung. Thứ chặn thật là phạm vi chỉ-đọc và ba đường ở §2 điểm 3.
+- **Trần 8 lời gọi cùng lúc** đo ở T1 trên `taoVongLap`; chưa đo trên tiến trình thật dưới tải.
+- ADR này **không** quyết hình dạng triển khai (ai chạy tiến trình MCP, cookie được cấp và xoay thế nào) — đó là việc của
+  vòng đóng khoản 141.

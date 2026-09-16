@@ -5696,3 +5696,153 @@ Hệ quả ⑾ của trần 2 s — trước vòng này mới là ĐỌC — nay
 | 68b-2 | NHẸ | Hàng 126 kể ba đường; sau lượt soi 68a phải nói ra rằng hình dạng còn ở một hàm thứ tư | đúng | hàng 126 trỏ khoản 140; khoản 140 kể đủ ba hàm |
 | 68b-3 | INFO | Con số 2 006 ms từng ghi trong chú thích bản vá là số của phép đo hỏng | đúng | chú thích bản vá và biên bản dùng số của kịch bản bốn người giữ (2 005 / 2 011 ms) |
 | 68b-4 | INFO | Đường ⑶ vẫn là ĐỌC sau vòng này | đúng | ghi ở ranh giới ⑶ và ở hàng 126 |
+
+# §S1.74 — `apps/mcp`: bề mặt MCP chỉ-đọc nói HTTP với `apps/api`; bảng so sánh giá, số hồ sơ thầu và liên hệ nhà cung cấp KHÔNG phơi; lượt soi dọc 69; khoản 141 và 142 mở
+
+**Ngày:** 2026-09-17 · **Nhánh:** `app-mcp-chi-doc-qua-api` từ `master` `e8fb75b` · **ADR:** 038
+
+## 1. Vì sao vòng này tồn tại
+
+Chủ dự án yêu cầu một máy chủ MCP cho TrustProcure. Đây là hạng mục NGOÀI lộ trình S1 — `Handoff.md`
+§11 không có nó — nên vòng này bắt đầu bằng hai lượt hỏi chứ không bằng mã: hình dạng kết nối
+(client HTTP của `apps/api` / in-process / gọi thẳng gói) và phạm vi (chỉ đọc có bảng giá / chỉ đọc
+không bảng giá / đọc-ghi). Chủ dự án chọn **client HTTP + chỉ đọc, trừ bảng so sánh giá**. Lý do
+từng phương án bị bác nằm ở ADR-038 §3.
+
+## 2. Mã
+
+`apps/mcp` — 8 tệp mã, 8 tệp test, `dependencies` **rỗng**:
+
+| Tệp | Việc | Lớp cưỡng chế của nó |
+|---|---|---|
+| `cong-cu.ts` | bảng 8 công cụ, dữ liệu thuần; `thamSo` suy từ `path` | `ROUTE_DOC_KHONG_PHOI` — ba đường không phơi, mỗi đường một lý do |
+| `duong-dan.ts` | dựng đường dẫn từ tham số của người lạ | `^[A-Za-z0-9_-]{1,64}$`, tham số lạ ⇒ ném, fail-closed |
+| `giao-thuc.ts` | JSON-RPC 2.0 + MCP, tự cài | tên công cụ lạ / tham số sai ⇒ −32602 TRƯỚC mạng; thân lỗi không chuyển tiếp; thân 2xx phải là JSON |
+| `khach-api.ts` | lời gọi ra ngoài DUY NHẤT | `redirect: "manual"`, trần thời gian, trần thân đọc theo stream, đối chiếu `origin`, cookie chỉ khi cần |
+| `khung-dong.ts` | gom byte stdin thành dòng | `StringDecoder`, trần độ dài, xả vô điều kiện khi đang bỏ |
+| `cau-hinh.ts` | env → cấu hình, hàm thuần | `https:` trừ localhost, cookie đúng hình dạng RFC 6265, không nêu giá trị trong lỗi |
+| `vong-lap.ts` | dòng vào → phản hồi ra | trần 8 lời gọi cùng lúc, `ghi` ném thành log |
+| `main.ts` | nối stdio, ba việc | stdout là kênh giao thức; `unhandledRejection`/`uncaughtException` có chốt chặn |
+
+Cộng: `tests/architecture/cong-quyen-route.test.ts` (mốc chết thứ tư), `eslint.config.js` (một dòng
+`ignores`), `package.json` (`mcp:dev`), `pnpm-lock.yaml` (`apps/mcp: {}`).
+
+## 3. Bảng công cụ KHÔNG import `ROUTES`, và cổng đối chiếu ở tầng test
+
+Hình dạng hiển nhiên — `apps/mcp` import `ROUTES` rồi lọc — bị bác vì hai lý do ĐO ĐƯỢC (ADR-038 §3):
+`ROUTES` mang handler nên kéo sáu gói nghiệp vụ vào một tiến trình chỉ nói HTTP; và
+`pham-vi-san-xuat.test.ts` vế ⑷ (lượt soi 67a-2) dựa trên tiền đề *"app là lá"* để miễn cả `apps/`
+khỏi phép đọc — một app import app khác ở mã sản xuất làm tiền đề ấy sai trong im lặng.
+
+Thay vào đó `cong-cu.test.ts` đọc `ROUTES` (import tương đối xuyên app) và đối chiếu HAI CHIỀU.
+Đo bằng đột biến: thêm một công cụ trỏ `/rfqs/:rfqId/comparison` ⇒ đỏ; đổi một công cụ sang route
+không tồn tại ⇒ đỏ 3 test; thêm lại `list_supplier_contacts` ⇒ đỏ; thêm lại `get_rfq_bid_count` ⇒ đỏ.
+
+## 4. BA CỔNG CỦA KHO ĐÃ NỔ, VÀ MỘT TRONG SỐ ĐÓ DẠY LẠI MỘT BÀI CŨ
+
+⑴ **`pnpm test` lần đầu XANH 861/861 — và cái xanh ấy không nói gì cả.** `quetTepTs` của
+`cong-quyen-route.test.ts` đọc `git ls-files`, nên `apps/mcp` chưa `git add` là `apps/mcp` cổng
+không nhìn thấy. Sau khi stage, **mốc chết thứ tư nổ đúng ngày `apps/mcp` ra đời**. Cùng lớp với
+khoản 121/S1.72 (cổng một đường đi cây thư mục gặp tệp dò tạm): ở kho này, "cổng đọc gì" quyết định
+"cổng thấy gì", và thứ tự stage/đo là một phần của phép đo.
+
+⑵ **`tep-van-ban-git.test.ts` và `xuong-dong-ts.test.ts` cùng đỏ vì MỘT tệp.**
+`apps/mcp/src/duong-dan.test.ts` mang một **byte NUL thô** (ca test "tham số chứa NUL" viết thẳng ký
+tự vào nguồn), nên Git xếp cả tệp là NHỊ PHÂN. Đúng lớp lỗi `.gitattributes` đã ghi lại từ
+`apps/unseal-worker/src/index.ts`. Sửa: dựng ký tự lúc chạy bằng `String.fromCharCode(0)`.
+
+⑶ Hai cổng ấy còn dạy một điều thứ hai: sau khi sửa cây làm việc, chúng **vẫn đỏ** cho tới khi
+`git add` lại — chúng đọc BLOB đã stage, không đọc đĩa.
+
+## 5. Lượt soi 69 — lượt DỌC trên `apps/mcp`, chạy trước khi merge
+
+Xem `## Lượt soi 69` bên dưới. Tóm tắt xử lý: **1 HIGH, 6 MEDIUM, 7 LOW**.
+
+- **Vá trong chính vòng này:** M-1 (bộ đệm stdin tích vô hạn — lỗi THẬT), M-2 (trần thân kiểm sau
+  khi nạp), M-3 (câu biện minh rộng hơn phép đo), M-5 (thân 2xx không kiểm `content-type`; và hai
+  công cụ bị rút), M-6 (rút `get_rfq_bid_count`), L-1 tới L-7.
+- **Chủ dự án quyết ngày 2026-09-17:** rút `get_rfq_bid_count` (M-6) và `list_supplier_contacts`
+  (M-5) khỏi bảng công cụ — 10 công cụ xuống **8**; nhận H-1 về sổ nợ (khoản 141) và merge vòng này.
+- **Vào sổ nợ:** khoản **141** (chứng chỉ là phiên người mua toàn quyền — chạm migration và
+  `apps/api`, là một vòng riêng) và khoản **142** (tám công cụ không để lại dòng nào trong
+  `audit_events`).
+
+## 6. Phép đo
+
+| Cổng | Lệnh | Kết quả |
+|---|---|---|
+| T0 | `pnpm t0` | exit 0 — 247 module / 1024 phụ thuộc |
+| T1+T2 | `pnpm test` | (số đo trên HEAD ở §8) |
+| `apps/mcp` riêng | `pnpm exec vitest run apps/mcp` | **8 tệp / 101 test** |
+| T3 | `pnpm test:int` | (số đo trên HEAD ở §8) |
+| Evidence | `pnpm evidence` | (số đo trên HEAD ở §8) |
+
+**Đột biến: 20 lần áp, 20 lần chết**, ba lượt, mỗi lượt đọc báo cáo `--reporter=json` của chính
+lượt chạy ấy rồi khôi phục byte gốc:
+
+| Lượt | Đột biến | Kết quả |
+|---|---|---|
+| 1 (trước lượt soi) | D1 thêm công cụ `comparison` · D2 bỏ `get_rfq` · D3 tắt kiểm hình dạng tham số · D4 `redirect: "follow"` · D5 đổi tên cookie · D6 chuyển tiếp thân lỗi · D7 bỏ `StringDecoder` · D8 log ra stdout | 8/8 chết (D3 đỏ 14 test, D8 đỏ 2) |
+| 2 (sau lượt soi) | D9 **khôi phục nguyên văn dòng sai của M-1** · D10 trần thân kiểm sau khi nạp · D11 bỏ kiểm `content-type` · D12 gửi cookie cho route công khai · D13 khai `health` không công khai · D14 bỏ đối chiếu `origin` · D15 bỏ kiểm hình dạng cookie · D16 thêm lại công cụ liên hệ · D17 thêm lại công cụ đếm thầu | 9/9 chết |
+| 3 (lớp vá L-1/L-2) | D18 bỏ trần đồng thời · D19 không trả lại chỗ trong trần · D20 bỏ `try/catch` quanh `ghi` | 3/3 chết |
+
+D9 là mũi quan trọng nhất của lượt hai: nó chứng minh ca test MỚI bắt được đúng lỗi bản đầu, chứ
+không chỉ chứng minh mã mới xanh.
+
+## 7. Phần KHÔNG đóng — nói thẳng
+
+- **Khoản 141 và 142** ở trên. Lời khai "MCP chỉ đọc" hôm nay là tính chất của MÁY KHÁCH, không
+  phải của CHỨNG CHỈ; và bề mặt agent không để lại dấu vết kiểm toán nào.
+- **`MO_DAU_DU_LIEU` là một lớp MỎNG.** Nó đánh dấu ranh giới dữ liệu/chỉ thị trong thân trả về,
+  nhưng không chặn được một máy khách chọn tin vào nội dung. Thứ chặn thật là phạm vi chỉ-đọc và ba
+  đường ở `ROUTE_DOC_KHONG_PHOI`.
+- **`apps/mcp/*.mjs` nằm trong `ignores` của eslint** (bản sao có chủ ý thứ năm của hook resolve) —
+  nhất quán với bốn bản trước, và cùng cái giá: hook chạy ở đường `pnpm mcp:dev` mà không bị lint.
+- **Trần 8 lời gọi cùng lúc đo ở T1 trên `taoVongLap`, chưa đo trên tiến trình thật.** Ca tiến
+  trình thật hôm nay đo bắt tay, stdout sạch và dòng rác; không đo tải.
+- **Nhịp lượt soi ngang:** mốc hiện tại là *"sau ba vòng đổi hardening, hay chậm nhất S1.77"*
+  (`Handoff.md` §11). S1.74 **không đổi hardening** và chưa chạm mốc — không lỡ nhịp.
+
+## Lượt soi 69 — lượt DỌC trên `apps/mcp` (ADR-038), chạy trên nhánh trước khi merge
+
+Reviewer đọc 9 tệp nguồn + 6 tệp test của `apps/mcp`, hai `.mjs`, `package.json` của app và của gốc,
+`eslint.config.js`, `tests/architecture/cong-quyen-route.test.ts`, cộng `apps/api/src/routes.ts`,
+`routes/buyer.ts`, `dispatch.ts`, `packages/identity/src/session-actor.ts`, `login.ts`,
+`vitest.config.ts`, `.gitleaks.toml`. **Không có Bash, không có CSDL — đọc mã, không đo.**
+
+### 69 — 1 CAO, 6 NẶNG, 7 NHẸ
+
+**CAO-1 (H-1) — lời khai "chỉ đọc" là tính chất của máy khách, không của chứng chỉ.** → khoản **141**,
+chủ dự án chọn nhận về sổ ngày 2026-09-17.
+
+**NẶNG:**
+
+- **M-1 — bộ đệm stdin TÍCH sau lần vượt trần đầu.** `if (!dangBo && dem.length > TRAN)`: một khi
+  `dangBo` bật, điều kiện false vĩnh viễn cho tới khi gặp `\n`, trong khi `dem += bo.write(chunk)`
+  vẫn nối mọi chunk. Chế độ "bỏ tới hết dòng" không bỏ gì — nó tích; một dòng 4 GB không newline làm
+  tiến trình OOM. **Test cũ không bắt vì nó gửi newline ngay chunk sau lần xả.** ĐÃ VÁ (xả vô điều
+  kiện khi đang bỏ) + `coDem()` để đo thẳng bộ đệm + hai ca mới; đột biến D9 khôi phục dòng cũ ⇒ đỏ.
+- **M-2 — trần thân kiểm SAU khi nạp trọn.** `await phanHoi.text()` rồi mới so 256 KB; `fetch` không
+  có trần thân, thứ duy nhất chặn là đồng hồ. ĐÃ VÁ: kiểm `content-length`, rồi đọc theo
+  `getReader()` cộng dồn byte và `cancel()` khi vượt; hai ca test (khai độ dài / chunked).
+- **M-3 — câu biện minh của cổng kiến trúc SAI về lớp quyền và sổ kiểm toán.** `dispatch.ts:504` là
+  `if (route.mutates && route.self !== true)` ⇒ route đọc KHÔNG bao giờ gọi `requirePermission`.
+  ĐÃ VÁ: gạch nguyên văn tại chỗ, viết lại đúng mức; khoảng trống pháp y thành khoản **142**.
+- **M-4 — ADR-038 được viện dẫn 8 lần mà chưa tồn tại trong kho.** ĐÃ VÁ: ADR-038 viết trong cùng vòng.
+- **M-5 — thân 2xx chảy nguyên văn, không kiểm `content-type`; `list_supplier_contacts` phơi dữ liệu
+  cá nhân bên thứ ba.** ĐÃ VÁ: đòi `application/json`, gắn `MO_DAU_DU_LIEU`; chủ dự án RÚT công cụ.
+- **M-6 — `get_rfq_bid_count` cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá.** Chủ dự án RÚT.
+
+**NHẸ (L-1…L-7):** trần lời gọi cùng lúc + backpressure stdout; ba đường chết đột ngột
+(`unhandledRejection`, thiếu listener `error`, `process.exit` cắt bộ đệm); hình dạng cookie chưa
+kiểm; hai trần mang tên "byte" mà đo đơn vị mã UTF-16; `dungDuongDan` không khẳng định kết quả bắt
+đầu bằng `/` trong khi khách nối chuỗi; cookie gửi cả cho `/health`; ba lớp chặn đúng mà chưa được
+đo (prototype pollution, trần thân, thân 2xx không phải JSON). **Cả bảy đã vá**, mỗi cái kèm ít nhất
+một khẳng định mới.
+
+### Reviewer KHÔNG tìm thấy
+
+Bí mật cứng trong `apps/mcp` (các hằng `COOKIE` trong ba tệp test là chuỗi giả); xác thực bị nới để
+test xanh (`dispatch.ts`, `session-actor.ts`, `routes/buyer.ts` không đổi ở nhánh này; `eslint.config.js`
+chỉ thêm một dòng `ignores`, không tắt luật nào); SQL injection / command injection (không `pg`,
+không `child_process`, không `eval` ở mã sản xuất).
