@@ -79,6 +79,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/test-support
 
+  apps/mcp: {}
+
   apps/public-keys:
     dependencies:
       '@trustprocure/bidding':
