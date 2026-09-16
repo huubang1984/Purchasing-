@@ -470,6 +470,18 @@ export async function executeUnsealRequest(
     throw loi;
   }
 
+  // [S1.73 / khoản 126] KHOÁ HÀNG RFQ TRƯỚC LẦN GHI SỔ ĐẦU. Câu `kt2` dưới kia đổi `status` của chính hàng này. Khi nó chờ khoá hàng
+  // SAU lần ghi sổ đầu, giao dịch worker giữ khoá tư vấn ghi sổ của tổ chức suốt lúc chờ, nên MỌI lần ghi sổ khác của tổ chức gãy
+  // 55P03 ở trần 2 s (050): đo hai lượt với bốn yêu cầu mở thầu thứ hai cách nhau 500 ms — 2 005 và 2 011 ms, người giữ chỉ là NGƯỜI
+  // DÙNG THƯỜNG, không superuser, không cần IM7 (§S1.73, khoản 126). Lấy khoá ở đây cho worker CÙNG THỨ TỰ KHOÁ với mọi đường khác —
+  // khoá hàng trước, khoá tư vấn ghi sổ sau — nên vòng chờ khép kín không dựng được nữa. `FOR NO KEY UPDATE` đúng mức mà `kt2` cần;
+  // `app_unseal` có `UPDATE (status)` (019) và `SELECT (id, org_id, status)` (009) nên lấy được đúng mức ấy, không hơn. Hàng thiếu thì
+  // `kt2` mới là lớp báo lỗi (`rowCount` khác 1), nên ở đây KHÔNG thêm một nhánh nữa cho ca mà khoá ngoại đã chặn.
+  await client.query(
+    "SELECT id FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 FOR NO KEY UPDATE",
+    [r.rfq_id, orgId],
+  );
+
   // [REVIEW AN NINH S1.6 — LOW-3] Lấy MỌI khoá còn hiệu lực, và ném nếu một thuật toán có HAI
   // hàng. Bản trước lấy `khoa[0]` không `ORDER BY`: hai hàng còn hiệu lực làm mọi phong bì rơi
   // vào nhánh thất bại trong khi hàm vẫn báo thành công và vẫn lật RFQ sang `UNSEALED`.

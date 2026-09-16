@@ -598,7 +598,10 @@ describe("[sổ nợ 39] hạn mức theo NGƯỜI GỌI trên /auth/* — đế
       [LOGIN_LINK_MAX_PER_ORG + 1],
     );
     expect(Number(moi[0]?.n)).toBeGreaterThanOrEqual(1);
-  }, 60_000);
+    // [S1.73] 120 s — đúng hạn của hai test cùng độ dài vòng lặp trong chính describe này. Ở lượt evidence song song của
+    // S1.73, test này chạm hạn 60 s (chạy riêng mất 6 304 ms); và vitest KHÔNG huỷ lượt chạy quá hạn, nên những lần gọi
+    // còn lại của nó cộng tiếp vào `soLanLamCham` và làm test [review H6-2] đỏ theo — đỏ dây chuyền, không phải hai lỗi.
+  }, 120_000);
 
   it("[review H6-2] tổ chức LẠ cũng bị LÀM CHẬM khi vượt trần toàn tổ chức — độ trễ không còn là oracle tồn tại tổ chức", async () => {
     const orgLa = "00000000-0000-4000-8000-00000000cafe";

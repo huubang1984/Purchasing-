@@ -1286,7 +1286,7 @@ bỏ trần, như trước S1.71, chờ 6 047 ms rồi thu hồi; ⑾ — mục 
 `MFA_LOCKED` ở ngưỡng gãy và rollback cả bộ đếm lẫn khoá, còn lần đoán đúng không cần khoá ghi sổ (`packages/identity/src/login.ts`), nên
 trong lúc ấy ngưỡng E3 không chặn lần đoán. **[S1.72 / lượt soi 67b-1]** Tiền đề của ⑾ rộng hơn phép đo: người giữ khoá quá 2 s ĐÃ BIẾT
 chỉ có dưới IM7, còn người giữ ngoài IM7 chưa loại trừ — ba đường chờ khoá hàng sau lần ghi sổ đầu của khoản 126 chưa đo, và phép đo 66a-1
-dựng người giữ bằng superuser. Việc chấp nhận ⑾ chờ chủ dự án xác nhận lại trên tiền đề đã sửa; con trỏ bền ở hàng 126. Lời "phiên đặt
+dựng người giữ bằng superuser. Việc chấp nhận ⑾ chờ chủ dự án xác nhận lại trên tiền đề đã sửa; con trỏ bền ở hàng 126. **[S1.73]** Phép đo của khoản 126 BÁC tiền đề ấy: bốn yêu cầu mở thầu thứ hai của người dùng thường, cách nhau 500 ms, giữ khoá ghi sổ của tổ chức quá 2 s và lần ghi sổ đồng thời gãy 55P03 sau 2 005–2 011 ms — không superuser, không cần IM7. Chính hệ quả ⑾ cũng thành ĐO: khoá bị giữ thì ba lần đoán sai liên tiếp ở ngưỡng đều gãy 55P03, bộ đếm và mốc khoá bị rollback cả ba lần, còn lần đoán đúng vẫn qua. Ngày 2026-09-16 chủ dự án chọn vá khoản 126 và MỞ một khoản riêng cho việc ngưỡng khoá MFA phụ thuộc lần ghi sổ — khoản 139; việc chấp nhận ⑾ nay đứng trên số đo chứ không trên tiền đề đã bị bác. Lời "phiên đặt
 `lock_timeout` nhỏ hơn 2 s chờ tới 2 s ở lần ghi sổ" nay đo (lượt soi ngang 66a-3, test ở `db/tran-cho-khoa-ghi-so.int.test.ts`): giao dịch
 `SET LOCAL lock_timeout = '500ms'` ⇒ 55P03 sau 2 008–2 009 ms dưới trần, 511 ms khi hàm bỏ trần.
 
@@ -1337,6 +1337,19 @@ người gọi, khoản 122.
 khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc
 `throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào
 tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
+
+
+### [S1.73 / khoản 126] Worker mở thầu KHOÁ HÀNG RFQ trước lần ghi sổ đầu — thứ tự khoá của mọi đường ghi là khoá hàng trước, khoá tư vấn ghi sổ sau
+
+**Bối cảnh.** Trần 2 s của S1.71 bảo vệ người chờ khoá ghi sổ, nhưng nó biến mỗi mili-giây một giao dịch giữ khoá ấy thành mili-giây cả tổ chức không ghi sổ được. `executeUnsealRequest` ghi sổ `RFQ_KEY_MATERIAL_UNWRAPPED` rồi mới phát `UPDATE public.unseal_requests` và `UPDATE public.rfq_packages`; câu sau chờ khoá hàng RFQ. Hàng 126 hỏi đường sản xuất nào dựng được người giữ hàng ấy.
+
+**Quyết định (2026-09-16).** ⑴ `executeUnsealRequest` lấy khoá hàng RFQ bằng một câu `SELECT id … FOR NO KEY UPDATE` NGAY TRƯỚC phần giải mã, tức trước lần ghi sổ đầu; vị trí câu `UPDATE` và thứ tự seq của hai bản ghi sổ giữ nguyên. Thứ tự khoá của worker khi ấy giống mọi đường khác — khoá hàng trước, khoá tư vấn ghi sổ sau — nên không dựng được vòng chờ khép kín. ⑵ Chủ dự án NHẬN đổi mã lỗi trong cửa sổ đua: một yêu cầu mở thầu thứ hai phát đúng lúc worker đang chạy nay chờ khoá hàng rồi bị trigger 019 từ chối bằng `check_violation` (HTTP 422, thông điệp "RFQ đang ở UNSEALED") thay cho lần vướng chỉ mục duy nhất trước đây (HTTP 409). Lý do nhận: 422 nói đúng lý do hơn, và giá đo được của bản vá nhỏ.
+
+**Hệ quả.** Worker giữ khoá hàng RFQ suốt giao dịch, gồm cả lúc mở bọc khoá và giải mã phong bì — đo: 26–45 ms cho một và tám phong bì, so với 37–91 ms của bản trước; một yêu cầu mở thầu đồng thời vẫn có trả lời sau khoảng 20 ms. Một lượt mở thầu HỎNG cũng giữ khoá hàng ấy tới khi giao dịch kết thúc — trước bản vá thì không. Đổi lại: bốn yêu cầu mở thầu thứ hai cách nhau 500 ms không còn làm lần ghi sổ đồng thời của tổ chức gãy.
+
+**Phần KHÔNG đóng.** Hình dạng "câu ghi hàng đứng sau lần ghi sổ đầu" còn ở `approveUnseal` — khoản 140, đọc, chưa đo. Ngưỡng khoá MFA vẫn phụ thuộc lần ghi sổ `MFA_LOCKED` nên trong lúc khoá ghi sổ bị giữ thì nó không chạm — khoản 139, đo. Trần 2 s không đuổi người giữ; khoản 128 vẫn mở.
+
+**Đo bằng gì.** `apps/unseal-worker/src/unseal-worker.int.test.ts` (bốn test, gồm đối chứng dương của phép dò khoá và ca giao dịch hỏng thả khoá ngay lúc abort), `packages/rfq/src/rfq.int.test.ts` (đường ⑵), `packages/identity/src/mfa.int.test.ts` (hệ quả E3). Số đo đầy đủ ở `evidence/security-reviews.md` §S1.73.
 
 ### Điều ADR này KHÔNG đóng
 

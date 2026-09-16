@@ -17,6 +17,7 @@ import {
   enrollTotpCredential,
   generateTotpSecret,
   verifyTotpAttempt,
+  verifyTotpForLogin,
   type MfaAttemptResult,
   type TotpAttempt,
   type TotpSecretUnsealer,
@@ -2125,4 +2126,84 @@ describe("[QT3] MFA dưới search_path thù địch", () => {
       await dbRieng.stop();
     }
   }, 240_000);
+});
+
+// =============================================================================================
+// [S1.73 / khoản 126 ⑾] KHOÁ GHI SỔ CỦA TỔ CHỨC BỊ GIỮ ⇒ NGƯỠNG KHOÁ E3 CỦA `/auth/totp` KHÔNG CHẠM — ĐO
+//
+// Từ S1.71, mọi lần ghi sổ chờ khoá tư vấn ghi sổ của tổ chức tối đa 2 s rồi gãy 55P03 (050). `/auth/totp` gọi `verifyTotpForLogin` TRONG
+// giao dịch của request (`apps/api/src/routes/auth.ts`): khi lần đoán sai đưa bộ đếm CHẠM ngưỡng, hàm ghi `MFA_LOCKED` — và chính lần ghi
+// ấy gãy nếu khoá đang bị giữ. Lỗi ném ra khỏi handler nên giao dịch request rollback, mang theo CẢ bộ đếm lẫn `locked_until`. Lần đoán
+// ĐÚNG không cần ghi sổ, nên nó KHÔNG gãy.
+//
+// Hệ quả ⑾ ghi ở ADR-016 [S1.71] mới là ĐỌC; test này đo. Chủ dự án chấp nhận ⑾ ngày 2026-09-14 trên tiền đề "ai giữ được khoá quá 2 s thì
+// đã ở IM7 (khoản 128)" — phép đo của khoản 126 (§S1.73) cho thấy tiền đề ấy SAI, nên việc chấp nhận chờ chủ dự án xác nhận lại.
+//
+// Không nhãn INV: E3 có nhãn riêng ở các test trên; đây là phép đo RANH GIỚI của E3 dưới một điều kiện ngoài nó.
+// =============================================================================================
+describe("[S1.73 / khoản 126 ⑾] khoá ghi sổ của tổ chức bị giữ thì ngưỡng khoá E3 không chạm", () => {
+  const GIU_SO =
+    "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K126_GIU_KHOA', 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
+
+  it("ở ngưỡng, mỗi lần đoán SAI gãy 55P03 và bộ đếm lẫn khoá bị rollback — ba lần liên tiếp vẫn KHÔNG khoá được hồ sơ, còn mã ĐÚNG vẫn qua", async () => {
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA, MFA_MAX_FAILED_ATTEMPTS - 1],
+    );
+    const maDung = deriveTotpCode(biMatA, counterForTime(Date.now()));
+    const maSai = maDung === "000000" ? "111111" : "000000";
+
+    const giu = await apiPool.connect();
+    const maLoi: string[] = [];
+    const trangThai: string[] = [];
+    const msMoiLan: number[] = [];
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await giu.query(GIU_SO, [orgA]);
+
+      for (let lan = 0; lan < 3; lan += 1) {
+        const batDau = Date.now();
+        const loi = await withTenant(apiPool, orgA, (c) =>
+          verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maSai }, congMoBiMat),
+        ).then(
+          (kq) => ({ code: `khong-nem:${JSON.stringify(kq)}` }),
+          (e: unknown) => e as { code?: string },
+        );
+        msMoiLan.push(Date.now() - batDau);
+        maLoi.push(loi.code ?? "?");
+        const { rows } = await db.pool.query<{ f: number; l: Date | null }>(
+          "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
+          [nguoiA],
+        );
+        trangThai.push(`${rows[0]!.f}/${rows[0]!.l === null ? "chua-khoa" : "da-khoa"}`);
+      }
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const kqDung = await withTenant(apiPool, orgA, (c) =>
+      verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maDung }, congMoBiMat),
+    );
+
+    // Trả hồ sơ về trạng thái sạch: test này đặt bộ đếm sát ngưỡng, và một tệp test đọc theo thứ tự khác sẽ thấy trạng thái ấy
+    // (lượt soi 68a-3). Đặt trước khối khẳng định để nó chạy cả khi một khẳng định hỏng.
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = 0, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA],
+    );
+
+    const ke =
+      `mã lỗi mỗi lần đoán sai: [${maLoi.join(",")}] sau [${msMoiLan.join(",")}] ms; ` +
+      `bộ đếm/khoá sau mỗi lần: [${trangThai.join(",")}]; ngưỡng = ${MFA_MAX_FAILED_ATTEMPTS}`;
+
+    expect(maLoi, `mỗi lần đoán sai ở ngưỡng phải gãy ở lần ghi MFA_LOCKED — ${ke}`).toEqual(["55P03", "55P03", "55P03"]);
+    expect(trangThai, `bộ đếm và khoá bị rollback theo giao dịch request — ${ke}`).toEqual([
+      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
+      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
+      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
+    ]);
+    expect(kqDung.ok, `mã đúng không cần ghi sổ nên vẫn qua — ${ke}`).toBe(true);
+  }, 60_000);
 });
