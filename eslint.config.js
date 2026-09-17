@@ -49,6 +49,10 @@ export default tseslint.config(
       // [S1.17] `tools/neo-so-kiem-toan/*.mjs` — bản sao có chủ ý thứ tư của cùng hook resolve,
       // cho entry point xuất/kiểm mốc neo ngoài. Vẫn liệt kê đúng một thư mục.
       "tools/neo-so-kiem-toan/*.mjs",
+      // [ADR-038] `apps/mcp/*.mjs` — bản sao có chủ ý thứ NĂM của cùng hook resolve, cho điểm vào
+      // của tiến trình MCP (`pnpm mcp:dev`). Lý do không dùng chung file với `apps/api` ghi ở đầu
+      // `apps/mcp/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một thư mục, không gộp `apps/*/*.mjs`.
+      "apps/mcp/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

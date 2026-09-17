@@ -1,0 +1,138 @@
+// ==============================================================================================
+// apps/mcp/src/cong-cu.ts — BẢNG CÔNG CỤ MCP. DỮ LIỆU THUẦN, KHÔNG IMPORT MỘT DÒNG MÃ NÀO CỦA api.
+//
+// Mỗi công cụ MCP là MỘT route ĐỌC của `apps/api`, và không gì khác. Bảng này không import
+// `ROUTES` — lý do đo được nằm ở khối đầu `cong-cu.test.ts`, nơi hai bên được đối chiếu hai chiều.
+//
+// BA ĐIỀU BẢNG NÀY KHÔNG LÀM, nói ra để không ai đi tìm:
+//   ⑴ không mang handler, không mang mã quyền — quyền là việc của `apps/api`, và MCP không được
+//      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
+//   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
+//      chiếu làm một công cụ ghi không viết được;
+//   ⑶ không mang ba route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
+//      KHÔNG, không phải một việc chưa làm.
+//
+// Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
+// là một máy khách MCP bất kỳ. Chú thích và tên biến nội bộ bằng tiếng Việt, theo Handoff §14.
+// ==============================================================================================
+
+/** Một công cụ MCP: đúng một route ĐỌC của `apps/api`. */
+export interface CongCuMcp {
+  /** Tên công cụ trong giao thức MCP — `^[a-z][a-z0-9_]*$`. */
+  readonly ten: string;
+  readonly method: "GET";
+  /** Mẫu đường dẫn của `apps/api`, nguyên văn, kể cả `:thamSo`. */
+  readonly path: string;
+  /** Mô tả gửi cho máy khách MCP. */
+  readonly moTa: string;
+  /** SUY từ `path` — không khai tay, nên không trôi được. */
+  readonly thamSo: readonly string[];
+  /**
+   * Route CÔNG KHAI của `apps/api` (`audience: "PUBLIC"`) — không cần chứng chỉ nào.
+   *
+   * [lượt soi 69 L-6] Cờ này tồn tại để cookie phiên KHÔNG được gửi kèm những lời gọi không cần
+   * nó. Một bí mật chỉ đi ra khi có lý do là một bí mật ít đường rò hơn. Cổng đối chiếu buộc cờ
+   * này khớp `audience` của `ROUTES`, nên nó không tự khai sai được.
+   */
+  readonly congKhai: boolean;
+}
+
+/**
+ * Tên tham số trong một mẫu đường dẫn: `/rfqs/:rfqId/items` → `["rfqId"]`.
+ *
+ * Hàm THUẦN và là nguồn DUY NHẤT của danh sách tham số: một công cụ không có cách nào khai một
+ * tham số mà đường dẫn không có, hay quên một tham số mà đường dẫn đòi.
+ */
+export function thamSoCuaDuong(pDuong: string): string[] {
+  return pDuong
+    .split("/")
+    .filter((doan) => doan.startsWith(":"))
+    .map((doan) => doan.slice(1));
+}
+
+/**
+ * Route ĐỌC của `apps/api` mà MCP CỐ Ý không phơi. Mỗi dòng là một quyết định của chủ dự án, và
+ * lý do phải đọc được ở đây — cổng đối chiếu đòi cả hai (route có thật, lý do không rỗng).
+ *
+ * Danh sách này KHÔNG phải "chưa làm". Nó là chỗ một lần "tiện tay thêm vào" phải va vào một câu
+ * đã viết sẵn.
+ */
+export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
+  "/rfqs/:rfqId/comparison":
+    "BẢNG SO SÁNH GIÁ sau mở thầu — thứ toàn bộ sản phẩm sinh ra để bảo vệ. Một công cụ MCP đưa " +
+    "nó vào ngữ cảnh của một agent là đưa giá của mọi nhà cung cấp ra một nơi chủ dự án không " +
+    "kiểm soát được, và không lớp nào trong hệ thống lấy lại được. Chủ dự án chọn KHÔNG phơi " +
+    "ngày 2026-09-17 (ADR-038). Cần đọc giá thì đọc bằng chính giao diện người mua, dưới phiên " +
+    "có MFA của một con người.",
+  "/rfqs/:rfqId/bid-count":
+    "SỐ HỒ SƠ THẦU ĐÃ NHẬN — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +
+    "vì cả hai hàm có MỤC ĐÍCH DUY NHẤT là kiểm soát tiết lộ (`tests/architecture/" +
+    "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số hồ sơ nhận được TRƯỚC " +
+    "lễ mở là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
+    "hỏi vì sao hai hàm cùng rổ lại đi hai hướng, và chủ dự án rút nó ngày 2026-09-17 (ADR-038).",
+  "/suppliers/:supplierId/contacts":
+    "TÊN, EMAIL, ĐIỆN THOẠI của những con người cụ thể ở một công ty khác. Bản đầu của S1.74 phơi " +
+    "nó kèm câu 'business data, not credentials' — đúng về CHỨNG CHỈ và sai về DỮ LIỆU CÁ NHÂN " +
+    "(lượt soi 69 M-5). Chính lập luận dùng cho bảng giá áp nguyên ở đây: đã vào ngữ cảnh một " +
+    "agent thì không lấy lại được. Chủ dự án rút ngày 2026-09-17 (ADR-038).",
+};
+
+/** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */
+const BANG: readonly {
+  readonly ten: string;
+  readonly path: string;
+  readonly moTa: string;
+  readonly congKhai?: true;
+}[] = [
+  {
+    ten: "health",
+    path: "/health",
+    moTa: "Liveness probe of the TrustProcure API. Takes no arguments.",
+    congKhai: true,
+  },
+  {
+    ten: "me",
+    path: "/me",
+    moTa: "The buyer session behind the configured credential: organisation, user and session id.",
+  },
+  {
+    ten: "list_suppliers",
+    path: "/suppliers",
+    moTa: "List suppliers of the caller's organisation.",
+  },
+  {
+    ten: "get_supplier",
+    path: "/suppliers/:supplierId",
+    moTa: "One supplier of the caller's organisation, by id. Contact people are not included.",
+  },
+  {
+    ten: "get_policy",
+    path: "/policy",
+    moTa: "Procurement policy of the organisation: approval thresholds and dual-approval rules.",
+  },
+  {
+    ten: "get_rfq",
+    path: "/rfqs/:rfqId",
+    moTa: "One RFQ: state, deadline, budget visibility and metadata. Never bid prices.",
+  },
+  {
+    ten: "list_rfq_items",
+    path: "/rfqs/:rfqId/items",
+    moTa: "Line items of one RFQ: what is being bought, in what quantity.",
+  },
+  {
+    ten: "get_unseal_request",
+    path: "/unseal/:unsealRequestId",
+    moTa: "State of one unseal request: who asked, who approved, whether it has been dispatched.",
+  },
+];
+
+/** Bảng công cụ MCP. `thamSo` suy từ `path` tại chỗ — không có bản chép thứ hai để trôi. */
+export const CONG_CU: readonly CongCuMcp[] = BANG.map((d) => ({
+  ten: d.ten,
+  method: "GET" as const,
+  path: d.path,
+  moTa: d.moTa,
+  thamSo: thamSoCuaDuong(d.path),
+  congKhai: d.congKhai === true,
+}));

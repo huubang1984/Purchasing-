@@ -1,0 +1,12 @@
+{
+  "name": "@trustprocure/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "//": "[ADR-038] May chu MCP CHI DOC, noi voi apps/api bang HTTP. Danh sach phu thuoc RONG va do la mot bao dam, khong phai mot su thieu sot: khong `@modelcontextprotocol/sdk` (giao thuc la JSON-RPC 2.0 tren stdio, tu cai — cung lap luan `node:http` tran cua ADR-020, va `tests/architecture/pham-vi-san-xuat.test.ts` ghim DUNG HAI phu thuoc ngoai o pham vi san xuat), khong `pg` (tien trinh nay khong cham CSDL), khong `@trustprocure/api` (import `ROUTES` o duong chay se keo ca cay nghiep vu vao mot tien trinh chi noi HTTP — xem khoi dau `src/cong-cu.test.ts`). Bang cong cu doi chieu voi `ROUTES` o TANG TEST, noi import xuyen app duoc phep.",
+  "devDependencies": {}
+}

@@ -318,7 +318,16 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
   // phải ra đời CÙNG LÚC với cổng quyền của nó."* Đúng thế: route đầu tiên (`POST /suppliers`)
   // và cổng của nó (`dispatch.ts` + `routes.test.ts` [INV-H17]) vào kho trong CÙNG một commit.
   // ============================================================================================
-  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ BA APP, và app thứ ba là nơi cổng quyền CÓ NGHĨA", () => {
+  // ============================================================================================
+  // *** MỐC CHẾT THỨ TƯ ĐÃ NỔ ĐÚNG NGÀY NÓ ĐƯỢC HẸN — apps/mcp ra đời (ADR-038). ***
+  //
+  // Nguyên văn khẳng định trước: `const APP_DA_BIET = ["unseal-worker", "public-keys", "api"]` cộng
+  // tiêu đề *"`apps/` NAY CÓ BA APP, và app thứ ba là nơi cổng quyền CÓ NGHĨA"*. Nó đỏ ở lượt chạy
+  // đầu tiên sau khi `apps/mcp` được `git add` — và CHỈ khi ấy: `quetTepTs` đọc `git ls-files`, nên
+  // một app chưa vào kho là một app cổng này không nhìn thấy. Lượt chạy trước lúc stage XANH, và
+  // cái xanh ấy không nói gì cả.
+  // ============================================================================================
+  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ BỐN APP, và app thứ tư MƯỢN cổng quyền của app thứ ba", () => {
     const cacTep = quetTepTs(THU_MUC_APPS);
     expect(cacTep.length, "apps/ phải có ít nhất một module .ts đã vào kho").toBeGreaterThan(0);
 
@@ -332,35 +341,58 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     //      không có người dùng nào để hỏi quyền. Một cổng quyền ở đó là một cổng canh cửa vào
     //      một căn phòng trống.
     //
+    //   ⑶ [ADR-038] `apps/mcp` là app đầu tiên mang một BỀ MẶT AGENT, và nó KHÔNG chạm CSDL: nó
+    //      nói HTTP với `apps/api` dưới một phiên người mua đã có. Một `requirePermission` viết
+    //      TRONG `apps/mcp` sẽ là bản sao thứ hai của ma trận quyền, đặt ở một tiến trình không
+    //      đọc được ma trận ấy: một cổng sẽ trôi, không phải một lớp thêm. Thứ `apps/mcp` tự canh
+    //      không phải QUYỀN mà là PHẠM VI — chỉ route đọc, và ba đường ở `ROUTE_DOC_KHONG_PHOI`
+    //      (`apps/mcp/src/cong-cu.test.ts`).
+    //
+    //      ~~Cổng quyền của nó LÀ cổng quyền của `apps/api` — mọi công cụ đi qua `dispatch.ts`,
+    //      `requirePermission`, RLS và sổ kiểm toán, ghi đúng người dùng của phiên ấy.~~
+    //      **[lượt soi 69 M-3] CÂU VỪA GẠCH RỘNG HƠN PHÉP ĐO, và nó là câu đang BIỆN MINH cho việc
+    //      `apps/mcp` không mang lớp quyền nào — đúng khuôn "lấp mã bằng nhãn thay vì bằng lớp"
+    //      mà chính tệp này cảnh báo ở khối trên.** `dispatch.ts:504` là
+    //      `if (route.mutates && route.self !== true)`: route ĐỌC KHÔNG BAO GIỜ gọi
+    //      `requirePermission`. Phát biểu đúng mức: tám công cụ của MCP đi qua phiên + RLS theo tổ
+    //      chức, và **không công cụ nào để lại một dòng nào trong `audit_events`** — hai đường đọc
+    //      DUY NHẤT có cổng quyền thật (`buildComparisonTable`, `countReceivedBids` — rổ
+    //      `HAM_DOC_CO_QUYEN` ở đầu tệp này, và `apps/api/src/routes/buyer.ts:206`) đều nằm trong
+    //      `ROUTE_DOC_KHONG_PHOI`, tức MCP cố ý không phơi. Khoảng trống pháp y ấy là khoản nợ 142.
+    //
     // Tức lớp này quét mã THẬT của hai app, và cả hai đúng là không được phép mang cổng quyền. Vế
     // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh. Ngày
     // `apps/api` ra đời — route đầu tiên nhận một phiên NGƯỜI DÙNG và gọi một hàm ghi — mới là
     // ngày nó có nghĩa trọn vẹn, và ngày ấy khẳng định dưới đây phải đỏ rồi được viết lại lần nữa.
-    const APP_DA_BIET = ["unseal-worker", "public-keys", "api"] as const;
+    const APP_DA_BIET = ["unseal-worker", "public-keys", "api", "mcp"] as const;
     const tepNgoaiDanhSach = cacTep.filter(
       (t) => !APP_DA_BIET.some((app) => t.includes(`${THU_MUC_APPS}${sep}${app}${sep}`)),
     );
     expect(
       tepNgoaiDanhSach,
-      "Nếu câu này đỏ thì `apps/` đã có một app THỨ TƯ — hãy đọc lại khối chú thích trên và viết " +
+      "Nếu câu này đỏ thì `apps/` đã có một app THỨ NĂM — hãy đọc lại khối chú thích trên và viết " +
         "lại phần chênh cho đúng thứ vừa ra đời, và quyết định nó có route hay không.",
     ).toEqual([]);
 
-    // Đối chứng cho vế ⑵, để "public-keys không mang cổng quyền" là một PHÉP ĐO chứ không phải
-    // một câu trong chú thích: mã nguồn của nó không gọi một hàm đổi trạng thái nào — tức nó rơi
-    // vào ca "không có gì để canh", không phải ca "có thứ để canh mà không canh".
-    const tepPublicKeys = cacTep.filter((t) => t.includes(`${sep}public-keys${sep}`));
-    expect(tepPublicKeys.length, "apps/public-keys phải có mã đã vào kho").toBeGreaterThan(0);
-    for (const tep of tepPublicKeys) {
-      const ma = readFileSync(tep, "utf8");
-      const hamGhiDuocGoi = HAM_DOI_TRANG_THAI.filter((ten) =>
-        new RegExp("\\b" + ten + "\\s*\\(").test(ma),
-      );
-      expect(
-        hamGhiDuocGoi,
-        `${tep.slice(GOC.length)} gọi hàm đổi trạng thái — app "chỉ đọc" không còn chỉ đọc nữa, ` +
-          "và phần chênh ở trên đã sai.",
-      ).toEqual([]);
+    // Đối chứng cho vế ⑵ và vế ⑶, để "hai app này không mang cổng quyền" là một PHÉP ĐO chứ không
+    // phải một câu trong chú thích: mã nguồn của chúng không gọi một hàm đổi trạng thái nào — tức
+    // chúng rơi vào ca "không có gì để canh", không phải ca "có thứ để canh mà không canh".
+    // [ADR-038] `mcp` vào vòng này cùng ngày nó ra đời: một công cụ MCP gọi thẳng một hàm nghiệp
+    // vụ là đúng thứ vế ⑶ nói rằng nó KHÔNG làm.
+    for (const app of ["public-keys", "mcp"] as const) {
+      const tepCuaApp = cacTep.filter((t) => t.includes(`${sep}${app}${sep}`));
+      expect(tepCuaApp.length, `apps/${app} phải có mã đã vào kho`).toBeGreaterThan(0);
+      for (const tep of tepCuaApp) {
+        const ma = readFileSync(tep, "utf8");
+        const hamGhiDuocGoi = HAM_DOI_TRANG_THAI.filter((ten) =>
+          new RegExp("\\b" + ten + "\\s*\\(").test(ma),
+        );
+        expect(
+          hamGhiDuocGoi,
+          `${tep.slice(GOC.length)} gọi hàm đổi trạng thái — app "chỉ đọc" không còn chỉ đọc nữa, ` +
+            "và phần chênh ở trên đã sai.",
+        ).toEqual([]);
+      }
     }
   });
 });
