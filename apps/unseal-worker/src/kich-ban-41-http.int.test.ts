@@ -572,7 +572,12 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
         for (const g of quetRoRi(ph.text + "\n" + headerText)) roRi.push(`${r.method} ${r.path} (${ph.status}): ${g}`);
       }
     }
-    expect(soGoi).toBeGreaterThanOrEqual(ROUTES.length - 1);
+    // [khoản 141] Số route bị bỏ qua SUY từ chính bảng, không viết cứng: vòng lặp trên bỏ MỌI
+    // route tự thân, và S1.75 thêm cái thứ hai (`POST /auth/agent-session`). Con số `- 1` cũ
+    // đúng khi chỉ có đăng xuất, và nó thiu lặng lẽ ngay khi lớp route ấy có thêm một thành viên.
+    const soTuThan = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true).length;
+    expect(soTuThan, "không còn route tự thân nào — vòng lặp trên đã bỏ qua nhầm thứ gì đó").toBeGreaterThan(0);
+    expect(soGoi).toBeGreaterThanOrEqual(ROUTES.length - soTuThan);
     // [sổ nợ 49] Không route ghi nào dừng ở 422 HÌNH DẠNG — mọi thân đều qua bộ đọc thân và chạm nghiệp vụ;
     // và ít nhất mười route ghi đi trọn tới 2xx trên RFQ hy sinh.
     expect(loiHinhDang, "route ghi dừng ở 422 hình dạng — thân chưa hợp lệ").toEqual([]);

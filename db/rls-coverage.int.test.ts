@@ -900,6 +900,10 @@ describe("phủ RLS", () => {
       { bang: "rfq_packages", cot: "status" },
       { bang: "sessions", cot: "expires_at" },
       { bang: "sessions", cot: "id" },
+      // [khoản 141 / ADR-039, 051] `kind` — worker mở thầu chạy lại `assertFreshMfa` trên
+      // `dispatched_by_session_id`, và giải mã là hành động KHÔNG THU HỒI ĐƯỢC duy nhất của hệ
+      // thống. Không có cột này thì `app_unseal` mù hoàn toàn với phạm vi của chứng chỉ điều phối.
+      { bang: "sessions", cot: "kind" },
       { bang: "sessions", cot: "mfa_verified_at" },
       { bang: "sessions", cot: "org_id" },
       { bang: "sessions", cot: "revoked_at" },
@@ -1247,6 +1251,10 @@ describe("phủ RLS", () => {
       // ĐÃ MFA ngay lúc chèn (trigger `sessions_kiem_mfa_khi_tao` ép), nên trạng thái "đã xác thực hai
       // lớp" tới trong CÙNG câu INSERT chứ không bằng "một câu lệnh riêng". Vế UPDATE giữ nguyên cho
       // `assertFreshMfa`/xác thực lại. Nguyên văn Task 9 giữ ở khối trên để đối chiếu.
+      // [khoản 141 / ADR-039, 051] `kind` CÓ INSERT và CỐ Ý KHÔNG có UPDATE: phạm vi do máy chủ
+      // đóng lúc phát và BẤT BIẾN sau đó. Sự vắng mặt của một hàng `UPDATE` ở đây LÀ bất biến ấy —
+      // `UPDATE sessions SET kind` dưới app_api ném 42501, và `auth.int.test.ts` đo đúng câu đó.
+      { grantee: "app_api", bang: "sessions", cot: "kind", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "mfa_verified_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "sessions", cot: "mfa_verified_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "sessions", cot: "org_id", quyen: "INSERT" },
