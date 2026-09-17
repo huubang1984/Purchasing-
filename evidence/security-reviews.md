@@ -5927,12 +5927,24 @@ từ lúc viết, và cả bốn đều rỗng.
 
 ## 7. Phép đo
 
+Đo trên HEAD `3c91d7b` — đúng cây được đẩy:
+
 | Cổng | Lệnh | Kết quả |
 |---|---|---|
-| T0 | `pnpm t0` | (số đo trên HEAD ở §8) |
-| T1+T2 | `pnpm test` | (số đo trên HEAD ở §8) |
-| T3 | `pnpm test:int` | (số đo trên HEAD ở §8) |
-| Evidence | `pnpm evidence` | (số đo trên HEAD ở §8) |
+| T0 | `pnpm t0` | exit 0 — **248 module / 1 028 phụ thuộc**, 0 vi phạm |
+| T1+T2 | `pnpm test` | **901 passed**, 1 skipped / 63 tệp |
+| T3 | `pnpm test:int` | **1 016 passed** / 46 tệp |
+| Evidence | `pnpm evidence` | **vitest thoát mã 0**, 1 918 khẳng định (S1.74: 1 899, **+19**), 56/56 bất biến |
+
+**Một lượt T3 ĐỎ phải bỏ, và nó dạy lại một điều.** Lượt đầu sau commit mã đỏ 8 test ở 5 tệp — không cái nào là hồi quy hành
+vi, cả sáu (sau khi gộp) là LỜI KHAI ĐẾM mà vòng này làm thiu: census ACL mức cột ở hai nơi, thân `/me`, ba danh sách liệt kê
+từng migration, và `ROUTES.length - 1` viết cứng trong bộ quét rò rỉ của kịch bản 41. Mỗi cái đều bị bắt bởi đúng cổng sinh ra
+để bắt nó. Con số `- 1` ấy đúng khi chỉ có MỘT route tự thân và thiu LẶNG LẼ ngay khi lớp route ấy có thêm thành viên — nay nó
+đếm suy từ chính bảng.
+
+**Và một lượt đỏ VÌ TẢI.** Chạy hai tệp nặng nhất song song cho một `Test timed out in 180000ms` ở *"[vòng fix 1 — M1] GRANT
+INSERT trên cột chuỗi bị thu hồi"*; chạy riêng tệp ấy thì xanh, và lượt nguyên cây cũng xanh. Đỏ vì tải và đỏ vì sai trông
+giống hệt nhau trong log — phép đo đúng là lượt nguyên cây, và cả hai lượt đều ghi ở đây.
 
 **Đột biến — hai lượt, và lượt đầu mới là lượt có giá trị:**
 
