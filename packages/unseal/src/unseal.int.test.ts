@@ -948,11 +948,18 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
 // ngoại KHÔNG xung đột `FOR NO KEY UPDATE`, nên nếu khoá chỉ đến từ khoá ngoại thì người giữ dưới đây
 // đã phải đi lọt — đo thì nó CHỜ.
 //
-// ĐỘT BIẾN NÀO LÀM VẾ NÀY ĐỎ — ĐÃ ĐO, không suy [lượt soi 71 / G2-1; bảng đo ở §S1.76 mục 4]:
-//   ⒜ dời câu `INSERT` xuống SAU `appendAuditEvent`  → **ĐỎ**
-//   ⒝ gỡ `FOR NO KEY UPDATE` khỏi thân trigger 019   → **ĐỎ**
+// ĐỘT BIẾN NÀO LÀM VẾ NÀY ĐỎ, VÀ ĐỎ BẰNG CÁCH NÀO — ĐÃ ĐO, không suy
+// [lượt soi 71 / G2-1, G2-4; bảng đo ở §S1.76 mục 4]:
+//   ⒜ dời câu `INSERT` xuống SAU `appendAuditEvent`  → **ĐỎ** bằng `40P01 deadlock detected` ném từ
+//        chính câu INSERT; KHÔNG vế `expect` nào chạy tới. Đó là hình dạng khoản 140 khi nó CÓ THẬT:
+//        approve cầm khoá ghi sổ rồi chờ hàng, người giữ chờ lại khoá ghi sổ ⇒ vòng khép kín ⇒ bộ dò
+//        khoá chết bắn ở `deadlock_timeout` 1 s, TRƯỚC trần 2 s của 050 (xem khoản 143).
+//   ⒝ gỡ `FOR NO KEY UPDATE` khỏi thân trigger 019   → **ĐỎ** ở vòng chờ có hạn dưới đây
 //   ⒞ bỏ KHOÁ NGOẠI `(org_id, unseal_request_id)`    → **XANH NGUYÊN**
-//   ⒟ tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` → **ĐỎ**
+//   ⒟ tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` → **ĐỎ**, cùng cách với ⒝
+// Tức KHÔNG đột biến nào ở trên bị một vế `expect` bắt — chúng chết sớm hơn. Vế `expect` canh một ca
+// khác, và ca ấy mới là ca im lặng: approve cầm khoá ghi sổ mà KHÔNG khép thành vòng (người giữ không
+// ghi sổ ⇒ không có khoá chết). Chỉ một khẳng định trên `pg_locks` thấy được ca ấy.
 // ⒞ là vế chịu lực của cả lời giải thích: khoá ngoại KHÔNG giữ vế này, câu `FOR NO KEY UPDATE` mới
 // giữ. Bản đầu của khối này khai ngược lại, và khai sai.
 //

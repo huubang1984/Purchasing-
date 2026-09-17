@@ -6097,15 +6097,29 @@ khai đúng vế ấy là chỗ giữ khoản 140 đóng. Khuôn lấy từ `gia
 Bản đầu của biên bản này khai "đảo hai câu ấy, hay **bỏ khoá ngoại**, thì khoản 140 thành thật ngay".
 Lượt soi 71 [G2-1] bác, và vòng này đo lại từng đột biến một:
 
-| # | Đột biến | Kết quả | Nói gì |
+| # | Đột biến | Kết quả | ĐỎ **bằng cách nào** — đo, không suy |
 |---|---|---|---|
-| ⒜ | dời `INSERT` xuống SAU `appendAuditEvent` | **ĐỎ** | vế canh bắt đúng hình dạng khoản 126 |
-| ⒝ | gỡ `FOR NO KEY UPDATE` khỏi thân trigger (LÚC CHẠY) | **ĐỎ** | đây mới là thứ giữ khoản 140 đóng |
+| ⒜ | dời `INSERT` xuống SAU `appendAuditEvent` | **ĐỎ** | `40P01 deadlock detected` ném từ chính câu `INSERT` của `approveUnseal` (`requests.ts:243`, qua `withTenant`). **Không vế `expect` nào chạy tới** |
+| ⒝ | gỡ `FOR NO KEY UPDATE` khỏi thân trigger (LÚC CHẠY) | **ĐỎ** | vòng chờ có hạn ném `hết 30000ms` — approve thôi không kẹt ở `INSERT` nữa |
 | ⒞ | bỏ KHOÁ NGOẠI `(org_id, unseal_request_id)` | **XANH NGUYÊN** | khoá ngoại **không** giữ vế này |
-| ⒟ | tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` | **ĐỎ** | cùng chiều với ⒝ |
+| ⒟ | tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` | **ĐỎ** | cùng cách với ⒝ |
 
 ⒞ là vế chịu lực của cả lời giải thích, và nó xác nhận bằng phép đo điều mà mục 1 nói bằng lời: lời
 khoá-ngoại của bản đầu **sai**.
+
+**Cột cuối là thứ bản đầu không có, và nó lật một câu.** Cả ba tài liệu từng viết rằng vế ⑵ ("không ai
+cầm khoá ghi sổ") là chỗ sẽ đỏ khi hồi quy. Đo thì **không đột biến nào trong ba cái ấy bị một vế
+`expect` bắt** — chúng chết sớm hơn, ở lớp khác. Điều ấy xác nhận phần lõi của [G2-4].
+
+⒜ đáng đọc kỹ, vì nó cho biết khoản 140 — **khi có thật** — trông như thế nào: approve ghi sổ trước nên
+cầm khoá tư vấn của tổ chức, rồi kẹt ở `INSERT` chờ giao dịch người giữ; người giữ lại chờ đúng khoá tư
+vấn ấy ở lần ghi sổ của nó. Vòng khép kín, và **bộ dò khoá chết của PostgreSQL bắn ở `deadlock_timeout`
+1 s — TRƯỚC trần 2 s của 050**, đúng điều khoản **143** ghi. Tức lớp lỗi này biểu hiện bằng `40P01`,
+không bằng `55P03`; ai đi tìm nó bằng cách canh trần 2 s sẽ tìm nhầm chỗ.
+
+Vế ⑵ vì thế vẫn có việc riêng, và phải nói đúng việc ấy: nó bắt ca approve cầm khoá ghi sổ mà **KHÔNG**
+khép thành vòng — người giữ nào không ghi sổ thì không có khoá chết, và khi ấy chỉ một khẳng định trên
+`pg_locks` mới thấy. Đó là ca hỏng IM LẶNG, và nó là ca duy nhất một vế `expect` ở đây thật sự canh.
 
 **Một cái bẫy phải ghi lại, vì đường hiển nhiên KHÔNG đo gì cả.** Đột biến ⒝ làm theo cách thường —
 sửa thân hàm trong `db/migrations/019_unseal.sql` — cho kết quả **XANH**, và em suýt ghi "đột biến ⒝
