@@ -138,7 +138,7 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
   // ============================================================================================
   // [khoản 141 / ADR-039] HAI BẢNG, MỘT SỰ THẬT — và đây là chỗ chúng không trôi khỏi nhau được.
   //
-  // Từ S1.75, `apps/api` tự biết route nào một phiên agent gọi được: trường `agent` trên
+  // Từ S1.76, `apps/api` tự biết route nào một phiên agent gọi được: trường `agent` trên
   // `BuyerReadRoute`/`BuyerSelfRoute`, đọc qua vị từ `agentGoiDuoc`. Bảng công cụ MCP là một lời
   // khai ĐỘC LẬP về cùng câu hỏi ấy. Hai lời khai độc lập về cùng một sự thật là đúng hình dạng
   // trôi mà kho này đã bắt ba lần — nên chúng bị buộc vào nhau ở đây, theo CẢ HAI chiều:

@@ -573,7 +573,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
       }
     }
     // [khoản 141] Số route bị bỏ qua SUY từ chính bảng, không viết cứng: vòng lặp trên bỏ MỌI
-    // route tự thân, và S1.75 thêm cái thứ hai (`POST /auth/agent-session`). Con số `- 1` cũ
+    // route tự thân, và S1.76 thêm cái thứ hai (`POST /auth/agent-session`). Con số `- 1` cũ
     // đúng khi chỉ có đăng xuất, và nó thiu lặng lẽ ngay khi lớp route ấy có thêm một thành viên.
     const soTuThan = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true).length;
     expect(soTuThan, "không còn route tự thân nào — vòng lặp trên đã bỏ qua nhầm thứ gì đó").toBeGreaterThan(0);

@@ -175,6 +175,16 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
+        if (kq.auditSkipped === true) {
+          // [S1.75 / khoản 139] Hồ sơ ĐÃ khoá nhưng sổ kiểm toán KHÔNG nhận được dòng `MFA_LOCKED`:
+          // khoá ghi sổ của tổ chức bị giữ quá trần 2 s (050). Đây là chỗ DUY NHẤT cái thiếu ấy để
+          // lại dấu — `verifyAuditChain` chỉ kiểm chuỗi băm của những hàng ĐANG CÓ, nên nó không
+          // bao giờ thấy được một hàng chưa từng được ghi.
+          //
+          // Dòng này CỐ ĐỊNH, không nội suy `orgId`, `userId` hay `lockedUntil` — cùng kỷ luật A2
+          // với `dispatch.ts`: một dòng log của đường đăng nhập là thứ đi thẳng ra stderr.
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) — ho so VAN khoa");
+        }
         // [review L-7] Hai giá trị cho client, không hơn: lý do chi tiết (NO_CREDENTIAL,
         // CODE_ALREADY_USED, …) là oracle cho kẻ cầm token bị chuyển tiếp; `lockedUntil` làm tròn
         // LÊN phút để không ai lên lịch đoán tới giây.
@@ -249,6 +259,15 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
+        if (kq.auditSkipped === true) {
+          // [GIAO ĐIỂM S1.75 × S1.76] Đường này KHÔNG tồn tại khi khoản 139 được vá, nên vế log của
+          // nó không thể có mặt ở bản vá ấy — và hai nhánh gộp lại thì không cổng nào đỏ. Điều kiện
+          // ① của chủ dự án ("cái thiếu phải để lại dấu") nói về SỰ KIỆN `MFA_LOCKED`, không về
+          // đường HTTP nào sinh ra nó; một đường phát mới đi qua `verifyTotpForLogin` mà im lặng là
+          // đúng cái lỗ ấy, chỉ ở chỗ khó thấy hơn. Chuỗi NÊU TÊN ĐƯỜNG: hai chỗ cùng một câu thì
+          // dòng log không nói được cái thiếu nằm ở đâu.
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) tren duong phat agent — ho so VAN khoa");
+        }
         // Cùng hai giá trị như `/auth/totp` (review L-7): lý do chi tiết là oracle, `lockedUntil`
         // làm tròn LÊN phút.
         const khoa = kq.reason === "LOCKED_OUT";

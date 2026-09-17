@@ -822,6 +822,65 @@ describe("/auth/redeem + /auth/totp — token không là phiên; TOTP mới là 
     expect(await dem()).toBe(1);
   });
 
+  // =============================================================================================
+  // [S1.75 / khoản 139 — lượt soi 70, H-1] ĐIỀU KIỆN ① CỦA ĐÁNH ĐỔI: CÁI THIẾU PHẢI ĐỂ LẠI DẤU.
+  //
+  // Chủ dự án nhận đánh đổi "hồ sơ khoá được, sổ thiếu một dòng" NGÀY 2026-09-17 kèm điều kiện cái
+  // thiếu ấy không im lặng. Cưỡng chế của điều kiện ấy là MỘT dòng `console.error` ở
+  // `routes/auth.ts`. Trước vế này, xoá cả khối log đi thì KHÔNG test nào đỏ — tức điều kiện của
+  // chủ dự án sống bằng thiện chí của người sửa sau, không bằng một lớp.
+  //
+  // Vế này đi qua HTTP thật, với khoá ghi sổ của tổ chức bị một giao dịch khác giữ.
+  // =============================================================================================
+  it("[S1.75 / khoản 139] khoá ghi sổ bị giữ ⇒ hồ sơ VẪN khoá, sổ KHÔNG có dòng nào, và ĐÚNG MỘT dòng log để lại dấu", async () => {
+    const u = await taoNguoi("k139@vidu.vn");
+    const { token } = await linkVaGhiDanh("k139@vidu.vn");
+    const demKhoa = async () =>
+      Number(
+        (await db.pool.query<{ n: string }>(
+          "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'MFA_LOCKED'",
+          [orgA, u],
+        )).rows[0]?.n ?? "-1",
+      );
+
+    const giu = await apiPool.connect();
+    // [khoản nợ 66] Mốc, không phải 0: `logLoi` cộng dồn suốt tệp.
+    const mocLog = logLoi.length;
+    let cuoi: PhanHoi | undefined;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await giu.query(
+        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K139_GIU_KHOA', 'K139', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+        [orgA],
+      );
+      for (let i = 0; i < MFA_MAX_FAILED_ATTEMPTS; i += 1) {
+        cuoi = await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: "000000" } });
+      }
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const dong = logLoi.slice(mocLog).filter((d) => d.includes("khoan 139"));
+    const soDong = await demKhoa();
+    const sau = await goi("POST", "/auth/totp", { body: { orgId: orgA, token, code: "000000" } });
+    const ke = `status cuối: ${String(cuoi?.status)}; dòng log khoản 139: ${dong.length}; MFA_LOCKED: ${soDong}`;
+
+    // ⑴ Không lần nào thành 500: 55P03 bị nuốt trong SAVEPOINT, request vẫn là một 401 bình thường.
+    expect(cuoi?.status, `lần chạm ngưỡng vẫn là 401, không phải 500 — ${ke}`).toBe(401);
+    // ⑵ Trần đã trở lại: lần sau bị chặn.
+    expect(sau.status).toBe(401);
+    expect((sau.body as { reason: string }).reason, `hồ sơ phải KHOÁ thật — ${ke}`).toBe("LOCKED_OUT");
+    // ⑶ Sổ trống trong cửa sổ ấy.
+    expect(soDong, `sổ không nhận dòng MFA_LOCKED nào — ${ke}`).toBe(0);
+    // ⑷ VÀ CÁI THIẾU ĐỂ LẠI DẤU — đúng MỘT dòng. Đây là vế cưỡng chế điều kiện của chủ dự án.
+    expect(dong.length, `phải có ĐÚNG một dòng log cho cái thiếu — ${ke}`).toBe(1);
+    // ⑸ Dòng ấy KHÔNG nội suy giá trị nào (kỷ luật A2).
+    expect(dong[0], "dòng log không được mang orgId").not.toContain(orgA);
+    expect(dong[0], "dòng log không được mang userId").not.toContain(u);
+  });
+
   it("đăng xuất: cookie bị xoá, phiên bị thu hồi, /me ⇒ 401; đăng xuất lần hai vẫn 401 (không phiên)", async () => {
     await taoNguoi("out@vidu.vn");
     const { cookie } = await dangNhap("out@vidu.vn");
@@ -1110,5 +1169,65 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     await expect(
       db.pool.query("UPDATE sessions SET kind = 'SOMETHING_ELSE' WHERE org_id = $1", [orgA]),
     ).rejects.toMatchObject({ code: "23514" });
+  });
+  // ===============================================================================================
+  // ⑸ [GIAO ĐIỂM S1.75 × S1.76 — ĐO] ĐIỀU KIỆN ① CỦA CHỦ DỰ ÁN ĐI THEO SỰ KIỆN, KHÔNG THEO ĐƯỜNG.
+  //
+  // Khoản 139 (§S1.75) nhận đánh đổi "hồ sơ khoá được, sổ thiếu một dòng" kèm điều kiện cái thiếu
+  // phải để lại dấu, và cưỡng chế điều kiện ấy bằng MỘT dòng log ở `/auth/totp`. Vòng này thêm một
+  // đường phát thứ hai đi qua CÙNG `verifyTotpForLogin`. Hai nhánh gộp sạch — không xung đột, mọi
+  // cổng xanh — và đường mới im lặng: `auditSkipped` không ai đọc ở đó.
+  //
+  // Đây là lý do vế này tồn tại: điều kiện của chủ dự án nói về SỰ KIỆN `MFA_LOCKED`, không về một
+  // đường HTTP cụ thể, nên mỗi đường mới đi qua hàm ấy phải tự mang lại cái dấu. Đo qua HTTP thật,
+  // với khoá ghi sổ của tổ chức bị một giao dịch khác giữ.
+  // ===============================================================================================
+  it("⑸ đường phát agent cũng để lại ĐÚNG MỘT dấu khi `MFA_LOCKED` không vào được sổ", async () => {
+    const u = await taoNguoi("agent-k139@vd.test");
+    const nguoi = await dangNhap("agent-k139@vd.test");
+    const demKhoa = async () =>
+      Number(
+        (
+          await db.pool.query<{ n: string }>(
+            "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'MFA_LOCKED'",
+            [orgA, u],
+          )
+        ).rows[0]?.n ?? "-1",
+      );
+
+    const giu = await apiPool.connect();
+    // [khoản nợ 66] Mốc, không phải 0: `logLoi` cộng dồn suốt tệp.
+    const mocLog = logLoi.length;
+    let cuoi: PhanHoi | undefined;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await giu.query(
+        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K139_GIU_KHOA_AGENT', 'K139', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+        [orgA],
+      );
+      for (let i = 0; i < MFA_MAX_FAILED_ATTEMPTS; i += 1) {
+        cuoi = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+      }
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const dong = logLoi.slice(mocLog).filter((d) => d.includes("khoan 139"));
+    const soDong = await demKhoa();
+    const ke = `status cuối: ${String(cuoi?.status)}; dòng log khoản 139: ${dong.length}; MFA_LOCKED: ${soDong}`;
+
+    // ⑴ Lần chạm ngưỡng vẫn là một 401 bình thường — SAVEPOINT nuốt 55P03, không ai thấy 500.
+    expect(cuoi?.status, `lần chạm ngưỡng vẫn là 401, không phải 500 — ${ke}`).toBe(401);
+    // ⑵ Sổ trống trong cửa sổ ấy — đúng cái giá đã được chấp nhận.
+    expect(soDong, `sổ không nhận dòng MFA_LOCKED nào — ${ke}`).toBe(0);
+    // ⑶ VÀ CÁI THIẾU ĐỂ LẠI DẤU trên CHÍNH đường này — đúng MỘT dòng.
+    expect(dong.length, `đường phát agent phải để lại ĐÚNG một dấu — ${ke}`).toBe(1);
+    // ⑷ Dòng ấy NÊU TÊN ĐƯỜNG: một câu dùng chung cho hai đường thì không định vị được cái thiếu.
+    expect(dong[0], "dòng log phải nêu tên đường phát").toContain("duong phat agent");
+    // ⑸ Và nó không nội suy giá trị nào (kỷ luật A2).
+    expect(dong[0], "dòng log không được mang orgId").not.toContain(orgA);
+    expect(dong[0], "dòng log không được mang userId").not.toContain(u);
   });
 });

@@ -2134,34 +2134,51 @@ describe("[QT3] MFA dưới search_path thù địch", () => {
 });
 
 // =============================================================================================
-// [S1.73 / khoản 126 ⑾] KHOÁ GHI SỔ CỦA TỔ CHỨC BỊ GIỮ ⇒ NGƯỠNG KHOÁ E3 CỦA `/auth/totp` KHÔNG CHẠM — ĐO
+// [S1.75 / khoản 139] KHOÁ GHI SỔ CỦA TỔ CHỨC BỊ GIỮ ⇒ NGƯỠNG KHOÁ E3 VẪN CHẠM — VÀ SỔ THIẾU MỘT DÒNG
 //
-// Từ S1.71, mọi lần ghi sổ chờ khoá tư vấn ghi sổ của tổ chức tối đa 2 s rồi gãy 55P03 (050). `/auth/totp` gọi `verifyTotpForLogin` TRONG
-// giao dịch của request (`apps/api/src/routes/auth.ts`): khi lần đoán sai đưa bộ đếm CHẠM ngưỡng, hàm ghi `MFA_LOCKED` — và chính lần ghi
-// ấy gãy nếu khoá đang bị giữ. Lỗi ném ra khỏi handler nên giao dịch request rollback, mang theo CẢ bộ đếm lẫn `locked_until`. Lần đoán
-// ĐÚNG không cần ghi sổ, nên nó KHÔNG gãy.
+// **Lời khai đúng hôm nay.** `/auth/totp` gọi `verifyTotpForLogin` TRONG giao dịch của request. Khi lần đoán sai đưa bộ đếm CHẠM ngưỡng,
+// hàm ghi `MFA_LOCKED`, và lần ghi ấy chờ khoá tư vấn ghi sổ của tổ chức tối đa 2 s rồi gãy 55P03 (050). Từ S1.75, lần ghi ấy nằm trong
+// một SAVEPOINT: 55P03 làm nó bị BỎ, giao dịch đi tiếp, và **khoá hồ sơ do `CAU_DAT_KHOA` đặt TRƯỚC savepoint vẫn đứng**.
 //
-// Hệ quả ⑾ ghi ở ADR-016 [S1.71] mới là ĐỌC; test này đo. Chủ dự án chấp nhận ⑾ ngày 2026-09-14 trên tiền đề "ai giữ được khoá quá 2 s thì
-// đã ở IM7 (khoản 128)" — phép đo của khoản 126 (§S1.73) cho thấy tiền đề ấy SAI, nên việc chấp nhận chờ chủ dự án xác nhận lại.
+// Nguyên văn cũ của tiêu đề khối này, giữ để đối chiếu: ~~KHOÁ GHI SỔ CỦA TỔ CHỨC BỊ GIỮ ⇒ NGƯỠNG KHOÁ E3 CỦA `/auth/totp` KHÔNG CHẠM~~ —
+// đúng từ S1.71 tới S1.74. Khi ấy lỗi ném ra khỏi handler, giao dịch rollback và mang theo CẢ bộ đếm lẫn `locked_until`, nên ba lần đoán
+// sai liên tiếp ở ngưỡng đều KHÔNG khoá được ai: trong cửa sổ ấy số lần đoán TOTP không còn trần (đo ở §S1.73, khoản 139).
+//
+// CÁI GIÁ được đo Ở ĐÂY chứ không chỉ được nói: vế ⑷ đếm đúng **0** bản ghi `MFA_LOCKED` sau loạt ấy. Chủ dự án chọn đánh đổi này ngày
+// 2026-09-17 (ADR-008, tiểu mục [S1.75 / khoản 139]): ngưỡng khoá MFA có trần đáng giá hơn một dòng sổ, với điều kiện cái thiếu để lại dấu
+// — cờ `auditSkipped`, vế ⑶.
 //
 // Không nhãn INV: E3 có nhãn riêng ở các test trên; đây là phép đo RANH GIỚI của E3 dưới một điều kiện ngoài nó.
 // =============================================================================================
-describe("[S1.73 / khoản 126 ⑾] khoá ghi sổ của tổ chức bị giữ thì ngưỡng khoá E3 không chạm", () => {
+describe("[S1.75 / khoản 139] khoá ghi sổ của tổ chức bị giữ thì ngưỡng khoá E3 VẪN chạm, và sổ thiếu một dòng", () => {
   const GIU_SO =
-    "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K126_GIU_KHOA', 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
+    "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K139_GIU_KHOA', 'K139', NULL, '{}'::jsonb, NULL, NULL, NULL)";
 
-  it("ở ngưỡng, mỗi lần đoán SAI gãy 55P03 và bộ đếm lẫn khoá bị rollback — ba lần liên tiếp vẫn KHÔNG khoá được hồ sơ, còn mã ĐÚNG vẫn qua", async () => {
+  const demKhoa = async (): Promise<number> =>
+    Number(
+      (
+        await db.pool.query<{ n: string }>(
+          "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'MFA_LOCKED'",
+          [orgA, nguoiA],
+        )
+      ).rows[0]?.n ?? "-1",
+    );
+
+  it("ở ngưỡng, lần đoán SAI KHOÁ ĐƯỢC hồ sơ dù lần ghi sổ gãy — mã ĐÚNG ngay sau đó bị chặn, và sổ không có dòng nào", async () => {
     await db.pool.query(
       "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
       [nguoiA, MFA_MAX_FAILED_ATTEMPTS - 1],
     );
+    const truoc = await demKhoa();
     const maDung = deriveTotpCode(biMatA, counterForTime(Date.now()));
     const maSai = maDung === "000000" ? "111111" : "000000";
 
     const giu = await apiPool.connect();
-    const maLoi: string[] = [];
+    const ke0: string[] = [];
     const trangThai: string[] = [];
     const msMoiLan: number[] = [];
+    const boQuaGhiSo: boolean[] = [];
+    let kqDung: Awaited<ReturnType<typeof verifyTotpForLogin>> | undefined;
     try {
       await giu.query("BEGIN");
       await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
@@ -2169,46 +2186,150 @@ describe("[S1.73 / khoản 126 ⑾] khoá ghi sổ của tổ chức bị giữ 
 
       for (let lan = 0; lan < 3; lan += 1) {
         const batDau = Date.now();
-        const loi = await withTenant(apiPool, orgA, (c) =>
+        const kq = await withTenant(apiPool, orgA, (c) =>
           verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maSai }, congMoBiMat),
         ).then(
-          (kq) => ({ code: `khong-nem:${JSON.stringify(kq)}` }),
-          (e: unknown) => e as { code?: string },
+          (x) => x,
+          (e: unknown) => ({ ok: false as const, reason: `NEM:${(e as { code?: string }).code ?? "?"}` }),
         );
         msMoiLan.push(Date.now() - batDau);
-        maLoi.push(loi.code ?? "?");
+        ke0.push(kq.ok ? "ok" : String((kq as { reason: string }).reason));
+        boQuaGhiSo.push((kq as { auditSkipped?: true }).auditSkipped === true);
         const { rows } = await db.pool.query<{ f: number; l: Date | null }>(
           "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
           [nguoiA],
         );
         trangThai.push(`${rows[0]!.f}/${rows[0]!.l === null ? "chua-khoa" : "da-khoa"}`);
       }
+
+      // Vế chịu lực NHẤT của khoản 139: mã ĐÚNG ngay sau loạt ấy phải bị CHẶN. Trước bản vá nó mở được phiên, vì hồ sơ chưa từng khoá.
+      // Đo TRONG khi khoá ghi sổ vẫn bị giữ — đường đúng không ghi sổ nên nó không gãy vì lý do khác.
+      kqDung = await withTenant(apiPool, orgA, (c) =>
+        verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maDung }, congMoBiMat),
+      );
     } finally {
       await giu.query("ROLLBACK").catch(() => undefined);
       giu.release();
     }
 
-    const kqDung = await withTenant(apiPool, orgA, (c) =>
-      verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maDung }, congMoBiMat),
-    );
-
-    // Trả hồ sơ về trạng thái sạch: test này đặt bộ đếm sát ngưỡng, và một tệp test đọc theo thứ tự khác sẽ thấy trạng thái ấy
-    // (lượt soi 68a-3). Đặt trước khối khẳng định để nó chạy cả khi một khẳng định hỏng.
+    const sau = await demKhoa();
+    // Trả hồ sơ về trạng thái sạch trước khối khẳng định (lượt soi 68a-3) — test này khoá hồ sơ THẬT, nên một tệp đọc sau sẽ thấy nó khoá.
     await db.pool.query(
       "UPDATE mfa_credentials SET failed_attempts = 0, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
       [nguoiA],
     );
 
     const ke =
-      `mã lỗi mỗi lần đoán sai: [${maLoi.join(",")}] sau [${msMoiLan.join(",")}] ms; ` +
-      `bộ đếm/khoá sau mỗi lần: [${trangThai.join(",")}]; ngưỡng = ${MFA_MAX_FAILED_ATTEMPTS}`;
+      `kết quả mỗi lần đoán sai: [${ke0.join(",")}] sau [${msMoiLan.join(",")}] ms; bộ đếm/khoá sau mỗi lần: [${trangThai.join(",")}]; ` +
+      `auditSkipped: [${boQuaGhiSo.join(",")}]; MFA_LOCKED trước/sau: ${truoc}/${sau}; ngưỡng = ${MFA_MAX_FAILED_ATTEMPTS}`;
 
-    expect(maLoi, `mỗi lần đoán sai ở ngưỡng phải gãy ở lần ghi MFA_LOCKED — ${ke}`).toEqual(["55P03", "55P03", "55P03"]);
-    expect(trangThai, `bộ đếm và khoá bị rollback theo giao dịch request — ${ke}`).toEqual([
-      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
-      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
-      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
+    // ⑴ KHÔNG lần nào ném nữa — 55P03 bị SAVEPOINT nuốt, không lần nào ra khỏi hàm.
+    expect(
+      ke0.filter((x) => x.startsWith("NEM:")),
+      `không lần nào được ném ra khỏi hàm — ${ke}`,
+    ).toEqual([]);
+    // ⑵ Hồ sơ khoá THẬT ngay lần chạm ngưỡng, và ở nguyên trạng thái ấy.
+    expect(trangThai, `bộ đếm và khoá SỐNG QUA lần ghi sổ hỏng — ${ke}`).toEqual([
+      `${MFA_MAX_FAILED_ATTEMPTS}/da-khoa`,
+      `${MFA_MAX_FAILED_ATTEMPTS}/da-khoa`,
+      `${MFA_MAX_FAILED_ATTEMPTS}/da-khoa`,
     ]);
-    expect(kqDung.ok, `mã đúng không cần ghi sổ nên vẫn qua — ${ke}`).toBe(true);
+    // ⑶ Cái thiếu để lại DẤU — đúng ở lần chạm ngưỡng, không ở hai lần sau (hai lần ấy trả LOCKED_OUT trước khi chạm đường ghi sổ).
+    expect(boQuaGhiSo, `cờ auditSkipped chỉ bật ở lần chạm ngưỡng — ${ke}`).toEqual([true, false, false]);
+    // ⑷ Sổ không nhận dòng nào — và nói cho ĐÚNG MỨC, vì vế này KHÔNG phân biệt bản vá với bản trước.
+    //    [lượt soi 70, M-1/M-2] Đo trên `master` bằng CHÍNH đồ gá này: `MFA_LOCKED trước/sau: 0/0` —
+    //    lần ghi gãy thì giao dịch rollback, nên bản CŨ cũng để sổ trống. Tức "sổ thiếu một dòng"
+    //    KHÔNG phải cái giá bản vá này trả so với HEAD.
+    //    Cái thật sự bị đổi nằm ở chỗ khác và chưa test nào đo: mã CŨ, nếu tranh chấp tan TRƯỚC khi kẻ
+    //    đoán xong, rốt cuộc vẫn ghi được một dòng `MFA_LOCKED` (với giá là đoán không trần trong lúc
+    //    chờ); mã MỚI khoá ngay ở lần chạm ngưỡng nên không bao giờ ghi dòng ấy nữa. Vế dưới chỉ giữ
+    //    lời khai "trong cửa sổ khoá bị giữ, sổ trống" — đừng đọc nó rộng hơn thế.
+    expect(sau - truoc, `trong cửa sổ khoá bị giữ, sổ không nhận dòng nào — ${ke}`).toBe(0);
+    // ⑸ Trần đã trở lại: mã ĐÚNG cũng bị chặn.
+    expect(kqDung?.ok, `mã đúng phải bị chặn vì hồ sơ đã khoá — ${ke}`).toBe(false);
+    expect(kqDung !== undefined && !kqDung.ok ? kqDung.reason : "?", ke).toBe("LOCKED_OUT");
+  }, 60_000);
+
+  // ===========================================================================================
+  // [lượt soi 70, H-2] ĐIỀU KIỆN ② CỦA ĐÁNH ĐỔI PHẢI CÓ RĂNG.
+  //
+  // ADR-008 tiểu mục [S1.75 / khoản 139] khai `catch` HẸP — chỉ nuốt 55P03 — là một điều kiện của
+  // việc chủ dự án nhận đánh đổi. Trước vế này, lời khai ấy KHÔNG có phép đo nào: một lần nới
+  // `catch` thành nuốt mọi lỗi sống qua cả hai test trên, vì cả hai chỉ dựng 55P03 thật và đường
+  // thành công. Vế này dựng một lỗi ghi sổ KHÁC và đòi nó thoát ra nguyên.
+  //
+  // Dựng bằng TRIGGER lúc chạy chứ không bằng REVOKE: `public.audit_append` không bị thu EXECUTE
+  // khỏi `PUBLIC` ở 004, nên thu quyền của `app_api` KHÔNG sinh 42501 — đã kiểm trước khi viết.
+  // Trigger cho ta quyền chọn đúng SQLSTATE, và `finally` gỡ nó kể cả khi khẳng định hỏng.
+  // ===========================================================================================
+  it("mã lỗi ghi sổ KHÁC 55P03 KHÔNG bị nuốt — `catch` hẹp có răng", async () => {
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA, MFA_MAX_FAILED_ATTEMPTS - 1],
+    );
+    const maDung = deriveTotpCode(biMatA, counterForTime(Date.now()));
+    const maSai = maDung === "000000" ? "111111" : "000000";
+
+    await db.pool.query(
+      `CREATE OR REPLACE FUNCTION public.k139_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS $fn$
+       BEGIN RAISE EXCEPTION 'k139: chan lan ghi so de do catch hep' USING ERRCODE = '42501'; END $fn$`,
+    );
+    await db.pool.query("CREATE TRIGGER k139_chan BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION public.k139_chan_ghi_so()");
+    await db.pool.query("ALTER TABLE audit_events ENABLE ALWAYS TRIGGER k139_chan");
+
+    let loi: { code?: string };
+    let trangThai = "?";
+    try {
+      loi = await withTenant(apiPool, orgA, (c) =>
+        verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maSai }, congMoBiMat),
+      ).then(
+        (kq) => ({ code: `khong-nem:${JSON.stringify(kq)}` }),
+        (e: unknown) => e as { code?: string },
+      );
+      const { rows } = await db.pool.query<{ f: number; l: Date | null }>(
+        "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
+        [nguoiA],
+      );
+      trangThai = `${rows[0]!.f}/${rows[0]!.l === null ? "chua-khoa" : "da-khoa"}`;
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k139_chan ON audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k139_chan_ghi_so()");
+      await db.pool.query(
+        "UPDATE mfa_credentials SET failed_attempts = 0, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+        [nguoiA],
+      );
+    }
+
+    const ke = `mã lỗi thoát ra: ${String(loi.code)}; bộ đếm/khoá sau đó: ${trangThai}`;
+    expect(loi.code, `lỗi ghi sổ KHÁC 55P03 phải thoát ra NGUYÊN — fail-closed — ${ke}`).toBe("42501");
+    // Và hệ quả đi kèm, nói ra để không ai tưởng bản vá cứu được ca này: giao dịch rollback như cũ,
+    // nên bộ đếm KHÔNG tăng. Đó là lựa chọn, không phải sót.
+    expect(trangThai, `ca này vẫn rollback — bộ đếm giữ nguyên giá trị trước đó — ${ke}`).toBe(
+      `${MFA_MAX_FAILED_ATTEMPTS - 1}/chua-khoa`,
+    );
+  }, 60_000);
+
+  it("ĐỐI CHỨNG: không ai giữ khoá thì lần chạm ngưỡng ghi ĐỦ một dòng và KHÔNG bật auditSkipped", async () => {
+    // Vế này là thứ giữ cho bản vá khỏi thành "bỏ ghi sổ luôn cho xong": `catch` chỉ nuốt 55P03, nên đường thường phải ghi đủ.
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA, MFA_MAX_FAILED_ATTEMPTS - 1],
+    );
+    const truoc = await demKhoa();
+    const maDung = deriveTotpCode(biMatA, counterForTime(Date.now()));
+    const maSai = maDung === "000000" ? "111111" : "000000";
+
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maSai }, congMoBiMat),
+    );
+    const sau = await demKhoa();
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = 0, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA],
+    );
+
+    const ke = `MFA_LOCKED trước/sau: ${truoc}/${sau}; auditSkipped = ${String((kq as { auditSkipped?: true }).auditSkipped)}`;
+    expect(sau - truoc, `đường thường vẫn ghi ĐỦ một dòng — ${ke}`).toBe(1);
+    expect((kq as { auditSkipped?: true }).auditSkipped, `không được bật cờ khi lần ghi sổ thành công — ${ke}`).toBeUndefined();
   }, 60_000);
 });
