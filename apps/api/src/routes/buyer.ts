@@ -133,10 +133,17 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/me",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] phiên của chính người gọi; không chạm một bảng nào
+    agent: true,
     handler: (ctx) =>
       Promise.resolve({
         status: 200,
-        body: { userId: ctx.actor.id, sessionId: ctx.actor.sessionId, orgId: ctx.orgId },
+        // [khoản 141 / ADR-039 — lượt soi đối kháng Đ-2] `kind` đi ra đây, và đó là đường DUY NHẤT
+        // để một máy khách tự kiểm được nó đang cầm loại chứng chỉ nào. Không mở oracle mới: route
+        // này đã trả `sessionId` của CHÍNH phiên đang gọi, nên nó không nói thêm gì về phiên của
+        // người khác. `apps/mcp` gọi đúng đường này một lần lúc khởi động và NÉM nếu không phải
+        // `AGENT_READONLY` — nếu thiếu, bốn lớp của vòng này chỉ là kỷ luật vận hành.
+        body: { userId: ctx.actor.id, sessionId: ctx.actor.sessionId, orgId: ctx.orgId, kind: ctx.actor.kind },
       }),
   },
   {
@@ -144,6 +151,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] sổ nhà cung cấp — dữ liệu nghiệp vụ, không giá
+    agent: true,
     handler: async (ctx) => ({ status: 200, body: { suppliers: await listSuppliers(ctx.client, ctx.orgId) } }),
   },
   {
@@ -151,6 +160,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] một nhà cung cấp; liên hệ KHÔNG nằm trong thân này
+    agent: true,
     handler: async (ctx) => {
       const s = await getSupplier(ctx.client, ctx.orgId, supplierIdParam(ctx.req));
       if (s === null) throw new HttpError(404, "khong co nha cung cap");
@@ -162,6 +173,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId/contacts",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] tên, email, điện thoại của người ở công ty khác — ADR-038 rút khỏi bề mặt agent
+    agent: false,
     handler: async (ctx) => ({
       status: 200,
       body: { contacts: await listSupplierContacts(ctx.client, ctx.orgId, supplierIdParam(ctx.req)) },
@@ -172,6 +185,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/policy",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] ngưỡng phê duyệt của chính tổ chức
+    agent: true,
     handler: async (ctx) => ({ status: 200, body: { policy: await getActiveProcurementPolicy(ctx.client, ctx.orgId) } }),
   },
   {
@@ -179,6 +194,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] trạng thái RFQ; không bao giờ giá
+    agent: true,
     handler: async (ctx) => {
       const r = await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req));
       if (r === null) throw new HttpError(404, "khong co goi thau");
@@ -190,6 +207,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/items",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] hạng mục mua — cái gì, bao nhiêu
+    agent: true,
     handler: async (ctx) => ({ status: 200, body: { items: await listRfqItems(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } }),
   },
   {
@@ -197,6 +216,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/unseal/:unsealRequestId",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] trạng thái một yêu cầu mở thầu
+    agent: true,
     handler: async (ctx) => {
       const r = await getUnsealRequest(ctx.client, ctx.orgId, unsealIdParam(ctx.req));
       if (r === null) throw new HttpError(404, "khong co yeu cau mo thau");
@@ -211,6 +232,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/comparison",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] BẢNG SO SÁNH GIÁ — thứ toàn bộ sản phẩm sinh ra để bảo vệ
+    agent: false,
     handler: async (ctx) => ({
       status: 200,
       body: {
@@ -228,6 +251,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/bid-count",
     audience: "BUYER",
     mutates: false,
+    // [khoản 141] số hồ sơ thầu đã nhận — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
+    agent: false,
     handler: async (ctx) => ({
       status: 200,
       body: {

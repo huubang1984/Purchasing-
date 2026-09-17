@@ -922,11 +922,11 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
 });
 
 // ================================================================================================
-// [S1.76 / khoản 140] `approveUnseal` TUẦN TỰ HOÁ TRÊN HÀNG YÊU CẦU **TRƯỚC** LẦN GHI SỔ ĐẦU
+// [S1.77 / khoản 140] `approveUnseal` TUẦN TỰ HOÁ TRÊN HÀNG YÊU CẦU **TRƯỚC** LẦN GHI SỔ ĐẦU
 //
 // Khoản 140 mở ở S1.73 với lời đọc: *"`approveUnseal` INSERT một phê duyệt, ghi sổ, rồi UPDATE
 // `unseal_requests` — nếu một giao dịch khác đang giữ khoá hàng thì lần phê duyệt đứng chờ TRONG KHI
-// giữ khoá ghi sổ của tổ chức, đúng lớp lỗi của khoản 126."* **Phép đo BÁC lời ấy** (§S1.76).
+// giữ khoá ghi sổ của tổ chức, đúng lớp lỗi của khoản 126."* **Phép đo BÁC lời ấy** (§S1.77).
 //
 // Thứ lời đọc bỏ sót nằm trong chính câu đầu nó nhắc tới: `INSERT INTO public.unseal_approvals` bắn
 // trigger `unseal_approvals_kiem_nguoi_duyet` (019, BEFORE INSERT), và thân hàm ấy mở đầu bằng
@@ -949,7 +949,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
 // đã phải đi lọt — đo thì nó CHỜ.
 //
 // ĐỘT BIẾN NÀO LÀM VẾ NÀY ĐỎ, VÀ ĐỎ BẰNG CÁCH NÀO — ĐÃ ĐO, không suy
-// [lượt soi 71 / G2-1, G2-4; bảng đo ở §S1.76 mục 4]:
+// [lượt soi 71 / G2-1, G2-4; bảng đo ở §S1.77 mục 4]:
 //   ⒜ dời câu `INSERT` xuống SAU `appendAuditEvent`  → **ĐỎ** bằng `40P01 deadlock detected` ném từ
 //        chính câu INSERT; KHÔNG vế `expect` nào chạy tới. Đó là hình dạng khoản 140 khi nó CÓ THẬT:
 //        approve cầm khoá ghi sổ rồi chờ hàng, người giữ chờ lại khoá ghi sổ ⇒ vòng khép kín ⇒ bộ dò
@@ -972,7 +972,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
 //   khoá khỏi chuỗi ấy → chạy lại chính chuỗi ấy.
 // Đây là chỗ khoản 140 được giữ ĐÓNG, không phải chỗ nó được vá.
 // ================================================================================================
-describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯỚC lần ghi sổ đầu", () => {
+describe("[S1.77 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯỚC lần ghi sổ đầu", () => {
   const KHOA_GHI_SO_CUA_TO_CHUC =
     `SELECT pid, granted FROM pg_catalog.pg_locks
       WHERE locktype = 'advisory'
@@ -1034,13 +1034,13 @@ describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯ�
       // nó cũng chưa lấy khoá ghi sổ. Đó là chiều hỏng IM LẶNG (xanh giả) nên nó không bao giờ tự lộ.
       //
       // ĐỪNG ĐỌC VÒNG NÀY LÀ "THÊM RĂNG": đo rồi, và bản sleep cứng CŨNG bắt được cả ⒝ lẫn ⒟ trên máy
-      // chạy phép đo này (§S1.76 mục 4). Thứ vòng này bỏ đi là chỗ PHỤ THUỘC THỜI GIAN — bản cũ chụp
+      // chạy phép đo này (§S1.77 mục 4). Thứ vòng này bỏ đi là chỗ PHỤ THUỘC THỜI GIAN — bản cũ chụp
       // ở mốc 2 s rồi TIN rằng approve đã kẹt; bản này KHẲNG ĐỊNH điều ấy trước khi đo. Chiều hỏng mà
       // lượt soi 71 nêu không dựng lại được theo yêu cầu ở đây, nên đây là một phép PHÒNG, không phải
       // một bản vá cho lỗi đã quan sát được.
       // Vòng dưới biến "approve đang kẹt" từ giả định thành KHẲNG ĐỊNH: chờ tới khi thấy chính câu
       // `INSERT … unseal_approvals` của nó nằm trong `pg_stat_activity` với `wait_event_type='Lock'`
-      // và `wait_event='transactionid'` — đúng thứ §S1.76 mục 3 chụp tay — rồi mới đo.
+      // và `wait_event='transactionid'` — đúng thứ §S1.77 mục 3 chụp tay — rồi mới đo.
       const han = Date.now() + 30_000;
       for (;;) {
         const { rows } = await db.pool.query<{ pid: number; wait_event: string; q: string }>(

@@ -47,6 +47,54 @@ export const TRAN_THAN_BYTE = 256 * 1024;
 /** Nhãn nhận dạng để `apps/api` phân biệt được lời gọi đến từ bề mặt agent với lời gọi của người. */
 export const NHAN_MAY_KHACH = "trustprocure-mcp/0.1.0";
 
+/** Chứng chỉ trong biến môi trường không phải phiên agent. Thông điệp KHÔNG nêu giá trị cookie. */
+export class PhamViSaiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PhamViSaiError";
+  }
+}
+
+/**
+ * [khoản 141 / ADR-039 — lượt soi đối kháng Đ-2] MỘT lời gọi, MỘT lần, lúc khởi động.
+ *
+ * VÌ SAO CẦN: bốn lớp của khoản 141 canh HÀNG PHIÊN — cột `kind`, trần TTL, quyền `UPDATE` vắng
+ * mặt, vế 403 ở `dispatch.ts`. Không lớp nào trả lời câu hỏi *phiên nào được giao cho tiến trình
+ * nào*. Cắm một cookie NGƯỜI vào `TRUSTPROCURE_MCP_SESSION_COOKIE` làm tiến trình này mạnh y hệt
+ * trước vòng 141: nó đọc được bảng so sánh giá và ghi được mọi thứ người ấy ghi được, và không
+ * lớp nào ở phía máy chủ thấy gì bất thường — vì không có gì bất thường để thấy.
+ *
+ * Nên lớp này nằm ở ĐÂY, phía máy khách, và nó fail-closed: không xác minh được thì KHÔNG khởi
+ * động. Đúng khuôn `docCauHinh` — một cấu hình không kiểm được là một cấu hình bị từ chối.
+ *
+ * PHÁT BIỂU ĐÚNG MỨC: đây là lớp của một tiến trình TRUNG THỰC tự kiểm mình. Nó không chặn được
+ * một máy khách MCP khác tự viết, cầm cùng cookie ấy và không hỏi gì — thứ chặn ca đó là phạm vi
+ * của chính chứng chỉ (051 + `dispatch.ts`), không phải hàm này.
+ */
+export async function kiemPhamViAgent(pGoiApi: GoiApi): Promise<void> {
+  const kq = await pGoiApi("GET", "/me", true);
+  if (kq.status !== 200) {
+    throw new PhamViSaiError(
+      `khong xac minh duoc pham vi cua chung chi — GET /me tra ma ${String(kq.status)}`,
+    );
+  }
+  let than: unknown;
+  try {
+    than = JSON.parse(kq.than);
+  } catch {
+    throw new PhamViSaiError("GET /me tra than khong phai JSON");
+  }
+  const kind = (than as { kind?: unknown }).kind;
+  if (kind !== "AGENT_READONLY") {
+    // `kind` không phải bí mật (nó là một trong hai mã định danh đã khai), nên nêu ra được — và
+    // nêu ra thì người vận hành biết ngay mình cắm nhầm loại chứ không phải sai token.
+    throw new PhamViSaiError(
+      `chung chi trong TRUSTPROCURE_MCP_SESSION_COOKIE co kind=${JSON.stringify(kind)}, ` +
+        "can AGENT_READONLY — xin mot chung chi agent bang POST /auth/agent-session",
+    );
+  }
+}
+
 export function taoGoiApi(pCauHinh: CauHinhMcp): GoiApi {
   return async (method, duongDan, canPhien) => {
     // ⑷ Dựng rồi ĐỐI CHIẾU: `new URL` một mình không đủ — nó vui vẻ nhận một đường dẫn tuyệt đối.

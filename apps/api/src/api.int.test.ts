@@ -263,7 +263,10 @@ describe("xác thực người mua — một 401 cho mọi ca hỏng", () => {
   it("phiên hợp lệ: /me trả đúng người và đúng phiên — danh tính DẪN XUẤT từ cookie", async () => {
     const r = await goi("GET", "/me", { cookie: cookieMua(tokPM) });
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ userId: uPM, sessionId: sPM, orgId: orgA });
+    // [khoản 141 / ADR-039] `kind` nay ở trong thân: đường DUY NHẤT để một máy khách tự kiểm
+    // mình đang cầm loại chứng chỉ nào. `toEqual` (không phải `toMatchObject`) nên một trường
+    // thứ năm lọt vào thân `/me` mai sau vẫn làm câu này đỏ.
+    expect(r.body).toEqual({ userId: uPM, sessionId: sPM, orgId: orgA, kind: "USER" });
   });
 });
 

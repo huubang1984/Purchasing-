@@ -1704,6 +1704,11 @@ describe("quyền trên hai bảng mới, đo không mù", () => {
       { bang: "sessions", cot: "expires_at", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "id", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "ip", ai: "app_api", quyen: "INSERT" },
+      // [khoản 141 / ADR-039, 051] Phạm vi của chứng chỉ. `app_api` CHÈN được, KHÔNG sửa được —
+      // sự vắng mặt của một hàng `UPDATE` ở đây LÀ bất biến ⑶ của 051; `app_unseal` chỉ ĐỌC, vì
+      // giải mã là hành động không thu hồi được duy nhất của hệ thống.
+      { bang: "sessions", cot: "kind", ai: "app_api", quyen: "INSERT" },
+      { bang: "sessions", cot: "kind", ai: "app_unseal", quyen: "SELECT" },
       { bang: "sessions", cot: "mfa_verified_at", ai: "app_api", quyen: "INSERT" }, // [029]
       { bang: "sessions", cot: "mfa_verified_at", ai: "app_api", quyen: "UPDATE" },
       { bang: "sessions", cot: "mfa_verified_at", ai: "app_unseal", quyen: "SELECT" },

@@ -81,6 +81,7 @@ import {
   PermissionDeniedError,
   requirePermission,
   resolveSessionByToken,
+  throwAuditedDenial,
   SessionInvalidError,
   type SessionActor,
 } from "@trustprocure/identity";
@@ -92,6 +93,27 @@ import { coHan } from "./co-han.js";
 import { diaChiPhanGiaiDuoc, khoaNguoiGoi } from "./dia-chi.js";
 import { moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 import { ghepDuongDan, tachCookiePhien, tachDoan } from "./router.js";
+
+/**
+ * [khoản 141 / ADR-039] Lần từ chối VÌ PHẠM VI CỦA CHỨNG CHỈ — khác hẳn lần từ chối vì quyền.
+ *
+ * Tên kết thúc bằng `DeniedError` có chủ đích: cổng [INV-D5]
+ * (`tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`) nhận diện lớp từ chối bằng đuôi tên ấy và
+ * đòi mọi lời tạo nó phải nằm trong đối số của một lời gọi `throwAuditedDenial`. Đặt tên khác là
+ * tự đưa mình ra ngoài tầm cổng.
+ *
+ * Thân phản hồi dùng lại `THAN_403` của lần từ chối quyền, và đó là một lựa chọn: phân biệt "sai
+ * quyền" với "sai phạm vi" trước client là một oracle nói cho kẻ cầm chứng chỉ biết nó đang cầm
+ * loại nào. Hàng sổ `AGENT_SCOPE_DENIED` mới là chỗ phân biệt hai ca.
+ */
+export class AgentScopeDeniedError extends Error {
+  constructor() {
+    super("chứng chỉ phiên không có phạm vi cho đường này");
+    this.name = "AgentScopeDeniedError";
+  }
+}
+
+import { agentGoiDuoc } from "./route-types.js";
 import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
@@ -500,6 +522,74 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               if (e instanceof SessionInvalidError) throw new LoiXacThuc({ cause: e });
               throw e;
             }
+            // ==================================================================================
+            // [khoản 141 / ADR-039] PHẠM VI CỦA CHỨNG CHỈ — và nó đứng TRƯỚC cổng quyền.
+            //
+            // VÌ SAO TRƯỚC: `requirePermission` trả lời "người này có được làm việc này không";
+            // câu ở đây là "chứng chỉ này có được dùng cho đường này không". Một phiên agent của
+            // một người mua TOÀN QUYỀN đi qua cổng quyền sạch sẽ — nên đặt sau là đặt một cổng
+            // không bao giờ đóng. Và route ĐỌC không gọi `requirePermission` (`route.mutates` sai),
+            // nên đặt sau còn có nghĩa là không canh gì cho đúng nhóm route mà `apps/mcp` dùng.
+            //
+            // VÌ SAO QUA `throwAuditedDenial` chứ không `throw` thẳng: D5 đòi mỗi lần TỪ CHỐI để
+            // lại một bản ghi, và lần từ chối này là lần đầu tiên trong kho mà một route ĐỌC của
+            // người mua sinh ra một hàng `audit_events`. Hàng ấy ghi ở giao dịch ĐỘC LẬP nên nó
+            // sống qua rollback của giao dịch người gọi.
+            //
+            // GHI HỎNG THÌ KHÔNG TRẢ 403: `throwAuditedDenial` ném `DenialAuditFailedError` khi
+            // không ghi được, và tên lớp ấy KHÔNG có trong bảng catch ở cuối hàm ⇒ rơi xuống
+            // `loiNoiBo` ⇒ 500, không 403 và không dữ liệu. Fail-closed, và nói ra ở đây vì nó là
+            // một hợp đồng chứ không phải một hệ quả tình cờ.
+            // ==================================================================================
+            if (actor.kind === "AGENT_READONLY" && !agentGoiDuoc(route)) {
+              await throwAuditedDenial(
+                deps.auditPool,
+                cookie.orgId,
+                {
+                  actorType: "USER",
+                  actorId: actor.id,
+                  action: "AGENT_SCOPE_DENIED",
+                  resourceType: "SESSION",
+                  resourceId: actor.sessionId,
+                  // KHÔNG nội suy tham số đường dẫn: `route.path` là MẪU đã khai trong `ROUTES`,
+                  // không phải chuỗi người gọi gửi. `requestId` để nối hàng sổ với dòng log.
+                  payload: { method: route.method, routePath: route.path, requestId },
+                },
+                new AgentScopeDeniedError(),
+              );
+            }
+            // ==================================================================================
+            // [khoản 144 / S1.76 — ĐO] TRẦN THEO PHIÊN TRÊN ROUTE TỰ THÂN.
+            //
+            // VÌ SAO Ở ĐÂY, SAU `resolveSessionByToken`: khoá bucket là `actor.sessionId`, một giá
+            // trị chỉ có sau khi phiên đã được xác thực. Đếm TRƯỚC đó thì khoá phải là token người
+            // gọi gửi, và khi ấy một kẻ gửi token ngẫu nhiên tạo được một hàng `caller_rate_limits`
+            // mỗi request — đúng cái bảng mà khoản 55 đã gọi tên là bảng DUY NHẤT có số hàng do kẻ
+            // tấn công chọn.
+            //
+            // VÌ SAO TRONG MỘT GIAO DỊCH RIÊNG (`withTenant` trên `deps.pool`, không dùng `client`):
+            // ~~handler của đường phát rollback ở mọi lần mã sai — 401 là một nhánh ném~~ — câu ấy
+            // SAI, và một lượt đột biến đã nói ra: handler của `/auth/agent-session` trả 401 bằng
+            // `return`, nên giao dịch COMMIT và trên đường HÔM NAY hai cách cho cùng kết quả (đột
+            // biến chuyển phép đếm vào giao dịch chính đi qua vế ⑹ SẠCH). Lý do đúng là lý do cho
+            // đường MAI SAU: một route tự thân mà handler NÉM thì giao dịch cuốn theo cả phép đếm,
+            // và trần thành một lớp không bao giờ đóng — đúng khiếm khuyết mà `callerLimit` của
+            // nhánh ANON đã phải tránh (`/auth/redeem` ném `LoginTokenError` ⇒ 422). Vế ⑺ của
+            // `auth.int.test.ts` đo đúng điều đó bằng một route tự thân có handler ném.
+            //
+            // VÌ SAO KHÔNG PHẢI `callerLimit` THEO ĐỊA CHỈ: đo được ở vòng này, đòn khoá một hồ sơ
+            // MFA chỉ cần `MFA_MAX_FAILED_ATTEMPTS` = 5 request; một trần 30/15 phút theo địa chỉ
+            // chặn cái thứ 31, tức chặn sau khi việc đã xong. Xem `BuyerSelfRoute.sessionLimit`.
+            // ==================================================================================
+            if (route.mutates && route.self === true && route.sessionLimit !== null) {
+              const tran = route.sessionLimit;
+              const soLan = await withTenant(deps.pool, cookie.orgId, (kh) =>
+                tangBucketNguoiGoi(kh, `${route.path}|phien|${actor.sessionId}`, deps.services.pepper),
+              );
+              if (soLan > tran) {
+                return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+              }
+            }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
             if (route.mutates && route.self !== true) {
               await requirePermission(
@@ -576,6 +666,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       // phòng thủ) nay là 500 có log, không còn 422.
       if (err instanceof TenantError && err.kind === "input") return { status: 401, body: THAN_401 };
       if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
+      // [khoản 141] Cùng thân, cùng mã — xem khối đầu `AgentScopeDeniedError`. Thiếu dòng này thì
+      // lần từ chối phạm vi rơi xuống `loiNoiBo` và thành 500: đúng, nhưng sai mã và mất hợp đồng.
+      if (err instanceof AgentScopeDeniedError) return { status: 403, body: THAN_403 };
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
       return loiNoiBo(err, requestId);
     }

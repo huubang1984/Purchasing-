@@ -28,6 +28,18 @@ export const LOGIN_MAX_TOKENS_PER_WINDOW = 5;
 export const LOGIN_RATE_WINDOW_SECONDS = 15 * 60;
 export const USER_SESSION_DEFAULT_TTL_SECONDS = 8 * 3600;
 export const USER_SESSION_MAX_TTL_SECONDS = 24 * 3600;
+/**
+ * [khoản 141 / ADR-039] Trần TTL của một phiên `AGENT_READONLY` — MỘT GIỜ.
+ *
+ * Cùng con số mà `sessions_agent_ttl_ngan` (051) ràng ở tầng CSDL; hai lớp, hai lỗi khác nhau.
+ * Vì sao không ngắn hơn: bản đầu của vòng này định 15 phút, và lượt soi đối kháng Đ-3 đo ra rằng
+ * 15 phút không dùng được — `expires_at` không có `GRANT UPDATE` nên gia hạn là bất khả, còn phát
+ * một phiên mới đòi một magic link MỚI cộng một mã TOTP tươi trong ±90 giây (trigger của 039),
+ * tức một con người gõ TOTP bốn lần mỗi giờ và đụng `LOGIN_MAX_TOKENS_PER_WINDOW`. Một chế độ
+ * vận hành không dùng được không phải một lớp an ninh: nó đẩy người vận hành sang cắm cookie 8
+ * giờ của chính mình vào biến môi trường — đúng thứ khoản 141 sinh ra để chặn.
+ */
+export const AGENT_SESSION_MAX_TTL_SECONDS = 3600;
 
 export class LoginTokenError extends Error {
   constructor() {
@@ -340,6 +352,10 @@ export async function startUserSession(
   if (!(input.mfaProof instanceof MfaProof) || input.mfaProof.userId !== input.userId || input.mfaProof.orgId !== orgId) {
     throw new LoginTokenError();
   }
+  // [khoản 141 / ADR-039] Hàm này phát ĐÚNG MỘT loại phiên: phiên của một CON NGƯỜI. Bản đầu của
+  // vòng nhận thêm một tham số `kind`, và một lượt đột biến cho thấy nhánh ấy KHÔNG CÓ NGƯỜI GỌI —
+  // `startAgentSession` là đường duy nhất phát chứng chỉ agent. Một nhánh không ai đi là một nhánh
+  // không ai đo, nên nó bị bỏ chứ không được thêm một test cho có.
   const ttl = Math.min(Math.max(input.ttlSeconds ?? USER_SESSION_DEFAULT_TTL_SECONDS, 60), USER_SESSION_MAX_TTL_SECONDS);
 
   // Tiêu thụ TRƯỚC, và đòi đúng một hàng: hai lượt song song với cùng token thì đúng một lượt
@@ -353,16 +369,89 @@ export async function startUserSession(
   if (tieuThu.rowCount !== 1) throw new LoginTokenError();
 
   const token = randomBytes(32).toString("base64url");
+  // [khoản 141] `kind` được NÊU TÊN tường minh, không dựa vào `DEFAULT 'USER'` của 051: DEFAULT ở
+  // đó bảo vệ hàng trăm câu INSERT viết tay trong test, nó KHÔNG bảo vệ sản xuất. Một đường phát
+  // quên khai phạm vi mà vẫn chạy được là đúng hình dạng lỗi khoản 141 nói tới.
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO public.sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, ip, user_agent)
+    `INSERT INTO public.sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, ip, user_agent, kind)
      VALUES ($1, $2, $3, (pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $4::pg_catalog.float8)),
-             pg_catalog.now(), $5::pg_catalog.inet, $6)
+             pg_catalog.now(), $5::pg_catalog.inet, $6, 'USER')
      RETURNING id`,
     [orgId, input.userId, bam(token), ttl, input.ip ?? null, input.userAgent?.slice(0, 512) ?? null],
   );
   const id = rows[0]?.id;
   if (id === undefined) throw new Error("startUserSession: INSERT sessions không trả về hàng");
   return { sessionId: id, token, expiresInSeconds: ttl };
+}
+
+// ==============================================================================================
+// [khoản 141 / ADR-039] PHÁT MỘT CHỨNG CHỈ AGENT CHO CHÍNH NGƯỜI ĐANG ĐĂNG NHẬP
+//
+// Khác `startUserSession` ở đúng hai chỗ, và cả hai đều là chỗ nó HẸP HƠN:
+//   ⑴ KHÔNG tiêu thụ một `user_login_tokens` nào — người gọi đã có một phiên NGƯỜI còn sống, và
+//      `apps/api` đã đòi điều đó bằng `self: true` + `agent: false` trên route. Nên đường này
+//      KHÔNG đụng `LOGIN_MAX_TOKENS_PER_WINDOW` và không cần một lượt gửi email nào. Đó chính là
+//      thứ làm trần một giờ trở nên dùng được (lượt soi đối kháng Đ-3).
+//   ⑵ TTL bị ghim bằng `AGENT_SESSION_MAX_TTL_SECONDS`, không nhận tham số — người gọi không xin
+//      dài hơn được.
+//
+// VẪN ĐÒI MỘT MÃ TOTP TƯƠI, và đó KHÔNG phải một lựa chọn: trigger `sessions_kiem_totp_gan_day`
+// (039, `ENABLE ALWAYS`, thân bị hardening ghim) bắt MỌI hàng phiên do `app_api` chèn có
+// `mfa_verified_at IS NOT NULL` phải đi sau một lần TOTP đúng trong ±3 bước 30 giây. Mà
+// `resolveSessionByToken` lại đòi đúng cột ấy — một phiên `mfa_verified_at NULL` không đăng nhập
+// được. Tức "phát chứng chỉ máy một lần rồi để đó" là BẤT KHẢ hôm nay mà không nới thân một
+// trigger đang bị ghim; vòng này KHÔNG nới nó. Phát biểu đúng mức: đường này đổi "magic link CỘNG
+// TOTP mỗi giờ" thành "MỘT mã TOTP mỗi giờ" — rẻ hơn hẳn, và vẫn là một con người mỗi giờ.
+// ==============================================================================================
+
+export interface StartedAgentSession {
+  readonly sessionId: string;
+  readonly token: string;
+  readonly expiresInSeconds: number;
+}
+
+export async function startAgentSession(
+  client: pg.PoolClient,
+  orgId: string,
+  input: {
+    readonly userId: string;
+    /** Bằng chứng TOTP TƯƠI của CHÍNH người này — cùng hợp đồng `startUserSession`. */
+    readonly mfaProof: MfaProof;
+    /** Phiên NGƯỜI đã xin chứng chỉ này. Đi vào sổ kiểm toán, không vào hàng phiên. */
+    readonly capBoiSessionId: string;
+    readonly ip?: string | null;
+  },
+): Promise<StartedAgentSession> {
+  await assertTenantBound(client, orgId, "startAgentSession");
+  if (!UUID_RE.test(input.userId) || !UUID_RE.test(input.capBoiSessionId)) throw new LoginTokenError();
+  if (!(input.mfaProof instanceof MfaProof) || input.mfaProof.userId !== input.userId || input.mfaProof.orgId !== orgId) {
+    throw new LoginTokenError();
+  }
+
+  const token = randomBytes(LOGIN_TOKEN_BYTES).toString("base64url");
+  const { rows } = await client.query<{ id: string }>(
+    `INSERT INTO public.sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, ip, kind)
+     VALUES ($1, $2, $3, (pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $4::pg_catalog.float8)),
+             pg_catalog.now(), $5::pg_catalog.inet, 'AGENT_READONLY')
+     RETURNING id`,
+    [orgId, input.userId, bam(token), AGENT_SESSION_MAX_TTL_SECONDS, input.ip ?? null],
+  );
+  const id = rows[0]?.id;
+  if (id === undefined) throw new Error("startAgentSession: INSERT sessions không trả về hàng");
+
+  // Phát một chứng chỉ máy là một sự kiện đáng có trong sổ: nó là lần DUY NHẤT một phạm vi mới ra
+  // đời, và nó nêu tên cả phiên người đã xin. `resourceId` là phiên MỚI — thứ cần tra ngược khi
+  // một hàng `AGENT_SCOPE_DENIED` xuất hiện.
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: input.userId,
+    action: "AGENT_SESSION_ISSUED",
+    resourceType: "SESSION",
+    resourceId: id,
+    payload: { issuedBySessionId: input.capBoiSessionId, expiresInSeconds: AGENT_SESSION_MAX_TTL_SECONDS },
+  });
+
+  return { sessionId: id, token, expiresInSeconds: AGENT_SESSION_MAX_TTL_SECONDS };
 }
 
 /** Đăng xuất: thu hồi phiên. Idempotent — thu hồi lần hai không đổi gì và không ném. */

@@ -49,8 +49,16 @@ import { describe, expect, it } from "vitest";
 
 const GOC = fileURLToPath(new URL("../../", import.meta.url));
 
+/**
+ * [S1.76 / lượt rà giao điểm] `--deduplicate` KHÔNG phải trang trí. Khi index còn một đường ĐANG
+ * XUNG ĐỘT, `git ls-files` in MỘT DÒNG MỖI STAGE (1/2/3) cho đường ấy — ba bản sao cùng tên. Cổng
+ * này gom theo thư mục và tố "tệp chỉ khác nhau hoa-thường"; các cổng khác so `toEqual` VÉT CẠN.
+ * Cả hai đỏ GIẢ cho một người chạy `pnpm test` để nghiệm bản gộp TRƯỚC khi `git add` — đúng nhịp
+ * làm việc của một vòng có gộp. Lượt gộp S1.76 xanh CHỈ VÌ cả hai xung đột đều là `.md`.
+ * Cùng cờ ấy có ở mọi chỗ đọc `git ls-files` của `tests/architecture`.
+ */
 function tepTheoGit(...mau: string[]): string[] {
-  return execFileSync("git", ["ls-files", ...mau], { cwd: GOC, encoding: "utf8" })
+  return execFileSync("git", ["ls-files", "--deduplicate", ...mau], { cwd: GOC, encoding: "utf8" })
     .split(/\r?\n/)
     .filter((t) => t.length > 0);
 }

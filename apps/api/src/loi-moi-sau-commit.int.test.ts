@@ -216,6 +216,7 @@ function tuyenGia(): Route[] {
       path: "/k124/co-bu-422",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       handler: (ctx) => {
         ctx.afterCommitCoBu({
           viec: () => {
@@ -236,6 +237,7 @@ function tuyenGia(): Route[] {
       path: "/k124/hai-viec-co-bu",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       handler: (ctx) => {
         ctx.afterCommitCoBu({
           viec: () => Promise.reject(loiCoTen("LoiViecMot")),
@@ -268,6 +270,7 @@ function tuyenGia(): Route[] {
       path: "/k124/viec-co-bu-hong",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       handler: (ctx) => {
         ctx.afterCommit(() => {
           ghiGia.push("thuong");
@@ -289,6 +292,7 @@ function tuyenGia(): Route[] {
       path: "/k124/tat-ca-xong",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       // Việc thường XẾP TRƯỚC việc có bù — nhưng chạy SAU nó.
       handler: (ctx) => {
         ctx.afterCommit(() => {
@@ -314,6 +318,7 @@ function tuyenGia(): Route[] {
       path: "/k124/bu-giao-dich",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       handler: async (ctx) => {
         txHandler = (await ctx.client.query<{ t: string }>("SELECT pg_catalog.txid_current()::text AS t")).rows[0]!.t;
         ctx.afterCommitCoBu({

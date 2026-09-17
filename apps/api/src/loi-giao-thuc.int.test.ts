@@ -256,15 +256,16 @@ function tuyenK118(): Route[] {
       // PUBLIC không có client: handler tự ném một lỗi mang hình dạng lỗi Postgres (tên `error`, SQLSTATE).
       handler: () => Promise.reject(Object.assign(new Error("gia lap"), { name: "error", code: "42501" })),
     },
-    { method: "GET", path: "/k118/mua/42501", audience: "BUYER", mutates: false, handler: chay(CAU_42501) },
-    { method: "GET", path: "/k118/mua/hoan", audience: "BUYER", mutates: false, handler: chay(CAU_HOAN) },
-    { method: "GET", path: "/k118/mua/phien-hong", audience: "BUYER", mutates: false, handler: () => Promise.reject(new SessionInvalidError()) },
-    { method: "GET", path: "/k118/mua/vo-hai", audience: "BUYER", mutates: false, handler: chay("SELECT 1") },
+    { method: "GET", path: "/k118/mua/42501", audience: "BUYER", mutates: false, agent: false, handler: chay(CAU_42501) },
+    { method: "GET", path: "/k118/mua/hoan", audience: "BUYER", mutates: false, agent: false, handler: chay(CAU_HOAN) },
+    { method: "GET", path: "/k118/mua/phien-hong", audience: "BUYER", mutates: false, agent: false, handler: () => Promise.reject(new SessionInvalidError()) },
+    { method: "GET", path: "/k118/mua/vo-hai", audience: "BUYER", mutates: false, agent: false, handler: chay("SELECT 1") },
     {
       method: "GET",
       path: "/k118/mua/sau-commit",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       // Việc sau commit reject bằng một lỗi mang hình dạng lỗi Postgres; thông điệp của nó không được vào log.
       handler: (ctx) => {
         ctx.afterCommit(() => Promise.reject(Object.assign(new Error("gia lap sau commit"), { name: "error", code: "08006" })));
@@ -283,6 +284,7 @@ function tuyenK118(): Route[] {
       path: "/k118/mua/de-lai-phien",
       audience: "BUYER",
       mutates: false,
+      agent: false,
       handler: async (ctx) => {
         await ctx.client.query("SELECT pg_catalog.set_config('app.org_id', $1, false)", [ctx.orgId]);
         return { status: 200, body: { ok: true } };

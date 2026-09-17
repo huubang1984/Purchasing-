@@ -18,6 +18,7 @@ import {
   generateTotpSecret,
   redeemLoginToken,
   revokeSession,
+  startAgentSession,
   startUserSession,
   verifyTotpForLogin,
 } from "@trustprocure/identity";
@@ -213,9 +214,91 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     audience: "BUYER",
     mutates: true,
     self: true,
+    // [khoản 141] Phiên agent tự thu hồi được, và đó là điều MONG MUỐN: một tiến trình MCP dừng
+    // sạch nên trả lại chứng chỉ của nó thay vì để nó sống tới hết giờ. Route chỉ chạm CHÍNH phiên
+    // đang gọi, nên nó không mở được gì thêm.
+    agent: true,
+    // [khoản 144] CỐ Ý KHÔNG TRẦN. Đăng xuất chỉ thu hồi CHÍNH phiên đang gọi: lần đầu thành công
+    // làm phiên hết hiệu lực, nên lần thứ hai đã là 401 ở `resolveSessionByToken` — trần ở đây
+    // không chặn thêm gì. Và nó có mặt xấu: một 429 trên đường đăng xuất là một lớp GIỮ người ta ở
+    // trong phiên, tức đúng chiều ngược với thứ ta muốn khi ai đó nghi phiên mình bị trộm.
+    sessionLimit: null,
     handler: async (ctx) => {
       await revokeSession(ctx.client, ctx.orgId, ctx.actor.sessionId);
       return { status: 200, body: { ok: true }, setCookie: [XOA_COOKIE] };
+    },
+  },
+  {
+    // ==========================================================================================
+    // [khoản 141 / ADR-039] ĐƯỜNG PHÁT CHỨNG CHỈ AGENT — và vì sao nó nằm ở ĐÂY.
+    //
+    // Phiên agent có trần TTL một giờ (051) và `sessions.expires_at` KHÔNG có `GRANT UPDATE`
+    // (006 — "không gia hạn phiên trượt"), nên gia hạn tại chỗ là bất khả. Nếu đường phát duy
+    // nhất là `POST /auth/totp` thì giữ một máy chủ MCP sống đòi một con người gõ TOTP mỗi giờ
+    // và đụng `LOGIN_MAX_TOKENS_PER_WINDOW` — lượt soi đối kháng Đ-3 đo ra rằng đó là một chế độ
+    // vận hành không dùng được, và một chế độ không dùng được không phải một lớp an ninh: nó đẩy
+    // người vận hành sang cắm cookie NGƯỜI 8 giờ vào biến môi trường, đúng thứ vòng này chặn.
+    //
+    // Route này là đường ra khỏi thế lưỡng nan ấy, và nó KHÔNG nới một bảo đảm nào:
+    //   • `self: true` + `agent: false` — chỉ một phiên NGƯỜI gọi được. Một chứng chỉ agent KHÔNG
+    //     tự gia hạn và KHÔNG tự nhân bản được; đó là vế chịu lực.
+    //   • Nó KHÔNG chạm trigger `sessions_kiem_totp_gan_day` (039) đang bị hardening ghim: phiên
+    //     người gọi đã qua TOTP, và `assertFreshMfa` dưới đây đòi lần TOTP ấy còn TƯƠI.
+    //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
+    //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
+    // ==========================================================================================
+    method: "POST",
+    path: "/auth/agent-session",
+    audience: "BUYER",
+    mutates: true,
+    self: true,
+    agent: false,
+    // [khoản 144 — ĐO] BA, và con số ấy phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS` = 5 mới có nghĩa.
+    // Đo trước khi có dòng này: 12 lần gọi với mã sai ⇒ 12×401, `failed_attempts` chạm 5, hồ sơ
+    // khoá, và nạn nhân sau đó nhận `LOCKED_OUT` trên ĐƯỜNG ĐĂNG NHẬP THẬT với mã ĐÚNG — tức một
+    // cookie trộm được khoá luôn đường mà chủ nhân cần để đi thu hồi chính cookie ấy. Trần phải cắt
+    // TRƯỚC lần thứ năm, nên 30 (con số của `callerLimit` trên `/auth/totp`) là vô nghĩa ở đây.
+    // Một người vận hành thật xin chứng chỉ mỗi giờ một lần; ba lần mỗi mười lăm phút là rộng rãi.
+    sessionLimit: 3,
+    handler: async (ctx) => {
+      // Một mã TOTP TƯƠI, không một magic link nào — xem khối đầu `startAgentSession`. Trigger 039
+      // đòi lần TOTP ấy, nên đây không phải một lớp ta tự thêm cho chắc: không có nó thì câu INSERT
+      // gãy ở CSDL.
+      const code = chuoi(ctx.req.body, "code");
+      const kq = await verifyTotpForLogin(
+        ctx.client,
+        { orgId: ctx.orgId, userId: ctx.actor.id, code },
+        ctx.services.totpSecretUnsealer,
+      );
+      if (!kq.ok) {
+        if (kq.auditSkipped === true) {
+          // [GIAO ĐIỂM S1.75 × S1.76] Đường này KHÔNG tồn tại khi khoản 139 được vá, nên vế log của
+          // nó không thể có mặt ở bản vá ấy — và hai nhánh gộp lại thì không cổng nào đỏ. Điều kiện
+          // ① của chủ dự án ("cái thiếu phải để lại dấu") nói về SỰ KIỆN `MFA_LOCKED`, không về
+          // đường HTTP nào sinh ra nó; một đường phát mới đi qua `verifyTotpForLogin` mà im lặng là
+          // đúng cái lỗ ấy, chỉ ở chỗ khó thấy hơn. Chuỗi NÊU TÊN ĐƯỜNG: hai chỗ cùng một câu thì
+          // dòng log không nói được cái thiếu nằm ở đâu.
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) tren duong phat agent — ho so VAN khoa");
+        }
+        // Cùng hai giá trị như `/auth/totp` (review L-7): lý do chi tiết là oracle, `lockedUntil`
+        // làm tròn LÊN phút.
+        const khoa = kq.reason === "LOCKED_OUT";
+        const lam = kq.lockedUntil === null ? null : new Date(Math.ceil(kq.lockedUntil.getTime() / 60_000) * 60_000).toISOString();
+        return { status: 401, body: { ok: false, reason: khoa ? "LOCKED_OUT" : "WRONG_CODE", lockedUntil: khoa ? lam : null } };
+      }
+      const phien = await startAgentSession(ctx.client, ctx.orgId, {
+        userId: ctx.actor.id,
+        mfaProof: kq.proof,
+        capBoiSessionId: ctx.actor.sessionId,
+        ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
+      });
+      // Token đi trong THÂN: người vận hành chép sang biến môi trường của tiến trình MCP. Không
+      // `setCookie` — một tiến trình không phải trình duyệt không dùng được cookie, và một chứng
+      // chỉ agent nằm trong cookie của người gọi là đúng thứ khoản 141 muốn tách ra.
+      return {
+        status: 200,
+        body: { token: phien.token, expiresInSeconds: phien.expiresInSeconds, kind: "AGENT_READONLY" },
+      };
     },
   },
 ];
