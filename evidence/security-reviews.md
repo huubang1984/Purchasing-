@@ -5846,3 +5846,110 @@ Bí mật cứng trong `apps/mcp` (các hằng `COOKIE` trong ba tệp test là 
 test xanh (`dispatch.ts`, `session-actor.ts`, `routes/buyer.ts` không đổi ở nhánh này; `eslint.config.js`
 chỉ thêm một dòng `ignores`, không tắt luật nào); SQL injection / command injection (không `pg`,
 không `child_process`, không `eval` ở mã sản xuất).
+
+# §S1.75 — khoản nợ 141: phạm vi sống trên hàng phiên — `sessions.kind`, trường `agent` bắt buộc trên route, một vế 403 có ghi sổ; khoản 142 thu hẹp, khoản 143 mở
+
+**Ngày:** 2026-09-17 · **Nhánh:** `khoan-141-phien-co-pham-vi` từ `master` `6bcbe96` · **ADR:** 039
+
+## 1. Vì sao vòng này tồn tại
+
+S1.74 (ADR-038) dựng `apps/mcp` và khai bề mặt ấy là CHỈ ĐỌC. Lượt soi 69 H-1 đo ra rằng lời khai ấy là tính chất của **máy khách**,
+không phải của **chứng chỉ**: cookie mà tiến trình MCP cầm là một phiên người mua đã qua MFA, không phạm vi, TTL 8–24 giờ. Chủ dự án
+chọn nhận về sổ ở S1.74 và đóng ở vòng này.
+
+## 2. Vòng này bắt đầu bằng KHẢO SÁT, không bằng mã
+
+Bảy agent đọc song song bảy vùng (vòng đời phiên, bộ điều phối, đường ghi sổ từ chối, cổng SQL của migration, cổng kiến trúc, hạ tầng
+test tích hợp, chỗ nối với `apps/mcp`), rồi ba phương án thiết kế **độc lập từ ba góc nhìn** — CSDL-trước, kiểu-ép-lúc-biên-dịch,
+phép-đo-trước — rồi một lượt chấm và ghép. Lý do dùng ba góc nhìn: vòng này có một câu hỏi thật chưa ngã ngũ — *"route này agent đọc
+được"* nên là một tính chất của **kiểu** hay một **danh sách đường**. Danh sách thì trôi; kiểu thì có thể không phủ hết.
+
+Bản tổng hợp chọn KIỂU, và nó đúng.
+
+## 3. Lượt soi đối kháng chạy TRƯỚC khi viết dòng mã đầu tiên — và nó tìm ra ba CAO
+
+Đây là chỗ nhịp của vòng này khác các vòng trước: lượt soi chạy trên **hình dạng chưa cài**, không trên bản vá.
+
+| # | Hạng | Phát hiện | Xử lý |
+|---|---|---|---|
+| Đ-1 | CAO | vị từ cấp quyền NGẦM cho mọi `BuyerSelfRoute` tương lai — một `POST /auth/session/extend` thêm ở vòng sau gọi được ngay dưới phiên agent, **không cổng nào đỏ** | `agent` bắt buộc trên cả route tự thân; vị từ viết lại; ba đối chứng dương ở `routes.test.ts` |
+| Đ-2 | CAO | `apps/mcp` vẫn nhận cookie NGƯỜI — bốn lớp canh hàng phiên, không lớp nào canh *phiên nào cho tiến trình nào* | `/me` trả `kind`; `apps/mcp` gọi một lần lúc khởi động và **từ chối khởi động** nếu sai loại |
+| Đ-3 | CAO | TTL 15 phút không gia hạn được ⇒ đẩy người vận hành về đúng Đ-2 | chủ dự án chọn trần một giờ + đường phát riêng `POST /auth/agent-session` |
+| Đ-5 | NẶNG | `app_unseal` mù `kind` ở đúng chỗ giải mã không thu hồi được | thêm `GRANT SELECT (kind)` vào 051 — rẻ trước khi checksum khoá |
+| T-1 | NẶNG | cờ trong thân không phải boolean có chiều hỏng FAIL-OPEN | đường phát đòi một mã TOTP, không có cờ boolean nào |
+| R-1/R-2/R-3 | NẶNG | ba lời khai rộng hơn phép đo trong bản thiết kế | viết lại trong header 051 (census thay cho một dòng GRANT; ca giao dịch dài ngã về phía an toàn; "CSDL bắt lỗi của TypeScript" thay cho "CSDL giữ, không TypeScript") |
+
+## 4. Một tiền đề gãy giữa đường
+
+Thiết kế định cho đường gia hạn né trigger `sessions_kiem_totp_gan_day` (039). Đọc kỹ thì trigger ấy áp cho **mọi** hàng phiên do
+`app_api` chèn có `mfa_verified_at IS NOT NULL` — mà `resolveSessionByToken` lại đòi đúng cột ấy, nên một phiên `mfa_verified_at NULL`
+không đăng nhập được. Tức "phát chứng chỉ máy một lần rồi để đó" là **bất khả** hôm nay nếu không nới thân một trigger đang bị hardening
+ghim; vòng này không nới nó.
+
+Phát biểu đúng mức, và nó nằm trong mã: đường phát đổi *"magic link qua email **cộng** TOTP mỗi giờ"* thành *"**một** mã TOTP mỗi giờ"*
+— không đụng `LOGIN_MAX_TOKENS_PER_WINDOW`, không cần hộp thư. Vẫn là một con người mỗi giờ.
+
+## 5. Ba lần bộ test tự dạy lại một điều
+
+⑴ **Cổng đối chiếu đỏ ngay lần chạy đầu** vì em gộp nhầm hai nhóm: `/health` là route `PUBLIC`, nhánh ấy không đọc cookie nên
+`agentGoiDuoc` trả `false` cho nó. Ghi chú giữ lại trong tệp — đó là lằn ranh dễ lẫn nhất của cả vòng.
+
+⑵ **Fixture tích hợp đỏ vì TOTP chống phát lại**: `dangNhap` vừa tiêu thụ mã của bước hiện tại, nên đường phát phải dùng mã của bước kế
+tiếp. Một hành vi ĐÚNG của hệ thống làm test đỏ.
+
+⑶ **Đối chứng dương chọn sai đường**: `/rfqs/:id/comparison` ra 403 cho cả phiên NGƯỜI, vì nó là route đọc **có cổng quyền riêng**
+(`BID_VIEW`). Dùng nó làm đối chứng là đo nhầm lớp — một 403 ở đó không phân biệt được "sai quyền" với "sai phạm vi". Đối chứng chuyển
+sang `/suppliers/:id/contacts`, và hàng sổ `AGENT_SCOPE_DENIED` mới là thứ phân biệt hai ca.
+
+## 6. LƯỢT ĐỘT BIẾN ĐẦU: BỐN LỚP SỐNG SÓT — tức bốn lời khai chưa được đo
+
+Đây là phần đáng giá nhất của vòng. Mã đã xanh ở cả ba tầng, `pnpm t0` sạch, 33/33 test tích hợp xanh — và lượt đột biến đầu vẫn cho
+**4/12 sống**:
+
+| Đột biến | Nó nói gì |
+|---|---|
+| `docKind` rơi về `"USER"` thay vì ném | lớp fail-closed lúc ĐỌC `kind` không có một phép đo nào |
+| bỏ `CHECK sessions_agent_ttl_ngan` | khẳng định TTL đang đọc một hàng do `startAgentSession` tạo, mà hàm ấy tự ghim 3 600 s — tức nó đo **TypeScript**, không đo CSDL |
+| phiên agent nhận TTL của người | nhánh `kind` trong `startUserSession` **không có người gọi nào** — mã chết |
+| đổi `action` của hàng sổ lúc phát | không ai kiểm hàng `AGENT_SESSION_ISSUED` |
+
+Ba xử lý khác nhau, và chúng khác nhau có lý do:
+
+- **Hai lớp thiếu phép đo** ⇒ thêm phép đo, và phép đo phải đi **thẳng vào bảng dưới quyền superuser** thay vì đi qua hàm TypeScript
+  vốn tự ghim đúng con số ấy. Ca `kind` lạ gỡ `CHECK` trong một giao dịch, đặt giá trị lạ, đo qua HTTP thật, rồi đặt lại `CHECK` ở
+  `finally` — một phép đo để lại lược đồ hỏng là một phép đo hỏng.
+- **Một lớp là mã chết** ⇒ **bỏ đi**, không thêm test cho có. Một nhánh không ai đi là một nhánh không ai đo, và giữ nó lại chỉ để có
+  một test đi qua là dựng thêm một lời khai không ai dùng.
+- **Một lớp thiếu khẳng định** ⇒ thêm một dòng vào phép đo đã có.
+
+Nói thẳng điều lượt đột biến này chứng minh: **một bộ test toàn xanh không nói gì về việc nó đo cái gì.** Bốn lớp trên đã "xanh" suốt
+từ lúc viết, và cả bốn đều rỗng.
+
+## 7. Phép đo
+
+| Cổng | Lệnh | Kết quả |
+|---|---|---|
+| T0 | `pnpm t0` | (số đo trên HEAD ở §8) |
+| T1+T2 | `pnpm test` | (số đo trên HEAD ở §8) |
+| T3 | `pnpm test:int` | (số đo trên HEAD ở §8) |
+| Evidence | `pnpm evidence` | (số đo trên HEAD ở §8) |
+
+**Đột biến — hai lượt, và lượt đầu mới là lượt có giá trị:**
+
+| Lượt | Kết quả |
+|---|---|
+| 1 (trên mã đã xanh) | **8/12 chết, 4 SỐNG** — xem §6 |
+| 2 (sau khi vá bốn chỗ) | **12/12 chết** |
+
+Mười hai đột biến: bỏ vế 403 ở `dispatch.ts` · `agentGoiDuoc` mở hết route đọc · mở hết route tự thân · vế thuần không đòi khai `agent` ·
+`docKind` rơi về `"USER"` · bỏ `CHECK` trần TTL · cấp `GRANT UPDATE (kind)` · bỏ `CHECK` tập giá trị · `startAgentSession` nới TTL ·
+`/me` không trả `kind` · `apps/mcp` bỏ lớp kiểm phạm vi · đổi `action` của hàng sổ lúc phát.
+
+## 8. Phần KHÔNG đóng
+
+- **Khoản 142 thu hẹp, chưa đóng** — nhánh TỪ CHỐI đã đóng, nhánh CHO QUA vẫn mở. Xem ADR-039 §5.
+- **Khoản 143 mở** — chưa có trần tần suất trên route NGƯỜI MUA, và vế 403 mới ghi một hàng sổ cho mỗi lần từ chối qua khoá tư vấn nối
+  tiếp toàn tổ chức. CHƯA ĐO.
+- **Bất biến phạm vi sống trong đúng một `if` ở đúng một app** — 28 lời gọi `resolveSessionActor` nhận `kind` và không cái nào đọc.
+- **`breakGlassWitnessSessionId`** — điều kiện tiềm ẩn, ghi ra lúc còn rẻ.
+- **Nhịp lượt soi ngang:** mốc là *"sau ba vòng đổi hardening, hay chậm nhất S1.77"*. S1.75 **không đổi hardening** — không lỡ nhịp.

@@ -4274,3 +4274,93 @@ rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
 - **Trần 8 lời gọi cùng lúc** đo ở T1 trên `taoVongLap`; chưa đo trên tiến trình thật dưới tải.
 - ADR này **không** quyết hình dạng triển khai (ai chạy tiến trình MCP, cookie được cấp và xoay thế nào) — đó là việc của
   vòng đóng khoản 141.
+
+---
+
+## ADR-039 — Phạm vi của chứng chỉ phiên: `sessions.kind`, trường `agent` bắt buộc trên route, và một vế 403 có ghi sổ
+
+**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.75]** · **Khoản nợ liên quan:** 141 (đóng), 142 (thu hẹp, còn mở) ·
+**Liên quan:** ADR-038 (bề mặt MCP chỉ đọc), ADR-016 (cổng quyền ở tầng ứng dụng), ADR-020 (bảng route là dữ liệu), ADR-029 (một con số
+không có lớp suy ra thì không được viết)
+
+### 1. Vì sao ADR này tồn tại
+
+S1.74 dựng `apps/mcp` và ADR-038 khai bề mặt ấy là CHỈ ĐỌC. Lượt soi 69 H-1 đo ra rằng lời khai ấy là tính chất của **máy khách**, không
+phải của **chứng chỉ**: `resolveSessionByToken` chỉ kiểm `token_hash`, `revoked_at`, `expires_at`, `mfa_verified_at`, `users.status` —
+hàng phiên không mang một bit nào phân biệt phiên của một con người với phiên của một bề mặt agent. Ai đọc được môi trường của tiến
+trình MCP gọi thẳng được `GET /rfqs/<id>/comparison` và mọi route GHI trong giới hạn ma trận quyền của người ấy. Tám công cụ,
+`duong-dan.ts` và cổng đối chiếu của `apps/mcp` đều nằm ở phía **trước** chứng chỉ.
+
+### 2. Quyết định
+
+Phạm vi sống trên **hàng phiên**, do máy chủ đóng lúc phát, và bất biến sau đó. Năm lớp, mỗi lớp đúng tầng của nó:
+
+1. **CSDL (051)** giữ ba thứ nó cưỡng chế được: tập giá trị của `sessions.kind`; trần TTL một giờ của phiên agent bằng `CHECK` trên
+   `expires_at − created_at`; và tính bất biến của phạm vi bằng một **quyền vắng mặt** — không có `GRANT UPDATE (kind)`, nên
+   `UPDATE … SET kind` dưới `app_api` ném 42501. Cộng `GRANT SELECT (kind)` cho `app_unseal` (§3).
+2. **Chứng chỉ**: `SessionActor` mọc trường thứ tư `kind`, **không** nới `type` — `actor.type` rót thẳng vào `actorType` của
+   `appendAuditEvent` ở 28 chỗ, và `CHECK` của 003 không có `'AGENT'`. Giá trị lạ đọc lên thì **ném**, không rơi về `"USER"`.
+3. **Kiểu ép lúc biên dịch**: trường **bắt buộc** `agent: boolean` trên `BuyerReadRoute` **và** `BuyerSelfRoute`. Một route đọc hay tự
+   thân mới không biên dịch được cho tới khi người viết nó quyết — cùng khuôn `permission` trên `BuyerWriteRoute`. Vị từ `agentGoiDuoc`
+   là nguồn **duy nhất** của câu trả lời, và cả `dispatch.ts` lẫn cổng đối chiếu của `apps/mcp` đọc chính nó.
+4. **Một vế 403 ở `dispatch.ts`**, đứng **trước** `requirePermission` và đi qua `throwAuditedDenial`. Đứng trước vì hai lý do đo được:
+   một phiên agent của một người mua toàn quyền đi qua cổng quyền sạch sẽ, và route ĐỌC không gọi `requirePermission` lần nào. Đi qua
+   `throwAuditedDenial` vì D5 đòi mỗi lần từ chối để lại một bản ghi — đây là lần đầu tiên trong kho một route đọc của người mua sinh ra
+   một hàng `audit_events`. **Ghi hỏng thì KHÔNG trả 403:** `DenialAuditFailedError` không có tên trong bảng catch nên rơi xuống 500,
+   không dữ liệu.
+5. **Lớp máy khách**: `GET /me` trả `kind`, và `apps/mcp` gọi nó **một lần lúc khởi động** rồi ném nếu không phải `AGENT_READONLY`.
+   Không có lớp này thì bốn lớp trên chỉ là kỷ luật vận hành — chúng canh hàng phiên, không canh việc *phiên nào được giao cho tiến
+   trình nào*.
+
+**Đường phát chứng chỉ agent** là `POST /auth/agent-session`, khai `self: true, agent: false` — chỉ một phiên **người** gọi được, nên
+một chứng chỉ agent không tự gia hạn và không tự nhân bản. Nó đòi một mã TOTP tươi, và điều đó **không phải lựa chọn**: trigger
+`sessions_kiem_totp_gan_day` (039, `ENABLE ALWAYS`, thân bị hardening ghim) bắt mọi hàng phiên do `app_api` chèn có `mfa_verified_at`
+phải đi sau một lần TOTP đúng trong ±90 giây, mà `resolveSessionByToken` lại đòi đúng cột ấy.
+
+### 3. Bị bác, và một chỗ bản đầu sai
+
+- **Một danh sách đường cho phép đặt cạnh `ROUTES`.** Hình dạng đầu tiên của vòng. Bị bác vì một danh sách chuỗi mà không ai đối chiếu
+  là một cổng sẽ trôi — kho đã trả giá ba lần cho hình dạng ấy. Trường bắt buộc thì không ai quên được.
+- **Chỉ đặt `agent` trên route ĐỌC** (bản đầu, lượt soi đối kháng Đ-1). Vị từ khi ấy trả `r.self === true` cho route tự thân, tức cấp
+  quyền **ngầm** cho mọi `BuyerSelfRoute` tương lai: một `POST /auth/session/extend` thêm ở vòng sau gọi được ngay dưới phiên agent,
+  không tệp nào phải sửa và **không cổng nào đỏ**. Route tự thân chạm chính chứng chỉ, nên đó đúng là lớp không được im lặng.
+- **Trần TTL 15 phút** (bản đầu, Đ-3). `expires_at` không có `GRANT UPDATE` nên gia hạn là bất khả; phát phiên mới qua `/auth/totp` đòi
+  một magic link MỚI cộng TOTP, tức một con người gõ TOTP bốn lần mỗi giờ và đụng `LOGIN_MAX_TOKENS_PER_WINDOW`. Một chế độ vận hành
+  không dùng được không phải một lớp an ninh: nó đẩy người vận hành sang cắm cookie 8 giờ của chính mình vào biến môi trường — đúng thứ
+  vòng này chặn. Chủ dự án chọn: trần một giờ, cộng đường phát riêng ở §2. Đường ấy đổi *"magic link cộng TOTP mỗi giờ"* thành *"một mã
+  TOTP mỗi giờ"*.
+- **Không cấp gì cho `app_unseal`** (bản đầu, Đ-5). Lý do bản đầu — "giữ đúng nguyên tắc 006 tự viết" — là một quy ước văn phong, không
+  phải một lập luận an ninh. Chính 006 ghi rằng sáu cột ấy được cấp *"vì bất biến D1"*, và "không giải mã dưới một chứng chỉ agent" là
+  một câu cùng hạng D1: giải mã là hành động **không thu hồi được** duy nhất của hệ thống. Một dòng `GRANT SELECT (kind)` rẻ bây giờ và
+  đắt sau khi checksum khoá 051.
+- **Nới thân trigger 039** để phát một chứng chỉ máy không cần TOTP. Không làm: thân ấy đang bị hardening ghim, và nới nó đổi một bảo
+  đảm của đường đăng nhập để mua tiện lợi cho một bề mặt phụ.
+
+### 4. Đo bằng gì
+
+- **Năm phép đo tích hợp trên Postgres thật, qua HTTP thật** (`apps/api/src/auth.int.test.ts`): đường phát đòi TOTP tươi và mã sai
+  không sinh phiên nào; phiên agent đọc được đúng những đường nó được phép (đối chứng dương); nó bị **403** ở route ghi, ở ba đường
+  không phơi, và ở chính đường phát chứng chỉ; mỗi lần từ chối để lại **đúng một** hàng `AGENT_SCOPE_DENIED` nêu **mẫu** đường dẫn;
+  CSDL giữ trần TTL và trả 42501 cho một lần nâng cấp phạm vi tại chỗ.
+- **Cổng đối chiếu hai chiều** (`apps/mcp/src/cong-cu.test.ts`): tập route agent đọc được **khớp** tập công cụ cần phiên của MCP; ba
+  đường không phơi cũng bị `apps/api` từ chối chứ không chỉ vắng khỏi bảng công cụ; đúng một route ghi agent gọi được, và nó là đăng
+  xuất.
+- **Hai phép đo trên tiến trình MCP thật**: cầm phiên người, hay một `kind` lạ, thì tiến trình **từ chối khởi động** — thoát mã 1,
+  không một dòng "sẵn sàng" nào, và đúng một lời gọi api.
+- **Mười hai đột biến** — xem `evidence/security-reviews.md` §S1.75.
+
+### 5. Ranh giới nói thẳng, và khoản nợ
+
+- **Bất biến phạm vi sống trong đúng MỘT `if` ở đúng MỘT app.** 28 lời gọi `resolveSessionActor` trong chín gói nghiệp vụ **nhận** được
+  trường `kind` và **không cái nào đọc**. Gói quảng cáo một trường chúng bỏ qua; ghi ra đây thay vì để người đọc suy rằng gói tự canh.
+- **Khoản 142 thu hẹp, chưa đóng.** Nhánh TỪ CHỐI đã đóng: mỗi lần 403 phạm vi để lại một hàng sổ. Nhánh CHO QUA vẫn mở — một agent đọc
+  đúng bảy đường cho phép không để lại gì, và kho hôm nay không có hàm nào ghi một hàng sổ ở giao dịch độc lập rồi **trả về**; dựng nó
+  là dựng đúng cái "cổng gác im lặng" mà `packages/identity/src/index.ts` nêu làm tiêu chí không cho ra cửa.
+- **Lớp ở `apps/mcp` là lớp của một tiến trình TRUNG THỰC tự kiểm mình.** Nó không chặn một máy khách MCP tự viết cầm cùng cookie và
+  không hỏi gì — thứ chặn ca đó là phạm vi của chính chứng chỉ (051 + `dispatch.ts`), không phải hàm ấy.
+- **Chưa có trần tần suất trên route NGƯỜI MUA** (lượt soi Đ-4). Vế 403 mới ghi một hàng sổ cho mỗi yêu cầu bị từ chối, qua khoá tư vấn
+  nối tiếp toàn tổ chức dưới trần 2 giây của 050. Một kẻ cầm cookie agent bị rò lặp lời gọi có thể xếp mọi lần ghi sổ của tổ chức ấy sau
+  hàng của mình. CHƯA ĐO — và vì chưa đo nên nó vào sổ nợ (khoản 143) chứ không vào một câu khai ở đây.
+- **`breakGlassWitnessSessionId`** (`packages/unseal/src/requests.ts`) là chỗ duy nhất trong kho một `sessionId` thứ hai là ĐẦU VÀO, và
+  `resolveSessionActor` sẽ không từ chối một phiên agent ở đó. Hôm nay không gọi được qua HTTP; ngày break-glass có đường HTTP, một phiên
+  `AGENT_READONLY` thoả được luật hai người. Viết ra lúc nó còn rẻ.
