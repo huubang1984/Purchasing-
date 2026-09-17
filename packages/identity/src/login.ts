@@ -5,6 +5,8 @@
 //   issueLoginToken     email → token đăng nhập (băm xuống bảng, dạng rõ đi tới BỘ GỬI, không về client)
 //   redeemLoginToken    token → người dùng + đã có TOTP chưa (KHÔNG mở phiên — E2 cho người mua)
 //   verifyTotpForLogin  mã TOTP → kết quả; và trả nợ ADR-008 phương án (ii): `justLocked` ⇒ MFA_LOCKED
+//                       — [S1.75 / khoản 139] trừ khi khoá ghi sổ của tổ chức bị giữ: lần ghi bị bỏ
+//                       trong một SAVEPOINT, hồ sơ VẪN khoá, kết quả mang `auditSkipped`
 //   startUserSession    tiêu thụ token + chèn phiên ĐÃ MFA trong CÙNG giao dịch → token phiên
 //   revokeSession       đăng xuất
 //
@@ -173,8 +175,16 @@ export async function redeemLoginToken(
 }
 
 /**
- * Kiểm mã TOTP cho một lần đăng nhập — và TRẢ NỢ ADR-008 bằng phương án (ii): khi hồ sơ VỪA bị
- * khoá (`justLocked`), ghi đúng MỘT bản ghi `MFA_LOCKED`. Tần suất của sự kiện này bị chặn trên
+ * Kiểm mã TOTP cho một lần đăng nhập — và TRẢ NỢ ADR-008 bằng phương án (ii).
+ *
+ * **[S1.75 / khoản 139] LỜI KHAI ĐÚNG HÔM NAY:** khi hồ sơ VỪA bị khoá (`justLocked`), hàm ghi
+ * đúng MỘT bản ghi `MFA_LOCKED` — TRỪ khi khoá tư vấn ghi sổ của tổ chức bị giữ quá trần 2 s (050)
+ * ở đúng lần chạm ngưỡng. Khi ấy lần ghi bị BỎ trong một SAVEPOINT, **khoá hồ sơ vẫn đứng**, và
+ * kết quả mang `auditSkipped` để tầng app ghi lại cái thiếu. Nguyên văn cũ, giữ để đối chiếu:
+ * ~~khi hồ sơ VỪA bị khoá (`justLocked`), ghi đúng MỘT bản ghi `MFA_LOCKED`~~ — câu ấy đúng cho tới
+ * S1.74, và nó SAI theo hướng nguy hiểm: tới S1.73 lần ghi hỏng kéo theo cả khoá hồ sơ (khoản 139).
+ *
+ * Tần suất của sự kiện này bị chặn trên
  * `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ nên lập luận DoS của ADR-008 không áp dụng; và nó là bản
  * ghi có CHIỀU THỜI GIAN mà `failed_attempts` (một trạng thái bị đặt về 0 khi thành công) không
  * cho được — đúng ba khiếm khuyết ADR-008 liệt kê.
@@ -202,7 +212,18 @@ export class MfaProof {
 
 export type LoginTotpResult =
   | { readonly ok: true; readonly proof: MfaProof }
-  | Extract<MfaAttemptResult, { readonly ok: false }>;
+  | (Extract<MfaAttemptResult, { readonly ok: false }> & {
+      /**
+       * [khoản nợ 139] Hồ sơ VỪA bị khoá nhưng bản ghi `MFA_LOCKED` KHÔNG vào được sổ, vì khoá tư
+       * vấn ghi sổ của tổ chức bị giữ quá trần 2 s của `noi_chuoi_kiem_toan()` (050). Khoá hồ sơ
+       * vẫn đứng — đó là toàn bộ lý do khoản 139 đóng được — nhưng sổ THIẾU một dòng.
+       *
+       * Cờ này tồn tại để cái thiếu ấy KHÔNG im lặng: gói này cố ý không tự ghi ra `console.*`
+       * (cùng kỷ luật với `packages/outbox/src/runner.ts`), nên nó BÁO LÊN và người gọi ở tầng app
+       * ghi một dòng log. Không có cờ, chỗ này là một lần mất dữ liệu kiểm toán không ai đếm được.
+       */
+      readonly auditSkipped?: true;
+    });
 
 export async function verifyTotpForLogin(
   client: pg.PoolClient,
@@ -212,13 +233,45 @@ export async function verifyTotpForLogin(
   const kq = await verifyTotpAttempt(client, input, unsealer);
   if (kq.ok) return { ok: true, proof: taoMfaProof(input.orgId, input.userId, kq.counter) };
   if (kq.justLocked) {
-    await appendAuditEvent(client, input.orgId, {
-      actorType: "USER",
-      actorId: input.userId,
-      action: "MFA_LOCKED",
-      resourceType: "MFA_CREDENTIAL",
-      payload: { lockedUntil: kq.lockedUntil?.toISOString() ?? null },
-    });
+    // ==========================================================================================
+    // [S1.75 / khoản nợ 139] LẦN GHI `MFA_LOCKED` KHÔNG ĐƯỢC KÉO THEO KHOÁ HỒ SƠ KHI NÓ HỎNG.
+    //
+    // `verifyTotpAttempt` vừa chạy `CAU_DAT_KHOA` — bộ đếm và `locked_until` đã nằm trong giao
+    // dịch này. Lần ghi sổ ngay dưới lấy khoá tư vấn ghi sổ của tổ chức qua trigger 004, và từ
+    // 050 nó chờ tối đa 2 s rồi gãy 55P03. TRƯỚC vòng này, lỗi ấy ném ra khỏi handler, giao dịch
+    // rollback, và nó mang theo CẢ khoá hồ sơ: đo được ba lần đoán sai liên tiếp ở ngưỡng đều
+    // không khoá được ai — tức trong cửa sổ ấy số lần đoán TOTP KHÔNG CÒN TRẦN (§S1.73).
+    //
+    // SAVEPOINT là BẮT BUỘC, không phải trang trí. Một `try/catch` trần không cứu được gì: câu
+    // lệnh hỏng đã đưa giao dịch vào trạng thái aborted, mọi câu sau ném 25P02, và COMMIT trên nó
+    // trả về command tag ROLLBACK chứ KHÔNG ném — `packages/tenancy/src/with-tenant.ts` ghi đúng
+    // hành vi ấy. Hình dạng này đã có tiền lệ sản xuất ở `apps/api/src/routes/auth.ts`
+    // (`SAVEPOINT xep_hang`, bắt 23503), và tầng CSDL đã đo rằng nó đúng với CHÍNH lỗi 55P03 này:
+    // `db/tran-cho-khoa-ghi-so.int.test.ts` — sau `ROLLBACK TO SAVEPOINT`, `lock_timeout` vẫn là
+    // giá trị phiên.
+    //
+    // CÁI GIÁ, nói thẳng: sổ kiểm toán THIẾU một dòng `MFA_LOCKED` trong đúng cửa sổ ấy. Chủ dự án
+    // chọn đánh đổi này ngày 2026-09-17 (ADR-008, tiểu mục [S1.75 / khoản 139]) — ngưỡng khoá MFA
+    // có trần quan trọng hơn một dòng sổ, VỚI ĐIỀU KIỆN cái thiếu ấy để lại dấu: xem `auditSkipped`.
+    //
+    // `catch` HẸP CÓ CHỦ Ý — chỉ 55P03, không 57014. Nếu `statement_timeout` cạn trước trần 2 s thì
+    // lỗi là 57014 và câu dưới NÉM LẠI, tức rơi về hành vi cũ; đó là lựa chọn fail-closed, vì nuốt
+    // 57014 sẽ nuốt luôn mọi lần huỷ câu chính đáng. Dư lượng ấy ghi ở khoản nợ 143.
+    // ==========================================================================================
+    await client.query("SAVEPOINT ghi_so_mfa_locked");
+    try {
+      await appendAuditEvent(client, input.orgId, {
+        actorType: "USER",
+        actorId: input.userId,
+        action: "MFA_LOCKED",
+        resourceType: "MFA_CREDENTIAL",
+        payload: { lockedUntil: kq.lockedUntil?.toISOString() ?? null },
+      });
+    } catch (e) {
+      if (!(e instanceof Error && "code" in e && e.code === "55P03")) throw e;
+      await client.query("ROLLBACK TO SAVEPOINT ghi_so_mfa_locked");
+      return { ...kq, auditSkipped: true };
+    }
   }
   return kq;
 }
