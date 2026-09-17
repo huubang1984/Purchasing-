@@ -5846,3 +5846,142 @@ Bí mật cứng trong `apps/mcp` (các hằng `COOKIE` trong ba tệp test là 
 test xanh (`dispatch.ts`, `session-actor.ts`, `routes/buyer.ts` không đổi ở nhánh này; `eslint.config.js`
 chỉ thêm một dòng `ignores`, không tắt luật nào); SQL injection / command injection (không `pg`,
 không `child_process`, không `eval` ở mã sản xuất).
+
+# §S1.75 — khoản nợ 139: ngưỡng khoá MFA sống qua một lần ghi sổ hỏng (SAVEPOINT quanh `MFA_LOCKED`); lượt soi dọc 70; khoản 143 mở
+
+**Ngày:** 2026-09-17 · **Nhánh:** `khoan-139-nguong-khoa-mfa-song-qua-ghi-so-hong` từ `master` `6bcbe96` · **ADR:** 008 (tiểu mục mới), 016, 020 (sửa lời khai)
+
+- Tài liệu: STATE (hàng 139 đóng; hàng 143 mở; hàng 69 vế ⑵ sửa; dòng CÒN MỞ), Handoff (hai dòng đếm 142/41 → 143/41), DECISIONS (ADR-008 tiểu mục [S1.75 / khoản 139] + khối "ĐÃ TRẢ"; ADR-016 "Phần KHÔNG đóng"; ADR-020 mục 2 ràng buộc ⑶), biên bản này.
+
+## 1. Vì sao vòng này tồn tại
+
+Khoản 139 mở ở S1.73 với trạng thái ĐO: `/auth/totp` gọi `verifyTotpForLogin` trong giao dịch của
+request; khi một lần đoán sai đưa bộ đếm CHẠM ngưỡng, hàm ghi `MFA_LOCKED`, và chính lần ghi ấy chờ
+khoá tư vấn ghi sổ của tổ chức tối đa 2 s rồi gãy 55P03 (050). Lỗi ném ra khỏi handler nên giao dịch
+rollback, **mang theo cả `failed_attempts` lẫn `locked_until`**. Tức trong lúc một giao dịch của tổ
+chức giữ khoá ghi sổ, số lần đoán TOTP **không còn trần**.
+
+Sổ nợ nêu ba hình dạng và ghi rõ *mỗi cái đổi một bảo đảm khác nhau nên phải trình chủ dự án kèm số
+đo*. Vòng này đo, trình, và vá theo phương án chủ dự án chọn.
+
+## 2. Ba phương án, và vì sao hai cái bị loại
+
+| | Đóng được 139? | Vì sao loại |
+|---|---|---|
+| (A) pool ghi sổ riêng, khuôn khoản 119/121 | **Chỉ khi cũng nuốt lỗi** | Khoá tư vấn là của **TỔ CHỨC** (004), nên một giao dịch ĐỘC LẬP cũng xếp hàng sau đúng khoá ấy và cũng gãy 55P03. Nó chỉ đóng được 139 nếu CŨNG nuốt lỗi — tức thành (B) cộng một kết nối. Tệ hơn: nó commit dòng sổ **trước** giao dịch chính nên đẻ thêm ca *sổ có dòng mà hồ sơ không khoá*. Chi phí kèm theo: `/auth/totp` là route **vô danh** (`AnonContext`) không mang `auditPool` — chỉ `BuyerContext` có —, và cổng `[INV-D5]` (`tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`) ghim lời gọi `withTenant(auditPool, …)` ở **đúng một tệp** `packages/identity/src/rbac.ts`, nên (A) buộc phải thêm một hàm mới ở đó |
+| (B) **SAVEPOINT** quanh lần ghi | **Có** | **CHỌN.** Nhỏ nhất, nằm gọn một tệp, không thêm kết nối, không chạm cổng nào |
+| (C) bộ đếm ngoài số phận giao dịch | Không khả thi | Bảng UNLOGGED và giao dịch con đều chết theo rollback; `dblink` không được cài và có cổng chặn. Dạng duy nhất chạy được là một bảng đếm thứ hai ghi qua kết nối thứ hai — đắt nhất, và vẫn không mang lại dòng sổ |
+
+## 3. Mã
+
+`packages/identity/src/login.ts` — lần ghi `MFA_LOCKED` nằm trong `SAVEPOINT ghi_so_mfa_locked`;
+55P03 ⇒ `ROLLBACK TO SAVEPOINT` rồi trả kết quả kèm cờ `auditSkipped`. Bộ đếm và `locked_until` do
+`CAU_DAT_KHOA` đặt **trước** savepoint nên không bị đụng tới.
+
+SAVEPOINT là **bắt buộc**, không phải trang trí: câu hỏng đã đưa giao dịch vào trạng thái aborted,
+mọi câu sau ném 25P02, và COMMIT trên nó trả command tag `ROLLBACK` chứ **không ném** — một
+`try/catch` trần không cứu được gì. Hình dạng này đã có tiền lệ sản xuất trong chính tệp route
+(`apps/api/src/routes/auth.ts`, `SAVEPOINT xep_hang` bắt 23503), và tầng CSDL đã đo nó đúng với
+CHÍNH lỗi 55P03 này (`db/tran-cho-khoa-ghi-so.int.test.ts`).
+
+`apps/api/src/routes/auth.ts` — một dòng `console.error` **cố định**, không nội suy `orgId`,
+`userId` hay `lockedUntil`. Gói `identity` cố ý không tự ghi `console.*` (cùng kỷ luật với
+`packages/outbox`), nên nó **báo lên** và tầng app ghi.
+
+## 4. Phép đo
+
+Cùng một đồ gá, hai lượt trên cùng nhánh; lượt TRƯỚC chạy sau khi lùi `login.ts` về `master`. Khoá
+ghi sổ của tổ chức bị một giao dịch khác giữ, bộ đếm đặt sát ngưỡng, ba lần đoán sai liên tiếp:
+
+| | mã lỗi mỗi lần | bộ đếm/khoá sau mỗi lần | ms | `MFA_LOCKED` trước/sau | mã ĐÚNG ngay sau |
+|---|---|---|---|---|---|
+| TRƯỚC | `55P03` ×3 | `4/chưa-khoá` ×3 | `[2 029, 2 013, 2 008]` | **0/0** | **mở được phiên** |
+| SAU | không ném | `5/đã-khoá` ×3 | `[2 026, 4, 4]` | **0/0** | `LOCKED_OUT` |
+
+Trần đã trở lại. Chỉ lần chạm ngưỡng trả khoảng 2 s (vẫn chờ hết trần rồi mới bỏ lần ghi); hai lần
+sau 4 ms vì hồ sơ đã khoá nên không còn chạm đường ghi sổ.
+
+`pnpm t0` xanh (248 module, 1 026 phụ thuộc, 0 vi phạm) · `pnpm test` 63 tệp · `mfa.int.test.ts`
+**53/53** · `auth.int.test.ts` **29/29**.
+
+## 5. CÁI GIÁ — bản đầu của vòng này nói SAI, và lượt soi 70 bắt được
+
+Bản đầu của hàng 139 và của tiểu mục ADR đều viết *đổi một dòng sổ lấy một cái trần*, kèm con số
+`2 005 ms` cho bản TRƯỚC. **Cả hai sai, theo hai kiểu khác nhau, và cả hai là lỗi tự làm mình nặng
+hơn thực tế.**
+
+- **Con số `2 005 ms` là số MƯỢN** — nó thuộc kịch bản bốn yêu cầu mở thầu của khoản 126 (§S1.73),
+  không thuộc đồ gá này. Lượt đo baseline ban đầu **xanh** nên nó không in ms ra, và chỗ trống được
+  lấp bằng một số của phép đo khác. Đúng lớp lỗi *số của phép đo hỏng* mà lượt soi 68b-3 bắt một
+  vòng trước. Đo lại đúng đồ gá: `[2 029, 2 013, 2 008]`.
+- **"Sổ thiếu một dòng" KHÔNG phải cái giá của bản vá này.** Đo trên `master` bằng chính đồ gá ấy:
+  `MFA_LOCKED trước/sau: **0/0**`. Lần ghi gãy thì giao dịch rollback, nên bản CŨ cũng để sổ trống.
+  So với HEAD, bản vá **không đánh mất dòng sổ nào**; nó chỉ thêm cái khoá.
+
+**Cái giá THẬT, và nó chưa có phép đo:** mã CŨ, nếu tranh chấp tan TRƯỚC khi kẻ đoán xong, rốt cuộc
+vẫn ghi được một dòng `MFA_LOCKED` (với giá là đoán không trần trong lúc chờ); mã MỚI khoá ngay ở
+lần chạm ngưỡng nên **không bao giờ ghi dòng ấy nữa**. Vế ⑷ của test đo *"trong cửa sổ khoá bị giữ,
+sổ trống"* — không hơn, và chú thích của nó nay nói đúng điều đó thay vì tự gọi mình là "cái giá".
+
+## 6. Phần KHÔNG đóng — nói thẳng
+
+- **Khoản 143 (mở).** `catch` chỉ nuốt `55P03`. Ít nhất hai mã khác đi lọt và làm khoản 139 tái hiện
+  nguyên vẹn: `57014` khi `statement_timeout` cạn trước trần, và `40P01` khi bộ dò khoá chết bắn ở
+  `deadlock_timeout` **1 s** — tức TRƯỚC trần 2 s, nên nó không phải ca hiếm hơn. `catch` hẹp là lựa
+  chọn fail-closed có chủ ý (nuốt 57014 sẽ nuốt luôn mọi lần huỷ câu chính đáng), không phải một sót.
+- **Cái giá thật ở mục 5 chưa có phép đo.**
+- **Nhịp lượt soi ngang.** Mốc là *sau ba vòng đổi hardening, hay chậm nhất S1.77* (`Handoff.md` §11).
+  S1.75 **không đổi hardening** và chưa chạm mốc — không lỡ nhịp.
+
+## Lượt soi 70 — lượt DỌC trên bản vá khoản 139, chạy trên nhánh TRƯỚC khi merge
+
+Bốn góc đọc song song (cơ chế SAVEPOINT; răng của test; lời khai tài liệu; an ninh + cổng), mỗi phát
+hiện bị một reviewer KHÁC phản bác trước khi được giữ. **Chỉ đọc mã, không chạy test.** 28 phát hiện
+đứng, 12 bị bác.
+
+### 70 — 3 NẶNG, 6 NHẸ, phần còn lại INFO
+
+**NẶNG — cả ba chụm vào MỘT chỗ: điều kiện mà chủ dự án gắn vào lời đồng ý không có lớp nào giữ.**
+
+- **H-1 — điều kiện ① ("cái thiếu phải để lại DẤU") mới LÀM, chưa ĐO.** Xoá cả khối `console.error`
+  ở `apps/api/src/routes/auth.ts` thì **không test nào đỏ**. Tức điều kiện của chủ dự án sống bằng
+  thiện chí của người sửa sau. → **vá bằng test**: `apps/api/src/auth.int.test.ts`, qua HTTP thật với
+  khoá bị giữ — 401 (không 500), hồ sơ khoá, sổ 0 dòng, **đúng MỘT** dòng log, và dòng ấy không mang
+  `orgId` lẫn `userId`.
+- **H-2 — điều kiện ② ("`catch` hẹp, chỉ 55P03") cũng chưa từng đỏ.** Nới `catch` thành nuốt mọi lỗi
+  thì cả hai test cũ vẫn xanh, vì cả hai chỉ dựng 55P03 thật và đường thành công. → **vá bằng test**:
+  một trigger dựng lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra NGUYÊN và giao dịch vẫn
+  rollback. (Dùng trigger chứ không REVOKE: `public.audit_append` không bị thu EXECUTE khỏi `PUBLIC`
+  ở 004, nên thu quyền của `app_api` không sinh 42501 — đã kiểm trước khi viết.)
+- **M-2 — ADR khai "cả ba điều kiện đã làm và đo" trong khi hai trong ba không có một dòng đo nào.**
+  → sau H-1 và H-2, lời khai ấy nay ĐÚNG; tiểu mục ADR ghi rõ nó chỉ đúng *sau khi lượt soi 70 ép*.
+
+**NHẸ**
+
+- **M-1 — con số `2 005 ms` là số của phép đo khác**, và nửa "TRƯỚC" không truy về được phép đo nào.
+  → đo lại, thay bằng `[2 029, 2 013, 2 008]`; xem mục 5.
+- **H-3 — tiểu mục `###` chèn vào GIỮA thân ADR-008** nên nó tái gán cha cho toàn bộ lập luận gốc
+  2026-08-28 (ba phương án, khối "ĐÃ TRẢ") và làm lệch con trỏ *"xem cuối ADR"* ở đầu ADR. → dời
+  tiểu mục xuống **cuối** ADR-008, sau khối "ĐÃ TRẢ".
+- **H-4 / H-5 — hai lời khai CŨ chưa gạch**: khối "ĐÃ TRẢ" ở cuối ADR-008 và ràng buộc ⑶ ở mục 2 của
+  ADR-020 vẫn nói *ghi đúng MỘT bản ghi* vô điều kiện. → cả hai nay mang ngoại lệ.
+- **H-6 — hàng 69 của sổ nợ** vẫn kể *"`ROLLBACK` làm rơi cả bộ đếm, cả khoá, cả bản ghi"* như hành
+  vi hôm nay. → gạch, ghi hành vi mới, và nêu rằng mã KHÁC 55P03 thì vẫn rơi cả ba (khoản 143).
+- **L-2 — dòng mục lục đầu `login.ts`** còn lời khai cũ trong khi JSDoc ngay dưới đã sửa. → sửa.
+- **L-4 — ADR-016 "Phần KHÔNG đóng"** còn nói khoản 139 ở thì hiện tại. → gạch, trỏ sang S1.75.
+
+### Reviewer phản bác được 12 phát hiện
+
+Đáng kể nhất: **ADR-008 không cần sửa `docs/TEST-PLAN.md`** — phát biểu E3 ở đó không chạm sổ kiểm
+toán, và bản vá chỉ làm vế *"giới hạn số lần thử"* mạnh thêm. Và **không cổng kiến trúc nào bị bản vá
+làm đỏ**, đo chứ không đoán: `git diff | grep auditPool` = 0 dòng (INV-D5 sạch); `LoginTotpResult` là
+export CHỈ KIỂU nên `barrel-exports` không ghim; không nhãn `INV-` nào thêm hay bớt nên sổ khai nhãn
+không phải đổi; EOL của ba tệp `.ts` là `w/lf`, hai tệp `.md` là `w/crlf` — đúng.
+
+### Reviewer KHÔNG tìm thấy
+
+Lỗi ở chính cơ chế SAVEPOINT: phía đặt savepoint ĐÚNG (sau `CAU_DAT_KHOA`), spread không mất trường
+nào của kết quả, thiếu `RELEASE SAVEPOINT` là vô hại vì nhánh ấy `return` ngay và `/auth/totp` không
+chạy thêm câu SQL nào trên đường 401 — tiền lệ `SAVEPOINT xep_hang` cũng không release. Dòng log
+không phải oracle cho kẻ gọi (chuỗi cố định, ra stderr máy chủ, không vào phản hồi), và log flooding
+không phải lối vào: trần chồng bốn tầng trên `/auth/totp`.

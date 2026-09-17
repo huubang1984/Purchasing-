@@ -243,12 +243,67 @@ hôm nay — "không ghi gì, và có một trường `justLocked` không ai g�
 đúng về chuỗi hash cộng một khoảng trống chưa lấp, không phải một thiết kế đã xong.
 
 **[2026-09-06 — ĐÃ TRẢ, phương án (ii).** `verifyTotpForLogin` (`packages/identity/src/login.ts`)
-gọi `verifyTotpAttempt` rồi, khi `justLocked`, ghi đúng MỘT bản ghi `MFA_LOCKED` (actor USER, resource
+gọi `verifyTotpAttempt` rồi, khi `justLocked`, ghi đúng MỘT bản ghi `MFA_LOCKED` — **[S1.75 / khoản 139] trừ khi khoá ghi sổ của tổ chức bị giữ quá trần 2 s ở đúng lần chạm ngưỡng, khi ấy KHÔNG dòng nào vào sổ và hồ sơ vẫn khoá; xem tiểu mục cuối ADR này** — (actor USER, resource
 `MFA_CREDENTIAL`, payload `lockedUntil`) vào chuỗi hash. Tần suất bị chặn trên `1 / MFA_LOCKOUT_SECONDS`
 mỗi hồ sơ nên lập luận DoS ở trên không áp dụng. Đo qua HTTP ở `apps/api/src/auth.int.test.ts`
 [INV-E3]: sai `MFA_MAX_FAILED_ATTEMPTS` lần ⇒ đúng một bản ghi; lần sai kế tiếp (đã khoá) không ghi
 thêm; đột biến gỡ dòng ghi ⇒ test ĐỎ. Endpoint đăng nhập (`POST /auth/totp`) ra đời CÙNG commit —
 đúng thứ tự khoản nợ đòi.**
+
+### [S1.75 / khoản 139] Chi phí mà ADR này BÁC BỎ đã quay lại — ở đúng sự kiện nó đồng ý ghi
+
+**Ngày:** 2026-09-17 · **Trạng thái:** chủ dự án chấp nhận đánh đổi, kèm điều kiện.
+
+ADR này bác phương án ghi-mọi-lần-thất-bại bằng một lập luận về chi phí: `appendAuditEvent` đi qua
+`noi_chuoi_kiem_toan()`, thứ mở đầu bằng `pg_advisory_xact_lock` **theo tổ chức**, nên ghi sổ ở đây
+sẽ nối tiếp hoá sổ của cả tổ chức. Phương án (ii) được chọn vì tần suất của `justLocked` bị chặn
+trên `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ, nên *lập luận DoS không áp dụng*.
+
+**Điều ADR không lường:** lập luận ấy nói về tần suất NGƯỜI GỌI tạo ra, không nói gì về việc **người
+KHÁC giữ khoá ấy**. Từ S1.71 (050) mọi lần ghi sổ chờ khoá tối đa 2 s rồi gãy 55P03, và §S1.73 đo được
+rằng những giao dịch HỢP LỆ — không cần IM7 — giữ được khoá ấy quá 2 s. Nói chính xác như phép đo chứ
+không rộng hơn (lượt soi 70): **một** người giữ làm lần ghi sổ đồng thời chậm 966 ms rồi vẫn xong;
+phải **bốn** yêu cầu mở thầu cách nhau 500 ms mới đẩy nó quá trần và gãy 55P03 ở 2 005–2 011 ms. Khi đó lần ghi `MFA_LOCKED`
+gãy, lỗi ném ra khỏi handler, giao dịch rollback và mang theo **cả `failed_attempts` lẫn
+`locked_until`**: số lần đoán TOTP không còn trần (khoản 139, đo ở §S1.73).
+
+**Quyết định.** Bọc lần ghi `MFA_LOCKED` trong một `SAVEPOINT`; 55P03 ⇒ bỏ lần ghi, giữ khoá hồ sơ.
+
+**Cái giá, nói cho đúng — bản đầu của tiểu mục này nói SAI theo hướng tự làm mình nặng hơn thực tế.**
+Nó viết *đổi một dòng sổ lấy một cái trần*. Đo lại trên `master` bằng chính đồ gá của phép đo:
+`MFA_LOCKED trước/sau: **0/0**` — lần ghi gãy thì giao dịch rollback, nên bản CŨ cũng để sổ trống. So
+với HEAD, bản vá **không đánh mất dòng sổ nào**; nó chỉ thêm cái khoá. Thứ thật sự bị đổi nằm ở sau
+đó: mã CŨ, nếu tranh chấp tan TRƯỚC khi kẻ đoán xong, rốt cuộc vẫn ghi được một dòng (với giá là đoán
+không trần trong lúc chờ); mã MỚI khoá ngay nên không bao giờ ghi dòng ấy nữa. Điều đó **chưa** có
+phép đo — nói ra ở đây thay vì để nó thành một lời khai ngầm.
+
+Ba điều kiện đi kèm, và cả ba nay đều có một lớp giữ — nhưng chỉ sau khi **lượt soi 70** ép:
+
+1. cái thiếu phải để lại **dấu** — kết quả mang `auditSkipped`, `apps/api` ghi một dòng cố định
+   không nội suy giá trị; gói `identity` không tự ghi `console.*` (cùng kỷ luật với `outbox`).
+   **Đo:** qua HTTP thật ở `apps/api/src/auth.int.test.ts` — khoá bị giữ, sai đủ ngưỡng ⇒ 401 (không
+   500), hồ sơ khoá, sổ 0 dòng, và ĐÚNG một dòng log không mang `orgId` lẫn `userId`;
+2. `catch` **hẹp** — chỉ 55P03. Mọi mã khác vẫn ném nguyên (fail-closed). **Đo:** một trigger dựng
+   lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra nguyên và giao dịch vẫn rollback;
+3. một **đối chứng** giữ cho bản vá khỏi thành *bỏ ghi sổ luôn cho xong*: không ai giữ khoá thì lần
+   chạm ngưỡng vẫn ghi đủ một dòng và không bật cờ. **Đo:** `packages/identity/src/mfa.int.test.ts`.
+
+**Trước lượt soi 70, ① chỉ đo được nửa (`auditSkipped` có test, dòng log KHÔNG) và ② không có phép đo
+nào** — xoá dòng log hay nới `catch` thành nuốt mọi lỗi đều không làm một test nào đỏ. Tức điều kiện
+chủ dự án gắn vào lời đồng ý đang sống bằng thiện chí của người sửa sau. Hai vế đo ở trên ra đời từ
+đó.
+
+**Bác:** ghi trên pool ghi sổ riêng (khuôn khoản 119/121) — khoá là của TỔ CHỨC nên giao dịch độc lập
+cũng gãy, nó chỉ đóng được 139 nếu CŨNG nuốt lỗi, lại commit dòng sổ TRƯỚC giao dịch chính nên đẻ
+thêm ca *sổ có dòng mà hồ sơ không khoá*. **Bác:** giữ nguyên — sổ toàn vẹn nhưng TOTP không trần
+trong cửa sổ khoá bị giữ, và đó là đánh đổi sai chiều với E3.
+
+**Dư lượng, nói ra:** nếu câu gãy bằng một mã KHÁC 55P03 thì khoản 139 tái hiện nguyên vẹn — và có
+ít nhất hai mã như thế: `57014` khi `statement_timeout` cạn trước trần, và `40P01` khi bộ dò khoá chết
+bắn ở `deadlock_timeout` 1 s, tức TRƯỚC trần 2 s. Khoản **143**.
+
+**Đo bằng gì.** `packages/identity/src/mfa.int.test.ts` (ba vế: bản vá, `catch` hẹp, đối chứng),
+`apps/api/src/auth.int.test.ts` (dấu vết qua HTTP). Biên bản: `evidence/security-reviews.md` §S1.75.
 
 **Ghi chú về nhãn.** Test khoá quyết định này mang thẻ `[T9-J]`, **không** `[INV-D5]`. Nó
 chứng minh một **ngoại lệ** của D5; một thẻ `[INV-D5]` sẽ đẩy vào `evidence/INV-matrix.md`
@@ -1347,7 +1402,7 @@ tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.7
 
 **Hệ quả.** Worker giữ khoá hàng RFQ suốt giao dịch, gồm cả lúc mở bọc khoá và giải mã phong bì — đo: 26–45 ms cho một và tám phong bì, so với 37–91 ms của bản trước; một yêu cầu mở thầu đồng thời vẫn có trả lời sau khoảng 20 ms. Một lượt mở thầu HỎNG cũng giữ khoá hàng ấy tới khi giao dịch kết thúc — trước bản vá thì không. Đổi lại: bốn yêu cầu mở thầu thứ hai cách nhau 500 ms không còn làm lần ghi sổ đồng thời của tổ chức gãy.
 
-**Phần KHÔNG đóng.** Hình dạng "câu ghi hàng đứng sau lần ghi sổ đầu" còn ở `approveUnseal` — khoản 140, đọc, chưa đo. Ngưỡng khoá MFA vẫn phụ thuộc lần ghi sổ `MFA_LOCKED` nên trong lúc khoá ghi sổ bị giữ thì nó không chạm — khoản 139, đo. Trần 2 s không đuổi người giữ; khoản 128 vẫn mở.
+**Phần KHÔNG đóng.** Hình dạng "câu ghi hàng đứng sau lần ghi sổ đầu" còn ở `approveUnseal` — khoản 140, đọc, chưa đo. ~~Ngưỡng khoá MFA vẫn phụ thuộc lần ghi sổ `MFA_LOCKED` nên trong lúc khoá ghi sổ bị giữ thì nó không chạm — khoản 139, đo.~~ **[S1.75] Khoản 139 ĐÓNG:** lần ghi `MFA_LOCKED` nay nằm trong một SAVEPOINT, nên khoá ghi sổ bị giữ thì ngưỡng VẪN chạm (đo). Dư lượng `40P01` / `57014` là khoản 143. Trần 2 s không đuổi người giữ; khoản 128 vẫn mở.
 
 **Đo bằng gì.** `apps/unseal-worker/src/unseal-worker.int.test.ts` (bốn test, gồm đối chứng dương của phép dò khoá và ca giao dịch hỏng thả khoá ngay lúc abort), `packages/rfq/src/rfq.int.test.ts` (đường ⑵), `packages/identity/src/mfa.int.test.ts` (hệ quả E3). Số đo đầy đủ ở `evidence/security-reviews.md` §S1.73.
 
@@ -1784,6 +1839,9 @@ Ba ràng buộc đi kèm, cả ba cưỡng chế được:
 3. **Nợ ADR-008 trả bằng phương án (ii):** khi `verifyTotpAttempt` trả `justLocked`, ghi **một** bản
    ghi `MFA_LOCKED` vào sổ kiểm toán. Tần suất bị chặn trên `1 / MFA_LOCKOUT_SECONDS` mỗi hồ sơ nên
    lập luận DoS của ADR-008 không áp dụng. Trường `justLocked` có người gọi đầu tiên.
+   **[S1.75 / khoản 139]** Ràng buộc này nay có một ngoại lệ: khoá tư vấn ghi sổ của tổ chức bị giữ
+   quá trần 2 s (050) ở đúng lần chạm ngưỡng ⇒ **không dòng nào** vào sổ, hồ sơ VẪN khoá, kết quả mang
+   `auditSkipped` và `apps/api` ghi một dòng log. Xem tiểu mục cuối ADR-008.
 
 ### 3. E6 — token KHÔNG BAO GIỜ vào đường dẫn hay query
 
@@ -1946,7 +2004,11 @@ là giả lập trên hộp thư dev. Chi tiết ở `evidence/security-reviews.
 4. **Phiên người mua:** một `INSERT INTO sessions` viết tay bởi `app_api` thiếu `mfa_verified_at` bị
    trigger từ chối; `resolveSessionByToken` với token sai/hết hạn/thu hồi ném **cùng một** lỗi
    (không oracle); bản ghi `MFA_LOCKED` xuất hiện đúng **một** lần sau `MFA_MAX_FAILED_ATTEMPTS`
-   lần sai, không xuất hiện ở lần sai thứ nhất.
+   lần sai, không xuất hiện ở lần sai thứ nhất. **[S1.75 / khoản 139] Lời khai ấy nay có một ngoại
+   lệ, và nó phải đứng ngay đây chứ không nằm riêng:** nếu khoá tư vấn ghi sổ của tổ chức bị giữ quá
+   trần 2 s (050) ở ĐÚNG lần chạm ngưỡng thì **không dòng nào** vào sổ — hồ sơ vẫn khoá, kết quả mang
+   cờ `auditSkipped`, và `apps/api` ghi một dòng log. Đo ở `packages/identity/src/mfa.int.test.ts`;
+   quyết định ở ADR-008, tiểu mục [S1.75 / khoản 139].
 5. **Bộ quét rò rỉ (A1/A2/A4 ở tầng HTTP):** gieo giá `1234567891` qua một báo giá niêm phong
    THẬT, gọi mọi route `BUYER`/`GUEST` trước mở thầu, quét thân phản hồi + log bắt được + thông
    điệp lỗi; **đối chứng dương**: cùng bộ quét bắt được khi một route cố ý trả bản rõ.
