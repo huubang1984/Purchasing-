@@ -33,6 +33,7 @@ import { describe, expect, it } from "vitest";
 // `vitest.config.ts`), và `apps/mcp` cố ý KHÔNG khai nó ở `dependencies` — đường chạy của MCP
 // không chạm api bằng mã, chỉ bằng HTTP. Test là nơi duy nhất nối hai app.
 import { ROUTES } from "../../api/src/routes.js";
+import { agentGoiDuoc } from "../../api/src/route-types.js";
 import { CONG_CU, ROUTE_DOC_KHONG_PHOI, thamSoCuaDuong } from "./cong-cu.js";
 
 /** Khoá đối chiếu của một route: `GET /rfqs/:rfqId`. Cặp (method, path) là duy nhất — router đòi thế. */
@@ -132,6 +133,64 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
     }
     // Đối chứng: đúng một công cụ công khai hôm nay, nên vế trên không phải "mọi cái đều false".
     expect(CONG_CU.filter((c) => c.congKhai).map((c) => c.ten)).toEqual(["health"]);
+  });
+
+  // ============================================================================================
+  // [khoản 141 / ADR-039] HAI BẢNG, MỘT SỰ THẬT — và đây là chỗ chúng không trôi khỏi nhau được.
+  //
+  // Từ S1.75, `apps/api` tự biết route nào một phiên agent gọi được: trường `agent` trên
+  // `BuyerReadRoute`/`BuyerSelfRoute`, đọc qua vị từ `agentGoiDuoc`. Bảng công cụ MCP là một lời
+  // khai ĐỘC LẬP về cùng câu hỏi ấy. Hai lời khai độc lập về cùng một sự thật là đúng hình dạng
+  // trôi mà kho này đã bắt ba lần — nên chúng bị buộc vào nhau ở đây, theo CẢ HAI chiều:
+  //   → `apps/api` mở một route đọc cho agent mà MCP không có công cụ ⇒ đỏ;
+  //   ← MCP có công cụ mà `apps/api` không cho phiên agent gọi ⇒ đỏ (công cụ ấy sẽ luôn 403).
+  // ============================================================================================
+  it("→← tập route agent đọc được KHỚP tập công cụ CẦN PHIÊN của MCP", () => {
+    // So đúng nhóm: `agentGoiDuoc` chỉ phán về route NGƯỜI MUA, vì chỉ nhánh BUYER của bộ điều
+    // phối mới đọc cookie phiên. Route PUBLIC (`/health`) không nhận chứng chỉ nào, nên nó nằm
+    // ngoài phép so này và được canh bởi khẳng định `congKhai` ở trên. Lần chạy đầu của cổng này
+    // đỏ vì gộp hai nhóm — giữ lại ghi chú vì đó là lằn ranh dễ lẫn nhất của cả vòng.
+    const duongAgentDoc = ROUTES.filter((r) => agentGoiDuoc(r) && r.method === "GET")
+      .map((r) => r.path)
+      .sort();
+    const congCuCanPhien = CONG_CU.filter((c) => !c.congKhai)
+      .map((c) => c.path)
+      .sort();
+    expect(
+      congCuCanPhien,
+      "bảng công cụ MCP và vị từ `agentGoiDuoc` của apps/api đã lệch nhau — một công cụ không gọi " +
+        "được sẽ luôn 403, và một route mở mà không có công cụ là một bề mặt không ai dùng tới",
+    ).toEqual(duongAgentDoc);
+    // Đối chứng: phép so trên không được rỗng ruột.
+    expect(duongAgentDoc.length).toBeGreaterThan(5);
+  });
+
+  it("← ba đường KHÔNG PHƠI cũng bị apps/api từ chối, không chỉ vắng khỏi bảng công cụ", () => {
+    // Vắng khỏi bảng công cụ chặn máy khách CỦA TA. Vế dưới đây mới là thứ chặn một máy khách
+    // MCP tự viết cầm cùng chứng chỉ: `apps/api` từ chối, chứ không phải `apps/mcp` không hỏi.
+    for (const duong of Object.keys(ROUTE_DOC_KHONG_PHOI)) {
+      const route = ROUTES.find((r) => r.path === duong && r.method === "GET");
+      expect(route, `apps/api không còn route GET nào tên ${duong}`).toBeDefined();
+      expect(
+        route === undefined ? null : agentGoiDuoc(route),
+        `${duong} nằm trong ROUTE_DOC_KHONG_PHOI nhưng apps/api VẪN cho phiên agent gọi`,
+      ).toBe(false);
+    }
+  });
+
+  it("route GHI mà agent gọi được: đúng một đường, và nó là đăng xuất", () => {
+    // [lượt soi đối kháng Đ-1] Route TỰ THÂN chạm chính chứng chỉ, nên nhóm ấy không được im
+    // lặng: một `BuyerSelfRoute` thứ hai khai `agent: true` làm câu này đỏ và buộc người viết nói
+    // ra vì sao một phiên agent được phép đổi trạng thái ấy.
+    const ghiAgentGoiDuoc = ROUTES.filter((r) => agentGoiDuoc(r) && r.method !== "GET").map((r) => r.path);
+    expect(ghiAgentGoiDuoc).toEqual(["/auth/logout"]);
+  });
+
+  it("đường PHÁT chứng chỉ agent KHÔNG được gọi bằng chính chứng chỉ agent", () => {
+    // Vế chịu lực của cả khoản 141: một chứng chỉ agent không tự gia hạn và không tự nhân bản.
+    const capPhien = ROUTES.find((r) => r.path === "/auth/agent-session");
+    expect(capPhien, "apps/api không còn đường phát chứng chỉ agent").toBeDefined();
+    expect(capPhien === undefined ? null : agentGoiDuoc(capPhien)).toBe(false);
   });
 
   it("tên công cụ là duy nhất và hợp lệ với MCP", () => {

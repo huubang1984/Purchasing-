@@ -18,6 +18,7 @@ import {
   generateTotpSecret,
   redeemLoginToken,
   revokeSession,
+  startAgentSession,
   startUserSession,
   verifyTotpForLogin,
 } from "@trustprocure/identity";
@@ -203,9 +204,70 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     audience: "BUYER",
     mutates: true,
     self: true,
+    // [khoản 141] Phiên agent tự thu hồi được, và đó là điều MONG MUỐN: một tiến trình MCP dừng
+    // sạch nên trả lại chứng chỉ của nó thay vì để nó sống tới hết giờ. Route chỉ chạm CHÍNH phiên
+    // đang gọi, nên nó không mở được gì thêm.
+    agent: true,
     handler: async (ctx) => {
       await revokeSession(ctx.client, ctx.orgId, ctx.actor.sessionId);
       return { status: 200, body: { ok: true }, setCookie: [XOA_COOKIE] };
+    },
+  },
+  {
+    // ==========================================================================================
+    // [khoản 141 / ADR-039] ĐƯỜNG PHÁT CHỨNG CHỈ AGENT — và vì sao nó nằm ở ĐÂY.
+    //
+    // Phiên agent có trần TTL một giờ (051) và `sessions.expires_at` KHÔNG có `GRANT UPDATE`
+    // (006 — "không gia hạn phiên trượt"), nên gia hạn tại chỗ là bất khả. Nếu đường phát duy
+    // nhất là `POST /auth/totp` thì giữ một máy chủ MCP sống đòi một con người gõ TOTP mỗi giờ
+    // và đụng `LOGIN_MAX_TOKENS_PER_WINDOW` — lượt soi đối kháng Đ-3 đo ra rằng đó là một chế độ
+    // vận hành không dùng được, và một chế độ không dùng được không phải một lớp an ninh: nó đẩy
+    // người vận hành sang cắm cookie NGƯỜI 8 giờ vào biến môi trường, đúng thứ vòng này chặn.
+    //
+    // Route này là đường ra khỏi thế lưỡng nan ấy, và nó KHÔNG nới một bảo đảm nào:
+    //   • `self: true` + `agent: false` — chỉ một phiên NGƯỜI gọi được. Một chứng chỉ agent KHÔNG
+    //     tự gia hạn và KHÔNG tự nhân bản được; đó là vế chịu lực.
+    //   • Nó KHÔNG chạm trigger `sessions_kiem_totp_gan_day` (039) đang bị hardening ghim: phiên
+    //     người gọi đã qua TOTP, và `assertFreshMfa` dưới đây đòi lần TOTP ấy còn TƯƠI.
+    //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
+    //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
+    // ==========================================================================================
+    method: "POST",
+    path: "/auth/agent-session",
+    audience: "BUYER",
+    mutates: true,
+    self: true,
+    agent: false,
+    handler: async (ctx) => {
+      // Một mã TOTP TƯƠI, không một magic link nào — xem khối đầu `startAgentSession`. Trigger 039
+      // đòi lần TOTP ấy, nên đây không phải một lớp ta tự thêm cho chắc: không có nó thì câu INSERT
+      // gãy ở CSDL.
+      const code = chuoi(ctx.req.body, "code");
+      const kq = await verifyTotpForLogin(
+        ctx.client,
+        { orgId: ctx.orgId, userId: ctx.actor.id, code },
+        ctx.services.totpSecretUnsealer,
+      );
+      if (!kq.ok) {
+        // Cùng hai giá trị như `/auth/totp` (review L-7): lý do chi tiết là oracle, `lockedUntil`
+        // làm tròn LÊN phút.
+        const khoa = kq.reason === "LOCKED_OUT";
+        const lam = kq.lockedUntil === null ? null : new Date(Math.ceil(kq.lockedUntil.getTime() / 60_000) * 60_000).toISOString();
+        return { status: 401, body: { ok: false, reason: khoa ? "LOCKED_OUT" : "WRONG_CODE", lockedUntil: khoa ? lam : null } };
+      }
+      const phien = await startAgentSession(ctx.client, ctx.orgId, {
+        userId: ctx.actor.id,
+        mfaProof: kq.proof,
+        capBoiSessionId: ctx.actor.sessionId,
+        ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
+      });
+      // Token đi trong THÂN: người vận hành chép sang biến môi trường của tiến trình MCP. Không
+      // `setCookie` — một tiến trình không phải trình duyệt không dùng được cookie, và một chứng
+      // chỉ agent nằm trong cookie của người gọi là đúng thứ khoản 141 muốn tách ra.
+      return {
+        status: 200,
+        body: { token: phien.token, expiresInSeconds: phien.expiresInSeconds, kind: "AGENT_READONLY" },
+      };
     },
   },
 ];

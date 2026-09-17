@@ -223,6 +223,14 @@ const DANH_SACH_TRANG_IDENTITY = [
   "issueLoginToken",
   "redeemLoginToken",
   "revokeSession",
+  // [khoản 141 / ADR-039] `startAgentSession` — đường DUY NHẤT phát một chứng chỉ `AGENT_READONLY`.
+  // Đi qua đúng tiêu chí của cửa này: nó NÉM một `LoginTokenError` khi không thoả (không có nhánh
+  // nào trả `null`/`false` để người gọi vô tình nuốt), và nó KHÔNG trả lời một câu hỏi quyền nào —
+  // cổng phạm vi nằm ở `apps/api/src/dispatch.ts`, không ở đây. Nó còn HẸP HƠN `startUserSession`
+  // ở hai chỗ: không nhận tham số TTL (trần một giờ ghim trong hàm), và không tiêu thụ một token
+  // đăng nhập nào — người gọi phải đã có một phiên NGƯỜI, điều mà route `self: true, agent: false`
+  // của apps/api đòi.
+  "startAgentSession",
   "startUserSession",
   "verifyTotpForLogin",
   "verifyTotpAttempt",
