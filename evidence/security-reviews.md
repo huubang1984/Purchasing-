@@ -6198,6 +6198,28 @@ và khoản **146** (phép vá `--deduplicate` chưa có phép đo nào trong b�
 (34 + 22), và cổng P8 mù với nó vì biểu thức đòi cụm chữ *"Sổ đăng ký"* đứng trước con số. Lời khai từ S1.21 — ghi ra ở đây để nó
 không chìm thêm một vòng nữa.
 
+### Phép đo trên cây ĐƯỢC ĐẨY
+
+| Cổng | Lệnh | Kết quả |
+|---|---|---|
+| T0 | `pnpm t0` | exit 0 — **248 module / 1 029 phụ thuộc**, 0 vi phạm |
+| T1+T2 | `pnpm test` | **904 passed**, 1 skipped / **63 tệp** |
+| T3 | `pnpm test:int` | **1 022 passed** / **46 tệp** |
+| Evidence | `pnpm evidence` | **vitest thoát mã 0**, **1 927 khẳng định** (§S1.75 trên `3c91d7b`: 1 918, **+9**), **56/56 bất biến** (34/34 nghiệp vụ + 22/22 hàng rào) |
+
+Phụ thuộc lên 1 028 → 1 029 vì cổng mới import `ROUTES`. Bảng này đo trên cây có đủ mã, test và cổng; phần tài liệu
+được áp sau nó, rồi `tests/architecture` chạy lại trên bản có tài liệu — đúng nhịp mà §S1.61 và §S1.71 mỗi lần bỏ qua
+là mỗi lần mất một vòng evidence. Lượt trên CI chạy trên đúng commit được đẩy.
+
+**Một lượt T1 ĐỎ phải bỏ, và nó là lời khai đếm — lần thứ hai trong cùng vòng.** Sau khi mở khoản 145 và 146, P12 đỏ:
+*"đoạn đếm khai 41 khoản, dòng tổng kết có 43"*. Đoạn đếm dưới dòng tổng kết suy từ sổ, và nó không tự suy lại. Cùng
+một cổng đã bắt đúng một việc ấy ở §7; khác ở chỗ lần này nó bắt **hai khoản mới mở giữa vòng**, không phải một cột
+CSDL mới.
+
+**Và `git add -A` suýt commit một tệp dò của depcruise** (`packages/audit/src/zzprobe-…ts`). Nó nằm trong `packages/`,
+không trong `.gitignore`, và nó chỉ tồn tại trong lúc `pnpm t0` chạy — nên một lệnh `git add -A` phát ra đúng cửa sổ ấy
+đưa nó vào index. Đã gỡ khỏi index và khỏi đĩa.
+
 ### Điều lượt này dạy, nói thẳng
 
 Một lần gộp **sạch** không nói gì về việc hai bản vá có còn đúng khi đứng cạnh nhau — và cái giá của việc tin vào nó không phải một
