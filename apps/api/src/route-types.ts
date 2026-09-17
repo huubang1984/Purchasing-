@@ -235,20 +235,28 @@ export interface BuyerSelfRoute extends RouteBase {
    */
   readonly agent: boolean;
   /**
-   * [khoản 144 / S1.76 — ĐO] Trần số lời gọi cho MỘT PHIÊN trên route này trong cửa sổ
-   * `OTP_RATE_WINDOW_SECONDS`. **BẮT BUỘC khai**; `null` nghĩa là *cố ý không trần*, và chỗ khai
-   * phải nói vì sao — cùng kỷ luật với `agent` ngay trên.
+   * [S1.78 / khoản 144 — ĐO] Ngưỡng `failed_attempts` của hồ sơ MFA mà route này **không được vượt
+   * qua**: đủ ngưỡng thì route trả 429 và **không** thử mã, tức không làm bộ đếm tăng thêm.
+   * **BẮT BUỘC khai**; `null` nghĩa là *route này không chạm hồ sơ MFA*, và chỗ khai phải nói vì
+   * sao — cùng kỷ luật với `agent` ngay trên.
    *
-   * **VÌ SAO THEO PHIÊN, KHÔNG THEO ĐỊA CHỈ như `AnonRoute.callerLimit`.** Đòn đo được ở vòng này
-   * khoá một hồ sơ MFA bằng ĐÚNG `MFA_MAX_FAILED_ATTEMPTS` request (đo: 12 lần gọi ⇒ 12×401, hồ sơ
-   * khoá ở lần thứ 5, nạn nhân sau đó `LOCKED_OUT` trên đường đăng nhập thật). Một trần 30/15 phút
-   * theo địa chỉ **không chặn được gì** ở đó — nó chỉ chặn cái thứ 31. Phiên thì kẻ tấn công không
-   * xoay được: nó cầm đúng một cookie trộm được, và mỗi cookie thêm là một nạn nhân thêm.
+   * **ĐÂY LÀ BẢN THAY của `sessionLimit`, và lý do là một phép đo.** S1.76 đặt một trần theo CỬA SỔ
+   * (`sessionLimit: 3` trên bucket `caller_rate_limits`) với lời khai *"một cookie trộm được không
+   * khoá được hồ sơ của chủ nhân nó"*. Lượt soi ngang 72 bác, và phép đo bác theo (§S1.78 mục 2):
+   * bucket ấy là cửa sổ **NHẢY** làm tròn theo epoch — mọi bộ đếm về 0 cùng lúc, ở những mốc CÔNG
+   * KHAI — còn `failed_attempts` thì **ĐƠN ĐIỆU**. Ba lần ở cửa sổ này cộng hai lần ở cửa sổ sau vẫn
+   * đủ năm: đo được `401,401,401,401,401`, `failed_attempts` 3 → 5, hồ sơ KHOÁ, nạn nhân nhận
+   * `LOCKED_OUT` trên đường đăng nhập thật với mã ĐÚNG.
    *
-   * **RANH GIỚI, nói ra:** một kẻ cầm NHIỀU cookie của NHIỀU người vẫn khoá được từng người một;
-   * lớp chặn ca ấy là một trần theo địa chỉ chồng lên, và nó CHƯA có ở đây — khoản 144.
+   * **VÌ SAO TRẦN NÀY ĐÚNG CHỖ:** nó đọc thẳng đại lượng cần bảo vệ, nên **không có ranh giới nào để
+   * canh**. Một trần theo cửa sổ là một bộ đếm SONG SONG — nó đoán về `failed_attempts` qua một biến
+   * khác, và mọi lời đoán như thế đều sai ở ranh giới.
+   *
+   * **RANH GIỚI, nói ra:** trần này chặn đúng MỘT tác hại — đẩy hồ sơ người khác tới ngưỡng khoá. Nó
+   * **không** là một trần tần suất: route vẫn nhận bao nhiêu lời gọi cũng được, và câu hỏi trần tần
+   * suất cho route người mua vẫn là khoản 144, còn mở.
    */
-  readonly sessionLimit: number | null;
+  readonly mfaTranDuongPhu: number | null;
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 

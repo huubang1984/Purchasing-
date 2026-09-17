@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { MFA_MAX_FAILED_ATTEMPTS } from "@trustprocure/identity";
 import { ROUTES } from "../../apps/api/src/routes.js";
 
 // =============================================================================================
@@ -250,7 +251,7 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
 
   it("ĐỐI CHỨNG ÂM: cùng module ấy ĐI QUA khi có `requirePermission`", () => {
     const dung = [
-      'import { requirePermission, PERMISSIONS } from "@trustprocure/identity";',
+      'import { MFA_MAX_FAILED_ATTEMPTS, PERMISSIONS, requirePermission } from "@trustprocure/identity";',
       'import { createSupplier } from "@trustprocure/supplier";',
       "export async function handler(c, orgId, body, auditPool) {",
       "  await requirePermission(c, { ...body.check, permission: PERMISSIONS.SUPPLIER_MANAGE,",
@@ -505,14 +506,25 @@ describe("[S1.76] đường HTTP nào thử mã TOTP cũng phải đọc `auditS
     expect(coGoi.length, "không tệp route nào gọi `verifyTotpForLogin` — phép đếm rỗng ruột").toBeGreaterThan(0);
   });
 
-  // Vế này đọc qua `unknown` CÓ CHỦ Ý: viết thẳng `!("sessionLimit" in r)` thì TypeScript thu hẹp
+  // Vế này đọc qua `unknown` CÓ CHỦ Ý: viết thẳng `!("mfaTranDuongPhu" in r)` thì TypeScript thu hẹp
   // kết quả thành `never` và báo lỗi biên dịch — tức lớp KIỂU đã cưỡng chế điều này rồi, và đó là
   // lớp mạnh hơn. Vế runtime ở lại cho ca một bảng route dựng bằng ép kiểu (`as unknown as Route`,
   // hình dạng mà chính `auth.int.test.ts` dùng để đo) đi vào `ROUTES` thật.
-  it("mỗi route tự thân khai `sessionLimit` — kể cả khi câu trả lời là `null`", () => {
+  it("mỗi route tự thân khai `mfaTranDuongPhu` — kể cả khi câu trả lời là `null`", () => {
     const khongKhai = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true)
-      .map((r) => ({ ten: `${r.method} ${r.path}`, gt: (r as { sessionLimit?: unknown }).sessionLimit }))
+      .map((r) => ({ ten: `${r.method} ${r.path}`, gt: (r as { mfaTranDuongPhu?: unknown }).mfaTranDuongPhu }))
       .filter((x) => x.gt === undefined);
-    expect(khongKhai.map((x) => x.ten), "route tự thân phải tự khai trần").toEqual([]);
+    expect(khongKhai.map((x) => x.ten), "route tự thân phải tự khai ngưỡng trạng thái").toEqual([]);
+  });
+
+  // [S1.78 / lượt soi ngang 72] VÀ NGƯỠNG ẤY PHẢI CÓ NGHĨA. Một trần bằng hay lớn hơn
+  // `MFA_MAX_FAILED_ATTEMPTS` không chặn được gì — hồ sơ khoá trước khi trần chạm. Vế trên chỉ đòi
+  // route TỰ KHAI; vế này đòi câu trả lời đúng. Bản S1.76 khai 3 và 3 < 5, nên vế này KHÔNG bắt
+  // được lỗi của nó — nó canh một chiều hỏng khác, và nói ra để không ai đọc nó rộng hơn.
+  it("ngưỡng trạng thái đã khai phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS`", () => {
+    const vuot = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true)
+      .map((r) => ({ ten: `${r.method} ${r.path}`, gt: (r as { mfaTranDuongPhu?: unknown }).mfaTranDuongPhu }))
+      .filter((x) => typeof x.gt === "number" && x.gt >= MFA_MAX_FAILED_ATTEMPTS);
+    expect(vuot.map((x) => x.ten), "ngưỡng ≥ ngưỡng khoá là một trần không bao giờ chạm").toEqual([]);
   });
 });

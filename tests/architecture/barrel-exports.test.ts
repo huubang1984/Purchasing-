@@ -184,6 +184,10 @@ const DANH_SACH_TRANG_IDENTITY = [
   "MFA_LOCKOUT_SECONDS",
   "MFA_MAX_ALLOWED_FAILED_ATTEMPTS",
   "MFA_MAX_FAILED_ATTEMPTS",
+  // [S1.78 / khoản 144] Trần theo TRẠNG THÁI hồ sơ MFA cho các ĐƯỜNG PHỤ chạm TOTP, và phép đọc của nó.
+  // Một hằng số và một phép ĐỌC THUẦN — không hàm nào ở đây trả lời câu hỏi quyền.
+  "MFA_TRAN_SAI_DUONG_PHU",
+  "conChoChoDuongPhu",
   "MfaRequiredError",
   "PERMISSIONS",
   "PermissionAuditFailedError",

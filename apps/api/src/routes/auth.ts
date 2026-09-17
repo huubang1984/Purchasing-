@@ -13,9 +13,10 @@
 // dòng `console.error` nào mang nó.
 // ==============================================================================================
 import {
-  LoginTokenError,
   enrollOrReplaceTotpForLogin,
   generateTotpSecret,
+  LoginTokenError,
+  MFA_TRAN_SAI_DUONG_PHU,
   redeemLoginToken,
   revokeSession,
   startAgentSession,
@@ -218,11 +219,12 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     // sạch nên trả lại chứng chỉ của nó thay vì để nó sống tới hết giờ. Route chỉ chạm CHÍNH phiên
     // đang gọi, nên nó không mở được gì thêm.
     agent: true,
-    // [khoản 144] CỐ Ý KHÔNG TRẦN. Đăng xuất chỉ thu hồi CHÍNH phiên đang gọi: lần đầu thành công
-    // làm phiên hết hiệu lực, nên lần thứ hai đã là 401 ở `resolveSessionByToken` — trần ở đây
-    // không chặn thêm gì. Và nó có mặt xấu: một 429 trên đường đăng xuất là một lớp GIỮ người ta ở
-    // trong phiên, tức đúng chiều ngược với thứ ta muốn khi ai đó nghi phiên mình bị trộm.
-    sessionLimit: null,
+    // [S1.78 / khoản 144] `null` VÌ ROUTE NÀY KHÔNG CHẠM HỒ SƠ MFA. Đăng xuất chỉ thu hồi CHÍNH
+    // phiên đang gọi — không mã TOTP nào được thử, nên không đường nào đẩy `failed_attempts` lên.
+    // (Bản trước khai `null` với nghĩa "cố ý không trần TẦN SUẤT", và lý do ấy vẫn đúng cho tần
+    // suất: một 429 trên đường đăng xuất là một lớp GIỮ người ta ở trong phiên, đúng chiều ngược
+    // với thứ ta muốn khi ai đó nghi phiên mình bị trộm.)
+    mfaTranDuongPhu: null,
     handler: async (ctx) => {
       await revokeSession(ctx.client, ctx.orgId, ctx.actor.sessionId);
       return { status: 200, body: { ok: true }, setCookie: [XOA_COOKIE] };
@@ -243,7 +245,13 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     //   • `self: true` + `agent: false` — chỉ một phiên NGƯỜI gọi được. Một chứng chỉ agent KHÔNG
     //     tự gia hạn và KHÔNG tự nhân bản được; đó là vế chịu lực.
     //   • Nó KHÔNG chạm trigger `sessions_kiem_totp_gan_day` (039) đang bị hardening ghim: phiên
-    //     người gọi đã qua TOTP, và `assertFreshMfa` dưới đây đòi lần TOTP ấy còn TƯƠI.
+    //     người gọi đã qua TOTP, và handler dưới đây đòi MỘT MÃ TOTP MỚI ngay tại lần gọi này —
+    //     tươi hơn mọi phép kiểm "còn tươi", vì nó là một lần xác thực chứ không phải một lần đọc
+    //     dấu thời gian. ~~và `assertFreshMfa` dưới đây đòi lần TOTP ấy còn TƯƠI~~ — **[S1.78 /
+    //     lượt soi ngang 72] câu ấy SAI:** `assertFreshMfa` không được gọi ở đường này, cũng không
+    //     ở đường nào trong `apps/api`; nơi duy nhất gọi nó là `apps/unseal-worker`. Một lập luận
+    //     an ninh viện một hàm không ai gọi là một lập luận rỗng, và nó nguy hiểm hơn việc không có
+    //     lập luận nào — người đọc sau sẽ tin rằng lớp ấy có.
     //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
     //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
     // ==========================================================================================
@@ -253,13 +261,17 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     mutates: true,
     self: true,
     agent: false,
-    // [khoản 144 — ĐO] BA, và con số ấy phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS` = 5 mới có nghĩa.
-    // Đo trước khi có dòng này: 12 lần gọi với mã sai ⇒ 12×401, `failed_attempts` chạm 5, hồ sơ
-    // khoá, và nạn nhân sau đó nhận `LOCKED_OUT` trên ĐƯỜNG ĐĂNG NHẬP THẬT với mã ĐÚNG — tức một
-    // cookie trộm được khoá luôn đường mà chủ nhân cần để đi thu hồi chính cookie ấy. Trần phải cắt
-    // TRƯỚC lần thứ năm, nên 30 (con số của `callerLimit` trên `/auth/totp`) là vô nghĩa ở đây.
-    // Một người vận hành thật xin chứng chỉ mỗi giờ một lần; ba lần mỗi mười lăm phút là rộng rãi.
-    sessionLimit: 3,
+    // [S1.78 / khoản 144 — ĐO] ROUTE NÀY CHẠM HỒ SƠ MFA, nên nó phải khai một ngưỡng TRẠNG THÁI.
+    //
+    // Đòn: 12 lần gọi với mã sai ⇒ 12×401, `failed_attempts` chạm 5, hồ sơ khoá, và nạn nhân sau đó
+    // nhận `LOCKED_OUT` trên ĐƯỜNG ĐĂNG NHẬP THẬT với mã ĐÚNG — tức một cookie trộm được khoá luôn
+    // đường mà chủ nhân cần để đi thu hồi chính cookie ấy.
+    //
+    // ~~Bản S1.76 chặn bằng một trần theo CỬA SỔ (`sessionLimit: 3`).~~ **Lượt soi ngang 72 bác, và
+    // phép đo bác theo:** cửa sổ ấy NHẢY về 0 ở những mốc công khai, còn `failed_attempts` thì đơn
+    // điệu — ba lần ở cửa sổ này cộng hai lần ở cửa sổ sau vẫn đủ năm, và đo được đúng như thế
+    // (§S1.78 mục 2). Trần dưới đây đọc THẲNG `failed_attempts`, nên không có mốc nào để canh.
+    mfaTranDuongPhu: MFA_TRAN_SAI_DUONG_PHU,
     handler: async (ctx) => {
       // Một mã TOTP TƯƠI, không một magic link nào — xem khối đầu `startAgentSession`. Trigger 039
       // đòi lần TOTP ấy, nên đây không phải một lớp ta tự thêm cho chắc: không có nó thì câu INSERT
