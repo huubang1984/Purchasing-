@@ -43,10 +43,39 @@ export class SessionInvalidError extends Error {
  * Danh tính đọc ra từ một phiên. `sessionId` được trả lại cùng để người gọi ghi thẳng nó xuống
  * cột `*_session_id` — không phải để tiện, mà để không ai phải cầm hai biến rồi ghép nhầm.
  */
+/**
+ * [khoản 141 / ADR-039] PHẠM VI của một phiên, đóng bởi MÁY CHỦ lúc phát và BẤT BIẾN sau đó.
+ *
+ * `AGENT_READONLY` là chứng chỉ của một bề mặt agent (`apps/mcp`): nó đi qua đúng đường HTTP của
+ * người mua, nhưng `apps/api` từ chối 403 mọi route không được khai tường minh là agent gọi được.
+ *
+ * VÌ SAO LÀ MỘT TRƯỜNG MỚI, KHÔNG PHẢI MỘT GIÁ TRỊ MỚI CỦA `type`: `actor.type` được rót thẳng
+ * vào `actorType` của `appendAuditEvent` ở 28 chỗ trong chín gói, và `CHECK` của 003 trên
+ * `audit_events.actor_type` không có `'AGENT'`. Nới `type` là đổi lược đồ SỔ KIỂM TOÁN cho một
+ * câu hỏi về QUYỀN — hai thứ khác nhau, và trộn chúng làm cả hai khó đọc.
+ */
+export type SessionKind = "USER" | "AGENT_READONLY";
+
+/** Fail-closed: một giá trị lạ đọc lên từ cột `kind` KHÔNG được rơi về "USER". */
+function docKind(tho: unknown): SessionKind {
+  if (tho === "USER" || tho === "AGENT_READONLY") return tho;
+  throw new SessionInvalidError();
+}
+
 export interface SessionActor {
   readonly type: "USER";
   readonly id: string;
   readonly sessionId: string;
+  /**
+   * [khoản 141] Phạm vi của chứng chỉ. Bất biến ở tầng CSDL bằng một QUYỀN VẮNG MẶT: 051 không
+   * cấp `UPDATE (kind)`, nên `app_api` không nâng cấp phạm vi tại chỗ được (42501).
+   *
+   * PHÁT BIỂU ĐÚNG MỨC: 28 lời gọi `resolveSessionActor` trong các gói nghiệp vụ NHẬN được trường
+   * này và KHÔNG cái nào đọc nó — bất biến phạm vi hôm nay sống trong đúng MỘT `if` ở đúng MỘT
+   * app (`apps/api/src/dispatch.ts`). Gói quảng cáo một trường chúng bỏ qua; ADR-039 ghi rõ điều
+   * đó thay vì để người đọc suy ra rằng gói tự canh.
+   */
+  readonly kind: SessionKind;
 }
 
 /**
@@ -66,8 +95,8 @@ export async function resolveSessionActor(
   // `resolveSessionByToken` (đường HTTP, review L-1). Trigger 034 thu hồi phiên lúc đình chỉ; vế này
   // đứng riêng cho ca phiên CÒN SỐNG của người bị đình chỉ (chèn sau đình chỉ, hoặc trigger bị gỡ).
   // Cùng một lỗi cho mọi ca hỏng — "bị đình chỉ" nói ra cũng là một oracle.
-  const { rows } = await client.query<{ user_id: string }>(
-    `SELECT s.user_id
+  const { rows } = await client.query<{ user_id: string; kind: string }>(
+    `SELECT s.user_id, s.kind
        FROM public.sessions s
        JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.user_id
       WHERE s.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
@@ -78,7 +107,7 @@ export async function resolveSessionActor(
   );
   const hang = rows[0];
   if (hang === undefined) throw new SessionInvalidError();
-  return { type: "USER", id: hang.user_id, sessionId };
+  return { type: "USER", id: hang.user_id, sessionId, kind: docKind(hang.kind) };
 }
 
 // ==============================================================================================
@@ -118,8 +147,8 @@ export async function resolveSessionByToken(
 
   // [review L-1] JOIN `users.status`: một người bị đình chỉ không được đọc gì nữa — không đợi hết TTL.
   // Cùng một lỗi cho ca này như bốn ca kia: "bị đình chỉ" cũng là một oracle nếu nói ra.
-  const { rows } = await client.query<{ id: string; user_id: string }>(
-    `SELECT s.id, s.user_id
+  const { rows } = await client.query<{ id: string; user_id: string; kind: string }>(
+    `SELECT s.id, s.user_id, s.kind
        FROM public.sessions s
        JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.user_id
       WHERE s.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
@@ -131,5 +160,5 @@ export async function resolveSessionByToken(
   );
   const hang = rows[0];
   if (hang === undefined) throw new SessionInvalidError();
-  return { type: "USER", id: hang.user_id, sessionId: hang.id };
+  return { type: "USER", id: hang.user_id, sessionId: hang.id, kind: docKind(hang.kind) };
 }

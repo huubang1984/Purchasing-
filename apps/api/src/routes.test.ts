@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
 // `tests/architecture/boundaries.test.ts` quét TOÀN kho ở một tiến trình khác. Khoá này là
 // thứ giữ hai lượt quét không giẫm lên nhau — xem khối lý do đầy đủ trong chính tệp khoá.
 import { voiKhoaDepcruise } from "../../../tests/architecture/khoa-depcruise.js";
-import { MIEN_TRAN_NGUOI_GOI, timViPhamBangRoute, type Route } from "./route-types.js";
+import { MIEN_TRAN_NGUOI_GOI, agentGoiDuoc, timViPhamBangRoute, type Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 
 const GOC = fileURLToPath(new URL("../../../", import.meta.url));
@@ -122,6 +122,65 @@ describe("[INV-H17] bảng route: mọi route ghi của người mua khai mã qu
     expect(dispatch).toContain("requirePermission(");
     expect(dispatch).toContain("withTenant(");
     expect(dispatch).toContain("withGuestSession(");
+  });
+});
+
+// ==============================================================================================
+// [khoản 141 / ADR-039] PHẠM VI CỦA CHỨNG CHỈ — lời khai phải CÓ MẶT, và vị từ phải MẶC ĐỊNH ĐÓNG
+//
+// Lớp cưỡng chế thật là KIỂU: `BuyerReadRoute`/`BuyerSelfRoute` không biên dịch được nếu thiếu
+// `agent`. Nhưng `timViPhamBangRoute` tồn tại cho đúng ca kiểu không với tới — một bảng đến từ
+// JSON — nên hai chiều dưới đây phải đo được ở đó.
+// ==============================================================================================
+describe("[khoản 141] lời khai phạm vi trên bảng route", () => {
+  it("`ROUTES` thật không có vi phạm phạm vi nào", () => {
+    expect(timViPhamBangRoute(ROUTES).filter((v) => v.includes("khoản 141") || v.includes("`agent`"))).toEqual([]);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG ⑴: route ĐỌC của người mua VẮNG `agent` bị bắt", () => {
+    const xau = [
+      { method: "GET", path: "/x", audience: "BUYER", mutates: false, handler: khongLam },
+    ] as unknown as Route[];
+    expect(timViPhamBangRoute(xau).join("\n")).toContain("[khoản 141]");
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG ⑵: route TỰ THÂN vắng `agent` cũng bị bắt — không chỉ route đọc", () => {
+    // [lượt soi đối kháng Đ-1] Chiều này là chiều bản đầu bỏ sót: route tự thân chạm chính chứng
+    // chỉ, và một lời khai VẮNG ở đó đọc ra giống hệt một route chưa ai quyết.
+    const xau = [
+      { method: "POST", path: "/auth/x", audience: "BUYER", mutates: true, self: true, handler: khongLam },
+    ] as unknown as Route[];
+    expect(timViPhamBangRoute(xau).join("\n")).toContain("[khoản 141]");
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG ⑶: khai `agent` ở nơi nó không có nghĩa cũng bị bắt", () => {
+    const xau = [
+      { method: "POST", path: "/x", audience: "ANON", mutates: true, agent: true, handler: khongLam },
+    ] as unknown as Route[];
+    expect(timViPhamBangRoute(xau).join("\n")).toContain("agent");
+  });
+
+  it("vị từ `agentGoiDuoc` MẶC ĐỊNH ĐÓNG cho mọi hình dạng route khác", () => {
+    // Ba nhóm không đi qua nhánh BUYER của bộ điều phối, nên chứng chỉ agent không mua gì ở đó —
+    // và vị từ nói đúng điều ấy thay vì im lặng.
+    const khac = [
+      { method: "GET", path: "/health", audience: "PUBLIC", handler: khongLam },
+      { method: "POST", path: "/auth/link", audience: "ANON", mutates: true, handler: khongLam },
+      { method: "GET", path: "/guest/rfq", audience: "GUEST", mutates: false, handler: khongLam },
+      // Route GHI có mã quyền: không có trường nào để khai ngược lại, và vị từ trả false.
+      { method: "POST", path: "/rfqs", audience: "BUYER", mutates: true, permission: "RFQ_CREATE", resourceType: "RFQ", handler: khongLam },
+    ] as unknown as Route[];
+    expect(khac.map((r) => agentGoiDuoc(r))).toEqual([false, false, false, false]);
+  });
+
+  it("vị từ đọc ĐÚNG lời khai, không đoán theo phương thức", () => {
+    const bang = [
+      { method: "GET", path: "/a", audience: "BUYER", mutates: false, agent: true, handler: khongLam },
+      { method: "GET", path: "/b", audience: "BUYER", mutates: false, agent: false, handler: khongLam },
+      { method: "POST", path: "/auth/c", audience: "BUYER", mutates: true, self: true, agent: true, handler: khongLam },
+      { method: "POST", path: "/auth/d", audience: "BUYER", mutates: true, self: true, agent: false, handler: khongLam },
+    ] as unknown as Route[];
+    expect(bang.map((r) => agentGoiDuoc(r))).toEqual([true, false, true, false]);
   });
 });
 

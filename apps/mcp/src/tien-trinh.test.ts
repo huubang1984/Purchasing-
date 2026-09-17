@@ -56,11 +56,17 @@ function chayMain(env: Readonly<Record<string, string>>): ChildProcess {
   return tt;
 }
 
-async function apiGia(): Promise<{ goc: string; nhatKy: string[] }> {
+async function apiGia(kindCuaMe = "AGENT_READONLY"): Promise<{ goc: string; nhatKy: string[] }> {
   const nhatKy: string[] = [];
   const s = createServer((req, res) => {
     nhatKy.push(req.url ?? "");
     res.writeHead(200, { "content-type": "application/json" });
+    // [khoản 141 / ADR-039] Tiến trình gọi `GET /me` MỘT lần lúc khởi động và ném nếu `kind` không
+    // phải `AGENT_READONLY` — nên mọi phép đo dưới đây phải phục vụ được lời gọi ấy trước đã.
+    if (req.url === "/me") {
+      res.end(JSON.stringify({ userId: "u", sessionId: "s", orgId: "o", kind: kindCuaMe }));
+      return;
+    }
     res.end(JSON.stringify({ duongDan: req.url }));
   });
   cacMayChu.push(s);
@@ -145,8 +151,43 @@ describe("tiến trình mcp thật", () => {
       result: { content: [{ type: "text", text: thanMongDoi }] },
     });
 
-    // Tiến trình đã gọi api THẬT một lần, đúng đường dẫn — và chỉ một lần.
-    expect(api.nhatKy).toEqual(["/rfqs/abc"]);
+    // Tiến trình gọi api THẬT đúng hai lần: `/me` lúc khởi động (lớp phạm vi), rồi đúng đường dẫn
+    // của công cụ. Không lời gọi thứ ba — một công cụ không được lặng lẽ dò thêm đường nào.
+    expect(api.nhatKy).toEqual(["/me", "/rfqs/abc"]);
+  }, 90_000);
+
+  // ============================================================================================
+  // [khoản 141 / ADR-039 — lượt soi đối kháng Đ-2] LỚP DUY NHẤT TRẢ LỜI CÂU "PHIÊN NÀO CHO TIẾN
+  // TRÌNH NÀO"
+  //
+  // Bốn lớp của khoản 141 canh HÀNG PHIÊN. Không lớp nào ngăn người vận hành cắm một cookie NGƯỜI
+  // vào biến môi trường — và làm thế thì tiến trình này mạnh y hệt trước vòng 141. Hai khẳng định
+  // dưới đây là phép đo của lớp bù ở phía máy khách, và chúng đo trên TIẾN TRÌNH THẬT vì đó là
+  // chỗ duy nhất "không khởi động" có nghĩa.
+  // ============================================================================================
+  it.each([
+    { ten: "phiên NGƯỜI", kind: "USER" },
+    { ten: "giá trị lạ", kind: "SOMETHING_ELSE" },
+  ])("cầm $ten ⇒ TỪ CHỐI khởi động, thoát mã 1, không nêu cookie", async ({ kind }) => {
+    const api = await apiGia(kind);
+    const tt = chayMain({
+      TRUSTPROCURE_MCP_API_URL: api.goc,
+      TRUSTPROCURE_MCP_SESSION_COOKIE: COOKIE,
+    });
+    const loi = await doiDong(tt, "stderr", /tu choi khoi dong/u, 60_000);
+    const ma = await new Promise<number | null>((xong) => {
+      tt.once("exit", (m) => {
+        xong(m);
+      });
+    });
+    expect(ma).toBe(1);
+    expect(loi).toContain("PhamViSaiError");
+    expect(loi).toContain("AGENT_READONLY");
+    expect(loi, "thông điệp từ chối mang cookie phiên").not.toContain(COOKIE);
+    // Và nó dừng TRƯỚC khi nghe stdio: không một dòng "san sang" nào.
+    expect(loi).not.toContain("san sang tren stdio");
+    // Đúng một lời gọi api: `/me`. Không công cụ nào chạy được.
+    expect(api.nhatKy).toEqual(["/me"]);
   }, 90_000);
 
   it("dòng rác trên stdin ⇒ -32700, tiến trình KHÔNG chết", async () => {

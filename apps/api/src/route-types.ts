@@ -203,6 +203,15 @@ export interface GuestRoute extends RouteBase {
 export interface BuyerReadRoute extends RouteBase {
   readonly audience: "BUYER";
   readonly mutates: false;
+  /**
+   * [khoản 141 / ADR-039] Một phiên `AGENT_READONLY` gọi được route này hay không.
+   *
+   * BẮT BUỘC, và đó là cả điểm của nó: cùng khuôn `permission` trên `BuyerWriteRoute` — một route
+   * đọc mới KHÔNG BIÊN DỊCH ĐƯỢC cho tới khi người viết nó QUYẾT. Bản đầu của vòng này định dùng
+   * một danh sách đường cho phép; lượt soi bác đúng: một danh sách chuỗi mà không ai đối chiếu là
+   * một cổng sẽ trôi, còn một trường bắt buộc thì không ai quên được.
+   */
+  readonly agent: boolean;
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
@@ -214,6 +223,32 @@ export interface BuyerSelfRoute extends RouteBase {
   readonly audience: "BUYER";
   readonly mutates: true;
   readonly self: true;
+  /**
+   * [khoản 141 / ADR-039 — lượt soi đối kháng Đ-1] BẮT BUỘC ở đây CŨNG vậy, và đây là chỗ bản đầu
+   * của vòng này sai.
+   *
+   * Bản đầu chỉ đặt `agent` trên `BuyerReadRoute` và để vị từ trả `r.self === true` cho route tự
+   * thân — tức MỌI `BuyerSelfRoute` tương lai được cấp quyền NGẦM. Kịch bản đo được: vòng sau thêm
+   * `POST /auth/session/extend` (self, `/auth/*` hợp lệ) và nó gọi được ngay dưới phiên agent —
+   * không tệp nào phải sửa, KHÔNG CỔNG NÀO ĐỎ. Route tự thân chạm chính chứng chỉ, nên đó đúng là
+   * lớp route không được im lặng.
+   */
+  readonly agent: boolean;
+  /**
+   * [khoản 144 / S1.76 — ĐO] Trần số lời gọi cho MỘT PHIÊN trên route này trong cửa sổ
+   * `OTP_RATE_WINDOW_SECONDS`. **BẮT BUỘC khai**; `null` nghĩa là *cố ý không trần*, và chỗ khai
+   * phải nói vì sao — cùng kỷ luật với `agent` ngay trên.
+   *
+   * **VÌ SAO THEO PHIÊN, KHÔNG THEO ĐỊA CHỈ như `AnonRoute.callerLimit`.** Đòn đo được ở vòng này
+   * khoá một hồ sơ MFA bằng ĐÚNG `MFA_MAX_FAILED_ATTEMPTS` request (đo: 12 lần gọi ⇒ 12×401, hồ sơ
+   * khoá ở lần thứ 5, nạn nhân sau đó `LOCKED_OUT` trên đường đăng nhập thật). Một trần 30/15 phút
+   * theo địa chỉ **không chặn được gì** ở đó — nó chỉ chặn cái thứ 31. Phiên thì kẻ tấn công không
+   * xoay được: nó cầm đúng một cookie trộm được, và mỗi cookie thêm là một nạn nhân thêm.
+   *
+   * **RANH GIỚI, nói ra:** một kẻ cầm NHIỀU cookie của NHIỀU người vẫn khoá được từng người một;
+   * lớp chặn ca ấy là một trần theo địa chỉ chồng lên, và nó CHƯA có ở đây — khoản 144.
+   */
+  readonly sessionLimit: number | null;
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
@@ -231,6 +266,24 @@ export interface BuyerWriteRoute extends RouteBase {
 }
 
 export type Route = PublicRoute | AnonRoute | GuestRoute | BuyerReadRoute | BuyerSelfRoute | BuyerWriteRoute;
+
+/**
+ * [khoản 141 / ADR-039] Một phiên `AGENT_READONLY` gọi được route này hay không.
+ *
+ * Vị từ THUẦN, và nó là nguồn DUY NHẤT của câu trả lời ấy: `dispatch.ts` gọi nó, và cổng đối chiếu
+ * của `apps/mcp` cũng gọi nó. Hai bên đọc cùng một hàm nên không có cách nào lệch nhau.
+ *
+ * Route KHÔNG phải của người mua trả `false` mà không cần hỏi gì: nhánh `ANON`/`GUEST`/`PUBLIC` của
+ * bộ điều phối không đọc cookie phiên người mua, nên một chứng chỉ agent không mua được gì ở đó
+ * (đo: `dispatch.ts` nhánh ANON lấy tổ chức từ thân yêu cầu, không từ cookie).
+ */
+export function agentGoiDuoc(r: Route): boolean {
+  if (r.audience !== "BUYER") return false;
+  if (r.mutates === false) return r.agent === true;
+  if (r.self === true) return r.agent === true;
+  // Route GHI có mã quyền: không bao giờ, và không có trường nào để khai ngược lại.
+  return false;
+}
 
 // ----------------------------------------------------------------------------------------------
 // LỚP CANH DƯỚI DẠNG HÀM THUẦN — để test đo được nó trên một bảng GIẢ, không chỉ trên `ROUTES`.
@@ -314,6 +367,18 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
     // ANON được POST mà không đổi trạng thái: token phải đi trong THÂN (E6), và GET không có thân.
     if (r.audience !== "PUBLIC" && r.audience !== "ANON" && r.method !== "GET" && !r.mutates) {
       viPham.push(`${khoa}: phương thức ghi mà khai mutates:false — hoặc sai phương thức, hoặc đang trốn cổng quyền`);
+    }
+    // [khoản 141 / ADR-039] Lời khai phạm vi phải CÓ MẶT ở đúng nơi nó có nghĩa, và VẮNG ở mọi nơi
+    // khác. Kiểu đã ép chiều thứ nhất lúc biên dịch; hai vế dưới đây ép lại cho một bảng đến từ
+    // JSON — và vế thứ hai là chiều mà lượt soi Đ-1 chỉ ra rằng bản đầu bỏ sót: một lời khai VẮNG
+    // trên route tự thân đọc ra giống hệt một route chưa ai quyết.
+    const canKhaiAgent =
+      r.audience === "BUYER" && (r.mutates === false || (r.mutates === true && r.self === true));
+    if (canKhaiAgent && typeof (r as { agent?: unknown }).agent !== "boolean") {
+      viPham.push(`${khoa}: route ĐỌC hoặc TỰ THÂN của người mua KHÔNG khai \`agent\` [khoản 141]`);
+    }
+    if (!canKhaiAgent && "agent" in r) {
+      viPham.push(`${khoa}: khai \`agent\` trên một route không phải route đọc/tự thân của người mua`);
     }
     if (r.audience === "BUYER" && r.mutates && r.self === true) {
       if (!r.path.startsWith("/auth/")) {

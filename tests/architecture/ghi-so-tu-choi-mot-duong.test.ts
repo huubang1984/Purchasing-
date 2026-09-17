@@ -271,7 +271,7 @@ const CHO_TRAN_DUOC_PHEP: readonly { readonly tep: string; readonly ham: string;
  * chạy cục bộ — trên CI mọi tệp đều đã track.
  */
 function maSanXuat(): string[] {
-  return execFileSync("git", ["ls-files", "*.ts"], { cwd: GOC, encoding: "utf8" })
+  return execFileSync("git", ["ls-files", "--deduplicate", "*.ts"], { cwd: GOC, encoding: "utf8" })
     .split(/\r?\n/u)
     .filter((t) => /^(?:packages|apps)\/[^/]+\/src\/.+\.ts$/u.test(t) && !t.endsWith(".test.ts"))
     .map((t) => join(GOC, t));

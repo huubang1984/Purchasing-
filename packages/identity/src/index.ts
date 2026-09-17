@@ -115,6 +115,10 @@ export {
   // apps/api không có cách nào tra `sessions` mà không đi qua đây, và đó là điều mong muốn.
   resolveSessionByToken,
   type SessionActor,
+  // [khoản 141 / ADR-039] Phạm vi của chứng chỉ phiên. Chỉ KIỂU đi ra — không có hàm nào đọc hay
+  // đặt `kind` ngoài hai đường đã có (`resolveSession*` đọc, `startUserSession` đặt), nên không
+  // symbol nào ở đây mở thêm một cửa vào `public.sessions`.
+  type SessionKind,
 } from "./session-actor.js";
 // ============================================================================================
 // [ADR-020 mục 2 / S1.10.4] Nửa PHÁT của khoản nợ 6. Cùng tiêu chí với khối trên: mọi hàm ở đây
@@ -133,6 +137,11 @@ export {
   redeemLoginToken,
   revokeSession,
   startUserSession,
+  // [khoan 141 / ADR-039] Duong phat chung chi agent. Cung tieu chi voi khoi tren: no NEM mot
+  // `LoginTokenError` duy nhat khi khong thoa, va no KHONG nhan tham so TTL — tran mot gio ghim
+  // trong chinh ham, khong o cho goi.
+  startAgentSession,
+  type StartedAgentSession,
   verifyTotpForLogin,
   type IssueLoginTokenOutcome,
   type LoginTotpResult,

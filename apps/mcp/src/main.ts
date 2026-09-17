@@ -16,7 +16,7 @@
 // ==============================================================================================
 
 import { CauHinhError, docCauHinh } from "./cau-hinh.js";
-import { taoGoiApi } from "./khach-api.js";
+import { kiemPhamViAgent, taoGoiApi } from "./khach-api.js";
 import { taoVongLap } from "./vong-lap.js";
 
 function moTaLoi(e: unknown): string {
@@ -25,7 +25,7 @@ function moTaLoi(e: unknown): string {
   return "loi khong ro";
 }
 
-function chinh(): void {
+async function chinh(): Promise<void> {
   let ch;
   try {
     ch = docCauHinh(process.env);
@@ -47,8 +47,22 @@ function chinh(): void {
     process.exitCode = 1;
   });
 
+  const goiApi = taoGoiApi(ch);
+
+  // [khoản 141 / ADR-039 — lượt soi đối kháng Đ-2] MỘT lời gọi, MỘT lần, TRƯỚC khi nghe stdin: nếu
+  // chứng chỉ trong biến môi trường không phải một phiên agent thì tiến trình này KHÔNG lên. Lý do
+  // đầy đủ ở khối đầu `kiemPhamViAgent`. Giá phải trả, nói thẳng: `apps/api` phải đang chạy lúc
+  // khởi động — một máy chủ MCP không xác minh được chính mình thì không phải một máy chủ sẵn sàng.
+  try {
+    await kiemPhamViAgent(goiApi);
+  } catch (e) {
+    console.error(`[mcp] tu choi khoi dong — ${moTaLoi(e)}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const vongLap = taoVongLap({
-    goiApi: taoGoiApi(ch),
+    goiApi,
     ghi: (dong) => {
       // Giá trị trả về của `write` là tín hiệu backpressure. Ở đây không xếp hàng thêm — trần số
       // lời gọi cùng lúc của `vong-lap.ts` mới là thứ giới hạn lượng phản hồi đang bay; dòng log
@@ -95,4 +109,4 @@ function chinh(): void {
   });
 }
 
-chinh();
+void chinh();

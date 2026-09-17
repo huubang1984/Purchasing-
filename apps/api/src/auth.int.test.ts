@@ -988,3 +988,350 @@ describe("[029] app_api không tạo được phiên thiếu MFA", () => {
     await expect(chen()).rejects.toThrow(/MFA/u);
   });
 });
+
+// ==============================================================================================
+// [khoản 141 / ADR-039] PHẠM VI CỦA CHỨNG CHỈ — ĐO TRÊN POSTGRES THẬT, QUA HTTP THẬT
+//
+// Trước vòng này, "MCP chỉ đọc" là một tính chất của MÁY KHÁCH: mọi lớp nằm ở phía `apps/mcp`, và
+// một máy khách khác cầm cùng cookie làm được mọi thứ người mua làm được. Bộ đo dưới đây là chỗ
+// câu ấy thôi là lời hứa và thành một 403 THẬT do `apps/api` nói.
+//
+// Bốn nhóm, và nhóm thứ tư mới là nhóm khó giả mạo nhất:
+//   ⑴ đường PHÁT chứng chỉ agent chạy được, và nó đòi một mã TOTP tươi (trigger 039 bắt buộc thế);
+//   ⑵ phiên agent LÀM ĐƯỢC việc của nó — đối chứng dương, để ba khẳng định TỪ CHỐI không xanh vì
+//      phiên hỏng;
+//   ⑶ phiên agent bị TỪ CHỐI ở đúng ba nhóm: route ghi, route đọc ngoài phạm vi, và chính đường
+//      phát chứng chỉ (không tự nhân bản);
+//   ⑷ mỗi lần từ chối để lại một hàng `AGENT_SCOPE_DENIED` trong sổ, và CSDL tự giữ hai bảo đảm
+//      còn lại: trần TTL một giờ, và phạm vi KHÔNG nâng cấp tại chỗ được (42501).
+// ==============================================================================================
+describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
+  const UUID_GIA = "00000000-0000-4000-8000-000000000001";
+
+  /** Đăng nhập NGƯỜI rồi đổi lấy một chứng chỉ agent bằng một mã TOTP tươi. */
+  async function phienAgent(email: string): Promise<{ cookie: string; cookieNguoi: string; token: string }> {
+    await taoNguoi(email);
+    const nguoi = await dangNhap(email);
+    // Mã của bước KẾ TIẾP, không phải mã hiện tại: `dangNhap` vừa tiêu thụ mã của bước này, và
+    // `verifyTotpAttempt` chống phát lại bằng `last_used_counter` — dùng lại chính nó thì 401
+    // WRONG_CODE. Bước +1 vẫn nằm trong cửa sổ ±3 mà trigger 039 đòi.
+    const r = await goi("POST", "/auth/agent-session", {
+      cookie: nguoi.cookie,
+      body: { code: deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1) },
+    });
+    expect(r.status, r.text).toBe(200);
+    const b = r.body as { token: string; expiresInSeconds: number; kind: string };
+    expect(b.kind).toBe("AGENT_READONLY");
+    // Lần PHÁT một phạm vi mới là sự kiện duy nhất trong vòng đời chứng chỉ, nên nó phải ở trong
+    // sổ — và hàng ấy nêu cả phiên NGƯỜI đã xin, thứ cần tra ngược khi một `AGENT_SCOPE_DENIED`
+    // xuất hiện. (Một lượt đột biến đổi tên action đi qua sạch trước khi có khẳng định này.)
+    const soPhat = await db.pool.query<{ resource_id: string; payload: { issuedBySessionId?: string } }>(
+      `SELECT resource_id, payload FROM audit_events
+        WHERE org_id = $1 AND action = 'AGENT_SESSION_ISSUED' ORDER BY seq DESC LIMIT 1`,
+      [orgA],
+    );
+    expect(soPhat.rows[0]?.payload?.issuedBySessionId, "hàng sổ không nêu phiên người đã xin").toBeTruthy();
+    // Trần một giờ, và nó do `startAgentSession` ghim — người gọi không xin dài hơn được.
+    expect(b.expiresInSeconds).toBe(3600);
+    return { cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${b.token}`, cookieNguoi: nguoi.cookie, token: b.token };
+  }
+
+  it("⑴ đường phát ĐÒI một mã TOTP tươi — mã sai thì 401 và không có phiên nào ra đời", async () => {
+    await taoNguoi("agent-ma-sai@vd.test");
+    const nguoi = await dangNhap("agent-ma-sai@vd.test");
+    const truoc = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM sessions WHERE org_id = $1 AND kind = 'AGENT_READONLY'",
+      [orgA],
+    );
+    const r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+    expect(r.status, r.text).toBe(401);
+    const sau = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM sessions WHERE org_id = $1 AND kind = 'AGENT_READONLY'",
+      [orgA],
+    );
+    expect(sau.rows[0]?.n).toBe(truoc.rows[0]?.n);
+  });
+
+  it("⑵ ĐỐI CHỨNG DƯƠNG: phiên agent đọc được đúng những đường nó được phép", async () => {
+    const a = await phienAgent("agent-doi-chung@vd.test");
+    const me = await goi("GET", "/me", { cookie: a.cookie });
+    expect(me.status, me.text).toBe(200);
+    // `/me` nay trả `kind` — đường DUY NHẤT để một máy khách tự kiểm mình đang cầm loại gì.
+    expect((me.body as { kind: string }).kind).toBe("AGENT_READONLY");
+    for (const duong of ["/suppliers", "/policy"]) {
+      const r = await goi("GET", duong, { cookie: a.cookie });
+      expect(r.status, `${duong}: ${r.text}`).toBe(200);
+    }
+  });
+
+  it("⑶ TỪ CHỐI: route ghi, route đọc ngoài phạm vi, và chính đường phát chứng chỉ", async () => {
+    const a = await phienAgent("agent-tu-choi@vd.test");
+    const ca = [
+      { ten: "route GHI", method: "POST", duong: "/suppliers", body: { legalName: "X", taxCode: "1" } },
+      { ten: "bảng so sánh GIÁ", method: "GET", duong: `/rfqs/${UUID_GIA}/comparison` },
+      { ten: "số hồ sơ thầu", method: "GET", duong: `/rfqs/${UUID_GIA}/bid-count` },
+      { ten: "liên hệ nhà cung cấp", method: "GET", duong: `/suppliers/${UUID_GIA}/contacts` },
+      { ten: "tự nhân bản chứng chỉ", method: "POST", duong: "/auth/agent-session", body: { code: "123456" } },
+    ];
+    for (const c of ca) {
+      const r = await goi(c.method, c.duong, { cookie: a.cookie, body: c.body });
+      expect(r.status, `${c.ten} (${c.method} ${c.duong}): ${r.text}`).toBe(403);
+    }
+    // ĐỐI CHỨNG: cùng một đường, dưới phiên NGƯỜI, KHÔNG ra 403 — nếu không thì các khẳng định
+    // trên xanh vì một lý do khác (route hỏng, uuid sai), chứ không vì phạm vi.
+    //
+    // Chọn `/suppliers/:id/contacts` chứ KHÔNG chọn `/comparison`, và lý do đáng ghi: `comparison`
+    // và `bid-count` là hai route ĐỌC CÓ CỔNG QUYỀN riêng — gói tự gọi `requirePermission(BID_VIEW)`
+    // — nên chúng ra 403 cho cả phiên người của một vai BUYER thường. Dùng chúng làm đối chứng là
+    // đo nhầm lớp: một 403 ở đó không phân biệt được "sai quyền" với "sai phạm vi". Hàng sổ
+    // `AGENT_SCOPE_DENIED` ở khẳng định ⑷ mới là thứ phân biệt hai ca.
+    const nguoi = await goi("GET", `/suppliers/${UUID_GIA}/contacts`, { cookie: a.cookieNguoi });
+    expect(nguoi.status, nguoi.text).not.toBe(403);
+  });
+
+  it("⑷ mỗi lần từ chối để lại ĐÚNG MỘT hàng `AGENT_SCOPE_DENIED` nêu tên route", async () => {
+    const a = await phienAgent("agent-so-kiem-toan@vd.test");
+    const truoc = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED'",
+      [orgA],
+    );
+    const r = await goi("GET", `/rfqs/${UUID_GIA}/comparison`, { cookie: a.cookie });
+    expect(r.status).toBe(403);
+    const sau = await db.pool.query<{ n: string; payload: { routePath?: string } | null }>(
+      `SELECT count(*) OVER () AS n, payload FROM audit_events
+        WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED'
+        ORDER BY seq DESC LIMIT 1`,
+      [orgA],
+    );
+    expect(Number(sau.rows[0]?.n ?? 0)).toBe(Number(truoc.rows[0]?.n ?? 0) + 1);
+    // Hàng sổ nêu MẪU đường dẫn đã khai trong ROUTES, không phải chuỗi người gọi gửi.
+    expect(sau.rows[0]?.payload?.routePath).toBe("/rfqs/:rfqId/comparison");
+  });
+
+  it("⑷ CHECK trần TTL là của CSDL, không của TypeScript — chèn thẳng một phiên agent 2 giờ thì 23514", async () => {
+    // Đột biến bỏ `sessions_agent_ttl_ngan` từng đi qua sạch: khẳng định cũ đọc `expires_at −
+    // created_at` của một hàng do `startAgentSession` tạo, mà hàm ấy tự ghim 3 600 s — tức nó đo
+    // TypeScript. Câu dưới đây đi thẳng vào bảng dưới quyền superuser, nên nó đo đúng CHECK.
+    const nguoiId = await taoNguoi("agent-check-ttl@vd.test");
+    const chen = (giay: number): Promise<unknown> =>
+      db.pool.query(
+        `INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, kind)
+         VALUES ($1, $2, decode(repeat('ab', 32), 'hex'), now() + make_interval(secs => $3), now(), 'AGENT_READONLY')`,
+        [orgA, nguoiId, giay],
+      );
+    await expect(chen(7200)).rejects.toMatchObject({ code: "23514" });
+    // Đối chứng dương: đúng trong trần thì vào được — nếu không, câu trên đỏ vì một lý do khác.
+    await expect(chen(1800)).resolves.toBeDefined();
+  });
+
+  it("⑷ `kind` lạ đọc lên thì NÉM, không rơi về USER — fail-closed ở tầng đọc", async () => {
+    // Đột biến làm `docKind` trả "USER" cho mọi giá trị lạ từng đi qua sạch. Ca này dựng đúng tình
+    // huống ấy: gỡ CHECK trong MỘT giao dịch, đặt một giá trị lạ, rồi đo qua HTTP thật. CHECK được
+    // đặt lại ở `finally` — một phép đo để lại lược đồ hỏng là một phép đo hỏng.
+    const a = await phienAgent("agent-kind-la@vd.test");
+    try {
+      await db.pool.query("ALTER TABLE sessions DROP CONSTRAINT sessions_kind_hop_le");
+      await db.pool.query(
+        "UPDATE sessions SET kind = 'KHONG_PHAI_LOAI_NAO' WHERE org_id = $1 AND kind = 'AGENT_READONLY'",
+        [orgA],
+      );
+      const r = await goi("GET", "/me", { cookie: a.cookie });
+      // `SessionInvalidError` ⇒ 401, cùng một thân với mọi ca phiên hỏng khác.
+      expect(r.status, r.text).toBe(401);
+    } finally {
+      await db.pool.query(
+        "UPDATE sessions SET kind = 'AGENT_READONLY' WHERE org_id = $1 AND kind = 'KHONG_PHAI_LOAI_NAO'",
+        [orgA],
+      );
+      await db.pool.query(
+        "ALTER TABLE sessions ADD CONSTRAINT sessions_kind_hop_le CHECK (kind IN ('USER', 'AGENT_READONLY'))",
+      );
+    }
+  });
+
+  it("⑷ CSDL giữ trần TTL một giờ và KHÔNG cho nâng cấp phạm vi tại chỗ", async () => {
+    await phienAgent("agent-csdl@vd.test");
+    const { rows } = await db.pool.query<{ giay: string; kind: string }>(
+      `SELECT extract(epoch FROM (expires_at - created_at)) AS giay, kind
+         FROM sessions WHERE org_id = $1 AND kind = 'AGENT_READONLY' ORDER BY created_at DESC LIMIT 1`,
+      [orgA],
+    );
+    expect(Number(rows[0]?.giay ?? 0)).toBeLessThanOrEqual(3600);
+
+    // Bất biến ⑶ của 051: phạm vi bất biến bằng một QUYỀN VẮNG MẶT, không bằng một trigger.
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await c.query("UPDATE public.sessions SET kind = 'USER' WHERE org_id = $1", [orgA]);
+      }),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    // Và tập giá trị: một loại phiên thứ ba không vào bảng được, kể cả dưới superuser.
+    await expect(
+      db.pool.query("UPDATE sessions SET kind = 'SOMETHING_ELSE' WHERE org_id = $1", [orgA]),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+  // ===============================================================================================
+  // ⑸ [GIAO ĐIỂM S1.75 × S1.76 — ĐO] ĐIỀU KIỆN ① CỦA CHỦ DỰ ÁN ĐI THEO SỰ KIỆN, KHÔNG THEO ĐƯỜNG.
+  //
+  // Khoản 139 (§S1.75) nhận đánh đổi "hồ sơ khoá được, sổ thiếu một dòng" kèm điều kiện cái thiếu
+  // phải để lại dấu, và cưỡng chế điều kiện ấy bằng MỘT dòng log ở `/auth/totp`. Vòng này thêm một
+  // đường phát thứ hai đi qua CÙNG `verifyTotpForLogin`. Hai nhánh gộp sạch — không xung đột, mọi
+  // cổng xanh — và đường mới im lặng: `auditSkipped` không ai đọc ở đó.
+  //
+  // Đây là lý do vế này tồn tại: điều kiện của chủ dự án nói về SỰ KIỆN `MFA_LOCKED`, không về một
+  // đường HTTP cụ thể, nên mỗi đường mới đi qua hàm ấy phải tự mang lại cái dấu. Đo qua HTTP thật,
+  // với khoá ghi sổ của tổ chức bị một giao dịch khác giữ.
+  // ===============================================================================================
+  it("⑸ đường phát agent cũng để lại ĐÚNG MỘT dấu khi `MFA_LOCKED` không vào được sổ", async () => {
+    const u = await taoNguoi("agent-k139@vd.test");
+    const nguoi = await dangNhap("agent-k139@vd.test");
+    const demKhoa = async () =>
+      Number(
+        (
+          await db.pool.query<{ n: string }>(
+            "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'MFA_LOCKED'",
+            [orgA, u],
+          )
+        ).rows[0]?.n ?? "-1",
+      );
+
+    // [khoản 144] Trần theo phiên (3) cắt TRƯỚC `MFA_MAX_FAILED_ATTEMPTS` (5), nên một phiên KHÔNG
+    // tự đẩy hồ sơ tới ngưỡng qua đường này được nữa — và đó chính là điều vế ⑹ đo. Cảnh còn tới
+    // được, và là cảnh thật: hồ sơ đã ở sát ngưỡng vì những lần sai trên `/auth/totp`, rồi MỘT lần
+    // sai trên đường phát agent là lần chạm ngưỡng. Mồi bằng CSDL để vế này đo đúng một thứ.
+    await db.pool.query("UPDATE mfa_credentials SET failed_attempts = $1 WHERE org_id = $2 AND user_id = $3", [
+      MFA_MAX_FAILED_ATTEMPTS - 1,
+      orgA,
+      u,
+    ]);
+
+    const giu = await apiPool.connect();
+    // [khoản nợ 66] Mốc, không phải 0: `logLoi` cộng dồn suốt tệp.
+    const mocLog = logLoi.length;
+    let cuoi: PhanHoi | undefined;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await giu.query(
+        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K139_GIU_KHOA_AGENT', 'K139', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+        [orgA],
+      );
+      cuoi = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const dong = logLoi.slice(mocLog).filter((d) => d.includes("khoan 139"));
+    const soDong = await demKhoa();
+    const ke = `status cuối: ${String(cuoi?.status)}; dòng log khoản 139: ${dong.length}; MFA_LOCKED: ${soDong}`;
+
+    // ⑴ Lần chạm ngưỡng vẫn là một 401 bình thường — SAVEPOINT nuốt 55P03, không ai thấy 500.
+    expect(cuoi?.status, `lần chạm ngưỡng vẫn là 401, không phải 500 — ${ke}`).toBe(401);
+    // ⑵ Sổ trống trong cửa sổ ấy — đúng cái giá đã được chấp nhận.
+    expect(soDong, `sổ không nhận dòng MFA_LOCKED nào — ${ke}`).toBe(0);
+    // ⑶ VÀ CÁI THIẾU ĐỂ LẠI DẤU trên CHÍNH đường này — đúng MỘT dòng.
+    expect(dong.length, `đường phát agent phải để lại ĐÚNG một dấu — ${ke}`).toBe(1);
+    // ⑷ Dòng ấy NÊU TÊN ĐƯỜNG: một câu dùng chung cho hai đường thì không định vị được cái thiếu.
+    expect(dong[0], "dòng log phải nêu tên đường phát").toContain("duong phat agent");
+    // ⑸ Và nó không nội suy giá trị nào (kỷ luật A2).
+    expect(dong[0], "dòng log không được mang orgId").not.toContain(orgA);
+    expect(dong[0], "dòng log không được mang userId").not.toContain(u);
+  });
+  // ===============================================================================================
+  // ⑹ [khoản 144 — ĐO; chủ dự án chọn vá ở bộ điều phối ngày 2026-09-17] MỘT COOKIE TRỘM ĐƯỢC KHÔNG
+  // KHOÁ ĐƯỢC HỒ SƠ CỦA CHỦ NHÂN NÓ.
+  //
+  // Đo TRƯỚC khi có `sessionLimit` (12 lời gọi, một cookie): 12×401, `failed_attempts` chạm 5, hồ sơ
+  // KHOÁ, và nạn nhân sau đó nhận `LOCKED_OUT` trên đường đăng nhập THẬT với mã ĐÚNG — tức đường mà
+  // chủ nhân cần để đi thu hồi chính cookie bị trộm. Vế này là cặp SAU của phép đo ấy.
+  //
+  // Con số 3 phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS` = 5 mới có nghĩa; một trần 30 (giá trị của
+  // `callerLimit` trên `/auth/totp`) chặn cái thứ 31, tức chặn sau khi việc đã xong.
+  // ===============================================================================================
+  it("⑹ trần theo phiên cắt TRƯỚC lần thứ năm ⇒ hồ sơ không khoá, và nạn nhân vẫn đăng nhập được", async () => {
+    const u = await taoNguoi("tran-phien@vd.test");
+    const nguoi = await dangNhap("tran-phien@vd.test");
+
+    const ma: number[] = [];
+    let retryAfter: string | null = null;
+    for (let i = 0; i < MFA_MAX_FAILED_ATTEMPTS + 2; i += 1) {
+      const r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+      ma.push(r.status);
+      if (r.status === 429) retryAfter ??= r.headers.get("retry-after");
+    }
+    const ke = `chuỗi status: ${ma.join(",")}`;
+
+    // ⑴ Ba lần đầu tới được handler; từ lần thứ TƯ là 429 — cắt trước lần thứ năm.
+    expect(ma.slice(0, 3), `ba lần đầu phải tới handler — ${ke}`).toEqual([401, 401, 401]);
+    expect(ma.slice(3), `từ lần thứ tư phải là 429 — ${ke}`).toEqual([429, 429, 429, 429]);
+    expect(retryAfter, "429 phải mang Retry-After").toBe(String(OTP_RATE_WINDOW_SECONDS));
+
+    // ⑵ Và đây mới là điều trần ấy tồn tại để bảo vệ: hồ sơ KHÔNG khoá.
+    const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
+      "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+      [orgA, u],
+    );
+    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+    expect(Number(rows[0]?.failed_attempts), `số lần sai phải dừng ở trần — ${ke}`).toBeLessThan(MFA_MAX_FAILED_ATTEMPTS);
+
+    // ⑶ Đòn đã đo không còn tới đích: nạn nhân đăng nhập được bằng mã ĐÚNG, qua đúng đường thật.
+    const truoc = dv.linkDaGui.length;
+    await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-phien@vd.test" } });
+    await ob.chay(orgA);
+    expect(dv.linkDaGui).toHaveLength(truoc + 1);
+    const tk = dv.linkDaGui.at(-1)?.token ?? "";
+    await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: tk } });
+    // Bước KẾ TIẾP, không phải bước hiện tại: `dangNhap` ở đầu vế này vừa tiêu thụ mã của bước này,
+    // và `verifyTotpAttempt` chống phát lại bằng `last_used_counter` ⇒ dùng lại chính nó là WRONG_CODE.
+    // Một hành vi ĐÚNG của hệ thống làm phép đo đỏ — lần thứ hai trong vòng này.
+    const vao = await goi("POST", "/auth/totp", {
+      body: { orgId: orgA, token: tk, code: deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1) },
+    });
+    expect(vao.status, `nạn nhân phải đăng nhập được — ${ke}; thân: ${vao.text}`).toBe(200);
+  });
+  // ===============================================================================================
+  // ⑺ [khoản 144 — ĐO] PHÉP ĐẾM PHẢI SỐNG QUA MỘT HANDLER NÉM.
+  //
+  // Vế ⑹ một mình KHÔNG đo được điều đó: handler của `/auth/agent-session` trả 401 bằng `return`,
+  // nên giao dịch COMMIT và đếm ở giao dịch nào cũng cho cùng kết quả — một lượt đột biến chuyển
+  // phép đếm vào giao dịch chính đi qua ⑹ SẠCH. Route tự thân TƯƠNG LAI thì ném được (`/auth/redeem`
+  // của nhánh ANON đã ném `LoginTokenError` ⇒ 422), và khi ấy đếm trong giao dịch chính là một trần
+  // không bao giờ đóng — đúng khiếm khuyết mà `callerLimit` của nhánh ANON đã phải tránh.
+  //
+  // Đo bằng CHÍNH bộ điều phối ấy với một bảng route khác: một route tự thân mà handler NÉM.
+  // ===============================================================================================
+  it("⑺ trần theo phiên sống qua rollback: route tự thân có handler NÉM vẫn bị cắt ở lần thứ ba", async () => {
+    await taoNguoi("vach-ngan@vd.test");
+    const nguoi = await dangNhap("vach-ngan@vd.test");
+    const routeNem = {
+      method: "POST",
+      path: "/auth/thu-vach-ngan",
+      audience: "BUYER",
+      mutates: true,
+      self: true,
+      agent: false,
+      sessionLimit: 2,
+      handler: () => {
+        throw new Error("nem de giao dich cuon lai");
+      },
+    } as unknown as Route;
+    const s2 = createApiServer(
+      createDispatcher({ pool: apiPool, auditPool, services: dv.services, routes: [...ROUTES, routeNem] }),
+      { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) },
+    );
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    try {
+      const ma: number[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        ma.push((await goi("POST", "/auth/thu-vach-ngan", { cookie: nguoi.cookie, goc: goc2 })).status);
+      }
+      // Hai lần đầu đi tới handler và handler ném ⇒ 500, giao dịch của chúng ROLLBACK. Lần thứ ba
+      // vẫn phải là 429: phép đếm không nằm trong giao dịch bị cuốn.
+      expect(ma, `chuỗi status: ${ma.join(",")}`).toEqual([500, 500, 429]);
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+});
