@@ -5990,9 +5990,9 @@ không phải lối vào: trần chồng bốn tầng trên `/auth/totp`.
 
 **Ngày:** 2026-09-17 · **Nhánh:** `khoan-140-approve-unseal-khoa-hang-truoc-ghi-so` từ `master` `8f7a985` · **ADR:** 016 (sửa lời khai)
 
-- Tài liệu: STATE (hàng 140 đóng, hàng 146 mở, dòng CÒN MỞ, đoạn đếm), Handoff (hai dòng đếm 143/41 → **144/41**), DECISIONS (ADR-016 "Phần KHÔNG đóng"), biên bản này.
+- Tài liệu: STATE (hàng 140 đóng, hàng 147 mở, dòng CÒN MỞ, đoạn đếm), Handoff (hai dòng đếm 143/41 → **144/41**), DECISIONS (ADR-016 "Phần KHÔNG đóng"), biên bản này.
 - **Không có thay đổi HÀNH VI ở mã sản xuất** — nhưng diff CÓ chạm `packages/unseal/src/requests.ts`: một khối chú thích đặt tên cho lớp phòng thủ tại chỗ gọi. Bản đầu của dòng này viết "không có bản vá mã sản xuất", đọc qua thì tưởng diff không chạm `packages/` [lượt soi 71 / G3-8].
-- Vòng này đóng một khoản bằng phép đo, để lại một test giữ cho nó đóng, và **mở một khoản MỚI đã đo** (146) tìm được khi đọc dọc `approveUnseal`.
+- Vòng này đóng một khoản bằng phép đo, để lại một test giữ cho nó đóng, và **mở một khoản MỚI đã đo** (147) tìm được khi đọc dọc `approveUnseal`.
 
 ## 1. Vòng này không sinh ra một bản vá, và đó là kết quả
 
@@ -6199,7 +6199,7 @@ này.
   ms ở đó là một lượt, và chúng chỉ chịu lực ở dấu — "dưới 1 s" so với trần 2 s — chứ không ở giá trị.
 - Khoản **143** (dư lượng `40P01` / `57014` của bản vá khoản 139) không bị vòng này chạm.
 
-## 7. Khoản nợ MỚI — 146, tìm được khi đọc dọc `approveUnseal`, và ĐÃ ĐO
+## 7. Khoản nợ MỚI — 147, tìm được khi đọc dọc `approveUnseal`, và ĐÃ ĐO
 
 Lượt soi 71 [L71D-2] đọc dọc hàm và thấy một thứ không thuộc khoản 140: `approveUnseal` bắt lỗi của câu
 `INSERT` rồi phân loại bằng MỘT biểu thức chính quy ba vế —
@@ -6223,14 +6223,19 @@ lỗi với khoản 32 / 119 / 121, ở một đường mà cổng `[INV-D5]` kh
 
 Phép đo còn loại bỏ đường sửa tệ hơn: **`err.constraint` được pg điền sẵn** (chuỗi tên ràng buộc nằm
 đúng ở đó), nên đường đúng là phân loại bằng `code === '23505'` cộng `err.constraint`, chứ không phải
-đọc chuỗi thông điệp. Ghi thành **khoản 146**, không vá ở vòng này.
+đọc chuỗi thông điệp. Ghi thành **khoản 147**, không vá ở vòng này.
 
-**Vì sao 146 chứ không phải 144.** Lúc vòng này cấp số, sổ trên `master` dừng ở 143 và nhánh này cấp 144. Nhưng một
-phiên khác chạy **song song** trên nhánh `khoan-141-phien-co-pham-vi` (PR #76) đã cấp **144 và 145** cho hai khoản
-khác — và nhánh ấy đã push, đi trước nhánh này. Hai phiên cấp số độc lập trên hai nhánh thì `master` không trọng tài
-được: va chạm chỉ lộ ra lúc merge, khi sổ có hai hàng cùng số. Vòng này nhường, và ghi lại quy tắc: **số khoản phải
-lấy từ số lớn nhất trên MỌI nhánh đang sống, không phải từ `master`** — `git log --all` hay một lượt đọc sổ ở các
-worktree khác, trước khi cấp.
+**Vì sao 147, sau khi đã đổi số HAI LẦN.** Lúc vòng này cấp số, sổ trên `master` dừng ở 143 nên nhánh này cấp **144**.
+Nhưng một phiên khác chạy **song song** trên `khoan-141-phien-co-pham-vi` (PR #76) đã cấp 144 và 145 cho hai khoản
+khác, và nhánh ấy đã push, đi trước nhánh này — nên vòng này đổi sang **146**. Trong lúc vòng này chạy lại cổng,
+phiên kia cấp nốt **146**. Đổi lần hai, sang **147**.
+
+Hai lần đổi ấy là bằng chứng của một điều đáng ghi hơn cả con số: **`master` không trọng tài được việc cấp số.** Mỗi
+phiên đọc `master`, thấy cùng một `max`, rồi cấp chồng lên nhau; va chạm chỉ lộ ra lúc merge, khi sổ có hai hàng cùng
+số và mọi con trỏ *"khoản N"* trong biên bản, ADR, chú thích mã và thông điệp commit đều trỏ nhập nhằng. Quy tắc:
+**số khoản lấy từ số lớn nhất trên MỌI nhánh đang sống** — `git show <nhánh>:docs/STATE.md` cho từng nhánh có hoạt
+động mới, `git worktree list` để biết phiên nào đang làm — và **push sớm** để ghim chỗ, vì một số chưa push thì không
+ai thấy. Lần đổi thứ hai xảy ra đúng vì vòng này giữ số trong máy quá lâu.
 
 ## 8. Lượt soi dọc 71 — 28 agent, và nó soi chính bản vá của vòng này
 
@@ -6248,7 +6253,7 @@ lại một danh sách phát hiện **trên chính vòng này**, trong đó sáu
 | G2-1 | bảng đột biến sai — đo lại cả bốn, xem mục 4 |
 | G2-6, G3-7, L71D-3 | "người giữ nhẹ nhất" sai — xem mục 2 |
 | G3-8, G3-9, G3-10 | lời khai hẹp lại: diff CÓ chạm `requests.ts`; chỉ kịch bản ⑵ để lại vế canh; nhánh điều kiện và số lượt đo vào mục 6 |
-| L71D-2 | khoản 146, đo rồi mới mở — xem mục 7 |
+| L71D-2 | khoản 147, đo rồi mới mở — xem mục 7 |
 | G2-5 | `pApprove` có thể thành unhandled rejection nếu thân test ném trước `await` — thêm tay bắt câm |
 | G3-3, G3-6 | **BỊ BÁC** ở pha thẩm tra, không sửa gì |
 | G3-11, G3-12 | quét độc lập xác nhận mục 5 không sót hàm thứ tư, và mọi con số/con trỏ đếm lại đều đúng |
