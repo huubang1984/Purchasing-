@@ -558,6 +558,38 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 new AgentScopeDeniedError(),
               );
             }
+            // ==================================================================================
+            // [khoản 144 / S1.76 — ĐO] TRẦN THEO PHIÊN TRÊN ROUTE TỰ THÂN.
+            //
+            // VÌ SAO Ở ĐÂY, SAU `resolveSessionByToken`: khoá bucket là `actor.sessionId`, một giá
+            // trị chỉ có sau khi phiên đã được xác thực. Đếm TRƯỚC đó thì khoá phải là token người
+            // gọi gửi, và khi ấy một kẻ gửi token ngẫu nhiên tạo được một hàng `caller_rate_limits`
+            // mỗi request — đúng cái bảng mà khoản 55 đã gọi tên là bảng DUY NHẤT có số hàng do kẻ
+            // tấn công chọn.
+            //
+            // VÌ SAO TRONG MỘT GIAO DỊCH RIÊNG (`withTenant` trên `deps.pool`, không dùng `client`):
+            // ~~handler của đường phát rollback ở mọi lần mã sai — 401 là một nhánh ném~~ — câu ấy
+            // SAI, và một lượt đột biến đã nói ra: handler của `/auth/agent-session` trả 401 bằng
+            // `return`, nên giao dịch COMMIT và trên đường HÔM NAY hai cách cho cùng kết quả (đột
+            // biến chuyển phép đếm vào giao dịch chính đi qua vế ⑹ SẠCH). Lý do đúng là lý do cho
+            // đường MAI SAU: một route tự thân mà handler NÉM thì giao dịch cuốn theo cả phép đếm,
+            // và trần thành một lớp không bao giờ đóng — đúng khiếm khuyết mà `callerLimit` của
+            // nhánh ANON đã phải tránh (`/auth/redeem` ném `LoginTokenError` ⇒ 422). Vế ⑺ của
+            // `auth.int.test.ts` đo đúng điều đó bằng một route tự thân có handler ném.
+            //
+            // VÌ SAO KHÔNG PHẢI `callerLimit` THEO ĐỊA CHỈ: đo được ở vòng này, đòn khoá một hồ sơ
+            // MFA chỉ cần `MFA_MAX_FAILED_ATTEMPTS` = 5 request; một trần 30/15 phút theo địa chỉ
+            // chặn cái thứ 31, tức chặn sau khi việc đã xong. Xem `BuyerSelfRoute.sessionLimit`.
+            // ==================================================================================
+            if (route.mutates && route.self === true && route.sessionLimit !== null) {
+              const tran = route.sessionLimit;
+              const soLan = await withTenant(deps.pool, cookie.orgId, (kh) =>
+                tangBucketNguoiGoi(kh, `${route.path}|phien|${actor.sessionId}`, deps.services.pepper),
+              );
+              if (soLan > tran) {
+                return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+              }
+            }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
             if (route.mutates && route.self !== true) {
               await requirePermission(

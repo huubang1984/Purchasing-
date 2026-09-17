@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ROUTES } from "../../apps/api/src/routes.js";
 
 // =============================================================================================
 // [ADR-016 mục 4] CỔNG QUYỀN Ở TẦNG ỨNG DỤNG LÀ MẶC ĐỊNH MỞ — ĐÂY LÀ LỚP ĐÓNG NÓ LẠI
@@ -165,7 +166,7 @@ const HAM_TU_LA_CONG = ["assertUnsealAllowed"] as const;
  * lệch về phía KHOAN DUNG — nên một lần ĐỎ luôn là một lần đỏ thật).
  */
 function thanHamExport(pTen: string): string | null {
-  const cacTep = execFileSync("git", ["ls-files", "packages/*/src/*.ts"], {
+  const cacTep = execFileSync("git", ["ls-files", "--deduplicate", "packages/*/src/*.ts"], {
     cwd: GOC,
     encoding: "utf8",
   })
@@ -212,7 +213,7 @@ const CUA_GOI = [
 // đổi có chủ đích — vị từ trở thành "cái gì ĐÃ VÀO KHO thì phải có cổng quyền", và CI, nơi lớp
 // này phải cắn, chỉ bao giờ nhìn thấy mã đã commit.
 function quetTepTs(thuMucTuongDoi: string): string[] {
-  const ra = execFileSync("git", ["ls-files", "--", thuMucTuongDoi], {
+  const ra = execFileSync("git", ["ls-files", "--deduplicate", "--", thuMucTuongDoi], {
     cwd: GOC,
     encoding: "utf8",
   });
@@ -463,5 +464,55 @@ describe("[ADR-016] danh sách hàm ghi không được tự làm mù mình", ()
     // biết thấy một thân hàm KHÔNG có cổng.
     expect(thanHamExport("khongCoHamTenNay")).toBeNull();
     expect(thanHamExport("getUnsealRequest")?.includes("requirePermission")).toBe(false);
+  });
+});
+
+// =================================================================================================
+// [S1.76 / khoản 139 × khoản 141 — LƯỢT RÀ GIAO ĐIỂM] MỘT ĐƯỜNG HTTP THỬ MÃ TOTP PHẢI MANG HAI THỨ.
+//
+// Vòng khoản 139 đổi `verifyTotpForLogin` thành *"ghi `MFA_LOCKED`, TRỪ khi khoá ghi sổ của tổ chức
+// bị giữ ⇒ trả về `auditSkipped`"*, và cưỡng chế điều kiện của chủ dự án (*"cái thiếu phải để lại
+// dấu"*) bằng MỘT dòng log ở `/auth/totp` — đường duy nhất lúc ấy. Vòng khoản 141 thêm đường thứ
+// hai qua CÙNG hàm ấy. Hai nhánh gộp SẠCH: không xung đột, `tsc` im (trường là tuỳ chọn), không
+// cổng nào đỏ — và đường mới im lặng. Vòng khoản 141 cũng đo được rằng đường mới không có trần nào,
+// nên năm request khoá được hồ sơ của chủ nhân cookie.
+//
+// Cổng này biến hai bài học ấy thành một lớp: mỗi lời gọi `verifyTotpForLogin` trong bảng route
+// phải đi kèm MỘT chỗ đọc `auditSkipped` và MỘT lời khai trần.
+//
+// PHÁT BIỂU ĐÚNG MỨC — đây là phép đếm theo TỆP, không phải phép đọc theo hàm bao. Nó bắt ca thật
+// (chép một handler và bỏ quên khối log hay dòng trần), và nó MÙ với ca hai lời gọi cùng nằm trong
+// một handler đã có đủ hai thứ. Phép đọc chặt hơn cần cây cú pháp; hàng này chưa cần tới đó vì bảng
+// route là dữ liệu phẳng, mỗi route một object.
+// =================================================================================================
+describe("[S1.76] đường HTTP nào thử mã TOTP cũng phải đọc `auditSkipped` và khai một trần", () => {
+  const tepRoute = quetTepTs("apps/api/src/routes");
+
+  it("mỗi lời gọi `verifyTotpForLogin` có một chỗ đọc `auditSkipped` trong cùng tệp", () => {
+    const thieu: string[] = [];
+    for (const t of tepRoute) {
+      const ma = readFileSync(t, "utf8");
+      const soGoi = (ma.match(/verifyTotpForLogin\s*\(/gu) ?? []).length;
+      if (soGoi === 0) continue;
+      const soDoc = (ma.match(/auditSkipped/gu) ?? []).length;
+      if (soDoc < soGoi) thieu.push(`${relative(GOC, t)}: ${String(soGoi)} lời gọi, ${String(soDoc)} chỗ đọc`);
+    }
+    expect(thieu, "một đường thử TOTP không đọc `auditSkipped` là một lần mất dòng sổ trong im lặng").toEqual([]);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: phép đếm ấy thấy được ít nhất một tệp — nó không xanh vì không tìm thấy gì", () => {
+    const coGoi = tepRoute.filter((t) => /verifyTotpForLogin\s*\(/u.test(readFileSync(t, "utf8")));
+    expect(coGoi.length, "không tệp route nào gọi `verifyTotpForLogin` — phép đếm rỗng ruột").toBeGreaterThan(0);
+  });
+
+  // Vế này đọc qua `unknown` CÓ CHỦ Ý: viết thẳng `!("sessionLimit" in r)` thì TypeScript thu hẹp
+  // kết quả thành `never` và báo lỗi biên dịch — tức lớp KIỂU đã cưỡng chế điều này rồi, và đó là
+  // lớp mạnh hơn. Vế runtime ở lại cho ca một bảng route dựng bằng ép kiểu (`as unknown as Route`,
+  // hình dạng mà chính `auth.int.test.ts` dùng để đo) đi vào `ROUTES` thật.
+  it("mỗi route tự thân khai `sessionLimit` — kể cả khi câu trả lời là `null`", () => {
+    const khongKhai = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true)
+      .map((r) => ({ ten: `${r.method} ${r.path}`, gt: (r as { sessionLimit?: unknown }).sessionLimit }))
+      .filter((x) => x.gt === undefined);
+    expect(khongKhai.map((x) => x.ten), "route tự thân phải tự khai trần").toEqual([]);
   });
 });

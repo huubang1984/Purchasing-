@@ -218,6 +218,11 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     // sạch nên trả lại chứng chỉ của nó thay vì để nó sống tới hết giờ. Route chỉ chạm CHÍNH phiên
     // đang gọi, nên nó không mở được gì thêm.
     agent: true,
+    // [khoản 144] CỐ Ý KHÔNG TRẦN. Đăng xuất chỉ thu hồi CHÍNH phiên đang gọi: lần đầu thành công
+    // làm phiên hết hiệu lực, nên lần thứ hai đã là 401 ở `resolveSessionByToken` — trần ở đây
+    // không chặn thêm gì. Và nó có mặt xấu: một 429 trên đường đăng xuất là một lớp GIỮ người ta ở
+    // trong phiên, tức đúng chiều ngược với thứ ta muốn khi ai đó nghi phiên mình bị trộm.
+    sessionLimit: null,
     handler: async (ctx) => {
       await revokeSession(ctx.client, ctx.orgId, ctx.actor.sessionId);
       return { status: 200, body: { ok: true }, setCookie: [XOA_COOKIE] };
@@ -248,6 +253,13 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     mutates: true,
     self: true,
     agent: false,
+    // [khoản 144 — ĐO] BA, và con số ấy phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS` = 5 mới có nghĩa.
+    // Đo trước khi có dòng này: 12 lần gọi với mã sai ⇒ 12×401, `failed_attempts` chạm 5, hồ sơ
+    // khoá, và nạn nhân sau đó nhận `LOCKED_OUT` trên ĐƯỜNG ĐĂNG NHẬP THẬT với mã ĐÚNG — tức một
+    // cookie trộm được khoá luôn đường mà chủ nhân cần để đi thu hồi chính cookie ấy. Trần phải cắt
+    // TRƯỚC lần thứ năm, nên 30 (con số của `callerLimit` trên `/auth/totp`) là vô nghĩa ở đây.
+    // Một người vận hành thật xin chứng chỉ mỗi giờ một lần; ba lần mỗi mười lăm phút là rộng rãi.
+    sessionLimit: 3,
     handler: async (ctx) => {
       // Một mã TOTP TƯƠI, không một magic link nào — xem khối đầu `startAgentSession`. Trigger 039
       // đòi lần TOTP ấy, nên đây không phải một lớp ta tự thêm cho chắc: không có nó thì câu INSERT

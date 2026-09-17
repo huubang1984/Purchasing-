@@ -6066,7 +6066,7 @@ từ lúc viết, và cả bốn đều rỗng.
 
 ## 7. Phép đo
 
-Đo trên HEAD `3c91d7b` — đúng cây được đẩy:
+~~Đo trên HEAD `3c91d7b` — đúng cây được đẩy:~~ Câu ấy đúng khi viết và SAI từ lúc vòng gộp `origin/master`. Bảng dưới là số đo trên `3c91d7b`, tức TRƯỚC khi vòng khoản 139 vào cây và trước cả vế ⑸⑹⑺ của lượt gộp; số đo trên cây thật sự được đẩy nằm ở **§10**, và đó mới là bảng người duyệt phải đọc:
 
 | Cổng | Lệnh | Kết quả |
 |---|---|---|
@@ -6134,4 +6134,73 @@ mới**, và đòi dòng ấy nêu tên đường.
 Điều đáng mang sang: **điều kiện của chủ dự án gắn với một SỰ KIỆN, không với một đường HTTP.** Mỗi đường mới đi qua hàm
 sinh ra sự kiện ấy phải tự mang lại cái dấu — và hôm nay không lớp nào bắt được một đường quên. Cái đó chưa đo, và nó là
 một dư lượng thật của lượt gộp này, không phải của thiết kế vòng nào.
+
+## 10. LƯỢT RÀ GIAO ĐIỂM — VÀ MỘT LỐI KHOÁ TÀI KHOẢN KHÔNG AI ĐẶT VÀO ĐÓ
+
+§9 kết bằng một câu đáng ngờ: *"vá xong"*. Nên vòng chạy thêm một lượt rà **chỉ nhắm vào giao điểm hai vòng** — năm góc đọc song
+song (kiểu và luồng gọi · đường ghi sổ · lời khai đếm · cổng kiến trúc · tài liệu), mỗi phát hiện qua một agent THẨM ĐỊNH có nhiệm
+vụ **bác bỏ** nó. **19 phát hiện thô, 8 sống sót.** Lượt thẩm định không chỉ lọc: nó sửa ba mảnh sai trong phát hiện nặng nhất, và
+phần sửa ấy mới là phần đúng.
+
+### Phát hiện nặng nhất: đường phát agent là một lối khoá tài khoản
+
+`POST /auth/agent-session` chạy `verifyTotpAttempt`. Mọi trần tần suất của kho sống trên `AnonRoute` — `callerLimit` không phải một
+trường mà `BuyerSelfRoute` khai được, kể cả muốn — và bộ điều phối chỉ đếm trong nhánh `ANON`. **Đo, qua HTTP thật:**
+
+| Bước | Kết quả |
+|---|---|
+| 12 × `POST /auth/agent-session`, mã sai, một cookie | **12 × 401** — không một 429 nào |
+| `mfa_credentials` sau đó | `failed_attempts = 5`, `locked_until` đã đặt |
+| Nạn nhân đăng nhập đường thật, mã **ĐÚNG** | **401 `LOCKED_OUT`** |
+
+Tức: một cookie trộm được khoá luôn đường mà chủ nhân cần để đi **thu hồi chính cookie ấy**.
+
+Ba mảnh mà lượt thẩm định sửa, và cả ba đều quan trọng: ⑴ mô hình đe doạ KHÔNG phải "kẻ đọc được môi trường tiến trình MCP" — kẻ ấy
+cầm token `AGENT_READONLY` và bị 403 ở cổng phạm vi trước handler; đòn này đòi cookie NGƯỜI, một vị thế mạnh hơn hẳn. ⑵ Phép so
+*"trên `/auth/totp` cùng đòn ấy dừng ở 30 lần"* SAI hai lượt: khoá rơi ở lần thứ **5**, dưới 30 rất xa — `callerLimit` chưa bao giờ
+cản được một lần khoá tài khoản; lớp che thật trên `/auth/totp` là **magic-link token** (5/15 phút/người). Cái MỚI mà đường phát mở
+ra, phát biểu đúng: **lần đầu tiên trong kho, một phép thử TOTP chạy được chỉ với một cookie phiên** — không token, không bucket.
+⑶ *"khoá vĩnh viễn"* và biến thể lệch đồng hồ của `apps/mcp` — bỏ: vòng lặp chết cùng cookie, và `apps/mcp` không sinh mã TOTP nào.
+
+**Chủ dự án chọn vá ở bộ điều phối** (2026-09-17), không vá trong handler — đặt lớp trong handler là đúng khiếm khuyết Đ-2 mà lượt
+soi của chính vòng này đã bắt. Hình dạng ở ADR-039, tiểu mục `[S1.76 / khoản 144]`.
+
+### Lượt đột biến của bản vá nói ra một lời khai sai của chính nó
+
+Bảy đột biến trên phần gộp, và **một trong bảy SỐNG ở lượt đầu**: chuyển phép đếm từ giao dịch riêng vào giao dịch chính đi qua vế
+⑹ **sạch**. Lý do: chú thích của bản vá viết *"handler rollback ở mọi lần mã sai — 401 là một nhánh ném"*, và câu ấy **sai** —
+handler `return` 401, giao dịch COMMIT, nên hai cách cho cùng kết quả trên đường hôm nay. Lời khai đúng là lời khai cho đường MAI
+SAU, và nó nay có phép đo riêng: vế ⑺ dựng một route tự thân có handler **NÉM** trên chính bộ điều phối ấy với một bảng route khác,
+rồi đòi lần thứ ba vẫn là 429. Sau khi có vế ⑺: **7/7 chết cô lập**, mỗi đột biến đúng một test đỏ.
+
+| Đột biến | Vế bắt |
+|---|---|
+| bỏ vế log ở đường phát agent · dùng chung câu của `/auth/totp` | ⑸ |
+| bỏ vế đếm ở bộ điều phối · `sessionLimit` 3 → 30 | ⑹ |
+| đếm trong giao dịch chính | ⑺ (vế ⑹ để nó SỐNG) |
+| bỏ khối đọc `auditSkipped` · bỏ lời khai `sessionLimit` | cổng `[S1.76]` mới |
+
+### Bảy phát hiện còn lại
+
+**Đã đóng trong vòng:** ⑴ `auditSkipped` là trường TUỲ CHỌN và không cổng nào buộc ai đọc nó — một đường thứ ba sẽ thủng lại y hệt,
+chỉ khác tên. Nay có một cổng: mỗi lời gọi `verifyTotpForLogin` trong bảng route phải đi kèm một chỗ đọc `auditSkipped` và route tự
+thân phải khai `sessionLimit`. Phát biểu đúng mức — phép đếm theo TỆP, mù với ca hai lời gọi trong cùng một handler đã đủ hai thứ.
+⑵ **Bảy** chỗ đọc `git ls-files` của `tests/architecture` đỏ GIẢ khi index còn một đường xung đột: git in một dòng mỗi stage, nên
+cổng khoản 20 tố một cặp tệp trùng hoa-thường không hề tồn tại và `[INV-D5]` so `toEqual` vét cạn với ba bản sao. Ca ấy nổ đúng vào
+nhịp *"chạy `pnpm test` để nghiệm bản gộp trước khi `git add`"*. Lượt gộp này xanh **chỉ vì cả hai xung đột đều là `.md`**. Vá bằng
+`--deduplicate` ở cả bảy chỗ. ⑶ §7 khai *"đo trên HEAD `3c91d7b` — đúng cây được đẩy"*, nay sai — đã gạch tại chỗ.
+
+**Vào sổ:** khoản **145** (`startAgentSession` ghi sổ trong cùng giao dịch với lần tiêu thụ mã TOTP, không SAVEPOINT — đúng hình
+dạng khoản 139 ở một hàm mà khoản 139 không nêu; khác ở chỗ rollback tại đây chỉ mất một lần PHÁT, nên là câu hỏi về tính sẵn sàng)
+và khoản **146** (phép vá `--deduplicate` chưa có phép đo nào trong bộ test — cơ chế đã đo bằng một kho nháp, ngoài bộ test).
+
+**Không vào sổ vì không do lượt này sinh ra:** `Handoff.md` dòng 161 khai *"54 bất biến (34 + 20)"* trong khi sổ đăng ký thật có 56
+(34 + 22), và cổng P8 mù với nó vì biểu thức đòi cụm chữ *"Sổ đăng ký"* đứng trước con số. Lời khai từ S1.21 — ghi ra ở đây để nó
+không chìm thêm một vòng nữa.
+
+### Điều lượt này dạy, nói thẳng
+
+Một lần gộp **sạch** không nói gì về việc hai bản vá có còn đúng khi đứng cạnh nhau — và cái giá của việc tin vào nó không phải một
+lỗi biên dịch, mà **một lối khoá tài khoản** và **một lần mất dữ liệu kiểm toán trong im lặng**. Cả hai đều nằm ở chỗ Git không có
+gì để báo.
 

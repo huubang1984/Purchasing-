@@ -4341,7 +4341,7 @@ rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
 
 ## ADR-039 — Phạm vi của chứng chỉ phiên: `sessions.kind`, trường `agent` bắt buộc trên route, và một vế 403 có ghi sổ
 
-**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.76]** · **Khoản nợ liên quan:** 141 (đóng), 142 (thu hẹp, còn mở) ·
+**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.76]** · **Khoản nợ liên quan:** 141 (đóng), 142 và 144 (thu hẹp, còn mở), 145 và 146 (mở) ·
 **Liên quan:** ADR-038 (bề mặt MCP chỉ đọc), ADR-016 (cổng quyền ở tầng ứng dụng), ADR-020 (bảng route là dữ liệu), ADR-029 (một con số
 không có lớp suy ra thì không được viết)
 
@@ -4410,6 +4410,27 @@ phải đi sau một lần TOTP đúng trong ±90 giây, mà `resolveSessionByTo
 - **Hai phép đo trên tiến trình MCP thật**: cầm phiên người, hay một `kind` lạ, thì tiến trình **từ chối khởi động** — thoát mã 1,
   không một dòng "sẵn sàng" nào, và đúng một lời gọi api.
 - **Mười hai đột biến** — xem `evidence/security-reviews.md` §S1.76.
+
+### [S1.76 / khoản 144] Đường phát agent phải mang một trần, và trần ấy KHÔNG phải `callerLimit`
+
+ADR này chọn đặt đường phát ở `audience: "BUYER"`, `self: true` — đúng lớp khán giả mà nó cần. Hệ quả **không lường trước**: mọi
+trần tần suất của kho sống trên `AnonRoute`, nên đường phát ra đời KHÔNG có bộ đếm nào, và nó chạy `verifyTotpAttempt`. Đo được sau
+khi gộp: **12 lời gọi ⇒ 12×401, `failed_attempts` chạm 5, hồ sơ KHOÁ**, rồi nạn nhân nhận `LOCKED_OUT` trên đường đăng nhập thật với
+mã ĐÚNG. Một cookie trộm được khoá luôn đường mà chủ nhân cần để đi thu hồi chính cookie ấy.
+
+Chủ dự án chọn **vá ở bộ điều phối** ngày 2026-09-17, không vá trong handler: đặt lớp trong handler là đúng khiếm khuyết Đ-2 mà lượt
+soi của chính vòng này đã bắt — một đường tự thân sau vẫn quên được.
+
+**Và trần ấy phải theo PHIÊN, không theo địa chỉ.** Đòn cần đúng `MFA_MAX_FAILED_ATTEMPTS` = 5 request, nên `callerLimit = 30` của
+`/auth/totp` chặn cái thứ 31 — tức chặn sau khi việc đã xong. Kẻ tấn công xoay được địa chỉ; nó không xoay được cookie trộm được, và
+mỗi cookie thêm là một nạn nhân thêm. `BuyerSelfRoute.sessionLimit` vì thế **bắt buộc khai**, `null` nghĩa là *cố ý không trần* và
+chỗ khai phải nói vì sao (`/auth/logout` khai `null`: một 429 trên đường đăng xuất là một lớp GIỮ người ta ở trong phiên).
+
+Phép đếm nằm ở giao dịch RIÊNG. Lời khai đầu tiên cho lý do ấy **sai** — *"handler trả 401 bằng một nhánh ném"* — và một lượt đột
+biến nói ra: handler `return` 401, giao dịch COMMIT, nên trên đường hôm nay hai cách cho cùng kết quả. Lý do đúng là lý do cho đường
+MAI SAU, và nó nay có phép đo riêng: một route tự thân có handler NÉM (`auth.int.test.ts` vế ⑺).
+
+**Ranh giới:** một kẻ cầm NHIỀU cookie của NHIỀU người vẫn khoá được từng người một — khoản 144.
 
 ### 5. Ranh giới nói thẳng, và khoản nợ
 

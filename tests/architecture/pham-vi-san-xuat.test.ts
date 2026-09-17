@@ -72,7 +72,7 @@ interface Manifest {
 }
 
 function docManifest(): Manifest[] {
-  return execFileSync("git", ["ls-files", "package.json", "*/*/package.json"], {
+  return execFileSync("git", ["ls-files", "--deduplicate", "package.json", "*/*/package.json"], {
     cwd: GOC,
     encoding: "utf8",
   })
@@ -105,7 +105,7 @@ function goiChiDungChoTest(tenGoiWorkspace: readonly string[]): string[] {
   const nguoiDung = new Map<string, { test: number; sanXuat: number }>();
   for (const ten of tenGoiWorkspace) nguoiDung.set(ten, { test: 0, sanXuat: 0 });
 
-  const cacTep = execFileSync("git", ["ls-files", "*.ts", "*.mts", "*.mjs"], {
+  const cacTep = execFileSync("git", ["ls-files", "--deduplicate", "*.ts", "*.mts", "*.mjs"], {
     cwd: GOC,
     encoding: "utf8",
   })
@@ -273,7 +273,7 @@ describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯ�
 
   it("[S1.72 / khoản 121] gói workspace mà mã sản xuất import LÚC CHẠY phải nằm ở `dependencies` của chính gói — gói chỉ dùng cho test được miễn, [lượt soi 67a-2, 67c-5] chỉ gói dưới `packages/`; mỗi app và tool có mã sản xuất phải có tệp được đọc", () => {
     const chiTest = mienTruVe4(goiChiDungChoTest(tenWorkspace), manifest);
-    const cacTep = execFileSync("git", ["ls-files", "*.ts"], { cwd: GOC, encoding: "utf8" })
+    const cacTep = execFileSync("git", ["ls-files", "--deduplicate", "*.ts"], { cwd: GOC, encoding: "utf8" })
       .split(/\r?\n/)
       .filter((t) => /^(?:packages|apps|tools)\/[^/]+\/src\/.+\.ts$/u.test(t) && !laTepTest(t));
     const theoThuMuc = new Map(

@@ -234,6 +234,21 @@ export interface BuyerSelfRoute extends RouteBase {
    * lớp route không được im lặng.
    */
   readonly agent: boolean;
+  /**
+   * [khoản 144 / S1.76 — ĐO] Trần số lời gọi cho MỘT PHIÊN trên route này trong cửa sổ
+   * `OTP_RATE_WINDOW_SECONDS`. **BẮT BUỘC khai**; `null` nghĩa là *cố ý không trần*, và chỗ khai
+   * phải nói vì sao — cùng kỷ luật với `agent` ngay trên.
+   *
+   * **VÌ SAO THEO PHIÊN, KHÔNG THEO ĐỊA CHỈ như `AnonRoute.callerLimit`.** Đòn đo được ở vòng này
+   * khoá một hồ sơ MFA bằng ĐÚNG `MFA_MAX_FAILED_ATTEMPTS` request (đo: 12 lần gọi ⇒ 12×401, hồ sơ
+   * khoá ở lần thứ 5, nạn nhân sau đó `LOCKED_OUT` trên đường đăng nhập thật). Một trần 30/15 phút
+   * theo địa chỉ **không chặn được gì** ở đó — nó chỉ chặn cái thứ 31. Phiên thì kẻ tấn công không
+   * xoay được: nó cầm đúng một cookie trộm được, và mỗi cookie thêm là một nạn nhân thêm.
+   *
+   * **RANH GIỚI, nói ra:** một kẻ cầm NHIỀU cookie của NHIỀU người vẫn khoá được từng người một;
+   * lớp chặn ca ấy là một trần theo địa chỉ chồng lên, và nó CHƯA có ở đây — khoản 144.
+   */
+  readonly sessionLimit: number | null;
   readonly handler: (ctx: BuyerContext) => Promise<ApiResponse>;
 }
 
