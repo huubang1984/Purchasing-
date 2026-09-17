@@ -920,3 +920,116 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
     expect(await demTuChoi(yc.id, "UNSEAL_APPROVAL_DENIED")).toBe(0);
   });
 });
+
+// ================================================================================================
+// [S1.76 / khoản 140] `approveUnseal` TUẦN TỰ HOÁ TRÊN HÀNG YÊU CẦU **TRƯỚC** LẦN GHI SỔ ĐẦU
+//
+// Khoản 140 mở ở S1.73 với lời đọc: *"`approveUnseal` INSERT một phê duyệt, ghi sổ, rồi UPDATE
+// `unseal_requests` — nếu một giao dịch khác đang giữ khoá hàng thì lần phê duyệt đứng chờ TRONG KHI
+// giữ khoá ghi sổ của tổ chức, đúng lớp lỗi của khoản 126."* **Phép đo BÁC lời ấy** (§S1.76).
+//
+// Thứ lời đọc bỏ sót nằm trong chính câu đầu nó nhắc tới: `INSERT INTO public.unseal_approvals` bắn
+// trigger `unseal_approvals_kiem_nguoi_duyet` (019, BEFORE INSERT), và thân hàm ấy mở đầu bằng
+// `SELECT … FROM public.unseal_requests … FOR NO KEY UPDATE`. Tức câu INSERT **giữ khoá hàng yêu cầu**
+// — và nó đứng TRƯỚC `appendAuditEvent`. `approveUnseal` vì thế đã sẵn mang đúng hình dạng mà bản vá
+// khoản 126 quy định ("khoá hàng trước lần ghi sổ đầu"), và câu `UPDATE … SET status = 'APPROVED'` ở
+// cuối hàm chỉ xin lại đúng mức khoá giao dịch đã cầm, nên nó không chờ được ai.
+//
+// Bản đầu của khối này ghi rằng khoá đến từ KHOÁ NGOẠI `(org_id, unseal_request_id)` và gọi tính chất
+// ấy là "tình cờ". **Sai cả hai vế** (lượt soi 71): khoá đến từ một câu `FOR NO KEY UPDATE` viết
+// TƯỜNG MINH trong trigger cưỡng chế D2, tức nó là một lựa chọn CÓ CHỦ Ý, không phải may mắn. Và nó
+// giải thích đúng số đo, trong khi lời khoá-ngoại thì không: `FOR KEY SHARE` của một phép kiểm khoá
+// ngoại KHÔNG xung đột `FOR NO KEY UPDATE`, nên nếu khoá chỉ đến từ khoá ngoại thì kịch bản ⑵ đã phải
+// đi lọt — đo thì nó CHỜ.
+//
+// VÌ SAO VẪN CẦN VẾ NÀY khi không có gì để vá: tính chất ấy có chủ ý nhưng VÔ DANH ở `requests.ts`
+// (nay đã được đặt tên bằng một khối chú thích ở đó). Nó đứng nhờ hai điều có thể bị đổi mà không ai
+// thấy — câu `FOR NO KEY UPDATE` trong trigger 019, và việc câu `INSERT` đứng trước lần ghi sổ. Đảo
+// hai câu ấy, hay gỡ mệnh đề khoá khỏi trigger, thì khoản 140 thành thật ngay; và cái đỏ sẽ là vế ⑴
+// dưới đây. Đây là chỗ khoản 140 được giữ ĐÓNG, không phải chỗ nó được vá.
+// ================================================================================================
+describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯỚC lần ghi sổ đầu", () => {
+  const KHOA_GHI_SO_CUA_TO_CHUC =
+    `SELECT pid, granted FROM pg_catalog.pg_locks
+      WHERE locktype = 'advisory'
+        AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid
+        AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid`;
+
+  it("người giữ hàng ⇒ approve kẹt TRƯỚC lần ghi sổ: khoá ghi sổ của tổ chức KHÔNG bị ai cầm, và lần ghi sổ của người giữ đi qua ngay", async () => {
+    const rfqId = await taoRfqDaDong(false);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "den gio", actorSessionId: sYc }, auditPool),
+    );
+
+    const giu = await apiPool.connect();
+    const ke: string[] = [];
+    let khoaTrongLucCho: unknown[] = [];
+    let msGhiSoCuaNguoiGiu = -1;
+    let ketQuaApprove = "chua-xong";
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      // Người giữ là `dispatchUnseal`, dùng NGUYÊN VĂN câu của nó (`requests.ts`). Chọn câu này chứ
+      // không chọn câu của `cancelUnseal` là có chủ ý: câu của cancel đổi `status`, mà `status` nằm
+      // trong vị từ của chỉ mục riêng phần `unseal_requests_mot_yeu_cau_dang_mo` (019) nên nó là một
+      // KEY update — người giữ MẠNH hơn. Câu dưới KHÔNG chạm `status` nên chỉ `FOR NO KEY UPDATE`,
+      // tức người giữ NHẸ NHẤT mà đường sản xuất dựng được; vế này đứng với người giữ nhẹ nhất thì
+      // đứng với mọi người giữ.
+      const u = await giu.query(
+        "UPDATE public.unseal_requests SET dispatched_at = pg_catalog.now(), dispatched_by = $2, " +
+          "dispatched_by_session_id = $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $4 AND dispatched_at IS NULL",
+        [yc.id, uYc, sYc, orgA],
+      );
+      expect(u.rowCount, "đối chứng: người giữ phải THẬT SỰ khoá được hàng").toBe(1);
+
+      const pApprove = withTenant(apiPool, orgA, (c) =>
+        approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+      ).then(
+        (r) => {
+          ketQuaApprove = `xong status=${r.status}`;
+          return r;
+        },
+        (e: unknown) => {
+          ketQuaApprove = `ném code=${(e as { code?: string }).code ?? "?"}`;
+          throw e;
+        },
+      );
+
+      // Để approve chạy tới chỗ nó kẹt. 2 s là quá đủ: mọi câu trước đó của nó đều dưới 10 ms khi
+      // không có tranh chấp (đo).
+      await new Promise((r) => setTimeout(r, 2_000));
+
+      khoaTrongLucCho = (await db.pool.query<Record<string, unknown>>(KHOA_GHI_SO_CUA_TO_CHUC, [orgA])).rows;
+
+      // Lần ghi sổ của NGƯỜI GIỮ — đoạn sau của `dispatchUnseal`. Nếu approve đang cầm khoá ghi sổ
+      // (tức khoản 140 có thật) thì câu này phải chờ tới trần 2 s của 050 rồi gãy 55P03.
+      const t = Date.now();
+      await giu.query(
+        `SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K140_DISPATCH', 'unseal_request', $2, '{}'::jsonb, NULL, NULL, NULL)`,
+        [orgA, yc.id],
+      );
+      msGhiSoCuaNguoiGiu = Date.now() - t;
+
+      // Nhả hàng ⇒ approve phải chạy tiếp và XONG. Vế này chứng rằng đây là một lần CHỜ, không phải
+      // một vòng khoá chết: nếu có vòng, một trong hai bên đã chết bằng 40P01 trước khi tới đây.
+      await giu.query("ROLLBACK");
+      await pApprove;
+      ke.push(`approve=${ketQuaApprove}`);
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const keChung =
+      `khoá ghi sổ của tổ chức trong lúc approve chờ: ${JSON.stringify(khoaTrongLucCho)}; ` +
+      `lần ghi sổ của người giữ: ${msGhiSoCuaNguoiGiu} ms; ${ke.join(" ")}`;
+
+    // ⑴ KHÔNG ai cầm khoá ghi sổ của tổ chức trong lúc approve chờ hàng. Đây là mệnh đề mà khoản 140
+    //    khai ngược lại, và là vế sẽ ĐỎ nếu ai dời `INSERT` xuống sau `appendAuditEvent`.
+    expect(khoaTrongLucCho, `approve KHÔNG được cầm khoá ghi sổ trong lúc chờ hàng — ${keChung}`).toEqual([]);
+    // ⑵ Hệ quả đo được của ⑴: lần ghi sổ của người giữ đi qua NGAY, không chạm trần 2 s của 050.
+    expect(msGhiSoCuaNguoiGiu, `lần ghi sổ của người giữ phải đi qua ngay — ${keChung}`).toBeLessThan(1_000);
+    // ⑶ Và đây là một lần CHỜ, không phải khoá chết: nhả hàng thì approve xong bình thường.
+    expect(ketQuaApprove, `nhả hàng thì approve phải chạy tiếp — ${keChung}`).toBe("xong status=APPROVED");
+  }, 120_000);
+});
