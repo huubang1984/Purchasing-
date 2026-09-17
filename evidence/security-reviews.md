@@ -6226,3 +6226,281 @@ Một lần gộp **sạch** không nói gì về việc hai bản vá có còn 
 lỗi biên dịch, mà **một lối khoá tài khoản** và **một lần mất dữ liệu kiểm toán trong im lặng**. Cả hai đều nằm ở chỗ Git không có
 gì để báo.
 
+
+# §S1.77 — khoản nợ 140 ĐÓNG vì TIỀN ĐỀ SAI: `approveUnseal` đã khoá hàng TRƯỚC lần ghi sổ đầu (bằng trigger 019); lượt soi dọc 71; khoản 147 mở
+
+**Ngày:** 2026-09-17 · **Nhánh:** `khoan-140-approve-unseal-khoa-hang-truoc-ghi-so` từ `master` `8f7a985`, gộp `master` `1ca92ab` trước khi merge · **ADR:** 016 (sửa lời khai)
+
+- Tài liệu: STATE (hàng 140 đóng, hàng 147 mở, dòng CÒN MỞ, đoạn đếm), Handoff (hai dòng đếm 146/43 → **147/43**), DECISIONS (ADR-016 "Phần KHÔNG đóng"), biên bản này.
+- **Không có thay đổi HÀNH VI ở mã sản xuất** — nhưng diff CÓ chạm `packages/unseal/src/requests.ts`: một khối chú thích đặt tên cho lớp phòng thủ tại chỗ gọi. Bản đầu của dòng này viết "không có bản vá mã sản xuất", đọc qua thì tưởng diff không chạm `packages/` [lượt soi 71 / G3-8].
+- Vòng này đóng một khoản bằng phép đo, để lại một test giữ cho nó đóng, và **mở một khoản MỚI đã đo** (147) tìm được khi đọc dọc `approveUnseal`.
+
+## 1. Vòng này không sinh ra một bản vá, và đó là kết quả
+
+Khoản 140 mở ở S1.73 (lượt soi 68a-1), trạng thái **ĐỌC, CHƯA ĐO**, với lời đọc: *`approveUnseal`
+INSERT một phê duyệt, ghi sổ, rồi `UPDATE unseal_requests`; nếu một giao dịch khác đang giữ khoá hàng
+— `cancelUnseal` ghi hàng trước rồi mới ghi sổ — thì lần phê duyệt đứng chờ TRONG KHI giữ khoá ghi sổ
+của tổ chức, đúng lớp lỗi của khoản 126.*
+
+Phép đo **bác lời ấy**. Thứ lời đọc bỏ sót nằm ngay trong câu đầu tiên nó nhắc tới: `INSERT INTO
+public.unseal_approvals` bắn trigger `unseal_approvals_kiem_nguoi_duyet` (019, `BEFORE INSERT`), và
+thân hàm của trigger ấy mở đầu bằng
+
+    SELECT r.requested_by, r.requested_by_session_id, r.status … FROM public.unseal_requests r
+     WHERE r.id = NEW.unseal_request_id AND r.org_id = NEW.org_id
+       FOR NO KEY UPDATE;
+
+nên **chính câu INSERT đã giữ khoá hàng yêu cầu** — và nó đứng **TRƯỚC** `appendAuditEvent`. Câu
+`UPDATE … SET status = 'APPROVED'` ở cuối hàm chỉ xin lại đúng mức khoá mà giao dịch đã cầm từ đó, nên
+nó không chờ được ai. Tức `approveUnseal` đã sẵn mang đúng hình dạng mà bản vá khoản 126 quy định
+(*khoá hàng trước lần ghi sổ đầu*), bằng một câu `FOR NO KEY UPDATE` viết **tường minh** trong trigger
+cưỡng chế D2 — một lựa chọn CÓ CHỦ Ý, chỉ là **vô danh** ở `requests.ts`.
+
+**Bản đầu của biên bản này quy khoá cho KHOÁ NGOẠI `(org_id, unseal_request_id)` và gọi tính chất ấy
+là *tình cờ*. Sai cả hai vế, và lượt soi 71 bắt được.** Sai ở chỗ nặng nhất có thể: `FOR KEY SHARE`
+(thứ một phép kiểm khoá ngoại lấy) **không** xung đột `FOR NO KEY UPDATE`, nên nếu khoá chỉ đến từ
+khoá ngoại thì kịch bản ⑵ dưới đây đã phải **đi lọt** — mà đo thì nó CHỜ. Tức lời giải thích ấy giải
+thích sai đúng cái số đo mà nó được viết ra để giải thích. Vòng này trả nợ bằng một khối chú thích ở
+`packages/unseal/src/requests.ts` đặt tên cho lớp phòng thủ ấy tại chỗ gọi.
+
+## 2. Phép đo — ba kịch bản người giữ, ba kết quả cùng chiều
+
+Mỗi kịch bản dựng người giữ bằng **nguyên văn câu SQL của đường sản xuất**, rồi gọi `approveUnseal`
+thật; `pg_stat_activity` và `pg_locks` được chụp trong lúc chờ.
+
+| # | Người giữ | approve kẹt ở đâu | approve có cầm khoá ghi sổ? | ghi sổ của người giữ |
+|---|---|---|---|---|
+| ⑴ | `cancelUnseal` — `SET status='CANCELLED'` | `INSERT unseal_approvals`, **trước** lần ghi sổ | không | **5 ms** |
+| ⑵ | `dispatchUnseal` — `SET dispatched_at, …` (KHÔNG chạm `status`) | `INSERT unseal_approvals`, **trước** lần ghi sổ | `pg_locks` advisory = **rỗng** | **4 ms** |
+| ⑶ | chen vào GIỮA `INSERT` và `UPDATE` của approve | — | có, nhưng `UPDATE` **không chờ**: xong trong **3 ms** | **người giữ** mới là bên bị chặn (quá 5 000 ms) |
+
+**Bản đầu của mục này viết rằng ⑵ là "người giữ NHẸ NHẤT mà đường sản xuất dựng được", vì câu của
+`cancelUnseal` đổi `status` nên là một KEY update. SAI, và lượt soi 71 bắt được [G2-6, L71D-3]:**
+`status` chỉ nằm trong VỊ TỪ của chỉ mục RIÊNG PHẦN `unseal_requests_mot_yeu_cau_dang_mo` (019:73-74),
+mà PostgreSQL chỉ tính là cột khoá các cột của một chỉ mục unique KHÔNG riêng phần và KHÔNG biểu thức.
+Nên ⑴ và ⑵ lấy **cùng một chế độ khoá** — bảng trên đo cùng một mức hai lần, và câu "đứng với người
+giữ nhẹ nhất thì đứng với mọi người giữ" mất tiền đề.
+
+**Lập luận thay thế, và nó ĐÓNG KÍN chứ không chỉ nhiều mẫu hơn [L71D-6].** Khoá mà trigger lấy ở câu
+INSERT là `FOR NO KEY UPDATE` (019:207). Khoá mà câu `UPDATE … SET status = 'APPROVED', approved_at =
+…` ở cuối `approveUnseal` cần cũng đúng là `FOR NO KEY UPDATE` — `status` và `approved_at` không phải
+cột khoá, vì hai chỉ mục duy nhất góp key_attrs của `unseal_requests` là `unseal_requests_pkey (id)`
+và `UNIQUE (org_id, id)` (019:63). **Hai câu cùng một chế độ khoá**, nên tập người giữ chặn được câu
+SAU lần ghi sổ **trùng khít** tập người giữ chặn được câu TRƯỚC nó. Không tồn tại khe nào để approve
+vừa cầm khoá ghi sổ vừa còn phải chờ hàng — và lập luận này không phụ thuộc vào việc đã liệt đủ người
+giữ hay chưa, khác hẳn "ba kịch bản cùng chiều".
+
+Kịch bản ⑶ đóng nốt cửa sổ còn lại: người giữ **không chen vào được** giữa `INSERT` và `UPDATE`, vì
+`INSERT` đã ghim hàng.
+
+## 3. Vì sao lời đọc cũ sai — và vì sao vòng này cũng sai hai lần trước khi đúng
+
+Hàng 140 đọc `requests.ts` và thấy đúng ba câu: INSERT → ghi sổ → UPDATE. Từ ba câu ấy, kết luận
+*"UPDATE có thể chờ trong khi đang giữ khoá ghi sổ"* là một suy diễn **hợp lý và sai**, vì câu INSERT
+không mang mệnh đề khoá nào **nhìn thấy được ở tệp TypeScript** — mệnh đề ấy nằm trong một trigger ở
+`019`. Đó là toàn bộ nguyên nhân: **lượt soi ở tầng TypeScript không thấy khoá do tầng CSDL lấy.**
+
+Vòng này lặp lại đúng lỗi ấy hai lần trước khi đo:
+
+1. đổ cho `cancelUnseal` — đo: approve kẹt ở INSERT, TRƯỚC lần ghi sổ;
+2. đổ cho `dispatchUnseal`, lập luận rằng `FOR KEY SHARE` của khoá ngoại không xung đột
+   `FOR NO KEY UPDATE` nên INSERT phải lọt — đo: nó vẫn CHỜ, `pg_locks` cho khoá ghi sổ **rỗng**.
+
+Lập luận ⑵ dựa trên bảng đối kháng khoá hàng của PostgreSQL và nó **đúng như một mệnh đề về bảng ấy**
+— chỉ là nó nói về một khoá KHÔNG PHẢI khoá đang được lấy. Khoá thật là `FOR NO KEY UPDATE` của
+trigger, và `FOR NO KEY UPDATE` thì xung đột với chính nó. `pg_stat_activity` gọi tên thứ approve
+chờ: `wait_event_type = Lock`, `wait_event = transactionid`.
+
+**Bài học, trả giá ba lần trong một vòng (một lần bởi hàng 140, hai lần bởi vòng này):** với một kho
+đặt nhiều lớp cưỡng chế trong trigger, một phép đọc ở tầng ứng dụng **không đủ** để kết luận về thứ tự
+khoá — phải đọc trigger, hoặc đo. Và khi đã có số đo mà lời giải thích không khớp, thì **lời giải
+thích sai**, không phải số đo.
+
+## 4. Khoản này KHÔNG được vá, và chỗ giữ nó đóng là một TEST — có ĐO răng
+
+Tính chất ở mục 1 **có chủ ý** (một câu `FOR NO KEY UPDATE` viết tường minh trong trigger D2), nhưng
+nó đứng nhờ hai điều có thể bị đổi mà không ai ở tầng TypeScript thấy — mệnh đề khoá ấy trong trigger
+`019`, và việc câu `INSERT` đứng trước lần ghi sổ. Gỡ mệnh đề khoá, hay dời câu INSERT xuống sau lần
+ghi sổ, thì khoản 140 thành thật ngay.
+
+Nên vòng này để lại một vế trong `packages/unseal/src/unseal.int.test.ts` khẳng định bốn điều:
+⑴ **đối chứng dương** — chạy lại đúng phép dò `pg_locks` trong một giao dịch ĐANG cầm khoá ghi sổ, nó
+phải THẤY; ⑵ **không ai cầm khoá ghi sổ của tổ chức** trong lúc approve chờ hàng; ⑶ hệ quả đo được của
+⑵ — lần ghi sổ của người giữ đi qua dưới 1 s, không chạm trần 2 s của 050; ⑷ nhả hàng thì approve xong
+bình thường, tức đây là một lần **chờ**, không phải một vòng khoá chết.
+
+**Vế ⑴ được thêm ở vòng này vì lượt soi 71 [G3-5] chỉ ra vế ⑵ là một khẳng định RỖNG** (`toEqual([])`):
+một phép dò hỏng — sai chuỗi băm, sai kiểu, sai `orgA` — làm nó xanh mãi mãi, mà cả ba tài liệu lại
+khai đúng vế ấy là chỗ giữ khoản 140 đóng. Khuôn lấy từ `gia-han-xep-job-truoc-ghi-so.int.test.ts`.
+
+### Bảng đột biến — ĐO, không suy
+
+Bản đầu của biên bản này khai "đảo hai câu ấy, hay **bỏ khoá ngoại**, thì khoản 140 thành thật ngay".
+Lượt soi 71 [G2-1] bác, và vòng này đo lại từng đột biến một:
+
+| # | Đột biến | Kết quả | ĐỎ **bằng cách nào** — đo, không suy |
+|---|---|---|---|
+| ⒜ | dời `INSERT` xuống SAU `appendAuditEvent` | **ĐỎ** | `40P01 deadlock detected` ném từ chính câu `INSERT` của `approveUnseal` (`requests.ts:243`, qua `withTenant`). **Không vế `expect` nào chạy tới** |
+| ⒝ | gỡ `FOR NO KEY UPDATE` khỏi thân trigger (LÚC CHẠY) | **ĐỎ** | vòng chờ có hạn ném `hết 30000ms` — approve thôi không kẹt ở `INSERT` nữa |
+| ⒞ | bỏ KHOÁ NGOẠI `(org_id, unseal_request_id)` | **XANH NGUYÊN** | khoá ngoại **không** giữ vế này |
+| ⒟ | tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` | **ĐỎ** | cùng cách với ⒝ |
+
+⒞ là vế chịu lực của cả lời giải thích, và nó xác nhận bằng phép đo điều mà mục 1 nói bằng lời: lời
+khoá-ngoại của bản đầu **sai**.
+
+**Cột cuối là thứ bản đầu không có, và nó lật một câu.** Cả ba tài liệu từng viết rằng vế ⑵ ("không ai
+cầm khoá ghi sổ") là chỗ sẽ đỏ khi hồi quy. Đo thì **không đột biến nào trong ba cái ấy bị một vế
+`expect` bắt** — chúng chết sớm hơn, ở lớp khác. Điều ấy xác nhận phần lõi của [G2-4].
+
+⒜ đáng đọc kỹ, vì nó cho biết khoản 140 — **khi có thật** — trông như thế nào: approve ghi sổ trước nên
+cầm khoá tư vấn của tổ chức, rồi kẹt ở `INSERT` chờ giao dịch người giữ; người giữ lại chờ đúng khoá tư
+vấn ấy ở lần ghi sổ của nó. Vòng khép kín, và **bộ dò khoá chết của PostgreSQL bắn ở `deadlock_timeout`
+1 s — TRƯỚC trần 2 s của 050**, đúng điều khoản **143** ghi. Tức lớp lỗi này biểu hiện bằng `40P01`,
+không bằng `55P03`; ai đi tìm nó bằng cách canh trần 2 s sẽ tìm nhầm chỗ.
+
+Vế ⑵ vì thế vẫn có việc riêng, và phải nói đúng việc ấy: nó bắt ca approve cầm khoá ghi sổ mà **KHÔNG**
+khép thành vòng — người giữ nào không ghi sổ thì không có khoá chết, và khi ấy chỉ một khẳng định trên
+`pg_locks` mới thấy. Đó là ca hỏng IM LẶNG, và nó là ca duy nhất một vế `expect` ở đây thật sự canh.
+
+**Một cái bẫy phải ghi lại, vì đường hiển nhiên KHÔNG đo gì cả.** Đột biến ⒝ làm theo cách thường —
+sửa thân hàm trong `db/migrations/019_unseal.sql` — cho kết quả **XANH**, và em suýt ghi "đột biến ⒝
+sống" vào biên bản. Nó xanh vì `hardening.always.sql` chạy `CREATE OR REPLACE FUNCTION
+public.unseal_kiem_nguoi_duyet()` và **âm thầm phục hồi** thân hàm: đột biến không bao giờ tồn tại.
+Sửa cả hai tệp thì bước phán xét của hardening chặn `migrate()` ngay. Đường đo được là đột biến LÚC
+CHẠY, sau migrate + hardening: đọc `pg_get_functiondef(...)`, bỏ mệnh đề khoá khỏi chuỗi ấy, chạy lại
+chính chuỗi ấy. **Ở một kho có lớp hardening tự sửa, một đột biến "sống" phải được chứng là đã THẬT SỰ
+áp, không chỉ là đã ghi vào tệp.**
+
+**Và một lời khai bị đo rồi rút lại.** Vòng này thay `setTimeout(2_000)` bằng một vòng chờ có hạn dò
+`pg_stat_activity` [G2-2]. Nhưng đo thì **bản sleep cứng cũng bắt được cả ⒝ lẫn ⒟** trên máy chạy phép
+đo này. Nên vòng chờ **không thêm răng** — nó bỏ chỗ PHỤ THUỘC THỜI GIAN: bản cũ chụp ở mốc 2 s rồi
+TIN rằng approve đã kẹt, bản mới KHẲNG ĐỊNH điều ấy trước khi đo, và ném nếu không khẳng định được.
+Chiều hỏng mà lượt soi 71 nêu (máy chậm ⇒ chụp trước khi approve kịp kẹt ⇒ ba vế xanh rỗng ruột) không
+dựng lại được theo yêu cầu ở đây, nên đây là một phép PHÒNG, không phải một bản vá cho lỗi đã quan sát.
+
+## 5. Lượt quét lại tập hàm cùng hình dạng — kết quả ÂM
+
+Lượt soi 68a khai đã quét mọi hàm nghiệp vụ và tìm ra **ba** hàm có câu ghi đứng sau lần ghi sổ đầu:
+`executeUnsealRequest` (vá ở S1.73), `requestMfaReset` (đọc là an toàn), `approveUnseal` (hàng 140).
+Vòng này quét lại toàn bộ `packages/**` và `apps/**` và **xác nhận không có hàm thứ tư**.
+
+Ba hàm thoạt nhìn có hình dạng ấy đều là **dương tính giả**, ghi ra để lượt sau khỏi quét lại:
+
+| Hàm | Vì sao là dương tính giả |
+|---|---|
+| `verifyOtpAndStartSession` | chữ `UPDATE` chỉ nằm trong **chú thích** |
+| `purgeRfqKeyMaterial` | chữ `UPDATE` chỉ nằm trong **chú thích** |
+| `submitBid` | câu `INSERT INTO public.vendor_bids` nằm trong hàm nội bộ `layHoacTaoLuong`, và hàm ấy được gọi **TRƯỚC** lần ghi sổ — phép quét đầu dùng `export` làm ranh giới hàm nên nhảy qua các hàm không export |
+
+**Một cặp nghi can thứ tư được nêu ra rồi BỊ BÁC, ghi lại để khỏi nghi lại.** Lượt soi 71 chỉ ra
+`openRfq` ghi sổ `RFQ_KEY_MATERIAL_ISSUED` (qua `issueRfqKeyPair`, `key-material.ts:180`) *rồi mới*
+`UPDATE public.rfq_packages` (`rfq.ts:468`), trong khi `cancelRfq` khoá hàng RFQ trước (`rfq.ts:703`)
+rồi mới ghi sổ (`rfq.ts:715`) — đọc ở tầng TypeScript thì đúng là hai thứ tự ngược nhau, tức đúng hình
+dạng khoá chết. **Nhưng cùng một lớp lỗi đã làm hàng 140 sai lại làm lời này sai:** `INSERT INTO
+public.rfq_key_material` (`key-material.ts:154`, đứng TRƯỚC lần ghi sổ ở 180) bắn trigger
+`rfq_key_material_chi_sinh_luc_mo` (`017`, `BEFORE INSERT`), và trigger ấy lấy `FOR NO KEY UPDATE`
+trên `rfq_packages`. `openRfq` vì thế **cũng** khoá hàng trước lần ghi sổ — cùng thứ tự với
+`cancelRfq`, không có vòng chờ.
+
+### Một khuôn HẸP — và câu bị BỎ, vì nó sinh ra âm tính giả
+
+Bản đầu của mục này kết: *"kho lấy khoá hàng CHA bằng `FOR NO KEY UPDATE` bên trong các trigger
+`BEFORE INSERT` của bảng CON, nên hình dạng «INSERT con → ghi sổ → UPDATE cha» đã bị vô hiệu hoá ngay
+từ cấu trúc, và một lượt quét hình dạng ấy ở tầng TypeScript sẽ cho dương tính giả một cách **có hệ
+thống**."* **Câu ấy bị bỏ, và lượt soi 71 [G3-4, L71D-5] đúng khi đòi bỏ nó.**
+
+Nó sai, và sai theo chiều nguy hiểm nhất: nó dặn lượt soi sau gạt bỏ — như *dương tính giả hệ thống* —
+đúng một lớp lỗi ĐÃ CÓ THẬT ở kho này. Tức một quy tắc thành văn sinh ra **ÂM TÍNH GIẢ**, chọi thẳng
+rủi ro lớn nhất của chính vòng này ("đóng nhầm một khoản có thật").
+
+Hai phản ví dụ nằm sẵn trong kho, một trong số đó nằm **cùng tệp migration, cùng bảng cha**:
+
+| Phản ví dụ | Vì sao khuôn không đúng ở đó |
+|---|---|
+| `rfq_unsealed_bids` (019) | trigger `BEFORE INSERT` đọc hàng cha bằng **SELECT TRẦN, không mệnh đề khoá**. Và hàm khép đúng hình dạng ấy trên chính bảng ấy là `executeUnsealRequest` — tức **khoản 126, một khoản CÓ THẬT, đã đo, đã vá ở S1.73** bằng hai câu khoá viết TAY ở tầng TypeScript, không nhờ trigger nào. Chính mục 5 này liệt nó là "vá ở S1.73", cách đó bốn đoạn |
+| `vendor_bid_versions` (018) | trigger `BEFORE INSERT` lấy `FOR SHARE`, **có chủ ý** và có lý do ghi tại chỗ (`FOR SHARE` không xung đột `FOR SHARE`, để 50 nhà cung cấp nộp cùng lúc khỏi xếp hàng). `FOR SHARE` chỉ HOÃN xung đột: hai bên cùng cầm rồi bên nào `UPDATE` cũng phải nâng khoá và chờ bên kia — nếu bên ấy đã ghi sổ trước lúc nâng thì đúng hình dạng khoản 126. Hôm nay chưa hàm nào khép hình dạng ấy, nên đây là lời khai quá rộng chứ chưa phải một lỗ |
+
+**Thứ giữ lại là một quy tắc THAO TÁC, không phải một mệnh đề toàn kho:** muốn kết luận về thứ tự khoá
+ở kho này thì **phải đọc trigger, hoặc đo** — không suy từ tầng TypeScript, và cũng không suy từ khuôn
+này.
+
+## 6. Phần KHÔNG đóng — nói thẳng
+
+- Kịch bản ⑶ đo bằng cách chạy **chuỗi câu của `approveUnseal` bằng tay** (không gọi hàm), vì không
+  có điểm dừng nào giữa `INSERT` và `UPDATE` của hàm thật. Chuỗi câu là nguyên văn của đường sản xuất,
+  nhưng nó **không** đi qua `requirePermission` và các lớp trước đó.
+- Pool của test **không đặt `statement_timeout`** (khác `createPool` của sản xuất), nên ở môi trường
+  test một lần chờ khoá hàng là chờ **vô hạn**. Điều đó không đổi hình dạng khoá, nhưng nó đổi *thứ
+  cắt* lần chờ — lượt đo đầu của vòng này treo 90 s vì lý do ấy.
+- Câu `UPDATE` cuối của `approveUnseal` nằm sau một **nhánh điều kiện** (`if (Số phê duyệt có >= cần)`)
+  — trên RFQ cấp đơn nó luôn chạy, trên cấp kép lần duyệt đầu KHÔNG chạy. Phép đo ở mục 2 dựng RFQ cấp
+  đơn. Điều ấy không nới kết luận (lần duyệt không chạy câu UPDATE thì càng không chờ được ai), nhưng
+  bản đầu của biên bản không nói ra [lượt soi 71 / G3-10].
+- Mỗi kịch bản ở mục 2 chạy **một lượt**, không lặp ba lượt như khuôn đo vách ngăn của kho. Các con số
+  ms ở đó là một lượt, và chúng chỉ chịu lực ở dấu — "dưới 1 s" so với trần 2 s — chứ không ở giá trị.
+- Khoản **143** (dư lượng `40P01` / `57014` của bản vá khoản 139) không bị vòng này chạm.
+
+## 7. Khoản nợ MỚI — 147, tìm được khi đọc dọc `approveUnseal`, và ĐÃ ĐO
+
+Lượt soi 71 [L71D-2] đọc dọc hàm và thấy một thứ không thuộc khoản 140: `approveUnseal` bắt lỗi của câu
+`INSERT` rồi phân loại bằng MỘT biểu thức chính quy ba vế —
+`khong duoc tu phe duyet|phai o mot PHIEN khac|mot lan tren mot yeu cau`. Hai vế đầu khớp nguyên văn hai
+câu `RAISE` của trigger 019. **Vế thứ ba không khớp gì cả:** `grep -rn 'mot lan tren mot yeu cau' db/
+packages/ apps/` chỉ trả về đúng dòng regex ấy. Ca nó định bắt là hai ràng buộc `UNIQUE` của 019 — mà cả
+hai khai **VÔ DANH**, nên tên trong thông điệp 23505 là tên PostgreSQL tự đặt. (`009` thì ĐẶT TÊN:
+`rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan`.)
+
+**Vòng này ĐO thay vì mở một khoản trên tiền đề chỉ-đọc** — đúng thứ đã đẻ ra cả mớ khoản 140. RFQ cấp
+kép, Postgres thật:
+
+| Bước | Kết quả đo |
+|---|---|
+| uD1 duyệt lần đầu từ phiên sD1 | `UNSEAL_APPROVED` **1** hàng, yêu cầu còn `PENDING` (cấp kép cần hai) |
+| CÙNG uD1 duyệt lần hai từ một PHIÊN KHÁC | trigger CHO QUA; `INSERT` trượt UNIQUE, ném `23505`, `constraint = unseal_approvals_org_id_unseal_request_id_approver_user_id_key` |
+| `UNSEAL_APPROVAL_DENIED` cho yêu cầu ấy | **0 hàng** |
+
+Đúng ca D2 mà hai ràng buộc ấy dựng ra để chặn, bị chặn đúng — và **không để lại dấu nào**. Cùng lớp
+lỗi với khoản 32 / 119 / 121, ở một đường mà cổng `[INV-D5]` không phủ.
+
+Phép đo còn loại bỏ đường sửa tệ hơn: **`err.constraint` được pg điền sẵn** (chuỗi tên ràng buộc nằm
+đúng ở đó), nên đường đúng là phân loại bằng `code === '23505'` cộng `err.constraint`, chứ không phải
+đọc chuỗi thông điệp. Ghi thành **khoản 147**, không vá ở vòng này.
+
+**Vòng này là §S1.77, không phải §S1.76.** Số vòng đi theo THỨ TỰ MERGE, và vòng khoản 141 (PR #76) vào `master`
+trước. Hai vòng chạy song song cùng tự gọi mình là S1.76; nếu cả hai vào sổ thì `evidence/security-reviews.md` có
+hai tiêu đề `# §S1.76` và mọi con trỏ `§S1.76` trở nên nhập nhằng. Cùng một lớp lỗi với việc cấp số khoản dưới đây,
+và cùng một cách chữa: **nhường cho nhánh đã vào trước**.
+
+**Vì sao khoản này mang số 147, sau khi đã đổi số HAI LẦN.** Lúc vòng này cấp số, sổ trên `master` dừng ở 143 nên nhánh này cấp **144**.
+Nhưng một phiên khác chạy **song song** trên `khoan-141-phien-co-pham-vi` (PR #76) đã cấp 144 và 145 cho hai khoản
+khác, và nhánh ấy đã push, đi trước nhánh này — nên vòng này đổi sang **146**. Trong lúc vòng này chạy lại cổng,
+phiên kia cấp nốt **146**. Đổi lần hai, sang **147**.
+
+Hai lần đổi ấy là bằng chứng của một điều đáng ghi hơn cả con số: **`master` không trọng tài được việc cấp số.** Mỗi
+phiên đọc `master`, thấy cùng một `max`, rồi cấp chồng lên nhau; va chạm chỉ lộ ra lúc merge, khi sổ có hai hàng cùng
+số và mọi con trỏ *"khoản N"* trong biên bản, ADR, chú thích mã và thông điệp commit đều trỏ nhập nhằng. Quy tắc:
+**số khoản lấy từ số lớn nhất trên MỌI nhánh đang sống** — `git show <nhánh>:docs/STATE.md` cho từng nhánh có hoạt
+động mới, `git worktree list` để biết phiên nào đang làm — và **push sớm** để ghim chỗ, vì một số chưa push thì không
+ai thấy. Lần đổi thứ hai xảy ra đúng vì vòng này giữ số trong máy quá lâu.
+
+## 8. Lượt soi dọc 71 — 28 agent, và nó soi chính bản vá của vòng này
+
+Ba góc: ⑴ tìm một kịch bản làm khoản 140 CÒN THẬT; ⑵ test có răng không; ⑶ lời khai có rộng hơn phép đo
+không. Góc ⑴ **không tìm được kịch bản nào** và đưa thêm lập luận đóng kín ở mục 2. Hai góc còn lại giữ
+lại một danh sách phát hiện **trên chính vòng này**, trong đó sáu phiếu NẶNG:
+
+| Phiếu | Việc đã làm |
+|---|---|
+| G3-1, G3-2, L71D-1 | STATE và ADR-016 còn khai cơ chế KHOÁ NGOẠI mà chính commit này bác — **sửa cả hai**. ADR-016 "Phần KHÔNG đóng" bị bỏ sót **hai vòng liên tiếp** (lượt soi 70 đã bắt đúng tiểu mục ấy); nay mỗi lần sửa cơ chế ở STATE phải soi lại ADR |
+| G3-1 | STATE còn giữ bài học "phép kiểm khoá ngoại bám theo chuỗi phiên bản hàng" — cơ chế ấy **không có thật**, bỏ hẳn, thay bằng bài học đúng ở mục 3 |
+| G3-4, L71D-5 | "khuôn chung" — xem mục 5, câu nguy hiểm bị bỏ |
+| G3-5 | vế rỗng không đối chứng dương — thêm vế ⑴, xem mục 4 |
+| G2-2 | sleep cứng — thay bằng vòng chờ có hạn, nhưng **đo rồi mới khai đúng công của nó** (mục 4) |
+| G2-1 | bảng đột biến sai — đo lại cả bốn, xem mục 4 |
+| G2-6, G3-7, L71D-3 | "người giữ nhẹ nhất" sai — xem mục 2 |
+| G3-8, G3-9, G3-10 | lời khai hẹp lại: diff CÓ chạm `requests.ts`; chỉ kịch bản ⑵ để lại vế canh; nhánh điều kiện và số lượt đo vào mục 6 |
+| L71D-2 | khoản 147, đo rồi mới mở — xem mục 7 |
+| G2-5 | `pApprove` có thể thành unhandled rejection nếu thân test ném trước `await` — thêm tay bắt câm |
+| G3-3, G3-6 | **BỊ BÁC** ở pha thẩm tra, không sửa gì |
+| G3-11, G3-12 | quét độc lập xác nhận mục 5 không sót hàm thứ tư, và mọi con số/con trỏ đếm lại đều đúng |
+

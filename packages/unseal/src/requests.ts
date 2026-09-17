@@ -216,6 +216,21 @@ export async function approveUnseal(
   // Phân loại theo THÔNG BÁO chứ không theo SQLSTATE, và đó là một thu hẹp phải nói ra: cả hai
   // trigger dùng chung `check_violation`, nên SQLSTATE không phân biệt được chúng với nhau hay
   // với một `CHECK` bất kỳ. Thông báo thì do chính 019 viết ra và có test đọc nó.
+  // [S1.77 / khoản 140] CÂU NÀY KHOÁ HÀNG YÊU CẦU, và chỗ khoá không nằm ở đây — nói ra vì việc nó
+  // vô danh ở tệp này chính là thứ làm lượt soi 68a-1 mở nhầm khoản 140.
+  //
+  // `unseal_approvals` mang trigger `unseal_approvals_kiem_nguoi_duyet` (019, BEFORE INSERT), và thân
+  // hàm của nó mở đầu bằng `SELECT … FROM public.unseal_requests … FOR NO KEY UPDATE`. Nên câu INSERT
+  // dưới đây GIỮ khoá hàng yêu cầu ở mức `FOR NO KEY UPDATE` — TRƯỚC lần ghi sổ `UNSEAL_APPROVED` ở
+  // dưới, và trước câu `UPDATE … SET status = 'APPROVED'` ở cuối hàm.
+  //
+  // Hệ quả: hàm này KHÔNG mang hình dạng của khoản 126 ("câu chờ khoá hàng SAU lần ghi sổ đầu"). Câu
+  // `UPDATE` ở cuối chỉ xin lại ĐÚNG mức khoá giao dịch đã cầm từ đây (`FOR NO KEY UPDATE` — `status`
+  // và `approved_at` không phải cột khoá), nên tập người giữ chặn được nó TRÙNG KHÍT tập người giữ
+  // chặn được câu INSERT ở trên: không có khe nào để hàm này vừa cầm khoá ghi sổ vừa còn phải chờ
+  // hàng. Đo ở `unseal.int.test.ts`, vế `[S1.77 / khoản 140]` — MỘT vế, dựng một người giữ nằm đúng
+  // trên đường biên ấy (§S1.77 mục 2 ghi cả ba kịch bản đã chạy, chỉ vế này được giữ lại làm vế canh).
+  // Dời câu INSERT này xuống SAU lần ghi sổ thì khoản 140 thành thật ngay, và vế ấy ĐỎ — đã đo.
   try {
     await client.query(
       `INSERT INTO public.unseal_approvals
