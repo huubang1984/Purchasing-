@@ -225,9 +225,12 @@ export async function approveUnseal(
   // dưới, và trước câu `UPDATE … SET status = 'APPROVED'` ở cuối hàm.
   //
   // Hệ quả: hàm này KHÔNG mang hình dạng của khoản 126 ("câu chờ khoá hàng SAU lần ghi sổ đầu"). Câu
-  // `UPDATE` ở cuối chỉ xin lại đúng mức khoá giao dịch đã cầm từ đây, nên nó không chờ được ai. Đo
-  // bằng ba kịch bản người giữ ở `unseal.int.test.ts` (§S1.76). Dời câu INSERT này xuống SAU lần ghi
-  // sổ thì khoản 140 thành thật ngay — đó là thứ vế `[S1.76 / khoản 140]` của tệp test ấy canh.
+  // `UPDATE` ở cuối chỉ xin lại ĐÚNG mức khoá giao dịch đã cầm từ đây (`FOR NO KEY UPDATE` — `status`
+  // và `approved_at` không phải cột khoá), nên tập người giữ chặn được nó TRÙNG KHÍT tập người giữ
+  // chặn được câu INSERT ở trên: không có khe nào để hàm này vừa cầm khoá ghi sổ vừa còn phải chờ
+  // hàng. Đo ở `unseal.int.test.ts`, vế `[S1.76 / khoản 140]` — MỘT vế, dựng một người giữ nằm đúng
+  // trên đường biên ấy (§S1.76 mục 2 ghi cả ba kịch bản đã chạy, chỉ vế này được giữ lại làm vế canh).
+  // Dời câu INSERT này xuống SAU lần ghi sổ thì khoản 140 thành thật ngay, và vế ấy ĐỎ — đã đo.
   try {
     await client.query(
       `INSERT INTO public.unseal_approvals

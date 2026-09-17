@@ -931,22 +931,39 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ từ chối của cổng
 // Thứ lời đọc bỏ sót nằm trong chính câu đầu nó nhắc tới: `INSERT INTO public.unseal_approvals` bắn
 // trigger `unseal_approvals_kiem_nguoi_duyet` (019, BEFORE INSERT), và thân hàm ấy mở đầu bằng
 // `SELECT … FROM public.unseal_requests … FOR NO KEY UPDATE`. Tức câu INSERT **giữ khoá hàng yêu cầu**
-// — và nó đứng TRƯỚC `appendAuditEvent`. `approveUnseal` vì thế đã sẵn mang đúng hình dạng mà bản vá
-// khoản 126 quy định ("khoá hàng trước lần ghi sổ đầu"), và câu `UPDATE … SET status = 'APPROVED'` ở
-// cuối hàm chỉ xin lại đúng mức khoá giao dịch đã cầm, nên nó không chờ được ai.
+// — và nó đứng TRƯỚC `appendAuditEvent`.
+//
+// LẬP LUẬN ĐÓNG KÍN — mạnh hơn "ba kịch bản cùng chiều", vì nó không phụ thuộc vào việc đã liệt đủ
+// người giữ hay chưa [lượt soi 71 / L71D-6]: khoá mà trigger lấy ở câu INSERT là `FOR NO KEY UPDATE`
+// (019:207), **đúng bằng** mức mà câu `UPDATE … SET status = 'APPROVED', approved_at = …` ở cuối hàm
+// cần (`status`/`approved_at` không phải cột khoá: hai chỉ mục duy nhất góp key_attrs của
+// `unseal_requests` là `unseal_requests_pkey (id)` và `UNIQUE (org_id, id)` — 019:63). Hai câu cùng
+// một chế độ khoá ⇒ tập người giữ chặn được câu SAU lần ghi sổ TRÙNG KHÍT tập người giữ chặn được câu
+// TRƯỚC nó ⇒ **không tồn tại khe nào** để approve vừa cầm khoá ghi sổ vừa còn phải chờ hàng.
 //
 // Bản đầu của khối này ghi rằng khoá đến từ KHOÁ NGOẠI `(org_id, unseal_request_id)` và gọi tính chất
 // ấy là "tình cờ". **Sai cả hai vế** (lượt soi 71): khoá đến từ một câu `FOR NO KEY UPDATE` viết
 // TƯỜNG MINH trong trigger cưỡng chế D2, tức nó là một lựa chọn CÓ CHỦ Ý, không phải may mắn. Và nó
 // giải thích đúng số đo, trong khi lời khoá-ngoại thì không: `FOR KEY SHARE` của một phép kiểm khoá
-// ngoại KHÔNG xung đột `FOR NO KEY UPDATE`, nên nếu khoá chỉ đến từ khoá ngoại thì kịch bản ⑵ đã phải
-// đi lọt — đo thì nó CHỜ.
+// ngoại KHÔNG xung đột `FOR NO KEY UPDATE`, nên nếu khoá chỉ đến từ khoá ngoại thì người giữ dưới đây
+// đã phải đi lọt — đo thì nó CHỜ.
 //
-// VÌ SAO VẪN CẦN VẾ NÀY khi không có gì để vá: tính chất ấy có chủ ý nhưng VÔ DANH ở `requests.ts`
-// (nay đã được đặt tên bằng một khối chú thích ở đó). Nó đứng nhờ hai điều có thể bị đổi mà không ai
-// thấy — câu `FOR NO KEY UPDATE` trong trigger 019, và việc câu `INSERT` đứng trước lần ghi sổ. Đảo
-// hai câu ấy, hay gỡ mệnh đề khoá khỏi trigger, thì khoản 140 thành thật ngay; và cái đỏ sẽ là vế ⑴
-// dưới đây. Đây là chỗ khoản 140 được giữ ĐÓNG, không phải chỗ nó được vá.
+// ĐỘT BIẾN NÀO LÀM VẾ NÀY ĐỎ — ĐÃ ĐO, không suy [lượt soi 71 / G2-1; bảng đo ở §S1.76 mục 4]:
+//   ⒜ dời câu `INSERT` xuống SAU `appendAuditEvent`  → **ĐỎ**
+//   ⒝ gỡ `FOR NO KEY UPDATE` khỏi thân trigger 019   → **ĐỎ**
+//   ⒞ bỏ KHOÁ NGOẠI `(org_id, unseal_request_id)`    → **XANH NGUYÊN**
+//   ⒟ tắt hẳn trigger `unseal_approvals_kiem_nguoi_duyet` → **ĐỎ**
+// ⒞ là vế chịu lực của cả lời giải thích: khoá ngoại KHÔNG giữ vế này, câu `FOR NO KEY UPDATE` mới
+// giữ. Bản đầu của khối này khai ngược lại, và khai sai.
+//
+// CÁCH DỰNG LẠI ⒝/⒟ — đọc trước khi thử, vì đường hiển nhiên KHÔNG đo gì cả: sửa thân hàm trong
+// `db/migrations/019_unseal.sql` thì `hardening.always.sql` **âm thầm phục hồi nó** (nó chạy
+// `CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet()`), và test báo XANH — một đột biến
+// "sống" GIẢ. Sửa cả hai tệp thì bước phán xét của hardening chặn `migrate()`. Đường đo được là đột
+// biến LÚC CHẠY, sau khi migrate + hardening đã xong:
+//   `SELECT pg_get_functiondef(to_regprocedure('public.unseal_kiem_nguoi_duyet()'))` → bỏ mệnh đề
+//   khoá khỏi chuỗi ấy → chạy lại chính chuỗi ấy.
+// Đây là chỗ khoản 140 được giữ ĐÓNG, không phải chỗ nó được vá.
 // ================================================================================================
 describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯỚC lần ghi sổ đầu", () => {
   const KHOA_GHI_SO_CUA_TO_CHUC =
@@ -964,17 +981,23 @@ describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯ�
     const giu = await apiPool.connect();
     const ke: string[] = [];
     let khoaTrongLucCho: unknown[] = [];
+    let approveDangCho = "chưa-thấy";
     let msGhiSoCuaNguoiGiu = -1;
     let ketQuaApprove = "chua-xong";
     try {
       await giu.query("BEGIN");
       await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
-      // Người giữ là `dispatchUnseal`, dùng NGUYÊN VĂN câu của nó (`requests.ts`). Chọn câu này chứ
-      // không chọn câu của `cancelUnseal` là có chủ ý: câu của cancel đổi `status`, mà `status` nằm
-      // trong vị từ của chỉ mục riêng phần `unseal_requests_mot_yeu_cau_dang_mo` (019) nên nó là một
-      // KEY update — người giữ MẠNH hơn. Câu dưới KHÔNG chạm `status` nên chỉ `FOR NO KEY UPDATE`,
-      // tức người giữ NHẸ NHẤT mà đường sản xuất dựng được; vế này đứng với người giữ nhẹ nhất thì
-      // đứng với mọi người giữ.
+      // Người giữ dùng NGUYÊN VĂN câu của `dispatchUnseal` (`requests.ts`). Câu ấy lấy
+      // `FOR NO KEY UPDATE` — **đúng bằng** chế độ mà câu `UPDATE … SET status = 'APPROVED'` ở cuối
+      // `approveUnseal` lấy, và cũng đúng bằng chế độ trigger lấy ở câu INSERT. Nên người giữ này
+      // nằm ngay trên đường biên: nó là người giữ NHẸ NHẤT còn chặn được câu UPDATE cuối. Nếu khoản
+      // 140 có thật thì nó phải lọt qua câu INSERT rồi kẹt ở câu UPDATE — đo thì nó kẹt ở INSERT.
+      //
+      // [lượt soi 71 / G2-6, L71D-3] Bản đầu của khối này viết rằng câu của `cancelUnseal` (đổi
+      // `status`) là một KEY update vì `status` nằm trong vị từ của chỉ mục riêng phần
+      // `unseal_requests_mot_yeu_cau_dang_mo` (019:73-74). **SAI:** Postgres chỉ tính là cột khoá
+      // các cột của một chỉ mục unique KHÔNG riêng phần và KHÔNG biểu thức, nên đổi `status` vẫn chỉ
+      // là `FOR NO KEY UPDATE` — hai người giữ ấy CÙNG một chế độ khoá, không ai nhẹ hơn ai.
       const u = await giu.query(
         "UPDATE public.unseal_requests SET dispatched_at = pg_catalog.now(), dispatched_by = $2, " +
           "dispatched_by_session_id = $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $4 AND dispatched_at IS NULL",
@@ -994,10 +1017,46 @@ describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯ�
           throw e;
         },
       );
+      // [lượt soi 71 / G2-5] Nếu thân test ném trước `await pApprove`, lời hứa trên thành unhandled
+      // rejection và Node giết cả tiến trình. Gắn một tay bắt câm — vế `expect` dưới đọc
+      // `ketQuaApprove`, không đọc lời hứa này.
+      void pApprove.catch(() => undefined);
 
-      // Để approve chạy tới chỗ nó kẹt. 2 s là quá đủ: mọi câu trước đó của nó đều dưới 10 ms khi
-      // không có tranh chấp (đo).
-      await new Promise((r) => setTimeout(r, 2_000));
+      // [lượt soi 71 / G2-2] KHÔNG dùng sleep cứng. Dưới tải, một sleep cứng có thể chụp lúc approve
+      // CHƯA tới câu INSERT; khi ấy cả ba vế dưới đều xanh — kể cả trên bản đột biến ⒜, vì lúc chụp
+      // nó cũng chưa lấy khoá ghi sổ. Đó là chiều hỏng IM LẶNG (xanh giả) nên nó không bao giờ tự lộ.
+      //
+      // ĐỪNG ĐỌC VÒNG NÀY LÀ "THÊM RĂNG": đo rồi, và bản sleep cứng CŨNG bắt được cả ⒝ lẫn ⒟ trên máy
+      // chạy phép đo này (§S1.76 mục 4). Thứ vòng này bỏ đi là chỗ PHỤ THUỘC THỜI GIAN — bản cũ chụp
+      // ở mốc 2 s rồi TIN rằng approve đã kẹt; bản này KHẲNG ĐỊNH điều ấy trước khi đo. Chiều hỏng mà
+      // lượt soi 71 nêu không dựng lại được theo yêu cầu ở đây, nên đây là một phép PHÒNG, không phải
+      // một bản vá cho lỗi đã quan sát được.
+      // Vòng dưới biến "approve đang kẹt" từ giả định thành KHẲNG ĐỊNH: chờ tới khi thấy chính câu
+      // `INSERT … unseal_approvals` của nó nằm trong `pg_stat_activity` với `wait_event_type='Lock'`
+      // và `wait_event='transactionid'` — đúng thứ §S1.76 mục 3 chụp tay — rồi mới đo.
+      const han = Date.now() + 30_000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ pid: number; wait_event: string; q: string }>(
+          "SELECT pid, wait_event, left(query, 60) AS q FROM pg_catalog.pg_stat_activity " +
+            "WHERE datname OPERATOR(pg_catalog.=) pg_catalog.current_database() " +
+            "AND wait_event_type OPERATOR(pg_catalog.=) 'Lock' AND wait_event OPERATOR(pg_catalog.=) 'transactionid' " +
+            "AND query ILIKE '%unseal_approvals%'",
+        );
+        const r = rows[0];
+        if (r !== undefined) {
+          approveDangCho = `pid=${r.pid} wait_event=${r.wait_event} query=${r.q.replace(/\s+/g, " ")}`;
+          break;
+        }
+        if (Date.now() > han)
+          throw new Error(
+            "hết 30000ms: KHÔNG thấy approve kẹt trên hàng yêu cầu. Hai cách đọc, cả hai đều phải ĐỎ " +
+              "chứ không được báo xanh: ⑴ HỒI QUY — câu INSERT thôi không còn giữ khoá hàng, nên approve " +
+              "đi thẳng qua lần ghi sổ rồi mới kẹt ở câu UPDATE cuối, tức khoản 140 vừa thành THẬT " +
+              "(đo được: đây đúng là thứ đột biến ⒝ và ⒟ gây ra); ⑵ đồ gá hỏng hoặc máy quá chậm, và " +
+              "khi ấy ba vế dưới sẽ xanh RỖNG RUỘT. Xem [lượt soi 71 / G2-2].",
+          );
+        await new Promise((xong) => setTimeout(xong, 20));
+      }
 
       khoaTrongLucCho = (await db.pool.query<Record<string, unknown>>(KHOA_GHI_SO_CUA_TO_CHUC, [orgA])).rows;
 
@@ -1020,16 +1079,39 @@ describe("[S1.76 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯ�
       giu.release();
     }
 
+    // [lượt soi 71 / G3-5] ĐỐI CHỨNG DƯƠNG của phép dò. Vế ⑴ dưới là một khẳng định RỖNG
+    // (`toEqual([])`), nên một phép dò hỏng — sai chuỗi băm, sai kiểu, sai `orgA` — làm nó xanh mãi
+    // mãi. Chạy lại ĐÚNG câu dò ấy trong một giao dịch đang cầm khoá ghi sổ của tổ chức: nó phải
+    // THẤY. Không vế này thì vế ⑴ không chứng được gì. Chạy SAU khi approve đã xong nên không ai bị
+    // chặn. Khuôn lấy từ `packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts:132-138`.
+    const doi = await apiPool.connect();
+    let khoaKhiCoNguoiCam: unknown[] = [];
+    try {
+      await doi.query("BEGIN");
+      await doi.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await doi.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::text, 0))", [orgA]);
+      khoaKhiCoNguoiCam = (await db.pool.query<Record<string, unknown>>(KHOA_GHI_SO_CUA_TO_CHUC, [orgA])).rows;
+    } finally {
+      await doi.query("ROLLBACK").catch(() => undefined);
+      doi.release();
+    }
+
     const keChung =
+      `approve lúc chụp: ${approveDangCho}; ` +
       `khoá ghi sổ của tổ chức trong lúc approve chờ: ${JSON.stringify(khoaTrongLucCho)}; ` +
       `lần ghi sổ của người giữ: ${msGhiSoCuaNguoiGiu} ms; ${ke.join(" ")}`;
 
-    // ⑴ KHÔNG ai cầm khoá ghi sổ của tổ chức trong lúc approve chờ hàng. Đây là mệnh đề mà khoản 140
-    //    khai ngược lại, và là vế sẽ ĐỎ nếu ai dời `INSERT` xuống sau `appendAuditEvent`.
+    // ⑴ Đối chứng dương TRƯỚC — nếu vế này đỏ thì phép dò hỏng và vế ⑵ vô nghĩa.
+    expect(
+      khoaKhiCoNguoiCam.length,
+      `đối chứng dương: phép dò KHÔNG thấy khoá ghi sổ mà một giao dịch đang cầm — ${keChung}`,
+    ).toBeGreaterThanOrEqual(1);
+    // ⑵ KHÔNG ai cầm khoá ghi sổ của tổ chức trong lúc approve chờ hàng — và vòng chờ ở trên đã
+    //    khẳng định approve THẬT SỰ đang kẹt lúc chụp. Đây là mệnh đề mà khoản 140 khai ngược lại.
     expect(khoaTrongLucCho, `approve KHÔNG được cầm khoá ghi sổ trong lúc chờ hàng — ${keChung}`).toEqual([]);
-    // ⑵ Hệ quả đo được của ⑴: lần ghi sổ của người giữ đi qua NGAY, không chạm trần 2 s của 050.
+    // ⑶ Hệ quả đo được của ⑵: lần ghi sổ của người giữ đi qua NGAY, không chạm trần 2 s của 050.
     expect(msGhiSoCuaNguoiGiu, `lần ghi sổ của người giữ phải đi qua ngay — ${keChung}`).toBeLessThan(1_000);
-    // ⑶ Và đây là một lần CHỜ, không phải khoá chết: nhả hàng thì approve xong bình thường.
+    // ⑷ Và đây là một lần CHỜ, không phải khoá chết: nhả hàng thì approve xong bình thường.
     expect(ketQuaApprove, `nhả hàng thì approve phải chạy tiếp — ${keChung}`).toBe("xong status=APPROVED");
   }, 120_000);
 });
