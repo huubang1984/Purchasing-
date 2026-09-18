@@ -32,6 +32,10 @@ export default tseslint.config(
       // "tools/*/*.mjs" — giữ nguyên tính chất "mọi file .mjs khác đều ồn ào".
       "tools/bench-keyprovider/*.mjs",
       "tools/inv-matrix/*.mjs",
+      // [S1.82 / khoan 116] Ban sao thu TU, cho `pnpm worker:dev`. Van viet duong dan DAY DU
+      // ("apps/unseal-worker/*.mjs"), KHONG gop thanh "apps/*/*.mjs" — giu tinh chat "moi tep
+      // .mjs khac deu on ao".
+      "apps/unseal-worker/*.mjs",
       // [2026-08-29] Hai thư mục đo phục vụ QUYẾT ĐỊNH, không phải mã sản phẩm, và cùng
       // lý do kỹ thuật với hai dòng trên: thuần JS không kiểu, nằm ngoài "include" của
       // tsconfig.json (chỉ có "**/*.ts"), nên typescript-eslint không parse được.

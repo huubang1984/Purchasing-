@@ -242,6 +242,18 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
   },
   // [S1.69 / khoản 120] `packages/identity/src/rbac.ts` (cau 1 — `auditPool.query()` của khangDinhAuditPoolDungQuyen, "một câu CHỈ ĐỌC tự
   // commit") rời danh sách: câu kiểm vai nay chạy trên CHÍNH kết nối của lần ghi sổ, bên trong withTenant, sau lần lấy có trần.
+  "apps/unseal-worker/src/tien-trinh.ts": {
+    lay: 1,
+    cau: 1,
+    lyDo:
+      "[S1.82 / khoản 116 / ADR-040] HAI đường, và cả hai cố ý ngoài withTenant. ⑴ `lay`: batDau() " +
+      "gọi khangDinhPhienDangNhapUngDung trên một client của MỖI pool (vòng lặp qua [pool, auditPool] " +
+      "— một chỗ lấy client viết ra trong văn bản) trước runner.start(); chỉ đọc, cùng khuôn " +
+      "apps/api/src/composition.ts. ⑵ `cau`: lời gọi `public.outbox_danh_sach_to_chuc()` — nguồn " +
+      "danh sách tổ chức. Câu hỏi 'những tổ chức nào' ĐỨNG TRƯỚC câu hỏi 'tổ chức nào', nên nó " +
+      "không gắn được tenant theo định nghĩa. Bán kính: một hàm SECURITY DEFINER trả về ĐÚNG một " +
+      "cột `id`, EXECUTE chỉ cấp cho app_unseal, và app_unseal đọc THẲNG organizations vẫn 0 hàng (đo)",
+  },
   "apps/api/src/composition.ts": {
     lay: 1,
     cau: 0,

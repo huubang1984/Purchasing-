@@ -378,7 +378,8 @@
 --       và trả bằng một hàng rào chặn deploy.
 --       CỬA cho MATVIEW và cho hàm SECURITY DEFINER: không có cửa kỹ thuật nào (matview không
 --       có RLS, SECURITY DEFINER là leo quyền theo định nghĩa), nên cửa là DANH SÁCH NGOẠI LỆ
---       viết tay NGOAI_LE_DOC_VONG — hiện RỖNG. Thêm một tên vào đó là một quyết định phải
+--       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ [S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng:
+--       `public.outbox_danh_sach_to_chuc` (ADR-040). Thêm một tên vào đó là một quyết định phải
 --       nhìn thấy, y như NGOAI_LE_HINH_DANG. Tên viết ĐỦ SCHEMA nên nó đã sẵn sàng cho việc
 --       bỏ giới hạn schema ở vòng fix 2.
 --       Hàm thuộc EXTENSION (pg_depend deptype='e') được loại trừ: chúng không do dự án viết
@@ -566,10 +567,20 @@ DECLARE
   --      thứ mà vế ⑵ cố ý không cấp. PostgreSQL tự AND vế `USING` này vào, nên tuổi do CSDL áp.
   -- Đổi một ký tự của biểu thức, đổi 'd' sang '*', hay đổi role đều làm dòng này HẾT KHỚP và
   -- hardening gãy — đó là toàn bộ lý do khoá sáu cột thay vì hai.
+  -- [S1.82 / khoan 116 / 052 / ADR-040] DONG THU HAI: policy DOC cua vai so huu ham liet ke to
+  -- chuc. Vi tu `true` doc duoc vi CHU THE da hep bang `TO` — `app_liet_ke_to_chuc` la NOLOGIN
+  -- NOINHERIT, khong tien trinh nao dang nhap duoc, va no co DUNG `SELECT (id)` tren DUNG bang
+  -- ay. Lenh 'r' (SELECT) chu khong phai 'a'/'w'/'d': vai ay khong ghi duoc gi. Do (S1.82):
+  -- `app_unseal` doc THANG `organizations` van thay 0 hang, nen dong nay KHONG noi ban kinh cua
+  -- bat ky vai ung dung nao.
+  -- CHU THICH PHAI O NGOAI khoi VALUES: bo doc o db/rls-coverage.int.test.ts tach hang theo van
+  -- ban, va mot dong `--` ben trong lam no thay 1 hang thay vi 2 (do — ba test do cung mot luot).
   NGOAI_LE_HINH_DANG constant text :=
     $q$(VALUES ('', '', '', '', '', ''),
                ('otp_rate_limits', 'otp_rate_limits_don_cua_so_cu', 'd', 'app_api', 'co_org_id',
-                '((NULLIF(current_setting(''app.org_id''::text, true), ''''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))'))
+                '((NULLIF(current_setting(''app.org_id''::text, true), ''''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))'),
+               ('organizations', 'organizations_liet_ke_worker', 'r', 'app_liet_ke_to_chuc', 'bang_goc',
+                'true'))
          AS g(bang, polname, lenh, vai_tro, pham_vi, bieu_thuc)$q$;
 
   -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
@@ -589,8 +600,30 @@ DECLARE
 
   -- [vòng fix 1 — I2] Ngoại lệ viết tay cho hai thứ KHÔNG có cửa kỹ thuật: MATERIALIZED VIEW
   -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. Tên viết đủ schema
-  -- ('public.ten_doi_tuong'). RỖNG là trạng thái đúng ở S0 — mỗi dòng thêm vào phải kèm lý do.
-  NGOAI_LE_DOC_VONG constant text := $q$(VALUES ('')) AS x(ten)$q$;
+  -- ('public.ten_doi_tuong'). ~~RỖNG là trạng thái đúng ở S0~~ — mỗi dòng thêm vào phải kèm lý do.
+  --
+  -- [S1.82 / khoản 116, ADR-040] DÒNG ĐẦU TIÊN, và nó là một TIỀN LỆ chứ không phải một bản vá.
+  -- `public.outbox_danh_sach_to_chuc()` (052) là nguồn danh sách tổ chức cho `JobRunner` của
+  -- `apps/unseal-worker`. Vì sao nó KHÔNG bỏ được `SECURITY DEFINER`: `organizations` bật FORCE
+  -- RLS với một policy không có `TO`, nên policy ấy áp cả CHỦ BẢNG; một hàm `SECURITY INVOKER`
+  -- chạy dưới `app_unseal` thấy ĐÚNG 0 hàng (đo, §S1.82 cảnh ⓿).
+  --
+  -- BA VẾ GIỮ BÁN KÍNH, và cả ba đo được:
+  --   * chủ hàm là `app_liet_ke_to_chuc` — một vai NOLOGIN NOINHERIT không tiến trình nào đăng
+  --     nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG `organizations`;
+  --   * policy đi kèm mang `TO app_liet_ke_to_chuc`, nên `app_unseal` đọc THẲNG `organizations`
+  --     vẫn thấy 0 hàng (đo, cảnh ❹);
+  --   * `EXECUTE` bị thu hồi khỏi PUBLIC và khỏi `app_api` (đo cảnh ❺: 42501).
+  --
+  -- KHOÁ THEO TÊN TRẦN — nói ra vì nó là bậc tự do thật: dòng này miễn trừ MỌI overload cùng tên
+  -- và cả một view/matview trùng tên. Hàng ghim thân hàm ở dưới KHÔNG phải lớp chặn overload
+  -- (nó ghim `public.outbox_danh_sach_to_chuc()` — chữ ký KHÔNG tham số). Một overload
+  -- `outbox_danh_sach_to_chuc(text)` sẽ đi qua cả hai. Ghi vào khoản 163.
+  --
+  -- Hàng `('')` được GIỮ: chuỗi rỗng, non-NULL. Một dòng NULL làm `NOT IN` ra NULL và tắt CẢ HAI
+  -- nhánh của mục (C) — đó là khoản 112, vẫn MỞ, và vòng này gánh nó.
+  NGOAI_LE_DOC_VONG constant text :=
+    $q$(VALUES (''), ('public.outbox_danh_sach_to_chuc')) AS x(ten)$q$;
 
   -- Vị từ "bảng này là CON của một bảng tenant" — lá phân mảnh HOẶC con cháu INHERITS. Con
   -- thừa hưởng policy của cha khi truy vấn đi qua cha, và PostgreSQL KHÔNG cho tạo policy riêng
@@ -833,7 +866,9 @@ DECLARE
           -- là một view, không phải bảng); ⑵ VIEW ĐỌC QUA HÀM (`SELECT gia FROM public.f()` — rule phụ thuộc `pg_proc`, không
           -- phụ thuộc bảng), và nhánh "cột org_id của chính view" cũng im khi view không chiếu `org_id`. Đuổi theo bằng bao đóng
           -- đệ quy `pg_rewrite`→`pg_depend`→`pg_proc` là một vị từ nữa để trôi; vế ĐỐI XỨNG với nhánh SECDEF ngay dưới — vốn
-          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (sáu migration ghi "mục (C) CẤM mọi SECURITY DEFINER") — thì
+          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (~~sáu~~ [S1.82] BẢY migration, MƯỜI chỗ, ghi "mục (C) CẤM
+-- mọi SECURITY DEFINER" — đếm lại ở S1.82: 005 ×3, 006 ×2, 010, 011, 018, 027, 034; cả mười nay THIU và không
+-- sửa được, xem khoản 162) — thì
           -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một
           -- view trên bảng tra cứu KHÔNG có dữ liệu tenant cũng phải đặt cờ; cửa ra là một dòng `ALTER VIEW` hoặc
           -- `NGOAI_LE_DOC_VONG`. Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.
@@ -3747,6 +3782,83 @@ $ham$$q$,
                     FROM pg_proc p WHERE p.oid = to_regprocedure('public.app_current_org_id()')),
                   'hàm public.app_current_org_id() không tồn tại')$q$,
       $q$quyền sở hữu hàm app_current_org_id() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.82 / khoản 116 / 052 / ADR-040] Hàm SECURITY DEFINER DUY NHẤT của kho ----------
+    -- Đây là hàng ghim ĐẦU TIÊN đòi `prosecdef IS TRUE` — 52 hàng còn lại đòi IS FALSE — và
+    -- đầu tiên ghim `proowner`. Với một hàm SECURITY DEFINER thì CHỦ HÀM chính là toàn bộ đặc
+    -- quyền của nó, nên để chủ hàm ngoài vòng ghim là ghim vỏ mà bỏ ruột.
+    --
+    -- VÌ SAO VẾ NÀY LÀ VẾ CHỊU LỰC: `hardening.always.sql` ghim thân hàm theo một DANH SÁCH TÊN
+    -- VIẾT TAY, nên một hàm KHÔNG có mặt ở đây thì một `CREATE OR REPLACE FUNCTION` sau deploy
+    -- SỐNG SÓT qua mọi lần `migrate()` — đo end-to-end ở `[T10-I]`. Với hàm này, "sống sót" nghĩa
+    -- là một thân tuỳ ý chạy dưới quyền chủ hàm. Không có test nào đỏ; đó là lý do hàng này phải
+    -- ra đời CÙNG COMMIT với 052 chứ không sau.
+    --
+    -- TIỀN ĐIỀU KIỆN theo MIGRATION NGUỒN, không theo "hàm đã tồn tại": nếu tiền điều kiện là
+    -- `to_regprocedure(...) IS NOT NULL` thì một `DROP FUNCTION` sau deploy làm CẢ lượt sửa lẫn
+    -- lượt phán xét im lặng bỏ qua — đúng chế độ hỏng mà hàng này tồn tại để chặn. Neo vào
+    -- `schema_migrations` thì hàm bị DROP là một hàng ĐỎ, có lối ra in trong chẩn đoán.
+    --
+    -- CÂU SỬA KHÔNG ĐỔI ĐƯỢC CHỦ HÀM (`CREATE OR REPLACE` giữ nguyên owner), nên ca "hàm bị DROP
+    -- rồi ai đó dựng lại dưới vai deploy" tự chữa được THÂN nhưng ĐỎ ở vế `proowner` — ồn ào, và
+    -- đó là lựa chọn có chủ ý: im lặng ở đây là 0 tổ chức, tức đường mở thầu đứng mà không ai
+    -- thấy gì đỏ.
+    ARRAY[
+      $q$định nghĩa hàm outbox_danh_sach_to_chuc() (052)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.outbox_danh_sach_to_chuc()
+  RETURNS SETOF pg_catalog.uuid
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = pg_catalog
+AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT o.id FROM public.organizations o$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS TRUE
+            AND p.proretset IS TRUE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.uuid'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+            AND p.proowner = to_regrole('app_liet_ke_to_chuc')::oid
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' retset=' || p.proretset::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' chu=' || coalesce(p.proowner::regrole::text, '(null)')
+                          || '. HANG NAY TRONG THUC TE LA MOT PHAN XET, khong tu chua: vai deploy '
+                          || 'KHONG so huu ham nay (chu la app_liet_ke_to_chuc) nen cau sua o o [3] bi tu '
+                          || 'choi 42501 va bi nuot. Do cung la mot TINH CHAT tot: chi SUPERUSER moi thay '
+                          || 'duoc than ham, vi app_liet_ke_to_chuc la NOLOGIN. Loi ra: chay cau o o [3] '
+                          || 'duoi SUPERUSER, va neu chu ham sai thi them ALTER FUNCTION '
+                          || 'public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc — '
+                          || 'CREATE OR REPLACE KHONG doi duoc chu.'
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()')),
+                  'hàm public.outbox_danh_sach_to_chuc() không tồn tại — 052 đã áp mà hàm bị DROP')$q$,
+      $q$quyền sở hữu hàm outbox_danh_sach_to_chuc() hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.82 / khoản 116 / 052] ACL của hàm ấy -------------------------------------------
+    -- PostgreSQL cấp EXECUTE cho PUBLIC trên MỌI hàm mới. Một `GRANT EXECUTE ... TO PUBLIC` sau
+    -- deploy mở danh sách tổ chức cho mọi vai trong cụm; hàng này lật lại ở MỌI lần migrate().
+    -- `app_api` bị nêu ĐÍCH DANH vì nó là vai duy nhất khác có mặt trên cùng cụm.
+    ARRAY[
+      $q$EXECUTE trên outbox_danh_sach_to_chuc(): PUBLIC không, app_api không, app_unseal có (052)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
+      $q$REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM app_api;
+        GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal$q$,
+      $q$(SELECT NOT has_function_privilege('public', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE')
+                AND NOT has_function_privilege('app_api', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE')
+                AND has_function_privilege('app_unseal', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE'))$q$,
+      $q$'ACL cua outbox_danh_sach_to_chuc() sai — proacl hien tai: '
+        || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
+                      WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()')), '(null)')$q$,
+      $q$quyền sở hữu hàm outbox_danh_sach_to_chuc() hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của ~~hai~~ BỐN trigger đăng nhập ----
@@ -9845,6 +9957,27 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN NULL;
       WHEN OTHERS THEN
         RAISE WARNING 'Hardening: không tạo được role app_unseal: % (%). BƯỚC 3 sẽ phán xét.',
+                      SQLERRM, SQLSTATE;
+    END;
+  END IF;
+  -- [S1.82 / khoản 116] Vai thứ BA, và nó KHÔNG phải một vai ứng dụng: không tiến trình nào đăng
+  -- nhập bằng nó và không tiến trình nào `SET ROLE` sang nó. Nó chỉ tồn tại để SỞ HỮU đúng một
+  -- hàm `SECURITY DEFINER` (`public.outbox_danh_sach_to_chuc()`, 052) và để mang đúng một policy
+  -- `FOR SELECT` trên `organizations`.
+  --
+  -- VÌ SAO Ở ĐÂY chứ không trong `052`: role là đối tượng của CỤM, và một migration đánh số chỉ
+  -- chạy MỘT LẦN. Role bị DROP sau deploy thì `052` không bao giờ dựng lại nó, còn hàm thì mất
+  -- chủ. Đặt ở tệp chạy MỌI lượt là cùng lập luận đã đặt `app_api`/`app_unseal` ở đây.
+  --
+  -- `NOINHERIT` là load-bearing: vai này không được kế thừa quyền của bất kỳ nhóm nào mà ai đó
+  -- lỡ cấp cho nó — với một vai SỞ HỮU hàm `SECURITY DEFINER`, mọi quyền nó kế thừa đều trở
+  -- thành quyền của thân hàm. BƯỚC 1 gỡ membership lạ, đây là lớp thứ hai.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_liet_ke_to_chuc') THEN
+    BEGIN
+      CREATE ROLE app_liet_ke_to_chuc NOLOGIN NOINHERIT;
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        RAISE WARNING 'Hardening: không tạo được role app_liet_ke_to_chuc: % (%). BƯỚC 3 sẽ phán xét.',
                       SQLERRM, SQLSTATE;
     END;
   END IF;

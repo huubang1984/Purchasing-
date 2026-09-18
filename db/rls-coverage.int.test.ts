@@ -89,6 +89,12 @@ const NGOAI_LE_HINH_DANG: readonly DongNgoaiLe[] = [
     "((NULLIF(current_setting('app.org_id'::text, true), ''::text) IS NULL) AND " +
       "(window_start < (now() - make_interval(secs => (1800)::double precision))))",
   ],
+  // [S1.82 / khoản 116 / ADR-040] Dòng THỨ HAI: policy đọc của vai sở hữu hàm liệt kê tổ chức
+  // (`052`). Vị từ là `true`, và điều đó đọc được vì CHỦ THỂ đã hẹp bằng `TO` — cột `vai_tro` ở
+  // đây là `app_liet_ke_to_chuc`, một vai NOLOGIN NOINHERIT không tiến trình nào đăng nhập được,
+  // có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này. Lệnh `r` (SELECT) chứ không phải `a`/`w`/`d`: vai
+  // ấy không ghi được gì. Đo (§S1.82): `app_unseal` đọc THẲNG `organizations` vẫn 0 hàng.
+  ["organizations", "organizations_liet_ke_worker", "r", "app_liet_ke_to_chuc", "bang_goc", "true"],
 ];
 
 /** Danh tính của một policy đủ để so với một dòng ngoại lệ. */
@@ -503,10 +509,13 @@ describe("phủ RLS", () => {
     // [S1.15 / sổ nợ 57] Nay có HAI giá trị: `044` là policy đầu tiên viết `TO app_api`. Khẳng
     // định vì thế MẠNH HƠN bản cũ — nó đo được cả nhánh PUBLIC (OID 0, không có hàng trong
     // pg_roles) LẪN nhánh role thật, và một bản kết xuất chỉ đúng một nhánh nay sẽ đỏ.
+    // [S1.82 / khoản 116] Nay có BA giá trị: `052` thêm `TO app_liet_ke_to_chuc`. Khẳng định vì
+    // thế mạnh hơn một bậc nữa — nó đo cả nhánh PUBLIC (OID 0, không có hàng trong pg_roles)
+    // lẫn HAI role thật khác nhau.
     expect(
       [...new Set(rows.map((r) => r.vai_tro))].sort(),
       "vai_tro không kết xuất được PUBLIC — khoá sáu cột đang so bằng chuỗi rỗng",
-    ).toEqual(["PUBLIC", "app_api"]);
+    ).toEqual(["PUBLIC", "app_api", "app_liet_ke_to_chuc"]);
 
     // Không có policy nào thì mọi khẳng định dưới đây rỗng ruột — chốt trước.
     const bangCoPolicy = new Set(rows.map((r) => r.ten_bang));

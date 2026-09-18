@@ -47,6 +47,9 @@ import {
 } from "./composition.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+
+/** [S1.82] Lỗi của chính vòng poll — gom lại để không lượt nào nuốt nó trong im lặng. */
+const hongPoll: unknown[] = [];
 const GOC = fileURLToPath(new URL("../../../", import.meta.url));
 
 let db: TestDatabase;
@@ -99,7 +102,14 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
         },
         onJobFailure: (r) => hong.push(r),
       },
-      { pollIntervalMs: 1000 },
+      {
+        // [S1.82 / khoản 116] Hai vế này BẮT BUỘC. Các lượt dưới gọi `runOnceForOrg` tường minh
+        // nên nguồn danh sách tổ chức không được dùng tới; khai nó ra để hợp đồng ở tầng
+        // composition đọc được, và để một ngày ai đó đổi sang `runOnce()` thì không phải đi tìm.
+        listOrganizations: () => [orgA],
+        onPollError: (e) => hongPoll.push(e),
+        pollIntervalMs: 1000,
+      },
     );
 
     const jobId = await withTenant(apiPool, orgA, (c) =>
@@ -149,7 +159,14 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
         },
         onJobFailure: (r) => hong.push(r),
       },
-      { pollIntervalMs: 1000, maxAttempts: 1 },
+      {
+        // [S1.82 / khoản 116] Hai vế này BẮT BUỘC. Các lượt dưới gọi `runOnceForOrg` tường minh
+        // nên nguồn danh sách tổ chức không được dùng tới; khai nó ra để hợp đồng ở tầng
+        // composition đọc được, và để một ngày ai đó đổi sang `runOnce()` thì không phải đi tìm.
+        listOrganizations: () => [orgA],
+        onPollError: (e) => hongPoll.push(e),
+        pollIntervalMs: 1000, maxAttempts: 1,
+      },
     );
 
     await withTenant(apiPool, orgA, (c) =>
@@ -320,7 +337,14 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
         alertSink: { name: "khong-dung-toi", deliver: () => Promise.resolve() },
         onJobFailure: (r) => hong.push(r),
       },
-      { maxAttempts: 2 },
+      {
+        // [S1.82 / khoản 116] Hai vế này BẮT BUỘC. Các lượt dưới gọi `runOnceForOrg` tường minh
+        // nên nguồn danh sách tổ chức không được dùng tới; khai nó ra để hợp đồng ở tầng
+        // composition đọc được, và để một ngày ai đó đổi sang `runOnce()` thì không phải đi tìm.
+        listOrganizations: () => [orgA],
+        onPollError: (e) => hongPoll.push(e),
+        maxAttempts: 2,
+      },
     );
     const jobId = await withTenant(apiPool, orgA, (c) =>
       enqueueJob(c, orgA, { kind: UNSEAL_JOB_KIND, payload: { unsealRequestId: id }, dedupeKey: `unseal:${id}` }),

@@ -4452,3 +4452,77 @@ MAI SAU, và nó nay có phép đo riêng: một route tự thân có handler N�
 - **`breakGlassWitnessSessionId`** (`packages/unseal/src/requests.ts`) là chỗ duy nhất trong kho một `sessionId` thứ hai là ĐẦU VÀO, và
   `resolveSessionActor` sẽ không từ chối một phiên agent ở đó. Hôm nay không gọi được qua HTTP; ngày break-glass có đường HTTP, một phiên
   `AGENT_READONLY` thoả được luật hai người. Viết ra lúc nó còn rẻ.
+
+## ADR-040 — Nguồn danh sách tổ chức cho tiến trình worker: một hàm `SECURITY DEFINER`, một vai chủ hàm riêng, và một policy hẹp
+
+**Ngày:** 2026-09-18 · **Trạng thái:** ĐÃ CHẤP NHẬN · **Khoản nợ:** 116 (đóng), 162–166 (mở)
+
+### Bối cảnh
+
+`JobRunner.runOnce()` NÉM nếu thiếu `listOrganizations`; đó là hệ quả cố ý của quyết định KHÔNG dùng role vượt RLS (ADR-022).
+Tiến trình `api` trả được cổng ấy bằng tập *“tổ chức ĐÃ THẤY enqueue”*, nhưng tập ấy không ĐẦY ĐỦ và một tiến trình RIÊNG
+không có gì để nạp vào nó. Không có nguồn ấy thì `apps/unseal-worker` không có điểm vào tiến trình — khoản 116.
+
+`organizations` bật `ENABLE` **và `FORCE`** RLS, và policy `organizations_tenant_isolation` cố ý không có mệnh đề `TO` (002),
+nên nó áp cho PUBLIC — **kể cả chủ sở hữu bảng**. Chỉ SUPERUSER được miễn.
+
+### Quyết định
+
+Chủ dự án chọn hình dạng **hàm `SECURITY DEFINER`** ngày 2026-09-18, và chọn **lần thứ hai** cùng ngày sau khi phép đo bác
+hình dạng đầu: một hàm `SECURITY DEFINER` TRẦN **không chạy được**. `SECURITY DEFINER` chỉ đổi `current_user` sang chủ hàm;
+nó KHÔNG tạo miễn trừ RLS, và `FORCE` bỏ đúng miễn trừ của chủ.
+
+| Cảnh (ba tổ chức, gọi từ `app_unseal`, chưa gắn tổ chức) | Kết quả |
+|---|---|
+| `app_unseal` SELECT thẳng `organizations` | 0 |
+| hàm SECDEF, chủ = `postgres` — **cảnh CỤM TEST** | 3 |
+| hàm SECDEF, chủ = vai thường NOSUPERUSER — **cảnh CỤM THẬT** | **0, KHÔNG LỖI** |
+| cùng hàm ấy, thêm policy `FOR SELECT TO` đúng chủ hàm | 3 |
+| `app_unseal` SELECT thẳng `organizations` SAU khi có policy | **0** |
+| sau `REVOKE EXECUTE` khỏi `app_unseal` | 42501 |
+
+Hai dòng giữa là toàn bộ lý do ADR này dài: hình dạng trần **XANH trên CI và trả 0 tổ chức ở sản xuất**, rồi `runOnce()` gặp
+danh sách rỗng thì `return 0` — không ném, không `onPollError`. Hỏng IM LẶNG trên đúng đường mở thầu, và CI không thấy vì
+`migrate()` của cụm test chạy bằng `postgres`. Kho đã đo chính cơ chế ấy từ S0 (`005_identity.sql`, `ĐO-1d`/`ĐO-1e`).
+
+Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), bốn vế:
+
+1. vai `app_liet_ke_to_chuc` — NOLOGIN NOINHERIT, do hardening BƯỚC 0 tạo (role là đối tượng CỤM; một migration đánh số chỉ
+   chạy một lần, nên role bị DROP sẽ không bao giờ trở lại);
+2. vai ấy có ĐÚNG hai quyền: `SELECT (id)` trên `organizations` và `EXECUTE` trên `app_current_org_id()`;
+3. một policy `FOR SELECT TO app_liet_ke_to_chuc USING (true)` — chủ thể hẹp bằng `TO`, không bằng vị từ;
+4. hàm `public.outbox_danh_sach_to_chuc()` `SECURITY DEFINER`, `ALTER … OWNER TO` vai ấy, `REVOKE` khỏi PUBLIC và `app_api`.
+
+### Cái giá, ghi ra đầy đủ
+
+| # | Cái giá | Ghi ở đâu |
+|---|---|---|
+| ⑴ | **Dòng ĐẦU TIÊN** của `NGOAI_LE_DOC_VONG` — danh sách RỖNG từ S0 | `hardening.always.sql` |
+| ⑵ | **Mười chỗ trong BẢY migration đã áp** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
+| ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng `TO <vai>` | `db/migration-shape.test.ts` |
+| ⑷ | Dòng thứ hai của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (044 là dòng đầu) | hai tệp trên |
+| ⑸ | Một vai CSDL thứ ba, và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế | khoản 164 |
+| ⑹ | Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp | khoản 163 |
+
+Và một quyền MƯỢN trong đúng giao dịch của `052`: `ALTER … OWNER TO` đòi người chạy đổi được vai sang vai đích **và** chủ mới
+phải có `CREATE` trên schema. Cả hai được cấp rồi trả lại trong cùng giao dịch — đo từng cái một, mỗi cái một thông điệp lỗi
+riêng. Hệ quả nói thẳng: đường này chỉ đi được khi vai deploy là **người tạo** vai chủ hàm (PostgreSQL 16 cấp ADMIN OPTION cho
+người tạo). Một cụm nơi vai chủ hàm do superuser tạo sẵn sẽ gãy `052` **ồn ào** với `must be able to` đổi vai — đã đo.
+
+### Phương án bị loại, và vì sao
+
+- **Policy `FOR SELECT TO app_unseal`** (bỏ hàm): rẻ nhất về hạ tầng, nhưng `app_unseal` khi ấy đọc được **trọn** `organizations`
+  (`id`, `name`, `slug`) của mọi tổ chức bằng một SELECT thẳng. Bán kính rộng hơn hẳn, và nó đảo chính quyết định.
+- **Danh sách từ biến môi trường**: vi phạm vế SỐNG của hợp đồng `OrganizationLister`, mà `runner.ts` gọi đích danh. Tổ chức MỚI
+  thì thầu của họ không bao giờ được mở, và KHÔNG gì đỏ.
+- **Vai chủ hàm có `BYPASSRLS`**: tránh được policy, nhưng `BYPASSRLS` là thuộc tính của ROLE chứ không theo bảng, và hardening
+  săn đúng thuộc tính ấy. Một ngoại lệ ở đó đắt và đáng sợ hơn một policy `FOR SELECT` có `TO`.
+
+### Điều CHƯA CHẮC, ghi ra thay vì để người đọc tưởng đã kín
+
+- `apps/api` so CHÉO ba vòng bí mật và nổ lúc khởi động nếu hai vòng trùng nhau. Worker giữ **một** vòng nên không có gì để so:
+  dán nhầm giá trị pepper vào `TRUSTPROCURE_MASTER_KEYS` thì nó LÊN ĐƯỢC và chỉ hỏng lúc mở phong bì. Đáng một dòng ở đây,
+  chưa đáng một lớp kiểm mới.
+- Hàng ghim thân hàm trong thực tế là một **PHÁN XÉT**, không tự chữa: vai deploy không sở hữu hàm nên câu sửa bị 42501 và bị
+  nuốt. Đó cũng là một tính chất TỐT — chỉ SUPERUSER thay được thân hàm, vì chủ hàm là NOLOGIN — nhưng nó khác lời hứa
+  “tự chữa” của mọi hàng khác, nên nó được viết ra trong chẩn đoán của chính hàng ấy.

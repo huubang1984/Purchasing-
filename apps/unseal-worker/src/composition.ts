@@ -161,6 +161,29 @@ export function buildUnsealWorkerHandlers(
 }
 
 /**
+ * [S1.82 / khoản 116] Tuỳ chọn của runner worker — hai vế BẮT BUỘC, và chúng bắt buộc vì cùng một
+ * lập luận đã ép `onJobFailure`.
+ *
+ * `JobRunnerOptions.listOrganizations` và `onPollError` đều TUỲ CHỌN ở tầng thư viện, và cái sau
+ * mặc định IM LẶNG — hợp lý cho một thư viện hàng đợi, tai hại cho tiến trình DUY NHẤT giữ khả
+ * năng giải mã. Ở đây:
+ *   * thiếu `listOrganizations` thì `runOnce()` ném, và trong vòng `start()` lỗi ấy đi tới
+ *     `onPollError` rồi biến mất — một tiến trình chạy mãi mà phục vụ 0 tổ chức;
+ *   * thiếu `onPollError` thì mọi lỗi của nguồn danh sách tổ chức (hàm `052` bị DROP ⇒ 42883,
+ *     `app_unseal` mất EXECUTE ⇒ 42501) chìm không một tiếng động.
+ * Hai vế ấy cộng lại là đúng chế độ hỏng mà cả khoản 116 tồn tại để đóng, nên chúng không tuỳ
+ * chọn được ở tầng này.
+ */
+export interface TuyChonRunnerWorker {
+  readonly listOrganizations: () => Promise<readonly string[]> | readonly string[];
+  readonly onPollError: (error: unknown) => void;
+  readonly pollIntervalMs?: number;
+  readonly maxAttempts?: number;
+  readonly retryDelaySeconds?: number;
+  readonly batchSize?: number;
+}
+
+/**
  * Dựng runner của worker mở thầu.
  *
  * `pool` PHẢI là pool của role `app_unseal`: `executeUnsealRequest` mở bọc khoá và ghi bản rõ,
@@ -170,8 +193,18 @@ export function buildUnsealWorkerHandlers(
 export function createUnsealWorkerRunner(
   pool: pg.Pool,
   deps: UnsealWorkerDeps,
-  options: { readonly pollIntervalMs?: number; readonly maxAttempts?: number } = {},
+  options: TuyChonRunnerWorker,
 ): JobRunner {
+  if (pool === deps.auditPool) {
+    // [khoản 116 / khoản 121] Hai pool phải KHÁC NHAU. `executeUnsealRequest` ghi lần TỪ CHỐI ở
+    // một giao dịch độc lập trên `auditPool` TRONG KHI giao dịch của job đang giữ một kết nối của
+    // pool này; dùng chung thì mỗi lần từ chối chờ hết trần rồi ra `DenialAuditFailedError` và
+    // KHÔNG bản ghi nào. Bản trước chỉ ghi điều ấy trong một docstring — một docstring không chặn
+    // được gì.
+    throw new Error(
+      "createUnsealWorkerRunner: `pool` và `deps.auditPool` phải là hai pool KHÁC NHAU — xem khoản 121.",
+    );
+  }
   return new JobRunner(pool, buildUnsealWorkerHandlers(deps), {
     ...options,
     onJobFailure: deps.onJobFailure,

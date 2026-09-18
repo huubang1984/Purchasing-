@@ -7004,3 +7004,145 @@ Cũng không làm: đường hồi sinh job đã chết (khoản **155**), ranh 
 - `pnpm t0` — 249 module, 1033 phụ thuộc, **0 vi phạm**
 - `pnpm test` — 63/63 tệp, **908 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
 - `pnpm evidence` — **`vitest thoát mã 0`**, 1934 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+# §S1.82 — điểm vào tiến trình worker mở thầu: một hàm `SECURITY DEFINER` KHÔNG chạy được, và phép đo chỉ ra vì sao
+
+Chủ dự án chọn phạm vi *“sửa luôn cả điểm vào worker (khoản 116)”*, và ngày 2026-09-18 chọn **hàm `SECURITY DEFINER`**
+làm nguồn danh sách tổ chức. Vòng này mở bằng một lượt soi HÌNH DẠNG chạy **trước dòng mã đầu tiên** (năm góc độc lập,
+phản biện đối kháng từng phát hiện: **42 sống, 7 bị bác**) — và lượt soi ấy **bác chính hình dạng vừa được duyệt**.
+
+## 1. Phép đo bác hình dạng đã duyệt, và nó là một ca XANH GIẢ TRÊN CI
+
+`organizations` bật `ENABLE` **và `FORCE`** RLS, và policy `organizations_tenant_isolation` cố ý không có mệnh đề `TO`
+(`002_organizations_and_users.sql`), nên nó áp cho PUBLIC — **kể cả CHỦ SỞ HỮU BẢNG**. `SECURITY DEFINER` chỉ đổi
+`current_user` sang chủ hàm; nó KHÔNG tạo một miễn trừ RLS. Chỉ SUPERUSER được miễn.
+
+Đo, ba tổ chức trong bảng, gọi từ `app_unseal` trên kết nối CHƯA gắn tổ chức:
+
+```
+⓿ app_unseal SELECT thẳng organizations                        = 0
+❶ hàm SECDEF, chủ = postgres          (cảnh CỤM TEST)          = 3
+❷ hàm SECDEF, chủ = vai thường NOSUPERUSER (cảnh CỤM THẬT)     = 0     <- KHÔNG LỖI
+❸ cùng hàm ❷, thêm policy FOR SELECT TO đúng chủ hàm           = 3
+❹ app_unseal SELECT thẳng organizations SAU khi có policy ❸    = 0
+❺ sau REVOKE EXECUTE khỏi app_unseal                           = 42501
+```
+
+**❶ so với ❷ là toàn bộ vòng này.** Hình dạng đã duyệt sẽ **XANH trên CI và trả 0 tổ chức ở sản xuất**, vì `migrate()`
+của cụm test chạy bằng `postgres` còn cụm thật chạy bằng một vai thường. Rồi `runOnce()` gặp danh sách rỗng thì
+`return 0` — không ném, không `onPollError`. Hỏng **IM LẶNG** trên đúng đường mở thầu.
+
+Kho đã đo chính cơ chế ấy từ S0 và ghi ở `005_identity.sql`: *`ĐO-1d` SELECT dưới CHỦ SỞ HỮU (chưa gắn) → 0*,
+*`ĐO-1e` cùng câu dưới SUPERUSER → 1*, kèm câu *“FORCE ràng buộc CẢ chủ sở hữu … chỉ superuser mới được miễn”*.
+Phiên này đã **trích một lời khai của `runner.ts:88-92`** — *“Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG cần role vượt
+RLS”* — mà không tự đo. Lời khai ấy đúng về `SECURITY DEFINER` như một CƠ CHẾ và thiếu vế chủ hàm; nó đã được vá.
+
+Chủ dự án chọn lại, cùng ngày: **vai chủ hàm riêng + policy hẹp** (ADR-040).
+
+## 2. Hình dạng cuối, và vì sao mỗi vế có mặt
+
+| Vế | Tác dụng | Đột biến giết nó |
+|---|---|---|
+| vai `app_liet_ke_to_chuc` NOLOGIN NOINHERIT, do hardening BƯỚC 0 tạo | có chủ hàm CỐ ĐỊNH ở mọi cụm, kể cả CI | đổi chủ sang vai khác ⇒ **0** |
+| `GRANT SELECT (id)` — ĐÚNG một cột | bán kính không rộng hơn thân hàm | — |
+| policy `FOR SELECT TO app_liet_ke_to_chuc USING (true)` | chủ thể hẹp bằng `TO`, không bằng vị từ | `DROP POLICY` ⇒ **0** |
+| hàm `SECURITY DEFINER` | chạy dưới quyền chủ | `SECURITY INVOKER` ⇒ **0** |
+| `REVOKE EXECUTE` khỏi PUBLIC và `app_api` | chỉ `app_unseal` gọi được | gọi từ `app_api` ⇒ **42501** |
+
+Và vế giữ bán kính, đo ở chính lượt test: `app_unseal` đọc **THẲNG** `organizations` vẫn thấy **0 hàng**. Nó chỉ đi
+qua được ĐÚNG MỘT hàm, trả về ĐÚNG MỘT cột.
+
+## 3. Hai quyền phải MƯỢN, và mỗi cái một thông điệp lỗi riêng
+
+`ALTER FUNCTION … OWNER TO` đòi HAI thứ, và chúng lộ ra lần lượt chứ không cùng lúc:
+
+```
+lượt 1: Migration 052 thất bại: must be able to SET ROLE "app_liet_ke_to_chuc"
+lượt 2: Migration 052 thất bại: permission denied for schema public
+```
+
+Người chạy phải đổi được vai sang vai đích, **và** chủ mới phải có `CREATE` trên schema chứa hàm. Cả hai được cấp rồi
+**trả lại trong cùng giao dịch của `052`** — một membership thường trực sẽ bị BƯỚC 1 của hardening gỡ ở lượt `sua` kế,
+và khai nó vào danh sách trắng là để vai deploy giữ VĨNH VIỄN một đường đổi vai sang chủ của hàm `SECURITY DEFINER`
+duy nhất trong kho.
+
+**Ranh giới nói thẳng:** đường này chỉ đi được khi vai deploy là NGƯỜI TẠO vai chủ hàm — PostgreSQL 16 cấp ADMIN OPTION
+cho người tạo. Đã đo cả ca ngược: một cụm nơi vai chủ hàm do superuser tạo sẵn làm `052` gãy **ỒN ÀO** ở lượt 1.
+
+## 4. Một lỗi thứ tự của chính vòng này, đo ra được
+
+Bản đầu của `052` đặt khối `REVOKE`/`GRANT` **sau** `ALTER … OWNER TO`. Hardening nêu:
+
+```
+"EXECUTE trên outbox_danh_sach_to_chuc(): …": trạng thái hiện tại SAI
+(proacl hien tai: =X/app_liet_ke_to_chuc,app_liet_ke_to_chuc=X/app_liet_ke_to_chuc)
+```
+
+`=X/…` là PUBLIC — tức `REVOKE` đã IM LẶNG không làm gì, vì vai deploy thôi là chủ hàm ngay trước đó. Đổi chủ còn viết
+lại NGƯỜI CẤP trong ACL. Khối ACL nay đứng TRƯỚC, và cùng cơ chế ấy được ghi vào test: đột biến *“đổi chủ hàm”* phải
+cấp lại `EXECUTE` khi phục hồi, nếu không mọi khẳng định sau nó đỏ vì 42501 chứ không vì thứ nó định đo.
+
+## 5. Ghim thân hàm — vế hỏng IM LẶNG, và nó có RĂNG
+
+`hardening.always.sql` ghim thân hàm theo một DANH SÁCH TÊN VIẾT TAY, nên một hàm KHÔNG có mặt ở đó thì một
+`CREATE OR REPLACE FUNCTION` sau deploy **sống sót qua mọi lần `migrate()`** — đo end-to-end ở `[T10-I]`. Với hàm này,
+“sống sót” nghĩa là một thân tuỳ ý chạy dưới quyền chủ hàm.
+
+Đo: đổi thân thành `… WHERE false` rồi chạy `migrate()` ⇒
+
+```
+Hardening (phan_xet) thất bại: "định nghĩa hàm outbox_danh_sach_to_chuc() (052)":
+prosrc hiện tại: SELECT o.id FROM public.organizations o WHERE false | … chu=app_liet_ke_to_chuc
+```
+
+**Và nó là một PHÁN XÉT chứ không tự chữa** — vai deploy không sở hữu hàm nên câu sửa bị 42501 và bị nuốt. Đó cũng là
+một tính chất TỐT: chủ hàm là NOLOGIN, nên chỉ SUPERUSER thay được thân hàm. Điều ấy được viết vào chính chẩn đoán của
+hàng ghim, kèm lối ra.
+
+## 6. Điểm vào tiến trình
+
+`main.ts` + `tien-trinh.ts` + `cau-hinh.ts` + `adapters/canh-bao-dev.ts`, cộng `register-ts-resolve.mjs` và
+`worker:dev`. Hai pool RIÊNG vai `app_unseal`; `createUnsealWorkerRunner` nay **NÉM** nếu hai pool trùng nhau — vế
+khoản 121 thôi là một docstring. `listOrganizations` và `onPollError` là tham số **BẮT BUỘC**, cùng lập luận đã ép
+`onJobFailure`. `batDau()` gọi nguồn danh sách tổ chức MỘT LẦN và ném nếu hỏng: *“thiếu hàm”* phải nổ lúc KHỞI ĐỘNG,
+không lúc poll thứ một nghìn.
+
+Cấu hình đọc **bảy** biến và cố ý KHÔNG đọc `TOTP_MASTER_KEYS`, `OTP_PEPPERS`, `RECEIPT_SIGNING_KEYS` — ADR-006: tiến
+trình mở phong bì thầu không được giữ thêm bí mật nào khác. Đó là một lời hứa sản phẩm, nên nó có một phép đo riêng
+(`cau-hinh.test.ts`: đặt cả ba biến với giá trị RÁC, cấu hình vẫn đọc được, và tập khoá trả về đúng bảy trường).
+
+**Mốc chết HAI CHIỀU**, hai bảng handler THẬT trên cùng một hàng đợi: sau lượt của `api`, job `UNSEAL_RFQ` còn
+`PENDING` với `attempts = 0`; sau lượt của worker, nó `attempts = 1` trong khi `LOGIN_LINK_SEND` còn nguyên.
+
+## 7. Cái giá, không giấu
+
+| # | Cái giá | Khoản |
+|---|---|---|
+| ⑴ | dòng ĐẦU TIÊN của `NGOAI_LE_DOC_VONG` — rỗng từ S0 | — |
+| ⑵ | **mười chỗ trong BẢY migration đã áp** thành lời khai thiu, KHÔNG sửa được (checksum, khoản 19) | 162 |
+| ⑶ | ngoại lệ ĐẦU TIÊN của quy tắc `USING (true)`, kèm meta-test đòi `TO <vai>` | — |
+| ⑷ | miễn trừ khoá theo TÊN TRẦN ⇒ overload cùng tên đi qua cả hai lớp | 163 |
+| ⑸ | vai thứ ba nằm NGOÀI `ROLE_CANH` ⇒ thuộc tính không được cưỡng chế | 164 |
+| ⑹ | worker giữ MỘT vòng khoá ⇒ không có phép so chéo | 165 |
+| ⑺ | `moTaLoiKhongGiaTri` nay có hai bản, bản của worker HẸP HƠN | 166 |
+
+Một chỗ khai thiu thì SỬA ĐƯỢC và đã sửa: `hardening.always.sql` tự khai *“sáu migration”* — đúng ra **bảy**. Tệp
+`.always` chạy lại mỗi lượt nên không có checksum khoá.
+
+## 8. Phần KHÔNG làm
+
+Khoản 116 còn đòi *đo lại 106/107 trên đường điểm vào ở trần thân HTTP và ở 8 MiB, và đo thời hạn của handler*. Vòng
+này dựng ĐƯỜNG và đo TÍNH ĐÚNG của nó, KHÔNG đo hai mốc cỡ phong bì. Khoản **167** giữ chỗ, và câu *“lượt mở thầu chạy
+trọn”* nay đúng cho đường điểm vào ở cỡ NHỎ.
+
+Hàng đợi **129 · 131** (gộp 147) rồi **128** vẫn chưa động tới.
+
+## Sổ nợ
+
+**161 → 167 khoản, 57 → 62 còn mở** — khoản **116 ĐÓNG**, sáu khoản mới (162–167). 62 = 5 ngoài mã + 57 có mã.
+
+## Cổng
+
+- `pnpm t0` — 257 module, 1065 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 64/64 tệp, **921 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`**, 1954 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**

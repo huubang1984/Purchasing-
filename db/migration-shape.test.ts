@@ -226,6 +226,19 @@ const NGOAI_LE_LAC_CHO: readonly {
       "THỨ HAI, FOR DELETE, chỉ có hiệu lực trên kết nối CHƯA gắn tổ chức và chỉ trên cửa sổ đã " +
       "quá 30 phút (sổ nợ 57 — bộ dọn không hỏi được 'tổ chức nào')",
   },
+  {
+    tenFile: "052_worker_liet_ke_to_chuc.sql",
+    tenBang: "organizations",
+    tenPolicy: "organizations_liet_ke_worker",
+    lyDo:
+      "[S1.82 / khoản 116 / ADR-040] bảng ra đời ở 002 CÙNG policy cách ly của nó — không có " +
+      "cửa sổ trần nào; đây là policy THỨ HAI, FOR SELECT, và chủ thể của nó là ĐÚNG MỘT vai " +
+      "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ĐÚNG MỘT hàm SECURITY " +
+      "DEFINER. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
+      "nên dòng này không nới bán kính của bất kỳ vai ứng dụng nào. Nó NỚI chứ không siết, và " +
+      "nới thì đáng bị soi kỹ hơn chứ không đáng một vế điều kiện mới trong quy tắc — cùng " +
+      "cách xử lý đã dùng cho 044",
+  },
 ];
 
 /** Không file nào được bật RLS hay tạo/sửa policy cho bảng do file KHÁC tạo ra. */
@@ -320,6 +333,46 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
  * [vòng fix 1 — I6] Phát biểu này cố ý hẹp hơn bản trước ("ba dạng bị cấm"): nó bắt được ba
  * CÁCH VIẾT, và bốn payload viết lại tương đương ngữ nghĩa đã chứng minh cách viết ≠ dạng.
  */
+/**
+ * [S1.82 / khoản 116 / ADR-040] Ngoại lệ ĐẦU TIÊN của quy tắc `USING (true)`, và nó là một TIỀN
+ * LỆ chứ không phải một bản vá.
+ *
+ * Quy tắc gốc đúng ở chỗ nó đọc `USING (true)` như *"policy này không chặn gì"*. Với MỘT policy
+ * `TO PUBLIC` thì đó đúng là fail-open. Nhưng vị từ không phải chủ thể duy nhất của một policy:
+ * `TO <vai>` cũng hẹp, và hai vế ấy nhân với nhau. Một policy `FOR SELECT TO <một vai NOLOGIN
+ * không ai đăng nhập được, có đúng một GRANT cột>` là HẸP dù vị từ là `true` — và viết một vị từ
+ * giả cho có (`id IS NOT NULL`) chỉ để lách lớp này là đúng thứ chính khối chú thích của
+ * `kiemTraFailOpen` gọi là *"cách viết ≠ dạng"*.
+ *
+ * Nên cửa là một DÒNG CÓ TÊN, cùng khuôn `NGOAI_LE_LAC_CHO`, và mỗi dòng phải nói được vì sao
+ * CHỦ THỂ hẹp thay cho vị từ.
+ *
+ * Lớp có thẩm quyền vẫn là `NGOAI_LE_HINH_DANG` ở `hardening.always.sql` — nơi cùng policy này
+ * phải có một dòng khoá SÁU cột, trong đó có cả `vai_tro`. Lớp ở đây chỉ là lưới bắt sớm.
+ */
+const NGOAI_LE_USING_TRUE: readonly {
+  readonly tenFile: string;
+  readonly tenPolicy: string;
+  readonly lyDo: string;
+}[] = [
+  {
+    tenFile: "052_worker_liet_ke_to_chuc.sql",
+    tenPolicy: "organizations_liet_ke_worker",
+    lyDo:
+      "chủ thể hẹp thay cho vị từ: `FOR SELECT TO app_liet_ke_to_chuc` — một vai NOLOGIN " +
+      "NOINHERIT không tiến trình nào đăng nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này " +
+      "và sở hữu ĐÚNG một hàm SECURITY DEFINER. Vị từ hẹp hơn không tồn tại: mục đích của " +
+      "policy là *mọi* id tổ chức. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` " +
+      "vẫn thấy 0 hàng, nên dòng này không mở bán kính của bất kỳ vai ứng dụng nào",
+  },
+];
+
+function laNgoaiLeUsingTrue(pTenFile: string, pTenPolicy: string): boolean {
+  return NGOAI_LE_USING_TRUE.some(
+    (n) => n.tenFile === pTenFile && chuanHoaTen(n.tenPolicy) === pTenPolicy,
+  );
+}
+
 function kiemTraFailOpen(pFile: Map<string, string>): string[] {
   const viPham: string[] = [];
   for (const [tenFile, sqlTho] of pFile) {
@@ -349,7 +402,7 @@ function kiemTraFailOpen(pFile: Map<string, string>): string[] {
       if (/\bWITH\s+CHECK\s*\(\s*true\s*\)/i.test(than)) {
         viPham.push(`${tenFile}: policy "${ten}" có WITH CHECK (true) — không kiểm gì cả`);
       }
-      if (/\bUSING\s*\(\s*true\s*\)/i.test(than)) {
+      if (/\bUSING\s*\(\s*true\s*\)/i.test(than) && !laNgoaiLeUsingTrue(tenFile, ten)) {
         viPham.push(`${tenFile}: policy "${ten}" có USING (true) — không chặn gì cả`);
       }
     }
@@ -463,6 +516,34 @@ describe("hình dạng file migration", () => {
 
   it("[INV-F1] không file migration nào chứa cách viết policy fail-open bị cấm", () => {
     expect(kiemTraFailOpen(cacFile)).toEqual([]);
+  });
+
+  // [S1.82 / khoản 116] Meta-test của cửa `USING (true)` vừa mở, cùng khuôn meta-test của
+  // `NGOAI_LE_LAC_CHO` ngay trên: một dòng trỏ tới policy không còn tồn tại là rác IM LẶNG, và
+  // rác im lặng trong danh sách ngoại lệ là chỗ mà lần nới tiếp theo trốn vào.
+  it("[S1.82] mỗi ngoại lệ `USING (true)` ứng với một policy CÓ THẬT, có `TO <vai>`, và có lý do", () => {
+    const chet = NGOAI_LE_USING_TRUE.filter((n) => {
+      const sql = cacFile.get(n.tenFile);
+      if (sql === undefined) return true;
+      const re = new RegExp(
+        String.raw`CREATE\s+POLICY\s+${n.tenPolicy}\s+ON\s+${TEN_CO_SCHEMA}([\s\S]*?);`,
+        "i",
+      );
+      const khop = re.exec(boChuThich(sql));
+      if (khop === null) return true;
+      // Vế CHỊU LỰC của mọi dòng trong danh sách này: chủ thể phải hẹp bằng `TO <vai>`. Một
+      // ngoại lệ cho một policy `TO PUBLIC` sẽ đúng là fail-open, và nó phải ĐỎ ở đây.
+      const than = khop[2] ?? "";
+      return !/\bTO\s+(?!PUBLIC\b)[A-Za-z_][A-Za-z0-9_$]*/i.test(than);
+    });
+    expect(
+      chet,
+      "ngoại lệ USING (true) không ứng với policy nào đang tồn tại, hoặc policy ấy không hẹp " +
+        "chủ thể bằng `TO <vai>` — khi ấy nó fail-open thật và ngoại lệ không đứng được",
+    ).toEqual([]);
+    for (const n of NGOAI_LE_USING_TRUE) {
+      expect(n.lyDo.length, `ngoại lệ ${n.tenPolicy} phải có lý do`).toBeGreaterThan(40);
+    }
   });
 
   // [S1.15 / review H7-5] Cửa `NGOAI_LE_LAC_CHO` mở cho ĐÚNG một câu `CREATE POLICY`. Đo thẳng vế
