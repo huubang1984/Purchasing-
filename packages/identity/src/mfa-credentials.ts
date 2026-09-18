@@ -250,6 +250,13 @@ export const MFA_MAX_ALLOWED_FAILED_ATTEMPTS = 20;
 export type MfaDenialReason =
   | "NO_CREDENTIAL"
   | "LOCKED_OUT"
+  /**
+   * [S1.83 / lượt soi ngang 73 — khoản 144] Lần thử tới từ một ĐƯỜNG PHỤ và hồ sơ đã hết ngân
+   * sách của đường ấy. KHÁC `LOCKED_OUT`: hồ sơ vẫn bình thường, và đường ĐĂNG NHẬP CHÍNH vẫn
+   * mở — đó là toàn bộ điểm của ngưỡng này. Nó ra đời ở chỗ này chứ không ở bộ điều phối vì chỉ
+   * ở đây nó mới NGUYÊN TỬ; xem khối `CAU_DAT_COC`.
+   */
+  | "SIDE_PATH_EXHAUSTED"
   | TotpFailureReason;
 
 export type MfaAttemptResult =
@@ -278,6 +285,13 @@ export interface TotpAttempt {
   readonly window?: number;
   readonly maxFailedAttempts?: number;
   readonly lockoutSeconds?: number;
+  /**
+   * [S1.83 / lượt soi ngang 73 — khoản 144] NGƯỠNG CỦA ĐƯỜNG PHỤ. Khi có, lần thử này chỉ được
+   * tiêu một đơn vị ngân sách nếu `failed_attempts < tranDuongPhu` — và phép so ấy nằm TRONG
+   * chính câu `UPDATE` đặt cọc, nên nó đúng kể cả khi N lời gọi chạy cùng lúc. Vắng mặt ⇒ đường
+   * CHÍNH, không ngưỡng phụ nào.
+   */
+  readonly tranDuongPhu?: number;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -295,6 +309,7 @@ interface HangHoSo {
   secret_key_version: string;
   last_used_counter: string | null;
   locked_until: Date | null;
+  failed_attempts: number;
   dang_khoa: boolean;
 }
 
@@ -316,6 +331,7 @@ const CAU_DOC_HO_SO = `
          c.secret_key_version,
          c.last_used_counter,
          c.locked_until,
+         c.failed_attempts,
          (c.locked_until IS NOT NULL
           AND c.locked_until OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()) IS TRUE
            AS dang_khoa
@@ -340,6 +356,7 @@ const CAU_DOC_HO_SO_THEO_ID = `
          c.secret_key_version,
          c.last_used_counter,
          c.locked_until,
+         c.failed_attempts,
          (c.locked_until IS NOT NULL
           AND c.locked_until OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()) IS TRUE
            AS dang_khoa
@@ -503,6 +520,35 @@ const CAU_GHI_THANH_CONG = `
  *
  * `locked_until` được ĐẶT LẠI VỀ NULL ở nhánh hồ sơ đã HẾT khoá: nếu giữ giá trị cũ, một hồ sơ
  * đã hết khoá vẫn mang một mốc quá khứ và mọi phép đọc sau đó phải tự nhớ so nó với hiện tại.
+ *
+ * ================================================================================================
+ * [S1.83 / lượt soi ngang 73 — khoản 144, LẦN THỨ BA] `$3` LÀ NGƯỠNG CỦA ĐƯỜNG PHỤ, VÀ NÓ PHẢI Ở
+ * ĐÂY CHỨ KHÔNG Ở MỘT PHÉP ĐỌC TRƯỚC ĐÓ.
+ *
+ * S1.78 đặt ngưỡng ấy ở bộ điều phối, dưới dạng `conChoChoDuongPhu` — một `SELECT failed_attempts`
+ * trần, không khoá, chạy TRƯỚC handler. Lượt soi ngang 73 hỏi chiều ĐỒNG THỜI và phép đo trả lời:
+ * ở READ COMMITTED, N giao dịch bắn cùng lúc đều đọc `failed_attempts = 0`, đều thấy `0 < 2`, đều
+ * đi qua; rồi N câu `UPDATE` này xếp hàng trên khoá HÀNG và bộ đếm cuối = N. Đo được trên bộ test
+ * (`auth.int.test.ts` vế ⑻, `poolAs` max = 3): `401,401,401`, `failed_attempts = 3` với ngưỡng 2.
+ * Cỡ của lỗ bằng số kết nối kẻ tấn công giành được; pool nghiệp vụ mặc định của sản xuất là 10 và
+ * `MFA_MAX_FAILED_ATTEMPTS` là 5, nên một loạt đủ để KHOÁ hồ sơ nạn nhân.
+ *
+ * VÀ NÓ LÀ MỘT HỒI QUY, nói thẳng: thứ S1.78 thay — `tangBucketNguoiGoi` — là
+ * `INSERT … ON CONFLICT DO UPDATE SET hits = hits + 1 RETURNING hits`, tăng-rồi-đọc NGUYÊN TỬ,
+ * đúng kể cả khi cùng lúc. Bản S1.78 mạnh hơn ở chiều TUẦN TỰ (nó đứng qua mọi lần cửa sổ làm
+ * mới) và không có trần nào ở chiều CÙNG LÚC. Bản này giữ cả hai: vị từ nằm trong chính câu
+ * `UPDATE` giành cọc, nên phép so và phép tăng là MỘT thao tác.
+ *
+ * VÌ SAO KHÔNG LẤY KHOÁ Ở PHÉP ĐỌC (`SELECT … FOR UPDATE`, hay một khoá tư vấn): nó sẽ giữ khoá
+ * hàng `mfa_credentials` suốt cả handler — kể cả qua lần mở phong bì bí mật và lần ghi sổ kiểm
+ * toán. Đó đúng là hình dạng mà khoản 69, 126 và 128 tồn tại để gỡ, và kho đã bỏ bốn vòng để đưa
+ * mọi đường ghi ra khỏi nó. Thêm một khoá mới ở đây là đi ngược lại; vị từ trong câu lệnh không
+ * tốn một khoá nào.
+ *
+ * `$3` NULL ⇒ đường CHÍNH, không ngưỡng phụ. Vế `$3 IS NULL OR …` giữ MỘT câu lệnh cho cả hai
+ * đường, nên không có bản sao nào để trôi — và một `null` bị truyền nhầm làm vế này biến mất
+ * HOÀN TOÀN chứ không âm thầm nới ngưỡng, nên hỏng là hỏng thấy được.
+ * ================================================================================================
  */
 const CAU_DAT_COC = `
   UPDATE public.mfa_credentials c
@@ -520,7 +566,9 @@ const CAU_DAT_COC = `
    WHERE c.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
      AND c.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
      AND (c.locked_until IS NULL
-          OR c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())`;
+          OR c.locked_until OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())
+     AND ($3::pg_catalog.int4 IS NULL
+          OR c.failed_attempts OPERATOR(pg_catalog.<) $3::pg_catalog.int4)`;
 
 /**
  * Đặt khoá khi bộ đếm ĐÃ tới ngưỡng. Chạy CHỈ KHI cổng mở bí mật đã phán "mã sai", và chỉ trong
@@ -744,6 +792,23 @@ export async function verifyTotpAttempt(
         "Một ngưỡng đủ lớn làm vế E3(1) biến mất trong im lặng.",
     );
   }
+  // [S1.83 / khoản 144] `tranDuongPhu` đi THẲNG vào một câu SQL, nên nó phải có hình dạng trước
+  // khi tới đó — và nó phải có CẢ cận trên: một ngưỡng phụ >= `maxFailedAttempts` không chặn gì
+  // cả (hồ sơ khoá trước khi ngưỡng ấy chạm), tức một lớp phòng thủ biến mất trong im lặng. Cùng
+  // kỷ luật với `maxFailedAttempts` ngay trên: một tham số chính sách phải có cận HAI đầu.
+  const tranPhu = attempt.tranDuongPhu;
+  if (tranPhu !== undefined) {
+    if (!Number.isSafeInteger(tranPhu) || tranPhu < 1) {
+      throw new RangeError("verifyTotpAttempt: tranDuongPhu phải là số nguyên >= 1.");
+    }
+    if (tranPhu >= nguong) {
+      throw new RangeError(
+        `verifyTotpAttempt: tranDuongPhu (${String(tranPhu)}) phải NHỎ HƠN maxFailedAttempts ` +
+          `(${String(nguong)}) — bằng hay lớn hơn thì hồ sơ khoá trước khi ngưỡng phụ chạm, và ` +
+          "ngưỡng phụ thành mã chết.",
+      );
+    }
+  }
   // [MỤC 5] `window` được kiểm Ở ĐÂY chứ không chỉ trong `verifyTotpCode`, và vị trí là chịu
   // lực: `verifyTotpCode` chỉ chạy SAU `assertTenantBound`, câu SELECT và một lần MỞ PHONG BÌ.
   // Một `window` khổng lồ (đo: 200000 -> 8745 ms CPU cho 400001 lần HMAC-SHA1 trong MỘT lời
@@ -784,9 +849,10 @@ export async function verifyTotpAttempt(
   // `hoSo.dang_khoa` ở trên vẫn còn, nhưng nó là ĐƯỜNG TẮT KHÔNG THẨM QUYỀN: đọc từ ảnh chụp
   // không khoá hàng, chỉ từ chối THÊM chứ không bao giờ cho qua thêm, và nó giữ nguyên hành vi
   // mặt tiền cho ca "hồ sơ đang khoá + mã sai hình dạng".
-  const { rowCount: coCho } = await client.query(CAU_DAT_COC, [hoSo.id, orgId]);
+  const { rowCount: coCho } = await client.query(CAU_DAT_COC, [hoSo.id, orgId, tranPhu ?? null]);
   if ((coCho ?? 0) === 0) {
-    // Không giành được cọc ⇒ hồ sơ ĐANG khoá. Phải đọc LẠI chứ không được trả `hoSo.locked_until`:
+    // [S1.83 / khoản 144] Không giành được cọc ⇒ MỘT TRONG HAI: hồ sơ ĐANG khoá, hay lần thử này
+    // tới từ một ĐƯỜNG PHỤ đã hết ngân sách. Phải đọc LẠI chứ không được trả `hoSo.locked_until`:
     // ảnh chụp ấy được lấy TRƯỚC khi bất kỳ request nào ghi, nên trong đúng loạt đầu nó là NULL —
     // trả nó ra là trả một lời khai đã cũ, và `apps/api` sẽ dựng phản hồi LOCKED_OUT không mốc.
     // READ COMMITTED cấp ảnh chụp mới cho mỗi câu, và câu UPDATE vừa CHỜ XONG người giữ khoá.
@@ -802,6 +868,19 @@ export async function verifyTotpAttempt(
       // phải LOCKED_OUT. Gộp hai ca lại sẽ là một lời khai rộng hơn thứ đo được.
       return { ok: false, reason: "NO_CREDENTIAL", lockedUntil: null, justLocked: false };
     }
+    // [S1.83 / khoản 144] KHOÁ đứng TRƯỚC ngân sách đường phụ, và thứ tự ấy có chủ đích: một hồ
+    // sơ đang khoá thì `LOCKED_OUT` là câu trả lời ĐÚNG cho mọi đường, còn `SIDE_PATH_EXHAUSTED`
+    // là một lời khai HẸP HƠN ("hồ sơ vẫn bình thường, chỉ đường này hết ngân sách"). Trả lời
+    // hẹp hơn cho một hồ sơ đang khoá là khai rộng hơn sự thật theo hướng trấn an.
+    if (moi.dang_khoa) {
+      return { ok: false, reason: "LOCKED_OUT", lockedUntil: moi.locked_until, justLocked: false };
+    }
+    if (tranPhu !== undefined && Number(moi.failed_attempts) >= tranPhu) {
+      return { ok: false, reason: "SIDE_PATH_EXHAUSTED", lockedUntil: null, justLocked: false };
+    }
+    // Không khoá, không chạm ngưỡng phụ, mà vẫn không giành được cọc: hàng đã đổi dưới chân ta
+    // giữa câu `UPDATE` và câu đọc lại. Giữ `LOCKED_OUT` như bản trước — fail-CLOSED, và ca này
+    // KHÔNG có mũi đột biến nào làm nó đỏ được nên nó không được kể là một lớp canh.
     return { ok: false, reason: "LOCKED_OUT", lockedUntil: moi.locked_until, justLocked: false };
   }
 

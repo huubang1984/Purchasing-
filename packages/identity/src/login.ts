@@ -247,7 +247,17 @@ export type LoginTotpResult =
 
 export async function verifyTotpForLogin(
   client: pg.PoolClient,
-  input: { readonly orgId: string; readonly userId: string; readonly code: string },
+  input: {
+    readonly orgId: string;
+    readonly userId: string;
+    readonly code: string;
+    /**
+     * [S1.83 / lượt soi ngang 73 — khoản 144] Ngưỡng của ĐƯỜNG PHỤ, chuyển thẳng xuống
+     * `verifyTotpAttempt`. Đường ĐĂNG NHẬP CHÍNH không truyền nó và không được truyền nó: ngưỡng
+     * phụ tồn tại để giữ đường chính luôn mở, nên đặt nó lên chính đường ấy là tự đóng cửa mình.
+     */
+    readonly tranDuongPhu?: number;
+  },
   unsealer: TotpSecretUnsealer,
 ): Promise<LoginTotpResult> {
   const kq = await verifyTotpAttempt(client, input, unsealer);

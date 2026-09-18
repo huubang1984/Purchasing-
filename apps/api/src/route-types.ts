@@ -404,3 +404,15 @@ export function timViPhamBangRoute(routes: readonly Route[]): readonly string[] 
   }
   return viPham;
 }
+
+/**
+ * [S1.78 / khoản 144; S1.83 nới chỗ ở] Thân riêng cho trần TRẠNG THÁI: một 429 ở đây nói "hồ sơ
+ * đang gần ngưỡng khoá", không nói "bạn gọi quá nhanh", và KHÔNG mang `Retry-After` — không có
+ * cửa sổ nào để chờ hết.
+ *
+ * NÓ SỐNG Ở ĐÂY chứ không ở `dispatch.ts` vì từ S1.83 có HAI chỗ dựng phản hồi ấy: cổng đi trước
+ * của bộ điều phối, và nhánh `SIDE_PATH_EXHAUSTED` trong chính handler — thứ mang THẨM QUYỀN.
+ * `dispatch.ts` đã import `routes/auth.js`, nên chiều ngược lại là một VÒNG mà `pnpm t0` chặn;
+ * `route-types.ts` là chỗ cả hai cùng nhìn thấy được.
+ */
+export const THAN_429_MFA = { error: "ho so MFA gan nguong khoa; dang nhap lai truoc" } as const;

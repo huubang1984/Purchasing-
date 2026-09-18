@@ -26,6 +26,7 @@ import {
 import { enqueueJob } from "@trustprocure/outbox";
 import { HttpError } from "../http.js";
 import { EMAIL_MAX_BYTES, LOGIN_LINK_SEND_KIND } from "../outbox-api.js";
+import { THAN_429_MFA } from "../route-types.js";
 import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
 
 /**
@@ -279,10 +280,21 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
       const code = chuoi(ctx.req.body, "code");
       const kq = await verifyTotpForLogin(
         ctx.client,
-        { orgId: ctx.orgId, userId: ctx.actor.id, code },
+        // [S1.83 / lượt soi ngang 73 — khoản 144] NGƯỠNG ĐI XUỐNG TỚI CÂU LỆNH. Cổng ở bộ điều
+        // phối là một đường tắt không thẩm quyền (nó tự khai thế); thứ giữ ngưỡng đứng khi N lời
+        // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
+        // được dùng ở cả hai chỗ — khai `mfaTranDuongPhu` của route ngay trên và ở đây — nên hai
+        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.
+        { orgId: ctx.orgId, userId: ctx.actor.id, code, tranDuongPhu: MFA_TRAN_SAI_DUONG_PHU },
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
+        // Hết ngân sách đường phụ là một 429, KHÔNG phải 401: hồ sơ vẫn bình thường và đường đăng
+        // nhập chính vẫn mở. Trả 401 ở đây sẽ nói sai cả hai điều đó. Cùng thân với cổng đi trước
+        // để một kẻ gọi không phân biệt được mình bị cắt ở lớp nào.
+        if (kq.reason === "SIDE_PATH_EXHAUSTED") {
+          return { status: 429, body: THAN_429_MFA };
+        }
         if (kq.auditSkipped === true) {
           // [GIAO ĐIỂM S1.75 × S1.76] Đường này KHÔNG tồn tại khi khoản 139 được vá, nên vế log của
           // nó không thể có mặt ở bản vá ấy — và hai nhánh gộp lại thì không cổng nào đỏ. Điều kiện

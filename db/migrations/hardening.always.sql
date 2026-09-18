@@ -866,7 +866,7 @@ DECLARE
           -- là một view, không phải bảng); ⑵ VIEW ĐỌC QUA HÀM (`SELECT gia FROM public.f()` — rule phụ thuộc `pg_proc`, không
           -- phụ thuộc bảng), và nhánh "cột org_id của chính view" cũng im khi view không chiếu `org_id`. Đuổi theo bằng bao đóng
           -- đệ quy `pg_rewrite`→`pg_depend`→`pg_proc` là một vị từ nữa để trôi; vế ĐỐI XỨNG với nhánh SECDEF ngay dưới — vốn
-          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (~~sáu~~ [S1.82] BẢY migration, MƯỜI chỗ, ghi "mục (C) CẤM
+          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (~~sáu~~ ~~[S1.82] BẢY migration, MƯỜI chỗ~~ [S1.83 / lượt soi ngang 73 — ĐẾM LẠI] TÁM migration, MƯỜI HAI chỗ, ghi "mục (C) CẤM
 -- mọi SECURITY DEFINER" — đếm lại ở S1.82: 005 ×3, 006 ×2, 010, 011, 018, 027, 034; cả mười nay THIU và không
 -- sửa được, xem khoản 162) — thì
           -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một

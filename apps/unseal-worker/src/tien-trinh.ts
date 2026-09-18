@@ -137,6 +137,32 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
           { cause: e },
         );
       }
+      // ==========================================================================================
+      // ⑵b [S1.83 / lượt soi ngang 73] DANH SÁCH RỖNG CŨNG PHẢI GIẾT TIẾN TRÌNH, KHÔNG CHỈ MỘT
+      // LẦN GỌI NÉM.
+      //
+      // Vế ⑵ ngay trên chỉ bắt đường hàm KHÔNG GỌI ĐƯỢC (42883, 42501). Nhưng `052` sinh ra để
+      // giết một cảnh KHÁC — cảnh ❷ của §S1.82: hàm gọi được, **trả 0 hàng, KHÔNG LỖI**. Ba đột
+      // biến lúc chạy mà `tien-trinh.int.test.ts` đã đo đều cho đúng cảnh ấy: `SECURITY INVOKER`,
+      // `DROP POLICY organizations_liet_ke_worker`, và đổi chủ hàm. Trước vế này, cả ba đi qua ⑵
+      // trót lọt, `runner.start()` chạy, và `runOnce()` gặp danh sách rỗng thì `return 0` — dấu vết
+      // duy nhất là một dòng log khởi động ghi `to chuc thay duoc: 0`. Một dòng log không phải một
+      // hàng rào: nó không dừng gì, và trên đường mở thầu thì "không dừng" nghĩa là phong bì không
+      // ai mở mà không ai biết.
+      //
+      // VÌ SAO NÉM CHỨ KHÔNG CẢNH BÁO: 0 tổ chức là một cấu hình KHÔNG DÙNG ĐƯỢC cho tiến trình
+      // này — nó không có việc gì để làm, mãi mãi, ở mọi lượt poll. Một cụm thật luôn có ít nhất
+      // một tổ chức; 0 nghĩa là lớp quyền đã vỡ, không phải "hôm nay vắng khách".
+      // ==========================================================================================
+      if (soToChuc === 0) {
+        throw new Error(
+          "public.outbox_danh_sach_to_chuc() goi duoc nhung tra 0 to chuc. Day la canh ❷ cua " +
+            "ADR-040: ham SECURITY DEFINER doc mot bang FORCE RLS tra 0 hang MA KHONG LOI khi " +
+            "policy `organizations_liet_ke_worker` bi DROP, khi ham bi doi sang SECURITY INVOKER, " +
+            "hay khi chu ham khong con la `app_liet_ke_to_chuc`. Tien trinh KHONG len de lan hong " +
+            "nay khong thanh im lang tren duong mo thau.",
+        );
+      }
 
       runner.start();
       console.error(
