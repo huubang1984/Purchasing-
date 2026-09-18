@@ -5,8 +5,13 @@
 // đã kiểm hình dạng hoặc ném. Không đọc `process.env`, không mở kết nối — nên mọi ca "thiếu
 // biến", "URL sai dạng" đo được ở T1.
 //
-// BÍ MẬT DUY NHẤT của tiến trình này là `TRUSTPROCURE_MCP_SESSION_COOKIE`: một phiên NGƯỜI MUA
-// đang sống. Nó không có mặc định, và không bao giờ xuất hiện trong một thông điệp lỗi.
+// BÍ MẬT DUY NHẤT của tiến trình này là `TRUSTPROCURE_MCP_SESSION_COOKIE`: ~~một phiên NGƯỜI MUA
+// đang sống~~ [S1.80 / khoản 141] một chứng chỉ `AGENT_READONLY` đang sống. ADR-039 đã đổi nó từ
+// một phiên người mua TOÀN QUYỀN thành một chứng chỉ có PHẠM VI, TTL trần MỘT GIỜ; câu cũ ở trên
+// sống qua bốn vòng sau khi chính điều nó khai bị bác. Tệp này chỉ kiểm HÌNH DẠNG cookie — LOẠI
+// phiên thì `khach-api.ts` kiểm bằng một lời gọi `GET /me` lúc khởi động, và từ chối lên nếu
+// `kind !== "AGENT_READONLY"`. Nó không có mặc định, và không bao giờ xuất hiện trong một thông
+// điệp lỗi.
 // ==============================================================================================
 
 export class CauHinhError extends Error {
@@ -19,7 +24,7 @@ export class CauHinhError extends Error {
 export interface CauHinhMcp {
   /** Gốc của `apps/api`, KHÔNG có đường dẫn, KHÔNG có query. `https:` — `http:` chỉ cho localhost. */
   readonly apiBaseUrl: string;
-  /** Giá trị cookie phiên người mua. Bí mật. */
+  /** Giá trị cookie của chứng chỉ `AGENT_READONLY` — ~~phiên người mua~~ [S1.80 / khoản 141]. Bí mật. */
   readonly sessionCookie: string;
   /** Trần cho mỗi lời gọi api, ms. */
   readonly timeoutMs: number;
