@@ -189,7 +189,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       );
       expect(rows.map((r) => r.rolname)).toEqual(["app_api", "app_unseal"]);
     });
-    // [S1.11] Ngân sách riêng: ca này dựng một container MỚI rồi chạy trọn 37 migration + ba lượt
+    // [S1.11] Ngân sách riêng: ca này dựng một container MỚI rồi chạy trọn ~~37~~ [S1.79] 51 migration + ba lượt
     // hardening. Đo được: ~5 s khi chạy ba file; ~21 s trong `test:int` đầy đủ; chạm trần 30 s khi
     // `pnpm evidence` chạy cả hai tầng (đỏ hai lượt liên tiếp, không khẳng định nào sai). Các ca
     // sau trong file này cũng ở 25–30 s dưới cùng tải — chúng là cùng một ngân sách.

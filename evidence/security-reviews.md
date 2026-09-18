@@ -6652,3 +6652,111 @@ song song chạm nhau · khoản đóng sai.
 Góc *"khoản đóng sai"* thử phá khoản 139 và 140 và **không phá được** — lời khai của cả hai còn đúng,
 và nó còn ghi rằng khoản 140 khai **thiếu** một lớp giữ nó. Đó là kết quả ÂM, và một lượt soi ngang
 không tìm ra gì ở một góc cũng là một phép đo.
+
+---
+
+# §S1.79 — LỜI KHAI THIU: 30 chỗ vá, hai lớp hỏng không có cổng nào canh; khoản 150 và 151 mở
+
+Vòng này bắt đầu từ ba dòng mà §S1.78 §6 tự ghi là *“chưa sửa ở vòng này”*. Chủ dự án chọn chen chúng vào trước
+hàng đợi 130/129/131/128. Đọc lại §6 thì ba hoá **năm**, và một lượt quét ngang trên toàn kho thì năm hoá **ba
+mươi**. Con số ấy là nội dung chính của biên bản này, không phải bản vá.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng, đúng quy ước S1.78 vừa đặt
+
+`Handoff.md` §11 đặt mốc *“chậm nhất **S1.83**”*. Vòng này là S1.79, **chưa chạm**, nên không lượt ngang nào chạy
+và không có lỡ nhịp. Nói rõ để không ai nhầm: lượt quét của vòng này **không phải** một lượt soi ngang — nó chỉ
+soi MỘT lớp lỗi (lời khai bị HEAD làm cho sai), không soi hồi quy, không soi lớp cưỡng chế, không soi test mất răng.
+
+## 1. Năm mục của §S1.78 §6 — và một mục trong đó đã tự đóng
+
+| Mục §6 | Trạng thái khi đo lại |
+|---|---|
+| ADR-038 khai khoản 141 MỞ | ĐÚNG là thiu — 141 ĐÓNG ở S1.76. Vá |
+| ADR-038 nói `apps/mcp` cầm cookie người mua toàn quyền | ĐÚNG là thiu — bị ADR-039 bác. Vá, **giữ nguyên câu cũ** vì nó là lý do ADR-039 tồn tại |
+| `dispatch.ts:504` ở ADR-038 và hàng sổ 142 | ĐÚNG là thiu — câu ấy ở dòng **592**. Vá, và tìm thêm **bản thứ ba** mà §6 không nêu, ở `tests/architecture/cong-quyen-route.test.ts` |
+| khối mở đầu `login.ts` thiếu `startAgentSession` | ĐÚNG, và **nặng hơn §6 ghi**: khối khai *“Bốn bước, bốn hàm”*, liệt **năm** tên, trong khi tệp xuất **bảy** — thiếu cả `enrollOrReplaceTotpForLogin` |
+| `Handoff.md` §2 khai HEAD của `master` là `30d1972` | ĐÚNG là thiu — và cả đoạn mở đầu §1 vẫn khai *“S1 … chưa viết một dòng mã nào”*, sống từ 2026-08-29 qua **94 commit** sửa chính tệp ấy |
+| khối lý do `/auth/agent-session` viện `assertFreshMfa` | **ĐÃ SỬA Ở S1.78.** Hàm ấy không còn tồn tại ở đâu trong `apps/` hay `packages/`. Chính §6 là chỗ thiu |
+
+Mục cuối đáng dừng lại một câu: **bản ghi liệt kê lời khai thiu tự chứa một lời khai thiu.** Nó được viết cùng
+vòng với bản vá cho chính nó, và không ai đối chiếu lại lúc đóng vòng.
+
+## 2. Lượt quét — và một phần bị cắt lặng lẽ, nói ra trước
+
+Sáu góc chạy song song trên toàn kho: con trỏ · trạng thái khoản · số đếm · ký hiệu chết · SHA và ngày · lời khai
+đã bị một vòng sau bác. **63 agent, 0 lỗi, 62 phát hiện, 57 đưa qua thẩm tra đối kháng, 54 sống sót.**
+
+**Chỗ bị cắt, ghi ra chứ không giấu:** góc con trỏ tìm **19** phát hiện, khung chạy chỉ đưa **14** cái đầu qua
+thẩm tra — **5 cái rơi trong im lặng** vì một `slice(0, 14)` viết cứng trong script. Chúng chưa được đo và không
+nằm trong 30 chỗ vá dưới đây.
+
+**Và thẩm tra đối kháng KHÔNG đủ chặt:** tỷ lệ bác chỉ 3/57. Khi tự đọc lại, tôi bác thêm một cái mà thẩm tra
+viên cho qua — `Handoff.md` mục *“Hai khoản còn mở … là 23 và nửa sau của 30”* **đã nằm trong dấu gạch `~~…~~`**,
+tức kho đã sửa rồi. Mỗi phát hiện trong bảng dưới đều được đo lại bằng tay trước khi vá.
+
+## 3. Hai lớp hỏng, và không lớp nào có cổng canh
+
+### ⑴ Con trỏ `tệp:DÒNG` — khoản 150
+
+`[INV-H20]` P4 giải con trỏ tới một **TỆP** trong `git ls-files`. **Số dòng thì không lớp nào đọc.** Mười con trỏ
+đã trôi, ở mười lăm chỗ. Hai cái đáng nhớ:
+
+- `apps/api/src/routes/buyer.ts:206` nay là `GET /rfqs/:rfqId/items` — một route ĐỌC **không** có cổng quyền,
+  trong khi câu nó đứng cạnh nói về hai route **CÓ** cổng. Con trỏ không chỉ sai chỗ: nó minh hoạ **ngược**.
+- `apps/api/src/auth.int.test.ts:546` và `:768` lệch **bảy dòng ngay từ commit sinh ra chúng** — chính khối chú
+  thích chứa chúng đã đẩy hai khẳng định xuống. Ở HEAD lệch 90 và 149 dòng. Con trỏ ấy **chưa đúng một ngày nào**.
+
+Vá bằng LỚP: mọi con trỏ đổi sang **neo theo TÊN** — tên hàm, tên test, mã hàng bảng. Một cái **không sửa được**:
+`db/migrations/006_sessions_and_mfa.sql` trỏ `hardening.always.sql:312-318` (thật: 320–324); sửa chú thích một
+migration đã áp là đổi checksum, đúng khoản 19.
+
+Và vòng này tự dựng lại bằng chứng cho chính khoản 150: bản vá khối mở đầu `login.ts` thêm 8 dòng, đẩy
+`startUserSession` từ 337 xuống **345** — tức số dòng mà lượt quét vừa đo đã thiu trước khi vòng này kịp ghi nó.
+
+### ⑵ Trạng thái khoản nợ sống ngoài sổ — khoản 151
+
+`[INV-H20]` đọc `docs/STATE.md` và `Handoff.md`. `docs/DECISIONS.md`, `docs/ARCHITECTURE.md`, `docs/TEST-PLAN.md`
+và **chú thích mã nguồn** thì không ai đối chiếu. Mười một chỗ khai một khoản ĐÃ ĐÓNG là còn mở: 6 · 8 · 9 · 11 ·
+23 · 38 · 39 · 41 · 42 · 73 · 74.
+
+Cái đắt nhất là khoản 23 ở `tools/inv-matrix/src/danh-gia.ts`: chuỗi ấy chảy **nguyên văn** vào
+`evidence/INV-matrix.md`, nên **gói bằng chứng mà `pnpm evidence` đóng dấu tự khai một khoản đã đóng là còn mở**.
+Đó là bằng chứng mới cho khoản **68** — không mở khoản khác cho nó.
+
+**Kỷ lục thời gian sống, đo được:** lời khai *“ADR-011 đang mở, chặn S1.4/S1.5”*. ADR-011 chốt **TRỌN VẸN**
+2026-09-04 ở S1.5 và tự ghi thế trong dòng trạng thái của chính nó; `Handoff.md` và `docs/STATE.md` vẫn khai nó
+đang mở tới S1.78 — **73 vòng**, qua **82** và **106** commit sửa đúng hai tệp ấy.
+
+## 4. Ba mươi chỗ đã vá
+
+| Lớp | Số chỗ | Nặng nhất |
+|---|---|---|
+| con trỏ `tệp:dòng` trôi | 13 | `buyer.ts:206` minh hoạ ngược · `auth.int.test.ts:546` sai từ lúc sinh |
+| khoản đã đóng vẫn khai mở | 11 | khoản 23 chảy vào `evidence/INV-matrix.md` |
+| số đếm viết cứng đã sai | 9 | `docs/STATE.md` *“Mười tám migration”* — thật 51 |
+| lời khai bị vòng sau bác | 4 | ADR-038 *“cookie người mua toàn quyền”* · `Handoff.md` *“chưa viết một dòng mã nào”* |
+| ký hiệu chết hoặc khối liệt kê thiếu | 3 | `outbox_events` không phải tên bảng nào — thật là `outbox_jobs` |
+
+Ba con số đáng gọi tên riêng, vì cả ba đều ở chỗ người đọc lấy kết luận:
+
+- `docs/TEST-PLAN.md` khai tổng bất biến là **55**; 34 + 22 = **56**, và cổng evidence in *56/56* suốt thời gian đó.
+  Chuỗi gạch của dòng ấy đã nối tới `22` ở vế hàng rào mà quên nối vế tổng — một nửa lần cập nhật.
+- `docs/ARCHITECTURE.md` dòng 9 khai *“mười gói dưới `packages/`”*; thật là **13**. Dòng ấy **do chính S1.78 viết ra**
+  để sửa một lời khai thiu khác (*“chưa có mã nguồn”*) — tức bản vá cho lời khai thiu tự đẻ ra một lời khai thiu.
+- `docs/TEST-PLAN.md` khai T2 *“không có endpoint, nên không có bộ quét rò rỉ”*; `apps/api` khai **46 route** và bộ
+  quét rò rỉ chạy trên chính mảng ấy. Vế *“không có OpenAPI”* thì vẫn đúng và giữ nguyên.
+
+## 5. Phần KHÔNG đóng
+
+- **Không cổng nào** ngăn con trỏ `:NNN` thứ mười một, hay lời khai trạng-thái-ngoài-sổ thứ mười hai. Khoản 150 và
+  151 mở đúng vì thế; vòng này vá **hiện trạng**, không vá **nguồn**.
+- **5 phát hiện góc con trỏ bị `slice(0, 14)` cắt** chưa được đo.
+- `db/migrations/006_sessions_and_mfa.sql` giữ con trỏ sai — khoản 19, mở bằng cấu tạo.
+- Hàng đợi chủ dự án giao (**130 · 129 · 131 ·** rồi **128**, gộp 147 vào vòng 131) **chưa động tới**; vòng này là
+  phần chen vào trước theo yêu cầu.
+
+## 6. Cổng
+
+- `pnpm t0` — 248 module, 1030 phụ thuộc, 0 vi phạm
+- `pnpm test` — 63/63 tệp, 905 đạt · 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`**, 1929 khẳng định, 56/56 bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**

@@ -45,7 +45,8 @@ describe("vòng đời khóa", () => {
   });
 
   // Không gắn [INV-G2]: G2 phát biểu "mỗi RFQ một cặp khóa; lộ một RFQ không lan sang RFQ
-  // khác" (docs/TEST-PLAN.md:100) — một bất biến về cô lập khóa theo RFQ. Package này (Task 7)
+  // khác" (docs/TEST-PLAN.md, hàng **G2** — ~~`:100`~~ [S1.79] đã trôi tới 108, neo theo MÃ hàng)
+  // — một bất biến về cô lập khóa theo RFQ. Package này (Task 7)
   // chưa có khái niệm RFQ/bid trong chữ ký wrap()/unwrap() — đơn vị cô lập duy nhất hiện có là
   // orgId (bất biến F3, đã có test riêng bên dưới). G2 THỰC SỰ CHƯA ĐƯỢC PHỦ bởi test nào ở
   // Task 7; cần một task sau (khi wrap()/unwrap() nhận thêm contextId cho rfqId/bidId — xem

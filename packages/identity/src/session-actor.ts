@@ -117,8 +117,9 @@ export async function resolveSessionActor(
 // được xác lập. Tầng HTTP cầm thứ khác: một TOKEN dạng rõ từ cookie. 006 đã thiết kế sẵn cột
 // `token_hash` + `UNIQUE (org_id, token_hash)` cho đúng việc này — chỉ chưa có hàm nào dùng tới
 // (khoản nợ 6). Hàm này là nửa ĐỌC của khoản nợ ấy; ~~nửa PHÁT (`startUserSession`) là
-// S1.10.4~~ **[S1.21] nửa PHÁT đã có từ S1.10.4** — `login.ts:228`, gọi ở
-// `apps/api/src/routes/auth.ts:184`. Câu ở thì tương lai đã sống qua mười vòng.
+// S1.10.4~~ **[S1.21] nửa PHÁT đã có từ S1.10.4** — `login.ts`, gọi ở
+// `apps/api/src/routes/auth.ts`. Câu ở thì tương lai đã sống qua mười vòng.
+// [S1.79] Hai con trỏ ~~`:228`~~ ~~`:184`~~ đã trôi tới 345 và 196 — neo theo TÊN hàm, không theo số dòng.
 //
 // HAI ĐIỀU CỐ Ý:
 //   ⑴ Đòi `mfa_verified_at IS NOT NULL`. ADR-020 nói "không có đăng nhập nửa chừng": một phiên

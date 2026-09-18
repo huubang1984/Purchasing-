@@ -354,12 +354,14 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     //      `requirePermission`, RLS và sổ kiểm toán, ghi đúng người dùng của phiên ấy.~~
     //      **[lượt soi 69 M-3] CÂU VỪA GẠCH RỘNG HƠN PHÉP ĐO, và nó là câu đang BIỆN MINH cho việc
     //      `apps/mcp` không mang lớp quyền nào — đúng khuôn "lấp mã bằng nhãn thay vì bằng lớp"
-    //      mà chính tệp này cảnh báo ở khối trên.** `dispatch.ts:504` là
+    //      mà chính tệp này cảnh báo ở khối trên.** ~~`dispatch.ts:504`~~ [S1.79] `dispatch.ts:592` là
     //      `if (route.mutates && route.self !== true)`: route ĐỌC KHÔNG BAO GIỜ gọi
     //      `requirePermission`. Phát biểu đúng mức: tám công cụ của MCP đi qua phiên + RLS theo tổ
     //      chức, và **không công cụ nào để lại một dòng nào trong `audit_events`** — hai đường đọc
     //      DUY NHẤT có cổng quyền thật (`buildComparisonTable`, `countReceivedBids` — rổ
-    //      `HAM_DOC_CO_QUYEN` ở đầu tệp này, và `apps/api/src/routes/buyer.ts:206`) đều nằm trong
+    //      `HAM_DOC_CO_QUYEN` ở đầu tệp này, và khối *"Hai đường ĐỌC CÓ CỔNG (khoản nợ 33)"* trong
+    //      `apps/api/src/routes/buyer.ts` — ~~`:206`~~ [S1.79] số dòng ấy nay là `GET /rfqs/:rfqId/items`,
+    //      một route ĐỌC KHÔNG có cổng, tức con trỏ cũ minh hoạ NGƯỢC câu nó đứng cạnh) đều nằm trong
     //      `ROUTE_DOC_KHONG_PHOI`, tức MCP cố ý không phơi. Khoảng trống pháp y ấy là khoản nợ 142.
     //
     // Tức lớp này quét mã THẬT của hai app, và cả hai đúng là không được phép mang cổng quyền. Vế

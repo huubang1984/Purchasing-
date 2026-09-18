@@ -1794,7 +1794,7 @@ cuộc di trú chứ không phải một lần sửa hàm:
 2. **Phiên người mua phát ở đâu.** Đo được: **không một hàm sản phẩm nào INSERT vào `sessions`**;
    năm file test tự chèn hàng. `users` **không có cột mật khẩu** (002). `resolveSessionActor` nhận
    `sessionId` UUID, không nhận token — tức đường *"bearer → phiên"* chưa tồn tại. Đây là khoản nợ 6
-   của sổ S0, vẫn mở. Và ADR-008 ghi một nợ **bắt buộc trả trước endpoint đăng nhập**: chọn (i) bảng
+   của sổ S0, ~~vẫn mở~~ **[S1.79] ĐÓNG** — nửa ĐỌC ở S1.10.2, nửa PHÁT ở S1.10.4. Và ADR-008 ghi một nợ **bắt buộc trả trước endpoint đăng nhập**: chọn (i) bảng
    riêng hay (ii) chỉ ghi chuyển trạng thái `justLocked`.
 3. **Magic link đi vào URL dạng nào** — E6 trống vì đúng câu này (§3 ma trận).
 4. **Cưỡng chế `withGuestSession()` bằng gì.** §4 của A5: *"một đường phục vụ khách quên gắn thì vị
@@ -2124,7 +2124,7 @@ test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
 - **Không có `/readyz` chạm CSDL**: `/health` cố ý không mở kết nối (public.ts). Kiểm sẵn sàng
   làm ở `batDau()`; một health-check theo chu kỳ có chạm CSDL là quyết định của tầng triển khai.
 - **Vị từ 037 chỉ biết `app_api`**; vai ứng dụng thứ hai vẫn đi qua im lặng (L-4 của 029).
-- **Nợ 38, 39, 41, 42** vẫn mở; vòng này chỉ cho chúng một tiến trình để treo.
+- **Nợ 38, 39, 41, 42** ~~vẫn mở~~ **[S1.79] cả bốn ĐÓNG** (39, 41, 42 ở S1.12 — ADR-022 và migration 038; 38 ở khoản riêng của nó); vòng này chỉ cho chúng một tiến trình để treo.
 
 ### Đo bằng gì
 
@@ -3160,7 +3160,7 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 - ~~**Tập hàm canh chỉ-ghi-thêm vẫn suy từ HÌNH DẠNG THÂN HÀM** (`prosrc` không có `RETURN`), tức một
   phép so khớp văn bản.~~ **[S1.29] Nay là HÌNH DẠNG ∪ KHAI BÁO** — `HAM_CANH_CHI_GHI_THEM` kê tên,
   khớp nguyên văn `hardening.always.sql`, và một tổng điều tra buộc mọi hàm trigger BEFORE-ROW
-  UPDATE/DELETE phải được phân loại (ADR-035, khoản nợ 60 đóng; phần chưa đóng là 73 và 74). Vế
+  UPDATE/DELETE phải được phân loại (ADR-035, khoản nợ 60 đóng; ~~phần chưa đóng là 73 và 74~~ **[S1.79]** 73 đóng ở S1.31, 74 ở S1.30). Vế
   hình dạng vẫn chặt hơn một danh sách tên và vẫn có phản ví dụ thật giữ cho nó không lỏng
   (`rfq_items_chan_truncate` — cùng hình dạng thân, nhưng là trigger TRUNCATE cấp câu lệnh, nên vế
   *"cả UPDATE lẫn DELETE, cấp HÀNG"* loại nó ra). Nó **không** là một tính chất ngữ nghĩa.
@@ -4236,7 +4236,7 @@ Bốn đột biến đỏ cô lập: phán xét no-op; lượt sửa no-op; bỏ
 
 ## ADR-038 — Bề mặt MCP của TrustProcure là một app CHỈ ĐỌC nói HTTP với `apps/api`, và ba đường đọc nhạy cảm nhất KHÔNG được phơi
 
-**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.74]** · **Khoản nợ liên quan:** 141, 142 (mở) ·
+**Ngày:** 2026-09-17 · **Trạng thái:** Đã chấp nhận · **[S1.74]** · **Khoản nợ liên quan:** ~~141, 142 (mở)~~ **[S1.79]** 141 (ĐÓNG ở S1.76 — ADR-039), 142 (mở) ·
 **Liên quan:** ADR-020 (`node:http` trần, không framework — và danh sách phụ thuộc sản xuất hai dòng), ADR-016 (cổng quyền ở
 tầng ứng dụng), ADR-021 (cấu hình là hàm thuần, fail-closed), ADR-029 (một con số không có lớp suy ra thì không được viết)
 
@@ -4329,13 +4329,18 @@ rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
   được mọi route, kể cả `/rfqs/<id>/comparison` và mọi route ghi. Tám công cụ, `duong-dan.ts` và cổng đối chiếu đều nằm ở
   phía TRƯỚC chứng chỉ. Đường đóng đúng — cột phạm vi cho `sessions`, vế từ chối ở `dispatch.ts`, int test đo 403 thật —
   chạm migration và `apps/api`, nên là một vòng riêng; chủ dự án chọn nhận về sổ và merge vòng này.
-- **Bề mặt agent không để lại dấu vết kiểm toán nào** — khoản nợ **142**. `dispatch.ts:504` là
+  **[S1.79 / lượt soi ngang 72] Vòng ấy đã chạy — khoản 141 ĐÓNG ở S1.76, ADR-039.** Cái `apps/mcp` cầm nay là
+  một chứng chỉ `AGENT_READONLY` có phạm vi sống trên HÀNG PHIÊN (`sessions.kind`, migration 051), TTL trần một
+  giờ, và `dispatch.ts` từ chối 403 **có ghi sổ** khi chứng chỉ ấy chạm route ghi hay route ngoài danh sách agent.
+  Hai câu đầu của gạch đầu dòng này là lời khai của S1.74 và **không còn đúng ở HEAD** — giữ nguyên chứ không xoá,
+  vì chúng là lý do ADR-039 tồn tại.
+- **Bề mặt agent không để lại dấu vết kiểm toán nào** — khoản nợ **142**. ~~`dispatch.ts:504`~~ **[S1.79]** `dispatch.ts:592` là
   `if (route.mutates && route.self !== true)`: route đọc không gọi `requirePermission`, nơi lần ghi sổ xảy ra.
 - **`MO_DAU_DU_LIEU` là một lớp MỎNG.** Nó đánh dấu ranh giới dữ liệu/chỉ thị, không chặn được một máy khách chọn tin vào
   nội dung. Thứ chặn thật là phạm vi chỉ-đọc và ba đường ở §2 điểm 3.
 - **Trần 8 lời gọi cùng lúc** đo ở T1 trên `taoVongLap`; chưa đo trên tiến trình thật dưới tải.
 - ADR này **không** quyết hình dạng triển khai (ai chạy tiến trình MCP, cookie được cấp và xoay thế nào) — đó là việc của
-  vòng đóng khoản 141.
+  vòng đóng khoản 141. **[S1.79]** Vòng ấy là **S1.76**, và hình dạng triển khai chốt ở **ADR-039**.
 
 ---
 
