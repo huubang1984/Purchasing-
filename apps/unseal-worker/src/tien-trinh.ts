@@ -32,6 +32,7 @@
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createLocalDevUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
 import { createUnsealWorkerRunner } from "./composition.js";
 import type { CauHinhWorker } from "./cau-hinh.js";
@@ -68,6 +69,43 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
   // truyền nhầm cùng một pool vào cả hai chỗ.
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_unseal" });
   const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_unseal" });
+
+  // ============================================================================================
+  // [S1.84 / khoản 129 và khoản 173] HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT, GẮN MỘT LẦN CHO MỖI POOL.
+  //
+  // ⑴ `release` mang `SESSION_STATE_LEFT`: `withTenant` huỷ một kết nối vì trạng thái phiên còn
+  //    sót sau giao dịch. Lỗi ấy KHÔNG được ném cho ai.
+  // ⑵ sự kiện lỗi-tới-muộn: lần lấy kết nối tới SAU trần `maxConnectWaitMs`, người gọi đã đi.
+  //
+  // KHOẢN 173 ĐO ĐƯỢC ĐÚNG CHỖ NÀY: tới S1.83, `apps/api/src/composition.ts` gắn ⑴ cho cả hai pool
+  // còn tiến trình này KHÔNG gắn lần nào — nên cùng một sự cố để lại dấu ở `api` và không để lại gì
+  // ở tiến trình DUY NHẤT giải mã được phong bì. Cổng `tests/architecture/pool-nghe-du-tin-hieu.test.ts`
+  // nay đòi cả hai ở mọi pool dựng trong `apps/`, nên nó không quên lại được.
+  //
+  // Bộ mô tả là `moTaLoi` CỤC BỘ của tiến trình này, không phải bản của `apps/api`: mã CHẠY của
+  // worker không được import từ `apps/api` (quy tắc `g1-`). Bản cục bộ hẹp hơn — khoản 166.
+  // ============================================================================================
+  // GẮN TỪNG POOL MỘT, không qua một vòng lặp: cổng `pool-nghe-du-tin-hieu.test.ts` đọc TÊN BIẾN
+  // trên cây cú pháp, và một vòng lặp biến hai cái tên ấy thành một biến vòng lặp mà cổng không
+  // thấy. Bản đầu của khối này viết bằng vòng lặp và cổng ĐỎ — giữ lại lý do ở đây để lần sau
+  // không ai "dọn gọn" nó về vòng lặp rồi làm cổng mù. Chỉ CÁI GỌI được trải ra; phần thân dùng
+  // chung qua hai hàm dựng bộ nghe ngay dưới, nên không có logic nào bị chép hai lần.
+  const ghiKetNoiHuy =
+    (ten: string) =>
+    (loi: unknown): void => {
+      if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+        console.error(`[unseal-worker] ket noi huy ${ten} ${moTaLoi(loi)}`);
+      }
+    };
+  const ghiLoiToiMuon =
+    (ten: string) =>
+    (loi: unknown): void => {
+      console.error(`[unseal-worker] loi ket noi toi muon ${ten} ${moTaLoi(loi)}`);
+    };
+  pool.on("release", ghiKetNoiHuy("pool"));
+  ngheLoiKetNoiToiMuon(pool, ghiLoiToiMuon("pool"));
+  auditPool.on("release", ghiKetNoiHuy("auditPool"));
+  ngheLoiKetNoiToiMuon(auditPool, ghiLoiToiMuon("auditPool"));
 
   const unwrapper = createLocalDevUnwrapper(
     new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys),

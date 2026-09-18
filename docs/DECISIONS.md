@@ -4526,3 +4526,51 @@ người tạo). Một cụm nơi vai chủ hàm do superuser tạo sẵn sẽ g
 - Hàng ghim thân hàm trong thực tế là một **PHÁN XÉT**, không tự chữa: vai deploy không sở hữu hàm nên câu sửa bị 42501 và bị
   nuốt. Đó cũng là một tính chất TỐT — chỉ SUPERUSER thay được thân hàm, vì chủ hàm là NOLOGIN — nhưng nó khác lời hứa
   “tự chữa” của mọi hàng khác, nên nó được viết ra trong chẩn đoán của chính hàng ấy.
+
+## ADR-041 — Tín hiệu của lỗi kết nối TỚI SAU trần đi ra bằng một sự kiện trên pool, và cái giá của nó được trả bằng một cổng
+
+**Ngày:** 2026-09-19 · **Trạng thái:** ĐÃ CHẤP NHẬN · **Khoản nợ:** 129 (đóng), 173 (đóng), 176 (mở)
+
+### Bối cảnh
+
+Khoản 120 cho `withTenant` một trần chờ lấy kết nối. Hết trần thì lời gọi của pg-pool VẪN nằm trong hàng đợi của nó: kết nối
+tới sau được nhả ngay, và nếu nó NHIỄM thì bộ bọc vai huỷ nó bằng `release(KetNoiNhiemError)` rồi ném vào một nhánh từ chối
+RỖNG. Đo trên HEAD `d4b2b51`, nguyên văn chuỗi sự kiện:
+
+```
+nguoi_goi_nhan=TenantError:CONNECT_WAIT_EXCEEDED | release:sach | release:KetNoiNhiemError | tong=0 ranh=0 cho=0
+```
+
+Cô lập CÒN NGUYÊN — kết nối nhiễm rời pool hẳn. Thứ mất là TÍN HIỆU, và lớp khoản 99 sinh ra chính là để phát tín hiệu ấy.
+
+### Ba hình dạng đã cân, và cái giá đo được của từng cái
+
+| Hình dạng | Chỗ gọi phải đổi | Cái giá |
+|---|---|---|
+| Tiêm bộ báo theo LỜI GỌI (`WithTenantOptions`) | **19** — hai trong ba chỗ đặt trần nằm trong `packages/identity/src/rbac.ts`, một thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 18 chỗ im lặng, tức fail-open ở đúng lớp lỗi đang vá |
+| **Sự kiện trên POOL** (chọn) | **0** | dựa vào một lớp GẮN BẰNG TAY ở composition root — lớp ấy ĐÃ bị quên một lần (khoản 173) |
+| `withTenant` tự `console.error` | **0** | `packages/tenancy` thành một tầng ghi log; dòng không mang tên pool; `mo-ta-loi.ts` thôi là chỗ duy nhất mô tả lỗi |
+
+Một hình dạng thứ tư — `createPool` gắn sẵn — bị loại vì `packages/tenancy` và `packages/db` KHÔNG phụ thuộc nhau (cả hai chỉ
+phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai gói.
+
+### Quyết định
+
+**Sự kiện riêng trên pool**, cộng một cổng kiến trúc trả giá cho nó trong CÙNG vòng. Chủ dự án chọn ngày 2026-09-19 sau khi
+được trình ba hình dạng kèm số chỗ gọi đo được.
+
+- `withTenant` phát `SU_KIEN_LOI_KET_NOI_TOI_MUON` **chỉ khi** trần đã nổ — đối xứng với nhánh thành công ngay cạnh, nên lỗi
+  tới TRONG trần vẫn đi ra qua `Promise.race` cho người gọi và MỘT sự cố không bao giờ thành HAI dòng. Có đối chứng đo vế này.
+- Tên sự kiện KHÔNG phải `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe, nên một pool chưa gắn listener sẽ giết
+  tiến trình thay vì mất tín hiệu. Tên riêng làm hỏng-êm, và cái giá ấy được trả bằng cổng.
+- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` nghe đủ hai tín hiệu mất-không-ai-biết:
+  `release` mang `SESSION_STATE_LEFT` (khoản 118) và lỗi-tới-muộn (khoản 129). Cổng đọc CÂY CÚ PHÁP, không phải biểu thức
+  chính quy.
+
+### Hệ quả
+
+- **Khoản 173 đóng như một hệ quả trực tiếp:** cổng đỏ ngay lượt đầu vì `apps/unseal-worker` không gắn listener nào; nay nó
+  gắn đủ bốn. Cùng một sự cố nay để lại dấu ở CẢ HAI tiến trình.
+- Khối gắn listener của worker được viết TRẢI RA từng pool chứ không qua vòng lặp: bản đầu dùng vòng lặp và cổng ĐỎ, vì phép
+  đọc theo tên biến không thấy biến vòng lặp. Lý do ấy ghi tại chỗ để không ai "dọn gọn" nó rồi làm cổng mù.
+- **Cái giá còn lại, nói ra:** cổng đọc tên biến trong CÙNG MỘT TỆP và chỉ quét `apps/` — khoản **176**.

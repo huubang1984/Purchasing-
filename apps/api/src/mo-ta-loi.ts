@@ -20,7 +20,7 @@
 // ra mã" thay vì "không có trường" và làm đỏ test ấy). Đúng một tầng — không đi theo chuỗi.
 // ==============================================================================================
 import type pg from "pg";
-import { TenantError } from "@trustprocure/tenancy";
+import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 
 /** Hình dạng của SQLSTATE: đúng năm ký tự chữ số và chữ hoa. */
 const MA_NAM_KY_TU = /^[0-9A-Z]{5}$/u;
@@ -64,5 +64,28 @@ export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
     if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
       console.error(`[api] ket noi huy ${tenPool} ${moTaLoiKhongGiaTri(loi)}`);
     }
+  });
+}
+
+/**
+ * [S1.84 / khoản 129] Ghi lỗi của lần lấy kết nối TỚI SAU trần `maxConnectWaitMs` của `withTenant`.
+ *
+ * VÌ SAO NÓ CẦN MỘT ĐƯỜNG RIÊNG: khi trần nổ, `withTenant` đã ném `CONNECT_WAIT_EXCEEDED` cho người
+ * gọi và người gọi đã đi. Lời hứa của `pool.connect()` vẫn nằm trong hàng đợi của pg-pool; kết nối
+ * tới sau đó được nhả ngay, và NẾU nó nhiễm thì bộ bọc vai huỷ nó bằng `release(KetNoiNhiemError)`
+ * rồi ném vào một nhánh không ai bắt. Đo trên mã trước bản vá (§S1.84): người gọi nhận
+ * `CONNECT_WAIT_EXCEEDED`, pool phát `release` mang `KetNoiNhiemError`, pool về `0/0/0` — cô lập
+ * còn nguyên, còn tín hiệu mà lớp khoản 99 sinh ra để phát thì MẤT HẲN.
+ *
+ * MỘT SỰ CỐ, MỘT DÒNG: `withTenant` chỉ phát sự kiện này khi trần ĐÃ nổ. Lỗi tới TRONG trần đi ra
+ * qua `Promise.race` và người gọi nhận nó như thường, nên nó không đi qua đây — không có ca nào
+ * sinh hai bản ghi cho cùng một sự cố.
+ *
+ * Gắn MỘT lần cho mỗi pool, ở composition root — cùng kỷ luật với `ghiLogKetNoiHuy`, và
+ * `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi cả hai.
+ */
+export function ghiLogLoiKetNoiToiMuon(pool: pg.Pool, tenPool: string): void {
+  ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {
+    console.error(`[api] loi ket noi toi muon ${tenPool} ${moTaLoiKhongGiaTri(loi)}`);
   });
 }

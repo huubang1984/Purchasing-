@@ -114,6 +114,40 @@ export interface WithTenantOptions {
 const TRAN_CHO_TOI_DA_MS = 2_147_483_647;
 
 /**
+ * [S1.84 / khoản 129] TÊN SỰ KIỆN cho lỗi của lần lấy kết nối TỚI SAU trần `maxConnectWaitMs`.
+ *
+ * VÌ SAO MỘT SỰ KIỆN CHỨ KHÔNG PHẢI MỘT THAM SỐ: bộ báo là tính chất của POOL, không của lời gọi. Hai trong ba chỗ đặt trần nằm trong
+ * `packages/identity/src/rbac.ts` — một thư viện không có bộ ghi log —, nên tiêm theo lời gọi sẽ phải luồn qua `requirePermission`, hàm có
+ * **19 chỗ gọi** trong mã sản xuất; một tham số TUỲ CHỌN khi ấy làm 18 chỗ im lặng, tức fail-open ở đúng lớp lỗi khoản này đang vá.
+ *
+ * VÌ SAO KHÔNG PHẢI `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe. Tên riêng làm một pool chưa gắn listener chỉ MẤT tín hiệu chứ
+ * không giết tiến trình — và cái giá ấy được trả bằng một cổng kiến trúc đòi mọi pool dựng ở composition root gắn đủ listener.
+ *
+ * VÌ SAO KHÔNG GẮN Ở `createPool`: `packages/tenancy` và `packages/db` KHÔNG phụ thuộc nhau (cả hai chỉ phụ thuộc `pg`), nên gắn ở đó cần một
+ * cạnh phụ thuộc mới giữa hai gói. Chủ dự án chọn đường này ngày 2026-09-19.
+ */
+export const SU_KIEN_LOI_KET_NOI_TOI_MUON = "trustprocure:loi-ket-noi-toi-muon";
+
+/**
+ * Phát lỗi tới muộn trên pool. `emit` của một sự kiện KHÔNG phải `'error'` mà không ai nghe là no-op — mất tín hiệu, không ném.
+ *
+ * Ép kiểu: kiểu của `pg.Pool` chỉ khai các tên sự kiện của riêng nó. Một chỗ ép duy nhất, ở đây, thay vì mỗi chỗ gọi tự ép.
+ */
+function phatLoiKetNoiToiMuon(pool: pg.Pool, loi: unknown): void {
+  (pool as unknown as { emit(ten: string, ...doiSo: unknown[]): boolean }).emit(SU_KIEN_LOI_KET_NOI_TOI_MUON, loi);
+}
+
+/**
+ * [S1.84 / khoản 129] Nghe lỗi tới muộn của một pool. Gọi MỘT lần cho mỗi pool, ở composition root — cùng chỗ và cùng kỷ luật với
+ * `ghiLogKetNoiHuy`, và cổng kiến trúc `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi cả hai.
+ *
+ * Hàm nhận bộ ghi chứ không tự ghi: gói này không phải tầng mô tả lỗi của ứng dụng.
+ */
+export function ngheLoiKetNoiToiMuon(pool: pg.Pool, nghe: (loi: unknown) => void): void {
+  (pool as unknown as { on(ten: string, nghe: (loi: unknown) => void): unknown }).on(SU_KIEN_LOI_KET_NOI_TOI_MUON, nghe);
+}
+
+/**
  * [S1.69 / khoản 120] Chờ lần lấy kết nối `layKetNoi` có trần — xem `WithTenantOptions.maxConnectWaitMs`. Nhận LỜI HỨA của lần lấy chứ không
  * nhận pool: `withTenant` giữ MỘT chỗ gọi `pool.connect()`, nên listener 'error' của nó phủ mọi client nó giao cho `fn` (lượt soi 63a-1 —
  * bản đầu gọi `connect` lần hai ở đây, và census khoản 99 đỏ).
@@ -129,7 +163,11 @@ const TRAN_CHO_TOI_DA_MS = 2_147_483_647;
  *     không dòng log nào; với pool có vai, kết nối nhiễm đã bị `ganVaiTroChoPool` huỷ trước khi lỗi ấy tới đây (lượt soi 63a-4 — nói ra, chưa
  *     làm; [S1.72 / lượt soi ngang 66b-1] đo: lỗi ấy tới SAU khi `withTenant` đã ném CONNECT_WAIT_EXCEEDED, không ai nhận nó — khoản 129).
  */
-function choKetNoiCoTran(layKetNoi: Promise<pg.PoolClient>, tranMs: number): Promise<pg.PoolClient> {
+function choKetNoiCoTran(
+  layKetNoi: Promise<pg.PoolClient>,
+  tranMs: number,
+  baoLoiToiMuon: (loi: unknown) => void,
+): Promise<pg.PoolClient> {
   let hetTran = false;
   let henGio: ReturnType<typeof setTimeout> | undefined;
   const hetTranHua = new Promise<never>((_, tuChoi) => {
@@ -144,12 +182,18 @@ function choKetNoiCoTran(layKetNoi: Promise<pg.PoolClient>, tranMs: number): Pro
       );
     }, tranMs);
   });
-  // ⑴ Kết nối tới SAU trần: trả ngay về pool. ⑶ Nhánh lỗi để trống có chủ đích — lỗi trong trần đi ra qua `Promise.race` bên dưới.
+  // ⑴ Kết nối tới SAU trần: trả ngay về pool.
+  // ⑶ [S1.84 / khoản 129] ~~Nhánh lỗi để trống có chủ đích~~ — nhánh ấy KHÔNG còn trống. Lỗi TRONG trần vẫn đi ra qua
+  //   `Promise.race` bên dưới và người gọi nhận nó, nên ở đây chỉ báo khi `hetTran` — đối xứng đúng với nhánh thành công
+  //   ngay trên, và nhờ thế MỘT sự cố không bao giờ thành HAI dòng. Đo trên mã trước bản vá: người gọi nhận
+  //   `CONNECT_WAIT_EXCEEDED`, pool phát `release` mang `KetNoiNhiemError`, pool về 0/0/0 — cô lập còn nguyên, TÍN HIỆU thì mất.
   void layKetNoi.then(
     (client) => {
       if (hetTran) client.release();
     },
-    () => {},
+    (loi: unknown) => {
+      if (hetTran) baoLoiToiMuon(loi);
+    },
   );
   return Promise.race([layKetNoi, hetTranHua]).finally(() => {
     clearTimeout(henGio);
@@ -275,7 +319,12 @@ export async function withTenant<T>(
   // [S1.69 / khoản 120, lượt soi 63a-1] MỘT chỗ lấy client cho cả hai đường — có trần hay không —, nên listener 'error' ngay dưới đây phủ mọi
   // client hàm này giao cho `fn` (census khoản 99 ⒟ đếm theo tệp).
   const layKetNoi = pool.connect();
-  const client = tranCho === undefined ? await layKetNoi : await choKetNoiCoTran(layKetNoi, tranCho);
+  const client =
+    tranCho === undefined
+      ? await layKetNoi
+      : await choKetNoiCoTran(layKetNoi, tranCho, (loi) => {
+          phatLoiKetNoiToiMuon(pool, loi);
+        });
 
   // Trong lúc client đang CHECKED-OUT, pg-pool KHÔNG gắn listener 'error' nào lên nó (chỉ gắn
   // khi client rảnh nằm trong pool). Nếu kết nối chết giữa chừng — backend bị terminate, mất
