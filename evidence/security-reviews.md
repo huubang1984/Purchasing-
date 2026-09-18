@@ -6789,3 +6789,76 @@ không đoán. Sổ nợ sau trọn vòng: **149 → 152 khoản, 45 → 48 còn
 - `pnpm t0` — 248 module, 1030 phụ thuộc, 0 vi phạm
 - `pnpm test` — 63/63 tệp, 905 đạt · 1 bỏ qua
 - `pnpm evidence` — **`vitest thoát mã 0`**, 1929 khẳng định, 56/56 bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+---
+
+# §S1.80 — MCP `trustprocure`: `CONNECTION_CLOSED` là fail-closed ĐÚNG, không phải lỗi; đăng ký đã gỡ; khoản 153 mở
+
+Chủ dự án giao *“gỡ MCP `trustprocure` CONNECTION_CLOSED”*. Vòng này bắt đầu bằng một phép đo, và phép đo bác
+chính chữ *“gỡ lỗi”*: **không có lỗi nào để gỡ.**
+
+## 1. Đo
+
+Chạy Y NGUYÊN lệnh trong đăng ký, từ gốc kho, không đặt biến môi trường nào:
+
+```
+$ node --experimental-transform-types --import ./apps/mcp/register-ts-resolve.mjs apps/mcp/src/main.ts
+[mcp] cau hinh khong hop le — thieu bien moi truong TRUSTPROCURE_MCP_API_URL
+exit=1
+```
+
+Tiến trình thoát **ngay**, ống stdio đóng, máy khách thấy `CONNECTION_CLOSED`. `claude mcp list` nói đúng nguyên
+nhân ở dòng ngay dưới: `Missing environment variables: TRUSTPROCURE_MCP_API_URL, TRUSTPROCURE_MCP_SESSION_COOKIE`.
+Đăng ký khai `env` trỏ vào `${...}` — cố ý, để không giữ bí mật trong tệp cấu hình — và hai biến ấy chưa bao giờ
+được đặt. **`apps/mcp` fail-closed đúng khuôn ADR-021.**
+
+## 2. Phần thật sự là nợ
+
+Để tiến trình ấy lên được cần BA điều kiện, và điều kiện thứ ba không thoả lâu được:
+
+| | Điều kiện | Ở đâu |
+|---|---|---|
+| ⑴ | `apps/api` phải ĐANG CHẠY lúc khởi động | `main.ts` gọi `kiemPhamViAgent` TRƯỚC khi nghe stdin — cần Postgres đã migrate cộng bốn vòng khoá |
+| ⑵ | cookie phải có `kind` là `AGENT_READONLY` | `khach-api.ts` từ chối thẳng, và nói ra đường xin |
+| ⑶ | **TTL trần MỘT GIỜ, không gia hạn được** | `expires_at` không có `GRANT UPDATE` ⇒ mỗi giờ một mã TOTP tươi qua `POST /auth/agent-session` |
+
+⑶ là chỗ đau: **kể cả dựng xong, đăng ký sẽ `CONNECTION_CLOSED` lại sau ≤ 1 giờ.** Cả ba đều là CHỦ Ý của ADR-039
+chứ không phải thiếu sót — thứ THIẾU là một đường vận hành CẤP và XOAY chứng chỉ agent. Đó là khoản **153**.
+
+## 3. Chủ dự án chọn GỠ đăng ký
+
+Ba phương án đã trình kèm số đo: ⒜ gỡ đăng ký; ⒝ viết `tools/mcp-dev` dựng lại đồ gá test để phát chứng chỉ —
+một vòng làm việc, mà vẫn chết sau một giờ; ⒞ để nguyên và chỉ ghi sổ. Chủ dự án chọn **⒜** ngày 2026-09-18.
+
+Đã lưu nguyên văn cấu hình trước khi gỡ, nên đăng ký lại là dán lại đúng khối cũ:
+
+```json
+{ "trustprocure": { "type": "stdio", "command": "node",
+  "args": ["--experimental-transform-types", "--import", "./apps/mcp/register-ts-resolve.mjs", "apps/mcp/src/main.ts"],
+  "env": { "TRUSTPROCURE_MCP_API_URL": "${TRUSTPROCURE_MCP_API_URL}",
+            "TRUSTPROCURE_MCP_SESSION_COOKIE": "${TRUSTPROCURE_MCP_SESSION_COOKIE}" } } }
+```
+
+`claude mcp list` sau khi gỡ: *No MCP servers configured.* Không tệp nào trong kho đổi vì việc gỡ — đăng ký sống
+trong `~/.claude.json`, ngoài kho.
+
+## 4. Hai lời khai thiu mà lượt quét S1.79 KHÔNG với tới
+
+`apps/mcp/src/cau-hinh.ts` vẫn khai cookie ấy là *“một phiên NGƯỜI MUA đang sống”* (khối mở đầu) và *“Giá trị
+cookie phiên người mua”* (JSDoc) — bị ADR-039 bác từ S1.76, sống qua bốn vòng. Cả hai đã vá ở vòng này.
+
+Đây là một phép đo về chính lượt quét của S1.79: góc *“lời khai đã bị vòng sau bác”* **không chạm `apps/mcp`**.
+Sáu góc chạy trên toàn kho nhưng không góc nào khai một danh sách thư mục phải phủ, nên vùng phủ là thứ tình cờ
+chứ không phải thứ đo được. Ghi vào khoản **151** như bằng chứng thứ hai, không mở khoản mới.
+
+## 5. Phần KHÔNG đóng
+
+- Đường **cấp và XOAY** chứng chỉ agent chưa tồn tại — khoản 153.
+- Chưa phép đo nào nói một chu kỳ một giờ có dùng được trên thực tế hay không.
+- `tools/mcp-dev` (phương án ⒝) **không làm** ở vòng này.
+- Hàng đợi chủ dự án giao — **130 · 129 · 131** (gộp 147) rồi **128** — vẫn chưa động tới.
+
+## 6. Cổng
+
+- `pnpm t0` — 248 module, 1030 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 63/63 tệp, **905 đạt** | 1 bỏ qua; `tests/architecture` riêng: 20/20 tệp, 259 đạt
+- `pnpm evidence` — **`vitest thoát mã 0`**, 1929 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
