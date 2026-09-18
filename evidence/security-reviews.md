@@ -6766,7 +6766,25 @@ Ba con số đáng gọi tên riêng, vì cả ba đều ở chỗ người đ�
 - Hàng đợi chủ dự án giao (**130 · 129 · 131 ·** rồi **128**, gộp 147 vào vòng 131) **chưa động tới**; vòng này là
   phần chen vào trước theo yêu cầu.
 
-## 6. Cổng
+## 7. Một phép đo KHÔNG do vòng này gây ra, nhưng vòng này đo được — khoản 152
+
+T3 của PR #79 **ĐỎ ở commit đầu** (`3dbe9aa`) và **XANH ở hai commit sau** (`299599c`, `8559244`) — ba lượt
+trên **cùng một cây mã nguồn**, chỉ khác tài liệu. Đọc log thay vì gọi nó là flake:
+
+```
+FAIL packages/identity/src/rbac.int.test.ts > [INV-D5] [S1.69 / khoản 120] auditPool bão hoà tạm thời
+Error: het 5000ms, so lan ghi so cua B dang cho khoa: 0
+```
+
+**`0`, không phải `1`.** Không lần chờ nào tồn tại — nên đây không phải *chờ chưa đủ lâu*, mà là **cảnh chưa
+bao giờ dựng được**. Đồ gá khởi động giao dịch `giuKhoa` rồi **lập tức** phát hai lần từ chối ở B, không chờ
+bằng chứng nào rằng khoá tư vấn đã được cầm. Hai lần từ chối chạy trước thì chúng lấy khoá ngay và không bao
+giờ xếp hàng. Đó là một **quan hệ xảy-ra-trước còn thiếu**, không phải một hạn quá ngắn.
+
+Ghi thành khoản **152**, **chưa sửa ở vòng này**: đây là vòng tài liệu, và sửa một cuộc đua thì phải đo chứ
+không đoán. Sổ nợ sau trọn vòng: **149 → 152 khoản, 45 → 48 còn mở** — 48 = 5 ngoài mã + 43 có mã.
+
+## 8. Cổng
 
 - `pnpm t0` — 248 module, 1030 phụ thuộc, 0 vi phạm
 - `pnpm test` — 63/63 tệp, 905 đạt · 1 bỏ qua
