@@ -6743,7 +6743,8 @@ Cái đắt nhất là khoản 23 ở `tools/inv-matrix/src/danh-gia.ts`: chuỗ
 | ký hiệu chết | 1 | `outbox_events` không phải tên bảng nào — thật là `outbox_jobs` |
 
 **Con số này tự nó là một bài học của vòng.** Bản nháp đầu của biên bản viết *“30 chỗ”* — một con số ước lượng
-chứ không đếm, và nó sai. Đếm lại bằng số mốc mà các script vá đã khớp: 9 + 3 + 30 + 5 = **47**. Một vòng
+chứ không đếm, và nó sai. Đếm lại bằng số CHỖ mà các script vá đã sửa — không phải số MỐC, vì một
+mốc có thể phủ nhiều chỗ: 9 + 3 + 30 + 5 = **47**. Một vòng
 chuyên đi sửa số đếm viết cứng suýt ghi một số đếm viết cứng sai vào chính biên bản của nó.
 
 Ba con số đáng gọi tên riêng, vì cả ba đều ở chỗ người đọc lấy kết luận:
