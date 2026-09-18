@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU, counterForTime, deriveTotpCode } from "@trustprocure/identity";
 import { OTP_RATE_WINDOW_SECONDS } from "@trustprocure/invitation";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -1195,10 +1195,19 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
         ).rows[0]?.n ?? "-1",
       );
 
-    // [khoản 144] Trần theo phiên (3) cắt TRƯỚC `MFA_MAX_FAILED_ATTEMPTS` (5), nên một phiên KHÔNG
-    // tự đẩy hồ sơ tới ngưỡng qua đường này được nữa — và đó chính là điều vế ⑹ đo. Cảnh còn tới
-    // được, và là cảnh thật: hồ sơ đã ở sát ngưỡng vì những lần sai trên `/auth/totp`, rồi MỘT lần
-    // sai trên đường phát agent là lần chạm ngưỡng. Mồi bằng CSDL để vế này đo đúng một thứ.
+    // [S1.78 / lượt soi ngang 72] TIỀN ĐỀ CỦA VẾ NÀY ĐÃ HẾT ĐÚNG, và nói ra chứ không sửa lặng lẽ.
+    //
+    // Bản S1.76 mồi hồ sơ tới `MFA_MAX_FAILED_ATTEMPTS - 1` rồi coi MỘT lần sai trên đường phát
+    // agent là lần CHẠM NGƯỠNG — cảnh ấy tới được vì trần khi đó là trần theo CỬA SỔ, và một cửa sổ
+    // sạch cho ba lần bất kể hồ sơ đang ở đâu.
+    //
+    // Trần nay là trần theo TRẠNG THÁI (`mfaTranDuongPhu`, §S1.78), nên với hồ sơ đã ở 4 thì đường
+    // phát agent KHÔNG thử mã nữa — nó trả 429 trước khi chạm `verifyTotpForLogin`. Tức đường này
+    // **không bao giờ còn là lần khoá được nữa**, và đó là một SIẾT, không phải một hồi quy.
+    //
+    // Vế này vì thế đổi thứ nó đo: từ *"lần chạm ngưỡng để lại dấu"* sang *"đường phụ không chạm
+    // được ngưỡng"* — mệnh đề mạnh hơn, và là mệnh đề mà chủ dự án đã chọn ngày 2026-09-18. Mồi vẫn
+    // bằng CSDL để cảnh là cảnh thật (hồ sơ sát ngưỡng vì những lần sai trên `/auth/totp`).
     await db.pool.query("UPDATE mfa_credentials SET failed_attempts = $1 WHERE org_id = $2 AND user_id = $3", [
       MFA_MAX_FAILED_ATTEMPTS - 1,
       orgA,
@@ -1226,112 +1235,140 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     const soDong = await demKhoa();
     const ke = `status cuối: ${String(cuoi?.status)}; dòng log khoản 139: ${dong.length}; MFA_LOCKED: ${soDong}`;
 
-    // ⑴ Lần chạm ngưỡng vẫn là một 401 bình thường — SAVEPOINT nuốt 55P03, không ai thấy 500.
-    expect(cuoi?.status, `lần chạm ngưỡng vẫn là 401, không phải 500 — ${ke}`).toBe(401);
-    // ⑵ Sổ trống trong cửa sổ ấy — đúng cái giá đã được chấp nhận.
-    expect(soDong, `sổ không nhận dòng MFA_LOCKED nào — ${ke}`).toBe(0);
-    // ⑶ VÀ CÁI THIẾU ĐỂ LẠI DẤU trên CHÍNH đường này — đúng MỘT dòng.
-    expect(dong.length, `đường phát agent phải để lại ĐÚNG một dấu — ${ke}`).toBe(1);
-    // ⑷ Dòng ấy NÊU TÊN ĐƯỜNG: một câu dùng chung cho hai đường thì không định vị được cái thiếu.
-    expect(dong[0], "dòng log phải nêu tên đường phát").toContain("duong phat agent");
-    // ⑸ Và nó không nội suy giá trị nào (kỷ luật A2).
-    expect(dong[0], "dòng log không được mang orgId").not.toContain(orgA);
-    expect(dong[0], "dòng log không được mang userId").not.toContain(u);
+    const sauCung = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
+      "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+      [orgA, u],
+    );
+    const keDu = `${ke}; failed sau: ${String(sauCung.rows[0]?.failed_attempts)}; locked: ${String(sauCung.rows[0]?.locked_until)}`;
+
+    // ⑴ Hồ sơ đã ở sát ngưỡng thì đường phụ TỪ CHỐI, không thử mã: 429, không 401.
+    expect(cuoi?.status, `đường phụ phải từ chối khi hồ sơ sát ngưỡng — ${keDu}`).toBe(429);
+    // ⑵ Và lần từ chối ấy KHÔNG làm bộ đếm tăng — nếu nó tăng thì chính lớp phòng thủ này là đường
+    //    đẩy hồ sơ tới ngưỡng, chỉ chậm hơn.
+    expect(Number(sauCung.rows[0]?.failed_attempts), `lần từ chối không được tăng bộ đếm — ${keDu}`)
+      .toBe(MFA_MAX_FAILED_ATTEMPTS - 1);
+    // ⑶ Hồ sơ KHÔNG khoá. Đây là mệnh đề thay chỗ cho ⑶⑷⑸ của bản S1.76 (đếm dòng log của lần
+    //    chạm ngưỡng): đường này không chạm ngưỡng được nữa nên không có dấu nào để đếm.
+    expect(sauCung.rows[0]?.locked_until, `hồ sơ KHÔNG được khoá qua đường phụ — ${keDu}`).toBeNull();
+    // ⑷ Và không có `MFA_LOCKED` nào — kể cả một hàng sổ ghi được.
+    expect(soDong, `không lần khoá nào xảy ra — ${keDu}`).toBe(0);
+    // ⑸ Không dòng log nào của khoản 139 trên đường này, vì không có cái thiếu nào để báo.
+    expect(dong.length, `không có lần ghi sổ nào hỏng để phải báo — ${keDu}`).toBe(0);
   });
   // ===============================================================================================
-  // ⑹ [khoản 144 — ĐO; chủ dự án chọn vá ở bộ điều phối ngày 2026-09-17] MỘT COOKIE TRỘM ĐƯỢC KHÔNG
-  // KHOÁ ĐƯỢC HỒ SƠ CỦA CHỦ NHÂN NÓ.
+  // ⑹ [S1.78 / khoản 144 — ĐO; chủ dự án chọn "trần theo TRẠNG THÁI" ngày 2026-09-18]
+  // MỘT COOKIE TRỘM ĐƯỢC KHÔNG KHOÁ ĐƯỢC HỒ SƠ CỦA CHỦ NHÂN NÓ — KỂ CẢ KHI KẺ TẤN CÔNG BIẾT CHỜ.
   //
-  // Đo TRƯỚC khi có `sessionLimit` (12 lời gọi, một cookie): 12×401, `failed_attempts` chạm 5, hồ sơ
-  // KHOÁ, và nạn nhân sau đó nhận `LOCKED_OUT` trên đường đăng nhập THẬT với mã ĐÚNG — tức đường mà
-  // chủ nhân cần để đi thu hồi chính cookie bị trộm. Vế này là cặp SAU của phép đo ấy.
+  // Vế này thay vế ⑹ của S1.76, và lý do thay là một phép đo chứ không phải một ý thích.
   //
-  // Con số 3 phải nhỏ hơn `MFA_MAX_FAILED_ATTEMPTS` = 5 mới có nghĩa; một trần 30 (giá trị của
-  // `callerLimit` trên `/auth/totp`) chặn cái thứ 31, tức chặn sau khi việc đã xong.
+  // Bản S1.76 chặn bằng trần theo CỬA SỔ (`sessionLimit: 3` trên `caller_rate_limits`) và vế ⑹ cũ
+  // gọi bảy lời gọi trong MỘT vòng lặp chặt — trọn vẹn trong một cửa sổ. Lượt soi ngang 72 chỉ ra
+  // cửa sổ ấy NHẢY về 0 ở những mốc công khai còn `failed_attempts` thì ĐƠN ĐIỆU, và phép đo bác
+  // bản vá ấy: `401,401,401,401,401`, `failed_attempts` 3 → 5, hồ sơ KHOÁ, nạn nhân `LOCKED_OUT`
+  // trên đường đăng nhập thật với mã ĐÚNG (§S1.78 mục 2).
+  //
+  // VÌ SAO VẾ NÀY XOÁ SẠCH BẢNG ĐẾM GIỮA CHỪNG, và đó là chỗ nó có răng: xoá `caller_rate_limits`
+  // là dạng MẠNH NHẤT của "một cửa sổ mới đã tới" — mạnh hơn mọi lần chờ. Một trần theo cửa sổ,
+  // bất kể độ dài, đi qua được vế này; chỉ một trần đọc THẲNG `failed_attempts` mới đứng. Ai thay
+  // trần trạng thái bằng một bộ đếm song song thì vế này ĐỎ.
   // ===============================================================================================
-  it("⑹ trần theo phiên cắt TRƯỚC lần thứ năm ⇒ hồ sơ không khoá, và nạn nhân vẫn đăng nhập được", async () => {
-    const u = await taoNguoi("tran-phien@vd.test");
-    const nguoi = await dangNhap("tran-phien@vd.test");
+  it("⑹ trần trạng thái đứng qua MỌI lần cửa sổ đếm được làm mới ⇒ hồ sơ không khoá, nạn nhân vẫn đăng nhập được", async () => {
+    const u = await taoNguoi("tran-trang-thai@vd.test");
+    const nguoi = await dangNhap("tran-trang-thai@vd.test");
 
     const ma: number[] = [];
-    let retryAfter: string | null = null;
-    for (let i = 0; i < MFA_MAX_FAILED_ATTEMPTS + 2; i += 1) {
+    const ban = async (): Promise<void> => {
       const r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
       ma.push(r.status);
-      if (r.status === 429) retryAfter ??= r.headers.get("retry-after");
-    }
-    const ke = `chuỗi status: ${ma.join(",")}`;
+    };
 
-    // ⑴ Ba lần đầu tới được handler; từ lần thứ TƯ là 429 — cắt trước lần thứ năm.
-    expect(ma.slice(0, 3), `ba lần đầu phải tới handler — ${ke}`).toEqual([401, 401, 401]);
-    expect(ma.slice(3), `từ lần thứ tư phải là 429 — ${ke}`).toEqual([429, 429, 429, 429]);
-    expect(retryAfter, "429 phải mang Retry-After").toBe(String(OTP_RATE_WINDOW_SECONDS));
+    // Đợt 1 — tới ngưỡng trạng thái.
+    for (let i = 0; i < 3; i += 1) await ban();
+    // MỌI bộ đếm theo cửa sổ được làm mới hoàn toàn. Đây là điều kẻ tấn công có được bằng cách CHỜ.
+    const xoa = await db.pool.query("DELETE FROM caller_rate_limits");
+    // Đợt 2 — nếu trần là một bộ đếm song song thì đợt này lại đi qua được.
+    for (let i = 0; i < 3; i += 1) await ban();
 
-    // ⑵ Và đây mới là điều trần ấy tồn tại để bảo vệ: hồ sơ KHÔNG khoá.
     const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
       "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
       [orgA, u],
     );
-    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
-    expect(Number(rows[0]?.failed_attempts), `số lần sai phải dừng ở trần — ${ke}`).toBeLessThan(MFA_MAX_FAILED_ATTEMPTS);
+    const ke = `chuỗi status: ${ma.join(",")}; đã xoá ${String(xoa.rowCount)} hàng bucket; failed=${String(rows[0]?.failed_attempts)}`;
 
-    // ⑶ Đòn đã đo không còn tới đích: nạn nhân đăng nhập được bằng mã ĐÚNG, qua đúng đường thật.
+    // ⑴ Ngưỡng cắt ở đúng chỗ đã khai, và LẦN CẮT KHÔNG LÀM BỘ ĐẾM TĂNG — nếu nó tăng thì chính
+    //    lớp phòng thủ này là đường đẩy hồ sơ tới ngưỡng.
+    expect(ma.slice(0, MFA_TRAN_SAI_DUONG_PHU), `hai lần đầu tới handler — ${ke}`)
+      .toEqual(Array(MFA_TRAN_SAI_DUONG_PHU).fill(401));
+    expect(ma.slice(MFA_TRAN_SAI_DUONG_PHU), `mọi lần sau phải là 429, KỂ CẢ sau khi xoá bucket — ${ke}`)
+      .toEqual(Array(ma.length - MFA_TRAN_SAI_DUONG_PHU).fill(429));
+    expect(Number(rows[0]?.failed_attempts), `bộ đếm phải dừng ở ngưỡng — ${ke}`).toBe(MFA_TRAN_SAI_DUONG_PHU);
+
+    // ⑵ Và đây là điều trần ấy tồn tại để bảo vệ.
+    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+
+    // ⑶ Đòn không tới đích: nạn nhân đăng nhập được bằng mã ĐÚNG, qua đúng đường thật.
     const truoc = dv.linkDaGui.length;
-    await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-phien@vd.test" } });
+    await goi("POST", "/auth/link", { body: { orgId: orgA, email: "tran-trang-thai@vd.test" } });
     await ob.chay(orgA);
     expect(dv.linkDaGui).toHaveLength(truoc + 1);
     const tk = dv.linkDaGui.at(-1)?.token ?? "";
     await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: tk } });
-    // Bước KẾ TIẾP, không phải bước hiện tại: `dangNhap` ở đầu vế này vừa tiêu thụ mã của bước này,
-    // và `verifyTotpAttempt` chống phát lại bằng `last_used_counter` ⇒ dùng lại chính nó là WRONG_CODE.
-    // Một hành vi ĐÚNG của hệ thống làm phép đo đỏ — lần thứ hai trong vòng này.
     const vao = await goi("POST", "/auth/totp", {
       body: { orgId: orgA, token: tk, code: deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1) },
     });
     expect(vao.status, `nạn nhân phải đăng nhập được — ${ke}; thân: ${vao.text}`).toBe(200);
   });
   // ===============================================================================================
-  // ⑺ [khoản 144 — ĐO] PHÉP ĐẾM PHẢI SỐNG QUA MỘT HANDLER NÉM.
+  // ⑺ [S1.78 / khoản 144 — ĐO] MỘT YÊU CẦU GIỮ ĐÚNG **MỘT** KẾT NỐI CỦA POOL NGHIỆP VỤ.
   //
-  // Vế ⑹ một mình KHÔNG đo được điều đó: handler của `/auth/agent-session` trả 401 bằng `return`,
-  // nên giao dịch COMMIT và đếm ở giao dịch nào cũng cho cùng kết quả — một lượt đột biến chuyển
-  // phép đếm vào giao dịch chính đi qua ⑹ SẠCH. Route tự thân TƯƠNG LAI thì ném được (`/auth/redeem`
-  // của nhánh ANON đã ném `LoginTokenError` ⇒ 422), và khi ấy đếm trong giao dịch chính là một trần
-  // không bao giờ đóng — đúng khiếm khuyết mà `callerLimit` của nhánh ANON đã phải tránh.
+  // Vế ⑺ của S1.76 đo một tính chất KHÁC: "phép đếm sống qua một handler ném". Tính chất ấy nay
+  // KHÔNG CÒN Ý NGHĨA và nói ra chứ không lặng lẽ bỏ — trần trạng thái là một phép ĐỌC THUẦN, nên
+  // không có gì để sống qua một rollback. Thứ thế chỗ nó là tính chất dưới đây, và nó quan trọng
+  // hơn: bản S1.76 mở một `withTenant(deps.pool, …)` LỒNG bên trong giao dịch đang giữ một kết nối
+  // của CHÍNH pool ấy, không trần chờ.
   //
-  // Đo bằng CHÍNH bộ điều phối ấy với một bảng route khác: một route tự thân mà handler NÉM.
+  // `composition.ts` dùng tiền đề "mỗi yêu cầu giữ MỘT kết nối của `pool`" để định cỡ `auditPool`;
+  // `pool.ts` viết rằng rút cạn pool là "chạm tới người của TỔ CHỨC KHÁC". Đo trên bản S1.76
+  // (§S1.78 mục 3): còn một kết nối rảnh thì route có trần TREO 8 007 ms còn route không trần đi
+  // qua trong 36 ms; nhả kết nối thì nó chạy tiếp trong 17 ms.
+  //
+  // Vế này là phép đo ấy, giữ lại làm vế canh. `apiPool` của `poolAs` có `max = 3`.
   // ===============================================================================================
-  it("⑺ trần theo phiên sống qua rollback: route tự thân có handler NÉM vẫn bị cắt ở lần thứ ba", async () => {
-    await taoNguoi("vach-ngan@vd.test");
-    const nguoi = await dangNhap("vach-ngan@vd.test");
-    const routeNem = {
-      method: "POST",
-      path: "/auth/thu-vach-ngan",
-      audience: "BUYER",
-      mutates: true,
-      self: true,
-      agent: false,
-      sessionLimit: 2,
-      handler: () => {
-        throw new Error("nem de giao dich cuon lai");
-      },
-    } as unknown as Route;
-    const s2 = createApiServer(
-      createDispatcher({ pool: apiPool, auditPool, services: dv.services, routes: [...ROUTES, routeNem] }),
-      { remoteAddressOf: taoDocDiaChi(["127.0.0.1"]) },
-    );
-    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
-    const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+  it("⑺ route có trần trạng thái chỉ cần MỘT kết nối: còn một kết nối rảnh thì nó vẫn đi qua", async () => {
+    await taoNguoi("mot-ket-noi-a@vd.test");
+    await taoNguoi("mot-ket-noi-b@vd.test");
+    const a = await dangNhap("mot-ket-noi-a@vd.test");
+    const b = await dangNhap("mot-ket-noi-b@vd.test");
+
+    const coHan = async (ten: string, p: Promise<{ status: number }>): Promise<string> => {
+      const t = Date.now();
+      let het: NodeJS.Timeout | undefined;
+      const dongHo = new Promise<string>((ok) => {
+        het = setTimeout(() => ok("TREO"), 8_000);
+      });
+      const r = await Promise.race([p.then((v) => `xong:${String(v.status)}`, () => "ném"), dongHo]);
+      if (het !== undefined) clearTimeout(het);
+      return `${ten}=${r}/${String(Date.now() - t)}ms`;
+    };
+
+    // Chiếm 2 trong 3 kết nối ⇒ còn ĐÚNG MỘT. Một route cần hai kết nối sẽ đứng ở đây.
+    const giu1 = await apiPool.connect();
+    const giu2 = await apiPool.connect();
+    const ke: string[] = [];
     try {
-      const ma: number[] = [];
-      for (let i = 0; i < 3; i += 1) {
-        ma.push((await goi("POST", "/auth/thu-vach-ngan", { cookie: nguoi.cookie, goc: goc2 })).status);
-      }
-      // Hai lần đầu đi tới handler và handler ném ⇒ 500, giao dịch của chúng ROLLBACK. Lần thứ ba
-      // vẫn phải là 429: phép đếm không nằm trong giao dịch bị cuốn.
-      expect(ma, `chuỗi status: ${ma.join(",")}`).toEqual([500, 500, 429]);
+      // Đối chứng: route tự thân KHÔNG chạm hồ sơ MFA (`mfaTranDuongPhu: null`) — vốn chỉ cần một.
+      ke.push(await coHan("logout", goi("POST", "/auth/logout", { cookie: a.cookie })));
+      // Vế chịu lực: route CÓ trần trạng thái cũng chỉ được cần một.
+      const pAgent = goi("POST", "/auth/agent-session", { cookie: b.cookie, body: { code: "000000" } });
+      void pAgent.catch(() => undefined);
+      ke.push(await coHan("agent-session", pAgent));
     } finally {
-      await new Promise<void>((xong) => s2.close(() => xong()));
+      giu1.release();
+      giu2.release();
     }
+    const chung = ke.join(" | ");
+
+    expect(chung, `đối chứng: route một-kết-nối phải đi qua — ${chung}`).toContain("logout=xong:200");
+    expect(chung, `route có trần trạng thái KHÔNG được cần kết nối thứ hai — ${chung}`).toContain("agent-session=xong:401");
   });
 });

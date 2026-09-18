@@ -5986,7 +5986,7 @@ chạy thêm câu SQL nào trên đường 401 — tiền lệ `SAVEPOINT xep_ha
 không phải oracle cho kẻ gọi (chuỗi cố định, ra stderr máy chủ, không vào phản hồi), và log flooding
 không phải lối vào: trần chồng bốn tầng trên `/auth/totp`.
 
-# §S1.76 — khoản nợ 141: phạm vi sống trên hàng phiên — `sessions.kind`, trường `agent` bắt buộc trên route, một vế 403 có ghi sổ; khoản 142 thu hẹp, khoản 144 mở
+# §S1.76 — khoản nợ 141: phạm vi sống trên hàng phiên — `sessions.kind`, trường `agent` bắt buộc trên route, một vế 403 có ghi sổ; khoản 142 thu hẹp, khoản 144, 145 và 146 mở
 
 **Ngày:** 2026-09-17 · **Nhánh:** `khoan-141-phien-co-pham-vi` từ `master` `6bcbe96`, gộp `origin/master` `8f7a985` giữa vòng (xem §9) · **ADR:** 039
 
@@ -6504,3 +6504,151 @@ lại một danh sách phát hiện **trên chính vòng này**, trong đó sáu
 | G3-3, G3-6 | **BỊ BÁC** ở pha thẩm tra, không sửa gì |
 | G3-11, G3-12 | quét độc lập xác nhận mục 5 không sót hàm thứ tư, và mọi con số/con trỏ đếm lại đều đúng |
 
+# §S1.78 — LƯỢT SOI NGANG 72 (S1.72 → S1.77): hai khoản CAO trên mã vừa merge hai giờ trước, đo — vá — đo lại; khoản 144 vá lại bằng trần TRẠNG THÁI; khoản 148 và 149 mở
+
+**Ngày:** 2026-09-18 · **Nhánh:** `luot-soi-ngang-72` từ `master` `4e3118f` · **ADR:** 039 (sửa lời khai)
+
+## 1. Vòng này tồn tại vì một lần LỠ NHỊP, và nói ra trước mọi thứ khác
+
+`Handoff.md` §11 đặt mốc: *"Lượt kế: sau ba vòng đổi hardening, hay chậm nhất **S1.77**"*. S1.77 chạm
+đúng mốc ấy và **không chạy lượt ngang**. Lý do không đẹp: vòng ấy **không kiểm mốc ở đầu vòng**, và
+chỉ phát hiện ra sau khi đã merge.
+
+Khác hai lần lỡ nhịp trước — S1.66 (mốc S1.52 trôi qua mười ba vòng) và S1.71 (chạm mốc nhưng điều
+kiện *ba vòng đổi hardening* chưa thoả, nên ghi lý do) — lần này **mốc đã chạm và không có lý do nào
+ngoài việc quên**. Đo vế còn lại cho đủ: `hardening.always.sql` không đổi lần nào kể từ lượt 66
+(`git rev-list --count 70075e8..4e3118f --first-parent -- db/migrations/hardening.always.sql` = 0).
+
+**Và cái giá của lần lỡ nhịp ấy hiện ra bằng số ở mục 2 và 3:** hai khoản CAO mà lượt này tìm ra đều
+do S1.76 tạo, đều vào `master` lúc 22:36 ngày 17/09, và nếu lượt ngang chạy đúng mốc thì chúng đã bị
+bắt **trước** khi vào chứ không phải sau.
+
+Chủ dự án chọn chạy ngay thay vì dời. Mốc kế: **chậm nhất S1.83**, kèm một câu thêm vào quy ước —
+*vòng nào cũng phải kiểm mốc này ở ĐẦU vòng, không phải sau khi merge*.
+
+## 2. CAO-A — `sessionLimit: 3` không đóng được đòn nó sinh ra để đóng
+
+Commit `d114947` (S1.76) khai thẳng trên tiêu đề: *"tran theo PHIEN tren route tu than — mot cookie
+trom duoc khong khoa duoc ho so cua chu nhan no"*. **Lời ấy sai**, và sai vì một tính chất mà CHÍNH
+kho đã viết ra ở hai tệp mà bản vá ấy chạm:
+
+- `tangBucketNguoiGoi` đếm trên **cửa sổ RỜI RẠC** làm tròn theo epoch (`floor(epoch/900)*900`) —
+  `invitation.ts` tự ghi: *"một kẻ tấn công canh đúng ranh giới hai cửa sổ gửi được GẤP ĐÔI hạn mức"*;
+- `failed_attempts` của hồ sơ MFA thì **ĐƠN ĐIỆU** — đường về 0 duy nhất là một mã TOTP **ĐÚNG**.
+
+Ba lần ở cửa sổ này cộng hai lần ở cửa sổ sau vẫn đủ `MFA_MAX_FAILED_ATTEMPTS` = 5. Vế ⑹ của vòng ấy
+không thấy vì bảy lời gọi của nó chạy trong **một** cửa sổ.
+
+**Phép đo** (dựng cửa sổ kế bằng cách dịch mốc của mọi hàng đếm lui đúng một cửa sổ — nguyên văn điều
+xảy ra khi đồng hồ đi qua một bội của 900 s):
+
+| | trước vá | sau vá |
+|---|---|---|
+| chuỗi status | `401,401,401,401,401` | `401,401,429,429,429` |
+| sau cửa sổ 1 | `failed=3`, `locked=null` | `failed=2`, `locked=null` |
+| **sau khi vắt qua ranh giới** | **`failed=5`, hồ sơ KHOÁ** | `failed=2`, `locked=null` |
+| nạn nhân đăng nhập bằng mã ĐÚNG | **401 `LOCKED_OUT`** | **200 `ok`** |
+
+## 3. CAO-B — phép đếm lấy kết nối THỨ HAI từ chính pool đang giữ giao dịch
+
+`dispatch.ts` mở một `withTenant(deps.pool, …)` **LỒNG** bên trong `withTenant(deps.pool, …,
+trongGiaoDich)` của cùng yêu cầu, **không** `maxConnectWaitMs`. Kho đã tự gọi tên đúng hình dạng này ở
+hai chỗ: `with-tenant.ts` (*"pool dùng chung với chính giao dịch đang chờ nó"*) và `pool.ts` (*"rút cạn
+pool của cả tiến trình — tức chạm tới người của TỔ CHỨC KHÁC"*). Nó phá tiền đề mà `composition.ts`
+dùng để định cỡ `auditPool`: *"mỗi yêu cầu giữ MỘT kết nối của `pool`"*.
+
+**Phép đo vi sai** — chiếm 2 trong 3 kết nối của pool test, còn đúng một rảnh:
+
+| | trước vá | sau vá |
+|---|---|---|
+| `/auth/logout` (đối chứng, không trần) | `200` sau **36 ms** | `200` sau 23 ms |
+| `/auth/agent-session` | **TREO 8 007 ms** | `401` sau **18 ms** |
+| sau khi nhả hai kết nối | `401` sau 17 ms | (đã xong) |
+
+## 4. Bản vá — chủ dự án chọn "trần theo TRẠNG THÁI", và CAO-B biến mất như hệ quả
+
+Trường route `sessionLimit` (trần theo CỬA SỔ) đổi thành **`mfaTranDuongPhu`** (ngưỡng
+`failed_attempts`), với `MFA_TRAN_SAI_DUONG_PHU = 2` trên `/auth/agent-session` và `null` trên
+`/auth/logout` (route không chạm hồ sơ MFA).
+
+Ba tính chất của thiết kế, và chúng là lý do nó đúng chỗ còn bản cũ thì không:
+
+1. **Nó đọc thẳng đại lượng cần bảo vệ**, nên **không có mốc nào để canh**. Một trần theo cửa sổ là
+   một bộ đếm **SONG SONG** — nó đoán về `failed_attempts` qua một biến khác, và mọi lời đoán như thế
+   đều sai ở ranh giới.
+2. **Lần từ chối KHÔNG tăng bộ đếm.** Nếu nó tăng thì chính lớp phòng thủ này là đường đẩy hồ sơ tới
+   ngưỡng — đúng lỗi nó sinh ra để chặn, chỉ chậm hơn.
+3. **Nó là một phép ĐỌC THUẦN**, nên chạy được trên chính `client` của giao dịch. **CAO-B biến mất như
+   hệ quả**, không cần một bản vá riêng — và vế ⑺ cũ ("phép đếm sống qua một handler ném") mất nghĩa
+   vì không còn gì để sống qua một rollback.
+
+**Giá phải trả, nói ra:** một người dùng THẬT đã sai hai lần trên đường đăng nhập chính sẽ bị đường
+phát chứng chỉ agent từ chối cho tới khi họ đăng nhập đúng một lần. Fail-closed có chủ ý — đường phát
+agent là đường PHỤ, đường đăng nhập mới là đường phải luôn mở.
+
+### Đột biến — hai vế canh mới có răng
+
+| # | Đột biến | ⑹ | ⑺ |
+|---|---|---|---|
+| — | bản gốc | XANH | XANH |
+| M1 | bỏ hẳn trần trạng thái (`conChoChoDuongPhu` luôn cho qua) | **ĐỎ** | — |
+| M3 | đặt lại phép kiểm vào một `withTenant` LỒNG trên `deps.pool` — **đúng hình dạng bản S1.76** | — | **ĐỎ** |
+
+Vế ⑹ **xoá sạch `caller_rate_limits` giữa chừng**: đó là dạng MẠNH NHẤT của *"một cửa sổ mới đã tới"*,
+mạnh hơn mọi lần chờ. Một trần theo cửa sổ, bất kể độ dài, ĐỎ ở đó.
+
+### Một vế đổi thứ nó đo, và nói ra chứ không sửa lặng lẽ
+
+Vế ⑸ (giao điểm S1.75 × S1.76) mồi hồ sơ tới `MFA_MAX_FAILED_ATTEMPTS - 1` rồi coi một lần sai trên
+đường phát agent là lần **chạm ngưỡng**. Tiền đề ấy nay hết đúng: đường phụ **không bao giờ còn chạm
+được ngưỡng**. Vế đổi sang đo mệnh đề mạnh hơn — *đường phụ từ chối, không tăng bộ đếm, hồ sơ không
+khoá*. Hệ quả: nhánh `auditSkipped` trên route ấy nay **không tới được** chừng nào
+`mfaTranDuongPhu < MFA_MAX_FAILED_ATTEMPTS`; khối được giữ lại và một vế cổng mới ghim đúng bất đẳng
+thức ấy, nên câu "không tới được" là một câu **kiểm được**, không phải một lời hứa.
+
+## 5. Thu hoạch lời khai thiu — thứ một lượt NGANG lấy được mà lượt DỌC không
+
+| Lời khai | Viết ở | Sống bao lâu | Đã sửa |
+|---|---|---|---|
+| `docs/ARCHITECTURE.md`: *"Trạng thái triển khai: **chưa có mã nguồn**"* | vòng khai sinh, 27/08 | sai từ S1.1, qua **16 commit sửa chính tệp ấy** | ✔ |
+| `docs/STATE.md`: *"Cập nhật lần cuối: 2026-09-08 (S1.22)"* | S1.22 | **68 commit** sửa chính tệp ấy | ✔ |
+| `docs/STATE.md` §Kiến trúc: *"Phần chưa có dòng mã nào: toàn bộ luồng nghiệp vụ … và toàn bộ tầng HTTP"* | S0 | S1.21 sửa bản SONG SINH ở `Handoff.md` §6 và bỏ sót bản này | ✔ |
+| `Handoff.md` §6: *54 bất biến · 23 hàng trống · 5 mã cờ hẹp* | S1.21 | cả ba sai ở HEAD (56 · 0 · —) | ✔ |
+| *"17 tiền đề"* ở ba chỗ | S1.10 | tệp có **18** hàng | ✔ |
+| tiêu đề §S1.76 khai *"khoản 144 mở"* | S1.76 | chính vòng ấy mở 144, **145 và 146** | ✔ |
+| hàng sổ 147: *"Hai vế đầu khớp NGUYÊN VĂN"* | **S1.77 — lỗi của chính vòng trước của phiên này** | một vòng | ✔ |
+
+Chỗ cuối đáng dừng lại: S1.77 đọc lại regex ấy, đối chiếu **vế thứ ba** bằng `grep`, rồi khai về **cả
+hai vế đầu** mà không đối chiếu. Đối chiếu nốt thì vế thứ hai (`phai o mot PHIEN khac`) **cũng không
+khớp** câu `RAISE` tương ứng (`Phe duyet phai DEN TU mot PHIEN KHAC…`, `019:226`) — nó khớp một câu của
+trigger khác, trên bảng khác. **Hai** trong ba vế là vế chết, không phải một.
+
+## 6. Phần KHÔNG đóng, và hai khoản mới
+
+- **Khoản 148** — bốn lớp cưỡng chế mà S1.76 dựng đều hẹp hơn hoặc yếu hơn lời khai của chúng:
+  `--deduplicate` khai *"có ở MỌI chỗ đọc `git ls-files` của `tests/architecture`"* mà chỉ có ở 7/13;
+  cổng `auditSkipped` đếm **văn bản THÔ** kể cả trong chú thích (đi ngược chuẩn cây cú pháp mà chính
+  S1.72 đặt ra cho cùng thư mục); và phạm vi cổng ấy chỉ quét `apps/api/src/routes`.
+- **Khoản 149** — hai vế canh của S1.73 không khẳng định tiền đề: vế đo chủ lực của khoản 126 ở
+  `unseal-worker.int.test.ts` xanh kể cả khi đồ gá không dựng được cảnh, và `expect(khoaB).toBe(0)` ở
+  `rfq.int.test.ts` là khẳng định RỖNG không đối chứng dương — trong khi **bản sao y hệt của phép dò
+  ấy ở tệp khác CÙNG vòng thì có đối chứng**.
+- **Chưa sửa ở vòng này, ghi để không ai tưởng đã xong:** ADR-038 vẫn khai khoản 141 MỞ và vẫn nói
+  `apps/mcp` cầm một phiên người mua toàn quyền (bị bác từ S1.76); con trỏ `dispatch.ts:504` ở ADR-038
+  và hàng sổ 142 trỏ vào một câu khác; khối mở đầu `login.ts` không liệt `startAgentSession`;
+  `Handoff.md` §2 vẫn khai HEAD của master là `30d1972`; khối lý do của `/auth/agent-session` viện
+  `assertFreshMfa` — một hàm KHÔNG đường nào trong `apps/` gọi.
+- **Phạm vi phép đo:** cả hai phép đo CAO chạy trên pool test (`max = 3`) và trên cụm Postgres của bộ
+  test, không trên một tiến trình `api` thật dưới tải. Hình dạng thì không đổi theo cỡ pool — CAO-B là
+  một tính chất ĐẾM (một yêu cầu cần mấy kết nối), không phải một ngưỡng.
+
+## 7. Lượt soi ngang 72 — số liệu
+
+**44 agent, 0 lỗi, 38 phát hiện qua thẩm tra đối kháng, KHÔNG phát hiện nào bị bác.** Bảy phiếu CAO
+gộp lại là **hai** lỗi (bốn góc độc lập tìm ra cùng một cặp — đó là tín hiệu, không phải trùng lặp).
+Sáu góc: hồi quy xuyên vòng · lớp cưỡng chế bị vô hiệu · lời khai thiu · test mất răng · chỗ hai vòng
+song song chạm nhau · khoản đóng sai.
+
+Góc *"khoản đóng sai"* thử phá khoản 139 và 140 và **không phá được** — lời khai của cả hai còn đúng,
+và nó còn ghi rằng khoản 140 khai **thiếu** một lớp giữ nó. Đó là kết quả ÂM, và một lượt soi ngang
+không tìm ra gì ở một góc cũng là một phép đo.

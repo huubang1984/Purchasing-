@@ -4,8 +4,15 @@
 > `docs/DECISIONS.md`; thiết kế đầy đủ ở
 > `docs/superpowers/specs/2026-08-26-trustprocure-s0-s1-design.md`.
 >
-> **Trạng thái triển khai: chưa có mã nguồn.** Tài liệu này mô tả kiến trúc mục tiêu của
-> S0+S1 đã được duyệt. Cập nhật lại khi thực tế lệch khỏi thiết kế.
+> ~~**Trạng thái triển khai: chưa có mã nguồn.**~~ **[S1.78 / lượt soi ngang 72] Câu ấy viết ngày
+> khai sinh tệp (2026-08-27) và SAI từ S1.1; nó sống qua 16 commit sửa chính tệp này.** Trạng thái
+> thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — mười gói dưới `packages/`, bốn app
+> dưới `apps/` (`api`, `unseal-worker`, `public-keys`, `mcp`), 51 migration đánh số, và cổng evidence
+> 56/56 bất biến. Tài liệu này mô tả kiến trúc **đang chạy**; cập nhật lại khi thực tế lệch khỏi nó.
+>
+> *Vì sao một câu sai sống lâu đến thế:* không cổng nào đọc dòng này. Đó là khoản nợ **68** (evidence
+> đóng dấu xanh cho văn xuôi không phép đo nào chạm), và lượt soi ngang 72 là lần đầu ai đó đọc lại
+> nó — đúng việc mà một lượt soi ngang sinh ra để làm.
 
 ---
 

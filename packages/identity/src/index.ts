@@ -89,6 +89,8 @@ export {
   MFA_LOCKOUT_SECONDS,
   MFA_MAX_ALLOWED_FAILED_ATTEMPTS,
   MFA_MAX_FAILED_ATTEMPTS,
+  MFA_TRAN_SAI_DUONG_PHU,
+  conChoChoDuongPhu,
   enrollTotpCredential,
   verifyTotpAttempt,
   type MfaAttemptResult,

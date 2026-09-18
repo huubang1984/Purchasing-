@@ -157,6 +157,62 @@ export const MFA_MAX_FAILED_ATTEMPTS = 5;
 /** Độ dài cửa sổ khoá, tính bằng giây. */
 export const MFA_LOCKOUT_SECONDS = 900;
 
+// ================================================================================================
+// [S1.78 / khoản 144 — ĐO; chủ dự án chọn "trần theo TRẠNG THÁI" ngày 2026-09-18]
+// MỘT ĐƯỜNG PHỤ KHÔNG ĐƯỢC ĐẨY HỒ SƠ CỦA NGƯỜI KHÁC TỚI NGƯỠNG KHOÁ.
+//
+// Bối cảnh, và nó là một phép đo chứ không phải một lo xa: `/auth/agent-session` đòi một mã TOTP
+// tươi, nên mỗi lần gọi sai làm `failed_attempts` của hồ sơ MFA tăng một. Ai cầm một cookie phiên
+// trộm được của người mua bắn đủ `MFA_MAX_FAILED_ATTEMPTS` lần là KHOÁ hồ sơ chủ nhân — tức khoá
+// đúng con đường mà chủ nhân cần để đi thu hồi chính cookie ấy.
+//
+// S1.76 vá bằng một TRẦN THEO CỬA SỔ (`sessionLimit: 3`, bucket `caller_rate_limits`). Lượt soi
+// ngang 72 bác, và phép đo bác theo (§S1.78 mục 2): bucket ấy là cửa sổ NHẢY làm tròn theo epoch —
+// mọi bộ đếm về 0 cùng lúc ở những mốc CÔNG KHAI — còn `failed_attempts` thì ĐƠN ĐIỆU, chỉ về 0 khi
+// có một mã ĐÚNG. Ba lần ở cửa sổ này cộng hai lần ở cửa sổ sau vẫn đủ năm. Đo được: chuỗi
+// `401,401,401,401,401`, `failed_attempts` 3 → 5, hồ sơ KHOÁ, và nạn nhân nhận `LOCKED_OUT` trên
+// đường đăng nhập thật với mã ĐÚNG.
+//
+// VÌ SAO TRẦN NÀY ĐÚNG CHỖ CÒN TRẦN KIA THÌ KHÔNG: nó nối vào CHÍNH đại lượng cần bảo vệ. Một trần
+// theo cửa sổ là một bộ đếm SONG SONG — nó đoán về `failed_attempts` qua một biến khác, và mọi lời
+// đoán như thế đều sai ở ranh giới. Ngưỡng dưới đây đọc thẳng `failed_attempts`, nên KHÔNG có ranh
+// giới nào để canh: kẻ tấn công đẩy được tới đúng `MFA_TRAN_SAI_DUONG_PHU` rồi dừng, mãi mãi, bất
+// kể cửa sổ nào.
+//
+// VÌ SAO LẦN TỪ CHỐI KHÔNG TĂNG BỘ ĐẾM: nếu nó tăng thì chính lớp phòng thủ này trở thành đường đẩy
+// hồ sơ tới ngưỡng — đúng lỗi nó sinh ra để chặn, chỉ chậm hơn.
+//
+// GIÁ PHẢI TRẢ, nói ra: một người dùng THẬT đã sai hai lần trên đường đăng nhập chính sẽ bị đường
+// phát chứng chỉ agent từ chối cho tới khi họ đăng nhập đúng một lần. Đó là fail-closed có chủ ý —
+// đường phát agent là đường PHỤ, còn đường đăng nhập mới là đường phải luôn mở.
+// ================================================================================================
+export const MFA_TRAN_SAI_DUONG_PHU = 2;
+
+/**
+ * `true` khi hồ sơ MFA của người này còn đủ chỗ để một ĐƯỜNG PHỤ thử một mã TOTP mà không có nguy
+ * cơ đẩy hồ sơ tới ngưỡng khoá. Đọc thuần, KHÔNG ghi — xem khối trên.
+ *
+ * Hồ sơ chưa tồn tại thì trả `true`: lần thử sẽ hỏng ở chỗ khác với lý do đúng của nó, và một
+ * ngưỡng chặn trước một hồ sơ không có là một lớp từ chối sai người.
+ */
+export async function conChoChoDuongPhu(
+  client: pg.PoolClient,
+  orgId: string,
+  userId: string,
+  tran: number = MFA_TRAN_SAI_DUONG_PHU,
+): Promise<boolean> {
+  const { rows } = await client.query<{ failed_attempts: number }>(
+    `SELECT c.failed_attempts
+       FROM public.mfa_credentials c
+      WHERE c.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND c.user_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, userId],
+  );
+  const h = rows[0];
+  if (h === undefined) return true;
+  return Number(h.failed_attempts) < tran;
+}
+
 /**
  * [vòng fix 1 — MỤC 5] TRẦN CỦA `maxFailedAttempts`, và vì sao một tham số chính sách phải có
  * cận TRÊN chứ không chỉ cận DƯỚI.

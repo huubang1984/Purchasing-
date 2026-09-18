@@ -77,12 +77,13 @@
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import {
+  conChoChoDuongPhu,
   MfaRequiredError,
   PermissionDeniedError,
   requirePermission,
   resolveSessionByToken,
-  throwAuditedDenial,
   SessionInvalidError,
+  throwAuditedDenial,
   type SessionActor,
 } from "@trustprocure/identity";
 import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
@@ -190,6 +191,9 @@ const THAN_404 = { error: "khong co duong nay" } as const;
 const THAN_405 = { error: "phuong thuc khong duoc ho tro" } as const;
 const THAN_500 = { error: "loi noi bo" } as const;
 const THAN_429 = { error: "qua nhieu yeu cau" } as const;
+/** [S1.78 / khoản 144] Thân riêng cho trần TRẠNG THÁI: một 429 ở đây nói "hồ sơ đang gần ngưỡng khoá",
+ * không nói "bạn gọi quá nhanh", và KHÔNG mang `Retry-After` — không có cửa sổ nào để chờ hết. */
+const THAN_429_MFA = { error: "ho so MFA gan nguong khoa; dang nhap lai truoc" } as const;
 /** [review H5-1] Độ trễ khi một tổ chức vượt `orgLimit` — làm chậm, không khoá. */
 export const TRE_QUA_TRAN_TO_CHUC_MS = 2000;
 /** Thân 503 cho ca KHÔNG đọc được địa chỉ người gọi (review H6-1). Không nêu lý do chi tiết. */
@@ -559,35 +563,29 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               );
             }
             // ==================================================================================
-            // [khoản 144 / S1.76 — ĐO] TRẦN THEO PHIÊN TRÊN ROUTE TỰ THÂN.
+            // [S1.78 / khoản 144 — ĐO] TRẦN THEO TRẠNG THÁI HỒ SƠ MFA, KHÔNG THEO CỬA SỔ.
             //
-            // VÌ SAO Ở ĐÂY, SAU `resolveSessionByToken`: khoá bucket là `actor.sessionId`, một giá
-            // trị chỉ có sau khi phiên đã được xác thực. Đếm TRƯỚC đó thì khoá phải là token người
-            // gọi gửi, và khi ấy một kẻ gửi token ngẫu nhiên tạo được một hàng `caller_rate_limits`
-            // mỗi request — đúng cái bảng mà khoản 55 đã gọi tên là bảng DUY NHẤT có số hàng do kẻ
-            // tấn công chọn.
+            // Route tự thân nào đòi một mã TOTP thì mỗi lần sai làm `failed_attempts` của hồ sơ
+            // NGƯỜI GỌI tăng một — nên một cookie trộm được đẩy hồ sơ chủ nhân tới ngưỡng khoá,
+            // tức khoá đúng con đường chủ nhân cần để đi thu hồi chính cookie ấy.
             //
-            // VÌ SAO TRONG MỘT GIAO DỊCH RIÊNG (`withTenant` trên `deps.pool`, không dùng `client`):
-            // ~~handler của đường phát rollback ở mọi lần mã sai — 401 là một nhánh ném~~ — câu ấy
-            // SAI, và một lượt đột biến đã nói ra: handler của `/auth/agent-session` trả 401 bằng
-            // `return`, nên giao dịch COMMIT và trên đường HÔM NAY hai cách cho cùng kết quả (đột
-            // biến chuyển phép đếm vào giao dịch chính đi qua vế ⑹ SẠCH). Lý do đúng là lý do cho
-            // đường MAI SAU: một route tự thân mà handler NÉM thì giao dịch cuốn theo cả phép đếm,
-            // và trần thành một lớp không bao giờ đóng — đúng khiếm khuyết mà `callerLimit` của
-            // nhánh ANON đã phải tránh (`/auth/redeem` ném `LoginTokenError` ⇒ 422). Vế ⑺ của
-            // `auth.int.test.ts` đo đúng điều đó bằng một route tự thân có handler ném.
+            // VÌ SAO ĐỌC `failed_attempts` CHỨ KHÔNG ĐẾM CỬA SỔ: bản trước của khối này đếm trên
+            // `caller_rate_limits` với trần 3. Lượt soi ngang 72 bác và phép đo bác theo — bucket
+            // ấy là cửa sổ NHẢY làm tròn theo epoch, còn `failed_attempts` thì đơn điệu, nên ba
+            // lần ở cửa sổ này cộng hai lần ở cửa sổ sau vẫn đủ năm (§S1.78 mục 2). Trần đọc thẳng
+            // đại lượng cần bảo vệ thì KHÔNG có ranh giới nào để canh.
             //
-            // VÌ SAO KHÔNG PHẢI `callerLimit` THEO ĐỊA CHỈ: đo được ở vòng này, đòn khoá một hồ sơ
-            // MFA chỉ cần `MFA_MAX_FAILED_ATTEMPTS` = 5 request; một trần 30/15 phút theo địa chỉ
-            // chặn cái thứ 31, tức chặn sau khi việc đã xong. Xem `BuyerSelfRoute.sessionLimit`.
+            // VÌ SAO TRÊN `client` CHỨ KHÔNG PHẢI MỘT `withTenant` RIÊNG: bản trước mở một
+            // `withTenant(deps.pool, …)` LỒNG bên trong giao dịch đang giữ một kết nối của CHÍNH
+            // pool ấy, không trần chờ. Đo được (§S1.78 mục 3): với một kết nối rảnh, route có trần
+            // treo 8 000 ms còn route không trần đi qua trong 36 ms; nhả kết nối thì nó chạy tiếp
+            // trong 17 ms. Nó phá tiền đề "mỗi yêu cầu giữ MỘT kết nối của `pool`" mà
+            // `composition.ts` dùng để định cỡ `auditPool`. Khối này là một phép ĐỌC THUẦN nên nó
+            // không cần một giao dịch riêng để sống qua rollback — dùng `client` là đủ và đúng.
             // ==================================================================================
-            if (route.mutates && route.self === true && route.sessionLimit !== null) {
-              const tran = route.sessionLimit;
-              const soLan = await withTenant(deps.pool, cookie.orgId, (kh) =>
-                tangBucketNguoiGoi(kh, `${route.path}|phien|${actor.sessionId}`, deps.services.pepper),
-              );
-              if (soLan > tran) {
-                return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+            if (route.mutates && route.self === true && route.mfaTranDuongPhu !== null) {
+              if (!(await conChoChoDuongPhu(client, cookie.orgId, actor.id, route.mfaTranDuongPhu))) {
+                return { status: 429, body: THAN_429_MFA };
               }
             }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
