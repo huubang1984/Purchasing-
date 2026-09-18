@@ -3265,7 +3265,7 @@ gì**. Khai năm khoản trong khi có mười ba nghĩa là tám khoản nợ k
 
 ⑹ **[review lượt 13, H13-1] *"ĐÓNG"* nghĩa là CÓ LỚP GIỮ, không phải CÓ CÀI ĐẶT.** Vòng này
    suýt tuyên khoản nợ 1 đóng dựa trên `callerLimit: LOGIN_TOTP_MAX_PER_CALLER` ở
-   `apps/api/src/routes/auth.ts:166` — một dòng cấu hình THẬT, cưỡng chế THẬT ở dispatcher, nhưng
+   ~~`apps/api/src/routes/auth.ts:166`~~ **[S1.79]** `apps/api/src/routes/auth.ts` dòng `callerLimit: LOGIN_TOTP_MAX_PER_CALLER` — một dòng cấu hình THẬT, cưỡng chế THẬT ở dispatcher, nhưng
    **xoá đúng dòng ấy thì không một test nào đỏ**: hai test hạn mức đã có chỉ đo `/auth/link` và
    `/auth/redeem`, và đối chứng của chúng gỡ cờ khỏi MỌI route ANON rồi vẫn chỉ đo `/auth/redeem`.
    Đó là "xanh giả" ở chiều ngược với chiều quen thuộc: **hàng rào có thật, nhưng không có gì giữ
@@ -3355,7 +3355,7 @@ mẫu rộng hơn.
 4. `docs/STATE.md` mang **hai** lời khai số ADR, **28** và **27**, ở hai mục khác nhau. ✔ đã đo —
    và đây là phép đo buộc §2⑷ vào phép kiểm.
 5. Khoản nợ 1 đóng bởi lớp trả cho khoản nợ **39** (`callerLimit = 30`/15 phút trên `/auth/totp`,
-   `apps/api/src/routes/auth.ts:166`); khoản nợ 5 đóng bởi `RLS WITH CHECK` với test có từ commit
+   ~~`apps/api/src/routes/auth.ts:166`~~ **[S1.79]** `apps/api/src/routes/auth.ts` dòng `callerLimit: LOGIN_TOTP_MAX_PER_CALLER`); khoản nợ 5 đóng bởi `RLS WITH CHECK` với test có từ commit
    `13a6e5b` (2026-08-28). ✔ đã đo cả hai — và cả hai là **lớp KHÁC lớp mà khoản nợ chỉ tên**, đúng
    khuôn nửa đầu khoản nợ 3 ở S1.20.
 6. **[vòng sửa sau review lượt 13]** Một dòng nợ thụt vào **một dấu cách** vẫn là hàng bảng với

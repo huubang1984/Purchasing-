@@ -6655,11 +6655,11 @@ không tìm ra gì ở một góc cũng là một phép đo.
 
 ---
 
-# §S1.79 — LỜI KHAI THIU: 30 chỗ vá, hai lớp hỏng không có cổng nào canh; khoản 150 và 151 mở
+# §S1.79 — LỜI KHAI THIU: 47 chỗ vá, hai lớp hỏng không có cổng nào canh; khoản 150 và 151 mở
 
 Vòng này bắt đầu từ ba dòng mà §S1.78 §6 tự ghi là *“chưa sửa ở vòng này”*. Chủ dự án chọn chen chúng vào trước
-hàng đợi 130/129/131/128. Đọc lại §6 thì ba hoá **năm**, và một lượt quét ngang trên toàn kho thì năm hoá **ba
-mươi**. Con số ấy là nội dung chính của biên bản này, không phải bản vá.
+hàng đợi 130/129/131/128. Đọc lại §6 thì ba hoá **năm**, và một lượt quét ngang trên toàn kho thì năm hoá **bốn
+mươi bảy**. Con số ấy là nội dung chính của biên bản này, không phải bản vá.
 
 ## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng, đúng quy ước S1.78 vừa đặt
 
@@ -6687,8 +6687,11 @@ Sáu góc chạy song song trên toàn kho: con trỏ · trạng thái khoản �
 đã bị một vòng sau bác. **63 agent, 0 lỗi, 62 phát hiện, 57 đưa qua thẩm tra đối kháng, 54 sống sót.**
 
 **Chỗ bị cắt, ghi ra chứ không giấu:** góc con trỏ tìm **19** phát hiện, khung chạy chỉ đưa **14** cái đầu qua
-thẩm tra — **5 cái rơi trong im lặng** vì một `slice(0, 14)` viết cứng trong script. Chúng chưa được đo và không
-nằm trong 30 chỗ vá dưới đây.
+thẩm tra — **5 cái rơi trong im lặng** vì một `slice(0, 14)` viết cứng trong script. Phát hiện ra chúng ở cuối
+vòng, và **đo lại trước khi đóng**: cả năm đều là con trỏ trôi; một cái đã nằm sẵn trong bản vá, bốn cái còn lại
+là `pool.ts:92` (thật 95) và ba bản `routes/auth.ts:166` (thật 168). Chúng **đã vá** và nằm trong 47 chỗ dưới
+đây. Một lần grep toàn kho còn ra **chỗ thứ tư** mang `routes/auth.ts:166` mà cả lượt quét lẫn phần bị cắt đều
+không thấy — tức con số 19 của chính góc ấy cũng chưa phải là đủ.
 
 **Và thẩm tra đối kháng KHÔNG đủ chặt:** tỷ lệ bác chỉ 3/57. Khi tự đọc lại, tôi bác thêm một cái mà thẩm tra
 viên cho qua — `Handoff.md` mục *“Hai khoản còn mở … là 23 và nửa sau của 30”* **đã nằm trong dấu gạch `~~…~~`**,
@@ -6698,8 +6701,8 @@ tức kho đã sửa rồi. Mỗi phát hiện trong bảng dưới đều đư�
 
 ### ⑴ Con trỏ `tệp:DÒNG` — khoản 150
 
-`[INV-H20]` P4 giải con trỏ tới một **TỆP** trong `git ls-files`. **Số dòng thì không lớp nào đọc.** Mười con trỏ
-đã trôi, ở mười lăm chỗ. Hai cái đáng nhớ:
+`[INV-H20]` P4 giải con trỏ tới một **TỆP** trong `git ls-files`. **Số dòng thì không lớp nào đọc.** **Mười bốn**
+con trỏ đã trôi, ở **hai mươi** chỗ — vá được 19, một không sửa được. Hai cái đáng nhớ:
 
 - `apps/api/src/routes/buyer.ts:206` nay là `GET /rfqs/:rfqId/items` — một route ĐỌC **không** có cổng quyền,
   trong khi câu nó đứng cạnh nói về hai route **CÓ** cổng. Con trỏ không chỉ sai chỗ: nó minh hoạ **ngược**.
@@ -6727,15 +6730,21 @@ Cái đắt nhất là khoản 23 ở `tools/inv-matrix/src/danh-gia.ts`: chuỗ
 2026-09-04 ở S1.5 và tự ghi thế trong dòng trạng thái của chính nó; `Handoff.md` và `docs/STATE.md` vẫn khai nó
 đang mở tới S1.78 — **73 vòng**, qua **82** và **106** commit sửa đúng hai tệp ấy.
 
-## 4. Ba mươi chỗ đã vá
+## 4. Bốn mươi bảy chỗ đã vá
 
 | Lớp | Số chỗ | Nặng nhất |
 |---|---|---|
-| con trỏ `tệp:dòng` trôi | 13 | `buyer.ts:206` minh hoạ ngược · `auth.int.test.ts:546` sai từ lúc sinh |
+| con trỏ `tệp:dòng` trôi | 19 | `buyer.ts:206` minh hoạ ngược · `auth.int.test.ts:546` sai từ lúc sinh |
 | khoản đã đóng vẫn khai mở | 11 | khoản 23 chảy vào `evidence/INV-matrix.md` |
 | số đếm viết cứng đã sai | 9 | `docs/STATE.md` *“Mười tám migration”* — thật 51 |
 | lời khai bị vòng sau bác | 4 | ADR-038 *“cookie người mua toàn quyền”* · `Handoff.md` *“chưa viết một dòng mã nào”* |
-| ký hiệu chết hoặc khối liệt kê thiếu | 3 | `outbox_events` không phải tên bảng nào — thật là `outbox_jobs` |
+| SHA hay trạng thái PR đã cũ | 2 | `Handoff.md` §2 khai HEAD là `30d1972`, và PR #2 là *MỞ* |
+| khối liệt kê thiếu | 1 | khối mở đầu `login.ts` khai bốn hàm, liệt năm, tệp xuất bảy |
+| ký hiệu chết | 1 | `outbox_events` không phải tên bảng nào — thật là `outbox_jobs` |
+
+**Con số này tự nó là một bài học của vòng.** Bản nháp đầu của biên bản viết *“30 chỗ”* — một con số ước lượng
+chứ không đếm, và nó sai. Đếm lại bằng số mốc mà các script vá đã khớp: 9 + 3 + 30 + 5 = **47**. Một vòng
+chuyên đi sửa số đếm viết cứng suýt ghi một số đếm viết cứng sai vào chính biên bản của nó.
 
 Ba con số đáng gọi tên riêng, vì cả ba đều ở chỗ người đọc lấy kết luận:
 
@@ -6750,7 +6759,8 @@ Ba con số đáng gọi tên riêng, vì cả ba đều ở chỗ người đ�
 
 - **Không cổng nào** ngăn con trỏ `:NNN` thứ mười một, hay lời khai trạng-thái-ngoài-sổ thứ mười hai. Khoản 150 và
   151 mở đúng vì thế; vòng này vá **hiện trạng**, không vá **nguồn**.
-- **5 phát hiện góc con trỏ bị `slice(0, 14)` cắt** chưa được đo.
+- ~~**5 phát hiện góc con trỏ bị `slice(0, 14)` cắt** chưa được đo.~~ **[đo ở cuối vòng]** Cả năm đã đo và đã vá. Nhưng cái
+  **khung** thì chưa sửa: script workflow vẫn có thể cắt trong im lặng ở lượt sau.
 - `db/migrations/006_sessions_and_mfa.sql` giữ con trỏ sai — khoản 19, mở bằng cấu tạo.
 - Hàng đợi chủ dự án giao (**130 · 129 · 131 ·** rồi **128**, gộp 147 vào vòng 131) **chưa động tới**; vòng này là
   phần chen vào trước theo yêu cầu.
