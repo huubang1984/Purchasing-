@@ -18,6 +18,7 @@
     "bench:keys": "node --experimental-transform-types --import ./tools/bench-keyprovider/register-ts-resolve.mjs tools/bench-keyprovider/src/index.ts",
     "api:dev": "node --experimental-transform-types --import ./apps/api/register-ts-resolve.mjs apps/api/src/main.ts",
     "mcp:dev": "node --experimental-transform-types --import ./apps/mcp/register-ts-resolve.mjs apps/mcp/src/main.ts",
+    "worker:dev": "node --experimental-transform-types --import ./apps/unseal-worker/register-ts-resolve.mjs apps/unseal-worker/src/main.ts",
     "neo": "node --experimental-transform-types --import ./tools/neo-so-kiem-toan/register-ts-resolve.mjs tools/neo-so-kiem-toan/src/index.ts"
   },
   "devDependencies": {
