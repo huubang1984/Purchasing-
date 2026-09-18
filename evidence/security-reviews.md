@@ -7146,3 +7146,150 @@ Hàng đợi **129 · 131** (gộp 147) rồi **128** vẫn chưa động tới.
 - `pnpm t0` — 257 module, 1065 phụ thuộc, **0 vi phạm**
 - `pnpm test` — 64/64 tệp, **921 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
 - `pnpm evidence` — **`vitest thoát mã 0`**, 1954 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+---
+
+# §S1.83 — LƯỢT SOI NGANG 73: một CAO trong bản vá mà lượt soi ngang 72 vừa tạo ra
+
+Chủ dự án giao ba việc theo thứ tự: *"Cập nhật trạng thái, rồi chạy lượt soi ngang, rồi tiếp hàng đợi
+129 → 131 (gộp 147) → 128"*. Vòng này là việc thứ hai, cộng phần vá của những gì nó tìm ra.
+
+## 0. Kiểm mốc — ở ĐẦU vòng, và đo CẢ HAI vế thay vì chỉ nói "tới hạn"
+
+`Handoff.md` §11 đặt mốc *"sau ba vòng đổi hardening, **hay** chậm nhất S1.83"*. Vòng này là S1.83.
+
+| Vế | Đo | Kết quả |
+|---|---|---|
+| lịch | vòng hiện tại là S1.83 | **ĐÃ CHẠM** |
+| ba vòng đổi hardening | `git rev-list --count 4e3118f..1dfc7e3 --first-parent -- db/migrations/hardening.always.sql` | **1** — CHƯA thoả |
+
+Hai vế nối bằng **hay**, nên một vế đủ để tới hạn. Ghi ra vì một lời khai đã sai trước khi được đo:
+sơ đồ trạng thái (Version 17) viết *"hai vế đều nghiêng về chạy ngay"* và kể `CAU_CLAIM` của S1.81 như
+một lần "chạm tầng canh". `CAU_CLAIM` KHÔNG phải `hardening.always.sql`, nên nó không đếm vào vế ấy.
+Đã sửa ở Version 18 của sơ đồ, cùng ngày.
+
+## 1. Lượt soi ngang 73 — số liệu
+
+**66 agent, 0 lỗi, 30 phát hiện qua thẩm tra đối kháng: 27 sống, 3 bị bác.** Sáu góc độc lập trên cửa
+sổ S1.78 → S1.82 (`4e3118f..1dfc7e3`, PR #78–#82, 13 commit, 48 tệp): hồi quy xuyên vòng · lớp cưỡng
+chế bị vô hiệu · lời khai rộng hơn mã · test mất răng · chỗ hai lớp chạm nhau · khoản đóng sai. Mỗi
+phát hiện qua **hai** người phản biện với hai lăng kính khác nhau (đọc mã · tìm lớp đối lập đã chặn
+sẵn), mặc định BÁC nếu không chắc.
+
+**Tỉ lệ bác 3/30 là thấp, và kho đã có một bài học về đúng con số ấy** (một lượt quét trước bác 3/57).
+Nên trước khi vá, em tự đo lại **năm** phát hiện nặng nhất bằng tay. Cả năm đứng vững; bốn trong năm
+được vá ở vòng này.
+
+Hai góc cho **kết quả ÂM**, và cả hai đã đo chứ không đoán:
+- *"còn hình dạng `enqueue` nào cổng không thấy?"* — đếm hết: bốn chỗ gọi thật, cả bốn truyền một hằng
+  `*_KIND`; năm khai báo hằng, tất cả khớp mẫu; một trigger SQL cộng bản sao ghim của nó. Không có
+  hình dạng thứ tư nào ĐANG được dùng.
+- *"đường SQL nào của worker đi ngoài `withTenant` mà census không đếm?"* — chạy lại chính phép đếm
+  của census trên toàn bộ mã sản xuất: kết quả đúng bằng `DUONG_KHAI`. Không có đường thứ ba.
+
+## 2. CAO — khoản 144, LẦN THỨ BA, và nó là hồi quy do chính lượt 72 tạo ra
+
+Lượt 72 (ở S1.78) bác trần theo CỬA SỔ và thay bằng trần theo TRẠNG THÁI. Lượt 73 hỏi chiều còn lại.
+
+`conChoChoDuongPhu` (`mfa-credentials.ts`) là một `SELECT c.failed_attempts` **trần** — không
+`FOR UPDATE`, không khoá tư vấn — chạy ở bộ điều phối TRƯỚC handler. Lần TĂNG nằm ở cuối đường, trong
+câu `CAU_DAT_COC`. Giữa hai chỗ đó là cả handler. Ở READ COMMITTED, N giao dịch bắn cùng lúc đều đọc
+`failed_attempts = 0`, đều thấy `0 < 2`, đều đi qua; rồi N câu tăng xếp hàng trên khoá HÀNG và bộ đếm
+cuối = N.
+
+**Đo (`auth.int.test.ts` vế ⑻, `poolAs` max = 3), ĐỎ trên mã trước bản vá:**
+
+```
+status: 401,401,401 ; failed_attempts = 3 ; trần = 2
+```
+
+**BẢNG HAI CHIỀU — và hai chiều cho hai kết quả NGƯỢC nhau:**
+
+| Chiều | Bản S1.76 (cửa sổ, `caller_rate_limits`) | Bản S1.78 (trạng thái, đọc thuần) |
+|---|---|---|
+| TUẦN TỰ, qua mọi lần cửa sổ làm mới | **THỦNG** — cửa sổ nhảy về 0, ba lần cộng hai lần vẫn đủ năm | ĐỨNG (vế ⑹) |
+| CÙNG LÚC, N yêu cầu song song | ĐỨNG — `INSERT … ON CONFLICT DO UPDATE SET hits = hits + 1 RETURNING hits` là tăng-rồi-đọc NGUYÊN TỬ | **THỦNG** — `failed_attempts` = N (vế ⑻) |
+
+Tức S1.78 đổi một **bộ đếm nguyên tử** lấy một **phép chụp không khoá**. Cỡ của lỗ bằng số kết nối kẻ
+tấn công giành được: pool nghiệp vụ mặc định của sản xuất là 10 và `MFA_MAX_FAILED_ATTEMPTS` là 5, nên
+một loạt đủ để KHOÁ hồ sơ nạn nhân — đúng đòn mà cả S1.76 lẫn S1.78 sinh ra để chặn. **Phần KHÔNG đo
+được ở đây, nói ra:** bộ test có `poolAs` max = 3, nên vế đo được là *"ngưỡng bị vượt"* (3 > 2), không
+phải *"hồ sơ bị khoá"*; vế khoá cần đồng thời ≥ 5.
+
+**BẢN VÁ — ngưỡng chuyển vào chính câu lệnh, KHÔNG thêm một khoá nào.** `CAU_DAT_COC` nhận `$3` và
+mang thêm `AND ($3::int4 IS NULL OR c.failed_attempts < $3::int4)`, nên phép so và phép tăng là MỘT
+thao tác. Nhánh 0 hàng nay tách hai nguyên nhân (đang khoá · hết ngân sách đường phụ) bằng chính lần
+đọc lại đã có sẵn, không tốn round trip nào. Lý do MỚI: `LOCKED_OUT` đứng TRƯỚC — trả một lời khai hẹp
+hơn (*"hồ sơ vẫn bình thường"*) cho một hồ sơ đang khoá là khai rộng hơn sự thật theo hướng trấn an.
+
+**VÌ SAO KHÔNG LẤY KHOÁ Ở PHÉP ĐỌC** (`SELECT … FOR UPDATE`, hay một khoá tư vấn): nó giữ khoá hàng
+`mfa_credentials` suốt cả handler, kể cả qua lần mở phong bì bí mật và lần ghi sổ kiểm toán. Đó đúng là
+hình dạng mà khoản 69, 126 và 128 tồn tại để gỡ, và kho đã bỏ bốn vòng đưa mọi đường ghi ra khỏi nó.
+Một vị từ trong câu lệnh không tốn khoá nào.
+
+Cổng ở bộ điều phối được GIỮ, và nay **tự khai là một đường tắt KHÔNG THẨM QUYỀN**: nó chỉ được phép
+từ chối THÊM, không bao giờ cho qua thêm; xoá nó đi thì hành vi vẫn đúng, chỉ tốn hơn.
+
+## 3. Bốn phát hiện khác, tự đo lại rồi mới vá
+
+| # | Đo | Vá |
+|---|---|---|
+| ⑴ | Docstring `OrganizationLister` (`runner.ts`) VẪN khuyên đúng hình dạng ADR-040 vừa bác — hàm `SECURITY DEFINER` do **chủ sở hữu bảng** sở hữu, tức cảnh ❷ (0 hàng, không lỗi). Biên bản §S1.82 khai *"đã vá"*; `git show --stat 60500f0 -- packages/outbox/src/runner.ts` **rỗng** — tệp không hề bị chạm | gạch lời cũ, ghi phép đo 3-vs-0, trỏ sang `052` và ADR-040 |
+| ⑵ | `batDau()` chỉ ném khi lister **NÉM**. Ba đột biến của vế ⑵ (`SECURITY INVOKER` · `DROP POLICY` · đổi chủ hàm) cho **0 hàng KHÔNG LỖI** — cả ba đi qua `batDau()` trót lọt, dấu vết duy nhất là một dòng log `to chuc thay duoc: 0` | `soToChuc === 0` ⇒ NÉM, thông điệp nêu đích danh cảnh ❷ và ba nguyên nhân |
+| ⑶ | Mốc chết hai chiều khai *"đo bằng HAI bảng handler THẬT"* — vế `api` là bảng viết tay và **bỏ `kindKhongNguoiNhan`**, nên mảng lọc trong test có MỘT phần tử còn tiến trình thật có HAI | dùng `buildApiOutboxHandlers` thật + đúng mảng lọc của `composition.ts` |
+| ⑷ | Khoản 162 đếm **thiếu**: 12 chỗ trong 8 migration, không phải 10 trong 7 — sót `006:246` và `020:68`, và con số sai được chép ra bốn nơi trong cùng một vòng | sửa ở sổ nợ, ADR-040 và `hardening.always.sql`; ba bản trong migration đánh số thì KHÔNG sửa được (checksum) |
+
+Vế ⑶ có một hệ quả không lường trước, và nó chứng minh vế ấy đáng vá: đổi sang bảng handler THẬT làm
+test **ĐỎ ngay** — `LOGIN_LINK_SEND` không mang `email` thì handler thật ném, job về `PENDING` với
+`attempts = 1`. Một bảng handler giả nhận mọi payload, nên nó đo đúng cái TÊN `kind` và không đo gì
+thêm. Payload nay là payload thật của từng `kind`.
+
+## 4. Mốc đột biến — năm mũi, cả năm ĐỎ đúng tập
+
+| Mũi | Đổi | ⑹ tuần tự | ⑻ cùng lúc | ⑵b |
+|---|---|---|---|---|
+| M1 | vị từ ngưỡng thành hằng ĐÚNG (giữ nguyên số tham số) | XANH | **ĐỎ** | — |
+| M2 | không truyền ngưỡng xuống câu lệnh (`null`) | XANH | **ĐỎ** | — |
+| M3 | `<` thành `<=` (lệch một đơn vị) | XANH | **ĐỎ** | — |
+| M4 | route thôi truyền `tranDuongPhu` | XANH | **ĐỎ** | — |
+| M5 | gỡ vế `soToChuc === 0` | — | — | **ĐỎ** (7 đạt / 1 đỏ) |
+
+Bốn mũi đầu đều giết ⑻ và để ⑹ XANH. Đó không phải trùng hợp mà là một phép đo về chính kiến trúc hai
+lớp: ở chiều TUẦN TỰ, cổng đi trước của bộ điều phối cắt ở lần thứ ba nên câu lệnh không bao giờ bị hỏi
+tới ngưỡng — tức vế ⑹ **mù hoàn toàn** với lớp mới. Không có vế ⑻ thì lớp thẩm quyền không có một mốc
+chết nào.
+
+## 5. Phần GHI KHOẢN, không vá — và vì sao
+
+Tám khoản mới (**168–175**), không khoản nào là một linh cảm. Nặng nhất là **168**: bốn góc độc lập
+cùng tìm ra rằng sổ `kind` mồ côi đặt bảo đảm *"vẫn chết ồn ào"* lên đúng tiến trình có danh sách tổ
+chức HẸP NHẤT. Ba neo đã kiểm lại bằng tay: `apps/api/src/composition.ts:124` khai sổ, `:118` cho thấy
+`listOrganizations` của `api` là tập tổ chức nó ĐÃ THẤY enqueue, và `apps/unseal-worker/src/composition.ts`
+KHÔNG khai sổ dù từ S1.82 nó là tiến trình duy nhất thấy MỌI tổ chức. Chưa vá vì nó đổi ngữ nghĩa
+`NO_HANDLER` ở hai tiến trình và đáng một vòng riêng có phép đo.
+
+Ba phát hiện **BỊ BÁC** cũng ghi ra, vì một kết quả âm của thẩm tra cũng là một phép đo: sổ mồ côi đặt
+"đúng tiến trình" (bản mạnh hơn của 168, bị bác vì nói quá) · chú thích *"khẳng định đột biến đã áp"*
+(bác: khẳng định ấy CÓ, ở dạng `expect(await dem(), ten).toBe(0)`) · khoản 153 đứng trên một quyền vắng
+mặt không ai canh (bác: `hardening.always.sql` CÓ canh ACL của bảng phiên).
+
+Cụm *vai `app_liet_ke_to_chuc` nằm ngoài `ROLE_CANH`* được ba góc cùng tìm ra và **đã là khoản 164** từ
+S1.82 — không mở khoản mới cho nó.
+
+## 6. Phần KHÔNG làm
+
+Hàng đợi chủ dự án giao — **129 → 131 (gộp 147) → 128** — chưa động tới; nó là việc kế tiếp. Vế còn
+lại của khoản 144 (route ĐỌC của người mua chưa có trần tần suất nào) vẫn MỞ và vòng này không chạm.
+Vế khoá-hồ-sơ ở đồng thời ≥ 5 chưa đo được trên bộ test hiện tại — cần một pool riêng cỡ sản xuất.
+
+## Sổ nợ
+
+**167 → 175 khoản, 62 → 70 còn mở** — không khoản nào đóng, tám khoản mới (168–175). 70 = 5 ngoài mã +
+65 có mã. Khoản **144** thu hẹp lần thứ ba (vế đồng thời đã vá, vế route ĐỌC còn mở); khoản **162** sửa
+số đếm.
+
+## Cổng
+
+- `pnpm t0` — 257 module, 1068 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 64/64 tệp, **921 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`**, 1956 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**

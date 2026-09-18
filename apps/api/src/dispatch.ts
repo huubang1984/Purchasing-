@@ -114,7 +114,7 @@ export class AgentScopeDeniedError extends Error {
   }
 }
 
-import { agentGoiDuoc } from "./route-types.js";
+import { THAN_429_MFA, agentGoiDuoc } from "./route-types.js";
 import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
@@ -191,9 +191,6 @@ const THAN_404 = { error: "khong co duong nay" } as const;
 const THAN_405 = { error: "phuong thuc khong duoc ho tro" } as const;
 const THAN_500 = { error: "loi noi bo" } as const;
 const THAN_429 = { error: "qua nhieu yeu cau" } as const;
-/** [S1.78 / khoản 144] Thân riêng cho trần TRẠNG THÁI: một 429 ở đây nói "hồ sơ đang gần ngưỡng khoá",
- * không nói "bạn gọi quá nhanh", và KHÔNG mang `Retry-After` — không có cửa sổ nào để chờ hết. */
-const THAN_429_MFA = { error: "ho so MFA gan nguong khoa; dang nhap lai truoc" } as const;
 /** [review H5-1] Độ trễ khi một tổ chức vượt `orgLimit` — làm chậm, không khoá. */
 export const TRE_QUA_TRAN_TO_CHUC_MS = 2000;
 /** Thân 503 cho ca KHÔNG đọc được địa chỉ người gọi (review H6-1). Không nêu lý do chi tiết. */
@@ -582,6 +579,22 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             // trong 17 ms. Nó phá tiền đề "mỗi yêu cầu giữ MỘT kết nối của `pool`" mà
             // `composition.ts` dùng để định cỡ `auditPool`. Khối này là một phép ĐỌC THUẦN nên nó
             // không cần một giao dịch riêng để sống qua rollback — dùng `client` là đủ và đúng.
+            // ==================================================================================
+            // ==================================================================================
+            // [S1.83 / lượt soi ngang 73 — khoản 144] KHỐI NÀY LÀ MỘT ĐƯỜNG TẮT **KHÔNG THẨM
+            // QUYỀN**, và từ vòng này nó tự khai điều đó.
+            //
+            // Nó là một phép ĐỌC không khoá, còn phép TĂNG nằm ở cuối handler trong một câu khác.
+            // Giữa hai chỗ đó có một khoảng, nên ở READ COMMITTED N lời gọi cùng lúc đều đọc cùng
+            // một giá trị cũ và đều đi qua đây — đo được: ba yêu cầu song song ⇒ `failed_attempts`
+            // = 3 với ngưỡng 2 (`auth.int.test.ts` vế ⑻). Một phép kiểm-rồi-làm không khoá KHÔNG
+            // chặn được gì theo chiều đồng thời, bất kể nó đọc đúng cột nào.
+            //
+            // THẨM QUYỀN nay nằm trong `CAU_DAT_COC` của `packages/identity/src/mfa-credentials.ts`:
+            // vị từ ngưỡng đứng TRONG chính câu `UPDATE` giành cọc, nên phép so và phép tăng là
+            // MỘT thao tác. Khối dưới đây chỉ còn một việc: cắt sớm để một lời gọi đã hết ngân
+            // sách không phải tốn một lần mở phong bì bí mật. Nó chỉ được phép TỪ CHỐI THÊM, không
+            // bao giờ cho qua thêm — xoá nó đi thì hành vi vẫn đúng, chỉ tốn hơn.
             // ==================================================================================
             if (route.mutates && route.self === true && route.mfaTranDuongPhu !== null) {
               if (!(await conChoChoDuongPhu(client, cookie.orgId, actor.id, route.mfaTranDuongPhu))) {

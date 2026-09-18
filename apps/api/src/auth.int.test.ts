@@ -1373,4 +1373,69 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     expect(chung, `đối chứng: route một-kết-nối phải đi qua — ${chung}`).toContain("logout=xong:200");
     expect(chung, `route có trần trạng thái KHÔNG được cần kết nối thứ hai — ${chung}`).toContain("agent-session=xong:401");
   });
+  // ===============================================================================================
+  // ⑻ [S1.83 / lượt soi ngang 73 — khoản 144, LẦN THỨ BA] TRẦN TRẠNG THÁI PHẢI ĐỨNG CẢ KHI
+  // CÙNG LÚC, KHÔNG CHỈ KHI TUẦN TỰ.
+  //
+  // Vế ⑹ ngay trên đo kịch bản TUẦN TỰ và tự viết rằng *"ai thay trần trạng thái bằng một bộ đếm
+  // song song thì vế này ĐỎ"*. Nó đúng — nhưng nó KHÔNG BAO GIỜ bắn hai yêu cầu cùng lúc, nên nó
+  // không nói gì về chiều ĐỒNG THỜI. Lượt soi ngang 73 hỏi đúng chiều ấy, và phép đo trả lời:
+  //
+  //   `conChoChoDuongPhu` (mfa-credentials.ts) là một `SELECT c.failed_attempts` TRẦN — không
+  //   `FOR UPDATE`, không khoá tư vấn — rồi trả `failed_attempts < tran`. Lần TĂNG nằm ở CUỐI
+  //   đường, trong một câu khác (`CAU_DAT_COC`). Giữa hai chỗ đó là cả handler. Ở READ COMMITTED,
+  //   N giao dịch bắn cùng lúc đều đọc `failed_attempts = 0`, đều thấy `0 < 2`, đều ĐI QUA cổng;
+  //   rồi N câu tăng xếp hàng trên khoá HÀNG và bộ đếm cuối = N.
+  //
+  // VÀ NÓ LÀ MỘT HỒI QUY, đo được: thứ S1.78 thay — `tangBucketNguoiGoi`
+  // (`packages/invitation/src/invitation.ts`) — là `INSERT … ON CONFLICT DO UPDATE SET
+  // hits = hits + 1 RETURNING hits`, một phép TĂNG-RỒI-ĐỌC **nguyên tử**: N yêu cầu song song vẫn
+  // chỉ cho `sessionLimit` lần thử. Ở chiều TUẦN TỰ bản S1.78 mạnh hơn (nó đứng qua mọi lần cửa
+  // sổ làm mới — vế ⑹); ở chiều CÙNG LÚC nó KHÔNG có trần nào, còn bản cũ thì có. Hai chiều, hai
+  // kết quả ngược nhau, nên cả hai vế phải cùng sống ở đây.
+  //
+  // CỠ CỦA LỖ BẰNG SỐ KẾT NỐI KẺ TẤN CÔNG GIÀNH ĐƯỢC. `poolAs` của bộ test có `max = 3`, nên ở
+  // đây đo được ĐÚNG vế "ngưỡng bị vượt" (3 > 2). Vế HỆ QUẢ — khoá hẳn hồ sơ — cần đồng thời
+  // >= `MFA_MAX_FAILED_ATTEMPTS`, tức một pool >= 5; pool nghiệp vụ mặc định của sản xuất là 10
+  // (`apps/api/src/cau-hinh.ts`). KHÔNG đo được ở đây thì KHÔNG khai ở đây: vế dưới khẳng định
+  // đúng thứ đo được, và hệ quả ghi ở biên bản §S1.83.
+  //
+  // RED THẬT trên mã trước bản vá: `failed_attempts` = 3 và ba mã đều 401.
+  // ===============================================================================================
+  it("⑻ ba lần thử CÙNG LÚC không vượt được trần trạng thái — ngưỡng là của CÂU LỆNH, không của một phép đọc trước đó", async () => {
+    const u = await taoNguoi("tran-cung-luc@vd.test");
+    const nguoi = await dangNhap("tran-cung-luc@vd.test");
+
+    // Ba yêu cầu bắn CÙNG LÚC, không lượt nào chờ lượt nào. `poolAs` có max = 3 nên cả ba thật sự
+    // nằm trong ba giao dịch song song — đây là điều kiện mà vế ⑹ không bao giờ dựng.
+    const ma = (
+      await Promise.all(
+        Array.from({ length: 3 }, () =>
+          goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } }),
+        ),
+      )
+    ).map((r) => r.status);
+
+    const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
+      "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+      [orgA, u],
+    );
+    const dem = Number(rows[0]?.failed_attempts);
+    const ke = `status: ${ma.slice().sort().join(",")}; failed=${String(dem)}; trần=${String(MFA_TRAN_SAI_DUONG_PHU)}`;
+
+    // ⑴ VẾ CHỊU LỰC. Bộ đếm KHÔNG được vượt ngưỡng, bất kể mấy yêu cầu chạy song song. Đây là
+    //    đúng lời khai mà khối `mfaTranDuongPhu` ở `routes/auth.ts` viết ra, chỉ đọc theo chiều
+    //    đồng thời thay vì chiều tuần tự.
+    expect(dem, `bộ đếm KHÔNG được vượt ngưỡng dù bắn cùng lúc — ${ke}`).toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
+
+    // ⑵ Hệ quả trực tiếp: số lần THỰC SỰ tiêu ngân sách không lớn hơn ngưỡng, nên ít nhất một
+    //    trong ba phải bị cắt. Đếm bằng chính mã trả về chứ không bằng đồng hồ.
+    expect(ma.filter((s) => s === 401).length, `số lần tới được handler phải <= ngưỡng — ${ke}`)
+      .toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
+    expect(ma.filter((s) => s === 429).length, `phần dư phải bị cắt bằng 429 — ${ke}`)
+      .toBe(3 - ma.filter((s) => s === 401).length);
+
+    // ⑶ Và điều trần ấy tồn tại để bảo vệ vẫn đúng.
+    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+  });
 });

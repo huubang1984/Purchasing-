@@ -85,15 +85,32 @@ export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void
  * nó bám vào chuỗi *"apps/ rỗng"* chứ không vào TÍNH CHẤT, nên hai câu cùng nghĩa viết khác chữ
  * thì chỉ một câu được vá.** Cài đặt sản phẩm CÓ từ S1.10: `apps/api/src/composition.ts` tiêm một
  * lister thật. Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
- * điều đó ghi ở chính chỗ nó. Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG
- * cần role vượt RLS: một hàm `SECURITY DEFINER` do chủ sở hữu bảng sở hữu, `REVOKE FROM
- * PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là `SELECT id FROM organizations` —
- * bán kính đúng bằng MỘT truy vấn trả về MỘT danh sách id, thay vì một THUỘC TÍNH ROLE có
- * bán kính "mọi bảng role này có hoặc SẼ CÓ quyền". CẢNH BÁO BẮT BUỘC nếu ai làm đường đó:
- * `hardening.always.sql` ghim THÂN hàm plpgsql theo một DANH SÁCH TÊN VIẾT TAY, nên hàm mới
- * KHÔNG được ghim và một `CREATE OR REPLACE` sau deploy sống sót qua `migrate()` (đo
- * end-to-end ở test `[T10-I]`). Hàm phải vào danh sách cưỡng chế thân hàm CÙNG LÚC với khi
- * nó ra đời, không phải sau.
+ * điều đó ghi ở chính chỗ nó.
+ *
+ * ~~Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG cần role vượt RLS: một hàm `SECURITY DEFINER` do
+ * CHỦ SỞ HỮU BẢNG sở hữu, `REVOKE FROM PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là
+ * `SELECT id FROM organizations`.~~
+ *
+ * **[S1.83 / lượt soi ngang 73] HÌNH DẠNG VỪA GẠCH LÀ MỘT HỎNG IM LẶNG, và nó nằm ở đây suốt
+ * vòng S1.82 — đúng vòng đo ra điều ấy.** `organizations` bật **FORCE** RLS và policy cách ly cố
+ * ý không có mệnh đề `TO`, nên nó áp cả CHỦ SỞ HỮU BẢNG; `SECURITY DEFINER` chỉ đổi
+ * `current_user` sang chủ hàm — nó KHÔNG tạo miễn trừ RLS, chỉ SUPERUSER được miễn. Đo (§S1.82,
+ * ba tổ chức): chủ hàm là `postgres` (cảnh CỤM TEST) ⇒ **3**; chủ hàm là một vai thường (cảnh
+ * CỤM THẬT) ⇒ **0, KHÔNG LỖI**. Tức lời khuyên cũ **xanh trên CI và trả 0 tổ chức ở sản xuất**.
+ *
+ * Biên bản §S1.82 khai rằng lời khai này "đã vá" — **nó không**: `git show --stat 60500f0 --
+ * packages/outbox/src/runner.ts` rỗng, tệp không hề bị chạm. Vá ở đây, cùng lượt phát hiện.
+ *
+ * **ĐƯỜNG ĐANG CHẠY, và nó đã có thật:** `db/migrations/052_worker_liet_ke_to_chuc.sql` cộng
+ * ADR-040 — một vai **NOLOGIN NOINHERIT riêng** (`app_liet_ke_to_chuc`) sở hữu hàm, cộng một
+ * policy `FOR SELECT TO chính vai ấy`. Chủ thể hẹp bằng `TO`, KHÔNG bằng vị từ. `apps/unseal-worker`
+ * gọi nó qua `public.outbox_danh_sach_to_chuc()`.
+ *
+ * CẢNH BÁO BẮT BUỘC nếu ai làm một hàm như thế nữa: `hardening.always.sql` ghim THÂN hàm theo một
+ * DANH SÁCH TÊN VIẾT TAY, nên hàm mới KHÔNG được ghim và một `CREATE OR REPLACE` sau deploy sống
+ * sót qua `migrate()` (đo end-to-end ở test `[T10-I]`). Hàm phải vào danh sách cưỡng chế thân hàm
+ * CÙNG LÚC với khi nó ra đời, không phải sau. Và nó phải vào `NGOAI_LE_DOC_VONG` — mục (C) cấm mọi
+ * `SECURITY DEFINER`, nên một hàm không được miễn trừ làm `migrate()` gãy.
  */
 export type OrganizationLister = () => Promise<readonly string[]> | readonly string[];
 
