@@ -42,9 +42,20 @@ export const UNSEAL_JOB_KIND = "UNSEAL_RFQ";
  * Các `kind` mà worker này CỐ Ý không nhận — và mỗi dòng là một quyết định, không phải một lần
  * quên.
  *
- * Danh sách tồn tại để lớp canh ở `composition.int.test.ts` có hai lựa chọn thay vì một: mỗi
+ * ~~Danh sách tồn tại để lớp canh ở `composition.int.test.ts` có hai lựa chọn thay vì một: mỗi
  * `kind` được enqueue ở đâu đó trong kho phải HOẶC có handler ở đây, HOẶC nằm ở đây kèm lý do.
- * Một `kind` thứ ba ra đời mà không ai quyết định sẽ làm test ấy ĐỎ.
+ * Một `kind` thứ ba ra đời mà không ai quyết định sẽ làm test ấy ĐỎ.~~
+ *
+ * **[S1.81 / khoản 154] DANH SÁCH NÀY BỊ XUỐNG HẠNG, và lý do đo được.** Nó thôi là một lời bào
+ * chữa hợp lệ ở tầng KHO: `RFQ_DEADLINE_EXTENDED_NOTICE` nằm đây kèm một lý do ĐÚNG (*"thuộc app
+ * gửi, không thuộc worker"*) và cổng vẫn XANH — trong khi `apps/api` chỉ đăng ký
+ * `LOGIN_LINK_SEND`, tức KHÔNG tiến trình nào nhận nó. Một lời bào chữa trỏ sang một tiến trình
+ * khác mà không ai đối chiếu với tiến trình ấy là một lời bào chữa không kiểm được.
+ *
+ * Nay danh sách này chỉ còn nói một điều HẸP: *"worker này không nhận, và đây là lý do"*. Câu
+ * *"có tiến trình nào nhận không"* do cổng ở `composition.int.test.ts` hỏi, bằng cách đối chiếu
+ * với bảng handler THẬT của cả hai tiến trình; đường bào chữa duy nhất còn lại là
+ * `KIND_KHONG_NGUOI_NHAN` (`@trustprocure/outbox`), và mỗi dòng ở đó phải trỏ tới một khoản còn mở.
  */
 export const KIND_KHONG_NHAN: Readonly<Record<string, string>> = {
   // Thông báo gia hạn hạn nộp đi TỚI NHÀ CUNG CẤP, qua email hoặc SMS. Tiến trình này chạy dưới

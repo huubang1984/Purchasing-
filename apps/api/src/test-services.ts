@@ -6,7 +6,7 @@ import { createLocalDevReceiptSigner, ReceiptSigningKeyRing, type ReceiptKeyPair
 import { createCipheriv, createDecipheriv } from "node:crypto";
 import type { TotpSecretUnsealer, WrappedTotpSecret } from "@trustprocure/identity";
 import { PepperRing, type Channel } from "@trustprocure/invitation";
-import { JobRunner, type JobFailureReport } from "@trustprocure/outbox";
+import { JobRunner, KIND_KHONG_NGUOI_NHAN, type JobFailureReport } from "@trustprocure/outbox";
 import type pg from "pg";
 import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
@@ -22,6 +22,10 @@ export function outboxTest(pool: pg.Pool, services: ApiServices, tuyChon: { hand
   const loi: JobFailureReport[] = [];
   const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
     ...tuyChon,
+    // [S1.81 / khoản 154] Giống HỆT `apps/api/src/composition.ts`, và phải giống: runner của test
+    // mà nhặt nhiều loại việc hơn runner thật là một phép đo trên một đường không ai chạy — đúng
+    // thứ đã để `kich-ban-41-http.int.test.ts` âm thầm giết một job `UNSEAL_RFQ` mỗi lượt.
+    kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
     onJobFailure: (b) => {
       loi.push(b);
     },

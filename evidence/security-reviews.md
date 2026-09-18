@@ -6862,3 +6862,145 @@ chứ không phải thứ đo được. Ghi vào khoản **151** như bằng ch�
 - `pnpm t0` — 248 module, 1030 phụ thuộc, **0 vi phạm**
 - `pnpm test` — 63/63 tệp, **905 đạt** | 1 bỏ qua; `tests/architecture` riêng: 20/20 tệp, 259 đạt
 - `pnpm evidence` — **`vitest thoát mã 0`**, 1929 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+# §S1.81 — vị từ nhặt việc không lọc `kind`: tiến trình `api` GIẾT job của worker mở thầu; sổ `kind` mồ côi; tám khoản mở
+
+Chủ dự án giao hàng đợi **130 → 129 → 131 (gộp 147) → 128**, và chọn phạm vi rộng nhất cho vòng 130:
+*“Sửa luôn cả điểm vào worker (khoản 116)”*. Vòng này bắt đầu bằng một lượt soi HÌNH DẠNG chạy **trước dòng mã
+đầu tiên** (nhịp `soi-truoc-khi-viet-ma`, sáu góc độc lập cộng một lượt phản biện đối kháng trên từng phát hiện:
+**58 phát hiện sống, 5 bị bác**), và lượt soi ấy đổi hẳn hình dạng của vòng.
+
+## 1. Phép đo mở màn — một lỗi ĐANG SỐNG, không phải một rủi ro
+
+`CAU_CLAIM` của `JobRunner` tới S1.80 **không có vị từ `kind`**; `kind` chỉ xuất hiện ở mệnh đề `RETURNING`. Nên
+MỌI runner claim MỌI loại job của tổ chức nó phục vụ. Đo trên HEAD `e587819`, một tổ chức, ba job xếp hàng, runner
+dựng đúng như `apps/api/src/composition.ts` dựng nó:
+
+```
+[ĐO] Object.keys(buildApiOutboxHandlers) = ["LOGIN_LINK_SEND"]
+[ĐO] runOnce() = 3
+[ĐO] onJobFailure = ["BREAK_GLASS_UNSEAL_ALERT/NO_HANDLER/true","RFQ_DEADLINE_EXTENDED_NOTICE/NO_HANDLER/true","UNSEAL_RFQ/NO_HANDLER/true"]
+[ĐO] UNSEAL_RFQ                   status=FAILED attempts=1 ly_do=NO_HANDLER ket_thuc=co
+[ĐO] BREAK_GLASS_UNSEAL_ALERT     status=FAILED attempts=1 ly_do=NO_HANDLER ket_thuc=co
+[ĐO] RFQ_DEADLINE_EXTENDED_NOTICE status=FAILED attempts=1 ly_do=NO_HANDLER ket_thuc=co
+[ĐO] runOnce() lượt hai = 0
+```
+
+Tiến trình `api` **giết** việc của worker mở thầu, ở **lượt thử thứ nhất**. Nhánh `if (!handler)` truyền cứng
+`boCuoc = true` và nằm **TRƯỚC** `try/catch`, nên `maxAttempts` không dính dáng; `FAILED` là trạng thái cuối và
+không đường tự động nào đưa nó về `PENDING`. Với `UNSEAL_RFQ` còn thêm một lớp: `dispatchUnseal` mang
+`AND dispatched_at IS NULL`, nên điều phối lại ném `UnsealError`.
+
+Và cảnh báo break-glass — `BREAK_GLASS_UNSEAL_ALERT` — nằm trong ba job ấy. Bất biến **D4** ghi rằng vế
+*“có người biết”* **chưa** đúng. Phép đo này nói mạnh hơn: tới S1.80 nó **bị làm cho SAI**, bởi chính một tiến
+trình khác của cùng hệ.
+
+## 2. Lượt soi hình dạng bác hai lời khai của chính phiên này
+
+**⑴ Tiền đề khoản 130 KHÔNG sai — nó ĐÚNG nhưng CÓ ĐIỀU KIỆN.** Phiên này đã phát biểu *“tiền đề khoản 130 sai”*.
+Quá rộng. Cơ chế *“đốt đủ `maxAttempts` lượt rồi FAILED”* cần một tiến trình giữ handler, và điều kiện ấy chính là
+khoản **116**; cái sai chỉ là ĐỌC khoản 130 như một mô tả hiện trạng. Khoản 130 còn nêu **HAI** hình dạng đề xuất,
+không phải ba: vế *“điều phối lại sau job FAILED”* nằm ở tầng API chứ không trong runner, nên nói *“cả ba đều sau
+try/catch”* là một lỗi phạm trù. Khoản 130 **giữ MỞ** — chủ dự án tự mở nó ngày 2026-09-14, và đóng nó là đảo một
+quyết định của chủ dự án.
+
+**⑵ Lỗ trigger hẹp hơn lời khai đúng một nửa.** Phiên này nói *“cập nhật `dispatched_by` trong khi giữ nguyên
+`dispatched_at` đi lọt cả hai trigger”*. Nửa *“đặt người điều phối mà không để lại dấu thời gian”* **gãy ngay** ở
+`CHECK unseal_requests_dieu_phoi_du_bo` (022), thứ đòi ba cột `dispatched_*` cùng NULL hoặc cùng không-NULL. Lỗ thật
+là **GHI ĐÈ** cặp người-và-phiên trên một hàng **ĐÃ** điều phối. Ghi đúng hình dạng ấy vào khoản **159**; viết sai nó
+sẽ làm phép đo sau dựng sai ca rồi kết luận *“không tái hiện được”*.
+
+## 3. Vế lọc `kind` — và vì sao một mình nó là một HỒI QUY
+
+Vị từ mới đứng **trong truy vấn con**, trước `ORDER BY` / `LIMIT` / `FOR UPDATE SKIP LOCKED`, cộng một bản sao
+phòng thủ ở `WHERE` ngoài — đúng khuôn `org_id` đã ghim hai lần ở khối [QT3]. Mảng lọc là
+`Object.keys(handlers)` hợp với `kindKhongNguoiNhan`, **đóng băng trong constructor**: tính lại mỗi lượt cho phép
+bảng handler đổi giữa lúc claim và lúc tra cứu, tức mở lại đúng cửa vị từ này sinh ra để đóng.
+
+Nhưng vế lọc **một mình** đổi một thất bại ỒN ÀO thành một thất bại IM LẶNG: một `kind` không ai nhận thôi bị claim,
+nên nó thôi để lại cả dòng `console.error` lẫn hàng `FAILED` — nó nằm `PENDING` mãi, và **không lớp nào trong kho đếm
+tuổi của một hàng `PENDING`**. Đó không phải giả thuyết: `RFQ_DEADLINE_EXTENDED_NOTICE` (`packages/rfq/src/rfq.ts`,
+enqueue ở hai chỗ) **không có handler ở bất kỳ tiến trình nào**.
+
+Nên vế thứ hai là bắt buộc, và nó là `packages/outbox/src/so-kind-mo-coi.ts`: một `kind` khai ở đó VẪN nằm trong mảng
+lọc, nên VẪN bị claim, VẪN chết ỒN ÀO với `NO_HANDLER`. Tín hiệu duy nhất đang tồn tại **không bị xoá**. Khác biệt:
+nó chết ở ĐÚNG MỘT tiến trình (`api` khai sổ; worker không), do một dòng khai tường minh.
+
+## 4. Cổng canh đã XANH mười ba ngày vì nó hỏi SAI CÂU
+
+Cổng `[khoản nợ 34]` ở `apps/unseal-worker/src/composition.int.test.ts` hỏi *“worker này đã QUYẾT ĐỊNH `kind` ấy
+chưa”*. `RFQ_DEADLINE_EXTENDED_NOTICE` nằm trong `KIND_KHONG_NHAN` kèm một lý do **đúng** — *“thuộc app gửi, không
+thuộc worker”* — nên cổng xanh từ 2026-09-05, trong khi app gửi ấy **không nhận nó**. Một lời bào chữa trỏ sang một
+tiến trình khác mà không ai đối chiếu với tiến trình ấy là một lời bào chữa không kiểm được — đúng lớp *“hàng rào tự
+làm mù mình bằng một danh sách tên”* mà chính cổng ấy sinh ra để chống.
+
+Câu hỏi mới: *“có tiến trình nào NHẬN không”*, đối chiếu `Object.keys` của **cả hai bảng handler THẬT**. Ba vế:
+
+| | Vế | Đỏ khi |
+|---|---|---|
+| ⑴ | mọi `kind` quét được ∈ handler worker ∪ handler api ∪ sổ mồ côi | làm rỗng sổ mồ côi ⇒ ĐỎ với đúng `[RFQ_DEADLINE_EXTENDED_NOTICE]` |
+| ⑵ | sổ mồ côi ∩ hợp hai bảng handler = ∅ | một `kind` vừa khai mồ côi vừa có handler ⇒ tiến trình khai sổ GIẾT job của tiến trình kia |
+| ⑶ | mỗi dòng sổ mồ côi trỏ tới một khoản CÒN MỞ | xoá hàng 154 khỏi `docs/STATE.md` ⇒ ĐỎ ở `docs/STATE.md không có hàng cho khoản 154` |
+
+Cả ba mốc đỏ ở trên **đã chạy**, không phải suy. Một cổng xanh từ lúc ra đời là một cổng chưa đo gì.
+
+## 5. Kế hoạch truy vấn — đo, không suy
+
+`EXPLAIN (ANALYZE, BUFFERS)` câu claim, hai mức tồn dư, bản cơ sở và bản có vị từ:
+
+| Tồn dư | Bản | Đường đi | Sort | Thời gian |
+|---|---|---|---|---|
+| ĐẦY (3 000 hàng nhặt được) | cơ sở | Seq Scan 3 000 hàng | quicksort 261 kB | 2,112 ms |
+| ĐẦY | có vị từ | Seq Scan, lọc còn 1 497 | quicksort 130 kB | 1,208 ms |
+| THẬT (2 940 DONE · 40 PENDING · 20 RUNNING) | cơ sở | BitmapOr `claim_idx` + `lease_idx`, 53 buffer | quicksort 27 kB | 0,561 ms |
+| THẬT | có vị từ | **CÙNG** BitmapOr, **CÙNG** 53 buffer, lọc còn 17 | quicksort 25 kB | 0,506 ms |
+
+Không chỉ mục nào bị mất và không kế hoạch nào xấu đi ⇒ **KHÔNG thêm chỉ mục ở vòng này**. Một chỉ mục thừa trên bảng
+hàng đợi là giá phải trả ở mọi `INSERT` mà chưa mua được gì. Khoản **157** giữ chỗ cho lần đo lại. **Ranh giới nói ra:**
+phép đo chạy trên MỘT tổ chức và một phân bố kind đều; hình dạng tồn dư thật của sản xuất chưa ai đo.
+
+## 6. Mốc đột biến
+
+| Đột biến | Test phải đỏ | Kết quả |
+|---|---|---|
+| gỡ vế `kind` khỏi **truy vấn con**, giữ ở `WHERE` ngoài | *“vị từ `kind` nằm TRONG truy vấn con”* | ĐỎ — `expected +0 to be 1` |
+| làm rỗng `KIND_KHONG_NGUOI_NHAN` | cổng kind mồ côi vế ⑴ | ĐỎ — `[RFQ_DEADLINE_EXTENDED_NOTICE]` |
+| bỏ hàng 154 khỏi sổ nợ | cổng kind mồ côi vế ⑶ | ĐỎ — `không có hàng cho khoản 154` |
+
+Mốc thứ nhất là mốc khoá **VỊ TRÍ** của vị từ, không phải sự tồn tại của nó: ba job lạ có `run_after` cũ hơn ăn hết
+`batchSize`, nên bản đặt vị từ ở `WHERE` ngoài nhặt được **0**. Khẳng định đo **handler đã chạy**, không đo *“khác 0”*.
+
+## 7. Một lời khai thiu mà lượt quét S1.79 KHÔNG với tới — trong đúng tệp nó đã vá
+
+`packages/outbox/src/runner.ts` mang **bản sao thứ năm** của lời khai *“`apps/` rỗng”* (khoản 7, thiu từ S1.10), ở
+docstring của `OrganizationLister`. S1.79 đã vá bản sao **thứ tư** trong **chính tệp ấy**, cách đó hai trăm dòng.
+Phép đo về chính lượt quét: nó bám vào CHUỖI *“apps/ rỗng”* chứ không vào TÍNH CHẤT, nên hai câu cùng nghĩa viết khác
+chữ thì chỉ một câu được vá. Bản sao **thứ sáu** nằm ở `tools/inv-matrix/src/danh-gia.ts` mục D4. Cả hai đã vá; ghi vào
+khoản **151** làm bằng chứng thứ ba.
+
+## 8. Phần KHÔNG làm ở vòng này, và vì sao
+
+**Điểm vào tiến trình của worker (khoản 116) CHƯA dựng**, và đó không phải một lần bỏ dở — nó vướng một quyết định
+thuộc chủ dự án. `organizations` bật `FORCE ROW LEVEL SECURITY` với `USING (id = app_current_org_id())`, nên một tiến
+trình riêng chạy dưới `app_unseal` **không liệt kê được tổ chức**, trong khi `runOnce()` ném nếu thiếu
+`listOrganizations`. Bốn phương án đã cân; cả bốn đều có giá, và cái rẻ nhất về kỹ thuật đòi **mở dòng đầu tiên của
+`NGOAI_LE_DOC_VONG`** — một danh sách RỖNG từ S0, trong khi sáu migration ghi *“mục (C) CẤM mọi SECURITY DEFINER”*.
+Đó là một tiền lệ, không phải một bản vá, nên nó phải có chữ ký chủ dự án trước dòng mã đầu. Trình riêng.
+
+Hệ quả trung gian, nói thẳng: sau vòng này job `UNSEAL_RFQ` nằm **`PENDING`** chờ một tiến trình chưa được dựng, thay
+vì **`FAILED`** không đường về. Tốt hơn hẳn — một job chờ thì cứu được, một job chết thì không — nhưng nó **chưa chạy**.
+Khoản 116 giữ MỞ; khoản **156** giữ chỗ cho lớp phát hiện theo TUỔI, thứ duy nhất bắt được ca *“có handler nhưng không
+ai chạy”*.
+
+Cũng không làm: đường hồi sinh job đã chết (khoản **155**), ranh giới `kind` ở tầng CSDL (**158**), hai lỗ trigger
+(**159**, **160**), lỗ nhận diện `kind` của phép quét (**161**). Hàng đợi **129 · 131** (gộp 147) rồi **128** chưa động tới.
+
+## Sổ nợ
+
+**153 → 161 khoản, 49 → 57 còn mở** (57 = 5 ngoài mã + 52 có mã).
+
+## Cổng
+
+- `pnpm t0` — 249 module, 1033 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 63/63 tệp, **908 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`**, 1934 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**

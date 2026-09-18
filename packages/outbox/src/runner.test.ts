@@ -131,3 +131,34 @@ describe("runOnce() đòi nguồn danh sách tổ chức", () => {
     await expect(runner.runOnce()).resolves.toBe(0);
   });
 });
+
+describe("[S1.81 / khoản 116] mảng lọc `kind` rỗng thì NÉM, không báo 0 job mãi mãi", () => {
+  // Từ S1.81 `CAU_CLAIM` mang `j.kind = ANY($4)`. `= ANY('{}'::text[])` là FALSE với MỌI hàng,
+  // nên một runner không handler và không khai `kindKhongNguoiNhan` sẽ trả "0 job" đều đặn trong
+  // khi hàng đợi đầy — một hỏng hóc IM LẶNG trông y hệt một hàng đợi rỗng. Cùng lập luận
+  // fail-closed đã ép `listOrganizations` phải ném.
+  it("runOnceForOrg NÉM, và ném TRƯỚC khi mượn kết nối", async () => {
+    const runner = new JobRunner(POOL_KHONG_DUOC_DUNG, {});
+    await expect(runner.runOnceForOrg("11111111-1111-4111-8111-111111111111")).rejects.toBeInstanceOf(
+      OutboxError,
+    );
+    await expect(runner.runOnceForOrg("11111111-1111-4111-8111-111111111111")).rejects.toThrow(/kind/);
+  });
+
+  it("runOnce NÉM khi danh sách tổ chức KHÔNG rỗng", async () => {
+    const runner = new JobRunner(POOL_KHONG_DUOC_DUNG, {}, {
+      listOrganizations: () => ["11111111-1111-4111-8111-111111111111"],
+    });
+    await expect(runner.runOnce()).rejects.toThrow(/kind/);
+  });
+
+  it("đối chứng dương: `kindKhongNguoiNhan` một mình đủ để ĐI QUA phép kiểm và chạm pool", async () => {
+    // Không có vế này, hai test trên xanh cả khi phép kiểm ném VÔ ĐIỀU KIỆN. Đây là hình dạng
+    // thật của tiến trình khai sổ mồ côi: bảng handler có thể không chứa `kind` ấy, nhưng mảng
+    // lọc thì có — nên lượt chạy phải đi tiếp tới CSDL và nổ ở đó, không nổ ở phép kiểm.
+    const runner = new JobRunner(POOL_KHONG_DUOC_DUNG, {}, { kindKhongNguoiNhan: ["MO_COI"] });
+    await expect(
+      runner.runOnceForOrg("11111111-1111-4111-8111-111111111111"),
+    ).rejects.toThrow(/POOL BỊ CHẠM/);
+  });
+});

@@ -557,7 +557,13 @@ describe("job runner", () => {
     // C2 (RFQ, deadline, báo giá muộn) chưa tồn tại trong 001–007.
     const id = await xepHang(orgId, { kind: "KHONG_CO_HANDLER" });
     const baoCao: JobFailureReport[] = [];
-    const runner = runnerChoMotToChuc({}, { maxAttempts: 1, onJobFailure: (r) => baoCao.push(r) });
+    // [S1.81 / khoản 154] Từ vòng này `CAU_CLAIM` lọc theo `kind`, nên một `kind` ngoài mảng lọc
+    // KHÔNG bị claim. Khai nó mồ côi là đúng thứ một tiến trình thật làm để giữ nhánh `NO_HANDLER`
+    // sống — mọi khẳng định dưới đây GIỮ NGUYÊN, và đó là điểm: vị từ lọc không xoá tín hiệu này.
+    const runner = runnerChoMotToChuc(
+      {},
+      { maxAttempts: 1, kindKhongNguoiNhan: ["KHONG_CO_HANDLER"], onJobFailure: (r) => baoCao.push(r) },
+    );
     expect(await runner.runOnce()).toBe(1);
 
     const hang = await docHang(id);
@@ -568,6 +574,70 @@ describe("job runner", () => {
     expect(baoCao.map((r) => `${r.reason}/${String(r.gaveUp)}`)).toEqual(["NO_HANDLER/true"]);
     // Và nó KHÔNG còn chiếm chỗ trong hàng đợi: một lượt nữa không nhặt lại nó.
     expect(await runner.runOnce()).toBe(0);
+  });
+
+  it("[S1.81 / khoản 116] `kind` ngoài bảng handler và ngoài sổ mồ côi KHÔNG bị claim", async () => {
+    // Đây là vế vá lỗi ĐANG SỐNG đo được trên `e587819`: runner của tiến trình `api` (bảng handler
+    // đúng một khoá) nhặt job `UNSEAL_RFQ` của worker rồi ghi FAILED/NO_HANDLER ở lượt thử 1.
+    const idLa = await xepHang(orgId, { kind: "VIEC_CUA_TIEN_TRINH_KHAC" });
+    const idNha = await xepHang(orgId, { kind: "VIEC_CUA_TOI" });
+
+    const daChay: string[] = [];
+    const baoCao: JobFailureReport[] = [];
+    const runner = runnerChoMotToChuc(
+      {
+        VIEC_CUA_TOI: (job) => {
+          daChay.push(job.kind);
+          return Promise.resolve();
+        },
+      },
+      { onJobFailure: (r) => baoCao.push(r) },
+    );
+    expect(await runner.runOnce()).toBe(1);
+
+    // Chống rỗng ruột: job của CHÍNH runner này phải chạy xong — nếu không, "0 job lạ" chỉ chứng
+    // minh câu lệnh hỏng chứ không chứng minh vị từ lọc làm việc.
+    expect(daChay).toEqual(["VIEC_CUA_TOI"]);
+    expect((await docHang(idNha)).status).toBe("DONE");
+
+    // Còn job lạ: KHÔNG bị chạm. Không claim, không tăng lượt thử, không kết cục, không báo cáo.
+    const la = await docHang(idLa);
+    expect(la.status).toBe("PENDING");
+    expect(la.attempts).toBe(0);
+    expect(la.last_failure_reason).toBeNull();
+    expect(baoCao).toEqual([]);
+  });
+
+  it("[S1.81 / khoản 116] vị từ `kind` nằm TRONG truy vấn con — một lô đầy việc lạ không làm runner đi tay không", async () => {
+    // MỐC ĐỘT BIẾN khoá VỊ TRÍ của vị từ: chuyển vế `kind` từ truy vấn con ra `WHERE` ngoài thì
+    // `LIMIT` của truy vấn con ăn hết bằng việc lạ (chúng có `run_after` cũ hơn), và lượt này
+    // nhặt được 0 job. Một khẳng định "khác 0" không đủ — phải đo HANDLER đã chạy.
+    const orgRieng = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ('Loc Kind', 'loc-kind-s181') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const cu = new Date(Date.now() - 60_000).toISOString();
+    for (let i = 0; i < 3; i += 1) {
+      await xepHang(orgRieng, { kind: "VIEC_LA_DUNG_TRUOC", runAfter: new Date(cu) });
+    }
+    await xepHang(orgRieng, { kind: "VIEC_CUA_TOI" });
+
+    const daChay: string[] = [];
+    const runner = runnerChoMotToChuc(
+      {
+        VIEC_CUA_TOI: (job) => {
+          daChay.push(job.kind);
+          return Promise.resolve();
+        },
+      },
+      { batchSize: 2 },
+      orgRieng,
+    );
+    expect(await runner.runOnce()).toBe(1);
+    expect(daChay, "ba việc lạ đứng trước đã ăn hết batchSize — vị từ `kind` không ở truy vấn con").toEqual([
+      "VIEC_CUA_TOI",
+    ]);
   });
 
   it("[T10-J] `run_after` được GIỮ NGUYÊN khi job vào FAILED", async () => {
