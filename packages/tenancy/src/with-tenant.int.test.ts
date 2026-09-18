@@ -3,7 +3,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { TenantError, withTenant } from "./with-tenant.js";
+import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "./with-tenant.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -969,4 +969,76 @@ describe("[S1.69 / khoản 120] withTenant: maxConnectWaitMs", () => {
     expect(loi).toBe(loiGoc);
     expect(Date.now() - batDau).toBeLessThan(1000);
   });
+});
+
+// ================================================================================================
+// [S1.84 / khoản 129] LỖI CỦA LẦN LẤY KẾT NỐI TỚI SAU TRẦN PHẢI CÓ ĐƯỜNG RA
+//
+// Khoản 120 cho `withTenant` một trần chờ kết nối. Hết trần thì lời gọi của pg-pool VẪN nằm trong
+// hàng đợi: kết nối tới sau được nhả ngay (vế ⑴ ngay trên đã đo), và NẾU nó nhiễm thì bộ bọc vai
+// huỷ nó bằng `release(KetNoiNhiemError)` rồi ném vào một nhánh không ai bắt.
+//
+// ĐO TRÊN MÃ TRƯỚC BẢN VÁ, nguyên văn chuỗi sự kiện:
+//   nguoi_goi_nhan=TenantError:CONNECT_WAIT_EXCEEDED | release:sach | release:KetNoiNhiemError
+//   | tong=0 ranh=0 cho=0
+// Cô lập CÒN NGUYÊN — kết nối nhiễm rời pool hẳn. Thứ mất là TÍN HIỆU, và lớp khoản 99 sinh ra
+// chính là để phát tín hiệu ấy.
+//
+// Chủ dự án chọn hình dạng "sự kiện trên pool + cổng canh" ngày 2026-09-19 (ADR-041): bộ báo là
+// tính chất của POOL chứ không của lời gọi, vì hai trong ba chỗ đặt trần nằm trong một thư viện
+// không có bộ ghi log và `requirePermission` có 19 chỗ gọi.
+// ================================================================================================
+describe("[S1.84 / khoản 129] lỗi kết nối tới SAU trần", () => {
+  it("kết nối NHIỄM tới sau trần ⇒ sự kiện lỗi-tới-muộn mang đúng `KetNoiNhiemError`; cô lập vẫn giữ", async () => {
+    const pool = createPool(db.connectionString, 1, { role: "app_api" });
+    const toiMuon: unknown[] = [];
+    ngheLoiKetNoiToiMuon(pool, (loi) => toiMuon.push(loi));
+    const giu = await pool.connect();
+    let daNha = false;
+    try {
+      await giu.query("SET row_security = off");
+      const loi = await withTenant(pool, orgA, () => Promise.resolve("khong chay"), { maxConnectWaitMs: 300 }).then(
+        () => "KHONG_NEM",
+        (e: unknown) => e,
+      );
+      expect((loi as TenantError).code, "người gọi vẫn nhận đúng lỗi của trần").toBe("CONNECT_WAIT_EXCEEDED");
+      expect(toiMuon, "trần vừa nổ, kết nối muộn chưa tới ⇒ chưa có gì để báo").toHaveLength(0);
+
+      giu.release();
+      daNha = true;
+      const han = Date.now() + 3000;
+      while (toiMuon.length === 0 && Date.now() < han) await new Promise<void>((x) => setTimeout(x, 20));
+
+      // ⑴ VẾ CHỊU LỰC: tín hiệu tới được một người nghe, và nó là ĐÚNG lỗi chứ không phải một lỗi bọc.
+      expect(toiMuon, `phải có ĐÚNG một lần báo; nhận ${String(toiMuon.length)}`).toHaveLength(1);
+      expect((toiMuon[0] as Error).name).toBe("KetNoiNhiemError");
+
+      // ⑵ Cô lập không đổi: kết nối nhiễm rời pool hẳn, không quay lại phục vụ ai.
+      await new Promise<void>((x) => setTimeout(x, 200));
+      expect({ tong: pool.totalCount, ranh: pool.idleCount, cho: pool.waitingCount }).toEqual({ tong: 0, ranh: 0, cho: 0 });
+    } finally {
+      if (!daNha) giu.release();
+      await pool.end().catch(() => undefined);
+    }
+  }, 30_000);
+
+  it("ĐỐI CHỨNG: kết nối nhiễm tới TRONG trần ⇒ người gọi nhận lỗi, KHÔNG sự kiện nào — một sự cố không thành hai dòng", async () => {
+    const pool = createPool(db.connectionString, 1, { role: "app_api" });
+    const toiMuon: unknown[] = [];
+    ngheLoiKetNoiToiMuon(pool, (loi) => toiMuon.push(loi));
+    const giu = await pool.connect();
+    try {
+      await giu.query("SET row_security = off");
+      setTimeout(() => giu.release(), 100);
+      const loi = await withTenant(pool, orgA, () => Promise.resolve("khong chay"), { maxConnectWaitMs: 4000 }).then(
+        () => "KHONG_NEM",
+        (e: unknown) => e,
+      );
+      expect((loi as Error).name, "trong trần thì lỗi đi ra qua Promise.race").toBe("KetNoiNhiemError");
+      await new Promise<void>((x) => setTimeout(x, 300));
+      expect(toiMuon, "người gọi ĐÃ nhận lỗi ⇒ không được báo thêm lần nữa").toHaveLength(0);
+    } finally {
+      await pool.end().catch(() => undefined);
+    }
+  }, 30_000);
 });

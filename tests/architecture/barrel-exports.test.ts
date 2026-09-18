@@ -948,7 +948,15 @@ const DANH_SACH_TRANG_DB = [
 // Một symbol thứ tư ở đây mà gắn GUC theo một đường khác là một đường vòng qua quyết định "phiên
 // này thuộc tổ chức nào" — và hậu quả của nó không phải một lỗi, mà là dữ liệu của tổ chức khác
 // đọc như dữ liệu của mình.
-const DANH_SACH_TRANG_TENANCY = ["TenantError", "withGuestSession", "withTenant"];
+const DANH_SACH_TRANG_TENANCY = [
+  // [S1.84 / khoản 129] Hai symbol của đường tín hiệu "lỗi kết nối tới SAU trần": tên sự kiện và hàm nghe.
+  // Gói này KHÔNG tự ghi log — nó phát, composition root ghi.
+  "SU_KIEN_LOI_KET_NOI_TOI_MUON",
+  "TenantError",
+  "ngheLoiKetNoiToiMuon",
+  "withGuestSession",
+  "withTenant",
+];
 
 // `test-support` không phải mã sản phẩm, và lớp canh của nó vẫn cần thiết vì đúng lý do đó: mọi
 // thứ ở đây chạy với quyền cao (dựng CSDL, chạy migration, đúc khoá ký thử). `taoBoKyNeoThuNghiem`

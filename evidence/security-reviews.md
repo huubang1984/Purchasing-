@@ -7293,3 +7293,99 @@ số đếm.
 - `pnpm t0` — 257 module, 1068 phụ thuộc, **0 vi phạm**
 - `pnpm test` — 64/64 tệp, **921 đạt** | 1 bỏ qua; `tests/architecture` riêng: **259 đạt** | 1 bỏ qua
 - `pnpm evidence` — **`vitest thoát mã 0`**, 1956 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+---
+
+# §S1.84 — KHOẢN 129: tín hiệu của kết nối nhiễm tới SAU trần, và một cổng trả giá cho hình dạng đã chọn
+
+Việc thứ ba trong ba việc chủ dự án giao: hàng đợi **129 → 131 (gộp 147) → 128**. Vòng này là khoản 129.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng
+
+`Handoff.md` §11 đặt mốc *"sau ba vòng đổi hardening, hay chậm nhất **S1.89**"* (đặt lại ở S1.83). Vòng này là
+S1.84 — **chưa chạm**, và `hardening.always.sql` không đổi ở vòng này. Không lượt ngang nào chạy, không lỡ nhịp.
+
+## 1. Đo tiền đề TRƯỚC dòng mã đầu tiên — và nó ĐỨNG
+
+Kho có tiền lệ một khoản nợ đóng vì tiền đề của chính nó SAI (khoản 140, §S1.77), nên vòng này bắt đầu bằng
+một phép đo chứ không bằng một bản vá. Pool có vai `app_api`, max 1, kết nối duy nhất bị `SET row_security = off`
+rồi nhả SAU trần 300 ms:
+
+```
+nguoi_goi_nhan=TenantError:CONNECT_WAIT_EXCEEDED | release:sach | release:KetNoiNhiemError | tong=0 ranh=0 cho=0
+```
+
+Đọc từng vế: người gọi nhận đúng lỗi của trần · kết nối đang giữ được nhả sạch · kết nối ấy được giao cho lời gọi
+ĐÃ BỎ, bộ bọc vai thấy nhiễm và huỷ nó bằng `release(KetNoiNhiemError)` · pool về `0/0/0`. **Cô lập CÒN NGUYÊN** —
+kết nối nhiễm rời pool hẳn, không quay lại phục vụ ai. Thứ mất là **TÍN HIỆU**: `KetNoiNhiemError` rơi vào nhánh
+từ chối rỗng `() => {}` của `choKetNoiCoTran` và không ai nhận. Đúng như khoản 129 ghi từ S1.72.
+
+## 2. Ba hình dạng, và cái giá ĐO ĐƯỢC của từng cái
+
+Sổ nợ đề xuất hai hình dạng. Đo ra thì **cả hai đều có một cái giá sổ không nêu**.
+
+| Hình dạng | Chỗ gọi phải đổi | Cái giá |
+|---|---|---|
+| Tiêm bộ báo theo LỜI GỌI | **19** — hai trong ba chỗ đặt trần nằm trong `rbac.ts`, thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 18 chỗ im lặng ⇒ fail-open ở đúng lớp lỗi đang vá |
+| **Sự kiện trên POOL** (chủ dự án chọn) | **0** | dựa vào một lớp GẮN BẰNG TAY ở composition root — lớp ấy ĐÃ bị quên một lần (khoản 173) |
+| `withTenant` tự `console.error` | **0** | `packages/tenancy` thành một tầng ghi log; dòng không mang tên pool; `mo-ta-loi.ts` thôi là chỗ duy nhất mô tả lỗi |
+
+Hình dạng thứ tư — `createPool` gắn sẵn — bị loại bằng một phép đo cấu trúc: `packages/tenancy` và `packages/db`
+KHÔNG phụ thuộc nhau, cả hai chỉ phụ thuộc `pg`.
+
+Chủ dự án chọn **sự kiện trên pool + cổng canh** ngày 2026-09-19 (ADR-041) — tức chọn luôn việc trả cái giá của
+nó trong CÙNG vòng, thay vì ghi nó thành một khoản nợ mới.
+
+## 3. Bản vá — và vì sao nó không sinh hai dòng cho một sự cố
+
+Nhánh từ chối rỗng nay báo qua `SU_KIEN_LOI_KET_NOI_TOI_MUON`, **chỉ khi `hetTran`** — đối xứng đúng với nhánh
+thành công ngay cạnh nó (`if (hetTran) client.release()`). Lỗi tới TRONG trần vẫn đi ra qua `Promise.race` và
+người gọi nhận nó như thường, nên nó không đi qua đường này. Vế ấy có một **đối chứng đo riêng**, không phải một
+lời hứa: nhả kết nối nhiễm ở 100 ms dưới trần 4 000 ms ⇒ người gọi nhận `KetNoiNhiemError`, và số sự kiện là **0**.
+
+Tên sự kiện cố ý KHÔNG phải `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe, nên một pool chưa gắn
+listener sẽ GIẾT TIẾN TRÌNH thay vì mất tín hiệu. Tên riêng làm nó hỏng êm — và cái giá ấy được trả bằng cổng ở
+mục 5, không bằng một câu hứa.
+
+## 4. Mốc đột biến — năm mũi, cả năm ĐỎ đúng chỗ
+
+| Mũi | Đổi | Vế chính | Đối chứng | Cổng |
+|---|---|---|---|---|
+| M1 | khôi phục nhánh từ chối RỖNG (đúng mã trước bản vá) | **ĐỎ** `nhận 0` | XANH | — |
+| M2 | bỏ điều kiện `hetTran` | XANH | **ĐỎ** `không được báo thêm lần nữa` | — |
+| M3 | worker bỏ một listener `release` | — | — | **ĐỎ** |
+| M4 | worker bỏ một listener lỗi-tới-muộn | — | — | **ĐỎ** |
+| M5 | `api` bỏ `ghiLogLoiKetNoiToiMuon(auditPool)` | — | — | **ĐỎ** |
+
+M1 là phép đo ĐỎ trên mã cũ: nó khôi phục nguyên văn nhánh rỗng và vế chính đỏ với `nhận 0`. M1 và M2 giết hai vế
+KHÁC NHAU — hai vế canh hai tính chất khác nhau, không vế nào thừa.
+
+## 5. Cổng — cái giá của hình dạng, trả trong cùng vòng
+
+`tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` nghe đủ hai tín hiệu
+mất-không-ai-biết: `release` mang `SESSION_STATE_LEFT` (khoản 118) và lỗi-tới-muộn (khoản 129). Phép đọc là CÂY
+CÚ PHÁP, không phải biểu thức chính quy, và danh sách tệp lấy từ `git ls-files`.
+
+**Cổng ĐỎ ngay lượt đầu, hai pool thiếu cả hai listener** — đó là khoản 173, và nó đóng như một hệ quả trực tiếp.
+
+Và cổng bắt luôn một lỗi của chính vòng này: bản đầu của khối gắn listener ở worker viết bằng một **vòng lặp**
+trên `[[pool, "pool"], [auditPool, "auditPool"]]`, nên phép đọc theo tên biến chỉ thấy biến vòng lặp `p`. Lời giải
+là sửa MÃ cho lời khai thành thật — trải ra từng pool một — chứ không nới phép đọc; lý do ghi ngay tại chỗ để lần
+sau không ai "dọn gọn" nó về vòng lặp rồi làm cổng mù.
+
+## 6. Phần KHÔNG làm
+
+Khoản **131** (gộp **147**) và **128** chưa động tới — hai vòng kế tiếp của hàng đợi. Ranh giới của cổng mới ghi
+thành khoản **176**: nó đọc tên biến trong CÙNG MỘT TỆP và chỉ quét `apps/`.
+
+## Sổ nợ
+
+**175 → 176 khoản, 70 → 69 còn mở** — đóng **2** (129, 173), mở **1** (176). 69 = 5 ngoài mã + 64 có mã.
+Khoản 173 đóng phần ĐO ĐƯỢC; phần dư của nó (*"tập con `api` mà worker chép chưa ai liệt kê ra để soi"*) trỏ
+sang khoản 166.
+
+## Cổng
+
+- `pnpm t0` — 258 module, 1075 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 65/65 tệp, **925 đạt** | 1 bỏ qua; `tests/architecture` riêng: **263 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`** (`vitest-report.json`: `success: true`, 0 test đỏ), 1962 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**

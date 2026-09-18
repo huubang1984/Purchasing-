@@ -32,7 +32,7 @@ import type { CauHinhApi } from "./cau-hinh.js";
 import { KMS_TIMEOUT_MS_MAC_DINH, boiTranKms } from "./co-han.js";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { createDispatcher } from "./dispatch.js";
-import { ghiLogKetNoiHuy, moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
+import { ghiLogKetNoiHuy, ghiLogLoiKetNoiToiMuon, moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
@@ -90,6 +90,12 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   // chỗ duy nhất nó thành một dòng log — xem `ghiLogKetNoiHuy`.
   ghiLogKetNoiHuy(pool, "pool");
   ghiLogKetNoiHuy(auditPool, "auditPool");
+  // [S1.84 / khoản 129] Lỗi của lần lấy kết nối TỚI SAU trần `maxConnectWaitMs`: người gọi đã nhận
+  // `CONNECT_WAIT_EXCEEDED` và bỏ đi, nên lỗi ấy không có ai để ném tới. Đây là chỗ duy nhất nó
+  // thành một dòng log. Nêu TÊN POOL: `auditPool` (trần 5 s) và `pool` (phần bù sau commit) là hai
+  // đường khác nhau, và một dòng không nói pool nào thì không dẫn tới nguyên nhân nào.
+  ghiLogLoiKetNoiToiMuon(pool, "pool");
+  ghiLogLoiKetNoiToiMuon(auditPool, "auditPool");
 
   const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
   const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
