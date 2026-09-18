@@ -109,7 +109,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ **55** mã cùng chảy vào `evidence/INV-matrix.md`.
+**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ **[S1.79] 56** mã cùng chảy vào `evidence/INV-matrix.md` — 34 + 22 = 56, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -120,7 +120,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 > **ĐỌC CỘT *Trạng thái S0* TRƯỚC CỘT *Chặn merge*.** Cột *Chặn merge* nói tầng ấy **sẽ** chặn
 > khi nó tồn tại; nó **không** nói tầng ấy đang chạy hôm nay. Ba tầng dưới đây **chưa được
 > dựng**, và điều đó đo được: `grep -E 'playwright|k6|osv-scanner'` trên `package.json` cùng mọi
-> `*.yml` cho **0 hit**, và `.github/workflows/ci.yml` chỉ có bốn job — `t0`, `t1-t2`, `t3`,
+> `*.yml` cho **0 hit**, và `.github/workflows/ci.yml` ~~chỉ có bốn job~~ **[S1.79] có NĂM job** (`t0b-audit` tách ra sau) — `t0`, `t1-t2`, `t3`,
 > `evidence`. Cho tới khi cột *Trạng thái S0* của một hàng ghi **ĐÃ DỰNG**, mọi thứ mô tả dưới
 > hàng đó là **kế hoạch**, kể cả bảng 15 kịch bản tấn công có tên ở mục T5.
 
@@ -128,9 +128,9 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 |---|---|---|---|---|---|
 | **T0** | Cổng tĩnh: typecheck, lint, quét bí mật, audit phụ thuộc, kiểm tra ranh giới module | tsc, eslint, gitleaks, osv-scanner, dependency-cruiser | Mọi commit | Có | **ĐÃ DỰNG một phần** — job `t0` có tsc + eslint + depcruise + gitleaks + `pnpm audit`; **`osv-scanner` chưa có** |
 | **T1** | Unit & property-based | Vitest, fast-check | Mọi commit | Có | **ĐÃ DỰNG** — job `t1-t2` chạy `pnpm test` |
-| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có | **CHƯA DỰNG — S1.** Không có OpenAPI, không có endpoint, nên **không có bộ quét rò rỉ**. Job `t1-t2` hôm nay chỉ là T1 |
+| **T2** | Contract/API + bộ quét rò rỉ | OpenAPI, Vitest | Mọi commit | Có | ~~**CHƯA DỰNG — S1.** Không có OpenAPI, không có endpoint, nên **không có bộ quét rò rỉ**. Job `t1-t2` hôm nay chỉ là T1~~ **[S1.79]** Vẫn **không có OpenAPI**; hai vế còn lại sai từ S1.10 — `apps/api` khai **46 route** trong `ROUTES`, và **bộ quét rò rỉ có thật**, chạy trên chính mảng ấy |
 | **T3** | Integration với Postgres thật | Testcontainers, Vitest | Mọi PR | Có | **ĐÃ DỰNG** — job `t3` chạy `pnpm test:int` trên Postgres thật |
-| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có | **CHƯA DỰNG — S1.** Playwright **không có trong `package.json`**; `apps/` rỗng |
+| **T4** | E2E trên trình duyệt thật | Playwright | Mọi PR | Có | **CHƯA DỰNG — S1.** Playwright **không có trong `package.json`** (vẫn đúng); ~~`apps/` rỗng~~ **[S1.79]** `apps/` có **bốn app** |
 | **T5** | Bộ test đối kháng | Vitest + Playwright | Mọi PR | Có | **CHƯA DỰNG NHƯ MỘT TẦNG RIÊNG.** Test đối kháng của S0 **có thật** nhưng sống lẫn trong T1/T3 (xem cột *Số test* của `evidence/INV-matrix.md`); **bảng 15 kịch bản dưới đây chưa có kịch bản nào chạy** |
 | **T6** | Phi chức năng | k6, kịch bản DR | Hằng đêm | Không (cảnh báo) | **CHƯA DỰNG — S1+.** `k6` không có; chưa có kịch bản DR. Ngoại lệ duy nhất đã đo: `pnpm bench:keys` (hiệu năng bọc/mở khoá `local-dev`) |
 

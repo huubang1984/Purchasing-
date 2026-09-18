@@ -1,13 +1,21 @@
 // ==============================================================================================
 // [ADR-020 mục 2 / S1.10.4] ĐĂNG NHẬP NGƯỜI MUA — nửa PHÁT của khoản nợ 6
 //
-// Bốn bước, bốn hàm, mỗi hàm một giao dịch của người gọi:
+// ~~Bốn bước, bốn hàm~~ [S1.79 / lượt soi ngang 72] BẢY hàm, mỗi hàm một giao dịch của người gọi.
+// Khối này khai "bốn" rồi liệt NĂM tên, còn hai hàm thêm sau thì không ai thêm vào danh sách:
+// `enrollOrReplaceTotpForLogin` (S1.10.7) và `startAgentSession` (S1.76 / khoản 141). Một khối mở
+// đầu liệt kê thiếu không làm test nào đỏ — nó chỉ làm người đọc tin rằng tệp này nhỏ hơn thật.
 //   issueLoginToken     email → token đăng nhập (băm xuống bảng, dạng rõ đi tới BỘ GỬI, không về client)
 //   redeemLoginToken    token → người dùng + đã có TOTP chưa (KHÔNG mở phiên — E2 cho người mua)
 //   verifyTotpForLogin  mã TOTP → kết quả; và trả nợ ADR-008 phương án (ii): `justLocked` ⇒ MFA_LOCKED
 //                       — [S1.75 / khoản 139] trừ khi khoá ghi sổ của tổ chức bị giữ: lần ghi bị bỏ
 //                       trong một SAVEPOINT, hồ sơ VẪN khoá, kết quả mang `auditSkipped`
+//   enrollOrReplaceTotpForLogin
+//                       ghi danh TOTP, hoặc THAY bí mật của một hồ sơ CHƯA xác nhận; hồ sơ đã xác
+//                       nhận thì `rowCount = 0` ⇒ ném. Mỗi lần ghi danh để lại `MFA_ENROLLED` kèm IP
 //   startUserSession    tiêu thụ token + chèn phiên ĐÃ MFA trong CÙNG giao dịch → token phiên
+//   startAgentSession   [S1.76 / khoản 141] chứng chỉ `AGENT_READONLY` có phạm vi trên hàng phiên,
+//                       TTL trần MỘT GIỜ; vẫn đòi một mã TOTP TƯƠI vì trigger 039 bắt buộc thế
 //   revokeSession       đăng xuất
 //
 // Ba kỷ luật kế thừa nguyên vẹn từ `packages/invitation`:

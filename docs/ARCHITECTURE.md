@@ -6,7 +6,7 @@
 >
 > ~~**Trạng thái triển khai: chưa có mã nguồn.**~~ **[S1.78 / lượt soi ngang 72] Câu ấy viết ngày
 > khai sinh tệp (2026-08-27) và SAI từ S1.1; nó sống qua 16 commit sửa chính tệp này.** Trạng thái
-> thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — mười gói dưới `packages/`, bốn app
+> thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — ~~mười~~ **[S1.79] 13** gói dưới `packages/`, bốn app
 > dưới `apps/` (`api`, `unseal-worker`, `public-keys`, `mcp`), 51 migration đánh số, và cổng evidence
 > 56/56 bất biến. Tài liệu này mô tả kiến trúc **đang chạy**; cập nhật lại khi thực tế lệch khỏi nó.
 >
@@ -95,7 +95,7 @@ apps/
                         withGuestSession / requirePermission; `routes/**` bị `g9-` cấm chạm
                         pg, tenancy, node:http. [S1.10, 2026-09-06] Đủ bốn đối tượng route
                         (PUBLIC/ANON/GUEST/BUYER), đăng nhập người mua bằng magic link + TOTP,
-                        đường khách trọn vẹn, 28 route người mua; kiểm `Origin` cho mọi yêu cầu
+                        đường khách trọn vẹn, ~~28~~ [S1.79] 32 route người mua; kiểm `Origin` cho mọi yêu cầu
                         không-GET. ~~CHƯA có composition root chạy thật (pool, KMS, bộ gửi).~~
                         [S1.11 / ADR-021] `main.ts` + `composition.ts` + `cau-hinh.ts`: tiến
                         trình dựng từ biến môi trường (fail-closed, adapter phải khai tên), pool
@@ -188,7 +188,7 @@ vẫn đúng: `api` cần `kms:Encrypt` để **bọc** một khoá riêng, và 
 ```text
 S0  organizations · users · roles · permissions · role_permissions · user_roles
     sessions · mfa_credentials
-    audit_events · outbox_events
+    audit_events · outbox_jobs                    [S1.79] tên bảng: KHÔNG có `outbox_events`
 
 S1  suppliers · supplier_contacts
     rfq_packages · rfq_items · rfq_approvals · rfq_invitations · rfq_invitation_tokens

@@ -6,8 +6,10 @@
 // dependency-cruiser canh CẠNH phụ thuộc, nó KHÔNG nhìn thấy symbol, nên một symbol mọc ra ở
 // cửa này qua re-export bắc cầu đi lọt mọi cấu hình depcruise.
 //
-// Đây là gói THỨ BA có danh sách trắng barrel; `audit`, `tenancy`, `db`, `test-support` vẫn
-// chưa có (khoản nợ Task 9 §V3.5, nay còn BỐN gói thay vì bốn gói cộng gói này).
+// Đây là gói THỨ BA có danh sách trắng barrel; ~~`audit`, `tenancy`, `db`, `test-support` vẫn
+// chưa có (khoản nợ Task 9 §V3.5, nay còn BỐN gói thay vì bốn gói cộng gói này).~~
+// [S1.79] Khoản nợ ấy là khoản 9, và nó ĐÓNG 2026-09-07 (S1.18 / ADR-027): cả bốn gói đều đã
+// có danh sách trắng, và `[INV-H18]` suy từ TÍNH CHẤT nên danh sách MIỄN TRỪ phải RỖNG.
 //
 // TIÊU CHÍ dùng để quyết định cái gì được ra cửa, viết ra để lần sau không phải đoán: mỗi
 // symbol ở đây là một NĂNG LỰC mọi service gọi được. `KetCucKhongGhiDuocError` và

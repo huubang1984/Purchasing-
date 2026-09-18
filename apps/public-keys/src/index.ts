@@ -24,7 +24,9 @@
 // đây tồn tại đúng để đi ra khỏi hệ thống — in vào hợp đồng, đọc qua điện thoại, đăng ở một nơi
 // chúng ta không kiểm soát. Một nhà cung cấp so dấu vân tay ấy với thứ endpoint trả về thì mới có
 // một phép kiểm chứng THẬT SỰ độc lập. Đây là cùng một khoản nợ với "artefact neo ngoài của B3"
-// (khoản nợ 11 của sổ S0), và nó vẫn mở — cơ chế có, artefact thì chưa.
+// (khoản nợ 11 của sổ S0), ~~và nó vẫn mở — cơ chế có, artefact thì chưa~~ [S1.79] và nó ĐÓNG từ
+// S1.17 (ADR-026): artefact neo ngoài có thật — `anchor-text.ts`, `anchor-sign.ts`, `anchor-store.ts`
+// và entry point `tools/neo-so-kiem-toan`.
 //
 // ----------------------------------------------------------------------------------------------
 // KHÔNG PHỤ THUỘC HTTP FRAMEWORK NÀO

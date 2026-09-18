@@ -84,8 +84,10 @@ let ipHienTai = "203.0.113.1";
 //
 // PHẠM VI CHÍNH XÁC, vì khối này dễ đọc rộng hơn thứ nó làm [review an ninh lượt 17, I-5]:
 // vai ⒝ bị gỡ ở HAI test — `[nợ 52]` và `[review H6-2]`, hai chỗ có vòng lặp 300 lượt. Nó KHÔNG
-// bị gỡ ở cả tệp: `:546` (`toBeLessThan(TRE_TEST_MS)`, test H5-1) và `:768`
-// (`toBeLessThan(3000)`) vẫn là khẳng định thời gian tuyệt đối kiểu "phải nhanh". Cả hai đo MỘT
+// bị gỡ ở cả tệp: `toBeLessThan(TRE_TEST_MS)` trong test `[review H5-1]` và `toBeLessThan(3000)`
+// trong test `[sổ nợ 38]` (bộ gửi treo) vẫn là khẳng định thời gian tuyệt đối kiểu "phải nhanh".
+// [S1.79] Neo theo TÊN TEST: hai con trỏ cũ ~~`:546`~~ ~~`:768`~~ lệch 7 dòng NGAY TỪ commit viết ra
+// chúng (chính khối chú thích này đẩy xuống), và ở HEAD lệch 90 và 149 dòng. Cả hai đo MỘT
 // lượt chứ không 300, nên cửa sổ đỏ oan của chúng hẹp hơn hẳn — nhưng chúng CÙNG HỌ, và ngày một
 // trong hai đỏ oan dưới tải thì cách sửa là cách ở đây, không phải nới hằng số.
 //

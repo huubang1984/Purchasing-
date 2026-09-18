@@ -320,7 +320,8 @@ function khangDinhTrong(pTen: string, pGiaTri: number, pMin: number, pMax: numbe
  * `options.listOrganizations` do composition root tiêm vào. ~~Hôm nay KHÔNG có cài đặt sản phẩm
  * nào cho cổng đó vì `apps/` còn rỗng — cùng tình trạng với `TotpSecretUnsealer` của Task 9, và
  * được ghi vào sổ nợ thay vì bị che.~~ **[S1.21, review lượt 13 H13-6] CÓ cài đặt sản phẩm từ
- * S1.10:** `apps/api/src/composition.ts:96` tiêm `listOrganizations` thật (tập tổ chức tiến
+ * S1.10:** `apps/api/src/composition.ts` tiêm `listOrganizations` thật (~~`:96`~~ [S1.79] số dòng bỏ
+ * đi — đã trôi tới 118; tập tổ chức tiến
  * trình này đã thấy enqueue). Câu vừa gạch là bản sao thứ tư của lời khai *"`apps/` rỗng"* —
  * khoản nợ 7, thiu từ S1.10.
  *

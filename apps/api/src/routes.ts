@@ -3,7 +3,8 @@
 //
 // Route là DỮ LIỆU: một mảng đọc được bằng `import { ROUTES }`, không cần khởi động máy chủ. Hình
 // dạng từng route và lớp canh thuần (`timViPhamBangRoute`) nằm ở `route-types.ts`; file này chỉ
-// LẮP ba nhóm lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
+// LẮP ~~ba~~ [S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi
+// cặp (method, path) là duy nhất — lớp canh đòi thế.
 // ==============================================================================================
 import type { Route } from "./route-types.js";
 import { ROUTES_ANON } from "./routes/anon.js";
