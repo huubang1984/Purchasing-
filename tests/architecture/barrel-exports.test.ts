@@ -325,6 +325,11 @@ describe("bề mặt export công khai của identity", () => {
 // sao cái tên đó gộp ba nguyên nhân khác hẳn nhau và đã bị đổi ở vòng fix 1.)
 const DANH_SACH_TRANG_OUTBOX = [
   "JobRunner",
+  // [S1.81 / khoản 154] Sổ `kind` mồ côi. Nó ở cửa vì nó là hợp đồng GIỮA hai app: `apps/api`
+  // truyền nó vào `kindKhongNguoiNhan`, còn cổng ở `apps/unseal-worker` đối chiếu nó với hợp hai
+  // bảng handler. Một bản chép ở mỗi app là một bản sẽ trôi — cùng lập luận đã đưa `vai-tro.ts`
+  // về `@trustprocure/db` ở S1.11.
+  "KIND_KHONG_NGUOI_NHAN",
   "MAX_ATTEMPTS_LIMIT",
   "MAX_BATCH_SIZE",
   "MAX_HANDLER_TIMEOUT_MS",

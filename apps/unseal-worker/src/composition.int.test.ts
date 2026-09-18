@@ -5,11 +5,18 @@
 //   ⑴ một job `BREAK_GLASS_UNSEAL_ALERT` thật sự tới được một adapter gửi, và để lại một bản ghi
 //     `BREAK_GLASS_ALERT_DELIVERED`;
 //   ⑵ một lần gửi HỎNG làm job thất bại và `onJobFailure` được gọi — không nuốt;
-//   ⑶ MỌI `kind` được enqueue ở đâu đó trong kho HOẶC có handler ở đây, HOẶC nằm trong
-//     `KIND_KHONG_NHAN` kèm lý do. Một `kind` thứ ba ra đời mà không ai quyết định làm test ĐỎ.
+//   ⑶ ~~MỌI `kind` được enqueue ở đâu đó trong kho HOẶC có handler ở đây, HOẶC nằm trong
+//     `KIND_KHONG_NHAN` kèm lý do.~~ **[S1.81 / khoản 154]** MỌI `kind` được enqueue ở đâu đó
+//     trong kho phải có handler ở MỘT TIẾN TRÌNH NÀO ĐÓ (worker hoặc api, đối chiếu bảng handler
+//     THẬT), hoặc được khai trong `KIND_KHONG_NGUOI_NHAN` kèm một khoản CÒN MỞ.
 //
 // Vế ⑶ là vế chống *"hàng rào tự làm mù mình bằng một danh sách tên"* — cùng khuôn khoản nợ 3,
 // 16 và 33, và lần này lớp canh được dựng CÙNG LÚC với thứ nó canh chứ không sau.
+//
+// **[S1.81] Và chính vế ⑶ đã tự làm mù mình theo đúng lớp nó chống.** Câu hỏi cũ — *"worker này
+// đã quyết định chưa"* — xanh với `RFQ_DEADLINE_EXTENDED_NOTICE` suốt từ 2026-09-05, trong khi
+// không tiến trình nào trong kho nhận nó. Cổng hỏi sai câu, và một cổng hỏi sai câu xanh hơn một
+// cổng không tồn tại. Câu hỏi mới đối chiếu với `Object.keys` của cả hai bảng handler.
 // =============================================================================================
 
 import { execFileSync } from "node:child_process";
@@ -21,8 +28,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { enqueueJob, type JobFailureReport } from "@trustprocure/outbox";
+import { KIND_KHONG_NGUOI_NHAN, enqueueJob, type JobFailureReport } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+// [S1.81 / khoản 154] Import TƯƠNG ĐỐI xuyên app, cùng lý do và cùng tiền lệ với
+// `kich-ban-41-http.int.test.ts`: cổng dưới đây phải đọc bảng handler THẬT của cả hai tiến trình
+// bằng `Object.keys`, không bằng một biểu thức chính quy trên văn bản — một handler thêm vào bằng
+// spread hay bằng khoá tính toán vô hình với mọi phép quét văn bản. Test là nơi duy nhất nối hai
+// app; `@trustprocure/api` KHÔNG được thành dependency của worker (đường chạy worker không chạm api).
+import { buildApiOutboxHandlers } from "../../api/src/outbox-api.js";
+import { dichVuTest } from "../../api/src/test-services.js";
 import {
   BREAK_GLASS_ALERT_KIND,
   KIND_KHONG_NHAN,
@@ -207,26 +221,71 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
     expect([...kind]).toContain(BREAK_GLASS_ALERT_KIND);
     expect([...kind]).toContain(UNSEAL_JOB_KIND);
 
-    const coHandler = new Set(
-      Object.keys(
-        buildUnsealWorkerHandlers({
-          unwrapper: boMoBocGia,
-          auditPool: auditUnsealPool,
-          alertSink: { name: "x", deliver: () => Promise.resolve() },
-          onJobFailure: () => undefined,
-        }),
-      ),
+    // [S1.81 / khoản 154] CÂU HỎI CỦA CỔNG NÀY ĐÃ ĐỔI, và cái cũ là một lớp canh tự làm mù mình.
+    //
+    // Bản tới S1.80 hỏi *"worker này đã QUYẾT ĐỊNH `kind` ấy chưa"* — có handler, hoặc có một
+    // dòng trong `KIND_KHONG_NHAN`. Đo được rằng câu ấy không đủ: `RFQ_DEADLINE_EXTENDED_NOTICE`
+    // nằm trong `KIND_KHONG_NHAN` kèm lý do đúng (*"thuộc app gửi, không thuộc worker"*) nên cổng
+    // XANH, trong khi `apps/api` chỉ đăng ký `LOGIN_LINK_SEND` — tức KHÔNG tiến trình nào trong
+    // kho nhận nó. Một lời bào chữa trỏ sang một tiến trình khác mà không ai đối chiếu với tiến
+    // trình ấy là một lời bào chữa không kiểm được.
+    //
+    // Nay cổng hỏi *"có tiến trình nào NHẬN không"*, và nó đối chiếu với bảng handler THẬT của cả
+    // hai tiến trình bằng `Object.keys`. Chỉ còn một đường bào chữa: `KIND_KHONG_NGUOI_NHAN` ở
+    // `@trustprocure/outbox`, và mỗi dòng ở đó phải trỏ tới một khoản CÒN MỞ (vế ⑶ dưới).
+    const handlerWorker = Object.keys(
+      buildUnsealWorkerHandlers({
+        unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
+        alertSink: { name: "x", deliver: () => Promise.resolve() },
+        onJobFailure: () => undefined,
+      }),
     );
-    const chuaQuyet = [...kind].filter(
-      (k) => !coHandler.has(k) && !Object.hasOwn(KIND_KHONG_NHAN, k),
+    const handlerApi = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
+    // Chống rỗng ruột ở vế mới: hai bảng handler phải THẬT SỰ không rỗng và không trùng nhau.
+    expect(handlerWorker.length, "bảng handler của worker rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    expect(handlerApi.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    const coNguoiNhan = new Set([...handlerWorker, ...handlerApi]);
+
+    // ⑴ mọi `kind` enqueue được phải có người nhận, hoặc được KHAI là mồ côi.
+    const khongAiNhan = [...kind].filter(
+      (k) => !coNguoiNhan.has(k) && !Object.hasOwn(KIND_KHONG_NGUOI_NHAN, k),
     );
     expect(
-      chuaQuyet,
-      "Một `kind` được enqueue ở đâu đó nhưng KHÔNG có handler và cũng KHÔNG nằm trong " +
-        "KIND_KHONG_NHAN. Nếu worker này phải nhận nó, thêm handler; nếu không, thêm một dòng " +
-        "vào KIND_KHONG_NHAN kèm lý do. Bỏ qua nghĩa là job ấy thành NO_HANDLER và chết trong " +
-        "im lặng — đúng khoản nợ 34.",
+      khongAiNhan,
+      "Một `kind` được enqueue ở đâu đó nhưng KHÔNG tiến trình nào có handler cho nó, và nó " +
+        "cũng KHÔNG được khai trong KIND_KHONG_NGUOI_NHAN. Đường ĐÚNG là viết handler ở tiến " +
+        "trình giữ đủ quyền cho nó. Khai vào sổ mồ côi là đường TẠM, và nó đòi một khoản còn " +
+        "mở giữ chặng cuối — xem packages/outbox/src/so-kind-mo-coi.ts.",
     ).toEqual([]);
+
+    // ⑵ hai rổ không giao nhau. Vế này là vế GIẾT VIỆC: một `kind` vừa khai mồ côi vừa có
+    // handler ở tiến trình khác sẽ bị tiến trình khai sổ nhặt rồi ghi thẳng `FAILED`/`NO_HANDLER`
+    // trước khi tiến trình có handler kịp chạm tới — đúng lỗi mà cả vòng S1.81 tồn tại để vá,
+    // chỉ khác là lần này do một dòng khai tường minh.
+    const vuaNhanVuaMoCoi = [...coNguoiNhan].filter((k) => Object.hasOwn(KIND_KHONG_NGUOI_NHAN, k));
+    expect(
+      vuaNhanVuaMoCoi,
+      "Một `kind` vừa có handler vừa được khai mồ côi. Tiến trình khai sổ sẽ GIẾT job của tiến " +
+        "trình có handler: nó claim job ấy (kind nằm trong mảng lọc) rồi ghi NO_HANDLER, bỏ cuộc " +
+        "ngay lượt thử thứ nhất. Xoá dòng khỏi KIND_KHONG_NGUOI_NHAN.",
+    ).toEqual([]);
+
+    // ⑶ mỗi dòng của sổ mồ côi phải trỏ tới một khoản CÒN MỞ. Một `kind` mồ côi VĨNH VIỄN là một
+    // tính năng chết, không phải một trạng thái ổn định — và khoản đóng mà sổ còn trỏ tới là
+    // đúng lớp "lời khai ngoài sổ không ai đối chiếu" của khoản 151.
+    const so = readFileSync(join(GOC, "docs/STATE.md"), "utf8");
+    for (const [k, lyDo] of Object.entries(KIND_KHONG_NGUOI_NHAN)) {
+      const soKhoan = /khoản (\d+)/.exec(lyDo)?.[1];
+      expect(soKhoan, `lý do của \`${k}\` không nêu số khoản: ${lyDo}`).toBeDefined();
+      const hang = so.split(/\r?\n/).find((d) => d.startsWith(`| ${String(soKhoan)} |`));
+      expect(hang, `docs/STATE.md không có hàng cho khoản ${String(soKhoan)} (\`${k}\`)`).toBeDefined();
+      expect(
+        hang,
+        `khoản ${String(soKhoan)} không còn MỞ, nhưng \`${k}\` vẫn được khai mồ côi. Hoặc viết ` +
+          "handler cho nó, hoặc mở lại khoản giữ chặng cuối của nó.",
+      ).toContain("**[MỞ]**");
+    }
   });
 
   it("[khoản nợ 34] hai rổ không giao nhau — một `kind` không thể vừa nhận vừa không nhận", () => {

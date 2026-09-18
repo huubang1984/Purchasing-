@@ -18,6 +18,10 @@
 // hạn thuê bằng tay.
 // ============================================================================================
 export { OutboxError, enqueueJob, type JobInput } from "./enqueue.js";
+// [S1.81 / khoản 154] Sổ `kind` mồ côi. Ra cửa vì nó là hợp đồng GIỮA hai app: `apps/api` truyền
+// nó vào `kindKhongNguoiNhan`, và cổng ở `apps/unseal-worker` đối chiếu nó với hợp hai bảng
+// handler. Một bản chép ở mỗi app là một bản sẽ trôi.
+export { KIND_KHONG_NGUOI_NHAN } from "./so-kind-mo-coi.js";
 export {
   JobRunner,
   MAX_ATTEMPTS_LIMIT,

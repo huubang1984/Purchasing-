@@ -25,7 +25,7 @@ import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocur
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
-import { JobRunner } from "@trustprocure/outbox";
+import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
 import type { CauHinhApi } from "./cau-hinh.js";
@@ -116,6 +116,12 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
     pollIntervalMs: OUTBOX_POLL_MS,
     listOrganizations: () => [...toChucDaThay],
+    // [S1.81 / khoản 154] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và đó là tiến trình
+    // này. Vì sao `api` chứ không phải worker: `api` là tiến trình chạy thường trực trong mọi
+    // triển khai (worker có thể chưa được dựng — khoản 116), nên đặt ở đây thì một `kind` không
+    // người nhận vẫn tới trạng thái cuối ỒN ÀO ở đúng một chỗ. Hai tiến trình cùng khai thì cả
+    // hai cùng tranh nhau ghi kết cục và `attempts` của job ấy thôi đọc được.
+    kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
     onJobFailure: (bao) => {
       // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — ~~chỉ tên lý do và kind~~ [S1.67 / khoản 118] tên lý do, kind, và TÊN cùng MÃ
       // cố định của lỗi gốc (`moTaLoiKhongGiaTri`) — không message. Trước vòng này dòng này không nói lỗi gì: job hỏng vì kết nối nhiễm

@@ -79,7 +79,13 @@ export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void
  * Cài đặt nào không giữ được ĐẦY ĐỦ + SỐNG phải KÊU (ném), không được trả về danh sách cụt:
  * `runOnce()` báo lỗi của lister về `onPollError`, còn một danh sách cụt thì không ai thấy.
  *
- * Hôm nay CHƯA CÓ cài đặt sản phẩm nào (`apps/` còn rỗng). Đường cài đặt đã được đo là KHÔNG
+ * ~~Hôm nay CHƯA CÓ cài đặt sản phẩm nào (`apps/` còn rỗng).~~ **[S1.81 / khoản 151] Bản sao THỨ
+ * NĂM của lời khai *"`apps/` rỗng"* (khoản 7, thiu từ S1.10) — và nó sống ở ĐÚNG TỆP mà lượt quét
+ * S1.79 đã vá bản sao thứ tư (`:320-323`), cách đó hai trăm dòng. Phép đo về chính lượt quét ấy:
+ * nó bám vào chuỗi *"apps/ rỗng"* chứ không vào TÍNH CHẤT, nên hai câu cùng nghĩa viết khác chữ
+ * thì chỉ một câu được vá.** Cài đặt sản phẩm CÓ từ S1.10: `apps/api/src/composition.ts` tiêm một
+ * lister thật. Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
+ * điều đó ghi ở chính chỗ nó. Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG
  * cần role vượt RLS: một hàm `SECURITY DEFINER` do chủ sở hữu bảng sở hữu, `REVOKE FROM
  * PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là `SELECT id FROM organizations` —
  * bán kính đúng bằng MỘT truy vấn trả về MỘT danh sách id, thay vì một THUỘC TÍNH ROLE có
@@ -95,7 +101,12 @@ export type OrganizationLister = () => Promise<readonly string[]> | readonly str
  * Lý do một lần chạy job không thành công.
  *   `HANDLER_ERROR`        handler đã chạy và ném.
  *   `HANDLER_TIMEOUT`      handler chưa xong khi hết `handlerTimeoutMs`; lượt chạy bị bỏ dở.
- *   `NO_HANDLER`           không có handler cho `kind` này — lỗi CẤU HÌNH, bỏ cuộc ngay.
+ *   `NO_HANDLER`           ~~không có handler cho `kind` này — lỗi CẤU HÌNH, bỏ cuộc ngay.~~
+ *                          [S1.81 / khoản 154] `kind` này CÓ trong mảng lọc của `CAU_CLAIM` —
+ *                          vì nó được khai ở `kindKhongNguoiNhan`, hoặc vì khoá có mặt trong
+ *                          bảng handler mà giá trị không gọi được — nhưng không có handler.
+ *                          Từ S1.81 một `kind` LẠ (ngoài cả hai tập) KHÔNG còn tới được mã này:
+ *                          nó không bị claim. Vẫn bỏ cuộc ngay.
  *   `OUTCOME_NOT_WRITTEN`  câu ghi kết cục chạm 0 hàng, nên runner này KHÔNG ghi gì vào hàng
  *                          đó. Mã này chỉ tới quan sát viên, KHÔNG BAO GIỜ vào CSDL —
  *                          `outbox_jobs.last_failure_reason` cố ý không có giá trị tương ứng
@@ -161,6 +172,23 @@ export interface JobRunnerOptions {
   readonly handlerTimeoutMs?: number;
   /** Nguồn danh sách tổ chức. BẮT BUỘC nếu gọi `runOnce()` hoặc `start()`. */
   readonly listOrganizations?: OrganizationLister;
+  /**
+   * [S1.81 / khoản 154] `kind` mà runner này nhặt DÙ nó không có handler — để đưa chúng tới
+   * trạng thái cuối một cách ỒN ÀO thay vì để chúng nằm `PENDING` im lặng.
+   *
+   * Từ S1.81 `CAU_CLAIM` lọc theo `kind`, và mảng lọc là `Object.keys(handlers)` hợp với mảng
+   * này. Không có nó, một `kind` mà KHÔNG tiến trình nào nhận (hôm nay:
+   * `RFQ_DEADLINE_EXTENDED_NOTICE`) thôi bị claim, nên nó thôi để lại cả dòng log lẫn hàng
+   * `FAILED` — vị từ lọc khi ấy đổi một thất bại ỒN ÀO thành một thất bại IM LẶNG, đúng lớp
+   * khiếm khuyết mà nhánh `NO_HANDLER` sinh ra để chặn.
+   *
+   * Nguồn duy nhất nên truyền vào đây là `KIND_KHONG_NGUOI_NHAN` (`so-kind-mo-coi.ts`), và
+   * ĐÚNG MỘT tiến trình được truyền: hai tiến trình cùng khai thì cả hai cùng tranh nhau đưa một
+   * job mồ côi tới trạng thái cuối. Một `kind` khai ở đây mà tiến trình KHÁC có handler cho nó
+   * là một lỗi GIẾT VIỆC — vế ⑵ của cổng ở `apps/unseal-worker/src/composition.int.test.ts`
+   * canh đúng ca ấy.
+   */
+  readonly kindKhongNguoiNhan?: readonly string[];
   /** Quan sát viên. MẶC ĐỊNH IM LẶNG — gói này không tự ghi log bao giờ. */
   readonly onJobFailure?: (report: JobFailureReport) => void;
   /** Quan sát viên cho lỗi của chính vòng poll (mất kết nối, lister ném). Mặc định im lặng. */
@@ -211,6 +239,27 @@ class HetGioHandlerError extends Error {
 // `app.org_id` của tổ chức ĐANG XÉT — tức chạy việc của B dưới ngữ cảnh của A.
 // ============================================================================================
 
+// ============================================================================================
+// [S1.81 / khoản 116] VẾ `kind` — RUNNER CHỈ NHẶT LOẠI VIỆC NÓ NHẬN ĐƯỢC
+//
+// Tới S1.80 câu này KHÔNG có vị từ `kind`; `kind` chỉ xuất hiện ở `RETURNING`. Hệ quả ĐO được
+// trên HEAD `e587819`: runner của tiến trình `api` (bảng handler đúng một khoá `LOGIN_LINK_SEND`)
+// nhặt cả `UNSEAL_RFQ` lẫn `BREAK_GLASS_UNSEAL_ALERT` rồi ghi chúng `FAILED` / `NO_HANDLER` ở
+// lượt thử THỨ NHẤT — tức tiến trình api GIẾT việc của worker mở thầu, và không đường tự động
+// nào đưa một hàng `FAILED` về `PENDING`.
+//
+// VẾ TRONG TRUY VẤN CON LÀ VẾ CHỊU LỰC, không phải vế ở `WHERE` ngoài: nó đứng TRƯỚC
+// `ORDER BY` / `LIMIT` / `FOR UPDATE SKIP LOCKED`, nên một lô đầy job của loại khác không ăn hết
+// `batchSize` rồi để runner đi tay không. Vế ở `WHERE` ngoài là BẢN SAO PHÒNG THỦ, viết THÊM chứ
+// không viết THAY — đúng khuôn `org_id` đã ghim hai lần ở khối [QT3] trên.
+//
+// Kế hoạch truy vấn đã ĐO (§S1.81 mục 4), không suy: ở cảnh tồn dư thật (2 940 `DONE`, 40
+// `PENDING`, 20 `RUNNING`) CẢ HAI bản đi qua CÙNG đường chỉ mục — `BitmapOr` trên
+// `outbox_jobs_claim_idx` và `outbox_jobs_lease_idx`, cùng 53 buffer — và bản có vị từ chỉ lọc
+// thêm ở Bitmap Heap Scan (17 hàng thay vì 40). Không chỉ mục nào bị mất, nên KHÔNG thêm chỉ mục
+// ở vòng này; khoản 158 giữ chỗ cho lần đo lại khi tồn dư đổi hình dạng.
+// ============================================================================================
+
 const CAU_CLAIM = `
   UPDATE public.outbox_jobs AS j
      SET status = 'RUNNING',
@@ -218,10 +267,12 @@ const CAU_CLAIM = `
          lease_expires_at = pg_catalog.clock_timestamp()
              OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $3::pg_catalog.float8)
    WHERE j.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+     AND j.kind OPERATOR(pg_catalog.=) ANY ($4::pg_catalog.text[])
      AND j.id OPERATOR(pg_catalog.=) ANY (
            SELECT s.id
              FROM public.outbox_jobs s
             WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+              AND s.kind OPERATOR(pg_catalog.=) ANY ($4::pg_catalog.text[])
               AND ((s.status OPERATOR(pg_catalog.=) 'PENDING'::pg_catalog.text
                     AND s.run_after OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp())
                 OR (s.status OPERATOR(pg_catalog.=) 'RUNNING'::pg_catalog.text
@@ -345,6 +396,15 @@ export class JobRunner {
   readonly #leaseSeconds: number;
   readonly #handlerTimeoutMs: number;
   readonly #listOrganizations: OrganizationLister | undefined;
+  /**
+   * [S1.81 / khoản 116] Mảng lọc `kind` của `CAU_CLAIM`, ĐÓNG BĂNG trong constructor.
+   *
+   * Tính một lần chứ không mỗi lượt, và đó là một quyết định chứ không phải một tối ưu: tính
+   * lại mỗi lượt cho phép bảng handler đổi giữa lúc claim và lúc tra cứu, tức mở lại đúng cửa
+   * "claim được mà không có handler" mà vế này tồn tại để đóng. Bảng handler của runner là
+   * `Readonly<Record<…>>` và không có đường sửa sau khi dựng.
+   */
+  readonly #kindNhan: readonly string[];
   readonly #onJobFailure: ((report: JobFailureReport) => void) | undefined;
   readonly #onPollError: ((error: unknown) => void) | undefined;
   #timer: NodeJS.Timeout | null = null;
@@ -362,6 +422,11 @@ export class JobRunner {
   ) {
     this.#pool = pool;
     this.#handlers = handlers;
+    // Sắp xếp để mảng tham số là một hàm của TẬP chứ không của thứ tự khai — hai runner cùng
+    // bảng handler phát ra cùng một câu lệnh, nên kế hoạch truy vấn dùng chung được.
+    this.#kindNhan = [
+      ...new Set([...Object.keys(handlers), ...(options.kindKhongNguoiNhan ?? [])]),
+    ].sort();
     this.#batchSize = khangDinhTrong("batchSize", options.batchSize ?? 10, 1, MAX_BATCH_SIZE);
     this.#maxAttempts = khangDinhTrong(
       "maxAttempts",
@@ -431,11 +496,16 @@ export class JobRunner {
    * đường phòng thủ ở đó là code review; hàng rào này nhắm những cách hỏng THẬT SỰ HAY GẶP.
    */
   async runOnceForOrg(orgId: string): Promise<number> {
+    // [S1.81 / khoản 116] Mảng lọc RỖNG là fail-closed CÂM: `= ANY('{}')` sai với mọi hàng, nên
+    // runner sẽ báo "0 job" mãi mãi trong khi hàng đợi đầy. Ném thay vì im, và ném TRƯỚC
+    // `withTenant` để không mượn một kết nối chỉ để phát ra một câu lệnh không bao giờ khớp.
+    this.#kiemCoKindDeNhat();
     const daClaim = await withTenant(this.#pool, orgId, async (client) => {
       const { rows } = await client.query<HangDaClaim>(CAU_CLAIM, [
         orgId,
         this.#batchSize,
         this.#leaseSeconds,
+        this.#kindNhan,
       ]);
       return rows;
     });
@@ -455,6 +525,13 @@ export class JobRunner {
         // Không có handler là lỗi CẤU HÌNH, không phải lỗi tạm thời — bỏ cuộc ngay thay vì thử
         // lại mãi và che mất vấn đề. Đây cũng là vế "job không treo": một `kind` lạ đi tới
         // trạng thái cuối, nên nó không chiếm khoá chống trùng và không quay vòng vô hạn.
+        //
+        // [S1.81 / khoản 154] Từ vị từ lọc `kind`, tới được đây nghĩa là `kind` ấy NẰM TRONG
+        // mảng lọc — tức nó được khai ở `kindKhongNguoiNhan`, hoặc bảng handler có khoá mà giá
+        // trị không gọi được. Một `kind` ngoài cả hai tập không bị claim, nên nó KHÔNG tới đây
+        // và KHÔNG tới trạng thái cuối: nó nằm `PENDING`. Câu "một `kind` lạ đi tới trạng thái
+        // cuối" ở trên vì thế chỉ còn đúng cho `kind` ĐÃ KHAI — và sổ mồ côi
+        // (`so-kind-mo-coi.ts`) tồn tại đúng để mọi `kind` không người nhận đều được khai.
         if (await this.#ghiKetCuc(job, "NO_HANDLER", true, undefined)) xong += 1;
         continue;
       }
@@ -562,6 +639,10 @@ export class JobRunner {
     }
     const danhSach = await nguon();
     if (danhSach.length === 0) return 0;
+    // SAU phép kiểm danh sách rỗng, có chủ đích: một runner KHÔNG tổ chức nào và KHÔNG kind nào
+    // là một runner chưa được nối, không phải một runner cấu hình sai — `runOnce()` của nó trả
+    // 0 và không chạm pool, và `runner.test.ts` ghim đúng hành vi ấy.
+    this.#kiemCoKindDeNhat();
 
     const batDau = this.#diemXoayVong % danhSach.length;
     this.#diemXoayVong = (batDau + 1) % danhSach.length;
@@ -611,6 +692,23 @@ export class JobRunner {
     this.#dangChay = false;
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;
+  }
+
+  /**
+   * [S1.81 / khoản 116] Từ chối chạy một lượt mà mảng lọc `kind` rỗng.
+   *
+   * `= ANY('{}'::text[])` là FALSE với MỌI hàng, nên một runner không handler và không khai
+   * `kindKhongNguoiNhan` sẽ trả "0 job" đều đặn trong khi hàng đợi đầy — một hỏng hóc IM LẶNG
+   * trông y hệt một hàng đợi rỗng. Đây là lớp phân biệt hai ca ấy, và nó ném chứ không log:
+   * gói này không tự ghi log bao giờ.
+   */
+  #kiemCoKindDeNhat(): void {
+    if (this.#kindNhan.length > 0) return;
+    throw new OutboxError(
+      "JobRunner không có `kind` nào để nhặt: bảng handler rỗng và `kindKhongNguoiNhan` không " +
+        "được khai. Từ S1.81 câu claim lọc theo `kind`, nên một mảng lọc rỗng KHÔNG nhặt được " +
+        "hàng nào — nó sẽ báo 0 job mãi mãi trong khi hàng đợi đầy. Đăng ký ít nhất một handler.",
+    );
   }
 
   /**
