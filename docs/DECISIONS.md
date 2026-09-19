@@ -3183,7 +3183,7 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
   khi có người vào cụm gõ `REVOKE`. Đây là đánh đổi CỐ Ý — chiều còn lại là `migrate()` tự thu hồi
   quyền trên một bảng nó chỉ suy ra — nhưng nó thuộc về danh sách này chứ không nên nằm im.
 
-**[S1.86 / khoản 128 — ADR-042] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_KHOA_TU_VAN_PHIEN_SAI`** — *quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng*. Lý do nó là một phán xét CHẶN ĐƯỢC DEPLOY chứ không phải một lời khuyên: một phiên vai `app_api` lấy `pg_advisory_lock` trên khoá ghi sổ của một tổ chức rồi đứng yên làm MỌI lần ghi sổ của tổ chức ấy gãy `55P03` vô thời hạn — `idle_in_transaction_session_timeout` không với tới vì phiên ấy KHÔNG ở trong giao dịch, và pool không đặt `idle_session_timeout` (đo §S1.86). Câu sửa là `REVOKE … FROM PUBLIC` — **đơn điệu**, đúng nhóm tự chữa được của §2⑵ — cộng một câu `GRANT … TO CURRENT_USER` trả lại đúng hàm mà `migrate()` lấy ở câu ĐẦU TIÊN của nó. Hậu điều kiện đọc theo `proname` nên nó phủ CẢ HAI dạng đối số mà không ghim chữ ký: `pg_advisory_lock(integer, integer)` lấy CÙNG một khoá, và một đột biến chỉ thu hồi dạng `(bigint)` làm `migrate()` gãy ở BƯỚC 3 (đo). Ranh giới, nói ra: mục này KHÔNG chạm `*_xact_lock*` — `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên vai ứng dụng buộc phải giữ chúng, và nửa ấy là khoản 178, không phải một thiếu sót của mục này.
+**[S1.86 / khoản 128 — ADR-042] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_KHOA_TU_VAN_PHIEN_SAI`** — *quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng*. Lý do nó là một phán xét CHẶN ĐƯỢC DEPLOY chứ không phải một lời khuyên: một phiên vai `app_api` lấy `pg_advisory_lock` trên khoá ghi sổ của một tổ chức rồi đứng yên làm MỌI lần ghi sổ của tổ chức ấy gãy `55P03` vô thời hạn — `idle_in_transaction_session_timeout` không với tới vì phiên ấy KHÔNG ở trong giao dịch, và pool không đặt `idle_session_timeout` (đo §S1.86). Câu sửa là `REVOKE … FROM PUBLIC` — **đơn điệu**, đúng nhóm tự chữa được của §2⑵ — cộng một câu `GRANT … TO CURRENT_USER` trả lại đúng hàm mà `migrate()` lấy ở câu ĐẦU TIÊN của nó. Hậu điều kiện đọc theo `proname` nên nó phủ CẢ HAI dạng đối số mà không ghim chữ ký: **[S1.87 / lượt soi ngang 74 — ĐO]** `pg_proc` có MỘT HÀNG cho mỗi overload, nên bỏ ngỏ dạng `(integer, integer)` để lại một hàng ở hậu điều kiện ⇒ `migrate()` gãy ở BƯỚC 3 (đo: đột biến M2). Lời khai CŨ giải thích cùng phép đo ấy bằng một tiền đề SAI — ~~`pg_advisory_lock(integer, integer)` lấy CÙNG một khoá~~ — và phép đo bác: PostgreSQL giữ HAI không gian khoá tư vấn RỜI NHAU (`pg_locks.objsubid` = 1 cho dạng `bigint`, 2 cho cặp `(integer, integer)`); với phiên A đang giữ `pg_advisory_lock(k)` dạng `bigint`, phiên B LẤY ĐƯỢC `pg_try_advisory_lock(hi, lo)` trên chính hai nửa của `k` (true) trong khi dạng `bigint` trượt (false), và `pg_locks` cho hai hàng `objsubid` 1 và 2. Nên thu hồi dạng hai đối số là PHÒNG THỦ CHIỀU SÂU cho một không gian khoá KHÁC, không phải việc bịt một đường vòng tới khoá ghi sổ. Ranh giới, nói ra: mục này KHÔNG chạm `*_xact_lock*` — `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên vai ứng dụng buộc phải giữ chúng, và nửa ấy là khoản 178, không phải một thiếu sót của mục này.
 
 ### 7. Đo bằng gì
 
@@ -4500,7 +4500,7 @@ Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), b
 | # | Cái giá | Ghi ở đâu |
 |---|---|---|
 | ⑴ | **Dòng ĐẦU TIÊN** của `NGOAI_LE_DOC_VONG` — danh sách RỖNG từ S0 | `hardening.always.sql` |
-| ⑵ | ~~**Mười chỗ trong BẢY migration đã áp**~~ **[S1.83] MƯỜI HAI chỗ trong TÁM migration** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
+| ⑵ | ~~**Mười chỗ trong BẢY migration đã áp**~~ ~~**[S1.83] MƯỜI HAI chỗ trong TÁM migration**~~ **[S1.87] MƯỜI BA chỗ trong TÁM migration** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
 | ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng `TO <vai>` | `db/migration-shape.test.ts` |
 | ⑷ | Dòng thứ hai của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (044 là dòng đầu) | hai tệp trên |
 | ⑸ | Một vai CSDL thứ ba, và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế | khoản 164 |
@@ -4549,7 +4549,7 @@ Cô lập CÒN NGUYÊN — kết nối nhiễm rời pool hẳn. Thứ mất là
 
 | Hình dạng | Chỗ gọi phải đổi | Cái giá |
 |---|---|---|
-| Tiêm bộ báo theo LỜI GỌI (`WithTenantOptions`) | **19** — hai trong ba chỗ đặt trần nằm trong `packages/identity/src/rbac.ts`, một thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 18 chỗ im lặng, tức fail-open ở đúng lớp lỗi đang vá |
+| Tiêm bộ báo theo LỜI GỌI (`WithTenantOptions`) | **[S1.87 — ĐẾM LẠI] 14** (~~**19**~~) — hai trong ba chỗ đặt trần nằm trong `packages/identity/src/rbac.ts`, một thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 13 (~~18~~) chỗ im lặng, tức fail-open ở đúng lớp lỗi đang vá |
 | **Sự kiện trên POOL** (chọn) | **0** | dựa vào một lớp GẮN BẰNG TAY ở composition root — lớp ấy ĐÃ bị quên một lần (khoản 173) |
 | `withTenant` tự `console.error` | **0** | `packages/tenancy` thành một tầng ghi log; dòng không mang tên pool; `mo-ta-loi.ts` thôi là chỗ duy nhất mô tả lỗi |
 
@@ -4580,6 +4580,8 @@ phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai 
 
 ## ADR-042 — Người GIỮ khoá ghi sổ: thu hồi quyền đóng được đường CỐ Ý, và đường HỢP LỆ được nhận chứ không được vá
 
+> **[S1.87 / lượt soi ngang 74 — ĐÍNH CHÍNH, ĐO] TIÊU ĐỀ NÀY CHIA SAI TRỤC, VÀ MỘT CÂU LỆNH CỦA NÓ LÀ NO-OP.** Giữ tiêu đề vì nó là tên đã được trích dẫn, nhưng đọc đúng của ADR này từ nay là: **thu hồi quyền đóng được KHOÁ MỨC PHIÊN, và KHOÁ MỨC GIAO DỊCH được nhận chứ không được vá.** Hai sửa chữa, cả hai đo được. **⑴ Trục chia là CƠ CHẾ, không phải Ý ĐỊNH.** Kẻ cố ý chọn được cơ chế: cùng vai `app_api`, `BEGIN` rồi `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))` rồi `SELECT 1` mỗi 30 s cho đúng hậu quả ấy vô thời hạn — `statement_timeout` không chạm, `idle_in_transaction_session_timeout` đếm quãng idle LIÊN TỤC nên không nổ, và `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên không `REVOKE` nào chạm tới. Nên mục hardening NÂNG GIÁ của kẻ cố ý chứ không đóng cửa; nửa còn mở của khoản 178 bao gồm cả đường cố ý. **⑵ Câu `GRANT ... TO CURRENT_USER` đã bị gỡ — nó là NO-OP ở mọi nhánh tới được.** Chính ADR này viết ra tiền đề bác nó (*“Không lượt `migrate()` nào tự cấp lại được cho chính mình”*) rồi vẫn giữ câu lệnh: nhánh superuser thì nó thừa, nhánh NOSUPERUSER thì nó cũng `42501` như câu `REVOKE`. Đo hai chiều ở §S1.87 — vô hiệu hoá mà giữ nguyên chữ ⇒ test XANH 6/6 (vế ghim nó không có răng); gỡ hẳn ⇒ đúng một vế đỏ và trọn `db/migrations.int.test.ts` XANH, tức 17 hồ sơ deploy lấy quyền từ FIXTURE. Tiền điều kiện triển khai ở mục ⑴ dưới đây **vẫn nguyên giá trị** — nó chưa bao giờ đến từ câu `GRANT` ấy.
+
 **Bối cảnh.** `noi_chuoi_kiem_toan()` nối chuỗi sổ kiểm toán dưới `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))`, và `050`
 cho người CHỜ một trần 2 s. Trần ấy bảo vệ người chờ; nó không đuổi người GIỮ. Khoản 128 hỏi người giữ có cận thời gian nào không.
 
@@ -4595,9 +4597,12 @@ dụng BUỘC phải giữ `pg_advisory_xact_lock`. Và cụm ghim `postgres:16-
 
 **Quyết định của chủ dự án, ngày 2026-09-19.**
 
-⑴ **Nửa CỐ Ý — thu hồi, và cấp lại cho vai ĐANG chạy migrate.** `hardening.always.sql` thu hồi EXECUTE của tám hàm LẤY khoá mức
-phiên khỏi PUBLIC (`pg_advisory_lock*`, `pg_try_advisory_lock*`, cả hai dạng đối số), rồi `GRANT ... TO CURRENT_USER`. Đo: `app_api`
-nhận `42501`, và đường ghi sổ hợp lệ vẫn đi qua trong 7 ms. `*_xact_lock*` và `pg_advisory_unlock*` KHÔNG bị đụng.
+⑴ **Nửa khoá MỨC PHIÊN — thu hồi.** (~~*Nửa CỐ Ý — thu hồi, và cấp lại cho vai ĐANG chạy migrate*~~ — xem đính chính ở đầu ADR.)
+`hardening.always.sql` thu hồi EXECUTE của tám hàm LẤY khoá mức phiên khỏi PUBLIC (`pg_advisory_lock*`, `pg_try_advisory_lock*`,
+cả hai dạng đối số). Đo: `app_api` nhận `42501`, và đường ghi sổ hợp lệ vẫn đi qua trong 7 ms. `*_xact_lock*` và
+`pg_advisory_unlock*` KHÔNG bị đụng. **[S1.87]** Hai dạng đối số đều bị thu hồi vì hậu điều kiện lọc theo `proname` — bỏ ngỏ một
+overload để lại một hàng ⇒ BƯỚC 3 gãy — chứ KHÔNG phải vì dạng `(integer, integer)` lấy cùng khoá: đo được hai không gian khoá
+RỜI NHAU (`pg_locks.objsubid` 1 và 2), nên đó là phòng thủ chiều sâu.
 
 Phương án bị loại: một vai `app_migrate` ổn định giữ quyền, vai deploy làm thành viên. Nó bỏ được bước thủ công, nhưng thêm một vai
 vào lược đồ và một ràng buộc vận hành mới (vai deploy phải là thành viên) — một bậc tự do mới để quên.

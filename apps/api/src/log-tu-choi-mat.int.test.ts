@@ -141,10 +141,17 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       expect(moi[0]).toMatch(
         /^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage <- error 55P03$/u,
       );
-      // ĐỐI CHỨNG A2 — dòng log giàu thêm mà không mang một giá trị nào.
-      for (const gt of [orgA, ai.id, TEN_GUI_LEN, "4111"]) {
-        expect(moi[0], `dòng log mang một GIÁ TRỊ: ${gt}`).not.toContain(gt);
-      }
+      // [S1.87 / lượt soi ngang 74 góc 4 — ĐỌC] VÒNG "ĐỐI CHỨNG A2" Ở ĐÂY ĐÃ BỊ GỠ, và gỡ vì hai
+      // lý do đo được, chứ không phải để test ngắn lại:
+      //   ⑴ Nó không đo một bit nào. Khẳng định ngay trên neo HAI ĐẦU (`^…$`, KHÔNG cờ `m`) nên
+      //      chuỗi đã bị xác định HOÀN TOÀN; vùng tự do duy nhất là 36 ký tự `requestId`. Xoá hẳn
+      //      vòng ấy không làm mất một mệnh đề nào.
+      //   ⑵ Nó là nguồn ĐỎ OAN duy nhất của tệp: `not.toContain("4111")` chạy trên chính chuỗi có
+      //      `requestId` ngẫu nhiên hệ 16 ⇒ ~29 vị trí × 16⁻⁴, cỡ MỘT lượt trong hai nghìn đỏ mà
+      //      không lỗi nào thật. Một khẳng định không bao giờ bắt được lỗi mà thỉnh thoảng đỏ giả
+      //      là một khẳng định phải đi.
+      // Vế A2 THẬT — có răng, đo từng giá trị qua chính hàm sinh chuỗi — sống ở
+      // `packages/identity/src/mo-ta-hang-dong.test.ts`.
       // Và D5 thật, không chỉ dòng log: lần từ chối không vào sổ, thao tác không xảy ra.
       const { rows: so } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",

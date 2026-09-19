@@ -7237,7 +7237,7 @@ từ chối THÊM, không bao giờ cho qua thêm; xoá nó đi thì hành vi v�
 | ⑴ | Docstring `OrganizationLister` (`runner.ts`) VẪN khuyên đúng hình dạng ADR-040 vừa bác — hàm `SECURITY DEFINER` do **chủ sở hữu bảng** sở hữu, tức cảnh ❷ (0 hàng, không lỗi). Biên bản §S1.82 khai *"đã vá"*; `git show --stat 60500f0 -- packages/outbox/src/runner.ts` **rỗng** — tệp không hề bị chạm | gạch lời cũ, ghi phép đo 3-vs-0, trỏ sang `052` và ADR-040 |
 | ⑵ | `batDau()` chỉ ném khi lister **NÉM**. Ba đột biến của vế ⑵ (`SECURITY INVOKER` · `DROP POLICY` · đổi chủ hàm) cho **0 hàng KHÔNG LỖI** — cả ba đi qua `batDau()` trót lọt, dấu vết duy nhất là một dòng log `to chuc thay duoc: 0` | `soToChuc === 0` ⇒ NÉM, thông điệp nêu đích danh cảnh ❷ và ba nguyên nhân |
 | ⑶ | Mốc chết hai chiều khai *"đo bằng HAI bảng handler THẬT"* — vế `api` là bảng viết tay và **bỏ `kindKhongNguoiNhan`**, nên mảng lọc trong test có MỘT phần tử còn tiến trình thật có HAI | dùng `buildApiOutboxHandlers` thật + đúng mảng lọc của `composition.ts` |
-| ⑷ | Khoản 162 đếm **thiếu**: 12 chỗ trong 8 migration, không phải 10 trong 7 — sót `006:246` và `020:68`, và con số sai được chép ra bốn nơi trong cùng một vòng | sửa ở sổ nợ, ADR-040 và `hardening.always.sql`; ba bản trong migration đánh số thì KHÔNG sửa được (checksum) |
+| ⑷ | Khoản 162 đếm **thiếu**: 12 chỗ trong 8 migration, không phải 10 trong 7 — sót `006:246` và `020:68`, và con số sai được chép ra bốn nơi trong cùng một vòng — **[S1.87 / lượt soi ngang 74] phép đếm LẠI này cũng thiếu một: `027:85`, cùng mệnh đề với `027:116` trong chính tệp nó đang đếm ⇒ 13 chỗ, xem khoản 162** | sửa ở sổ nợ, ADR-040 và `hardening.always.sql`; ba bản trong migration đánh số thì KHÔNG sửa được (checksum) |
 
 Vế ⑶ có một hệ quả không lường trước, và nó chứng minh vế ấy đáng vá: đổi sang bảng handler THẬT làm
 test **ĐỎ ngay** — `LOGIN_LINK_SEND` không mang `email` thì handler thật ném, job về `PENDING` với
@@ -7326,7 +7326,7 @@ Sổ nợ đề xuất hai hình dạng. Đo ra thì **cả hai đều có một
 
 | Hình dạng | Chỗ gọi phải đổi | Cái giá |
 |---|---|---|
-| Tiêm bộ báo theo LỜI GỌI | **19** — hai trong ba chỗ đặt trần nằm trong `rbac.ts`, thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 18 chỗ im lặng ⇒ fail-open ở đúng lớp lỗi đang vá |
+| Tiêm bộ báo theo LỜI GỌI | **[S1.87 — ĐẾM LẠI] 14** (~~**19**~~) — hai trong ba chỗ đặt trần nằm trong `rbac.ts`, thư viện không có bộ ghi log, nên bộ báo phải luồn qua `requirePermission` | tham số TUỲ CHỌN làm 13 (~~18~~) chỗ im lặng ⇒ fail-open ở đúng lớp lỗi đang vá |
 | **Sự kiện trên POOL** (chủ dự án chọn) | **0** | dựa vào một lớp GẮN BẰNG TAY ở composition root — lớp ấy ĐÃ bị quên một lần (khoản 173) |
 | `withTenant` tự `console.error` | **0** | `packages/tenancy` thành một tầng ghi log; dòng không mang tên pool; `mo-ta-loi.ts` thôi là chỗ duy nhất mô tả lỗi |
 
@@ -7586,7 +7586,7 @@ của superuser"*. Đo xong thì nó rộng hơn: `REVOKE` trên hàm `pg_catalo
 can thiệp của superuser — không riêng vai mới. Cùng khuôn hồ sơ N3 đã có trong kho, và vế ⓹ của tệp test đo nó: một vai NOSUPERUSER
 mới KHÔNG có `pg_advisory_lock(bigint)`, và ĐÚNG MỘT câu `GRANT` là đủ.
 
-## 4. Mốc đột biến — bốn mũi, cả bốn ĐỎ, và hai mũi đỏ ở chỗ mạnh hơn em định
+## 4. Mốc đột biến — **[S1.87 — ĐẾM LẠI] năm** (~~bốn~~) mũi, cả năm ĐỎ, và hai mũi đỏ ở chỗ mạnh hơn em định
 
 | Mũi | Đổi | Đỏ ở đâu |
 |---|---|---|
@@ -7598,8 +7598,8 @@ mới KHÔNG có `pg_advisory_lock(bigint)`, và ĐÚNG MỘT câu `GRANT` là �
 | M5 | gỡ bẫy `42501` ở `migrate.ts` | vế ⓺ — thông điệp về lại `permission denied` trần trụi |
 
 M1 và M2 đỏ ở **hardening**, không ở tệp test: hậu điều kiện của chính mục ấy bắt được, nên một lần triển khai thiếu bản vá GÃY chứ
-không âm thầm chạy. Đó là chỗ mạnh hơn một khẳng định trong test, và nó có nghĩa là cả hai dạng đối số đều load-bearing —
-`pg_advisory_lock(integer, integer)` lấy **cùng một khoá**.
+không âm thầm chạy. Đó là chỗ mạnh hơn một khẳng định trong test. **[S1.87 / lượt soi ngang 74 — ĐO, BÁC LỜI KHAI NÀY]** Câu
+tiếp theo của §S1.86 — ~~*cả hai dạng đối số đều load-bearing, `pg_advisory_lock(integer, integer)` lấy cùng một khoá*~~ — là một suy luận SAI về ngữ nghĩa khoá tư vấn, được trình bày như hệ quả của M2. M2 chỉ nói về bề RỘNG của hậu điều kiện (lọc theo `proname`, mà `pg_proc` có một hàng cho mỗi overload), không nói gì về không gian khoá. Đo lại: PostgreSQL giữ HAI không gian RỜI NHAU (`pg_locks.objsubid` 1 cho `bigint`, 2 cho cặp `(integer, integer)`); phiên A giữ `pg_advisory_lock(k)`, phiên B lấy ĐƯỢC `pg_try_advisory_lock(hi, lo)` trên hai nửa của `k` (`true`) và KHÔNG lấy được dạng `bigint` (`false`), `pg_locks` ra hai hàng `objsubid` 1 và 2. Thu hồi dạng hai đối số vì thế là phòng thủ chiều sâu, không phải bịt một đường vòng — đúng lớp lỗi *“tiền đề của chính nó SAI”* mà khoản 140 đã trả giá một lần.
 
 ## 5. Một ranh giới của chính phép đo, nói ra
 
@@ -7666,3 +7666,195 @@ XANH — **cả ba vì không cổng nào trong đó chạy `migrate()`**. Chỉ
 Bài học ghi vào chỗ nó thuộc về: script đột biến phải chụp `sha256` của mọi tệp đích lúc khởi động, so lại sau MỖI lượt khôi phục,
 và NÉM khi lệch — kho đã có đúng kỷ luật ấy ghi ra từ trước, và script của vòng này bỏ qua nó. Cộng một bước không thay thế được
 bằng cổng tĩnh: `git diff` tệp bị đột biến và ĐỌC BẰNG MẮT trước khi `git add`.
+
+# §S1.87 — LƯỢT SOI NGANG 74, vòng MỘT: sửa lời khai. Hai CAO, và một nằm trong ADR chấp nhận chưa tới một ngày trước
+
+Chủ dự án chọn **chạy sớm** (*"Lượt soi ngang sớm"*), rồi sau khi đọc kết quả chọn **tách hai vòng**: vòng này sửa LỜI KHAI —
+tài liệu, chú thích, một dòng SQL chết, một khẳng định trang trí — **không đổi một hành vi nào**; vòng sau vá CỔNG.
+
+## 0. Kiểm mốc ở ĐẦU vòng — và lần này KHÔNG vế nào thoả
+
+`Handoff.md` §11: *"sau ba vòng đổi hardening, hay chậm nhất **S1.89**"*. Đo cả hai vế chứ không đọc lịch:
+
+| Vế | Đo | Thoả? |
+|---|---|---|
+| Lịch | vòng này là **S1.87**, mốc là S1.89 | **chưa** |
+| Hardening | `git rev-list --count 1dfc7e3..HEAD --first-parent -- db/migrations/hardening.always.sql` = **2** | **chưa** (cần 3) |
+
+Tức đây **không phải một lượt đúng mốc** mà là một lượt chạy TRƯỚC mốc, theo chỉ thị của chủ dự án sau khi S1.86 vừa đổi hardening
+lần thứ hai. Ghi ra vì hai lần trước kho đã trả giá cho việc *nói* mốc thay vì *đo* mốc (§S1.78, §S1.83).
+
+Lý do ấy đứng vững sau lượt: **cả hai phát hiện CAO đều nằm TRONG cửa sổ S1.83–S1.86**, và một trong hai nằm trong **ADR-042** —
+chấp nhận cùng ngày, chưa tới một giờ trước khi lượt soi chạy.
+
+## 1. Sáu góc, một góc ÂM, và mọi phát hiện nặng được tự đo lại
+
+Cửa sổ `1dfc7e3..166975f` — 8 commit, 38 tệp, +2512/−91.
+
+| Góc | Kết quả |
+|---|---|
+| 1 — hồi quy xuyên vòng | **ÂM**; ~14 mục kiểm và loại trừ |
+| 2 — lớp cưỡng chế bị vô hiệu | 4 TRUNG, 2 THẤP; **14** đường vòng đã kiểm và BÁC |
+| 3 — lời khai rộng hơn mã | **1 CAO**, 4 TRUNG, 1 THẤP |
+| 4 — test mất răng | 3 TRUNG, 3 THẤP |
+| 5 — chỗ hai lớp chạm nhau | 1 TRUNG, 2 ghi chú; 4 giao điểm BÁC |
+| 6 — khoản đóng sai | **1 CAO**, 1 TRUNG, 1 THẤP; 116/129/147 đóng ĐÚNG |
+
+Gộp trùng: **2 CAO · ~11 TRUNG · ~8 THẤP**. Hai chỗ HAI góc độc lập hội tụ: câu `GRANT` chết (góc 2 và góc 4), và `tools/` ngoài
+tầm cổng pool (góc 3 và góc 5).
+
+## 2. CAO ①: một suy luận SAI được trình bày như hệ quả của một phép đo
+
+Ba chỗ — `docs/DECISIONS.md` (ADR-042), `evidence/security-reviews.md` §S1.86, và thông điệp khẳng định của vế ⓷ trong
+`db/khoa-ghi-so-nguoi-giu.int.test.ts` — đều khai *"`pg_advisory_lock(integer, integer)` lấy CÙNG một khoá"*, và hai chỗ còn nói
+mạnh hơn: *"một dạng đối số lọt lưới là một đường vòng nguyên vẹn"*.
+
+**Đo, phiên A giữ khoá dạng `bigint`, phiên B thử cả hai dạng trên chính con số ấy:**
+
+```
+dang_int_int_lay_duoc : true      <- B LAY DUOC khoa (int,int)
+dang_bigint_lay_duoc  : false     <- B KHONG lay duoc khoa bigint
+pg_locks              : {objsubid: 1, granted: true, pid: A}
+                        {objsubid: 2, granted: true, pid: B}
+```
+
+PostgreSQL giữ **hai không gian khoá tư vấn RỜI NHAU**, phân biệt bằng `objsubid`. Một phiên gọi `pg_advisory_lock(hi, lo)` **không
+bao giờ** đụng khoá mà `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))` giữ. Nên:
+
+* thu hồi dạng hai đối số vẫn ĐÚNG, nhưng là **phòng thủ chiều sâu**, không phải bịt một đường vòng;
+* lý do đột biến M2 (*chỉ thu hồi dạng `bigint`*) đỏ nằm ở **hậu điều kiện**, không ở không gian khoá: `CAU_KHOA_TU_VAN_PHIEN_SAI`
+  lọc theo `p.proname`, mà `pg_proc` có MỘT HÀNG cho mỗi overload, nên bỏ ngỏ một dạng để lại một hàng ⇒ BƯỚC 3 gãy.
+
+Đây đúng lớp lỗi *"tiền đề của chính nó SAI"* mà khoản 140 đã trả giá một lần: phép đo thật, kết luận rút ra từ nó thì không.
+
+## 3. CAO ②: một câu lệnh không mua gì, và một vế test khai rằng thiếu nó là chặn deploy
+
+`hardening.always.sql` của S1.86 kết thúc vòng `REVOKE` bằng
+`EXECUTE format('GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER)`. Bảng hai nhánh:
+
+| `CURRENT_USER` lúc BƯỚC 2 chạy | `REVOKE` trên hàm `pg_catalog` | câu `GRANT` |
+|---|---|---|
+| SUPERUSER (chủ hàm) | thành công | **vô nghĩa** — superuser đi qua mọi phép kiểm quyền |
+| NOSUPERUSER | `42501`, nuốt thành `RAISE WARNING` | cũng `42501` → nuốt |
+
+Nhánh nào nó chạy được thì nó không mua gì; nhánh nào nó mua được gì thì nó không chạy được. **Chính ADR-042 đã viết ra tiền đề
+ấy** — *"Không lượt `migrate()` nào tự cấp lại được cho chính mình"* — rồi vẫn giữ câu lệnh, giữ khối chú thích nói ngược lại, và
+thêm một vế test ghim sự có mặt của nó.
+
+**Đo hai chiều, và cả hai chiều đều bác:**
+
+```
+Đ1  vô hiệu hoá (EXECUTE -> PERFORM), GIỮ NGUYÊN từng ký tự chuỗi
+    -> khoa-ghi-so-nguoi-giu.int.test.ts  XANH [6 passed (6)]
+Đ2a gỡ HẲN khối GRANT
+    -> khoa-ghi-so-nguoi-giu.int.test.ts  ĐỎ [1 failed | 5 passed (6)]
+       đúng MỘT vế đỏ: ⓸ — vế so CHUỖI CON; năm vế HÀNH VI còn lại XANH
+Đ2b gỡ HẲN khối GRANT
+    -> db/migrations.int.test.ts          **XANH [114 passed (114)]**
+```
+
+Đ1 nói vế ⓸ **không có răng** với một đột biến vô hiệu hoá (`includes` trên một tệp mười nghìn dòng, không bỏ chú thích — nó giết
+được đột biến XOÁ và không giết được đột biến GIỮ NGUYÊN CHỮ). Đ2b nói **tiền điều kiện triển khai nằm ở FIXTURE**
+(`GRANT ... TO trien_khai` trong `db/migrations.int.test.ts`), chưa bao giờ ở hardening.
+
+**Nguy hiểm cụ thể nếu để nguyên:** một vòng sau tin lời khai *"mục hardening tự cấp lại cho vai đang chạy migrate"* mà bỏ dòng
+`GRANT` của fixture ⇒ 17 hồ sơ deploy đỏ lại với `permission denied for function pg_advisory_lock` — đúng cảnh S1.86 đã trả giá
+một lần. Ngược lại, ai đó dọn đúng (gỡ mã chết) thì vế ⓸ đỏ vì một lý do sai.
+
+**Đã làm:** gỡ câu lệnh khỏi hardening, thay khối chú thích bằng phép đo trên, gỡ nửa sau của vế ⓸ và đổi tiêu đề vế cho khớp thứ
+nó còn đo (hai nguồn phải nói cùng một tập hàm khoá). Tiền điều kiện thật không mất người canh: vế ⓹ đo nó trên một vai
+NOSUPERUSER mới, vế ⓺ đo `TU_CHOI_KHOA_MIGRATE` nêu NGUYÊN VĂN câu lệnh cần chạy, và ô *"quyền cần"* của mục hardening mang cùng
+câu ấy.
+
+## 4. Hai lời khai chia sai trục
+
+**⑴ `CỐ Ý / HỢP LỆ` → `mức PHIÊN / mức GIAO DỊCH`.** ADR-042 và chú thích hardening chia hai đường theo **ý định**; phép đo chia
+theo **cơ chế**, và kẻ cố ý được CHỌN cơ chế. Chính vế ⓶ của tệp test đã viết ra đường ấy rồi dán nhãn *"hợp lệ"*: vai `app_api`,
+`BEGIN` → `pg_advisory_xact_lock(...)` → `SELECT 1` mỗi 30 s. `statement_timeout` 15 s không chạm một câu 0 ms;
+`idle_in_transaction_session_timeout` đếm quãng idle **liên tục** nên không bao giờ nổ (vế ⓶ đã đo đúng tính chất ấy ở ngưỡng 1 s
+với nhịp 300 ms); `transaction_timeout` chưa có trên `postgres:16-alpine`; và không `REVOKE` nào chạm tới vì
+`noi_chuoi_kiem_toan()` là SECURITY INVOKER. Mục hardening vì thế **nâng giá** của kẻ cố ý — một câu lệnh rồi bỏ đi ⇒ một câu lệnh
+cộng một nhịp giữ kết nối — chứ không đóng cửa. Đọc đúng của cặp 128/178 từ nay: **128 đóng nửa khoá MỨC PHIÊN; 178 là nửa khoá
+MỨC GIAO DỊCH, và nửa ấy mở cho cả người gọi hợp lệ lẫn kẻ cố ý.**
+
+**⑵ Khoản 176 khai *"hai ranh giới, cả hai ghi ngay đầu tệp cổng"*.** Đo: tệp cổng viết ra **một**; ranh giới ⑵ (thư mục) không có
+một chữ nào ở đó; và có một ranh giới **⑶** không được khai ở đâu cả — phép nhận diện chỉ thấy `createPool` gọi bằng TÊN TRẦN gán
+vào một khai báo biến, nên `new pg.Pool(…)`, một bí danh import, hay một pool gán vào thuộc tính lớp đều **vô hình**. Cả ba ranh
+giới nay đứng ở đầu tệp cổng bằng chữ, vì một cổng im lặng bỏ qua một vùng mã là một cổng nói dối về phạm vi của chính nó.
+
+## 5. Chùm con số thiu — ba lời khai, cả ba dựng lại được bằng một lệnh
+
+| Chỗ | Khai | Đo lại | Sai ở đâu |
+|---|---|---|---|
+| `with-tenant.ts`, ADR-041 (2 bản) | `requirePermission` có **19 chỗ gọi** | **14** | không dựng lại được ở BẤT KỲ commit nào của cửa sổ; tính rộng nhất cũng chỉ ra 16 |
+| khoản 162, ADR-040, `hardening.always.sql` | **12 chỗ / 8 migration** khai lệnh cấm mục (C) | **13** | sót `027:85` — cùng mệnh đề với `027:116`, trong chính tệp phép đếm đang đếm |
+| §S1.86 mục 4, khoản 128 | **bốn** mũi đột biến | **năm** | bảng ngay dưới tiêu đề liệt kê M0–M5; thông điệp merge cũng ghi năm |
+
+Lập luận không đổi ở cả ba — 13 chỗ im lặng cũng là fail-open, 13 chú thích thiu cũng không sửa được — nhưng một con số định giá
+một phương án bị loại mà không dựng lại được là một lời khai không ai kiểm. Và khoản 162 nay thiu **lần thứ ba**, bằng đúng cách nó
+thiu hai lần đầu: một lần ĐẾM LẠI cũng là một lời khai. Một ca BIÊN được loại ra kèm lý do (`007:346` nói về CƠ CHẾ cưỡng chế chứ
+không phải lệnh cấm mục (C) — và đã kiểm: nó KHÔNG thiu, `public.outbox_danh_sach_to_chuc()` có mặt trong cả hai danh sách của
+hardening).
+
+## 6. Một khẳng định không bao giờ bắt được lỗi mà thỉnh thoảng đỏ giả
+
+`apps/api/src/log-tu-choi-mat.int.test.ts` có vòng *"ĐỐI CHỨNG A2"* chạy `not.toContain` trên bốn giá trị. Khẳng định ngay trên nó
+neo HAI ĐẦU (`/^\[api\] … 55P03$/u`, không cờ `m`) nên chuỗi đã bị xác định HOÀN TOÀN — vùng tự do duy nhất là 36 ký tự
+`requestId`. Vòng ấy không đo một bit nào; đổi lại, `not.toContain("4111")` chạy trên chính `requestId` ngẫu nhiên hệ 16 ⇒ cỡ
+**một lượt trong hai nghìn** đỏ oan. Đã gỡ, và ghi lý do tại chỗ. Vế A2 THẬT — đo từng giá trị qua chính hàm sinh chuỗi — sống ở
+`packages/identity/src/mo-ta-hang-dong.test.ts`.
+
+Cùng họ, đã thu hẹp chứ không gỡ: docstring của `moTaHangDongCuaLanTuChoi` khai *"một UUID có dấu gạch nối, một email có `@`, một
+số bắt đầu bằng chữ số — cả ba trượt cả hai hình dạng"*, rồi để câu ấy đứng thay cho một lời hứa rộng hơn nhiều. Đo trên chuỗi
+thật: `HINH_DANG_LOAI_TAI_NGUYEN` **KHỚP** một bí mật TOTP base32 (`JBSWY3DPEHPK3PXP`) và một UUID viết hoa đã bỏ gạch nối — và
+kho NÀY thật sự phát base32 (`base32()` ở `apps/api/src/routes/auth.ts`). Bán kính hôm nay bằng **0** (ba trường đều là hằng đóng
+hoặc kiểu union), nên đây là một lời khai được thu hẹp, không phải một lỗ — khoản 189 giữ lối ra bằng TẬP ĐÓNG.
+
+## 7. Phần KHÔNG vá ở vòng này — ghi thành khoản, không để im lặng biến mất
+
+Đây là điều kiện của chính việc tách hai vòng, và nó là bài học của CAO thứ hai mà góc 6 tìm ra: khoản 131 đóng với một ô hằng chỉ
+điền một nửa, và vế bị bỏ **không được ghi sang khoản nào** — nó biến mất trong im lặng.
+
+| Khoản | Vòng sau phải vá |
+|---|---|
+| **179** | vế cổng (`clause`) không ra được dòng log từ chối — CAO, ba đường mất người phân biệt |
+| **180** | hai pool của `tools/neo-so-kiem-toan` không nghe tín hiệu nào; cổng không nhìn tới `tools/` |
+| **181** | `loc-vi-pham-d2.test.ts` neo vào `019` thay vì bản CHẠY trong hardening |
+| **182** | cổng pool nhận diện hẹp hơn phạm vi nó khai; hai vế không mang răng |
+| **183** | không phép đo HÀNH VI nào cho dòng log "lỗi kết nối tới muộn" |
+| **184** | vế ⑻ không bảo đảm ba yêu cầu chồng nhau; `locked_until` là khẳng định luôn đúng |
+| **185** | nhiều ca trong một `it` ở hai chỗ |
+| **186** | vế ⓷ thiếu đối chứng DƯƠNG cho mệnh đề thành viên |
+| **187** | kiểm kê tập con mã đã chép từ `api` sang worker (tách khỏi phần dư khoản 173) |
+| **188** | `mfaTranDuongPhu` khai ở route mà không ai canh handler truyền xuống |
+| **189** | phép canh theo HÌNH DẠNG cho lọt lớp bí mật kho tự sinh |
+
+Và bốn lời khai được sửa tại chỗ: khoản 173 (phần dư trỏ sang 166 — khoản ấy không mang việc), khoản 176 (hai ranh giới →
+ba), khoản 178 (nửa còn mở bao gồm cả đường cố ý), và cột tệp của khoản 128 — nó nêu `packages/db/src/pool.ts` trong khi
+`git diff --name-only 1dfc7e3..166975f -- packages/db/src/pool.ts` **rỗng**. Vế `idle_session_timeout` của hàng ấy đóng bằng
+LẬP LUẬN chứ không bằng mã, và lập luận ấy đã soát lại ở vòng này và ĐỨNG (sau khi tám hàm LẤY khoá mức phiên mất EXECUTE,
+một phiên `idle` ngoài giao dịch không còn đường nào giữ khoá ghi sổ; danh sách tám hàm là ĐỦ tập hàm lấy khoá mức phiên của
+PostgreSQL 16). Cột tệp nay gạch tệp ấy để lời khai khớp bản vá.
+
+## 8. Cổng
+
+| Cổng | Kết quả |
+|---|---|
+| `pnpm t0` | 262 module, 1103 phụ thuộc, **0 vi phạm** |
+| `pnpm test` | 67/67 tệp, **934 đạt** · 1 bỏ qua |
+| `tests/architecture` | 21/21 tệp, **263 đạt** · 1 bỏ qua |
+| `pnpm evidence` | **`vitest thoát mã 0`**, 1982 khẳng định, **56/56** bất biến, XANH |
+
+Cổng kiến trúc chạy SAU khi áp tài liệu và TRƯỚC evidence — `[INV-H20]` P0/P4/P5/P11/P12 cùng phép tự đối chiếu sổ nợ đều đọc bản
+cuối. Không cổng nào phải nới một ngưỡng nào, và vòng này không thêm một nhãn `[INV-…]` nào nên sổ khai nhãn không đổi.
+
+MỘT CHỖ TỰ BẮT, ghi ra: lượt evidence ĐẦU của vòng này bị giết sau ba phút vì em cho nó chạy TRƯỚC khi áp xong tài liệu — đúng lỗi
+đã làm mất một vòng evidence ở S1.61 và một ở S1.71, và đã ghi thành kỷ luật (*chạy `tests/architecture` sau khi áp tài liệu, rồi
+mới evidence*). Giết cây tiến trình rồi áp nốt hai lời khai còn sót rẻ hơn chạy hết rồi chạy lại; container test mồ côi do `ryuk`
+thu.
+
+## 9. Một điều đáng nói về nhịp
+
+Lượt 73 tìm ra một CAO **do chính lượt 72 tạo ra**. Lượt 74 lặp lại đúng khuôn: hai CAO đều nằm trong bốn vòng vừa viết, và một
+trong hai nằm trong một ADR đã chấp nhận cùng ngày. Hai lần liên tiếp, thứ lượt soi ngang bắt được không phải nợ cũ mà là **mực
+chưa khô**. Đó là lập luận cho việc chạy sớm hơn mốc khi hardening vừa đổi — và nó là một phép đo, không phải một cảm giác.

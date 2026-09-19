@@ -272,7 +272,19 @@ function hangMaQuyen(v: string): string {
  * "TÊN THÌ ĐƯỢC, GIÁ TRỊ THÌ KHÔNG" LÀ MỘT PHÉP KIỂM, KHÔNG PHẢI MỘT LỜI HỨA. Mỗi trường đi qua hình dạng của chính nó — mã định
  * danh viết hoa cho `action`/`resourceType`, khuôn chấm chữ thường cho mã quyền — và thứ không khớp ra `HANG_LA`. Nên kể cả khi một
  * vòng sau đưa nhầm một giá trị (id, email, giá) vào một trong các trường ấy, nó KHÔNG ra được dòng log: một UUID có dấu gạch nối,
- * một email có `@`, một số bắt đầu bằng chữ số — cả ba trượt cả hai hình dạng. Cùng kỷ luật A2 với `moTaLoiKhongGiaTri` ở
+ * một email có `@`, một số bắt đầu bằng chữ số — cả ba trượt cả hai hình dạng.
+ *
+ * [S1.87 / lượt soi ngang 74 góc 2 — ĐO] RANH GIỚI CỦA PHÉP KIỂM ẤY, VÀ CÂU CŨ RỘNG HƠN THỨ NÓ LÀM ĐƯỢC.
+ * ~~cả ba trượt cả hai hình dạng — nên một giá trị KHÔNG ra được dòng log~~ đúng cho ĐÚNG BA ví dụ ấy, không đúng cho mọi giá trị.
+ * `HINH_DANG_LOAI_TAI_NGUYEN` nhận MỌI chuỗi hoa-số-gạch-dưới dài ≤ 64 bắt đầu bằng chữ cái, mà đó chính là hình dạng của lớp bí
+ * mật kho NÀY tự sinh ra: `base32()` ở `apps/api/src/routes/auth.ts` phát bí mật TOTP theo RFC 4648 (A–Z2–7), và một bí mật bắt đầu
+ * bằng chữ cái — 26/32 số lần — KHỚP (đo: `JBSWY3DPEHPK3PXP` khớp; một UUID viết hoa đã bỏ gạch nối cũng khớp). Nên phát biểu đúng
+ * mức: đây là CHẶN CẤU TRÚC chống nội suy văn xuôi/id/email/số, KHÔNG phải một bộ lọc bí mật. Hôm nay không đường sản xuất nào đưa
+ * một bí mật vào ba trường ấy (`action`/`resourceType` là hằng viết cứng, `permission` có kiểu union), nên bán kính bằng 0 — và đó
+ * là lý do đây là một lời khai được thu hẹp chứ không phải một lỗ. Muốn giữ lời hứa rộng thì phải kiểm theo TẬP ĐÓNG chứ không theo
+ * hình dạng: khoản 189.
+ *
+ * Cùng kỷ luật A2 với `moTaLoiKhongGiaTri` ở
  * `apps/api/src/mo-ta-loi.ts`, và hàm này là nguồn DUY NHẤT của phần hằng ấy: `apps/api` và `apps/unseal-worker` đều gọi nó, nên hai
  * tiến trình không lệch nhau được.
  *
