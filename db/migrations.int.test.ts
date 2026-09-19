@@ -60,6 +60,14 @@ async function dungRoleTrienKhaiThuong(db: TestDatabase): Promise<string> {
   await db.pool.query("CREATE ROLE trien_khai LOGIN CREATEROLE PASSWORD 'mat-khau-trien-khai'");
   await db.pool.query(`ALTER DATABASE "${tenDb}" OWNER TO trien_khai`);
   await db.pool.query("GRANT ALL ON TABLE schema_migrations TO trien_khai");
+  // [S1.86 / khoản 128 / ADR-042] TIỀN ĐIỀU KIỆN MỚI CỦA MỌI VAI DEPLOY NOSUPERUSER, và nó là
+  // một QUYẾT ĐỊNH chứ không phải một dòng dọn dẹp: `hardening.always.sql` thu hồi EXECUTE của các
+  // hàm lấy khoá tư vấn MỨC PHIÊN khỏi PUBLIC, mà `migrate()` dùng CHÍNH `pg_advisory_lock(bigint)`
+  // làm cơ chế loại trừ hai tiến trình migrate — và nó lấy khoá ấy TRƯỚC khi hardening chạy, nên
+  // không lượt migrate nào tự cấp lại được cho mình. Đo (§S1.86): thiếu dòng này, 17 hồ sơ deploy
+  // của tệp này gãy với `permission denied for function pg_advisory_lock`. Chủ dự án chọn trả cái
+  // giá ấy ngày 2026-09-19; `migrate.ts` nêu đúng câu lệnh này trong `TU_CHOI_KHOA_MIGRATE`.
+  await db.pool.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO trien_khai");
 
   const url = new URL(db.connectionString);
   url.username = "trien_khai";
@@ -7767,7 +7775,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // Đối chứng dương ở cuối: CÙNG cơ sở dữ liệu đó, CÙNG vi phạm đó, migrate() bằng role ĐỌC
   // ĐƯỢC bảng thì (E3) bắn đúng cảnh báo — nên (d) không phải vì (E3) rỗng ruột.
   // ==========================================================================
-  it("[khoản nợ 88 — lượt soi 36 #3, ĐO] HỒ SƠ N3 (cụm TRỐNG, vai deploy CREATEROLE không superuser chạy migrate() ĐẦU TIÊN): BƯỚC 0 tạo app_api/app_unseal dưới vai ấy nên PostgreSQL 16 cấp cho nó membership ngầm chỉ-admin (INHERIT FALSE, SET FALSE, grantor là superuser bootstrap) — với tập vai theo USAGE/SET, mọi migration đánh số đi qua và vai deploy KHÔNG lọt tập; deploy dừng ở lượt PHÁN XÉT với đúng một mục có tên (membership lạ không tự gỡ được) và lối ra; superuser REVOKE một lần ⇒ đi qua", async () => {
+  it("[khoản nợ 88 — lượt soi 36 #3, ĐO] HỒ SƠ N3 (cụm TRỐNG, vai deploy CREATEROLE không superuser chạy migrate() ĐẦU TIÊN): BƯỚC 0 tạo app_api/app_unseal dưới vai ấy nên PostgreSQL 16 cấp cho nó membership ngầm chỉ-admin (INHERIT FALSE, SET FALSE, grantor là superuser bootstrap) — với tập vai theo USAGE/SET, mọi migration đánh số đi qua và vai deploy KHÔNG lọt tập; deploy dừng ở lượt PHÁN XÉT với ~~đúng một mục~~ [S1.86 / khoản 128] HAI mục có tên (membership lạ không tự gỡ được; và quyền gọi hàm khoá tư vấn mức phiên — `REVOKE` trên hàm `pg_catalog` đòi chủ hàm) và lối ra; superuser làm ~~một~~ HAI việc một lần ⇒ đi qua", async () => {
     // Trước S1.44 (tập theo 'MEMBER'): vai deploy lọt tập ⇒ mục "quyền CREATE/TEMP trên database của vai ứng dụng và
     // mọi thành viên" THU HỒI CREATE của chính chủ database ở lượt sửa ⇒ 001 gãy "permission denied for database" — một
     // lỗi thô, không tên mục (đo: đột biến trả VAI_KET_NOI_UNG_DUNG về 'MEMBER' làm test này đỏ ở 001). Tiền tồn từ
@@ -7777,6 +7785,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const { rows } = await db.pool.query<{ ten_db: string }>("SELECT current_database() AS ten_db");
       await db.pool.query("CREATE ROLE trien_khai LOGIN CREATEROLE PASSWORD 'mat-khau-trien-khai'");
       await db.pool.query(`ALTER DATABASE "${rows[0]!.ten_db}" OWNER TO trien_khai`);
+      // [S1.86 / khoản 128] Cùng tiền điều kiện với khuôn dựng vai deploy ở đầu tệp — xem khối ở đó.
+      await db.pool.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO trien_khai");
       const poolTrienKhai = createPool(doiNguoiDung(db.connectionString, "trien_khai", "mat-khau-trien-khai"), 2);
       try {
         // Tiền đề: vai deploy sở hữu database ⇒ có CREATE trên nó (CREATE SCHEMA app_private ở 001 và ở hardening cần).
@@ -7814,11 +7824,27 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         const tap = (await db.pool.query<{ rolname: string }>(docHangHardeningTu(HARDENING, "VAI_KET_NOI_UNG_DUNG"))).rows.map((r) => r.rolname).sort();
         expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_unseal"]);
         expect((await db.pool.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_PHU_LENH_SAI"))).rows).toEqual([]);
-        // (d) Deploy DỪNG ở lượt phán xét — đúng MỘT mục, có tên, có lối ra — không phải lỗi thô ở 001.
-        expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 1 mục:/u);
+        // (d) Deploy DỪNG ở lượt phán xét — mục nào cũng CÓ TÊN và CÓ LỐI RA, không phải lỗi thô ở 001.
+        // [S1.86 / khoản 128] Từ vòng này là HAI mục, không phải một: mục thứ hai thu hồi EXECUTE của các hàm
+        // lấy khoá tư vấn MỨC PHIÊN khỏi PUBLIC, và `REVOKE` trên hàm `pg_catalog` đòi CHỦ HÀM — vai deploy
+        // NOSUPERUSER không làm được. Đây là lời khai ĐẾM, nên nó thiu ngay khi thêm một mục cần superuser;
+        // giữ con số ở đây có chủ đích để lần thêm sau phải nhìn thấy hồ sơ N3.
+        expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 2 mục:/u);
         expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
-        // (e) Lối ra đúng như thông báo: superuser gỡ hai membership ngầm một lần ⇒ migrate() dưới vai deploy đi qua.
+        expect(kq).toContain('- "quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng"');
+        // (e) Lối ra đúng như thông báo, và nay nó gồm HAI việc của superuser — cả hai chạy MỘT LẦN:
+        //     ⑴ gỡ hai membership ngầm; ⑵ thu hồi các hàm lấy khoá mức phiên khỏi PUBLIC (khoản 128).
+        //     Vai deploy giữ được `pg_advisory_lock(bigint)` vì khuôn dựng ở trên đã cấp RIÊNG cho nó — một
+        //     lần `GRANT` của superuser, đúng tiền điều kiện mà `TU_CHOI_KHOA_MIGRATE` nêu ra.
         await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai");
+        for (const f of [
+          "pg_advisory_lock(bigint)", "pg_advisory_lock(integer, integer)",
+          "pg_advisory_lock_shared(bigint)", "pg_advisory_lock_shared(integer, integer)",
+          "pg_try_advisory_lock(bigint)", "pg_try_advisory_lock(integer, integer)",
+          "pg_try_advisory_lock_shared(bigint)", "pg_try_advisory_lock_shared(integer, integer)",
+        ]) {
+          await db.pool.query(`REVOKE EXECUTE ON FUNCTION pg_catalog.${f} FROM PUBLIC`);
+        }
         await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
       } finally {
         await poolTrienKhai.end();

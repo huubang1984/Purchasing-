@@ -3183,6 +3183,8 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
   khi có người vào cụm gõ `REVOKE`. Đây là đánh đổi CỐ Ý — chiều còn lại là `migrate()` tự thu hồi
   quyền trên một bảng nó chỉ suy ra — nhưng nó thuộc về danh sách này chứ không nên nằm im.
 
+**[S1.86 / khoản 128 — ADR-042] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_KHOA_TU_VAN_PHIEN_SAI`** — *quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng*. Lý do nó là một phán xét CHẶN ĐƯỢC DEPLOY chứ không phải một lời khuyên: một phiên vai `app_api` lấy `pg_advisory_lock` trên khoá ghi sổ của một tổ chức rồi đứng yên làm MỌI lần ghi sổ của tổ chức ấy gãy `55P03` vô thời hạn — `idle_in_transaction_session_timeout` không với tới vì phiên ấy KHÔNG ở trong giao dịch, và pool không đặt `idle_session_timeout` (đo §S1.86). Câu sửa là `REVOKE … FROM PUBLIC` — **đơn điệu**, đúng nhóm tự chữa được của §2⑵ — cộng một câu `GRANT … TO CURRENT_USER` trả lại đúng hàm mà `migrate()` lấy ở câu ĐẦU TIÊN của nó. Hậu điều kiện đọc theo `proname` nên nó phủ CẢ HAI dạng đối số mà không ghim chữ ký: `pg_advisory_lock(integer, integer)` lấy CÙNG một khoá, và một đột biến chỉ thu hồi dạng `(bigint)` làm `migrate()` gãy ở BƯỚC 3 (đo). Ranh giới, nói ra: mục này KHÔNG chạm `*_xact_lock*` — `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên vai ứng dụng buộc phải giữ chúng, và nửa ấy là khoản 178, không phải một thiếu sót của mục này.
+
 ### 7. Đo bằng gì
 
 **[S1.49 / khoản 93] Bảy mục canh sổ kiểm toán, gọi đúng tên loại của chúng theo §2 — lượt soi 41 NẶNG-2 bác bản đầu vì nó gọi cả bảy là "phán xét" rồi lại khai `REVOKE` là *không* đơn điệu, ngược chính §2⑵ và ngược mã:** BỐN mục PHÁN XÉT (câu sửa no-op) — `CAU_CHI_GHI_THEM_QUYEN` và `CAU_CHI_GHI_THEM_VAT_LY` (quyền GHI và trạng thái vật lý của bảng chỉ-ghi-thêm SUY TỪ TÍNH CHẤT, không ghim tên bảng), `CAU_HINH_DANG_CHINH_TAC` và `CAU_COT_NGOAI_CHUOI` (hình dạng cột của bảng sổ chính tắc: một cột thêm vào sổ là một chỗ dữ liệu đi ra ngoài chuỗi hash, và một cột bị đổi tên làm `audit_events` rớt khỏi tập `can_co` ⇒ lớp C mất khả năng tự chữa trigger nối chuỗi, trong im lặng). BA mục TỰ CHỮA rồi mới phán xét ở hậu điều kiện — `CAU_TRIGGER_CHAN_SAI` (dựng lại bốn trigger chặn: ĐƠN ĐIỆU), `CAU_BANG_SO_VAT_LY` (`SET LOGGED` + thêm `UNIQUE (org_id, seq)`: đơn điệu), `CAU_QUYEN_BANG_SO_MO_TA` (`REVOKE … CASCADE`: đơn điệu — §2⑵ đã xếp `REVOKE` vào nhóm tự chữa được, và lượt sửa chạy đúng thế). Cùng nhóm, mục *không có overload lạ của bốn hàm chuỗi kiểm toán* (`audit_compute_hash`, `noi_chuoi_kiem_toan`, `audit_append`, `chot_moc_neo` — đúng BỐN, không hơn) viết THẲNG SQL ở hậu điều kiện thay vì qua một hằng, nên khoá tra cứu của nó là chính TÊN MỤC: một overload cùng tên khác chữ ký là một hàm thứ năm mà một lời gọi không đủ điều kiện có thể rơi vào. Hai phán xét sống NGOÀI mảng `bang` — BƯỚC 3 chạy `CAU_MEMBERSHIP_LA` (tư cách thành viên LẠ của `app_api`/`app_unseal`: BƯỚC 1 gỡ được thì tự chữa, gỡ không được thì chặn) và `CAU_ADMIN_LA` (quyền ADMIN OPTION lạ trên hai vai ấy) thẳng vào `loi_gom` trước vòng lặp — cùng hạng phán xét, chỉ khác chỗ đứng (lượt soi 41 CAO-2). Cổng `tests/architecture/hardening-co-ly-do.test.ts` ([INV-H19]) đòi mọi phán xét của hardening — nhận diện theo TÍNH CHẤT *ô câu sửa là no-op*, không theo tên hằng — có một khoá tra cứu trong ADR-028, ADR-036 hay ADR-037, và không nằm trong vùng đã gạch.
@@ -4574,3 +4576,68 @@ phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai 
 - Khối gắn listener của worker được viết TRẢI RA từng pool chứ không qua vòng lặp: bản đầu dùng vòng lặp và cổng ĐỎ, vì phép
   đọc theo tên biến không thấy biến vòng lặp. Lý do ấy ghi tại chỗ để không ai "dọn gọn" nó rồi làm cổng mù.
 - **Cái giá còn lại, nói ra:** cổng đọc tên biến trong CÙNG MỘT TỆP và chỉ quét `apps/` — khoản **176**.
+
+
+## ADR-042 — Người GIỮ khoá ghi sổ: thu hồi quyền đóng được đường CỐ Ý, và đường HỢP LỆ được nhận chứ không được vá
+
+**Bối cảnh.** `noi_chuoi_kiem_toan()` nối chuỗi sổ kiểm toán dưới `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))`, và `050`
+cho người CHỜ một trần 2 s. Trần ấy bảo vệ người chờ; nó không đuổi người GIỮ. Khoản 128 hỏi người giữ có cận thời gian nào không.
+
+**Đo (§S1.86, Postgres thật, vai `app_api`).** Hai đường, và chúng khác nhau về bản chất:
+
+| Đường | Đo được | Đóng được bằng quyền? |
+|---|---|---|
+| Phiên CỐ Ý lấy `pg_advisory_lock` (mức PHIÊN) rồi đứng yên | `state=idle` nên `idle_in_transaction_session_timeout` KHÔNG với tới (ép xuống 500 ms, chờ 3 s — gấp sáu ngưỡng — vẫn giữ); `idle_session_timeout` là `0`; nạn nhân gãy `55P03` ở 2 005 ms | **Được** |
+| Giao dịch HỢP LỆ đã ghi sổ rồi còn làm việc tiếp | phát câu mỗi 300 ms dưới ngưỡng 1 s ⇒ không bao giờ đứng yên đủ lâu; nạn nhân gãy `55P03` ở 2 004 ms trong khi người giữ vẫn sống | **Không** |
+
+Vế thứ hai không đóng được vì `noi_chuoi_kiem_toan()` là SECURITY **INVOKER** (đo: `prosecdef = false`, chủ `postgres`), nên vai ứng
+dụng BUỘC phải giữ `pg_advisory_xact_lock`. Và cụm ghim `postgres:16-alpine`, nên `transaction_timeout` (PostgreSQL 17) chưa có.
+
+**Quyết định của chủ dự án, ngày 2026-09-19.**
+
+⑴ **Nửa CỐ Ý — thu hồi, và cấp lại cho vai ĐANG chạy migrate.** `hardening.always.sql` thu hồi EXECUTE của tám hàm LẤY khoá mức
+phiên khỏi PUBLIC (`pg_advisory_lock*`, `pg_try_advisory_lock*`, cả hai dạng đối số), rồi `GRANT ... TO CURRENT_USER`. Đo: `app_api`
+nhận `42501`, và đường ghi sổ hợp lệ vẫn đi qua trong 7 ms. `*_xact_lock*` và `pg_advisory_unlock*` KHÔNG bị đụng.
+
+Phương án bị loại: một vai `app_migrate` ổn định giữ quyền, vai deploy làm thành viên. Nó bỏ được bước thủ công, nhưng thêm một vai
+vào lược đồ và một ràng buộc vận hành mới (vai deploy phải là thành viên) — một bậc tự do mới để quên.
+
+**CÁI GIÁ — và lần trình đầu mô tả nó SAI, phép đo bác, chủ dự án quyết lại.**
+
+Lúc trình phương án, cái giá được mô tả là *"một vai deploy hoàn toàn mới cần một lần `GRANT` của superuser"*, với hàm ý rằng câu
+`GRANT ... TO CURRENT_USER` trong hardening lo được phần còn lại. **Phép đo bác lời ấy:** `pnpm evidence` đỏ với **17** hồ sơ deploy
+(N2, N3, QT1) cùng một dòng `permission denied for function pg_advisory_lock`. Đối chứng: đặt `hardening.always.sql` về bản HEAD ⇒
+xanh; đặt lại bản có mục này ⇒ đỏ.
+
+**Vì sao `CURRENT_USER` không bao giờ cứu được vai deploy — một vòng con gà và quả trứng:** `migrate()` lấy `pg_advisory_lock` ở câu
+ĐẦU TIÊN, trước khi `hardening.always.sql` chạy. Lúc câu `REVOKE` thực thi được thì `CURRENT_USER` là SUPERUSER (chỉ superuser mới
+`REVOKE` được trên hàm `pg_catalog`), nên vai deploy không nhận được gì; tới lượt deploy, nó gãy ở câu đầu, trước khi hardening kịp
+nói một lời. Không lượt `migrate()` nào tự cấp lại được cho chính mình.
+
+**Quyết định lại, ngày 2026-09-19:** giữ mục thu hồi, và **nhận thêm một TIỀN ĐIỀU KIỆN vào hợp đồng triển khai** — mỗi vai deploy
+NOSUPERUSER cần đúng một câu, chạy một lần dưới superuser:
+
+```sql
+GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO <vai deploy>;
+```
+
+Hai phương án bị loại lần này: bỏ hẳn mục thu hồi (đường cố ý vẫn mở), và đổi cơ chế loại trừ của `migrate()` để thôi cần khoá mức
+phiên (đóng được mà không thêm bước vận hành, nhưng nó thay CƠ CHẾ chống hai tiến trình migrate — rủi ro rộng hơn khoản 128 nhiều).
+
+**Và cái giá ấy phải TỰ NÓI RA.** Câu `pg_advisory_lock` chạy trước hardening, nên ô *"quyền cần"* của hardening không bao giờ tới
+được người đọc: thông điệp trần trụi là `permission denied for function pg_advisory_lock` — đúng nhưng không nói phải làm gì. Nên
+`migrate.ts` bắt `42501` ở đúng câu ấy và ném `TU_CHOI_KHOA_MIGRATE`, thứ nêu NGUYÊN VĂN câu `GRANT` trên và giữ lỗi gốc ở `cause`.
+Một bản duy nhất, ra cửa `@trustprocure/db`, test IMPORT chứ không chép — cùng kỷ luật với `TU_CHOI_GUC_SOM` (§S1.51 đã đo cái giá
+của việc chép: bốn chỗ ghim im lặng hỏng, một chỗ thoái hoá thành no-op).
+
+⑵ **Nửa HỢP LỆ — NHẬN VÀ GHI RA.** Không thêm mã. Hai phương án bị loại: một bộ dọn `pg_terminate_backend` các phiên giữ quá N giây
+(đóng được cận thời gian thật, nhưng GIẾT việc nghiệp vụ hợp lệ đang chạy dở — một lần rollback không ai yêu cầu), và nâng cụm lên
+PostgreSQL 17 để dùng `transaction_timeout` (cận thật ở tầng CSDL, nhưng là quyết định hạ tầng rộng hơn khoản 128 nhiều). Ghi thành
+khoản **178** kèm cả hai phép đo và bán kính: 38 chỗ gọi `appendAuditEvent`, và khoản 126 đã xử lý thứ tự khoá ở các đường đã biết.
+
+**Hệ quả.** Khoản 128 đóng nửa CỐ Ý. `db/khoa-ghi-so-nguoi-giu.int.test.ts` giữ cả hai vế: vế ⓵ là test hồi quy của bản vá, vế ⓶ là
+PHÉP ĐO của ranh giới — nó XANH vì nửa kia còn mở, và nó sẽ phải đổi nếu khoản 178 được đóng.
+
+**Một ranh giới của chính phép đo, nói ra:** câu `GRANT` không kiểm được bằng hành vi ở cụm test, vì migrate ở đó chạy dưới `postgres`
+— chủ của chính hàm ấy — nên cả `has_function_privilege` lẫn `proacl` đều XANH dù câu `GRANT` có bị gỡ hẳn (đo: đột biến M4). Vế ⓸ vì
+thế đọc NGUỒN của mục hardening. Cùng lớp lỗi với ADR-040.
