@@ -1,0 +1,15 @@
+{
+  "name": "@trustprocure/gieo-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "[ADR-044] Cong cu DEV gieo mot vong thau du de demo. Khong phai duong san xuat: no doi bien moi truong RIENG va in token dang ro ra stderr.",
+  "dependencies": {
+    "@trustprocure/crypto-keys": "workspace:*",
+    "@trustprocure/db": "workspace:*",
+    "@trustprocure/identity": "workspace:*",
+    "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/sealed-envelope": "workspace:*",
+    "@trustprocure/tenancy": "workspace:*"
+  }
+}

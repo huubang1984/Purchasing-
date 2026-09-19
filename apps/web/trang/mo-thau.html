@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Mở thầu — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Mở thầu và so sánh</h1>
+    <span class="vai">Người mua</span>
+    <nav><a href="/nop-thau">Màn nhà cung cấp</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Dán mã từ link đăng nhập, rồi nhập mã sáu số của ứng dụng xác thực. Cần hai
+      người khác nhau để mở thầu, nên màn này đăng nhập lại được bằng người thứ hai.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-vao">Vào</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Gói thầu</h2>
+    <label for="rfq">Mã gói thầu</label>
+    <input id="rfq" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <button id="nut-doc" class="phu">Đọc</button>
+    <dl class="tt" id="tt-rfq"></dl>
+    <div class="bao luu" id="dem" hidden></div>
+    <div class="bao loi" id="loi2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Mở thầu</h2>
+    <p class="ghi">Đóng thầu trước, rồi tạo yêu cầu mở. Mở thầu chỉ giải mã — nó không phải phê
+      duyệt trúng thầu.</p>
+    <label for="ly-do">Lý do</label>
+    <input id="ly-do" autocomplete="off" value="Het han nop, mo de danh gia">
+    <div class="doi">
+      <button id="nut-dong" class="phu">Đóng thầu</button>
+      <button id="nut-yeu-cau">Tạo yêu cầu mở</button>
+    </div>
+    <dl class="tt" id="tt-yc"></dl>
+    <div class="doi">
+      <button id="nut-duyet" class="phu">Phê duyệt</button>
+      <button id="nut-dieu-phoi">Điều phối giải mã</button>
+    </div>
+    <div class="bao loi" id="loi3" hidden></div>
+    <div class="bao ok" id="ok3" hidden></div>
+  </section>
+
+  <section class="buoc" id="b4" hidden>
+    <h2><span class="so">4</span> Bảng so sánh</h2>
+    <button id="nut-bang" class="phu">Đọc bảng so sánh</button>
+    <table id="bang">
+      <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <dl class="tt" id="tt-tong"></dl>
+    <p class="ghi">Giá thấp nhất không đồng nghĩa nhà cung cấp tốt nhất — xếp hạng theo tổng chi
+      phí là việc của bước đánh giá, chưa có trong lát cắt này.</p>
+    <div class="bao loi" id="loi4" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/mo-thau.js"></script>
+</body>
+</html>

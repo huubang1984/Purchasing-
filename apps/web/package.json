@@ -1,0 +1,12 @@
+{
+  "name": "@trustprocure/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "//": "[ADR-044] LAT CAT DEMO. App nay phuc vu HAI trang tinh va CHUYEN TIEP /api/* sang apps/api. `dependencies` RONG va do la mot bao dam: no khong cham CSDL, khong giu mot bi mat nao, khong co mot duong ghi nao cua rieng no. Moi quyen no co la quyen cua phien ma trinh duyet dang cam.",
+  "dependencies": {}
+}

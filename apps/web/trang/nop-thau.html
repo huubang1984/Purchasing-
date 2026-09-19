@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Nộp báo giá — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Nộp báo giá</h1>
+    <span class="vai">Nhà cung cấp</span>
+    <nav><a href="/mo-thau">Màn người mua</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Mở lời mời</h2>
+    <p class="ghi">Dán mã tổ chức và mã lời mời từ link được gửi cho anh/chị. Nếu mở bằng đúng link
+      thì hai ô này tự điền.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã lời mời</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <button id="nut-mo">Mở lời mời</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Xác minh danh tính</h2>
+    <p class="ghi">Mã dùng một lần được gửi qua kênh khác với kênh đã gửi link — để một người chỉ
+      cầm được một trong hai thứ thì không vào được.</p>
+    <label for="kenh">Kênh nhận mã</label>
+    <select id="kenh"></select>
+    <button id="nut-gui" class="phu">Gửi mã</button>
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-xac">Xác minh</button>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Gói thầu</h2>
+    <dl class="tt" id="tt-rfq"></dl>
+    <table id="bang-hang">
+      <thead><tr><th>Hạng mục</th><th class="so">SL</th><th>ĐVT</th><th class="so">Đơn giá</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <label for="tien-te">Tiền tệ</label>
+    <input id="tien-te" value="VND" autocomplete="off" spellcheck="false">
+    <div class="bao luu" id="tong"></div>
+    <button id="nut-nop">Niêm phong và nộp</button>
+    <div class="bao loi" id="loi3" hidden></div>
+  </section>
+
+  <section class="buoc" id="b4" hidden>
+    <h2><span class="so">4</span> Biên nhận</h2>
+    <div class="bao ok">Báo giá đã được niêm phong trên máy của anh/chị trước khi rời đi.</div>
+    <dl class="tt" id="tt-bn"></dl>
+    <p class="ghi">Phong bì vừa tạo, đọc lại bằng chính bộ giải mã phần đầu:</p>
+    <div class="ma" id="mo-ta-pb"></div>
+    <p class="ghi">Văn bản chính tắc đã được hệ thống ký — kiểm chứng được bằng khoá công khai ở
+      <code>/.well-known/trustprocure-receipt-keys</code>, không cần hỏi ai:</p>
+    <div class="ma" id="van-ban"></div>
+    <div class="ma" id="chu-ky"></div>
+    <button id="nut-lai" class="phu">Nộp bản sửa đổi</button>
+  </section>
+
+  <footer class="chan">Lát cắt demo — giá được mã hoá trong trình duyệt, máy chủ không đọc được.</footer>
+</main>
+<script type="module" src="/nop-thau.js"></script>
+</body>
+</html>

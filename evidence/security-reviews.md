@@ -7947,3 +7947,95 @@ nó chạy `Evidence pack` trên máy sạch. Vòng này không đổi mã nên 
 
 Không mở khoản nào. Không đóng khoản nào. **79 khoản mở, y nguyên** — vòng này đổi cách ĐỌC sổ, không đổi nội dung sổ.
 
+---
+
+# §S1.89 — LÁT CẮT DEMO: sản phẩm đi trọn một vòng qua giao diện, và sáu lớp cưỡng chế CHẶN ĐÚNG trên đường đi
+
+Vòng này thêm một app, một cửa gói, một công cụ dev và hai tệp test. **Không đổi một dòng nào của `apps/api`,
+`apps/unseal-worker`, `packages/*` đang chạy, và không một migration nào.** Chi tiết quyết định: ADR-044.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng
+
+`Handoff.md` §11 đặt mốc *"sau ba vòng đổi hardening, hay chậm nhất S1.90"* (đặt lại ở S1.88 sau khi ghi lỡ nhịp). Vòng này là
+S1.89: vế lịch **chưa chạm**; vế hardening — `git rev-list --count a07e986..HEAD --first-parent -- db/migrations/hardening.always.sql`
+= **0**, vòng này không chạm SQL. Không lượt ngang nào chạy, không lỡ nhịp. Lượt 75 vẫn nợ và đến hạn ở S1.90.
+
+## 1. Phần đáng đọc nhất KHÔNG phải mã của vòng này — mà là thứ lượt chạy thật đã CHẶN
+
+Một lượt chạy đầu-cuối trên Postgres thật, bốn tiến trình, một trình duyệt thật. Trên đường đi, **sáu lớp cưỡng chế đã chặn**, và
+mỗi lần chặn là một lần một nguyên tắc ở `docs/PRODUCT.md` §4 tự chứng minh nó không phải khẩu hiệu:
+
+| # | Bước bị chặn | Thông điệp thật | Nguyên tắc |
+|---|---|---|---|
+| ⑴ | Script gieo mở gói thầu khi chưa đủ duyệt | *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"* | phê duyệt kép |
+| ⑵ | Người TẠO gói thầu tự đứng tên một trong hai người duyệt | *"Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet (D2)"* | SoD |
+| ⑶ | Cấp cho một người cả PROCUREMENT_MANAGER lẫn DIRECTOR | *"Phân tách nhiệm vụ (D3): người dùng … sẽ nắm trọn chuỗi"* | SoD, ở tầng CSDL |
+| ⑷ | PROCUREMENT_MANAGER bấm PHÊ DUYỆT mở thầu | `403 khong co quyen` — `005` chỉ cấp `rfq.unseal.approve` cho DIRECTOR | SoD |
+| ⑸ | Người YÊU CẦU mở thầu tự phê duyệt | *"Nguoi yeu cau mo thau khong duoc tu phe duyet (D2, D3)"* | SoD |
+| ⑹ | Điều phối giải mã khi mới có MỘT chữ ký | *"yêu cầu mở thầu phải ở trạng thái APPROVED; đang ở PENDING"* | Open ≠ Award |
+
+Cộng một lớp thứ bảy không phải lỗi mà là tính chất: `apps/api` **từ chối khởi động** khi chuỗi kết nối đăng nhập bằng superuser
+(*"phải đăng nhập bằng role `app_api_login`"*).
+
+**Vì sao sáu dòng trên là phần đáng giá nhất của biên bản này:** chúng không đến từ một test do dự án tự viết cho chính mình. Chúng
+đến từ một người cố dựng một buổi demo và liên tục bị chính sản phẩm chặn lại vì làm sai thứ tự. Đó là hình dạng bằng chứng gần
+nhất với một khách hàng thật mà dự án từng có.
+
+## 2. Số đo của lượt chạy
+
+| Bước | Số đo |
+|---|---|
+| Niêm phong trong trình duyệt | phong bì **311 byte**, magic `TPSE`, định dạng v1, thuật toán **X25519** (chọn lúc chạy theo khả năng trình duyệt), khoá phù du 44 byte |
+| Biên nhận | `ECDSA_P256_SHA256`, `kid=k1`, mang `ciphertext_sha256` và `submitted_at` của Postgres |
+| Trước đóng thầu | `bid-count` trả `disclosed:false`, lý do `STRICT_BLIND_BEFORE_CLOSE` |
+| Sau đóng thầu | `3` báo giá, KHÔNG mức giá nào |
+| Sau hai chữ ký | `APPROVED` → điều phối `200` → worker giải mã **3/3** |
+| Bảng so sánh | 537.600.000,00 / 544.000.000,00 / 548.800.000,00 VND; parsed 3, unparsed 0, lệch tiền tệ: không |
+
+Tổng 544.000.000,00 của bản nộp qua giao diện khớp ĐÚNG phép nhân tay: 120×2.450.000 + 800×185.000 + 2.400×42.500.
+
+## 3. Bốn khiếm khuyết của CHÍNH vòng này, và cái gì bắt được chúng
+
+| # | Khiếm khuyết | Ai bắt |
+|---|---|---|
+| ⑴ | `GOC_NIEM_PHONG` thiếu một cấp `../` ⇒ máy chủ đọc `apps/packages/…` và chết lúc khởi động | `phuc-vu.test.ts` ngay lượt chạy đầu — trước khi có ai mở trình duyệt |
+| ⑵ | Trang người mua không gửi `orgId` ⇒ `422 thiếu trường "orgId"` | lượt chạy thật |
+| ⑶ | Trang người mua gọi `/auth/redeem` ở MỖI lần bấm ⇒ mỗi lần sinh một bí mật TOTP MỚI, người dùng không bao giờ ghi danh xong | lượt chạy thật — và không test nào của vòng này bắt được, ghi ra thay vì lặng lẽ sửa |
+| ⑷ | Trang đoán sai hình dạng `/me` (đoán có `email`; thực tế `{userId, sessionId, orgId, kind}`) | lượt chạy thật |
+
+⑶ là cái đắt nhất và nó đáng một dòng riêng: một lỗi mà mọi cổng tĩnh đều xanh, mọi test đơn vị đều xanh, và chỉ một CON NGƯỜI đi
+hết luồng mới thấy. Đó đúng là lớp lỗi mà bốn mảnh của `PRODUCT.md` §11 nói tới — và là lập luận cho việc lát cắt này phải tồn tại.
+
+## 4. Mốc đột biến — hai mũi, cả hai ĐỎ
+
+Trên `apps/web/src/cua-trinh-duyet.test.ts`, đột biến ghi ra đĩa rồi khôi phục, **có kiểm `sha256` và NÉM nếu lệch**:
+
+| Mũi | Đổi | Kết quả |
+|---|---|---|
+| VE-1 | bỏ `"format"` khỏi `MODULE_TRINH_DUYET` | **ĐỎ** (thoát mã 1) |
+| VE-3 | `import type { webcrypto }` → `import { webcrypto }` ở `format.ts` | **ĐỎ** (thoát mã 1) |
+
+Khôi phục: `sha256` của cả hai tệp khớp bản gốc.
+
+## 5. Cổng
+
+| Cổng | Kết quả |
+|---|---|
+| `pnpm t0` | **thoát mã 0** — **278** module (262 → 278), **1 135** phụ thuộc, 0 vi phạm. (Con số đầu tiên em ghi vào chính biên bản này là *276 / 1 125*: đo TRƯỚC khi hai tệp test của vòng được thêm. Gạch và đo lại thay vì để một lời khai thiu ra đời cùng vòng sinh ra nó.) |
+| `pnpm test` | xem §6 |
+| `pnpm test:int` cục bộ | KHÔNG chạy — phiên song song dùng chung Postgres; vòng này không đổi một dòng SQL nào và CI chạy T3 trên nhánh |
+
+## 6. Phần KHÔNG làm
+
+- **Không có test tích hợp nối `apps/web` với `apps/api` thật.** `phuc-vu.test.ts` đo bộ chuyển tiếp bằng một upstream GIẢ, vì thứ
+  `apps/web` chịu trách nhiệm là *"chuyển tiếp đúng những gì"*; hành vi của API đã có `guest.int.test.ts`. Một cạnh import
+  `apps/web → apps/api` cũng là một cạnh depcruise phải bless, và đổi một ranh giới kiến trúc lấy sự tiện lợi của một test là đổi
+  sai chiều. **Phần chênh: không lớp tự động nào đo rằng hai app nối được với nhau** — hôm nay đó là một lượt chạy tay, ghi ở §2.
+- **Không đóng một khoản rổ A nào.** Vòng này làm mảnh ⑴ của bảng §11, không làm sổ nợ.
+- **Không có HTTPS trong lượt chạy.** Demo chạy ở `127.0.0.1`, nơi trình duyệt chấp nhận cookie `Secure`. Trên điện thoại thật qua
+  LAN thì phải có chứng chỉ — hai biến đã có chỗ, phép đo thì chưa.
+
+## Sổ nợ
+
+Không mở khoản nào, không đóng khoản nào. **79 khoản mở, y nguyên.**
+

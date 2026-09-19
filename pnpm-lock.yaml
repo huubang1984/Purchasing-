@@ -133,6 +133,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/unseal
 
+  apps/web: {}
+
   packages/audit:
     dependencies:
       '@trustprocure/crypto-keys':
@@ -291,6 +293,27 @@ importers:
       '@trustprocure/crypto-keys':
         specifier: workspace:*
         version: link:../../packages/crypto-keys
+
+  tools/gieo-demo:
+    dependencies:
+      '@trustprocure/crypto-keys':
+        specifier: workspace:*
+        version: link:../../packages/crypto-keys
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@trustprocure/invitation':
+        specifier: workspace:*
+        version: link:../../packages/invitation
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../../packages/sealed-envelope
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
 
   tools/inv-matrix: {}
 
