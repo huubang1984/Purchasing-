@@ -1,0 +1,171 @@
+/* ==============================================================================================
+   TrustProcure — lát cắt demo. Một tệp CSS, không phụ thuộc, không phông tải từ mạng.
+   `script-src 'self'` cũng kéo theo `style-src 'self'`, nên không có Google Fonts ở đây: phông hệ
+   thống là thứ duy nhất đi qua được chính sách, và trên điện thoại nó cũng là thứ hiển thị nhanh
+   nhất. Thiết kế ưu tiên màn hình hẹp vì người nộp thầu ngồi ở công trường, không ngồi ở bàn.
+   ============================================================================================== */
+
+:root {
+  --nen: #f2f4f5;
+  --the: #ffffff;
+  --chim: #e4e8ea;
+  --vien: #cfd6da;
+  --chu: #161d21;
+  --chu-mo: #56646c;
+  --lam: #2f6f8f;
+  --lam-nen: #dce9ef;
+  --luc: #2e6b4f;
+  --luc-nen: #dceae2;
+  --do: #97341f;
+  --do-nen: #f3dcd6;
+  --vang-nen: #f6ecd2;
+  --vang-chu: #7a5a12;
+  --r: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --nen: #10161a;
+    --the: #182127;
+    --chim: #202c33;
+    --vien: #2d3d45;
+    --chu: #e8eef1;
+    --chu-mo: #9bacb5;
+    --lam: #6fb3d2;
+    --lam-nen: #17323f;
+    --luc: #7fc9a3;
+    --luc-nen: #143026;
+    --do: #e79683;
+    --do-nen: #3a1d16;
+    --vang-nen: #362a12;
+    --vang-chu: #e0c078;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--nen);
+  color: var(--chu);
+  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main { max-width: 680px; margin: 0 auto; }
+
+header.dau {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+header.dau h1 { font-size: 1.15rem; margin: 0; letter-spacing: -0.01em; }
+header.dau .vai {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lam);
+  background: var(--lam-nen);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+header.dau nav { margin-left: auto; font-size: 0.85rem; }
+header.dau nav a { color: var(--chu-mo); }
+
+section.buoc {
+  background: var(--the);
+  border: 1px solid var(--vien);
+  border-radius: var(--r);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+section.buoc[hidden] { display: none; }
+section.buoc > h2 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--chu-mo);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+section.buoc > h2 .so {
+  display: inline-grid;
+  place-items: center;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--chim);
+  color: var(--chu);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+section.buoc.xong > h2 .so { background: var(--luc-nen); color: var(--luc); }
+
+label { display: block; font-size: 0.85rem; color: var(--chu-mo); margin: 10px 0 4px; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--vien);
+  border-radius: 8px;
+  background: var(--nen);
+  color: var(--chu);
+  font: inherit;
+  font-size: 1rem;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--lam); outline-offset: 1px; }
+input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
+
+button {
+  margin-top: 14px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lam);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 46px;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.phu { background: var(--chim); color: var(--chu); }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--vien); }
+th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--chu-mo); font-weight: 600; }
+td.so, th.so { text-align: right; font-variant-numeric: tabular-nums; }
+tr.thap td { background: var(--luc-nen); }
+
+.ghi { font-size: 0.85rem; color: var(--chu-mo); margin: 8px 0 0; }
+.ma {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  word-break: break-all;
+  background: var(--nen);
+  border: 1px solid var(--vien);
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.bao { border-radius: 8px; padding: 11px 13px; margin-top: 12px; font-size: 0.9rem; }
+.bao[hidden] { display: none; }
+.bao.loi { background: var(--do-nen); color: var(--do); }
+.bao.ok { background: var(--luc-nen); color: var(--luc); }
+.bao.luu { background: var(--vang-nen); color: var(--vang-chu); }
+
+.doi { display: flex; gap: 10px; flex-wrap: wrap; }
+.doi > * { flex: 1 1 140px; }
+
+dl.tt { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.88rem; }
+dl.tt dt { color: var(--chu-mo); }
+dl.tt dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+footer.chan { margin: 22px 0 8px; font-size: 0.78rem; color: var(--chu-mo); text-align: center; }

@@ -57,6 +57,12 @@ export default tseslint.config(
       // của tiến trình MCP (`pnpm mcp:dev`). Lý do không dùng chung file với `apps/api` ghi ở đầu
       // `apps/mcp/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một thư mục, không gộp `apps/*/*.mjs`.
       "apps/mcp/*.mjs",
+      // [ADR-044] `apps/web/*.mjs` và `tools/gieo-demo/*.mjs` — bản sao có chủ ý thứ SÁU và thứ BẢY
+      // của cùng hook resolve, cho `pnpm web:dev` và `pnpm gieo:demo`. Vẫn liệt kê TỪNG thư mục,
+      // không gộp `apps/*/*.mjs`: tính chất "mọi tệp .mjs khác trong kho đều ồn ào" là thứ fix
+      // round 2 đã mua bằng một lần đo, và một lần gộp cho tiện sẽ trả lại nó.
+      "apps/web/*.mjs",
+      "tools/gieo-demo/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",
@@ -72,6 +78,34 @@ export default tseslint.config(
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
       "no-console": ["error", { allow: ["error"] }],
+    },
+  },
+  {
+    // [ADR-044] MÃ CHẠY TRONG TRÌNH DUYỆT — `apps/web/trang/*.js`.
+    //
+    // Hai tệp này KHÔNG phải TypeScript và không nằm trong `tsconfig.json`, nên bộ luật cần kiểu
+    // không chạy được trên chúng. Hai lựa chọn còn lại đều tệ hơn việc tắt phần cần kiểu: bỏ hẳn
+    // chúng khỏi eslint (mã chạm cookie phiên của nhà cung cấp mà không lớp nào đọc), hoặc kéo
+    // `lib: ["DOM"]` vào `tsconfig.base.json` (mở `document`, `window`, `localStorage` ra cho MỌI
+    // tệp máy chủ của kho — bán kính ảnh hưởng lớn hơn nhiều, và `packages/sealed-envelope/src/
+    // format.ts` đã ghi đúng lập luận ấy từ S1.4).
+    //
+    // `globals` liệt kê ĐÚNG những cái hai tệp ấy dùng, không phải cả bộ trình duyệt: một tên mới
+    // xuất hiện sẽ làm eslint đỏ, và đó là lúc người viết phải nói ra rằng trang vừa chạm một bề
+    // mặt mới.
+    files: ["apps/web/trang/*.js"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: false },
+      globals: {
+        atob: "readonly",
+        btoa: "readonly",
+        crypto: "readonly",
+        document: "readonly",
+        fetch: "readonly",
+        location: "readonly",
+        TextEncoder: "readonly",
+      },
     },
   },
   {

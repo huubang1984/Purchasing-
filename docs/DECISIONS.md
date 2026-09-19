@@ -4709,3 +4709,87 @@ khoản rổ C — và để nguyên rổ A. Trần vẫn dùng được, nhưng
 **Điều ADR này KHÔNG nói.** Nó không nói phần đã xây là thừa: 56/56 bất biến có lớp cưỡng chế và được đo bằng đột biến, và đó là
 phần khó nhất của sản phẩm. Nó không đóng một khoản nợ nào — tập khoản mở sau ADR này vẫn là 79, y nguyên. Và nó không nói lượt
 soi đối kháng là sai: nó nói lượt soi cần một ĐÍCH, và từ hôm nay đích ấy là kịch bản ở §11.
+
+---
+
+## ADR-044 — Lát cắt demo: `apps/web`, cửa trình duyệt của gói niêm phong, và không một bước build nào
+
+**Bối cảnh.** `docs/PRODUCT.md` §11 (ADR-043) liệt kê bốn mảnh còn thiếu của MVP1, và mảnh thứ nhất là **giao diện**: kho có đúng
+một tệp `.html` và nó là máy dò ở `tools/do-webcrypto/`. Hệ quả đo được: một nhà cung cấp **không có chỗ nào để nộp thầu**, nên USP
+số 1 — *người mua không nhìn thấy giá trước deadline* — chưa bao giờ chạy ngoài bộ test. Chủ dự án chọn làm lát cắt demo trước spec
+S2, với lý do ghi ở `Handoff.md` §11: việc gặp khách hàng pilot chặn việc viết S2, và không có gì để cho xem thì không gặp được.
+
+**Phạm vi chủ dự án chốt ngày 2026-09-19:** HAI màn — nhà cung cấp nộp thầu, người mua mở thầu và đọc bảng so sánh — cộng một
+script gieo bối cảnh. KHÔNG làm màn tạo RFQ, mời nhà cung cấp, quản trị người dùng: chúng là bảy màn hình và không màn nào chạm một
+USP nào.
+
+### Quyết định
+
+⑴ **`apps/web` — máy chủ tĩnh `node:http` trần, TỰ CHUYỂN TIẾP `/api/*` sang `apps/api`.** `dependencies` rỗng; kho giữ nguyên
+**0 phụ thuộc sản xuất**.
+
+⑵ **`packages/sealed-envelope/src/browser.ts` — cửa thứ BA của gói**, cạnh `index.ts` (máy chủ) và `unseal.ts` (mở phong bì). Nó
+xuất đúng những gì một trang web cần để niêm phong, và không một symbol nào của nó nhận một kết nối CSDL.
+
+⑶ **KHÔNG có bước build.** Máy chủ phục vụ chính tệp `.ts` của gói, gỡ kiểu bằng `module.stripTypeScriptTypes` của Node lúc khởi
+động; trang nạp bằng `import` chuẩn. Trình duyệt chạy **đúng byte mà `roundtrip.test.ts` và `guest.int.test.ts` đo**.
+
+⑷ **`tools/gieo-demo`** gieo một vòng thầu đủ để demo và in ra sáu đường link.
+
+### Ba phương án bị loại, và cái giá của từng cái
+
+| Phương án | Vì sao loại |
+|---|---|
+| Phục vụ HTML thẳng từ `apps/api` | `server.ts` ghim `content-type: application/json` cho MỌI phản hồi cộng `nosniff`, kèm đúng câu *"JSON không bao giờ bị đọc thành HTML"*. Đó là một tính chất an ninh đã chọn; nhét HTML vào là gỡ nó |
+| Trang ở origin khác + thêm CORS vào `apps/api` | Phiên đi bằng cookie. CORS kèm `credentials` mở một bề mặt CSRF mới trên đúng API đang giữ dữ liệu thầu, để đổi lấy sự tiện lợi của một trang demo |
+| Bundler (esbuild/vite) để gói `sealBid` | Thêm một phụ thuộc và một tệp phát sinh, và tạo ra **bản cài thứ hai** của đường niêm phong ở dạng đã biên dịch. Một dự án mà lõi giá trị là *"giá được niêm phong đúng cách"* không nên có hai bản mã niêm phong |
+| Viết lại định dạng phong bì bằng JavaScript thuần trong trang | Cùng lý do trên, nhưng tệ hơn: hai bản trôi khỏi nhau mà không cổng nào thấy |
+
+### Cái giá của hình dạng đã chọn — nói thẳng, không giấu
+
+- **Bộ chuyển tiếp THẤY cookie phiên của người dùng.** Nó không lưu, không ghi log, không đọc — nhưng nó đi qua, và một tiến trình
+  đi qua là một tiến trình phải tin. **`apps/web` không được đứng trước một cụm sản xuất.** Triển khai thật dùng một reverse proxy
+  của hạ tầng, không dùng tiến trình này.
+- **`X-Forwarded-For` KHÔNG được chuyển tiếp** (khai hộ người gọi một địa chỉ là đúng thứ `taoDocDiaChi` tồn tại để chặn), nên
+  `apps/api` thấy socket của bộ chuyển tiếp: **mọi người dùng demo dùng chung một ô đếm hạn mức theo người gọi**. Chấp nhận được
+  cho một buổi trình bày, và nói ra ở đây thay vì để ai đó phát hiện lúc đang demo.
+- **`stripTypeScriptTypes` là API THỬ NGHIỆM của Node.** Nó in cảnh báo và có thể đổi. Đây là một công cụ demo, không phải một
+  đường sản xuất; nếu lát cắt này lớn lên thành sản phẩm thật thì đó là lúc bàn lại, và bàn lại khi ấy rẻ vì không có tệp phát sinh
+  nào phải bỏ đi.
+- **Mã của hai trang (`apps/web/trang/*.js`) không được typecheck.** `tsconfig.base.json` cố ý không có `lib: ["DOM"]`, và kéo DOM
+  vào sẽ mở `document`/`window`/`localStorage` cho MỌI tệp máy chủ của kho — bán kính ảnh hưởng lớn hơn nhiều. Bù lại, eslint VẪN
+  chạy trên chúng với `globals` liệt kê đúng những tên chúng dùng, nên một bề mặt trình duyệt mới sẽ làm cổng đỏ.
+
+### Đo bằng gì
+
+- `apps/web/src/cua-trinh-duyet.test.ts` — ba tính chất của cửa trình duyệt, đọc **cây import thật** bằng `ts.createSourceFile`:
+  đóng bắc cầu khớp lời khai, không import giá trị tới `node:*`/`pg`/gói khác, và mã ĐÃ gỡ kiểu không còn specifier `node:`. Hai
+  mũi đột biến đã chạy và **cả hai ĐỎ** (bỏ một tệp khỏi lời khai; đổi `import type` thành `import` ở `format.ts`).
+- `apps/web/src/phuc-vu.test.ts` — bề mặt tệp và bộ chuyển tiếp, đo bằng một upstream GIẢ: CSP không có `unsafe-inline`, mọi dạng
+  leo thư mục ra 404, `/lib/seal.js` còn nguyên `deriveContentKey`/`encodeEnvelope`, ĐÚNG bốn header đi lên (và `x-forwarded-for`
+  KHÔNG đi lên), mọi `Set-Cookie` đi xuống, header lạ của api KHÔNG đi xuống, thân vượt trần 413 mà api không nhận gì, api chết ra
+  502 không lộ hình dạng mạng.
+- **Một lượt chạy THẬT, đầu tới cuối** — xem `evidence/security-reviews.md` §S1.89.
+
+### Cách chạy
+
+```bash
+docker run -d --name tp-demo-pg -e POSTGRES_PASSWORD=demo -p 55433:5432 postgres:16-alpine
+# một lần: vai đăng nhập cho hai tiến trình (migration tạo vai NOLOGIN, không tạo vai đăng nhập)
+docker exec -i tp-demo-pg psql -U postgres -c "CREATE ROLE app_api_login LOGIN PASSWORD 'demo'; GRANT app_api TO app_api_login;"
+docker exec -i tp-demo-pg psql -U postgres -c "CREATE ROLE app_unseal_login LOGIN PASSWORD 'demo'; GRANT app_unseal TO app_unseal_login;"
+pnpm gieo:demo   # in ra sáu link; cần TRUSTPROCURE_SEED_DATABASE_URL trỏ vai superuser
+pnpm api:dev     # TRUSTPROCURE_ALLOWED_ORIGINS phải chứa origin của apps/web
+pnpm worker:dev  # không chạy thì bảng so sánh sẽ rỗng sau khi điều phối
+pnpm web:dev
+```
+
+**Cookie phiên khách mang `Secure`**, nên mở trên điện thoại qua một địa chỉ LAN `http://192.168.x.x` sẽ **im lặng thất bại** —
+trình duyệt nhận `Set-Cookie` rồi vứt. Muốn demo trên máy thật phải có HTTPS: `TRUSTPROCURE_WEB_TLS_CERT` và `_KEY`. `main.ts` in
+một dòng cảnh báo khi phát hiện đúng cảnh này.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói lát cắt này là sản phẩm. Nó không đóng một khoản nợ nào của rổ A. Nó không làm S2 gần hơn một dòng — nhưng nó làm
+việc **gặp khách hàng pilot** khả thi, và đó là mảnh thứ tư của bảng ở `PRODUCT.md` §11, mảnh chặn nhiều nhất.
+

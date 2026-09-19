@@ -2,7 +2,10 @@
   "name": "trustprocure",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.0.0", "pnpm": ">=9.0.0" },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
@@ -18,6 +21,8 @@
     "bench:keys": "node --experimental-transform-types --import ./tools/bench-keyprovider/register-ts-resolve.mjs tools/bench-keyprovider/src/index.ts",
     "api:dev": "node --experimental-transform-types --import ./apps/api/register-ts-resolve.mjs apps/api/src/main.ts",
     "mcp:dev": "node --experimental-transform-types --import ./apps/mcp/register-ts-resolve.mjs apps/mcp/src/main.ts",
+    "web:dev": "node --experimental-transform-types --import ./apps/web/register-ts-resolve.mjs apps/web/src/main.ts",
+    "gieo:demo": "node --experimental-transform-types --import ./tools/gieo-demo/register-ts-resolve.mjs tools/gieo-demo/src/index.ts",
     "worker:dev": "node --experimental-transform-types --import ./apps/unseal-worker/register-ts-resolve.mjs apps/unseal-worker/src/main.ts",
     "neo": "node --experimental-transform-types --import ./tools/neo-so-kiem-toan/register-ts-resolve.mjs tools/neo-so-kiem-toan/src/index.ts"
   },

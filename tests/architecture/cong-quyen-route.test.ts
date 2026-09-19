@@ -329,7 +329,7 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
   // một app chưa vào kho là một app cổng này không nhìn thấy. Lượt chạy trước lúc stage XANH, và
   // cái xanh ấy không nói gì cả.
   // ============================================================================================
-  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ BỐN APP, và app thứ tư MƯỢN cổng quyền của app thứ ba", () => {
+  it("PHÁT BIỂU ĐÚNG MỨC: `apps/` NAY CÓ NĂM APP, và app thứ năm KHÔNG CÓ ROUTE NÀO CỦA RIÊNG NÓ", () => {
     const cacTep = quetTepTs(THU_MUC_APPS);
     expect(cacTep.length, "apps/ phải có ít nhất một module .ts đã vào kho").toBeGreaterThan(0);
 
@@ -368,7 +368,19 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh. Ngày
     // `apps/api` ra đời — route đầu tiên nhận một phiên NGƯỜI DÙNG và gọi một hàm ghi — mới là
     // ngày nó có nghĩa trọn vẹn, và ngày ấy khẳng định dưới đây phải đỏ rồi được viết lại lần nữa.
-    const APP_DA_BIET = ["unseal-worker", "public-keys", "api", "mcp"] as const;
+    //   ⑷ [ADR-044] `apps/web` là app THỨ NĂM và nó KHÔNG CÓ MỘT ROUTE NÀO CỦA RIÊNG NÓ: nó phục
+    //      vụ vài tệp tĩnh đã biết trước tên, và chuyển tiếp `/api/*` sang `apps/api` NGUYÊN VĂN —
+    //      cùng phương thức, cùng đường dẫn, cùng thân, cùng cookie. Không có một handler nghiệp
+    //      vụ nào, không chạm CSDL, `dependencies` rỗng. Một `requirePermission` ở đó sẽ là bản
+    //      sao thứ hai của ma trận quyền đặt ở một tiến trình không đọc được ma trận ấy — đúng
+    //      cái bẫy mà ⑶ vừa mô tả cho `apps/mcp`. Thứ nó tự canh là BỀ MẶT TỆP (một bản đồ đóng,
+    //      đọc xong lúc khởi động) và DANH SÁCH TRẮNG header hai chiều, cả hai đo ở
+    //      `apps/web/src/phuc-vu.test.ts`.
+    //
+    //      **Phần chênh, nói thẳng:** bộ chuyển tiếp THẤY cookie phiên khi nó đi qua. Nó không
+    //      lưu, không ghi log, không đọc — nhưng ADR-044 ghi rằng app này KHÔNG được đứng trước
+    //      một cụm sản xuất, và đó là một ràng buộc VẬN HÀNH, không phải một lớp mã.
+    const APP_DA_BIET = ["unseal-worker", "public-keys", "api", "mcp", "web"] as const;
     const tepNgoaiDanhSach = cacTep.filter(
       (t) => !APP_DA_BIET.some((app) => t.includes(`${THU_MUC_APPS}${sep}${app}${sep}`)),
     );
