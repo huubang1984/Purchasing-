@@ -27,6 +27,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   A2: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    // [S1.85 / khoản 131] Dòng log của một lần từ chối MẤT khỏi sổ giàu thêm bốn hằng đóng — và hai tệp này đo vế A2 của
+    // lần giàu ấy: `mo-ta-hang-dong` ở mức hàm (một giá trị đặt đúng vào trường được đọc vẫn ra `HANG_LA`), và
+    // `log-tu-choi-mat` qua HTTP trên tiến trình thật (dòng không mang id tổ chức, id người dùng hay thân yêu cầu).
+    "apps/api/src/log-tu-choi-mat.int.test.ts",
+    "packages/identity/src/mo-ta-hang-dong.test.ts",
   ],
   A3: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
@@ -104,6 +109,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   D2: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    // [S1.85 / khoản 147] Bộ lọc D2 của `approveUnseal` đối chiếu NGUYÊN VĂN với các câu `RAISE` của `019` — khuôn §R3,
+    // và là lớp duy nhất canh được một vế mà đường sản xuất không tới.
+    "packages/unseal/src/loc-vi-pham-d2.test.ts",
     "packages/identity/src/ma-tran-quyen.test.ts",
     "packages/identity/src/rbac.int.test.ts",
     "packages/rfq/src/rfq.int.test.ts",
@@ -120,6 +128,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   D5: [
     "apps/api/src/api.int.test.ts",
+    // [S1.85 / khoản 131] Lần từ chối KHÔNG ghi được sổ vì trần 2 s của `050`: D5 vẫn fail-closed, và dòng log nay nói
+    // lần từ chối nào đã mất. [khoản 147] `loc-vi-pham-d2` canh vế D2 mà `unseal.int.test.ts` không dựng được.
+    "apps/api/src/log-tu-choi-mat.int.test.ts",
+    "packages/unseal/src/loc-vi-pham-d2.test.ts",
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/composition.int.test.ts",
     "apps/api/src/loi-giao-thuc.int.test.ts",

@@ -36,10 +36,14 @@ export {
 // [S1.68 / khoản 119] `throwAuditedDenial` và lớp lỗi của nó ra cửa cùng tiêu chí với `requirePermission`: hàm NÉM ở MỌI nhánh — lần từ
 // chối đã ghi sổ, hoặc `DenialAuditFailedError` khi không ghi được — nên không dựng ra được một cổng gác im lặng. Người gọi ngoài gói:
 // cổng mở thầu và `approveUnseal` của `@trustprocure/unseal`.
+// [S1.85 / khoản 131] `moTaHangDongCuaLanTuChoi` ra cửa theo cùng tiêu chí, và nó KHÔNG trả lời câu hỏi quyền nào: một hàm THUẦN
+// nhận một lỗi và trả các HẰNG ĐÓNG của lần từ chối đã không ghi được sổ, cho dòng log. Hai tiến trình đọc nó — bộ điều phối `api`
+// và worker mở thầu — nên phần hằng của hai dòng log không lệch nhau được.
 export {
   DenialAuditFailedError,
   PermissionAuditFailedError,
   PermissionDeniedError,
+  moTaHangDongCuaLanTuChoi,
   requirePermission,
   throwAuditedDenial,
   type PermissionCheck,

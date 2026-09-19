@@ -7389,3 +7389,140 @@ sang khoản 166.
 - `pnpm t0` — 258 module, 1075 phụ thuộc, **0 vi phạm**
 - `pnpm test` — 65/65 tệp, **925 đạt** | 1 bỏ qua; `tests/architecture` riêng: **263 đạt** | 1 bỏ qua
 - `pnpm evidence` — **`vitest thoát mã 0`** (`vitest-report.json`: `success: true`, 0 test đỏ), 1962 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+---
+
+# §S1.85 — KHOẢN 131 (gộp 147): một lần từ chối mất khỏi sổ phải nói nó là lần từ chối nào
+
+Việc thứ hai trong hàng đợi chủ dự án giao: **129 → 131 (gộp 147) → 128**. Vòng này là khoản 131, gộp khoản 147.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng
+
+`Handoff.md` §11 đặt mốc *"sau ba vòng đổi hardening, hay chậm nhất **S1.89**"* (đặt lại ở S1.83). Vòng này là S1.85 —
+**chưa chạm**; vế hardening đo được: `git rev-list --count 1dfc7e3..HEAD --first-parent -- db/migrations/hardening.always.sql`
+= **1**, chưa tới ba. Không lượt ngang nào chạy, không lỡ nhịp. Vòng này cũng KHÔNG đổi `hardening.always.sql` — cái giá của
+khoản 147 trả bằng một migration đánh số cộng một cổng đọc tài liệu, không bằng một mục hardening (xem mục 5).
+
+## 1. Đo tiền đề TRƯỚC dòng mã đầu tiên — và nó ĐỨNG
+
+Tiến trình `api` thật qua HTTP, một giao dịch giữ khoá ghi sổ của tổ chức, `POST /suppliers` bằng một phiên KHÔNG vai trò:
+
+```
+status=500 than={"error":"loi noi bo"} daCho=2052
+[api] 9c5b2cd6-e418-40ed-aa1b-1cd28aee05de PermissionAuditFailedError <- error 55P03
+```
+
+Đọc từng vế: bất biến D5 **đứng** — thao tác bị từ chối, 0 hàng `suppliers`, 500 ồn ào chứ không suy giảm im lặng. Thứ hỏng là
+thứ CÒN LẠI sau sự cố: một dòng mang tên lớp bọc và SQLSTATE, không `action`, không mã quyền, không `resourceType`, không mẫu
+route. Đúng như khoản 131 ghi từ S1.72, và 2 052 ms là trần 2 s của `050` chứ không phải một con số ngẫu nhiên.
+
+## 2. Bản vá — hai tầng, và mỗi tầng ở đúng chỗ BIẾT thứ nó nói
+
+| Hằng | Ai biết nó | Đi vào dòng log qua đâu |
+|---|---|---|
+| `action`, `resourceType`, mã quyền | chính LỚP LỖI (`PermissionAuditFailedError`, `DenialAuditFailedError`) | `moTaHangDongCuaLanTuChoi` ở `packages/identity/src/rbac.ts` |
+| mẫu route | chỉ BỘ ĐIỀU PHỐI | `moTaRoute(route)` ở `apps/api/src/dispatch.ts` |
+
+Không hằng nào có hai chỗ ở. Và `apps/api/src/mo-ta-loi.ts` cùng `apps/unseal-worker/src/tien-trinh.ts` gọi CÙNG một hàm cho
+phần hằng, nên dòng log của hai tiến trình không lệch nhau được — bản chép cục bộ của worker giữ nguyên phần còn lại, có chủ ý.
+
+Dòng sau bản vá:
+
+```
+[api] <requestId> POST /suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier.manage <- error 55P03
+```
+
+**"Tên thì được, giá trị thì không" là một PHÉP KIỂM, không phải một lời hứa.** Mỗi trường đi qua hình dạng của chính nó —
+`^[A-Z][A-Z0-9_]{0,63}$` cho mã định danh, khuôn chấm chữ thường cho mã quyền — và thứ không khớp ra hằng `HANG_LA`. Một UUID có
+dấu gạch nối, một email có `@`, một số bắt đầu bằng chữ số: cả ba trượt cả hai hình dạng. `instanceof` chứ không đọc theo tên
+trường, nên một lỗi bất kỳ mang một trường tên `permission` không mua được chỗ trong dòng log.
+
+Tham số của `moTaRoute` là `Route`, KHÔNG phải `string`, và đó cũng là một phép canh: `route.path` là chữ viết cứng trong bảng
+`ROUTES`, còn `vao.path` là chuỗi của người gọi và mang giá trị (`/suppliers/<uuid>/contacts`). Nhận `string` thì hai thứ ấy lẫn
+vào nhau được bằng một lần sửa vô ý; nhận `Route` thì lần ấy không biên dịch.
+
+**Bản đầu của hình dạng mã quyền SAI, và một đối chứng bắt được nó:** `/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*){1,3}$/` không cho dấu
+gạch dưới, nên `user.mfa_reset` — một mã có thật trong `PERMISSIONS` — ra `HANG_LA`. Một phép canh quá hẹp làm mọi dòng log thật
+thành vô nghĩa mà không cổng nào kêu. Vế `ĐỐI CHỨNG KHÔNG RỖNG RUỘT` của `mo-ta-hang-dong.test.ts` chạy MỌI giá trị trong
+`PERMISSIONS` qua bộ mô tả và đòi từng cái ra nguyên vẹn; nó là lý do lỗi ấy không sống quá năm phút.
+
+## 3. Khoản 147 — ba việc, và một lớp thứ tư mà phép đo bắt em phải thêm
+
+⑴ `db/migrations/053_ten_rang_buoc_unseal_approvals.sql` đặt tên hai ràng buộc VÔ DANH của `019` theo khuôn `009`. Tên cũ KHÔNG
+viết cứng trong migration — nó là chuỗi PostgreSQL tự sinh, dẫn xuất của danh sách cột, và bị cắt ở 63 byte (tên đầy đủ của vế
+PHIÊN dài 65 ký tự). Tìm theo TẬP CỘT, và NÉM nếu không thấy đúng một ràng buộc cho mỗi tập.
+
+⑵ `approveUnseal` phân loại thêm bằng `code === '23505'` cộng `err.constraint` trong một danh sách ĐÓNG. Không đọc `message`:
+`DETAIL` của `23505` mang `Key (org_id, unseal_request_id, approver_user_id)=(…)` — đúng thứ A2 cấm đưa vào một nhánh ghi log.
+
+⑶ Vế chết thứ ba (`mot lan tren mot yeu cau`, không khớp gì cả) bị XOÁ; vế PHIÊN được sửa về NGUYÊN VĂN `019:226`.
+
+**Đo (`unseal.int.test.ts`, RFQ cấp kép, Postgres thật):** cùng uD1 duyệt lần hai từ một PHIÊN KHÁC ⇒ trigger cho qua cả ba vế,
+câu INSERT trượt ở UNIQUE, lỗi mang `{code: 23505, constraint: unseal_approvals_mot_nguoi_mot_lan, table: unseal_approvals}` và
+**ĐÚNG MỘT** hàng `UNSEAL_APPROVAL_DENIED` — trước bản vá là **0**.
+
+## 4. Vế thứ tư: một đột biến SỐNG bắt em thêm một lớp
+
+Mũi M6 — trả vế PHIÊN về chuỗi chết cũ — làm trọn `unseal.int.test.ts` **XANH 40/40**. Không test hành vi nào bắt được, và lý do
+là một tính chất chứ không phải một thiếu sót: ca "người khác, CÙNG phiên" KHÔNG dựng được qua `approveUnseal`, vì `actor.id` và
+`actor.sessionId` cùng đến từ một phiên nên vế TỰ PHÊ DUYỆT nổ trước. **Một vế chỉ có test hành vi canh là một vế sẽ chết lại** —
+đó chính là cách hai vế chết của bộ lọc này sống qua năm vòng.
+
+Lớp bắt: `packages/unseal/src/loc-vi-pham-d2.test.ts` ĐỌC `019_unseal.sql` và `hardening.always.sql`, rút NGUYÊN VĂN các câu
+`RAISE` của `unseal_kiem_nguoi_duyet()`, và đòi bộ lọc khớp đúng hai câu D2 — không khớp câu `PENDING`, và §R3 đòi hai câu ấy có
+mặt nguyên văn trong bản CƯỠNG CHẾ (bản hardening mới là bản chạy ở mọi lần `migrate()`; đọc `019` một mình là đọc một bản có thể
+đã bị thay). Cùng khuôn đã dùng cho `ma-tran-quyen.test.ts`.
+
+Và một phép đo riêng ở tầng CSDL chứng minh vế PHIÊN CÒN SỐNG chứ không phải đã chết: tắt trigger `unseal_approvals_kiem_danh_tinh`
+lúc chạy (nó chạy TRƯỚC, vì trigger cùng bảng chạy theo thứ tự TÊN), ghép "người khác, cùng phiên" bằng một câu INSERT thẳng ⇒ vế
+PHIÊN nổ với đúng câu `RAISE` của `019:226`; bật lại ở `finally`, và một vế khẳng định nó đã được bật lại.
+
+## 5. Một lời khai của sổ nợ được phép đo SỬA
+
+§S1.78 ghi rằng chuỗi chết `phai o mot PHIEN khac` *"khớp một câu `RAISE` KHÁC, của nhánh break-glass trên bảng `unseal_requests`"*.
+Bản đầu của vế đối chứng ở mục 4 quét đúng `019` theo lời khai ấy và **ĐỎ**. Đo lại: đúng bảng, nhưng câu `RAISE` ấy nằm ở
+**`022_security_review_s1.sql`** (và bản cưỡng chế ở `hardening.always.sql`), KHÔNG ở `019`. Phép đo sửa lời khai; phép đọc không
+bị nới. Kết luận của §S1.78 — *vế ấy là vế chết đối với câu `INSERT INTO unseal_approvals`* — không đổi, vì trigger break-glass ấy
+ở trên một bảng khác và không nổ từ câu INSERT này.
+
+## 6. Mốc đột biến — bảy mũi, cả bảy ĐỎ đúng chỗ, cộng một đối chứng
+
+| Mũi | Đổi | Cổng đỏ |
+|---|---|---|
+| M0 | *không đột biến nào* | **XANH** — đối chứng |
+| M1 | bỏ phần hằng khỏi bộ mô tả (mã trước bản vá 131) | `log-tu-choi-mat` |
+| M2 | bỏ mẫu route khỏi dòng 500 (mã trước bản vá 131) | `log-tu-choi-mat` |
+| M3 | gỡ phép canh hình dạng mã quyền (`/^.+$/`) | `mo-ta-hang-dong` — vế A2 |
+| M4 | thu hẹp hình dạng mã quyền (bỏ dấu gạch dưới) | `mo-ta-hang-dong` — vế không-rỗng-ruột |
+| M5 | bỏ nhánh `23505` (mã trước bản vá 147) | `unseal.int.test` |
+| M6 | trả vế PHIÊN về chuỗi chết cũ | `loc-vi-pham-d2` — *và chỉ nó* |
+| M7 | `053` đặt tên khác lời khai của mã | `unseal.int.test` (2 vế) |
+
+M3 và M4 giết hai vế NGƯỢC NHAU của cùng một phép canh — rò và rỗng ruột. M6 là mũi duy nhất mà không phép đo hành vi nào bắt
+được, và nó là lý do mục 4 tồn tại.
+
+## 7. Phần KHÔNG làm
+
+Sổ nợ khoản 131 tự nêu *"ghi id người dùng hay không là một quyết định A2 riêng"*. Vòng này **KHÔNG quyết**: dòng mới nói lần từ
+chối NÀO, không nói của AI. Và lập luận quen thuộc *"danh tính lấy từ sổ kiểm toán"* KHÔNG đứng ở đúng ca này — ca này được định
+nghĩa bởi việc hàng sổ ấy không ghi được. Ghi thành khoản **177** kèm ba hình dạng và một phép đo để quyết, chứ không quyết thay
+chủ dự án.
+
+Khoản **128** chưa động tới — vòng cuối của hàng đợi.
+
+## Sổ nợ
+
+**176 → 177 khoản, 69 → 68 còn mở** — đóng **2** (131, 147), mở **1** (177). 68 = 5 ngoài mã + 63 có mã.
+
+## Cổng
+
+- `pnpm t0` — 261 module, 1097 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 67/67 tệp, **934 đạt** | 1 bỏ qua; `tests/architecture` riêng: **263 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`** (`vitest-report.json`: `success: true`, 0 test đỏ), 1976 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+**Lượt evidence ĐẦU đỏ, nói ra:** `vitest thoát mã 1` trong khi cổng evidence vẫn in *XANH* — đúng cái bẫy đã ghi
+(cổng chỉ đếm nhãn `[INV-*]`, dòng phải đọc là `vitest thoát mã`). Bốn test đỏ, cả bốn là **lời khai đếm thiu do chính
+vòng này làm cho sai**, không phải hồi quy: ba danh sách migration viết cứng ở `db/migrations.int.test.ts` (52 → 53) và một
+khẳng định neo ở `loi-moi-sau-commit.int.test.ts` mà dòng 500 nay mang thêm mẫu route (`GET /k124/hai-viec-co-bu ViecCoBuThuHai`).
+Lượt hai xanh. Và `tests/architecture` cũng đỏ một lượt trước đó vì `053` cùng hai tệp test mới chưa `git add` — cổng `[INV-H20]`
+P4/P9b giải con trỏ trong `git ls-files`, nên stage TRƯỚC evidence là bắt buộc chứ không phải thói quen.

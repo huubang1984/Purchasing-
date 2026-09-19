@@ -310,7 +310,7 @@ function anhXaLoiPostgres(err: Error & { code?: unknown; routine?: unknown }): A
   return null;
 }
 
-function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
+function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResponse {
   if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
   if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
   if (err instanceof MfaRequiredError) return { status: 401, body: THAN_401 };
@@ -324,15 +324,29 @@ function anhXaLoiHandler(err: unknown, requestId: string): ApiResponse {
   if (err instanceof Error && err.name === "error" && "code" in err) {
     // [S1.67 / lượt soi 61a-1] 42501 ⇒ 403 như cũ, kèm MỘT dòng log mang tên và mã — xem khối đầu tệp. Lớp 22 và 23 không ghi: người
     // gọi gây ra được.
-    if (err.code === "42501") console.error(`[api] ${requestId} ${moTaLoiKhongGiaTri(err)}`);
+    if (err.code === "42501") console.error(`[api] ${requestId} ${moTaRoute(route)} ${moTaLoiKhongGiaTri(err)}`);
     const pg = anhXaLoiPostgres(err);
     if (pg !== null) return pg;
   }
-  return loiNoiBo(err, requestId);
+  return loiNoiBo(err, requestId, route);
+}
+
+/**
+ * [S1.85 / khoản 131] MẪU route cho dòng log — `POST /suppliers/:supplierId/contacts`, không phải đường dẫn đã gọi.
+ *
+ * Đây là hằng đóng DUY NHẤT mà không lớp lỗi nào mang được: `action`, mã quyền và `resourceType` đi theo lần từ chối (xem
+ * `moTaHangDongCuaLanTuChoi`), còn "người gọi gõ vào cửa nào" thì chỉ bộ điều phối biết.
+ *
+ * THAM SỐ LÀ `Route`, KHÔNG PHẢI MỘT CHUỖI, và đó chính là phép canh: `route.path` là một chữ viết cứng trong bảng `ROUTES`, trong
+ * khi `vao.path` là chuỗi của NGƯỜI GỌI và mang giá trị (`/suppliers/<uuid>/contacts`). Nhận `string` thì hai thứ ấy lẫn vào nhau
+ * được bằng một lần sửa vô ý; nhận `Route` thì lần ấy không biên dịch.
+ */
+function moTaRoute(route: Route): string {
+  return `${route.method} ${route.path}`;
 }
 
 /** 500 thân cố định với MỘT dòng log — đích chung của lỗi handler ngoài bảng và của mọi lỗi thuộc KHUNG. */
-function loiNoiBo(err: unknown, requestId: string): ApiResponse {
+function loiNoiBo(err: unknown, requestId: string, route: Route): ApiResponse {
   // ~~Chỉ TÊN lỗi và mã yêu cầu.~~ [S1.68 / lượt soi 62b-4] TÊN lỗi, mã cố định và mã yêu cầu — cộng tên và mã của MỘT tầng `cause` cho lỗi
   // không có trường `code` (hôm nay chủ yếu hai lớp bọc của lần ghi sổ từ chối), xem `moTaLoiKhongGiaTri`. Không `err` nguyên, không
   // ~~`cause`~~ `cause` nguyên: `cause` của một lỗi Postgres mang câu lệnh và tham số, tức có thể mang một phong bì hay một mã OTP (A2).
@@ -341,7 +355,10 @@ function loiNoiBo(err: unknown, requestId: string): ApiResponse {
   // [S1.67 / khoản 118] Và SQLSTATE của một lỗi Postgres: tên `error` một mình không phân biệt được 42501 ở `SET ROLE` với 08006 kết
   // nối đứt hay 57014 câu bị huỷ. Cả hai loại mã đi qua `moTaLoiKhongGiaTri` — một hàm cho mọi chỗ ghi log lỗi của bộ điều phối và
   // composition root (`main.ts` in thông điệp của lỗi cấu hình và khởi động — có chủ đích; lượt soi 61a-2).
-  console.error(`[api] ${requestId} ${moTaLoiKhongGiaTri(err)}`);
+  // [S1.85 / khoản 131] Cộng MẪU ROUTE và, cho hai lớp bọc của lần ghi sổ từ chối, các hằng đóng của chính lần từ chối ấy. Đo trước
+  // bản vá (§S1.85): khoá ghi sổ của tổ chức bị giữ ⇒ `POST /suppliers` của một phiên không vai trò ra 500 sau 2 052 ms và để lại
+  // đúng `[api] <requestId> PermissionAuditFailedError <- error 55P03` — một dòng không nói lần từ chối nào đã mất khỏi sổ.
+  console.error(`[api] ${requestId} ${moTaRoute(route)} ${moTaLoiKhongGiaTri(err)}`);
   return { status: 500, body: THAN_500 };
 }
 
@@ -661,7 +678,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     } catch (err) {
       if (err instanceof LoiXacThuc) return { status: 401, body: THAN_401 };
       // [S1.67 / khoản 118] Nguồn ⑶ ở đầu tệp: chỉ lỗi của handler đi qua bảng của giai đoạn 2.
-      if (err instanceof LoiHandler) return anhXaLoiHandler(err.cause, requestId);
+      if (err instanceof LoiHandler) return anhXaLoiHandler(err.cause, requestId, route);
       // `withTenant` ném TenantError cho một orgId SAI HÌNH DẠNG (nó KHÔNG tra `organizations` —
       // một orgId lạ nhưng đúng UUID đi qua và RLS lọc thành 0 hàng), và `withGuestSession` ném
       // TenantError cho một phiên khách hỏng ~~— cả hai thuộc giai đoạn xác thực, không phải lỗi handler~~. [S1.66 / lượt soi ngang
@@ -681,7 +698,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       // lần từ chối phạm vi rơi xuống `loiNoiBo` và thành 500: đúng, nhưng sai mã và mất hợp đồng.
       if (err instanceof AgentScopeDeniedError) return { status: 403, body: THAN_403 };
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
-      return loiNoiBo(err, requestId);
+      return loiNoiBo(err, requestId, route);
     }
   };
 }

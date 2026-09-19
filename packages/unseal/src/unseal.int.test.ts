@@ -1122,3 +1122,105 @@ describe("[S1.77 / khoản 140] approveUnseal tuần tự hoá trên hàng TRƯ�
     expect(ketQuaApprove, `nhả hàng thì approve phải chạy tiếp — ${keChung}`).toBe("xong status=APPROVED");
   }, 120_000);
 });
+
+// ==============================================================================================
+// [S1.85 / khoản 147] VẾ D2 MÀ TRIGGER CHO QUA VÀ RÀNG BUỘC DUY NHẤT CHẶN — `23505`, KHÔNG PHẢI
+// MỘT THÔNG ĐIỆP.
+//
+// `approveUnseal` phân loại lỗi của câu `INSERT INTO unseal_approvals` bằng một bộ lọc THÔNG ĐIỆP,
+// và tới trước vòng này bộ lọc ấy có BA vế trong đó HAI là vế chết (§S1.77 rồi §S1.78 sửa lại).
+// Vế còn sống duy nhất là `khong duoc tu phe duyet`. Ca dưới đây — CÙNG một người duyệt lần hai từ
+// một PHIÊN KHÁC trên một RFQ cấp kép — đi qua cả ba phép kiểm của trigger rồi trượt ở ràng buộc
+// UNIQUE, tức ném `23505`; bộ lọc cũ không khớp và một lần THỬ vi phạm D2 để lại 0 hàng sổ.
+// ==============================================================================================
+describe("[INV-D5] [INV-D2] [S1.85 / khoản 147] phê duyệt lần hai từ phiên khác — 23505 chứ không phải 23514", () => {
+  async function demTuChoi147(requestId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_APPROVAL_DENIED' AND resource_id = $2",
+      [orgA, requestId],
+    );
+    return Number(rows[0]?.n ?? "0");
+  }
+
+  it("[INV-D5] cùng một người duyệt lần hai từ PHIÊN KHÁC ⇒ ĐÚNG MỘT hàng `UNSEAL_APPROVAL_DENIED`, và lỗi là 23505 mang TÊN ràng buộc", async () => {
+    // RFQ CẤP KÉP: sau phê duyệt đầu yêu cầu còn `PENDING`, nên phép kiểm PENDING của trigger cho
+    // qua. Trên RFQ dưới ngưỡng, yêu cầu đã sang `APPROVED` và trigger gãy ở vế PENDING — 23514,
+    // một ca KHÁC (đó là điều test "một người phê duyệt HAI LẦN chỉ tính một" ở trên thật sự đo).
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "hop dong lon", actorSessionId: sYc }, auditPool),
+    );
+    const sauMot = await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+    );
+    expect(sauMot.status, "cấp kép: một phê duyệt chưa đủ, yêu cầu phải còn PENDING").toBe("PENDING");
+    expect(await demTuChoi147(yc.id)).toBe(0);
+
+    // CÙNG uD1, PHIÊN KHÁC — trigger cho qua cả ba vế (còn PENDING · người duyệt khác người yêu
+    // cầu · phiên khác phiên yêu cầu); ràng buộc UNIQUE theo NGƯỜI là thứ chặn.
+    const sD1b = await taoPhien(uD1);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1b }, auditPool),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error & { code?: unknown; constraint?: unknown; table?: unknown },
+    );
+    expect(loi, "lần duyệt thứ hai của CÙNG một người phải bị chặn").not.toBeNull();
+    // Phép đo mà bản vá dựa lên: `pg` điền sẵn `code` và `constraint`, và tên ràng buộc là tên
+    // `053` đặt — không phải chuỗi PostgreSQL tự sinh (dẫn xuất của danh sách cột, cắt ở 63 byte).
+    expect({ code: loi?.code, constraint: loi?.constraint, table: loi?.table }).toEqual({
+      code: "23505",
+      constraint: "unseal_approvals_mot_nguoi_mot_lan",
+      table: "unseal_approvals",
+    });
+    expect(
+      await demTuChoi147(yc.id),
+      "trước bản vá khoản 147: bộ lọc thông điệp không khớp 23505 nào, lỗi rơi thẳng xuống `throw` và D5 mất một lần THỬ",
+    ).toBe(1);
+  });
+
+  it("[S1.85 / khoản 147] `unseal_approvals` có ĐÚNG HAI ràng buộc UNIQUE, cả hai mang tên của `053` — một ràng buộc thứ ba không được lặng lẽ đổi nghĩa của `23505` ở đường này", async () => {
+    const { rows } = await db.pool.query<{ conname: string }>(
+      "SELECT c.conname::text AS conname FROM pg_catalog.pg_constraint c " +
+        "WHERE c.conrelid = 'public.unseal_approvals'::pg_catalog.regclass AND c.contype = 'u' ORDER BY c.conname",
+    );
+    expect(rows.map((r) => r.conname)).toEqual([
+      "unseal_approvals_mot_nguoi_mot_lan",
+      "unseal_approvals_mot_phien_mot_lan",
+    ]);
+  });
+
+  it("[S1.85 / khoản 147] vế PHIÊN của trigger `019` CÒN SỐNG — `approveUnseal` chỉ không dựng được ca ấy, vì danh tính người duyệt là dẫn xuất của phiên", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "hop dong lon", actorSessionId: sYc }, auditPool),
+    );
+    // "Người khác, CÙNG phiên đã yêu cầu" không dựng được qua `approveUnseal` (`actor.id` và
+    // `actor.sessionId` cùng đến từ một phiên), và ở tầng CSDL nó bị `unseal_approvals_kiem_danh_tinh`
+    // chặn TRƯỚC — trigger cùng bảng chạy theo THỨ TỰ TÊN, và `kiem_danh_tinh` < `kiem_nguoi_duyet`.
+    // Nên phép đo phải TẮT đúng trigger ấy lúc chạy, rồi bật lại ở `finally`.
+    await db.pool.query("ALTER TABLE public.unseal_approvals DISABLE TRIGGER unseal_approvals_kiem_danh_tinh");
+    try {
+      const loi = await withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO unseal_approvals (org_id, unseal_request_id, approver_user_id, approver_session_id) VALUES ($1, $2, $3, $4)",
+          [orgA, yc.id, uD1, sYc],
+        ),
+      ).then(
+        () => null,
+        (e: unknown) => e as Error,
+      );
+      // NGUYÊN VĂN câu `RAISE` của `019:226`, và đây là chuỗi mà bộ lọc của `approveUnseal` nay
+      // mang. Bộ lọc cũ viết `phai o mot PHIEN khac` — một chuỗi của một trigger KHÁC, trên bảng
+      // `unseal_requests`, tức một vế chết đối với câu INSERT này.
+      expect(loi?.message).toMatch(/Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau \(D2\)/u);
+    } finally {
+      await db.pool.query("ALTER TABLE public.unseal_approvals ENABLE TRIGGER unseal_approvals_kiem_danh_tinh");
+    }
+    const { rows } = await db.pool.query<{ tgenabled: string }>(
+      "SELECT t.tgenabled::text AS tgenabled FROM pg_catalog.pg_trigger t " +
+        "WHERE t.tgrelid = 'public.unseal_approvals'::pg_catalog.regclass AND t.tgname = 'unseal_approvals_kiem_danh_tinh'",
+    );
+    expect(rows[0]?.tgenabled, "trigger phải được bật lại — một phép đo không được để lại lược đồ khác lúc nó tới").toBe("O");
+  });
+});

@@ -32,6 +32,7 @@
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createLocalDevUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
 import { createUnsealWorkerRunner } from "./composition.js";
@@ -55,8 +56,13 @@ const CAU_LIET_KE_TO_CHUC =
  */
 function moTaLoi(loi: unknown): string {
   if (!(loi instanceof Error)) return "loi khong ro";
+  // [S1.85 / khoản 131] Phần HẰNG ĐÓNG của một lần từ chối không ghi được sổ dùng CHUNG hàm với `apps/api` — `moTaHangDongCuaLanTuChoi`
+  // của `@trustprocure/identity`, nơi phép kiểm hình dạng "tên thì được, giá trị thì không" sống. Phần còn lại vẫn là bản CỤC BỘ của
+  // tiến trình này, có chủ đích (xem khối dưới): tiến trình mở thầu không đi qua mã CHẠY của `api`.
+  const hang = moTaHangDongCuaLanTuChoi(loi);
+  const duoi = hang === "" ? "" : ` ${hang}`;
   const ma = (loi as { code?: unknown }).code;
-  return typeof ma === "string" && /^[0-9A-Z]{5}$/u.test(ma) ? `${loi.name} ${ma}` : loi.name;
+  return typeof ma === "string" && /^[0-9A-Z]{5}$/u.test(ma) ? `${loi.name} ${ma}${duoi}` : `${loi.name}${duoi}`;
 }
 
 export interface TienTrinhWorker {
