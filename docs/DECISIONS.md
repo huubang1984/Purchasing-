@@ -4646,3 +4646,66 @@ PHÉP ĐO của ranh giới — nó XANH vì nửa kia còn mở, và nó sẽ p
 **Một ranh giới của chính phép đo, nói ra:** câu `GRANT` không kiểm được bằng hành vi ở cụm test, vì migrate ở đó chạy dưới `postgres`
 — chủ của chính hàm ấy — nên cả `has_function_privilege` lẫn `proacl` đều XANH dù câu `GRANT` có bị gỡ hẳn (đo: đột biến M4). Vế ⓸ vì
 thế đọc NGUỒN của mục hardening. Cùng lớp lỗi với ADR-040.
+
+---
+
+## ADR-043 — Cổng pilot: S1 đóng, MVP1 có một định nghĩa hoàn thành bằng hành vi, và sổ nợ chia ba rổ
+
+**Bối cảnh — bốn phép đo, không phải một cảm giác.**
+
+⑴ **Sổ nợ phân kỳ.** Đếm bằng chính dòng `**CÒN MỞ TÍNH TỚI HEAD:**` mà `[INV-H20]` cưỡng chế, trên `docs/STATE.md` ở từng mốc
+lịch sử của `master`: 13 khoản mở (2026-09-09) · 16 (09-10) · **14 — đáy** (09-12) · 25 (09-13) · 41 (09-17) · 49 (09-18) ·
+**79** (09-19, `1a1a060`). Bảy ngày, gấp 5,6 lần. Mỗi vòng gần đây đóng 1–2 khoản và mở 5–11: **35 trong 79 khoản đang mở sinh
+ra ở bảy vòng cuối** (dãy 154–189).
+
+⑵ **Kế hoạch hết từ S1.21.** `docs/superpowers/plans/` có tệp cuối cùng đề ngày 2026-09-07 cho S1.21. Từ S1.22 tới S1.87 là **66
+vòng không có kế hoạch nào** — sổ nợ đã lên thay kế hoạch, và sổ nợ là một MÁY PHÁT chứ không phải một danh sách việc: lượt soi
+đối kháng được thiết kế để tìm ra khoản mới, và nó làm đúng việc được giao.
+
+⑶ **Công đi vào tài liệu.** Hai mươi vòng gần nhất: tài liệu 200–300 dòng mỗi vòng, đều đặn; mã sản phẩm có vòng chỉ 11, 12, 21,
+31 dòng. Kho có 20 934 dòng mã sản phẩm, 63 622 dòng test và 24 637 dòng tài liệu — tài liệu đã LỚN HƠN thứ nó mô tả.
+
+⑷ **Điều kiện hoàn thành S1 mục 7 không có trạng thái *đạt*.** §7 của kế hoạch S1 đặt *"Không một tuyên bố nào rộng hơn phép đo"*
+làm điều kiện nghiệm thu. Nhưng mỗi lần sửa tài liệu lại sinh lời khai mới có thể thiu — S1.79 vá 47 chỗ, S1.87 vá tiếp — nên
+điều kiện ấy **không bao giờ thoả được**. Nó là một BẤT BIẾN VẬN HÀNH bị đặt nhầm chỗ làm CỔNG NGHIỆM THU, và đó là động cơ giữ
+S1 mở suốt 78 vòng trong khi sáu điều kiện đầu đã đạt từ 2026-09-05.
+
+**Quyết định của chủ dự án, ngày 2026-09-19.**
+
+⑴ **S1 ĐÓNG.** Sáu điều kiện đầu của §7 đo lại trên `master` `1a1a060` — bảng đối chiếu ở `docs/STATE.md` §*Cột mốc hiện tại*,
+xuất xứ là lượt CI `35443970423` chạy trên chính commit ấy (sáu job SUCCESS, kể cả `windows-latest` và `Evidence pack`).
+
+⑵ **Mục 7 của §7 thôi làm cổng nghiệm thu, và thành quy ước viết tài liệu.** Nó vẫn bắt buộc ở từng câu — gạch bỏ tại chỗ, giữ
+nguyên văn — nhưng nó KHÔNG còn giữ được một lát cắt ở trạng thái *chưa xong*. Lý do: một điều kiện không có trạng thái *đạt*
+không phải một cổng.
+
+⑶ **Sổ nợ chia ba rổ, theo đúng MỘT câu hỏi:** *khoản này có chặn một người mua thật chạy trọn kịch bản ở `docs/PRODUCT.md` §11
+trên hạ tầng thật không?* Một khoản vào **rổ A — CHẶN PILOT** khi ít nhất một vế đúng: ⒜ nó làm một bước của kịch bản không chạy
+được, hay chạy ra kết quả người dùng thấy là sai; ⒝ nó phá một trong sáu nguyên tắc bất khả xâm phạm (`PRODUCT.md` §4) **trên
+hình dạng TRIỂN KHAI THẬT**, khác với hình dạng cụm test; ⒞ nó là tiền điều kiện của lần triển khai thật. Khoản thật mà không
+thoả vế nào vào **rổ B — ĐÓNG BĂNG tới sau pilot**. Khoản mà chủ thể của nó là chính bộ tài liệu hay bộ cổng của dự án, hoặc đã
+hết chủ thể, hoặc mở bằng cấu tạo (không đóng được), vào **rổ C — RỜI SỔ**, thành *giới hạn đã biết*.
+
+**Chỉ rổ A được mở vòng.** Một vòng muốn chạm rổ B phải nói nó chạm mảnh nào trong bảng bốn mảnh của `PRODUCT.md` §11.
+
+**Cái giá, nói thẳng — và nó không nhỏ.** Đóng băng 47 khoản là **chấp nhận một tập rủi ro đã đo**, không phải kết luận chúng vô
+hại. Trong rổ B có những thứ có răng: `ci.yml` không khai `permissions` (115), lần từ chối quyền không có trần theo người gọi
+(122), hai lần gia hạn đồng thời ghi một sự kiện không xảy ra (127), tám công cụ MCP không để lại dấu vết kiểm toán (142). Chúng
+ở rổ B vì kịch bản §11 chạy được mà không cần chúng đóng — **không** vì chúng đã hết là khiếm khuyết. Mỗi khoản rổ B giữ nguyên
+văn trong sổ, giữ nguyên trạng thái `[MỞ]`, và phải được đọc lại **trước** khi có khách hàng thứ hai.
+
+**Việc XẾP từng khoản vào rổ nào là phép đọc của vòng này, không phải một phán quyết.** Ba danh sách nằm ở `docs/STATE.md`
+§*Nợ kỹ thuật*, ngay dưới đoạn đếm; mỗi rổ kèm lý do đọc được, nên bác được từng khoản một. Một khoản bị xếp sai rổ là một lỗi
+sửa được bằng một dòng, và vòng sau phải sửa nó ở ĐÚNG chỗ ấy chứ không mở khoản mới.
+
+**Phương án bị loại: đặt một trần số khoản mở** ("sổ nợ vượt N thì vòng sau chỉ được đóng"). Nó đo ĐÚNG triệu chứng và SAI
+nguyên nhân: trần ép giảm con số mà không nói khoản nào đáng làm, nên nó thưởng cho việc đóng những khoản rẻ nhất — đúng những
+khoản rổ C — và để nguyên rổ A. Trần vẫn dùng được, nhưng chỉ sau khi đã có ba rổ.
+
+**Đo bằng gì.** ⒜ `docs/PRODUCT.md` §11 có một kịch bản phát biểu bằng hành vi người dùng và một bảng bốn mảnh còn thiếu.
+⒝ `docs/STATE.md` mang ba danh sách rổ, và tổng ba rổ bằng đúng số khoản ở dòng `**CÒN MỞ TÍNH TỚI HEAD:**` — 14 + 47 + 18 = 79.
+⒞ Biên bản của mọi vòng sau ADR này mở đầu bằng một dòng nói vòng ấy chạm mảnh nào của bảng bốn mảnh, hay chạm khoản rổ A nào.
+
+**Điều ADR này KHÔNG nói.** Nó không nói phần đã xây là thừa: 56/56 bất biến có lớp cưỡng chế và được đo bằng đột biến, và đó là
+phần khó nhất của sản phẩm. Nó không đóng một khoản nợ nào — tập khoản mở sau ADR này vẫn là 79, y nguyên. Và nó không nói lượt
+soi đối kháng là sai: nó nói lượt soi cần một ĐÍCH, và từ hôm nay đích ấy là kịch bản ở §11.
