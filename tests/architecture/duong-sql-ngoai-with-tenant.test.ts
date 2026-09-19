@@ -218,6 +218,14 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     so: 1,
     lyDo: "chính createPool — nơi DUY NHẤT của mã sản xuất dựng pg.Pool, rồi giao cho ganVaiTroChoPool khi có vai",
   },
+  "tools/gieo-demo/src/index.ts": {
+    so: 1,
+    lyDo:
+      "[ADR-044] script gieo bối cảnh demo: nó TẠO RA tenant, nên nó không dùng được vai ứng dụng — đo trên cụm thật, " +
+      "app_api KHÔNG có INSERT trên organizations/users/user_roles/sessions, và đúng ra là không được có. `createPool` " +
+      "buộc phải có `role`, nên một kết nối đặc quyền phải dựng pool thẳng. Bán kính: công cụ DEV, đòi một biến môi " +
+      "trường RIÊNG (TRUSTPROCURE_SEED_DATABASE_URL) chứ không mượn biến của apps/api, và phần CÓ tenant vẫn đi qua withTenant",
+  },
   "packages/test-support/src/postgres.ts": {
     so: 3,
     lyDo: "hạ tầng test: pg.Client dựng CSDL của cụm thử, pool superuser của cụm là cố ý, poolAs bọc ganVaiTroChoPool",
@@ -253,6 +261,15 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "danh sách tổ chức. Câu hỏi 'những tổ chức nào' ĐỨNG TRƯỚC câu hỏi 'tổ chức nào', nên nó " +
       "không gắn được tenant theo định nghĩa. Bán kính: một hàm SECURITY DEFINER trả về ĐÚNG một " +
       "cột `id`, EXECUTE chỉ cấp cho app_unseal, và app_unseal đọc THẲNG organizations vẫn 0 hàng (đo)",
+  },
+  "tools/gieo-demo/src/index.ts": {
+    lay: 0,
+    cau: 6,
+    lyDo:
+      "[ADR-044] sáu câu gieo hàng NỀN của một tenant mới — tổ chức, người dùng, vai trò, phiên, hạng mục, ngân sách, " +
+      "phê duyệt RFQ — chạy trước khi tenant ấy TỒN TẠI, nên chúng không gắn được tenant theo định nghĩa: `withTenant` " +
+      "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
+      "withTenant, và đó là ranh giới thật giữa hai nửa của script",
   },
   "apps/api/src/composition.ts": {
     lay: 1,

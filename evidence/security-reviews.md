@@ -8017,12 +8017,40 @@ Trên `apps/web/src/cua-trinh-duyet.test.ts`, đột biến ghi ra đĩa rồi k
 
 Khôi phục: `sha256` của cả hai tệp khớp bản gốc.
 
+## 4b. LƯỢT CI ĐẦU ĐỎ SÁU CỔNG, VÀ NGUYÊN NHÂN LÀ MỘT BÀI HỌC KHO ĐÃ VIẾT SẴN RỒI EM VẪN LẶP LẠI
+
+`pnpm test` ở máy XANH (949/949) trước khi push. CI đỏ **sáu** test kiến trúc. Nguyên nhân duy nhất: các cổng ấy đọc mã bằng
+`git ls-files`, và lúc em chạy chúng thì tệp mới **chưa được `git add`** — nên chúng quét một cây KHÔNG CÓ `apps/web` và
+`tools/gieo-demo`. Cái xanh ấy không nói gì cả.
+
+Bài học này đã nằm sẵn trong kho, ở đúng tệp vừa đỏ (`tests/architecture/cong-quyen-route.test.ts`, khối trên mốc chết thứ tư):
+
+> *"Nó đỏ ở lượt chạy đầu tiên sau khi `apps/mcp` được `git add` — và CHỈ khi ấy … Lượt chạy trước lúc stage XANH, và cái xanh ấy
+> không nói gì cả."*
+
+**Quy tắc rút ra, viết vào đây để lần sau không phải trả lại:** vòng nào THÊM tệp nguồn thì `git add` TRƯỚC khi chạy `pnpm test`,
+không phải sau.
+
+Sáu cổng ấy đòi gì, và vá thế nào — không cổng nào được nới, cả sáu đều được ĐÁP ỨNG:
+
+| Cổng | Đòi | Vá |
+|---|---|---|
+| `[INV-H21]` QT3 | 13 câu SQL của script gieo chưa ghim trục nào | ghim đủ: `public.<bảng>`, `pg_catalog.now()`, `OPERATOR(pg_catalog.=)`, `OPERATOR(pg_catalog.+)`, `::pg_catalog.interval` |
+| `duong-sql` ⒜ | mọi `createPool` truyền `role` | script gieo KHÔNG dùng được vai ứng dụng (đo: `app_api` không có INSERT trên `organizations`/`users`/`user_roles`/`sessions`) ⇒ dựng `pg.Pool` thẳng và **KHAI kèm lý do**, cùng cơ chế `packages/test-support` |
+| `duong-sql` ⒞ | đường chạy SQL thẳng trên pool phải khai | khai `lay: 0, cau: 6` kèm lý do: sáu câu ấy gieo hàng NỀN của một tenant **trước khi tenant tồn tại**, nên không gắn tenant được theo định nghĩa |
+| `cong-quyen-route` | *"apps/ NAY CÓ BỐN APP"* | viết lại thành NĂM, thêm đoạn ⑷ nói vì sao `apps/web` không có route nào của riêng nó, và ghi phần chênh (bộ chuyển tiếp thấy cookie) |
+| `[INV-H20]` P9b | số gói + công cụ ở `Handoff.md` suy từ `git ls-files` | `13 gói + 5 công cụ` → `6` |
+| `[INV-H20]` P9b đột biến | phép đột biến của chính lời khai ấy phải còn răng | lời khai này phải có **đúng MỘT** bản: để lại bản cũ dạng `~~…đầy đủ…~~` làm phép đột biến rỗng ruột. Lịch sử giữ con số TRẦN, đúng khuôn lời khai migration |
+
+Dòng cuối đáng đọc lại: **một lần gạch-giữ-nguyên-văn làm hỏng một phép đột biến.** Quy ước "gạch chứ không xoá" và quy ước "mỗi
+lời khai đúng một bản" đá nhau ở đúng chỗ này, và cổng bắt được.
+
 ## 5. Cổng
 
 | Cổng | Kết quả |
 |---|---|
-| `pnpm t0` | **thoát mã 0** — **278** module (262 → 278), **1 135** phụ thuộc, 0 vi phạm. (Con số đầu tiên em ghi vào chính biên bản này là *276 / 1 125*: đo TRƯỚC khi hai tệp test của vòng được thêm. Gạch và đo lại thay vì để một lời khai thiu ra đời cùng vòng sinh ra nó.) |
-| `pnpm test` | xem §6 |
+| `pnpm t0` | **thoát mã 0** — **278** module (262 → 278), **1 136** phụ thuộc, 0 vi phạm. (Con số đầu tiên em ghi vào chính biên bản này là *276 / 1 125*: đo TRƯỚC khi hai tệp test của vòng được thêm. Gạch và đo lại thay vì để một lời khai thiu ra đời cùng vòng sinh ra nó.) |
+| `pnpm test` | **thoát mã 0** — 69 tệp, 949 test, 1 skipped (lượt chạy SAU khi `git add`) |
 | `pnpm test:int` cục bộ | KHÔNG chạy — phiên song song dùng chung Postgres; vòng này không đổi một dòng SQL nào và CI chạy T3 trên nhánh |
 
 ## 6. Phần KHÔNG làm

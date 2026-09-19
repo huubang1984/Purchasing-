@@ -10,6 +10,7 @@
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
-    "@trustprocure/tenancy": "workspace:*"
+    "@trustprocure/tenancy": "workspace:*",
+    "pg": "^8.13.0"
   }
 }

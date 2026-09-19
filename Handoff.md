@@ -83,7 +83,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 
 **[S1.85]** Dòng `008 … 051` của khối trên đã sửa thành `053` — S1.82 thêm `052` mà KHÔNG sửa dòng này (lần thiu thứ tư của chính nó, và là lần đầu KHÔNG ai sửa trong cùng vòng), S1.85 thêm `053`. Lần sửa tay thứ TƯ, và khoản 136 vẫn mở — con số này là số đo của nó. ~~**[S1.76]** Dòng `008 … 050` của khối trên đã sửa thành `051` — S1.76 thêm migration 051 (`sessions.kind`). Lần sửa tay thứ BA của cùng một dòng, và mỗi lần đều do một người nhớ ra chứ không do một cổng nào kêu — khoản 136 vẫn mở, và con số ba lần này là số đo của chính nó.~~
 
-~~**Bảy gói + hai công cụ:**~~ **[S1.28] 13 gói + 5 công cụ** — cũng suy từ `git ls-files`:
+~~**Bảy gói + hai công cụ:**~~ **[S1.89] 13 gói + 6 công cụ** (~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
 
 | Gói | Vai trò |
 |---|---|
