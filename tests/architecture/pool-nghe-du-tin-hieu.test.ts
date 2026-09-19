@@ -22,6 +22,20 @@
 // RANH GIỚI, nói ra: cổng đọc TÊN BIẾN trong CÙNG MỘT TỆP. Một pool dựng ở tệp này rồi truyền sang
 // tệp khác để gắn listener sẽ bị tính là thiếu; hôm nay không ca nào như thế, và nếu có thì lời
 // giải đúng là khai vào `NGOAI_LE` ngay dưới kèm lý do, chứ không phải nới phép đọc.
+//
+// [S1.87 / lượt soi ngang 74 góc 3 và góc 5 — ĐỌC] CÒN HAI RANH GIỚI NỮA, VÀ TỚI VÒNG NÀY CHÚNG
+// KHÔNG ĐƯỢC VIẾT RA Ở ĐÂU. Khoản 176 khai *"Hai ranh giới, cả hai ghi ngay đầu tệp cổng"* trong
+// khi tệp này viết ĐÚNG MỘT, và thực tế có BA:
+//   ⑵ THƯ MỤC: `TEP_APP` đọc `git ls-files -- "apps/**/*.ts"`. `packages/` và `tools/` đứng ngoài
+//      tầm cổng, và đó KHÔNG phải một ca giả định: `tools/neo-so-kiem-toan/src/index.ts` dựng hai
+//      pool bằng `createPool` (`xuat` và `kiem`), gọi `withTenant` trên cả hai, và không gắn một
+//      listener nào — tức đúng lớp lỗi khoản 173 vừa đóng, còn nguyên ở một chỗ thứ ba. Cái giá
+//      hẹp hơn ở `api`: kết nối vẫn bị HUỶ nên cô lập còn nguyên; thứ mất là TÍN HIỆU. Khoản 180.
+//   ⑶ HÌNH DẠNG NHẬN DIỆN: phép đọc chỉ thấy `createPool` gọi bằng TÊN TRẦN và gán vào một khai
+//      báo biến. `new pg.Pool(…)`, một `createPool` nhập dưới bí danh, hay một pool gán vào thuộc
+//      tính lớp đều VÔ HÌNH với cổng — không bị kêu, cũng không lọt vào `NGOAI_LE`. Khoản 182.
+// Cả hai ranh giới ấy làm cổng FAIL-OPEN chứ không fail-closed, nên chúng phải đứng ở đây bằng
+// chữ: một cổng im lặng bỏ qua một vùng mã là một cổng nói dối về phạm vi của chính nó.
 // ==============================================================================================
 
 import { execFileSync } from "node:child_process";

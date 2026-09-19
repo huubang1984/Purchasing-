@@ -866,9 +866,10 @@ DECLARE
           -- là một view, không phải bảng); ⑵ VIEW ĐỌC QUA HÀM (`SELECT gia FROM public.f()` — rule phụ thuộc `pg_proc`, không
           -- phụ thuộc bảng), và nhánh "cột org_id của chính view" cũng im khi view không chiếu `org_id`. Đuổi theo bằng bao đóng
           -- đệ quy `pg_rewrite`→`pg_depend`→`pg_proc` là một vị từ nữa để trôi; vế ĐỐI XỨNG với nhánh SECDEF ngay dưới — vốn
-          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (~~sáu~~ ~~[S1.82] BẢY migration, MƯỜI chỗ~~ [S1.83 / lượt soi ngang 73 — ĐẾM LẠI] TÁM migration, MƯỜI HAI chỗ, ghi "mục (C) CẤM
--- mọi SECURITY DEFINER" — đếm lại ở S1.82: 005 ×3, 006 ×2, 010, 011, 018, 027, 034; cả mười nay THIU và không
--- sửa được, xem khoản 162) — thì
+          -- KHÔNG có vế đích nào và cả kho đã sống với nó từ S0 (~~sáu~~ ~~[S1.82] BẢY migration, MƯỜI chỗ~~ ~~[S1.83 / lượt soi
+          -- ngang 73 — ĐẾM LẠI] TÁM migration, MƯỜI HAI chỗ~~ [S1.87 / lượt soi ngang 74 — ĐẾM LẠI] TÁM migration, MƯỜI BA chỗ,
+          -- ghi "mục (C) CẤM mọi SECURITY DEFINER" — đếm lại ở S1.87: 005 ×3, 006 ×3, 010, 011, 018, 020, 027 ×2, 034; cả mười ba
+          -- nay THIU và không sửa được, xem khoản 162) — thì
           -- không: MỌI view/matview trong lược đồ dự án phải `security_invoker`, matview thì phải khai. Cái giá nói ra: một
           -- view trên bảng tra cứu KHÔNG có dữ liệu tenant cũng phải đặt cờ; cửa ra là một dòng `ALTER VIEW` hoặc
           -- `NGOAI_LE_DOC_VONG`. Lược đồ thật hôm nay KHÔNG có view/matview nào (đo), nên vế này không kêu oan chỗ nào.
@@ -9734,7 +9735,14 @@ $ham$;
     --   * MỌI lần ghi sổ của tổ chức ấy gãy `55P03` ở 2 005 ms, vô thời hạn.
     -- Đo trước mục này: `app_api` gọi được CẢ 21 hàm khoá tư vấn của `pg_catalog`.
     --
-    -- MỤC NÀY ĐÓNG ĐƯỜNG CỐ Ý, KHÔNG ĐÓNG ĐƯỜNG HỢP LỆ — nói ra vì nửa kia vẫn mở (khoản 178):
+    -- MỤC NÀY ĐÓNG KHOÁ MỨC PHIÊN, KHÔNG ĐÓNG KHOÁ MỨC GIAO DỊCH — nửa kia vẫn mở (khoản 178).
+    -- [S1.87 / lượt soi ngang 74 góc 2] TRỤC CHIA LÀ CƠ CHẾ, KHÔNG PHẢI Ý ĐỊNH. Bản S1.86 viết
+    -- *"đóng đường CỐ Ý, không đóng đường HỢP LỆ"* — chia theo Ý ĐỊNH, trong khi kẻ cố ý được CHỌN
+    -- cơ chế: cùng vai `app_api`, `BEGIN` rồi `pg_advisory_xact_lock(...)` rồi `SELECT 1` mỗi 30 s
+    -- cho đúng hậu quả ấy, vô thời hạn, và không `REVOKE` nào chạm tới. Mục này vì thế NÂNG GIÁ
+    -- của kẻ cố ý (một câu lệnh rồi bỏ đi ⇒ một câu lệnh cộng một nhịp giữ kết nối) chứ không đóng
+    -- cửa. Nói đúng trục vì một vòng sau đọc *"đã đóng đường cố ý"* sẽ coi DoS sổ kiểm toán theo
+    -- tổ chức là việc đã xử lý. Phần còn mở, cho CẢ hai loại người gọi:
     -- một giao dịch HỢP LỆ đã ghi sổ rồi còn làm việc tiếp vẫn giữ khoá suốt đời nó, và không
     -- `REVOKE` nào chạm tới ca ấy — `noi_chuoi_kiem_toan()` là SECURITY **INVOKER** (đo:
     -- `prosecdef = false`, chủ `postgres`), nên vai ứng dụng BUỘC phải giữ `pg_advisory_xact_lock`.
@@ -9742,12 +9750,26 @@ $ham$;
     -- `pg_advisory_unlock*` cũng không: một phiên chỉ nhả được khoá của CHÍNH nó, nên nó không
     -- mua thêm quyền gì, và `migrate()` gọi nó ở lượt dọn dẹp.
     --
-    -- VÌ SAO CÓ CÂU `GRANT ... TO CURRENT_USER` NGAY SAU: `migrate()` dùng CHÍNH
-    -- `pg_advisory_lock(bigint)` làm cơ chế loại trừ hai tiến trình migrate, và nó lấy khoá ấy ở
-    -- câu ĐẦU TIÊN — trước khi file này chạy. S0 đã đo đúng ca này một lần: *"REVOKE EXECUTE ON
-    -- FUNCTION pg_advisory_unlock(bigint) FROM PUBLIC rồi chạy migrate() dưới role non-superuser"*
-    -- ⇒ `42501` (xem `packages/db/src/migrate.ts`). Nên lượt sửa cấp lại cho ĐÚNG vai đang chạy
-    -- migrate — không đoán tên vai, không thêm vai mới vào lược đồ.
+    -- [S1.87 / lượt soi ngang 74 góc 2 — ĐO] VÌ SAO Ở ĐÂY KHÔNG CÓ CÂU `GRANT` NÀO, và vì sao
+    -- S1.86 đã có một câu như thế rồi gỡ đi. Bản S1.86 kết thúc vòng `REVOKE` bằng
+    -- `EXECUTE format('GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER)`
+    -- với lý do *"cấp lại cho ĐÚNG vai đang chạy migrate"*. Câu ấy là NO-OP ở MỌI nhánh tới được,
+    -- và chính ADR-042 đã viết ra tiền đề bác nó mà không rút ra kết luận:
+    --   * `CURRENT_USER` là SUPERUSER (chỉ chủ hàm `pg_catalog` mới `REVOKE` được, nên đây là
+    --     nhánh DUY NHẤT mà BƯỚC 2 chạy trọn) ⇒ câu `GRANT` không mua gì: superuser đi qua mọi
+    --     phép kiểm quyền;
+    --   * `CURRENT_USER` là NOSUPERUSER ⇒ chính câu `REVOKE` đã `42501` và bị nuốt thành
+    --     `RAISE WARNING`; câu `GRANT` cũng `42501` (không sở hữu hàm, không GRANT OPTION).
+    -- Tức nhánh nào nó chạy được thì nó không mua gì, nhánh nào nó mua được gì thì nó không chạy.
+    -- ĐO (§S1.87), hai chiều: ⑴ đổi `EXECUTE` thành `PERFORM` mà GIỮ NGUYÊN từng ký tự chuỗi ⇒
+    -- `db/khoa-ghi-so-nguoi-giu.int.test.ts` XANH 6/6 — vế ghim câu ấy chỉ so CHUỖI CON trên toàn
+    -- tệp nên nó không có răng với một đột biến vô hiệu hoá; ⑵ gỡ HẲN khối ấy ⇒ đúng MỘT vế đỏ
+    -- (chính vế ghim chuỗi), năm vế HÀNH VI còn lại XANH, và trọn `db/migrations.int.test.ts`
+    -- XANH — tức 17 hồ sơ deploy lấy quyền từ FIXTURE (`GRANT ... TO trien_khai`), không từ đây.
+    -- Tiền điều kiện triển khai THẬT nằm ở ô "quyền cần" dưới và ở `TU_CHOI_KHOA_MIGRATE` của
+    -- `packages/db/src/migrate.ts`. Giữ một câu lệnh không mua gì, kèm một vế test khai rằng
+    -- thiếu nó là chặn deploy, là dựng một lớp không tồn tại — và một vòng sau tin lời khai ấy mà
+    -- bỏ dòng `GRANT` của fixture sẽ làm 17 hồ sơ đỏ lại. Nên câu lệnh đã đi, lời khai đi theo.
     --
     -- HỆ QUẢ VẬN HÀNH, nói ra thay vì để ai đó gặp: `REVOKE` trên hàm `pg_catalog` đòi CHỦ HÀM
     -- (thường là SUPERUSER). Dưới một vai deploy NOSUPERUSER, BƯỚC 2 nuốt `42501` và BƯỚC 3 gãy
@@ -9773,12 +9795,6 @@ $ham$;
                RAISE WARNING 'Hardening: khong thu hoi duoc EXECUTE tren pg_catalog.%: % (%)', f, SQLERRM, SQLSTATE;
              END;
            END LOOP;
-           -- Vai ĐANG chạy migrate() phải giữ lại đúng hàm mà migrate() lấy ở câu đầu tiên.
-           BEGIN
-             EXECUTE pg_catalog.format('GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER);
-           EXCEPTION WHEN OTHERS THEN
-             RAISE WARNING 'Hardening: khong cap lai duoc pg_advisory_lock(bigint) cho %: % (%)', CURRENT_USER, SQLERRM, SQLSTATE;
-           END;
          END
          $ak$$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_KHOA_TU_VAN_PHIEN_SAI || $q$) t)$q$,

@@ -118,7 +118,12 @@ const TRAN_CHO_TOI_DA_MS = 2_147_483_647;
  *
  * VÌ SAO MỘT SỰ KIỆN CHỨ KHÔNG PHẢI MỘT THAM SỐ: bộ báo là tính chất của POOL, không của lời gọi. Hai trong ba chỗ đặt trần nằm trong
  * `packages/identity/src/rbac.ts` — một thư viện không có bộ ghi log —, nên tiêm theo lời gọi sẽ phải luồn qua `requirePermission`, hàm có
- * **19 chỗ gọi** trong mã sản xuất; một tham số TUỲ CHỌN khi ấy làm 18 chỗ im lặng, tức fail-open ở đúng lớp lỗi khoản này đang vá.
+ * **[S1.87 / lượt soi ngang 74 — ĐẾM LẠI] 14 chỗ gọi** (~~**19 chỗ gọi**~~) trong mã sản xuất; một tham số TUỲ CHỌN khi ấy làm 13 chỗ
+ * (~~18 chỗ~~) im lặng, tức fail-open ở đúng lớp lỗi khoản này đang vá. Con số 19 không dựng lại được từ mã ở bất kỳ commit nào của
+ * cửa sổ: `grep -rn 'requirePermission(' --include=*.ts apps packages tools`, bỏ `*.test.ts`, bỏ dòng khai báo và bỏ một chuỗi ký tự
+ * ở `rbac.ts` ⇒ 14 (`dispatch.ts` ×1, `mfa-reset.ts` ×3, `invitation.ts` ×1, `rfq.ts` ×2, `key-material.ts` ×1, `comparison.ts` ×2,
+ * `gate.ts` ×1, `requests.ts` ×3). Lập luận KHÔNG đổi — 13 chỗ im lặng cũng là fail-open — nhưng con số định giá một phương án bị
+ * loại phải dựng lại được, nếu không nó là một lời khai không ai kiểm.
  *
  * VÌ SAO KHÔNG PHẢI `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe. Tên riêng làm một pool chưa gắn listener chỉ MẤT tín hiệu chứ
  * không giết tiến trình — và cái giá ấy được trả bằng một cổng kiến trúc đòi mọi pool dựng ở composition root gắn đủ listener.

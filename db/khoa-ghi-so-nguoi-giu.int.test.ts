@@ -166,9 +166,22 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
         "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta",
       [TEN_HAM_LAY_KHOA_PHIEN],
     );
+    // [S1.87 / lượt soi ngang 74 góc 3 — ĐO, và phép đo BÁC lời khai cũ của chính vế này.]
+    // Lời cũ: ~~"một dạng đối số lọt lưới là một đường vòng nguyên vẹn — `pg_advisory_lock(integer,
+    // integer)` lấy CÙNG khoá"~~. SAI. PostgreSQL giữ HAI không gian khoá tư vấn RỜI NHAU, phân
+    // biệt bằng `pg_locks.objsubid`: 1 cho dạng `bigint`, 2 cho cặp `(integer, integer)`.
+    // ĐO (phiên A giữ `pg_advisory_lock(k)` dạng bigint, phiên B thử cả hai dạng trên CÙNG con số):
+    //   dạng (int,int) lấy được = true · dạng bigint lấy được = false
+    //   pg_locks: {objsubid: 1, granted: true, pid: A} và {objsubid: 2, granted: true, pid: B}
+    // Nên một phiên gọi `pg_advisory_lock(hi, lo)` KHÔNG BAO GIỜ đụng khoá mà
+    // `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))` giữ — dạng hai đối số KHÔNG phải một
+    // đường vòng tới khoá ghi sổ. Thu hồi nó vẫn đúng, nhưng là PHÒNG THỦ CHIỀU SÂU.
+    // Và lý do đột biến "chỉ thu hồi dạng (bigint)" đỏ nằm ở HẬU ĐIỀU KIỆN, không ở không gian
+    // khoá: `CAU_KHOA_TU_VAN_PHIEN_SAI` lọc theo `p.proname`, mà `pg_proc` có MỘT HÀNG cho mỗi
+    // overload, nên bỏ ngỏ một dạng để lại một hàng ⇒ BƯỚC 3 của hardening gãy.
     expect(
       rows.map((x) => x.mo_ta),
-      "một dạng đối số lọt lưới là một đường vòng nguyên vẹn — `pg_advisory_lock(integer, integer)` lấy CÙNG khoá",
+      "một dạng đối số bỏ ngỏ để lại một hàng ở hậu điều kiện lọc theo `proname` ⇒ BƯỚC 3 gãy; và nó là phòng thủ chiều sâu cho một KHÔNG GIAN KHOÁ KHÁC, không phải một đường vòng tới khoá ghi sổ",
     ).toEqual([]);
 
     // ĐỐI CHỨNG CHỐNG RỖNG RUỘT: phép đọc phải THẤY được các hàm ấy và thấy vai ứng dụng có thật.
@@ -184,7 +197,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
     expect(vai[0]?.n).toBe(2);
   });
 
-  it("⓸ vai ĐANG chạy `migrate()` GIỮ LẠI `pg_advisory_lock(bigint)` — thiếu nó là chặn chính lần triển khai", () => {
+  it("⓸ mục hardening và `migrate()` phải nói CÙNG một tập hàm khoá — đổi cơ chế khoá của migrate mà quên mục này thì ĐỎ ở đây", () => {
     // `migrate()` lấy khoá ấy ở câu ĐẦU TIÊN, TRƯỚC khi `hardening.always.sql` chạy. Vế này đọc
     // NGUỒN của `migrate.ts` thay vì chép lại tên hàm: đổi cơ chế khoá của migrate mà quên mục
     // hardening thì vế này đỏ, chứ không phải lần triển khai kế tiếp mới đỏ.
@@ -194,20 +207,21 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
       new Set(["pg_advisory_lock", "pg_advisory_unlock"]),
     );
 
-    // CÂU `GRANT` KHÔNG KIỂM ĐƯỢC BẮNG HÀNH VI Ở ĐÂY, và nói ra rẻ hơn giả vờ kiểm: cụm test
-    // chạy `migrate()` dưới `postgres`, mà `postgres` là CHỦ của chính hàm `pg_advisory_lock`.
-    // Nên `has_function_privilege` luôn true (superuser đi qua mọi phép kiểm), và `proacl` cũng luôn
-    // mang một dòng cho `postgres` — dòng MẬC ĐỊNH của chủ hàm, có hay không câu `GRANT` cũng thế.
-    // Đã ĐO: gỡ hẳn câu `GRANT` khỏi mục hardening thì cả hai phiên bản của vế này đều XANH (đột
-    // biến M4, §S1.86). CÙNG LỚP LỖI với ADR-040 (*hàm SECURITY DEFINER TRẢ XANH trên CI mà 0
-    // hàng ở cụm thật, vì migrate chạy superuser*). Nên vế này đọc NGUỒN của mục hardening — yếu
-    // hơn một phép đo hành vi, nhưng nó là thứ DUY NHẤT giết được M4, và vế ⓹ dưới đo phần
-    // còn lại (một vai NOSUPERUSER không có quyền, và một câu GRANT là đủ).
-    const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
-    expect(
-      hardening.includes("GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER"),
-      "mục hardening phải cấp lại `pg_advisory_lock(bigint)` cho vai ĐANG chạy migrate — thiếu câu ấy là chặn lần triển khai kế tiếp",
-    ).toBe(true);
+    // [S1.87 / lượt soi ngang 74 góc 2 và góc 4 — ĐO] NỬA SAU CỦA VẾ NÀY ĐÃ ĐI, cùng với câu lệnh
+    // mà nó ghim. Bản S1.86 khẳng định `hardening.always.sql` CÓ chứa chuỗi
+    // `GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER`, với lời
+    // khai *"thiếu câu ấy là chặn lần triển khai kế tiếp"*. Hai phép đo bác cả hai nửa của lời khai:
+    //   ⑴ RĂNG: đổi `EXECUTE` thành `PERFORM` mà giữ nguyên từng ký tự chuỗi ⇒ tệp này XANH 6/6.
+    //      Khẳng định ấy là `includes` trên một tệp mười nghìn dòng, không bỏ chú thích — nó giết
+    //      được đột biến XOÁ và không giết được đột biến VÔ HIỆU HOÁ.
+    //   ⑵ LỜI KHAI: gỡ hẳn khối `GRANT` ⇒ đúng MỘT vế đỏ (chính vế này), năm vế HÀNH VI còn lại
+    //      XANH, và trọn `db/migrations.int.test.ts` XANH — 17 hồ sơ deploy lấy quyền từ FIXTURE
+    //      (`GRANT ... TO trien_khai`), chưa bao giờ từ câu lệnh trong hardening. Câu ấy là NO-OP ở
+    //      mọi nhánh tới được (superuser ⇒ thừa; NOSUPERUSER ⇒ cũng `42501` như câu `REVOKE`).
+    // Nên câu lệnh đã được gỡ khỏi `hardening.always.sql` (ADR-042, đính chính S1.87). Tiền điều
+    // kiện triển khai THẬT — một câu `GRANT` của superuser cho mỗi vai deploy NOSUPERUSER mới —
+    // không mất người canh: vế ⓹ đo nó trên một vai mới, vế ⓺ đo `TU_CHOI_KHOA_MIGRATE` nói ra
+    // nguyên văn câu lệnh cần chạy, và ô "quyền cần" của mục hardening mang cùng câu ấy.
   });
 
   it("⓹ CÁI GIÁ VẬN HÀNH, đo chứ không khải: một vai NOSUPERUSER mới KHÔNG có `pg_advisory_lock(bigint)`, tức gãy ở câu ĐẦU TIÊN của `migrate()`", async () => {
