@@ -184,6 +184,59 @@ export interface ApproveUnsealInput {
  * đúng một câu UPDATE thắng, và người thua thấy `rowCount = 0` — không phải một cuộc đua đọc.
  * Trigger `unseal_requests_kiem_du_phe_duyet` là lớp có thẩm quyền cho phép đếm.
  */
+/**
+ * [S1.85 / khoản 147] Hai trigger D2 của `019` nói "không" bằng `RAISE` — phân loại theo NGUYÊN VĂN thông điệp của chúng.
+ *
+ * Bộ lọc cũ có BA vế và **hai** trong ba là vế chết (đo, §S1.78 rồi §S1.85):
+ *
+ *   ~~`phai o mot PHIEN khac`~~   — câu `RAISE` thật của `019:226` là `Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau (D2)`.
+ *                                  Chuỗi cũ khớp một câu `RAISE` KHÁC, của nhánh break-glass trên bảng `unseal_requests` — một trigger
+ *                                  khác trên một bảng khác, không bao giờ nổ từ câu `INSERT INTO unseal_approvals` này.
+ *   ~~`mot lan tren mot yeu cau`~~ — `grep -rn 'mot lan tren mot yeu cau' db/ packages/ apps/` chỉ trả về đúng dòng regex ấy. Ca nó định
+ *                                  bắt là hai ràng buộc UNIQUE của `019`, và chúng ném `23505` mang TÊN RÀNG BUỘC, không mang chuỗi ấy —
+ *                                  nay là việc của `laTrungPheDuyet`.
+ *
+ * VẾ PHIÊN GIỮ LẠI DÙ HÔM NAY KHÔNG TỚI ĐƯỢC, và lý do phải nói ra thay vì để nó thành một vế chết thứ hai: danh tính người duyệt là
+ * DẪN XUẤT của phiên (`actor.id` và `actor.sessionId` cùng đến từ `resolveSessionActor`), nên `approver_session_id = phien_yeu_cau` kéo
+ * theo `approver_user_id = nguoi_yeu_cau`, và vế TỰ PHÊ DUYỆT ở trên nó trong thân trigger nổ trước. Đo được ở tầng CSDL (§S1.85): ghép
+ * "người khác, cùng phiên" bằng một câu INSERT thẳng thì vế phiên NỔ — nó sống ở `019`, chỉ là `approveUnseal` không dựng được ca ấy.
+ * Sửa chuỗi cho ĐÚNG là rẻ và giữ D5 đứng nếu tầng trên đổi; xoá nó là bỏ một lớp vì hôm nay không ai với tới.
+ *
+ * `export` KHỎI TỆP (không khỏi gói — `index.ts` không nêu nó, và `barrel-exports.test.ts` giữ điều đó) vì một vế KHÔNG tới được
+ * qua đường sản xuất thì không phép đo hành vi nào ghim được nó, và một vế không ai ghim là một vế sắp chết lần nữa. Thay vào đó
+ * `loc-vi-pham-d2.test.ts` ĐỌC `db/migrations/019_unseal.sql`, rút NGUYÊN VĂN các câu `RAISE` của `unseal_kiem_nguoi_duyet()` và
+ * đòi vị từ này khớp đúng hai câu D2 — cùng khuôn §R3 với `ma-tran-quyen.test.ts`. Đột biến đo được (§S1.85): trả chuỗi cũ về thì
+ * test ấy ĐỎ; trước vòng này không test nào đỏ, và đó chính là cách hai vế chết sống được năm vòng.
+ */
+export function laViPhamD2TheoThongDiep(loi: Error): boolean {
+  return /khong duoc tu phe duyet|phai den tu mot PHIEN KHAC/iu.test(loi.message);
+}
+
+/**
+ * [S1.85 / khoản 147] MỘT NGƯỜI — HAY MỘT PHIÊN — PHÊ DUYỆT LẦN THỨ HAI: `23505` trên `unseal_approvals`.
+ *
+ * Trigger CHO QUA ca này (yêu cầu còn PENDING, người duyệt khác người yêu cầu, phiên khác phiên yêu cầu); thứ chặn nó là hai ràng buộc
+ * UNIQUE của `019`. Tới trước vòng này bộ lọc thông điệp không khớp `23505` nào, nên lỗi rơi thẳng xuống `throw loi` và một lần THỬ vi
+ * phạm D2 để lại **0 hàng** `UNSEAL_APPROVAL_DENIED` — cùng lớp lỗi với khoản 32 / 119 / 121, ở một đường mà cổng `[INV-D5]` không phủ.
+ *
+ * ĐỌC `code` VÀ `constraint`, KHÔNG ĐỌC `message`: thông điệp `23505` do PostgreSQL viết và mang TÊN BẢNG cùng tên ràng buộc, còn
+ * `DETAIL` của nó mang GIÁ TRỊ HÀNG — `Key (org_id, unseal_request_id, approver_user_id)=(…)` — tức đúng thứ A2 cấm đọc vào một nhánh
+ * ghi log. `code` và `constraint` là hai trường riêng mà `pg` điền sẵn (đo, §S1.85).
+ *
+ * `053` đặt tên hai ràng buộc ấy; trước đó chúng VÔ DANH và mang tên PostgreSQL tự sinh — một dẫn xuất của danh sách cột, bị cắt ở 63
+ * byte. Danh sách dưới đây là ĐÓNG và nó khớp nguyên văn `053`; `unseal.int.test.ts` ghim rằng `unseal_approvals` không có ràng buộc
+ * UNIQUE nào NGOÀI hai tên này, nên một ràng buộc thứ ba không lặng lẽ đổi nghĩa của "23505 ở đây".
+ */
+const RANG_BUOC_TRUNG_PHE_DUYET: ReadonlySet<string> = new Set([
+  "unseal_approvals_mot_nguoi_mot_lan",
+  "unseal_approvals_mot_phien_mot_lan",
+]);
+
+function laTrungPheDuyet(loi: Error): boolean {
+  const e = loi as { code?: unknown; constraint?: unknown };
+  return e.code === "23505" && typeof e.constraint === "string" && RANG_BUOC_TRUNG_PHE_DUYET.has(e.constraint);
+}
+
 export async function approveUnseal(
   client: pg.PoolClient,
   orgId: string,
@@ -216,6 +269,8 @@ export async function approveUnseal(
   // Phân loại theo THÔNG BÁO chứ không theo SQLSTATE, và đó là một thu hẹp phải nói ra: cả hai
   // trigger dùng chung `check_violation`, nên SQLSTATE không phân biệt được chúng với nhau hay
   // với một `CHECK` bất kỳ. Thông báo thì do chính 019 viết ra và có test đọc nó.
+  // [S1.85 / khoản 147] Câu trên đúng cho hai vế TRIGGER và chỉ cho chúng. Vế thứ ba của lần từ chối D2 KHÔNG đến từ một trigger mà
+  // từ hai ràng buộc UNIQUE của 019, và nó ném `23505` — xem `LA_TRUNG_PHE_DUYET` dưới đây.
   // [S1.77 / khoản 140] CÂU NÀY KHOÁ HÀNG YÊU CẦU, và chỗ khoá không nằm ở đây — nói ra vì việc nó
   // vô danh ở tệp này chính là thứ làm lượt soi 68a-1 mở nhầm khoản 140.
   //
@@ -242,7 +297,7 @@ export async function approveUnseal(
     // [S1.68 / khoản 119] Lần ghi đi qua `throwAuditedDenial`: ghi được ⇒ ném lại chính vi phạm D2; không ghi được ⇒
     // `DenialAuditFailedError` giữ vi phạm trong `denial`. Bản trước để lỗi của lần ghi thay chỗ vi phạm — đo qua HTTP, trigger chặn lần
     // ghi: RAISE 23514 ⇒ 422 mang thông điệp của trigger, RAISE TP119 ⇒ 500, EXECUTE thu hồi ⇒ 403, không hàng sổ nào (biên bản §S1.68).
-    if (loi instanceof Error && /khong duoc tu phe duyet|phai o mot PHIEN khac|mot lan tren mot yeu cau/i.test(loi.message)) {
+    if (loi instanceof Error && (laViPhamD2TheoThongDiep(loi) || laTrungPheDuyet(loi))) {
       await throwAuditedDenial(
         auditPool,
         orgId,

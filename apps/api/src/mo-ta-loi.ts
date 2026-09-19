@@ -20,6 +20,7 @@
 // ra mã" thay vì "không có trường" và làm đỏ test ấy). Đúng một tầng — không đi theo chuỗi.
 // ==============================================================================================
 import type pg from "pg";
+import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 
 /** Hình dạng của SQLSTATE: đúng năm ký tự chữ số và chữ hoa. */
@@ -32,9 +33,15 @@ export function moTaLoiKhongGiaTri(loi: unknown): string {
 }
 
 function moTaMotTang(loi: Error): string {
-  if (loi instanceof TenantError) return `${loi.name} ${loi.code}`;
+  // [S1.85 / khoản 131] Và các HẰNG ĐÓNG của một lần từ chối không ghi được sổ, nếu lỗi này là một trong hai lớp bọc ấy. Phép kiểm
+  // hình dạng nằm trong `moTaHangDongCuaLanTuChoi` (packages/identity) — MỘT chỗ ở cho cả `api` lẫn worker mở thầu — và nó trả chuỗi
+  // RỖNG cho mọi lỗi khác, kể cả một lỗi chỉ mang TÊN của hai lớp ấy. Luật A2 của tệp này không đổi: thứ đi qua đây vẫn chỉ là tên
+  // lớp, mã cố định và mã định danh viết hoa; `message` và `cause` nguyên vẫn không vào dòng.
+  const hang = moTaHangDongCuaLanTuChoi(loi);
+  const duoi = hang === "" ? "" : ` ${hang}`;
+  if (loi instanceof TenantError) return `${loi.name} ${loi.code}${duoi}`;
   const ma = (loi as { code?: unknown }).code;
-  return typeof ma === "string" && MA_NAM_KY_TU.test(ma) ? `${loi.name} ${ma}` : loi.name;
+  return typeof ma === "string" && MA_NAM_KY_TU.test(ma) ? `${loi.name} ${ma}${duoi}` : `${loi.name}${duoi}`;
 }
 
 /**

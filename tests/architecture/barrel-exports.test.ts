@@ -196,6 +196,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   // đường trả về.
   "DenialAuditFailedError",
   "throwAuditedDenial",
+  // [S1.85 / khoản 131] Hàm THUẦN trả các hằng đóng của một lần từ chối không ghi được sổ, cho dòng log — không đọc CSDL, không
+  // trả lời câu hỏi quyền nào.
+  "moTaHangDongCuaLanTuChoi",
   "SEPARATION_OF_DUTIES_CHAIN",
   "SessionInvalidError",
   "assertFreshMfa",

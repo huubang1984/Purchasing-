@@ -647,7 +647,8 @@ describe("[S1.70 / khoản 124] bộ điều phối: việc sau commit CÓ BÙ, 
     expect([r2.status, r2.body]).toEqual([500, JSON.stringify({ error: "loi noi bo" })]);
     expect(ghiGia).toEqual([]);
     expect(bat2.log).toHaveLength(1);
-    expect(bat2.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} ViecCoBuThuHai$/u);
+    // [S1.85 / khoản 131] Dòng 500 nay mang MẪU ROUTE — hằng đóng của bảng `ROUTES`, không phải đường dẫn đã gọi.
+    expect(bat2.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} GET \/k124\/hai-viec-co-bu ViecCoBuThuHai$/u);
   });
 
   it("⑺ phần bù chạy trong một giao dịch MỚI đã gắn tổ chức — không phải giao dịch của handler", async () => {

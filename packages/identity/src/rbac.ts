@@ -33,6 +33,12 @@ export class PermissionDeniedError extends Error {
 export class PermissionAuditFailedError extends Error {
   constructor(
     readonly denial: PermissionDeniedError,
+    /**
+     * [S1.85 / khoản 131] `resource_type` của bản ghi ĐÃ KHÔNG ghi được — một MÃ ĐỊNH DANH viết hoa, đã qua `HINH_DANG_LOAI_TAI_NGUYEN`
+     * ở đầu `requirePermission`. Có mặt ở đây để dòng log nói được lần từ chối NÀO đã mất; `action` của lần ghi ấy là hằng
+     * `ACTION_TU_CHOI_QUYEN`, và `permission` đọc từ `denial`.
+     */
+    readonly resourceType: string,
     cause: Error,
   ) {
     super(
@@ -60,6 +66,8 @@ export class PermissionAuditFailedError extends Error {
 export class DenialAuditFailedError extends Error {
   constructor(
     readonly action: string,
+    /** [S1.85 / khoản 131] `resource_type` của bản ghi đã không ghi được — cùng lý do với `PermissionAuditFailedError.resourceType`. */
+    readonly resourceType: string,
     readonly denial: Error,
     cause: Error,
   ) {
@@ -229,6 +237,55 @@ export interface PermissionRequirement extends PermissionCheck {
  * đi VÔ Ý — nội suy một chuỗi người dùng hoặc một thông báo lỗi vào trường này.
  */
 const HINH_DANG_LOAI_TAI_NGUYEN = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/**
+ * Hình dạng của một MÃ QUYỀN: các đoạn chữ thường nối bằng dấu chấm (`supplier.manage`) — khuôn của MỌI giá trị trong `PERMISSIONS`,
+ * và có meta-test đối chiếu danh mục ấy với bảng `permissions` của `005`.
+ */
+const HINH_DANG_MA_QUYEN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){1,3}$/u;
+
+/**
+ * Thứ thay chỗ một hằng KHÔNG đúng hình dạng. Chính nó là một hằng: nó nói "có một trường ở đây và nó không đúng khuôn" mà không
+ * nói trường ấy mang gì. Im lặng bỏ đi thì dòng log ngắn lại một cách không ai giải thích được — cùng lý do với `loi khong ro`.
+ */
+const HANG_LA = "HANG_LA";
+
+/** `action` của bản ghi mà `requirePermission` ghi khi từ chối. MỘT chỗ ở: câu `appendAuditEvent` dưới đây và dòng log đọc cùng hằng. */
+const ACTION_TU_CHOI_QUYEN = "PERMISSION_DENIED";
+
+function hangMaHoa(v: string): string {
+  return HINH_DANG_LOAI_TAI_NGUYEN.test(v) ? v : HANG_LA;
+}
+
+function hangMaQuyen(v: string): string {
+  return HINH_DANG_MA_QUYEN.test(v) ? v : HANG_LA;
+}
+
+/**
+ * [S1.85 / khoản 131] CÁC HẰNG ĐÓNG CỦA MỘT LẦN TỪ CHỐI KHÔNG GHI ĐƯỢC SỔ — cho dòng log, và CHỈ hằng.
+ *
+ * VÌ SAO NÓ TỒN TẠI, đo được (§S1.85): khoá ghi sổ của một tổ chức bị giữ quá trần 2 s của `050` ⇒ mọi lần từ chối của tổ chức ấy
+ * gãy `55P03`, và tới trước vòng này bộ điều phối để lại đúng một dòng
+ * `[api] <requestId> PermissionAuditFailedError <- error 55P03` — không `action`, không mã quyền, không `resourceType`, không mẫu
+ * route. Sau sự cố không nguồn nào còn cho biết lần từ chối NÀO đã mất (khoản 131, ghi từ S1.72).
+ *
+ * "TÊN THÌ ĐƯỢC, GIÁ TRỊ THÌ KHÔNG" LÀ MỘT PHÉP KIỂM, KHÔNG PHẢI MỘT LỜI HỨA. Mỗi trường đi qua hình dạng của chính nó — mã định
+ * danh viết hoa cho `action`/`resourceType`, khuôn chấm chữ thường cho mã quyền — và thứ không khớp ra `HANG_LA`. Nên kể cả khi một
+ * vòng sau đưa nhầm một giá trị (id, email, giá) vào một trong các trường ấy, nó KHÔNG ra được dòng log: một UUID có dấu gạch nối,
+ * một email có `@`, một số bắt đầu bằng chữ số — cả ba trượt cả hai hình dạng. Cùng kỷ luật A2 với `moTaLoiKhongGiaTri` ở
+ * `apps/api/src/mo-ta-loi.ts`, và hàm này là nguồn DUY NHẤT của phần hằng ấy: `apps/api` và `apps/unseal-worker` đều gọi nó, nên hai
+ * tiến trình không lệch nhau được.
+ *
+ * `instanceof` chứ không phải đọc theo tên trường, có chủ đích: một lỗi BẤT KỲ mang một trường tên `permission` không mua được chỗ
+ * trong dòng log. Lỗi khác ⇒ chuỗi rỗng, người gọi không nối gì thêm.
+ */
+export function moTaHangDongCuaLanTuChoi(loi: unknown): string {
+  if (loi instanceof PermissionAuditFailedError) {
+    return `${ACTION_TU_CHOI_QUYEN} ${hangMaHoa(loi.resourceType)} ${hangMaQuyen(loi.denial.permission)}`;
+  }
+  if (loi instanceof DenialAuditFailedError) return `${hangMaHoa(loi.action)} ${hangMaHoa(loi.resourceType)}`;
+  return "";
+}
 
 /**
  * Câu hỏi mà `requirePermission` phải trả lời TRƯỚC khi thử ghi: phiên NGƯỜI GỌI có đang giữ
@@ -454,7 +511,7 @@ export async function requirePermission(
         return appendAuditEvent(c, requirement.orgId, {
           actorType: "USER",
           actorId: requirement.userId,
-          action: "PERMISSION_DENIED",
+          action: ACTION_TU_CHOI_QUYEN,
           resourceType: requirement.resourceType,
           resourceId: requirement.resourceId ?? null,
           requestId: requirement.requestId ?? null,
@@ -482,6 +539,7 @@ export async function requirePermission(
     // được người điều tra qua `cause` của Error này.
     throw new PermissionAuditFailedError(
       tuChoi,
+      requirement.resourceType,
       loi instanceof Error
         ? loi
         : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, {
@@ -550,6 +608,7 @@ export async function throwAuditedDenial(
     // Cùng khuôn [vòng fix 2 — MỤC E] của `requirePermission`: nêu KIỂU của thứ lạ bị ném, không nội suy GIÁ TRỊ; giá trị gốc ở `cause`.
     throw new DenialAuditFailedError(
       event.action,
+      event.resourceType,
       denial,
       loi instanceof Error
         ? loi
