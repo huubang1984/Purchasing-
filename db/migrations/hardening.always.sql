@@ -2050,6 +2050,21 @@ $ham$;
           AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
                          AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET')))$q$;
 
+  -- [S1.86 / khoản 128] Vai ỨNG DỤNG nào còn gọi được một hàm LẤY khoá tư vấn MỨC PHIÊN.
+  -- Lọc theo `proname` nên nó phủ CẢ HAI dạng đối số (`bigint` và `integer, integer`) mà không
+  -- phải liệt kê chữ ký — thêm một overload mới của PostgreSQL vẫn bị bắt.
+  -- KHÔNG gồm `*_xact_lock*`: `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên vai ứng dụng buộc
+  -- phải giữ chúng; nửa ấy là khoản 178, không phải mục này.
+  CAU_KHOA_TU_VAN_PHIEN_SAI constant text :=
+    $q$SELECT v.rolname || ' gọi được pg_catalog.' || p.proname AS mo_ta
+         FROM ($q$ || VAI_KET_NOI_UNG_DUNG || $q$) v
+         CROSS JOIN pg_catalog.pg_proc p
+         JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'pg_catalog'
+          AND p.proname IN ('pg_advisory_lock', 'pg_advisory_lock_shared',
+                            'pg_try_advisory_lock', 'pg_try_advisory_lock_shared')
+          AND pg_catalog.has_function_privilege(v.rolname, p.oid, 'EXECUTE')$q$;
+
   -- ---- [S1.47 / khoản nợ 87] GUC TUỲ BIẾN (app.*) GẮN SẴN CHO PHIÊN ỨNG DỤNG — PHÁN XÉT, KHÔNG TỰ SỬA ----------------
   -- Lượt soi ngang 33a #1: toàn bộ ranh giới tenant/khách từ 001/027/042/044 là NĂM GUC `app.*` mà policy đọc qua
   -- `current_setting(..., true)` — chưa gắn ⇒ NULL ⇒ 0 hàng (fail-closed). Ba mục "đặt ở mức database" ở trên chỉ ghim
@@ -9705,6 +9720,70 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_QUYEN_BANG_SO_MO_TA || $q$) t)$q$,
       $q$quyền sở hữu các bảng sổ đó (hoặc là grantor của chính quyền cần thu hồi) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.86 / khoản 128] KHOÁ TƯ VẤN MỨC PHIÊN — VAI ỨNG DỤNG KHÔNG ĐƯỢC LẤY -----------
+    --
+    -- BÀI TOÁN, đo được (§S1.86). `noi_chuoi_kiem_toan()` nối chuỗi sổ kiểm toán dưới
+    -- `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))`, và `050` cho người CHỜ một trần
+    -- 2 s. Trần ấy bảo vệ người chờ; nó KHÔNG đuổi người GIỮ. Một phiên vai `app_api` lấy
+    -- `pg_advisory_lock` — khoá MỨC PHIÊN trên CÙNG khoá ấy — rồi đứng yên thì:
+    --   * nó KHÔNG ở trong giao dịch, nên `idle_in_transaction_session_timeout` không với tới
+    --     (đo: ép GUC ấy xuống 500 ms, chờ 3 s — gấp sáu ngưỡng — phiên vẫn `idle`, khoá vẫn giữ);
+    --   * pool KHÔNG đặt `idle_session_timeout` (đo: giá trị là `0`);
+    --   * MỌI lần ghi sổ của tổ chức ấy gãy `55P03` ở 2 005 ms, vô thời hạn.
+    -- Đo trước mục này: `app_api` gọi được CẢ 21 hàm khoá tư vấn của `pg_catalog`.
+    --
+    -- MỤC NÀY ĐÓNG ĐƯỜNG CỐ Ý, KHÔNG ĐÓNG ĐƯỜNG HỢP LỆ — nói ra vì nửa kia vẫn mở (khoản 178):
+    -- một giao dịch HỢP LỆ đã ghi sổ rồi còn làm việc tiếp vẫn giữ khoá suốt đời nó, và không
+    -- `REVOKE` nào chạm tới ca ấy — `noi_chuoi_kiem_toan()` là SECURITY **INVOKER** (đo:
+    -- `prosecdef = false`, chủ `postgres`), nên vai ứng dụng BUỘC phải giữ `pg_advisory_xact_lock`.
+    -- Vì thế danh sách dưới đây chỉ gồm các hàm LẤY khoá MỨC PHIÊN. `*_xact_lock*` KHÔNG bị đụng.
+    -- `pg_advisory_unlock*` cũng không: một phiên chỉ nhả được khoá của CHÍNH nó, nên nó không
+    -- mua thêm quyền gì, và `migrate()` gọi nó ở lượt dọn dẹp.
+    --
+    -- VÌ SAO CÓ CÂU `GRANT ... TO CURRENT_USER` NGAY SAU: `migrate()` dùng CHÍNH
+    -- `pg_advisory_lock(bigint)` làm cơ chế loại trừ hai tiến trình migrate, và nó lấy khoá ấy ở
+    -- câu ĐẦU TIÊN — trước khi file này chạy. S0 đã đo đúng ca này một lần: *"REVOKE EXECUTE ON
+    -- FUNCTION pg_advisory_unlock(bigint) FROM PUBLIC rồi chạy migrate() dưới role non-superuser"*
+    -- ⇒ `42501` (xem `packages/db/src/migrate.ts`). Nên lượt sửa cấp lại cho ĐÚNG vai đang chạy
+    -- migrate — không đoán tên vai, không thêm vai mới vào lược đồ.
+    --
+    -- HỆ QUẢ VẬN HÀNH, nói ra thay vì để ai đó gặp: `REVOKE` trên hàm `pg_catalog` đòi CHỦ HÀM
+    -- (thường là SUPERUSER). Dưới một vai deploy NOSUPERUSER, BƯỚC 2 nuốt `42501` và BƯỚC 3 gãy
+    -- với đúng tên mục này cùng lối ra — CÙNG KHUÔN hồ sơ N3 (*"superuser REVOKE một lần ⇒ đi
+    -- qua"*). Và một vai deploy HOÀN TOÀN MỚI cần thêm một câu `GRANT` của superuser, vì nó gãy ở
+    -- câu đầu của `migrate()` trước khi file này kịp chạy. Chủ dự án chọn cái giá ấy ngày
+    -- 2026-09-19 (ADR-042) thay vì thêm một vai `app_migrate` ổn định vào lược đồ.
+    ARRAY[
+      $q$quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng$q$,
+      $q$true$q$,
+      $q$DO $ak$
+         DECLARE f text;
+         BEGIN
+           FOREACH f IN ARRAY ARRAY[
+             'pg_advisory_lock(bigint)', 'pg_advisory_lock(integer, integer)',
+             'pg_advisory_lock_shared(bigint)', 'pg_advisory_lock_shared(integer, integer)',
+             'pg_try_advisory_lock(bigint)', 'pg_try_advisory_lock(integer, integer)',
+             'pg_try_advisory_lock_shared(bigint)', 'pg_try_advisory_lock_shared(integer, integer)'
+           ] LOOP
+             BEGIN
+               EXECUTE pg_catalog.format('REVOKE EXECUTE ON FUNCTION pg_catalog.%s FROM PUBLIC', f);
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: khong thu hoi duoc EXECUTE tren pg_catalog.%: % (%)', f, SQLERRM, SQLSTATE;
+             END;
+           END LOOP;
+           -- Vai ĐANG chạy migrate() phải giữ lại đúng hàm mà migrate() lấy ở câu đầu tiên.
+           BEGIN
+             EXECUTE pg_catalog.format('GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO %I', CURRENT_USER);
+           EXCEPTION WHEN OTHERS THEN
+             RAISE WARNING 'Hardening: khong cap lai duoc pg_advisory_lock(bigint) cho %: % (%)', CURRENT_USER, SQLERRM, SQLSTATE;
+           END;
+         END
+         $ak$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_KHOA_TU_VAN_PHIEN_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(t.mo_ta, '; ' ORDER BY t.mo_ta) FROM ($q$ || CAU_KHOA_TU_VAN_PHIEN_SAI || $q$) t)$q$,
+      $q$chủ sở hữu hàm pg_catalog (thường là SUPERUSER) — và với một vai deploy MỚI, thêm một lần "GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO <vai deploy>"$q$
     ],
 
     -- ---- [S1.20 / sổ nợ 3 + 16] Bốn tính chất thay cho bốn danh sách tên -------------------

@@ -128,6 +128,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   D5: [
     "apps/api/src/api.int.test.ts",
+    // [S1.86 / khoản 128] Ai GIỮ được khoá ghi sổ của tổ chức, và giữ được bao lâu: một phiên vai ứng dụng nay KHÔNG lấy
+    // được khoá mức PHIÊN (42501), nên không còn đường CỐ Ý làm mọi lần ghi sổ của một tổ chức gãy 55P03 vô thời hạn.
+    "db/khoa-ghi-so-nguoi-giu.int.test.ts",
     // [S1.85 / khoản 131] Lần từ chối KHÔNG ghi được sổ vì trần 2 s của `050`: D5 vẫn fail-closed, và dòng log nay nói
     // lần từ chối nào đã mất. [khoản 147] `loc-vi-pham-d2` canh vế D2 mà `unseal.int.test.ts` không dựng được.
     "apps/api/src/log-tu-choi-mat.int.test.ts",

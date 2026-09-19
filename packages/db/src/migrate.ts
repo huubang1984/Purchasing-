@@ -3,6 +3,21 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type pg from "pg";
 
+/**
+ * [S1.86 / khoản 128 / ADR-042] Thông điệp khi vai chạy `migrate()` KHÔNG gọi được
+ * `pg_advisory_lock(bigint)` — hàm mà `hardening.always.sql` thu hồi khỏi PUBLIC.
+ *
+ * MỘT BẢN, ở đây, và test IMPORT nó: §S1.51 đã đo cái giá của việc chép một thông điệp như thế
+ * sang test — đổi chữ một lần làm bốn chỗ ghim im lặng hỏng, trong đó một chỗ thoái hoá thành
+ * no-op. Câu lệnh nêu trong thông điệp là NGUYÊN VĂN thứ người vận hành cần chạy.
+ */
+export const TU_CHOI_KHOA_MIGRATE =
+  "migrate() không lấy được khoá loại trừ của chính nó: vai đang chạy không có EXECUTE trên " +
+  "pg_catalog.pg_advisory_lock(bigint). Đây là hệ quả CÓ CHỦ Ý của mục hardening 'quyền gọi hàm " +
+  "khoá tư vấn MỨC PHIÊN của vai ứng dụng' (khoản 128, ADR-042), thứ chặn một phiên vai ứng dụng " +
+  "giữ khoá ghi sổ của một tổ chức vô thời hạn. Lối ra, chạy MỘT LẦN dưới superuser cho mỗi vai " +
+  "deploy: GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO <vai deploy>;";
+
 // Khoá advisory tuỳ ý nhưng cố định cho toàn dự án — chỉ dùng để loại trừ lẫn nhau giữa
 // các tiến trình migrate() chạy đồng thời (vd. hai pod cùng khởi động, blue/green deploy).
 // Không liên quan tới bất kỳ khoá nghiệp vụ nào khác nên chọn một số bất kỳ đủ lớn để
@@ -454,7 +469,22 @@ export async function migrate(
 
     // pg_advisory_lock chặn tới khi có được khoá — tiến trình migrate() thứ hai chạy đồng
     // thời sẽ đợi ở đây thay vì đua vào cùng một transaction DDL với tiến trình thứ nhất.
-    await lockClient.query("SELECT pg_catalog.pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    //
+    // [S1.86 / khoản 128 / ADR-042] VÀ ĐÂY LÀ CÂU ĐẦU TIÊN CHẠM QUYỀN, NÊN NÓ PHẢI TỰ GIẢI THÍCH.
+    // `hardening.always.sql` thu hồi EXECUTE của các hàm lấy khoá tư vấn MỨC PHIÊN khỏi PUBLIC —
+    // đó là lớp chặn một phiên vai ứng dụng giữ khoá ghi sổ của một tổ chức vô thời hạn. Hệ quả:
+    // một vai deploy NOSUPERUSER cần được cấp lại ĐÚNG hàm này, và nó gãy ở ĐÂY — TRƯỚC khi
+    // hardening kịp chạy, nên ô "quyền cần" của hardening không bao giờ tới được người đọc.
+    // Không có khối này, thông điệp là `permission denied for function pg_advisory_lock` trần
+    // trụi: đúng nhưng không nói phải làm gì (đo §S1.86 — 17 hồ sơ deploy đỏ với đúng dòng ấy).
+    try {
+      await lockClient.query("SELECT pg_catalog.pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    } catch (loi) {
+      if ((loi as { code?: unknown }).code === "42501") {
+        throw new Error(TU_CHOI_KHOA_MIGRATE, { cause: loi });
+      }
+      throw loi;
+    }
 
     // [fix round 4 — Minor] CREATE TABLE này phải nằm TRONG advisory lock. Bản trước gọi
     // pool.query(...) TRƯỚC khi lấy khoá: hai migrate() đồng thời trên một CSDL TRỐNG (hai

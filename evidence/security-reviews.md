@@ -7526,3 +7526,143 @@ vòng này làm cho sai**, không phải hồi quy: ba danh sách migration vi�
 khẳng định neo ở `loi-moi-sau-commit.int.test.ts` mà dòng 500 nay mang thêm mẫu route (`GET /k124/hai-viec-co-bu ViecCoBuThuHai`).
 Lượt hai xanh. Và `tests/architecture` cũng đỏ một lượt trước đó vì `053` cùng hai tệp test mới chưa `git add` — cổng `[INV-H20]`
 P4/P9b giải con trỏ trong `git ls-files`, nên stage TRƯỚC evidence là bắt buộc chứ không phải thói quen.
+
+---
+
+# §S1.86 — KHOẢN 128: người GIỮ khoá ghi sổ, và ranh giới giữa đường CỐ Ý với đường HỢP LỆ
+
+Việc cuối trong hàng đợi chủ dự án giao: **129 → 131 (gộp 147) → 128**.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng
+
+`Handoff.md` §11 đặt mốc *"sau ba vòng đổi hardening, hay chậm nhất **S1.89**"*. Vòng này là S1.86 — **chưa chạm** vế lịch; vế
+hardening đo được `git rev-list --count 1dfc7e3..HEAD --first-parent -- db/migrations/hardening.always.sql` = **1** trước vòng này.
+Không lỡ nhịp. **Vòng này CÓ đổi `hardening.always.sql`** (một mục mới), nên bộ đếm ấy thành **2** — vòng sau kiểm mốc phải đo lại.
+
+## 1. Hàng này vào vòng với nhãn ĐỌC, nên việc đầu tiên là ĐO — và tiền đề đứng cả hai vế
+
+`noi_chuoi_kiem_toan()` nối chuỗi sổ dưới `pg_advisory_xact_lock(hashtextextended(<tổ chức>, 0))`, và `050` cho người CHỜ một trần
+2 s. Trần ấy bảo vệ người chờ; nó không đuổi người GIỮ.
+
+```
+GUC pool app_api: idle_session_timeout=0 iits=1min statement_timeout=15s lock_timeout=15s
+sau khi lay khoa MUC PHIEN:             granted=1  state=idle
+lan ghi so trong khi bi giu:            55P03 o 2 005 ms
+sau 3 s dung yen (iits ep xuong 500ms): state=idle  granted=1      <- GUC KHONG voi toi
+lan ghi so sau 3 s:                     55P03 o 2 004 ms
+ham khoa tu van: 21 ham, app_api goi duoc 21
+```
+
+Sổ nợ đề nghị đo bằng *"đứng yên quá 60 s"*. Vòng này đo trong **3 s** bằng cách ép chính `idle_in_transaction_session_timeout`
+xuống 500 ms — gấp sáu ngưỡng. Mạnh hơn, vì nó cô lập ĐÚNG lý do: phiên giữ khoá mức PHIÊN **không ở trong giao dịch**, nên GUC ấy
+không bao giờ với tới nó, và pool không đặt `idle_session_timeout`.
+
+Vế thứ hai — một giao dịch còn phát câu — cũng đứng: phát câu mỗi 300 ms dưới ngưỡng 1 s ⇒ `idle in transaction`, khoá vẫn giữ,
+nạn nhân gãy `55P03` ở **2 004 ms**.
+
+## 2. Hình dạng sổ nợ đề xuất PHẢI ĐỔI, và phép đo là lý do
+
+Sổ nợ viết: *"thu hồi EXECUTE các hàm khoá tư vấn mức phiên khỏi PUBLIC"*. Đo ra hai điều làm câu ấy chưa đủ:
+
+| Đo | Hệ quả cho hình dạng |
+|---|---|
+| `migrate()` gọi `pg_advisory_lock` + `pg_advisory_unlock` — **mức phiên** | Thu hồi trần trụi chặn luôn lần triển khai. S0 đã đo đúng ca ấy một lần (`migrate.ts`: *REVOKE `pg_advisory_unlock` ⇒ 42501, lỗi biến mất hoàn toàn*) |
+| `noi_chuoi_kiem_toan()` là SECURITY **INVOKER** (`prosecdef = false`, chủ `postgres`) | Vai ứng dụng BUỘC phải giữ `pg_advisory_xact_lock` ⇒ **nửa thứ hai không đóng được bằng thu hồi quyền, bất kể làm thế nào** |
+
+Nên cái mà thu hồi đóng được là đường **CỐ Ý**, không phải đường **HỢP LỆ**. Hai đường ấy khác nhau về bản chất, và vòng này tách
+chúng ra thay vì gộp thành "khoản 128".
+
+## 3. Chủ dự án quyết hai việc (ADR-042)
+
+⑴ **Nửa CỐ Ý — thu hồi, cấp lại cho vai ĐANG chạy migrate.** Mục hardening mới thu hồi TÁM hàm lấy khoá mức phiên khỏi PUBLIC
+(`pg_advisory_lock*`, `pg_try_advisory_lock*`, **cả hai dạng đối số**) rồi `GRANT ... TO CURRENT_USER`. Đo sau vá: `app_api` nhận
+**42501**, đường ghi sổ hợp lệ vẫn qua trong **7 ms**. `*_xact_lock*` và `pg_advisory_unlock*` không bị đụng.
+
+⑵ **Nửa HỢP LỆ — NHẬN VÀ GHI RA**, thành khoản **178**, kèm cả hai phép đo và ba hình dạng đã cân (giữ nguyên · bộ dọn giết phiên
+quá N giây · PG17 + `transaction_timeout`).
+
+**Cái giá, và một lần nói lại cho đúng.** Lúc trình phương án em mô tả cái giá là *"một vai deploy hoàn toàn mới cần một lần GRANT
+của superuser"*. Đo xong thì nó rộng hơn: `REVOKE` trên hàm `pg_catalog` đòi CHỦ HÀM, nên **mọi CSDL chưa áp mục này** cần một lần
+can thiệp của superuser — không riêng vai mới. Cùng khuôn hồ sơ N3 đã có trong kho, và vế ⓹ của tệp test đo nó: một vai NOSUPERUSER
+mới KHÔNG có `pg_advisory_lock(bigint)`, và ĐÚNG MỘT câu `GRANT` là đủ.
+
+## 4. Mốc đột biến — bốn mũi, cả bốn ĐỎ, và hai mũi đỏ ở chỗ mạnh hơn em định
+
+| Mũi | Đổi | Đỏ ở đâu |
+|---|---|---|
+| M0 | *không đột biến nào* | **XANH** — đối chứng |
+| M1 | gỡ hẳn vòng `REVOKE` | **`migrate()` gãy ở BƯỚC 3 của chính hardening** |
+| M2 | chỉ thu hồi dạng `(bigint)`, bỏ ngỏ `(integer, integer)` | **`migrate()` gãy ở BƯỚC 3** |
+| M3 | thu hồi QUÁ TAY, chạm cả `*_xact_lock` | đối chứng dương của vế ⓵ — đường ghi sổ hợp lệ hỏng |
+| M4 | gỡ câu `GRANT ... TO CURRENT_USER` | vế ⓸ |
+| M5 | gỡ bẫy `42501` ở `migrate.ts` | vế ⓺ — thông điệp về lại `permission denied` trần trụi |
+
+M1 và M2 đỏ ở **hardening**, không ở tệp test: hậu điều kiện của chính mục ấy bắt được, nên một lần triển khai thiếu bản vá GÃY chứ
+không âm thầm chạy. Đó là chỗ mạnh hơn một khẳng định trong test, và nó có nghĩa là cả hai dạng đối số đều load-bearing —
+`pg_advisory_lock(integer, integer)` lấy **cùng một khoá**.
+
+## 5. Một ranh giới của chính phép đo, nói ra
+
+Câu `GRANT` **không kiểm được bằng hành vi ở cụm test**: migrate ở đó chạy dưới `postgres`, mà `postgres` là CHỦ của chính hàm ấy.
+Nên `has_function_privilege` luôn true (superuser đi qua mọi phép kiểm) và `proacl` cũng luôn mang một dòng cho `postgres` — dòng
+MẶC ĐỊNH của chủ hàm. **Đo: đột biến M4 làm CẢ HAI phiên bản ấy XANH.** Cùng lớp lỗi với ADR-040 (*hàm `SECURITY DEFINER` trả XANH
+trên CI mà 0 hàng ở cụm thật, vì migrate chạy superuser*). Vế ⓸ vì thế đọc NGUỒN của mục hardening — yếu hơn một phép đo hành vi,
+nhưng nó là thứ DUY NHẤT giết được M4, và vế ⓹ đo phần còn lại. Ghi ra thay vì để một vế rỗng ruột đứng đó trông như một phép đo.
+
+## 6. Em trình một cái giá SAI, phép đo bác nó, và chủ dự án quyết lại
+
+Đây là phần đáng đọc nhất của vòng này, nên nó không nằm trong một dấu ngoặc.
+
+Lúc trình đánh đổi, em mô tả cái giá của phương án ⒜ là *"một vai deploy hoàn toàn mới cần một lần `GRANT` của superuser"*, với hàm
+ý rằng câu `GRANT ... TO CURRENT_USER` trong hardening lo được phần còn lại. Chủ dự án chọn ⒜ **trên lời mô tả ấy**.
+
+Cài xong, `pnpm evidence` đỏ: **17 test**, tất cả là hồ sơ deploy (N2, N3, QT1), tất cả cùng một dòng
+`permission denied for function pg_advisory_lock`. Đối chứng hai chiều: đặt `hardening.always.sql` về bản HEAD ⇒ hồ sơ ấy XANH; đặt
+lại bản có mục mới ⇒ ĐỎ.
+
+**Lý do là một vòng con gà và quả trứng mà em đã không thấy khi trình.** `migrate()` lấy `pg_advisory_lock` ở câu ĐẦU TIÊN, trước khi
+`hardening.always.sql` chạy. Chỉ superuser mới `REVOKE` được trên hàm `pg_catalog`, nên lúc câu `GRANT ... TO CURRENT_USER` thực thi
+được thì `CURRENT_USER` **là superuser** — vai deploy không nhận được gì, và tới lượt deploy nó gãy ở câu đầu, trước khi hardening kịp
+nói một lời. Không lượt `migrate()` nào tự cấp lại được cho chính mình. Cái giá thật vì thế không phải *"một lần cho một vai mới"* mà
+là **một tiền điều kiện thường trực của hợp đồng triển khai**.
+
+Em dừng lại và trình lại thay vì tự sửa: uỷ quyền merge không phủ việc nhận một hồi quy đo được, kể cả hồi quy trên chính bản vá của
+mình. Chủ dự án chọn giữ mục thu hồi và **nhận tiền điều kiện** — một câu `GRANT` dưới superuser cho mỗi vai deploy.
+
+**Mười sáu trong mười bảy hồ sơ sửa bằng MỘT dòng** — khuôn dựng vai deploy của `db/migrations.int.test.ts` là một chỗ, nên tiền điều
+kiện vào đúng một lần. Hồ sơ thứ mười bảy là **N3** (cụm TRỐNG, vai deploy NOSUPERUSER chạy `migrate()` ĐẦU TIÊN) và nó hỏng theo
+kiểu khác: nó ghim *"Hardening không sửa được **1** mục"*, mà nay là **2** — mục thứ hai chính là mục mới, vì `REVOKE` trên hàm
+`pg_catalog` đòi chủ hàm. Một **lời khai ĐẾM** thiu đúng lúc thêm một mục cần superuser. Nó được sửa thành 2, nêu tên cả hai mục, và
+lối ra của hồ sơ ấy nay gồm HAI việc của superuser — cùng tiêu đề test cũng được sửa, vì tiêu đề khai *"đúng một mục"*.
+
+**Và cái giá ấy phải TỰ NÓI RA.** Ô *"quyền cần"* của hardening chạy SAU nên không bao giờ tới được người đọc ở ca này. `migrate.ts`
+nay bắt `42501` ở đúng câu ấy và ném `TU_CHOI_KHOA_MIGRATE` — nêu NGUYÊN VĂN câu `GRANT` cần chạy, giữ lỗi gốc ở `cause`. Một bản
+duy nhất ra cửa `@trustprocure/db`, test IMPORT chứ không chép (§S1.51 đã đo cái giá của việc chép). Vế ⓺ của tệp test đo nó: một vai
+deploy chưa được cấp nhận đúng thông điệp ấy chứ không phải `permission denied` trần trụi.
+
+## 7. Phần KHÔNG làm
+
+Nửa HỢP LỆ của khoản 128 → khoản **178**. Hàng đợi chủ dự án giao đã hết.
+
+## Sổ nợ
+
+**177 → 178 khoản, 68 → 68 còn mở** — đóng **1** (128), mở **1** (178). 68 = 5 ngoài mã + 63 có mã. **41 → 42 ADR.**
+
+## Cổng
+
+- `pnpm t0` — 262 module, 1103 phụ thuộc, **0 vi phạm**
+- `pnpm test` — 67/67 tệp, **934 đạt** | 1 bỏ qua; `tests/architecture` riêng: **263 đạt** | 1 bỏ qua
+- `pnpm evidence` — **`vitest thoát mã 0`** (`vitest-report.json`: `success: true`, 0 test đỏ), 1982 khẳng định, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), **XANH**
+
+**HAI LƯỢT EVIDENCE ĐỎ TRƯỚC ĐÓ, và lượt thứ hai là lỗi của chính em — nói ra cả hai.**
+
+⑴ **17 test**, hồ sơ deploy, `permission denied for function pg_advisory_lock` — đó là phép đo bác lời trình của em, xem mục 6.
+
+⑵ **309 test / 107 tệp**, `permission denied for function pg_advisory_**xact**_lock` — một hàm mà bản vá này KHÔNG thu hồi. Thủ phạm
+là script đột biến của chính vòng này: nó in *"đã khôi phục nguyên bản"* nhưng mũi **M3** (thêm `pg_advisory_xact_lock` vào danh sách
+thu hồi) **ở lại trong tệp**, rồi em `git add` và chạy ba cổng trên nó. `pnpm t0` XANH, `tests/architecture` XANH, `pnpm test`
+XANH — **cả ba vì không cổng nào trong đó chạy `migrate()`**. Chỉ `pnpm evidence` bắt được.
+
+Bài học ghi vào chỗ nó thuộc về: script đột biến phải chụp `sha256` của mọi tệp đích lúc khởi động, so lại sau MỖI lượt khôi phục,
+và NÉM khi lệch — kho đã có đúng kỷ luật ấy ghi ra từ trước, và script của vòng này bỏ qua nó. Cộng một bước không thay thế được
+bằng cổng tĩnh: `git diff` tệp bị đột biến và ĐỌC BẰNG MẮT trước khi `git add`.
