@@ -8042,6 +8042,14 @@ Sáu cổng ấy đòi gì, và vá thế nào — không cổng nào được n
 | `[INV-H20]` P9b | số gói + công cụ ở `Handoff.md` suy từ `git ls-files` | `13 gói + 5 công cụ` → `6` |
 | `[INV-H20]` P9b đột biến | phép đột biến của chính lời khai ấy phải còn răng | lời khai này phải có **đúng MỘT** bản: để lại bản cũ dạng `~~…đầy đủ…~~` làm phép đột biến rỗng ruột. Lịch sử giữ con số TRẦN, đúng khuôn lời khai migration |
 
+**Lượt CI thứ HAI còn đỏ một cổng nữa, và nó tinh hơn cả sáu cổng trên.** `tests/architecture/qt3-cu-phap.int.test.ts` **PREPARE
+từng câu SQL sản xuất trên Postgres thật**, và nó báo *"2/156 câu KHÔNG phân tích được — `expires_at` là timestamptz nhưng biểu
+thức là integer"*. Câu ấy chạy ĐÚNG lúc gieo thật; thứ hỏng là câu mà CỔNG đọc: hai chỗ dùng một hằng `SAU_HAI_GIO` rồi nội suy
+`${…}` vào chuỗi, và bộ đọc tĩnh thay mỗi chỗ nội suy bằng một số nguyên. Vá bằng cách **viết nội tuyến** biểu thức ở cả hai chỗ.
+
+Bài học riêng của nó: một hằng SQL dùng chung trông gọn hơn, nhưng nó làm cổng đọc một câu KHÁC câu chạy — và một cổng đọc sai
+câu là một cổng không canh gì. Lượt vá đã chạy lại chính cổng ấy ở máy (thoát mã 0) trước khi đẩy, thay vì tốn thêm một vòng CI.
+
 Dòng cuối đáng đọc lại: **một lần gạch-giữ-nguyên-văn làm hỏng một phép đột biến.** Quy ước "gạch chứ không xoá" và quy ước "mỗi
 lời khai đúng một bản" đá nhau ở đúng chỗ này, và cổng bắt được.
 

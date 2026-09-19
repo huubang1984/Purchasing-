@@ -36,6 +36,12 @@
 // Mọi câu SQL ở đây ghim đủ bốn trục của QT3 ([INV-H21]): tên bảng đủ lược đồ, tên hàm
 // `pg_catalog.`, toán tử `OPERATOR(pg_catalog.…)`. Một script chạy dưới kết nối đặc quyền là chỗ
 // một `search_path` độc đắt nhất, nên nó là chỗ CUỐI CÙNG đáng được miễn.
+//
+// Và biểu thức `now() + interval` được viết NỘI TUYẾN ở cả hai chỗ thay vì rút thành một hằng
+// rồi nội suy: `tests/architecture/qt3-cu-phap.int.test.ts` PREPARE từng câu trên Postgres thật,
+// và bộ đọc tĩnh của nó thay mỗi chỗ nội suy bằng một số nguyên — nên câu nó kiểm sẽ KHÁC câu
+// chạy thật, và nó đỏ đúng như thế ở lượt CI thứ hai của vòng này. Một hằng dùng chung trông gọn
+// hơn; một câu mà cổng đọc được ĐÚNG NHƯ NÓ CHẠY thì đáng hơn.
 // ==============================================================================================
 
 import { randomBytes } from "node:crypto";
@@ -89,9 +95,6 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
 
 const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "Vat tu Truong Thanh"];
 
-/** `now() + interval` ghim cả tên hàm lẫn toán tử — xem khối QT3 ở đầu tệp. */
-const SAU_HAI_GIO = "pg_catalog.now() OPERATOR(pg_catalog.+) '2 hours'::pg_catalog.interval";
-
 async function chinh(): Promise<void> {
   const url = bat("TRUSTPROCURE_SEED_DATABASE_URL");
   const vong = docVongKhoa();
@@ -138,7 +141,7 @@ async function chinh(): Promise<void> {
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
       const sid = (await q<{ id: string }>(
         "INSERT INTO public.sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
-          `VALUES ($1, $2, $3, ${SAU_HAI_GIO}, pg_catalog.now()) RETURNING id`,
+          "VALUES ($1, $2, $3, pg_catalog.now() OPERATOR(pg_catalog.+) '2 hours'::pg_catalog.interval, pg_catalog.now()) RETURNING id",
         [org, id, randomBytes(32)],
       )).id;
       nguoiMua.push({ email, id, sessionId: sid });
@@ -154,7 +157,7 @@ async function chinh(): Promise<void> {
 
     const rfq = (await q<{ id: string }>(
       "INSERT INTO public.rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
-        `VALUES ($1, $2, ${SAU_HAI_GIO}, true, $3, $4) RETURNING id`,
+        "VALUES ($1, $2, pg_catalog.now() OPERATOR(pg_catalog.+) '2 hours'::pg_catalog.interval, true, $3, $4) RETURNING id",
       [org, `Goi thau vat tu ket cau ${duoi}`, nguoiGieo, phienGieo],
     )).id;
     for (const [i, hm] of HANG_MUC.entries()) {
