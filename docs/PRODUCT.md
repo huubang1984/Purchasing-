@@ -116,3 +116,40 @@ kiểm toán.
 
 **Chưa có khách hàng pilot.** Đây là rủi ro lớn nhất của dự án — lớn hơn mọi rủi ro kỹ
 thuật. Nên tiếp cận song song ngay từ S0, không đợi có sản phẩm.
+
+---
+
+## 11. Định nghĩa hoàn thành MVP1 — bằng hành vi, không bằng số đếm
+
+> **[2026-09-19] Mục này ra đời vì dự án đi 24 ngày mà không có một câu nào nói KHI NÀO thì xong.**
+> Điều kiện hoàn thành của S0 và của S1 đều phát biểu bằng số đếm của chính dự án: độ phủ bất
+> biến, số khoản nợ, số lượt soi. Không con số nào trong đó nói một người mua thật đã làm được
+> gì. Hệ quả đo được: sáu điều kiện đầu của S1 đạt từ 2026-09-05, và 78 vòng tiếp theo vẫn chạy
+> vì không có mốc nào để dừng. Xem ADR-043.
+
+**MVP1 xong khi câu dưới đây chạy được một lần, đầu tới cuối, trên hạ tầng thật, không một bước
+nào cần người của dự án can thiệp bằng tay:**
+
+> Một người mua của một doanh nghiệp thật tạo một RFQ có ít nhất ba hạng mục và mời ba nhà cung
+> cấp thật. Ba nhà cung cấp mở link mời **trên điện thoại của họ**, nộp báo giá niêm phong, và
+> nhận biên nhận kiểm chứng được. Quá hạn nộp, hai người của bên mua phê duyệt mở thầu. Bảng so
+> sánh hiện ra với giá đúng tới từng chữ số. Người mua chọn nhà cung cấp và xuất được bộ bằng
+> chứng kiểm toán của trọn chuỗi ấy.
+
+Câu ấy chạm cả ba USP ở §2, và nó **chưa chạy được** vì bốn mảnh dưới đây — đo trên `master`
+`1a1a060` ngày 2026-09-19:
+
+| # | Mảnh còn thiếu | Đo được |
+|---|---|---|
+| 1 | **Giao diện** — nhà cung cấp không có chỗ nào để nộp thầu | `git ls-files` cho đúng MỘT tệp `.html` trong kho, và nó là máy dò ở `tools/do-webcrypto/`. Bốn tiến trình trong `apps/` đều là tiến trình nền |
+| 2 | **S2 — Đánh giá, BAFO, Award** | §7 của chính tệp này khai *Chưa có spec*, và `docs/superpowers/specs/` có đúng một tệp, cho S0+S1 |
+| 3 | **Triển khai thật** | ADR-009 chốt AWS + AWS KMS `ap-southeast-1` trên giấy; chưa có tài khoản, chưa có CMK, chưa có role — khoản nợ 15 |
+| 4 | **Khách hàng pilot** | §10 ghi *Chưa có khách hàng pilot* từ 2026-08-27, và dòng ấy chưa đổi một chữ |
+
+**Ba mảnh đầu là việc của dự án. Mảnh thứ tư thì không, và nó chặn nhiều nhất** — §10 đã gọi nó
+là rủi ro lớn nhất, lớn hơn mọi rủi ro kỹ thuật, từ ngày đầu tiên.
+
+**Điều mục này KHÔNG nói:** nó không nói phần đã xây là thừa. Lõi niêm phong có 56/56 bất biến
+được cưỡng chế và đo bằng đột biến; đó là thứ khó nhất của sản phẩm và nó đã xong. Mục này chỉ
+nói rằng *đo bằng bất biến* và *đo bằng người mua* là hai trục khác nhau, và dự án tới hôm nay
+chỉ có trục thứ nhất.

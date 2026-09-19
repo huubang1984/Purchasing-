@@ -7858,3 +7858,92 @@ thu.
 Lượt 73 tìm ra một CAO **do chính lượt 72 tạo ra**. Lượt 74 lặp lại đúng khuôn: hai CAO đều nằm trong bốn vòng vừa viết, và một
 trong hai nằm trong một ADR đã chấp nhận cùng ngày. Hai lần liên tiếp, thứ lượt soi ngang bắt được không phải nợ cũ mà là **mực
 chưa khô**. Đó là lập luận cho việc chạy sớm hơn mốc khi hardening vừa đổi — và nó là một phép đo, không phải một cảm giác.
+
+---
+
+# §S1.88 — CHỐT S1 VÀ CHIA SỔ NỢ BA RỔ: một vòng không đổi một dòng hành vi nào, và nó mở đầu bằng một câu hỏi của chủ dự án
+
+**Vòng này không phải một lượt soi.** Nó trả lời một câu hỏi: *đang đi đúng kế hoạch không, đích cuối là gì, cần gì để hoàn thành.*
+Sản phẩm của nó là ba tài liệu và một ADR — **0 dòng mã sản phẩm, 0 SQL, 0 test đổi**. Không có mốc đột biến, và lý do được ghi ở §6.
+
+## 0. Kiểm mốc lượt soi ngang — và lần này mốc ĐÃ CHẠM, vòng này KHÔNG chạy: ghi LỠ NHỊP kèm lý do
+
+`Handoff.md` §11 đặt điều kiện *"sau ba vòng đổi hardening, **hay** chậm nhất S1.89"*. Đo cả hai vế thay vì đọc lịch:
+
+| vế | phép đo | kết quả |
+|---|---|---|
+| lịch | vòng này là S1.88 < S1.89 | **chưa chạm** |
+| hardening | `git rev-list --count 1dfc7e3..HEAD --first-parent -- db/migrations/hardening.always.sql` | **3** — **ĐÃ THOẢ** |
+
+S1.87 đo vế này được **2** và kết luận *"chưa tới ba"*. Con số lên 3 vì **chính S1.87** đổi hardening (gỡ một dòng SQL chết).
+Hai vế nối bằng **hay**, nên một vế đủ: **mốc đã chạm ở vòng này**, và vòng này không chạy lượt ngang 75.
+
+**Lý do, và nó là một lý do chứ không phải một cái cớ:** lượt soi ngang soi MÃ — hồi quy xuyên vòng, lớp cưỡng chế lách nhau, test
+mất răng. Vòng này không đổi một dòng mã nào, nên chạy nó ở đây là soi đúng cây mà S1.87 đã soi. **Và một vòng KHÁC đang chạy song
+song trên `khoan-179-ve-cong-log-tu-choi` lúc biên bản này được viết** — nó đang đổi 11 tệp mã và test. Lượt ngang 75 chạy sau khi
+vòng ấy merge thì soi được cả hai; chạy bây giờ thì soi một cây sắp đổi. **Mốc mới: ngay sau vòng ấy merge, chậm nhất S1.90.**
+
+## 1. Bốn phép đo, và chúng nói cùng một điều
+
+⑴ **Sổ nợ phân kỳ.** Đếm bằng chính dòng `**CÒN MỞ TÍNH TỚI HEAD:**` trên `docs/STATE.md` ở từng mốc lịch sử của `master`:
+13 (09-09) · 16 (09-10) · **14 — đáy** (09-12) · 25 (09-13) · 41 (09-17) · 49 (09-18) · **79** (09-19). Bảy ngày, **gấp 5,6 lần**.
+**35** trong 79 khoản mở sinh ra ở bảy vòng cuối (dãy 154–189).
+
+⑵ **Kế hoạch hết từ S1.21.** Tệp cuối của `docs/superpowers/plans/` đề ngày 2026-09-07. S1.22 → S1.87 là **66 vòng không có kế
+hoạch**; sổ nợ đã lên thay kế hoạch, mà sổ nợ là một máy phát.
+
+⑶ **Công đi vào tài liệu.** Hai mươi vòng gần nhất: tài liệu 200–300 dòng mỗi vòng đều đặn, mã sản phẩm có vòng 11–31 dòng. Kho:
+20 934 dòng mã sản phẩm · 63 622 dòng test · 24 637 dòng tài liệu.
+
+⑷ **Điều kiện §7 mục 7 không có trạng thái *đạt*.** Sáu ô đầu đạt từ 2026-09-05; 78 vòng chạy tiếp. Chi tiết ở ADR-043.
+
+**Một lời tự đính chính của chính vòng này:** con số đầu tiên em báo cho chủ dự án là *"95 khoản mở"*. Sai — phép đếm ấy quét cả
+`docs/STATE.md` thay vì quét KHỐI `## Nợ kỹ thuật`, nên nó nhặt cả hàng của bảng *Điều kiện hoàn thành S0*. Số đúng, đếm bằng bộ
+đọc của `[INV-H20]`: **79**. Đường cong sau khi đo lại còn DỐC HƠN con số sai (đáy 14 chứ không phải 28).
+
+## 2. Ba rổ — và ranh giới của phép phân loại
+
+Tiêu chí, ba vế và danh sách đầy đủ: ADR-043 và `docs/STATE.md` §*Nợ kỹ thuật*. Tổng: **14 chặn pilot · 47 đóng băng · 18 rời sổ
+= 79**, đúng bằng dòng tổng kết. **Không khoản nào đóng, không khoản nào mở ở vòng này.**
+
+Phép phân loại đọc THÂN của từng khoản ở `1a1a060`, **không chạy lại một phép đo nào của chúng** — đó là ranh giới, và nó được ghi
+ở cả ADR lẫn sổ. Hai chỗ phép đọc ấy sửa lượt xếp đầu tiên của chính em, ghi ra vì chúng là bằng chứng rằng đọc kỹ có giá:
+
+- **114** — em xếp A vì *"nhà cung cấp làm phình mỗi lần đọc bảng so sánh"*. Đọc hết thân khoản: *"Hôm nay trần thân HTTP 64 KiB
+  chặn trước"*. Có một lớp khác đang đỡ ⇒ **B**.
+- **178** — em xếp A vì nó giữ khoá ghi sổ của cả tổ chức. Đọc hết: ADR-042 đã thêm tiền điều kiện deploy, phần dư chỉ cắn ở tải
+  cao ⇒ **B**, và pilot là tải thấp.
+
+## 3. Cổng
+
+| Cổng | Kết quả |
+|---|---|
+| `pnpm t0` (nhánh này) | **thoát mã 0** — 262 module, 1 103 phụ thuộc, 0 vi phạm |
+| `pnpm test` (nhánh này) | xem §5 |
+| `pnpm test:int` cục bộ | **CỐ Ý KHÔNG CHẠY** — xem §4 |
+| CI trên `master` `1a1a060` | lượt `35443970423`, **sáu job SUCCESS** (T0, T0b, T1+T2 ubuntu, T1+T2 windows, T3, Evidence) |
+
+## 4. Vì sao `test:int` không chạy cục bộ, và vì sao thay thế của nó MẠNH HƠN chứ không yếu hơn
+
+Một phiên khác đang chạy trên `worktrees/s0-foundation` cùng máy, cùng Postgres. Hai lượt tích hợp chồng nhau đã từng cho
+`migrations.int` hết hạn và thời lượng tệp vô lý — bài học đã ghi. Xếp hàng là đúng, giết là sai.
+
+Thay vào đó, bằng chứng cho điều kiện §7 mục 2 lấy từ **lượt CI chạy trên CHÍNH commit `1a1a060`**, và nó mạnh hơn một lượt cục bộ
+ở ba vế đo được: nó có bước quét bí mật (`gitleaks`) mà `pnpm t0` cục bộ không có; nó chạy T1+T2 trên **cả** `windows-latest`; và
+nó chạy `Evidence pack` trên máy sạch. Vòng này không đổi mã nên lượt ấy vẫn nói đúng về hành vi của HEAD.
+
+## 5. Phần KHÔNG làm — và mỗi cái một lý do
+
+- **Không chạy mốc đột biến.** Đột biến chứng minh một lớp có răng; vòng này không thêm lớp nào. Đột biến trên văn bản tài liệu thì
+  `[INV-H20]` đã mang sẵn và nó chạy trong `pnpm test`.
+- **Không đóng một khoản rổ C nào.** Chuyển 18 khoản sang `[ĐÓNG]` là đổi tập khoản mở, tức đổi dòng tổng kết VÀ đoạn đếm, và đó là
+  một quyết định riêng của chủ dự án. Rổ C hôm nay chỉ là một cách ĐỌC, không phải một lần đóng.
+- **Không đổi nhịp lượt soi ngang.** Câu hỏi *"soi theo lát cắt thay vì theo lịch"* chưa trình, chưa chốt; `Handoff.md` §11 giữ
+  nguyên quy tắc cũ, và §0 ở trên ghi lỡ nhịp theo đúng quy tắc ấy.
+- **Không viết spec S2, không dựng giao diện.** Cả hai là việc kế tiếp có tên ở `Handoff.md` §11, và cả hai đứng sau việc gặp khách
+  hàng pilot — viết trước khi gặp là đúng thứ rủi ro số 1 của kế hoạch S1 cảnh báo.
+
+## Sổ nợ
+
+Không mở khoản nào. Không đóng khoản nào. **79 khoản mở, y nguyên** — vòng này đổi cách ĐỌC sổ, không đổi nội dung sổ.
+
