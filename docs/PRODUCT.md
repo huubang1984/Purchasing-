@@ -141,10 +141,31 @@ Câu ấy chạm cả ba USP ở §2, và nó **chưa chạy được** vì bố
 
 | # | Mảnh còn thiếu | Đo được |
 |---|---|---|
-| 1 | **Giao diện** — nhà cung cấp không có chỗ nào để nộp thầu | `git ls-files` cho đúng MỘT tệp `.html` trong kho, và nó là máy dò ở `tools/do-webcrypto/`. Bốn tiến trình trong `apps/` đều là tiến trình nền |
+| 1 | ~~**Giao diện** — nhà cung cấp không có chỗ nào để nộp thầu~~ **[S1.97] LỜI KHAI NÀY ĐÃ SAI. Mảnh 1 nay là:** *người mua không có chỗ nào để TẠO gói thầu và MỜI nhà cung cấp; và không có chỗ nào để xuất bộ bằng chứng* | **[S1.97 — ĐI THỬ TRÊN TRÌNH DUYỆT THẬT, khung 375×812]** `apps/web/trang/nop-thau.html` và `mo-thau.html` có thật, và bảy bước của kịch bản đi được năm bước rưỡi: nhà cung cấp mở link, OTP qua kênh KHÁC, nộp báo giá niêm phong trong trình duyệt, nhận biên nhận ký ECDSA P-256 — chạy; đóng thầu, xin mở, HAI người duyệt, điều phối, bảng so sánh đúng tới từng chữ số — chạy; xuất bằng chứng `ok=true checked=27` — chạy nhưng bằng CLI. Hai bước KHÔNG có giao diện: tạo gói thầu và mời nhà cung cấp (bộ gieo làm qua API), và chọn nhà cung cấp (thuộc mảnh 2). ~~Số cũ giữ để đối chiếu: `git ls-files` một tệp `.html`~~ — nay **ba**, trong đó hai là trang sản phẩm |
 | 2 | **S2 — Đánh giá, BAFO, Award** | §7 của chính tệp này khai *Chưa có spec*, và `docs/superpowers/specs/` có đúng một tệp, cho S0+S1 |
 | 3 | **Triển khai thật** | ADR-009 chốt AWS + AWS KMS `ap-southeast-1` trên giấy; chưa có tài khoản, chưa có CMK, chưa có role — khoản nợ 15 |
 | 4 | **Khách hàng pilot** | §10 ghi *Chưa có khách hàng pilot* từ 2026-08-27, và dòng ấy chưa đổi một chữ |
+
+
+**[2026-09-20 / S1.97] BẢNG TRÊN ĐƯỢC ĐO LẠI SAU TÁM VÒNG KHÔNG AI ĐỤNG TỚI, VÀ HÀNG 1 SAI.**
+Bảng này chốt ngày 2026-09-19 (S1.88). Từ đó tới S1.96 là tám vòng, mỗi vòng đo lại sổ nợ và không vòng nào đo lại ĐÍCH — đúng
+hình dạng mà ADR-043 gọi tên: sổ nợ là một máy phát, còn kịch bản §11 thì đứng yên. Lượt đi thử S1.97 chạy trọn kịch bản trên
+bản `f6865bb`, bằng trình duyệt ở khung hình điện thoại cho phần nhà cung cấp, và kết quả là:
+
+| bước của kịch bản §11 | đo được 2026-09-20 |
+|---|---|
+| người mua tạo RFQ ≥3 hạng mục, mời 3 nhà cung cấp | **không có giao diện** — `pnpm gieo:demo` làm qua API |
+| ba nhà cung cấp mở link **trên điện thoại**, nộp báo giá niêm phong | **chạy** — 375×812, ba bản nộp, giá niêm phong trong trình duyệt |
+| nhận biên nhận kiểm chứng được | **chạy** — văn bản chính tắc ký ECDSA P-256, kiểm bằng `/.well-known/trustprocure-receipt-keys` |
+| quá hạn nộp | **chạy** — đóng sớm có lý do, `OPEN` → `CLOSED` |
+| hai người của bên mua phê duyệt mở thầu | **chạy** — hai người khác nhau, hai phiên, người soạn không tự duyệt được |
+| bảng so sánh hiện ra với giá đúng tới từng chữ số | **chạy** — ba tổng khớp từng chữ số, 3 đọc được / 0 không đọc được |
+| người mua CHỌN nhà cung cấp | **không có** — thuộc S2, và giao diện tự nói *chưa có trong lát cắt này* |
+| xuất bộ bằng chứng kiểm toán của trọn chuỗi | **chạy, nhưng bằng CLI** — `pnpm neo xuat` rồi `kiem` trả `ok=true checked=27 neo=1` |
+
+**Nghĩa là mảnh 1 không còn là *nhà cung cấp không nộp được*.** Nó là hai lỗ cụ thể hơn: không có màn tạo gói thầu và mời, và
+không có màn xuất bằng chứng. Mảnh 2, 3, 4 không đổi một chữ — và **hai trong bốn mảnh không phải việc của mã**: mảnh 3 cần một
+tài khoản hạ tầng, mảnh 4 cần một khách hàng. Không vòng vá lỗi nào chạm được hai mảnh ấy.
 
 **Ba mảnh đầu là việc của dự án. Mảnh thứ tư thì không, và nó chặn nhiều nhất** — §10 đã gọi nó
 là rủi ro lớn nhất, lớn hơn mọi rủi ro kỹ thuật, từ ngày đầu tiên.
