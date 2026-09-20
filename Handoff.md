@@ -412,8 +412,8 @@ Mười một mục trên là việc của S0 và của đầu S1; chúng đã x
 kịch bản phát biểu bằng hành vi người mua ở `docs/PRODUCT.md` §11. Bốn việc, đúng thứ tự này:
 
 1. **Rổ A — mười bốn khoản chặn pilot.** Danh sách và lý do từng khoản ở `docs/STATE.md` §*Nợ kỹ thuật*,
-   ngay dưới đoạn đếm: ~~15 · 102 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 154 · 155 · 159 · 160 · 165~~ ~~**[S1.93] 15 · 102 · 103 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 155 · 159 · 160 · 165 · 196 · 198**~~ **[S1.94] 15 · 102 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 155 · 159 · 160 · 165 · 196 · 198** (103 ĐÓNG) (154 ĐÓNG ở S1.91; 198 vào ở S1.92; 103 và 196 lên từ rổ B ở S1.93).
-   ~~Bốn mươi bảy~~ ~~**[S1.93] Năm mươi mốt**~~ **[S1.94] Năm mươi** khoản rổ B **đóng băng** tới sau pilot, ~~mười tám~~ **[S1.94] mười chín** khoản rổ C thành *giới hạn đã biết*. Một
+   ngay dưới đoạn đếm: ~~15 · 102 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 154 · 155 · 159 · 160 · 165~~ ~~**[S1.93] 15 · 102 · 103 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 155 · 159 · 160 · 165 · 196 · 198**~~ ~~**[S1.94] 15 · 102 · 104 · 105 · 108 · 109 · 125 · 130 · 135 · 155 · 159 · 160 · 165 · 196 · 198**~~ **[S1.95] 15 · 102 · 105 · 109 · 125 · 130 · 159 · 165 · 196 · 198** (103 ĐÓNG; 104 · 108 · 135 · 160 sang rổ B, 155 sang rổ C) (154 ĐÓNG ở S1.91; 198 vào ở S1.92; 103 và 196 lên từ rổ B ở S1.93).
+   ~~Bốn mươi bảy~~ ~~**[S1.93] Năm mươi mốt**~~ ~~**[S1.94] Năm mươi**~~ **[S1.95] Năm mươi tư** khoản rổ B **đóng băng** tới sau pilot, ~~mười tám~~ ~~**[S1.94] mười chín**~~ **[S1.95] hai mươi** khoản rổ C thành *giới hạn đã biết*. Một
    vòng chạm rổ B phải nói nó chạm mảnh nào của bảng bốn mảnh ở §11.
 2. **Spec S2 — Đánh giá, BAFO, Award.** Lát cắt MVP1 duy nhất chưa có spec (`docs/PRODUCT.md` §7), ước
    lượng gốc 3–4 tuần. Không viết được đúng nếu chưa có việc 4.
