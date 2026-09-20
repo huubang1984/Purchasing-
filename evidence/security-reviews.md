@@ -8313,3 +8313,105 @@ merge** — sau khi `t0`, `pnpm test` và hai lượt int nhắm tệp đều đ
 `t0` exit 0 (279 module / 1141 phụ thuộc / 0 vi phạm) · `pnpm test` 69 tệp / 951 test · `buyer.int` + `composition.int` 14 test ·
 evidence **vitest thoát mã 0**. Sổ nợ **196 khoản, 83 → 81 mở**; rổ A **15 → 13**; rổ B và rổ C không đổi. Không migration nào, không một dòng
 `hardening.always.sql` nào.
+
+# §S1.92 — CHẶNG GỬI CHẠY ĐÚNG, VÀ KHÔNG AI ĐÁNH THỨC NÓ: KHOẢN 156 THÔI LÀ MỘT PHÉP ĐỌC
+
+**Vòng này sinh ra từ một lượt ĐI THỬ, mười phút sau khi S1.91 merge.** Chủ dự án chọn nghiệm thu bằng tay chặng gửi vừa dựng. Nó không chạy.
+
+## 1. Nhịp lượt soi ngang — LỠ NHỊP, và mốc đã chạm
+
+Kiểm ở ĐẦU vòng. Vế lịch **chạm**: vòng này là S1.92, mốc là *chậm nhất S1.92*. Vế hardening
+`git rev-list --count 1dfc7e3..origin/master --first-parent -- db/migrations/hardening.always.sql` = **3**, đủ ba — vẫn là ba lần đổi mà S1.90
+đã đo rồi hoãn. Không lượt ngang nào chạy. Lý do: vòng này sinh ra giữa phiên từ một lượt đi thử, và chủ dự án chọn vá chặng đánh thức ngay thay
+vì mở một lượt sáu góc; lượt soi ngang là việc chủ dự án gọi (ADR-043). **Mốc mới: chậm nhất S1.93.**
+
+## 2. Phép đo tìm ra khiếm khuyết
+
+Môi trường demo dựng lại từ master, gieo một vòng thầu mới, đi bằng chính các đường của sản phẩm: gia hạn hạn nộp → đóng thầu → tạo yêu cầu mở
+thầu. Sau **30,6 giây** chờ, hộp thư dev **rỗng**. Sổ:
+
+```
+RFQ_DEADLINE_EXTENDED_NOTICE | PENDING | 3
+UNSEAL_APPROVAL_NOTICE       | PENDING | 2
+```
+
+Việc được xếp đúng, đủ, đúng số. Không có gì chạy chúng. Hai phép tìm nói vì sao:
+
+| Đo | Kết quả trên bản S1.91 |
+|---|---|
+| `nudgeOutbox` có ở nhánh nào của `dispatch.ts` | chỉ `ANON` |
+| `ctx.nudgeOutbox()` được gọi ở đâu trong toàn kho | đúng một chỗ: `routes/auth.ts`, tức `POST /auth/link` |
+| `listOrganizations` của runner `api` | `() => [...toChucDaThay]`, tập chỉ lớn lên trong `outboxNudge` |
+
+**Phép đối chứng, và nó là phép đo quan trọng nhất của mục này:** một lời gọi `/auth/link` cho cùng tổ chức ⇒ **5/5 việc xong trong 8 giây**,
+sáu tệp trong hộp thư. Tức handler, phép tra email, phép phát mã, bộ gửi — tất cả đều đúng. Thứ thiếu là lời đánh thức.
+
+Sau khi runner thức, phần còn lại của lượt đi thử đạt hết: hai người duyệt vào bằng **đúng mã trong tin** (không nhận token nào từ script gieo),
+tìm ra yêu cầu chỉ từ mã gói thầu trong tin, phê duyệt 0→1→2, `APPROVED`.
+
+## 3. Điều đáng đọc nhất: sổ nợ đã ghi đúng ca này từ mười một vòng trước
+
+Khoản **156**, S1.81, nguyên văn: *“`listOrganizations` của `api` là tập tổ chức ĐÃ THẤY enqueue, nạp qua đúng một lời gọi `ctx.nudgeOutbox()` ở
+`routes/auth.ts`, mà đường điều phối mở thầu KHÔNG đi qua đó.”*
+
+Nó nằm ở **rổ B — đóng băng tới sau pilot**. Nó chặn đúng kịch bản pilot. Và hai vòng S1.90–S1.91 dựng một chặng gửi lên trên nó mà không vòng
+nào đọc lại nó — kể cả vòng S1.91, vòng đã *viết lại* một khoản khác vì lời khai của nó sai.
+
+Bài học mang sang: **rổ không phải một phán quyết đọc một lần.** Một khoản rổ B có thể đang chặn pilot, và thứ phát hiện ra điều đó là một người
+đi thử, không phải một lượt đọc mã.
+
+## 4. Vì sao cổng không thấy
+
+`buyer.int.test.ts` chạy handler outbox **bằng tay** — `outboxTest(apiPool, dv.services).chay(orgA)`. Nó đo nội dung tin, và nó xanh kể cả khi
+không một tiến trình nào trên đời gọi handler ấy. Đó là một lựa chọn đúng cho thứ nó đo; vách ngăn nằm ở chỗ **không phép đo nào đứng giữa** “bộ
+điều phối chạy xong một yêu cầu” và “runner được đánh thức”. Cùng lớp với bài học đã ghi ở §S1.78 (*đo vách ngăn cả tuần tự lẫn cùng lúc*): thứ
+không ai đo là thứ nằm GIỮA hai tầng đều đã được đo kỹ.
+
+## 5. Bản vá — ADR-047
+
+Dấu “giao dịch này đã xếp việc” đặt ở **chính `enqueueJob`** (`WeakSet`, đọc-thì-xoá), bộ điều phối đọc trong `finally` ở cả ba nhánh có tổ chức
+rồi đánh thức sau commit khi phản hồi `< 400`. `ctx.nudgeOutbox` bị xoá khỏi hợp đồng route: còn giữ là còn hai cơ chế làm một việc, và cái thứ
+hai là cái quên được. Ba phương án kia và cái giá của bản đã chọn ghi ở ADR-047 — **nửa còn lại của khoản 156 vẫn mở**, và §6 dưới đây nói rõ nửa
+nào.
+
+## 6. Đột biến — bốn, cả bốn ĐỎ
+
+| # | Đột biến | Tệp | Kết quả |
+|---|---|---|---|
+| 1 | bỏ lời đánh thức ở nhánh NGƯỜI MUA (dựng lại đúng khiếm khuyết) | `apps/api/src/dispatch.ts` | 🔴 |
+| 2 | `enqueueJob` không để dấu | `packages/outbox/src/enqueue.ts` | 🔴 |
+| 3 | đặt dấu TRƯỚC câu INSERT (ca 23503 mất tính chất) | `packages/outbox/src/enqueue.ts` | 🔴 |
+| 4 | `layDauXepViec` đọc mà KHÔNG xoá | `packages/outbox/src/enqueue.ts` | 🔴 |
+
+Khôi phục tự kiểm bằng sha256 sau mỗi lượt; cả hai tệp về đúng băm gốc.
+
+## 7. Lượt chạy THẬT sau bản vá — cùng môi trường, cùng kịch bản
+
+Tiến trình `api` mới dựng từ nhánh vá, hộp thư mới, gieo một vòng thầu mới. **Không một lời gọi `/auth/link` nào** — 0 tệp `LOGIN_LINK` trong hộp
+thư là bằng chứng của điều đó.
+
+| Việc | Chưa vá (§2) | Đã vá |
+|---|---|---|
+| tin gia hạn hạn nộp × 3 | 139,97 · 140,00 · 140,07 s | **0,05 · 0,08 · 0,10 s** |
+| tin báo người duyệt × 2 | 119,60 · 119,64 s | **0,05 · 0,07 s** |
+
+Cột “chưa vá” **không phải độ trễ tự nhiên**: nó là thời gian tới lúc em gọi `/auth/link` bằng tay. Không có lời gọi ấy thì không có con số nào.
+
+Sau đó cả chuỗi đi tới cuối: hai người duyệt vào **chỉ bằng mã trong tin**, `2 / 2`, `APPROVED`.
+
+## 8. Hai điều nhỏ hơn, đo được, KHÔNG vá ở vòng này
+
+- `GET http://127.0.0.1:18090/login` → **404**. Tin báo mang link `/login#<mã>` (hình dạng ADR-020, giống hệt `LOGIN_LINK` đã có từ lâu), mà lát
+  cắt demo chỉ phục vụ `/nop-thau` và `/mo-thau`; thêm nữa, mã trong fragment **không mang `orgId`** mà `/auth/redeem` đòi. Trong buổi demo, bấm
+  link trong tin sẽ ra trang trắng. Ghi thành **khoản 198** (rổ A) thay vì vá kèm: nó đụng hình dạng link của ADR-020, tức một quyết định chứ không một lỗi — ba hướng đã ghi ở thân khoản.
+- **Script đo đầu của vòng in ba dấu ✓ vô nghĩa**: `every()` trên mảng rỗng luôn đúng, nên ba khẳng định về NỘI DUNG tin đều “đạt” khi không có
+  tin nào. Chỉ hai khẳng định ĐẾM bắt được sự thật. Bản thứ hai kiểm “tập không rỗng” trước mọi khẳng định trên tập — và đó là cùng một lớp lỗi
+  với *“khẳng định tiền đề giữa BEGIN/ROLLBACK hỏng làm đỏ lan”* đã ghi ở các vòng đột biến trước.
+
+## 9. Số đo
+
+- `pnpm t0` **0** — 280 module / 1145 phụ thuộc / 0 vi phạm
+- `pnpm test` — **70 tệp / 955 test** đạt, 1 bỏ qua
+- `apps/api/src/buyer.int.test.ts` — **10 test** đạt (thêm phép đo khoản 156)
+- evidence — **56/56** (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ **2013** khẳng định, `vitest thoát mã 0`, cổng **XANH**
+- sổ nợ **196 → 198** khoản; mở **81 → 82** (197 sinh ra ĐÓNG; 198 mở, vào rổ A); rổ A **13 → 14**; **46 → 47** ADR

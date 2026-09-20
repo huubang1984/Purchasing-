@@ -4925,3 +4925,83 @@ vòng này chỉ đo rằng nó VẪN cưỡng chế, không đo rằng nó vừ
 đổi một hợp đồng đã có `null`, không phải dựng lại lớp.
 hưởng từ đường bên cạnh.
 
+## ADR-047 — Lời đánh thức runner outbox là một DẤU của giao dịch, không phải một lời khai của route
+
+**Bối cảnh.** Ngày 2026-09-20, ngay sau khi S1.91 merge, chủ dự án cho đi thử chặng gửi vừa dựng trên môi trường demo thật. Lượt đi đó dừng ở
+một chỗ không một cổng nào của kho nhìn thấy: **năm việc được xếp đúng, đủ, đúng số — và không có gì chạy chúng.**
+
+```
+RFQ_DEADLINE_EXTENDED_NOTICE | PENDING | 3
+UNSEAL_APPROVAL_NOTICE       | PENDING | 2
+```
+
+Nguyên nhân đo được bằng hai phép tìm:
+
+| Đo | Kết quả trên bản S1.91 |
+|---|---|
+| `nudgeOutbox` có ở nhánh nào của `dispatch.ts` | **chỉ `ANON`** — nhánh `BUYER` và `GUEST` không được truyền |
+| `ctx.nudgeOutbox()` được gọi ở đâu trong toàn kho | **đúng một chỗ**: `routes/auth.ts`, tức `POST /auth/link` |
+| `listOrganizations` của runner trong `api` | `() => [...toChucDaThay]`, và tập ấy CHỈ lớn lên trong `outboxNudge` |
+
+Nên vòng poll không bao giờ ghé một tổ chức chưa từng có ai xin link đăng nhập **trong đúng vòng đời tiến trình ấy**. Phép đối chứng: một lời
+gọi `/auth/link` cho cùng tổ chức ⇒ cả năm việc xong trong tám giây. Không một dòng log nào nói điều đó, vì không có gì hỏng cả.
+
+**Điều đáng đọc nhất không phải là khiếm khuyết, mà là chỗ nó nằm:** sổ nợ đã ghi đúng ca này từ S1.81, ở khoản 156, bằng đúng những chữ *"đường
+điều phối mở thầu KHÔNG đi qua đó"*. Nó nằm trong **rổ B — đóng băng tới sau pilot**, trong khi nó chặn đúng kịch bản pilot. Và hai vòng sau đó
+dựng một chặng gửi lên trên nó mà không đọc lại nó.
+
+### Vì sao cổng không thấy
+
+`buyer.int.test.ts` chạy handler outbox **bằng tay** (`outboxTest(apiPool, dv.services).chay(orgA)`), nên nó xanh kể cả khi không một tiến trình
+nào trên đời gọi handler ấy. Đó là một lựa chọn đúng cho thứ nó đo — nội dung tin — và nó **không** đo ai gọi. Giữa hai tầng ấy có một vách
+ngăn, và vách ngăn là chỗ khoản 156 sống suốt mười một vòng.
+
+### Quyết định
+
+⑴ **Dấu đặt ở CHÍNH `enqueueJob`**, không ở route. `packages/outbox` giữ một `WeakSet<object>` các client đã xếp việc; `layDauXepViec(client)`
+đọc **và xoá**. Dấu được đặt SAU khi câu INSERT trả về, nên đường 23503 của `/auth/link` (tổ chức không tồn tại ⇒ ném ⇒ `ROLLBACK TO SAVEPOINT`
+⇒ vẫn 200) vẫn *không có gì để đánh thức*, đúng như trước.
+
+⑵ **Bộ điều phối đọc dấu trong `finally`, ở CẢ BA nhánh có tổ chức** — ANON, BUYER, GUEST — ngay trong callback của `withTenant`, trước lúc
+client về pool. Rồi đánh thức sau commit nếu phản hồi `< 400`, giữ nguyên hợp đồng cũ (`setImmediate` ở composition root, không chặn phản hồi).
+
+⑶ **`ctx.nudgeOutbox` BỊ XOÁ khỏi hợp đồng route.** Còn giữ nó là còn hai cơ chế làm một việc, và cái thứ hai là cái quên được.
+
+### Bốn phương án, và vì sao ba cái kia bị loại
+
+| Phương án | Vì sao loại |
+|---|---|
+| Khai thêm ba lời gọi `nudgeOutbox()` ở ba chỗ xếp việc còn lại | Chữa **ca**, không chữa **lớp**. Chỗ xếp việc thứ năm sẽ lại quên, và lần quên sau cũng sẽ không có dòng log nào |
+| Đánh thức sau **mọi** yêu cầu GHI thành công | Bỏ được lời khai, nhưng thêm một truy vấn claim cho mỗi lần ghi — kể cả lần ghi không xếp việc nào. Trả một chi phí thường trực để mua một tính chất mà cái dấu cho không |
+| Ghi danh **mọi** tổ chức có lưu lượng rồi để vòng poll lo | Tập tổ chức lớn theo lưu lượng, và nạp được từ đầu vào KHÔNG xác thực (`orgId` của `/auth/link` là do người gọi đưa): một đường làm phình bộ nhớ và làm vòng poll dài ra, đổi lấy độ trễ 5 giây thay vì tức thì |
+| Lớp phát hiện theo TUỔI của hàng `PENDING` (đề xuất gốc của khoản 156) | **Không loại — hoãn.** Nó phủ hai ca mà dấu KHÔNG phủ (xem cái giá). Nhưng nó cần một nguồn tổ chức không phụ thuộc tiến trình nào đang chạy, tức đụng đúng bài toán của khoản 116, và nó không cần thiết để chặng gửi hôm nay tới nơi |
+
+### Cái giá — nói thẳng
+
+- **Nửa còn lại của khoản 156 vẫn MỞ, và nó phải được đọc đúng:** dấu chỉ sống trong tiến trình đã xếp việc. Tiến trình khởi động lại thì
+  `toChucDaThay` rỗng, nên việc `PENDING` của một tổ chức chờ tới yêu cầu GHI *có xếp việc* kế tiếp của chính tổ chức ấy. Hẹp hơn nhiều so với
+  *"chờ một ai đó tình cờ xin link đăng nhập"*, và vẫn không phải *"không bao giờ mất"*.
+- **Nhiều instance vẫn theo ADR-022.** Dấu không đổi gì ở đó: mỗi tiến trình đánh thức tập tổ chức của riêng nó.
+- **`WeakSet` buộc dấu vào ĐỊNH DANH của client.** Một tầng nào đó bọc `PoolClient` bằng proxy giữa `enqueueJob` và bộ điều phối sẽ làm dấu mất
+  lặng lẽ. Hôm nay không có tầng ấy; nếu mai có, `dau-xep-viec.test.ts` vế ⑵ là chỗ nó sẽ hiện ra.
+- **Một lần ghi có xếp việc nay tốn thêm một lời gọi `runOnceForOrg`** — đúng chi phí mà `/auth/link` đã trả từ S1.12, nay trả ở ba chỗ nữa.
+
+### Đo bằng gì
+
+- `packages/outbox/src/dau-xep-viec.test.ts` — bốn tính chất, không cần Postgres: xếp việc ⇒ có dấu và **đọc thì xoá**; dấu KHÔNG rò sang client
+  khác; `enqueueJob` ném ⇒ không dấu; nhánh `DO NOTHING` vẫn có dấu.
+- `apps/api/src/buyer.int.test.ts` — *"[khoản 156] đường NGƯỜI MUA đánh thức runner khi — và CHỈ khi — giao dịch vừa xếp việc"*: một phép ĐỌC
+  không đánh thức ai; một route GHI không xếp việc (`/auth/logout`) không đánh thức ai; `POST /rfqs/:id/unseal` ⇒ **đúng một** lời đánh thức
+  mang đúng tổ chức.
+- **Bốn đột biến, cả bốn ĐỎ** (khôi phục tự kiểm bằng sha256): bỏ lời đánh thức ở nhánh người mua — tức dựng lại đúng khiếm khuyết — ; bỏ dấu ở
+  `enqueueJob`; đặt dấu TRƯỚC câu INSERT (ca 23503 mất tính chất); `layDauXepViec` đọc mà không xoá.
+- **Một lượt chạy THẬT, trên cùng môi trường demo đã tìm ra khiếm khuyết** (§S1.92): cùng kịch bản, tiến trình mới, KHÔNG một lời gọi `/auth/link`
+  nào — 0 tệp `LOGIN_LINK` trong hộp thư chứng minh điều đó — và năm việc xong trong **0,05–0,10 giây**, so với **119,6–140,1 giây** ở lượt
+  trước, nơi con số ấy không phải độ trễ tự nhiên mà là *thời gian tới lúc em gọi `/auth/link` bằng tay*.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói khoản 156 đã đóng — một nửa còn mở và cái giá ở trên ghi rõ nửa nào. Nó không nói lát cắt demo bấm được link trong tin: `apps/web`
+phục vụ `/nop-thau` và `/mo-thau`, còn tin mang `/login#<mã>` theo ADR-020, nên trong bản demo link ấy ra 404 và mã không mang `orgId` mà
+`/auth/redeem` đòi — ghi thành khoản riêng, không vá ở đây. Và nó không nói vách ngăn *"test gọi handler bằng tay"* đã được canh ở mọi chỗ: vòng
+này chỉ dựng một phép đo ở đúng chỗ đã thủng.

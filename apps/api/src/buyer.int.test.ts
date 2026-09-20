@@ -90,6 +90,15 @@ async function demTuChoi(userId: string): Promise<number> {
 
 const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
+/**
+ * [S1.92 / khoản 156] Mọi lời đánh thức runner outbox mà BỘ ĐIỀU PHỐI phát ra, theo thứ tự.
+ *
+ * Tiến trình thật cắm `runner.runOnceForOrg` vào đây (composition.ts). Test lắp tay thì cắm một
+ * mảng: thứ cần đo ở tầng này không phải job có chạy không — `outboxTest` đo việc ấy — mà là bộ
+ * điều phối có PHÁT lời đánh thức hay không. Trước vòng này, đường người mua không phát lời nào.
+ */
+const daDanhThuc: string[] = [];
+
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
@@ -97,7 +106,9 @@ beforeAll(async () => {
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
-  server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }));
+  server = createApiServer(
+    createDispatcher({ pool: apiPool, auditPool, services: dv.services, outboxNudge: (org) => daDanhThuc.push(org) }),
+  );
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }, 180000);
@@ -533,6 +544,30 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
     expect(choDuyetB?.rfqId).toBe(rfqId);
     expect(choDuyetB?.token, "chủ dự án chọn tin MANG mã đăng nhập — ADR-046").not.toBeNull();
     expect(moi.some((t) => t.email === "bao2-xin@vidu.vn"), "người yêu cầu không nhận tin nào").toBe(false);
+  });
+
+  it("[khoản 156] đường NGƯỜI MUA đánh thức runner khi — và CHỈ khi — giao dịch vừa xếp việc", async () => {
+    // Phép đo của lượt đi thử 2026-09-20 (§S1.92) ở tầng thấp nhất còn nói đúng nó: hai test khoản
+    // 194 ở trên chạy handler outbox BẰNG TAY (`outboxTest`), nên chúng xanh kể cả khi không một
+    // tiến trình nào trên đời gọi handler ấy. Đó đúng là chỗ cổng đã mù, và đây là chỗ bịt.
+    const nguoiXin = await nguoi("dt-xin@vidu.vn", ["DIRECTOR"]);
+    const duyetD = await nguoi("dt-duyet@vidu.vn", ["DIRECTOR"]);
+    const duyetD2 = await nguoi("dt-duyet-2@vidu.vn", ["DIRECTOR"]);
+    const rfqId = await rfqDaDong(nguoiXin, [duyetD, duyetD2]);
+
+    daDanhThuc.length = 0;
+    expect((await goi("GET", `/rfqs/${rfqId}/unseal`, nguoiXin)).status).toBe(200);
+    expect(daDanhThuc, "một phép ĐỌC không xếp việc nào, nên không đánh thức ai").toEqual([]);
+
+    // Một route GHI của người mua KHÔNG xếp việc: dấu phải vắng, nếu không thì mỗi lần ghi là một
+    // lần chạy runner vô ích — và lời khai "đánh thức khi có việc" thành một lời khai rỗng.
+    const boDi = await nguoi("dt-bo-di@vidu.vn", []);
+    expect((await goi("POST", "/auth/logout", boDi)).status).toBe(200);
+    expect(daDanhThuc, "route GHI không xếp việc thì không đánh thức ai").toEqual([]);
+
+    const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, nguoiXin, { reason: "den gio mo thau" });
+    expect(yc.status, yc.text).toBe(201);
+    expect(daDanhThuc, "xếp việc trên đường người mua ⇒ ĐÚNG MỘT lời đánh thức, mang đúng tổ chức").toEqual([orgA]);
   });
 
   it("[khoản 154] gia hạn hạn nộp ⇒ tin tới ĐÚNG đích của lời mời; lời mời đã thu hồi thì KHÔNG gửi", async () => {

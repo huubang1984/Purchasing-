@@ -18,6 +18,10 @@
 // hạn thuê bằng tay.
 // ============================================================================================
 export { OutboxError, enqueueJob, type JobInput } from "./enqueue.js";
+// [S1.92 / khoản 156] Dấu "giao dịch này đã xếp việc". Ra cửa vì nó là hợp đồng giữa gói này và bộ
+// điều phối của `apps/api`: `enqueueJob` đặt dấu, `dispatch.ts` đọc-và-xoá rồi đánh thức runner.
+// Giữ nó trong gói thì `apps/api` phải tự khai lại từng chỗ xếp việc — đúng lớp lỗi khoản 156.
+export { layDauXepViec } from "./enqueue.js";
 // [S1.81 / khoản 154] Sổ `kind` mồ côi. Ra cửa vì nó là hợp đồng GIỮA hai app: `apps/api` truyền
 // nó vào `kindKhongNguoiNhan`, và cổng ở `apps/unseal-worker` đối chiếu nó với hợp hai bảng
 // handler. Một bản chép ở mỗi app là một bản sẽ trôi.

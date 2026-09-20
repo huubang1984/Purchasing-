@@ -88,6 +88,7 @@ import {
 } from "@trustprocure/identity";
 import { InvitationError, resolveGuestSessionByToken } from "@trustprocure/invitation";
 import { OTP_RATE_WINDOW_SECONDS, tangBucketNguoiGoi } from "@trustprocure/invitation";
+import { layDauXepViec } from "@trustprocure/outbox";
 import { TenantError, withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { HttpError, type ApiRequest, type ApiResponse } from "./http.js";
 import { coHan } from "./co-han.js";
@@ -152,6 +153,12 @@ export interface DispatcherDeps {
    * [sổ nợ 38] Đánh thức runner outbox của tiến trình cho một tổ chức vừa có job — gọi SAU commit,
    * đồng bộ (bên nhận tự lên lịch, không được chặn phản hồi). Composition root cài; test lắp tay
    * bỏ trống và tự chạy `runOnceForOrg`.
+   *
+   * [S1.92 / khoản 156] Điều kiện gọi KHÔNG còn là một lời khai của route. Nó là dấu mà chính
+   * `enqueueJob` để lại trên client (`layDauXepViec`), đọc trong `finally` của callback `withTenant`
+   * ở CẢ BA nhánh có tổ chức — ANON, BUYER, GUEST. Trước vòng này chỉ nhánh ANON có đường gọi, nên
+   * mọi việc do đường người mua xếp nằm `PENDING` tới khi một route ANON tình cờ đánh thức tổ chức
+   * ấy (§S1.92).
    */
   readonly outboxNudge?: (orgId: string) => void;
 }
@@ -506,21 +513,24 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               }
             }
           }
-          let danhThuc = false;
-          const nudgeOutbox = (): void => {
-            danhThuc = true;
-          };
+          let daXepViec = false;
           const handler = nguonHandler();
           const phanHoi = await chaySauCommit(
             await handler.giaoDich(
-              withTenant(deps.pool, orgId, (client) =>
-                handler.chay(() => route.handler({ req, orgId, client, services: deps.services, afterCommit, nudgeOutbox })),
-              ),
+              withTenant(deps.pool, orgId, async (client) => {
+                try {
+                  return await handler.chay(() => route.handler({ req, orgId, client, services: deps.services, afterCommit }));
+                } finally {
+                  // [S1.92 / khoản 156] ĐỌC TRONG callback, và trong `finally`: client về pool ngay
+                  // sau đây, nên một dấu đọc-thì-xoá không được phép đi theo nó sang yêu cầu sau.
+                  daXepViec = layDauXepViec(client);
+                }
+              }),
             ),
             orgId,
           );
           // [sổ nợ 38] Job đã nằm trong CSDL (commit xong) và phản hồi đã quyết: đánh thức, không đợi.
-          if (danhThuc && phanHoi.status < 400) deps.outboxNudge?.(orgId);
+          if (daXepViec && phanHoi.status < 400) deps.outboxNudge?.(orgId);
           return phanHoi;
         }
 
@@ -528,6 +538,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_NGUOI_MUA]);
           if (cookie === null) return { status: 401, body: THAN_401 };
           const handler = nguonHandler();
+          let daXepViec = false;
           const trongGiaoDich = async (client: pg.PoolClient): Promise<ApiResponse> => {
             let actor: SessionActor;
             try {
@@ -633,11 +644,19 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 deps.auditPool,
               );
             }
-            return handler.chay(() =>
-              route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu }),
-            );
+            try {
+              return await handler.chay(() =>
+                route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu }),
+              );
+            } finally {
+              // [S1.92 / khoản 156] Xem khối cùng nhãn ở nhánh ANON. Đây là nhánh mà ba chỗ xếp việc
+              // của sản phẩm nằm trên đó, và là nhánh trước vòng này KHÔNG có đường đánh thức nào.
+              daXepViec = layDauXepViec(client);
+            }
           };
-          return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then((r) => chaySauCommit(r, cookie.orgId));
+          const phanHoi = await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then((r) => chaySauCommit(r, cookie.orgId));
+          if (daXepViec && phanHoi.status < 400) deps.outboxNudge?.(cookie.orgId);
+          return phanHoi;
         }
 
         case "GUEST": {
@@ -669,7 +688,24 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               }),
             );
           // Đường GHI: `withTenant`, không GUC — xem khối [S1.10.3] ở đầu file.
-          if (route.mutates) return await handler.giaoDich(withTenant(deps.pool, cookie.orgId, goiHandler));
+          if (route.mutates) {
+            // [S1.92 / khoản 156] Hôm nay KHÔNG route khách nào xếp việc (bốn chỗ `enqueueJob` của mã
+            // sản xuất nằm ở đường ANON và đường người mua). Nhánh này vẫn đọc dấu, vì lớp lỗi của
+            // khoản 156 là "một đường xếp việc mới ra đời mà không ai khai nó" — một nhánh đứng
+            // ngoài lớp canh là đúng chỗ lớp lỗi ấy quay lại.
+            let daXepViec = false;
+            const phanHoi = await handler.giaoDich(
+              withTenant(deps.pool, cookie.orgId, async (client) => {
+                try {
+                  return await goiHandler(client);
+                } finally {
+                  daXepViec = layDauXepViec(client);
+                }
+              }),
+            );
+            if (daXepViec && phanHoi.status < 400) deps.outboxNudge?.(cookie.orgId);
+            return phanHoi;
+          }
           // Đường ĐỌC: `withGuestSession` tự đọc lại hàng phiên, từ chối phiên thu hồi/hết hạn, và
           // đặt CẢ BA GUC. Handler nhận `client` khi mọi việc ấy đã xong — hoặc không nhận gì cả.
           return await handler.giaoDich(withGuestSession(deps.pool, cookie.orgId, phien.guestSessionId, goiHandler));
