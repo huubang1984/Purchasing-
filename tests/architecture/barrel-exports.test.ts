@@ -562,6 +562,11 @@ const DANH_SACH_TRANG_INVITATION = [
   "getInvitationNoticeTarget",
   "issueMagicLinkToken",
   "issueOtpChallenge",
+  // [S1.98 / khoan 125] Danh sach loi moi cua mot RFQ: id, nha cung cap, nguoi lien he, kenh,
+  // trang thai. KHONG tra token — bang rfq_invitations khong co cot token nao, ma moi song o
+  // rfq_invitation_tokens va ham nay khong cham toi. Cong quyen rfq.invite nam THANG trong
+  // than ham, va no o ro HAM_DOC_CO_QUYEN cua cong-quyen-route.test.ts.
+  "listInvitations",
   "redeemMagicLink",
   // [ADR-020 / S1.10.2] Nhận TOKEN PHIÊN KHÁCH (thứ chỉ tồn tại SAU khi OTP đã đối chiếu) và trả
   // `guest_sessions.id` cho `withGuestSession`. Nó KHÔNG nhận magic link và KHÔNG mở phiên — tức

@@ -165,7 +165,7 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
     expect(duongAgentDoc.length).toBeGreaterThan(5);
   });
 
-  it("← bốn đường KHÔNG PHƠI cũng bị apps/api từ chối, không chỉ vắng khỏi bảng công cụ", () => {
+  it("← mọi đường KHÔNG PHƠI cũng bị apps/api từ chối, không chỉ vắng khỏi bảng công cụ", () => {
     // Vắng khỏi bảng công cụ chặn máy khách CỦA TA. Vế dưới đây mới là thứ chặn một máy khách
     // MCP tự viết cầm cùng chứng chỉ: `apps/api` từ chối, chứ không phải `apps/mcp` không hỏi.
     for (const duong of Object.keys(ROUTE_DOC_KHONG_PHOI)) {

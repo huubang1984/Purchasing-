@@ -718,4 +718,92 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
       "một thông báo gia hạn gửi cho người đã bị rút lời mời là một tin nói sai về trạng thái của họ",
     ).toHaveLength(0);
   });
+
+  // =============================================================================================
+  // [S1.98 / khoản 125] MỘT LỜI MỜI CÒN SỐNG MÀ NGƯỜI MUA KHÔNG GIỮ ID THÌ KHÔNG THU HỒI ĐƯỢC,
+  // VÀ MỜI LẠI NHÀ CUNG CẤP ẤY LUÔN 409.
+  //
+  // Id lời mời chỉ đi ra ở thân `201` của `POST /rfqs/:rfqId/invitations` (và ở thân `500` của ca
+  // bù hỏng, từ S1.70). Mất phản hồi ấy là kẹt: `revoked_at` chỉ do `revokeInvitation` đặt nên
+  // lời mời không tự hết, còn `rfq_invitations_mot_loi_moi_con_song` (024) biến mọi lần mời lại
+  // thành 409. Phép đo dưới đây dựng đúng cảnh ấy — lời mời có thật, id thì KHÔNG ai cầm — rồi đi
+  // trọn đường thoát mà khoản 125 kê: đọc danh sách, thu hồi bằng id đọc được, mời lại.
+  // =============================================================================================
+  it("[khoản 125] danh sách lời mời trả id nên lời mời kẹt thu hồi được rồi mời lại 201 — và danh sách KHÔNG mang token, cổng quyền là rfq.invite", async () => {
+    const pm = await nguoi("ds-moi-pm@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const gdA = await nguoi("ds-moi-gd1@vidu.vn", ["DIRECTOR"]);
+    const gdB = await nguoi("ds-moi-gd2@vidu.vn", ["DIRECTOR"]);
+    // TECHNICAL KHÔNG giữ `rfq.invite` — xem ma trận quyền ở `packages/identity`.
+    const ktv = await nguoi("ds-moi-kt@vidu.vn", ["TECHNICAL"]);
+
+    const { rows: ncc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, 'Thep Danh Sach', '0322222222', $2, $3) RETURNING id",
+      [orgA, pm.id, pm.sessionId],
+    );
+    const supplierId = ncc[0]?.id ?? "";
+    const { rows: lh } = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Chi Ds', 'ds@thepdanhsach.vn', '0913333333', $3, $4) RETURNING id",
+      [orgA, supplierId, pm.id, pm.sessionId],
+    );
+    const contactId = lh[0]?.id ?? "";
+    const rfqId = await rfqDaDong(pm, [gdA, gdB], false);
+
+    // Lời mời KẸT: dựng thẳng bằng SQL, tức không ai cầm thân `201` — đúng cảnh mà khoản 125 tả.
+    const { rows: ket } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+      [orgA, rfqId, supplierId, contactId, pm.id, pm.sessionId],
+    );
+    const idKet = ket[0]?.id ?? "";
+
+    // ⑴ Mời lại khi lời mời cũ còn sống: 409 — đây là cái bẫy mà khoản 125 nói tới.
+    const trung = await goi("POST", `/rfqs/${rfqId}/invitations`, pm, { supplierId, contactId });
+    expect(trung.status, trung.text).toBe(409);
+
+    // ⑵ Danh sách trả ĐÚNG id ấy, kèm tên người để người mua nhận ra mình đang thu hồi của ai.
+    const ds = await goi("GET", `/rfqs/${rfqId}/invitations`, pm);
+    expect(ds.status, ds.text).toBe(200);
+    const dsMoi = (ds.body as { invitations: readonly { id: string; supplierName: string; contactName: string; status: string; revokedAt: string | null }[] }).invitations;
+    expect(dsMoi).toHaveLength(1);
+    expect(dsMoi[0]?.id, "id ấy TRƯỚC vòng này không route đọc nào trả").toBe(idKet);
+    expect(dsMoi[0]?.supplierName).toBe("Thep Danh Sach");
+    expect(dsMoi[0]?.contactName).toBe("Chi Ds");
+    expect(dsMoi[0]?.status).toBe("SENT");
+    expect(dsMoi[0]?.revokedAt).toBeNull();
+
+    // ⑶ CỔNG QUYỀN: danh sách ai được mời là thông tin cạnh tranh. TECHNICAL bị 403, và lần từ
+    //    chối ấy để lại ĐÚNG một hàng sổ — cổng nằm trong thân hàm, không ở cờ của route.
+    const demTuChoi = async (): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED' AND resource_id = $2",
+        [orgA, rfqId],
+      );
+      return Number(rows[0]?.n ?? "0");
+    };
+    const truocTuChoi = await demTuChoi();
+    const cam = await goi("GET", `/rfqs/${rfqId}/invitations`, ktv);
+    expect(cam.status, cam.text).toBe(403);
+    expect(await demTuChoi(), "[INV-D5] một lần từ chối ⇒ một hàng sổ").toBe(truocTuChoi + 1);
+
+    // ⑷ Thu hồi bằng id vừa đọc, rồi mời lại: 201. Vòng kẹt thoát ra được.
+    expect((await goi("POST", `/invitations/${idKet}/revoke`, pm)).status).toBe(200);
+    const truocGui = dv.loiMoiDaGui.length;
+    const lai = await goi("POST", `/rfqs/${rfqId}/invitations`, pm, { supplierId, contactId });
+    expect(lai.status, lai.text).toBe(201);
+    expect(dv.loiMoiDaGui).toHaveLength(truocGui + 1);
+    const tokenThat = dv.loiMoiDaGui.at(-1)?.token ?? "";
+    expect(tokenThat.length, "tiền đề: lần mời lại đã phát một token THẬT").toBeGreaterThan(20);
+
+    // ⑸ Danh sách nay hai dòng — một đã thu hồi, một còn sống — và KHÔNG mang một byte nào của
+    //    token. `rfq_invitations` không có cột token nào (mã sống ở `rfq_invitation_tokens`), nên
+    //    khẳng định này canh cấu tạo chứ không canh một câu SELECT tự giữ mình.
+    const ds2 = await goi("GET", `/rfqs/${rfqId}/invitations`, pm);
+    expect(ds2.status).toBe(200);
+    const dsHai = (ds2.body as { invitations: readonly { id: string; status: string; revokedAt: string | null }[] }).invitations;
+    expect(dsHai).toHaveLength(2);
+    expect(dsHai.filter((m) => m.status === "REVOKED").map((m) => m.id)).toEqual([idKet]);
+    expect(dsHai.filter((m) => m.revokedAt === null)).toHaveLength(1);
+    expect(ds2.text, "danh sách lời mời KHÔNG được mang mã mời").not.toContain(tokenThat);
+  });
 });

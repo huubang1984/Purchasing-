@@ -129,13 +129,24 @@ async function chinh(): Promise<void> {
     // hai người DUYỆT khác người soạn, với hai VAI khác nhau. Giữ lại lời kể này vì một bối cảnh
     // demo dựng được bằng hai người sẽ là dấu hiệu Separation of Duties đã mất răng.
     const nguoiMua: { readonly email: string; readonly id: string; readonly sessionId: string }[] = [];
-    for (const ten of ["soan", "duyet1", "duyet2"]) {
+    // [S1.98] NGƯỜI SOẠN THỨ HAI, và lý do nó phải có mặt là một phép đo chứ không một linh cảm.
+    //
+    // Lượt đi thử màn `/tao-thau` (S1.98) gãy ở đúng bước phê duyệt gói thầu: `rfq.approve` là
+    // quyền của PROCUREMENT_MANAGER, gói vượt ngưỡng cần HAI phê duyệt, và người TẠO không được
+    // đếm là một trong hai (D2). Bối cảnh demo có đúng MỘT người mang vai ấy, nên một gói thầu
+    // tạo từ giao diện KHÔNG BAO GIỜ mở được — demo tự chặn chính bước mà `docs/PRODUCT.md` §11
+    // đặt làm bước đầu tiên.
+    //
+    // Hai người DUYỆT mang vai DIRECTOR vẫn cần thiết và không thay được: `rfq.unseal.approve`
+    // chỉ của DIRECTOR. Nên bối cảnh này có NĂM người, hai vai, hai loại phê duyệt khác nhau —
+    // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
+    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2"]) {
       const email = `${ten}.${duoi}@vidu.vn`;
       const id = (await q<{ id: string }>(
         "INSERT INTO public.users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id",
-        [org, email, ten === "soan" ? "Nguoi soan goi thau" : `Nguoi duyet ${ten.slice(-1)}`],
+        [org, email, ten.startsWith("soan") ? `Nguoi soan goi thau ${ten.slice(4)}`.trim() : `Nguoi duyet ${ten.slice(-1)}`],
       )).id;
-      const vai = ten === "soan" ? "PROCUREMENT_MANAGER" : "DIRECTOR";
+      const vai = ten.startsWith("soan") ? "PROCUREMENT_MANAGER" : "DIRECTOR";
       await pool.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vai]);
       // MỖI người một phiên riêng: mọi lần ghi có kiểm danh tính (013) đòi một phiên còn sống, và
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
@@ -237,7 +248,9 @@ async function chinh(): Promise<void> {
     ra.push("NHÀ CUNG CẤP — mở trên điện thoại, mỗi link một người:");
     for (const lm of loiMoi) ra.push(`  ${lm.ten.padEnd(24)} ${gocWeb}/nop-thau#${org}:${lm.token}`);
     ra.push("");
-    ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh. Mở thầu cần HAI người:");
+    ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
+    ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
+    ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
     for (const nm of tokenNguoiMua) ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);

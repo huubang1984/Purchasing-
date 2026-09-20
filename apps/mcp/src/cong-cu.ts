@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang bốn route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
+//   ⑶ không mang ~~bốn~~ [S1.98] NĂM route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
 //      KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -75,6 +75,14 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "nó kèm câu 'business data, not credentials' — đúng về CHỨNG CHỈ và sai về DỮ LIỆU CÁ NHÂN " +
     "(lượt soi 69 M-5). Chính lập luận dùng cho bảng giá áp nguyên ở đây: đã vào ngữ cảnh một " +
     "agent thì không lấy lại được. Chủ dự án rút ngày 2026-09-17 (ADR-038).",
+  "/rfqs/:rfqId/invitations":
+    "DANH SÁCH AI ĐƯỢC MỜI dự một gói thầu — biết đối thủ là ai đáng giá đúng bằng biết giá của " +
+    "họ, và nó đáng giá SỚM HƠN: trước lễ mở, một nhà cung cấp biết mình đang đấu với ai thì " +
+    "đoán được vùng giá mà không cần thấy một con số nào. Cùng lập luận với bảng so sánh giá và " +
+    "danh bạ người liên hệ: đã vào ngữ cảnh một tác tử thì không lấy lại được. Route khai " +
+    "`agent: false` và dòng này khai vì sao; cổng quyền của nó là `rfq.invite`, tức AI MỜI ĐƯỢC " +
+    "THÌ XEM ĐƯỢC, không rộng hơn. Đường thu hồi một lời mời gửi nhầm là việc của con người ở " +
+    "giao diện người mua, không phải của một tác tử. [S1.98 / khoản 125]",
   "/rfqs/:rfqId/unseal":
     "YÊU CẦU MỞ THẦU ĐANG MỞ của một gói thầu — đường TÌM ĐƯỢC mà S1.90 mở cho người duyệt thứ " +
     "hai (ADR-045 ⑵). Nó khác ba dòng trên ở chỗ thứ nó trả về KHÔNG phải dữ liệu nhạy cảm: " +
