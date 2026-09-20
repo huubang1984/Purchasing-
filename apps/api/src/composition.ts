@@ -120,6 +120,18 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   // tổ chức (RLS), nên `listOrganizations` là tập tổ chức tiến trình này ĐÃ THẤY enqueue; `nudge`
   // đánh thức ngay cho tổ chức vừa có job (setImmediate — không chặn phản hồi), vòng poll nhặt job
   // còn sót (thử lại). Giới hạn nhiều instance ghi ở ADR-022.
+  //
+  // [S1.92 / khoản 156] Câu "ĐÃ THẤY enqueue" ở trên nay ĐÚNG; tới trước vòng này nó là một lời khai
+  // rộng hơn mã. Tập này chỉ lớn lên trong `outboxNudge`, mà `outboxNudge` chỉ được gọi khi một route
+  // ANON tự khai — tức đúng `/auth/link`. Ba chỗ xếp việc trên đường người mua không nạp được một
+  // tổ chức nào vào đây, nên vòng poll cũng không ghé: việc nằm `PENDING` tới khi có người xin link
+  // đăng nhập cho cùng tổ chức (đo ở §S1.92: 5 việc, rồi 5/5 xong trong 8 giây sau MỘT lời gọi
+  // `/auth/link`). Nay điều kiện đánh thức là dấu của chính `enqueueJob`.
+  //
+  // CÒN MỞ, và khoản 156 giữ nguyên nửa ấy: tiến trình KHỞI ĐỘNG LẠI thì tập này rỗng, nên việc
+  // `PENDING` của một tổ chức chỉ được nhặt khi tổ chức ấy có yêu cầu GHI tiếp theo. Một lớp phát
+  // hiện theo TUỔI (không phụ thuộc tiến trình nào đang chạy) cần một nguồn tổ chức — đúng bài toán
+  // của khoản 116.
   const toChucDaThay = new Set<string>();
   const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
     pollIntervalMs: OUTBOX_POLL_MS,

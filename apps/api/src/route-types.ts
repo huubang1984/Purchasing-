@@ -158,12 +158,11 @@ export interface AnonContext {
   readonly client: pg.PoolClient;
   readonly services: ApiServices;
   readonly afterCommit: AfterCommit;
-  /**
-   * [sổ nợ 38] Handler vừa `enqueueJob` cho tổ chức này — dispatcher ĐÁNH THỨC runner outbox SAU
-   * commit, KHÔNG await (await là đưa oracle thời gian trở lại dưới dạng khác). Không có runner
-   * (test lắp tay) thì là no-op; test gọi `runOnceForOrg` tường minh.
-   */
-  readonly nudgeOutbox: () => void;
+  // [S1.92 / khoản 156] ~~`nudgeOutbox: () => void`~~ — hợp đồng cũ: *handler vừa `enqueueJob` thì
+  // TỰ KHAI để dispatcher đánh thức runner sau commit*. Nó đúng ở chỗ nó phủ, và lớp lỗi nằm ở chỗ
+  // nó KHÔNG phủ: đúng một route trong kho từng gọi nó, ba chỗ xếp việc còn lại nằm trên đường
+  // người mua — nơi ctx này không tồn tại. Nay dấu do chính `enqueueJob` để lại và dispatcher đọc,
+  // nên không còn gì để khai và không còn gì để quên. Xem `layDauXepViec` (packages/outbox).
 }
 
 /**

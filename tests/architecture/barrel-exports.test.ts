@@ -346,6 +346,10 @@ const DANH_SACH_TRANG_OUTBOX = [
   "MIN_POLL_INTERVAL_MS",
   "OutboxError",
   "enqueueJob",
+  // [S1.92 / khoản 156] Dấu "giao dịch này đã xếp việc", đọc-thì-xoá. Ở cửa vì nó là hợp đồng GIỮA
+  // gói này và bộ điều phối `apps/api`: giữ trong gói thì mỗi chỗ xếp việc lại phải tự khai một lời
+  // đánh thức, và đó đúng là lớp lỗi mà khoản 156 ghi lại.
+  "layDauXepViec",
 ];
 
 const OUTBOX_PACKAGE_JSON_URL = new URL("../../packages/outbox/package.json", import.meta.url);

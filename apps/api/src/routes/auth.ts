@@ -124,7 +124,9 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
         await ctx.client.query("ROLLBACK TO SAVEPOINT xep_hang");
         return { status: 200, body: { ok: true } };
       }
-      ctx.nudgeOutbox();
+      // [S1.92 / khoản 156] ~~`ctx.nudgeOutbox()`~~ — lời khai duy nhất trong kho, và nó đã đúng.
+      // Nay `enqueueJob` ở trên tự để dấu trên `ctx.client`, và bộ điều phối đọc dấu ấy: cùng một
+      // lời đánh thức, không còn một lời khai để quên ở chỗ thứ năm.
       return { status: 200, body: { ok: true } };
     },
   },

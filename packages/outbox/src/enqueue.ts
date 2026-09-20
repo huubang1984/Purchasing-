@@ -13,6 +13,39 @@ export class OutboxError extends Error {
   }
 }
 
+// ==============================================================================================
+// [S1.92 / khoản 156] DẤU "GIAO DỊCH NÀY ĐÃ XẾP VIỆC" — để lời đánh thức không còn phải được KHAI
+//
+// Trước vòng này, tiến trình `api` đánh thức runner qua ĐÚNG MỘT lời gọi `ctx.nudgeOutbox()` ở
+// `routes/auth.ts`, và `listOrganizations` của runner là tập tổ chức đã đánh thức. Ba chỗ xếp việc
+// còn lại — gia hạn hạn nộp, yêu cầu mở thầu, và lời báo người duyệt của S1.91 — đều nằm trên
+// đường NGƯỜI MUA, nơi bộ điều phối thậm chí không truyền `nudgeOutbox` vào. Đo được ở lượt đi thử
+// 2026-09-20 (§S1.92): năm việc nằm `PENDING` cho tới khi một người tình cờ xin link đăng nhập cho
+// CÙNG tổ chức, rồi cả năm xong trong tám giây. Không một dòng log nào nói điều đó.
+//
+// Chữa bằng cách khai thêm ba chỗ nữa thì lớp lỗi vẫn còn nguyên: chỗ xếp việc thứ năm sẽ lại quên.
+// Nên dấu đặt ở CHÍNH `enqueueJob` — chỗ không thể quên, vì không xếp việc thì không có gì để quên.
+//
+// WEAKSET CHỨ KHÔNG PHẢI MỘT THUỘC TÍNH TRÊN CLIENT: client thuộc về pool và sẽ được dùng lại cho
+// yêu cầu của người khác, nên một thuộc tính sót lại là một lời đánh thức giả mang tổ chức sai.
+// `layDauXepViec` XOÁ dấu khi đọc, và bộ điều phối đọc nó trong `finally` NGAY trong callback của
+// `withTenant` — trước lúc client về pool, kể cả khi handler ném.
+// ==============================================================================================
+const DA_XEP_VIEC = new WeakSet<object>();
+
+/**
+ * Đọc dấu và XOÁ nó: `true` khi `enqueueJob` đã chạy trên client này kể từ lần đọc trước.
+ *
+ * Dấu được đặt SAU khi câu INSERT trả về, nên đường 23503 của `/auth/link` (tổ chức không tồn tại
+ * ⇒ `enqueueJob` ném ⇒ `ROLLBACK TO SAVEPOINT` ⇒ vẫn 200) KHÔNG đặt dấu: không có việc nào để
+ * đánh thức, đúng như trước vòng này.
+ */
+export function layDauXepViec(client: pg.PoolClient): boolean {
+  const co = DA_XEP_VIEC.has(client);
+  DA_XEP_VIEC.delete(client);
+  return co;
+}
+
 export interface JobInput {
   /**
    * Loại việc. Ràng buộc CẤU TRÚC ở tầng CSDL: `^[A-Z][A-Z0-9_]{0,63}$` (xem 007_outbox.sql).
@@ -137,6 +170,10 @@ export async function enqueueJob(
     job.dedupeKey ?? null,
     job.runAfter ?? null,
   ]);
+
+  // [S1.92 / khoản 156] Câu INSERT đã trả về: từ đây giao dịch này CÓ việc để chạy, kể cả ở nhánh
+  // `DO NOTHING` bên dưới (một job PENDING trùng khoá vẫn là một job đang chờ được đánh thức).
+  DA_XEP_VIEC.add(client);
 
   const daTao = rows[0];
   if (daTao) return daTao.id;
