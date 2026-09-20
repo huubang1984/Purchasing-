@@ -65,7 +65,12 @@ const DON_BUCKET_MS = 5 * 60 * 1000;
 const DON_BUCKET_ON_AO = 1000;
 
 export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
-  const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
+  const pool = createPool(ch.databaseUrl, ch.dbPoolMax, {
+    role: "app_api",
+    // [S1.94 / khoản 103] Kết nối RẢNH chết (CSDL khởi động lại, máy ngủ dậy): trước vòng này sự
+    // kiện ấy không có người nghe ⇒ tiến trình chết. Nay nó là một dòng, không phải một lần chết.
+    onPoolError: (e) => console.error(`[api] pool loi ${moTaLoiKhongGiaTri(e)}`),
+  });
   // [S1.69 / khoản 120] Chú thích dời từ hằng `AUDIT_POOL_MAX` đã gỡ, giữ nguyên văn: "Số kết nối của pool ~~sổ từ chối quyền — nhỏ, vì nó chỉ
   // ghi một hàng cho mỗi lần 403~~ [S1.68 / lượt soi 62a-4] ghi sổ MỌI lần từ chối ở giao dịch độc lập — `PERMISSION_DENIED` (403),
   // `UNSEAL_DENIED` và hai lần thử vi phạm D2 (422) — dùng chung mọi tổ chức. ~~Cỡ của nó và phép kiểm "pool còn chỗ" tức thì của
@@ -85,7 +90,10 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   //     người gọi cho lần từ chối — khoản 122.
   //     [S1.72 / lượt soi ngang 66b-8, 66c-1] Số đo ⑵ là của trước S1.71: từ S1.71 lần ghi sổ chờ khoá ghi sổ của tổ chức tối đa 2 s (050),
   //     `/me` của tổ chức khác 627–1 007 ms ở cả ba kịch bản, và khoản 123 đã đóng (§S1.71).
-  const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_api" });
+  const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, {
+    role: "app_api",
+    onPoolError: (e) => console.error(`[api] pool kiem toan loi ${moTaLoiKhongGiaTri(e)}`),
+  });
   // [S1.67 / khoản 118] Kết nối bị `withTenant` huỷ vì trạng thái phiên còn sót sau giao dịch: lỗi ấy không được ném cho ai, nên đây là
   // chỗ duy nhất nó thành một dòng log — xem `ghiLogKetNoiHuy`.
   ghiLogKetNoiHuy(pool, "pool");

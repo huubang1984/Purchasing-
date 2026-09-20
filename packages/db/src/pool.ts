@@ -127,6 +127,15 @@ export interface TuyChonPool {
    * `037` là lớp CSDL đứng sau cho ca quên đặt. Xem `vai-tro.ts`.
    */
   readonly role?: VaiUngDung;
+  /**
+   * [S1.94 / khoản 103 + 180] Bộ ghi log cho sự kiện `'error'` của CHÍNH pool.
+   *
+   * Người gọi KHÔNG phải gắn listener: `createPool` luôn gắn một cái (xem khối ngay trên
+   * `pool.on("error", …)`). Tham số này chỉ nói *ghi dòng log ở đâu và bằng chữ gì* — gói này giữ
+   * hợp đồng CẤM LOG, nên nó không tự in một byte nào. Không truyền ⇒ tiến trình vẫn SỐNG, chỉ
+   * mất dòng chẩn đoán; truyền ⇒ nói được nó đã sống sót vì chuyện gì.
+   */
+  readonly onPoolError?: (loi: unknown) => void;
 }
 
 const LOCK_TIMEOUT_MS_MAC_DINH = 15_000;
@@ -209,6 +218,31 @@ export function createPool(
     // nhánh loopback (không để undefined) để không phụ thuộc biến môi trường PGSSLMODE có thể
     // rò từ máy chủ vào tiến trình.
     ssl: canBoQuaTls ? false : { rejectUnauthorized: true },
+  });
+  // ============================================================================================
+  // [S1.94 / khoản 103 — lượt soi ngang 75 góc 6] SỰ KIỆN `'error'` CỦA POOL PHẢI CÓ NGƯỜI NGHE,
+  // VÀ CHỖ KHÔNG QUÊN ĐƯỢC LÀ CHÍNH HÀM NÀY.
+  //
+  // `pg` phát `'error'` TRÊN POOL khi một client ĐANG RẢNH trong hồ chết (CSDL khởi động lại, máy
+  // ngủ dậy, `pg_terminate_backend`, một cú ngắt mạng). Không ai nghe thì `EventEmitter` NÉM —
+  // `events.js` biến một sự kiện không người nghe thành một exception không ai bắt, và tiến trình
+  // Node CHẾT. `apps/api` và `apps/unseal-worker` không đặt `process.on("uncaughtException")`, nên
+  // đó là chết thật, giữa một kịch bản đang chạy.
+  //
+  // VÌ SAO NUỐT CHỨ KHÔNG NÉM LẠI: tới lúc sự kiện này tới, `pg` ĐÃ gỡ client hỏng khỏi hồ. Không
+  // có giao dịch nào của người dùng đang treo trên nó (client rảnh, theo định nghĩa), nên không có
+  // gì để fail-closed cho. Thứ duy nhất còn lại là một dòng chẩn đoán — và đó là việc của
+  // `onPoolError`, cắm từ composition root, vì gói này giữ hợp đồng CẤM LOG.
+  //
+  // VÌ SAO ĐẶT Ở ĐÂY CHỨ KHÔNG Ở COMPOSITION ROOT như hai tín hiệu của khoản 129/173: hai tín hiệu
+  // ấy là sự kiện của RIÊNG kho này (`release` mang `SESSION_STATE_LEFT`, `SU_KIEN_LOI_KET_NOI_TOI_MUON`)
+  // nên chúng phải được khai. `'error'` thì không: nó là hợp đồng của `pg`, và một lớp phải-khai cho
+  // nó đã được ĐO là quên được — `tools/neo-so-kiem-toan` dựng hai pool và không gắn gì (khoản 180),
+  // đúng lớp lỗi mà khoản 173 vừa đóng, còn nguyên ở chỗ thứ ba. Cùng bài học với ADR-047: đặt lớp
+  // ở chỗ không thể quên, vì không dựng pool thì không có gì để quên.
+  // ============================================================================================
+  pool.on("error", (loi: unknown) => {
+    tuyChon.onPoolError?.(loi);
   });
   return tuyChon.role === undefined ? pool : ganVaiTroChoPool(pool, tuyChon.role);
 }
