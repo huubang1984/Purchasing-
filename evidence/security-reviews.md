@@ -8610,3 +8610,46 @@ trả cũng ghi ra — trên máy nhiều luồng, lượt test đơn vị khôn
 Script áp sổ nợ của vòng này chèn lời khai vào TRƯỚC dấu gạch đứng CUỐI của hàng, mà cột cuối là cột **con trỏ tệp**, không phải
 cột văn. Hàng 103 và 201 vì thế mang hơn một nghìn ký tự văn xuôi trong ô con trỏ — cổng `[INV-H20]` vẫn 45/45, vì nó soi con trỏ
 có giải được không, không soi ô nào chứa chúng. Đã chuyển về ô văn, và ô con trỏ của 103 nay có thêm tệp đo mới.
+
+# §S1.95 — XẾP LẠI RỔ: NĂM KHOẢN RỜI RỔ A VÌ ĐO, MỘT KHOẢN Ở LẠI VÌ ĐO, KHÔNG MỘT DÒNG MÃ SẢN XUẤT NÀO ĐỔI
+
+**Vòng này chạm khoản rổ A nào:** không đóng khoản nào — nó sửa chính danh sách *chặn pilot*. Mảnh của bảng bốn mảnh: không mảnh
+nào; đây là vòng làm cho ba rổ nói đúng sự thật trước khi có ai đi theo chúng.
+
+## 1. Vì sao đo lại thay vì áp thẳng
+
+Lượt soi ngang 75 là một lượt fan-out, và bài học đã ghi của kho là thẩm tra đối kháng của nó **bác quá ít**. Góc 5 đề xuất hạ
+năm khoản khỏi rổ A và đóng một khoản. Sáu mục ấy được đo lại bằng bốn lần quét và hai lần đọc thân hàm — tổng cộng rẻ hơn một
+lượt evidence — và **hai trong sáu không đứng được**.
+
+## 2. Sáu phép đo
+
+| khoản | góc 5 | đo được trên HEAD | kết quả |
+|---|---|---|---|
+| **104** trạng thái phiên rò qua pool | A→B | không một migration nào và `db/hardening.always.sql` cũng không đặt GUC mức phiên; mã sản xuất dùng `SET LOCAL`; `withTenant` bắt GUC `app.*` rò ở `BEGIN` kế | **→ B** |
+| **108** `payload` qua `double` | A→B | §11 đòi *giá đúng tới từng chữ số*, nhưng sai số chỉ xuất hiện từ 16 chữ số có nghĩa; `totalAmount` đọc bằng SQL nên luôn đúng | **→ B** |
+| **130** job mở thầu FAILED | A→B | §11 đòi *không một bước nào cần người của dự án can thiệp bằng tay*; phục hồi = huỷ + tạo lại + gom lại HAI phê duyệt; worker có trong pilot | **BÁC — ở lại A** |
+| **135** closure sau commit chạm `ctx.client` | A→B | đúng hai chỗ đăng ký việc sau commit; cả hai không chạm `ctx.client`, và `bu` duy nhất gọi hàm nằm trong `RFQ_INVITE` của route | **→ B** |
+| **160** nhân chứng break-glass hết hạn | A→B | `docs/PRODUCT.md` không nhắc break-glass một lần nào; hàng tự khai CHƯA ĐO | **→ B** |
+| **155** job chết không hồi sinh được | ĐÓNG | §11 mảnh 3: chưa có tài khoản AWS, chưa CMK, chưa role ⇒ dự án chưa từng triển khai ⇒ tập chủ thể rỗng | **→ rổ C, KHÔNG đóng** |
+
+## 3. Hai chỗ lệch đề xuất, và lý do
+
+**130 ở lại rổ A.** Hàng ấy mang một câu do chính chủ dự án viết: *chủ dự án tự mở hàng này ngày 2026-09-14 làm người canh hệ quả
+⑻ đã chấp nhận*. Hạ nó xuống rổ B là đóng băng đúng người canh ấy tới sau pilot, trong khi hậu quả của nó rơi trúng bước *hai
+người bên mua phê duyệt mở thầu* của §11 và đường phục hồi duy nhất là can thiệp tay — đúng thứ câu §11 cấm.
+
+**155 sang rổ C chứ không đóng.** Kho đã có tiền lệ cho *hết chủ thể*: khoản **153** (đăng ký MCP đã gỡ) không được đóng, nó sang
+rổ C và giữ nguyên nhãn `[MỞ]`. Đóng là nói *đã chữa* — mà không có gì được chữa. Rổ C là nói *không còn ai để cắn*, và nếu một
+ngày có CSDL chạy bản trước S1.81 thì hàng ấy tỉnh lại nguyên văn.
+
+## 4. Không ADR mới
+
+ADR-043 đã viết sẵn: *một khoản bị xếp sai rổ là một lỗi sửa được bằng một dòng, và vòng sau phải sửa nó ở ĐÚNG chỗ ấy chứ không
+mở khoản mới*. Vòng này làm đúng điều đó, nên nó không cần một quyết định kiến trúc mới — và số ADR giữ nguyên **48**.
+
+## 5. Số đo
+
+- rổ A **15 → 10**, rổ B **50 → 54**, rổ C **19 → 20**; tổng mở **84 không đổi**, ba rổ cộng đúng 10 + 54 + 20 = 84
+- sổ nợ **203** khoản, không đóng và không mở khoản nào; **48** ADR không đổi
+- không một dòng mã sản xuất nào đổi — sáu hàng sổ nợ, ba dòng rổ, một đoạn đếm, ba lời khai ở `Handoff.md`
