@@ -24,6 +24,22 @@ import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
 
 /** `kind` của job mà worker tiêu thụ. Một hằng, một chỗ ở — worker đọc chính nó. */
 export const UNSEAL_JOB_KIND = "UNSEAL_RFQ";
+
+/**
+ * [S1.96 / khoản 130] Khoá chống trùng của job mở thầu, MỘT định nghĩa cho cả đường điều phối
+ * lần đầu lẫn đường điều phối lại.
+ *
+ * Nó là thứ trả lời câu hỏi *"lần này có phải một lần PHỤC HỒI không"* — và nó trả lời bằng một
+ * TÍNH CHẤT của cơ sở dữ liệu, không bằng một danh sách mã lỗi: chỉ mục `outbox_jobs_dedupe_idx`
+ * (007) là `UNIQUE (org_id, kind, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN
+ * ('PENDING', 'RUNNING')`, nên một job `FAILED` KHÔNG giữ khoá còn một job đang sống thì GIỮ.
+ * Điều phối lại vì thế không cần đọc `last_failure_reason`, không cần phân loại lỗi hạ tầng với
+ * lỗi nghiệp vụ — hai việc mà `runner.ts` đã ghi là *"một hàng rào tự làm mù mình bằng danh sách
+ * tên"*.
+ */
+export function khoaChongTrungMoThau(unsealRequestId: string): string {
+  return `unseal:${unsealRequestId}`;
+}
 /** [S1.91 / khoản 194] Việc BÁO cho người duyệt rằng có một yêu cầu mở thầu đang chờ họ. */
 export const UNSEAL_NOTICE_KIND = "UNSEAL_APPROVAL_NOTICE";
 
@@ -440,6 +456,127 @@ export interface DispatchUnsealInput {
  * *"`api` không có quyền giải mã và chỉ được YÊU CẦU mở thầu qua hàng đợi"*, và dòng này là câu
  * ấy ở dạng mã.
  */
+// ==============================================================================================
+// [S1.96 / khoản 130] MỘT JOB MỞ THẦU ĐÃ CHẾT PHẢI ĐIỀU PHỐI LẠI ĐƯỢC, VÀ ĐƯỜNG ẤY PHẢI ĐI TRỌN
+// CỔNG BỐN VẾ MỘT LẦN NỮA.
+//
+// Trước vòng này, `JobRunner` đốt một lượt thử cho MỌI lỗi của handler — kể cả 55P03 ở trần chờ
+// khoá ghi sổ — và sau `maxAttempts` job vào `FAILED`, một trạng thái không có cạnh nào đi ra.
+// Đường phục hồi duy nhất qua API là huỷ yêu cầu, tạo yêu cầu mới, rồi gom lại ĐỦ HAI phê duyệt.
+// `docs/PRODUCT.md` §11 đòi *"không một bước nào cần người của dự án can thiệp bằng tay"*, và
+// việc ấy rơi trúng bước *"hai người bên mua phê duyệt mở thầu"* của chính kịch bản.
+//
+// BA ĐIỀU LÀM ĐƯỜNG NÀY AN TOÀN, VÀ CẢ BA ĐỀU LÀ TÍNH CHẤT CHỨ KHÔNG PHẢI LỜI HỨA:
+//
+//   ⑴ **Không mở thầu hai lần.** Hai câu kết thúc của worker đòi `status = 'APPROVED'` và
+//     `status = 'CLOSED'` rồi kiểm `rowCount`; một lượt chạy trên yêu cầu đã `EXECUTED` khớp 0
+//     hàng và ném. Lớp ấy có sẵn từ S1.6, vòng này không phải dựng thêm gì cho nó.
+//
+//   ⑵ **Không chạy song song với một lượt đang sống.** Chỉ mục chống trùng của 007 chỉ phủ
+//     `PENDING` và `RUNNING`, nên câu đếm ngay dưới đây hỏi đúng câu hỏi *"có lượt nào đang
+//     sống không"* mà không cần biết vì sao lượt trước chết.
+//
+//   ⑶ **Cặp người-phiên mới KHÔNG tự khai.** Migration 054 đổi mệnh đề `WHEN` của
+//     `unseal_requests_kiem_nguoi_dieu_phoi` để nó fire mỗi khi cặp ĐỔI, nên `app_api` không ghi
+//     được một `dispatched_by_session_id` trỏ tới phiên đã thu hồi, hết hạn, hay của tổ chức
+//     khác. Đó là khoản 159, và nó phải đóng TRƯỚC vòng này chứ không sau.
+//
+// VÌ SAO ĐỔI CẶP NGƯỜI-PHIÊN THAY VÌ GIỮ NGUYÊN: worker hỏi lại vế 2 của D1 lúc giải mã bằng
+// `assertFreshMfa(dispatched_by_session_id, dispatched_by)` với hạn một giờ. Một job điều phối
+// lại mà vẫn mang phiên CŨ sẽ bị từ chối `MFA_FRESH` — đường phục hồi chết ngay lúc sinh. Người
+// bấm lại vừa đi trọn cổng bốn vế với MFA tươi của CHÍNH họ, nên ghi họ vào là câu ĐÚNG hơn.
+//
+// `dispatched_at` KHÔNG đổi, và không đổi được: `unseal_dieu_phoi_mot_lan` (022) ném khi nó đổi.
+// Nên hàng giữ mốc của lần điều phối ĐẦU, còn cặp người-phiên nói ai đứng sau lượt ĐANG CHẠY;
+// hàng sổ `UNSEAL_REDISPATCHED` mang cả cặp cũ lẫn cặp mới để nối hai nghĩa ấy lại.
+//
+// KHÔNG CÓ BỘ ĐẾM LẦN BẤM LẠI, và đó là lựa chọn: mỗi lần đều phải qua trọn cổng bốn vế, mỗi lần
+// đều để lại một hàng sổ, và ⑵ bảo đảm không quá một lượt sống cùng lúc — nên một người bấm liên
+// tục chỉ tự làm đầy sổ kiểm toán của chính mình chứ không giành được gì.
+//
+// RANH GIỚI NÓI RA: với yêu cầu BREAK-GLASS, câu `UPDATE` dưới đây chạm trigger
+// `unseal_requests_kiem_nhan_chung` (022) — trigger ấy fire ở MỌI update khi hàng có nhân chứng,
+// và nó đòi phiên nhân chứng còn sống. Phiên ấy hết hạn thì điều phối lại gãy. Đó là khoản 160,
+// và vòng này KHÔNG đóng nó; nó chỉ thêm một chỗ nữa mà khoản 160 cắn được.
+// ==============================================================================================
+async function dieuPhoiLaiSauKhiChet(
+  client: pg.PoolClient,
+  orgId: string,
+  bangChung: UnsealGateReport,
+): Promise<UnsealGateReport> {
+  const { rows: hang } = await client.query<{ status: string }>(
+    `SELECT status FROM public.unseal_requests
+      WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+      FOR NO KEY UPDATE`,
+    [bangChung.unsealRequestId, orgId],
+  );
+  const r = hang[0];
+  if (r === undefined) {
+    throw new UnsealError("Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.");
+  }
+  // [S1.96] LỚP NÀY KHÔNG PHẢI LỚP CÓ THẨM QUYỀN, và nói ra để không ai đọc ngược — cùng khuôn
+  // với khối trạng thái ở `executeUnsealRequest` của worker. Vế 3 của cổng bốn vế đã từ chối một
+  // yêu cầu không còn `APPROVED` TRƯỚC khi hàm này được gọi, nên qua đường công khai vế dưới
+  // không với tới được — đột biến tắt nó SỐNG, và điều đó được ghi vào §S1.96 thay vì giấu đi.
+  // Nó ở lại cho một ca DUY NHẤT mà cổng không phủ: trạng thái đổi GIỮA lần cổng đọc và câu
+  // `UPDATE` dưới đây. Lớp có thẩm quyền cho ca ấy là vế `AND status = 'APPROVED'` của chính câu
+  // UPDATE; vế này chỉ làm thông điệp nói được VÌ SAO.
+  if (r.status !== "APPROVED") {
+    throw new UnsealError(
+      `Chỉ điều phối lại được yêu cầu đang ở trạng thái APPROVED; yêu cầu này đang ở ${r.status}.`,
+    );
+  }
+
+  const { rows: dem } = await client.query<{ n: string }>(
+    `SELECT pg_catalog.count(*)::pg_catalog.text AS n FROM public.outbox_jobs
+      WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND kind OPERATOR(pg_catalog.=) $2::pg_catalog.text
+        AND dedupe_key OPERATOR(pg_catalog.=) $3::pg_catalog.text
+        AND status OPERATOR(pg_catalog.=) ANY (ARRAY['PENDING', 'RUNNING']::pg_catalog.text[])`,
+    [orgId, UNSEAL_JOB_KIND, khoaChongTrungMoThau(bangChung.unsealRequestId)],
+  );
+  if (Number(dem[0]?.n ?? "0") > 0) {
+    throw new UnsealError(
+      "Yêu cầu mở thầu này vẫn còn một lượt đang chờ chạy — chưa có gì để điều phối lại.",
+    );
+  }
+
+  const doiCap = await client.query(
+    `UPDATE public.unseal_requests
+        SET dispatched_by = $2::pg_catalog.uuid, dispatched_by_session_id = $3::pg_catalog.uuid
+      WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND org_id OPERATOR(pg_catalog.=) $4::pg_catalog.uuid
+        AND dispatched_at IS NOT NULL
+        AND status OPERATOR(pg_catalog.=) 'APPROVED'
+      RETURNING id`,
+    [bangChung.unsealRequestId, bangChung.userId, bangChung.sessionId, orgId],
+  );
+  if (doiCap.rowCount !== 1) {
+    throw new UnsealError("Không ghi được người điều phối mới — trạng thái đã đổi giữa chừng.");
+  }
+
+  await enqueueJob(client, orgId, {
+    kind: UNSEAL_JOB_KIND,
+    payload: { unsealRequestId: bangChung.unsealRequestId, rfqId: bangChung.rfqId },
+    dedupeKey: khoaChongTrungMoThau(bangChung.unsealRequestId),
+  });
+
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: bangChung.userId,
+    action: "UNSEAL_REDISPATCHED",
+    resourceType: "unseal_request",
+    resourceId: bangChung.unsealRequestId,
+    payload: {
+      rfqId: bangChung.rfqId,
+      clauses: [...bangChung.clauses],
+      breakGlass: bangChung.breakGlass,
+    },
+  });
+  return bangChung;
+}
+
 export async function dispatchUnseal(
   client: pg.PoolClient,
   orgId: string,
@@ -467,13 +604,17 @@ export async function dispatchUnseal(
     [bangChung.unsealRequestId, bangChung.userId, bangChung.sessionId, orgId],
   );
   if (dp.rowCount !== 1) {
-    throw new UnsealError("Yêu cầu mở thầu này đã được điều phối rồi.");
+    // [S1.96 / khoản 130] KHÔNG còn là một ca lỗi. Xem khối `dieuPhoiLaiSauKhiChet` bên dưới.
+    // Các lần từ chối trong đó là từ chối TRẠNG THÁI, không phải từ chối QUYỀN — cùng hạng với
+    // câu "đã được điều phối rồi" mà nhánh này thay thế, nên chúng không đi qua đường ghi sổ
+    // từ chối của cổng. Mọi từ chối QUYỀN đã nằm lại trong `assertUnsealAllowed` ở trên.
+    return await dieuPhoiLaiSauKhiChet(client, orgId, bangChung);
   }
 
   await enqueueJob(client, orgId, {
     kind: UNSEAL_JOB_KIND,
     payload: { unsealRequestId: bangChung.unsealRequestId, rfqId: bangChung.rfqId },
-    dedupeKey: `unseal:${bangChung.unsealRequestId}`,
+    dedupeKey: khoaChongTrungMoThau(bangChung.unsealRequestId),
   });
 
   await appendAuditEvent(client, orgId, {

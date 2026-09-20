@@ -8653,3 +8653,101 @@ mở khoản mới*. Vòng này làm đúng điều đó, nên nó không cần 
 - rổ A **15 → 10**, rổ B **50 → 54**, rổ C **19 → 20**; tổng mở **84 không đổi**, ba rổ cộng đúng 10 + 54 + 20 = 84
 - sổ nợ **203** khoản, không đóng và không mở khoản nào; **48** ADR không đổi
 - không một dòng mã sản xuất nào đổi — sáu hàng sổ nợ, ba dòng rổ, một đoạn đếm, ba lời khai ở `Handoff.md`
+
+# §S1.96 — HAI KHOẢN RỔ A KHOÁ NHAU, VÀ LƯỢT SOI HÌNH DẠNG TÌM RA MỘT BẢN VÁ VÔ DỤNG CỘNG MỘT BẢN VÁ NO-OP TRƯỚC DÒNG MÃ ĐẦU TIÊN
+
+**Vòng này chạm khoản rổ A nào:** đóng **130** và **159**. Mảnh của bảng bốn mảnh: mảnh 3 (hạ tầng) — một lần mở thầu chết giữa chừng
+mà không tự phục hồi được là một bước của kịch bản §11 cần người can thiệp tay.
+
+## 1. Vì sao vòng này soi hình dạng trước khi viết mã
+
+Quy ước của kho: vòng chạm bảo mật lõi thì lượt soi đối kháng chạy trên HÌNH DẠNG chưa cài. Sáu góc, ba góc đổi thiết kế:
+
+**⑴ Giữ nguyên cặp người-phiên làm bản vá VÔ DỤNG.** Worker hỏi lại vế 2 của D1 lúc giải mã bằng
+`assertFreshMfa(dispatched_by_session_id, dispatched_by)` với `UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS = 1 giờ`. Một job xếp lại mà vẫn mang
+phiên cũ bị từ chối `MFA_FRESH` — đường phục hồi chết ngay lúc sinh. Lời hứa ban đầu của vòng này là *không đụng ba cột `dispatched_*`*;
+phép đo bác nó.
+
+**⑵ Hàng rào sẵn có hẹp hơn vẻ ngoài.** `unseal_dieu_phoi_mot_lan` (022) cấm đổi `dispatched_at`, KHÔNG cấm đổi cặp người-phiên — và
+worker không đọc `dispatched_at` để phán. Nên hình dạng chạy được nằm gọn trong hàng rào có sẵn: giữ mốc, đổi cặp.
+
+**⑶ Hai khoản rổ A KHOÁ NHAU.** Khoản 159 ghi rằng lối ghi đè *chưa tới được hôm nay*, vì `dispatchUnseal` mang `AND dispatched_at IS
+NULL`. Vòng này mở đúng lối ấy — nên vá 130 khi 159 còn mở là biến một mối đe doạ trên giấy thành một lối đi thật. Thứ tự bắt buộc:
+migration trước, mã ứng dụng sau.
+
+## 2. Bẫy đắt nhất, và nó chỉ lộ ra khi ĐO
+
+`db/migrations/hardening.always.sql` ghim NGUYÊN VĂN định nghĩa trigger bằng `pg_get_triggerdef` và **tự chữa** khi thấy khác. Đo trên
+cây thật: sau khi migration `054` chạy, `pg_get_triggerdef` **vẫn trả bản cũ** — lượt hardening ngay sau migration đã lặng lẽ trả trigger
+về mệnh đề `WHEN` cũ. **Migration một mình là một no-op, và mọi cổng vẫn xanh.**
+
+Phải sửa ba chỗ trong cùng một commit: khối tự chữa, và hai chuỗi ghim (một ở khối tự chữa, một ở mục phán xét). Chuỗi chuẩn hoá không
+được đoán — nó được đọc ra từ chính `pg_get_triggerdef` sau khi trigger đã đứng.
+
+## 3. Hình dạng đã cài
+
+`dispatchUnseal` có nhánh thứ hai. Khi câu `UPDATE` một-lần chạm 0 hàng — tức hàng đã điều phối rồi — nhánh ấy:
+
+- đọc hàng dưới `FOR NO KEY UPDATE`, đòi `status = 'APPROVED'`;
+- đếm job `PENDING`/`RUNNING` mang cùng `dedupe_key`; còn lượt sống thì từ chối;
+- đổi cặp người-phiên sang người vừa qua cổng, GIỮ `dispatched_at`;
+- xếp lại job, ghi một hàng `UNSEAL_REDISPATCHED`.
+
+Câu hỏi *lần này có phải một lần PHỤC HỒI không* do **chỉ mục** trả lời: `outbox_jobs_dedupe_idx` (007) chỉ phủ `PENDING` và `RUNNING`,
+nên job `FAILED` không giữ khoá. Không một danh sách mã lỗi PostgreSQL nào được dựng — `runner.ts` đã gọi tên lớp khiếm khuyết ấy là
+*hàng rào tự làm mù mình bằng danh sách tên*, và vòng này không dựng thêm một cái.
+
+Không mở thầu hai lần: hai câu kết thúc của worker đòi `status = 'APPROVED'` và `'CLOSED'` rồi kiểm `rowCount`. Lớp ấy có từ S1.6; vòng
+này dựa vào nó và nói ra rằng mình dựa vào.
+
+## 4. Đột biến
+
+| | kết quả |
+|---|---|
+| lùi TRỌN lớp trigger (migration + ba chỗ ghim) | **2 đỏ** — đúng hai test của khoản 159 |
+| lùi riêng chuỗi ghim hardening | `migrate()` NÉM, 52 test skipped — fail-closed ở cổng văn bản |
+| bỏ phép đếm lượt đang sống | 1 đỏ |
+| điều phối lại KHÔNG đổi cặp người-phiên | 1 đỏ |
+| điều phối lại KHÔNG ghi sổ | 1 đỏ |
+| bỏ vế `status !== "APPROVED"` bên trong nhánh | **SỐNG** |
+
+**Con SỐNG được giữ lại và ghi ra thay vì giấu đi.** Vế trạng thái bên trong nhánh phục hồi không với tới được qua đường công khai: vế 3
+của cổng bốn vế đã từ chối một yêu cầu không còn `APPROVED` TRƯỚC khi nhánh chạy. Test của vòng ban đầu khẳng định thông điệp của vế bên
+trong — nó thực ra đang bắt lời từ chối của CỔNG, tức một khẳng định rỗng. Đã sửa: test nay ghim `UnsealDeniedError` và nói rõ nó đo
+cổng; vế bên trong mang chú thích nói nó KHÔNG phải lớp có thẩm quyền, cùng khuôn với khối trạng thái ở `executeUnsealRequest` của
+worker, và nó ở lại cho đúng một ca mà cổng không phủ — trạng thái đổi GIỮA lần cổng đọc và câu `UPDATE`.
+
+**Một lỗi của bộ chạy đột biến, đã sửa cách đọc:** bộ đếm chỉ đếm `status === "failed"`, nên một đột biến làm `migrate()` ném trong
+`beforeAll` (52 test **skipped**, 0 failed) bị đọc thành *SỐNG*. Hai con đầu tiên bị đọc sai theo đúng cách ấy; đo lại từng con với đầu
+ra thật mới thấy.
+
+## 5. Ranh giới nói ra
+
+- **Break-glass:** câu `UPDATE` đổi cặp chạm `unseal_requests_kiem_nhan_chung`, trigger fire ở MỌI update khi hàng có nhân chứng, nên với
+  yêu cầu break-glass thì điều phối lại chỉ chạy khi phiên nhân chứng còn sống. Đó là khoản 160 (rổ B), vòng này KHÔNG đóng nó — nó chỉ
+  thêm một chỗ nữa khoản ấy cắn được, và điều đó đã ghi vào thân khoản 160.
+- **Chưa đo ở tầng HTTP:** route `POST /unseal/:id/dispatch` không đổi một dòng nào và gọi thẳng `dispatchUnseal` với phiên của người
+  bấm, nên phép đo ở tầng hàm phủ đúng đường ấy; nhưng vòng này KHÔNG thêm một test đi qua bộ điều phối HTTP.
+- **Phòng ngừa vẫn chưa có:** vòng này chữa (phục hồi được), không ngăn (lỗi hạ tầng vẫn đốt một lượt thử). Phân loại lỗi hạ tầng là một
+  quyết định riêng, và `runner.ts` đã ghi vì sao nó không phải *một dòng thêm ở đây*.
+
+## 6. Một khe hở kiểu QUÊN KHAI trong chính bộ test, đóng ở mức suite
+
+Lượt evidence đầu của vòng này đỏ ở `H19`: một test của `db/hardening-suy-tu-tinh-chat.int.test.ts` hết hạn **30 000 ms**. Đo riêng:
+**2 716 ms** — dưới hạn mặc định mười một lần. Giãn 5–10 lần dưới tải song song là con số đã ghi từ S1.73, nên đây là tải máy chứ
+không phải hồi quy của vòng.
+
+Thứ đáng sửa không phải một test. **31 test của suite ấy khai hạn 180 000 ms vì chúng chạy hardening trên một cụm thật; đúng MỘT
+test không khai** — và nó im lặng cho tới lượt evidence này. Vá đúng một test là để nguyên cái khe hở. Hạn nay đặt ở `describe`,
+nơi không ai quên được: hạn khai riêng của 31 test kia VẪN THẮNG (vitest gộp tuỳ chọn suite trước, tuỳ chọn test sau), còn test thứ
+32 và mọi test thêm sau này không rơi về 30 s vì một lần quên nữa.
+
+## 7. Số đo
+
+- `pnpm t0` **0** — 281 module / 1148 phụ thuộc / 0 vi phạm
+- `pnpm test` — **70 tệp / 956 test** đạt, 1 bỏ qua
+- `packages/unseal/src/unseal.int.test.ts` — **52/52**, trong đó 6 ca mới
+- sổ nợ tự đối chiếu **45/45**; `tests/architecture` **263 đạt**
+- `pnpm evidence` **XANH** — `vitest thoát mã 0`, **56/56** bất biến (34 nghiệp vụ + 22 hàng rào), **2025** khẳng định
+- **54** migration đánh số (53 → 54); sổ nợ **203** khoản, mở **84 → 82**; rổ A **10 → 8**, rổ B **54**, rổ C **20**;
+  **48** ADR không đổi — ADR-016 nhận một tiểu mục thay vì một ADR mới
