@@ -73,8 +73,16 @@ export interface TienTrinhWorker {
 export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
   // Hai pool RIÊNG: `createPool` gọi hai lần, nên hai đối tượng khác nhau — không có đường nào
   // truyền nhầm cùng một pool vào cả hai chỗ.
-  const pool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_unseal" });
-  const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, { role: "app_unseal" });
+  // [S1.94 / khoản 103] Xem khối cùng nhãn trong `packages/db/src/pool.ts`. Tiến trình NÀY là
+  // tiến trình duy nhất giải mã được phong bì, nên một lần chết im lặng ở đây đắt hơn ở `api`.
+  const pool = createPool(ch.databaseUrl, ch.dbPoolMax, {
+    role: "app_unseal",
+    onPoolError: (e) => console.error(`[unseal-worker] pool loi ${moTaLoi(e)}`),
+  });
+  const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, {
+    role: "app_unseal",
+    onPoolError: (e) => console.error(`[unseal-worker] pool kiem toan loi ${moTaLoi(e)}`),
+  });
 
   // ============================================================================================
   // [S1.84 / khoản 129 và khoản 173] HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT, GẮN MỘT LẦN CHO MỖI POOL.

@@ -139,7 +139,13 @@ function mocNuocCao(neo: readonly ExternalAnchor[]): number {
 async function xuat(kho: AnchorStore, org: readonly string[]): Promise<number> {
   const boKy = docBoKy();
   const khoaCongKhai = docKhoaCongKhai();
-  const pool = createPool(batBuoc("DATABASE_URL"), 2, { role: "app_api" });
+  const pool = createPool(batBuoc("DATABASE_URL"), 2, {
+    role: "app_api",
+    // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
+    // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
+    // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
+    onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
+  });
   let soHong = 0;
   try {
     for (const id of org) {
@@ -195,7 +201,13 @@ async function xuat(kho: AnchorStore, org: readonly string[]): Promise<number> {
 
 async function kiem(kho: AnchorStore, org: readonly string[]): Promise<number> {
   const khoaCongKhai = docKhoaCongKhai();
-  const pool = createPool(batBuoc("DATABASE_URL"), 2, { role: "app_api" });
+  const pool = createPool(batBuoc("DATABASE_URL"), 2, {
+    role: "app_api",
+    // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
+    // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
+    // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
+    onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
+  });
   let soHong = 0;
   try {
     for (const id of org) {

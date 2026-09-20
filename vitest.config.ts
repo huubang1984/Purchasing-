@@ -1,5 +1,32 @@
+import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+// ==============================================================================================
+// [S1.94] TRẦN SỐ TỆP CHẠY CÙNG LÚC — VÌ THỨ KHAN HIẾM Ở ĐÂY KHÔNG PHẢI CPU MÀ LÀ CONTAINER.
+//
+// Mỗi tệp `*.int.test.ts` tự dựng MỘT container Postgres (`startPostgres`), và kho nay có 51 tệp
+// như vậy. Vitest mặc định lấy trần theo số CPU, nên trên máy 16 luồng nó mở tới ~15 cluster
+// Postgres cùng lúc trên MỘT đĩa ảo Docker — và cái nghẽn ở đó là I/O, không phải phép tính.
+//
+// ĐO ĐƯỢC ngày 2026-09-20, cùng một cây mã, không đổi một dòng sản xuất nào:
+//   · `db/rls-coverage.int.test.ts` chạy RIÊNG: 51/51 đạt, 121,7 giây.
+//   · CHÍNH tệp ấy trong lượt evidence ở trần mặc định: 507 giây, một test hết hạn 180 giây, rồi
+//     ba test sau đỏ dây chuyền — vitest KHÔNG huỷ test quá hạn nên nó chạy tiếp và làm bẩn
+//     fixture của các test sau trong cùng tệp.
+//   · Hai lượt evidence liên tiếp: mọi tệp int chậm đều 1,35 lần (cộng dồn 3308 → 4465 giây), kể
+//     cả những tệp không liên quan gì tới vòng vá — tức máy, không phải hồi quy.
+//
+// VÌ SAO LÀ TRẦN (`Math.min`) CHỨ KHÔNG PHẢI MỘT SỐ CỨNG: máy CI chỉ có 2–4 luồng. Viết cứng 6 ở
+// đó là NÂNG mức song song lên chứ không hạ, đúng chiều ngược với thứ dòng này muốn. `min` giữ
+// nguyên hành vi cũ ở mọi máy nhỏ hơn trần.
+//
+// RANH GIỚI NÓI RA: dòng này KHÔNG chữa cái gốc. Gốc là 51 container cho một lượt gác cổng, và
+// các hạn 180 giây rải trong `db/` vẫn đứng nguyên vì chúng canh thứ khác (một `migrate()` treo
+// thật). Trần này chỉ mua lại khoảng thở, và nó mua bằng một cái giá: trên máy nhiều luồng, lượt
+// `pnpm test` (không container) cũng chậm đi vì bị hạ cùng. Xem khoản 203.
+// ==============================================================================================
+const TRAN_TEP_CUNG_LUC = 6;
 
 export default defineConfig({
   resolve: {
@@ -40,5 +67,10 @@ export default defineConfig({
     environment: "node",
     testTimeout: 30000,
     hookTimeout: 180000,
+    // `minWorkers` phải đi kèm: mặc định của nó cũng suy từ số CPU, nên hạ MỘT MÌNH `maxWorkers`
+    // xuống dưới số ấy làm tinypool ném ngay lúc khởi động (`minThreads and maxThreads must not
+    // conflict`) — đo được lúc áp dòng trên, vitest chạy 0 tệp và thoát.
+    minWorkers: 1,
+    maxWorkers: Math.min(availableParallelism(), TRAN_TEP_CUNG_LUC),
   },
 });

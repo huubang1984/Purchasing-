@@ -51,6 +51,68 @@ describe("[S1.11] hộp thư dev", () => {
     }
   });
 
+  it("[khoản 201] hai loại tin mà S1.91 thêm: mã đăng nhập CHỈ đứng sau `#`, và `token: null` thì không có link", async () => {
+    // ==========================================================================================
+    // Tới trước vòng này, `hop-thu-dev.test.ts` có ĐÚNG 0 dòng chạm hai bộ gửi mới — lượt soi
+    // ngang 75 góc 4 đo được, và nêu đột biến sống: đổi `/login#${m.token}` thành
+    // `/login?t=${m.token}` trong nhánh tin báo người duyệt thì mã đăng nhập đi vào query string,
+    // tức vào log truy cập và `Referer` — vỡ đúng điều ADR-020 mục 3 chọn fragment để tránh — và
+    // TOÀN KHO vẫn xanh, vì mọi test khác dùng bộ gửi giả của `test-services.ts`.
+    // ==========================================================================================
+    thuMuc = join(mkdtempSync(join(tmpdir(), "tp-hop-thu-")), "con");
+    const ht = taoHopThuDev({ thuMuc, baseUrl: "https://mua.vidu.vn" });
+    expect(ht.approvalNoticeSender.name).toBe("dev-mailbox");
+    expect(ht.deadlineNoticeSender.name).toBe("dev-mailbox");
+
+    await ht.approvalNoticeSender.send({
+      orgId: "org-1",
+      email: "duyet@vidu.vn",
+      rfqId: "rfq-1",
+      unsealRequestId: "yc-1",
+      token: "TOKEN-BAO-DUYET",
+    });
+    // [khoản 199 / ADR-048] Trần riêng chặn ⇒ tin VẪN đi, chỉ không mang mã. Hợp đồng, không phải ca lỗi.
+    await ht.approvalNoticeSender.send({
+      orgId: "org-1",
+      email: "duyet2@vidu.vn",
+      rfqId: "rfq-1",
+      unsealRequestId: "yc-1",
+      token: null,
+    });
+    await ht.deadlineNoticeSender.send({
+      orgId: "org-1",
+      invitationId: "inv-9",
+      channel: "EMAIL",
+      destination: "ncc@vidu.vn",
+      newDeadlineAt: "2026-10-01T03:00:00.000Z",
+    });
+
+    const tin = docTin();
+    expect(tin.map((t) => t.loai)).toEqual(["UNSEAL_APPROVAL_NOTICE", "UNSEAL_APPROVAL_NOTICE", "DEADLINE_NOTICE"]);
+    const [mangMa, khongMa, hanMoi] = tin as [TinHopThuDev, TinHopThuDev, TinHopThuDev];
+
+    if (mangMa.loai !== "UNSEAL_APPROVAL_NOTICE") throw new Error("tin dau phai la UNSEAL_APPROVAL_NOTICE");
+    expect(mangMa.duongLink, "mã CHỈ đứng sau `#` — đây là vế mà đột biến query string phải giết").toBe(
+      "https://mua.vidu.vn/login#TOKEN-BAO-DUYET",
+    );
+    const u = new URL(mangMa.duongLink ?? "");
+    expect(u.pathname + u.search, "không một byte nào của mã được ra ngoài fragment").not.toMatch(/TOKEN/u);
+    expect(mangMa.den).toBe("duyet@vidu.vn");
+    expect(mangMa.rfqId).toBe("rfq-1");
+    expect(mangMa.unsealRequestId).toBe("yc-1");
+
+    if (khongMa.loai !== "UNSEAL_APPROVAL_NOTICE") throw new Error("tin hai phai la UNSEAL_APPROVAL_NOTICE");
+    expect(khongMa.duongLink, "hạn mức chặn ⇒ tin đi, KHÔNG có link").toBeNull();
+    expect(khongMa.den, "và nó vẫn tới đúng người").toBe("duyet2@vidu.vn");
+
+    if (hanMoi.loai !== "DEADLINE_NOTICE") throw new Error("tin ba phai la DEADLINE_NOTICE");
+    expect(hanMoi.hanNopMoi).toBe("2026-10-01T03:00:00.000Z");
+    expect(hanMoi.kenh).toBe("EMAIL");
+    expect(hanMoi.den).toBe("ncc@vidu.vn");
+    // Tin gia hạn KHÔNG mang link và KHÔNG mang mã nào — nó chỉ nói một mốc thời gian.
+    expect(JSON.stringify(hanMoi)).not.toMatch(/TOKEN|#/u);
+  });
+
   it("hàng rào môi trường chạy NGAY KHI TẠO; [review H3-2] local-dev + NODE_ENV=production cũng bị chặn", () => {
     thuMuc = mkdtempSync(join(tmpdir(), "tp-hop-thu-"));
     process.env["TRUSTPROCURE_KEY_ADAPTER"] = "kms";

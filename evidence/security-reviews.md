@@ -8519,3 +8519,94 @@ khai *"đúng MỘT tệp `.html`"*, hôm nay `git ls-files "*.html"` ra **ba**.
 - `apps/api/src/buyer.int.test.ts` **12 test** · `apps/api/src/auth.int.test.ts` **41 test**
 - evidence — **56/56** (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ **2016** khẳng định, `vitest thoát mã 0`, cổng **XANH**
 - sổ nợ **198 → 202** khoản; mở **82 → 85**; rổ A **14 → 16**, rổ B **50 → 51**, rổ C **18**; **47 → 48** ADR
+
+# §S1.94 — HAI KHOẢN CỦA CHÍNH LƯỢT SOI 75 ĐÓNG LẠI, CẢ HAI BẰNG LỚP CHỨ KHÔNG BẰNG LỜI KHAI
+
+**Vòng này chạm khoản rổ A nào:** đóng **103** (rổ A, vừa lên từ rổ B ở vòng trước) và **201** (rổ B). Mảnh của bảng bốn mảnh: mảnh 3
+(hạ tầng) — một tiến trình sống sót qua một đêm máy ngủ là tiền điều kiện của mọi kịch bản §11 đi qua một hạn nộp.
+
+## 1. Khoản 103 — một kết nối RẢNH chết không được phép giết tiến trình
+
+`pg` phát `'error'` **trên pool** khi một client đang rảnh trong hồ chết. Không ai nghe thì `EventEmitter` ném, và vì `apps/api` lẫn
+`apps/unseal-worker` không đặt `process.on("uncaughtException")`, đó là một lần chết thật.
+
+**Lớp đặt ở đâu là toàn bộ quyết định.** Hai tín hiệu của khoản 129/173 được khai ở từng composition root, và lớp phải-khai ấy ĐÃ bị
+quên một lần — `tools/neo-so-kiem-toan` dựng hai pool và gắn 0 listener (khoản 180), đúng lớp lỗi mà khoản 173 vừa đóng, còn nguyên ở
+chỗ thứ ba. Nên `'error'` không đi đường khai: `createPool` **luôn** gắn listener, và `onPoolError` chỉ nói *ghi dòng chẩn đoán ở đâu*
+(gói `packages/db` giữ hợp đồng CẤM LOG). Sáu chỗ dựng pool của kho — api ×2, worker ×2, tools ×2 — được phủ bằng một chỗ.
+
+Nuốt chứ không ném lại là ĐÚNG ở đây: tới lúc sự kiện tới, `pg` đã gỡ client hỏng khỏi hồ, và không giao dịch người dùng nào treo trên
+một client rảnh. Không có gì để fail-closed cho; thứ còn lại chỉ là chẩn đoán.
+
+**Phép đo, và nó không mô phỏng:** `packages/db/src/pool-song-sot-loi-ket-noi-ranh.int.test.ts` mượn một client, trả lại, rồi giết
+backend ấy bằng `pg_terminate_backend` **từ một kết nối khác** — đúng hình dạng của một lần CSDL khởi động lại. `pool.emit("error", …)`
+chỉ chứng minh `EventEmitter` hoạt động; nó không chứng minh `pg` phát sự kiện ấy trên đường nào.
+
+Ba khẳng định: người nghe nhận một `Error` có tên; pool **vẫn cấp được kết nối mới** sau sự cố; và ca **không truyền** `onPoolError`
+vẫn sống — tức lớp nằm ở `createPool`, không ở lời khai của người gọi.
+
+**Đột biến:** gỡ `pool.on("error", …)` khỏi `createPool` ⇒ tiến trình vitest chết với *Unhandled Errors*. Không phải một khẳng định đỏ
+— một tiến trình chết, đúng hình dạng của sự cố thật. Khôi phục tự kiểm sha256.
+
+**CÒN LẠI ở khoản 180:** hai tín hiệu kia (`release` mang `SESSION_STATE_LEFT`, và lần lấy kết nối tới muộn) vẫn chưa được gắn ở
+`tools/`. Bản vá này không đóng 180.
+
+## 2. Khoản 201 — ba ca cho hai bộ gửi mà lượt soi 75 đo được là có 0 dòng test
+
+`apps/api/src/adapters/hop-thu-dev.test.ts` nay ghim: mã đăng nhập **chỉ** đứng sau dấu thăng (đường dẫn và query không mang một byte
+nào của nó), `token: null` ⇒ tin **vẫn đi** và `duongLink` là `null`, tin gia hạn không mang mã nào.
+
+**Đột biến — chính con mà góc 4 nêu ra:** đổi `/login#${m.token}` thành `/login?t=${m.token}` trong nhánh tin báo người duyệt ⇒ **ĐỎ**.
+Trước vòng này nó xanh toàn kho, vì mọi test khác dùng bộ gửi giả của `test-services.ts`.
+
+## 3. Số đo
+
+- `pnpm t0` **0** — 281 module / 1148 phụ thuộc / 0 vi phạm (~~280 / 1145~~ — số cũ đo TRƯỚC khi tệp int mới có mặt)
+- `pnpm test` — **70 tệp / 956 test** đạt, 1 bỏ qua
+- sổ nợ tự đối chiếu **45/45**
+- `pnpm evidence` **XANH** — `vitest thoát mã 0`, **56/56** bất biến (34 nghiệp vụ + 22 hàng rào), đọc từ **2019** khẳng định
+- sổ nợ **203** khoản, mở **85 → 84** — đóng 103 và 201, **mở 203**; rổ A **16 → 15**, rổ B **51 → 50**, rổ C **18 → 19**; **48** ADR không đổi
+
+## 4. Cổng evidence đỏ HAI lượt, và nó không đỏ vì bản vá — khoản 203
+
+Lượt evidence đầu trên cây cuối: `F1` đỏ, một test hết hạn 180 giây, không một khẳng định nào sai. Lượt hai, trên máy vừa được
+dọn sạch hơn lượt một: **bảy** test đỏ, hai cổng chặn merge.
+
+**Thứ phân biệt được tải với hồi quy, và nó rẻ:** `db/rls-coverage.int.test.ts` chạy RIÊNG — **51/51 đạt, 121,7 giây**. Cùng tệp
+ấy trong lượt evidence: 507 giây, 4 đỏ. Và tệp ấy **không gọi `createPool` một lần nào**, nên bản vá của vòng này không với tới
+được nó; đường nối duy nhất là cái máy. So từng tệp giữa hai lượt thì mọi tệp tích hợp chậm đều **1,35 lần**, kể cả những tệp
+không liên quan gì tới vòng vá — cùng khuôn đã ghi ở mục 55 của `docs/STATE.md`.
+
+**Ba trong bảy cái đỏ là DÂY CHUYỀN.** Vitest không huỷ một test đã quá hạn: nó chạy tiếp, và fixture của nó làm bẩn các test sau
+trong CÙNG tệp. Ai đọc báo cáo mà không biết điều đó sẽ đi chữa ba khẳng định hoàn toàn lành.
+
+**Đã làm — hạ trần song song, KHÔNG nới một ngưỡng nào.** Các hạn 180 giây rải trong `db/` canh một `migrate()` treo thật; nới
+chúng là biến một phép đo thành một lời khai. Thứ sai là điều kiện đo: 51 tệp tích hợp, mỗi tệp một cluster Postgres, vitest lấy
+trần theo số CPU nên máy 16 luồng mở 15 cluster cùng lúc. `vitest.config.ts` nay có trần 6, viết bằng `Math.min` với số CPU để
+máy CI 2–4 luồng KHÔNG bị nâng lên.
+
+Bản đầu của dòng ấy hỏng, và cổng bắt được trước khi nó kịp tốn một lượt evidence: hạ một mình `maxWorkers` thì `minWorkers` vẫn
+suy từ số CPU, tinypool ném ngay lúc khởi động, vitest chạy **0 tệp** rồi thoát — đúng thứ dễ đọc nhầm thành xanh nếu chỉ nhìn mã
+thoát. Câu ấy nay nằm trong chú thích cạnh `minWorkers`.
+
+**Kết quả đo được của trần**, cùng cây mã, máy sạch:
+
+| | lượt 1 | lượt 2 | lượt 3 (có trần) |
+|---|---|---|---|
+| cổng | 🔴 1 chặn | 🔴 2 chặn | 🟢 **XANH** |
+| tổng thời lượng tệp tích hợp | 3308 s | 4465 s | **2232 s** |
+| `db/rls-coverage.int.test.ts` | 359 s | 507 s | **218 s** |
+| `apps/api/src/auth.int.test.ts` | 267 s | 416 s | **58 s** |
+| test từng hết hạn 180 s | hết hạn | hết hạn | **68,4 s đạt** |
+| thời gian treo máy | — | 23 ph 20 | **19 ph 08** |
+
+Hạ mức song song làm lượt chạy NHANH HƠN, không chậm hơn — tức máy đang tranh nhau chứ không đang làm việc.
+
+**Khoản 203 mở, rổ C, và nó ở lại MỞ có chủ ý.** Trần là khoảng thở, không phải lời chữa: gốc vẫn là mỗi tệp một cluster. Giá đã
+trả cũng ghi ra — trên máy nhiều luồng, lượt test đơn vị không container cũng bị hạ theo.
+
+## 5. Một lỗi của chính vòng này, đã sửa
+
+Script áp sổ nợ của vòng này chèn lời khai vào TRƯỚC dấu gạch đứng CUỐI của hàng, mà cột cuối là cột **con trỏ tệp**, không phải
+cột văn. Hàng 103 và 201 vì thế mang hơn một nghìn ký tự văn xuôi trong ô con trỏ — cổng `[INV-H20]` vẫn 45/45, vì nó soi con trỏ
+có giải được không, không soi ô nào chứa chúng. Đã chuyển về ô văn, và ô con trỏ của 103 nay có thêm tệp đo mới.
