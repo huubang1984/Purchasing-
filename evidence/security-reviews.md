@@ -8751,3 +8751,73 @@ nơi không ai quên được: hạn khai riêng của 31 test kia VẪN THẮNG
 - `pnpm evidence` **XANH** — `vitest thoát mã 0`, **56/56** bất biến (34 nghiệp vụ + 22 hàng rào), **2025** khẳng định
 - **54** migration đánh số (53 → 54); sổ nợ **203** khoản, mở **84 → 82**; rổ A **10 → 8**, rổ B **54**, rổ C **20**;
   **48** ADR không đổi — ADR-016 nhận một tiểu mục thay vì một ADR mới
+
+# §S1.97 — ĐI TRỌN KỊCH BẢN §11 TRÊN TRÌNH DUYỆT THẬT, KHÔNG VÁ MỘT LỖI NÀO
+
+**Vòng này chạm khoản rổ A nào:** không khoản nào, và đó là chủ ý. Mảnh của bảng bốn mảnh: **mảnh 1**, và vòng này tồn tại vì bảng ấy
+chốt ngày 2026-09-19 rồi **tám vòng không ai đo lại**.
+
+## 1. Vì sao một vòng không vá gì
+
+Chủ dự án nêu đúng hình dạng rủi ro: *lỗi → sửa → lỗi → sửa*. Số liệu ủng hộ lo ngại ấy. Sáu vòng gần nhất, tổng mở đi
+79 → 83 → 81 → 82 → 85 → 84 → 82; rổ A đi 14 · 15 · 13 · 14 · 16 · 15 · 10 · 8. Nhìn thì rổ A giảm một nửa, nhưng bóc ra: trong 8 khoản
+rời rổ A, **5 là xếp lại rổ** (S1.95) và chỉ **3 là đóng thật**. Xếp lại rổ làm danh sách nói đúng hơn; nó không xây thêm gì.
+
+ADR-043 đã gọi tên cơ chế: *sổ nợ là một MÁY PHÁT chứ không phải một danh sách việc*. Lối ra mà chính ADR ấy kê là đo theo §11. Vòng
+này làm đúng điều đó, và không làm gì khác.
+
+## 2. Lượt đi thử — bảy bước, trên `f6865bb`
+
+Sạp dựng lại từ đầu trên container mới: `pnpm gieo:demo`, api, web, worker. Phần nhà cung cấp đi bằng trình duyệt ở khung **375×812**,
+vì §11 viết *mở link mời trên điện thoại của họ* — đó là một phần của phép đo chứ không phải chi tiết trang trí.
+
+| bước | kết quả |
+|---|---|
+| người mua tạo RFQ ≥3 hạng mục, mời 3 nhà cung cấp | **không có giao diện** — bộ gieo làm qua API |
+| nhà cung cấp mở link mời | **chạy** — hai ô tự điền từ fragment |
+| xác minh danh tính | **chạy** — link đi EMAIL, OTP bắt buộc đi kênh KHÁC (SMS); phiên nằm trong cookie, JavaScript không đọc được |
+| nộp báo giá niêm phong | **chạy** — ba bản nộp, giá mã hoá trong trình duyệt; tổng tự tính đúng tới từng chữ số |
+| biên nhận kiểm chứng được | **chạy** — văn bản chính tắc ký ECDSA P-256, `ciphertext_sha256`, kiểm bằng `/.well-known/trustprocure-receipt-keys` |
+| đóng thầu quá hạn | **chạy** — đóng sớm có lý do, `OPEN` → `CLOSED`; trước khi đóng, số báo giá bị giấu theo `STRICT_BLIND_BEFORE_CLOSE` |
+| HAI người duyệt | **chạy** — ba người khác nhau (soạn, duyệt 1, duyệt 2), ba phiên; giao diện nói thẳng người tạo không tự duyệt được; `0/2` → `1/2` → `2/2` → `APPROVED` |
+| điều phối giải mã | **chạy** — worker giải mã, gói thầu `UNSEALED` |
+| bảng so sánh | **chạy** — ba tổng khớp từng chữ số, 3 đọc được / 0 không đọc được, không lệch tiền tệ |
+| người mua CHỌN nhà cung cấp | **không có** — thuộc S2; giao diện tự nói *chưa có trong lát cắt này* |
+| xuất bộ bằng chứng kiểm toán | **chạy, bằng CLI** — `pnpm neo xuat` rồi `kiem`: `ok=true checked=27 neo=1` |
+
+Giá đã nhập và giá đọc ra khớp tuyệt đối: 526.800.000 · 528.480.000 · 528.600.000 VND, trung bình 527.960.000.
+
+## 3. Hàng 1 của bảng bốn mảnh SAI, và đó là kết quả chính của vòng
+
+Bảng khai *nhà cung cấp không có chỗ nào để nộp thầu*, kèm phép đo *`git ls-files` cho đúng MỘT tệp `.html`, và nó là máy dò*. Hôm nay
+có **ba** tệp `.html`, hai trong đó là trang sản phẩm, và đường nộp thầu đi được trọn vẹn. Mảnh 1 nay là hai lỗ hẹp hơn hẳn: **không có
+màn tạo gói thầu và mời nhà cung cấp**, và **không có màn xuất bằng chứng**.
+
+Mảnh 2, 3, 4 không đổi một chữ. Và **hai trong bốn mảnh không phải việc của mã**: mảnh 3 cần một tài khoản hạ tầng, mảnh 4 cần một
+khách hàng. Không vòng vá lỗi nào chạm được hai mảnh ấy — đó là câu trả lời đo được cho câu hỏi *vá tiếp có ra khỏi vòng lặp không*.
+
+## 4. Một khiếm khuyết mới, và một phát hiện bị chính vòng này bác
+
+**Khoản 204 (rổ B) — trang nộp thầu chỉ đọc `location.hash` một lần.** Đo: tải `nop-thau.js` rồi đếm, `hashchange` 0 lần, `popstate` 0
+lần. Đổi fragment trên cùng tài liệu không làm trang đọc lại, nên tab giữ token CŨ và máy chủ trả *đã dùng*. Ba người ba điện thoại
+không cắn; cắn là một người nhận link mời LẦN HAI và bấm khi tab cũ còn mở — và thông điệp lúc ấy đổ lỗi cho link mới. Rổ B vì khoản
+125 đang chặn chính đường thu hồi-rồi-mời-lại.
+
+**Bị bác trước khi thành khoản:** lúc dựng sạp, `apps/api` không khởi động được vì vai `app_api_login` chưa tồn tại, và em định ghi
+thành một khoản *không gì trong kho tạo vai đăng nhập*. Kiểm lại trước khi viết: ADR-044 có sẵn mục **Cách chạy** với đúng hai lệnh
+`CREATE ROLE`, kèm ghi chú *migration tạo vai NOLOGIN, không tạo vai đăng nhập*. Đó là lỗi tìm kiếm của người đo, không phải lỗ hổng
+của kho. Thứ còn đúng và nhỏ hơn nhiều: `pnpm gieo:demo` để lại một sạp chưa khởi động được, tức ma sát dựng demo — không đủ thành một
+khoản.
+
+## 5. Ranh giới nói ra
+
+- Bước *quá hạn nộp* đi bằng **đóng sớm có lý do**, không phải bằng cách chờ hết hai giờ. Đường đóng theo đồng hồ chưa được đo ở vòng
+  này, và khoản 196 (không lớp nào so hai đồng hồ) vẫn mở.
+- Nhà cung cấp 2 và 3 bấm nút bằng `.click()` thay vì toạ độ; bố cục đã được chứng minh bằng nhà cung cấp 1 ở đúng khung hình ấy.
+- Vòng này KHÔNG đo đường break-glass, KHÔNG đo nộp lại bản sửa đổi, và KHÔNG đo ca một nhà cung cấp không nộp gì.
+
+## 6. Số đo
+
+- sổ nợ **204** khoản, mở **82 → 83**; rổ A **8** không đổi, rổ B **54 → 55**, rổ C **20**; **48** ADR không đổi
+- đóng **0** khoản, mở **1** — và vòng này cố ý không vá gì
+- không một dòng mã sản xuất nào đổi
