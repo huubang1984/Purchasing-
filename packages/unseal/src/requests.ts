@@ -18,12 +18,14 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
+import { PERMISSIONS, listUserIdsWithPermission, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
 
 /** `kind` của job mà worker tiêu thụ. Một hằng, một chỗ ở — worker đọc chính nó. */
 export const UNSEAL_JOB_KIND = "UNSEAL_RFQ";
+/** [S1.91 / khoản 194] Việc BÁO cho người duyệt rằng có một yêu cầu mở thầu đang chờ họ. */
+export const UNSEAL_NOTICE_KIND = "UNSEAL_APPROVAL_NOTICE";
 
 export class UnsealError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -204,6 +206,32 @@ export async function requestUnseal(
       ...(nhanChung === null ? {} : { breakGlassWitnessUserId: nhanChung.id }),
     },
   });
+
+  // [S1.91 / khoản 194] BÁO CHO NGƯỜI DUYỆT — vì tới trước vòng này KHÔNG AI BÁO CHO HỌ CẢ.
+  //
+  // Mở thầu đòi HAI người (D2), và cho tới S1.90 `requestUnseal` không xếp một việc nào: người duyệt
+  // thứ hai chỉ biết có việc chờ mình nếu một con người khác nhắn cho họ. Lượt đi thử 2026-09-20 chỉ
+  // đi được tới cuối vì script gieo phát sẵn link cho cả ba vai — một tính chất của công cụ demo,
+  // không phải của sản phẩm. Đo lại ở S1.91: bốn chỗ `enqueueJob` trong toàn mã sản xuất, không chỗ
+  // nào báo cho người duyệt.
+  //
+  // NGƯỜI YÊU CẦU BỊ LOẠI khỏi danh sách, và đó không phải phép lịch sự: D2 nói họ không duyệt được,
+  // nên một tin báo *"có việc chờ anh"* gửi cho chính họ là một tin sai.
+  //
+  // `dedupeKey` theo cặp (yêu cầu, người nhận): một kẻ tạo rồi huỷ yêu cầu liên tục không rải được
+  // tin — và vì mỗi tin mang một mã đăng nhập (ADR-046), vế chống rải ấy là vế an ninh chứ không
+  // phải vế lịch sự. Trần thứ hai nằm ở `LOGIN_MAX_TOKENS_PER_WINDOW` của chính `issueLoginToken`,
+  // mà handler đi qua thay vì tự phát mã.
+  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
+  for (const userId of nguoiDuyet) {
+    if (userId === actor.id) continue;
+    await enqueueJob(client, orgId, {
+      kind: UNSEAL_NOTICE_KIND,
+      payload: { unsealRequestId: h.id, rfqId: input.rfqId, userId },
+      dedupeKey: `unseal-notice:${h.id}:${userId}`,
+    });
+  }
+
   return doiYeuCau(h);
 }
 

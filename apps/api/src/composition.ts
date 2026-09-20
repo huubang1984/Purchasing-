@@ -110,6 +110,8 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       new ReceiptSigningKeyRing(ch.receiptSigningKeys.active, ch.receiptSigningKeys.keys),
     ),
     loginLinkSender: hopThu.loginLinkSender,
+    approvalNoticeSender: hopThu.approvalNoticeSender,
+    deadlineNoticeSender: hopThu.deadlineNoticeSender,
     invitationLinkSender: hopThu.invitationLinkSender,
     otpSender: hopThu.otpSender,
   }, KMS_TIMEOUT_MS_MAC_DINH);

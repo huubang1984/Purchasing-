@@ -8228,3 +8228,88 @@ Hai phép đo phụ, làm để 401 ở bảng trên có nghĩa: đường mới
 **Điều phép đo này KHÔNG chứng minh:** nó đi qua HTTP, không qua DOM. Việc `mo-thau.js` gọi đúng đường và vẽ đúng ô vẫn chỉ được đo
 bằng mắt trên một lượt đi thử — và đó là khoảng trống thật, cùng họ với khoảng trống đã sinh ra khoản 190. Kho này chưa có phép đo nào
 mở được một trình duyệt.
+# §S1.91 — MỘT PHÉP ĐO BÁC MỘT LỜI KHAI CỦA CHÍNH VÒNG TRƯỚC, VÀ HAI KHOẢN RỔ A ĐÓNG BẰNG MỘT LỚP
+
+Vòng này bắt đầu bằng việc chủ dự án chọn *"khoản 194 — cửa sổ 15 phút"*. Việc đầu tiên là ĐO, và phép đo bác chính cách S1.90 ghi khoản ấy.
+Quyết định: ADR-046. Khoản đóng: **154** và **194**, cả hai đều rổ A.
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng
+
+Vế lịch **chưa chạm** (S1.91 < S1.92). Vế hardening `git rev-list --count 1dfc7e3..origin/master --first-parent -- db/migrations/hardening.always.sql`
+= **3** — vẫn đủ ba, nhưng vẫn là ba lần đổi mà S1.90 đã đo rồi hoãn, không phải ba lần mới. Không lượt ngang nào chạy, S1.91 không chạm
+`hardening.always.sql`. Mốc giữ nguyên: chậm nhất **S1.92**.
+
+## 1. Lời khai bị bác, và nó là lời khai của chính em viết ở vòng trước
+
+| S1.90 ghi | S1.91 đo | Kết |
+|---|---|---|
+| *mã đăng nhập 15 phút × mở thầu cần hai người* | `LOGIN_TOKEN_TTL_SECONDS` đếm từ lúc NGƯỜI DÙNG xin link; phiên sống 8 giờ sau khi vào | **SAI** |
+| — | `tools/gieo-demo` phát cả ba link một lúc rồi để đó | thủ phạm thật của lượt đi thử |
+| — | `requestUnseal` xếp **0** việc; 4 chỗ `enqueueJob` toàn kho, không chỗ nào báo người duyệt | **khoảng trống thật** |
+
+Bài học không phải *"đo trước khi ghi"* — S1.90 có đo, nó đo cái sai. Bài học là: **một khoản nợ sinh ra từ một lần vấp phải nêu CƠ CHẾ, không
+nêu triệu chứng.** Triệu chứng là hai link hết hạn; cơ chế là không ai được báo. Thân khoản 194 nay mang cả hai, nguyên văn cũ giữ tại chỗ.
+
+## 2. Hai khoản rổ A là cùng một khoảng trống ở hai đầu
+
+Khoản **154** (S1.81): `RFQ_DEADLINE_EXTENDED_NOTICE` enqueue ở hai chỗ, không tiến trình nào nhận. Khoản **194**: người duyệt không được báo.
+Kho có đường XẾP VIỆC thông báo mà **không có chặng GỬI** — nên thêm một loại tin thứ hai chỉ tạo ra khoản 154 thứ hai. Vòng này dựng chặng ấy
+một lần: hai cổng gửi, hai handler ở `apps/api` (tiến trình DUY NHẤT đọc được `supplier_contacts` — ADR-006), và
+`packages/outbox/src/so-kind-mo-coi.ts` nay RỖNG.
+
+Sổ `kind` mồ côi có một hợp đồng đáng nể, và nó vừa làm đúng việc của mình: **mỗi dòng phải trỏ một khoản CÒN MỞ; khoản đóng ⇒ cổng ĐỎ.** Nghĩa
+là không đóng được 154 bằng một dòng tài liệu — phải có handler thật.
+
+## 3. Đánh đổi trình lên, chủ dự án chọn NGƯỢC khuyến nghị
+
+Bản trình khuyến nghị tin **chỉ báo, không kèm mã đăng nhập**: giữ việc phát chứng chỉ do NGƯỜI khởi xướng. Chủ dự án chọn **kèm mã**, lý do ma
+sát. Ghi đúng cái giá: mỗi yêu cầu mở thầu biến một hành động của người này thành chứng chỉ của người kia.
+
+Ba lớp bao cái giá ấy, và **không lớp nào là lớp mới** — đó là lý do phương án chấp nhận được: mã đi qua ĐÚNG `issueLoginToken` (nên
+`LOGIN_MAX_TOKENS_PER_WINDOW` vẫn cưỡng chế, handler không có đường phát mã riêng); `dedupeKey` theo cặp chặn đường tạo–huỷ lặp để rải; hạn mức
+từ chối thì tin vẫn đi, chỉ không mang mã.
+
+## 4. Một khiếm khuyết của PHÉP ĐO, chỉ lượt đột biến tìm ra
+
+Đột biến *"đổi `RFQ_UNSEAL_APPROVE` thành `RFQ_UNSEAL`"* **SỐNG** ở lượt chạy đầu. Lý do đo được: vai `DIRECTOR` giữ CẢ HAI mã quyền
+(`role_permissions`: DIRECTOR → `rfq.unseal, rfq.unseal.approve`; PROCUREMENT_MANAGER → `rfq.unseal`), nên hai tập người nhận trùng nhau và test
+không ghim được quyền nào. Nó chỉ chết sau khi thêm một `PROCUREMENT_MANAGER` vào bối cảnh — người giữ đúng MỘT trong hai mã.
+
+Đây là cùng lớp lỗi với *"fixture vai bootstrap che vế lọc"*: một phép đo xanh vì mọi vai trong bối cảnh đều thoả cả hai vế.
+
+| Đột biến | Test phải đỏ | Lượt 1 | Sau khi thêm PM |
+|---|---|---|---|
+| bỏ vế loại người yêu cầu | người YÊU CẦU không có việc nào | **ĐỎ** | ĐỎ |
+| `RFQ_UNSEAL_APPROVE` → `RFQ_UNSEAL` | đúng tập người nhận | **SỐNG** | **ĐỎ** |
+| bỏ `i.revoked_at IS NULL` | lời mời đã thu hồi không nhận tin | (neo sai, chạy lại) | **ĐỎ** |
+
+## 5. Hai thứ vòng này ĐỤNG mà không sửa, nói ra
+
+⑴ **Gia hạn hạn nộp làm MẤT HIỆU LỰC hai phê duyệt RFQ cũ** — lần gia hạn thứ hai bị `422` *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi
+co 0 (D2)"*. Đó là hành vi ĐÚNG và đáng ghi; test dựng vế ngược trên một gói thầu thứ hai thay vì gia hạn hai lần.
+
+⑵ **Nội dung tin còn nghèo:** mang id gói thầu và id yêu cầu, không mang tên gói thầu hay người xin — đủ để hành động, chưa đủ để đọc mà hiểu.
+Không mở khoản mới cho nó vì đây là một lựa chọn phạm vi, không phải một khoảng trống bị bỏ quên; ADR-046 §*Điều ADR này KHÔNG nói* giữ câu ấy.
+
+## 6b. Lượt evidence CHẶN MERGE một lần, và nó bắt đúng thứ nó sinh ra để bắt
+
+Lượt evidence đầu của vòng này **đỏ**: `D1` có test mang nhãn nhưng không test nào ĐẠT. Hai test đỏ là `kich-ban-41.int.test.ts` và bản HTTP của
+nó, cùng một câu:
+
+```
+expect(rows.map((r) => r.kind)).toEqual(["UNSEAL_RFQ"]);
+```
+
+Câu ấy đọc MỌI job mang `unsealRequestId` ấy, và vòng này làm `requestUnseal` xếp thêm việc báo người duyệt — những việc mang cùng id. **Lời khai
+gốc không sai; nó được viết HẸP HƠN thứ nó muốn nói.** Điều kịch bản 41 muốn ghim là *điều phối chỉ ĐẶT MỘT job GIẢI MÃ, `api` không tự giải mã*,
+và vế ấy vẫn đúng nguyên. Bản sửa giữ nguyên độ sắc (`toHaveLength(1)` cho `UNSEAL_RFQ`, không phải *ít nhất một*) rồi nói thêm điều mới bằng hai
+khẳng định riêng — **không nới vế cũ để cho qua**.
+
+Đáng ghi vì đây là lần thứ hai trong hai vòng liên tiếp một cổng bắt được thứ em không tự nhớ ra, và lần này nó bắt ở **lượt cuối cùng trước
+merge** — sau khi `t0`, `pnpm test` và hai lượt int nhắm tệp đều đã xanh.
+
+## 6. Số đo
+
+`t0` exit 0 (279 module / 1141 phụ thuộc / 0 vi phạm) · `pnpm test` 69 tệp / 951 test · `buyer.int` + `composition.int` 14 test ·
+evidence **vitest thoát mã 0**. Sổ nợ **196 khoản, 83 → 81 mở**; rổ A **15 → 13**; rổ B và rổ C không đổi. Không migration nào, không một dòng
+`hardening.always.sql` nào.

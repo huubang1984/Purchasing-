@@ -38,7 +38,10 @@ describe("[S1.11] hộp thư dev", () => {
     expect(moi.loai === "INVITATION_LINK" && moi.duongLink).toBe("https://mua.vidu.vn/i#TOKEN-MOI");
     expect(otp.loai === "OTP" && otp.ma).toBe("123456");
     // Token không bao giờ vào đường dẫn hay query — chỉ sau `#`.
-    for (const t of tin) if ("duongLink" in t) expect(new URL(t.duongLink).pathname + new URL(t.duongLink).search).not.toMatch(/TOKEN/u);
+    for (const t of tin)
+      if ("duongLink" in t && t.duongLink !== null) {
+        expect(new URL(t.duongLink).pathname + new URL(t.duongLink).search).not.toMatch(/TOKEN/u);
+      }
     expect(loi).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
     // Thư mục được tạo (kể cả lồng), tệp chỉ chủ đọc được — trên POSIX; Windows không có mode.

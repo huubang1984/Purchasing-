@@ -45,8 +45,9 @@
  * vế ⑶ của hợp đồng ở trên tồn tại để nó không ở tạm mãi.
  */
 export const KIND_KHONG_NGUOI_NHAN: Readonly<Record<string, string>> = {
-  // `packages/rfq/src/rfq.ts` enqueue nó ở hai chỗ khi hạn nộp được gia hạn, nhưng chặng GỬI tới
-  // nhà cung cấp chưa tồn tại: `apps/api` chỉ đăng ký `LOGIN_LINK_SEND`, và `apps/unseal-worker`
-  // cố ý không nhận (vai `app_unseal` không đọc được `supplier_contacts` — ADR-006).
-  RFQ_DEADLINE_EXTENDED_NOTICE: "khoản 154: chặng gửi thông báo gia hạn hạn nộp chưa có handler ở tiến trình nào",
+  // [S1.91 / khoản 154] SỔ NÀY NAY RỖNG, và đó là trạng thái ĐÚNG chứ không phải một sổ bỏ hoang.
+  // `RFQ_DEADLINE_EXTENDED_NOTICE` ở đây từ S1.81 tới S1.90; chặng gửi tới nhà cung cấp nay tồn tại
+  // ở `apps/api` (`buildApiOutboxHandlers`), đúng tiến trình duy nhất đọc được `supplier_contacts`.
+  // Vế ⑶ của hợp đồng trên — mỗi dòng trỏ một khoản CÒN MỞ — là thứ buộc dòng ấy phải đi khi khoản
+  // 154 đóng, thay vì ở lại thành một lời khai thiu.
 };

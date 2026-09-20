@@ -22,7 +22,7 @@ import { createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
-import { dichVuTest, type DichVuTest } from "./test-services.js";
+import { dichVuTest, outboxTest, type DichVuTest } from "./test-services.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -396,5 +396,205 @@ describe("[sổ nợ 40 / 040] đặt lại TOTP qua HTTP — hai người", () 
     expect(huy.status, huy.text).toBe(200);
     expect((huy.body as { mfaReset: { status: string } }).mfaReset.status).toBe("CANCELLED");
     expect((await goi("POST", `/mfa-resets/${id2}/approve`, pm2, {})).status).toBe(422);
+  });
+});
+// =================================================================================================
+// [S1.91 / khoản 194 · 154] HAI TIN BÁO MÀ TỚI S1.90 KHÔNG TIẾN TRÌNH NÀO GỬI
+//
+// Khoản 194 sinh ra từ một lượt đi thử và ĐƯỢC GHI SAI ở vòng S1.90: biên bản khi ấy đổ cho cửa sổ
+// 15 phút của mã đăng nhập. Phép đo ở S1.91 bác điều đó — `LOGIN_TOKEN_TTL_SECONDS` đếm từ lúc
+// NGƯỜI DÙNG xin link, và phiên sống 8 giờ sau khi vào. Thứ làm hỏng lượt đi thử là `tools/gieo-demo`
+// phát cả ba link một lúc rồi để đó.
+//
+// Khoảng trống THẬT lớn hơn: `requestUnseal` không xếp một việc nào, nên người duyệt thứ hai chỉ biết
+// có việc chờ mình nếu một con người khác nhắn cho họ. Mở thầu đòi HAI người (D2) mà hệ thống không
+// nói với người thứ hai — tính năng ấy tự chạy được bao giờ.
+//
+// Khoản 154 là cùng một khoảng trống ở đầu kia: `RFQ_DEADLINE_EXTENDED_NOTICE` được enqueue từ S1.81
+// và không tiến trình nào nhận. Hai khoản đóng bằng MỘT chặng gửi, và đó là lý do chúng cùng vòng.
+// =================================================================================================
+describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình nào gửi", () => {
+  /**
+   * RFQ đã ĐÓNG — cùng khuôn `taoRfqDaDong` của `packages/unseal`, dựng bằng SQL để không phụ thuộc
+   * chính sách mà một test khác trong tệp này có thể đã đặt (hay chưa đặt).
+   *
+   * LUÔN cấp kép, và hai phê duyệt RFQ phải đến từ HAI người khác nhau: cổng D2 ở tầng CSDL từ chối
+   * cạnh PENDING_APPROVAL -> OPEN khi thiếu, và nó từ chối ĐÚNG — fixture thiếu hai hàng ấy làm ba
+   * test đầu của khối này đỏ với *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0"*.
+   */
+  async function rfqDaDong(ai: Nguoi, duyet: readonly Nguoi[], dong = true): Promise<string> {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Bao tin', now() + interval '7 days', true, $2, $3) RETURNING id",
+      [orgA, ai.id, ai.sessionId],
+    );
+    const rfqId = rows[0]?.id ?? "";
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Thep tam', '10.0000', 'tam', $3, $4)",
+      [orgA, rfqId, ai.id, ai.sessionId],
+    );
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
+      [rfqId, ai.id, ai.sessionId],
+    );
+    for (const d of duyet) {
+      await db.pool.query("INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)", [orgA, rfqId, d.id, d.sessionId]);
+    }
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(
+        "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+        [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), ai.id, ai.sessionId],
+      );
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqId, ai.id, ai.sessionId]);
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+    // `dong = false` giữ RFQ ở OPEN: cạnh CLOSED -> OPEN KHÔNG tồn tại (máy trạng thái từ chối,
+    // và nó từ chối đúng), nên một test cần RFQ còn mở phải dừng ở đây chứ không mở lại.
+    if (dong) {
+      await db.pool.query(
+        "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong de kiem tra', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+        [rfqId, ai.id, ai.sessionId],
+      );
+    }
+    return rfqId;
+  }
+
+  /** Mọi người trong tổ chức đang giữ `rfq.unseal.approve` — đọc bằng SQL, không qua hàm đang được đo. */
+  async function nguoiDuyetCuaToChuc(): Promise<Set<string>> {
+    const { rows } = await db.pool.query<{ id: string }>(
+      `SELECT DISTINCT u.id FROM user_roles ur
+         JOIN users u ON u.id = ur.user_id
+         JOIN role_permissions rp ON rp.role_code = ur.role_code
+        WHERE ur.org_id = $1 AND rp.permission_code = 'rfq.unseal.approve' AND u.status = 'ACTIVE'`,
+      [orgA],
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  it("[khoản 194] tạo yêu cầu mở ⇒ MỖI người duyệt một việc, và người YÊU CẦU không có việc nào", async () => {
+    const nguoiXin = await nguoi("bao-xin@vidu.vn", ["DIRECTOR"]);
+    const duyetA = await nguoi("bao-duyet-a@vidu.vn", ["DIRECTOR"]);
+    const duyetA2 = await nguoi("bao-duyet-a2@vidu.vn", ["DIRECTOR"]);
+    // PM giữ `rfq.unseal` (xin mở được) nhưng KHÔNG giữ `rfq.unseal.approve`. Người này tồn tại
+    // trong phép đo để ghim rằng tin báo đi theo quyền PHÊ DUYỆT chứ không theo quyền XIN MỞ — đổi
+    // một mã quyền thành mã kia là một đột biến SỐNG nếu không có ai giữ đúng một trong hai.
+    const pmKhongDuyet = await nguoi("bao-pm-khong-duyet@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const rfqId = await rfqDaDong(nguoiXin, [duyetA, duyetA2]);
+
+    const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, nguoiXin, { reason: "den gio mo thau" });
+    expect(yc.status, yc.text).toBe(201);
+    const unsealId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+
+    const { rows: viec } = await db.pool.query<{ payload: { userId: string } }>(
+      "SELECT payload FROM outbox_jobs WHERE org_id = $1 AND kind = 'UNSEAL_APPROVAL_NOTICE' AND payload->>'unsealRequestId' = $2",
+      [orgA, unsealId],
+    );
+    const nhan = new Set(viec.map((v) => v.payload.userId));
+    const phaiNhan = await nguoiDuyetCuaToChuc();
+    phaiNhan.delete(nguoiXin.id);
+
+    expect(nhan, "mỗi người giữ rfq.unseal.approve nhận ĐÚNG một việc").toEqual(phaiNhan);
+    expect(nhan.has(duyetA.id), "người duyệt vừa tạo phải có trong danh sách").toBe(true);
+    expect(nhan.has(nguoiXin.id), "D2 nói người yêu cầu không duyệt được — báo cho họ là một tin SAI").toBe(false);
+    expect(
+      nhan.has(pmKhongDuyet.id),
+      "PROCUREMENT_MANAGER giữ rfq.unseal nhưng không giữ rfq.unseal.approve — họ xin mở được, không duyệt được",
+    ).toBe(false);
+    expect(viec).toHaveLength(phaiNhan.size);
+  });
+
+  it("[khoản 194] chạy outbox ⇒ tin tới đúng email của từng người duyệt, mang mã đăng nhập", async () => {
+    const nguoiXin = await nguoi("bao2-xin@vidu.vn", ["DIRECTOR"]);
+    const duyetB = await nguoi("bao2-duyet@vidu.vn", ["DIRECTOR"]);
+    const duyetB2 = await nguoi("bao2-duyet-2@vidu.vn", ["DIRECTOR"]);
+    const rfqId = await rfqDaDong(nguoiXin, [duyetB, duyetB2]);
+    const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, nguoiXin, { reason: "den gio mo thau" });
+    expect(yc.status, yc.text).toBe(201);
+    const unsealId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+
+    const truoc = dv.thongBaoDaGui.length;
+    const ob = outboxTest(apiPool, dv.services);
+    await ob.chay(orgA);
+    const moi = dv.thongBaoDaGui.slice(truoc).filter((t) => t.unsealRequestId === unsealId);
+
+    expect(ob.loi, "không job nào được phép hỏng").toEqual([]);
+    expect(moi.length, "ít nhất người duyệt vừa tạo phải nhận được").toBeGreaterThan(0);
+    const choDuyetB = moi.find((t) => t.email === "bao2-duyet@vidu.vn");
+    expect(choDuyetB, "tin phải tới đúng email đọc từ hàng users").toBeDefined();
+    expect(choDuyetB?.rfqId).toBe(rfqId);
+    expect(choDuyetB?.token, "chủ dự án chọn tin MANG mã đăng nhập — ADR-046").not.toBeNull();
+    expect(moi.some((t) => t.email === "bao2-xin@vidu.vn"), "người yêu cầu không nhận tin nào").toBe(false);
+  });
+
+  it("[khoản 154] gia hạn hạn nộp ⇒ tin tới ĐÚNG đích của lời mời; lời mời đã thu hồi thì KHÔNG gửi", async () => {
+    const pm = await nguoi("bao-han-pm@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const { rows: ncc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, 'Thep Bao Tin', '0311111111', $2, $3) RETURNING id",
+      [orgA, pm.id, pm.sessionId],
+    );
+    const supplierId = ncc[0]?.id ?? "";
+    const { rows: lh } = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Chi Tin', 'tin@thepbaotin.vn', '0912345678', $3, $4) RETURNING id",
+      [orgA, supplierId, pm.id, pm.sessionId],
+    );
+    const contactId = lh[0]?.id ?? "";
+
+    const gdH1 = await nguoi("bao-han-gd1@vidu.vn", ["DIRECTOR"]);
+    const gdH2 = await nguoi("bao-han-gd2@vidu.vn", ["DIRECTOR"]);
+    const rfqId = await rfqDaDong(pm, [gdH1, gdH2], false);
+    const { rows: moi } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+      [orgA, rfqId, supplierId, contactId, pm.id, pm.sessionId],
+    );
+    const invitationId = moi[0]?.id ?? "";
+
+    const hanMoi = new Date(Date.now() + 9 * 24 * 3600 * 1000).toISOString();
+    const gh = await goi("POST", `/rfqs/${rfqId}/extend`, pm, { newDeadlineAt: hanMoi, reason: "them thoi gian" });
+    expect(gh.status, gh.text).toBe(200);
+
+    const truoc = dv.hanMoiDaGui.length;
+    const ob = outboxTest(apiPool, dv.services);
+    await ob.chay(orgA);
+    const daGui = dv.hanMoiDaGui.slice(truoc).filter((t) => t.invitationId === invitationId);
+    expect(ob.loi).toEqual([]);
+    expect(daGui, "một lời mời còn sống ⇒ đúng một tin").toHaveLength(1);
+    expect(daGui[0]?.destination, "kênh EMAIL ⇒ địa chỉ email của người liên hệ").toBe("tin@thepbaotin.vn");
+    expect(daGui[0]?.channel).toBe("EMAIL");
+
+    // VẾ NGƯỢC, và nó là vế đáng giá — dựng trên một gói thầu THỨ HAI chứ không gia hạn lần nữa.
+    //
+    // Vì sao không gia hạn lần hai trên cùng gói: một lần gia hạn ĐỔI NỘI DUNG, và hai phê duyệt RFQ
+    // được ràng vào nội dung ấy — lần gia hạn thứ hai bị từ chối `422` với *"RFQ nay can 2 phe duyet
+    // TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*. Đó là hành vi ĐÚNG và đáng ghi: đổi hạn nộp làm mất
+    // hiệu lực chữ ký cũ. Test này đo chặng GỬI, không đo lại vế ấy.
+    const rfqB = await rfqDaDong(pm, [gdH1, gdH2], false);
+    const { rows: moiB } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+        "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+      [orgA, rfqB, supplierId, contactId, pm.id, pm.sessionId],
+    );
+    const invitationB = moiB[0]?.id ?? "";
+    await db.pool.query("UPDATE rfq_invitations SET revoked_at = now(), status = 'REVOKED', revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1", [invitationB, pm.id, pm.sessionId]);
+
+    const han2 = new Date(Date.now() + 11 * 24 * 3600 * 1000).toISOString();
+    const ghB = await goi("POST", `/rfqs/${rfqB}/extend`, pm, { newDeadlineAt: han2, reason: "gia han goi B" });
+    expect(ghB.status, ghB.text).toBe(200);
+    const truoc2 = dv.hanMoiDaGui.length;
+    await ob.chay(orgA);
+    expect(
+      dv.hanMoiDaGui.slice(truoc2).filter((t) => t.invitationId === invitationB),
+      "một thông báo gia hạn gửi cho người đã bị rút lời mời là một tin nói sai về trạng thái của họ",
+    ).toHaveLength(0);
   });
 });

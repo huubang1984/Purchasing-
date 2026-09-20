@@ -38,6 +38,44 @@ export interface LoginLinkSender {
 }
 
 /**
+ * [S1.91 / khoản 194 / ADR-046] Bộ báo cho NGƯỜI DUYỆT rằng có một yêu cầu mở thầu đang chờ họ.
+ *
+ * `token` có thể là `null`, và vế ấy là một hợp đồng chứ không phải một ca lỗi: mã đăng nhập đi qua
+ * `issueLoginToken`, nên `LOGIN_MAX_TOKENS_PER_WINDOW` chặn được người nhận thứ sáu trong một cửa sổ
+ * 15 phút. Khi ấy tin VẪN đi — chỉ không mang mã — vì *"có việc chờ anh"* là thông tin người duyệt
+ * cần, còn mã đăng nhập thì họ tự xin được.
+ */
+export interface ApprovalNoticeSender {
+  readonly name: string;
+  send(input: {
+    readonly orgId: string;
+    readonly email: string;
+    readonly rfqId: string;
+    readonly unsealRequestId: string;
+    readonly token: string | null;
+  }): Promise<void>;
+}
+
+/**
+ * [S1.91 / khoản 154] Bộ báo cho NHÀ CUNG CẤP rằng hạn nộp đã được gia hạn.
+ *
+ * Loại việc này được enqueue từ S1.81 và tới S1.90 KHÔNG tiến trình nào nhận — nó nằm `PENDING`
+ * vĩnh viễn, và `packages/outbox/src/so-kind-mo-coi.ts` khai điều đó thành một dòng có số khoản.
+ * Chặng gửi phải ở `apps/api`: vai `app_unseal` của worker không đọc được `supplier_contacts`
+ * (ADR-006), nên worker không dựng nổi đích gửi dù có muốn.
+ */
+export interface DeadlineNoticeSender {
+  readonly name: string;
+  send(input: {
+    readonly orgId: string;
+    readonly invitationId: string;
+    readonly channel: Channel;
+    readonly destination: string;
+    readonly newDeadlineAt: string;
+  }): Promise<void>;
+}
+
+/**
  * Bộ BỌC bí mật TOTP lúc ghi danh — cặp với `TotpSecretUnsealer` của identity. Cả hai là adapter
  * TIÊM vào: `apps/api` KHÔNG được import `@trustprocure/crypto-keys/unwrap` (họ `g1-`), nên adapter
  * thật là một lời gọi KMS trên một CMK RIÊNG cho TOTP — không phải CMK của khoá RFQ (ADR-006/009).
@@ -68,6 +106,8 @@ export interface ApiServices {
   readonly otpSender: OtpSender;
   readonly receiptSigner: ReceiptSigner;
   readonly loginLinkSender: LoginLinkSender;
+  readonly approvalNoticeSender: ApprovalNoticeSender;
+  readonly deadlineNoticeSender: DeadlineNoticeSender;
   readonly totpSecretWrapper: TotpSecretWrapper;
   readonly totpSecretUnsealer: TotpSecretUnsealer;
 }

@@ -206,6 +206,40 @@ export async function hasPermission(
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * [S1.91 / khoản 194] AI TRONG TỔ CHỨC GIỮ MỘT MÃ QUYỀN — danh sách NGƯỜI NHẬN, không phải một cổng.
+ *
+ * Vì sao hàm này được phép ra mặt tiền gói trong khi `hasPermission` thì KHÔNG (khối đầu `index.ts`):
+ * `hasPermission` nguy hiểm vì nó trả lời câu hỏi *"được hay không"* mà không để lại dấu vết, nên nó
+ * mời gọi một cổng quyền im lặng. Hàm này không trả lời câu hỏi ấy cho ai — nó trả về một danh sách
+ * người để GỬI TIN. Không nhánh nào trong kho được dùng nó để quyết định cho qua hay chặn.
+ *
+ * Trả `userId` chứ KHÔNG trả email, và vế ấy là có chủ đích: người gọi duy nhất hôm nay là đường xếp
+ * việc thông báo, nó chỉ cần định danh. Giải ra email là việc của handler, đọc từ chính hàng `users`
+ * — cùng kỷ luật đã ghi ở `issueLoginToken` (review lượt 14, H14-6): không tin một chuỗi email do
+ * người gọi mang tới, vì `UNIQUE (org_id, email)` so NGUYÊN VĂN.
+ *
+ * Phạm vi tổ chức do RLS giữ, như mọi câu đọc khác của gói này; `assertTenantBound` là vế thứ hai.
+ */
+export async function listUserIdsWithPermission(
+  client: pg.PoolClient,
+  orgId: string,
+  permission: string,
+): Promise<readonly string[]> {
+  await assertTenantBound(client, orgId, "listUserIdsWithPermission");
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT DISTINCT u.id
+       FROM public.user_roles ur
+       JOIN public.users u ON u.id OPERATOR(pg_catalog.=) ur.user_id
+       JOIN public.role_permissions rp ON rp.role_code OPERATOR(pg_catalog.=) ur.role_code
+      WHERE rp.permission_code OPERATOR(pg_catalog.=) $1::pg_catalog.text
+        AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'
+      ORDER BY u.id`,
+    [permission],
+  );
+  return rows.map((r) => r.id);
+}
+
 export interface PermissionRequirement extends PermissionCheck {
   /**
    * Loại tài nguyên bị từ chối, ghi thẳng vào cột `resource_type` của sổ kiểm toán BẤT BIẾN.
