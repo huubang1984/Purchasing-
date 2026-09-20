@@ -290,4 +290,28 @@ $("nut-lai").addEventListener("click", () => {
   $("b3").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
+// ==============================================================================================
+// [S1.98 / khoản 204] ĐỌC LẠI FRAGMENT KHI NÓ ĐỔI, VÌ TRÌNH DUYỆT KHÔNG TẢI LẠI TÀI LIỆU.
+//
+// Trang này đọc `location.hash` đúng một lần lúc tải, và với ba nhà cung cấp trên ba điện thoại
+// thì thế là đủ. Nhưng khi một người bấm link mời THỨ HAI — sau một lần thu hồi rồi mời lại —
+// trong tab đang mở, trình duyệt chỉ đổi fragment: tài liệu không tải lại, hai ô giữ mã CŨ, và
+// máy chủ trả *"magic link không hợp lệ, đã hết hạn, đã dùng, hoặc đã bị thu hồi"*. Thông điệp
+// ấy đổ lỗi cho link MỚI trong khi lỗi nằm ở trang đang giữ link CŨ.
+//
+// Đo được ở lượt đi thử §11 của S1.97: mở link của nhà cung cấp thứ hai trong tab của người thứ
+// nhất ⇒ bước 1 đỏ; `location.reload()` thì đúng ngay.
+//
+// Ngoài việc đọc lại hai ô, phải XOÁ trạng thái phiên đang dựng dở: một `redeem` của lời mời cũ
+// còn sống trong biến `phien` sẽ làm bước 2 gửi OTP cho đúng người của lời mời TRƯỚC.
+// ==============================================================================================
+window.addEventListener("hashchange", () => {
+  docLink();
+  phien = { orgId: $("org").value.trim(), token: $("token").value.trim(), rfq: null, items: [], publicKeys: [] };
+  for (const id of ["loi1", "loi2", "loi3", "ok1", "ok2"]) {
+    const el = $(id);
+    if (el !== null) bao(el, "");
+  }
+});
+
 docLink();

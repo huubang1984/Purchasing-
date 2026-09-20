@@ -143,7 +143,7 @@ const HAM_DUONG_KHACH = [
  * Rổ này KHÔNG phải một nhãn: test bên dưới đọc MÃ NGUỒN của từng hàm và đòi thân nó thật sự gọi
  * `requirePermission`. Một hàm nằm ở đây mà không có cổng là một lần ĐỎ.
  */
-const HAM_DOC_CO_QUYEN = ["buildComparisonTable", "countReceivedBids"] as const;
+const HAM_DOC_CO_QUYEN = ["buildComparisonTable", "countReceivedBids", "listInvitations"] as const;
 
 /**
  * [khoản nợ 33] HÀM THUẦN TUÝ — không nhận `client`, không nhận `orgId`, không chạm CSDL.

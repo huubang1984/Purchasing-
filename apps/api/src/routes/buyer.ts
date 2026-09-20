@@ -18,6 +18,7 @@ import {
   clearOtpLockout,
   createInvitation,
   issueMagicLinkToken,
+  listInvitations,
   revokeInvitation,
   CHANNELS,
   type Channel,
@@ -202,6 +203,34 @@ const doc: readonly BuyerReadRoute[] = [
       if (r === null) throw new HttpError(404, "khong co goi thau");
       return { status: 200, body: { rfq: r } };
     },
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/invitations",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.98 / khoản 125] KHÔNG khai `permission` ở đây, và sự vắng mặt ấy là CÓ Ý: `dispatch.ts`
+    // chỉ gọi `requirePermission` khi `route.mutates`, nên một cờ quyền trên route ĐỌC là một lời
+    // khai không có lớp. Cổng thật nằm THẲNG trong thân `listInvitations`, cùng khuôn hai đường
+    // đọc có cổng đã có (`buildComparisonTable`, `countReceivedBids`), và
+    // `tests/architecture/cong-quyen-route.test.ts` đọc thân hàm ấy để rổ `HAM_DOC_CO_QUYEN` là
+    // một phép đo chứ không một cái nhãn.
+    //
+    // KHÔNG `agent: true`: danh sách ai được mời là thông tin cạnh tranh, và chứng chỉ agent chỉ
+    // đọc — không có lý do để phơi nó ra một bề mặt rộng hơn người bấm nút. Kiểu `BuyerReadRoute`
+    // đòi khai cờ này TƯỜNG MINH, nên đây là một quyết định được ghi chứ không một chỗ bỏ trống.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        invitations: await listInvitations(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "GET",

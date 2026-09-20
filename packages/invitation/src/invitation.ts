@@ -1047,6 +1047,101 @@ export async function getInvitationNoticeTarget(
   return destination === "" ? null : { channel, destination };
 }
 
+export interface InvitationSummary {
+  readonly id: string;
+  readonly supplierId: string;
+  readonly supplierName: string;
+  readonly contactId: string;
+  readonly contactName: string;
+  readonly linkChannel: string;
+  readonly status: string;
+  readonly createdAt: string;
+  readonly revokedAt: string | null;
+}
+
+// ==============================================================================================
+// [S1.98 / khoản 125] DANH SÁCH LỜI MỜI CỦA MỘT RFQ — VÌ MỘT LỜI MỜI CÒN SỐNG MÀ KHÔNG AI GIỮ ID
+// THÌ KHÔNG THU HỒI ĐƯỢC, VÀ MỜI LẠI NHÀ CUNG CẤP ẤY LUÔN 409.
+//
+// Trước hàm này, id lời mời chỉ đi ra ở thân `201` của `POST /rfqs/:rfqId/invitations` (và ở thân
+// `500` của ca bù hỏng, từ S1.70). Mất phản hồi ấy là mất đường thu hồi: `revoked_at` chỉ do
+// `revokeInvitation` đặt, nên lời mời không tự hết, còn chỉ mục `rfq_invitations_mot_loi_moi_con_song`
+// (024) biến mọi lần mời lại thành 409. Khoản 125 ghi sẵn hình dạng này, và đây là nó.
+//
+// CỔNG QUYỀN NẰM TRONG THÂN HÀM, KHÔNG Ở CỜ CỦA ROUTE, và đó không phải lựa chọn phong cách:
+// `dispatch.ts` chỉ gọi `requirePermission` khi `route.mutates` — một route ĐỌC khai `permission`
+// sẽ bị bỏ qua IM LẶNG. Kho đã có đúng khuôn cho ca này (`buildComparisonTable`,
+// `countReceivedBids`), và `cong-quyen-route.test.ts` ĐỌC THÂN từng hàm ở rổ `HAM_DOC_CO_QUYEN`
+// để rổ ấy là một phép đo chứ không một cái nhãn — nên lời gọi phải nằm THẲNG ở đây, không qua
+// một helper dùng chung.
+//
+// VÌ SAO `rfq.invite` CHỨ KHÔNG PHẢI MỘT QUYỀN ĐỌC RỘNG HƠN: danh sách ai được mời là thông tin
+// cạnh tranh — biết đối thủ là ai đáng giá đúng bằng biết giá của họ. Ai mời được thì xem được;
+// không hơn.
+//
+// HÀM NÀY KHÔNG TRẢ TOKEN, và điều đó được CẤU TẠO bảo đảm chứ không chỉ do câu `SELECT` tự giữ
+// mình: `rfq_invitations` không có cột token nào — mã mời sống ở `rfq_invitation_tokens`, bảng
+// riêng, và hàm này không chạm tới nó.
+// ==============================================================================================
+export async function listInvitations(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
+): Promise<InvitationSummary[]> {
+  await assertTenantBound(client, orgId, "listInvitations");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.RFQ_INVITE,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  const { rows } = await client.query<{
+    id: string;
+    supplier_id: string;
+    supplier_name: string;
+    contact_id: string;
+    contact_name: string;
+    link_channel: string;
+    status: string;
+    created_at: Date;
+    revoked_at: Date | null;
+  }>(
+    `SELECT m.id, m.supplier_id, ncc.legal_name AS supplier_name, m.contact_id,
+            lh.full_name AS contact_name, m.link_channel, m.status, m.created_at, m.revoked_at
+       FROM public.rfq_invitations m
+       JOIN public.suppliers ncc
+         ON ncc.id OPERATOR(pg_catalog.=) m.supplier_id
+        AND ncc.org_id OPERATOR(pg_catalog.=) m.org_id
+       JOIN public.supplier_contacts lh
+         ON lh.id OPERATOR(pg_catalog.=) m.contact_id
+        AND lh.org_id OPERATOR(pg_catalog.=) m.org_id
+      WHERE m.rfq_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND m.org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+      ORDER BY m.created_at, m.id`,
+    [input.rfqId, orgId],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    supplierId: r.supplier_id,
+    supplierName: r.supplier_name,
+    contactId: r.contact_id,
+    contactName: r.contact_name,
+    linkChannel: r.link_channel,
+    status: r.status,
+    createdAt: r.created_at.toISOString(),
+    revokedAt: r.revoked_at === null ? null : r.revoked_at.toISOString(),
+  }));
+}
+
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,

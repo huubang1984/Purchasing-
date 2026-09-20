@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Tạo gói thầu — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Tạo gói thầu và mời nhà cung cấp</h1>
+    <span class="vai">Người mua</span>
+    <nav><a href="/mo-thau">Màn mở thầu</a> · <a href="/nop-thau">Màn nhà cung cấp</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Dán mã từ link đăng nhập, rồi nhập mã sáu số của ứng dụng xác thực. Một gói
+      thầu vượt ngưỡng cần HAI người duyệt trước khi mở, nên màn này đăng nhập lại được bằng
+      người thứ hai — giống màn mở thầu.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-vao">Vào</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Gói thầu</h2>
+    <p class="ghi">Tạo mới, hoặc dán mã một gói đã có để đi tiếp — người duyệt thứ hai vào bằng
+      đường ấy.</p>
+    <label for="tieu-de">Tiêu đề</label>
+    <input id="tieu-de" autocomplete="off" placeholder="Mua thep tam quy IV">
+    <label for="han">Hạn nộp</label>
+    <input id="han" type="datetime-local">
+    <button id="nut-tao">Tạo gói thầu</button>
+    <label for="rfq">hoặc dán mã gói thầu đã có</label>
+    <input id="rfq" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <button id="nut-doc" class="phu">Đọc</button>
+    <dl class="tt" id="tt-rfq"></dl>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Hạng mục</h2>
+    <p class="ghi">Kịch bản hoàn thành đòi ít nhất ba hạng mục. Số thứ tự tự tăng; sửa được trước
+      khi nộp duyệt.</p>
+    <label for="hm-mo-ta">Mô tả</label>
+    <input id="hm-mo-ta" autocomplete="off" placeholder="Thep tam SS400 day 10mm">
+    <label for="hm-sl">Số lượng</label>
+    <input id="hm-sl" inputmode="decimal" autocomplete="off" placeholder="120">
+    <label for="hm-dvt">Đơn vị</label>
+    <input id="hm-dvt" autocomplete="off" placeholder="tam">
+    <button id="nut-them-hm" class="phu">Thêm hạng mục</button>
+    <table id="bang-hm">
+      <thead><tr><th class="so">#</th><th>Hạng mục</th><th class="so">SL</th><th>ĐVT</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao loi" id="loi3" hidden></div>
+  </section>
+
+  <section class="buoc" id="b4" hidden>
+    <h2><span class="so">4</span> Ngân sách và phê duyệt</h2>
+    <p class="ghi">Giá trị ước lượng quyết định gói này có cần hai người duyệt hay không — ngưỡng
+      nằm ở chính sách của tổ chức, không nằm ở màn này. Người tạo KHÔNG tự duyệt được.</p>
+    <label for="ns">Giá trị ước lượng</label>
+    <input id="ns" inputmode="decimal" autocomplete="off" placeholder="1000000000.00">
+    <label for="tien-te">Tiền tệ</label>
+    <input id="tien-te" autocomplete="off" value="VND">
+    <button id="nut-ns" class="phu">Đặt ngân sách</button>
+    <dl class="tt" id="tt-ns"></dl>
+    <div class="doi">
+      <button id="nut-nop-duyet" class="phu">Nộp duyệt</button>
+      <button id="nut-duyet" class="phu">Phê duyệt</button>
+    </div>
+    <button id="nut-mo">Mở thầu</button>
+    <div class="bao loi" id="loi4" hidden></div>
+    <div class="bao ok" id="ok4" hidden></div>
+  </section>
+
+  <section class="buoc" id="b5" hidden>
+    <h2><span class="so">5</span> Nhà cung cấp và lời mời</h2>
+    <p class="ghi">Mỗi lời mời đi tới MỘT người liên hệ, và mã mời không bao giờ quay về màn này —
+      nó đi thẳng tới bộ gửi. Danh sách dưới trả id để thu hồi được lời mời gửi nhầm.</p>
+    <label for="ncc-ten">Tên pháp nhân nhà cung cấp</label>
+    <input id="ncc-ten" autocomplete="off" placeholder="Thep Dong Anh">
+    <label for="ncc-mst">Mã số thuế</label>
+    <input id="ncc-mst" autocomplete="off" placeholder="0301234567">
+    <button id="nut-tao-ncc" class="phu">Tạo nhà cung cấp</button>
+    <label for="lh-ten">Người liên hệ</label>
+    <input id="lh-ten" autocomplete="off" placeholder="Anh Ban">
+    <label for="lh-email">Email</label>
+    <input id="lh-email" autocomplete="off" inputmode="email" placeholder="ban@vidu.vn">
+    <label for="lh-dt">Điện thoại</label>
+    <input id="lh-dt" autocomplete="off" inputmode="tel" placeholder="0901234567">
+    <button id="nut-them-lh" class="phu">Thêm người liên hệ</button>
+    <button id="nut-moi">Mời nhà cung cấp này</button>
+    <button id="nut-doc-moi" class="phu">Đọc danh sách lời mời</button>
+    <table id="bang-moi">
+      <thead><tr><th>Nhà cung cấp</th><th>Người liên hệ</th><th>Kênh</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao loi" id="loi5" hidden></div>
+    <div class="bao ok" id="ok5" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/tao-thau.js"></script>
+</body>
+</html>

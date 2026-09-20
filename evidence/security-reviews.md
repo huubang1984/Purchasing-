@@ -8821,3 +8821,96 @@ khoản.
 - sổ nợ **204** khoản, mở **82 → 83**; rổ A **8** không đổi, rổ B **54 → 55**, rổ C **20**; **48** ADR không đổi
 - đóng **0** khoản, mở **1** — và vòng này cố ý không vá gì
 - không một dòng mã sản xuất nào đổi
+
+# §S1.98 — MÀN TẠO GÓI THẦU, VÀ KHOẢN 125 ĐÓNG VÌ MỘT MÀN HÌNH MỜI ĐƯỢC MÀ KHÔNG THU HỒI ĐƯỢC LÀ MỘT MÀN HÌNH CHƯA XONG
+
+**Vòng này chạm khoản rổ A nào:** đóng **125**. Mảnh của bảng bốn mảnh: **mảnh 1**, nửa *tạo gói thầu và mời nhà cung cấp*. Kèm theo,
+khoản **204** (rổ B) đóng luôn vì vòng này viết một trang anh em ngay cạnh nó.
+
+## 1. Vì sao route đọc phải có, trước cả màn hình
+
+Lượt đi thử S1.97 đo được bước ĐẦU TIÊN của §11 không có giao diện. Nhưng một màn *mời nhà cung cấp* mà không thu hồi được lời mời gửi
+nhầm thì chưa xong — và khoản 125 đã ghi từ S1.70 rằng id lời mời chỉ đi ra ở thân `201`, nên mất phản hồi ấy là kẹt vĩnh viễn:
+`revoked_at` chỉ do `revokeInvitation` đặt, và `rfq_invitations_mot_loi_moi_con_song` (024) biến mọi lần mời lại thành 409.
+
+Hàng 125 tự kê hình dạng: *`GET /rfqs/:rfqId/invitations` trả id, nhà cung cấp, người liên hệ, kênh, trạng thái, không trả token; cổng
+quyền `rfq.invite`*. Vòng này cài đúng thế.
+
+## 2. Một quyết định thiết kế mà chính cổng của kho ép ra
+
+Bản đầu của route định khai `permission: PERMISSIONS.RFQ_INVITE` ngay trên route. Khối chú thích của `cong-quyen-route.test.ts` bác nó
+bằng một câu đọc được:
+
+> `dispatch.ts` là `if (route.mutates && route.self !== true)`: route ĐỌC KHÔNG BAO GIỜ gọi `requirePermission`.
+
+Tức một cờ quyền trên route đọc là **một lời khai không có lớp** — im lặng, và trông như đã canh. Kho đã có khuôn đúng: hai đường đọc có
+cổng thật (`buildComparisonTable`, `countReceivedBids`) đặt `requirePermission` THẲNG trong thân hàm, và rổ `HAM_DOC_CO_QUYEN` được
+cổng ĐỌC THÂN để nó là phép đo chứ không cái nhãn — một helper dùng chung cũng không qua được, vì phép đọc ấy không đi theo tầng gián
+tiếp. `listInvitations` làm đúng khuôn ấy.
+
+Hai quyết định nhỏ hơn, ghi ra để không ai phải cân lại: quyền là `rfq.invite` chứ không một quyền đọc rộng hơn (danh sách ai được mời
+là thông tin cạnh tranh — biết đối thủ là ai đáng giá đúng bằng biết giá của họ); và `agent: false` — kiểu `BuyerReadRoute` đòi khai cờ
+ấy TƯỜNG MINH, nên đây là một quyết định được ghi chứ không một chỗ bỏ trống.
+
+**Không trả token, và điều đó là CẤU TẠO:** `rfq_invitations` không có cột token nào — mã mời sống ở `rfq_invitation_tokens`, bảng
+riêng, và hàm này không chạm tới. Khẳng định *không mang token* trong test vì thế là một cái canh, không phải một phép đo; nói rõ như
+vậy thay vì để nó trông mạnh hơn thực tế.
+
+## 3. Phép đo
+
+`apps/api/src/buyer.int.test.ts` dựng đúng cảnh khoản 125 tả — lời mời có thật, id thì không ai cầm:
+
+- mời lại khi lời mời cũ còn sống ⇒ **409**, đúng cái bẫy;
+- `GET /rfqs/:id/invitations` ⇒ trả ĐÚNG id ấy, kèm tên nhà cung cấp và người liên hệ;
+- TECHNICAL (không giữ `rfq.invite`) đọc ⇒ **403**, và `[INV-D5]` đếm ĐÚNG một hàng sổ mới;
+- thu hồi bằng id vừa đọc rồi mời lại ⇒ **201** — vòng kẹt thoát ra được;
+- danh sách nay hai dòng, một `REVOKED` một `SENT`, và không mang một byte nào của token vừa phát.
+
+**Đột biến:** gỡ `requirePermission` khỏi `listInvitations` ⇒ TECHNICAL nhận **200 kèm trọn danh sách**. Con đột biến ấy in ra chính thứ
+bị rò, nên nó vừa là phép đo vừa là lời giải thích.
+
+## 4. Lượt đi thử, và hai thứ nó tìm ra
+
+Trang `/tao-thau` đi trọn trên trình duyệt thật: gói `7773cca6` từ `DRAFT` tới `OPEN` với ba hạng mục, ngân sách một tỷ, nộp duyệt, và
+**hai phê duyệt của hai người KHÁC người tạo**; rồi tạo nhà cung cấp, thêm người liên hệ, mời, đọc danh sách, thu hồi, mời lại — cả
+vòng bằng chuột.
+
+**⑴ Bối cảnh demo tự chặn chính bước nó quảng cáo.** `rfq.approve` là quyền của PROCUREMENT_MANAGER, phê duyệt kép đòi HAI người khác
+người tạo, mà bộ gieo chỉ dựng MỘT người mang vai ấy. Một gói thầu tạo từ giao diện vì thế KHÔNG BAO GIỜ mở được. Lần đầu bấm, màn hình
+trả đúng câu của lớp cưỡng chế — *"Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet (D2)"* — và lần thứ hai, với một DIRECTOR, trả
+*"khong co quyen"*. Bộ gieo nay dựng **ba** PROCUREMENT_MANAGER và hai DIRECTOR, và tự in ra ai làm gì: hai loại phê duyệt khác nhau,
+hai vai khác nhau, và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
+
+**⑵ Khoản 204 vá luôn.** Viết một trang anh em ngay cạnh `nop-thau.js` mà để nguyên thì hoặc chép lại khiếm khuyết, hoặc hai trang cư xử
+khác nhau ở cùng một chỗ. Cả hai trang nay nghe `hashchange`, đọc lại fragment và xoá trạng thái phiên đang dựng dở. Đo trên trình duyệt:
+đổi fragment trên cùng tài liệu, `performance.getEntriesByType('navigation').length` vẫn bằng **1** (không tải lại), và hai ô đổi theo.
+
+## 4b. Cổng thứ ba mà vòng này va phải, và nó là cổng đáng có nhất
+
+Thêm một route ĐỌC làm `apps/mcp/src/cong-cu.test.ts` đỏ với một câu nói thẳng ý định:
+
+> *apps/api có thêm một route ĐỌC mà bảng công cụ MCP không biết. Thêm công cụ, hoặc khai nó vào `ROUTE_DOC_KHONG_PHOI` kèm lý do — im
+> lặng không phải một lựa chọn.*
+
+Tức kho KHÔNG cho một bề mặt đọc mới ra đời mà không có ai quyết định nó có được phơi cho tác tử hay không. Đăng ký MCP đã gỡ từ S1.80
+(khoản 153) và cổng này vẫn đứng — nó canh một QUYẾT ĐỊNH, không canh một tiến trình đang chạy.
+
+Quyết định đã ghi: **không phơi**. Danh sách ai được mời là thông tin cạnh tranh, và nó đáng giá SỚM hơn cả bảng giá — trước lễ mở, một
+nhà cung cấp biết mình đang đấu với ai thì đoán được vùng giá mà không cần thấy một con số nào. Cùng lập luận đã dùng cho bảng so sánh
+giá và danh bạ người liên hệ: đã vào ngữ cảnh một tác tử thì không lấy lại được.
+
+Hai lời khai đếm thiu đi kèm, đã sửa: `cong-cu.ts` và `giao-thuc.ts` đều viết *"bốn đường ở `ROUTE_DOC_KHONG_PHOI`"* — nay năm. Và tên
+một test cũng viết cứng *"bốn đường"*; nó đổi thành *"mọi đường"*, vì một cái tên mang số đếm là một lời khai sắp thiu.
+
+## 5. Ranh giới nói ra
+
+- Màn này KHÔNG có đường xuất bộ bằng chứng — đó là lỗ còn lại của mảnh 1, và `docs/PRODUCT.md` §11 nay nói đúng thế.
+- Không có test DOM cho hai trang: `apps/web` chỉ có test phía máy chủ. Hành vi `hashchange` và trọn màn `/tao-thau` được đo bằng lượt đi
+  thử trên trình duyệt thật, ghi ở mục 4 — một phép đo có thật nhưng KHÔNG chạy lại được trong CI.
+- Nhà cung cấp 2 và 3 không được mời trong lượt đi thử này; §11 đòi ba, và đường mời đã đo một lần thì hai lần sau là cùng một đường.
+
+## 6. Số đo
+
+- sổ nợ **204** khoản, mở **83 → 81**; rổ A **8 → 7**, rổ B **55 → 54**, rổ C **20**; **48** ADR không đổi
+- đóng **125** (rổ A) và **204** (rổ B); mở **0**
+- `pnpm t0` **0** — 282 module / 1148 phụ thuộc

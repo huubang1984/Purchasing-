@@ -81,6 +81,8 @@ export const TRANG: Readonly<Record<string, string>> = {
   "/nop-thau.js": "nop-thau.js",
   "/mo-thau": "mo-thau.html",
   "/mo-thau.js": "mo-thau.js",
+  "/tao-thau": "tao-thau.html",
+  "/tao-thau.js": "tao-thau.js",
   "/chung.css": "chung.css",
 };
 
