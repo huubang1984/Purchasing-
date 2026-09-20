@@ -76,6 +76,42 @@ function doiYeuCau(h: HangYeuCau): UnsealRequestRecord {
   };
 }
 
+/**
+ * [S1.90 / khoản 190] BẢN ĐỌC của một yêu cầu mở thầu — RECORD cộng hai con số đếm.
+ *
+ * Hai trường này KHÔNG nằm ở `UnsealRequestRecord` vì `COT` được dùng trong `RETURNING` của ba
+ * câu ghi, và một `RETURNING` mang truy vấn con là một câu khác hẳn về chi phí lẫn về ngữ nghĩa
+ * khoá. Đường ĐỌC trả bản rộng; đường GHI trả bản hẹp rồi người gọi đọc lại nếu cần số mới.
+ *
+ * `requiredApprovals` gọi ĐÚNG hàm mà cổng `assertUnsealAllowed` gọi
+ * (`public.unseal_so_phe_duyet_can`) — cố ý, để màn hình và cổng không bao giờ nói hai ngưỡng
+ * khác nhau. Một bản sao của quy tắc ngưỡng ở tầng đọc là một bản sao sẽ lệch.
+ */
+export interface UnsealRequestView extends UnsealRequestRecord {
+  readonly approvalCount: number;
+  readonly requiredApprovals: number;
+}
+
+interface HangYeuCauXem extends HangYeuCau {
+  /** `pg_catalog.count(*)` là `bigint`; `pg` trả nó về dưới dạng chuỗi. */
+  readonly so_phe_duyet: string;
+  readonly can_phe_duyet: number;
+}
+
+const COT_XEM = `r.id, r.rfq_id, r.status, r.break_glass, r.requested_by,
+            (SELECT pg_catalog.count(*) FROM public.unseal_approvals a
+              WHERE a.unseal_request_id OPERATOR(pg_catalog.=) r.id
+                AND a.org_id OPERATOR(pg_catalog.=) r.org_id) AS so_phe_duyet,
+            public.unseal_so_phe_duyet_can(r.rfq_id) AS can_phe_duyet`;
+
+function doiYeuCauXem(h: HangYeuCauXem): UnsealRequestView {
+  return {
+    ...doiYeuCau(h),
+    approvalCount: Number(h.so_phe_duyet),
+    requiredApprovals: h.can_phe_duyet,
+  };
+}
+
 export interface RequestUnsealInput {
   readonly rfqId: string;
   readonly reason: string;
@@ -483,13 +519,54 @@ export async function getUnsealRequest(
   client: pg.PoolClient,
   orgId: string,
   unsealRequestId: string,
-): Promise<UnsealRequestRecord | null> {
+): Promise<UnsealRequestView | null> {
   await assertTenantBound(client, orgId, "getUnsealRequest");
   batBuocUuid(unsealRequestId, "unsealRequestId");
-  const { rows } = await client.query<HangYeuCau>(
-    `SELECT ${COT} FROM public.unseal_requests WHERE id OPERATOR(pg_catalog.=) $1`,
+  const { rows } = await client.query<HangYeuCauXem>(
+    `SELECT ${COT_XEM} FROM public.unseal_requests r
+      WHERE r.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
     [unsealRequestId],
   );
   const h = rows[0];
-  return h === undefined ? null : doiYeuCau(h);
+  return h === undefined ? null : doiYeuCauXem(h);
+}
+
+/**
+ * [S1.90 / khoản 190] YÊU CẦU MỞ THẦU ĐANG MỞ CỦA MỘT GÓI THẦU — TÌM ĐƯỢC, KHÔNG PHẢI ĐOÁN ID.
+ *
+ * VÌ SAO ĐƯỜNG NÀY PHẢI TỒN TẠI, nói bằng một phép đo chứ không bằng một mong muốn: mở thầu đòi
+ * HAI người, và hai người ấy ngồi ở hai máy. Trước vòng này, cách duy nhất để đọc một yêu cầu là
+ * biết UUID của nó — mà UUID ấy chỉ hiện ra ở màn hình của người ĐÃ TẠO. Tức tính năng hai người
+ * duyệt chỉ chạy được khi một người làm cả hai vai trên cùng một tab, và đó là đúng thứ D2 cấm.
+ * Lượt đi thử 2026-09-20 vấp vào nó ở bước phê duyệt thứ nhất.
+ *
+ * KHÔNG CÓ MƠ HỒ "CÁI NÀO": `019` dựng index duy nhất một phần `unseal_requests_mot_yeu_cau_dang_mo`
+ * trên `(org_id, rfq_id) WHERE status IN ('PENDING','APPROVED')`, nên mỗi gói thầu có NHIỀU NHẤT
+ * MỘT yêu cầu đang mở. Câu dưới đây không `ORDER BY` và không `LIMIT` — nếu nó trả về hai hàng thì
+ * index ấy đã chết, và im lặng chọn "cái mới nhất" sẽ giấu đúng cái chết ấy đi.
+ *
+ * KHÔNG CÓ CỔNG QUYỀN, cùng hạng với `getUnsealRequest` (rổ `HAM_CHI_DOC`): nó không tiết lộ một
+ * mức giá nào, và người gọi đã phải qua `audience: BUYER` của tổ chức. Cái nó MỞ RỘNG là khả năng
+ * TÌM — nên route gọi nó đóng cửa với tác tử chỉ-đọc, và lý do ấy ghi ở chính route.
+ */
+export async function getOpenUnsealForRfq(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+): Promise<UnsealRequestView | null> {
+  await assertTenantBound(client, orgId, "getOpenUnsealForRfq");
+  batBuocUuid(rfqId, "rfqId");
+  const { rows } = await client.query<HangYeuCauXem>(
+    `SELECT ${COT_XEM} FROM public.unseal_requests r
+      WHERE r.rfq_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND r.status IN ('PENDING', 'APPROVED')`,
+    [rfqId],
+  );
+  if (rows.length > 1) {
+    throw new UnsealError(
+      `gói thầu ${rfqId} có ${rows.length} yêu cầu mở thầu đang mở — index unseal_requests_mot_yeu_cau_dang_mo đã không còn hiệu lực`,
+    );
+  }
+  const h = rows[0];
+  return h === undefined ? null : doiYeuCauXem(h);
 }

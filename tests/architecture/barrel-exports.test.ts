@@ -795,6 +795,9 @@ const DANH_SACH_TRANG_UNSEAL = [
   "cancelUnseal",
   "countReceivedBids",
   "dispatchUnseal",
+  // [S1.90 / khoản 190] tìm yêu cầu mở thầu đang mở của một gói thầu — để người duyệt thứ hai
+  // không phải biết trước UUID mà chỉ màn hình của người tạo mới có.
+  "getOpenUnsealForRfq",
   "getUnsealRequest",
   "requestUnseal",
 ];

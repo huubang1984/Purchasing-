@@ -8074,4 +8074,157 @@ lời khai đúng một bản" đá nhau ở đúng chỗ này, và cổng bắt
 ## Sổ nợ
 
 Không mở khoản nào, không đóng khoản nào. **79 khoản mở, y nguyên.**
+# §S1.90 — SÁU KHIẾM KHUYẾT MÀ TÁM MƯƠI CHÍN VÒNG CỔNG KHÔNG THẤY, VÌ MỌI PHÉP ĐO GỌI HÀM CHỨ KHÔNG MỞ HAI TAB
 
+Vòng này không sinh ra từ một lượt soi mã. Nó sinh ra từ một người **đi thử sản phẩm**: ngày 2026-09-20 chủ dự án chạy trọn kịch bản
+`docs/PRODUCT.md` §11 trên bản S1.89 vừa merge, với Postgres thật, bốn tiến trình thật và một trình duyệt thật. Quyết định:
+ADR-045. Khoản nợ mở: **190 · 191 · 192** (đóng cùng vòng) và **193 · 194 · 195 · 196** (còn mở).
+
+## 0. Kiểm mốc lượt soi ngang — ở ĐẦU vòng, và lần này mốc ĐÃ CHẠM
+
+`Handoff.md` §11 đặt mốc *"ngay sau khi vòng `khoan-179` merge, chậm nhất S1.90"*. Đo cả hai vế:
+
+| Vế | Phép đo | Kết quả |
+|---|---|---|
+| Lịch | vòng này là S1.90 | **CHẠM** |
+| Hardening | `git rev-list --count 1dfc7e3..origin/master --first-parent -- db/migrations/hardening.always.sql` | **3** — đủ ba |
+| Điều kiện phụ | `khoan-179-ve-cong-log-tu-choi` chưa đẩy lên origin, không PR nào mở | vế *ngay sau khi merge* không giữ được |
+
+**LỠ NHỊP, và lý do đo được chứ không phải quên:** ⑴ ADR-043 buộc lượt 75 lấy **rổ A** làm một góc soi riêng, mà rổ A vừa đổi trong
+chính vòng này (14 → 15, cộng ba khoản rổ B mới) — cho lượt 75 soi một sổ nợ chụp ở `1a1a060` là phí một lượt sáu góc; ⑵ lượt soi
+ngang là việc chủ dự án gọi, không phải việc vòng tự gọi. **Mốc mới: chậm nhất S1.92.**
+
+## 1. Thứ đáng đọc nhất: một khiếm khuyết mà không hình thức đo nào của kho này với tới được
+
+`mo-thau.js` chỉ giữ `unsealRequestId` trong bộ nhớ của tab **đã tạo** yêu cầu, và API khi ấy chỉ có `GET /unseal/:unsealRequestId`
+— một đường đòi người gọi đã biết UUID. Hệ quả, phát biểu cho đúng độ nặng của nó:
+
+> Ràng buộc D2 — *người yêu cầu mở thầu không được tự phê duyệt* — được cưỡng chế bởi một trigger ở tầng cơ sở dữ liệu, có test,
+> có đột biến, có bản ghi kiểm toán. Và giao diện duy nhất của sản phẩm làm cho nó **chỉ dùng được bằng cách vi phạm tinh thần của
+> chính nó**: hai người duyệt phải ngồi chung một tab.
+
+Tám mươi chín vòng cổng không thấy. Không phải vì cổng yếu — `unseal.int.test.ts` gọi `approveUnseal` bằng hai phiên khác nhau và
+đo đúng D2 — mà vì **khiếm khuyết này chỉ tồn tại giữa hai TAB**, còn mọi phép đo của kho gọi HÀM. Đây là một phát biểu về giới hạn
+của hình thức đo, không phải về chất lượng của nó, và nó là lý do thật để một lượt đi thử có chỗ trong nhịp làm việc.
+
+## 2. Sáu khiếm khuyết, phân loại theo chỗ chúng nằm
+
+| # | Khiếm khuyết | Tầng | Trạng thái |
+|---|---|---|---|
+| 190 | người duyệt thứ hai không tìm được yêu cầu mở thầu | giao diện + API | **ĐÓNG** vòng này |
+| 191 | cú bấm bị chặn trả về ba chữ, không nói vì sao | giao diện | **ĐÓNG** vòng này |
+| 192 | ô *Số phê duyệt* luôn là một dấu gạch | giao diện + API | **ĐÓNG** vòng này |
+| 193 | bắt bấm Vào thất bại một lần rồi mới đưa bí mật ghi danh | giao diện | mở, rổ B |
+| 194 | mã đăng nhập 15 phút × mở thầu cần hai người | chính sách | mở, **rổ A** |
+| 195 | thông điệp gộp ba trạng thái token | giao diện + API | mở, rổ B |
+| 196 | hạn nộp phán xử bằng đồng hồ CSDL, không khai nguồn, không canh lệch | vận hành | mở, rổ B |
+
+**Không một khiếm khuyết nào nằm ở lõi.** Mật mã, cưỡng chế quyền, máy trạng thái, sổ kiểm toán, tách tiến trình giữ khoá — chạy
+đúng ngay lần đầu dưới tay một người chưa từng dùng. Đó cũng là một kết quả, và nó đáng ghi ngang với sáu khiếm khuyết kia.
+
+## 3. Lượt chạy đã CHỨNG MINH gì — đọc từ sổ kiểm toán, không từ trí nhớ
+
+Ba mươi mốt sự kiện, chuỗi hash liền mạch, một tổ chức:
+
+```
+OTP_CHALLENGE_ISSUED -> GUEST_SESSION_STARTED -> BID_SUBMITTED x5 (co version 2)
+-> RFQ_CLOSED -> UNSEAL_REQUESTED -> PERMISSION_DENIED   <- nguoi tao tu duyet
+-> UNSEAL_APPROVED x2 -> UNSEAL_DISPATCHED (USER)
+-> RFQ_KEY_MATERIAL_UNWRAPPED (SERVICE) -> RFQ_UNSEALED (SERVICE)
+```
+
+Ba điều đọc được từ chuỗi ấy mà không tài liệu nào thay thế được:
+
+⑴ **Một lần bị từ chối cũng là một hàng sổ** — `PERMISSION_DENIED` kèm `{"permission": "rfq.unseal.approve"}`, có số thứ tự, có
+`prev_hash`. Ai muốn xoá dấu vết một lần vượt quyền phải viết lại cả chuỗi.
+
+⑵ **Cột `actor_type` đổi USER → SERVICE đúng tại dòng mở khoá.** Lời khai *"api không có khoá để tự giải mã"* hiện ra trong sổ dưới
+dạng hai dòng mang danh tính khác, chứ không phải dưới dạng một câu trong ADR.
+
+⑶ **Chính sách mù nghiêm giấu cả SỐ ĐẾM** (`STRICT_BLIND_BEFORE_CLOSE`), không chỉ giá. Người mua trước giờ đóng thầu không biết có
+ai nộp hay chưa — nghiêm hơn mức biên bản §S1.89 mô tả.
+
+Bảng so sánh: 3/3 đọc được, 0 không đọc được, không lệch tiền tệ. 303.200.000 / 306.000.000 / 312.800.000 VND — chênh 9,6 triệu
+(3,17%), và ba con số ấy hình thành mà không ai trong ba người biết hai người kia viết gì.
+
+## 4. Một lần đỏ KHÔNG phải lỗi sản phẩm, ghi ra vì phép đo của nó có giá trị
+
+Giữa lượt đi, một lần nộp hợp lệ bị cổng C1 chặn với *"Da qua han nop bao gia"*. Đo:
+
+| | |
+|---|---|
+| `created_at` của gói thầu | 2026-09-19 **17:05:01** UTC |
+| `deadline_at` (tạo + 2 giờ) | 2026-09-19 **19:05:01** UTC |
+| Giờ thật lúc gieo | ~2026-09-19 **23:27** UTC |
+| Ba đồng hồ sau đó (máy / container / `now()`) | **23:34:21 — khớp nhau** |
+
+Đồng hồ container Postgres chậm **6 giờ 22 phút** sau một đêm máy ngủ, rồi tự đồng bộ **giữa hai lần kiểm**. Cổng chặn **ĐÚNG** theo
+đồng hồ nó tin. Đó là artefact môi trường — nhưng nó phơi ra một câu hỏi thật của sản phẩm, nay là khoản **196**: *hạn nộp được phán
+xử bằng đồng hồ nào, ai canh nó, và người bị loại đối chiếu bằng gì?* Trong đấu thầu, *quá hạn* là một sự kiện có hậu quả pháp lý.
+
+## 5. Hai lần em kết luận sai trong lượt đi, và cả hai được phép đo bác
+
+⑴ Em gọi việc ghi danh MFA lặp lại là một **lỗi**. Mã bác: `routes/auth.ts:140` trả `needsEnrollment: false` khi hồ sơ đã có TOTP, và
+chú thích `[review M-5]` ghi rõ hồ sơ **chưa xác nhận** được ghi danh lại là CÓ CHỦ ĐÍCH — để một lần ghi danh trộm không khoá người
+mua thật ra ngoài.
+
+⑵ Em khai với chủ dự án rằng mã đăng nhập sống **2 giờ**; đó là hạn nộp thầu. Mã đăng nhập sống **15 phút**, đo trên
+`user_login_tokens`. Lời khai sai ấy làm hỏng một lượt đi thử: hai mã của hai người duyệt hết hạn trước khi tới lượt họ, chưa từng
+được dùng. Nó thành khoản **194**, và khoản ấy vào **rổ A** — vì ràng buộc thật không phải *15 phút*, mà là *hai người rảnh trong
+cùng một cửa sổ 15 phút*.
+
+## 6. Bề mặt vòng này đổi, và đo bằng gì
+
+| Đổi | Đo |
+|---|---|
+| `getOpenUnsealForRfq` — tìm yêu cầu ĐANG MỞ theo id gói thầu | 6 test tích hợp mới trên Postgres thật |
+| `GET /rfqs/:rfqId/unseal`, `agent: false` | 2 test khai báo ở `routes.test.ts`, kèm đối chứng dương |
+| `approvalCount` · `requiredApprovals` trên bản đọc | 4 khẳng định mới trong bài đi trọn luồng người mua |
+| `loiTuChoiDuyet` ở trang — thân 403 của API **không đổi** | đọc mã; thân hằng `THAN_403` giữ nguyên |
+| Runbook ADR-044 thêm câu *sửa trang phải khởi động lại máy chủ* | `napTep()` nạp một lần lúc khởi động |
+
+**Hai đột biến chạy thật, cả hai bị giết, khôi phục tự kiểm bằng sha256 và ném khi lệch:**
+
+| Đột biến | Test phải đỏ | Kết quả |
+|---|---|---|
+| bỏ vế `AND r.status IN ('PENDING','APPROVED')` | *yêu cầu ĐÃ HUỶ không còn đang mở* | **ĐỎ** (mã thoát 1) |
+| viết cứng `requiredApprovals: 2` | *RFQ dưới ngưỡng chỉ cần MỘT chữ ký* | **ĐỎ** (mã thoát 1) |
+
+Vế lọc trạng thái là vế dễ chết nhất của cả bản vá: bỏ nó đi thì mã vẫn chạy, màn hình vẫn có số, và người duyệt thứ hai sẽ ký lên
+một yêu cầu đã chết. Test *đã huỷ* đo tiền đề TRƯỚC khi huỷ, để `null` sau đó không chứng minh 0.
+
+## 7. Điều vòng này KHÔNG làm
+
+Không chạy lượt soi ngang 75 (mục 0). Không chạm một migration nào, một dòng `hardening.always.sql` nào, một lớp mật mã nào. Không
+đóng một khoản rổ A nào có từ trước — **194** làm rổ A **dài thêm**, và đó là kết quả trung thực của một lượt đi thử: đi thử sản phẩm
+thì sổ nợ dài ra trước khi ngắn lại.
+
+## 8. Bản vá được nghiệm thu BẰNG CHÍNH KỊCH BẢN ĐÃ TÌM RA KHIẾM KHUYẾT
+
+Mục 1 nói khiếm khuyết này sống được vì *mọi phép đo của kho gọi HÀM chứ không mở HAI TAB*. Nếu vòng sửa cũng chỉ đo bằng hàm thì nó
+lặp lại đúng chỗ mù ấy — nên bản vá được chạy lại trên **ngăn xếp đang chạy thật**, trước khi merge.
+
+Hình dạng phép đo: ba "máy" là **ba hũ cookie hoàn toàn riêng**, nói HTTP qua `apps/web` tới `apps/api` như một trình duyệt. Máy B và
+C **không bao giờ** nhận `unsealRequestId` từ mã của script — chúng chỉ được đưa id GÓI THẦU, đúng như một người duyệt thật nhận từ
+email hay lời nhắn của đồng nghiệp. Ba vai đăng nhập bằng đúng đường của sản phẩm: `/auth/redeem`, ghi danh TOTP, `/auth/totp`.
+
+| Máy | Bước | Kết quả |
+|---|---|---|
+| A · soạn | đóng thầu, tạo yêu cầu mở | ĐẠT — mã yêu cầu chỉ máy A biết |
+| A · soạn | tự phê duyệt | **CHẶN 403** |
+| B · duyệt 1 | `GET /rfqs/:rfqId/unseal` chỉ với id gói thầu | **TÌM RA đúng yêu cầu máy A tạo** — khoản 190 |
+| B · duyệt 1 | `approvalCount` 0, `requiredApprovals` 2 | ĐẠT — khoản 192 |
+| B · duyệt 1 | phê duyệt, rồi đọc lại | đếm lên **1** |
+| C · duyệt 2 | tìm, phê duyệt, đọc lại | đếm lên **2**, trạng thái **APPROVED** |
+| C · duyệt 2 | điều phối giải mã | ĐẠT |
+| — | sau khi worker chạy xong, đọc lại đường tìm | **`null`** — yêu cầu EXECUTED không còn *đang mở* |
+
+Mười ba khẳng định, **tất cả ĐẠT**. Hàng cuối đáng kể riêng: nó đo vế lọc trạng thái trên ĐƯỜNG THẬT, không phải bằng một lần `UPDATE`
+viết tay — cùng vế mà đột biến ở mục 6 giết bằng test *đã huỷ*, nay được xác nhận thêm một lần ở trạng thái `EXECUTED`.
+
+Hai phép đo phụ, làm để 401 ở bảng trên có nghĩa: đường mới trả **401** khi không có phiên (route CÓ thật, thiếu phiên), còn một
+đường bịa dưới cùng tiền tố trả **404** — nên 401 không phải một cái bắt-tất-cả.
+
+**Điều phép đo này KHÔNG chứng minh:** nó đi qua HTTP, không qua DOM. Việc `mo-thau.js` gọi đúng đường và vẽ đúng ô vẫn chỉ được đo
+bằng mắt trên một lượt đi thử — và đó là khoảng trống thật, cùng họ với khoảng trống đã sinh ra khoản 190. Kho này chưa có phép đo nào
+mở được một trình duyệt.

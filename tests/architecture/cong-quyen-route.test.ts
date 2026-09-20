@@ -79,6 +79,10 @@ const HAM_CHI_DOC = [
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",
+  // [S1.90 / khoản 190] cùng hạng với `getUnsealRequest`: nó trả TRẠNG THÁI của một yêu cầu mở
+  // thầu, không trả một mức giá nào. Cái nó mở rộng là khả năng TÌM, và vế ấy được đóng ở route
+  // (`agent: false`), không ở đây — rổ này nói về cổng quyền, không nói về đối tượng gọi.
+  "getOpenUnsealForRfq",
   "getRfq",
   "getSupplier",
   "getUnsealRequest",

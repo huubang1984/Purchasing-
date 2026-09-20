@@ -268,3 +268,28 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
     });
   }, 120000);
 });
+// ==============================================================================================
+// [S1.90 / khoản 190] MỘT ĐƯỜNG *TÌM ĐƯỢC* KHÁC MỘT ĐƯỜNG *ĐỌC ĐƯỢC*
+//
+// `GET /unseal/:unsealRequestId` khai `agent: true`, và đúng như thế: nó đòi người gọi ĐÃ BIẾT một
+// UUID. `GET /rfqs/:rfqId/unseal` biến một id gói thầu — thứ một tác tử chỉ-đọc liệt kê được —
+// thành id của một yêu cầu mở thầu, tức nó MỞ đúng khả năng mà đường kia giữ lại.
+//
+// Vế này được ghim vì nó là một QUYẾT ĐỊNH, không phải một mặc định: một quyết định không có phép
+// đo nào canh sẽ bị một lần sửa "cho đồng bộ với đường bên cạnh" lật lại mà không ai thấy.
+// ==============================================================================================
+describe("[khoản 190] đường TÌM yêu cầu mở thầu đóng cửa với tác tử chỉ-đọc", () => {
+  it("bộ điều phối đọc ra `agent: false` trên GET /rfqs/:rfqId/unseal", () => {
+    const r = ROUTES.find((x) => x.method === "GET" && x.path === "/rfqs/:rfqId/unseal");
+    expect(r, "bảng ROUTES không còn đường GET /rfqs/:rfqId/unseal").toBeDefined();
+    if (r === undefined) return;
+    expect(agentGoiDuoc(r)).toBe(false);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: đường đọc theo id bên cạnh VẪN mở — vị từ không phải một cái chặn-tất-cả", () => {
+    const r = ROUTES.find((x) => x.method === "GET" && x.path === "/unseal/:unsealRequestId");
+    expect(r, "bảng ROUTES không còn đường GET /unseal/:unsealRequestId").toBeDefined();
+    if (r === undefined) return;
+    expect(agentGoiDuoc(r)).toBe(true);
+  });
+});

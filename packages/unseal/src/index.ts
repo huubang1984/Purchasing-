@@ -48,6 +48,7 @@ export {
   approveUnseal,
   cancelUnseal,
   dispatchUnseal,
+  getOpenUnsealForRfq,
   getUnsealRequest,
   requestUnseal,
   type ApproveUnsealInput,
@@ -55,4 +56,5 @@ export {
   type DispatchUnsealInput,
   type RequestUnsealInput,
   type UnsealRequestRecord,
+  type UnsealRequestView,
 } from "./requests.js";
