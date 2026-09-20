@@ -16,6 +16,11 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 let phien = { orgId: "", token: "", rfqId: "", unsealRequestId: "", daRedeem: false };
 
+/** [S1.90 / khoản 190] Câu này phải chỉ ra LỐI ĐI, vì lối đi ấy vừa mới tồn tại. */
+const CHUA_CO_YEU_CAU =
+  "Chưa nạp được yêu cầu mở thầu nào. Dán mã gói thầu ở bước 2 rồi bấm Đọc — trang sẽ tự lấy " +
+  "yêu cầu đang treo của gói ấy, kể cả khi người khác tạo nó ở máy khác.";
+
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
     method,
@@ -142,6 +147,8 @@ $("nut-doc").addEventListener("click", async () => {
       ? `Số báo giá đang bị giấu (${c.reason}) — chính sách mù nghiêm còn hiệu lực tới khi đóng thầu.`
       : `Đã nhận ${c?.count ?? "?"} báo giá. Không một mức giá nào đọc được ở đây.`);
   }
+  // [S1.90 / khoản 190] Bấm Đọc là lúc người duyệt thứ hai lấy được yêu cầu đang treo.
+  await napYeuCau(id);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -149,13 +156,56 @@ $("nut-doc").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------------------------
 
 function veYeuCau(yc) {
+  // [S1.90 / khoản 190] `null` là một câu trả lời ĐÚNG, không phải một lỗi: "gói thầu này chưa
+  // ai xin mở" khác hẳn "không có gói thầu ấy", và người duyệt thứ hai cần đọc ra sự khác nhau.
+  if (yc === null || yc === undefined) {
+    phien = { ...phien, unsealRequestId: "" };
+    dienDl($("tt-yc"), [["Yêu cầu mở thầu", "chưa có — người soạn phải tạo trước"]]);
+    return;
+  }
   phien = { ...phien, unsealRequestId: yc.id };
+  // [S1.90 / khoản 192] "1 / 2" chứ không phải "1": trong màn này toàn bộ ý nghĩa nằm ở chỗ ĐÃ
+  // ĐỦ CHƯA, và một con số không có mẫu số thì không trả lời được câu ấy. Ngưỡng lấy từ máy chủ,
+  // nơi nó gọi đúng hàm mà cổng chính sách gọi — trang không được tự suy ra "hai".
+  const can = yc.requiredApprovals;
+  const dem = yc.approvalCount;
   dienDl($("tt-yc"), [
     ["Mã yêu cầu", yc.id],
     ["Trạng thái", yc.status],
-    ["Số phê duyệt", yc.approvalCount ?? yc.approvals?.length ?? "—"],
+    ["Số phê duyệt", dem === undefined ? "—" : can === undefined ? String(dem) : `${dem} / ${can}`],
     ["Break-glass", yc.breakGlass === true ? "CÓ" : "không"],
   ]);
+}
+
+/**
+ * [S1.90 / khoản 190] ĐỌC LẠI yêu cầu đang mở TỪ MÁY CHỦ, thay vì tin bộ nhớ của tab.
+ *
+ * Trước vòng này mã yêu cầu chỉ tồn tại trong biến `phien` của tab ĐÃ TẠO ra nó, nên người duyệt
+ * thứ hai — ngồi máy khác, theo đúng đòi hỏi D2 — không có đường nào lấy được. Hàm này là cả
+ * phép sửa: mỗi lần đọc gói thầu, và sau mỗi lần ghi, trang hỏi lại máy chủ.
+ */
+async function napYeuCau(rfqId) {
+  if (rfqId === "") return null;
+  const r = await goi("GET", `/rfqs/${rfqId}/unseal`);
+  if (r.status !== 200) return r;
+  veYeuCau(r.body.unsealRequest ?? null);
+  return r;
+}
+
+/**
+ * [S1.90 / khoản 191] MỘT CÚ BẤM BỊ CHẶN PHẢI NÓI NÓ BỊ CHẶN VÌ SAO — ở TRANG, không ở API.
+ *
+ * Thân 403 của `apps/api` là một hằng (`{"error":"khong co quyen"}`) và nó phải ở nguyên như thế:
+ * nói rõ THIẾU QUYỀN NÀO là dựng sẵn bản đồ mô hình quyền cho người dò. Nhưng trang thì BIẾT
+ * người dùng vừa bấm gì, nên nó nói được điều API không nên nói mà không tiết lộ gì thêm.
+ */
+function loiTuChoiDuyet(r) {
+  if (r.status === 403) {
+    return "Tài khoản đang đăng nhập không phê duyệt mở thầu được. Hai vế dẫn tới cùng câu trả " +
+      "lời này: vai hiện tại không được cấp quyền phê duyệt, hoặc chính tài khoản này đã TẠO ra " +
+      "yêu cầu — người yêu cầu không tự duyệt cho mình. Đổi sang người thứ hai ở bước 1.";
+  }
+  return loiCua(r, "Không phê duyệt được");
 }
 
 $("nut-dong").addEventListener("click", async () => {
@@ -170,21 +220,23 @@ $("nut-yeu-cau").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/unseal`, { reason: $("ly-do").value.trim() });
   if (r.status !== 201) { bao($("loi3"), loiCua(r, "Không tạo được yêu cầu mở")); return; }
   veYeuCau(r.body.unsealRequest);
+  await napYeuCau(phien.rfqId);
   bao($("ok3"), "Đã tạo yêu cầu. Người tạo KHÔNG tự phê duyệt thay cho người thứ hai được.");
 });
 
 $("nut-duyet").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
-  if (phien.unsealRequestId === "") { bao($("loi3"), "Chưa có yêu cầu nào."); return; }
+  if (phien.unsealRequestId === "") { bao($("loi3"), CHUA_CO_YEU_CAU); return; }
   const r = await goi("POST", `/unseal/${phien.unsealRequestId}/approve`);
-  if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không phê duyệt được")); return; }
+  if (r.status !== 200) { bao($("loi3"), loiTuChoiDuyet(r)); return; }
   veYeuCau(r.body.unsealRequest);
+  await napYeuCau(phien.rfqId);
   bao($("ok3"), "Đã ghi một chữ ký phê duyệt. Thiếu người thứ hai thì điều phối sẽ bị từ chối.");
 });
 
 $("nut-dieu-phoi").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
-  if (phien.unsealRequestId === "") { bao($("loi3"), "Chưa có yêu cầu nào."); return; }
+  if (phien.unsealRequestId === "") { bao($("loi3"), CHUA_CO_YEU_CAU); return; }
   const r = await goi("POST", `/unseal/${phien.unsealRequestId}/dispatch`);
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Cổng chính sách từ chối")); return; }
   bao($("ok3"), "Đã xếp việc cho tiến trình mở thầu. Tiến trình `api` không có khoá để tự giải mã.");

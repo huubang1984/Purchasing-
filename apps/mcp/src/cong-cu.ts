@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ba route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
+//   ⑶ không mang bốn route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
 //      KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -75,6 +75,14 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "nó kèm câu 'business data, not credentials' — đúng về CHỨNG CHỈ và sai về DỮ LIỆU CÁ NHÂN " +
     "(lượt soi 69 M-5). Chính lập luận dùng cho bảng giá áp nguyên ở đây: đã vào ngữ cảnh một " +
     "agent thì không lấy lại được. Chủ dự án rút ngày 2026-09-17 (ADR-038).",
+  "/rfqs/:rfqId/unseal":
+    "YÊU CẦU MỞ THẦU ĐANG MỞ của một gói thầu — đường TÌM ĐƯỢC mà S1.90 mở cho người duyệt thứ " +
+    "hai (ADR-045 ⑵). Nó khác ba dòng trên ở chỗ thứ nó trả về KHÔNG phải dữ liệu nhạy cảm: " +
+    "trạng thái một yêu cầu, hai con số đếm, không một mức giá nào. Cái nó mở là KHẢ NĂNG TÌM — " +
+    "biến một id gói thầu, thứ tác tử liệt kê được, thành id của một yêu cầu mở thầu mà đường " +
+    "`/unseal/:unsealRequestId` cố ý bắt phải biết trước. Một tác tử chỉ-đọc không có việc nào " +
+    "cần khả năng ấy, nên route khai `agent: false` và dòng này khai vì sao. Ngày nào có việc " +
+    "cần thì đổi một dòng và viết một ADR, chứ đừng đọc ngược ra từ sự im lặng hôm nay.",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

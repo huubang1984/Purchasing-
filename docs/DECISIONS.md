@@ -4784,6 +4784,10 @@ pnpm worker:dev  # không chạy thì bảng so sánh sẽ rỗng sau khi điề
 pnpm web:dev
 ```
 
+**`apps/web` nạp TOÀN BỘ tệp MỘT LẦN lúc khởi động** (`napTep()` đổ vào một Map đóng — cố ý, để không có lần đọc đĩa nào lúc
+phục vụ, nên không có đường leo thư mục). Cái giá: **sửa một trang thì phải khởi động lại máy chủ web.** Lượt đi thử 2026-09-20 mất
+hai mươi phút vì một dòng chữ cũ được đọc thành một lỗi mã — xem `evidence/security-reviews.md` §S1.90.
+
 **Cookie phiên khách mang `Secure`**, nên mở trên điện thoại qua một địa chỉ LAN `http://192.168.x.x` sẽ **im lặng thất bại** —
 trình duyệt nhận `Set-Cookie` rồi vứt. Muốn demo trên máy thật phải có HTTPS: `TRUSTPROCURE_WEB_TLS_CERT` và `_KEY`. `main.ts` in
 một dòng cảnh báo khi phát hiện đúng cảnh này.
@@ -4792,4 +4796,72 @@ một dòng cảnh báo khi phát hiện đúng cảnh này.
 
 Nó không nói lát cắt này là sản phẩm. Nó không đóng một khoản nợ nào của rổ A. Nó không làm S2 gần hơn một dòng — nhưng nó làm
 việc **gặp khách hàng pilot** khả thi, và đó là mảnh thứ tư của bảng ở `PRODUCT.md` §11, mảnh chặn nhiều nhất.
+
+## ADR-045 — Người duyệt thứ hai phải TÌM được yêu cầu mở thầu, và cái giá của việc mở khả năng tìm
+
+**Bối cảnh.** Ngày 2026-09-20 chủ dự án đi trọn kịch bản `docs/PRODUCT.md` §11 trên bản S1.89 vừa merge: nhà cung cấp niêm phong báo
+giá trên trình duyệt, người mua đóng thầu, xin mở, hai người duyệt, đọc bảng so sánh. Luồng chạy tới cuối — nhưng nó **chỉ chạy được
+nhờ một điều kiện chưa ai định ra**: cả ba vai phải dùng CHUNG một tab trình duyệt.
+
+Lý do đo được: `mo-thau.js` chỉ giữ `unsealRequestId` trong bộ nhớ của tab đã TẠO ra yêu cầu, và API khi ấy chỉ có
+`GET /unseal/:unsealRequestId` — một đường đòi người gọi đã biết UUID. Hệ quả: ràng buộc D2 (*người yêu cầu không tự phê duyệt*) chỉ
+đúng trên giấy, vì hai người duyệt ở hai máy **không có đường nào** tìm ra yêu cầu đang treo. Lớp cưỡng chế đắt nhất của sản phẩm bị
+chính giao diện của nó làm cho không dùng được.
+
+**Và đây là phần đáng đọc nhất của bối cảnh:** tám mươi chín vòng cổng không thấy điều đó. Không phải vì cổng yếu — mà vì mọi phép đo
+của kho này gọi HÀM, còn khiếm khuyết này chỉ tồn tại giữa HAI TAB. Một lượt người thật đi thử tìm ra thứ mà không lượt soi mã nào
+tìm được, và đó là một phát biểu về giới hạn của hình thức đo chứ không phải về chất lượng của nó.
+
+### Quyết định
+
+⑴ **Thêm `GET /rfqs/:rfqId/unseal`**, trả yêu cầu mở thầu ĐANG MỞ của gói thầu, hoặc `null`. Câu SQL **không** `ORDER BY`, **không**
+`LIMIT`: migration `019` đã dựng index duy nhất một phần `unseal_requests_mot_yeu_cau_dang_mo` trên
+`(org_id, rfq_id) WHERE status IN ('PENDING','APPROVED')`, nên mỗi gói thầu có nhiều nhất MỘT yêu cầu đang mở. Hàm **ném** khi nhận
+về hai hàng, vì im lặng chọn *cái mới nhất* sẽ giấu đúng cái chết của index ấy đi.
+
+⑵ **Đường mới đóng cửa với tác tử chỉ-đọc (`agent: false`)**, khác đường `/unseal/:id` ngay bên cạnh. Đây là vế đắt nhất của ADR này
+nên nói thẳng cái giá: nó làm hai đường cạnh nhau khai hai thứ khác nhau, và một người đọc lướt sẽ thấy như một sự thiếu nhất quán.
+Lý do giữ: đường cũ đòi người gọi **đã biết** một UUID; đường mới biến một id gói thầu — thứ tác tử liệt kê được — thành id của một
+yêu cầu mở thầu, tức nó mở đúng khả năng mà đường cũ giữ lại. Một tác tử chỉ-đọc hôm nay không có việc nào cần khả năng ấy. Ngày nào
+có thì đổi một dòng và viết một ADR, chứ không đọc ngược ra từ sự im lặng hôm nay.
+
+⑶ **`null` chứ không 404 khi chưa có yêu cầu nào.** *Gói thầu này chưa ai xin mở* và *không có gói thầu ấy* là hai câu trả lời khác
+nhau; trả 404 cho cả hai là bắt người duyệt thứ hai đoán.
+
+⑷ **`approvalCount` và `requiredApprovals` đi kèm bản ĐỌC.** Ngưỡng gọi ĐÚNG hàm mà cổng chính sách gọi
+(`public.unseal_so_phe_duyet_can`): một bản sao của quy tắc ngưỡng ở tầng đọc là một bản sao sẽ lệch, và lệch ở đây nghĩa là màn hình
+nói *đủ rồi* trong khi cổng nói chưa. Hai trường này **không** vào `UnsealRequestRecord`, vì `COT` được dùng trong `RETURNING` của ba
+câu ghi và một `RETURNING` mang truy vấn con là một câu khác hẳn về chi phí lẫn ngữ nghĩa khoá — đường ĐỌC trả bản rộng, đường GHI
+trả bản hẹp rồi người gọi đọc lại.
+
+⑸ **Thông điệp từ chối sửa Ở TRANG, không ở API.** Thân 403 của `apps/api` giữ nguyên một hằng: nói rõ thiếu quyền nào là dựng sẵn
+bản đồ mô hình quyền cho người dò. Trang thì biết người dùng vừa bấm gì, nên nó nói được cả hai vế dẫn tới cùng một 403 — *vai không
+có quyền phê duyệt* và *người yêu cầu không tự duyệt* — mà không tiết lộ thêm một bit nào.
+
+### Điều đã CÂN NHẮC và BỎ
+
+**Cho trang nhớ `unsealRequestId` vào `localStorage`.** Rẻ hơn, không đổi một dòng API. Bỏ vì nó sửa sai chỗ: mã yêu cầu vẫn không
+sang được máy thứ hai, nên nó chỉ làm cho khiếm khuyết sống sót qua một lần tải lại trang chứ không đóng nó. Nó còn tạo ra một trạng
+thái dai trên máy người dùng cho một thứ mà máy chủ đã là nguồn sự thật.
+
+**Bắt người tạo yêu cầu chép mã cho người duyệt.** Bỏ vì nó biến một lỗi giao diện thành một quy trình thủ công, và vì bất kỳ tài
+liệu vận hành nào cũng sẽ mô tả nó như một tính năng.
+
+### Đo bằng gì
+
+Sáu test tích hợp mới ở `packages/unseal/src/unseal.int.test.ts`: tìm được theo id gói thầu; `null` khi chưa có ai xin; đếm đi
+0 → 1 → 2 với trạng thái chỉ đổi ở chữ ký cuối; ngưỡng bằng 1 cho RFQ dưới ngưỡng; **yêu cầu ĐÃ HUỶ không còn là đang mở** (có đo
+tiền đề TRƯỚC khi huỷ, để `null` sau đó không chứng minh 0); hai đường đọc trả CÙNG một bản ghi. Bốn khẳng định mới chèn vào bài đi
+trọn luồng người mua ở `apps/api/src/buyer.int.test.ts` — chúng chạy trong đúng thứ tự một người thật bấm. Hai test khai báo ở
+`apps/api/src/routes.test.ts` ghim `agent: false`, kèm một đối chứng dương để vị từ không trở thành một cái chặn-tất-cả.
+
+**Hai đột biến chạy thật, cả hai bị giết, khôi phục tự kiểm bằng sha256:** bỏ vế `AND r.status IN ('PENDING','APPROVED')` ⇒ test *đã
+huỷ* đỏ; viết cứng `requiredApprovals: 2` ⇒ test *dưới ngưỡng cần một* đỏ.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói lượt đi thử đã hết khiếm khuyết: bốn khoản còn mở (**193 · 194 · 195 · 196**), và **194** nằm ở rổ A — mã đăng nhập sống
+15 phút trong khi mở thầu đòi hai người, một ràng buộc vận hành chưa ai chọn một cách có ý thức. Nó không nói `agent: false` là câu
+trả lời cuối cùng cho mọi đường tìm-được sau này; nó chỉ nói vế ấy phải là một quyết định có người ký, không phải một mặc định thừa
+hưởng từ đường bên cạnh.
 

@@ -51,6 +51,7 @@ import {
   cancelUnseal,
   countReceivedBids,
   dispatchUnseal,
+  getOpenUnsealForRfq,
   getUnsealRequest,
   requestUnseal,
 } from "@trustprocure/unseal";
@@ -223,6 +224,27 @@ const doc: readonly BuyerReadRoute[] = [
       if (r === null) throw new HttpError(404, "khong co yeu cau mo thau");
       return { status: 200, body: { unsealRequest: r } };
     },
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/unseal",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.90 / khoản 190] YÊU CẦU MỞ THẦU ĐANG MỞ CỦA GÓI THẦU NÀY — `null` khi không có.
+    //
+    // `agent: false`, và vế ấy là quyết định chứ không phải sơ suất. Đường `/unseal/:id` ngay
+    // trên là `agent: true` vì nó đòi người gọi ĐÃ BIẾT một UUID; đường này biến một id gói thầu
+    // — thứ tác tử chỉ-đọc liệt kê được — thành id của một yêu cầu mở thầu, tức nó mở đúng khả
+    // năng mà đường kia giữ lại. Một tác tử chỉ-đọc không có việc nào cần khả năng ấy, và ngày
+    // nào có thì đổi một dòng cộng một ADR, chứ không phải đọc ngược lại từ sự im lặng hôm nay.
+    //
+    // KHÔNG 404 khi không có yêu cầu: "gói thầu này chưa ai xin mở" là một câu trả lời ĐÚNG, và
+    // người duyệt thứ hai cần phân biệt nó với "không có gói thầu ấy" (404 thật, từ `getRfq`).
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { unsealRequest: await getOpenUnsealForRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) },
+    }),
   },
   // Hai đường ĐỌC CÓ CỔNG (khoản nợ 33): gói tự gọi requirePermission(BID_VIEW). Route là GET vì
   // chúng không đổi trạng thái; cổng nằm trong gói vì mục đích duy nhất của chúng là kiểm soát

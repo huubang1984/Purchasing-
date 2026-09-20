@@ -299,20 +299,39 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     expect(ss.status, ss.text).toBe(422);
     expect((await goi("GET", `/rfqs/${rfqId}/bid-count`, pm1)).status).toBe(200);
 
+    // [S1.90 / khoản 190] Trước khi có ai xin mở: 200 kèm `null`, KHÔNG phải 404. "Gói thầu này
+    // chưa ai xin mở" và "không có gói thầu ấy" là hai câu trả lời khác nhau, và người duyệt thứ
+    // hai cần phân biệt được — 404 cho cả hai là bắt họ đoán.
+    const chuaAiXin = await goi("GET", `/rfqs/${rfqId}/unseal`, gd2);
+    expect(chuaAiXin.status, chuaAiXin.text).toBe(200);
+    expect((chuaAiXin.body as { unsealRequest: unknown }).unsealRequest).toBeNull();
+
     // [INV-D1] [INV-D2] Yêu cầu mở thầu (DIRECTOR có rfq.unseal), hai giám đốc KHÁC duyệt, rồi điều phối.
     const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, gd1, { reason: "den gio mo thau" });
     expect(yc.status, yc.text).toBe(201);
     const unsealId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+
+    // [S1.90 / khoản 190 · 192] Người duyệt thứ hai ngồi MÁY KHÁC: tất cả những gì họ có là mã gói
+    // thầu, không phải `unsealId` — cái ấy chỉ hiện trên màn hình của người đã tạo. Đường dưới đây
+    // là thứ biến "cần hai người duyệt" từ một lời hứa thành một việc làm được.
+    const timTheoRfq = async (): Promise<{ id: string; approvalCount: number; requiredApprovals: number }> => {
+      const t = await goi("GET", `/rfqs/${rfqId}/unseal`, gd2);
+      expect(t.status, t.text).toBe(200);
+      return (t.body as { unsealRequest: { id: string; approvalCount: number; requiredApprovals: number } }).unsealRequest;
+    };
+    expect(await timTheoRfq()).toMatchObject({ id: unsealId, approvalCount: 0, requiredApprovals: 2 });
     // [review H2-10] Hai 422 dưới đọc LÝ DO: trigger 019 (D2, D3) và cổng D1 — không phải 422 nào cũng được.
     const tuDuyet = await goi("POST", `/unseal/${unsealId}/approve`, gd1);
     expect(tuDuyet.status).toBe(422);
     expect(tuDuyet.text).toContain("khong duoc tu phe duyet (D2, D3)");
     expect((await goi("POST", `/unseal/${unsealId}/approve`, gd2)).status).toBe(200);
+    expect((await timTheoRfq()).approvalCount, "một chữ ký — và màn hình phải đọc ra ĐÚNG một").toBe(1);
     const somMot = await goi("POST", `/unseal/${unsealId}/dispatch`, gd1);
     expect(somMot.status).toBe(422);
     // Cổng D1 đọc trạng thái trước khi đếm: mới một phê duyệt ⇒ yêu cầu còn PENDING, chưa APPROVED.
     expect(somMot.text).toContain("phải ở trạng thái APPROVED; đang ở PENDING");
     expect((await goi("POST", `/unseal/${unsealId}/approve`, gd3)).status).toBe(200);
+    expect(await timTheoRfq()).toMatchObject({ approvalCount: 2, requiredApprovals: 2 });
     const dp = await goi("POST", `/unseal/${unsealId}/dispatch`, gd1);
     expect(dp.status, dp.text).toBe(200);
     const trangThai = await goi("GET", `/unseal/${unsealId}`, pm1);

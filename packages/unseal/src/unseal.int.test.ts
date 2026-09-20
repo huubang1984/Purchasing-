@@ -25,6 +25,8 @@ import {
   assertUnsealAllowed,
   cancelUnseal,
   dispatchUnseal,
+  getOpenUnsealForRfq,
+  getUnsealRequest,
   requestUnseal,
 } from "./index.js";
 
@@ -1222,5 +1224,107 @@ describe("[INV-D5] [INV-D2] [S1.85 / khoản 147] phê duyệt lần hai từ ph
         "WHERE t.tgrelid = 'public.unseal_approvals'::pg_catalog.regclass AND t.tgname = 'unseal_approvals_kiem_danh_tinh'",
     );
     expect(rows[0]?.tgenabled, "trigger phải được bật lại — một phép đo không được để lại lược đồ khác lúc nó tới").toBe("O");
+  });
+});
+// =============================================================================================
+// [S1.90 / khoản 190 · 192] TÌM ĐƯỢC YÊU CẦU MỞ THẦU, VÀ ĐẾM ĐƯỢC CHỮ KÝ
+//
+// Khối này sinh ra từ MỘT LƯỢT ĐI THỬ, không từ một lượt đọc mã: ngày 2026-09-20 chủ dự án đi
+// trọn luồng người mua và dừng lại ở bước phê duyệt THỨ NHẤT, vì mã yêu cầu mở thầu chỉ tồn tại
+// trong bộ nhớ của tab ĐÃ TẠO ra nó. D2 đòi người duyệt phải là người KHÁC — tức máy khác — nên
+// tính năng hai người duyệt khi ấy chỉ chạy được bằng cách vi phạm tinh thần của chính nó.
+//
+// Hai vế được đo ở đây, và vế thứ hai là vế dễ chết:
+//   ⑴ TÌM ĐƯỢC: theo id gói thầu, không cần biết trước UUID của yêu cầu.
+//   ⑵ CHỈ CÁI ĐANG MỞ: một yêu cầu đã huỷ KHÔNG được trả về. Bỏ vế lọc trạng thái đi thì mã vẫn
+//      chạy, màn hình vẫn có số — và người duyệt thứ hai sẽ ký lên một yêu cầu đã chết. Test
+//      "đã huỷ" dưới đây là test duy nhất đỏ khi vế ấy mất, nên nó là lý do khối này tồn tại.
+// =============================================================================================
+describe("[khoản 190] yêu cầu mở thầu ĐANG MỞ của một gói thầu", () => {
+  it("gói thầu chưa ai xin mở trả về null — một câu trả lời, không phải một lỗi", async () => {
+    const rfqId = await taoRfqDaDong();
+    const xem = await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId));
+    expect(xem, "chưa có yêu cầu nào thì phải là null chứ không ném").toBeNull();
+  });
+
+  it("tìm được yêu cầu mà một PHIÊN KHÁC đã tạo, chỉ từ id gói thầu", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "den gio mo thau", actorSessionId: sYc }, auditPool),
+    );
+    // Người duyệt thứ hai KHÔNG biết `yc.id`; tất cả những gì họ có là mã gói thầu.
+    const xem = await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId));
+    expect(xem?.id).toBe(yc.id);
+    expect(xem?.status).toBe("PENDING");
+    expect(xem?.approvalCount).toBe(0);
+    expect(xem?.requiredApprovals, "RFQ cấp kép cần hai chữ ký").toBe(2);
+  });
+
+  it("số chữ ký đi 0 → 1 → 2 và trạng thái chỉ đổi ở chữ ký cuối", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "hop dong lon", actorSessionId: sYc }, auditPool),
+    );
+    const doc = async (): Promise<{ so: number; tt: string }> => {
+      const x = await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId));
+      return { so: x?.approvalCount ?? -1, tt: x?.status ?? "" };
+    };
+    expect(await doc()).toEqual({ so: 0, tt: "PENDING" });
+
+    await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+    );
+    expect(await doc(), "một chữ ký: đếm lên, trạng thái ĐỨNG YÊN").toEqual({ so: 1, tt: "PENDING" });
+
+    await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD2 }, auditPool),
+    );
+    expect(await doc()).toEqual({ so: 2, tt: "APPROVED" });
+  });
+
+  it("RFQ dưới ngưỡng chỉ cần MỘT chữ ký — ngưỡng đến từ máy chủ, không từ một hằng của màn hình", async () => {
+    const rfqId = await taoRfqDaDong();
+    await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "den gio", actorSessionId: sYc }, auditPool),
+    );
+    const xem = await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId));
+    expect(xem?.requiredApprovals).toBe(1);
+  });
+
+  it("yêu cầu ĐÃ HUỶ không còn 'đang mở' — và tiền đề được đo trước khi huỷ", async () => {
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "den gio", actorSessionId: sYc }, auditPool),
+    );
+    expect(
+      (await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId)))?.id,
+      "tiền đề: trước khi huỷ thì nó PHẢI tìm thấy — không có vế này thì null sau đó chứng minh 0",
+    ).toBe(yc.id);
+
+    await withTenant(apiPool, orgA, (c) =>
+      cancelUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sYc }, auditPool),
+    );
+    expect(
+      await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId)),
+      "một yêu cầu đã huỷ mà vẫn hiện ra là một chữ ký đặt lên một yêu cầu đã chết",
+    ).toBeNull();
+    // Nó KHÔNG biến mất khỏi hệ thống — đọc theo id vẫn thấy. Hai đường trả lời hai câu khác nhau.
+    expect(
+      (await withTenant(apiPool, orgA, (c) => getUnsealRequest(c, orgA, yc.id)))?.status,
+    ).toBe("CANCELLED");
+  });
+
+  it("hai đường đọc trả về CÙNG một bản ghi — không có bản sao quy tắc ngưỡng nào", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "hop dong lon", actorSessionId: sYc }, auditPool),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+    );
+    const theoId = await withTenant(apiPool, orgA, (c) => getUnsealRequest(c, orgA, yc.id));
+    const theoRfq = await withTenant(apiPool, orgA, (c) => getOpenUnsealForRfq(c, orgA, rfqId));
+    expect(theoId).toEqual(theoRfq);
+    expect(theoId?.approvalCount).toBe(1);
   });
 });
