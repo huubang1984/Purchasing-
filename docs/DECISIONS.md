@@ -4863,5 +4863,65 @@ huỷ* đỏ; viết cứng `requiredApprovals: 2` ⇒ test *dưới ngưỡng c
 Nó không nói lượt đi thử đã hết khiếm khuyết: bốn khoản còn mở (**193 · 194 · 195 · 196**), và **194** nằm ở rổ A — mã đăng nhập sống
 15 phút trong khi mở thầu đòi hai người, một ràng buộc vận hành chưa ai chọn một cách có ý thức. Nó không nói `agent: false` là câu
 trả lời cuối cùng cho mọi đường tìm-được sau này; nó chỉ nói vế ấy phải là một quyết định có người ký, không phải một mặc định thừa
+## ADR-046 — Chặng GỬI THÔNG BÁO: một lớp, hai khoản rổ A, và một đánh đổi chủ dự án chọn ngược khuyến nghị
+
+**Bối cảnh — và nó bắt đầu bằng việc bác một lời khai của chính kho này.** Vòng S1.90 ghi khoản 194 là *"mã đăng nhập sống 15 phút nhân với
+mở thầu cần hai người"*. Phép đo ở S1.91 bác câu ấy: `LOGIN_TOKEN_TTL_SECONDS` đếm từ lúc NGƯỜI DÙNG xin link, không từ lúc có việc cần
+duyệt, và `USER_SESSION_DEFAULT_TTL_SECONDS` cho phiên sống 8 giờ sau khi vào. *Hai người rảnh cùng một cửa sổ 15 phút* là một ràng buộc
+không tồn tại; thứ làm hỏng lượt đi thử 2026-09-20 là `tools/gieo-demo` phát cả ba link một lúc rồi để đó.
+
+Khoảng trống THẬT lớn hơn và đo được: **`requestUnseal` không xếp một việc nào.** Bốn chỗ `enqueueJob` trong toàn mã sản xuất, không chỗ nào
+báo cho người duyệt; bộ gửi biết đúng ba loại tin. Mở thầu đòi HAI người (D2) mà hệ thống không nói với người thứ hai — tính năng đắt nhất của
+sản phẩm chưa bao giờ tự chạy được, và lượt đi thử chỉ đi tới cuối vì công cụ demo phát sẵn link cho cả ba vai.
+
+**Và cùng khoảng trống ấy đã có một khoản mang tên từ S1.81:** khoản **154** — `RFQ_DEADLINE_EXTENDED_NOTICE` được enqueue ở hai chỗ khi gia hạn
+hạn nộp, không tiến trình nào nhận, nằm `PENDING` vĩnh viễn. Kho có đường XẾP VIỆC thông báo mà không có chặng GỬI. Thêm một loại tin thứ hai
+vào một kho như thế chỉ tạo ra khoản 154 thứ hai.
+
+### Quyết định
+
+⑴ **Dựng chặng gửi MỘT LẦN, dùng cho cả hai khoản.** Hai cổng gửi mới (`ApprovalNoticeSender`, `DeadlineNoticeSender`) cùng khuôn ba cổng đã có,
+hai handler trong `buildApiOutboxHandlers`. Chặng gửi phải ở `apps/api`: vai `app_unseal` của worker không đọc được `supplier_contacts` (ADR-006),
+nên worker không dựng nổi đích gửi dù có muốn. `packages/outbox/src/so-kind-mo-coi.ts` nay RỖNG, và vế ⑶ của hợp đồng sổ ấy — *mỗi dòng phải trỏ
+một khoản CÒN MỞ* — là thứ buộc dòng của 154 phải đi thay vì ở lại thành một lời khai thiu.
+
+⑵ **`requestUnseal` xếp một việc cho MỖI người giữ `rfq.unseal.approve`, TRỪ người yêu cầu.** Loại trừ ấy không phải phép lịch sự: D2 nói người
+yêu cầu không duyệt được, nên một tin *"có việc chờ anh"* gửi cho chính họ là một tin sai. `dedupeKey` theo cặp (yêu cầu, người nhận).
+
+⑶ **TIN MANG MÃ ĐĂNG NHẬP — chủ dự án chọn, NGƯỢC với khuyến nghị của bản trình.** Bản trình khuyến nghị tin chỉ BÁO, để người duyệt tự xin link:
+giữ việc phát chứng chỉ do NGƯỜI khởi xướng, và tránh rải N mã đăng nhập còn sống vào hộp thư của N giám đốc mỗi lần có một yêu cầu. Chủ dự án
+chọn phương án mang mã, với lý do ma sát: một cú bấm là vào thẳng.
+
+**Cái giá, ghi ra vì nó là cái giá thật:** mỗi yêu cầu mở thầu biến một hành động của NGƯỜI NÀY thành chứng chỉ của NGƯỜI KIA, và một kẻ giữ
+`rfq.unseal` có thêm một cách khiến hệ thống gửi mã đăng nhập tới hộp thư người khác. **Ba lớp bao cái giá ấy, và không lớp nào mới — đó là lý do
+phương án này chấp nhận được:** ⒜ mã đi qua ĐÚNG `issueLoginToken`, nên `LOGIN_MAX_TOKENS_PER_WINDOW` (5 mã / 15 phút / người) vẫn cưỡng chế và
+handler KHÔNG có đường phát mã riêng; ⒝ `dedupeKey` theo cặp chặn đường tạo–huỷ lặp để rải; ⒞ hạn mức từ chối thì tin VẪN đi, chỉ không mang mã —
+`token: string | null` là một hợp đồng ở cổng gửi, không phải một ca lỗi.
+
+⑷ **`listUserIdsWithPermission` trả `userId`, KHÔNG trả email.** Handler giải ra email từ chính hàng `users` — cùng kỷ luật H14-6 của
+`issueLoginToken`: không tin một chuỗi email do người gọi mang tới, vì `UNIQUE (org_id, email)` so NGUYÊN VĂN. Hàm này ra mặt tiền gói trong khi
+`hasPermission` thì không, và lý do phân biệt: `hasPermission` trả lời câu hỏi *"được hay không"* mà không để lại dấu vết nên nó mời gọi một cổng
+quyền im lặng; hàm này trả một danh sách NGƯỜI NHẬN và không nhánh nào được dùng nó để cho qua hay chặn.
+
+⑸ **Lời mời ĐÃ THU HỒI không nhận thông báo gia hạn.** Một tin gia hạn gửi cho người đã bị rút lời mời là một tin nói sai về trạng thái của họ.
+
+### Đo bằng gì
+
+Ba test tích hợp mới ở `apps/api/src/buyer.int.test.ts`, chạy qua ĐÚNG route HTTP: ⑴ tạo yêu cầu mở ⇒ tập người nhận bằng đúng tập người giữ
+`rfq.unseal.approve` trừ người yêu cầu — và một `PROCUREMENT_MANAGER` (giữ `rfq.unseal`, KHÔNG giữ `rfq.unseal.approve`) có mặt trong phép đo để
+ghim rằng tin đi theo quyền PHÊ DUYỆT chứ không theo quyền XIN MỞ; ⑵ chạy outbox ⇒ tin tới đúng email đọc từ hàng `users`, mang mã; ⑶ gia hạn hạn
+nộp ⇒ tin tới đúng đích của lời mời, và lời mời đã thu hồi thì KHÔNG nhận gì.
+
+**Ba đột biến chạy thật, cả ba bị giết, khôi phục tự kiểm bằng sha256:** bỏ vế loại người yêu cầu ⇒ đỏ; đổi `RFQ_UNSEAL_APPROVE` thành
+`RFQ_UNSEAL` ⇒ đỏ; bỏ vế `i.revoked_at IS NULL` ⇒ đỏ. **Đột biến thứ hai SỐNG ở lượt chạy đầu** — vai `DIRECTOR` giữ CẢ HAI mã quyền nên hai tập
+người nhận trùng nhau, và phép đo không ghim được quyền nào. Nó chỉ chết sau khi thêm một `PROCUREMENT_MANAGER` vào bối cảnh. Ghi ra vì đó là một
+khiếm khuyết của PHÉP ĐO mà chỉ lượt đột biến tìm ra được.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói nội dung tin đã đủ: một tin báo hôm nay mang id gói thầu và id yêu cầu, không mang tên gói thầu hay người xin — đủ để hành động,
+chưa đủ để đọc mà hiểu. Nó không nói `LOGIN_MAX_TOKENS_PER_WINDOW = 5` là con số đúng cho ca N giám đốc; con số ấy được chọn cho ca một người và
+vòng này chỉ đo rằng nó VẪN cưỡng chế, không đo rằng nó vừa. Và nó không đóng câu hỏi ⑶ mãi mãi: một vòng sau muốn rút mã khỏi tin thì chỉ cần
+đổi một hợp đồng đã có `null`, không phải dựng lại lớp.
 hưởng từ đường bên cạnh.
 

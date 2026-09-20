@@ -228,6 +228,10 @@ const DANH_SACH_TRANG_IDENTITY = [
   "USER_SESSION_DEFAULT_TTL_SECONDS",
   "enrollOrReplaceTotpForLogin",
   "issueLoginToken",
+  // [S1.91 / khoản 194] Trả DANH SÁCH NGƯỜI NHẬN cho đường xếp việc thông báo — không trả lời
+  // câu hỏi "được hay không" cho ai, nên nó không mang chỗ mù mà `hasPermission` mang (khối đầu
+  // `packages/identity/src/index.ts`). Trả `userId`, không trả email.
+  "listUserIdsWithPermission",
   "redeemLoginToken",
   "revokeSession",
   // [khoản 141 / ADR-039] `startAgentSession` — đường DUY NHẤT phát một chứng chỉ `AGENT_READONLY`.
@@ -546,6 +550,9 @@ const DANH_SACH_TRANG_INVITATION = [
   // [sổ nợ 57 / 044] Cùng hình dạng, bảng khác: nhận Pool, trả số hàng. Nó KHÔNG nhận mốc tuổi —
   // mốc ấy nằm trong policy `otp_rate_limits_don_cua_so_cu`, và câu DELETE của nó không có `WHERE`.
   "donOtpRateLimitsCu",
+  // [S1.91 / khoản 154] Kênh + địa chỉ của một lời mời CÒN SỐNG, không gì khác — mặt cắt hẹp
+  // nhất cho một handler outbox chạy ngoài mọi phiên người dùng.
+  "getInvitationNoticeTarget",
   "issueMagicLinkToken",
   "issueOtpChallenge",
   "redeemMagicLink",
@@ -787,6 +794,9 @@ const DANH_SACH_TRANG_UNSEAL = [
   "UNSEAL_CLAUSES",
   "UNSEAL_JOB_KIND",
   "UNSEAL_MFA_MAX_AGE_SECONDS",
+  // [S1.91 / khoản 194] Loại việc BÁO cho người duyệt. Ra cửa vì `apps/api` đăng ký handler
+  // theo đúng hằng này — một chuỗi chép tay ở hai nơi là một chuỗi sẽ lệch.
+  "UNSEAL_NOTICE_KIND",
   "UnsealDeniedError",
   "UnsealError",
   "approveUnseal",

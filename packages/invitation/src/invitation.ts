@@ -1018,6 +1018,35 @@ export async function clearOtpLockout(
 /** [S1.70 / lượt soi 64a-9] Lý do thu hồi do hệ thống đặt — kiểm LÚC CHẠY, không chỉ ở kiểu. */
 const LY_DO_THU_HOI: ReadonlySet<string> = new Set(["LINK_SEND_FAILED"]);
 
+/**
+ * [S1.91 / khoản 154] ĐÍCH GỬI của một lời mời — kênh và địa chỉ, không gì khác.
+ *
+ * Chỉ trả về hai trường mà chặng gửi cần. Không trả tên người liên hệ, không trả id nhà cung cấp:
+ * người gọi là một handler outbox chạy ngoài mọi phiên người dùng, nên mặt cắt hẹp nhất là mặt cắt
+ * đúng. Lời mời đã THU HỒI trả `null` — một thông báo gia hạn gửi cho người đã bị rút lời mời là
+ * một tin nói sai về trạng thái của họ.
+ */
+export async function getInvitationNoticeTarget(
+  client: pg.PoolClient,
+  orgId: string,
+  invitationId: string,
+): Promise<{ readonly channel: Channel; readonly destination: string } | null> {
+  await assertTenantBound(client, orgId, "getInvitationNoticeTarget");
+  const { rows } = await client.query<{ link_channel: string; email: string; phone: string | null }>(
+    `SELECT i.link_channel, c.email, c.phone
+       FROM public.rfq_invitations i
+       JOIN public.supplier_contacts c ON c.id OPERATOR(pg_catalog.=) i.contact_id
+      WHERE i.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND i.revoked_at IS NULL`,
+    [invitationId],
+  );
+  const h = rows[0];
+  if (h === undefined) return null;
+  const channel = h.link_channel as Channel;
+  const destination = channel === "EMAIL" ? h.email : (h.phone ?? "");
+  return destination === "" ? null : { channel, destination };
+}
+
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,

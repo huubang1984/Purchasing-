@@ -86,10 +86,17 @@ const HAM_CHI_DOC = [
   "getRfq",
   "getSupplier",
   "getUnsealRequest",
+  // [S1.91 / khoản 154] Kênh + địa chỉ của một lời mời còn sống. Người gọi DUY NHẤT là handler
+  // outbox của `apps/api`, chạy ngoài mọi phiên người dùng — không có ai để hỏi quyền, cùng
+  // lập luận đã ghi cho `listSuppliers` và `auditStoredCiphertexts`.
+  "getInvitationNoticeTarget",
   "listBidVersions",
   "listRfqItems",
   "listSupplierContacts",
   "listSuppliers",
+  // [S1.91 / khoản 194] Trả danh sách NGƯỜI NHẬN của một tin báo, không trả lời một câu hỏi
+  // quyền nào. Người gọi là `requestUnseal`, đã qua cổng `RFQ_UNSEAL` của chính nó trước đó.
+  "listUserIdsWithPermission",
 ] as const;
 
 /**

@@ -43,6 +43,7 @@ export {
   DenialAuditFailedError,
   PermissionAuditFailedError,
   PermissionDeniedError,
+  listUserIdsWithPermission,
   moTaHangDongCuaLanTuChoi,
   requirePermission,
   throwAuditedDenial,

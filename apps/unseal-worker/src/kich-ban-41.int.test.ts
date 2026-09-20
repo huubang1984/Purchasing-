@@ -524,7 +524,18 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       "SELECT kind FROM outbox_jobs WHERE payload->>'unsealRequestId' = $1",
       [trangThai.unsealRequestId],
     );
-    expect(rows.map((r) => r.kind)).toEqual(["UNSEAL_RFQ"]);
+    // [S1.91 / khoản 194] Câu này TỪNG là `toEqual(["UNSEAL_RFQ"])`, và nó đỏ ở lượt evidence của vòng
+    // khoản 194 vì `requestUnseal` nay xếp thêm một việc BÁO cho mỗi người duyệt — những việc ấy mang
+    // cùng `unsealRequestId` nên lọt vào đúng câu SELECT này.
+    //
+    // Lời khai GỐC không sai, chỉ được viết hẹp hơn thứ nó muốn nói: *điều phối chỉ ĐẶT MỘT job GIẢI
+    // MÃ, `api` không tự giải mã*. Vế ấy giữ nguyên độ sắc ở dòng đầu dưới đây — đúng MỘT `UNSEAL_RFQ`,
+    // không phải "ít nhất một". Hai dòng sau nói thêm điều mới mà không nới vế cũ.
+    expect(rows.filter((r) => r.kind === "UNSEAL_RFQ"), "điều phối đặt ĐÚNG MỘT việc giải mã").toHaveLength(1);
+    expect(rows.filter((r) => r.kind === "UNSEAL_APPROVAL_NOTICE").length, "và ít nhất một tin báo người duyệt").toBeGreaterThan(0);
+    expect(new Set(rows.map((r) => r.kind)), "không loại việc nào khác bám theo một yêu cầu mở thầu").toEqual(
+      new Set(["UNSEAL_RFQ", "UNSEAL_APPROVAL_NOTICE"]),
+    );
   });
 
   it("bước 11 — worker mở năm phong bì, và chỉ lấy PHIÊN BẢN CUỐI của người đã sửa giá", async () => {

@@ -19,7 +19,10 @@
 // ==============================================================================================
 
 import { issueLoginToken } from "@trustprocure/identity";
+import { getInvitationNoticeTarget } from "@trustprocure/invitation";
 import type { JobHandler } from "@trustprocure/outbox";
+import { RFQ_DEADLINE_NOTICE_KIND } from "@trustprocure/rfq";
+import { UNSEAL_NOTICE_KIND } from "@trustprocure/unseal";
 import { coHan } from "./co-han.js";
 import type { ApiServices } from "./route-types.js";
 
@@ -47,7 +50,9 @@ function docChuoi(payload: Record<string, unknown>, khoa: string): string {
   return v;
 }
 
-export function buildApiOutboxHandlers(services: Pick<ApiServices, "loginLinkSender">): Readonly<Record<string, JobHandler>> {
+export function buildApiOutboxHandlers(
+  services: Pick<ApiServices, "loginLinkSender" | "approvalNoticeSender" | "deadlineNoticeSender">,
+): Readonly<Record<string, JobHandler>> {
   return {
     [LOGIN_LINK_SEND_KIND]: async (job, client) => {
       const email = docChuoi(job.payload, "email");
@@ -55,6 +60,51 @@ export function buildApiOutboxHandlers(services: Pick<ApiServices, "loginLinkSen
       // Không có người dùng / bị hạn mức: job xong, không gửi gì — và không ai ngoài sổ biết.
       if (!kq.ok) return;
       return () => coHan(() => services.loginLinkSender.send({ orgId: job.orgId, email: kq.email, token: kq.token }), SEND_TIMEOUT_MS, "BoGuiQuaHan");
+    },
+    [UNSEAL_NOTICE_KIND]: async (job, client) => {
+      const userId = docChuoi(job.payload, "userId");
+      const rfqId = docChuoi(job.payload, "rfqId");
+      const unsealRequestId = docChuoi(job.payload, "unsealRequestId");
+      // Email đọc TỪ HÀNG `users`, không từ payload — cùng kỷ luật H14-6 của `issueLoginToken`.
+      const { rows } = await client.query<{ email: string }>(
+        `SELECT u.email FROM public.users u
+          WHERE u.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+            AND u.status OPERATOR(pg_catalog.=) 'ACTIVE'`,
+        [userId],
+      );
+      const email = rows[0]?.email;
+      // Người dùng đã bị vô hiệu hoá giữa lúc xếp việc và lúc chạy: job XONG, không gửi gì.
+      if (email === undefined) return;
+      // Hạn mức chặn ⇒ tin VẪN đi, chỉ không mang mã. Hợp đồng ở `ApprovalNoticeSender`.
+      const kq = await issueLoginToken(client, job.orgId, { email });
+      const token = kq.ok ? kq.token : null;
+      const den = kq.ok ? kq.email : email;
+      return () =>
+        coHan(
+          () => services.approvalNoticeSender.send({ orgId: job.orgId, email: den, rfqId, unsealRequestId, token }),
+          SEND_TIMEOUT_MS,
+          "BoGuiQuaHan",
+        );
+    },
+    [RFQ_DEADLINE_NOTICE_KIND]: async (job, client) => {
+      const invitationId = docChuoi(job.payload, "invitationId");
+      const newDeadlineAt = docChuoi(job.payload, "newDeadlineAt");
+      const dich = await getInvitationNoticeTarget(client, job.orgId, invitationId);
+      // Lời mời đã thu hồi, hay không có địa chỉ ở kênh đã chọn: job XONG, không gửi gì.
+      if (dich === null) return;
+      return () =>
+        coHan(
+          () =>
+            services.deadlineNoticeSender.send({
+              orgId: job.orgId,
+              invitationId,
+              channel: dich.channel,
+              destination: dich.destination,
+              newDeadlineAt,
+            }),
+          SEND_TIMEOUT_MS,
+          "BoGuiQuaHan",
+        );
     },
   };
 }

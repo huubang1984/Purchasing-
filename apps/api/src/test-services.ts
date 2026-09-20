@@ -62,6 +62,23 @@ export interface LoiMoiDaGui {
   readonly token: string;
 }
 
+/** [S1.91 / khoản 194] Một tin báo cho người duyệt đã đi qua bộ gửi. `token` `null` = hạn mức chặn. */
+export interface ThongBaoDaGui {
+  readonly orgId: string;
+  readonly email: string;
+  readonly rfqId: string;
+  readonly unsealRequestId: string;
+  readonly token: string | null;
+}
+
+/** [S1.91 / khoản 154] Một tin báo gia hạn hạn nộp đã đi qua bộ gửi. */
+export interface HanMoiDaGui {
+  readonly invitationId: string;
+  readonly channel: string;
+  readonly destination: string;
+  readonly newDeadlineAt: string;
+}
+
 export interface DichVuTest {
   readonly services: ApiServices;
   /** Công tắc gây hỏng cho test đường 500: bật thì bộ mở bí mật TOTP ném. */
@@ -72,6 +89,10 @@ export interface DichVuTest {
   readonly loiMoiDaGui: LoiMoiDaGui[];
   /** Mọi OTP đã đi qua bộ gửi, theo thứ tự. Test đọc mã ở đây — và CHỈ ở đây. */
   readonly otpDaGui: OtpDaGui[];
+  /** [khoản 194] Mọi tin báo người duyệt đã đi qua bộ gửi. */
+  readonly thongBaoDaGui: ThongBaoDaGui[];
+  /** [khoản 154] Mọi tin báo gia hạn hạn nộp đã đi qua bộ gửi. */
+  readonly hanMoiDaGui: HanMoiDaGui[];
   readonly khoaKy: ReceiptKeyPair;
 }
 
@@ -85,6 +106,8 @@ export function dichVuTest(): DichVuTest {
   const linkDaGui: LinkDaGui[] = [];
   const hong = { totpUnsealer: false };
   const loiMoiDaGui: LoiMoiDaGui[] = [];
+  const thongBaoDaGui: ThongBaoDaGui[] = [];
+  const hanMoiDaGui: HanMoiDaGui[] = [];
   // Bộ bọc/mở bí mật TOTP của test: AES-256-GCM, khoá dẫn xuất theo tổ chức, AAD ràng buộc tổ chức
   // + phiên bản — cùng fixture với `packages/identity/src/mfa.int.test.ts`, KHÔNG phải stub trả
   // thẳng plaintext (một stub như thế làm mọi khẳng định "bí mật của A không mở ở B" xanh vì lý do sai).
@@ -115,6 +138,8 @@ export function dichVuTest(): DichVuTest {
     otpDaGui,
     linkDaGui,
     loiMoiDaGui,
+    thongBaoDaGui,
+    hanMoiDaGui,
     khoaKy,
     services: {
       // Bộ bọc khoá RFQ của test — đối xứng, cùng fixture với bidding.int.test.ts. Không phải KMS.
@@ -134,6 +159,20 @@ export function dichVuTest(): DichVuTest {
         name: "ghi-lai-cua-test",
         send: (m) => {
           linkDaGui.push({ orgId: m.orgId, email: m.email, token: m.token });
+          return Promise.resolve();
+        },
+      },
+      approvalNoticeSender: {
+        name: "ghi-lai-cua-test",
+        send: (m) => {
+          thongBaoDaGui.push({ orgId: m.orgId, email: m.email, rfqId: m.rfqId, unsealRequestId: m.unsealRequestId, token: m.token });
+          return Promise.resolve();
+        },
+      },
+      deadlineNoticeSender: {
+        name: "ghi-lai-cua-test",
+        send: (m) => {
+          hanMoiDaGui.push({ invitationId: m.invitationId, channel: m.channel, destination: m.destination, newDeadlineAt: m.newDeadlineAt });
           return Promise.resolve();
         },
       },

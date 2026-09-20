@@ -27,12 +27,20 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assertLocalDevAllowed } from "@trustprocure/crypto-keys";
-import type { InvitationLinkSender, LoginLinkSender, OtpSender } from "../route-types.js";
+import type {
+  ApprovalNoticeSender,
+  DeadlineNoticeSender,
+  InvitationLinkSender,
+  LoginLinkSender,
+  OtpSender,
+} from "../route-types.js";
 
 export interface HopThuDev {
   readonly loginLinkSender: LoginLinkSender;
   readonly invitationLinkSender: InvitationLinkSender;
   readonly otpSender: OtpSender;
+  readonly approvalNoticeSender: ApprovalNoticeSender;
+  readonly deadlineNoticeSender: DeadlineNoticeSender;
 }
 
 export interface TuyChonHopThuDev {
@@ -53,7 +61,26 @@ export type TinHopThuDev =
       readonly duongLink: string;
       readonly luc: string;
     }
-  | { readonly loai: "OTP"; readonly kenh: string; readonly den: string; readonly ma: string; readonly luc: string };
+  | { readonly loai: "OTP"; readonly kenh: string; readonly den: string; readonly ma: string; readonly luc: string }
+  | {
+      readonly loai: "UNSEAL_APPROVAL_NOTICE";
+      readonly orgId: string;
+      readonly den: string;
+      readonly rfqId: string;
+      readonly unsealRequestId: string;
+      /** `null` khi hạn mức phát mã đăng nhập đã chặn — tin vẫn đi, người nhận tự xin link. */
+      readonly duongLink: string | null;
+      readonly luc: string;
+    }
+  | {
+      readonly loai: "DEADLINE_NOTICE";
+      readonly orgId: string;
+      readonly invitationId: string;
+      readonly kenh: string;
+      readonly den: string;
+      readonly hanNopMoi: string;
+      readonly luc: string;
+    };
 
 const TEN = "dev-mailbox";
 
@@ -106,6 +133,32 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
     otpSender: {
       name: TEN,
       send: (m) => ghi({ loai: "OTP", kenh: m.channel, den: m.destination, ma: m.code, luc: luc() }),
+    },
+    approvalNoticeSender: {
+      name: TEN,
+      send: (m) =>
+        ghi({
+          loai: "UNSEAL_APPROVAL_NOTICE",
+          orgId: m.orgId,
+          den: m.email,
+          rfqId: m.rfqId,
+          unsealRequestId: m.unsealRequestId,
+          duongLink: m.token === null ? null : `${tuyChon.baseUrl}/login#${m.token}`,
+          luc: luc(),
+        }),
+    },
+    deadlineNoticeSender: {
+      name: TEN,
+      send: (m) =>
+        ghi({
+          loai: "DEADLINE_NOTICE",
+          orgId: m.orgId,
+          invitationId: m.invitationId,
+          kenh: m.channel,
+          den: m.destination,
+          hanNopMoi: m.newDeadlineAt,
+          luc: luc(),
+        }),
     },
   };
 }

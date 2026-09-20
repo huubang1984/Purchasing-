@@ -44,6 +44,7 @@ export {
 } from "./comparison.js";
 export {
   UNSEAL_JOB_KIND,
+  UNSEAL_NOTICE_KIND,
   UnsealError,
   approveUnseal,
   cancelUnseal,
