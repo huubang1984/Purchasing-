@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { PERMISSIONS } from "@trustprocure/identity";
+import { HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
@@ -568,6 +568,92 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
     const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, nguoiXin, { reason: "den gio mo thau" });
     expect(yc.status, yc.text).toBe(201);
     expect(daDanhThuc, "xếp việc trên đường người mua ⇒ ĐÚNG MỘT lời đánh thức, mang đúng tổ chức").toEqual([orgA]);
+  });
+
+  it("[khoản 199] vòng xin mở → huỷ → xin mở KHÔNG khoá được người duyệt ra khỏi hệ thống", async () => {
+    // ==========================================================================================
+    // Phép đo này dựng lại một lượt tấn công mà lượt soi ngang 75 tái lập trên ngăn xếp THẬT trong
+    // ba giây: 5 mã đăng nhập cho MỖI người duyệt, rồi `/auth/link` của họ trả 200 mà không gửi
+    // gì. Kẻ tấn công không cần quyền đặc biệt nào — `rfq.unseal` là quyền để XIN MỞ THẦU.
+    //
+    // Vế đáng giá không phải "hệ thống tiêu ít mã hơn", mà là dòng cuối: NẠN NHÂN VẪN VÀO ĐƯỢC.
+    // ==========================================================================================
+    const keLap = await nguoi("k199-xin@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const duyet1 = await nguoi("k199-duyet-1@vidu.vn", ["DIRECTOR"]);
+    const duyet2 = await nguoi("k199-duyet-2@vidu.vn", ["DIRECTOR"]);
+    const rfqId = await rfqDaDong(keLap, [duyet1, duyet2]);
+    const ob = outboxTest(apiPool, dv.services);
+
+    const demMa = async (uid: string): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM user_login_tokens WHERE org_id = $1 AND user_id = $2",
+        [orgA, uid],
+      );
+      return Number(rows[0]?.n ?? "-1");
+    };
+
+    for (let i = 0; i < 4; i += 1) {
+      const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, keLap, { reason: "den gio mo thau" });
+      expect(yc.status, `vòng ${i}: ${yc.text}`).toBe(201);
+      await ob.chay(orgA);
+      const id = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+      expect((await goi("POST", `/unseal/${id}/cancel`, keLap)).status, "người YÊU CẦU tự rút lời của mình").toBe(200);
+    }
+    expect(ob.loi, "không job nào được phép hỏng").toEqual([]);
+
+    expect(await demMa(duyet1.id), "hệ thống chỉ được tiêu tối đa trần RIÊNG của nó").toBe(HE_THONG_MAX_TOKENS_PER_WINDOW);
+    expect(await demMa(duyet2.id)).toBe(HE_THONG_MAX_TOKENS_PER_WINDOW);
+    expect(HE_THONG_MAX_TOKENS_PER_WINDOW, "trần hệ thống phải NHỎ HƠN HẲN trần tự phục vụ").toBeLessThan(
+      LOGIN_MAX_TOKENS_PER_WINDOW,
+    );
+
+    // Tin thứ ba trở đi vẫn ĐI, chỉ không mang mã — hợp đồng `token: string | null`.
+    const choDuyet1 = dv.thongBaoDaGui.filter((t) => t.email === "k199-duyet-1@vidu.vn");
+    expect(choDuyet1.length, "bốn vòng ⇒ bốn tin, không tin nào bị nuốt").toBe(4);
+    expect(choDuyet1.filter((t) => t.token !== null), "chỉ hai tin đầu mang mã").toHaveLength(HE_THONG_MAX_TOKENS_PER_WINDOW);
+
+    // VẾ ĐÁNG GIÁ: nạn nhân tự xin link và NHẬN ĐƯỢC.
+    const truoc = dv.linkDaGui.length;
+    const xin = await goi("POST", "/auth/link", null, { orgId: orgA, email: "k199-duyet-1@vidu.vn" });
+    expect(xin.status).toBe(200);
+    await ob.chay(orgA);
+    expect(
+      dv.linkDaGui.slice(truoc).some((l) => l.email === "k199-duyet-1@vidu.vn"),
+      "người duyệt VẪN tự đăng nhập được sau bốn vòng tấn công — đây là chính khoản 199",
+    ).toBe(true);
+  });
+
+  it("[khoản 199] chỉ người YÊU CẦU hoặc người DUYỆT được huỷ, và lần từ chối để lại một hàng sổ", async () => {
+    const xin = await nguoi("k199b-xin@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const pmKhac = await nguoi("k199b-pm-khac@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const gd1 = await nguoi("k199b-gd1@vidu.vn", ["DIRECTOR"]);
+    const gd2 = await nguoi("k199b-gd2@vidu.vn", ["DIRECTOR"]);
+    const rfqId = await rfqDaDong(xin, [gd1, gd2]);
+
+    const demTuChoiHuy = async (uid: string): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'UNSEAL_CANCEL_DENIED'",
+        [orgA, uid],
+      );
+      return Number(rows[0]?.n ?? "-1");
+    };
+
+    const yc = await goi("POST", `/rfqs/${rfqId}/unseal`, xin, { reason: "den gio mo thau" });
+    expect(yc.status, yc.text).toBe(201);
+    const id = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+
+    // Một PM KHÁC giữ đúng `rfq.unseal` — tới trước vòng này chừng ấy là đủ để xoá công của hai người.
+    const truoc = await demTuChoiHuy(pmKhac.id);
+    const tuChoi = await goi("POST", `/unseal/${id}/cancel`, pmKhac);
+    expect(tuChoi.status, tuChoi.text).toBe(422);
+    expect(await demTuChoiHuy(pmKhac.id), "[INV-D5] mỗi lần từ chối để lại ĐÚNG một hàng").toBe(truoc + 1);
+
+    // Yêu cầu vẫn sống — lần từ chối không được phép đổi trạng thái gì.
+    const con = await goi("GET", `/rfqs/${rfqId}/unseal`, gd1);
+    expect((con.body as { unsealRequest: { id: string } | null }).unsealRequest?.id).toBe(id);
+
+    // Người DUYỆT thì huỷ được: một yêu cầu kẹt vẫn phải có đường dừng.
+    expect((await goi("POST", `/unseal/${id}/cancel`, gd1)).status, "người giữ rfq.unseal.approve huỷ được").toBe(200);
   });
 
   it("[khoản 154] gia hạn hạn nộp ⇒ tin tới ĐÚNG đích của lời mời; lời mời đã thu hồi thì KHÔNG gửi", async () => {

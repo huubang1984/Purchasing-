@@ -17,7 +17,7 @@ export class OutboxError extends Error {
 // [S1.92 / khoản 156] DẤU "GIAO DỊCH NÀY ĐÃ XẾP VIỆC" — để lời đánh thức không còn phải được KHAI
 //
 // Trước vòng này, tiến trình `api` đánh thức runner qua ĐÚNG MỘT lời gọi `ctx.nudgeOutbox()` ở
-// `routes/auth.ts`, và `listOrganizations` của runner là tập tổ chức đã đánh thức. Ba chỗ xếp việc
+// `routes/auth.ts`, và `listOrganizations` của runner là tập tổ chức đã đánh thức. ~~Ba~~ **[S1.93] Bốn** chỗ xếp việc
 // còn lại — gia hạn hạn nộp, yêu cầu mở thầu, và lời báo người duyệt của S1.91 — đều nằm trên
 // đường NGƯỜI MUA, nơi bộ điều phối thậm chí không truyền `nudgeOutbox` vào. Đo được ở lượt đi thử
 // 2026-09-20 (§S1.92): năm việc nằm `PENDING` cho tới khi một người tình cờ xin link đăng nhập cho

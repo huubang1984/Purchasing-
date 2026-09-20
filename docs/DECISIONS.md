@@ -4725,8 +4725,8 @@ USP nào.
 
 ### Quyết định
 
-⑴ **`apps/web` — máy chủ tĩnh `node:http` trần, TỰ CHUYỂN TIẾP `/api/*` sang `apps/api`.** `dependencies` rỗng; kho giữ nguyên
-**0 phụ thuộc sản xuất**.
+⑴ **`apps/web` — máy chủ tĩnh `node:http` trần, TỰ CHUYỂN TIẾP `/api/*` sang `apps/api`.** `dependencies` rỗng; ~~kho giữ nguyên
+**0 phụ thuộc sản xuất**~~ **[S1.93 / lượt soi ngang 75] nói cho đúng: `apps/web` có 0, còn KHO thì giữ nguyên danh sách phụ thuộc sản xuất HAI DÒNG** — `pg` và `pg-connection-string`, khai ở `tests/architecture/pham-vi-san-xuat.test.ts`; chính `docs/DECISIONS.md` ở một chỗ khác đã viết đúng là *“danh sách phụ thuộc sản xuất hai dòng”*.
 
 ⑵ **`packages/sealed-envelope/src/browser.ts` — cửa thứ BA của gói**, cạnh `index.ts` (máy chủ) và `unseal.ts` (mở phong bì). Nó
 xuất đúng những gì một trang web cần để niêm phong, và không một symbol nào của nó nhận một kết nối CSDL.
@@ -5005,3 +5005,78 @@ Nó không nói khoản 156 đã đóng — một nửa còn mở và cái giá 
 phục vụ `/nop-thau` và `/mo-thau`, còn tin mang `/login#<mã>` theo ADR-020, nên trong bản demo link ấy ra 404 và mã không mang `orgId` mà
 `/auth/redeem` đòi — ghi thành khoản riêng, không vá ở đây. Và nó không nói vách ngăn *"test gọi handler bằng tay"* đã được canh ở mọi chỗ: vòng
 này chỉ dựng một phép đo ở đúng chỗ đã thủng.
+
+## ADR-048 — Mã do HỆ THỐNG phát đi một trần riêng, và quyền huỷ một yêu cầu mở thầu không thuộc về bất kỳ ai
+
+**Bối cảnh.** Lượt soi ngang 75 (S1.93) soi chặng gửi thông báo mà S1.91 dựng và S1.92 nối vào runner, rồi tái lập một lượt tấn
+công trên ngăn xếp THẬT trong **ba giây**:
+
+```
+kẻ tấn công: một người giữ `rfq.unseal` — tức chính quyền để XIN MỞ THẦU, không có gì đặc biệt
+vòng lặp   : POST /rfqs/{rfq}/unseal  →  POST /unseal/{id}/cancel  →  lặp
+sau 5 vòng : duyet1 và duyet2 mỗi người có 5/5 mã đăng nhập trong cửa sổ 15 phút
+kết quả    : `/auth/link` của họ trả 200 và KHÔNG GỬI GÌ — magic link là đường vào DUY NHẤT
+```
+
+Hai lời khai của chính dự án bị phép đo này bác:
+
+| Viết ở | Nguyên văn | Vì sao sai |
+|---|---|---|
+| `requests.ts` (S1.91) | *"`dedupeKey` theo cặp (yêu cầu, người nhận): một kẻ tạo rồi huỷ yêu cầu liên tục không rải được tin"* | `h.id` là id của MỘT yêu cầu. Tạo lại ⇒ id mới ⇒ khoá dedupe mới. Câu này **SAI**, không phải rộng |
+| ADR-046 | *"handler đi qua đúng `issueLoginToken` nên `LOGIN_MAX_TOKENS_PER_WINDOW` vẫn cưỡng chế"* | Đúng về cơ chế, **ngược về chiều**: trần chung không bảo vệ người nhận, nó là thứ kẻ tấn công ĐỐT. Hạn mức thành vũ khí |
+
+Và nó vi phạm đúng một nguyên tắc dự án đã viết ra từ ADR-015 §5: *hạn mức theo ĐÍCH chỉ được làm chậm, không được khoá, vì khoá
+cho phép một người khoá lối vào của người khác*. Lớp D2 — hai người duyệt, hai phiên — bị vô hiệu bởi **một** người, im lặng ở
+phần khuếch đại (vòng lặp có để lại `UNSEAL_REQUESTED`/`UNSEAL_CANCELLED`; việc 5 mã của nạn nhân bị đốt thì không để lại gì).
+
+### Quyết định
+
+⑴ **`issueLoginToken` nhận `tranRieng`, và nó chỉ SIẾT.** `const tran = input.tranRieng === undefined ? LOGIN_MAX_TOKENS_PER_WINDOW
+: Math.min(input.tranRieng, LOGIN_MAX_TOKENS_PER_WINDOW)`. Một tham số không bao giờ nới được trần chung — và vế kẹp ấy có phép đo
+riêng, vì không đường sản xuất nào hôm nay truyền một trần lớn hơn, nên không có nó thì `Math.min` là một dòng không ai canh (đột
+biến đã chạy và đã SỐNG ở lượt đầu).
+
+⑵ **`HE_THONG_MAX_TOKENS_PER_WINDOW = 2`**, cắm vào handler `UNSEAL_APPROVAL_NOTICE`. Con số chọn theo một tính chất chứ không theo
+cảm giác: nó phải nhỏ hơn hẳn trần tự phục vụ để phần còn lại — **5 − 2 = 3 lượt xin link** — luôn thuộc về chính chủ, dù kẻ kích
+hoạt lặp bao nhiêu lần. Vượt trần ⇒ tin **VẪN ĐI**, chỉ không mang mã: hợp đồng `token: string | null` mà ADR-046 dựng cho ca hạn
+mức nay là van an toàn của chính nó.
+
+⑶ **Huỷ một yêu cầu mở thầu: người YÊU CẦU, hoặc người giữ `rfq.unseal.approve`.** Tới trước vòng này, mọi người giữ `rfq.unseal`
+huỷ được MỌI yêu cầu — kể cả một yêu cầu đã gom đủ hai chữ ký của người khác. Vì sao chừa cửa cho người duyệt: một yêu cầu kẹt khi
+người yêu cầu nghỉ việc vẫn phải có đường dừng, và người đã được tin để nói *có* thì cũng được tin để nói *thôi*. Lần từ chối đi qua
+`throwAuditedDenial` (D5), và `resourceType` phải viết HOA — viết thường thì hàm ném một `Error` trần và route thành **500**, đo
+được ở lượt chạy đầu của chính phép đo này. Fail-closed đúng ý.
+
+### Ba phương án kia, và vì sao không chọn
+
+| Phương án | Vì sao không |
+|---|---|
+| **Tin không mang mã nữa** (khuyến nghị gốc của em ở ADR-046) | Đóng trọn đường khuếch đại, nhưng nó lật lại một quyết định chủ dự án đã cân và đã chọn — và ⑴⑵ đạt cùng tính chất an ninh mà không lấy đi thứ đã chọn |
+| **Ngân sách riêng bằng một `purpose` mới** | Sạch nhất về mô hình: mã hệ thống đếm ở một cột khác. Nhưng `user_login_tokens.purpose` có `CHECK (purpose IN ('LOGIN'))`, nên nó là một **migration** — kéo theo `hardening.always.sql`, ba danh sách của `migrations.int`, và cổng QT3. Trả một migration cho một tính chất mà một tham số đã mua được |
+| **Trần tần suất trên route người mua** | Đúng hướng và rộng hơn (nó cũng chặn các vòng lặp khác), nhưng MỌI trần của kho hôm nay sống trên `AnonRoute` — thêm trần cho nhánh BUYER là một lớp mới, không phải một bản vá. Ghi thành khoản, không làm ở đây |
+
+### Cái giá — nói thẳng
+
+- **Người duyệt thứ ba, thứ tư trở đi trong CÙNG một cửa sổ nhận tin KHÔNG mang mã.** Với một tổ chức có nhiều hơn hai người duyệt
+  và nhiều yêu cầu mở thầu trong mười lăm phút, một số người sẽ phải tự xin link. Đó là cái giá của việc không cho một người đốt
+  ngân sách của người khác, và nó rơi vào đúng nhóm người có nhiều quyền nhất — không rơi vào nhà cung cấp.
+- **`tranRieng` là một tham số, không phải một lớp.** Một đường phát mã MỚI quên truyền nó sẽ lại tiêu ngân sách chung. Lớp thật là
+  một cột `purpose` riêng, và nó đã được ghi thành khoản chứ không hứa suông.
+- **Quyền huỷ nay phụ thuộc `listUserIdsWithPermission`** — một câu SQL nữa trên đường huỷ. Đổi lại, D2 không còn bị một người gỡ.
+
+### Đo bằng gì
+
+- `apps/api/src/buyer.int.test.ts` — *"[khoản 199] vòng xin mở → huỷ → xin mở KHÔNG khoá được người duyệt ra khỏi hệ thống"*: bốn
+  vòng tấn công, rồi khẳng định **nạn nhân tự xin link và NHẬN ĐƯỢC**; cộng *"chỉ người YÊU CẦU hoặc người DUYỆT được huỷ"* với vế
+  D5 (đúng một hàng `UNSEAL_CANCEL_DENIED`) và vế *yêu cầu vẫn sống sau lần từ chối*.
+- `apps/api/src/auth.int.test.ts` — vế kẹp: `tranRieng: 9999` vẫn dừng ở `LOGIN_MAX_TOKENS_PER_WINDOW`.
+- **Ba đột biến, cả ba ĐỎ** (khôi phục tự kiểm sha256): bỏ `tranRieng` khỏi handler; tắt phép kiểm quyền huỷ; `Math.min` → `??`.
+- **Lượt chạy THẬT, cùng kịch bản đã tìm ra khiếm khuyết** (§S1.93 mục 6): sáu vòng tấn công ⇒ mỗi nạn nhân bị đốt **2/5** thay vì
+  **5/5**, và cả hai vẫn nhận được link đăng nhập của chính mình.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói đường khuếch đại đã hết: một kẻ bên trong vẫn tạo được vô hạn yêu cầu mở thầu và vẫn rải được vô hạn **tin** (không
+mang mã) vào hộp thư người duyệt — trần tần suất cho route người mua là khoản riêng. Nó không nói `2` là con số đúng cho một tổ
+chức có mười người duyệt; nó nói vì sao con số ấy phải nhỏ hơn hẳn `5`. Và nó không đóng ADR-046: tin **vẫn** mang mã, đúng như chủ
+dự án đã chọn — vòng này chỉ làm cho lựa chọn ấy không còn là một đường khoá cửa.

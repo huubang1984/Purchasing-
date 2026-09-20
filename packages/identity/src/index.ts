@@ -134,6 +134,7 @@ export {
 // "không có người dùng" với "đã gửi" trước kẻ liệt kê email.
 // ============================================================================================
 export {
+  HE_THONG_MAX_TOKENS_PER_WINDOW,
   LOGIN_MAX_TOKENS_PER_WINDOW,
   LOGIN_RATE_WINDOW_SECONDS,
   LOGIN_TOKEN_TTL_SECONDS,

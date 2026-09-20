@@ -689,7 +689,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             );
           // Đường GHI: `withTenant`, không GUC — xem khối [S1.10.3] ở đầu file.
           if (route.mutates) {
-            // [S1.92 / khoản 156] Hôm nay KHÔNG route khách nào xếp việc (bốn chỗ `enqueueJob` của mã
+            // [S1.92 / khoản 156] Hôm nay KHÔNG route khách nào xếp việc (~~bốn~~ **[S1.93] năm** chỗ `enqueueJob` của mã
             // sản xuất nằm ở đường ANON và đường người mua). Nhánh này vẫn đọc dấu, vì lớp lỗi của
             // khoản 156 là "một đường xếp việc mới ra đời mà không ai khai nó" — một nhánh đứng
             // ngoài lớp canh là đúng chỗ lớp lỗi ấy quay lại.

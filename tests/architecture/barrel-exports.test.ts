@@ -213,6 +213,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   // [ADR-020 muc 2 / S1.10.4] nua PHAT cua khoan no 6: token dang nhap, TOTP cho dang nhap
   // (tra no ADR-008 phuong an ii), phien DA MFA, dang xuat. Khong ham nao nhan userId lam
   // loi khai — userId DAN XUAT tu token.
+  // [S1.93 / khoản 199] Trần cho mã do HỆ THỐNG phát — ra cửa vì `apps/api` là nơi cắm nó vào
+  // handler tin báo, và một bản chép ở app là một bản sẽ trôi khỏi con số mà `login.ts` cưỡng chế.
+  "HE_THONG_MAX_TOKENS_PER_WINDOW",
   "LOGIN_MAX_TOKENS_PER_WINDOW",
   "LOGIN_RATE_WINDOW_SECONDS",
   "LOGIN_TOKEN_TTL_SECONDS",
