@@ -1,7 +1,9 @@
 // ==============================================================================================
-// apps/api/src/adapters/hop-thu-dev.ts — HỘP THƯ DEV: ba bộ gửi ghi ra ĐĨA, mỗi tin một tệp
+// apps/api/src/adapters/hop-thu-dev.ts — HỘP THƯ DEV: ~~ba~~ NĂM bộ gửi ghi ra ĐĨA, mỗi tin một tệp
 //
-// Ba cổng gửi (`LoginLinkSender`, `InvitationLinkSender`, `OtpSender`) phải được TIÊM và không có
+// ~~Ba cổng gửi (`LoginLinkSender`, `InvitationLinkSender`, `OtpSender`)~~ [S1.93 / lượt soi ngang 75] NĂM cổng gửi —
+// ba cổng trên cộng `ApprovalNoticeSender` và `DeadlineNoticeSender` mà S1.91 thêm vào CHÍNH tệp này mà không sửa
+// khối chú thích này — phải được TIÊM và không có
 // mặc định. Hôm nay kho chưa có một bộ gửi thật nào (SMTP/SES/SMS là hạ tầng chưa có — ADR-009,
 // sổ nợ 38), nên tiến trình chạy thật chỉ có MỘT adapter: hộp thư dev — thứ mọi máy phát triển
 // cần (đọc link và mã OTP mà không cần mail) và thứ KHÔNG ĐƯỢC chạy ở sản xuất. Hàng rào là

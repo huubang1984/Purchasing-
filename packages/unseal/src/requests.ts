@@ -218,10 +218,15 @@ export async function requestUnseal(
   // NGƯỜI YÊU CẦU BỊ LOẠI khỏi danh sách, và đó không phải phép lịch sự: D2 nói họ không duyệt được,
   // nên một tin báo *"có việc chờ anh"* gửi cho chính họ là một tin sai.
   //
-  // `dedupeKey` theo cặp (yêu cầu, người nhận): một kẻ tạo rồi huỷ yêu cầu liên tục không rải được
-  // tin — và vì mỗi tin mang một mã đăng nhập (ADR-046), vế chống rải ấy là vế an ninh chứ không
-  // phải vế lịch sự. Trần thứ hai nằm ở `LOGIN_MAX_TOKENS_PER_WINDOW` của chính `issueLoginToken`,
-  // mà handler đi qua thay vì tự phát mã.
+  // `dedupeKey` theo cặp (yêu cầu, người nhận): trong CÙNG một yêu cầu, không ai nhận hai tin.
+  //
+  // ~~một kẻ tạo rồi huỷ yêu cầu liên tục không rải được tin — và vì mỗi tin mang một mã đăng nhập
+  // (ADR-046), vế chống rải ấy là vế an ninh chứ không phải vế lịch sự~~ **[S1.93 / khoản 199 — lượt
+  // soi ngang 75 BÁC câu này, và nó SAI chứ không rộng]**: `h.id` là id của MỘT yêu cầu, nên mỗi lần
+  // tạo lại sinh một khoá dedupe MỚI. Vòng *xin mở → huỷ → xin mở* rải được không giới hạn, và phép
+  // đo trên ngăn xếp thật phát 5 mã cho mỗi người duyệt trong 3 giây. Vế an ninh THẬT nay nằm ở
+  // `tranRieng: HE_THONG_MAX_TOKENS_PER_WINDOW` mà handler truyền cho `issueLoginToken`, cộng với
+  // quyền huỷ đã siết ở `cancelUnseal`. §S1.93.
   const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
   for (const userId of nguoiDuyet) {
     if (userId === actor.id) continue;
@@ -521,6 +526,47 @@ export async function cancelUnseal(
     },
     auditPool,
   );
+
+  // ==============================================================================================
+  // [S1.93 / khoản 199 / ADR-048] AI ĐƯỢC HUỶ — và vì sao `rfq.unseal` một mình là KHÔNG ĐỦ.
+  //
+  // Tới trước vòng này, mọi người giữ `rfq.unseal` huỷ được MỌI yêu cầu, kể cả một yêu cầu đã gom
+  // đủ hai chữ ký của người khác. Lượt soi ngang 75 chỉ ra hai hệ quả: ⑴ một người xoá được công
+  // của hai người, và ⑵ cặp *huỷ + tạo lại* là bộ khuếch đại của khoản 199 — mỗi vòng phát thêm
+  // một mã đăng nhập cho mỗi người duyệt.
+  //
+  // Quy tắc: NGƯỜI YÊU CẦU tự rút được lời của mình; ngoài họ, chỉ người giữ `rfq.unseal.approve`.
+  // Vì sao chừa cửa ấy: một yêu cầu kẹt khi người yêu cầu nghỉ việc vẫn phải có đường dừng, và
+  // người duyệt là người ĐÃ được tin để nói có — nên họ cũng được tin để nói thôi. Lần từ chối đi
+  // qua `throwAuditedDenial`: D5 đòi mỗi lần từ chối để lại một hàng, và hàng ấy sống qua rollback.
+  // ==============================================================================================
+  const { rows: chu } = await client.query<{ requested_by: string }>(
+    `SELECT requested_by FROM public.unseal_requests
+      WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
+    [input.unsealRequestId],
+  );
+  const nguoiTao = chu[0]?.requested_by;
+  if (nguoiTao !== undefined && nguoiTao !== actor.id) {
+    const duyetDuoc = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
+    if (!duyetDuoc.includes(actor.id)) {
+      await throwAuditedDenial(
+        auditPool,
+        orgId,
+        {
+          actorType: actor.type,
+          actorId: actor.id,
+          action: "UNSEAL_CANCEL_DENIED",
+          // HOA: `throwAuditedDenial` đòi `^[A-Z][A-Z0-9_]{0,63}$` cho cả hai trường, khác
+          // `appendAuditEvent` (thường). Viết thường ở đây ⇒ nó ném một Error TRẦN ⇒ 500, không
+          // 422 — đo được ở lượt đầu của chính test dưới đây, và đó là fail-closed đúng ý.
+          resourceType: "UNSEAL_REQUEST",
+          resourceId: input.unsealRequestId,
+          payload: { lyDo: "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC" },
+        },
+        new UnsealError("Chỉ người đã tạo yêu cầu, hoặc người có quyền phê duyệt mở thầu, mới huỷ được nó."),
+      );
+    }
+  }
 
   const { rows } = await client.query<HangYeuCau>(
     `UPDATE public.unseal_requests SET status = 'CANCELLED', cancelled_at = pg_catalog.now()

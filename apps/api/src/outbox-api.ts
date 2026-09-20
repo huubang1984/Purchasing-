@@ -18,7 +18,7 @@
 // `app_unseal`, không đọc được `users`, và cũng không phải nơi giữ bộ gửi.
 // ==============================================================================================
 
-import { issueLoginToken } from "@trustprocure/identity";
+import { HE_THONG_MAX_TOKENS_PER_WINDOW, issueLoginToken } from "@trustprocure/identity";
 import { getInvitationNoticeTarget } from "@trustprocure/invitation";
 import type { JobHandler } from "@trustprocure/outbox";
 import { RFQ_DEADLINE_NOTICE_KIND } from "@trustprocure/rfq";
@@ -76,7 +76,13 @@ export function buildApiOutboxHandlers(
       // Người dùng đã bị vô hiệu hoá giữa lúc xếp việc và lúc chạy: job XONG, không gửi gì.
       if (email === undefined) return;
       // Hạn mức chặn ⇒ tin VẪN đi, chỉ không mang mã. Hợp đồng ở `ApprovalNoticeSender`.
-      const kq = await issueLoginToken(client, job.orgId, { email });
+      //
+      // [S1.93 / khoản 199] `tranRieng` là cả bản vá của một khoản CAO. Lần phát này do NGƯỜI KHÁC
+      // kích hoạt (ai giữ `rfq.unseal` cũng tạo được yêu cầu mở thầu), nên nó không được phép tiêu
+      // ngân sách mà chủ hộp thư cần để TỰ vào. Trước vòng này nó tiêu chung, và lượt soi ngang 75
+      // tái lập hậu quả trong 3 giây: 5 mã mỗi người duyệt, rồi `/auth/link` của họ trả 200 mà
+      // không gửi gì — hai người duyệt bị khoá khỏi hệ thống bởi MỘT người. §S1.93.
+      const kq = await issueLoginToken(client, job.orgId, { email, tranRieng: HE_THONG_MAX_TOKENS_PER_WINDOW });
       const token = kq.ok ? kq.token : null;
       const den = kq.ok ? kq.email : email;
       return () =>

@@ -25,7 +25,9 @@
 //
 // PHÉP ĐO GIỮ CỬA NÀY ĐÚNG
 //
-// `packages/sealed-envelope/src/cua-trinh-duyet.test.ts` đọc cây import BẮC CẦU từ file này và
+// ~~`packages/sealed-envelope/src/cua-trinh-duyet.test.ts`~~ [S1.93 / lượt soi ngang 75] Lớp canh ấy sống ở
+// `apps/web/src/cua-trinh-duyet.test.ts` — tệp trong gói này KHÔNG tồn tại, và đó là một con trỏ chết từ ngày
+// ADR-044 đặt lớp canh ở app thay vì ở gói. Nó đọc cây import BẮC CẦU từ file này và
 // đòi: không file nào trong cây import `pg`, `node:*` dạng giá trị, hay một gói workspace khác.
 // Nó đọc cây THẬT bằng `ts.createSourceFile`, không đọc một danh sách tên — nên thêm một import
 // máy chủ vào `seal.ts` hay `format.ts` làm nó ĐỎ, kể cả khi không ai nhớ tới file này.

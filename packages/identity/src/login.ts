@@ -33,6 +33,20 @@ export const LOGIN_TOKEN_BYTES = 32;
 export const LOGIN_TOKEN_TTL_SECONDS = 15 * 60;
 /** Tối đa bấy nhiêu token đăng nhập được phát cho MỘT người dùng trong một cửa sổ. */
 export const LOGIN_MAX_TOKENS_PER_WINDOW = 5;
+/**
+ * [S1.93 / khoản 199 / ADR-048] TRẦN CHO MÃ DO **HỆ THỐNG** PHÁT, thấp hơn trần tự phục vụ.
+ *
+ * Vì sao phải có một con số thứ hai: `LOGIN_MAX_TOKENS_PER_WINDOW` đếm trên MỘT bảng, và tới trước
+ * vòng này mọi mã đều đếm chung. Khi một tin báo do NGƯỜI KHÁC kích hoạt cũng phát mã, trần chung
+ * ấy thôi là lớp bảo vệ và thành VŨ KHÍ: đốt hết ngân sách của một người là khoá đúng con đường
+ * họ cần để tự vào (lượt soi ngang 75 tái lập trong 3 giây — §S1.93).
+ *
+ * Con số 2 chọn theo một tính chất, không theo cảm giác: nó phải NHỎ HƠN HẲN trần tự phục vụ để
+ * phần còn lại (5 − 2 = 3 lượt xin link) luôn thuộc về chính chủ, dù kẻ kích hoạt lặp bao nhiêu
+ * lần. ADR-015 §5 nói cùng điều ấy bằng lời khác: một hạn mức theo ĐÍCH chỉ được làm chậm, không
+ * được khoá, vì khoá cho phép một người khoá lối vào của người khác.
+ */
+export const HE_THONG_MAX_TOKENS_PER_WINDOW = 2;
 export const LOGIN_RATE_WINDOW_SECONDS = 15 * 60;
 export const USER_SESSION_DEFAULT_TTL_SECONDS = 8 * 3600;
 export const USER_SESSION_MAX_TTL_SECONDS = 24 * 3600;
@@ -75,7 +89,17 @@ export type IssueLoginTokenOutcome =
 export async function issueLoginToken(
   client: pg.PoolClient,
   orgId: string,
-  input: { readonly email: string; readonly ttlSeconds?: number },
+  input: {
+    readonly email: string;
+    readonly ttlSeconds?: number;
+    /**
+     * [S1.93 / khoản 199] Trần RIÊNG cho lần phát này, dùng khi người kích hoạt KHÔNG phải chủ
+     * nhân của hộp thư. Luôn bị kẹp dưới `LOGIN_MAX_TOKENS_PER_WINDOW`: một tham số không bao giờ
+     * NỚI được trần chung, nó chỉ siết thêm. Vượt trần ⇒ `RATE_LIMITED` như thường, và người gọi
+     * (handler tin báo) gửi tin KHÔNG mang mã — hợp đồng `token: string | null` đã có sẵn.
+     */
+    readonly tranRieng?: number;
+  },
 ): Promise<IssueLoginTokenOutcome> {
   await assertTenantBound(client, orgId, "issueLoginToken");
   // [khoản nợ 63 / S1.27] KHÔNG hạ chữ thường ở đây, và đó là toàn bộ bản vá — xem khối chú
@@ -144,7 +168,9 @@ export async function issueLoginToken(
             (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $2::pg_catalog.float8))`,
     [u.id, LOGIN_RATE_WINDOW_SECONDS],
   );
-  if (Number(dem[0]?.n ?? 0) >= LOGIN_MAX_TOKENS_PER_WINDOW) return { ok: false, reason: "RATE_LIMITED" };
+  // `Math.min` chứ không phải `??`: một trần riêng lớn hơn trần chung KHÔNG được phép nới trần chung.
+  const tran = input.tranRieng === undefined ? LOGIN_MAX_TOKENS_PER_WINDOW : Math.min(input.tranRieng, LOGIN_MAX_TOKENS_PER_WINDOW);
+  if (Number(dem[0]?.n ?? 0) >= tran) return { ok: false, reason: "RATE_LIMITED" };
 
   const token = randomBytes(LOGIN_TOKEN_BYTES).toString("base64url");
   await client.query(

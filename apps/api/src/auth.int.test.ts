@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU, counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU, counterForTime, deriveTotpCode, issueLoginToken } from "@trustprocure/identity";
 import { OTP_RATE_WINDOW_SECONDS } from "@trustprocure/invitation";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -380,6 +380,24 @@ describe("/auth/link — không liệt kê được email", () => {
     expect(await ob.chay(orgA)).toBe(LOGIN_MAX_TOKENS_PER_WINDOW + 3);
     expect(ob.loi).toHaveLength(0);
     expect(dv.linkDaGui.length - truoc).toBe(LOGIN_MAX_TOKENS_PER_WINDOW);
+  });
+
+  it("[khoản 199] `tranRieng` chỉ SIẾT, không NỚI — một tham số không được phép vượt trần chung", async () => {
+    // Vế kẹp `Math.min` của `issueLoginToken`. Không đường sản xuất nào truyền một trần lớn hơn
+    // trần chung hôm nay, nên nếu không có phép đo này thì đổi `Math.min(...)` thành `??` là một
+    // đột biến SỐNG — đã chạy và đã thấy nó sống ở lượt đột biến của vòng S1.93.
+    await taoNguoi("kep@vidu.vn");
+    const ket: string[] = [];
+    await withTenant(apiPool, orgA, async (c) => {
+      for (let i = 0; i < LOGIN_MAX_TOKENS_PER_WINDOW + 2; i += 1) {
+        const kq = await issueLoginToken(c, orgA, { email: "kep@vidu.vn", tranRieng: 9999 });
+        ket.push(kq.ok ? "ok" : kq.reason);
+      }
+    });
+    expect(ket.filter((k) => k === "ok"), "trần chung vẫn cưỡng chế dù người gọi xin 9999").toHaveLength(
+      LOGIN_MAX_TOKENS_PER_WINDOW,
+    );
+    expect(ket.at(-1)).toBe("RATE_LIMITED");
   });
 });
 

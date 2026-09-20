@@ -160,7 +160,7 @@ export interface AnonContext {
   readonly afterCommit: AfterCommit;
   // [S1.92 / khoản 156] ~~`nudgeOutbox: () => void`~~ — hợp đồng cũ: *handler vừa `enqueueJob` thì
   // TỰ KHAI để dispatcher đánh thức runner sau commit*. Nó đúng ở chỗ nó phủ, và lớp lỗi nằm ở chỗ
-  // nó KHÔNG phủ: đúng một route trong kho từng gọi nó, ba chỗ xếp việc còn lại nằm trên đường
+  // nó KHÔNG phủ: đúng một route trong kho từng gọi nó, ~~ba~~ **[S1.93] bốn** chỗ xếp việc còn lại nằm trên đường
   // người mua — nơi ctx này không tồn tại. Nay dấu do chính `enqueueJob` để lại và dispatcher đọc,
   // nên không còn gì để khai và không còn gì để quên. Xem `layDauXepViec` (packages/outbox).
 }

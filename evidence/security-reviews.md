@@ -8415,3 +8415,107 @@ Sau đó cả chuỗi đi tới cuối: hai người duyệt vào **chỉ bằng
 - `apps/api/src/buyer.int.test.ts` — **10 test** đạt (thêm phép đo khoản 156)
 - evidence — **56/56** (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ **2013** khẳng định, `vitest thoát mã 0`, cổng **XANH**
 - sổ nợ **196 → 198** khoản; mở **81 → 82** (197 sinh ra ĐÓNG; 198 mở, vào rổ A); rổ A **13 → 14**; **46 → 47** ADR
+
+# §S1.93 — LƯỢT SOI NGANG 75: MỘT NGƯỜI KHOÁ ĐƯỢC CẢ HAI NGƯỜI DUYỆT, VÀ KHIẾM KHUYẾT NẰM TRONG MÃ CỦA BA VÒNG NGAY TRƯỚC
+
+**Vòng này chạm khoản rổ A nào:** nó SINH RA một khoản rổ A mới bằng phép đo (199, vá ngay trong vòng), chuyển hai khoản rổ B lên rổ
+A (103, 196), và mở rộng khoản 198. Mảnh của bảng bốn mảnh: mảnh 1 (giao diện) và mảnh 3 (hạ tầng) — xem mục 4 và mục 7.
+
+## 1. Kiểm mốc — lượt 75 chạy ĐÚNG MỐC
+
+Vế lịch **chạm**: mốc là *chậm nhất S1.92*, S1.92 đã ghi lỡ nhịp và dời sang *chậm nhất S1.93*; vòng này là S1.93. Vế hardening
+`git rev-list --count 1dfc7e3..origin/master --first-parent -- db/migrations/hardening.always.sql` = **3**. Cửa sổ soi:
+`1a1a060..c3c73ad` — **13 commit, 58 tệp, +4345/−57** (mã `.ts` +2105, test +861, tài liệu +471, biên bản +557).
+
+## 2. Sáu góc, và hai góc trong đó là bắt buộc
+
+| Góc | Kết quả |
+|---|---|
+| 1 — hồi quy xuyên vòng | **KHÔNG ÂM**: 1 TRUNG (khoản 200), 2 THẤP; ~15 nghi vấn kiểm và BÁC bằng mã |
+| 2 — lớp cưỡng chế bị vô hiệu | **1 CAO** (khoản 199), 1 TRUNG (202), 2 THẤP; 20+ đường vòng BÁC |
+| 3 — lời khai rộng hơn mã | 8 TRUNG, 3 THẤP; ~25 lời khai dựng lại bằng lệnh và thấy ĐÚNG |
+| 4 — test mất răng | 4 mức A, 8 mức B/C; 16 test kiểm và thấy CÓ RĂNG |
+| 5 — **rổ A dưới kính lúp** (ADR-043) | 14/14 khoản soi lại; đề nghị đổi rổ 5, đóng 1; 5 khoảng trống §11 ngoài sổ |
+| 6 — **rổ B xếp nhầm** (góc mới) | 50/50 khoản soi lại; **2 khoản phải lên rổ A** |
+
+Góc 6 sinh ra từ chuyện của chính vòng trước: khoản 156 nằm ở rổ B suốt mười một vòng trong khi nó chặn đúng kịch bản pilot.
+
+## 3. CAO — một người khoá được cả hai người duyệt ra khỏi hệ thống
+
+Tái lập trên ngăn xếp THẬT (`tp-demo-pg` + `apps/api` + `apps/web`), kẻ tấn công chỉ giữ `rfq.unseal`:
+
+```
+[1] tạo 201 · hộp thư +2 · huỷ 200        ... lặp 5 vòng, hết 3 giây
+duyet1@…: /auth/link → 200 · hộp thư +0   ✗ KHÔNG ĐĂNG NHẬP ĐƯỢC
+duyet2@…: /auth/link → 200 · hộp thư +0   ✗ KHÔNG ĐĂNG NHẬP ĐƯỢC
+```
+
+Sổ CSDL: **5 mã mỗi nạn nhân, 07:00:01 → 07:00:04** — chạm đúng `LOGIN_MAX_TOKENS_PER_WINDOW = 5`. Cơ chế và bản vá ở ADR-048.
+
+Điều đáng ghi nhất không phải cơ chế mà là **hai lời khai của chính dự án bị bác**: chú thích `dedupeKey` của S1.91 nói *"một kẻ tạo
+rồi huỷ yêu cầu liên tục không rải được tin"* — **SAI**, vì `h.id` đổi mỗi lần tạo lại; và ADR-046 nói trần chung *"vẫn cưỡng chế"* —
+đúng về cơ chế, **ngược về chiều**: trần ấy là thứ kẻ tấn công đốt. Cả hai do em viết, cách đây chưa đầy một ngày.
+
+## 4. Khoản 198 rộng ra: KHÔNG PHẢI một link chết, mà HAI
+
+`hop-thu-dev.ts` dựng `${baseUrl}/i#<mã>` cho lời mời nhà cung cấp; `/i` cũng không có trong bản đồ `TRANG` ⇒ 404. Tức **mọi link do
+sản phẩm sinh ra đều không bấm được**, cả phía người mua lẫn phía nhà cung cấp. Lượt đi thử 2026-09-20 không vấp vì `tools/gieo-demo`
+in ra một link VIẾT TAY `/nop-thau#<org>:<mã>` — một hình dạng không bộ gửi nào sinh ra. Và hai lời trong chính thân khoản 198 cũng
+quá rộng, đã sửa: 404 trả thân `khong co trang nay` chứ không *trang trắng*, và *"đường duy nhất"* sai vì `orgId` có trong thân tin.
+
+## 5. Ba khoản mới ghi phần KHÔNG vá
+
+- **200** — khuôn của khoản 123 quay lại ở `requestUnseal` (xếp việc SAU lần ghi sổ, giữ khoá tư vấn ghi sổ tới COMMIT). Lời ghim của
+  S1.71 là một test cho ĐÚNG MỘT hàm, không phải một cổng cho khuôn.
+- **201** — hai bộ gửi mới của hộp thư dev có **0 dòng** test; đột biến đưa mã đăng nhập từ fragment sang query string vẫn xanh toàn kho.
+- **202** — bộ chuyển tiếp `apps/web` làm rụng `sec-fetch-site`, nên vế thứ hai của cổng chống nguồn lạ biến mất sau proxy.
+
+## 6. Đột biến — ba, và con thứ ba SỐNG ở lượt đầu
+
+| # | Đột biến | Lượt 1 | Sau khi thêm phép đo |
+|---|---|---|---|
+| 1 | bỏ `tranRieng` khỏi handler tin báo | 🔴 | 🔴 |
+| 2 | tắt phép kiểm quyền huỷ | 🔴 | 🔴 |
+| 3 | `Math.min(tranRieng, trần chung)` → `??` | 🟢 **SỐNG** | 🔴 |
+
+Con thứ ba sống vì không đường sản xuất nào truyền một trần lớn hơn trần chung, nên vế kẹp là một dòng không ai canh. Bịt bằng một ca
+riêng trong `auth.int.test.ts` (`tranRieng: 9999` vẫn dừng ở 5) rồi chạy lại mới giết được. Khôi phục tự kiểm sha256 ở cả ba lượt.
+
+Một chi tiết của lượt chạy đầu, giữ lại vì nó là một tính chất chứ không phải một sự cố: phép đo trả **500** thay vì 422 vì
+`resourceType` viết thường — `throwAuditedDenial` đòi `^[A-Z][A-Z0-9_]{0,63}$` cho cả `action` lẫn `resourceType` và ném một `Error`
+trần khi sai hình dạng. Fail-closed đúng ý: sai thì thành 500 có log, không thành một 403 câm.
+
+## 7. Lượt chạy THẬT sau bản vá — cùng kịch bản, cùng môi trường
+
+| | chưa vá | đã vá |
+|---|---|---|
+| mã hệ thống đốt của mỗi nạn nhân | **5/5** | **2/5** |
+| nạn nhân tự xin link sau 6 vòng tấn công | ✗ 200, không tin nào | ✓ nhận được |
+| tin báo người duyệt vẫn đi | có | có — 12 tệp, hai tin đầu mang mã |
+
+Sổ CSDL sau bản vá: mỗi nạn nhân **3** mã = 2 (trần hệ thống) + 1 (lượt tự xin của chính họ), tức ngân sách tự phục vụ còn nguyên.
+
+## 8. Hai khoản rổ B lên rổ A, và phần CHƯA áp
+
+**196** (hạn nộp phán xử bằng đồng hồ CSDL) và **103** (pool ứng dụng không nghe `'error'`) đều mang đúng ba dấu của khoản 156: một
+thứ chạy NỀN, một KHOẢNG TRỐNG chứ không phải một lỗi, và một hiện tượng chỉ hiện ra khi có nhiều tiến trình — không hiện ra khi gọi
+hàm. Cùng cái container đã lệch **6 giờ 22 phút** sau một đêm máy ngủ ngày 2026-09-20, và cùng đêm ấy là kích hoạt điển hình của 103.
+
+**CHƯA áp:** góc 5 đề nghị chuyển 104 · 108 · 130 · 135 · 160 xuống rổ B và ĐÓNG 155 (hết chủ thể — thân khoản tự khai phạm vi *"trên
+mọi triển khai đã chạy TRƯỚC bản vá S1.81"*, mà dự án chưa triển khai ở đâu). Thu hẹp tập chặn pilot là quyết định của chủ dự án, không
+phải của một lượt soi — nên nó nằm ở đây chờ, không nằm trong sổ.
+
+## 9. Năm khoảng trống §11 mà sổ nợ KHÔNG mang
+
+Góc 5 đi trọn kịch bản trên mã hôm nay: ⑴ không đường nào tạo tổ chức/người dùng/vai ngoài một script superuser; ⑵ link mời NCC 404
+(nay là khoản 198); ⑶ không có bộ gửi email/SMS thật — `TRUSTPROCURE_SENDER_ADAPTER` có đúng một giá trị hợp lệ là `dev-mailbox`;
+⑷ không có AWARD và không có đường xuất bộ bằng chứng (mảnh 2/S2); ⑸ bảng *"bốn mảnh còn thiếu"* của `PRODUCT.md` §11 đã thiu — nó
+khai *"đúng MỘT tệp `.html`"*, hôm nay `git ls-files "*.html"` ra **ba**. Phần lõi §11 thì CHẠY, và đã chạy hai lần trên ngăn xếp thật.
+
+## 10. Số đo
+
+- `pnpm t0` **0** — 280 module / 1145 phụ thuộc / 0 vi phạm
+- `pnpm test` — **70 tệp / 955 test** đạt, 1 bỏ qua
+- `apps/api/src/buyer.int.test.ts` **12 test** · `apps/api/src/auth.int.test.ts` **41 test**
+- evidence — **56/56** (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ **2016** khẳng định, `vitest thoát mã 0`, cổng **XANH**
+- sổ nợ **198 → 202** khoản; mở **82 → 85**; rổ A **14 → 16**, rổ B **50 → 51**, rổ C **18**; **47 → 48** ADR
