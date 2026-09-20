@@ -8198,3 +8198,33 @@ một yêu cầu đã chết. Test *đã huỷ* đo tiền đề TRƯỚC khi hu
 Không chạy lượt soi ngang 75 (mục 0). Không chạm một migration nào, một dòng `hardening.always.sql` nào, một lớp mật mã nào. Không
 đóng một khoản rổ A nào có từ trước — **194** làm rổ A **dài thêm**, và đó là kết quả trung thực của một lượt đi thử: đi thử sản phẩm
 thì sổ nợ dài ra trước khi ngắn lại.
+
+## 8. Bản vá được nghiệm thu BẰNG CHÍNH KỊCH BẢN ĐÃ TÌM RA KHIẾM KHUYẾT
+
+Mục 1 nói khiếm khuyết này sống được vì *mọi phép đo của kho gọi HÀM chứ không mở HAI TAB*. Nếu vòng sửa cũng chỉ đo bằng hàm thì nó
+lặp lại đúng chỗ mù ấy — nên bản vá được chạy lại trên **ngăn xếp đang chạy thật**, trước khi merge.
+
+Hình dạng phép đo: ba "máy" là **ba hũ cookie hoàn toàn riêng**, nói HTTP qua `apps/web` tới `apps/api` như một trình duyệt. Máy B và
+C **không bao giờ** nhận `unsealRequestId` từ mã của script — chúng chỉ được đưa id GÓI THẦU, đúng như một người duyệt thật nhận từ
+email hay lời nhắn của đồng nghiệp. Ba vai đăng nhập bằng đúng đường của sản phẩm: `/auth/redeem`, ghi danh TOTP, `/auth/totp`.
+
+| Máy | Bước | Kết quả |
+|---|---|---|
+| A · soạn | đóng thầu, tạo yêu cầu mở | ĐẠT — mã yêu cầu chỉ máy A biết |
+| A · soạn | tự phê duyệt | **CHẶN 403** |
+| B · duyệt 1 | `GET /rfqs/:rfqId/unseal` chỉ với id gói thầu | **TÌM RA đúng yêu cầu máy A tạo** — khoản 190 |
+| B · duyệt 1 | `approvalCount` 0, `requiredApprovals` 2 | ĐẠT — khoản 192 |
+| B · duyệt 1 | phê duyệt, rồi đọc lại | đếm lên **1** |
+| C · duyệt 2 | tìm, phê duyệt, đọc lại | đếm lên **2**, trạng thái **APPROVED** |
+| C · duyệt 2 | điều phối giải mã | ĐẠT |
+| — | sau khi worker chạy xong, đọc lại đường tìm | **`null`** — yêu cầu EXECUTED không còn *đang mở* |
+
+Mười ba khẳng định, **tất cả ĐẠT**. Hàng cuối đáng kể riêng: nó đo vế lọc trạng thái trên ĐƯỜNG THẬT, không phải bằng một lần `UPDATE`
+viết tay — cùng vế mà đột biến ở mục 6 giết bằng test *đã huỷ*, nay được xác nhận thêm một lần ở trạng thái `EXECUTED`.
+
+Hai phép đo phụ, làm để 401 ở bảng trên có nghĩa: đường mới trả **401** khi không có phiên (route CÓ thật, thiếu phiên), còn một
+đường bịa dưới cùng tiền tố trả **404** — nên 401 không phải một cái bắt-tất-cả.
+
+**Điều phép đo này KHÔNG chứng minh:** nó đi qua HTTP, không qua DOM. Việc `mo-thau.js` gọi đúng đường và vẽ đúng ô vẫn chỉ được đo
+bằng mắt trên một lượt đi thử — và đó là khoảng trống thật, cùng họ với khoảng trống đã sinh ra khoản 190. Kho này chưa có phép đo nào
+mở được một trình duyệt.
