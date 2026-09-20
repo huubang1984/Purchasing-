@@ -618,6 +618,171 @@ describe("dispatchUnseal", () => {
 });
 
 // ===============================================================================================
+// [S1.96 / khoản 130 + 159] MỘT JOB MỞ THẦU ĐÃ CHẾT PHẢI ĐIỀU PHỐI LẠI ĐƯỢC
+//
+// §11 đòi *"không một bước nào cần người của dự án can thiệp bằng tay"*. Trước vòng này, job
+// `UNSEAL_RFQ` hết `maxAttempts` thì vào `FAILED` — trạng thái không có cạnh nào đi ra — và
+// đường phục hồi duy nhất qua API là huỷ yêu cầu, tạo yêu cầu mới, gom lại ĐỦ HAI phê duyệt.
+// ===============================================================================================
+interface HangDieuPhoi {
+  readonly status: string;
+  readonly dispatched_at: Date | null;
+  readonly dispatched_by: string | null;
+  readonly dispatched_by_session_id: string | null;
+}
+
+async function docHangDieuPhoi(requestId: string): Promise<HangDieuPhoi> {
+  const { rows } = await db.pool.query<HangDieuPhoi>(
+    "SELECT status, dispatched_at, dispatched_by, dispatched_by_session_id FROM unseal_requests WHERE id = $1",
+    [requestId],
+  );
+  const r = rows[0];
+  if (r === undefined) throw new Error("khong tim thay unseal_requests");
+  return r;
+}
+
+async function ketCucJob(requestId: string): Promise<string[]> {
+  const { rows } = await db.pool.query<{ status: string }>(
+    "SELECT status FROM outbox_jobs WHERE dedupe_key = $1 ORDER BY created_at",
+    [`unseal:${requestId}`],
+  );
+  return rows.map((r) => r.status);
+}
+
+/** Đốt job đúng như `JobRunner` làm sau `maxAttempts`: `FAILED` + `finished_at` (hai CHECK của 007 khoá chúng với nhau). */
+async function dotHetLuot(requestId: string): Promise<void> {
+  await db.pool.query(
+    "UPDATE outbox_jobs SET status = 'FAILED', finished_at = now(), last_failure_reason = 'HANDLER_ERROR' " +
+      " WHERE dedupe_key = $1 AND status <> 'FAILED'",
+    [`unseal:${requestId}`],
+  );
+}
+
+describe("[khoản 130] điều phối lại sau khi job chết", () => {
+  it("job FAILED ⇒ xếp job MỚI, đổi cặp người-phiên sang người vừa qua cổng, GIỮ NGUYÊN dispatched_at, và để lại hàng sổ", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    const truoc = await docHangDieuPhoi(requestId);
+    expect(truoc.dispatched_by_session_id, "tiền đề: lần điều phối đầu đã ghi phiên của người bấm").toBe(sYc);
+
+    await dotHetLuot(requestId);
+    expect(await ketCucJob(requestId)).toEqual(["FAILED"]);
+
+    // `sYcB` là phiên KHÁC của cùng người: đủ để cặp ĐỔI, nên nó chạm đúng trigger của khoản 159.
+    const bangChung = await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+    );
+    expect(bangChung.clauses, "điều phối lại đi TRỌN cổng bốn vế, không phải một lối tắt").toHaveLength(4);
+
+    const sau = await docHangDieuPhoi(requestId);
+    expect(sau.dispatched_at, "mốc điều phối ĐẦU là bất biến — `unseal_dieu_phoi_mot_lan` (022) canh nó").toEqual(
+      truoc.dispatched_at,
+    );
+    expect(sau.dispatched_by_session_id, "cặp người-phiên chuyển sang phiên vừa qua cổng với MFA tươi").toBe(sYcB);
+
+    expect(await ketCucJob(requestId), "job cũ ở lại làm dấu vết, job mới đứng cạnh nó").toEqual([
+      "FAILED",
+      "PENDING",
+    ]);
+
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE action = 'UNSEAL_REDISPATCHED' AND resource_id = $1",
+      [requestId],
+    );
+    expect(so[0]?.n, "D5: lần điều phối lại để lại đúng một hàng sổ").toBe("1");
+  });
+
+  it("còn một lượt ĐANG SỐNG thì từ chối — đây không phải đường bấm hai lần cho nhanh", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+      ),
+    ).rejects.toThrow(/vẫn còn một lượt đang chờ chạy/u);
+    expect(await ketCucJob(requestId), "không job thứ hai nào được xếp").toEqual(["PENDING"]);
+    expect((await docHangDieuPhoi(requestId)).dispatched_by_session_id, "và cặp người-phiên KHÔNG đổi").toBe(sYc);
+  });
+
+  // ĐO CÁI GÌ: rằng CỔNG BỐN VẾ từ chối trước, chứ không phải vế trạng thái bên trong nhánh phục
+  // hồi. Đột biến tắt vế bên trong SỐNG, và đó là kết quả ĐÚNG — xem khối chú thích ở `requests.ts`.
+  it("yêu cầu không còn APPROVED thì CỔNG từ chối trước khi nhánh phục hồi kịp chạy — không mở thầu lại thứ đã mở", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await dotHetLuot(requestId);
+    await db.pool.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [requestId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+      ),
+    ).rejects.toBeInstanceOf(UnsealDeniedError);
+    expect(await ketCucJob(requestId), "và không job nào được xếp thêm").toEqual(["FAILED"]);
+  });
+});
+
+describe("[khoản 159] cặp người-phiên điều phối được kiểm ở MỌI lần ghi, không chỉ lần đầu", () => {
+  it("ghi đè bằng một phiên KHÔNG TỒN TẠI bị chặn — trước S1.96 lối này đi lọt vì mệnh đề WHEN chỉ canh lần đầu", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    const phienMa = randomUUID();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE unseal_requests SET dispatched_by = $1, dispatched_by_session_id = $2 WHERE id = $3", [
+          uYc,
+          phienMa,
+          requestId,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect((await docHangDieuPhoi(requestId)).dispatched_by_session_id, "hàng giữ nguyên cặp cũ").toBe(sYc);
+  });
+
+  it("ghi đè bằng phiên ĐÃ THU HỒI cũng bị chặn — đây là ca mà khoản 159 gọi là nặng nhất", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    const sThuHoi = await taoPhien(uYc);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sThuHoi]);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE unseal_requests SET dispatched_by = $1, dispatched_by_session_id = $2 WHERE id = $3", [
+          uYc,
+          sThuHoi,
+          requestId,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("ĐỐI CHỨNG — đường hợp lệ KHÔNG gãy: tuyên bố EXECUTED không đụng cặp nên trigger không fire", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    // Phiên của người điều phối đóng lại — đúng cảnh mà khoản 159 cảnh báo là sẽ gãy nếu bỏ hẳn mệnh đề `WHEN`.
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sYc]);
+    const kq = await db.pool.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [requestId],
+    );
+    expect(kq.rowCount, "lần ghi KHÔNG đổi cặp vẫn đi qua, dù phiên điều phối đã thu hồi").toBe(1);
+    await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sYc]);
+  });
+});
+
+// ===============================================================================================
 // [khoản nợ 32] D5 CHO CẢ BỐN VẾ, KHÔNG CHỈ VẾ MỘT
 //
 // `requirePermission` ghi sổ cho vế 1 từ S0. Ba vế còn lại ném và KHÔNG ghi gì — nên một người

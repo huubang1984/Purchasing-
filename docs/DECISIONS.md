@@ -1458,6 +1458,23 @@ tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.7
 
 ---
 
+**[S1.96 / khoản 130 + 159] MỞ RỘNG: "DẪN XUẤT" PHẢI ĐÚNG Ở **MỌI** LẦN GHI, KHÔNG CHỈ LẦN ĐẦU — VÀ ĐÓ LÀ ĐIỀU KIỆN ĐỂ MỘT LẦN MỞ THẦU CHẾT ĐIỀU PHỐI LẠI ĐƯỢC.**
+
+ADR này nói danh tính đã xác thực là DẪN XUẤT của một phiên, không phải một tham số người gọi khai. Lớp cưỡng chế cho `unseal_requests` là trigger `unseal_requests_kiem_nguoi_dieu_phoi` (022), nhưng mệnh đề `WHEN` của nó chỉ canh lần ghi ĐẦU (`OLD.dispatched_by IS NULL`). Trên một lần ghi ĐÈ, `kiem_danh_tinh_theo_phien` không chạy, và `dispatched_by_session_id` — cột không có khoá ngoại — nhận được một uuid bất kỳ, kể cả phiên đã thu hồi hay không tồn tại. Khoản 159 đo được điều đó ở S1.81 và ghi rằng lối tới nó **chưa tồn tại**, vì đường mã duy nhất ghi ba cột ấy mang `AND dispatched_at IS NULL`.
+
+**Vòng S1.96 mở đúng lối ấy, có chủ ý, và vì thế lớp phải đi trước.** Khoản 130 đòi một job mở thầu đã chết phải điều phối lại được mà không cần người của dự án can thiệp tay (`docs/PRODUCT.md` §11). Đường phục hồi **buộc phải** ghi đè cặp người-phiên: worker hỏi lại vế 2 của D1 lúc giải mã bằng `assertFreshMfa` trên `dispatched_by_session_id` với hạn một giờ, nên một job xếp lại mà vẫn mang phiên CŨ sẽ bị từ chối `MFA_FRESH` vĩnh viễn.
+
+**Quyết định.** Migration `054` đổi mệnh đề `WHEN` thành *fire khi cặp ĐỔI* (`IS DISTINCT FROM` trên cả hai cột). Hai phương án bị loại, và lý do ghi ra để không ai phải cân lại:
+
+- **Cấm hẳn ghi đè** (đề xuất nguyên thuỷ của khoản 159, bằng cách thêm hai cột vào danh sách bất biến của `unseal_kiem_chuyen_trang_thai`): nó đóng luôn cửa của khoản 130. *Kiểm* mọi lần ghi mạnh hơn *cấm* ghi — nó cho đường hợp lệ đi qua và vẫn bắt mọi lời khai.
+- **Bỏ hẳn mệnh đề `WHEN`**: trigger khi ấy fire ở mọi update, kể cả lần `app_unseal` tuyên bố `EXECUTED` — lúc đó phiên của người điều phối có thể đã đóng, và đường hợp lệ gãy. Chính khoản 159 ghi sẵn cảnh báo này; một test đối chứng ghim đúng ca ấy.
+
+**Điều ADR này KHÔNG nới.** `dispatched_at` vẫn ghi được đúng một lần — `unseal_dieu_phoi_mot_lan` (022) không bị chạm. Hàng vì thế mang mốc của lần điều phối ĐẦU và cặp người-phiên của lần thử ĐANG CHẠY; hai nghĩa ấy được nối lại bằng một hàng sổ `UNSEAL_REDISPATCHED` mang cả cặp cũ lẫn cặp mới. Và không có bộ đếm lần bấm lại: mỗi lần đều đi trọn cổng bốn vế, đều để lại một hàng sổ, và chỉ một job sống tồn tại mỗi lúc.
+
+**Đo bằng gì.** `packages/unseal/src/unseal.int.test.ts`: ghi đè bằng phiên không tồn tại và bằng phiên đã thu hồi đều bị `check_violation` chặn; đối chứng `EXECUTED` vẫn đi qua khi phiên điều phối đã thu hồi. Đột biến lùi trọn lớp — migration cộng cả ba chỗ ghim trong `hardening.always.sql` — giết đúng hai test ấy.
+
+---
+
 ## ADR-017 — Chính sách tính `requires_dual_approval`: **ngưỡng theo tổ chức, CÓ PHIÊN BẢN, và kết luận phải TÁI LẬP ĐƯỢC**
 
 **Ngày:** 2026-08-30 · **Trạng thái:** **Đã chấp nhận** · Sinh ra từ: **M-6** của lượt review S1.2 (`fcd5986`) · Gỡ chặn: **D2** · Liên quan: **C3**, **A4**

@@ -4278,12 +4278,14 @@ $ham$;
                                  AND NOT t.tgisinternal
                                  AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
                                  AND t.tgenabled = 'A'
-                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND (old.dispatched_by IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$) THEN
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND ((new.dispatched_by IS DISTINCT FROM old.dispatched_by) OR (new.dispatched_by_session_id IS DISTINCT FROM old.dispatched_by_session_id)))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$) THEN
              DROP TRIGGER IF EXISTS unseal_requests_kiem_nguoi_dieu_phoi ON public.unseal_requests;
              CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi
                BEFORE UPDATE ON public.unseal_requests
                FOR EACH ROW
-               WHEN (NEW.dispatched_by IS NOT NULL AND OLD.dispatched_by IS NULL)
+               WHEN (NEW.dispatched_by IS NOT NULL
+                     AND (NEW.dispatched_by IS DISTINCT FROM OLD.dispatched_by
+                          OR NEW.dispatched_by_session_id IS DISTINCT FROM OLD.dispatched_by_session_id))
                EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id');
              ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nguoi_dieu_phoi;
            END IF;
@@ -4456,7 +4458,7 @@ $ham$;
                                AND NOT t.tgisinternal
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
-                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND (old.dispatched_by IS NULL))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$))
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nguoi_dieu_phoi BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.dispatched_by IS NOT NULL) AND ((new.dispatched_by IS DISTINCT FROM old.dispatched_by) OR (new.dispatched_by_session_id IS DISTINCT FROM old.dispatched_by_session_id)))) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('dispatched_by', 'dispatched_by_session_id')$def$))
             AND (to_regclass('public.unseal_requests') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.unseal_requests')

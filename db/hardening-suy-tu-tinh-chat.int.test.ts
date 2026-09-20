@@ -1456,7 +1456,15 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   return { orgId: org };
 }
 
-describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ danh sách tên", () => {
+// [S1.96] HẠN Ở MỨC SUITE, vì cái khe hở này là KHE HỞ KIỂU QUÊN KHAI.
+// 31 test của suite này khai `}, 180000);` vì chúng chạy hardening trên một cụm thật; đúng MỘT
+// test không khai, nên nó rơi về hạn mặc định 30 s — và ở lượt evidence S1.96 nó hết hạn.
+// Đo: chạy RIÊNG **2 716 ms**, dưới hạn mặc định mười một lần; dưới tải song song của evidence thì
+// quá 30 000 ms. Giãn 5–10 lần dưới tải là con số đã ghi ở S1.73 — tải máy, không phải hồi quy.
+// Đặt hạn ở suite thay vì vá đúng một test: hạn khai riêng cho từng test VẪN THẮNG (vitest gộp
+// `Object.assign({}, suiteOptions, options)`), nên 31 dòng kia không đổi nghĩa, còn test thứ 32 và
+// mọi test thêm sau này không rơi về 30 s vì một lần quên nữa.
+describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ danh sách tên", { timeout: 180_000 }, () => {
   let db: TestDatabase;
 
   beforeAll(async () => {
