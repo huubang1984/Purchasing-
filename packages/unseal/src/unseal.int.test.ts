@@ -41,9 +41,15 @@ let auditPool: pg.Pool;
 let orgA: string;
 /** Pool của vai `app_unseal` — đường của unseal-worker, và vai chạy câu `EXECUTED`. */
 let unsealPool: pg.Pool;
-/** uYc yêu cầu (PROCUREMENT_MANAGER), uD1/uD2 duyệt (DIRECTOR), uKhong không có quyền nào. */
-let uYc: string, uD1: string, uD2: string, uKhong: string;
-let sYc: string, sD1: string, sD2: string, sKhong: string, sYcB: string;
+/**
+ * uYc yêu cầu (PROCUREMENT_MANAGER), uD1/uD2 duyệt (DIRECTOR), uKhong không có quyền nào.
+ *
+ * `uYc2` là một PROCUREMENT_MANAGER THỨ HAI, và nó có mặt vì một lý do đo được: ca điều phối
+ * lại dùng `sYcB` — phiên khác của CÙNG người — nên nó không phân biệt được trường NGƯỜI của
+ * cặp cũ. Đột biến ghi `previousDispatchedBy` thành người MỚI SỐNG qua ca ấy (đo ở S1.103).
+ */
+let uYc: string, uYc2: string, uD1: string, uD2: string, uKhong: string;
+let sYc: string, sD1: string, sD2: string, sKhong: string, sYcB: string, sYc2: string;
 let csA: string;
 
 async function taoNguoi(email: string, vaiTro: string): Promise<string> {
@@ -159,12 +165,14 @@ beforeAll(async () => {
   orgA = orgs.rows[0]?.id ?? "";
 
   uYc = await taoNguoi("yc@vidu.vn", "PROCUREMENT_MANAGER");
+  uYc2 = await taoNguoi("yc2@vidu.vn", "PROCUREMENT_MANAGER");
   uD1 = await taoNguoi("d1@vidu.vn", "DIRECTOR");
   uD2 = await taoNguoi("d2@vidu.vn", "DIRECTOR");
   uKhong = await taoNguoi("khong@vidu.vn", "TECHNICAL");
 
   sYc = await taoPhien(uYc);
   sYcB = await taoPhien(uYc);
+  sYc2 = await taoPhien(uYc2);
   sD1 = await taoPhien(uD1);
   sD2 = await taoPhien(uD2);
   sKhong = await taoPhien(uKhong);
@@ -175,8 +183,9 @@ beforeAll(async () => {
     [orgA, uYc, sYc],
   );
   csA = cs.rows[0]?.id ?? "";
-  expect([orgA, uYc, uD1, uD2, uKhong, sYc, sD1, sD2, sKhong, sYcB, csA].filter((x) => x === ""))
-    .toEqual([]);
+  expect(
+    [orgA, uYc, uYc2, uD1, uD2, uKhong, sYc, sD1, sD2, sKhong, sYcB, sYc2, csA].filter((x) => x === ""),
+  ).toEqual([]);
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
@@ -673,8 +682,8 @@ async function dotHetLuot(requestId: string): Promise<void> {
 }
 
 describe("[khoản 130] điều phối lại sau khi job chết", () => {
-  it("job FAILED ⇒ xếp job MỚI, đổi cặp người-phiên sang người vừa qua cổng, GIỮ NGUYÊN dispatched_at, và để lại hàng sổ", async () => {
-    const { requestId } = await yeuCauDaDuyet();
+  it("job FAILED ⇒ xếp job MỚI, đổi cặp người-phiên sang người vừa qua cổng, GIỮ NGUYÊN dispatched_at, và để lại hàng sổ MANG CẢ HAI CẶP", async () => {
+    const { rfqId, requestId } = await yeuCauDaDuyet();
     await withTenant(apiPool, orgA, (c) =>
       dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
     );
@@ -706,6 +715,77 @@ describe("[khoản 130] điều phối lại sau khi job chết", () => {
       [requestId],
     );
     expect(so[0]?.n, "D5: lần điều phối lại để lại đúng một hàng sổ").toBe("1");
+
+    // [S1.103 / khoản 208] ĐẾM HÀNG KHÔNG ĐO ĐƯỢC NỘI DUNG. Sau câu `UPDATE` ở trên,
+    // `dispatched_at` còn giữ mốc của lần điều phối ĐẦU nhưng `dispatched_by_session_id`
+    // đã là của người bấm lại — nên `sYc` không còn đứng ở một CỘT nào, và `audit_events`
+    // thì không có cột phiên. Hàng sổ này là nơi duy nhất nó còn sống. Phép đo trước khi
+    // vá: gỡ trọn payload thì cả 58 ca của tệp này VẪN XANH.
+    const { rows: noiDung } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE action = 'UNSEAL_REDISPATCHED' AND resource_id = $1",
+      [requestId],
+    );
+    expect(
+      noiDung[0]?.payload,
+      "hàng sổ nối MỐC của lần đầu với CẶP của lần đang chạy — `toEqual` để một trường bị bỏ quên cũng đỏ",
+    ).toEqual({
+      rfqId,
+      clauses: [...bangChung.clauses],
+      breakGlass: bangChung.breakGlass,
+      previousDispatchedBy: uYc,
+      previousDispatchedBySessionId: sYc,
+      dispatchedBy: uYc,
+      dispatchedBySessionId: sYcB,
+    });
+  });
+
+  // [S1.103 / khoản 208] CA NGAY TRÊN KHÔNG ĐO ĐƯỢC NỬA KIA CỦA CẶP. Nó bấm lại bằng `sYcB`,
+  // một phiên KHÁC của CÙNG người, nên `previousDispatchedBy` mang đúng giá trị mà
+  // `dispatchedBy` cũng mang — một đột biến ghi nhầm cặp cũ thành cặp mới ở trường NGƯỜI
+  // SỐNG sót qua nó (đo thật, S1.103). Ca này đóng nửa ấy bằng một người bấm lại KHÁC hẳn,
+  // và nó là hình dạng THẬT của đường phục hồi: người bấm lại thường không phải người bấm
+  // lần đầu, vì lần đầu đã thất bại.
+  it("[khoản 208] người bấm lại là người KHÁC ⇒ hàng sổ giữ cả NGƯỜI lẫn PHIÊN của lần điều phối ĐẦU", async () => {
+    const { rfqId, requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    const truoc = await docHangDieuPhoi(requestId);
+    expect([truoc.dispatched_by, truoc.dispatched_by_session_id], "tiền đề: lần đầu là uYc/sYc").toEqual([
+      uYc,
+      sYc,
+    ]);
+    await dotHetLuot(requestId);
+
+    const bangChung = await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc2 }, auditPool),
+    );
+    expect(bangChung.userId, "tiền đề: người bấm lại đi TRỌN cổng bốn vế bằng danh tính của chính họ").toBe(
+      uYc2,
+    );
+
+    const sau = await docHangDieuPhoi(requestId);
+    expect(
+      [sau.dispatched_by, sau.dispatched_by_session_id],
+      "hai cột chỉ còn người của lần ĐANG CHẠY — cặp của lần đầu rời khỏi bảng từ đây",
+    ).toEqual([uYc2, sYc2]);
+    expect(sau.dispatched_at, "còn mốc thì vẫn của lần ĐẦU — đúng thứ làm hàng thành phát biểu ghép").toEqual(
+      truoc.dispatched_at,
+    );
+
+    const { rows: noiDung } = await db.pool.query<{ payload: Record<string, unknown> }>(
+      "SELECT payload FROM audit_events WHERE action = 'UNSEAL_REDISPATCHED' AND resource_id = $1",
+      [requestId],
+    );
+    expect(noiDung[0]?.payload, "cặp CŨ — cả người lẫn phiên — chỉ còn sống ở hàng sổ này").toEqual({
+      rfqId,
+      clauses: [...bangChung.clauses],
+      breakGlass: bangChung.breakGlass,
+      previousDispatchedBy: uYc,
+      previousDispatchedBySessionId: sYc,
+      dispatchedBy: uYc2,
+      dispatchedBySessionId: sYc2,
+    });
   });
 
   it("còn một lượt ĐANG SỐNG thì từ chối — đây không phải đường bấm hai lần cho nhanh", async () => {
