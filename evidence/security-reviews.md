@@ -10130,3 +10130,134 @@ Cùng chỗ ấy, `evaluatedAt` bỏ `to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.USOF
   không đổi, rổ B **61 → 62**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 62 + 21 = 89.
 - **53** ADR không đổi, **57** migration không đổi, **14** gói không đổi, **56/56** bất biến không
   đổi. `evidence/INV-matrix.md` ****không đổi một byte****.
+# §S1.107 — LƯỢT SOI NGANG 77: HAI CỔNG XANH VÌ PHẠM VI, MỘT TRẠNG THÁI HÚT, VÀ MỘT TÍNH NĂNG CÓ ĐỦ TEST MÀ KHÔNG CHẠY ĐƯỢC
+
+## 1. Mốc, và cả hai vế được ĐO chứ không đoán
+
+Kiểm ở **đầu vòng**, theo đúng câu mà §11 tự đặt ra sau lần lỡ nhịp S1.77:
+
+- vế **lịch**: mốc là *chậm nhất S1.107*, và vòng này là S1.107 ⇒ **CHẠM**;
+- vế **hardening**: `git rev-list --count 81dae1b..dc2b560 --first-parent -- db/migrations/hardening.always.sql` = **2**, chưa tới ba.
+
+Hai vế nối bằng **hay**, nên một vế đủ. Ghi ra vì lượt 73 đã có tiền lệ một lời khai *"cả hai vế
+đều nghiêng về chạy"* bị chính phép đo bác.
+
+**Cửa sổ: TÁM vòng S1.99–S1.106** (`81dae1b..dc2b560`, PR #99–#106; 22 commit, 55 tệp,
++6467/−151). S1.99 nằm TRONG cửa sổ, và đó là một lựa chọn có lý do: lượt **76** chạy *ở* S1.99 và
+soi S1.93–S1.98, nên ba bản vá CAO của chính S1.99 chưa ai soi.
+
+## 2. Góc MỚI của lượt này, và nó sinh ra cả hai CAO
+
+Lượt 75 thêm góc *rổ B xếp nhầm*. Lượt 77 thêm góc **cổng XANH vì phạm vi của nó**, và góc ấy đến
+từ hai khoản mà S1.106 vừa ghi (223, 224). Hình dạng: vị từ của cổng đúng, nhưng tập nó ĐỌC bị thu
+lại bởi một điều kiện mà không ai viết ra như một điều kiện — *"gói này đã có ai import chưa"*,
+*"kịch bản này có đi tới bước đó chưa"*, *"tổ chức trong fixture được tạo bằng gì"*.
+
+Nó ngược hẳn hình dạng của S1.105: ở đó cổng **ĐỎ** và em đọc sai tập con. Ở đây **không có tín
+hiệu nào cả** — bốn cổng xanh trọn suốt nhiều vòng.
+
+## 3. CAO ① — `EVALUATING` không có một cạnh ra nào, và S1.106 vừa mở cửa VÀO nó
+
+Bảng cạnh được cưỡng chế (`011`, ghim lại trong `hardening.always.sql`) để `EVALUATING` đứng **chỉ
+như đích đến**: `UNSEALED->EVALUATING`, hết. Không `->CANCELLED`, không `->AWARDED`, không đường
+về. `BAFO_CLOSED` mà `057`, `doc-bang-xep-hang.ts` và spec §4.3 đều viện dẫn làm đường chấm lại
+**không phải một giá trị nào** trong tập đóng của `009`.
+
+Vô hại suốt từ `009` — vì **không route nào đi qua cạnh vào**. S1.106 mở đúng cửa ấy ra HTTP và
+đặt một nút *"Chấm thầu"* lên nó, và khoản **220** đã đo rằng **năm trên sáu** vai giữ
+`evaluation.perform`. Từ vòng ấy, một cú bấm của vai thấp nhất làm một gói thầu thật không huỷ
+được, không chấm lại được, không trao được.
+
+Chủ dự án chọn **thêm cạnh `EVALUATING->CANCELLED`** (không mở đường chấm lại — chấm lại là việc
+của BAFO ở S2.5). `058` làm đúng thế, và bản vá đi qua **HAI lớp** vì `cancelRfq` có danh sách
+trắng RIÊNG (`status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN')`) — mở lớp CSDL mà quên lớp ứng dụng
+thì cạnh tồn tại mà không ai đi qua được.
+
+**Và nó là BỐN chỗ, không hai.** Bảng cạnh sống ở `058`, bản ghim + hai trường điều kiện ở
+`hardening.always.sql`, bảng `HAM_*` cộng ba danh sách migration ở `db/migrations.int.test.ts`, và
+— chỗ suýt sót — **`RFQ_TRANSITIONS` ở `packages/rfq/src/rfq.ts` cùng con trỏ tệp trong
+`transitions.test.ts`**, vốn còn trỏ `011`. Chính tệp ấy mở đầu bằng một khối chú thích nói rằng
+đọc một bản ĐÃ CHẾT thì *"test vẫn xanh nhưng nó không còn canh thứ đang chạy"*; vòng này là lần
+thứ HAI bảng cạnh dời tệp.
+
+## 4. CAO ② — một tính năng có đủ test và không chạy được ngoài cụm test
+
+`taoLuotDanhGia` từ chối khi chính sách đang hiệu lực không khai `eval_components`. `056` cấp
+`GRANT INSERT (eval_components, bafo_top_n) TO app_api` từ S1.102; `057` cưỡng chế hình dạng bên
+trong từ S1.105. Nhưng **không một dòng mã sản xuất nào ghi hai cột ấy**:
+`packages/rfq/src/procurement-policy.ts` có **0** lần nhắc tới chúng, và `POST /policy` đọc đúng ba
+trường. Mọi chỗ còn lại nhắc tới `eval_components` đều là `db/*.int.test.ts` ghi **SQL thẳng dưới
+superuser**.
+
+Tức `POST /rfqs/:rfqId/evaluate` — giao cho người mua ở S1.106, kèm một cái nút — **luôn trả 422
+`CHINH_SACH_CHUA_KHAI_TRONG_SO` cho mọi tổ chức tạo qua sản phẩm**. Mọi cổng xanh, vì fixture của
+chúng là thứ không người dùng nào tái lập được.
+
+Chủ dự án chọn **mở đường ghi ngay trong vòng này**. Tầng ứng dụng CỐ Ý mỏng: nó kiểm hình dạng
+NGOÀI (mảng không rỗng, ba khoá chuỗi, `bafoTopN` nguyên không âm) và giao phần còn lại cho `CHECK`
+của `057` — `don_vi` thuộc {TIEN, DIEM}, ít nhất một `TIEN`, khuôn của `he_so`. Ba lớp, mỗi lớp một
+việc, không lớp nào chép lại luật của lớp kia. Khoá của `ThanhPhanTrongSoVao` viết theo lối CSDL
+(`don_vi`, `he_so`) chứ không camelCase: một cách viết thứ hai ở cửa API sẽ là cách viết **thứ ba**
+cho cùng một hợp đồng.
+
+**Và nó mở khoá cho khoản 224.** Bước **12b** mới của kịch bản HTTP nay chấm thầu THẬT qua HTTP,
+trên chính sách người mua tạo qua HTTP — phép đo đầu tiên đi trọn đường chấm thầu mà không có một
+câu SQL viết tay nào.
+
+## 5. Ba TRUNG BÌNH
+
+| # | phát hiện | bản vá |
+|---|---|---|
+| ② | `resourceType: "RFQ_EVALUATION"` đi kèm `resourceId: <rfqId>` ở **ba** chỗ. Cặp ấy đi NGUYÊN VĂN vào hàng sổ `PERMISSION_DENIED`, nên ai nối `resource_id` sang `rfq_evaluations` được **0 hàng** cho một sự kiện CÓ THẬT. Mọi anh em trong kho khớp cặp, và hàng sổ THÀNH CÔNG ngay dưới đó đã khớp đúng | `RFQ` + rfqId ở cả ba, cộng một khẳng định đọc **cả hai** trường của hàng sổ mới nhất |
+| ③ | `apps/web/trang/*.js` có **một** luật eslint (`no-undef`). Không lớp nào cấm `innerHTML`. Hôm nay **0 sink** — đo được — nhưng ba CAO của lượt **76** đều ở đúng thư mục ấy và được vá **ĐIỂM** | `no-restricted-properties` cấm `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`; **mười** chỗ `innerHTML = ""` đổi sang `replaceChildren()` nên luật KHÔNG có ngoại lệ nào; cộng hai probe — một tệp vi phạm THẬT làm eslint đỏ, một tệp sạch thì xanh |
+| ④ | `SO_DML_TOI_THIEU = 100` là người canh **duy nhất** cho tính đầy đủ của bộ đọc `[INV-H21]`, trong khi thực tế là **173** câu DML từ 115 tệp ⇒ dung sai **42%** | một sàn **SUY RA**: mỗi tệp có `.query(` phải đóng góp ít nhất một câu, với **một** dòng miễn trừ có lý do (`auth.ts` chỉ có `SAVEPOINT`/`ROLLBACK TO`, thứ PostgreSQL không `PREPARE` được), và dòng miễn trừ ấy cũng bị canh |
+
+## 6. Sáu phép đo ÂM — ghi ra để vòng sau không làm lại
+
+- **Không gói nào khác còn phụ thuộc lúc chạy chưa khai.** Quét 23 gói/app/tool, 115 tệp, 91 import: chỉ `packages/test-support` (`@trustprocure/audit`, `@trustprocure/db` ở `devDependencies`) — và nó là gói TỰ KHAI chỉ-dùng-cho-test, tức miễn trừ ĐÚNG.
+- **Bảng xếp hạng không nhân đôi hàng.** `rfq_unsealed_bids` có `UNIQUE (org_id, bid_version_id)` (`019`), nên phép nối bảy bảng của `docBangXepHang` không sinh bản sao.
+- **0 sink HTML trong toàn bộ `apps/web`** — `innerHTML` khác rỗng, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval`, `new Function`: không một chỗ nào.
+- **`g16-danh-gia` có đủ BA probe** ở `boundaries.test.ts` — gói mới của S1.104 khai đúng bốn chỗ.
+- **Lời khai đếm của `[INV-H20]` khớp thực tế**: 14 gói + 6 công cụ, 57 migration (nay 58), 53 ADR (nay 54).
+- **Chấm thầu KHÔNG đóng mất màn so sánh.** Giả thuyết ban đầu của góc ① là `EVALUATING` làm `buildComparisonTable` từ chối; `COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING"]`, và chú thích ngay trên nó nói đúng lý do. Phép đo **bác** giả thuyết.
+
+## 7. Ranh giới nói ra
+
+- **`CLOSED` và `UNSEALED` VẪN là trạng thái hút** — khoản **225**, rổ B. Vòng soi mở ĐÚNG cạnh nó đo được; hai cạnh còn lại là một câu hỏi nghiệp vụ mua sắm, không phải một bản vá.
+- **`ProcurementPolicyRecord` không mang `evalComponents` ra ngoài.** Đường GHI mở, đường ĐỌC LẠI thì chưa: người mua đặt được trọng số nhưng chưa xem lại được qua API. Cố ý — thêm trường vào một bản ghi đọc là chạm mọi `toEqual` đang canh nó, và vòng này đã đủ rộng.
+- **Bước 12b làm kịch bản HTTP đi tới `EVALUATING`**, nên phép quét rò rỉ lần hai và bước 14 nay chạy trong một thế giới CÓ lượt chấm. Đó là điểm; nó cũng nghĩa là mọi khẳng định *"rfqStatus là UNSEALED"* sau bước 12 sẽ đỏ nếu ai dời bước 12b lên trên.
+- **Lượt 77 KHÔNG chạy fan-out nhiều tác tử** như lượt 73 hay 76 — sáu góc chạy tuần tự, và mọi phát hiện được tự đo lại bằng tay trước khi vá, theo bài học lượt 75 (thẩm tra đối kháng bác quá ít, 3/57).
+
+## 7b. BẢY chỗ cho MỘT cạnh — và một lượt `test:int` cháy vì em đếm thiếu
+
+Thêm `EVALUATING->CANCELLED` là **bảy** lời khai, không bốn như em ước lượng lúc bắt đầu:
+
+| # | nơi |
+|---|---|
+| ⑴ | `db/migrations/058_...sql` — bảng cạnh SỐNG |
+| ⑵ | `hardening.always.sql`, khối `CREATE OR REPLACE` — bản **SỬA** |
+| ⑶ | `hardening.always.sql`, chuỗi `$than$…$than$` — bản **PHÁN XÉT**, đã CHUẨN HOÁ khoảng trắng |
+| ⑷ | `hardening.always.sql` — tên mục ghim `(011)` → `(058)` và ô điều kiện `schema_migrations` |
+| ⑸ | `db/migrations.int.test.ts` — bảng `HAM_*` cộng BA danh sách liệt kê từng migration |
+| ⑹ | `packages/rfq/src/rfq.ts` `RFQ_TRANSITIONS` + con trỏ tệp trong `transitions.test.ts` |
+| ⑺ | `cancelRfq` — danh sách trắng RIÊNG ở tầng ứng dụng |
+
+Em sửa ⑴⑵⑷⑸⑹⑺ và **quên ⑶**. Kết quả đo được: `migrate()` chết ở chế độ *phán xét*, **51 tệp int
+đỏ, 106 ca hỏng, 958 ca bỏ qua**, 620 giây. Lượt trước đó còn lệch nhỏ hơn: `058` ghi *"khoản 225"*
+còn bản ghim ghi *"khoản 226"* — hai bản sao lệch **một con số trong một chú thích** là đủ để cổng
+từ chối, và đó đúng là điều lớp ấy sinh ra để làm.
+
+Bản chuẩn hoá được dựng LẠI bằng cách **suy từ thân mới** (`" ".join(body.split())`) sau khi chứng
+minh công thức ấy tái tạo ĐÚNG bản cũ từ `011` — không chép tay. Và một chi tiết đáng nhớ hơn cả
+con số: thông báo nền của lượt chạy in *"exit code 0"* trong khi log ghi `VITEST_THOAT_MA=1`. Dòng
+tự ghi sau một lần chuyển hướng KHÔNG qua ống là dòng chịu lực; mã thoát của lớp bọc thì không.
+
+## 8. Số đo
+
+- `pnpm t0` ****0 vi phạm** — 294 module, 1202 phụ thuộc**.
+- `pnpm test` ****72 tệp / 1056 ca** (1 bỏ qua) — lượt đầu ĐỎ 1 ca: lời khai `**<n> ADR**` ở `docs/STATE.md` chưa đổi theo ADR-054, và `[INV-H20]` P5 bắt**.
+- `pnpm test:int` ****54 tệp / 1135 ca**, `VITEST_THOAT_MA=0`, 934 giây — lượt ĐẦU ĐỎ **51 tệp / 106 ca**; xem mục 7b**.
+- `pnpm evidence` ****`vitest thoát mã 0`, báo cáo 2192 khẳng định** — lượt DUY NHẤT unit + int chung một pool; **56/56** bất biến được kiểm chứng**.
+- Phép đo mới: `rfq.int.test.ts` **+3 ca** (cạnh mới, cạnh KHÔNG mở, ranh giới hai lớp); `phuc-vu.test.ts` **+2 probe** eslint; `kich-ban-41-http.int.test.ts` **+1 bước** (12b) và bước 14 đổi lời khai; `luot-danh-gia.int.test.ts` **+1 khẳng định** cặp (loại, id); `qt3-cu-phap.int.test.ts` **+3 khẳng định** sàn theo tệp.
+- Sổ nợ **224 → 225** khoản, mở **89 → 89** — khoản 225 mở, khoản **224 ĐÓNG**. Rổ A **6**, rổ B **62**, rổ C **21**; ba rổ cộng đúng: 6 + 62 + 21 = 89.
+- **53 → 54** ADR (ADR-054), **57 → 58** migration, **14** gói không đổi, **56/56** bất biến không đổi. `evidence/INV-matrix.md` ****đổi ĐÚNG MỘT dòng** — mô tả của **A4**, theo ADR-054. Không bất biến nào đổi trạng thái**.
