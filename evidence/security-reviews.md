@@ -9362,7 +9362,7 @@ S2 nào.
 | ⑤ | TRUNG | Spec chưa nói báo giá KHÔNG đọc được giá xếp hạng thế nào — mà kho **bảo đảm** ca ấy xảy ra | `020_comparison.sql` mục (3) · `comparison.ts:96` |
 | ⑥ | TRUNG | Lệch tiền tệ đã có lớp ở tầng hiển thị; spec bỏ nó ở tầng dữ liệu, còn J5/J7/award đều giả định có một người thắng | `comparison.ts` `currencyMismatch` |
 | ⑦ | THẤP | §4.3 khai *"bốn cạnh mới"*, khối mã ngay dưới liệt kê **NĂM** | spec §4.3 |
-| ⑧ | THẤP | Chưa có mã quyền nào cho S2 — hôm nay đúng TÁM mã `rfq.*` | `packages/identity/src` |
+| ⑧ | ~~THẤP~~ **SAI** | ~~Chưa có mã quyền nào cho S2 — hôm nay đúng TÁM mã `rfq.*`~~ **[S1.102] Ba mã ĐÃ CÓ từ `005`**; và thứ nằm dưới lời khai sai ấy là một phát hiện NẶNG hơn — xem §S1.102 mục 2 | `packages/identity/src/permissions.ts` |
 
 **Hai trong ba CAO là mâu thuẫn NỘI TẠI của spec**, không phải lệch giữa spec và mã: ② là hai mục của cùng tài
 liệu nói hai điều loại trừ nhau, ③ là một hệ quả của §4.3 mà §4.2 không mang. Đó là thứ một lượt soi hình dạng
@@ -9516,3 +9516,106 @@ minh rằng không còn cuộc đua nào khác trong 51 tệp int.
 - **49 → 50** ADR (ADR-050), **55** migration không đổi, **56/56** bất biến không đổi.
 - Spec: **259 → 288 dòng**, và trạng thái đổi từ *"bản thảo để chủ dự án đọc và bác"* sang *"đã qua lượt soi
   hình dạng"*.
+
+# §S1.102 — S2.1 CÀI XONG, VÀ MỘT LỜI KHAI SAI CỦA VÒNG TRƯỚC CHE MỘT PHÁT HIỆN NẶNG HƠN HẲN: **J3 CHƯA CÓ LỚP NÀO CANH**
+
+## 1. Vòng này là gì
+
+Chủ dự án chọn **S2.0 + S2.1**. Việc đầu tiên là đọc ma trận quyền — vì S2.0 theo ADR-050 ⑸ là *"thêm mã quyền"*
+— và chính lượt đọc ấy bác bỏ tiền đề của hạng mục.
+
+## 2. Lời khai sai, và thứ nằm DƯỚI nó
+
+**Lời khai sai.** ADR-050 ⑸, spec §2.3⑼ và biên bản §S1.101 ⑧ đều khai *"chưa có mã quyền nào cho S2 — hôm nay
+đúng tám mã `rfq.*`"*. Ba mã S2 cần **đã có từ `005_identity.sql`**, chỉ không mang tiền tố ấy:
+`evaluation.perform`, `award.recommend`, `po.approve`. Lượt soi grep `"rfq\.[a-z.]+"`, thấy tám, rồi đọc phần
+rỗng còn lại thành *không tồn tại*.
+
+**Đó là lần thứ BA của cùng một lối sai trong ba vòng liên tiếp**, và cả ba lần đều cùng một hình dạng: một
+lượt tìm HẸP cho ra tập rỗng, và tập rỗng ấy được đọc thành *"không có"*.
+
+| vòng | lượt tìm | kết luận sai | sự thật |
+|---|---|---|---|
+| S1.100 | grep `tests/architecture` cho cổng trigger | *"không cổng nào đọc quan hệ hardening ↔ migration"* | cổng ở `db/migrations.int.test.ts`, một test INT |
+| S1.101 | grep ba tệp khai của `INV-D3` | *"cả ba đo MA TRẬN QUYỀN"* | `rbac.int.test.ts` có hẳn khối phân tách nhiệm vụ mức người dùng |
+| S1.102 | grep `"rfq\.…"` cho mã quyền | *"chưa có mã nào cho S2"* | ba mã có từ `005`, không mang tiền tố ấy |
+
+Cả ba lần, phép đo hay cổng của kho là thứ bác lại. Bài học không phải *"grep kỹ hơn"* — mà là: **một tập rỗng
+là bằng chứng về LƯỢT TÌM, không phải về KHO.** Muốn kết luận *"không tồn tại"* thì phải tìm theo một trục khác
+với trục đã dùng: theo Ý NGHĨA (mã quyền cho việc gì), không theo HÌNH DẠNG TÊN.
+
+**Và thứ nằm dưới lời khai sai ấy nặng hơn hẳn.** `SEPARATION_OF_DUTIES_CHAIN` — phát biểu máy-đọc-được của
+D3, khớp nguyên văn ở BA nơi — là:
+
+```
+rfq.create → rfq.invite → rfq.unseal → award.recommend → po.approve
+```
+
+Ba lớp ấy chặn một người ôm **TRỌN NĂM**. Nhưng `PROCUREMENT_MANAGER` giữ **BỐN**: `rfq.create`, `rfq.invite`,
+`rfq.unseal`, `award.recommend` — thiếu đúng `po.approve`. Mà **J3** của spec S2 đòi bộ ba *tạo RFQ · điều phối
+mở thầu · đề xuất award* không cùng một người, và **cả ba đều nằm trong tay một PM hôm nay**.
+
+Nên **J3 không được chuỗi D3 hiện có cưỡng chế.** Lượt soi S1.101 hỏi *"năm người của bối cảnh demo có đủ
+không"* — đủ — mà không hỏi *"lớp nào đang canh"*. Câu sau mới là câu của một lượt soi.
+
+## 3. Quyết định: J3 canh theo HÀNH VI, không theo QUYỀN — ADR-051
+
+Chủ dự án chọn **trigger trên hàng award, đọc dữ liệu thật của chính RFQ ấy**: so người đề xuất với
+`rfq_packages.created_by` và `unseal_requests.dispatched_by` của cùng gói thầu.
+
+Điều đáng ghi là **vì sao trục ấy là trục đúng**. D3 đã có lớp ở hai trục — *quyền của một VAI* (trigger mức vai
+trò) và *hợp quyền của một NGƯỜI* (trigger mức người dùng). Trục thứ ba — *ai đã LÀM gì trên một gói thầu cụ
+thể* — không lớp nào chạm tới. Thêm một mắt xích vào chuỗi cũng không đóng được nó, vì chuỗi nói về QUYỀN còn
+J3 nói về HÀNH VI. Phương án bỏ `award.recommend` khỏi PROCUREMENT_MANAGER được cân nhắc và không chọn: nó đổi
+một mốc ghim của S0 và cấm rộng hơn thứ D3 phát biểu.
+
+**Và ADR-051 ghi ra một điều kiện thật:** trigger ấy đọc `dispatched_by`, mà sau một lần điều phối lại cột ấy
+mang người của lần thử ĐANG CHẠY (054) — nên người điều phối lần ĐẦU không còn trong cột nào, và J3 sẽ không
+thấy họ. Đó chính là khoản **208**. Nó thôi là một khoản rổ B "hàng nói sai" và trở thành **điều kiện của
+J3**.
+
+## 4. S2.1 — `056`, và phép đo ĐỎ trước
+
+`org_procurement_policies` nhận `eval_components jsonb` + `bafo_top_n integer`, ba ràng buộc `CHECK`, và một
+`GRANT INSERT` cộng dồn. Phép đo chạy TRƯỚC khi có migration:
+
+| lượt | kết quả |
+|---|---|
+| chưa có `056` | **10 đỏ / 1 xanh** — ca xanh duy nhất là *"phiên bản chính sách CŨ vẫn ghi được"*, đúng ca không cần cột mới |
+| có `056` | **11 xanh** |
+
+Hình dạng được chọn, và mỗi cái một lý do đọc được: **tất-cả-hoặc-không-cột-nào**, vì một phiên bản khai một
+nửa là một phiên bản nói dối về chính nó · **`bafo_top_n = 0` là một lời khai CÓ MẶT** (*tổ chức này không dùng
+BAFO*), khác hẳn `NULL` (*chưa khai gì*), nên vế tất-cả-hoặc-không không buộc ai bật BAFO · **`eval_components`
+phải là MẢNG**, vì `jsonb` nhận cả số, chuỗi và `null` ở mức gốc.
+
+**Một lỗi của chính vòng này, do cổng của kho bắt:** bản đầu của tệp đo đếm số phiên bản chính sách bằng một
+biến cục bộ, mà `035` đòi `version` bằng ĐÚNG `max + 1` và liên tục — nên bộ đếm trôi ngay sau ca ghi hỏng đầu
+tiên và **7 ca đỏ vì `035`** chứ không vì thứ chúng định đo. Đã đổi sang đọc số phiên bản TỪ CSDL.
+
+## 5. Ranh giới nói ra
+
+- **S2.0 chưa xong.** Vòng này chốt được *S2.0 KHÔNG phải việc gì* (không thêm mã) và *J3 canh ở đâu*
+  (ADR-051), nhưng lớp thật của J3 nằm ở **S2.6** cùng bảng `rfq_awards` — chưa có bảng thì chưa có trigger.
+- **Ba `CHECK` của `056` KHÔNG được hardening canh.** Khoản **105** (rổ A) ghi rằng gỡ hay hạ một `CHECK` an
+  ninh về `NOT VALID` thì không lớp nào kêu. Ba ràng buộc này nằm đúng trong khoảng trống ấy; `056` nói ra điều
+  đó trong chính đầu tệp thay vì để người đọc tưởng chúng được canh.
+- **`056` không khai hình dạng BÊN TRONG của `eval_components`** ngoài *"phải là một mảng"*. Vế *mọi phần tử
+  mang một trường tiền* là **J1**, cần một trigger đọc chính sách — đo ở S1.101, ghi vào spec §5. Dựng nửa lớp
+  ấy bằng một `CHECK` sẽ là một ràng buộc TRÔNG NHƯ đang canh J1 mà không canh.
+- **Tệp đo của `056` cố ý KHÔNG mang nhãn `[INV-*]`**: `056` chưa cưỡng chế một bất biến nhóm J nào, nó dựng
+  chỗ để chúng đứng. Gắn nhãn ở đây là ghi một dòng *passed* vào hàng của một bất biến chưa tồn tại — đúng thứ
+  `[INV-H22]` sinh ra để chặn.
+- **Không sổ nợ nào mở hay đóng.** Lời khai sai được GẠCH tại chỗ ở cả ba tệp, đúng khuôn mà S1.100 đã dùng cho
+  lời khai sai của chính nó.
+
+## 6. Số đo
+
+- `pnpm t0` **0 vi phạm** — 287 module / 1165 phụ thuộc cruised.
+- `pnpm test` **71 tệp, 1007 đạt / 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm test:int` **52 tệp, 1090 đạt** — 51 → 52 tệp và 1079 → 1090 ca, đúng bằng tệp mới và 11 ca của nó.
+- `pnpm evidence` **XANH**, `vitest thoát mã 0`, **56/56** bất biến, **2098** khẳng định — 2087 → 2098, cũng
+  đúng bằng 11. Ba độ lệch khớp nhau là một phép kiểm nhỏ mà rẻ: không gì ngoài tệp mới nhúc nhích.
+- Phép đo mới: `db/chinh-sach-danh-gia.int.test.ts` **11 ca**, và chúng **10 đỏ trước `056`**.
+- Sổ nợ **218** khoản, mở **85** — không đổi, vòng này không mở và không đóng khoản nào. Ba rổ không đổi.
+- **50 → 51** ADR (ADR-051), **55 → 56** migration, **56/56** bất biến không đổi.

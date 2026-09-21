@@ -1082,11 +1082,16 @@ describe("phủ RLS", () => {
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
       // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.
+      // [S1.102 / S2.1] Hai cột của chính sách đánh giá — `056`. Vào tập INSERT chứ KHÔNG vào tập
+      // UPDATE, cùng lý do đã ghi cho `strict_blind_mode`: bảng chỉ ghi thêm, đổi chính sách là thêm
+      // một phiên bản.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "bafo_top_n", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "currency", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "dual_approval_threshold", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "effective_from", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "eval_components", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "org_id", quyen: "INSERT" },
       // [S1.7] Cột chế độ nghiêm của A6. Nó vào tập INSERT chứ KHÔNG vào tập UPDATE: bảng này
       // chỉ ghi thêm, và đổi chính sách nghĩa là thêm một phiên bản — xem 014 và 020.
