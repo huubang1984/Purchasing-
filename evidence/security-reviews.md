@@ -9087,13 +9087,53 @@ ADR-043 mô tả; lối ra là một phép đo suy con số từ nguồn, và đ
 - **Chưa có lượt đi thử §11 trên bản này.** Ba bản vá đều ở đường người dùng thật; lượt đi thử kế tiếp nên bắt đầu từ `/i` và `/login`
   của bộ gửi tin, vì đó là đường vừa mở và chưa ai đi bằng chuột.
 
+## 9b. Cổng evidence đỏ MỘT LẦN trên CI, và điều đó phơi ra một khoảng trống của chính bộ đo
+
+Lượt CI đầu của PR #99: `vitest thoát mã 1`. Hai mươi lượt liên tiếp trước đó đều xanh, và hai
+lượt evidence ở máy cũng xanh — nên nó không phải một flake thường gặp, và cũng không tái lập
+được ngoài CI.
+
+**Thứ làm việc chẩn đoán đắt hơn nó đáng, và nó là một khiếm khuyết của bộ đo chứ không của mã:**
+`chay-evidence.mjs` in mã thoát rồi dừng, còn artifact CI chỉ mang `INV-matrix.md` và
+`run-metadata.md`. Hai tệp ấy nói **bất biến nào** đỏ, không nói **test nào** đỏ. Con số khẳng
+định cũng không giúp: CI in **2069**, đúng bằng lượt XANH ở máy — một lần đỏ và một lần xanh cho
+ra cùng một con số, nên nó không phải một tín hiệu.
+
+Đường duy nhất còn lại là diff hai bản ma trận, và nó khoanh được đúng một hàng:
+
+```
+< | D5 | Lần từ chối vì thiếu quyền cũng phải audit | 124 | 🔴 ĐANG ĐỎ |   ← CI
+> | D5 | Lần từ chối vì thiếu quyền cũng phải audit | 124 | ✅ ĐẠT    |   ← máy
+```
+
+Tới đó thì hết đường: 22 tệp mang nhãn D5, và không tệp nào trong artifact nêu tên.
+
+**Đã vá, và bản vá được KIỂM chứ không được khai:** `evidence/vitest-report.json` nay lên theo
+artifact. Lượt CI kế tiếp cho thấy nó có thật — 991 KB trong artifact. Lần đỏ sau tự nêu tên.
+
+**Ứng viên có tên, và cả bốn cùng một họ.** Từ báo cáo cục bộ, bốn ca D5 chậm nhất: *auditPool hết
+chỗ kéo dài* 5104 ms · *throwAuditedDenial ghi sổ ở giao dịch độc lập* 5056 ms · *cận thời gian
+của người giữ khoá ghi sổ* 2191 ms · *lần từ chối MẤT khỏi sổ vì trần 2 s* 2157 ms. Hai ca cuối
+dựng quanh một trần **2 giây** và đang mất 2,15–2,19 s ở một máy nhanh: kết quả mong đợi của
+chúng phụ thuộc vào một cuộc đua ngã về đúng một phía.
+
+**Phần vòng này CÓ góp, nói ra thay vì phủi:** không dòng nào của S1.99 chạm `requirePermission`
+hay `throwAuditedDenial`. Cơ chế duy nhất mà vòng này góp là XẾP TỆP — thêm một tệp test mới đổi
+cách vitest nhồi tệp vào sáu worker, nên đổi tổ hợp int chạy đồng thời. Đó là góp vào cái **cò**,
+không vào cái **súng**. Và `T3` xanh nói thêm một điều: evidence là lượt DUY NHẤT unit và int
+chung một pool, nên hình dạng này chỉ hiện ở đúng cổng chặn merge. Khoản **213**, cùng họ với 203.
+
+**Điều KHÔNG đóng:** cái tên. Vòng này không đi tìm nó bằng cách chạy lại CI nhiều lượt — nó đặt
+lớp để lần sau tên tự hiện, và ghi khoản.
+
 ## 10. Số đo
 
-- sổ nợ **212** khoản, mở **81 → 85**; rổ A **7 → 6**, rổ B **54 → 58**, rổ C **20 → 21**; **48** ADR không đổi
-- đóng **198** (rổ A); mở và đóng trong cùng vòng: **205**, **206**, **207**; mở **208 · 209 · 210 · 211 · 212**
+- sổ nợ **213** khoản, mở **81 → 86**; rổ A **7 → 6**, rổ B **54 → 58**, rổ C **20 → 22**; **48** ADR không đổi
+- đóng **198** (rổ A); mở và đóng trong cùng vòng: **205**, **206**, **207**; mở **208 · 209 · 210 · 211 · 212 · 213**
 - `pnpm t0` **0** — 285 module / 1153 phụ thuộc
 - `pnpm test` **999 đạt / 1 bỏ qua**, 71 tệp; riêng `apps/web` **58 đạt** (40 ca mới ở `so-tien.test.ts`, 4 ca mới ở `phuc-vu.test.ts`)
 - đột biến: **4 chạy, 4 chết** — 2 ở `so-tien.ts` (5 đỏ, 10 đỏ), 1 ở `eslint.config.js` (3 lỗi), 1 ở `TRANG` (2 đỏ); khôi phục kiểm bằng
   `sha256`, khớp cả bốn
-- sổ nợ tự đối chiếu **45/45**; evidence **XANH** — **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ 2069 khẳng định,
-  `vitest thoát mã 0`
+- sổ nợ tự đối chiếu **45/45**; evidence ở máy **XANH hai lượt** — **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ
+  2069 khẳng định, `vitest thoát mã 0`
+- trên CI: lượt đầu **ĐỎ** ở một khẳng định D5, lượt thứ hai **XANH cả sáu cổng** — xem mục 9b và khoản 213
