@@ -63,10 +63,18 @@ function docLink() {
 // lần tải đầu, nhưng người bấm một link thứ hai cùng đường dẫn khác fragment thì trình duyệt
 // KHÔNG tải lại tài liệu — ô vẫn giữ mã cũ, và máy chủ trả "đã dùng" như thể link mới hỏng.
 // Khoản 204 đo đúng ca ấy trên `nop-thau.js`; trang này ra đời sau nên nó không lặp lại.
+// [S1.99 / khoản 205] Bản đầu của listener này viết `{ ...phien, daRedeem: false, token }`, tức
+// nó GIỮ `rfqId`, `supplierId`, `contactId`, `soHangMuc` của người trước. Khoản 204 khai rằng
+// trang này *"mang sẵn listener ấy, nên nó không lặp lại khiếm khuyết"* — lời khai ấy sai: một
+// nửa trạng thái phiên sống sót qua lần đổi người, và bốn con trỏ ấy được đọc dưới quyền của
+// người TRƯỚC. Dựng lại trọn vẹn là câu duy nhất không cần ai nhớ trường nào phải xoá.
 window.addEventListener("hashchange", () => {
   docLink();
-  phien = { ...phien, daRedeem: false, token: $("token").value.trim() };
-  bao($("loi1"), ""); bao($("ok1"), ""); bao($("ghi-danh"), "");
+  phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
+    const el = $(id);
+    if (el !== null) bao(el, "");
+  }
 });
 
 $("nut-vao").addEventListener("click", async () => {

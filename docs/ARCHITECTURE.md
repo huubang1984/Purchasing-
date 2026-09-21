@@ -6,7 +6,7 @@
 >
 > ~~**Trạng thái triển khai: chưa có mã nguồn.**~~ **[S1.78 / lượt soi ngang 72] Câu ấy viết ngày
 > khai sinh tệp (2026-08-27) và SAI từ S1.1; nó sống qua 16 commit sửa chính tệp này.** Trạng thái
-> thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — ~~mười~~ **[S1.79] 13** gói dưới `packages/`, bốn app
+> thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — ~~mười~~ **[S1.79] 13** gói dưới `packages/`, ~~bốn app~~ **[S1.99] NĂM app**
 > dưới `apps/` (`api`, `unseal-worker`, `public-keys`, `mcp`), ~~51~~ **[S1.82] 52** migration đánh số, và cổng evidence
 > 56/56 bất biến. Tài liệu này mô tả kiến trúc **đang chạy**; cập nhật lại khi thực tế lệch khỏi nó.
 >
@@ -20,8 +20,8 @@
 
 | Lớp | Công nghệ |
 |---|---|
-| Giao diện nội bộ | Next.js (App Router) |
-| Cổng nhà cung cấp | Next.js — mã hóa bằng WebCrypto phía trình duyệt |
+| Giao diện nội bộ + cổng nhà cung cấp | ~~Next.js (App Router)~~ **[ADR-044] `apps/web` — `node:http` trần, không bundler, không bước build, `dependencies` RỖNG** |
+| Mã hoá phía trình duyệt | `packages/sealed-envelope/src/browser.ts` — WebCrypto, máy chủ gỡ kiểu rồi phục vụ ở `/lib/` |
 | API | ~~NestJS~~ **`node:http` trần + bảng route khai báo** (ADR-020, 2026-09-06) |
 | Worker mở thầu | ~~NestJS~~ hàm thuần + composition root, `node` trần (process riêng) |
 | Tiến trình `api` | [S1.11 / ADR-021] composition root trong `apps/api`; `pnpm api:dev` chạy TypeScript trực tiếp bằng Node ≥ 22 — chưa có bước build |
@@ -34,7 +34,7 @@
 
 ```text
 ┌──────────────────────────┬──────────────────────────────────┐
-│  web (Next.js)           │  vendor-portal (Next.js)         │
+│  web (node:http trần)    │  (không có vendor-portal)        │
 │  người dùng nội bộ       │  nhà cung cấp — magic link + OTP │
 └────────────┬─────────────┴───────────────┬──────────────────┘
              │                             │  ciphertext (WebCrypto)
@@ -86,8 +86,9 @@ tầng. Chi tiết: ADR-015.
 
 ```text
 apps/
-  web/                  Next.js — giao diện nội bộ
-  vendor-portal/        Next.js — cổng nhà cung cấp
+  web/                  [ADR-044] node:http trần — ba trang tĩnh (/nop-thau, /mo-thau,
+                        /tao-thau) + bộ chuyển tiếp /api/*; KHÔNG phải Next.js
+  ~~vendor-portal/~~    [S1.99] KHÔNG TỒN TẠI — trang nhà cung cấp là /nop-thau trong web/
   api/                  ~~NestJS~~ [ADR-020] node:http trần + `ROUTES` KHAI BÁO — API chính
                         (KHÔNG có quyền giải mã). Route là DỮ LIỆU liệt kê được, để ba lớp
                         canh "với MỌI route" (cổng quyền, E6, bộ quét rò rỉ) đo được mà không

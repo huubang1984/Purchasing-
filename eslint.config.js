@@ -90,9 +90,18 @@ export default tseslint.config(
     // tệp máy chủ của kho — bán kính ảnh hưởng lớn hơn nhiều, và `packages/sealed-envelope/src/
     // format.ts` đã ghi đúng lập luận ấy từ S1.4).
     //
-    // `globals` liệt kê ĐÚNG những cái hai tệp ấy dùng, không phải cả bộ trình duyệt: một tên mới
-    // xuất hiện sẽ làm eslint đỏ, và đó là lúc người viết phải nói ra rằng trang vừa chạm một bề
-    // mặt mới.
+    // `globals` liệt kê ĐÚNG những cái các tệp ấy dùng, không phải cả bộ trình duyệt.
+    //
+    // [S1.99 / khoản 207] CÂU TRÊN CHỈ THÀNH MỘT LỚP TỪ VÒNG NÀY. Bản cũ viết tiếp rằng *"một
+    // tên mới xuất hiện sẽ làm eslint đỏ"* — và câu ấy SAI suốt từ S1.89, vì luật duy nhất đọc
+    // `globals` là `no-undef`, mà `no-undef` không được bật ở bất kỳ đâu trong tệp này. Đo bằng
+    // cách ép luật ra ngoài cấu hình: `npx eslint --rule '{"no-undef":"error"}' apps/web/trang`
+    // cho đúng HAI lỗi, cả hai là `window` — một bề mặt trình duyệt không ai khai, đã lọt vào kho
+    // từ vòng S1.98 mà `pnpm t0` vẫn xanh. Một danh sách trắng không có luật đọc nó là một lời
+    // khai không có lớp, và nó nằm trong tệp cấu hình của chính bộ đo.
+    //
+    // Nay luật được bật ngay dưới đây, nên câu *"một tên mới sẽ làm eslint đỏ"* là một phép đo
+    // chứ không phải một ý định.
     files: ["apps/web/trang/*.js"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
@@ -105,8 +114,13 @@ export default tseslint.config(
         fetch: "readonly",
         location: "readonly",
         TextEncoder: "readonly",
+        window: "readonly",
       },
     },
+    // Phải GỘP chứ không được thay: `disableTypeChecked` ở trên đóng góp trọn một khối `rules`
+    // (mọi luật cần kiểu, tắt), và một khoá `rules` viết sau nó sẽ ĐÈ MẤT cả khối ấy — eslint
+    // khi đó gãy ngay ở luật cần kiểu đầu tiên thay vì chạy. Đo một lần lúc bật luật này.
+    rules: { ...tseslint.configs.disableTypeChecked.rules, "no-undef": "error" },
   },
   {
     files: ["**/*.test.ts", "tools/**/*.ts"],

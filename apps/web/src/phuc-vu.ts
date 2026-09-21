@@ -65,6 +65,7 @@ const TRAN_THAN = 1024 * 1024;
 
 const GOC_WEB = new URL("../", import.meta.url);
 const GOC_NIEM_PHONG = new URL("../../../packages/sealed-envelope/src/", import.meta.url);
+const GOC_WEB_SRC = new URL("src/", GOC_WEB);
 
 /**
  * Các module của cửa trình duyệt, theo đúng thứ tự phụ thuộc.
@@ -75,6 +76,16 @@ const GOC_NIEM_PHONG = new URL("../../../packages/sealed-envelope/src/", import.
  */
 export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
 
+/**
+ * [S1.99 / khoản 206] Module của CHÍNH `apps/web/src/` được phục vụ cho trình duyệt, đi qua đúng
+ * bộ gỡ kiểu mà cửa niêm phong đi qua.
+ *
+ * Vì sao có danh sách thứ hai thay vì nối vào `MODULE_TRINH_DUYET`: danh sách trên là ĐÓNG BẮC
+ * CẦU của `browser.ts` và `cua-trinh-duyet.test.ts` đòi nó TRÙNG KHỚP cây import thật — thêm một
+ * tên lạ vào đó làm cổng ấy đỏ, đúng như nó phải thế. Hai gốc khác nhau thì hai lời khai.
+ */
+export const MODULE_WEB = ["so-tien"] as const;
+
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {
   "/nop-thau": "nop-thau.html",
@@ -84,6 +95,17 @@ export const TRANG: Readonly<Record<string, string>> = {
   "/tao-thau": "tao-thau.html",
   "/tao-thau.js": "tao-thau.js",
   "/chung.css": "chung.css",
+  // [S1.99 / khoản 198] HAI ĐƯỜNG MÀ SẢN PHẨM ĐÃ SINH RA LINK TỪ S1.12 MÀ KHO CHƯA BAO GIỜ PHỤC
+  // VỤ. `apps/api/src/adapters/hop-thu-dev.ts` dựng `${baseUrl}/login#<mã>` cho người mua và
+  // `${baseUrl}/i#<mã>` cho nhà cung cấp theo ADR-020 mục 3; cả hai trả 404 cho tới vòng này, nên
+  // MỌI link do sản phẩm sinh ra đều không bấm được và lượt đi thử chỉ đi được nhờ link VIẾT TAY
+  // của `tools/gieo-demo`.
+  //
+  // Chúng là BÍ DANH của trang đã có, không phải màn mới: `/i` là nơi một lời mời dẫn tới, tức
+  // trang nộp thầu; `/login` là nơi tin báo người duyệt dẫn tới, tức trang mở thầu. Người mua cần
+  // màn tạo gói thì gõ thẳng `/tao-thau` — không bộ gửi nào sinh link tới đó.
+  "/i": "nop-thau.html",
+  "/login": "mo-thau.html",
 };
 
 const LOAI_THEO_DUOI: Readonly<Record<string, string>> = {
@@ -136,8 +158,12 @@ export function napTep(): ReadonlyMap<string, TepPhucVu> {
     if (loai === undefined) throw new Error(`apps/web: không biết content-type của ${ten}`);
     m.set(duong, { noiDung: readFileSync(new URL(`trang/${ten}`, GOC_WEB), "utf8"), loai });
   }
-  for (const ten of MODULE_TRINH_DUYET) {
-    const nguon = readFileSync(new URL(`${ten}.ts`, GOC_NIEM_PHONG), "utf8");
+  const canPhucVu: readonly (readonly [string, URL])[] = [
+    ...MODULE_TRINH_DUYET.map((ten) => [ten, GOC_NIEM_PHONG] as const),
+    ...MODULE_WEB.map((ten) => [ten, GOC_WEB_SRC] as const),
+  ];
+  for (const [ten, goc] of canPhucVu) {
+    const nguon = readFileSync(new URL(`${ten}.ts`, goc), "utf8");
     // `mode: "transform"` chứ không phải mặc định "strip": mã nguồn của kho dùng cú pháp mà bản
     // chỉ-xoá không nhận. Cùng lý do `--experimental-transform-types` có mặt ở mọi script dev.
     const js = stripTypeScriptTypes(nguon, { mode: "transform", sourceUrl: `/lib/${ten}.js` });
