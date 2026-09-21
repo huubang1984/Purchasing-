@@ -5368,3 +5368,57 @@ khác của chuỗi (ai tạo, ai mời, ai mở) vẫn chỉ được canh ở 
 award: spec §2.2⑶ lấy từ chính sách đã có, và việc ấy thuộc S2.6. Và nó không sửa lời khai của ADR-050 ⑸ bằng
 cách viết lại — câu sai ở đó được GẠCH và trỏ sang đây, vì một ADR đã merge là một bản ghi lịch sử, không phải
 một trang wiki.
+
+---
+
+## ADR-052 — `effective_cost` làm tròn TỪNG THÀNH PHẦN rồi cộng, không cộng rồi làm tròn một lần
+
+**Bối cảnh.** ADR-050 ⑴ chốt *luật* làm tròn (nửa-ra-xa-0, giống `pg_catalog.round(x, 2)`) nhưng không chốt
+*chỗ* làm tròn. Hai chỗ đều hợp lý và chúng cho hai con số khác nhau, nên câu hỏi phải được trả lời trước dòng
+mã đầu tiên của `packages/danh-gia` chứ không sau.
+
+**Phép đo đứng trước câu hỏi** — 200 000 bộ, mỗi bộ 2–6 thành phần, giá trị `0..99,9999`:
+
+| | |
+|---|---|
+| hai cách cho kết quả KHÁC NHAU | **76 975 / 200 000 = 38,5 %** |
+| lệch lớn nhất gặp được | **0,03** |
+| trần lý thuyết với `n` thành phần | `n/2` xu |
+
+Đây không phải một ca hiếm ở rìa miền giá trị. Nó là bốn trên mười.
+
+### Quyết định
+
+**Làm tròn từng thành phần khi quy đổi, rồi CỘNG các số đã làm tròn.** `components` lưu số đã làm tròn;
+`effective_cost` là tổng ĐÚNG của chúng, không làm tròn thêm lần nào. Chủ dự án chốt ngày 2026-09-21.
+
+Lý do là **J2**, không phải số học:
+
+⑴ **J2 nói kiểm toán viên cầm dữ liệu, chạy hàm, ra đúng con số.** Với cách này, phép kiểm là một phép CỘNG —
+công cụ yếu nhất có thể, và ai cũng có. Với cách kia, họ còn phải tái lập ĐÚNG luật làm tròn; mà luật ấy chính
+là thứ hai tầng của sản phẩm đang bất đồng (**khoản 218**, vẫn mở). Một bất biến mà muốn kiểm phải trước hết
+đồng ý về một luật đang tranh chấp thì không phải một bất biến, nó là một lời mời tranh luận.
+
+⑵ **S2.4 hiện bảng thành phần lên màn.** Nếu các dòng hiển thị không cộng ra con số cuối, người mua đọc một
+bảng tự cãi mình. Đó đúng lớp lỗi của **khoản 206** — một trang dạy người dùng một cách đọc rồi tự dùng cách
+khác — và nó đã trả giá một lần bằng một phong bì niêm phong mang hai con số mâu thuẫn.
+
+### Cái giá — nói thẳng
+
+- **Sai số tích luỹ tối đa `n/2` xu** so với phép tính một lần. Trên một BẢNG XẾP HẠNG, thứ có nghĩa là THỨ TỰ
+  chứ không phải xu tuyệt đối — **nhưng hai báo giá cách nhau dưới ba xu thì thứ tự giữa chúng do luật làm tròn
+  quyết định**, và điều đó phải được nói ra chứ không giấu sau chữ "không đáng kể".
+- **ADR này KHÔNG chốt luật phá hoà cho hai `effective_cost` bằng nhau.** Hôm nay chưa có bảng xếp hạng nên
+  chưa có chỗ để chốt; nó thuộc **S2.3**. Nói ra để không ai đọc quyết định này thành *"đã xử lý ca hoà"*.
+
+### Đo bằng gì
+
+`packages/danh-gia/src/chi-phi-hieu-dung.test.ts`: hai thành phần cùng rơi đúng điểm hoà (`0.005 + 0.005`) —
+từng-phần-rồi-cộng cho **0.02**, cộng-rồi-làm-tròn cho **0.01**. Một ca, và nó phân biệt được hai phương án.
+Cộng một ca đòi bảng thành phần CỘNG RA đúng `effective_cost`, tức vế dễ của J2 ở dạng khẳng định.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói cách nào *đúng hơn về toán* — cộng-rồi-làm-tròn chính xác hơn, và ADR này chọn cách kém chính xác
+hơn một cách có chủ ý vì một bất biến kiểm toán được đáng giá hơn ba xu. Nó cũng không sửa `apps/web/src/so-tien.ts`:
+khoản **218** vẫn mở, và vòng này chỉ biến nó từ một câu ĐỌC ĐƯỢC thành một con số ĐO ĐƯỢC.

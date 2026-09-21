@@ -9710,3 +9710,119 @@ câu ấy được giữ nguyên văn và gạch, không xoá, vì cái giá c�
 - Sổ nợ **218** khoản, mở **85 → 84** — khoản **208 ĐÓNG**. Rổ A **6** không đổi, rổ B **58 → 57**, rổ C **21**
   không đổi; ba rổ cộng đúng: 6 + 57 + 21 = 84.
 - **51 ADR** không đổi, **56 migration** không đổi, **56/56** bất biến không đổi.
+
+# §S1.104 — S2.2: HÀM THUẦN CHI PHÍ HIỆU DỤNG, VÀ BA LẦN MỘT FIXTURE KHÔNG PHÂN BIỆT ĐƯỢC SUÝT GHIM NHẦM THỨ NÓ ĐỊNH GHIM
+
+## 1. Vòng này là gì
+
+**S2.2**: `packages/danh-gia` — hàm thuần tính `effective_cost` — cộng bảng ca **nửa xu** đối chiếu với
+`pg_catalog.round(x, 2)` chạy thật, thứ mà ADR-050 ⑴ gọi là *điều kiện của S2.2, không phải một lượt kiểm tuỳ ý*.
+
+**Vòng này KHÔNG đóng khoản 218**, và em nói ra ngay vì trong ô lựa chọn trình cho chủ dự án em đã viết là nó có.
+ADR-050 mục *Cái giá* chốt ngược lại: quyết định ⑴ ghim luật cho `effective_cost` và **không sửa `so-tien.ts`**,
+vì con số ấy đi vào phong bì niêm phong và người nộp không có lượt thứ hai. Vòng này làm việc khác: biến khoản
+218 từ một câu ĐỌC ĐƯỢC thành một con số ĐO ĐƯỢC.
+
+## 2. Phép đo đầu tiên sửa chính lời khai của sổ nợ
+
+Thân khoản 218 viết hệ quả là *"một đơn giá và một lượng cho phần lẻ **đúng nửa xu**"*. Đo thật:
+
+| | |
+|---|---|
+| phần dư `lượng × đơn giá mod 100` làm hai luật lệch | **50 trên 100** — từ **50 tới 99**, liên tục |
+| tỉ lệ ca lệch | **50 %** |
+| ví dụ không cần "nửa xu" nào | `1.2345 × 2 = 2.4690` → trang **2.46**, luật sản phẩm **2.47** |
+
+Không phải một điểm — mà là **một nửa mọi đầu vào**. Lời khai hẹp hơn sự thật **năm mươi lần**, và nó đã được
+gạch tại chỗ trong thân khoản 218 cùng với con số đo được.
+
+## 3. Quyết định phải chốt trước dòng mã đầu — ADR-052
+
+ADR-050 ⑴ chốt *luật* làm tròn nhưng không chốt *chỗ*. Đo trước khi hỏi, 200 000 bộ 2–6 thành phần:
+
+| | |
+|---|---|
+| hai cách cho kết quả KHÁC NHAU | **76 975 / 200 000 = 38,5 %** |
+| lệch lớn nhất gặp được | **0,03** (trần `n/2` xu) |
+
+Chủ dự án chọn **làm tròn từng thành phần rồi cộng**. Lý do là J2 chứ không phải số học: kiểm toán viên khi ấy
+chỉ cần một phép CỘNG, không cần tái lập luật làm tròn — mà luật ấy chính là thứ hai tầng đang bất đồng. Và
+S2.4 hiện bảng thành phần lên màn; các dòng không cộng ra con số cuối là một bảng tự cãi mình, đúng lớp lỗi của
+khoản 206. Cái giá — sai số tích luỹ tối đa `n/2` xu — ghi thẳng vào ADR chứ không giấu.
+
+## 4. BA lần cùng một hình dạng: một fixture không phân biệt được
+
+Đây là thứ đáng mang sang, và nó lặp lại ba lần trong hai vòng liên tiếp.
+
+| # | fixture | thứ nó KHÔNG phân biệt được | bắt bằng gì |
+|---|---|---|---|
+| ⑴ | S1.103, khoản 208: hai **phiên** của **cùng một người** | nửa NGƯỜI của cặp cũ | đột biến ⑶ SỐNG |
+| ⑵ | S1.104, bảng ca toàn số **không âm** | *nửa-lên* với *nửa-ra-xa-0* | đo trước, không để thành nợ |
+| ⑶ | S1.104, mũi tự-đột-biến **P9b** của `[INV-H20]` | lời khai đã GẠCH với lời khai còn SỐNG | cổng tự đỏ |
+
+**Ca ⑵ đo được cả hai chiều**, và đó là điểm của nó:
+
+| bảng ca | đột biến "bỏ xử lý dấu" (hàm thuần thành nửa-lên) |
+|---|---|
+| **có** ca âm | **ĐỎ** — ba ca, và thông điệp gọi đúng tên từng ca |
+| **không** ca âm | **3/3 XANH — đột biến SỐNG** |
+
+Một luật làm tròn sai đi thẳng ra sản phẩm nếu bảng ca chỉ có số dương. Và `round(-0.005, 2)` của Postgres là
+**`-0.01`** — đo, không đọc tài liệu — nên §2.3⑸ gọi đúng tên luật.
+
+## 5. Ca ⑶: cổng bắt em, rồi em thấy cổng có một lỗ
+
+`[INV-H20]` P9b đỏ khi em gạch tại chỗ lời khai *"13 gói + 6 công cụ"*. Đọc kỹ thì đó không chỉ là lỗi của em:
+
+- **P7** (số ADR) lọc bỏ `~~…~~` **trước** rồi nhắm lời khai **CÒN SỐNG** — kèm chú thích ghi rằng nó từng sai
+  đúng kiểu này và chính `[INV-H20]` bắt được, ở S1.29;
+- **P9b** (số gói) `exec` trên văn bản **THÔ**, nên nó nhắm match đầu tiên — kể cả một cụm đã gạch.
+
+Hệ quả: với hình dạng "gạch tại chỗ", P9b **đỏ GIẢ** — nó ràng buộc *kiểu gạch của tài liệu* thay vì *con số*.
+Hai mũi anh em trôi khỏi nhau vì không ai đọc chúng cạnh nhau. Vòng này sửa P9b cho khớp P7, và đo cả ba chiều:
+
+| trạng thái | P9b |
+|---|---|
+| P9b CŨ + gạch tại chỗ | **ĐỎ giả** |
+| P9b MỚI + gạch tại chỗ | XANH |
+| P9b MỚI + khai sai số (14 → 13) | **ĐỎ thật** — *"Handoff.md khai 13 gói + 6 công cụ, kho có 14"* |
+
+## 6. Bốn lời khai mà một GÓI MỚI bắt buộc phải sửa — cả bốn do cổng gọi tên
+
+`pnpm t0` XANH không nói gì về ba cái đầu: depcruise chỉ báo vi phạm của quy tắc **đã khai**, còn *"gói này
+thiếu quy tắc"* là việc của `pnpm test`.
+
+| cổng | đòi gì |
+|---|---|
+| `[INV-H16]` | họ quy tắc biên giới `g16-` trong `.dependency-cruiser.cjs` |
+| `[INV-H16]` | **ba test probe** — *"quy tắc chưa từng đỏ thật là quy tắc chưa được đo"* |
+| `[INV-H18]` | danh sách trắng barrel + một dòng ở `DANH_SACH_TRANG_THEO_CUA` |
+| `[INV-H20]` P9b | `Handoff.md`: `13 gói + 6 công cụ` → `14` |
+
+## 7. Ranh giới nói ra
+
+- **Khoản 218 VẪN MỞ.** Vòng này đo nó, không vá nó, và lý do là ADR-050 mục *Cái giá*.
+- **`packages/danh-gia` chưa ai gọi.** Hàm thuần có, và không một đường sản xuất nào chạy qua nó — `rfq_evaluations`
+  là **S2.3**. Nói ra để không ai đọc *"S2.2 xong"* thành *"đã chấm được thầu"*.
+- **J1 mới có vế LỌC, chưa có vế CƯỠNG CHẾ.** Hàm thuần loại thành phần `DIEM` khỏi tổng; còn vế *chính sách
+  khai thành phần nào có đơn vị tiền* cần một trigger đọc `org_procurement_policies`, và spec §5 đã ghi nó là
+  việc của S2.3. Một `CHECK` ở đây sẽ TRÔNG NHƯ đang canh J1 mà không canh.
+- **J2 mới có vế DỄ.** *Bảng thành phần cộng ra `effective_cost`* đã được khẳng định; vế thật — *tính lại từ
+  `components` + phiên bản chính sách trên dữ liệu ĐỌC TỪ CSDL* — cần bảng `rfq_evaluation_lines`, tức S2.3.
+- **Không luật phá hoà.** Hai `effective_cost` bằng nhau xếp hạng thế nào thì ADR-052 cố ý không chốt: chưa có
+  bảng xếp hạng thì chưa có chỗ để chốt.
+- **Hai tệp test của gói KHÔNG mang nhãn `[INV-*]`** — cùng lý do với `db/chinh-sach-danh-gia.int.test.ts` ở
+  S1.102: chưa bất biến nhóm J nào được cưỡng chế, nên một nhãn ở đây là ghi *passed* vào hàng của một bất biến
+  chưa tồn tại.
+
+## 8. Số đo
+
+- `pnpm t0` **0 vi phạm** — **291 module / 1174 phụ thuộc**.
+- `pnpm test` **72 tệp, 1050 đạt / 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm test:int` **53 tệp, 1094 đạt** (52 → 53 tệp, 1091 → 1094 ca — đúng +1 tệp và +3 ca của bảng nửa-xu).
+- `pnpm evidence` **XANH** — `vitest thoát mã 0`, **56/56** bất biến, **2145** khẳng định (2099 → 2145). `evidence/INV-matrix.md` đổi ĐÚNG MỘT ô: hàng `H16` **47 → 51** khẳng định, tức +3 probe biên giới và +1 ca cửa barrel. Không hàng nào khác nhúc nhích — hai tệp test của `packages/danh-gia` cố ý không mang nhãn `[INV-*]` nên chúng không vào ma trận.
+- Phép đo mới: `chi-phi-hieu-dung.test.ts` **33 ca**, `nua-xu.int.test.ts` **3 ca** (19 ca của bảng đối chiếu
+  trong một lượt đi về), `so-tien.test.ts` **40 → 46 ca** cho khoản 218. Bốn phần cộng ĐÚNG bằng độ lệch của
+  `pnpm test` (1007 → 1050 = +43): 33 + 6 + 3 probe + 1 cửa barrel.
+- Sổ nợ **218** khoản, mở **84** — không đổi; khoản 218 vẫn MỞ, thân viết lại bằng phép đo. Ba rổ không đổi.
+- **51 → 52** ADR (ADR-052), **13 → 14** gói, **56** migration không đổi, **56/56** bất biến không đổi.

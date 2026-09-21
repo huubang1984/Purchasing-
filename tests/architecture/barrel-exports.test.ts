@@ -979,6 +979,19 @@ const DANH_SACH_TRANG_DB = [
 // Một symbol thứ tư ở đây mà gắn GUC theo một đường khác là một đường vòng qua quyết định "phiên
 // này thuộc tổ chức nào" — và hậu quả của nó không phải một lỗi, mà là dữ liệu của tổ chức khác
 // đọc như dữ liệu của mình.
+// BẢY SYMBOL, và gói này đáng canh vì HẬU QUẢ của con số nó tính: `effective_cost` quyết định
+// THỨ HẠNG, thứ hạng quyết định award. Một symbol thứ tám tính tiền theo một luật khác là
+// khoản 218 mọc lại trong chính gói sinh ra để chấm dứt nó.
+const DANH_SACH_TRANG_DANH_GIA = [
+  "SO_LE_HE_SO",
+  "SO_LE_TIEN",
+  "docSo",
+  "laTuChoi",
+  "lamTron",
+  "tinhChiPhiHieuDung",
+  "vietSo",
+];
+
 const DANH_SACH_TRANG_TENANCY = [
   // [S1.84 / khoản 129] Hai symbol của đường tín hiệu "lỗi kết nối tới SAU trần": tên sự kiện và hàm nghe.
   // Gói này KHÔNG tự ghi log — nó phát, composition root ghi.
@@ -1029,6 +1042,15 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
       ".",
       DANH_SACH_TRANG_DB,
       "migrate() và createPool() là hai chỗ mà một dòng thêm vào đổi hành vi của MỌI kết nối.",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/danh-gia chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "danh-gia",
+      ".",
+      DANH_SACH_TRANG_DANH_GIA,
+      "effective_cost quyết định THỨ HẠNG, và thứ hạng quyết định ai được trao thầu.",
     );
   });
 
@@ -1142,6 +1164,7 @@ const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly
         ["./unwrap", DANH_SACH_TRANG_UNWRAP],
       ]),
     ],
+    ["danh-gia", new Map([[".", DANH_SACH_TRANG_DANH_GIA]])],
     ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
     ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
     ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],
