@@ -212,3 +212,9 @@ jobs:
           path: |
             evidence/INV-matrix.md
             evidence/run-metadata.md
+            # [S1.99] BAO CAO VITEST PHAI LEN THEO, VA DAY LA MOT KHIEM KHUYET DO CHINH VONG
+            # NAY VAP PHAI. `chay-evidence.mjs` in "vitest thoat ma 1" roi dung; hai file tren
+            # chi noi bat bien NAO do, khong noi TEST NAO do. Mot cong chan merge ma khong ai
+            # truy duoc nguyen nhan tu CI la mot cong bat nguoi doc phai doan — va lan dau no
+            # do that, nguoi doc dung la phien nay, mat mot luot CI de biet minh dang tim gi.
+            evidence/vitest-report.json
