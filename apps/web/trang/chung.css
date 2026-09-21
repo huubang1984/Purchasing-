@@ -142,6 +142,11 @@ th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; colo
 td.so, th.so { text-align: right; font-variant-numeric: tabular-nums; }
 tr.thap td { background: var(--luc-nen); }
 
+/* [S1.106 / S2.4] Thành phần của một hàng xếp hạng nằm NGAY TRONG ô, không sau một cú bấm:
+   spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */
+ul.tp { margin: 0; padding: 0; list-style: none; }
+ul.tp li { font-size: 0.82rem; color: var(--chu-mo); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 .ghi { font-size: 0.85rem; color: var(--chu-mo); margin: 8px 0 0; }
 .ma {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;

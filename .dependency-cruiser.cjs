@@ -301,8 +301,9 @@ module.exports = {
         "Chi index.ts duoc mo. Goi nay giu ham THUAN tinh `effective_cost` va (tu S2.3) lop CO " +
         "TRANG THAI chay mot luot cham - con so quyet " +
         "dinh THU HANG, tuc quyet dinh ai duoc trao thau. Pham vi that cua quy tac, noi ra " +
-        "nhu g14-/g15-: hom nay no rut KHONG symbol nao khoi tam voi, vi ca bay symbol gia " +
-        "tri deu DA o cua. Thu no mua la MAC DINH DONG cho module tuong lai - va o day cai " +
+        "nhu g14-/g15-: hom nay no rut KHONG symbol nao khoi tam voi, vi MOI symbol gia " +
+        "tri cua goi deu DA o cua (con so tuyet doi o day la mot loi khai thiu: S2.3 va " +
+        "S2.4 moi vong them symbol, con lop nay chi noi ve HINH DANG). Thu no mua la MAC DINH DONG cho module tuong lai - va o day cai " +
         "mac dinh ay dat gia hon thuong le, vi mot bo tinh tien THU HAI di vong qua cua la " +
         "dung hinh dang khoan 218 (hai tang thu tien ve hai chu so bang hai luat).",
       severity: "error",

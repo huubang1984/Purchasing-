@@ -12,6 +12,7 @@
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
+    "@trustprocure/danh-gia": "workspace:*",
     "@trustprocure/db": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",

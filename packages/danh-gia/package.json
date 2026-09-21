@@ -5,5 +5,10 @@
   "type": "module",
   "main": "src/index.ts",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "pg": "^8.13.0" }
+  "//": "[S1.106 / khoan 223] `@trustprocure/audit` va `@trustprocure/identity` duoc import LUC CHAY tu S2.3 (`luot-danh-gia.ts`) ma khong he duoc khai o day, va moi cong deu XANH suot hai vong: ve ⑷ cua `tests/architecture/pham-vi-san-xuat.test.ts` bo qua goi nay vi phep dem cua ve ⑵ phan loai mot goi KHONG CO NGUOI DUNG SAN XUAT la chi-dung-cho-test. Route dau tien cua S2.4 lam no thanh goi san xuat va hai dong nay do ra. Do that, khong suy: `node --experimental-transform-types --import ./apps/api/register-ts-resolve.mjs apps/api/src/routes/buyer.ts` chet voi ERR_MODULE_NOT_FOUND `@trustprocure/audit` truoc ban va nay — tuc `pnpm api:dev` khong khoi dong duoc, con vitest thi khong thay gi vi alias `@trustprocure` -> `./packages` cua `vitest.config.ts` giai MOI ten bat ke package.json.",
+  "dependencies": {
+    "@trustprocure/audit": "workspace:*",
+    "@trustprocure/identity": "workspace:*",
+    "pg": "^8.13.0"
+  }
 }

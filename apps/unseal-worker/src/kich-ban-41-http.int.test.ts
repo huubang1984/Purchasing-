@@ -522,6 +522,12 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
           return { path: r.path.replace(":unsealRequestId", hy.unsealId), body: {}, cookie: m };
         case "POST /unseal/:unsealRequestId/cancel":
           return { path: r.path.replace(":unsealRequestId", hy.unsealId), body: {}, cookie: m };
+        // [S1.106 / S2.4] RFQ hy sinh B đang ở DRAFT, nên lượt chấm dừng ở
+        // `RFQ_KHONG_CHAM_DUOC` — một 422 NGHIỆP VỤ có tên, đúng thứ bộ quét cần: thân đã qua
+        // bộ đọc thân và chạm nghiệp vụ. Không dùng RFQ thật của kịch bản: một lượt chấm đổi
+        // trạng thái gói thầu sang EVALUATING và bộ quét không được làm thế.
+        case "POST /rfqs/:rfqId/evaluate":
+          return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /users/:userId/mfa-reset":
           return {
             path: r.path.replace(":userId", nanHy.id),

@@ -991,6 +991,7 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "SO_LE_HE_SO",
   "SO_LE_TIEN",
   "TRANG_THAI_CHAM_DUOC",
+  "docBangXepHang",
   "docSo",
   "laTuChoi",
   "lamTron",

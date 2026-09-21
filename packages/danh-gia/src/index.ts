@@ -28,3 +28,13 @@ export {
   type LyDoTuChoiLuot,
   type TaoLuotDanhGiaInput,
 } from "./luot-danh-gia.js";
+
+// [S1.106 / S2.4] Đường ĐỌC bảng xếp hạng — cổng `bid.view` nằm THẲNG trong thân hàm
+// (khoản 33), vì `cong-quyen-route.test.ts` đọc mã nguồn chứ không đọc một danh sách tên.
+export {
+  docBangXepHang,
+  type BangXepHang,
+  type DocBangXepHangInput,
+  type HangBangXepHang,
+  type ThanhPhanHien,
+} from "./doc-bang-xep-hang.js";
