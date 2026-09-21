@@ -9971,6 +9971,12 @@ trên sáu vai đều có. Thành khoản **220**.
   lời khai quyết định được từ VĂN BẢN migration (vế thứ năm — nhân chứng hành vi — thì không, và
   `test:int` là chỗ đúng của nó). Cổng ấy chưa được viết ở vòng này: nó cần lượt
   đỏ riêng cho từng vế, và vòng này đã đủ việc. Nói ra chứ không lặng lẽ để đó.
+- **Một cổng CI đỏ mà không phải vì bản vá** — khoản **222**. `T1+T2 (windows-latest)` đỏ một ca ở
+  PROBE của `routes.test.ts`: `EPERM` khi `mkdir` khoá `depcruise`. Cùng commit ấy ubuntu-latest,
+  T0, T0b và T3 đều xanh, và `pnpm test` ở máy (cũng Windows) xanh hai lượt. Khoá của khoản **59**
+  NÉM với mọi mã ngoài `EEXIST`, còn Windows trả `EPERM` cho `mkdir` vào một thư mục *đang chờ
+  xoá* — nên lớp dựng để diệt cổng đỏ giả vừa dựng một cái. Ghi ra chứ không để một lượt chạy lại
+  xoá dấu; sửa nó cần một phép đo tiêm lỗi và nó KHÔNG thuộc vòng này.
 - **Lượt soi ngang TRƯỢT NHỊP.** `Handoff.md` §11 ghi mốc *chậm nhất S1.105*, và vòng này là S1.105 mà
   không phải lượt soi. Ghi ra chứ không đẩy mốc; mốc mới là **chậm nhất S1.107**.
 
@@ -9981,6 +9987,6 @@ trên sáu vai đều có. Thành khoản **220**.
 - `pnpm test:int` **54 tệp / 1123 ca**. Lượt ĐẦU **ĐỎ 3 ca** — mục 7 ⑸; đã vá, và tệp ấy chạy riêng lại **36/36**.
 - `pnpm evidence` **`vitest thoát mã 0`, báo cáo 2174 khẳng định** — lượt DUY NHẤT unit + int chung một pool, tức phép đo trọn cây SAU bản vá.
 - Phép đo mới: `luot-danh-gia.int.test.ts` **16 ca**; `chinh-sach-danh-gia.int.test.ts` **11 → 24 ca**.
-- Sổ nợ **218 → 221** khoản, mở **84 → 87** (khoản 219, 220, 221 mở; không khoản nào đóng). Rổ A **6** không
-  đổi, rổ B **57 → 60**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 60 + 21 = 87.
+- Sổ nợ **218 → 222** khoản, mở **84 → 88** (khoản 219, 220, 221, 222 mở; không khoản nào đóng). Rổ A **6**
+  không đổi, rổ B **57 → 61**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 61 + 21 = 88.
 - **52 → 53** ADR (ADR-053), **56 → 57** migration, **14** gói không đổi, **56/56** bất biến không đổi.
