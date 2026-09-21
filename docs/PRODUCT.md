@@ -56,10 +56,22 @@ phải chuyện câu chữ.
 | "Giá thấp nhất = nhà cung cấp tốt nhất" | "Hỗ trợ quyết định dựa trên tổng chi phí" |
 | "AI phát hiện gian lận" | "Tạo bằng chứng kiểm toán" |
 | **"Kể cả chúng tôi cũng không xem được"** | **"Mọi lần truy cập đều để lại dấu vết bất biến"** |
+| **"Chống được thông đồng giữa người mua và nhà cung cấp"** | **"Làm việc móc nối đắt hơn và để lại dấu đọc được"** |
 
-Dòng cuối là ràng buộc bổ sung phát sinh từ ADR-002: mô hình đe dọa đã chọn là tầng 1+2,
-nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã. Tuyên bố zero-knowledge sẽ là
-tuyên bố sai sự thật.
+Dòng *"Kể cả chúng tôi cũng không xem được"* là ràng buộc bổ sung phát sinh từ ADR-002: mô
+hình đe dọa đã chọn là tầng 1+2, nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã.
+Tuyên bố zero-knowledge sẽ là tuyên bố sai sự thật.
+
+**[2026-09-21] Dòng cuối phát sinh từ ADR-054, và nó chặn một tuyên bố mà chính tên sản phẩm
+mời gọi.** Lõi niêm phong bảo vệ *thông tin giá trước deadline*. Nó không chạm được trường hợp
+một người của bên mua móc nối với **cả** pool nhà cung cấp — lần nào cũng mời đúng ba tên ấy, hoặc
+sắp xếp để các bên lần lượt thắng — vì ở đó giá đã thống nhất xong trước khi chạm hệ thống và
+không ai cần đọc phong bì của ai. Ba số đo trong ADR-054: D3 chỉ nổ khi một vai giữ **cả năm**
+mắt xích nên `rfq.create` + `rfq.invite` nằm chung một vai là hợp lệ; cạnh `DRAFT →
+PENDING_APPROVAL` **không đếm lời mời** dù spec khai là có; và mọi bất biến đóng khung trong một
+`rfq_id` trong khi loại gian lận này chỉ lộ ra trên chuỗi nhiều gói thầu. Biện pháp — ngưỡng số
+nhà cung cấp tối thiểu, buộc mời NCC mới theo chu kỳ, chữ ký thứ hai cho danh sách mời — thuộc S3,
+và không biện pháp nào trong đó *phát hiện* được thông đồng.
 
 ## 6. Quyết định phạm vi MVP1
 

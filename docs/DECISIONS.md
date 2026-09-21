@@ -5499,3 +5499,102 @@ mọi lượt `migrate()`, nên một đột biến trong migration sẽ *"sốn
 Nó không nói `gia` là mã thành phần đúng cho mọi tổ chức — nó nói đó là mã DUY NHẤT có nguồn dữ liệu hôm
 nay. Nó cũng không chốt luật phá hoà (ADR-052 để mở, và S2.3 không đóng). Và nó không đóng khoản **105**:
 mọi `CHECK` của `057` nằm trong khoảng trống mà hardening không canh.
+
+---
+
+## ADR-054 — Mô hình đe dọa KHÔNG bao gồm bên mua thông đồng với TOÀN BỘ pool nhà cung cấp, và lớp chặn khả dĩ nằm ở khâu MỜI chứ không ở khâu niêm phong
+
+**Bối cảnh.** Chủ dự án phản biện ngày 2026-09-21 bằng hai kịch bản mà không tài liệu nào trước đó gọi
+tên: ⒜ **chiếm pool** — một người của bên mua móc nối với cả ba nhà cung cấp và lần nào cũng mời đúng ba
+tên ấy; ⒝ **xoay vòng thắng thầu** — ba bên thỏa thuận trước ai thắng gói nào, bên mua phím giá và phím
+thứ hạng.
+
+Cả hai đi lọt qua trọn lõi niêm phong, và lý do gói trong một câu: **lõi ấy bảo vệ thông tin giá trước
+deadline, còn hai kịch bản này không cần biết giá của ai.** Giá đã thống nhất xong trước khi chạm hệ
+thống. Niêm phong một cuộc thi mà cả ba thí sinh cùng một đội thì phong bì không mang thông tin nào.
+
+ADR-002 xếp ba tầng đe dọa theo trục *ai giải mã được* — người dùng ứng dụng, cá nhân có thẩm quyền đơn
+lẻ, nhà vận hành nền tảng. Không tầng nào trong ba tầng ấy chạm ⒜⒝, vì kẻ tấn công ở đây **không đọc
+phong bì của ai cả**. Trục thứ hai — *ai chọn được người dự thi* — chưa từng được xếp tầng, và đó là chỗ
+hai kịch bản trên sống.
+
+**Bốn số đo trên `master` `dc2b560`, đo trước khi quyết định.**
+
+⑴ **D3 là phép kiểm trên MỘT vai trong MỘT ma trận, không phải trên hành vi.** `kiem_tra_ma_tran_quyen`
+(`005`) chỉ nổ khi một vai giữ **cả năm** mã `rfq.create → rfq.invite → rfq.unseal → award.recommend →
+po.approve`. `PROCUREMENT_MANAGER` giữ **bốn trên năm** — ADR-051 đã đo đúng con số ấy khi tìm điều kiện
+thật của J3 — và `BUYER` giữ ba, trong đó có **cả `rfq.create` lẫn `rfq.invite`**. Nghĩa là mắt xích
+quyết định của kịch bản ⒜, *ai chọn nhà cung cấp*, nằm chung một vai với *ai tạo gói thầu*, ở **cả hai**
+vai được cấp hai mã ấy — và điều đó hoàn toàn **hợp lệ** dưới D3.
+
+⑵ **Cạnh `DRAFT → PENDING_APPROVAL` không đếm lời mời.** Spec S0+S1 §4.3 khai điều kiện bắt buộc của
+cạnh này gồm *"số nhà cung cấp được mời đạt ngưỡng chính sách"*. Trigger thật (`009`, thay bằng `011`)
+kiểm đúng hai thứ: `so_hang_muc = 0` và deadline. Ngưỡng ấy **không tồn tại ở bất kỳ đâu**:
+`org_procurement_policies` có bốn cột chính sách — `dual_approval_threshold`, `currency`, cùng
+`eval_components` và `bafo_top_n` thêm ở `056` — và không cột nào là số nhà cung cấp tối thiểu. Ràng buộc
+sản phẩm §8 hàng 5 cấm hard-code *"3 báo giá"*; đo được là con số ấy không được cưỡng chế ở đâu cả, kể
+cả dưới dạng cấu hình.
+
+⑶ **Mọi bất biến đóng khung trong MỘT `rfq_id`.** 56/56 bất biến của lõi niêm phong, cổng bốn vế của
+đường mở thầu, J1–J7 của S2 — không mệnh đề nào đọc quá một gói thầu. Hai kịch bản trên **chỉ lộ ra trên
+chuỗi nhiều gói thầu**: một RFQ mời đúng ba nhà cung cấp quen là chuyện thường ngày; hai mươi RFQ liên
+tiếp mời đúng ba tên ấy mới là tín hiệu. Đây là lỗ hổng của **hình dạng dữ liệu được đọc**, không phải
+một tính năng còn thiếu.
+
+⑷ **Dữ liệu để phát hiện thì đã có; thứ chưa có là lớp đọc nó.** `rfq_invitations` mang `supplier_id`,
+`rfq_id`, `created_at`, và từ `013` mang cả `invited_by` + `invited_by_session_id`. Câu *"người mua X đã
+mời những ai, bao nhiêu lần, trong mười hai tháng"* trả lời được bằng một truy vấn trên bảng đang có,
+không cần một cột mới nào.
+
+### Quyết định
+
+⑴ **Mô hình đe dọa của ADR-002 được ghi rõ là KHÔNG bao gồm trường hợp bên mua thông đồng với toàn bộ
+pool nhà cung cấp.** ADR-002 không sai và không bị thay thế — nó trả lời trục *ai giải mã được*, và trả
+lời đúng. ADR này thêm trục *ai chọn người dự thi* và trả lời **không** cho MVP1.
+
+⑵ **Cấm tuyên bố sản phẩm phát hiện hay ngăn được thông đồng.** Vào `docs/PRODUCT.md` §5, cùng khuôn với
+dòng zero-knowledge mà ADR-002 đã đặt ở đó. Thứ nói thay: sản phẩm làm việc móc nối **đắt hơn** và để
+lại **dấu đọc được**, rồi đưa tín hiệu thống kê cho con người điều tra — đúng nguyên tắc ⑸ *Risk Signal ≠
+Fraud Verdict*.
+
+⑶ **Lớp chặn khả dĩ nằm ở khâu MỜI, và nó là ba việc, cưỡng chế ở CẠNH TRẠNG THÁI chứ không ở tầng báo
+cáo.** (a) ngưỡng số nhà cung cấp tối thiểu vào `org_procurement_policies`, kiểm ở `DRAFT →
+PENDING_APPROVAL` — đây là **trả nợ spec §4.3**, không phải tính năng mới; (b) chính sách buộc mỗi RFQ có
+ít nhất một nhà cung cấp mà **chính người mời ấy** chưa mời trong N lần gần nhất, tính trên
+`invited_by` + `supplier_id` của `rfq_invitations`; (c) danh sách mời cần chữ ký thứ hai khi giá trị gói
+vượt ngưỡng — tức tách `rfq.invite` khỏi `rfq.create` bằng **hành vi đã xảy ra trên từng gói thầu**, đúng
+hình dạng mà ADR-051 đã chọn cho J3, chứ không bằng một hàng mới trong ma trận quyền.
+
+⑷ **Ba việc trên thuộc S3 Governance và KHÔNG chen vào MVP1.** Lý do không phải thứ tự ưu tiên: một máy
+dò xoay vòng cần lịch sử nhiều gói thầu mới có nghĩa, mà dự án chưa có **một RFQ thật nào** — §10 và
+mảnh 4 của §11 đã ghi điều đó từ 2026-08-27. Xây lúc này là dựng một phép đo trên tập rỗng, đúng cái bẫy
+ADR-043 gọi tên.
+
+⑸ **Khi tới lượt phát hiện xoay vòng, xếp theo SỨC MẠNH TÍN HIỆU chứ không theo độ dễ cài.** Khoảng cách
+giữa giá thắng và giá nhì mạnh nhất — thông đồng để lại biên bọc lót ổn định bất thường, cạnh tranh thật
+cho phân tán rộng — rồi tới ma trận tỷ lệ thắng theo nhà cung cấp và theo chu kỳ; cả hai mạnh hơn hẳn tín
+hiệu IP/thiết bị/metadata, thứ đắt nhất, nhiều báo động giả nhất, **và là thứ duy nhất trong ba đang
+được §10 của spec S2 nhắc tên**. Thứ tự ấy phải vào spec S3, vì trực giác mặc định xếp ngược lại.
+
+⑹ **Không mở khoản nợ cho ⑶ ở vòng này.** Ba việc ấy là phạm vi S3, và S3 chưa có spec; ghi chúng thành
+nợ của MVP1 sẽ tạo đúng thứ máy phát mà ADR-043 mô tả. Chúng nằm ở đây, và phải xuất hiện trong spec S3
+ngay khi spec ấy được viết.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói lõi niêm phong là thừa. Lõi ấy chặn một họ tấn công khác hẳn — bên mua xem giá sớm, sửa
+giá sau deadline, một người ôm trọn đường mở thầu — và họ ấy có thật, phổ biến hơn, và đã được cưỡng chế
+bằng 56/56 bất biến đo bằng đột biến.
+
+Nó **không** nói ba việc ở ⑶ ngăn được thông đồng. Chúng làm việc móc nối đắt hơn và để lại dấu đọc được.
+Một người mua quyết tâm vẫn mời được ba nhà cung cấp cùng một chủ dưới ba pháp nhân khác nhau, và không
+lớp phần mềm nào của TrustProcure thấy điều đó.
+
+Nó **không** thay thế biện pháp ngoài phần mềm: phân công người chấm theo cách người mua không đoán
+trước, luân chuyển người phụ trách nhóm hàng, và **giá tham chiếu bên ngoài** — nếu cả ba nhà thầu cùng
+một đội thì so ba giá ấy với nhau là vô nghĩa, chỉ một mốc giá ngoài hệ thống mới bắt được. Mốc ấy là S4
+Data Foundation, xa hơn cả S3.
+
+Nó **không** mở rộng phạm vi S2. Spec S2 §8.1 đã thú nhận sản phẩm không chặn được người mua rò tin bằng
+miệng; ADR này nói phần còn lại của cùng một sự thật — kịch bản ⒜⒝ **không cần rò tin gì cả** — và để cả
+hai ở nguyên chỗ cũ: ngoài phạm vi MVP1.
