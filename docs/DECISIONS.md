@@ -5097,3 +5097,99 @@ Nó không nói đường khuếch đại đã hết: một kẻ bên trong vẫ
 mang mã) vào hộp thư người duyệt — trần tần suất cho route người mua là khoản riêng. Nó không nói `2` là con số đúng cho một tổ
 chức có mười người duyệt; nó nói vì sao con số ấy phải nhỏ hơn hẳn `5`. Và nó không đóng ADR-046: tin **vẫn** mang mã, đúng như chủ
 dự án đã chọn — vòng này chỉ làm cho lựa chọn ấy không còn là một đường khoá cửa.
+
+## ADR-049 — Cặp nhân chứng break-glass là lời khai của MỘT LẦN: ghi một lần, bất biến, và không gác câu `EXECUTED`
+
+**Bối cảnh.** 022 mục (4) dựng hai cột `break_glass_witness_*` và tự gọi chúng là *"mức thấp nhất còn giữ được D3"* khi đường phê
+duyệt bị bỏ: break-glass vẫn bỏ qua NGƯỠNG, nhưng nó phải có một người thứ hai trong một phiên thứ hai. Lượt soi ngang 76 đọc ra hai
+khiếm khuyết ĐỐI XỨNG của cùng một cơ chế và ghi thành khoản 209 + 210, cả hai nhãn *"đo trên mã nguồn, chưa chạy trên cụm thật"*.
+Vòng này đo cả hai trên một cụm PostgreSQL thật, dưới đúng các vai sản xuất, TRƯỚC khi viết một dòng vá nào:
+
+```
+[209] app_api:  UPDATE unseal_requests SET break_glass_witness_* = <chính người yêu cầu> …   ⇒ rowCount = 1
+[209] chủ SH :  cùng câu ấy                                                                  ⇒ rowCount = 1
+[210] app_unseal: UPDATE … SET status='EXECUTED' sau khi phiên nhân chứng bị thu hồi
+      ⇒ Phien khong hop le: het han, bi thu hoi, hoac thuoc to chuc khac
+        (unseal_requests.break_glass_witness_session_id)
+```
+
+Vế 209 nói: D3 phá được bằng MỘT câu, sau khi hàng đã `APPROVED`. Trigger canh danh tính cho qua vì nó hỏi *"cặp này dẫn xuất từ một
+phiên sống không"*, chứ KHÔNG hỏi *"người này có phải người khác không"* — hai vế D3 ấy nằm ở `unseal_kiem_du_phe_duyet`, và trigger
+gọi hàm ấy chỉ chạy ở CẠNH `→ APPROVED`. Vế 210 nói điều ngược lại của cùng cơ chế: trigger nhân chứng gác MỌI lần ghi, kể cả câu
+`UPDATE` kết thúc của worker, nên một phiên nhân chứng chết (TTL mặc định 8 giờ) làm chính lượt mở thầu khẩn cấp **bất khả** — gãy ở
+CUỐI, sau khi đã mở bọc khoá KMS và giải mã mọi phong bì, và mỗi lượt thử lại đốt thêm một lần `kms:Decrypt`.
+
+**Hai khoản khoá lẫn nhau, nên chúng là một vòng chứ không phải hai.** Vá 210 một mình — thu hẹp `WHEN` về đúng lượt cặp ĐỔI, khuôn
+054 — thì câu `UPDATE` của 209 thôi bị trigger danh tính soi, tức lỗ RỘNG RA. Vá 209 một mình thì đường hợp lệ vẫn tắc.
+
+### Quyết định
+
+⑴ **Cặp nhân chứng vào danh sách cột bất biến của `unseal_kiem_chuyen_trang_thai`, với một câu `RAISE` RIÊNG gọi tên D3.** Câu riêng
+là cố ý: nó là một vế KHÁC với *"chỉ sửa được trạng thái và các mốc thời gian"*, và một phép đo phải khoá được đúng vế nó đo. Trigger
+này canh MỌI vai, kể cả chủ sở hữu và một script vận hành chạy dưới siêu người dùng.
+
+⑵ **Thu hồi `UPDATE (break_glass_witness_user_id, break_glass_witness_session_id)` khỏi `app_api`.** 022 cấp cả `INSERT` lẫn `UPDATE`,
+nhưng không đường mã nào dùng vế `UPDATE`: `requestUnseal` đặt nhân chứng trong chính câu `INSERT`, và đó là chỗ DUY NHẤT trong toàn
+kho chạm hai cột. Một đặc quyền không ai gọi mà đúng là phương tiện của kẻ tấn công thì thu hồi, không giữ.
+
+⑶ **Trigger nhân chứng chỉ còn `BEFORE INSERT` — hẹp hơn khuôn mà khoản 210 đề ra, và đây là chỗ ADR này đi ngược một đề xuất đã
+ghi.** Khoản 210 đề xuất khuôn 054: một nhánh `INSERT` cộng một nhánh `UPDATE` thu hẹp về lượt cặp ĐỔI. Nhưng sau ⑴ thì cặp nhân chứng
+KHÔNG ĐỔI ĐƯỢC trên `UPDATE` nữa, nên nhánh `UPDATE` ấy sẽ là một trigger **không bao giờ fire**. Một trigger không fire được không
+phải một lớp phòng thủ; nó là một câu nói sai về thứ gì đang canh thứ gì — đúng hình dạng mà khoản 211 gọi tên. 054 CẦN nhánh `UPDATE`
+vì cặp ĐIỀU PHỐI đổi thật (khoản 130: điều phối lại một job đã chết); cặp NHÂN CHỨNG là lời khai của MỘT LẦN, không phải một trạng thái
+đang chạy. Tên trigger giữ nguyên: 043 mang `ENABLE ALWAYS` theo tên ấy và hardening ghim nó theo tên, nên đổi tên là mở thêm ba chỗ
+phải nhớ mà không mua được gì.
+
+⑷ **Ba chỗ ghim trigger của hardening có thêm hai cổng — một TĨNH, một ĐỘNG — và ADR này chốt vì sao phải hai, và vì sao chúng BỔ
+SUNG chứ không thay cổng đã có.** Cổng đã có nằm ở `db/migrations.int.test.ts`: nó so **43 thân hàm** trigger giữa migration và
+hardening, đòi mục ghim khai đúng migration CUỐI CÙNG định nghĩa hàm, và — đúng như khoản 211 nói — chỉ đòi chuỗi
+`CREATE TRIGGER <tên>` xuất hiện trong mục. Nó đã bắt chính vòng này: `055` định nghĩa lại
+`unseal_kiem_chuyen_trang_thai` mà mục ghim vẫn khai `019_unseal.sql` ⇒ hai ca đỏ, sửa thành `(055)` theo đúng quy ước đọc được từ
+`unseal_kiem_du_phe_duyet (022)`. Thứ nó KHÔNG đo là ĐỊNH NGHĨA TRIGGER — thời điểm, sự kiện, mệnh đề `WHEN` — và đó là chỗ hai cổng
+mới đứng. Khoản 211 đề xuất một khẳng định so chuẩn hoá khoảng trắng giữa câu `CREATE TRIGGER` của migration và chỗ ghim ⑵. Bản ấy đã được ĐO LÀ BẤT KHẢ: 11 trong 71
+chỗ ghim ⑵ được viết bằng chính tả CANONICAL của `pg_get_triggerdef` chứ không bằng nguồn migration, nên so văn bản là dựng một bộ
+chuẩn hoá SQL viết tay — thứ sẽ hẹp hơn PostgreSQL ở đúng ngày nó cần rộng. Nên: cổng **TĨNH** đòi mỗi tên trigger có ĐÚNG HAI văn bản
+ghim ⑴/⑶ giống nhau từng byte và tập tên của ⑵ trùng khít tập tên ⑴/⑶ (đo được hôm nay: **71 = 71 = 71**); cổng **ĐỘNG** xoá sạch cả 71
+trigger, gọi lại `migrate()`, rồi so `pg_get_triggerdef` của bản vừa cài với văn bản đã ghim — **lấy chính PostgreSQL làm bộ chuẩn
+hoá**. Phần dư — 11 chỗ ghim viết sai chính tả — thành khoản 214 chứ không thành một lời hứa.
+
+### Cái giá — nói thẳng
+
+- **Không còn đường nào đổi nhân chứng, kể cả một đường hợp lệ.** Nếu nhân chứng nghỉ việc hay bị đình chỉ giữa lúc sự cố, cách duy
+  nhất là HUỶ yêu cầu rồi tạo lại. Đó là hành vi ĐÚNG — một lời khai mới cần một hành vi mới, có mã kiểm toán riêng — nhưng nó là một
+  bước thêm mà người vận hành phải biết TRƯỚC sự cố, không phải phát hiện trong sự cố.
+- **Hai lớp cho một vế, và đột biến cho thấy chúng KHÔNG dư.** Gỡ mệnh đề trigger ⇒ chỉ ca trigger đỏ, ca `42501` vẫn xanh vì lớp đặc
+  quyền đứng TRƯỚC. Gỡ câu `REVOKE` ⇒ chỉ ca `42501` đỏ, ca trigger vẫn xanh. Mỗi lớp giữ đúng phần vai của mình; không lớp nào một
+  mình phủ cả hai. Dự đoán ban đầu của vòng này — *"gỡ trigger thì hai ca đỏ"* — SAI, và cái sai ấy mới là số đo.
+- **Cổng động tốn ~15 s và nó CHẠM lớp hardening thật.** Nó xoá 71 trigger trên một cụm dùng một lần rồi gọi lại `migrate()`. Nếu một
+  ngày hardening thôi tự chữa được một trigger nào (ví dụ vì bảng của nó chưa tồn tại ở phiên bản đang đo), cổng này đỏ. Đó là ý muốn,
+  không phải tác dụng phụ.
+- **`CREATE CONSTRAINT TRIGGER` ngoài tầm cả hai cổng**: `pg_get_triggerdef` in nó với tiền tố khác nên nó không thuộc tập 71. Nói ra
+  thay vì để một con số xanh che đi.
+
+### Đo bằng gì
+
+- `packages/unseal/src/unseal.int.test.ts` — describe `[INV-D3] [khoản 209 + 210]`, **6 ca**: ba ca ĐỎ TRƯỚC bản vá (`42501` dưới
+  `app_api`; `23514` gọi tên D3 dưới chủ sở hữu; câu `EXECUTED` đi được sau khi phiên nhân chứng bị thu hồi) và ba ca đối chứng (một
+  đột biến trong tệp, và hai phép kiểm lúc CHÈN vẫn 23514). Đây là lần ĐẦU `INV-D3` có phép đo trên đường break-glass: ba tệp khai
+  của nó trước vòng này đo D3 ở mức VAI TRÒ và QUYỀN — kể cả một khối *phân tách nhiệm vụ ở mức người dùng* — và không tệp
+  nào chạm đường break-glass.
+- `db/ghim-trigger-tu-chua.int.test.ts` — **4 ca** (khoản 211, cổng ĐỘNG).
+- `tests/architecture/hardening-co-ly-do.test.ts` — **8 ca mới** (khoản 211, cổng TĨNH), gồm một mẫu dương và năm mẫu âm, trong đó
+  một mẫu âm đo đúng cái bẫy: văn bản trong `$def$` KHÔNG được đọc như một câu sửa.
+- `db/rls-coverage.int.test.ts` — sổ khai GRANT mất hai hàng `UPDATE` CÙNG LÚC với câu `REVOKE`; gỡ câu `REVOKE` một mình ⇒ `[M5]` đỏ.
+- **Sáu đột biến, cả sáu ĐỎ; hai đột biến CỐ Ý SỐNG** (khôi phục tự kiểm sha256 ở cả tám lượt): ⑴ gỡ mệnh đề bất biến ở CẢ BA chỗ
+  (055 + ⑵ + ⑶) ⇒ 1 đỏ · ⑵ gỡ `REVOKE` ⇒ 1 đỏ, và riêng nó ⇒ `[M5]` đỏ · ⑶ trả trigger về `BEFORE INSERT OR UPDATE` ở cả ba chỗ ⇒ ca
+  210 đỏ · ⑷ đổi CHỈ chỗ ghim ⑵ ⇒ cổng ĐỘNG đỏ 2 ca (đúng ca im lặng của khoản 211) · ⑸ đổi MỘT trong hai bản ghim ⇒ cổng TĨNH đỏ ·
+  ⑹ đổi lời khai số ADR đã viết lại về `48` ⇒ `P7` đỏ (trước vòng này nó xanh ở MỌI con số — khoản 217).
+- **Hai đột biến SỐNG, và mỗi cái nói ra một điều:** làm yếu CHỈ `055` mà để nguyên ba chỗ ghim ⇒ XANH, vì hardening tự chữa ngay
+  trong chính lần `migrate()` ấy — bằng chứng sống cho câu khoản 211 viết, rằng *hardening là lớp CÓ THẨM QUYỀN còn migration đánh số
+  thì không*. Và đột biến ⑷ chạy trên cổng TĨNH ⇒ XANH, đúng chỗ thu hẹp mà cổng tĩnh TỰ KHAI.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói `unseal_requests` đã hết chỗ nói sai: khoản **215** (một hàng KHÔNG break-glass vẫn mang được nhân chứng ở tầng CSDL) và
+khoản **208** (hàng `UNSEAL_REDISPATCHED` không mang một cặp người-phiên nào) vẫn mở. Nó không nói cổng của 211 so được ⑵ với
+migration — khoản **214** giữ đúng phần dư ấy, và cho tới khi 11 chỗ ghim được viết lại bằng chính tả nguồn thì phép so ấy vẫn bất
+khả. Và nó không nói nhân chứng là một lớp MẠNH: 022 đã tự viết nó là *"mức thấp nhất còn giữ được D3"*, và vòng này chỉ làm cho mức
+thấp nhất ấy không bị một câu `UPDATE` gỡ đi.

@@ -295,3 +295,194 @@ describe("[INV-H19] hardening: mọi phán xét có một dòng lý do trong ADR
     expect(() => docBang(hong)).toThrow(/khuôn LẠ/u);
   });
 });
+
+// ==============================================================================================
+// [INV-H19] [S1.100 / khoản 211] BA CHỖ GHIM CỦA MỘT TRIGGER PHẢI CÓ ĐỦ BA, VÀ HAI CHỖ VĂN BẢN
+// PHẢI GIỐNG NHAU TỪNG BYTE
+//
+// Mỗi trigger mà hardening tự chữa có BA chỗ ghim: ⑴ `pg_get_triggerdef` trong ĐIỀU KIỆN sửa,
+// ⑵ câu `CREATE TRIGGER` + `ENABLE ALWAYS` trong CÂU SỬA, ⑶ `pg_get_triggerdef` trong VỊ TỪ
+// PHÁN XÉT. Khoản 211 đo được rằng ba lối quên KHÔNG đối xứng:
+//   quên ⑶ ⇒ đỏ mọi lần — ồn ào và an toàn;
+//   quên ⑴ ⇒ dựng lại trigger ở mọi lần `migrate()` — im lặng, hại thấp;
+//   quên ⑵ ⇒ MÃ CHẾT cho tới ngày trigger trôi, rồi hardening cài lại bản CŨ; và vì
+//     `packages/db/src/migrate.ts` cố ý tách phán xét sang transaction RIÊNG, bản yếu **đã
+//     COMMIT** rồi phán xét mới đỏ. Đó là lối quên duy nhất vừa im lặng vừa hại nặng.
+//
+// Hình dạng đo được hôm nay rất đều, và chính sự đều đặn ấy là thứ cổng này giữ: **71 tên, mỗi
+// tên ĐÚNG HAI văn bản ghim giống nhau từng byte, và đúng một câu sửa cài nó** — 71 = 71 = 71.
+//
+// CHỖ CỔNG NÀY KHÔNG TỚI, nói ra thay vì để người đọc tự phát hiện: nó so ⑴ với ⑶ (hai văn bản
+// CÙNG một chính tả canonical) và so TẬP TÊN của ⑵ với tập tên của ⑴/⑶. Nó KHÔNG so NỘI DUNG ⑵
+// với ⑴/⑶, vì hai bên viết hai chính tả khác nhau: ⑵ là nguồn viết tay (`NEW.`,
+// `OPERATOR(pg_catalog.=)`, `IN (…)`) còn ⑴/⑶ là đầu ra `pg_get_triggerdef` (`new.`, `=`,
+// `= ANY (ARRAY[…])`), và 11 câu sửa của tệp này vốn được viết TỪ đầu ra canonical. Phép đo ấy
+// cần chính PostgreSQL làm bộ chuẩn hoá, và nó nằm ở `db/ghim-trigger-tu-chua.int.test.ts`.
+// ==============================================================================================
+
+/** Một tên trigger cùng tập văn bản đã ghim của nó (đầu ra `pg_get_triggerdef`, trong `$def$…$def$`). */
+export interface GhimTrigger {
+  readonly ten: string;
+  readonly ban: readonly string[];
+}
+
+/** Hai thẻ dollar-quote bọc VĂN BẢN ĐÃ GHIM, không bọc mã sẽ chạy. */
+const THE_GHIM = ["$def$", "$than$"] as const;
+
+/**
+ * Bỏ mọi vùng `$def$…$def$` và `$than$…$than$`. Mọi thẻ khác giữ nguyên — cố ý: một thẻ ghim MỚI
+ * sẽ làm cổng ĐỎ ồn ào (một câu `CREATE TRIGGER` cắt sai) chứ không làm nó MÙ.
+ */
+export function boVungGhim(sql: string): string {
+  let ra = sql;
+  for (const the of THE_GHIM) {
+    const phan = ra.split(the);
+    if (phan.length % 2 === 0) {
+      throw new Error(`số lần xuất hiện của \`${the}\` là LẺ (${phan.length - 1}) — dollar-quote hở, bộ đọc đang MÙ`);
+    }
+    ra = phan.filter((_, i) => i % 2 === 0).join("\n");
+  }
+  return ra;
+}
+
+/** ⑴ + ⑶ — mọi văn bản đã ghim, gom theo tên trigger, giữ NGUYÊN VĂN để so từng byte. */
+export function docGhimTrigger(hardening: string): readonly GhimTrigger[] {
+  const theo = new Map<string, string[]>();
+  for (const m of hardening.matchAll(/\$def\$(CREATE TRIGGER ([A-Za-z_0-9]+)[\s\S]*?)\$def\$/gu)) {
+    const ten = m[2]!;
+    const ban = theo.get(ten) ?? [];
+    ban.push(m[1]!);
+    theo.set(ten, ban);
+  }
+  return [...theo]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([ten, ban]) => ({ ten, ban }));
+}
+
+/** ⑵ — tên của mọi trigger mà một CÂU SỬA của hardening thật sự cài. */
+export function tenTriggerCauSua(hardening: string): readonly string[] {
+  const sach = boVungGhim(hardening).replaceAll(/--[^\n]*/gu, "");
+  const ten = new Set<string>();
+  for (const m of sach.matchAll(/\bCREATE TRIGGER\s+([A-Za-z_0-9]+)/gu)) ten.add(m[1]!);
+  return [...ten].sort((a, b) => a.localeCompare(b));
+}
+
+export function viPhamBaChoGhim(hardening: string): readonly string[] {
+  const ghim = docGhimTrigger(hardening);
+  const cai = new Set(tenTriggerCauSua(hardening));
+  if (ghim.length < 60) {
+    throw new Error(`chỉ đọc được ${ghim.length} tên trigger đã ghim, phải ≥ 60 — khuôn \`$def$\` đã đổi, cổng đang MÙ`);
+  }
+  const loi: string[] = [];
+  for (const g of ghim) {
+    if (g.ban.length !== 2) {
+      loi.push(
+        `\`${g.ten}\`: có ${g.ban.length} văn bản ghim, phải đúng 2 — ⑴ trong điều kiện sửa và ⑶ trong vị từ phán xét`,
+      );
+    }
+    const rieng = new Set(g.ban);
+    if (rieng.size > 1) {
+      loi.push(
+        `\`${g.ten}\`: ${rieng.size} văn bản ghim KHÁC NHAU — ⑴ và ⑶ đang ghim hai bản trigger khác nhau, ` +
+          "nên một trong hai chắc chắn sai",
+      );
+    }
+    if (!cai.has(g.ten)) {
+      loi.push(`\`${g.ten}\`: được GHIM mà KHÔNG câu sửa nào cài nó — chỗ ghim ⑵ thiếu, hardening không tự chữa được`);
+    }
+  }
+  for (const t of [...cai].sort((a, b) => a.localeCompare(b))) {
+    if (!ghim.some((g) => g.ten === t)) {
+      loi.push(`\`${t}\`: một câu sửa CÀI nó mà không chỗ nào GHIM nó — ⑴/⑶ thiếu, hardening cài rồi không phán xét`);
+    }
+  }
+  return loi;
+}
+
+const MAU_DU_BA_CHO = `
+    ARRAY[
+      $q$hàm + trigger t_vi_du$q$,
+      $q$true$q$,
+      $q$DO $fn1$
+         BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                           WHERE t.tgname = 'zz_canh'
+                             AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER zz_canh BEFORE UPDATE ON public.zz FOR EACH ROW WHEN ((new.a IS NOT NULL)) EXECUTE FUNCTION f()$def$) THEN
+             CREATE TRIGGER zz_canh BEFORE UPDATE ON public.zz FOR EACH ROW
+               WHEN (NEW.a IS NOT NULL) EXECUTE FUNCTION public.f();
+           END IF;
+         END
+         $fn1$$q$,
+      $q$EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgname = 'zz_canh'
+                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER zz_canh BEFORE UPDATE ON public.zz FOR EACH ROW WHEN ((new.a IS NOT NULL)) EXECUTE FUNCTION f()$def$)$q$,
+      $q$chẩn đoán$q$,
+      $q$quyền$q$
+    ]
+`;
+
+describe("[INV-H19] [S1.100 / khoản 211] ba chỗ ghim của một trigger", () => {
+  it("[INV-H19] mọi trigger được hardening tự chữa có ĐỦ ba chỗ ghim, và ⑴ khớp ⑶ từng byte", () => {
+    expect(viPhamBaChoGhim(HARDENING)).toEqual([]);
+  });
+
+  it("[INV-H19] số đo của hình dạng: mỗi tên đúng HAI văn bản ghim, và tập ⑵ trùng khít tập ⑴/⑶", () => {
+    const ghim = docGhimTrigger(HARDENING);
+    const cai = tenTriggerCauSua(HARDENING);
+    expect(ghim.length, "số tên trigger được ghim").toBeGreaterThanOrEqual(60);
+    expect(new Set(ghim.map((g) => g.ban.length)), "mỗi tên phải có đúng 2 văn bản ghim").toEqual(new Set([2]));
+    expect(cai.length, "tập tên ở câu sửa ⑵ phải trùng khít tập tên đã ghim").toBe(ghim.length);
+    expect(cai).toEqual(ghim.map((g) => g.ten));
+  });
+
+  it("[INV-H19] MẪU DƯƠNG: một mục đủ ba chỗ và hai văn bản ghim giống nhau thì KHÔNG vi phạm", () => {
+    const mau = Array.from({ length: 60 }, (_, i) => MAU_DU_BA_CHO.replaceAll("zz_canh", `zz_canh_${i}`)).join("\n");
+    expect(viPhamBaChoGhim(mau)).toEqual([]);
+  });
+
+  it("[INV-H19] MẪU ÂM ⑴≠⑶: hai văn bản ghim lệch một cột thì ĐỎ và gọi tên trigger", () => {
+    const mau = Array.from({ length: 60 }, (_, i) => MAU_DU_BA_CHO.replaceAll("zz_canh", `zz_canh_${i}`)).join("\n");
+    const doi = mau.replace("WHEN ((new.a IS NOT NULL)) EXECUTE FUNCTION f()$def$)$q$", "WHEN ((new.b IS NOT NULL)) EXECUTE FUNCTION f()$def$)$q$");
+    expect(doi, "neo của mẫu âm phải khớp đúng một lần").not.toBe(mau);
+    const loi = viPhamBaChoGhim(doi);
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("zz_canh_0");
+    expect(loi[0]).toContain("KHÁC NHAU");
+  });
+
+  it("[INV-H19] MẪU ÂM quên ⑵: ghim đủ hai chỗ mà không câu sửa nào cài thì ĐỎ", () => {
+    const mau = Array.from({ length: 60 }, (_, i) => MAU_DU_BA_CHO.replaceAll("zz_canh", `zz_canh_${i}`)).join("\n");
+    const doi = mau.replace(
+      "             CREATE TRIGGER zz_canh_0 BEFORE UPDATE ON public.zz FOR EACH ROW\n",
+      "             PERFORM 1;\n",
+    );
+    expect(doi).not.toBe(mau);
+    const loi = viPhamBaChoGhim(doi);
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("chỗ ghim ⑵ thiếu");
+  });
+
+  it("[INV-H19] MẪU ÂM quên ⑴/⑶: một câu sửa cài trigger mà không chỗ nào ghim nó thì ĐỎ", () => {
+    const mau =
+      Array.from({ length: 60 }, (_, i) => MAU_DU_BA_CHO.replaceAll("zz_canh", `zz_canh_${i}`)).join("\n") +
+      "\n$q$CREATE TRIGGER zz_khong_ghim BEFORE UPDATE ON public.zz FOR EACH ROW EXECUTE FUNCTION public.f();$q$\n";
+    const loi = viPhamBaChoGhim(mau);
+    expect(loi).toHaveLength(1);
+    expect(loi[0]).toContain("zz_khong_ghim");
+    expect(loi[0]).toContain("⑴/⑶ thiếu");
+  });
+
+  it("[INV-H19] MẪU ÂM chống MÙ: `$def$` hở một nửa thì NÉM, không xanh trên tập rỗng", () => {
+    expect(() => viPhamBaChoGhim(MAU_DU_BA_CHO + "$def$CREATE TRIGGER zz_ho BEFORE UPDATE ON public.zz")).toThrow(
+      /là LẺ/u,
+    );
+    expect(() => viPhamBaChoGhim("-- không có gì\n")).toThrow(/đang MÙ/u);
+  });
+
+  it("[INV-H19] MẪU ÂM: văn bản trong `$def$` KHÔNG được đọc như một câu sửa — nó là văn bản ghim", () => {
+    // Đúng cái bẫy: `$def$` mang chuỗi `CREATE TRIGGER`. Nếu bộ đọc ⑵ không bỏ vùng ấy thì nó
+    // thấy một trigger `zz_canh` "được cài" ở mọi mục, và mọi mẫu âm quên-⑵ ở trên thành XANH GIẢ.
+    expect(tenTriggerCauSua(MAU_DU_BA_CHO)).toEqual(["zz_canh"]);
+    expect(boVungGhim(MAU_DU_BA_CHO)).not.toContain("new.a IS NOT NULL");
+    expect(boVungGhim(MAU_DU_BA_CHO)).toContain("NEW.a IS NOT NULL");
+  });
+});

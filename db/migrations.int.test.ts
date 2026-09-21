@@ -1520,7 +1520,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "thu_hoi_don_dieu", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_thu_hoi_don_dieu", "invitation_otp_thu_hoi_don_dieu", "rfq_invitation_tokens_thu_hoi_don_dieu", "rfq_invitations_thu_hoi_don_dieu", "user_login_tokens_thu_hoi_don_dieu"] },
     { ham: "unseal_canh_bao_break_glass", migration: "019_unseal.sql", trigger: ["unseal_requests_canh_bao_break_glass"] },
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
-    { ham: "unseal_kiem_chuyen_trang_thai", migration: "019_unseal.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
+    { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
     { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "019_unseal.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
@@ -3087,6 +3087,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "052_worker_liet_ke_to_chuc.sql",
           "053_ten_rang_buoc_unseal_approvals.sql",
           "054_dieu_phoi_lai_co_canh.sql",
+          "055_nhan_chung_break_glass_bat_bien.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7480,6 +7481,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "052_worker_liet_ke_to_chuc.sql",
         "053_ten_rang_buoc_unseal_approvals.sql",
         "054_dieu_phoi_lai_co_canh.sql",
+        "055_nhan_chung_break_glass_bat_bien.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7754,6 +7756,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "052_worker_liet_ke_to_chuc.sql",
         "053_ten_rang_buoc_unseal_approvals.sql",
         "054_dieu_phoi_lai_co_canh.sql",
+        "055_nhan_chung_break_glass_bat_bien.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

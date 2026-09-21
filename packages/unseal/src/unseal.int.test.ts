@@ -39,6 +39,8 @@ let apiPool: pg.Pool;
  * `audit_append` chạy dưới RLS và `WITH CHECK (org_id = app_current_org_id())`. */
 let auditPool: pg.Pool;
 let orgA: string;
+/** Pool của vai `app_unseal` — đường của unseal-worker, và vai chạy câu `EXECUTED`. */
+let unsealPool: pg.Pool;
 /** uYc yêu cầu (PROCUREMENT_MANAGER), uD1/uD2 duyệt (DIRECTOR), uKhong không có quyền nào. */
 let uYc: string, uD1: string, uD2: string, uKhong: string;
 let sYc: string, sD1: string, sD2: string, sKhong: string, sYcB: string;
@@ -177,6 +179,7 @@ beforeAll(async () => {
     .toEqual([]);
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
+  unsealPool = db.poolAs("app_unseal");
 }, 180000);
 
 afterAll(async () => {
@@ -431,6 +434,13 @@ describe("[INV-D2] phê duyệt mở thầu", () => {
           " FOR EACH ROW WHEN (NEW.status = 'APPROVED' AND NEW.status IS DISTINCT FROM OLD.status) " +
           " EXECUTE FUNCTION public.unseal_kiem_du_phe_duyet()",
       );
+      // [S1.100 / khoản 216] `ENABLE ALWAYS` là một PHẦN của trigger này (045), nên một lượt khôi phục
+      // thiếu nó trả lại một trigger YẾU HƠN bản bị gỡ: nó thôi chạy dưới `session_replication_role =
+      // replica`. Không test nào trong tệp này đặt GUC ấy, nên nó chưa hại ai — nhưng một lượt khôi phục
+      // không khôi phục là đúng lớp lỗi mà khoản 145 và S1.86 đã trả giá một lần.
+      await db.pool.query(
+        "ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_du_phe_duyet",
+      );
     }
   });
 
@@ -577,6 +587,10 @@ describe("[INV-D4] break-glass", () => {
         "CREATE TRIGGER unseal_requests_canh_bao_break_glass AFTER INSERT ON unseal_requests " +
           " FOR EACH ROW WHEN (NEW.break_glass) " +
           " EXECUTE FUNCTION public.unseal_canh_bao_break_glass()",
+      );
+      // [S1.100 / khoản 216] Cùng lý do: 045 đưa trigger này lên `ENABLE ALWAYS`.
+      await db.pool.query(
+        "ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_canh_bao_break_glass",
       );
     }
   });
@@ -779,6 +793,165 @@ describe("[khoản 159] cặp người-phiên điều phối được kiểm ở
     );
     expect(kq.rowCount, "lần ghi KHÔNG đổi cặp vẫn đi qua, dù phiên điều phối đã thu hồi").toBe(1);
     await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sYc]);
+  });
+});
+
+// ===============================================================================================
+// [INV-D3] [khoản 209 + 210] CẶP NHÂN CHỨNG BREAK-GLASS — BẤT BIẾN SAU KHI SINH, VÀ KHÔNG GÁC
+// CÂU `EXECUTED` CỦA WORKER
+//
+// Hai khoản khoá lẫn nhau nên chúng được đo trong CÙNG một khối. 022 mục (4) dựng nhân chứng làm
+// *"mức thấp nhất còn giữ được D3"* khi đường phê duyệt bị bỏ — nhưng nó canh mức ấy ở đúng MỘT
+// CẠNH (`→ APPROVED`), và hai cột nhân chứng KHÔNG nằm trong danh sách bất biến của
+// `unseal_kiem_chuyen_trang_thai`. Còn trigger canh danh tính thì gác MỌI lần ghi, kể cả câu
+// `EXECUTED` của worker — nên một phiên nhân chứng chết làm chính lượt mở thầu khẩn cấp bất khả.
+//
+// Trước vòng này `INV-D3` có ba tệp, và chúng đo D3 ở mức VAI TRÒ và QUYỀN — kể cả một khối *phân
+// tách nhiệm vụ ở mức người dùng* ở `rbac.int.test.ts`. Không tệp nào đo đường BREAK-GLASS, tức đúng
+// chỗ chuỗi nằm trọn trong tay một người được sau khi đường phê duyệt đã bị bỏ.
+// ===============================================================================================
+describe("[INV-D3] [khoản 209 + 210] cặp nhân chứng break-glass", () => {
+  /** Một yêu cầu break-glass ĐÃ `APPROVED` — đường riêng của D4: không cần một phê duyệt nào. */
+  async function breakGlassDaDuyet(phienNhanChung = sD1): Promise<{ rfqId: string; requestId: string }> {
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(
+        c,
+        orgA,
+        {
+          rfqId,
+          reason: "su co: can mo ngay",
+          actorSessionId: sYc,
+          breakGlass: true,
+          breakGlassWitnessSessionId: phienNhanChung,
+        },
+        auditPool,
+      ),
+    );
+    const { rowCount } = await withTenant(apiPool, orgA, (c) =>
+      c.query("UPDATE unseal_requests SET status = 'APPROVED', approved_at = now() WHERE id = $1", [yc.id]),
+    );
+    expect(rowCount, "break-glass sang APPROVED không cần phê duyệt nào (D4)").toBe(1);
+    return { rfqId, requestId: yc.id };
+  }
+
+  /**
+   * Thông điệp của một lần từ chối, KHÔNG đi qua `expect.stringContaining` trong
+   * `toMatchObject`: bộ khớp bất đối xứng ấy trả `any`, và `no-unsafe-assignment` chặn đúng.
+   * Ở đây cần CẢ mã lỗi lẫn thông điệp từ CÙNG một lần thử, nên bắt lỗi rồi khẳng định hai vế.
+   */
+  const thongDiep = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+  async function docNhanChung(requestId: string): Promise<{ u: string | null; s: string | null }> {
+    const { rows } = await db.pool.query<{ u: string | null; s: string | null }>(
+      "SELECT break_glass_witness_user_id AS u, break_glass_witness_session_id AS s " +
+        "  FROM unseal_requests WHERE id = $1",
+      [requestId],
+    );
+    return rows[0] ?? { u: null, s: null };
+  }
+
+  it("[INV-D3] [khoản 209] `app_api` KHÔNG có quyền UPDATE trên hai cột nhân chứng — 42501", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "UPDATE unseal_requests SET break_glass_witness_user_id = $1, " +
+            "  break_glass_witness_session_id = $2 WHERE id = $3",
+          [uYc, sYcB, requestId],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    expect(await docNhanChung(requestId), "hàng giữ nguyên cặp nhân chứng gốc").toEqual({ u: uD1, s: sD1 });
+  });
+
+  it("[INV-D3] [khoản 209] lớp trigger chặn CẢ khi người gọi có quyền cột: 23514 gọi tên D3", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    const loi: unknown = await db.pool
+      .query(
+        "UPDATE unseal_requests SET break_glass_witness_user_id = $1, " +
+          "  break_glass_witness_session_id = $2 WHERE id = $3",
+        [uYc, sYcB, requestId],
+      )
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(loi, "câu UPDATE phải bị TỪ CHỐI, không phải đi qua").toMatchObject({ code: "23514" });
+    expect(thongDiep(loi)).toContain("Khong doi duoc nguoi lam chung break-glass");
+    expect(await docNhanChung(requestId)).toEqual({ u: uD1, s: sD1 });
+  });
+
+  it("[INV-D3] [khoản 209] ĐỘT BIẾN: gỡ trigger cột bất biến thì ĐÚNG câu ấy ĐI LỌT", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    await db.pool.query("DROP TRIGGER unseal_requests_kiem_chuyen_trang_thai ON unseal_requests");
+    try {
+      const { rowCount } = await db.pool.query(
+        "UPDATE unseal_requests SET break_glass_witness_user_id = $1, " +
+          "  break_glass_witness_session_id = $2 WHERE id = $3",
+        [uYc, sYcB, requestId],
+      );
+      expect(rowCount, "không có trigger thì người yêu cầu tự làm chứng cho chính mình").toBe(1);
+      expect(await docNhanChung(requestId)).toEqual({ u: uYc, s: sYcB });
+    } finally {
+      await db.pool.query(
+        "CREATE TRIGGER unseal_requests_kiem_chuyen_trang_thai BEFORE UPDATE ON unseal_requests " +
+          " FOR EACH ROW EXECUTE FUNCTION public.unseal_kiem_chuyen_trang_thai()",
+      );
+      await db.pool.query(
+        "ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+      );
+      const { rows } = await db.pool.query<{ e: string }>(
+        "SELECT tgenabled::text AS e FROM pg_trigger " +
+          " WHERE tgname = 'unseal_requests_kiem_chuyen_trang_thai' AND NOT tgisinternal",
+      );
+      expect(rows[0]?.e, "khôi phục phải trả lại ENABLE ALWAYS, không chỉ trả lại trigger").toBe("A");
+    }
+  });
+
+  it("[INV-D3] [khoản 210] phiên nhân chứng bị THU HỒI: câu `EXECUTED` của worker VẪN đi được", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    // Nhân chứng đăng xuất — hay bị đình chỉ, hay TTL 8 giờ hết. Đúng cảnh mà khoản 210 dựng.
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sD1]);
+    try {
+      const kq = await withTenant(unsealPool, orgA, (c) =>
+        c.query(
+          "UPDATE public.unseal_requests SET status = 'EXECUTED', executed_at = pg_catalog.now() " +
+            " WHERE id = $1 AND org_id = $2 AND status = 'APPROVED'",
+          [requestId, orgA],
+        ),
+      );
+      expect(kq.rowCount, "một phiên nhân chứng chết KHÔNG được làm lượt mở thầu khẩn cấp bất khả").toBe(1);
+    } finally {
+      await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sD1]);
+    }
+  });
+
+  it("[INV-D3] [khoản 210] ĐỐI CHỨNG DƯƠNG: nhân chứng BỊA lúc CHÈN vẫn bị chặn — thu hẹp `WHEN` không tắt lớp", async () => {
+    const rfqId = await taoRfqDaDong();
+    await expect(
+      db.pool.query(
+        "INSERT INTO unseal_requests (org_id, rfq_id, reason, break_glass, requested_by, " +
+          "  requested_by_session_id, break_glass_witness_user_id, break_glass_witness_session_id) " +
+          "VALUES ($1, $2, 'su co: can mo ngay', true, $3, $4, $5, $6)",
+        [orgA, rfqId, uYc, sYc, uD1, randomUUID()],
+      ),
+    ).rejects.toMatchObject({ code: "23514", message: /Phien khong hop le/u });
+  });
+
+  it("[INV-D3] [khoản 210] ĐỐI CHỨNG DƯƠNG: nhân chứng KHÔNG khớp chủ phiên bị chặn lúc CHÈN", async () => {
+    const rfqId = await taoRfqDaDong();
+    await expect(
+      db.pool.query(
+        "INSERT INTO unseal_requests (org_id, rfq_id, reason, break_glass, requested_by, " +
+          "  requested_by_session_id, break_glass_witness_user_id, break_glass_witness_session_id) " +
+          "VALUES ($1, $2, 'su co: can mo ngay', true, $3, $4, $5, $6)",
+        [orgA, rfqId, uYc, sYc, uD1, sD2],
+      ),
+    ).rejects.toMatchObject({ code: "23514", message: /khong khop chu phien/u });
   });
 });
 
