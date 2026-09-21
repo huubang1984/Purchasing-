@@ -5576,9 +5576,15 @@ cho phân tán rộng — rồi tới ma trận tỷ lệ thắng theo nhà cung
 hiệu IP/thiết bị/metadata, thứ đắt nhất, nhiều báo động giả nhất, **và là thứ duy nhất trong ba đang
 được §10 của spec S2 nhắc tên**. Thứ tự ấy phải vào spec S3, vì trực giác mặc định xếp ngược lại.
 
-⑹ **Không mở khoản nợ cho ⑶ ở vòng này.** Ba việc ấy là phạm vi S3, và S3 chưa có spec; ghi chúng thành
+⑹ ~~**Không mở khoản nợ cho ⑶ ở vòng này.** Ba việc ấy là phạm vi S3, và S3 chưa có spec; ghi chúng thành
 nợ của MVP1 sẽ tạo đúng thứ máy phát mà ADR-043 mô tả. Chúng nằm ở đây, và phải xuất hiện trong spec S3
-ngay khi spec ấy được viết.
+ngay khi spec ấy được viết.~~ **[S1.107] CHỦ DỰ ÁN QUYẾT ĐỊNH NGƯỢC LẠI — VÀ LẬP LUẬN BỊ BÁC ĐÚNG CHỖ NÓ
+SAI.** Nguyên văn trên trộn hai thứ khác nhau: *mở một khoản nợ* và *đưa một việc vào hàng đợi MVP1*.
+Ba rổ của ADR-043 tồn tại chính để tách chúng — rổ B là *đóng băng tới sau pilot*, và một khoản nằm ở đó
+không chặn MVP1 một bước nào. Cái giá của việc KHÔNG ghi thì đo được: một quyết định chỉ sống trong tệp
+này không có cổng nào đọc, còn mọi khoản trong sổ nợ đều đi qua `[INV-H20]` ở mỗi lượt chạy — chính là
+phép đo đã bắt hai lời khai số ADR thiu ở vòng này. Khoản **225** (rổ B) mang trọn ba việc của ⑶ và chỉ
+tên từng phép đo đứng sau chúng. ⑷ không đổi một chữ: chúng vẫn KHÔNG chen vào MVP1.
 
 ### Điều ADR này KHÔNG nói
 
