@@ -15,6 +15,7 @@
 // ==============================================================================================
 
 import { chooseKeyAgreementAlgorithm, describeEnvelope, sealBid } from "/lib/browser.js";
+import { cong, donGiaNguoiGo, thanhTien, tien } from "/lib/so-tien.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -69,41 +70,17 @@ async function trinhDuyetLamDuocGi() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Số tiền — nhân bằng số nguyên tỉ lệ, không nhân bằng `double`
+// Số tiền — [S1.99 / khoản 206] MỘT BẢN CÀI, Ở `apps/web/src/so-tien.ts`
 //
-// `quantity` về từ API là chuỗi 4 chữ số thập phân; đơn giá người dùng gõ là số nguyên. Nhân hai
-// số ấy bằng `Number` cho ra sai số ở đúng chỗ đắt nhất — khoản nợ 108 của kho nói về cùng lớp
-// lỗi ở phía đọc. Ở đây nhân bằng `BigInt` và trả về CHUỖI, nên `totalAmount` đi vào phong bì
-// không bao giờ đi qua một `double` nào.
+// Phép tính từng nằm nội tuyến ngay đây, và vì nó nằm ở một tệp `.js` ngoài `tsconfig.json`
+// trong một thư mục không có test nào, nó mang hai khiếm khuyết im lặng suốt từ S1.89: đơn giá
+// `1.500` đọc thành MỘT (dấu chấm bị đọc là dấu thập phân trong khi chính trang này in dấu chấm
+// là dấu NGHÌN ở dòng tổng), và mọi phần lẻ thừa bị cắt cụt không một lời nào.
+//
+// Nay nó sống ở `apps/web/src/so-tien.ts`: tsc gác, `so-tien.test.ts` đo 40 ca, và máy chủ gỡ
+// kiểu phục vụ đúng tệp ấy ở `/lib/so-tien.js`. Cùng nguyên tắc mà khối mở đầu tệp này đã viết
+// cho `sealBid` — thứ trình duyệt chạy là thứ test đo.
 // ---------------------------------------------------------------------------------------------
-
-function sangNguyen(chuoi, soLe) {
-  const s = String(chuoi).trim();
-  if (!/^\d+(\.\d+)?$/.test(s)) return null;
-  const [nguyen, le = ""] = s.split(".");
-  return BigInt(nguyen + (le + "0".repeat(soLe)).slice(0, soLe));
-}
-
-/** `sl` (4 chữ số thập phân) × `dg` (số nguyên) → chuỗi tiền 2 chữ số thập phân. */
-function thanhTien(sl, dg) {
-  const a = sangNguyen(sl, 4);
-  const b = sangNguyen(dg, 0);
-  if (a === null || b === null) return null;
-  const scaled = (a * b * 100n) / 10000n;
-  return `${scaled / 100n}.${String(scaled % 100n).padStart(2, "0")}`;
-}
-
-function cong(dsChuoi) {
-  let t = 0n;
-  for (const c of dsChuoi) {
-    const v = sangNguyen(c, 2);
-    if (v === null) return null;
-    t += v;
-  }
-  return `${t / 100n}.${String(t % 100n).padStart(2, "0")}`;
-}
-
-const nhomSo = (s) => s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — mở lời mời
@@ -202,19 +179,40 @@ function dongTien() {
   const ra = [];
   for (const o of $("bang-hang").querySelectorAll("input[data-line-no]")) {
     const it = phien.items.find((x) => String(x.lineNo) === o.dataset.lineNo);
-    const tt = o.value.trim() === "" ? null : thanhTien(it.quantity, o.value.trim());
-    ra.push({ lineNo: it.lineNo, unitPrice: o.value.trim(), amount: tt });
+    // [S1.99 / khoản 206] `unitPrice` đi vào phong bì là dạng ĐÃ CHUẨN HOÁ, không phải chuỗi thô.
+    // Bản cũ đẩy nguyên thứ người dùng gõ vào `unitPrice` còn `amount` thì tính ra, nên một ô ghi
+    // `1.500` niêm phong thành `unitPrice "1.500"` cạnh `amount "1.00"` — hai con số tự cãi nhau
+    // trong một phong bì không mở lại được để sửa.
+    const chuan = donGiaNguoiGo(o.value);
+    ra.push({
+      lineNo: it.lineNo,
+      unitPrice: chuan,
+      amount: chuan === null ? null : thanhTien(it.quantity, chuan),
+    });
   }
   return ra;
+}
+
+/** Ô đơn giá đầu tiên có chữ mà KHÔNG đọc được — để nói ra ô nào, chứ không chỉ nói "chưa đủ". */
+function donGiaKhongDocDuoc() {
+  for (const o of $("bang-hang").querySelectorAll("input[data-line-no]")) {
+    const go = o.value.trim();
+    if (go !== "" && donGiaNguoiGo(go) === null) return go;
+  }
+  return null;
 }
 
 function tinhLai() {
   const d = dongTien();
   const thieu = d.some((x) => x.amount === null);
   const tong = thieu ? null : cong(d.map((x) => x.amount));
-  $("tong").textContent = tong === null
-    ? "Nhập đơn giá cho tất cả hạng mục để ra tổng."
-    : `Tổng: ${nhomSo(tong.split(".")[0])},${tong.split(".")[1]} ${$("tien-te").value.trim() || "VND"}`;
+  const hong = donGiaKhongDocDuoc();
+  $("tong").textContent =
+    tong !== null
+      ? `Tổng: ${tien(tong)} ${$("tien-te").value.trim() || "VND"}`
+      : hong !== null
+        ? `Đơn giá "${hong}" không đọc được. Đơn giá là số nguyên đồng, và dấu chấm chỉ dùng để nhóm nghìn — viết 1.500.000 hoặc 1500000.`
+        : "Nhập đơn giá cho tất cả hạng mục để ra tổng.";
   $("nut-nop").disabled = tong === null;
   return tong;
 }

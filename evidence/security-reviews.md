@@ -8914,3 +8914,186 @@ một test cũng viết cứng *"bốn đường"*; nó đổi thành *"mọi đ
 - sổ nợ **204** khoản, mở **83 → 81**; rổ A **8 → 7**, rổ B **55 → 54**, rổ C **20**; **48** ADR không đổi
 - đóng **125** (rổ A) và **204** (rổ B); mở **0**
 - `pnpm t0` **0** — 282 module / 1148 phụ thuộc
+
+# §S1.99 — LƯỢT SOI NGANG 76, VÀ BA KHIẾM KHUYẾT CAO NẰM Ở ĐÚNG MỘT THƯ MỤC MÀ KHÔNG CỔNG NÀO NHÌN TỚI
+
+## 1. Lượt 76 — cửa sổ, nhịp, kỷ luật
+
+Cửa sổ sáu vòng **S1.93–S1.98** (`c3c73ad..81dae1b`, PR #93–#98; 6 commit, 43 tệp, +2166/−67). Mốc `Handoff.md` §11 ghi *"chậm nhất
+S1.99"*, và cả hai vế được ĐO chứ không đoán: vế **lịch** CHẠM (vòng này là S1.99); vế hardening
+`git rev-list --count c3c73ad..81dae1b --first-parent -- db/migrations/hardening.always.sql` = **1**, chưa tới ba. Hai vế nối bằng
+*hay*, nên một vế đủ. Ghi ra vì lượt 73 đã có tiền lệ một lời khai *"cả hai vế đều nghiêng về chạy"* bị chính phép đo bác.
+
+**Kỷ luật của lượt này khác lượt trước, và lý do nằm trong sổ:** bài học đã ghi của kho là *lượt quét fan-out phải tự kiểm lại* — thẩm
+tra đối kháng của lượt 75 bác quá ít (3 trong 57). Nên vòng này **tự đo lại từng phát hiện nặng** trước khi đề xuất vá, thay vì tin báo
+cáo của góc. Bốn phát hiện CAO dưới đây đều được đo lại bằng tay; năm phát hiện của góc 4 được đối chiếu với mã nguồn từng dòng và ghi
+rõ cái nào **chưa** chạy trên cụm thật.
+
+Sáu góc, **33 phát hiện**: 4 CAO, ~16 TRUNG, ~13 THẤP.
+
+## 2. Ba trong bốn CAO nằm ở `apps/web/trang/`, và đó mới là phát hiện
+
+`apps/web/trang/*.js` là **1 158 dòng** mã chạy trên máy nhà cung cấp và máy người mua. Nó không nằm trong `tsconfig.json`, không có một
+test nào, không cổng kiến trúc nào đọc, và `pnpm t0` xanh suốt trong khi ba khiếm khuyết dưới đây sống ở đó. Đây không phải ba lỗi rời
+nhau — nó là một **vùng không có phép đo**, và ba lỗi chỉ là thứ lộ ra khi có người nhìn.
+
+ADR-044 chốt vùng ấy là mã demo, và điều đó đúng. Nhưng hai trong ba khiếm khuyết có hậu quả không demo chút nào: một cái khoá tài khoản
+người duyệt thật, một cái niêm phong một con số sai vào thứ không mở lại được.
+
+Vì thế vòng này vá cả ba, và với hai trong ba thì **vá bằng một lớp chứ không bằng một dòng sửa** — xem mục 4 và mục 5.
+
+## 3. Khoản 205 — người duyệt thứ hai khoá tài khoản người duyệt thứ nhất, ba mắt đều đo được
+
+Chuỗi, và cả ba mắt đều nằm trong mã của kho:
+
+⑴ `apps/web/trang/mo-thau.js` khớp `hashchange` **đúng 0 lần**. Đổi fragment trên cùng một tài liệu không tải lại trang — chính phép đo
+mà §S1.98 đã dùng cho `nop-thau.js` (`performance.getEntriesByType('navigation').length` vẫn bằng 1). Hai ô `org` và `token` giữ mã của
+người TRƯỚC.
+
+⑵ Cổng đăng nhập của trang so `token` đọc từ **ô nhập** với `phien.token`. Hai thứ ấy bằng nhau, nên vế `if (token !== phien.token)`
+không reset gì; `phien.daRedeem` vẫn `true` nên `/auth/redeem` bị bỏ qua.
+
+⑶ `/auth/totp` do đó nhận **mã đăng nhập của người thứ nhất** kèm **mã sáu số của người thứ hai**. `MFA_MAX_FAILED_ATTEMPTS` là **5**
+(`packages/identity/src/mfa-credentials.ts`). Năm lần gõ là chứng chỉ MFA của người thứ nhất bị khoá.
+
+Đó là **cùng hạng hậu quả với khoản 199** mà ADR-048 vừa tốn trọn một vòng để đóng, và khác ở một chỗ làm nó tệ hơn: nó không cần kẻ tấn
+công nào. Hai người duyệt thật, một cái tab đang mở, một buổi demo — đúng kịch bản §11 mô tả.
+
+**Và nó là khiếm khuyết của chính vòng S1.98.** Vòng ấy đóng khoản 204 ở `nop-thau.js` và `tao-thau.js` rồi bỏ trang thứ ba, sau khi tự
+viết vào biên bản rằng để nguyên sẽ thành *"hai trang cư xử khác nhau ở cùng một chỗ"*. Câu ấy đúng; nó chỉ được áp cho hai trang trong
+ba.
+
+**Cách vá:** listener dựng **LẠI phiên trọn vẹn**, không vá từng trường. `rfqId` và `unsealRequestId` đang giữ là hai con trỏ đọc được
+dưới quyền của NGƯỜI TRƯỚC; mang chúng sang phiên người sau là đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (xem mục 8).
+
+## 4. Khoản 206 — trang hiện dấu chấm là nghìn rồi đọc dấu chấm là thập phân
+
+Đo bằng cách chạy thẳng ba hàm:
+
+| người nộp gõ | trang tính ra | |
+|---|---|---|
+| `1.500` | **1,00** | sai 1500 lần, IM LẶNG |
+| `12.5` | **12,00** | cắt cụt, IM LẶNG |
+| `1.500.000` | *từ chối* | dạng đầy đủ bị chặn |
+| trang **hiện** tổng | `1.500.000,00` | dấu chấm = **nghìn** |
+
+Tức chỉ ca **một dấu chấm** lọt im lặng — và đó là ca người Việt gõ nhiều nhất.
+
+**Nặng hơn một ô hiển thị sai.** `dongTien()` đẩy CHUỖI THÔ người dùng gõ vào `unitPrice` của phong bì còn `amount` thì tính ra, nên một
+ô ghi `1.500` niêm phong thành `unitPrice "1.500"` cạnh `amount "1.00"` — hai con số tự cãi nhau, trong đúng thứ không mở lại được để
+sửa sau hạn nộp. Người nộp không có lượt thứ hai.
+
+**Vá bằng một LỚP, không bằng một dòng sửa.** Phép tính dời sang `apps/web/src/so-tien.ts`: tsc gác, `so-tien.test.ts` đo **40 ca**, và
+máy chủ gỡ kiểu phục vụ **đúng tệp ấy** ở `/lib/so-tien.js`. Đây chính là nguyên tắc mà `nop-thau.js` tự viết ở khối mở đầu cho `sealBid`
+— *"không có bản cài thứ hai … thứ trình duyệt chạy là thứ test đo"* — và phép tính quyết định CON SỐ đi vào phong bì thì không được
+hưởng nguyên tắc ấy cho tới vòng này. (`mo-thau.js` cũng đang giữ một bản cài THỨ HAI của quy ước hiển thị, chép tay; nay cả hai trang
+dùng chung một tệp.)
+
+Và nó tách làm **hai bộ đọc**, vì hai nguồn chuỗi có hai nghĩa khác nhau cho cùng một dấu:
+- `sangNguyen` đọc chuỗi **máy sinh ra** — ở đó dấu chấm là dấu thập phân, luôn luôn, vì chính máy chủ viết ra thế. Nó cũng thôi cắt cụt
+  âm thầm: phần lẻ dài hơn `soLe` nay trả `null`.
+- `donGiaNguoiGo` đọc chuỗi **người gõ** — ở đó dấu chấm chỉ có thể là dấu nhóm nghìn. Nhận đúng dạng mà trang tự IN RA, **từ chối có
+  tiếng** mọi dạng mơ hồ, và trả về dạng CHUẨN HOÁ để phong bì không còn mang chuỗi thô.
+
+Vế trung tâm của phép đo là `describe("hiển thị và đọc vào phải là một")`: lấy đầu ra của hàm hiển thị đưa thẳng vào hàm đọc, đòi ra lại
+đúng con số ban đầu. Đó là vế mà khiếm khuyết đã vi phạm.
+
+**Hai đột biến chạy, cả hai chết:** bỏ vế chống cắt cụt ⇒ **5 đỏ**; không xoá dấu chấm khi chuẩn hoá ⇒ **10 đỏ**. Khôi phục kiểm bằng
+`sha256`, khớp.
+
+## 5. Khoản 207 — một danh sách trắng mà không luật nào đọc
+
+`eslint.config.js` khai `globals` cho `apps/web/trang/*.js` và viết ngay dưới: *"một tên mới xuất hiện sẽ làm eslint đỏ, và đó là lúc
+người viết phải nói ra rằng trang vừa chạm một bề mặt mới."*
+
+Luật duy nhất đọc `globals` là `no-undef`, và `no-undef` **không xuất hiện một lần nào** trong tệp ấy. Đo bằng cách ép luật ra ngoài cấu
+hình: `npx eslint --rule '{"no-undef":"error"}' apps/web/trang` cho đúng **HAI** lỗi, cả hai là `window` — một bề mặt trình duyệt không
+ai khai, đã lọt vào kho từ S1.98 mà `pnpm t0` vẫn xanh suốt.
+
+Một lời khai không có lớp, nằm trong tệp cấu hình của **chính bộ đo**. Nay luật được bật và `window` được khai; đột biến bỏ `window` khỏi
+danh sách ⇒ **3 lỗi** ở cả ba trang, trước vòng này là **0**.
+
+**Một bẫy đã đo và ghi lại tại chỗ:** khoá `rules` viết sau `...tseslint.configs.disableTypeChecked` sẽ **đè mất** trọn khối luật của nó,
+và eslint gãy ngay ở luật cần kiểu đầu tiên thay vì chạy. Phải gộp, không được thay.
+
+## 6. Khoản 198 — đóng bằng hướng thứ tư mà thân khoản không nghĩ tới
+
+Thân khoản đề ra ba hướng, cả ba đọc bài toán là *phải sinh một màn mới hoặc đổi hình dạng link*: ⒜ thêm màn `/login`, ⒝ nhét `orgId` vào
+fragment (đổi ADR-020), ⒞ cho `/auth/redeem` tự suy tổ chức (đổi một hợp đồng ANON).
+
+Phép đo nói bài toán nhỏ hơn thế. `/i` và `/login` là **nơi một link dẫn tới**, và cả hai nơi ấy đã có trang: lời mời dẫn tới trang nộp
+thầu, tin báo người duyệt dẫn tới trang mở thầu. Hai **bí danh** trong bản đồ `TRANG` đóng cả hai phía, không thêm màn nào, không đụng
+ADR-020.
+
+Phần `orgId` thiếu trong fragment KHÔNG đóng và cũng không cần đóng: `docLink()` của cả hai trang đã xử lý fragment không có dấu hai
+chấm bằng cách điền mã vào ô token; tin nhắn mang sẵn `orgId` trong thân.
+
+**Lớp kèm theo, vì một bản đồ viết tay sẽ thiu lần nữa.** `apps/web/src/phuc-vu.test.ts` đọc VĂN BẢN NGUỒN của bộ gửi tin, rút mọi đường
+dẫn mà nó dựng link tới, và đòi từng đường có mặt trong `TRANG`. Nó đọc văn bản chứ không import: một cạnh từ `apps/web` sang `apps/api`
+là một cạnh depcruise phải bless, và khối mở đầu tệp ấy đã ghi rằng đổi một ranh giới kiến trúc lấy sự tiện lợi của một test là đổi sai
+chiều. Có đối chứng dương (biểu thức phải khớp ≥ 3 lần) để vế không đúng một cách rỗng tuếch. Đột biến bỏ `/i` khỏi `TRANG` ⇒ **2 đỏ**.
+
+**Hệ quả cho rổ A:** đây là lần đầu rổ A không còn khoản nào thuộc vế ⒜ *một bước của kịch bản không chạy được*. Sáu khoản còn lại đều là
+⒝ hoặc ⒞ — hạ tầng và deploy.
+
+## 7. Năm khoản ghi phần KHÔNG vá
+
+Góc 4 (điều phối lại + trigger danh tính) xác nhận trục an toàn chính **đứng vững**: không dựng được đường mở thầu hai lần, và mệnh đề
+`WHEN` mới của migration 054 là **siêu tập chặt** của bản cũ. Nhưng nó tìm ra bốn thứ, và góc 6 tìm ra một chùm lời khai thiu:
+
+- **208** — `UNSEAL_REDISPATCHED` không mang cặp người-phiên nào, trong khi ba nơi khai là nó mang cả cặp cũ lẫn cặp mới. Đo: xoá cả ba
+  trường trong payload, không test nào đỏ.
+- **209** — nhân chứng break-glass đổi được sau `APPROVED`, nên một câu `UPDATE` đưa người yêu cầu vào làm chứng cho chính mình. D3 phá
+  được bằng một câu. *Đo trên mã nguồn, CHƯA chạy trên cụm thật; cách đo đã viết ra trong thân khoản.*
+- **210** — trigger nhân chứng gác cả câu `EXECUTED` của worker, nên một phiên nhân chứng chết làm **chính lượt mở thầu khẩn cấp** bất
+  khả, không chỉ điều phối lại. Mở rộng khoản 160 sang một hệ quả nặng hơn hẳn.
+- **211** — quên chỗ ghim ⑵ ở `hardening.always.sql` sẽ cài lại bản trigger YẾU HƠN, và vì phán xét chạy ở transaction riêng thì bản yếu
+  **đã commit** rồi mới đỏ. *Suy từ mã nguồn, chưa chạy phép đo.*
+- **212** — hai mươi lăm lời khai đếm thiu, ghi thành MỘT hàng thay vì vá tay từng câu.
+
+**209 và 210 phải vá cùng một vòng** — thu hẹp `WHEN` của trigger nhân chứng mà không khoá bất biến hai cột nhân chứng sẽ **mở rộng** lỗ
+D3. Chúng vào rổ B chứ không rổ A vì `docs/PRODUCT.md` §11 không nhắc break-glass một lần nào và đường ấy chưa đi được qua HTTP; nhưng
+chúng phải được đọc lại TRƯỚC lần đầu ai đó dùng break-glass thật, không phải trước khách hàng thứ hai.
+
+**Điều đáng ghi nhất của góc 6, và nó là câu trả lời cho câu hỏi *làm sao thoát vòng lặp lỗi→sửa→lỗi*:** góc ấy đọc kỹ mọi mục *Ranh giới
+nói ra* của §S1.94–§S1.98 và **không tìm được câu nào rộng hơn phép đo**, trừ một. Văn hoá ghi ranh giới ở kho này thật sự chặt. Thứ trôi
+là **các CON SỐ viết cứng** — và khoản 136 đã ghi sẵn từ lâu rằng con số ấy LÀ số đo của nó. Vá tay hai mươi lăm câu là đúng cái vòng lặp
+ADR-043 mô tả; lối ra là một phép đo suy con số từ nguồn, và đó là một vòng riêng.
+
+## 8. Hai lời khai sai của chính vòng trước, sửa tại chỗ
+
+- Hàng **204** của sổ khai: *"Trang `tao-thau.js` ra đời cùng vòng và mang sẵn listener ấy, nên nó không lặp lại khiếm khuyết."* Sai hai
+  chỗ: listener ấy viết `{ ...phien, daRedeem: false, token }` nên **giữ** `rfqId`, `supplierId`, `contactId`, `soHangMuc` của người
+  trước; và trang **thứ ba** không được nhắc một lần nào. Câu gạch tại chỗ, nguyên văn giữ lại để đối chiếu.
+- `Handoff.md` mục *việc tiếp theo* số 1 khai *"Rổ A — **mười bốn** khoản chặn pilot"* trong khi dòng ngay dưới nó liệt kê bảy. Con số ấy
+  sống từ S1.88 qua **sáu vòng**, mỗi vòng đều viết lại danh sách ở dòng kế tiếp.
+- `docs/ARCHITECTURE.md` khai *bốn app* (năm), *52 migration* (54), một app `vendor-portal` **không tồn tại**, và `Next.js` ở hai dòng
+  mà ADR-044 đã chốt là `node:http` trần. Bốn lời khai sai ở đúng cửa trước của tài liệu kiến trúc, trong một tệp tự khai *"mô tả kiến
+  trúc ĐANG CHẠY"*. Sửa cả bốn; phần còn lại của chùm nằm ở khoản 212.
+
+## 9. Ranh giới nói ra
+
+- **`apps/web/trang/*.js` vẫn không có test DOM và vẫn không được tsc gác.** Vòng này kéo phần TÍNH TOÁN ra khỏi vùng ấy và đặt vào chỗ
+  có cả hai; phần còn lại — dựng DOM, gắn sự kiện, gọi `fetch` — vẫn không có phép đo nào. Hành vi `hashchange` của khoản 205 được suy
+  từ mã nguồn và từ phép đo trình duyệt mà §S1.98 đã chạy cho `nop-thau.js`; nó **không** được chạy lại trên trình duyệt trong vòng này,
+  và **không** chạy lại được trong CI.
+- **Chuỗi khoá MFA của khoản 205 không được tái lập đầu-cuối trên ngăn xếp thật.** Ba mắt đều đo riêng (0 lần khớp `hashchange`; vế so
+  token đọc ô nhập; hằng số 5). Khác khoản 199 — cái ấy được tái lập thật trong 3 giây. Ghi ra vì đó là chênh lệch giữa hai phép đo cùng
+  hạng hậu quả.
+- **`donGiaNguoiGo` nhận `1.500` là một nghìn năm trăm.** Đó là một quy ước, không phải một định lý: nó khớp đúng dạng mà chính trang in
+  ra, và mọi dạng khác bị từ chối có tiếng. Một người thật sự muốn gõ *một phẩy năm* sẽ bị từ chối chứ không bị đoán sai — lựa chọn ấy
+  đúng ở đây vì đầu ra đi vào một phong bì không sửa được.
+- **209 và 211 chưa chạy trên cụm thật.** Cách đo đã viết ra trong thân từng khoản; vòng này không chạy chúng.
+- **Chưa có lượt đi thử §11 trên bản này.** Ba bản vá đều ở đường người dùng thật; lượt đi thử kế tiếp nên bắt đầu từ `/i` và `/login`
+  của bộ gửi tin, vì đó là đường vừa mở và chưa ai đi bằng chuột.
+
+## 10. Số đo
+
+- sổ nợ **212** khoản, mở **81 → 85**; rổ A **7 → 6**, rổ B **54 → 58**, rổ C **20 → 21**; **48** ADR không đổi
+- đóng **198** (rổ A); mở và đóng trong cùng vòng: **205**, **206**, **207**; mở **208 · 209 · 210 · 211 · 212**
+- `pnpm t0` **0** — 285 module / 1153 phụ thuộc
+- `pnpm test` **999 đạt / 1 bỏ qua**, 71 tệp; riêng `apps/web` **58 đạt** (40 ca mới ở `so-tien.test.ts`, 4 ca mới ở `phuc-vu.test.ts`)
+- đột biến: **4 chạy, 4 chết** — 2 ở `so-tien.ts` (5 đỏ, 10 đỏ), 1 ở `eslint.config.js` (3 lỗi), 1 ở `TRANG` (2 đỏ); khôi phục kiểm bằng
+  `sha256`, khớp cả bốn
+- sổ nợ tự đối chiếu **45/45**; evidence **XANH** — **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ 2069 khẳng định,
+  `vitest thoát mã 0`

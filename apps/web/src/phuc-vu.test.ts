@@ -12,10 +12,11 @@
 // ghi ở đầu `ts-resolve-hook.mjs`.)
 // ==============================================================================================
 
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { MODULE_TRINH_DUYET, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
+import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
   readonly method: string;
@@ -75,6 +76,54 @@ describe("bề mặt tệp", () => {
     const m = napTep();
     for (const duong of Object.keys(TRANG)) expect(m.has(duong), duong).toBe(true);
     for (const ten of MODULE_TRINH_DUYET) expect(m.has(`/lib/${ten}.js`), ten).toBe(true);
+    for (const ten of MODULE_WEB) expect(m.has(`/lib/${ten}.js`), ten).toBe(true);
+  });
+
+  // ============================================================================================
+  // [S1.99 / khoản 198] MỌI ĐƯỜNG MÀ SẢN PHẨM DỰNG LINK TỚI PHẢI LÀ ĐƯỜNG `apps/web` PHỤC VỤ
+  //
+  // Khoản 198 sống từ S1.92 và rộng ra ở S1.93: bộ gửi tin dựng `${baseUrl}/login#<mã>` cho
+  // người mua và `${baseUrl}/i#<mã>` cho nhà cung cấp, mà bản đồ `TRANG` không có đường nào
+  // trong hai đường ấy — nên MỌI link do sản phẩm sinh ra trả 404, và lượt đi thử chỉ đi được
+  // nhờ link VIẾT TAY của `tools/gieo-demo`. Hai vòng liền đọc qua mà không ai thấy, vì không
+  // lớp nào nối hai phía lại.
+  //
+  // Vế này đọc VĂN BẢN NGUỒN của bộ gửi chứ không import nó: một cạnh import từ `apps/web` sang
+  // `apps/api` là một cạnh depcruise phải bless, và khối mở đầu tệp này đã ghi rằng đổi một ranh
+  // giới kiến trúc lấy sự tiện lợi của một test là đổi sai chiều. Đọc văn bản không tạo cạnh nào.
+  //
+  // Nó đo HÌNH DẠNG chứ không đo một danh sách: thêm một dạng link mới ở bộ gửi mà quên trang
+  // thì câu này đỏ, kể cả khi không ai nhớ tới khoản 198.
+  // ============================================================================================
+  it("[khoản 198] mọi đường dẫn bộ gửi tin dựng link tới đều nằm trong TRANG", () => {
+    const nguon = readFileSync(
+      new URL("../../api/src/adapters/hop-thu-dev.ts", import.meta.url),
+      "utf8",
+    );
+    const duong = [...nguon.matchAll(/\$\{tuyChon\.baseUrl\}(\/[a-z0-9-]*)#/gu)].map((m) => m[1]);
+    // Đối chứng dương: nếu biểu thức này khớp 0 lần thì vế dưới đúng một cách rỗng tuếch.
+    expect(duong.length, "không đọc được dạng link nào ở hop-thu-dev.ts").toBeGreaterThanOrEqual(3);
+    for (const d of new Set(duong)) expect(Object.keys(TRANG), d).toContain(d);
+  });
+
+  it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {
+    const ri = await goi("/i");
+    expect(ri.status).toBe(200);
+    expect(ri.text).toContain("Nộp báo giá");
+    const rl = await goi("/login");
+    expect(rl.status).toBe(200);
+    expect(rl.text).toContain("Mở thầu");
+  });
+
+  it("[khoản 206] phép tính tiền ra JavaScript, còn nguyên hai bộ đọc chuỗi", async () => {
+    const r = await goi("/lib/so-tien.js");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("text/javascript");
+    // Cùng vế chống "phục vụ một bản rỗng" mà `/lib/seal.js` dùng: hai bộ đọc phải cùng có mặt,
+    // vì chính việc chỉ có MỘT bộ đọc cho cả chuỗi máy lẫn chuỗi người gõ là khiếm khuyết cũ.
+    expect(r.text).toContain("export function donGiaNguoiGo");
+    expect(r.text).toContain("export function sangNguyen");
+    expect(r.text).not.toMatch(/from\s+["']node:/u);
   });
 
   it("trang nộp thầu ra HTML kèm CSP không có unsafe-inline", async () => {

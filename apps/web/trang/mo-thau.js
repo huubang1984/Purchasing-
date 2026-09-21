@@ -10,6 +10,8 @@
 // được một mức giá trước khi mở thầu, kể cả khi người dùng là quản trị viên.
 // ==============================================================================================
 
+import { tien } from "/lib/so-tien.js";
+
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
@@ -48,13 +50,9 @@ function dienDl(el, hang) {
   }
 }
 
-const nhomSo = (s) => String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-
-function tien(chuoi) {
-  if (chuoi === null || chuoi === undefined) return "—";
-  const [n, l = "00"] = String(chuoi).split(".");
-  return `${nhomSo(n)},${l}`;
-}
+// [S1.99 / khoản 206] `tien` từng có một bản cài THỨ HAI ngay đây, chép tay từ `nop-thau.js`.
+// Hai bản cài của cùng một quy ước hiển thị là hai chỗ để chúng lệch nhau, và trang nộp thầu đã
+// chứng minh quy ước ấy đáng được đo.
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP
@@ -270,6 +268,38 @@ $("nut-bang").addEventListener("click", async () => {
     ["Trung bình", tien(a.average)],
     ["Lệch tiền tệ", a.currencyMismatch === true ? "CÓ — không so sánh thẳng được" : "không"],
   ]);
+});
+
+// ==============================================================================================
+// [S1.99 / khoản 205] ĐỔI FRAGMENT PHẢI ĐỔI CẢ PHIÊN — VÀ Ở TRANG NÀY, KHÔNG LÀM THẾ THÌ NGƯỜI
+// DUYỆT THỨ HAI KHOÁ TÀI KHOẢN CỦA NGƯỜI DUYỆT THỨ NHẤT.
+//
+// Chuỗi hỏng, đo được ở cả ba mắt:
+//   ⑴ trang đọc `location.hash` ĐÚNG MỘT LẦN lúc tải, và đổi fragment trên cùng một tài liệu
+//     KHÔNG tải lại trang — nên hai ô `org`/`token` giữ nguyên mã của người duyệt THỨ NHẤT;
+//   ⑵ cổng đăng nhập ngay trên đọc ô nhập chứ không đọc fragment: `token` bằng `phien.token` nên
+//     nó không reset gì, và `phien.daRedeem` vẫn true nên `/auth/redeem` bị bỏ qua;
+//   ⑶ `/auth/totp` do đó nhận mã đăng nhập của NGƯỜI THỨ NHẤT kèm mã sáu số của NGƯỜI THỨ HAI.
+//     `MFA_MAX_FAILED_ATTEMPTS` là 5 (`packages/identity/src/mfa-credentials.ts`), nên năm lần gõ
+//     là chứng chỉ MFA của người thứ nhất bị khoá — bởi một người không hề định làm thế.
+//
+// Đó là cùng hạng hậu quả với khoản 199 mà ADR-048 vừa tốn trọn một vòng để đóng, và nó là
+// khiếm khuyết của chính vòng S1.98: vòng ấy đóng khoản 204 ở `nop-thau.js` và `tao-thau.js` rồi
+// bỏ trang này, sau khi tự viết rằng để nguyên sẽ thành *"hai trang cư xử khác nhau ở cùng một
+// chỗ"*.
+//
+// Phiên được dựng LẠI TRỌN VẸN chứ không vá từng trường: `rfqId` và `unsealRequestId` đang giữ
+// là hai con trỏ đọc được dưới quyền của NGƯỜI TRƯỚC. Mang chúng sang phiên của người sau là
+// đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (khoản 204 ghi sai rằng trang ấy không lặp
+// lại khiếm khuyết).
+// ==============================================================================================
+window.addEventListener("hashchange", () => {
+  docLink();
+  phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ok3", "ghi-danh"]) {
+    const el = $(id);
+    if (el !== null) bao(el, "");
+  }
 });
 
 docLink();
