@@ -9437,6 +9437,65 @@ sai thì người đọc không biết nó đã kiểm chỗ nào và bỏ chỗ
 - **`numeric(18,2)` cho VND là một mô hình đáng hỏi lại**, và ADR-050 nói ra rằng nó KHÔNG trả lời câu ấy: hai
   chữ số là lựa chọn của `014`/`022`, không của vòng này.
 
+## 7b. Evidence ĐỎ trên CI ở một vòng KHÔNG chạm mã — và bản vá của S1.99 trả lời ngay lần đỏ đầu tiên
+
+`Evidence pack` đỏ trên CI cho PR của chính vòng này, trong khi xanh hai lượt ở máy. Vòng này là một vòng TÀI
+LIỆU: không một dòng mã nào bị chạm, nên nó không thể là hồi quy. Cùng hình dạng khoản **213**, và lần này
+`vitest thoát mã 1` cũng in **2087** khẳng định — **y hệt lượt xanh**, nên con số ấy lại không phân biệt được
+gì, đúng như 213 đã ghi.
+
+Khác lần trước ở đúng một chỗ: artifact `inv-matrix` **mang** `evidence/vitest-report.json` (1 MB), thứ S1.99
+thêm vào *"để lần đỏ sau tự nêu tên"*. Nó nêu tên ngay, ở lượt đọc đầu tiên:
+
+```
+packages/identity/src/rbac.int.test.ts                                      5099 ms
+[INV-D5] khoá tư vấn ghi sổ của tổ chức B ghim cả hai kết nối auditPool …
+Error: het 5000ms, so lan ghi so cua B dang cho khoa: 0     (rbac.int.test.ts:724)
+```
+
+**Rồi số đo tự nói ra chẩn đoán.** Cùng ca ấy, cùng commit, ở máy: `passed` trong **723 ms**.
+
+| | ở máy | trên CI |
+|---|---|---|
+| kết quả | passed | **failed** |
+| thời lượng | **723 ms** | **5099 ms** |
+
+Bước nhảy 723 → 5099 không phải một đường cong tải. **5099 ms CHÍNH LÀ cái hạn** — vòng quét đốt trọn 5 000 ms
+rồi ném. Một ca chậm vì tải thì nằm rải giữa hai con số ấy; một ca *đứng đúng ở hạn* là một ca chờ một trạng
+thái **không bao giờ tới**.
+
+**Nguyên nhân: một cuộc đua trong chính phép đo, không ở mã sản xuất.** Giao dịch giữ khoá được TẠO, rồi hai
+lần ghi tranh khoá khởi động NGAY — không ai chờ một xác nhận nào rằng khoá đã nằm trong tay giao dịch ấy. Trên
+một runner chậm, `withTenant` còn đang lấy kết nối / `SET ROLE` / `BEGIN` thì hai lần ghi của B đã tới
+`audit_append` và **lấy được khoá ngay**: không ai chờ ai, nên `NOT granted` đứng ở 0 VĨNH VIỄN. Đúng lớp lỗi
+*kiểm-rồi-làm* mà khoản 188 đã ghi cho một phép chụp khác của kho.
+
+**Và bản sửa hiển nhiên là bản sửa SAI — đây là số đo nói ra điều đó.** Lần chờ khoá của B có trần **2 giây**
+(hàm nối chuỗi, `050`), và chính chú thích ngay dưới vòng quét đã ghi con số ấy. Nên cửa sổ quan sát KHÔNG được
+dài hơn 2 s; bản cũ tự cho mình **5 s**, tức **quan sát lâu hơn thứ được quan sát**. Nới 5 s thành 10 s chỉ làm
+ca đỏ chậm gấp đôi và giấu nguyên nhân sâu thêm một tầng.
+
+**Bản vá, ba vế:** chờ tới khi khoá được GIỮ thật (`granted ≥ 1`) rồi mới cho ai tranh nó · hạ hạn quan sát
+xuống **1 800 ms**, dưới trần 2 s, vì quá 2 s thì hai lần ghi của B đã gãy `55P03` và trạng thái cần thấy đã
+chết · bộ đếm chia `granted`/`NOT granted` thay vì chỉ đếm vế chờ, vì một nửa phép đo không phân biệt được
+*đang chờ* với *chẳng ai phải chờ*.
+
+**Nhân quả chứng minh bằng đột biến, và nó TÁI LẬP lỗi của CI trên máy** — tiêm 300 ms trễ trước giao dịch giữ
+khoá:
+
+| bản | kết quả |
+|---|---|
+| CŨ (không chốt chờ-khoá-được-giữ) | **ĐỎ 5061 ms** — `het 5000ms, so lan ghi so cua B dang cho khoa: 0`, ĐÚNG nguyên văn CI in ra |
+| MỚI (có chốt) | **XANH 1025 ms** |
+
+**Vòng này vì thế chạm một dòng mã, và nói ra:** mục 1 khai *"không một dòng mã S2 nào"* — vẫn đúng, không một
+dòng S2 nào. Thứ bị sửa là một PHÉP ĐO đã hỏng sẵn, do chính CI của vòng này phơi ra. Để nó lại rồi merge trên
+một lượt chạy lại là đúng thứ S1.99 đã từ chối làm.
+
+**Khoản 213 ĐÓNG**, và điều nó KHÔNG đóng được ghi ra: lần đỏ của S1.99 không bao giờ truy được tên — lúc ấy
+artifact chưa mang báo cáo — nên không ai chứng minh được nó LÀ ca này; và một cuộc đua được sửa không chứng
+minh rằng không còn cuộc đua nào khác trong 51 tệp int.
+
 ## 8. Số đo
 
 - `pnpm t0` **0 vi phạm** — 286 module / 1158 phụ thuộc cruised.
@@ -9445,11 +9504,15 @@ sai thì người đọc không biết nó đã kiểm chỗ nào và bỏ chỗ
   và `evidence/INV-matrix.md` KHÔNG đổi một con số nào. Đó là phép đo xác nhận đúng điều vòng này tự khai:
   không một dòng mã nào bị chạm. Một vòng tài liệu mà ma trận bất biến NHÍCH là một vòng đã nói sai về
   chính mình.
-- **Không một dòng mã S2 nào.** Phép đo của vòng này là **chín phép đọc** có tệp và dòng (bốn ở CAO ①, hai ở
+- **Không một dòng mã S2 nào** — và vế ấy vẫn đúng sau mục 7b: thứ bị sửa ở đó là một PHÉP ĐO đã hỏng
+  sẵn (`packages/identity/src/rbac.int.test.ts`), do chính CI của vòng này phơi ra. Phép đo của lượt soi
+  là **chín phép đọc** có tệp và dòng (bốn ở CAO ①, hai ở
   CAO ②/③ trên chính spec, `020` mục (3), `comparison.ts` `currencyMismatch`, và `011:147`), cộng một phép kiểm
   rằng `so-tien` không có người gọi phía máy chủ.
-- Sổ nợ **217 → 218** khoản, mở **85 → 86**: mở **218**, không đóng khoản nào. Rổ A **6** không đổi, rổ B
-  **57 → 58**, rổ C **22** không đổi.
+- **Hai đột biến của mục 7b**: bản CŨ + trễ 300 ms ⇒ **ĐỎ 5061 ms** với ĐÚNG nguyên văn thông điệp CI in
+  ra; bản MỚI + cùng trễ ⇒ **XANH 1025 ms**. Khôi phục tự kiểm `sha256`.
+- Sổ nợ **217 → 218** khoản, mở **85 → 85**: mở **218** (hai luật làm tròn tiền), đóng **213** (cổng
+  evidence không tất định — xem mục 7b). Rổ A **6** không đổi, rổ B **57 → 58**, rổ C **22 → 21**.
 - **49 → 50** ADR (ADR-050), **55** migration không đổi, **56/56** bất biến không đổi.
 - Spec: **259 → 288 dòng**, và trạng thái đổi từ *"bản thảo để chủ dự án đọc và bác"* sang *"đã qua lượt soi
   hình dạng"*.
