@@ -504,8 +504,15 @@ async function dieuPhoiLaiSauKhiChet(
   orgId: string,
   bangChung: UnsealGateReport,
 ): Promise<UnsealGateReport> {
-  const { rows: hang } = await client.query<{ status: string }>(
-    `SELECT status FROM public.unseal_requests
+  // [S1.103 / khoản 208] Câu này lấy thêm CẶP CŨ, và nó là chỗ DUY NHẤT lấy được: hàng đã
+  // khoá `FOR NO KEY UPDATE` ở đây, còn câu `UPDATE ... RETURNING` bên dưới trả về giá trị
+  // MỚI. Không thêm một lượt đi về nào — cùng hàng, cùng khoá, chỉ rộng thêm hai cột.
+  const { rows: hang } = await client.query<{
+    status: string;
+    dispatched_by: string | null;
+    dispatched_by_session_id: string | null;
+  }>(
+    `SELECT status, dispatched_by, dispatched_by_session_id FROM public.unseal_requests
       WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND org_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
       FOR NO KEY UPDATE`,
@@ -568,10 +575,21 @@ async function dieuPhoiLaiSauKhiChet(
     action: "UNSEAL_REDISPATCHED",
     resourceType: "unseal_request",
     resourceId: bangChung.unsealRequestId,
+    // [S1.103 / khoản 208] HÀNG SỔ NÀY LÀ NƠI DUY NHẤT CẶP CŨ CÒN SỐNG. `dispatched_at`
+    // không đổi được (`unseal_dieu_phoi_mot_lan`, 022) còn cặp người-phiên thì vừa bị ghi
+    // đè ở câu `UPDATE` ngay trên — nên từ lúc ấy `dispatched_by_session_id` của lần điều
+    // phối ĐẦU không còn đứng ở một cột nào, và `audit_events` thì không có cột phiên.
+    // Ba nơi khai hàng này mang CẢ HAI cặp từ S1.96 (khối thiết kế ngay trên, `054`,
+    // ADR-046); tới S1.103 nó mới mang thật. Đo trước khi vá: gỡ trọn payload thì 58/58
+    // test của tệp này VẪN XANH — không lớp nào đọc nó.
     payload: {
       rfqId: bangChung.rfqId,
       clauses: [...bangChung.clauses],
       breakGlass: bangChung.breakGlass,
+      previousDispatchedBy: r.dispatched_by,
+      previousDispatchedBySessionId: r.dispatched_by_session_id,
+      dispatchedBy: bangChung.userId,
+      dispatchedBySessionId: bangChung.sessionId,
     },
   });
   return bangChung;

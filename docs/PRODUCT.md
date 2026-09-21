@@ -79,7 +79,7 @@ Ba lát cắt thuộc MVP1: **S0** (nền móng, 2,5 tuần) + **S1** (sealed bi
 |---|---|---|---|
 | S0 | Foundation & Control Plane | MVP1 | Đã có spec |
 | S1 | Sealed Bid Core | MVP1 | Đã có spec |
-| S2 | Evaluation & Award (gồm BAFO) | MVP1 | Chưa có spec |
+| S2 | Evaluation & Award (gồm BAFO) | MVP1 | ~~Chưa có spec~~ **[S1.103] Đã có spec** (vào kho ở S1.101) |
 | S3 | Governance | MVP2 | Chưa có spec |
 | S4 | Data Foundation & Intelligence | MVP3 | Chưa có spec |
 | S5 | ERP Integration & Enterprise | Enterprise | Chưa có spec |
@@ -142,7 +142,7 @@ Câu ấy chạm cả ba USP ở §2, và nó **chưa chạy được** vì bố
 | # | Mảnh còn thiếu | Đo được |
 |---|---|---|
 | 1 | ~~**Giao diện** — nhà cung cấp không có chỗ nào để nộp thầu~~ ~~**[S1.97] LỜI KHAI NÀY ĐÃ SAI. Mảnh 1 nay là:** *người mua không có chỗ nào để TẠO gói thầu và MỜI nhà cung cấp; và không có chỗ nào để xuất bộ bằng chứng*~~ **[S1.98] Mảnh 1 nay còn ĐÚNG MỘT lỗ:** *không có chỗ nào để xuất bộ bằng chứng* — `/tao-thau` đã làm trọn nửa kia | **[S1.97 — ĐI THỬ TRÊN TRÌNH DUYỆT THẬT, khung 375×812]** `apps/web/trang/nop-thau.html` và `mo-thau.html` có thật, và bảy bước của kịch bản đi được năm bước rưỡi: nhà cung cấp mở link, OTP qua kênh KHÁC, nộp báo giá niêm phong trong trình duyệt, nhận biên nhận ký ECDSA P-256 — chạy; đóng thầu, xin mở, HAI người duyệt, điều phối, bảng so sánh đúng tới từng chữ số — chạy; xuất bằng chứng `ok=true checked=27` — chạy nhưng bằng CLI. Hai bước KHÔNG có giao diện: tạo gói thầu và mời nhà cung cấp (bộ gieo làm qua API), và chọn nhà cung cấp (thuộc mảnh 2). ~~Số cũ giữ để đối chiếu: `git ls-files` một tệp `.html`~~ — nay **ba**, trong đó hai là trang sản phẩm |
-| 2 | **S2 — Đánh giá, BAFO, Award** | §7 của chính tệp này khai *Chưa có spec*, và `docs/superpowers/specs/` có đúng một tệp, cho S0+S1 |
+| 2 | **S2 — Đánh giá, BAFO, Award** | ~~§7 của chính tệp này khai *Chưa có spec*, và `docs/superpowers/specs/` có đúng một tệp, cho S0+S1~~ **[S1.103] Ô NÀY THIU HAI VÒNG, và nó thiu vì chính vòng viết spec không đọc lại nó.** `specs/` nay có **hai** tệp — S1.101 đưa spec S2 vào kho — và §7 đã sửa ở cùng vòng này. **Mảnh 2 vẫn CHƯA XONG, nhưng vì một lý do khác hẳn:** có spec không phải có mã. Đo được ngày 2026-09-21: S2.1 (chính sách đánh giá) cài xong ở S1.102 bằng `056`; **S2.2–S2.7 chưa có một dòng nào**, nên bước *người mua CHỌN nhà cung cấp* của kịch bản §11 vẫn không chạy. Và ADR-051 ghi rằng **J3 chưa có lớp nào cưỡng chế** — lớp thật của nó nằm ở S2.6 cùng bảng `rfq_awards` |
 | 3 | **Triển khai thật** | ADR-009 chốt AWS + AWS KMS `ap-southeast-1` trên giấy; chưa có tài khoản, chưa có CMK, chưa có role — khoản nợ 15 |
 | 4 | **Khách hàng pilot** | §10 ghi *Chưa có khách hàng pilot* từ 2026-08-27, và dòng ấy chưa đổi một chữ |
 

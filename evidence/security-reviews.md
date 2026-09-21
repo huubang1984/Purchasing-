@@ -9619,3 +9619,94 @@ tiên và **7 ca đỏ vì `035`** chứ không vì thứ chúng định đo. Đ
 - Phép đo mới: `db/chinh-sach-danh-gia.int.test.ts` **11 ca**, và chúng **10 đỏ trước `056`**.
 - Sổ nợ **218** khoản, mở **85** — không đổi, vòng này không mở và không đóng khoản nào. Ba rổ không đổi.
 - **50 → 51** ADR (ADR-051), **55 → 56** migration, **56/56** bất biến không đổi.
+
+# §S1.103 — KHOẢN 208 ĐÓNG BẰNG MỘT ĐỘT BIẾN SỐNG SÓT, VÀ NĂM LỜI KHAI *"S2 CHƯA CÓ SPEC"* THIU VÌ CHÍNH VÒNG VIẾT SPEC KHÔNG ĐỌC LẠI CHÚNG
+
+## 1. Vòng này là gì
+
+Hai việc, và cả hai đến từ **lượt cập nhật trạng thái** ngay trước vòng: một lượt rà không sửa gì, chỉ đọc, và nó tìm
+ra năm lời khai thiu. Việc thứ hai là khoản **208** — ADR-051 của vòng trước đã ghi nó là **điều kiện thật của J3**
+chứ không còn là một khoản rổ B *"hàng nói sai"*.
+
+## 2. Khoản 208 — sổ nợ ghi sẵn cách đo, và cách đo ấy đúng
+
+Hàng sổ `UNSEAL_REDISPATCHED` **không mang một cặp người-phiên nào**, trong khi **ba nơi** khai là nó mang cả cặp cũ
+lẫn cặp mới: khối thiết kế của `dieuPhoiLaiSauKhiChet`, `db/migrations/054_dieu_phoi_lai_co_canh.sql`, và ADR-046.
+
+| lượt | kết quả |
+|---|---|
+| đối chứng, bản sạch | **58/58 xanh**, 16,09 s |
+| **gỡ TRỌN payload** (`payload: {}`) | **58/58 vẫn XANH** — không một lớp nào đọc nó |
+
+Vì sao nó đáng vá chứ không đáng gỡ câu khai: `dispatched_at` **không đổi được** (`unseal_dieu_phoi_mot_lan`, `022`)
+còn cặp người-phiên thì **bị ghi đè** ở chính câu `UPDATE` của đường phục hồi. Sau lần điều phối lại thứ nhất, hàng
+`unseal_requests` là một phát biểu ghép: **mốc của người A đứng cạnh người B**, và `dispatched_by_session_id` của
+lần ĐẦU không còn ở một cột nào. `audit_events` thì không có cột phiên. Hàng sổ là chỗ duy nhất cặp cũ còn sống được.
+
+**Bản vá.** Câu `SELECT ... FOR NO KEY UPDATE` lấy thêm hai cột — và nó là chỗ DUY NHẤT lấy được, vì
+`UPDATE ... RETURNING` trả về giá trị MỚI. Không thêm một lượt đi về nào: cùng hàng, cùng khoá đã giữ. Payload nhận
+bốn trường: `previousDispatchedBy`, `previousDispatchedBySessionId`, `dispatchedBy`, `dispatchedBySessionId`.
+
+## 3. Mũi đột biến thứ ba SỐNG, và cái sống ấy là phần đáng đọc của vòng
+
+| mũi | nội dung | trước khi vá | sau khi vá |
+|---|---|---|---|
+| ⑴ | `payload: {}` | **58/58 XANH** | **ĐỎ** |
+| ⑵ | cặp CŨ ghi thành cặp MỚI (cả hai trường) | — | **ĐỎ** ở `previousDispatchedBySessionId` |
+| ⑶ | **chỉ trường NGƯỜI** của cặp cũ | — | **SỐNG** |
+
+Mũi ⑶ sống vì ca sẵn có bấm lại bằng `sYcB` — một phiên **KHÁC** của **CÙNG** người `uYc`. Fixture ấy đúng cho thứ
+nó sinh ra để đo (trigger của khoản 159 fire khi cặp ĐỔI), nhưng với khoản 208 nó làm nửa NGƯỜI của cặp thành một
+trường không phân biệt được: `previousDispatchedBy` và `dispatchedBy` mang cùng giá trị, nên ghi nhầm cái này thành
+cái kia không ai thấy.
+
+Đóng nửa ấy bằng một ca mới: người bấm lại là `uYc2`, một `PROCUREMENT_MANAGER` **thứ hai**. Nó không phải một ca
+nhân tạo — nó là **hình dạng THẬT của đường phục hồi**, vì người bấm lần đầu chính là người vừa thất bại. Mũi ⑶ khi
+ấy **ĐỎ**, đỏ đúng ở `previousDispatchedBy`. **58 → 59 ca.**
+
+Điều đáng mang sang: **một mũi đột biến sống sót không phải một thất bại của phép đo — nó là phép đo.** Nếu em dừng
+ở hai mũi đầu thì bản vá vẫn "có test", và nửa cặp vẫn không được canh.
+
+**`054` KHÔNG sửa, và không phải vì quên:** câu khai ở đó mô tả đúng thứ cần có, và nay nó ĐÚNG. Migration đã áp thì
+sửa chú thích cũng đổi checksum — đó là khoản **19**, rổ C.
+
+## 4. Năm lời khai *"S2 chưa có spec"*, và chúng thiu theo hai kiểu khác nhau
+
+S1.101 đưa spec S2 vào kho. **Không một lời khai nào đếm spec được sửa trong vòng ấy, cũng không ở S1.102.**
+
+| nơi | kiểu |
+|---|---|
+| `docs/PRODUCT.md` §7 — ô *Chưa có spec* | lời khai **sống**, đổi thật |
+| `docs/PRODUCT.md` §11 mảnh 2 — *"`specs/` có đúng một tệp"* | lời khai **sống**, đổi thật (nay **hai** tệp) |
+| `Handoff.md` §11 việc 2 — *"lát cắt MVP1 duy nhất chưa có spec"* | lời khai **sống**, đổi thật |
+| `docs/STATE.md` hai chỗ trong khối có ngày | gạch tại chỗ |
+
+Nặng nhất là §11 mảnh 2, vì nó là **định nghĩa hoàn thành MVP1**. Và khi sửa nó thì một câu khác lộ ra: mảnh 2 vẫn
+**chưa xong**, nhưng vì một lý do khác hẳn — *có spec không phải có mã*. S2.1 cài xong ở S1.102; **S2.2–S2.7 chưa có
+một dòng nào**; và ADR-051 ghi rằng **J3 chưa có lớp nào cưỡng chế**.
+
+**Một câu không thiu mà bị BÁC.** `Handoff.md` §11 việc 2 viết *"không viết được đúng nếu chưa có việc 4"* — việc 4
+là **khách hàng pilot**. Spec S2 được viết khi vẫn chưa có pilot. Dự án đã chọn đi trước điều kiện mình tự đặt ra;
+câu ấy được giữ nguyên văn và gạch, không xoá, vì cái giá của lựa chọn ấy chỉ đo được khi có người mua thật đọc spec.
+
+## 5. Ranh giới nói ra
+
+- **Vòng này không chạm J3.** Nó gỡ *điều kiện* của J3 (cặp người-phiên của lần điều phối đầu nay có chỗ sống), chứ
+  không dựng lớp J3 — lớp ấy nằm ở **S2.6** cùng bảng `rfq_awards`, và ADR-051 đã chốt hình dạng.
+- **Payload là dữ liệu, không phải ràng buộc.** Không `CHECK` nào, không trigger nào đọc bốn trường mới; thứ canh
+  chúng là một test tích hợp. Một lần ghi sai payload vẫn đi lọt tầng CSDL — đúng hạng với mọi payload sổ kiểm toán
+  khác của kho, và nói ra để không ai đọc thành *"CSDL canh"*.
+- **Ca mới đọc `audit_events` bằng pool `postgres`**, không qua vai ứng dụng — nó đo NỘI DUNG đã ghi, không đo ai đọc
+  được gì. Vế quyền đọc sổ đã có lớp riêng ở `[INV-D5]`.
+- **Không ADR mới.** Vòng này cài một quyết định đã chốt (ADR-046) và sửa lời khai; không có gì để quyết.
+
+## 6. Số đo
+
+- `pnpm t0` **0 vi phạm** — **287 module / 1165 phụ thuộc**.
+- `pnpm test` **71 tệp, 1007 đạt / 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm test:int` **52 tệp, 1091 đạt** (1090 → 1091, đúng +1 của ca mới).
+- `pnpm evidence` **XANH** — `vitest thoát mã 0`, **56/56** bất biến, **2099** khẳng định (2098 → 2099).
+- `packages/unseal/src/unseal.int.test.ts` **58 → 59** ca.
+- Sổ nợ **218** khoản, mở **85 → 84** — khoản **208 ĐÓNG**. Rổ A **6** không đổi, rổ B **58 → 57**, rổ C **21**
+  không đổi; ba rổ cộng đúng: 6 + 57 + 21 = 84.
+- **51 ADR** không đổi, **56 migration** không đổi, **56/56** bất biến không đổi.
