@@ -9826,3 +9826,161 @@ thiếu quy tắc"* là việc của `pnpm test`.
   `pnpm test` (1007 → 1050 = +43): 33 + 6 + 3 probe + 1 cửa barrel.
 - Sổ nợ **218** khoản, mở **84** — không đổi; khoản 218 vẫn MỞ, thân viết lại bằng phép đo. Ba rổ không đổi.
 - **51 → 52** ADR (ADR-052), **13 → 14** gói, **56** migration không đổi, **56/56** bất biến không đổi.
+
+# §S1.105 — S2.3: LƯỢT ĐÁNH GIÁ, VÀ `056` ĐỂ HỞ ĐÚNG THỨ **J1** CẦN ĐỂ CƯỠNG CHẾ ĐƯỢC
+
+## 1. Vòng này là gì
+
+**S2.3**: `rfq_evaluations` + `rfq_evaluation_lines`, cổng quyền, cạnh `UNSEALED->EVALUATING` sống, **J6**,
+và vế **cấu trúc** + vế **nội dung** của **J1**. Sáu phát hiện hình dạng đứng trước dòng mã đầu tiên, và cả
+sáu là phép ĐO chứ không phép đọc.
+
+## 2. Sáu phát hiện trước dòng mã đầu — và hai cái đổi thiết kế
+
+| # | phát hiện | hệ quả |
+|---|---|---|
+| ⑴ | `rfq_unsealed_bids` **không có** `UNIQUE (org_id, id)` | FK hợp thành trỏ `(org_id, bid_version_id)` — và nó MẠNH HƠN: buộc mỗi hàng xếp hạng trỏ tới một báo giá **ĐÃ MỞ** |
+| ⑵ | spec §4.1 viết *"tạo **phiên bản mới** trước khi chấm"* | lượt chấm ghim chính sách **hiện hành**, không phải `rfq_budgets.policy_id` — ghim vào bản của ngân sách thì tạo bản mới chẳng giúp gì |
+| ⑶ | khuôn `014`/`016` | cặp người-phiên đi qua **trigger** `kiem_danh_tinh_theo_phien`, không FK |
+| ⑷ | khoản 211 | mỗi trigger mới cần **ba chỗ ghim**; và cổng thật là `db/migrations.int.test.ts`, nơi `HAM_TRIGGER_KHONG_GHIM` **RỖNG** nên *tập ghim BẰNG tập thật* |
+| ⑸ | `CHECK` không chứa được truy vấn con | vế cấu trúc của J1 dùng `jsonb_path_exists` (`provolatile = 'i'`, đo thật) |
+| ⑹ | **`056` để hở đúng thứ J1 cần** | xem mục 3 |
+
+## 3. Phát hiện ⑹ — nặng nhất, và nó làm một mệnh đề thành không cưỡng chế được
+
+J1 nói *"con số xếp hạng chỉ gồm các khoản có **ĐƠN VỊ TIỀN**"*, cưỡng chế bằng *"một trigger đọc
+`org_procurement_policies` để biết chính sách khai thành phần nào có đơn vị tiền"*. Nhưng hình dạng mà
+S1.102 để lại — `[{"ma":"gia","he_so":"1.00"}]` — **không có một trường đơn vị nào**. Trigger ấy chưa có
+gì để đọc.
+
+`056` nói rõ trong chính đầu tệp rằng nó không khai hình dạng bên trong, và lý do khi ấy ĐÚNG. Nên S2.3 là
+chỗ hình dạng phải được chốt — **ADR-053**. Hệ quả nói ra trước khi chạy: fixture của
+`db/chinh-sach-danh-gia.int.test.ts` mang đúng hình dạng cũ, nên nó **ĐỎ bảy ca**. Đó là một lượt đỏ CÓ
+ÍCH; đã sửa, **11 → 24 ca**.
+
+## 4. Một lỗ mà chỉ phép đo tìm ra
+
+Vế `@.don_vi != "TIEN" && @.don_vi != "DIEM"` một mình **KHÔNG bắt** `{"don_vi": 3}`:
+
+| đầu vào `don_vi` | chỉ so chuỗi | thêm `@.don_vi.type() != "string"` |
+|---|---|---|
+| `"XXX"` | bắt | bắt |
+| **`3`** | **ĐI LỌT** | bắt |
+| `null` · `true` · `["TIEN"]` | **ĐI LỌT** | bắt |
+
+So một SỐ với một CHUỖI trong jsonpath cho *unknown*, nên bộ lọc loại phần tử ấy ra. Đọc tài liệu không
+cho câu trả lời này; một container Postgres cho nó trong ba mươi giây. Bản `CHECK` chính thức được chạy
+trên bảng thật trước khi vào migration: **3 hợp lệ vào, cả 7 hàng sai bị chặn**.
+
+## 5. Ba ca của S1.102 thôi đo thứ chúng khai — cùng lớp lỗi đã trả giá hai lần
+
+Ba ca *"`eval_components` không phải MẢNG"* khai `constraint: ..._la_mang`. Từ `057` chúng khớp
+`..._hinh_dang`: `jsonpath` ở chế độ **lax** TỰ BỌC một scalar thành mảng một phần tử, nên `$[*] ? (…)`
+cũng bắt `'"chi-gia"'` — và Postgres báo ràng buộc nào nó chạm trước, **không hứa thứ tự**.
+
+Một ca mà HAI ràng buộc cùng bắt thì **không đo được ràng buộc nào cả**. Đúng lớp lỗi mà
+`fixture-vai-bootstrap-che-ve-loc` đã trả giá ở S1.53 và S1.56, và mà S1.103/S1.104 vừa gặp ở hai hình
+dạng khác. Đã cho `..._la_mang` một input mà **CHỈ nó** bắt: một **OBJECT TRẦN** — object ấy đi qua trọn
+ba vế của `..._hinh_dang` (có `ma`/`don_vi`/`he_so` đều là chuỗi, `don_vi` là `TIEN`), nên thứ duy nhất
+còn chặn nó là vế *"phải là một MẢNG"*.
+
+## 6. Đột biến: vế nội dung của J1 chịu lực
+
+| lượt | kết quả |
+|---|---|
+| trigger CÒN SỐNG, hàng mang `tien` cho thành phần `DIEM` | **ĐỎ `23514`** |
+| trigger bị `DISABLE` lúc chạy | **hàng ĐI LỌT** — J1 mất lớp duy nhất của nó |
+| khôi phục | `tgenabled` về **`A`**, không phải `O` |
+
+Đột biến làm **LÚC CHẠY**, không bằng cách sửa migration: hardening ghim trigger ấy và **tự chữa** ở mọi
+lượt `migrate()`, nên một đột biến trong migration sẽ *"sống"* GIẢ — bẫy S1.86 đã trả giá bằng một lượt
+evidence 309 ca đỏ. Và câu khôi phục mang `ENABLE ALWAYS`, đúng khoản **216**.
+
+## 7. NĂM lỗi của chính em — ⑶ nguy nhất, ⑷ và ⑸ đắt nhất
+
+| # | lỗi | bắt bằng gì |
+|---|---|---|
+| ⑴ | vai `AUDITOR` không tồn tại trong `005` | FK `user_roles_role_code_fkey` |
+| ⑵ | `$3` dùng ở hai chỗ nên Postgres không suy được kiểu | `could not determine data type of parameter $3` |
+| ⑶ | **script Python lỗi cú pháp ⇒ ca đột biến KHÔNG được thêm, mà test vẫn XANH** | **em đếm số ca: 15 chứ không phải 16** |
+| ⑷ | **`057` cấp `GRANT … INSERT` mức BẢNG, và không dựng policy `<bảng>_khach`** | **`pnpm test:int`: NĂM cổng đỏ** |
+| ⑸ | **hàm trigger mới của `057` không được phân loại, và hai bộ ba mới không có nhân chứng hành vi** | **`pnpm test:int` TRỌN CÂY: ba cổng đỏ nữa — tập con em tự chọn KHÔNG có tệp ấy** |
+
+⑶ là cái đáng ghi: một lượt XANH **vô nghĩa** trông giống một lượt xanh thật. Thứ phát hiện ra nó không
+phải một cổng — mà là phép đếm số ca trước và sau. Cùng lớp với bài học *"khôi phục phải tự kiểm bằng
+sha256"* của S1.86.
+
+⑷ là cái đắt nhất, và nó đáng chỗ riêng vì **HAI dòng SQL làm đỏ NĂM cổng ở ba tệp**:
+
+| cổng đỏ | vì sao |
+|---|---|
+| `[INV-H14]` bộ dò oracle xuyên tổ chức | `GRANT … INSERT` **mức BẢNG** cho `app_api` ghi được cả cột `id`, nên `<bảng>_pkey` — một `UNIQUE (id)` không dẫn đầu bằng `org_id` — thành đúng hình dạng **ADR-013** từ chối |
+| `phủ RLS` quyền BẢNG · `[M5]` quyền CỘT | hai bản khai liệt kê TỪNG cặp (vai, bảng, quyền); hai bảng mới không có dòng nào |
+| `[INV-F1]` danh tính đối tượng canh | `BANG_TENANT_KHAI` của hardening phải BẰNG tập bảng tenant theo tính chất — thiếu hai tên |
+| `[khoản nợ 29]` ×2 — mọi bảng RLS mang `<bảng>_khach` | `027` lấp MỘT LẦN cho lược đồ của ngày ấy, và hardening chỉ **phán xét** chứ không **dựng** `_khach` cho bảng sinh sau |
+
+Hai nguyên nhân, và cả hai **đã được viết ra trong kho từ trước**: `040` mang đúng khuôn của một bảng
+tenant sinh sau `027` — policy khách, `GRANT INSERT` theo **CỘT** — và hardening tự nói *"migration tạo
+bảng tenant mới PHẢI thêm tên vào `BANG_TENANT_KHAI`"*. Em không đọc khuôn ấy trước khi viết `057`.
+
+Điều đáng ghi hơn con số năm: **`pnpm t0` và `pnpm test` XANH TRỌN** trên bản mang cả hai khiếm khuyết.
+Không cổng nào ngoài `test:int` chạm tới được, vì cả hai chỉ hiện ra trên một cụm Postgres THẬT sau
+`migrate()`. Đó là lý do `test:int` đứng TRƯỚC khi mở PR chứ không sau — cùng lớp bài học với khoản
+**102** (`SECURITY DEFINER` trên bảng FORCE RLS xanh trên CI, 0 hàng ở cụm thật).
+
+Và một lời khai thiu đi kèm: chú thích hardening viết *"⇒ 29 policy RESTRICTIVE `_khach`"*. Con số ấy là
+lược đồ của S1.48; `057` làm nó 31. Đã đổi thành một câu SUY RA thay vì một con số tuyệt đối — đúng
+nguyên tắc mà chính cổng ấy phát biểu: *đếm từ CATALOG, không từ lời khai*.
+
+⑸ đến từ lượt `test:int` TRỌN CÂY — lượt mà bản vá của ⑷ chưa chạm tới, vì em chọn một tập con NĂM
+tệp để đo nhanh và tập ấy **không có tệp của `[INV-H19]`**. Ba cổng nữa đỏ, và cả ba là cùng một
+thứ: `057` dựng một hàm trigger MỚI.
+
+| cổng đỏ | đòi gì |
+|---|---|
+| tổng điều tra khoản **60** | mọi hàm trigger phải nằm trong **ĐÚNG MỘT** danh sách — `HAM_CANH_CHI_GHI_THEM` hay `HAM_KHONG_PHAI_CANH`. `kiem_thanh_phan_theo_chinh_sach` chưa ở đâu cả |
+| nhân chứng khoản **74** | mỗi bộ ba *(hàm, bảng, sự kiện)* khai KHÔNG-CANH cần một hàng **THẬT** đi qua nó dưới một **vai ứng dụng**. Hai bộ ba mới: hàm mới trên `rfq_evaluation_lines`, và `kiem_danh_tinh_theo_phien` — hàm CŨ — trên `rfq_evaluations`, vì **một bảng mới dưới một hàm cũ cũng là một bộ ba mới** |
+| đột biến của khoản **74** | nó khẳng định tập đỏ ĐÚNG BẰNG hai bộ ba của hàm đột biến; một bộ ba thiếu nhân chứng ở kho thật làm tập ấy thành ba |
+
+Nhân chứng không phải một dòng khai: `dungKichBan()` phải dựng một **lượt chấm thật** — một hàng
+`rfq_evaluations` và một hàng `rfq_evaluation_lines` — dưới `app_api`, với `components` KHỚP tập của
+chính sách đã ghim. Và nó lộ ra một thứ đáng ghi: chính sách của kịch bản khai `eval_components` thì
+`056` đòi `bafo_top_n` **đi kèm** (`(eval_components IS NULL) = (bafo_top_n IS NULL)`, `0` là *không
+dùng BAFO*). Hai cột ấy là một BỘ, và lượt đỏ thứ hai của phép đo chính là câu ấy nói ra.
+
+Bài học thật của ⑸ nằm ở chỗ **em chọn tập con**: một tập con chọn theo *"cổng nào vừa đỏ"* chỉ đo
+lại những cổng đã đỏ. Nó rẻ và nó đúng chỗ, nhưng nó **không phải** một phép đo về bản vá. Chỉ lượt
+trọn cây là thế, và nó tìm ra đúng thứ tập con bỏ qua.
+
+Và lỗi ⑴ dẫn tới một phép đo đáng hơn bản thân nó: **chỉ `DIRECTOR` không giữ `evaluation.perform`** — năm
+trên sáu vai đều có. Thành khoản **220**.
+
+## 8. Ranh giới nói ra
+
+- **Chính sách đa thành phần chưa chấm được** — khoản **219**, và nó là một cửa đóng CÓ TÊN
+  (`THANH_PHAN_CHUA_CO_NGUON`) chứ không một `0` âm thầm. Nguồn cho `DIEM` là **S2.4**.
+- **Cổng quyền của đường chấm là một lớp NÔNG** — khoản **220**; lớp thật của J3 nằm ở **S2.6**.
+- **J1 nay có cả hai vế ở tầng CSDL, J2 mới có vế dễ.** *Bảng thành phần cộng ra `effective_cost`* đã
+  được khẳng định trên dữ liệu ĐỌC TỪ CSDL; vế thật của J2 — tính lại từ `components` + phiên bản chính
+  sách — cần bộ xuất của **S2.7**.
+- **Ba `CHECK` của `057` KHÔNG được hardening canh** — khoản **105**, rổ A. Hai TRIGGER thì được, ba chỗ
+  mỗi cái.
+- **Tệp đo mới cố ý KHÔNG mang nhãn `[INV-*]`** — J1 và J2 chưa trọn, nên một nhãn ở đây là ghi `passed`
+  vào hàng của một bất biến chưa đủ.
+- **Vòng phản hồi của cả lớp lỗi ⑷ và ⑸ là một lượt `test:int`** — khoản **221**, và BỐN trong BẢY
+  lời khai quyết định được từ VĂN BẢN migration (vế thứ năm — nhân chứng hành vi — thì không, và
+  `test:int` là chỗ đúng của nó). Cổng ấy chưa được viết ở vòng này: nó cần lượt
+  đỏ riêng cho từng vế, và vòng này đã đủ việc. Nói ra chứ không lặng lẽ để đó.
+- **Lượt soi ngang TRƯỢT NHỊP.** `Handoff.md` §11 ghi mốc *chậm nhất S1.105*, và vòng này là S1.105 mà
+  không phải lượt soi. Ghi ra chứ không đẩy mốc; mốc mới là **chậm nhất S1.107**.
+
+## 9. Số đo
+
+- `pnpm t0` **0 vi phạm** — 293 module, 1190 phụ thuộc.
+- `pnpm test` **72 tệp / 1050 ca** (1 bỏ qua); `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm test:int` **54 tệp / 1123 ca**. Lượt ĐẦU **ĐỎ 3 ca** — mục 7 ⑸; đã vá, và tệp ấy chạy riêng lại **36/36**.
+- `pnpm evidence` **`vitest thoát mã 0`, báo cáo 2174 khẳng định** — lượt DUY NHẤT unit + int chung một pool, tức phép đo trọn cây SAU bản vá.
+- Phép đo mới: `luot-danh-gia.int.test.ts` **16 ca**; `chinh-sach-danh-gia.int.test.ts` **11 → 24 ca**.
+- Sổ nợ **218 → 221** khoản, mở **84 → 87** (khoản 219, 220, 221 mở; không khoản nào đóng). Rổ A **6** không
+  đổi, rổ B **57 → 60**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 60 + 21 = 87.
+- **52 → 53** ADR (ADR-053), **56 → 57** migration, **14** gói không đổi, **56/56** bất biến không đổi.

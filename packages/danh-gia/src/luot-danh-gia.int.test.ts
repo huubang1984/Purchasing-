@@ -62,7 +62,7 @@ async function taoChinhSach(evalComponents: string | null): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
       "eval_components, bafo_top_n, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, '100000000.00', 'VND', $3, CASE WHEN $3 IS NULL THEN NULL ELSE 0 END, $4, $5) RETURNING id",
+      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE 0 END, $4, $5) RETURNING id",
     [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc],
   );
   return rows[0]?.id ?? "";
@@ -230,7 +230,11 @@ beforeAll(async () => {
   unsealPool = db.poolAs("app_unseal");
   uYc = await taoNguoi("yc@vidu.vn", "PROCUREMENT_MANAGER");
   uD1 = await taoNguoi("d1@vidu.vn", "DIRECTOR");
-  uKhong = await taoNguoi("khong@vidu.vn", "AUDITOR");
+  // [S1.105 — ĐO, không đoán] `DIRECTOR` là vai DUY NHẤT trong sáu vai của `005` KHÔNG giữ
+  // `evaluation.perform`: năm vai kia (REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER ·
+  // FINANCE) đều có. Nên cổng quyền của route chấm gần như không phân tách được vai nào — cùng
+  // hình dạng mà ADR-051 đã tìm ra cho J3, và nó là lý do J3 cần một lớp theo HÀNH VI.
+  uKhong = await taoNguoi("khong@vidu.vn", "DIRECTOR");
   sYc = await taoPhien(uYc);
   sD1 = await taoPhien(uD1);
   sKhong = await taoPhien(uKhong);
@@ -442,6 +446,53 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
     await expect(
       chenHang(evalId, bidVersionId, '[{"ma":"gia","tien":"100.00"},{"ma":"kt","tien":null}]'),
     ).resolves.toBeUndefined();
+  });
+
+  // [S1.105] ĐỘT BIẾN — GỠ TRIGGER THÌ HÀNG SAI ĐI LỌT, và đó là phép đo rằng vế nội dung của
+  // J1 sống trong TRIGGER chứ không trong một `CHECK` nào.
+  //
+  // Đột biến phải làm LÚC CHẠY, KHÔNG bằng cách sửa migration: hardening ghim trigger này và nó
+  // TỰ CHỮA ở mọi lượt `migrate()`, nên một đột biến trong migration sẽ "sống" GIẢ — đúng cái bẫy
+  // S1.86 đã trả giá bằng một lượt evidence 309 ca đỏ.
+  //
+  // Câu khôi phục mang `ENABLE ALWAYS`: thiếu nó là trả lại một trigger YẾU HƠN bản đã gỡ, đúng
+  // khoản **216** mà S1.100 mở và đóng trong cùng vòng.
+  it("đột biến: gỡ trigger `..._kiem_thanh_phan` ⇒ hàng mang `tien` cho thành phần DIEM ĐI LỌT", async () => {
+    const ca =
+      '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"kt","don_vi":"DIEM","he_so":"2.0000"}]';
+    const { evalId, bidVersionId } = await luotTrong(ca);
+    const sai = '[{"ma":"gia","tien":"100.00"},{"ma":"kt","tien":"240.00"}]';
+    // Tiền đề: với trigger CÒN SỐNG, hàng ấy bị chặn.
+    await expect(chenHang(evalId, bidVersionId, sai)).rejects.toMatchObject({ code: "23514" });
+
+    await db.pool.query(
+      "ALTER TABLE rfq_evaluation_lines DISABLE TRIGGER rfq_evaluation_lines_kiem_thanh_phan",
+    );
+    try {
+      const truoc = await db.pool.query<{ n: string }>(
+        "SELECT tgenabled::text AS n FROM pg_trigger WHERE tgname = $1 AND NOT tgisinternal",
+        ["rfq_evaluation_lines_kiem_thanh_phan"],
+      );
+      expect(
+        truoc.rows[0]?.n,
+        "khẳng định đột biến ĐÃ ÁP — một đột biến không áp được là một ca XANH vô nghĩa",
+      ).toBe("D");
+      await expect(
+        chenHang(evalId, bidVersionId, sai),
+        "không trigger thì một điểm phi giá đi thẳng vào effective_cost — J1 mất lớp duy nhất của nó",
+      ).resolves.toBeUndefined();
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_evaluation_lines ENABLE ALWAYS TRIGGER rfq_evaluation_lines_kiem_thanh_phan",
+      );
+      const sau = await db.pool.query<{ n: string }>(
+        "SELECT tgenabled::text AS n FROM pg_trigger WHERE tgname = $1 AND NOT tgisinternal",
+        ["rfq_evaluation_lines_kiem_thanh_phan"],
+      );
+      expect(sau.rows[0]?.n, "khôi phục phải trả về ENABLE ALWAYS (`A`), không phải `O` — khoản 216").toBe(
+        "A",
+      );
+    }
   });
 
   it("`app_api` KHÔNG sửa được một lượt chấm đã ghi — bảng chỉ ghi thêm", async () => {

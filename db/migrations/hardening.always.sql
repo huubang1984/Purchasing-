@@ -2071,9 +2071,12 @@ $ham$;
   -- `current_setting(..., true)` — chưa gắn ⇒ NULL ⇒ 0 hàng (fail-closed). Ba mục "đặt ở mức database" ở trên chỉ ghim
   -- TÊN row_security / session_replication_role / search_path; `ALTER DATABASE … SET app.org_id = <B>` lật [INV-F1]
   -- "chưa gắn ⇒ 0 hàng" thành "⇒ tổ chức B" cho MỌI câu ngoài withTenant (pool.query trần, job, migrate), và
-  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` (một mỗi bảng tenant — đếm
-  -- từ catalog ở rls-coverage, S1.48; "11" là số CREATE POLICY trong migration, con số thiu) thu hẹp ⇒ câu ghi
-  -- của người mua 0 hàng không lỗi (ADR-036). Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
+  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ MỘT policy RESTRICTIVE `_khach` cho MỖI bảng
+  -- tenant thu hẹp ⇒ câu ghi của người mua 0 hàng không lỗi (ADR-036). Con số TUYỆT ĐỐI ở đây là một lời khai
+  -- thiu nên nó không được viết ra: "11" là số `CREATE POLICY` trong migration, "29" là lược đồ của S1.48, và
+  -- `057` làm nó 31 — cổng ở rls-coverage ĐẾM TỪ CATALOG (S1.48) và đòi restrictive = số bảng tenant, nên nó
+  -- đúng ở mọi lược đồ.
+  -- Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
   -- khi SET lẫn RESET một GUC placeholder ở mức database — trừ khi được `GRANT SET ON PARAMETER` (PG15+, nhánh ⒟) —
   -- và `ALTER ROLE … RESET ALL` dưới vai không superuser GIỮ IM LẶNG phần tử placeholder (guc.c skipIfNoPermissions):
   -- bốn mục RESET ALL ở dưới chỉ "tự chữa" trọn khi vai deploy là superuser hay có SET trên tham số; nếu không, mục
@@ -3342,6 +3345,8 @@ $ham$;
          ('public', 'outbox_jobs', '007_outbox'),
          ('public', 'rfq_approvals', '009_rfq'),
          ('public', 'rfq_budgets', '014_procurement_policy'),
+         ('public', 'rfq_evaluation_lines', '057_luot_danh_gia'),
+         ('public', 'rfq_evaluations', '057_luot_danh_gia'),
          ('public', 'rfq_invitation_tokens', '010_invitations'),
          ('public', 'rfq_invitations', '010_invitations'),
          ('public', 'rfq_items', '009_rfq'),

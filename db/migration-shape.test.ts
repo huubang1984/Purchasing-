@@ -447,6 +447,12 @@ describe("hình dạng file migration", () => {
     // ly do KHAC: no la bang dau tien co mot cot ma `app_api` GHI DUOC nhung KHONG DOC DUOC
     // (`wrapped_private_key`). Hinh dang RLS khong noi gi ve dieu do — quyen theo COT noi, va
     // lop do no la db/rls-coverage.int.test.ts. Hai lop canh hai thu khac nhau.
+    // [S1.105 / 057] Hai bang moi — `rfq_evaluations` va `rfq_evaluation_lines` — deu co org_id,
+    // nen ca hai chiu DUNG cung bo rang buoc, va `NGOAI_LE_HINH_DANG` VAN RONG sau S2.3: policy
+    // cua chung la `(org_id = app_current_org_id())` nguyen van. `rfq_evaluation_lines` dang chu y
+    // vi mot ly do khac: FK hop thanh cua no tro vao `rfq_unsealed_bids (org_id, bid_version_id)`
+    // chu khong vao `(org_id, id)` — bang ay KHONG co UNIQUE theo `id`, va tro vao cap kia MANH
+    // HON: no buoc moi hang xep hang phai tro toi mot bao gia DA MO.
     expect(cacBang.filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang).sort()).toEqual([
       "audit_chain_anchors",
       "audit_events",
@@ -462,6 +468,8 @@ describe("hình dạng file migration", () => {
       "outbox_jobs",
       "rfq_approvals",
       "rfq_budgets",
+      "rfq_evaluation_lines",
+      "rfq_evaluations",
       "rfq_invitation_tokens",
       "rfq_invitations",
       "rfq_items",

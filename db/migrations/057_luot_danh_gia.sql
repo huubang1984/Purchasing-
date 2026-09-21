@@ -100,11 +100,26 @@ CREATE POLICY rfq_evaluations_tenant_isolation ON rfq_evaluations
   USING (org_id = app_current_org_id())
   WITH CHECK (org_id = app_current_org_id());
 
+-- [khoản nợ 29] Bảng mới SAU `027` phải TỰ mang policy khách. `027` lấp một lần cho lược đồ của
+-- ngày ấy, và hardening KHÔNG dựng `_khach` cho bảng mới — nó chỉ PHÁN XÉT. Thiếu dòng này là
+-- ba cổng đỏ, đã đo ở chính vòng này. Khách không có việc gì với một lượt chấm.
+CREATE POLICY rfq_evaluations_khach ON rfq_evaluations AS RESTRICTIVE
+  USING (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL)
+  WITH CHECK (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL);
+
 -- CHỈ GHI THÊM, và lớp cưỡng chế là QUYỀN chứ không phải một trigger: `app_api` không có `UPDATE`
 -- lẫn `DELETE`. Chấm lại là một lượt chấm MỚI — spec §4.3 nói `BAFO_CLOSED->EVALUATING` sinh một
 -- `rfq_evaluations` THỨ HAI và hàng cũ ở lại nguyên vẹn, vì *"vì sao xếp hạng đổi"* là một câu
 -- hỏi kiểm toán thật. Cùng khuôn với `org_procurement_policies`.
-GRANT SELECT, INSERT ON rfq_evaluations TO app_api;
+-- **`id` (và `created_at`) KHÔNG nằm trong `GRANT INSERT`, và đó là một lớp canh chứ không khẩu vị.**
+-- `INV-H14` phân loại một chỉ mục duy nhất là ORACLE xuyên tổ chức khi `app_api` GHI ĐƯỢC vào nó và
+-- nó không dẫn đầu bằng `org_id` — kiểm tra duy nhất chạy dưới quyền hệ thống trên TOÀN bảng, nên
+-- `duplicate key` trả lời được *"tổ chức khác có hàng này không"*. `<bảng>_pkey` ở đây là `(id)`,
+-- nên một `GRANT INSERT` mức BẢNG biến nó thành đúng hình dạng ADR-013 từ chối. Khuôn `002` với
+-- `users_pkey`: đóng bằng QUYỀN THEO CỘT. Bản đầu của vòng này cấp mức bảng và `test:int` đỏ.
+GRANT SELECT ON rfq_evaluations TO app_api;
+GRANT INSERT (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id)
+  ON rfq_evaluations TO app_api;
 -- Cố ý KHÔNG cấp gì cho `app_unseal`: vai ấy giải mã, nó không chấm.
 
 CREATE TRIGGER rfq_evaluations_kiem_danh_tinh
@@ -174,7 +189,16 @@ CREATE POLICY rfq_evaluation_lines_tenant_isolation ON rfq_evaluation_lines
   USING (org_id = app_current_org_id())
   WITH CHECK (org_id = app_current_org_id());
 
-GRANT SELECT, INSERT ON rfq_evaluation_lines TO app_api;
+-- [khoản nợ 29] Cùng lý do như bảng cha ngay trên.
+CREATE POLICY rfq_evaluation_lines_khach ON rfq_evaluation_lines AS RESTRICTIVE
+  USING (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL)
+  WITH CHECK (NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL);
+
+-- Cùng lý do `INV-H14` như bảng cha: `rfq_evaluation_lines_pkey` là `(id)`, nên `id` không
+-- được cấp. `UNIQUE (org_id, evaluation_id, bid_version_id)` thì dẫn đầu bằng `org_id` rồi.
+GRANT SELECT ON rfq_evaluation_lines TO app_api;
+GRANT INSERT (org_id, evaluation_id, bid_version_id, effective_cost, components, rank)
+  ON rfq_evaluation_lines TO app_api;
 
 -- ============================================================================================
 -- (4) VẾ NỘI DUNG CỦA **J1** — MỘT TRIGGER, VÌ MỘT `CHECK` KHÔNG ĐỌC ĐƯỢC BẢNG KHÁC
