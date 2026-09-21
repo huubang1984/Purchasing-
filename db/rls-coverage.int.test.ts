@@ -796,6 +796,12 @@ describe("phủ RLS", () => {
       // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
       { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
+      // [S1.105 / 057] Hai bảng của lượt đánh giá chỉ hiện SELECT ở MỨC BẢNG — INSERT của chúng
+      // là quyền CỘT (xem [M5] dưới), vì `<bảng>_pkey` là `(id)` và INV-H14 đòi thế. KHÔNG có
+      // UPDATE lẫn DELETE cho vai nào: chấm lại là một lượt chấm MỚI, hàng cũ ở lại nguyên vẹn.
+      // Và app_unseal không có dòng nào — vai ấy giải mã, nó không chấm.
+      { grantee: "app_api", bang: "rfq_evaluation_lines", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_evaluations", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
       // [011] `rfq_items` mat DELETE o muc bang, `suppliers`/`supplier_contacts` mat UPDATE theo
@@ -1150,6 +1156,20 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_budgets", cot: "policy_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_budgets", cot: "rfq_id", quyen: "INSERT" },
+      // [S1.105 / 057] `id` và `created_at` vắng mặt ở CẢ HAI bảng: khuôn `users_pkey` của 002 —
+      // `<bảng>_pkey` là `(id)` nên cấp `id` là mở đúng oracle mà INV-H14 canh.
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "components", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "effective_cost", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluation_lines", cot: "rank", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "currency", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_evaluations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "consumed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", cot: "invitation_id", quyen: "INSERT" },
@@ -1759,7 +1779,7 @@ interface PolicyRestrictiveKhai {
 
 /**
  * MỌI policy RESTRICTIVE của dự án, khoá theo `lược đồ.bảng.policy` [lượt soi 22] và bốn cột (lệnh, vai, USING, WITH CHECK)
- * nguyên văn `pg_get_expr`. 21 bảng chỉ mang vế "không phải phiên khách"; 8 bảng khách được đọc
+ * nguyên văn `pg_get_expr`. 23 bảng chỉ mang vế "không phải phiên khách"; 8 bảng khách được đọc
  * thêm nới theo một cột. Một RESTRICTIVE mới — kể cả `USING (false)` — không có ở đây là ĐỎ.
  */
 const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>> = (() => {
@@ -1775,7 +1795,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
-      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_invitation_tokens", "rfq_unsealed_bids",
+      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_evaluation_lines", "rfq_evaluations",
+      "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals", "unseal_requests",
       "user_login_tokens", "user_roles", "users",
     ].map(chiKhach),

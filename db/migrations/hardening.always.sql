@@ -2071,9 +2071,12 @@ $ham$;
   -- `current_setting(..., true)` — chưa gắn ⇒ NULL ⇒ 0 hàng (fail-closed). Ba mục "đặt ở mức database" ở trên chỉ ghim
   -- TÊN row_security / session_replication_role / search_path; `ALTER DATABASE … SET app.org_id = <B>` lật [INV-F1]
   -- "chưa gắn ⇒ 0 hàng" thành "⇒ tổ chức B" cho MỌI câu ngoài withTenant (pool.query trần, job, migrate), và
-  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` (một mỗi bảng tenant — đếm
-  -- từ catalog ở rls-coverage, S1.48; "11" là số CREATE POLICY trong migration, con số thiu) thu hẹp ⇒ câu ghi
-  -- của người mua 0 hàng không lỗi (ADR-036). Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
+  -- `SET app.guest_session_id` biến mọi phiên thành phiên khách ⇒ MỘT policy RESTRICTIVE `_khach` cho MỖI bảng
+  -- tenant thu hẹp ⇒ câu ghi của người mua 0 hàng không lỗi (ADR-036). Con số TUYỆT ĐỐI ở đây là một lời khai
+  -- thiu nên nó không được viết ra: "11" là số `CREATE POLICY` trong migration, "29" là lược đồ của S1.48, và
+  -- `057` làm nó 31 — cổng ở rls-coverage ĐẾM TỪ CATALOG (S1.48) và đòi restrictive = số bảng tenant, nên nó
+  -- đúng ở mọi lược đồ.
+  -- Đo (test khoản 87, PostgreSQL 16): chủ database KHÔNG superuser bị 42501
   -- khi SET lẫn RESET một GUC placeholder ở mức database — trừ khi được `GRANT SET ON PARAMETER` (PG15+, nhánh ⒟) —
   -- và `ALTER ROLE … RESET ALL` dưới vai không superuser GIỮ IM LẶNG phần tử placeholder (guc.c skipIfNoPermissions):
   -- bốn mục RESET ALL ở dưới chỉ "tự chữa" trọn khi vai deploy là superuser hay có SET trên tham số; nếu không, mục
@@ -3342,6 +3345,8 @@ $ham$;
          ('public', 'outbox_jobs', '007_outbox'),
          ('public', 'rfq_approvals', '009_rfq'),
          ('public', 'rfq_budgets', '014_procurement_policy'),
+         ('public', 'rfq_evaluation_lines', '057_luot_danh_gia'),
+         ('public', 'rfq_evaluations', '057_luot_danh_gia'),
          ('public', 'rfq_invitation_tokens', '010_invitations'),
          ('public', 'rfq_invitations', '010_invitations'),
          ('public', 'rfq_items', '009_rfq'),
@@ -4304,6 +4309,21 @@ $ham$;
                WHEN (NEW.break_glass_witness_user_id IS NOT NULL)
                EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
                  'break_glass_witness_user_id', 'break_glass_witness_session_id');
+           IF to_regclass('public.rfq_evaluations') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_evaluations')
+                                 AND t.tgname = 'rfq_evaluations_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluations_kiem_danh_tinh BEFORE INSERT ON public.rfq_evaluations FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_evaluations_kiem_danh_tinh ON public.rfq_evaluations;
+             CREATE TRIGGER rfq_evaluations_kiem_danh_tinh
+               BEFORE INSERT ON public.rfq_evaluations
+               FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
+                 'created_by', 'created_by_session_id');
+             ALTER TABLE public.rfq_evaluations ENABLE ALWAYS TRIGGER rfq_evaluations_kiem_danh_tinh;
+           END IF;
              ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung;
            END IF;
          END
@@ -4467,6 +4487,14 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$))
+            AND (to_regclass('public.rfq_evaluations') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_evaluations')
+                               AND t.tgname = 'rfq_evaluations_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluations_kiem_danh_tinh BEFORE INSERT ON public.rfq_evaluations FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -5731,6 +5759,110 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.guest_session_kiem_danh_tinh()')),
                   'hàm public.guest_session_kiem_danh_tinh() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.guest_session_kiem_danh_tinh() và bảng public.guest_sessions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    ARRAY[
+      $q$hàm + trigger kiem_thanh_phan_theo_chinh_sach (057)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '057_luot_danh_gia.sql')$q$,
+      $q$DO $fn56$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.kiem_thanh_phan_theo_chinh_sach()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.kiem_thanh_phan_theo_chinh_sach();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.kiem_thanh_phan_theo_chinh_sach() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  v_policy  uuid;
+  v_cua_cs  text[];
+  v_cua_hang text[];
+BEGIN
+  SELECT e.policy_id INTO v_policy
+    FROM public.rfq_evaluations e
+   WHERE e.org_id = NEW.org_id AND e.id = NEW.evaluation_id;
+
+  IF v_policy IS NULL THEN
+    -- Không với tới được qua đường công khai (FK hợp thành đã đòi hàng ấy tồn tại), nhưng một
+    -- `NULL` im lặng ở đây sẽ làm phép so dưới đây thành `NULL = NULL` và trigger cho qua MỌI
+    -- hàng. Fail-closed tường minh thay vì dựa vào một FK đứng ở nơi khác.
+    RAISE EXCEPTION 'Khong doc duoc chinh sach cua luot danh gia (J1)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT array_agg(x ORDER BY x) INTO v_cua_hang
+    FROM (SELECT (c.value ->> 'ma')
+                 || '|'
+                 || CASE WHEN c.value ->> 'tien' IS NULL THEN 'DIEM' ELSE 'TIEN' END AS x
+            FROM jsonb_array_elements(NEW.components) AS c(value)) AS s;
+
+  SELECT array_agg(x ORDER BY x) INTO v_cua_cs
+    FROM (SELECT (p.value ->> 'ma') || '|' || (p.value ->> 'don_vi') AS x
+            FROM public.org_procurement_policies o,
+                 jsonb_array_elements(o.eval_components) AS p(value)
+           WHERE o.org_id = NEW.org_id AND o.id = v_policy) AS s;
+
+  IF v_cua_cs IS NULL THEN
+    RAISE EXCEPTION 'Chinh sach cua luot danh gia chua khai trong so danh gia (J1)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- `coalesce` cho mảng RỖNG: `components` rỗng hợp lệ ở hàng không đọc được giá, và khi ấy nó
+  -- phải KHÁC tập của chính sách chứ không được thành `NULL` rồi cho qua.
+  IF coalesce(v_cua_hang, ARRAY[]::text[]) <> v_cua_cs THEN
+    RAISE EXCEPTION 'Thanh phan cua hang xep hang khong khop chinh sach da ghim (J1)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$ham$;
+           IF to_regclass('public.rfq_evaluation_lines') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                                 AND t.tgname = 'rfq_evaluation_lines_kiem_thanh_phan'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.kiem_thanh_phan_theo_chinh_sach()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_thanh_phan BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW WHEN ((new.effective_cost IS NOT NULL)) EXECUTE FUNCTION kiem_thanh_phan_theo_chinh_sach()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_evaluation_lines_kiem_thanh_phan ON public.rfq_evaluation_lines;
+             CREATE TRIGGER rfq_evaluation_lines_kiem_thanh_phan
+               BEFORE INSERT ON public.rfq_evaluation_lines
+               FOR EACH ROW
+               WHEN (NEW.effective_cost IS NOT NULL)
+               EXECUTE FUNCTION public.kiem_thanh_phan_theo_chinh_sach();
+             ALTER TABLE public.rfq_evaluation_lines ENABLE ALWAYS TRIGGER rfq_evaluation_lines_kiem_thanh_phan;
+           END IF;
+         END
+         $fn56$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE v_policy uuid; v_cua_cs text[]; v_cua_hang text[]; BEGIN SELECT e.policy_id INTO v_policy FROM public.rfq_evaluations e WHERE e.org_id = NEW.org_id AND e.id = NEW.evaluation_id; IF v_policy IS NULL THEN -- Không với tới được qua đường công khai (FK hợp thành đã đòi hàng ấy tồn tại), nhưng một -- `NULL` im lặng ở đây sẽ làm phép so dưới đây thành `NULL = NULL` và trigger cho qua MỌI -- hàng. Fail-closed tường minh thay vì dựa vào một FK đứng ở nơi khác. RAISE EXCEPTION 'Khong doc duoc chinh sach cua luot danh gia (J1)' USING ERRCODE = 'check_violation'; END IF; SELECT array_agg(x ORDER BY x) INTO v_cua_hang FROM (SELECT (c.value ->> 'ma') || '|' || CASE WHEN c.value ->> 'tien' IS NULL THEN 'DIEM' ELSE 'TIEN' END AS x FROM jsonb_array_elements(NEW.components) AS c(value)) AS s; SELECT array_agg(x ORDER BY x) INTO v_cua_cs FROM (SELECT (p.value ->> 'ma') || '|' || (p.value ->> 'don_vi') AS x FROM public.org_procurement_policies o, jsonb_array_elements(o.eval_components) AS p(value) WHERE o.org_id = NEW.org_id AND o.id = v_policy) AS s; IF v_cua_cs IS NULL THEN RAISE EXCEPTION 'Chinh sach cua luot danh gia chua khai trong so danh gia (J1)' USING ERRCODE = 'check_violation'; END IF; -- `coalesce` cho mảng RỖNG: `components` rỗng hợp lệ ở hàng không đọc được giá, và khi ấy nó -- phải KHÁC tập của chính sách chứ không được thành `NULL` rồi cho qua. IF coalesce(v_cua_hang, ARRAY[]::text[]) <> v_cua_cs THEN RAISE EXCEPTION 'Thanh phan cua hang xep hang khong khop chinh sach da ghim (J1)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END;$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_evaluation_lines')
+                           AND t.tgname = 'rfq_evaluation_lines_kiem_thanh_phan'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.kiem_thanh_phan_theo_chinh_sach()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluation_lines_kiem_thanh_phan BEFORE INSERT ON public.rfq_evaluation_lines FOR EACH ROW WHEN ((new.effective_cost IS NOT NULL)) EXECUTE FUNCTION kiem_thanh_phan_theo_chinh_sach()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_thanh_phan_theo_chinh_sach()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.kiem_thanh_phan_theo_chinh_sach()')),
+                  'hàm public.kiem_thanh_phan_theo_chinh_sach() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.kiem_thanh_phan_theo_chinh_sach() và bảng public.rfq_evaluation_lines (hoặc CREATE trên schema public khi hàm chưa tồn tại)$q$
     ],
 
     ARRAY[

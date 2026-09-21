@@ -161,7 +161,11 @@ importers:
 
   packages/crypto-keys: {}
 
-  packages/danh-gia: {}
+  packages/danh-gia:
+    dependencies:
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
 
   packages/db:
     dependencies:

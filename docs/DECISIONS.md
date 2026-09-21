@@ -5422,3 +5422,80 @@ Cộng một ca đòi bảng thành phần CỘNG RA đúng `effective_cost`, t�
 Nó không nói cách nào *đúng hơn về toán* — cộng-rồi-làm-tròn chính xác hơn, và ADR này chọn cách kém chính xác
 hơn một cách có chủ ý vì một bất biến kiểm toán được đáng giá hơn ba xu. Nó cũng không sửa `apps/web/src/so-tien.ts`:
 khoản **218** vẫn mở, và vòng này chỉ biến nó từ một câu ĐỌC ĐƯỢC thành một con số ĐO ĐƯỢC.
+
+---
+
+## ADR-053 — Hình dạng BÊN TRONG của `eval_components`, và vì sao S2.3 chỉ chấm được MỘT thành phần
+
+**Bối cảnh.** `056` (S2.1) cố ý để hở hình dạng bên trong của `eval_components`, và nói ra điều đó
+trong chính đầu tệp: *"không khai hình dạng BÊN TRONG … ngoài 'phải là một mảng'"*. Lý do khi ấy đúng —
+vế *mọi phần tử mang một trường tiền* là **J1**, và J1 cần một trigger đọc chính sách chứ không một `CHECK`.
+
+**Phát hiện của S2.3, và nó phải đọc trước mọi quyết định dưới đây.** J1 phát biểu *"con số xếp hạng chỉ
+gồm các khoản có ĐƠN VỊ TIỀN"*, cưỡng chế bằng *"một trigger đọc `org_procurement_policies` để biết chính
+sách khai thành phần nào có đơn vị tiền"*. Nhưng hình dạng mà S1.102 để lại —
+`[{"ma":"gia","he_so":"1.00"}]` — **không có một trường đơn vị nào**. Trigger ấy chưa có gì để đọc, và
+J1 vì thế là một mệnh đề chưa cưỡng chế được trên dữ liệu đang có.
+
+### Quyết định
+
+⑴ **Mỗi phần tử của `eval_components` là một object mang ĐÚNG ba trường, cả ba là CHUỖI:** `ma`,
+`don_vi` (`TIEN` hoặc `DIEM`), `he_so`. Và mảng phải có **ít nhất một** thành phần `TIEN`.
+
+`he_so` là CHUỖI chứ không phải số JSON, và đó không phải sự cầu kỳ: `numeric` của Postgres và `number`
+của JSON không cùng một miền, và ADR-052 vừa mua một bất biến kiểm toán bằng cách giữ mọi phép tính tiền
+trên `bigint`. Một `he_so: 1` kiểu số JSON là cửa để `double` quay lại.
+
+⑵ **Cưỡng chế bằng `jsonb_path_exists` trong một `CHECK`**, vì một `CHECK` không chứa được truy vấn con.
+`jsonb_path_exists(jsonb, jsonpath)` là `IMMUTABLE` (`provolatile = 'i'`, đo trên PostgreSQL 16) nên nó
+dùng được ở đó.
+
+**Một lỗ chỉ phép đo tìm ra, ghi lại vì nó là bài học tái dùng được:** vế
+`@.don_vi != "TIEN" && @.don_vi != "DIEM"` một mình **KHÔNG bắt** `{"don_vi": 3}`. So một SỐ với một
+CHUỖI trong jsonpath cho *unknown*, nên bộ lọc loại phần tử ấy ra và một `don_vi` kiểu số đi lọt. Vế
+`@.don_vi.type() != "string"` đứng TRƯỚC là thứ đóng nó — và với nó, cả năm kiểu sai (`"XXX"`, `3`,
+`null`, `true`, `["TIEN"]`) đều bị bắt. Đọc tài liệu không cho câu trả lời này; một container Postgres
+cho nó trong ba mươi giây.
+
+⑶ **S2.3 chỉ chấm được chính sách khai ĐÚNG MỘT thành phần, mã `gia`, đơn vị `TIEN`** — và mọi hình dạng
+khác bị **TỪ CHỐI bằng một câu gọi tên**, không âm thầm lấy `0`.
+
+Lý do là dữ liệu, không phải sự dè dặt: một báo giá hôm nay chỉ mang đúng một số tiền mà hệ thống đọc
+được, `payload ->> 'totalAmount'` qua `public.bid_so_tien` (020). Không có chỗ nào để nhà cung cấp khai
+phí vận chuyển riêng, và không có chỗ nào để ai chấm điểm kỹ thuật — màn chấm là **S2.4**. Lấy `0` cho
+một thành phần không có nguồn là đưa vào bảng xếp hạng một con số không ai giải thích được, đúng thứ
+ràng buộc ⑷ của `PRODUCT` §8⑸ cấm.
+
+⑷ **Hai `effective_cost` bằng nhau nhận CÙNG một `rank`** (xếp hạng thi đấu: 1, 2, 2, 4). ADR-052 cố ý
+không chốt luật phá hoà, nên lớp này không bịa một luật: câu *"hai báo giá này bằng nhau"* đọc được, còn
+gán cho chúng hai hạng khác nhau là khai một thứ tự mà dữ liệu không có.
+
+### Cái giá — nói thẳng
+
+- **Fixture của `db/chinh-sach-danh-gia.int.test.ts` ĐỎ khi `057` vào** — bảy ca, vì nó mang đúng hình
+  dạng cũ. Đó là một lượt đỏ CÓ ÍCH: nó là phép đo rằng ràng buộc mới có răng. Đã sửa, 11 → 24 ca.
+- **Ba ca *"không phải MẢNG"* của S1.102 thôi đo thứ chúng khai.** `jsonpath` ở chế độ lax TỰ BỌC một
+  scalar thành mảng, nên `..._hinh_dang` cũng bắt `'"chi-gia"'`, và Postgres báo ràng buộc nào nó chạm
+  trước — không hứa thứ tự. Một ca mà HAI ràng buộc cùng bắt thì không đo được ràng buộc nào cả. Đã cho
+  `..._la_mang` một input mà **chỉ nó** bắt: một OBJECT TRẦN, thứ đi qua trọn ba vế của `..._hinh_dang`.
+- **Chính sách đa thành phần không chấm được cho tới S2.4.** Một tổ chức muốn cộng phí vận chuyển vào
+  Effective Cost hôm nay thấy một lời từ chối, không thấy một bảng xếp hạng gần đúng. Fail-closed, và nó
+  có giá.
+- **`evaluation.perform` do NĂM trên SÁU vai giữ** (đo trên `005`: chỉ `DIRECTOR` không có). Nên cổng
+  quyền của đường chấm gần như không phân tách được vai nào — cùng hình dạng mà ADR-051 đã tìm ra cho
+  **J3**, và nó là lý do J3 cần một lớp theo HÀNH VI chứ không theo QUYỀN.
+
+### Đo bằng gì
+
+`db/chinh-sach-danh-gia.int.test.ts` **24 ca**, trong đó 11 ca hình dạng bên trong và một ca `DIEM` đứng
+cạnh `TIEN` là HỢP LỆ (J1 **lọc**, không **cấm**). `packages/danh-gia/src/luot-danh-gia.int.test.ts`
+**16 ca**: bốn đường hợp lệ, sáu lối từ chối, năm ca vế nội dung của J1, và một **đột biến** gỡ trigger
+lúc chạy — với trigger sống thì hàng mang `tien` cho một thành phần `DIEM` bị chặn `23514`, gỡ trigger
+thì nó **đi lọt**. Đột biến làm LÚC CHẠY chứ không sửa migration: hardening ghim trigger ấy và tự chữa ở
+mọi lượt `migrate()`, nên một đột biến trong migration sẽ *"sống"* GIẢ — bẫy S1.86 đã trả giá.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói `gia` là mã thành phần đúng cho mọi tổ chức — nó nói đó là mã DUY NHẤT có nguồn dữ liệu hôm
+nay. Nó cũng không chốt luật phá hoà (ADR-052 để mở, và S2.3 không đóng). Và nó không đóng khoản **105**:
+mọi `CHECK` của `057` nằm trong khoảng trống mà hardening không canh.

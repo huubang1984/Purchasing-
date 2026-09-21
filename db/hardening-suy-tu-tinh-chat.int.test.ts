@@ -201,8 +201,9 @@ async function migrateLai(db: TestDatabase): Promise<string> {
  */
 const HAM_KHONG_PHAI_CANH = [
   "public.kiem_danh_tinh_theo_phien",
-  // [S1.32] Mười chín hàm chỉ gắn INSERT vào tập rộng khi tập ấy mở ra bit 4. Chúng không thể là hàm
-  // canh chỉ-ghi-thêm (không gắn UPDATE/DELETE); khai ở đây để một hàm INSERT mới không đi vào lặng lẽ.
+  // [S1.32] ~~Mười chín~~ **[S1.105]** HAI MƯƠI hàm chỉ gắn INSERT vào tập rộng khi tập ấy mở ra bit 4.
+  // Chúng không thể là hàm canh chỉ-ghi-thêm (không gắn UPDATE/DELETE); khai ở đây để một hàm INSERT mới
+  // không đi vào lặng lẽ.
   "public.bid_dat_so_phien_ban",
   "public.bid_kiem_han_nop",
   "public.bid_kiem_phien_khach",
@@ -210,6 +211,10 @@ const HAM_KHONG_PHAI_CANH = [
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
   "public.guest_session_kiem_danh_tinh",
+  // [S1.105 / 057] Vế NỘI DUNG của J1: nó so tập `(ma, đơn vị)` của `components` với tập mà phiên bản
+  // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
+  // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
+  "public.kiem_thanh_phan_theo_chinh_sach",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",
@@ -835,6 +840,13 @@ async function loiCua(
 }
 
 /**
+ * [S1.105 / 057] Chính sách của kịch bản khai ĐÚNG MỘT thành phần giá, và hàng xếp hạng mang đúng
+ * thành phần ấy — vế nội dung của J1 so hai tập `(ma, đơn vị)` NGUYÊN VĂN, kể cả số lần lặp.
+ */
+const TP_CHINH_SACH_KICH_BAN = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
+const TP_HANG_KICH_BAN = '[{"ma":"gia","tien":"100.00"}]';
+
+/**
  * Kịch bản nhân chứng: một đời RFQ (soạn → nộp → một phê duyệt → mở → gia hạn → mời → khách xác
  * minh → NỘP BÁO GIÁ kèm biên nhận → đóng → yêu cầu mở thầu → duyệt → ghi bản rõ → điều phối → mở
  * thầu), một RFQ thứ hai bị huỷ để thu hồi vật liệu khoá, một việc outbox, một liên kết đăng nhập,
@@ -938,9 +950,14 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   const cs = await chenNC(
     "public.org_procurement_policies",
     api(
-      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
-        "VALUES ($1, 1, '100000000.00', 'VND', $2, $3) RETURNING id, org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id",
-      [org, pm.u, pm.s],
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, created_by, created_by_session_id) " +
+        "VALUES ($1, 1, '100000000.00', 'VND', $4::jsonb, 0, $2, $3) RETURNING id, org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id",
+      // [S1.105 / 057] `bafo_top_n` đi KÈM: `056` đòi `(eval_components IS NULL) = (bafo_top_n IS NULL)`,
+      // và `0` là *không dùng BAFO*. Hai cột ấy là một BỘ, nên khai một nửa là một hàng bị chặn.
+      // `eval_components` KHÔNG khai ở `khai` (nên không đòi RETURNING nó): nó ở đây để
+      // trigger `kiem_thanh_phan_theo_chinh_sach` có một tập để so — chính sách rỗng làm nó ném, và khi ấy
+      // bộ ba của nó không bao giờ có nhân chứng.
+      [org, pm.u, pm.s, TP_CHINH_SACH_KICH_BAN],
       { org_id: org, version: 1, dual_approval_threshold: "100000000.00", currency: "VND", created_by: pm.u, created_by_session_id: pm.s },
     ),
   );
@@ -1451,6 +1468,34 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "public.users",
     "UPDATE",
     api("UPDATE users SET status = 'SUSPENDED' WHERE org_id = $1 AND id = $2 RETURNING status", [org, dc.u], { status: "SUSPENDED" }),
+  );
+
+  // ---- [S1.105 / 057] Lượt đánh giá: HAI bộ ba mới của tổng điều tra khoản 60 ----------
+  // `kiem_danh_tinh_theo_phien` trên `rfq_evaluations`/INSERT (hàm cũ, BẢNG mới — bộ ba là (hàm, bảng,
+  // sự kiện), nên một bảng mới là một bộ ba mới), và `kiem_thanh_phan_theo_chinh_sach` trên
+  // `rfq_evaluation_lines`/INSERT. Hàng phải KHỚP tập `(ma, đơn vị)` của chính sách đã ghim.
+  const ld = await chenNC(
+    "public.rfq_evaluations",
+    api(
+      "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id, org_id, rfq_id, policy_id, currency, created_by, created_by_session_id",
+      [org, rfq1, cs, pm.u, pm.s],
+      { org_id: org, rfq_id: rfq1, policy_id: cs, currency: "VND", created_by: pm.u, created_by_session_id: pm.s },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_evaluation_lines",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, '100.00', $4::jsonb, 1) RETURNING org_id, evaluation_id, bid_version_id, effective_cost, rank",
+        [org, ld, pb, TP_HANG_KICH_BAN],
+        { org_id: org, evaluation_id: ld, bid_version_id: pb, effective_cost: "100.00", rank: 1 },
+      ),
+    ),
+    1,
+    "rfq_evaluation_lines",
   );
 
   return { orgId: org };

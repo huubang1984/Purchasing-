@@ -16,3 +16,15 @@ export {
   type ThanhPhanDaQuyDoi,
   type TuChoi,
 } from "./chi-phi-hieu-dung.js";
+
+// Lớp CÓ TRẠNG THÁI — spec §3.2 đặt nó cùng gói với hàm thuần, khuôn `packages/unseal`.
+export {
+  DanhGiaTuChoiError,
+  MA_THANH_PHAN_GIA,
+  TRANG_THAI_CHAM_DUOC,
+  taoLuotDanhGia,
+  type HangXepHang,
+  type LuotDanhGia,
+  type LyDoTuChoiLuot,
+  type TaoLuotDanhGiaInput,
+} from "./luot-danh-gia.js";
