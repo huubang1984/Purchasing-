@@ -1451,11 +1451,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     {
       ham: "kiem_danh_tinh_theo_phien",
       migration: "013_actor_from_session.sql",
-      // [review H6-6] MƯỜI CHÍN trigger — viết ra để phép kiểm "mỗi trigger có định nghĩa ghim" có
-      // việc; hai trigger còn lại của hàm này thuộc 040 và được ghim ở mục `mfa_reset_kiem_quyen`.
+      // [review H6-6] ~~MƯỜI CHÍN~~ **[S1.105] HAI MƯƠI** trigger — viết ra để phép kiểm "mỗi trigger
+      // có định nghĩa ghim" có việc; hai trigger còn lại của hàm này thuộc 040 và được ghim ở mục
+      // `mfa_reset_kiem_quyen`. `rfq_evaluations_kiem_danh_tinh` (057) là trigger thứ HAI MƯƠI HAI của
+      // hàm này tính cả hai cái ấy — đúng con số mà chú thích H6-6 bên dưới đã viết sẵn cảnh báo.
       trigger: [
         "org_procurement_policies_kiem_danh_tinh",
         "rfq_budgets_kiem_danh_tinh",
+        "rfq_evaluations_kiem_danh_tinh",
         "rfq_invitation_tokens_kiem_danh_tinh",
         "rfq_invitations_kiem_danh_tinh",
         "rfq_invitations_kiem_nguoi_thu_hoi",
@@ -1498,6 +1501,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
     { ham: "chinh_sach_phien_ban_tang_dan", migration: "035_phien_ban_chinh_sach_lien_tuc.sql", trigger: ["org_procurement_policies_phien_ban_tang_dan"] },
     { ham: "guest_session_kiem_danh_tinh", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_kiem_danh_tinh"] },
+    { ham: "kiem_thanh_phan_theo_chinh_sach", migration: "057_luot_danh_gia.sql", trigger: ["rfq_evaluation_lines_kiem_thanh_phan"] },
     { ham: "kiem_tra_nguong_khong_cung_tay_nguoi_dung", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["user_roles_nguong_khong_cung_tay"] },
     { ham: "kiem_tra_nguong_khong_cung_tay_vai_tro", migration: "033_policy_manage_khong_cung_tay.sql", trigger: ["role_permissions_nguong_khong_cung_tay"] },
     { ham: "loi_moi_khong_song_lai", migration: "022_security_review_s1.sql", trigger: ["rfq_invitations_khong_song_lai"] },
@@ -3089,6 +3093,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "054_dieu_phoi_lai_co_canh.sql",
           "055_nhan_chung_break_glass_bat_bien.sql",
           "056_chinh_sach_danh_gia.sql",
+          "057_luot_danh_gia.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7484,6 +7489,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "054_dieu_phoi_lai_co_canh.sql",
         "055_nhan_chung_break_glass_bat_bien.sql",
         "056_chinh_sach_danh_gia.sql",
+        "057_luot_danh_gia.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7760,6 +7766,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "054_dieu_phoi_lai_co_canh.sql",
         "055_nhan_chung_break_glass_bat_bien.sql",
         "056_chinh_sach_danh_gia.sql",
+        "057_luot_danh_gia.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

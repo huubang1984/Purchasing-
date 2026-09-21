@@ -983,11 +983,18 @@ const DANH_SACH_TRANG_DB = [
 // THỨ HẠNG, thứ hạng quyết định award. Một symbol thứ tám tính tiền theo một luật khác là
 // khoản 218 mọc lại trong chính gói sinh ra để chấm dứt nó.
 const DANH_SACH_TRANG_DANH_GIA = [
+  // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
+  // `chi-phi-hieu-dung.ts` vẫn thuần — spec §3.2 đòi đúng thế, vì J2 phải đo được bằng một lời
+  // gọi hàm chứ không bằng một lượt dựng cảnh.
+  "DanhGiaTuChoiError",
+  "MA_THANH_PHAN_GIA",
   "SO_LE_HE_SO",
   "SO_LE_TIEN",
+  "TRANG_THAI_CHAM_DUOC",
   "docSo",
   "laTuChoi",
   "lamTron",
+  "taoLuotDanhGia",
   "tinhChiPhiHieuDung",
   "vietSo",
 ];

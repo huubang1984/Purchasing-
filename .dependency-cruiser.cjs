@@ -298,7 +298,8 @@ module.exports = {
       name: "g16-danh-gia-chi-index-la-cua-cong-khai",
       comment:
         "Toan bo packages/danh-gia/src/ la vung han che doi voi module ben ngoai package. " +
-        "Chi index.ts duoc mo. Goi nay giu HAM THUAN tinh `effective_cost` - con so quyet " +
+        "Chi index.ts duoc mo. Goi nay giu ham THUAN tinh `effective_cost` va (tu S2.3) lop CO " +
+        "TRANG THAI chay mot luot cham - con so quyet " +
         "dinh THU HANG, tuc quyet dinh ai duoc trao thau. Pham vi that cua quy tac, noi ra " +
         "nhu g14-/g15-: hom nay no rut KHONG symbol nao khoi tam voi, vi ca bay symbol gia " +
         "tri deu DA o cua. Thu no mua la MAC DINH DONG cho module tuong lai - va o day cai " +
