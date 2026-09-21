@@ -1316,9 +1316,9 @@ describe("phủ RLS", () => {
       // [022, review S1.6 HIGH-2a] Nhân chứng của break-glass: nó bỏ qua NGƯỠNG, không bỏ qua
       // NGƯỜI THỨ HAI.
       { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "INSERT" },
-      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_session_id", quyen: "UPDATE" },
+      // [S1.100 / khoản 209] Hai vế `UPDATE` ở đây đã bị `055` THU HỒI: không đường mã nào dùng chúng, và
+      // chúng là đúng phương tiện của lối đưa người yêu cầu vào làm chứng cho chính mình sau khi đã `APPROVED`.
       { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "INSERT" },
-      { grantee: "app_api", bang: "unseal_requests", cot: "break_glass_witness_user_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "unseal_requests", cot: "cancelled_at", quyen: "UPDATE" },
       // [022, review S1.6 HIGH-3] Mốc ĐIỀU PHỐI — thứ để worker hỏi lại được vế 2 của D1.
       { grantee: "app_api", bang: "unseal_requests", cot: "dispatched_at", quyen: "UPDATE" },

@@ -4296,10 +4296,10 @@ $ham$;
                                  AND NOT t.tgisinternal
                                  AND t.tgfoid = to_regprocedure('public.kiem_danh_tinh_theo_phien()')
                                  AND t.tgenabled = 'A'
-                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$) THEN
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$) THEN
              DROP TRIGGER IF EXISTS unseal_requests_kiem_nhan_chung ON public.unseal_requests;
              CREATE TRIGGER unseal_requests_kiem_nhan_chung
-               BEFORE INSERT OR UPDATE ON public.unseal_requests
+               BEFORE INSERT ON public.unseal_requests
                FOR EACH ROW
                WHEN (NEW.break_glass_witness_user_id IS NOT NULL)
                EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien(
@@ -4466,7 +4466,7 @@ $ham$;
                                AND NOT t.tgisinternal
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
-                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$))
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT ON public.unseal_requests FOR EACH ROW WHEN ((new.break_glass_witness_user_id IS NOT NULL)) EXECUTE FUNCTION kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -7681,8 +7681,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger unseal_kiem_chuyen_trang_thai (019)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '019_unseal.sql')$q$,
+      $q$hàm + trigger unseal_kiem_chuyen_trang_thai (055)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '055_nhan_chung_break_glass_bat_bien.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7719,6 +7719,18 @@ BEGIN
     RAISE EXCEPTION 'Chi sua duoc trang thai va cac moc thoi gian cua yeu cau mo thau'
       USING ERRCODE = 'check_violation';
   END IF;
+
+  -- [S1.100 / khoản 209] CẶP NHÂN CHỨNG BREAK-GLASS CŨNG BẤT BIẾN — và nó có câu `RAISE` RIÊNG
+  -- vì nó là một vế KHÁC. Hai vế D3 nằm trong `unseal_kiem_du_phe_duyet`, mà trigger gọi hàm ấy
+  -- chỉ chạy ở CẠNH `-> APPROVED`. Nên một câu `UPDATE` sau khi đã duyệt đưa chính người yêu cầu
+  -- vào làm chứng cho mình, và không vế nào chạy lại: trigger danh tính hỏi *"cặp này dẫn xuất
+  -- từ một phiên sống không"*, KHÔNG hỏi *"người này có phải người khác không"*. Đo được trên
+  -- cụm thật trước vòng này: `rowCount = 1`, dưới cả `app_api` lẫn chủ sở hữu.
+  IF NEW.break_glass_witness_user_id IS DISTINCT FROM OLD.break_glass_witness_user_id
+     OR NEW.break_glass_witness_session_id IS DISTINCT FROM OLD.break_glass_witness_session_id THEN
+    RAISE EXCEPTION 'Khong doi duoc nguoi lam chung break-glass sau khi yeu cau da sinh (D3)'
+      USING ERRCODE = 'check_violation';
+  END IF;
   RETURN NEW;
 END
 $ham$;
@@ -7737,7 +7749,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE CANH_HOP_LE constant text[] := ARRAY[ 'PENDING->APPROVED', 'PENDING->CANCELLED', 'APPROVED->EXECUTED', 'APPROVED->CANCELLED' ]; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status OPERATOR(pg_catalog.||) '->' OPERATOR(pg_catalog.||) NEW.status) OPERATOR(pg_catalog.=) ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai yeu cau mo thau khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- Không cột nào của phần YÊU CẦU được sửa sau khi đã tạo. Một lý do sửa được sau khi phê duyệt -- là một lý do người duyệt chưa từng đọc. IF NEW.rfq_id IS DISTINCT FROM OLD.rfq_id OR NEW.reason IS DISTINCT FROM OLD.reason OR NEW.break_glass IS DISTINCT FROM OLD.break_glass OR NEW.requested_by IS DISTINCT FROM OLD.requested_by OR NEW.requested_by_session_id IS DISTINCT FROM OLD.requested_by_session_id THEN RAISE EXCEPTION 'Chi sua duoc trang thai va cac moc thoi gian cua yeu cau mo thau' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE CANH_HOP_LE constant text[] := ARRAY[ 'PENDING->APPROVED', 'PENDING->CANCELLED', 'APPROVED->EXECUTED', 'APPROVED->CANCELLED' ]; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status OPERATOR(pg_catalog.||) '->' OPERATOR(pg_catalog.||) NEW.status) OPERATOR(pg_catalog.=) ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai yeu cau mo thau khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- Không cột nào của phần YÊU CẦU được sửa sau khi đã tạo. Một lý do sửa được sau khi phê duyệt -- là một lý do người duyệt chưa từng đọc. IF NEW.rfq_id IS DISTINCT FROM OLD.rfq_id OR NEW.reason IS DISTINCT FROM OLD.reason OR NEW.break_glass IS DISTINCT FROM OLD.break_glass OR NEW.requested_by IS DISTINCT FROM OLD.requested_by OR NEW.requested_by_session_id IS DISTINCT FROM OLD.requested_by_session_id THEN RAISE EXCEPTION 'Chi sua duoc trang thai va cac moc thoi gian cua yeu cau mo thau' USING ERRCODE = 'check_violation'; END IF; -- [S1.100 / khoản 209] CẶP NHÂN CHỨNG BREAK-GLASS CŨNG BẤT BIẾN — và nó có câu `RAISE` RIÊNG -- vì nó là một vế KHÁC. Hai vế D3 nằm trong `unseal_kiem_du_phe_duyet`, mà trigger gọi hàm ấy -- chỉ chạy ở CẠNH `-> APPROVED`. Nên một câu `UPDATE` sau khi đã duyệt đưa chính người yêu cầu -- vào làm chứng cho mình, và không vế nào chạy lại: trigger danh tính hỏi *"cặp này dẫn xuất -- từ một phiên sống không"*, KHÔNG hỏi *"người này có phải người khác không"*. Đo được trên -- cụm thật trước vòng này: `rowCount = 1`, dưới cả `app_api` lẫn chủ sở hữu. IF NEW.break_glass_witness_user_id IS DISTINCT FROM OLD.break_glass_witness_user_id OR NEW.break_glass_witness_session_id IS DISTINCT FROM OLD.break_glass_witness_session_id THEN RAISE EXCEPTION 'Khong doi duoc nguoi lam chung break-glass sau khi yeu cau da sinh (D3)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

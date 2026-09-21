@@ -9137,3 +9137,198 @@ lớp để lần sau tên tự hiện, và ghi khoản.
 - sổ nợ tự đối chiếu **45/45**; evidence ở máy **XANH hai lượt** — **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ
   2069 khẳng định, `vitest thoát mã 0`
 - trên CI: lượt đầu **ĐỎ** ở một khẳng định D5, lượt thứ hai **XANH cả sáu cổng** — xem mục 9b và khoản 213
+
+# §S1.100 — HAI KHIẾM KHUYẾT ĐỐI XỨNG CỦA MỘT CƠ CHẾ, VÀ MỘT BẢN SỬA ĐÃ GHI TRONG SỔ BỊ ĐO LÀ BẤT KHẢ
+
+## 1. Vòng này là gì, và vì sao hai khoản là MỘT vòng
+
+Chủ dự án chọn nhóm **209 + 210 (+211)** trong ba ứng viên. Ba khoản ấy do lượt soi ngang 76 ghi ở S1.99, cả ba mang nhãn *"đo trên
+mã nguồn, chưa chạy trên cụm thật"* — nên việc đầu tiên của vòng này KHÔNG phải viết mã, mà là dựng phép đo và để nó ĐỎ.
+
+209 và 210 là hai khiếm khuyết **đối xứng của cùng một cơ chế**: cặp nhân chứng break-glass mà 022 mục (4) dựng làm *"mức thấp nhất
+còn giữ được D3"*. 209 nói cơ chế ấy canh QUÁ ÍT (hai vế D3 chỉ chạy ở cạnh `→ APPROVED`, và hai cột không bất biến). 210 nói nó canh
+QUÁ NHIỀU (trigger danh tính gác cả câu `EXECUTED` của worker). Và chúng khoá lẫn nhau: thu hẹp `WHEN` để chữa 210 sẽ MỞ RỘNG lỗ 209.
+
+## 2. Phép đo đứng trước bản vá — ba ca ĐỎ, ba ca đối chứng XANH
+
+Khối `[INV-D3] [khoản 209 + 210]` thêm vào `packages/unseal/src/unseal.int.test.ts`, chạy TRƯỚC khi có một dòng vá nào:
+
+| ca | kết quả trước bản vá | nghĩa |
+|---|---|---|
+| `app_api` UPDATE hai cột nhân chứng | `rowCount = 1` | kẻ yêu cầu CÓ đặc quyền cột để tự làm chứng |
+| chủ sở hữu, cùng câu ấy | `rowCount = 1` | và không trigger nào chặn |
+| `app_unseal` UPDATE `→ EXECUTED`, phiên nhân chứng đã thu hồi | `Phien khong hop le: … (unseal_requests.break_glass_witness_session_id)` | lượt mở thầu khẩn cấp BẤT KHẢ |
+| đột biến gỡ trigger cột bất biến | lọt (xanh) | đối chứng |
+| CHÈN với nhân chứng bịa | 23514 | lớp còn sống ở `INSERT` |
+| CHÈN với nhân chứng không khớp chủ phiên | 23514 | lớp còn sống ở `INSERT` |
+
+**Ba đỏ, ba xanh** — và ba ca xanh nói một điều mà ba ca đỏ không nói: lớp có mặt ở `INSERT` và VẮNG ở `UPDATE`. Đó là hình dạng của
+khiếm khuyết, không phải "trigger sai".
+
+Một chi tiết của phép đo đáng ghi, và nó phải viết HẸP hơn bản đầu của chính mục này: `INV-D3` trước vòng này khai BA tệp, và
+chúng đo D3 ở mức VAI TRÒ và QUYỀN — `rbac.int.test.ts` còn có hẳn một khối *"phân tách nhiệm vụ ở mức người dùng"*, nên câu
+*"cả ba chỉ đo ma trận quyền"* là một lời khai rộng hơn phép đo và đã bị chính vòng này bác. Câu đúng hẹp hơn: **không tệp nào
+trong ba tệp ấy chạm đường BREAK-GLASS** — đúng chỗ D3 phá được bằng một câu sau khi đường phê duyệt đã bị bỏ.
+
+## 3. Khoản 209 — hai lớp, và đột biến bác dự đoán của chính vòng này
+
+`055` mục (1) đưa hai cột nhân chứng vào danh sách bất biến của `unseal_kiem_chuyen_trang_thai`, với một câu `RAISE` RIÊNG gọi tên D3.
+Mục (2) THU HỒI `UPDATE` trên hai cột ấy khỏi `app_api` — 022 cấp nó, và không đường mã nào gọi nó, vì `requestUnseal` đặt nhân chứng
+trong chính câu `INSERT`.
+
+Thứ tự trigger là **phần của bản vá**: trigger `BEFORE … FOR EACH ROW` fire theo thứ tự TÊN, nên `…kiem_chuyen_trang_thai` (`c`) đứng
+trước `…kiem_nhan_chung` (`n`), và câu tấn công gãy với thông điệp gọi tên D3 chứ không gãy với một thông điệp về phiên.
+
+**Và đây là chỗ đột biến bác một dự đoán đã viết ra.** Vòng này dự đoán *"gỡ mệnh đề trigger thì HAI ca đỏ"*. Đo được: **một** ca đỏ.
+Ca `42501` vẫn xanh, vì lớp đặc quyền đứng TRƯỚC trigger. Đột biến ngược lại — gỡ câu `REVOKE` — cũng cho **một** ca đỏ, và lần này là
+ca `42501`, còn ca trigger xanh. Cộng lại, hai lượt ấy chứng minh một điều mạnh hơn điều vòng này định chứng minh: **hai lớp không dư
+thừa, mỗi lớp giữ đúng phần vai của mình, và không lớp nào một mình phủ cả hai.**
+
+## 4. Khoản 210 — đóng HẸP HƠN bản mà thân khoản đề ra
+
+Thân khoản đề xuất khuôn 054: một nhánh `INSERT` cộng một nhánh `UPDATE` thu hẹp về lượt cặp ĐỔI. `055` mục (3) chọn **chỉ còn
+`BEFORE INSERT`**, vì sau mục (1) cặp nhân chứng không đổi được trên `UPDATE` nữa — nên nhánh `UPDATE` ấy sẽ là một trigger **không
+bao giờ fire**, tức một câu nói sai về thứ gì đang canh thứ gì. 054 CẦN nhánh `UPDATE` vì cặp ĐIỀU PHỐI đổi thật (khoản 130); cặp
+NHÂN CHỨNG là lời khai của MỘT LẦN.
+
+Tên trigger giữ nguyên, cố ý: 043 mang `ENABLE ALWAYS` theo tên ấy và hardening ghim nó theo tên, nên đổi tên là mở thêm ba chỗ phải
+nhớ mà không mua được gì.
+
+## 5. Khoản 211 — bản sửa đã ghi trong sổ bị ĐO LÀ BẤT KHẢ, và hai cổng BỔ SUNG cho cổng đã có
+
+Thân khoản 211 mang hai lời khai. Bản đầu của vòng này tuyên cả hai đều sai; **lượt `test:int` bác điều đó, và chỗ sai là của
+vòng này.** Ghi lại đúng thứ tự đã xảy ra, vì đây là bài học chứ không phải một dòng đính chính:
+
+⑴ *"Test tĩnh hiện có chỉ đòi chuỗi `CREATE TRIGGER <tên>` xuất hiện."* — **ĐÚNG.** Bản đầu của vòng này viết *"không có test nào như
+thế"*, vì lượt tìm chỉ grep `tests/architecture` và kết luận từ một tập rỗng. Cổng ấy nằm ở `db/migrations.int.test.ts` — một test
+**INT**, nên nó ngoài tầm mọi lượt grep tĩnh — và nó làm ba việc: so **43 thân hàm** trigger giữa migration và hardening cộng chuỗi
+hậu điều kiện `$than$`; đòi migration ghi ở mỗi mục ghim là migration **CUỐI CÙNG** định nghĩa hàm ấy; và chỉ đòi **chuỗi**
+`CREATE TRIGGER <tên>` XUẤT HIỆN trong mục — không so mệnh đề `WHEN`, đúng nguyên văn thân khoản 211.
+
+**Và nó bắt chính vòng này.** `055` định nghĩa lại `unseal_kiem_chuyen_trang_thai`, nhưng mục ghim vẫn khai `019_unseal.sql`. Hai ca
+đỏ ở `test:int`:
+
+```
+unseal_kiem_chuyen_trang_thai: hardening ghim 019_unseal.sql nhưng bản CUỐI ở 055_nhan_chung_break_glass_bat_bien.sql
+unseal_kiem_chuyen_trang_thai: thân hàm trong migration ≠ thân trong hardening
+```
+
+Quy ước đúng đọc được ngay trong tệp: `unseal_kiem_du_phe_duyet` do 019 định nghĩa rồi 022 định nghĩa lại, và mục ghim của nó mang
+`(022)` cùng cổng phiên bản `022_security_review_s1.sql`. Nên mục của `unseal_kiem_chuyen_trang_thai` phải mang `(055)` ở CẢ BA chỗ:
+tên mục, cổng phiên bản, và bảng khai của test. Bản đầu của vòng này viết `(019/055)` và để cổng phiên bản ở `019` — vừa sai quy ước,
+vừa làm hardening cài thân mới trên một cụm chưa áp `055`.
+
+Bài học thì cũ và vòng này vẫn sập: **một lượt grep hẹp cho ra một tập rỗng, và một tập rỗng đọc thành "không có cổng nào" là một lời
+khai rộng hơn phép đo.** Cổng bắt nó là cổng của `nợ 51`/`nợ 56` ở `db/migrations.int.test.ts` — cổng mà vòng này tưởng không tồn tại.
+
+**Và có một chi tiết thứ hai đáng ghi ở đúng chỗ này:** hai ca ấy KHÔNG mang nhãn `[INV-*]` nào. Nên `pnpm evidence` in ra
+*"56/56 bất biến được kiểm chứng … Cổng evidence: XANH"* trong cùng một lượt mà nó in `vitest thoát mã 1`. Đó đúng là cái bẫy đã ghi
+trong sổ tay của kho — cổng bất biến chỉ đếm khẳng định MANG NHÃN, còn dòng chịu lực là `thoát mã`. Vòng này đọc dòng ấy, nên nó
+không đẩy một PR đỏ; nhưng một người tin dòng *"XANH"* thì đã đẩy.
+
+⑵ *"Sửa đúng cách: một khẳng định so chuẩn hoá khoảng trắng giữa câu `CREATE TRIGGER` của migration và chỗ ghim ⑵."* — cài thử bộ so
+ấy trên tệp thật cho **11 chỗ lệch trong 71**, và cả 11 lệch vì CÙNG một lý do:
+
+```
+hardening ⑵ : BEFORE DELETE OR UPDATE …  WHEN ((new.status = 'OPEN'::text) AND …)
+migration    : BEFORE UPDATE OR DELETE …  WHEN (NEW.status OPERATOR(pg_catalog.=) 'OPEN' AND …)
+```
+
+Mười một chỗ ghim ⑵ ấy được viết bằng chính tả **CANONICAL của `pg_get_triggerdef`**, không bằng nguồn migration. So hai chính tả ấy
+bằng khoảng trắng là dựng một bộ chuẩn hoá SQL viết tay — thứ sẽ hẹp hơn PostgreSQL ở đúng ngày nó cần rộng, và kho này đã trả giá bài
+học ấy một lần ở S1.72, khi một bộ bỏ chú thích viết bằng biểu thức chính quy hoá ra mù và phải đổi sang đọc cây cú pháp. Nên bản sửa
+đã ghi trong sổ KHÔNG được cài; phần dư thành khoản **214**.
+
+**Hai cổng MỚI — bổ sung, không thay — và chúng chia nhau theo đúng thứ mỗi cổng đo được. Cổng cũ so THÂN HÀM; hai cổng này so
+ĐỊNH NGHĨA TRIGGER (thời điểm, sự kiện, mệnh đề `WHEN`) và sự ĐẦY ĐỦ của ba chỗ ghim:**
+
+- **TĨNH** (`tests/architecture/hardening-co-ly-do.test.ts`, 8 ca): mỗi tên trigger được ghim phải có ĐÚNG HAI văn bản ghim ⑴/⑶ giống
+  nhau **từng byte**, và tập tên của ⑵ phải trùng khít tập tên của ⑴/⑶. Hình dạng đo được hôm nay: **71 = 71 = 71**, mỗi tên đúng hai
+  bản, không tên nào thiếu ⑵, không tên nào thiếu ⑴/⑶. Năm mẫu âm, trong đó một mẫu đo đúng cái bẫy của chính bộ đọc: văn bản trong
+  `$def$` mang chuỗi `CREATE TRIGGER`, và nếu bộ đọc ⑵ không bỏ vùng ấy thì mọi mẫu âm quên-⑵ thành XANH GIẢ.
+- **ĐỘNG** (`db/ghim-trigger-tu-chua.int.test.ts`, 4 ca): xoá SẠCH cả 71 trigger, gọi lại `migrate()` cho lượt tự chữa cài lại, rồi so
+  `pg_get_triggerdef` của bản vừa cài với văn bản đã ghim — **lấy chính PostgreSQL làm bộ chuẩn hoá**, nên không cần một dòng chuẩn hoá
+  viết tay nào. Thêm một ca cho trigger TRÔI sang bản yếu (mất mệnh đề `WHEN`), vì lối quên ⑵ chỉ lộ ra vào ngày trigger trôi.
+
+**Đột biến chứng minh sự phân công ấy đúng:** đổi CHỈ chỗ ghim ⑵ ⇒ cổng ĐỘNG đỏ 2 ca, cổng TĨNH XANH. Cổng tĩnh tự khai chỗ thu hẹp
+ấy trong chính khối chú thích của nó, và đột biến đo được rằng lời khai ấy đúng — không rộng hơn, không hẹp hơn.
+
+## 6. Một đột biến CỐ Ý SỐNG, và nó là bằng chứng cho câu nặng nhất của khoản 211
+
+Đột biến: làm yếu **chỉ** `055` (trả trigger về `BEFORE INSERT OR UPDATE`), để nguyên cả ba chỗ ghim của hardening. Kết quả: **XANH,
+sáu trên sáu.** Vì hardening thấy trigger trong cụm khác văn bản đã ghim, nên nó tự chữa — **ngay trong chính lần `migrate()` ấy**.
+
+Đó là bằng chứng sống cho câu mà khoản 211 viết mà chưa ai đo: *hardening là lớp CÓ THẨM QUYỀN, còn migration đánh số thì không.* Một
+migration tương lai làm yếu một trigger được ghim sẽ bị hoàn tác âm thầm, và không ai biết — trừ khi ba chỗ ghim được sửa cùng lúc. Đó
+cũng là lý do hai cổng mới của vòng này đứng ở hardening chứ không ở migration.
+
+## 7. Ba khoản mới, và hai chỗ lời khai thiu mà vòng này phải sửa tay
+
+**214 (rổ B)** — 11 chỗ ghim ⑵ viết bằng chính tả canonical. Nói rõ phần KHÔNG phải lỗ an ninh: mệnh đề `WHEN` được giải tại lúc
+`CREATE`, nên `=` trần trong 11 chỗ ấy giải theo `search_path` của phiên chạy hardening, và `migrate()` ghim `search_path` bằng câu
+lệnh ĐẦU TIÊN của cả lượt, còn `hardening.always.sql` tự ghim lại ở phạm vi transaction. Hai dòng ấy là thứ duy nhất đứng giữa 11 mệnh
+đề này và một lượt giải toán tử theo schema lạ — hôm nay chúng có, và không cổng nào nói rằng chúng PHẢI có VÌ LÝ DO NÀY.
+
+**215 (rổ B)** — ở tầng CSDL, một hàng KHÔNG break-glass vẫn mang được cặp nhân chứng: `requestUnseal` chặn ở tầng ứng dụng, nhưng
+không ràng buộc `CHECK` nào nối `break_glass` với hai cột. Không đặc quyền nào lấy được; hại nằm ở sổ sách. Cùng lớp với khoản 208.
+
+**216 (mở và đóng cùng vòng)** — hai lượt khôi phục đột biến CŨ ở `unseal.int.test.ts` dựng lại trigger bằng `CREATE TRIGGER` trần, nên
+`tgenabled` về `'O'` thay vì `'A'`: một lượt khôi phục **không khôi phục**. Chưa hại ai (không test nào trong tệp đặt
+`session_replication_role`), nhưng đúng lớp lỗi mà S1.86 đã trả giá một lần. Đóng bằng hai câu `ALTER TABLE … ENABLE ALWAYS`, và từ
+vòng này cổng động của 211 đòi `tgenabled = 'A'` cho cả 71 trigger.
+
+**217 (mở và đóng cùng vòng) — và bản sửa ĐẦU của nó bị chính `[INV-H20]` bác.** `viPhamSoADR` khớp mẫu
+`**<tiền tố><số> ADR**`: con số phải đứng NGAY TRƯỚC dấu `**` đóng. Nên trong CÙNG một bảng của `Handoff.md`,
+`**[S1.93] 48 ADR**` được canh và ĐÚNG, còn `**[S1.86] cả 42 ADR đều …**` KHÔNG được canh — và nó đứng ở `42` từ S1.87 tới S1.99, qua
+BẢY ADR mới.
+
+Bản sửa đầu: viết lại lời khai thiu thành `**[S1.100] 49 ADR** — cả 49 đều …` để nó VÀO tầm cổng. Kết quả: **ba mũi của P7 đỏ.** Mũi
+tự-đột-biến của P7 *xoá lời khai còn sống rồi đòi cổng im hẳn* — nó khoá theo cấu tạo rằng `Handoff.md` có ĐÚNG MỘT lời khai còn sống,
+nên thêm một chỗ được canh là bất khả. Cổng cố ý chỉ canh một.
+
+Nên đóng theo chiều NGƯỢC: **xoá con số khỏi lời khai thứ hai.** Nó nay viết *"mọi ADR đều Đã chấp nhận"*, không mang số, nên không có
+gì để thiu. Đó đúng là bài học của khoản 212 — thứ trôi là các con số viết cứng — và cách chữa rẻ nhất cho một con số KHÔNG ai canh là
+BỎ NÓ ĐI, không phải thêm một người canh.
+
+**NĂM chỗ con số phải sửa tay trong một vòng không hề đi tìm chúng — và đó là số đo mới nhất của khoản 212:**
+
+| # | chỗ | trạng thái trước vòng này | ai tìm ra |
+|---|---|---|---|
+| ⑴ | `Handoff.md` §3, dòng `008 … 054` | đúng, cần bump | vòng này, **trong chính vòng thêm migration** — lần đầu dòng ấy không thiu (khoản 136, lần sửa thứ NĂM) |
+| ⑵ | `Handoff.md`, `cả 42 ADR đều …` | **thiu 7 ADR, 13 vòng** | vòng này, vì nó thêm một ADR — khoản 217 |
+| ⑶ | `docs/STATE.md`, `**BỐN MƯƠI TÁM ADR**` (chữ HOA) | đúng, cần bump | **`[INV-H20]` nêu tên** sau khi hai chỗ kia đã sửa |
+| ⑷ | `docs/ARCHITECTURE.md`, `52 migration` | **thiu 3 migration, từ S1.82** | vòng này, khi đi tìm mọi lời khai về migration |
+| ⑸ | `Handoff.md` §11, `mốc kế: chậm nhất S1.99` | **thiu một vòng** — S1.99 CHẠY lượt 76 mà không sửa dòng ghi nhịp | vòng này, ở bước *"đầu vòng kiểm mốc"* |
+
+Chỗ ⑶ là một cái bẫy đã ghi trong sổ tay mà vẫn sập: `grep -i` **không gấp chữ hoa tiếng Việt**, nên lượt tìm đầu của vòng này không
+thấy lời khai ấy; `[INV-H20]` nêu tên nó (*"STATE khai 48 ADR, DECISIONS có 49 đầu mục"*) chỉ vì nó nằm trong tầm cổng. Chỗ ⑵ và ⑷ thì
+nằm NGOÀI mọi cổng, và cả hai đã thiu nhiều vòng. Chỗ ⑸ đáng ngại nhất theo một nghĩa khác: nó là dòng mà **chính kỷ luật của kho dặn
+phải đọc ở ĐẦU mỗi vòng**, và nó nói một mốc đã qua.
+
+Một lần không thiu không phải một lớp. Khoản 212 vẫn mở, và số đo của nó vừa tăng.
+
+## 8. Ranh giới nói ra
+
+- **Không có đường đổi nhân chứng.** Nếu nhân chứng nghỉ việc giữa sự cố, cách duy nhất là HUỶ yêu cầu rồi tạo lại. Đó là hành vi
+  đúng, nhưng nó là một bước mà người vận hành phải biết TRƯỚC sự cố.
+- **Cổng tĩnh của 211 không so nội dung ⑵ với ⑴/⑶** — chỉ so TẬP TÊN, và so ⑴ với ⑶ từng byte. Đột biến đã đo đúng chỗ thu hẹp ấy.
+- **`CREATE CONSTRAINT TRIGGER` ngoài tập 71** vì `pg_get_triggerdef` in nó với tiền tố khác.
+- **Khoản 208 không được chạm** dù nó cùng bảng và cùng họ *"hàng nói một câu tổng hợp SAI"*: nó đòi mở rộng payload sổ kiểm toán, một
+  hình dạng khác, cần phép đo khác.
+- **Vòng này KHÔNG chạy lượt soi ngang.** Mốc `Handoff.md` §11 sau lượt 76 chưa tới; ba khoản đóng ở đây đều do lượt 76 ghi sẵn.
+- **Không đo trên cụm triển khai thật.** Mọi số đo ở trên lấy từ Testcontainers PostgreSQL 16 — cùng giới hạn mà mọi vòng trước đã
+  ghi, và nó là lý do `[khoản 102]` còn trong rổ A.
+
+## 9. Số đo
+
+- `pnpm t0` **0 vi phạm** — 286 module / 1158 phụ thuộc cruised.
+- `pnpm test` **71 tệp, 1007 đạt / 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm test:int` **51 tệp, 1079 đạt** — lượt ĐẦU đỏ **2 ca**, cả hai ở `db/migrations.int.test.ts`; xem mục 5.
+- `pnpm evidence` **XANH**, `vitest thoát mã 0`, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), đọc từ **2087** khẳng định.
+  Lượt ĐẦU in *"Cổng evidence: XANH"* trong cùng một lượt với `vitest thoát mã 1`, vì hai ca đỏ không mang nhãn `[INV-*]` — xem mục 5.
+- Phép đo mới: `[INV-D3] [khoản 209 + 210]` **6 ca** (3 ĐỎ trước bản vá) · `db/ghim-trigger-tu-chua.int.test.ts` **4 ca**, tệp mới ·
+  `tests/architecture/hardening-co-ly-do.test.ts` **8 → 16 ca**. `INV-D3` lần đầu có phép đo trên đường break-glass.
+- **Sáu đột biến ĐỎ, hai CỐ Ý SỐNG**; khôi phục tự kiểm `sha256` ở cả tám lượt, không lượt nào lệch.
+- Sổ nợ **213 → 217** khoản, mở **86 → 85**: đóng **209 · 210 · 211**; mở và đóng trong cùng vòng **216 · 217**; mở **214 · 215**.
+- Rổ A **6** — KHÔNG đổi, và vẫn không khoản nào thuộc vế ⒜; rổ B **58 → 57**; rổ C **22** — không đổi.
+- **48 → 49** ADR (ADR-049), **54 → 55** migration đánh số, **56/56** bất biến — không thêm bất biến nào.

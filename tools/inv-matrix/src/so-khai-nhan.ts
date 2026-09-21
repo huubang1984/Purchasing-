@@ -121,6 +121,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/identity/src/ma-tran-quyen.test.ts",
     "packages/identity/src/rbac.int.test.ts",
     "packages/rfq/src/rfq.int.test.ts",
+    // [S1.100 / khoản 209 + 210] Ba tệp trên đo D3 ở mức VAI TRÒ và QUYỀN — kể cả một khối *phân tách nhiệm
+    // vụ ở mức người dùng* ở `rbac.int.test.ts`. KHÔNG tệp nào đo đường BREAK-GLASS, đúng chỗ D3 phá được
+    // bằng một câu `UPDATE` sau khi đường phê duyệt đã bị bỏ.
+    "packages/unseal/src/unseal.int.test.ts",
   ],
   D4: [
     "apps/unseal-worker/src/composition.int.test.ts",
@@ -255,6 +259,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "tests/architecture/barrel-exports.test.ts",
   ],
   H19: [
+    // [S1.100 / khoan 211] Luot tu chua cua hardening cai lai DUNG ban da ghim — cho ghim ⑵ so voi ⑴/⑶ bang
+    // chinh PostgreSQL lam bo chuan hoa, vi hai ben viet hai chinh ta khac nhau.
+    "db/ghim-trigger-tu-chua.int.test.ts",
     "db/hardening-suy-tu-tinh-chat.int.test.ts",
     "tests/architecture/hardening-co-ly-do.test.ts",
   ],
