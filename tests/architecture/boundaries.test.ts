@@ -1897,6 +1897,79 @@ describe("biên giới module của packages/tenancy", () => {
 });
 
 // ==============================================================================================
+// `packages/danh-gia` — GÓI ĐẦU TIÊN CỦA S2, VÀ NÓ GIỮ CON SỐ QUYẾT ĐỊNH THỨ HẠNG.
+//
+// `tinhChiPhiHieuDung` là hàm thuần tính `effective_cost`. Thứ hạng suy từ con số ấy, và
+// award suy từ thứ hạng — nên một bộ tính tiền THỨ HAI đi vòng qua cửa không phải một lỗi
+// kiến trúc, nó là **đúng hình dạng khoản 218**: hai tầng của cùng một sản phẩm thu một số
+// tiền về hai chữ số bằng hai luật khác nhau. Lớp này mua cái mặc định đóng cho mọi module
+// tương lai của gói.
+// ==============================================================================================
+describe("biên giới module của packages/danh-gia", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/danh-gia/src", () => {
+    const probe = "packages/rfq/src/zzprobe-danh-gia-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { tinhChiPhiHieuDung } from "../../danh-gia/src/chi-phi-hieu-dung.js";',
+        "export { tinhChiPhiHieuDung };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/rfq", "packages/danh-gia"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-danh-gia-tuong-doi.ts");
+      expect(output).toContain("g16-danh-gia-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] module MỚI thêm vào packages/danh-gia/src mặc định không với tới được từ ngoài", () => {
+    const moduleMoi = "packages/danh-gia/src/zzprobe-module-moi.ts";
+    writeFileSync(moduleMoi, "export const zplaceholder = 1;\n");
+    mkdirSync("apps/tmp-probe-danh-gia-moi/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-danh-gia-moi/src/leak.ts",
+      [
+        'import { zplaceholder } from "../../../packages/danh-gia/src/zzprobe-module-moi.js";',
+        "export { zplaceholder };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-danh-gia-moi", "packages/danh-gia"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-module-moi");
+      expect(output).toContain("g16-danh-gia-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(moduleMoi, { force: true });
+      rmSync("apps/tmp-probe-danh-gia-moi", { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được — đối chứng dương, chống quy tắc chặn-tất-cả", () => {
+    mkdirSync("apps/tmp-probe-danh-gia-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-danh-gia-cua/src/dung.ts",
+      [
+        'import { tinhChiPhiHieuDung } from "../../../packages/danh-gia/src/index.js";',
+        "export { tinhChiPhiHieuDung };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-danh-gia-cua", "packages/danh-gia"]);
+      expect(output).not.toContain("g16-danh-gia-chi-index-la-cua-cong-khai");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-danh-gia-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+// ==============================================================================================
 // `packages/test-support` — VÌ SAO NÓ KHÔNG ĐƯỢC MIỄN TIẾP.
 //
 // Lý do miễn trừ cũ của nó KHÁC ba gói kia: *"hạ tầng kiểm thử, không phải mã sản phẩm"*. Câu ấy

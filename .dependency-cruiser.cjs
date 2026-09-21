@@ -68,6 +68,9 @@ const TENANCY_SRC_PREFIX = ciPrefix("packages/tenancy/src/");
 const TENANCY_INDEX_TS = ciFile("packages/tenancy/src/index.ts");
 const TEST_SUPPORT_SRC_PREFIX = ciPrefix("packages/test-support/src/");
 const TEST_SUPPORT_INDEX_TS = ciFile("packages/test-support/src/index.ts");
+// [S1.104 / S2.2] Ho "g16-": goi thu 14, va la goi dau tien cua S2.
+const DANH_GIA_SRC_PREFIX = ciPrefix("packages/danh-gia/src/");
+const DANH_GIA_INDEX_TS = ciFile("packages/danh-gia/src/index.ts");
 
 // ==========================================================================================
 // VONG FIX 2 (MUC D) - CUNG KHUON "MAC DINH DONG", AP CHO packages/identity/src/
@@ -290,6 +293,20 @@ module.exports = {
       severity: "error",
       from: { pathNot: TEST_SUPPORT_SRC_PREFIX },
       to: { path: TEST_SUPPORT_SRC_PREFIX, pathNot: [TEST_SUPPORT_INDEX_TS] },
+    },
+    {
+      name: "g16-danh-gia-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/danh-gia/src/ la vung han che doi voi module ben ngoai package. " +
+        "Chi index.ts duoc mo. Goi nay giu HAM THUAN tinh `effective_cost` - con so quyet " +
+        "dinh THU HANG, tuc quyet dinh ai duoc trao thau. Pham vi that cua quy tac, noi ra " +
+        "nhu g14-/g15-: hom nay no rut KHONG symbol nao khoi tam voi, vi ca bay symbol gia " +
+        "tri deu DA o cua. Thu no mua la MAC DINH DONG cho module tuong lai - va o day cai " +
+        "mac dinh ay dat gia hon thuong le, vi mot bo tinh tien THU HAI di vong qua cua la " +
+        "dung hinh dang khoan 218 (hai tang thu tien ve hai chu so bang hai luat).",
+      severity: "error",
+      from: { pathNot: DANH_GIA_SRC_PREFIX },
+      to: { path: DANH_GIA_SRC_PREFIX, pathNot: [DANH_GIA_INDEX_TS] },
     },
     // ------------------------------------------------------------------------------------------
     // [ADR-020 muc 4 / S1.10.2] HO "g9-" — handler cua apps/api chi nhan `ctx.client` DA GAN phien.

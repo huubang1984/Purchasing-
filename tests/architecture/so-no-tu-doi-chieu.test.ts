@@ -1032,7 +1032,14 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
   });
 
   it("P9b đột biến — XOÁ lời khai gói/công cụ thì vẫn ĐỎ", () => {
-    const m = /\*\*(\[S[\d.]+\] \d+ gói \+ \d+ công cụ)\*\*/.exec(HANDOFF)!;
+    // [S1.104] Phải nhắm lời khai CÒN SỐNG, đúng khuôn mũi P7 ngay trên — và trước vòng này mũi
+    // này KHÔNG làm thế: nó `exec` trên văn bản THÔ, nên một lời khai đã GẠCH đứng trước lời khai
+    // sống sẽ hút lấy phép đột biến, cụm sống ở lại đúng, cổng im, và mũi này XANH trong khi đáng
+    // lẽ phải đỏ. Đo được ở chính S1.104: gạch tại chỗ `**[S1.89] 13 gói + 6 công cụ**` rồi thêm
+    // cụm mới ⇒ mũi này đỏ với "expected [] to have a length of 1". Cùng khiếm khuyết mà P7 đã
+    // sửa từ S1.29; hai mũi anh em trôi khỏi nhau vì không ai đọc chúng cạnh nhau.
+    const song = HANDOFF.replace(/`[^`\n]*`/g, "").replace(/~~[\s\S]*?~~/g, "");
+    const m = /\*\*(\[S[\d.]+\] \d+ gói \+ \d+ công cụ)\*\*/.exec(song)!;
     const loi = viPhamHinhDangKho(dotBien(HANDOFF, m[0], m[1]!), "Handoff.md");
     expect(loi).toHaveLength(1);
     expect(loi[0]).toContain("không tìm thấy lời khai");
