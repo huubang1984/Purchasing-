@@ -190,6 +190,11 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   "UnsealDeniedError",
   "ComparisonError",
   "ComparisonDeniedError",
+  // [S1.106 / S2.4] Năm lối TỪ CHỐI CÓ TÊN của cổng chấm (`RFQ_KHONG_CHAM_DUOC`,
+  // `CHINH_SACH_CHUA_KHAI_TRONG_SO`, `THANH_PHAN_CHUA_CO_NGUON`, `LECH_TIEN_TE`,
+  // `KHONG_CO_BAO_GIA_DOC_DUOC`). Thiếu dòng này, cả năm đi ra dưới 500 — một lời từ chối có
+  // tên bị đọc thành một sự cố máy chủ, và người mua không biết phải sửa gì.
+  "DanhGiaTuChoiError",
 ]);
 
 const THAN_401 = { error: "phien khong hop le" } as const;

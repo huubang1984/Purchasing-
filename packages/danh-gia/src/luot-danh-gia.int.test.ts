@@ -9,6 +9,11 @@
 // **Không mang nhãn `[INV-*]`**, và đó là cố ý: J1 mới có vế cấu trúc + vế nội dung ở tầng CSDL,
 // còn J2 mới có vế dễ; cả hai chưa đủ để khai một bất biến nhóm J là ĐÃ ĐƯỢC CƯỠNG CHẾ. Gắn nhãn
 // ở đây là ghi một dòng `passed` vào hàng của một bất biến chưa trọn — đúng thứ `[INV-H22]` chặn.
+//
+// [S1.106 / S2.4] Tệp này nay đo CẢ đường ĐỌC (`docBangXepHang`), và nó nằm ở đây chứ không ở một
+// tệp riêng vì toàn bộ giàn cảnh — chính sách, RFQ, báo giá niêm phong, mở thầu — là CHUNG. Một
+// tệp thứ hai nghĩa là một container Postgres thứ 55 và một BẢN SAO của giàn cảnh ấy; hai bản sao
+// của cùng một quy ước là hai chỗ để chúng lệch nhau.
 // ===============================================================================================
 
 import { randomBytes } from "node:crypto";
@@ -20,6 +25,7 @@ import { PermissionDeniedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { docBangXepHang } from "./doc-bang-xep-hang.js";
 import { DanhGiaTuChoiError, taoLuotDanhGia } from "./luot-danh-gia.js";
 import { SO_LE_TIEN, docSo, vietSo } from "./chi-phi-hieu-dung.js";
 
@@ -31,24 +37,27 @@ let db: TestDatabase;
 let apiPool: pg.Pool;
 let unsealPool: pg.Pool;
 let orgA = "";
-let uYc = "", uD1 = "", uKhong = "";
-let sYc = "", sD1 = "", sKhong = "";
+// [S1.106 / S2.4] Tổ chức THỨ HAI, một người, một phiên — đủ để hỏi bảng xếp hạng của tổ chức
+// A từ phía NGƯỜI GỌI khác. Không dựng giàn cảnh gì thêm cho nó: câu cần đo là *không thấy gì*.
+let orgB = "";
+let uYc = "", uD1 = "", uKhong = "", uKhongXem = "", uB = "";
+let sYc = "", sD1 = "", sKhong = "", sKhongXem = "", sB = "";
 
-async function taoNguoi(email: string, vaiTro: string): Promise<string> {
+async function taoNguoi(email: string, vaiTro: string, org: string = orgA): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $2) RETURNING id",
-    [orgA, email],
+    [org, email],
   );
   const id = rows[0]?.id ?? "";
-  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgA, id, vaiTro]);
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vaiTro]);
   return id;
 }
 
-async function taoPhien(userId: string): Promise<string> {
+async function taoPhien(userId: string, org: string = orgA): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
       "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
-    [orgA, userId, randomBytes(32)],
+    [org, userId, randomBytes(32)],
   );
   return rows[0]?.id ?? "";
 }
@@ -235,10 +244,22 @@ beforeAll(async () => {
   // FINANCE) đều có. Nên cổng quyền của route chấm gần như không phân tách được vai nào — cùng
   // hình dạng mà ADR-051 đã tìm ra cho J3, và nó là lý do J3 cần một lớp theo HÀNH VI.
   uKhong = await taoNguoi("khong@vidu.vn", "DIRECTOR");
+  // [S1.106 / S2.4] Cổng của đường ĐỌC là `bid.view`, và `005` cấp nó cho PROCUREMENT_MANAGER,
+  // FINANCE, DIRECTOR — nên một phiên KHÔNG xem được phải là một vai khác `uKhong` ở trên.
+  uKhongXem = await taoNguoi("khong-xem@vidu.vn", "REQUESTER");
   sYc = await taoPhien(uYc);
   sD1 = await taoPhien(uD1);
   sKhong = await taoPhien(uKhong);
-  expect([orgA, uYc, uD1, uKhong, sYc, sD1, sKhong].filter((x) => x === "")).toEqual([]);
+  sKhongXem = await taoPhien(uKhongXem);
+  const { rows: b } = await db.pool.query<{ id: string }>(
+    "INSERT INTO organizations (name, slug) VALUES ('Cong ty B', 'cong-ty-b') RETURNING id",
+  );
+  orgB = b[0]?.id ?? "";
+  uB = await taoNguoi("pm-b@vidu.vn", "PROCUREMENT_MANAGER", orgB);
+  sB = await taoPhien(uB, orgB);
+  expect(
+    [orgA, orgB, uYc, uD1, uKhong, uKhongXem, uB, sYc, sD1, sKhong, sKhongXem, sB].filter((x) => x === ""),
+  ).toEqual([]);
 }, 240000);
 
 afterAll(async () => {
@@ -500,5 +521,211 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
     await expect(
       withTenant(apiPool, orgA, (c) => c.query("UPDATE rfq_evaluations SET currency = 'USD' WHERE id = $1", [evalId])),
     ).rejects.toMatchObject({ code: "42501" });
+  });
+});
+// ==============================================================================================
+// [S1.106 / S2.4] ĐỌC BẢNG XẾP HẠNG
+//
+// Vế chịu lực của cả vòng: cột `components` phải đi RA TỚI người đọc. **J2** nói mỗi hàng xếp
+// hạng tái lập được, và một màn hình chỉ hiện `effective_cost` biến J2 thành một lời hứa mà người
+// mua không kiểm được. Nên phép đo ở đây không dừng ở "có mấy hàng" — nó đòi từng thành phần.
+// ==============================================================================================
+describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () => {
+  it("chưa chấm lần nào ⇒ `null`, KHÔNG phải một bảng RỖNG", async () => {
+    const { rfqId } = await goiDaMo([["101000000.00", "VND"]]);
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    // Một mảng rỗng ở đây nói dối: *"đã chấm, và không ai trong bảng"* khác hẳn *"chưa chấm"*, và
+    // màn chấm phải phân biệt được hai câu ấy — cùng khuôn `getOpenUnsealForRfq` (khoản 190).
+    expect(kq).toBeNull();
+  });
+
+  it("chấm rồi ⇒ hạng TĂNG DẦN, tên nhà cung cấp, và MỖI HÀNG mang đủ thành phần sinh ra con số", async () => {
+    const { rfqId, banRo } = await goiDaMo([
+      ["548800000.00", "VND"],
+      ["537600000.00", "VND"],
+      ["544000000.00", "VND"],
+    ]);
+    const luot = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq).not.toBeNull();
+    expect(kq?.evaluationId).toBe(luot.evaluationId);
+    expect(kq?.policyVersion).toBe(luot.policyVersion);
+    expect(kq?.currency).toBe("VND");
+    expect(kq?.evaluatedAt).toBeInstanceOf(Date);
+    // `ORDER BY l.rank ASC NULLS LAST` — hàng đọc theo THỨ HẠNG, không theo thứ tự chèn.
+    expect(kq?.rows.map((h) => h.rank)).toEqual([1, 2, 3]);
+    expect(kq?.rows.map((h) => h.effectiveCost)).toEqual(["537600000.00", "544000000.00", "548800000.00"]);
+    expect(kq?.rows.map((h) => h.bidVersionId)).toEqual([banRo[1], banRo[2], banRo[0]]);
+    // Tên nhà cung cấp đi qua BỐN phép nối (`rfq_unsealed_bids` → `vendor_bid_versions` →
+    // `vendor_bids` → `rfq_invitations` → `suppliers`); một phép nối sai `org_id` vẫn trả đúng số
+    // hàng, nên phải khẳng định chính cái tên.
+    for (const h of kq?.rows ?? []) expect(h.supplierName, JSON.stringify(h)).toMatch(/^NCC \d /u);
+
+    // VẾ CHỊU LỰC: từng thành phần, không chỉ tổng. Chính sách của giàn cảnh khai đúng một thành
+    // phần `gia` hệ số `1.0000`, nên `giaTri × heSo` phải BẰNG `effectiveCost` của hàng ấy.
+    for (const h of kq?.rows ?? []) {
+      expect(h.components, JSON.stringify(h)).toHaveLength(1);
+      const tp = h.components[0];
+      expect(tp?.ma).toBe("gia");
+      expect(tp?.donVi).toBe("TIEN");
+      expect(tp?.heSo).toBe("1.0000");
+      expect(tp?.giaTri).toBe(h.effectiveCost);
+      expect(tp?.tien).toBe(h.effectiveCost);
+    }
+  });
+
+  it("báo giá KHÔNG đọc được số tiền ⇒ xuống CUỐI bảng (`NULLS LAST`) và `components` RỖNG", async () => {
+    const { rfqId, banRo } = await goiDaMo([
+      ["530000000.00", "VND"],
+      ["khong-phai-so", "VND"],
+    ]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    // `NULL` là LỚN NHẤT theo mặc định ASC của Postgres, nên `NULLS LAST` không đổi kết quả hôm
+    // nay — nó được viết ra để một lần đổi `ORDER BY` sang `DESC` mai sau không lặng lẽ đưa hàng
+    // không đọc được lên ĐẦU bảng xếp hạng.
+    expect(kq?.rows.map((h) => h.rank)).toEqual([1, null]);
+    expect(kq?.rows.map((h) => h.bidVersionId)).toEqual([banRo[0], banRo[1]]);
+    expect(kq?.rows[1]?.effectiveCost).toBeNull();
+    expect(kq?.rows[1]?.components).toEqual([]);
+  });
+
+  it("HAI lượt chấm ⇒ đọc lượt MỚI NHẤT, và lượt CŨ còn nguyên trong CSDL", async () => {
+    const { rfqId } = await goiDaMo([["520000000.00", "VND"]]);
+    const dau = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    // Cạnh `BAFO_CLOSED->EVALUATING` của spec §4.3 sinh một `rfq_evaluations` THỨ HAI; ở vòng này
+    // chưa có đường BAFO, nên lượt thứ hai được chèn THẲNG dưới vai ứng dụng — đúng hình dạng mà
+    // đường ấy sẽ tạo ra, không phải một lối tắt của test.
+    const sau = await withTenant(apiPool, orgA, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations " +
+          "WHERE id = $1 RETURNING id",
+        [dau.evaluationId],
+      );
+      return rows[0]?.id ?? "";
+    });
+    expect(sau).not.toBe("");
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq?.evaluationId).toBe(sau);
+    // Lượt mới chưa có hàng nào ⇒ bảng RỖNG, và đó KHÁC `null`: đã có một lượt chấm.
+    expect(kq?.rows).toEqual([]);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1",
+      [rfqId],
+    );
+    expect(rows[0]?.n, "lượt chấm cũ đã biến mất — sổ kiểm toán mất một mắt").toBe("2");
+  });
+
+  it("`don_vi` VẮNG trong `components` ⇒ suy đúng LUẬT của trigger; `he_so`/`gia_tri` vắng ⇒ `null`, KHÔNG bịa", async () => {
+    // `057` chỉ đòi `ma` và `tien` trong mỗi phần tử `components`, nên một hàng THẬT có thể không
+    // mang `don_vi`/`he_so`/`gia_tri` — và trigger `kiem_thanh_phan_theo_chinh_sach` suy đơn vị
+    // từ `tien` (`null` là `DIEM`, có giá trị là `TIEN`). Bộ đọc phải suy CÙNG một luật, còn hai
+    // trường kia thì không suy được từ đâu cả.
+    const csId = await taoChinhSach('[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"chatluong","don_vi":"DIEM","he_so":"2.0000"}]');
+    const rfqId = await taoRfqMo(csId);
+    const versionId = await nopBaoGia(rfqId, "NCC 9 hai thanh phan");
+    await moThau(rfqId, [[versionId, { totalAmount: "515000000.00", currency: "VND" }]]);
+    await withTenant(apiPool, orgA, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+        [orgA, rfqId, csId, uYc, sYc],
+      );
+      await c.query(
+        "INSERT INTO rfq_evaluation_lines (org_id, evaluation_id, bid_version_id, effective_cost, components, rank) " +
+          "VALUES ($1, $2, $3, '515000000.00', $4::jsonb, 1)",
+        [orgA, rows[0]?.id ?? "", versionId, '[{"ma":"gia","tien":"515000000.00"},{"ma":"chatluong","tien":null}]'],
+      );
+    });
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq?.rows).toHaveLength(1);
+    expect(kq?.rows[0]?.components).toEqual([
+      { ma: "gia", donVi: "TIEN", heSo: null, giaTri: null, tien: "515000000.00" },
+      { ma: "chatluong", donVi: "DIEM", heSo: null, giaTri: null, tien: null },
+    ]);
+  });
+
+  it("phiên KHÔNG có `bid.view` ⇒ `PermissionDeniedError`, KHÔNG một hàng bảng nào đi ra, và ĐÚNG MỘT hàng sổ", async () => {
+    const { rfqId } = await goiDaMo([["512000000.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const { rows: truoc } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED'",
+      [orgA],
+    );
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sKhongXem }, apiPool).then(
+        () => null,
+        (e: unknown) => e,
+      ),
+    );
+    // `REQUESTER` là một vai THẬT của `005` không giữ `bid.view` — khác `uKhong` (DIRECTOR), vai
+    // duy nhất KHÔNG giữ `evaluation.perform`. Hai cổng, hai mã quyền, hai vai khác nhau.
+    expect(loi).toBeInstanceOf(PermissionDeniedError);
+    const { rows: sau } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED'",
+      [orgA],
+    );
+    expect(Number(sau[0]?.n) - Number(truoc[0]?.n), "một lần từ chối phải để lại ĐÚNG MỘT hàng sổ (D5)").toBe(1);
+  });
+
+  it("tổ chức KHÁC hỏi đúng mã gói thầu ấy ⇒ `null`, không một hàng nào", async () => {
+    const { rfqId } = await goiDaMo([["509000000.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    // Bảy phép nối của câu đọc đều mang vế `org_id`; RLS là lớp thứ hai. Phép đo này đứng ở phía
+    // NGƯỜI GỌI: một tổ chức khác, một phiên khác, đúng mã gói thầu của tổ chức A.
+    const kq = await withTenant(apiPool, orgB, (c) =>
+      docBangXepHang(c, orgB, { rfqId, actorSessionId: sB }, apiPool),
+    );
+    expect(kq).toBeNull();
+  });
+
+  it("bất biến A3 ĐO LẠI SAU KHI CÓ MỘT LƯỢT CHẤM: giá dạng rõ nay ở HAI bảng, không một", async () => {
+    // TÊN TEST NÀY CỐ Ý KHÔNG MANG NHÃN trong ngoặc vuông, và đó là vế thứ hai của cùng một sự
+    // cẩn thận: `tools/inv-matrix/src/so-khai-nhan.ts` không khai tệp này cho A3 (nên một nhãn ở
+    // đây CHẶN MERGE ở lượt evidence), và tệ hơn — một test TÊN là A3 mà XANH sẽ ghi một dòng
+    // `passed` vào hàng của A3 trong khi nó khẳng định A3 SAI.
+    //
+    // KHÔNG phải một lời chúc phúc cho hai bảng. Đây là một cái ĐINH GHIM VÀO THỰC TẠI, và nó
+    // mâu thuẫn với lời khai của bất biến A3 mà `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`
+    // bước 14 đo: *"giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng"*. Lời khai ấy vẫn XANH ở đó chỉ vì
+    // kịch bản ấy không chấm thầu lần nào — tức cổng ĐÚNG, nhưng nó đứng ở một thế giới không có
+    // lượt chấm. `057` (S2.3, đã merge) dựng chỗ ở thứ hai cho một con giá dạng rõ, và vòng này
+    // là vòng đầu tiên NHÌN THẤY nó.
+    //
+    // Tập được viết VÉT CẠN và CHÍNH XÁC: dù chủ dự án chọn hướng nào, dòng này cũng đỏ và buộc
+    // người sửa đọc lại quyết định. Xem khoản 224 — ĐANG MỞ, chờ quyết định của chủ dự án.
+    const GIA = "777123456.00";
+    const { rfqId } = await goiDaMo([[GIA, "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const { rows: bang } = await db.pool.query<{ ten: string }>(
+      "SELECT c.relname AS ten FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+        "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY c.relname",
+    );
+    expect(bang.length, "chống rỗng ruột: không đọc được bảng nào").toBeGreaterThan(20);
+    const dinh: string[] = [];
+    for (const b of bang) {
+      if (!/^[a-z_][a-z0-9_]*$/u.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
+      const { rows } = await db.pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`,
+        [GIA],
+      );
+      if (rows[0]?.n !== "0") dinh.push(b.ten);
+    }
+    expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
   });
 });

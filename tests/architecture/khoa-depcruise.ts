@@ -60,12 +60,38 @@
 //    nên `node_modules` **không phải mục tiêu**, và `doNotFollow: "(^|/)node_modules(/|$)"`
 //    (`.dependency-cruiser.cjs:674`) chặn duyệt tiếp — khoá ở đó vô hình với chính công cụ này.
 //
+//
+// ==============================================================================================
+// ⑸ CHỖ HỎNG THỨ NĂM — VÀ NÓ KHÔNG ĐẾN TỪ MỘT LƯỢT SOI, NÓ ĐẾN TỪ CI. [khoản 222]
+//
+// `EPERM` BỊ PHÂN LOẠI LÀ *HỎNG THẬT*, NHƯNG WINDOWS TRẢ ĐÚNG `EPERM` CHO MỘT TRANH CHẤP.
+//
+// Đo: PR #105, run 35625587011, job `T1+T2 (windows-latest)` ĐỎ đúng một ca — `EPERM: operation
+// not permitted, mkdir '…/node_modules/.cache/trustprocure/depcruise.lock'` ở PROBE của
+// `apps/api/src/routes.test.ts` — trong khi ubuntu-latest, T0, T0b và T3 của CÙNG commit đều
+// SUCCESS, và `pnpm test` ở máy (cũng Windows) xanh hai lượt.
+//
+// `routes.test.ts` giữ khoá trọn vòng đời probe còn `boundaries.test.ts` giành-nhả khoá ở MỖI
+// lượt cruise, nên trên đường dẫn ấy có một dòng `mkdir`/`rmdir` liên tục. Trên Windows, `mkdir`
+// vào một thư mục đã `rmdir` mà handle cuối chưa đóng (*pending delete*) trả
+// `ERROR_ACCESS_DENIED`, và libuv map nó thành `EPERM` — KHÔNG phải `EEXIST`. Nên lớp dựng để
+// diệt cổng đỏ giả vừa dựng một cái, đúng lớp lỗi mà bốn mục trên vừa kể.
+//
+// Bản vá hẹp, hai vế, và vế thứ hai giữ tính chất ⑴:
+//   • `EPERM` mà TÊN CÓ TRONG THƯ MỤC CHA ⇒ coi như có người đang giữ (chờ tiếp);
+//   • `EPERM` mà tên KHÔNG có ⇒ vẫn NÉM ngay (đó là quyền thật), và ngay cả vế trên cũng chỉ
+//     được tha trong `CUA_SO_EPERM_MS` rồi ném CHÍNH lỗi gốc — một mã lỗi được tha không được
+//     biến thành một lần chờ 180 giây.
+//
+// Vị từ hỏi `readdir` CỦA THƯ MỤC CHA, không hỏi `lstat` của chính đường dẫn: một thư mục đang
+// chờ xoá cũng làm `lstat` ném `EPERM` (cùng một `CreateFileW`), còn `readdir` vẫn liệt kê nó.
+//
 // Khoá vẫn CÓ HẠN theo hai chiều: chờ tối đa `HAN_CHO_MS` rồi NÉM (một lượt treo im lặng còn tệ
 // hơn một lượt đỏ), và một khoá mà CHỦ của nó đã chết bị thu hồi ngay lập tức.
 // ==============================================================================================
 
-import { mkdirSync, lstatSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, lstatSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const GOC = fileURLToPath(new URL("../../", import.meta.url));
@@ -95,6 +121,16 @@ const HAN_CHO_MS = 180_000;
  * BUỘC nhỏ hơn `HAN_CHO_MS`, nếu không thì một khoá rác đầu độc mọi lượt chạy tới khi hết hạn.
  */
 const HAN_KHOA_MS = 30_000;
+/**
+ * [khoản 222] CỬA SỔ NHẪN NẠI CHO `EPERM` — hai giây, và con số NHỎ là chủ ý.
+ *
+ * Một thư mục Windows *đang chờ xoá* biến mất ngay khi cái handle cuối cùng đóng, tức vài
+ * mili-giây; cửa sổ này không phải một hạn chờ, nó là bề rộng của một khe đua tranh. Hết cửa
+ * sổ thì NÉM CHÍNH LỖI GỐC — tính chất ⑴ (*hỏng TO chứ không treo im*) không được đổi thành
+ * một lần chờ `HAN_CHO_MS` chỉ vì có thêm một mã lỗi được tha. Đo các lần LIÊN TIẾP: một
+ * nhịp `EEXIST` xen vào là bằng chứng khoá đang được dùng bình thường, nên cửa sổ mở lại.
+ */
+const CUA_SO_EPERM_MS = 2_000;
 const NHIP_MS = 50;
 
 /** Ngủ ĐỒNG BỘ — `Atomics.wait` là cách duy nhất làm việc đó mà không quay vòng đốt CPU. */
@@ -104,6 +140,24 @@ function nguDongBo(ms: number): void {
 
 function maLoi(e: unknown): string | undefined {
   return (e as NodeJS.ErrnoException | undefined)?.code;
+}
+
+/**
+ * [khoản 222] Cái TÊN này có nằm trong thư mục cha không — kể cả khi nó đang chờ xoá.
+ *
+ * `readdir` đọc thư mục cha bằng `NtQueryDirectoryFile`, vốn vẫn liệt kê một mục *pending
+ * delete*; `lstat` của chính đường dẫn thì mở handle nên nó ném `EPERM` cùng lý do với
+ * `mkdir`. Hỏi sai chỗ ở đây là biến vị từ thành một hằng `false` trên đúng ca cần nó.
+ *
+ * Không đọc được thư mục cha ⇒ `false`: "không chắc" phải đi về phía NÉM, vì chiều kia là
+ * một lần chờ.
+ */
+function tenConTonTai(duong: string): boolean {
+  try {
+    return readdirSync(dirname(duong)).includes(basename(duong));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -150,6 +204,14 @@ function laKhoaRac(duong: string): boolean {
   return Date.now() - noi.mtimeMs > HAN_KHOA_MS;
 }
 
+/**
+ * Lượt `mkdir` THẬT, và nó KHÔNG `recursive` — tính nguyên tử của `mkdir` là toàn bộ lý do
+ * lớp này dùng `mkdir` chứ không dùng `existsSync` rồi `mkdir`.
+ */
+function taoThuMucKhoa(duong: string): void {
+  mkdirSync(duong, { recursive: false });
+}
+
 /** Đếm mức lồng: một tiến trình ĐANG cầm khoá mà gọi lồng thì sẽ tự khoá chết chính mình. */
 let mucLong = 0;
 
@@ -158,20 +220,41 @@ let mucLong = 0;
  *
  * `duongKhoa` chỉ để PHÉP ĐO về chính lớp khoá này tiêm được một đường khác vào — xem
  * `khoa-depcruise.test.ts`. Mã sản xuất của lớp test không bao giờ truyền nó.
+ *
+ * [khoản 222] `tao` là cửa THỨ HAI cùng hạng, và nó có lý do hẹp: sự kiện của hệ điều hành
+ * làm ⑸ đỏ — `mkdir` vào một thư mục đang chờ xoá — là một đua tranh KHÔNG dựng lại theo ý
+ * muốn được, nên phép đo về cách xử nó phải TIÊM lỗi. Mã sản xuất không bao giờ truyền nó.
  */
-export function voiKhoaDepcruise<T>(fn: () => T, duongKhoa: string = DUONG_KHOA): T {
+export function voiKhoaDepcruise<T>(
+  fn: () => T,
+  duongKhoa: string = DUONG_KHOA,
+  tao: (duong: string) => void = taoThuMucKhoa,
+): T {
   if (mucLong > 0) return fn(); // đã cầm khoá rồi — vào thẳng, đừng chờ chính mình
 
   const han = Date.now() + HAN_CHO_MS;
+  let hanEperm: number | undefined;
   for (;;) {
     try {
-      mkdirSync(duongKhoa, { recursive: false });
+      tao(duongKhoa);
       break;
     } catch (e) {
-      // Chỉ `EEXIST` mới nghĩa là "có người đang giữ". Mọi mã lỗi khác (`ENOENT` vì thư mục cha
-      // không tồn tại, `EACCES`, `EPERM`) là hỏng THẬT: ném ngay, mang theo lỗi gốc. Đây là chỗ
-      // `catch {}` trần của bản đầu nuốt mất chẩn đoán rồi quay vòng vô hạn — xem ⑴.
-      if (maLoi(e) !== "EEXIST") throw e;
+      // Chỉ `EEXIST` mới nghĩa là "có người đang giữ" — và [khoản 222] `EPERM` trên một cái TÊN
+      // ĐANG TỒN TẠI, vì đó là thư mục khoá đang chờ xoá trên Windows. Mọi mã lỗi khác (`ENOENT`
+      // vì thư mục cha không tồn tại, `EACCES`, và cả `EPERM` trên một cái tên KHÔNG có) là hỏng
+      // THẬT: ném ngay, mang theo lỗi gốc. Đây là chỗ `catch {}` trần của bản đầu nuốt mất chẩn
+      // đoán rồi quay vòng vô hạn — xem ⑴.
+      const ma = maLoi(e);
+      if (ma !== "EEXIST" && !(ma === "EPERM" && tenConTonTai(duongKhoa))) throw e;
+
+      // [khoản 222] Cửa sổ nhẫn nại đo các lần `EPERM` LIÊN TIẾP; hết cửa sổ thì ném lỗi GỐC,
+      // không phải lỗi hạn chờ — một người đọc phải thấy `EPERM` chứ không thấy "quá 180 giây".
+      if (ma === "EPERM") {
+        hanEperm ??= Date.now() + CUA_SO_EPERM_MS;
+        if (Date.now() > hanEperm) throw e;
+      } else {
+        hanEperm = undefined;
+      }
 
       // HẠN ĐỨNG TRƯỚC MỌI NHÁNH KHÁC. Không nhánh nào dưới đây được phép `continue` vượt qua nó.
       if (Date.now() > han) {

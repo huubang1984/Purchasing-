@@ -9990,3 +9990,143 @@ trên sáu vai đều có. Thành khoản **220**.
 - Sổ nợ **218 → 222** khoản, mở **84 → 88** (khoản 219, 220, 221, 222 mở; không khoản nào đóng). Rổ A **6**
   không đổi, rổ B **57 → 61**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 61 + 21 = 88.
 - **52 → 53** ADR (ADR-053), **56 → 57** migration, **14** gói không đổi, **56/56** bất biến không đổi.
+# §S1.106 — S2.4: BẢNG XẾP HẠNG ĐI RA TỚI NGƯỜI ĐỌC, VÀ HAI CỔNG XANH VÌ CHÚNG ĐỨNG Ở MỘT THẾ GIỚI KHÔNG CÓ LƯỢT CHẤM
+
+## 1. Vòng này là gì
+
+Hai route người mua, bước 5 của màn mở thầu, và bản vá của khoản **222**. Vế chịu lực không phải
+"thêm một bảng lên màn hình": spec §8 nói *"bảng xếp hạng luôn hiện thành phần, để người đọc thấy
+con số nào đến từ đâu"*, và đó là câu duy nhất làm **J2** — *mỗi hàng xếp hạng tái lập được* —
+kiểm được bằng mắt người mua. Nên cột `components` đi RA TỚI giao diện, mở sẵn, không sau một cú
+bấm.
+
+`POST /rfqs/:rfqId/evaluate` khai `evaluation.perform`; `GET /rfqs/:rfqId/ranking` KHÔNG khai
+`permission` và điều đó là có ý — `dispatch.ts` chỉ gọi `requirePermission` cho route ghi, nên một
+cờ quyền trên route đọc là một lời khai không có lớp. Cổng thật nằm THẲNG trong thân
+`docBangXepHang`, mã `bid.view`, cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh: đọc một bảng xếp
+hạng là một lần TIẾT LỘ GIÁ, và nó phải chịu đúng cổng mà bảng so sánh chịu.
+
+## 2. Phát hiện đắt nhất của vòng: HAI cổng xanh vì phạm vi của chúng, không vì mã đúng
+
+Cả hai đều cùng một hình dạng, và nó khác hình dạng của S1.105: ở đó cổng ĐỎ và em đọc sai tập
+con. Ở đây cổng **XANH** trong khi thứ nó khai đã sai — vì phạm vi của cổng bị thu lại bởi một
+điều kiện mà không ai viết ra như một điều kiện.
+
+| cổng | vì sao nó xanh trên một lời khai đã sai |
+|---|---|
+| vế ⑷ của `pham-vi-san-xuat.test.ts` — khoản **223** | nó bỏ qua gói mà phép đếm xếp là *chỉ dùng cho test*, và một gói KHÔNG AI IMPORT ở mã sản xuất rơi đúng vào lớp ấy. `packages/danh-gia` sống HAI vòng với hai phụ thuộc lúc chạy không khai |
+| bước 14 của kịch bản HTTP, bất biến **A3** — khoản **224** | nó quét mọi bảng cho một mức giá và đòi tập `["rfq_unsealed_bids"]`. Đúng — trong một kịch bản KHÔNG CHẤM THẦU LẦN NÀO. `057` đã dựng chỗ ở thứ hai từ S1.105 |
+
+Khoản **223** đo được hai chiều, và phép đo mới là thứ đáng ghi chứ không phải hai dòng
+`dependencies`: `node --experimental-transform-types --import
+./apps/api/register-ts-resolve.mjs apps/api/src/routes/buyer.ts` chết với
+`ERR_MODULE_NOT_FOUND: Cannot find package '@trustprocure/audit'` TRƯỚC bản vá, và thoát **0**
+sau. Tức `pnpm api:dev` sẽ không khởi động được, và bốn cổng của hai vòng trước không thấy gì —
+vì `vitest.config.ts` alias `@trustprocure` sang `./packages`, nên MỌI tên workspace giải được ở
+test bất kể manifest nói gì.
+
+Khoản **224** thì không đóng được bằng mã, và nó là chỗ vòng này DỪNG: tập đo thật là
+`["rfq_evaluation_lines", "rfq_unsealed_bids"]`. Hai hướng — thu `rfq_evaluation_lines` về không
+lưu số dạng rõ, hay viết lại A3 thành một danh sách bảng ĐƯỢC KHAI — và hướng thứ nhất đâm vào
+J2, thứ đòi một dấu vết LƯU LẠI. Nới một bất biến đã công bố không đi qua uỷ quyền merge, nên nó
+được trình chứ không được chọn ở đây.
+
+Và vòng này CỐ Ý không thêm lượt chấm vào kịch bản của bước 14: làm thế sẽ nới đúng cái cổng đang
+tranh luận, trước khi có quyết định. Thay vào đó một cái ĐINH GHIM VÀO THỰC TẠI được đóng ở
+`packages/danh-gia/src/luot-danh-gia.int.test.ts`, tập hai bảng viết vét cạn — hướng nào được
+chọn thì dòng ấy cũng đỏ.
+
+## 3. Khoản 222 đóng, và nó đóng bằng phép đo tiêm lỗi
+
+Bản vá hẹp đúng một mã lỗi: `EPERM` mà TÊN có trong thư mục cha ⇒ tranh chấp; `EPERM` mà tên
+không có ⇒ vẫn NÉM. Vị từ hỏi `readdir` của thư mục CHA chứ không `lstat` của đường dẫn, vì một
+thư mục đang chờ xoá cũng làm `lstat` ném `EPERM` — cùng một `CreateFileW`. Hỏi sai chỗ là biến
+vị từ thành một hằng `false` trên đúng ca cần nó.
+
+Cái giá được ghim lại bằng một cửa sổ hai giây: hết cửa sổ thì ném CHÍNH lỗi gốc, nên tính chất
+⑴ của khoá — *hỏng TO chứ không treo im* — không bị đổi thành một lần chờ 180 giây.
+
+| mũi đo | đo gì |
+|---|---|
+| ⑴ một nhịp `EPERM` rồi thôi | vào được; `mkdir` được gọi đúng HAI lần |
+| ⑵ `EPERM` liên tiếp | ném lỗi GỐC, hơn năm lượt thử, dưới 30 giây |
+| ⑶ `EPERM` trên tên KHÔNG tồn tại | ném ở lượt thử ĐẦU — lỗi quyền thật vẫn là lỗi thật |
+| ⑷ đối chứng `EACCES` trên tên ĐANG tồn tại | vẫn ném ngay, để bản vá không rộng hơn chẩn đoán |
+
+Ba đột biến, ba tập đỏ ĐÚNG như dự kiến: gỡ nhánh `EPERM` ⇒ ⑴ và ⑵; cửa sổ không bao giờ đóng ⇒
+⑵; vị từ nhìn tên luôn trả đúng ⇒ ⑶. Khôi phục tự kiểm bằng sha256.
+
+Ranh giới nói ra ở đầu khối đo: sự kiện của hệ điều hành KHÔNG được tái lập ở đây và không dựng
+lại theo ý muốn được. Bằng chứng nó xảy ra là ca đỏ trên CI của PR #105. Thứ được đo là cách lớp
+khoá xử lỗi ấy.
+
+## 4. Bảy lời khai mà HAI route bắt buộc phải sửa
+
+Khoản **221** của vòng trước ghi *bảy lời khai ở năm tệp* cho một BẢNG tenant. Một ROUTE có con số
+riêng, và hai trong bảy chỗ này không nằm trong danh sách mà em mang sang từ S1.75.
+
+| nơi | lời khai |
+|---|---|
+| `apps/api/src/routes/buyer.ts` | route, và với route ghi là `permission` + `resourceType` + `resourceId` |
+| `apps/api/src/dispatch.ts` | `LOI_NGHIEP_VU_422` — thiếu tên lớp lỗi thì năm lối từ chối CÓ TÊN đi ra dưới 500 |
+| `apps/api/package.json` | vế ⑷: gói workspace import lúc chạy phải có dòng `dependencies` |
+| `apps/mcp/src/cong-cu.ts` | **mỗi route ĐỌC** phải có công cụ MCP hoặc một dòng `ROUTE_DOC_KHONG_PHOI` kèm lý do — im lặng không phải một lựa chọn |
+| `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` | `thanHopLe`: mỗi route GHI phải có một thân hợp lệ, nếu không bộ quét tự đỏ |
+| `tests/architecture/barrel-exports.test.ts` | danh sách trắng export của gói |
+| `tests/architecture/cong-quyen-route.test.ts` | rổ `HAM_DOC_CO_QUYEN` cho một đường đọc CÓ CỔNG |
+
+Hai chỗ mới so với S1.75: bảng MCP và `LOI_NGHIEP_VU_422`. Cả hai đều do cổng gọi tên, không do
+trí nhớ — và cả hai đỏ ở lượt `pnpm test` đầu tiên.
+
+Dòng MCP không phải một quyết định mới: nếu lập luận của ADR-038 đủ để rút bảng so sánh giá thì nó
+mạnh hơn cho đường này, vốn mang cả `components`. Cùng một quyết định, một bề mặt rộng hơn.
+
+## 5. Hai chỗ bộ đọc KHÔNG được bịa, và một chỗ nó suy theo luật của CSDL
+
+`057` chỉ đòi `ma` và `tien` trong mỗi phần tử `components`, nên một hàng THẬT có thể không mang
+`don_vi`, `he_so`, `gia_tri`.
+
+- `don_vi` vắng ⇒ SUY, và suy đúng luật mà trigger `kiem_thanh_phan_theo_chinh_sach` dùng để đối
+  chiếu với chính sách: `tien` null là `DIEM`, có giá trị là `TIEN`. Suy theo luật của CSDL, không
+  theo một mặc định cho tiện.
+- `he_so` và `gia_tri` vắng ⇒ `null` đi thẳng ra giao diện và hiện thành một gạch ngang. Một
+  `"1.0000"` bịa ở đây là bịa ra đúng thứ J2 phải kiểm được.
+
+Bản đầu của `doc-bang-xep-hang.ts` trả `?? ""` cho cả hai, và đó là một lời nói dối im lặng: một
+ô rỗng trên màn hình không phân biệt được *"hệ số bằng rỗng"* với *"không có hệ số"*.
+
+Cùng chỗ ấy, `evaluatedAt` bỏ `to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.USOF')` để trả `Date` của
+`pg` như `packages/rfq` và `packages/supplier`: `OF` in `+07` cho múi giờ chẵn giờ, và
+`Date.parse` KHÔNG buộc phải hiểu dạng ấy — một cái bẫy đặt ở tầng giao diện.
+
+## 6. Ranh giới nói ra
+
+- **Khoản 224 chưa đóng, và bước đầu của nó là một quyết định, không một bản vá.** Vòng này trình
+  hai hướng kèm phép đo; nới một bất biến đã công bố không đi qua uỷ quyền merge.
+- **Khoản 223 đóng ca cụ thể, KHÔNG đóng lỗ của lớp canh.** Gói lá kế tiếp lặp lại y nguyên tới
+  khi vế ⑷ đọc mọi gói dưới `packages/` bất kể ai import.
+- **Hai route mới KHÔNG có phép đo hạnh phúc qua HTTP.** Chúng được quét: 403 cho một phiên không
+  vai, thân hợp lệ qua bộ đọc thân, và bảng MCP hai chiều. Đường hạnh phúc đo ở tầng gói, nơi có
+  cụm Postgres thật. Thêm một lượt chấm vào kịch bản HTTP sẽ chạm đúng bước 14 — xem mục 2.
+- **Bước 5 của màn mở thầu là một lát cắt demo.** Nó không có đường BAFO, không có chính sách
+  nhiều thành phần chấm được — khoản **219** vẫn mở.
+- **Lượt soi ngang: mốc là chậm nhất S1.107, và vòng này KHÔNG phải lượt soi.** Nhịp còn nguyên
+  hạn, nên đây không phải một lần lỡ nhịp thứ hai; S1.107 bị ghim cho lượt soi.
+- **Phép đo mới nằm trong tệp của S2.3, không một tệp mới.** Giàn cảnh là chung, và một tệp thứ
+  hai nghĩa là một container Postgres thứ 55 cộng một BẢN SAO của giàn cảnh — hai bản sao của cùng
+  một quy ước là hai chỗ để chúng lệch nhau.
+
+## 7. Số đo
+
+- `pnpm t0` **0 vi phạm** — 294 module, 1195 phụ thuộc.
+- `pnpm test` lượt ĐẦU **ĐỎ 2 ca ở 2 tệp** — khoản 223 và bảng MCP, mục 2 và mục 4; sau bản vá
+  **72 tệp / 1054 ca**, 1 bỏ qua.
+- `pnpm test:int` ****54 tệp / 1131 ca**, `VITEST_THOAT_MA=0`, 941 giây**.
+- `pnpm evidence` ****`vitest thoát mã 0`, báo cáo 2186 khẳng định** — lượt DUY NHẤT unit + int chung một pool; **56/56** bất biến được kiểm chứng, 34 nghiệp vụ cộng 22 hàng rào**.
+- Phép đo mới: `luot-danh-gia.int.test.ts` **16 → 24 ca**; `khoa-depcruise.test.ts` **6 → 10 ca**.
+- Đột biến: **3** mũi trên bản vá khoản 222, mỗi mũi một tập đỏ đúng dự kiến, khôi phục tự kiểm
+  bằng sha256.
+- Sổ nợ **222 → 224** khoản, mở **88 → 89** — khoản 223 và 224 mở, khoản **222 ĐÓNG**. Rổ A **6**
+  không đổi, rổ B **61 → 62**, rổ C **21** không đổi; ba rổ cộng đúng: 6 + 62 + 21 = 89.
+- **53** ADR không đổi, **57** migration không đổi, **14** gói không đổi, **56/56** bất biến không
+  đổi. `evidence/INV-matrix.md` ****không đổi một byte****.

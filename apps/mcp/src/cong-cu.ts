@@ -9,8 +9,8 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ [S1.98] NĂM route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó là một lần chủ dự án nói
-//      KHÔNG, không phải một việc chưa làm.
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ [S1.106] SÁU route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
 // là một máy khách MCP bất kỳ. Chú thích và tên biến nội bộ bằng tiếng Việt, theo Handoff §14.
@@ -70,6 +70,12 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số hồ sơ nhận được TRƯỚC " +
     "lễ mở là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
     "hỏi vì sao hai hàm cùng rổ lại đi hai hướng, và chủ dự án rút nó ngày 2026-09-17 (ADR-038).",
+  "/rfqs/:rfqId/ranking":
+    "BẢNG XẾP HẠNG của lượt chấm mới nhất — và nó mang NHIỀU HƠN bảng so sánh giá ở ngay trên: " +
+    "cạnh `effective_cost` của từng báo giá, nó mang cả cột `components`, tức từng con số đã quy " +
+    "đổi sinh ra con số ấy. Nếu lập luận của ADR-038 đủ để rút bảng so sánh thì nó đủ mạnh hơn " +
+    "cho đường này; không có quyết định MỚI nào ở đây, chỉ là cùng một quyết định áp lên một bề " +
+    "mặt rộng hơn. Route khai `agent: false` và dòng này khai vì sao. [S1.106 / S2.4]",
   "/suppliers/:supplierId/contacts":
     "TÊN, EMAIL, ĐIỆN THOẠI của những con người cụ thể ở một công ty khác. Bản đầu của S1.74 phơi " +
     "nó kèm câu 'business data, not credentials' — đúng về CHỨNG CHỈ và sai về DỮ LIỆU CÁ NHÂN " +

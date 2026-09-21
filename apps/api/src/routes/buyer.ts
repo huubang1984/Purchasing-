@@ -13,6 +13,7 @@
 // Danh tính ở MỌI lời gọi gói là `ctx.actor.sessionId` — dẫn xuất từ cookie (ADR-016). Thân yêu
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
+import { docBangXepHang, taoLuotDanhGia } from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
@@ -316,12 +317,69 @@ const doc: readonly BuyerReadRoute[] = [
       },
     }),
   },
+  // [S1.106 / S2.4] BẢNG XẾP HẠNG của lượt chấm MỚI NHẤT — cùng rổ `HAM_DOC_CO_QUYEN` với hai
+  // đường trên, và cùng lý do: cổng `bid.view` nằm THẲNG trong `docBangXepHang`.
+  //
+  // `null` khi gói thầu chưa được chấm lần nào, KHÔNG 404: "chưa chấm" là một câu trả lời đúng và
+  // màn chấm phải phân biệt nó với "không có gói thầu ấy" — cùng khuôn `/rfqs/:rfqId/unseal`
+  // (khoản 190). Một mảng rỗng thì nói dối: *"đã chấm, và không ai trong bảng"*.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/ranking",
+    audience: "BUYER",
+    mutates: false,
+    // [khoản 141] THỨ HẠNG — cùng hạng tiết lộ với bảng so sánh, và hơn: nó mang cả `components`,
+    // tức từng con số sinh ra `effective_cost`. Tác tử chỉ-đọc không có việc gì ở đây.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        ranking: await docBangXepHang(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
 ];
 
 // ----------------------------------------------------------------------------------------------
 // GHI — mỗi route một mã quyền. `resourceId` đọc từ ĐƯỜNG DẪN, không từ thân.
 // ----------------------------------------------------------------------------------------------
 const ghi: readonly BuyerWriteRoute[] = [
+  // --------------------------------------------------------------------------------------------
+  // [S1.106 / S2.4] CHẤM — cạnh `UNSEALED->EVALUATING` của `011`, và nó là route ghi DUY NHẤT mang
+  // `evaluation.perform`.
+  //
+  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên SÁU vai giữ
+  // (chỉ `DIRECTOR` không), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
+  // chặn được "ai trong tổ chức". Ghi ra ở đúng chỗ người đọc mã route sẽ tìm.
+  //
+  // `taoLuotDanhGia` tự gọi `requirePermission` lần nữa với CÙNG mã — khoản nợ 31/33, lớp của gói
+  // chứ không của route; xem khối đầu tệp.
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/evaluate",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.EVALUATION_PERFORM,
+    resourceType: "RFQ_EVALUATION",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        evaluation: await taoLuotDanhGia(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
   {
     method: "POST",
     path: "/policy",

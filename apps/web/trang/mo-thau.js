@@ -115,6 +115,7 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b2"), true);
     hien($("b3"), true);
     hien($("b4"), true);
+    hien($("b5"), true);
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -270,6 +271,86 @@ $("nut-bang").addEventListener("click", async () => {
   ]);
 });
 
+// ---------------------------------------------------------------------------------------------
+// Bước 5 — chấm thầu và bảng xếp hạng
+//
+// Thành phần MỞ SẴN, không sau một cú bấm: spec §8 nói *"bảng xếp hạng luôn hiện thành phần, để
+// người đọc thấy con số nào đến từ đâu"*, và đó không phải một yêu cầu trang trí. J2 nói mỗi hàng
+// xếp hạng tái lập được; một màn hình chỉ hiện `effective_cost` biến J2 thành một lời hứa mà
+// người mua không kiểm được — nên cột `components` đi RA TỚI đây chứ không dừng ở CSDL.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Một hàng thành phần thành chữ. Số để NGUYÊN VĂN, không qua `tien()`: đây là dấu vết kiểm toán,
+ * và `1.0000` làm tròn thành `1` là đánh mất đúng thứ người đọc tới đây để xem.
+ *
+ * `he_so`/`gia_tri` vắng thì hiện một gạch ngang — `057` chỉ đòi `ma` và `tien`, nên một hàng có
+ * thể thật sự không mang chúng, và bịa ra `1.0000` là bịa ra chính thứ J2 phải kiểm được.
+ */
+function veThanhPhan(tp) {
+  const ul = document.createElement("ul");
+  ul.className = "tp";
+  for (const t of tp) {
+    const li = document.createElement("li");
+    // `textContent`, không `innerHTML`: `ma` đến từ chính sách của tổ chức, tức từ người dùng.
+    li.textContent = `${t.ma} · ${t.giaTri ?? "—"} × ${t.heSo ?? "—"} = ${t.tien ?? "—"} (${t.donVi})`;
+    ul.append(li);
+  }
+  if (tp.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "không thành phần nào — báo giá này không đọc được số tiền";
+    ul.append(li);
+  }
+  return ul;
+}
+
+async function veXepHang() {
+  bao($("loi5"), "");
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/ranking`);
+  if (r.status !== 200) { bao($("loi5"), loiCua(r, "Chưa đọc được bảng xếp hạng")); return; }
+  const tbody = $("bang-hang").querySelector("tbody");
+  tbody.innerHTML = "";
+  const b = r.body.ranking ?? null;
+  // `null` là câu trả lời ĐÚNG cho "chưa chấm lần nào", cùng khuôn `veYeuCau` ở bước 3. Một bảng
+  // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
+  if (b === null) {
+    dienDl($("tt-luot"), [["Lượt chấm", "chưa chấm lần nào — bấm Chấm thầu"]]);
+    return;
+  }
+  dienDl($("tt-luot"), [
+    ["Mã lượt chấm", b.evaluationId],
+    ["Chính sách phiên bản", b.policyVersion],
+    ["Tiền tệ", b.currency],
+    ["Chấm lúc", new Date(b.evaluatedAt).toLocaleString("vi-VN")],
+  ]);
+  for (const h of b.rows ?? []) {
+    const tr = document.createElement("tr");
+    if (h.rank === 1) tr.className = "thap";
+    const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
+    tr.append(
+      td(h.rank === null ? "—" : String(h.rank), "so"),
+      td(h.supplierName),
+      td(h.effectiveCost === null ? "—" : tien(h.effectiveCost), "so"),
+    );
+    const o = document.createElement("td");
+    o.append(veThanhPhan(h.components ?? []));
+    tr.append(o);
+    tbody.append(tr);
+  }
+}
+
+$("nut-cham").addEventListener("click", async () => {
+  bao($("loi5"), ""); bao($("ok5"), "");
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/evaluate`);
+  // Năm lối từ chối của cổng chấm đi ra dưới 422 kèm câu người đọc được (`DanhGiaTuChoiError`),
+  // nên `loiCua` đã đủ: câu ấy gọi tên được phiên bản chính sách, và trang không cần đoán lại.
+  if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không chấm được")); return; }
+  bao($("ok5"), `Đã chấm theo chính sách phiên bản ${r.body.evaluation?.policyVersion ?? "?"}. Gói thầu sang EVALUATING.`);
+  await veXepHang();
+});
+
+$("nut-xep-hang").addEventListener("click", veXepHang);
+
 // ==============================================================================================
 // [S1.99 / khoản 205] ĐỔI FRAGMENT PHẢI ĐỔI CẢ PHIÊN — VÀ Ở TRANG NÀY, KHÔNG LÀM THẾ THÌ NGƯỜI
 // DUYỆT THỨ HAI KHOÁ TÀI KHOẢN CỦA NGƯỜI DUYỆT THỨ NHẤT.
@@ -296,7 +377,7 @@ $("nut-bang").addEventListener("click", async () => {
 window.addEventListener("hashchange", () => {
   docLink();
   phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ok3", "ghi-danh"]) {
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "ok1", "ok3", "ok5", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }

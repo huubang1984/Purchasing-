@@ -182,6 +182,107 @@ describe("[review lượt 16] khoá phải HỎNG TO chứ không được treo 
   });
 });
 
+// ==============================================================================================
+// [khoản 222] MŨI ĐO THỨ NĂM — VÀ NÓ ĐẾN TỪ CI, KHÔNG TỪ MỘT LƯỢT SOI
+//
+// PR #105, run 35625587011: `T1+T2 (windows-latest)` đỏ ĐÚNG MỘT CA ở PROBE của
+// `apps/api/src/routes.test.ts` — `EPERM: operation not permitted, mkdir '…/depcruise.lock'` —
+// trong khi ubuntu-latest, T0, T0b và T3 của CÙNG commit đều xanh, và `pnpm test` ở máy (cũng
+// Windows) xanh hai lượt.
+//
+// RANH GIỚI CỦA PHÉP ĐO NÀY, nói ra vì nó quyết định cách đọc kết quả: sự kiện của hệ điều hành
+// — `mkdir` vào một thư mục *đang chờ xoá* trả `ERROR_ACCESS_DENIED`, libuv map thành `EPERM` —
+// KHÔNG được tái lập ở đây, và không dựng lại theo ý muốn được. Bằng chứng nó xảy ra là ca đỏ
+// trên CI. Thứ ĐƯỢC đo là bốn quyết định của lớp khoá khi lỗi ấy tới, và cả bốn cần thiết: thiếu
+// ⑵ thì bản vá đổi một lần đỏ ngay thành một lần chờ `HAN_CHO_MS`; thiếu ⑶ và ⑷ thì nó tha cả
+// lỗi quyền thật, tức mở lại đúng cái treo im mà mục ⑴ của khoá đóng.
+//
+// Ba trong bốn mũi khẳng định SỐ LẦN GỌI `mkdir` chứ không khẳng định thời gian: "ném ngay" đo
+// bằng đồng hồ là một lời khai mà một máy CI đang tải nặng bẻ được.
+// ==============================================================================================
+
+/** Lỗi hệ thống ĐÚNG HÌNH DẠNG của libuv: một `Error` mang `code`. */
+function loiHeThong(ma: "EPERM" | "EACCES", duong: string): Error {
+  const cau = ma === "EPERM" ? "operation not permitted" : "permission denied";
+  return Object.assign(new Error(`${ma}: ${cau}, mkdir '${duong}'`), { code: ma });
+}
+
+/**
+ * Cửa `tao` tiêm: ném `ma` đúng `soLanNem` lượt đầu rồi để `mkdir` thật làm việc, và ĐẾM số lần
+ * được gọi — con số ấy là thứ phân biệt "ném ngay" với "ném sau khi đã chờ".
+ */
+function taoTiemLoi(
+  ma: "EPERM" | "EACCES",
+  soLanNem: number,
+): { readonly tao: (duong: string) => void; readonly goi: () => number } {
+  let conNem = soLanNem;
+  let dem = 0;
+  return {
+    tao: (duong: string) => {
+      dem += 1;
+      if (conNem > 0) {
+        conNem -= 1;
+        throw loiHeThong(ma, duong);
+      }
+      mkdirSync(duong, { recursive: false });
+    },
+    goi: () => dem,
+  };
+}
+
+describe("[khoản 222] `EPERM` trên một cái TÊN ĐANG TỒN TẠI là TRANH CHẤP, không phải lỗi quyền", () => {
+  it("⑴ một nhịp `EPERM` rồi thôi ⇒ VÀO ĐƯỢC — đúng ca *pending delete* của Windows", { timeout: 20_000 }, async () => {
+    // Dựng đúng hình dạng của ca đỏ trên CI: thư mục khoá CÓ TRÊN ĐĨA (nên cái tên tồn tại) và
+    // chủ của nó đã chết (nên nó là rác, đúng như một thư mục vừa bị `rmdir` bỏ lại).
+    const duong = join(thuMuc, "eperm-mot-nhip.lock");
+    mkdirSync(duong, { recursive: true });
+    writeFileSync(join(duong, "pid"), String(await pidDaChet()), "utf8");
+
+    const t = taoTiemLoi("EPERM", 1);
+    // Trước bản vá dòng này ném `EPERM` ra ngoài — đó CHÍNH LÀ ca đỏ của `T1+T2 (windows-latest)`.
+    expect(voiKhoaDepcruise(() => "vao-duoc", duong, t.tao)).toBe("vao-duoc");
+    expect(t.goi(), "phải thử lại sau nhịp EPERM chứ không ném").toBe(2);
+    expect(existsSync(duong), "nhả khoá xong mà thư mục còn đó").toBe(false);
+  });
+
+  it("⑵ `EPERM` LIÊN TIẾP ⇒ ném CHÍNH LỖI GỐC, và ném trong cửa sổ ngắn chứ không chờ 180 giây", { timeout: 60_000 }, () => {
+    // Chủ khoá CÒN SỐNG ⇒ không có gì để thu hồi, nên vòng chỉ còn chờ. Nếu `EPERM` được tha VÔ
+    // HẠN thì chỗ này chờ hết `HAN_CHO_MS` rồi ném lỗi HẠN CHỜ — một thông điệp không hề nói ra
+    // `EPERM`, tức người đọc mất chẩn đoán duy nhất.
+    const duong = join(thuMuc, "eperm-lien-tiep.lock");
+    mkdirSync(duong, { recursive: true });
+    writeFileSync(join(duong, "pid"), String(process.pid), "utf8");
+
+    const t = taoTiemLoi("EPERM", Number.MAX_SAFE_INTEGER);
+    const truoc = Date.now();
+    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/EPERM/u);
+    expect(Date.now() - truoc, "một mã lỗi được tha KHÔNG được thành một lần chờ 180 giây").toBeLessThan(30_000);
+    // Và cửa sổ phải THẬT: gỡ nó đi thì lượt đầu tiên đã ném, tức `mkdir` chỉ được gọi một lần.
+    expect(t.goi(), "không có cửa sổ nhẫn nại nào — bản vá đã bị gỡ").toBeGreaterThan(5);
+    rmSync(duong, { recursive: true, force: true });
+  });
+
+  it("⑶ `EPERM` trên một cái tên KHÔNG tồn tại ⇒ ném NGAY — lỗi quyền thật vẫn là lỗi thật", { timeout: 20_000 }, () => {
+    const duong = join(thuMuc, "eperm-khong-co-ten.lock"); // CỐ Ý không tạo
+    const t = taoTiemLoi("EPERM", Number.MAX_SAFE_INTEGER);
+    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/EPERM/u);
+    expect(t.goi(), "đã chờ một cái tên không hề tồn tại").toBe(1);
+  });
+
+  it("⑷ ĐỐI CHỨNG: `EACCES` trên cái tên ĐANG TỒN TẠI vẫn ném NGAY — bản vá hẹp đúng một mã lỗi", { timeout: 20_000 }, () => {
+    // Thiếu vế này, bản vá xanh y hệt với một phiên bản tha MỌI lỗi khi đường dẫn có trên đĩa —
+    // tức mở lại đúng cái treo im mà mục ⑴ đóng, chỉ hẹp hơn một chút.
+    const duong = join(thuMuc, "eacces-co-ten.lock");
+    mkdirSync(duong, { recursive: true });
+    writeFileSync(join(duong, "pid"), String(process.pid), "utf8");
+
+    const t = taoTiemLoi("EACCES", Number.MAX_SAFE_INTEGER);
+    expect(() => voiKhoaDepcruise(() => 1, duong, t.tao)).toThrow(/EACCES/u);
+    expect(t.goi(), "`EACCES` bị tha — bản vá rộng hơn chẩn đoán").toBe(1);
+    rmSync(duong, { recursive: true, force: true });
+  });
+});
+
 /** PID của một tiến trình đã THOÁT — dùng làm chủ khoá chết trong phép đo chiều dương. */
 async function pidDaChet(): Promise<number> {
   const con = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
