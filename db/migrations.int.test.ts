@@ -3088,6 +3088,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "053_ten_rang_buoc_unseal_approvals.sql",
           "054_dieu_phoi_lai_co_canh.sql",
           "055_nhan_chung_break_glass_bat_bien.sql",
+          "056_chinh_sach_danh_gia.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7482,6 +7483,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "053_ten_rang_buoc_unseal_approvals.sql",
         "054_dieu_phoi_lai_co_canh.sql",
         "055_nhan_chung_break_glass_bat_bien.sql",
+        "056_chinh_sach_danh_gia.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7757,6 +7759,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "053_ten_rang_buoc_unseal_approvals.sql",
         "054_dieu_phoi_lai_co_canh.sql",
         "055_nhan_chung_break_glass_bat_bien.sql",
+        "056_chinh_sach_danh_gia.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

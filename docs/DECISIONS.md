@@ -5251,9 +5251,13 @@ gì"*. S2 mạnh hơn một bậc, và đó là cố ý: một bảng SO SÁNH t
 thì không có giá trị `null` nào có nghĩa — và một award dựa trên nó là một quyết định dựa trên con số không so
 được.
 
-⑸ **Mã quyền của S2 là một hạng mục CÓ TÊN (S2.0), đứng trước S2.3.** Hôm nay kho có đúng **tám** mã `rfq.*`
+⑸ ~~**Mã quyền của S2 là một hạng mục CÓ TÊN (S2.0), đứng trước S2.3.** Hôm nay kho có đúng **tám** mã `rfq.*`
 (`create`, `approve`, `open`, `cancel`, `invite`, `unseal`, `unseal.approve`, `key.purge`) và **không mã nào**
-cho đánh giá, BAFO hay award. Spec §9 nhắc *"cổng quyền"* ở S2.3 như một việc phụ; nó không phải việc phụ — ma
+cho đánh giá, BAFO hay award.~~ **[S1.102] LỜI KHAI NÀY SAI, và ADR-051 chép lại đúng.** Ba mã ĐÃ CÓ từ `005`
+— `evaluation.perform`, `award.recommend`, `po.approve` — chỉ là không mang tiền tố `rfq.`, nên một lượt grep
+`"rfq\.[a-z.]+"` cho ra tập rỗng và tập rỗng ấy bị đọc thành *không tồn tại*. Hai trong ba mã còn là mắt xích
+của `SEPARATION_OF_DUTIES_CHAIN`. Phần còn lại của câu — rằng S2.0 là một hạng mục có tên, đứng trước S2.3 —
+vẫn đúng, nhưng nội dung của nó KHÁC hẳn: không thêm mã, mà nối mã sẵn có vào cổng và dựng lớp cho **J3**. Spec §9 nhắc *"cổng quyền"* ở S2.3 như một việc phụ; nó không phải việc phụ — ma
 trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép đo sẵn và có thứ tự bắt buộc.
 
 ### Cái giá — nói thẳng
@@ -5285,3 +5289,82 @@ hai chữ số ở đây là lựa chọn của `014`/`022` chứ không của A
 cạnh trạng thái của RFQ khi một award bị huỷ (`AWARDED` quay về `EVALUATING` hay đứng yên) — spec §8.3 giữ đúng
 phần hẹp ấy còn mở, phải chốt trước **S2.6**. Và nó không nói S2 an toàn: §8.1 của spec đã ghi rằng BAFO là một
 chỗ rò **nghiệp vụ** mà không lớp mật mã nào chặn được, và lượt soi này không đụng tới điều đó.
+
+## ADR-051 — J3 cưỡng chế theo HÀNH VI ĐÃ XẢY RA trên từng gói thầu, không theo quyền được cấp
+
+**Bối cảnh.** ADR-050 ⑸ khai rằng *"mã quyền của S2 chưa tồn tại"*. **Sai**, và cách nó sai đáng ghi hơn bản thân
+nó: lượt soi S1.101 grep `"rfq\.[a-z.]+"`, thấy tám mã, và đọc tập rỗng còn lại thành *không tồn tại*. Ba mã
+S2 cần đã có từ `005_identity.sql`, chỉ không mang tiền tố ấy:
+
+| mã | vai đang giữ (005) |
+|---|---|
+| `evaluation.perform` | REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER · FINANCE |
+| `award.recommend` | BUYER · PROCUREMENT_MANAGER · FINANCE · DIRECTOR |
+| `po.approve` | FINANCE · DIRECTOR |
+
+**Và dưới lời khai sai ấy là một phát hiện nặng hơn hẳn.** `SEPARATION_OF_DUTIES_CHAIN` — phát biểu
+máy-đọc-được của D3, khớp nguyên văn ở BA nơi (hằng TypeScript, thân `kiem_tra_phan_tach_nhiem_vu()` của `005`,
+mục (E2) của hardening) — là:
+
+```
+rfq.create → rfq.invite → rfq.unseal → award.recommend → po.approve
+```
+
+Ba lớp ấy chặn một người ôm **TRỌN NĂM** mắt xích. Nhưng `PROCUREMENT_MANAGER` giữ **bốn**: `rfq.create`,
+`rfq.invite`, `rfq.unseal`, `award.recommend` — thiếu đúng `po.approve`. Mà **J3** của spec S2 đòi bộ ba *tạo
+RFQ · điều phối mở thầu · đề xuất award* không cùng một người, và cả ba đều nằm trong tay một PM hôm nay.
+
+**Nên J3 KHÔNG được chuỗi D3 hiện có cưỡng chế**, và lượt soi S1.101 không phát hiện ra điều đó: nó hỏi *"năm
+người của bối cảnh demo có đủ không"* (đủ) mà không hỏi *"lớp nào đang canh"* (chưa lớp nào).
+
+### Quyết định
+
+**J3 cưỡng chế bằng một trigger trên hàng award, đọc DỮ LIỆU THẬT của chính RFQ ấy** — so người đề xuất với
+`rfq_packages.created_by` và với `unseal_requests.dispatched_by` của cùng gói thầu. Cùng khuôn
+`unseal_kiem_du_phe_duyet`: một vế D3 sống trong một trigger đọc hàng, không trong một danh sách quyền.
+
+Ba lý do, và lý do thứ ba là lý do quyết định:
+
+⑴ **Nó mạnh hơn lớp vai trò.** Lớp vai trò hỏi *"người này ĐƯỢC PHÉP làm cả ba việc không"*; trigger hỏi
+*"người này ĐÃ LÀM cả ba việc trên gói thầu NÀY chưa"*. Một tổ chức nhỏ có thể cần một PM giữ cả bốn mã để vận
+hành nhiều gói thầu song song; thứ D3 thật sự cấm là một người ôm trọn chuỗi **của MỘT gói**.
+
+⑵ **Nó không đụng ma trận quyền**, nên ba nơi ghim của D3 và mốc `CHAIN_COVERING_ROLE_PAIRS` đứng yên. Phương
+án bỏ `award.recommend` khỏi PROCUREMENT_MANAGER được cân nhắc và KHÔNG chọn: nó đổi ma trận mục 25 — một mốc
+ghim của S0 — và làm một PM không đề xuất trao thầu được cho gói thầu của chính họ **kể cả khi người khác đã
+mở thầu**, tức cấm rộng hơn thứ D3 phát biểu.
+
+⑶ **Nó là lớp DUY NHẤT đúng trục.** Hai trục của D3 đã có lớp: trục *quyền của một vai* (trigger mức vai trò)
+và trục *hợp quyền của một người* (trigger mức người dùng). Trục thứ ba — *ai đã làm gì trên một gói thầu cụ
+thể* — không lớp nào chạm tới, và J3 nằm đúng trên trục ấy. Thêm một mắt xích vào chuỗi cũng không đóng được
+nó: chuỗi nói về QUYỀN, còn J3 nói về HÀNH VI.
+
+### Cái giá — nói thẳng
+
+- **Một trigger nữa trên đường award**, và nó đọc hai bảng khác (`rfq_packages`, `unseal_requests`). Mỗi lần
+  đề xuất trao thầu là hai lần tra thêm. Chấp nhận được: đề xuất trao thầu là hành động hiếm, không phải đường
+  nóng.
+- **Nó cưỡng chế được vì `022` đã dựng ba cột `dispatched_*`.** Nếu khoản **208** (hàng `UNSEAL_REDISPATCHED`
+  không mang cặp người-phiên) được vá theo hướng đổi ngữ nghĩa của `dispatched_by`, trigger này phải được đọc
+  lại. Ghi ra để ngày ấy không ai đổi một bên mà quên bên kia.
+- **Nó KHÔNG phủ đường điều phối lại.** Sau một lần điều phối lại, `dispatched_by` mang người của lần thử ĐANG
+  CHẠY (054), nên người điều phối lần ĐẦU không còn trong cột nào — và J3 sẽ không thấy họ. Đó chính là khoản
+  **208**, và nó là điều kiện thật của J3 chứ không phải một ghi chú lịch sự.
+- **Ba lớp, ba trục, và không lớp nào phủ được hai trục.** Một người đọc muốn biết D3 được canh thế nào phải
+  đọc cả ba. Đó là cái giá của việc một bất biến có ba nghĩa ở ba tầng.
+
+### Đo bằng gì
+
+Chưa đo được ở vòng này: `rfq_awards` chưa tồn tại (S2.6). Thứ vòng này đo là **tiền đề** của quyết định — ma
+trận quyền thật, đọc từ `005_identity.sql` và `permissions.ts`, cho thấy PROCUREMENT_MANAGER giữ đúng bốn mắt
+xích. Ba phép đo mà ADR này đặt làm điều kiện của S2.6, và cả ba phải ĐỎ trước khi xanh: người tạo RFQ tự đề
+xuất trao thầu ⇒ chặn · người điều phối mở thầu tự đề xuất ⇒ chặn · **đối chứng dương**: một người thứ ba, giữ
+ĐÚNG `award.recommend`, đề xuất được.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói ba lớp của D3 đã đủ. Trục *ai đã làm gì* mới có lớp ở đúng một chỗ — đường award — còn các bước
+khác của chuỗi (ai tạo, ai mời, ai mở) vẫn chỉ được canh ở trục quyền. Nó không nói ngưỡng mấy chữ ký cho
+award: spec §2.2⑶ lấy từ chính sách đã có, và việc ấy thuộc S2.6. Và nó không sửa lời khai của ADR-050 ⑸ bằng
+cách viết lại — câu sai ở đó được GẠCH và trỏ sang đây, vì một ADR đã merge là một bản ghi lịch sử, không phải
+một trang wiki.
