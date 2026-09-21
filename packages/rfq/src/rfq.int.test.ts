@@ -76,6 +76,15 @@ let s1: string, s2: string, s3: string, s2b: string;
  * một phiên ĐÃ BỊ THU HỒI vì nghi ngờ chiếm đoạt vẫn ký được một phê duyệt — quy trình ứng phó sự
  * cố "thu hồi hết phiên của người này" không đóng được đường phê duyệt.
  */
+/** Số hàng sổ mang một `action` — đếm HAI phía để một lần ghi thừa cũng đỏ. */
+async function demSuKien(orgId: string, action: string): Promise<number> {
+  const { rows } = await db.pool.query<{ n: string }>(
+    "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2",
+    [orgId, action],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 async function taoPhien(orgId: string, userId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
@@ -245,7 +254,15 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     }
   });
 
-  it("mọi cạnh HỢP LỆ đi được — đối chứng dương, chống quy tắc chặn-tất-cả", async () => {
+  /**
+   * [S1.107 / lượt soi ngang 77] Dựng một RFQ đi TRỌN các cạnh hợp lệ tới `EVALUATING`.
+   *
+   * Tách ra khỏi test *đối chứng dương* ngay dưới vì vòng này cần CÙNG trạng thái ấy cho ba
+   * phép đo về cạnh mới `EVALUATING->CANCELLED`. Một bản sao thứ hai của giàn cảnh này là hai
+   * chỗ để chúng lệch nhau — và chính tệp `transitions.test.ts` bên cạnh tồn tại vì đúng lý do
+   * ấy ở một cặp khác.
+   */
+  async function rfqToiEvaluating(): Promise<string> {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
@@ -276,8 +293,75 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
       await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
       await c.query("UPDATE rfq_packages SET status = 'EVALUATING' WHERE id = $1", [rfqId]);
     });
+    return rfqId;
+  }
+
+  it("mọi cạnh HỢP LỆ đi được — đối chứng dương, chống quy tắc chặn-tất-cả", async () => {
+    const rfqId = await rfqToiEvaluating();
     const sau = await withTenant(apiPool, orgA, (c) => getRfq(c, orgA, rfqId));
     expect(sau?.status).toBe("EVALUATING");
+  });
+  // ============================================================================================
+  // [S1.107 / lượt soi ngang 77 — CAO ①] `EVALUATING` THÔI LÀ MỘT TRẠNG THÁI HÚT
+  //
+  // Trước `058`, `EVALUATING` chỉ đứng làm ĐÍCH của `UNSEALED->EVALUATING` và không có một cạnh ra
+  // nào. Vô hại suốt từ `009` vì không route nào đi qua cạnh vào — tới S1.106, vòng mở
+  // `POST /rfqs/:rfqId/evaluate` ra HTTP và đặt một nút lên nó, mà `evaluation.perform` thì NĂM
+  // trên SÁU vai giữ (khoản 220). Ba phép đo dưới đây đo cạnh MỚI, HAI LỚP của nó, và RANH GIỚI.
+  // ============================================================================================
+  it("[058] huỷ được từ EVALUATING — cạnh mới đi qua CẢ HAI lớp, và để lại đúng một hàng sổ", async () => {
+    const rfqId = await rfqToiEvaluating();
+    const truoc = await demSuKien(orgA, "RFQ_CANCELLED");
+    const r = await withTenant(apiPool, orgA, (c) =>
+      cancelRfq(c, orgA, { rfqId, reason: "chinh sach cham sai, dung goi thau", actorSessionId: s1 }, apiPool),
+    );
+    expect(r.status).toBe("CANCELLED");
+    // `cancelled_at` là vế thứ hai của `CHECK ((status = 'CANCELLED') = (cancelled_at IS NOT NULL))`
+    // ở `009` — một lần huỷ không đặt mốc là một hàng CSDL từ chối, không phải một trạng thái lạ.
+    const { rows } = await db.pool.query<{ ca: string | null }>(
+      "SELECT cancelled_at::text AS ca FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    expect(rows[0]?.ca).not.toBeNull();
+    expect(await demSuKien(orgA, "RFQ_CANCELLED"), "một lần huỷ phải để lại ĐÚNG MỘT hàng sổ").toBe(truoc + 1);
+  });
+
+  it("[058] cạnh mở ĐÚNG MỘT: `EVALUATING->UNSEALED` và `EVALUATING->OPEN` vẫn bị trigger chặn", async () => {
+    // Không có vế này, bản vá xanh y hệt với một phiên bản mở cả một chùm cạnh ra khỏi EVALUATING.
+    const rfqId = await rfqToiEvaluating();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]),
+      ),
+    ).rejects.toThrow(/EVALUATING -> UNSEALED/u);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'OPEN' WHERE id = $1", [rfqId]),
+      ),
+    ).rejects.toThrow(/EVALUATING -> OPEN/u);
+  });
+
+  it("[058 / khoản 225] RANH GIỚI: `CLOSED` và `UNSEALED` VẪN không huỷ được — cả hai lớp cùng nói không", async () => {
+    // Ghi ra thay vì để người đọc suy từ sự im lặng: vòng này mở ĐÚNG cạnh mà lượt soi đo được,
+    // và hai trạng thái kia vẫn là trạng thái hút. Khoản 225 giữ câu hỏi ấy mở.
+    const rfqId = await rfqNhap();
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, keyWrapper: boBocGia }, apiPool);
+      await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
+    });
+    // Lớp ỨNG DỤNG: danh sách trắng của `cancelRfq` không có `CLOSED`, nên `UPDATE` khớp 0 hàng.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        cancelRfq(c, orgA, { rfqId, reason: "thu huy sau khi dong", actorSessionId: s1 }, apiPool),
+      ),
+    ).rejects.toThrow();
+    // Lớp CSDL: cạnh `CLOSED->CANCELLED` không có trong bảng cạnh.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now() WHERE id = $1", [rfqId]),
+      ),
+    ).rejects.toThrow(/CLOSED -> CANCELLED/u);
   });
 
   it("bỏ qua một bậc cũng bị chặn: DRAFT -> OPEN không phải một cạnh", async () => {

@@ -42,7 +42,7 @@ function loiCua(r, macDinh) {
 }
 
 function dienDl(el, hang) {
-  el.innerHTML = "";
+  el.replaceChildren();
   for (const [k, v] of hang) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v === null || v === undefined ? "—" : String(v);
@@ -251,7 +251,7 @@ $("nut-bang").addEventListener("click", async () => {
   if (r.status !== 200) { bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh")); return; }
   const c = r.body.comparison;
   const tbody = $("bang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   const reNhoNhat = c.aggregates?.min ?? null;
   for (const h of c.rows ?? []) {
     const tr = document.createElement("tr");
@@ -309,7 +309,7 @@ async function veXepHang() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/ranking`);
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Chưa đọc được bảng xếp hạng")); return; }
   const tbody = $("bang-hang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   const b = r.body.ranking ?? null;
   // `null` là câu trả lời ĐÚNG cho "chưa chấm lần nào", cùng khuôn `veYeuCau` ở bước 3. Một bảng
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".

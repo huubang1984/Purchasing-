@@ -106,7 +106,7 @@ $("nut-mo").addEventListener("click", async () => {
   phien = { ...phien, orgId, token };
   bao($("ok1"), `Lời mời hợp lệ. Link được gửi qua ${r.body.linkChannel}.`);
   const kenh = $("kenh");
-  kenh.innerHTML = "";
+  kenh.replaceChildren();
   for (const k of r.body.otpChannels ?? []) {
     const o = document.createElement("option");
     o.value = k; o.textContent = k;
@@ -151,7 +151,7 @@ async function napGoiThau() {
   phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [] };
 
   const han = new Date(phien.rfq.deadlineAt);
-  $("tt-rfq").innerHTML = "";
+  $("tt-rfq").replaceChildren();
   for (const [k, v] of [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status], ["Hạn nộp", han.toLocaleString("vi-VN")]]) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v;
@@ -159,7 +159,7 @@ async function napGoiThau() {
   }
 
   const tbody = $("bang-hang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   for (const it of phien.items) {
     const tr = document.createElement("tr");
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
@@ -259,7 +259,7 @@ $("nut-nop").addEventListener("click", async () => {
 
 function veBienNhan(bn, phongBi, thuatToan, phienBanKhoa) {
   const h = describeEnvelope(phongBi);
-  $("tt-bn").innerHTML = "";
+  $("tt-bn").replaceChildren();
   const hang = [
     ["Mã bản nộp", bn.bidVersionId],
     ["Lần nộp", `#${bn.version}`],

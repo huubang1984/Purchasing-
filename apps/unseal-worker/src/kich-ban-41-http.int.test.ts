@@ -288,7 +288,10 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   it("bước 1 — người mua dựng RFQ 1 tỷ qua HTTP và nó GIỮ yêu cầu phê duyệt kép", async () => {
     const m = trangThai.mua.cookie;
     expect((await goi("POST", "/policy", m, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(403);
-    expect((await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(201);
+    // [S1.107 / lượt soi ngang 77 — CAO ②] Chính sách NAY khai trọng số qua HTTP. Trước vòng này
+    // `createProcurementPolicy` không có đường ghi `eval_components`, nên mọi tổ chức tạo qua
+    // sản phẩm đều KHÔNG chấm thầu được — và không cổng nào thấy, vì mọi fixture ghi SQL thẳng.
+    expect((await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 0 })).status).toBe(201);
     const rfq = await goi("POST", "/rfqs", m, { title: "Mua thep tam SS400 quy IV", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
     expect(rfq.status, rfq.text).toBe(201);
     trangThai.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
@@ -478,7 +481,9 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
         case "POST /guest/bids":
           return { path: r.path, body: { envelope: Buffer.from(phongBiHy).toString("base64") }, cookie: kHy };
         case "POST /policy":
-          return { path: r.path, body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND" }, cookie: trangThai.taiChinh.cookie };
+          // [S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
+          // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
+          return { path: r.path, body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 0 }, cookie: trangThai.taiChinh.cookie };
         case "POST /suppliers":
           return { path: r.path, body: { legalName: "Cong ty Quet", taxCode: "0388888888" }, cookie: m };
         case "POST /suppliers/:supplierId/contacts":
@@ -670,6 +675,45 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(quetRoRi(r.text).length).toBeGreaterThan(0);
   });
 
+  it("bước 12b — CHẤM THẦU qua HTTP: `POST /evaluate` rồi `GET /ranking`, và THÀNH PHẦN đi ra tới người đọc", async () => {
+    // [S1.107 / lượt soi ngang 77 — CAO ②] Bước này KHÔNG dựng được trước vòng này: không đường
+    // sản xuất nào ghi `eval_components`, nên `POST /evaluate` của S1.106 luôn trả 422 ngoài cụm
+    // test. Đây là phép đo đầu tiên đi TRỌN đường chấm thầu bằng HTTP, trên chính sách mà người
+    // mua tạo qua HTTP.
+    const m = trangThai.mua.cookie;
+    const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, m, {});
+    expect(r.status, r.text).toBe(201);
+    const ld = (r.body as { evaluation: { evaluationId: string; currency: string; lines: { rank: number | null }[] } }).evaluation;
+    expect(ld.currency).toBe("VND");
+    expect(ld.lines).toHaveLength(5);
+    expect([...ld.lines].map((x) => x.rank).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5]);
+
+    const bxh = await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, m);
+    expect(bxh.status, bxh.text).toBe(200);
+    const bang = (bxh.body as {
+      ranking: {
+        evaluationId: string;
+        rows: { supplierName: string; effectiveCost: string | null; rank: number | null; components: { ma: string; tien: string | null }[] }[];
+      };
+    }).ranking;
+    expect(bang.evaluationId).toBe(ld.evaluationId);
+    const mongDoi = [...trangThai.loiMoi].sort((a, b) => Number(a.gia) - Number(b.gia));
+    expect(bang.rows.map((x) => x.supplierName)).toEqual(mongDoi.map((x) => x.ten));
+    expect(bang.rows[0]?.effectiveCost).toBe(GIA_SUA_LAI);
+    // VẾ CHỊU LỰC của cả S2.4: mỗi hàng mang THÀNH PHẦN sinh ra con số. Hệ số là `1.0000`, nên
+    // `tien` phải bằng chính `effectiveCost` — một bảng chỉ hiện tổng thì J2 là lời hứa rỗng.
+    for (const h of bang.rows) {
+      expect(h.components, JSON.stringify(h)).toHaveLength(1);
+      expect(h.components[0]?.ma).toBe("gia");
+      expect(h.components[0]?.tien).toBe(h.effectiveCost);
+    }
+
+    // Chấm LẦN HAI dừng ở một từ chối CÓ TÊN: cạnh `UNSEALED->EVALUATING` đã đi qua một lần.
+    const lai = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, m, {});
+    expect(lai.status, lai.text).toBe(422);
+    expect(lai.text).toContain("UNSEALED");
+  });
+
   it("[INV-A2] [INV-A5] [INV-A4] BỘ QUÉT RÒ RỈ LẦN HAI — SAU mở thầu, khi bản rõ ĐÃ nằm trong CSDL: năm phiên khách và một người mua KHÔNG có bid.view đọc mọi route đọc — không giá nào lọt", async () => {
     // [review H2-4 ⑴⑷] Vòng quét thứ nhất chạy TRƯỚC mở thầu, khi bản rõ giá chưa tồn tại phía máy chủ —
     // không route nào rò được thứ chưa có. Vòng này chạy ở cửa sổ có nghĩa: `rfq_unsealed_bids` đã có
@@ -721,7 +765,19 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
       if (rows[0]?.n !== "0") dinh.push(b.ten);
     }
     expect(bang.length).toBeGreaterThan(20);
-    expect(dinh).toEqual(["rfq_unsealed_bids"]);
+    // [S1.107 / khoản 224 — QUYẾT ĐỊNH CỦA CHỦ DỰ ÁN] Lời khai cũ ở đây là *"giá dạng rõ chỉ tồn
+    // tại ở ĐÚNG MỘT bảng"*, và nó ĐÚNG — trong một kịch bản KHÔNG CHẤM THẦU LẦN NÀO. `057` dựng
+    // chỗ ở thứ hai từ S1.105 (`effective_cost` và `components.tien` của `rfq_evaluation_lines`),
+    // và lượt soi ngang 77 đo ra rằng cổng này xanh vì phạm vi của nó, không vì lời khai đúng.
+    //
+    // Bước 12b nay chấm thầu THẬT trước khi tới đây, nên phép quét dưới chạy trong một thế giới
+    // CÓ lượt chấm — và lời khai đổi theo ADR-054: giá dạng rõ chỉ ở những bảng ĐƯỢC KHAI, mỗi
+    // bảng kèm vai ghi và cổng đọc của nó:
+    //   • `rfq_unsealed_bids`     — ghi bởi `app_unseal` (019), đọc qua `bid.view`;
+    //   • `rfq_evaluation_lines`  — ghi bởi `app_api` qua `taoLuotDanhGia` với GRANT theo CỘT
+    //                               (057), đọc qua `bid.view` ở `docBangXepHang`.
+    // Tập viết VÉT CẠN chứ không "chứa": một bảng THỨ BA mai sau phải làm dòng này ĐỎ.
+    expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
   }, 120000);
 
   it("bước 15 — sổ kiểm toán kể lại toàn bộ kịch bản, kể cả năm lần đăng nhập qua TOTP, theo đúng thứ tự", async () => {

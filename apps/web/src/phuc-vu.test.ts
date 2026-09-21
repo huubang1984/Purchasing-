@@ -12,7 +12,10 @@
 // ghi ở đầu `ts-resolve-hook.mjs`.)
 // ==============================================================================================
 
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -228,4 +231,68 @@ describe("bộ chuyển tiếp", () => {
     expect(chu).not.toContain("ECONNREFUSED");
     await new Promise<void>((xong) => chet.close(() => xong()));
   });
+});
+
+// ==============================================================================================
+// [S1.107 / lượt soi ngang 77 — ③] LUẬT CẤM SINK HTML PHẢI ĐỎ THẬT
+//
+// `apps/web/trang/*.js` là mã DUY NHẤT của kho chạy trong trình duyệt của người mua và của nhà
+// cung cấp, và nó dựng DOM từ dữ liệu máy chủ trả về — tên nhà cung cấp, mã thành phần chính sách,
+// thông điệp lỗi. Lượt soi ngang **76** tìm ra BA khiếm khuyết CAO và cả ba nằm trong đúng thư mục
+// này; S1.99 vá chúng, nhưng vá ĐIỂM. Tới lượt 77, thư mục ấy vẫn chỉ có MỘT luật (`no-undef`).
+//
+// Vòng này thêm luật, và mũi đo dưới đây là thứ biến nó từ một dòng cấu hình thành một LỚP: viết
+// một tệp vi phạm THẬT vào đúng thư mục ấy rồi chạy eslint, đòi nó đỏ. *"Một quy tắc chưa từng đỏ
+// thật là một quy tắc chưa được đo"* — cùng khuôn ba probe depcruise của `boundaries.test.ts`.
+// ==============================================================================================
+describe("[S1.107] lớp cấm sink HTML ở apps/web/trang", () => {
+  const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
+
+  it("một tệp gán `innerHTML` trong `apps/web/trang/` làm eslint ĐỎ — và đỏ vì ĐÚNG luật ấy", () => {
+    const probe = join(GOC_KHO, "apps/web/trang/zzprobe-sink.js");
+    writeFileSync(
+      probe,
+      `const el = document.getElementById("x");
+el.innerHTML = "<b>" + location.hash + "</b>";
+`,
+    );
+    try {
+      let ra = "";
+      try {
+        execFileSync("npx", ["eslint", "apps/web/trang/zzprobe-sink.js"], {
+          cwd: GOC_KHO,
+          encoding: "utf8",
+          shell: true,
+        });
+      } catch (e) {
+        ra = String((e as { stdout?: string }).stdout ?? "");
+      }
+      expect(ra, "eslint KHÔNG đỏ trên một tệp gán innerHTML — luật không có răng").toContain("no-restricted-properties");
+      expect(ra).toContain("innerHTML");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 120_000);
+
+  it("ĐỐI CHỨNG ÂM: cùng tệp ấy dựng DOM bằng `textContent` thì eslint XANH", () => {
+    // Không có vế này, vế trên xanh y hệt với một cấu hình làm đỏ MỌI tệp trong thư mục.
+    const probe = join(GOC_KHO, "apps/web/trang/zzprobe-sach.js");
+    writeFileSync(
+      probe,
+      `const el = document.getElementById("x");
+el.replaceChildren();
+el.textContent = location.hash;
+`,
+    );
+    try {
+      const ra = execFileSync("npx", ["eslint", "apps/web/trang/zzprobe-sach.js"], {
+        cwd: GOC_KHO,
+        encoding: "utf8",
+        shell: true,
+      });
+      expect(ra.trim()).toBe("");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 120_000);
 });

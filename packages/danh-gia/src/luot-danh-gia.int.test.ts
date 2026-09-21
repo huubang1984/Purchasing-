@@ -681,6 +681,17 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
       [orgA],
     );
     expect(Number(sau[0]?.n) - Number(truoc[0]?.n), "một lần từ chối phải để lại ĐÚNG MỘT hàng sổ (D5)").toBe(1);
+    // [S1.107 / lượt soi ngang 77 — ②] Và hàng sổ ấy phải mang một CẶP khớp nhau. Trước vòng
+    // này nó khai `resource_type = "RFQ_EVALUATION"` với `resource_id` là id của một
+    // `rfq_packages` — ai nối `resource_id` sang `rfq_evaluations` được 0 hàng cho một sự kiện
+    // CÓ THẬT. Khẳng định đọc CẢ HAI trường: chỉ đo `resource_type` thì một id sai vẫn lọt.
+    const { rows: moi } = await db.pool.query<{ rt: string; ri: string | null }>(
+      "SELECT resource_type AS rt, resource_id::text AS ri FROM audit_events " +
+        "WHERE org_id = $1 AND action = 'PERMISSION_DENIED' ORDER BY seq DESC LIMIT 1",
+      [orgA],
+    );
+    expect(moi[0]?.rt).toBe("RFQ");
+    expect(moi[0]?.ri, "`resource_id` phải là chính gói thầu mà `resource_type` khai").toBe(rfqId);
   });
 
   it("tổ chức KHÁC hỏi đúng mã gói thầu ấy ⇒ `null`, không một hàng nào", async () => {

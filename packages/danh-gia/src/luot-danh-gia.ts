@@ -222,7 +222,15 @@ export async function taoLuotDanhGia(
       userId: actor.id,
       orgId,
       permission: PERMISSIONS.EVALUATION_PERFORM,
-      resourceType: "RFQ_EVALUATION",
+      // [S1.107 / lượt soi ngang 77 — ②] `RFQ`, KHÔNG `RFQ_EVALUATION`. Cặp này đi NGUYÊN
+      // VĂN vào hàng sổ `PERMISSION_DENIED` (`rbac.ts` truyền thẳng cho `appendAuditEvent`),
+      // nên một `resource_type` khai một loại còn `resource_id` mang id của loại khác là một
+      // câu SAI ghi vào sổ kiểm toán: ai nối `resource_id` sang `rfq_evaluations` sẽ được 0
+      // hàng cho một sự kiện CÓ THẬT. Ở đường ghi còn một lý do thứ hai: lúc cổng quyền chạy,
+      // lượt đánh giá CHƯA tồn tại. Mọi anh em trong kho khớp cặp — `RFQ`+rfqId ở
+      // `buildComparisonTable` và `requestUnseal`, `UNSEAL_REQUEST`+unsealId ở `gate.ts` —
+      // và hàng sổ THÀNH CÔNG ngay dưới đây đã khớp đúng (`rfq_evaluation`+evaluationId).
+      resourceType: "RFQ",
       resourceId: input.rfqId,
     },
     auditPool,

@@ -39,6 +39,7 @@ import {
   setRfqBudget,
   submitRfqForApproval,
   type Currency,
+  type ThanhPhanTrongSoVao,
 } from "@trustprocure/rfq";
 import {
   addSupplierContact,
@@ -87,6 +88,35 @@ function chuoiTuyChon(body: unknown, ten: string): string | null {
 }
 function soNguyen(body: unknown, ten: string): number {
   const v = truong(body, ten);
+  if (typeof v !== "number" || !Number.isInteger(v)) throw new HttpError(422, `trường "${ten}" phải là số nguyên`);
+  return v;
+}
+/**
+ * [S1.107 / lượt soi ngang 77 — CAO ②] `evalComponents` của thân `POST /policy`: KHÔNG bắt buộc,
+ * và khi vắng thì chính sách ấy không chấm thầu được — đúng trạng thái của MỌI tổ chức cho tới
+ * vòng này, vì `056` cấp GRANT từ S1.102 và `057` cưỡng chế hình dạng từ S1.105 nhưng không một
+ * dòng mã sản xuất nào ghi hai cột ấy, nên route chấm thầu của S1.106 luôn trả 422 ngoài cụm test.
+ *
+ * Bộ đọc này chỉ kiểm hình dạng NGOÀI — mảng của object. Ba trường chuỗi do `packages/rfq` kiểm,
+ * còn `don_vi` thuộc {TIEN, DIEM}, *ít nhất một TIEN* và khuôn của `he_so` do `CHECK` của `057`
+ * phán xử. Ba lớp, mỗi lớp một việc, và không lớp nào chép lại luật của lớp kia.
+ */
+function mangTrongSo(body: unknown, ten: string): readonly ThanhPhanTrongSoVao[] | undefined {
+  const v = truong(body, ten);
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) throw new HttpError(422, `trường "${ten}" phải là mảng`);
+  for (const t of v) {
+    if (typeof t !== "object" || t === null || Array.isArray(t)) {
+      throw new HttpError(422, `trường "${ten}" phải là mảng các object`);
+    }
+  }
+  return v as readonly ThanhPhanTrongSoVao[];
+}
+
+/** Số nguyên TUỲ CHỌN — `undefined` khi vắng, để `packages/rfq` phán xử cặp với `evalComponents`. */
+function soNguyenTuyChon(body: unknown, ten: string): number | undefined {
+  const v = truong(body, ten);
+  if (v === undefined || v === null) return undefined;
   if (typeof v !== "number" || !Number.isInteger(v)) throw new HttpError(422, `trường "${ten}" phải là số nguyên`);
   return v;
 }
@@ -366,7 +396,9 @@ const ghi: readonly BuyerWriteRoute[] = [
     audience: "BUYER",
     mutates: true,
     permission: PERMISSIONS.EVALUATION_PERFORM,
-    resourceType: "RFQ_EVALUATION",
+    // [S1.107 / lượt soi ngang 77 — ②] `RFQ`: bộ điều phối ghi cặp này nguyên văn vào hàng
+    // sổ `PERMISSION_DENIED`, và lúc ấy lượt đánh giá chưa tồn tại.
+    resourceType: "RFQ",
     resourceId: rfqIdParam,
     handler: async (ctx) => ({
       status: 201,
@@ -400,6 +432,11 @@ const ghi: readonly BuyerWriteRoute[] = [
         version,
         dualApprovalThreshold: chuoiBatBuoc(ctx.req.body, "dualApprovalThreshold"),
         currency: tienTe(ctx.req.body),
+        // [S1.107 / CAO ②] Hai trường TUỲ CHỌN đi thành một BỘ — `056` đòi
+        // `(eval_components IS NULL) = (bafo_top_n IS NULL)`, và `packages/rfq` ném một lỗi
+        // CÓ TÊN khi chỉ một trong hai được khai, thay vì để người gọi đọc một `23514`.
+        evalComponents: mangTrongSo(ctx.req.body, "evalComponents"),
+        bafoTopN: soNguyenTuyChon(ctx.req.body, "bafoTopN"),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { policy } };
