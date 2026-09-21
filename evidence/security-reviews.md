@@ -9332,3 +9332,124 @@ Một lần không thiu không phải một lớp. Khoản 212 vẫn mở, và s
 - Sổ nợ **213 → 217** khoản, mở **86 → 85**: đóng **209 · 210 · 211**; mở và đóng trong cùng vòng **216 · 217**; mở **214 · 215**.
 - Rổ A **6** — KHÔNG đổi, và vẫn không khoản nào thuộc vế ⒜; rổ B **58 → 57**; rổ C **22** — không đổi.
 - **48 → 49** ADR (ADR-049), **54 → 55** migration đánh số, **56/56** bất biến — không thêm bất biến nào.
+
+# §S1.101 — LƯỢT SOI HÌNH DẠNG MẢNH S2, TRƯỚC DÒNG MÃ ĐẦU TIÊN: TÁM PHÁT HIỆN, VÀ HAI TRONG BA CAO LÀ MÂU THUẪN NỘI TẠI CỦA CHÍNH SPEC
+
+## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
+
+Chủ dự án chọn **Mảnh S2** (đánh giá → BAFO → award). Spec `docs/superpowers/specs/2026-09-21-…` đã viết xong từ
+trước và nằm **untracked** qua nhiều vòng, cố ý giữ cho vòng riêng của nó.
+
+Hai điều đọc được ngay ở chính spec đã định hình vòng này, trước khi em quyết bất cứ gì:
+
+- **§9 tự ước lượng 3–4 tuần, bảy hạng mục** (S2.1–S2.7). Một vòng không cài được bấy nhiêu, và cài một phần
+  bảy rồi gọi là xong là một lời khai rộng hơn phép đo.
+- **§8.3 tự ghi** đường huỷ award *"chưa thiết kế trong bản này — phải chốt trước khi viết migration"*, và §10
+  nhắc lại. Tức spec TỰ nói có một quyết định chặn chưa có.
+
+Cộng với lệ của kho — *soi TRƯỚC khi viết mã*, mà S1.75 lập khi tìm ra ba CAO trước dòng mã đầu — hình dạng
+đúng của vòng này là: **một lượt soi trên spec, chốt các quyết định chặn, rồi commit spec.** Không một dòng mã
+S2 nào.
+
+## 2. Tám phát hiện, và mỗi cái là một phép ĐỌC có tệp và dòng
+
+| # | Mức | Phát hiện | Đọc ở đâu |
+|---|---|---|---|
+| ① | **CAO** | Kho có HAI luật thu số tiền về hai chữ số, và chúng lệch nhau ở nửa xu — nên **J2**, bất biến TRUNG TÂM của S2, không thoả được như spec đang viết | `so-tien.ts` `thanhTien` · `comparison.ts:287` · `009:96` · `022:347` |
+| ② | **CAO** | §4.2 khai `rfq_awards` chỉ-ghi-thêm còn **J7** khai chỉ mục UNIQUE bộ phận — hai thứ loại trừ nhau; và §8.3 là CÙNG một lỗ, không phải một rủi ro riêng | spec §4.2 · §5 J7 · §8.3 |
+| ③ | **CAO** | `rfq_bafo_rounds` không có FK tới lượt đánh giá đã sinh ra danh sách mời, mà `BAFO_CLOSED->EVALUATING` sinh một `rfq_evaluations` THỨ HAI | spec §4.2 · §4.3 |
+| ④ | TRUNG | **J1** khai cưỡng chế bằng `CHECK` trên `components` — một `CHECK` không tham chiếu được `org_procurement_policies` nên không biết thành phần nào có đơn vị tiền | spec §5 J1 |
+| ⑤ | TRUNG | Spec chưa nói báo giá KHÔNG đọc được giá xếp hạng thế nào — mà kho **bảo đảm** ca ấy xảy ra | `020_comparison.sql` mục (3) · `comparison.ts:96` |
+| ⑥ | TRUNG | Lệch tiền tệ đã có lớp ở tầng hiển thị; spec bỏ nó ở tầng dữ liệu, còn J5/J7/award đều giả định có một người thắng | `comparison.ts` `currencyMismatch` |
+| ⑦ | THẤP | §4.3 khai *"bốn cạnh mới"*, khối mã ngay dưới liệt kê **NĂM** | spec §4.3 |
+| ⑧ | THẤP | Chưa có mã quyền nào cho S2 — hôm nay đúng TÁM mã `rfq.*` | `packages/identity/src` |
+
+**Hai trong ba CAO là mâu thuẫn NỘI TẠI của spec**, không phải lệch giữa spec và mã: ② là hai mục của cùng tài
+liệu nói hai điều loại trừ nhau, ③ là một hệ quả của §4.3 mà §4.2 không mang. Đó là thứ một lượt soi hình dạng
+tìm được mà một lượt soi sau khi cài sẽ phải trả bằng một migration.
+
+## 3. CAO ① — hai luật làm tròn, và vì sao J2 không thoả được
+
+```
+apps/web/src/so-tien.ts        thanhTien: (a * b * 100n) / 10000n   -> CẮT CỤT về 0 (BigInt chia)
+packages/unseal/src/comparison.ts:287   round(avg(bid_so_tien(…)), 2) -> LÀM TRÒN nửa-ra-xa-0
+db/migrations/009_rfq.sql:96            quantity numeric(18, 4)
+db/migrations/022_security_review_s1.sql:347  "Mọi số tiền khác của lược đồ là numeric(18, 2)"
+```
+
+Lượng có **bốn** chữ số thập phân, tiền có **hai**. Tích SINH RA chữ số thứ ba, và kho đang có hai luật thu nó
+về hai. J2 nói *"tính lại từ `components` + phiên bản chính sách ra ĐÚNG `effective_cost` đã lưu"*. Nếu hàm
+thuần cắt cụt mà đường ghi làm tròn thì J2 **đỏ** ở đúng các đầu vào nửa xu. Và nếu cả hai cùng đi một đường
+thì J2 **XANH trên một con số sai** — đó mới là hình dạng đáng sợ, vì một bất biến xanh là một bất biến không ai
+đọc lại.
+
+Spec không nói một chữ nào về luật làm tròn. Đây là chỗ một tài liệu **thiếu một dòng** làm bất biến trung tâm
+của nó bất khả, và không lượt đọc nào sau khi cài sẽ thấy — vì lúc ấy hai bên đã khớp nhau ở một con số.
+
+## 4. CAO ② và ③ — hai chỗ spec tự cãi mình
+
+**②** §4.2: *"Chỉ-ghi-thêm; huỷ là một hàng trạng thái mới, không phải `UPDATE`"*. **J7**: *"Chỉ mục UNIQUE bộ
+phận"*. Một UNIQUE bộ phận không diễn đạt được *"tối đa một award còn sống"* trên một bảng chỉ-ghi-thêm: khi
+huỷ sinh một hàng MỚI, hàng `PROPOSED` cũ **vẫn khớp** mọi vị từ bộ phận. Muốn chỉ mục ấy chạy thì trạng thái
+phải ở CÙNG hàng — tức `UPDATE`, tức bỏ vế chỉ-ghi-thêm. Và §8.3 tự ghi đường huỷ chưa thiết kế. Ba mục, một lỗ.
+
+**③** `rfq_bafo_rounds` giữ FK chính sách, `top_n`, hạn nộp, người mở + phiên — **không** FK tới
+`rfq_evaluations`. Nhưng §4.3 nói `BAFO_CLOSED->EVALUATING` sinh một lượt đánh giá THỨ HAI, và §4.2 nói danh
+sách mời *"suy từ `rfq_evaluation_lines.rank ≤ top_n`"*. Suy từ lượt **nào**? Sau vòng hai, câu *"ai đủ điều
+kiện vào BAFO"* chỉ trả lời được bằng một phép suy theo `seq` — **đúng hình dạng khoản 208**, mà S1.100 vừa đóng
+một khoản em của nó. Một FK hợp thành đóng nó, và nó rẻ hơn hẳn khi đặt trước migration.
+
+## 5. Hai quyết định của chủ dự án, và ba quyết định của lượt soi
+
+Hai chỗ CAO đầu không phải việc của mã — chúng là lựa chọn sản phẩm, nên được trình. Chủ dự án chốt: **⑴** một
+luật làm tròn duy nhất, nửa-ra-xa-0, ghim ở CẢ hai tầng bằng một phép đo; **⑵** `rfq_awards` GIỮ chỉ-ghi-thêm,
+J7 giữ nguyên mệnh đề và đổi cột cưỡng chế sang một **trigger** đọc hàng trạng thái mới nhất.
+
+Ba chỗ còn lại điền được từ tiền lệ ĐO ĐƯỢC, nên lượt soi tự chốt và ghi lý do vào **ADR-050**: báo giá không
+đọc được giá vẫn có hàng với `effective_cost`/`rank` NULL (tiền lệ `bid_so_tien` cố ý trả NULL thay vì ném, và
+`buildComparisonTable` giữ hàng, đếm riêng thành `unparsed`) và **J5 siết thêm một vế** — award không trỏ được
+tới một báo giá không có `effective_cost`; lệch tiền tệ ⇒ lượt đánh giá bị **từ chối**, mạnh hơn bảng so sánh
+một bậc và đó là cố ý; và mã quyền thành hạng mục **S2.0** có tên, đứng trước S2.3.
+
+Một khoản mới: **218** — trình duyệt VẪN cắt cụt. ADR-050 ⑴ ghim luật cho `effective_cost`, nó cố ý KHÔNG sửa
+`so-tien.ts`, vì sửa một lớp tiền đang chạy là một vòng riêng có phép đo riêng. Kiểm được rằng nó chưa hại ai:
+`so-tien` chỉ có hai trang trình duyệt import, và `dongTien()` niêm phong đơn giá đã chuẩn hoá CÙNG `amount`
+tính ra, nên không phép tính phía máy chủ nào đối chiếu với nó — hôm nay.
+
+## 6. Một lời khai của spec mà phép đo XÁC NHẬN
+
+Spec §4.3 viết `UNSEALED->EVALUATING` *"đã có từ 011 và chưa ai đi qua"*. Đúng: mảng `CANH_HOP_LE` của
+`011:147` mang đúng cạnh ấy, giữa `CLOSED->UNSEALED` và `DRAFT->CANCELLED`. Ghi ra vì một lượt soi chỉ nêu chỗ
+sai thì người đọc không biết nó đã kiểm chỗ nào và bỏ chỗ nào.
+
+## 7. Ranh giới nói ra
+
+- **Lượt soi này đọc, KHÔNG chạy.** Cả tám phát hiện rút từ mã nguồn và tài liệu; vòng này không dựng một cụm
+  Postgres nào, vì không có mã S2 nào để chạy. Ba phép đo mà ADR-050 đặt làm điều kiện (bảng ca nửa xu · đột
+  biến hai award cùng sống · lượt đánh giá lệch tiền tệ bị từ chối) **chưa tồn tại**, và chúng là điều kiện của
+  S2.0–S2.3, S2.6.
+- **Không soi §8.1.** Chỗ rò lớn nhất của S2 theo chính spec là rò NGHIỆP VỤ — người mua đã biết giá vòng một
+  rồi nói riêng với một nhà cung cấp. Lượt này không đụng tới, và không có gì mới để nói về nó.
+- **Không soi ba khoản rổ A mà §8.4 nêu** (102, 105, 109). Chúng đã ở rổ A với lý do riêng; §8.4 đúng khi nói
+  cả ba phải đóng trước khi S2 chạy trên hạ tầng thật.
+- **Spec vẫn là spec.** Vòng này không biến nó thành mã, và không một bất biến nhóm **J** nào có phép đo. Bảy
+  hạng mục §9 còn nguyên; vòng này chỉ làm cho hai hạng mục đầu đi được mà không phải quay lại sửa migration.
+- **`numeric(18,2)` cho VND là một mô hình đáng hỏi lại**, và ADR-050 nói ra rằng nó KHÔNG trả lời câu ấy: hai
+  chữ số là lựa chọn của `014`/`022`, không của vòng này.
+
+## 8. Số đo
+
+- `pnpm t0` **0 vi phạm** — 286 module / 1158 phụ thuộc cruised.
+- `pnpm test` **71 tệp, 1007 đạt / 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- `pnpm evidence` **XANH**, `vitest thoát mã 0`, **56/56** bất biến, **2087** khẳng định — **y hệt S1.100**,
+  và `evidence/INV-matrix.md` KHÔNG đổi một con số nào. Đó là phép đo xác nhận đúng điều vòng này tự khai:
+  không một dòng mã nào bị chạm. Một vòng tài liệu mà ma trận bất biến NHÍCH là một vòng đã nói sai về
+  chính mình.
+- **Không một dòng mã S2 nào.** Phép đo của vòng này là **chín phép đọc** có tệp và dòng (bốn ở CAO ①, hai ở
+  CAO ②/③ trên chính spec, `020` mục (3), `comparison.ts` `currencyMismatch`, và `011:147`), cộng một phép kiểm
+  rằng `so-tien` không có người gọi phía máy chủ.
+- Sổ nợ **217 → 218** khoản, mở **85 → 86**: mở **218**, không đóng khoản nào. Rổ A **6** không đổi, rổ B
+  **57 → 58**, rổ C **22** không đổi.
+- **49 → 50** ADR (ADR-050), **55** migration không đổi, **56/56** bất biến không đổi.
+- Spec: **259 → 288 dòng**, và trạng thái đổi từ *"bản thảo để chủ dự án đọc và bác"* sang *"đã qua lượt soi
+  hình dạng"*.

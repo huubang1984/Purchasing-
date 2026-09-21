@@ -5193,3 +5193,95 @@ khoản **208** (hàng `UNSEAL_REDISPATCHED` không mang một cặp người-ph
 migration — khoản **214** giữ đúng phần dư ấy, và cho tới khi 11 chỗ ghim được viết lại bằng chính tả nguồn thì phép so ấy vẫn bất
 khả. Và nó không nói nhân chứng là một lớp MẠNH: 022 đã tự viết nó là *"mức thấp nhất còn giữ được D3"*, và vòng này chỉ làm cho mức
 thấp nhất ấy không bị một câu `UPDATE` gỡ đi.
+
+## ADR-050 — Effective Cost thu về hai chữ số bằng MỘT luật ghim ở hai tầng, và `rfq_awards` giữ chỉ-ghi-thêm với J7 cưỡng chế bằng trigger
+
+**Bối cảnh.** Lượt soi hình dạng S1.101 chạy trên spec S2 (`docs/superpowers/specs/2026-09-21-…`) **trước dòng mã
+đầu tiên**, theo lệ mà S1.75 lập. Tám phát hiện, ba CAO. Hai trong ba CAO không phải việc của mã — chúng là hai
+lựa chọn sản phẩm, và chủ dự án chốt ngày 2026-09-21. ADR này ghi cả năm quyết định của lượt soi, vì ba quyết
+định còn lại rút từ tiền lệ ĐO ĐƯỢC chứ không từ ý thích, và một lượt soi sau phải kiểm lại được lý do.
+
+**Bốn phép đọc trên mã, mỗi cái một chỗ:**
+
+```
+apps/web/src/so-tien.ts        thanhTien: (a * b * 100n) / 10000n   -> CẮT CỤT về 0 (BigInt chia)
+packages/unseal/src/comparison.ts:287   round(avg(bid_so_tien(…)), 2) -> LÀM TRÒN nửa-ra-xa-0
+db/migrations/009_rfq.sql:96            quantity numeric(18, 4)
+db/migrations/022_security_review_s1.sql:347  "Mọi số tiền khác của lược đồ là numeric(18, 2)"
+```
+
+Ba dòng đầu cộng lại thành một bài toán mà spec không nhắc: lượng có **bốn** chữ số thập phân, tiền có **hai**,
+nên tích SINH RA chữ số thứ ba, và kho đang có **hai luật thu nó về hai** — chúng lệch nhau ở đúng nửa xu. Bất
+biến **J2** của S2 (*"tính lại ra ĐÚNG `effective_cost` đã lưu"*) là bất biến TRUNG TÂM của mảnh ấy, và nó
+không thoả được khi luật chưa chốt: hàm thuần cắt cụt cộng đường ghi làm tròn cho J2 đỏ ở các đầu vào nửa xu,
+còn nếu cả hai đi cùng một đường thì J2 **XANH trên một con số sai**.
+
+Chỗ CAO thứ hai là một mâu thuẫn NỘI TẠI của spec: §4.2 khai `rfq_awards` *"chỉ-ghi-thêm; huỷ là một hàng trạng
+thái mới"* còn **J7** khai cơ chế *"chỉ mục UNIQUE bộ phận"*. Hai thứ ấy loại trừ nhau — một UNIQUE bộ phận
+không diễn đạt được *"tối đa một award còn sống"* trên bảng chỉ-ghi-thêm, vì hàng `PROPOSED` cũ vẫn khớp mọi vị
+từ sau khi đã có hàng huỷ. Và §8.3 của spec tự ghi đường huỷ *"chưa thiết kế, phải chốt trước khi viết
+migration"* — nên đó không phải hai rủi ro mà MỘT.
+
+### Quyết định
+
+⑴ **MỘT luật làm tròn: nửa-ra-xa-0, và nó được GHIM Ở CẢ HAI TẦNG bằng một phép đo.** Luật chọn theo tiền lệ
+đang chạy — `pg_catalog.round(x, 2)` của `comparison.ts:287` là số tiền phái sinh duy nhất kho có hôm nay. Hàm
+thuần của `packages/danh-gia` phải làm tròn GIỐNG Postgres, không được cắt cụt như `thanhTien`. Phép đo là một
+bảng ca **nửa xu** đối chiếu hàm thuần với `round(x, 2)` chạy thật; nó là điều kiện của S2.2, không phải một
+lượt kiểm tuỳ ý.
+
+⑵ **`rfq_awards` GIỮ chỉ-ghi-thêm; J7 giữ nguyên MỆNH ĐỀ và đổi CỘT CƯỠNG CHẾ sang một trigger.** Trigger đọc
+hàng trạng thái MỚI NHẤT của `(org_id, rfq_id)` và ném khi đã có một award còn sống — khuôn
+`unseal_dieu_phoi_mot_lan` (022). Lý do chọn chỉ-ghi-thêm thay vì một cột `status` sửa được: câu *ai huỷ, lúc
+nào, vì sao* phải trả lời được **từ chính bảng**, và một cột sửa được bằng `UPDATE` là đúng lớp lỗi mà khoản
+209 vừa trả giá — một câu viết tay đổi được lý do trao thầu sau khi đã duyệt.
+
+⑶ **Báo giá không đọc được giá vẫn CÓ hàng xếp hạng, với `effective_cost IS NULL` và `rank IS NULL`; và J5
+siết thêm một vế.** Tiền lệ là `public.bid_so_tien` (020), vốn **cố ý trả NULL thay vì ném** cho bốn ca — chuỗi
+không phải số, `NaN` (mà `numeric` NHẬN, và `'NaN' > 0` là TRUE), `Infinity`, và số âm — với lý do đã ghi:
+*"một lần ném giữa một truy vấn tổng hợp làm HỎNG CẢ BẢNG SO SÁNH vì đúng một nhà cung cấp gõ sai"*. Nên
+S2 giữ hàng, không vứt, đúng như `buildComparisonTable` đang giữ và đếm riêng thành `unparsed`. Vế siết: **award
+không trỏ được tới một báo giá không có `effective_cost`** — không có nó, J5 (*"báo giá CÒN HỢP LỆ"*) im lặng
+cho phép trao thầu cho một hàng không có con số nào.
+
+⑷ **Lệch tiền tệ ⇒ lượt đánh giá bị TỪ CHỐI, không sinh bảng xếp hạng nào.** `buildComparisonTable` đã khai vế
+này ở mức hiển thị: các báo giá đọc được không cùng đơn vị tiền ⇒ `min`/`max`/`average`/`belowBudget` đều
+`null`, vì *"`min(1000 USD, 2000 VND)` là một con số không có nghĩa, và hiển thị nó ra còn tệ hơn không hiển thị
+gì"*. S2 mạnh hơn một bậc, và đó là cố ý: một bảng SO SÁNH trả `null` được vì nó chỉ hiển thị, còn một `rank`
+thì không có giá trị `null` nào có nghĩa — và một award dựa trên nó là một quyết định dựa trên con số không so
+được.
+
+⑸ **Mã quyền của S2 là một hạng mục CÓ TÊN (S2.0), đứng trước S2.3.** Hôm nay kho có đúng **tám** mã `rfq.*`
+(`create`, `approve`, `open`, `cancel`, `invite`, `unseal`, `unseal.approve`, `key.purge`) và **không mã nào**
+cho đánh giá, BAFO hay award. Spec §9 nhắc *"cổng quyền"* ở S2.3 như một việc phụ; nó không phải việc phụ — ma
+trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép đo sẵn và có thứ tự bắt buộc.
+
+### Cái giá — nói thẳng
+
+- **Trình duyệt VẪN cắt cụt.** Quyết định ⑴ ghim luật cho `effective_cost`; nó KHÔNG sửa `so-tien.ts`. Nên cho
+  tới khi ai đó hợp nhất, hai tầng của cùng một sản phẩm hiển thị hai con số khác nhau ở đúng nửa xu. Ghi thành
+  **khoản 218** chứ không hứa suông.
+- **Một trigger đắt hơn một chỉ mục, và nó cần đột biến riêng.** Một chỉ mục UNIQUE sai thì CSDL vẫn chặn; một
+  trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
+- **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
+  được cho tới khi tổ chức chuẩn hoá đơn vị. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
+  không thấy một bảng xếp hạng gần đúng.
+- **ADR này quyết trên ĐỌC, không trên CHẠY.** Cả năm quyết định rút từ mã nguồn và tài liệu; vòng này không
+  dựng một cụm nào, vì không có mã nào để chạy. Phép đo thật là điều kiện của S2.0–S2.2, và chúng chưa tồn tại.
+
+### Đo bằng gì
+
+- Không một dòng mã S2 nào ở vòng này. Thứ đo được là **bốn phép đọc** ở khối trên, mỗi cái kèm tệp và dòng, và
+  một phép kiểm rằng `UNSEALED->EVALUATING` thật sự đã có trong `CANH_HOP_LE` của `011:147` và chưa cạnh nào đi
+  qua — lời khai ấy của spec ĐÚNG.
+- Ba phép đo mà ADR này đặt làm điều kiện, và chúng phải đỏ trước khi xanh: bảng ca **nửa xu** (S2.2, J2) · đột
+  biến **hai award cùng sống** (S2.6, J7) · một lượt đánh giá trên tập báo giá **lệch tiền tệ** phải bị từ chối
+  và gọi tên (S2.3, quyết định ⑷).
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói `numeric(18, 2)` là mô hình đúng cho VND — đồng tiền ấy không dùng phần thập phân trong thực tế, và
+hai chữ số ở đây là lựa chọn của `014`/`022` chứ không của ADR này; đổi nó là một việc lớn hơn S2. Nó không nói
+cạnh trạng thái của RFQ khi một award bị huỷ (`AWARDED` quay về `EVALUATING` hay đứng yên) — spec §8.3 giữ đúng
+phần hẹp ấy còn mở, phải chốt trước **S2.6**. Và nó không nói S2 an toàn: §8.1 của spec đã ghi rằng BAFO là một
+chỗ rò **nghiệp vụ** mà không lớp mật mã nào chặn được, và lượt soi này không đụng tới điều đó.
