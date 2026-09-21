@@ -703,27 +703,67 @@ describe("[INV-D5] [S1.69 / khoản 120] auditPool bão hoà tạm thời: lần
         () => "KHONG_NEM",
         (e: unknown) => (e as Error).name,
       );
+    /**
+     * [S1.101 / khoản 213 — ĐO TRÊN CI, và bản sửa "nâng trần" là bản sửa SAI]
+     *
+     * Đếm khoá tư vấn ghi sổ của ĐÚNG tổ chức B, chia theo `granted`. Bản trước chỉ đếm vế
+     * `NOT granted` và đó là một nửa phép đo: nó không phân biệt được *"hai lần ghi của B đang
+     * chờ"* với *"giao dịch giữ khoá CHƯA kịp giữ, nên chẳng ai phải chờ"*.
+     */
+    const demKhoaB = async (): Promise<{ readonly giu: number; readonly cho: number }> => {
+      const { rows } = await db.pool.query<{ giu: number; cho: number }>(
+        "SELECT count(*) FILTER (WHERE granted)::int AS giu, count(*) FILTER (WHERE NOT granted)::int AS cho " +
+          "  FROM pg_catalog.pg_locks WHERE locktype = 'advisory' " +
+          "   AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+          "   AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+        [orgB],
+      );
+      return { giu: rows[0]?.giu ?? 0, cho: rows[0]?.cho ?? 0 };
+    };
+    const choToi = async (
+      dat: (x: { readonly giu: number; readonly cho: number }) => boolean,
+      hanMs: number,
+      viSao: string,
+    ): Promise<void> => {
+      const han = Date.now() + hanMs;
+      for (;;) {
+        const x = await demKhoaB();
+        if (dat(x)) return;
+        if (Date.now() > han) {
+          throw new Error(`het ${String(hanMs)}ms cho "${viSao}": giu=${String(x.giu)} cho=${String(x.cho)}`);
+        }
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+    };
+
     try {
       const truocA = await demTuChoi(orgId);
       const giuKhoa = withTenant(poolGiuKhoa, orgB, async (c) => {
         await c.query("SELECT * FROM public.audit_append($1,'USER',NULL,'K120_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)", [orgB]);
         await choTha;
       });
+
+      // [S1.101 / khoản 213] CHỜ KHOÁ ĐƯỢC GIỮ THẬT TRƯỚC KHI CHO AI TRANH NÓ — và đây là chỗ
+      // ca này đỏ trên CI ở S1.101 với `so lan ghi so cua B dang cho khoa: 0`.
+      //
+      // Bản trước tạo `giuKhoa` rồi khởi động `haiB` NGAY, không chờ một xác nhận nào rằng khoá
+      // đã nằm trong tay giao dịch ấy. Trên một runner chậm, `withTenant` còn đang lấy kết nối /
+      // `SET ROLE` / `BEGIN` thì hai lần ghi của B đã tới `audit_append` và **lấy được khoá ngay**
+      // — không ai chờ ai, nên `NOT granted` đứng ở 0 VĨNH VIỄN, và vòng quét đốt trọn hạn rồi
+      // ném. Đúng lớp lỗi "kiểm-rồi-làm" mà `docs/STATE.md` đã ghi cho phép chụp vách ngăn.
+      //
+      // **Và nâng hạn là bản sửa SAI, đây là số đo nói ra điều đó:** lần chờ khoá của B có trần
+      // **2 s** (hàm nối chuỗi, `050`), nên cửa sổ quan sát KHÔNG được dài hơn 2 s — bản trước tự
+      // cho mình 5 s, tức quan sát lâu hơn thứ được quan sát. Nới 5 s thành 10 s chỉ làm ca đỏ
+      // chậm gấp đôi và giấu nguyên nhân sâu hơn.
+      await choToi((x) => x.giu >= 1, 4000, "giao dịch của B GIỮ được khoá ghi sổ");
+
       // Hai lần từ chối ở B giữ cả hai kết nối của poolSo, chờ khoá tư vấn mà giao dịch trên đang giữ.
       const haiB = [tuChoi(orgB, nguoiB), tuChoi(orgB, nguoiB)];
-      const han = Date.now() + 5000;
-      for (;;) {
-        // [lượt soi 63a-10] Chỉ đếm khoá tư vấn ghi sổ của tổ chức B, và hết hạn thì ném thay vì đi tiếp im lặng.
-        const { rows } = await db.pool.query<{ n: number }>(
-          "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted " +
-            "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
-            "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
-          [orgB],
-        );
-        if ((rows[0]?.n ?? 0) >= 2) break;
-        if (Date.now() > han) throw new Error(`het 5000ms, so lan ghi so cua B dang cho khoa: ${String(rows[0]?.n)}`);
-        await new Promise<void>((xong) => setTimeout(xong, 20));
-      }
+      // [lượt soi 63a-10] Hết hạn thì NÉM thay vì đi tiếp im lặng. Hạn 1 800 ms đứng DƯỚI trần 2 s
+      // của chính lần chờ ấy: quá 2 s thì hai lần ghi của B đã gãy `55P03` và `cho` không bao giờ
+      // còn lên 2 được nữa — chờ thêm là chờ một trạng thái đã chết.
+      await choToi((x) => x.cho >= 2, 1800, "hai lần ghi sổ của B ĐANG CHỜ khoá");
       expect({ tong: poolSo.totalCount, ranh: poolSo.idleCount }).toEqual({ tong: 2, ranh: 0 });
       // [S1.71 / khoản 123, lượt soi 65a-4] Hai lần ghi sổ của B đang chờ khoá gãy 55P03 sau 2 s (trần trên hàm nối chuỗi, 050): nhả khoá
       // sau 600 ms thay vì 1 500 ms, để lần chờ của B đứng xa trần cả khi test chạy dưới tải.
