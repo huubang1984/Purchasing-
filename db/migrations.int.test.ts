@@ -1455,10 +1455,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // có định nghĩa ghim" có việc; hai trigger còn lại của hàm này thuộc 040 và được ghim ở mục
       // `mfa_reset_kiem_quyen`. `rfq_evaluations_kiem_danh_tinh` (057) là trigger thứ HAI MƯƠI HAI của
       // hàm này tính cả hai cái ấy — đúng con số mà chú thích H6-6 bên dưới đã viết sẵn cảnh báo.
-      // ~~HAI MƯƠI~~ **[S1.108] HAI MƯƠI MỐT** ở danh sách này: `rfq_bafo_rounds_kiem_danh_tinh`
-      // (059) là trigger thứ HAI MƯƠI BA của hàm, tính cả hai cái của 040.
+      // ~~HAI MƯƠI~~ ~~**[S1.108] HAI MƯƠI MỐT**~~ **[S1.110] HAI MƯƠI BA** ở danh sách này:
+      // `rfq_bafo_rounds_kiem_danh_tinh` (059) là trigger thứ HAI MƯƠI BA của hàm tính cả hai
+      // cái của 040, và `061` thêm HAI nữa — `rfq_awards` cùng `rfq_award_approvals`, hai bảng
+      // CHỈ-GHI-THÊM của trao thầu, nên danh tính của người ĐỀ XUẤT và người DUYỆT đều là DẪN
+      // XUẤT (ADR-016) chứ không phải một trường trong thân yêu cầu.
       trigger: [
         "org_procurement_policies_kiem_danh_tinh",
+        "rfq_award_approvals_kiem_danh_tinh",
+        "rfq_awards_kiem_danh_tinh",
         "rfq_bafo_rounds_kiem_danh_tinh",
         "rfq_budgets_kiem_danh_tinh",
         "rfq_evaluations_kiem_danh_tinh",
@@ -1496,12 +1501,23 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   const HAM_56: readonly { ham: string; migration: string; trigger: readonly string[] }[] = [
     // [S1.20 / sổ nợ 16] `047` định nghĩa lại thân hàm này (thông điệp đọc `TG_OP`) và thêm BA
     // trigger `_chan_truncate` — nên bản ghim phải trỏ sang `047`, đúng quy tắc "migration CUỐI
-    // CÙNG" mà chính khoản nợ 56 dựng ra. Sáu trigger, không phải ba.
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    // CÙNG" mà chính khoản nợ 56 dựng ra. ~~Sáu~~ **[S1.110] MƯỜI** trigger, không phải ba: `061`
+    // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
+    // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
+    // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
     { ham: "bafo_kiem_vong", migration: "060_bafo_luot_moi_nhat_va_han_cho_khach.sql", trigger: ["rfq_bafo_rounds_kiem_vong"] },
+    // [S1.110 / S2.6] BA hàm cưỡng chế của trao thầu — **J3 · J5 · J7**. Chúng vào đây vì vế
+    // *"mọi hàm RETURNS trigger hoặc được ghim hoặc nằm trong danh sách loại trừ CÓ LÝ DO"*
+    // (sổ nợ 54) và danh sách loại trừ nay RỖNG có chủ đích: một `CREATE OR REPLACE` thay ba
+    // thân này bằng `RETURN NEW` mở lại đúng bộ ba mà J3 cấm, hạ `CHU_KY_CAN` về 0, và tháo
+    // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
+    { ham: "award_kiem_de_xuat", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
@@ -1525,7 +1541,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_khoa_chi_sinh_luc_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_sinh_luc_mo"] },
     { ham: "rfq_khoa_chi_thu_hoi_khi_huy", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_thu_hoi_khi_huy"] },
     { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "059_vong_bafo.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    // [S1.110 / S2.6] `061` them HAI canh (`EVALUATING->AWARDED`, `AWARDED->EVALUATING`)
+    // bang `CREATE OR REPLACE`, nen con tro doi sang no — dung quy tac "migration CUOI CUNG".
+    // Ban thao dau cua `061` viet than nay BANG TAY va roi 45 dong cuong che con song cua
+    // `059` (D2 tren bam noi dung, C4 deadline, ba ve moc chi dat mot lan, cua so thau toi
+    // thieu, "khong mo RFQ rong"). Ba lop deu KHONG keu: `migrate()` xanh, hardening AM THAM
+    // phuc hoi ban `059` len tren, va mot phep tu kiem bang chuoi con `%EVALUATING->AWARDED%`
+    // tra CO vi no khop mot CHU THICH. CHINH PHEP KIEM NAY la thu bat duoc — no so THAN, khong
+    // so mot chuoi con.
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "061_trao_thau.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
@@ -1545,7 +1569,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
   const HAM_GHIM = [...HAM_51, ...HAM_56];
 
-  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ ~~BỐN MƯƠI BA~~ BỐN MƯƠI LĂM thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ ~~BỐN MƯƠI BA~~ ~~BỐN MƯƠI LĂM~~ [S1.110] BỐN MƯƠI TÁM thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
     const hardening = docFile("hardening.always.sql");
     const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
@@ -3107,6 +3131,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
+        "061_trao_thau.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7506,6 +7531,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
+        "061_trao_thau.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7786,6 +7812,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
+        "061_trao_thau.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
@@ -8071,4 +8098,208 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await db.stop();
     }
   }, 300_000);
+});
+
+// ================================================================================================
+// [S1.110 / khoản 226] THÊM MỘT TRẠNG THÁI RFQ PHẢI PHÂN LOẠI NÓ Ở **MỌI** RÀNG BUỘC LIỆT KÊ TẬP
+//
+// Khoản 226 sinh ra ở S1.108, khi một lượt soi đọc `009` rồi khai HAI ràng buộc mốc trong khi có
+// BỐN — `migrate()` xanh, `typecheck` xanh, **11 ca int đỏ**. Nó ghi sẵn cách đúng để đếm: hỏi
+// `pg_constraint`, đừng đọc tệp.
+//
+// ------------------------------------------------------------------------------------------------
+// VÀ KHI S1.110 CHẠY ĐÚNG CÂU ẤY, NÓ BÁC **HAI** LỜI KHAI CỦA CHÍNH KHOẢN 226
+// ------------------------------------------------------------------------------------------------
+// ⑴ Khoản khai *"bốn trong bảy liệt kê trạng thái"*. Đo: **SÁU** trong bảy — nó quên chính
+//    `rfq_packages_status_check` và quên `rfq_deadline_bat_buoc_sau_draft`.
+// ⑵ Danh sách miễn trừ của khoản khai `rfq_deadline_bat_buoc_sau_draft` *"nói về MỘT trạng thái"*.
+//    Nó nói về **HAI** (`DRAFT` và `CANCELLED`). Kết luận *miễn* vẫn đúng, nhưng LÝ DO thì sai —
+//    và một cổng dựng trên lý do ấy sẽ miễn nhầm ca ngược lại.
+// ⑶ Và hình dạng mà khoản ĐỀ XUẤT — *"phải liệt kê ĐÚNG tập mà `RFQ_STATUSES` khai"* — là một
+//    lời khai SAI với BỐN trong sáu: bốn ràng buộc mốc liệt kê những TẬP CON đúng theo nghĩa của
+//    chúng (`rfq_da_mo_thi_co_moc_mo` không được chứa `DRAFT`, vì một RFQ ở `DRAFT` KHÔNG có
+//    `opened_at`). Một cổng đòi chúng bằng nhau sẽ đỏ vĩnh viễn.
+//
+// ------------------------------------------------------------------------------------------------
+// NÊN CỔNG NÀY ĐO MỘT TÍNH CHẤT KHÁC, VÀ NÓ LÀ TÍNH CHẤT THẬT SỰ CẦN
+// ------------------------------------------------------------------------------------------------
+// Với MỖI ràng buộc liệt kê một tập, MỖI trạng thái của tập đóng phải được **PHÂN LOẠI**: hoặc
+// `co` (ràng buộc liệt kê nó), hoặc `vang` (cố ý vắng, kèm LÝ DO). Thêm một trạng thái vào tập
+// đóng làm mọi khai báo trở nên THIẾU, nên cổng đỏ ở ĐÚNG những ràng buộc phải đọc lại — và mỗi
+// lần đọc lại buộc người sửa viết ra một lý do.
+//
+// Đó là thứ hai ràng buộc hạng *NÊN* đòi. `rfq_da_mo_thi_co_moc_mo` thiếu `AWARDED` thì **không
+// gì đỏ** — nó chỉ lặng lẽ thôi cưỡng chế cho trạng thái mới, và đó là lớp khiếm khuyết mà một
+// lượt `test:int` 950 giây cũng không bắt.
+//
+// Tập đóng đọc từ `rfq_packages_status_check` LÚC CHẠY, không từ một hằng TypeScript: `packages/rfq`
+// đã có `RFQ_STATUSES` và `packages/rfq/src/transitions.test.ts` đã ghim nó với SQL, nên nhập nó
+// vào đây là thêm một bản sao thứ ba chứ không thêm một phép đo.
+// ================================================================================================
+
+/** Trạng thái mà một ràng buộc CỐ Ý không liệt kê, kèm lý do — `vang` của khai báo dưới. */
+type VangCoLyDo = Readonly<Record<string, string>>;
+
+interface KhaiRangBuoc {
+  readonly co: readonly string[];
+  readonly vang: VangCoLyDo;
+}
+
+/**
+ * Ràng buộc liệt kê một TẬP trạng thái, và phân loại từng trạng thái của tập đóng.
+ *
+ * Thêm một trạng thái ⇒ mỗi khai báo ở đây thiếu một khoá ⇒ cổng đỏ kèm tên ràng buộc.
+ */
+const CHECK_TAP_TRANG_THAI_KHAI: Readonly<Record<string, KhaiRangBuoc>> = {
+  // Tập ĐÓNG — mọi trạng thái có mặt, theo định nghĩa.
+  rfq_packages_status_check: {
+    co: ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED", "UNSEALED", "EVALUATING",
+         "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED", "CANCELLED"],
+    vang: {},
+  },
+  // *"Đã mở thì CÓ mốc mở"* — mọi trạng thái SAU `OPEN` phải có `opened_at`.
+  rfq_da_mo_thi_co_moc_mo: {
+    co: ["OPEN", "CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED",
+         "BAFO_UNSEALED", "AWARDED"],
+    vang: {
+      DRAFT: "chưa mở, nên không có mốc mở",
+      PENDING_APPROVAL: "chưa mở, nên không có mốc mở",
+      CANCELLED: "huỷ được TRƯỚC khi mở, nên mốc mở có thể vắng — 011 (H-3) tách hai chiều ra hai ràng buộc đúng vì ca này",
+    },
+  },
+  // *"Đã đóng thì CÓ mốc đóng"*.
+  rfq_da_dong_thi_co_moc_dong: {
+    co: ["CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"],
+    vang: {
+      DRAFT: "chưa đóng",
+      PENDING_APPROVAL: "chưa đóng",
+      OPEN: "đang mở, chưa đóng",
+      CANCELLED: "huỷ được trước khi đóng",
+    },
+  },
+  // Chiều NGƯỢC, thêm ở `011 (H-3)`: *"chưa mở thì KHÔNG ĐƯỢC có mốc mở"*. `CANCELLED` có mặt vì
+  // một RFQ huỷ SAU khi mở thì vẫn giữ `opened_at`.
+  rfq_chua_mo_thi_khong_co_moc_mo: {
+    co: ["OPEN", "CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED",
+         "BAFO_UNSEALED", "AWARDED", "CANCELLED"],
+    vang: {
+      DRAFT: "chưa mở ⇒ mốc mở phải NULL",
+      PENDING_APPROVAL: "chưa mở ⇒ mốc mở phải NULL",
+    },
+  },
+  rfq_chua_dong_thi_khong_co_moc_dong: {
+    co: ["CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED",
+         "AWARDED", "CANCELLED"],
+    vang: {
+      DRAFT: "chưa đóng ⇒ mốc đóng phải NULL",
+      PENDING_APPROVAL: "chưa đóng ⇒ mốc đóng phải NULL",
+      OPEN: "đang mở ⇒ mốc đóng phải NULL",
+    },
+  },
+};
+
+/**
+ * Ràng buộc có chữ `status` mà KHÔNG phải một phép liệt kê tập — miễn, kèm lý do ĐÚNG.
+ *
+ * `rfq_deadline_bat_buoc_sau_draft` nhắc HAI trạng thái, nên nó KHÔNG được miễn vì *"nói về một
+ * trạng thái"* (lời khai của khoản 226). Lý do thật là CHIỀU của vị từ: nó đọc *"chỉ `DRAFT` và
+ * `CANCELLED` được phép KHÔNG có deadline"*, nên một trạng thái MỚI **tự động bị ĐÒI** phải có
+ * `deadline_at` — fail-closed đúng chiều. Miễn nó là an toàn; miễn nó VÌ LÝ DO SAI thì không, vì
+ * lý do sai cũng sẽ miễn một ràng buộc có chiều ngược lại.
+ */
+const CHECK_STATUS_MIEN_TRU: Readonly<Record<string, string>> = {
+  rfq_deadline_bat_buoc_sau_draft:
+    "vị từ NGƯỢC CHIỀU: chỉ DRAFT và CANCELLED được phép thiếu deadline, nên trạng thái MỚI tự " +
+    "động bị đòi phải có — fail-closed, không cần sửa khi thêm trạng thái",
+  rfq_huy_thi_co_moc_huy:
+    "song điều kiện trên ĐÚNG MỘT trạng thái (CANCELLED); trạng thái mới không đổi nghĩa của nó",
+};
+
+describe("[S1.110 / khoản 226] thêm một trạng thái RFQ phải phân loại nó ở MỌI ràng buộc liệt kê tập", { timeout: 180_000 }, () => {
+  it("mỗi ràng buộc liệt kê tập được KHAI, và mỗi trạng thái của tập đóng được PHÂN LOẠI ở đó", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+
+      const { rows } = await db.pool.query<{ conname: string; def: string }>(
+        `SELECT conname, pg_get_constraintdef(oid) AS def
+           FROM pg_constraint
+          WHERE conrelid = 'public.rfq_packages'::regclass AND contype = 'c'
+            AND pg_get_constraintdef(oid) LIKE '%status%'
+          ORDER BY conname`,
+      );
+      // Chống rỗng ruột: một truy vấn trả 0 hàng làm mọi khẳng định dưới đây xanh mà không đo gì.
+      expect(rows.length, "không ràng buộc nào có chữ status — truy vấn hỏng").toBeGreaterThan(5);
+
+      /** Mọi giá trị trạng thái mà văn bản một ràng buộc nhắc tới. */
+      const trangThaiTrong = (def: string): readonly string[] =>
+        [...new Set([...def.matchAll(/'([A-Z][A-Z_]*)'::text/gu)].map((m) => m[1]!))].sort();
+
+      // TẬP ĐÓNG là nguồn duy nhất — đọc từ chính ràng buộc `status_check` lúc chạy.
+      const dong = rows.find((r) => r.conname === "rfq_packages_status_check");
+      expect(dong, "không thấy rfq_packages_status_check").toBeDefined();
+      const tapDong = trangThaiTrong(dong!.def);
+      expect(tapDong.length, "tập đóng phải có ít nhất mười trạng thái").toBeGreaterThan(9);
+
+      const lech: string[] = [];
+      for (const r of rows) {
+        const thay = trangThaiTrong(r.def);
+        const mienTru = CHECK_STATUS_MIEN_TRU[r.conname];
+        const khai = CHECK_TAP_TRANG_THAI_KHAI[r.conname];
+
+        if (thay.length < 2) {
+          // Một giá trị — phải nằm ở danh sách miễn trừ, không ở danh sách khai.
+          if (mienTru === undefined) lech.push(`${r.conname}: nhắc MỘT trạng thái mà chưa khai ở CHECK_STATUS_MIEN_TRU kèm lý do`);
+          continue;
+        }
+        if (mienTru !== undefined) {
+          if (khai !== undefined) lech.push(`${r.conname}: khai ở CẢ hai danh sách — chọn một`);
+          continue;
+        }
+        if (khai === undefined) {
+          lech.push(
+            `${r.conname}: liệt kê ${String(thay.length)} trạng thái mà CHƯA KHAI. Thêm nó vào ` +
+              "CHECK_TAP_TRANG_THAI_KHAI (phân loại từng trạng thái của tập đóng) hay vào " +
+              "CHECK_STATUS_MIEN_TRU kèm LÝ DO — im lặng không phải một lựa chọn.",
+          );
+          continue;
+        }
+        // ⑴ tập `co` phải BẰNG thứ catalog nói.
+        if (JSON.stringify([...khai.co].sort()) !== JSON.stringify(thay)) {
+          lech.push(`${r.conname}: khai co=[${[...khai.co].sort().join(",")}] nhưng CSDL có [${thay.join(",")}]`);
+        }
+        // ⑵ và `co ∪ vang` phải PHỦ TRỌN tập đóng — đây là vế bắt một trạng thái MỚI.
+        const phanLoai = new Set([...khai.co, ...Object.keys(khai.vang)]);
+        const thieu = tapDong.filter((t) => !phanLoai.has(t));
+        const la = [...phanLoai].filter((t) => !tapDong.includes(t)).sort();
+        if (thieu.length > 0) {
+          lech.push(
+            `${r.conname}: trạng thái CHƯA PHÂN LOẠI: ${thieu.join(", ")} — thêm vào \`co\` nếu ` +
+              "ràng buộc phải liệt kê nó, hay vào `vang` kèm lý do nếu nó CỐ Ý vắng.",
+          );
+        }
+        if (la.length > 0) lech.push(`${r.conname}: khai trạng thái KHÔNG có trong tập đóng: ${la.join(", ")}`);
+      }
+
+      // Và chiều ngược: một khai báo trỏ tới ràng buộc không còn tồn tại.
+      const coThat = new Set(rows.map((r) => r.conname));
+      for (const ten of [...Object.keys(CHECK_TAP_TRANG_THAI_KHAI), ...Object.keys(CHECK_STATUS_MIEN_TRU)]) {
+        if (!coThat.has(ten)) lech.push(`${ten}: đã KHAI mà không còn trong CSDL — gỡ khai báo`);
+      }
+
+      expect(lech, "khoản 226: thêm một trạng thái mà quên một ràng buộc").toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
+
+  it("ĐỘT BIẾN — bỏ `AWARDED` khỏi MỘT khai báo thì cổng ĐỎ và gọi ĐÚNG tên ràng buộc", () => {
+    // Đột biến trên chính phép kiểm, không trên CSDL: nó chứng minh vế ⑵ có RĂNG. Thiếu ca này,
+    // một `phanLoai` luôn phủ trọn (ví dụ vì `tapDong` rỗng) sẽ làm cổng trên xanh mà không đo gì.
+    const tapDong = ["DRAFT", "OPEN", "AWARDED"];
+    const khai = { co: ["OPEN"], vang: { DRAFT: "chưa mở" } };
+    const phanLoai = new Set([...khai.co, ...Object.keys(khai.vang)]);
+    const thieu = tapDong.filter((t) => !phanLoai.has(t));
+    expect(thieu, "một trạng thái chưa phân loại phải lộ ra").toEqual(["AWARDED"]);
+  });
 });

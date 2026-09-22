@@ -199,6 +199,10 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   // `CHUA_CHAM_LAN_NAO`, `CHINH_SACH_TAT_BAFO`, `KHONG_CO_VONG_DANG_MO`). Cùng lớp lỗi mà S2.4
   // vừa vấp: thiếu dòng này, một lời từ chối có tên đi ra dưới 500 và người mua không biết sửa gì.
   "VongBafoTuChoiError",
+  // [S1.110 / S2.6] Bốn lối TỪ CHỐI CÓ TÊN của lớp trao thầu (`RFQ_KHONG_DE_XUAT_DUOC`,
+  // `CHUA_CHAM_LAN_NAO`, `KHONG_CO_DE_XUAT_DANG_CHO`, `KHONG_CO_AWARD_CON_SONG`). Ba lần liên
+  // tiếp dòng này bị quên là ba lần một câu "gói thầu đang ở trạng thái khác" đi ra dưới 500.
+  "TraoThauTuChoiError",
 ]);
 
 const THAN_401 = { error: "phien khong hop le" } as const;

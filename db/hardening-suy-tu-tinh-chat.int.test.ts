@@ -121,6 +121,14 @@ const BANG_CHI_GHI_THEM_THAT = [
   "audit_chain_anchors",
   "audit_events",
   "bid_receipts",
+  // [S1.110 / S2.6 / 061] Hai bảng trao thầu. Chúng vào đây vì vị từ SUY TỪ TÍNH CHẤT đã
+  // thấy chúng — `061` cho mỗi bảng một trigger `bid_chi_ghi_them` ở `UPDATE OR DELETE`
+  // CỘNG một chốt `TRUNCATE` cấp câu lệnh, cả hai `ENABLE ALWAYS`. Dòng này chỉ là lời
+  // khai bắt kịp, và nó phải bắt kịp: một tập suy ra mà không ai khai là một tập không ai
+  // đọc. `rfq_awards` chỉ-ghi-thêm là TIỀN ĐỀ của §2.3⑹ — nếu `UPDATE` đi được thì *huỷ là
+  // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
+  "rfq_award_approvals",
+  "rfq_awards",
   "rfq_unsealed_bids",
   "vendor_bid_versions",
 ];
@@ -212,6 +220,14 @@ const HAM_KHONG_PHAI_CANH = [
   // nó (mọi lần nộp vòng MỘT, vì `bafo_round_id IS NULL` thì nó trả `NEW` ngay), nên nó đòi một
   // nhân chứng hành vi cho INSERT — `dungKichBan()` đã nộp báo giá thật.
   "public.bid_kiem_vong_bafo",
+  // [S1.110 / S2.6 / 061] BA hàm cưỡng chế của trao thầu — **J3 · J5 · J7**. Cả ba chỉ gắn
+  // INSERT, nên chúng KHÔNG thể là hàm canh chỉ-ghi-thêm (một bảng vẫn sửa được nếu chỉ có
+  // chúng); thứ giữ hai bảng ấy chỉ-ghi-thêm là `bid_chi_ghi_them`. Một hàng HỢP LỆ đi qua
+  // cả ba, nên cả ba đòi một nhân chứng hành vi — `dungKichBan()` dựng một chuỗi trao thầu
+  // thật ở cuối kịch bản, với BA con người khác nhau vì J3 đòi đúng thế.
+  "public.award_kiem_de_xuat",
+  "public.award_kiem_mot_award_song",
+  "public.award_kiem_nguoi_duyet",
   "public.bid_phai_co_bien_nhan",
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
@@ -1549,6 +1565,69 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_bafo_rounds",
+  );
+
+  // ---- [S1.110 / S2.6 / 061] Trao thầu: NĂM bộ ba mới của tổng điều tra khoản 60 -------
+  // `kiem_danh_tinh_theo_phien` trên `rfq_awards`/INSERT và trên `rfq_award_approvals`/INSERT (hàm
+  // CŨ, hai bảng MỚI — bộ ba là (hàm, bảng, sự kiện) nên một bảng mới là một bộ ba mới), cộng ba
+  // hàm MỚI: `award_kiem_de_xuat` và `award_kiem_mot_award_song` trên `rfq_awards`/INSERT, và
+  // `award_kiem_nguoi_duyet` trên `rfq_award_approvals`/INSERT.
+  //
+  // BA con người khác nhau, và đó không phải để cho đẹp — J3 ĐÒI đúng thế: `pm` tạo `rfq1` VÀ điều
+  // phối lượt mở thầu, nên họ không đề xuất được; `pm2` đề xuất; `gd` duyệt, vì người đề xuất không
+  // tự duyệt được. Một kịch bản dùng hai người sẽ NÉM, và nó ném vì lớp đang được đo.
+  //
+  // `bid_chi_ghi_them` trên hai bảng ấy KHÔNG cần nhân chứng: nó từ chối VÔ ĐIỀU KIỆN ở
+  // `UPDATE`/`DELETE`/`TRUNCATE`, nên không hàng hợp lệ nào đi qua được — đúng thứ
+  // `HAM_CANH_CHI_GHI_THEM` miễn trừ.
+  const deXuat = await chenNC(
+    "public.rfq_awards",
+    api(
+      "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, " +
+        "acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, 'PROPOSED', 'gia thap nhat', $5, $6) " +
+        "RETURNING id, org_id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_by_session_id",
+      [org, rfq1, ld, pb, pm2.u, pm2.s],
+      {
+        org_id: org, rfq_id: rfq1, evaluation_id: ld, bid_version_id: pb,
+        status: "PROPOSED", reason: "gia thap nhat", acted_by: pm2.u, acted_by_session_id: pm2.s,
+      },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_award_approvals",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) " +
+          "VALUES ($1, $2, $3, $4) RETURNING org_id, award_id, approver_user_id, approver_session_id",
+        [org, deXuat, gd.u, gd.s],
+        { org_id: org, award_id: deXuat, approver_user_id: gd.u, approver_session_id: gd.s },
+      ),
+    ),
+    1,
+    "rfq_award_approvals",
+  );
+  // Hàng `APPROVED` chép ĐÚNG `evaluation_id`/`bid_version_id` của đề xuất —
+  // `award_kiem_mot_award_song` từ chối nếu lệch, và vế ấy giữ cho một lần "duyệt" không đổi người
+  // thắng sau lưng người vừa ký. Câu này cũng là nhân chứng cho phép ĐẾM chữ ký: nó chỉ đi qua vì
+  // câu ngay trên đã ghi đúng một chữ ký.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_awards",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, " +
+          "acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, 'APPROVED', 'gia thap nhat', $5, $6) " +
+          "RETURNING org_id, rfq_id, evaluation_id, bid_version_id, status, acted_by, acted_by_session_id",
+        [org, rfq1, ld, pb, gd.u, gd.s],
+        {
+          org_id: org, rfq_id: rfq1, evaluation_id: ld, bid_version_id: pb,
+          status: "APPROVED", acted_by: gd.u, acted_by_session_id: gd.s,
+        },
+      ),
+    ),
+    1,
+    "rfq_awards",
   );
 
   return { orgId: org };

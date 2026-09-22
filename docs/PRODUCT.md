@@ -57,6 +57,7 @@ phải chuyện câu chữ.
 | "AI phát hiện gian lận" | "Tạo bằng chứng kiểm toán" |
 | **"Kể cả chúng tôi cũng không xem được"** | **"Mọi lần truy cập đều để lại dấu vết bất biến"** |
 | ~~**[S1.108] "Vòng BAFO giữ kín giá của bạn với người mua"**~~ **[S1.109] "Vòng BAFO giữ kín giá của bạn với người mua"** | **"Giá vòng BAFO được niêm phong lại và chỉ mở qua cổng bốn vế; danh sách mời suy từ thứ hạng nên một lần mời ngoài top-N để lại dấu"** — [S1.109] nay ĐO được: một vòng quét mọi route với người mua ĐỦ QUYỀN không thấy một chữ số giá BAFO nào trước cổng, và thấy ngay sau |
+| **[S1.110] "Hai người ký thì không ai trao thầu cho người quen được"** | **"Hệ thống cưỡng chế rằng người ĐỀ XUẤT trao thầu không phải người TẠO gói thầu, không phải người ĐIỀU PHỐI mở thầu (của lần điều phối đang chạy), và không phải người DUYỆT — bốn vai, ba trigger đọc dữ liệu thật, và mỗi lần từ chối để lại một dòng"** — và phần phải nói ra: vế *điều phối* KHÔNG thấy người điều phối lần ĐẦU sau một lần điều phối lại (khoản 233), nên câu đúng là *ba trong bốn mắt xích được cưỡng chế theo hành vi, mắt thứ tư chỉ theo lần gần nhất*. Và không lớp nào của sản phẩm chặn được hai người bàn nhau ngoài hệ thống — thứ nó làm là để lại dấu vết cho một lượt kiểm toán SAU đó |
 
 Dòng cuối là ràng buộc bổ sung phát sinh từ ADR-002: mô hình đe dọa đã chọn là tầng 1+2,
 nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã. Tuyên bố zero-knowledge sẽ là

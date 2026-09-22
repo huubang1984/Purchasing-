@@ -1007,6 +1007,14 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "docVongBafoKhach",
   "dongVongBafo",
   "moVongBafo",
+  // [S1.110 / S2.6] NĂM symbol của lớp trao thầu. KHÔNG có hàm nào cho phiên KHÁCH, và đó là
+  // một quyết định: policy `rfq_awards_khach` (`061`) đóng HẲN hai bảng với khách, nên một hàm
+  // đọc cho khách ở đây sẽ là một hàm luôn trả rỗng — tức một lời hứa sai về bề mặt.
+  "TraoThauTuChoiError",
+  "deXuatTraoThau",
+  "docTraoThau",
+  "duyetTraoThau",
+  "huyTraoThau",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [

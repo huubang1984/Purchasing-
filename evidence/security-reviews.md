@@ -10618,3 +10618,219 @@ S1.108 đo vế hardening bằng gốc `305a090..origin/master` = 0 rồi kết 
 - **Không đo tải, không đo đua.** Hai câu của `dongVongBafo` sống trong một giao dịch; ca hai vòng
   BAFO mở đồng thời dựa vào chỉ mục bộ phận `rfq_bafo_rounds_mot_vong_dang_mo` của `059`, đã có phép
   đo ở S1.108 — vòng này không đo lại.
+
+---
+
+# §S1.110 — S2.6 trao thầu: hành động cuối của sản phẩm, và một bản vá viết BẰNG TAY suýt xoá 45 dòng cưỡng chế
+
+**Ngày:** 2026-09-22 · **Nhánh:** `s1-110-s2-6-award` · **Migration:** `061_trao_thau.sql` ·
+**ADR:** 057 · **Khoản mới:** 231 · 232 · 233 · **Khoản đóng:** 226
+
+## 1. Thứ đáng đọc trước mọi thứ khác: một `CREATE OR REPLACE` viết bằng tay, và BA lớp không bắt
+
+`061` phải thêm hai cạnh (`EVALUATING->AWARDED`, `AWARDED->EVALUATING`) vào
+`rfq_kiem_chuyen_trang_thai`. Bản thảo đầu được viết **bằng tay** — mảng cạnh cộng hai vế deadline
+nhớ được. Kết quả đo bằng byte: **1 503 byte thay cho 6 704**.
+
+Thứ biến mất, đo bằng phép so dòng mã sau khi bỏ chú thích:
+
+| vế mất | nó cưỡng chế điều gì |
+|---|---|
+| D2 dual-approval trên băm nội dung | `RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI` |
+| C4 deadline | `Khong duoc rut ngan hay xoa deadline` |
+| ba vế mốc | `opened_at` · `closed_at` · `cancelled_at` chỉ đặt được MỘT LẦN |
+| cửa sổ thầu tối thiểu | `CUA_SO_TOI_THIEU` |
+| đóng sớm phải có lý do | `early_close_reason` |
+| chỉ sửa được ở DRAFT, và không mở RFQ rỗng | hai vế cuối |
+
+**Ba lớp lẽ ra phải bắt đều không bắt, và đó là phần đáng ghi:**
+
+⑴ **`migrate()` XANH.** Không một dòng lỗi.
+
+⑵ **Hardening ÂM THẦM phục hồi thân `059` lên trên bản mới.** Mục hardening chạy bước SỬA **TRƯỚC**
+vòng migration đánh số và bước PHÁN XÉT **SAU**, nên một hàm đã ghim mà chỉ đổi trong migration thì
+bị dựng lại về bản ghim — và migration thành **no-op** trong im lặng. Đó đúng là cái bẫy mà khoản
+**S1.96** đo được và ghi ra, gặp lại nguyên hình.
+
+⑶ **Phép tự kiểm của chính em bị một CHÚ THÍCH lừa.** Câu kiểm là
+`prosrc LIKE '%EVALUATING->AWARDED%'` và nó trả **CÓ** — vì thân `059` chứa một chú thích *giải thích
+vì sao cạnh ấy vắng*, và chuỗi con khớp vào chú thích đó.
+
+**Thứ bắt được** là một câu hỏi hẹp hơn: `prosrc LIKE '%''EVALUATING->AWARDED''%'` — **phần tử mảng
+CÓ NHÁY**, không phải một chuỗi con trần. Nó trả *"hardening đã phục hồi bản 059"*, và từ đó cả hai
+vấn đề lộ ra cùng lúc.
+
+**Nếu đi thêm một bước nữa** — cập nhật bản ghim cho khớp bản viết tay — thì hardening sẽ **cài bản
+thiếu ấy lên MỌI cụm, vĩnh viễn**, và mọi cổng xanh vì hai bên khớp nhau. Khớp vào bản sai.
+
+**Cách làm đã áp, và nó là một quy tắc rộng hơn tệp này:** một hàm ĐÃ GHIM thì không hand-write
+`CREATE OR REPLACE` — trích nguyên thân đang sống bằng script rồi CỘNG vào, rồi kiểm bằng phép so
+**dòng mã**. Phép so ấy in ra `THÊM: ["'EVALUATING->AWARDED',", "'AWARDED->EVALUATING',"]` và
+`MẤT: []`, rồi bản ghim đi từ 6 704 lên **7 209** byte, rồi cả bảy vế cũ được đo lại BẰNG HÀNH VI
+trên cụm thật.
+
+## 2. Ba CAO của lượt soi HÌNH DẠNG, chạy trước dòng mã đầu
+
+Khuôn S1.75 / S1.101 / S1.108 / S1.109 — bắt buộc vì award là hành động **cuối** và **không thu hồi
+được** của sản phẩm.
+
+| # | Phát hiện | Hệ quả |
+|---|---|---|
+| ⑴ | J3 KHÔNG thấy người điều phối lần ĐẦU sau một lần điều phối lại; ADR-051 đặt cược rằng khoản 208 sẽ đổi ngữ nghĩa `dispatched_by`, và khoản 208 đóng ở S1.103 **theo đường khác** (payload hàng sổ, không phải cột) | A mở thầu → worker chết → B điều phối lại → **A đề xuất trao thầu và ĐI QUA** ⇒ **khoản 233**, chủ dự án chọn NHẬN |
+| ⑵ | `AWARDED` chạm **SÁU** ràng buộc `CHECK`, không bốn — và HAI trong sáu thuộc hạng *thiếu thì không gì đỏ* | `061` dựng lại **NĂM** ràng buộc; khoản **226** đóng bằng một cổng mới |
+| ⑶ | `AWARDED` sẽ là trạng thái HÚT thứ BA nếu §8.3 không chốt, và nó quyết định `AWARDED` **nghĩa là gì** — J7 đọc một trong hai nghĩa | chủ dự án chốt `AWARDED->EVALUATING` ⇒ **ADR-057** |
+
+## 3. Khoản 226 đóng, và phép đo bác BA lời khai của chính khoản ấy
+
+Vòng này là vòng **ĐẦU TIÊN** có một trạng thái mới để cổng của khoản 226 chứng minh mình.
+
+⑴ *"bốn trong bảy liệt kê trạng thái"* → thật là **SÁU** (quên `rfq_packages_status_check`, quên
+`rfq_deadline_bat_buoc_sau_draft`).
+
+⑵ *"`rfq_deadline_bat_buoc_sau_draft` nói về MỘT trạng thái"* → nó nói về **HAI** (`DRAFT`,
+`CANCELLED`). Kết luận *miễn* đúng, **lý do sai**, và một cổng dựng trên lý do ấy sẽ miễn nhầm.
+
+⑶ **và đây là chỗ nặng nhất: CÁCH SỬA mà khoản 226 kê ra thì SAI với bốn trong sáu.** Nó viết *mọi
+`CHECK` liệt kê hai giá trị trở lên phải liệt kê ĐÚNG `RFQ_STATUSES`* — nhưng bốn ràng buộc MỐC liệt
+kê tập **CON** đúng theo nghĩa của chúng (`rfq_da_mo_thi_co_moc_mo` không được chứa `DRAFT`). Một
+cổng như thế đỏ vĩnh viễn ở bốn dòng ĐÚNG.
+
+**Cổng thật sự dựng đo một tính chất KHÁC:** *mỗi trạng thái của tập đóng phải được PHÂN LOẠI ở mỗi
+ràng buộc — vào `co` nếu ràng buộc phải kể nó, hay vào `vang` KÈM LÝ DO nếu nó CỐ Ý vắng*, cộng ba
+vế: mọi ràng buộc liệt kê tập phải được khai, `co` phải bằng đúng catalog, và không khai báo nào trỏ
+tới một ràng buộc đã biến mất.
+
+**Đột biến THẬT:** gỡ `AWARDED` khỏi `co` của MỘT khai báo ⇒ đỏ với hai thông điệp gọi đúng tên ràng
+buộc; khôi phục kiểm bằng `sha256` (`4ca99ef7f3cff8df`).
+
+## 4. Chốt `TRUNCATE` — cổng tìm ra, không phải em
+
+Lượt `migrate()` đầu của vòng ĐỎ với *"bảng CHỈ-GHI-THÊM không có chốt TRUNCATE ĐANG BẬT và VÔ ĐIỀU
+KIỆN"* cho cả hai bảng mới. Trigger cấp HÀNG không bao giờ chạy cho `TRUNCATE`, và khoản **79** đã
+đo rằng `WHEN (false)` trên một trigger `TRUNCATE` cấp câu lệnh là HỢP LỆ với PostgreSQL 16 và
+`TRUNCATE` đi lọt — nên một chốt có `WHEN` không phải một chốt. Hai `BEFORE TRUNCATE … FOR EACH
+STATEMENT` cộng `ENABLE ALWAYS`, khuôn `047`.
+
+## 5. Ba bản ghim MỚI, và phép đo nói chúng CÓ RĂNG
+
+`054` hàm `RETURNS trigger` trong `public`, ghim `051` — nên ba hàm mới phải vào, vì danh sách loại
+trừ của sổ nợ 54 **rỗng có chủ đích**. Cộng SÁU trigger vào hai mục đã có
+(`kiem_danh_tinh_theo_phien` +2, `bid_chi_ghi_them` +4).
+
+Mọi chuỗi `pg_get_triggerdef` được **ĐO** trên cụm thật, không đoán: postgres chuẩn hoá
+`BEFORE UPDATE OR DELETE` thành `BEFORE DELETE OR UPDATE`.
+
+**Bốn đột biến, một lượt `migrate()`, bốn phép đọc lại** (cụm dùng-một-lần, `migrate()` 1 015 ms):
+
+| đột biến | lớp nó tháo | kết quả |
+|---|---|---|
+| `award_kiem_mot_award_song` → `RETURN NEW` | J7 cộng `CHU_KY_CAN` cộng khoá tư vấn | **KHÔI PHỤC** |
+| `DROP TRIGGER rfq_awards_chan_truncate` | bảng chỉ-ghi-thêm thành xoá sạch được | **KHÔI PHỤC**, `tgenabled = 'A'` |
+| `DISABLE rfq_award_approvals_kiem_nguoi_duyet` | J3 vế 1 tắt trong im lặng | **KHÔI PHỤC** về `'A'` |
+| `DROP TRIGGER rfq_awards_kiem_danh_tinh` | danh tính thôi là DẪN XUẤT | **KHÔI PHỤC** — và ca này chứng minh việc chèn vào một mục ĐÃ CÓ thật sự có hiệu lực |
+
+Lượt `migrate()` thứ ba (không đột biến) im lặng — idempotent.
+
+## 6. Ba bất biến mới, mỗi vế một ca — và một vế chỉ đo được bằng cách TẮT một lớp
+
+**J3** có BA vế, và chúng không cùng độ chắc:
+
+- *người TẠO RFQ không đề xuất được* — `uYc` giữ `award.recommend` nên cổng QUYỀN cho họ qua, và thứ
+  chặn là trigger đọc HÀNG. Ca khẳng định thêm rằng RFQ **không đổi trạng thái**: câu `UPDATE` đứng
+  SAU câu `INSERT`, nên một thứ tự ngược lại sẽ để RFQ ở `AWARDED` mà không award nào tồn tại.
+- *người ĐIỀU PHỐI không đề xuất được* — fixture để `dispatched_by` NULL (nó ghi bản rõ thẳng dưới
+  vai `app_unseal`), nên vế này **INERT** cho tới khi ca tự đặt cột ấy. Đối chứng DƯƠNG: cùng gói,
+  cùng báo giá, chỉ đổi NGƯỜI ⇒ đi qua.
+- *người ĐỀ XUẤT không tự duyệt* — `uDuyet` là `FINANCE`, giữ **CẢ HAI** mã `award.recommend` và
+  `po.approve`, tức đúng ca mà lớp vai trò KHÔNG chặn nổi.
+- **vế PHIÊN của cùng mệnh đề KHÔNG tới được qua đường sản xuất**, vì
+  `kiem_danh_tinh_theo_phien` buộc cặp người-phiên là DẪN XUẤT. Đo bằng cách **TẮT** trigger danh
+  tính lúc chạy, khẳng định phép tắt ĐÃ ÁP (`tgenabled = 'D'`), rồi khẳng định vế phiên vẫn chặn —
+  và khôi phục kiểm lại `tgenabled = 'A'` (`ENABLE ALWAYS`, không `ENABLE` thường).
+
+**J5** có vế CẤU TRÚC (khoá ngoại hợp thành tới `rfq_evaluation_lines`, chọn được vì `057` đã dựng
+`UNIQUE (org_id, evaluation_id, bid_version_id)`) và hai vế NỘI DUNG. Vế *thuộc đúng RFQ* chỉ tới
+được bằng một câu `INSERT` thẳng, vì lớp gói tự suy lượt chấm — có đối chứng dương cùng câu ấy với
+lượt chấm của CHÍNH gói.
+
+**J7** đo qua đường sản xuất (hai đề xuất ⇒ lần hai bị từ chối ở CẢ lớp gói VÀ lớp CSDL), cộng ba ca
+chuỗi chỉ tới được bằng `INSERT` thẳng: `APPROVED` không chữ ký (*"can 1 chu ky duyet; dang co 0"*),
+`APPROVED` nói về một báo giá KHÁC, và huỷ hai lần.
+
+**KHÔNG mang nhãn `[INV-*]`** — cùng lý do khoản **229**: dải mã bất biến ghim `[A-H]` ở TÁM chỗ.
+
+## 7. Một lời khai của CHÍNH vòng này bị phép đo bác
+
+Ca *"báo giá không có `effective_cost` đọc được"* được viết lần đầu bằng `currency: null`. Nó
+**SAI**: `taoLuotDanhGia` lọc *đọc được* theo `tien`, rồi vế §2.3⑻ TỪ CHỐI cả lượt chấm khi tập đọc
+được lệch đơn vị tiền (`LECH_TIEN_TE`). Nên một `currency` NULL không cho một hàng xếp hạng NULL —
+nó cho **KHÔNG lượt chấm nào**, và ca ấy đỏ ở giàn cảnh chứ không ở thứ đang đo.
+
+Hình dạng ĐÚNG là `totalAmount` **không phải số**: `bid_so_tien` (`020`) trả NULL, hàng xếp hạng VẪN
+tồn tại với `effective_cost` và `rank` cùng NULL (§2.3⑺), khoá ngoại hợp thành vẫn đi qua — nên vế
+CẤU TRÚC của J5 KHÔNG chặn, và thứ chặn là vế NỘI DUNG. Đó chính là lý do vế nội dung tồn tại.
+
+## 8. Mười một lời khai thiu, và thoát mã 0 lần thứ BA
+
+Lượt `test:int` đầu của hai tệp cổng trả **`[exited with code 0]` trong khi 11 test ĐỎ**. Lần thứ ba
+trong ba vòng liên tiếp bộ bọc nền báo 0 mà vitest đỏ — thoát mã của bộ bọc **không chịu lực**, và
+dòng phải đọc là *"Tests N failed"*.
+
+Mười một lời khai, tất cả là staleness thật:
+
+- `HAM_GHIM`: con trỏ `rfq_kiem_chuyen_trang_thai` 059 → **061**, cộng BA mục mới, cộng SÁU trigger
+  vào hai mục đã có;
+- `BANG_TENANT_KHAI` (hardening) và bản sinh đôi ở `db/migration-shape.test.ts`: +2 bảng;
+- quyền mức BẢNG +2, quyền mức CỘT +12, policy RESTRICTIVE +2;
+- BA danh sách tên migration, mỗi danh sách +`061_trao_thau.sql`;
+- `docs/DECISIONS.md`/`docs/STATE.md`/`Handoff.md`: ADR 56 → 57, migration 60 → 61, khoản 230 → 233.
+
+## 9. Một lớp canh MÙ với đúng gói chứa mọi đường ghi của S2 — tìm ra khi soát diff của chính vòng này
+
+`tests/architecture/cong-quyen-route.test.ts` có một phép kiểm *"mọi hàm export của các gói nghiệp vụ
+đều được PHÂN LOẠI — thêm một hàm mới buộc phải quyết"*, và ngay trên `CUA_GOI` là một chú thích nói
+rằng lớp lỗi *"hàng rào tự làm mù mình bằng một danh sách tên"* đã xảy ra **ba lần**.
+
+**Đây là lần thứ TƯ.** Đo: `CUA_GOI` có **NĂM** cửa gói và **KHÔNG** có `@trustprocure/danh-gia` —
+tức gói chứa `taoLuotDanhGia` (S1.105), `moVongBafo` + `dongVongBafo` (S1.109) và ba hàm trao thầu
+của vòng này. Cả sáu đều đổi `rfq_packages.status`.
+
+**Hậu quả đọc được từ chính vị từ `timViPham`:** nó lọc mã nguồn theo `HAM_DOI_TRANG_THAI`, nên một
+module gọi sáu hàm ấy mà KHÔNG nhắc `requirePermission` **đi qua sạch sẽ** — tên chúng không có
+trong danh sách. Lớp canh đã mù với sáu hàm ghi suốt từ S1.105.
+
+**Và nửa khó thấy hơn:** `docBangXepHang` CÓ mặt ở `HAM_DOC_CO_QUYEN`, nên nó nhận phép kiểm *"có
+cổng THẬT"* (phép kiểm ấy đọc mã nguồn theo TÊN, không theo cửa gói) mà KHÔNG nhận phép kiểm phân
+loại. Một nửa lớp canh sống, một nửa chết, và bề ngoài giống như cả hai đều sống.
+
+**Đóng ở vòng này**, vì nó là lớp canh lẽ ra phải phân loại đúng ba hàm ghi mà vòng này vừa thêm.
+Mười lăm hàm export của gói được phân loại, trải **năm** rổ: sáu `HAM_DOI_TRANG_THAI`, hai
+`HAM_DOC_CO_QUYEN` (`docBangXepHang` cũ + `docTraoThau` mới), một `HAM_CHI_DOC` (`docVongBafo` —
+không cổng, và `vong-bafo.ts` đã ghi vì sao), một `HAM_DUONG_KHACH` (`docVongBafoKhach`), năm
+`HAM_THUAN_TUY`. Tổng đúng 15, và sáu rổ vẫn không giao nhau — có ca đo riêng cho đúng điều đó.
+
+**Phần KHÔNG đóng, nói ra:** `timViPham` vẫn là vị từ YẾU — nó chỉ đòi mã nguồn *nhắc tới* chuỗi
+`requirePermission`, nên một dòng chú thích cũng thoả. Chính tệp ấy đã ghi điều đó từ ADR-016 mục 4,
+và vòng này không đổi nó.
+
+## 10. Ranh giới nói ra
+
+- **Lượt chấm mà award dựa trên được canh ở MỘT lớp**, trong khi cùng tính chất ấy cho vòng BAFO được
+  canh ở HAI (`060`). Bất đối xứng có lý do đo được — `evaluationId` của award không phải tham số của
+  hàm nào — và nó vào sổ thành khoản **231**, không được đọc thành *đã đủ*.
+- **Người đề xuất không tự rút lại được đề xuất của mình.** Khoản **232**.
+- **J3 khai phạm vi HẸP HƠN mệnh đề.** Khoản **233**, chủ dự án chọn NHẬN ngày 2026-09-22.
+- **`AWARDED->CANCELLED` không tồn tại** — cặp thứ BA của khoản **225**, và `transitions.test.ts`
+  ghim cả ba cặp nên ngày nào khoản ấy được quyết thì cả ba cùng đỏ.
+- **MỘT LỜI KHAI NỮA CỦA VÒNG NÀY BỊ PHÉP ĐO BÁC.** Bản đầu của mục này viết *"ba trigger của `061`
+  đi ra dưới 500"*. Sai: bước 12h đo được **422**, mang nguyên câu của trigger — `anhXaLoiPostgres`
+  (`dispatch.ts`) ánh xạ `23514` tới 422 và LỘ thông điệp khi lỗi đến từ một `RAISE` của trigger
+  (`routine = exec_stmt_raise`), đúng vì câu ấy do migration VIẾT chứ không nội suy dữ liệu người
+  dùng. Nên J3 nói được cho người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`
+  — và ca đo khẳng định thông điệp **gọi tên** `(J3)`, không chỉ trả một mã. Khác hẳn ca khoản
+  **230**: ở đó ba trigger của `018` ném từ một hàm mà lớp gói BẮT rồi bọc lại, nên câu gốc mất.
+- **Không đo tải, không đo đua.** Khoá tư vấn của J7 có lập luận (`app_api` không có `UPDATE` nên một
+  khoá HÀNG là bất khả) và một ca đo *hai đề xuất tuần tự*; ca **đồng thời** thì chưa đo.
+- **Lượt soi ngang 78: LỠ NHỊP lần thứ hai liên tiếp**, và lần này cả hai vế đã thoả (4 lần đổi
+  hardening kể từ `dc2b560`). Lý do là một lập luận về LỊCH, yếu hơn lý do của S1.109. Mốc KHÔNG dời:
+  chậm nhất **S1.111**. Ghi ở `Handoff.md` §11.

@@ -53,3 +53,21 @@ export {
   type VongBafo,
   type VongBafoKhach,
 } from "./vong-bafo.js";
+// [S1.110 / S2.6] TRAO THẦU — lớp có trạng thái. `061` dựng hai bảng chỉ-ghi-thêm và năm trigger
+// canh (J3 · J5 · J7); đây là đường sản xuất đi qua chúng, và nó là hành động CUỐI của sản phẩm.
+export {
+  TraoThauTuChoiError,
+  deXuatTraoThau,
+  docTraoThau,
+  duyetTraoThau,
+  huyTraoThau,
+  type ChuKyDuyet,
+  type DeXuatTraoThauInput,
+  type DocTraoThauInput,
+  type DuyetTraoThauInput,
+  type HuyTraoThauInput,
+  type LyDoTuChoiTraoThau,
+  type TraoThau,
+  type TraoThauDayDu,
+  type TrangThaiTraoThau,
+} from "./trao-thau.js";

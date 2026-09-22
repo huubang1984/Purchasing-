@@ -3345,6 +3345,8 @@ $ham$;
          ('public', 'otp_rate_limits', '010_invitations'),
          ('public', 'outbox_jobs', '007_outbox'),
          ('public', 'rfq_approvals', '009_rfq'),
+         ('public', 'rfq_award_approvals', '061_trao_thau'),
+         ('public', 'rfq_awards', '061_trao_thau'),
          ('public', 'rfq_bafo_rounds', '059_vong_bafo'),
          ('public', 'rfq_budgets', '014_procurement_policy'),
          ('public', 'rfq_evaluation_lines', '057_luot_danh_gia'),
@@ -4343,6 +4345,28 @@ $ham$;
            END IF;
              ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung;
            END IF;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_danh_tinh BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('acted_by', 'acted_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_kiem_danh_tinh ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_kiem_danh_tinh BEFORE INSERT ON rfq_awards FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'acted_by', 'acted_by_session_id');
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_danh_tinh;
+           END IF;
+           IF to_regclass('public.rfq_award_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                                 AND t.tgname = 'rfq_award_approvals_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_danh_tinh BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approver_user_id', 'approver_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_approvals_kiem_danh_tinh ON public.rfq_award_approvals;
+             CREATE TRIGGER rfq_award_approvals_kiem_danh_tinh BEFORE INSERT ON rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'approver_user_id', 'approver_session_id');
+             ALTER TABLE public.rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_kiem_danh_tinh;
+           END IF;
          END
          $fn51$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -4520,6 +4544,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_bafo_rounds_kiem_danh_tinh BEFORE INSERT ON public.rfq_bafo_rounds FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('opened_by', 'opened_by_session_id')$def$))
+            AND (to_regclass('public.rfq_awards') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                               AND t.tgname = 'rfq_awards_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_danh_tinh BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('acted_by', 'acted_by_session_id')$def$))
+            AND (to_regclass('public.rfq_award_approvals') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                               AND t.tgname = 'rfq_award_approvals_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_danh_tinh BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('approver_user_id', 'approver_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -5229,6 +5269,50 @@ $ham$;
              CREATE TRIGGER rfq_unsealed_bids_chan_truncate BEFORE TRUNCATE ON public.rfq_unsealed_bids FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_unsealed_bids ENABLE ALWAYS TRIGGER rfq_unsealed_bids_chan_truncate;
            END IF;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_chi_ghi_them ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_chi_ghi_them BEFORE UPDATE OR DELETE ON rfq_awards FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chan_truncate BEFORE TRUNCATE ON public.rfq_awards FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_chan_truncate ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_chan_truncate BEFORE TRUNCATE ON rfq_awards FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_chan_truncate;
+           END IF;
+           IF to_regclass('public.rfq_award_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                                 AND t.tgname = 'rfq_award_approvals_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_approvals_chi_ghi_them ON public.rfq_award_approvals;
+             CREATE TRIGGER rfq_award_approvals_chi_ghi_them BEFORE UPDATE OR DELETE ON rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_award_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                                 AND t.tgname = 'rfq_award_approvals_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_chan_truncate BEFORE TRUNCATE ON public.rfq_award_approvals FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_approvals_chan_truncate ON public.rfq_award_approvals;
+             CREATE TRIGGER rfq_award_approvals_chan_truncate BEFORE TRUNCATE ON rfq_award_approvals FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -5280,6 +5364,38 @@ $ham$;
                            AND t.tgfoid = to_regprocedure('public.bid_chi_ghi_them()')
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_unsealed_bids_chan_truncate BEFORE TRUNCATE ON public.rfq_unsealed_bids FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$)
+            AND (to_regclass('public.rfq_awards') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                               AND t.tgname = 'rfq_awards_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_awards') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                               AND t.tgname = 'rfq_awards_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_chan_truncate BEFORE TRUNCATE ON public.rfq_awards FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_award_approvals') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                               AND t.tgname = 'rfq_award_approvals_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_award_approvals') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                               AND t.tgname = 'rfq_award_approvals_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_chan_truncate BEFORE TRUNCATE ON public.rfq_award_approvals FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -5293,7 +5409,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.rfq_unsealed_bids, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -5779,6 +5895,368 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.bafo_kiem_vong()')),
                   'hàm public.bafo_kiem_vong() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.bafo_kiem_vong() và bảng public.rfq_bafo_rounds (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.110 / S2.6] J3 ve 2+3 va J5 ve NOI DUNG — nguoi de xuat trao thau (061) ----
+    -- Ghim vi day la lop cuong che theo HANH VI DA XAY RA, khong theo quyen duoc cap: mot
+    -- `CREATE OR REPLACE` thay than nay bang `RETURN NEW` mo lai dung bo ba ma J3 cam, va
+    -- khong mot cong nao khac cua kho thay dieu do. Ve *nguoi dieu phoi* chi thay lan dieu
+    -- phoi DANG CHAY (khoan 233) — ban ghim giu dung pham vi ay, khong rong hon.
+    ARRAY[
+      $q$hàm + trigger award_kiem_de_xuat (061)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
+      $q$DO $fn57$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_de_xuat()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_de_xuat();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_de_xuat() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  nguoi_tao uuid;
+  nguoi_dieu_phoi uuid;
+  gia numeric;
+BEGIN
+  -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử.
+  IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT p.created_by INTO nguoi_tao
+    FROM public.rfq_packages p
+   WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id
+     AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy.
+  IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN
+    RAISE EXCEPTION
+      'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- [J3 vế 3] ...và người ĐIỀU PHỐI mở thầu cũng không. Xem khối phạm vi ở trên: cột này mang
+  -- người của lần điều phối ĐANG CHẠY, nên vế này không phủ đường điều phối lại (khoản 233).
+  SELECT r.dispatched_by INTO nguoi_dieu_phoi
+    FROM public.unseal_requests r
+   WHERE r.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
+     AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id
+     AND r.dispatched_by IS NOT NULL
+   ORDER BY r.requested_at DESC
+   LIMIT 1;
+  IF nguoi_dieu_phoi IS NOT NULL AND nguoi_dieu_phoi OPERATOR(pg_catalog.=) NEW.acted_by THEN
+    RAISE EXCEPTION
+      'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy
+  -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và
+  -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có.
+  SELECT l.effective_cost INTO gia
+    FROM public.rfq_evaluation_lines l
+   WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id
+     AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id
+     AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id;
+  IF gia IS NULL THEN
+    RAISE EXCEPTION
+      'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành
+  -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy
+  -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy
+  -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO.
+  IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e
+                  WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id
+                    AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id
+                    AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN
+    RAISE EXCEPTION
+      'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_kiem_de_xuat'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_de_xuat BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_de_xuat()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_kiem_de_xuat ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_kiem_de_xuat BEFORE INSERT ON rfq_awards FOR EACH ROW EXECUTE FUNCTION public.award_kiem_de_xuat();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_de_xuat;
+           END IF;
+         END
+         $fn57$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE nguoi_tao uuid; nguoi_dieu_phoi uuid; gia numeric; BEGIN -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử. IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN RETURN NEW; END IF; SELECT p.created_by INTO nguoi_tao FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy. IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J3 vế 3] ...và người ĐIỀU PHỐI mở thầu cũng không. Xem khối phạm vi ở trên: cột này mang -- người của lần điều phối ĐANG CHẠY, nên vế này không phủ đường điều phối lại (khoản 233). SELECT r.dispatched_by INTO nguoi_dieu_phoi FROM public.unseal_requests r WHERE r.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.dispatched_by IS NOT NULL ORDER BY r.requested_at DESC LIMIT 1; IF nguoi_dieu_phoi IS NOT NULL AND nguoi_dieu_phoi OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có. SELECT l.effective_cost INTO gia FROM public.rfq_evaluation_lines l WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id; IF gia IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id USING ERRCODE = 'check_violation'; END IF; -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO. IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN RAISE EXCEPTION 'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_kiem_de_xuat'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_de_xuat BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_de_xuat()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_de_xuat()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_de_xuat()')),
+                  'hàm public.award_kiem_de_xuat() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_de_xuat() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.110 / S2.6] J7 — toi da MOT award con song, chuoi mot chieu (061) ----------
+    -- `CHU_KY_CAN constant integer := 1` song trong than nay va KHONG o cho nao khac, nen ban
+    -- ghim la thu giu con so ay: mot lan ha no ve 0 bien phe duyet kep thanh mot lan bam.
+    -- Khoa tu van `pg_advisory_xact_lock` cung nam trong than — go no ra thi hai giao dich
+    -- cung doc *chua co award nao* roi cung chen, va J7 mat rang ma khong ai kieu.
+    ARRAY[
+      $q$hàm + trigger award_kiem_mot_award_song (061)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
+      $q$DO $fn57$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_mot_award_song()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_mot_award_song();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_mot_award_song() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  CHU_KY_CAN constant integer := 1;
+  truoc_status text;
+  truoc_id uuid;
+  truoc_eval uuid;
+  truoc_bid uuid;
+  so_chu_ky integer;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1));
+
+  SELECT a.status, a.id, a.evaluation_id, a.bid_version_id
+    INTO truoc_status, truoc_id, truoc_eval, truoc_bid
+    FROM public.rfq_awards a
+   WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id
+     AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
+   ORDER BY a.acted_at DESC, a.id DESC
+   LIMIT 1;
+
+  IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN
+    -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7.
+    IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN
+      RAISE EXCEPTION
+        'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)',
+        NEW.rfq_id, truoc_status
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó.
+  IF truoc_status IS NULL THEN
+    RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu
+  -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất.
+  IF NEW.evaluation_id IS DISTINCT FROM truoc_eval
+     OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN
+    RAISE EXCEPTION
+      'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN
+    IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN
+      RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %',
+        truoc_status
+        USING ERRCODE = 'check_violation';
+    END IF;
+    -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. Đổi `CHU_KY_CAN` là toàn bộ việc phải làm nếu
+    -- ngày nào chủ dự án chọn hai.
+    SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky
+      FROM public.rfq_award_approvals ap
+     WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id
+       AND ap.award_id OPERATOR(pg_catalog.=) truoc_id;
+    IF so_chu_ky < CHU_KY_CAN THEN
+      RAISE EXCEPTION
+        'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt.
+  IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN
+    RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_awards') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                                 AND t.tgname = 'rfq_awards_kiem_mot_award_song'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_mot_award_song BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_mot_award_song()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_awards_kiem_mot_award_song ON public.rfq_awards;
+             CREATE TRIGGER rfq_awards_kiem_mot_award_song BEFORE INSERT ON rfq_awards FOR EACH ROW EXECUTE FUNCTION public.award_kiem_mot_award_song();
+             ALTER TABLE public.rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_mot_award_song;
+           END IF;
+         END
+         $fn57$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE CHU_KY_CAN constant integer := 1; truoc_status text; truoc_id uuid; truoc_eval uuid; truoc_bid uuid; so_chu_ky integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1)); SELECT a.status, a.id, a.evaluation_id, a.bid_version_id INTO truoc_status, truoc_id, truoc_eval, truoc_bid FROM public.rfq_awards a WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7. IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN RAISE EXCEPTION 'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó. IF truoc_status IS NULL THEN RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status USING ERRCODE = 'check_violation'; END IF; -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất. IF NEW.evaluation_id IS DISTINCT FROM truoc_eval OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN RAISE EXCEPTION 'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status USING ERRCODE = 'check_violation'; END IF; IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %', truoc_status USING ERRCODE = 'check_violation'; END IF; -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. Đổi `CHU_KY_CAN` là toàn bộ việc phải làm nếu -- ngày nào chủ dự án chọn hai. SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky < CHU_KY_CAN THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_awards')
+                           AND t.tgname = 'rfq_awards_kiem_mot_award_song'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_awards_kiem_mot_award_song BEFORE INSERT ON public.rfq_awards FOR EACH ROW EXECUTE FUNCTION award_kiem_mot_award_song()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_mot_award_song()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_mot_award_song()')),
+                  'hàm public.award_kiem_mot_award_song() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_mot_award_song() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.110 / S2.6] J3 ve 1 — nguoi duyet khac nguoi de xuat (061) -----------------
+    -- Hai ve: so NGUOI va so PHIEN. Ve PHIEN khong toi duoc qua duong san xuat (trigger danh
+    -- tinh buoc cap nguoi-phien la DAN XUAT) nen no chi do duoc bang mot lan tat trigger ay
+    -- luc chay — co mot ca lam dung the o `luot-danh-gia.int.test.ts`.
+    ARRAY[
+      $q$hàm + trigger award_kiem_nguoi_duyet (061)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
+      $q$DO $fn57$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.award_kiem_nguoi_duyet()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.award_kiem_nguoi_duyet();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.award_kiem_nguoi_duyet() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  nguoi_de_xuat uuid;
+  phien_de_xuat uuid;
+  trang_thai text;
+BEGIN
+  SELECT a.acted_by, a.acted_by_session_id, a.status
+    INTO nguoi_de_xuat, phien_de_xuat, trang_thai
+    FROM public.rfq_awards a
+   WHERE a.id OPERATOR(pg_catalog.=) NEW.award_id
+     AND a.org_id OPERATOR(pg_catalog.=) NEW.org_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay de xuat trao thau %', NEW.award_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  -- Chữ ký chỉ đặt được lên một hàng ĐỀ XUẤT. Không có vế này, một hàng `APPROVED` hay
+  -- `CANCELLED` cũng nhận được chữ ký, và phép đếm ở mục (6) đọc một tập lẫn lộn.
+  IF trang_thai IS DISTINCT FROM 'PROPOSED' THEN
+    RAISE EXCEPTION 'Chi duyet duoc mot hang PROPOSED; hang % dang o %', NEW.award_id, trang_thai
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF nguoi_de_xuat OPERATOR(pg_catalog.=) NEW.approver_user_id THEN
+    RAISE EXCEPTION 'Nguoi de xuat trao thau khong duoc tu duyet (J3)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- ...và cũng không bằng một PHIÊN khác của cùng con người. `kiem_danh_tinh_theo_phien` đã buộc
+  -- cặp người-phiên của hàng này là DẪN XUẤT, nên so phiên ở đây bắt được ca hai phiên một người
+  -- mà vế trên đã bắt, VÀ ca một phiên khai hai người mà vế trên không thấy.
+  IF phien_de_xuat OPERATOR(pg_catalog.=) NEW.approver_session_id THEN
+    RAISE EXCEPTION 'Phien da de xuat trao thau khong duoc dung de duyet (J3)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_award_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                                 AND t.tgname = 'rfq_award_approvals_kiem_nguoi_duyet'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_nguoi_duyet BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION award_kiem_nguoi_duyet()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_award_approvals_kiem_nguoi_duyet ON public.rfq_award_approvals;
+             CREATE TRIGGER rfq_award_approvals_kiem_nguoi_duyet BEFORE INSERT ON rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION public.award_kiem_nguoi_duyet();
+             ALTER TABLE public.rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_kiem_nguoi_duyet;
+           END IF;
+         END
+         $fn57$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE nguoi_de_xuat uuid; phien_de_xuat uuid; trang_thai text; BEGIN SELECT a.acted_by, a.acted_by_session_id, a.status INTO nguoi_de_xuat, phien_de_xuat, trang_thai FROM public.rfq_awards a WHERE a.id OPERATOR(pg_catalog.=) NEW.award_id AND a.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay de xuat trao thau %', NEW.award_id USING ERRCODE = 'foreign_key_violation'; END IF; -- Chữ ký chỉ đặt được lên một hàng ĐỀ XUẤT. Không có vế này, một hàng `APPROVED` hay -- `CANCELLED` cũng nhận được chữ ký, và phép đếm ở mục (6) đọc một tập lẫn lộn. IF trang_thai IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot hang PROPOSED; hang % dang o %', NEW.award_id, trang_thai USING ERRCODE = 'check_violation'; END IF; IF nguoi_de_xuat OPERATOR(pg_catalog.=) NEW.approver_user_id THEN RAISE EXCEPTION 'Nguoi de xuat trao thau khong duoc tu duyet (J3)' USING ERRCODE = 'check_violation'; END IF; -- ...và cũng không bằng một PHIÊN khác của cùng con người. `kiem_danh_tinh_theo_phien` đã buộc -- cặp người-phiên của hàng này là DẪN XUẤT, nên so phiên ở đây bắt được ca hai phiên một người -- mà vế trên đã bắt, VÀ ca một phiên khai hai người mà vế trên không thấy. IF phien_de_xuat OPERATOR(pg_catalog.=) NEW.approver_session_id THEN RAISE EXCEPTION 'Phien da de xuat trao thau khong duoc dung de duyet (J3)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_award_approvals')
+                           AND t.tgname = 'rfq_award_approvals_kiem_nguoi_duyet'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_award_approvals_kiem_nguoi_duyet BEFORE INSERT ON public.rfq_award_approvals FOR EACH ROW EXECUTE FUNCTION award_kiem_nguoi_duyet()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.award_kiem_nguoi_duyet()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.award_kiem_nguoi_duyet()')),
+                  'hàm public.award_kiem_nguoi_duyet() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.award_kiem_nguoi_duyet() và bảng public.rfq_award_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -7289,8 +7767,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chuyen_trang_thai (059)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '059_vong_bafo.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chuyen_trang_thai (061)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7335,6 +7813,13 @@ DECLARE
     'BAFO_OPEN->BAFO_CLOSED',
     'BAFO_CLOSED->BAFO_UNSEALED',
     'BAFO_UNSEALED->EVALUATING',
+    -- [S1.110 / S2.6 / §8.3] HAI cạnh của trao thầu. `EVALUATING->AWARDED` là cạnh spec
+    -- §4.3 khai từ đầu; `AWARDED->EVALUATING` là quyết định của chủ dự án ngày 2026-09-22,
+    -- và nó làm `AWARDED` nghĩa là *đang có một award CÒN SỐNG* thay vì *đã từng trao*.
+    -- Không có cạnh về, `AWARDED` là trạng thái HÚT thứ BA (sau `CLOSED` và `UNSEALED` —
+    -- khoản 225), và một award bị huỷ để RFQ đứng ở `AWARDED` mà không có award nào sống.
+    'EVALUATING->AWARDED',
+    'AWARDED->EVALUATING',
     'DRAFT->CANCELLED',
     'PENDING_APPROVAL->CANCELLED',
     'OPEN->CANCELLED',
@@ -7448,7 +7933,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE -- `PENDING_APPROVAL->DRAFT` là cạnh MỚI của vòng sửa này: sau C-1, hạng mục chỉ sửa được ở -- DRAFT, nên phải có đường quay lại — và đường ấy XOÁ MỌI CHỮ KÝ PHÊ DUYỆT (trigger dưới). -- -- [S1.107 / lượt soi ngang 77 — CAO ①] `EVALUATING->CANCELLED` là cạnh MỚI của `058`, và -- nó đóng một TRẠNG THÁI HÚT. Trước nó `EVALUATING` KHÔNG có một cạnh ra nào: nó chỉ đứng -- làm đích của `UNSEALED->EVALUATING`, còn `EVALUATING->BAFO_OPEN` và `EVALUATING->AWARDED` -- mới chỉ có trong spec §4.3 — `BAFO_CLOSED` và `AWARDED` chưa phải giá trị nào trong tập -- đóng của `009`. Điều đó vô hại suốt từ `009` vì KHÔNG ROUTE NÀO đi qua cạnh vào; S1.106 -- mở đúng cửa ấy ra HTTP (`POST /rfqs/:rfqId/evaluate`) và đặt một nút lên nó, mà -- `evaluation.perform` thì NĂM trên SÁU vai giữ (khoản 220). Từ đó một cú bấm của vai thấp -- nhất làm một gói thầu THẬT không huỷ được, không chấm lại được, không trao được. -- -- [S1.108 / S2.5] NĂM cạnh MỚI của `059` mở vòng BAFO. Bốn cạnh đầu là một chu trình: -- `EVALUATING->BAFO_OPEN->BAFO_CLOSED->BAFO_UNSEALED->EVALUATING`, và nó đi qua BAFO_UNSEALED -- chứ không nối thẳng `BAFO_CLOSED->EVALUATING` như spec §4.3 khai. Lý do là một phép đo, không -- một khẩu vị: cạnh `CLOSED->UNSEALED` tồn tại để `rfq_kiem_yeu_cau_mo_thau` đòi một yêu cầu -- mở thầu ĐÃ PHÊ DUYỆT, và nối thẳng sẽ cho một lượt chấm LẠI chạy trong khi phong bì vòng hai -- còn nguyên niêm — bảng xếp hạng khi ấy vẫn là bảng vòng một và không lớp nào kêu. Cạnh thứ -- năm `BAFO_OPEN->CANCELLED` là ảnh của `OPEN->CANCELLED`; hai cạnh KHÔNG mở -- (`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED`) là ảnh của hai cạnh khoản **225** còn -- để mở, và chúng cố ý im lặng cùng một chỗ với ảnh gốc. -- -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6. CANH_HOP_LE constant text[] := ARRAY[ 'DRAFT->PENDING_APPROVAL', 'PENDING_APPROVAL->DRAFT', 'PENDING_APPROVAL->OPEN', 'OPEN->CLOSED', 'CLOSED->UNSEALED', 'UNSEALED->EVALUATING', 'EVALUATING->BAFO_OPEN', 'BAFO_OPEN->BAFO_CLOSED', 'BAFO_CLOSED->BAFO_UNSEALED', 'BAFO_UNSEALED->EVALUATING', 'DRAFT->CANCELLED', 'PENDING_APPROVAL->CANCELLED', 'OPEN->CANCELLED', 'BAFO_OPEN->CANCELLED', 'EVALUATING->CANCELLED' ]; -- Cửa sổ thầu tối thiểu. ARCHITECTURE §6 đòi "deadline ≥ now + cửa sổ tối thiểu" và KHÔNG tầng -- nào cài đặt nó (M-5). Sàn dưới ở đây là sàn CỦA HỆ, không phải chính sách của tổ chức: một -- RFQ mở với deadline đã ở quá khứ là một trạng thái hỏng TRÊN DỮ LIỆU. CUA_SO_TOI_THIEU constant interval := interval '1 hour'; so_hang_muc integer; so_phe_duyet integer; bam_hien_tai bytea; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status || '->' || NEW.status) = ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai RFQ khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- (b) deadline không bao giờ lùi. [L-1] Vế `NEW.deadline_at IS NULL` được thêm ở vòng sửa này: -- bản 009 chỉ chạy khi CẢ HAI giá trị NOT NULL, nên ở DRAFT hai câu `SET NULL` rồi `SET <sớm -- hơn>` lùi được deadline. Chú thích và tên test của 009 vì vậy rộng hơn mã; nay thì không. IF OLD.deadline_at IS NOT NULL AND (NEW.deadline_at IS NULL OR NEW.deadline_at < OLD.deadline_at) THEN RAISE EXCEPTION 'Khong duoc rut ngan hay xoa deadline cua RFQ (C4)' USING ERRCODE = 'check_violation'; END IF; -- (c) [C-1] `PENDING_APPROVAL` BỊ GỠ khỏi danh sách được đổi deadline: sau khi đã nộp duyệt, -- đổi deadline là đổi nội dung mà người duyệt sẽ ký. IF NEW.deadline_at IS DISTINCT FROM OLD.deadline_at AND OLD.status NOT IN ('DRAFT', 'OPEN') THEN RAISE EXCEPTION 'Chi doi duoc deadline khi RFQ dang DRAFT hoac OPEN (C4)' USING ERRCODE = 'check_violation'; END IF; IF (NEW.title IS DISTINCT FROM OLD.title OR NEW.requires_dual_approval IS DISTINCT FROM OLD.requires_dual_approval) AND OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'Chi sua duoc tieu de va nguong phe duyet khi RFQ con o DRAFT' USING ERRCODE = 'check_violation'; END IF; -- (f) [H-3] BA MỐC CHỈ ĐẶT ĐƯỢC MỘT LẦN. Không có vế này, gọi lại `openRfq` trên một RFQ đang -- OPEN đẩy `opened_at` tới hiện tại, và mọi phép kiểm khác im lặng vì status không đổi. IF OLD.opened_at IS NOT NULL AND NEW.opened_at IS DISTINCT FROM OLD.opened_at THEN RAISE EXCEPTION 'opened_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.closed_at IS NOT NULL AND NEW.closed_at IS DISTINCT FROM OLD.closed_at THEN RAISE EXCEPTION 'closed_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; -- (g) [M-5] Cửa sổ thầu tối thiểu, kiểm ở CẢ HAI cạnh đi vào vòng phê duyệt và vòng mở. IF NEW.status IN ('PENDING_APPROVAL', 'OPEN') AND NEW.status IS DISTINCT FROM OLD.status THEN IF NEW.deadline_at IS NULL OR NEW.deadline_at < now() + CUA_SO_TOI_THIEU THEN RAISE EXCEPTION 'Cua so thau phai con it nhat % ke tu bay gio', CUA_SO_TOI_THIEU USING ERRCODE = 'check_violation'; END IF; END IF; -- (h) [H-4] ĐÓNG SỚM là một hành vi có tên. Đóng đúng hạn không đòi gì thêm. IF NEW.status = 'CLOSED' AND OLD.status = 'OPEN' AND now() < OLD.deadline_at THEN IF NEW.early_close_reason IS NULL THEN RAISE EXCEPTION 'Dong RFQ truoc han phai co ly do tuong minh (early_close_reason)' USING ERRCODE = 'check_violation'; END IF; END IF; IF NEW.status = 'OPEN' THEN SELECT count(*) INTO so_hang_muc FROM public.rfq_items i WHERE i.rfq_id = NEW.id; IF so_hang_muc = 0 THEN RAISE EXCEPTION 'Khong mo duoc RFQ khong co hang muc nao' USING ERRCODE = 'check_violation'; END IF; IF NEW.requires_dual_approval THEN -- [C-1] Đây là dòng đóng CRITICAL: đếm phê duyệt TRÊN ĐÚNG NỘI DUNG hiện tại, không đếm -- "có bao nhiêu hàng". Thêm một hạng mục sau khi đã duyệt làm băm đổi, và hai chữ ký cũ -- không còn đếm được nữa. bam_hien_tai := public.rfq_bam_noi_dung(NEW.id); SELECT count(*) INTO so_phe_duyet FROM public.rfq_approvals a WHERE a.rfq_id = NEW.id AND a.approved_content_hash = bam_hien_tai; IF so_phe_duyet < 2 THEN RAISE EXCEPTION 'RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co % (D2)', so_phe_duyet USING ERRCODE = 'check_violation'; END IF; END IF; END IF; RETURN NEW; END$than$
+                = $than$DECLARE -- `PENDING_APPROVAL->DRAFT` là cạnh MỚI của vòng sửa này: sau C-1, hạng mục chỉ sửa được ở -- DRAFT, nên phải có đường quay lại — và đường ấy XOÁ MỌI CHỮ KÝ PHÊ DUYỆT (trigger dưới). -- -- [S1.107 / lượt soi ngang 77 — CAO ①] `EVALUATING->CANCELLED` là cạnh MỚI của `058`, và -- nó đóng một TRẠNG THÁI HÚT. Trước nó `EVALUATING` KHÔNG có một cạnh ra nào: nó chỉ đứng -- làm đích của `UNSEALED->EVALUATING`, còn `EVALUATING->BAFO_OPEN` và `EVALUATING->AWARDED` -- mới chỉ có trong spec §4.3 — `BAFO_CLOSED` và `AWARDED` chưa phải giá trị nào trong tập -- đóng của `009`. Điều đó vô hại suốt từ `009` vì KHÔNG ROUTE NÀO đi qua cạnh vào; S1.106 -- mở đúng cửa ấy ra HTTP (`POST /rfqs/:rfqId/evaluate`) và đặt một nút lên nó, mà -- `evaluation.perform` thì NĂM trên SÁU vai giữ (khoản 220). Từ đó một cú bấm của vai thấp -- nhất làm một gói thầu THẬT không huỷ được, không chấm lại được, không trao được. -- -- [S1.108 / S2.5] NĂM cạnh MỚI của `059` mở vòng BAFO. Bốn cạnh đầu là một chu trình: -- `EVALUATING->BAFO_OPEN->BAFO_CLOSED->BAFO_UNSEALED->EVALUATING`, và nó đi qua BAFO_UNSEALED -- chứ không nối thẳng `BAFO_CLOSED->EVALUATING` như spec §4.3 khai. Lý do là một phép đo, không -- một khẩu vị: cạnh `CLOSED->UNSEALED` tồn tại để `rfq_kiem_yeu_cau_mo_thau` đòi một yêu cầu -- mở thầu ĐÃ PHÊ DUYỆT, và nối thẳng sẽ cho một lượt chấm LẠI chạy trong khi phong bì vòng hai -- còn nguyên niêm — bảng xếp hạng khi ấy vẫn là bảng vòng một và không lớp nào kêu. Cạnh thứ -- năm `BAFO_OPEN->CANCELLED` là ảnh của `OPEN->CANCELLED`; hai cạnh KHÔNG mở -- (`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED`) là ảnh của hai cạnh khoản **225** còn -- để mở, và chúng cố ý im lặng cùng một chỗ với ảnh gốc. -- -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6. CANH_HOP_LE constant text[] := ARRAY[ 'DRAFT->PENDING_APPROVAL', 'PENDING_APPROVAL->DRAFT', 'PENDING_APPROVAL->OPEN', 'OPEN->CLOSED', 'CLOSED->UNSEALED', 'UNSEALED->EVALUATING', 'EVALUATING->BAFO_OPEN', 'BAFO_OPEN->BAFO_CLOSED', 'BAFO_CLOSED->BAFO_UNSEALED', 'BAFO_UNSEALED->EVALUATING', -- [S1.110 / S2.6 / §8.3] HAI cạnh của trao thầu. `EVALUATING->AWARDED` là cạnh spec -- §4.3 khai từ đầu; `AWARDED->EVALUATING` là quyết định của chủ dự án ngày 2026-09-22, -- và nó làm `AWARDED` nghĩa là *đang có một award CÒN SỐNG* thay vì *đã từng trao*. -- Không có cạnh về, `AWARDED` là trạng thái HÚT thứ BA (sau `CLOSED` và `UNSEALED` — -- khoản 225), và một award bị huỷ để RFQ đứng ở `AWARDED` mà không có award nào sống. 'EVALUATING->AWARDED', 'AWARDED->EVALUATING', 'DRAFT->CANCELLED', 'PENDING_APPROVAL->CANCELLED', 'OPEN->CANCELLED', 'BAFO_OPEN->CANCELLED', 'EVALUATING->CANCELLED' ]; -- Cửa sổ thầu tối thiểu. ARCHITECTURE §6 đòi "deadline ≥ now + cửa sổ tối thiểu" và KHÔNG tầng -- nào cài đặt nó (M-5). Sàn dưới ở đây là sàn CỦA HỆ, không phải chính sách của tổ chức: một -- RFQ mở với deadline đã ở quá khứ là một trạng thái hỏng TRÊN DỮ LIỆU. CUA_SO_TOI_THIEU constant interval := interval '1 hour'; so_hang_muc integer; so_phe_duyet integer; bam_hien_tai bytea; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status || '->' || NEW.status) = ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai RFQ khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- (b) deadline không bao giờ lùi. [L-1] Vế `NEW.deadline_at IS NULL` được thêm ở vòng sửa này: -- bản 009 chỉ chạy khi CẢ HAI giá trị NOT NULL, nên ở DRAFT hai câu `SET NULL` rồi `SET <sớm -- hơn>` lùi được deadline. Chú thích và tên test của 009 vì vậy rộng hơn mã; nay thì không. IF OLD.deadline_at IS NOT NULL AND (NEW.deadline_at IS NULL OR NEW.deadline_at < OLD.deadline_at) THEN RAISE EXCEPTION 'Khong duoc rut ngan hay xoa deadline cua RFQ (C4)' USING ERRCODE = 'check_violation'; END IF; -- (c) [C-1] `PENDING_APPROVAL` BỊ GỠ khỏi danh sách được đổi deadline: sau khi đã nộp duyệt, -- đổi deadline là đổi nội dung mà người duyệt sẽ ký. IF NEW.deadline_at IS DISTINCT FROM OLD.deadline_at AND OLD.status NOT IN ('DRAFT', 'OPEN') THEN RAISE EXCEPTION 'Chi doi duoc deadline khi RFQ dang DRAFT hoac OPEN (C4)' USING ERRCODE = 'check_violation'; END IF; IF (NEW.title IS DISTINCT FROM OLD.title OR NEW.requires_dual_approval IS DISTINCT FROM OLD.requires_dual_approval) AND OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'Chi sua duoc tieu de va nguong phe duyet khi RFQ con o DRAFT' USING ERRCODE = 'check_violation'; END IF; -- (f) [H-3] BA MỐC CHỈ ĐẶT ĐƯỢC MỘT LẦN. Không có vế này, gọi lại `openRfq` trên một RFQ đang -- OPEN đẩy `opened_at` tới hiện tại, và mọi phép kiểm khác im lặng vì status không đổi. IF OLD.opened_at IS NOT NULL AND NEW.opened_at IS DISTINCT FROM OLD.opened_at THEN RAISE EXCEPTION 'opened_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.closed_at IS NOT NULL AND NEW.closed_at IS DISTINCT FROM OLD.closed_at THEN RAISE EXCEPTION 'closed_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; -- (g) [M-5] Cửa sổ thầu tối thiểu, kiểm ở CẢ HAI cạnh đi vào vòng phê duyệt và vòng mở. IF NEW.status IN ('PENDING_APPROVAL', 'OPEN') AND NEW.status IS DISTINCT FROM OLD.status THEN IF NEW.deadline_at IS NULL OR NEW.deadline_at < now() + CUA_SO_TOI_THIEU THEN RAISE EXCEPTION 'Cua so thau phai con it nhat % ke tu bay gio', CUA_SO_TOI_THIEU USING ERRCODE = 'check_violation'; END IF; END IF; -- (h) [H-4] ĐÓNG SỚM là một hành vi có tên. Đóng đúng hạn không đòi gì thêm. IF NEW.status = 'CLOSED' AND OLD.status = 'OPEN' AND now() < OLD.deadline_at THEN IF NEW.early_close_reason IS NULL THEN RAISE EXCEPTION 'Dong RFQ truoc han phai co ly do tuong minh (early_close_reason)' USING ERRCODE = 'check_violation'; END IF; END IF; IF NEW.status = 'OPEN' THEN SELECT count(*) INTO so_hang_muc FROM public.rfq_items i WHERE i.rfq_id = NEW.id; IF so_hang_muc = 0 THEN RAISE EXCEPTION 'Khong mo duoc RFQ khong co hang muc nao' USING ERRCODE = 'check_violation'; END IF; IF NEW.requires_dual_approval THEN -- [C-1] Đây là dòng đóng CRITICAL: đếm phê duyệt TRÊN ĐÚNG NỘI DUNG hiện tại, không đếm -- "có bao nhiêu hàng". Thêm một hạng mục sau khi đã duyệt làm băm đổi, và hai chữ ký cũ -- không còn đếm được nữa. bam_hien_tai := public.rfq_bam_noi_dung(NEW.id); SELECT count(*) INTO so_phe_duyet FROM public.rfq_approvals a WHERE a.rfq_id = NEW.id AND a.approved_content_hash = bam_hien_tai; IF so_phe_duyet < 2 THEN RAISE EXCEPTION 'RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co % (D2)', so_phe_duyet USING ERRCODE = 'check_violation'; END IF; END IF; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ [S1.109] BẢY route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ [S1.110] TÁM route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -105,6 +105,15 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "biết chính xác khi nào cửa đóng, là đoán được vùng giá mà không cần thấy một con số nào. " +
     "Cùng lý do thứ hai với `/rfqs/:rfqId/unseal`: nó biến một id gói thầu thành id một vòng " +
     "BAFO. Route khai `agent: false` và dòng này khai vì sao. [S1.109 / S2.5]",
+  "/rfqs/:rfqId/award":
+    "ĐỀ XUẤT TRAO THẦU của một gói thầu — AI THẮNG, cộng lý do người đề xuất viết ra, cộng " +
+    "chữ ký của người duyệt. Nó không mang một mức giá nào, và đó chính là chỗ dễ đọc sai: " +
+    "danh tính người thắng là KẾT LUẬN của mọi thứ ADR-038 rút khỏi bề mặt này. Bảng so sánh " +
+    "và bảng xếp hạng là dữ liệu để suy ra nó; dòng này LÀ nó. Rút một bề mặt rộng rồi phơi " +
+    "chính kết luận của nó là phơi cả hai. Cổng quyền của route là `bid.view`, tức AI XEM " +
+    "ĐƯỢC GIÁ THÌ XEM ĐƯỢC KẾT QUẢ — không rộng hơn, và một chứng chỉ `AGENT_READONLY` không " +
+    "phải một con người có MFA. Route khai `agent: false` và dòng này khai vì sao. " +
+    "[S1.110 / S2.6]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

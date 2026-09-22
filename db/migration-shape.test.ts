@@ -467,6 +467,12 @@ describe("hình dạng file migration", () => {
       "otp_rate_limits",
       "outbox_jobs",
       "rfq_approvals",
+      // [S1.110 / S2.6 / 061] Hai bảng CHỈ-GHI-THÊM của trao thầu. Cả hai mang `org_id` nên
+      // chúng chịu ĐÚNG cùng bộ ràng buộc tenant; `rfq_award_approvals` còn có khoá ngoại hợp
+      // thành `(org_id, award_id)` tới `rfq_awards`, tức một chữ ký không trỏ sang tổ chức
+      // khác được kể cả khi RLS bị tắt. Policy khách của CẢ HAI là vị từ ĐÓNG HẲN.
+      "rfq_award_approvals",
+      "rfq_awards",
       // [S1.108 / 059] Vòng BAFO cũng có org_id nên nó chịu ĐÚNG cùng bộ ràng buộc, và
       // `NGOAI_LE_HINH_DANG` VẪN RỖNG sau S2.5. Bảng này đáng chú ý vì policy khách của nó là
       // vị từ ĐÓNG HẲN chứ không vị từ hẹp theo `app.guest_rfq_id` như `rfq_packages` —

@@ -240,12 +240,22 @@ function quetRoRi(vanBan: string, sau = 0): readonly string[] {
   return MOI_GIA.filter((g) => thay.has(g));
 }
 
+/** Trạng thái RFQ của kịch bản, đọc thẳng dưới vai superuser — không qua route nào. */
+async function trangThaiRfq(): Promise<string> {
+  const { rows } = await db.pool.query<{ status: string }>(
+    "SELECT status FROM rfq_packages WHERE id = $1",
+    [trangThai.rfqId],
+  );
+  return rows[0]?.status ?? "";
+}
+
 const trangThai: {
   rfqId: string;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string; cookie: string }[];
   bienNhan: { canonicalText: string; signature: string; ten: string; bidVersionId: string }[];
   unsealRequestId: string;
   bafoRoundId: string;
+  awardId: string;
   topN: string[];
   giaBafo: Map<string, string>;
   mua: Nguoi;
@@ -260,6 +270,7 @@ const trangThai: {
   bienNhan: [],
   unsealRequestId: "",
   bafoRoundId: "",
+  awardId: "",
   topN: [],
   giaBafo: new Map(),
   mua: { id: "", cookie: "" },
@@ -559,6 +570,20 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
           return { path: r.path.replace(":rfqId", hyB), body: { deadlineAt: han }, cookie: m };
         case "POST /rfqs/:rfqId/bafo/close":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
+        // [S1.110 / S2.6] BA route trao thầu đi tới `hyB` — một RFQ ở `DRAFT` — nên chúng
+        // dừng ở lời TỪ CHỐI CÓ TÊN của `TraoThauTuChoiError` (422), sau khi đã qua bộ đọc
+        // thân và chạm nghiệp vụ. `bidVersionId` là `UUID0`: nó chỉ cần đúng HÌNH DẠNG, vì
+        // phép kiểm trạng thái gói thầu nổ TRƯỚC khi câu `INSERT` chạm khoá ngoại nào.
+        //
+        // Hai route DUYỆT và HUỶ đi bằng cookie GIÁM ĐỐC, không `m`: cổng của chúng là
+        // `po.approve`, và `PROCUREMENT_MANAGER` KHÔNG giữ mã ấy — dùng `m` sẽ cho một 403 ở
+        // cổng quyền, tức route KHÔNG đi tới nghiệp vụ và bộ quét đo một thế giới rỗng.
+        case "POST /rfqs/:rfqId/award":
+          return { path: r.path.replace(":rfqId", hyB), body: { bidVersionId: UUID0, reason: "de xuat de quet" }, cookie: m };
+        case "POST /rfqs/:rfqId/award/:awardId/approve":
+          return { path: r.path.replace(":rfqId", hyB).replace(":awardId", UUID0), body: {}, cookie: trangThai.gd1.cookie };
+        case "POST /rfqs/:rfqId/award/cancel":
+          return { path: r.path.replace(":rfqId", hyB), body: { reason: "huy de quet" }, cookie: trangThai.gd1.cookie };
         case "POST /users/:userId/mfa-reset":
           return {
             path: r.path.replace(":userId", nanHy.id),
@@ -1117,6 +1142,90 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(await goi("GET", `/rfqs/${trangThai.rfqId}/bafo`, m).then((x) => (x.body as { bafoRound: { closedAt: string | null } }).bafoRound.closedAt)).not.toBeNull();
   });
 
+  // ============================================================================================
+  // [S1.110 / S2.6] TRAO THẦU QUA HTTP — hành động CUỐI, và chỗ duy nhất đòi đúng HAI con người
+  //
+  // Bốn route của S2.6 đã có một vòng quét quyền ở `buyer.int.test.ts` (403 cho phiên không quyền,
+  // đúng một mã đi qua), nhưng vòng quét ấy chứng minh cổng ĐÓNG chứ không chứng minh đường ĐI
+  // ĐƯỢC. Hai bước dưới đây là phép đo ấy, trên cùng tiến trình HTTP thật với cùng năm con người
+  // mà kịch bản đã dựng — và đúng ba vai khác nhau, nên J3 có việc thật để làm.
+  // ============================================================================================
+
+  it("bước 12h — ĐỀ XUẤT trao thầu qua HTTP: người TẠO gói thầu bị J3 chặn, người KHÁC đi qua", async () => {
+    // `trangThai.mua` vừa là `created_by` của RFQ vừa là người ĐIỀU PHỐI cả hai lượt mở thầu, nên
+    // J3 chặn họ trên HAI vế cùng lúc; trigger kiểm `created_by` trước nên thông điệp nói vế ấy.
+    // Đây là lần DUY NHẤT trong kho một cổng quyền nói CÓ mà một trigger nói KHÔNG — `mua` là
+    // `PROCUREMENT_MANAGER`, tức họ GIỮ `award.recommend`.
+    const nhat = (await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, trangThai.mua.cookie).then(
+      (x) => (x.body as { ranking: { rows: { bidVersionId: string; rank: number | null }[] } }).ranking,
+    )).rows.find((h) => h.rank === 1)!;
+    expect(nhat.bidVersionId, "tiền đề: phải có một hàng hạng NHẤT để trao thầu").toBeTruthy();
+
+    const tuChoi = await goi("POST", `/rfqs/${trangThai.rfqId}/award`, trangThai.mua.cookie, {
+      bidVersionId: nhat.bidVersionId,
+      reason: "nguoi tao goi thau tu de xuat",
+    });
+    // 422 MANG CÂU CỦA TRIGGER, không 500 — và lời khai đầu của vòng này nói 500, rồi phép đo bác
+    // nó. `anhXaLoiPostgres` (`dispatch.ts`) ánh xạ `23514` tới 422, và nó LỘ thông điệp khi lỗi
+    // đến từ một `RAISE` của trigger (`routine = exec_stmt_raise`) — đúng ca của ba trigger `061`,
+    // vì thông điệp ấy do migration VIẾT chứ không nội suy dữ liệu người dùng. Nên J3 nói được cho
+    // người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`.
+    expect(tuChoi.status, tuChoi.text).toBe(422);
+    expect(tuChoi.text, "câu từ chối phải GỌI TÊN bất biến, không chỉ nói không").toMatch(/\(J3\)/u);
+    expect(await trangThaiRfq(), "lần từ chối KHÔNG được để lại một trạng thái nửa vời").toBe("EVALUATING");
+
+    // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI: `pm2` cũng là
+    // `PROCUREMENT_MANAGER`, cũng giữ `award.recommend`, nhưng họ không tạo và không điều phối.
+    const ok = await goi("POST", `/rfqs/${trangThai.rfqId}/award`, trangThai.pm2.cookie, {
+      bidVersionId: nhat.bidVersionId,
+      reason: "gia BAFO thap nhat, ky thuat dat",
+    });
+    expect(ok.status, ok.text).toBe(201);
+    const aw = (ok.body as { award: { awardId: string; status: string; bidVersionId: string; evaluationId: string } }).award;
+    expect(aw.status).toBe("PROPOSED");
+    expect(aw.bidVersionId).toBe(nhat.bidVersionId);
+    trangThai.awardId = aw.awardId;
+
+    // `AWARDED` nghĩa là *ĐANG CÓ một award còn sống* (ADR-057), nên nó đặt ngay ở hàng PROPOSED.
+    expect(await trangThaiRfq()).toBe("AWARDED");
+
+    // Và lượt chấm mà award dựa trên là lượt SAU BAFO — vế mà `deXuatTraoThau` canh MỘT MÌNH
+    // (khoản 231). Bước 12g vừa tạo lượt ấy, nên đây là thế giới có HAI lượt chấm.
+    const { rows: luot } = await db.pool.query<{ id: string }>(
+      "SELECT id FROM rfq_evaluations WHERE org_id = $1 AND rfq_id = $2 ORDER BY created_at DESC, id DESC",
+      [orgA, trangThai.rfqId],
+    );
+    expect(luot.length, "tiền đề: phải có HAI lượt chấm sau một chu kỳ BAFO").toBe(2);
+    expect(aw.evaluationId, "award phải dựa trên bảng xếp hạng SAU BAFO").toBe(luot[0]?.id);
+  });
+
+  it("bước 12i — PHÊ DUYỆT qua HTTP: người đề xuất bị chặn ở cổng QUYỀN, giám đốc ký, RFQ đứng yên", async () => {
+    const duong = `/rfqs/${trangThai.rfqId}/award/${trangThai.awardId}/approve`;
+
+    // `pm2` vừa đề xuất, và `PROCUREMENT_MANAGER` KHÔNG giữ `po.approve` — nên họ dừng ở cổng
+    // QUYỀN (403), trước cả khi trigger *không tự duyệt* được hỏi. Hai lớp, và lớp ngoài chặn trước.
+    const chan = await goi("POST", duong, trangThai.pm2.cookie);
+    expect(chan.status, chan.text).toBe(403);
+
+    const ok = await goi("POST", duong, trangThai.gd1.cookie);
+    expect(ok.status, ok.text).toBe(201);
+    expect((ok.body as { award: { status: string } }).award.status).toBe("APPROVED");
+
+    // Duyệt KHÔNG đổi trạng thái RFQ — nó đã ở `AWARDED` từ lúc có đề xuất.
+    expect(await trangThaiRfq()).toBe("AWARDED");
+
+    const doc = await goi("GET", `/rfqs/${trangThai.rfqId}/award`, trangThai.mua.cookie);
+    expect(doc.status, doc.text).toBe(200);
+    const day = (doc.body as { award: { status: string; approvals: { approverUserId: string }[] } }).award;
+    expect(day.status).toBe("APPROVED");
+    // MỘT chữ ký, đúng §7 — và nó là của GIÁM ĐỐC, không của người đề xuất.
+    expect(day.approvals.map((c) => c.approverUserId)).toEqual([trangThai.gd1.id]);
+
+    // Lần duyệt THỨ HAI trên cùng đề xuất bị từ chối: hàng mới nhất nay là `APPROVED`.
+    const lai = await goi("POST", duong, trangThai.gd2.cookie);
+    expect(lai.status, lai.text).toBe(422);
+  });
+
   it("bước 13 — [INV-B5] job toàn vẹn chạy sạch trên TÁM phiên bản (đường vận hành, không HTTP)", async () => {
     const bc = await withTenant(unsealPool, orgA, (c) => auditStoredCiphertexts(c, orgA, trangThai.rfqId));
     // ~~SÁU~~ **[S1.109] TÁM**: năm phong bì vòng một + một bản sửa giá + HAI phong bì BAFO. Con
@@ -1174,6 +1283,13 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // Và hai vòng là HAI, không một — nếu khối BAFO ở trên lặng lẽ không chạy, hai dòng này đỏ.
     expect(cac.filter((a) => a === "RFQ_UNSEALED")).toHaveLength(2);
     expect(cac.filter((a) => a === "RFQ_BAFO_ROUND_OPENED")).toHaveLength(1);
+    // [S1.110 / S2.6] Hành động CUỐI để lại ĐÚNG hai dòng, và thứ tự của chúng là một phần
+    // của mệnh đề: một đề xuất rồi một lần duyệt, không bao giờ ngược lại.
+    expect(cac.filter((a) => a === "RFQ_AWARD_PROPOSED")).toHaveLength(1);
+    expect(cac.filter((a) => a === "RFQ_AWARD_APPROVED")).toHaveLength(1);
+    expect(cac.indexOf("RFQ_AWARD_APPROVED")).toBeGreaterThan(cac.indexOf("RFQ_AWARD_PROPOSED"));
+    // ...và lần đề xuất đứng SAU lượt chấm cuối: award dựa trên bảng xếp hạng SAU BAFO.
+    expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
     // Không một dòng sổ nào mang giá — sổ là bằng chứng, không phải nơi rò.
