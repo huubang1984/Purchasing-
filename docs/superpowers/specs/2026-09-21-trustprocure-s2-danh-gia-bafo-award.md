@@ -135,27 +135,50 @@ ràng buộc ⑷ cấm.
 | `rfq_awards` | Đề xuất trao thầu: bid được chọn, lý do (bắt buộc), người đề xuất + phiên, trạng thái | Chỉ-ghi-thêm; huỷ là một hàng trạng thái mới, không phải `UPDATE` — **[S1.101 / §2.3⑹]** nên J7 cưỡng chế bằng TRIGGER đọc hàng mới nhất, không bằng chỉ mục UNIQUE bộ phận: hàng `PROPOSED` cũ vẫn khớp mọi vị từ bộ phận sau khi đã huỷ |
 | `rfq_award_approvals` | Chữ ký duyệt: người duyệt + phiên | Khuôn `unseal_approvals`: UNIQUE một người một lần, một phiên một lần |
 
-### 4.3. Máy trạng thái — NĂM cạnh mới
+### 4.3. Máy trạng thái — ~~NĂM~~ **[S1.108] BẢY** cạnh mới
 
-Danh sách `CANH_HOP_LE` ở `rfq_kiem_chuyen_trang_thai` (011) nhận thêm:
+Danh sách `CANH_HOP_LE` ở `rfq_kiem_chuyen_trang_thai` (~~011~~ **[S1.108] 059**) nhận thêm:
 
 ```
-EVALUATING->BAFO_OPEN      BAFO_OPEN->BAFO_CLOSED
-BAFO_CLOSED->EVALUATING    EVALUATING->AWARDED
+EVALUATING->BAFO_OPEN        BAFO_OPEN->BAFO_CLOSED
+BAFO_CLOSED->BAFO_UNSEALED   BAFO_UNSEALED->EVALUATING
+BAFO_OPEN->CANCELLED         EVALUATING->AWARDED
 EVALUATING->CANCELLED
 ```
 
 *(**[S1.101]** Bản đầu của mục này khai "bốn cạnh" trong khi khối ngay trên liệt kê NĂM — cùng họ khoản 212,
 ở dòng đầu của chính tài liệu này. Đã sửa.)*
 
+*(**[S1.108 / S2.5 / ADR-055]** Khối trên vừa đổi HAI chỗ, và cả hai đến từ một lượt soi hình dạng
+chạy TRƯỚC dòng mã đầu — không từ một lần đọc lại tài liệu.*
+
+*⒜ **`BAFO_CLOSED->EVALUATING` BỊ THAY** bằng hai cạnh đi qua một trạng thái MỚI, `BAFO_UNSEALED`.
+Lý do là một phép đo: cạnh `CLOSED->UNSEALED` tồn tại không phải để đẹp máy trạng thái —
+`rfq_kiem_yeu_cau_mo_thau` (`019 §4`) cắm vào đúng cạnh ấy và đòi một yêu cầu mở thầu ĐÃ PHÊ
+DUYỆT. Nối thẳng `BAFO_CLOSED->EVALUATING` cho một lượt chấm LẠI chạy trong khi phong bì vòng hai
+còn nguyên niêm, và bảng xếp hạng khi ấy vẫn là bảng của vòng MỘT mà không lớp nào kêu. Bộ ba
+`BAFO_OPEN·BAFO_CLOSED·BAFO_UNSEALED` là ẢNH của `OPEN·CLOSED·UNSEALED`, nên nó dùng lại nguyên cả
+lớp canh thay vì dựng khuôn thứ hai.*
+
+*⒝ **`BAFO_OPEN->CANCELLED` được thêm**, và nó suy ra từ chính phép ảnh ấy: `OPEN->CANCELLED` CÓ
+trong bảng cạnh nên ảnh của nó cũng có. Hai cạnh KHÔNG thêm — `BAFO_CLOSED->CANCELLED` và
+`BAFO_UNSEALED->CANCELLED` — là ảnh của hai cạnh mà khoản nợ **225** đang giữ câu hỏi mở, và `059`
+cố ý im lặng ở cùng chỗ để ngày nào khoản ấy được quyết thì HAI cặp cùng đổi chứ không một.)*
+
+*(**[S1.108]** `EVALUATING->AWARDED` vẫn CHƯA có: `AWARDED` chưa phải một giá trị nào trong tập
+đóng của `009`, và `059` cố ý không thêm nó. S2.6.)*
+
 `UNSEALED->EVALUATING` **đã có từ 011 và chưa ai đi qua** — đo được ở `011:147`, trong chính mảng `CANH_HOP_LE`.
 S2 là thứ làm nó sống. Không có cạnh
 nào từ `UNSEALED` hay `CLOSED` thẳng tới `AWARDED`: đó là cưỡng chế của nguyên tắc ⑶ *Open ≠ Award*
 ở tầng CSDL, không phải một lời hứa của ứng dụng.
 
-`BAFO_CLOSED->EVALUATING` là cạnh quay lại: sau khi mở vòng hai, bảng xếp hạng được tính LẠI trên
-báo giá mới. Một `rfq_evaluations` thứ hai ra đời; hàng cũ ở lại nguyên vẹn, vì *"vì sao xếp hạng
-đổi"* là một câu hỏi kiểm toán thật.
+~~`BAFO_CLOSED->EVALUATING` là cạnh quay lại~~ **[S1.108] `BAFO_UNSEALED->EVALUATING` là cạnh quay
+lại**: sau khi mở vòng hai — *và sau khi phong bì của nó đã đi qua cổng bốn vế* — bảng xếp hạng
+được tính LẠI trên báo giá mới. Một `rfq_evaluations` thứ hai ra đời; hàng cũ ở lại nguyên vẹn, vì
+*"vì sao xếp hạng đổi"* là một câu hỏi kiểm toán thật. Đo ở `059`: `rfq_evaluations` KHÔNG có
+`UNIQUE` trên `rfq_id` nên lượt thứ hai không cần một migration nào, và `TRANG_THAI_CHAM_DUOC` của
+`packages/danh-gia` thôi là một hằng CHUỖI để thành một tập hai phần tử.
 
 **Hardening:** mọi cạnh mới phải được ghim ở `db/migrations/hardening.always.sql` trong CÙNG commit
 với migration — S1.96 đo được rằng migration một mình là no-op, vì lượt hardening ngay sau đó trả
@@ -268,7 +291,7 @@ phải đóng trước khi S2 chạy trên hạ tầng thật.
 | S2.2 | Hàm thuần Effective Cost | `packages/danh-gia`, bảng ca T1 **kèm bảng ca NỬA XU đối chiếu với `round(x,2)` của Postgres** (§2.3⑸), **J1 + J2** |
 | S2.3 | Lượt đánh giá | `rfq_evaluations` + `_lines`, cổng quyền, `UNSEALED->EVALUATING` sống, **J6** |
 | S2.4 | Bảng xếp hạng trên giao diện | Màn chấm: thành phần hiện ra, không chỉ con số |
-| S2.5 | BAFO | Cạnh trạng thái, vòng mời suy từ `rank`, nộp niêm phong, mở qua cổng bốn vế, **J4** |
+| S2.5 | BAFO | Cạnh trạng thái, vòng mời suy từ `rank`, nộp niêm phong, mở qua cổng bốn vế, **J4**. **[S1.108] CHIA HAI VÒNG theo quyết định của chủ dự án ngày 2026-09-22:** S1.108 làm tầng CSDL và máy trạng thái (`059`, `rfq_bafo_rounds`, C1/C3 học BAFO, mã quyền `rfq.bafo.open`, top-N suy từ `rank`); **S1.109** làm route, worker, màn hình và **J4** — vì J4 là một vòng quét ROUTE và quét khi chưa route nào tồn tại cho ra một cổng XANH trên tập RỖNG. Khoản **227** ghi ranh giới ấy |
 | S2.6 | Award | `rfq_awards` + `_approvals`, hai chữ ký khác người, **J3 + J5 + J7** |
 | S2.7 | Bằng chứng tái lập | Bộ xuất mang đủ đầu vào để tính lại; đây là vế cuối của điều kiện hoàn thành |
 

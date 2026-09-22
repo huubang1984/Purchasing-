@@ -467,6 +467,11 @@ describe("hình dạng file migration", () => {
       "otp_rate_limits",
       "outbox_jobs",
       "rfq_approvals",
+      // [S1.108 / 059] Vòng BAFO cũng có org_id nên nó chịu ĐÚNG cùng bộ ràng buộc, và
+      // `NGOAI_LE_HINH_DANG` VẪN RỖNG sau S2.5. Bảng này đáng chú ý vì policy khách của nó là
+      // vị từ ĐÓNG HẲN chứ không vị từ hẹp theo `app.guest_rfq_id` như `rfq_packages` —
+      // `027 §6` đặt mặc định là TỪ CHỐI, và nới nó là một quyết định của S1.109.
+      "rfq_bafo_rounds",
       "rfq_budgets",
       "rfq_evaluation_lines",
       "rfq_evaluations",

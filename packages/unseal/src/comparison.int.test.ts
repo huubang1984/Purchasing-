@@ -39,7 +39,16 @@ import {
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
-/** Bảy giá trị của `rfq_packages.status` — đọc từ chính CHECK của 009, không chép tay. */
+/**
+ * ~~Bảy~~ **[S1.108] MƯỜI** giá trị của `rfq_packages.status`.
+ *
+ * ~~đọc từ chính CHECK của 009, không chép tay~~ — **câu ấy SAI, và nó sai từ lúc được viết**:
+ * khối dưới là một mảng CHÉP TAY, không một phép đọc. `059` thêm ba giá trị và danh sách này
+ * thiu trong im lặng cho tới khi một test dùng nó. Giữ nguyên hình thức chép tay (một phép đọc
+ * ở đây sẽ làm hai test dưới mất khả năng nói "đúng bảy" / "đúng ba"), nhưng thôi khai rằng nó
+ * là một phép đọc. Bản khớp-với-CSDL nằm ở `packages/rfq/src/transitions.test.ts`, nơi tập đóng
+ * được BÓC từ văn bản `059` và so với `RFQ_STATUSES`.
+ */
 const MOI_TRANG_THAI = [
   "DRAFT",
   "PENDING_APPROVAL",
@@ -47,6 +56,9 @@ const MOI_TRANG_THAI = [
   "CLOSED",
   "UNSEALED",
   "EVALUATING",
+  "BAFO_OPEN",
+  "BAFO_CLOSED",
+  "BAFO_UNSEALED",
   "CANCELLED",
 ];
 
@@ -251,8 +263,13 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
  * kèm mốc của nó là một hàng dữ liệu HỎNG, không phải một ca đối kháng.
  */
 async function epTrangThai(rfqId: string, trangThai: string): Promise<void> {
-  const daMo = ["OPEN", "CLOSED", "UNSEALED", "EVALUATING"].includes(trangThai);
-  const daDong = ["CLOSED", "UNSEALED", "EVALUATING"].includes(trangThai);
+  // [S1.108 / 059] Ba trạng thái BAFO chỉ tới được QUA `OPEN` rồi `CLOSED`, nên chúng thuộc CẢ
+  // HAI tập. Bốn ràng buộc mốc của `009`+`011` đòi đúng thế, và thiếu chúng ở đây thì câu ép
+  // trạng thái vỡ với `violates check constraint "rfq_da_dong_thi_co_moc_dong"` — đã đo.
+  const DA_MO = ["OPEN", "CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED"];
+  const DA_DONG = ["CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED"];
+  const daMo = DA_MO.includes(trangThai);
+  const daDong = DA_DONG.includes(trangThai);
   for (const t of ["rfq_packages_kiem_chuyen_trang_thai", "rfq_packages_kiem_yeu_cau_mo_thau"]) {
     await db.pool.query(`ALTER TABLE rfq_packages DISABLE TRIGGER ${t}`);
   }
@@ -364,11 +381,16 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
     const biTuChoi = MOI_TRANG_THAI.filter(
       (t) => !(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(t),
     );
-    expect(biTuChoi, "năm trạng thái phải bị từ chối, không phải bốn").toEqual([
+    // [S1.108 / 059] ~~năm~~ **BẢY**: `BAFO_OPEN` và `BAFO_CLOSED` là quãng nhà cung cấp đang
+    // nộp lại NIÊM PHONG, và bảng so sánh đóng suốt quãng ấy. `BAFO_UNSEALED` thì MỞ — phong bì
+    // vòng hai vừa qua cổng bốn vế, và bảng xếp hạng sắp được tính lại từ đó.
+    expect(biTuChoi, "bảy trạng thái phải bị từ chối, không phải năm").toEqual([
       "DRAFT",
       "PENDING_APPROVAL",
       "OPEN",
       "CLOSED",
+      "BAFO_OPEN",
+      "BAFO_CLOSED",
       "CANCELLED",
     ]);
 
@@ -384,7 +406,7 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
       expect(loi?.rfqStatus).toBe(trangThai);
     }
 
-    // Đối chứng dương thứ hai: đưa về đúng hai trạng thái được phép thì cổng mở lại.
+    // Đối chứng dương thứ hai: đưa về đúng ~~hai~~ **[S1.108] ba** trạng thái được phép thì cổng mở lại.
     for (const trangThai of COMPARISON_ALLOWED_STATUSES) {
       await epTrangThai(rfqId, trangThai);
       const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqId, actorSessionId: sYc }, apiPool));
@@ -683,7 +705,7 @@ describe("[INV-D5] [S1.72 / khoản 121] bảng so sánh từ chối vì A4 thì
     }
   }
 
-  it("[INV-D5] năm trạng thái bị từ chối ⇒ `ComparisonDeniedError` như cũ và mỗi lần đúng một `COMPARISON_DENIED` mang trạng thái RFQ và người xem; hai trạng thái được phép không thêm hàng nào", async () => {
+  it("[INV-D5] ~~năm~~ BẢY trạng thái bị từ chối ⇒ `ComparisonDeniedError` như cũ và mỗi lần đúng một `COMPARISON_DENIED` mang trạng thái RFQ và người xem; ~~hai~~ BA trạng thái được phép không thêm hàng nào", async () => {
     const rfqId = await taoRfqMo(csNghiem);
     const biTuChoi = MOI_TRANG_THAI.filter((t) => !(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(t));
     for (const [i, trangThai] of biTuChoi.entries()) {

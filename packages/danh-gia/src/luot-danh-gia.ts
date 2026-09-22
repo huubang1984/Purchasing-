@@ -39,8 +39,19 @@ import {
 /** Mã thành phần DUY NHẤT có nguồn dữ liệu ở vòng này — `bid_so_tien(payload->>'totalAmount')`. */
 export const MA_THANH_PHAN_GIA = "gia";
 
-/** Trạng thái RFQ duy nhất mà một lượt chấm đi ra được — cạnh `UNSEALED->EVALUATING` của `011`. */
-export const TRANG_THAI_CHAM_DUOC = "UNSEALED";
+/**
+ * Các trạng thái RFQ mà một lượt chấm đi ra được — hai cạnh vào `EVALUATING` của bảng cạnh.
+ *
+ * ~~`UNSEALED` là trạng thái DUY NHẤT — cạnh `UNSEALED->EVALUATING` của `011`.~~
+ * [S1.108 / S2.5 / 059] Hai, không một: `BAFO_UNSEALED->EVALUATING` là cạnh chấm LẠI sau vòng
+ * BAFO, và một lượt chấm thứ hai ra đời ở đó (spec §4.3 — hàng cũ ở lại nguyên vẹn, vì *"vì sao
+ * xếp hạng đổi"* là một câu hỏi kiểm toán thật). Một hằng CHUỖI ở đây sẽ làm cạnh mới sống trong
+ * bảng cạnh mà không hàm nào đi qua được.
+ *
+ * `rfq_evaluations` KHÔNG có `UNIQUE` trên `rfq_id`, nên lượt thứ hai không cần một migration —
+ * đã đo ở `057`.
+ */
+export const TRANG_THAI_CHAM_DUOC = ["UNSEALED", "BAFO_UNSEALED"] as const;
 
 export type LyDoTuChoiLuot =
   | "RFQ_KHONG_CHAM_DUOC"
@@ -153,14 +164,35 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
   };
 }
 
-/** Đọc mọi báo giá ĐÃ MỞ của một gói thầu, cùng số tiền đọc được và đơn vị tiền của nó. */
+/**
+ * ~~Đọc mọi báo giá ĐÃ MỞ của một gói thầu, cùng số tiền đọc được và đơn vị tiền của nó.~~
+ *
+ * [S1.108 / S2.5] MỘT hàng cho MỘT luồng báo giá — phiên bản `version` LỚN NHẤT trong số đã mở.
+ *
+ * ~~Bản trước đọc MỌI hàng của `rfq_unsealed_bids` thuộc RFQ.~~ Câu ấy đúng cho tới khi có vòng
+ * BAFO, và nó đúng vì một lý do KHÔNG ai viết ra: `apps/unseal-worker/src/index.ts:511` mở phong bì
+ * bằng `SELECT DISTINCT ON (v.bid_id) … ORDER BY v.bid_id, v.version DESC` — **một** phong bì mỗi
+ * luồng — nên bảng bản rõ hôm nay đã có đúng một hàng cho mỗi nhà cung cấp, và một phép đọc "mọi
+ * hàng" cho ra cùng kết quả.
+ *
+ * Vòng BAFO phá tiền đề ấy: lượt mở thầu THỨ HAI thêm một hàng bản rõ cho mỗi nhà cung cấp top-N,
+ * còn hàng vòng MỘT của họ ở lại (`rfq_unsealed_bids` là bảng chỉ-ghi-thêm, và lịch sử ấy là một
+ * câu hỏi kiểm toán thật). Đọc "mọi hàng" khi ấy xếp hạng một nhà cung cấp HAI LẦN — một lần với
+ * giá cũ, một lần với giá mới — và bảng xếp hạng thôi là một thứ tự trên NGƯỜI DỰ THẦU.
+ *
+ * Luật ở đây là bản sao của luật mà worker đã chọn một lần: **lần nộp SAU thay lần nộp TRƯỚC**.
+ * Nó cũng là luật đúng cho nhà cung cấp NGOÀI top-N — họ không được mời nộp lại, nên phiên bản mới
+ * nhất của họ vẫn là báo giá vòng một, và họ vẫn đứng trong bảng. BAFO cải thiện giá của top-N; nó
+ * không loại ai khỏi cuộc thi.
+ */
 async function docBaoGia(
   client: pg.PoolClient,
   orgId: string,
   rfqId: string,
 ): Promise<readonly HangBaoGia[]> {
   const { rows } = await client.query<HangBaoGia>(
-    `SELECT u.bid_version_id,
+    `SELECT DISTINCT ON (v.bid_id)
+            u.bid_version_id,
             public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS tien,
             (u.payload OPERATOR(pg_catalog.->>) 'currency') AS currency
        FROM public.rfq_unsealed_bids u
@@ -172,7 +204,7 @@ async function docBaoGia(
                                        AND i.org_id OPERATOR(pg_catalog.=) b.org_id
       WHERE u.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
-      ORDER BY u.bid_version_id`,
+      ORDER BY v.bid_id, v.version DESC`,
     [orgId, rfqId],
   );
   return rows;
@@ -246,10 +278,11 @@ export async function taoLuotDanhGia(
     [orgId, input.rfqId],
   );
   const trangThai = rfq[0]?.status;
-  if (trangThai !== TRANG_THAI_CHAM_DUOC) {
+  if (trangThai === undefined || !(TRANG_THAI_CHAM_DUOC as readonly string[]).includes(trangThai)) {
     throw new DanhGiaTuChoiError(
       "RFQ_KHONG_CHAM_DUOC",
-      `Chỉ chấm được gói thầu đang ở trạng thái ${TRANG_THAI_CHAM_DUOC}; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      `Chỉ chấm được gói thầu đang ở trạng thái ${TRANG_THAI_CHAM_DUOC.join(" hoặc ")}; ` +
+        `gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
     );
   }
 
@@ -323,14 +356,19 @@ export async function taoLuotDanhGia(
   }
 
   // Cạnh `UNSEALED->EVALUATING` có từ `011:147` và CHƯA AI ĐI QUA. Câu này là thứ làm nó sống.
-  // Vế `AND status = 'UNSEALED'` là lớp CÓ THẨM QUYỀN cho ca trạng thái đổi giữa lần đọc ở trên
-  // và câu này; phép kiểm ở trên chỉ làm thông điệp nói được VÌ SAO.
+  // Vế `AND status IN (...)` là lớp CÓ THẨM QUYỀN cho ca trạng thái đổi giữa lần đọc ở trên và
+  // câu này; phép kiểm ở trên chỉ làm thông điệp nói được VÌ SAO.
+  //
+  // [S1.108 / S2.5] Hai giá trị viết NỘI TUYẾN, KHÔNG nội suy `${TRANG_THAI_CHAM_DUOC}`: khoản
+  // nợ ở `test-int` đã đo rằng một hằng nội suy vào câu SQL làm cổng `PREPARE` của `[T3]` đọc
+  // thành một tham số và đỏ, trong khi mã vẫn chạy đúng. Hai bản sao ở đây được khoá bằng một
+  // test đọc cả hai.
   const doi = await client.query(
     `UPDATE public.rfq_packages
         SET status = 'EVALUATING'
       WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
-        AND status OPERATOR(pg_catalog.=) 'UNSEALED'`,
+        AND status IN ('UNSEALED', 'BAFO_UNSEALED')`,
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {

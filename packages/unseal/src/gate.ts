@@ -68,6 +68,13 @@ export const UNSEAL_CLAUSES = ["PERMISSION", "MFA_FRESH", "RFQ_CLOSED", "POLICY_
 export type UnsealClause = (typeof UNSEAL_CLAUSES)[number];
 
 /**
+ * [S1.108 / S2.5 / 059] Hai trạng thái mà một yêu cầu mở thầu đi qua vế 3 được — cùng tập với
+ * `unseal_kiem_rfq_da_dong` của `059`. Tên vế vẫn là `RFQ_CLOSED`: nó là mã của HÀNG C3 trong sổ
+ * đăng ký và trong `UNSEAL_CLAUSES`, và đổi nó sẽ đổi payload của mọi hàng sổ từ chối đã ghi.
+ */
+export const TRANG_THAI_MO_THAU_DUOC: ReadonlySet<string> = new Set(["CLOSED", "BAFO_CLOSED"]);
+
+/**
  * Cửa sổ MFA mặc định cho mở thầu: 15 phút.
  *
  * Mệnh đề D1 nói *"MFA còn hiệu lực trong cửa sổ NGẮN"* mà không cho một con số, nên con số phải
@@ -270,14 +277,20 @@ export async function assertUnsealAllowed(
   // Vế này CHÍNH LÀ hàng C3 của sổ đăng ký. Ở cuối S0, ghi chú §4 của D1 chỉ ra rằng hai hàng ấy
   // cách nhau tám dòng trong ma trận, một hàng ✅ và một hàng ⏳, cùng nói về một điều. Nay chúng
   // nói về một điều VÀ cùng được một lớp giữ.
-  if (yc.rfq_status !== "CLOSED") {
+  //
+  // [S1.108 / S2.5 / 059] `BAFO_CLOSED` đi qua vế này, và nó KHÔNG phải một lần nới: phong bì
+  // vòng BAFO được mở bằng ĐÚNG cổng bốn vế này, đó là điều spec §8.1⑶ hứa. Thứ giữ cho hai vòng
+  // không lẫn nhau nằm ở tầng CSDL chứ không ở đây — `unseal_requests.bafo_round_id` do C3 đặt,
+  // và `rfq_kiem_yeu_cau_mo_thau` đòi yêu cầu CỦA ĐÚNG VÒNG ấy. Một hằng ở đây sẽ là bản sao thứ
+  // hai của cùng lời khai, và nó lệch được.
+  if (!TRANG_THAI_MO_THAU_DUOC.has(yc.rfq_status)) {
     await tuChoi(
       auditPool,
       orgId,
       actor.id,
       input.unsealRequestId,
       "RFQ_CLOSED",
-      `RFQ phải ở trạng thái CLOSED để mở thầu; đang ở ${yc.rfq_status}`,
+      `RFQ phải ở trạng thái CLOSED hoặc BAFO_CLOSED để mở thầu; đang ở ${yc.rfq_status}`,
     );
   }
 

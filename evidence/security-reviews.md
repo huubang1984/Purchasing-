@@ -10290,3 +10290,199 @@ tệp ấy chạy CÙNG MỘT LƯỢT vitest ở máy — `apps/web/src/phuc-vu.
 - Phép đo mới: `rfq.int.test.ts` **+3 ca** (cạnh mới, cạnh KHÔNG mở, ranh giới hai lớp); `phuc-vu.test.ts` **+2 probe** eslint; `kich-ban-41-http.int.test.ts` **+1 bước** (12b) và bước 14 đổi lời khai; `luot-danh-gia.int.test.ts` **+1 khẳng định** cặp (loại, id); `qt3-cu-phap.int.test.ts` **+3 khẳng định** sàn theo tệp.
 - Sổ nợ **224 → 225** khoản, mở **89 → 89** — khoản 225 mở, khoản **224 ĐÓNG**. Rổ A **6**, rổ B **62**, rổ C **21**; ba rổ cộng đúng: 6 + 62 + 21 = 89.
 - **53 → 54** ADR (ADR-054), **57 → 58** migration, **14** gói không đổi, **56/56** bất biến không đổi. `evidence/INV-matrix.md` ****đổi ĐÚNG MỘT dòng** — mô tả của **A4**, theo ADR-054. Không bất biến nào đổi trạng thái**.
+
+---
+
+# §S1.108 — S2.5 TẦNG CSDL: VÒNG BAFO, VÀ BA THỨ MỘT LƯỢT SOI HÌNH DẠNG TÌM RA TRƯỚC DÒNG MÃ ĐẦU
+
+## 1. Mốc lượt soi ngang, đo ở ĐẦU vòng
+
+- vế **lịch**: mốc là *chậm nhất S1.113*, vòng này là S1.108 ⇒ **CHƯA chạm**;
+- vế **hardening**: `git rev-list --count 305a090..origin/master --first-parent -- db/migrations/hardening.always.sql` = **0** — chính vòng này là lần đổi THỨ NHẤT kể từ lượt 77, nên sau merge con số là **1**, chưa tới ba.
+
+Không vế nào thoả ⇒ không lượt ngang, **không lỡ nhịp**. Mốc giữ nguyên: **chậm nhất S1.113**.
+
+Nhưng vòng này CÓ chạy một lượt soi **HÌNH DẠNG** trước dòng mã đầu — khuôn S1.75/S1.101, bắt buộc
+với vòng chạm lõi niêm phong. Nó **không** tính là lượt ngang: nó soi một hình dạng CHƯA CÀI, không
+soi hồi quy xuyên vòng, không soi test mất răng.
+
+## 2. Vì sao BAFO là vòng bắt buộc phải soi trước khi viết
+
+BAFO mở lại cửa nộp **sau khi giá của mọi người đã lộ**. Mọi vòng trước của S2 thêm bảng và thêm
+đường đọc; vòng này sửa **C1** — trigger chịu lực nhất của lõi niêm phong — và **C3** cùng vế 3 của
+cổng bốn vế. Một bản vá sai ở đó không làm cổng đỏ: nó mở lại cửa nộp của vòng MỘT.
+
+## 3. Ba phát hiện của lượt soi, mỗi cái đổi thiết kế
+
+| # | phát hiện | đo ở đâu | hệ quả lên thiết kế |
+|---|---|---|---|
+| ⑴ | `bid_kiem_han_nop` (C1) đòi `status = 'OPEN'` **và** `now() < rfq_packages.deadline_at` ⇒ chặn MỌI lần nộp BAFO. Và hạn ấy không dùng lại được: vế (b) của bảng cạnh cấm deadline LÙI, vế (c) chỉ cho đổi ở `DRAFT`/`OPEN` | `018` C1; `hardening:7093` (b)(c) | hạn BAFO **buộc** sống ở `rfq_bafo_rounds`; C1 có nhánh thứ hai |
+| ⑵ | `unseal_kiem_rfq_da_dong` (C3) và `gate.ts` vế 3 ghim cứng `'CLOSED'` | `019:121`, `gate.ts:273` | cả hai học `BAFO_CLOSED`; hằng ở TS thành một tập có tên |
+| ⑶ | Spec §4.3 đi thẳng `BAFO_CLOSED->EVALUATING` — **không có trạng thái nào nghĩa là *phong bì BAFO đã mở*.** Cạnh `CLOSED->UNSEALED` tồn tại đúng để `rfq_kiem_yeu_cau_mo_thau` đòi một yêu cầu ĐÃ PHÊ DUYỆT | `019:340–368` + spec §4.3 | **thêm `BAFO_UNSEALED`** — bốn cạnh, không ba; spec sửa tại chỗ |
+
+Cộng một phát hiện về **cổng quyền**: nếu mở vòng BAFO gác bằng `evaluation.perform` thì **năm trên
+sáu** vai mở được (khoản 220 đã đo), và `BUYER` trong số đó còn giữ `rfq.create`. Chủ dự án chốt
+một mã RIÊNG, `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` — ADR-055 ⑹.
+
+## 4. Một giả thuyết của chính lượt soi bị phép đo BÁC
+
+*"Vòng BAFO dùng lại cặp khoá vòng một (`rfq_key_material` có `UNIQUE (org_id, rfq_id, algorithm)`)
+nên phong bì vòng hai yếu hơn."* Nghe đúng, và **sai**: khoá chỉ thu hồi được khi RFQ `CANCELLED`
+(`rfq_khoa_chi_thu_hoi_khi_huy`), nên nó vẫn nằm đó suốt vòng một — cổng bốn vế LUÔN là cổng chính
+sách, chưa bao giờ là cổng mật mã. BAFO không làm điều đó tệ đi, và `UNIQUE` kia không phải một
+khiếm khuyết cần vá ở vòng này. Ghi ra vì nó đã gần thành một CAO thứ tư.
+
+## 5. Bốn cạnh, và cạnh thứ năm suy ra từ phép ảnh
+
+Bộ ba `BAFO_OPEN·BAFO_CLOSED·BAFO_UNSEALED` là **ảnh** của `OPEN·CLOSED·UNSEALED`, nên tập cạnh huỷ
+được suy chứ không quyết:
+
+| vòng một | vòng BAFO |
+|---|---|
+| `OPEN->CANCELLED` CÓ | `BAFO_OPEN->CANCELLED` **CÓ** |
+| `CLOSED->CANCELLED` KHÔNG | `BAFO_CLOSED->CANCELLED` **KHÔNG** |
+| `UNSEALED->CANCELLED` KHÔNG | `BAFO_UNSEALED->CANCELLED` **KHÔNG** |
+
+Hai dòng KHÔNG là khoản **225** đang mở, và `059` cố ý im lặng ở cùng chỗ với ảnh gốc — để ngày nào
+khoản ấy được quyết thì HAI cặp cùng đổi, không một. Có một ca ghim đúng bốn vế ấy cộng hai đối
+chứng dương.
+
+## 6. Dấu vòng là DẪN XUẤT, và đó là vế đóng ⑶
+
+Hai cột mới, **cả hai do trigger đặt**, không role nào có `INSERT`:
+
+- `vendor_bid_versions.bafo_round_id` — C1 đặt (nó đã đọc RFQ để kiểm hạn);
+- `unseal_requests.bafo_round_id` — C3 đặt (nó đã đọc RFQ để kiểm trạng thái).
+
+Nhờ cột thứ hai, `rfq_kiem_yeu_cau_mo_thau` phân biệt được hai vòng: một yêu cầu mở thầu của VÒNG
+MỘT **không** mở được phong bì vòng hai. Không có nó, cổng bốn vế chạy một lần rồi mở được mọi vòng
+về sau — và đó đúng là lỗ mà ⑶ mô tả. Ca đo dựng đúng thế giới ấy: khẳng định trước rằng yêu cầu
+vòng một CÓ THẬT và vẫn `APPROVED`/`EXECUTED`, rồi đòi cạnh vào `BAFO_UNSEALED` vẫn ném.
+
+## 7. BỐN, không HAI — lượt soi của chính vòng này đếm sai một lời khai
+
+Lượt soi đọc `009` và ghi ra rằng có **hai** ràng buộc mốc liệt kê trạng thái. Thực tế **bốn**:
+`011 (H-3)` thêm CHIỀU NGƯỢC của cả hai (*"chưa mở thì KHÔNG ĐƯỢC có mốc"*), ở một tệp khác.
+
+Hậu quả đo được: `migrate()` XANH, `pnpm typecheck` XANH, **11 ca int đỏ** với
+`violates check constraint "rfq_chua_dong_thi_khong_co_moc_dong"` — một RFQ ở `BAFO_OPEN` CÓ
+`closed_at` (nó đã đi qua `CLOSED`) mà `BAFO_OPEN` không nằm trong tập của ràng buộc chiều ngược.
+
+Cách đúng để đếm, và nó là một câu SQL chứ không một lượt đọc tệp:
+
+```sql
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conrelid = 'rfq_packages'::regclass AND contype = 'c'
+   AND pg_get_constraintdef(oid) LIKE '%status%';
+```
+
+Bảy dòng, bốn trong bảy liệt kê trạng thái. Khoản **226** ghi phần chưa có lớp.
+
+## 7b. Và một lời khai của chính migration này SAI, theo một cách đáng ghi lại
+
+Bản đầu của `059` viết: *"`unseal_requests` được cấp `SELECT` mức BẢNG ở `019:83` và `019:89` nên
+cột mới đã nằm trong tầm đọc của cả hai vai"* — và **bỏ** dòng `GRANT` cho `app_unseal` vì nó
+"redundant". `019:89` CÓ cấp mức bảng, nhưng **`022:298` `REVOKE SELECT ON unseal_requests FROM
+app_unseal`** rồi cấp lại theo CỘT. Lượt tìm của bản đầu là một `grep` khớp `GRANT` với tên bảng
+**trên cùng một dòng**, nên nó đọc `019` mà không bao giờ thấy `022`.
+
+Cái giá, đo được: mục (8) đọc `r.bafo_round_id` dưới vai `app_unseal`, nên `migrate()` xanh mà
+`UPDATE rfq_packages SET status='UNSEALED'` — câu mà MỌI kịch bản mở thầu chạy — chết với
+`permission denied for table unseal_requests`. **38 ca đỏ trong một tệp, 36 trong số đó không liên
+quan gì tới BAFO.**
+
+Đúng lớp lỗi mà bộ nhớ của kho gọi là *tập rỗng là bằng chứng về LƯỢT TÌM*. Bản vá đi kèm một phép
+đo để vòng sau không lặp: một tệp SQL chạy MỌI câu `SELECT` mà bốn hàm mới thực hiện, dưới ĐÚNG vai
+gọi chúng, cộng hai vế ÂM (`app_api` không có `INSERT` trên `round_no`, không có `DELETE` trên
+`rfq_bafo_rounds`).
+
+## 7c. Fixture `moThau` lệch khỏi worker thật suốt hai vòng, và chỉ vòng BAFO thấy
+
+Worker thật đặt `status='EXECUTED', executed_at=now()` cùng lúc với `UNSEALED`
+(`apps/unseal-worker/src/index.ts:607` — *"bản rõ, mốc `EXECUTED` và trạng thái `UNSEALED` phải
+cùng sống hoặc cùng chết"*). Fixture để yêu cầu ở `APPROVED` **mãi**.
+
+Vô hại suốt S1.105 và S1.106, vì không kịch bản nào cần một yêu cầu mở thầu THỨ HAI. Vòng BAFO cần,
+và chỉ mục bộ phận `unseal_requests_mot_yeu_cau_dang_mo` (`019:73`) bắt ngay — *"một RFQ có TỐI ĐA
+MỘT yêu cầu đang mở"*, một ràng buộc có từ `019` mà chưa kịch bản nào chạm. Cùng hình dạng *cổng
+xanh vì phạm vi* mà lượt soi 77 gọi tên, chỉ khác là lần này nó nằm trong FIXTURE.
+
+Fixture được vá cho khớp worker, và ràng buộc ấy được ghim thành một ca riêng **cộng một đối chứng
+dương** — nó là một hệ quả thật cho S1.109: đường mở vòng BAFO phải đi SAU khi worker đóng yêu cầu
+vòng một, và đó KHÔNG phải một giới hạn cần gỡ (hai yêu cầu cùng mở thì ngưỡng *hai người khác
+nhau* của D2 bị CHIA ĐÔI thay vì bị thoả — `019:70–72` đã viết đúng câu ấy).
+
+## 7d. Và thứ nặng nhất của vòng: một TIỀN ĐỀ không ai viết ra, mà chính vòng BAFO phá
+
+`docBaoGia` — bộ đọc của đường chấm — đọc **MỌI** hàng `rfq_unsealed_bids` thuộc RFQ, không lọc gì.
+Câu ấy ĐÚNG suốt S1.105 và S1.106, và nó đúng vì một tính chất nằm ở một tệp khác:
+`apps/unseal-worker/src/index.ts:511` mở phong bì bằng
+
+```sql
+SELECT DISTINCT ON (v.bid_id) v.id, v.envelope … ORDER BY v.bid_id, v.version DESC
+```
+
+— **một** phong bì mỗi luồng báo giá. Nên bảng bản rõ hôm nay đã có đúng một hàng cho mỗi nhà cung
+cấp, và *"đọc mọi hàng"* cho ra cùng kết quả với *"đọc hàng mới nhất"*. Hai bộ đọc, một kết quả, và
+không lớp nào ghi lại rằng cái thứ hai phụ thuộc cái thứ nhất.
+
+**Vòng BAFO phá đúng tiền đề ấy.** Lượt mở thầu THỨ HAI thêm một hàng bản rõ cho mỗi nhà cung cấp
+top-N, còn hàng vòng MỘT của họ ở lại — `rfq_unsealed_bids` là bảng chỉ-ghi-thêm, và lịch sử ấy là
+một câu hỏi kiểm toán thật. Từ đó lượt chấm LẠI xếp hạng một nhà cung cấp **hai lần**: một lần với
+giá cũ, một lần với giá mới. Bảng xếp hạng thôi là một thứ tự trên NGƯỜI DỰ THẦU.
+
+**Ca đo của chính vòng này KHÔNG bắt được nó lúc đầu**, và đó là phần đáng ghi hơn cả khiếm khuyết:
+ca *"bốn cạnh đi trọn"* khẳng định `hang2.get(lai1) === 1` — giá BAFO thấp nhất đứng hạng nhất — và
+khẳng định ấy ĐÚNG với cả bảng năm hàng lẫn bảng ba hàng. Một khẳng định về MỘT PHẦN TỬ không nói gì
+về LỰC LƯỢNG của tập. Phát hiện đến từ một lượt đọc lại đường chấm lại, không từ một cổng.
+
+Bản vá là bản sao của luật mà worker đã chọn một lần — `DISTINCT ON (v.bid_id) … ORDER BY v.bid_id,
+v.version DESC`, *lần nộp SAU thay lần nộp TRƯỚC*. Nó cũng đúng cho nhà cung cấp NGOÀI top-N: họ
+không được mời nộp lại, nên phiên bản mới nhất của họ vẫn là báo giá vòng một, và họ **vẫn đứng
+trong bảng**. BAFO cải thiện giá của top-N; nó không loại ai khỏi cuộc thi.
+
+Ba khẳng định mới, trong đó một là khẳng định TIỀN ĐỀ: `kq2.lines` có **đúng ba** hàng; bảng bản rõ
+thật sự có **năm** hàng (nếu không, ca kia rỗng ruột); và nhà cung cấp ngoài top-2 vẫn xếp hạng, ở
+hạng **3**, với giá vòng một của họ.
+
+## 8. Phép đo ÂM — ghi ra để vòng sau không làm lại
+
+- **`TRUNCATE rfq_bafo_rounds` KHÔNG cần lớp thứ ba.** `047` dạy rằng một trigger cấp HÀNG chặn DELETE mà không có vế `TRUNCATE` là một nửa lớp, và nhánh DELETE của `bafo_kiem_vong` làm bảng này thuộc đúng hạng ấy. Đo: đường trần ném *"cannot truncate a table referenced in a foreign key constraint … vendor_bid_versions"*; đường `CASCADE` lan tới `vendor_bid_versions` và ném *"Bang vendor_bid_versions chi duoc ghi them"*. Cả hai đường đã đóng. Thứ được ghim là TÍNH CHẤT (hai ca đòi cả hai đường vẫn ném), không phải cơ chế — vì phép bảo vệ ấy GIÁN TIẾP, nó sống nhờ khoá ngoại kia còn đó.
+- **Khoá vòng một không làm phong bì vòng hai yếu hơn** — mục 4.
+- **Thứ tự trigger trên `vendor_bid_versions` được ĐO, không suy:** `a_…_dat_so_phien_ban` · `…_kiem_han_nop` · `…_kiem_phien_khach` · `…_kiem_vong_bafo`, đọc từ `pg_trigger` trên cụm thật. Tên `kiem_vong_bafo` được CHỌN để sắp sau `kiem_han_nop` (v > p > h).
+- **`pg_get_triggerdef` chuẩn hoá thứ tự sự kiện:** `BEFORE INSERT OR UPDATE OR DELETE` in ra thành `BEFORE INSERT OR DELETE OR UPDATE`, và `IN (...)` in ra thành `= ANY (ARRAY[...])`. Cả hai được đo trên một container `postgres:16-alpine` dùng một lần TRƯỚC khi viết bản ghim — nếu đoán thì đó là hai lượt `test:int` mất trắng.
+- **`rfq_evaluations` KHÔNG có `UNIQUE (rfq_id)`** nên lượt chấm thứ hai không cần migration nào; đã đo ở `057` và vòng này dùng lại kết luận ấy.
+
+**Một ca đỏ KHÔNG phải của vòng này, ghi ra thay vì để nó thành một lần chạy lại im lặng.** Lượt
+`test:int` trọn cây lần một có một ca đỏ ở `packages/identity/src/phien-can-totp.int.test.ts` —
+`[039] … tươi ⇒ đi qua; lệch 3 bước vẫn qua` — với `Phien da-MFA phai di sau mot lan TOTP dung gan
+day`. Cùng tệp chạy RIÊNG ngay sau: **XANH 5/5**. Không bản vá nào của vòng này chạm `sessions`,
+`mfa_credentials` hay trigger `sessions_kiem_totp_gan_day`.
+
+Cơ chế, suy từ mã và CHƯA tái lập: helper `hoSo` ghi `last_used_counter = counterForTime(Date.now())
+- lechBuoc` — đồng hồ của **Node**, lúc ghi hồ sơ — còn trigger `039` so nó với **`now()` của
+PostgreSQL** lúc chèn phiên, dung sai ±3 bước × 30 giây. Ca ở dòng 79 dùng `lechBuoc = 3`, **đúng
+biên**: một lần đồng hồ tường vượt mốc bội-30-giây giữa hai câu ấy là đỏ. Dưới tải của 54 tệp int
+song song, khoảng cách giữa hai câu đủ lớn để xác suất ăn vào.
+
+Vòng này KHÔNG sửa nó — sửa một tệp của gói khác vì một ca đỏ chưa tái lập là đúng thứ kho này gọi
+là *sửa theo suy luận*. Nó được tách thành một việc riêng, và việc ấy bắt đầu bằng một lượt tái lập
+(chạy lặp, hoặc tiêm một độ trễ ~31 giây vào điểm đua) trước khi chạm một dòng nào.
+
+## 9. Ranh giới nói ra
+
+- **Bốn cạnh BAFO tồn tại và được canh, nhưng KHÔNG đường sản xuất nào đi qua.** Route, worker, màn hình và **J4** thuộc S1.109 — khoản **227**. Lý do chia KHÔNG phải sức chứa: J4 là một vòng quét ROUTE, và quét khi chưa route nào tồn tại cho ra một cổng XANH trên tập RỖNG. Khác ca S1.107 ở đúng một điểm: ở đó cửa VÀO `EVALUATING` được mở ra HTTP trong khi không có cửa RA; ở đây mọi cửa vào và ra đều đóng với người dùng CÙNG MỘT LÚC.
+- **`policy rfq_bafo_rounds_khach` đóng HẲN với khách.** `027 §6` đặt mặc định là TỪ CHỐI, vòng này không có route khách nào cho BAFO, và bảng mang hai trường mà một nhà cung cấp đọc được là tin cạnh tranh thật (`top_n`, `opened_by`). Nới nó là một câu hỏi có dữ liệu để trả lời ở S1.109.
+- **`buildComparisonTable` chưa lọc theo vòng.** Hôm nay không đường nào tạo được một hàng `rfq_unsealed_bids` của vòng hai ngoài cụm test, nên nó chưa trộn được — nhưng câu ấy đúng vì PHẠM VI, không vì một lớp. Ghi ở khoản 227.
+- **`EVALUATING->AWARDED` vẫn chưa có**, `AWARDED` chưa phải một giá trị nào trong tập đóng. S2.6.
+- **Khoản 225 không được trả lời ở vòng này**, và `059` chép nguyên câu trả lời hiện hành sang ảnh BAFO thay vì đoán một câu mới.
+
+## 10. Số đo
+
+- `pnpm t0` **0 vi phạm** — 294 module, 1203 phụ thuộc.
+- `pnpm test` **72 tệp / 1061 ca** (1 bỏ qua), `VITEST_THOAT_MA=0` — lượt đầu ĐỎ 3 ca: hai lời khai đếm ở `docs/STATE.md`/`Handoff.md` và một danh sách bảng tenant chưa khai.
+- `pnpm test:int` **54 tệp / 1152 ca**, `VITEST_THOAT_MA=0`, **989 giây** — lượt ĐẦU đỏ 3 ca ở 2 tệp (xem mục 7 và 7c); ca `[039]` của `phien-can-totp` đỏ ở lượt trọn cây rồi XANH khi chạy riêng, và nó KHÔNG phải hồi quy của vòng này (ca ấy ghim đúng biên ±3 bước TOTP, xem cuối mục 8).
+- `pnpm evidence` **`vitest thoát mã 0`, báo cáo 2213 khẳng định** (2192 → 2213) — lượt DUY NHẤT unit + int chung một pool; **56/56** bất biến được kiểm chứng (34/34 nghiệp vụ + 22/22 hàng rào).
+- Phép đo mới: `luot-danh-gia.int.test.ts` **+14 ca** (bốn cạnh đi trọn, top-N hai chiều, CAO ③, dấu vòng không khai được, sáu ca của `bafo_kiem_vong`, hai ca C1, TRUNCATE hai đường, thứ tự yêu cầu mở thầu) và **+4 helper** fixture; `transitions.test.ts` **+4 ca** (tập đóng khớp SQL, ba cạnh KHÔNG tồn tại).
+- Sổ nợ **225 → 227** khoản, mở **89 → 91** — khoản **226** và **227** mở, không khoản nào đóng. Rổ A **6**, rổ B **62 → 64**, rổ C **21**; ba rổ cộng đúng: 6 + 64 + 21 = 91.
+- **54 → 55** ADR (ADR-055), **58 → 59** migration, **14** gói không đổi. `evidence/INV-matrix.md` **KHÔNG đổi một byte** — `sha256` khớp `origin/master`, dù tệp ĐƯỢC SINH LẠI (mtime trùng lượt evidence). Không bất biến nào đổi trạng thái, số đếm hay mô tả: mọi ca mới của vòng này KHÔNG mang nhãn `[INV-xx]`, và ca `[INV-A4]`/`[INV-D5]` chỉ ĐỔI TÊN chứ không đổi số.

@@ -207,6 +207,11 @@ const HAM_KHONG_PHAI_CANH = [
   "public.bid_dat_so_phien_ban",
   "public.bid_kiem_han_nop",
   "public.bid_kiem_phien_khach",
+  // [S1.108 / 059] Vế top-N của vòng BAFO: nó đọc `NEW.bafo_round_id` mà C1 vừa đặt và RAISE khi
+  // luồng báo giá không nằm trong top-N của lượt đánh giá mà vòng trỏ tới. Một hàng HỢP LỆ đi qua
+  // nó (mọi lần nộp vòng MỘT, vì `bafo_round_id IS NULL` thì nó trả `NEW` ngay), nên nó đòi một
+  // nhân chứng hành vi cho INSERT — `dungKichBan()` đã nộp báo giá thật.
+  "public.bid_kiem_vong_bafo",
   "public.bid_phai_co_bien_nhan",
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
@@ -241,6 +246,11 @@ const HAM_KHONG_PHAI_CANH = [
   "public.mfa_reset_kiem_quyen",
   "public.otp_go_khoa_khong_xoa_dau_vet",
   "public.outbox_jobs_xoa_payload_dang_nhap",
+  // [S1.108 / 059] Ba nhánh trong một hàm: INSERT (một vòng hợp lệ), UPDATE (chỉ `closed_at`, chỉ
+  // một chiều), DELETE (từ chối vô điều kiện). Nhánh DELETE một mình sẽ làm nó là hàm CANH, nhưng
+  // nhánh UPDATE từ chối CÓ ĐIỀU KIỆN — một câu `SET closed_at = now()` hợp lệ đi qua — nên bảng
+  // vẫn sửa được ở đường hợp lệ và nó thuộc danh sách này.
+  "public.bafo_kiem_vong",
   "public.rfq_budgets_chi_sua_khi_soan",
   "public.rfq_gia_han_khong_hoi_sinh",
   "public.rfq_items_chi_sua_khi_soan",
@@ -469,6 +479,10 @@ const MOI_SU_KIEN: readonly SuKien[] = ["INSERT", "UPDATE", "DELETE"];
  */
 const HAM_CANH_MOT_SU_KIEN: Readonly<Record<string, SuKien>> = {
   "public.rfq_key_material_bat_bien": "DELETE",
+  // [S1.108 / 059] `bafo_kiem_vong` từ chối DELETE VÔ ĐIỀU KIỆN (*"một vòng BAFO là một sự thật
+  // kiểm toán"*), còn INSERT và UPDATE thì từ chối CÓ ĐIỀU KIỆN — nên nó không phải hàm canh
+  // chỉ-ghi-thêm, và nhân chứng của nó chỉ có được ở hai sự kiện kia.
+  "public.bafo_kiem_vong": "DELETE",
 };
 
 interface HangTapRong {
@@ -951,9 +965,13 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "public.org_procurement_policies",
     api(
       "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, created_by, created_by_session_id) " +
-        "VALUES ($1, 1, '100000000.00', 'VND', $4::jsonb, 0, $2, $3) RETURNING id, org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id",
+        "VALUES ($1, 1, '100000000.00', 'VND', $4::jsonb, 1, $2, $3) RETURNING id, org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id",
       // [S1.105 / 057] `bafo_top_n` đi KÈM: `056` đòi `(eval_components IS NULL) = (bafo_top_n IS NULL)`,
       // và `0` là *không dùng BAFO*. Hai cột ấy là một BỘ, nên khai một nửa là một hàng bị chặn.
+      // ~~`0`~~ **[S1.108 / 059] `1`** — `bafo_kiem_vong` đòi `top_n` của vòng KHỚP `bafo_top_n` của
+      // ĐÚNG phiên bản chính sách mà lượt đánh giá đã tính dưới, và `0` nghĩa là *tổ chức này không
+      // dùng BAFO*. Với `0`, bộ ba `(bafo_kiem_vong, rfq_bafo_rounds, INSERT)` không bao giờ có
+      // nhân chứng. Không khai `bafo_top_n` ở `khai` nên không đòi `RETURNING` nó.
       // `eval_components` KHÔNG khai ở `khai` (nên không đòi RETURNING nó): nó ở đây để
       // trigger `kiem_thanh_phan_theo_chinh_sach` có một tập để so — chính sách rỗng làm nó ném, và khi ấy
       // bộ ba của nó không bao giờ có nhân chứng.
@@ -1496,6 +1514,41 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_evaluation_lines",
+  );
+
+
+  // ---- [S1.108 / 059] Vòng BAFO: BA bộ ba mới của tổng điều tra khoản 60 ----------------
+  // `kiem_danh_tinh_theo_phien` trên `rfq_bafo_rounds`/INSERT (hàm CŨ, bảng MỚI), và
+  // `bafo_kiem_vong` ở INSERT lẫn UPDATE. Sự kiện DELETE của nó khai ở `HAM_CANH_MOT_SU_KIEN`:
+  // nó từ chối vô điều kiện ở đó, nên không nhân chứng nào có được.
+  //
+  // `bid_kiem_vong_bafo` KHÔNG cần một câu mới: nó cắm trên `vendor_bid_versions`/INSERT và câu
+  // nộp báo giá của vòng MỘT ở trên đã đi qua nó (`bafo_round_id IS NULL` ⇒ trả `NEW` ngay).
+  //
+  // RFQ phải ở `EVALUATING` — cạnh `UNSEALED->EVALUATING`. Câu dưới là câu DỰNG, không làm nhân
+  // chứng: bộ ba `(rfq_kiem_chuyen_trang_thai, rfq_packages, UPDATE)` đã có nhân chứng ở trên.
+  await c.query("UPDATE rfq_packages SET status = 'EVALUATING' WHERE id = $1", [rfq1]);
+
+  const vongBafo = await chenNC(
+    "public.rfq_bafo_rounds",
+    api(
+      "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, deadline_at, " +
+        "opened_by, opened_by_session_id) VALUES ($1, $2, $3, $4, 1, $5, $6, $7) " +
+        "RETURNING id, org_id, rfq_id, evaluation_id, policy_id, top_n, opened_by, opened_by_session_id",
+      [org, rfq1, ld, cs, XA_HON, pm.u, pm.s],
+      // `round_no` KHÔNG khai: `bafo_kiem_vong` ĐẶT nó, và vế ⒠ của khoản 80 làm nhân chứng NÉM
+      // khi một cột đã khai bị trigger sửa. Cùng khuôn `bid_dat_so_phien_ban` với `version`.
+      { org_id: org, rfq_id: rfq1, evaluation_id: ld, policy_id: cs, top_n: 1, opened_by: pm.u, opened_by_session_id: pm.s },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_bafo_rounds",
+      "UPDATE",
+      api("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1 RETURNING id", [vongBafo], { id: vongBafo }),
+    ),
+    1,
+    "rfq_bafo_rounds",
   );
 
   return { orgId: org };

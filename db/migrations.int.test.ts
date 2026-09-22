@@ -1455,8 +1455,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // có định nghĩa ghim" có việc; hai trigger còn lại của hàm này thuộc 040 và được ghim ở mục
       // `mfa_reset_kiem_quyen`. `rfq_evaluations_kiem_danh_tinh` (057) là trigger thứ HAI MƯƠI HAI của
       // hàm này tính cả hai cái ấy — đúng con số mà chú thích H6-6 bên dưới đã viết sẵn cảnh báo.
+      // ~~HAI MƯƠI~~ **[S1.108] HAI MƯƠI MỐT** ở danh sách này: `rfq_bafo_rounds_kiem_danh_tinh`
+      // (059) là trigger thứ HAI MƯƠI BA của hàm, tính cả hai cái của 040.
       trigger: [
         "org_procurement_policies_kiem_danh_tinh",
+        "rfq_bafo_rounds_kiem_danh_tinh",
         "rfq_budgets_kiem_danh_tinh",
         "rfq_evaluations_kiem_danh_tinh",
         "rfq_invitation_tokens_kiem_danh_tinh",
@@ -1495,9 +1498,16 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // trigger `_chan_truncate` — nên bản ghim phải trỏ sang `047`, đúng quy tắc "migration CUỐI
     // CÙNG" mà chính khoản nợ 56 dựng ra. Sáu trigger, không phải ba.
     { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
+    // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
+    // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
+    { ham: "bafo_kiem_vong", migration: "059_vong_bafo.sql", trigger: ["rfq_bafo_rounds_kiem_vong"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
-    { ham: "bid_kiem_han_nop", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_han_nop", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
+    // [S1.108 / S2.5] Tên trigger được chọn để sắp SAU `vendor_bid_versions_kiem_han_nop` theo
+    // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
+    { ham: "bid_kiem_vong_bafo", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
     { ham: "chinh_sach_phien_ban_tang_dan", migration: "035_phien_ban_chinh_sach_lien_tuc.sql", trigger: ["org_procurement_policies_phien_ban_tang_dan"] },
     { ham: "guest_session_kiem_danh_tinh", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_kiem_danh_tinh"] },
@@ -1514,20 +1524,20 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_key_material_bat_bien", migration: "026_xoa_mat_ma_vat_lieu_khoa.sql", trigger: ["rfq_key_material_bat_bien"] },
     { ham: "rfq_khoa_chi_sinh_luc_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_sinh_luc_mo"] },
     { ham: "rfq_khoa_chi_thu_hoi_khi_huy", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_thu_hoi_khi_huy"] },
-    { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "058_huy_duoc_sau_khi_cham.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "059_vong_bafo.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
     { ham: "rfq_kiem_nguong_phe_duyet_kep", migration: "014_procurement_policy.sql", trigger: ["rfq_packages_kiem_nguong_phe_duyet_kep"] },
-    { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "019_unseal.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
+    { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
     { ham: "thu_hoi_don_dieu", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_thu_hoi_don_dieu", "invitation_otp_thu_hoi_don_dieu", "rfq_invitation_tokens_thu_hoi_don_dieu", "rfq_invitations_thu_hoi_don_dieu", "user_login_tokens_thu_hoi_don_dieu"] },
     { ham: "unseal_canh_bao_break_glass", migration: "019_unseal.sql", trigger: ["unseal_requests_canh_bao_break_glass"] },
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
     { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
     { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
-    { ham: "unseal_kiem_rfq_da_dong", migration: "019_unseal.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
+    { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
     { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "019_unseal.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
     { ham: "users_thu_hoi_phien_khi_dinh_chi", migration: "034_dinh_chi_thu_hoi_phien.sql", trigger: ["users_thu_hoi_phien_khi_dinh_chi"] },
   ];
@@ -1535,7 +1545,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
   const HAM_GHIM = [...HAM_51, ...HAM_56];
 
-  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ BỐN MƯƠI BA thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.13 / nợ 51 · S1.15 / nợ 56] ~~năm~~ ~~tám~~ ~~BỐN MƯƠI BA~~ BỐN MƯƠI LĂM thân hàm trigger trong migration và trong hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const docFile = (tenFile: string): string => readFileSync(fileURLToPath(new URL(`./migrations/${tenFile}`, import.meta.url)), "utf8");
     const hardening = docFile("hardening.always.sql");
     const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
@@ -3095,6 +3105,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "056_chinh_sach_danh_gia.sql",
           "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
+        "059_vong_bafo.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7492,6 +7503,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "056_chinh_sach_danh_gia.sql",
         "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
+        "059_vong_bafo.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7770,6 +7782,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "056_chinh_sach_danh_gia.sql",
         "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
+        "059_vong_bafo.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

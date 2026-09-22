@@ -56,6 +56,25 @@ export const PERMISSIONS = {
   RFQ_UNSEAL_APPROVE: "rfq.unseal.approve",
   BID_VIEW: "bid.view",
   EVALUATION_PERFORM: "evaluation.perform",
+  /**
+   * [S1.108 / S2.5 / 059] Mở một vòng BAFO sau khi đã chấm.
+   *
+   * MÃ RIÊNG, và lý do là một phép ĐO chứ không một khẩu vị. Mở vòng BAFO là hành động DUY NHẤT
+   * của sản phẩm mà người bấm **đã biết giá của mọi người** — spec S2 §8.1 gọi nó là chỗ rò lớn
+   * nhất của S2, và rò NGHIỆP VỤ chứ không kỹ thuật. Nếu nó đi qua `evaluation.perform` thì NĂM
+   * trên SÁU vai mở được (khoản **220** đã đo: `REQUESTER · BUYER · TECHNICAL ·
+   * PROCUREMENT_MANAGER · FINANCE`, chỉ `DIRECTOR` không), và `BUYER` trong số đó còn giữ cả
+   * `rfq.create` — tức một người tự tạo gói, tự chấm, rồi tự mời lại top-N.
+   *
+   * Dùng lại `rfq.invite` cũng KHÔNG đúng, dù nó hẹp hơn (`BUYER` + `PROCUREMENT_MANAGER`): mời
+   * SAU khi đã biết giá là một quyền KHÁC với mời lúc chưa biết gì, và một mã dùng cho cả hai
+   * làm ma trận quyền nói được ít hơn thực tế.
+   *
+   * Chủ dự án chốt 2026-09-22: chỉ `PROCUREMENT_MANAGER`. D3 KHÔNG đổi — `kiem_tra_ma_tran_quyen`
+   * (005) nổ khi một vai giữ CẢ NĂM mã của chuỗi `rfq.create → rfq.invite → rfq.unseal →
+   * award.recommend → po.approve`, và mã này không nằm trong chuỗi ấy.
+   */
+  RFQ_BAFO_OPEN: "rfq.bafo.open",
   AWARD_RECOMMEND: "award.recommend",
   PO_APPROVE: "po.approve",
   SUPPLIER_MANAGE: "supplier.manage",
