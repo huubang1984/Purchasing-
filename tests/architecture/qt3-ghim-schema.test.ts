@@ -68,7 +68,7 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
-import { moiCauSql, type CauSql } from "./qt3-doc-sql.js";
+import { moiCauSql, viPhamSanTheoTep, type CauSql } from "./qt3-doc-sql.js";
 import { NGU_PHAP_KHONG_GHIM, TU_KHOA_SAU_FROM, TU_KHOA_TRUOC_NGOAC } from "./qt3-tu-vung.js";
 
 /**
@@ -88,6 +88,17 @@ import { NGU_PHAP_KHONG_GHIM, TU_KHOA_SAU_FROM, TU_KHOA_TRUOC_NGOAC } from "./qt
  */
 const SO_CAU_TOI_THIEU = 139;
 const SO_TEP_TOI_THIEU = 27;
+
+/*
+ * **[S1.113 / lượt soi ngang 78 — ③] HAI CON SỐ TRÊN KHÔNG CÒN LÀ NGƯỜI CANH DUY NHẤT — và chúng
+ * đã thiu.** Khối chú thích ngay trên tự khai là *"đóng đinh sát số đo, không phải một cái sàn
+ * lỏng"*; lượt 78 đo lại trên HEAD: **204 câu từ 34 tệp**, tức sàn 139/27 để lọt 32% và 21%. Đó
+ * là đúng lớp lỗi mà lượt **77** đã tìm ra và đóng — nhưng đóng ở bên dùng KIA của cùng bộ đọc
+ * (`qt3-cu-phap.int.test.ts`), nên chỗ này sống sót thêm sáu vòng.
+ *
+ * Người canh thật nay là `viPhamSanTheoTep` ở chính `qt3-doc-sql.ts`: *mỗi tệp nguồn có `.query(`
+ * phải đóng góp ít nhất MỘT câu*. Hai con số giữ nguyên làm lớp thứ hai, không làm lớp duy nhất.
+ */
 
 /**
  * Tệp DUY NHẤT được chạm `search_path`, và lý do KHÔNG được đo bằng độ dài câu văn.
@@ -256,6 +267,8 @@ describe("[INV-H21] QT3: ghim thì phải ghim ĐỦ", () => {
   it("bộ đọc thấy đủ mã có SQL — nếu nó thấy quá ít thì mọi khẳng định dưới đây rỗng ruột", () => {
     expect(CAC_CAU.length).toBeGreaterThanOrEqual(SO_CAU_TOI_THIEU);
     expect(new Set(CAC_CAU.map((c) => c.tep)).size).toBeGreaterThanOrEqual(SO_TEP_TOI_THIEU);
+    // [S1.113 / lượt soi ngang 78 — ③] Người canh SUY RA, xem khối khai ở trên hai con số.
+    expect(viPhamSanTheoTep(CAC_CAU), "sàn theo tệp — tính đầy đủ của bộ đọc").toEqual([]);
   });
 
   it("bộ đọc GHÉP được câu nối bằng `+` — không thì nửa sau mọi câu như thế là vô hình", () => {
