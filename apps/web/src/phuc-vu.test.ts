@@ -19,6 +19,11 @@ import { fileURLToPath } from "node:url";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// [khoản nợ 59] Hai probe ở cuối tệp viết một tệp `.js` THẬT vào `apps/web/trang/`, và thư mục
+// ấy NẰM TRONG mục tiêu cruise (`packages apps tools tests db`). Khoá này là thứ giữ chúng không
+// giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
+// đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
+import { voiKhoaDepcruise } from "../../../tests/architecture/khoa-depcruise.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -248,51 +253,64 @@ describe("bộ chuyển tiếp", () => {
 describe("[S1.107] lớp cấm sink HTML ở apps/web/trang", () => {
   const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
 
+  /**
+   * Viết một tệp `.js` THẬT vào `apps/web/trang/`, chạy eslint trên nó, rồi dọn — TRONG khoá
+   * của khoản nợ **59**.
+   *
+   * Khoá không phải một phép phòng xa: bản đầu của hai probe này KHÔNG có nó, và CI ubuntu của
+   * PR #107 đỏ với `ENOENT ... apps/web/trang/zzprobe-sink.js ... in apps/web/trang/zzprobe-sink.js`
+   * ở `[INV-G1]` của `tests/architecture/boundaries.test.ts` — lượt cruise TOÀN KHO liệt kê tệp
+   * probe rồi đọc nó sau khi `finally` đã xoá. Thư mục `apps/web/trang/` NẰM TRONG mục tiêu
+   * cruise (`packages apps tools tests db`), nên một tệp thật ở đó là tài nguyên DÙNG CHUNG.
+   */
+  function voiTepProbe(ten: string, noiDung: string, do_: (duong: string) => void): void {
+    const duong = join(GOC_KHO, `apps/web/trang/${ten}`);
+    voiKhoaDepcruise(() => {
+      writeFileSync(duong, noiDung);
+      try {
+        do_(`apps/web/trang/${ten}`);
+      } finally {
+        rmSync(duong, { force: true });
+      }
+    });
+  }
+
+  /** eslint trên một tệp, trả STDOUT — eslint thoát khác 0 khi có lỗi, nên lỗi đi qua `catch`. */
+  function chayEslint(duongTuongDoi: string): string {
+    try {
+      return execFileSync("npx", ["eslint", duongTuongDoi], { cwd: GOC_KHO, encoding: "utf8", shell: true });
+    } catch (e) {
+      return String((e as { stdout?: string }).stdout ?? "");
+    }
+  }
+
   it("một tệp gán `innerHTML` trong `apps/web/trang/` làm eslint ĐỎ — và đỏ vì ĐÚNG luật ấy", () => {
-    const probe = join(GOC_KHO, "apps/web/trang/zzprobe-sink.js");
-    writeFileSync(
-      probe,
+    voiTepProbe(
+      "zzprobe-sink.js",
       `const el = document.getElementById("x");
 el.innerHTML = "<b>" + location.hash + "</b>";
 `,
+      (duong) => {
+        const ra = chayEslint(duong);
+        expect(ra, "eslint KHÔNG đỏ trên một tệp gán innerHTML — luật không có răng").toContain(
+          "no-restricted-properties",
+        );
+        expect(ra).toContain("innerHTML");
+      },
     );
-    try {
-      let ra = "";
-      try {
-        execFileSync("npx", ["eslint", "apps/web/trang/zzprobe-sink.js"], {
-          cwd: GOC_KHO,
-          encoding: "utf8",
-          shell: true,
-        });
-      } catch (e) {
-        ra = String((e as { stdout?: string }).stdout ?? "");
-      }
-      expect(ra, "eslint KHÔNG đỏ trên một tệp gán innerHTML — luật không có răng").toContain("no-restricted-properties");
-      expect(ra).toContain("innerHTML");
-    } finally {
-      rmSync(probe, { force: true });
-    }
   }, 120_000);
 
   it("ĐỐI CHỨNG ÂM: cùng tệp ấy dựng DOM bằng `textContent` thì eslint XANH", () => {
     // Không có vế này, vế trên xanh y hệt với một cấu hình làm đỏ MỌI tệp trong thư mục.
-    const probe = join(GOC_KHO, "apps/web/trang/zzprobe-sach.js");
-    writeFileSync(
-      probe,
+    voiTepProbe(
+      "zzprobe-sach.js",
       `const el = document.getElementById("x");
 el.replaceChildren();
 el.textContent = location.hash;
 `,
+      (duong) => {
+        expect(chayEslint(duong).trim(), "một tệp sạch mà eslint vẫn kêu — luật quá rộng").toBe("");
+      },
     );
-    try {
-      const ra = execFileSync("npx", ["eslint", "apps/web/trang/zzprobe-sach.js"], {
-        cwd: GOC_KHO,
-        encoding: "utf8",
-        shell: true,
-      });
-      expect(ra.trim()).toBe("");
-    } finally {
-      rmSync(probe, { force: true });
-    }
   }, 120_000);
 });

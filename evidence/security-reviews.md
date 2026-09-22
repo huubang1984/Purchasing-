@@ -10252,6 +10252,35 @@ minh công thức ấy tái tạo ĐÚNG bản cũ từ `011` — không chép t
 con số: thông báo nền của lượt chạy in *"exit code 0"* trong khi log ghi `VITEST_THOAT_MA=1`. Dòng
 tự ghi sau một lần chuyển hướng KHÔNG qua ống là dòng chịu lực; mã thoát của lớp bọc thì không.
 
+## 7c. Và bản vá ③ của chính vòng soi dựng ra một cổng ĐỎ GIẢ — CI bắt
+
+Hai probe của luật cấm sink HTML viết một tệp `.js` **THẬT** vào `apps/web/trang/`, vì luật eslint
+khớp theo ĐƯỜNG DẪN nên tệp phải nằm đúng ở đó. Bản đầu không lấy khoá của khoản **59**.
+
+Đo trên CI, PR #107 lượt đầu: `T1+T2 (ubuntu-latest)` **ĐỎ**, `T1+T2 (windows-latest)` **XANH**,
+`T3` xanh, `pnpm test` ở máy xanh. Ca đỏ là `[INV-G1]` của `tests/architecture/boundaries.test.ts`:
+
+```
+ERROR: Extracting dependencies ran afoul of...
+  ENOENT: no such file or directory, open '.../apps/web/trang/zzprobe-sink.js'
+... in apps/web/trang/zzprobe-sink.js
+```
+
+Lượt cruise TOÀN KHO liệt kê tệp probe rồi đọc nó **sau khi** `finally` đã xoá. `apps/web/trang/`
+nằm trong mục tiêu cruise (`packages apps tools tests db`), nên một tệp thật ở đó là **tài nguyên
+dùng chung** — đúng định nghĩa mà khoản 59 viết ra, và đúng thứ vòng này vừa đóng ở khoản 222 cho
+một mã lỗi khác.
+
+Một vòng soi ngang có chủ đề *"cổng xanh vì phạm vi"* vừa tự dựng một **cổng đỏ giả**. Ghi ra
+nguyên văn thay vì sửa im lặng, vì nó nói một điều đúng về kho này: bất cứ test nào viết một tệp
+thật vào cây nguồn đều phải đi qua `voiKhoaDepcruise`, và *"tôi xoá nó ngay trong `finally`"*
+không phải một lớp — nó chỉ thu hẹp cửa sổ.
+
+**Bản vá:** cả hai probe chạy trong `voiKhoaDepcruise`, gom vào một hàm `voiTepProbe` để không có
+chỗ thứ hai quên. **Phép đo hai chiều:** chiều ÂM là chính ca đỏ trên CI ở trên; chiều DƯƠNG là hai
+tệp ấy chạy CÙNG MỘT LƯỢT vitest ở máy — `apps/web/src/phuc-vu.test.ts` và
+`tests/architecture/boundaries.test.ts`, 86 ca, xanh.
+
 ## 8. Số đo
 
 - `pnpm t0` ****0 vi phạm** — 294 module, 1202 phụ thuộc**.
