@@ -56,7 +56,7 @@ phải chuyện câu chữ.
 | "Giá thấp nhất = nhà cung cấp tốt nhất" | "Hỗ trợ quyết định dựa trên tổng chi phí" |
 | "AI phát hiện gian lận" | "Tạo bằng chứng kiểm toán" |
 | **"Kể cả chúng tôi cũng không xem được"** | **"Mọi lần truy cập đều để lại dấu vết bất biến"** |
-| **[S1.108] "Vòng BAFO giữ kín giá của bạn với người mua"** | **"Giá vòng BAFO được niêm phong lại và chỉ mở qua cổng bốn vế; danh sách mời suy từ thứ hạng nên một lần mời ngoài top-N để lại dấu"** |
+| ~~**[S1.108] "Vòng BAFO giữ kín giá của bạn với người mua"**~~ **[S1.109] "Vòng BAFO giữ kín giá của bạn với người mua"** | **"Giá vòng BAFO được niêm phong lại và chỉ mở qua cổng bốn vế; danh sách mời suy từ thứ hạng nên một lần mời ngoài top-N để lại dấu"** — [S1.109] nay ĐO được: một vòng quét mọi route với người mua ĐỦ QUYỀN không thấy một chữ số giá BAFO nào trước cổng, và thấy ngay sau |
 
 Dòng cuối là ràng buộc bổ sung phát sinh từ ADR-002: mô hình đe dọa đã chọn là tầng 1+2,
 nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã. Tuyên bố zero-knowledge sẽ là

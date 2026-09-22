@@ -27,6 +27,15 @@ import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docBangXepHang } from "./doc-bang-xep-hang.js";
 import { DanhGiaTuChoiError, taoLuotDanhGia } from "./luot-danh-gia.js";
+// Bí danh có chủ đích: tệp này đã có một FIXTURE tên `moVongBafo` (chèn hàng thẳng, dựng
+// cảnh cho S1.108). Hàm SẢN XUẤT đi vào dưới tên khác để không chỗ nào đọc nhầm cái này
+// thành cái kia — hai thứ đo hai việc khác nhau.
+import {
+  VongBafoTuChoiError,
+  docVongBafo,
+  dongVongBafo as dongVongBafoThat,
+  moVongBafo as moVongBafoThat,
+} from "./vong-bafo.js";
 import { SO_LE_TIEN, docSo, vietSo } from "./chi-phi-hieu-dung.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -1249,5 +1258,172 @@ describe("[S1.108 / S2.5] một vòng BAFO hợp lệ, và nó chỉ đóng đư
       [rfqId],
     );
     expect(rows[0]?.con, "hạn vòng một còn ở tương lai — MAI_SAU là bảy ngày").toBe(true);
+  });
+});
+
+// ================================================================================================
+// [S1.109 / S2.5 tầng người dùng] ĐƯỜNG SẢN XUẤT của bốn cạnh BAFO
+//
+// S1.108 chứng minh bốn cạnh ĐI TRỌN ĐƯỢC bằng cách chèn hàng thẳng dưới vai ứng dụng. Khoản
+// **227** ghi rằng lúc ấy KHÔNG đường sản xuất nào đi qua chúng. Khối này đo chính các hàm mà
+// route gọi — nên nó cũng đo những thứ fixture không có: cổng quyền, hàng sổ, và lối từ chối.
+// ================================================================================================
+
+describe("[S1.109 / S2.5] moVongBafo và dongVongBafo — hai cạnh đầu qua đường SẢN XUẤT", { timeout: 300000 }, () => {
+  it("mở vòng: EVALUATING -> BAFO_OPEN, số vòng 1, top-N SUY từ chính sách, một hàng sổ", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"], ["544000000.00", "VND"]], 2);
+
+    const han = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+    const v = await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId, deadlineAt: han, actorSessionId: sYc }, apiPool),
+    );
+
+    expect(v.roundNo).toBe(1);
+    // `topN` KHÔNG do người gọi khai — nó suy từ `bafo_top_n` của phiên bản chính sách mà lượt
+    // chấm đã tính dưới. `daCham(..., 2)` dựng chính sách với `bafo_top_n = 2`.
+    expect(v.topN).toBe(2);
+    expect(v.closedAt).toBeNull();
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_OPEN");
+
+    const { rows: so } = await db.pool.query<{ resource_id: string; payload: Record<string, unknown> }>(
+      "SELECT resource_id, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_BAFO_ROUND_OPENED'",
+      [orgA],
+    );
+    expect(so).toHaveLength(1);
+    expect(so[0]?.resource_id).toBe(v.bafoRoundId);
+    expect(so[0]?.payload.rfqId).toBe(rfqId);
+    expect(so[0]?.payload.topN).toBe(2);
+
+    // Đường ĐỌC thấy đúng vòng vừa mở.
+    const doc = await withTenant(apiPool, orgA, (c) => docVongBafo(c, orgA, rfqId));
+    expect(doc?.bafoRoundId).toBe(v.bafoRoundId);
+  });
+
+  it("đóng vòng: BAFO_OPEN -> BAFO_CLOSED, `closed_at` của VÒNG được đặt — và `closed_at` của GÓI THẦU KHÔNG đổi", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 1);
+    await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+    );
+
+    // TIỀN ĐỀ, đo trước: gói thầu ĐÃ CÓ một `closed_at` từ vòng một. Không có khẳng định này, ca
+    // dưới xanh cả khi cột ấy vốn NULL — và lúc ấy nó không đo gì.
+    const { rows: truoc } = await db.pool.query<{ closed_at: Date | null }>(
+      "SELECT closed_at FROM rfq_packages WHERE id = $1", [rfqId],
+    );
+    expect(truoc[0]?.closed_at).not.toBeNull();
+
+    const v = await withTenant(apiPool, orgA, (c) =>
+      dongVongBafoThat(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(v.closedAt).not.toBeNull();
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_CLOSED");
+
+    // VẾ ĐÁNG GIÁ NHẤT của ca này: `closeRfq` ghi `rfq_packages.closed_at`, nên tham số hoá nó
+    // cho BAFO sẽ GHI ĐÈ giờ đóng thầu vòng một — một sự thật kiểm toán. `dongVongBafo` là một
+    // hàm riêng đúng vì thế.
+    const { rows: sau } = await db.pool.query<{ closed_at: Date | null; early_close_reason: string | null }>(
+      "SELECT closed_at, early_close_reason FROM rfq_packages WHERE id = $1", [rfqId],
+    );
+    expect(sau[0]?.closed_at?.toISOString()).toBe(truoc[0]?.closed_at?.toISOString());
+  });
+
+  it("cổng quyền `rfq.bafo.open`: một phiên KHÔNG có mã ấy bị từ chối, kể cả khi nó chấm thầu được", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 1);
+    // `uKhong` là DIRECTOR — vai giữ `bid.view` và không giữ `evaluation.perform`; ADR-055 cho
+    // `rfq.bafo.open` CHỈ `PROCUREMENT_MANAGER`, nên DIRECTOR không mở vòng được.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        moVongBafoThat(c, orgA, { rfqId, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sKhong }, apiPool),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("ba lối TỪ CHỐI CÓ TÊN — và cả ba là `VongBafoTuChoiError`, không một lỗi Postgres trần", async () => {
+    // ⑴ sai trạng thái: gói thầu chưa chấm lần nào thì còn ở UNSEALED.
+    const { rfqId: chuaCham } = await goiDaMo([["548800000.00", "VND"]], TP_GIA, 2);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        moVongBafoThat(c, orgA, { rfqId: chuaCham, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toThrow(/EVALUATING/u);
+
+    // ⑵ chính sách TẮT BAFO (`bafo_top_n = 0` — quy ước của `056`).
+    const { rfqId: tatBafo } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 0);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId: tatBafo, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(VongBafoTuChoiError);
+    expect((loi as VongBafoTuChoiError).lyDo).toBe("CHINH_SACH_TAT_BAFO");
+
+    // ⑶ đóng một vòng khi không có vòng nào đang mở.
+    const loi2 = await withTenant(apiPool, orgA, (c) =>
+      dongVongBafoThat(c, orgA, { rfqId: tatBafo, actorSessionId: sYc }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi2).toBeInstanceOf(VongBafoTuChoiError);
+    expect((loi2 as VongBafoTuChoiError).lyDo).toBe("KHONG_CO_VONG_DANG_MO");
+  });
+});
+
+// ================================================================================================
+// [S1.109 / S2.5 / 060] VÒNG BAFO CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT
+//
+// Lỗ mà lượt soi HÌNH DẠNG của vòng này tìm ra: `059` kiểm lượt đánh giá THUỘC ĐÚNG RFQ và khớp
+// chính sách, nhưng KHÔNG đòi nó là lượt mới nhất — nên sau đúng một chu kỳ BAFO (lúc ấy có HAI
+// lượt), vòng thứ hai mở được với lượt CŨ, tức mời top-N của bảng xếp hạng TRƯỚC BAFO.
+//
+// Ca này chèn hàng THẲNG dưới vai `app_api`, không qua `moVongBafoThat`: hàm ấy tự suy lượt mới
+// nhất, nên đi qua nó thì lớp CSDL không bao giờ được hỏi. Đo lớp dưới thì phải gọi thẳng lớp dưới.
+// ================================================================================================
+
+describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CSDL từ chối", { timeout: 300000 }, () => {
+  it("lượt CŨ bị từ chối, và ĐỐI CHỨNG DƯƠNG: cùng câu ấy với lượt MỚI NHẤT thì đi qua", async () => {
+    // Một chu kỳ BAFO trọn vẹn để có HAI lượt chấm trên cùng một RFQ.
+    const { rfqId, banRo, luotId: luot1 } = await daCham(
+      [["548800000.00", "VND"], ["537600000.00", "VND"], ["544000000.00", "VND"]], 2,
+    );
+    const vong1 = await moVongBafo(rfqId, luot1, 2);
+    const lai = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    await moThauBafo(rfqId, vong1, [[lai, { totalAmount: "500000000.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    const luot2 = kq2.evaluationId;
+
+    // TIỀN ĐỀ: hai lượt chấm KHÁC NHAU thật sự tồn tại cho cùng một RFQ. Thiếu khẳng định này,
+    // ca dưới xanh cả khi `luot2 === luot1` — và lúc ấy nó không đo gì.
+    expect(luot2).not.toBe(luot1);
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_evaluations WHERE org_id = $1 AND rfq_id = $2", [orgA, rfqId],
+    );
+    expect(dem[0]?.n).toBe("2");
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+
+    const chen = async (luotId: string): Promise<string> => {
+      const { rows: e } = await db.pool.query<{ policy_id: string }>(
+        "SELECT policy_id FROM rfq_evaluations WHERE id = $1", [luotId],
+      );
+      return await withTenant(apiPool, orgA, async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, deadline_at, " +
+            "opened_by, opened_by_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+          [orgA, rfqId, luotId, e[0]?.policy_id ?? "", 2, new Date(Date.now() + 3 * 24 * 3600 * 1000), uYc, sYc],
+        );
+        return rows[0]?.id ?? "";
+      });
+    };
+
+    // VẾ ÂM — lượt CŨ.
+    await expect(chen(luot1)).rejects.toThrow(/khong phai luot moi nhat/u);
+
+    // ĐỐI CHỨNG DƯƠNG — cùng câu, cùng mọi tham số khác, chỉ đổi lượt. Không có vế này, ca trên
+    // xanh cả khi câu INSERT hỏng vì một lý do khác hẳn.
+    const vong2 = await chen(luot2);
+    expect(vong2).not.toBe("");
+    const { rows: v } = await db.pool.query<{ round_no: number; evaluation_id: string }>(
+      "SELECT round_no, evaluation_id FROM rfq_bafo_rounds WHERE id = $1", [vong2],
+    );
+    expect(v[0]?.evaluation_id).toBe(luot2);
+    expect(v[0]?.round_no).toBe(2);
   });
 });

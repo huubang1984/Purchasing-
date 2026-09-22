@@ -116,6 +116,7 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b3"), true);
     hien($("b4"), true);
     hien($("b5"), true);
+    hien($("b6"), true);
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -257,7 +258,15 @@ $("nut-bang").addEventListener("click", async () => {
     const tr = document.createElement("tr");
     if (reNhoNhat !== null && h.totalAmount === reNhoNhat) tr.className = "thap";
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
-    tr.append(td(h.supplierLegalName), td(tien(h.totalAmount), "so"), td(h.currency ?? "—"), td(String(h.version ?? "—"), "so"));
+    // [S1.109] Sau một vòng BAFO, bảng này CỐ Ý có hai dòng cho một nhà cung cấp — nó là một
+    // bảng LỊCH SỬ, và người mua cần thấy ai hạ bao nhiêu. Không có cột vòng, hai dòng ấy trông
+    // như một lỗi; `isLatestForBid` là thứ nói dòng nào đang có hiệu lực.
+    if (h.isLatestForBid === false) tr.classList.add("mo");
+    tr.append(
+      td(h.supplierLegalName), td(tien(h.totalAmount), "so"), td(h.currency ?? "—"),
+      td(String(h.version ?? "—"), "so"),
+      td(h.bafoRoundNo === null || h.bafoRoundNo === undefined ? "vòng 1" : `BAFO ${h.bafoRoundNo}`),
+    );
     tbody.append(tr);
   }
   const a = c.aggregates ?? {};
@@ -350,6 +359,50 @@ $("nut-cham").addEventListener("click", async () => {
 });
 
 $("nut-xep-hang").addEventListener("click", veXepHang);
+
+// ---------------------------------------------------------------------------------------------
+// Bước 6 — vòng BAFO
+//
+// `null` là câu trả lời ĐÚNG cho "chưa mở vòng nào", cùng khuôn `veYeuCau` và `veXepHang`.
+// ---------------------------------------------------------------------------------------------
+
+async function veVongBafo() {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/bafo`);
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Chưa đọc được vòng BAFO")); return; }
+  const v = r.body.bafoRound ?? null;
+  if (v === null) {
+    dienDl($("tt-bafo"), [["Vòng BAFO", "chưa mở vòng nào"]]);
+    return;
+  }
+  dienDl($("tt-bafo"), [
+    ["Vòng số", v.roundNo],
+    ["Mời top-N", v.topN],
+    ["Hạn nộp", new Date(v.deadlineAt).toLocaleString("vi-VN")],
+    ["Mở lúc", new Date(v.openedAt).toLocaleString("vi-VN")],
+    ["Đóng lúc", v.closedAt === null ? "đang mở" : new Date(v.closedAt).toLocaleString("vi-VN")],
+  ]);
+}
+
+$("nut-mo-bafo").addEventListener("click", async () => {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  const gio = $("han-bafo").value;
+  if (gio === "") { bao($("loi6"), "Chọn hạn nộp của vòng BAFO trước."); return; }
+  // `datetime-local` cho một chuỗi KHÔNG có múi giờ; `new Date(...)` đọc nó theo giờ máy, đúng
+  // thứ người bấm vừa gõ. `toISOString()` rồi mới gửi — route đọc ISO 8601.
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/bafo`, { deadlineAt: new Date(gio).toISOString() });
+  // Bốn lối từ chối có tên của lớp vòng BAFO đi ra dưới 422 kèm câu người đọc được.
+  if (r.status !== 201) { bao($("loi6"), loiCua(r, "Không mở được vòng BAFO")); return; }
+  bao($("ok6"), `Đã mở vòng BAFO số ${r.body.bafoRound?.roundNo ?? "?"} — mời top-${r.body.bafoRound?.topN ?? "?"}. Gói thầu sang BAFO_OPEN.`);
+  await veVongBafo();
+});
+
+$("nut-dong-bafo").addEventListener("click", async () => {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/bafo/close`);
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Không đóng được vòng BAFO")); return; }
+  bao($("ok6"), "Đã đóng vòng BAFO. Gói thầu sang BAFO_CLOSED — mở phong bì vòng hai bằng cổng bốn vế ở bước 3.");
+  await veVongBafo();
+});
 
 // ==============================================================================================
 // [S1.99 / khoản 205] ĐỔI FRAGMENT PHẢI ĐỔI CẢ PHIÊN — VÀ Ở TRANG NÀY, KHÔNG LÀM THẾ THÌ NGƯỜI
