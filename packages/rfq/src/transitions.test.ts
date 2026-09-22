@@ -15,29 +15,35 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 // `TAX_CODE_PATTERN` (packages/supplier ↔ 008).
 // =============================================================================================
 
+// [S1.107 / lượt soi ngang 77] LẦN THỨ HAI bảng cạnh SỐNG dời tệp: `058` thêm
+// `EVALUATING->CANCELLED` bằng `CREATE OR REPLACE`, nên `011` nay cũng là một bản ĐÃ CHẾT.
+// Con trỏ dưới đây phải dời theo — và đó chính là lớp lỗi mà khối ngay dưới đã gọi tên một
+// lần rồi. Quy ước đọc được: con trỏ trỏ migration CUỐI CÙNG định nghĩa `CANH_HOP_LE`, cùng
+// quy ước với trường `migration` của bảng ghim trong `db/migrations.int.test.ts`.
+//
 // [Vòng sửa sau review an ninh] Bảng cạnh SỐNG nay nằm ở 011, không ở 009: 011 thay thế thân
 // `rfq_kiem_chuyen_trang_thai` bằng `CREATE OR REPLACE`. Đọc 009 sau vòng sửa là đọc một bản
 // đã CHẾT — test vẫn xanh nhưng nó không còn canh thứ đang chạy. Đây đúng lớp lỗi mà chính
 // file này sinh ra để chống, chỉ khác là nó đến từ phía migration.
-const DUONG_DAN_011 = fileURLToPath(
-  new URL("../../../db/migrations/011_rfq_hardening.sql", import.meta.url),
+const DUONG_DAN_BANG_CANH = fileURLToPath(
+  new URL("../../../db/migrations/058_huy_duoc_sau_khi_cham.sql", import.meta.url),
 );
 
-/** Bóc các chuỗi 'A->B' trong khối `CANH_HOP_LE constant text[] := ARRAY[...]` của 009. */
+/** Bóc các chuỗi 'A->B' trong khối `CANH_HOP_LE constant text[] := ARRAY[...]` đang SỐNG. */
 function bocCanhTuSql(): string[] {
-  const sql = readFileSync(DUONG_DAN_011, "utf8");
+  const sql = readFileSync(DUONG_DAN_BANG_CANH, "utf8");
   const khoi = /CANH_HOP_LE constant text\[\] :=\s*ARRAY\[([\s\S]*?)\]\s*;/.exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy khối CANH_HOP_LE trong 011_rfq_hardening.sql. Nếu bảng cạnh đã được viết lại " +
-        "một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
+      "Không tìm thấy khối CANH_HOP_LE trong 058_huy_duoc_sau_khi_cham.sql. Nếu bảng cạnh đã được " +
+        "viết lại một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
     );
   }
   return [...khoi[1].matchAll(/'([A-Z_]+->[A-Z_]+)'/g)].map((m) => m[1] as string).sort();
 }
 
 describe("bảng cạnh của máy trạng thái RFQ", () => {
-  it("bản TS và bảng cạnh SỐNG (011) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
+  it("bản TS và bảng cạnh SỐNG (058) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
     const tuTs = RFQ_TRANSITIONS.map(([tu, den]) => `${tu}->${den}`).sort();
     const tuSql = bocCanhTuSql();
 

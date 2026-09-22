@@ -96,7 +96,9 @@ export async function docBangXepHang(
       userId: actor.id,
       orgId,
       permission: PERMISSIONS.BID_VIEW,
-      resourceType: "RFQ_EVALUATION",
+      // [S1.107 / lượt soi ngang 77 — ②] `RFQ`, KHÔNG `RFQ_EVALUATION` — xem lý do đầy đủ ở
+      // `luot-danh-gia.ts`. Cặp (loại, id) đi nguyên văn vào hàng sổ `PERMISSION_DENIED`.
+      resourceType: "RFQ",
       resourceId: input.rfqId,
     },
     auditPool,

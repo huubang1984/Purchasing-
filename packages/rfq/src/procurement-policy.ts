@@ -39,10 +39,38 @@ export interface ProcurementPolicyRecord {
   readonly effectiveFrom: Date;
 }
 
+/**
+ * [S1.107 / lượt soi ngang 77 — CAO ②] MỘT THÀNH PHẦN TRỌNG SỐ, ĐÚNG HÌNH DẠNG `057` CƯỠNG CHẾ.
+ *
+ * Khoá viết theo lối CSDL (`don_vi`, `he_so`) chứ không camelCase, và đó là một quyết định chứ
+ * không một sự cẩu thả: hình dạng bên trong của `eval_components` là một hợp đồng do `CHECK` của
+ * `057` cưỡng chế, `taoLuotDanhGia` đọc ĐÚNG ba khoá ấy, và một cách viết thứ hai ở cửa API sẽ là
+ * CÁCH VIẾT THỨ BA cho cùng một hợp đồng. Kho này đã trả giá nhiều lần cho hai bản sao trôi khỏi
+ * nhau — `HINH_DANG_CHUAN`, `TAX_CODE_PATTERN`, `RFQ_TRANSITIONS`.
+ */
+export interface ThanhPhanTrongSoVao {
+  readonly ma: string;
+  readonly don_vi: string;
+  readonly he_so: string;
+}
+
 export interface CreateProcurementPolicyInput {
   readonly version: number;
   readonly dualApprovalThreshold: string;
   readonly currency: Currency;
+  /**
+   * Trọng số chấm thầu. `undefined` hay `null` ⇒ tổ chức KHÔNG chấm được — và đó là trạng thái
+   * của mọi tổ chức trước vòng này, vì không đường sản xuất nào ghi được cột ấy (lượt soi ngang
+   * 77, CAO ②: `056` cấp GRANT từ S1.102, `057` cưỡng chế hình dạng từ S1.105, và route chấm
+   * thầu của S1.106 vì thế luôn trả 422 `CHINH_SACH_CHUA_KHAI_TRONG_SO` ngoài cụm test).
+   *
+   * Tầng này CỐ Ý mỏng: nó kiểm hình dạng NGOÀI (mảng không rỗng, ba khoá chuỗi) rồi giao cho
+   * `CHECK` của `057` phán xử phần còn lại — `don_vi` thuộc {TIEN, DIEM}, ít nhất một `TIEN`,
+   * khuôn của `he_so`. Một bản sao thứ hai của luật ấy ở TypeScript là một bản sao sẽ trôi.
+   */
+  readonly evalComponents?: readonly ThanhPhanTrongSoVao[] | null;
+  /** Số nhà thầu vào vòng BAFO. `0` nghĩa là tổ chức KHÔNG dùng BAFO — xem `056`. */
+  readonly bafoTopN?: number | null;
   readonly actorSessionId: string;
 }
 
@@ -84,6 +112,39 @@ function batBuocTien(giaTri: string, ten: string): string {
 }
 
 /**
+ * [S1.107] Hình dạng NGOÀI của `evalComponents`, và chỉ hình dạng ngoài. Trả chuỗi JSON để đưa
+ * thẳng xuống `$7::jsonb`, hay `null` khi người gọi không khai.
+ *
+ * `056` đòi `(eval_components IS NULL) = (bafo_top_n IS NULL)`, nên hai trường đi thành một BỘ:
+ * khai một mà thiếu cái kia là một lần NÉM có tên ở đây, không phải một lần 23514 khó đọc.
+ */
+function trongSoJson(input: CreateProcurementPolicyInput): { tp: string | null; topN: number | null } {
+  // `unknown` chứ không phải kiểu đã khai: người gọi gần nhất là một thân HTTP, và kiểu ở biên
+  // giới TypeScript là một lời HỨA của người gọi, không phải một phép đo. Kiểm lại ở đây thì một
+  // thân dị dạng dừng ở một lỗi CÓ TÊN thay vì ở `23514` của `057`.
+  const tho: unknown = input.evalComponents ?? null;
+  const topN = input.bafoTopN ?? null;
+  if (tho === null) {
+    if (topN !== null) throw new RfqError("bafoTopN chỉ đặt được cùng evalComponents");
+    return { tp: null, topN: null };
+  }
+  const mang: readonly unknown[] = Array.isArray(tho) ? (tho as readonly unknown[]) : [];
+  if (mang.length === 0) throw new RfqError("evalComponents phải là mảng không rỗng");
+  const ra: { ma: string; don_vi: string; he_so: string }[] = [];
+  for (const t of mang) {
+    const o = t as Record<string, unknown> | null;
+    if (typeof o?.ma !== "string" || typeof o.don_vi !== "string" || typeof o.he_so !== "string") {
+      throw new RfqError('mỗi thành phần cần ba trường chuỗi "ma", "don_vi", "he_so"');
+    }
+    ra.push({ ma: o.ma, don_vi: o.don_vi, he_so: o.he_so });
+  }
+  if (topN === null || !Number.isInteger(topN) || topN < 0) {
+    throw new RfqError("bafoTopN phải là số nguyên không âm khi có evalComponents");
+  }
+  return { tp: JSON.stringify(ra), topN };
+}
+
+/**
  * Thêm MỘT PHIÊN BẢN chính sách. Không có hàm sửa, và đó là toàn bộ cơ chế: `app_api` không có
  * `UPDATE`/`DELETE` trên bảng này (014). Sửa được ngưỡng của một phiên bản đã dùng nghĩa là phân
  * loại của mọi RFQ cũ đổi theo mà không ai biết — tức "tái lập được" thành một lời hứa rỗng.
@@ -104,11 +165,15 @@ export async function createProcurementPolicy(
     throw new RfqError("currency chỉ nhận VND hoặc USD");
   }
 
+  const { tp, topN } = trongSoJson(input);
+
   const { rows } = await client.query<HangChinhSach>(
     `INSERT INTO public.org_procurement_policies
-       (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id)
-     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5, $6) RETURNING ${COT_CHINH_SACH}`,
-    [orgId, input.version, nguong, input.currency, actor.id, actor.sessionId],
+       (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n,
+        created_by, created_by_session_id)
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8)
+     RETURNING ${COT_CHINH_SACH}`,
+    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("Câu INSERT org_procurement_policies không trả về hàng");
@@ -122,7 +187,15 @@ export async function createProcurementPolicy(
     action: "PROCUREMENT_POLICY_CREATED",
     resourceType: "procurement_policy",
     resourceId: hang.id,
-    payload: { version: hang.version, threshold: nguong, currency: hang.currency },
+    // [S1.107] `soThanhPhan` chứ không phải chính các trọng số: mã thành phần là dữ liệu
+    // quản trị, nhưng một hàng sổ nên nói CÓ HAY KHÔNG và BAO NHIÊU, không chép cả cấu hình.
+    payload: {
+      version: hang.version,
+      threshold: nguong,
+      currency: hang.currency,
+      soThanhPhan: input.evalComponents?.length ?? 0,
+      bafoTopN: topN,
+    },
   });
 
   return doiChinhSach(hang);

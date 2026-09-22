@@ -88,6 +88,9 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["DRAFT", "CANCELLED"],
   ["PENDING_APPROVAL", "CANCELLED"],
   ["OPEN", "CANCELLED"],
+  // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
+  // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
+  ["EVALUATING", "CANCELLED"],
 ];
 
 // ===========================================================================================
@@ -702,7 +705,8 @@ export async function cancelRfq(
   const { rows } = await client.query<HangRfq>(
     `UPDATE public.rfq_packages SET status = 'CANCELLED', cancelled_at = pg_catalog.now(),
             cancelled_by = $2, cancelled_by_session_id = $3
-      WHERE id OPERATOR(pg_catalog.=) $1 AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN') RETURNING ${COT_RFQ}`,
+      WHERE id OPERATOR(pg_catalog.=) $1
+        AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN', 'EVALUATING') RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];

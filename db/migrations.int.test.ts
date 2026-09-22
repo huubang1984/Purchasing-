@@ -1515,7 +1515,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_khoa_chi_sinh_luc_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_sinh_luc_mo"] },
     { ham: "rfq_khoa_chi_thu_hoi_khi_huy", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_thu_hoi_khi_huy"] },
     { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "058_huy_duoc_sau_khi_cham.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
@@ -3094,6 +3094,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "055_nhan_chung_break_glass_bat_bien.sql",
           "056_chinh_sach_danh_gia.sql",
           "057_luot_danh_gia.sql",
+        "058_huy_duoc_sau_khi_cham.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7490,6 +7491,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "055_nhan_chung_break_glass_bat_bien.sql",
         "056_chinh_sach_danh_gia.sql",
         "057_luot_danh_gia.sql",
+        "058_huy_duoc_sau_khi_cham.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7767,6 +7769,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "055_nhan_chung_break_glass_bat_bien.sql",
         "056_chinh_sach_danh_gia.sql",
         "057_luot_danh_gia.sql",
+        "058_huy_duoc_sau_khi_cham.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

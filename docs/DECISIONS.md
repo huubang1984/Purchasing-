@@ -5499,3 +5499,52 @@ mọi lượt `migrate()`, nên một đột biến trong migration sẽ *"sốn
 Nó không nói `gia` là mã thành phần đúng cho mọi tổ chức — nó nói đó là mã DUY NHẤT có nguồn dữ liệu hôm
 nay. Nó cũng không chốt luật phá hoà (ADR-052 để mở, và S2.3 không đóng). Và nó không đóng khoản **105**:
 mọi `CHECK` của `057` nằm trong khoảng trống mà hardening không canh.
+
+## ADR-054 — Giá dạng rõ sống ở những bảng ĐƯỢC KHAI, không ở "đúng một bảng"
+
+**Trạng thái.** Đã chấp nhận — 2026-09-22, S1.107, lượt soi ngang 77.
+
+**Bối cảnh.** Lời khai của A3/A4 từ S1 là *"sau mở thầu, giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng"*, và
+cổng đo nó là bước 14 của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: quét `t::text` trên MỌI
+bảng của lược đồ `public` tìm một mức giá, rồi đòi tập kết quả bằng `["rfq_unsealed_bids"]`.
+
+Lượt soi ngang 77 đo lại trên cụm thật, sau một lượt `taoLuotDanhGia`: tập thật là
+`["rfq_evaluation_lines", "rfq_unsealed_bids"]` — **hai** bảng. Migration `057` của S1.105 dựng chỗ ở thứ
+hai (`effective_cost` và `components.tien`), và cổng vẫn xanh suốt hai vòng vì **kịch bản của nó không
+chấm thầu lần nào**. Cổng ĐÚNG; phạm vi của nó là thứ đã thu lại, và không ai viết điều đó ra như một
+điều kiện.
+
+**Hai hướng đã được đo, và cái giá của mỗi hướng.**
+
+⑴ *Giữ nguyên chữ "đúng một bảng".* `rfq_evaluation_lines` khi ấy không được lưu `effective_cost` và
+`components` dạng rõ, tức bảng xếp hạng phải tính LẠI ở mỗi lượt đọc. Nhưng **J2** đòi mỗi hàng xếp hạng
+*tái lập được*, và một dấu vết tái lập được là một dấu vết LƯU LẠI — hai đòi hỏi đâm thẳng vào nhau. Nó
+cũng huỷ `057`, một migration đã áp.
+
+⑵ *Viết lại lời khai thành một DANH SÁCH BẢNG ĐƯỢC KHAI.* Tập đo thành hai, liệt kê vét cạn, mỗi bảng
+kèm **vai ghi** và **cổng đọc** của nó.
+
+**Quyết định.** Chủ dự án chọn ⑵ ngày 2026-09-22.
+
+A3/A4 nay phát biểu: *giá dạng rõ chỉ tồn tại ở những bảng ĐƯỢC KHAI dưới đây, và mỗi bảng có đúng một
+vai ghi được cùng đúng một cổng đọc.*
+
+| bảng | vai GHI | cổng ĐỌC |
+|---|---|---|
+| `rfq_unsealed_bids` (019) | `app_unseal`, sau cổng bốn vế và đủ chữ ký phê duyệt | `bid.view` ở `buildComparisonTable` |
+| `rfq_evaluation_lines` (057) | `app_api` qua `taoLuotDanhGia`, `GRANT INSERT` theo **CỘT** | `bid.view` ở `docBangXepHang` |
+
+**Vì sao ⑵ KHÔNG phải một lần nới lỏng tự phục vụ.** Lớp bảo vệ của bảng thứ hai không thua bảng thứ
+nhất: ENABLE + FORCE RLS, policy `_tenant_isolation` cộng `_khach`, `GRANT` theo cột (`id` và
+`created_at` KHÔNG được cấp, đúng để `<bảng>_pkey` không thành oracle xuyên tổ chức của ADR-013), và
+đường đọc duy nhất đi qua `bid.view`. Cái sai là **lời khai**, không phải lớp. Một lời khai sai trong bộ
+bằng chứng đem cho kiểm toán viên là thứ kho này coi là nặng hơn một con số lệch.
+
+**Đo bằng gì.** Bước 14 của kịch bản HTTP giữ nguyên phép quét MỌI bảng đọc từ `pg_class`, nhưng ⑴ chạy
+SAU một lượt chấm thật qua HTTP (bước 12b, mới ở vòng này) và ⑵ khẳng định tập bằng `toEqual` **vét
+cạn** chứ không `toContain`. Một bảng thứ ba xuất hiện — vì một migration mai sau, hay vì một lối rò —
+làm dòng ấy đỏ và buộc người sửa quay lại ADR này.
+
+**Ranh giới.** ADR này KHÔNG nói rằng thêm một bảng giá dạng rõ là việc rẻ. Nó nói ngược lại: mỗi bảng
+như thế phải đi kèm một dòng trong bảng trên, và dòng ấy phải khai được vai ghi cùng cổng đọc. Không
+khai được thì không thêm.
