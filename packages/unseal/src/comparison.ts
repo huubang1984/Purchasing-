@@ -30,16 +30,43 @@ import { assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 
 /**
- * Hai trạng thái mà một bảng so sánh được phép tồn tại.
+ * Ba trạng thái mà một bảng so sánh được phép tồn tại.
  *
  * `EVALUATING` có mặt vì bảng so sánh là ĐẦU VÀO của việc chấm thầu, không phải một màn hình
  * xem một lần: đóng nó lại ngay sau `UNSEALED` sẽ làm người chấm không xem lại được thứ họ đang
  * chấm. Mọi trạng thái khác — kể cả `CLOSED`, tức đã hết hạn nộp nhưng CHƯA mở — bị từ chối.
+ *
+ * [S1.108 / S2.5 / 059] `BAFO_UNSEALED` có mặt, `BAFO_OPEN` và `BAFO_CLOSED` thì KHÔNG, và cả
+ * hai nửa của câu ấy là quyết định:
+ *   * `BAFO_UNSEALED` — phong bì vòng hai vừa được mở qua cổng bốn vế, và bảng xếp hạng sẽ được
+ *     tính LẠI từ đó. Không có nó, `BAFO_UNSEALED->EVALUATING` là một cạnh mà người chấm đi qua
+ *     trong bóng tối: họ phải chuyển trạng thái TRƯỚC khi được xem thứ họ sắp chấm.
+ *   * `BAFO_OPEN`/`BAFO_CLOSED` — đây là quãng nhà cung cấp đang nộp lại NIÊM PHONG. Bảng so
+ *     sánh của vòng MỘT vẫn đọc được về mặt dữ liệu, và người mua đã thấy nó rồi, nên việc đóng
+ *     lại KHÔNG bảo vệ một bí mật nào. Nó bảo vệ một thứ khác: một màn hình giá vòng một mở suốt
+ *     quãng vòng hai đang chạy là màn hình để người mua vừa nhìn giá cũ vừa nói chuyện với nhà
+ *     cung cấp — và §8.1 nói thẳng rằng lớp mật mã không chặn được cuộc nói chuyện ấy. Đóng màn
+ *     hình không chặn nó nốt; nó chỉ thôi làm việc ấy tiện.
  */
-export const COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING"] as const;
+export const COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING", "BAFO_UNSEALED"] as const;
 
-/** Ba trạng thái mà "số báo giá đã nhận" không còn là bí mật: hạn nộp đã qua và RFQ đã đóng. */
-const TRANG_THAI_DA_DONG = new Set(["CLOSED", "UNSEALED", "EVALUATING"]);
+/**
+ * Các trạng thái mà "số báo giá đã nhận" không còn là bí mật: hạn nộp đã qua và RFQ đã đóng.
+ *
+ * [S1.108] Ba trạng thái BAFO đều ĐÃ qua `CLOSED` một lần, nên con số ấy đã thôi là bí mật từ
+ * trước khi vòng hai mở. `BAFO_OPEN` nằm trong tập này DÙ đang nhận báo giá, và đó là đúng: thứ
+ * chưa được biết ở `OPEN` là *"có bao nhiêu người đã nộp"* của một cuộc thi mà danh sách dự thi
+ * còn kín; ở `BAFO_OPEN` danh sách dự thi là top-N, suy được từ bảng xếp hạng mà chính người đọc
+ * đã xem.
+ */
+const TRANG_THAI_DA_DONG = new Set([
+  "CLOSED",
+  "UNSEALED",
+  "EVALUATING",
+  "BAFO_OPEN",
+  "BAFO_CLOSED",
+  "BAFO_UNSEALED",
+]);
 
 export class ComparisonDeniedError extends Error {
   constructor(

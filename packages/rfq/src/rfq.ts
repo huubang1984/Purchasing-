@@ -67,6 +67,12 @@ export const RFQ_STATUSES = [
   "CLOSED",
   "UNSEALED",
   "EVALUATING",
+  // [S1.108 / S2.5 / 059] Ba giá trị MỚI của vòng BAFO. `BAFO_UNSEALED` KHÔNG có trong spec §4.3
+  // — spec khai `BAFO_CLOSED->EVALUATING` thẳng — và nó được thêm vì lượt soi hình dạng đo được
+  // rằng nối thẳng bỏ mất vế *"phong bì vòng hai đã đi qua cổng bốn vế"*. Xem đầu `059`.
+  "BAFO_OPEN",
+  "BAFO_CLOSED",
+  "BAFO_UNSEALED",
   "CANCELLED",
 ] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
@@ -88,6 +94,16 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["DRAFT", "CANCELLED"],
   ["PENDING_APPROVAL", "CANCELLED"],
   ["OPEN", "CANCELLED"],
+  // [S1.108 / S2.5 / 059] Chu trình BAFO: bốn cạnh, không ba. Ảnh của
+  // `OPEN->CLOSED->UNSEALED->EVALUATING`, nên `BAFO_UNSEALED` đứng đúng chỗ `UNSEALED` đứng.
+  ["EVALUATING", "BAFO_OPEN"],
+  ["BAFO_OPEN", "BAFO_CLOSED"],
+  ["BAFO_CLOSED", "BAFO_UNSEALED"],
+  ["BAFO_UNSEALED", "EVALUATING"],
+  // [S1.108] Cạnh huỷ thứ tư, và nó suy ra từ ảnh: `OPEN->CANCELLED` CÓ nên
+  // `BAFO_OPEN->CANCELLED` có. `BAFO_CLOSED` và `BAFO_UNSEALED` KHÔNG có, đúng như `CLOSED` và
+  // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.
+  ["BAFO_OPEN", "CANCELLED"],
   // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
   // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
   ["EVALUATING", "CANCELLED"],
@@ -706,7 +722,8 @@ export async function cancelRfq(
     `UPDATE public.rfq_packages SET status = 'CANCELLED', cancelled_at = pg_catalog.now(),
             cancelled_by = $2, cancelled_by_session_id = $3
       WHERE id OPERATOR(pg_catalog.=) $1
-        AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN', 'EVALUATING') RETURNING ${COT_RFQ}`,
+        AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN', 'BAFO_OPEN', 'EVALUATING')
+        RETURNING ${COT_RFQ}`,
     [input.rfqId, actor.id, actor.sessionId],
   );
   const hang = rows[0];

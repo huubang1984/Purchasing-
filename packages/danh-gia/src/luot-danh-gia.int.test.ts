@@ -62,8 +62,13 @@ async function taoPhien(userId: string, org: string = orgA): Promise<string> {
   return rows[0]?.id ?? "";
 }
 
-/** Phiên bản chính sách KẾ TIẾP — `035` đòi `version` bằng ĐÚNG `max + 1` và liên tục. */
-async function taoChinhSach(evalComponents: string | null): Promise<string> {
+/**
+ * Phiên bản chính sách KẾ TIẾP — `035` đòi `version` bằng ĐÚNG `max + 1` và liên tục.
+ *
+ * [S1.108 / S2.5] `topN` thêm ở vòng này, mặc định `0` = *"tổ chức này không dùng BAFO"* (quy ước
+ * của `056`). Mặc định giữ nguyên hành vi cho ba mươi chỗ gọi đã có.
+ */
+async function taoChinhSach(evalComponents: string | null, topN = 0): Promise<string> {
   const { rows: ke } = await db.pool.query<{ n: number }>(
     "SELECT coalesce(max(version), 0) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
     [orgA],
@@ -71,11 +76,20 @@ async function taoChinhSach(evalComponents: string | null): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
       "eval_components, bafo_top_n, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE 0 END, $4, $5) RETURNING id",
-    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc],
+      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE $6::integer END, $4, $5) RETURNING id",
+    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc, topN],
   );
   return rows[0]?.id ?? "";
 }
+
+/**
+ * [S1.108 / S2.5] Luồng báo giá và phiên khách của từng phiên bản đã nộp.
+ *
+ * Nộp BAFO KHÔNG phải một luồng mới: `vendor_bids` có `UNIQUE (org_id, invitation_id)` từ `018`
+ * nên một lời mời có ĐÚNG MỘT luồng, và báo giá vòng hai là một PHIÊN BẢN mới trên luồng ấy. Để
+ * nộp lại cần đúng hai thứ mà `nopBaoGia` đang bỏ đi: `bid_id` và phiên khách đã xác thực.
+ */
+const LUONG_CUA_PHIEN_BAN = new Map<string, { readonly bidId: string; readonly phienKhach: string }>();
 
 async function taoRfqMo(policyId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
@@ -177,8 +191,107 @@ async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
         Buffer.alloc(70, 7),
       ],
     );
+    LUONG_CUA_PHIEN_BAN.set(versionId, { bidId, phienKhach: pk[0]?.id ?? "" });
     return versionId;
   });
+}
+
+/**
+ * [S1.108 / S2.5] Nộp LẠI trên đúng luồng báo giá của một phiên bản vòng một — đường nộp BAFO.
+ *
+ * Đi qua CHÍNH `vendor_bid_versions` với CHÍNH phiên khách cũ, nên nó đi qua cả ba trigger của
+ * `018` cộng trigger top-N của `059`. Trả về id phiên bản mới.
+ */
+async function nopLaiBafo(rfqId: string, versionVongMot: string): Promise<string> {
+  const luong = LUONG_CUA_PHIEN_BAN.get(versionVongMot);
+  if (luong === undefined) throw new Error(`khong biet luong cua phien ban ${versionVongMot}`);
+  return await withTenant(apiPool, orgA, async (c) => {
+    const { rows: v } = await c.query<{ id: string; version: number }>(
+      "INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id, version",
+      [orgA, luong.bidId, Buffer.alloc(64, 11), luong.phienKhach],
+    );
+    const versionId = v[0]?.id ?? "";
+    await c.query(
+      "INSERT INTO bid_receipts (org_id, bid_version_id, canonical_text, signature) VALUES ($1, $2, $3, $4)",
+      [
+        orgA,
+        versionId,
+        `trustprocure-receipt-v1\nalg=ECDSA_P256_SHA256\nkid=k1\nrfq_id=${rfqId}\n` +
+          `bid_id=${luong.bidId}\nversion=${String(v[0]?.version ?? 2)}\n` +
+          `ciphertext_sha256=${"b".repeat(64)}\nsubmitted_at=2026-09-22T00:00:00.000000Z\n`,
+        Buffer.alloc(70, 8),
+      ],
+    );
+    return versionId;
+  });
+}
+
+/**
+ * [S1.108 / S2.5] Mở một vòng BAFO trên một gói thầu đang `EVALUATING`. Trả về id vòng.
+ *
+ * `policy_id` được ĐỌC TỪ lượt đánh giá chứ không truyền vào: `rfq_evaluations.policy_id` là
+ * phiên bản chính sách mà con số xếp hạng đã được tính dưới, và `top_n` của vòng phải khớp
+ * `bafo_top_n` của ĐÚNG phiên bản ấy. Truyền tay là mở một đường cho hai giá trị lệch nhau trong
+ * chính fixture, tức là đo một thế giới không tồn tại.
+ */
+async function moVongBafo(
+  rfqId: string,
+  luotId: string,
+  topN: number,
+  han: Date = new Date(Date.now() + 3 * 24 * 3600 * 1000),
+): Promise<string> {
+  const { rows: e } = await db.pool.query<{ policy_id: string }>(
+    "SELECT policy_id FROM rfq_evaluations WHERE id = $1",
+    [luotId],
+  );
+  return await withTenant(apiPool, orgA, async (c) => {
+    const { rows } = await c.query<{ id: string }>(
+      "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, deadline_at, " +
+        "opened_by, opened_by_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+      [orgA, rfqId, luotId, e[0]?.policy_id ?? "", topN, han, uYc, sYc],
+    );
+    const vongId = rows[0]?.id ?? "";
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_OPEN' WHERE id = $1", [rfqId]);
+    return vongId;
+  });
+}
+
+/**
+ * [S1.108 / S2.5] Đóng vòng BAFO rồi mở phong bì vòng hai qua ĐÚNG cổng bốn vế.
+ *
+ * `requestUnseal` ở đây tạo một yêu cầu THỨ HAI cho cùng RFQ, và C3 của `059` gắn
+ * `bafo_round_id` cho nó. Vế ấy là thứ làm `rfq_kiem_yeu_cau_mo_thau` phân biệt được hai vòng.
+ */
+async function moThauBafo(
+  rfqId: string,
+  vongId: string,
+  banRo: readonly (readonly [string, unknown])[],
+): Promise<string> {
+  await withTenant(apiPool, orgA, async (c) => {
+    await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+  });
+  const yc = await withTenant(apiPool, orgA, (c) =>
+    requestUnseal(c, orgA, { rfqId, reason: "den gio mo thau vong BAFO", actorSessionId: sYc }, apiPool),
+  );
+  await withTenant(apiPool, orgA, (c) =>
+    approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, apiPool),
+  );
+  await withTenant(unsealPool, orgA, async (c) => {
+    for (const [versionId, payload] of banRo) {
+      await c.query(
+        "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) VALUES ($1, $2, $3, $4)",
+        [orgA, yc.id, versionId, JSON.stringify(payload)],
+      );
+    }
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_UNSEALED' WHERE id = $1", [rfqId]);
+    await c.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [yc.id],
+    );
+  });
+  return yc.id;
 }
 
 /** Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ, rồi tuyên bố `UNSEALED`. */
@@ -202,6 +315,17 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
       );
     }
     await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
+    // [S1.108 / S2.5] Dòng này THIẾU cho tới vòng này, và nó là một lệch so với đường sản xuất:
+    // worker thật đặt `EXECUTED` cùng lúc với `UNSEALED` (`apps/unseal-worker/src/index.ts:607` —
+    // *"bản rõ, mốc `EXECUTED` và trạng thái `UNSEALED` phải cùng sống hoặc cùng chết"*). Fixture
+    // để yêu cầu ở `APPROVED` mãi, và điều đó VÔ HẠI suốt hai vòng vì không kịch bản nào cần một
+    // yêu cầu mở thầu THỨ HAI. Vòng BAFO cần, và chỉ mục bộ phận
+    // `unseal_requests_mot_yeu_cau_dang_mo` (`019:73`) bắt ngay — *"một RFQ có TỐI ĐA MỘT yêu cầu
+    // đang mở"*. Cùng hình dạng *cổng xanh vì phạm vi* mà lượt soi 77 gọi tên.
+    await c.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [yc.id],
+    );
   });
 }
 
@@ -209,8 +333,9 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
 async function goiDaMo(
   soTien: readonly (readonly [string, string | null])[],
   evalComponents: string | null = TP_GIA,
-): Promise<{ rfqId: string; banRo: readonly string[] }> {
-  const csId = await taoChinhSach(evalComponents);
+  topN = 0,
+): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
+  const csId = await taoChinhSach(evalComponents, topN);
   const rfqId = await taoRfqMo(csId);
   const ban: [string, unknown][] = [];
   const ids: string[] = [];
@@ -220,7 +345,7 @@ async function goiDaMo(
     ban.push([versionId, { totalAmount: tien, currency: dv }]);
   }
   await moThau(rfqId, ban);
-  return { rfqId, banRo: ids };
+  return { rfqId, banRo: ids, csId };
 }
 
 async function trangThaiRfq(rfqId: string): Promise<string> {
@@ -738,5 +863,391 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
       if (rows[0]?.n !== "0") dinh.push(b.ten);
     }
     expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+  });
+});
+
+// ==============================================================================================
+// [S1.108 / S2.5] VÒNG BAFO — BỐN CẠNH, VÀ TOP-N SUY TỪ `rank`
+//
+// Khối này ở ĐÂY chứ không ở một tệp riêng vì fixture của nó CHÍNH LÀ fixture ở trên: một vòng
+// BAFO bắt đầu ở `EVALUATING`, tức ở đúng chỗ `taoLuotDanhGia` vừa để gói thầu lại. Một tệp
+// riêng sẽ phải chép hai trăm dòng giàn cảnh để đo đúng những thứ này.
+//
+// Bốn cạnh được đo ở tầng HÀNH VI, không ở tầng văn bản: `transitions.test.ts` đã so bảng cạnh TS
+// với bảng cạnh SQL, còn ở đây từng cạnh được ĐI QUA trên một cụm Postgres thật, dưới vai ứng
+// dụng thật, với đủ trigger `ENABLE ALWAYS`.
+// ==============================================================================================
+
+/** Một gói thầu đã chấm xong, sẵn sàng mở vòng BAFO. Trả về đủ thứ cho phần còn lại. */
+async function daCham(
+  soTien: readonly (readonly [string, string | null])[],
+  topN: number,
+): Promise<{
+  readonly rfqId: string;
+  readonly banRo: readonly string[];
+  readonly luotId: string;
+  readonly hang: ReadonlyMap<string, number | null>;
+}> {
+  const { rfqId, banRo } = await goiDaMo(soTien, TP_GIA, topN);
+  const kq = await withTenant(apiPool, orgA, (c) =>
+    taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+  );
+  return {
+    rfqId,
+    banRo,
+    luotId: kq.evaluationId,
+    hang: new Map(kq.lines.map((l) => [l.bidVersionId, l.rank])),
+  };
+}
+
+describe("[S1.108 / S2.5] vòng BAFO đi trọn bốn cạnh", { timeout: 300000 }, () => {
+  it("EVALUATING -> BAFO_OPEN -> BAFO_CLOSED -> BAFO_UNSEALED -> EVALUATING, và lượt chấm THỨ HAI ra đời", async () => {
+    const { rfqId, banRo, luotId, hang } = await daCham(
+      [
+        ["548800000.00", "VND"],
+        ["537600000.00", "VND"],
+        ["544000000.00", "VND"],
+      ],
+      2,
+    );
+    // Tiền đề của mọi thứ dưới đây: hạng 1 và 2 là hai báo giá THẤP nhất, hạng 3 là cái cao nhất.
+    expect(
+      [banRo[0], banRo[1], banRo[2]].map((id) => hang.get(id ?? "")),
+      "tiền đề hỏng thì mọi khẳng định dưới vô nghĩa",
+    ).toEqual([3, 1, 2]);
+
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_OPEN");
+    const { rows: v } = await db.pool.query<{ round_no: number; closed_at: Date | null }>(
+      "SELECT round_no, closed_at FROM rfq_bafo_rounds WHERE id = $1",
+      [vongId],
+    );
+    expect(v[0]?.round_no, "số vòng là DẪN XUẤT, do trigger đặt").toBe(1);
+    expect(v[0]?.closed_at).toBeNull();
+
+    // Hai nhà cung cấp TRONG top-2 nộp lại. Giá hạ.
+    const lai1 = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    const lai2 = await nopLaiBafo(rfqId, banRo[2] ?? "");
+    const { rows: dau } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM vendor_bid_versions WHERE id = ANY($1::uuid[])",
+      [[lai1, lai2]],
+    );
+    expect(
+      dau.map((r) => r.bafo_round_id),
+      "C1 đặt dấu vòng cho mọi phiên bản nộp ở BAFO_OPEN",
+    ).toEqual([vongId, vongId]);
+    const { rows: cu } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM vendor_bid_versions WHERE id = $1",
+      [banRo[1] ?? ""],
+    );
+    expect(cu[0]?.bafo_round_id, "phiên bản vòng MỘT không mang dấu vòng nào").toBeNull();
+
+    const ycBafo = await moThauBafo(rfqId, vongId, [
+      [lai1, { totalAmount: "500000000.00", currency: "VND" }],
+      [lai2, { totalAmount: "530000000.00", currency: "VND" }],
+    ]);
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_UNSEALED");
+    const { rows: ycv } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM unseal_requests WHERE id = $1",
+      [ycBafo],
+    );
+    expect(ycv[0]?.bafo_round_id, "C3 gắn yêu cầu mở thầu vào ĐÚNG vòng nó mở").toBe(vongId);
+
+    // Chấm LẠI: cạnh `BAFO_UNSEALED->EVALUATING`.
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    expect(kq2.evaluationId, "một lượt chấm THỨ HAI, không phải lượt cũ sửa lại").not.toBe(luotId);
+    const hang2 = new Map(kq2.lines.map((l) => [l.bidVersionId, l.rank]));
+    expect(hang2.get(lai1), "500 triệu là giá thấp nhất sau vòng hai").toBe(1);
+    // MỘT hàng cho MỘT nhà cung cấp — BA, không NĂM. `rfq_unsealed_bids` lúc này có 3 hàng của
+    // vòng một CỘNG 2 hàng của vòng hai, và một phép đọc "mọi hàng" sẽ xếp hạng hai nhà cung cấp
+    // top-N HAI LẦN, một lần với giá cũ. Đây là vế mà `docBaoGia` vừa được sửa để giữ.
+    expect(kq2.lines, "một luồng báo giá cho ĐÚNG một hàng xếp hạng").toHaveLength(3);
+    const { rows: soBanRo } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_unsealed_bids u JOIN vendor_bid_versions v " +
+        "ON v.id = u.bid_version_id JOIN vendor_bids b ON b.id = v.bid_id " +
+        "JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [rfqId],
+    );
+    expect(soBanRo[0]?.n, "tiền đề: bảng bản rõ THẬT SỰ có năm hàng — nếu không, ca trên rỗng ruột").toBe("5");
+    // Nhà cung cấp NGOÀI top-2 vẫn đứng trong bảng, với giá vòng MỘT của họ. BAFO cải thiện giá
+    // của top-N; nó không loại ai khỏi cuộc thi.
+    expect(hang2.get(banRo[0] ?? ""), "báo giá 548,8 triệu của vòng một vẫn xếp hạng, và đứng cuối").toBe(3);
+    const { rows: soLuot } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1",
+      [rfqId],
+    );
+    expect(soLuot[0]?.n, "hàng cũ Ở LẠI nguyên vẹn — spec §4.3").toBe("2");
+  });
+
+  it("nhà cung cấp NGOÀI top-N không nộp được, và thông điệp nói đúng lý do", async () => {
+    const { rfqId, banRo, luotId, hang } = await daCham(
+      [
+        ["548800000.00", "VND"],
+        ["537600000.00", "VND"],
+        ["544000000.00", "VND"],
+      ],
+      2,
+    );
+    expect(hang.get(banRo[0] ?? ""), "báo giá cao nhất đứng hạng 3").toBe(3);
+    await moVongBafo(rfqId, luotId, 2);
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(/khong nam trong top-N/u);
+    // ĐỐI CHỨNG DƯƠNG: cùng lúc ấy, hạng 1 nộp được. Không có vế này, ca trên xanh y hệt với một
+    // trigger từ chối MỌI lần nộp BAFO.
+    await expect(nopLaiBafo(rfqId, banRo[1] ?? "")).resolves.toBeTruthy();
+  });
+
+  it("[CAO ③] yêu cầu mở thầu của VÒNG MỘT không mở được phong bì vòng hai", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+      await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+    });
+    // Yêu cầu của vòng MỘT vẫn ở `EXECUTED` và vẫn thuộc đúng RFQ này — thân hàm của `019` chỉ
+    // đếm "có yêu cầu APPROVED/EXECUTED nào cho RFQ này không", nên trước `059` câu dưới ĐI QUA.
+    const { rows: cu } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM unseal_requests WHERE rfq_id = $1 AND bafo_round_id IS NULL " +
+        "AND status IN ('APPROVED', 'EXECUTED')",
+      [rfqId],
+    );
+    expect(cu[0]?.n, "tiền đề: yêu cầu vòng một CÓ THẬT và vẫn được phê duyệt").toBe("1");
+    await expect(
+      withTenant(unsealPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'BAFO_UNSEALED' WHERE id = $1", [rfqId]),
+      ),
+    ).rejects.toThrow(/yeu cau mo thau CUA VONG AY/u);
+  });
+
+  it("dấu vòng KHÔNG khai được: `app_api` không có INSERT trên `bafo_round_id`", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    const luong = LUONG_CUA_PHIEN_BAN.get(banRo[0] ?? "");
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id, bafo_round_id) " +
+            "VALUES ($1, $2, $3, $4, $5)",
+          [orgA, luong?.bidId ?? "", Buffer.alloc(64, 3), luong?.phienKhach ?? "", vongId],
+        ),
+      ),
+    ).rejects.toThrow(/permission denied for (table|column)/u);
+  });
+});
+
+describe("[S1.108 / S2.5] một vòng BAFO hợp lệ, và nó chỉ đóng được một lần", { timeout: 300000 }, () => {
+  it("RFQ không ở EVALUATING thì không mở được vòng nào", async () => {
+    const { rfqId, csId } = await goiDaMo([["100.00", "VND"]], TP_GIA, 1);
+    // Gói này còn ở `UNSEALED` — chưa chấm.
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+    const { rows: l } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+      [orgA, rfqId, csId, uYc, sYc],
+    );
+    await expect(moVongBafo(rfqId, l[0]?.id ?? "", 1)).rejects.toThrow(
+      /Chi mo duoc vong BAFO khi RFQ dang o EVALUATING/u,
+    );
+  });
+
+  it("lượt đánh giá của gói thầu KHÁC bị từ chối — khoá ngoại hợp thành không bắt được ca này", async () => {
+    const a = await daCham([["100.00", "VND"]], 1);
+    const b = await daCham([["100.00", "VND"]], 1);
+    // `b.luotId` cùng TỔ CHỨC nên khoá ngoại `(org_id, evaluation_id)` đi qua; thứ chặn là trigger.
+    await expect(moVongBafo(a.rfqId, b.luotId, 1)).rejects.toThrow(/khong thuoc RFQ/u);
+    // ĐỐI CHỨNG DƯƠNG: lượt của chính nó thì mở được.
+    await expect(moVongBafo(a.rfqId, a.luotId, 1)).resolves.toBeTruthy();
+  });
+
+  it.each([
+    ["top_n LỚN hơn chính sách", 3],
+    ["top_n NHỎ hơn chính sách", 1],
+  ])("%s ⇒ ném", async (_ten, topN) => {
+    const { rfqId, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    await expect(moVongBafo(rfqId, luotId, topN)).rejects.toThrow(
+      new RegExp(`top_n cua vong \\(${String(topN)}\\) khac bafo_top_n cua chinh sach \\(2\\)`, "u"),
+    );
+  });
+
+  it("hạn nộp trong vòng một giờ tới ⇒ ném; hạn xa hơn thì đi qua", async () => {
+    const { rfqId, luotId } = await daCham([["100.00", "VND"]], 1);
+    await expect(moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 30 * 60 * 1000))).rejects.toThrow(
+      /Cua so BAFO phai con it nhat/u,
+    );
+    await expect(
+      moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 90 * 60 * 1000)),
+    ).resolves.toBeTruthy();
+  });
+
+  it("`round_no` đếm 1 rồi 2, và vòng thứ hai không mở được khi vòng một chưa đóng", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const v1 = await moVongBafo(rfqId, luotId, 2);
+    // Hai lớp cùng nói không, và lớp nào nói TRƯỚC thì thông điệp là của lớp ấy:
+    // `bafo_kiem_vong` đòi RFQ ở `EVALUATING`, mà nó đang `BAFO_OPEN`.
+    await expect(moVongBafo(rfqId, luotId, 2)).rejects.toThrow(/EVALUATING/u);
+    // Đi trọn vòng một để về `EVALUATING`, rồi mở vòng HAI: `round_no` phải là 2.
+    const lai = await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await moThauBafo(rfqId, v1, [[lai, { totalAmount: "90.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    const v2 = await moVongBafo(rfqId, kq2.evaluationId, 2);
+    const { rows } = await db.pool.query<{ round_no: number }>(
+      "SELECT round_no FROM rfq_bafo_rounds WHERE id = $1",
+      [v2],
+    );
+    expect(rows[0]?.round_no).toBe(2);
+  });
+
+  it.each([
+    ["mở lại một vòng đã đóng", "UPDATE rfq_bafo_rounds SET closed_at = NULL WHERE id = $1"],
+    [
+      "dời hạn nộp của một vòng",
+      "UPDATE rfq_bafo_rounds SET deadline_at = now() + interval '9 days' WHERE id = $1",
+    ],
+    ["xoá một vòng", "DELETE FROM rfq_bafo_rounds WHERE id = $1"],
+  ])("%s ⇒ ném, kể cả dưới vai SỞ HỮU bảng", async (ten, cau) => {
+    const mau =
+      ten === "mở lại một vòng đã đóng"
+        ? /da dong thi khong mo lai duoc/u
+        : ten === "dời hạn nộp của một vòng"
+          ? /Chi sua duoc closed_at/u
+          : /Khong duoc xoa mot vong BAFO/u;
+    const { rfqId, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1);
+    await db.pool.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+    // `db.pool` chạy dưới vai SỞ HỮU bảng, thứ mà GRANT không chặn. Đây là lý do ba vế trên là
+    // TRIGGER chứ không phải ba dòng GRANT vắng mặt.
+    await expect(db.pool.query(cau, [vongId])).rejects.toThrow(mau);
+  });
+
+  it("yêu cầu mở thầu vòng BAFO KHÔNG tạo được khi yêu cầu vòng một còn đang mở", async () => {
+    // Phát hiện của chính vòng này, ghim lại thay vì để nó sống trong một fixture. Chỉ mục bộ
+    // phận `unseal_requests_mot_yeu_cau_dang_mo` (`019:73`) nói *"một RFQ có TỐI ĐA MỘT yêu cầu
+    // đang mở"*, với `đang mở` = `status IN ('PENDING', 'APPROVED')`. Nó có từ `019` và chưa từng
+    // bị một kịch bản nào chạm, vì cho tới S2.5 không gói thầu nào cần mở thầu LẦN HAI.
+    //
+    // Hệ quả cho S1.109, nói ra ở đây vì đây là chỗ nó ĐO được: đường sản xuất mở vòng BAFO phải
+    // đi SAU khi worker đã đặt `EXECUTED` cho yêu cầu vòng một. Không phải một giới hạn cần gỡ —
+    // nó chính là vế D2 mà `019` đã ghi: hai yêu cầu cùng mở thì ngưỡng "hai người khác nhau" bị
+    // CHIA ĐÔI thay vì bị thoả.
+    const { rfqId, banRo, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1);
+    await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+      await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+    });
+    // Đẩy yêu cầu vòng một NGƯỢC về `APPROVED` — trạng thái mà fixture cũ để nó ở suốt hai vòng.
+    // `unseal_kiem_chuyen_trang_thai` (`055`) chặn đúng chiều ấy (*"EXECUTED -> APPROVED"*), và đó
+    // là một lớp ĐÚNG — nên nó được tắt cho ĐÚNG một câu rồi bật lại trong `finally`, khuôn mà
+    // `db/hardening-suy-tu-tinh-chat.int.test.ts` dùng cho mọi đột biến lớp CSDL. Thứ đang được đo
+    // ở đây là chỉ mục bộ phận, không phải máy trạng thái của yêu cầu.
+    await db.pool.query(
+      "ALTER TABLE unseal_requests DISABLE TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+    );
+    try {
+      await db.pool.query(
+        "UPDATE unseal_requests SET status = 'APPROVED', executed_at = NULL " +
+          "WHERE rfq_id = $1 AND bafo_round_id IS NULL",
+        [rfqId],
+      );
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+      );
+    }
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        requestUnseal(c, orgA, { rfqId, reason: "mo vong hai", actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toThrow(/unseal_requests_mot_yeu_cau_dang_mo/u);
+    // ĐỐI CHỨNG DƯƠNG: đặt lại `EXECUTED` thì yêu cầu thứ hai tạo được.
+    await db.pool.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() " +
+        "WHERE rfq_id = $1 AND bafo_round_id IS NULL",
+      [rfqId],
+    );
+    const yc2 = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "mo vong hai", actorSessionId: sYc }, apiPool),
+    );
+    const { rows } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM unseal_requests WHERE id = $1",
+      [yc2.id],
+    );
+    expect(rows[0]?.bafo_round_id).toBe(vongId);
+  });
+
+  it("`TRUNCATE rfq_bafo_rounds` bị chặn ở CẢ HAI đường — không cần lớp thứ ba", async () => {
+    // Tính chất, không cơ chế: đường trần bị khoá ngoại của `vendor_bid_versions` chặn, đường
+    // CASCADE lan tới chính bảng ấy và đụng trigger `047`. Ngày nào khoá ngoại ấy đi, dòng này đỏ
+    // và người sửa phải đọc lại mục (4) của `059`.
+    await expect(db.pool.query("TRUNCATE public.rfq_bafo_rounds")).rejects.toThrow(
+      /cannot truncate a table referenced in a foreign key constraint/u,
+    );
+    await expect(db.pool.query("TRUNCATE public.rfq_bafo_rounds CASCADE")).rejects.toThrow(
+      /Bang vendor_bid_versions chi duoc ghi them/u,
+    );
+  });
+
+  it("nộp báo giá khi RFQ đang EVALUATING ⇒ C1 từ chối bằng chính thông điệp cũ", async () => {
+    const { rfqId, banRo } = await daCham([["100.00", "VND"]], 1);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(
+      /RFQ khong nhan bao gia khi dang o trang thai EVALUATING \(C1\)/u,
+    );
+  });
+
+  it("nộp SAU hạn của vòng BAFO ⇒ C1 từ chối; hạn của vòng MỘT không còn liên quan", async () => {
+    const { rfqId, banRo, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 90 * 60 * 1000));
+    // Đẩy hạn về quá khứ dưới vai sở hữu — `bafo_kiem_vong` cấm cả vai ấy sửa `deadline_at`, nên
+    // trigger phải được tắt trong đúng một câu. Đây là khuôn `db/hardening-suy-tu-tinh-chat` dùng
+    // cho mọi đột biến lớp CSDL: tắt lúc chạy, `finally` bật lại.
+    await db.pool.query("ALTER TABLE rfq_bafo_rounds DISABLE TRIGGER rfq_bafo_rounds_kiem_vong");
+    try {
+      await db.pool.query(
+        "UPDATE rfq_bafo_rounds SET deadline_at = now() - interval '1 minute' WHERE id = $1",
+        [vongId],
+      );
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_bafo_rounds ENABLE ALWAYS TRIGGER rfq_bafo_rounds_kiem_vong",
+      );
+    }
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(/Da qua han nop bao gia \(C1\)/u);
+    // Và hạn của RFQ vẫn ở TƯƠNG LAI — nên ca trên đo đúng hạn của VÒNG, không đo hạn của gói.
+    const { rows } = await db.pool.query<{ con: boolean }>(
+      "SELECT deadline_at > now() AS con FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    expect(rows[0]?.con, "hạn vòng một còn ở tương lai — MAI_SAU là bảy ngày").toBe(true);
   });
 });

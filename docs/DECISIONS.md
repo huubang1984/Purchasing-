@@ -5548,3 +5548,103 @@ làm dòng ấy đỏ và buộc người sửa quay lại ADR này.
 **Ranh giới.** ADR này KHÔNG nói rằng thêm một bảng giá dạng rõ là việc rẻ. Nó nói ngược lại: mỗi bảng
 như thế phải đi kèm một dòng trong bảng trên, và dòng ấy phải khai được vai ghi cùng cổng đọc. Không
 khai được thì không thêm.
+
+---
+
+## ADR-055 — Vòng BAFO có trạng thái *"phong bì đã mở"* của riêng nó, và ai mở vòng là một mã quyền MỚI
+
+**Ngày:** 2026-09-22 · **Trạng thái:** Đã chấp nhận · **Vòng:** S1.108 / S2.5 · **Migration:** `059`
+
+**Bối cảnh.** Spec S2 §4.3 khai NĂM cạnh mới, trong đó phần BAFO là ba cạnh:
+`EVALUATING->BAFO_OPEN`, `BAFO_OPEN->BAFO_CLOSED`, `BAFO_CLOSED->EVALUATING`. Lượt soi hình dạng
+chạy TRƯỚC dòng mã đầu — theo lệ của vòng chạm lõi niêm phong — và đo được ba thứ mà hình dạng ấy
+không đứng được:
+
+⑴ **`bid_kiem_han_nop` (C1, `018`) chặn MỌI lần nộp BAFO.** Nó đòi `status = 'OPEN'` **và**
+`now() < rfq_packages.deadline_at`. Một vòng BAFO có RFQ ở `BAFO_OPEN` và hạn vòng một đã ở quá
+khứ. Và hạn ấy không dùng lại được: vế (b) của `rfq_kiem_chuyen_trang_thai` cấm deadline LÙI, vế
+(c) chỉ cho đổi ở `DRAFT`/`OPEN`.
+
+⑵ **`unseal_kiem_rfq_da_dong` (C3, `019`) và vế 3 của cổng bốn vế ghim cứng `'CLOSED'`**, nên
+phong bì vòng hai không mở được bằng đường nào — trong khi spec §8.1⑶ hứa đúng điều ngược lại.
+
+⑶ **Không có trạng thái nào nghĩa là *"phong bì BAFO đã mở"*.** Cạnh `CLOSED->UNSEALED` tồn tại
+không phải để đẹp máy trạng thái: `rfq_kiem_yeu_cau_mo_thau` cắm vào đúng cạnh ấy và đòi một yêu
+cầu mở thầu ĐÃ PHÊ DUYỆT. Nối thẳng `BAFO_CLOSED->EVALUATING` cho một lượt chấm LẠI chạy trong khi
+phong bì vòng hai còn nguyên niêm — và bảng xếp hạng khi ấy vẫn là bảng của vòng MỘT, không lớp
+nào kêu.
+
+**Một giả thuyết bị chính phép đo BÁC, ghi ra vì nó nghe rất đúng:** *"vòng BAFO dùng lại cặp khoá
+vòng một nên phong bì vòng hai yếu hơn"*. Sai. `rfq_key_material` chỉ thu hồi được khi RFQ
+`CANCELLED` (`hardening`, `rfq_khoa_chi_thu_hoi_khi_huy`), nên khoá vẫn nằm đó suốt vòng một; cổng
+bốn vế LUÔN là cổng chính sách chứ chưa bao giờ là cổng mật mã. BAFO không làm điều đó tệ đi, và
+`UNIQUE (org_id, rfq_id, algorithm)` của `017` không phải một khiếm khuyết cần vá ở vòng này.
+
+### Quyết định
+
+⑴ **Thêm trạng thái `BAFO_UNSEALED`. Bốn cạnh, không ba.**
+
+```
+EVALUATING->BAFO_OPEN   BAFO_OPEN->BAFO_CLOSED
+BAFO_CLOSED->BAFO_UNSEALED   BAFO_UNSEALED->EVALUATING
+```
+
+Bộ ba BAFO là **ảnh** của bộ ba `OPEN·CLOSED·UNSEALED`, nên nó thừa hưởng nguyên cả lớp canh: cạnh
+vào `BAFO_UNSEALED` dùng lại `rfq_kiem_yeu_cau_mo_thau`, không dựng khuôn thứ hai. Spec §4.3 được
+sửa tại chỗ.
+
+⑵ **Cạnh huỷ suy ra từ ảnh, không quyết mới.** `OPEN->CANCELLED` CÓ nên `BAFO_OPEN->CANCELLED` có;
+`CLOSED->CANCELLED` và `UNSEALED->CANCELLED` KHÔNG nên `BAFO_CLOSED->CANCELLED` và
+`BAFO_UNSEALED->CANCELLED` cũng không. Hai dòng KHÔNG ấy là khoản **225** đang mở, và vòng này cố
+ý **không** trả lời nó — nó chỉ chép câu trả lời hiện hành sang ảnh, để ngày nào khoản 225 được
+quyết thì HAI cặp cùng đổi chứ không một.
+
+⑶ **Dấu vòng là DẪN XUẤT, do trigger đặt, không khai được.** `vendor_bid_versions.bafo_round_id`
+do C1 đặt (nó đã đọc RFQ để kiểm hạn); `unseal_requests.bafo_round_id` do C3 đặt (nó đã đọc RFQ để
+kiểm trạng thái). Không role nào có `INSERT` trên hai cột ấy — khuôn `bid_dat_so_phien_ban` của
+`018`: *"một số do người gọi khai là một số hai người cùng khai được"*.
+
+Nhờ thế `rfq_kiem_yeu_cau_mo_thau` phân biệt được hai vòng, và đó là vế đóng ⑶: một yêu cầu mở
+thầu của VÒNG MỘT không mở được phong bì vòng hai. Không có cột ấy, cổng bốn vế chạy một lần rồi
+mở được mọi vòng về sau.
+
+⑷ **`top_n` là giá trị ĐÃ ÁP, và nó phải khớp `bafo_top_n` của phiên bản chính sách mà lượt đánh
+giá được trỏ tới.** Chính sách có phiên bản liên tục (`035`), nên một vòng BAFO phải trả lời được
+*"hồi ấy mời mấy người"* mà không phụ thuộc phiên bản hôm nay. Phép khớp chạy lúc MỞ, một lần.
+
+⑸ **Danh sách mời KHÔNG được lưu, và phép suy từ `rank` là một lớp CHẶN.** Spec §8.1 nói thứ S2
+làm được ở chỗ rò lớn nhất của nó: *"danh sách mời BAFO suy từ `rank`, không do người mua gõ tay,
+nên một lần mời ngoài top-N là một lần lệch đọc được"*. Câu ấy chỉ đúng nếu phép suy CHẶN được một
+lần nộp — nên nó là một trigger trên `vendor_bid_versions`, không một truy vấn dựng danh sách để
+hiển thị. Trigger riêng, KHÔNG nhồi vào C1: C1 tên là *hạn nộp*, và gắn top-N vào đó làm cái tên
+nói dối. Tên trigger được chọn để sắp SAU C1 theo thứ tự chữ cái, và thứ tự ấy có một ca đọc
+`pg_trigger` đòi nó.
+
+⑹ **Mở một vòng BAFO đứng sau một mã quyền RIÊNG — `rfq.bafo.open` — và chỉ `PROCUREMENT_MANAGER`
+giữ nó.**
+
+Đây là quyết định của chủ dự án ngày 2026-09-22, và nó đứng trên một phép đo: mở vòng BAFO là hành
+động **duy nhất** của sản phẩm mà người bấm ĐÃ BIẾT giá của mọi người. Nếu nó đi qua
+`evaluation.perform` thì **năm trên sáu** vai mở được — khoản **220** đã đo con số ấy — và `BUYER`
+trong số đó còn giữ cả `rfq.create`, tức một người tự tạo gói, tự chấm, rồi tự mời lại top-N.
+
+Dùng lại `rfq.invite` cũng không đúng dù nó hẹp hơn (`BUYER` + `PROCUREMENT_MANAGER`): **mời SAU
+khi đã biết giá là một quyền khác với mời lúc chưa biết gì**, và một mã dùng cho cả hai làm ma
+trận quyền nói được ít hơn thực tế. D3 không đổi — mã mới không nằm trong chuỗi năm mã mà
+`kiem_tra_ma_tran_quyen` canh, nên `PROCUREMENT_MANAGER` vẫn bốn trên năm.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói vòng BAFO chặn được người mua rò tin. Spec §8.1 đã thú nhận điều ngược lại, và
+`docs/PRODUCT.md` §5 giữ lời thú nhận ấy: tới lúc mời BAFO người mua đã biết giá vòng một của mọi
+người, và một câu *"anh đang đứng thứ hai, hạ 3% là thắng"* nói bằng miệng thì không lớp mật mã
+nào thấy. Thứ S2 làm được là ⑴ danh sách mời SUY ra nên một lần mời ngoài top-N để lại dấu, ⑵ mọi
+lần đọc bảng so sánh đã có sổ, ⑶ giá vòng hai niêm phong lại.
+
+Nó **không** nói bốn cạnh ấy đã có người đi qua. Sau `059` chúng **tồn tại và được canh**, nhưng
+KHÔNG đường sản xuất nào đi qua — route, worker, màn hình và **J4** thuộc S1.109, và lý do chia
+không phải sức chứa mà là phép đo: J4 là một vòng quét ROUTE, và quét khi chưa route nào tồn tại
+cho ra một cổng XANH trên tập RỖNG. Khoản **227** ghi ranh giới ấy.
+
+Nó **không** mở lại câu hỏi *ai được huỷ một gói thầu đã đóng* (khoản 225), và **không** nói gì về
+`EVALUATING->AWARDED` — `AWARDED` vẫn chưa phải một giá trị nào trong tập đóng. S2.6.
