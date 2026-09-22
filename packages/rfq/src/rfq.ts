@@ -73,6 +73,11 @@ export const RFQ_STATUSES = [
   "BAFO_OPEN",
   "BAFO_CLOSED",
   "BAFO_UNSEALED",
+  // [S1.110 / S2.6 / 061] Trạng thái thứ MƯỜI MỘT, và nghĩa của nó là một quyết định của chủ dự
+  // án ngày 2026-09-22 (§8.3): `AWARDED` nghĩa là *ĐANG CÓ một award còn sống*, không *đã từng
+  // trao thầu*. Nhờ nghĩa ấy trạng thái RFQ là ẢNH của hàng `rfq_awards` mới nhất, nên J7 và máy
+  // trạng thái đọc CÙNG một sự thật — và khi award bị huỷ thì RFQ có đường về `EVALUATING`.
+  "AWARDED",
   "CANCELLED",
 ] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
@@ -100,6 +105,10 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["BAFO_OPEN", "BAFO_CLOSED"],
   ["BAFO_CLOSED", "BAFO_UNSEALED"],
   ["BAFO_UNSEALED", "EVALUATING"],
+  // [S1.110 / S2.6 / 061] Hai cạnh của trao thầu. `AWARDED->EVALUATING` là đường VỀ, và nó tồn
+  // tại để `AWARDED` không thành trạng thái HÚT thứ ba (khoản 225 giữ hai cái đầu).
+  ["EVALUATING", "AWARDED"],
+  ["AWARDED", "EVALUATING"],
   // [S1.108] Cạnh huỷ thứ tư, và nó suy ra từ ảnh: `OPEN->CANCELLED` CÓ nên
   // `BAFO_OPEN->CANCELLED` có. `BAFO_CLOSED` và `BAFO_UNSEALED` KHÔNG có, đúng như `CLOSED` và
   // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.

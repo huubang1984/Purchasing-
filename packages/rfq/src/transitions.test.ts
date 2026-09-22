@@ -29,18 +29,33 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 // nên `058` nay cũng là một bản ĐÃ CHẾT. Ba lần dời trong ba vòng liên tiếp là một nhịp, không
 // một sự cố: mỗi migration đổi bảng cạnh sẽ dời con trỏ này, và quy ước ở trên là thứ làm việc
 // dời trở thành cơ học chứ không thành một câu hỏi.
+//
+// [S1.110 / S2.6] LẦN THỨ TƯ — và lần này việc dời con trỏ là thứ suýt che một khiếm khuyết
+// THẬT, nên nhịp ở trên phải đọc kèm phép đo dưới đây.
+//
+// `061` thêm HAI cạnh (`EVALUATING->AWARDED`, `AWARDED->EVALUATING`) và nó viết lại thân hàm
+// bằng `CREATE OR REPLACE`. Bản thảo đầu của `061` được viết BẰNG TAY và **rơi 45 dòng** cưỡng
+// chế còn sống của `059`: vế phê duyệt kép của D2 trên băm nội dung, vế C4 *không rút ngắn
+// deadline*, ba vế *mốc chỉ đặt một lần*, cửa sổ thầu tối thiểu, và vế *không mở RFQ rỗng*.
+// Ba lớp đều KHÔNG kêu: `migrate()` xanh, hardening ÂM THẦM phục hồi thân `059` lên trên (nên
+// migration thành no-op), và một phép tự kiểm `prosrc LIKE '%EVALUATING->AWARDED%'` trả CÓ vì
+// nó khớp một CHÚ THÍCH trong thân `059` giải thích vì sao cạnh ấy vắng.
+//
+// Quy tắc rút ra, và nó rộng hơn tệp này: một hàm ĐÃ GHIM thì không hand-write `CREATE OR
+// REPLACE` — trích nguyên thân đang sống bằng script rồi CỘNG vào, và kiểm bằng phần tử mảng
+// CÓ NHÁY (`'%''EVALUATING->AWARDED''%'`) hay bằng hành vi, chứ đừng bằng một chuỗi con trần.
 const DUONG_DAN_BANG_CANH = fileURLToPath(
-  new URL("../../../db/migrations/059_vong_bafo.sql", import.meta.url),
+  new URL("../../../db/migrations/061_trao_thau.sql", import.meta.url),
 );
 
-/** Tập đóng của `status` ĐANG SỐNG, bóc từ `CHECK` mà `059` vừa dựng lại. */
+/** Tập đóng của `status` ĐANG SỐNG, bóc từ `CHECK` mà `061` vừa dựng lại. */
 function bocTrangThaiTuSql(): string[] {
   const sql = readFileSync(DUONG_DAN_BANG_CANH, "utf8");
   const khoi = /ADD CONSTRAINT rfq_packages_status_check\s*CHECK \(status IN \(([\s\S]*?)\)\);/
     .exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy ràng buộc rfq_packages_status_check trong 059_vong_bafo.sql. Nếu tập đóng " +
+      "Không tìm thấy ràng buộc rfq_packages_status_check trong 061_trao_thau.sql. Nếu tập đóng " +
         "đã dời tệp, con trỏ này phải dời CÙNG LÚC — không được xoá.",
     );
   }
@@ -53,7 +68,7 @@ function bocCanhTuSql(): string[] {
   const khoi = /CANH_HOP_LE constant text\[\] :=\s*ARRAY\[([\s\S]*?)\]\s*;/.exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy khối CANH_HOP_LE trong 059_vong_bafo.sql. Nếu bảng cạnh đã được " +
+      "Không tìm thấy khối CANH_HOP_LE trong 061_trao_thau.sql. Nếu bảng cạnh đã được " +
         "viết lại một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
     );
   }
@@ -61,7 +76,7 @@ function bocCanhTuSql(): string[] {
 }
 
 describe("bảng cạnh của máy trạng thái RFQ", () => {
-  it("bản TS và bảng cạnh SỐNG (059) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
+  it("bản TS và bảng cạnh SỐNG (061) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
     const tuTs = RFQ_TRANSITIONS.map(([tu, den]) => `${tu}->${den}`).sort();
     const tuSql = bocCanhTuSql();
 
@@ -112,11 +127,18 @@ describe("bảng cạnh của máy trạng thái RFQ", () => {
     expect(bocCanhTuSql()).not.toContain("EVALUATING->BAFO_UNSEALED");
   });
 
-  it("`BAFO_CLOSED->CANCELLED` và `BAFO_UNSEALED->CANCELLED` KHÔNG có mặt — khoản 225, hai cặp", () => {
+  it("`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED` và `AWARDED->CANCELLED` KHÔNG có mặt — khoản 225, BA cặp", () => {
     // Đây KHÔNG phải một tính chất mong muốn: nó là cùng câu hỏi nghiệp vụ mà `CLOSED` và
     // `UNSEALED` đang treo ở khoản 225, chép sang ảnh BAFO. Ghim để ngày nào khoản ấy được quyết
     // thì CẢ HAI cặp cùng đỏ — không một cặp.
+    //
+    // [S1.110 / S2.6] Và nay là cặp THỨ BA: `061` thêm `AWARDED` mà KHÔNG thêm
+    // `AWARDED->CANCELLED`, cùng một lý do và cùng một khoản. `cancelRfq` cũng không nhận
+    // `AWARDED` trong danh sách trắng của nó, nên hai lớp nói cùng một câu. Đường ra khỏi
+    // `AWARDED` mà vòng này DỰNG là `AWARDED->EVALUATING` — huỷ AWARD, không huỷ gói thầu.
     const canh = bocCanhTuSql();
+    expect(canh).not.toContain("AWARDED->CANCELLED");
+    expect(RFQ_TRANSITIONS.some(([tu, den]) => tu === "AWARDED" && den === "CANCELLED")).toBe(false);
     expect(canh).not.toContain("CLOSED->CANCELLED");
     expect(canh).not.toContain("UNSEALED->CANCELLED");
     expect(canh).not.toContain("BAFO_CLOSED->CANCELLED");

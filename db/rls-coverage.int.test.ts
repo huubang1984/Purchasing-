@@ -799,6 +799,14 @@ describe("phủ RLS", () => {
       // UPDATE của nó là quyền CỘT (xem [M5] dưới) vì `<bảng>_pkey` là `(id)`. `app_unseal`
       // KHÔNG có dòng nào ở đây — nó đọc bảng ấy theo CỘT, để `opened_by` và
       // `opened_by_session_id` nằm ngoài tầm: vai giải mã không cần biết AI mở vòng.
+      // [S1.110 / S2.6 / 061] Hai bảng của trao thầu chỉ hiện SELECT ở MỨC BẢNG — INSERT của
+      // chúng là quyền CỘT (xem [M5] dưới), vì `<bảng>_pkey` là `(id)` và INV-H14 đòi thế.
+      // KHÔNG có UPDATE lẫn DELETE cho vai nào, và ở đây vế ấy MẠNH hơn ở hai bảng chấm thầu:
+      // hai bảng này CHỈ-GHI-THÊM được cưỡng chế bằng trigger `ENABLE ALWAYS` cộng một chốt
+      // `TRUNCATE` riêng, nên *huỷ là một hàng mới* là một tính chất của DỮ LIỆU chứ không một
+      // quy ước của ứng dụng (§2.3⑹). `app_unseal` không có dòng nào — vai giải mã không trao thầu.
+      { grantee: "app_api", bang: "rfq_award_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_awards", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_bafo_rounds", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
       // [S1.105 / 057] Hai bảng của lượt đánh giá chỉ hiện SELECT ở MỨC BẢNG — INSERT của chúng
@@ -1176,6 +1184,24 @@ describe("phủ RLS", () => {
       // `round_no` vì nó là DẪN XUẤT do trigger đặt — một số do người gọi khai là một số hai
       // người cùng khai được; `opened_at` vì nó có `DEFAULT now()`. UPDATE chỉ có `closed_at`,
       // và `bafo_kiem_vong` canh CHIỀU của nó (NULL -> một giá trị, một lần).
+      // [S1.110 / S2.6 / 061] `id` và `acted_at`/`approved_at` VẮNG khỏi INSERT, mỗi cái một lý
+      // do: `id` vì `<bảng>_pkey` là `(id)` (khuôn `users_pkey` của 002, INV-H14); hai cột mốc vì
+      // chúng có `DEFAULT now()` — một mốc do người gọi khai là một mốc người gọi chọn được.
+      // KHÔNG một dòng `UPDATE` nào, và đó là vế phân biệt hai bảng này với `rfq_bafo_rounds`
+      // (bảng ấy có `closed_at` UPDATE được): chuỗi trạng thái award đi bằng HÀNG MỚI, không
+      // bằng một lần sửa cột.
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "approver_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "award_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "acted_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "acted_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "closed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "deadline_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "evaluation_id", quyen: "INSERT" },
@@ -1834,7 +1860,14 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
-      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_evaluation_lines",
+      "outbox_jobs", "rfq_approvals",
+      // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
+      // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có
+      // giá; biết AI thắng khi mình thua thì càng. Ngày nào sản phẩm có màn *kết quả* cho
+      // nhà cung cấp thì nới nó là một quyết định có dữ liệu để trả lời — như `060` đã làm
+      // cho `rfq_bafo_rounds`, và hàng ấy nay nằm ở nhóm `khachNoi` ngay dưới.
+      "rfq_award_approvals", "rfq_awards",
+      "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals", "unseal_requests",

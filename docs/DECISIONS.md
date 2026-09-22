@@ -5702,3 +5702,87 @@ không vì đường này gọi đường kia.
 
 Nó **không** đổi gì ở `countReceivedBids` (A6): con số ấy đếm LUỒNG (`vendor_bids`), không đếm
 phiên bản, nên vòng BAFO không chạm tới nó.
+
+---
+
+## ADR-057 — `AWARDED` nghĩa là *"đang có một award còn sống"*, và huỷ award đưa RFQ **về `EVALUATING`**
+
+**Trạng thái:** Đã chấp nhận · **Ngày:** 2026-09-22 · **Vòng:** S1.110 / S2.6 trao thầu
+
+### Bối cảnh
+
+Spec §8.3 để ngỏ đúng một câu và ĐÒI nó được chốt trước S2.6: *cạnh trạng thái của RFQ khi award bị
+huỷ — `AWARDED` quay lại `EVALUATING`, hay đứng yên?*
+
+Lượt soi hình dạng của S1.110 đo được rằng câu ấy không phải một chi tiết máy trạng thái. Nó quyết
+định `AWARDED` **nghĩa là gì**, và **J7** đọc một trong hai nghĩa:
+
+- nếu `AWARDED` nghĩa *"đã trao thầu"* thì nó là một trạng thái HÚT — không cạnh nào ra, nên một gói
+  thầu bị huỷ award **đứng ở `AWARDED` mà không có award nào còn sống**, một trạng thái tự mâu thuẫn;
+- nếu nó nghĩa *"đang có một award còn sống"* thì cạnh ra tồn tại, và nó là cạnh về `EVALUATING`.
+
+### Quyết định
+
+Chủ dự án chốt ngày 2026-09-22: **`AWARDED->EVALUATING`**, và `AWARDED` nghĩa là *đang có một award
+còn sống*. Ba hệ quả kéo theo, và chúng **không** phải lựa chọn — chúng suy ra từ nghĩa ấy:
+
+⑴ hàng **`PROPOSED`** đặt trạng thái RFQ sang `AWARDED`. J7 coi một đề xuất đang chờ duyệt là *còn
+sống* (nó từ chối một đề xuất thứ hai), nên trạng thái RFQ phải nói cùng một câu. Nếu `PROPOSED`
+không đặt `AWARDED`, thì giữa lúc đề xuất và lúc duyệt, RFQ đứng ở `EVALUATING` — và `moVongBafo` mở
+được một vòng BAFO **dưới chân một đề xuất đang chờ duyệt**, tức tính lại chính bảng xếp hạng mà đề
+xuất ấy dựa trên.
+
+⑵ hàng **`APPROVED`** KHÔNG đổi trạng thái RFQ. Nó đã ở `AWARDED`.
+
+⑶ hàng **`CANCELLED`** đưa về `EVALUATING`, và đó là lúc một đề xuất MỚI đi được — J7 cho `PROPOSED`
+khi hàng mới nhất đã huỷ.
+
+### `AWARDED->CANCELLED` KHÔNG được thêm, và đó là cùng một khoản nợ chứ không một quyết định mới
+
+`061` thêm `AWARDED` vào tập đóng mà **không** thêm `AWARDED->CANCELLED`, và `cancelRfq` cũng không
+nhận `AWARDED` vào danh sách trắng. Hai lớp nói cùng một câu.
+
+Đó là **cặp thứ BA** của khoản **225** (*`CLOSED` và `UNSEALED` là trạng thái hút*), không phải một
+lỗ mới: huỷ cả GÓI THẦU sau khi giá đã lộ là một câu hỏi nghiệp vụ mua sắm, và nó khác hẳn câu hỏi
+*huỷ một AWARD*. Cái ADR này chốt là cái thứ hai. Ca ranh giới ở `packages/rfq/src/transitions.test.ts`
+ghim cả ba cặp, nên ngày nào khoản 225 được quyết thì cả ba cùng đỏ — không một cặp.
+
+### Một chữ ký, không hai — và con số sống ở CSDL
+
+§7 viết *"một người ĐỀ XUẤT trao thầu kèm lý do, một người KHÁC phê duyệt"* — **một**. §4.2 thì đặt
+tên bảng số nhiều (`rfq_award_approvals`) và khai khuôn `unseal_approvals`, vốn là khuôn của HAI chữ
+ký (D2). Hai câu ấy **không** mâu thuẫn, và lượt soi hình dạng đo được vì sao: khuôn `unseal_approvals`
+nói về HÌNH DẠNG ràng buộc — `UNIQUE (org, request, approver_user)` cộng `UNIQUE (org, request,
+approver_session)`, sáu ràng buộc đo trên cụm thật — không về SỐ LƯỢNG.
+
+Chủ dự án chốt **MỘT** ngày 2026-09-22. Con số sống ở **một chỗ**: `CHU_KY_CAN constant integer := 1`
+trong `award_kiem_mot_award_song`. Lớp gói KHÔNG đếm — hai bản đếm là hai bản trôi — nên
+`duyetTraoThau` ghi chữ ký rồi ghi luôn hàng `APPROVED`, và nếu ngày nào con số thành hai thì câu
+`INSERT` thứ hai từ chối với thông điệp gọi tên số chữ ký đang có, và lời gọi của người duyệt thứ hai
+đi qua. Không một dòng nào của lớp trên phải đổi.
+
+### Cổng HUỶ là cổng của người DUYỆT, và cái giá được nói ra
+
+Một phép đo trên `005`: `award.recommend` do **BUYER · PROCUREMENT_MANAGER · FINANCE · DIRECTOR**
+giữ; `po.approve` chỉ **FINANCE · DIRECTOR**. Nếu huỷ đi qua `award.recommend` thì một `BUYER` huỷ
+được một award **đã duyệt** rồi đề xuất người khác — phê duyệt kép bị tháo bằng cách **bào mòn**, chứ
+không bằng cách vượt. Nên `huyTraoThau` đòi `po.approve`.
+
+Cái giá, nói thẳng: **người đề xuất không tự rút lại được đề xuất của mình.** Đó là một quyền hẹp hơn
+và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hay một cổng phụ thuộc trạng thái, và cả
+hai là thiết kế mới. Ghi thành khoản **232**.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói J3 đã trọn. Vế *người điều phối mở thầu* đọc `unseal_requests.dispatched_by`, cột
+mang người của lần điều phối ĐANG CHẠY, nên sau một lần điều phối lại nó không thấy người đầu. Chủ
+dự án chọn **NHẬN** lỗ ấy ngày 2026-09-22 sau khi ba hình dạng đóng được cân, và ô J3 khai phạm vi
+HẸP HƠN mệnh đề — khoản **233**.
+
+Nó **không** nói lượt chấm mà award dựa trên được canh ở hai lớp. Khác `060` (vòng BAFO), tầng CSDL
+ở đây chỉ đòi lượt chấm **thuộc đúng RFQ**, không đòi nó là lượt **mới nhất**; câu `ORDER BY
+e.created_at DESC` của `deXuatTraoThau` là lớp DUY NHẤT. Bất đối xứng ấy có lý do đo được —
+`rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một thân yêu cầu khai được nó,
+còn `evaluationId` của award không phải tham số của hàm nào — và nó vào sổ thành khoản **231**.
+
+Nó **không** đổi gì ở `cancelRfq`, `countReceivedBids`, hay đường niêm phong.

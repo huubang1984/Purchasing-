@@ -14,9 +14,13 @@
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
 import {
+  deXuatTraoThau,
   docBangXepHang,
+  docTraoThau,
   docVongBafo,
   dongVongBafo,
+  duyetTraoThau,
+  huyTraoThau,
   moVongBafo,
   taoLuotDanhGia,
 } from "@trustprocure/danh-gia";
@@ -162,6 +166,7 @@ const invitationIdParam = (req: ApiRequest): string => uuidParam(req, "invitatio
 const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId");
 const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
+const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -379,6 +384,31 @@ const doc: readonly BuyerReadRoute[] = [
       body: { bafoRound: await docVongBafo(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) },
     }),
   },
+  // [S1.110 / S2.6] AWARD MỚI NHẤT của gói thầu kèm chữ ký duyệt — `null` khi chưa có đề xuất
+  // nào. CÙNG rổ `HAM_DOC_CO_QUYEN` với bảng xếp hạng và bảng so sánh, và khác hẳn
+  // `/rfqs/:rfqId/bafo` ngay trên: hàng vòng BAFO không nói ai là ai, còn hàng này nói **ai
+  // thắng**. Cổng `bid.view` nằm THẲNG trong `docTraoThau` (khoản 33).
+  //
+  // `agent: false` cùng lý do `/rfqs/:rfqId/ranking`: danh tính người thắng là kết luận đắt nhất
+  // mà một tác tử chỉ-đọc đọc được, và không việc nào của `apps/mcp` cần nó.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/award",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        award: await docTraoThau(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
   {
     method: "GET",
     path: "/rfqs/:rfqId/ranking",
@@ -491,6 +521,97 @@ const ghi: readonly BuyerWriteRoute[] = [
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // --------------------------------------------------------------------------------------------
+  // [S1.110 / S2.6] TRAO THẦU — cạnh `EVALUATING->AWARDED` và `AWARDED->EVALUATING` của `061`, và
+  // hành động CUỐI của sản phẩm. Ba route, và **hai** mã quyền khác nhau ở đúng chỗ spec §7 đòi
+  // hai con người: `award.recommend` để ĐỀ XUẤT, `po.approve` để DUYỆT.
+  //
+  // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
+  // tự suy lượt chấm MỚI NHẤT. Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
+  // thuộc đúng RFQ, không đòi nó mới nhất — nên một ca đo khoá riêng vế ấy.
+  //
+  // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
+  // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
+  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. Cái giá: người đề xuất không tự rút lại
+  // được (khoản **232**).
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.AWARD_RECOMMEND,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await deXuatTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            bidVersionId: uuidBody(ctx.req.body, "bidVersionId"),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // `awardId` đi trong ĐƯỜNG DẪN, không trong thân: người duyệt ký lên đúng đề xuất họ đã đọc, và
+  // một lời gọi chỉ theo `rfqId` sẽ ký lên đề xuất MỚI trong im lặng nếu đề xuất kia vừa bị huỷ và
+  // dựng lại. `resourceId` vẫn là `rfqId` — hàng sổ `PERMISSION_DENIED` nói về gói thầu, và
+  // `duyetTraoThau` đối chiếu hai id để hàng sổ ấy không gọi tên sai gói.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/:awardId/approve",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.PO_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await duyetTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            awardId: awardIdParam(ctx.req),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/cancel",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.PO_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await huyTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
           ctx.auditPool,
         ),
       },

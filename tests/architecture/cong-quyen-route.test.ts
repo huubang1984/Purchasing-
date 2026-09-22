@@ -46,6 +46,15 @@ const THU_MUC_APPS = "apps";
 /** Hàm ĐỔI TRẠNG THÁI — mọi lời gọi từ `apps/` phải đi kèm một phép kiểm quyền. */
 const HAM_DOI_TRANG_THAI = [
   "addRfqItem",
+  // [S1.110 / S2.6] SÁU hàm ghi của `@trustprocure/danh-gia`, vào cùng lúc gói ấy vào
+  // `CUA_GOI`. Cả sáu đổi `rfq_packages.status`, và ba hàm trao thầu còn ghi vào hai bảng
+  // CHỈ-GHI-THÊM mà không vai nào `UPDATE` được — tức một lần ghi sai không sửa lại được.
+  "deXuatTraoThau",
+  "dongVongBafo",
+  "duyetTraoThau",
+  "huyTraoThau",
+  "moVongBafo",
+  "taoLuotDanhGia",
   "addSupplierContact",
   "approveRfq",
   "approveUnseal",
@@ -76,6 +85,11 @@ const HAM_CHI_DOC = [
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
   // `app_unseal`, và KHÔNG có người dùng nào để hỏi quyền. Cùng lý do đã ghi cho `listSuppliers`.
   "auditStoredCiphertexts",
+  // [S1.110] `docVongBafo` KHÔNG mang cổng, và `packages/danh-gia/src/vong-bafo.ts` đã ghi vì
+  // sao ở chỗ người đọc sẽ tìm: hàng nó trả không mang một mức giá nào, và `topN` thì một
+  // người mua đã đọc được qua `GET /policy`. Một cổng `bid.view` ở đó canh một thứ không phải
+  // bí mật, rồi làm người đọc tưởng nó là. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docVongBafo",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",
@@ -105,6 +119,12 @@ const HAM_CHI_DOC = [
  * quyền bằng token và mã OTP — một phép chứng minh MẠNH HƠN một phiên, không phải một ngoại lệ.
  */
 const HAM_DUONG_KHACH = [
+  // [S1.110 / S2.6] `docVongBafoKhach` — hàm DUY NHẤT của `@trustprocure/danh-gia` mà một
+  // phiên KHÁCH chạm tới, và nó trả đúng HAI trường (`roundNo`, `deadlineAt`). Không cổng
+  // quyền vì không có tài khoản người mua nào ở đầu dây; hai lớp canh nó là policy
+  // `rfq_bafo_rounds_khach` (`060`, canh HÀNG nào ra khỏi CSDL) và kiểu trả về (canh TRƯỜNG
+  // nào ra khỏi tiến trình). `topN` và `openedBy` không đi ra đường khách bằng lối nào.
+  "docVongBafoKhach",
   "issueOtpChallenge",
   "redeemMagicLink",
   // [ADR-020 / S1.10.2] cookie khách → phiên khách: tự chứng minh bằng token, không có mã quyền.
@@ -149,6 +169,10 @@ const HAM_DOC_CO_QUYEN = [
   // [S1.106 / S2.4] Đọc một bảng xếp hạng là một lần TIẾT LỘ GIÁ, nên nó chịu đúng cổng
   // `bid.view` mà bảng so sánh chịu — không phải `evaluation.perform`.
   "docBangXepHang",
+  // [S1.110 / S2.6] Award không mang một con SỐ nào, nhưng nó mang **ai thắng** — kết luận
+  // của mọi thứ ADR-038 rút khỏi bề mặt MCP. Nên nó chịu đúng cổng `bid.view` mà bảng xếp
+  // hạng chịu, và lời gọi đứng THẲNG trong thân `docTraoThau` (khoản 33).
+  "docTraoThau",
   "listInvitations",
 ] as const;
 
@@ -161,6 +185,14 @@ const HAM_DOC_CO_QUYEN = [
  */
 const HAM_THUAN_TUY = [
   "buildReceiptText",
+  // [S1.110] Năm hàm thuần của `@trustprocure/danh-gia`: không `client`, không `orgId`, không
+  // chạm CSDL. `tinhChiPhiHieuDung` là hàm mà **J2** đòi tái lập được, nên một tham số
+  // "chỉ máy chủ mới có" thêm vào nó phá đúng bất biến ấy — cùng ca `verifyReceipt`.
+  "docSo",
+  "laTuChoi",
+  "lamTron",
+  "tinhChiPhiHieuDung",
+  "vietSo",
   "createLocalDevReceiptSigner",
   "derToRawSignature",
   "parseReceiptText",
@@ -206,12 +238,24 @@ function thanHamExport(pTen: string): string | null {
 // RFQ, cộng hai hàm đọc bảng giá, đều nằm ngoài tầm nhìn của cả hai lớp ở file này. Một module
 // `apps/api` gọi `approveUnseal` mà quên dòng quyền sẽ đi qua sạch sẽ. Đúng khuôn *"hàng rào tự
 // làm mù mình bằng một danh sách tên"* mà khoản nợ 3 và 16 đã ghi — lần thứ ba.
+//
+// [S1.110 / S2.6] LẦN THỨ TƯ, và lần này danh sách bỏ sót gói chứa MỌI đường ghi của S2.
+// Đo: `CUA_GOI` có NĂM cửa và KHÔNG có `@trustprocure/danh-gia`, nên phép kiểm *"mọi hàm
+// export đều được PHÂN LOẠI"* không đọc gói ấy một dòng nào — trong khi `taoLuotDanhGia`
+// (S1.105), `moVongBafo` + `dongVongBafo` (S1.109) và `deXuatTraoThau` + `duyetTraoThau` +
+// `huyTraoThau` (S1.110) đều là hàm ĐỔI TRẠNG THÁI. Hậu quả đọc được từ chính vị từ
+// `timViPham`: một module gọi chúng mà KHÔNG nhắc `requirePermission` đi qua sạch sẽ, vì tên
+// chúng không nằm trong `HAM_DOI_TRANG_THAI`. Tức lớp canh này đã mù với sáu hàm ghi suốt
+// từ S1.105 — và `docBangXepHang` thì có mặt ở `HAM_DOC_CO_QUYEN`, nên nó nhận phép kiểm
+// "có cổng THẬT" mà KHÔNG nhận phép kiểm phân loại: một nửa lớp canh, đúng thứ khó thấy
+// nhất. Mười lăm hàm của gói được phân loại ở vòng này, trải năm rổ.
 const CUA_GOI = [
   "@trustprocure/supplier",
   "@trustprocure/rfq",
   "@trustprocure/invitation",
   "@trustprocure/unseal",
   "@trustprocure/bidding",
+  "@trustprocure/danh-gia",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -432,7 +476,7 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
 });
 
 describe("[ADR-016] danh sách hàm ghi không được tự làm mù mình", () => {
-  it("mọi hàm export của ba gói nghiệp vụ đều được PHÂN LOẠI — thêm một hàm mới buộc phải quyết", async () => {
+  it("mọi hàm export của ~~ba~~ [S1.110] SÁU gói nghiệp vụ đều được PHÂN LOẠI — thêm một hàm mới buộc phải quyết", async () => {
     const daPhanLoai = new Set<string>([
       ...HAM_DOI_TRANG_THAI,
       ...HAM_CHI_DOC,

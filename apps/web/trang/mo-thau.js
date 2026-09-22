@@ -117,6 +117,7 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b4"), true);
     hien($("b5"), true);
     hien($("b6"), true);
+    hien($("b7"), true);
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -402,6 +403,73 @@ $("nut-dong-bafo").addEventListener("click", async () => {
   if (r.status !== 200) { bao($("loi6"), loiCua(r, "Không đóng được vòng BAFO")); return; }
   bao($("ok6"), "Đã đóng vòng BAFO. Gói thầu sang BAFO_CLOSED — mở phong bì vòng hai bằng cổng bốn vế ở bước 3.");
   await veVongBafo();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Bước 7 — trao thầu
+//
+// `null` là câu trả lời ĐÚNG cho "chưa có đề xuất nào", cùng khuôn `veYeuCau` / `veXepHang` /
+// `veVongBafo`. Trang KHÔNG tự đếm chữ ký: số chữ ký cần sống ở CSDL (`CHU_KY_CAN`), nên nếu
+// ngày nào con số ấy thành hai thì trang này không phải đổi một dòng — nó chỉ hiện thứ đọc được.
+// ---------------------------------------------------------------------------------------------
+
+async function veTraoThau() {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/award`);
+  if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return; }
+  const a = r.body.award ?? null;
+  if (a === null) {
+    dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
+    return;
+  }
+  dienDl($("tt-award"), [
+    ["Trạng thái", a.status],
+    ["Báo giá được chọn", a.bidVersionId],
+    ["Dựa trên lượt chấm", a.evaluationId],
+    ["Lý do", a.reason],
+    ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
+    ["Chữ ký duyệt", a.approvals.length === 0
+      ? "chưa có"
+      : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")],
+  ]);
+}
+
+$("nut-de-xuat").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const bv = $("bao-gia-thang").value.trim();
+  const lyDo = $("ly-do-award").value.trim();
+  if (bv === "" || lyDo === "") { bao($("loi7"), "Cần cả id báo giá và lý do."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award`, { bidVersionId: bv, reason: lyDo });
+  // Bốn lối từ chối có tên của lớp trao thầu đi ra dưới 422 với câu của lớp gói; ba trigger của
+  // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
+  // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không đề xuất được")); return; }
+  bao($("ok7"), "Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần MỘT người KHÁC phê duyệt.");
+  await veTraoThau();
+});
+
+$("nut-duyet-award").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  // Người duyệt ký lên ĐÚNG đề xuất họ vừa đọc, nên `awardId` đi trong đường dẫn: giữa lúc đọc
+  // và lúc bấm, đề xuất kia huỷ được và một đề xuất KHÁC dựng lên, và một lời gọi chỉ theo
+  // `rfqId` sẽ ký lên đề xuất mới trong im lặng.
+  const doc = await goi("GET", `/rfqs/${phien.rfqId}/award`);
+  const a = doc.status === 200 ? (doc.body.award ?? null) : null;
+  if (a === null) { bao($("loi7"), "Chưa có đề xuất nào để duyệt."); return; }
+  if (a.status !== "PROPOSED") { bao($("loi7"), `Đề xuất đang ở ${a.status}, không duyệt được.`); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
+  bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
+  await veTraoThau();
+});
+
+$("nut-huy-award").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const lyDo = $("ly-do-award").value.trim();
+  if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần huỷ — một lần huỷ không lý do là đúng thứ D5 cấm."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/cancel`, { reason: lyDo });
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không huỷ được")); return; }
+  bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
+  await veTraoThau();
 });
 
 // ==============================================================================================
