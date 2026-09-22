@@ -10834,3 +10834,71 @@ và vòng này không đổi nó.
 - **Lượt soi ngang 78: LỠ NHỊP lần thứ hai liên tiếp**, và lần này cả hai vế đã thoả (4 lần đổi
   hardening kể từ `dc2b560`). Lý do là một lập luận về LỊCH, yếu hơn lý do của S1.109. Mốc KHÔNG dời:
   chậm nhất **S1.111**. Ghi ở `Handoff.md` §11.
+
+---
+
+# §S1.111 — ĐỔI SỐ một nhánh đã va: ADR-054 → ADR-058, khoản 225 → khoản 234
+
+**Ngày:** 2026-09-22 · **Nhánh:** `thong-dong-khau-moi` (từ `claude/contractor-collusion-prevention-chjvxk`)
+· **Không một dòng mã** — bốn tệp tài liệu.
+
+## 1. Vì sao va, và phép đo phân biệt hai nhánh
+
+Hai nhánh bị nghi va. Đo trước khi đụng, và một trong hai **không va**:
+
+| nhánh | commit ngoài `master` | là tổ tiên của `master`? | kết luận |
+|---|---|---|---|
+| `soi-ngang-107` | **0** | **CÓ** | đã merge ở PR #107 — nó chính là **NGUỒN** của ADR-054 + khoản 225 trong `master`, không phải một bản trùng |
+| `claude/contractor-collusion-prevention-chjvxk` | **2** | không | va thật |
+
+Lời khai *"cả hai nhánh đều va"* sinh ra từ một ảnh chụp `tip` của `soi-ngang-107` đọc theo số lớn
+nhất, mà không hỏi câu quyết định: *nhánh ấy có còn nằm ngoài `master` không*. Một phép đo một dòng
+(`git merge-base --is-ancestor`) bác nó.
+
+## 2. Hai số, hai nội dung khác hẳn nhau
+
+Nhánh còn lại tách ở `dc2b560` (merge PR #106) và nằm ngoài **bốn** vòng. Trong bốn vòng ấy `master`
+cấp hai số cho việc KHÁC:
+
+| số | trên nhánh | trên `master` |
+|---|---|---|
+| ADR-054 | *Mô hình đe doạ KHÔNG bao gồm bên mua thông đồng với TOÀN BỘ pool NCC* | *Giá dạng rõ sống ở những bảng ĐƯỢC KHAI* |
+| khoản 225 | *Khâu MỜI không có lớp nào canh **ai** được mời* | *`CLOSED`/`UNSEALED` là trạng thái hút* |
+
+Đúng **bốn** chỗ mang số phải đổi: tiêu đề ADR, một `Khoản **225**` trong thân ADR, và hai `ADR-054`
+trong hàng sổ nợ. Nội dung giữ **nguyên văn** — kể cả bốn số đo trên `dc2b560`, vì chúng là phép đo
+tại thời điểm ấy chứ không phải lời khai về hôm nay; một khối `>` ở đầu ADR nói ra việc đổi số.
+
+## 3. Cách gộp, và vì sao không gỡ xung đột từng dòng
+
+Bốn tệp tài liệu đều bị viết lại qua bốn vòng, và mọi dòng ĐẾM đều đổi. Gộp bằng cách lấy **bản
+`master`** cho cả bốn tệp ở commit merge (`git diff origin/master` sau đó = **RỖNG**, đo được), rồi
+áp lại nội dung nhánh với số mới ở commit thứ hai. Diff ròng so với `master` vì thế đúng bằng nội
+dung nhánh đã đổi số, và không một dòng đếm nào của bốn vòng kia bị một lần gỡ xung đột làm hỏng.
+
+## 4. Một con trỏ THIU mà nhánh này sửa hộ ba vòng
+
+`docs/PRODUCT.md` mang câu *"**Dòng cuối** là ràng buộc bổ sung phát sinh từ ADR-002"*. Con trỏ ấy
+đếm VỊ TRÍ, và nó thiu **từ S1.108**: hàng BAFO là hàng đầu tiên nằm DƯỚI nó, rồi S1.109 và S1.110
+nới thêm hai hàng nữa — nên *"dòng cuối"* trỏ vào một hàng nói chuyện khác hẳn.
+
+Nhánh này sửa đúng cách — **gọi TÊN hàng** thay vì đếm vị trí — và bản vá ấy sửa luôn lỗ của ba
+vòng. Bài học rộng hơn số hiệu: một con trỏ theo VỊ TRÍ trong tài liệu là một con trỏ sẽ thiu, và nó
+thiu **im lặng**, vì không cổng nào đọc được ý nghĩa của chữ *"dòng cuối"*.
+
+## 5. Nhãn vòng KHÔNG được tự chế
+
+Bản đầu của lượt đổi số này dùng nhãn `[S1.110b]` cho các lời khai đếm. `[INV-H20]` ĐỎ ngay với
+*"không tìm thấy lời khai `**<số> ADR**`"* — cổng đọc nhãn theo khuôn `[S1.<số>]`, và một chữ cái
+làm nó KHÔNG THẤY lời khai chứ không làm nó báo sai định dạng. Số vòng đi theo **thứ tự merge**
+(`docs/STATE.md`), nên vòng này là **S1.111**, và nhãn ấy là nhãn hợp lệ duy nhất.
+
+## 6. Ranh giới nói ra
+
+- **Không một dòng mã**, nên `test:int` và `evidence` không đo gì mới ở vòng này; `t0` và `pnpm test`
+  (nơi `[INV-H20]` sống) là hai cổng có việc.
+- **Mốc lượt soi ngang 78 rơi ĐÚNG vào vòng này** (*chậm nhất S1.111*), và vòng này là một vòng ĐỔI
+  SỐ tài liệu — nó không có bề mặt mã để một lượt soi ngang soi. Ghi **lỡ nhịp lần thứ BA**, và ba
+  lần liên tiếp là một nhịp đã hỏng chứ không còn là ba lần hoãn: xem `Handoff.md` §11.
+- Khoản **234** giữ nguyên nội dung và nguyên rổ (**B**) mà nhánh đã xếp; vòng này không phán xử lại
+  việc xếp rổ ấy.
