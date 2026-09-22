@@ -10994,7 +10994,8 @@ mình có ở biên hay không, và **mọi ca hiện có giữ nguyên** — k�
 # §S1.113 — LƯỢT SOI NGANG 78: ĐÍCH MÀ ADR-043 DỰNG RA ĐỂ MỌI VÒNG ĐỌC ĐÃ KHÔNG AI ĐỌC TRONG MƯỜI HAI VÒNG, VÀ BA CÁI SÀN CHỐNG MÙ ĐỀU ĐÃ TRÔI
 
 **Mảnh của bảng bốn mảnh mà vòng này chạm: mảnh 2** — và nó chạm bằng cách sửa chính ô ấy, không
-bằng cách viết thêm mã cho nó. *(Dòng này tồn tại vì vế ⒞ của mục **Đo bằng gì** ở ADR-043 đòi nó,
+bằng cách viết thêm mã cho nó. **Khoản rổ A mà vòng này chạm: 233**, đưa VÀO rổ ấy theo quyết định
+của chủ dự án ngày 2026-09-22 — xem mục 7. *(Dòng này tồn tại vì vế ⒞ của mục **Đo bằng gì** ở ADR-043 đòi nó,
 và vòng này đo được rằng nó chưa từng chạy — xem mục 4.)*
 
 ## 1. Mốc, và cả hai vế được ĐO chứ không đoán
@@ -11140,7 +11141,7 @@ trước vòng này không có gì đỏ.** Khôi phục tự kiểm bằng `sha
   không-nội-bộ trong `public`, **97/97** ở `tgenabled = 'A'`; 87 có văn bản ghim, 10 còn lại do
   hardening SINH RA từ `BANG_CHI_GHI_THEM` hay ghim qua hằng thân hàm — không cái nào không có lớp.
 
-## 7. Đề xuất CHƯA ÁP — rổ của khoản 233, và vì sao lượt soi không tự áp
+## 7. Rổ của khoản 233 — lượt soi ĐỀ XUẤT, chủ dự án CHỐT, và cả hai việc xảy ra trong cùng phiên
 
 Phép xếp rổ của ADR-043 có **ba** vế nối bằng *hay*. Đo trên mọi hàng sổ nợ có lý do rổ riêng:
 **12/12 hàng chỉ viện dẫn vế ⒜** (*không chặn kịch bản §11*); **0/12** viện dẫn vế ⒝ (*phá một trong
@@ -11161,7 +11162,24 @@ nào"* — chỉ trả lời vế ⒜.
 **Lượt soi KHÔNG tự áp**, và đó không phải sự rụt rè: ADR-043 viết rằng xếp sai rổ sửa bằng một dòng
 TẠI CHỖ, còn S1.95 đã lập tiền lệ *"thu hẹp tập chặn pilot là quyết định của chủ dự án, không phải
 của một lượt soi"* — và vòng ấy đo lại sáu đề xuất của lượt 75 rồi **bác hai**. Ghi thành khoản
-**236**, chờ chủ dự án.
+**236**, trình chủ dự án.
+
+**CHỦ DỰ ÁN CHỐT CÙNG PHIÊN, 2026-09-22: 233 LÊN RỔ A.** Đã áp đúng chỗ ADR-043 chỉ — một dòng
+TẠI CHỖ ở thân hàng 233 và ở ba dòng rổ, **không** mở khoản mới; khoản **236** vì thế ĐÓNG ngay
+trong vòng mở nó, vì nó sinh ra chỉ để giữ một câu hỏi và câu hỏi ấy đã có trả lời. Rổ A **6 → 7**,
+rổ B **68 → 67**, rổ C **24 → 23**; tổng mở **96 → 97**, ba rổ cộng đúng: 7 + 67 + 23 = 97.
+
+**Hai điều PHẢI đọc kèm, vì chúng là phần lượt này KHÔNG làm.** ⑴ Lý do rổ B cũ của hàng 233 —
+*kịch bản §11 không có lần điều phối lại nào* — **không sai**; nó chỉ trả lời một trong ba vế, và
+nguyên văn của nó được giữ lại tại chỗ để đối chiếu. ⑵ **Mười một hàng rổ B còn lại vẫn mang lý do
+chỉ đọc vế ⒜**, và vòng này KHÔNG đọc lại từng hàng ấy — 12/12 là một phép đo về HÌNH DẠNG của
+những lý do, không phải một phán quyết rằng mười một hàng kia xếp đúng. Một hàng xếp sai rổ vẫn sửa
+được bằng một dòng vào ngày có người đọc nó.
+
+**Và một hệ quả về LOẠI, không về số:** trước vòng này, §S1.99 ghi rằng rổ A *"không còn một khoản
+nào thuộc vế ⒜"* — sáu khoản đều là ⒝ hoặc ⒞, tức hạ tầng và deploy. Khoản 233 vào rổ A theo vế
+**⒝**, nên câu ấy vẫn đúng: rổ A nay bảy khoản, và không khoản nào chặn một BƯỚC của kịch bản.
+Thứ 233 phá là một **nguyên tắc**, trên hình dạng triển khai thật.
 
 ## 8. Ranh giới nói ra
 
@@ -11233,8 +11251,9 @@ chạm một khoản rổ A đang mở.
   **+1 khẳng định**; `qt3-cu-phap.int.test.ts` giữ nguyên số khẳng định, đổi chỗ đứng của chúng.
 - Đột biến: **2 lượt**, lượt đầu đo SAI chủ thể và được ghi lại nguyên văn; lượt hai cho ĐÚNG MỘT ca
   đỏ. Khôi phục tự kiểm `sha256`, khớp.
-- Sổ nợ **235 → 237** khoản, mở **96 → 98** — hai khoản MỚI (236 · 237), **không** khoản nào đóng.
-  Rổ A **6** không đổi, rổ B **68** không đổi, rổ C **22 → 24**; ba rổ cộng đúng: 6 + 68 + 24 = 98.
+- Sổ nợ **235 → 237** khoản, mở **96 → 97** — hai khoản MỚI (236 · 237) và **236 ĐÓNG ngay trong
+  vòng mở nó** sau khi chủ dự án chốt chuyển 233 lên rổ A. Rổ A **6 → 7**, rổ B **68 → 67**, rổ C
+  **22 → 23**; ba rổ cộng đúng: 7 + 67 + 23 = 97.
 - **58 → 59** ADR (ADR-059), **61** migration không đổi, **14** gói không đổi, **56/56** bất biến
   không đổi — vòng này KHÔNG thêm nhãn `[INV-*]` nào, và đó là chủ ý: nới dải sang `[A-HJ]` là vòng
   229, sau S2.7.
