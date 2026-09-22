@@ -5899,3 +5899,94 @@ Data Foundation, xa hơn cả S3.
 Nó **không** mở rộng phạm vi S2. Spec S2 §8.1 đã thú nhận sản phẩm không chặn được người mua rò tin bằng
 miệng; ADR này nói phần còn lại của cùng một sự thật — kịch bản ⒜⒝ **không cần rò tin gì cả** — và để cả
 hai ở nguyên chỗ cũ: ngoài phạm vi MVP1.
+
+---
+
+## ADR-059 — S2.7: bộ xuất bằng chứng phải TỰ ĐỦ và mang một đặc tả phép tính, để phép kiểm chứng **ĐÚNG** chứ không chỉ **NHẤT QUÁN**
+
+**Bối cảnh — bốn phép đo, chạy ở lượt soi ngang 78 ngày 2026-09-22, không phải bốn ước lượng.**
+
+⑴ **CSDL đã mang đủ đầu vào để tính lại.** `rfq_evaluations.policy_id` trỏ đúng phiên bản chính sách đã
+dùng; `rfq_evaluation_lines.components` là một mảng `jsonb` mà `CHECK` của `057` buộc mỗi phần tử mang `ma`
+và `tien`; `effective_cost` và `rank` nằm cùng hàng. **S2.7 KHÔNG phải một vòng lược đồ** — không cột nào
+còn thiếu.
+
+⑵ **Bộ xuất hôm nay không mang một đầu vào chấm thầu nào.** `pnpm neo xuat` gọi `exportChainHead` và ký một
+mốc neo; `pnpm neo kiem` xác minh chuỗi hash. Lượt đi thử S1.97 đo được `ok=true checked=27 neo=1` — hai
+mươi bảy **sự kiện sổ**, không một hàng xếp hạng. Chủ thể của công cụ ấy là *chuỗi kiểm toán không bị sửa*,
+một mệnh đề khác hẳn *con số này tính lại ra đúng thế*.
+
+⑶ **J2 mới có VẾ DỄ.** Hai phép đo đang có (`chi-phi-hieu-dung.test.ts`, `luot-danh-gia.int.test.ts`) cộng
+bảng `components` **đã lưu** rồi so với `effective_cost` **đã lưu**. Chính tệp ấy khai nguyên văn: *"J2 mới
+có vế dễ; cả hai chưa đủ để khai một bất biến nhóm J là ĐÃ ĐƯỢC CƯỠNG CHẾ"*. Nên S2.7 không phải một hạng
+mục rời — **nó là nửa KHÓ của J2, nâng lên mức bộ xuất**, và nó là thứ làm J2 đủ điều kiện vào ma trận
+(khoản **229**).
+
+⑷ **Một artefact của chính bước này đã được ghi là hỏng.** Khoản **196** — rổ A — ghi rằng `early_close_reason`
+tính theo `now()` *"làm hỏng chính artefact của bước xuất bằng chứng"*. S2.7 vì thế chạm một khoản rổ A đang
+mở, và đó là chỗ duy nhất trong S2 có tính chất ấy.
+
+### Quyết định của chủ dự án, ngày 2026-09-22
+
+**Bộ xuất phải TỰ ĐỦ, và nó mang theo một ĐẶC TẢ phép tính đọc được.** Một kiểm toán viên cầm bundle phải
+tự cài lại được phép tính bằng công cụ của họ và ra đúng con số — không phải chạy mã của dự án này.
+
+Ba thứ bundle phải mang, và lý do từng thứ là một mệnh đề chứ không phải một tiện ích:
+
+| mang gì | vì sao KHÔNG bỏ được |
+|---|---|
+| `components` từng hàng, **và** phiên bản chính sách đã dùng | Thiếu phiên bản chính sách thì `effective_cost` không tái lập được: cùng một `components` dưới hai bản trọng số ra hai con số. `policy_id` một mình chưa đủ — nó là một con trỏ vào một CSDL mà người ngoài không có |
+| định danh báo giá và hàng award | *Trao thầu đúng báo giá nào* là mệnh đề mà §11 đòi kiểm được; một bảng xếp hạng không nối được với award chỉ chứng một nửa |
+| đặc tả phép tính, ĐỦ để cài lại | Không có nó thì bundle chỉ kiểm được bằng mã của chính dự án, và khi ấy nó chứng **nhất quán** chứ không chứng **đúng** |
+
+**Vì sao vế thứ ba là vế chịu lực, nói thẳng.** Nếu bộ kiểm `import` chính `chiPhiHieuDung`, thì một lỗi
+trong hàm ấy **tự tái lập chính nó**: bundle sẽ khai ĐẠT trên một con số sai, và lớp bằng chứng đắt nhất của
+sản phẩm sẽ nói dối đúng vào ngày nó cần nói thật. Đó không phải một khả năng lý thuyết — `docs/PRODUCT.md`
+§11 đặt *xuất được bộ bằng chứng kiểm toán của trọn chuỗi* làm bước cuối của định nghĩa hoàn thành, và người
+đọc bước ấy là một người **ngoài** dự án.
+
+**Kho có tiền lệ cho CẢ HAI hướng, nên đây là một quyết định chứ không phải một lần tra cứu.** ADR-044 từ
+chối một bản cài thứ hai của đường niêm phong — *"hai bản trôi khỏi nhau mà không cổng nào thấy"*. Ngược
+lại, `[INV-B4]` và cổng ghim trigger **cố ý** giữ hai bộ đọc độc lập, vì ở đó thứ được đo là *hai bản có
+khớp nhau không*. Phép phân biệt: khi hai bản là hai lần CÀI cùng một việc thì một bản là đủ; khi bản thứ
+hai là một người KIỂM độc lập thì nó là chính giá trị. S2.7 thuộc vế sau.
+
+**Bộ kiểm đi kèm VẪN được gọi hàm thuần**, và đó không mâu thuẫn: nó là một cổng chạy mỗi lượt, rẻ, bắt hồi
+quy sớm. Thứ ADR này cấm là **để bảo đảm của bundle PHỤ THUỘC vào nó**. Hai lớp, hai chủ thể — cùng hình
+dạng với ADR-044 §*Đo bằng gì* và với khuôn `[INV-B4]`.
+
+### Phương án bị loại, và cái giá của từng cái
+
+| phương án | vì sao loại |
+|---|---|
+| Mở rộng `pnpm neo xuat` để mang thêm bảng xếp hạng | Trộn hai chủ thể vào một artefact: *chuỗi kiểm toán không bị sửa* và *con số này tính lại ra đúng thế* hỏng theo hai lối khác nhau và được ký bằng hai thứ khác nhau (mốc neo đi qua KMS ở môi trường thật, ADR-009/026). Một bundle hỏng vế này sẽ kéo cả vế kia thành nghi ngờ |
+| Bộ kiểm chỉ gọi `chiPhiHieuDung` rồi so với số đã lưu | Rẻ nhất, và nó là **đúng thứ ADR này tồn tại để từ chối**: chứng nhất quán, không chứng đúng. Giữ lại làm LỚP THỨ HAI, không làm bảo đảm |
+| Ghi đầu vào tái tính vào payload hàng sổ lúc chấm | Đi ké chuỗi hash sẵn có — hấp dẫn. Nhưng nó đóng băng khuôn payload vào một chuỗi chỉ-ghi-thêm: một lần đổi hình dạng `components` về sau là một lần không sửa được, và `audit_events` là bảng mà `hardening.always.sql` canh chặt nhất |
+| Một định dạng chuẩn ngoài (ví dụ một sơ đồ JSON của bên thứ ba) | Không có chuẩn nào cho *chi phí hiệu dụng của một gói thầu*; dựng một cái là dựng một sản phẩm thứ hai |
+
+### Đo bằng gì
+
+⒜ Một bundle xuất ra từ một vòng thầu THẬT phải tái lập được **mà không cần CSDL**: mọi đầu vào của phép
+tính nằm trong bundle, đo bằng một lượt chạy trên một thư mục đã ngắt kết nối.
+
+⒝ **Phép đo chịu lực là một bản cài ĐỘC LẬP:** một bộ tính lại viết **chỉ từ đặc tả**, không import một
+symbol nào của `packages/danh-gia`, cho ra đúng `effective_cost` và đúng thứ tự `rank` của mọi hàng. Ranh
+giới ấy phải được cưỡng chế bằng một cổng — cùng khuôn `[INV-G1]`/`[INV-H16]` vốn đã cấm những cạnh import
+khác — chứ không bằng một câu trong tài liệu này.
+
+⒞ **Đột biến, và nó phải đỏ ở CẢ HAI lớp:** đổi một hệ số trong bundle mà không đổi `effective_cost` đã lưu
+⇒ bộ kiểm đỏ; đổi `effective_cost` đã lưu mà không đổi `components` ⇒ bộ kiểm đỏ. Cộng một đột biến chỉ
+lớp độc lập bắt được: một lỗi làm tròn **trong chính `chiPhiHieuDung`** — nếu chỉ lớp gọi-hàm-thuần chạy thì
+đột biến ấy SỐNG, và đó là phép đo chứng minh vế thứ ba của bảng trên không phải trang trí.
+
+⒟ J2 chỉ được khai là ĐÃ CƯỠNG CHẾ — tức được một ô trong ma trận bất biến — **sau khi** ⒝ và ⒞ chạy. Thứ
+tự này là chủ ý: khoản **229** nới dải mã bất biến sang `[A-HJ]`, và mở một ô cho một bất biến mới cưỡng chế
+nửa là đúng thứ `[INV-H22]` sinh ra để chặn.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói `pnpm neo` là thừa: chuỗi kiểm toán và mốc neo ngoài vẫn là lớp trả lời *sổ có bị sửa
+không*, một câu hỏi mà bundle này không trả lời. Nó **không** mở giao diện cho bước xuất bằng chứng — lỗ ấy
+là mảnh 1 của `docs/PRODUCT.md` §11 và vẫn mở. Và nó **không** đóng khoản **196**: đồng hồ lệch vẫn làm hỏng
+`early_close_reason` trong chính bundle này, nên vòng làm S2.7 phải đọc lại hàng ấy trước khi chốt hình dạng
+trường thời gian.

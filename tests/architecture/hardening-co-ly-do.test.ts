@@ -309,8 +309,11 @@ describe("[INV-H19] hardening: mọi phán xét có một dòng lý do trong ADR
 //     `packages/db/src/migrate.ts` cố ý tách phán xét sang transaction RIÊNG, bản yếu **đã
 //     COMMIT** rồi phán xét mới đỏ. Đó là lối quên duy nhất vừa im lặng vừa hại nặng.
 //
-// Hình dạng đo được hôm nay rất đều, và chính sự đều đặn ấy là thứ cổng này giữ: **71 tên, mỗi
-// tên ĐÚNG HAI văn bản ghim giống nhau từng byte, và đúng một câu sửa cài nó** — 71 = 71 = 71.
+// Hình dạng đo được hôm nay rất đều, và chính sự đều đặn ấy là thứ cổng này giữ: ~~**71 tên, mỗi
+// tên ĐÚNG HAI văn bản ghim giống nhau từng byte, và đúng một câu sửa cài nó** — 71 = 71 = 71.~~
+// **[S1.113 / lượt soi ngang 78 — ③] Con số 71 đã THIU: đo lại trên HEAD ra 85 tên** (87 kể cả
+// hai `CREATE CONSTRAINT TRIGGER`). Câu văn giữ nguyên hình dạng — mỗi tên đúng hai văn bản ghim
+// và đúng một câu sửa — nhưng số đếm KHÔNG còn viết ở đây nữa: xem `tenTriggerEnableAlways`.
 //
 // CHỖ CỔNG NÀY KHÔNG TỚI, nói ra thay vì để người đọc tự phát hiện: nó so ⑴ với ⑶ (hai văn bản
 // CÙNG một chính tả canonical) và so TẬP TÊN của ⑵ với tập tên của ⑴/⑶. Nó KHÔNG so NỘI DUNG ⑵
@@ -366,6 +369,58 @@ export function tenTriggerCauSua(hardening: string): readonly string[] {
   for (const m of sach.matchAll(/\bCREATE TRIGGER\s+([A-Za-z_0-9]+)/gu)) ten.add(m[1]!);
   return [...ten].sort((a, b) => a.localeCompare(b));
 }
+
+/**
+ * [S1.113 / lượt soi ngang 78 — ③] BỘ ĐỌC THỨ BA, VÀ NÓ CỐ Ý KHÔNG CÙNG HỌ VỚI HAI BỘ TRÊN.
+ *
+ * `docGhimTrigger` và `tenTriggerCauSua` **đều** khớp trên chuỗi `CREATE TRIGGER`, nên một lần
+ * đổi khuôn ấy làm CẢ HAI mù cùng lúc — và khẳng định `cai.length === ghim.length` ngay dưới vẫn
+ * XANH, vì hai vế cùng co lại. Người canh duy nhất cho ngày đó là một con SỐ viết cứng, và lượt
+ * soi 78 đo được rằng con số ấy đã trôi: sàn `>= 60` trong khi hình dạng thật là **85**, tức 25
+ * tên trôi lọt trong im lặng. Cùng lớp với `SO_DML_TOI_THIEU` mà lượt 77 vừa đóng ở MỘT chỗ.
+ *
+ * `ALTER TABLE … ENABLE ALWAYS TRIGGER <tên>` là một mệnh đề KHÁC HẲN, nằm ở câu sửa chứ không
+ * trong văn bản ghim, nên nó mù theo một lối khác. Hai bộ đọc phải khớp thì mới xanh.
+ */
+export function tenTriggerEnableAlways(hardening: string): readonly string[] {
+  const sach = boVungGhim(hardening).replaceAll(/--[^\n]*/gu, "");
+  const ten = new Set<string>();
+  for (const m of sach.matchAll(/\bENABLE ALWAYS TRIGGER\s+([A-Za-z_0-9]+)/gu)) ten.add(m[1]!);
+  return [...ten].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Bốn tên có `ENABLE ALWAYS TRIGGER` mà KHÔNG có văn bản ghim `$def$` — mỗi dòng một lý do đo được:
+ * HAI cái ghim bằng THUỘC TÍNH, và HAI cái là `CREATE CONSTRAINT TRIGGER`.
+ * Danh sách miễn trừ chỉ đứng được khi chính nó bị canh: khẳng định thứ hai đòi mỗi dòng ở đây
+ * trỏ một tên CÒN THẬT SỰ xuất hiện ở một câu `ENABLE ALWAYS`, nên một dòng thiu không giữ chỗ
+ * được cho một trigger mai sau.
+ */
+const ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM: readonly { readonly ten: string; readonly lyDo: string }[] = [
+  {
+    ten: "role_permissions_ma_tran_quyen",
+    lyDo:
+      "ghim bằng THUỘC TÍNH chứ không bằng văn bản `pg_get_triggerdef`: điều kiện sửa so " +
+      "`tgfoid`, `tgtype = 21` và `tgenabled = 'A'`, và câu sửa dùng `CREATE OR REPLACE TRIGGER`",
+  },
+  {
+    ten: "user_roles_phan_tach_nhiem_vu",
+    lyDo:
+      "cùng khuôn với hàng trên — ghim bằng `tgfoid`/`tgtype`/`tgenabled`, không bằng văn bản; " +
+      "thân hàm của nó ghim riêng qua hằng `THAN_PHAN_TACH`",
+  },
+  {
+    ten: "rfq_key_material_phai_di_kem_lan_mo",
+    lyDo:
+      "`CREATE CONSTRAINT TRIGGER` — `pg_get_triggerdef` in ra với tiền tố khác, nên nó KHÔNG " +
+      "thuộc tập `$def$CREATE TRIGGER`; chỗ thu hẹp này đã khai ở khối [INV-H19] phía trên và ở " +
+      "`db/ghim-trigger-tu-chua.int.test.ts`",
+  },
+  {
+    ten: "vendor_bid_versions_phai_co_bien_nhan",
+    lyDo: "cùng lý do với hàng trên — `CREATE CONSTRAINT TRIGGER`, tiền tố khác",
+  },
+];
 
 export function viPhamBaChoGhim(hardening: string): readonly string[] {
   const ghim = docGhimTrigger(hardening);
@@ -428,10 +483,32 @@ describe("[INV-H19] [S1.100 / khoản 211] ba chỗ ghim của một trigger", (
   it("[INV-H19] số đo của hình dạng: mỗi tên đúng HAI văn bản ghim, và tập ⑵ trùng khít tập ⑴/⑶", () => {
     const ghim = docGhimTrigger(HARDENING);
     const cai = tenTriggerCauSua(HARDENING);
-    expect(ghim.length, "số tên trigger được ghim").toBeGreaterThanOrEqual(60);
     expect(new Set(ghim.map((g) => g.ban.length)), "mỗi tên phải có đúng 2 văn bản ghim").toEqual(new Set([2]));
     expect(cai.length, "tập tên ở câu sửa ⑵ phải trùng khít tập tên đã ghim").toBe(ghim.length);
     expect(cai).toEqual(ghim.map((g) => g.ten));
+  });
+
+  // [S1.113 / lượt soi ngang 78 — ③] Người canh cho việc HAI BỘ ĐỌC TRÊN CÙNG MÙ — xem khối khai
+  // ở `tenTriggerEnableAlways`. Thay cho cái sàn `>= 60` mà lượt 78 đo ra là đã trôi 25 tên.
+  it("[INV-H19] bộ đọc thứ BA (`ENABLE ALWAYS TRIGGER`) khớp tập đã ghim, trừ BỐN tên có dòng miễn trừ", () => {
+    const daGhim = new Set(docGhimTrigger(HARDENING).map((g) => g.ten));
+    const enableAlways = tenTriggerEnableAlways(HARDENING);
+    const mienTru = new Map(ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM.map((x) => [x.ten, x.lyDo]));
+
+    expect(
+      enableAlways.length,
+      "chống rỗng ruột: không đọc được câu `ENABLE ALWAYS TRIGGER` nào — bộ đọc thứ ba đã mù",
+    ).toBeGreaterThan(daGhim.size);
+    expect(
+      enableAlways.filter((t) => !daGhim.has(t) && !mienTru.has(t)),
+      "một trigger được `ENABLE ALWAYS` mà KHÔNG có văn bản ghim `$def$` và cũng không có dòng " +
+        "miễn trừ — hoặc nó thiếu bản ghim, hoặc bộ đọc `$def$` đang mù",
+    ).toEqual([]);
+    expect(
+      [...mienTru.keys()].filter((t) => !enableAlways.includes(t)),
+      "một dòng miễn trừ trỏ vào tên không còn câu `ENABLE ALWAYS` nào — dòng ấy che chỗ cho một " +
+        "trigger THẬT mai sau",
+    ).toEqual([]);
   });
 
   it("[INV-H19] MẪU DƯƠNG: một mục đủ ba chỗ và hai văn bản ghim giống nhau thì KHÔNG vi phạm", () => {

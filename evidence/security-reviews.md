@@ -10988,3 +10988,272 @@ mình có ở biên hay không, và **mọi ca hiện có giữ nguyên** — k�
   dùng mốc cố định `NGAY`, hoặc ở lệch 0.
 - **Không đo dưới tải.** Lần đỏ gốc xảy ra trong một lượt trọn cây; phép đo của vòng này chạy trên
   cụm dùng-một-lần với máy rảnh. Vế *"khe hở lớn hơn bao nhiêu dưới tải"* chưa có số.
+
+---
+
+# §S1.113 — LƯỢT SOI NGANG 78: ĐÍCH MÀ ADR-043 DỰNG RA ĐỂ MỌI VÒNG ĐỌC ĐÃ KHÔNG AI ĐỌC TRONG MƯỜI HAI VÒNG, VÀ BA CÁI SÀN CHỐNG MÙ ĐỀU ĐÃ TRÔI
+
+**Mảnh của bảng bốn mảnh mà vòng này chạm: mảnh 2** — và nó chạm bằng cách sửa chính ô ấy, không
+bằng cách viết thêm mã cho nó. **Khoản rổ A mà vòng này chạm: 233**, đưa VÀO rổ ấy theo quyết định
+của chủ dự án ngày 2026-09-22 — xem mục 7. *(Dòng này tồn tại vì vế ⒞ của mục **Đo bằng gì** ở ADR-043 đòi nó,
+và vòng này đo được rằng nó chưa từng chạy — xem mục 4.)*
+
+## 1. Mốc, và cả hai vế được ĐO chứ không đoán
+
+Kiểm ở **đầu vòng**:
+
+- vế **lịch**: mốc là *chậm nhất S1.111*, và vòng này là S1.113 ⇒ **CHẠM, và đã QUÁ HẠN hai vòng**;
+- vế **hardening**: `git rev-list --count dc2b560..origin/master --first-parent -- db/migrations/hardening.always.sql` = **4**, vượt ngưỡng ba.
+
+Hai vế nối bằng **hay**, nên một vế đủ — lần này **cả hai** thoả, và đó là điều đáng ghi chứ không
+phải điều đáng mừng: §11 của `Handoff.md` ghi **ba lần lỡ nhịp liên tiếp** (S1.109 vì NỘI DUNG,
+S1.110 vì LỊCH, S1.111 vì KHÔNG CÓ MÃ), và chính mục ấy tự nói rằng ba lý do mỗi lần một yếu hơn là
+một nhịp đã HỎNG. Lượt này chạy vì **chủ dự án gọi**, đúng ADR-043.
+
+**Cửa sổ: NĂM vòng S1.107–S1.111** (`dc2b560..9920b09`, PR #107–#111; 15 commit, 50 tệp,
++8957/−184), cộng S1.112 gộp vào trước khi mở PR. S1.107 nằm TRONG cửa sổ vì lượt **77** chạy *ở*
+S1.107 và soi S1.99–S1.106, nên bản vá của chính S1.107 chưa ai soi — cùng quy ước cửa sổ mà lượt
+77 đã dùng cho S1.99.
+
+## 2. Sáu góc, và góc MỚI của lượt này
+
+Năm góc mang sang: rổ A (bắt buộc, ADR-043) · hồi quy xuyên vòng · lời khai rộng hơn mã · **cổng
+XANH vì phạm vi của nó** (lượt 77) · **rổ B xếp nhầm** (lượt 75).
+
+Góc **MỚI — *ba bản sao của một thân hàm ghim, bản nào đang thật sự chạy***, sinh ra từ suýt-sót của
+S1.110: một bản vá viết TAY vào `hardening.always.sql` suýt xoá 45 dòng cưỡng chế còn sống, và ba
+lớp đều im lặng. Cửa sổ này đổi hardening **bốn** lần, và §11 của `Handoff.md` tự gọi lượt 78 là *lượt ngang thưa nhất kể từ lượt 40*.
+
+**Góc ấy cho kết quả ÂM, và phép đo được ghi ra để vòng sau không làm lại** — xem mục 6. Nhưng câu
+hỏi kế tiếp của nó (*có cổng nào canh việc đó không?*) mở ra đúng hai phát hiện nặng của lượt này.
+
+## 3. CAO ① — ĐÍCH của ADR-043 sai từ S1.110, và bốn trong năm vòng của cửa sổ có sửa chính tệp ấy
+
+ADR-043 ra đời để chống một hình dạng có tên: *sổ nợ là một MÁY PHÁT, còn kịch bản §11 thì đứng
+yên*. Nó đặt `docs/PRODUCT.md` §11 làm ĐÍCH của mọi vòng, và §S1.97 — lượt đi thử duy nhất từng đo
+lại đích ấy — kết luận bằng đúng một câu: ***"đo lại ĐÍCH rẻ hơn đo lại sổ nợ, và nó là thứ nói cho
+ta biết còn thiếu gì THẬT."***
+
+Mười bốn vòng sau câu ấy, đo lại đích:
+
+| ô của §11 | khai | đo được 2026-09-22 |
+|---|---|---|
+| mảnh 2 | *S2.2–S2.7 **chưa có một dòng nào**, nên bước người mua CHỌN nhà cung cấp vẫn không chạy* | **S2.2 · S2.3 · S2.4 · S2.5 · S2.6 XONG** (S1.104 · S1.105 · S1.106 · S1.108+S1.109 · S1.110). Chỉ S2.7 còn lại |
+| bước *người mua CHỌN nhà cung cấp* | *không có — giao diện tự nói **chưa có trong lát cắt này*** | `apps/web/trang/mo-thau.js` gọi `GET/POST /rfqs/:rfqId/award`, `…/award/:awardId/approve`, `…/award/cancel` ở **bước 7**; và câu *"chưa có trong lát cắt này"* mà ô ấy viện dẫn **không còn tồn tại** ở `apps/web/trang/` — grep toàn thư mục: **0** kết quả |
+| đuôi ô mảnh 2 | *ADR-051 ghi rằng **J3 chưa có lớp nào cưỡng chế*** | `061` giao ba trigger cưỡng chế, trong đó `award_kiem_de_xuat` — **J3 CÓ lớp từ S1.110**, với đúng một lỗ đã đo và đã khai: khoản **233** |
+
+**Bản thân con số là phát hiện:** `git log --first-parent dc2b560..origin/master -- docs/PRODUCT.md`
+cho **bốn** vòng (S1.108 · S1.109 · S1.110 · S1.111) có sửa tệp này, và không vòng nào đọc lại ô
+mảnh 2 — kể cả S1.110, chính vòng làm cho nó sai.
+
+**Vá trong vòng:** ô mảnh 2 sửa tại chỗ theo lệ của kho (gạch nguyên văn cũ, lời khai mới đứng
+sau), và một đoạn dưới bảng đi-thử 2026-09-20 nói rõ HAI hàng nào của ảnh chụp ấy nay đã khác — ảnh
+chụp giữ nguyên vì nó là một BẢN GHI, không phải một lời khai sống.
+
+## 4. CAO ② — vế ⒞ của *Đo bằng gì* ở ADR-043 chưa chạy lần nào, và không cổng nào đọc nó
+
+ADR-043 §*Đo bằng gì* ⒞ viết nguyên văn: *"Biên bản của mọi vòng sau ADR này mở đầu bằng một dòng
+nói vòng ấy chạm mảnh nào của bảng bốn mảnh, hay chạm khoản rổ A nào."*
+
+Đo trên `evidence/security-reviews.md`, mười hai mục S1.100–S1.111 — số lần nhắc mỗi dấu:
+
+| vòng | *mảnh* | *rổ A* | *§11* |
+|---|---|---|---|
+| S1.100 · S1.101 · S1.102 · S1.103 | 0 · 2 · 0 · 3 | 1 · 2 · 1 · 0 | 2 · 0 · 0 · 4 |
+| S1.104 · S1.105 · S1.106 · S1.107 | 0 · 0 · 0 · 0 | 0 · 1 · 0 · 0 | 0 · 1 · 0 · 1 |
+| S1.108 · S1.109 · S1.110 · S1.111 | 0 · 0 · 0 · 0 | 0 · 0 · 0 · 0 | 0 · 0 · 1 · 1 |
+
+**Bốn vòng — S1.104, S1.106, S1.108, S1.109 — không nhắc một dấu nào trong ba.** Cả năm vòng của
+cửa sổ lượt 78 có **0** lần nhắc *mảnh*. Không một cổng nào đọc vế ⒞: `[INV-H20]` canh P4 con trỏ
+sổ nợ, P5 số ADR, P11 con trỏ biên bản, P12 đoạn đếm — không vế nào canh ĐÍCH.
+
+Hai phát hiện này là MỘT: một điều khoản không có cổng thì không chạy, và cái nó lẽ ra giữ thì
+trôi. Ghi thành khoản **237**; ô mảnh 2 vá trong vòng, **CỔNG thì chưa**.
+
+## 5. TRUNG BÌNH ③ — ba cái sàn chống-mù đều đã trôi, và một trong ba tự khai là *"đóng đinh sát số đo"*
+
+Lượt **77** tìm ra lớp lỗi này ở một chỗ (`SO_DML_TOI_THIEU = 100` trong khi thực tế 173) và đóng
+nó bằng một **sàn SUY RA**. Lượt 78 đo phần còn lại:
+
+| sàn | ở đâu | khai | đo được | dung sai |
+|---|---|---|---|---|
+| `SAN_SO_TRIGGER` | `db/ghim-trigger-tu-chua.int.test.ts` | 60 — chú thích nói *"hiện là 71"* | **85** | 25 tên · 29% |
+| ghim trigger, bản tĩnh | `tests/architecture/hardening-co-ly-do.test.ts` | `>= 60` — chú thích nói *"71 = 71 = 71"* | **85** | 25 tên · 29% |
+| `SO_CAU_TOI_THIEU` | `tests/architecture/qt3-ghim-schema.test.ts` | 139 — chú thích nói *"đóng đinh sát số đo, không phải một cái sàn lỏng"* | **204** | 65 câu · 32% |
+| `SO_TEP_TOI_THIEU` | cùng tệp | 27 | **34** | 7 tệp · 21% |
+
+**Vì sao cái sàn là người canh DUY NHẤT, chứ không phải một lớp trang trí** — đây là phần đáng đọc
+hơn bốn con số:
+
+- ở tệp int, `docTrongCum()` truy vấn cụm bằng `tgname = ANY($1)` với `$1 = [...GHIM.keys()]`. **Mọi
+  khẳng định của tệp bị chính `GHIM` khoanh vùng:** bộ đọc mù đi thì cả hai vế cùng co lại,
+  `truoc.size === GHIM.size` vẫn xanh, và lượt *"xoá sạch rồi migrate lại"* chỉ xoá những trigger mà
+  bộ đọc còn thấy. Đúng hình dạng *cổng XANH vì phạm vi của nó* mà lượt 77 đặt tên;
+- ở tệp tĩnh, `docGhimTrigger` và `tenTriggerCauSua` **đều** khớp trên chuỗi `CREATE TRIGGER` — cùng
+  một họ. Một lần đổi khuôn làm CẢ HAI mù, và khẳng định `cai.length === ghim.length` vẫn xanh.
+
+**Vá ở LỚP, không ở điểm:**
+
+⑴ **Một bộ đọc THỨ BA, không cùng họ.** `ENABLE ALWAYS TRIGGER <tên>` là một mệnh đề khác hẳn, nằm ở
+câu sửa chứ không trong văn bản ghim: **89** tên, bao trùm trọn **85** tên mà bộ đọc `$def$CREATE TRIGGER` thấy, thừa đúng **4** —
+hai cái ghim bằng THUỘC TÍNH (`tgfoid` · `tgtype` · `tgenabled`, dùng `CREATE OR REPLACE TRIGGER`) và
+hai `CREATE CONSTRAINT TRIGGER` mà `pg_get_triggerdef` in ra với tiền tố khác. Bốn dòng miễn trừ
+mang lý do, và **chính danh sách miễn trừ cũng bị canh**: một dòng trỏ tên không còn câu
+`ENABLE ALWAYS` nào là ĐỎ, để nó không giữ chỗ cho một trigger mai sau.
+
+⑵ **Người canh SUY RA của lượt 77 dời về chính mô-đun bộ đọc** (`tests/architecture/qt3-doc-sql.ts`)
+thành `viPhamSanTheoTep`, nên bên dùng THỨ HAI — `qt3-ghim-schema.test.ts`, vốn không có nó suốt sáu
+vòng — nhận được, và bên dùng thứ BA mai sau nhận được mà không phải nhớ gì.
+
+⑶ `SAN_SO_TRIGGER` đóng đinh lại **60 → 85**, làm lớp thứ hai chứ không còn là lớp duy nhất.
+
+**ĐỘT BIẾN — hai lượt, và lượt đầu của em đo SAI chủ thể:**
+
+| lượt | đột biến | kết quả |
+|---|---|---|
+| ① | làm mù **một** bộ đọc (`docGhimTrigger` bỏ mọi tên bắt đầu bằng `r`) | **3 ca đỏ** — nhưng hai trong ba là cổng CŨ. Đột biến bỏ 45/85 tên, tụt xuống 40 < 60, nên chính cái sàn bắt được. **Không phải mô hình trung thực** |
+| ② | làm mù **cả hai bộ đọc cùng họ**, bỏ 12 tên bắt đầu bằng `u` — còn 73 tên, **trên** cả hai sàn 60 | **ĐÚNG MỘT ca đỏ: cổng mới.** Hai sàn 60 xanh, `cai.length === ghim.length` xanh, ba chỗ ghim xanh |
+
+Lượt ② là phép đo chịu lực: **12 trigger cưỡng chế biến mất khỏi tầm nhìn của cổng trong im lặng, và
+trước vòng này không có gì đỏ.** Khôi phục tự kiểm bằng `sha256`, khớp `0818142694...`.
+
+## 6. Phép đo ÂM — ghi ra để vòng sau không làm lại
+
+- **KHÔNG có trôi văn bản giữa migration và hardening.** Quét 59 hàm được ghim: **54 khớp từng
+  byte** với migration ĐỊNH NGHĨA SAU CÙNG của nó, 4 dựng từ hằng chung (`THAN_NOI_CHUOI` ·
+  `THAN_MOC_NEO` · `THAN_MA_TRAN` · `THAN_PHAN_TACH`, đã có `[INV-B4]` so riêng), 1 (`app_current_org_id`)
+  định nghĩa ở `001` với khuôn khác. Góc MỚI của lượt này cho kết quả ÂM.
+- **Phép đo runtime của góc ấy KHÔNG chạy được, và lý do là một tính chất chứ không phải một trục
+  trặc:** lượt *"chỉ migration đánh số, không hardening"* chết ngay ở `001` với `role "app_api" does
+  not exist` — vai ứng dụng do chính lượt SỬA của hardening tạo ra TRƯỚC migration đánh số. Tức
+  migration đánh số một mình **không** dựng được lược đồ, và điều đó đúng như kiến trúc đã khai.
+- **Mã mới của cửa sổ KHÔNG lặp lại khiếm khuyết `resourceType`/`resourceId` mà lượt 77 vá.** Sáu
+  route mới của S2.4–S2.6 đều khai `resourceType: "RFQ"` cạnh `rfqId` — đúng tiền lệ lượt 77.
+- **KHÔNG test nào mất răng trong cửa sổ.** 278 khẳng định thêm, **8** bị xoá, và cả 8 là thay bằng
+  bản CHẶT HƠN: *năm trạng thái* → *bảy trạng thái*, `["rfq_unsealed_bids"]` →
+  `["rfq_evaluation_lines", "rfq_unsealed_bids"]`, `bc.checked` 6 → 8, và hai khẳng định thứ tự sổ
+  kiểm toán trộn `indexOf` với `lastIndexOf` được S1.109 thay bằng cặp hàm tường minh vì vòng BAFO
+  cho lượt mở thầu THỨ HAI.
+- **KHÔNG còn chỗ nội suy `${}` nào vào SQL sản xuất** — bài học `[INV-H21]` của S1.110. Quét toàn
+  kho: đúng **2** chỗ, cả hai là câu tiện ích PostgreSQL không `PREPARE` được (`SET ROLE ${vai}` với
+  `vai` thuộc kiểu đóng `VaiUngDung`, và `SET LOCAL statement_timeout = ${TRAN_DON_MS}` với một hằng).
+- **Cụm KHÔNG có trigger nào lạc ngoài mọi lớp ghim.** Census trên cụm dùng một lần: **97** trigger
+  không-nội-bộ trong `public`, **97/97** ở `tgenabled = 'A'`; 87 có văn bản ghim, 10 còn lại do
+  hardening SINH RA từ `BANG_CHI_GHI_THEM` hay ghim qua hằng thân hàm — không cái nào không có lớp.
+
+## 7. Rổ của khoản 233 — lượt soi ĐỀ XUẤT, chủ dự án CHỐT, và cả hai việc xảy ra trong cùng phiên
+
+Phép xếp rổ của ADR-043 có **ba** vế nối bằng *hay*. Đo trên mọi hàng sổ nợ có lý do rổ riêng:
+**12/12 hàng chỉ viện dẫn vế ⒜** (*không chặn kịch bản §11*); **0/12** viện dẫn vế ⒝ (*phá một trong
+sáu nguyên tắc §4 trên hình dạng TRIỂN KHAI THẬT*) hay ⒞.
+
+Với mười một hàng, đọc một vế ra cùng kết quả. Với **khoản 233** thì không:
+
+- nguyên tắc **1** của `docs/PRODUCT.md` §4 viết *"Không cá nhân nào kiểm soát trọn chuỗi tạo RFQ →
+  chọn NCC → **mở thầu → award** → duyệt"*;
+- khoản 233 là đúng cảnh ấy: *A điều phối mở thầu → worker chết → B điều phối lại → A đề xuất trao
+  thầu → ĐI QUA*;
+- đường đi của nó là **mã sản xuất có thật** từ S1.96 (nhánh phục hồi điều phối, dựng để đóng khoản
+  130 — một khoản rổ A), không phải hình dạng cụm test.
+
+Tức **vế ⒝ THOẢ**, trong khi lý do rổ B của hàng 233 — *"kịch bản ấy không có lần điều phối lại
+nào"* — chỉ trả lời vế ⒜.
+
+**Lượt soi KHÔNG tự áp**, và đó không phải sự rụt rè: ADR-043 viết rằng xếp sai rổ sửa bằng một dòng
+TẠI CHỖ, còn S1.95 đã lập tiền lệ *"thu hẹp tập chặn pilot là quyết định của chủ dự án, không phải
+của một lượt soi"* — và vòng ấy đo lại sáu đề xuất của lượt 75 rồi **bác hai**. Ghi thành khoản
+**236**, trình chủ dự án.
+
+**CHỦ DỰ ÁN CHỐT CÙNG PHIÊN, 2026-09-22: 233 LÊN RỔ A.** Đã áp đúng chỗ ADR-043 chỉ — một dòng
+TẠI CHỖ ở thân hàng 233 và ở ba dòng rổ, **không** mở khoản mới; khoản **236** vì thế ĐÓNG ngay
+trong vòng mở nó, vì nó sinh ra chỉ để giữ một câu hỏi và câu hỏi ấy đã có trả lời. Rổ A **6 → 7**,
+rổ B **68 → 67**, rổ C **24 → 23**; tổng mở **96 → 97**, ba rổ cộng đúng: 7 + 67 + 23 = 97.
+
+**Hai điều PHẢI đọc kèm, vì chúng là phần lượt này KHÔNG làm.** ⑴ Lý do rổ B cũ của hàng 233 —
+*kịch bản §11 không có lần điều phối lại nào* — **không sai**; nó chỉ trả lời một trong ba vế, và
+nguyên văn của nó được giữ lại tại chỗ để đối chiếu. ⑵ **Mười một hàng rổ B còn lại vẫn mang lý do
+chỉ đọc vế ⒜**, và vòng này KHÔNG đọc lại từng hàng ấy — 12/12 là một phép đo về HÌNH DẠNG của
+những lý do, không phải một phán quyết rằng mười một hàng kia xếp đúng. Một hàng xếp sai rổ vẫn sửa
+được bằng một dòng vào ngày có người đọc nó.
+
+**Và một hệ quả về LOẠI, không về số:** trước vòng này, §S1.99 ghi rằng rổ A *"không còn một khoản
+nào thuộc vế ⒜"* — sáu khoản đều là ⒝ hoặc ⒞, tức hạ tầng và deploy. Khoản 233 vào rổ A theo vế
+**⒝**, nên câu ấy vẫn đúng: rổ A nay bảy khoản, và không khoản nào chặn một BƯỚC của kịch bản.
+Thứ 233 phá là một **nguyên tắc**, trên hình dạng triển khai thật.
+
+## 8. Ranh giới nói ra
+
+- **Lượt 78 KHÔNG chạy fan-out nhiều tác tử** — sáu góc chạy tuần tự, mọi phát hiện tự đo lại bằng
+  tay trước khi vá, theo bài học lượt 75 (thẩm tra đối kháng bác quá ít, 3/57) và cùng khuôn lượt 77.
+- **Góc *hồi quy xuyên vòng* cho kết quả ÂM về hành vi** — không tìm được một hồi quy nào do cửa sổ
+  tạo ra. Thứ lượt này tìm ra là hồi quy của **lời khai** và của **tầm nhìn cổng**, không phải của mã
+  chạy. Lượt 73 từng tìm ra một CAO là hồi quy do chính lượt 72 tạo; lần này không có.
+- **Ba cái sàn được đo, KHÔNG phải mọi cái sàn trong kho.** Lượt tìm: `grep -rnE "(SAN_|_TOI_THIEU|TOI_THIEU_|_SAN\b)[A-Z_]* *(:[^=]*)?= *[0-9]+"` trên `db/ packages/ tests/ apps/ tools/` cho **4** hằng, cộng ba sàn viết thẳng trong thân hàm ở `hardening-co-ly-do.test.ts`. Hai trong số ấy CHẶT: `soNoop >= 20` khi thực tế 24, và nó còn có một bộ đếm độc lập ngay cạnh.
+- **Ô mảnh 2 vá rồi, cổng cho vế ⒞ thì chưa** — khoản 237 giữ phần dư, và hình dạng đóng đã viết
+  sẵn trong thân khoản.
+- **`docs/PRODUCT.md` §11 vẫn còn một lỗ THẬT ở mảnh 1**: xuất bộ bằng chứng chỉ có đường CLI. Vòng
+  này KHÔNG chạm nó.
+
+## 9. CHUẨN BỊ hai vòng kế, và một con số của khoản 229 sai theo lối BỎ SÓT
+
+Chủ dự án gọi tiếp: chuẩn bị **S2.7** và **khoản 229**. Cả hai được ĐO ở vòng này thay vì để vòng sau
+đọc lời khai, và phép đo bác một con số.
+
+**⑴ Khoản 229 khai *tám chỗ*; đo trên HEAD ra **MƯỜI**.** Hai chỗ bị sót, và chúng sót theo hướng
+nguy nhất — một vòng đi theo danh sách của hàng ấy sẽ **để lại** chúng chứ không sửa thừa:
+
+| chỗ | hàng 229 kể | đo được |
+|---|---|---|
+| `tools/inv-matrix/src/parse.ts` | 3 | **4** — dòng 59, 62, 99, và **256** (vế *nhãn chưa khai*) |
+| `tests/architecture/so-no-tu-doi-chieu.test.ts` | 3 | 3 |
+| `nhan-bat-bien-cho-dat.test.ts` · `danh-gia.test.ts` | 1 + 1 | 1 + 1 |
+| **`packages/outbox/src/nhan-bat-bien.test.ts:51`** | **không kể** | **1** |
+
+Chỗ thứ mười nằm trong một **gói** mà hàng 229 không nhắc tên, nên không lượt đọc nào theo hàng ấy
+tìm tới nó. Cộng ba chỗ ở `parse.test.ts` ghim dải như một TÍNH CHẤT (một mũi đột biến thu `[A-H]`
+xuống `[A-G]`), hai con số tổng ở `TEST-PLAN.md`, và **tám** lời khai `56/56` còn sống.
+
+**⑵ Hàng J nào vào được ma trận — đo, không khai:**
+
+| mã | trạng thái | căn cứ |
+|---|---|---|
+| **J3 · J5 · J7** | **SẴN** | `luot-danh-gia.int.test.ts` khai nguyên văn *"Ba bất biến dưới đây có phép ĐO, có đối chứng DƯƠNG và có đột biến; thứ chúng chưa có là một ô trong ma trận"* |
+| **J4** | **SẴN** | ba ca ở `kich-ban-41-http.int.test.ts`, theo chính hàng 229 |
+| **J1** | chưa | có vế cấu trúc + vế nội dung ở tầng CSDL, **thiếu đột biến** |
+| **J2** | chưa | **mới có vế dễ** — và chính S2.7 làm nó đủ |
+| **J6** | **KHÔNG XÁC ĐỊNH** | lượt tìm đã chạy: grep `J6` trên mọi `*.test.ts` ra đúng MỘT tệp, hai khẳng định; **không tệp nào khai nó đủ hay chưa**. Vòng 229 phải ĐO nó |
+
+**⑶ S2.7 không phải một vòng lược đồ, và nó là nửa KHÓ của J2.** CSDL đã mang đủ đầu vào —
+`rfq_evaluations.policy_id`, `rfq_evaluation_lines.components`, `effective_cost`, `rank`. Thứ chưa
+có là một BỘ XUẤT mang chúng: `pnpm neo xuat` hôm nay xuất chuỗi kiểm toán và mốc neo, và lượt đi
+thử S1.97 đo `checked=27` — hai mươi bảy **sự kiện sổ**, không một hàng xếp hạng.
+
+**Chủ dự án chốt hai điều ngày 2026-09-22, và một trong hai là một quyết định kiến trúc nên nó
+thành ADR-059:** bộ xuất phải **TỰ ĐỦ và mang một đặc tả phép tính**, để phép kiểm chứng **ĐÚNG**
+chứ không chỉ **NHẤT QUÁN** — một bộ kiểm `import` chính hàm thuần sẽ để một lỗi trong hàm ấy tự
+tái lập chính nó; và **S2.7 chạy TRƯỚC 229**, vì mở ô ma trận cho J2 khi nó mới cưỡng chế nửa là
+đúng thứ `[INV-H22]` sinh ra để chặn. Kho có tiền lệ cho CẢ HAI hướng — ADR-044 từ chối bản cài thứ
+hai của đường niêm phong, còn `[INV-B4]` cố ý giữ hai bộ đọc độc lập — nên đây là một quyết định,
+không phải một lần tra cứu; phép phân biệt viết ở ADR-059.
+
+**Một ràng buộc đã có, phải đọc kèm:** khoản **196** (rổ A) ghi rằng `early_close_reason` tính theo
+`now()` *"làm hỏng chính artefact của bước xuất bằng chứng"*. S2.7 vì thế là hạng mục S2 duy nhất
+chạm một khoản rổ A đang mở.
+
+## 10. Số đo
+
+- `pnpm t0` — **0 vi phạm, 296 module / 1211 phụ thuộc**.
+- `pnpm test` — **72 tệp / 1061 ca** (1 bỏ qua), +1 ca so với HEAD: cổng bộ đọc thứ ba.
+- `pnpm test:int` — **54 tệp / 1189 ca, 0 đỏ, 1200 giây**.
+- `pnpm evidence` — **`vitest thoát mã 0`, 2251 khẳng định**, **56/56** bất biến (34/34 nghiệp vụ + 22/22 hàng rào), *Cổng evidence: XANH*; lượt DUY NHẤT unit + int chung một pool. `evidence/INV-matrix.md` **đổi ĐÚNG MỘT dòng** — H19 từ **68 → 70** khẳng định, đúng cổng bộ đọc thứ ba. Không bất biến nào đổi trạng thái.
+- Phép đo mới: `hardening-co-ly-do.test.ts` **+1 ca** (bộ đọc thứ ba) và **+4 dòng miễn trừ có lý do
+  bị canh**; `qt3-doc-sql.ts` **+1 hàm xuất** (`viPhamSanTheoTep`) dùng bởi HAI bên; `qt3-ghim-schema.test.ts`
+  **+1 khẳng định**; `qt3-cu-phap.int.test.ts` giữ nguyên số khẳng định, đổi chỗ đứng của chúng.
+- Đột biến: **2 lượt**, lượt đầu đo SAI chủ thể và được ghi lại nguyên văn; lượt hai cho ĐÚNG MỘT ca
+  đỏ. Khôi phục tự kiểm `sha256`, khớp.
+- Sổ nợ **235 → 237** khoản, mở **96 → 97** — hai khoản MỚI (236 · 237) và **236 ĐÓNG ngay trong
+  vòng mở nó** sau khi chủ dự án chốt chuyển 233 lên rổ A. Rổ A **6 → 7**, rổ B **68 → 67**, rổ C
+  **22 → 23**; ba rổ cộng đúng: 7 + 67 + 23 = 97.
+- **58 → 59** ADR (ADR-059), **61** migration không đổi, **14** gói không đổi, **56/56** bất biến
+  không đổi — vòng này KHÔNG thêm nhãn `[INV-*]` nào, và đó là chủ ý: nới dải sang `[A-HJ]` là vòng
+  229, sau S2.7.

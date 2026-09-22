@@ -147,3 +147,54 @@ export function docCauSql(ma: string, tep: string): readonly CauSql[] {
 export function moiCauSql(): readonly CauSql[] {
   return tepNguonCoSql().flatMap((t) => docCauSql(readFileSync(join(GOC, t), "utf8"), t));
 }
+
+/**
+ * [S1.113 / lượt soi ngang 78 — ③] NGƯỜI CANH TÍNH ĐẦY ĐỦ CỦA BỘ ĐỌC, ĐẶT Ở CHÍNH MÔ-ĐUN BỘ ĐỌC.
+ *
+ * Lượt soi **77** dựng đúng vị từ này — *mỗi tệp nguồn có `.query(` phải đóng góp ít nhất MỘT
+ * câu* — nhưng dựng nó **bên trong một bên dùng**, `qt3-cu-phap.int.test.ts`. Lượt 78 đo ra phần
+ * còn lại: bên dùng THỨ HAI của cùng bộ đọc này, `qt3-ghim-schema.test.ts`, vẫn chỉ có hai con số
+ * viết cứng — `>= 139` câu và `>= 27` tệp — trong khi hình dạng thật là **204** câu từ **34** tệp,
+ * tức dung sai 32% và 21%; và chú thích ngay trên hai con số ấy tự khai là *"đóng đinh sát số đo,
+ * không phải một cái sàn lỏng"*. Một bản vá ĐIỂM cho một lớp lỗi là một chỗ thứ hai phải nhớ, và
+ * chỗ ấy đã không được nhớ.
+ *
+ * Đặt vị từ ở đây thì bên dùng thứ BA mai sau được nó mà không phải nhớ gì.
+ */
+const RE_GOI_QUERY = /\.query\s*(?:<[^>]*>)?\s*\(/u;
+
+/**
+ * Tệp có `.query(` mà bộ đọc KHÔNG rút được câu nào — mỗi dòng một lý do. Danh sách miễn trừ chỉ
+ * đứng được khi chính nó bị canh: `viPhamSanTheoTep` đòi mỗi dòng ở đây trỏ một tệp CÓ THẬT còn
+ * gọi `.query(`, nên một dòng thiu không giữ chỗ được cho một tệp mai sau.
+ */
+export const TEP_CHI_DIEU_KHIEN_GIAO_DICH: readonly { readonly tep: string; readonly lyDo: string }[] = [
+  {
+    tep: "apps/api/src/routes/auth.ts",
+    lyDo:
+      "hai câu duy nhất là `SAVEPOINT xep_hang` và `ROLLBACK TO SAVEPOINT xep_hang` — điều khiển " +
+      "giao dịch, và PostgreSQL KHÔNG `PREPARE` được chúng, nên bộ đọc bỏ qua là ĐÚNG chứ không sót",
+  },
+];
+
+/** Vi phạm của sàn-theo-tệp; rỗng nghĩa là bộ đọc thấy đủ mọi tệp có SQL. */
+export function viPhamSanTheoTep(cau: readonly CauSql[]): readonly string[] {
+  const tepCoQuery = tepNguonCoSql().filter((t) => RE_GOI_QUERY.test(readFileSync(join(GOC, t), "utf8")));
+  const tepCoCau = new Set(cau.map((c) => c.tep));
+  const mienTru = new Set(TEP_CHI_DIEU_KHIEN_GIAO_DICH.map((x) => x.tep));
+  const loi: string[] = [];
+  if (tepCoQuery.length <= 20) {
+    loi.push(`chỉ thấy ${tepCoQuery.length} tệp gọi \`.query(\` — bộ liệt kê tệp đang MÙ`);
+  }
+  for (const t of tepCoQuery) {
+    if (!tepCoCau.has(t) && !mienTru.has(t)) {
+      loi.push(`${t}: có lời gọi \`.query(\` mà bộ đọc không rút được câu nào — bộ đọc đang mù một hình dạng`);
+    }
+  }
+  for (const t of mienTru) {
+    if (!tepCoQuery.includes(t)) {
+      loi.push(`${t}: dòng miễn trừ trỏ vào tệp không còn gọi \`.query(\` — dòng ấy che mất một tệp THẬT mai sau`);
+    }
+  }
+  return loi;
+}

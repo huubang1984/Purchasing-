@@ -40,8 +40,22 @@ const HARDENING = readFileSync(
   "utf8",
 ).replace(/\r\n/gu, "\n");
 
-/** Sàn chống MÙ: tập trigger được ghim hiện là 71. Một con số tụt xuống nghĩa là bộ đọc hỏng. */
-const SAN_SO_TRIGGER = 60;
+/**
+ * Sàn chống MÙ: một con số tụt xuống nghĩa là bộ đọc hỏng.
+ *
+ * ~~tập trigger được ghim hiện là 71~~ **[S1.113 / lượt soi ngang 78 — ③] 71 ĐÃ THIU, đo lại
+ * trên HEAD ra 85** — và cái sàn thì vẫn đứng ở 60, tức **25 tên trôi lọt được trong im lặng**.
+ * Chỗ đau hơn con số: `docTrongCum()` dưới đây lọc `tgname = ANY([...GHIM.keys()])`, nên MỌI
+ * khẳng định của tệp này bị chính `GHIM` khoanh vùng — bộ đọc mù đi thì cả hai vế cùng co lại và
+ * `truoc.size === GHIM.size` vẫn xanh. Cái sàn là người canh DUY NHẤT ở đây, đúng hình dạng
+ * *cổng XANH vì phạm vi của nó* mà lượt 77 đặt tên.
+ *
+ * **Người canh THẬT nay nằm ở `tests/architecture/hardening-co-ly-do.test.ts`**: một bộ đọc THỨ
+ * BA (`ENABLE ALWAYS TRIGGER`, khuôn khác hẳn) phải khớp tập đã ghim, nên một lần đổi khuôn
+ * `CREATE TRIGGER` làm hai bộ đọc cùng họ mù là ĐỎ chứ không im lặng — đo bằng đột biến, xem
+ * §S1.113. Con số dưới đây đóng đinh SÁT số đo làm lớp thứ hai, không làm lớp duy nhất nữa.
+ */
+const SAN_SO_TRIGGER = 85;
 
 /** ⑴ + ⑶ — văn bản `pg_get_triggerdef` đã ghim, theo tên trigger. */
 function docGhim(): ReadonlyMap<string, string> {
