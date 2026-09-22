@@ -10486,3 +10486,135 @@ là *sửa theo suy luận*. Nó được tách thành một việc riêng, và 
 - Phép đo mới: `luot-danh-gia.int.test.ts` **+14 ca** (bốn cạnh đi trọn, top-N hai chiều, CAO ③, dấu vòng không khai được, sáu ca của `bafo_kiem_vong`, hai ca C1, TRUNCATE hai đường, thứ tự yêu cầu mở thầu) và **+4 helper** fixture; `transitions.test.ts` **+4 ca** (tập đóng khớp SQL, ba cạnh KHÔNG tồn tại).
 - Sổ nợ **225 → 227** khoản, mở **89 → 91** — khoản **226** và **227** mở, không khoản nào đóng. Rổ A **6**, rổ B **62 → 64**, rổ C **21**; ba rổ cộng đúng: 6 + 64 + 21 = 91.
 - **54 → 55** ADR (ADR-055), **58 → 59** migration, **14** gói không đổi. `evidence/INV-matrix.md` **KHÔNG đổi một byte** — `sha256` khớp `origin/master`, dù tệp ĐƯỢC SINH LẠI (mtime trùng lượt evidence). Không bất biến nào đổi trạng thái, số đếm hay mô tả: mọi ca mới của vòng này KHÔNG mang nhãn `[INV-xx]`, và ca `[INV-A4]`/`[INV-D5]` chỉ ĐỔI TÊN chứ không đổi số.
+---
+
+# §S1.109 — S2.5 tầng người dùng: bốn cạnh BAFO có đường đi, và **J4** có phép đo
+
+**Vòng:** S1.109 · **Ngày:** 2026-09-22 · **Nhánh:** `s1-109-bafo-nguoi-dung` · **Migration:** `060`
+**Khoản mở:** 228 · 229 · 230 · **Khoản đóng:** 227 · **ADR:** 056
+
+## 1. Vì sao vòng này soi HÌNH DẠNG trước dòng mã đầu
+
+Cùng lý do S1.108: vòng này **sửa `executeUnsealRequest`** — đường giải mã của lõi niêm phong —
+chứ không chỉ thêm route. Khuôn S1.75 / S1.101 / S1.108.
+
+Lượt soi tìm **ba CAO** trước khi có mã, và cả ba đổi thiết kế.
+
+### CAO ① — `v.bafo_round_id = $3` với `$3 = NULL` mở ĐÚNG KHÔNG phong bì, và worker vẫn báo THÀNH CÔNG
+
+Bản vá hiển nhiên của câu đọc phong bì là thêm `AND v.bafo_round_id = $3`. Vòng MỘT có
+`bafo_round_id IS NULL`, nên vế ấy cho `NULL` ở mọi hàng ⇒ `phongBi` **rỗng** ⇒ `opened = 0` — rồi
+`kt1` và `kt2` **vẫn** thành công, RFQ vẫn được tuyên bố `UNSEALED`, và hàm vẫn trả về không lỗi.
+Tức đường CHÍNH của sản phẩm biến thành một lượt mở thầu rỗng, im lặng, đã tiêu một yêu cầu mở thầu
+đã qua cổng bốn vế và không mở lại được nữa.
+
+Viết đúng: `IS NOT DISTINCT FROM`. Lưới đã có — bước 11 của kịch bản 41 khẳng định `opened === 5` —
+nhưng đó là một lưới **tình cờ**: nó bắt được vì kịch bản 41 đi qua đúng đường, không vì ai dựng nó
+cho câu hỏi này.
+
+### CAO ② — `evaluation_id` của vòng BAFO do NGƯỜI GỌI khai, và `059` không đòi nó là lượt MỚI NHẤT
+
+`bafo_kiem_vong` kiểm lượt đánh giá **thuộc đúng RFQ**, `policy_id` **khớp**, `top_n` **khớp** — và
+không vế nào đòi nó là lượt mới nhất, trong khi `GRANT INSERT` có cấp cột ấy cho `app_api`.
+
+Hai lượt chấm cùng tồn tại là trạng thái BÌNH THƯỜNG sau đúng một chu kỳ BAFO. Lúc ấy vòng BAFO
+**thứ hai** mở được với lượt CŨ, tức **mời top-N của bảng xếp hạng TRƯỚC BAFO** — đúng vectơ mà
+spec §8.1⑴ sinh ra để chặn, và nó không để lại vết lệch nào vì mọi lớp cưỡng chế còn lại đều nhất
+quán với lượt đã chọn.
+
+Chủ dự án chốt: cưỡng chế ở **CSDL**, không chỉ ở route (khoản **220** đã đo rằng cổng chỉ ở route
+là lớp NÔNG). `060` mục (A).
+
+### CAO ③ — khoản 227⑵ hẹp hơn thực tế
+
+`buildComparisonTable` có **HAI** truy vấn. Khoản 227 khai câu hỏi *"hiện một dòng hay hai"* là
+**một**; nó là **hai**, vì phần TỔNG HỢP tính `min`/`max`/`average`/`belowBudget` trên cùng tập bị
+nhân đôi — và những con số ấy là lời khai về **TẬP NGƯỜI DỰ THẦU**, không về lịch sử. Không có cách
+đọc nào làm chúng đúng trên một tập có người đếm hai lần. **ADR-056.**
+
+## 2. Ba quyết định của chủ dự án, ngày 2026-09-22
+
+| # | Câu hỏi | Chốt |
+|---|---|---|
+| ⑴ | CAO ② cưỡng chế ở đâu | **CSDL đòi lượt MỚI NHẤT** — `060` (A), cộng `moVongBafo` tự suy; route KHÔNG nhận `evaluationId` |
+| ⑵ | Khách có thấy vòng BAFO không (khoản 227⑶) | **Nới HẸP** — policy theo `app.guest_rfq_id`, route trả ĐÚNG `{roundNo, deadlineAt}` |
+| ⑶ | Danh sách hàng của bảng so sánh (khoản 227⑵) | **Hiện CẢ HAI vòng**, thêm cột vòng; phần tổng hợp khử trùng bất kể — ADR-056 |
+
+## 3. Thứ vòng này giao
+
+- `060` — hai mục: `bafo_kiem_vong` đòi lượt chấm mới nhất; `rfq_bafo_rounds_khach` nới hẹp.
+  Hardening ghim lại `bafo_kiem_vong` (bản SỬA + bản THẨM PHÁN + nhãn/cổng migration) và khai
+  `rfq_bafo_rounds_khach` vào `POLICY_RESTRICTIVE_KHAI` cùng bản sinh đôi ở `db/rls-coverage.int.test.ts`.
+- `packages/danh-gia/src/vong-bafo.ts` — `moVongBafo` · `dongVongBafo` · `docVongBafo` ·
+  `docVongBafoKhach`, cổng `rfq.bafo.open`, hai hàng sổ mới.
+- Ba route người mua (`GET`/`POST /rfqs/:rfqId/bafo`, `POST /rfqs/:rfqId/bafo/close`) và trường
+  `bafoRound` ở `GET /guest/rfq`.
+- Worker: đọc `bafo_round_id`, lọc phong bì theo vòng, lật ĐÚNG cặp trạng thái, và hai hàng sổ mang
+  dấu vòng.
+- `comparison.ts`: `bafoRoundNo` + `isLatestForBid` ở `rows`; `aggregates` khử trùng bằng `DISTINCT ON`.
+- Màn hình: bước 6 của `/mo-thau` (mở/đóng vòng), cột **Vòng** ở bảng so sánh, và `/nop-thau` hiện
+  hạn **của vòng đang mở**.
+- **J4**: ba ca ở `kich-ban-41-http.int.test.ts` — vòng quét ROUTE (âm), đối chứng dương, đột biến.
+
+## 4. Cụm dùng-một-lần: `060` + hardening đo trong 3,3 giây
+
+`docker run postgres:16-alpine` + `migrate()` HAI lần (lượt hai = bản ghim tự phán xét mình):
+**2 179 ms** và **1 139 ms**. Lượt đầu ĐỎ ngay với thông điệp của hardening gọi đúng tên việc phải
+làm — *"policy RESTRICTIVE không thuộc lớp nào (khoản 83⑴) … khai đủ bảy cột vào `POLICY_RESTRICTIVE_KHAI`
+kèm bản ở `db/rls-coverage.int.test.ts`"* — tức phép đo ÂM của lượt soi (*"nới policy khách không
+phải một dòng migration"*) được chính cổng xác nhận trước khi tốn một lượt `test:int` 950 giây.
+
+Văn bản ghim được **ĐO** bằng `pg_get_expr` trên cụm ấy, không đoán.
+
+## 5. NĂM THỨ PHÉP ĐO BÁC, và ba trong năm là lời khai của CHÍNH lượt soi này
+
+Ghi ra vì đây là phần đáng đọc hơn danh sách bản vá.
+
+⑴ **"Hạn vòng một đã ở QUÁ KHỨ suốt `BAFO_OPEN`"** — lượt soi viết thế, và kịch bản 41 bác: gói
+thầu ở đó được **đóng SỚM**, nên `rfq.deadlineAt` vẫn nằm ở **tương lai**. Và ca ấy **tệ hơn** ca
+lượt soi tưởng tượng: nhà cung cấp đọc `rfq.deadlineAt` sẽ tin mình còn tới một ngày **XA HƠN** hạn
+thật của vòng BAFO — màn hình không chỉ nói sai, nó nói sai theo chiều ru ngủ. Khẳng định được viết
+lại thành *hai hạn KHÁC nhau, và hạn vòng một XA HƠN*.
+
+⑵ **"Đột biến gỡ lớp *không có hàng bản rõ* sẽ làm bộ quét THẤY giá BAFO"** — SAI. Hàng bản rõ đã
+nằm đó mà không route nào trả nó, vì một lớp **THỨ HAI** cũng đang từ chối: `COMPARISON_ALLOWED_STATUSES`
+không chứa `BAFO_OPEN`, nên `buildComparisonTable` trả **422** suốt cửa sổ niêm phong của vòng hai,
+bất kể trong bảng có gì. Kết quả MẠNH HƠN thứ đi tìm — J4 đứng trên **hai** lớp độc lập — nên ca
+được viết lại để khẳng định đúng cả hai vế.
+
+⑶ **"Cổng THẬT vẫn chặn: cùng câu INSERT, trigger đã bật, phải ĐỎ"** — SAI, câu INSERT **đi qua**.
+`unseal_kiem_yeu_cau_khi_ghi_ban_ro` chỉ đòi yêu cầu ở `APPROVED`/`EXECUTED`, và hai khoá ngoại hợp
+thành của `rfq_unsealed_bids` trỏ về hai bảng KHÁC NHAU chứ không về nhau — nên một hàng bản rõ
+ghép phong bì của gói thầu A với yêu cầu mở thầu của gói thầu B là hợp lệ ở tầng lược đồ. Không
+phải lỗ đang mở (chỉ `app_unseal` ghi được, và worker suy cả hai từ một yêu cầu), nhưng là một lớp
+mỏng hơn thứ ta tưởng ⇒ **khoản 228**.
+
+⑷ **"Đăng ký `[INV-J4]` là một dòng thêm vào sổ"** — SAI. Dải mã bất biến ghim `[A-H]` ở **tám**
+chỗ, `[INV-H22]` đỏ ngay ở lượt `pnpm test` đầu với `expected 'J4' to match /^[A-H]\d+$/`. Đăng ký
+được **HOÀN NGUYÊN**, phần CHẤT của J4 giữ nguyên ⇒ **khoản 229**.
+
+⑸ **"Vòng BAFO phải cấp lại cặp khoá"** — SAI (đã ghi ở S1.108 và đo lại ở vòng này): đường niêm
+phong phía nhà cung cấp chạy **không đổi một dòng**.
+
+## 6. Một lời khai của S1.108 sai một nhịp, và nó nằm ở mục NHỊP LƯỢT SOI NGANG
+
+S1.108 đo vế hardening bằng gốc `305a090..origin/master` = 0 rồi kết luận *"chính vòng này là lần
+đổi THỨ NHẤT kể từ lượt 77"*. `305a090` là merge của **S1.107**, còn cửa sổ lượt 77 **kết ở
+`dc2b560`** (merge của S1.106) — nên lần đổi hardening của chính S1.107 chưa lượt ngang nào soi.
+
+Đo lại bằng gốc đúng: `dc2b560..origin/master` = **2**. S1.109 là lần thứ **BA**, tức vế hardening
+**ĐÃ THOẢ** và mốc **CHẠM**. Vòng này ghi **LỠ NHỊP** kèm lý do (ba vòng cùng chủ đề, hai trong ba
+đã có lượt soi hình dạng riêng; và lượt ngang là việc chủ dự án gọi — ADR-043), và đặt mốc mới:
+**ngay sau S1.109, chậm nhất S1.111**, cửa sổ `dc2b560..`.
+
+## 7. Ranh giới nói ra
+
+- **J4 có phép đo, chưa có NHÃN.** Ba ca đủ ba thứ spec §5 đòi; thứ thiếu là một dòng trong ma trận
+  bất biến, và nó đòi nới dải `[A-H]` — một đổi thay của cỗ máy bằng chứng, không của S2.5.
+  Khoản **229**.
+- **Lần từ chối nộp thầu nay là 422, nhưng nó không nói được lý do nào trong ba.** Khoản **230**.
+- **Khoản 226 không đóng ở vòng này**: cổng văn bản đếm ràng buộc `CHECK` liệt kê trạng thái vẫn
+  chưa có, và `060` không thêm trạng thái nào nên nó không bị thử thách.
+- **Không đo tải, không đo đua.** Hai câu của `dongVongBafo` sống trong một giao dịch; ca hai vòng
+  BAFO mở đồng thời dựa vào chỉ mục bộ phận `rfq_bafo_rounds_mot_vong_dang_mo` của `059`, đã có phép
+  đo ở S1.108 — vòng này không đo lại.

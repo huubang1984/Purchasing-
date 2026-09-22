@@ -998,6 +998,15 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "taoLuotDanhGia",
   "tinhChiPhiHieuDung",
   "vietSo",
+  // [S1.109 / S2.5 tầng người dùng] NĂM symbol của lớp vòng BAFO. `docVongBafoKhach` ra cửa vì
+  // `apps/api/src/routes/guest.ts` gọi nó — và nó là hàm DUY NHẤT ở đây mà một phiên KHÁCH chạm
+  // tới, nên nó trả đúng hai trường (`roundNo`, `deadlineAt`). `topN` và `openedBy` không đi ra
+  // đường khách bằng lối nào.
+  "VongBafoTuChoiError",
+  "docVongBafo",
+  "docVongBafoKhach",
+  "dongVongBafo",
+  "moVongBafo",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [

@@ -13,7 +13,13 @@
 // Danh tính ở MỌI lời gọi gói là `ctx.actor.sessionId` — dẫn xuất từ cookie (ADR-016). Thân yêu
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
-import { docBangXepHang, taoLuotDanhGia } from "@trustprocure/danh-gia";
+import {
+  docBangXepHang,
+  docVongBafo,
+  dongVongBafo,
+  moVongBafo,
+  taoLuotDanhGia,
+} from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
@@ -353,6 +359,26 @@ const doc: readonly BuyerReadRoute[] = [
   // `null` khi gói thầu chưa được chấm lần nào, KHÔNG 404: "chưa chấm" là một câu trả lời đúng và
   // màn chấm phải phân biệt nó với "không có gói thầu ấy" — cùng khuôn `/rfqs/:rfqId/unseal`
   // (khoản 190). Một mảng rỗng thì nói dối: *"đã chấm, và không ai trong bảng"*.
+  // [S1.109 / S2.5] VÒNG BAFO MỚI NHẤT của gói thầu — `null` khi chưa mở vòng nào.
+  //
+  // KHÔNG cùng rổ `HAM_DOC_CO_QUYEN` với ba đường trên, và vế ấy là một quyết định đo được: hàng
+  // này không mang một mức giá nào. Nó mang `topN`, và với một NGƯỜI MUA con số ấy đã đọc được
+  // qua `GET /policy` — cổng `bid.view` ở đây sẽ canh một thứ không phải bí mật, rồi làm người
+  // đọc tưởng nó là.
+  //
+  // `agent: false` cùng lý do `/rfqs/:rfqId/unseal` (khoản 190): nó biến một id gói thầu thành
+  // id một vòng BAFO, và một tác tử chỉ-đọc không có việc nào cần khả năng ấy.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/bafo",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { bafoRound: await docVongBafo(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) },
+    }),
+  },
   {
     method: "GET",
     path: "/rfqs/:rfqId/ranking",
@@ -404,6 +430,64 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 201,
       body: {
         evaluation: await taoLuotDanhGia(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // --------------------------------------------------------------------------------------------
+  // [S1.109 / S2.5] MỞ và ĐÓNG vòng BAFO — cạnh `EVALUATING->BAFO_OPEN` và `BAFO_OPEN->BAFO_CLOSED`
+  // của `059`. Cho tới vòng này bốn cạnh BAFO tồn tại và được canh ở tầng CSDL mà KHÔNG đường sản
+  // xuất nào đi qua (khoản **227**).
+  //
+  // Mã quyền RIÊNG `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` (ADR-055) — KHÔNG dùng lại
+  // `evaluation.perform`: mở vòng BAFO là hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT
+  // giá của mọi người, và `evaluation.perform` do NĂM trên SÁU vai giữ (khoản 220).
+  //
+  // Thân KHÔNG mang `evaluationId`, và đó là vế đóng của một lỗ mà lượt soi hình dạng của vòng
+  // này tìm ra: `059` cho người gọi khai lượt chấm nào cũng được, nên vòng BAFO thứ hai mời được
+  // top-N của bảng xếp hạng TRƯỚC BAFO. `060` đòi lượt MỚI NHẤT ở tầng CSDL và `moVongBafo` tự
+  // suy nó — hai lớp, và không lớp nào đọc một trường do người gọi khai.
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/bafo",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_BAFO_OPEN,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        bafoRound: await moVongBafo(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            deadlineAt: ngayBatBuoc(ctx.req.body, "deadlineAt"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/bafo/close",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_BAFO_OPEN,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        bafoRound: await dongVongBafo(
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },

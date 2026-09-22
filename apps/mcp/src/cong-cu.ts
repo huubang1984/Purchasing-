@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ [S1.106] SÁU route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ [S1.109] BẢY route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -97,6 +97,14 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "`/unseal/:unsealRequestId` cố ý bắt phải biết trước. Một tác tử chỉ-đọc không có việc nào " +
     "cần khả năng ấy, nên route khai `agent: false` và dòng này khai vì sao. Ngày nào có việc " +
     "cần thì đổi một dòng và viết một ADR, chứ đừng đọc ngược ra từ sự im lặng hôm nay.",
+  "/rfqs/:rfqId/bafo":
+    "VÒNG BAFO của một gói thầu — số vòng, top-N, hạn nộp, ai mở. Nó KHÔNG mang một mức giá nào, " +
+    "nên nó không rơi vào lập luận của ADR-038; thứ nó mang là `topN`, tức MẤY NGƯỜI qua được " +
+    "vòng một, và thời điểm một cửa sổ nộp lại đang mở. Hai thứ ấy cộng lại là tín hiệu cạnh " +
+    "tranh cùng hạng với `/rfqs/:rfqId/invitations`: biết có bao nhiêu người còn trong cuộc, và " +
+    "biết chính xác khi nào cửa đóng, là đoán được vùng giá mà không cần thấy một con số nào. " +
+    "Cùng lý do thứ hai với `/rfqs/:rfqId/unseal`: nó biến một id gói thầu thành id một vòng " +
+    "BAFO. Route khai `agent: false` và dòng này khai vì sao. [S1.109 / S2.5]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

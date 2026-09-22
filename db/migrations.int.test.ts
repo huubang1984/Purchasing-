@@ -1501,7 +1501,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
-    { ham: "bafo_kiem_vong", migration: "059_vong_bafo.sql", trigger: ["rfq_bafo_rounds_kiem_vong"] },
+    { ham: "bafo_kiem_vong", migration: "060_bafo_luot_moi_nhat_va_han_cho_khach.sql", trigger: ["rfq_bafo_rounds_kiem_vong"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
@@ -3106,6 +3106,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
+        "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7504,6 +7505,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
+        "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7783,6 +7785,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "057_luot_danh_gia.sql",
         "058_huy_duoc_sau_khi_cham.sql",
         "059_vong_bafo.sql",
+        "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

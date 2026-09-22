@@ -106,6 +106,21 @@ export interface ComparisonRow {
   /** Số tiền dạng CHUỖI thập phân, hoặc `null` nếu bản rõ không nói ra một con số hợp lệ. */
   readonly totalAmount: string | null;
   readonly currency: string | null;
+  /**
+   * [S1.109 / S2.5 / khoản 227⑵] Số vòng BAFO đã sinh ra dòng này — `null` cho vòng MỘT.
+   *
+   * Bảng này CỐ Ý giữ cả hai vòng, và đó là quyết định của chủ dự án ngày 2026-09-22: nó là một
+   * bảng LỊCH SỬ, và người mua cần thấy ai hạ bao nhiêu. Cột này là thứ làm câu ấy đọc được —
+   * không có nó, hai dòng của cùng một nhà cung cấp trông như một lỗi.
+   */
+  readonly bafoRoundNo: number | null;
+  /**
+   * `true` khi đây là phiên bản MỚI NHẤT của luồng báo giá ấy — tức con số đang có hiệu lực.
+   *
+   * Nó được tính MỘT LẦN, trong SQL, và phần tổng hợp dùng ĐÚNG luật ấy. Hai chỗ tính cùng một
+   * thứ theo hai cách là hai chỗ để lệch nhau.
+   */
+  readonly isLatestForBid: boolean;
 }
 
 /**
@@ -117,9 +132,21 @@ export interface ComparisonRow {
  * Ở đây, muốn có `min` thì phải đi qua cổng đã từ chối mọi RFQ chưa mở thầu.
  */
 export interface ComparisonAggregates {
-  /** Số dòng đọc ra được một số tiền hợp lệ. */
+  /**
+   * [S1.109 / S2.5] MỌI con số dưới đây tính trên MỘT DÒNG MỖI LUỒNG BÁO GIÁ — phiên bản mới
+   * nhất — chứ không trên `rows`.
+   *
+   * Vì sao vế này KHÔNG phải một lựa chọn như `rows`: một bảng lịch sử hiện hai dòng cho một nhà
+   * cung cấp thì đọc được, nhưng `min`/`max`/`average`/`belowBudget` là lời khai về TẬP NGƯỜI DỰ
+   * THẦU. Tính chúng trên một tập có người đếm hai lần thì không có cách đọc nào làm chúng đúng:
+   * sau một vòng BAFO, `average` bị kéo về phía những người ĐƯỢC MỜI NỘP LẠI, và `belowBudget`
+   * đếm một nhà cung cấp hai lần.
+   *
+   * Nên `parsed + unparsed` KHÔNG còn bằng `rows.length` sau một vòng BAFO, và đó là chủ đích.
+   */
+  /** Số LUỒNG BÁO GIÁ đọc ra được một số tiền hợp lệ ở phiên bản mới nhất. */
   readonly parsed: number;
-  /** Số dòng KHÔNG đọc ra được — vẫn nằm trong `rows`, không bị vứt đi. */
+  /** Số luồng KHÔNG đọc ra được — dòng của chúng vẫn nằm trong `rows`, không bị vứt đi. */
   readonly unparsed: number;
   readonly currency: string | null;
   /**
@@ -165,6 +192,8 @@ interface HangDong {
   readonly payload: Record<string, unknown>;
   readonly total_amount: string | null;
   readonly currency: string | null;
+  readonly bafo_round_no: number | null;
+  readonly la_moi_nhat: boolean;
 }
 
 interface HangTongHop {
@@ -293,12 +322,16 @@ export async function buildComparisonTable(
             s.legal_name,
             u.payload,
             public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS total_amount,
-            (u.payload OPERATOR(pg_catalog.->>) 'currency')                       AS currency
+            (u.payload OPERATOR(pg_catalog.->>) 'currency')                       AS currency,
+            r.round_no                                   AS bafo_round_no,
+            (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
+               OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
        FROM public.rfq_unsealed_bids u
        JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
        JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
        JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
        JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
+       LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
       WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
       ORDER BY public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) ASC NULLS LAST, s.legal_name ASC`,
     [rfqId],
@@ -306,8 +339,22 @@ export async function buildComparisonTable(
 
   // Gom theo TIỀN TỆ chứ không gom một cục: nếu truy vấn trả về nhiều hơn một nhóm thì các phép
   // tổng hợp không có nghĩa, và đó là điều duy nhất phía TypeScript cần biết để quyết.
+  //
+  // [S1.109 / S2.5] `moi_nhat` là vế KHỬ TRÙNG, và nó là bản sao của luật mà worker
+  // (`index.ts`) và `docBaoGia` của `packages/danh-gia` đã chọn: `DISTINCT ON (v.bid_id) …
+  // ORDER BY v.version DESC` — lần nộp SAU thay lần nộp TRƯỚC. Ba bộ đọc, một luật, và không bộ
+  // nào phụ thuộc một tiền đề ngầm của bộ kia nữa (đó đúng là lỗ mà mục 7d của §S1.108 ghi).
   const { rows: th } = await client.query<HangTongHop>(
-    `SELECT (u.payload OPERATOR(pg_catalog.->>) 'currency')                                     AS currency,
+    `WITH moi_nhat AS (
+       SELECT DISTINCT ON (v.bid_id) u.payload, i.rfq_id, i.org_id
+         FROM public.rfq_unsealed_bids u
+         JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
+         JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+         JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+        WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+        ORDER BY v.bid_id, v.version DESC
+     )
+     SELECT (u.payload OPERATOR(pg_catalog.->>) 'currency')                                     AS currency,
             pg_catalog.count(*)::pg_catalog.int4                                              AS n,
             pg_catalog.min(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_min,
             pg_catalog.max(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_max,
@@ -317,13 +364,9 @@ export async function buildComparisonTable(
                 AND ns.currency OPERATOR(pg_catalog.=) (u.payload OPERATOR(pg_catalog.->>) 'currency')
                 AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) OPERATOR(pg_catalog.<=) ns.estimated_value
             )::pg_catalog.int4                                                     AS duoi_ngan_sach
-       FROM public.rfq_unsealed_bids u
-       JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
-       JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
-       JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
-       LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) i.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) i.org_id
-      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
-        AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
+       FROM moi_nhat u
+       LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) u.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) u.org_id
+      WHERE public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
       GROUP BY (u.payload OPERATOR(pg_catalog.->>) 'currency')`,
     [rfqId],
   );
@@ -345,10 +388,14 @@ export async function buildComparisonTable(
       payload: r.payload,
       totalAmount: r.total_amount,
       currency: r.currency,
+      bafoRoundNo: r.bafo_round_no,
+      isLatestForBid: r.la_moi_nhat,
     })),
     aggregates: {
       parsed: doc,
-      unparsed: dong.length - doc,
+      // `dong.length` KHÔNG còn là mẫu số đúng sau một vòng BAFO — nó đếm cả dòng lịch sử. Mẫu
+      // số là số LUỒNG, và `la_moi_nhat` là cùng một luật với vế khử trùng của truy vấn trên.
+      unparsed: dong.filter((r) => r.la_moi_nhat).length - doc,
       currency: mot?.currency ?? null,
       currencyMismatch: lechTien,
       min: mot?.gia_min ?? null,

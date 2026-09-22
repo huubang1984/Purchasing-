@@ -29,6 +29,9 @@ import { describeEnvelope } from "@trustprocure/sealed-envelope";
 import { ReceiptError, buildReceiptText, sha256Hex } from "./receipt.js";
 import type { ReceiptSigner } from "./signer.js";
 
+/** `check_violation` — ba trigger `BEFORE INSERT` của `vendor_bid_versions` đều `RAISE` mã này. */
+const MA_CHECK_VIOLATION = "23514";
+
 export class BiddingError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -126,19 +129,49 @@ export async function submitBid(
 
   const bidId = await layHoacTaoLuong(client, orgId, p.invitation_id);
 
-  const { rows: ban } = await client.query<{
-    id: string;
-    version: number;
-    submitted_at_text: string;
-  }>(
-    // `submitted_at_text` đi qua `public.bid_dau_thoi_gian_chinh_tac` chứ KHÔNG qua `Date` của
-    // JavaScript: `timestamptz` giữ micro-giây còn `Date` chỉ tới mili-giây, và một biên nhận cắt
-    // bớt ba chữ số cuối là một biên nhận không khớp dữ liệu nó chứng nhận.
-    `INSERT INTO public.vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, version, public.bid_dau_thoi_gian_chinh_tac(submitted_at) AS submitted_at_text`,
-    [orgId, bidId, Buffer.from(input.envelope), input.guestSessionId],
-  );
+  // [S1.109 / S2.5] Câu này đi qua BA trigger `BEFORE INSERT` biết từ chối: `bid_kiem_han_nop`
+  // (C1 — gói thầu không nhận báo giá, hoặc đã quá hạn của vòng đang mở), `bid_kiem_phien_khach`,
+  // và `bid_kiem_vong_bafo` (luồng này không nằm trong top-N của vòng BAFO). Cả ba `RAISE` với
+  // `ERRCODE = 'check_violation'`.
+  //
+  // KHÔNG bọc, lỗi `pg` đi lên với `name === "error"` — và `LOI_NGHIEP_VU_422` của `dispatch.ts`
+  // là một danh sách ĐÓNG theo TÊN LỚP, nên nó rơi xuống **500 thân cố định**. Đo được: trước
+  // vòng này không ca nào ghim hành vi ấy (lượt tìm: `grep -n "500"` và `grep -n "C1|han nop"`
+  // trên `apps/api/src/guest.int.test.ts` ⇒ 0 dòng), và nó đã đúng như thế từ S1.4 cho lần từ
+  // chối QUÁ HẠN. Vòng BAFO làm nó thành đường đi THƯỜNG XUYÊN: mọi nhà cung cấp ngoài top-N bấm
+  // nộp đều gặp.
+  //
+  // Thông điệp KHÔNG chép lại câu của CSDL: hai trong ba câu ấy nội suy `bid_id` và
+  // `bafo_round_id`. Nó cũng KHÔNG phân biệt ba lý do — làm được điều đó đúng cách cần một
+  // ERRCODE riêng cho mỗi trigger, không phải một lượt đọc chuỗi lỗi; ghi thành khoản nợ. Ba lý
+  // do đều đọc được từ màn hình: trạng thái gói thầu và hạn của vòng đang mở đã nằm trong
+  // `GET /guest/rfq`.
+  let ban: { id: string; version: number; submitted_at_text: string }[];
+  try {
+    const kq = await client.query<{
+      id: string;
+      version: number;
+      submitted_at_text: string;
+    }>(
+      // `submitted_at_text` đi qua `public.bid_dau_thoi_gian_chinh_tac` chứ KHÔNG qua `Date` của
+      // JavaScript: `timestamptz` giữ micro-giây còn `Date` chỉ tới mili-giây, và một biên nhận cắt
+      // bớt ba chữ số cuối là một biên nhận không khớp dữ liệu nó chứng nhận.
+      `INSERT INTO public.vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, version, public.bid_dau_thoi_gian_chinh_tac(submitted_at) AS submitted_at_text`,
+      [orgId, bidId, Buffer.from(input.envelope), input.guestSessionId],
+    );
+    ban = kq.rows;
+  } catch (loi) {
+    if (loi instanceof Error && (loi as { code?: unknown }).code === MA_CHECK_VIOLATION) {
+      throw new BiddingError(
+        "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
+          "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
+        { cause: loi },
+      );
+    }
+    throw loi;
+  }
   const b = ban[0];
   if (b === undefined) {
     throw new BiddingError("Không ghi được phiên bản báo giá.");

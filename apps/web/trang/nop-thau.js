@@ -148,11 +148,26 @@ $("nut-xac").addEventListener("click", async () => {
 async function napGoiThau() {
   const r = await goi("GET", "/guest/rfq");
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không đọc được gói thầu")); hien($("b3"), true); return; }
-  phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [] };
+  phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null };
 
-  const han = new Date(phien.rfq.deadlineAt);
+  // [S1.109 / S2.5 / khoản 227⑶] HẠN NÀO LÀ HẠN ĐANG CÓ HIỆU LỰC.
+  //
+  // `rfq.deadlineAt` là hạn VÒNG MỘT, và suốt `BAFO_OPEN` nó đã ở QUÁ KHỨ — nó không cập nhật
+  // được (vế (b) của bảng cạnh cấm deadline lùi, vế (c) chỉ cho đổi ở `DRAFT`/`OPEN`), và chính
+  // vì thế `059` tách hạn BAFO sang bảng riêng. In thẳng `rfq.deadlineAt` trong lúc có vòng BAFO
+  // là để màn hình nói một hạn đã qua trong khi người đọc nó vẫn nộp được.
+  const vong = phien.bafoRound;
+  const han = new Date(vong === null ? phien.rfq.deadlineAt : vong.deadlineAt);
   $("tt-rfq").replaceChildren();
-  for (const [k, v] of [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status], ["Hạn nộp", han.toLocaleString("vi-VN")]]) {
+  const dong = [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status]];
+  if (vong !== null) {
+    dong.push(["Vòng", `BAFO ${vong.roundNo} — mời nộp lại, niêm phong như vòng một`]);
+    dong.push(["Hạn nộp của vòng này", han.toLocaleString("vi-VN")]);
+    dong.push(["Hạn vòng một", new Date(phien.rfq.deadlineAt).toLocaleString("vi-VN")]);
+  } else {
+    dong.push(["Hạn nộp", han.toLocaleString("vi-VN")]);
+  }
+  for (const [k, v] of dong) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v;
     $("tt-rfq").append(dt, dd);

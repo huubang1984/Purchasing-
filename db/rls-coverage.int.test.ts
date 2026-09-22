@@ -1834,7 +1834,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
-      "outbox_jobs", "rfq_approvals", "rfq_bafo_rounds", "rfq_budgets", "rfq_evaluation_lines",
+      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals", "unseal_requests",
@@ -1842,6 +1842,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     ].map(chiKhach),
     khachNoi("bid_receipts", khachHoac("(bid_version_id IN ( SELECT v.id\n   FROM vendor_bid_versions v))")),
     khachNoi("guest_sessions", khachHoac(veGuest("id", "app.guest_session_id"))),
+    khachNoi("rfq_bafo_rounds", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),
     khachNoi("rfq_invitations", khachHoac(veGuest("id", "app.guest_invitation_id"))),
     khachNoi("rfq_items", khachHoac(veGuest("rfq_id", "app.guest_rfq_id"))),
     khachNoi("rfq_key_material", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),

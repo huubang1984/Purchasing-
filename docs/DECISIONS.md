@@ -5648,3 +5648,57 @@ cho ra một cổng XANH trên tập RỖNG. Khoản **227** ghi ranh giới ấ
 
 Nó **không** mở lại câu hỏi *ai được huỷ một gói thầu đã đóng* (khoản 225), và **không** nói gì về
 `EVALUATING->AWARDED` — `AWARDED` vẫn chưa phải một giá trị nào trong tập đóng. S2.6.
+---
+
+## ADR-056 — Bảng so sánh sau BAFO là một bảng **lịch sử**, nhưng các phép **tổng hợp** thì không
+
+**Trạng thái:** Đã chấp nhận · **Ngày:** 2026-09-22 · **Vòng:** S1.109 / S2.5 tầng người dùng
+
+### Bối cảnh
+
+`059` cho một nhà cung cấp top-N nộp LẠI ở vòng BAFO, và `rfq_unsealed_bids` là bảng chỉ-ghi-thêm,
+nên sau lượt mở thầu thứ hai một luồng báo giá có **hai** hàng bản rõ. Khoản **227⑵** ghi câu hỏi:
+`buildComparisonTable` nên hiện một dòng hay hai?
+
+Khoản ấy khai câu hỏi là **một**. Lượt soi hình dạng của S1.109 đo lại và thấy nó là **hai**, vì
+hàm có HAI truy vấn: một dựng `rows`, một dựng `aggregates` (`min`/`max`/`average`/`belowBudget`
+cộng `parsed`/`unparsed`).
+
+### Quyết định
+
+**Hai vế, và chúng đi ngược chiều nhau — đó là toàn bộ nội dung của ADR này.**
+
+⑴ **`rows` giữ CẢ HAI vòng**, cộng hai trường mới: `bafoRoundNo` (`null` cho vòng một) và
+`isLatestForBid`. Chủ dự án chốt ngày 2026-09-22. Lý do: bảng so sánh là thứ người mua đọc để
+quyết định, và *"ai hạ bao nhiêu"* là một câu hỏi thật của nghiệp vụ BAFO. Giấu dòng cũ đi là giấu
+đúng thứ vòng BAFO sinh ra để tạo.
+
+⑵ **`aggregates` KHỬ TRÙNG — một dòng mỗi luồng, phiên bản mới nhất — và vế này KHÔNG phải một
+lựa chọn.** `min`, `max`, `average`, `belowBudget`, `parsed`, `unparsed` là lời khai về **tập người
+dự thầu**, không về lịch sử. Tính chúng trên tập có người đếm hai lần thì không có cách đọc nào làm
+chúng đúng: `average` bị kéo về phía những người ĐƯỢC MỜI nộp lại, và `belowBudget` đếm một nhà
+cung cấp hai lần.
+
+Hệ quả nói thẳng ra để không ai đọc nhầm: **`parsed + unparsed` KHÔNG còn bằng `rows.length`** sau
+một vòng BAFO.
+
+### Vì sao luật khử trùng là luật ĐÃ CÓ, không phải luật mới
+
+`DISTINCT ON (v.bid_id) … ORDER BY v.version DESC` — *lần nộp SAU thay lần nộp TRƯỚC* — là luật mà
+`apps/unseal-worker/src/index.ts` chọn từ S1.4 và `docBaoGia` của `packages/danh-gia` chép lại ở
+S1.108 (mục 7d của §S1.108). Đây là bộ đọc **thứ ba**, và nó chép cùng một luật.
+
+Ba bộ đọc chép cùng một câu SQL là một chỗ để lệch nhau. Nhưng phương án còn lại — một bộ đọc dùng
+chung — đã được cân và **không chọn**: ba bộ đọc sống ở ba gói với ba vai CSDL khác nhau
+(`app_unseal` đọc phong bì, `app_api` đọc bản rõ), và một hàm dùng chung sẽ phải nhận cả hai vai.
+Cái giá được trả bằng phép đo thay vì bằng kiến trúc: ba ca ở `kich-ban-41-http.int.test.ts` đòi
+đúng cùng một con số từ cả ba đường trên CÙNG một bộ dữ liệu, nên một lần lệch làm cả ba đỏ.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói `isLatestForBid` là một lời khai về *"báo giá nào được chấm"*. Đường chấm đọc lại
+`rfq_unsealed_bids` bằng luật của chính nó; hai đường trùng kết quả vì chúng chép cùng một luật,
+không vì đường này gọi đường kia.
+
+Nó **không** đổi gì ở `countReceivedBids` (A6): con số ấy đếm LUỒNG (`vendor_bids`), không đếm
+phiên bản, nên vòng BAFO không chạm tới nó.

@@ -126,6 +126,12 @@ interface HangYeuCau {
   readonly status: string;
   readonly dispatched_by: string | null;
   readonly dispatched_by_session_id: string | null;
+  /**
+   * [S1.109 / S2.5] Dấu vòng BAFO, do trigger `unseal_kiem_rfq_da_dong` (C3, `059`) đặt —
+   * `null` cho lượt mở thầu VÒNG MỘT. `app_unseal` có `SELECT (bafo_round_id)` trên
+   * `unseal_requests` (`059`), không hơn.
+   */
+  readonly bafo_round_id: string | null;
 }
 
 interface HangKhoa {
@@ -417,7 +423,7 @@ export async function executeUnsealRequest(
   }
 
   const { rows: yc } = await client.query<HangYeuCau>(
-    "SELECT rfq_id, status, dispatched_by, dispatched_by_session_id FROM public.unseal_requests " +
+    "SELECT rfq_id, status, dispatched_by, dispatched_by_session_id, bafo_round_id FROM public.unseal_requests " +
       " WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 FOR NO KEY UPDATE",
     [input.unsealRequestId, orgId],
   );
@@ -507,14 +513,30 @@ export async function executeUnsealRequest(
 
   // Chỉ lấy PHIÊN BẢN CUỐI của mỗi luồng báo giá. B1 giữ mọi phiên bản để không ai sửa lén được
   // thứ đã nộp; mở thầu thì chỉ mở thứ nhà cung cấp muốn được chấm — bản cuối trước hạn.
+  //
+  // [S1.109 / S2.5] VÀ CHỈ PHONG BÌ CỦA ĐÚNG VÒNG NÀY. `vendor_bid_versions.bafo_round_id` do C1
+  // đặt (`059`): `null` cho vòng một, id vòng cho một lần nộp BAFO. Không có vế này, lượt mở thầu
+  // vòng HAI đọc lại phiên bản cuối của MỌI luồng — kể cả luồng của nhà cung cấp ngoài top-N, vốn
+  // chưa nộp lại nên bản cuối của họ vẫn là phong bì VÒNG MỘT đã mở rồi — và câu `INSERT` bản rõ
+  // đụng `UNIQUE (org_id, bid_version_id)` của `019`.
+  //
+  // `IS NOT DISTINCT FROM`, KHÔNG `=`. Với `$3 = NULL` — tức MỌI lượt mở thầu vòng một, đường
+  // CHÍNH của sản phẩm — `v.bafo_round_id = $3` cho `NULL` ở mọi hàng, nên `phongBi` RỖNG, vòng
+  // lặp không chạy lần nào, `opened = 0`, và hai câu kết thúc VẪN thành công: RFQ được tuyên bố
+  // `UNSEALED` với không một hàng bản rõ nào, hàm trả về không lỗi, và yêu cầu mở thầu đã tiêu —
+  // nó không chạy lại được. Ghi ra vì đó là một dòng trông đúng.
+  //
+  // KHÔNG dùng `ON CONFLICT DO NOTHING` ở câu `INSERT` để né xung đột ấy: nuốt xung đột là nuốt
+  // luôn ca *hai lần mở cùng một phong bì*, thứ mà `UNIQUE` kia tồn tại để bắt (khoản 227⑵).
   const { rows: phongBi } = await client.query<HangPhongBi>(
     `SELECT DISTINCT ON (v.bid_id) v.id, v.envelope
        FROM public.vendor_bid_versions v
        JOIN public.vendor_bids b ON b.id OPERATOR(pg_catalog.=) v.bid_id AND b.org_id OPERATOR(pg_catalog.=) v.org_id
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
       WHERE i.rfq_id OPERATOR(pg_catalog.=) $1 AND v.org_id OPERATOR(pg_catalog.=) $2
+        AND v.bafo_round_id IS NOT DISTINCT FROM $3
       ORDER BY v.bid_id, v.version DESC`,
-    [r.rfq_id, orgId],
+    [r.rfq_id, orgId, r.bafo_round_id],
   );
 
   // ---------------------------------------------------------------------------------------
@@ -594,6 +616,9 @@ export async function executeUnsealRequest(
     resourceId: r.rfq_id,
     payload: {
       unsealRequestId: input.unsealRequestId,
+      // [S1.109] Không có trường này, sau một vòng BAFO sổ có HAI hàng giống hệt nhau cho cùng
+      // một RFQ và câu *"hàng nào thuộc vòng nào"* chỉ trả lời được bằng một lượt nối ngược.
+      bafoRoundId: r.bafo_round_id,
       algorithms: [...khoaRieng.keys()].sort(),
       opened,
       failedBidVersionIds,
@@ -611,12 +636,21 @@ export async function executeUnsealRequest(
   if (kt1.rowCount !== 1) {
     throw new UnsealWorkerError("không đóng được yêu cầu mở thầu — trạng thái đã đổi giữa chừng");
   }
+  // [S1.109 / S2.5] MỘT TRONG HAI CẶP, và cặp nào thì do DẤU VÒNG quyết định chứ không do một
+  // lần đọc trạng thái: `bafo_round_id` của yêu cầu là dẫn xuất mà C3 đặt, nên nó không khai sai
+  // được. Hai cặp là hai cạnh có thật của bảng cạnh (`011` và `059`), và vế `AND status = …` giữ
+  // nguyên vai trò lớp CÓ THẨM QUYỀN cho ca trạng thái đổi giữa chừng.
+  const laBafo = r.bafo_round_id !== null;
+  const tuTrangThai = laBafo ? "BAFO_CLOSED" : "CLOSED";
+  const denTrangThai = laBafo ? "BAFO_UNSEALED" : "UNSEALED";
   const kt2 = await client.query(
-    "UPDATE public.rfq_packages SET status = 'UNSEALED' WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 AND status OPERATOR(pg_catalog.=) 'CLOSED'",
-    [r.rfq_id, orgId],
+    "UPDATE public.rfq_packages SET status = $3 WHERE id OPERATOR(pg_catalog.=) $1 AND org_id OPERATOR(pg_catalog.=) $2 AND status OPERATOR(pg_catalog.=) $4",
+    [r.rfq_id, orgId, denTrangThai, tuTrangThai],
   );
   if (kt2.rowCount !== 1) {
-    throw new UnsealWorkerError("không tuyên bố được RFQ đã UNSEALED — trạng thái đã đổi giữa chừng");
+    throw new UnsealWorkerError(
+      `không tuyên bố được RFQ đã ${denTrangThai} — trạng thái đã đổi giữa chừng`,
+    );
   }
 
   await appendAuditEvent(client, orgId, {
@@ -625,7 +659,7 @@ export async function executeUnsealRequest(
     action: "RFQ_UNSEALED",
     resourceType: "rfq_package",
     resourceId: r.rfq_id,
-    payload: { unsealRequestId: input.unsealRequestId, opened, failedBidVersionIds },
+    payload: { unsealRequestId: input.unsealRequestId, bafoRoundId: r.bafo_round_id, opened, failedBidVersionIds },
   });
 
   return {

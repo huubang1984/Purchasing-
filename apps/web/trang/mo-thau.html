@@ -64,7 +64,7 @@
     <h2><span class="so">4</span> Bảng so sánh</h2>
     <button id="nut-bang" class="phu">Đọc bảng so sánh</button>
     <table id="bang">
-      <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th></tr></thead>
+      <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th><th>Vòng</th></tr></thead>
       <tbody></tbody>
     </table>
     <dl class="tt" id="tt-tong"></dl>
@@ -89,6 +89,25 @@
     </table>
     <div class="bao loi" id="loi5" hidden></div>
     <div class="bao ok" id="ok5" hidden></div>
+  </section>
+
+  <section class="buoc" id="b6" hidden>
+    <h2><span class="so">6</span> Vòng BAFO</h2>
+    <p class="ghi">Mời <strong>top-N</strong> nộp lại — niêm phong đúng như vòng một, và danh sách
+      mời <strong>suy từ bảng xếp hạng</strong> chứ không ai gõ tay. Người mua lúc này đã biết giá
+      của mọi người, nên đây là hành động có mã quyền RIÊNG (<code>rfq.bafo.open</code>), và sản
+      phẩm <em>không</em> chặn được một lần rò tin bằng miệng.</p>
+    <label for="han-bafo">Hạn nộp của vòng BAFO (ít nhất 1 giờ kể từ bây giờ)</label>
+    <input id="han-bafo" type="datetime-local">
+    <div class="doi">
+      <button id="nut-mo-bafo">Mở vòng BAFO</button>
+      <button id="nut-dong-bafo" class="phu">Đóng vòng BAFO</button>
+    </div>
+    <dl class="tt" id="tt-bafo"></dl>
+    <p class="ghi">Đóng vòng xong thì phong bì vòng hai mở bằng <strong>đúng cổng bốn vế</strong>
+      ở bước 3 — yêu cầu mới, hai người duyệt mới. Rồi chấm lại ở bước 5.</p>
+    <div class="bao loi" id="loi6" hidden></div>
+    <div class="bao ok" id="ok6" hidden></div>
   </section>
 
   <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>

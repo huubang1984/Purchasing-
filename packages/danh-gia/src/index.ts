@@ -38,3 +38,18 @@ export {
   type HangBangXepHang,
   type ThanhPhanHien,
 } from "./doc-bang-xep-hang.js";
+// [S1.109 / S2.5 tầng người dùng] VÒNG BAFO — lớp có trạng thái. `059` dựng bảng và ba trigger
+// canh, `060` thêm vế *"lượt chấm mới nhất"*; đây là đường sản xuất đi qua chúng, và cho tới vòng
+// này KHÔNG đường nào đi qua (khoản 227).
+export {
+  VongBafoTuChoiError,
+  docVongBafo,
+  docVongBafoKhach,
+  dongVongBafo,
+  moVongBafo,
+  type DongVongBafoInput,
+  type LyDoTuChoiVong,
+  type MoVongBafoInput,
+  type VongBafo,
+  type VongBafoKhach,
+} from "./vong-bafo.js";
