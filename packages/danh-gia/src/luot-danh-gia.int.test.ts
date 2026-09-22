@@ -27,6 +27,21 @@ import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docBangXepHang } from "./doc-bang-xep-hang.js";
 import { DanhGiaTuChoiError, taoLuotDanhGia } from "./luot-danh-gia.js";
+// Bí danh có chủ đích: tệp này đã có một FIXTURE tên `moVongBafo` (chèn hàng thẳng, dựng
+// cảnh cho S1.108). Hàm SẢN XUẤT đi vào dưới tên khác để không chỗ nào đọc nhầm cái này
+// thành cái kia — hai thứ đo hai việc khác nhau.
+import {
+  VongBafoTuChoiError,
+  docVongBafo,
+  dongVongBafo as dongVongBafoThat,
+  moVongBafo as moVongBafoThat,
+} from "./vong-bafo.js";
+import {
+  deXuatTraoThau,
+  docTraoThau,
+  duyetTraoThau,
+  huyTraoThau,
+} from "./trao-thau.js";
 import { SO_LE_TIEN, docSo, vietSo } from "./chi-phi-hieu-dung.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -42,6 +57,15 @@ let orgA = "";
 let orgB = "";
 let uYc = "", uD1 = "", uKhong = "", uKhongXem = "", uB = "";
 let sYc = "", sD1 = "", sKhong = "", sKhongXem = "", sB = "";
+// [S1.110 / S2.6] HAI người nữa, và cả hai là một phép ĐO trên `005` chứ không một khẩu vị:
+//   * `uDeXuat` — PROCUREMENT_MANAGER THỨ HAI. Giữ `award.recommend` và `bid.view`, KHÔNG giữ
+//     `po.approve`, và KHÔNG phải `created_by` của RFQ nào (fixture luôn dùng `uYc`). Đó là ba
+//     tính chất mà một người đề xuất hợp lệ phải có, và không vai nào khác trong fixture có đủ.
+//   * `uDuyet` — FINANCE. Giữ `po.approve`, và giữ LUÔN `award.recommend`; vế thứ hai là thứ
+//     làm ca *người đề xuất tự duyệt* đo được ở đúng chỗ khó — một người có CẢ HAI mã, tức lớp
+//     vai trò không chặn nổi và chỉ một trigger đọc hàng chặn được.
+let uDeXuat = "", uDuyet = "";
+let sDeXuat = "", sDuyet = "";
 
 async function taoNguoi(email: string, vaiTro: string, org: string = orgA): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
@@ -62,8 +86,13 @@ async function taoPhien(userId: string, org: string = orgA): Promise<string> {
   return rows[0]?.id ?? "";
 }
 
-/** Phiên bản chính sách KẾ TIẾP — `035` đòi `version` bằng ĐÚNG `max + 1` và liên tục. */
-async function taoChinhSach(evalComponents: string | null): Promise<string> {
+/**
+ * Phiên bản chính sách KẾ TIẾP — `035` đòi `version` bằng ĐÚNG `max + 1` và liên tục.
+ *
+ * [S1.108 / S2.5] `topN` thêm ở vòng này, mặc định `0` = *"tổ chức này không dùng BAFO"* (quy ước
+ * của `056`). Mặc định giữ nguyên hành vi cho ba mươi chỗ gọi đã có.
+ */
+async function taoChinhSach(evalComponents: string | null, topN = 0): Promise<string> {
   const { rows: ke } = await db.pool.query<{ n: number }>(
     "SELECT coalesce(max(version), 0) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
     [orgA],
@@ -71,11 +100,20 @@ async function taoChinhSach(evalComponents: string | null): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, " +
       "eval_components, bafo_top_n, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE 0 END, $4, $5) RETURNING id",
-    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc],
+      "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, CASE WHEN $3::jsonb IS NULL THEN NULL ELSE $6::integer END, $4, $5) RETURNING id",
+    [orgA, ke[0]?.n ?? 1, evalComponents, uYc, sYc, topN],
   );
   return rows[0]?.id ?? "";
 }
+
+/**
+ * [S1.108 / S2.5] Luồng báo giá và phiên khách của từng phiên bản đã nộp.
+ *
+ * Nộp BAFO KHÔNG phải một luồng mới: `vendor_bids` có `UNIQUE (org_id, invitation_id)` từ `018`
+ * nên một lời mời có ĐÚNG MỘT luồng, và báo giá vòng hai là một PHIÊN BẢN mới trên luồng ấy. Để
+ * nộp lại cần đúng hai thứ mà `nopBaoGia` đang bỏ đi: `bid_id` và phiên khách đã xác thực.
+ */
+const LUONG_CUA_PHIEN_BAN = new Map<string, { readonly bidId: string; readonly phienKhach: string }>();
 
 async function taoRfqMo(policyId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
@@ -177,8 +215,107 @@ async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
         Buffer.alloc(70, 7),
       ],
     );
+    LUONG_CUA_PHIEN_BAN.set(versionId, { bidId, phienKhach: pk[0]?.id ?? "" });
     return versionId;
   });
+}
+
+/**
+ * [S1.108 / S2.5] Nộp LẠI trên đúng luồng báo giá của một phiên bản vòng một — đường nộp BAFO.
+ *
+ * Đi qua CHÍNH `vendor_bid_versions` với CHÍNH phiên khách cũ, nên nó đi qua cả ba trigger của
+ * `018` cộng trigger top-N của `059`. Trả về id phiên bản mới.
+ */
+async function nopLaiBafo(rfqId: string, versionVongMot: string): Promise<string> {
+  const luong = LUONG_CUA_PHIEN_BAN.get(versionVongMot);
+  if (luong === undefined) throw new Error(`khong biet luong cua phien ban ${versionVongMot}`);
+  return await withTenant(apiPool, orgA, async (c) => {
+    const { rows: v } = await c.query<{ id: string; version: number }>(
+      "INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id, version",
+      [orgA, luong.bidId, Buffer.alloc(64, 11), luong.phienKhach],
+    );
+    const versionId = v[0]?.id ?? "";
+    await c.query(
+      "INSERT INTO bid_receipts (org_id, bid_version_id, canonical_text, signature) VALUES ($1, $2, $3, $4)",
+      [
+        orgA,
+        versionId,
+        `trustprocure-receipt-v1\nalg=ECDSA_P256_SHA256\nkid=k1\nrfq_id=${rfqId}\n` +
+          `bid_id=${luong.bidId}\nversion=${String(v[0]?.version ?? 2)}\n` +
+          `ciphertext_sha256=${"b".repeat(64)}\nsubmitted_at=2026-09-22T00:00:00.000000Z\n`,
+        Buffer.alloc(70, 8),
+      ],
+    );
+    return versionId;
+  });
+}
+
+/**
+ * [S1.108 / S2.5] Mở một vòng BAFO trên một gói thầu đang `EVALUATING`. Trả về id vòng.
+ *
+ * `policy_id` được ĐỌC TỪ lượt đánh giá chứ không truyền vào: `rfq_evaluations.policy_id` là
+ * phiên bản chính sách mà con số xếp hạng đã được tính dưới, và `top_n` của vòng phải khớp
+ * `bafo_top_n` của ĐÚNG phiên bản ấy. Truyền tay là mở một đường cho hai giá trị lệch nhau trong
+ * chính fixture, tức là đo một thế giới không tồn tại.
+ */
+async function moVongBafo(
+  rfqId: string,
+  luotId: string,
+  topN: number,
+  han: Date = new Date(Date.now() + 3 * 24 * 3600 * 1000),
+): Promise<string> {
+  const { rows: e } = await db.pool.query<{ policy_id: string }>(
+    "SELECT policy_id FROM rfq_evaluations WHERE id = $1",
+    [luotId],
+  );
+  return await withTenant(apiPool, orgA, async (c) => {
+    const { rows } = await c.query<{ id: string }>(
+      "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, deadline_at, " +
+        "opened_by, opened_by_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+      [orgA, rfqId, luotId, e[0]?.policy_id ?? "", topN, han, uYc, sYc],
+    );
+    const vongId = rows[0]?.id ?? "";
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_OPEN' WHERE id = $1", [rfqId]);
+    return vongId;
+  });
+}
+
+/**
+ * [S1.108 / S2.5] Đóng vòng BAFO rồi mở phong bì vòng hai qua ĐÚNG cổng bốn vế.
+ *
+ * `requestUnseal` ở đây tạo một yêu cầu THỨ HAI cho cùng RFQ, và C3 của `059` gắn
+ * `bafo_round_id` cho nó. Vế ấy là thứ làm `rfq_kiem_yeu_cau_mo_thau` phân biệt được hai vòng.
+ */
+async function moThauBafo(
+  rfqId: string,
+  vongId: string,
+  banRo: readonly (readonly [string, unknown])[],
+): Promise<string> {
+  await withTenant(apiPool, orgA, async (c) => {
+    await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+  });
+  const yc = await withTenant(apiPool, orgA, (c) =>
+    requestUnseal(c, orgA, { rfqId, reason: "den gio mo thau vong BAFO", actorSessionId: sYc }, apiPool),
+  );
+  await withTenant(apiPool, orgA, (c) =>
+    approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, apiPool),
+  );
+  await withTenant(unsealPool, orgA, async (c) => {
+    for (const [versionId, payload] of banRo) {
+      await c.query(
+        "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) VALUES ($1, $2, $3, $4)",
+        [orgA, yc.id, versionId, JSON.stringify(payload)],
+      );
+    }
+    await c.query("UPDATE rfq_packages SET status = 'BAFO_UNSEALED' WHERE id = $1", [rfqId]);
+    await c.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [yc.id],
+    );
+  });
+  return yc.id;
 }
 
 /** Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ, rồi tuyên bố `UNSEALED`. */
@@ -202,6 +339,17 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
       );
     }
     await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
+    // [S1.108 / S2.5] Dòng này THIẾU cho tới vòng này, và nó là một lệch so với đường sản xuất:
+    // worker thật đặt `EXECUTED` cùng lúc với `UNSEALED` (`apps/unseal-worker/src/index.ts:607` —
+    // *"bản rõ, mốc `EXECUTED` và trạng thái `UNSEALED` phải cùng sống hoặc cùng chết"*). Fixture
+    // để yêu cầu ở `APPROVED` mãi, và điều đó VÔ HẠI suốt hai vòng vì không kịch bản nào cần một
+    // yêu cầu mở thầu THỨ HAI. Vòng BAFO cần, và chỉ mục bộ phận
+    // `unseal_requests_mot_yeu_cau_dang_mo` (`019:73`) bắt ngay — *"một RFQ có TỐI ĐA MỘT yêu cầu
+    // đang mở"*. Cùng hình dạng *cổng xanh vì phạm vi* mà lượt soi 77 gọi tên.
+    await c.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1",
+      [yc.id],
+    );
   });
 }
 
@@ -209,8 +357,9 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
 async function goiDaMo(
   soTien: readonly (readonly [string, string | null])[],
   evalComponents: string | null = TP_GIA,
-): Promise<{ rfqId: string; banRo: readonly string[] }> {
-  const csId = await taoChinhSach(evalComponents);
+  topN = 0,
+): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
+  const csId = await taoChinhSach(evalComponents, topN);
   const rfqId = await taoRfqMo(csId);
   const ban: [string, unknown][] = [];
   const ids: string[] = [];
@@ -220,7 +369,7 @@ async function goiDaMo(
     ban.push([versionId, { totalAmount: tien, currency: dv }]);
   }
   await moThau(rfqId, ban);
-  return { rfqId, banRo: ids };
+  return { rfqId, banRo: ids, csId };
 }
 
 async function trangThaiRfq(rfqId: string): Promise<string> {
@@ -247,7 +396,11 @@ beforeAll(async () => {
   // [S1.106 / S2.4] Cổng của đường ĐỌC là `bid.view`, và `005` cấp nó cho PROCUREMENT_MANAGER,
   // FINANCE, DIRECTOR — nên một phiên KHÔNG xem được phải là một vai khác `uKhong` ở trên.
   uKhongXem = await taoNguoi("khong-xem@vidu.vn", "REQUESTER");
+  uDeXuat = await taoNguoi("de-xuat@vidu.vn", "PROCUREMENT_MANAGER");
+  uDuyet = await taoNguoi("duyet@vidu.vn", "FINANCE");
   sYc = await taoPhien(uYc);
+  sDeXuat = await taoPhien(uDeXuat);
+  sDuyet = await taoPhien(uDuyet);
   sD1 = await taoPhien(uD1);
   sKhong = await taoPhien(uKhong);
   sKhongXem = await taoPhien(uKhongXem);
@@ -258,7 +411,8 @@ beforeAll(async () => {
   uB = await taoNguoi("pm-b@vidu.vn", "PROCUREMENT_MANAGER", orgB);
   sB = await taoPhien(uB, orgB);
   expect(
-    [orgA, orgB, uYc, uD1, uKhong, uKhongXem, uB, sYc, sD1, sKhong, sKhongXem, sB].filter((x) => x === ""),
+    [orgA, orgB, uYc, uD1, uKhong, uKhongXem, uB, uDeXuat, uDuyet,
+      sYc, sD1, sKhong, sKhongXem, sB, sDeXuat, sDuyet].filter((x) => x === ""),
   ).toEqual([]);
 }, 240000);
 
@@ -681,6 +835,17 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
       [orgA],
     );
     expect(Number(sau[0]?.n) - Number(truoc[0]?.n), "một lần từ chối phải để lại ĐÚNG MỘT hàng sổ (D5)").toBe(1);
+    // [S1.107 / lượt soi ngang 77 — ②] Và hàng sổ ấy phải mang một CẶP khớp nhau. Trước vòng
+    // này nó khai `resource_type = "RFQ_EVALUATION"` với `resource_id` là id của một
+    // `rfq_packages` — ai nối `resource_id` sang `rfq_evaluations` được 0 hàng cho một sự kiện
+    // CÓ THẬT. Khẳng định đọc CẢ HAI trường: chỉ đo `resource_type` thì một id sai vẫn lọt.
+    const { rows: moi } = await db.pool.query<{ rt: string; ri: string | null }>(
+      "SELECT resource_type AS rt, resource_id::text AS ri FROM audit_events " +
+        "WHERE org_id = $1 AND action = 'PERMISSION_DENIED' ORDER BY seq DESC LIMIT 1",
+      [orgA],
+    );
+    expect(moi[0]?.rt).toBe("RFQ");
+    expect(moi[0]?.ri, "`resource_id` phải là chính gói thầu mà `resource_type` khai").toBe(rfqId);
   });
 
   it("tổ chức KHÁC hỏi đúng mã gói thầu ấy ⇒ `null`, không một hàng nào", async () => {
@@ -727,5 +892,1271 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
       if (rows[0]?.n !== "0") dinh.push(b.ten);
     }
     expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+  });
+});
+
+// ==============================================================================================
+// [S1.108 / S2.5] VÒNG BAFO — BỐN CẠNH, VÀ TOP-N SUY TỪ `rank`
+//
+// Khối này ở ĐÂY chứ không ở một tệp riêng vì fixture của nó CHÍNH LÀ fixture ở trên: một vòng
+// BAFO bắt đầu ở `EVALUATING`, tức ở đúng chỗ `taoLuotDanhGia` vừa để gói thầu lại. Một tệp
+// riêng sẽ phải chép hai trăm dòng giàn cảnh để đo đúng những thứ này.
+//
+// Bốn cạnh được đo ở tầng HÀNH VI, không ở tầng văn bản: `transitions.test.ts` đã so bảng cạnh TS
+// với bảng cạnh SQL, còn ở đây từng cạnh được ĐI QUA trên một cụm Postgres thật, dưới vai ứng
+// dụng thật, với đủ trigger `ENABLE ALWAYS`.
+// ==============================================================================================
+
+/** Một gói thầu đã chấm xong, sẵn sàng mở vòng BAFO. Trả về đủ thứ cho phần còn lại. */
+async function daCham(
+  soTien: readonly (readonly [string, string | null])[],
+  topN: number,
+): Promise<{
+  readonly rfqId: string;
+  readonly banRo: readonly string[];
+  readonly luotId: string;
+  readonly hang: ReadonlyMap<string, number | null>;
+}> {
+  const { rfqId, banRo } = await goiDaMo(soTien, TP_GIA, topN);
+  const kq = await withTenant(apiPool, orgA, (c) =>
+    taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+  );
+  return {
+    rfqId,
+    banRo,
+    luotId: kq.evaluationId,
+    hang: new Map(kq.lines.map((l) => [l.bidVersionId, l.rank])),
+  };
+}
+
+describe("[S1.108 / S2.5] vòng BAFO đi trọn bốn cạnh", { timeout: 300000 }, () => {
+  it("EVALUATING -> BAFO_OPEN -> BAFO_CLOSED -> BAFO_UNSEALED -> EVALUATING, và lượt chấm THỨ HAI ra đời", async () => {
+    const { rfqId, banRo, luotId, hang } = await daCham(
+      [
+        ["548800000.00", "VND"],
+        ["537600000.00", "VND"],
+        ["544000000.00", "VND"],
+      ],
+      2,
+    );
+    // Tiền đề của mọi thứ dưới đây: hạng 1 và 2 là hai báo giá THẤP nhất, hạng 3 là cái cao nhất.
+    expect(
+      [banRo[0], banRo[1], banRo[2]].map((id) => hang.get(id ?? "")),
+      "tiền đề hỏng thì mọi khẳng định dưới vô nghĩa",
+    ).toEqual([3, 1, 2]);
+
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_OPEN");
+    const { rows: v } = await db.pool.query<{ round_no: number; closed_at: Date | null }>(
+      "SELECT round_no, closed_at FROM rfq_bafo_rounds WHERE id = $1",
+      [vongId],
+    );
+    expect(v[0]?.round_no, "số vòng là DẪN XUẤT, do trigger đặt").toBe(1);
+    expect(v[0]?.closed_at).toBeNull();
+
+    // Hai nhà cung cấp TRONG top-2 nộp lại. Giá hạ.
+    const lai1 = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    const lai2 = await nopLaiBafo(rfqId, banRo[2] ?? "");
+    const { rows: dau } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM vendor_bid_versions WHERE id = ANY($1::uuid[])",
+      [[lai1, lai2]],
+    );
+    expect(
+      dau.map((r) => r.bafo_round_id),
+      "C1 đặt dấu vòng cho mọi phiên bản nộp ở BAFO_OPEN",
+    ).toEqual([vongId, vongId]);
+    const { rows: cu } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM vendor_bid_versions WHERE id = $1",
+      [banRo[1] ?? ""],
+    );
+    expect(cu[0]?.bafo_round_id, "phiên bản vòng MỘT không mang dấu vòng nào").toBeNull();
+
+    const ycBafo = await moThauBafo(rfqId, vongId, [
+      [lai1, { totalAmount: "500000000.00", currency: "VND" }],
+      [lai2, { totalAmount: "530000000.00", currency: "VND" }],
+    ]);
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_UNSEALED");
+    const { rows: ycv } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM unseal_requests WHERE id = $1",
+      [ycBafo],
+    );
+    expect(ycv[0]?.bafo_round_id, "C3 gắn yêu cầu mở thầu vào ĐÚNG vòng nó mở").toBe(vongId);
+
+    // Chấm LẠI: cạnh `BAFO_UNSEALED->EVALUATING`.
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    expect(kq2.evaluationId, "một lượt chấm THỨ HAI, không phải lượt cũ sửa lại").not.toBe(luotId);
+    const hang2 = new Map(kq2.lines.map((l) => [l.bidVersionId, l.rank]));
+    expect(hang2.get(lai1), "500 triệu là giá thấp nhất sau vòng hai").toBe(1);
+    // MỘT hàng cho MỘT nhà cung cấp — BA, không NĂM. `rfq_unsealed_bids` lúc này có 3 hàng của
+    // vòng một CỘNG 2 hàng của vòng hai, và một phép đọc "mọi hàng" sẽ xếp hạng hai nhà cung cấp
+    // top-N HAI LẦN, một lần với giá cũ. Đây là vế mà `docBaoGia` vừa được sửa để giữ.
+    expect(kq2.lines, "một luồng báo giá cho ĐÚNG một hàng xếp hạng").toHaveLength(3);
+    const { rows: soBanRo } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_unsealed_bids u JOIN vendor_bid_versions v " +
+        "ON v.id = u.bid_version_id JOIN vendor_bids b ON b.id = v.bid_id " +
+        "JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [rfqId],
+    );
+    expect(soBanRo[0]?.n, "tiền đề: bảng bản rõ THẬT SỰ có năm hàng — nếu không, ca trên rỗng ruột").toBe("5");
+    // Nhà cung cấp NGOÀI top-2 vẫn đứng trong bảng, với giá vòng MỘT của họ. BAFO cải thiện giá
+    // của top-N; nó không loại ai khỏi cuộc thi.
+    expect(hang2.get(banRo[0] ?? ""), "báo giá 548,8 triệu của vòng một vẫn xếp hạng, và đứng cuối").toBe(3);
+    const { rows: soLuot } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_evaluations WHERE rfq_id = $1",
+      [rfqId],
+    );
+    expect(soLuot[0]?.n, "hàng cũ Ở LẠI nguyên vẹn — spec §4.3").toBe("2");
+  });
+
+  it("nhà cung cấp NGOÀI top-N không nộp được, và thông điệp nói đúng lý do", async () => {
+    const { rfqId, banRo, luotId, hang } = await daCham(
+      [
+        ["548800000.00", "VND"],
+        ["537600000.00", "VND"],
+        ["544000000.00", "VND"],
+      ],
+      2,
+    );
+    expect(hang.get(banRo[0] ?? ""), "báo giá cao nhất đứng hạng 3").toBe(3);
+    await moVongBafo(rfqId, luotId, 2);
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(/khong nam trong top-N/u);
+    // ĐỐI CHỨNG DƯƠNG: cùng lúc ấy, hạng 1 nộp được. Không có vế này, ca trên xanh y hệt với một
+    // trigger từ chối MỌI lần nộp BAFO.
+    await expect(nopLaiBafo(rfqId, banRo[1] ?? "")).resolves.toBeTruthy();
+  });
+
+  it("[CAO ③] yêu cầu mở thầu của VÒNG MỘT không mở được phong bì vòng hai", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+      await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+    });
+    // Yêu cầu của vòng MỘT vẫn ở `EXECUTED` và vẫn thuộc đúng RFQ này — thân hàm của `019` chỉ
+    // đếm "có yêu cầu APPROVED/EXECUTED nào cho RFQ này không", nên trước `059` câu dưới ĐI QUA.
+    const { rows: cu } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM unseal_requests WHERE rfq_id = $1 AND bafo_round_id IS NULL " +
+        "AND status IN ('APPROVED', 'EXECUTED')",
+      [rfqId],
+    );
+    expect(cu[0]?.n, "tiền đề: yêu cầu vòng một CÓ THẬT và vẫn được phê duyệt").toBe("1");
+    await expect(
+      withTenant(unsealPool, orgA, (c) =>
+        c.query("UPDATE rfq_packages SET status = 'BAFO_UNSEALED' WHERE id = $1", [rfqId]),
+      ),
+    ).rejects.toThrow(/yeu cau mo thau CUA VONG AY/u);
+  });
+
+  it("dấu vòng KHÔNG khai được: `app_api` không có INSERT trên `bafo_round_id`", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const vongId = await moVongBafo(rfqId, luotId, 2);
+    const luong = LUONG_CUA_PHIEN_BAN.get(banRo[0] ?? "");
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO vendor_bid_versions (org_id, bid_id, envelope, submitted_by_guest_session_id, bafo_round_id) " +
+            "VALUES ($1, $2, $3, $4, $5)",
+          [orgA, luong?.bidId ?? "", Buffer.alloc(64, 3), luong?.phienKhach ?? "", vongId],
+        ),
+      ),
+    ).rejects.toThrow(/permission denied for (table|column)/u);
+  });
+});
+
+describe("[S1.108 / S2.5] một vòng BAFO hợp lệ, và nó chỉ đóng được một lần", { timeout: 300000 }, () => {
+  it("RFQ không ở EVALUATING thì không mở được vòng nào", async () => {
+    const { rfqId, csId } = await goiDaMo([["100.00", "VND"]], TP_GIA, 1);
+    // Gói này còn ở `UNSEALED` — chưa chấm.
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+    const { rows: l } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, $3, 'VND', $4, $5) RETURNING id",
+      [orgA, rfqId, csId, uYc, sYc],
+    );
+    await expect(moVongBafo(rfqId, l[0]?.id ?? "", 1)).rejects.toThrow(
+      /Chi mo duoc vong BAFO khi RFQ dang o EVALUATING/u,
+    );
+  });
+
+  it("lượt đánh giá của gói thầu KHÁC bị từ chối — khoá ngoại hợp thành không bắt được ca này", async () => {
+    const a = await daCham([["100.00", "VND"]], 1);
+    const b = await daCham([["100.00", "VND"]], 1);
+    // `b.luotId` cùng TỔ CHỨC nên khoá ngoại `(org_id, evaluation_id)` đi qua; thứ chặn là trigger.
+    await expect(moVongBafo(a.rfqId, b.luotId, 1)).rejects.toThrow(/khong thuoc RFQ/u);
+    // ĐỐI CHỨNG DƯƠNG: lượt của chính nó thì mở được.
+    await expect(moVongBafo(a.rfqId, a.luotId, 1)).resolves.toBeTruthy();
+  });
+
+  it.each([
+    ["top_n LỚN hơn chính sách", 3],
+    ["top_n NHỎ hơn chính sách", 1],
+  ])("%s ⇒ ném", async (_ten, topN) => {
+    const { rfqId, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    await expect(moVongBafo(rfqId, luotId, topN)).rejects.toThrow(
+      new RegExp(`top_n cua vong \\(${String(topN)}\\) khac bafo_top_n cua chinh sach \\(2\\)`, "u"),
+    );
+  });
+
+  it("hạn nộp trong vòng một giờ tới ⇒ ném; hạn xa hơn thì đi qua", async () => {
+    const { rfqId, luotId } = await daCham([["100.00", "VND"]], 1);
+    await expect(moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 30 * 60 * 1000))).rejects.toThrow(
+      /Cua so BAFO phai con it nhat/u,
+    );
+    await expect(
+      moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 90 * 60 * 1000)),
+    ).resolves.toBeTruthy();
+  });
+
+  it("`round_no` đếm 1 rồi 2, và vòng thứ hai không mở được khi vòng một chưa đóng", async () => {
+    const { rfqId, banRo, luotId } = await daCham(
+      [
+        ["100.00", "VND"],
+        ["200.00", "VND"],
+      ],
+      2,
+    );
+    const v1 = await moVongBafo(rfqId, luotId, 2);
+    // Hai lớp cùng nói không, và lớp nào nói TRƯỚC thì thông điệp là của lớp ấy:
+    // `bafo_kiem_vong` đòi RFQ ở `EVALUATING`, mà nó đang `BAFO_OPEN`.
+    await expect(moVongBafo(rfqId, luotId, 2)).rejects.toThrow(/EVALUATING/u);
+    // Đi trọn vòng một để về `EVALUATING`, rồi mở vòng HAI: `round_no` phải là 2.
+    const lai = await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await moThauBafo(rfqId, v1, [[lai, { totalAmount: "90.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    const v2 = await moVongBafo(rfqId, kq2.evaluationId, 2);
+    const { rows } = await db.pool.query<{ round_no: number }>(
+      "SELECT round_no FROM rfq_bafo_rounds WHERE id = $1",
+      [v2],
+    );
+    expect(rows[0]?.round_no).toBe(2);
+  });
+
+  it.each([
+    ["mở lại một vòng đã đóng", "UPDATE rfq_bafo_rounds SET closed_at = NULL WHERE id = $1"],
+    [
+      "dời hạn nộp của một vòng",
+      "UPDATE rfq_bafo_rounds SET deadline_at = now() + interval '9 days' WHERE id = $1",
+    ],
+    ["xoá một vòng", "DELETE FROM rfq_bafo_rounds WHERE id = $1"],
+  ])("%s ⇒ ném, kể cả dưới vai SỞ HỮU bảng", async (ten, cau) => {
+    const mau =
+      ten === "mở lại một vòng đã đóng"
+        ? /da dong thi khong mo lai duoc/u
+        : ten === "dời hạn nộp của một vòng"
+          ? /Chi sua duoc closed_at/u
+          : /Khong duoc xoa mot vong BAFO/u;
+    const { rfqId, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1);
+    await db.pool.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+    // `db.pool` chạy dưới vai SỞ HỮU bảng, thứ mà GRANT không chặn. Đây là lý do ba vế trên là
+    // TRIGGER chứ không phải ba dòng GRANT vắng mặt.
+    await expect(db.pool.query(cau, [vongId])).rejects.toThrow(mau);
+  });
+
+  it("yêu cầu mở thầu vòng BAFO KHÔNG tạo được khi yêu cầu vòng một còn đang mở", async () => {
+    // Phát hiện của chính vòng này, ghim lại thay vì để nó sống trong một fixture. Chỉ mục bộ
+    // phận `unseal_requests_mot_yeu_cau_dang_mo` (`019:73`) nói *"một RFQ có TỐI ĐA MỘT yêu cầu
+    // đang mở"*, với `đang mở` = `status IN ('PENDING', 'APPROVED')`. Nó có từ `019` và chưa từng
+    // bị một kịch bản nào chạm, vì cho tới S2.5 không gói thầu nào cần mở thầu LẦN HAI.
+    //
+    // Hệ quả cho S1.109, nói ra ở đây vì đây là chỗ nó ĐO được: đường sản xuất mở vòng BAFO phải
+    // đi SAU khi worker đã đặt `EXECUTED` cho yêu cầu vòng một. Không phải một giới hạn cần gỡ —
+    // nó chính là vế D2 mà `019` đã ghi: hai yêu cầu cùng mở thì ngưỡng "hai người khác nhau" bị
+    // CHIA ĐÔI thay vì bị thoả.
+    const { rfqId, banRo, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1);
+    await nopLaiBafo(rfqId, banRo[0] ?? "");
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vongId]);
+      await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+    });
+    // Đẩy yêu cầu vòng một NGƯỢC về `APPROVED` — trạng thái mà fixture cũ để nó ở suốt hai vòng.
+    // `unseal_kiem_chuyen_trang_thai` (`055`) chặn đúng chiều ấy (*"EXECUTED -> APPROVED"*), và đó
+    // là một lớp ĐÚNG — nên nó được tắt cho ĐÚNG một câu rồi bật lại trong `finally`, khuôn mà
+    // `db/hardening-suy-tu-tinh-chat.int.test.ts` dùng cho mọi đột biến lớp CSDL. Thứ đang được đo
+    // ở đây là chỉ mục bộ phận, không phải máy trạng thái của yêu cầu.
+    await db.pool.query(
+      "ALTER TABLE unseal_requests DISABLE TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+    );
+    try {
+      await db.pool.query(
+        "UPDATE unseal_requests SET status = 'APPROVED', executed_at = NULL " +
+          "WHERE rfq_id = $1 AND bafo_round_id IS NULL",
+        [rfqId],
+      );
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_chuyen_trang_thai",
+      );
+    }
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        requestUnseal(c, orgA, { rfqId, reason: "mo vong hai", actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toThrow(/unseal_requests_mot_yeu_cau_dang_mo/u);
+    // ĐỐI CHỨNG DƯƠNG: đặt lại `EXECUTED` thì yêu cầu thứ hai tạo được.
+    await db.pool.query(
+      "UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() " +
+        "WHERE rfq_id = $1 AND bafo_round_id IS NULL",
+      [rfqId],
+    );
+    const yc2 = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "mo vong hai", actorSessionId: sYc }, apiPool),
+    );
+    const { rows } = await db.pool.query<{ bafo_round_id: string | null }>(
+      "SELECT bafo_round_id FROM unseal_requests WHERE id = $1",
+      [yc2.id],
+    );
+    expect(rows[0]?.bafo_round_id).toBe(vongId);
+  });
+
+  it("`TRUNCATE rfq_bafo_rounds` bị chặn ở CẢ HAI đường — không cần lớp thứ ba", async () => {
+    // Tính chất, không cơ chế: đường trần bị khoá ngoại của `vendor_bid_versions` chặn, đường
+    // CASCADE lan tới chính bảng ấy và đụng trigger `047`. Ngày nào khoá ngoại ấy đi, dòng này đỏ
+    // và người sửa phải đọc lại mục (4) của `059`.
+    await expect(db.pool.query("TRUNCATE public.rfq_bafo_rounds")).rejects.toThrow(
+      /cannot truncate a table referenced in a foreign key constraint/u,
+    );
+    await expect(db.pool.query("TRUNCATE public.rfq_bafo_rounds CASCADE")).rejects.toThrow(
+      /Bang vendor_bid_versions chi duoc ghi them/u,
+    );
+  });
+
+  it("nộp báo giá khi RFQ đang EVALUATING ⇒ C1 từ chối bằng chính thông điệp cũ", async () => {
+    const { rfqId, banRo } = await daCham([["100.00", "VND"]], 1);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(
+      /RFQ khong nhan bao gia khi dang o trang thai EVALUATING \(C1\)/u,
+    );
+  });
+
+  it("nộp SAU hạn của vòng BAFO ⇒ C1 từ chối; hạn của vòng MỘT không còn liên quan", async () => {
+    const { rfqId, banRo, luotId } = await daCham([["100.00", "VND"]], 1);
+    const vongId = await moVongBafo(rfqId, luotId, 1, new Date(Date.now() + 90 * 60 * 1000));
+    // Đẩy hạn về quá khứ dưới vai sở hữu — `bafo_kiem_vong` cấm cả vai ấy sửa `deadline_at`, nên
+    // trigger phải được tắt trong đúng một câu. Đây là khuôn `db/hardening-suy-tu-tinh-chat` dùng
+    // cho mọi đột biến lớp CSDL: tắt lúc chạy, `finally` bật lại.
+    await db.pool.query("ALTER TABLE rfq_bafo_rounds DISABLE TRIGGER rfq_bafo_rounds_kiem_vong");
+    try {
+      await db.pool.query(
+        "UPDATE rfq_bafo_rounds SET deadline_at = now() - interval '1 minute' WHERE id = $1",
+        [vongId],
+      );
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_bafo_rounds ENABLE ALWAYS TRIGGER rfq_bafo_rounds_kiem_vong",
+      );
+    }
+    await expect(nopLaiBafo(rfqId, banRo[0] ?? "")).rejects.toThrow(/Da qua han nop bao gia \(C1\)/u);
+    // Và hạn của RFQ vẫn ở TƯƠNG LAI — nên ca trên đo đúng hạn của VÒNG, không đo hạn của gói.
+    const { rows } = await db.pool.query<{ con: boolean }>(
+      "SELECT deadline_at > now() AS con FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    expect(rows[0]?.con, "hạn vòng một còn ở tương lai — MAI_SAU là bảy ngày").toBe(true);
+  });
+});
+
+// ================================================================================================
+// [S1.109 / S2.5 tầng người dùng] ĐƯỜNG SẢN XUẤT của bốn cạnh BAFO
+//
+// S1.108 chứng minh bốn cạnh ĐI TRỌN ĐƯỢC bằng cách chèn hàng thẳng dưới vai ứng dụng. Khoản
+// **227** ghi rằng lúc ấy KHÔNG đường sản xuất nào đi qua chúng. Khối này đo chính các hàm mà
+// route gọi — nên nó cũng đo những thứ fixture không có: cổng quyền, hàng sổ, và lối từ chối.
+// ================================================================================================
+
+describe("[S1.109 / S2.5] moVongBafo và dongVongBafo — hai cạnh đầu qua đường SẢN XUẤT", { timeout: 300000 }, () => {
+  it("mở vòng: EVALUATING -> BAFO_OPEN, số vòng 1, top-N SUY từ chính sách, một hàng sổ", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"], ["544000000.00", "VND"]], 2);
+
+    const han = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+    const v = await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId, deadlineAt: han, actorSessionId: sYc }, apiPool),
+    );
+
+    expect(v.roundNo).toBe(1);
+    // `topN` KHÔNG do người gọi khai — nó suy từ `bafo_top_n` của phiên bản chính sách mà lượt
+    // chấm đã tính dưới. `daCham(..., 2)` dựng chính sách với `bafo_top_n = 2`.
+    expect(v.topN).toBe(2);
+    expect(v.closedAt).toBeNull();
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_OPEN");
+
+    const { rows: so } = await db.pool.query<{ resource_id: string; payload: Record<string, unknown> }>(
+      "SELECT resource_id, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_BAFO_ROUND_OPENED'",
+      [orgA],
+    );
+    expect(so).toHaveLength(1);
+    expect(so[0]?.resource_id).toBe(v.bafoRoundId);
+    expect(so[0]?.payload.rfqId).toBe(rfqId);
+    expect(so[0]?.payload.topN).toBe(2);
+
+    // Đường ĐỌC thấy đúng vòng vừa mở.
+    const doc = await withTenant(apiPool, orgA, (c) => docVongBafo(c, orgA, rfqId));
+    expect(doc?.bafoRoundId).toBe(v.bafoRoundId);
+  });
+
+  it("đóng vòng: BAFO_OPEN -> BAFO_CLOSED, `closed_at` của VÒNG được đặt — và `closed_at` của GÓI THẦU KHÔNG đổi", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 1);
+    await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+    );
+
+    // TIỀN ĐỀ, đo trước: gói thầu ĐÃ CÓ một `closed_at` từ vòng một. Không có khẳng định này, ca
+    // dưới xanh cả khi cột ấy vốn NULL — và lúc ấy nó không đo gì.
+    const { rows: truoc } = await db.pool.query<{ closed_at: Date | null }>(
+      "SELECT closed_at FROM rfq_packages WHERE id = $1", [rfqId],
+    );
+    expect(truoc[0]?.closed_at).not.toBeNull();
+
+    const v = await withTenant(apiPool, orgA, (c) =>
+      dongVongBafoThat(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(v.closedAt).not.toBeNull();
+    expect(await trangThaiRfq(rfqId)).toBe("BAFO_CLOSED");
+
+    // VẾ ĐÁNG GIÁ NHẤT của ca này: `closeRfq` ghi `rfq_packages.closed_at`, nên tham số hoá nó
+    // cho BAFO sẽ GHI ĐÈ giờ đóng thầu vòng một — một sự thật kiểm toán. `dongVongBafo` là một
+    // hàm riêng đúng vì thế.
+    const { rows: sau } = await db.pool.query<{ closed_at: Date | null; early_close_reason: string | null }>(
+      "SELECT closed_at, early_close_reason FROM rfq_packages WHERE id = $1", [rfqId],
+    );
+    expect(sau[0]?.closed_at?.toISOString()).toBe(truoc[0]?.closed_at?.toISOString());
+  });
+
+  it("cổng quyền `rfq.bafo.open`: một phiên KHÔNG có mã ấy bị từ chối, kể cả khi nó chấm thầu được", async () => {
+    const { rfqId } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 1);
+    // `uKhong` là DIRECTOR — vai giữ `bid.view` và không giữ `evaluation.perform`; ADR-055 cho
+    // `rfq.bafo.open` CHỈ `PROCUREMENT_MANAGER`, nên DIRECTOR không mở vòng được.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        moVongBafoThat(c, orgA, { rfqId, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sKhong }, apiPool),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("ba lối TỪ CHỐI CÓ TÊN — và cả ba là `VongBafoTuChoiError`, không một lỗi Postgres trần", async () => {
+    // ⑴ sai trạng thái: gói thầu chưa chấm lần nào thì còn ở UNSEALED.
+    const { rfqId: chuaCham } = await goiDaMo([["548800000.00", "VND"]], TP_GIA, 2);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        moVongBafoThat(c, orgA, { rfqId: chuaCham, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toThrow(/EVALUATING/u);
+
+    // ⑵ chính sách TẮT BAFO (`bafo_top_n = 0` — quy ước của `056`).
+    const { rfqId: tatBafo } = await daCham([["548800000.00", "VND"], ["537600000.00", "VND"]], 0);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      moVongBafoThat(c, orgA, { rfqId: tatBafo, deadlineAt: new Date(Date.now() + 3 * 24 * 3600 * 1000), actorSessionId: sYc }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(VongBafoTuChoiError);
+    expect((loi as VongBafoTuChoiError).lyDo).toBe("CHINH_SACH_TAT_BAFO");
+
+    // ⑶ đóng một vòng khi không có vòng nào đang mở.
+    const loi2 = await withTenant(apiPool, orgA, (c) =>
+      dongVongBafoThat(c, orgA, { rfqId: tatBafo, actorSessionId: sYc }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi2).toBeInstanceOf(VongBafoTuChoiError);
+    expect((loi2 as VongBafoTuChoiError).lyDo).toBe("KHONG_CO_VONG_DANG_MO");
+  });
+});
+
+// ================================================================================================
+// [S1.109 / S2.5 / 060] VÒNG BAFO CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT
+//
+// Lỗ mà lượt soi HÌNH DẠNG của vòng này tìm ra: `059` kiểm lượt đánh giá THUỘC ĐÚNG RFQ và khớp
+// chính sách, nhưng KHÔNG đòi nó là lượt mới nhất — nên sau đúng một chu kỳ BAFO (lúc ấy có HAI
+// lượt), vòng thứ hai mở được với lượt CŨ, tức mời top-N của bảng xếp hạng TRƯỚC BAFO.
+//
+// Ca này chèn hàng THẲNG dưới vai `app_api`, không qua `moVongBafoThat`: hàm ấy tự suy lượt mới
+// nhất, nên đi qua nó thì lớp CSDL không bao giờ được hỏi. Đo lớp dưới thì phải gọi thẳng lớp dưới.
+// ================================================================================================
+
+describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CSDL từ chối", { timeout: 300000 }, () => {
+  it("lượt CŨ bị từ chối, và ĐỐI CHỨNG DƯƠNG: cùng câu ấy với lượt MỚI NHẤT thì đi qua", async () => {
+    // Một chu kỳ BAFO trọn vẹn để có HAI lượt chấm trên cùng một RFQ.
+    const { rfqId, banRo, luotId: luot1 } = await daCham(
+      [["548800000.00", "VND"], ["537600000.00", "VND"], ["544000000.00", "VND"]], 2,
+    );
+    const vong1 = await moVongBafo(rfqId, luot1, 2);
+    const lai = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    await moThauBafo(rfqId, vong1, [[lai, { totalAmount: "500000000.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    const luot2 = kq2.evaluationId;
+
+    // TIỀN ĐỀ: hai lượt chấm KHÁC NHAU thật sự tồn tại cho cùng một RFQ. Thiếu khẳng định này,
+    // ca dưới xanh cả khi `luot2 === luot1` — và lúc ấy nó không đo gì.
+    expect(luot2).not.toBe(luot1);
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_evaluations WHERE org_id = $1 AND rfq_id = $2", [orgA, rfqId],
+    );
+    expect(dem[0]?.n).toBe("2");
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+
+    const chen = async (luotId: string): Promise<string> => {
+      const { rows: e } = await db.pool.query<{ policy_id: string }>(
+        "SELECT policy_id FROM rfq_evaluations WHERE id = $1", [luotId],
+      );
+      return await withTenant(apiPool, orgA, async (c) => {
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, deadline_at, " +
+            "opened_by, opened_by_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+          [orgA, rfqId, luotId, e[0]?.policy_id ?? "", 2, new Date(Date.now() + 3 * 24 * 3600 * 1000), uYc, sYc],
+        );
+        return rows[0]?.id ?? "";
+      });
+    };
+
+    // VẾ ÂM — lượt CŨ.
+    await expect(chen(luot1)).rejects.toThrow(/khong phai luot moi nhat/u);
+
+    // ĐỐI CHỨNG DƯƠNG — cùng câu, cùng mọi tham số khác, chỉ đổi lượt. Không có vế này, ca trên
+    // xanh cả khi câu INSERT hỏng vì một lý do khác hẳn.
+    const vong2 = await chen(luot2);
+    expect(vong2).not.toBe("");
+    const { rows: v } = await db.pool.query<{ round_no: number; evaluation_id: string }>(
+      "SELECT round_no, evaluation_id FROM rfq_bafo_rounds WHERE id = $1", [vong2],
+    );
+    expect(v[0]?.evaluation_id).toBe(luot2);
+    expect(v[0]?.round_no).toBe(2);
+  });
+});
+
+// ================================================================================================
+// [S1.110 / S2.6] TRAO THẦU — ĐƯỜNG HỢP LỆ, VÀ BA BẤT BIẾN MỚI ĐO TỪNG VẾ MỘT
+//
+// Khối này ở ĐÂY vì fixture của nó CHÍNH LÀ fixture ở trên — một award bắt đầu ở `EVALUATING`,
+// tức ở đúng chỗ `taoLuotDanhGia` để gói thầu lại, và nó cần cả một chu kỳ BAFO để đo vế *lượt
+// chấm mới nhất*. Cùng lập luận mà khối `[S1.108]` đã viết ra.
+//
+// **KHÔNG mang nhãn `[INV-*]`**, và đó là cố ý, cùng lý do khối đầu tệp đã ghi: dải mã bất biến
+// ghim `[A-H]` ở TÁM chỗ nên nhóm **J** chưa có ô nào để ghi một dòng `passed` vào (khoản **229**).
+// Ba bất biến dưới đây có phép ĐO, có đối chứng DƯƠNG và có đột biến; thứ chúng chưa có là một ô
+// trong ma trận, và mở ô ấy là một vòng riêng.
+//
+// ------------------------------------------------------------------------------------------------
+// PHẠM VI THẬT CỦA TỪNG VẾ, ĐO CHỨ KHÔNG KHAI
+// ------------------------------------------------------------------------------------------------
+// **J3** có BA vế và chúng không cùng độ chắc: vế *người tạo RFQ* và vế *người duyệt ≠ người đề
+// xuất* đọc dữ liệu đủ để phán xử; vế *người điều phối* đọc `unseal_requests.dispatched_by`, cột
+// mang người của lần điều phối ĐANG CHẠY — nên sau một lần điều phối lại nó không thấy người đầu
+// (khoản **233**). Ca dưới đo đúng thứ vế ấy CÓ, không đo thứ nó không có.
+//
+// **J5** có vế CẤU TRÚC (khoá ngoại hợp thành) và vế NỘI DUNG (`effective_cost` đọc được + lượt
+// chấm thuộc đúng RFQ). Vế cấu trúc không cần ca riêng — nó là một khoá ngoại; hai vế nội dung
+// thì cần, và vế *thuộc đúng RFQ* chỉ tới được bằng một câu `INSERT` thẳng vì `deXuatTraoThau` tự
+// suy lượt chấm.
+//
+// **J7** là một trigger đọc hàng mới nhất dưới khoá tư vấn. Ca *hai award cùng sống* đo nó qua
+// đường sản xuất; ba ca chuỗi (`APPROVED` không chữ ký, `APPROVED` đổi báo giá, huỷ hai lần) chỉ
+// tới được bằng câu `INSERT` thẳng, vì lớp gói không viết ra được những hàng ấy.
+// ================================================================================================
+
+/** Một gói thầu đã chấm xong và ĐANG Ở `EVALUATING` — sẵn sàng cho một đề xuất trao thầu. */
+async function sanSangTraoThau(
+  soTien: readonly (readonly [string, string | null])[] = [
+    ["548800000.00", "VND"],
+    ["537600000.00", "VND"],
+    ["544000000.00", "VND"],
+  ],
+): Promise<{ readonly rfqId: string; readonly banRo: readonly string[]; readonly luotId: string }> {
+  const { rfqId, banRo, luotId } = await daCham(soTien, 0);
+  expect(await trangThaiRfq(rfqId), "tiền đề: gói thầu phải đang ở EVALUATING").toBe("EVALUATING");
+  return { rfqId, banRo, luotId };
+}
+
+/**
+ * Chèn một hàng `rfq_awards` THẲNG dưới vai `app_api`, bỏ qua lớp gói.
+ *
+ * Ba ca chuỗi của J7 và vế *lượt chấm thuộc đúng RFQ* của J5 KHÔNG tới được qua `deXuatTraoThau`
+ * / `duyetTraoThau`: lớp gói tự suy `evaluation_id`, tự chép `bid_version_id` và tự ghi chữ ký
+ * trước hàng `APPROVED`. Đo lớp dưới thì phải gọi thẳng lớp dưới — cùng khuôn ca `060` ở trên.
+ */
+async function chenAwardTho(cot: {
+  readonly rfqId: string;
+  readonly evaluationId: string;
+  readonly bidVersionId: string;
+  readonly status: string;
+  readonly actedBy: string;
+  readonly actedBySessionId: string;
+  readonly reason?: string;
+}): Promise<string> {
+  return await withTenant(apiPool, orgA, async (c) => {
+    const { rows } = await c.query<{ id: string }>(
+      "INSERT INTO rfq_awards (org_id, rfq_id, evaluation_id, bid_version_id, status, reason, " +
+        "acted_by, acted_by_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+      [
+        orgA,
+        cot.rfqId,
+        cot.evaluationId,
+        cot.bidVersionId,
+        cot.status,
+        cot.reason ?? "cau INSERT thang de do tang CSDL",
+        cot.actedBy,
+        cot.actedBySessionId,
+      ],
+    );
+    return rows[0]?.id ?? "";
+  });
+}
+
+/** Mọi hàng award của một gói thầu, theo đúng thứ tự mà `award_kiem_mot_award_song` đọc. */
+async function hangAward(rfqId: string): Promise<readonly { status: string; acted_by: string }[]> {
+  const { rows } = await db.pool.query<{ status: string; acted_by: string }>(
+    "SELECT status, acted_by FROM rfq_awards WHERE org_id = $1 AND rfq_id = $2 " +
+      "ORDER BY acted_at ASC, id ASC",
+    [orgA, rfqId],
+  );
+  return rows;
+}
+
+async function hangSoCuaAward(rfqId: string, action: string): Promise<number> {
+  const { rows } = await db.pool.query<{ n: string }>(
+    "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 " +
+      "AND payload->>'rfqId' = $3",
+    [orgA, action, rfqId],
+  );
+  return Number(rows[0]?.n ?? "0");
+}
+
+describe("[S1.110 / S2.6] trao thầu đi trọn chuỗi PROPOSED → APPROVED → CANCELLED", { timeout: 300000 }, () => {
+  it("đề xuất ⇒ RFQ sang AWARDED, lượt chấm được SUY, một hàng sổ", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c,
+        orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat, ky thuat dat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(kq.status).toBe("PROPOSED");
+    expect(kq.bidVersionId).toBe(banRo[1]);
+    // Lượt chấm KHÔNG do người gọi khai — nó được suy, và đây là lớp DUY NHẤT canh vế ấy.
+    expect(kq.evaluationId, "award phải nói ra nó dựa trên lượt chấm NÀO").toBe(luotId);
+    expect(kq.actedBy).toBe(uDeXuat);
+    expect(kq.reason).toBe("gia thap nhat, ky thuat dat");
+
+    expect(await trangThaiRfq(rfqId), "`AWARDED` nghĩa là ĐANG CÓ một award còn sống").toBe("AWARDED");
+    expect(await hangSoCuaAward(rfqId, "RFQ_AWARD_PROPOSED")).toBe(1);
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+  });
+
+  it("phê duyệt ⇒ một chữ ký, một hàng APPROVED, và RFQ ĐỨNG YÊN ở AWARDED", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    const duyet = await withTenant(apiPool, orgA, (c) =>
+      duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+    );
+    expect(duyet.status).toBe("APPROVED");
+    expect(duyet.actedBy).toBe(uDuyet);
+    // Hàng `APPROVED` chép ĐÚNG báo giá của đề xuất — `award_kiem_mot_award_song` đòi vế này.
+    expect([duyet.evaluationId, duyet.bidVersionId]).toEqual([dx.evaluationId, dx.bidVersionId]);
+    expect(await trangThaiRfq(rfqId), "duyệt KHÔNG đổi trạng thái RFQ — nó đã ở AWARDED").toBe("AWARDED");
+
+    const { rows: ck } = await db.pool.query<{ approver_user_id: string }>(
+      "SELECT approver_user_id FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2",
+      [orgA, dx.awardId],
+    );
+    expect(ck.map((r) => r.approver_user_id)).toEqual([uDuyet]);
+    expect(await hangSoCuaAward(rfqId, "RFQ_AWARD_APPROVED")).toBe(1);
+
+    // Đường ĐỌC thấy hàng mới nhất CỘNG chữ ký của đề xuất mà nó nối vào.
+    const doc = await withTenant(apiPool, orgA, (c) =>
+      docTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(doc?.status).toBe("APPROVED");
+    expect(doc?.approvals.map((a) => a.approverUserId)).toEqual([uDuyet]);
+  });
+
+  it("huỷ ⇒ RFQ về EVALUATING, và một đề xuất MỚI đi được (J7 mở lại sau CANCELLED)", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+    );
+    const huy = await withTenant(apiPool, orgA, (c) =>
+      huyTraoThau(c, orgA, { rfqId, reason: "ncc rut lai cam ket giao hang", actorSessionId: sDuyet }, apiPool),
+    );
+    expect(huy.status).toBe("CANCELLED");
+    expect(huy.reason).toBe("ncc rut lai cam ket giao hang");
+    expect(await trangThaiRfq(rfqId), "§8.3 chốt 2026-09-22: AWARDED->EVALUATING").toBe("EVALUATING");
+    expect(await hangSoCuaAward(rfqId, "RFQ_AWARD_CANCELLED")).toBe(1);
+
+    // CHỈ-GHI-THÊM: ba hàng còn nguyên, không hàng nào bị sửa. Đây là vế đo được của §2.3⑹ —
+    // câu *ai huỷ, lúc nào, vì sao* trả lời được từ chính bảng.
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED", "CANCELLED"]);
+
+    // ...và ĐỐI CHỨNG DƯƠNG cho vế J7 *hàng mới nhất đã huỷ thì đề xuất lại được*.
+    const lai = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[2] ?? "", reason: "chuyen sang ncc thu hai", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(lai.status).toBe("PROPOSED");
+    expect(lai.bidVersionId).toBe(banRo[2]);
+    expect(await trangThaiRfq(rfqId)).toBe("AWARDED");
+  });
+
+  it("lượt chấm được suy là lượt MỚI NHẤT — đo sau một chu kỳ BAFO, nơi có HAI lượt", async () => {
+    // Vế này là lớp DUY NHẤT: `award_kiem_de_xuat` đòi lượt chấm THUỘC ĐÚNG RFQ, không đòi nó mới
+    // nhất. Nên nếu câu `ORDER BY e.created_at DESC` của `deXuatTraoThau` sai, KHÔNG lớp nào kêu.
+    const { rfqId, banRo, luotId: luot1 } = await daCham(
+      [["548800000.00", "VND"], ["537600000.00", "VND"], ["544000000.00", "VND"]], 2,
+    );
+    const vong1 = await moVongBafo(rfqId, luot1, 2);
+    const lai = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    await moThauBafo(rfqId, vong1, [[lai, { totalAmount: "500000000.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq2.evaluationId, "tiền đề: phải có HAI lượt chấm khác nhau").not.toBe(luot1);
+
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: lai, reason: "gia BAFO thap nhat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(dx.evaluationId, "award phải dựa trên bảng xếp hạng SAU BAFO").toBe(kq2.evaluationId);
+  });
+});
+
+describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên", { timeout: 300000 }, () => {
+  it("[J3 vế 2] NGƯỜI TẠO gói thầu không đề xuất được trao thầu cho chính gói ấy", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    // `uYc` là `created_by` của mọi RFQ mà fixture dựng, và họ giữ `award.recommend`
+    // (PROCUREMENT_MANAGER) — nên cổng QUYỀN cho họ đi qua, và thứ chặn là trigger đọc HÀNH VI.
+    const { rows: tao } = await db.pool.query<{ created_by: string }>(
+      "SELECT created_by FROM rfq_packages WHERE id = $1", [rfqId],
+    );
+    expect(tao[0]?.created_by, "tiền đề của ca này").toBe(uYc);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu tao tu de xuat", actorSessionId: sYc },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau/u);
+
+    // Và gói thầu KHÔNG đổi trạng thái — câu `UPDATE` đứng SAU câu `INSERT`, nên một trigger nổ
+    // ở `INSERT` phải để lại đúng trạng thái cũ. Thiếu khẳng định này, một thứ tự ngược lại sẽ
+    // để RFQ ở `AWARDED` mà không award nào tồn tại.
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+    expect(await hangAward(rfqId)).toEqual([]);
+  });
+
+  it("[J3 vế 3] NGƯỜI ĐIỀU PHỐI mở thầu cũng không — và vế ấy chỉ thấy lần điều phối ĐANG CHẠY", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    // Fixture để `dispatched_by` NULL (nó ghi bản rõ thẳng dưới vai `app_unseal`), nên vế này
+    // INERT cho tới khi có ai đó thật sự điều phối. Đặt nó tay là đúng thứ worker đặt.
+    const { rowCount } = await db.pool.query(
+      "UPDATE unseal_requests SET dispatched_by = $2, dispatched_by_session_id = $3, " +
+        "dispatched_at = now() WHERE org_id = $1 AND rfq_id = $4",
+      [orgA, uDeXuat, sDeXuat, rfqId],
+    );
+    expect(rowCount, "tiền đề: phải có ĐÚNG một yêu cầu mở thầu để gắn người điều phối").toBe(1);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu dieu phoi tu de xuat", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+
+    // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI. Không có vế này, ca trên xanh cả
+    // khi trigger từ chối mọi đề xuất trên gói thầu ấy vì một lý do khác hẳn.
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "nguoi thu ba de xuat", actorSessionId: sDuyet },
+        apiPool,
+      ),
+    );
+    expect(dx.status).toBe("PROPOSED");
+    expect(dx.actedBy).toBe(uDuyet);
+  });
+
+  it("[J3 vế 1] NGƯỜI ĐỀ XUẤT không tự duyệt được, kể cả khi họ giữ `po.approve`", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    // `uDuyet` (FINANCE) giữ CẢ `award.recommend` lẫn `po.approve` — đo được ở `005`, và nó là
+    // đúng ca mà lớp vai trò KHÔNG chặn được: hai mã đều có, nên chỉ một trigger đọc HÀNG chặn nổi.
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat roi tu duyet", actorSessionId: sDuyet },
+        apiPool,
+      ),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toThrow(/Nguoi de xuat trao thau khong duoc tu duyet/u);
+
+    // Không chữ ký nào được ghi, và hàng `APPROVED` không tồn tại.
+    const { rows: ck } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2",
+      [orgA, dx.awardId],
+    );
+    expect(ck[0]?.n).toBe("0");
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+  });
+
+  it("[J3 vế 1 — nửa KHÔNG tới được qua lớp trên] cùng một PHIÊN, hai người dùng khác nhau", async () => {
+    // `award_kiem_nguoi_duyet` có HAI vế: so NGƯỜI và so PHIÊN. Vế PHIÊN không tới được qua đường
+    // sản xuất, vì `kiem_danh_tinh_theo_phien` buộc cặp người-phiên là DẪN XUẤT — nên một phiên
+    // của A không khai được `approver_user_id = B`. Chính chú thích của `061` khai điều đó.
+    //
+    // Đo nó bằng cách TẮT trigger danh tính lúc chạy, và khẳng định phép tắt ĐÃ ÁP trước khi tin
+    // kết quả. Thiếu bước khẳng định ấy, một lệnh `ALTER` thất bại sẽ cho một ca xanh vì vế NGƯỜI
+    // bắt — tức đo lại đúng thứ ca trên đã đo.
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de do ve PHIEN", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await db.pool.query(
+      "ALTER TABLE rfq_award_approvals DISABLE TRIGGER rfq_award_approvals_kiem_danh_tinh",
+    );
+    try {
+      const { rows: tg } = await db.pool.query<{ tgenabled: string }>(
+        "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_award_approvals_kiem_danh_tinh'",
+      );
+      expect(tg[0]?.tgenabled, "đột biến phải THẬT SỰ được áp trước khi đọc kết quả").toBe("D");
+
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          c.query(
+            "INSERT INTO rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) " +
+              "VALUES ($1, $2, $3, $4)",
+            [orgA, dx.awardId, uDuyet, sDeXuat],
+          ),
+        ),
+      ).rejects.toThrow(/Phien da de xuat trao thau khong duoc dung de duyet/u);
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_kiem_danh_tinh",
+      );
+    }
+    // KHÔI PHỤC phải tự kiểm — một trigger `ENABLE ALWAYS` bị để lại ở `DISABLE` sẽ làm mọi ca
+    // sau đó đo một thế giới không có lớp danh tính, và không ca nào trong tệp này kêu.
+    const { rows: lai } = await db.pool.query<{ tgenabled: string }>(
+      "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_award_approvals_kiem_danh_tinh'",
+    );
+    expect(lai[0]?.tgenabled, "phải về đúng ENABLE ALWAYS, không phải ENABLE thường").toBe("A");
+  });
+});
+
+describe("[S1.110 / S2.6] J5 — hai vế NỘI DUNG, mỗi vế một câu", { timeout: 300000 }, () => {
+  it("[J5 giá] báo giá KHÔNG có `effective_cost` đọc được thì không trao thầu được", async () => {
+    // MỘT LỜI KHAI CỦA CHÍNH VÒNG NÀY BỊ PHÉP ĐO BÁC. Bản đầu của ca này dựng *báo giá không đọc
+    // được* bằng `currency: null`, và nó SAI: `taoLuotDanhGia` lọc *đọc được* theo `tien`, rồi vế
+    // §2.3⑻ TỪ CHỐI cả lượt chấm khi tập đọc được lệch đơn vị tiền (`LECH_TIEN_TE`). Nên một
+    // `currency` NULL không cho một hàng xếp hạng NULL — nó cho KHÔNG lượt chấm nào, và ca ấy đỏ
+    // ở giàn cảnh chứ không ở thứ đang đo.
+    //
+    // Hình dạng ĐÚNG là một `totalAmount` KHÔNG PHẢI SỐ: `bid_so_tien` (`020`) trả NULL, hàng xếp
+    // hạng VẪN tồn tại với `effective_cost` và `rank` cùng NULL (§2.3⑺), và khoá ngoại hợp thành
+    // của `061` vẫn đi qua — nên vế CẤU TRÚC của J5 KHÔNG chặn, và thứ chặn là vế NỘI DUNG. Đó
+    // chính là lý do vế nội dung tồn tại, và ca này là chỗ nó được chứng minh.
+    const { rfqId, banRo } = await sanSangTraoThau([
+      ["khong-phai-so", "VND"],
+      ["537600000.00", "VND"],
+    ]);
+    const { rows: hang } = await db.pool.query<{ effective_cost: string | null; rank: number | null }>(
+      "SELECT effective_cost, rank FROM rfq_evaluation_lines WHERE org_id = $1 AND bid_version_id = $2",
+      [orgA, banRo[0] ?? ""],
+    );
+    expect(
+      hang,
+      "tiền đề: hàng xếp hạng phải TỒN TẠI — nếu không, ca này đo khoá ngoại chứ không đo J5",
+    ).toHaveLength(1);
+    expect(
+      [hang[0]?.effective_cost, hang[0]?.rank],
+      "tiền đề: hàng ấy phải thật sự không đọc được giá",
+    ).toEqual([null, null]);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[0] ?? "", reason: "chon bao gia khong doc duoc", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/khong co effective_cost doc duoc/u);
+
+    // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng người, chỉ đổi sang báo giá ĐỌC ĐƯỢC.
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "bao gia doc duoc", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(dx.status).toBe("PROPOSED");
+  });
+
+  it("[J5 RFQ] lượt chấm của gói thầu KHÁC bị từ chối — câu INSERT thẳng, vì lớp gói tự suy", async () => {
+    const a = await sanSangTraoThau();
+    const b = await sanSangTraoThau();
+    expect(a.rfqId).not.toBe(b.rfqId);
+
+    // Khoá ngoại hợp thành `(org_id, evaluation_id, bid_version_id)` ĐI QUA: cặp ấy có thật ở
+    // `rfq_evaluation_lines`. Thứ không có chuỗi nào buộc là *lượt chấm ấy thuộc `NEW.rfq_id`*.
+    await expect(
+      chenAwardTho({
+        rfqId: a.rfqId,
+        evaluationId: b.luotId,
+        bidVersionId: b.banRo[1] ?? "",
+        status: "PROPOSED",
+        actedBy: uDeXuat,
+        actedBySessionId: sDeXuat,
+      }),
+    ).rejects.toThrow(/khong thuoc RFQ/u);
+
+    // ĐỐI CHỨNG DƯƠNG — CÙNG câu ấy với lượt chấm của CHÍNH gói `a`.
+    const id = await chenAwardTho({
+      rfqId: a.rfqId,
+      evaluationId: a.luotId,
+      bidVersionId: a.banRo[1] ?? "",
+      status: "PROPOSED",
+      actedBy: uDeXuat,
+      actedBySessionId: sDeXuat,
+    });
+    expect(id).not.toBe("");
+  });
+});
+
+describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi chỉ đi một chiều", { timeout: 300000 }, () => {
+  it("hai đề xuất trên cùng một gói thầu: lần thứ hai bị từ chối và gọi tên J7", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat mot", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    // Lớp GÓI bắt trước (RFQ nay ở `AWARDED`, không còn `EVALUATING`) — và thông điệp của nó là
+    // thứ người dùng đọc, nên nó phải nói ra trạng thái.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[2] ?? "", reason: "de xuat hai", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/Chỉ đề xuất trao thầu khi gói thầu đang ở EVALUATING; gói này đang ở AWARDED/u);
+
+    // Và lớp CSDL — thứ có thẩm quyền — bắt cùng ca ấy khi lớp gói bị đi vòng. Hai lớp, và ca
+    // này là lý do lớp dưới tồn tại: một đường ghi tương lai quên câu `UPDATE` trạng thái sẽ đi
+    // qua lớp trên mà không đi qua lớp này.
+    await expect(
+      chenAwardTho({
+        rfqId,
+        evaluationId: luotId,
+        bidVersionId: banRo[2] ?? "",
+        status: "PROPOSED",
+        actedBy: uDeXuat,
+        actedBySessionId: sDeXuat,
+      }),
+    ).rejects.toThrow(/da co mot award con song .*toi da MOT \(J7\)/u);
+  });
+
+  it("hàng APPROVED KHÔNG CHỮ KÝ bị từ chối, và thông điệp nói ra số chữ ký đang có", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(dx.evaluationId).toBe(luotId);
+
+    await expect(
+      chenAwardTho({
+        rfqId,
+        evaluationId: luotId,
+        bidVersionId: banRo[1] ?? "",
+        status: "APPROVED",
+        actedBy: uDuyet,
+        actedBySessionId: sDuyet,
+      }),
+    ).rejects.toThrow(/can 1 chu ky duyet; dang co 0/u);
+
+    // ĐỐI CHỨNG DƯƠNG — CÙNG câu ấy sau khi có ĐÚNG một chữ ký hợp lệ.
+    await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "INSERT INTO rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) " +
+          "VALUES ($1, $2, $3, $4)",
+        [orgA, dx.awardId, uDuyet, sDuyet],
+      ),
+    );
+    const id = await chenAwardTho({
+      rfqId,
+      evaluationId: luotId,
+      bidVersionId: banRo[1] ?? "",
+      status: "APPROVED",
+      actedBy: uDuyet,
+      actedBySessionId: sDuyet,
+    });
+    expect(id).not.toBe("");
+  });
+
+  it("hàng APPROVED nói về một BÁO GIÁ KHÁC bị từ chối", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat bao gia hai", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "INSERT INTO rfq_award_approvals (org_id, award_id, approver_user_id, approver_session_id) " +
+          "VALUES ($1, $2, $3, $4)",
+        [orgA, dx.awardId, uDuyet, sDuyet],
+      ),
+    );
+    // Chữ ký ĐÃ có, nên thứ chặn KHÔNG phải phép đếm — nó là vế *cùng báo giá*. Không có vế ấy,
+    // một hàng "duyệt" đổi người thắng sau lưng người đã ký.
+    await expect(
+      chenAwardTho({
+        rfqId,
+        evaluationId: luotId,
+        bidVersionId: banRo[2] ?? "",
+        status: "APPROVED",
+        actedBy: uDuyet,
+        actedBySessionId: sDuyet,
+      }),
+    ).rejects.toThrow(/phai noi ve dung bao gia cua de xuat dang song/u);
+  });
+
+  it("huỷ HAI LẦN: lần thứ hai bị từ chối ở cả lớp gói và lớp CSDL", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      huyTraoThau(c, orgA, { rfqId, reason: "huy lan mot", actorSessionId: sDuyet }, apiPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        huyTraoThau(c, orgA, { rfqId, reason: "huy lan hai", actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toThrow(/Chỉ huỷ được khi gói thầu đang ở AWARDED; gói này đang ở EVALUATING/u);
+
+    await expect(
+      chenAwardTho({
+        rfqId,
+        evaluationId: luotId,
+        bidVersionId: banRo[1] ?? "",
+        status: "CANCELLED",
+        actedBy: uDuyet,
+        actedBySessionId: sDuyet,
+      }),
+    ).rejects.toThrow(/da huy roi/u);
+  });
+
+  it("hàng APPROVED / CANCELLED mà CHƯA có đề xuất nào bị từ chối", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    for (const tt of ["APPROVED", "CANCELLED"]) {
+      await expect(
+        chenAwardTho({
+          rfqId,
+          evaluationId: luotId,
+          bidVersionId: banRo[1] ?? "",
+          status: tt,
+          actedBy: uDuyet,
+          actedBySessionId: sDuyet,
+        }),
+        `hàng ${tt} không có đề xuất trước đó`,
+      ).rejects.toThrow(/chua co de xuat trao thau nao/u);
+    }
+  });
+
+  it("hai bảng award đều CHỈ-GHI-THÊM — `UPDATE` và `DELETE` bị chặn kể cả với superuser", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+    );
+    // `db.pool` là SUPERUSER + BYPASSRLS, nên ca này đo đúng thứ `ENABLE ALWAYS` tồn tại để làm:
+    // chặn cả vai không ai chặn được bằng quyền.
+    await expect(
+      db.pool.query("UPDATE rfq_awards SET reason = 'sua lai' WHERE id = $1", [dx.awardId]),
+    ).rejects.toThrow();
+    await expect(
+      db.pool.query("DELETE FROM rfq_awards WHERE id = $1", [dx.awardId]),
+    ).rejects.toThrow();
+    await expect(
+      db.pool.query("DELETE FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2", [orgA, dx.awardId]),
+    ).rejects.toThrow();
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+});
+
+describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đường trao thầu", { timeout: 300000 }, () => {
+  it("`award.recommend` thiếu ⇒ 403 có hàng sổ; `po.approve` thiếu ⇒ cũng vậy", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    // `uKhongXem` là `REQUESTER` — đo được ở `005` rằng vai ấy KHÔNG giữ `award.recommend`,
+    // `po.approve` lẫn `bid.view`, nên nó là phiên duy nhất trong fixture trượt cả ba cổng.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "khong co quyen", actorSessionId: sKhongXem },
+          apiPool,
+        ),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat that", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    // `uDeXuat` là PROCUREMENT_MANAGER: giữ `award.recommend`, KHÔNG giữ `po.approve`. Nên cổng
+    // duyệt chặn họ ở lớp QUYỀN, trước cả khi trigger *không tự duyệt* được hỏi.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDeXuat }, apiPool),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        huyTraoThau(c, orgA, { rfqId, reason: "khong co po.approve", actorSessionId: sDeXuat }, apiPool),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        docTraoThau(c, orgA, { rfqId, actorSessionId: sKhongXem }, apiPool),
+      ),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED' " +
+        "AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    expect(Number(so[0]?.n ?? "0"), "mỗi lần từ chối một hàng sổ").toBe(4);
+  });
+
+  it("đề xuất trỏ tới award của gói thầu KHÁC bị từ chối trước khi chạm cổng nào", async () => {
+    const a = await sanSangTraoThau();
+    const b = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId: b.rfqId, bidVersionId: b.banRo[1] ?? "", reason: "de xuat cua goi b", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    // Cặp `(rfqId đường dẫn, awardId)` lệch nhau: hàng sổ `PERMISSION_DENIED` của route sẽ gọi
+    // tên gói `a` cho một hành động trên gói `b`. Không phải một lần vượt cổng — một câu SAI.
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        duyetTraoThau(c, orgA, { rfqId: a.rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toThrow(/không thuộc gói thầu được nêu trong đường dẫn/u);
+  });
+
+  it("một phiên của tổ chức KHÁC không thấy và không chạm được award của tổ chức này", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat cua to chuc A", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    // `uB` là PROCUREMENT_MANAGER của tổ chức B: họ giữ `bid.view`, nên thứ chặn KHÔNG phải cổng
+    // quyền — nó là RLS cộng phép giải phiên. Câu cần đo là *không thấy gì*.
+    await expect(
+      withTenant(apiPool, orgB, (c) => docTraoThau(c, orgB, { rfqId, actorSessionId: sB }, apiPool)),
+    ).resolves.toBeNull();
+    await expect(
+      withTenant(apiPool, orgB, (c) =>
+        huyTraoThau(c, orgB, { rfqId, reason: "to chuc khac huy", actorSessionId: sB }, apiPool),
+      ),
+    ).rejects.toThrow();
+    // Và award của tổ chức A còn nguyên.
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+  });
+
+  it("`docTraoThau` trả `null` khi chưa có đề xuất nào — KHÔNG mảng rỗng, KHÔNG 404", async () => {
+    const { rfqId } = await sanSangTraoThau();
+    await expect(
+      withTenant(apiPool, orgA, (c) => docTraoThau(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).resolves.toBeNull();
   });
 });

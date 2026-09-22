@@ -56,22 +56,22 @@ phải chuyện câu chữ.
 | "Giá thấp nhất = nhà cung cấp tốt nhất" | "Hỗ trợ quyết định dựa trên tổng chi phí" |
 | "AI phát hiện gian lận" | "Tạo bằng chứng kiểm toán" |
 | **"Kể cả chúng tôi cũng không xem được"** | **"Mọi lần truy cập đều để lại dấu vết bất biến"** |
-| **"Chống được thông đồng giữa người mua và nhà cung cấp"** | **"Làm việc móc nối đắt hơn và để lại dấu đọc được"** |
+| ~~**[S1.108] "Vòng BAFO giữ kín giá của bạn với người mua"**~~ **[S1.109] "Vòng BAFO giữ kín giá của bạn với người mua"** | **"Giá vòng BAFO được niêm phong lại và chỉ mở qua cổng bốn vế; danh sách mời suy từ thứ hạng nên một lần mời ngoài top-N để lại dấu"** — [S1.109] nay ĐO được: một vòng quét mọi route với người mua ĐỦ QUYỀN không thấy một chữ số giá BAFO nào trước cổng, và thấy ngay sau |
+| **[S1.110] "Hai người ký thì không ai trao thầu cho người quen được"** | **"Hệ thống cưỡng chế rằng người ĐỀ XUẤT trao thầu không phải người TẠO gói thầu, không phải người ĐIỀU PHỐI mở thầu (của lần điều phối đang chạy), và không phải người DUYỆT — bốn vai, ba trigger đọc dữ liệu thật, và mỗi lần từ chối để lại một dòng"** — và phần phải nói ra: vế *điều phối* KHÔNG thấy người điều phối lần ĐẦU sau một lần điều phối lại (khoản 233), nên câu đúng là *ba trong bốn mắt xích được cưỡng chế theo hành vi, mắt thứ tư chỉ theo lần gần nhất*. Và không lớp nào của sản phẩm chặn được hai người bàn nhau ngoài hệ thống — thứ nó làm là để lại dấu vết cho một lượt kiểm toán SAU đó |
 
-Dòng *"Kể cả chúng tôi cũng không xem được"* là ràng buộc bổ sung phát sinh từ ADR-002: mô
-hình đe dọa đã chọn là tầng 1+2, nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã.
-Tuyên bố zero-knowledge sẽ là tuyên bố sai sự thật.
+Dòng cuối là ràng buộc bổ sung phát sinh từ ADR-002: mô hình đe dọa đã chọn là tầng 1+2,
+nhà vận hành nền tảng vẫn có khả năng kỹ thuật để giải mã. Tuyên bố zero-knowledge sẽ là
+tuyên bố sai sự thật.
 
-**[2026-09-21] Dòng cuối phát sinh từ ADR-054, và nó chặn một tuyên bố mà chính tên sản phẩm
-mời gọi.** Lõi niêm phong bảo vệ *thông tin giá trước deadline*. Nó không chạm được trường hợp
-một người của bên mua móc nối với **cả** pool nhà cung cấp — lần nào cũng mời đúng ba tên ấy, hoặc
-sắp xếp để các bên lần lượt thắng — vì ở đó giá đã thống nhất xong trước khi chạm hệ thống và
-không ai cần đọc phong bì của ai. Ba số đo trong ADR-054: D3 chỉ nổ khi một vai giữ **cả năm**
-mắt xích nên `rfq.create` + `rfq.invite` nằm chung một vai là hợp lệ; cạnh `DRAFT →
-PENDING_APPROVAL` **không đếm lời mời** dù spec khai là có; và mọi bất biến đóng khung trong một
-`rfq_id` trong khi loại gian lận này chỉ lộ ra trên chuỗi nhiều gói thầu. Biện pháp — ngưỡng số
-nhà cung cấp tối thiểu, buộc mời NCC mới theo chu kỳ, chữ ký thứ hai cho danh sách mời — thuộc S3,
-và không biện pháp nào trong đó *phát hiện* được thông đồng.
+**[S1.108 / S2.5 / ADR-055]** Dòng BAFO là ràng buộc phát sinh từ spec S2 §8.1, và nó là
+chỗ rò lớn nhất của S2 — **rò NGHIỆP VỤ, không phải rò kỹ thuật**. Tới lúc mời BAFO, người
+mua **đã biết giá vòng một của mọi người**; một câu *"anh đang đứng thứ hai, hạ 3% là
+thắng"* nói bằng miệng thì không lớp mật mã nào của sản phẩm chặn được, vì thông tin đã nằm
+trong đầu một con người hợp lệ. Ba thứ sản phẩm LÀM ĐƯỢC, và chỉ ba: ⑴ danh sách mời SUY từ
+`rank` chứ không do người mua gõ tay, nên một lần mời ngoài top-N là một lần lệch đọc được
+(cưỡng chế ở tầng CSDL từ `059`, không phải một truy vấn hiển thị); ⑵ mọi lần đọc bảng so
+sánh sau mở thầu đều có hàng sổ; ⑶ giá vòng hai niêm phong LẠI, nên người mua không thấy
+vòng hai trước khi nó được mở qua đúng cổng bốn vế.
 
 ## 6. Quyết định phạm vi MVP1
 

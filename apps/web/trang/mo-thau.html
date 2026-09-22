@@ -64,7 +64,7 @@
     <h2><span class="so">4</span> Bảng so sánh</h2>
     <button id="nut-bang" class="phu">Đọc bảng so sánh</button>
     <table id="bang">
-      <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th></tr></thead>
+      <thead><tr><th>Nhà cung cấp</th><th class="so">Tổng</th><th>Tiền tệ</th><th class="so">Lần nộp</th><th>Vòng</th></tr></thead>
       <tbody></tbody>
     </table>
     <dl class="tt" id="tt-tong"></dl>
@@ -89,6 +89,54 @@
     </table>
     <div class="bao loi" id="loi5" hidden></div>
     <div class="bao ok" id="ok5" hidden></div>
+  </section>
+
+  <section class="buoc" id="b6" hidden>
+    <h2><span class="so">6</span> Vòng BAFO</h2>
+    <p class="ghi">Mời <strong>top-N</strong> nộp lại — niêm phong đúng như vòng một, và danh sách
+      mời <strong>suy từ bảng xếp hạng</strong> chứ không ai gõ tay. Người mua lúc này đã biết giá
+      của mọi người, nên đây là hành động có mã quyền RIÊNG (<code>rfq.bafo.open</code>), và sản
+      phẩm <em>không</em> chặn được một lần rò tin bằng miệng.</p>
+    <label for="han-bafo">Hạn nộp của vòng BAFO (ít nhất 1 giờ kể từ bây giờ)</label>
+    <input id="han-bafo" type="datetime-local">
+    <div class="doi">
+      <button id="nut-mo-bafo">Mở vòng BAFO</button>
+      <button id="nut-dong-bafo" class="phu">Đóng vòng BAFO</button>
+    </div>
+    <dl class="tt" id="tt-bafo"></dl>
+    <p class="ghi">Đóng vòng xong thì phong bì vòng hai mở bằng <strong>đúng cổng bốn vế</strong>
+      ở bước 3 — yêu cầu mới, hai người duyệt mới. Rồi chấm lại ở bước 5.</p>
+    <div class="bao loi" id="loi6" hidden></div>
+    <div class="bao ok" id="ok6" hidden></div>
+  </section>
+
+  <section class="buoc" id="b7" hidden>
+    <h2><span class="so">7</span> Trao thầu</h2>
+    <p class="ghi">Hành động <strong>cuối</strong> của sản phẩm, và chỗ duy nhất đòi đúng
+      <strong>hai con người</strong>: một người <em>đề xuất</em> kèm lý do
+      (<code>award.recommend</code>), một người <strong>khác</strong> <em>phê duyệt</em>
+      (<code>po.approve</code>). Hai mã quyền khác nhau, và ba trigger của tầng CSDL canh tiếp
+      theo <strong>hành vi đã xảy ra</strong> trên chính gói thầu này — người tạo gói và người
+      điều phối mở thầu <em>không</em> đề xuất được, và người đề xuất <em>không</em> tự duyệt được.</p>
+    <p class="ghi">Lượt chấm mà đề xuất dựa trên <strong>không gõ tay</strong>: nó là lượt
+      <strong>mới nhất</strong>, nên sau một chu kỳ BAFO thì award nói về bảng xếp hạng SAU BAFO.
+      Báo giá được chọn phải có <strong>chi phí hiệu dụng đọc được</strong> ở đúng lượt ấy.</p>
+    <label for="bao-gia-thang">Báo giá được chọn (id phiên bản, lấy từ bảng xếp hạng ở bước 5)</label>
+    <input id="bao-gia-thang" type="text" placeholder="uuid của bid version">
+    <label for="ly-do-award">Lý do — <strong>bắt buộc</strong>, ở cả lần đề xuất và lần huỷ</label>
+    <input id="ly-do-award" type="text" placeholder="vì sao chọn báo giá này">
+    <div class="doi">
+      <button id="nut-de-xuat">Đề xuất trao thầu</button>
+      <button id="nut-duyet-award" class="phu">Phê duyệt</button>
+      <button id="nut-huy-award" class="phu">Huỷ trao thầu</button>
+    </div>
+    <dl class="tt" id="tt-award"></dl>
+    <p class="ghi">Huỷ là một <strong>hàng trạng thái mới</strong>, không một lần sửa: lịch sử ở
+      lại nguyên vẹn và câu <em>ai huỷ, lúc nào, vì sao</em> trả lời được từ chính bảng. Gói thầu
+      quay về <code>EVALUATING</code> để chấm lại — và cổng huỷ là cổng của người
+      <strong>duyệt</strong>, không của người đề xuất.</p>
+    <div class="bao loi" id="loi7" hidden></div>
+    <div class="bao ok" id="ok7" hidden></div>
   </section>
 
   <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>

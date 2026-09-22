@@ -42,7 +42,7 @@ function loiCua(r, macDinh) {
 }
 
 function dienDl(el, hang) {
-  el.innerHTML = "";
+  el.replaceChildren();
   for (const [k, v] of hang) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v === null || v === undefined ? "—" : String(v);
@@ -116,6 +116,8 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b3"), true);
     hien($("b4"), true);
     hien($("b5"), true);
+    hien($("b6"), true);
+    hien($("b7"), true);
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -251,13 +253,21 @@ $("nut-bang").addEventListener("click", async () => {
   if (r.status !== 200) { bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh")); return; }
   const c = r.body.comparison;
   const tbody = $("bang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   const reNhoNhat = c.aggregates?.min ?? null;
   for (const h of c.rows ?? []) {
     const tr = document.createElement("tr");
     if (reNhoNhat !== null && h.totalAmount === reNhoNhat) tr.className = "thap";
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
-    tr.append(td(h.supplierLegalName), td(tien(h.totalAmount), "so"), td(h.currency ?? "—"), td(String(h.version ?? "—"), "so"));
+    // [S1.109] Sau một vòng BAFO, bảng này CỐ Ý có hai dòng cho một nhà cung cấp — nó là một
+    // bảng LỊCH SỬ, và người mua cần thấy ai hạ bao nhiêu. Không có cột vòng, hai dòng ấy trông
+    // như một lỗi; `isLatestForBid` là thứ nói dòng nào đang có hiệu lực.
+    if (h.isLatestForBid === false) tr.classList.add("mo");
+    tr.append(
+      td(h.supplierLegalName), td(tien(h.totalAmount), "so"), td(h.currency ?? "—"),
+      td(String(h.version ?? "—"), "so"),
+      td(h.bafoRoundNo === null || h.bafoRoundNo === undefined ? "vòng 1" : `BAFO ${h.bafoRoundNo}`),
+    );
     tbody.append(tr);
   }
   const a = c.aggregates ?? {};
@@ -309,7 +319,7 @@ async function veXepHang() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/ranking`);
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Chưa đọc được bảng xếp hạng")); return; }
   const tbody = $("bang-hang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   const b = r.body.ranking ?? null;
   // `null` là câu trả lời ĐÚNG cho "chưa chấm lần nào", cùng khuôn `veYeuCau` ở bước 3. Một bảng
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
@@ -350,6 +360,117 @@ $("nut-cham").addEventListener("click", async () => {
 });
 
 $("nut-xep-hang").addEventListener("click", veXepHang);
+
+// ---------------------------------------------------------------------------------------------
+// Bước 6 — vòng BAFO
+//
+// `null` là câu trả lời ĐÚNG cho "chưa mở vòng nào", cùng khuôn `veYeuCau` và `veXepHang`.
+// ---------------------------------------------------------------------------------------------
+
+async function veVongBafo() {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/bafo`);
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Chưa đọc được vòng BAFO")); return; }
+  const v = r.body.bafoRound ?? null;
+  if (v === null) {
+    dienDl($("tt-bafo"), [["Vòng BAFO", "chưa mở vòng nào"]]);
+    return;
+  }
+  dienDl($("tt-bafo"), [
+    ["Vòng số", v.roundNo],
+    ["Mời top-N", v.topN],
+    ["Hạn nộp", new Date(v.deadlineAt).toLocaleString("vi-VN")],
+    ["Mở lúc", new Date(v.openedAt).toLocaleString("vi-VN")],
+    ["Đóng lúc", v.closedAt === null ? "đang mở" : new Date(v.closedAt).toLocaleString("vi-VN")],
+  ]);
+}
+
+$("nut-mo-bafo").addEventListener("click", async () => {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  const gio = $("han-bafo").value;
+  if (gio === "") { bao($("loi6"), "Chọn hạn nộp của vòng BAFO trước."); return; }
+  // `datetime-local` cho một chuỗi KHÔNG có múi giờ; `new Date(...)` đọc nó theo giờ máy, đúng
+  // thứ người bấm vừa gõ. `toISOString()` rồi mới gửi — route đọc ISO 8601.
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/bafo`, { deadlineAt: new Date(gio).toISOString() });
+  // Bốn lối từ chối có tên của lớp vòng BAFO đi ra dưới 422 kèm câu người đọc được.
+  if (r.status !== 201) { bao($("loi6"), loiCua(r, "Không mở được vòng BAFO")); return; }
+  bao($("ok6"), `Đã mở vòng BAFO số ${r.body.bafoRound?.roundNo ?? "?"} — mời top-${r.body.bafoRound?.topN ?? "?"}. Gói thầu sang BAFO_OPEN.`);
+  await veVongBafo();
+});
+
+$("nut-dong-bafo").addEventListener("click", async () => {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/bafo/close`);
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Không đóng được vòng BAFO")); return; }
+  bao($("ok6"), "Đã đóng vòng BAFO. Gói thầu sang BAFO_CLOSED — mở phong bì vòng hai bằng cổng bốn vế ở bước 3.");
+  await veVongBafo();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Bước 7 — trao thầu
+//
+// `null` là câu trả lời ĐÚNG cho "chưa có đề xuất nào", cùng khuôn `veYeuCau` / `veXepHang` /
+// `veVongBafo`. Trang KHÔNG tự đếm chữ ký: số chữ ký cần sống ở CSDL (`CHU_KY_CAN`), nên nếu
+// ngày nào con số ấy thành hai thì trang này không phải đổi một dòng — nó chỉ hiện thứ đọc được.
+// ---------------------------------------------------------------------------------------------
+
+async function veTraoThau() {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/award`);
+  if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return; }
+  const a = r.body.award ?? null;
+  if (a === null) {
+    dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
+    return;
+  }
+  dienDl($("tt-award"), [
+    ["Trạng thái", a.status],
+    ["Báo giá được chọn", a.bidVersionId],
+    ["Dựa trên lượt chấm", a.evaluationId],
+    ["Lý do", a.reason],
+    ["Lúc", new Date(a.actedAt).toLocaleString("vi-VN")],
+    ["Chữ ký duyệt", a.approvals.length === 0
+      ? "chưa có"
+      : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")],
+  ]);
+}
+
+$("nut-de-xuat").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const bv = $("bao-gia-thang").value.trim();
+  const lyDo = $("ly-do-award").value.trim();
+  if (bv === "" || lyDo === "") { bao($("loi7"), "Cần cả id báo giá và lý do."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award`, { bidVersionId: bv, reason: lyDo });
+  // Bốn lối từ chối có tên của lớp trao thầu đi ra dưới 422 với câu của lớp gói; ba trigger của
+  // `061` CŨNG ra 422, mang câu của CSDL — `anhXaLoiPostgres` lộ thông điệp khi lỗi đến từ một
+  // `RAISE` của trigger, vì câu ấy do migration viết. Nên `loiCua` đủ cho cả hai đường.
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không đề xuất được")); return; }
+  bao($("ok7"), "Đã ghi đề xuất trao thầu. Gói thầu sang AWARDED — nay cần MỘT người KHÁC phê duyệt.");
+  await veTraoThau();
+});
+
+$("nut-duyet-award").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  // Người duyệt ký lên ĐÚNG đề xuất họ vừa đọc, nên `awardId` đi trong đường dẫn: giữa lúc đọc
+  // và lúc bấm, đề xuất kia huỷ được và một đề xuất KHÁC dựng lên, và một lời gọi chỉ theo
+  // `rfqId` sẽ ký lên đề xuất mới trong im lặng.
+  const doc = await goi("GET", `/rfqs/${phien.rfqId}/award`);
+  const a = doc.status === 200 ? (doc.body.award ?? null) : null;
+  if (a === null) { bao($("loi7"), "Chưa có đề xuất nào để duyệt."); return; }
+  if (a.status !== "PROPOSED") { bao($("loi7"), `Đề xuất đang ở ${a.status}, không duyệt được.`); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
+  bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
+  await veTraoThau();
+});
+
+$("nut-huy-award").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const lyDo = $("ly-do-award").value.trim();
+  if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần huỷ — một lần huỷ không lý do là đúng thứ D5 cấm."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/cancel`, { reason: lyDo });
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không huỷ được")); return; }
+  bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
+  await veTraoThau();
+});
 
 // ==============================================================================================
 // [S1.99 / khoản 205] ĐỔI FRAGMENT PHẢI ĐỔI CẢ PHIÊN — VÀ Ở TRANG NÀY, KHÔNG LÀM THẾ THÌ NGƯỜI

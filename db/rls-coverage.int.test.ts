@@ -795,6 +795,19 @@ describe("phủ RLS", () => {
       // `rfq_approvals` KHONG co UPDATE lan DELETE cho bat ky role nao: mot chu ky phe duyet sua
       // duoc hay rut lai duoc trong im lang thi no khong phai chu ky.
       { grantee: "app_api", bang: "rfq_approvals", quyen: "SELECT" },
+      // [S1.108 / 059] `rfq_bafo_rounds` hiện SELECT ở MỨC BẢNG cho `app_api`; INSERT và
+      // UPDATE của nó là quyền CỘT (xem [M5] dưới) vì `<bảng>_pkey` là `(id)`. `app_unseal`
+      // KHÔNG có dòng nào ở đây — nó đọc bảng ấy theo CỘT, để `opened_by` và
+      // `opened_by_session_id` nằm ngoài tầm: vai giải mã không cần biết AI mở vòng.
+      // [S1.110 / S2.6 / 061] Hai bảng của trao thầu chỉ hiện SELECT ở MỨC BẢNG — INSERT của
+      // chúng là quyền CỘT (xem [M5] dưới), vì `<bảng>_pkey` là `(id)` và INV-H14 đòi thế.
+      // KHÔNG có UPDATE lẫn DELETE cho vai nào, và ở đây vế ấy MẠNH hơn ở hai bảng chấm thầu:
+      // hai bảng này CHỈ-GHI-THÊM được cưỡng chế bằng trigger `ENABLE ALWAYS` cộng một chốt
+      // `TRUNCATE` riêng, nên *huỷ là một hàng mới* là một tính chất của DỮ LIỆU chứ không một
+      // quy ước của ứng dụng (§2.3⑹). `app_unseal` không có dòng nào — vai giải mã không trao thầu.
+      { grantee: "app_api", bang: "rfq_award_approvals", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_awards", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_budgets", quyen: "SELECT" },
       // [S1.105 / 057] Hai bảng của lượt đánh giá chỉ hiện SELECT ở MỨC BẢNG — INSERT của chúng
       // là quyền CỘT (xem [M5] dưới), vì `<bảng>_pkey` là `(id)` và INV-H14 đòi thế. KHÔNG có
@@ -898,6 +911,19 @@ describe("phủ RLS", () => {
       // [S1.6] BA cot cua `rfq_invitations`, khong hon: worker phai di tu `vendor_bids` toi
       // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
       // `link_channel`, `status` KHONG duoc cap — worker khong co viec gi voi danh tinh NCC.
+      // [S1.108 / 059] `app_unseal` đọc vòng BAFO để biết nó đang mở phong bì của VÒNG NÀO.
+      // Hai cột VẮNG là cố ý: `opened_by` và `opened_by_session_id` — vai giải mã không cần
+      // danh tính người mở vòng, và nguyên tắc của `008` là một quyền cấp "cho chắc" là một
+      // quyền không ai gỡ ra nữa.
+      { bang: "rfq_bafo_rounds", cot: "closed_at" },
+      { bang: "rfq_bafo_rounds", cot: "deadline_at" },
+      { bang: "rfq_bafo_rounds", cot: "evaluation_id" },
+      { bang: "rfq_bafo_rounds", cot: "id" },
+      { bang: "rfq_bafo_rounds", cot: "opened_at" },
+      { bang: "rfq_bafo_rounds", cot: "org_id" },
+      { bang: "rfq_bafo_rounds", cot: "rfq_id" },
+      { bang: "rfq_bafo_rounds", cot: "round_no" },
+      { bang: "rfq_bafo_rounds", cot: "top_n" },
       { bang: "rfq_invitations", cot: "id" },
       { bang: "rfq_invitations", cot: "org_id" },
       { bang: "rfq_invitations", cot: "rfq_id" },
@@ -925,6 +951,10 @@ describe("phủ RLS", () => {
       { bang: "sessions", cot: "user_id" },
       // [022] `unseal_requests` chuyển từ SELECT mức BẢNG xuống ĐÚNG sáu cột worker đọc.
       // `reason`, `break_glass`, và mọi mốc thời gian khác KHÔNG được cấp.
+      // [S1.108 / 059] Dấu vòng của yêu cầu mở thầu — `rfq_kiem_yeu_cau_mo_thau` đọc nó dưới
+      // CHÍNH vai này, và dòng `GRANT` ấy là thứ bản đầu của `059` bỏ sót: 38 ca đỏ, 36 trong
+      // số đó không liên quan gì tới BAFO. Xem §S1.108 mục 7b.
+      { bang: "unseal_requests", cot: "bafo_round_id" },
       { bang: "unseal_requests", cot: "dispatched_by" },
       { bang: "unseal_requests", cot: "dispatched_by_session_id" },
       { bang: "unseal_requests", cot: "id" },
@@ -938,6 +968,9 @@ describe("phủ RLS", () => {
       // con `app_api` thi khong (cot dau la `rfq_key_material.wrapped_private_key`). Y nghia manh
       // hon o day: mot `api` bi chiem hoan toan cung khong rut duoc phong bi niem phong ra de
       // tan cong ngoai tuyen ve sau.
+      // [S1.108 / 059] Dấu vòng của phiên bản báo giá, do C1 đặt. `app_unseal` cần nó để
+      // không mở phong bì của vòng khác.
+      { bang: "vendor_bid_versions", cot: "bafo_round_id" },
       { bang: "vendor_bid_versions", cot: "bid_id" },
       { bang: "vendor_bid_versions", cot: "envelope" },
       { bang: "vendor_bid_versions", cot: "id" },
@@ -1146,6 +1179,38 @@ describe("phủ RLS", () => {
       // [ADR-017 / 014] Ngan sach du tinh cua nguoi mua. UPDATE co, nhung bi trigger
       // `rfq_budgets_chi_sua_khi_soan` gioi han vao luc RFQ con o DRAFT — sua duoc bang chung SAU
       // khi nguoi duyet da ky nghia la bang chung noi mot dang con quyet dinh da ra mot neo.
+      // [S1.108 / 059] `id`, `round_no`, `opened_at` VẮNG khỏi INSERT, mỗi cái một lý do:
+      // `id` vì `rfq_bafo_rounds_pkey` là `(id)` (khuôn `users_pkey` của 002, INV-H14);
+      // `round_no` vì nó là DẪN XUẤT do trigger đặt — một số do người gọi khai là một số hai
+      // người cùng khai được; `opened_at` vì nó có `DEFAULT now()`. UPDATE chỉ có `closed_at`,
+      // và `bafo_kiem_vong` canh CHIỀU của nó (NULL -> một giá trị, một lần).
+      // [S1.110 / S2.6 / 061] `id` và `acted_at`/`approved_at` VẮNG khỏi INSERT, mỗi cái một lý
+      // do: `id` vì `<bảng>_pkey` là `(id)` (khuôn `users_pkey` của 002, INV-H14); hai cột mốc vì
+      // chúng có `DEFAULT now()` — một mốc do người gọi khai là một mốc người gọi chọn được.
+      // KHÔNG một dòng `UPDATE` nào, và đó là vế phân biệt hai bảng này với `rfq_bafo_rounds`
+      // (bảng ấy có `closed_at` UPDATE được): chuỗi trạng thái award đi bằng HÀNG MỚI, không
+      // bằng một lần sửa cột.
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "approver_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "award_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_award_approvals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "acted_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "acted_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_awards", cot: "status", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "closed_at", quyen: "UPDATE" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "deadline_at", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "opened_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "opened_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_bafo_rounds", cot: "top_n", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_budgets", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_budgets", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_budgets", cot: "currency", quyen: "INSERT" },
@@ -1795,13 +1860,22 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
-      "outbox_jobs", "rfq_approvals", "rfq_budgets", "rfq_evaluation_lines", "rfq_evaluations",
+      "outbox_jobs", "rfq_approvals",
+      // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
+      // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có
+      // giá; biết AI thắng khi mình thua thì càng. Ngày nào sản phẩm có màn *kết quả* cho
+      // nhà cung cấp thì nới nó là một quyết định có dữ liệu để trả lời — như `060` đã làm
+      // cho `rfq_bafo_rounds`, và hàng ấy nay nằm ở nhóm `khachNoi` ngay dưới.
+      "rfq_award_approvals", "rfq_awards",
+      "rfq_budgets", "rfq_evaluation_lines",
+      "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals", "unseal_requests",
       "user_login_tokens", "user_roles", "users",
     ].map(chiKhach),
     khachNoi("bid_receipts", khachHoac("(bid_version_id IN ( SELECT v.id\n   FROM vendor_bid_versions v))")),
     khachNoi("guest_sessions", khachHoac(veGuest("id", "app.guest_session_id"))),
+    khachNoi("rfq_bafo_rounds", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),
     khachNoi("rfq_invitations", khachHoac(veGuest("id", "app.guest_invitation_id"))),
     khachNoi("rfq_items", khachHoac(veGuest("rfq_id", "app.guest_rfq_id"))),
     khachNoi("rfq_key_material", khachHoac(veGuest("rfq_id", "app.guest_rfq_id")), KHACH_NULL),

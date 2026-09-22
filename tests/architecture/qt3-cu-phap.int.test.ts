@@ -29,7 +29,12 @@
 
 import { withMigratedDatabase } from "@trustprocure/test-support";
 import { describe, expect, it } from "vitest";
-import { moiCauSql, type CauSql } from "./qt3-doc-sql.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { moiCauSql, tepNguonCoSql, type CauSql } from "./qt3-doc-sql.js";
+
+const GOC = fileURLToPath(new URL("../../", import.meta.url));
 
 /** `PREPARE` chỉ nhận DML. Câu tiện ích được đếm riêng, không được bỏ im. */
 const RE_DML = /^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|VALUES)\b/i;
@@ -45,6 +50,34 @@ const KIEU_KHONG_XAC_DINH = new Set(["42P18", "42P08"]);
 
 /** Số câu DML tối thiểu phải đo được — không có nó thì một bộ lọc hỏng làm test rỗng ruột. */
 const SO_DML_TOI_THIEU = 100;
+
+/**
+ * [S1.107 / lượt soi ngang 77 — ④] SÀN THEO TỆP — người canh THẬT cho tính đầy đủ của bộ đọc.
+ *
+ * `SO_DML_TOI_THIEU` ở trên là một con số VIẾT CỨNG, và lượt soi 77 đo ra rằng nó đã trôi: hôm nay
+ * bộ đọc rút được **173** câu DML từ 115 tệp, nên một hồi quy nuốt mất 42% số câu vẫn đi lọt. Nó
+ * cũng là người canh DUY NHẤT — không có một census vét cạn nào cho tập câu SQL, khác hẳn `GRANT`
+ * hay policy.
+ *
+ * Vị từ dưới đây không viết cứng gì cả: **mỗi tệp nguồn có lời gọi `.query(` phải đóng góp ít
+ * nhất MỘT câu**. Nó bắt đúng lớp hỏng mà con số kia bỏ sót — bộ đọc mù một hình dạng chuỗi, một
+ * kiểu nối, một tệp — và nó tự chặt hơn theo kho thay vì thiu dần.
+ */
+const RE_GOI_QUERY = /\.query\s*(?:<[^>]*>)?\s*\(/u;
+
+/**
+ * Tệp có `.query(` mà bộ đọc KHÔNG rút được câu nào — mỗi dòng một lý do, cùng khuôn
+ * `CHO_TRAN_DUOC_PHEP` và `ROUTE_DOC_KHONG_PHOI`. Một danh sách miễn trừ chỉ đứng được khi nó
+ * cũng bị canh: khẳng định thứ hai đòi mỗi dòng ở đây trỏ một tệp CÓ THẬT còn gọi `.query(`.
+ */
+const TEP_CHI_DIEU_KHIEN_GIAO_DICH: readonly { readonly tep: string; readonly lyDo: string }[] = [
+  {
+    tep: "apps/api/src/routes/auth.ts",
+    lyDo:
+      "hai câu duy nhất là `SAVEPOINT xep_hang` và `ROLLBACK TO SAVEPOINT xep_hang` — điều khiển " +
+      "giao dịch, và PostgreSQL KHÔNG `PREPARE` được chúng, nên bộ đọc bỏ qua là ĐÚNG chứ không sót",
+  },
+];
 
 interface Loi {
   readonly cau: CauSql;
@@ -101,6 +134,20 @@ describe("[INV-H21] mỗi câu SQL sản xuất được PostgreSQL phân tích"
           client.release();
         }
       });
+
+      // [S1.107 / lượt soi ngang 77 — ④] SÀN THEO TỆP, xem khối khai ở trên.
+      const tepCoQuery = tepNguonCoSql().filter((t) => RE_GOI_QUERY.test(readFileSync(join(GOC, t), "utf8")));
+      const tepCoCau = new Set(tatCa.map((c) => c.tep));
+      const mienTru = new Set(TEP_CHI_DIEU_KHIEN_GIAO_DICH.map((x) => x.tep));
+      expect(tepCoQuery.length, "chống rỗng ruột: không thấy tệp nào gọi `.query(`").toBeGreaterThan(20);
+      expect(
+        tepCoQuery.filter((t) => !tepCoCau.has(t) && !mienTru.has(t)),
+        "tệp có lời gọi `.query(` mà bộ đọc không rút được câu nào — bộ đọc đang mù một hình dạng",
+      ).toEqual([]);
+      expect(
+        [...mienTru].filter((t) => !tepCoQuery.includes(t)),
+        "một dòng miễn trừ trỏ vào tệp không còn gọi `.query(` — dòng ấy che mất một tệp THẬT mai sau",
+      ).toEqual([]);
 
       expect(dml.length, "quá ít câu DML — bộ lọc đang nuốt mất chủ thể").toBeGreaterThanOrEqual(
         SO_DML_TOI_THIEU,

@@ -141,6 +141,10 @@ th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--vien
 th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--chu-mo); font-weight: 600; }
 td.so, th.so { text-align: right; font-variant-numeric: tabular-nums; }
 tr.thap td { background: var(--luc-nen); }
+/* [S1.109] Dòng LỊCH SỬ của bảng so sánh — một báo giá đã bị chính nhà cung cấp ấy thay ở vòng
+   BAFO. Nó ở lại trong bảng có chủ đích (người mua cần thấy ai hạ bao nhiêu), nhưng nó không
+   phải con số đang có hiệu lực, nên nó không được trông ngang hàng. */
+tr.mo td { opacity: 0.55; font-style: italic; }
 
 /* [S1.106 / S2.4] Thành phần của một hàng xếp hạng nằm NGAY TRONG ô, không sau một cú bấm:
    spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */

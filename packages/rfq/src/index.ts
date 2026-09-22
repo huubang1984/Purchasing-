@@ -49,6 +49,10 @@ export {
   type CreateProcurementPolicyInput,
   type Currency,
   type ProcurementPolicyRecord,
+  // [S1.107 / lượt soi ngang 77 — CAO ②] Hình dạng một thành phần trọng số, đúng ba khoá mà
+  // `CHECK` của `057` cưỡng chế. Ra cửa vì `apps/api` phải đọc thân yêu cầu thành kiểu ấy —
+  // một cách viết thứ hai ở tầng HTTP là cách viết THỨ BA cho cùng một hợp đồng.
+  type ThanhPhanTrongSoVao,
   type RfqBudgetRecord,
   type SetRfqBudgetInput,
 } from "./procurement-policy.js";

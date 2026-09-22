@@ -5500,107 +5500,289 @@ Nó không nói `gia` là mã thành phần đúng cho mọi tổ chức — nó
 nay. Nó cũng không chốt luật phá hoà (ADR-052 để mở, và S2.3 không đóng). Và nó không đóng khoản **105**:
 mọi `CHECK` của `057` nằm trong khoảng trống mà hardening không canh.
 
+## ADR-054 — Giá dạng rõ sống ở những bảng ĐƯỢC KHAI, không ở "đúng một bảng"
+
+**Trạng thái.** Đã chấp nhận — 2026-09-22, S1.107, lượt soi ngang 77.
+
+**Bối cảnh.** Lời khai của A3/A4 từ S1 là *"sau mở thầu, giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng"*, và
+cổng đo nó là bước 14 của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: quét `t::text` trên MỌI
+bảng của lược đồ `public` tìm một mức giá, rồi đòi tập kết quả bằng `["rfq_unsealed_bids"]`.
+
+Lượt soi ngang 77 đo lại trên cụm thật, sau một lượt `taoLuotDanhGia`: tập thật là
+`["rfq_evaluation_lines", "rfq_unsealed_bids"]` — **hai** bảng. Migration `057` của S1.105 dựng chỗ ở thứ
+hai (`effective_cost` và `components.tien`), và cổng vẫn xanh suốt hai vòng vì **kịch bản của nó không
+chấm thầu lần nào**. Cổng ĐÚNG; phạm vi của nó là thứ đã thu lại, và không ai viết điều đó ra như một
+điều kiện.
+
+**Hai hướng đã được đo, và cái giá của mỗi hướng.**
+
+⑴ *Giữ nguyên chữ "đúng một bảng".* `rfq_evaluation_lines` khi ấy không được lưu `effective_cost` và
+`components` dạng rõ, tức bảng xếp hạng phải tính LẠI ở mỗi lượt đọc. Nhưng **J2** đòi mỗi hàng xếp hạng
+*tái lập được*, và một dấu vết tái lập được là một dấu vết LƯU LẠI — hai đòi hỏi đâm thẳng vào nhau. Nó
+cũng huỷ `057`, một migration đã áp.
+
+⑵ *Viết lại lời khai thành một DANH SÁCH BẢNG ĐƯỢC KHAI.* Tập đo thành hai, liệt kê vét cạn, mỗi bảng
+kèm **vai ghi** và **cổng đọc** của nó.
+
+**Quyết định.** Chủ dự án chọn ⑵ ngày 2026-09-22.
+
+A3/A4 nay phát biểu: *giá dạng rõ chỉ tồn tại ở những bảng ĐƯỢC KHAI dưới đây, và mỗi bảng có đúng một
+vai ghi được cùng đúng một cổng đọc.*
+
+| bảng | vai GHI | cổng ĐỌC |
+|---|---|---|
+| `rfq_unsealed_bids` (019) | `app_unseal`, sau cổng bốn vế và đủ chữ ký phê duyệt | `bid.view` ở `buildComparisonTable` |
+| `rfq_evaluation_lines` (057) | `app_api` qua `taoLuotDanhGia`, `GRANT INSERT` theo **CỘT** | `bid.view` ở `docBangXepHang` |
+
+**Vì sao ⑵ KHÔNG phải một lần nới lỏng tự phục vụ.** Lớp bảo vệ của bảng thứ hai không thua bảng thứ
+nhất: ENABLE + FORCE RLS, policy `_tenant_isolation` cộng `_khach`, `GRANT` theo cột (`id` và
+`created_at` KHÔNG được cấp, đúng để `<bảng>_pkey` không thành oracle xuyên tổ chức của ADR-013), và
+đường đọc duy nhất đi qua `bid.view`. Cái sai là **lời khai**, không phải lớp. Một lời khai sai trong bộ
+bằng chứng đem cho kiểm toán viên là thứ kho này coi là nặng hơn một con số lệch.
+
+**Đo bằng gì.** Bước 14 của kịch bản HTTP giữ nguyên phép quét MỌI bảng đọc từ `pg_class`, nhưng ⑴ chạy
+SAU một lượt chấm thật qua HTTP (bước 12b, mới ở vòng này) và ⑵ khẳng định tập bằng `toEqual` **vét
+cạn** chứ không `toContain`. Một bảng thứ ba xuất hiện — vì một migration mai sau, hay vì một lối rò —
+làm dòng ấy đỏ và buộc người sửa quay lại ADR này.
+
+**Ranh giới.** ADR này KHÔNG nói rằng thêm một bảng giá dạng rõ là việc rẻ. Nó nói ngược lại: mỗi bảng
+như thế phải đi kèm một dòng trong bảng trên, và dòng ấy phải khai được vai ghi cùng cổng đọc. Không
+khai được thì không thêm.
+
 ---
 
-## ADR-054 — Mô hình đe dọa KHÔNG bao gồm bên mua thông đồng với TOÀN BỘ pool nhà cung cấp, và lớp chặn khả dĩ nằm ở khâu MỜI chứ không ở khâu niêm phong
+## ADR-055 — Vòng BAFO có trạng thái *"phong bì đã mở"* của riêng nó, và ai mở vòng là một mã quyền MỚI
 
-**Bối cảnh.** Chủ dự án phản biện ngày 2026-09-21 bằng hai kịch bản mà không tài liệu nào trước đó gọi
-tên: ⒜ **chiếm pool** — một người của bên mua móc nối với cả ba nhà cung cấp và lần nào cũng mời đúng ba
-tên ấy; ⒝ **xoay vòng thắng thầu** — ba bên thỏa thuận trước ai thắng gói nào, bên mua phím giá và phím
-thứ hạng.
+**Ngày:** 2026-09-22 · **Trạng thái:** Đã chấp nhận · **Vòng:** S1.108 / S2.5 · **Migration:** `059`
 
-Cả hai đi lọt qua trọn lõi niêm phong, và lý do gói trong một câu: **lõi ấy bảo vệ thông tin giá trước
-deadline, còn hai kịch bản này không cần biết giá của ai.** Giá đã thống nhất xong trước khi chạm hệ
-thống. Niêm phong một cuộc thi mà cả ba thí sinh cùng một đội thì phong bì không mang thông tin nào.
+**Bối cảnh.** Spec S2 §4.3 khai NĂM cạnh mới, trong đó phần BAFO là ba cạnh:
+`EVALUATING->BAFO_OPEN`, `BAFO_OPEN->BAFO_CLOSED`, `BAFO_CLOSED->EVALUATING`. Lượt soi hình dạng
+chạy TRƯỚC dòng mã đầu — theo lệ của vòng chạm lõi niêm phong — và đo được ba thứ mà hình dạng ấy
+không đứng được:
 
-ADR-002 xếp ba tầng đe dọa theo trục *ai giải mã được* — người dùng ứng dụng, cá nhân có thẩm quyền đơn
-lẻ, nhà vận hành nền tảng. Không tầng nào trong ba tầng ấy chạm ⒜⒝, vì kẻ tấn công ở đây **không đọc
-phong bì của ai cả**. Trục thứ hai — *ai chọn được người dự thi* — chưa từng được xếp tầng, và đó là chỗ
-hai kịch bản trên sống.
+⑴ **`bid_kiem_han_nop` (C1, `018`) chặn MỌI lần nộp BAFO.** Nó đòi `status = 'OPEN'` **và**
+`now() < rfq_packages.deadline_at`. Một vòng BAFO có RFQ ở `BAFO_OPEN` và hạn vòng một đã ở quá
+khứ. Và hạn ấy không dùng lại được: vế (b) của `rfq_kiem_chuyen_trang_thai` cấm deadline LÙI, vế
+(c) chỉ cho đổi ở `DRAFT`/`OPEN`.
 
-**Bốn số đo trên `master` `dc2b560`, đo trước khi quyết định.**
+⑵ **`unseal_kiem_rfq_da_dong` (C3, `019`) và vế 3 của cổng bốn vế ghim cứng `'CLOSED'`**, nên
+phong bì vòng hai không mở được bằng đường nào — trong khi spec §8.1⑶ hứa đúng điều ngược lại.
 
-⑴ **D3 là phép kiểm trên MỘT vai trong MỘT ma trận, không phải trên hành vi.** `kiem_tra_ma_tran_quyen`
-(`005`) chỉ nổ khi một vai giữ **cả năm** mã `rfq.create → rfq.invite → rfq.unseal → award.recommend →
-po.approve`. `PROCUREMENT_MANAGER` giữ **bốn trên năm** — ADR-051 đã đo đúng con số ấy khi tìm điều kiện
-thật của J3 — và `BUYER` giữ ba, trong đó có **cả `rfq.create` lẫn `rfq.invite`**. Nghĩa là mắt xích
-quyết định của kịch bản ⒜, *ai chọn nhà cung cấp*, nằm chung một vai với *ai tạo gói thầu*, ở **cả hai**
-vai được cấp hai mã ấy — và điều đó hoàn toàn **hợp lệ** dưới D3.
+⑶ **Không có trạng thái nào nghĩa là *"phong bì BAFO đã mở"*.** Cạnh `CLOSED->UNSEALED` tồn tại
+không phải để đẹp máy trạng thái: `rfq_kiem_yeu_cau_mo_thau` cắm vào đúng cạnh ấy và đòi một yêu
+cầu mở thầu ĐÃ PHÊ DUYỆT. Nối thẳng `BAFO_CLOSED->EVALUATING` cho một lượt chấm LẠI chạy trong khi
+phong bì vòng hai còn nguyên niêm — và bảng xếp hạng khi ấy vẫn là bảng của vòng MỘT, không lớp
+nào kêu.
 
-⑵ **Cạnh `DRAFT → PENDING_APPROVAL` không đếm lời mời.** Spec S0+S1 §4.3 khai điều kiện bắt buộc của
-cạnh này gồm *"số nhà cung cấp được mời đạt ngưỡng chính sách"*. Trigger thật (`009`, thay bằng `011`)
-kiểm đúng hai thứ: `so_hang_muc = 0` và deadline. Ngưỡng ấy **không tồn tại ở bất kỳ đâu**:
-`org_procurement_policies` có bốn cột chính sách — `dual_approval_threshold`, `currency`, cùng
-`eval_components` và `bafo_top_n` thêm ở `056` — và không cột nào là số nhà cung cấp tối thiểu. Ràng buộc
-sản phẩm §8 hàng 5 cấm hard-code *"3 báo giá"*; đo được là con số ấy không được cưỡng chế ở đâu cả, kể
-cả dưới dạng cấu hình.
-
-⑶ **Mọi bất biến đóng khung trong MỘT `rfq_id`.** 56/56 bất biến của lõi niêm phong, cổng bốn vế của
-đường mở thầu, J1–J7 của S2 — không mệnh đề nào đọc quá một gói thầu. Hai kịch bản trên **chỉ lộ ra trên
-chuỗi nhiều gói thầu**: một RFQ mời đúng ba nhà cung cấp quen là chuyện thường ngày; hai mươi RFQ liên
-tiếp mời đúng ba tên ấy mới là tín hiệu. Đây là lỗ hổng của **hình dạng dữ liệu được đọc**, không phải
-một tính năng còn thiếu.
-
-⑷ **Dữ liệu để phát hiện thì đã có; thứ chưa có là lớp đọc nó.** `rfq_invitations` mang `supplier_id`,
-`rfq_id`, `created_at`, và từ `013` mang cả `invited_by` + `invited_by_session_id`. Câu *"người mua X đã
-mời những ai, bao nhiêu lần, trong mười hai tháng"* trả lời được bằng một truy vấn trên bảng đang có,
-không cần một cột mới nào.
+**Một giả thuyết bị chính phép đo BÁC, ghi ra vì nó nghe rất đúng:** *"vòng BAFO dùng lại cặp khoá
+vòng một nên phong bì vòng hai yếu hơn"*. Sai. `rfq_key_material` chỉ thu hồi được khi RFQ
+`CANCELLED` (`hardening`, `rfq_khoa_chi_thu_hoi_khi_huy`), nên khoá vẫn nằm đó suốt vòng một; cổng
+bốn vế LUÔN là cổng chính sách chứ chưa bao giờ là cổng mật mã. BAFO không làm điều đó tệ đi, và
+`UNIQUE (org_id, rfq_id, algorithm)` của `017` không phải một khiếm khuyết cần vá ở vòng này.
 
 ### Quyết định
 
-⑴ **Mô hình đe dọa của ADR-002 được ghi rõ là KHÔNG bao gồm trường hợp bên mua thông đồng với toàn bộ
-pool nhà cung cấp.** ADR-002 không sai và không bị thay thế — nó trả lời trục *ai giải mã được*, và trả
-lời đúng. ADR này thêm trục *ai chọn người dự thi* và trả lời **không** cho MVP1.
+⑴ **Thêm trạng thái `BAFO_UNSEALED`. Bốn cạnh, không ba.**
 
-⑵ **Cấm tuyên bố sản phẩm phát hiện hay ngăn được thông đồng.** Vào `docs/PRODUCT.md` §5, cùng khuôn với
-dòng zero-knowledge mà ADR-002 đã đặt ở đó. Thứ nói thay: sản phẩm làm việc móc nối **đắt hơn** và để
-lại **dấu đọc được**, rồi đưa tín hiệu thống kê cho con người điều tra — đúng nguyên tắc ⑸ *Risk Signal ≠
-Fraud Verdict*.
+```
+EVALUATING->BAFO_OPEN   BAFO_OPEN->BAFO_CLOSED
+BAFO_CLOSED->BAFO_UNSEALED   BAFO_UNSEALED->EVALUATING
+```
 
-⑶ **Lớp chặn khả dĩ nằm ở khâu MỜI, và nó là ba việc, cưỡng chế ở CẠNH TRẠNG THÁI chứ không ở tầng báo
-cáo.** (a) ngưỡng số nhà cung cấp tối thiểu vào `org_procurement_policies`, kiểm ở `DRAFT →
-PENDING_APPROVAL` — đây là **trả nợ spec §4.3**, không phải tính năng mới; (b) chính sách buộc mỗi RFQ có
-ít nhất một nhà cung cấp mà **chính người mời ấy** chưa mời trong N lần gần nhất, tính trên
-`invited_by` + `supplier_id` của `rfq_invitations`; (c) danh sách mời cần chữ ký thứ hai khi giá trị gói
-vượt ngưỡng — tức tách `rfq.invite` khỏi `rfq.create` bằng **hành vi đã xảy ra trên từng gói thầu**, đúng
-hình dạng mà ADR-051 đã chọn cho J3, chứ không bằng một hàng mới trong ma trận quyền.
+Bộ ba BAFO là **ảnh** của bộ ba `OPEN·CLOSED·UNSEALED`, nên nó thừa hưởng nguyên cả lớp canh: cạnh
+vào `BAFO_UNSEALED` dùng lại `rfq_kiem_yeu_cau_mo_thau`, không dựng khuôn thứ hai. Spec §4.3 được
+sửa tại chỗ.
 
-⑷ **Ba việc trên thuộc S3 Governance và KHÔNG chen vào MVP1.** Lý do không phải thứ tự ưu tiên: một máy
-dò xoay vòng cần lịch sử nhiều gói thầu mới có nghĩa, mà dự án chưa có **một RFQ thật nào** — §10 và
-mảnh 4 của §11 đã ghi điều đó từ 2026-08-27. Xây lúc này là dựng một phép đo trên tập rỗng, đúng cái bẫy
-ADR-043 gọi tên.
+⑵ **Cạnh huỷ suy ra từ ảnh, không quyết mới.** `OPEN->CANCELLED` CÓ nên `BAFO_OPEN->CANCELLED` có;
+`CLOSED->CANCELLED` và `UNSEALED->CANCELLED` KHÔNG nên `BAFO_CLOSED->CANCELLED` và
+`BAFO_UNSEALED->CANCELLED` cũng không. Hai dòng KHÔNG ấy là khoản **225** đang mở, và vòng này cố
+ý **không** trả lời nó — nó chỉ chép câu trả lời hiện hành sang ảnh, để ngày nào khoản 225 được
+quyết thì HAI cặp cùng đổi chứ không một.
 
-⑸ **Khi tới lượt phát hiện xoay vòng, xếp theo SỨC MẠNH TÍN HIỆU chứ không theo độ dễ cài.** Khoảng cách
-giữa giá thắng và giá nhì mạnh nhất — thông đồng để lại biên bọc lót ổn định bất thường, cạnh tranh thật
-cho phân tán rộng — rồi tới ma trận tỷ lệ thắng theo nhà cung cấp và theo chu kỳ; cả hai mạnh hơn hẳn tín
-hiệu IP/thiết bị/metadata, thứ đắt nhất, nhiều báo động giả nhất, **và là thứ duy nhất trong ba đang
-được §10 của spec S2 nhắc tên**. Thứ tự ấy phải vào spec S3, vì trực giác mặc định xếp ngược lại.
+⑶ **Dấu vòng là DẪN XUẤT, do trigger đặt, không khai được.** `vendor_bid_versions.bafo_round_id`
+do C1 đặt (nó đã đọc RFQ để kiểm hạn); `unseal_requests.bafo_round_id` do C3 đặt (nó đã đọc RFQ để
+kiểm trạng thái). Không role nào có `INSERT` trên hai cột ấy — khuôn `bid_dat_so_phien_ban` của
+`018`: *"một số do người gọi khai là một số hai người cùng khai được"*.
 
-⑹ ~~**Không mở khoản nợ cho ⑶ ở vòng này.** Ba việc ấy là phạm vi S3, và S3 chưa có spec; ghi chúng thành
-nợ của MVP1 sẽ tạo đúng thứ máy phát mà ADR-043 mô tả. Chúng nằm ở đây, và phải xuất hiện trong spec S3
-ngay khi spec ấy được viết.~~ **[S1.107] CHỦ DỰ ÁN QUYẾT ĐỊNH NGƯỢC LẠI — VÀ LẬP LUẬN BỊ BÁC ĐÚNG CHỖ NÓ
-SAI.** Nguyên văn trên trộn hai thứ khác nhau: *mở một khoản nợ* và *đưa một việc vào hàng đợi MVP1*.
-Ba rổ của ADR-043 tồn tại chính để tách chúng — rổ B là *đóng băng tới sau pilot*, và một khoản nằm ở đó
-không chặn MVP1 một bước nào. Cái giá của việc KHÔNG ghi thì đo được: một quyết định chỉ sống trong tệp
-này không có cổng nào đọc, còn mọi khoản trong sổ nợ đều đi qua `[INV-H20]` ở mỗi lượt chạy — chính là
-phép đo đã bắt hai lời khai số ADR thiu ở vòng này. Khoản **225** (rổ B) mang trọn ba việc của ⑶ và chỉ
-tên từng phép đo đứng sau chúng. ⑷ không đổi một chữ: chúng vẫn KHÔNG chen vào MVP1.
+Nhờ thế `rfq_kiem_yeu_cau_mo_thau` phân biệt được hai vòng, và đó là vế đóng ⑶: một yêu cầu mở
+thầu của VÒNG MỘT không mở được phong bì vòng hai. Không có cột ấy, cổng bốn vế chạy một lần rồi
+mở được mọi vòng về sau.
+
+⑷ **`top_n` là giá trị ĐÃ ÁP, và nó phải khớp `bafo_top_n` của phiên bản chính sách mà lượt đánh
+giá được trỏ tới.** Chính sách có phiên bản liên tục (`035`), nên một vòng BAFO phải trả lời được
+*"hồi ấy mời mấy người"* mà không phụ thuộc phiên bản hôm nay. Phép khớp chạy lúc MỞ, một lần.
+
+⑸ **Danh sách mời KHÔNG được lưu, và phép suy từ `rank` là một lớp CHẶN.** Spec §8.1 nói thứ S2
+làm được ở chỗ rò lớn nhất của nó: *"danh sách mời BAFO suy từ `rank`, không do người mua gõ tay,
+nên một lần mời ngoài top-N là một lần lệch đọc được"*. Câu ấy chỉ đúng nếu phép suy CHẶN được một
+lần nộp — nên nó là một trigger trên `vendor_bid_versions`, không một truy vấn dựng danh sách để
+hiển thị. Trigger riêng, KHÔNG nhồi vào C1: C1 tên là *hạn nộp*, và gắn top-N vào đó làm cái tên
+nói dối. Tên trigger được chọn để sắp SAU C1 theo thứ tự chữ cái, và thứ tự ấy có một ca đọc
+`pg_trigger` đòi nó.
+
+⑹ **Mở một vòng BAFO đứng sau một mã quyền RIÊNG — `rfq.bafo.open` — và chỉ `PROCUREMENT_MANAGER`
+giữ nó.**
+
+Đây là quyết định của chủ dự án ngày 2026-09-22, và nó đứng trên một phép đo: mở vòng BAFO là hành
+động **duy nhất** của sản phẩm mà người bấm ĐÃ BIẾT giá của mọi người. Nếu nó đi qua
+`evaluation.perform` thì **năm trên sáu** vai mở được — khoản **220** đã đo con số ấy — và `BUYER`
+trong số đó còn giữ cả `rfq.create`, tức một người tự tạo gói, tự chấm, rồi tự mời lại top-N.
+
+Dùng lại `rfq.invite` cũng không đúng dù nó hẹp hơn (`BUYER` + `PROCUREMENT_MANAGER`): **mời SAU
+khi đã biết giá là một quyền khác với mời lúc chưa biết gì**, và một mã dùng cho cả hai làm ma
+trận quyền nói được ít hơn thực tế. D3 không đổi — mã mới không nằm trong chuỗi năm mã mà
+`kiem_tra_ma_tran_quyen` canh, nên `PROCUREMENT_MANAGER` vẫn bốn trên năm.
 
 ### Điều ADR này KHÔNG nói
 
-Nó **không** nói lõi niêm phong là thừa. Lõi ấy chặn một họ tấn công khác hẳn — bên mua xem giá sớm, sửa
-giá sau deadline, một người ôm trọn đường mở thầu — và họ ấy có thật, phổ biến hơn, và đã được cưỡng chế
-bằng 56/56 bất biến đo bằng đột biến.
+Nó **không** nói vòng BAFO chặn được người mua rò tin. Spec §8.1 đã thú nhận điều ngược lại, và
+`docs/PRODUCT.md` §5 giữ lời thú nhận ấy: tới lúc mời BAFO người mua đã biết giá vòng một của mọi
+người, và một câu *"anh đang đứng thứ hai, hạ 3% là thắng"* nói bằng miệng thì không lớp mật mã
+nào thấy. Thứ S2 làm được là ⑴ danh sách mời SUY ra nên một lần mời ngoài top-N để lại dấu, ⑵ mọi
+lần đọc bảng so sánh đã có sổ, ⑶ giá vòng hai niêm phong lại.
 
-Nó **không** nói ba việc ở ⑶ ngăn được thông đồng. Chúng làm việc móc nối đắt hơn và để lại dấu đọc được.
-Một người mua quyết tâm vẫn mời được ba nhà cung cấp cùng một chủ dưới ba pháp nhân khác nhau, và không
-lớp phần mềm nào của TrustProcure thấy điều đó.
+Nó **không** nói bốn cạnh ấy đã có người đi qua. Sau `059` chúng **tồn tại và được canh**, nhưng
+KHÔNG đường sản xuất nào đi qua — route, worker, màn hình và **J4** thuộc S1.109, và lý do chia
+không phải sức chứa mà là phép đo: J4 là một vòng quét ROUTE, và quét khi chưa route nào tồn tại
+cho ra một cổng XANH trên tập RỖNG. Khoản **227** ghi ranh giới ấy.
 
-Nó **không** thay thế biện pháp ngoài phần mềm: phân công người chấm theo cách người mua không đoán
-trước, luân chuyển người phụ trách nhóm hàng, và **giá tham chiếu bên ngoài** — nếu cả ba nhà thầu cùng
-một đội thì so ba giá ấy với nhau là vô nghĩa, chỉ một mốc giá ngoài hệ thống mới bắt được. Mốc ấy là S4
-Data Foundation, xa hơn cả S3.
+Nó **không** mở lại câu hỏi *ai được huỷ một gói thầu đã đóng* (khoản 225), và **không** nói gì về
+`EVALUATING->AWARDED` — `AWARDED` vẫn chưa phải một giá trị nào trong tập đóng. S2.6.
+---
 
-Nó **không** mở rộng phạm vi S2. Spec S2 §8.1 đã thú nhận sản phẩm không chặn được người mua rò tin bằng
-miệng; ADR này nói phần còn lại của cùng một sự thật — kịch bản ⒜⒝ **không cần rò tin gì cả** — và để cả
-hai ở nguyên chỗ cũ: ngoài phạm vi MVP1.
+## ADR-056 — Bảng so sánh sau BAFO là một bảng **lịch sử**, nhưng các phép **tổng hợp** thì không
+
+**Trạng thái:** Đã chấp nhận · **Ngày:** 2026-09-22 · **Vòng:** S1.109 / S2.5 tầng người dùng
+
+### Bối cảnh
+
+`059` cho một nhà cung cấp top-N nộp LẠI ở vòng BAFO, và `rfq_unsealed_bids` là bảng chỉ-ghi-thêm,
+nên sau lượt mở thầu thứ hai một luồng báo giá có **hai** hàng bản rõ. Khoản **227⑵** ghi câu hỏi:
+`buildComparisonTable` nên hiện một dòng hay hai?
+
+Khoản ấy khai câu hỏi là **một**. Lượt soi hình dạng của S1.109 đo lại và thấy nó là **hai**, vì
+hàm có HAI truy vấn: một dựng `rows`, một dựng `aggregates` (`min`/`max`/`average`/`belowBudget`
+cộng `parsed`/`unparsed`).
+
+### Quyết định
+
+**Hai vế, và chúng đi ngược chiều nhau — đó là toàn bộ nội dung của ADR này.**
+
+⑴ **`rows` giữ CẢ HAI vòng**, cộng hai trường mới: `bafoRoundNo` (`null` cho vòng một) và
+`isLatestForBid`. Chủ dự án chốt ngày 2026-09-22. Lý do: bảng so sánh là thứ người mua đọc để
+quyết định, và *"ai hạ bao nhiêu"* là một câu hỏi thật của nghiệp vụ BAFO. Giấu dòng cũ đi là giấu
+đúng thứ vòng BAFO sinh ra để tạo.
+
+⑵ **`aggregates` KHỬ TRÙNG — một dòng mỗi luồng, phiên bản mới nhất — và vế này KHÔNG phải một
+lựa chọn.** `min`, `max`, `average`, `belowBudget`, `parsed`, `unparsed` là lời khai về **tập người
+dự thầu**, không về lịch sử. Tính chúng trên tập có người đếm hai lần thì không có cách đọc nào làm
+chúng đúng: `average` bị kéo về phía những người ĐƯỢC MỜI nộp lại, và `belowBudget` đếm một nhà
+cung cấp hai lần.
+
+Hệ quả nói thẳng ra để không ai đọc nhầm: **`parsed + unparsed` KHÔNG còn bằng `rows.length`** sau
+một vòng BAFO.
+
+### Vì sao luật khử trùng là luật ĐÃ CÓ, không phải luật mới
+
+`DISTINCT ON (v.bid_id) … ORDER BY v.version DESC` — *lần nộp SAU thay lần nộp TRƯỚC* — là luật mà
+`apps/unseal-worker/src/index.ts` chọn từ S1.4 và `docBaoGia` của `packages/danh-gia` chép lại ở
+S1.108 (mục 7d của §S1.108). Đây là bộ đọc **thứ ba**, và nó chép cùng một luật.
+
+Ba bộ đọc chép cùng một câu SQL là một chỗ để lệch nhau. Nhưng phương án còn lại — một bộ đọc dùng
+chung — đã được cân và **không chọn**: ba bộ đọc sống ở ba gói với ba vai CSDL khác nhau
+(`app_unseal` đọc phong bì, `app_api` đọc bản rõ), và một hàm dùng chung sẽ phải nhận cả hai vai.
+Cái giá được trả bằng phép đo thay vì bằng kiến trúc: ba ca ở `kich-ban-41-http.int.test.ts` đòi
+đúng cùng một con số từ cả ba đường trên CÙNG một bộ dữ liệu, nên một lần lệch làm cả ba đỏ.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói `isLatestForBid` là một lời khai về *"báo giá nào được chấm"*. Đường chấm đọc lại
+`rfq_unsealed_bids` bằng luật của chính nó; hai đường trùng kết quả vì chúng chép cùng một luật,
+không vì đường này gọi đường kia.
+
+Nó **không** đổi gì ở `countReceivedBids` (A6): con số ấy đếm LUỒNG (`vendor_bids`), không đếm
+phiên bản, nên vòng BAFO không chạm tới nó.
+
+---
+
+## ADR-057 — `AWARDED` nghĩa là *"đang có một award còn sống"*, và huỷ award đưa RFQ **về `EVALUATING`**
+
+**Trạng thái:** Đã chấp nhận · **Ngày:** 2026-09-22 · **Vòng:** S1.110 / S2.6 trao thầu
+
+### Bối cảnh
+
+Spec §8.3 để ngỏ đúng một câu và ĐÒI nó được chốt trước S2.6: *cạnh trạng thái của RFQ khi award bị
+huỷ — `AWARDED` quay lại `EVALUATING`, hay đứng yên?*
+
+Lượt soi hình dạng của S1.110 đo được rằng câu ấy không phải một chi tiết máy trạng thái. Nó quyết
+định `AWARDED` **nghĩa là gì**, và **J7** đọc một trong hai nghĩa:
+
+- nếu `AWARDED` nghĩa *"đã trao thầu"* thì nó là một trạng thái HÚT — không cạnh nào ra, nên một gói
+  thầu bị huỷ award **đứng ở `AWARDED` mà không có award nào còn sống**, một trạng thái tự mâu thuẫn;
+- nếu nó nghĩa *"đang có một award còn sống"* thì cạnh ra tồn tại, và nó là cạnh về `EVALUATING`.
+
+### Quyết định
+
+Chủ dự án chốt ngày 2026-09-22: **`AWARDED->EVALUATING`**, và `AWARDED` nghĩa là *đang có một award
+còn sống*. Ba hệ quả kéo theo, và chúng **không** phải lựa chọn — chúng suy ra từ nghĩa ấy:
+
+⑴ hàng **`PROPOSED`** đặt trạng thái RFQ sang `AWARDED`. J7 coi một đề xuất đang chờ duyệt là *còn
+sống* (nó từ chối một đề xuất thứ hai), nên trạng thái RFQ phải nói cùng một câu. Nếu `PROPOSED`
+không đặt `AWARDED`, thì giữa lúc đề xuất và lúc duyệt, RFQ đứng ở `EVALUATING` — và `moVongBafo` mở
+được một vòng BAFO **dưới chân một đề xuất đang chờ duyệt**, tức tính lại chính bảng xếp hạng mà đề
+xuất ấy dựa trên.
+
+⑵ hàng **`APPROVED`** KHÔNG đổi trạng thái RFQ. Nó đã ở `AWARDED`.
+
+⑶ hàng **`CANCELLED`** đưa về `EVALUATING`, và đó là lúc một đề xuất MỚI đi được — J7 cho `PROPOSED`
+khi hàng mới nhất đã huỷ.
+
+### `AWARDED->CANCELLED` KHÔNG được thêm, và đó là cùng một khoản nợ chứ không một quyết định mới
+
+`061` thêm `AWARDED` vào tập đóng mà **không** thêm `AWARDED->CANCELLED`, và `cancelRfq` cũng không
+nhận `AWARDED` vào danh sách trắng. Hai lớp nói cùng một câu.
+
+Đó là **cặp thứ BA** của khoản **225** (*`CLOSED` và `UNSEALED` là trạng thái hút*), không phải một
+lỗ mới: huỷ cả GÓI THẦU sau khi giá đã lộ là một câu hỏi nghiệp vụ mua sắm, và nó khác hẳn câu hỏi
+*huỷ một AWARD*. Cái ADR này chốt là cái thứ hai. Ca ranh giới ở `packages/rfq/src/transitions.test.ts`
+ghim cả ba cặp, nên ngày nào khoản 225 được quyết thì cả ba cùng đỏ — không một cặp.
+
+### Một chữ ký, không hai — và con số sống ở CSDL
+
+§7 viết *"một người ĐỀ XUẤT trao thầu kèm lý do, một người KHÁC phê duyệt"* — **một**. §4.2 thì đặt
+tên bảng số nhiều (`rfq_award_approvals`) và khai khuôn `unseal_approvals`, vốn là khuôn của HAI chữ
+ký (D2). Hai câu ấy **không** mâu thuẫn, và lượt soi hình dạng đo được vì sao: khuôn `unseal_approvals`
+nói về HÌNH DẠNG ràng buộc — `UNIQUE (org, request, approver_user)` cộng `UNIQUE (org, request,
+approver_session)`, sáu ràng buộc đo trên cụm thật — không về SỐ LƯỢNG.
+
+Chủ dự án chốt **MỘT** ngày 2026-09-22. Con số sống ở **một chỗ**: `CHU_KY_CAN constant integer := 1`
+trong `award_kiem_mot_award_song`. Lớp gói KHÔNG đếm — hai bản đếm là hai bản trôi — nên
+`duyetTraoThau` ghi chữ ký rồi ghi luôn hàng `APPROVED`, và nếu ngày nào con số thành hai thì câu
+`INSERT` thứ hai từ chối với thông điệp gọi tên số chữ ký đang có, và lời gọi của người duyệt thứ hai
+đi qua. Không một dòng nào của lớp trên phải đổi.
+
+### Cổng HUỶ là cổng của người DUYỆT, và cái giá được nói ra
+
+Một phép đo trên `005`: `award.recommend` do **BUYER · PROCUREMENT_MANAGER · FINANCE · DIRECTOR**
+giữ; `po.approve` chỉ **FINANCE · DIRECTOR**. Nếu huỷ đi qua `award.recommend` thì một `BUYER` huỷ
+được một award **đã duyệt** rồi đề xuất người khác — phê duyệt kép bị tháo bằng cách **bào mòn**, chứ
+không bằng cách vượt. Nên `huyTraoThau` đòi `po.approve`.
+
+Cái giá, nói thẳng: **người đề xuất không tự rút lại được đề xuất của mình.** Đó là một quyền hẹp hơn
+và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hay một cổng phụ thuộc trạng thái, và cả
+hai là thiết kế mới. Ghi thành khoản **232**.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** nói J3 đã trọn. Vế *người điều phối mở thầu* đọc `unseal_requests.dispatched_by`, cột
+mang người của lần điều phối ĐANG CHẠY, nên sau một lần điều phối lại nó không thấy người đầu. Chủ
+dự án chọn **NHẬN** lỗ ấy ngày 2026-09-22 sau khi ba hình dạng đóng được cân, và ô J3 khai phạm vi
+HẸP HƠN mệnh đề — khoản **233**.
+
+Nó **không** nói lượt chấm mà award dựa trên được canh ở hai lớp. Khác `060` (vòng BAFO), tầng CSDL
+ở đây chỉ đòi lượt chấm **thuộc đúng RFQ**, không đòi nó là lượt **mới nhất**; câu `ORDER BY
+e.created_at DESC` của `deXuatTraoThau` là lớp DUY NHẤT. Bất đối xứng ấy có lý do đo được —
+`rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một thân yêu cầu khai được nó,
+còn `evaluationId` của award không phải tham số của hàm nào — và nó vào sổ thành khoản **231**.
+
+Nó **không** đổi gì ở `cancelRfq`, `countReceivedBids`, hay đường niêm phong.

@@ -36,7 +36,7 @@ function loiCua(r, macDinh) {
 }
 
 function dienDl(el, hang) {
-  el.innerHTML = "";
+  el.replaceChildren();
   for (const [k, v] of hang) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v === null || v === undefined ? "—" : String(v);
@@ -161,7 +161,7 @@ $("nut-doc").addEventListener("click", async () => {
 async function napHangMuc() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/items`);
   const tb = $("bang-hm").querySelector("tbody");
-  tb.innerHTML = "";
+  tb.replaceChildren();
   const ds = Array.isArray(r.body?.items) ? r.body.items : [];
   phien = { ...phien, soHangMuc: ds.length };
   for (const hm of ds) {
@@ -268,7 +268,7 @@ $("nut-doc-moi").addEventListener("click", async () => {
 async function napLoiMoi() {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/invitations`);
   const tb = $("bang-moi").querySelector("tbody");
-  tb.innerHTML = "";
+  tb.replaceChildren();
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");

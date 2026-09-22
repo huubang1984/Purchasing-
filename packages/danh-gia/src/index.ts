@@ -38,3 +38,36 @@ export {
   type HangBangXepHang,
   type ThanhPhanHien,
 } from "./doc-bang-xep-hang.js";
+// [S1.109 / S2.5 tầng người dùng] VÒNG BAFO — lớp có trạng thái. `059` dựng bảng và ba trigger
+// canh, `060` thêm vế *"lượt chấm mới nhất"*; đây là đường sản xuất đi qua chúng, và cho tới vòng
+// này KHÔNG đường nào đi qua (khoản 227).
+export {
+  VongBafoTuChoiError,
+  docVongBafo,
+  docVongBafoKhach,
+  dongVongBafo,
+  moVongBafo,
+  type DongVongBafoInput,
+  type LyDoTuChoiVong,
+  type MoVongBafoInput,
+  type VongBafo,
+  type VongBafoKhach,
+} from "./vong-bafo.js";
+// [S1.110 / S2.6] TRAO THẦU — lớp có trạng thái. `061` dựng hai bảng chỉ-ghi-thêm và năm trigger
+// canh (J3 · J5 · J7); đây là đường sản xuất đi qua chúng, và nó là hành động CUỐI của sản phẩm.
+export {
+  TraoThauTuChoiError,
+  deXuatTraoThau,
+  docTraoThau,
+  duyetTraoThau,
+  huyTraoThau,
+  type ChuKyDuyet,
+  type DeXuatTraoThauInput,
+  type DocTraoThauInput,
+  type DuyetTraoThauInput,
+  type HuyTraoThauInput,
+  type LyDoTuChoiTraoThau,
+  type TraoThau,
+  type TraoThauDayDu,
+  type TrangThaiTraoThau,
+} from "./trao-thau.js";

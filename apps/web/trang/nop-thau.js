@@ -106,7 +106,7 @@ $("nut-mo").addEventListener("click", async () => {
   phien = { ...phien, orgId, token };
   bao($("ok1"), `Lời mời hợp lệ. Link được gửi qua ${r.body.linkChannel}.`);
   const kenh = $("kenh");
-  kenh.innerHTML = "";
+  kenh.replaceChildren();
   for (const k of r.body.otpChannels ?? []) {
     const o = document.createElement("option");
     o.value = k; o.textContent = k;
@@ -148,18 +148,33 @@ $("nut-xac").addEventListener("click", async () => {
 async function napGoiThau() {
   const r = await goi("GET", "/guest/rfq");
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không đọc được gói thầu")); hien($("b3"), true); return; }
-  phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [] };
+  phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null };
 
-  const han = new Date(phien.rfq.deadlineAt);
-  $("tt-rfq").innerHTML = "";
-  for (const [k, v] of [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status], ["Hạn nộp", han.toLocaleString("vi-VN")]]) {
+  // [S1.109 / S2.5 / khoản 227⑶] HẠN NÀO LÀ HẠN ĐANG CÓ HIỆU LỰC.
+  //
+  // `rfq.deadlineAt` là hạn VÒNG MỘT, và suốt `BAFO_OPEN` nó đã ở QUÁ KHỨ — nó không cập nhật
+  // được (vế (b) của bảng cạnh cấm deadline lùi, vế (c) chỉ cho đổi ở `DRAFT`/`OPEN`), và chính
+  // vì thế `059` tách hạn BAFO sang bảng riêng. In thẳng `rfq.deadlineAt` trong lúc có vòng BAFO
+  // là để màn hình nói một hạn đã qua trong khi người đọc nó vẫn nộp được.
+  const vong = phien.bafoRound;
+  const han = new Date(vong === null ? phien.rfq.deadlineAt : vong.deadlineAt);
+  $("tt-rfq").replaceChildren();
+  const dong = [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status]];
+  if (vong !== null) {
+    dong.push(["Vòng", `BAFO ${vong.roundNo} — mời nộp lại, niêm phong như vòng một`]);
+    dong.push(["Hạn nộp của vòng này", han.toLocaleString("vi-VN")]);
+    dong.push(["Hạn vòng một", new Date(phien.rfq.deadlineAt).toLocaleString("vi-VN")]);
+  } else {
+    dong.push(["Hạn nộp", han.toLocaleString("vi-VN")]);
+  }
+  for (const [k, v] of dong) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v;
     $("tt-rfq").append(dt, dd);
   }
 
   const tbody = $("bang-hang").querySelector("tbody");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   for (const it of phien.items) {
     const tr = document.createElement("tr");
     const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
@@ -259,7 +274,7 @@ $("nut-nop").addEventListener("click", async () => {
 
 function veBienNhan(bn, phongBi, thuatToan, phienBanKhoa) {
   const h = describeEnvelope(phongBi);
-  $("tt-bn").innerHTML = "";
+  $("tt-bn").replaceChildren();
   const hang = [
     ["Mã bản nộp", bn.bidVersionId],
     ["Lần nộp", `#${bn.version}`],

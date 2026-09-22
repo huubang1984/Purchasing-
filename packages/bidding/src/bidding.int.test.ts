@@ -203,6 +203,30 @@ afterAll(async () => {
 // ===============================================================================================
 // [INV-B2] MỖI LẦN NỘP SINH MỘT BIÊN NHẬN, VÀ NHÀ CUNG CẤP KIỂM CHỨNG ĐỘC LẬP ĐƯỢC
 // ===============================================================================================
+/**
+ * [S1.109 / khoản 230] `submitBid` nay BỌC lời từ chối của ba trigger `BEFORE INSERT` thành
+ * `BiddingError`, để một lần nộp bị từ chối ra **422** thay vì **500** (`dispatch.ts` ánh xạ theo
+ * TÊN LỚP, và một lỗi `pg` trần không có tên nào trong danh sách đóng).
+ *
+ * Câu của CSDL **vẫn còn nguyên**, ở `cause` — và khẳng định trên `cause` MẠNH HƠN bản cũ
+ * (`rejects.toThrow(/…/)`), vì nó đòi CẢ HAI vế trong một lượt:
+ *   ⑴ phép kiểm nằm ở **CSDL** — chỉ Postgres nói được đúng câu ấy, với `code = 23514`;
+ *   ⑵ gói ánh xạ nó thành một lỗi nghiệp vụ **CÓ TÊN**, không để lỗi trần đi lên thành 500.
+ * Bản cũ chỉ đo ⑴, và nó xanh cả khi lỗi đi ra dưới dạng một sự cố máy chủ.
+ */
+async function tuChoiTuCsdl(viec: Promise<unknown>, mau: RegExp): Promise<void> {
+  const loi = await viec.then(
+    () => null,
+    (e: unknown) => e,
+  );
+  expect(loi, "lần nộp này phải bị từ chối").not.toBeNull();
+  expect((loi as Error).name, "phải là lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần").toBe("BiddingError");
+  const nguyenNhan = (loi as { cause?: unknown }).cause;
+  expect(nguyenNhan, "câu của CSDL phải còn ở cause").toBeInstanceOf(Error);
+  expect((nguyenNhan as { code?: unknown }).code, "và nó phải là check_violation của một trigger").toBe("23514");
+  expect((nguyenNhan as Error).message).toMatch(mau);
+}
+
 describe("[INV-B2] nộp báo giá và biên nhận đã ký", () => {
   it("[INV-B2] chuỗi TRỌN VẸN: niêm phong, nộp, nhận biên nhận, kiểm bằng khoá công khai một mình", async () => {
     const bc = await dungBoiCanh();
@@ -482,11 +506,12 @@ describe("[INV-C1] hạn nộp", () => {
       await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
 
-    await expect(
+    await tuChoiTuCsdl(
       withTenant(apiPool, orgA, (c) =>
         submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }),
       ),
-    ).rejects.toThrow(/Da qua han nop bao gia/);
+      /Da qua han nop bao gia/u,
+    );
 
     // ... và KHÔNG để lại gì: không phiên bản, không biên nhận.
     const { rows } = await db.pool.query<{ n: string }>(
@@ -508,11 +533,12 @@ describe("[INV-C1] hạn nộp", () => {
         [bc.rfqId, uA, sA],
       ),
     );
-    await expect(
+    await tuChoiTuCsdl(
       withTenant(apiPool, orgA, (c) =>
         submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }),
       ),
-    ).rejects.toThrow(/khong nhan bao gia khi dang o trang thai CLOSED/);
+      /khong nhan bao gia khi dang o trang thai CLOSED/u,
+    );
   });
 
   it("[INV-C1] ĐỘT BIẾN: gỡ trigger hạn nộp thì một báo giá TRỄ đi lọt", async () => {

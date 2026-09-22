@@ -13,7 +13,17 @@
 // Danh tính ở MỌI lời gọi gói là `ctx.actor.sessionId` — dẫn xuất từ cookie (ADR-016). Thân yêu
 // cầu chỉ mang dữ liệu nghiệp vụ; không trường nào trong thân là một lời khai "tôi là ai".
 // ==============================================================================================
-import { docBangXepHang, taoLuotDanhGia } from "@trustprocure/danh-gia";
+import {
+  deXuatTraoThau,
+  docBangXepHang,
+  docTraoThau,
+  docVongBafo,
+  dongVongBafo,
+  duyetTraoThau,
+  huyTraoThau,
+  moVongBafo,
+  taoLuotDanhGia,
+} from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
@@ -39,6 +49,7 @@ import {
   setRfqBudget,
   submitRfqForApproval,
   type Currency,
+  type ThanhPhanTrongSoVao,
 } from "@trustprocure/rfq";
 import {
   addSupplierContact,
@@ -90,6 +101,35 @@ function soNguyen(body: unknown, ten: string): number {
   if (typeof v !== "number" || !Number.isInteger(v)) throw new HttpError(422, `trường "${ten}" phải là số nguyên`);
   return v;
 }
+/**
+ * [S1.107 / lượt soi ngang 77 — CAO ②] `evalComponents` của thân `POST /policy`: KHÔNG bắt buộc,
+ * và khi vắng thì chính sách ấy không chấm thầu được — đúng trạng thái của MỌI tổ chức cho tới
+ * vòng này, vì `056` cấp GRANT từ S1.102 và `057` cưỡng chế hình dạng từ S1.105 nhưng không một
+ * dòng mã sản xuất nào ghi hai cột ấy, nên route chấm thầu của S1.106 luôn trả 422 ngoài cụm test.
+ *
+ * Bộ đọc này chỉ kiểm hình dạng NGOÀI — mảng của object. Ba trường chuỗi do `packages/rfq` kiểm,
+ * còn `don_vi` thuộc {TIEN, DIEM}, *ít nhất một TIEN* và khuôn của `he_so` do `CHECK` của `057`
+ * phán xử. Ba lớp, mỗi lớp một việc, và không lớp nào chép lại luật của lớp kia.
+ */
+function mangTrongSo(body: unknown, ten: string): readonly ThanhPhanTrongSoVao[] | undefined {
+  const v = truong(body, ten);
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) throw new HttpError(422, `trường "${ten}" phải là mảng`);
+  for (const t of v) {
+    if (typeof t !== "object" || t === null || Array.isArray(t)) {
+      throw new HttpError(422, `trường "${ten}" phải là mảng các object`);
+    }
+  }
+  return v as readonly ThanhPhanTrongSoVao[];
+}
+
+/** Số nguyên TUỲ CHỌN — `undefined` khi vắng, để `packages/rfq` phán xử cặp với `evalComponents`. */
+function soNguyenTuyChon(body: unknown, ten: string): number | undefined {
+  const v = truong(body, ten);
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "number" || !Number.isInteger(v)) throw new HttpError(422, `trường "${ten}" phải là số nguyên`);
+  return v;
+}
 function ngayTuyChon(body: unknown, ten: string): Date | null {
   const v = truong(body, ten);
   if (v === undefined || v === null) return null;
@@ -126,6 +166,7 @@ const invitationIdParam = (req: ApiRequest): string => uuidParam(req, "invitatio
 const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId");
 const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
+const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -323,6 +364,51 @@ const doc: readonly BuyerReadRoute[] = [
   // `null` khi gói thầu chưa được chấm lần nào, KHÔNG 404: "chưa chấm" là một câu trả lời đúng và
   // màn chấm phải phân biệt nó với "không có gói thầu ấy" — cùng khuôn `/rfqs/:rfqId/unseal`
   // (khoản 190). Một mảng rỗng thì nói dối: *"đã chấm, và không ai trong bảng"*.
+  // [S1.109 / S2.5] VÒNG BAFO MỚI NHẤT của gói thầu — `null` khi chưa mở vòng nào.
+  //
+  // KHÔNG cùng rổ `HAM_DOC_CO_QUYEN` với ba đường trên, và vế ấy là một quyết định đo được: hàng
+  // này không mang một mức giá nào. Nó mang `topN`, và với một NGƯỜI MUA con số ấy đã đọc được
+  // qua `GET /policy` — cổng `bid.view` ở đây sẽ canh một thứ không phải bí mật, rồi làm người
+  // đọc tưởng nó là.
+  //
+  // `agent: false` cùng lý do `/rfqs/:rfqId/unseal` (khoản 190): nó biến một id gói thầu thành
+  // id một vòng BAFO, và một tác tử chỉ-đọc không có việc nào cần khả năng ấy.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/bafo",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { bafoRound: await docVongBafo(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) },
+    }),
+  },
+  // [S1.110 / S2.6] AWARD MỚI NHẤT của gói thầu kèm chữ ký duyệt — `null` khi chưa có đề xuất
+  // nào. CÙNG rổ `HAM_DOC_CO_QUYEN` với bảng xếp hạng và bảng so sánh, và khác hẳn
+  // `/rfqs/:rfqId/bafo` ngay trên: hàng vòng BAFO không nói ai là ai, còn hàng này nói **ai
+  // thắng**. Cổng `bid.view` nằm THẲNG trong `docTraoThau` (khoản 33).
+  //
+  // `agent: false` cùng lý do `/rfqs/:rfqId/ranking`: danh tính người thắng là kết luận đắt nhất
+  // mà một tác tử chỉ-đọc đọc được, và không việc nào của `apps/mcp` cần nó.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/award",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        award: await docTraoThau(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
   {
     method: "GET",
     path: "/rfqs/:rfqId/ranking",
@@ -366,7 +452,9 @@ const ghi: readonly BuyerWriteRoute[] = [
     audience: "BUYER",
     mutates: true,
     permission: PERMISSIONS.EVALUATION_PERFORM,
-    resourceType: "RFQ_EVALUATION",
+    // [S1.107 / lượt soi ngang 77 — ②] `RFQ`: bộ điều phối ghi cặp này nguyên văn vào hàng
+    // sổ `PERMISSION_DENIED`, và lúc ấy lượt đánh giá chưa tồn tại.
+    resourceType: "RFQ",
     resourceId: rfqIdParam,
     handler: async (ctx) => ({
       status: 201,
@@ -375,6 +463,155 @@ const ghi: readonly BuyerWriteRoute[] = [
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // --------------------------------------------------------------------------------------------
+  // [S1.109 / S2.5] MỞ và ĐÓNG vòng BAFO — cạnh `EVALUATING->BAFO_OPEN` và `BAFO_OPEN->BAFO_CLOSED`
+  // của `059`. Cho tới vòng này bốn cạnh BAFO tồn tại và được canh ở tầng CSDL mà KHÔNG đường sản
+  // xuất nào đi qua (khoản **227**).
+  //
+  // Mã quyền RIÊNG `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` (ADR-055) — KHÔNG dùng lại
+  // `evaluation.perform`: mở vòng BAFO là hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT
+  // giá của mọi người, và `evaluation.perform` do NĂM trên SÁU vai giữ (khoản 220).
+  //
+  // Thân KHÔNG mang `evaluationId`, và đó là vế đóng của một lỗ mà lượt soi hình dạng của vòng
+  // này tìm ra: `059` cho người gọi khai lượt chấm nào cũng được, nên vòng BAFO thứ hai mời được
+  // top-N của bảng xếp hạng TRƯỚC BAFO. `060` đòi lượt MỚI NHẤT ở tầng CSDL và `moVongBafo` tự
+  // suy nó — hai lớp, và không lớp nào đọc một trường do người gọi khai.
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/bafo",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_BAFO_OPEN,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        bafoRound: await moVongBafo(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            deadlineAt: ngayBatBuoc(ctx.req.body, "deadlineAt"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/bafo/close",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_BAFO_OPEN,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        bafoRound: await dongVongBafo(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // --------------------------------------------------------------------------------------------
+  // [S1.110 / S2.6] TRAO THẦU — cạnh `EVALUATING->AWARDED` và `AWARDED->EVALUATING` của `061`, và
+  // hành động CUỐI của sản phẩm. Ba route, và **hai** mã quyền khác nhau ở đúng chỗ spec §7 đòi
+  // hai con người: `award.recommend` để ĐỀ XUẤT, `po.approve` để DUYỆT.
+  //
+  // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
+  // tự suy lượt chấm MỚI NHẤT. Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
+  // thuộc đúng RFQ, không đòi nó mới nhất — nên một ca đo khoá riêng vế ấy.
+  //
+  // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
+  // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
+  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. Cái giá: người đề xuất không tự rút lại
+  // được (khoản **232**).
+  // --------------------------------------------------------------------------------------------
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.AWARD_RECOMMEND,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await deXuatTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            bidVersionId: uuidBody(ctx.req.body, "bidVersionId"),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // `awardId` đi trong ĐƯỜNG DẪN, không trong thân: người duyệt ký lên đúng đề xuất họ đã đọc, và
+  // một lời gọi chỉ theo `rfqId` sẽ ký lên đề xuất MỚI trong im lặng nếu đề xuất kia vừa bị huỷ và
+  // dựng lại. `resourceId` vẫn là `rfqId` — hàng sổ `PERMISSION_DENIED` nói về gói thầu, và
+  // `duyetTraoThau` đối chiếu hai id để hàng sổ ấy không gọi tên sai gói.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/:awardId/approve",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.PO_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await duyetTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            awardId: awardIdParam(ctx.req),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/cancel",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.PO_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await huyTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
           ctx.auditPool,
         ),
       },
@@ -400,6 +637,11 @@ const ghi: readonly BuyerWriteRoute[] = [
         version,
         dualApprovalThreshold: chuoiBatBuoc(ctx.req.body, "dualApprovalThreshold"),
         currency: tienTe(ctx.req.body),
+        // [S1.107 / CAO ②] Hai trường TUỲ CHỌN đi thành một BỘ — `056` đòi
+        // `(eval_components IS NULL) = (bafo_top_n IS NULL)`, và `packages/rfq` ném một lỗi
+        // CÓ TÊN khi chỉ một trong hai được khai, thay vì để người gọi đọc một `23514`.
+        evalComponents: mangTrongSo(ctx.req.body, "evalComponents"),
+        bafoTopN: soNguyenTuyChon(ctx.req.body, "bafoTopN"),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { policy } };

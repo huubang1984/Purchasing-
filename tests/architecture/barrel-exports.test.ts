@@ -998,6 +998,23 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "taoLuotDanhGia",
   "tinhChiPhiHieuDung",
   "vietSo",
+  // [S1.109 / S2.5 tầng người dùng] NĂM symbol của lớp vòng BAFO. `docVongBafoKhach` ra cửa vì
+  // `apps/api/src/routes/guest.ts` gọi nó — và nó là hàm DUY NHẤT ở đây mà một phiên KHÁCH chạm
+  // tới, nên nó trả đúng hai trường (`roundNo`, `deadlineAt`). `topN` và `openedBy` không đi ra
+  // đường khách bằng lối nào.
+  "VongBafoTuChoiError",
+  "docVongBafo",
+  "docVongBafoKhach",
+  "dongVongBafo",
+  "moVongBafo",
+  // [S1.110 / S2.6] NĂM symbol của lớp trao thầu. KHÔNG có hàm nào cho phiên KHÁCH, và đó là
+  // một quyết định: policy `rfq_awards_khach` (`061`) đóng HẲN hai bảng với khách, nên một hàm
+  // đọc cho khách ở đây sẽ là một hàm luôn trả rỗng — tức một lời hứa sai về bề mặt.
+  "TraoThauTuChoiError",
+  "deXuatTraoThau",
+  "docTraoThau",
+  "duyetTraoThau",
+  "huyTraoThau",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [

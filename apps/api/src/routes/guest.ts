@@ -10,6 +10,7 @@
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
 // ==============================================================================================
 import { getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
+import { docVongBafoKhach } from "@trustprocure/danh-gia";
 import { getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { HttpError } from "../http.js";
@@ -65,13 +66,23 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       if (rfq === null) throw new HttpError(404, "khong co goi thau");
       const items = await listRfqItems(ctx.client, ctx.orgId, ctx.rfqId);
       const khoa = await getRfqPublicKeys(ctx.client, ctx.orgId, ctx.rfqId);
+      const vongBafo = await docVongBafoKhach(ctx.client, ctx.orgId, ctx.rfqId);
       // Danh sách trường là DANH SÁCH TRẮNG, không phải `...rfq`: `createdBy` là một người mua,
       // `requiresDualApproval` là nội bộ, và ngân sách thì KHÔNG CÓ Ở ĐÂY — `rfq_budgets` đóng với
       // phiên khách (027) và handler này cũng không hỏi. Test đo cả hai vế.
+      //
+      // [S1.109 / S2.5 / khoản 227⑶] `bafoRound` là `null` ngoài vòng BAFO, và khi có vòng nó
+      // mang ĐÚNG hai trường. Vì sao nó phải có mặt: `rfq.deadlineAt` là hạn VÒNG MỘT, và suốt
+      // `BAFO_OPEN` nó đã ở QUÁ KHỨ — vế (b) của bảng cạnh cấm deadline lùi và vế (c) chỉ cho đổi
+      // ở `DRAFT`/`OPEN`, nên nó không cập nhật được; chính vì thế `059` tách hạn BAFO sang bảng
+      // riêng. Không có trường này, màn nộp thầu chỉ đọc được một hạn ĐÃ QUA trong khi nhà cung
+      // cấp vẫn nộp được. `topN` và `openedBy` KHÔNG ra khỏi đây — `docVongBafoKhach` trả đúng
+      // hai trường, và policy `rfq_bafo_rounds_khach` (`060`) canh HÀNG ở một tầng khác.
       return {
         status: 200,
         body: {
           rfq: { id: rfq.id, title: rfq.title, status: rfq.status, deadlineAt: rfq.deadlineAt },
+          bafoRound: vongBafo,
           items: items.map((i) => ({
             lineNo: i.lineNo,
             description: i.description,

@@ -120,7 +120,31 @@ export default tseslint.config(
     // Phải GỘP chứ không được thay: `disableTypeChecked` ở trên đóng góp trọn một khối `rules`
     // (mọi luật cần kiểu, tắt), và một khoá `rules` viết sau nó sẽ ĐÈ MẤT cả khối ấy — eslint
     // khi đó gãy ngay ở luật cần kiểu đầu tiên thay vì chạy. Đo một lần lúc bật luật này.
-    rules: { ...tseslint.configs.disableTypeChecked.rules, "no-undef": "error" },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      "no-undef": "error",
+    // [S1.107 / lượt soi ngang 77 — ③] VÀ MỘT LUẬT THỨ HAI, VÌ MỘT THƯ MỤC KHÔNG SINK HÔM NAY
+    // KHÔNG PHẢI MỘT THƯ MỤC KHÔNG SINK.
+    //
+    // Lượt soi ngang 76 tìm ra BA khiếm khuyết CAO và cả ba nằm trong đúng thư mục này. Chúng
+    // được vá ở S1.99 — nhưng vá ĐIỂM: hôm nay `apps/web/trang/*.js` có 0 chỗ gán `innerHTML`
+    // khác rỗng, 0 `insertAdjacentHTML`, 0 `document.write` (đo ở lượt 77), và KHÔNG lớp nào giữ
+    // cho con số ấy ở 0. Đây là mã duy nhất của kho chạy trong trình duyệt của người mua và của
+    // nhà cung cấp, và nó dựng DOM từ dữ liệu máy chủ trả về — tên nhà cung cấp, mã thành phần
+    // chính sách, thông điệp lỗi. Một `innerHTML` đặt vào đúng một trong những chỗ ấy là XSS.
+    //
+    // MƯỜI chỗ `innerHTML = ""` (xoá con) đã đổi sang `replaceChildren()` ở chính vòng này,
+    // nên luật dưới đây KHÔNG cần một ngoại lệ nào — và một luật không ngoại lệ là luật không ai
+    // học được cách lách.
+    "no-restricted-properties": [
+      "error",
+      { property: "innerHTML", message: "Dựng DOM bằng createElement + textContent. `innerHTML` trên dữ liệu máy chủ là XSS; xoá con thì dùng replaceChildren()." },
+      { property: "outerHTML", message: "Dựng DOM bằng createElement + textContent, không bằng chuỗi HTML." },
+      { property: "insertAdjacentHTML", message: "Dựng DOM bằng createElement + textContent, không bằng chuỗi HTML." },
+      { object: "document", property: "write", message: "`document.write` phân tích chuỗi thành HTML — cùng lớp rủi ro với innerHTML." },
+      { object: "document", property: "writeln", message: "`document.writeln` phân tích chuỗi thành HTML — cùng lớp rủi ro với innerHTML." },
+    ],
+    },
   },
   {
     files: ["**/*.test.ts", "tools/**/*.ts"],
