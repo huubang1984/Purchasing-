@@ -10902,3 +10902,89 @@ làm nó KHÔNG THẤY lời khai chứ không làm nó báo sai định dạng.
   lần liên tiếp là một nhịp đã hỏng chứ không còn là ba lần hoãn: xem `Handoff.md` §11.
 - Khoản **234** giữ nguyên nội dung và nguyên rổ (**B**) mà nhánh đã xếp; vòng này không phán xử lại
   việc xếp rổ ấy.
+
+---
+
+# §S1.112 — một ca ĐỎ NGẪU NHIÊN, và ca nguy nhất không phải ca đã báo
+
+**Ngày:** 2026-09-22 · **Nhánh:** `khoan-totp-bien-dung-sai` · **Khoản:** 235 (mở và ĐÓNG cùng vòng)
+· Một tệp test, không một dòng mã sản xuất.
+
+## 1. Tái lập TẤT ĐỊNH trước khi sửa
+
+`hoSo()` tính `last_used_counter` ở T1 bằng `counterForTime(Date.now())`; trigger `039` so nó với
+`clock_timestamp()` ở T2 > T1, dung sai **±3** bước 30 giây. Ca `lechBuoc = 3` ngồi **đúng biên
+dưới**.
+
+Phép đo ép đúng điều kiện của giả thuyết — chờ qua một mốc bội-30-giây **giữa** `hoSo` và câu chèn:
+
+| ca | dựng | kết quả |
+|---|---|---|
+| đối chứng ÂM | `hoSo(+3)` rồi chèn NGAY | **QUA** — giàn cảnh đúng |
+| **NHÂN QUẢ** | `hoSo(+3)`, CHỜ qua mốc, chèn | **TỪ CHỐI 23514**, đúng thông điệp đã báo |
+
+Khe hở tự nhiên T1→T2, đo 20 lượt trên máy rảnh: **trung bình 7 ms** (min 5, max 9) ⇒ xác suất vượt
+mốc ≈ **0,023 %** mỗi cặp. Dưới tải trọn cây khe ấy lớn hơn, và xác suất lớn theo tỉ lệ.
+
+## 2. BA lời khai của chẩn đoán bị chính phép đo bác
+
+**⑴ *"khe hở HAI ĐỒNG HỒ Node ↔ Postgres"* — sai.** Container dùng chung clock của host nên không
+có skew. Đo: lấy bộ đếm từ `clock_timestamp()` của CSDL **ngay trong câu ghi** — tức đúng bản vá
+được kê ra — và ca ấy **VẪN ĐỎ**. Thứ gây đỏ là **thời gian TRÔI** giữa hai câu, không phải nguồn
+đồng hồ. Một bản vá đúng theo lời khai sai sẽ để nguyên cuộc đua và làm người sau tin nó đã đóng.
+
+**⑵ *"`lechBuoc = -3` cũng ở biên"* — sai.** Đồng hồ chỉ trôi **tới**, nên một lần vượt mốc đưa `-3`
+từ *+3 bước ở tương lai* thành *+2* — **sâu hơn** vào trong dung sai. Đo: vẫn QUA.
+
+**⑶ *"những ca TỪ CHỐI thì lệch thêm một bước vẫn từ chối, nên chúng an toàn"* — SAI với `-4`, và
+đây là ca NGUY HƠN ca đã báo.** Bộ đếm *+4 bước ở tương lai*, sau một lần vượt mốc, thành *+3* —
+**lọt vào dung sai và câu INSERT ĐI QUA**. Một ca lẽ ra **ĐỎ** thành **XANH**: một lần **mù**, không
+phải một lần ồn. Ca ấy là mốc `[review H4-6]` ghim cận trên *"bộ đếm ở tương lai không được thoả mãn
+vĩnh viễn"*; nó im lặng mất đi nghĩa là một lần nới dung sai thật của `039` sẽ không bị bắt. `+4`
+thì an toàn thật — lệch thêm một bước là càng xa.
+
+Bảng đầy đủ, mỗi hàng một phép đo đã chạy:
+
+| `lechBuoc` | phán quyết đúng | sau MỘT lần vượt mốc | phơi ra? |
+|---|---|---|---|
+| **+3** | QUA | **TỪ CHỐI** | **CÓ — đỏ giả** |
+| +4 | TỪ CHỐI | TỪ CHỐI | không |
+| −3 | QUA | QUA | không |
+| **−4** | TỪ CHỐI | **QUA** | **CÓ — xanh giả, nặng hơn** |
+
+## 3. Vá ở FIXTURE, và vì sao không ở hai chỗ kia
+
+**Không ở trigger `039`:** dung sai ±3 là một quyết định an ninh, không một tham số test.
+
+**Không ở mã sản xuất:** đường sản xuất KHÔNG có cuộc đua này — `verifyTotpAttempt` ghi bộ đếm ở
+lệch **0**, nên nó còn trọn ba bước (90 giây) slack trước khi `startUserSession` chèn. Chỉ TEST mới
+ngồi đúng biên, và ngồi đúng biên là **chủ ý**.
+
+`hoSo()` nay gọi `choDuBien()` trước khi ghi: chờ tới khi còn ít nhất **5 giây** trong bước hiện
+tại, cộng một **hậu điều kiện** khẳng định phép chờ đã làm được việc — thiếu nó thì một lần nới
+`BIEN_TOI_THIEU_MS` sai đi qua trong im lặng. Mọi ca đi qua `hoSo()`, nên không ca nào phải tự nhớ
+mình có ở biên hay không, và **mọi ca hiện có giữ nguyên** — kể cả ±3 và ±4.
+
+## 4. Đo sau vá, và một phép đo của em KHÔNG kết luận được
+
+- Chạy tệp **10 lượt**: **0 đỏ**, thời lượng 9–11 s (nền: ~10 s) — biên gần như không tốn gì, vì các
+  lời gọi `hoSo` cách nhau mili-giây nên cả tệp vượt nhiều nhất một mốc.
+- Phép chờ **THẬT SỰ chạy**: 11/11 lượt của phép đo A/B, mỗi lượt 26 ms. Một cổng không bao giờ vào
+  là một cổng không đo gì, nên vế này được đo riêng.
+- **Thứ KHÔNG kết luận được, nói ra:** một phép A/B căn theo mili-giây (đặt câu ghi hồ sơ vào 6 ms
+  cuối của bước) tái lập được **1 lần trong 11**. Con số ấy quá thưa để làm một phép đo — jitter của
+  phép căn cùng cỡ với khe hở 7 ms, nên nhánh "không vá" không ép được điều kiện một cách tin cậy.
+  Kết luận nhân quả vì thế dựa trên mục 1 (ép vượt mốc, 100 %), **không** dựa trên A/B ấy.
+
+## 5. Ranh giới nói ra
+
+- **PHẦN DƯ:** biên 5 giây **không xoá** cuộc đua — nó đẩy ngưỡng từ 7 ms lên 5 000 ms (hơn 700 lần).
+  Một khe hở vượt 5 giây vẫn lật được ca `+3`. Nếu ca ấy lại đỏ, đo `conLaiTrongBuoc()` **trước khi**
+  kết luận: đó vẫn là khoản 235, không phải một lỗi nghiệp vụ mới.
+- **Lượt TÌM cho lời khai *"không có chỗ thứ hai"*:** `grep counterForTime|STEP_SECONDS` trên
+  `packages/ apps/ db/`. Chỗ duy nhất khác ngồi ở BIÊN là `apps/api/src/auth.int.test.ts:1040`
+  (`counterForTime(Date.now()) + 1`, cửa sổ xác thực `DEFAULT_WINDOW = 1`) — và nó **an toàn** theo
+  chiều đồng hồ trôi: mã của bước `N+1` rơi vào GIỮA cửa sổ của bước `N+1`. Mọi chỗ còn lại hoặc
+  dùng mốc cố định `NGAY`, hoặc ở lệch 0.
+- **Không đo dưới tải.** Lần đỏ gốc xảy ra trong một lượt trọn cây; phép đo của vòng này chạy trên
+  cụm dùng-một-lần với máy rảnh. Vế *"khe hở lớn hơn bao nhiêu dưới tải"* chưa có số.
