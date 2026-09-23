@@ -966,6 +966,8 @@ const DANH_SACH_TRANG_DB = [
   // [S1.86 / khoản 128] Cùng hạng: thông điệp khi vai chạy `migrate()` không gọi được `pg_advisory_lock(bigint)` — hàm mà
   // hardening thu hồi khỏi PUBLIC. Nó nêu NGUYÊN VĂN câu `GRANT` người vận hành cần chạy, và test import nó thay vì chép.
   "TU_CHOI_KHOA_MIGRATE",
+  // [khoản 102] Cùng hạng: tiền tố của phép từ chối khi vai chạy `migrate()` là chủ bảng FORCE mà không BYPASSRLS.
+  "TU_CHOI_CHU_BANG_FORCE",
   // [S1.59 / khoản nợ 99] Tiền tố của lỗi khi client lấy từ pool có vai không sạch — cùng lý do; và lớp lỗi mang TÊN riêng, vì ~~mọi
   // chỗ ghi log của tiến trình chỉ ghi tên lỗi~~ [S1.67 / khoản 118, lượt soi 61b-7] dòng log lỗi của `apps/api` ghi tên cùng mã cố
   // định, mà lớp này không mang mã — tên là thứ duy nhất phân biệt nó (lượt soi 52 NHẸ-2).

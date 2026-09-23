@@ -6077,3 +6077,37 @@ do **TRIGGER**: hai người đua nhau trên cùng một gói làm trigger `RAIS
 không lối nào ở tầng gói ghi được. Lớp gói bắt trước ở đường thuận nên ca ấy chỉ tới được khi có tranh
 chấp thật — và khi ấy sổ im. Đó là giới hạn còn lại, và nó được ghi ra chứ không để người sau tưởng đã
 kín. Và nó **không** đổi cách `requirePermission` ghi từ chối QUYỀN: đường ấy không đổi một dòng.
+
+---
+
+## ADR-061 — Vai chạy `migrate()` đã là CHỦ bảng FORCE thì phải có BYPASSRLS; `migrate()` từ chối chạy thay vì để backfill ra 0 hàng
+
+**Bối cảnh.** Khoản **102** (rổ A, ⒞ tiền điều kiện triển khai thật) đo ở S1.58: vai chạy migration mà RLS coi là CHỦ một bảng
+FORCE — chính chủ (hồ sơ N3), hay thừa kế một vai NOLOGIN sở hữu bảng (N3′) — và có EXECUTE trên hàm ngữ cảnh thì mọi câu migration
+chạm bảng tenant bị policy lọc: backfill ra 0 hàng không lỗi, `ADD FOREIGN KEY` đánh dấu ràng buộc hợp lệ mà không kiểm hàng, và
+(đọc ở S1.66) một migration chép-rồi-xoá bảng làm mất dữ liệu. `005_identity.sql` và khoản 91 (FORCE mọi bảng RLS) làm hình dạng ấy
+thành MẶC ĐỊNH, không phải một góc hiếm. Hai hướng vá tại chỗ đã đo và bác: `row_security = off` cho từng tệp gãy cài mới ở 004;
+chủ tự thu hồi EXECUTE gãy ở 011. Thân khoản ghi: lối ra duy nhất đã đo là chạy `migrate()` dưới vai BYPASSRLS — *"một quyết định về
+mô hình triển khai, không phải một bản vá"*.
+
+**Quyết định (chủ dự án, 2026-09-23).** Hồ sơ triển khai thật của TrustProcure chạy `migrate()` dưới một vai có **BYPASSRLS** (hay
+SUPERUSER). `migrate()` cưỡng chế điều đó bằng máy: TRƯỚC lượt sửa của hardening, nếu vai hiện tại không SUPERUSER, không BYPASSRLS mà
+`pg_has_role(current_user, relowner, 'USAGE')` đúng với một bảng FORCE RLS nào trong lược đồ dự án, nó NÉM `TU_CHOI_CHU_BANG_FORCE`
+kèm tối đa năm tên bảng — không lượt sửa, không migration đánh số nào chạy.
+
+**Phạm vi, nói ra.**
+- Cài MỚI dưới vai thường đi qua: chưa có bảng, không backfill nào có hàng để tiêu. Nhưng vai nào tạo bảng thì thành chủ bảng ấy và
+  hardening FORCE mọi bảng RLS — nên lượt deploy SAU của chính vai ấy bị từ chối. Một cụm thật, sớm hay muộn, đòi BYPASSRLS.
+- Hồ sơ N2 (vai deploy KHÔNG sở hữu bảng) giữ nguyên: các lớp khoản 97/100/101 vẫn là thứ canh nó.
+- Trên AWS RDS (ADR-009): vai master thuộc `rds_superuser` và cấp được `BYPASSRLS` cho vai deploy. **Chưa đo trên một cụm RDS thật**
+  — đó là việc của lần triển khai đầu (khoản 15).
+
+**Đo bằng gì.** `db/migrations.int.test.ts` [khoản nợ 101] pha ⒟: N3 và N3′ nay TỪ CHỐI (trước đây ghim *"deploy xanh, backfill bị
+tiêu"*), hàng giữ nguyên; cùng vai thêm BYPASSRLS thì hai backfill tới đích.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** gỡ các lớp canh vai deploy thường (khoản 97/100/101): N2 vẫn là hồ sơ hợp lệ. Nó **không** biến BYPASSRLS thành quyền của
+vai ỨNG DỤNG — `khangDinhPhienDangNhapUngDung` vẫn từ chối BYPASSRLS ở mọi phiên đăng nhập của `apps/`. Và nó **không** xét ca
+một vai thường tạo bảng mới rồi backfill bảng ấy trong CÙNG lượt deploy: phép kiểm chạy TRƯỚC vòng đánh số, khi vai ấy chưa là chủ
+bảng nào. Nếu chính migration ấy `FORCE ROW LEVEL SECURITY` trước câu backfill thì câu backfill bị lọc — ca này **chưa đo**.
