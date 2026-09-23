@@ -1,4 +1,4 @@
-import { TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, createPool, migrate } from "@trustprocure/db";
+import { TU_CHOI_CHU_BANG_FORCE, TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, createPool, migrate } from "@trustprocure/db";
 import {
   startPostgres,
   withMigratedDatabase,
@@ -809,10 +809,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "không có ràng buộc",
       ).toBe(0);
       expect(await emailCua(idHoa)).toBe("N3hoa70@vidu.vn");
-      expect(loi!.message).toBe(
-        `Migration ${ten049} thất bại: supplier_contacts: co hang email chua o chu thuong nhung vai chay migration trien_khai chi thay 0 hang ` +
-          "(row_security_active = true) — RLS da loc khoi doi chieu; chay lai migrate() duoi mot vai ma RLS khong ap de thay dinh danh (049, khoan no 70)",
-      );
+      // [khoản 102 ĐÓNG / ADR-061] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: bản trước ghim thông điệp của khối đối chiếu 049 dưới N3 (*"vai chạy
+      // migration chỉ thấy 0 hàng … RLS đã lọc khỏi đối chiếu"*). Nay `migrate()` từ chối hồ sơ ấy TRƯỚC lượt sửa, nên 049 không chạy
+      // tới; ba khẳng định ngay trên (không ghi 049, không ràng buộc, email nguyên văn) vẫn đúng và vẫn được đo.
+      expect(loi!.message).toContain(TU_CHOI_CHU_BANG_FORCE);
       // Lối ra thông báo chỉ: dưới một vai mà RLS không áp (superuser bootstrap) khối đối chiếu nêu định danh như thường.
       const loiSu = await migrate(db.pool, tmp).then(
         () => null,
@@ -873,39 +873,32 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const dongSauVong = (duong: string): string =>
         `public.suppliers/trien_khai (vai chạy migration)/SELECT: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (${duong})`;
 
-      await pha(
+      // [khoản 102 ĐÓNG / ADR-061] BA PHA ĐẦU LẬT CÓ CHỦ ĐÍCH. ⑴ chính chủ, ⑵ thành viên INHERIT của chủ thường và ⑶ thành viên
+      // INHERIT của chủ BYPASSRLS (BYPASSRLS không thừa kế qua membership — đo: `migrate()` từ chối) đều là vai mà RLS coi là CHỦ bảng
+      // FORCE mà không được miễn RLS — hồ sơ N3/N3′. Trước khoản 102 chúng đi tới mục 94 và migration vá lỗi dưới chính vai ấy tới
+      // đích; nay `migrate()` TỪ CHỐI trước lượt sửa, và lối ra duy nhất là BYPASSRLS (đo ở ca khoản 101 pha ⒟⑶). Pha ⑷ và ⑸ — vai
+      // KHÔNG là chủ lúc hỏi — giữ nguyên.
+      const phaTuChoi = async (ten: string, dung: string, go: string): Promise<void> => {
+        await db.pool.query(dung);
+        await expect(migrate(p, tmp), `${ten}: vai chủ bảng FORCE không BYPASSRLS ⇒ từ chối (khoản 102)`).rejects.toThrow(
+          TU_CHOI_CHU_BANG_FORCE,
+        );
+        await db.pool.query(go);
+      };
+      await phaTuChoi(
         "⑴ vai deploy LÀ chủ bảng",
-        async () => {
-          await db.pool.query(`ALTER TABLE suppliers OWNER TO trien_khai; ${CHI_APP_API}`);
-        },
-        ["public.suppliers/trien_khai (chủ bảng)/SELECT", "cố ý KHÔNG soi chủ thể này"],
-        ["public.suppliers/trien_khai (vai chạy migration)"],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}`,
+        `ALTER TABLE suppliers OWNER TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
-      await pha(
+      await phaTuChoi(
         "⑵ thành viên INHERIT của chủ thường, bảng FORCE",
-        async () => {
-          await db.pool.query(
-            `CREATE ROLE zz_chu100a NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100a; GRANT zz_chu100a TO trien_khai; ${CHI_APP_API}`,
-          );
-        },
-        [dongSauVong("thừa kế quyền chủ bảng zz_chu100a"), "cố ý KHÔNG chặn nó"],
-        [],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100a FROM trien_khai`,
+        `CREATE ROLE zz_chu100a NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100a; GRANT zz_chu100a TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100a FROM trien_khai; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
-      await pha(
-        "⑶ thành viên INHERIT của chủ BYPASSRLS — chủ thể thứ nhất im",
-        async () => {
-          await db.pool.query(
-            `CREATE ROLE zz_chu100b NOLOGIN NOSUPERUSER BYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100b; GRANT zz_chu100b TO trien_khai; ${CHI_APP_API}`,
-          );
-        },
-        [dongSauVong("thừa kế quyền chủ bảng zz_chu100b"), "cố ý KHÔNG chặn nó"],
-        ["(chủ bảng)"],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100b FROM trien_khai`,
+      await phaTuChoi(
+        "⑶ thành viên INHERIT của chủ BYPASSRLS",
+        `CREATE ROLE zz_chu100b NOLOGIN NOSUPERUSER BYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100b; GRANT zz_chu100b TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100b FROM trien_khai; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
       await pha(
         "⑷ vai có ADMIN OPTION (không INHERIT, không SET) trên chủ",
@@ -1045,8 +1038,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const TEP_D1 = "9991_zz_backfill102a.sql";
       await writeFile(join(tmp, TEP_D1), BACKFILL, "utf8");
       await db.pool.query("ALTER TABLE public.suppliers OWNER TO trien_khai; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai");
-      await expect(migrate(p, tmp), "⒟⑴ ranh giới khoản 102: chủ bảng FORCE có EXECUTE — deploy xanh").resolves.toEqual([TEP_D1]);
-      expect(await tenNcc(), "⒟⑴ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+      // [khoản 102 ĐÓNG] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: bản trước ghim RANH GIỚI — deploy XANH, backfill bị tiêu. Nay `migrate()` TỪ CHỐI
+      // trước lượt sửa, không tệp nào được ghi, hàng giữ nguyên; và cùng backfill ấy dưới cùng vai có BYPASSRLS thì tới đích.
+      await expect(migrate(p, tmp), "⒟⑴ chủ bảng FORCE có EXECUTE, không BYPASSRLS ⇒ TỪ CHỐI").rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+      expect(await tenNcc(), "⒟⑴ không migration nào chạy: hàng giữ nguyên").toEqual(["NCC 101"]);
       // ⒟ ⑵ hồ sơ N3′: vai deploy thừa kế một vai NOLOGIN sở hữu cả bảng lẫn hàm (lượt soi 51 NẶNG-1 — bản đầu đỏ ở phán xét mọi lần deploy).
       const TEP_D2 = "9992_zz_backfill102b.sql";
       await writeFile(join(tmp, TEP_D2), BACKFILL, "utf8");
@@ -1054,8 +1049,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "CREATE ROLE zz_chu102 NOLOGIN; ALTER TABLE public.suppliers OWNER TO zz_chu102; ALTER FUNCTION public.app_current_org_id() OWNER TO zz_chu102; " +
           "REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai; GRANT zz_chu102 TO trien_khai",
       );
-      await expect(migrate(p, tmp), "⒟⑵ hồ sơ N3′: deploy xanh (khoản 102)").resolves.toEqual([TEP_D2]);
-      expect(await tenNcc(), "⒟⑵ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+      await expect(migrate(p, tmp), "⒟⑵ hồ sơ N3′ (thừa kế chủ bảng) ⇒ TỪ CHỐI (khoản 102)").rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+      expect(await tenNcc(), "⒟⑵ không migration nào chạy: hàng giữ nguyên").toEqual(["NCC 101"]);
+      // ⒟⑶ lối ra đã đo của khoản 102: CÙNG vai, thêm BYPASSRLS ⇒ cả hai backfill tới đích, mỗi cái đúng một lần.
+      await db.pool.query("ALTER ROLE trien_khai BYPASSRLS");
+      await expect(migrate(p, tmp), "⒟⑶ vai deploy có BYPASSRLS ⇒ đi qua").resolves.toEqual([TEP_D1, TEP_D2]);
+      expect(await tenNcc(), "⒟⑶ backfill dưới BYPASSRLS thấy hàng thật").toEqual(["NCC 101 (da sua 101) (da sua 101)"]);
     } finally {
       await poolTrienKhai?.end();
       await rm(tmp, { recursive: true, force: true });
@@ -7907,6 +7906,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         ]) {
           await db.pool.query(`REVOKE EXECUTE ON FUNCTION pg_catalog.${f} FROM PUBLIC`);
         }
+        // [khoản 102 ĐÓNG / ADR-061] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: lượt đầu trên cụm TRỐNG đã tạo mọi bảng dưới `trien_khai`, nên từ lượt
+        // này nó là CHỦ bảng FORCE mà không BYPASSRLS — hồ sơ N3 — và `migrate()` từ chối trước lượt sửa. Lối ra của ADR-061: một
+        // lần `ALTER ROLE … BYPASSRLS` của superuser, rồi lượt kế đi thẳng.
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+        await db.pool.query("ALTER ROLE trien_khai BYPASSRLS");
         await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
       } finally {
         await poolTrienKhai.end();

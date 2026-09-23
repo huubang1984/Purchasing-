@@ -45,6 +45,13 @@ export const TU_CHOI_DOI_VAI =
   "migrate() từ chối ghi migration: tệp kết thúc dưới một vai khác vai đã mở vòng migration đánh số";
 
 /**
+ * [khoản 102] Tiền tố của phép TỪ CHỐI khi vai chạy `migrate()` là CHỦ (hay thừa kế quyền chủ) của một bảng FORCE RLS mà không
+ * SUPERUSER, không BYPASSRLS — hồ sơ N3/N3′. Xuất ra để test ghim MỘT bản, cùng lý do với `TU_CHOI_GUC_SOM`.
+ */
+export const TU_CHOI_CHU_BANG_FORCE =
+  "migrate() từ chối chạy: vai chạy migration là CHỦ của bảng FORCE ROW LEVEL SECURITY mà không SUPERUSER, không BYPASSRLS";
+
+/**
  * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
  * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, bốn GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm —
  * [S1.72 / lượt soi ngang 66b-7] quan hệ, KIỂU và HÀM trong `pg_temp`; [lượt soi 67a-5] cả toán tử, lớp và họ toán tử, collation, conversion
@@ -574,6 +581,39 @@ export async function migrate(
         `${TU_CHOI_GUC_SOM} — ${gucGanSan[0].ten}. ` +
           "Mọi migration đánh số sẽ chạy dưới tổ chức/phiên khách do người khác chọn (ALTER DATABASE/ROLE … SET, ALTER SYSTEM, " +
           "options= trên chuỗi kết nối deploy). RESET rồi chạy lại trên kết nối mới (mục phán xét khoản 87 của hardening).",
+      );
+    }
+
+    // [khoản 102 — chủ dự án chốt 2026-09-23: *vai deploy phải có BYPASSRLS*] HỒ SƠ N3/N3′ BỊ TỪ CHỐI TRƯỚC LƯỢT SỬA.
+    // Vai chạy migration mà RLS coi là CHỦ một bảng FORCE (chính chủ, hay thừa kế một vai sở hữu bảng) và KHÔNG được miễn RLS
+    // thì mọi câu migration chạm bảng tenant bị policy lọc: backfill ra 0 hàng KHÔNG LỖI, `ADD FOREIGN KEY` đánh dấu ràng buộc
+    // hợp lệ mà không kiểm hàng, và một migration "chép sang bảng mới rồi DROP bảng cũ" chép ra 0 hàng rồi xoá — mất dữ liệu
+    // (đo S1.58; đọc S1.66). Hai hướng vá tại chỗ đã đo và BÁC (thân khoản 102): `row_security = off` từng tệp gãy cài mới ở 004;
+    // tự thu hồi EXECUTE gãy ở 011. Lối ra duy nhất đã đo là chạy `migrate()` dưới vai BYPASSRLS — nên đó là HỢP ĐỒNG, không phải
+    // một lời khuyên: phép kiểm dưới đây biến "N3 phải deploy dưới BYPASSRLS" từ một câu trong sổ nợ thành một lần NÉM.
+    // PHẠM VI, nói ra: chỉ vai đã là CHỦ bảng FORCE. Cài MỚI dưới vai thường đi qua (chưa có bảng; không backfill nào có hàng để
+    // tiêu), và vai N2 (không sở hữu bảng) giữ nguyên các lớp khoản 97/100/101. Nhưng vai nào tạo bảng thì thành chủ bảng ấy, và
+    // hardening FORCE mọi bảng RLS — nên lượt deploy SAU của chính vai ấy bị từ chối ở đây: một cụm thật sớm muộn đòi BYPASSRLS.
+    // "RLS coi là chủ" đo bằng `pg_has_role(…, 'USAGE')` — đúng quan hệ thừa kế mà PostgreSQL dùng khi miễn RLS cho chủ bảng
+    // (N3′: thành viên INHERIT của vai sở hữu). Chỉ TÊN bảng vào thông điệp, tối đa năm tên.
+    const { rows: hoSoVai } = await lockClient.query<{ chu_force: string | null }>(
+      "SELECT CASE WHEN r.rolsuper OR r.rolbypassrls THEN NULL ELSE " +
+        "  (SELECT pg_catalog.string_agg(t.ten, ', ') FROM (" +
+        "     SELECT n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname AS ten " +
+        "       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace " +
+        "      WHERE c.relkind OPERATOR(pg_catalog.=) ANY (ARRAY['r', 'p']::pg_catalog.\"char\"[]) " +
+        "        AND c.relrowsecurity AND c.relforcerowsecurity " +
+        "        AND n.nspname OPERATOR(pg_catalog.<>) ALL (ARRAY['pg_catalog', 'information_schema']::pg_catalog.name[]) " +
+        "        AND pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') " +
+        "      ORDER BY 1 LIMIT 5) t) END AS chu_force " +
+        "  FROM pg_catalog.pg_roles r WHERE r.rolname OPERATOR(pg_catalog.=) current_user",
+    );
+    if (hoSoVai[0]?.chu_force) {
+      throw await tuChoiVaHuyPhien(
+        `${TU_CHOI_CHU_BANG_FORCE} — ví dụ ${hoSoVai[0].chu_force}. RLS áp cho chủ bảng FORCE, nên backfill và kiểm khoá ngoại ` +
+          "của migration chạy dưới vai này thấy 0 hàng KHÔNG LỖI, và một migration chép-rồi-xoá bảng làm MẤT dữ liệu (khoản 102). " +
+          "Chạy migrate() dưới một vai có BYPASSRLS (ALTER ROLE <vai deploy> BYPASSRLS, cần SUPERUSER — trên AWS RDS: vai master " +
+          "cấp được) hay dưới SUPERUSER. Không lượt sửa, không migration đánh số nào chạy ở lượt này.",
       );
     }
 
