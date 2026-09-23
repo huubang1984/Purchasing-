@@ -3235,6 +3235,9 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
     từ: không có nó, hai trigger dựng sẵn của PostgreSQL đủ để chặn deploy trên một lược đồ hợp lệ.
     ✔ đã đo.
 
+
+**[khoản 105] Một phán xét mới theo đúng §2⑵ — mục *ràng buộc CHECK an ninh còn nguyên, còn hiệu lực và đúng định nghĩa đã khai (khoản 105)*.** Đo ở S1.61: gỡ `users_email_chu_thuong`, `supplier_contacts_email_chu_thuong` và hạ `supplier_contacts_email_hinh_dang` về `NOT VALID` sau deploy ⇒ `migrate()` kế đi qua và `Alice105@corp.com` vào được bảng. Mục mới PHÁN XÉT, không TỰ DỰNG lại, vì dựng một `CHECK` không đơn điệu: dữ liệu có thể đã vi phạm trong lúc ràng buộc vắng mặt, và một `ADD CONSTRAINT` tự động sẽ hoặc gãy deploy với lỗi sai hướng, hoặc — dưới `NOT VALID` — hợp thức hoá hàng vi phạm. Chủ thể là danh sách `CHECK_AN_NINH_KHAI` khai theo TÊN kèm migration CUỐI CÙNG định nghĩa ràng buộc và định nghĩa NGUYÊN VĂN (kênh ⑵ của ADR-037: tên đã khai kèm migration khai sinh). Danh sách theo tên thì mù đúng ở chỗ nó thiếu, nên `db/check-an-ninh.int.test.ts` đòi MỌI `CHECK` của lược đồ thuộc đúng một trong hai tập — khai an ninh, hay miễn kèm lý do thuộc một nhóm có tên — và `tests/architecture/check-an-ninh-khai.test.ts` đòi mỗi dòng khai trỏ migration cuối cùng nhắc tên ràng buộc.
+
 ## ADR-029 — Một lời khai TÓM TẮT trong tài liệu phải được SUY RA, hoặc nó sẽ thiu
 
 **Ngày:** 2026-09-08 (phép đo: 2026-09-07) · **Trạng thái:** **Đã chấp nhận** · Đóng: **không
