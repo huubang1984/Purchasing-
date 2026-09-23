@@ -2180,4 +2180,70 @@ describe("họ g11- — khả năng ký mốc neo ngoài", () => {
       rmSync("apps/tmp-probe-neo-cua", { recursive: true, force: true });
     }
   }, 60000);
+
+  // --------------------------------------------------------------------------------------------
+  // [S1.114 / S2.7 / ADR-059 vế 2] `g17-` — LỚP TÍNH LẠI ĐỘC LẬP KHÔNG VỚI TỚI `packages/danh-gia`
+  //
+  // ADR-059 cấm để bảo đảm của bộ bằng chứng phụ thuộc vào chính `chiPhiHieuDung`: một lỗi nằm
+  // trong hàm ấy tự tái lập chính nó qua bộ kiểm. Câu ấy chỉ có nghĩa nếu ranh giới được CƯỠNG
+  // CHẾ — và một quy tắc `depcruise` XANH không nói gì cho tới khi có người làm nó ĐỎ.
+  //
+  // Tệp dò viết vào CHÍNH thư mục bị hạn chế, không sửa tệp thật: một phép đo chạm mã sản xuất là
+  // một phép đo có thể để lại mã sản xuất đã sửa (bài học S1.86).
+  // --------------------------------------------------------------------------------------------
+  it("[INV-G1] `doc-lap/` của bộ bằng chứng KHÔNG với tới packages/danh-gia", () => {
+    const probe = "tools/bo-xuat-danh-gia/src/doc-lap/zprobe-cau-noi.ts";
+    writeFileSync(
+      probe,
+      [
+        'import { SO_LE_TIEN } from "@trustprocure/danh-gia";',
+        "export const zplaceholder = SO_LE_TIEN;",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["tools/bo-xuat-danh-gia", "packages/danh-gia"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("g17-kiem-doc-lap-khong-cham-danh-gia");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] `g17-` canh GIÁN TIẾP, không chỉ cạnh trực tiếp — đối chứng dương", () => {
+    // Vế thứ hai, và nó là thứ `reachable: true` mua được: một tệp trung gian NGOÀI `doc-lap/`
+    // re-export khả năng bị cấm, rồi `doc-lap/` import tệp trung gian ấy. Một quy tắc canh cạnh
+    // TRỰC TIẾP sẽ im — đúng lớp lỗ hổng mà `g11-khong-import-nguoc-tu-cong-cu-xuat-neo` đóng.
+    const cau = "tools/bo-xuat-danh-gia/src/zprobe-trung-gian.ts";
+    const probe = "tools/bo-xuat-danh-gia/src/doc-lap/zprobe-gian-tiep.ts";
+    writeFileSync(
+      cau,
+      ['export { SO_LE_TIEN } from "@trustprocure/danh-gia";', ""].join("\n"),
+    );
+    writeFileSync(
+      probe,
+      [
+        'import { SO_LE_TIEN } from "../zprobe-trung-gian.js";',
+        "export const zplaceholder = SO_LE_TIEN;",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["tools/bo-xuat-danh-gia", "packages/danh-gia"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("g17-kiem-doc-lap-khong-cham-danh-gia");
+    } finally {
+      rmSync(probe, { force: true });
+      rmSync(cau, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-G1] phần CÒN LẠI của bộ bằng chứng VẪN gọi được hàm thuần — đối chứng dương", () => {
+    // Nếu `g17-` chặn cả tệp ngoài `doc-lap/` thì lớp ⑴ của ADR-059 (bộ kiểm rẻ, gọi hàm thuần)
+    // không tồn tại được — và hai bài đo trên sẽ ĐỎ vì một lý do sai. `kiem.ts` import
+    // `@trustprocure/danh-gia` THẬT, nên lượt cruise dưới đây là một phép đo trên mã thật.
+    const { status, output } = depcruise(["tools/bo-xuat-danh-gia", "packages/danh-gia"]);
+    expect(output).not.toContain("g17-");
+    expect(status, `lớp gọi hàm thuần bị chặn nhầm:\n${output}`).toBe(0);
+  }, 60000);
 });
