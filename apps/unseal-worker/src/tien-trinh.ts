@@ -31,7 +31,7 @@
 
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createLocalDevUnwrapper } from "@trustprocure/crypto-keys/unwrap";
-import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
@@ -171,6 +171,10 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
         c.on("error", boQuaLoiKetNoi);
         try {
           await khangDinhPhienDangNhapUngDung(c, "app_unseal");
+          // [khoản 165] Tiến trình này giữ MỘT vòng nên không tự so chéo được (ADR-006). Nó so với
+          // dấu kiểm mà `apps/api` đã ghi — hay ghi trước để `api` so. Lệch ⇒ tiến trình KHÔNG lên,
+          // thay vì hỏng lúc mở phong bì thật. Không giải mã gì: xem khối đầu `062`.
+          if (p === pool) await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
         } finally {
           c.off("error", boQuaLoiKetNoi);
           c.release();

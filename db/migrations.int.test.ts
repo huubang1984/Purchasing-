@@ -327,6 +327,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const tenDb = dbRows[0]!.ten_db;
       await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET row_security = off`);
 
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH, cùng khuôn khoản 92 ở mức database: lượt SỬA gỡ hàng mức vai rồi lượt ấy DỪNG
+      // (hàng vừa gỡ có thể đang che một độc ở tầng thấp hơn mà phiên deploy không thấy), và lượt kế đi thẳng. Vế "chữa được"
+      // mà test này đo không đổi — nó được đo ngay dưới.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).rejects.toThrow("cấu hình mức VAI của GUC vận hành — app_api.row_security");
       await migrate(db.pool, MIGRATIONS_DIR);
 
       const { rows } = await db.pool.query<{ setconfig: string[] | null }>(
@@ -1996,6 +2000,32 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
+  // [khoản 109 — lượt soi ngang 59a-2] CÙNG khuôn ở mức VAI. Hàng mức vai của vai đăng nhập ứng dụng mang giá trị ĐÚNG che
+  // một `ALTER SYSTEM` độc; hardening `RESET ALL` vô điều kiện ⇒ trước bản vá: `migrate()` XANH và pool ứng dụng mới chạy dưới
+  // `{ke_gian,public}` (đo S1.66). Nay lượt ấy DỪNG, nêu tên vai và GUC, và lượt kế đi thẳng.
+  it("[khoản 109] lượt sửa gỡ hàng mức VAI của vai đăng nhập ứng dụng ⇒ migrate() DỪNG nêu vai.GUC; lượt kế đi thẳng", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE ROLE app_api_login LOGIN IN ROLE app_api");
+      await db.pool.query(`ALTER ROLE app_api_login SET search_path = "$user", public`);
+      const loiLan1 = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiLan1, "lượt sửa gỡ hàng mức vai ⇒ lượt ấy dừng").not.toBeNull();
+      expect(loiLan1!.message).toContain("lượt sửa vừa gỡ cấu hình mức VAI của GUC vận hành — app_api_login.search_path");
+      expect(loiLan1!.message, "chỉ TÊN, không giá trị").not.toContain("$user");
+      const { rows } = await db.pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole WHERE r.rolname = 'app_api_login'",
+      );
+      expect(rows[0]!.n, "lượt SỬA vẫn chạy và vẫn gỡ").toBe(0);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "lượt kế đi thẳng").resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  });
+
   // [S1.34 / khoản nợ 78] CHE TÊN qua search_path — ADR-036 hàng 16. Đo trước khi vá (PostgreSQL 16):
   // app_api tạo được bảng tạm (TEMP đến từ PUBLIC, `datacl` NULL), và `sessions` trần rơi vào bảng
   // tạm: SELECT đếm 0 khi public.sessions có 1 hàng, UPDATE 0 hàng không lỗi; bảng tạm sống hết đời
@@ -2391,6 +2421,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         `ALTER ROLE app_unseal_login IN DATABASE "${tenDb}" SET row_security = off`,
       );
 
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH — xem ca [fix I5] ở đầu tệp: lượt sửa gỡ rồi dừng, lượt kế đi thẳng.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).rejects.toThrow("app_unseal_login.row_security, app_unseal_login.search_path");
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       const { rows } = await db.pool.query<{ toan_cum: string[] | null; trong_db: string[] | null }>(
@@ -2956,8 +2988,22 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "nếu phép đo này KHÔNG ra chuỗi trần thì payload đã hỏng và cả test này rỗng ruột",
         ).toBe("(org_id = app_current_org_id())");
 
+        // [khoản 109] Pool CÓ VAI nay từ chối ngay ở lần lấy đầu: `gia` đứng trước `public` là phần CẤM, kiểm tuyệt đối trong
+        // `ganVaiTroChoPool`. Phép đo tiền đề (a) vì thế đi qua một client KHÔNG vai rồi `SET ROLE` bằng tay — đúng hình dạng
+        // của mọi mã dựng pool không qua `createPool(…, { role })` — và vế từ chối được ghim ngay đây.
         const apiPool = db.poolAs("app_api");
-        const client = await apiPool.connect();
+        const tuChoi = await apiPool.connect().then(
+          (c) => {
+            c.release();
+            return null;
+          },
+          (e: Error) => e,
+        );
+        expect(tuChoi?.message, "pool có vai phải từ chối search path có schema lạ trước public").toContain(
+          "schema lạ đứng trước public",
+        );
+        const client = await poolThuDich.connect();
+        await client.query("SET ROLE app_api");
         try {
           await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
           const { rows: doc } = await client.query<{ email: string }>(
@@ -2969,6 +3015,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
               "hổng không tồn tại và nửa (b) là thừa. Đo lại trước khi kết luận.",
           ).toEqual(["vip@b.com"]);
         } finally {
+          // Client KHÔNG vai quay lại `poolThuDich` mà vế (b) dùng tiếp: trả nó về đúng như lúc lấy.
+          await client.query("RESET ROLE; SELECT pg_catalog.set_config('app.org_id', '', false)");
           client.release();
         }
 
@@ -3132,6 +3180,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -3429,14 +3478,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // cho hàng mà bốn mục kia không với tới — `ALTER ROLE ALL` ở vế (a) — chứ không phải lớp duy nhất.
       await db.pool.query("ALTER ROLE app_api SET search_path = ke_gian, public");
       await nhanh92("vai app_api (toàn cụm): GUC vận hành search_path", "nhánh catalog phải thấy ALTER ROLE <vai ứng dụng> SET");
-      expect(await chayMoi(), "bốn mục RESET ALL tự chữa hàng của vai ứng dụng ở lượt SỬA").toBeNull();
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: lượt SỬA vẫn chữa (đo ngay dưới), nhưng lượt ấy nay DỪNG vì nó vừa gỡ một hàng
+      // mức VAI — cùng khuôn nhánh database ở (a'). Lượt kế đi thẳng.
+      expect((await chayMoi())?.message, "lượt gỡ hàng mức vai phải dừng").toContain("cấu hình mức VAI của GUC vận hành — app_api.search_path");
+      expect(await chayMoi(), "bốn mục RESET ALL tự chữa hàng của vai ứng dụng ở lượt SỬA — lượt kế đi thẳng").toBeNull();
       expect(
         (await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c,
         "phép đo không rỗng ruột: lượt SỬA thật sự đã dọn rolconfig",
       ).toBeNull();
       await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET session_replication_role = replica`);
       await nhanh92(`vai app_api IN DATABASE ${tenDb}: GUC vận hành session_replication_role`, "nhánh catalog phải thấy IN DATABASE");
-      expect(await chayMoi(), "mục `cấu hình IN DATABASE của app_api` tự chữa hàng ấy").toBeNull();
+      expect((await chayMoi())?.message, "lượt gỡ hàng mức vai IN DATABASE phải dừng").toContain("app_api.session_replication_role");
+      expect(await chayMoi(), "mục `cấu hình IN DATABASE của app_api` tự chữa hàng ấy — lượt kế đi thẳng").toBeNull();
       await sach92("gỡ hết ⇒ nhánh catalog rỗng");
 
       // (b) ALTER DATABASE SET — nguồn `database`: ba mục kề TỰ CHỮA, mục 92 cố ý im ở CẢ HAI nhánh, và phép từ chối
@@ -7532,6 +7585,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7813,6 +7867,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

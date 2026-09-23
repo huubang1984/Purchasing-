@@ -38,6 +38,8 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   invitation_otp_challenges_destination_hash_check: "DO_DAI",
   invitation_otp_challenges_failed_attempts_check: "SO",
   invitation_otp_challenges_pepper_version_check: "DO_DAI",
+  master_key_check_values_kcv_check: "DO_DAI",
+  master_key_check_values_key_version_check: "DO_DAI",
   mfa_credentials_failed_attempts_check: "SO",
   mfa_credentials_kind_check: "MIEN",
   mfa_credentials_last_used_counter_check: "SO",

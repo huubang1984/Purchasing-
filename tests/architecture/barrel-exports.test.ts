@@ -950,6 +950,11 @@ const DANH_SACH_TRANG_AUDIT = [
 // một đường mở kết nối "tiện tay" — `g9-api-routes-khong-cham-tenancy-va-db` cấm handler của
 // `apps/api` chạm gói này HOÀN TOÀN, kể cả qua cửa.
 const DANH_SACH_TRANG_DB = [
+  // [khoản 165] Dấu kiểm vòng khoá bọc (`062`): hàm băm thuần, hàm ghi-hoặc-so chạy lúc khởi động của `apps/api` và
+  // `apps/unseal-worker`, và lớp lỗi mang TÊN riêng để dòng log khởi động gọi đúng tên sự cố. Không giải mã, không bọc.
+  "DauKiemVongKhoaLechError",
+  "doiChieuDauKiemVongKhoa",
+  "tinhDauKiemKhoa",
   // [S1.51 / lượt soi 44 NẶNG-1] Một CHUỖI, không phải một năng lực: tiền tố của phép từ chối sớm trong `migrate()`. Nó
   // ra cửa vì test ghim nguyên văn nó làm bằng chứng của khoản nợ 87 — bốn bản chép tay đã im lặng hỏng một lần khi
   // chuỗi đổi chữ. Không mở kết nối, không chạm quyền.

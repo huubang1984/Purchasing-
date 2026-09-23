@@ -2677,11 +2677,12 @@ $ham$;
 
   POLICY_KHAC_KHAI constant text :=
     $q$(VALUES
-         ('public', 'caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
+         ('public', 'caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
+         ('public', 'master_key_check_values', 'master_key_check_values_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
        ) AS k(nspname, bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
 
   BANG_RLS_NGOAI_TENANT_KHAI constant text :=
-    $q$(VALUES ('public', 'caller_rate_limits')) AS b(nspname, relname)$q$;
+    $q$(VALUES ('public', 'caller_rate_limits'), ('public', 'master_key_check_values')) AS b(nspname, relname)$q$;
 
   -- [khoản 105] RÀNG BUỘC `CHECK` AN NINH — khai theo TÊN, kèm migration CUỐI CÙNG định nghĩa nó và định nghĩa NGUYÊN VĂN
   -- (`pg_get_constraintdef`). Mục phán xét "ràng buộc CHECK an ninh còn nguyên" ở dưới đòi mỗi dòng: tồn tại, `convalidated`, và
@@ -9369,6 +9370,62 @@ $ham$;
             AND (c.oid IS NULL OR c.contype <> 'c' OR NOT c.convalidated OR pg_get_constraintdef(c.oid) <> ck.dinh_nghia))
         || ' — lớp DUY NHẤT ở tầng lược đồ của các bất biến ấy đã vắng hay yếu đi'$q$,
       $q$một migration MỚI dựng lại ràng buộc (ADD CONSTRAINT, hay VALIDATE CONSTRAINT với ràng buộc NOT VALID) sau khi sửa hàng vi phạm; hoặc, nếu định nghĩa đổi CÓ CHỦ ĐÍCH, sửa dòng khai trong CHECK_AN_NINH_KHAI của chính file này (hardening cố ý không tự dựng: dữ liệu có thể đã vi phạm)$q$
+    ],
+
+    -- ---- [khoản 165] RLS của `master_key_check_values` (062) — bảng NGOÀI cây tenant thứ HAI -------
+    -- Cùng lý do và cùng khuôn với mục `caller_rate_limits` ngay trên: `VI_TU_BANG_TENANT` lọc theo `org_id`,
+    -- nên một `DISABLE ROW LEVEL SECURITY` hay một policy bị sửa trên bảng dấu kiểm sẽ sống qua mọi deploy nếu
+    -- không có mục này. Chép khuôn chứ không gộp hai bảng vào một vòng lặp: thông điệp phán xét phải gọi đúng
+    -- TÊN bảng lệch, và hai mục riêng là hai dòng đọc được trong báo cáo hardening.
+    ARRAY[
+      $q$RLS + policy khách của master_key_check_values (062)$q$,
+      $q$to_regclass('public.master_key_check_values') IS NOT NULL$q$,
+      -- Ba câu dưới đây đi qua `EXECUTE format(...)` chứ không viết thẳng, và đó KHÔNG phải để né một
+      -- lớp canh: `db/migration-shape.test.ts` cấm một file bật RLS hay tạo policy cho bảng do file
+      -- KHÁC tạo, vì tách hai việc qua hai file để lộ một cửa sổ không có RLS. Hardening không mở cửa
+      -- sổ ấy (nó chạy MỌI lần, sau khi 062 đã chạy) và mọi mục tự chữa RLS khác trong file này dùng
+      -- đúng idiom động ấy (xem mục (A)). Viết thẳng ở đây sẽ làm lớp tĩnh mất khả năng phân biệt
+      -- "một migration đánh số quên policy" với "hardening dựng lại policy".
+      $q$DO $fn165$
+         DECLARE
+           ten_bang constant text := 'public.master_key_check_values';
+           -- Trong một literal nháy đơn, mỗi `'` nhân đôi. Chuỗi ĐÍCH là
+           --   NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL
+           -- nên `''app…''` cho hai nháy đơn, và BỐN nháy cho literal chuỗi RỖNG.
+           vi_tu constant text := 'NULLIF(pg_catalog.current_setting(''app.guest_session_id'', true), '''')::pg_catalog.uuid IS NULL';
+         BEGIN
+           EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', ten_bang);
+           EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', ten_bang);
+           IF NOT EXISTS (SELECT 1 FROM pg_policy p
+                           WHERE p.polrelid = to_regclass(ten_bang)
+                             AND p.polname = 'master_key_check_values_khach') THEN
+             EXECUTE format('CREATE POLICY master_key_check_values_khach ON %s USING (%s) WITH CHECK (%s)',
+                            ten_bang, vi_tu, vi_tu);
+           END IF;
+         END
+         $fn165$$q$,
+      $q$(SELECT c.relrowsecurity AND c.relforcerowsecurity
+            AND (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) = 1
+            AND EXISTS (SELECT 1 FROM pg_policy p
+                         WHERE p.polrelid = c.oid
+                           AND p.polname = 'master_key_check_values_khach'
+                           AND p.polpermissive
+                           AND pg_get_expr(p.polqual, c.oid) = pg_get_expr(p.polwithcheck, c.oid)
+                           -- [S1.38 / khoản nợ 82⑵, lượt soi 25a #7] NGUYÊN VĂN thay cho LIKE chuỗi con: bản cũ nhận
+                           -- cả `USING (false AND … app.guest_session_id …)` — đo: sống qua migrate(), bộ đếm 0 hàng.
+                           AND pg_get_expr(p.polqual, c.oid) = $q$ || KHACH_KHONG_PHIEN_LIT || $q$
+                           -- [lượt soi 29, NHẸ-7] và cả VAI lẫn LỆNH: `ALTER POLICY … TO app_unseal` giữ nguyên
+                           -- hai vế mà làm app_api đếm 0 hàng.
+                           AND p.polroles = '{0}'::oid[] AND p.polcmd = '*')
+           FROM pg_class c WHERE c.oid = to_regclass('public.master_key_check_values'))$q$,
+      $q$coalesce((SELECT 'RLS/policy của master_key_check_values lệch — rls=' || c.relrowsecurity::text
+                          || ' force=' || c.relforcerowsecurity::text
+                          || ' policy=' || coalesce((SELECT string_agg(p.polname::text, '; ' ORDER BY p.polname)
+                                                       FROM pg_policy p WHERE p.polrelid = c.oid), '(KHÔNG CÓ)')
+                          || ' (chỉ nêu tên — biểu thức, vai, lệnh không in ra; so với 062 trong pg_policy)'
+                     FROM pg_class c WHERE c.oid = to_regclass('public.master_key_check_values')),
+                  'bảng public.master_key_check_values không tồn tại')$q$,
+      $q$quyền sở hữu bảng public.master_key_check_values hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.15 / sổ nợ 57] Policy dọn của `otp_rate_limits` (044) ----------------------
