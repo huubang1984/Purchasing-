@@ -71,3 +71,25 @@ export {
   type TraoThauDayDu,
   type TrangThaiTraoThau,
 } from "./trao-thau.js";
+// [mảnh 1 / màn xuất bằng chứng] BỘ BẰNG CHỨNG ĐÁNH GIÁ (S2.7, ADR-059) — nửa XUẤT, chuyển từ
+// `tools/bo-xuat-danh-gia` xuống đây để CLI và `apps/api` ghi ra cùng byte. `xuatBoBangChung` là
+// đường dưới phiên người dùng, mang hai cổng `audit.read` + `bid.view` trong thân; `dungBoBangChung`
+// KHÔNG hỏi quyền và chỉ công cụ vận hành gọi nó.
+export { DAC_TA } from "./dac-ta.js";
+export {
+  DANG_BUNDLE,
+  PHIEN_BAN_BUNDLE,
+  TEP_DAC_TA,
+  TEP_DU_LIEU,
+  dungBoBangChung,
+  xuatBoBangChung,
+  type BoBangChung,
+  type BoBangChungDaXuat,
+  type HangBundle,
+  type LuotChamBundle,
+  type MocThoiGian,
+  type ThanhPhanChinhSachBundle,
+  type ThanhPhanLuu,
+  type TraoThauBundle,
+  type XuatBoBangChungInput,
+} from "./bo-bang-chung.js";

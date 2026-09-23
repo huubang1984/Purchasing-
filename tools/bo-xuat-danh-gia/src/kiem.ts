@@ -35,11 +35,11 @@
 // ==============================================================================================
 
 import {
+  DAC_TA,
   laTuChoi,
   tinhChiPhiHieuDung,
   type ThanhPhanChinhSach,
 } from "@trustprocure/danh-gia";
-import { DAC_TA } from "./dac-ta.js";
 import {
   khongTinhDuoc,
   tinhLai,

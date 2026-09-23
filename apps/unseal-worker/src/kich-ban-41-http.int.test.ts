@@ -18,9 +18,14 @@
 // Nó KHÔNG đo heap, KHÔNG đo APM trace, KHÔNG đo lỗi ở tầng vận chuyển ngoài tiến trình. §4 của ma
 // trận ghi đúng ba vế ấy; ô ✅ của A2 KHÔNG được đọc rộng hơn.
 // ==============================================================================================
-import { createPublicKey } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { createHash, createPublicKey } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execPath } from "node:process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { auditStoredCiphertexts, verifyReceipt } from "@trustprocure/bidding";
@@ -1231,6 +1236,78 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const lai = await goi("POST", duong, trangThai.gd2.cookie);
     expect(lai.status, lai.text).toBe(422);
   });
+
+  // [mảnh 1 / màn xuất bằng chứng] Bước cuối của kịch bản `docs/PRODUCT.md` §11 — *"xuất được
+  // bộ bằng chứng kiểm toán của trọn chuỗi ấy"* — nay có đường HTTP dưới phiên một con người.
+  // Ba điều được đo, và điều thứ ba là điều chịu lực:
+  //   ⑴ cổng: `PROCUREMENT_MANAGER` chấm và đề xuất được nhưng KHÔNG giữ `audit.read` ⇒ 403;
+  //   ⑵ hai tệp đi ra đúng byte mà CLI `pnpm bang-chung xuat` ghi (trừ đúng một dòng `xuatLuc`);
+  //   ⑶ hai tệp tải qua HTTP đi qua bộ kiểm ĐỘC LẬP `pnpm bang-chung kiem` — chạy như một tiến
+  //      trình riêng, KHÔNG có `DATABASE_URL`, tức đúng lượt kiểm mà màn hình dặn người dùng chạy.
+  it("bước 12j — XUẤT BỘ BẰNG CHỨNG qua HTTP: cổng audit.read, cùng byte với CLI, và qua bộ kiểm độc lập", async () => {
+    const duong = `/rfqs/${trangThai.rfqId}/evidence-bundle`;
+
+    const chan = await goi("GET", duong, trangThai.mua.cookie);
+    expect(chan.status, chan.text).toBe(403);
+
+    const ok = await goi("GET", duong, trangThai.gd1.cookie);
+    expect(ok.status, ok.text).toBe(200);
+    const eb = (ok.body as {
+      evidenceBundle: { tep: Record<string, string>; soLuotCham: number; soHang: number; soTraoThau: number };
+    }).evidenceBundle;
+    expect(Object.keys(eb.tep).sort()).toEqual(["DAC-TA.md", "bo-bang-chung.json"]);
+    // Hai lượt chấm (trước và SAU BAFO) — bộ bằng chứng mang MỌI lượt, không chỉ lượt mới nhất.
+    expect(eb.soLuotCham).toBe(2);
+    expect(eb.soTraoThau).toBe(2);
+    const bo = JSON.parse(eb.tep["bo-bang-chung.json"] ?? "") as {
+      dacTaSha256: string;
+      traoThau: { awardId: string; status: string }[];
+    };
+    expect(bo.dacTaSha256).toBe(createHash("sha256").update(Buffer.from(eb.tep["DAC-TA.md"] ?? "", "utf8")).digest("hex"));
+    expect(bo.traoThau.map((t) => t.status)).toEqual(["PROPOSED", "APPROVED"]);
+    expect(bo.traoThau[0]?.awardId).toBe(trangThai.awardId);
+
+    const goc = fileURLToPath(new URL("../../../", import.meta.url));
+    const chayCli = (dbUrl: string | null, ...thamSo: string[]): { ma: number; ra: string; loi: string } => {
+      const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "test" };
+      if (dbUrl === null) delete env["DATABASE_URL"];
+      else env["DATABASE_URL"] = dbUrl;
+      const kq = spawnSync(
+        execPath,
+        [
+          "--experimental-transform-types",
+          "--import",
+          pathToFileURL(join(goc, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href,
+          join(goc, "tools", "bo-xuat-danh-gia", "src", "index.ts"),
+          ...thamSo,
+        ],
+        { env, encoding: "utf8", cwd: goc },
+      );
+      return { ma: kq.status ?? -1, ra: kq.stdout ?? "", loi: kq.stderr ?? "" };
+    };
+
+    const thuMuc = await mkdtemp(join(tmpdir(), "tp-bang-chung-http-"));
+    try {
+      const quaHttp = join(thuMuc, "qua-http");
+      const quaCli = join(thuMuc, "qua-cli");
+      await mkdir(quaHttp);
+      // Ghi đúng như trình duyệt ghi: văn bản → byte UTF-8, không phân tích lại.
+      for (const [ten, noiDung] of Object.entries(eb.tep)) await writeFile(join(quaHttp, ten), Buffer.from(noiDung, "utf8"));
+
+      const kiem = chayCli(null, "kiem", "--bo", quaHttp);
+      expect(kiem.ma, `${kiem.ra}\n${kiem.loi}`).toBe(0);
+      expect(kiem.ra).toContain("ok=true");
+
+      const xuat = chayCli(db.connectionString, "xuat", "--org", orgA, "--rfq", trangThai.rfqId, "--ra", quaCli);
+      expect(xuat.ma, `${xuat.ra}\n${xuat.loi}`).toBe(0);
+      expect(await readFile(join(quaCli, "DAC-TA.md"), "utf8")).toBe(eb.tep["DAC-TA.md"]);
+      // `xuatLuc` là đồng hồ của TIẾN TRÌNH xuất — hai tiến trình, hai mốc. Mọi dòng khác bằng nhau.
+      const boQua = (v: string): string => v.replace(/"xuatLuc": \{[^}]*\}/u, '"xuatLuc": {}');
+      expect(boQua(await readFile(join(quaCli, "bo-bang-chung.json"), "utf8"))).toBe(boQua(eb.tep["bo-bang-chung.json"] ?? ""));
+    } finally {
+      await rm(thuMuc, { recursive: true, force: true });
+    }
+  }, 120000);
 
   it("bước 13 — [INV-B5] job toàn vẹn chạy sạch trên TÁM phiên bản (đường vận hành, không HTTP)", async () => {
     const bc = await withTenant(unsealPool, orgA, (c) => auditStoredCiphertexts(c, orgA, trangThai.rfqId));

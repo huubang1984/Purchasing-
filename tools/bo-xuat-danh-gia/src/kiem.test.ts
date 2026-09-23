@@ -13,8 +13,8 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { DAC_TA } from "@trustprocure/danh-gia";
 import type { BoBangChung, HangBundle, ThanhPhanLuu } from "./bo.js";
-import { DAC_TA } from "./dac-ta.js";
 import { HAM_THUAN_THAT, kiemBo, type TinhHamThuan } from "./kiem.js";
 import {
   khongTinhDuoc,

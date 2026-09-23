@@ -23,6 +23,7 @@ import {
   huyTraoThau,
   moVongBafo,
   taoLuotDanhGia,
+  xuatBoBangChung,
 } from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
@@ -401,6 +402,33 @@ const doc: readonly BuyerReadRoute[] = [
       status: 200,
       body: {
         award: await docTraoThau(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // [mảnh 1 / màn xuất bằng chứng] BỘ BẰNG CHỨNG ĐÁNH GIÁ (S2.7, ADR-059) dưới phiên một con
+  // người — đúng hai tệp mà `pnpm bang-chung xuat` ghi, cùng byte, vì cả hai đi qua cùng một
+  // hàm dựng bundle trong `@trustprocure/danh-gia`. Trả VĂN BẢN của tệp chứ không trả object:
+  // nếu trình duyệt tự `JSON.stringify` lại, byte của bundle do trình duyệt quyết chứ không do
+  // máy chủ.
+  //
+  // Cổng `audit.read` + `bid.view` nằm THẲNG trong `xuatBoBangChung` (khoản 33). `agent: false`
+  // cùng lý do `/rfqs/:rfqId/ranking`: bundle mang MỌI hàng của MỌI lượt chấm, tức nhiều giá hơn
+  // cả bảng xếp hạng. `null` khi gói thầu chưa chấm lần nào — cùng khuôn `GET /award`.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/evidence-bundle",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        evidenceBundle: await xuatBoBangChung(
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },

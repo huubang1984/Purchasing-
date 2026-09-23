@@ -2,6 +2,21 @@
 // [S1.114 / S2.7 / ADR-059] ĐỌC MỌI THỨ BUNDLE CẦN, TỪ CƠ SỞ DỮ LIỆU — NỬA *XUẤT*
 //
 // ----------------------------------------------------------------------------------------------
+// [mảnh 1 / màn xuất bằng chứng] VÌ SAO TỆP NÀY Ở ĐÂY, VÀ HAI ĐƯỜNG GỌI NÓ
+// ----------------------------------------------------------------------------------------------
+// Tệp này sinh ra ở `tools/bo-xuat-danh-gia/src/doc-tu-csdl.ts`. Vòng dựng màn xuất bằng chứng
+// chuyển nó xuống gói, vì bundle nay có HAI đường xuất phải ra CÙNG byte:
+//   ⑴ `pnpm bang-chung xuat` — công cụ vận hành, giữ `DATABASE_URL`, KHÔNG hỏi quyền ai;
+//   ⑵ `GET /rfqs/:rfqId/evidence-bundle` của `apps/api` — dưới phiên một con người, qua
+//      `xuatBoBangChung` ở cuối tệp, mang cổng quyền đứng THẲNG trong thân hàm (khoản 33).
+// Cả hai gọi `dungBoBangChung`, nên việc tuần tự hoá JSON cũng nằm ở đây: hai bản `JSON.stringify`
+// ở hai nơi là hai bundle có thể khác nhau một khoảng trắng, và `dacTaSha256` thì chỉ canh ĐẶC TẢ.
+//
+// Nửa *ĐỌC* (`docBo` và các kiểu phía người kiểm) CỐ Ý ở lại `tools/bo-xuat-danh-gia/src/bo.ts`:
+// người kiểm không được mượn định nghĩa hình dạng của chính người bị kiểm. Bốn hằng số tên/phiên
+// bản vì vậy có HAI bản, và `tools/bo-xuat-danh-gia/src/hang-so-khop.test.ts` đòi chúng bằng nhau.
+//
+// ----------------------------------------------------------------------------------------------
 // MỌI LƯỢT CHẤM, KHÔNG PHẢI LƯỢT MỚI NHẤT
 // ----------------------------------------------------------------------------------------------
 // `docBangXepHang` (màn hình) cố ý chỉ lấy lượt chấm MỚI NHẤT, và chú thích của chính nó viết:
@@ -30,9 +45,79 @@
 // đọc tin vào thứ dự án chưa dám tin.
 // ==============================================================================================
 
+import { createHash } from "node:crypto";
 import type pg from "pg";
-import type { MocThoiGian, LuotChamBundle, TraoThauBundle } from "./bo.js";
-import type { ThanhPhanChinhSachDoc } from "./doc-lap/tinh-lai.js";
+import { assertTenantBound } from "@trustprocure/audit";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { DAC_TA } from "./dac-ta.js";
+
+export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
+export const PHIEN_BAN_BUNDLE = 1;
+export const TEP_DU_LIEU = "bo-bang-chung.json";
+export const TEP_DAC_TA = "DAC-TA.md";
+
+/** Một mốc thời gian, cùng NGUỒN của nó — xem khoản 196 và khối đầu tệp. */
+export interface MocThoiGian {
+  readonly giaTri: string;
+  readonly nguon: string;
+}
+
+/** Một phần tử `eval_components` của chính sách — cách viết khoá của `057`, chép nguyên văn. */
+export interface ThanhPhanChinhSachBundle {
+  readonly ma: string;
+  readonly don_vi: string;
+  readonly he_so: string;
+}
+
+/** Một phần tử của `components` — NGUYÊN VĂN như cơ sở dữ liệu giữ. */
+export interface ThanhPhanLuu {
+  readonly ma: string;
+  readonly donVi?: string;
+  readonly heSo?: string;
+  readonly giaTri?: string;
+  readonly tien: string | null;
+}
+
+export interface HangBundle {
+  readonly bidVersionId: string;
+  readonly supplierName: string;
+  readonly effectiveCost: string | null;
+  readonly rank: number | null;
+  readonly components: readonly ThanhPhanLuu[];
+}
+
+export interface LuotChamBundle {
+  readonly evaluationId: string;
+  readonly policyId: string;
+  readonly policyVersion: number;
+  readonly currency: string;
+  readonly chinhSachThanhPhan: readonly ThanhPhanChinhSachBundle[];
+  readonly taoLuc: MocThoiGian;
+  readonly hang: readonly HangBundle[];
+}
+
+export interface TraoThauBundle {
+  readonly awardId: string;
+  readonly evaluationId: string;
+  readonly bidVersionId: string;
+  readonly status: string;
+  readonly reason: string;
+  readonly actedAt: MocThoiGian;
+}
+
+export interface BoBangChung {
+  readonly dang: string;
+  readonly phienBan: number;
+  readonly dacTaPhienBan: number;
+  /** SHA-256 hex của ĐÚNG byte UTF-8 của `DAC-TA.md` đi kèm. */
+  readonly dacTaSha256: string;
+  readonly orgId: string;
+  readonly rfqId: string;
+  readonly xuatLuc: MocThoiGian;
+  /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
+  readonly luotCham: readonly LuotChamBundle[];
+  readonly traoThau: readonly TraoThauBundle[];
+}
 
 /** Câu đi kèm MỌI mốc thời gian đọc từ cơ sở dữ liệu. Xem khối đầu tệp và khoản 196. */
 export const NGUON_DONG_HO_CSDL =
@@ -49,7 +134,7 @@ interface HangLuot {
   readonly version: number;
   readonly currency: string;
   readonly created_at: Date;
-  readonly eval_components: readonly ThanhPhanChinhSachDoc[] | null;
+  readonly eval_components: readonly ThanhPhanChinhSachBundle[] | null;
 }
 
 interface HangDong {
@@ -197,4 +282,104 @@ export async function docMoiTraoThau(
     reason: r.reason,
     actedAt: moc(r.acted_at),
   }));
+}
+
+// ----------------------------------------------------------------------------------------------
+// DỰNG BUNDLE — MỘT CHỖ DUY NHẤT CHO CẢ HAI ĐƯỜNG XUẤT
+// ----------------------------------------------------------------------------------------------
+
+/** Câu đi kèm `xuatLuc` — đồng hồ của TIẾN TRÌNH xuất, dù tiến trình ấy là CLI hay `apps/api`. */
+export const NGUON_DONG_HO_XUAT =
+  "đồng hồ của tiến trình xuất — KHÔNG được chứng thực; không đầu vào nào của phép tính";
+
+/** Hai tệp của một bộ bằng chứng, đã tuần tự hoá — khoá là TÊN tệp, giá trị là văn bản UTF-8. */
+export interface BoBangChungDaXuat {
+  readonly tep: Readonly<Record<typeof TEP_DU_LIEU | typeof TEP_DAC_TA, string>>;
+  readonly soLuotCham: number;
+  readonly soHang: number;
+  readonly soTraoThau: number;
+}
+
+/**
+ * Đọc và tuần tự hoá bộ bằng chứng của một gói thầu. `null` khi gói thầu chưa được chấm lần nào.
+ *
+ * KHÔNG hỏi quyền: người gọi là `pnpm bang-chung xuat` (giữ `DATABASE_URL`, tức đã đứng ngoài mọi
+ * cổng ứng dụng) hoặc `xuatBoBangChung` ngay dưới, nơi cổng đứng. `client` phải đã gắn tenant.
+ *
+ * `null` chứ không một bundle rỗng: một thư mục trông như bộ bằng chứng mà không mang phép đo nào
+ * tệ hơn không có thư mục nào — cùng luật với `kiemBo` từ chối một lượt kiểm không đo được gì.
+ */
+export async function dungBoBangChung(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  xuatLuc: Date,
+): Promise<BoBangChungDaXuat | null> {
+  const luotCham = await docMoiLuotCham(client, orgId, rfqId);
+  if (luotCham.length === 0) return null;
+  const traoThau = await docMoiTraoThau(client, orgId, rfqId);
+
+  const bo: BoBangChung = {
+    dang: DANG_BUNDLE,
+    phienBan: PHIEN_BAN_BUNDLE,
+    dacTaPhienBan: 1,
+    // Băm của BYTE UTF-8, không của chuỗi JS: kho chạy `core.autocrlf=true`, và người ghi đĩa phải
+    // ghi đúng `Buffer.from(…, "utf8")` của văn bản này — cùng bài học với `trich`.
+    dacTaSha256: createHash("sha256").update(Buffer.from(DAC_TA, "utf8")).digest("hex"),
+    orgId,
+    rfqId,
+    xuatLuc: { giaTri: xuatLuc.toISOString(), nguon: NGUON_DONG_HO_XUAT },
+    luotCham,
+    traoThau,
+  };
+
+  return {
+    tep: {
+      [TEP_DU_LIEU]: `${JSON.stringify(bo, null, 2)}\n`,
+      [TEP_DAC_TA]: DAC_TA,
+    },
+    soLuotCham: luotCham.length,
+    soHang: luotCham.reduce((t, l) => t + l.hang.length, 0),
+    soTraoThau: traoThau.length,
+  };
+}
+
+export interface XuatBoBangChungInput {
+  readonly rfqId: string;
+  readonly actorSessionId: string;
+}
+
+/**
+ * [mảnh 1 / màn xuất bằng chứng] Đường xuất dưới phiên một CON NGƯỜI — `GET /rfqs/:rfqId/evidence-bundle`.
+ *
+ * HAI cổng, cả hai đứng THẲNG trong thân (khoản 33 — `cong-quyen-route.test.ts` đọc thân hàm):
+ *   ⑴ `audit.read` — *"Đọc và xuất sổ kiểm toán"* (`005`). Đây là mã của HÀNH ĐỘNG: xuất bằng chứng
+ *      là việc của người kiểm toán, không của người trao thầu — `PROCUREMENT_MANAGER` chấm và đề xuất
+ *      được nhưng KHÔNG tự xuất bằng chứng về chính việc mình làm;
+ *   ⑵ `bid.view` — vì bundle mang `effectiveCost` và `components` của TỪNG báo giá, tức GIÁ. Hôm nay
+ *      mọi vai giữ ⑴ cũng giữ ⑵ (`FINANCE`, `DIRECTOR`), nên ⑵ không rút quyền của ai. Nó ở đây cho
+ *      ngày mai: một vai kiểm toán chỉ giữ `audit.read` sẽ KHÔNG đọc được giá qua cửa sau này mà
+ *      không ai phải nhớ ra — đúng khuôn *mặc định đóng* của kho.
+ */
+export async function xuatBoBangChung(
+  client: pg.PoolClient,
+  orgId: string,
+  input: XuatBoBangChungInput,
+  auditPool: pg.Pool,
+): Promise<BoBangChungDaXuat | null> {
+  await assertTenantBound(client, orgId, "xuatBoBangChung");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  await requirePermission(
+    client,
+    { userId: actor.id, orgId, permission: PERMISSIONS.AUDIT_READ, resourceType: "RFQ", resourceId: input.rfqId },
+    auditPool,
+  );
+  await requirePermission(
+    client,
+    { userId: actor.id, orgId, permission: PERMISSIONS.BID_VIEW, resourceType: "RFQ", resourceId: input.rfqId },
+    auditPool,
+  );
+
+  return dungBoBangChung(client, orgId, input.rfqId, new Date());
 }
