@@ -304,8 +304,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // [S1.115 / khoản 229] NHÓM J — và mỗi dòng dưới đây trả lời câu *"tệp ấy đo được bất biến
   // này bằng cách nào"* mà khối đầu tệp đòi.
   //
-  // **J6 KHÔNG có ở đây**, và đó là một lời khai chứ không một sơ suất: mệnh đề của nó rộng hơn
-  // thứ đang được cưỡng chế (khoản **239**), nên nó chưa có hàng trong sổ đăng ký để khai vào.
+  // ~~**J6 KHÔNG có ở đây**, và đó là một lời khai chứ không một sơ suất: mệnh đề của nó rộng hơn
+  // thứ đang được cưỡng chế (khoản **239**), nên nó chưa có hàng trong sổ đăng ký để khai vào.~~
+  // **[S1.116 / khoản 239 / ADR-060] J6 NAY CÓ MẶT.** Mệnh đề được phát biểu lại đúng mức, luật ghi sổ
+  // CHỌN LỌC cài ở `packages/danh-gia/src/tu-choi-vao-so.ts`, và ba ca đo nó — một mã CHUỖI vào sổ, một mã
+  // CẤU HÌNH không vào, và một đột biến chặn lần ghi để chứng minh nó fail-CLOSED.
   // ---------------------------------------------------------------------------------------
   // J1 — vế LỌC: `DIEM` không bao giờ vào tổng. Hàm thuần đo vế tính; tệp tích hợp đo vế
   // trigger, cộng một đột biến gỡ trigger lúc chạy.
@@ -333,6 +336,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   J4: ["apps/unseal-worker/src/kich-ban-41-http.int.test.ts"],
   // J5 — award trỏ đúng báo giá của đúng RFQ, và báo giá ấy đọc được giá.
   J5: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
+  // J6 — dấu vết của một hành động và của một lần từ chối. Ba ca nằm cùng tệp với giàn cảnh trao thầu,
+  // vì đột biến của nó cần một lối từ chối THẬT trên đường sản xuất chứ không một lời gọi tay.
+  J6: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
   // J7 — tối đa MỘT award còn sống.
   J7: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
 };

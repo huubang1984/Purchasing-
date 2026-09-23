@@ -29,6 +29,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 import {
   laTuChoi,
   tinhChiPhiHieuDung,
@@ -53,12 +54,16 @@ export const MA_THANH_PHAN_GIA = "gia";
  */
 export const TRANG_THAI_CHAM_DUOC = ["UNSEALED", "BAFO_UNSEALED"] as const;
 
-export type LyDoTuChoiLuot =
+// [S1.116 / khoản 239] Suy TỪ `MaTuChoiTrangThai` chứ không viết lại: một mã không có dòng
+// trong `VAO_SO` thì KHÔNG biên dịch được — kiểu cưỡng chế từ vựng, rẻ hơn một cổng đọc mã.
+export type LyDoTuChoiLuot = Extract<
+  MaTuChoiTrangThai,
   | "RFQ_KHONG_CHAM_DUOC"
   | "CHINH_SACH_CHUA_KHAI_TRONG_SO"
   | "THANH_PHAN_CHUA_CO_NGUON"
   | "LECH_TIEN_TE"
-  | "KHONG_CO_BAO_GIA_DOC_DUOC";
+  | "KHONG_CO_BAO_GIA_DOC_DUOC"
+>;
 
 /**
  * Một lần từ chối của cổng đánh giá. Nó mang `lyDo` máy đọc được VÀ một câu người đọc được —
@@ -279,10 +284,16 @@ export async function taoLuotDanhGia(
   );
   const trangThai = rfq[0]?.status;
   if (trangThai === undefined || !(TRANG_THAI_CHAM_DUOC as readonly string[]).includes(trangThai)) {
-    throw new DanhGiaTuChoiError(
-      "RFQ_KHONG_CHAM_DUOC",
-      `Chỉ chấm được gói thầu đang ở trạng thái ${TRANG_THAI_CHAM_DUOC.join(" hoặc ")}; ` +
-        `gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new DanhGiaTuChoiError(
+        "RFQ_KHONG_CHAM_DUOC",
+        `Chỉ chấm được gói thầu đang ở trạng thái ${TRANG_THAI_CHAM_DUOC.join(" hoặc ")}; ` +
+          `gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
 
@@ -372,9 +383,15 @@ export async function taoLuotDanhGia(
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {
-    throw new DanhGiaTuChoiError(
-      "RFQ_KHONG_CHAM_DUOC",
-      "Trạng thái gói thầu đã đổi giữa lúc chấm; lượt đánh giá này không được ghi nhận.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new DanhGiaTuChoiError(
+        "RFQ_KHONG_CHAM_DUOC",
+        "Trạng thái gói thầu đã đổi giữa lúc chấm; lượt đánh giá này không được ghi nhận.",
+      ),
     );
   }
 

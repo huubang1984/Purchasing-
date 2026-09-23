@@ -11666,3 +11666,127 @@ thứ nó đo. `parse.test.ts` **21 → 23 ca**.
 - Sổ nợ **238 → 239** khoản; **229 ĐÓNG**, **239 MỚI** ⇒ tổng mở **98** không đổi. Rổ A **7** không
   đổi, rổ B **67 → 68**, rổ C **24 → 23**; ba rổ cộng đúng: 7 + 68 + 23 = 98.
 - **59** ADR không đổi, **61** migration không đổi, **14 gói + 7 công cụ** không đổi.
+
+# §S1.116 — KHOẢN 239 / ADR-060: TỪ CHỐI TRẠNG THÁI VÀO SỔ CÓ CHỌN LỌC, VÀ CẢ HAI LỐI ĐƯỢC ĐO GIÁ TRƯỚC KHI HỎI
+
+**Mảnh của bảng bốn mảnh mà vòng này chạm: KHÔNG MẢNH NÀO.** Mảnh 2 đã xong ở S1.114; vòng này vá
+một lỗ trong lớp SỔ của chính lát cắt ấy, không làm một bước nào của kịch bản §11 chạy thêm.
+**Khoản rổ A mà vòng này chạm: KHÔNG KHOẢN NÀO** — nó đóng một khoản **rổ B** (239). Nói ra chứ
+không gán bừa một liên hệ: vế ⒞ của ADR-043 đòi một câu trả lời, và *không chạm gì* là một câu trả
+lời hợp lệ khi nó đúng.
+
+## 1. Lỗ, và hai câu sống cạnh nhau mười một vòng
+
+Spec S2 §5 nói **J6** là *"mọi lần đề xuất, duyệt, huỷ award, và **mọi lần từ chối của cổng đánh
+giá**, đều để lại một hàng sổ"*. `packages/danh-gia/src/luot-danh-gia.ts` viết thẳng điều ngược lại
+cho nửa sau:
+
+> mọi lần từ chối QUYỀN đã nằm lại trong `requirePermission`. Các lần từ chối TRẠNG THÁI … không đi
+> qua đường ghi sổ từ chối của cổng.
+
+Cả hai vào kho ở **S1.105** và không ai đối chiếu chúng cho tới khi vòng 229 chuẩn bị mở ô ma trận.
+
+**Đo được, và nó sắc hơn "thiếu một hàng sổ":** `apps/api/src/dispatch.ts` xếp ba lớp lỗi ấy vào
+`LOI_NGHIEP_VU_422`, và nhánh 422 **trả về ngay** — không `console.error`, không hàng sổ. Chú thích
+của chính tệp ấy viết *"422 với thân cố định, **không vào log**"*. Nên một lần từ chối trạng thái
+**không để lại dấu vết nào, ở đâu cả**.
+
+## 2. Đo giá CẢ HAI lối trước khi hỏi — và phép đo làm quyết định khác đi
+
+Lượt trước em trình câu hỏi mà chưa đo giá; chủ dự án bảo **đo trước**. Hai con số đổi hình dạng
+câu trả lời:
+
+**⑴ Máy móc để GHI đã có, và rẻ hơn tưởng.**
+
+| thứ cần | đo được |
+|---|---|
+| migration | **0** — `audit_events.action` là `text NOT NULL`, **không `CHECK`** nào giới hạn từ vựng |
+| cửa công khai mới | **0** — `throwAuditedDenial(auditPool, orgId, event, denial)` đã xuất ở `@trustprocure/identity` |
+| quy tắc `depcruise` mới | **0** — hàm ấy nằm trong `rbac.ts`, đúng chỗ `[INV-D5]` đã cho phép |
+| có biết AI không | **có** — cả **23** chỗ từ chối đều nằm sau `resolveSessionActor` |
+
+**⑵ Cái giá KHÔNG ở lần ghi, mà ở lần ĐỌC — và nó vĩnh viễn.** `verifyAuditChain` đọc **MỌI** hàng
+của tổ chức (`ORDER BY seq`, **không `LIMIT`**) rồi lặp: O(n), cả chuỗi vào bộ nhớ. `audit_events`
+chỉ-ghi-thêm, không tỉa được. Mỗi hàng thêm vào làm **mọi lượt kiểm về sau** chậm hơn, mãi mãi.
+
+**⑶ Và giá trị kiểm toán không đều nhau.** Trong **12** mã, **7** nói *một người bấm một bước sai
+thứ tự*: `RFQ_KHONG_CHAM_DUOC`, `RFQ_KHONG_DE_XUAT_DUOC`, `RFQ_KHONG_MO_VONG_DUOC`,
+`CHUA_CHAM_LAN_NAO`, `KHONG_CO_DE_XUAT_DANG_CHO`, `KHONG_CO_AWARD_CON_SONG`,
+`KHONG_CO_VONG_DANG_MO`. Chuỗi ấy — *tạo RFQ → chọn NCC → mở thầu → award → duyệt* — chính là chuỗi
+mà nguyên tắc **1** của `docs/PRODUCT.md` §4 cấm một cá nhân kiểm soát trọn. **5** mã còn lại nói
+*cấu hình chưa sẵn sàng*, và chúng lặp đúng bằng số lần người dùng bấm lại trước khi ai đó sửa.
+
+## 3. Quyết định — ADR-060, và luật là một MỆNH ĐỀ
+
+> **Ghi khi lời từ chối nói rằng NGƯỜI DÙNG cố đi một bước của chuỗi không đúng thứ tự.**
+> **Không ghi khi nó nói rằng CẤU HÌNH chưa sẵn sàng.**
+
+Một mệnh đề, không một danh sách tên — nên mã thứ mười ba mai sau có một chỗ để được phán xử thay
+vì được thêm vào một danh sách. Trên từ vựng hôm nay nó chia **7 / 5**, và mỗi dòng của `VAO_SO`
+mang một lý do trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*.
+
+**Từ vựng cưỡng chế bằng KIỂU, không bằng cổng.** Ba union lý do nay khai bằng
+`Extract<MaTuChoiTrangThai, …>`, và `VAO_SO` là một `Record` **đầy đủ** — nên một mã mới không có
+dòng quyết định **không biên dịch được**. Mạnh hơn một cổng đọc mã nguồn, và rẻ hơn: không tệp test
+nào phải nuôi.
+
+## 4. `return` chứ không `await` — một phép đo, không một khẩu vị
+
+Mười sáu chỗ ném đổi sang `nemTuChoi(...)`. Bản đầu viết `await nemTuChoi(...)` và `tsc` trả
+**mười tám** lỗi `possibly undefined`: `await` một `Promise<never>` **KHÔNG** làm TypeScript coi
+khối là kết thúc, nên mọi phép thu hẹp mà `throw` vốn cho đã biến mất. Đổi sang `return nemTuChoi(...)`
+— đúng khuôn `packages/unseal/src/gate.ts` đã dùng cho `throwAuditedDenial` — thì luồng thu hẹp lại
+và `tsc` xanh. Ghi ra vì cách sai trông hợp lý hơn cách đúng.
+
+Ba chỗ ném trong `docChinhSach` **không** đổi, và đó là chủ ý: cả ba là mã CẤU HÌNH, và hàm ấy
+không nhận `auditPool` — tức luật và hình dạng mã đã trùng nhau sẵn.
+
+## 5. Đo bằng gì — ba ca, và ca thứ ba là vế chịu lực
+
+⒜ **Một mã CHUỖI để lại ĐÚNG MỘT hàng.** `RFQ_STATE_DENIED`, `resource_id` là gói thầu,
+`payload.ma` là mã, `actor_id` là người bấm. Ca khẳng định **trước** rằng đường THUẬN không ghi
+hàng từ chối nào — thiếu tiền đề ấy, một ca xanh không phân biệt được *ghi đúng* với *ghi bừa*.
+
+⒝ **Đối chứng ÂM cùng cơ chế.** `LECH_TIEN_TE` từ chối THẬT (ca khẳng định cả lời từ chối) mà
+**không** để lại hàng nào. Nửa `vaoSo: false` phải rẻ thật: `nemTuChoi` ném thẳng, không chạm
+`auditPool`, không mở một giao dịch nào.
+
+⒞ **ĐỘT BIẾN — chặn đúng lần ghi ấy.** Một trigger `BEFORE INSERT ON audit_events WHEN (NEW.action
+= 'RFQ_STATE_DENIED')` ném, rồi ca đòi lời từ chối **GÃY ỒN ÀO**:
+
+```
+loi.name              === "DenialAuditFailedError"   ← không còn là lời từ chối trần
+loi.denial.lyDo       === "RFQ_KHONG_DE_XUAT_DUOC"   ← lời từ chối gốc đi kèm bên trong
+hangTuChoiTrangThai() === []                          ← và đúng là không hàng nào ghi được
+```
+
+Cộng một **đối chứng**: gỡ trigger ra thì cùng lời gọi ấy ghi được — nên ca trên đỏ vì ĐỘT BIẾN,
+không vì một lý do khác. Một hàng sổ *cố gắng hết sức* thì J6 không có giá trị nào: đúng lúc ai đó
+gỡ quyền ghi sổ là đúng lúc dấu vết biến mất mà không ai biết.
+
+## 6. Điều vòng này KHÔNG làm
+
+* **KHÔNG ghi mọi lần từ chối** — đó là đúng thứ ADR-060 từ chối, và mệnh đề J6 được **phát biểu
+  lại đúng mức** ở spec §5 thay vì để nó rộng hơn thực tại.
+* **KHÔNG vá được từ chối do TRIGGER.** Hai người đua nhau trên cùng một gói làm trigger
+  `RAISE EXCEPTION`, giao dịch bị huỷ, và không lối nào ở tầng gói ghi được. Lớp gói bắt trước ở
+  đường thuận nên ca ấy chỉ tới được khi có tranh chấp thật — và khi ấy sổ im.
+* **KHÔNG đổi đường ghi từ chối QUYỀN.** `requirePermission` không đổi một dòng.
+* **KHÔNG thêm một bảng sổ thứ hai** — một lớp bằng chứng mà `pnpm neo` không neo và
+  `verifyAuditChain` không kiểm là một lớp tệ hơn không có.
+
+## 7. Số đo
+
+- `pnpm t0` — **0 vi phạm, 308 module / 1258 phụ thuộc** (+1 module: `tu-choi-vao-so.ts`).
+- `pnpm test` — **74 tệp / 1138 ca** (1 bỏ qua), không đổi: ba ca mới đều là ca tích hợp.
+- `pnpm test:int` — **55 tệp / 1203 ca, 0 đỏ, 1172 giây** (trước vòng: 55 / 1200 / 964).
+- `pnpm evidence` — `vitest thoát mã 0`, **2342 khẳng định**, **63/63** bất biến (41/41 nghiệp vụ
+  + 22/22 hàng rào), *Cổng evidence: XANH* — lượt ĐẦU, vì vòng này không chạy gì song song với nó.
+- Mã mới: `packages/danh-gia/src/tu-choi-vao-so.ts` (**1 tệp**, bảng `VAO_SO` 12 dòng có lý do,
+  một lối ra `nemTuChoi`); **16** chỗ ném đổi; **3** ca mới ở `luot-danh-gia.int.test.ts`
+  (**68 → 71**).
+- Sổ đăng ký bất biến **62 → 63** (nghiệp vụ **40 → 41**); **1 cặp (mã, tệp)** mới cho **J6**.
+- **59 → 60** ADR (ADR-060). **61** migration không đổi — vòng này KHÔNG cần một migration nào, và
+  đó là một phép đo chứ không một may mắn.
+- Sổ nợ **239** khoản, **239 ĐÓNG** ⇒ mở **98 → 97**. Rổ A **7** không đổi, rổ B **68 → 67**, rổ C
+  **23** không đổi; ba rổ cộng đúng: 7 + 67 + 23 = 97.

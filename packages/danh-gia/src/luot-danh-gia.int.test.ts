@@ -2274,3 +2274,124 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
     ).resolves.toBeNull();
   });
 });
+
+// ================================================================================================
+// [S1.116 / khoản 239 / ADR-060] **J6** — TỪ CHỐI TRẠNG THÁI NÀO VÀO SỔ, VÀ CA CHỨNG MINH LẦN GHI
+// ẤY KHÔNG PHẢI "CỐ GẮNG HẾT SỨC"
+//
+// Khoản 239 đo được rằng một lần từ chối TRẠNG THÁI không để lại dấu vết nào: `dispatch.ts` trả 422
+// rồi thoát, và chú thích của chính nó viết *"422 với thân cố định, KHÔNG vào log"*. ADR-060 chốt
+// luật CHỌN LỌC — ghi khi lời từ chối nói NGƯỜI DÙNG đi sai thứ tự chuỗi, không ghi khi nó nói CẤU
+// HÌNH chưa sẵn sàng — và ba ca dưới đây đo đúng ba vế mà một ô trong ma trận đòi.
+// ================================================================================================
+
+describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có chọn lọc", { timeout: 300000 }, () => {
+  /** Đếm hàng `RFQ_STATE_DENIED` của một gói thầu. `resource_id`, KHÔNG phải `payload->>'rfqId'`. */
+  async function hangTuChoiTrangThai(rfqId: string): Promise<{ ma: string; actor: string }[]> {
+    const { rows } = await db.pool.query<{ ma: string; actor: string }>(
+      "SELECT payload->>'ma' AS ma, actor_id::text AS actor FROM audit_events " +
+        "WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows;
+  }
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ; mọi lần ghi khác đi qua. */
+  async function voiGhiSoBiChan<T>(viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k239_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k239 thong diep noi bo' USING ERRCODE = 'TP239'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k239_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW " +
+          "WHEN (NEW.action = 'RFQ_STATE_DENIED') EXECUTE FUNCTION public.k239_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k239_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k239_chan_ghi_so()");
+    }
+  }
+
+  /** Đưa một gói thầu sang `AWARDED` rồi đề xuất LẦN HAI — lối `RFQ_KHONG_DE_XUAT_DUOC`. */
+  async function deXuatLanHai(rfqId: string, bidVersionId: string): Promise<unknown> {
+    return withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId, reason: "de xuat lan hai", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+  }
+
+  it("[INV-J6] một mã CHUỖI để lại ĐÚNG MỘT hàng `RFQ_STATE_DENIED`, mang đúng mã và đúng người", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat mot", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    expect(await hangTuChoiTrangThai(rfqId), "tiền đề: đường THUẬN không được ghi hàng từ chối nào").toEqual([]);
+
+    const loi = await deXuatLanHai(rfqId, banRo[2] ?? "");
+    expect(loi).toMatchObject({ lyDo: "RFQ_KHONG_DE_XUAT_DUOC" });
+
+    // Hàng sổ mang MÃ, không mang thông điệp — thông điệp có tên trạng thái, hàng sổ thì bất biến.
+    expect(await hangTuChoiTrangThai(rfqId)).toEqual([
+      { ma: "RFQ_KHONG_DE_XUAT_DUOC", actor: uDeXuat },
+    ]);
+  });
+
+  it("[INV-J6] một mã CẤU HÌNH KHÔNG để lại hàng nào — đối chứng ÂM, cùng cơ chế", async () => {
+    // Nếu ca này XANH vì lối `LECH_TIEN_TE` không chạy, nó không đo gì; nên nó khẳng định CẢ lời
+    // từ chối lẫn sổ rỗng. Đây là nửa `vaoSo: false` của ADR-060, và nó phải rẻ THẬT —
+    // `nemTuChoi` ném thẳng, không chạm `auditPool`, không mở một giao dịch nào.
+    const { rfqId } = await goiDaMo([
+      ["100.00", "VND"],
+      ["100.00", "USD"],
+    ]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toMatchObject({ lyDo: "LECH_TIEN_TE" });
+    expect(
+      await hangTuChoiTrangThai(rfqId),
+      "`LECH_TIEN_TE` là sự cố DỮ LIỆU, không phải một người đi sai thứ tự — nó KHÔNG vào sổ",
+    ).toEqual([]);
+  });
+
+  it("[INV-J6] ĐỘT BIẾN — chặn lần ghi sổ thì lời từ chối GÃY ỒN ÀO, không im lặng đi qua", async () => {
+    // Đây là vế chịu lực: một hàng sổ *cố gắng hết sức* thì J6 không có giá trị nào, vì đúng lúc
+    // ai đó gỡ quyền ghi sổ là đúng lúc dấu vết biến mất mà không ai biết. `throwAuditedDenial`
+    // fail-CLOSED, và ca này là chỗ điều đó được đo.
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat mot", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+
+    const loi = await voiGhiSoBiChan(() => deXuatLanHai(rfqId, banRo[2] ?? ""));
+    // KHÔNG còn là lời từ chối trần: lần ghi hỏng được nâng lên thành một lỗi KHÁC HẲN, và lời
+    // từ chối gốc đi kèm trong đó.
+    expect(loi).toBeInstanceOf(Error);
+    expect((loi as Error).name, "lần ghi sổ hỏng phải đổi HÌNH DẠNG lỗi, không được nuốt").toBe(
+      "DenialAuditFailedError",
+    );
+    expect((loi as { denial?: { lyDo?: string } }).denial?.lyDo).toBe("RFQ_KHONG_DE_XUAT_DUOC");
+    expect(await hangTuChoiTrangThai(rfqId), "và đúng là KHÔNG hàng nào ghi được").toEqual([]);
+
+    // ĐỐI CHỨNG: gỡ trigger ra thì cùng lời gọi ấy ghi được — tức ca trên đỏ vì ĐỘT BIẾN, không
+    // vì một lý do khác.
+    const lai = await deXuatLanHai(rfqId, banRo[2] ?? "");
+    expect(lai).toMatchObject({ lyDo: "RFQ_KHONG_DE_XUAT_DUOC" });
+    expect((await hangTuChoiTrangThai(rfqId)).map((h) => h.ma)).toEqual(["RFQ_KHONG_DE_XUAT_DUOC"]);
+  });
+});
