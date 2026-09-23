@@ -13,11 +13,11 @@
 Dự án có **hai cách đếm bất biến**, cả hai đều đúng trong phạm vi của mình, và việc lẫn lộn
 chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này chốt cách đếm:
 
-- **40 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
+- **41 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
 - **22 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 62 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 63 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,9 +27,9 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **40** | 40 |
+| Nghiệp vụ (A–G) | **41** | 41 |
 | Hàng rào (H) | **22** | 22 |
-| **Cộng** | **62** | **62** |
+| **Cộng** | **63** | **63** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -38,7 +38,7 @@ G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **40/40** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **41/41** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -83,6 +83,7 @@ Hôm nay: **40/40** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | J3 | Người đề xuất award khác mọi người duyệt; và bộ ba *tạo RFQ · điều phối mở thầu · đề xuất award* không cùng một người. **Phạm vi thật HẸP HƠN mệnh đề:** vế điều phối chỉ thấy lần điều phối ĐANG CHẠY — khoản **233**, rổ A | Trigger `award_kiem_de_xuat` và `award_kiem_nguoi_duyet` (`061`), cả hai ghim ở `hardening.always.sql` | T3 | 5 | ✅ ĐẠT |  |
 | J4 | Báo giá BAFO niêm phong đúng như vòng một: không route nào trả một mức giá BAFO trước khi vòng ấy được mở qua cổng bốn vế | Vòng quét MỌI route dưới một phiên có đủ quyền, khuôn A2 | T2, T3 | 3 | ✅ ĐẠT |  |
 | J5 | Award chỉ trỏ tới một báo giá còn hợp lệ của CHÍNH RFQ ấy, và báo giá ấy phải có `effective_cost` đọc được | Khoá ngoại hợp thành, cộng hai vế nội dung trong `award_kiem_de_xuat` (`061`) | T3 | 3 | ✅ ĐẠT |  |
+| J6 | Mọi lần đề xuất, duyệt, huỷ award để lại một hàng sổ; mọi lần từ chối QUYỀN để lại `PERMISSION_DENIED`; và mọi lần từ chối TRẠNG THÁI **nói rằng người dùng đi sai thứ tự chuỗi** để lại `RFQ_STATE_DENIED`. Từ chối nói CẤU HÌNH chưa sẵn sàng thì KHÔNG — **ADR-060** | Khuôn D5; `throwAuditedDenial` ở giao dịch ĐỘC LẬP, và bảng `VAO_SO` cưỡng chế từ vựng bằng KIỂU | T3 | 3 | ✅ ĐẠT |  |
 | J7 | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 | 3 | ✅ ĐẠT |  |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
@@ -126,7 +127,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 62` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 63` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 

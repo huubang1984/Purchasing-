@@ -339,7 +339,8 @@ export interface MocGhim {
 // [S1.115 / khoan 229] 56 -> 62: nhom J vao so dang ky voi SAU hang (J1 J2 J3 J4 J5 J7). J6 KHONG
 // co hang — menh de cua no rong hon thu dang duoc cuong che, xem khoan 239. Cong lai CHAN dung
 // mot luot truoc khi dong nay duoc viet, y nhu lan S1.29: moc nay phai duoc NANG TAY.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 62, coDanhSachToiDa: 0 };
+// [S1.116 / khoan 239] 62 -> 63: J6 vao so dang ky sau khi ADR-060 chot luat ghi so CHON LOC.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 63, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

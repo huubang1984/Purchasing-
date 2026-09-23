@@ -53,13 +53,17 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 /** Lý do máy đọc được của một lần từ chối ở lớp này — cùng khuôn `LyDoTuChoiVong`. */
-export type LyDoTuChoiTraoThau =
+// [S1.116 / khoản 239] Suy TỪ `MaTuChoiTrangThai` — xem `tu-choi-vao-so.ts`.
+export type LyDoTuChoiTraoThau = Extract<
+  MaTuChoiTrangThai,
   | "RFQ_KHONG_DE_XUAT_DUOC"
   | "CHUA_CHAM_LAN_NAO"
   | "KHONG_CO_DE_XUAT_DANG_CHO"
-  | "KHONG_CO_AWARD_CON_SONG";
+  | "KHONG_CO_AWARD_CON_SONG"
+>;
 
 export class TraoThauTuChoiError extends Error {
   constructor(
@@ -231,9 +235,15 @@ export async function deXuatTraoThau(
   );
   const trangThai = rfq[0]?.status;
   if (trangThai !== "EVALUATING") {
-    throw new TraoThauTuChoiError(
-      "RFQ_KHONG_DE_XUAT_DUOC",
-      `Chỉ đề xuất trao thầu khi gói thầu đang ở EVALUATING; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "RFQ_KHONG_DE_XUAT_DUOC",
+        `Chỉ đề xuất trao thầu khi gói thầu đang ở EVALUATING; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
 
@@ -249,9 +259,15 @@ export async function deXuatTraoThau(
   );
   const lv = luot[0];
   if (lv === undefined) {
-    throw new TraoThauTuChoiError(
-      "CHUA_CHAM_LAN_NAO",
-      "Gói thầu này chưa có lượt chấm nào; một award phải trỏ tới một hàng xếp hạng nên không đề xuất được.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "CHUA_CHAM_LAN_NAO",
+        "Gói thầu này chưa có lượt chấm nào; một award phải trỏ tới một hàng xếp hạng nên không đề xuất được.",
+      ),
     );
   }
 
@@ -287,9 +303,15 @@ export async function deXuatTraoThau(
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {
-    throw new TraoThauTuChoiError(
-      "RFQ_KHONG_DE_XUAT_DUOC",
-      "Trạng thái gói thầu đã đổi giữa lúc đề xuất trao thầu; đề xuất này không được ghi nhận.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "RFQ_KHONG_DE_XUAT_DUOC",
+        "Trạng thái gói thầu đã đổi giữa lúc đề xuất trao thầu; đề xuất này không được ghi nhận.",
+      ),
     );
   }
 
@@ -342,16 +364,28 @@ export async function duyetTraoThau(
   );
   const dx = deXuat[0];
   if (dx === undefined || dx.status !== "PROPOSED") {
-    throw new TraoThauTuChoiError(
-      "KHONG_CO_DE_XUAT_DANG_CHO",
-      `Chỉ duyệt được một đề xuất đang ở PROPOSED; đề xuất này đang ở ${dx?.status ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_DE_XUAT_DANG_CHO",
+        `Chỉ duyệt được một đề xuất đang ở PROPOSED; đề xuất này đang ở ${dx?.status ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
   // Đề xuất phải thuộc ĐÚNG gói thầu mà lời gọi khai — xem `DuyetTraoThauInput.rfqId`.
   if (dx.rfq_id !== input.rfqId) {
-    throw new TraoThauTuChoiError(
-      "KHONG_CO_DE_XUAT_DANG_CHO",
-      "Đề xuất trao thầu này không thuộc gói thầu được nêu trong đường dẫn.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_DE_XUAT_DANG_CHO",
+        "Đề xuất trao thầu này không thuộc gói thầu được nêu trong đường dẫn.",
+      ),
     );
   }
 
@@ -452,17 +486,29 @@ export async function huyTraoThau(
   );
   const trangThai = rfq[0]?.status;
   if (trangThai !== "AWARDED") {
-    throw new TraoThauTuChoiError(
-      "KHONG_CO_AWARD_CON_SONG",
-      `Chỉ huỷ được khi gói thầu đang ở AWARDED; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_AWARD_CON_SONG",
+        `Chỉ huỷ được khi gói thầu đang ở AWARDED; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
 
   const truoc = await awardMoiNhat(client, orgId, input.rfqId);
   if (truoc === undefined || truoc.status === "CANCELLED") {
-    throw new TraoThauTuChoiError(
-      "KHONG_CO_AWARD_CON_SONG",
-      "Gói thầu đang ở AWARDED mà không có award nào còn sống — dữ liệu hỏng.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_AWARD_CON_SONG",
+        "Gói thầu đang ở AWARDED mà không có award nào còn sống — dữ liệu hỏng.",
+      ),
     );
   }
 
@@ -498,9 +544,15 @@ export async function huyTraoThau(
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {
-    throw new TraoThauTuChoiError(
-      "KHONG_CO_AWARD_CON_SONG",
-      "Trạng thái gói thầu đã đổi giữa lúc huỷ trao thầu; lần huỷ này không được ghi nhận.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_AWARD_CON_SONG",
+        "Trạng thái gói thầu đã đổi giữa lúc huỷ trao thầu; lần huỷ này không được ghi nhận.",
+      ),
     );
   }
 

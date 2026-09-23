@@ -27,13 +27,17 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 /** Lý do máy đọc được của một lần từ chối ở lớp này — cùng khuôn `LyDoTuChoiLuot`. */
-export type LyDoTuChoiVong =
+// [S1.116 / khoản 239] Suy TỪ `MaTuChoiTrangThai` — xem `tu-choi-vao-so.ts`.
+export type LyDoTuChoiVong = Extract<
+  MaTuChoiTrangThai,
   | "RFQ_KHONG_MO_VONG_DUOC"
   | "CHUA_CHAM_LAN_NAO"
   | "CHINH_SACH_TAT_BAFO"
-  | "KHONG_CO_VONG_DANG_MO";
+  | "KHONG_CO_VONG_DANG_MO"
+>;
 
 export class VongBafoTuChoiError extends Error {
   constructor(
@@ -148,9 +152,15 @@ export async function moVongBafo(
   );
   const trangThai = rfq[0]?.status;
   if (trangThai !== "EVALUATING") {
-    throw new VongBafoTuChoiError(
-      "RFQ_KHONG_MO_VONG_DUOC",
-      `Chỉ mở được vòng BAFO khi gói thầu đang ở EVALUATING; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "RFQ_KHONG_MO_VONG_DUOC",
+        `Chỉ mở được vòng BAFO khi gói thầu đang ở EVALUATING; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
 
@@ -170,9 +180,15 @@ export async function moVongBafo(
   );
   const lv = luot[0];
   if (lv === undefined) {
-    throw new VongBafoTuChoiError(
-      "CHUA_CHAM_LAN_NAO",
-      "Gói thầu này chưa có lượt chấm nào; danh sách mời BAFO suy từ bảng xếp hạng nên không mở vòng được.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "CHUA_CHAM_LAN_NAO",
+        "Gói thầu này chưa có lượt chấm nào; danh sách mời BAFO suy từ bảng xếp hạng nên không mở vòng được.",
+      ),
     );
   }
   // `bafo_top_n = 0` là quy ước *"tổ chức này không dùng BAFO"* (`056`), và `CHECK (top_n > 0)`
@@ -208,9 +224,15 @@ export async function moVongBafo(
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {
-    throw new VongBafoTuChoiError(
-      "RFQ_KHONG_MO_VONG_DUOC",
-      "Trạng thái gói thầu đã đổi giữa lúc mở vòng BAFO; vòng này không được ghi nhận.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "RFQ_KHONG_MO_VONG_DUOC",
+        "Trạng thái gói thầu đã đổi giữa lúc mở vòng BAFO; vòng này không được ghi nhận.",
+      ),
     );
   }
 
@@ -272,9 +294,15 @@ export async function dongVongBafo(
   );
   const trangThai = rfq[0]?.status;
   if (trangThai !== "BAFO_OPEN") {
-    throw new VongBafoTuChoiError(
-      "KHONG_CO_VONG_DANG_MO",
-      `Chỉ đóng được vòng BAFO khi gói thầu đang ở BAFO_OPEN; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "KHONG_CO_VONG_DANG_MO",
+        `Chỉ đóng được vòng BAFO khi gói thầu đang ở BAFO_OPEN; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
     );
   }
 
@@ -289,9 +317,15 @@ export async function dongVongBafo(
   );
   const v = vong[0];
   if (v === undefined) {
-    throw new VongBafoTuChoiError(
-      "KHONG_CO_VONG_DANG_MO",
-      "Gói thầu đang ở BAFO_OPEN mà không có vòng BAFO nào đang mở — dữ liệu hỏng.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "KHONG_CO_VONG_DANG_MO",
+        "Gói thầu đang ở BAFO_OPEN mà không có vòng BAFO nào đang mở — dữ liệu hỏng.",
+      ),
     );
   }
 
@@ -304,9 +338,15 @@ export async function dongVongBafo(
     [orgId, input.rfqId],
   );
   if (doi.rowCount !== 1) {
-    throw new VongBafoTuChoiError(
-      "KHONG_CO_VONG_DANG_MO",
-      "Trạng thái gói thầu đã đổi giữa lúc đóng vòng BAFO; lần đóng này không được ghi nhận.",
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new VongBafoTuChoiError(
+        "KHONG_CO_VONG_DANG_MO",
+        "Trạng thái gói thầu đã đổi giữa lúc đóng vòng BAFO; lần đóng này không được ghi nhận.",
+      ),
     );
   }
 

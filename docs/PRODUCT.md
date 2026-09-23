@@ -189,7 +189,7 @@ tài khoản hạ tầng, mảnh 4 cần một khách hàng. Không vòng vá l�
 **Ba mảnh đầu là việc của dự án. Mảnh thứ tư thì không, và nó chặn nhiều nhất** — §10 đã gọi nó
 là rủi ro lớn nhất, lớn hơn mọi rủi ro kỹ thuật, từ ngày đầu tiên.
 
-**Điều mục này KHÔNG nói:** nó không nói phần đã xây là thừa. Lõi niêm phong ~~có 56/56 bất biến~~ **[S1.115] cùng lớp đánh giá nay có 62/62 bất biến**
+**Điều mục này KHÔNG nói:** nó không nói phần đã xây là thừa. Lõi niêm phong ~~có 56/56 bất biến~~ ~~**[S1.115] cùng lớp đánh giá nay có 62/62 bất biến**~~ **[S1.116] 63/63**
 được cưỡng chế và đo bằng đột biến; đó là thứ khó nhất của sản phẩm và nó đã xong. Mục này chỉ
 nói rằng *đo bằng bất biến* và *đo bằng người mua* là hai trục khác nhau, và dự án tới hôm nay
 chỉ có trục thứ nhất.
