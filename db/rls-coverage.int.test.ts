@@ -771,6 +771,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "caller_rate_limits", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
+      // [khoản 165 / 062] Dấu kiểm vòng khoá bọc: đọc để SO, không UPDATE/DELETE — bảng chỉ-ghi-thêm.
+      { grantee: "app_api", bang: "master_key_check_values", quyen: "SELECT" },
       // [040 / sổ nợ 40] DELETE: đường đặt lại TOTP — trigger `mfa_credentials_xoa_can_yeu_cau` chỉ cho
       // qua khi có yêu cầu đã duyệt chưa tiêu thụ; không có trigger ấy thì GRANT này là một lỗ.
       { grantee: "app_api", bang: "mfa_credentials", quyen: "DELETE,SELECT" },
@@ -850,6 +852,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "vendor_bids", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_chain_anchors", quyen: "SELECT" },
       { grantee: "app_unseal", bang: "audit_events", quyen: "SELECT" },
+      // [khoản 165 / 062] Tiến trình mở thầu giữ MỘT vòng nên không tự so chéo được (ADR-006) — nó so dấu kiểm
+      // với dấu `apps/api` đã ghi, hay ghi trước. Dấu kiểm là HMAC(khoá, hằng): không phải bí mật, không mở gì.
+      { grantee: "app_unseal", bang: "master_key_check_values", quyen: "SELECT" },
       // [025, khoản nợ 34] `app_unseal` nay ĐỌC được hàng đợi. 007 viết *"cố ý KHÔNG cấp gì
       // cho app_unseal — kể cả SELECT"*, và câu ấy đúng cho tới khi có hai `kind` mà chỉ
       // tiến trình này chạy được. Cố ý KHÔNG có `INSERT`: một tiến trình vừa tự xếp việc
@@ -1083,6 +1088,9 @@ describe("phủ RLS", () => {
       // vi mot bam khong khop trong y het mot bam sai.
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "pepper_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "token_id", quyen: "INSERT" },
+      // [khoản 165 / 062] Theo CỘT: `recorded_at` do CSDL đặt.
+      { grantee: "app_api", bang: "master_key_check_values", cot: "kcv", quyen: "INSERT" },
+      { grantee: "app_api", bang: "master_key_check_values", cot: "key_version", quyen: "INSERT" },
       // [Task 9] `mfa_credentials` — bốn vắng mặt là load-bearing, mỗi cái đóng một đường đi:
       //   `id`                 KHÔNG INSERT -> mfa_credentials_pkey không làm oracle xuyên tổ
       //                                        chức được (khuôn users_pkey ở 002).
@@ -1460,6 +1468,9 @@ describe("phủ RLS", () => {
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_id", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "resource_type", quyen: "INSERT" },
       { grantee: "app_unseal", bang: "audit_events", cot: "user_agent", quyen: "INSERT" },
+      // [khoản 165 / 062] Ghi dấu kiểm khi khởi động TRƯỚC `apps/api` — hai cột, không hơn.
+      { grantee: "app_unseal", bang: "master_key_check_values", cot: "kcv", quyen: "INSERT" },
+      { grantee: "app_unseal", bang: "master_key_check_values", cot: "key_version", quyen: "INSERT" },
       // [S1.6] BON dong duoi day la toan bo quyen GHI cua tien trinh mo thau, va chung la hinh
       // dang cua ADR-006 trong mot bang quyen: no GHI ban ro (`rfq_unsealed_bids`), no TUYEN BO
       // ket qua (`rfq_packages.status`, `unseal_requests.status`), va no khong lam gi khac.
@@ -1890,6 +1901,9 @@ const BANG_RLS_NGOAI_TENANT: readonly string[] = [
   // 6195 của hardening.always.sql ghim riêng: RLS + FORCE + đúng một policy. Không có org_id vì
   // nó đếm theo NGƯỜI GỌI, xuyên tổ chức.
   "public.caller_rate_limits",
+  // [khoản 165 / 062] Dấu kiểm vòng khoá bọc — một hàng cho mỗi PHIÊN BẢN khoá, không cho tổ chức nào.
+  // Cùng hình dạng RLS với `caller_rate_limits`; hardening dựng lại RLS mỗi lần deploy.
+  "public.master_key_check_values",
 ];
 
 const CAU_POLICY_RESTRICTIVE =
@@ -2098,6 +2112,7 @@ const lit = (v: string | null): string => (v === null ? "NULL" : `'${v.replaceAl
 type DongKhac = readonly [string, string, string, string, string, string, string | null, string | null];
 const POLICY_KHAC_DA_KHAI: readonly DongKhac[] = [
   ["public", "caller_rate_limits", "caller_rate_limits_khach", "PERMISSIVE", "*", "PUBLIC", KHACH_NULL, KHACH_NULL],
+  ["public", "master_key_check_values", "master_key_check_values_khach", "PERMISSIVE", "*", "PUBLIC", KHACH_NULL, KHACH_NULL],
 ];
 
 /** [S1.55 / lượt soi 48 INFO-2] Khoá `lược đồ.bảng.policy` phải đúng ba phần — tên chứa dấu chấm làm split gán sai cột. */
@@ -2841,14 +2856,14 @@ describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () =>
     }
   }, 180000);
 
-  it("[S1.48 / lượt soi ngang 40b #2] số policy `_khach` đếm từ CATALOG, không từ lời khai: RESTRICTIVE = MỘT cho MỖI bảng tenant theo tính chất (khuôn 027 — hardening dựng, không phải chỉ các CREATE POLICY trong migration: 21/11/10 đều là con số thiu) + 1 PERMISSIVE (042 caller_rate_limits)", async () => {
+  it("[S1.48 / lượt soi ngang 40b #2] số policy `_khach` đếm từ CATALOG, không từ lời khai: RESTRICTIVE = MỘT cho MỖI bảng tenant theo tính chất (khuôn 027 — hardening dựng, không phải chỉ các CREATE POLICY trong migration: 21/11/10 đều là con số thiu) + 2 PERMISSIVE (042 caller_rate_limits, 062 master_key_check_values)", async () => {
     const viTuTenant = docHangHardening("VI_TU_BANG_TENANT");
     const { rows } = await db.pool.query<{ restrictive: number; permissive: number; tenant: number }>(
       "SELECT count(*) FILTER (WHERE NOT polpermissive)::int AS restrictive, count(*) FILTER (WHERE polpermissive)::int AS permissive, " +
         `       (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${viTuTenant}) AS tenant ` +
         "  FROM pg_policy WHERE polname LIKE '%\\_khach'",
     );
-    expect(rows[0]!.permissive).toBe(1);
+    expect(rows[0]!.permissive).toBe(2);
     expect(rows[0]!.restrictive, "một policy RESTRICTIVE _khach cho mỗi bảng tenant").toBe(rows[0]!.tenant);
     expect(rows[0]!.tenant).toBeGreaterThanOrEqual(29);
   });
