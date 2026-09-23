@@ -2677,11 +2677,74 @@ $ham$;
 
   POLICY_KHAC_KHAI constant text :=
     $q$(VALUES
-         ('public', 'caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
+         ('public', 'caller_rate_limits', 'caller_rate_limits_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
+         ('public', 'master_key_check_values', 'master_key_check_values_khach', 'PERMISSIVE', '*', 'PUBLIC', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)')
        ) AS k(nspname, bang, polname, loai, lenh, vai_tro, bieu_thuc_using, bieu_thuc_with_check)$q$;
 
   BANG_RLS_NGOAI_TENANT_KHAI constant text :=
-    $q$(VALUES ('public', 'caller_rate_limits')) AS b(nspname, relname)$q$;
+    $q$(VALUES ('public', 'caller_rate_limits'), ('public', 'master_key_check_values')) AS b(nspname, relname)$q$;
+
+  -- [khoản 105] RÀNG BUỘC `CHECK` AN NINH — khai theo TÊN, kèm migration CUỐI CÙNG định nghĩa nó và định nghĩa NGUYÊN VĂN
+  -- (`pg_get_constraintdef`). Mục phán xét "ràng buộc CHECK an ninh còn nguyên" ở dưới đòi mỗi dòng: tồn tại, `convalidated`, và
+  -- định nghĩa bằng từng ký tự — chỉ khi migration khai sinh đã áp (cùng khuôn `BANG_TENANT_KHAI`). Đo trước bản vá (S1.61): gỡ
+  -- `users_email_chu_thuong`, `supplier_contacts_email_chu_thuong` và hạ `supplier_contacts_email_hinh_dang` về NOT VALID sau deploy
+  -- ⇒ `migrate()` kế ĐI QUA, và `INSERT` `Alice105@corp.com` VÀO.
+  -- TIÊU CHÍ "an ninh", để danh sách không là khẩu vị: gỡ ràng buộc ấy mở một đường phá một bất biến của sổ đăng ký hay một nguyên
+  -- tắc `docs/PRODUCT.md` §4 — bí mật chỉ lưu dạng băm (độ dài 32), hạn của thẻ/phiên, phân tách nhiệm vụ (khoản duyệt ≠ người
+  -- yêu cầu), vòng đời khoá và yêu cầu mở thầu, máy trạng thái RFQ/award, chuỗi sổ kiểm toán, danh tính email chuẩn hoá. MỌI
+  -- `CHECK` khác của lược đồ phải được MIỄN kèm lý do ở `db/check-an-ninh.int.test.ts` — cổng ở đó đòi mỗi `CHECK` thuộc đúng một
+  -- trong hai tập, nên một `CHECK` mới không lọt khỏi tầm canh chỉ vì không ai nhớ khai.
+  -- Không TỰ SỬA (ADR-028 §2⑵): dựng lại một `CHECK` không đơn điệu — dữ liệu có thể đã vi phạm trong lúc nó vắng mặt.
+  -- GIÁ, nói ra (cùng giá của biểu thức policy khai nguyên văn): đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi
+  -- chép lại. Và một migration MỚI đổi một ràng buộc ở đây phải sửa dòng khai trong CÙNG commit — `tests/architecture/
+  -- check-an-ninh-khai.test.ts` đòi `mig` là migration CUỐI CÙNG nhắc tên ràng buộc.
+  CHECK_AN_NINH_KHAI constant text :=
+    $q$(VALUES
+         ('public', 'audit_chain_anchors', 'audit_chain_anchors_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
+         ('public', 'audit_chain_anchors', 'audit_chain_anchors_seq_check', '003_audit_events', 'CHECK ((seq > 0))'),
+         ('public', 'audit_events', 'audit_events_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
+         ('public', 'audit_events', 'audit_events_payload_khong_mang_gia', '003_audit_events', 'CHECK ((NOT jsonb_path_exists(payload, ''$.**?(((((((((((((((((exists (@."gia") || exists (@."don_gia")) || exists (@."tong_tien")) || exists (@."so_tien")) || exists (@."thanh_tien")) || exists (@."price")) || exists (@."unit_price")) || exists (@."amount")) || exists (@."total")) || exists (@."bid_amount")) || exists (@."bid_price")) || exists (@."password")) || exists (@."mat_khau")) || exists (@."token")) || exists (@."otp")) || exists (@."secret")) || exists (@."totp_secret")) || exists (@."private_key"))''::jsonpath)))'),
+         ('public', 'audit_events', 'audit_events_prev_hash_check', '003_audit_events', 'CHECK ((octet_length(prev_hash) = 32))'),
+         ('public', 'audit_events', 'audit_events_seq_check', '003_audit_events', 'CHECK ((seq > 0))'),
+         ('public', 'caller_rate_limits', 'caller_rate_limits_bucket_hash_check', '042_bucket_nguoi_goi_toan_cuc', 'CHECK ((octet_length(bucket_hash) = 32))'),
+         ('public', 'guest_sessions', 'guest_sessions_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
+         ('public', 'guest_sessions', 'guest_sessions_token_hash_check', '010_invitations', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'invitation_otp_challenges', 'invitation_otp_challenges_code_hash_check', '010_invitations', 'CHECK ((octet_length(code_hash) = 32))'),
+         ('public', 'invitation_otp_challenges', 'invitation_otp_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
+         ('public', 'mfa_reset_requests', 'mfa_reset_requests_duyet_du_bo', '040_dat_lai_totp_hai_nguoi', 'CHECK (((status = ''APPROVED''::text) = ((approved_by IS NOT NULL) AND (approved_by_session_id IS NOT NULL) AND (approved_at IS NOT NULL))))'),
+         ('public', 'mfa_reset_requests', 'mfa_reset_requests_han_sau_tao', '040_dat_lai_totp_hai_nguoi', 'CHECK ((expires_at > requested_at))'),
+         ('public', 'mfa_reset_requests', 'mfa_reset_requests_khong_tu_duyet', '040_dat_lai_totp_hai_nguoi', 'CHECK (((approved_by IS NULL) OR (approved_by <> requested_by)))'),
+         ('public', 'mfa_reset_requests', 'mfa_reset_requests_phien_khac', '040_dat_lai_totp_hai_nguoi', 'CHECK (((approved_by_session_id IS NULL) OR (approved_by_session_id <> requested_by_session_id)))'),
+         ('public', 'mfa_reset_requests', 'mfa_reset_requests_tieu_thu_sau_duyet', '040_dat_lai_totp_hai_nguoi', 'CHECK (((consumed_at IS NULL) OR (status = ''APPROVED''::text)))'),
+         ('public', 'otp_rate_limits', 'otp_rate_limits_bucket_hash_check', '010_invitations', 'CHECK ((octet_length(bucket_hash) = 32))'),
+         ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
+         ('public', 'rfq_awards', 'rfq_awards_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text])))'),
+         ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
+         ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_purpose_check', '010_invitations', 'CHECK ((purpose = ''BID_SUBMISSION''::text))'),
+         ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_token_hash_check', '010_invitations', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'rfq_key_material', 'rfq_key_material_algorithm_check', '017_rfq_key_material', 'CHECK ((algorithm = ANY (ARRAY[''ECDH_P256''::text, ''X25519''::text])))'),
+         ('public', 'rfq_key_material', 'rfq_key_material_thu_hoi_tron_ven', '017_rfq_key_material', 'CHECK ((num_nonnulls(revoked_at, revoked_reason, revoked_by, revoked_by_session_id) = ANY (ARRAY[0, 4])))'),
+         ('public', 'rfq_key_material', 'rfq_key_material_xoa_dong_bo', '026_xoa_mat_ma_vat_lieu_khoa', 'CHECK (((wrapped_private_key IS NULL) = (purged_at IS NOT NULL)))'),
+         ('public', 'rfq_key_material', 'rfq_key_material_xoa_du_danh_tinh', '026_xoa_mat_ma_vat_lieu_khoa', 'CHECK ((num_nonnulls(purged_at, purged_by, purged_by_session_id) = ANY (ARRAY[0, 3])))'),
+         ('public', 'rfq_packages', 'rfq_chua_dong_thi_khong_co_moc_dong', '061_trao_thau', 'CHECK (((status = ANY (ARRAY[''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text, ''CANCELLED''::text])) OR (closed_at IS NULL)))'),
+         ('public', 'rfq_packages', 'rfq_da_dong_thi_co_moc_dong', '061_trao_thau', 'CHECK (((status <> ALL (ARRAY[''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text])) OR (closed_at IS NOT NULL)))'),
+         ('public', 'rfq_packages', 'rfq_packages_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''DRAFT''::text, ''PENDING_APPROVAL''::text, ''OPEN''::text, ''CLOSED''::text, ''UNSEALED''::text, ''EVALUATING''::text, ''BAFO_OPEN''::text, ''BAFO_CLOSED''::text, ''BAFO_UNSEALED''::text, ''AWARDED''::text, ''CANCELLED''::text])))'),
+         ('public', 'rfq_packages', 'rfq_thu_tu_moc', '011_rfq_hardening', 'CHECK ((((opened_at IS NULL) OR (opened_at >= created_at)) AND ((closed_at IS NULL) OR (opened_at IS NULL) OR (closed_at >= opened_at))))'),
+         ('public', 'sessions', 'sessions_agent_ttl_ngan', '051_phien_co_pham_vi', 'CHECK (((kind <> ''AGENT_READONLY''::text) OR (expires_at <= (created_at + ''01:00:00''::interval))))'),
+         ('public', 'sessions', 'sessions_check', '006_sessions_and_mfa', 'CHECK ((expires_at > created_at))'),
+         ('public', 'sessions', 'sessions_kind_hop_le', '051_phien_co_pham_vi', 'CHECK ((kind = ANY (ARRAY[''USER''::text, ''AGENT_READONLY''::text])))'),
+         ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
+         ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
+         ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
+         ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
+         ('public', 'unseal_requests', 'unseal_requests_duyet_thi_co_moc', '019_unseal', 'CHECK (((status = ''PENDING''::text) OR (status = ''CANCELLED''::text) OR (approved_at IS NOT NULL)))'),
+         ('public', 'unseal_requests', 'unseal_requests_status_check', '019_unseal', 'CHECK ((status = ANY (ARRAY[''PENDING''::text, ''APPROVED''::text, ''EXECUTED''::text, ''CANCELLED''::text])))'),
+         ('public', 'user_login_tokens', 'user_login_tokens_han_sau_tao', '029_dang_nhap_nguoi_mua', 'CHECK ((expires_at > created_at))'),
+         ('public', 'user_login_tokens', 'user_login_tokens_purpose_check', '029_dang_nhap_nguoi_mua', 'CHECK ((purpose = ''LOGIN''::text))'),
+         ('public', 'user_login_tokens', 'user_login_tokens_token_hash_check', '029_dang_nhap_nguoi_mua', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))')
+       ) AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;
 
   -- [S1.55 / lượt soi 48 NẶNG-3] PERMISSIVE trên bảng mà [CR1] SẼ soi nếu nó ở public — con cháu của bảng tenant (VI_TU_CAN_CO_RLS)
   -- hay bảng có cột org_id — KHÔNG khai được ở (c). Bản đầu S1.55 gỡ ghim public cho (c) và mở luôn một lối lách [CR1]. Đo: lá
@@ -9277,6 +9340,92 @@ $ham$;
                      FROM pg_class c WHERE c.oid = to_regclass('public.caller_rate_limits')),
                   'bảng public.caller_rate_limits không tồn tại')$q$,
       $q$quyền sở hữu bảng public.caller_rate_limits hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [khoản 105] Ràng buộc CHECK an ninh còn nguyên — CHỈ PHÁN XÉT ------------------------------------------------
+    ARRAY[
+      $q$ràng buộc CHECK an ninh còn nguyên, còn hiệu lực và đúng định nghĩa đã khai (khoản 105)$q$,
+      $q$true$q$,
+      -- Cố ý no-op: xem khối trên CHECK_AN_NINH_KHAI — dựng lại một CHECK không đơn điệu.
+      $q$SELECT 1$q$,
+      $q$NOT EXISTS (SELECT 1 FROM $q$ || CHECK_AN_NINH_KHAI || $q$
+                     WHERE EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = ck.mig || '.sql')
+                       AND NOT EXISTS (SELECT 1 FROM pg_constraint c
+                                         JOIN pg_class t ON t.oid = c.conrelid
+                                         JOIN pg_namespace n ON n.oid = t.relnamespace
+                                        WHERE n.nspname = ck.nspname AND t.relname = ck.bang AND c.conname = ck.conname
+                                          AND c.contype = 'c' AND c.convalidated
+                                          AND pg_get_constraintdef(c.oid) = ck.dinh_nghia))$q$,
+      $q$(SELECT string_agg(ck.bang || '.' || ck.conname || ': ' ||
+                  CASE WHEN c.oid IS NULL THEN 'KHÔNG TỒN TẠI'
+                       WHEN c.contype <> 'c' THEN 'không phải CHECK'
+                       WHEN NOT c.convalidated THEN 'NOT VALID — hàng cũ chưa được kiểm'
+                       ELSE 'định nghĩa khác bản khai (so pg_get_constraintdef với CHECK_AN_NINH_KHAI)' END,
+                  '; ' ORDER BY ck.bang, ck.conname)
+           FROM $q$ || CHECK_AN_NINH_KHAI || $q$
+           LEFT JOIN pg_namespace n ON n.nspname = ck.nspname
+           LEFT JOIN pg_class t ON t.relnamespace = n.oid AND t.relname = ck.bang
+           LEFT JOIN pg_constraint c ON c.conrelid = t.oid AND c.conname = ck.conname
+          WHERE EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = ck.mig || '.sql')
+            AND (c.oid IS NULL OR c.contype <> 'c' OR NOT c.convalidated OR pg_get_constraintdef(c.oid) <> ck.dinh_nghia))
+        || ' — lớp DUY NHẤT ở tầng lược đồ của các bất biến ấy đã vắng hay yếu đi'$q$,
+      $q$một migration MỚI dựng lại ràng buộc (ADD CONSTRAINT, hay VALIDATE CONSTRAINT với ràng buộc NOT VALID) sau khi sửa hàng vi phạm; hoặc, nếu định nghĩa đổi CÓ CHỦ ĐÍCH, sửa dòng khai trong CHECK_AN_NINH_KHAI của chính file này (hardening cố ý không tự dựng: dữ liệu có thể đã vi phạm)$q$
+    ],
+
+    -- ---- [khoản 165] RLS của `master_key_check_values` (062) — bảng NGOÀI cây tenant thứ HAI -------
+    -- Cùng lý do và cùng khuôn với mục `caller_rate_limits` ngay trên: `VI_TU_BANG_TENANT` lọc theo `org_id`,
+    -- nên một `DISABLE ROW LEVEL SECURITY` hay một policy bị sửa trên bảng dấu kiểm sẽ sống qua mọi deploy nếu
+    -- không có mục này. Chép khuôn chứ không gộp hai bảng vào một vòng lặp: thông điệp phán xét phải gọi đúng
+    -- TÊN bảng lệch, và hai mục riêng là hai dòng đọc được trong báo cáo hardening.
+    ARRAY[
+      $q$RLS + policy khách của master_key_check_values (062)$q$,
+      $q$to_regclass('public.master_key_check_values') IS NOT NULL$q$,
+      -- Ba câu dưới đây đi qua `EXECUTE format(...)` chứ không viết thẳng, và đó KHÔNG phải để né một
+      -- lớp canh: `db/migration-shape.test.ts` cấm một file bật RLS hay tạo policy cho bảng do file
+      -- KHÁC tạo, vì tách hai việc qua hai file để lộ một cửa sổ không có RLS. Hardening không mở cửa
+      -- sổ ấy (nó chạy MỌI lần, sau khi 062 đã chạy) và mọi mục tự chữa RLS khác trong file này dùng
+      -- đúng idiom động ấy (xem mục (A)). Viết thẳng ở đây sẽ làm lớp tĩnh mất khả năng phân biệt
+      -- "một migration đánh số quên policy" với "hardening dựng lại policy".
+      $q$DO $fn165$
+         DECLARE
+           ten_bang constant text := 'public.master_key_check_values';
+           -- Trong một literal nháy đơn, mỗi `'` nhân đôi. Chuỗi ĐÍCH là
+           --   NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '')::pg_catalog.uuid IS NULL
+           -- nên `''app…''` cho hai nháy đơn, và BỐN nháy cho literal chuỗi RỖNG.
+           vi_tu constant text := 'NULLIF(pg_catalog.current_setting(''app.guest_session_id'', true), '''')::pg_catalog.uuid IS NULL';
+         BEGIN
+           EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', ten_bang);
+           EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', ten_bang);
+           IF NOT EXISTS (SELECT 1 FROM pg_policy p
+                           WHERE p.polrelid = to_regclass(ten_bang)
+                             AND p.polname = 'master_key_check_values_khach') THEN
+             EXECUTE format('CREATE POLICY master_key_check_values_khach ON %s USING (%s) WITH CHECK (%s)',
+                            ten_bang, vi_tu, vi_tu);
+           END IF;
+         END
+         $fn165$$q$,
+      $q$(SELECT c.relrowsecurity AND c.relforcerowsecurity
+            AND (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) = 1
+            AND EXISTS (SELECT 1 FROM pg_policy p
+                         WHERE p.polrelid = c.oid
+                           AND p.polname = 'master_key_check_values_khach'
+                           AND p.polpermissive
+                           AND pg_get_expr(p.polqual, c.oid) = pg_get_expr(p.polwithcheck, c.oid)
+                           -- [S1.38 / khoản nợ 82⑵, lượt soi 25a #7] NGUYÊN VĂN thay cho LIKE chuỗi con: bản cũ nhận
+                           -- cả `USING (false AND … app.guest_session_id …)` — đo: sống qua migrate(), bộ đếm 0 hàng.
+                           AND pg_get_expr(p.polqual, c.oid) = $q$ || KHACH_KHONG_PHIEN_LIT || $q$
+                           -- [lượt soi 29, NHẸ-7] và cả VAI lẫn LỆNH: `ALTER POLICY … TO app_unseal` giữ nguyên
+                           -- hai vế mà làm app_api đếm 0 hàng.
+                           AND p.polroles = '{0}'::oid[] AND p.polcmd = '*')
+           FROM pg_class c WHERE c.oid = to_regclass('public.master_key_check_values'))$q$,
+      $q$coalesce((SELECT 'RLS/policy của master_key_check_values lệch — rls=' || c.relrowsecurity::text
+                          || ' force=' || c.relforcerowsecurity::text
+                          || ' policy=' || coalesce((SELECT string_agg(p.polname::text, '; ' ORDER BY p.polname)
+                                                       FROM pg_policy p WHERE p.polrelid = c.oid), '(KHÔNG CÓ)')
+                          || ' (chỉ nêu tên — biểu thức, vai, lệnh không in ra; so với 062 trong pg_policy)'
+                     FROM pg_class c WHERE c.oid = to_regclass('public.master_key_check_values')),
+                  'bảng public.master_key_check_values không tồn tại')$q$,
+      $q$quyền sở hữu bảng public.master_key_check_values hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.15 / sổ nợ 57] Policy dọn của `otp_rate_limits` (044) ----------------------
