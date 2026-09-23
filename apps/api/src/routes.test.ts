@@ -12,7 +12,7 @@
 // Vị từ được tách thành hàm thuần (`timViPhamBangRoute`) để mỗi ca đo trên một bảng GIẢ, không
 // phải bằng cách sửa `ROUTES` thật rồi hoàn tác — cùng khuôn `timViPham` ở cong-quyen-route.
 // ==============================================================================================
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 // [khoản nợ 59] Cây nguồn là tài nguyên DÙNG CHUNG: probe bên dưới có thật trên đĩa, và
 // `tests/architecture/boundaries.test.ts` quét TOÀN kho ở một tiến trình khác. Khoá này là
 // thứ giữ hai lượt quét không giẫm lên nhau — xem khối lý do đầy đủ trong chính tệp khoá.
-import { voiKhoaDepcruise } from "../../../tests/architecture/khoa-depcruise.js";
+import { voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import { MIEN_TRAN_NGUOI_GOI, agentGoiDuoc, timViPhamBangRoute, type Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 
@@ -244,24 +244,29 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
     expect(crlf.replace(/\r\n/gu, "\n").split(/\n  \{\n    method:/u).length - 1).toBe(khoi.length);
   });
 
-  it("PROBE: một handler import @trustprocure/tenancy làm depcruise ĐỎ với quy tắc g9-", () => {
+  it("PROBE: một handler import @trustprocure/tenancy làm depcruise ĐỎ với quy tắc g9-", async () => {
     // [khoản nợ 59] Khoá bao TRỌN vòng đời của probe — tạo, quét, xoá — chứ không chỉ bao
     // lượt quét: probe nằm trên đĩa THẬT, nên chỉ cần nó TỒN TẠI trong lúc lượt quét toàn
     // kho ở tiến trình khác chạy là đủ để sinh một vi phạm không có thật.
-    voiKhoaDepcruise(() => {
+    // [S1.118] BẤT ĐỒNG BỘ cả lúc chờ khoá lẫn lúc chạy depcruise: lượt quét này mất tới 131 giây trên
+    // CI, và một `spawnSync` chặn event loop của worker vitest suốt ngần ấy — xem GIỚI HẠN ở
+    // `tests/architecture/khoa-depcruise.ts`.
+    await voiKhoaDepcruiseAsync(async () => {
       const thuMuc = join(GOC, "apps/api/src/routes");
       const probe = join(thuMuc, "zprobe-g9.ts");
       mkdirSync(thuMuc, { recursive: true });
       writeFileSync(probe, 'import { withTenant } from "@trustprocure/tenancy";\nexport const x = withTenant;\n');
       try {
-        const kq = spawnSync(
-          "pnpm",
-          ["exec", "depcruise", "apps/api", "--config", ".dependency-cruiser.cjs"],
-          { cwd: GOC, encoding: "utf8", shell: true },
-        );
-        const ra = `${kq.stdout}${kq.stderr}`;
-        expect(kq.status, ra).not.toBe(0);
-        expect(ra).toContain("g9-api-routes-khong-cham-tenancy-va-db");
+        const kq = await new Promise<{ ma: number | null; ra: string }>((xong) => {
+          execFile(
+            "pnpm",
+            ["exec", "depcruise", "apps/api", "--config", ".dependency-cruiser.cjs"],
+            { cwd: GOC, encoding: "utf8", shell: true, maxBuffer: 64 * 1024 * 1024 },
+            (loi, stdout, stderr) => xong({ ma: loi === null ? 0 : (typeof loi.code === "number" ? loi.code : 1), ra: `${stdout}${stderr}` }),
+          );
+        });
+        expect(kq.ma, kq.ra).not.toBe(0);
+        expect(kq.ra).toContain("g9-api-routes-khong-cham-tenancy-va-db");
       } finally {
         rmSync(probe, { force: true });
       }

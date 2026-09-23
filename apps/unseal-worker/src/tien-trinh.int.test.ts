@@ -94,6 +94,19 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     await tt.dung();
   }, 60_000);
 
+  // [khoản 165] Tiến trình này giữ MỘT vòng nên không tự so chéo được (ADR-006). Ca đối chứng dương
+  // ngay trên đã ghi dấu kiểm của `v1` = KHOA_32; một worker dán NHẦM khoá khác dưới `v1` phải KHÔNG
+  // lên — trước khoản 165 nó lên và chỉ hỏng lúc mở phong bì thật, giữa một lượt mở thầu.
+  it("⑴ [khoản 165] khoá bọc dán NHẦM dưới cùng tên phiên bản ⇒ `batDau()` NÉM DauKiemVongKhoaLechError, tiến trình không lên", async () => {
+    const nham = Buffer.alloc(32, 7).toString("base64");
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_MASTER_KEYS: `v1=${nham}` })));
+    try {
+      await expect(tt.batDau()).rejects.toMatchObject({ name: "DauKiemVongKhoaLechError" });
+    } finally {
+      await tt.dung();
+    }
+  }, 60_000);
+
   it("⑴ URL superuser bị chặn ở CẤU HÌNH (theo TÊN), trước khi chạm CSDL", () => {
     expect(() => docCauHinh(moiTruong({ TRUSTPROCURE_DATABASE_URL: db.connectionString }))).toThrow(
       /app_unseal_login/u,

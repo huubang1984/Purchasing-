@@ -215,58 +215,48 @@ function taoThuMucKhoa(duong: string): void {
 /** Đếm mức lồng: một tiến trình ĐANG cầm khoá mà gọi lồng thì sẽ tự khoá chết chính mình. */
 let mucLong = 0;
 
+/** Trạng thái chờ của MỘT lượt giành khoá — chung cho bản đồng bộ và bản bất đồng bộ. */
+interface TrangThaiCho {
+  readonly han: number;
+  hanEperm: number | undefined;
+}
+
 /**
- * Chạy `fn` với khoá `depcruise` trong tay. Mọi lời gọi `depcruise` đọc CÂY NGUỒN phải đi qua đây.
- *
- * `duongKhoa` chỉ để PHÉP ĐO về chính lớp khoá này tiêm được một đường khác vào — xem
- * `khoa-depcruise.test.ts`. Mã sản xuất của lớp test không bao giờ truyền nó.
- *
- * [khoản 222] `tao` là cửa THỨ HAI cùng hạng, và nó có lý do hẹp: sự kiện của hệ điều hành
- * làm ⑸ đỏ — `mkdir` vào một thư mục đang chờ xoá — là một đua tranh KHÔNG dựng lại theo ý
- * muốn được, nên phép đo về cách xử nó phải TIÊM lỗi. Mã sản xuất không bao giờ truyền nó.
+ * Thử giành khoá MỘT lần. `true` = đã giữ (và đã ghi tên chủ); `false` = có người đang giữ, người gọi
+ * ngủ một nhịp rồi thử lại. Mọi hỏng thật và mọi lần quá hạn đều NÉM ở đây — hai vòng chờ bên dưới chỉ
+ * khác nhau ở CÁCH ngủ, không ở luật.
  */
-export function voiKhoaDepcruise<T>(
-  fn: () => T,
-  duongKhoa: string = DUONG_KHOA,
-  tao: (duong: string) => void = taoThuMucKhoa,
-): T {
-  if (mucLong > 0) return fn(); // đã cầm khoá rồi — vào thẳng, đừng chờ chính mình
+function thuGianhKhoa(duongKhoa: string, tao: (duong: string) => void, tt: TrangThaiCho): boolean {
+  try {
+    tao(duongKhoa);
+  } catch (e) {
+    // Chỉ `EEXIST` mới nghĩa là "có người đang giữ" — và [khoản 222] `EPERM` trên một cái TÊN
+    // ĐANG TỒN TẠI, vì đó là thư mục khoá đang chờ xoá trên Windows. Mọi mã lỗi khác (`ENOENT`
+    // vì thư mục cha không tồn tại, `EACCES`, và cả `EPERM` trên một cái tên KHÔNG có) là hỏng
+    // THẬT: ném ngay, mang theo lỗi gốc. Đây là chỗ `catch {}` trần của bản đầu nuốt mất chẩn
+    // đoán rồi quay vòng vô hạn — xem ⑴.
+    const ma = maLoi(e);
+    if (ma !== "EEXIST" && !(ma === "EPERM" && tenConTonTai(duongKhoa))) throw e;
 
-  const han = Date.now() + HAN_CHO_MS;
-  let hanEperm: number | undefined;
-  for (;;) {
-    try {
-      tao(duongKhoa);
-      break;
-    } catch (e) {
-      // Chỉ `EEXIST` mới nghĩa là "có người đang giữ" — và [khoản 222] `EPERM` trên một cái TÊN
-      // ĐANG TỒN TẠI, vì đó là thư mục khoá đang chờ xoá trên Windows. Mọi mã lỗi khác (`ENOENT`
-      // vì thư mục cha không tồn tại, `EACCES`, và cả `EPERM` trên một cái tên KHÔNG có) là hỏng
-      // THẬT: ném ngay, mang theo lỗi gốc. Đây là chỗ `catch {}` trần của bản đầu nuốt mất chẩn
-      // đoán rồi quay vòng vô hạn — xem ⑴.
-      const ma = maLoi(e);
-      if (ma !== "EEXIST" && !(ma === "EPERM" && tenConTonTai(duongKhoa))) throw e;
-
-      // [khoản 222] Cửa sổ nhẫn nại đo các lần `EPERM` LIÊN TIẾP; hết cửa sổ thì ném lỗi GỐC,
-      // không phải lỗi hạn chờ — một người đọc phải thấy `EPERM` chứ không thấy "quá 180 giây".
-      if (ma === "EPERM") {
-        hanEperm ??= Date.now() + CUA_SO_EPERM_MS;
-        if (Date.now() > hanEperm) throw e;
-      } else {
-        hanEperm = undefined;
-      }
-
-      // HẠN ĐỨNG TRƯỚC MỌI NHÁNH KHÁC. Không nhánh nào dưới đây được phép `continue` vượt qua nó.
-      if (Date.now() > han) {
-        throw new Error(
-          `[khoản nợ 59] chờ khoá depcruise quá ${HAN_CHO_MS} ms tại ${duongKhoa}. ` +
-            "Một lượt treo im lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM.",
-        );
-      }
-
-      if (laKhoaRac(duongKhoa)) rmSync(duongKhoa, { recursive: true, force: true });
-      nguDongBo(NHIP_MS); // không có đường nào ra khỏi `catch` mà không đi qua đây
+    // [khoản 222] Cửa sổ nhẫn nại đo các lần `EPERM` LIÊN TIẾP; hết cửa sổ thì ném lỗi GỐC,
+    // không phải lỗi hạn chờ — một người đọc phải thấy `EPERM` chứ không thấy "quá 180 giây".
+    if (ma === "EPERM") {
+      tt.hanEperm ??= Date.now() + CUA_SO_EPERM_MS;
+      if (Date.now() > tt.hanEperm) throw e;
+    } else {
+      tt.hanEperm = undefined;
     }
+
+    // HẠN ĐỨNG TRƯỚC MỌI NHÁNH KHÁC. Không nhánh nào dưới đây được phép `continue` vượt qua nó.
+    if (Date.now() > tt.han) {
+      throw new Error(
+        `[khoản nợ 59] chờ khoá depcruise quá ${HAN_CHO_MS} ms tại ${duongKhoa}. ` +
+          "Một lượt treo im lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM.",
+      );
+    }
+
+    if (laKhoaRac(duongKhoa)) rmSync(duongKhoa, { recursive: true, force: true });
+    return false;
   }
 
   // Ghi tên chủ NGAY sau khi giành được. Ghi hỏng thì phải nhả khoá ra, không giữ một khoá vô chủ.
@@ -276,19 +266,67 @@ export function voiKhoaDepcruise<T>(
     rmSync(duongKhoa, { recursive: true, force: true });
     throw e;
   }
+  return true;
+}
+
+/**
+ * Chỉ xoá khoá CỦA MÌNH. Nếu ai đó đã thu hồi nó (ta bị treo lâu tới mức bị coi là chết) thì
+ * khoá hiện tại là của người khác, và xoá nó là dựng lại đúng đua tranh mà lớp này đi đóng.
+ */
+function nhaKhoa(duongKhoa: string): void {
+  if (chuKhoa(duongKhoa) === process.pid) rmSync(duongKhoa, { recursive: true, force: true });
+}
+
+/**
+ * Chạy `fn` với khoá `depcruise` trong tay. Mọi lời gọi `depcruise` đọc CÂY NGUỒN phải đi qua đây.
+ *
+ * `duongKhoa` chỉ để PHÉP ĐO về chính lớp khoá này tiêm được một đường khác vào — xem
+ * `khoa-depcruise.test.ts`. Mã sản xuất của lớp test không bao giờ truyền nó.
+ *
+ * [khoản 222] `tao` là cửa THỨ HAI cùng hạng, và nó có lý do hẹp: sự kiện của hệ điều hành
+ * làm ⑸ đỏ — `mkdir` vào một thư mục đang chờ xoá — là một đua tranh KHÔNG dựng lại theo ý
+ * muốn được, nên phép đo về cách xử nó phải TIÊM lỗi. Mã sản xuất không bao giờ truyền nó.
+ *
+ * GIỚI HẠN, đo được trên CI (S1.118): bản này NGỦ ĐỒNG BỘ khi chờ, tức chặn event loop của worker
+ * vitest suốt lúc một worker khác giữ khoá — tới 131 giây với probe `g9-` của `apps/api/src/routes.test.ts`.
+ * Quá hạn RPC của vitest thì worker ra `Timeout calling "onTaskUpdate"` và job đỏ dù mọi test đều qua.
+ * Test chạy trong worker vitest dùng `voiKhoaDepcruiseAsync` ngay dưới; bản này giữ cho các phép đo về
+ * chính lớp khoá và cho tiến trình con viết sẵn trong `khoa-depcruise.test.ts`.
+ */
+export function voiKhoaDepcruise<T>(
+  fn: () => T,
+  duongKhoa: string = DUONG_KHOA,
+  tao: (duong: string) => void = taoThuMucKhoa,
+): T {
+  if (mucLong > 0) return fn(); // đã cầm khoá rồi — vào thẳng, đừng chờ chính mình
+
+  const tt: TrangThaiCho = { han: Date.now() + HAN_CHO_MS, hanEperm: undefined };
+  while (!thuGianhKhoa(duongKhoa, tao, tt)) nguDongBo(NHIP_MS); // không đường nào vòng lại mà không ngủ
 
   mucLong += 1;
   try {
     return fn();
   } finally {
     mucLong -= 1;
-    // Chỉ xoá khoá CỦA MÌNH. Nếu ai đó đã thu hồi nó (ta bị treo lâu tới mức bị coi là chết) thì
-    // khoá hiện tại là của người khác, và xoá nó là dựng lại đúng đua tranh mà lớp này đi đóng.
-    if (chuKhoa(duongKhoa) === process.pid) rmSync(duongKhoa, { recursive: true, force: true });
+    nhaKhoa(duongKhoa);
   }
 }
 
-// [review lượt 16, INFO] `DUONG_KHOA_DE_DO` đã bị GỠ. Nó tự khai *"chỉ dùng cho phép đo về chính
-// khoá này — xem khoa-depcruise.test.ts"*, nhưng tệp ấy không hề import nó: một export CHẾT mang
-// một chú thích nói dối là có người dùng. Phép đo nay tiêm thẳng `duongKhoa` vào lời gọi, nên
-// hằng này không còn lý do tồn tại.
+/**
+ * CÙNG luật với `voiKhoaDepcruise`, nhưng CHỜ bằng `setTimeout` — event loop của worker vitest rảnh suốt
+ * lúc chờ, nên lời gọi RPC của vitest không hết hạn trong khi một worker khác giữ khoá. Xem GIỚI HẠN ở trên.
+ *
+ * Không có nhánh lồng: `mucLong` là trạng thái của một luồng đồng bộ và không nói được gì về một lời hứa
+ * đang chờ. Gọi lồng hàm này trong `fn` của chính nó là tự khoá chết cho tới hạn — và hạn NÉM.
+ */
+export async function voiKhoaDepcruiseAsync<T>(fn: () => T | Promise<T>, duongKhoa: string = DUONG_KHOA): Promise<T> {
+  const tt: TrangThaiCho = { han: Date.now() + HAN_CHO_MS, hanEperm: undefined };
+  while (!thuGianhKhoa(duongKhoa, taoThuMucKhoa, tt)) {
+    await new Promise<void>((xong) => setTimeout(xong, NHIP_MS));
+  }
+  try {
+    return await fn();
+  } finally {
+    nhaKhoa(duongKhoa);
+  }
+}

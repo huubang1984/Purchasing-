@@ -10,3 +10,5 @@ export {
   laVaiUngDung,
   type VaiUngDung,
 } from "./vai-tro.js";
+// [khoản 165] Dấu kiểm vòng khoá bọc — `apps/api` và `apps/unseal-worker` đối chiếu lúc khởi động (`062`).
+export { DauKiemVongKhoaLechError, doiChieuDauKiemVongKhoa, tinhDauKiemKhoa } from "./dau-kiem-vong-khoa.js";
