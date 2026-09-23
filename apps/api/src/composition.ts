@@ -23,7 +23,7 @@
 import type { AddressInfo } from "node:net";
 import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
-import { createPool, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
@@ -194,6 +194,9 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         c.on("error", boQuaLoiKetNoi);
         try {
           await khangDinhPhienDangNhapUngDung(c, "app_api");
+          // [khoản 165] Dấu kiểm vòng khoá bọc: bên khởi động trước (api hay worker) ghi, bên sau so.
+          // Lệch ⇒ ném ⇒ KHÔNG có cổng nào mở — thay vì hỏng giữa một lượt mở thầu. Một lần cho tiến trình.
+          if (p === pool) await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
         } finally {
           c.off("error", boQuaLoiKetNoi);
           c.release();
