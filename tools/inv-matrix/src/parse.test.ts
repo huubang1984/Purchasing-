@@ -32,11 +32,23 @@ const TEST_PLAN_MAU = [
   // Hàng nhóm H là BẮT BUỘC trong mẫu này, không phải cho đủ bộ. Không có nó, sổ đăng ký mẫu
   // nằm trọn trong dải A–G và một mũi đột biến thu hẹp `[A-H]` xuống `[A-G]` — tức bộ đọc BỎ SÓT
   // cả mười ba hàng rào — SỐNG SÓT toàn bộ file test này. Đo được ở harness Task 11.
+  //
+  // [S1.115 / khoản 229] **Hàng nhóm J dưới đây có mặt vì ĐÚNG lập luận ấy, không vì cho đủ bộ.**
+  // Dải nay là `[A-HJ]`; nếu mẫu chỉ có A–H thì một mũi thu ngược về `[A-H]` — tức bộ đọc bỏ sót
+  // trọn nhóm đánh giá — sống sót cả tệp này. Chữ `J` không liền sau `H` trong bảng chữ cái, nên
+  // một dải viết nhầm thành `[A-I]` hay `[A-J]` cũng phải bị bắt: `[A-J]` nhận `I`, một chữ KHÔNG
+  // có nhóm nào — và ca *nhãn ngoài dải* ở dưới là chỗ điều đó được đo.
   "### Nhóm H — Hàng rào",
   "",
   "| ID | Bất biến | Cưỡng chế | Tầng test |",
   "|---|---|---|---|",
   "| **H1** | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 |",
+  "",
+  "### Nhóm J — Đánh giá, BAFO, Award",
+  "",
+  "| ID | Bất biến | Cưỡng chế | Tầng test |",
+  "|---|---|---|---|",
+  "| **J1** | Chỉ khoản đơn vị TIỀN đi vào `effective_cost` | Hàm thuần + trigger | T1, T3 |",
 ].join("\n");
 
 function baoCao(
@@ -67,18 +79,49 @@ const BAO_CAO_MAU = JSON.stringify({
 describe("phân tích ma trận bất biến", () => {
   it("đọc được toàn bộ bất biến từ TEST-PLAN", () => {
     const invariants = parseInvariants(TEST_PLAN_MAU);
-    expect(invariants.map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1"]);
+    expect(invariants.map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
     expect(invariants[0]?.statement).toBe("Không endpoint nào trả về giá trước khi mở thầu");
     expect(invariants[2]?.enforcement).toBe("IAM + quyền cột DB");
     expect(invariants[2]?.testLayer, "cột tầng test cũng phải đi vào bằng chứng").toBe("**T0**, T3");
   });
 
-  it("dải [A-H] là RÀNG BUỘC: hàng nhóm H phải đọc được y như hàng nghiệp vụ", () => {
+  it("dải [A-HJ] là RÀNG BUỘC: hàng nhóm H phải đọc được y như hàng nghiệp vụ", () => {
     const invariants = parseInvariants(TEST_PLAN_MAU);
     const h1 = invariants.find((i) => i.id === "H1");
     expect(h1, "bộ đọc BỎ SÓT nhóm H — mười ba hàng rào biến mất khỏi ma trận").toBeDefined();
     expect(h1?.statement).toBe("`git reset --hard` bị chặn với mã thoát 2");
     expect(h1?.enforcement).toBe("Hook `git-safety`");
+  });
+
+  it("[S1.115 / khoản 229] dải [A-HJ]: hàng nhóm J cũng phải đọc được — và đây là mũi giết một lần thu dải", () => {
+    // Ca này ĐỎ nếu ai đó thu dải về `[A-H]`. Nó là bản sao có chủ ý của ca ngay trên, vì thứ
+    // nó canh cũng là một bản sao có chủ ý: hai nhóm nằm NGOÀI dải A–G, và mỗi nhóm cần một
+    // hàng trong mẫu thì mũi đột biến của nó mới có chỗ để chết.
+    const invariants = parseInvariants(TEST_PLAN_MAU);
+    const j1 = invariants.find((i) => i.id === "J1");
+    expect(j1, "bộ đọc BỎ SÓT nhóm J — trọn lớp đánh giá biến mất khỏi ma trận").toBeDefined();
+    expect(j1?.statement).toBe("Chỉ khoản đơn vị TIỀN đi vào `effective_cost`");
+    expect(j1?.enforcement).toBe("Hàm thuần + trigger");
+  });
+
+  it("[S1.115 / khoản 229] chữ `I` KHÔNG có nhóm nào — một dải viết nhầm `[A-J]` phải bị bắt", () => {
+    // `[A-HJ]` và `[A-J]` chỉ khác nhau ở đúng một chữ: `I`. Không nhóm bất biến nào mang chữ ấy,
+    // nên một dải nới quá tay sẽ đọc một hàng `I1` bịa thành một bất biến thật — và ca này là chỗ
+    // điều đó chết.
+    const md = [
+      "| ID | Bất biến | Cưỡng chế | Tầng test |",
+      "|---|---|---|---|",
+      "| **A1** | một bất biến THẬT | Kiến trúc | T1 |",
+      "| **I1** | một nhóm KHÔNG tồn tại | không có | T1 |",
+    ].join("\n");
+    // Hàng `A1` có mặt để bộ đọc KHÔNG ném vì *sổ rỗng* — nếu nó ném, ca này xanh vì một lý do
+    // khác hẳn thứ nó đo. Đó là đúng lớp lỗi mà bảng ca nửa xu đã đặt tên: một fixture không
+    // phân biệt được thì nửa được đo không phải nửa ta tưởng.
+    expect(
+      parseInvariants(md).map((i) => i.id),
+      "dải nới quá tay: `I` đi lọt vào ma trận",
+    ).toEqual(["A1"]);
+    expect(demHangUngVien(md), "phép đếm độc lập cũng KHÔNG được thấy `I1`").toEqual(["A1"]);
   });
 
   it("bỏ dấu ** khi đọc cột cưỡng chế in đậm", () => {
@@ -202,7 +245,7 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
 
   it("phép đếm độc lập vẫn thấy hàng mà bộ đọc chính bỏ sót", () => {
     const md = TEST_PLAN_MAU.replace("| **A4** |", "| A4 |");
-    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1"]);
+    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
   });
 
   it("bảng mẫu trong khối mã ``` KHÔNG bị đếm nhầm thành hàng sổ đăng ký", () => {
@@ -214,8 +257,8 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
       "| A4  | ... | Máy quét  | 1 test | PASS | a1b2c3 | ... |",
       "```",
     ].join("\n");
-    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1"]);
-    expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1"]);
+    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
+    expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
   });
 
   it("sổ đăng ký rỗng NÉM chứ không trả về mảng rỗng", () => {

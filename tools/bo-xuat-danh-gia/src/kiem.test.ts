@@ -109,7 +109,7 @@ function hangDung(id: string, giaTri: string, rank: number | null, cs: readonly 
 }
 
 describe("bundle lành lặn", () => {
-  it("ĐẠT, và đếm đúng số hàng", () => {
+  it("[INV-J2] ĐẠT, và đếm đúng số hàng", () => {
     const kq = kiemBo(boVoi([hangDung("b1", "10.00", 1), hangDung("b2", "20.00", 2)]), DAC_TA);
     expect(kq.loiBo).toEqual([]);
     expect(kq).toMatchObject({ dat: true, soHang: 2, soDat: 2, soLech: 0, soKhongTaiLapDuoc: 0 });
@@ -141,7 +141,7 @@ describe("bundle lành lặn", () => {
 });
 
 describe("ADR-059 ⒞ — ba mũi đột biến", () => {
-  it("⒜ đổi một HỆ SỐ trong bundle mà không đổi `effectiveCost` ⇒ ĐỎ ở CẢ HAI lớp", () => {
+  it("[INV-J2] ⒜ đổi một HỆ SỐ trong bundle mà không đổi `effectiveCost` ⇒ ĐỎ ở CẢ HAI lớp", () => {
     const bo = boVoi([hangDung("b1", "10.00", 1)], [{ ...GIA, he_so: "2.0000" }]);
     const kq = kiemBo(bo, DAC_TA);
     expect(kq.dat).toBe(false);
@@ -152,7 +152,7 @@ describe("ADR-059 ⒞ — ba mũi đột biến", () => {
     expect(noi).not.toContain("HAI LỚP BẤT ĐỒNG");
   });
 
-  it("⒝ đổi `effectiveCost` đã lưu mà không đổi `components` ⇒ ĐỎ ở CẢ HAI lớp", () => {
+  it("[INV-J2] ⒝ đổi `effectiveCost` đã lưu mà không đổi `components` ⇒ ĐỎ ở CẢ HAI lớp", () => {
     const g = hangDung("b1", "10.00", 1);
     const kq = kiemBo(boVoi([{ ...g, effectiveCost: "99.99" }]), DAC_TA);
     expect(kq.dat).toBe(false);
@@ -162,7 +162,7 @@ describe("ADR-059 ⒞ — ba mũi đột biến", () => {
     expect(noi).not.toContain("HAI LỚP BẤT ĐỒNG");
   });
 
-  it("⒞ lỗi làm tròn NẰM TRONG `chiPhiHieuDung` ⇒ CHỈ lớp độc lập bắt được", () => {
+  it("[INV-J2] ⒞ lỗi làm tròn NẰM TRONG `chiPhiHieuDung` ⇒ CHỈ lớp độc lập bắt được", () => {
     // Bundle được dựng từ đầu ra của hàm CÓ LỖI: đây là bundle mà một hệ thống mang lỗi ấy xuất
     // ra. `10.00 × 1.2345 = 12.345000`; nửa-ra-xa-0 cho `12.35`, cắt cụt cho `12.34`.
     const loi = HAM_THUAN_CAT_CUT([GIA], [{ ma: "gia", giaTri: "10.00" }]);

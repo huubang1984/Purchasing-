@@ -8,7 +8,7 @@
 > khai sinh tệp (2026-08-27) và SAI từ S1.1; nó sống qua 16 commit sửa chính tệp này.** Trạng thái
 > thật tính tới S1.78: S0 và S1 (Sealed Bid Core) **có mã trọn** — ~~mười~~ **[S1.79] 13** gói dưới `packages/`, ~~bốn app~~ **[S1.99] NĂM app**
 > dưới `apps/` (`api`, `unseal-worker`, `public-keys`, `mcp`, **[S1.100]** `web`), ~~51~~ ~~**[S1.82] 52**~~ **[S1.100] 55** migration đánh số, và cổng evidence
-> 56/56 bất biến. Tài liệu này mô tả kiến trúc **đang chạy**; cập nhật lại khi thực tế lệch khỏi nó.
+> ~~56/56~~ **[S1.115] 62/62** bất biến. Tài liệu này mô tả kiến trúc **đang chạy**; cập nhật lại khi thực tế lệch khỏi nó.
 >
 > *Vì sao một câu sai sống lâu đến thế:* không cổng nào đọc dòng này. Đó là khoản nợ **68** (evidence
 > đóng dấu xanh cho văn xuôi không phép đo nào chạm), và lượt soi ngang 72 là lần đầu ai đó đọc lại

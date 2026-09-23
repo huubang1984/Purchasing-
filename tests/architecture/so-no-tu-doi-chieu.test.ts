@@ -465,7 +465,7 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
 export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
   const le = viPhamCapGach(van, nhan);
   if (le.length > 0) return le;
-  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-H])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
+  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-HJ])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
   const hangRao = ma.filter((n) => n === "H").length;
   const nghiepVu = ma.length - hangRao;
   const reBB = new RegExp(
@@ -931,7 +931,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     expect(loi).toHaveLength(1);
     // Con số phải SUY từ chính `them`, không chép tay: bản trước ghim "55 (34 + 21)" và nó ĐỎ ở
     // đúng vòng sau, khi sổ đăng ký lớn thêm một hàng — cùng lớp lỗi mà tệp này đi đóng.
-    const soHang = (them.match(/^\|\s*\*\*[A-H]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJ]\d+\*\*\s*\|/gm) ?? []).length;
     const soHangRao = (them.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang} (${soHang - soHangRao} + ${soHangRao})`);
   });
@@ -995,7 +995,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
     const loi = viPhamSoBatBien(HANDOFF, them, "Handoff.md");
     expect(loi).toHaveLength(1);
-    const soHang = (them.match(/^\|\s*\*\*[A-H]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJ]\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang}`);
   });
 

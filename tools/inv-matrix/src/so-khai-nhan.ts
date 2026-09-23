@@ -300,4 +300,39 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   H9: [
     "tests/hooks/protect-secrets.test.ts",
   ],
+  // ---------------------------------------------------------------------------------------
+  // [S1.115 / khoản 229] NHÓM J — và mỗi dòng dưới đây trả lời câu *"tệp ấy đo được bất biến
+  // này bằng cách nào"* mà khối đầu tệp đòi.
+  //
+  // **J6 KHÔNG có ở đây**, và đó là một lời khai chứ không một sơ suất: mệnh đề của nó rộng hơn
+  // thứ đang được cưỡng chế (khoản **239**), nên nó chưa có hàng trong sổ đăng ký để khai vào.
+  // ---------------------------------------------------------------------------------------
+  // J1 — vế LỌC: `DIEM` không bao giờ vào tổng. Hàm thuần đo vế tính; tệp tích hợp đo vế
+  // trigger, cộng một đột biến gỡ trigger lúc chạy.
+  J1: [
+    "packages/danh-gia/src/chi-phi-hieu-dung.test.ts",
+    "packages/danh-gia/src/luot-danh-gia.int.test.ts",
+  ],
+  // J2 — TÁI LẬP ĐƯỢC. Năm tệp vì bất biến này sống ở năm chỗ khác nhau: hàm thuần, luật làm
+  // tròn đối chiếu với Postgres, dữ liệu ĐÃ GHI, và hai nửa của bộ bằng chứng S2.7 — trong đó
+  // `kiem.test.ts` mang ba mũi đột biến của ADR-059.
+  J2: [
+    "packages/danh-gia/src/chi-phi-hieu-dung.test.ts",
+    "packages/danh-gia/src/luot-danh-gia.int.test.ts",
+    "packages/danh-gia/src/nua-xu.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/bo-xuat.int.test.ts",
+    "tools/bo-xuat-danh-gia/src/kiem.test.ts",
+  ],
+  // J3 — ba vế phân tách nhiệm vụ; tệp HTTP đo vế ấy trên đường sản xuất thật.
+  J3: [
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    "packages/danh-gia/src/luot-danh-gia.int.test.ts",
+  ],
+  // J4 — giá BAFO không rò trước cổng bốn vế. Cùng bộ quét với `[INV-A2]`, câu hỏi KHÁC: A2
+  // hỏi *người KHÔNG có quyền thấy gì*, J4 hỏi *người CÓ ĐỦ quyền thấy gì*.
+  J4: ["apps/unseal-worker/src/kich-ban-41-http.int.test.ts"],
+  // J5 — award trỏ đúng báo giá của đúng RFQ, và báo giá ấy đọc được giá.
+  J5: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
+  // J7 — tối đa MỘT award còn sống.
+  J7: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
 };

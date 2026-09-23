@@ -125,7 +125,7 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
 
   it("sổ khai đóng băng có HÌNH DẠNG hợp lệ: mã theo mẫu, tệp tương đối kiểu `/`, không trùng", () => {
     for (const [ma, ds] of Object.entries(SO_KHAI_NHAN)) {
-      expect(ma).toMatch(/^[A-H]\d+$/);
+      expect(ma).toMatch(/^[A-HJ]\d+$/);
       expect(new Set(ds).size).toBe(ds.length);
       for (const tep of ds) {
         expect(tep).toMatch(/^[a-z0-9./_-]+\.test\.ts$/i);

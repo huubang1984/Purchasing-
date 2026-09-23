@@ -72,7 +72,7 @@ describe("[S1.104 / S2.2] đọc và viết số — không một `number` nào 
 });
 
 describe("[S1.104 / S2.2] J1 — chỉ khoản TIỀN đi vào `effective_cost`", () => {
-  it("thành phần `DIEM` có mặt trong `components` nhưng `tien` là null và KHÔNG cộng vào tổng", () => {
+  it("[INV-J1] thành phần `DIEM` có mặt trong `components` nhưng `tien` là null và KHÔNG cộng vào tổng", () => {
     const kq = phaiRaSo(
       tinhChiPhiHieuDung(
         [GIA, { ma: "ky_thuat", donVi: "DIEM", heSo: "3.0000" }],
@@ -131,7 +131,7 @@ describe("[S1.104 / S2.2] làm tròn TỪNG thành phần rồi CỘNG — chủ
     expect(kq.effectiveCost, "0.01 nghĩa là ai đó đã làm tròn TỔNG — đúng phương án KHÔNG được chọn").toBe("0.02");
   });
 
-  it("bảng thành phần CỘNG RA đúng `effective_cost` — đây là toàn bộ vế dễ của J2", () => {
+  it("[INV-J2] bảng thành phần CỘNG RA đúng `effective_cost` — đây là toàn bộ vế dễ của J2", () => {
     const kq = phaiRaSo(
       tinhChiPhiHieuDung(
         [
