@@ -109,7 +109,24 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **G3** | Xoay master key không làm mất khả năng giải mã báo giá cũ | Bọc khóa có phiên bản | T3, T6 |
 | **G4** | Mọi thao tác khóa — sinh, bọc, mở bọc, hủy — đều sinh audit | Ứng dụng | T3, T5 |
 
-**Tổng: 34 bất biến nghiệp vụ (nhóm A–G).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ **[S1.79] 56** mã cùng chảy vào `evidence/INV-matrix.md` — 34 + 22 = 56, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
+### Nhóm J — Đánh giá, BAFO, Award
+
+> **[S1.115 / khoản 229] Nhóm này vào sổ SAU KHI từng hàng được ĐO, không cùng lúc với spec.**
+> Điều kiện vào một ô: có phép ĐO, có đối chứng DƯƠNG, và có ĐỘT BIẾN giết được nó — đúng ba
+> thứ §1 đòi. **J6 CỐ Ý VẮNG** ở đây: mệnh đề của nó rộng hơn thứ đang được cưỡng chế, và
+> khoản **239** giữ câu hỏi ấy. Một ô mở cho một bất biến mới cưỡng chế nửa là đúng thứ
+> `[INV-H22]` sinh ra để chặn, nên chỗ trống giữa J5 và J7 là một lời khai, không một sơ suất.
+
+| ID | Bất biến | Cưỡng chế | Tầng test |
+|---|---|---|---|
+| **J1** | Con số xếp hạng chỉ gồm khoản có đơn vị TIỀN; một điểm phi giá không bao giờ đi vào `effective_cost` | Hàm thuần, `CHECK` cấu trúc và trigger nội dung `rfq_evaluation_lines_kiem_thanh_phan` (`057`) | T1, T3 |
+| **J2** | Mỗi hàng xếp hạng **tái lập được**: tính lại từ `components` cộng phiên bản chính sách ra ĐÚNG `effective_cost` đã lưu | Hàm thuần, **và một bản cài ĐỘC LẬP trong bộ bằng chứng** mà `depcruise` `g17-` cấm chạm `packages/danh-gia` — ADR-059 | T1, T3 |
+| **J3** | Người đề xuất award khác mọi người duyệt; và bộ ba *tạo RFQ · điều phối mở thầu · đề xuất award* không cùng một người. **Phạm vi thật HẸP HƠN mệnh đề:** vế điều phối chỉ thấy lần điều phối ĐANG CHẠY — khoản **233**, rổ A | Trigger `award_kiem_de_xuat` và `award_kiem_nguoi_duyet` (`061`), cả hai ghim ở `hardening.always.sql` | T3 |
+| **J4** | Báo giá BAFO niêm phong đúng như vòng một: không route nào trả một mức giá BAFO trước khi vòng ấy được mở qua cổng bốn vế | Vòng quét MỌI route dưới một phiên có đủ quyền, khuôn A2 | T2, T3 |
+| **J5** | Award chỉ trỏ tới một báo giá còn hợp lệ của CHÍNH RFQ ấy, và báo giá ấy phải có `effective_cost` đọc được | Khoá ngoại hợp thành, cộng hai vế nội dung trong `award_kiem_de_xuat` (`061`) | T3 |
+| **J7** | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 |
+
+**Tổng: ~~34 bất biến nghiệp vụ (nhóm A–G)~~ [S1.115] 40 bất biến nghiệp vụ (nhóm A–G và J).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ ~~**[S1.79] 56**~~ **[S1.115] 62** mã cùng chảy vào `evidence/INV-matrix.md` — ~~34 + 22 = 56~~ **40 + 22 = 62**, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
@@ -270,7 +287,7 @@ Hai hook của `ai-eng-os` cũng là mã cần kiểm chứng, không phải c�
 mặc nhiên. Chúng đã từng fail-open trên máy phát triển (spec §8.1).
 
 Hàng rào cũng là một biện pháp kiểm soát, nên nó cũng có mã và cũng nằm trong evidence
-pack. Nhóm **H** dùng chung cơ chế với 34 bất biến nghiệp vụ: test phải mang mã trong tên
+pack. Nhóm **H** dùng chung cơ chế với ~~34~~ **[S1.115] 40** bất biến nghiệp vụ: test phải mang mã trong tên
 theo dạng `[INV-H1]`, và mã không có test phủ sẽ làm CI đỏ.
 
 Nhóm H KHÔNG chỉ là hai hook: **mọi hàng rào tự động của dự án đều thuộc nhóm này**, kể cả
@@ -498,7 +515,7 @@ năng giải mã báo giá cũ". Bộ sinh ma trận gom theo MÃ, nên chín d�
 hàng nghiệp vụ mà chúng không đo — và vì test G2/G3 đúng nghĩa VẪN tồn tại song song, va chạm
 đó là vô hình nếu không đọc tên. Đây là "mốc chết giả đã dịch chỗ: nó không còn ở TEST, nó ở
 NHÃN". Một quy tắc biên giới depcruise LÀ một hàng rào, đúng hạng với hai hook ở trên, nên nó
-thuộc nhóm H — và nhóm H đã khớp sẵn regex `[A-H]\d+` của bộ sinh, không cần đụng bộ sinh.
+thuộc nhóm H — và nhóm H đã khớp sẵn regex ~~`[A-H]\d+`~~ **[S1.115] `[A-HJ]\d+`** của bộ sinh, không cần đụng bộ sinh.
 Mười test `[INV-G1]` trong cùng file thì GIỮ NGUYÊN: quy tắc `g1-` cưỡng chế đúng bất biến G1
 ("private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`"), tức ở đó nhãn khớp thứ được
 đo. Tên các quy tắc depcruise (`g1-`/`g2-`/`g3-`) không đổi — vấn đề nằm ở nhãn test.

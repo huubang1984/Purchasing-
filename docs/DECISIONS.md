@@ -4723,7 +4723,7 @@ khoản rổ C — và để nguyên rổ A. Trần vẫn dùng được, nhưng
 ⒝ `docs/STATE.md` mang ba danh sách rổ, và tổng ba rổ bằng đúng số khoản ở dòng `**CÒN MỞ TÍNH TỚI HEAD:**` — 14 + 47 + 18 = 79.
 ⒞ Biên bản của mọi vòng sau ADR này mở đầu bằng một dòng nói vòng ấy chạm mảnh nào của bảng bốn mảnh, hay chạm khoản rổ A nào.
 
-**Điều ADR này KHÔNG nói.** Nó không nói phần đã xây là thừa: 56/56 bất biến có lớp cưỡng chế và được đo bằng đột biến, và đó là
+**Điều ADR này KHÔNG nói.** Nó không nói phần đã xây là thừa: ~~56/56~~ **[S1.115] 62/62** bất biến có lớp cưỡng chế và được đo bằng đột biến, và đó là
 phần khó nhất của sản phẩm. Nó không đóng một khoản nợ nào — tập khoản mở sau ADR này vẫn là 79, y nguyên. Và nó không nói lượt
 soi đối kháng là sai: nó nói lượt soi cần một ĐÍCH, và từ hôm nay đích ấy là kịch bản ở §11.
 
@@ -5830,7 +5830,7 @@ kiểm đúng hai thứ: `so_hang_muc = 0` và deadline. Ngưỡng ấy **không
 sản phẩm §8 hàng 5 cấm hard-code *"3 báo giá"*; đo được là con số ấy không được cưỡng chế ở đâu cả, kể
 cả dưới dạng cấu hình.
 
-⑶ **Mọi bất biến đóng khung trong MỘT `rfq_id`.** 56/56 bất biến của lõi niêm phong, cổng bốn vế của
+⑶ **Mọi bất biến đóng khung trong MỘT `rfq_id`.** ~~56/56~~ **[S1.115] 62/62** bất biến (nhóm J vào sổ ở S1.115) của lõi niêm phong, cổng bốn vế của
 đường mở thầu, J1–J7 của S2 — không mệnh đề nào đọc quá một gói thầu. Hai kịch bản trên **chỉ lộ ra trên
 chuỗi nhiều gói thầu**: một RFQ mời đúng ba nhà cung cấp quen là chuyện thường ngày; hai mươi RFQ liên
 tiếp mời đúng ba tên ấy mới là tín hiệu. Đây là lỗ hổng của **hình dạng dữ liệu được đọc**, không phải
@@ -5885,7 +5885,7 @@ tên từng phép đo đứng sau chúng. ⑷ không đổi một chữ: chúng 
 
 Nó **không** nói lõi niêm phong là thừa. Lõi ấy chặn một họ tấn công khác hẳn — bên mua xem giá sớm, sửa
 giá sau deadline, một người ôm trọn đường mở thầu — và họ ấy có thật, phổ biến hơn, và đã được cưỡng chế
-bằng 56/56 bất biến đo bằng đột biến.
+bằng ~~56/56~~ **[S1.115] 62/62** bất biến đo bằng đột biến.
 
 Nó **không** nói ba việc ở ⑶ ngăn được thông đồng. Chúng làm việc móc nối đắt hơn và để lại dấu đọc được.
 Một người mua quyết tâm vẫn mời được ba nhà cung cấp cùng một chủ dưới ba pháp nhân khác nhau, và không

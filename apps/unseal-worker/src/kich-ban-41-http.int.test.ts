@@ -827,6 +827,12 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   // Nên vòng này giao PHẦN CHẤT của J4 — ba ca dưới — và để phần ĐĂNG KÝ thành một khoản riêng,
   // cùng lúc với J1/J2 (`packages/danh-gia/src/luot-danh-gia.int.test.ts` đã ghi vì sao hai mã ấy
   // cũng chưa vào sổ). Gắn nhãn hôm nay là ghi một dòng `passed` vào một hàng chưa tồn tại.
+  //
+  // **[S1.115 / khoản 229] KHOẢN RIÊNG ẤY ĐÃ CHẠY, và con số *tám* ở trên SAI.** Đo lại trên
+  // `master` ngày 2026-09-23: **MƯỜI** chỗ ghim, không tám — `parse.ts` giữ **BỐN** chứ không ba
+  // (vế *nhãn chưa khai* không được kể), và có một chỗ thứ mười ở `packages/outbox/src/`, một GÓI
+  // mà cả hai đoạn văn trên đều không nhắc tên. Cả mười nay là `[A-HJ]`, `J4` đã có ô, và ba ca
+  // dưới mang nhãn `[INV-J4]`.
   // ==============================================================================================
 
   it("bước 12c — MỞ VÒNG BAFO qua HTTP: top-N suy từ bảng xếp hạng, và nhà cung cấp thấy hạn CỦA VÒNG", async () => {
@@ -913,7 +919,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(bn2.text).not.toContain(trangThai.bafoRoundId);
   });
 
-  it("[INV-A2] BỘ QUÉT RÒ RỈ LẦN BA — giá BAFO đã NẰM TRONG CSDL mà chưa qua cổng bốn vế: không route nào trả nó, KỂ CẢ cho người mua đủ quyền", async () => {
+  it("[INV-A2] [INV-J4] BỘ QUÉT RÒ RỈ LẦN BA — giá BAFO đã NẰM TRONG CSDL mà chưa qua cổng bốn vế: không route nào trả nó, KỂ CẢ cho người mua đủ quyền", async () => {
     // TIỀN ĐỀ, đo trước khi quét: hai phong bì BAFO thật sự đã nộp. Không có khẳng định này, lượt
     // quét xanh cả khi bước trên hỏng lặng lẽ — và một bộ quét trên tập rỗng thì không đo gì.
     const { rows: dem } = await db.pool.query<{ n: string }>(
@@ -954,7 +960,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(thayGiaVongMot, "bộ quét phải VẪN thấy giá VÒNG MỘT ở chính lượt này").toBeGreaterThan(0);
   });
 
-  it("J4 — ĐỘT BIẾN — gỡ lớp giữ J4 lúc chạy thì bộ quét THẤY giá BAFO ngay ở route ấy", async () => {
+  it("[INV-J4] ĐỘT BIẾN — gỡ lớp giữ J4 lúc chạy thì bộ quét THẤY giá BAFO ngay ở route ấy", async () => {
     // J4 đúng KHÔNG phải vì bộ quét mù, và không phải vì route khéo: nó đúng vì **chưa có một
     // hàng bản rõ nào** cho phong bì BAFO, và đường DUY NHẤT sinh ra hàng ấy đi qua cổng bốn vế
     // (`rfq_kiem_yeu_cau_mo_thau` của `019 §4`, và từ `059` nó phân biệt được VÒNG).
@@ -1070,7 +1076,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(so[1]?.payload.bafoRoundId).toBe(trangThai.bafoRoundId);
   });
 
-  it("J4 — ĐỐI CHỨNG DƯƠNG — SAU cổng bốn vế, cùng bộ quét ấy THẤY giá BAFO", async () => {
+  it("[INV-J4] ĐỐI CHỨNG DƯƠNG — SAU cổng bốn vế, cùng bộ quét ấy THẤY giá BAFO", async () => {
     // §6 của spec gọi đúng vế này: *"Vòng quét route chứng minh KHÔNG thấy giá BAFO; nó chỉ có
     // nghĩa khi có một lượt chứng minh bộ quét THẤY giá ấy sau khi vòng BAFO mở."*
     const r = await goi("GET", `/rfqs/${trangThai.rfqId}/comparison`, trangThai.mua.cookie);
@@ -1151,7 +1157,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   // mà kịch bản đã dựng — và đúng ba vai khác nhau, nên J3 có việc thật để làm.
   // ============================================================================================
 
-  it("bước 12h — ĐỀ XUẤT trao thầu qua HTTP: người TẠO gói thầu bị J3 chặn, người KHÁC đi qua", async () => {
+  it("[INV-J3] bước 12h — ĐỀ XUẤT trao thầu qua HTTP: người TẠO gói thầu bị J3 chặn, người KHÁC đi qua", async () => {
     // `trangThai.mua` vừa là `created_by` của RFQ vừa là người ĐIỀU PHỐI cả hai lượt mở thầu, nên
     // J3 chặn họ trên HAI vế cùng lúc; trigger kiểm `created_by` trước nên thông điệp nói vế ấy.
     // Đây là lần DUY NHẤT trong kho một cổng quyền nói CÓ mà một trigger nói KHÔNG — `mua` là

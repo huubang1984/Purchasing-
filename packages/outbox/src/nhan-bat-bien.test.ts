@@ -48,7 +48,7 @@ const THU_MUC = fileURLToPath(new URL(".", import.meta.url));
 const MA_BI_CAM = ["C2", "D4", "B3"] as const;
 
 /** Cùng regex với bộ sinh của Task 11 (`NHAN_BAT_BIEN`). */
-const NHAN_BAT_BIEN = /\[INV-([A-H]\d+)\]/g;
+const NHAN_BAT_BIEN = /\[INV-([A-HJ]\d+)\]/g;
 
 /** Dòng khai báo một test — đúng thứ bộ sinh gom, không phải mọi dòng của file. */
 const DONG_KHAI_TEST = /^\s*it(?:\.each\b|\.skip\b|\.todo\b|\.only\b)?\s*[(<`]/;

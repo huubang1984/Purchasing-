@@ -11509,3 +11509,160 @@ riêng chạm mười chỗ gọi.
   **7** không đổi, rổ B **67** không đổi, rổ C **23 → 24**; ba rổ cộng đúng: 7 + 67 + 24 = 98.
 - **59** ADR không đổi (ADR-059 đã vào kho ở S1.113), **61** migration không đổi, **14 gói + 7 công
   cụ** (công cụ thứ bảy là của vòng này), **56/56** bất biến không đổi.
+
+# §S1.115 — KHOẢN 229: NHÓM J VÀO MA TRẬN BẤT BIẾN, VÀ PHÉP ĐO BÁC BA LỜI KHAI — TRONG ĐÓ HAI LÀ CỦA CHÍNH HÀNG 229
+
+**Mảnh của bảng bốn mảnh mà vòng này chạm: KHÔNG MẢNH NÀO, và đó là câu trả lời chứ không một
+chỗ bỏ trống.** Chủ thể của vòng này là **cỗ máy bằng chứng của chính dự án** — dải mã bất biến,
+sổ đăng ký, sổ khai nhãn — đúng thứ ADR-043 gọi là *vòng tự nuôi*. Nó không làm một bước nào của
+kịch bản §11 chạy được thêm. **Khoản rổ A mà vòng này chạm: 233** — phạm vi thật của **J3** được
+viết THẲNG vào ô ma trận của nó, nên một người đọc ma trận thấy ngay rằng vế *điều phối* hẹp hơn
+mệnh đề.
+
+## 1. Vòng này ĐO TRƯỚC KHI ĐĂNG KÝ, và đó là chỗ nó trả công
+
+Việc được giao là *"nới dải, đăng ký nhóm J"*. Nếu vòng này đi theo danh sách của hàng 229 thì nó
+đã đăng ký sai ở hai chỗ và bỏ sót hai chỗ. Ba lời khai bị bác:
+
+| lời khai | ai khai | phép đo | kết |
+|---|---|---|---|
+| *dải ghim ở **TÁM** chỗ* | hàng 229 (S1.109), hai chú thích mã | `grep -rnE '\[A-H\]' --include=*.ts` | **MƯỜI** |
+| *J1 CHƯA — thiếu đột biến* | hàng 229 (S1.113) | đọc `luot-danh-gia.int.test.ts` | **CÓ**, từ **S1.105** |
+| *J3 · J5 · J7 đều có đột biến* | khối `[S1.110]` | quét mọi `DISABLE TRIGGER`/`DROP TRIGGER` trong test | **chỉ J3** |
+
+**⑴ *Tám* là sai, và nó sai theo lối BỎ SÓT.** Con số đúng — **MƯỜI** — đã được đo và ghi ở S1.113;
+vòng này đo lại trên `master` `5e710ec` và nó vẫn là mười. Hai chỗ mà lời khai *tám* bỏ sót:
+`parse.ts` giữ **BỐN** chứ không ba (vế *nhãn chưa khai* ở dòng 256 không được kể), và có một chỗ
+thứ mười ở **`packages/outbox/src/nhan-bat-bien.test.ts`** — một GÓI mà cả hàng 229 lẫn hai chú
+thích mã đều không nhắc tên, nên không lượt đọc nào theo chúng tìm tới.
+
+**⑵ J1 có đột biến, và lời khai ngược lại đã SAI lúc được viết.** `luot-danh-gia.int.test.ts` mang
+một ca gỡ `rfq_evaluation_lines_kiem_thanh_phan` **lúc chạy** — có cả chốt *khẳng định đột biến ĐÃ
+ÁP trước khi đọc kết quả* lẫn khôi phục `ENABLE ALWAYS` — và ca ấy vào kho ở **S1.105**, tám vòng
+trước khi hàng 229 khai nó thiếu.
+
+**⑶ Chỉ J3 có đột biến.** Khối `[S1.110]` viết: *"Ba bất biến dưới đây có phép ĐO, có đối chứng
+DƯƠNG và có đột biến"*. Quét toàn kho: `rfq_awards_kiem_de_xuat` và `rfq_awards_kiem_mot_award_song`
+**không bị gỡ ở một ca nào**. Thứ J5 và J7 thật sự có là **ca `INSERT` THẲNG** — nó chứng minh một
+mệnh đề khác: *lớp giữ nằm ở trigger chứ không ở lớp gói*. Nó không chứng minh *gỡ lớp ấy ra thì
+thủng*. Hai câu ấy khác nhau, và một ô trong ma trận chỉ được mở khi câu thứ hai cũng được đo.
+
+## 2. Hai đột biến còn thiếu — viết trong vòng này, và mỗi ca gỡ ĐÚNG MỘT trigger
+
+```
+✓ [INV-J5] ĐỘT BIẾN — gỡ `rfq_awards_kiem_de_xuat` … award trỏ lượt chấm của gói KHÁC ĐI LỌT
+✓ [INV-J7] ĐỘT BIẾN — gỡ `rfq_awards_kiem_mot_award_song` … award THỨ HAI ĐI LỌT
+```
+
+Cả hai theo đúng khuôn ca J1 (S1.105) và ca J3 (S1.110):
+
+⒜ **tiền đề trước** — với trigger còn sống, hàng ấy bị chặn; thiếu bước này, một ca xanh sau khi
+gỡ trigger không phân biệt được *đột biến sống* với *hàng vốn dĩ hợp lệ*;
+⒝ **khẳng định phép gỡ ĐÃ ÁP** (`tgenabled = 'D'`) trước khi tin kết quả — một lệnh `ALTER` thất
+bại cho một ca xanh vô nghĩa;
+⒞ khôi phục **`ENABLE ALWAYS`**, không `ENABLE` thường — thiếu chữ ấy là trả lại một trigger YẾU
+HƠN bản đã gỡ (khoản **216**);
+⒟ **tự kiểm sau khôi phục** `tgenabled = 'A'` — một trigger để lại ở `DISABLE` làm mọi ca sau đó
+đo một thế giới không có lớp ấy, và không ca nào trong tệp kêu.
+
+**Gỡ ĐÚNG MỘT trigger là phần chịu lực.** Ca J5 dùng vế *lượt chấm của gói KHÁC* chứ không vế *giá
+không đọc được*, vì vế ấy tới được bằng một câu `INSERT` thẳng mà **không chạm một vế nào của J3** —
+nên thứ đỏ lên khi gỡ trigger là đúng J5. Ca J7 để `rfq_awards_kiem_de_xuat` sống, nên hàng thứ hai
+vẫn phải đi qua mọi vế của J3 và J5; thứ duy nhất mất đi là J7, và ca ấy đếm thẳng
+`count(*) = 2` hàng `PROPOSED` cùng sống — đúng thứ J7 cấm.
+
+`luot-danh-gia.int.test.ts` **66 → 68 ca**, trọn tệp xanh.
+
+## 3. J6 — lỗ thật, và vòng này CỐ Ý không vá nó
+
+J6 nói *"mọi lần đề xuất, duyệt, huỷ award, và **mọi lần từ chối của cổng đánh giá**, đều để lại
+một hàng sổ"*. `packages/danh-gia/src/luot-danh-gia.ts` viết thẳng điều ngược lại cho nửa sau:
+
+> mọi lần từ chối QUYỀN đã nằm lại trong `requirePermission`. Các lần từ chối TRẠNG THÁI … không đi
+> qua đường ghi sổ từ chối của cổng.
+
+Hai câu ấy sống cạnh nhau từ **S1.105** và không ai đối chiếu chúng.
+
+**Đo được:** J6 có phép ĐO ở **năm** điểm — `RFQ_EVALUATED`, từ chối QUYỀN của cổng chấm,
+`RFQ_AWARD_PROPOSED`, `RFQ_AWARD_APPROVED`, `RFQ_AWARD_CANCELLED` — cộng **bốn** khẳng định ở
+`kich-ban-41-http.int.test.ts`, trong đó **hai** về THỨ TỰ. **Không** điểm nào cho từ chối trạng
+thái. **Không** đột biến nào:
+khuôn `chan_ghi_so` (dựng một trigger chặn ghi sổ rồi đòi thao tác GÃY) có ở **sáu** tệp khác và
+không có quanh award.
+
+**Ba vế của ADR-043, đo TỪNG vế chứ không chỉ vế ⒜** — đúng bài học khoản 236:
+
+* ⒜ không bước nào của kịch bản §11 hỏng: kịch bản ấy là đường thuận;
+* ⒝ sáu nguyên tắc bất khả xâm phạm ở `docs/PRODUCT.md` §4 **không có** nguyên tắc nào về tính đầy
+  đủ của sổ kiểm toán — đọc cả sáu, không đoán — nên vế này KHÔNG thoả;
+* ⒞ không phải tiền đề triển khai.
+
+⇒ **rổ B**, khoản **239**. Câu phải trả lời là một quyết định chứ không một lần tra cứu: ghi sổ cho
+từ chối trạng thái thì sổ đầy tiếng ồn và `audit_events` là bảng chỉ-ghi-thêm; không ghi thì **J6
+phải được THU HẸP trong spec**. Chủ dự án chốt ngày 2026-09-23: đây là một khoản, chưa phải một bản
+vá. **J6 vì thế không có ô trong ma trận**, và chỗ trống giữa J5 và J7 ở `docs/TEST-PLAN.md` mang
+một dòng nói đúng vì sao.
+
+## 4. Sáu hàng vào sổ, và mỗi hàng mang phạm vi THẬT
+
+| mã | phép ĐO | đối chứng DƯƠNG | ĐỘT BIẾN |
+|---|---|---|---|
+| **J1** | hàm thuần + trigger CSDL | tập thành phần khớp ⇒ đi qua; `tien: null` cho `DIEM` đi qua | S1.105 — gỡ `..._kiem_thanh_phan` |
+| **J2** | vế dễ trên dữ liệu đã ghi, luật làm tròn đối chiếu Postgres, **lớp độc lập** của S2.7 | bundle lành lặn ĐẠT; `kiem` ngắt kết nối `ok=true` | ba mũi ⒜⒝⒞ của ADR-059 |
+| **J3** | bốn ca + một ca HTTP | *người KHÁC đi qua* ở bước 12h | S1.110 — gỡ `..._kiem_danh_tinh` |
+| **J4** | bộ quét mọi route dưới phiên có đủ quyền | SAU cổng bốn vế, cùng bộ quét THẤY giá | S1.109 — gỡ lớp giữ lúc chạy |
+| **J5** | hai vế nội dung | đổi sang báo giá đọc được thì đi qua; cùng câu với lượt chấm của chính gói thì đi qua | **S1.115 — vòng này** |
+| **J7** | qua lớp gói và qua `INSERT` thẳng | huỷ rồi đề xuất MỚI đi được | **S1.115 — vòng này** |
+
+Ô **J3** mang nguyên văn *"Phạm vi thật HẸP HƠN mệnh đề: vế điều phối chỉ thấy lần điều phối ĐANG
+CHẠY — khoản 233, rổ A"*. Đó là cách một khoản rổ A đọc được từ chính ma trận thay vì chỉ từ sổ nợ.
+
+## 5. Dải nới ở MƯỜI chỗ, và văn bản mẫu được vá theo LỚP
+
+Mười chỗ ghim `[A-H]` → `[A-HJ]`: `parse.ts` ×4 (`HANG_BAT_BIEN`, `NHAN_PHU_DO_DUOC`, bộ đếm độc
+lập, vế *nhãn chưa khai*), `so-no-tu-doi-chieu.test.ts` ×3, `nhan-bat-bien-cho-dat.test.ts`,
+`danh-gia.test.ts`, và `packages/outbox/src/nhan-bat-bien.test.ts`.
+
+**Thứ đáng ghi hơn mười chỗ ấy là văn bản mẫu của `parse.test.ts`.** Chính tệp đó đã dạy, từ Task
+11, rằng mẫu PHẢI có một hàng nhóm H — vì nếu không, một mũi đột biến thu `[A-H]` xuống `[A-G]`
+**sống sót toàn bộ tệp**. Lập luận ấy áp y nguyên cho nhóm J, nên mẫu nay có một hàng **J1** và một
+ca đọc nó. Vá LỚP, không vá điểm.
+
+Cộng một ca mới cho chữ **`I`**: `[A-HJ]` và `[A-J]` chỉ khác nhau ở đúng một chữ, và không nhóm
+bất biến nào mang chữ ấy. Ca này dựng một bảng có `A1` và `I1` rồi đòi bộ đọc trả **`["A1"]`** —
+hàng `A1` có mặt để bộ đọc không ném vì *sổ rỗng*, vì nếu nó ném thì ca xanh vì một lý do khác hẳn
+thứ nó đo. `parse.test.ts` **21 → 23 ca**.
+
+## 6. Điều vòng này KHÔNG làm
+
+* **KHÔNG mở ô cho J6** — xem mục 3.
+* **KHÔNG sửa mệnh đề J6 trong spec**, và cũng không thêm hàng sổ cho từ chối trạng thái. Cả hai đều
+  là câu trả lời cho cùng một câu hỏi chưa được chốt, và chọn hộ ở đây là chọn thay chủ dự án.
+* **KHÔNG đụng các mục CŨ của `evidence/security-reviews.md`.** **Bốn mươi bốn** chỗ viết *56/56*
+  trong đó ở lại nguyên văn — kể cả mục §S1.114 vừa viết hôm qua: chúng là ẢNH CHỤP theo vòng,
+  không phải lời khai hiện tại. **Bảy** lời khai *hiện tại* thì đã sửa: `ARCHITECTURE.md`,
+  `DECISIONS.md` ×3, `PRODUCT.md`, `STATE.md`, `Handoff.md`.
+* **KHÔNG đóng khoản 233.** Ô J3 chỉ làm phạm vi hẹp của nó ĐỌC ĐƯỢC, không làm nó rộng ra.
+
+## 7. Số đo
+
+- `pnpm t0` — **0 vi phạm, 307 module / 1253 phụ thuộc** (không đổi: vòng này không thêm module nào).
+- `pnpm test` — **74 tệp / 1138 ca** (1 bỏ qua), +2 ca so với HEAD: hai ca mới của `parse.test.ts`.
+- `pnpm test:int` — **55 tệp / 1200 ca, 0 đỏ, 964 giây** (trước vòng: 55 / 1198 / 988) — +2 ca là hai đột biến J5 và J7.
+- `pnpm evidence` — `vitest thoát mã 0`, **2339 khẳng định**, **62/62** bất biến (40/40 nghiệp vụ
+  + 22/22 hàng rào), *Cổng evidence: XANH*.
+- **Lượt evidence ĐẦU của vòng này ĐỎ, và nguyên nhân đáng ghi hơn kết quả:** `vitest thoát mã 1`,
+  mười tệp hỏng và **tất cả** là `tests/architecture/*`, hai tệp mang đúng dấu vết
+  `ENOENT … apps/tmp-probe-danh-gia-cua/src/dung.ts` — thư mục dò mà `boundaries.test.ts` dựng rồi
+  xoá. Nguyên nhân: một lượt `vitest` KHÁC chạy song song với `pnpm evidence` trong cùng cây. Ba mã
+  `D4 · D5 · H21` báo *"có test mang nhãn nhưng không test nào ĐẠT"* là HỆ QUẢ — tệp mang nhãn chết
+  trước khi kịp báo cáo, không phải bất biến nào thủng. Chạy lại một mình trên cây đã sạch tệp dò:
+  thoát mã **0**. Ghi ra vì một cổng đỏ vì TRANH CHẤP trông giống hệt một cổng đỏ vì hồi quy.
+- Mốc `MOC_GHIM.soPhuToiThieu` **56 → 62**, nâng TAY — cổng CHẶN đúng một lượt trước khi dòng ấy
+  được viết, y như lần S1.29. Đó là cơ chế, không phải sự cố.
+- Sổ đăng ký bất biến **56 → 62** (nghiệp vụ **34 → 40**, hàng rào **22** không đổi); **12 cặp
+  (mã, tệp)** mới khai ở `so-khai-nhan.ts`.
+- `luot-danh-gia.int.test.ts` **66 → 68 ca**; `parse.test.ts` **21 → 23 ca**.
+- Sổ nợ **238 → 239** khoản; **229 ĐÓNG**, **239 MỚI** ⇒ tổng mở **98** không đổi. Rổ A **7** không
+  đổi, rổ B **67 → 68**, rổ C **24 → 23**; ba rổ cộng đúng: 7 + 68 + 23 = 98.
+- **59** ADR không đổi, **61** migration không đổi, **14 gói + 7 công cụ** không đổi.

@@ -364,7 +364,7 @@ describe("`pnpm bang-chung xuat` — bộ xuất mang đủ đầu vào để t�
 });
 
 describe("`pnpm bang-chung kiem` — ĐẠT khi đã NGẮT KẾT NỐI", () => {
-  it("chạy với `DATABASE_URL` ĐÃ XOÁ khỏi môi trường và trả ok=true", () => {
+  it("[INV-J2] chạy với `DATABASE_URL` ĐÃ XOÁ khỏi môi trường và trả ok=true", () => {
     // Đây là vế ⒜ của ADR-059, và nó là một dòng: nếu công cụ lỡ mở một kết nối, lượt này ĐỎ với
     // "Thiếu biến môi trường DATABASE_URL" chứ không xanh nhờ một biến còn sót.
     const kq = chay(null, "kiem", "--bo", boThuMuc);

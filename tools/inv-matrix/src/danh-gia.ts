@@ -336,7 +336,10 @@ export interface MocGhim {
 // dung lop "ban sao khong duoc doi chieu" ma ADR-029 dat ten, o ngay tep cuong che moc.
 // [S1.29] 55 -> 56: H22 vao so dang ky (nhan bat bien phai dat o cho DA KHAI, ADR-035). Cong da
 // CHAN dung mot luot truoc khi dong nay duoc viet — do la co che, khong phai su co.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 56, coDanhSachToiDa: 0 };
+// [S1.115 / khoan 229] 56 -> 62: nhom J vao so dang ky voi SAU hang (J1 J2 J3 J4 J5 J7). J6 KHONG
+// co hang — menh de cua no rong hon thu dang duoc cuong che, xem khoan 239. Cong lai CHAN dung
+// mot luot truoc khi dong nay duoc viet, y nhu lan S1.29: moc nay phai duoc NANG TAY.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 62, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

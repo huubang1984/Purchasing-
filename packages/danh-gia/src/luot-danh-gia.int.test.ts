@@ -483,7 +483,7 @@ describe("[S1.105 / S2.3] đường hợp lệ của một lượt chấm", { ti
     ).toEqual([1, 2]);
   });
 
-  it("`components` đọc TỪ CSDL cộng ra ĐÚNG `effective_cost` — vế dễ của J2, trên dữ liệu đã ghi", async () => {
+  it("[INV-J2] `components` đọc TỪ CSDL cộng ra ĐÚNG `effective_cost` — vế dễ của J2, trên dữ liệu đã ghi", async () => {
     const { rfqId } = await goiDaMo([["1234.57", "VND"]]);
     const kq = await withTenant(apiPool, orgA, (c) =>
       taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
@@ -590,7 +590,7 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
     );
   }
 
-  it("tập thành phần KHỚP chính sách ⇒ đi qua (đối chứng dương)", async () => {
+  it("[INV-J1] tập thành phần KHỚP chính sách ⇒ đi qua (đối chứng dương)", async () => {
     const { evalId, bidVersionId } = await luotTrong(TP_GIA);
     await expect(chenHang(evalId, bidVersionId, '[{"ma":"gia","tien":"100.00"}]')).resolves.toBeUndefined();
   });
@@ -610,7 +610,7 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
     ).rejects.toMatchObject({ code: "23514" });
   });
 
-  it("**MỆNH ĐỀ J1**: một thành phần chính sách khai `DIEM` mà hàng lại mang `tien` cho nó ⇒ 23514", async () => {
+  it("[INV-J1] **MỆNH ĐỀ J1**: một thành phần chính sách khai `DIEM` mà hàng lại mang `tien` cho nó ⇒ 23514", async () => {
     const ca = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"kt","don_vi":"DIEM","he_so":"2.0000"}]';
     const { evalId, bidVersionId } = await luotTrong(ca);
     await expect(
@@ -632,7 +632,7 @@ describe("[S1.105 / S2.3] vế NỘI DUNG của J1 — trigger đọc chính sá
   //
   // Câu khôi phục mang `ENABLE ALWAYS`: thiếu nó là trả lại một trigger YẾU HƠN bản đã gỡ, đúng
   // khoản **216** mà S1.100 mở và đóng trong cùng vòng.
-  it("đột biến: gỡ trigger `..._kiem_thanh_phan` ⇒ hàng mang `tien` cho thành phần DIEM ĐI LỌT", async () => {
+  it("[INV-J1] đột biến: gỡ trigger `..._kiem_thanh_phan` ⇒ hàng mang `tien` cho thành phần DIEM ĐI LỌT", async () => {
     const ca =
       '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"},{"ma":"kt","don_vi":"DIEM","he_so":"2.0000"}]';
     const { evalId, bidVersionId } = await luotTrong(ca);
@@ -1455,10 +1455,18 @@ describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CS
 // tức ở đúng chỗ `taoLuotDanhGia` để gói thầu lại, và nó cần cả một chu kỳ BAFO để đo vế *lượt
 // chấm mới nhất*. Cùng lập luận mà khối `[S1.108]` đã viết ra.
 //
-// **KHÔNG mang nhãn `[INV-*]`**, và đó là cố ý, cùng lý do khối đầu tệp đã ghi: dải mã bất biến
+// ~~**KHÔNG mang nhãn `[INV-*]`**, và đó là cố ý, cùng lý do khối đầu tệp đã ghi: dải mã bất biến
 // ghim `[A-H]` ở TÁM chỗ nên nhóm **J** chưa có ô nào để ghi một dòng `passed` vào (khoản **229**).
 // Ba bất biến dưới đây có phép ĐO, có đối chứng DƯƠNG và có đột biến; thứ chúng chưa có là một ô
-// trong ma trận, và mở ô ấy là một vòng riêng.
+// trong ma trận, và mở ô ấy là một vòng riêng.~~
+//
+// **[S1.115 / khoản 229] ĐÃ MỞ Ô, và HAI câu vừa gạch đều bị phép đo bác.** ⑴ Con số *TÁM chỗ* là
+// của hàng 229 và nó SAI: đo trên `master` ngày 2026-09-23 ra **MƯỜI**, nay đã nới cả mười sang
+// `[A-HJ]`. ⑵ Câu *"ba bất biến dưới đây ... có đột biến"* đúng cho J3 và SAI cho J5 và J7: quét mọi
+// `DISABLE TRIGGER`/`DROP TRIGGER` trong test, `rfq_awards_kiem_de_xuat` và
+// `rfq_awards_kiem_mot_award_song` KHÔNG bị gỡ ở một ca nào. Thứ hai bất biến ấy thật sự có là ca
+// `INSERT` THẲNG — nó chứng minh *trigger là lớp giữ*, khác hẳn *gỡ lớp ra thì thủng*. Hai đột biến
+// còn thiếu viết ở cuối mỗi khối, và chỉ SAU đó ô ma trận mới mở.
 //
 // ------------------------------------------------------------------------------------------------
 // PHẠM VI THẬT CỦA TỪNG VẾ, ĐO CHỨ KHÔNG KHAI
@@ -1601,7 +1609,7 @@ describe("[S1.110 / S2.6] trao thầu đi trọn chuỗi PROPOSED → APPROVED �
     expect(doc?.approvals.map((a) => a.approverUserId)).toEqual([uDuyet]);
   });
 
-  it("huỷ ⇒ RFQ về EVALUATING, và một đề xuất MỚI đi được (J7 mở lại sau CANCELLED)", async () => {
+  it("[INV-J7] huỷ ⇒ RFQ về EVALUATING, và một đề xuất MỚI đi được (J7 mở lại sau CANCELLED)", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     const dx = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
@@ -1664,7 +1672,7 @@ describe("[S1.110 / S2.6] trao thầu đi trọn chuỗi PROPOSED → APPROVED �
 });
 
 describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên", { timeout: 300000 }, () => {
-  it("[J3 vế 2] NGƯỜI TẠO gói thầu không đề xuất được trao thầu cho chính gói ấy", async () => {
+  it("[INV-J3] vế 2 — NGƯỜI TẠO gói thầu không đề xuất được trao thầu cho chính gói ấy", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     // `uYc` là `created_by` của mọi RFQ mà fixture dựng, và họ giữ `award.recommend`
     // (PROCUREMENT_MANAGER) — nên cổng QUYỀN cho họ đi qua, và thứ chặn là trigger đọc HÀNH VI.
@@ -1690,7 +1698,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
     expect(await hangAward(rfqId)).toEqual([]);
   });
 
-  it("[J3 vế 3] NGƯỜI ĐIỀU PHỐI mở thầu cũng không — và vế ấy chỉ thấy lần điều phối ĐANG CHẠY", async () => {
+  it("[INV-J3] vế 3 — NGƯỜI ĐIỀU PHỐI mở thầu cũng không — và vế ấy chỉ thấy lần điều phối ĐANG CHẠY", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     // Fixture để `dispatched_by` NULL (nó ghi bản rõ thẳng dưới vai `app_unseal`), nên vế này
     // INERT cho tới khi có ai đó thật sự điều phối. Đặt nó tay là đúng thứ worker đặt.
@@ -1724,7 +1732,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
     expect(dx.actedBy).toBe(uDuyet);
   });
 
-  it("[J3 vế 1] NGƯỜI ĐỀ XUẤT không tự duyệt được, kể cả khi họ giữ `po.approve`", async () => {
+  it("[INV-J3] vế 1 — NGƯỜI ĐỀ XUẤT không tự duyệt được, kể cả khi họ giữ `po.approve`", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     // `uDuyet` (FINANCE) giữ CẢ `award.recommend` lẫn `po.approve` — đo được ở `005`, và nó là
     // đúng ca mà lớp vai trò KHÔNG chặn được: hai mã đều có, nên chỉ một trigger đọc HÀNG chặn nổi.
@@ -1750,7 +1758,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
     expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
   });
 
-  it("[J3 vế 1 — nửa KHÔNG tới được qua lớp trên] cùng một PHIÊN, hai người dùng khác nhau", async () => {
+  it("[INV-J3] vế 1, nửa KHÔNG tới được qua lớp trên — cùng một PHIÊN, hai người dùng khác nhau", async () => {
     // `award_kiem_nguoi_duyet` có HAI vế: so NGƯỜI và so PHIÊN. Vế PHIÊN không tới được qua đường
     // sản xuất, vì `kiem_danh_tinh_theo_phien` buộc cặp người-phiên là DẪN XUẤT — nên một phiên
     // của A không khai được `approver_user_id = B`. Chính chú thích của `061` khai điều đó.
@@ -1799,7 +1807,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
 });
 
 describe("[S1.110 / S2.6] J5 — hai vế NỘI DUNG, mỗi vế một câu", { timeout: 300000 }, () => {
-  it("[J5 giá] báo giá KHÔNG có `effective_cost` đọc được thì không trao thầu được", async () => {
+  it("[INV-J5] vế giá — báo giá KHÔNG có `effective_cost` đọc được thì không trao thầu được", async () => {
     // MỘT LỜI KHAI CỦA CHÍNH VÒNG NÀY BỊ PHÉP ĐO BÁC. Bản đầu của ca này dựng *báo giá không đọc
     // được* bằng `currency: null`, và nó SAI: `taoLuotDanhGia` lọc *đọc được* theo `tien`, rồi vế
     // §2.3⑻ TỪ CHỐI cả lượt chấm khi tập đọc được lệch đơn vị tiền (`LECH_TIEN_TE`). Nên một
@@ -1848,7 +1856,7 @@ describe("[S1.110 / S2.6] J5 — hai vế NỘI DUNG, mỗi vế một câu", { 
     expect(dx.status).toBe("PROPOSED");
   });
 
-  it("[J5 RFQ] lượt chấm của gói thầu KHÁC bị từ chối — câu INSERT thẳng, vì lớp gói tự suy", async () => {
+  it("[INV-J5] vế RFQ — lượt chấm của gói thầu KHÁC bị từ chối — câu INSERT thẳng, vì lớp gói tự suy", async () => {
     const a = await sanSangTraoThau();
     const b = await sanSangTraoThau();
     expect(a.rfqId).not.toBe(b.rfqId);
@@ -1877,10 +1885,61 @@ describe("[S1.110 / S2.6] J5 — hai vế NỘI DUNG, mỗi vế một câu", { 
     });
     expect(id).not.toBe("");
   });
+
+  // [S1.115 / khoản 229] ĐỘT BIẾN — và nó là thứ J5 KHÔNG CÓ cho tới vòng này.
+  //
+  // Đo lại ngày 2026-09-23, TRƯỚC khi mở ô ma trận cho nhóm J: khối `[S1.110]` ở đầu phần trao
+  // thầu khai rằng J3 · J5 · J7 *"có phép ĐO, có đối chứng DƯƠNG và có đột biến"*. Quét toàn
+  // kho tìm mọi lệnh `DISABLE TRIGGER`/`DROP TRIGGER` trong test: **chỉ J3 có** —
+  // `rfq_awards_kiem_de_xuat` và `rfq_awards_kiem_mot_award_song` không bị gỡ ở một ca nào.
+  //
+  // Thứ J5 và J7 thật sự có là **ca `INSERT` THẲNG**, và nó chứng minh một mệnh đề KHÁC: *lớp
+  // giữ nằm ở trigger chứ không ở lớp gói*. Nó không chứng minh *gỡ lớp ấy ra thì thủng*. Hai
+  // câu ấy khác nhau, và một ô trong ma trận bất biến chỉ được mở khi câu thứ hai cũng được đo.
+  //
+  // Ca này dùng vế *lượt chấm của gói KHÁC* chứ không vế *giá không đọc được*, vì vế ấy đi tới
+  // được bằng một câu `INSERT` thẳng mà KHÔNG chạm một vế nào của J3 — nên thứ đỏ lên khi gỡ
+  // trigger là đúng J5, không phải một vế đi ké.
+  it("[INV-J5] ĐỘT BIẾN — gỡ `rfq_awards_kiem_de_xuat` lúc chạy thì award trỏ lượt chấm của gói KHÁC ĐI LỌT", async () => {
+    const a = await sanSangTraoThau();
+    const b = await sanSangTraoThau();
+    const hangSai = {
+      rfqId: a.rfqId,
+      evaluationId: b.luotId,
+      bidVersionId: b.banRo[1] ?? "",
+      status: "PROPOSED",
+      actedBy: uDeXuat,
+      actedBySessionId: sDeXuat,
+    };
+    // Tiền đề: với trigger CÒN SỐNG, hàng ấy bị chặn. Thiếu bước này, một ca xanh sau khi gỡ
+    // trigger không phân biệt được *đột biến sống* với *hàng vốn dĩ hợp lệ*.
+    await expect(chenAwardTho(hangSai)).rejects.toThrow(/khong thuoc RFQ/u);
+
+    await db.pool.query("ALTER TABLE rfq_awards DISABLE TRIGGER rfq_awards_kiem_de_xuat");
+    try {
+      const { rows: tg } = await db.pool.query<{ tgenabled: string }>(
+        "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_awards_kiem_de_xuat'",
+      );
+      expect(tg[0]?.tgenabled, "đột biến phải THẬT SỰ được áp trước khi đọc kết quả").toBe("D");
+      const id = await chenAwardTho(hangSai);
+      expect(
+        id,
+        "không trigger thì một award trỏ lượt chấm của gói THẦU KHÁC đi thẳng vào sổ — J5 mất lớp duy nhất của nó",
+      ).not.toBe("");
+    } finally {
+      // `ENABLE ALWAYS`, không `ENABLE` thường: thiếu chữ ALWAYS là trả lại một trigger YẾU HƠN
+      // bản đã gỡ — đúng khoản **216**.
+      await db.pool.query("ALTER TABLE rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_de_xuat");
+    }
+    const { rows: lai } = await db.pool.query<{ tgenabled: string }>(
+      "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_awards_kiem_de_xuat'",
+    );
+    expect(lai[0]?.tgenabled, "phải về đúng ENABLE ALWAYS, không phải ENABLE thường").toBe("A");
+  });
 });
 
 describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi chỉ đi một chiều", { timeout: 300000 }, () => {
-  it("hai đề xuất trên cùng một gói thầu: lần thứ hai bị từ chối và gọi tên J7", async () => {
+  it("[INV-J7] hai đề xuất trên cùng một gói thầu: lần thứ hai bị từ chối và gọi tên J7", async () => {
     const { rfqId, banRo, luotId } = await sanSangTraoThau();
     await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
@@ -2058,6 +2117,61 @@ describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi 
       db.pool.query("DELETE FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2", [orgA, dx.awardId]),
     ).rejects.toThrow();
     expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+
+  // [S1.115 / khoản 229] ĐỘT BIẾN — cùng lý do với ca J5 ở trên: khối `[S1.110]` khai một đột
+  // biến mà kho không có. Ca này là nó.
+  //
+  // Gỡ ĐÚNG MỘT trigger: `rfq_awards_kiem_de_xuat` ở lại sống, nên hàng thứ hai vẫn phải đi
+  // qua mọi vế của J3 và J5. Thứ duy nhất mất đi là J7 — và đó là cách ca này chứng minh
+  // trigger ấy, chứ không một lớp nào khác, là thứ giữ *tối đa MỘT award còn sống*.
+  it("[INV-J7] ĐỘT BIẾN — gỡ `rfq_awards_kiem_mot_award_song` lúc chạy thì award THỨ HAI ĐI LỌT", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat mot", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    const hangHai = {
+      rfqId,
+      evaluationId: luotId,
+      bidVersionId: banRo[2] ?? "",
+      status: "PROPOSED",
+      actedBy: uDeXuat,
+      actedBySessionId: sDeXuat,
+    };
+    // Tiền đề: với trigger CÒN SỐNG, đề xuất thứ hai bị chặn và thông điệp gọi tên J7.
+    await expect(chenAwardTho(hangHai)).rejects.toThrow(/da co mot award con song/u);
+
+    await db.pool.query(
+      "ALTER TABLE rfq_awards DISABLE TRIGGER rfq_awards_kiem_mot_award_song",
+    );
+    try {
+      const { rows: tg } = await db.pool.query<{ tgenabled: string }>(
+        "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_awards_kiem_mot_award_song'",
+      );
+      expect(tg[0]?.tgenabled, "đột biến phải THẬT SỰ được áp trước khi đọc kết quả").toBe("D");
+      const id = await chenAwardTho(hangHai);
+      expect(
+        id,
+        "không trigger thì một gói thầu có HAI award cùng sống — và `docTraoThau` chỉ thấy một trong hai",
+      ).not.toBe("");
+      const { rows: dem } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM rfq_awards WHERE org_id = $1 AND rfq_id = $2 AND status = 'PROPOSED'",
+        [orgA, rfqId],
+      );
+      expect(dem[0]?.n, "HAI hàng PROPOSED cùng sống trên một gói thầu — đó là đúng thứ J7 cấm").toBe("2");
+    } finally {
+      await db.pool.query(
+        "ALTER TABLE rfq_awards ENABLE ALWAYS TRIGGER rfq_awards_kiem_mot_award_song",
+      );
+    }
+    const { rows: lai } = await db.pool.query<{ tgenabled: string }>(
+      "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_awards_kiem_mot_award_song'",
+    );
+    expect(lai[0]?.tgenabled, "phải về đúng ENABLE ALWAYS, không phải ENABLE thường").toBe("A");
   });
 });
 

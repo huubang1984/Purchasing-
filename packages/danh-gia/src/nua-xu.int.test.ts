@@ -78,7 +78,7 @@ afterAll(async () => {
 });
 
 describe("[S1.104 / S2.2] luật làm tròn ghim ở CẢ hai tầng", { timeout: 120000 }, () => {
-  it("hàm thuần cho ĐÚNG `pg_catalog.round(giaTri * heSo, 2)` ở mọi ca — một lượt đi về", async () => {
+  it("[INV-J2] hàm thuần cho ĐÚNG `pg_catalog.round(giaTri * heSo, 2)` ở mọi ca — một lượt đi về", async () => {
     const cho = CA.map((_, i) => `($${String(i * 2 + 1)}::pg_catalog.numeric, $${String(i * 2 + 2)}::pg_catalog.numeric)`);
     const thamSo = CA.flatMap((c) => [c.giaTri, c.heSo]);
     const { rows } = await db.pool.query<{ i: string; pg: string }>(
@@ -122,7 +122,7 @@ describe("[S1.104 / S2.2] luật làm tròn ghim ở CẢ hai tầng", { timeout
     expect(chan[0]?.v, "nửa-ra-xa-0, KHÔNG phải banker's: 0.005 → 0.01").toBe("0.01");
   });
 
-  it("CẮT CỤT thì bảng này ĐỎ — đối chứng âm, và nó là khoản 218 ở dạng phép đo", () => {
+  it("[INV-J2] CẮT CỤT thì bảng này ĐỎ — đối chứng âm, và nó là khoản 218 ở dạng phép đo", () => {
     const catCut = (g: bigint, h: bigint): bigint => (g * h) / 10n ** BigInt(SO_LE_HE_SO);
     const lech = CA.filter((c) => {
       const g = docSo(c.giaTri, SO_LE_TIEN) ?? 0n;
