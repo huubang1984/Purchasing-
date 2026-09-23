@@ -105,6 +105,13 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "biết chính xác khi nào cửa đóng, là đoán được vùng giá mà không cần thấy một con số nào. " +
     "Cùng lý do thứ hai với `/rfqs/:rfqId/unseal`: nó biến một id gói thầu thành id một vòng " +
     "BAFO. Route khai `agent: false` và dòng này khai vì sao. [S1.109 / S2.5]",
+  "/rfqs/:rfqId/evidence-bundle":
+    "BỘ BẰNG CHỨNG ĐÁNH GIÁ — mọi hàng của MỌI lượt chấm, mỗi hàng mang `effectiveCost` và từng " +
+    "thành phần đã quy đổi, cộng mọi lần trao thầu kể cả lần đã huỷ. Nó là bề mặt RỘNG NHẤT của " +
+    "cả hệ thống về giá: rộng hơn bảng xếp hạng (chỉ lượt mới nhất) và rộng hơn bảng so sánh. " +
+    "Mọi lập luận của ADR-038 áp nguyên, mạnh hơn. Người cần nó là một kiểm toán viên CON NGƯỜI " +
+    "giữ `audit.read` + `bid.view`, tải hai tệp về và kiểm NGOÀI hệ thống bằng " +
+    "`pnpm bang-chung kiem`; không việc nào của một tác tử chỉ-đọc cần nó. [mảnh 1]",
   "/rfqs/:rfqId/award":
     "ĐỀ XUẤT TRAO THẦU của một gói thầu — AI THẮNG, cộng lý do người đề xuất viết ra, cộng " +
     "chữ ký của người duyệt. Nó không mang một mức giá nào, và đó chính là chỗ dễ đọc sai: " +

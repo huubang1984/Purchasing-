@@ -13,6 +13,14 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-23 / S1.117] MẢNH 1 CỦA `docs/PRODUCT.md` §11 XONG — MÀN XUẤT BỘ BẰNG CHỨNG.** Bước 8 của `/mo-thau` gọi
+`GET /rfqs/:rfqId/evidence-bundle` (cổng `audit.read` + `bid.view`, `agent: false`) và tải đúng hai tệp mà `pnpm bang-chung
+xuat` ghi. Nửa XUẤT của S2.7 (`doc-tu-csdl.ts`, `dac-ta.ts`) chuyển từ `tools/bo-xuat-danh-gia` xuống `packages/danh-gia`
+(`dungBoBangChung` không cổng, chỉ CLI gọi; `xuatBoBangChung` có cổng, route gọi) để hai đường ra cùng byte; nửa KIỂM ở lại
+`tools/`. Đo: kịch bản 41 qua HTTP bước 12j — PM không `audit.read` ⇒ 403; giám đốc ⇒ 200; hai tệp qua `pnpm bang-chung kiem`
+KHÔNG `DATABASE_URL` ⇒ `ok=true`; bằng từng byte với CLI trừ `xuatLuc`; đột biến đổi cổng `audit.read` thành `bid.view` ⇒ 12j ĐỎ.
+Còn lại của §11 không đổi: mảnh 3 (triển khai thật) và mảnh 4 (pilot). Mốc neo sổ kiểm toán vẫn chỉ có CLI.
+
 ~~**Giai đoạn: S0 (Nền móng) — MÃ NGUỒN ĐÃ CÓ, mười một task đã commit. S1 chưa bắt đầu.**~~
 
 **Giai đoạn: S0 ĐÃ HỢP NHẤT VÀO `master`** (merge commit `30d1972`, giữ nguyên 46 commit).

@@ -111,12 +111,17 @@ export default tseslint.config(
       parserOptions: { projectService: false, project: false },
       globals: {
         atob: "readonly",
+        // [mảnh 1 / màn xuất bằng chứng] `Blob` + `URL.createObjectURL` + `setTimeout`: ghi hai tệp
+        // của bộ bằng chứng ra đĩa người dùng, đúng byte máy chủ trả (`mo-thau.js` bước 8).
+        Blob: "readonly",
         btoa: "readonly",
         crypto: "readonly",
         document: "readonly",
         fetch: "readonly",
         location: "readonly",
+        setTimeout: "readonly",
         TextEncoder: "readonly",
+        URL: "readonly",
         window: "readonly",
       },
     },

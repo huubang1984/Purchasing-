@@ -23,9 +23,10 @@ import { join } from "node:path";
 import { argv, env, exit, stderr, stdout } from "node:process";
 import { createPool } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { DANG_BUNDLE, PHIEN_BAN_BUNDLE, TEP_DAC_TA, TEP_DU_LIEU, docBo, type BoBangChung } from "./bo.js";
-import { DAC_TA } from "./dac-ta.js";
-import { docMoiLuotCham, docMoiTraoThau } from "./doc-tu-csdl.js";
+// [mảnh 1] Nửa XUẤT nay ở gói, để CLI và route `GET /rfqs/:rfqId/evidence-bundle` ghi ra CÙNG byte.
+// Nửa KIỂM (`docBo`, `kiemBo`) ở lại đây — người kiểm không mượn định nghĩa của người bị kiểm.
+import { dungBoBangChung } from "@trustprocure/danh-gia";
+import { TEP_DAC_TA, TEP_DU_LIEU, docBo } from "./bo.js";
 import { kiemBo } from "./kiem.js";
 
 const CACH_DUNG = `Cách dùng:
@@ -87,12 +88,9 @@ async function xuat(thamSo: readonly string[]): Promise<number> {
     onPoolError: (e) => console.error(`[bang-chung] pool loi ${e instanceof Error ? e.name : "loi la"}`),
   });
   try {
-    const { luotCham, traoThau } = await withTenant(pool, orgId, async (client) => ({
-      luotCham: await docMoiLuotCham(client, orgId, rfqId),
-      traoThau: await docMoiTraoThau(client, orgId, rfqId),
-    }));
+    const daXuat = await withTenant(pool, orgId, (client) => dungBoBangChung(client, orgId, rfqId, new Date()));
 
-    if (luotCham.length === 0) {
+    if (daXuat === null) {
       // KHÔNG ghi một bundle rỗng. Một thư mục trông như một bộ bằng chứng mà không mang phép đo
       // nào là thứ tệ hơn không có thư mục nào — cùng luật với `kiemBo` từ chối một lượt kiểm
       // không đo được gì.
@@ -100,31 +98,15 @@ async function xuat(thamSo: readonly string[]): Promise<number> {
       return 1;
     }
 
-    const bo: BoBangChung = {
-      dang: DANG_BUNDLE,
-      phienBan: PHIEN_BAN_BUNDLE,
-      dacTaPhienBan: 1,
-      dacTaSha256: bam(DAC_TA),
-      orgId,
-      rfqId,
-      xuatLuc: {
-        giaTri: new Date().toISOString(),
-        nguon: "đồng hồ của tiến trình xuất — KHÔNG được chứng thực; không đầu vào nào của phép tính",
-      },
-      luotCham,
-      traoThau,
-    };
-
     await mkdir(ra, { recursive: true });
     // `Buffer.from(…, "utf8")` chứ không đưa chuỗi thẳng cho `writeFile`: `dacTaSha256` là băm của
     // BYTE, và kho chạy `core.autocrlf=true` — một lần dịch xuống dòng là một lần băm lệch mà
     // không ai đổi một chữ nào. Cùng bài học với `trich`.
-    await writeFile(join(ra, TEP_DU_LIEU), Buffer.from(`${JSON.stringify(bo, null, 2)}\n`, "utf8"));
-    await writeFile(join(ra, TEP_DAC_TA), Buffer.from(DAC_TA, "utf8"));
+    await writeFile(join(ra, TEP_DU_LIEU), Buffer.from(daXuat.tep[TEP_DU_LIEU], "utf8"));
+    await writeFile(join(ra, TEP_DAC_TA), Buffer.from(daXuat.tep[TEP_DAC_TA], "utf8"));
 
-    const soHang = luotCham.reduce((t, l) => t + l.hang.length, 0);
     stdout.write(
-      `da xuat\t${ra}\tluot-cham=${String(luotCham.length)}\thang=${String(soHang)}\ttrao-thau=${String(traoThau.length)}\n`,
+      `da xuat\t${ra}\tluot-cham=${String(daXuat.soLuotCham)}\thang=${String(daXuat.soHang)}\ttrao-thau=${String(daXuat.soTraoThau)}\n`,
     );
     return 0;
   } finally {
