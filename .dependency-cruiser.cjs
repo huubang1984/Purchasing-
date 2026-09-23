@@ -71,6 +71,8 @@ const TEST_SUPPORT_INDEX_TS = ciFile("packages/test-support/src/index.ts");
 // [S1.104 / S2.2] Ho "g16-": goi thu 14, va la goi dau tien cua S2.
 const DANH_GIA_SRC_PREFIX = ciPrefix("packages/danh-gia/src/");
 const DANH_GIA_INDEX_TS = ciFile("packages/danh-gia/src/index.ts");
+// [S1.114 / S2.7 / ADR-059] Ho "g17-": lop tinh lai DOC LAP cua bo bang chung.
+const DOC_LAP_SRC_PREFIX = ciPrefix("tools/bo-xuat-danh-gia/src/doc-lap/");
 
 // ==========================================================================================
 // VONG FIX 2 (MUC D) - CUNG KHUON "MAC DINH DONG", AP CHO packages/identity/src/
@@ -309,6 +311,36 @@ module.exports = {
       severity: "error",
       from: { pathNot: DANH_GIA_SRC_PREFIX },
       to: { path: DANH_GIA_SRC_PREFIX, pathNot: [DANH_GIA_INDEX_TS] },
+    },
+    // ------------------------------------------------------------------------------------------
+    // [S1.114 / S2.7 / ADR-059 ve 2] Ho "g17-" — LOP TINH LAI DOC LAP CUA BO BANG CHUNG.
+    //
+    // ADR-059 chot rang bo kiem cua bundle KHONG duoc de bao dam cua no phu thuoc vao chinh ham
+    // `chiPhiHieuDung`: mot loi NAM TRONG ham ay tu tai lap chinh no, bundle khai DAT tren mot con
+    // so sai, va lop bang chung dat nhat cua san pham noi doi dung vao ngay no can noi that.
+    //
+    // Cau ay chi co nghia neu ranh gioi duoc CUONG CHE. Mot cau trong ADR khong chan duoc mot
+    // dong `import` — va kho nay da tra gia cho dung lop loi do (khoan 218: hai tang thu tien ve
+    // hai chu so bang hai luat, khong cong nao thay).
+    //
+    // `reachable: true` chu khong phai canh TRUC TIEP: mot module trung gian re-export
+    // `tinhChiPhiHieuDung` se lot qua mot quy tac canh truc tiep ma van dua dung kha nang bi cam
+    // vao lop doc lap. Day la cung lop lo hong ma "g11-khong-import-nguoc-tu-cong-cu-xuat-neo"
+    // dong bang mot quy tac thu hai.
+    //
+    // Doi chung DUONG: `tests/architecture/bo-bang-chung-doc-lap.test.ts` viet mot file dung thuc
+    // vao tools/bo-xuat-danh-gia/src/, cho kiem-doc-lap.ts import no, roi doi quy tac nay DO.
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g17-kiem-doc-lap-khong-cham-danh-gia",
+      comment:
+        "tools/bo-xuat-danh-gia/src/kiem-doc-lap.ts la ban cai DOC LAP cua phep tinh chi phi hieu " +
+        "dung, viet tu DAC-TA.md. No khong duoc VOI TOI packages/danh-gia qua bat ky duong nao - " +
+        "ke ca gian tiep. Neu no import duoc, no thoi la mot nguoi kiem doc lap va tro thanh mot " +
+        "ban sao, va ADR-059 mat ve chiu luc.",
+      severity: "error",
+      from: { path: DOC_LAP_SRC_PREFIX },
+      to: { path: DANH_GIA_SRC_PREFIX, reachable: true },
     },
     // ------------------------------------------------------------------------------------------
     // [ADR-020 muc 4 / S1.10.2] HO "g9-" — handler cua apps/api chi nhan `ctx.client` DA GAN phien.

@@ -157,6 +157,13 @@ tools/
                         nối vào nơi cất) và `kiem` (lấy MỌI mốc neo từ nơi cất, kiểm chữ ký,
                         đối chiếu với sổ). Danh sách tổ chức là THAM SỐ `--org` chứ không do
                         công cụ đoán — `app_api` không đọc được danh sách ấy (ADR-022).
+  bo-xuat-danh-gia/     [S1.114 / S2.7 / ADR-059] Bộ bằng chứng đánh giá: `xuat` ghi một bundle
+                        TỰ ĐỦ (mọi lượt chấm, trọng số của đúng phiên bản chính sách đã dùng,
+                        mọi hàng trao thầu) kèm `DAC-TA.md` — đặc tả đủ để cài lại phép tính;
+                        `kiem` xác minh nó KHÔNG mở kết nối nào. Hai lớp kiểm: một lớp gọi hàm
+                        thuần, và một lớp ĐỘC LẬP ở `src/doc-lap/` mà họ quy tắc `g17-` cấm
+                        với tới `packages/danh-gia` kể cả gián tiếp — bảo đảm của bundle treo
+                        vào lớp thứ hai, vì một lỗi trong hàm thuần tự tái lập chính nó.
 evidence/
   INV-matrix.md         Sinh tự động bởi CI
 docs/

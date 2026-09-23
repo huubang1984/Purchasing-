@@ -11257,3 +11257,255 @@ chạm một khoản rổ A đang mở.
 - **58 → 59** ADR (ADR-059), **61** migration không đổi, **14** gói không đổi, **56/56** bất biến
   không đổi — vòng này KHÔNG thêm nhãn `[INV-*]` nào, và đó là chủ ý: nới dải sang `[A-HJ]` là vòng
   229, sau S2.7.
+
+# §S1.114 — S2.7: BỘ BẰNG CHỨNG TỰ ĐỦ, VÀ MỘT NGƯỜI KIỂM ĐỘC LẬP CÓ RANH GIỚI ĐƯỢC CƯỠNG CHẾ BẰNG MÁY — MŨI ĐỘT BIẾN THỨ BA CHỨNG MINH LỚP ẤY KHÔNG PHẢI TRANG TRÍ
+
+**Mảnh của bảng bốn mảnh mà vòng này chạm: mảnh 2** — và vòng này **đóng** nó: S2.7 là hạng mục
+cuối của S2, và spec S2 §9 gọi nó là *vế cuối của điều kiện hoàn thành*. **Khoản rổ A mà vòng này
+chạm: 196** — đồng hồ cơ sở dữ liệu chưa được chứng thực, và ADR-059 ghi rằng nó *"làm hỏng chính
+artefact của bước xuất bằng chứng"*; hình dạng trường thời gian của bundle được chốt SAU khi đọc
+lại hàng ấy, xem mục 5.
+
+## 1. SOI HÌNH DẠNG TRƯỚC DÒNG MÃ ĐẦU TIÊN, và nó bác hai giả định của chính ADR-059
+
+Khuôn S1.75/S1.101: vòng chạm lõi bảo mật soi hình dạng trước khi cài. Lượt soi chạy trên `master`
+`7d9d314` và trả về năm thứ; hai trong số đó làm ADR-059 phải đọc rộng hơn chữ của nó.
+
+**⑴ `components` KHÔNG được lược đồ bảo đảm mang đủ đầu vào.** Bảng ⑴ của ADR-059 viết *"`components`
+từng hàng, và phiên bản chính sách đã dùng"* — như thể `components` là đủ. Đo trên `057`: `CHECK`
+chỉ đòi mỗi phần tử là object mang `ma` (chuỗi) và `tien` (chuỗi hay null). **`he_so` và `gia_tri`
+KHÔNG bị đòi.** Rằng đường ghi hôm nay luôn viết cả bốn là một tính chất của `luot-danh-gia.ts`,
+không của lược đồ — và `doc-bang-xep-hang.ts` đã viết thẳng ra điều đó: *"`he_so` và `gia_tri` thì
+KHÔNG suy được từ đâu cả"*.
+
+Hệ quả cho hình dạng: một hàng thiếu `giaTri` là hàng **KHÔNG TÁI LẬP ĐƯỢC** — không phải ĐẠT, và
+cũng không phải LỆCH. Ba kết luận, không hai. Và một bundle mà **không** hàng nào tái lập được thì
+**không ĐẠT**: `every()` trên mảng rỗng in ✓, và một lớp bằng chứng in ✓ trên không phép đo nào tệ
+hơn không có lớp nào.
+
+**⑵ Cùng một khái niệm có HAI cách viết khoá trong cùng một cơ sở dữ liệu.** `eval_components` của
+chính sách dùng `don_vi`/`he_so` — hợp đồng do `CHECK` của `057` cưỡng chế. `components` của từng
+hàng dùng `donVi`/`heSo`/`giaTri`, vì `luot-danh-gia.ts:348` `JSON.stringify` thẳng kiểu TypeScript
+ra. Trigger `kiem_thanh_phan_theo_chinh_sach` không vấp phải vì nó **suy** đơn vị từ `tien` thay vì
+đọc khoá.
+
+Quyết định: bundle chép **NGUYÊN VĂN cả hai**, không gộp về một cách viết. Một bộ xuất "dọn dẹp"
+đầu ra là một bộ xuất mà người kiểm không đối chiếu được với cơ sở dữ liệu nữa — cùng bài học
+`trich` đã ghi ở ADR-026 §5⑶ (*chép byte, đừng mã hoá lại*).
+
+**⑶ Lấy "lượt chấm mới nhất" là một cái bẫy có địa chỉ.** `docBangXepHang` cố ý chỉ lấy lượt mới
+nhất, và chú thích của chính nó chỉ sang đây: *"vì sao xếp hạng đổi là một câu hỏi kiểm toán, và
+nó được trả lời bằng bộ xuất của S2.7"*. Một vòng BAFO sinh một `rfq_evaluations` **thứ hai** và
+hàng cũ ở lại (spec §4.3), nên một bundle chỉ mang lượt mới nhất sẽ — sau một vòng BAFO — không
+chứa nổi bảng xếp hạng mà một award cũ trỏ tới, và sẽ **im lặng** về chuyện ấy. Bộ xuất lấy **mọi**
+lượt, cũ trước mới sau, và chính sách đọc theo `policy_id` của **từng** lượt chứ không theo bản mới
+nhất.
+
+**⑷ `ProcurementPolicyRecord` không xuất `evalComponents` ra ngoài.** `COT_CHINH_SACH` chọn đúng năm
+cột và `eval_components` không nằm trong đó. Nên đường đọc chính sách sẵn có **không** dùng được cho
+bundle; bộ xuất đọc thẳng, cùng câu mà `luot-danh-gia.ts` dùng.
+
+**⑸ `rfq_awards` là bảng SỰ KIỆN, không phải bảng trạng thái.** Đây là thứ phép đo bác một giả định
+của em chứ không phải của ADR: `duyetTraoThau` **INSERT một hàng `APPROVED` MỚI** chứ không UPDATE
+hàng `PROPOSED`. Khẳng định đầu tiên em viết (`toHaveLength(1)`) ĐỎ trên cụm thật ở lượt chạy đầu.
+Bundle mang **cả hai** hàng, và đó là đúng: *ai đề xuất* và *ai duyệt* là hai sự kiện của hai người
+khác nhau, và gộp chúng lại là xoá mất đúng vế phân tách nhiệm vụ mà `061` dựng ra để cưỡng chế.
+
+## 2. ADR-059 ⒜ — *tái lập được mà KHÔNG cần cơ sở dữ liệu*, đo bằng một dòng
+
+`pnpm bang-chung kiem --bo <thư mục>` chạy trong một tiến trình có **`DATABASE_URL` đã xoá khỏi môi
+trường**, trên một bundle xuất từ một vòng thầu đi qua mã sản xuất thật (chấm bằng `taoLuotDanhGia`,
+trao thầu bằng `deXuatTraoThau` + `duyetTraoThau`).
+
+```
+ok=true	hang=3	dat=3	lech=0	khong-tai-lap-duoc=0
+```
+
+Phép đo này **không thể xanh giả**: nếu công cụ lỡ mở một kết nối, `batBuoc("DATABASE_URL")` ném và
+lượt chạy trả mã 1 với *Thiếu biến môi trường DATABASE_URL*. Khẳng định còn đòi `stderr`, sau khi bỏ
+hai dòng cảnh báo của chính Node, phải **RỖNG**.
+
+Cùng lý do `pnpm neo trich` không mở pool (ADR-026 §5⑵): *nếu khâu tách đòi cơ sở dữ liệu thì thứ
+gọi là artefact độc lập vẫn phải đi qua chính hệ thống bị kiểm.*
+
+## 3. ADR-059 ⒝ — người kiểm ĐỘC LẬP, và ranh giới của nó là một quy tắc chứ không một câu
+
+Bộ tính lại độc lập nằm ở `tools/bo-xuat-danh-gia/src/doc-lap/tinh-lai.ts`, viết từ `DAC-TA.md`, và
+nó dùng **một phương pháp khác** chứ không một bản sao khác: `packages/danh-gia` quy mọi số về
+`bigint` ở tỉ lệ cố định rồi nhân; lớp này **không dùng `bigint`** — nó nhân dài trên mảng chữ số,
+đúng phép nhân làm trên giấy, rồi làm tròn bằng cách đọc phần đuôi bị cắt và so với `5` cộng các số
+0. Một bản sao CÙNG phương pháp chỉ bắt được lỗi gõ nhầm; hai phương pháp khác nhau còn bắt được lỗi
+của chính phương pháp — tràn tỉ lệ, cắt cụt sớm, đặt sai chỗ lần làm tròn.
+
+**Ranh giới được cưỡng chế bằng `depcruise`, không bằng chú thích:**
+
+```
+g17-kiem-doc-lap-khong-cham-danh-gia
+  from: tools/bo-xuat-danh-gia/src/doc-lap/     (CẢ THƯ MỤC, mặc định ĐÓNG)
+  to:   packages/danh-gia/src/  reachable: true (kể cả GIÁN TIẾP)
+```
+
+**Đối chứng dương, và nó trả về một con số đáng ghi.** Thêm đúng một dòng
+`import { SO_LE_TIEN } from "@trustprocure/danh-gia";` vào lớp độc lập rồi chạy `depcruise`:
+
+```
+x 6 dependency violations (6 errors, 0 warnings). 304 modules, 1231 dependencies cruised.
+  g17-…: tools/bo-xuat-danh-gia/src/doc-lap/… → packages/danh-gia/src/index.ts
+  g17-…: … → packages/danh-gia/src/chi-phi-hieu-dung.ts
+  g17-…: … → packages/danh-gia/src/luot-danh-gia.ts
+  g17-…: … → packages/danh-gia/src/doc-bang-xep-hang.ts
+  g17-…: … → packages/danh-gia/src/trao-thau.ts
+  g17-…: … → packages/danh-gia/src/vong-bafo.ts
+```
+
+**Sáu module, trong đó NĂM chỉ với tới được qua `index.ts`.** Một quy tắc canh cạnh TRỰC TIẾP sẽ
+thấy đúng một — và đó là cùng lớp lỗ hổng mà `g11-khong-import-nguoc-tu-cong-cu-xuat-neo` phải dựng
+một quy tắc THỨ HAI để đóng. Khôi phục tự kiểm bằng `sha256`: `c99376dda4e6…` trước và sau, KHỚP.
+
+Ba đối chứng ấy nay là test thường trực trong `tests/architecture/boundaries.test.ts`: một tệp dò
+trực tiếp, một tệp dò GIÁN TIẾP qua một module trung gian ngoài `doc-lap/`, và một đối chứng dương
+khẳng định phần CÒN LẠI của công cụ **vẫn** gọi được hàm thuần — nếu quy tắc chặn cả tệp ngoài
+`doc-lap/` thì lớp ⑴ của ADR-059 không tồn tại được, và hai bài đo kia sẽ đỏ vì một lý do sai.
+
+Tệp dò viết vào CHÍNH thư mục bị hạn chế, **không** sửa tệp thật — một phép đo chạm mã sản xuất là
+một phép đo có thể để lại mã sản xuất đã sửa (bài học S1.86).
+
+**HAI GIỚI HẠN CỦA LỚP NÀY, nói ra thay vì để người sau tưởng nó rộng hơn:**
+
+**⑴ Quy tắc bảo đảm *thứ nằm trong `doc-lap/` là độc lập*, KHÔNG bảo đảm *`kiemBo` có gọi nó*.**
+Không quy tắc cấu trúc nào buộc bộ kiểm phải hỏi lớp ấy. Thứ bịt lỗ đó là một phép đo HÀNH VI chứ
+không phải một quy tắc: mũi đột biến ⒞ chỉ đỏ được nếu `kiemBo` THẬT SỰ hỏi lớp độc lập — khi lớp
+gọi hàm thuần im, kết luận vẫn LỆCH. Một ngày nào đó ai đó gỡ lời gọi ấy, ca ⒞ đỏ.
+
+**⑵ Lớp này bắt được chỗ MÃ lệch khỏi ĐẶC TẢ. Nó KHÔNG bắt được một đặc tả sai** — hai bản cài từ
+cùng một đặc tả sai sẽ cùng sai, và không phép đo nào trong vòng này đóng lỗ ấy. Thứ đóng được nó là
+một người ĐỌC, và đó chính là lý do `DAC-TA.md` đi kèm bundle thay vì ở lại trong kho: người đọc là
+kiểm toán viên cầm artefact, không phải người viết mã.
+
+## 4. ADR-059 ⒞ — ba mũi đột biến, và mũi thứ ba là lý do cả ADR tồn tại
+
+| mũi | làm gì | lớp hàm thuần | lớp độc lập |
+|---|---|---|---|
+| ⒜ | đổi một `he_so` trong bundle, giữ nguyên `effectiveCost` | **LỆCH** | **LỆCH** |
+| ⒝ | đổi `effectiveCost` đã lưu, giữ nguyên `components` | **LỆCH** | **LỆCH** |
+| ⒞ | **một lỗi làm tròn NẰM TRONG `chiPhiHieuDung`** | **ĐẠT** (nó sống) | **LỆCH** |
+
+Mũi ⒞ được dựng đúng như hiện thực nó mô hình hoá: bundle được sinh **TỪ** đầu ra của hàm có lỗi,
+tức nó là bundle mà một hệ thống mang lỗi ấy sẽ xuất ra. Lỗi là *cắt cụt thay vì nửa-ra-xa-0* — lỗi
+rẻ nhất để viết nhầm.
+
+```
+10.00 × 1.2345 = 12.345000
+  nửa-ra-xa-0 (đúng đặc tả) → 12.35
+  cắt cụt     (đột biến)    → 12.34   ← con số nằm trong bundle
+```
+
+Lớp gọi hàm thuần tính lại bằng chính hàm sai ấy, ra `12.34`, thấy khớp, **không báo gì**. Lớp độc
+lập ra `12.35` và báo:
+
+```
+lớp độc lập: effectiveCost đã lưu 12.34, tính lại ra 12.35
+HAI LỚP BẤT ĐỒNG: lớp hàm thuần nói ĐẠT, lớp độc lập nói LỆCH — đây là hình dạng của một
+lỗi NẰM TRONG `chiPhiHieuDung` (ADR-059)
+```
+
+Đây là *"một lỗi trong hàm ấy tự tái lập chính nó"* của ADR-059, chạy được, trên một khẳng định chứ
+không trên một câu văn. Bài đo còn mang một **đối chứng thứ ba**: với hàm thuần THẬT, cùng bundle ấy
+đỏ ở cả hai lớp — nên vế *"lớp hàm thuần im"* ở trên đo đúng thứ nó nói, chứ không đo một bundle vốn
+dĩ không ai đọc được.
+
+**Điểm tiêm là một tham số, và nó được nói ra chứ không giấu.** `kiemBo(bo, dacTa, hamThuan)` nhận
+lớp ⑴ làm tham số, mặc định là hàm thật. Không có điểm tiêm thì mệnh đề chịu lực của ADR-059 chỉ là
+một câu trong tài liệu.
+
+**Phép đo thứ tư, khác hạng: hai lớp phải KHỚP.** `fast-check`, **2000** lượt trên cặp
+(`giaTri` tới 99 999 999.99, `he_so` tới 9999.9999): `tinhLai` và `tinhChiPhiHieuDung` ra **cùng**
+`effectiveCost`. Cùng khuôn `[INV-B4]` — hai bộ đọc độc lập, và thứ được đo là *hai bản có khớp nhau
+không*. Cộng một bảng ca biên so phép nhân dài với phép nhân `bigint` của ngôn ngữ, **không** đi qua
+`packages/danh-gia`: nếu cả hai lớp của kho cùng sai theo một lối, ca ấy vẫn đỏ.
+
+## 5. Khoản 196 — thứ vòng này làm, và thứ nó KHÔNG làm
+
+Đọc lại hàng 196 trước khi chốt hình dạng trường thời gian, đúng như ADR-059 §*Điều ADR này KHÔNG
+nói* đòi. Kết luận:
+
+**Phép tính của `DAC-TA.md` không đọc đồng hồ ở bất kỳ bước nào.** Chi phí hiệu dụng là
+`giaTri × he_so` làm tròn rồi cộng; thứ hạng là một phép sắp xếp. Nên một đồng hồ lệch **không chạm
+được một con số nào** trong phần tái lập được của bundle. Đó là lớp phòng thủ mạnh nhất có sẵn, và
+nó có sẵn vì hàm thuần của S2.2 vốn đã không đọc đồng hồ.
+
+**Nhưng mốc thời gian thì có thật trong bundle**, nên mỗi mốc đi kèm một trường `nguon` nói đúng nó
+đáng tin tới đâu:
+
+> đồng hồ của cơ sở dữ liệu lúc ghi — nguồn thời gian CHƯA được chứng thực (khoản 196); đủ để đối
+> chiếu thứ tự các sự kiện trong bundle này, không đủ để phán xử đúng hạn hay quá hạn
+
+Và `DAC-TA.md` §6 nói lại điều đó cho người đọc ngoài dự án. Ghi một mốc trần là mời người đọc tin
+vào thứ dự án chưa dám tin.
+
+**Khoản 196 KHÔNG đóng.** Vòng này không khai nguồn thời gian và không canh nó lệch; nó chỉ làm cho
+khiếm khuyết ấy **không lan** vào con số, và làm cho nó **đọc được** trên chính artefact.
+
+## 6. Khoản 238 — một sự thật viết ở hai chỗ, sửa một chỗ, HAI LẦN
+
+Hai phép đo chạy trong lượt soi hình dạng, cùng một lớp:
+
+**⑴ Rổ của khoản 196.** Dòng tổng RỔ A kể 196 từ **S1.93**. Ô *chỗ* của chính hàng 196 vẫn ghi
+`rổ B` — **hai mươi mốt vòng**. Lý do không ai thấy là đo được: quét toàn sổ, **196 là hàng DUY NHẤT
+mang một nhãn rổ trong ô *chỗ***, nên không cổng nào có tập để đọc và không mắt nào có thói quen để
+nhìn.
+
+**⑵ Lời khai S2 ở `Handoff.md`.** S1.113 gạch tại chỗ hai câu thiu ở `docs/PRODUCT.md` §11 mảnh 2 —
+*S2.2–S2.7 chưa có một dòng nào* và *ADR-051 ghi rằng J3 chưa có lớp nào cưỡng chế*. **Bản sao của
+đúng hai câu ấy** ở `Handoff.md` việc 2 ở lại nguyên văn. Vá ĐIỂM thay vì vá LỚP — ở chính vòng đặt
+tên cho lớp ấy.
+
+Cả hai đã sửa TẠI CHỖ. **Phần KHÔNG đóng, nói ra:** `[INV-H20]` SUY số migration, số gói, số công
+cụ, số ADR từ kho — nhưng *rổ của một khoản* và *trạng thái một hạng mục S2* vẫn là văn xuôi chép
+tay ở hai chỗ, và không vế P nào đọc chúng. Một trường hợp thứ ba xuất hiện được ngày mai. Hàng 238
+ghi lớp đóng được: một vế P đối chiếu ô *chỗ* của mỗi hàng với ba dòng tổng, và một vế đối chiếu
+bảng hạng mục của spec S2 với mọi lời khai về hạng mục ấy.
+
+## 7. Điều vòng này KHÔNG làm, nói ra thay vì để người sau đoán
+
+**KHÔNG thêm một nhãn `[INV-*]` nào, và đó là chủ ý.** J2 nay có cả vế khó, nhưng mở một ô trong ma
+trận bất biến là việc của vòng **229** (nới dải mã sang `[A-HJ]`), theo đúng thứ tự chủ dự án chốt
+ngày 2026-09-22 và đúng ADR-059 ⒟. Gắn nhãn ở vòng này là ghi một dòng `passed` vào hàng của một bất
+biến chưa có ô — và mở ô cho một bất biến mới cưỡng chế nửa là đúng thứ `[INV-H22]` sinh ra để chặn.
+
+**KHÔNG đóng mảnh 1.** Bước *xuất bộ bằng chứng* nay có một công cụ tự đủ, nhưng nó vẫn là **CLI**.
+Lỗ giao diện duy nhất còn lại của mảnh 1 không đổi một chữ.
+
+**KHÔNG làm `pnpm neo` thành thừa.** Chuỗi kiểm toán và mốc neo ngoài trả lời *sổ có bị sửa không*,
+một câu hỏi mà bundle này không trả lời, ký bằng một khoá khác.
+
+**KHÔNG phán xử ai được trao thầu.** `DAC-TA.md` §7 viết thẳng: trao cho hàng hạng 2 không phải một
+lỗi — bên mua có quyền và ghi lý do. Bộ kiểm **BÁO** hạng của báo giá được chọn, không phán xử nó.
+Bài đo cho ca ấy dùng đúng một award hạng 2 với lý do *"nhà cung cấp hạng 1 rút"*.
+
+**Giàn cảnh của bài đo tích hợp là một BẢN SAO** của `luot-danh-gia.int.test.ts`, và cái giá được
+ghi ở đầu tệp: nếu lược đồ đổi, hai tệp phải sửa. Rút nó thành một gói fixture chung là một vòng
+riêng chạm mười chỗ gọi.
+
+## 8. Số đo
+
+- `pnpm t0` — **0 vi phạm, 307 module / 1253 phụ thuộc** (trước vòng: 296 / 1211).
+- `pnpm test` — **74 tệp / 1136 ca** (1 bỏ qua), +73 ca so với HEAD: 72 ca của công cụ mới cộng một
+  đối chứng dương cho `g17-`.
+- `pnpm test:int` — **55 tệp / 1198 ca, 0 đỏ, 988 giây** (trước vòng: 54 tệp / 1189 ca / 1200 giây).
+- `pnpm evidence` — `vitest thoát mã 0`, **2335 khẳng định** (trước vòng: 2251), **56/56** bất biến
+  (34/34 nghiệp vụ + 22/22 hàng rào), *Cổng evidence: XANH*. Đây là lượt DUY NHẤT unit + int chung
+  một pool.
+- `evidence/INV-matrix.md` đổi ĐÚNG một ô: **G1 62 → 65** khẳng định — ba đối chứng mới của `g17-`.
+  Không hàng nào khác đổi, và **không hàng MỚI nào** — vòng này không thêm nhãn.
+- Mã mới: `tools/bo-xuat-danh-gia` — **6 tệp nguồn** (bộ đọc bundle, đặc tả, đường đọc CSDL, hai lớp
+  kiểm, CLI) cộng **3 tệp test**; **72** ca unit và **9** ca tích hợp.
+- Đột biến: **sáu**, và năm trong sáu nay là test THƯỜNG TRỰC. Ba mũi của ADR-059 ⒞ (`kiem.test.ts`);
+  hai tệp dò cho `g17-` — một cạnh TRỰC TIẾP, một cạnh GIÁN TIẾP qua module trung gian —
+  (`boundaries.test.ts`); và một lượt chạy BẰNG TAY trên chính `tinh-lai.ts` để đo con số **6 module**
+  ở mục 3, khôi phục tự kiểm `sha256` và KHỚP. Lớp độc lập có **0 câu `import`** và **0 lần dùng
+  `BigInt`** — đo bằng `grep`, không khai.
+- Sổ nợ **237 → 238** khoản, mở **97 → 98** — một khoản MỚI (238), **không** khoản nào đóng. Rổ A
+  **7** không đổi, rổ B **67** không đổi, rổ C **23 → 24**; ba rổ cộng đúng: 7 + 67 + 24 = 98.
+- **59** ADR không đổi (ADR-059 đã vào kho ở S1.113), **61** migration không đổi, **14 gói + 7 công
+  cụ** (công cụ thứ bảy là của vòng này), **56/56** bất biến không đổi.

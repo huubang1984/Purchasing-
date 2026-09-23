@@ -309,6 +309,22 @@ importers:
         specifier: workspace:*
         version: link:../../packages/crypto-keys
 
+  tools/bo-xuat-danh-gia:
+    dependencies:
+      '@trustprocure/danh-gia':
+        specifier: workspace:*
+        version: link:../../packages/danh-gia
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
+    devDependencies:
+      '@trustprocure/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
+
   tools/gieo-demo:
     dependencies:
       '@trustprocure/crypto-keys':
