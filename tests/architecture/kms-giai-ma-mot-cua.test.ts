@@ -1,14 +1,14 @@
 // ==============================================================================================
-// [ADR-061 ⒞] LỜI GỌI KMS TRẢ BÍ MẬT DẠNG RÕ CHỈ ĐƯỢC NẰM Ở PHÍA MỞ KHOÁ — VÀ "PHÍA MỞ KHOÁ" SUY TỪ
+// [ADR-062 ⒞] LỜI GỌI KMS TRẢ BÍ MẬT DẠNG RÕ CHỈ ĐƯỢC NẰM Ở PHÍA MỞ KHOÁ — VÀ "PHÍA MỞ KHOÁ" SUY TỪ
 // CHÍNH `.dependency-cruiser.cjs`, KHÔNG TỪ MỘT DANH SÁCH TÊN VIẾT Ở ĐÂY
 //
 // ----------------------------------------------------------------------------------------------
 // VÌ SAO CẦN, KHI IAM ĐÃ CHẶN
 // ----------------------------------------------------------------------------------------------
-// ADR-061 đặt ranh giới ở key policy: `tp-api` chỉ có `GenerateDataKeyPairWithoutPlaintext`,
+// ADR-062 đặt ranh giới ở key policy: `tp-api` chỉ có `GenerateDataKeyPairWithoutPlaintext`,
 // `Decrypt` bị `Deny` tường minh cho mọi principal ngoài `tp-unseal-worker`. Lớp ấy chặn LÚC CHẠY,
 // trên tài khoản thật — tức một lời gọi `DecryptCommand` lọt vào `apps/api` chỉ lộ ra khi chạy trên
-// prod, và dự án không có staging (ADR-061, bối cảnh triển khai). Tệp này dời phát hiện ấy về lúc
+// prod, và dự án không có staging (ADR-062, bối cảnh triển khai). Tệp này dời phát hiện ấy về lúc
 // review: mã GỌI một lệnh trả bí mật dạng rõ mà nằm ngoài phía mở khoá thì đỏ trước khi merge.
 //
 // ----------------------------------------------------------------------------------------------
@@ -30,11 +30,11 @@
 // `GenerateDataKeyPair`. Ba hình dạng gọi: lớp lệnh SDK v3 (`DecryptCommand`), phương thức của client
 // gộp (`new KMS().decrypt(` — chỉ tính khi tệp nhắc `@aws-sdk/client-kms`, vì `subtle().decrypt(` của
 // WebCrypto là hợp lệ và đang có ở `sealed-envelope/src/unseal.ts`), và gọi HTTP trần
-// (`TrentService.Decrypt`). Bản `...WithoutPlaintext` KHÔNG bị bắt — đó chính là quyền ADR-061 trao
+// (`TrentService.Decrypt`). Bản `...WithoutPlaintext` KHÔNG bị bắt — đó chính là quyền ADR-062 trao
 // cho `api`.
 // **Không bảo đảm:** tên lệnh ghép lúc chạy (`cmds["De" + "crypt"]`), hay một SDK khác bọc KMS. Đó
 // là giới hạn của một phép đọc văn bản; lớp chặn thật vẫn là key policy.
-// Tệp test (`*.test.*`, `tests/`) nằm ngoài phạm vi: phép đo ⒜ của ADR-061 CẦN gọi `Decrypt` dưới
+// Tệp test (`*.test.*`, `tests/`) nằm ngoài phạm vi: phép đo ⒜ của ADR-062 CẦN gọi `Decrypt` dưới
 // role `tp-api` để chứng minh nó bị từ chối.
 // ==============================================================================================
 
@@ -115,7 +115,7 @@ function tepMaKhongPhaiTest(): Array<{ duong: string; noiDung: string }> {
 
 const laPhiaMoKhoa = viTuPhiaMoKhoa(cauHinh.forbidden);
 
-describe("[ADR-061 ⒞] lời gọi KMS trả bí mật dạng rõ chỉ nằm ở phía mở khoá", () => {
+describe("[ADR-062 ⒞] lời gọi KMS trả bí mật dạng rõ chỉ nằm ở phía mở khoá", () => {
   it("kho hiện tại: không tệp mã nào ngoài phía mở khoá gọi Decrypt/ReEncrypt/GenerateDataKey*", () => {
     const tep = tepMaKhongPhaiTest();
     expect(tep.length, "git ls-files không trả về tệp mã nào — phép đo rỗng ruột").toBeGreaterThan(50);
@@ -151,7 +151,7 @@ describe("[ADR-061 ⒞] lời gọi KMS trả bí mật dạng rõ chỉ nằm �
     expect(khongHo("apps/unseal-worker/src/main.ts")).toBe(true);
   });
 
-  it("bắt đủ ba hình dạng gọi, và tha đúng quyền ADR-061 trao cho api", () => {
+  it("bắt đủ ba hình dạng gọi, và tha đúng quyền ADR-062 trao cho api", () => {
     const tep = [
       { duong: "apps/api/src/a.ts", noiDung: "await kms.send(new DecryptCommand({ CiphertextBlob }));" },
       { duong: "apps/api/src/b.ts", noiDung: 'import { KMS } from "@aws-sdk/client-kms";\nawait new KMS({}).generateDataKey({});' },

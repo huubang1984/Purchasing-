@@ -139,6 +139,26 @@
     <div class="bao ok" id="ok7" hidden></div>
   </section>
 
+  <section class="buoc" id="b8" hidden>
+    <h2><span class="so">8</span> Xuất bộ bằng chứng</h2>
+    <p class="ghi">Hai tệp của <strong>trọn chuỗi đánh giá</strong>: <code>bo-bang-chung.json</code>
+      mang <strong>mọi</strong> lượt chấm (kể cả lượt trước BAFO), từng thành phần đã quy đổi,
+      bộ trọng số của <strong>đúng phiên bản chính sách</strong> đã dùng và mọi lần trao thầu kể cả
+      lần đã huỷ; <code>DAC-TA.md</code> là đặc tả phép tính, đủ để một người ngoài cài lại.
+      Chỉ người giữ <code>audit.read</code> <strong>và</strong> <code>bid.view</code> xuất được.</p>
+    <div class="doi">
+      <button id="nut-xuat-bang-chung">Tải bộ bằng chứng</button>
+    </div>
+    <dl class="tt" id="tt-bang-chung"></dl>
+    <p class="ghi"><strong>Kiểm ở NGOÀI hệ thống này</strong> — trang này không tự kiểm, vì một
+      lớp kiểm do chính hệ thống bị kiểm phục vụ không chứng minh được gì. Đặt hai tệp vào một
+      thư mục rồi chạy <code>pnpm bang-chung kiem --bo &lt;thư-mục&gt;</code> trên một máy khác;
+      lệnh ấy không cần cơ sở dữ liệu. Mốc neo của sổ kiểm toán (<code>pnpm neo</code>) là một
+      artefact riêng, ký bằng khoá riêng, và vẫn xuất bằng dòng lệnh.</p>
+    <div class="bao loi" id="loi8" hidden></div>
+    <div class="bao ok" id="ok8" hidden></div>
+  </section>
+
   <footer class="chan">Lát cắt demo — mọi lần truy cập đều để lại dấu vết trong sổ kiểm toán.</footer>
 </main>
 <script type="module" src="/mo-thau.js"></script>

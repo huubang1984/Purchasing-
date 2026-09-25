@@ -332,16 +332,64 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
     }
   });
 
-  it("mặc định phiên của vai đăng nhập đặt search path hợp lệ khác mặc định máy chủ ⇒ mốc là của CHÍNH kết nối: các lần lấy kế giữ kết nối", async () => {
+  // [khoản 109] Ca này từng được ghim như HỢP LỆ: `zz99, public` là "một mặc định phiên hợp lệ khác mặc định máy chủ", nên phép so
+  // tương đối lấy nó làm mốc và giữ kết nối. Khoản 109 đo rằng đó chính là lỗ: một schema lạ đứng TRƯỚC `public` là phần CẤM, bất
+  // biến, và cả lớp này sinh ra để chặn nó. Tên test giữ vế còn đúng — mốc là của CHÍNH kết nối cho phần KHÔNG cấm (schema sau
+  // `public`) — còn vế "zz99 trước public được giữ" đổi thành NÉM ngay ở lần lấy ĐẦU.
+  it("mặc định phiên của vai đăng nhập: schema lạ TRƯỚC public ⇒ NÉM ngay lần lấy đầu (khoản 109); schema SAU public ⇒ mốc là của CHÍNH kết nối, các lần lấy kế giữ kết nối", async () => {
     await db.pool.query("ALTER ROLE app_api_login SET search_path = zz99, public");
+    try {
+      const loi = await loiKhiLay(poolMot().connect());
+      expect(loi, "phần CẤM được kiểm tuyệt đối — kể cả khi chưa có mốc").toBeInstanceOf(KetNoiNhiemError);
+      expect(loi!.message).toContain("schema lạ đứng trước public");
+      expect(loi!.message, "chỉ TÊN điều bị vi phạm, không tên schema").not.toContain("zz99");
+    } finally {
+      await db.pool.query("ALTER ROLE app_api_login RESET search_path");
+    }
+    await db.pool.query("ALTER ROLE app_api_login SET search_path = public, zz99");
     try {
       const p = poolMot();
       const a = await trangThai(p);
       const b = await trangThai(p);
-      expect(a.luoc_do, "tiền đề: mặc định phiên có hiệu lực").toBe("{zz99,public}");
+      expect(a.luoc_do, "tiền đề: mặc định phiên có hiệu lực").toBe("{public,zz99}");
       expect(b.pid, "so với một hằng thay vì mốc của kết nối thì kết nối hợp lệ này bị huỷ oan").toBe(a.pid);
     } finally {
       await db.pool.query("ALTER ROLE app_api_login RESET search_path");
+    }
+  });
+
+  // [khoản 109 — lượt soi ngang 59a-4] `public, pg_catalog` đặt `pg_catalog` SAU `public`, nên PostgreSQL thôi tìm nó ngầm ở đầu:
+  // một `public.lower(text)` thắng `pg_catalog.lower(text)` với tên trần. Đo trước bản vá: lấy client không ném, `lower('ABC')`
+  // ra `CUOP`. Nay NÉM ở lần lấy đầu, và không câu nào của người gọi chạy trên kết nối ấy.
+  it("[khoản 109] mặc định vai `public, pg_catalog` (59a-4) ⇒ lần lấy ĐẦU NÉM, trước khi `public.lower` kịp cướp tên trần", async () => {
+    await db.pool.query(
+      "CREATE FUNCTION public.lower(text) RETURNS text LANGUAGE sql AS $f$SELECT 'CUOP'::text$f$; " +
+        "GRANT EXECUTE ON FUNCTION public.lower(text) TO app_api; " +
+        "ALTER ROLE app_api_login SET search_path = public, pg_catalog",
+    );
+    try {
+      const loi = await loiKhiLay(poolMot().query("SELECT lower('ABC') AS x"));
+      expect(loi).toBeInstanceOf(KetNoiNhiemError);
+      expect(loi!.message).toContain("pg_catalog sau public");
+    } finally {
+      await db.pool.query("ALTER ROLE app_api_login RESET search_path; DROP FUNCTION public.lower(text)");
+    }
+  });
+
+  // [khoản 109 — lượt soi ngang 59a-2] `ALTER SYSTEM` đặt độc rồi nạp lại: không hàng mức vai hay database nào, deploy không thấy
+  // gì. Đo trước bản vá: pool ứng dụng mới lấy client không lỗi với `{ke_gian,public}`. Nay NÉM.
+  it("[khoản 109] `ALTER SYSTEM SET search_path = ke_gian, public` + reload (59a-2) ⇒ pool ứng dụng mới NÉM ở lần lấy đầu", async () => {
+    await db.pool.query("CREATE SCHEMA ke_gian; GRANT USAGE ON SCHEMA ke_gian TO app_api");
+    await db.pool.query("ALTER SYSTEM SET search_path = ke_gian, public");
+    await db.pool.query("SELECT pg_reload_conf()");
+    try {
+      const loi = await loiKhiLay(poolMot().connect());
+      expect(loi).toBeInstanceOf(KetNoiNhiemError);
+      expect(loi!.message).toContain("schema lạ đứng trước public");
+    } finally {
+      await db.pool.query("ALTER SYSTEM RESET search_path");
+      await db.pool.query("SELECT pg_reload_conf()");
+      await db.pool.query("DROP SCHEMA ke_gian");
     }
   });
 

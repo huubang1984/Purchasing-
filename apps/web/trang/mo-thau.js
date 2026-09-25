@@ -118,6 +118,7 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b5"), true);
     hien($("b6"), true);
     hien($("b7"), true);
+    hien($("b8"), true);
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -472,6 +473,57 @@ $("nut-huy-award").addEventListener("click", async () => {
   await veTraoThau();
 });
 
+// ---------------------------------------------------------------------------------------------
+// Bước 8 — xuất bộ bằng chứng (mảnh 1 của `docs/PRODUCT.md` §11)
+//
+// Máy chủ trả VĂN BẢN của hai tệp, và trang ghi đúng văn bản ấy ra đĩa — không `JSON.parse` rồi
+// `JSON.stringify` lại: byte của bundle phải do máy chủ quyết, cùng byte mà `pnpm bang-chung xuat`
+// ghi. `Blob` từ một chuỗi JS mã hoá UTF-8, đúng thứ `dacTaSha256` băm.
+//
+// Trang KHÔNG tự kiểm bundle. Lớp kiểm chịu lực của ADR-059 là một bản cài ĐỘC LẬP chạy ngoài hệ
+// thống; một nút "kiểm" ở đây sẽ là chính hệ thống bị kiểm tự phục vụ người kiểm nó.
+// ---------------------------------------------------------------------------------------------
+
+function taiVe(ten, noiDung, loai) {
+  const url = URL.createObjectURL(new Blob([noiDung], { type: loai }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ten;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // Thu hồi SAU một nhịp: thu hồi ngay trong cùng tác vụ làm vài trình duyệt huỷ lượt tải.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("nut-xuat-bang-chung").addEventListener("click", async () => {
+  bao($("loi8"), ""); bao($("ok8"), "");
+  $("nut-xuat-bang-chung").disabled = true;
+  try {
+    const r = await goi("GET", `/rfqs/${phien.rfqId}/evidence-bundle`);
+    if (r.status !== 200) { bao($("loi8"), loiCua(r, "Không xuất được bộ bằng chứng")); return; }
+    const b = r.body.evidenceBundle ?? null;
+    if (b === null) {
+      dienDl($("tt-bang-chung"), [["Bộ bằng chứng", "gói thầu chưa được chấm lần nào — không có gì để xuất"]]);
+      return;
+    }
+    const tenTep = Object.keys(b.tep);
+    for (const ten of tenTep) {
+      taiVe(ten, b.tep[ten], ten.endsWith(".json") ? "application/json" : "text/markdown;charset=utf-8");
+    }
+    dienDl($("tt-bang-chung"), [
+      ["Gói thầu", phien.rfqId],
+      ["Lượt chấm", b.soLuotCham],
+      ["Hàng (mọi lượt)", b.soHang],
+      ["Lần trao thầu (kể cả đã huỷ)", b.soTraoThau],
+      ["Tệp", tenTep.join(" · ")],
+    ]);
+    bao($("ok8"), "Đã tải hai tệp. Kiểm chúng ở một máy khác bằng `pnpm bang-chung kiem --bo <thư-mục>`.");
+  } finally {
+    $("nut-xuat-bang-chung").disabled = false;
+  }
+});
+
 // ==============================================================================================
 // [S1.99 / khoản 205] ĐỔI FRAGMENT PHẢI ĐỔI CẢ PHIÊN — VÀ Ở TRANG NÀY, KHÔNG LÀM THẾ THÌ NGƯỜI
 // DUYỆT THỨ HAI KHOÁ TÀI KHOẢN CỦA NGƯỜI DUYỆT THỨ NHẤT.
@@ -498,7 +550,7 @@ $("nut-huy-award").addEventListener("click", async () => {
 window.addEventListener("hashchange", () => {
   docLink();
   phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "ok1", "ok3", "ok5", "ghi-danh"]) {
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }

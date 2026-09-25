@@ -950,6 +950,11 @@ const DANH_SACH_TRANG_AUDIT = [
 // một đường mở kết nối "tiện tay" — `g9-api-routes-khong-cham-tenancy-va-db` cấm handler của
 // `apps/api` chạm gói này HOÀN TOÀN, kể cả qua cửa.
 const DANH_SACH_TRANG_DB = [
+  // [khoản 165] Dấu kiểm vòng khoá bọc (`062`): hàm băm thuần, hàm ghi-hoặc-so chạy lúc khởi động của `apps/api` và
+  // `apps/unseal-worker`, và lớp lỗi mang TÊN riêng để dòng log khởi động gọi đúng tên sự cố. Không giải mã, không bọc.
+  "DauKiemVongKhoaLechError",
+  "doiChieuDauKiemVongKhoa",
+  "tinhDauKiemKhoa",
   // [S1.51 / lượt soi 44 NẶNG-1] Một CHUỖI, không phải một năng lực: tiền tố của phép từ chối sớm trong `migrate()`. Nó
   // ra cửa vì test ghim nguyên văn nó làm bằng chứng của khoản nợ 87 — bốn bản chép tay đã im lặng hỏng một lần khi
   // chuỗi đổi chữ. Không mở kết nối, không chạm quyền.
@@ -961,6 +966,8 @@ const DANH_SACH_TRANG_DB = [
   // [S1.86 / khoản 128] Cùng hạng: thông điệp khi vai chạy `migrate()` không gọi được `pg_advisory_lock(bigint)` — hàm mà
   // hardening thu hồi khỏi PUBLIC. Nó nêu NGUYÊN VĂN câu `GRANT` người vận hành cần chạy, và test import nó thay vì chép.
   "TU_CHOI_KHOA_MIGRATE",
+  // [khoản 102] Cùng hạng: tiền tố của phép từ chối khi vai chạy `migrate()` là chủ bảng FORCE mà không BYPASSRLS.
+  "TU_CHOI_CHU_BANG_FORCE",
   // [S1.59 / khoản nợ 99] Tiền tố của lỗi khi client lấy từ pool có vai không sạch — cùng lý do; và lớp lỗi mang TÊN riêng, vì ~~mọi
   // chỗ ghi log của tiến trình chỉ ghi tên lỗi~~ [S1.67 / khoản 118, lượt soi 61b-7] dòng log lỗi của `apps/api` ghi tên cùng mã cố
   // định, mà lớp này không mang mã — tên là thứ duy nhất phân biệt nó (lượt soi 52 NHẸ-2).
@@ -1015,6 +1022,16 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "docTraoThau",
   "duyetTraoThau",
   "huyTraoThau",
+  // [mảnh 1 / màn xuất bằng chứng] Nửa XUẤT của bộ bằng chứng S2.7 xuống gói để CLI và `apps/api`
+  // ghi ra cùng byte. `xuatBoBangChung` là đường có cổng; `dungBoBangChung` không cổng, chỉ công
+  // cụ vận hành gọi. Năm hằng số là hình dạng của bundle mà nửa KIỂM ở `tools/` đối chiếu.
+  "DAC_TA",
+  "DANG_BUNDLE",
+  "PHIEN_BAN_BUNDLE",
+  "TEP_DAC_TA",
+  "TEP_DU_LIEU",
+  "dungBoBangChung",
+  "xuatBoBangChung",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [

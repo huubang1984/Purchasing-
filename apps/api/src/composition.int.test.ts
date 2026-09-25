@@ -51,6 +51,11 @@ function doiNguoiDung(chuoi: string, ten: string, matKhau: string): string {
   return url.toString();
 }
 
+// [khoản 165] MỘT khoá bọc cho mọi tiến trình dựng trong tệp này: từ `062`, tiến trình khởi động
+// trước ghi dấu kiểm của `v1`, và mọi tiến trình sau giữ khoá KHÁC dưới cùng tên `v1` bị từ chối lên
+// — đúng thứ khoản ấy đòi. Khoá ngẫu nhiên MỖI LẦN gọi `moiTruong` là một cụm dán nhầm khoá.
+const KHOA_BOC = randomBytes(32).toString("base64");
+
 function moiTruong(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
   return {
     TRUSTPROCURE_DATABASE_URL: urlLogin,
@@ -61,7 +66,7 @@ function moiTruong(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
     // [sổ nợ 41] Socket của mọi yêu cầu trong test là 127.0.0.1 — khai nó là proxy để đo đường X-Forwarded-For.
     TRUSTPROCURE_TRUSTED_PROXIES: "127.0.0.1",
     TRUSTPROCURE_KEY_ADAPTER: "local-dev",
-    TRUSTPROCURE_MASTER_KEYS: `v1=${randomBytes(32).toString("base64")}`,
+    TRUSTPROCURE_MASTER_KEYS: `v1=${KHOA_BOC}`,
     TRUSTPROCURE_MASTER_KEY_ACTIVE: "v1",
     TRUSTPROCURE_TOTP_MASTER_KEYS: `t1=${randomBytes(32).toString("base64")}`,
     TRUSTPROCURE_TOTP_MASTER_KEY_ACTIVE: "t1",
@@ -193,6 +198,26 @@ describe("[S1.11] batDau() fail-closed trước khi mở cổng", () => {
     } finally {
       await db.pool.query("REVOKE app_unseal FROM app_api_login");
     }
+  });
+
+  // [khoản 165] Ca chịu lực của `062`: một tiến trình KHÁC đã khởi động với `KHOA_BOC` dưới `v1`
+  // (lần dựng đầu tiên trong tệp ghi dấu kiểm), rồi tiến trình này dán NHẦM một khoá khác dưới cùng
+  // tên. Trước khoản 165 nó LÊN và chỉ hỏng khi worker mở phong bì; nay nó KHÔNG mở cổng nào.
+  it("[khoản 165] khoá bọc dán NHẦM dưới cùng tên phiên bản ⇒ batDau() ném DauKiemVongKhoaLechError, không cổng nào nghe", async () => {
+    const dung = taoTienTrinhApi(docCauHinh(moiTruong()));
+    await dung.batDau();
+    await dung.dung();
+    const nham = randomBytes(32).toString("base64");
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong({ TRUSTPROCURE_MASTER_KEYS: `v1=${nham}` })));
+    const loi = await tt.batDau().then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+    await tt.dung();
+    expect(loi?.name).toBe("DauKiemVongKhoaLechError");
+    expect(loi?.message).toContain('"v1"');
+    expect(loi?.message).not.toContain(nham);
+    expect(loi?.message).not.toContain(KHOA_BOC);
   });
 });
 

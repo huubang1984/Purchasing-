@@ -439,7 +439,7 @@ một **ràng buộc**, không phải một gợi ý:
 1. **KMS chỉ bọc/mở data key của TỔ CHỨC.** Nó **không bao giờ** được gọi cho từng phong bì,
    từng content key, hay từng nhà cung cấp.
 2. **Private key RFQ được bọc bằng data key của tổ chức**, không bọc trực tiếp bằng CMK.
-   **[ADR-061]** *"Data key của tổ chức"* nghĩa là một **cặp khoá P-256** do KMS sinh
+   **[ADR-062]** *"Data key của tổ chức"* nghĩa là một **cặp khoá P-256** do KMS sinh
    (`GenerateDataKeyPairWithoutPlaintext`), không phải khoá đối xứng — để `api` bọc bằng khoá
    công khai mà không bao giờ cầm bí mật mở.
 3. **Content key được bọc bằng public key RFQ** (X25519), hoàn toàn cục bộ, không chạm KMS.
@@ -1733,7 +1733,7 @@ khoá là một cuộc di trú có dữ liệu, không phải một lần sửa 
 
 **Vì sao ADR-006 KHÔNG bị phương án 4 làm mẻ.** ADR-006 trao cho `unseal-worker` **độc quyền
 `kms:Decrypt` trên khoá RFQ**. ~~Bọc một khoá riêng cần `kms:Encrypt`, không cần `Decrypt`.~~
-**[ADR-061] Câu vừa gạch SAI dưới ràng buộc 2 của ADR-009:** bọc bằng data key ĐỐI XỨNG của tổ
+**[ADR-062] Câu vừa gạch SAI dưới ràng buộc 2 của ADR-009:** bọc bằng data key ĐỐI XỨNG của tổ
 chức đòi `api` cầm data key dạng rõ, tức cần `Decrypt`/`GenerateDataKey`. Kết luận dưới đây vẫn
 đúng, nhưng đúng vì khoá tổ chức là một CẶP khoá và `api` bọc bằng khoá CÔNG KHAI, cục bộ. Tức
 `api` làm được việc ở mục 1 mà **vẫn không có quyền giải mã** — ranh giới IAM của ADR-006 còn
@@ -3240,6 +3240,9 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
     `lanname = 'internal'`** — không chứa `RETURN`. Đây là phép đo buộc vế `prolang = plpgsql` vào vị
     từ: không có nó, hai trigger dựng sẵn của PostgreSQL đủ để chặn deploy trên một lược đồ hợp lệ.
     ✔ đã đo.
+
+
+**[khoản 105] Một phán xét mới theo đúng §2⑵ — mục *ràng buộc CHECK an ninh còn nguyên, còn hiệu lực và đúng định nghĩa đã khai (khoản 105)*.** Đo ở S1.61: gỡ `users_email_chu_thuong`, `supplier_contacts_email_chu_thuong` và hạ `supplier_contacts_email_hinh_dang` về `NOT VALID` sau deploy ⇒ `migrate()` kế đi qua và `Alice105@corp.com` vào được bảng. Mục mới PHÁN XÉT, không TỰ DỰNG lại, vì dựng một `CHECK` không đơn điệu: dữ liệu có thể đã vi phạm trong lúc ràng buộc vắng mặt, và một `ADD CONSTRAINT` tự động sẽ hoặc gãy deploy với lỗi sai hướng, hoặc — dưới `NOT VALID` — hợp thức hoá hàng vi phạm. Chủ thể là danh sách `CHECK_AN_NINH_KHAI` khai theo TÊN kèm migration CUỐI CÙNG định nghĩa ràng buộc và định nghĩa NGUYÊN VĂN (kênh ⑵ của ADR-037: tên đã khai kèm migration khai sinh). Danh sách theo tên thì mù đúng ở chỗ nó thiếu, nên `db/check-an-ninh.int.test.ts` đòi MỌI `CHECK` của lược đồ thuộc đúng một trong hai tập — khai an ninh, hay miễn kèm lý do thuộc một nhóm có tên — và `tests/architecture/check-an-ninh-khai.test.ts` đòi mỗi dòng khai trỏ migration cuối cùng nhắc tên ràng buộc.
 
 ## ADR-029 — Một lời khai TÓM TẮT trong tài liệu phải được SUY RA, hoặc nó sẽ thiu
 
@@ -6083,7 +6086,41 @@ kín. Và nó **không** đổi cách `requirePermission` ghi từ chối QUYỀ
 
 ---
 
-## ADR-061 — Khoá của TỔ CHỨC là một CẶP khoá bất đối xứng do KMS sinh, để `api` bọc được mà KHÔNG BAO GIỜ có quyền giải mã
+## ADR-061 — Vai chạy `migrate()` đã là CHỦ bảng FORCE thì phải có BYPASSRLS; `migrate()` từ chối chạy thay vì để backfill ra 0 hàng
+
+**Bối cảnh.** Khoản **102** (rổ A, ⒞ tiền điều kiện triển khai thật) đo ở S1.58: vai chạy migration mà RLS coi là CHỦ một bảng
+FORCE — chính chủ (hồ sơ N3), hay thừa kế một vai NOLOGIN sở hữu bảng (N3′) — và có EXECUTE trên hàm ngữ cảnh thì mọi câu migration
+chạm bảng tenant bị policy lọc: backfill ra 0 hàng không lỗi, `ADD FOREIGN KEY` đánh dấu ràng buộc hợp lệ mà không kiểm hàng, và
+(đọc ở S1.66) một migration chép-rồi-xoá bảng làm mất dữ liệu. `005_identity.sql` và khoản 91 (FORCE mọi bảng RLS) làm hình dạng ấy
+thành MẶC ĐỊNH, không phải một góc hiếm. Hai hướng vá tại chỗ đã đo và bác: `row_security = off` cho từng tệp gãy cài mới ở 004;
+chủ tự thu hồi EXECUTE gãy ở 011. Thân khoản ghi: lối ra duy nhất đã đo là chạy `migrate()` dưới vai BYPASSRLS — *"một quyết định về
+mô hình triển khai, không phải một bản vá"*.
+
+**Quyết định (chủ dự án, 2026-09-23).** Hồ sơ triển khai thật của TrustProcure chạy `migrate()` dưới một vai có **BYPASSRLS** (hay
+SUPERUSER). `migrate()` cưỡng chế điều đó bằng máy: TRƯỚC lượt sửa của hardening, nếu vai hiện tại không SUPERUSER, không BYPASSRLS mà
+`pg_has_role(current_user, relowner, 'USAGE')` đúng với một bảng FORCE RLS nào trong lược đồ dự án, nó NÉM `TU_CHOI_CHU_BANG_FORCE`
+kèm tối đa năm tên bảng — không lượt sửa, không migration đánh số nào chạy.
+
+**Phạm vi, nói ra.**
+- Cài MỚI dưới vai thường đi qua: chưa có bảng, không backfill nào có hàng để tiêu. Nhưng vai nào tạo bảng thì thành chủ bảng ấy và
+  hardening FORCE mọi bảng RLS — nên lượt deploy SAU của chính vai ấy bị từ chối. Một cụm thật, sớm hay muộn, đòi BYPASSRLS.
+- Hồ sơ N2 (vai deploy KHÔNG sở hữu bảng) giữ nguyên: các lớp khoản 97/100/101 vẫn là thứ canh nó.
+- Trên AWS RDS (ADR-009): vai master thuộc `rds_superuser` và cấp được `BYPASSRLS` cho vai deploy. **Chưa đo trên một cụm RDS thật**
+  — đó là việc của lần triển khai đầu (khoản 15).
+
+**Đo bằng gì.** `db/migrations.int.test.ts` [khoản nợ 101] pha ⒟: N3 và N3′ nay TỪ CHỐI (trước đây ghim *"deploy xanh, backfill bị
+tiêu"*), hàng giữ nguyên; cùng vai thêm BYPASSRLS thì hai backfill tới đích.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** gỡ các lớp canh vai deploy thường (khoản 97/100/101): N2 vẫn là hồ sơ hợp lệ. Nó **không** biến BYPASSRLS thành quyền của
+vai ỨNG DỤNG — `khangDinhPhienDangNhapUngDung` vẫn từ chối BYPASSRLS ở mọi phiên đăng nhập của `apps/`. Và nó **không** xét ca
+một vai thường tạo bảng mới rồi backfill bảng ấy trong CÙNG lượt deploy: phép kiểm chạy TRƯỚC vòng đánh số, khi vai ấy chưa là chủ
+bảng nào. Nếu chính migration ấy `FORCE ROW LEVEL SECURITY` trước câu backfill thì câu backfill bị lọc — ca này **chưa đo**.
+
+---
+
+## ADR-062 — Khoá của TỔ CHỨC là một CẶP khoá bất đối xứng do KMS sinh, để `api` bọc được mà KHÔNG BAO GIỜ có quyền giải mã
 
 **Ngày:** 2026-09-25 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-002, ADR-006, **ADR-009**
 (ràng buộc 2 và 5), ADR-011, **ADR-019**, khoản nợ **15** (rổ A)
@@ -6202,7 +6239,7 @@ KMS, và nhánh đối chứng mô hình A vẫn ra 50.
 
 ⒞ Một phép kiểm tĩnh: không tệp nào dưới `apps/api/` gọi `DecryptCommand`, `GenerateDataKeyCommand`
 hay `GenerateDataKeyPairCommand` (bản có plaintext) của SDK KMS — cùng khuôn `g1-`/`g8-` đã canh
-đường mở khoá. **[S1.117] ĐÃ DỰNG, rộng hơn câu trên:** `tests/architecture/kms-giai-ma-mot-cua.test.ts`
+đường mở khoá. **[S1.119] ĐÃ DỰNG, rộng hơn câu trên:** `tests/architecture/kms-giai-ma-mot-cua.test.ts`
 quét MỌI tệp mã không phải test trong kho, không chỉ `apps/api/`. Tệp được phép gọi lệnh giải mã
 là tệp dưới `apps/unseal-worker/` hoặc là đích của một quy tắc depcruise họ `g1-khong-giai-ma-` /
 `g8-khong-mo-` — tập ấy ĐỌC từ `.dependency-cruiser.cjs`, không chép. Adapter `aws-kms` vì thế phải
@@ -6215,3 +6252,4 @@ khoá riêng RFQ trong cửa sổ một hàm* của ADR-019 vẫn đúng nguyên
 CHỨC, không phải khoảnh khắc sinh khoá RFQ. Nó **không** viết adapter `aws-kms`; khoản 15 vẫn mở
 cho tới khi có CMK, role và phép đo ⒜ chạy trên tài khoản thật. Và nó **không** đổi nhà cung cấp:
 ba điều kiện mở lại ADR-009 giữ nguyên.
+

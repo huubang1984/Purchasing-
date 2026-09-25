@@ -21,6 +21,7 @@
 // ==============================================================================================
 
 import type pg from "pg";
+import { viPhamLuocDoTuyetDoi } from "./luoc-do-an-toan.js";
 
 /**
  * Danh sách ĐÓNG các vai ứng dụng gắn được. Không nội suy chuỗi tuỳ ý vào `SET ROLE`: một tên
@@ -129,14 +130,20 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
   }
   const moc = mocLuocDo.get(client);
   if (moc === undefined) mocLuocDo.set(client, hang.luoc_do);
+  // [khoản 109] Phần CẤM của search path là bất biến, nên nó được kiểm TUYỆT ĐỐI — kể cả ở lần lấy ĐẦU,
+  // khi phép so tương đối chưa có mốc và một mặc định phiên độc (vai, database, `ALTER SYSTEM`) trở
+  // thành chính cái mốc. Phép so tương đối ở dòng kế vẫn giữ cho phần còn lại (schema sau `public`).
+  const camLuocDo = viPhamLuocDoTuyetDoi(hang.luoc_do, hang.current_role_name);
   const lech = [
     hang.vai_sao_chep !== "origin" && hang.vai_sao_chep !== "local" ? "session_replication_role" : null,
     hang.rls !== "on" ? "row_security" : null,
-    moc !== undefined && hang.luoc_do !== moc ? "search path hiệu lực" : null,
+    camLuocDo,
+    camLuocDo === null && moc !== undefined && hang.luoc_do !== moc ? "search path hiệu lực" : null,
   ].filter((x): x is string => x !== null);
   if (lech.length > 0) {
     throw new KetNoiNhiemError(
-      `${TU_CHOI_KET_NOI_NHIEM} — ${lech.join(", ")}. session_replication_role phải là origin hay local, row_security phải là on` +
+      `${TU_CHOI_KET_NOI_NHIEM} — ${lech.join(", ")}. session_replication_role phải là origin hay local, row_security phải là on, ` +
+        "search path hiệu lực phải có public, trước public chỉ có pg_catalog hay schema trùng tên vai, và pg_catalog không đứng sau public" +
         (moc === undefined
           ? ". Đây là lần lấy ĐẦU TIÊN của kết nối — chưa câu nào chạy trên nó — nên giá trị đến từ MẶC ĐỊNH PHIÊN (ALTER ROLE … SET, " +
             "ALTER DATABASE … SET, cấu hình máy chủ), không phải từ mã."

@@ -12,7 +12,7 @@
 // ghi ở đầu `ts-resolve-hook.mjs`.)
 // ==============================================================================================
 
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // ấy NẰM TRONG mục tiêu cruise (`packages apps tools tests db`). Khoá này là thứ giữ chúng không
 // giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
-import { voiKhoaDepcruise } from "../../../tests/architecture/khoa-depcruise.js";
+import { voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -263,35 +263,38 @@ describe("[S1.107] lớp cấm sink HTML ở apps/web/trang", () => {
    * probe rồi đọc nó sau khi `finally` đã xoá. Thư mục `apps/web/trang/` NẰM TRONG mục tiêu
    * cruise (`packages apps tools tests db`), nên một tệp thật ở đó là tài nguyên DÙNG CHUNG.
    */
-  function voiTepProbe(ten: string, noiDung: string, do_: (duong: string) => void): void {
+  // [S1.118] BẤT ĐỒNG BỘ: bản đồng bộ ngủ chặn event loop của worker trong lúc probe `g9-` ở
+  // `apps/api/src/routes.test.ts` giữ khoá (tới 131 giây trên CI) — lời gọi RPC `onTaskUpdate` của vitest
+  // hết hạn và job ubuntu đỏ dù MỌI test đều qua (PR #118, #119, #121). Xem GIỚI HẠN ở `khoa-depcruise.ts`.
+  async function voiTepProbe(ten: string, noiDung: string, do_: (duong: string) => Promise<void>): Promise<void> {
     const duong = join(GOC_KHO, `apps/web/trang/${ten}`);
-    voiKhoaDepcruise(() => {
+    await voiKhoaDepcruiseAsync(async () => {
       writeFileSync(duong, noiDung);
       try {
-        do_(`apps/web/trang/${ten}`);
+        await do_(`apps/web/trang/${ten}`);
       } finally {
         rmSync(duong, { force: true });
       }
     });
   }
 
-  /** eslint trên một tệp, trả STDOUT — eslint thoát khác 0 khi có lỗi, nên lỗi đi qua `catch`. */
-  function chayEslint(duongTuongDoi: string): string {
-    try {
-      return execFileSync("npx", ["eslint", duongTuongDoi], { cwd: GOC_KHO, encoding: "utf8", shell: true });
-    } catch (e) {
-      return String((e as { stdout?: string }).stdout ?? "");
-    }
+  /** eslint trên một tệp, trả STDOUT — eslint thoát khác 0 khi có lỗi, và STDOUT vẫn là thứ cần đọc. */
+  function chayEslint(duongTuongDoi: string): Promise<string> {
+    return new Promise((xong) => {
+      execFile("npx", ["eslint", duongTuongDoi], { cwd: GOC_KHO, encoding: "utf8", shell: true }, (_loi, stdout) =>
+        xong(String(stdout ?? "")),
+      );
+    });
   }
 
-  it("một tệp gán `innerHTML` trong `apps/web/trang/` làm eslint ĐỎ — và đỏ vì ĐÚNG luật ấy", () => {
-    voiTepProbe(
+  it("một tệp gán `innerHTML` trong `apps/web/trang/` làm eslint ĐỎ — và đỏ vì ĐÚNG luật ấy", async () => {
+    await voiTepProbe(
       "zzprobe-sink.js",
       `const el = document.getElementById("x");
 el.innerHTML = "<b>" + location.hash + "</b>";
 `,
-      (duong) => {
-        const ra = chayEslint(duong);
+      async (duong) => {
+        const ra = await chayEslint(duong);
         expect(ra, "eslint KHÔNG đỏ trên một tệp gán innerHTML — luật không có răng").toContain(
           "no-restricted-properties",
         );
@@ -300,16 +303,16 @@ el.innerHTML = "<b>" + location.hash + "</b>";
     );
   }, 120_000);
 
-  it("ĐỐI CHỨNG ÂM: cùng tệp ấy dựng DOM bằng `textContent` thì eslint XANH", () => {
+  it("ĐỐI CHỨNG ÂM: cùng tệp ấy dựng DOM bằng `textContent` thì eslint XANH", async () => {
     // Không có vế này, vế trên xanh y hệt với một cấu hình làm đỏ MỌI tệp trong thư mục.
-    voiTepProbe(
+    await voiTepProbe(
       "zzprobe-sach.js",
       `const el = document.getElementById("x");
 el.replaceChildren();
 el.textContent = location.hash;
 `,
-      (duong) => {
-        expect(chayEslint(duong).trim(), "một tệp sạch mà eslint vẫn kêu — luật quá rộng").toBe("");
+      async (duong) => {
+        expect((await chayEslint(duong)).trim(), "một tệp sạch mà eslint vẫn kêu — luật quá rộng").toBe("");
       },
     );
   }, 120_000);

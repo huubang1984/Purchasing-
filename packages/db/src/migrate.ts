@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type pg from "pg";
+import { VAI_UNG_DUNG } from "./vai-tro.js";
 
 /**
  * [S1.86 / khoản 128 / ADR-042] Thông điệp khi vai chạy `migrate()` KHÔNG gọi được
@@ -43,6 +44,13 @@ export const TU_CHOI_TRUOC_VONG =
  */
 export const TU_CHOI_DOI_VAI =
   "migrate() từ chối ghi migration: tệp kết thúc dưới một vai khác vai đã mở vòng migration đánh số";
+
+/**
+ * [khoản 102] Tiền tố của phép TỪ CHỐI khi vai chạy `migrate()` là CHỦ (hay thừa kế quyền chủ) của một bảng FORCE RLS mà không
+ * SUPERUSER, không BYPASSRLS — hồ sơ N3/N3′. Xuất ra để test ghim MỘT bản, cùng lý do với `TU_CHOI_GUC_SOM`.
+ */
+export const TU_CHOI_CHU_BANG_FORCE =
+  "migrate() từ chối chạy: vai chạy migration là CHỦ của bảng FORCE ROW LEVEL SECURITY mà không SUPERUSER, không BYPASSRLS";
 
 /**
  * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
@@ -577,6 +585,39 @@ export async function migrate(
       );
     }
 
+    // [khoản 102 — chủ dự án chốt 2026-09-23: *vai deploy phải có BYPASSRLS*] HỒ SƠ N3/N3′ BỊ TỪ CHỐI TRƯỚC LƯỢT SỬA.
+    // Vai chạy migration mà RLS coi là CHỦ một bảng FORCE (chính chủ, hay thừa kế một vai sở hữu bảng) và KHÔNG được miễn RLS
+    // thì mọi câu migration chạm bảng tenant bị policy lọc: backfill ra 0 hàng KHÔNG LỖI, `ADD FOREIGN KEY` đánh dấu ràng buộc
+    // hợp lệ mà không kiểm hàng, và một migration "chép sang bảng mới rồi DROP bảng cũ" chép ra 0 hàng rồi xoá — mất dữ liệu
+    // (đo S1.58; đọc S1.66). Hai hướng vá tại chỗ đã đo và BÁC (thân khoản 102): `row_security = off` từng tệp gãy cài mới ở 004;
+    // tự thu hồi EXECUTE gãy ở 011. Lối ra duy nhất đã đo là chạy `migrate()` dưới vai BYPASSRLS — nên đó là HỢP ĐỒNG, không phải
+    // một lời khuyên: phép kiểm dưới đây biến "N3 phải deploy dưới BYPASSRLS" từ một câu trong sổ nợ thành một lần NÉM.
+    // PHẠM VI, nói ra: chỉ vai đã là CHỦ bảng FORCE. Cài MỚI dưới vai thường đi qua (chưa có bảng; không backfill nào có hàng để
+    // tiêu), và vai N2 (không sở hữu bảng) giữ nguyên các lớp khoản 97/100/101. Nhưng vai nào tạo bảng thì thành chủ bảng ấy, và
+    // hardening FORCE mọi bảng RLS — nên lượt deploy SAU của chính vai ấy bị từ chối ở đây: một cụm thật sớm muộn đòi BYPASSRLS.
+    // "RLS coi là chủ" đo bằng `pg_has_role(…, 'USAGE')` — đúng quan hệ thừa kế mà PostgreSQL dùng khi miễn RLS cho chủ bảng
+    // (N3′: thành viên INHERIT của vai sở hữu). Chỉ TÊN bảng vào thông điệp, tối đa năm tên.
+    const { rows: hoSoVai } = await lockClient.query<{ chu_force: string | null }>(
+      "SELECT CASE WHEN r.rolsuper OR r.rolbypassrls THEN NULL ELSE " +
+        "  (SELECT pg_catalog.string_agg(t.ten, ', ') FROM (" +
+        "     SELECT n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname AS ten " +
+        "       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace " +
+        "      WHERE c.relkind OPERATOR(pg_catalog.=) ANY (ARRAY['r', 'p']::pg_catalog.\"char\"[]) " +
+        "        AND c.relrowsecurity AND c.relforcerowsecurity " +
+        "        AND n.nspname OPERATOR(pg_catalog.<>) ALL (ARRAY['pg_catalog', 'information_schema']::pg_catalog.name[]) " +
+        "        AND pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') " +
+        "      ORDER BY 1 LIMIT 5) t) END AS chu_force " +
+        "  FROM pg_catalog.pg_roles r WHERE r.rolname OPERATOR(pg_catalog.=) current_user",
+    );
+    if (hoSoVai[0]?.chu_force) {
+      throw await tuChoiVaHuyPhien(
+        `${TU_CHOI_CHU_BANG_FORCE} — ví dụ ${hoSoVai[0].chu_force}. RLS áp cho chủ bảng FORCE, nên backfill và kiểm khoá ngoại ` +
+          "của migration chạy dưới vai này thấy 0 hàng KHÔNG LỖI, và một migration chép-rồi-xoá bảng làm MẤT dữ liệu (khoản 102). " +
+          "Chạy migrate() dưới một vai có BYPASSRLS (ALTER ROLE <vai deploy> BYPASSRLS, cần SUPERUSER — trên AWS RDS: vai master " +
+          "cấp được) hay dưới SUPERUSER. Không lượt sửa, không migration đánh số nào chạy ở lượt này.",
+      );
+    }
+
     // [S1.51 / khoản nợ 92 — lượt soi 44 CAO-1] Chụp hàng mức database của ba GUC vận hành TRƯỚC lượt sửa. Vì sao bắt
     // buộc: ba mục kề chạy `ALTER DATABASE … RESET <guc>` VÔ ĐIỀU KIỆN, và một hàng mức database mang GIÁ TRỊ ĐÚNG là một
     // biện pháp giảm nhẹ hợp lệ — nó CHE một độc ở tầng thấp hơn (`postgresql.conf` / `ALTER SYSTEM` / `ALTER ROLE ALL`),
@@ -599,9 +640,44 @@ export async function migrate(
         )
       ).rows.map((r) => r.ten);
     const hangDbTruoc = await docHangMucDatabase();
+    // [khoản 109 — lượt soi ngang 59a-2] CÙNG lập luận, ở mức VAI. Hardening chạy `ALTER ROLE … RESET ALL` (toàn cụm và IN
+    // DATABASE) trên vai ứng dụng và vai đăng nhập của chúng VÔ ĐIỀU KIỆN; một hàng mức vai mang giá trị ĐÚNG có thể đang CHE
+    // một độc ở tầng thấp hơn (`ALTER SYSTEM`, `postgresql.conf`). Gỡ hàng che ⇒ deploy XANH, và mọi phiên ỨNG DỤNG mở sau đó
+    // chạy dưới độc ấy — phiên deploy không bao giờ thấy, vì nó không đăng nhập bằng các vai ấy (đo S1.66: `ALTER SYSTEM SET
+    // search_path = ke_gian, public`, hàng che ở `app_api_login` ⇒ `migrate()` qua, pool ứng dụng mới lấy `{ke_gian,public}`).
+    // Khác nhánh database ở một điểm, nói ra: chạy lại trên kết nối mới KHÔNG đọc được giá trị thật của vai kia — nên thông
+    // điệp đòi người vận hành kiểm nguồn cấu hình máy chủ, và lượt sau (hàng đã gỡ) đi qua. Lớp chặn giá trị độc ở chính phiên
+    // ứng dụng là phép kiểm TUYỆT ĐỐI của `ganVaiTroChoPool` và `withTenant`; lượt dừng này là để deploy KHÔNG xanh lặng lẽ.
+    // Chủ thể suy theo TÍNH CHẤT: vai ứng dụng và MỌI vai thành viên của chúng — không danh sách tên vai đăng nhập.
+    // Lần đọc SAU tra theo đúng TÊN vai của lần đọc TRƯỚC, không theo membership: BƯỚC 1 của hardening gỡ membership của vai
+    // lạ, và một phép lọc theo membership ở lần sau sẽ báo "đã gỡ" cho một hàng vẫn còn nguyên.
+    const docHangMucVai = async (vaiDaBiet: readonly string[] | null): Promise<string[]> =>
+      (
+        await lockClient.query<{ ten: string }>(
+          "SELECT DISTINCT r.rolname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) pg_catalog.split_part(c, '=', 1) AS ten " +
+            "  FROM pg_catalog.pg_db_role_setting s " +
+            "  JOIN pg_catalog.pg_roles r ON r.oid OPERATOR(pg_catalog.=) s.setrole, " +
+            "       pg_catalog.unnest(s.setconfig) c " +
+            " WHERE CASE WHEN $3::pg_catalog.text[] IS NULL " +
+            "            THEN EXISTS (SELECT 1 FROM pg_catalog.pg_roles k " +
+            "                          WHERE k.rolname OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.text[]) " +
+            "                            AND pg_catalog.pg_has_role(r.oid, k.oid, 'MEMBER')) " +
+            "            ELSE r.rolname OPERATOR(pg_catalog.=) ANY ($3::pg_catalog.text[]) END " +
+            "   AND (s.setdatabase OPERATOR(pg_catalog.=) 0 " +
+            "        OR s.setdatabase OPERATOR(pg_catalog.=) " +
+            "           (SELECT d.oid FROM pg_catalog.pg_database d " +
+            "             WHERE d.datname OPERATOR(pg_catalog.=) pg_catalog.current_database())) " +
+            "   AND pg_catalog.split_part(c, '=', 1) OPERATOR(pg_catalog.=) ANY ($1::pg_catalog.text[]) " +
+            " ORDER BY 1",
+          [TEN_GUC_VAN_HANH, [...VAI_UNG_DUNG], vaiDaBiet],
+        )
+      ).rows.map((r) => r.ten);
+    const hangVaiTruoc = await docHangMucVai(null);
 
     await chayFileLuonChay("sua");
 
+    const hangVaiSau = new Set(await docHangMucVai([...new Set(hangVaiTruoc.map((h) => h.slice(0, h.lastIndexOf("."))))]));
+    const hangVaiDaGo = hangVaiTruoc.filter((h) => !hangVaiSau.has(h));
     const hangDbSau = await docHangMucDatabase();
     if (hangDbSau.length > 0) {
       // [lượt soi 44 NẶNG-2] Lượt sửa KHÔNG gỡ được (vai deploy không sở hữu database ⇒ 42501, hardening nuốt thành
@@ -619,6 +695,16 @@ export async function migrate(
           "Phiên này mở TRƯỚC lúc gỡ nên vẫn mang giá trị cũ, và giá trị THẬT sau khi gỡ (postgresql.conf, ALTER SYSTEM, " +
           "ALTER ROLE ALL — những nguồn mà hàng vừa gỡ có thể đang che) chỉ đọc được trên một phiên MỚI: chạy lại " +
           "migrate() trên KẾT NỐI MỚI. Không migration đánh số nào chạy ở lượt này.",
+      );
+    }
+
+    if (hangVaiDaGo.length > 0) {
+      throw await tuChoiVaHuyPhien(
+        `migrate() từ chối chạy tiếp: lượt sửa vừa gỡ cấu hình mức VAI của GUC vận hành — ${hangVaiDaGo.join(", ")}. ` +
+          "Hàng vừa gỡ có thể đang CHE một giá trị độc ở tầng thấp hơn (ALTER SYSTEM, postgresql.conf, ALTER ROLE ALL), và " +
+          "phiên deploy không đăng nhập bằng các vai ấy nên không đọc được giá trị THẬT mà phiên ứng dụng sẽ thấy. Kiểm nguồn " +
+          "cấu hình máy chủ (pg_file_settings dưới vai đủ quyền), rồi chạy lại migrate() — lượt sau đi qua vì hàng đã gỡ. " +
+          "Không migration đánh số nào chạy ở lượt này (khoản 109).",
       );
     }
 

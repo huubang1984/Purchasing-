@@ -90,6 +90,11 @@ const HAM_CHI_DOC = [
   // người mua đã đọc được qua `GET /policy`. Một cổng `bid.view` ở đó canh một thứ không phải
   // bí mật, rồi làm người đọc tưởng nó là. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docVongBafo",
+  // [mảnh 1] `dungBoBangChung` KHÔNG mang cổng vì người gọi DUY NHẤT của nó ngoài gói là
+  // `pnpm bang-chung xuat` — công cụ vận hành giữ `DATABASE_URL`, đứng ngoài mọi cổng ứng dụng,
+  // cùng lập luận của `listSuppliers`. Đường của một CON NGƯỜI là `xuatBoBangChung` (rổ
+  // `HAM_DOC_CO_QUYEN`), và test cuối tệp này đòi `apps/` không gọi thẳng hàm này.
+  "dungBoBangChung",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",
@@ -174,6 +179,9 @@ const HAM_DOC_CO_QUYEN = [
   // hạng chịu, và lời gọi đứng THẲNG trong thân `docTraoThau` (khoản 33).
   "docTraoThau",
   "listInvitations",
+  // [mảnh 1 / màn xuất bằng chứng] Bộ bằng chứng mang MỌI hàng của MỌI lượt chấm — rộng hơn cả
+  // bảng xếp hạng. Hai cổng `audit.read` + `bid.view` đứng THẲNG trong thân `xuatBoBangChung`.
+  "xuatBoBangChung",
 ] as const;
 
 /**
@@ -602,5 +610,24 @@ describe("[S1.76] đường HTTP nào thử mã TOTP cũng phải đọc `auditS
       .map((r) => ({ ten: `${r.method} ${r.path}`, gt: (r as { mfaTranDuongPhu?: unknown }).mfaTranDuongPhu }))
       .filter((x) => typeof x.gt === "number" && x.gt >= MFA_MAX_FAILED_ATTEMPTS);
     expect(vuot.map((x) => x.ten), "ngưỡng ≥ ngưỡng khoá là một trần không bao giờ chạm").toEqual([]);
+  });
+});
+
+// =================================================================================================
+// [mảnh 1 / màn xuất bằng chứng] `dungBoBangChung` KHÔNG CÓ CỔNG, NÊN `apps/` KHÔNG ĐƯỢC GỌI NÓ.
+//
+// Nó nằm ở rổ `HAM_CHI_DOC` vì người gọi duy nhất ngoài gói là công cụ vận hành. Rổ ấy không canh
+// AI gọi — nên một route viết `dungBoBangChung(…)` thay cho `xuatBoBangChung(…)` sẽ trả MỌI giá của
+// MỌI lượt chấm cho bất kỳ phiên người mua nào, và không lớp nào ở trên kêu. Vế này đóng đúng đường ấy.
+// =================================================================================================
+describe("[mảnh 1] `apps/` không gọi thẳng `dungBoBangChung`", () => {
+  it("không tệp nào dưới `apps/` nhắc tới `dungBoBangChung`", () => {
+    const vi = quetTepTs(THU_MUC_APPS).filter((t) => /\bdungBoBangChung\b/u.test(readFileSync(t, "utf8")));
+    expect(vi.map((t) => relative(GOC, t)), "đường của một con người phải đi qua `xuatBoBangChung`").toEqual([]);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: `xuatBoBangChung` có người gọi dưới `apps/` — phép quét không rỗng ruột", () => {
+    const co = quetTepTs(THU_MUC_APPS).filter((t) => /\bxuatBoBangChung\b/u.test(readFileSync(t, "utf8")));
+    expect(co.length).toBeGreaterThan(0);
   });
 });

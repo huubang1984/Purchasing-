@@ -10,6 +10,13 @@
 // năm sau, khi `docs/` đã đổi. Thứ đi cùng artefact phải là thứ ĐÚNG lúc artefact ra đời — cùng lý
 // do `trich` bọc chính byte đã lưu thay vì mã hoá lại (ADR-026 §5⑶).
 //
+// **[mảnh 1 / màn xuất bằng chứng] Vì sao tệp này ở `packages/danh-gia` chứ không còn ở
+// `tools/bo-xuat-danh-gia`:** từ vòng này bundle có HAI đường xuất — CLI `pnpm bang-chung xuat` và
+// route `GET /rfqs/:rfqId/evidence-bundle` của `apps/api` — và cả hai phải ghi ĐÚNG cùng byte.
+// `apps/` không được import `tools/`, nên văn bản xuống gói mà cả hai cùng gọi. Lớp kiểm ĐỘC LẬP
+// (`tools/bo-xuat-danh-gia/src/doc-lap/`) KHÔNG đọc hằng số này — nó được viết TỪ văn bản, và `g17-`
+// cấm nó với tới gói này bằng bất kỳ đường nào.
+//
 // Một dòng ở đây đổi nghĩa là phép tính đổi. Nếu phép tính KHÔNG đổi mà chữ đổi, `dacTaSha256` của
 // các bundle cũ vẫn khớp tệp CỦA CHÍNH CHÚNG — băm nằm trong bundle, không nằm ở đây.
 // ==============================================================================================

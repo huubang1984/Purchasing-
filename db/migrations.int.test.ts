@@ -1,4 +1,4 @@
-import { TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, createPool, migrate } from "@trustprocure/db";
+import { TU_CHOI_CHU_BANG_FORCE, TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, createPool, migrate } from "@trustprocure/db";
 import {
   startPostgres,
   withMigratedDatabase,
@@ -327,6 +327,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const tenDb = dbRows[0]!.ten_db;
       await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET row_security = off`);
 
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH, cùng khuôn khoản 92 ở mức database: lượt SỬA gỡ hàng mức vai rồi lượt ấy DỪNG
+      // (hàng vừa gỡ có thể đang che một độc ở tầng thấp hơn mà phiên deploy không thấy), và lượt kế đi thẳng. Vế "chữa được"
+      // mà test này đo không đổi — nó được đo ngay dưới.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).rejects.toThrow("cấu hình mức VAI của GUC vận hành — app_api.row_security");
       await migrate(db.pool, MIGRATIONS_DIR);
 
       const { rows } = await db.pool.query<{ setconfig: string[] | null }>(
@@ -809,10 +813,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "không có ràng buộc",
       ).toBe(0);
       expect(await emailCua(idHoa)).toBe("N3hoa70@vidu.vn");
-      expect(loi!.message).toBe(
-        `Migration ${ten049} thất bại: supplier_contacts: co hang email chua o chu thuong nhung vai chay migration trien_khai chi thay 0 hang ` +
-          "(row_security_active = true) — RLS da loc khoi doi chieu; chay lai migrate() duoi mot vai ma RLS khong ap de thay dinh danh (049, khoan no 70)",
-      );
+      // [khoản 102 ĐÓNG / ADR-061] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: bản trước ghim thông điệp của khối đối chiếu 049 dưới N3 (*"vai chạy
+      // migration chỉ thấy 0 hàng … RLS đã lọc khỏi đối chiếu"*). Nay `migrate()` từ chối hồ sơ ấy TRƯỚC lượt sửa, nên 049 không chạy
+      // tới; ba khẳng định ngay trên (không ghi 049, không ràng buộc, email nguyên văn) vẫn đúng và vẫn được đo.
+      expect(loi!.message).toContain(TU_CHOI_CHU_BANG_FORCE);
       // Lối ra thông báo chỉ: dưới một vai mà RLS không áp (superuser bootstrap) khối đối chiếu nêu định danh như thường.
       const loiSu = await migrate(db.pool, tmp).then(
         () => null,
@@ -873,39 +877,32 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const dongSauVong = (duong: string): string =>
         `public.suppliers/trien_khai (vai chạy migration)/SELECT: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (${duong})`;
 
-      await pha(
+      // [khoản 102 ĐÓNG / ADR-061] BA PHA ĐẦU LẬT CÓ CHỦ ĐÍCH. ⑴ chính chủ, ⑵ thành viên INHERIT của chủ thường và ⑶ thành viên
+      // INHERIT của chủ BYPASSRLS (BYPASSRLS không thừa kế qua membership — đo: `migrate()` từ chối) đều là vai mà RLS coi là CHỦ bảng
+      // FORCE mà không được miễn RLS — hồ sơ N3/N3′. Trước khoản 102 chúng đi tới mục 94 và migration vá lỗi dưới chính vai ấy tới
+      // đích; nay `migrate()` TỪ CHỐI trước lượt sửa, và lối ra duy nhất là BYPASSRLS (đo ở ca khoản 101 pha ⒟⑶). Pha ⑷ và ⑸ — vai
+      // KHÔNG là chủ lúc hỏi — giữ nguyên.
+      const phaTuChoi = async (ten: string, dung: string, go: string): Promise<void> => {
+        await db.pool.query(dung);
+        await expect(migrate(p, tmp), `${ten}: vai chủ bảng FORCE không BYPASSRLS ⇒ từ chối (khoản 102)`).rejects.toThrow(
+          TU_CHOI_CHU_BANG_FORCE,
+        );
+        await db.pool.query(go);
+      };
+      await phaTuChoi(
         "⑴ vai deploy LÀ chủ bảng",
-        async () => {
-          await db.pool.query(`ALTER TABLE suppliers OWNER TO trien_khai; ${CHI_APP_API}`);
-        },
-        ["public.suppliers/trien_khai (chủ bảng)/SELECT", "cố ý KHÔNG soi chủ thể này"],
-        ["public.suppliers/trien_khai (vai chạy migration)"],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}`,
+        `ALTER TABLE suppliers OWNER TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
-      await pha(
+      await phaTuChoi(
         "⑵ thành viên INHERIT của chủ thường, bảng FORCE",
-        async () => {
-          await db.pool.query(
-            `CREATE ROLE zz_chu100a NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100a; GRANT zz_chu100a TO trien_khai; ${CHI_APP_API}`,
-          );
-        },
-        [dongSauVong("thừa kế quyền chủ bảng zz_chu100a"), "cố ý KHÔNG chặn nó"],
-        [],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100a FROM trien_khai`,
+        `CREATE ROLE zz_chu100a NOLOGIN NOSUPERUSER NOBYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100a; GRANT zz_chu100a TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100a FROM trien_khai; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
-      await pha(
-        "⑶ thành viên INHERIT của chủ BYPASSRLS — chủ thể thứ nhất im",
-        async () => {
-          await db.pool.query(
-            `CREATE ROLE zz_chu100b NOLOGIN NOSUPERUSER BYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100b; GRANT zz_chu100b TO trien_khai; ${CHI_APP_API}`,
-          );
-        },
-        [dongSauVong("thừa kế quyền chủ bảng zz_chu100b"), "cố ý KHÔNG chặn nó"],
-        ["(chủ bảng)"],
-        TRA_POLICY,
-        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100b FROM trien_khai`,
+      await phaTuChoi(
+        "⑶ thành viên INHERIT của chủ BYPASSRLS",
+        `CREATE ROLE zz_chu100b NOLOGIN NOSUPERUSER BYPASSRLS; ALTER TABLE suppliers OWNER TO zz_chu100b; GRANT zz_chu100b TO trien_khai; ${CHI_APP_API}`,
+        `ALTER TABLE suppliers OWNER TO ${vaiGoc}; REVOKE zz_chu100b FROM trien_khai; ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC`,
       );
       await pha(
         "⑷ vai có ADMIN OPTION (không INHERIT, không SET) trên chủ",
@@ -1045,8 +1042,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const TEP_D1 = "9991_zz_backfill102a.sql";
       await writeFile(join(tmp, TEP_D1), BACKFILL, "utf8");
       await db.pool.query("ALTER TABLE public.suppliers OWNER TO trien_khai; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai");
-      await expect(migrate(p, tmp), "⒟⑴ ranh giới khoản 102: chủ bảng FORCE có EXECUTE — deploy xanh").resolves.toEqual([TEP_D1]);
-      expect(await tenNcc(), "⒟⑴ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+      // [khoản 102 ĐÓNG] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: bản trước ghim RANH GIỚI — deploy XANH, backfill bị tiêu. Nay `migrate()` TỪ CHỐI
+      // trước lượt sửa, không tệp nào được ghi, hàng giữ nguyên; và cùng backfill ấy dưới cùng vai có BYPASSRLS thì tới đích.
+      await expect(migrate(p, tmp), "⒟⑴ chủ bảng FORCE có EXECUTE, không BYPASSRLS ⇒ TỪ CHỐI").rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+      expect(await tenNcc(), "⒟⑴ không migration nào chạy: hàng giữ nguyên").toEqual(["NCC 101"]);
       // ⒟ ⑵ hồ sơ N3′: vai deploy thừa kế một vai NOLOGIN sở hữu cả bảng lẫn hàm (lượt soi 51 NẶNG-1 — bản đầu đỏ ở phán xét mọi lần deploy).
       const TEP_D2 = "9992_zz_backfill102b.sql";
       await writeFile(join(tmp, TEP_D2), BACKFILL, "utf8");
@@ -1054,8 +1053,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "CREATE ROLE zz_chu102 NOLOGIN; ALTER TABLE public.suppliers OWNER TO zz_chu102; ALTER FUNCTION public.app_current_org_id() OWNER TO zz_chu102; " +
           "REVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai; GRANT zz_chu102 TO trien_khai",
       );
-      await expect(migrate(p, tmp), "⒟⑵ hồ sơ N3′: deploy xanh (khoản 102)").resolves.toEqual([TEP_D2]);
-      expect(await tenNcc(), "⒟⑵ ranh giới khoản 102: backfill bị tiêu").toEqual(["NCC 101"]);
+      await expect(migrate(p, tmp), "⒟⑵ hồ sơ N3′ (thừa kế chủ bảng) ⇒ TỪ CHỐI (khoản 102)").rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+      expect(await tenNcc(), "⒟⑵ không migration nào chạy: hàng giữ nguyên").toEqual(["NCC 101"]);
+      // ⒟⑶ lối ra đã đo của khoản 102: CÙNG vai, thêm BYPASSRLS ⇒ cả hai backfill tới đích, mỗi cái đúng một lần.
+      await db.pool.query("ALTER ROLE trien_khai BYPASSRLS");
+      await expect(migrate(p, tmp), "⒟⑶ vai deploy có BYPASSRLS ⇒ đi qua").resolves.toEqual([TEP_D1, TEP_D2]);
+      expect(await tenNcc(), "⒟⑶ backfill dưới BYPASSRLS thấy hàng thật").toEqual(["NCC 101 (da sua 101) (da sua 101)"]);
     } finally {
       await poolTrienKhai?.end();
       await rm(tmp, { recursive: true, force: true });
@@ -1996,6 +1999,32 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
+  // [khoản 109 — lượt soi ngang 59a-2] CÙNG khuôn ở mức VAI. Hàng mức vai của vai đăng nhập ứng dụng mang giá trị ĐÚNG che
+  // một `ALTER SYSTEM` độc; hardening `RESET ALL` vô điều kiện ⇒ trước bản vá: `migrate()` XANH và pool ứng dụng mới chạy dưới
+  // `{ke_gian,public}` (đo S1.66). Nay lượt ấy DỪNG, nêu tên vai và GUC, và lượt kế đi thẳng.
+  it("[khoản 109] lượt sửa gỡ hàng mức VAI của vai đăng nhập ứng dụng ⇒ migrate() DỪNG nêu vai.GUC; lượt kế đi thẳng", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query("CREATE ROLE app_api_login LOGIN IN ROLE app_api");
+      await db.pool.query(`ALTER ROLE app_api_login SET search_path = "$user", public`);
+      const loiLan1 = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loiLan1, "lượt sửa gỡ hàng mức vai ⇒ lượt ấy dừng").not.toBeNull();
+      expect(loiLan1!.message).toContain("lượt sửa vừa gỡ cấu hình mức VAI của GUC vận hành — app_api_login.search_path");
+      expect(loiLan1!.message, "chỉ TÊN, không giá trị").not.toContain("$user");
+      const { rows } = await db.pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole WHERE r.rolname = 'app_api_login'",
+      );
+      expect(rows[0]!.n, "lượt SỬA vẫn chạy và vẫn gỡ").toBe(0);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "lượt kế đi thẳng").resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  });
+
   // [S1.34 / khoản nợ 78] CHE TÊN qua search_path — ADR-036 hàng 16. Đo trước khi vá (PostgreSQL 16):
   // app_api tạo được bảng tạm (TEMP đến từ PUBLIC, `datacl` NULL), và `sessions` trần rơi vào bảng
   // tạm: SELECT đếm 0 khi public.sessions có 1 hàng, UPDATE 0 hàng không lỗi; bảng tạm sống hết đời
@@ -2391,6 +2420,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         `ALTER ROLE app_unseal_login IN DATABASE "${tenDb}" SET row_security = off`,
       );
 
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH — xem ca [fix I5] ở đầu tệp: lượt sửa gỡ rồi dừng, lượt kế đi thẳng.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).rejects.toThrow("app_unseal_login.row_security, app_unseal_login.search_path");
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       const { rows } = await db.pool.query<{ toan_cum: string[] | null; trong_db: string[] | null }>(
@@ -2956,8 +2987,22 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "nếu phép đo này KHÔNG ra chuỗi trần thì payload đã hỏng và cả test này rỗng ruột",
         ).toBe("(org_id = app_current_org_id())");
 
+        // [khoản 109] Pool CÓ VAI nay từ chối ngay ở lần lấy đầu: `gia` đứng trước `public` là phần CẤM, kiểm tuyệt đối trong
+        // `ganVaiTroChoPool`. Phép đo tiền đề (a) vì thế đi qua một client KHÔNG vai rồi `SET ROLE` bằng tay — đúng hình dạng
+        // của mọi mã dựng pool không qua `createPool(…, { role })` — và vế từ chối được ghim ngay đây.
         const apiPool = db.poolAs("app_api");
-        const client = await apiPool.connect();
+        const tuChoi = await apiPool.connect().then(
+          (c) => {
+            c.release();
+            return null;
+          },
+          (e: Error) => e,
+        );
+        expect(tuChoi?.message, "pool có vai phải từ chối search path có schema lạ trước public").toContain(
+          "schema lạ đứng trước public",
+        );
+        const client = await poolThuDich.connect();
+        await client.query("SET ROLE app_api");
         try {
           await client.query("SELECT set_config('app.org_id', $1, false)", [orgA]);
           const { rows: doc } = await client.query<{ email: string }>(
@@ -2969,6 +3014,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
               "hổng không tồn tại và nửa (b) là thừa. Đo lại trước khi kết luận.",
           ).toEqual(["vip@b.com"]);
         } finally {
+          // Client KHÔNG vai quay lại `poolThuDich` mà vế (b) dùng tiếp: trả nó về đúng như lúc lấy.
+          await client.query("RESET ROLE; SELECT pg_catalog.set_config('app.org_id', '', false)");
           client.release();
         }
 
@@ -3132,6 +3179,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -3429,14 +3477,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // cho hàng mà bốn mục kia không với tới — `ALTER ROLE ALL` ở vế (a) — chứ không phải lớp duy nhất.
       await db.pool.query("ALTER ROLE app_api SET search_path = ke_gian, public");
       await nhanh92("vai app_api (toàn cụm): GUC vận hành search_path", "nhánh catalog phải thấy ALTER ROLE <vai ứng dụng> SET");
-      expect(await chayMoi(), "bốn mục RESET ALL tự chữa hàng của vai ứng dụng ở lượt SỬA").toBeNull();
+      // [khoản 109] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: lượt SỬA vẫn chữa (đo ngay dưới), nhưng lượt ấy nay DỪNG vì nó vừa gỡ một hàng
+      // mức VAI — cùng khuôn nhánh database ở (a'). Lượt kế đi thẳng.
+      expect((await chayMoi())?.message, "lượt gỡ hàng mức vai phải dừng").toContain("cấu hình mức VAI của GUC vận hành — app_api.search_path");
+      expect(await chayMoi(), "bốn mục RESET ALL tự chữa hàng của vai ứng dụng ở lượt SỬA — lượt kế đi thẳng").toBeNull();
       expect(
         (await db.pool.query<{ c: string[] | null }>("SELECT rolconfig AS c FROM pg_roles WHERE rolname = 'app_api'")).rows[0]!.c,
         "phép đo không rỗng ruột: lượt SỬA thật sự đã dọn rolconfig",
       ).toBeNull();
       await db.pool.query(`ALTER ROLE app_api IN DATABASE "${tenDb}" SET session_replication_role = replica`);
       await nhanh92(`vai app_api IN DATABASE ${tenDb}: GUC vận hành session_replication_role`, "nhánh catalog phải thấy IN DATABASE");
-      expect(await chayMoi(), "mục `cấu hình IN DATABASE của app_api` tự chữa hàng ấy").toBeNull();
+      expect((await chayMoi())?.message, "lượt gỡ hàng mức vai IN DATABASE phải dừng").toContain("app_api.session_replication_role");
+      expect(await chayMoi(), "mục `cấu hình IN DATABASE của app_api` tự chữa hàng ấy — lượt kế đi thẳng").toBeNull();
       await sach92("gỡ hết ⇒ nhánh catalog rỗng");
 
       // (b) ALTER DATABASE SET — nguồn `database`: ba mục kề TỰ CHỮA, mục 92 cố ý im ở CẢ HAI nhánh, và phép từ chối
@@ -7532,6 +7584,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7813,6 +7866,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "059_vong_bafo.sql",
         "060_bafo_luot_moi_nhat_va_han_cho_khach.sql",
         "061_trao_thau.sql",
+        "062_dau_kiem_vong_khoa.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
@@ -7907,6 +7961,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         ]) {
           await db.pool.query(`REVOKE EXECUTE ON FUNCTION pg_catalog.${f} FROM PUBLIC`);
         }
+        // [khoản 102 ĐÓNG / ADR-061] KỲ VỌNG LẬT CÓ CHỦ ĐÍCH: lượt đầu trên cụm TRỐNG đã tạo mọi bảng dưới `trien_khai`, nên từ lượt
+        // này nó là CHỦ bảng FORCE mà không BYPASSRLS — hồ sơ N3 — và `migrate()` từ chối trước lượt sửa. Lối ra của ADR-061: một
+        // lần `ALTER ROLE … BYPASSRLS` của superuser, rồi lượt kế đi thẳng.
+        await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).rejects.toThrow(TU_CHOI_CHU_BANG_FORCE);
+        await db.pool.query("ALTER ROLE trien_khai BYPASSRLS");
         await expect(migrate(poolTrienKhai, MIGRATIONS_DIR)).resolves.toEqual([]);
       } finally {
         await poolTrienKhai.end();
