@@ -10,7 +10,7 @@
 // một lần, mở mọi khoá RFQ cần thiết, rồi `dispose()`. Sau `dispose()`, mọi lần gọi `unwrap` ném.
 // =============================================================================================
 
-import { createDecipheriv, createPublicKey, diffieHellman, type KeyObject } from "node:crypto";
+import { createDecipheriv, createPrivateKey, createPublicKey, diffieHellman, type KeyObject } from "node:crypto";
 
 import {
   aadV2,
@@ -91,6 +91,42 @@ export function taoHandle(orgId: string, keyVersion: string, khoaRieng: KeyObjec
     },
     dispose(): void {
       khoa = null;
+    },
+  };
+}
+
+export interface OrgKeyUnwrapper {
+  readonly name: string;
+  /** Mở khoá riêng tổ chức cho MỘT lượt mở thầu. Bên gọi phải `dispose()` handle khi xong. */
+  openOrgKey(khoa: WrappedOrgKey): Promise<OrgKeyHandle>;
+}
+
+export interface OrgKeyUnwrapperConfig {
+  readonly name: string;
+  /**
+   * Mở khoá riêng tổ chức đã bọc, trả PKCS#8 dạng rõ. Đây là chỗ DUY NHẤT các adapter khác nhau:
+   * local-dev mở bằng vòng master key; aws-kms gọi `kms:Decrypt` (kèm encryption context org_id).
+   * Bản rõ trả về bị `fill(0)` ngay sau khi dựng KeyObject.
+   */
+  moKhoaRieng(khoa: WrappedOrgKey): Promise<Uint8Array>;
+}
+
+/** Unwrapper tổ chức cho MỌI adapter: adapter chỉ cung cấp cách mở khoá riêng tổ chức. */
+export function createOrgKeyUnwrapper(cfg: OrgKeyUnwrapperConfig): OrgKeyUnwrapper {
+  return {
+    name: cfg.name,
+    async openOrgKey(khoa: WrappedOrgKey): Promise<OrgKeyHandle> {
+      assertOrgId(khoa.orgId);
+      const pkcs8 = await cfg.moKhoaRieng(khoa);
+      let rieng: KeyObject;
+      try {
+        rieng = createPrivateKey({ key: Buffer.from(pkcs8), format: "der", type: "pkcs8" });
+      } catch (error) {
+        throw new KeyError("Khoá riêng tổ chức đã mở nhưng không phải PKCS#8 hợp lệ.", { cause: error });
+      } finally {
+        pkcs8.fill(0);
+      }
+      return taoHandle(khoa.orgId, khoa.keyVersion, rieng);
     },
   };
 }

@@ -61,7 +61,7 @@ let orgA: string;
 /** Bộ mở bọc giả — không lượt nào của file này chạy tới đường mở thầu thật. */
 const boMoBocGia = {
   name: "khong-dung-toi",
-  unwrap: () => Promise.reject(new Error("khong nen goi toi day")),
+  openOrgKey: () => Promise.reject(new Error("khong nen goi toi day")),
 };
 
 beforeAll(async () => {

@@ -804,7 +804,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         rfq: await openRfq(
           ctx.client,
           ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, keyWrapper: ctx.services.rfqKeyWrapper },
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, orgKeys: ctx.services.orgKeyProvisioner },
           ctx.auditPool,
         ),
       },

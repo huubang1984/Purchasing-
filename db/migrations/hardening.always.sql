@@ -3403,6 +3403,7 @@ $ham$;
          ('public', 'invitation_otp_challenges', '010_invitations'),
          ('public', 'mfa_credentials', '006_sessions_and_mfa'),
          ('public', 'mfa_reset_requests', '040_dat_lai_totp_hai_nguoi'),
+         ('public', 'org_key_pairs', '063_cap_khoa_to_chuc'),
          ('public', 'org_procurement_policies', '014_procurement_policy'),
          ('public', 'organizations', '002_organizations_and_users'),
          ('public', 'otp_rate_limits', '010_invitations'),

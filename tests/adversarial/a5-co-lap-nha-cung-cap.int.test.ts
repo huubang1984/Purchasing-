@@ -19,7 +19,7 @@
 //     học ba lần: một hàng rào đọc một danh sách tên sẽ mù vào ngày có tên thứ hai.
 // ==============================================================================================
 
-import { randomBytes } from "node:crypto";
+import {generateKeyPairSync, randomBytes} from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -47,9 +47,17 @@ const CAU_BANG_RLS_THIEU_KHACH = `SELECT n.nspname || '.' || c.relname AS ten
   ORDER BY 1`;
 
 const boBocTest = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "doi-xung-cua-test",
-  wrap: (_orgId: string, banRo: Uint8Array) =>
-    Promise.resolve({ ciphertext: banRo.map((b) => b ^ 0xff), keyVersion: "test-v1" }),
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    return Promise.resolve({
+      orgId,
+      keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+    });
+  },
 };
 
 let db: TestDatabase;
@@ -231,7 +239,7 @@ beforeAll(async () => {
     [rfqId, uA, sA],
   );
   await withTenant(apiPool, orgA, async (c) => {
-    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest });
+    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest });
     await c.query(
       "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, " +
         "opened_by_session_id = $3 WHERE id = $1",

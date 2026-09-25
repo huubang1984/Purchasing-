@@ -30,7 +30,7 @@
 import type pg from "pg";
 import { appendAuditEvent } from "@trustprocure/audit";
 import { JobRunner, type JobFailureReport, type JobHandler } from "@trustprocure/outbox";
-import type { KeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
+import type { OrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { executeUnsealRequest } from "./index.js";
 
 /** `kind` của cảnh báo break-glass. Một hằng, một chỗ ở — 019 mục (5) là bên còn lại. */
@@ -87,7 +87,7 @@ export interface BreakGlassAlertSink {
 }
 
 export interface UnsealWorkerDeps {
-  readonly unwrapper: KeyUnwrapper;
+  readonly unwrapper: OrgKeyUnwrapper;
   readonly alertSink: BreakGlassAlertSink;
   /**
    * [S1.72 / khoản 121] BẮT BUỘC. Pool ghi sổ cho lần TỪ CHỐI lúc giải mã: `executeUnsealRequest` ghi `UNSEAL_EXECUTION_DENIED` ở giao dịch

@@ -22,7 +22,7 @@
 
 import type { AddressInfo } from "node:net";
 import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
-import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
+import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
@@ -110,7 +110,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   // [sổ nợ 38] Hai adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS treo không
   // được giữ kết nối tới idle_in_transaction_session_timeout.
   const services: ApiServices = boiTranKms({
-    rfqKeyWrapper: createLocalDevWrapper(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
+    orgKeyProvisioner: createLocalDevOrgKeyProvisioner(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
     totpSecretWrapper: totp.wrapper,
     totpSecretUnsealer: totp.unsealer,
     pepper: new PepperRing(ch.otpPeppers.active, ch.otpPeppers.keys),

@@ -11,7 +11,7 @@
 // mà mã sản phẩm không cần. Hệ quả tốt kèm theo: các phép đo dưới đây chạm THẲNG tầng CSDL.
 // =============================================================================================
 
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -38,9 +38,17 @@ const GIA_THAT = "Don gia: 1.234.567 VND cho 100 tam thep";
 
 /** Bộ bọc khoá của riêng test — xem cùng khối ở `sealed-envelope/src/key-material.int.test.ts`. */
 const boBocTest = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "doi-xung-cua-test",
-  wrap: (_orgId: string, plaintext: Uint8Array) =>
-    Promise.resolve({ ciphertext: plaintext.map((b) => b ^ 0xff), keyVersion: "test-v1" }),
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    return Promise.resolve({
+      orgId,
+      keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+    });
+  },
 };
 
 let db: TestDatabase;
@@ -92,7 +100,7 @@ async function dungBoiCanh(deadline: Date = MAI_SAU): Promise<{
     [rfqId, uA, sA],
   );
   await withTenant(apiPool, orgA, async (c) => {
-    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest });
+    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest });
     await c.query(
       "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, " +
         "opened_by_session_id = $3 WHERE id = $1",

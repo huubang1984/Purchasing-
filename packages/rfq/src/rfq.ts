@@ -5,7 +5,7 @@ import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
   revokeRfqKeyMaterial,
-  type KeyWrapper,
+  type OrgKeyProvisioner,
 } from "@trustprocure/sealed-envelope";
 
 // =============================================================================================
@@ -442,13 +442,14 @@ export interface OpenRfqInput {
   /** [ADR-016] Phiên của chính người mở. */
   readonly actorSessionId: string;
   /**
-   * [ADR-019 / C5] Bộ bọc khoá. Nó là THAM SỐ BẮT BUỘC, và đó là điểm đáng đọc của hàm này:
-   * mở một RFQ mà không sinh cặp khoá cho nó là một việc KHÔNG diễn đạt được nữa.
+   * [ADR-019 / C5 / ADR-062] Bộ sinh cặp khoá TỔ CHỨC. Nó là THAM SỐ BẮT BUỘC, và đó là điểm đáng
+   * đọc của hàm này: mở một RFQ mà không sinh cặp khoá cho nó là một việc KHÔNG diễn đạt được nữa.
+   * Khoá riêng RFQ được bọc bằng khoá công khai tổ chức; bộ sinh chỉ được gọi ở lần mở đầu tiên.
    *
    * Kiểu này được `@trustprocure/sealed-envelope` chuyển tiếp, nên `packages/rfq` KHÔNG có một
    * cạnh phụ thuộc nào tới `@trustprocure/crypto-keys`.
    */
-  readonly keyWrapper: KeyWrapper;
+  readonly orgKeys: OrgKeyProvisioner;
 }
 
 /**
@@ -489,7 +490,7 @@ export async function openRfq(
   await issueRfqKeyPair(client, orgId, {
     rfqId: input.rfqId,
     actorSessionId: input.actorSessionId,
-    wrapper: input.keyWrapper,
+    orgKeys: input.orgKeys,
   });
 
   const { rows } = await client.query<HangRfq>(
