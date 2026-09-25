@@ -6202,7 +6202,11 @@ KMS, và nhánh đối chứng mô hình A vẫn ra 50.
 
 ⒞ Một phép kiểm tĩnh: không tệp nào dưới `apps/api/` gọi `DecryptCommand`, `GenerateDataKeyCommand`
 hay `GenerateDataKeyPairCommand` (bản có plaintext) của SDK KMS — cùng khuôn `g1-`/`g8-` đã canh
-đường mở khoá.
+đường mở khoá. **[S1.117] ĐÃ DỰNG, rộng hơn câu trên:** `tests/architecture/kms-giai-ma-mot-cua.test.ts`
+quét MỌI tệp mã không phải test trong kho, không chỉ `apps/api/`. Tệp được phép gọi lệnh giải mã
+là tệp dưới `apps/unseal-worker/` hoặc là đích của một quy tắc depcruise họ `g1-khong-giai-ma-` /
+`g8-khong-mo-` — tập ấy ĐỌC từ `.dependency-cruiser.cjs`, không chép. Adapter `aws-kms` vì thế phải
+viết quy tắc `g1-` cho tệp mở khoá của nó trước khi được gọi `DecryptCommand`.
 
 ### Điều ADR này KHÔNG nói
 
