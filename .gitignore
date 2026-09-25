@@ -55,3 +55,14 @@ Thumbs.db
 # thu muc nay phai duoc quyet dinh mot cach co y thuc, khong duoc bien mat trong im lang.
 evidence/vitest-report.json
 evidence/run-metadata.md
+
+# Terraform (infra/terraform) — state nằm ở S3, không bao giờ ở git
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
