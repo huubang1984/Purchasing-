@@ -439,6 +439,9 @@ một **ràng buộc**, không phải một gợi ý:
 1. **KMS chỉ bọc/mở data key của TỔ CHỨC.** Nó **không bao giờ** được gọi cho từng phong bì,
    từng content key, hay từng nhà cung cấp.
 2. **Private key RFQ được bọc bằng data key của tổ chức**, không bọc trực tiếp bằng CMK.
+   **[ADR-061]** *"Data key của tổ chức"* nghĩa là một **cặp khoá P-256** do KMS sinh
+   (`GenerateDataKeyPairWithoutPlaintext`), không phải khoá đối xứng — để `api` bọc bằng khoá
+   công khai mà không bao giờ cầm bí mật mở.
 3. **Content key được bọc bằng public key RFQ** (X25519), hoàn toàn cục bộ, không chạm KMS.
 4. Data key của tổ chức, sau khi mở, **chỉ sống trong bộ nhớ của `unseal-worker`** và bị xoá
    sau lượt mở thầu — cùng đường đời với private key RFQ theo §3.2.
@@ -1729,7 +1732,10 @@ khoá là một cuộc di trú có dữ liệu, không phải một lần sửa 
    **không chạy được**, và nó không chạy được vì CSDL từ chối, không vì có ai nhớ.
 
 **Vì sao ADR-006 KHÔNG bị phương án 4 làm mẻ.** ADR-006 trao cho `unseal-worker` **độc quyền
-`kms:Decrypt` trên khoá RFQ**. Bọc một khoá riêng cần `kms:Encrypt`, không cần `Decrypt`. Tức
+`kms:Decrypt` trên khoá RFQ**. ~~Bọc một khoá riêng cần `kms:Encrypt`, không cần `Decrypt`.~~
+**[ADR-061] Câu vừa gạch SAI dưới ràng buộc 2 của ADR-009:** bọc bằng data key ĐỐI XỨNG của tổ
+chức đòi `api` cầm data key dạng rõ, tức cần `Decrypt`/`GenerateDataKey`. Kết luận dưới đây vẫn
+đúng, nhưng đúng vì khoá tổ chức là một CẶP khoá và `api` bọc bằng khoá CÔNG KHAI, cục bộ. Tức
 `api` làm được việc ở mục 1 mà **vẫn không có quyền giải mã** — ranh giới IAM của ADR-006 còn
 nguyên vẹn. Đây là lý do phương án 4 không phải một bước trượt về phía *"api mở được thầu"*.
 
@@ -6074,3 +6080,134 @@ do **TRIGGER**: hai người đua nhau trên cùng một gói làm trigger `RAIS
 không lối nào ở tầng gói ghi được. Lớp gói bắt trước ở đường thuận nên ca ấy chỉ tới được khi có tranh
 chấp thật — và khi ấy sổ im. Đó là giới hạn còn lại, và nó được ghi ra chứ không để người sau tưởng đã
 kín. Và nó **không** đổi cách `requirePermission` ghi từ chối QUYỀN: đường ấy không đổi một dòng.
+
+---
+
+## ADR-061 — Khoá của TỔ CHỨC là một CẶP khoá bất đối xứng do KMS sinh, để `api` bọc được mà KHÔNG BAO GIỜ có quyền giải mã
+
+**Ngày:** 2026-09-25 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-002, ADR-006, **ADR-009**
+(ràng buộc 2 và 5), ADR-011, **ADR-019**, khoản nợ **15** (rổ A)
+
+### Bối cảnh — hai ADR đã chấp nhận không cùng đúng được, và điều ấy chỉ lộ ra khi viết key policy thật
+
+Khi soạn key policy cho CMK bọc khoá của tổ chức, ô *"`tp-api` được gọi gì trên CMK"* không điền
+được. Hai câu đã chấp nhận kéo về hai phía:
+
+- **ADR-009, ràng buộc 2:** *"Private key RFQ được bọc bằng data key của TỔ CHỨC, không bọc trực
+  tiếp bằng CMK."* Ràng buộc 5: *"`kms:Decrypt` trên CMK chỉ cấp cho role của `unseal-worker`."*
+- **ADR-019:** *"Bọc một khoá riêng cần `kms:Encrypt`, không cần `Decrypt`. Tức `api` làm được việc
+  ở mục 1 mà vẫn không có quyền giải mã."*
+
+Với một data key **đối xứng** của tổ chức (mô hình B như ADR-009 ngầm hiểu), câu của ADR-019
+**sai**: muốn bọc bằng data key ấy thì `api` phải cầm data key ở dạng rõ, tức phải gọi
+`kms:Decrypt` (mở data key đã bọc) hoặc `kms:GenerateDataKey` (lấy bản rõ mới). Cả hai đều trao
+cho `api` đúng thứ làm `unseal-worker` đặc biệt: một bí mật dạng rõ đủ để mở mọi khoá RFQ của tổ
+chức. Còn nếu giữ nguyên chữ của ADR-019 — `kms:Encrypt` thẳng lên CMK — thì phá ràng buộc 2 của
+ADR-009, và mỗi lượt mở thầu thành **một lời gọi KMS cho mỗi RFQ** chứ không một lời gọi cho mỗi
+lượt.
+
+Hôm nay mâu thuẫn ấy không làm test nào đỏ vì adapter thật chưa tồn tại — chỉ có `local-dev`, nơi
+`deriveOrgKey` dẫn khoá tổ chức bằng HKDF từ master key nằm ngay trong tiến trình. Nó sẽ lộ ra
+đúng lúc viết adapter `aws-kms`, và khi ấy cái giá là sửa hai ADR cùng lúc với viết mã.
+
+### Phương án
+
+| # | Phương án | Quyền của `tp-api` trên CMK | Vì sao loại / giữ |
+|---|---|---|---|
+| 1 | Data key tổ chức đối xứng, `api` lấy bản rõ bằng `GenerateDataKey`/`Decrypt` | `Decrypt` hoặc `GenerateDataKey` | **Loại.** Phá ràng buộc 5 của ADR-009 và phá ADR-006 ở tầng IAM: `api` cầm được bí mật mở mọi khoá RFQ của tổ chức |
+| 2 | Bọc khoá riêng RFQ thẳng bằng CMK (`kms:Encrypt`) — đúng chữ ADR-019 | `Encrypt` | **Loại.** Phá ràng buộc 2 của ADR-009; worker gọi KMS một lần cho MỖI RFQ; và `Encrypt` của KMS giới hạn 4 KB bản rõ — đủ cho một khoá riêng, nhưng đổi kiến trúc để vừa một giới hạn là sai chiều |
+| 3 | CMK **bất đối xứng** (`ECC_NIST_P256`/`RSA`, `ENCRYPT_DECRYPT`), `api` mã hoá cục bộ bằng khoá công khai của CMK | `GetPublicKey` | **Loại.** Một CMK cho mọi tổ chức ⇒ lộ một lần giải mã là lộ chéo tổ chức; KMS không cho encryption context trên khoá bất đối xứng; khoá bất đối xứng không tự xoay |
+| 4 | **Mỗi tổ chức một CẶP khoá P-256 do KMS sinh bằng `GenerateDataKeyPairWithoutPlaintext`**; khoá công khai lưu CSDL, khoá riêng nằm ở dạng đã bọc bởi CMK đối xứng kèm encryption context `org_id` | `GenerateDataKeyPairWithoutPlaintext` | **Chọn.** |
+
+### Quyết định
+
+1. **Khoá của tổ chức là một cặp khoá `ECC_NIST_P256`**, sinh bằng
+   `kms:GenerateDataKeyPairWithoutPlaintext` trên CMK đối xứng `alias/tp-org-wrap`, với
+   `EncryptionContext = { org_id: <uuid> }`. KMS trả về khoá công khai (SPKI DER) và khoá riêng **đã
+   bọc** (`PrivateKeyCiphertextBlob`). **Không tiến trình nào của hệ thống thấy khoá riêng tổ chức ở
+   dạng rõ lúc sinh** — kể cả `api`, nơi lời gọi sinh chạy.
+2. **Bọc khoá riêng RFQ là phép toán CỤC BỘ trong `api`**: ECDH tạm thời với khoá công khai tổ
+   chức → HKDF-SHA256 → AES-256-GCM — đúng các primitive ADR-011 đã chốt cho phong bì. Không lời
+   gọi KMS nào trên đường mở RFQ. Cả hai cặp khoá của một RFQ (P-256 và X25519, ADR-019 §G2) đều
+   được bọc bằng cùng khoá công khai P-256 của tổ chức — thuật toán bọc độc lập với thuật toán của
+   khoá được bọc.
+3. **`unseal-worker` gọi `kms:Decrypt` đúng MỘT lần mỗi lượt mở thầu** để mở khoá riêng tổ chức,
+   rồi mở mọi thứ còn lại cục bộ. Con số *"1 lời gọi"* của ADR-009 trục 3 giữ nguyên. Khoá riêng tổ
+   chức dạng rõ theo ràng buộc 4 của ADR-009: chỉ sống trong bộ nhớ worker và bị xoá sau lượt.
+4. **Quyền trên `alias/tp-org-wrap`, viết thành key policy:**
+
+   | Principal | Được | Tuyệt đối không |
+   |---|---|---|
+   | `tp-api` | `kms:GenerateDataKeyPairWithoutPlaintext` (điều kiện có `kms:EncryptionContextKeys = org_id`) | `Decrypt`, `ReEncrypt*`, `GenerateDataKey`, `GenerateDataKeyPair` (bản CÓ plaintext), `Encrypt` |
+   | `tp-unseal-worker` | `kms:Decrypt` (cùng điều kiện) | mọi quyền sinh khoá |
+   | `tp-key-admin` | quản trị khoá | dùng khoá |
+   | mọi principal khác | — | `Decrypt`, `ReEncrypt*`, `GenerateDataKey*` có plaintext — chặn bằng một `Deny` tường minh theo `aws:PrincipalArn` |
+
+   Bản nháp key policy trước ADR này cấp cho `tp-api` hai quyền `Encrypt` và
+   `GenerateDataKeyWithoutPlaintext`; **cả hai bị bỏ.**
+
+### Hai ADR cũ được sửa tại chỗ, không xoá chữ
+
+- **ADR-009 ràng buộc 2** đứng nguyên, nhưng *"data key của tổ chức"* từ nay nghĩa là **cặp khoá**
+  của mục 1 — không phải khoá đối xứng. Ràng buộc 5 được **thắt chặt thêm**: `api` không có quyền
+  giải mã nào, không chỉ không có `Decrypt` trên *khoá RFQ*.
+- **ADR-019**: câu *"bọc một khoá riêng cần `kms:Encrypt`"* là câu sai được gạch tại chỗ; kết luận
+  của nó — `api` bọc được mà không giải mã được — **đúng**, và đúng vì mục 2 ở trên chứ không vì
+  `kms:Encrypt`.
+
+### Hệ quả
+
+- **Mặt tiền `KeyWrapper.wrap(orgId, plaintext)` giữ nguyên chữ ký.** Cái thay đổi là NGUỒN của
+  nó: adapter `aws-kms` cần đọc khoá công khai của tổ chức — tức một nơi lưu cặp khoá tổ chức
+  (khoá công khai + khoá riêng đã bọc + phiên bản), nghĩa là **một migration** và một đường sinh cặp
+  khoá khi tạo tổ chức. `WrappedKey.keyVersion` trỏ tới phiên bản cặp khoá tổ chức.
+- **`local-dev` phải đổi HÌNH theo**, không chỉ adapter thật: nếu `local-dev` còn dẫn khoá đối
+  xứng bằng HKDF thì mọi test chạy trên một mô hình mà sản xuất không dùng, và lớp đo của ràng buộc
+  1–3 ADR-009 đo sai vật. Đổi `local-dev` sang cặp khoá P-256 (khoá riêng bọc bằng master key nội
+  bộ) là một phần của việc viết adapter, không phải việc sau.
+- **Xoay khoá**: CMK đối xứng tự xoay hằng năm, blob cũ vẫn mở được. Xoay **cặp khoá tổ chức** là
+  sinh phiên bản mới; RFQ cũ giữ phiên bản cũ. Không có lượt bọc lại hàng loạt.
+- **Xoá mật mã theo tổ chức** (migration `026`) có thêm một đường rẻ: huỷ khoá riêng tổ chức đã bọc
+  là làm mọi khoá RFQ của tổ chức ấy không mở được nữa. ADR này **không** đổi cổng chính sách của
+  `026`; nó chỉ ghi nhận đường ấy tồn tại.
+
+### Bối cảnh triển khai chốt cùng ngày, vì chúng định hình key policy
+
+- Tổ chức AWS `o-u0xp6p6auq`: `trustprocure-management` (243714547276), `trustprocure-audit`
+  (528657840905, OU `Security`), `trustprocure-prod` (942091277863, OU `Workloads`). Truy cập người
+  qua IAM Identity Center ở `ap-southeast-1`, không IAM user. Ba SCP gắn cho hai OU: chỉ
+  `ap-southeast-1`, không tắt CloudTrail / rời tổ chức / tự đóng tài khoản, cấm root.
+- **Compute: ECS Fargate.** `tp-api` và `tp-unseal-worker` là *task role* của hai service riêng.
+  Rủi ro còn lại, nói thẳng: role deploy cần `iam:PassRole` cho task role của worker, tức một
+  pipeline deploy bị chiếm có thể chạy một task bất kỳ mang role worker. Giảm nhẹ: role deploy riêng
+  cho worker có duyệt tay, image worker ghim theo digest, cảnh báo EventBridge trên mọi `kms:Decrypt`
+  từ principal khác worker và mọi `RunTask` mang role worker ngoài service chính thức.
+- **Không có môi trường staging.** Hệ quả: phép kiểm *"`tp-api` gọi `Decrypt` bị `AccessDenied`"*
+  phải chạy trên prod **trước khi có dữ liệu khách hàng thật**, vì không còn nơi nào khác để chạy.
+- **Object Lock của bucket neo (ADR-026): chế độ Compliance, 1 năm.** Compliance cho phép tăng thời
+  hạn về sau, không cho giảm — nên 1 năm là điểm bắt đầu an toàn. Phải đối chiếu với yêu cầu lưu
+  trữ hồ sơ đấu thầu của khách hàng pilot trước khi coi là đủ.
+- **`tp-key-admin` tạm do MỘT người giữ.** Rủi ro chấp nhận có thời hạn: mất người ấy hoặc mất MFA
+  của người ấy thì không ai quản trị được CMK (key policy cố ý không có statement *"Enable IAM
+  policies"* cho `:root`). Điều kiện đóng: có người thứ hai trước khi có dữ liệu khách hàng thật.
+
+### Đo bằng gì — việc của lát cắt viết adapter, ghi ra ở đây để không bị quên
+
+⒜ Trên prod, trước dữ liệu thật: đóng vai `tp-api`, gọi `kms:Decrypt` trên một blob thật ⇒
+`AccessDeniedException`; đóng vai `tp-unseal-worker`, cùng lời gọi ⇒ thành công. **Đối chứng âm là
+bắt buộc**: một phép kiểm chỉ có vế từ chối xanh cả khi khoá bị tắt.
+
+⒝ `tools/bench-kms` chạy lại trên adapter thật: một lượt mở thầu 50 phong bì ⇒ **đúng 1** lời gọi
+KMS, và nhánh đối chứng mô hình A vẫn ra 50.
+
+⒞ Một phép kiểm tĩnh: không tệp nào dưới `apps/api/` gọi `DecryptCommand`, `GenerateDataKeyCommand`
+hay `GenerateDataKeyPairCommand` (bản có plaintext) của SDK KMS — cùng khuôn `g1-`/`g8-` đã canh
+đường mở khoá.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** đổi nơi cặp khoá RFQ ra đời (ADR-019 vẫn là `api`), và vế *core dump của `api` chứa
+khoá riêng RFQ trong cửa sổ một hàm* của ADR-019 vẫn đúng nguyên — ADR này bảo vệ khoá của TỔ
+CHỨC, không phải khoảnh khắc sinh khoá RFQ. Nó **không** viết adapter `aws-kms`; khoản 15 vẫn mở
+cho tới khi có CMK, role và phép đo ⒜ chạy trên tài khoản thật. Và nó **không** đổi nhà cung cấp:
+ba điều kiện mở lại ADR-009 giữ nguyên.
