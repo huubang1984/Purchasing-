@@ -14,11 +14,11 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073) (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
-| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-075), service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069; DNS Firewall chỉ phân giải một danh sách tên đóng — ADR-076), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-075), service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -164,6 +164,15 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 
 **Kiểm:** mời một nhà cung cấp khai kênh SMS/Zalo; log `/tp/api` không có `GuiKenhError`/`ZaloTokenMatError`.
 `ZaloTokenMatError` nghĩa là token đã xoay mà không ghi được vào secret — cấp lại refresh token (bước 2–3).
+
+**[ADR-076] Lọc tên miền.** SMS đi qua VPC endpoint `sms-voice` (tạo khi `sms` khác null); chỉ Zalo đi qua NAT. DNS Firewall
+của VPC chỉ phân giải `local.ten_duoc_phan_giai` ở stack 90 (endpoint AWS đang dùng, bucket lớp ECR, bucket neo, RDS, hai tên
+Zalo) — mọi tên khác NXDOMAIN, ghi `/tp/dns`, alarm `tp-dns-bi-chan` ⇒ email ⑸ của stack 60 (apply 60 sau 90).
+- Thêm một đích ngoài mới: thêm tên vào danh sách (và URL hằng vào adapter — `hinh-dang-dns.test.ts` đòi hai bên khớp).
+- Không chắc danh sách đủ (lần apply đầu, một dịch vụ mới): `-var che_do_dns=ALERT` — chỉ ghi log; xem `/tp/dns` rồi đặt
+  lại `BLOCK`. Lọc `{ $.firewall_rule_action = "ALERT" }` trong Logs Insights.
+- Trước khi apply: kiểm `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.ap-southeast-1.sms-voice`
+  có dịch vụ ở region; không có thì bỏ `sms-voice` khỏi `dich_vu_endpoint` và giữ tên SMS trong danh sách (đi qua NAT).
 
 ## Chạy thật — stack `90-ecs` (ADR-066)
 

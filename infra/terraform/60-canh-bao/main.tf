@@ -4,6 +4,8 @@
 #   ⑶ [ADR-072] Job neo `tp-neo` (lịch hằng ngày) dừng mà không thành công.
 #   ⑷ [ADR-073] 36 giờ không có mốc neo sổ kiểm toán mới nào trong bucket neo — bắt đúng ca ⑶ mù: lịch KHÔNG chạy
 #      (Scheduler bị tắt/xoá, role sai, image không kéo được mà không có task nào dừng).
+#   ⑸ [ADR-076] Một truy vấn DNS ngoài danh sách được phép trong VPC prod (DNS Firewall của stack 90 chặn/cảnh báo) —
+#      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -134,6 +136,18 @@ locals {
   # ⑶ [ADR-072] Job neo (`tp-neo`, lịch hằng ngày) DỪNG mà không thành công: container thoát ≠ 0 (xuất hay kiểm
   # hỏng ở ít nhất một tổ chức — `kiem` đỏ là dấu hiệu sổ bị sửa/cắt) hoặc task không khởi động được. Không có
   # cảnh báo này thì một lịch hỏng im lặng hàng tháng — đúng khuôn H9-3 của ADR-026.
+  # ⑸ [ADR-076] Tên alarm do stack 90 đặt (`local.ten_alarm_dns`) — `hinh-dang-dns.test.ts` so hai phía.
+  ten_alarm_dns = "tp-dns-bi-chan"
+  mau_dns_bi_chan = jsonencode({
+    source      = ["aws.cloudwatch"]
+    detail-type = ["CloudWatch Alarm State Change"]
+    account     = [local.prod]
+    detail = {
+      alarmName = [local.ten_alarm_dns]
+      state     = { value = ["ALARM"] }
+    }
+  })
+
   mau_neo_hong = jsonencode({
     source      = ["aws.ecs"]
     detail-type = ["ECS Task State Change"]
@@ -203,6 +217,7 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
               aws_cloudwatch_event_rule.put_key_policy_audit.arn,
               aws_cloudwatch_event_rule.task_worker_audit.arn,
               aws_cloudwatch_event_rule.neo_hong_audit.arn,
+              aws_cloudwatch_event_rule.dns_bi_chan_audit.arn,
             ]
           }
         }
@@ -425,4 +440,46 @@ resource "aws_cloudwatch_metric_alarm" "thieu_moc_neo" {
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
   ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑸ [ADR-076] Truy vấn DNS ngoài danh sách trong VPC prod
+# ---------------------------------------------------------------------------------------------
+# Alarm và log nằm ở prod (stack 90) — nơi có VPC. Chỉ đường THƯ đi qua audit, cùng khuôn ⑶: người có quyền ở prod gỡ
+# được alarm hay rule chuyển, nhưng lời gọi ấy nằm trong CloudTrail tổ chức.
+resource "aws_cloudwatch_event_rule" "dns_bi_chan_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-dns-bi-chan"
+  description   = "Truy van DNS ngoai danh sach duoc phep trong VPC prod (ADR-076)"
+  event_pattern = local.mau_dns_bi_chan
+}
+
+resource "aws_cloudwatch_event_target" "dns_bi_chan_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.dns_bi_chan_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc   = "$.time"
+      ly_do = "$.detail.state.reason"
+    }
+    input_template = "\"[TrustProcure] Truy van DNS NGOAI danh sach duoc phep trong VPC tp-prod (DNS Firewall, ADR-076). Luc <luc>. <ly_do>. Doc log /tp/dns o prod: query_name cho biet ten, srcids.instance cho biet ENI/task. Ma cua du an khong bao gio hoi ten ngoai danh sach: day la mot dich moi chua khai (them vao ten_duoc_phan_giai o stack 90) hoac api bi chiem.\""
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "dns_bi_chan_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-dns-bi-chan"
+  description   = "Chuyen alarm tp-dns-bi-chan sang audit (ADR-076)"
+  event_pattern = local.mau_dns_bi_chan
+}
+
+resource "aws_cloudwatch_event_target" "dns_bi_chan_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.dns_bi_chan_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
 }
