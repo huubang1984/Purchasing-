@@ -65,10 +65,15 @@ const DANH_SACH_TRANG_INDEX = [
   // khoá riêng ĐÃ BỌC — không symbol nào ở đây cho thêm một bậc tự do để MỞ.
   "createLocalDevOrgKeyProvisioner",
   "wrapForOrg",
+  // [ADR-062] Bộ sinh aws-kms: chỉ gọi `GenerateDataKeyPairWithoutPlaintext`, không lệnh nào trả
+  // bản rõ — cùng tiêu chí với bản local-dev ngay trên.
+  "createAwsKmsOrgKeyProvisioner",
 ];
 
 /** Danh sách trắng: export GIÁ TRỊ của cửa hạn chế, chỉ apps/unseal-worker được import. */
-const DANH_SACH_TRANG_UNWRAP = ["createLocalDevOrgUnwrapper", "createLocalDevUnwrapper", "createOrgKeyUnwrapper"];
+const DANH_SACH_TRANG_UNWRAP = [
+  "createAwsKmsOrgUnwrapper",
+  "createLocalDevOrgUnwrapper", "createLocalDevUnwrapper", "createOrgKeyUnwrapper"];
 
 /** Tập subpath export hợp lệ của package — mỗi mục là MỘT cửa công khai. */
 const TAP_CUA_HOP_LE = [".", "./unwrap"];

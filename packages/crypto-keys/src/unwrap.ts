@@ -4,6 +4,12 @@
 export { createLocalDevUnwrapper, type KeyUnwrapper } from "./local-dev-unwrapper.js";
 // [ADR-062] Mở khoá riêng TỔ CHỨC một lần mỗi lượt mở thầu, rồi mở khoá RFQ cục bộ.
 export { createLocalDevOrgUnwrapper } from "./local-dev-org-unwrapper.js";
+// [ADR-062] Bản aws-kms: MỘT `kms:Decrypt` mỗi lượt, kèm encryption context org_id.
+export {
+  createAwsKmsOrgUnwrapper,
+  type AwsKmsOrgUnwrapperConfig,
+  type KmsMoKhoa,
+} from "./aws-kms-org-unwrapper.js";
 export {
   createOrgKeyUnwrapper,
   type OrgKeyHandle,
