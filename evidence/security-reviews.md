@@ -12372,3 +12372,5 @@ Không cấp ADR hay migration nào.
   **85** ADR.
 - Sau khi mở PR, `master` nhận #153, #157, #158 và #159, tới ADR-089. Hợp vào nhánh không xung đột, và cây đã hợp không
   có chỗ ghim `[A-HJ]` mới. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**; CI 6/6 xanh.
+- Lần hợp thứ hai mang #160 và #155, cũng không xung đột. `pnpm cap-so` cấp số vòng từ số tạm; chạy lại không đổi byte
+  nào, và `pnpm cap-so --kiem` sạch. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **107 tệp, 1434 đạt, 1 bỏ qua**.
