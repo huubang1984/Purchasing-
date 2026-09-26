@@ -115,6 +115,15 @@ mkdirSync(dirname(DUONG_KHOA), { recursive: true });
  * 180 giây để lại hơn hai lần biên. Vượt biên thì NÉM kèm thông điệp, không treo.
  */
 const HAN_CHO_MS = 180_000;
+
+/**
+ * Trần thời gian cho MỘT test giữ khoá này rồi chạy một công cụ quét (depcruise, eslint) trong tiến
+ * trình con. Nó phải phủ CẢ HAI khoảng: chờ khoá tới `HAN_CHO_MS` (180 s) cộng một lượt quét giữ
+ * khoá — đo tới 131 s trên CI (S1.118). Trần cũ 120 s nhỏ hơn cả MỘT lượt quét đo được, nên runner
+ * Windows chậm đỏ ở `routes.test.ts` và `phuc-vu.test.ts` trên PR không chạm mã TypeScript nào
+ * (PR #127, #128). 360 s = 180 + 131 cộng biên; vượt nó thì test NÉM, không treo.
+ */
+export const TRAN_TEST_GIU_KHOA_MS = 360_000;
 /**
  * CHỈ là lưới đỡ cho khe giữa `mkdir` và lúc ghi xong tệp `pid` — khe ấy dài vài micro-giây, nên
  * 30 s đã là thừa mứa. Vế thật của "khoá rác" là ⑶: chủ khoá còn sống hay không. Con số này BẮT
