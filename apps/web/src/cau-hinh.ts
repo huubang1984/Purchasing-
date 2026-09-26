@@ -28,8 +28,12 @@ export class CauHinhError extends Error {
 export interface CauHinhWeb {
   readonly listenHost: string;
   readonly listenPort: number;
-  /** Origin của `apps/api`, dạng thuần `scheme://host[:port]`, không dấu `/` cuối. */
-  readonly apiOrigin: string;
+  /**
+   * Origin của `apps/api`, dạng thuần `scheme://host[:port]`, không dấu `/` cuối.
+   * [ADR-068] `null` = CHỈ PHỤC VỤ TĨNH: `/api/*` do reverse proxy của hạ tầng (ALB) định tuyến thẳng
+   * tới api, nên tiến trình này không bao giờ thấy cookie phiên.
+   */
+  readonly apiOrigin: string | null;
   /** Đường tới cert và key dạng PEM. `null` = chạy HTTP (chỉ dùng được ở localhost). */
   readonly tls: { readonly certPath: string; readonly keyPath: string } | null;
 }
@@ -82,11 +86,33 @@ function docTls(env: Readonly<Record<string, string | undefined>>): CauHinhWeb["
   return { certPath: cert, keyPath: key };
 }
 
+/**
+ * [ADR-068] Hai chế độ LOẠI TRỪ NHAU: chuyển tiếp (`TRUSTPROCURE_API_ORIGIN`, lát cắt demo ADR-044) hoặc chỉ tĩnh
+ * (`TRUSTPROCURE_WEB_STATIC_ONLY=1`). ADR-044 nói bộ chuyển tiếp "không được đứng trước một cụm sản xuất" — nay đó là một
+ * hàng rào: `NODE_ENV=production` mà không ở chế độ chỉ tĩnh là lỗi khởi động, không phải một dòng trong tài liệu.
+ */
+function docApiOrigin(env: Readonly<Record<string, string | undefined>>): string | null {
+  const chiTinh = docChuoi(env, "TRUSTPROCURE_WEB_STATIC_ONLY");
+  if (chiTinh !== null && chiTinh !== "1") throw new CauHinhError("TRUSTPROCURE_WEB_STATIC_ONLY: chỉ nhận 1");
+  if (chiTinh === "1") {
+    if (docChuoi(env, "TRUSTPROCURE_API_ORIGIN") !== null) {
+      throw new CauHinhError("TRUSTPROCURE_API_ORIGIN: không được có mặt cùng TRUSTPROCURE_WEB_STATIC_ONLY=1 — hai chế độ loại trừ nhau");
+    }
+    return null;
+  }
+  if (docChuoi(env, "NODE_ENV") === "production") {
+    throw new CauHinhError(
+      "TRUSTPROCURE_WEB_STATIC_ONLY: bắt buộc =1 khi NODE_ENV=production — bộ chuyển tiếp /api/* không đứng trước cụm sản xuất (ADR-044, ADR-068)",
+    );
+  }
+  return docOrigin(env, "TRUSTPROCURE_API_ORIGIN");
+}
+
 export function docCauHinh(env: Readonly<Record<string, string | undefined>>): CauHinhWeb {
   return {
     listenHost: docChuoi(env, "TRUSTPROCURE_WEB_HOST") ?? HOST_MAC_DINH,
     listenPort: docCong(env, "TRUSTPROCURE_WEB_PORT"),
-    apiOrigin: docOrigin(env, "TRUSTPROCURE_API_ORIGIN"),
+    apiOrigin: docApiOrigin(env),
     tls: docTls(env),
   };
 }

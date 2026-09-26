@@ -6471,3 +6471,39 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
 - Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
   người vận hành đọc `/tp/migrate` bằng tay.
 - `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
+
+## ADR-068 — `apps/web` ở prod: chỉ phục vụ tĩnh sau cùng ALB, ALB định tuyến `/api/*` thẳng tới api
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-044**, ADR-020, ADR-066, ADR-067
+
+### Bối cảnh
+
+ADR-044 dựng `apps/web` cho lát cắt demo: một máy chủ tĩnh TỰ chuyển tiếp `/api/*` sang `apps/api`, và nói thẳng *"`apps/web`
+không được đứng trước một cụm sản xuất — triển khai thật dùng một reverse proxy của hạ tầng"*: bộ chuyển tiếp thấy cookie phiên,
+và nó không chuyển `X-Forwarded-For` nên mọi người dùng chung một ô hạn mức. ADR-066 để lại `apps/web` chưa triển khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Một tên miền** (`ten_mien` của stack 90) cho cả trang lẫn `/api/*`: trang gọi `fetch("/api…")` cùng origin, nên không CORS,
+   cookie `__Host-` đi đúng origin. `TRUSTPROCURE_PUBLIC_BASE_URL` và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ tên
+   miền ấy — không còn hai biến Terraform riêng để khai lệch.
+2. **ALB là reverse proxy:** luật listener `/api/*` → target group `tp-api`, viết lại đường `^/api/(.*)$` → `/$1` (cùng phép bỏ
+   tiền tố của bộ chuyển tiếp demo); mặc định → target group `tp-web`. Api thấy ALB làm proxy tin cậy (`TRUSTED_PROXIES` = CIDR
+   subnet công khai), nên hạn mức theo người gọi hoạt động đúng.
+3. **`apps/web` chế độ chỉ tĩnh** — `TRUSTPROCURE_WEB_STATIC_ONLY=1`: `/api/*` lọt tới nó ra 404, không gọi upstream nào. Hai chế
+   độ loại trừ nhau, và **`NODE_ENV=production` mà không chỉ tĩnh là lỗi khởi động** — câu "không đứng trước cụm sản xuất" của
+   ADR-044 thành một hàng rào có test, không còn là một dòng tài liệu.
+4. **Service `tp-web`:** Fargate 0,25 vCPU, security group riêng (vào 8090 chỉ từ ALB; ra chỉ VPC endpoint và S3 để kéo image,
+   đẩy log — **không** tới CSDL), **không task role**. Image đích `web` của `deploy/Dockerfile`: `apps/web` và mã nguồn cửa trình
+   duyệt của `packages/sealed-envelope`, không phụ thuộc nào. Health check `/nop-thau`.
+5. **Pipeline (ADR-067):** job `api` đẩy `tp-web` và cập nhật service SAU `tp-api`; `trien-khai.sh dang-ky … -` đòi họ `tp-web`
+   KHÔNG mang task role — một bản bị gắn role thì dừng.
+
+### Hệ quả, nói thẳng
+
+- **Viết lại đường của ALB** (`transform` `url-rewrite`) mới được `terraform validate` với provider 6.66 — chưa chạy trên ALB thật.
+  Nếu vùng không nhận, phương án lùi là để api phục vụ thêm tiền tố `/api`, không phải quay lại bộ chuyển tiếp.
+- `/health` của api không còn công khai ở gốc; đường kiểm là `/api/health`.
+- Bộ chuyển tiếp của ADR-044 vẫn còn cho demo cục bộ (`pnpm web:dev`), và vẫn mang đúng những cái giá ADR ấy nêu.
+- Trang vẫn `cache-control: no-store` và nạp tệp một lần lúc khởi động — đổi trang = deploy lại, chấp nhận được khi deploy đã là
+  một nút bấm.

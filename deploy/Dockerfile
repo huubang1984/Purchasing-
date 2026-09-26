@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1.7
 # ==============================================================================================
-# deploy/Dockerfile — MỘT tệp, BA đích: api, worker, migrate (ADR-066)
+# deploy/Dockerfile — MỘT tệp, BỐN đích: api, worker, migrate (ADR-066), web (ADR-068)
 #
 #   docker build -f deploy/Dockerfile --target api     -t tp-api .
 #   docker build -f deploy/Dockerfile --target worker  -t tp-unseal-worker .
 #   docker build -f deploy/Dockerfile --target migrate -t tp-migrate .
+#   docker build -f deploy/Dockerfile --target web     -t tp-web .
 #
 # Không có bước biên dịch: ứng dụng chạy thẳng mã TypeScript bằng `node --experimental-transform-types`
 # (cùng cách `pnpm api:dev`). Vì Node từ chối bóc kiểu cho tệp NẰM TRONG node_modules, image giữ đúng
@@ -62,3 +63,15 @@ WORKDIR /app
 COPY --from=cai-migrate --chown=root:root /app /app
 USER node
 CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/chay-migrate/register-ts-resolve.mjs", "tools/chay-migrate/src/index.ts"]
+
+# [ADR-068] `web` chỉ phục vụ tĩnh sau ALB: không phụ thuộc nào (`dependencies` rỗng — ADR-044), không CSDL, không bí mật,
+# không bó CA. Nó cần đúng hai thứ: `apps/web` và mã nguồn cửa trình duyệt của gói niêm phong, đọc lúc khởi động và gỡ
+# kiểu bằng `stripTypeScriptTypes` — trình duyệt chạy đúng byte mà test của gói đo.
+FROM ${NODE_IMAGE} AS web
+ENV NODE_ENV=production TRUSTPROCURE_WEB_STATIC_ONLY=1 TRUSTPROCURE_WEB_HOST=0.0.0.0 TRUSTPROCURE_WEB_PORT=8090
+WORKDIR /app
+COPY --chown=root:root apps/web apps/web
+COPY --chown=root:root packages/sealed-envelope/src packages/sealed-envelope/src
+USER node
+EXPOSE 8090
+CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./apps/web/register-ts-resolve.mjs", "apps/web/src/main.ts"]
