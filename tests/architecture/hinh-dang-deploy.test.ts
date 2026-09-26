@@ -8,7 +8,8 @@
 //      trust policy của stack 30 ghim;
 //   ⑶ role ARN trỏ đúng tài khoản prod và đúng tên role khai ở `infra/terraform/chung` — không chép tay một con số;
 //   ⑷ mọi `uses:` ghim SHA 40 ký tự; checkout không giữ credential;
-//   ⑸ `pnpm`/`npm`/`docker build` chỉ xuất hiện trong `build`.
+//   ⑸ `pnpm`/`npm`/`docker build` chỉ xuất hiện trong `build`;
+//   ⑹ [ADR-078] `kiem` không quyền AWS, không environment, chạy sau `api`; `worker` tự kiểm sau khi cập nhật.
 // Đọc bằng regex như `hinh-dang-ci.test.ts` — dự án không có phụ thuộc YAML; cái giá (bám cách viết) là chủ đích.
 // ==============================================================================================
 
@@ -51,9 +52,9 @@ describe("[ADR-067] hình dạng của deploy.yml", () => {
     expect(VAN).toMatch(/cancel-in-progress: false/u);
   });
 
-  it("⑴ job đúng [build, api, worker]; build không id-token, không environment, chỉ contents: read", () => {
+  it("⑴ job đúng [build, api, kiem, worker]; build không id-token, không environment, chỉ contents: read", () => {
     const jobs = dong.slice(dong.indexOf("jobs:") + 1).filter((d) => /^ {2}[A-Za-z0-9_-]+:/u.test(d));
-    expect(jobs.map((d) => d.trim())).toEqual(["build:", "api:", "worker:"]);
+    expect(jobs.map((d) => d.trim())).toEqual(["build:", "api:", "kiem:", "worker:"]);
     const build = thanJob("build");
     expect(build).not.toMatch(/id-token/u);
     expect(build).not.toMatch(/environment:/u);
@@ -99,11 +100,24 @@ describe("[ADR-067] hình dạng của deploy.yml", () => {
   });
 
   it("⑸ mã bên thứ ba (pnpm/npm/docker build) chỉ chạy trong build; không secrets", () => {
-    for (const job of ["api", "worker"]) {
+    for (const job of ["api", "kiem", "worker"]) {
       const than = coNghia(thanJob(job)).join("\n");
       expect(than, job).not.toMatch(/\b(pnpm|npm|npx|yarn)\b|docker build/u);
     }
     expect(coNghia(VAN).join("\n")).not.toMatch(/secrets\.|GITHUB_TOKEN|github\.token/u);
     expect(VAN).not.toMatch(/pull_request_target/u);
+  });
+
+  it("⑹ kiem: sau api, không id-token, không environment, không AWS; worker tự kiểm", () => {
+    const kiem = thanJob("kiem");
+    expect(kiem).toMatch(/\n {4}needs: api\n/u);
+    expect(kiem).not.toMatch(/id-token|environment:|configure-aws-credentials|role-to-assume/u);
+    expect(kiem).toMatch(/ {4}permissions:\n {6}contents: read\n {4}steps:/u);
+    expect(kiem).toMatch(/run: bash deploy\/kiem-sau-deploy\.sh cong-khai\n/u);
+    const worker = thanJob("worker");
+    const capNhat = worker.indexOf("trien-khai.sh cap-nhat tp-unseal-worker");
+    const kiemWorker = worker.indexOf("kiem-sau-deploy.sh worker");
+    expect(capNhat).toBeGreaterThan(-1);
+    expect(kiemWorker).toBeGreaterThan(capNhat);
   });
 });

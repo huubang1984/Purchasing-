@@ -162,12 +162,15 @@ locals {
       repos       = local.repo_app
       services    = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
       pass_roles  = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job]
+      doc_log     = []
     }
     deploy_worker = {
       environment = "prod-worker"
       repos       = local.repo_worker
       services    = ["tp-unseal-worker"]
       pass_roles  = [local.role_arn.unseal_worker]
+      # [ADR-078] Kiểm sau deploy: tìm dòng lỗi khởi động trong log của worker.
+      doc_log = ["/tp/unseal-worker"]
     }
   }
 }
@@ -246,6 +249,16 @@ data "aws_iam_policy_document" "deploy" {
       test     = "ArnEquals"
       variable = "ecs:cluster"
       values   = ["arn:aws:ecs:${local.region}:${local.prod}:cluster/${local.cluster}"]
+    }
+  }
+
+  # [ADR-078] Chỉ ĐỌC (lọc) đúng nhóm log của thành phần mình deploy — không ghi, không xoá, không nhóm khác.
+  dynamic "statement" {
+    for_each = length(each.value.doc_log) == 0 ? [] : [1]
+    content {
+      sid       = "KiemLogSauDeploy"
+      actions   = ["logs:FilterLogEvents"]
+      resources = [for g in each.value.doc_log : "arn:aws:logs:${local.region}:${local.prod}:log-group:${g}:*"]
     }
   }
 

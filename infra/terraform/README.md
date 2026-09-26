@@ -298,6 +298,11 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 | `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE`, `TP_SG_NEO` — lấy từ `terraform output bien_github` (stack 90) |
 | `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
 
+**[ADR-078] Biến cấp repository** (Settings → Secrets and variables → Actions → *Variables*, KHÔNG gắn environment — job
+`kiem` không có environment): `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` lấy từ `terraform output bien_github_repo` (stack 90);
+`TP_RECEIPT_FINGERPRINT` = dấu vân tay tính độc lập của kid đang dùng (mục "Khoá công khai biên nhận"). Xoay khoá thì cập
+nhật hai biến khoá cùng lúc với apply stack 90 — không thì lần deploy kế đỏ ở `kiem`, đúng như mong đợi.
+
 Tên environment phải đúng hai chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
 ghim `sub = repo:huubang1984/Purchasing-:environment:<tên>`. Không có secret nào — pipeline lấy quyền
 AWS bằng OIDC.
@@ -307,6 +312,13 @@ AWS bằng OIDC.
 migrate (dừng nếu exit ≠ 0), cập nhật `tp-api` rồi `tp-web`; job `worker` chờ duyệt riêng ở `prod-worker`. Tóm tắt
 của run ghi ARN các bản task definition vừa đăng ký. Migrate hỏng ⇒ đọc `/tp/migrate` bằng tay (role
 deploy không đọc log).
+
+**[ADR-078] Kiểm sau deploy** (`deploy/kiem-sau-deploy.sh`): job `kiem` — không quyền AWS — gọi `https://<ten_mien>`:
+`/api/health`, `/nop-thau`, `/.well-known/trustprocure-receipt-keys` trả 200; HSTS, `x-frame-options: DENY`, `nosniff`, không
+header `server`; `/nop-thau` có CSP; `http://` ⇒ 301; tài liệu khoá có `activeKeyId` và dấu vân tay đúng hai biến trên. Job
+`worker` sau khi cập nhật chờ 2 phút rồi kiểm service đủ task và `/tp/unseal-worker` không có `khong khoi dong duoc` /
+`cau hinh khong hop le` (role `tp-deploy-worker` chỉ có `logs:FilterLogEvents` trên đúng nhóm log ấy — stack 30). Hỏng ⇒
+job đỏ và in kiểm nào hỏng; **không tự quay lui** — quyết định theo mục dưới.
 
 **Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
 tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.

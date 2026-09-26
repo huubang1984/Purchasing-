@@ -6919,3 +6919,38 @@ yêu cầu nào lỗi, chỉ phong bì không được mở.
 - Ngưỡng là đoán ở quy mô chưa có tải thật; đo lại sau một tháng chạy.
 - Lần apply đầu có thư ALARM→OK dự kiến cho mỗi service trước khi task lên.
 - Chưa chạy thật: `terraform validate` stack 60 và 90.
+
+## ADR-078 — Kiểm tự động sau mỗi lần deploy, không quay lui tự động
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-067**, ADR-070, ADR-075, ADR-062
+
+### Bối cảnh
+
+Pipeline (ADR-067) chỉ biết service "ổn định" và chạy đúng bản task definition vừa đăng ký. Nó không biết trang có
+phục vụ qua tên miền thật không, header ADR-075 có còn không, service công bố khoá có phát đúng khoá đang ký không, hay
+worker — không đứng sau ALB — có sống sau khởi động không.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Job `kiem`** sau `api`, **không quyền AWS, không environment** (`contents: read`), chạy
+   `deploy/kiem-sau-deploy.sh cong-khai` trên `https://<TP_TEN_MIEN>`:
+   - `/api/health`, `/nop-thau`, `/.well-known/trustprocure-receipt-keys` trả 200 (thử lại tới ~2 phút);
+   - mọi phản hồi có HSTS `max-age=31536000; includeSubDomains`, `x-frame-options: DENY`, `nosniff`, không `server`;
+     `/nop-thau` có CSP; `http://` ⇒ 301 sang https;
+   - tài liệu khoá: `activeKeyId` = `TP_RECEIPT_ACTIVE_KID`; dấu vân tay của kid ấy = `TP_RECEIPT_FINGERPRINT` (con số
+     in vào hợp đồng, tính độc lập từ stack 50); dấu vân tay = SHA-256 của `spki` trong chính tài liệu.
+2. **Job `worker`** sau khi cập nhật service: chờ 2 phút, kiểm `runningCount = desiredCount` và log `/tp/unseal-worker`
+   không có dòng lỗi khởi động kể từ lúc bắt đầu deploy. `tp-deploy-worker` thêm đúng `logs:FilterLogEvents` trên nhóm log
+   ấy (stack 30).
+3. **Hỏng ⇒ job đỏ, không tự quay lui**: migrate đã chạy, image cũ trên lược đồ mới là rủi ro người vận hành phải cân
+   (README, "Quay lui").
+4. `hinh-dang-deploy.test.ts` ⑹ ghim: `kiem` không id-token/environment/role, chạy sau `api`; `worker` kiểm SAU cập nhật.
+
+### Hệ quả, nói thẳng
+
+- Ba biến cấp repository phải khớp stack 50/90; xoay khoá mà quên cập nhật thì deploy kế đỏ ở `kiem` — cố ý.
+- `kiem` thấy những gì Internet thấy, kể cả DNS ngoài AWS và chứng chỉ; nó không kiểm luồng nghiệp vụ (đăng nhập, niêm
+  phong) — cần một tài khoản thử trên prod, việc sau.
+- Kiểm worker chỉ thấy lỗi KHỞI ĐỘNG trong 2 phút đầu; lỗi sau đó là việc của alarm ADR-077.
+- Chưa chạy thật: script đo trên máy chủ giả cục bộ (đúng, sai dấu vân tay, thiếu CSP, biến sai) và `aws` giả (đủ/thiếu
+  task, có dòng lỗi).
