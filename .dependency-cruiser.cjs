@@ -57,6 +57,10 @@ const LOCAL_DEV_ORG_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-or
 const ORG_OPEN_TS = ciFile("packages/crypto-keys/src/org-open.ts");
 // [ADR-062] Cua mo khoa rieng to chuc cua adapter aws-kms: goi kms:Decrypt.
 const AWS_KMS_ORG_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/aws-kms-org-unwrapper.ts");
+// [ADR-063] Ho "g18-": adapter TOTP that goi kms:Decrypt tren CMK rieng tp-totp.
+const TOTP_AWS_KMS_TS = ciFile("apps/api/src/adapters/totp-aws-kms.ts");
+const TOTP_AWS_KMS_TEST_TS = ciFile("apps/api/src/adapters/totp-aws-kms.test.ts");
+const API_COMPOSITION_TS = ciFile("apps/api/src/composition.ts");
 const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
 const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 // [S1.17] Ho "g11-": kha nang KY moc neo ngoai. Xem khoi chu thich cua ba quy tac g11- ben duoi.
@@ -336,6 +340,22 @@ module.exports = {
     // Doi chung DUONG: `tests/architecture/bo-bang-chung-doc-lap.test.ts` viet mot file dung thuc
     // vao tools/bo-xuat-danh-gia/src/, cho kiem-doc-lap.ts import no, roi doi quy tac nay DO.
     // ------------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------------------------------
+    // [ADR-063] HO "g18-" — adapter TOTP aws-kms goi kms:Decrypt (tren alias/tp-totp, KHONG phai
+    // tp-org-wrap). Chi composition root cua api va test cua chinh no duoc import no: mot handler
+    // hay mot goi khac import duoc no la co mot duong goi Decrypt ngoai cong TotpSecretUnsealer.
+    // `kms-giai-ma-mot-cua.test.ts` doc dich cua ho nay (khong chep ten) de cho tep ay goi Decrypt.
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g18-totp-kms-chi-composition",
+      comment:
+        "[ADR-063] apps/api/src/adapters/totp-aws-kms.ts goi kms:Decrypt tren CMK rieng cua TOTP. " +
+        "Chi apps/api/src/composition.ts (noi tiem cong TotpSecretUnsealer) va test cua chinh no " +
+        "duoc import no.",
+      severity: "error",
+      from: { pathNot: [API_COMPOSITION_TS, TOTP_AWS_KMS_TEST_TS] },
+      to: { path: TOTP_AWS_KMS_TS },
+    },
     {
       name: "g17-kiem-doc-lap-khong-cham-danh-gia",
       comment:

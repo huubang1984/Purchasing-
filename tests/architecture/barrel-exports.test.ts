@@ -740,9 +740,13 @@ const DANH_SACH_TRANG_BIDDING = [
   "ReceiptError",
   "ReceiptSigningKeyRing",
   "buildReceiptText",
+  // [ADR-011 / ADR-009] Bộ ký thật và phép đọc nửa công khai qua KMS: khoá riêng không rời KMS,
+  // nên không symbol nào ở đây cho ai thêm một khả năng ngoài "ký" và "đọc khoá công khai".
+  "createAwsKmsReceiptSigner",
   "createLocalDevReceiptSigner",
   "derToRawSignature",
   "getBidReceipt",
+  "layKhoaCongKhaiBienNhanKms",
   "listBidVersions",
   "parseReceiptText",
   "rawToDerSignature",

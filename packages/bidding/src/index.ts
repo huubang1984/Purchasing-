@@ -34,6 +34,14 @@ export {
   type ReceiptKeyPair,
   type ReceiptSigner,
 } from "./signer.js";
+// [ADR-011 / ADR-009] Bộ ký thật: `kms:Sign` trên `alias/tp-receipt-sign` — khoá riêng không rời KMS.
+export {
+  createAwsKmsReceiptSigner,
+  layKhoaCongKhaiBienNhanKms,
+  type AwsKmsReceiptSignerConfig,
+  type KmsDocKhoaCongKhai,
+  type KmsKyBienNhan,
+} from "./signer-aws-kms.js";
 // [S1.8] Job toàn vẹn của B5. Nó ra cửa vì nó là thứ một tiến trình vận hành gọi theo lịch —
 // nhưng nó KHÔNG ném khi phát hiện lệch, và đó là một ngoại lệ CÓ LÝ DO của tiêu chí "cổng gác
 // phải ném": nó không phải một cổng gác. Nó là một lớp PHÁT HIỆN, và một lớp phát hiện dừng ở
