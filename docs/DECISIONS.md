@@ -7418,3 +7418,34 @@ minh — chỉ lộ ra khi task chết lúc chạy hay thư không đi, tức sa
   Lớp tài khoản bắt được phần lớn ca ấy (SES chưa xác minh, image không có).
 - Tool là bước người vận hành phải nhớ chạy; không có gì chặn một `terraform apply` bỏ qua nó.
 - Chưa chạy trên tài khoản thật: đo bằng `terraform console` thật trên bản sao stack không backend và một `aws` giả.
+
+---
+
+## ADR-088 — Hộp thư vận hành tách khỏi hộp thư an ninh
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-077**, ADR-083, ADR-062
+
+### Bối cảnh
+
+Mọi cảnh báo của stack 60 — ⑴ sửa key policy, ⑵ task mang role worker, ⑶ ⑷ ⑺ mốc neo, ⑸ DNS lạ, ⑹ vận hành — đổ về
+một topic `tp-canh-bao-khoa`, một người nhận `email_canh_bao`. ⑹ (ADR-077, ADR-083) gửi thư cả khi vào ALARM lẫn khi về
+OK, cho CPU, p95, 5xx, thiếu task và lỗi nghiệp vụ: khi chạy thật nó là phần lớn số thư. Người nhận quen lướt qua thư, và
+một thư `PutKeyPolicy` — thứ duy nhất làm đường tấn công của KeyAdmin không im lặng (ADR-062) — chìm giữa chúng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. Chỉ ⑹ (`tp-van-hanh-*`) chuyển đi. ⑴–⑸ và ⑺ (kể cả hai alarm sức khoẻ của Lambda ⑺) ở lại hộp thư an ninh.
+2. Topic mới `tp-canh-bao-van-hanh` ở **audit**, cạnh topic cũ: đường chuyển prod ⇒ bus audit giữ nguyên, quyền admin prod
+   vẫn không tắt được thư. Chỉ rule `tp-canh-bao-van-hanh` publish được vào nó; rule ấy bị gỡ khỏi policy của topic khoá.
+3. Biến bắt buộc `email_van_hanh = list(string)` (≥ 1, không mặc định); mỗi địa chỉ một subscription. Hướng dẫn apply
+   chuyển hai biến của stack 60 sang tệp `canh-bao.tfvars` không commit (danh sách qua `-var` trong PowerShell dễ sai).
+4. `hinh-dang-van-hanh.test.ts` ⑵ đòi: target ⑹ là topic vận hành, policy của nó chỉ cho rule ⑹, subscription của nó đọc
+   `email_van_hanh`, và policy topic khoá không nhắc gì tới ⑹.
+
+### Hệ quả, nói thẳng
+
+- Thêm một lần bấm xác nhận cho mỗi địa chỉ vận hành; địa chỉ chưa xác nhận thì không nhận gì, và không alarm nào báo điều đó.
+- Apply lần kế trên một stack 60 đã chạy sẽ đòi `email_van_hanh` (biến bắt buộc) — cố ý, để không ai lỡ tay gửi thư vận
+  hành về đâu cũng được.
+- Dễ đặt cùng một địa chỉ cho cả hai biến; tool không cấm — khi ấy tách topic không giúp gì ngoài tiêu đề thư.
+- Chưa chạy trên AWS thật: `terraform validate` stack 60 đạt; test kiến trúc đo trên chữ của cấu hình.

@@ -7,7 +7,8 @@
 #   ⑸ [ADR-076] Một truy vấn DNS ngoài danh sách được phép trong VPC prod (DNS Firewall của stack 90 chặn/cảnh báo) —
 #      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
 #   ⑹ [ADR-077] Vận hành: mọi alarm prod mang tiền tố `tp-van-hanh-` (ALB, ECS, RDS — stack 90) vào ALARM hoặc trở về
-#      OK ⇒ chuyển sang audit ⇒ email.
+#      OK ⇒ chuyển sang audit ⇒ email. [ADR-088] Đi topic RIÊNG `tp-canh-bao-van-hanh` tới `email_van_hanh`: thư vận hành
+#      nhiều và lặp (ALARM rồi OK), không được làm chìm thư khoá/neo của topic `tp-canh-bao-khoa`.
 #   ⑺ [ADR-086] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
 #
@@ -39,8 +40,8 @@
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
 # (CloudTrail tổ chức phải bật: sự kiện "AWS API Call via CloudTrail" đi ra từ đó).
 #
-# Biến bắt buộc `email_canh_bao` — KHÔNG commit giá trị; truyền bằng -var hay tệp *.tfvars ngoài git.
-# AWS gửi thư xác nhận tới địa chỉ ấy; chưa bấm xác nhận thì chưa có cảnh báo nào tới.
+# Biến bắt buộc `email_canh_bao` (⑴–⑸, ⑺) và `email_van_hanh` (⑹, ADR-088) — KHÔNG commit giá trị; truyền bằng -var hay
+# tệp *.tfvars ngoài git. AWS gửi thư xác nhận tới từng địa chỉ; chưa bấm xác nhận thì địa chỉ ấy chưa nhận gì.
 
 terraform {
   required_version = ">= 1.10"
@@ -67,6 +68,15 @@ variable "email_canh_bao" {
   validation {
     condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.email_canh_bao))
     error_message = "email_canh_bao phải là một địa chỉ email."
+  }
+}
+
+variable "email_van_hanh" {
+  description = "[ADR-088] Người nhận thư VẬN HÀNH ⑹ (alarm tp-van-hanh-* của prod, ALARM và OK) — tách khỏi email_canh_bao."
+  type        = list(string)
+  validation {
+    condition     = length(var.email_van_hanh) > 0 && alltrue([for e in var.email_van_hanh : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "email_van_hanh phải là danh sách ít nhất một địa chỉ email."
   }
 }
 
@@ -241,7 +251,6 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
               aws_cloudwatch_event_rule.task_worker_audit.arn,
               aws_cloudwatch_event_rule.neo_hong_audit.arn,
               aws_cloudwatch_event_rule.dns_bi_chan_audit.arn,
-              aws_cloudwatch_event_rule.van_hanh_audit.arn,
             ]
           }
         }
@@ -518,10 +527,42 @@ resource "aws_cloudwatch_event_rule" "van_hanh_audit" {
   event_pattern = local.mau_van_hanh
 }
 
+# [ADR-088] Topic riêng cho ⑹. Cùng lý do không mã hoá bằng aws/sns như `tp-canh-bao-khoa`; chỉ rule ⑹ publish được.
+resource "aws_sns_topic" "van_hanh" {
+  provider = aws.audit
+  name     = "tp-canh-bao-van-hanh"
+}
+
+resource "aws_sns_topic_policy" "van_hanh" {
+  provider = aws.audit
+  arn      = aws_sns_topic.van_hanh.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EventBridgeGuiVanHanh"
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sns:Publish"
+      Resource  = aws_sns_topic.van_hanh.arn
+      Condition = { ArnEquals = { "aws:SourceArn" = [aws_cloudwatch_event_rule.van_hanh_audit.arn] } }
+    }]
+  })
+}
+
+resource "aws_sns_topic_subscription" "van_hanh" {
+  provider  = aws.audit
+  for_each  = toset(var.email_van_hanh)
+  topic_arn = aws_sns_topic.van_hanh.arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
+output "sns_van_hanh_arn" { value = aws_sns_topic.van_hanh.arn }
+
 resource "aws_cloudwatch_event_target" "van_hanh_audit" {
   provider = aws.audit
   rule     = aws_cloudwatch_event_rule.van_hanh_audit.name
-  arn      = aws_sns_topic.canh_bao_khoa.arn
+  arn      = aws_sns_topic.van_hanh.arn
 
   input_transformer {
     input_paths = {
