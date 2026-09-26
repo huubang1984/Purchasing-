@@ -93,6 +93,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/unseal/src/unseal.int.test.ts",
   ],
   C4: [
+    // [S1.146 / khoản 127] Ca gia hạn ĐỒNG THỜI tới cùng một hạn đo vế *"gia hạn chỉ khi hạn mới xa hơn, có audit"* của
+    // C4 dưới khoá hàng thật: lần sau bị từ chối và sổ mang đúng MỘT `RFQ_DEADLINE_EXTENDED` với `truoc` của lần đầu.
+    "packages/rfq/src/rfq.int.test.ts",
     "tests/adversarial/t5-doi-khang.int.test.ts",
   ],
   C5: [
