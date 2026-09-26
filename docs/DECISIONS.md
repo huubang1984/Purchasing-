@@ -6552,3 +6552,35 @@ mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo ch�
   phí dữ liệu.
 - `SENT` trong outbox vẫn không phải bằng chứng đã tới tay (ADR-015) — cả hai kênh đều có báo cáo giao tin riêng
   (event destination của End User Messaging, webhook ZNS) chưa được nối.
+
+## ADR-070 — Công bố khoá công khai biên nhận: service riêng chỉ cầm nửa công khai, neo vào bucket audit qua job neo
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-011** mục 3, ADR-026, ADR-062, ADR-066, ADR-068
+
+### Bối cảnh
+
+Khoản nợ 30 dựng `apps/public-keys` (tài liệu `/.well-known/trustprocure-receipt-keys`, dấu vân tay SHA-256 của SPKI) nhưng
+chưa có tiến trình chạy, và nó dựng tài liệu từ một `ReceiptSigningKeyRing` — thứ chỉ có dưới `local-dev`. Dưới `aws-kms`,
+khoá riêng không rời KMS, và chỉ `tp-api` (người ký) cùng KeyAdmin đọc được nửa công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Service riêng `tp-public-keys`** sau cùng ALB, luật đường `/.well-known/trustprocure-receipt-keys` và `…/*` (không viết
+   lại đường). Nó chỉ cầm **nửa công khai**, nhận qua biến môi trường (`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS` JSON `{kid: SPKI}`,
+   `TRUSTPROCURE_RECEIPT_ACTIVE_KID`): **không task role, không KMS, không CSDL, không bí mật**. Mỗi SPKI phải là EC P-256 —
+   sai loại thì từ chối khởi động. In dấu vân tay mọi khoá lúc khởi động.
+2. **Một nguồn cho kid và nửa công khai: stack 50** (KeyAdmin có `kms:Get*`) — output `bien_nhan`; stack 90 đọc state ấy cho
+   CẢ `TRUSTPROCURE_KMS_RECEIPT_KID` của api lẫn service công bố. kid không còn là biến của stack 90: đổi alias mà quên đổi
+   kid là ký bằng khoá này nhưng khai kid của khoá kia.
+3. Tài liệu dựng từ nửa công khai **trùng byte** tài liệu dựng từ vòng khoá (test đối chiếu) — hai đường, một định dạng.
+4. **Neo ngoài: tài liệu khoá vào bucket neo audit** (Object Lock COMPLIANCE) qua **đúng danh tính ghi duy nhất**
+   `tp-anchor-writer`, tức qua job neo chạy trên ECS với role `tp-anchor-job` — không nới policy của bucket (ADR-026 §4). Phần
+   này là lát kế (bộ ghi S3 của `AnchorStore`, ký mốc neo bằng KMS ở tài khoản audit, task `tp-anchor-job`).
+
+### Hệ quả, nói thẳng
+
+- Tới khi lát neo xong, tính độc lập của phép kiểm vẫn là **dấu vân tay in ra ngoài** (hợp đồng, điện thoại) — README hướng
+  dẫn tính nó từ output stack 50, không qua endpoint.
+- Một service thêm ~9 USD/tháng (Fargate 0,25 vCPU) để giữ tiến trình ký (api) khác tiến trình công bố.
+- Xoay khoá = sửa stack 50 (khoá mới + mục mới, không gỡ mục cũ) rồi apply 50 → 90 → deploy. Không có đường nào tự động
+  thêm kid vào danh sách công bố: một kid lạ trong biên nhận mà không có trong tài liệu là lỗi vận hành phải thấy được.

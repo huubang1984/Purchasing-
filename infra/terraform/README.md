@@ -190,7 +190,7 @@ terraform apply plan.tfplan                                             # chờ 
 ```
 
 `prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
-và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
 
@@ -200,8 +200,8 @@ mới apply phần còn lại.
 
 ```powershell
 aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
-foreach ($t in "api","worker","migrate","web") {
-  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web" }[$t]
+foreach ($t in "api","worker","migrate","web","public-keys") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys" }[$t]
   docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
   docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
 }
@@ -215,7 +215,28 @@ phải superuser); nếu `migrate()` từ chối, dừng lại và đọc thông
 chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
 
 **7. Kiểm:** `https://<ten_mien>/api/health` ⇒ 200 (ALB bỏ tiền tố `/api`); `https://<ten_mien>/nop-thau` ⇒ 200 kèm
-header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`, log `/tp/web` có `CHI TINH`.
+header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`, log `/tp/web` có `CHI TINH`;
+`https://<ten_mien>/.well-known/trustprocure-receipt-keys` ⇒ 200, và `sha256` in trong log `/tp/public-keys` TRÙNG dấu vân
+tay tính độc lập từ output của stack 50 (mục "Khoá công khai biên nhận" dưới).
+
+## Khoá công khai biên nhận — service `tp-public-keys` (ADR-070)
+
+Stack 50 (chạy bằng KeyAdmin, có `kms:GetPublicKey`) xuất `bien_nhan = { kid_dang_dung, khoa_cong_khai }`; stack 90 đọc state
+ấy, đặt `TRUSTPROCURE_KMS_RECEIPT_KID` cho api và chuyển nửa công khai vào service `tp-public-keys` — service không có task
+role, không KMS, không CSDL. **Thứ tự: apply 50 trước 90.**
+
+Tính dấu vân tay độc lập (không qua endpoint) — đây là con số in vào hợp đồng và đọc qua điện thoại cho nhà cung cấp:
+
+```powershell
+cd infra\terraform\50-kms-prod
+$b64 = (terraform output -json bien_nhan | ConvertFrom-Json).khoa_cong_khai.'kms-2026-09'
+$der = [Convert]::FromBase64String($b64)
+-join ([Security.Cryptography.SHA256]::Create().ComputeHash($der) | ForEach-Object { $_.ToString('x2') })
+```
+
+**Xoay khoá ký:** trong stack 50 thêm một `aws_kms_key` mới + một mục mới vào `local.khoa_bien_nhan`, trỏ
+`alias/tp-receipt-sign` sang khoá mới, đặt `receipt_kid` mới; apply 50, rồi 90, rồi deploy. **Không gỡ mục cũ** — biên
+nhận cũ phải kiểm được mãi (ADR-011 mục 3). Khoá cũ giữ quyền `GetPublicKey`, không còn ai `Sign` qua alias.
 
 **Chưa kiểm:** endpoint SES API (`email`) ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
 

@@ -74,7 +74,20 @@ export interface ReceiptKeyDocument {
  * gói này khẳng định điều đó bằng cách tìm chuỗi byte khoá riêng trong tài liệu đã tuần tự hoá.
  */
 export function buildReceiptKeyDocument(ring: ReceiptSigningKeyRing): ReceiptKeyDocument {
-  const keys = [...ring.publicKeys()]
+  return buildReceiptKeyDocumentTuKhoaCongKhai(ring.activeKeyId, ring.publicKeys());
+}
+
+/**
+ * [ADR-070] Dựng tài liệu CHỈ từ nửa công khai — đường của tiến trình chạy thật: dưới `aws-kms` không có vòng khoá
+ * nào trong tiến trình, và tiến trình công bố không được cầm khoá riêng hay quyền KMS nào. Cùng định dạng, cùng
+ * thứ tự, cùng dấu vân tay với `buildReceiptKeyDocument` — test đối chiếu hai đường trên cùng một cặp khoá.
+ */
+export function buildReceiptKeyDocumentTuKhoaCongKhai(
+  activeKeyId: string,
+  publicKeys: ReadonlyMap<string, Uint8Array>,
+): ReceiptKeyDocument {
+  if (!publicKeys.has(activeKeyId)) throw new Error(`khoá đang dùng "${activeKeyId}" không có trong danh sách công bố`);
+  const keys = [...publicKeys]
     .map(([kid, spki]) => ({
       kid,
       alg: RECEIPT_SIGNING_ALGORITHM,
@@ -84,7 +97,7 @@ export function buildReceiptKeyDocument(ring: ReceiptSigningKeyRing): ReceiptKey
     // Thứ tự ổn định: tài liệu này được so byte ở tầng vận hành, và một thứ tự phụ thuộc thứ tự
     // chèn sẽ làm hai lần khởi động cho hai tài liệu khác nhau mà không có gì đổi.
     .sort((a, b) => (a.kid < b.kid ? -1 : a.kid > b.kid ? 1 : 0));
-  return { activeKeyId: ring.activeKeyId, keys };
+  return { activeKeyId, keys };
 }
 
 function traLoi(res: ServerResponse, ma: number, than: unknown): void {
@@ -106,7 +119,11 @@ function traLoi(res: ServerResponse, ma: number, than: unknown): void {
  * khai: mọi phương thức khác `GET`/`HEAD` bị từ chối trước khi chạm tới định tuyến.
  */
 export function createReceiptKeyServer(ring: ReceiptSigningKeyRing): Server {
-  const taiLieu = buildReceiptKeyDocument(ring);
+  return createReceiptKeyServerTuTaiLieu(buildReceiptKeyDocument(ring));
+}
+
+/** [ADR-070] Cùng máy chủ, nhận tài liệu đã dựng — đường của `main.ts`. */
+export function createReceiptKeyServerTuTaiLieu(taiLieu: ReceiptKeyDocument): Server {
   const theoKid = new Map(taiLieu.keys.map((k) => [k.kid, k]));
 
   return createServer((req: IncomingMessage, res: ServerResponse) => {
