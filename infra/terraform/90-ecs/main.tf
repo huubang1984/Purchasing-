@@ -1376,6 +1376,94 @@ resource "aws_cloudwatch_metric_alarm" "rds_ket_noi" {
   treat_missing_data  = "notBreaching"
 }
 
+# ---------------------------------------------------------------------------------------------
+# [ADR-083] CẢNH BÁO LỖI NGHIỆP VỤ — ĐỌC TỪ LOG, CÙNG TIỀN TỐ `tp-van-hanh-` (thư đi qua ⑹ của stack 60)
+# ---------------------------------------------------------------------------------------------
+# Service vẫn "khoẻ" (ADR-077 im) trong khi việc nghiệp vụ hỏng: thư mời, OTP, hạn nộp không đi. Nguồn là CHÍNH dòng log
+# mà api/worker đã ghi (`onJobFailure`, `onPollError`, bộ dọn) — không thêm đường ghi nào, chỉ đếm:
+#   bo-cuoc      `outbox <kind> <lý do> (bo cuoc)` — một job hết lượt thử: một việc nghiệp vụ đã KHÔNG xảy ra. ≥ 1.
+#   kenh-loi     `GuiKenhError` — SMS/Zalo từ chối (từng lần thử, kể cả lần sẽ thử lại). ≥ 5 trong 15 phút.
+#   token-zalo   `ZaloTokenMatError` — token đã xoay mà không ghi lại được: kênh Zalo chết tới khi cấp lại. ≥ 1.
+#   poll-loi     `outbox poll` — vòng quét hỏng (mất hàm liệt kê, mất quyền). ≥ 3 trong 10 phút.
+#   bo-don       `(hong N luot lien tiep` — bộ dọn bảng hạn mức chết, bảng chỉ lớn lên. ≥ 1.
+#   ton-dong     `[unseal-worker] outbox ton dong: <giây> giay, …` — tuổi job PENDING quá hạn lâu nhất, mọi tổ chức (worker
+#                đo mỗi 5 phút). > 15 phút, hai kỳ liền: không ai đang rút outbox — ca KẸT không sinh dòng lỗi nào.
+# Thiếu dữ liệu = bình thường ở mọi alarm này (không lỗi thì không có dòng); worker chết là việc của alarm thiếu task.
+locals {
+  nhom_log_nghiep_vu = {
+    api    = aws_cloudwatch_log_group.tp["api"].name
+    worker = aws_cloudwatch_log_group.tp["unseal-worker"].name
+  }
+
+  # { tín hiệu = { mẫu, nguồn log, ngưỡng, kỳ (giây), số kỳ, mô tả } } — mẫu đếm, giá trị 1 mỗi dòng.
+  tin_hieu_nghiep_vu = {
+    bo-cuoc    = { mau = "\"outbox\" \"(bo cuoc)\"", nguon = ["api", "worker"], nguong = 1, ky = 300, so_ky = 1, mo_ta = "Mot job outbox BO CUOC (het luot thu): mot viec nghiep vu (thu moi, OTP, han nop, mo thau) da KHONG xay ra. Doc dong 'outbox <kind> <ly do> (bo cuoc)' trong /tp/api hoac /tp/unseal-worker." }
+    kenh-loi   = { mau = "\"GuiKenhError\"", nguon = ["api"], nguong = 5, ky = 900, so_ky = 1, mo_ta = "SMS/Zalo tu choi >= 5 lan trong 15 phut. Kiem so du ZNS, trang thai sender ID, tran chi tieu SMS; doc /tp/api." }
+    token-zalo = { mau = "\"ZaloTokenMatError\"", nguon = ["api"], nguong = 1, ky = 300, so_ky = 1, mo_ta = "Token Zalo da xoay ma khong ghi lai duoc: kenh Zalo chet toi khi cap lai refresh token (README, stack 85, buoc 2-3)." }
+    poll-loi   = { mau = "\"outbox poll\"", nguon = ["api", "worker"], nguong = 3, ky = 600, so_ky = 1, mo_ta = "Vong quet outbox hong >= 3 lan trong 10 phut (mat ham liet ke to chuc, mat quyen, CSDL). Doc /tp/api va /tp/unseal-worker." }
+    bo-don     = { mau = "\"luot lien tiep\"", nguon = ["api"], nguong = 1, ky = 300, so_ky = 1, mo_ta = "Bo don bang han muc hong hai luot lien tiep — bang chi lon len. Doc dong 'don ...' trong /tp/api." }
+  }
+
+  bo_loc_nghiep_vu = merge([
+    for k, v in local.tin_hieu_nghiep_vu : { for n in v.nguon : "${k}-${n}" => { tin_hieu = k, mau = v.mau, nhom = local.nhom_log_nghiep_vu[n] } }
+  ]...)
+}
+
+resource "aws_cloudwatch_log_metric_filter" "nghiep_vu" {
+  for_each       = local.bo_loc_nghiep_vu
+  name           = "tp-nghiep-vu-${each.key}"
+  log_group_name = each.value.nhom
+  pattern        = each.value.mau
+  metric_transformation {
+    name          = each.value.tin_hieu
+    namespace     = "TrustProcure/NghiepVu"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "nghiep_vu" {
+  for_each            = local.tin_hieu_nghiep_vu
+  alarm_name          = "${local.tien_to_van_hanh}nghiep-vu-${each.key}"
+  alarm_description   = "[ADR-083] ${each.value.mo_ta}"
+  namespace           = "TrustProcure/NghiepVu"
+  metric_name         = each.key
+  statistic           = "Sum"
+  period              = each.value.ky
+  evaluation_periods  = each.value.so_ky
+  threshold           = each.value.nguong
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  depends_on          = [aws_cloudwatch_log_metric_filter.nghiep_vu]
+}
+
+# Tồn đọng: mẫu tách theo khoảng trắng, lấy trường thứ năm làm GIÁ TRỊ (giây). Dạng dòng là hợp đồng với
+# `apps/unseal-worker` — `hinh-dang-van-hanh.test.ts` so hai phía.
+resource "aws_cloudwatch_log_metric_filter" "ton_dong" {
+  name           = "tp-nghiep-vu-ton-dong"
+  log_group_name = local.nhom_log_nghiep_vu.worker
+  pattern        = "[nguon=\"[unseal-worker]\", outbox=\"outbox\", ton=\"ton\", dong=\"dong:\", giay, ...]"
+  metric_transformation {
+    name      = "ton-dong-giay"
+    namespace = "TrustProcure/NghiepVu"
+    value     = "$giay"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ton_dong" {
+  alarm_name          = "${local.tien_to_van_hanh}nghiep-vu-ton-dong"
+  alarm_description   = "[ADR-083] Job outbox PENDING qua han lau nhat > 15 phut, hai ky 5 phut lien: khong ai dang rut outbox (api/worker ket, CSDL cham). Doc dong 'outbox ton dong' trong /tp/unseal-worker va log /tp/api."
+  namespace           = "TrustProcure/NghiepVu"
+  metric_name         = "ton-dong-giay"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 900
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  depends_on          = [aws_cloudwatch_log_metric_filter.ton_dong]
+}
+
 output "ban_ghi_dns" {
   description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền công khai tới ALB (bước 2)."
   value = {
