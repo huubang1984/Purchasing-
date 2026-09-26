@@ -55,6 +55,8 @@ const LOCAL_DEV_SHARED_TS = ciFile("packages/crypto-keys/src/local-dev-shared.ts
 // [ADR-062] Hai cua mo khoa MOI: mo khoa rieng TO CHUC (local-dev) va mo phong bi v2 dung chung.
 const LOCAL_DEV_ORG_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-org-unwrapper.ts");
 const ORG_OPEN_TS = ciFile("packages/crypto-keys/src/org-open.ts");
+// [ADR-062] Cua mo khoa rieng to chuc cua adapter aws-kms: goi kms:Decrypt.
+const AWS_KMS_ORG_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/aws-kms-org-unwrapper.ts");
 const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
 const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 // [S1.17] Ho "g11-": kha nang KY moc neo ngoai. Xem khoi chu thich cua ba quy tac g11- ben duoi.
@@ -571,15 +573,25 @@ module.exports = {
       to: { path: LOCAL_DEV_ORG_UNWRAPPER_TS },
     },
     {
+      name: "g1-khong-giai-ma-ngoai-unseal-worker-aws-kms-org-unwrapper-ts",
+      comment:
+        "[ADR-062] Chi apps/unseal-worker va unwrap.ts (mat tien cong khai cua chinh no) duoc import " +
+        "aws-kms-org-unwrapper.ts: no goi kms:Decrypt mo khoa rieng TO CHUC. Cung khuon voi " +
+        "local-dev-org-unwrapper.ts; la dich cua quy tac nay nen [ADR-062 (c)] cho no goi lenh giai ma KMS.",
+      severity: "error",
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS] },
+      to: { path: AWS_KMS_ORG_UNWRAPPER_TS },
+    },
+    {
       name: "g1-khong-giai-ma-ngoai-unseal-worker-org-open-ts",
       comment:
         "[ADR-062] org-open.ts mo phong bi v2 khi da co khoa rieng to chuc - dung chung cho moi " +
         "adapter. Chi apps/unseal-worker, unwrap.ts va cac unwrapper to chuc cua chinh goi (hom nay: " +
-        "local-dev-org-unwrapper.ts) duoc import no. org-key.ts (mat BOC) KHONG duoc liet ke: no " +
+        "local-dev-org-unwrapper.ts va aws-kms-org-unwrapper.ts) duoc import no. org-key.ts (mat BOC) KHONG duoc liet ke: no " +
         "la phia cong khai, va chieu import di tu org-open.ts SANG org-key.ts, khong nguoc lai.",
       severity: "error",
       // unwrap.ts re-export KIEU OrgKeyHandle/WrappedOrgKey; no la dich han che cua g1-...-unwrap-ts.
-      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS, LOCAL_DEV_ORG_UNWRAPPER_TS] },
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS, LOCAL_DEV_ORG_UNWRAPPER_TS, AWS_KMS_ORG_UNWRAPPER_TS] },
       to: { path: ORG_OPEN_TS },
     },
     {

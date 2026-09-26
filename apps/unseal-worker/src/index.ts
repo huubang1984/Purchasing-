@@ -44,7 +44,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { MfaRequiredError, assertFreshMfa, throwAuditedDenial } from "@trustprocure/identity";
-import type { KeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
+import type { OrgKeyHandle, OrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import {
   KEY_AGREEMENT_ALGORITHMS,
   describeEnvelope,
@@ -95,7 +95,8 @@ export const UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS = 60 * 60;
 
 export interface ExecuteUnsealInput {
   readonly unsealRequestId: string;
-  readonly unwrapper: KeyUnwrapper;
+  /** [ADR-062] Mở khoá riêng TỔ CHỨC — một lần mỗi lượt, rồi mở các khoá RFQ cục bộ. */
+  readonly unwrapper: OrgKeyUnwrapper;
   /** Ghi đè cửa sổ MFA lúc giải mã — chỉ để test đo được cả hai phía của ngưỡng. */
   readonly maxMfaAgeSeconds?: number;
 }
@@ -554,9 +555,33 @@ export async function executeUnsealRequest(
   // toán từ chính header đã được AAD ràng buộc, nên nó không nói dối được mà không hỏng tag.
   // ---------------------------------------------------------------------------------------
   const khoaRieng = new Map<KeyAgreementAlgorithm, Uint8Array>();
+  // [ADR-062] Khoá riêng TỔ CHỨC, theo phiên bản cặp khoá: mở MỘT lần mỗi lượt (một lời gọi KMS
+  // với aws-kms — ADR-009 trục 3), TRƯỚC vòng phong bì và NGOÀI try/catch từng phong bì. Mở hỏng
+  // (KMS lỗi, sai vòng khoá) thì cả lượt ném và yêu cầu mở thầu KHÔNG bị tiêu — không phải mọi
+  // phong bì rơi vào `failed` trong im lặng rồi RFQ vẫn lật sang `UNSEALED`.
+  const khoaToChuc = new Map<string, OrgKeyHandle>();
   let opened = 0;
   const failedBidVersionIds: string[] = [];
   try {
+    for (const phienBan of new Set([...theoThuatToan.values()].map((k) => k.key_version))) {
+      const { rows: capKhoa } = await client.query<{ wrapped_private_key: Buffer }>(
+        `SELECT wrapped_private_key FROM public.org_key_pairs
+          WHERE org_id OPERATOR(pg_catalog.=) $1 AND key_version OPERATOR(pg_catalog.=) $2`,
+        [orgId, phienBan],
+      );
+      const hang = capKhoa[0];
+      if (hang === undefined) {
+        throw new UnsealWorkerError(`tổ chức không có cặp khoá phiên bản ${phienBan} để mở khoá RFQ`);
+      }
+      khoaToChuc.set(
+        phienBan,
+        await input.unwrapper.openOrgKey({
+          orgId,
+          keyVersion: phienBan,
+          wrappedPrivateKey: new Uint8Array(hang.wrapped_private_key),
+        }),
+      );
+    }
     for (const pb of phongBi) {
       const byte = new Uint8Array(pb.envelope);
       let banRo: Uint8Array;
@@ -567,10 +592,9 @@ export async function executeUnsealRequest(
         if (rieng === undefined) {
           const k = theoThuatToan.get(thuatToan);
           if (k === undefined) throw new UnsealWorkerError("RFQ không có khoá cho thuật toán này");
-          rieng = await input.unwrapper.unwrap(orgId, {
-            ciphertext: new Uint8Array(k.wrapped_private_key),
-            keyVersion: k.key_version,
-          });
+          const h = khoaToChuc.get(k.key_version);
+          if (h === undefined) throw new UnsealWorkerError("không có khoá tổ chức cho phiên bản này");
+          rieng = h.unwrap({ ciphertext: new Uint8Array(k.wrapped_private_key), keyVersion: k.key_version });
           khoaRieng.set(thuatToan, rieng);
         }
         banRo = await unsealBid({
@@ -603,6 +627,7 @@ export async function executeUnsealRequest(
     // Cùng khuôn `pkcs8.fill(0)` ở `sealed-envelope/src/key-material.ts`: một lần ném giữa chừng
     // không được để lại khoá riêng RFQ nguyên vẹn trong heap.
     for (const rieng of khoaRieng.values()) rieng.fill(0);
+    for (const h of khoaToChuc.values()) h.dispose();
   }
 
   // [G4] Vế "MỞ BỌC" của mệnh đề *"mọi thao tác khoá — sinh, bọc, mở bọc, huỷ — đều sinh audit"*.

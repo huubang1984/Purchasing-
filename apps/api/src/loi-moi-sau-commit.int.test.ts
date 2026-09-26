@@ -379,7 +379,7 @@ beforeAll(async () => {
     await issueRfqKeyPair(c, orgX, {
       rfqId: rfqX,
       actorSessionId: pm.sessionId,
-      wrapper: { name: "k124", wrap: (_o: string, p: Uint8Array) => Promise.resolve({ ciphertext: p.map((b) => b ^ 0xff), keyVersion: "k124" }) },
+      orgKeys: dichVuTest().services.orgKeyProvisioner,
     });
     await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqX, pm.id, pm.sessionId]);
   });

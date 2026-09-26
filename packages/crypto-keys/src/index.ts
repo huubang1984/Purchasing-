@@ -15,3 +15,9 @@ export {
   type ProvisionedOrgKey,
 } from "./org-key.js";
 export { createLocalDevOrgKeyProvisioner } from "./local-dev-org-provisioner.js";
+// [ADR-062] Bản aws-kms của bộ sinh: `GenerateDataKeyPairWithoutPlaintext` — không trường bản rõ nào.
+export {
+  createAwsKmsOrgKeyProvisioner,
+  type AwsKmsOrgKeyProvisionerConfig,
+  type KmsSinhCapKhoa,
+} from "./aws-kms-org-provisioner.js";

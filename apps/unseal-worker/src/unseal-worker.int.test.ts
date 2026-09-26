@@ -11,7 +11,7 @@
 // depcruise quét, và sẽ KHÔNG BAO GIỜ CHẠY — tức luôn xanh.
 // =============================================================================================
 
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -22,40 +22,37 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
 import { executeUnsealRequest, UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS, UnsealWorkerError } from "./index.js";
+import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
 // ---------------------------------------------------------------------------------------------
-// BỘ BỌC / MỞ BỌC ĐỐI XỨNG CỦA RIÊNG TEST — cùng khuôn `sealed-envelope/src/key-material.int.test.ts`.
-// Adapter thật là `createLocalDevWrapper`/`createLocalDevUnwrapper` (dev) và KMS (ADR-009); cả
+// [ADR-062] BỘ SINH / MỞ CẶP KHOÁ TỔ CHỨC CỦA RIÊNG TEST (xor 0xff trên PKCS#8).
+// Adapter thật là `createLocalDevOrgKeyProvisioner`/`createLocalDevOrgUnwrapper` (dev) và KMS (ADR-062); cả
 // hai có phép đo riêng ở `packages/crypto-keys`. Ở đây thứ đang được đo là WORKER, không phải
 // phép bọc — và dùng đồ giả giữ cho phép đo ấy không phụ thuộc vào một adapter thứ ba.
 // ---------------------------------------------------------------------------------------------
-const KHOA_TEST = randomBytes(32);
 
 const boBocTest = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "doi-xung-cua-test",
-  wrap: (_orgId: string, plaintext: Uint8Array) => {
-    const iv = randomBytes(12);
-    const c = createCipheriv("aes-256-gcm", KHOA_TEST, iv);
-    const than = Buffer.concat([c.update(plaintext), c.final()]);
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     return Promise.resolve({
-      ciphertext: new Uint8Array(Buffer.concat([iv, c.getAuthTag(), than])),
+      orgId,
       keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
     });
   },
 };
 
-const boMoBocTest = {
+// [ADR-062] Mở cặp khoá tổ chức mà bộ sinh của test "bọc" bằng xor 0xff.
+const boMoBocTest = createOrgKeyUnwrapper({
   name: "doi-xung-cua-test",
-  unwrap: (_orgId: string, wrapped: { ciphertext: Uint8Array }) => {
-    const b = Buffer.from(wrapped.ciphertext);
-    const d = createDecipheriv("aes-256-gcm", KHOA_TEST, b.subarray(0, 12));
-    d.setAuthTag(b.subarray(12, 28));
-    return Promise.resolve(new Uint8Array(Buffer.concat([d.update(b.subarray(28)), d.final()])));
-  },
-};
+  moKhoaRieng: (k) => Promise.resolve(new Uint8Array(k.wrappedPrivateKey).map((b) => b ^ 0xff)),
+});
 
 let db: TestDatabase;
 let apiPool: pg.Pool;
@@ -114,7 +111,7 @@ async function taoRfqMo(): Promise<string> {
     [rfqId, uYc, sYc],
   );
   await withTenant(apiPool, orgA, async (c) => {
-    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sYc, wrapper: boBocTest });
+    await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sYc, orgKeys: boBocTest });
     await c.query(
       "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, " +
         "opened_by_session_id = $3 WHERE id = $1",

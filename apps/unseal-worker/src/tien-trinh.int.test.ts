@@ -305,7 +305,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       const runnerWorker = createUnsealWorkerRunner(
         unsealPool,
         {
-          unwrapper: { name: "x", unwrap: () => Promise.reject(new Error("khong goi toi")) },
+          unwrapper: { name: "x", openOrgKey: () => Promise.reject(new Error("khong goi toi")) },
           alertSink: { name: "x", deliver: () => Promise.resolve() },
           auditPool: db.poolAs("app_unseal"),
           onJobFailure: () => undefined,
@@ -331,7 +331,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       createUnsealWorkerRunner(
         unsealPool,
         {
-          unwrapper: { name: "x", unwrap: () => Promise.reject(new Error("khong goi toi")) },
+          unwrapper: { name: "x", openOrgKey: () => Promise.reject(new Error("khong goi toi")) },
           alertSink: { name: "x", deliver: () => Promise.resolve() },
           auditPool: unsealPool,
           onJobFailure: () => undefined,

@@ -47,7 +47,7 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { createLocalDevWrapper, MasterKeyRing } from "@trustprocure/crypto-keys";
+import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
@@ -203,7 +203,7 @@ async function chinh(): Promise<void> {
     await withTenant(pool, org, async (c) => {
       // Cặp khoá RFQ ra đời ở đây và khoá riêng được BỌC ngay — `issueRfqKeyPair` trả về mọi thứ
       // trừ nó (ADR-019). Script này không bao giờ cầm một khoá riêng dạng rõ.
-      await issueRfqKeyPair(c, org, { rfqId: rfq, actorSessionId: phienGieo, wrapper: createLocalDevWrapper(vong) });
+      await issueRfqKeyPair(c, org, { rfqId: rfq, actorSessionId: phienGieo, orgKeys: createLocalDevOrgKeyProvisioner(vong) });
       await c.query(
         "UPDATE public.rfq_packages SET status = 'OPEN', opened_at = pg_catalog.now(), opened_by = $2, opened_by_session_id = $3 " +
           "WHERE id OPERATOR(pg_catalog.=) $1",

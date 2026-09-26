@@ -916,6 +916,11 @@ describe("phủ RLS", () => {
       // [S1.6] BA cot cua `rfq_invitations`, khong hon: worker phai di tu `vendor_bids` toi
       // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
       // `link_channel`, `status` KHONG duoc cap — worker khong co viec gi voi danh tinh NCC.
+      // [ADR-062 / 063] `org_key_pairs.wrapped_private_key`: khoá riêng tổ chức ĐÃ BỌC, worker mở
+      // một lần mỗi lượt mở thầu. `public_key` vắng — worker không bọc gì cả.
+      { bang: "org_key_pairs", cot: "key_version" },
+      { bang: "org_key_pairs", cot: "org_id" },
+      { bang: "org_key_pairs", cot: "wrapped_private_key" },
       // [S1.108 / 059] `app_unseal` đọc vòng BAFO để biết nó đang mở phong bì của VÒNG NÀO.
       // Hai cột VẮNG là cố ý: `opened_by` và `opened_by_session_id` — vai giải mã không cần
       // danh tính người mở vòng, và nguyên tắc của `008` là một quyền cấp "cho chắc" là một
@@ -1126,6 +1131,11 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "mfa_reset_requests", cot: "requested_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "mfa_reset_requests", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "mfa_reset_requests", cot: "user_id", quyen: "INSERT" },
+      // [ADR-062 / 063] Cặp khoá tổ chức: CHỈ INSERT — xoay là thêm phiên bản; `created_at` do CSDL đặt.
+      { grantee: "app_api", bang: "org_key_pairs", cot: "key_version", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_key_pairs", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_key_pairs", cot: "public_key", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_key_pairs", cot: "wrapped_private_key", quyen: "INSERT" },
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
       // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.
@@ -1870,7 +1880,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
   return Object.fromEntries([
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
-      "mfa_reset_requests", "org_procurement_policies", "organizations", "otp_rate_limits",
+      "mfa_reset_requests", "org_key_pairs", "org_procurement_policies", "organizations",
+      "otp_rate_limits",
       "outbox_jobs", "rfq_approvals",
       // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
       // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có

@@ -36,9 +36,9 @@ export {
   type RevokeRfqKeyMaterialInput,
   type RfqPublicKeyRecord,
 } from "./key-material.js";
-// Chuyển tiếp KIỂU của bộ bọc khoá, không chuyển tiếp một cài đặt nào. Nhờ dòng này,
-// `packages/rfq` khai được tham số `keyWrapper` mà KHÔNG cần một cạnh phụ thuộc nào tới
+// Chuyển tiếp KIỂU của bộ sinh cặp khoá tổ chức (ADR-062; trước đó là bộ bọc khoá), không chuyển
+// tiếp một cài đặt nào. Nhờ dòng này, `packages/rfq` khai được tham số `orgKeys` mà KHÔNG cần một cạnh phụ thuộc nào tới
 // `@trustprocure/crypto-keys` — một gói ít cạnh tới crypto-keys hơn là một gói ít đường tới
 // khoá hơn. Đây là `export type`, nên nó không tồn tại lúc chạy và không xuất hiện ở danh sách
 // trắng barrel.
-export type { KeyWrapper } from "@trustprocure/crypto-keys";
+export type { OrgKeyProvisioner } from "@trustprocure/crypto-keys";

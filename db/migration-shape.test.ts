@@ -462,6 +462,8 @@ describe("hình dạng file migration", () => {
       "mfa_credentials",
       // [S1.12 / 040] yêu cầu đặt lại TOTP — bảng tenant thứ 29.
       "mfa_reset_requests",
+      // [ADR-062 / 063] Cặp khoá của tổ chức — chỉ-ghi-thêm bằng quyền, policy khách ĐÓNG HẲN.
+      "org_key_pairs",
       "org_procurement_policies",
       "organizations",
       "otp_rate_limits",

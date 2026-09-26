@@ -11,7 +11,7 @@
 //   [ADR-017] đường khách KHÔNG chạm `rfq_budgets`: đo bằng phản hồi VÀ bằng SQL dưới phiên khách.
 //   [028]     đối chứng: policy đóng của 027 làm `publicKeys` về rỗng; 028 là thứ mở nó.
 // ==============================================================================================
-import { randomBytes } from "node:crypto";
+import {generateKeyPairSync, randomBytes} from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -33,9 +33,17 @@ const NGAN_SACH = "987654321.00";
 const GIA_THAT = JSON.stringify({ unitPrice: 1234567891, currency: "VND" });
 
 const boBocTest = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "doi-xung-cua-test",
-  wrap: (_orgId: string, plaintext: Uint8Array) =>
-    Promise.resolve({ ciphertext: plaintext.map((b) => b ^ 0xff), keyVersion: "test-v1" }),
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    return Promise.resolve({
+      orgId,
+      keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+    });
+  },
 };
 
 let db: TestDatabase;
@@ -165,7 +173,7 @@ beforeAll(async () => {
   );
   await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqA, uA, sA]);
   await withTenant(apiPool, orgA, async (c) => {
-    await issueRfqKeyPair(c, orgA, { rfqId: rfqA, actorSessionId: sA, wrapper: boBocTest });
+    await issueRfqKeyPair(c, orgA, { rfqId: rfqA, actorSessionId: sA, orgKeys: boBocTest });
     await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqA, uA, sA]);
   });
 

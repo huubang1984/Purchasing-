@@ -41,6 +41,7 @@ import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
 import { executeUnsealRequest } from "./index.js";
+import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -70,11 +71,11 @@ const GIA_BAFO = ["911000000.00", "922000000.00"] as const;
 const MOI_GIA: readonly string[] = [...NHA_CUNG_CAP.map((n) => n.gia), GIA_SUA_LAI, ...GIA_BAFO];
 
 /** Bộ mở bọc CẶP với `rfqKeyWrapper` của `dichVuTest()` (xor 0xff) — chỉ worker cầm. */
-const boMoBoc = {
+// [ADR-062] Mở cặp khoá tổ chức mà bộ sinh của test "bọc" bằng xor 0xff.
+const boMoBoc = createOrgKeyUnwrapper({
   name: "doi-xung-cua-test",
-  unwrap: (_orgId: string, wrapped: { ciphertext: Uint8Array }) =>
-    Promise.resolve(wrapped.ciphertext.map((b) => b ^ 0xff)),
-};
+  moKhoaRieng: (k) => Promise.resolve(new Uint8Array(k.wrappedPrivateKey).map((b) => b ^ 0xff)),
+});
 
 let db: TestDatabase;
 let apiPool: pg.Pool;
