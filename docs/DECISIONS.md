@@ -5788,7 +5788,7 @@ mang người của lần điều phối ĐANG CHẠY, nên sau một lần đi�
 dự án chọn **NHẬN** lỗ ấy ngày 2026-09-22 sau khi ba hình dạng đóng được cân, và ô J3 khai phạm vi
 HẸP HƠN mệnh đề — khoản **233**.
 
-**[S1.124 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
+**[S1.126 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
 ADR-043, và ngày 2026-09-26 chủ dự án chọn hình dạng ⒝ trong ba hình dạng đã cân: một bảng LỊCH SỬ
 ĐIỀU PHỐI. `064` dựng `unseal_dispatch_history` — chỉ-ghi-thêm bằng quyền, ghi bởi một trigger
 `AFTER UPDATE` trên `unseal_requests` ở MỌI lần cặp người-phiên điều phối đổi — và thay thân
@@ -6445,12 +6445,83 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   trỏ tới nơi web sẽ chạy. Đó là lát cắt kế.
 - Chi phí ước lượng khi chạy: RDS ~30 USD/tháng, ALB ~20, Fargate (1 api 0,5 vCPU + 1 worker 0,25 vCPU)
   ~25, 6 interface endpoint ở 1 AZ ~45 (≈ 90 ở 2 AZ).
+
+## ADR-067 — Pipeline deploy bấm tay: build không quyền AWS, migrate trước api, worker duyệt riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-026 §4, **ADR-062**, ADR-066
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
+   GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
+   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy.
+2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
+   ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
+   `api` (role `tp-deploy`) và `worker` (role `tp-deploy-worker`) chỉ chạy mã của kho ở cùng commit.
+3. **Thứ tự của `api`:** đẩy `tp-migrate` và `tp-api` (thẻ = SHA commit, ECR bất biến ⇒ chạy lại dùng lại
+   image đã có) → đăng ký bản task definition mới **chỉ đổi image, ghim digest** → chạy task migrate một lần,
+   chờ dừng, **exit 0 mới đi tiếp** → cập nhật service `tp-api`, chờ ổn định, và chỉ ĐẠT khi service chạy
+   đúng bản vừa đăng ký (circuit breaker rollback cũng "ổn định", nhưng trên bản cũ).
+4. **Worker:** job riêng, environment riêng, chỉ chạy khi người bấm chọn `worker` hoặc `ca-hai`; với
+   `ca-hai` nó chạy SAU `api` (migrate xong trước). Đăng ký trong CHÍNH họ `tp-unseal-worker` qua
+   `UpdateService` — không `RunTask`, nên không bắn cảnh báo ⑵ của stack 60; thay image trong họ worker là
+   rủi ro còn lại đã nêu ở stack 60, và đường ấy đi qua duyệt tay.
+5. **Kiểm hình dạng trước khi nhân bản:** bản task definition mới chép từ bản ACTIVE mới nhất của họ; nếu
+   bản ấy mang task role khác role mong đợi, hoặc không đúng một container cùng tên họ, pipeline dừng.
+   Mạng của task migrate (subnet, security group) là biến environment `TP_SUBNETS_UNG_DUNG`,
+   `TP_SG_MIGRATE` — output `bien_github` của stack 90; role deploy không có quyền EC2 để tự dò.
+
+### Hệ quả, nói thẳng
+
+- **Chưa chạy thật:** cần stack 30/90 đã apply và hai environment đã tạo trên GitHub. `deploy/trien-khai.sh`
+  được đo với `aws`/`docker` giả (12 ca: đẩy mới, dùng lại, thẻ sai, đăng ký, role sai, image ngoài
+  registry, migrate đạt/hỏng, subnet sai, cập nhật đạt, rollback, chờ quá hạn).
+- **Lần đầu vẫn tay:** stack 90 cần image có sẵn để tạo task definition đầu tiên (README, bước 4).
+- Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
+  người vận hành đọc `/tp/migrate` bằng tay.
+- `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
+
+## ADR-068 — `apps/web` ở prod: chỉ phục vụ tĩnh sau cùng ALB, ALB định tuyến `/api/*` thẳng tới api
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-044**, ADR-020, ADR-066, ADR-067
+
+### Bối cảnh
+
+ADR-044 dựng `apps/web` cho lát cắt demo: một máy chủ tĩnh TỰ chuyển tiếp `/api/*` sang `apps/api`, và nói thẳng *"`apps/web`
+không được đứng trước một cụm sản xuất — triển khai thật dùng một reverse proxy của hạ tầng"*: bộ chuyển tiếp thấy cookie phiên,
+và nó không chuyển `X-Forwarded-For` nên mọi người dùng chung một ô hạn mức. ADR-066 để lại `apps/web` chưa triển khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Một tên miền** (`ten_mien` của stack 90) cho cả trang lẫn `/api/*`: trang gọi `fetch("/api…")` cùng origin, nên không CORS,
+   cookie `__Host-` đi đúng origin. `TRUSTPROCURE_PUBLIC_BASE_URL` và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ tên
+   miền ấy — không còn hai biến Terraform riêng để khai lệch.
+2. **ALB là reverse proxy:** luật listener `/api/*` → target group `tp-api`, viết lại đường `^/api/(.*)$` → `/$1` (cùng phép bỏ
+   tiền tố của bộ chuyển tiếp demo); mặc định → target group `tp-web`. Api thấy ALB làm proxy tin cậy (`TRUSTED_PROXIES` = CIDR
+   subnet công khai), nên hạn mức theo người gọi hoạt động đúng.
+3. **`apps/web` chế độ chỉ tĩnh** — `TRUSTPROCURE_WEB_STATIC_ONLY=1`: `/api/*` lọt tới nó ra 404, không gọi upstream nào. Hai chế
+   độ loại trừ nhau, và **`NODE_ENV=production` mà không chỉ tĩnh là lỗi khởi động** — câu "không đứng trước cụm sản xuất" của
+   ADR-044 thành một hàng rào có test, không còn là một dòng tài liệu.
+4. **Service `tp-web`:** Fargate 0,25 vCPU, security group riêng (vào 8090 chỉ từ ALB; ra chỉ VPC endpoint và S3 để kéo image,
+   đẩy log — **không** tới CSDL), **không task role**. Image đích `web` của `deploy/Dockerfile`: `apps/web` và mã nguồn cửa trình
+   duyệt của `packages/sealed-envelope`, không phụ thuộc nào. Health check `/nop-thau`.
+5. **Pipeline (ADR-067):** job `api` đẩy `tp-web` và cập nhật service SAU `tp-api`; `trien-khai.sh dang-ky … -` đòi họ `tp-web`
+   KHÔNG mang task role — một bản bị gắn role thì dừng.
+
+### Hệ quả, nói thẳng
+
+- **Viết lại đường của ALB** (`transform` `url-rewrite`) mới được `terraform validate` với provider 6.66 — chưa chạy trên ALB thật.
+  Nếu vùng không nhận, phương án lùi là để api phục vụ thêm tiền tố `/api`, không phải quay lại bộ chuyển tiếp.
+- `/health` của api không còn công khai ở gốc; đường kiểm là `/api/health`.
+- Bộ chuyển tiếp của ADR-044 vẫn còn cho demo cục bộ (`pnpm web:dev`), và vẫn mang đúng những cái giá ADR ấy nêu.
+- Trang vẫn `cache-control: no-store` và nạp tệp một lần lúc khởi động — đổi trang = deploy lại, chấp nhận được khi deploy đã là
+  một nút bấm.
 ---
 
-## ADR-067 — Nguồn thời gian của hạn nộp là đồng hồ CSDL, và từ nay nó được KHAI, được CANH, và để lại dấu cho người bị chặn
+## ADR-069 — Nguồn thời gian của hạn nộp là đồng hồ CSDL, và từ nay nó được KHAI, được CANH, và để lại dấu cho người bị chặn
 
 **Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-005, ADR-060, ADR-062, khoản **196**, khoản 238.
-**ADR-065** (SES) và **ADR-066** (ECS Fargate) do PR #132 và PR #133 chốt; ADR này là số kế tiếp.
+**ADR-065** đến **ADR-068** do phiên hạ tầng chốt (SES, ECS Fargate, pipeline deploy, …); ADR này là số kế tiếp.
 
 ### Bối cảnh — một phép đo, và thứ nó cho thấy
 

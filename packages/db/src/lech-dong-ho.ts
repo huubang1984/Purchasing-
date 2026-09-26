@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [khoản 196 / ADR-067 phần 1] CANH LỆCH GIỮA ĐỒNG HỒ CSDL VÀ ĐỒNG HỒ TIẾN TRÌNH
+// [khoản 196 / ADR-069 phần 1] CANH LỆCH GIỮA ĐỒNG HỒ CSDL VÀ ĐỒNG HỒ TIẾN TRÌNH
 //
 // Hạn nộp thầu được phán xử bằng `now()` của CSDL (C1, `bid_kiem_han_nop`), và các trigger đóng
 // RFQ của 011/022/058/059 cũng thế. Ngày 2026-09-20 đồng hồ container Postgres chậm 6 giờ 22 phút
@@ -29,7 +29,7 @@
 
 import type pg from "pg";
 
-/** Ngưỡng mặc định — ADR-067: hai giây, cấu hình được qua `TRUSTPROCURE_CLOCK_SKEW_MAX_MS`. */
+/** Ngưỡng mặc định — ADR-069: hai giây, cấu hình được qua `TRUSTPROCURE_CLOCK_SKEW_MAX_MS`. */
 export const LECH_DONG_HO_TOI_DA_MS_MAC_DINH = 2000;
 /** Nhịp đo lại mặc định lúc chạy — cấu hình được qua `TRUSTPROCURE_CLOCK_SKEW_CHECK_MS`. */
 export const CHU_KY_CANH_DONG_HO_MS_MAC_DINH = 60_000;
@@ -68,7 +68,7 @@ export class LechDongHoError extends Error {
     super(
       `đồng hồ CSDL lệch ${moTaLech(lechMs)} so với đồng hồ tiến trình (khứ hồi ${Math.round(khuHoiMs)} ms, ` +
         `ngưỡng ${nguongMs} ms). Hạn nộp thầu được phán xử bằng now() của CSDL (C1), nên tiến trình KHÔNG lên ` +
-        "khi hai đồng hồ không khớp: đồng bộ lại nguồn thời gian của máy CSDL hay của máy này (ADR-067), " +
+        "khi hai đồng hồ không khớp: đồng bộ lại nguồn thời gian của máy CSDL hay của máy này (ADR-069), " +
         "rồi khởi động lại.",
     );
     this.name = "LechDongHoError";

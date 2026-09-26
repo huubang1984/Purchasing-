@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 065 — [khoản 196 / ADR-067 phần 2] LẦN NỘP BỊ CHẶN VÌ HẠN MANG GIỜ CSDL LÚC PHÁN XỬ CÙNG HẠN
+-- 065 — [khoản 196 / ADR-069 phần 2] LẦN NỘP BỊ CHẶN VÌ HẠN MANG GIỜ CSDL LÚC PHÁN XỬ CÙNG HẠN
 -- =============================================================================================
 -- C1 (`bid_kiem_han_nop`, 018 → 059) phán xử hạn nộp bằng `now()` của CHÍNH giao dịch ghi — và đó
 -- vẫn là quyết định đúng (ADR-005): `now()` cũng là giá trị `submitted_at` ghi xuống và đi vào

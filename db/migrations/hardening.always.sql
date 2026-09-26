@@ -5970,7 +5970,7 @@ $ham$;
     -- ---- [S1.110 / S2.6] J3 ve 2+3 va J5 ve NOI DUNG — nguoi de xuat trao thau (061) ----
     -- Ghim vi day la lop cuong che theo HANH VI DA XAY RA, khong theo quyen duoc cap: mot
     -- `CREATE OR REPLACE` thay than nay bang `RETURN NEW` mo lai dung bo ba ma J3 cam, va
-    -- khong mot cong nao khac cua kho thay dieu do. [S1.124 / khoan 233] Tu `064` ve *nguoi
+    -- khong mot cong nao khac cua kho thay dieu do. [S1.126 / khoan 233] Tu `064` ve *nguoi
     -- dieu phoi* doc `unseal_dispatch_history` — moi nguoi TUNG dieu phoi, khong chi lan dang chay.
     ARRAY[
       $q$hàm + trigger award_kiem_de_xuat (061, thân từ 064)$q$,
@@ -6093,7 +6093,7 @@ $ham$;
       $q$quyền sở hữu hàm public.award_kiem_de_xuat() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- ---- [S1.124 / khoan 233] Lop GHI lich su dieu phoi — nguon du lieu cua J3 ve 3 (064) ----
+    -- ---- [S1.126 / khoan 233] Lop GHI lich su dieu phoi — nguon du lieu cua J3 ve 3 (064) ----
     -- Ghim vi J3 ve 3 chi manh bang lop ghi cua no: mot `CREATE OR REPLACE` thay than nay bang
     -- `RETURN NULL`, hay mot trigger bi tat, lam bang lich su ngung lon va nguoi dieu phoi lan
     -- dau lai de xuat trao thau duoc — dung lo cua khoan 233, va J3 van XANH vi no chi doc bang.

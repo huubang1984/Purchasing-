@@ -1518,7 +1518,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // (sổ nợ 54) và danh sách loại trừ nay RỖNG có chủ đích: một `CREATE OR REPLACE` thay ba
     // thân này bằng `RETURN NEW` mở lại đúng bộ ba mà J3 cấm, hạ `CHU_KY_CAN` về 0, và tháo
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
-    // [S1.124 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
+    // [S1.126 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
     { ham: "award_kiem_de_xuat", migration: "064_lich_su_dieu_phoi.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
@@ -1530,7 +1530,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
     { ham: "bid_kiem_vong_bafo", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
-    // [S1.124 / khoản 233] Lớp GHI của lịch sử điều phối — nguồn dữ liệu duy nhất của J3 vế 3. Một
+    // [S1.126 / khoản 233] Lớp GHI của lịch sử điều phối — nguồn dữ liệu duy nhất của J3 vế 3. Một
     // thân `RETURN NULL` làm bảng ngừng lớn và người điều phối lần đầu lại đề xuất được.
     { ham: "unseal_ghi_lich_su_dieu_phoi", migration: "064_lich_su_dieu_phoi.sql", trigger: ["unseal_requests_ghi_lich_su_dieu_phoi"] },
     { ham: "chinh_sach_phien_ban_tang_dan", migration: "035_phien_ban_chinh_sach_lien_tuc.sql", trigger: ["org_procurement_policies_phien_ban_tang_dan"] },

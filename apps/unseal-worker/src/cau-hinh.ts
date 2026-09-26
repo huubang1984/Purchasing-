@@ -67,7 +67,7 @@ export interface CauHinhWorkerChung {
   readonly dbPoolMax: number;
   /** Nhịp poll của runner, ms. */
   readonly pollIntervalMs: number;
-  /** [khoản 196 / ADR-067] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình, ms — cùng biến, cùng miền với `apps/api`. */
+  /** [khoản 196 / ADR-069] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình, ms — cùng biến, cùng miền với `apps/api`. */
   readonly lechDongHoToiDaMs: number;
   /** [khoản 196] Nhịp đo lại lúc chạy, ms. */
   readonly chuKyCanhDongHoMs: number;

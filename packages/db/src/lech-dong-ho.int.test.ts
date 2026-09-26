@@ -1,4 +1,4 @@
-// [khoản 196 / ADR-067 phần 1] Phép đo lệch đồng hồ trên PostgreSQL THẬT, dưới vai ứng dụng.
+// [khoản 196 / ADR-069 phần 1] Phép đo lệch đồng hồ trên PostgreSQL THẬT, dưới vai ứng dụng.
 //
 // Test thuần (`lech-dong-ho.test.ts`) đo số học của phép đo; tệp này đo rằng CÂU ĐỌC chạy được dưới
 // `app_api` và `app_unseal` — hai vai của hai tiến trình gọi nó — và rằng một độ lệch thật đi qua

@@ -967,7 +967,7 @@ const DANH_SACH_TRANG_AUDIT = [
 // một đường mở kết nối "tiện tay" — `g9-api-routes-khong-cham-tenancy-va-db` cấm handler của
 // `apps/api` chạm gói này HOÀN TOÀN, kể cả qua cửa.
 const DANH_SACH_TRANG_DB = [
-  // [khoản 196 / ADR-067] Canh lệch đồng hồ CSDL ↔ tiến trình: hai hằng mặc định, một lớp lỗi mang TÊN riêng (dòng log khởi động
+  // [khoản 196 / ADR-069] Canh lệch đồng hồ CSDL ↔ tiến trình: hai hằng mặc định, một lớp lỗi mang TÊN riêng (dòng log khởi động
   // gọi đúng tên sự cố), phép đo, đường khởi động (ném), đường định kỳ (gọi lại), và bộ định dạng dấu của độ lệch. Chỉ ĐỌC
   // `clock_timestamp()` — không ghi, không chạm quyền.
   "CHU_KY_CANH_DONG_HO_MS_MAC_DINH",

@@ -75,7 +75,7 @@ export interface CauHinhApiChung {
    */
   readonly afterCommitTimeoutMs: number | undefined;
   /**
-   * [khoản 196 / ADR-067] Ngưỡng lệch giữa đồng hồ CSDL và đồng hồ tiến trình, ms
+   * [khoản 196 / ADR-069] Ngưỡng lệch giữa đồng hồ CSDL và đồng hồ tiến trình, ms
    * (`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, 100–60 000; mặc định 2 000). Vượt lúc khởi động ⇒ tiến trình không
    * lên (`LechDongHoError`); vượt lúc chạy ⇒ một dòng log cảnh báo.
    */

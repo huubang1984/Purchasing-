@@ -107,7 +107,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     }
   }, 60_000);
 
-  // [khoản 196 / ADR-067 phần 1] Cùng hai vế với `apps/api/src/composition.int.test.ts`: lúc KHỞI
+  // [khoản 196 / ADR-069 phần 1] Cùng hai vế với `apps/api/src/composition.int.test.ts`: lúc KHỞI
   // ĐỘNG lệch quá ngưỡng ⇒ không lên; lúc CHẠY đồng hồ trôi ⇒ một dòng log cảnh báo có tên, không dừng.
   // Đồng hồ trôi được dựng ở phía TIẾN TRÌNH (đồng hồ tiêm) — đồng hồ CSDL không vặn được từ test.
   it("⑴ [khoản 196] đồng hồ tiến trình lệch 6 giờ 22 phút so với CSDL ⇒ `batDau()` NÉM LechDongHoError, tiến trình không lên", async () => {

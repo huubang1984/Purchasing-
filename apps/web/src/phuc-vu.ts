@@ -49,8 +49,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export interface TuyChonWeb {
-  /** Origin của `apps/api` — mọi `/api/*` đi tới đây. */
-  readonly apiOrigin: string;
+  /** Origin của `apps/api` — mọi `/api/*` đi tới đây. `null` = chỉ tĩnh (ADR-068): `/api/*` ra 404. */
+  readonly apiOrigin: string | null;
   /** Cặp PEM đã ĐỌC (không phải đường dẫn): `null` = HTTP. */
   readonly tls: { readonly cert: string; readonly key: string } | null;
 }
@@ -84,7 +84,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * CẦU của `browser.ts` và `cua-trinh-duyet.test.ts` đòi nó TRÙNG KHỚP cây import thật — thêm một
  * tên lạ vào đó làm cổng ấy đỏ, đúng như nó phải thế. Hai gốc khác nhau thì hai lời khai.
  *
- * [khoản 196 / ADR-067 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
+ * [khoản 196 / ADR-069 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
  */
 export const MODULE_WEB = ["so-tien", "dong-ho-may-chu"] as const;
 
@@ -248,7 +248,14 @@ export function taoWebServer(tuyChon: TuyChonWeb): Server {
   const xuLy = (req: IncomingMessage, res: ServerResponse): void => {
     const duong = (req.url ?? "/").split("?")[0] ?? "/";
     if (duong === "/api" || duong.startsWith("/api/")) {
-      void chuyenTiep(req, res, tuyChon.apiOrigin).catch(() => {
+      // [ADR-068] Chỉ tĩnh: reverse proxy định tuyến `/api/*` trước khi tới đây; một yêu cầu lọt tới là cấu hình
+      // hạ tầng sai, và trả 404 thay vì đoán một upstream.
+      const apiOrigin = tuyChon.apiOrigin;
+      if (apiOrigin === null) {
+        traLoi(res, 404, JSON.stringify({ error: "khong co" }), "application/json; charset=utf-8");
+        return;
+      }
+      void chuyenTiep(req, res, apiOrigin).catch(() => {
         if (!res.headersSent) traLoi(res, 502, JSON.stringify({ error: "khong goi duoc api" }), "application/json; charset=utf-8");
       });
       return;

@@ -69,7 +69,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       const items = await listRfqItems(ctx.client, ctx.orgId, ctx.rfqId);
       const khoa = await getRfqPublicKeys(ctx.client, ctx.orgId, ctx.rfqId);
       const vongBafo = await docVongBafoKhach(ctx.client, ctx.orgId, ctx.rfqId);
-      // [khoản 196 / ADR-067 phần 3] Giờ MÁY CHỦ — đồng hồ của CSDL, tức đúng nguồn mà C1 phán xử hạn
+      // [khoản 196 / ADR-069 phần 3] Giờ MÁY CHỦ — đồng hồ của CSDL, tức đúng nguồn mà C1 phán xử hạn
       // nộp — ở dạng chính tắc của biên nhận. `clock_timestamp()` chứ không `now()`: trang nộp thầu
       // đo độ lệch bằng điểm giữa khứ hồi, nên nó cần giờ LÚC CÂU CHẠY, không giờ lúc giao dịch mở.
       // Trang đếm ngược theo độ lệch ấy — không theo đồng hồ máy người dùng trần.
@@ -127,7 +127,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
           signer: ctx.services.receiptSigner,
         });
       } catch (loi) {
-        // [khoản 196 / ADR-067 phần 2] Lần chặn VÌ HẠN đi đường TRẢ VỀ, không ném: giao dịch còn lành
+        // [khoản 196 / ADR-069 phần 2] Lần chặn VÌ HẠN đi đường TRẢ VỀ, không ném: giao dịch còn lành
         // và đang mang hàng sổ `BID_DEADLINE_DENIED` (xem `NopQuaHanError`), nên bộ điều phối COMMIT nó.
         // Ném ở đây thì giao dịch rollback và hàng sổ đi theo — đúng thứ khoản 196 đo được là thiếu.
         // Hai dấu thời gian là thứ người bị chặn đối chiếu với đồng hồ của mình; không mang gì khác.

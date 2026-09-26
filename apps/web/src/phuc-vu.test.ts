@@ -254,6 +254,24 @@ describe("bộ chuyển tiếp", () => {
   });
 });
 
+describe("[ADR-068] chế độ chỉ tĩnh — sau ALB", () => {
+  it("`/api/*` ra 404 và KHÔNG gọi upstream nào; trang tĩnh vẫn phục vụ", async () => {
+    const truoc = daNhan.length;
+    const tinh = taoWebServer({ apiOrigin: null, tls: null });
+    await new Promise<void>((xong) => tinh.listen(0, "127.0.0.1", xong));
+    const goc = `http://127.0.0.1:${(tinh.address() as AddressInfo).port}`;
+    for (const duong of ["/api", "/api/guest/session"]) {
+      const res = await fetch(`${goc}${duong}`, { method: "POST", headers: { cookie: "a=b" }, body: "{}" });
+      expect(res.status, duong).toBe(404);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    const trang = await fetch(`${goc}/nop-thau`);
+    expect(trang.status).toBe(200);
+    expect(daNhan.length).toBe(truoc);
+    await new Promise<void>((xong) => tinh.close(() => xong()));
+  });
+});
+
 // ==============================================================================================
 // [S1.107 / lượt soi ngang 77 — ③] LUẬT CẤM SINK HTML PHẢI ĐỎ THẬT
 //
