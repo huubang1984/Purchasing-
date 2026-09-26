@@ -1,7 +1,7 @@
 -- =============================================================================================
--- 067 — [S1.137 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
+-- 067 — [S1.140 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
 -- =============================================================================================
--- ĐO (lượt soi hình dạng S3 — `evidence/security-reviews.md` §S1.136 mục 5, phép đo M3): một gói
+-- ĐO (lượt soi hình dạng S3 — `evidence/security-reviews.md` §S1.139 mục 5, phép đo M3): một gói
 -- cần phê duyệt kép, hai chữ ký, mở, rồi gia hạn hai lần. Lần một qua; lần hai bị từ chối
 -- *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*. Gói dưới ngưỡng gia hạn bao
 -- nhiêu lần cũng qua.
@@ -36,7 +36,7 @@ CREATE OR REPLACE FUNCTION public.rfq_kiem_chuyen_trang_thai() RETURNS trigger
 AS $ham$
 DECLARE
   -- `PENDING_APPROVAL->DRAFT` là cạnh của vòng sửa C-1 (`011`): sau C-1, hạng mục chỉ sửa được ở
-  -- DRAFT, nên phải có đường quay lại. [S1.137 / khoản 242 ⑵] Cạnh ấy KHÔNG xoá chữ ký nào. Bản
+  -- DRAFT, nên phải có đường quay lại. [S1.140 / khoản 242 ⑵] Cạnh ấy KHÔNG xoá chữ ký nào. Bản
   -- trước viết rằng nó xoá mọi chữ ký bằng một "trigger dưới" — trigger ấy chưa bao giờ được dựng,
   -- và `011` C-1 chọn đúng điều ngược lại: chữ ký cũ vô hiệu bằng BĂM, hàng cũ ở lại làm dấu vết.
   --
@@ -151,7 +151,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- [S1.137 / khoản 240] Điều kiện để MỞ chỉ được hỏi ở CẠNH vào OPEN, cùng cách vế (g). Bản `061`
+  -- [S1.140 / khoản 240] Điều kiện để MỞ chỉ được hỏi ở CẠNH vào OPEN, cùng cách vế (g). Bản `061`
   -- hỏi ở MỌI câu UPDATE trên gói đang OPEN; băm nội dung có `deadline_at` còn trigger này đọc hàng
   -- CŨ, nên lần gia hạn THỨ HAI của một gói cấp kép bị từ chối như thể thiếu chữ ký. Gia hạn không
   -- đòi ký lại (spec S0+S1 §4.4). Ở cạnh vào OPEN, phép đếm TRÊN NỘI DUNG HIỆN TẠI giữ nguyên.

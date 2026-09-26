@@ -45,7 +45,7 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 // REPLACE` — trích nguyên thân đang sống bằng script rồi CỘNG vào, và kiểm bằng phần tử mảng
 // CÓ NHÁY (`'%''EVALUATING->AWARDED''%'`) hay bằng hành vi, chứ đừng bằng một chuỗi con trần.
 //
-// [S1.137 / khoản 240] LẦN THỨ NĂM, và lần đầu hai thứ tệp này đọc TÁCH khỏi nhau. `067` viết lại
+// [S1.140 / khoản 240] LẦN THỨ NĂM, và lần đầu hai thứ tệp này đọc TÁCH khỏi nhau. `067` viết lại
 // thân hàm — nên mang lại nguyên khối `CANH_HOP_LE` — mà KHÔNG dựng lại `rfq_packages_status_check`.
 // Một con trỏ chung cho cả hai sẽ đọc bảng cạnh ở một bản đã chết, hoặc tìm tập đóng ở một tệp
 // không có nó. Hai con trỏ, mỗi cái theo quy tắc *migration CUỐI CÙNG* của thứ nó đọc.

@@ -610,7 +610,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
 });
 
 // =============================================================================================
-// [S1.137 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
+// [S1.140 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
 //
 // Tới `061`, khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy mỗi khi `NEW.status = 'OPEN'`
 // mà không hỏi `OLD.status` — tức chạy lại ở MỌI câu UPDATE trên một gói đang OPEN. Băm nội dung
@@ -622,7 +622,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
 // và không đòi ký lại. `067` đếm chữ ký ở ĐÚNG cạnh vào OPEN; ba ca dưới đo bản sửa, vế dương còn
 // nguyên của D2, và đột biến trả về hình dạng cũ.
 // =============================================================================================
-describe("[INV-D2] [S1.137 / khoản 240] chữ ký D2 chỉ được đếm ở cạnh mở gói — gói cấp kép gia hạn được nhiều lần", () => {
+describe("[INV-D2] [S1.140 / khoản 240] chữ ký D2 chỉ được đếm ở cạnh mở gói — gói cấp kép gia hạn được nhiều lần", () => {
   // Vế cạnh của `067`, nguyên văn. Đột biến dưới thay đúng chuỗi này.
   const VE_CANH = "IF NEW.status = 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status THEN";
 

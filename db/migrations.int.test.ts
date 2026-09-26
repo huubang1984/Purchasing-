@@ -1558,7 +1558,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // phuc hoi ban `059` len tren, va mot phep tu kiem bang chuoi con `%EVALUATING->AWARDED%`
     // tra CO vi no khop mot CHU THICH. CHINH PHEP KIEM NAY la thu bat duoc — no so THAN, khong
     // so mot chuoi con.
-    // [S1.137 / khoản 240] `067` định nghĩa lại thân (khối "điều kiện để mở" chỉ chạy ở CẠNH vào
+    // [S1.140 / khoản 240] `067` định nghĩa lại thân (khối "điều kiện để mở" chỉ chạy ở CẠNH vào
     // OPEN), nên con trỏ dời sang `067` theo cùng quy tắc *migration CUỐI CÙNG*. Thân `067` được
     // TRÍCH từ `061` bằng script rồi đổi đúng hai chỗ — bài học của chính khối chú thích ngay trên.
     { ham: "rfq_kiem_chuyen_trang_thai", migration: "067_dem_chu_ky_o_canh_mo_goi.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
