@@ -471,7 +471,7 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       "audit_chain_anchors:app_api:SELECT",
       "audit_chain_anchors:app_unseal:SELECT",
       "audit_events:app_api:SELECT",
-      // [ADR-072 phần 1 / 064] Vai chỉ-đọc của job neo: SELECT cả bảng sổ vì `verifyAuditChain` băm lại MỌI cột; với
+      // [ADR-072 phần 1 / 065] Vai chỉ-đọc của job neo: SELECT cả bảng sổ vì `verifyAuditChain` băm lại MỌI cột; với
       // `audit_chain_anchors` nó chỉ có SELECT theo CỘT (org_id, seq, hash) — nằm ở danh sách cột bên dưới, không ở đây.
       "audit_events:app_neo:SELECT",
       "audit_events:app_unseal:SELECT",
@@ -484,7 +484,7 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       // hồi chúng và cắm trigger dẫn xuất từ đầu chuỗi. Trước bản vá, app_api chèn được một mốc
       // neo GIẢ vào chính bộ kiểm chứng, VĨNH VIỄN (trigger append-only chặn gỡ bỏ), và việc
       // chiếm trước (org, seq) làm recordChainAnchor trả null mãi mãi.
-      // [ADR-072 phần 1 / 064] SELECT theo CỘT của app_neo trên mốc neo — chỉ ba cột `verifyAuditChain` đọc.
+      // [ADR-072 phần 1 / 065] SELECT theo CỘT của app_neo trên mốc neo — chỉ ba cột `verifyAuditChain` đọc.
       "audit_chain_anchors.hash:SELECT",
       "audit_chain_anchors.org_id:INSERT",
       "audit_chain_anchors.org_id:SELECT",

@@ -29,7 +29,7 @@ import { viPhamLuocDoTuyetDoi } from "./luoc-do-an-toan.js";
  * 001 dựng và hardening canh; role ĐĂNG NHẬP (`app_api_login`) không bao giờ là đích của SET ROLE.
  *
  * [ADR-072 phần 1] Tên thứ ba `app_neo` — vai CHỈ-ĐỌC của job neo (hardening dựng và canh như hai
- * tên kia, 064 cấp quyền). Thêm vào đây kéo theo hai lớp khác, cố ý: `khangDinhPhienDangNhapUngDung`
+ * tên kia, 065 cấp quyền). Thêm vào đây kéo theo hai lớp khác, cố ý: `khangDinhPhienDangNhapUngDung`
  * từ chối một phiên api/worker là thành viên của `app_neo` (và ngược lại), và `migrate()` đếm hàng
  * cấu hình mức vai của `app_neo`/`app_neo_login` như của hai cặp cũ.
  */

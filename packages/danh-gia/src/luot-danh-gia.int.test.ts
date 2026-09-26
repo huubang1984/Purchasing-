@@ -1472,9 +1472,11 @@ describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CS
 // PHẠM VI THẬT CỦA TỪNG VẾ, ĐO CHỨ KHÔNG KHAI
 // ------------------------------------------------------------------------------------------------
 // **J3** có BA vế và chúng không cùng độ chắc: vế *người tạo RFQ* và vế *người duyệt ≠ người đề
-// xuất* đọc dữ liệu đủ để phán xử; vế *người điều phối* đọc `unseal_requests.dispatched_by`, cột
+// xuất* đọc dữ liệu đủ để phán xử; ~~vế *người điều phối* đọc `unseal_requests.dispatched_by`, cột
 // mang người của lần điều phối ĐANG CHẠY — nên sau một lần điều phối lại nó không thấy người đầu
-// (khoản **233**). Ca dưới đo đúng thứ vế ấy CÓ, không đo thứ nó không có.
+// (khoản **233**). Ca dưới đo đúng thứ vế ấy CÓ, không đo thứ nó không có.~~ **[S1.129 / khoản 233
+// ĐÓNG]** vế *người điều phối* nay đọc `unseal_dispatch_history` (`064`), và ba ca mới đo nó qua một
+// lần điều phối lại: chặn, đối chứng dương, đột biến gỡ lớp ghi.
 //
 // **J5** có vế CẤU TRÚC (khoá ngoại hợp thành) và vế NỘI DUNG (`effective_cost` đọc được + lượt
 // chấm thuộc đúng RFQ). Vế cấu trúc không cần ca riêng — nó là một khoá ngoại; hai vế nội dung
@@ -1730,6 +1732,85 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
     );
     expect(dx.status).toBe("PROPOSED");
     expect(dx.actedBy).toBe(uDuyet);
+  });
+
+  // [S1.129 / khoản 233] Kịch bản mà hàng 233 viết ra: A điều phối → worker chết → B điều phối lại
+  // → A đề xuất. Trước `064` vế 3 đọc `dispatched_by` (nay là B) nên A ĐI QUA; từ `064` nó đọc
+  // `unseal_dispatch_history`, nơi trigger đã ghi CẢ HAI lần.
+  async function dieuPhoiTay(rfqId: string, nguoi: string, phien: string): Promise<void> {
+    const { rowCount } = await db.pool.query(
+      "UPDATE unseal_requests SET dispatched_by = $2, dispatched_by_session_id = $3, " +
+        "dispatched_at = coalesce(dispatched_at, now()) WHERE org_id = $1 AND rfq_id = $4",
+      [orgA, nguoi, phien, rfqId],
+    );
+    expect(rowCount, "tiền đề: phải có ĐÚNG một yêu cầu mở thầu để gắn người điều phối").toBe(1);
+  }
+
+  it("[INV-J3] vế 3 — người điều phối LẦN ĐẦU vẫn bị chặn sau một lần điều phối lại (khoản 233)", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await dieuPhoiTay(rfqId, uDeXuat, sDeXuat);
+    await dieuPhoiTay(rfqId, uKhong, sKhong);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "dieu phoi lan dau roi de xuat", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      ),
+    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+
+    const { rows: ls } = await db.pool.query<{ dispatched_by: string }>(
+      "SELECT dispatched_by FROM unseal_dispatch_history WHERE org_id = $1 AND rfq_id = $2 " +
+        "ORDER BY recorded_at, id",
+      [orgA, rfqId],
+    );
+    expect(ls.map((r) => r.dispatched_by), "trigger phải ghi CẢ HAI lần điều phối").toEqual([uDeXuat, uKhong]);
+
+    // ĐỐI CHỨNG DƯƠNG — người chưa từng điều phối, cùng gói, cùng báo giá.
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "nguoi chua tung dieu phoi", actorSessionId: sDuyet },
+        apiPool,
+      ),
+    );
+    expect(dx.status).toBe("PROPOSED");
+  });
+
+  it("[INV-J3] vế 3 — ĐỘT BIẾN: gỡ trigger ghi lịch sử thì người điều phối lần đầu lại đi qua", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await db.pool.query("ALTER TABLE unseal_requests DISABLE TRIGGER unseal_requests_ghi_lich_su_dieu_phoi");
+    try {
+      await dieuPhoiTay(rfqId, uDeXuat, sDeXuat);
+      await dieuPhoiTay(rfqId, uKhong, sKhong);
+      const dx = await withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          c, orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "dot bien go lop ghi", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      );
+      expect(dx.status, "không có lớp ghi thì vế 3 mù — đúng lỗ của khoản 233").toBe("PROPOSED");
+    } finally {
+      await db.pool.query("ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_ghi_lich_su_dieu_phoi");
+    }
+  });
+
+  it("[INV-J3] lịch sử điều phối CHỈ-GHI-THÊM với app_api, và cách ly theo tổ chức", async () => {
+    const { rfqId } = await sanSangTraoThau();
+    await dieuPhoiTay(rfqId, uDeXuat, sDeXuat);
+    for (const cau of [
+      "UPDATE unseal_dispatch_history SET dispatched_by = dispatched_by WHERE rfq_id = $1",
+      "DELETE FROM unseal_dispatch_history WHERE rfq_id = $1",
+    ]) {
+      await expect(withTenant(apiPool, orgA, (c) => c.query(cau, [rfqId])), cau).rejects.toMatchObject({ code: "42501" });
+    }
+    const { rows } = await withTenant(apiPool, orgB, (c) =>
+      c.query("SELECT 1 FROM unseal_dispatch_history WHERE rfq_id = $1", [rfqId]),
+    );
+    expect(rows, "tổ chức B không thấy lịch sử điều phối của A").toEqual([]);
   });
 
   it("[INV-J3] vế 1 — NGƯỜI ĐỀ XUẤT không tự duyệt được, kể cả khi họ giữ `po.approve`", async () => {
