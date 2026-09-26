@@ -13,6 +13,16 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-26 / S1.9101] SPEC S4 (DATA FOUNDATION & INTELLIGENCE · MVP3) VÀO KHO — BẢN NHÁP, CHƯA QUA LƯỢT SOI HÌNH
+DẠNG.** `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`. Bốn quyết định của chủ dự án ngày
+2026-09-26 (spec §2.2): đủ mười mục của V2.1 §33, chia S4a (hàng chuẩn, chuẩn hoá, đơn vị đo, lịch sử giá, benchmark, TCO) và
+S4b (Supplier Score, Risk Score, bất thường, phân tích người mua) — S4b chờ một cổng dữ liệu; giữ TypeScript + PostgreSQL,
+không service Python, không ML — đảo phần hệ quả của ADR-001; S4a mở vòng song song S3 ngay sau lượt soi — ngoại lệ thứ hai
+với ADR-043; benchmark chỉ trong tổ chức, cộng mốc giá ngoài nhập tay. Năm ADR phải chốt ở lượt soi (spec §2.3). Nhóm bất
+biến L1–L12. Phép đo lúc viết tìm ra một chỗ hở: bước 14 của kịch bản 41 chỉ quét `relkind IN ('r', 'p')`, nên một
+materialized view chứa giá dạng rõ đi qua cổng ADR-054 (spec §2.1). Chưa dòng mã, chưa migration, chưa ADR nào của S4. Vòng
+này không chạm mảnh nào của bảng bốn mảnh ở `docs/PRODUCT.md` §11.
+
 **[2026-09-26 / S1.153] S3.0 KHÉP — DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI
 ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`.** Đo trên `master` `fa8d4ea`: đúng mười chỗ ghim dải là regex có hiệu lực —
 `parse.ts` bốn, `so-no-tu-doi-chieu.test.ts` ba, ba tệp khác mỗi tệp một — và cả mười nay là `[A-HJK]`. Sổ thật chưa có
