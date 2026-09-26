@@ -43,7 +43,9 @@ import {
   type DongHo,
 } from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
-import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
+import { doTonDong } from "@trustprocure/outbox";
+import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
+import { canhTonDongDinhKy } from "./canh-ton-dong.js";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
 import { taoCanhBaoSes } from "./adapters/canh-bao-ses.js";
 import { createUnsealWorkerRunner, type BreakGlassAlertSink } from "./composition.js";
@@ -55,6 +57,9 @@ import type { CauHinhWorker } from "./cau-hinh.js";
  */
 const CAU_LIET_KE_TO_CHUC =
   "SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)";
+
+/** [ADR-083] Trễ của lần đo tồn đọng ĐẦU TIÊN sau khi lên, ms — đủ để vòng poll đầu chạy trước. */
+const TRE_DAU_TON_DONG_MS = 5_000;
 
 /**
  * Mô tả một lỗi cho dòng log mà KHÔNG mang giá trị — bản rút gọn của `apps/api/src/mo-ta-loi.ts`.
@@ -195,6 +200,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
 
   let daDung = false;
   let dungCanhDongHo: (() => void) | undefined;
+  let dungCanhTonDong: (() => void) | undefined;
 
   return {
     async batDau(): Promise<void> {
@@ -280,6 +286,19 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
           ),
         baoLoi: (e) => console.error(`[unseal-worker] canh LechDongHo khong do duoc ${moTaLoi(e)}`),
       });
+      // ⑷ [ADR-083] Dòng tồn đọng outbox cho cảnh báo lỗi nghiệp vụ — xem `canh-ton-dong.ts`. Đo
+      //    MỘT LẦN ngay sau khi lên (trễ ngắn để vòng poll đầu chạy trước), rồi mỗi nhịp. Mỗi tổ
+      //    chức đo trong `withTenant` của CHÍNH tổ chức ấy — không câu nào ở đây chạy ngoài tenant
+      //    ngoài lời liệt kê đã khai ở khối đầu tệp.
+      // [CẤM LOG] Lỗi chỉ ra TÊN và MÃ qua `moTaLoi`; dòng tổng chỉ mang ba con số.
+      dungCanhTonDong = canhTonDongDinhKy({
+        chuKyMs: ch.chuKyTonDongMs,
+        treDauMs: Math.min(TRE_DAU_TON_DONG_MS, ch.chuKyTonDongMs),
+        lietKeToChuc,
+        doMotToChuc: (orgId) => withTenant(pool, orgId, (c) => doTonDong(c, orgId)),
+        ghi: (dong) => console.error(dong),
+        baoLoi: (e) => console.error(`[unseal-worker] outbox ton dong khong do duoc ${moTaLoi(e)}`),
+      });
       console.error(
         `[unseal-worker] dang chay — khoa: ${ch.keyAdapter}, canh bao: ${ch.alertAdapter}, ` +
           `nhip poll: ${String(ch.pollIntervalMs)} ms, to chuc thay duoc: ${String(soToChuc)}`,
@@ -293,6 +312,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
       // hạn thuê của nó; runner khác nhặt lại sau khi hạn hết. Đó là tính chất của at-least-once.
       runner.stop();
       dungCanhDongHo?.();
+      dungCanhTonDong?.();
       await Promise.allSettled([pool.end(), auditPool.end()]);
       kmsClient?.destroy();
       sesClient?.destroy();

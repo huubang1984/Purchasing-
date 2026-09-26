@@ -71,6 +71,11 @@ export interface CauHinhWorkerChung {
   readonly lechDongHoToiDaMs: number;
   /** [khoản 196] Nhịp đo lại lúc chạy, ms. */
   readonly chuKyCanhDongHoMs: number;
+  /**
+   * [ADR-083] Nhịp ghi dòng `outbox ton dong`, ms (`TRUSTPROCURE_OUTBOX_TON_DONG_MS`, mặc định 5 phút).
+   * Cảnh báo CloudWatch đọc dòng ấy, nên nhịp này phải NGẮN HƠN chu kỳ đánh giá của cảnh báo.
+   */
+  readonly chuKyTonDongMs: number;
 }
 
 export interface KhoaWorkerLocalDev {
@@ -108,6 +113,9 @@ export interface CanhBaoSes {
 }
 
 export type CauHinhWorker = CauHinhWorkerChung & (KhoaWorkerLocalDev | KhoaWorkerAwsKms) & (CanhBaoDevFile | CanhBaoSes);
+
+/** [ADR-083] Mặc định của `TRUSTPROCURE_OUTBOX_TON_DONG_MS`: năm phút. */
+export const CHU_KY_TON_DONG_MS_MAC_DINH = 300_000;
 
 type MoiTruong = Readonly<Record<string, string | undefined>>;
 
@@ -279,5 +287,6 @@ export function docCauHinh(env: MoiTruong): CauHinhWorker {
     pollIntervalMs: docSoNguyen(env, "TRUSTPROCURE_OUTBOX_POLL_MS", 1000, 100, 60_000),
     lechDongHoToiDaMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_MAX_MS", LECH_DONG_HO_TOI_DA_MS_MAC_DINH, 100, 60_000),
     chuKyCanhDongHoMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_CHECK_MS", CHU_KY_CANH_DONG_HO_MS_MAC_DINH, 1000, 3_600_000),
+    chuKyTonDongMs: docSoNguyen(env, "TRUSTPROCURE_OUTBOX_TON_DONG_MS", CHU_KY_TON_DONG_MS_MAC_DINH, 1000, 3_600_000),
   };
 }

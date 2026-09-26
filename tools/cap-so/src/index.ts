@@ -1,5 +1,5 @@
 // ==============================================================================================
-// tools/cap-so — SỐ HIỆU CẤP LÚC MERGE, KHÔNG CẤP LÚC VIẾT (ADR-083)
+// tools/cap-so — SỐ HIỆU CẤP LÚC MERGE, KHÔNG CẤP LÚC VIẾT (ADR-084)
 //
 // GỐC CỦA CHUYỆN TRÙNG SỐ. Bốn dãy số — vòng `S1.N`, `ADR-N`, khoản nợ, migration `NNN_` — từng
 // được cấp trên NHÁNH theo luật S1.111: "đo max trên mọi nhánh đang sống rồi +1". Luật ấy không có

@@ -7204,7 +7204,44 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
   `unseal_so_phe_duyet_can`). Lượt soi đọc ra chúng nhưng **chưa đối chiếu** với danh mục ADR-028/036 xem đã là giới hạn
   đã biết chưa; việc ấy nằm ngoài S3.
 
-## ADR-083 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
+## ADR-083 — Cảnh báo lỗi nghiệp vụ: đếm dòng log sẵn có, và một chỉ số tồn đọng outbox
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-077**, ADR-069, ADR-040, sổ nợ 53
+
+### Bối cảnh
+
+ADR-077 báo khi service NGỪNG phục vụ. Service có thể khoẻ trong khi việc nghiệp vụ hỏng: một job outbox bỏ cuộc (thư mời,
+OTP, hạn nộp không đi), SMS/Zalo từ chối liên tục, token Zalo mất, vòng quét outbox hỏng. api và worker ĐÃ ghi đúng những
+dòng ấy (`onJobFailure`, `onPollError`, bộ dọn) — không ai đọc. Và ca tệ nhất, outbox KẸT (không ai rút), không sinh dòng lỗi nào.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Metric filter trên log sẵn có** (stack 90, namespace `TrustProcure/NghiepVu`), alarm cùng tiền tố `tp-van-hanh-` nên thư
+   đi qua ⑹ của stack 60 (ALARM và OK), không sửa stack 60:
+   - `bo-cuoc` — dòng `outbox … (bo cuoc)` ở api/worker, ≥ 1 trong 5 phút;
+   - `kenh-loi` — `GuiKenhError` ở api, ≥ 5 trong 15 phút (lần thử lại cũng đếm);
+   - `token-zalo` — `ZaloTokenMatError`, ≥ 1;
+   - `poll-loi` — `outbox poll` ở api/worker, ≥ 3 trong 10 phút;
+   - `bo-don` — bộ dọn bảng hạn mức hỏng hai lượt liền, ≥ 1.
+2. **Chỉ số tồn đọng**: worker (liệt kê được mọi tổ chức — ADR-040) đo mỗi 5 phút, trong `withTenant` từng tổ chức, tuổi
+   job `PENDING` quá hạn lâu nhất và số job ấy, rồi ghi MỘT dòng `[unseal-worker] outbox ton dong: <giây> giay, …`. Metric
+   filter lấy trường giây; alarm khi > 15 phút hai kỳ liền. Một tổ chức đo hỏng ⇒ một dòng `outbox ton dong khong do duoc`
+   rồi vẫn ghi dòng tổng (số tổ chức = số đo được); MỌI tổ chức hỏng hay liệt kê hỏng ⇒ KHÔNG ghi dòng tổng — `0 giay` khi
+   không đo được gì trông như khoẻ. Kỳ đo: `TRUSTPROCURE_OUTBOX_TON_DONG_MS` (mặc định 300 000; 1 000–3 600 000).
+3. Mọi alarm coi thiếu dữ liệu là bình thường; worker chết là việc của alarm thiếu task (ADR-077).
+4. `hinh-dang-van-hanh.test.ts` đòi mỗi mẫu log có mặt trong mã sinh ra nó, và mẫu tồn đọng khớp dòng worker ghi.
+
+### Hệ quả, nói thẳng
+
+- Alarm dựa trên CHỮ của dòng log: đổi câu log là mất cảnh báo — test kiến trúc canh đúng điều đó.
+- Khi không đo được tổ chức nào, alarm tồn đọng IM (thiếu dữ liệu = bình thường, vì trước tổ chức đầu tiên worker chạy 0
+  bản). Ca ấy có `poll-loi` (cùng hàm liệt kê hỏng thì runner cũng hỏng) và alarm thiếu task che.
+- Tồn đọng chỉ đo khi worker chạy (`so_ban_worker > 0`, tức sau tổ chức đầu tiên); trước đó outbox của api kẹt thì không ai
+  báo ngoài `bo-cuoc`/`poll-loi`.
+- Ngưỡng là đoán khi chưa có tải thật; `kenh-loi` đếm cả lần thử lại nên một nhà mạng chập chờn có thể gây thư ALARM→OK.
+- Chưa chạy thật: `terraform validate`; mẫu metric filter đo bằng test đối chiếu chuỗi, chưa trên CloudWatch.
+
+## ADR-084 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
 
 **Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Thay luật đổi số của S1.111
 

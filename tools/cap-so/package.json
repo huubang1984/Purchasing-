@@ -3,5 +3,5 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "//": "[ADR-083] `pnpm cap-so`: cap so that cho so tam cua nhanh luc merge; `--kiem` la cong CI. Chi dung module san cua Node."
+  "//": "[ADR-084] `pnpm cap-so`: cap so that cho so tam cua nhanh luc merge; `--kiem` la cong CI. Chi dung module san cua Node."
 }
