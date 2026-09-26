@@ -142,6 +142,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // lần từ chối nào đã mất. [khoản 147] `loc-vi-pham-d2` canh vế D2 mà `unseal.int.test.ts` không dựng được.
     "apps/api/src/log-tu-choi-mat.int.test.ts",
     "packages/unseal/src/loc-vi-pham-d2.test.ts",
+    // [S1.9102 / khoản 122 · 144] Trần lần từ chối theo phiên: N lần đầu mỗi cửa sổ VẪN để lại hàng sổ, phần còn lại 429 không
+    // hàng — D5 đo bằng số hàng `PERMISSION_DENIED`/`AGENT_SCOPE_DENIED` trước và sau trần.
+    "apps/api/src/auth.int.test.ts",
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/composition.int.test.ts",
     "apps/api/src/loi-giao-thuc.int.test.ts",

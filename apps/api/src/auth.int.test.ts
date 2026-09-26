@@ -1678,4 +1678,122 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
       }
     });
   });
+
+  describe("[S1.9102 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên — 429 trước lần ghi sổ", () => {
+    const TRAN = 3;
+    const THAN_429 = JSON.stringify({ error: "qua nhieu yeu cau" });
+    const NCC = { legalName: "NCC bi tu choi", taxCode: "0100000001" };
+
+    async function demHanh(action: string): Promise<number> {
+      const { rows } = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = $2", [orgA, action]);
+      return Number(rows[0]?.n ?? "-1");
+    }
+
+    /** Một máy chủ riêng mang trần nhỏ; `lam` nhận gốc URL của nó. Cùng khuôn vế ⒟. */
+    async function voiMayChu(lam: (goc2: string) => Promise<void>): Promise<void> {
+      const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, tranTuChoi: TRAN }), {
+        remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+      });
+      await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+      try {
+        await lam(`http://127.0.0.1:${(s2.address() as AddressInfo).port}`);
+      } finally {
+        await new Promise<void>((xong) => s2.close(() => xong()));
+      }
+    }
+
+    it("⒠ [INV-D5] phiên NGƯỜI thiếu quyền: N lần 403 mỗi lần một hàng `PERMISSION_DENIED`, rồi 429 KHÔNG hàng; việc nó CÓ quyền vẫn đi qua; phiên khác không bị kéo theo", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("tu-choi-nguoi@vd.test");
+        await taoNguoi("tu-choi-nguoi-khac@vd.test");
+        const a = await dangNhap("tu-choi-nguoi@vd.test");
+        const b = await dangNhap("tu-choi-nguoi-khac@vd.test");
+        const truoc = await demHanh("PERMISSION_DENIED");
+        // BUYER không có `supplier.manage` ⇒ POST /suppliers là một lần từ chối quyền (api.int.test.ts, INV-H17).
+        for (let i = 0; i < TRAN; i += 1) {
+          const r = await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 });
+          expect(r.status, `lần ${i + 1}: ${r.text}`).toBe(403);
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "N lần đầu VẪN vào sổ").toBe(truoc + TRAN);
+        for (let i = 0; i < 3; i += 1) {
+          const r = await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 });
+          expect(r.status, `lần ${TRAN + i + 1}: ${r.text}`).toBe(429);
+          expect(r.text).toBe(THAN_429);
+          expect(r.headers.get("retry-after")).toBe(String(OTP_RATE_WINDOW_SECONDS));
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "429 KHÔNG ghi hàng sổ — không chạm khoá chuỗi sổ").toBe(truoc + TRAN);
+        // Trần đếm LẦN TỪ CHỐI, không khoá phiên: route mà phiên ấy CÓ quyền vẫn chạy.
+        const tao = await goi("POST", "/rfqs", { cookie: a.cookie, body: { title: "van tao duoc sau tran tu choi" }, goc: goc2 });
+        expect(tao.status, tao.text).toBe(201);
+        // Trần theo PHIÊN: phiên khác vẫn nhận 403 và vẫn để lại hàng của mình.
+        const rb = await goi("POST", "/suppliers", { cookie: b.cookie, body: NCC, goc: goc2 });
+        expect(rb.status, rb.text).toBe(403);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc + TRAN + 1);
+      });
+    });
+
+    it("⒡ [INV-D5] phiên AGENT ngoài phạm vi: N lần 403 mỗi lần một hàng `AGENT_SCOPE_DENIED`, rồi 429 KHÔNG hàng; lần đọc trong phạm vi và phiên người của cùng người dùng không bị kéo theo", async () => {
+      await voiMayChu(async (goc2) => {
+        const a = await phienAgent("tu-choi-agent@vd.test");
+        const truoc = await demHanh("AGENT_SCOPE_DENIED");
+        for (let i = 0; i < TRAN; i += 1) {
+          const r = await goi("GET", `/rfqs/${UUID_GIA}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${i + 1}: ${r.text}`).toBe(403);
+        }
+        expect(await demHanh("AGENT_SCOPE_DENIED")).toBe(truoc + TRAN);
+        for (let i = 0; i < 3; i += 1) {
+          const r = await goi("GET", `/rfqs/${UUID_GIA}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${TRAN + i + 1}: ${r.text}`).toBe(429);
+          expect(r.text).toBe(THAN_429);
+        }
+        expect(await demHanh("AGENT_SCOPE_DENIED"), "429 KHÔNG ghi hàng sổ").toBe(truoc + TRAN);
+        expect((await goi("GET", "/suppliers", { cookie: a.cookie, goc: goc2 })).status, "lần đọc trong phạm vi là bucket khác").toBe(200);
+        expect((await goi("POST", "/suppliers", { cookie: a.cookieNguoi, body: NCC, goc: goc2 })).status, "phiên người là phiên khác").toBe(403);
+      });
+    });
+
+    it("⒢ [INV-D5] tám lần từ chối CÙNG LÚC của một phiên ⇒ đúng N lần 403 và đúng N hàng sổ — trần là của câu đếm, không của một phép đọc trước", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("tu-choi-cung-luc@vd.test");
+        const a = await dangNhap("tu-choi-cung-luc@vd.test");
+        const truoc = await demHanh("PERMISSION_DENIED");
+        const kq = await Promise.all(Array.from({ length: 8 }, () => goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 })));
+        expect(kq.map((r) => r.status).sort(), kq.map((r) => r.text).join("\n")).toEqual([403, 403, 403, 429, 429, 429, 429, 429]);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc + TRAN);
+      });
+    });
+
+    it("⒣ lần ghi sổ từ chối HỎNG (khoá chuỗi sổ bị giữ) vẫn tiêu ngân sách: 500 như trước, và lần đếm của nó KHÔNG cuộn theo", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("tu-choi-so-hong@vd.test");
+        const a = await dangNhap("tu-choi-so-hong@vd.test");
+        const truoc = await demHanh("PERMISSION_DENIED");
+        const giu = await apiPool.connect();
+        const ketQua: PhanHoi[] = [];
+        try {
+          await giu.query("BEGIN");
+          await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+          // Cùng khuôn ⒝: một hàng sổ chưa commit giữ khoá tư vấn nối tiếp của tổ chức ⇒ lần ghi từ chối không vào được sổ.
+          await giu.query(
+            "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K122_GIU_KHOA', 'K122', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+            [orgA],
+          );
+          for (let i = 0; i < TRAN; i += 1) ketQua.push(await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 }));
+        } finally {
+          await giu.query("ROLLBACK").catch(() => undefined);
+          giu.release();
+        }
+        for (const r of ketQua) {
+          expect(r.status, r.text).toBe(500);
+          expect(r.text).toBe(JSON.stringify({ error: "loi noi bo" }));
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "lần ghi hỏng không để hàng nào").toBe(truoc);
+        // Khoá đã nhả. Nếu lần đếm cuộn theo lần ghi hỏng thì lời gọi này là lần ĐẦU và ra 403 kèm một hàng — đo: đúng thế khi gỡ
+        // nhánh `DenialAuditFailedError`/`PermissionAuditFailedError` của `phanQuyetTuChoi`.
+        const r = await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 });
+        expect(r.status, r.text).toBe(429);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc);
+      });
+    }, 30_000);
+  });
 });
