@@ -10,7 +10,7 @@
 // ==============================================================================================
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -380,6 +380,13 @@ describe("kho thật — một nhánh cấp số lần đầu", () => {
 
     // Chạy lại trên cùng base: không đổi một byte.
     expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
+  });
+
+  it("symlink chưa theo dõi (như `node_modules` trỏ đi nơi khác) không bị đọc như văn bản", () => {
+    const goc = dungKho();
+    lamViec(goc, "a", 1);
+    symlinkSync(tmpdir(), join(goc, "lien-ket"), "junction");
+    expect(capSo(goc, { base: "master" }).bang.adr.get(9201)).toBe(3);
   });
 
   it("nhánh chưa merge base thì từ chối, không ghi gì", () => {

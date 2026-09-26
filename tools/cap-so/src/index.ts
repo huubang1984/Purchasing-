@@ -39,7 +39,7 @@
 // ==============================================================================================
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { argv, cwd, exit, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -770,6 +770,14 @@ function lichSuCap(goc: string, base: string): readonly LanCapCu[] {
   });
 }
 
+function laTepThuong(goc: string, p: string): boolean {
+  try {
+    return lstatSync(join(goc, p)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** Dòng NHÁNH thêm so với base: cây làm việc (kể cả tệp chưa theo dõi) so với base, không kể `tools/cap-so`. */
 function dongCuaNhanh(goc: string, base: string): Map<string, Set<number>> {
   const ra = new Map<string, Set<number>>();
@@ -780,12 +788,14 @@ function dongCuaNhanh(goc: string, base: string): Map<string, Set<number>> {
   }
   const chuaTheoDoi = git(goc, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0");
   for (const p of chuaTheoDoi) {
-    if (p === "" || laDuongCongCu(p)) continue;
+    if (p === "" || laDuongCongCu(p) || !laTepThuong(goc, p)) continue;
     const buf = readFileSync(join(goc, p));
     if (buf.includes(0)) continue;
     const soDong = buf.toString("utf8").split("\n").length;
     ra.set(p, new Set(Array.from({ length: soDong }, (_, i) => i + 1)));
   }
+  // Symlink (kể cả symlink tới thư mục, như một `node_modules` trỏ đi nơi khác) không phải văn bản của nhánh.
+  for (const p of [...ra.keys()]) if (!laTepThuong(goc, p)) ra.delete(p);
   return ra;
 }
 
@@ -1113,7 +1123,9 @@ export function main(thamSo: readonly string[], goc: string): number {
     }
     for (const [cu, moi] of kq.doiTen) stdout.write(`đổi tên   ${cu} → ${moi}\n`);
     stdout.write(kq.tepDaGhi.length === 0 ? "không tệp nào đổi\n" : `đã ghi: ${kq.tepDaGhi.join(", ")}\n`);
-    if (kq.trailer !== null) stdout.write(`\nThêm dòng này vào cuối thông điệp commit:\n${kq.trailer}\n`);
+    if (kq.trailer !== null && (kq.tepDaGhi.length > 0 || kq.doiTen.length > 0)) {
+      stdout.write(`\nThêm dòng này vào cuối thông điệp commit:\n${kq.trailer}\n`);
+    }
     return 0;
   } catch (e) {
     if (!(e instanceof CapSoError)) throw e;
