@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1.7
 # ==============================================================================================
-# deploy/Dockerfile — MỘT tệp, BA đích: api, worker, migrate (ADR-066)
+# deploy/Dockerfile — MỘT tệp, NĂM đích: api, worker, migrate (ADR-066), web (ADR-068), public-keys (ADR-070)
 #
 #   docker build -f deploy/Dockerfile --target api     -t tp-api .
 #   docker build -f deploy/Dockerfile --target worker  -t tp-unseal-worker .
 #   docker build -f deploy/Dockerfile --target migrate -t tp-migrate .
+#   docker build -f deploy/Dockerfile --target web     -t tp-web .
+#   docker build -f deploy/Dockerfile --target public-keys -t tp-public-keys .
 #
 # Không có bước biên dịch: ứng dụng chạy thẳng mã TypeScript bằng `node --experimental-transform-types`
 # (cùng cách `pnpm api:dev`). Vì Node từ chối bóc kiểu cho tệp NẰM TRONG node_modules, image giữ đúng
@@ -37,6 +39,9 @@ RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/api..." && rm 
 FROM nguon AS cai-worker
 RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/unseal-worker..." && rm -rf /pnpm/store
 
+FROM nguon AS cai-public-keys
+RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/public-keys..." && rm -rf /pnpm/store
+
 FROM nguon AS cai-migrate
 RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/chay-migrate..." && rm -rf /pnpm/store
 
@@ -62,3 +67,24 @@ WORKDIR /app
 COPY --from=cai-migrate --chown=root:root /app /app
 USER node
 CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/chay-migrate/register-ts-resolve.mjs", "tools/chay-migrate/src/index.ts"]
+
+# [ADR-068] `web` chỉ phục vụ tĩnh sau ALB: không phụ thuộc nào (`dependencies` rỗng — ADR-044), không CSDL, không bí mật,
+# không bó CA. Nó cần đúng hai thứ: `apps/web` và mã nguồn cửa trình duyệt của gói niêm phong, đọc lúc khởi động và gỡ
+# kiểu bằng `stripTypeScriptTypes` — trình duyệt chạy đúng byte mà test của gói đo.
+FROM ${NODE_IMAGE} AS web
+ENV NODE_ENV=production TRUSTPROCURE_WEB_STATIC_ONLY=1 TRUSTPROCURE_WEB_HOST=0.0.0.0 TRUSTPROCURE_WEB_PORT=8090
+WORKDIR /app
+COPY --chown=root:root apps/web apps/web
+COPY --chown=root:root packages/sealed-envelope/src packages/sealed-envelope/src
+USER node
+EXPOSE 8090
+CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./apps/web/register-ts-resolve.mjs", "apps/web/src/main.ts"]
+
+# [ADR-070] `public-keys` chỉ phục vụ nửa công khai nhận qua biến môi trường: không CSDL (không bó CA), không KMS.
+FROM ${NODE_IMAGE} AS public-keys
+ENV NODE_ENV=production TRUSTPROCURE_PUBLIC_KEYS_HOST=0.0.0.0 TRUSTPROCURE_PUBLIC_KEYS_PORT=8070
+WORKDIR /app
+COPY --from=cai-public-keys --chown=root:root /app /app
+USER node
+EXPOSE 8070
+CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./apps/public-keys/register-ts-resolve.mjs", "apps/public-keys/src/main.ts"]

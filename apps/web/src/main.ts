@@ -45,6 +45,11 @@ function chinh(): void {
   server.listen(ch.listenPort, ch.listenHost, () => {
     const giaoThuc = ch.tls === null ? "http" : "https";
     const goc = `${giaoThuc}://${ch.listenHost}:${ch.listenPort}`;
+    if (ch.apiOrigin === null) {
+      // [ADR-068] Sau ALB: TLS và định tuyến /api/* là việc của hạ tầng, nên không có cảnh báo HTTP nào ở đây.
+      console.error(`[web] dang nghe ${goc} — CHI TINH, /api/* do reverse proxy dinh tuyen`);
+      return;
+    }
     console.error(`[web] dang nghe ${goc} — chuyen tiep /api/* toi ${ch.apiOrigin}`);
     console.error(`[web] apps/api phai co ${goc} trong TRUSTPROCURE_ALLOWED_ORIGINS, neu khong moi POST bi 403`);
     if (ch.tls === null && ch.listenHost !== "127.0.0.1" && ch.listenHost !== "localhost") {

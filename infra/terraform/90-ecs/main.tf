@@ -1,13 +1,18 @@
 # Stack 90 — tài khoản PROD: chạy `api` và `unseal-worker` thật trên ECS Fargate (ADR-066).
 #
-#   Mạng     VPC 2 AZ. Subnet CÔNG KHAI chỉ cho ALB; task và RDS ở subnet RIÊNG, KHÔNG NAT — ra AWS qua
-#            VPC endpoint (KMS, ECR, Logs, Secrets Manager, SES; S3 gateway cho lớp image ECR). Task
-#            không có đường ra internet tuỳ ý.
+#   Mạng     VPC 2 AZ. Subnet CÔNG KHAI chỉ cho ALB; task và RDS ở subnet RIÊNG — ra AWS qua VPC endpoint
+#            (KMS, ECR, Logs, Secrets Manager, SES; S3 gateway cho lớp image ECR). [ADR-069] RIÊNG `api` ở
+#            subnet của nó, đi qua MỘT NAT Gateway, chỉ cổng 443 — cho SMS (End User Messaging) và Zalo ZNS.
+#            Worker, migrate, web không có tuyến ra internet.
 #   CSDL     RDS PostgreSQL 16, single-AZ, db.t4g.small, gp3 20 GB, mã hoá, force_ssl, backup 7 ngày,
 #            deletion protection. Mật khẩu master do RDS quản lý trong Secrets Manager.
-#   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate` — thẻ bất biến, quét lúc đẩy.
+#   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-web` — thẻ bất biến, quét lúc đẩy.
 #   Chạy     Cluster `tp-prod`; service `tp-api` sau ALB HTTPS; service `tp-unseal-worker` (họ task
 #            definition `tp-unseal-worker` — quy ước cảnh báo ⑵ của stack 60); task một lần `tp-migrate`.
+#   Khoá     [ADR-070] service `tp-public-keys` phục vụ `/.well-known/trustprocure-receipt-keys*` trên cùng ALB — chỉ nửa
+#            công khai (đọc từ state của stack 50), không task role, không KMS, không CSDL.
+#   Web      [ADR-068] MỘT tên miền: ALB chuyển `/api/*` THẲNG tới `tp-api` (bỏ tiền tố `/api`), mọi đường khác tới
+#            service `tp-web` — `apps/web` ở chế độ chỉ tĩnh, không thấy cookie phiên, không CSDL, không task role.
 #
 # Bí mật KHÔNG tạo ở đây (giá trị sẽ vào state): tạo bằng CLI TRƯỚC khi apply — README, mục "Stack 90".
 # Pipeline deploy (`tp-deploy`, `tp-deploy-worker`) đăng ký bản task definition mới; stack này bỏ qua
@@ -32,6 +37,17 @@ terraform {
 
 module "chung" { source = "../chung" }
 
+# [ADR-070] kid đang ký và nửa công khai của mọi khoá ký biên nhận — một nguồn: stack 50 (chạy bằng KeyAdmin).
+data "terraform_remote_state" "kms" {
+  backend = "s3"
+  config = {
+    bucket  = "tp-tfstate-243714547276"
+    key     = "50-kms-prod/terraform.tfstate"
+    region  = "ap-southeast-1"
+    profile = "tp-mgmt"
+  }
+}
+
 provider "aws" {
   region              = module.chung.region
   profile             = "tp-prod"
@@ -42,25 +58,18 @@ provider "aws" {
 # ---------------------------------------------------------------------------------------------
 # Biến
 # ---------------------------------------------------------------------------------------------
-variable "ten_mien_api" {
-  description = "Tên miền của api trên ALB (vd api.<domain>). DNS ngoài AWS: CNAME tới ALB."
+variable "ten_mien" {
+  description = "[ADR-068] Tên miền công khai DUY NHẤT (web và /api/*) trên ALB, vd app.<domain>. DNS ngoài AWS: CNAME tới ALB."
   type        = string
-}
-
-variable "url_cong_khai" {
-  description = "TRUSTPROCURE_PUBLIC_BASE_URL — gốc của /login#… và /i#… (https://, không đường dẫn)."
-  type        = string
-}
-
-variable "origin_duoc_phep" {
-  description = "TRUSTPROCURE_ALLOWED_ORIGINS — origin trình duyệt được gửi yêu cầu không-GET kèm cookie."
-  type        = list(string)
-  default     = []
+  validation {
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", var.ten_mien))
+    error_message = "ten_mien phải là một domain chữ thường hợp lệ."
+  }
 }
 
 variable "anh" {
-  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate } = \"<ecr>/tp-api@sha256:…\"."
-  type        = object({ api = string, worker = string, migrate = string })
+  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys } = \"<ecr>/tp-api@sha256:…\"."
+  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string })
   validation {
     condition     = alltrue([for u in values(var.anh) : can(regex("@sha256:[0-9a-f]{64}$", u))])
     error_message = "Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."
@@ -68,6 +77,16 @@ variable "anh" {
 }
 
 variable "so_ban_api" {
+  type    = number
+  default = 1
+}
+
+variable "so_ban_web" {
+  type    = number
+  default = 1
+}
+
+variable "so_ban_public_keys" {
   type    = number
   default = 1
 }
@@ -83,9 +102,8 @@ variable "kms" {
   type = object({
     org_key_version  = string
     totp_key_version = string
-    receipt_kid      = string
   })
-  default = { org_key_version = "kms-1", totp_key_version = "kms-totp-1", receipt_kid = "kms-2026-09" }
+  default = { org_key_version = "kms-1", totp_key_version = "kms-totp-1" }
 }
 
 variable "ses" {
@@ -96,6 +114,25 @@ variable "ses" {
     nhan_canh_bao     = list(string)
     configuration_set = string
   })
+}
+
+variable "sms" {
+  description = "[ADR-069] Kênh SMS của api — null = tắt. danh_tinh_gui: sender ID (brandname) đã đăng ký, khớp IAM của stack 85."
+  type = object({
+    danh_tinh_gui     = string
+    configuration_set = optional(string)
+  })
+  default = null
+}
+
+variable "zalo" {
+  description = "[ADR-069] Kênh Zalo ZNS của api — null = tắt. Ba ID template ZNS đã duyệt; secret token của stack 85."
+  type = object({
+    template_otp        = string
+    template_invitation = string
+    template_deadline   = string
+  })
+  default = null
 }
 
 variable "ses_endpoint_service" {
@@ -118,6 +155,10 @@ locals {
   cidr     = "10.20.0.0/16"
   az       = slice(data.aws_availability_zones.co.names, 0, 2)
   secret   = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
+  # [ADR-070] { kid_dang_dung, khoa_cong_khai = { kid = SPKI base64 } }
+  bien_nhan = data.terraform_remote_state.kms.outputs.bien_nhan
+  # [ADR-068] Một origin cho cả trang và /api/*: không CORS, cookie phiên đi cùng origin.
+  goc = "https://${var.ten_mien}"
 }
 
 data "aws_availability_zones" "co" { state = "available" }
@@ -150,6 +191,15 @@ resource "aws_subnet" "ung_dung" {
   cidr_block        = cidrsubnet(local.cidr, 8, 10 + count.index)
   availability_zone = local.az[count.index]
   tags              = { Name = "tp-ung-dung-${count.index}" }
+}
+
+# [ADR-069] Subnet riêng của api: bảng định tuyến của nó — và CHỈ của nó — có tuyến ra NAT.
+resource "aws_subnet" "api" {
+  count             = 2
+  vpc_id            = aws_vpc.tp.id
+  cidr_block        = cidrsubnet(local.cidr, 8, 30 + count.index)
+  availability_zone = local.az[count.index]
+  tags              = { Name = "tp-api-${count.index}" }
 }
 
 resource "aws_subnet" "csdl" {
@@ -191,6 +241,34 @@ resource "aws_route_table_association" "csdl" {
   route_table_id = aws_route_table.rieng.id
 }
 
+# [ADR-069] MỘT NAT ở AZ đầu (~35 USD/tháng + phí dữ liệu); api ở AZ kia đi chéo AZ. NAT hỏng thì SMS/Zalo
+# hỏng, email và mọi thứ khác không — chấp nhận ở quy mô này.
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = { Name = "tp-nat" }
+}
+
+resource "aws_nat_gateway" "api" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.cong_khai[0].id
+  tags          = { Name = "tp-nat" }
+  depends_on    = [aws_internet_gateway.tp]
+}
+
+resource "aws_route_table" "api" {
+  vpc_id = aws_vpc.tp.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.api.id
+  }
+}
+
+resource "aws_route_table_association" "api" {
+  count          = 2
+  subnet_id      = aws_subnet.api[count.index].id
+  route_table_id = aws_route_table.api.id
+}
+
 # ---------------------------------------------------------------------------------------------
 # Security group — mỗi tiến trình một nhóm, luật theo nhóm chứ không theo CIDR
 # ---------------------------------------------------------------------------------------------
@@ -209,6 +287,18 @@ resource "aws_security_group" "api" {
 resource "aws_security_group" "worker" {
   name        = "tp-unseal-worker"
   description = "Task unseal-worker"
+  vpc_id      = aws_vpc.tp.id
+}
+
+resource "aws_security_group" "web" {
+  name        = "tp-web"
+  description = "Task web (chi tinh)"
+  vpc_id      = aws_vpc.tp.id
+}
+
+resource "aws_security_group" "public_keys" {
+  name        = "tp-public-keys"
+  description = "Task public-keys (chi nua cong khai)"
   vpc_id      = aws_vpc.tp.id
 }
 
@@ -231,11 +321,14 @@ resource "aws_security_group" "endpoint" {
 }
 
 locals {
+  # Nhóm được nói chuyện với CSDL.
   nhom_task = {
     api     = aws_security_group.api.id
     worker  = aws_security_group.worker.id
     migrate = aws_security_group.migrate.id
   }
+  # Nhóm cần đường ra AWS (kéo image ECR, đẩy log) — web có mặt ở đây, KHÔNG có mặt ở CSDL.
+  nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id, public_keys = aws_security_group.public_keys.id })
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb" {
@@ -255,12 +348,53 @@ resource "aws_vpc_security_group_egress_rule" "alb_api" {
   to_port                      = 8080
 }
 
+resource "aws_vpc_security_group_egress_rule" "alb_web" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.web.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8090
+  to_port                      = 8090
+}
+
+resource "aws_vpc_security_group_ingress_rule" "web_tu_alb" {
+  security_group_id            = aws_security_group.web.id
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8090
+  to_port                      = 8090
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_public_keys" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.public_keys.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8070
+  to_port                      = 8070
+}
+
+resource "aws_vpc_security_group_ingress_rule" "public_keys_tu_alb" {
+  security_group_id            = aws_security_group.public_keys.id
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8070
+  to_port                      = 8070
+}
+
 resource "aws_vpc_security_group_ingress_rule" "api_tu_alb" {
   security_group_id            = aws_security_group.api.id
   referenced_security_group_id = aws_security_group.alb.id
   ip_protocol                  = "tcp"
   from_port                    = 8080
   to_port                      = 8080
+}
+
+# [ADR-069] api ra internet CHỈ 443 (SMS End User Messaging, Zalo ZNS). Không lọc theo tên miền — xem ADR-069.
+resource "aws_vpc_security_group_egress_rule" "api_internet" {
+  security_group_id = aws_security_group.api.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_csdl" {
@@ -273,7 +407,7 @@ resource "aws_vpc_security_group_egress_rule" "task_csdl" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_endpoint" {
-  for_each                     = local.nhom_task
+  for_each                     = local.nhom_ra_aws
   security_group_id            = each.value
   referenced_security_group_id = aws_security_group.endpoint.id
   ip_protocol                  = "tcp"
@@ -282,7 +416,7 @@ resource "aws_vpc_security_group_egress_rule" "task_endpoint" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_s3" {
-  for_each          = local.nhom_task
+  for_each          = local.nhom_ra_aws
   security_group_id = each.value
   prefix_list_id    = aws_vpc_endpoint.s3.prefix_list_id
   ip_protocol       = "tcp"
@@ -300,7 +434,7 @@ resource "aws_vpc_security_group_ingress_rule" "csdl_tu_task" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "endpoint_tu_task" {
-  for_each                     = local.nhom_task
+  for_each                     = local.nhom_ra_aws
   security_group_id            = aws_security_group.endpoint.id
   referenced_security_group_id = each.value
   ip_protocol                  = "tcp"
@@ -387,7 +521,7 @@ resource "aws_db_instance" "tp" {
 # ECR
 # ---------------------------------------------------------------------------------------------
 resource "aws_ecr_repository" "tp" {
-  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate"])
+  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -441,19 +575,35 @@ resource "aws_ecs_cluster" "tp" {
 }
 
 resource "aws_cloudwatch_log_group" "tp" {
-  for_each          = toset(["api", "unseal-worker", "migrate"])
+  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys"])
   name              = "/tp/${each.key}"
   retention_in_days = 90
 }
 
 locals {
+  # [ADR-069] Kênh số điện thoại: chỉ khai biến của kênh đã bật — api đọc "có biến" là "bật".
+  env_kenh_so = concat(
+    var.sms == null ? [] : concat([
+      { name = "TRUSTPROCURE_SMS_REGION", value = local.region },
+      { name = "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY", value = var.sms.danh_tinh_gui },
+      ], var.sms.configuration_set == null ? [] : [
+      { name = "TRUSTPROCURE_SMS_CONFIGURATION_SET", value = var.sms.configuration_set },
+    ]),
+    var.zalo == null ? [] : [
+      { name = "TRUSTPROCURE_ZALO_REGION", value = local.region },
+      { name = "TRUSTPROCURE_ZALO_SECRET_ID", value = "tp/api/zalo-oa" },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_OTP", value = var.zalo.template_otp },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_INVITATION", value = var.zalo.template_invitation },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE", value = var.zalo.template_deadline },
+    ],
+  )
   env = {
-    api = [
+    api = concat([
       { name = "NODE_ENV", value = "production" },
       { name = "TRUSTPROCURE_LISTEN_HOST", value = "0.0.0.0" },
       { name = "TRUSTPROCURE_LISTEN_PORT", value = "8080" },
-      { name = "TRUSTPROCURE_PUBLIC_BASE_URL", value = var.url_cong_khai },
-      { name = "TRUSTPROCURE_ALLOWED_ORIGINS", value = join(",", var.origin_duoc_phep) },
+      { name = "TRUSTPROCURE_PUBLIC_BASE_URL", value = local.goc },
+      { name = "TRUSTPROCURE_ALLOWED_ORIGINS", value = local.goc },
       # ALB nằm trong hai subnet công khai: chỉ CIDR ấy được nói "khách là ai" (sổ nợ 41).
       { name = "TRUSTPROCURE_TRUSTED_PROXIES", value = join(",", aws_subnet.cong_khai[*].cidr_block) },
       { name = "TRUSTPROCURE_KEY_ADAPTER", value = "aws-kms" },
@@ -463,13 +613,13 @@ locals {
       { name = "TRUSTPROCURE_KMS_TOTP_KEY_ID", value = "alias/tp-totp" },
       { name = "TRUSTPROCURE_KMS_TOTP_KEY_VERSION", value = var.kms.totp_key_version },
       { name = "TRUSTPROCURE_KMS_RECEIPT_KEY_ID", value = "alias/tp-receipt-sign" },
-      { name = "TRUSTPROCURE_KMS_RECEIPT_KID", value = var.kms.receipt_kid },
+      { name = "TRUSTPROCURE_KMS_RECEIPT_KID", value = local.bien_nhan.kid_dang_dung },
       { name = "TRUSTPROCURE_SENDER_ADAPTER", value = "ses" },
       { name = "TRUSTPROCURE_SES_REGION", value = local.region },
       { name = "TRUSTPROCURE_SES_FROM", value = var.ses.tu_api },
       { name = "TRUSTPROCURE_SES_CONFIGURATION_SET", value = var.ses.configuration_set },
       { name = "TRUSTPROCURE_OTP_PEPPER_ACTIVE", value = "p1" },
-    ]
+    ], local.env_kenh_so)
     worker = [
       { name = "NODE_ENV", value = "production" },
       { name = "TRUSTPROCURE_KEY_ADAPTER", value = "aws-kms" },
@@ -486,6 +636,20 @@ locals {
       { name = "TRUSTPROCURE_MIGRATE_DB_PORT", value = tostring(aws_db_instance.tp.port) },
       { name = "TRUSTPROCURE_MIGRATE_DB_NAME", value = aws_db_instance.tp.db_name },
     ]
+    # Image đã đặt ba biến này; khai lại ở đây để task definition tự nói nó chạy chế độ nào (ADR-068).
+    web = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_WEB_STATIC_ONLY", value = "1" },
+      { name = "TRUSTPROCURE_WEB_HOST", value = "0.0.0.0" },
+      { name = "TRUSTPROCURE_WEB_PORT", value = "8090" },
+    ]
+    public_keys = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_PUBLIC_KEYS_HOST", value = "0.0.0.0" },
+      { name = "TRUSTPROCURE_PUBLIC_KEYS_PORT", value = "8070" },
+      { name = "TRUSTPROCURE_RECEIPT_ACTIVE_KID", value = local.bien_nhan.kid_dang_dung },
+      { name = "TRUSTPROCURE_RECEIPT_PUBLIC_KEYS", value = jsonencode(local.bien_nhan.khoa_cong_khai) },
+    ]
   }
   bi_mat = {
     api = [
@@ -501,11 +665,17 @@ locals {
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
     ]
+    web         = []
+    public_keys = []
   }
   task = {
     api     = { ho = "tp-api", role = local.role_arn.api, cpu = 512, mem = 1024, log = "api", cong = [8080] }
     worker  = { ho = "tp-unseal-worker", role = local.role_arn.unseal_worker, cpu = 256, mem = 512, log = "unseal-worker", cong = [] }
     migrate = { ho = "tp-migrate", role = local.role_arn.migrate, cpu = 256, mem = 512, log = "migrate", cong = [] }
+    # Web không gọi AWS nào: KHÔNG task role (chỉ execution role để kéo image, đẩy log).
+    web = { ho = "tp-web", role = null, cpu = 256, mem = 512, log = "web", cong = [8090] }
+    # [ADR-070] Chỉ nửa công khai trong biến môi trường: không task role.
+    public_keys = { ho = "tp-public-keys", role = null, cpu = 256, mem = 512, log = "public-keys", cong = [8070] }
   }
 }
 
@@ -545,7 +715,7 @@ resource "aws_ecs_task_definition" "tp" {
 # ALB + HTTPS
 # ---------------------------------------------------------------------------------------------
 resource "aws_acm_certificate" "api" {
-  domain_name       = var.ten_mien_api
+  domain_name       = var.ten_mien
   validation_method = "DNS"
   lifecycle { create_before_destroy = true }
 }
@@ -581,6 +751,23 @@ resource "aws_lb_target_group" "api" {
   deregistration_delay = 30
 }
 
+resource "aws_lb_target_group" "web" {
+  name        = "tp-web"
+  port        = 8090
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.tp.id
+  health_check {
+    path                = "/nop-thau"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 15
+  }
+  deregistration_delay = 30
+}
+
+# [ADR-068] Mặc định: trang tĩnh. `/api/*` đi THẲNG tới api — tiến trình web không bao giờ thấy yêu cầu ấy.
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.api.arn
   port              = 443
@@ -588,6 +775,58 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
   default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+resource "aws_lb_target_group" "public_keys" {
+  name        = "tp-public-keys"
+  port        = 8070
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.tp.id
+  health_check {
+    path                = "/.well-known/trustprocure-receipt-keys"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 15
+  }
+  deregistration_delay = 30
+}
+
+# [ADR-070] Đường công bố khoá — không viết lại đường: service phục vụ đúng đường dẫn cố định ấy.
+resource "aws_lb_listener_rule" "public_keys" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+  condition {
+    path_pattern { values = ["/.well-known/trustprocure-receipt-keys", "/.well-known/trustprocure-receipt-keys/*"] }
+  }
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.public_keys.arn
+  }
+}
+
+# Trang gọi `fetch("/api<đường>")` còn api phục vụ `<đường>` (bộ chuyển tiếp demo của ADR-044 cũng bỏ tiền tố):
+# ALB viết lại đường trước khi chuyển. `/api` trơn không khớp mẫu này ⇒ rơi về web ⇒ 404.
+resource "aws_lb_listener_rule" "api" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+  condition {
+    path_pattern { values = ["/api/*"] }
+  }
+  transform {
+    type = "url-rewrite"
+    url_rewrite_config {
+      rewrite {
+        regex   = "^/api/(.*)$"
+        replace = "/$1"
+      }
+    }
+  }
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
   }
@@ -617,7 +856,7 @@ resource "aws_ecs_service" "api" {
   desired_count   = var.so_ban_api
   launch_type     = "FARGATE"
   network_configuration {
-    subnets          = aws_subnet.ung_dung[*].id
+    subnets          = aws_subnet.api[*].id
     security_groups  = [aws_security_group.api.id]
     assign_public_ip = false
   }
@@ -630,8 +869,56 @@ resource "aws_ecs_service" "api" {
     enable   = true
     rollback = true
   }
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener_rule.api]
   # Pipeline `tp-deploy` đăng ký bản mới và cập nhật service — Terraform không giật lùi nó.
+  lifecycle { ignore_changes = [task_definition] }
+}
+
+resource "aws_ecs_service" "public_keys" {
+  name            = "tp-public-keys"
+  cluster         = aws_ecs_cluster.tp.id
+  task_definition = aws_ecs_task_definition.tp["public_keys"].arn
+  desired_count   = var.so_ban_public_keys
+  launch_type     = "FARGATE"
+  network_configuration {
+    subnets          = aws_subnet.ung_dung[*].id
+    security_groups  = [aws_security_group.public_keys.id]
+    assign_public_ip = false
+  }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.public_keys.arn
+    container_name   = "tp-public-keys"
+    container_port   = 8070
+  }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  depends_on = [aws_lb_listener_rule.public_keys]
+  lifecycle { ignore_changes = [task_definition] }
+}
+
+resource "aws_ecs_service" "web" {
+  name            = "tp-web"
+  cluster         = aws_ecs_cluster.tp.id
+  task_definition = aws_ecs_task_definition.tp["web"].arn
+  desired_count   = var.so_ban_web
+  launch_type     = "FARGATE"
+  network_configuration {
+    subnets          = aws_subnet.ung_dung[*].id
+    security_groups  = [aws_security_group.web.id]
+    assign_public_ip = false
+  }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.web.arn
+    container_name   = "tp-web"
+    container_port   = 8090
+  }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  depends_on = [aws_lb_listener.https]
   lifecycle { ignore_changes = [task_definition] }
 }
 
@@ -657,12 +944,12 @@ resource "aws_ecs_service" "worker" {
 # Đầu ra
 # ---------------------------------------------------------------------------------------------
 output "ban_ghi_dns" {
-  description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền api tới ALB (bước 2)."
+  description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền công khai tới ALB (bước 2)."
   value = {
     xac_minh_acm = [for o in aws_acm_certificate.api.domain_validation_options : {
       loai = o.resource_record_type, ten = o.resource_record_name, gia_tri = o.resource_record_value
     }]
-    api = { loai = "CNAME", ten = var.ten_mien_api, gia_tri = aws_lb.api.dns_name }
+    cong_khai = { loai = "CNAME", ten = var.ten_mien, gia_tri = aws_lb.api.dns_name }
   }
 }
 
@@ -676,4 +963,12 @@ output "lenh_chay_migrate" {
     "--task-definition tp-migrate",
     "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", aws_subnet.ung_dung[*].id)}],securityGroups=[${aws_security_group.migrate.id}],assignPublicIp=DISABLED}'",
   ])
+}
+
+output "bien_github" {
+  description = "Biến của environment GitHub `prod` cho pipeline deploy (ADR-067) — role deploy không dò được mạng."
+  value = {
+    TP_SUBNETS_UNG_DUNG = join(",", aws_subnet.ung_dung[*].id)
+    TP_SG_MIGRATE       = aws_security_group.migrate.id
+  }
 }

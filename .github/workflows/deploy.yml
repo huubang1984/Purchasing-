@@ -1,0 +1,173 @@
+name: Deploy — prod (bam tay)
+
+# =============================================================================================
+# [ADR-067] PIPELINE DEPLOY: BAM TAY, DUYET TAY, HAI ROLE TACH NHAU
+# =============================================================================================
+# Chi `workflow_dispatch` tren `master`. Ba job:
+#
+#   build   KHONG co quyen AWS nao. Chay `docker build` (tuc `pnpm install` cua ca cay phu
+#           thuoc, script vong doi cua ben thu ba) va giao image duoi dang artifact. Token OIDC
+#           khong bao gio nam chung job voi ma ben thu ba — cung nguyen tac khoan no 67 cua
+#           `do-lap.yml`.
+#   api     environment `prod` (Required reviewers), role `tp-deploy`: day image tp-api va
+#           tp-migrate (ghim digest), chay task migrate MOT LAN va chi khi exit 0 moi cap nhat
+#           service `tp-api`, cho on dinh, kiem service chay DUNG ban vua dang ky; roi `tp-web`
+#           (ADR-068: chi tinh, khong task role) va `tp-public-keys` (ADR-070: chi nua cong khai).
+#   worker  environment `prod-worker` (duyet RIENG), role `tp-deploy-worker`: day tp-unseal-worker,
+#           cap nhat service `tp-unseal-worker`. Role nay PassRole duoc role co kms:Decrypt tren
+#           tp-org-wrap (ADR-062), nen no chi chay khi nguoi bam chon worker.
+#
+# Mot thanh phan, mot commit, mot the: the image = SHA commit; task definition ghim digest.
+# `concurrency` xep hang hai luot deploy — khong huy luot dang chay giua migrate va cap nhat.
+# Cac buoc AWS nam o `deploy/trien-khai.sh`.
+# =============================================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      # `type: choice` — gia tri tu do qua REST API bi GitHub chan (cung ly do do-lap.yml).
+      thanh_phan:
+        description: "Thanh phan can deploy"
+        type: choice
+        options: [api, worker, ca-hai]
+        default: api
+
+permissions: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build image (khong quyen AWS)
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Build image theo thanh phan
+        env:
+          THANH_PHAN: ${{ inputs.thanh_phan }}
+        run: |
+          set -euo pipefail
+          mkdir -p anh
+          build() {
+            docker build -f deploy/Dockerfile --target "$1" -t "tp-$1:ci" .
+            docker save "tp-$1:ci" | gzip -1 > "anh/$1.tar.gz"
+          }
+          if [ "$THANH_PHAN" != "worker" ]; then build api; build migrate; build web; build public-keys; fi
+          if [ "$THANH_PHAN" != "api" ]; then build worker; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: anh
+          path: anh/
+          retention-days: 1
+          if-no-files-found: error
+
+  api:
+    name: Deploy api + migrate + web + public-keys (tp-deploy)
+    needs: build
+    if: inputs.thanh_phan != 'worker'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-southeast-1
+      TAI_KHOAN: "942091277863"
+      CLUSTER: tp-prod
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: anh
+          path: anh
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: arn:aws:iam::942091277863:role/tp-deploy
+          role-session-name: deploy-api-${{ github.run_id }}
+          aws-region: ap-southeast-1
+      - name: Dang nhap ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "$TAI_KHOAN.dkr.ecr.$AWS_REGION.amazonaws.com"
+      - name: Day image, migrate, cap nhat tp-api
+        env:
+          SUBNETS: ${{ vars.TP_SUBNETS_UNG_DUNG }}
+          SG_MIGRATE: ${{ vars.TP_SG_MIGRATE }}
+          THE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          anh_migrate=$(bash deploy/trien-khai.sh day anh/migrate.tar.gz tp-migrate "$THE")
+          anh_api=$(bash deploy/trien-khai.sh day anh/api.tar.gz tp-api "$THE")
+          anh_web=$(bash deploy/trien-khai.sh day anh/web.tar.gz tp-web "$THE")
+          anh_pk=$(bash deploy/trien-khai.sh day anh/public-keys.tar.gz tp-public-keys "$THE")
+          td_migrate=$(bash deploy/trien-khai.sh dang-ky tp-migrate "$anh_migrate" tp-migrate)
+          bash deploy/trien-khai.sh migrate "$td_migrate"
+          td_api=$(bash deploy/trien-khai.sh dang-ky tp-api "$anh_api" tp-api)
+          bash deploy/trien-khai.sh cap-nhat tp-api "$td_api"
+          # Web sau api: trang mới có thể gọi đường api mới, không ngược lại.
+          td_web=$(bash deploy/trien-khai.sh dang-ky tp-web "$anh_web" -)
+          bash deploy/trien-khai.sh cap-nhat tp-web "$td_web"
+          # ADR-070: không task role, như web.
+          td_pk=$(bash deploy/trien-khai.sh dang-ky tp-public-keys "$anh_pk" -)
+          bash deploy/trien-khai.sh cap-nhat tp-public-keys "$td_pk"
+          {
+            echo "### Deploy api"
+            echo "- migrate: \`$td_migrate\`"
+            echo "- api: \`$td_api\`"
+            echo "- web: \`$td_web\`"
+            echo "- public-keys: \`$td_pk\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    name: Deploy unseal-worker (tp-deploy-worker)
+    needs: [build, api]
+    # Chay sau `api` khi ca hai duoc chon (migrate da xong); `api` bi bo qua khi chi chon worker.
+    if: >-
+      !cancelled() && inputs.thanh_phan != 'api' && needs.build.result == 'success'
+      && (needs.api.result == 'success' || needs.api.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: prod-worker
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-southeast-1
+      TAI_KHOAN: "942091277863"
+      CLUSTER: tp-prod
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: anh
+          path: anh
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: arn:aws:iam::942091277863:role/tp-deploy-worker
+          role-session-name: deploy-worker-${{ github.run_id }}
+          aws-region: ap-southeast-1
+      - name: Dang nhap ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "$TAI_KHOAN.dkr.ecr.$AWS_REGION.amazonaws.com"
+      - name: Day image, cap nhat tp-unseal-worker
+        env:
+          THE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          anh_worker=$(bash deploy/trien-khai.sh day anh/worker.tar.gz tp-unseal-worker "$THE")
+          td_worker=$(bash deploy/trien-khai.sh dang-ky tp-unseal-worker "$anh_worker" tp-unseal-worker)
+          bash deploy/trien-khai.sh cap-nhat tp-unseal-worker "$td_worker"
+          {
+            echo "### Deploy worker"
+            echo "- worker: \`$td_worker\`"
+          } >> "$GITHUB_STEP_SUMMARY"

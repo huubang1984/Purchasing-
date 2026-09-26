@@ -6436,3 +6436,151 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   trỏ tới nơi web sẽ chạy. Đó là lát cắt kế.
 - Chi phí ước lượng khi chạy: RDS ~30 USD/tháng, ALB ~20, Fargate (1 api 0,5 vCPU + 1 worker 0,25 vCPU)
   ~25, 6 interface endpoint ở 1 AZ ~45 (≈ 90 ở 2 AZ).
+
+## ADR-067 — Pipeline deploy bấm tay: build không quyền AWS, migrate trước api, worker duyệt riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-026 §4, **ADR-062**, ADR-066
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
+   GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
+   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy.
+2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
+   ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
+   `api` (role `tp-deploy`) và `worker` (role `tp-deploy-worker`) chỉ chạy mã của kho ở cùng commit.
+3. **Thứ tự của `api`:** đẩy `tp-migrate` và `tp-api` (thẻ = SHA commit, ECR bất biến ⇒ chạy lại dùng lại
+   image đã có) → đăng ký bản task definition mới **chỉ đổi image, ghim digest** → chạy task migrate một lần,
+   chờ dừng, **exit 0 mới đi tiếp** → cập nhật service `tp-api`, chờ ổn định, và chỉ ĐẠT khi service chạy
+   đúng bản vừa đăng ký (circuit breaker rollback cũng "ổn định", nhưng trên bản cũ).
+4. **Worker:** job riêng, environment riêng, chỉ chạy khi người bấm chọn `worker` hoặc `ca-hai`; với
+   `ca-hai` nó chạy SAU `api` (migrate xong trước). Đăng ký trong CHÍNH họ `tp-unseal-worker` qua
+   `UpdateService` — không `RunTask`, nên không bắn cảnh báo ⑵ của stack 60; thay image trong họ worker là
+   rủi ro còn lại đã nêu ở stack 60, và đường ấy đi qua duyệt tay.
+5. **Kiểm hình dạng trước khi nhân bản:** bản task definition mới chép từ bản ACTIVE mới nhất của họ; nếu
+   bản ấy mang task role khác role mong đợi, hoặc không đúng một container cùng tên họ, pipeline dừng.
+   Mạng của task migrate (subnet, security group) là biến environment `TP_SUBNETS_UNG_DUNG`,
+   `TP_SG_MIGRATE` — output `bien_github` của stack 90; role deploy không có quyền EC2 để tự dò.
+
+### Hệ quả, nói thẳng
+
+- **Chưa chạy thật:** cần stack 30/90 đã apply và hai environment đã tạo trên GitHub. `deploy/trien-khai.sh`
+  được đo với `aws`/`docker` giả (12 ca: đẩy mới, dùng lại, thẻ sai, đăng ký, role sai, image ngoài
+  registry, migrate đạt/hỏng, subnet sai, cập nhật đạt, rollback, chờ quá hạn).
+- **Lần đầu vẫn tay:** stack 90 cần image có sẵn để tạo task definition đầu tiên (README, bước 4).
+- Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
+  người vận hành đọc `/tp/migrate` bằng tay.
+- `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
+
+## ADR-068 — `apps/web` ở prod: chỉ phục vụ tĩnh sau cùng ALB, ALB định tuyến `/api/*` thẳng tới api
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-044**, ADR-020, ADR-066, ADR-067
+
+### Bối cảnh
+
+ADR-044 dựng `apps/web` cho lát cắt demo: một máy chủ tĩnh TỰ chuyển tiếp `/api/*` sang `apps/api`, và nói thẳng *"`apps/web`
+không được đứng trước một cụm sản xuất — triển khai thật dùng một reverse proxy của hạ tầng"*: bộ chuyển tiếp thấy cookie phiên,
+và nó không chuyển `X-Forwarded-For` nên mọi người dùng chung một ô hạn mức. ADR-066 để lại `apps/web` chưa triển khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Một tên miền** (`ten_mien` của stack 90) cho cả trang lẫn `/api/*`: trang gọi `fetch("/api…")` cùng origin, nên không CORS,
+   cookie `__Host-` đi đúng origin. `TRUSTPROCURE_PUBLIC_BASE_URL` và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ tên
+   miền ấy — không còn hai biến Terraform riêng để khai lệch.
+2. **ALB là reverse proxy:** luật listener `/api/*` → target group `tp-api`, viết lại đường `^/api/(.*)$` → `/$1` (cùng phép bỏ
+   tiền tố của bộ chuyển tiếp demo); mặc định → target group `tp-web`. Api thấy ALB làm proxy tin cậy (`TRUSTED_PROXIES` = CIDR
+   subnet công khai), nên hạn mức theo người gọi hoạt động đúng.
+3. **`apps/web` chế độ chỉ tĩnh** — `TRUSTPROCURE_WEB_STATIC_ONLY=1`: `/api/*` lọt tới nó ra 404, không gọi upstream nào. Hai chế
+   độ loại trừ nhau, và **`NODE_ENV=production` mà không chỉ tĩnh là lỗi khởi động** — câu "không đứng trước cụm sản xuất" của
+   ADR-044 thành một hàng rào có test, không còn là một dòng tài liệu.
+4. **Service `tp-web`:** Fargate 0,25 vCPU, security group riêng (vào 8090 chỉ từ ALB; ra chỉ VPC endpoint và S3 để kéo image,
+   đẩy log — **không** tới CSDL), **không task role**. Image đích `web` của `deploy/Dockerfile`: `apps/web` và mã nguồn cửa trình
+   duyệt của `packages/sealed-envelope`, không phụ thuộc nào. Health check `/nop-thau`.
+5. **Pipeline (ADR-067):** job `api` đẩy `tp-web` và cập nhật service SAU `tp-api`; `trien-khai.sh dang-ky … -` đòi họ `tp-web`
+   KHÔNG mang task role — một bản bị gắn role thì dừng.
+
+### Hệ quả, nói thẳng
+
+- **Viết lại đường của ALB** (`transform` `url-rewrite`) mới được `terraform validate` với provider 6.66 — chưa chạy trên ALB thật.
+  Nếu vùng không nhận, phương án lùi là để api phục vụ thêm tiền tố `/api`, không phải quay lại bộ chuyển tiếp.
+- `/health` của api không còn công khai ở gốc; đường kiểm là `/api/health`.
+- Bộ chuyển tiếp của ADR-044 vẫn còn cho demo cục bộ (`pnpm web:dev`), và vẫn mang đúng những cái giá ADR ấy nêu.
+- Trang vẫn `cache-control: no-store` và nạp tệp một lần lúc khởi động — đổi trang = deploy lại, chấp nhận được khi deploy đã là
+  một nút bấm.
+
+## ADR-069 — Kênh SMS qua AWS End User Messaging, Zalo ZNS với token trong Secrets Manager, và api ra internet qua NAT riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-015**, ADR-065, ADR-066
+
+### Bối cảnh
+
+ADR-015 chốt SMS là kênh OTP mặc định và Zalo ZNS là kênh thay thế; ADR-065 dựng bộ gửi thật chỉ cho EMAIL và để
+tin kênh SMS/ZALO_ZNS làm việc outbox thất bại. Hệ quả: nhà cung cấp chỉ khai số điện thoại không nhận được lời
+mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo chỉ có API công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Định tuyến theo kênh** (`adapters/kenh-so.ts`): `EMAIL` → SES; `SMS` → AWS End User Messaging SMS; `ZALO_ZNS` →
+   Zalo. Link đăng nhập và thông báo duyệt vẫn chỉ là thư. Kênh chưa bật vẫn **NÉM** — không rơi về kênh khác
+   (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
+2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
+   `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
+   **ASCII không dấu, ≤ 160 ký tự** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
+   đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
+3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
+   `otp`, `duong_dan`, `han_nop`). **Token trong Secrets Manager** (`tp/api/zalo-oa`): refresh token dùng một lần và
+   xoay mỗi lần làm mới, nên api **đọc và ghi** secret lúc chạy — IAM Get + Put trên đúng secret ấy. Làm mới sớm 10
+   phút trước hạn, single-flight trong tiến trình, đọc kho trước khi làm mới và sau khi làm mới thất bại (task khác
+   có thể đã xoay). Xoay xong mà không ghi được kho là lỗi có tên riêng `ZaloTokenMatError`.
+4. **Đường ra: NAT Gateway một AZ, CHỈ cho api.** Api dời sang subnet riêng (`tp-api-*`) mà bảng định tuyến có tuyến
+   ra NAT; security group api mở ra ngoài đúng cổng 443. Worker, migrate, web giữ nguyên: không có tuyến ra
+   internet.
+
+### Hệ quả, nói thẳng
+
+- **Api ra được MỌI máy chủ HTTPS**, không chỉ Zalo và AWS: security group không lọc theo tên miền. Một api bị chiếm
+  quyền có đường tuồn dữ liệu mà trước ADR này nó không có. Lọc theo tên miền (AWS Network Firewall, ~300 USD/tháng)
+  hoặc một egress proxy là việc khi có dữ liệu thật đủ giá — không làm ở lát này.
+- **Chưa gọi thật** Zalo lẫn End User Messaging: đường dẫn và hình dạng phản hồi của Zalo theo tài liệu công khai,
+  đo trên fetch giả. Đăng ký brandname, duyệt template ZNS, cấp quyền OA là việc tay dài ngày (README, stack 85).
+- **Hai task api làm mới token Zalo ĐÚNG cùng lúc vẫn có thể giẫm nhau** — Zalo không có phép so-và-đổi; kho đọc lại
+  sau thất bại chỉ cứu được khi task kia đã ghi xong. Với `so_ban_api = 1` rủi ro gần như không có; tăng số bản thì
+  phải có khoá phân tán (Postgres advisory lock) trước.
+- Token bị thu hồi trước hạn: lần gửi hỏng xoá token trong bộ nhớ, lần sau đọc lại kho — nhưng không tự làm mới
+  khi kho vẫn ghi "còn hạn"; tự hồi phục khi access token hết hạn (≤ 25 giờ) hoặc khi người vận hành nạp lại.
+- NAT là một điểm hỏng ở một AZ: NAT chết thì SMS/Zalo chết, email và phần còn lại không. Chi phí ~35 USD/tháng +
+  phí dữ liệu.
+- `SENT` trong outbox vẫn không phải bằng chứng đã tới tay (ADR-015) — cả hai kênh đều có báo cáo giao tin riêng
+  (event destination của End User Messaging, webhook ZNS) chưa được nối.
+
+## ADR-070 — Công bố khoá công khai biên nhận: service riêng chỉ cầm nửa công khai, neo vào bucket audit qua job neo
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-011** mục 3, ADR-026, ADR-062, ADR-066, ADR-068
+
+### Bối cảnh
+
+Khoản nợ 30 dựng `apps/public-keys` (tài liệu `/.well-known/trustprocure-receipt-keys`, dấu vân tay SHA-256 của SPKI) nhưng
+chưa có tiến trình chạy, và nó dựng tài liệu từ một `ReceiptSigningKeyRing` — thứ chỉ có dưới `local-dev`. Dưới `aws-kms`,
+khoá riêng không rời KMS, và chỉ `tp-api` (người ký) cùng KeyAdmin đọc được nửa công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Service riêng `tp-public-keys`** sau cùng ALB, luật đường `/.well-known/trustprocure-receipt-keys` và `…/*` (không viết
+   lại đường). Nó chỉ cầm **nửa công khai**, nhận qua biến môi trường (`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS` JSON `{kid: SPKI}`,
+   `TRUSTPROCURE_RECEIPT_ACTIVE_KID`): **không task role, không KMS, không CSDL, không bí mật**. Mỗi SPKI phải là EC P-256 —
+   sai loại thì từ chối khởi động. In dấu vân tay mọi khoá lúc khởi động.
+2. **Một nguồn cho kid và nửa công khai: stack 50** (KeyAdmin có `kms:Get*`) — output `bien_nhan`; stack 90 đọc state ấy cho
+   CẢ `TRUSTPROCURE_KMS_RECEIPT_KID` của api lẫn service công bố. kid không còn là biến của stack 90: đổi alias mà quên đổi
+   kid là ký bằng khoá này nhưng khai kid của khoá kia.
+3. Tài liệu dựng từ nửa công khai **trùng byte** tài liệu dựng từ vòng khoá (test đối chiếu) — hai đường, một định dạng.
+4. **Neo ngoài: tài liệu khoá vào bucket neo audit** (Object Lock COMPLIANCE) qua **đúng danh tính ghi duy nhất**
+   `tp-anchor-writer`, tức qua job neo chạy trên ECS với role `tp-anchor-job` — không nới policy của bucket (ADR-026 §4). Phần
+   này là lát kế (bộ ghi S3 của `AnchorStore`, ký mốc neo bằng KMS ở tài khoản audit, task `tp-anchor-job`).
+
+### Hệ quả, nói thẳng
+
+- Tới khi lát neo xong, tính độc lập của phép kiểm vẫn là **dấu vân tay in ra ngoài** (hợp đồng, điện thoại) — README hướng
+  dẫn tính nó từ output stack 50, không qua endpoint.
+- Một service thêm ~9 USD/tháng (Fargate 0,25 vCPU) để giữ tiến trình ký (api) khác tiến trình công bố.
+- Xoay khoá = sửa stack 50 (khoá mới + mục mới, không gỡ mục cũ) rồi apply 50 → 90 → deploy. Không có đường nào tự động
+  thêm kid vào danh sách công bố: một kid lạ trong biên nhận mà không có trong tài liệu là lỗi vận hành phải thấy được.

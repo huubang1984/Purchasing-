@@ -302,3 +302,50 @@ describe("[ADR-065] docCauHinh — bộ gửi ses", () => {
     nemVeBien(envHopLe({ TRUSTPROCURE_SENDER_ADAPTER: "sns" }), "TRUSTPROCURE_SENDER_ADAPTER", /CHƯA CÓ/u);
   });
 });
+
+// ==============================================================================================
+// [ADR-069] Kênh SMS và Zalo ZNS: tuỳ chọn dưới `ses`, bật khi có một biến, khai một nửa là lỗi; cấm dưới hộp thư dev.
+// ==============================================================================================
+describe("[ADR-069] docCauHinh — kênh SMS và Zalo ZNS", () => {
+  const envSes = (ghiDe: Record<string, string | undefined> = {}): MoiTruong =>
+    envHopLe({
+      TRUSTPROCURE_SENDER_ADAPTER: "ses",
+      TRUSTPROCURE_DEV_MAILBOX_DIR: undefined,
+      TRUSTPROCURE_SES_REGION: "ap-southeast-1",
+      TRUSTPROCURE_SES_FROM: "noreply@thu.vidu.vn",
+      ...ghiDe,
+    });
+  const SMS = { TRUSTPROCURE_SMS_REGION: "ap-southeast-1", TRUSTPROCURE_SMS_ORIGINATION_IDENTITY: "TRUSTPROC" };
+  const ZALO = {
+    TRUSTPROCURE_ZALO_REGION: "ap-southeast-1",
+    TRUSTPROCURE_ZALO_SECRET_ID: "tp/api/zalo-oa",
+    TRUSTPROCURE_ZALO_TEMPLATE_OTP: "228034",
+    TRUSTPROCURE_ZALO_TEMPLATE_INVITATION: "228035",
+    TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE: "228036",
+  };
+
+  it("không khai ⇒ hai kênh tắt (undefined); khai đủ ⇒ đọc đúng", () => {
+    const tat = docCauHinh(envSes());
+    if (tat.senderAdapter !== "ses") throw new Error("fixture khai ses");
+    expect(tat.sms).toBeUndefined();
+    expect(tat.zalo).toBeUndefined();
+    const bat = docCauHinh(envSes({ ...SMS, ...ZALO, TRUSTPROCURE_SMS_CONFIGURATION_SET: "tp-sms" }));
+    if (bat.senderAdapter !== "ses") throw new Error("không tới");
+    expect(bat.sms).toEqual({ region: "ap-southeast-1", danhTinhGui: "TRUSTPROC", configurationSet: "tp-sms" });
+    expect(bat.zalo).toEqual({ region: "ap-southeast-1", secretId: "tp/api/zalo-oa", mau: { otp: "228034", loiMoi: "228035", giaHan: "228036" } });
+  });
+
+  it("khai một nửa hay sai hình dạng ⇒ ném nêu tên biến", () => {
+    nemVeBien(envSes({ TRUSTPROCURE_SMS_ORIGINATION_IDENTITY: "TRUSTPROC" }), "TRUSTPROCURE_SMS_REGION");
+    nemVeBien(envSes({ TRUSTPROCURE_SMS_REGION: "ap-southeast-1" }), "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY");
+    nemVeBien(envSes({ ...SMS, TRUSTPROCURE_SMS_ORIGINATION_IDENTITY: "co khoang" }), "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY");
+    nemVeBien(envSes({ ...ZALO, TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE: undefined }), "TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE");
+    nemVeBien(envSes({ ...ZALO, TRUSTPROCURE_ZALO_TEMPLATE_OTP: "12;34" }), "TRUSTPROCURE_ZALO_TEMPLATE_OTP");
+    nemVeBien(envSes({ ...ZALO, TRUSTPROCURE_ZALO_REGION: "vn" }), "TRUSTPROCURE_ZALO_REGION");
+  });
+
+  it("dưới hộp thư dev, biến SMS/Zalo là của bộ gửi kia ⇒ ném", () => {
+    nemVeBien(envHopLe({ TRUSTPROCURE_SMS_REGION: "ap-southeast-1" }), "TRUSTPROCURE_SMS_REGION", /ADR-065/u);
+    nemVeBien(envHopLe({ TRUSTPROCURE_ZALO_SECRET_ID: "tp/api/zalo-oa" }), "TRUSTPROCURE_ZALO_SECRET_ID", /ADR-065/u);
+  });
+});
