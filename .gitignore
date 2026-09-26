@@ -66,3 +66,5 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+# Biến Terraform mang tên miền, email, digest image — không commit (ADR-066)
+*.tfvars

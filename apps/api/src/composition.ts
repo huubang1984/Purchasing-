@@ -22,12 +22,14 @@
 
 import type { AddressInfo } from "node:net";
 import { KMSClient } from "@aws-sdk/client-kms";
+import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { createAwsKmsReceiptSigner, createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createAwsKmsOrgKeyProvisioner, createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
-import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
+import { taoBoGuiSes } from "./adapters/gui-ses.js";
+import { taoHopThuDev, type HopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotpAwsKms } from "./adapters/totp-aws-kms.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
 import type { CauHinhApi } from "./cau-hinh.js";
@@ -144,7 +146,20 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   ghiLogLoiKetNoiToiMuon(auditPool, "auditPool");
 
   const khoa = dungKhoa(ch);
-  const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
+  // [ADR-065] Bộ gửi theo TRUSTPROCURE_SENDER_ADAPTER: hộp thư dev (tệp) hay SES (chỉ kênh EMAIL).
+  let sesClient: SESv2Client | undefined;
+  let hopThu: HopThuDev;
+  if (ch.senderAdapter === "dev-mailbox") {
+    hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
+  } else {
+    sesClient = new SESv2Client({ region: ch.ses.region });
+    hopThu = taoBoGuiSes({
+      client: sesClient,
+      tuDiaChi: ch.ses.tuDiaChi,
+      baseUrl: ch.publicBaseUrl,
+      ...(ch.ses.configurationSet === undefined ? {} : { configurationSet: ch.ses.configurationSet }),
+    });
+  }
   // [sổ nợ 38] ~~Hai~~ [ADR-064] Bốn adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS
   // treo không được giữ kết nối tới idle_in_transaction_session_timeout.
   const services: ApiServices = boiTranKms({
@@ -310,6 +325,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       });
       await Promise.allSettled([pool.end(), auditPool.end()]);
       khoa.dong();
+      sesClient?.destroy();
     },
   };
 }
