@@ -207,6 +207,18 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
     }
   });
 
+  it("[ADR-072] lich: tự liệt kê MỌI tổ chức bằng vai app_neo, xuất rồi kiểm — mã 0 khi mọi sổ xanh; nhận tham số ⇒ mã 1", () => {
+    const kq = chay("lich");
+    expect(kq.ma, kq.loi).toBe(0);
+    expect(kq.ra).toMatch(/^lich: [1-9]\d* to chuc$/mu);
+    expect(kq.ra).toContain(`${org}\tseq=`);
+    expect(kq.ra).toMatch(new RegExp(`^${org}\tok=true`, "mu"));
+    expect(kq.ra).toContain("lich: xuat=OK kiem=OK");
+    const thua = chay("lich", "--org", org);
+    expect(thua.ma).toBe(1);
+    expect(thua.loi).toMatch(/không nhận tham số/u);
+  });
+
   it("[INV-B3] xuat TỪ CHỐI một mốc neo LÙI — cắt đuôi chết ồn ào ở thời điểm xuất", async () => {
     // ==========================================================================================
     // [review lượt 9 — H9-1 ⑵] `audit_events.seq` chỉ đi lên, nên một đầu chuỗi THẤP HƠN mốc neo

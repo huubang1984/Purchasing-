@@ -1,6 +1,7 @@
-# Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"):
+# Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"), và một cho job neo:
 #   ⑴ KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod.
 #   ⑵ Một task mang role WORKER chạy ngoài service chính thức `tp-unseal-worker`.
+#   ⑶ [ADR-072] Job neo `tp-neo` (lịch hằng ngày) dừng mà không thành công.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -127,6 +128,23 @@ locals {
       ]
     }
   })
+
+  # ⑶ [ADR-072] Job neo (`tp-neo`, lịch hằng ngày) DỪNG mà không thành công: container thoát ≠ 0 (xuất hay kiểm
+  # hỏng ở ít nhất một tổ chức — `kiem` đỏ là dấu hiệu sổ bị sửa/cắt) hoặc task không khởi động được. Không có
+  # cảnh báo này thì một lịch hỏng im lặng hàng tháng — đúng khuôn H9-3 của ADR-026.
+  mau_neo_hong = jsonencode({
+    source      = ["aws.ecs"]
+    detail-type = ["ECS Task State Change"]
+    account     = [local.prod]
+    detail = {
+      group      = ["family:tp-neo"]
+      lastStatus = ["STOPPED"]
+      "$or" = [
+        { containers = { exitCode = [{ anything-but = 0 }] } },
+        { stopCode = ["TaskFailedToStart"] },
+      ]
+    }
+  })
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -170,6 +188,7 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
           "aws:SourceArn" = [
             aws_cloudwatch_event_rule.put_key_policy_audit.arn,
             aws_cloudwatch_event_rule.task_worker_audit.arn,
+            aws_cloudwatch_event_rule.neo_hong_audit.arn,
           ]
         }
       }
@@ -234,8 +253,32 @@ resource "aws_cloudwatch_event_target" "task_worker_audit" {
   }
 }
 
+resource "aws_cloudwatch_event_rule" "neo_hong_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-neo-hong"
+  description   = "Job neo tp-neo dung ma khong thanh cong (ADR-072)"
+  event_pattern = local.mau_neo_hong
+}
+
+resource "aws_cloudwatch_event_target" "neo_hong_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.neo_hong_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc     = "$.time"
+      task    = "$.detail.taskArn"
+      lyDo    = "$.detail.stoppedReason"
+      maDung  = "$.detail.stopCode"
+      maThoat = "$.detail.containers[0].exitCode"
+    }
+    input_template = "\"[TrustProcure] Job neo so kiem toan (tp-neo) KHONG thanh cong. Luc <luc>, task <task>, exitCode <maThoat>, stopCode <maDung>, ly do <lyDo>. Doc log /tp/neo: dong 'KHONG XUAT DUOC', 'TU CHOI NEO' hoac 'ok=false' la mot to chuc can dieu tra NGAY (so co the da bi sua hoac cat duoi).\""
+  }
+}
+
 # ---------------------------------------------------------------------------------------------
-# PROD — chuyển PutKeyPolicy (⑴) và task mang role worker (⑵) sang audit
+# PROD — chuyển PutKeyPolicy (⑴), task mang role worker (⑵) và job neo hỏng (⑶) sang audit
 # ---------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "events_assume" {
   statement {
@@ -305,3 +348,19 @@ resource "aws_cloudwatch_event_target" "task_worker_prod" {
 }
 
 output "sns_topic_arn" { value = aws_sns_topic.canh_bao_khoa.arn }
+
+resource "aws_cloudwatch_event_rule" "neo_hong_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-neo-hong"
+  description   = "Chuyen su kien job neo tp-neo dung khong thanh cong sang audit (ADR-072)"
+  event_pattern = local.mau_neo_hong
+}
+
+resource "aws_cloudwatch_event_target" "neo_hong_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.neo_hong_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
