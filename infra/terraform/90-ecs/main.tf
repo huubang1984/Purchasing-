@@ -571,6 +571,8 @@ resource "aws_ecr_lifecycle_policy" "tp" {
 data "aws_secretsmanager_secret" "api_db" { name = "tp/api/database-url" }
 data "aws_secretsmanager_secret" "api_pepper" { name = "tp/api/otp-peppers" }
 data "aws_secretsmanager_secret" "worker_db" { name = "tp/worker/database-url" }
+# [ADR-072] Vai `app_neo_login` của job neo — liệt kê tổ chức và CHỈ ĐỌC sổ kiểm toán; không dùng URL của api nữa.
+data "aws_secretsmanager_secret" "neo_db" { name = "tp/neo/database-url" }
 
 # Secret master do RDS tạo (tên `rds!db-…`) nằm NGOÀI nhánh `tp/*` mà stack 30 cấp cho execution role.
 resource "aws_iam_role_policy" "execution_rds_master" {
@@ -698,12 +700,13 @@ locals {
       { name = "TRUSTPROCURE_MIGRATE_DB_PASSWORD", valueFrom = "${aws_db_instance.tp.master_user_secret[0].secret_arn}:password::" },
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
+      { name = "TRUSTPROCURE_NEO_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
     ]
     web         = []
     public_keys = []
-    # Vai app_api — cùng URL với api; job neo chỉ ĐỌC đầu chuỗi (exportChainHead).
+    # [ADR-072] Vai app_neo — liệt kê tổ chức (hàm 052) và chỉ ĐỌC sổ kiểm toán.
     neo = [
-      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
+      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
     ]
   }
   task = {
@@ -1027,4 +1030,89 @@ output "lenh_chay_neo" {
       "--overrides '{\"containerOverrides\":[{\"name\":\"tp-neo\",\"command\":[\"xuat\",\"--org\",\"<uuid>\"]}]}'",
     ])
   }
+}
+
+# ---------------------------------------------------------------------------------------------
+# [ADR-072] Lịch neo sổ kiểm toán — mỗi ngày 02:15 giờ Việt Nam, `tp-neo lich`: liệt kê mọi tổ chức, xuất mốc neo
+# rồi kiểm. Task thoát ≠ 0 ⇒ cảnh báo ⑶ của stack 60 (email từ tài khoản audit).
+# ---------------------------------------------------------------------------------------------
+data "aws_iam_policy_document" "lich_neo_trust" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.prod]
+    }
+  }
+}
+
+resource "aws_iam_role" "lich_neo" {
+  name               = "tp-lich-neo"
+  assume_role_policy = data.aws_iam_policy_document.lich_neo_trust.json
+}
+
+# Chỉ chạy ĐÚNG họ tp-neo trong ĐÚNG cluster, và chỉ trao ĐÚNG role của job neo.
+data "aws_iam_policy_document" "lich_neo" {
+  statement {
+    sid       = "ChayJobNeo"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:aws:ecs:${local.region}:${local.prod}:task-definition/tp-neo", "arn:aws:ecs:${local.region}:${local.prod}:task-definition/tp-neo:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.tp.arn]
+    }
+  }
+  statement {
+    sid       = "TraoRoleJobNeo"
+    actions   = ["iam:PassRole"]
+    resources = [local.role_arn.anchor_job, local.role_arn.ecs_execution]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "lich_neo" {
+  name   = "chay-job-neo"
+  role   = aws_iam_role.lich_neo.id
+  policy = data.aws_iam_policy_document.lich_neo.json
+}
+
+resource "aws_scheduler_schedule" "neo" {
+  name                         = "tp-neo-hang-ngay"
+  description                  = "Neo so kiem toan moi to chuc, roi kiem (ADR-072)"
+  schedule_expression          = "cron(15 2 * * ? *)"
+  schedule_expression_timezone = "Asia/Ho_Chi_Minh"
+  flexible_time_window { mode = "OFF" }
+
+  target {
+    arn      = aws_ecs_cluster.tp.arn
+    role_arn = aws_iam_role.lich_neo.arn
+    # Họ KHÔNG kèm số bản: RunTask lấy bản ACTIVE mới nhất — bản pipeline vừa đăng ký, không phải bản Terraform tạo.
+    ecs_parameters {
+      task_definition_arn = "arn:aws:ecs:${local.region}:${local.prod}:task-definition/tp-neo"
+      launch_type         = "FARGATE"
+      task_count          = 1
+      network_configuration {
+        subnets          = aws_subnet.ung_dung[*].id
+        security_groups  = [aws_security_group.neo.id]
+        assign_public_ip = false
+      }
+    }
+    input = jsonencode({ containerOverrides = [{ name = "tp-neo", command = ["lich"] }] })
+    # Không thử lại: một lượt hỏng phải thành MỘT cảnh báo đọc được, không ba lượt chồng nhau.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+
+  depends_on = [aws_ecs_task_definition.tp]
 }
