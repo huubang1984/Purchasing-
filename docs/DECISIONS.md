@@ -7204,7 +7204,7 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
   `unseal_so_phe_duyet_can`). Lượt soi đọc ra chúng nhưng **chưa đối chiếu** với danh mục ADR-028/036 xem đã là giới hạn
   đã biết chưa; việc ấy nằm ngoài S3.
 
-## ADR-9201 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
+## ADR-083 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
 
 **Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Thay luật đổi số của S1.111
 

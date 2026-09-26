@@ -85,7 +85,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 
 **[S1.85]** Dòng `008 … 051` của khối trên đã sửa thành `053` — S1.82 thêm `052` mà KHÔNG sửa dòng này (lần thiu thứ tư của chính nó, và là lần đầu KHÔNG ai sửa trong cùng vòng), S1.85 thêm `053`. Lần sửa tay thứ TƯ, và khoản 136 vẫn mở — con số này là số đo của nó. ~~**[S1.76]** Dòng `008 … 050` của khối trên đã sửa thành `051` — S1.76 thêm migration 051 (`sessions.kind`). Lần sửa tay thứ BA của cùng một dòng, và mỗi lần đều do một người nhớ ra chứ không do một cổng nào kêu — khoản 136 vẫn mở, và con số ba lần này là số đo của chính nó.~~
 
-~~**Bảy gói + hai công cụ:**~~ **[S1.9101] 14 gói + 9 công cụ** (~~**[S1.123] 8**~~ ~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
+~~**Bảy gói + hai công cụ:**~~ **[S1.141] 14 gói + 9 công cụ** (~~**[S1.123] 8**~~ ~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
 
 | Gói | Vai trò |
 |---|---|
@@ -109,7 +109,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 | `tools/neo-so-kiem-toan` | Ký mốc neo ngoài cho sổ kiểm toán (ADR-026) |
 | `tools/bo-xuat-danh-gia` | Xuất bộ bằng chứng đánh giá **tự đủ** + đặc tả phép tính, và kiểm nó bằng HAI lớp trong đó lớp chịu lực là một bản cài ĐỘC LẬP (S2.7, ADR-059) |
 | `tools/chay-migrate` | Entry point của task ECS `tp-migrate`: `migrate()` rồi đảm bảo hai vai đăng nhập của api/worker từ chính URL của chúng (ADR-066) |
-| `tools/cap-so` | `pnpm cap-so`: cấp số thật cho số tạm của nhánh lúc merge, viết lại lời khai đếm; `--kiem` là cổng CI (ADR-9201) |
+| `tools/cap-so` | `pnpm cap-so`: cấp số thật cho số tạm của nhánh lúc merge, viết lại lời khai đếm; `--kiem` là cổng CI (ADR-083) |
 
 **Hàng rào kiến trúc:** `dependency-cruiser`, tất cả theo khuôn **"mặc định đóng"** — một module
 MỚI trong thư mục nhạy cảm đã bị chặn sẵn, không ai phải nhớ thêm quy tắc.
@@ -506,7 +506,7 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
 - **`.sql`, chú thích, tên test và `evidence/INV-matrix.md` là BẰNG CHỨNG KIỂM TOÁN.** Một câu
   phát biểu rộng hơn thứ được đo là **một khiếm khuyết thật**. Trong S0 đã có **19 câu như vậy
   bị bắt và hạ xuống đúng mức** — và quy ước là **gạch bỏ tại chỗ, giữ nguyên văn**, không xoá.
-- **[S1.9101] Số hiệu cấp lúc merge, không cấp lúc viết (ADR-9201; luật S1.111 đã bỏ).** Mục mới trên
+- **[S1.141] Số hiệu cấp lúc merge, không cấp lúc viết (ADR-083; luật S1.111 đã bỏ).** Mục mới trên
   nhánh mang SỐ TẠM: vòng `S1.91NN`, `ADR-92NN`, khoản `94NN`, migration `95NN_ten.sql` (NN = 01, 02, …).
   Không đo max rồi +1. Trước khi merge: `git fetch origin master && git merge origin/master && pnpm cap-so`,
   rồi commit kèm dòng trailer `Cap-So:` lệnh in ra. PR khác merge trước thì lặp lại đúng ba lệnh ấy.

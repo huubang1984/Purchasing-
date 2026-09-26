@@ -350,6 +350,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/test-support
 
+  tools/cap-so: {}
+
   tools/chay-migrate:
     dependencies:
       '@trustprocure/db':
