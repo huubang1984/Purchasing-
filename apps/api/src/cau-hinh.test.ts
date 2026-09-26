@@ -63,6 +63,7 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(ch.allowedOrigins).toEqual([]);
     expect(ch.trustedProxies).toEqual([]);
     expect(ch.afterCommitTimeoutMs).toBeUndefined();
+    if (ch.keyAdapter !== "local-dev") throw new Error("fixture khai local-dev");
     expect(ch.masterKeys.active).toBe("v2");
     expect(Object.keys(ch.masterKeys.keys).sort()).toEqual(["v1", "v2"]);
     expect(ch.masterKeys.keys["v1"]).toHaveLength(32);
@@ -184,5 +185,85 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
     nemVeBien(envHopLe({ TRUSTPROCURE_LISTEN_PORT: "70000" }), "TRUSTPROCURE_LISTEN_PORT");
     nemVeBien(envHopLe({ TRUSTPROCURE_DB_POOL_MAX: "0" }), "TRUSTPROCURE_DB_POOL_MAX");
     nemVeBien(envHopLe({ TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS: "5" }), "TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS");
+  });
+});
+
+// ==============================================================================================
+// [ADR-064] Adapter khoá `aws-kms`: không bí mật nào trong tiến trình, chỉ định danh CMK và nhãn.
+// ==============================================================================================
+const BIEN_LOCAL_DEV_KHOA = {
+  TRUSTPROCURE_MASTER_KEYS: undefined,
+  TRUSTPROCURE_MASTER_KEY_ACTIVE: undefined,
+  TRUSTPROCURE_TOTP_MASTER_KEYS: undefined,
+  TRUSTPROCURE_TOTP_MASTER_KEY_ACTIVE: undefined,
+  TRUSTPROCURE_RECEIPT_SIGNING_KEYS: undefined,
+  TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE: undefined,
+};
+
+function envKms(ghiDe: Record<string, string | undefined> = {}): MoiTruong {
+  return envHopLe({
+    ...BIEN_LOCAL_DEV_KHOA,
+    TRUSTPROCURE_KEY_ADAPTER: "aws-kms",
+    TRUSTPROCURE_AWS_REGION: "ap-southeast-1",
+    TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp-org-wrap",
+    TRUSTPROCURE_KMS_ORG_KEY_VERSION: "kms-1",
+    TRUSTPROCURE_KMS_TOTP_KEY_ID: "alias/tp-totp",
+    TRUSTPROCURE_KMS_TOTP_KEY_VERSION: "kms-totp-1",
+    TRUSTPROCURE_KMS_RECEIPT_KEY_ID: "alias/tp-receipt-sign",
+    TRUSTPROCURE_KMS_RECEIPT_KID: "kms-2026-09",
+    ...ghiDe,
+  });
+}
+
+describe("[ADR-064] docCauHinh — adapter khoá aws-kms", () => {
+  it("đọc đủ định danh CMK, nhãn phiên bản và vùng; pepper OTP vẫn là vòng trong tiến trình", () => {
+    const ch = docCauHinh(envKms());
+    expect(ch.keyAdapter).toBe("aws-kms");
+    if (ch.keyAdapter !== "aws-kms") throw new Error("không tới");
+    expect(ch.kms).toEqual({
+      region: "ap-southeast-1",
+      orgWrapKeyId: "alias/tp-org-wrap",
+      orgKeyVersion: "kms-1",
+      totpKeyId: "alias/tp-totp",
+      totpKeyVersion: "kms-totp-1",
+      receiptKeyId: "alias/tp-receipt-sign",
+      receiptKid: "kms-2026-09",
+    });
+    expect(ch.otpPeppers.active).toBe("p1");
+    // Không một trường khoá local-dev nào tồn tại trên nhánh này.
+    expect(Object.keys(ch)).not.toContain("masterKeys");
+    expect(Object.keys(ch)).not.toContain("receiptSigningKeys");
+  });
+
+  it("thiếu một biến KMS ⇒ ném nêu đúng tên biến", () => {
+    for (const ten of [
+      "TRUSTPROCURE_AWS_REGION",
+      "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID",
+      "TRUSTPROCURE_KMS_ORG_KEY_VERSION",
+      "TRUSTPROCURE_KMS_TOTP_KEY_ID",
+      "TRUSTPROCURE_KMS_TOTP_KEY_VERSION",
+      "TRUSTPROCURE_KMS_RECEIPT_KEY_ID",
+      "TRUSTPROCURE_KMS_RECEIPT_KID",
+    ]) {
+      nemVeBien(envKms({ [ten]: undefined }), ten);
+    }
+  });
+
+  it("hai bộ biến khoá LOẠI TRỪ nhau: aws-kms kèm vòng local-dev còn sót, hay local-dev kèm biến KMS ⇒ ném", () => {
+    nemVeBien(envKms({ TRUSTPROCURE_MASTER_KEYS: `v1=${BI_MAT.master}` }), "TRUSTPROCURE_MASTER_KEYS", /ADR-064/u);
+    nemVeBien(envKms({ TRUSTPROCURE_RECEIPT_SIGNING_KEYS: `k=${BI_MAT.ky}` }), "TRUSTPROCURE_RECEIPT_SIGNING_KEYS");
+    nemVeBien(envHopLe({ TRUSTPROCURE_KMS_TOTP_KEY_ID: "alias/tp-totp" }), "TRUSTPROCURE_KMS_TOTP_KEY_ID", /ADR-064/u);
+  });
+
+  it("[ADR-063] CMK của TOTP trùng CMK bọc cặp khoá tổ chức (hay trùng khoá ký) ⇒ ném, nêu cả hai tên", () => {
+    nemVeBien(envKms({ TRUSTPROCURE_KMS_TOTP_KEY_ID: "alias/tp-org-wrap" }), "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID", /TRUSTPROCURE_KMS_TOTP_KEY_ID/u);
+    nemVeBien(envKms({ TRUSTPROCURE_KMS_RECEIPT_KEY_ID: "alias/tp-totp" }), "TRUSTPROCURE_KMS_TOTP_KEY_ID", /TRUSTPROCURE_KMS_RECEIPT_KEY_ID/u);
+  });
+
+  it("hình dạng: vùng, nhãn phiên bản, kid, định danh CMK sai ⇒ ném", () => {
+    nemVeBien(envKms({ TRUSTPROCURE_AWS_REGION: "singapore" }), "TRUSTPROCURE_AWS_REGION");
+    nemVeBien(envKms({ TRUSTPROCURE_KMS_ORG_KEY_VERSION: "co khoang trang" }), "TRUSTPROCURE_KMS_ORG_KEY_VERSION");
+    nemVeBien(envKms({ TRUSTPROCURE_KMS_RECEIPT_KID: "kid\nalg=HMAC" }), "TRUSTPROCURE_KMS_RECEIPT_KID");
+    nemVeBien(envKms({ TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp org" }), "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID");
   });
 });

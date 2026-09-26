@@ -1,5 +1,6 @@
 // [sổ nợ 38] Trần thời gian cho việc ngoài CSDL: lỗi mang TÊN riêng, promise gốc bị bỏ, hai adapter KMS được bọc.
 import { describe, expect, it } from "vitest";
+import type { ReceiptSigner } from "@trustprocure/bidding";
 import type { OrgKeyProvisioner } from "@trustprocure/crypto-keys";
 import type { TotpSecretUnsealer } from "@trustprocure/identity";
 import { KMS_TIMEOUT_MS_MAC_DINH, QuaHanError, boiTranKms, coHan } from "./co-han.js";
@@ -40,7 +41,8 @@ describe("[sổ nợ 38] coHan / boiTranKms", () => {
     const unsealer: TotpSecretUnsealer = { kind: "TOTP_SECRET_UNSEALER", name: "treo", openTotpSecret: () => treo() };
     const khac = { name: "khac" };
     const orgKeyProvisioner: OrgKeyProvisioner = { name: "rfq-treo", generate: () => treo() };
-    const boc = boiTranKms({ totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, orgKeyProvisioner, khac }, 20);
+    const receiptSigner: ReceiptSigner = { name: "ky-treo", activeKeyId: "k1", sign: () => treo() };
+    const boc = boiTranKms({ totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, orgKeyProvisioner, receiptSigner, khac }, 20);
     expect(boc.khac).toBe(khac);
     // [review H4-8] Lời gọi KMS thứ ba (openRfq) cũng có trần.
     expect(boc.orgKeyProvisioner.name).toBe("rfq-treo");
@@ -49,6 +51,9 @@ describe("[sổ nợ 38] coHan / boiTranKms", () => {
     expect(boc.totpSecretWrapper.name).toBe("treo");
     await expect(boc.totpSecretWrapper.wrapTotpSecret("o", new Uint8Array(1))).rejects.toMatchObject({ name: "KmsQuaHan" });
     await expect(boc.totpSecretUnsealer.openTotpSecret("o", { ciphertext: new Uint8Array(1), keyVersion: "v" })).rejects.toMatchObject({ name: "KmsQuaHan" });
+    // [ADR-064] Lời gọi thứ tư: kms:Sign biên nhận — kid giữ nguyên vì nó đi vào văn bản TRƯỚC khi ký.
+    expect(boc.receiptSigner).toMatchObject({ name: "ky-treo", activeKeyId: "k1" });
+    await expect(boc.receiptSigner.sign("x")).rejects.toMatchObject({ name: "KmsQuaHan" });
     expect(KMS_TIMEOUT_MS_MAC_DINH).toBe(5000);
   });
 });

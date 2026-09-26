@@ -81,3 +81,33 @@ export function assertLocalDevAllowed(): void {
   }
 }
 
+
+/**
+ * [ADR-064] Hàng rào cho adapter GỬI/CẢNH BÁO dev (hộp thư dev của `api`, thư mục cảnh báo dev của
+ * worker) — TÁCH khỏi hàng rào khoá ở trên, và chỉ tách đúng một nhánh.
+ *
+ * Hai adapter ấy ghi bản rõ token, OTP và tên yêu cầu mở thầu ra đĩa. Tới ADR-064 chúng dùng CHÍNH
+ * `assertLocalDevAllowed`, nên một tiến trình khai `TRUSTPROCURE_KEY_ADAPTER=aws-kms` không dựng được
+ * chúng — mà hôm nay chưa có adapter gửi thật nào, tức `api` và worker không khởi động được với khoá
+ * thật. Quy tắc:
+ *   • khoá KHÔNG phải `aws-kms` ⇒ đúng `assertLocalDevAllowed()` như trước (không nới gì);
+ *   • khoá `aws-kms` ⇒ cho qua, TRỪ KHI `NODE_ENV` là production — khi ấy phải có cờ RIÊNG
+ *     `TRUSTPROCURE_ALLOW_DEV_SINKS=1`. Cờ này KHÔNG mở adapter khoá local-dev, và cờ của khoá
+ *     (`TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS`) KHÔNG mở hộp thư dev dưới aws-kms: hai quyết định, hai cờ.
+ * Nó vẫn không mang khả năng mật mã nào — đọc ba biến môi trường rồi ném hoặc không.
+ */
+export function assertDevSinkAllowed(): void {
+  const adapter = (process.env["TRUSTPROCURE_KEY_ADAPTER"] ?? "").trim().toLowerCase();
+  if (adapter !== "aws-kms") {
+    assertLocalDevAllowed();
+    return;
+  }
+  const moiTruong = (process.env["NODE_ENV"] ?? "").trim().toLowerCase();
+  if ((moiTruong === "production" || moiTruong === "prod") && process.env["TRUSTPROCURE_ALLOW_DEV_SINKS"] !== "1") {
+    throw new KeyError(
+      'Adapter gửi/cảnh báo dev bị chặn: TRUSTPROCURE_KEY_ADAPTER="aws-kms" với NODE_ENV="' + moiTruong +
+        '" — hộp thư dev ghi token và OTP dạng rõ ra đĩa. Dùng adapter gửi thật, hoặc đặt ' +
+        "TRUSTPROCURE_ALLOW_DEV_SINKS=1 nếu đây là lượt thử trước khi có dữ liệu khách hàng thật (ADR-064).",
+    );
+  }
+}

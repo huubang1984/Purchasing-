@@ -26,7 +26,8 @@
 // BA QUY TẮC, giống hai app kia:
 //   ⑴ Bí mật KHÔNG có mặc định. Thiếu là ném.
 //   ⑵ Thông điệp lỗi chỉ nêu TÊN biến, không bao giờ nêu GIÁ TRỊ.
-//   ⑶ Adapter phải được KHAI TÊN, và mỗi biến hôm nay chỉ có ĐÚNG MỘT giá trị hợp lệ. Một giá
+//   ⑶ Adapter phải được KHAI TÊN, và mỗi biến hôm nay chỉ có ĐÚNG MỘT giá trị hợp lệ [ADR-064: trừ
+//      biến khoá, nay có `local-dev` và `aws-kms`, và hai bộ biến của chúng loại trừ nhau]. Một giá
 //      trị khác ("kms", "pagerduty") là lời khai về một adapter CHƯA TỒN TẠI — ném với đúng câu
 //      ấy, thay vì im lặng rơi về bản dev.
 // ==============================================================================================
@@ -54,7 +55,7 @@ export interface VongBiMat {
   readonly keys: Readonly<Record<string, Buffer>>;
 }
 
-export interface CauHinhWorker {
+export interface CauHinhWorkerChung {
   /** `postgres://app_unseal_login:...@host/db` — pool tự đổi sang vai `app_unseal`. */
   readonly databaseUrl: string;
   /**
@@ -63,15 +64,30 @@ export interface CauHinhWorker {
    * chỉ có một kết nối thì mỗi lần TỪ CHỐI lúc giải mã chờ hết trần rồi ra `DenialAuditFailedError`.
    */
   readonly dbPoolMax: number;
-  readonly keyAdapter: "local-dev";
-  /** Vòng khoá chính bọc khoá riêng RFQ (ADR-019). Vòng DUY NHẤT tiến trình này giữ. */
-  readonly masterKeys: VongBiMat;
   readonly alertAdapter: "dev-file";
   /** Thư mục nhận cảnh báo break-glass. TUYỆT ĐỐI, và nên nằm NGOÀI cây repo. */
   readonly alertDir: string;
   /** Nhịp poll của runner, ms. */
   readonly pollIntervalMs: number;
 }
+
+export interface KhoaWorkerLocalDev {
+  readonly keyAdapter: "local-dev";
+  /** Vòng khoá chính bọc khoá riêng tổ chức (ADR-062). Vòng DUY NHẤT tiến trình này giữ. */
+  readonly masterKeys: VongBiMat;
+}
+
+/**
+ * [ADR-064] Khoá ở AWS KMS. Worker chỉ cần ĐÚNG MỘT CMK — `alias/tp-org-wrap`, để `kms:Decrypt` khoá
+ * riêng tổ chức mỗi lượt mở thầu. Nó KHÔNG đọc định danh CMK của TOTP hay khoá ký biên nhận: cùng lời
+ * hứa với ca ⑼ của vòng local-dev (một tiến trình mở phong bì không cầm lối vào bí mật nào khác).
+ */
+export interface KhoaWorkerAwsKms {
+  readonly keyAdapter: "aws-kms";
+  readonly kms: { readonly region: string; readonly orgWrapKeyId: string };
+}
+
+export type CauHinhWorker = CauHinhWorkerChung & (KhoaWorkerLocalDev | KhoaWorkerAwsKms);
 
 type MoiTruong = Readonly<Record<string, string | undefined>>;
 
@@ -168,12 +184,40 @@ function docThuMucTuyetDoi(env: MoiTruong, ten: string): string {
   return v;
 }
 
+const BIEN_KHOA_LOCAL_DEV = ["TRUSTPROCURE_MASTER_KEYS", "TRUSTPROCURE_MASTER_KEY_ACTIVE"] as const;
+const BIEN_KHOA_KMS = ["TRUSTPROCURE_AWS_REGION", "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID"] as const;
+
+/** [ADR-064] Hai bộ biến khoá LOẠI TRỪ nhau — cùng quy tắc ⑷ của `apps/api/src/cau-hinh.ts`. */
+function tuChoiBienCuaAdapterKhac(env: MoiTruong, adapter: string, bienKhac: readonly string[]): void {
+  const sot = bienKhac.filter((b) => (env[b]?.trim() ?? "") !== "");
+  if (sot.length > 0) {
+    throw new CauHinhError(
+      `TRUSTPROCURE_KEY_ADAPTER="${adapter}" nhưng còn khai ${sot.join(", ")} của adapter khoá kia (ADR-064)`,
+    );
+  }
+}
+
+function docKhoa(env: MoiTruong): KhoaWorkerLocalDev | KhoaWorkerAwsKms {
+  const keyAdapter = docAdapter(env, "TRUSTPROCURE_KEY_ADAPTER", ["local-dev", "aws-kms"] as const, "khoá");
+  if (keyAdapter === "local-dev") {
+    tuChoiBienCuaAdapterKhac(env, keyAdapter, BIEN_KHOA_KMS);
+    return { keyAdapter, masterKeys: docVong(env, "TRUSTPROCURE_MASTER_KEYS", "TRUSTPROCURE_MASTER_KEY_ACTIVE") };
+  }
+  tuChoiBienCuaAdapterKhac(env, keyAdapter, BIEN_KHOA_LOCAL_DEV);
+  const region = bat(env, "TRUSTPROCURE_AWS_REGION");
+  if (!/^[a-z]{2}(?:-[a-z]+)+-\d$/u.test(region)) throw new CauHinhError("TRUSTPROCURE_AWS_REGION không phải một vùng AWS hợp lệ");
+  const orgWrapKeyId = bat(env, "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID");
+  if (!/^[A-Za-z0-9/:_.-]{1,2048}$/u.test(orgWrapKeyId)) {
+    throw new CauHinhError("TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID không phải một định danh CMK hợp lệ");
+  }
+  return { keyAdapter, kms: { region, orgWrapKeyId } };
+}
+
 export function docCauHinh(env: MoiTruong): CauHinhWorker {
   return {
     databaseUrl: docDatabaseUrl(env, "TRUSTPROCURE_DATABASE_URL"),
     dbPoolMax: docSoNguyen(env, "TRUSTPROCURE_DB_POOL_MAX", 10, 1, 100),
-    keyAdapter: docAdapter(env, "TRUSTPROCURE_KEY_ADAPTER", ["local-dev"] as const, "khoá"),
-    masterKeys: docVong(env, "TRUSTPROCURE_MASTER_KEYS", "TRUSTPROCURE_MASTER_KEY_ACTIVE"),
+    ...docKhoa(env),
     alertAdapter: docAdapter(env, "TRUSTPROCURE_ALERT_ADAPTER", ["dev-file"] as const, "cảnh báo"),
     alertDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_ALERT_DIR"),
     pollIntervalMs: docSoNguyen(env, "TRUSTPROCURE_OUTBOX_POLL_MS", 1000, 100, 60_000),

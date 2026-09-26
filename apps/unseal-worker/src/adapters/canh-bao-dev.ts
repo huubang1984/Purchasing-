@@ -6,8 +6,9 @@
 // là đúng thứ làm người ta tưởng cảnh báo đã tới tay ai đó. Tệp này là bản DEV — thứ một máy phát
 // triển cần, và thứ KHÔNG ĐƯỢC chạy ở sản xuất.
 //
-// Hàng rào là `assertLocalDevAllowed()` — CÙNG HÀM với ba adapter local-dev kia, không phải một
-// bản chép (`crypto-keys/moi-truong.ts`: *"hai bản chép của một hàng rào là một bản sẽ trôi"*).
+// Hàng rào là ~~`assertLocalDevAllowed()`~~ [ADR-064] `assertDevSinkAllowed()` — cùng tệp với hàng rào
+// khoá, không phải một bản chép (`crypto-keys/moi-truong.ts`: *"hai bản chép của một hàng rào là một
+// bản sẽ trôi"*); dưới khoá local-dev nó CHÍNH LÀ `assertLocalDevAllowed()`.
 //
 // VÌ SAO GHI TỆP, KHÔNG GHI LOG — và vế này KHÁC hộp thư dev của `api`: tin ở đây không mang
 // token hay mã OTP, nhưng nó mang `unsealRequestId` và `rfqId` của một lần mở thầu KHẨN CẤP, tức
@@ -27,7 +28,7 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { assertLocalDevAllowed } from "@trustprocure/crypto-keys";
+import { assertDevSinkAllowed } from "@trustprocure/crypto-keys";
 import type { BreakGlassAlert, BreakGlassAlertSink } from "../composition.js";
 
 /** Hình dạng đọc được bằng máy của một cảnh báo trong thư mục dev. */
@@ -41,7 +42,9 @@ export interface TinCanhBaoDev {
 }
 
 export function taoCanhBaoDev(thuMuc: string): BreakGlassAlertSink {
-  assertLocalDevAllowed();
+  // [ADR-064] Hàng rào của adapter gửi/cảnh báo dev — tách khỏi hàng rào khoá: dưới `aws-kms` nó chỉ
+  // chặn ở production (trừ cờ riêng TRUSTPROCURE_ALLOW_DEV_SINKS=1).
+  assertDevSinkAllowed();
   mkdirSync(thuMuc, { recursive: true, mode: 0o700 });
   // `mkdirSync` bỏ qua `mode` khi thư mục ĐÃ tồn tại — nên đặt lại, cùng khuôn hộp thư dev.
   chmodSync(thuMuc, 0o700);

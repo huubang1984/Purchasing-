@@ -7,7 +7,9 @@
 // mặc định. Hôm nay kho chưa có một bộ gửi thật nào (SMTP/SES/SMS là hạ tầng chưa có — ADR-009,
 // sổ nợ 38), nên tiến trình chạy thật chỉ có MỘT adapter: hộp thư dev — thứ mọi máy phát triển
 // cần (đọc link và mã OTP mà không cần mail) và thứ KHÔNG ĐƯỢC chạy ở sản xuất. Hàng rào là
-// `assertLocalDevAllowed()` — cùng hàm với ba adapter local-dev kia, không phải một bản chép.
+// ~~`assertLocalDevAllowed()` — cùng hàm với ba adapter local-dev kia, không phải một bản chép.~~
+// [ADR-064] `assertDevSinkAllowed()` (cùng tệp `moi-truong.ts`): dưới khoá local-dev nó CHÍNH LÀ
+// `assertLocalDevAllowed()`; dưới `aws-kms` nó chỉ chặn ở production, trừ cờ riêng.
 // [review H3-2] Nói cho đúng cơ chế: hàng rào ấy đọc `TRUSTPROCURE_KEY_ADAPTER` (biến của bộ KHOÁ)
 // và `NODE_ENV`; từ S1.11, `local-dev` + `NODE_ENV=production` là mâu thuẫn và bị chặn trừ khi có
 // `TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS=1` — vì cấu hình của `api` BẮT BUỘC khai `local-dev`, nên trước
@@ -28,7 +30,7 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { assertLocalDevAllowed } from "@trustprocure/crypto-keys";
+import { assertDevSinkAllowed } from "@trustprocure/crypto-keys";
 import type {
   ApprovalNoticeSender,
   DeadlineNoticeSender,
@@ -87,7 +89,9 @@ export type TinHopThuDev =
 const TEN = "dev-mailbox";
 
 export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
-  assertLocalDevAllowed();
+  // [ADR-064] Hàng rào của adapter gửi/cảnh báo dev — tách khỏi hàng rào khoá: dưới `aws-kms` nó chỉ
+  // chặn ở production (trừ cờ riêng TRUSTPROCURE_ALLOW_DEV_SINKS=1).
+  assertDevSinkAllowed();
   mkdirSync(tuyChon.thuMuc, { recursive: true, mode: 0o700 });
   // [review H3-3] `mode` của mkdirSync chỉ áp cho thư mục MỚI; một thư mục có sẵn 0755 giữ nguyên 0755.
   // Siết lại tường minh (POSIX; Windows không có mode).
