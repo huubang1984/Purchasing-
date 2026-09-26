@@ -66,7 +66,9 @@ const GOC = fileURLToPath(new URL("../../", import.meta.url));
 // — ADR-009 chọn AWS KMS, và SDK chính hãng là thứ duy nhất ký SigV4 cho lời gọi ấy; tự viết một
 // bộ ký là thêm mã mật mã mà dự án phải tự canh. Cây phụ thuộc bắc cầu của nó (`@smithy/*`,
 // `@aws-crypto/*`…) do bước audit T0b đo, không liệt kê ở đây: test này chỉ xét phụ thuộc TRỰC TIẾP.
-const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = ["@aws-sdk/client-kms", "pg", "pg-connection-string"];
+// [ADR-065] `@aws-sdk/client-sesv2`: bộ gửi thư thật của `api` và cảnh báo break-glass của worker —
+// cùng lý do với client-kms (SDK chính hãng ký SigV4; không tự viết).
+const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = ["@aws-sdk/client-kms", "@aws-sdk/client-sesv2", "pg", "pg-connection-string"];
 
 interface Manifest {
   readonly duongDan: string;

@@ -30,13 +30,15 @@
 // ==============================================================================================
 
 import { KMSClient } from "@aws-sdk/client-kms";
+import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createAwsKmsOrgUnwrapper, createLocalDevOrgUnwrapper, type OrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
-import { createUnsealWorkerRunner } from "./composition.js";
+import { taoCanhBaoSes } from "./adapters/canh-bao-ses.js";
+import { createUnsealWorkerRunner, type BreakGlassAlertSink } from "./composition.js";
 import type { CauHinhWorker } from "./cau-hinh.js";
 
 /**
@@ -132,7 +134,20 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
     kmsClient = new KMSClient({ region: ch.kms.region });
     unwrapper = createAwsKmsOrgUnwrapper({ client: kmsClient, keyId: ch.kms.orgWrapKeyId });
   }
-  const alertSink = taoCanhBaoDev(ch.alertDir);
+  // [ADR-065] Cảnh báo break-glass: thư mục dev hay SES tới danh sách người nhận.
+  let sesClient: SESv2Client | undefined;
+  let alertSink: BreakGlassAlertSink;
+  if (ch.alertAdapter === "dev-file") {
+    alertSink = taoCanhBaoDev(ch.alertDir);
+  } else {
+    sesClient = new SESv2Client({ region: ch.ses.region });
+    alertSink = taoCanhBaoSes({
+      client: sesClient,
+      tuDiaChi: ch.ses.tuDiaChi,
+      denDiaChi: ch.ses.denDiaChi,
+      ...(ch.ses.configurationSet === undefined ? {} : { configurationSet: ch.ses.configurationSet }),
+    });
+  }
 
   const lietKeToChuc = async (): Promise<readonly string[]> => {
     const { rows } = await pool.query<{ id: string }>(CAU_LIET_KE_TO_CHUC);
@@ -246,6 +261,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
       runner.stop();
       await Promise.allSettled([pool.end(), auditPool.end()]);
       kmsClient?.destroy();
+      sesClient?.destroy();
     },
   };
 }

@@ -6363,3 +6363,85 @@ worker dùng CHÍNH `assertLocalDevAllowed`, hàng rào ấy chặn mọi tiến
   Nửa công khai của khoá KMS lấy bằng `layKhoaCongKhaiBienNhanKms` khi đường ấy được dựng.
 - Hai tiến trình không còn so chéo được cấu hình khoá của nhau dưới `aws-kms` (khoản 165 chỉ đo vòng
   local-dev); lệch CMK giữa `api` và worker lộ ra ở lượt mở thầu đầu tiên — ồn ào, không im lặng.
+
+---
+
+## ADR-065 — Bộ gửi thật là Amazon SES, CHỈ kênh EMAIL; mỗi tiến trình gửi từ đúng MỘT địa chỉ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-064**, ADR-010, sổ nợ 38
+
+### Bối cảnh
+
+ADR-064 nối khoá thật nhưng để hộp thư dev và thư mục cảnh báo dev chạy dưới cờ
+`TRUSTPROCURE_ALLOW_DEV_SINKS` — token, OTP và cảnh báo break-glass nằm dạng rõ trên đĩa task. Cờ ấy
+phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ gửi thật cho `api` (năm loại tin) và cho worker
+(cảnh báo break-glass). Liên hệ nhà cung cấp khai ba kênh: `EMAIL`, `SMS`, `ZALO_ZNS`.
+
+### Quyết định
+
+1. **Amazon SES (SESv2), cùng tài khoản prod và vùng `ap-southeast-1`.** Thư chữ thuần, tiêu đề hằng —
+   không byte đầu vào nào vào dòng tiêu đề, không thân HTML.
+2. **Chỉ kênh `EMAIL`.** Tin cho kênh `SMS`/`ZALO_ZNS` làm bộ gửi NÉM: việc outbox thất bại ồn ào,
+   không rơi về hộp thư dev, không đổi kênh. SMS và Zalo là lát cắt riêng.
+3. **Đích là MỘT địa chỉ đơn** — kiểm trước khi gọi SES: một đích mang dấu phẩy hay CR/LF là một lần
+   gửi token cho người thứ hai.
+4. **Mỗi tiến trình gửi từ đúng một địa chỉ**, cưỡng chế bằng IAM (`ses:FromAddress`, stack
+   `80-ses`): `tp-api` từ `noreply@…`, `tp-unseal-worker` từ `canh-bao@…`. Worker không gửi được một
+   "link đăng nhập" mang danh nghĩa `api`.
+5. **Cảnh báo break-glass** là một thư SES tới danh sách `TRUSTPROCURE_ALERT_EMAILS` (1–50);
+   `deliver` NÉM khi SES từ chối, nên job thất bại và được thử lại (hợp đồng của cổng).
+6. **Cấu hình:** `TRUSTPROCURE_SENDER_ADAPTER` nhận `dev-mailbox` hoặc `ses`, `TRUSTPROCURE_ALERT_ADAPTER`
+   nhận `dev-file` hoặc `ses`; mỗi cặp bộ biến LOẠI TRỪ nhau, cùng quy tắc ⑷ của ADR-064.
+
+### Hệ quả, nói thẳng
+
+- **SES sandbox**: tới khi AWS duyệt production access, mọi thư tới địa chỉ chưa xác minh bị từ chối.
+  Không lớp mã nào vượt được điều ấy; README ghi cách xin.
+- DNS nằm ngoài AWS: stack xuất bản ghi DKIM/MAIL FROM/DMARC để thêm bằng tay; domain chưa xác minh
+  thì SES từ chối gửi.
+- Nhà cung cấp chỉ khai SMS/Zalo KHÔNG nhận được lời mời tới khi có adapter kênh ấy — việc outbox của
+  họ thất bại và nằm trong log với tên lý do, không im lặng.
+- Thư đi qua hạ tầng SES: nội dung (link, mã) rời hệ thống ở dạng rõ trên kênh email — giới hạn của
+  mọi thiết kế magic link/OTP qua email, không riêng SES.
+
+---
+
+## ADR-066 — Chạy thật trên ECS Fargate: subnet riêng KHÔNG NAT, RDS single-AZ, image chạy thẳng TypeScript, migrate là một task
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-020, ADR-021, ADR-040, **ADR-061**,
+**ADR-062**, ADR-064, ADR-065
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Mạng:** VPC 2 AZ; subnet công khai chỉ chứa ALB; task và RDS ở subnet riêng **không có tuyến ra
+   internet**. Đường ra AWS là VPC endpoint (KMS, ECR api/dkr, Logs, Secrets Manager, SES; S3 gateway).
+   Mặc định endpoint đặt ở MỘT AZ (`endpoint_mot_az`) để giảm nửa chi phí. Security group theo tiến trình:
+   ALB → api:8080; api/worker/migrate → RDS:5432 và endpoint:443; không gì khác.
+2. **CSDL:** RDS PostgreSQL 16, `db.t4g.small`, single-AZ, gp3 20 GB, mã hoá, `rds.force_ssl=1`, backup 7
+   ngày, deletion protection + `prevent_destroy`. Mật khẩu master do RDS quản trong Secrets Manager.
+3. **Image:** một `deploy/Dockerfile`, ba đích (`api`, `worker`, `migrate`). Không bước biên dịch — chạy
+   `node --experimental-transform-types` như `pnpm *:dev`, giữ bố cục workspace (Node không bóc kiểu
+   trong node_modules). Chỉ phụ thuộc sản xuất của đúng gói, user `node`, rootfs chỉ-đọc ở ECS, bó CA của
+   RDS ghim sha256 qua `NODE_EXTRA_CA_CERTS` (`createPool` bắt TLS và cấm `sslmode` trong URL).
+4. **Migrate là một task** (`tools/chay-migrate`, họ `tp-migrate`, role `tp-migrate`): `migrate()` bằng
+   vai master của RDS, rồi đảm bảo `app_api_login`/`app_unseal_login` với mật khẩu lấy từ CHÍNH URL trong
+   secret `tp/api/database-url`, `tp/worker/database-url` — một nguồn sự thật, xoay mật khẩu = đổi secret
+   rồi chạy lại task. Lỗi tạo vai chỉ mang mã Postgres (câu lệnh mang mật khẩu).
+5. **Service:** `tp-api` sau ALB (TLS 1.2+/1.3, HTTP→301), `tp-unseal-worker` họ `tp-unseal-worker`
+   (quy ước cảnh báo ⑵ của stack 60). Bản task definition do pipeline deploy đăng ký — Terraform bỏ qua.
+   Image ghim theo **digest**.
+
+### Hệ quả, nói thẳng
+
+- **Chưa đo trên RDS thật:** vai master của RDS (`rds_superuser`, không phải superuser) có chạy trọn
+  `migrate()` và hardening được không — đặc biệt yêu cầu BYPASSRLS của ADR-061 cho vai chủ bảng FORCE —
+  là câu hỏi mở. Task migrate đầu tiên là phép đo; `migrate()` được thiết kế để TỪ CHỐI chứ không để
+  backfill ra 0 hàng.
+- **Worker `desired_count = 0` tới khi có tổ chức đầu tiên:** worker từ chối khởi động khi nguồn tổ chức
+  trả 0 hàng (ADR-040) — đo trong lượt chạy container 2026-09-26. Bật nó sau khi tạo tổ chức.
+- **VPC endpoint của SES API** (`com.amazonaws.<vùng>.email`) chưa kiểm được từ môi trường viết mã này;
+  nếu vùng không có, `plan` báo lỗi và biến `ses_endpoint_service` là chỗ đổi.
+- **`apps/web` chưa được triển khai** — người dùng đi qua web (ADR-044); `TRUSTPROCURE_PUBLIC_BASE_URL`
+  trỏ tới nơi web sẽ chạy. Đó là lát cắt kế.
+- Chi phí ước lượng khi chạy: RDS ~30 USD/tháng, ALB ~20, Fargate (1 api 0,5 vCPU + 1 worker 0,25 vCPU)
+  ~25, 6 interface endpoint ở 1 AZ ~45 (≈ 90 ở 2 AZ).

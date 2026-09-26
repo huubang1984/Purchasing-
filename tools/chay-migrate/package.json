@@ -1,0 +1,14 @@
+{
+  "name": "@trustprocure/chay-migrate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "[ADR-066] Entry point cua task ECS `tp-migrate`: chay migrate() bang vai chu CSDL, roi dam bao hai vai DANG NHAP cua api va worker (mat khau lay tu chinh URL ma hai tien trinh dung). Chay LUC DEPLOY, khong chay trong tien trinh ung dung.",
+  "dependencies": {
+    "@trustprocure/db": "workspace:*",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@trustprocure/test-support": "workspace:*"
+  }
+}
