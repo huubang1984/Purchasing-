@@ -1552,7 +1552,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // phuc hoi ban `059` len tren, va mot phep tu kiem bang chuoi con `%EVALUATING->AWARDED%`
     // tra CO vi no khop mot CHU THICH. CHINH PHEP KIEM NAY la thu bat duoc — no so THAN, khong
     // so mot chuoi con.
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "061_trao_thau.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    // [S1.132 / khoản 240] `066` định nghĩa lại thân (khối "điều kiện để mở" chỉ chạy ở CẠNH vào
+    // OPEN), nên con trỏ dời sang `066` theo cùng quy tắc *migration CUỐI CÙNG*. Thân `066` được
+    // TRÍCH từ `061` bằng script rồi đổi đúng hai chỗ — bài học của chính khối chú thích ngay trên.
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "066_dem_chu_ky_o_canh_mo_goi.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
@@ -3181,6 +3184,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "066_dem_chu_ky_o_canh_mo_goi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7587,6 +7591,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "066_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7870,6 +7875,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "066_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

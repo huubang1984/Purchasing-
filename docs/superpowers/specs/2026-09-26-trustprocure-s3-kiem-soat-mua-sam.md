@@ -103,7 +103,7 @@ Khuôn ADR-050: chỗ nào tiền lệ trong kho trả lời được thì lư�
 | # | Chỗ | Chốt | Tiền lệ |
 |---|---|---|---|
 | ⑽ | Bảng bậc con chèn thêm được vào phiên bản cũ ⇒ K1 sai hồi tố; phép đếm gặp NULL ⇒ lặng lẽ cho qua | Bậc là `jsonb` trên hàng chính sách; bậc áp lưu bằng `tier_tu_so_tien` trên `rfq_budgets`; mọi hàm theo bậc NÉM khi NULL; trao ở bậc đấu thầu chính thức bị từ chối; mọi chốt theo bậc dùng bậc cao hơn ở trao thầu | `056`; `014` (NULL = chưa trả lời được) |
-| ⑾ | Băm danh sách đổi `rfq_bam_noi_dung` ⇒ gãy mọi UPDATE của gói cấp kép (khoản **240**); người đã ký không ký lại được | Hàm băm danh sách RIÊNG + cột do trigger đặt; UNIQUE của `rfq_approvals` theo (người, băm); route cho cạnh về DRAFT; thu hồi ở OPEN giữ lại, có lý do và tín hiệu | `011` C-1; `014` §(4) |
+| ⑾ | Băm danh sách đổi `rfq_bam_noi_dung` ⇒ gãy mọi UPDATE của gói cấp kép (khoản **240**); người đã ký không ký lại được. **[S1.132]** Vế *gãy mọi UPDATE* hết đúng sau `066`; chốt giữ nguyên vì hai vế còn lại — đọc, chưa đo: đổi định dạng băm vẫn vô hiệu chữ ký của gói đang PENDING_APPROVAL lúc deploy, và UNIQUE vẫn chặn ký lại | Hàm băm danh sách RIÊNG + cột do trigger đặt; UNIQUE của `rfq_approvals` theo (người, băm); route cho cạnh về DRAFT; thu hồi ở OPEN giữ lại, có lý do và tín hiệu | `011` C-1; `014` §(4) |
 | ⑿ | K5 thiếu đúng người bỏ tên khỏi danh sách | Loại thêm mọi `revoked_by` (đọc mọi hàng), người đặt ngân sách, người nộp duyệt, người tạo bản ghi nhà cung cấp và người liên hệ | ADR-051 |
 | ⒀ | K3 "rửa" được bằng gói nháp | Chỉ đếm gói đã `opened_at`; loại gói đang xét; theo người mời | ADR-058 ⑶(b); K6 |
 | ⒁ | §4.6 và K10 là hai điều kiện khác nhau; người gây ra tín hiệu tự ghi nhận được | Một điều kiện, fail-closed; tính lại ở tầng gói; neo `submitted_at`; khoá `category_id` sau DRAFT; khoá theo (tổ chức, nhóm hàng); người ghi nhận ngoài {người tạo, người gây ra}; thêm `EARLY_CLOSE`; bằng chứng không mang số tiền | `011` C-1; ADR-051; ADR-054 |
@@ -555,7 +555,7 @@ Một phép đo phải có mà dễ quên: **K4 đo bằng thay đổi danh sác
 **[S1.131] Thêm các phép đo phải có:**
 - **Ba ca đã đo ở lượt soi thành test T3 thường trực:**
   - đột biến `CHU_KY_CAN := 2` — khoản 242, S3.5;
-  - gia hạn hai lần một gói cấp kép — khoản 240;
+  - gia hạn hai lần một gói cấp kép — khoản 240; **[S1.132]** đã vào kho cùng bản sửa (`066`, khối `[INV-D2] [S1.132 / khoản 240]` của `packages/rfq/src/rfq.int.test.ts`);
   - mở gói dưới ngưỡng với 0 chữ ký — khoản 241, S3.1.
   
   Cả ba đã chạy trên Postgres 16 bằng một bộ dựng cụm cục bộ thay testcontainers (biên bản §S1.131); đưa vào kho là việc
@@ -761,7 +761,7 @@ chữ ký chính sách — nên nếu có trôi thì trôi lên.
 |---|---|
 | **S3.0** | ADR-073/071 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1 |
 | **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-073; ngân sách bắt buộc; sàn một chữ ký; K1; gieo lại `gieo:demo` theo bảng vai của §7 |
-| **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; sửa khoản 240 nếu nó chưa được sửa ở vòng riêng |
+| **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; ~~sửa khoản 240 nếu nó chưa được sửa ở vòng riêng~~ **[S1.132]** khoản 240 đã sửa ở vòng riêng (`066`) |
 | **S3.3** | **Xác minh nội bộ lên đây** (K8a) — K2 cần nó; bốn luật đếm; ngoại lệ có hàng rút; K3 theo định nghĩa §5.1; tập loại trừ K5 mở rộng |
 | **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; đóng khoản 242 ⑴ |
 | **S3.6** | Một điều kiện fail-closed; `EARLY_CLOSE`; khoá `category_id` sau DRAFT |

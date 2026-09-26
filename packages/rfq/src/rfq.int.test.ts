@@ -17,6 +17,7 @@ import {
   listRfqItems,
   openRfq,
   submitRfqForApproval,
+  type RfqRecord,
 } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
@@ -605,6 +606,97 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
         }),
       ),
     ).rejects.toThrow(RfqError);
+  });
+});
+
+// =============================================================================================
+// [S1.132 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
+//
+// Tới `061`, khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy mỗi khi `NEW.status = 'OPEN'`
+// mà không hỏi `OLD.status` — tức chạy lại ở MỌI câu UPDATE trên một gói đang OPEN. Băm nội dung
+// có cả `deadline_at`, và trigger BEFORE đọc hàng CŨ. Nên lần gia hạn đầu băm ra đúng hạn lúc ký
+// và đi qua; lần hai băm ra hạn của lần gia hạn trước, lệch, và gói cấp kép KHÔNG gia hạn được nữa.
+// Mọi ca gia hạn khác của kho dùng ước lượng dưới ngưỡng, nên không ca nào thấy.
+//
+// Spec S0+S1 §4.4 đặt bốn điều kiện cho gia hạn — đang OPEN, có lý do, có audit, có thông báo —
+// và không đòi ký lại. `066` đếm chữ ký ở ĐÚNG cạnh vào OPEN; ba ca dưới đo bản sửa, vế dương còn
+// nguyên của D2, và đột biến trả về hình dạng cũ.
+// =============================================================================================
+describe("[INV-D2] [S1.132 / khoản 240] chữ ký D2 chỉ được đếm ở cạnh mở gói — gói cấp kép gia hạn được nhiều lần", () => {
+  // Vế cạnh của `066`, nguyên văn. Đột biến dưới thay đúng chuỗi này.
+  const VE_CANH = "IF NEW.status = 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status THEN";
+
+  const giaHan = (rfqId: string, ngay: number, lan: number): Promise<RfqRecord> =>
+    withTenant(apiPool, orgA, (c) =>
+      extendRfqDeadline(c, orgA, {
+        rfqId,
+        newDeadlineAt: new Date(Date.now() + ngay * 24 * 3600 * 1000),
+        reason: `gia han lan ${lan}`,
+        actorSessionId: s1,
+      }),
+    );
+
+  /** Gói cấp kép, hai chữ ký của HAI người khác người tạo, đã mở. */
+  async function goiCapKepDaMo(): Promise<string> {
+    const rfqId = await rfqNhap(orgA, true);
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s3 });
+    });
+    const mo = await withTenant(apiPool, orgA, (c) =>
+      openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool),
+    );
+    expect(mo.status).toBe("OPEN");
+    return rfqId;
+  }
+
+  it("gói cấp kép gia hạn BA lần liền đều qua — hạn đứng ở lần cuối, sổ kiểm toán có đủ ba lần", async () => {
+    const rfqId = await goiCapKepDaMo();
+    const r1 = await giaHan(rfqId, 10, 1);
+    const r2 = await giaHan(rfqId, 12, 2);
+    const r3 = await giaHan(rfqId, 14, 3);
+    expect([r1.status, r2.status, r3.status]).toEqual(["OPEN", "OPEN", "OPEN"]);
+    expect(r3.deadlineAt?.getTime()).toBeGreaterThan(r2.deadlineAt?.getTime() ?? Infinity);
+
+    const sau = await withTenant(apiPool, orgA, (c) => getRfq(c, orgA, rfqId));
+    expect(sau?.deadlineAt?.getTime()).toBe(r3.deadlineAt?.getTime());
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_DEADLINE_EXTENDED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    expect(Number(rows[0]?.n)).toBe(3);
+  });
+
+  it("ĐỐI CHỨNG — cạnh mở gói VẪN đếm chữ ký trên nội dung hiện tại: một chữ ký thì không mở", async () => {
+    // Ca `D2 — phê duyệt kép ở phía RFQ` ở trên đo cùng điều này. Nhắc lại ở đây để khối này tự mang
+    // vế dương: một bản sửa XOÁ hẳn khối đếm cũng làm ca gia hạn ở trên xanh.
+    const rfqId = await rfqNhap(orgA, true);
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+    });
+    await expect(
+      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool)),
+    ).rejects.toThrow(/can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1 \(D2\)/);
+  });
+
+  it("ĐỘT BIẾN — trả khối đếm về hình dạng `061` (không hỏi cạnh) thì lần gia hạn THỨ HAI gãy đúng thông điệp khoản 240 đo", async () => {
+    const { rows } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.rfq_kiem_chuyen_trang_thai()'::regprocedure) AS d",
+    );
+    const goc = rows[0]?.d ?? "";
+    expect(goc.split(VE_CANH).length - 1, "tiền đề: thân đang chạy mang ĐÚNG MỘT vế cạnh của `066`").toBe(1);
+    await db.pool.query(goc.replace(VE_CANH, "IF NEW.status = 'OPEN' THEN"));
+    try {
+      const rfqId = await goiCapKepDaMo();
+      await giaHan(rfqId, 10, 1);
+      await expect(giaHan(rfqId, 12, 2)).rejects.toThrow(
+        /can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 \(D2\)/,
+      );
+    } finally {
+      await db.pool.query(goc);
+    }
   });
 });
 

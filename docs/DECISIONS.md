@@ -6772,6 +6772,8 @@ bất biến thì bất biến bằng cấu tạo. Bậc áp lưu bằng `tier_t
 ⑾ **Băm danh sách là một hàm RIÊNG**, cộng một cột do trigger đặt trên `rfq_approvals`.
 - `rfq_bam_noi_dung` giữ nguyên. Nếu định nghĩa lại nó để phủ danh sách, mọi UPDATE sau đó trên một gói cấp kép đang OPEN
   sẽ gãy, vì khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy ở mọi lần UPDATE — khoản **240** đo đúng cơ chế ấy.
+  **[S1.132]** Cơ chế ấy đã sửa (`066`: khối đếm chỉ chạy ở cạnh vào OPEN). Chốt giữ nguyên: đổi định dạng băm vẫn vô hiệu chữ
+  ký của gói đang PENDING_APPROVAL lúc deploy — đọc, chưa đo.
 - UNIQUE của `rfq_approvals` đổi thành (tổ chức, gói, người, băm): người đã ký ký lại được trên nội dung mới. Theo `011`
   C-1, chữ ký cũ vô hiệu bằng băm, không bằng xoá. Đổi này chạm D2 của MVP1 và tên ràng buộc mà
   `apps/api/src/buyer.int.test.ts` đọc.
@@ -6824,6 +6826,7 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
 ### Ba phép đo, và ba khoản nợ
 
 - **240** — gói cần phê duyệt kép bị từ chối ở lần gia hạn THỨ HAI. Lỗi của MVP1 đang chạy trên `master`, không phải của S3.
+  **[S1.132] ĐÓNG** — `066`.
 - **241** — gói dưới ngưỡng mở được với 0 chữ ký, trái spec S0+S1 §4.3.
 - **242** — hai lời khai sai nằm trong thân hàm đã ghim: đổi `CHU_KY_CAN` thành 2 thì trao thầu **không bao giờ** duyệt được;
   và cạnh quay về DRAFT *"xoá mọi chữ ký"* là chú thích thiu ở năm chỗ, trái `011:245-251`.
