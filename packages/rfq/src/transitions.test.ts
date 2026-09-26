@@ -44,13 +44,21 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 // Quy tắc rút ra, và nó rộng hơn tệp này: một hàm ĐÃ GHIM thì không hand-write `CREATE OR
 // REPLACE` — trích nguyên thân đang sống bằng script rồi CỘNG vào, và kiểm bằng phần tử mảng
 // CÓ NHÁY (`'%''EVALUATING->AWARDED''%'`) hay bằng hành vi, chứ đừng bằng một chuỗi con trần.
+//
+// [S1.140 / khoản 240] LẦN THỨ NĂM, và lần đầu hai thứ tệp này đọc TÁCH khỏi nhau. `067` viết lại
+// thân hàm — nên mang lại nguyên khối `CANH_HOP_LE` — mà KHÔNG dựng lại `rfq_packages_status_check`.
+// Một con trỏ chung cho cả hai sẽ đọc bảng cạnh ở một bản đã chết, hoặc tìm tập đóng ở một tệp
+// không có nó. Hai con trỏ, mỗi cái theo quy tắc *migration CUỐI CÙNG* của thứ nó đọc.
 const DUONG_DAN_BANG_CANH = fileURLToPath(
+  new URL("../../../db/migrations/067_dem_chu_ky_o_canh_mo_goi.sql", import.meta.url),
+);
+const DUONG_DAN_TAP_DONG = fileURLToPath(
   new URL("../../../db/migrations/061_trao_thau.sql", import.meta.url),
 );
 
 /** Tập đóng của `status` ĐANG SỐNG, bóc từ `CHECK` mà `061` vừa dựng lại. */
 function bocTrangThaiTuSql(): string[] {
-  const sql = readFileSync(DUONG_DAN_BANG_CANH, "utf8");
+  const sql = readFileSync(DUONG_DAN_TAP_DONG, "utf8");
   const khoi = /ADD CONSTRAINT rfq_packages_status_check\s*CHECK \(status IN \(([\s\S]*?)\)\);/
     .exec(sql);
   if (khoi?.[1] === undefined) {
@@ -68,7 +76,7 @@ function bocCanhTuSql(): string[] {
   const khoi = /CANH_HOP_LE constant text\[\] :=\s*ARRAY\[([\s\S]*?)\]\s*;/.exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy khối CANH_HOP_LE trong 061_trao_thau.sql. Nếu bảng cạnh đã được " +
+      "Không tìm thấy khối CANH_HOP_LE trong 067_dem_chu_ky_o_canh_mo_goi.sql. Nếu bảng cạnh đã được " +
         "viết lại một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
     );
   }
@@ -76,7 +84,7 @@ function bocCanhTuSql(): string[] {
 }
 
 describe("bảng cạnh của máy trạng thái RFQ", () => {
-  it("bản TS và bảng cạnh SỐNG (061) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
+  it("bản TS và bảng cạnh SỐNG (067) là MỘT — hai bản sao không được trôi khỏi nhau", () => {
     const tuTs = RFQ_TRANSITIONS.map(([tu, den]) => `${tu}->${den}`).sort();
     const tuSql = bocCanhTuSql();
 

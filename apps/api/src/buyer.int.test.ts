@@ -695,10 +695,13 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
 
     // VẾ NGƯỢC, và nó là vế đáng giá — dựng trên một gói thầu THỨ HAI chứ không gia hạn lần nữa.
     //
-    // Vì sao không gia hạn lần hai trên cùng gói: một lần gia hạn ĐỔI NỘI DUNG, và hai phê duyệt RFQ
+    // ~~Vì sao không gia hạn lần hai trên cùng gói: một lần gia hạn ĐỔI NỘI DUNG, và hai phê duyệt RFQ
     // được ràng vào nội dung ấy — lần gia hạn thứ hai bị từ chối `422` với *"RFQ nay can 2 phe duyet
     // TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*. Đó là hành vi ĐÚNG và đáng ghi: đổi hạn nộp làm mất
-    // hiệu lực chữ ký cũ. Test này đo chặng GỬI, không đo lại vế ấy.
+    // hiệu lực chữ ký cũ.~~ [S1.140 / khoản 240] Câu vừa gạch SAI: lần gia hạn ĐẦU ngay trên đổi cùng
+    // cột ấy và đi qua, và spec S0+S1 §4.4 không đòi ký lại khi gia hạn. Đó là lỗi của khối đếm chữ ký
+    // chạy ở mọi câu UPDATE; `067` sửa nó. Gói thứ hai ở lại vì vế nó đo khác: lời mời ĐÃ THU HỒI
+    // không nhận tin. Test này đo chặng GỬI.
     const rfqB = await rfqDaDong(pm, [gdH1, gdH2], false);
     const { rows: moiB } = await db.pool.query<{ id: string }>(
       "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +

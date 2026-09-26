@@ -8286,7 +8286,8 @@ không ghim được quyền nào. Nó chỉ chết sau khi thêm một `PROCURE
 ## 5. Hai thứ vòng này ĐỤNG mà không sửa, nói ra
 
 ⑴ **Gia hạn hạn nộp làm MẤT HIỆU LỰC hai phê duyệt RFQ cũ** — lần gia hạn thứ hai bị `422` *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi
-co 0 (D2)"*. Đó là hành vi ĐÚNG và đáng ghi; test dựng vế ngược trên một gói thầu thứ hai thay vì gia hạn hai lần.
+co 0 (D2)"*. ~~Đó là hành vi ĐÚNG và đáng ghi;~~ **[S1.140] SAI — khoản 240, đóng ở §S1.140:** lần gia hạn ĐẦU đổi cùng cột
+ấy và đi qua, và spec S0+S1 §4.4 không đòi ký lại khi gia hạn. Test dựng vế ngược trên một gói thầu thứ hai thay vì gia hạn hai lần.
 
 ⑵ **Nội dung tin còn nghèo:** mang id gói thầu và id yêu cầu, không mang tên gói thầu hay người xin — đủ để hành động, chưa đủ để đọc mà hiểu.
 Không mở khoản mới cho nó vì đây là một lựa chọn phạm vi, không phải một khoảng trống bị bỏ quên; ADR-046 §*Điều ADR này KHÔNG nói* giữ câu ấy.
@@ -11790,3 +11791,393 @@ gỡ quyền ghi sổ là đúng lúc dấu vết biến mất mà không ai bi�
   đó là một phép đo chứ không một may mắn.
 - Sổ nợ **239** khoản, **239 ĐÓNG** ⇒ mở **98 → 97**. Rổ A **7** không đổi, rổ B **68 → 67**, rổ C
   **23** không đổi; ba rổ cộng đúng: 7 + 67 + 23 = 97.
+
+# §S1.139 — LƯỢT SOI HÌNH DẠNG SPEC S3, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 31 PHÁT HIỆN, CHÍN CAO, VÀ BA LỜI KHAI ĐO TRÊN POSTGRES THẬT — HAI TRONG BA LÀ LỖ CỦA MVP1 ĐANG CHẠY
+
+**Mảnh của `docs/PRODUCT.md` §11 mà vòng này chạm (ADR-043 ⒞): không mảnh nào.** Vòng này soi một spec. Mọi hạng mục
+S3.x về sau chạy dưới công tắc ADR-080.
+
+## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
+
+Chủ dự án yêu cầu một lượt soi hình dạng cho bản nháp spec S3 (`docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`),
+vào kho ở vòng S1.138. Khuôn là S1.101: soi TRƯỚC dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản phẩm, tự chốt
+phần tiền lệ trả lời được, rồi sửa spec tại chỗ.
+
+Một điều đặt khung cho mọi thứ dưới đây: **bản nháp là của chính vòng S1.138**, nên phần lớn chỗ sai lượt soi tìm ra là
+chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn `[S1.139]`, không viết lại, để người đọc thấy bản nháp đã nói
+gì và vì sao nó sai.
+
+Vòng này không viết một dòng mã S3 và không thêm migration. Thứ nó để lại:
+- spec sửa tại chỗ — §2.4, §2.5, §5.1, bảng vai của §7, §8.10, §8.11, bảng thay đổi của §9;
+- ba ADR — 080, 081, 082;
+- ba khoản nợ — 240, 241, 242.
+
+## 2. Bốn góc độc lập, 48 phát hiện thô, 31 sau khử trùng
+
+| Góc | Câu hỏi | Thô | CAO | TRUNG | THẤP |
+|---|---|---|---|---|---|
+| A | Lời khai của spec đối chiếu mã, và mâu thuẫn nội tại | 12 | 4 | 7 | 1 |
+| B | Khả thi cưỡng chế ở tầng CSDL | 12 | 7 | 5 | — |
+| C | Đối kháng: phân tách nhiệm vụ, thông đồng, kiểm soát giả | 12 | 6 | 5 | 1 |
+| D | Phạm vi, luồng người dùng, kiểm thử, quy trình | 12 | 2 | 10 | — |
+| **Cộng** | | **48** | **19** | **27** | **2** |
+
+Mỗi góc chỉ ĐỌC, có tệp:dòng; không góc nào chạy Postgres. Lượt gộp làm hai việc:
+- gộp các phát hiện trùng nhau — cùng một lỗ thấy từ hai, ba góc;
+- đọc lại từng phát hiện trên mã trước khi nhận.
+
+Kết quả: còn **31 — 9 CAO, 17 TRUNG, 5 THẤP**. Chỗ nào góc soi ghi *"CHƯA CHẮC"* mà đo được thì đã đo (§5).
+
+Hội tụ là tín hiệu đáng đọc. Bốn phát hiện được tìm ra độc lập từ nhiều góc:
+- CAO ① — bốn góc;
+- CAO ③ — ba góc (A③, B②, D①);
+- CAO ⑥ — bốn góc;
+- CAO ⑦ — bốn góc.
+
+## 3. Chín CAO
+
+| # | Phát hiện | Góc | Đọc / đo | Chốt |
+|---|---|---|---|---|
+| ① | **K2 và K3 là kiểm soát giả dưới mặc định.** Vai giữ `rfq.invite` tự tạo được bản ghi nhà cung cấp — `supplier.manage` cùng ở PM (`005:298,304`). `tax_code` cho phép NULL, và các NULL không đụng nhau (`008:59`). Người liên hệ chỉ duy nhất theo `(org_id, supplier_id, email)` (`008:157`), nên một email dùng được cho mọi công ty vỏ. Cửa sổ K3 còn "rửa" được bằng gói nháp, vì mời ở DRAFT thành miễn phí | C⑴⑹ · A⑥ · B⑥ · D② | đọc | ADR-082 ⑹ (chủ dự án) · ⒀ |
+| ② | **K5 thiếu người bỏ tên khỏi danh sách.** PM2 thu hồi đối thủ thật ở DRAFT rồi tự ký. `revokeInvitation` không kiểm người thu hồi hay trạng thái gói; trigger phê duyệt chỉ loại `created_by` (`011:253-300`). Cùng lỗ ấy: người đặt ngân sách, người nộp duyệt, người tạo bản ghi nhà cung cấp | C⑵ · D② · B⑪ | đọc | ⑿ |
+| ③ | **Gói không có ngân sách thoát mọi chốt theo bậc.** Ngân sách là tuỳ chọn (`020:63`); `requires_dual_approval DEFAULT true` (`009:39`) mở đường D2 mà không cần nó. **Và fail-open ở bậc đấu thầu chính thức:** idiom `IF so_chu_ky < CHU_KY_CAN` (`061:584`) gặp một hàm trả NULL thì không RAISE | A③ · B②④ · D① | đọc | ⑸ (chủ dự án) · ⑽ |
+| ④ | **Khai thấp ước lượng né trọn cặp trung tâm K2+K5** ở `DRAFT→PENDING_APPROVAL`: mua 900 triệu khai 99 triệu thì rơi xuống bậc 0. Nó né cả bậc đấu thầu chính thức: mua 12 tỷ khai 9,99 tỷ. §8.4 của bản nháp đếm ba cổng và thiếu đúng cổng này | C⑶ · B④ | đọc | ⑽ · ⑹iv · ⒁ |
+| ⑤ | **FINANCE đặt thước và cầm thứ bị đo.** `033` chỉ loại `rfq.create`/`rfq.approve`. FINANCE giữ `policy.manage` (`033:116`), cùng `po.approve` và `award.recommend` (`005:308-309`). Vậy số chữ ký và vai duyệt trao thầu mà bậc khai chính là thước đo việc FINANCE làm, và ràng buộc 7 của bản nháp (*"033 phủ luôn bậc mà không cần sửa"*) sai | C⑷ · A⑧ · D⑥ | đọc | ⑺ (chủ dự án) |
+| ⑥ | **Khâu mời §3.3 ↔ K4, dựng trên một tiền đề sai.** Bản nháp chép chú thích thiu *"cạnh về DRAFT đã xoá mọi chữ ký"*, nằm ở năm chỗ (`011:140`, `058`, `059`, `061`, thân ghim ở hardening) và trái chính `011:245-251`. Thêm ba lỗ: UNIQUE `rfq_approvals_mot_nguoi_mot_lan` (`009:156`) chặn người đã ký ký lại; định nghĩa lại `rfq_bam_noi_dung` để phủ danh sách làm gãy mọi UPDATE của gói cấp kép đang OPEN; K4 cấm đúng lần thu hồi ở OPEN mà §3.3 dựng tín hiệu quanh nó | A①② · B③ · C⑸⑺ · D⑪ | **đo** (M3) | ⑾ · khoản 240, 242 ⑵ |
+| ⑦ | **K10 và §4.6 là hai điều kiện khác nhau.** Chúng khác đúng ở ca tín hiệu trôi: một bản cho qua, một bản kẹt vĩnh viễn. Và người gây ra tín hiệu tự ghi nhận được — người thu hồi ghi nhận `INVITE_LIST_NARROWED` của chính mình | A④ · B⑤ · C⑸ · D② | đọc | ⒁ |
+| ⑧ | **Bậc sửa được hồi tố.** Bảng con chèn thêm được vào phiên bản chính sách đang dùng. Bất biến của `014` chỉ đến từ việc không cấp UPDATE/DELETE (`014:85`), còn bảng con thì cần INSERT. Vậy K1 sai hồi tố cho mọi gói đã rời DRAFT | B① · A⑦ | đọc | ⑽ (`jsonb`, khuôn `056`) |
+| ⑨ | **Phiên Passport dùng GUC riêng đi qua mọi policy `_khach` cũ như một kết nối người mua.** Policy khách chỉ được nhận khi biểu thức bằng nguyên văn literal `app.guest_session_id` (`KHACH_KHONG_PHIEN_LIT`, hardening `2655`). Khuôn `027` cũng không mượn được: `guest_sessions` và `invitation_otp_challenges` mang `invitation_id NOT NULL` (`010`) | B⑦ · A⑩ | đọc | ADR-081 ⑶ |
+
+**Ba trong chín CAO không phải lỗ của thiết kế, mà là chỗ bản nháp nói sai.**
+- ⑤ là một lời khai sai về ngữ nghĩa của `033`.
+- ⑥ chép lại một chú thích thiu.
+- ⑦ là hai mục của cùng tài liệu tự cãi nhau.
+
+Cùng lớp với CAO ②③ của §S1.101.
+
+**Năm CAO khác có chung một hình dạng:** chốt đọc một thứ mà chính người bị chốt tạo ra, hay bỏ qua được. Đó là:
+- bản ghi nhà cung cấp (①);
+- việc bỏ tên (②);
+- ngân sách (③);
+- ước lượng (④);
+- bảng bậc (⑧).
+
+CAO ⑨ là một lỗ cô lập, khác loại.
+
+## 4. Mười bảy TRUNG và năm THẤP
+
+| # | TRUNG | Góc | Chốt |
+|---|---|---|---|
+| 1 | Gửi link lúc mở gói qua job outbox có ba lỗi: token phải vào payload (trái `007`, E1); đó đúng hình dạng ADR-023 §1 đã loại; và nó đảo ADR-020 [S1.70] mà không gọi tên. Còn nếu job tự đúc token thì vấp trigger danh tính của `013`, vốn đòi một phiên người dùng còn sống | A⑤ · B⑩ · D③ | ⑼ (chủ dự án) |
+| 2 | K12 hứa quá. Phần TypeScript *"chỉ kiểm hình dạng ngoài"* đẩy mọi phán quyết xuống trigger, mà từ chối do trigger huỷ cả giao dịch nên không ghi sổ được. Giới hạn J6 chỉ hẹp vì lớp gói kiểm trước | A⑨ · B⑨ · D④ | ⒂ — lớp từ chối thứ ba chờ S3.0 |
+| 3 | Ghim hardening. Ba hàm S3 phải sửa đều bị ghim nguyên văn: `rfq_kiem_chuyen_trang_thai`, `rfq_kiem_nguoi_duyet`, và `award_kiem_mot_award_song` cùng dòng `CHU_KY_CAN`. Nên migration một mình bị đè ngay trong cùng `migrate()`. Hàm trợ giúp thì không ghim | B⑧ | ⒃ |
+| 4 | Cổng mở gói có hai lỗ. Trigger mới trên `rfq_packages` thiếu WHEN sẽ làm mọi lần mở thầu chết dưới `app_unseal`. Và khai `CO_XUNG_DOT` SAU khi ký thì chữ ký vẫn được đếm | B⑪ | ⒃ · ⒄ |
+| 5 | K9 đòi khai báo ở lượt chấm, nơi mọi thứ tất định và không ai quyết gì. Nó bỏ qua xác minh, thẩm định, ghi nhận tín hiệu và huỷ trao thầu | C⑻ · A (ranh giới) | ⒄. Khai theo từng nhà cung cấp lúc mời: không chốt |
+| 6 | Người thẩm định tự phục vụ. Luật `supplier.qualify ⟂ rfq.invite` không chặn FINANCE (giữ `award.recommend`) thẩm định rồi đề xuất chính nhà cung cấp ấy. Thẩm định cũng không gắn với phiên bản Passport | C⑼ · D⑥ | ADR-081 ⑵⑸ · ⒄ |
+| 7 | Đóng sớm rút cửa sổ nộp về vài phút. Vế *"phê duyệt riêng khi đã có báo giá"* của `011` §(H-4) chưa bao giờ được làm | C⑽ | ⒁ `EARLY_CLOSE` |
+| 8 | Tín hiệu chia nhỏ khoá trên những thứ người chia tự chọn: người tạo, nhóm hàng, thời điểm. Riêng nhóm hàng: `category_id` không khoá sau DRAFT, vì khối *"chỉ sửa ở DRAFT"* của thân ghim `061` chỉ phủ `title` và `requires_dual_approval` | C⑾ · B⑤ | ⒁ |
+| 9 | Thứ tự §9 sai ở ba chỗ. K2 *"chỉ đếm đã thẩm định"* (S3.3) cần bảng của S3.7. K4 băm ngoại lệ trước khi bảng ngoại lệ ra đời. Cổng trao thầu bị viết lại bốn lần | A⑪ · D⑤ | ⒆ |
+| 10 | §7 cần tối thiểu bảy người, và bản nháp có hai chỗ hở. Câu *"người mua tạo… người mua đề xuất"* bị J3 chặn nếu là một người. `dual_approval_threshold` không có mặc định. Ngoài ra `gieo:demo` không có FINANCE | D⑦ · A⑫ | spec §7, §8.10 |
+| 11 | §8.5 khai thiếu. 19 tệp tích hợp đi tới `PENDING_APPROVAL` và 8 tệp tạo lời mời. `invitation.int.test.ts` đúc token cho gói DRAFT — đúng thao tác K6 chặn. Kịch bản 41 đặt ngân sách đúng 1 tỷ | D⑧ | ⑻ — cụm hiện có thành đối chứng của nhánh chưa bật |
+| 12 | Quy trình. `master` đang là nguồn triển khai thật (PR #132, #133), còn S3.1/S3.2 đổi kịch bản pilot. ADR (a) chỉ bàn chuyện người | D⑨ | ⑻ (chủ dự án) — ADR-080 |
+| 13 | §6 khai *"bảy tầng phủ đủ"* trong khi T4 chưa dựng — Playwright không có trong `package.json`. T5 lại gắn khung `TIEN-DE-CHUA-DO.md`, mà tệp ấy hỏi người mua thật | D⑩ | ⒇ |
+| 14 | K1, K4, K10 đo được mà không giết được đột biến đáng sợ nhất. K1 so với chính `rfq_bac_cua` là trùng ngôn: đột biến `≤`→`<` ở biên sống sót. K4 là hai bất biến gộp một. K10 không có mốc neo | D⑪ | §5.1: K1 đo bằng bảng ca biên hằng số; tách K4a/K4b; neo `submitted_at` |
+| 15 | Bảy mục của V2.1 §32: vài mục chỉ còn là tên (Single Source, Purchase Splitting, Supplier Performance). Chữ *qualified* của V2.1 §12 11.1 bị rơi | D⑫ · C⑴ | ⑹iii · ⒅ · bảng mã quyền ở S3.0 |
+| 16 | Nếu bằng chứng `ESTIMATE_UNDERSTATED` mang số tiền trao, `governance_signals` thành bảng thứ ba chứa giá dạng rõ, trái ADR-054 | B⑫ⓐ | ⒁ |
+| 17 | View hiệu suất lọc *"≥ CLOSED"* theo trạng thái gói, mà `BAFO_OPEN` nằm sau `CLOSED`. PM vì thế đọc được ai đã nộp lại trong một vòng còn niêm phong. Góc C xếp THẤP; lượt gộp nâng lên vì đó là rò của nhóm A | C⑿ | ⒅ |
+
+| # | THẤP | Góc | Chốt |
+|---|---|---|---|
+| 1 | Số thiu ở §8.9 và §1: số ADR, số vòng, số migration của các nhánh song song | A⑫ · D⑨ | Luật max trên mọi nhánh đang sống (S1.111). Luật ấy bắt chính vòng này — §9 |
+| 2 | §9 trích sai *"MVP1 đo ra 9–11 tuần"*. PRODUCT §6 nói đó là ước lượng. Số đo duy nhất trong kho là S2: ước 3–4 tuần, chạy từ S1.101 tới S1.114 hết khoảng 41 giờ qua 14 vòng | D⑨ | spec §9 |
+| 3 | `suppliers.level = 2` không có đường ghi, vì `011` đã `REVOKE UPDATE ON suppliers FROM app_api`. Và một cột trạng thái lưu tay là kết luận trần | B⑫ⓑ | ADR-081 ⑷ — Level 2 là suy diễn |
+| 4 | *"Hàng mới nhất"* của `supplier_qualifications` nếu xếp theo `now()` thì một `REVOKED` bắt đầu trước nhưng commit sau một `QUALIFIED` sẽ bị lờ | B⑫ⓒ | ADR-081 ⑵ — cột sequence + khoá tư vấn |
+| 5 | Chỗ sai chữ, bốn chỗ: lý do loại BUYER khỏi view hiệu suất (PM giữ cả `rfq.invite` lẫn `bid.view`); §2.2 ⑵ *"SỐ và VAI theo bậc"* chỉ đúng cho trao thầu; tiêu đề §2.3 tự cãi ô (c); trích [CR4] (bác một phần — §8) | A⑫ · C⑿ | sửa chữ tại chỗ |
+
+## 5. Ba phép đo trên Postgres 16 thật
+
+Ba lời khai mà góc soi chỉ đọc ra được, hay ghi *"CHƯA CHẮC"*, được đo thay vì để ở dạng suy luận.
+
+**Bộ dựng cụm cục bộ.** Container của vòng này không có docker daemon, nên `testcontainers` không chạy. Một bản thay
+`@trustprocure/test-support`, gắn vào vitest bằng alias, dựng một cụm Postgres 16 MỚI mỗi lần gọi `startPostgres()`:
+- `initdb` chạy dưới user hệ thống `postgres`;
+- đường TCP đòi mật khẩu scram, giống `postgres:16-alpine` — nên một mật khẩu cũ bị từ chối thật, và `chay-migrate.int.test.ts` đo được đúng điều nó khai.
+
+Bộ dựng và các tệp đo **không vào commit**. Lượt chạy cả kho trên bộ dựng này: xem §11.
+
+| # | Lời khai | Cách đo | Kết quả | Khoản |
+|---|---|---|---|---|
+| M1 | `duyetTraoThau` và `061`: *"đổi `CHU_KY_CAN` là toàn bộ việc phải làm… lời gọi của người duyệt thứ hai đi qua"* | Đọc thân đang chạy của `award_kiem_mot_award_song` bằng `pg_get_functiondef`. Thay đúng dòng `CHU_KY_CAN constant integer := 1;` thành `:= 2;` và `CREATE OR REPLACE` lúc chạy, không qua `migrate()`. Khôi phục trong `finally` | Đối chứng `:= 1`: người duyệt đầu ⇒ `APPROVED`. Đột biến `:= 2`: người duyệt đầu nhận *"can 2 chu ky duyet; dang co 1"*, số chữ ký còn lại **0**. Người duyệt thứ hai (khác người, khác vai) nhận đúng lỗi ấy, số chữ ký vẫn **0**. Vậy trao thầu **không bao giờ** duyệt được | 242 ⑴ |
+| M2 | Spec S0+S1 §4.3: `PENDING_APPROVAL → OPEN` cần *"phê duyệt hợp lệ"* | Ca *"ĐI VÒNG QUA ỨNG DỤNG"* sẵn có ở `packages/rfq/src/rfq.int.test.ts`. `rfqNhap()` đặt ước lượng 1 triệu, dưới ngưỡng 100 triệu; rồi chính người tạo (PM, `s1`) nộp duyệt và mở. Không có lời gọi `approveRfq` nào | Xanh: gói mở với 0 chữ ký. Vế đối chứng của M3 cho cùng kết quả | 241 |
+| M3 | Góc A, *"CHƯA CHẮC"*: lần gia hạn THỨ HAI của gói cấp kép đã gãy ngay hôm nay | Gói có ước lượng ≥ ngưỡng, hai chữ ký, mở, rồi `extendRfqDeadline` hai lần. Đối chứng: gói dưới ngưỡng, cùng thao tác | Đối chứng: cả hai lần đều qua. Gói cấp kép: lần một qua; lần hai ném *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*. Đóng sớm ngay sau đó vẫn qua | 240 |
+
+**Cơ chế của M3, đọc sau khi đo.**
+- Khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy mỗi khi `NEW.status = 'OPEN'` và không hỏi `OLD.status` (thân `061`, ghim ở hardening).
+- `rfq_bam_noi_dung` băm cả `deadline_at` (`011`), và trigger BEFORE đọc hàng CŨ.
+- Lần gia hạn đầu băm ra deadline lúc ký, nên khớp. Lần hai băm ra deadline của lần gia hạn trước, nên lệch.
+- Đóng sớm đi qua vì khi ấy `NEW.status = 'CLOSED'`.
+
+Không test nào của kho phủ ca này: mọi ca gia hạn đều dùng ước lượng dưới ngưỡng.
+
+**M3 là lỗi của MVP1 đang chạy trên `master`, không phải của S3.** Theo đúng chữ ADR-043 nó thuộc rổ B, vì kịch bản
+§11 không gia hạn. Nhưng `gieo:demo` đặt ngân sách 9 tỷ, tức một gói cấp kép, và gia hạn là thao tác hạng nhất của spec
+S0+S1 §4.4. Nên khoản 240 ghi rõ: **phải đọc lại TRƯỚC pilot**.
+
+## 6. Năm quyết định của chủ dự án, và phần lượt soi tự chốt
+
+Năm chỗ là lựa chọn sản phẩm. Mỗi câu hỏi được trình kèm đề xuất và cái giá; chủ dự án chốt cả năm ngày 2026-09-26:
+- ⑸ **Sàn mọi gói:** ước lượng bắt buộc để rời DRAFT, và ≥ 1 chữ ký của người khác người tạo. Đây là trả nợ spec S0+S1 §4.3, và nó đóng khoản 241 cho tổ chức đã bật S3.
+- ⑹ **Đếm nhà cung cấp — chọn cả bốn luật:**
+  - không đếm bản ghi do người tạo gói hay người mời dựng;
+  - MST bắt buộc, mỗi MST và mỗi đích liên hệ đếm một lần;
+  - chỉ đếm nhà cung cấp đã xác minh;
+  - hậu kiểm lúc trao, bằng ngoại lệ `LOW_ACTUAL_COMPETITION`.
+- ⑺ **Thước chính sách:** chữ ký thứ hai cho phiên bản có bậc, cộng luật hành vi cho tác giả phiên bản.
+- ⑻ **Công tắc một chiều theo tổ chức** — ADR-080.
+- ⑼ **Gửi link:**
+  - đúc token lúc mở gói bằng phiên người mở;
+  - gửi at-most-once sau commit, không thu hồi khi hỏng;
+  - lời mời mang trạng thái *chưa gửi*, có lối *gửi lại*.
+
+Luật ⑹iii (chỉ đếm đã xác minh) đụng `PRODUCT.md` §8 ⑴: không thêm ma sát cho nhà cung cấp trước lần nộp đầu. Lượt soi
+gỡ xung đột ấy bằng cấu trúc thay vì hỏi lại — **thẩm định hai cấp** (ADR-081 ⑵):
+- **XÁC MINH** là việc nội bộ của bên mua, và đủ để nhà cung cấp được đếm;
+- chỉ **THẨM ĐỊNH ĐẦY ĐỦ** mới đòi nhà cung cấp nộp Passport.
+
+Cái giá rơi vào bên mua, và spec §8.2 nói ra: tổ chức vừa bật S3 có 0 nhà cung cấp đã xác minh.
+
+Mười một chốt từ tiền lệ (⑽–⒇) theo khuôn ADR-050: mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-082 và ở bảng §2.5 của spec.
+
+Hai chỗ lượt soi CỐ Ý không chốt:
+- **Lớp từ chối thứ ba của K12.** Nó mở rộng ADR-060, một luật chủ dự án đã chọn, nên chờ S3.0 — cùng bảng mã quyền cho các hành vi mới.
+- **Khai báo xung đột theo từng nhà cung cấp lúc mời.**
+
+ADR (c) — tải tệp cho Passport — vẫn chưa chốt, và đó là đúng: nó chỉ chặn S3.7b.
+
+## 7. Lời khai của bản nháp mà lượt soi XÁC NHẬN
+
+Một lượt soi chỉ nêu chỗ sai thì người đọc không biết nó đã kiểm chỗ nào. Các góc đã kiểm những chỗ dưới đây và thấy đúng:
+- **§3.3, chẩn đoán khâu mời** (A, B, D):
+  - không trigger nào trên `rfq_invitations` ràng lời mời theo trạng thái gói (`013:128-147`, `022:124-147`), và `createInvitation` cùng route không đọc trạng thái;
+  - `rfq_bam_noi_dung` chỉ băm tiêu đề, deadline và hạng mục (`011:26-37`);
+  - vế đếm chữ ký chỉ chạy khi `requires_dual_approval` (`061:250-262`) — M2 đo đúng hệ quả ấy.
+- **§4.7** (A, B, D): chữ ký và hàng `APPROVED` nằm trong cùng giao dịch, không savepoint (`trao-thau.ts:398-431`). Bản nháp ghi *"đọc ra, chưa đo"*; M1 đo nó.
+- **§8.8** (A, C, D): `rfq.approve` chỉ ở `PROCUREMENT_MANAGER` (`005:299`). Ma trận quyền tính tay của bản nháp khớp từng ô với mọi câu ghi `role_permissions` từ `005` tới `059`, kể cả câu DELETE của `033`.
+- **§2.3 (c)** (A, D): grep `multipart|upload` trên `apps`, `packages`, `db` ra 0.
+- **Khả thi ở CSDL** (B):
+  - trigger tự đặt cột bậc nằm ngoài GRANT, theo khuôn `approved_content_hash`;
+  - khuôn `033` áp được cho `supplier.qualify ⟂ rfq.invite`;
+  - view `security_invoker` cài được mà mục (C) `CAU_DOC_VONG` không kêu oan;
+  - đường đọc giá cho số tiền trao có sẵn — `UNIQUE (org_id, bid_version_id)` (`019:449`).
+- **Đứng vững trước góc đối kháng** (C):
+  - tự gán tổ hợp vai qua ứng dụng;
+  - bí mật của danh sách DRAFT — thông báo gia hạn bỏ qua lời mời đã thu hồi;
+  - đổi đích link sau khi ký;
+  - K7 trước khai thấp ở bậc 0–2;
+  - *"khai rồi rút"* ở K9.
+
+## 8. Một phát hiện bị bác MỘT PHẦN — [CR4]
+
+Góc A khai spec §4.1 trích sai [CR4]: *"[CR4] (hardening:952-962) nói về việc hardening tự chữa bảng chỉ-ghi-thêm"*.
+
+Đọc lại thì **đúng một nửa**. [CR4] gốc đúng là nói về tự chữa. Nhưng chính `hardening.always.sql` áp NGUYÊN TẮC của nó
+cho dữ liệu chính sách của khách hàng, hai lần, ở mục kiểm `role_permissions` (`10659-10660`, `11466-11467`): *"gỡ hộ một
+dòng `role_permissions` là migrate() tự tay đổi chính sách an ninh của khách hàng, đúng thứ [CR4] cấm"*.
+
+Câu của spec — không migration nào tự tạo phiên bản chính sách cho khách hàng — vì vậy đứng. Spec giữ câu ấy, không
+gạch, và thêm một câu nói chính xác [CR4] áp theo đường nào.
+
+## 9. Luật đổi số bắt chính vòng này
+
+Góc A và D chỉ ra: số ADR và số vòng của các nhánh song song mà spec §8.9 liệt kê đã thiu. Lượt soi thay các con số ấy
+bằng một LUẬT (S1.111): *mỗi vòng đo max trên mọi nhánh đang sống ngay trước khi commit*.
+
+Luật ấy bắt được chính vòng này, hai lần. Lượt soi được viết với số S1.128 và ADR-070…072.
+
+Lần đo đầu, trước khi chạy cổng:
+- `…-public-keys` cấp vòng **S1.127** và **ADR-070** lúc 04:05 UTC, rồi vào `master` qua PR #139. Vòng viết spec S3 đã
+  cấp S1.127 lúc 03:59, sớm hơn — nhưng `master` không đổi được trong vòng này, nên nhánh này đổi.
+- `…-neo-ecs` cấp **S1.128** và **ADR-071** (04:21). `…-khoan-15-public-keys` cũng cấp S1.128 (04:31). `…-lich-neo` đang
+  dùng **ADR-072** trong mã hạ tầng.
+- Số khoản nợ lớn nhất trên mọi nhánh là **239**. Migration lớn nhất là **065** (`…-khoan-196`).
+
+Lần đo thứ hai, sau khi chạy cổng và ngay trước commit: `…-khoan-233` đổi nhãn S1.126 → **S1.129** lúc 05:25 UTC, và
+`…-neo-ecs` vào `master` qua PR #140. Số ADR, khoản nợ và migration không đổi so với lần đầu.
+
+Vậy phải đổi:
+- vòng viết spec: **S1.127 → S1.130** — lần đổi thứ hai được công bố, sau S1.126 → S1.127;
+- lượt soi: **S1.128 → S1.131**;
+- ba ADR: **070…072 → 073…075**;
+- khoản 240–242 giữ nguyên số.
+
+Nhánh này hợp `origin/master` (`1cc0943`) trước khi commit. Nên sổ quyết định mang ADR-067…071 của `master` rồi tới
+ADR-073…075. **ADR-072 vắng trên nhánh này** cho tới khi `…-lich-neo` vào `master`: đó là khe số, không phải ADR bị xoá.
+
+**Lần đo thứ ba, lúc mở PR.** Trong khi nhánh này chờ, `master` nhận S1.130–S1.132, ADR-072…074 và migration `065`,
+`066` từ các nhánh neo và khoản 196, `…-hsts` giữ S1.133 và ADR-075, rồi `…-dns-egress` giữ S1.134 và ADR-076. Các số ấy được cấp SAU khi nhánh này đã push
+số của mình — nhưng `master` không đổi được, nên nhánh này đổi lần nữa: vòng viết spec **S1.135**, lượt soi **S1.136**,
+vòng sửa khoản 240 **S1.137**, ba ADR **ADR-077…079**, migration của khoản 240 **`067`**. Khoản 240–242 giữ số.
+
+**Lần đo thứ tư, khi PR chờ merge.** `master` nhận #145 (`…-hsts`), #146 (`…-dns-egress`), rồi #147 (`…-van-hanh`)
+với **S1.135** và **ADR-077** — lần này số của nhánh này bị chiếm thật trên `master`. Hai nhánh còn sống giữ hai số kế:
+`…-kiem-deploy` giữ S1.136 và ADR-078, `…-endpoint-policy` giữ S1.137 và ADR-079. Nên nhánh này đổi lần nữa, vượt qua
+cả hai: vòng viết spec **S1.138**, lượt soi **S1.139**, vòng sửa khoản 240 **S1.140**, ba ADR **ADR-080…082**. Migration
+`067` và khoản 240–242 giữ số: chưa nhánh nào khác dùng. Lần đổi này cũng sửa ba dải số mà các lần trước để lệch —
+*"ADR-078…079"* (ba ADR mà chỉ hai số), *"ADR-077/071"* ở bảng thay đổi của spec §9, và danh sách *"073, 074, 075"* ở
+mục 1 — vì lệnh thay chỉ bắt dạng `ADR-0xx`, không bắt số trần đứng sau `…` hay `/`.
+
+## 10. Ranh giới nói ra
+
+- **Chưa một dòng mã S3 nào, và không migration.** Sổ đăng ký bất biến không đổi: không hàng K nào vào sổ, vì mỗi hàng
+  vào ở đúng hạng mục đo được nó (spec §5.1).
+- **Ba phép đo chạy trên một bộ dựng cục bộ, không trên CI.** Tệp đo nằm ngoài kho. Spec §6 ghi ba ca ấy thành test T3
+  thường trực, và việc đưa vào kho thuộc hạng mục tương ứng: S3.5 cho M1, S3.1 cho M2, khoản 240 cho M3.
+- **Trong 31 phát hiện, chỉ CAO ⑥ có phép đo (M3).** M1 và M2 đo hai lời khai bản nháp nói ĐÚNG, và cả hai hoá ra là lỗ
+  của MVP1 (khoản 242 ⑴, khoản 241). 30 phát hiện còn lại là phép đọc: chúng đứng trên tệp:dòng của bốn báo cáo và trên
+  lần đọc lại khi gộp.
+- **Không soi ba hàm trợ giúp chưa ghim của MVP1** (`rfq_bam_noi_dung`, `rfq_can_phe_duyet_kep`,
+  `unseal_so_phe_duyet_can`) trước danh mục giới hạn đã biết của ADR-028/036. Góc B đọc ra chúng; việc đối chiếu nằm
+  ngoài S3 và ngoài vòng này.
+- **Tổ chức chưa bật S3 không an toàn hơn hôm nay.** Khoản 241 và nhà cung cấp vỏ ở lại nguyên cho nó (ADR-080 ⑶). Khoản
+  240 là của mọi tổ chức.
+- **Không chống được ba pháp nhân thật cùng một chủ** (ADR-058). Xác minh không có nghĩa là đáng tin (ADR-081).
+
+## 11. Số đo
+
+Hai cây được đo, và mỗi con số nói nó thuộc cây nào. Cây **cuối** là cây của commit này: nhánh đã hợp `master` `1cc0943`.
+Lượt chạy cả kho chạy trên cây **trước** lần hợp ấy — nhánh đã hợp `master` `2d7c9c4`. Giữa hai cây chỉ có mã của PR #140
+(job neo, `tools/neo-so-kiem-toan`), không có dòng nào của vòng này.
+
+- `pnpm t0` trên cây cuối — **0 vi phạm**, 359 module / 1443 phụ thuộc. Lượt đầu (cây trước) đỏ ở `eslint`, vì hai tệp của
+  bộ dựng cục bộ nằm trong cây làm việc (chưa commit, và không bao giờ commit). Chuyển chúng ra ngoài kho thì xanh.
+- `pnpm test` trên cây cuối — **92 tệp / 1271 đạt, 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu **45/45**.
+- Cả kho, hai tầng, trên bộ dựng Postgres 16 cục bộ, cây trước — **149 tệp / 2486 ca: 2477 đạt, 1 bỏ qua, 8 đỏ, 834
+  giây**.
+  - Tầng tích hợp: 58 tệp / 1222 ca, 1214 đạt.
+  - Cả 8 ca đỏ nằm ở `packages/test-support/src/postgres.int.test.ts` — bộ tự kiểm của chính bản dựng bằng
+    `testcontainers`. Tệp ấy import `./postgres.js` trực tiếp, không qua alias, và ném *"Could not find a working container
+    runtime strategy"*. Đó là môi trường không có docker, không phải hồi quy.
+- **Ma trận bất biến sinh lại từ chính báo cáo ấy:** 63/63 bất biến (41/41 nghiệp vụ + 22/22 hàng rào), 2486 khẳng định,
+  *Cổng evidence: XANH*, và `evidence/INV-matrix.md` **KHÔNG đổi một byte**. Đó là phép đo xác nhận điều vòng này tự khai:
+  không chạm một dòng mã nào. Lượt này KHÔNG phải `pnpm evidence` trên CI — bước 1 chạy trên bộ dựng cục bộ, bước 2 là
+  `pnpm evidence:matrix` đọc báo cáo của bước 1.
+- Sổ nợ **239 → 242** khoản, mở **93 → 96**: mở 240, 241, 242; không đóng khoản nào. Rổ A **3** không đổi, rổ B
+  **67 → 70**, rổ C **23** không đổi; ba rổ cộng đúng: 3 + 70 + 23 = 96.
+- **71 → 74** ADR trên nhánh này sau khi hợp `master` (ADR-073…075 lúc ấy — nay ADR-080…082 sau lần đo thứ tư, mục 9; ADR-072 do `…-lich-neo` giữ). **63** migration,
+  không đổi. Sổ đăng ký bất biến **63** không đổi.
+- Spec: **512 → 799 dòng**. Trạng thái đổi từ *"bản nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
+
+# §S1.140 — KHOẢN 240 ĐÓNG: CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI — VÀ NHẬN ĐỊNH *"HÀNH VI ĐÚNG"* CỦA S1.91 BỊ BÁC
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 240 lên rổ A theo quyết định của chủ dự án, rồi đóng trong cùng vòng.** Không mảnh nào của
+bảng bốn mảnh ở `docs/PRODUCT.md` §11 đổi.
+
+## 1. Vòng này là gì
+
+Chủ dự án chốt ngày 2026-09-26: *"sửa khoản 240 trước pilot"*. Khoản ấy do lượt soi hình dạng S3 đo (§S1.139 mục 5, phép
+đo M3): một gói cần phê duyệt kép, hai chữ ký, mở, rồi gia hạn hai lần — lần hai bị từ chối *"RFQ nay can 2 phe duyet TREN
+NOI DUNG HIEN TAI, moi co 0 (D2)"*.
+
+S1.139 xếp khoản ấy vào rổ B theo đúng chữ kịch bản §11, vì kịch bản không gia hạn. Chủ dự án đọc lại: pilot sẽ chạy gói
+cấp kép (`gieo:demo` đặt ngân sách 9 tỷ), và gia hạn là thao tác hạng nhất của spec S0+S1 §4.4 — nên vế ⒜ của rổ A đúng:
+một bước người mua làm ra kết quả sai. ADR-043 nói việc xếp rổ là một phép đọc sửa được bằng một dòng; sổ ghi khoản ấy lên
+rổ A rồi đóng, và tổng rổ A không đổi.
+
+## 2. Tái lập TRƯỚC khi sửa
+
+Ba ca mới ở `packages/rfq/src/rfq.int.test.ts`, khối `[INV-D2] [S1.140 / khoản 240]`, chạy trên cây CHƯA sửa:
+
+| Ca | Trên cây chưa sửa |
+|---|---|
+| gói cấp kép gia hạn ba lần liền | **ĐỎ** ở lần hai — đúng thông điệp của M3 |
+| đối chứng dương: một chữ ký thì không mở được gói | xanh |
+| đột biến trả khối đếm về hình dạng `061` | **ĐỎ** ở tiền đề — thân đang chạy chưa có vế cạnh |
+
+## 3. Vì sao đây là LỖI chứ không phải luật — và một nhận định cũ bị bác
+
+§S1.91 mục 5 ⑴ đã thấy đúng hiện tượng này và ghi: *"Gia hạn hạn nộp làm MẤT HIỆU LỰC hai phê duyệt RFQ cũ … Đó là hành vi
+ĐÚNG và đáng ghi"*. `apps/api/src/buyer.int.test.ts` chép cùng câu, và test ấy dựng vế ngược trên một gói thứ hai thay vì gia
+hạn hai lần. Nhận định ấy sai, vì ba lẽ:
+- **Nếu đó là luật thì lần gia hạn ĐẦU cũng phải bị chặn:** nó đổi cùng cột `deadline_at`, và nó đi qua — chính test của
+  S1.91 gia hạn một lần và nhận `200`. Hiện tượng chỉ có ở lần hai vì trigger BEFORE băm hàng CŨ.
+- **Spec S0+S1 §4.4** đặt bốn điều kiện cho gia hạn — đang OPEN, có lý do, có audit, có thông báo — và không có vế ký lại.
+- **Luật ấy không có đường nào để thoả:** `approveRfq` chỉ nhận gói đang PENDING_APPROVAL.
+
+Nhận định của S1.91 được gạch tại chỗ kèm lý do, ở cả biên bản lẫn chú thích test.
+
+## 4. Bản sửa
+
+`067_dem_chu_ky_o_canh_mo_goi.sql` định nghĩa lại `rfq_kiem_chuyen_trang_thai`. Thân được TRÍCH nguyên văn từ `061` bằng
+script rồi đổi đúng hai chỗ — khuôn S1.110 rút ra sau khi một bản viết tay rơi 45 dòng cưỡng chế. `diff` giữa hai thân ra
+đúng hai hunk:
+- ⑴ khối *điều kiện để mở* — có hạng mục, đủ hai chữ ký TRÊN NỘI DUNG HIỆN TẠI — chỉ chạy khi
+  `NEW.status IS DISTINCT FROM OLD.status`, cùng cách vế (g) đã viết cho cửa sổ thầu;
+- ⑵ chú thích đầu khối DECLARE nói cạnh về DRAFT *"xoá mọi chữ ký"* — sai, trái chính `011`. Đây là vế ⑵ của khoản 242, và
+  điều kiện đóng của vế ấy là đúng vòng định nghĩa lại hàm này.
+
+Bản ghim ở `hardening.always.sql` đổi trong cùng commit: nhãn *"(061, thân từ 067)"*, điều kiện tiên quyết trỏ `067`, thân
+trong khối DO, và chuỗi thân chuẩn hoá — cùng khuôn `064` của nhánh `…-khoan-233`. Ba chỗ đọc con trỏ theo quy tắc
+*migration CUỐI CÙNG* dời theo:
+- bảng ghim của `db/migrations.int.test.ts`;
+- ba danh sách migration của cùng tệp ấy;
+- con trỏ bảng cạnh của `packages/rfq/src/transitions.test.ts` — nay tách làm hai, vì `067` mang lại khối `CANH_HOP_LE` mà
+  không dựng lại tập đóng `status`, thứ vẫn ở `061`.
+
+Ngoài cạnh vào OPEN, một gói đang OPEN không đổi được thứ gì mà chữ ký phủ, trừ hạn nộp: hạng mục, tiêu đề và cờ phê duyệt
+kép chỉ sửa được ở DRAFT. Nên vế cạnh không mở một đường mới nào cho nội dung đã ký.
+
+## 5. Sau khi sửa
+
+| Ca | Sau `067` |
+|---|---|
+| gói cấp kép gia hạn ba lần liền; hạn đứng ở lần cuối; sổ kiểm toán có đủ ba lần | xanh |
+| đối chứng dương: một chữ ký thì không mở được gói | xanh |
+| đột biến: trả khối đếm về hình dạng `061` lúc chạy ⇒ lần gia hạn hai gãy đúng thông điệp M3 | xanh (đột biến bị giết) |
+
+Đột biến đọc thân đang chạy bằng `pg_get_functiondef`, đòi vế cạnh xuất hiện ĐÚNG MỘT lần, thay nó bằng hình dạng cũ, rồi
+khôi phục trong `finally`. Nhờ vậy nó đo đúng thân mà `migrate()` + hardening để lại, không đo một bản chép tay.
+
+## 6. Ranh giới nói ra
+
+- **Bốn migration cũ** (`011`, `058`, `059`, `061`) còn mang câu *"xoá mọi chữ ký"*: chúng đã áp và có checksum, nên không
+  sửa được. Thân SỐNG và bản ghim đã sửa. Khoản 242 vẫn MỞ cho vế ⑴ (S3.5).
+- ~~**Hai khe số migration.** `064` đang ở ba nhánh khác (`…-khoan-233` và `…-lich-neo`/`…-vai-neo` cùng dùng số ấy), `065`
+  ở `…-khoan-196`.~~ **Lúc mở PR:** cả ba đã vào `master` thành `064`, `065`, `066`, nên migration của vòng này đổi sang
+  `067`. `migrate()` áp theo tên mọi tệp chưa có trong `schema_migrations`, không đòi số liền, và không migration nào trong
+  ba migration ấy chạm `rfq_kiem_chuyen_trang_thai`.
+- **Gia hạn vẫn không có chữ ký thứ hai.** Spec không đòi, và vòng này không thêm. Nếu cần kiểm soát kép cho gia hạn — một
+  người gia hạn để một nhà cung cấp quen kịp nộp — đó là một chốt của S3, không phải của bản sửa này.
+- **Đo trên bộ dựng cụm cục bộ, không trên CI** — cùng bộ dựng của §S1.139.
+
+## 7. Số đo
+
+- Ba tệp tích hợp chạm trực tiếp (`packages/rfq/src/rfq.int.test.ts`, `db/migrations.int.test.ts`,
+  `db/hardening-suy-tu-tinh-chat.int.test.ts`) — **203/203 đạt**. Trong đó có phép kiểm bản ghim đồng bộ với migration CUỐI
+  CÙNG định nghĩa hàm, nay trỏ `067`.
+- Cả kho, hai tầng, trên bộ dựng Postgres 16 cục bộ — **150 tệp / 2498 ca: 2489 đạt, 1 bỏ qua, 8 đỏ, 871 giây**. Tầng tích
+  hợp: 58 tệp / 1226 ca, 1218 đạt. Cả 8 ca đỏ vẫn là bộ tự kiểm `testcontainers` của `packages/test-support` — môi trường
+  không có docker (§S1.139 mục 11).
+- Ma trận bất biến sinh lại từ chính báo cáo ấy: **63/63**, 2498 khẳng định, *Cổng evidence: XANH*. `evidence/INV-matrix.md`
+  đổi đúng MỘT ô: số khẳng định của **D2**, **34 → 37** — ba ca mới.
+- `pnpm t0` — **0 vi phạm**, 359 module / 1443 phụ thuộc. `pnpm test` — **92 tệp / 1271 đạt, 1 bỏ qua**; `[INV-H20]` sổ nợ
+  tự đối chiếu **45/45**.
+- Sổ nợ **242** khoản, mở **96 → 95**: đóng 240. Rổ A **3** không đổi (240 vào rồi đóng), rổ B **70 → 69**, rổ C **23**;
+  ba rổ cộng đúng: 3 + 69 + 23 = 95.
+- Migration **63 → 64** tệp (`067`). ADR **74** không đổi. Sổ đăng ký bất biến **63** không đổi.
+
+**Sau khi hợp `master` `c595403`** (PR #137 — khoản 233 đóng, migration `064`), các số trên đổi như sau. Cây được đo lại:
+- sổ nợ **242** khoản, mở **94** (= 92 của `master` + 241, 242); rổ A **2**, rổ B **69**, rổ C **23**; 2 + 69 + 23 = 94;
+- **65** migration (`064` của `master` + `067`); ADR **74** không đổi;
+- cả kho trên bộ dựng cục bộ — **150 tệp / 2501 ca: 2492 đạt, 1 bỏ qua, 8 đỏ** (vẫn chỉ bộ tự kiểm `test-support`), 856 giây;
+- ma trận sinh lại từ báo cáo ấy KHỚP TỪNG BYTE bản gộp của git: 63/63, *XANH*; so với `master` chỉ đổi ô D2 (34 → 37).
+
+**Lúc mở PR — đổi số lần ba và hợp `master` `27d0f6d`** (PR #138 khoản 196, cùng các nhánh neo). Vòng này thành §S1.137,
+migration thành `067`; sổ nợ **242** khoản, mở **93** (= 91 của `master` + 241, 242); rổ A **1**, rổ B **69**, rổ C
+**23**; 1 + 69 + 23 = 93; **67** migration; ADR **77**.
+
+**Khi chờ merge — hợp #145, #146, #147, #149 và đổi số lần bốn** (§S1.139 mục 9). Vòng này thành §S1.140, ba ADR thành
+ADR-080…082; sổ nợ **242** khoản, mở **93** — bốn PR ấy không chạm sổ nợ; **67** migration; ADR **81** (78 của
+`master` + 3). ADR-079 vắng trên nhánh này: `…-endpoint-policy` giữ nó — khe số, không phải ADR bị xoá.
+
+**Sau khi hợp #150** (`…-endpoint-policy`, S1.137 và ADR-079): khe số được lấp, sổ quyết định liền từ ADR-001 tới
+ADR-082; ADR **82** (79 của `master` + 3). Sổ nợ và migration không đổi — #150 không chạm chúng.
