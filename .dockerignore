@@ -1,0 +1,13 @@
+# [ADR-066] Ngữ cảnh build của deploy/Dockerfile: chỉ mã nguồn, không phụ thuộc đã cài, không test,
+# không bí mật cục bộ.
+**/node_modules
+**/*.test.ts
+**/*.int.test.ts
+**/.env
+**/.env.*
+!**/.env.example
+.git
+evidence
+docs
+infra
+**/.terraform

@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Chín stack, chạy đúng thứ tự
+## Mười stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng không NAT + VPC endpoint, RDS PostgreSQL 16, ECR, cluster `tp-prod`, service `tp-api` sau ALB HTTPS, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -134,6 +135,60 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
    `TRUSTPROCURE_SES_FROM` của api thành địa chỉ cảnh báo ⇒ `AccessDenied` (IAM theo địa chỉ gửi).
 
 **Chưa có:** SMS và Zalo ZNS. Liên hệ khai kênh ấy thì bộ gửi SES NÉM, việc outbox thất bại.
+
+## Chạy thật — stack `90-ecs` (ADR-066)
+
+**1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên).
+Host RDS chưa có ở lần đầu: tạo secret với host tạm rồi `put-secret-value` lại sau bước 3.
+
+```powershell
+aws secretsmanager create-secret --profile tp-prod --name tp/api/otp-peppers --secret-string "p1=<base64 32 byte>"
+aws secretsmanager create-secret --profile tp-prod --name tp/api/database-url `
+  --secret-string "postgres://app_api_login:<mat-khau-api>@<rds-host>:5432/trustprocure"
+aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url `
+  --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
+```
+
+**2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:
+
+```powershell
+cd infra\terraform\90-ecs
+terraform init
+terraform apply -var-file prod.tfvars -target aws_acm_certificate.api   # bước A: chỉ chứng chỉ
+terraform output ban_ghi_dns                                            # thêm CNAME xac_minh_acm ở DNS
+terraform plan -var-file prod.tfvars -out plan.tfplan                   # bước B: phần còn lại
+terraform apply plan.tfplan                                             # chờ ACM xác minh rồi tạo ALB
+```
+
+`prod.tfvars` (không commit): `ten_mien_api`, `url_cong_khai`, `origin_duoc_phep`, `anh = { api, worker,
+migrate }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
+mới apply phần còn lại.
+
+**3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `api` → ALB.
+
+**4. Build và đẩy image** (từ gốc kho):
+
+```powershell
+aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
+foreach ($t in "api","worker","migrate") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate" }[$t]
+  docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
+  docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
+}
+```
+
+**5. Migrate** — `terraform output lenh_chay_migrate`, chạy, đọc `/tp/migrate` trong CloudWatch: phải thấy
+`da ap N migration` và hai dòng `vai …`. **Đây cũng là phép đo ADR-061 trên RDS** (vai master RDS không
+phải superuser); nếu `migrate()` từ chối, dừng lại và đọc thông điệp — không sửa bằng tay trong CSDL.
+
+**6. Worker:** để `so_ban_worker = 0` tới khi có tổ chức đầu tiên (worker từ chối khởi động khi nguồn tổ
+chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
+
+**7. Kiểm:** `https://<ten_mien_api>/health` ⇒ 200; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`.
+
+**Chưa có:** triển khai `apps/web` (người dùng đi qua web, ADR-044). Endpoint SES API (`email`) chưa được
+kiểm ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
 
 ## Rủi ro còn lại — nói thẳng
 

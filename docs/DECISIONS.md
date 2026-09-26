@@ -6394,3 +6394,45 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   họ thất bại và nằm trong log với tên lý do, không im lặng.
 - Thư đi qua hạ tầng SES: nội dung (link, mã) rời hệ thống ở dạng rõ trên kênh email — giới hạn của
   mọi thiết kế magic link/OTP qua email, không riêng SES.
+
+---
+
+## ADR-066 — Chạy thật trên ECS Fargate: subnet riêng KHÔNG NAT, RDS single-AZ, image chạy thẳng TypeScript, migrate là một task
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-020, ADR-021, ADR-040, **ADR-061**,
+**ADR-062**, ADR-064, ADR-065
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Mạng:** VPC 2 AZ; subnet công khai chỉ chứa ALB; task và RDS ở subnet riêng **không có tuyến ra
+   internet**. Đường ra AWS là VPC endpoint (KMS, ECR api/dkr, Logs, Secrets Manager, SES; S3 gateway).
+   Mặc định endpoint đặt ở MỘT AZ (`endpoint_mot_az`) để giảm nửa chi phí. Security group theo tiến trình:
+   ALB → api:8080; api/worker/migrate → RDS:5432 và endpoint:443; không gì khác.
+2. **CSDL:** RDS PostgreSQL 16, `db.t4g.small`, single-AZ, gp3 20 GB, mã hoá, `rds.force_ssl=1`, backup 7
+   ngày, deletion protection + `prevent_destroy`. Mật khẩu master do RDS quản trong Secrets Manager.
+3. **Image:** một `deploy/Dockerfile`, ba đích (`api`, `worker`, `migrate`). Không bước biên dịch — chạy
+   `node --experimental-transform-types` như `pnpm *:dev`, giữ bố cục workspace (Node không bóc kiểu
+   trong node_modules). Chỉ phụ thuộc sản xuất của đúng gói, user `node`, rootfs chỉ-đọc ở ECS, bó CA của
+   RDS ghim sha256 qua `NODE_EXTRA_CA_CERTS` (`createPool` bắt TLS và cấm `sslmode` trong URL).
+4. **Migrate là một task** (`tools/chay-migrate`, họ `tp-migrate`, role `tp-migrate`): `migrate()` bằng
+   vai master của RDS, rồi đảm bảo `app_api_login`/`app_unseal_login` với mật khẩu lấy từ CHÍNH URL trong
+   secret `tp/api/database-url`, `tp/worker/database-url` — một nguồn sự thật, xoay mật khẩu = đổi secret
+   rồi chạy lại task. Lỗi tạo vai chỉ mang mã Postgres (câu lệnh mang mật khẩu).
+5. **Service:** `tp-api` sau ALB (TLS 1.2+/1.3, HTTP→301), `tp-unseal-worker` họ `tp-unseal-worker`
+   (quy ước cảnh báo ⑵ của stack 60). Bản task definition do pipeline deploy đăng ký — Terraform bỏ qua.
+   Image ghim theo **digest**.
+
+### Hệ quả, nói thẳng
+
+- **Chưa đo trên RDS thật:** vai master của RDS (`rds_superuser`, không phải superuser) có chạy trọn
+  `migrate()` và hardening được không — đặc biệt yêu cầu BYPASSRLS của ADR-061 cho vai chủ bảng FORCE —
+  là câu hỏi mở. Task migrate đầu tiên là phép đo; `migrate()` được thiết kế để TỪ CHỐI chứ không để
+  backfill ra 0 hàng.
+- **Worker `desired_count = 0` tới khi có tổ chức đầu tiên:** worker từ chối khởi động khi nguồn tổ chức
+  trả 0 hàng (ADR-040) — đo trong lượt chạy container 2026-09-26. Bật nó sau khi tạo tổ chức.
+- **VPC endpoint của SES API** (`com.amazonaws.<vùng>.email`) chưa kiểm được từ môi trường viết mã này;
+  nếu vùng không có, `plan` báo lỗi và biến `ses_endpoint_service` là chỗ đổi.
+- **`apps/web` chưa được triển khai** — người dùng đi qua web (ADR-044); `TRUSTPROCURE_PUBLIC_BASE_URL`
+  trỏ tới nơi web sẽ chạy. Đó là lát cắt kế.
+- Chi phí ước lượng khi chạy: RDS ~30 USD/tháng, ALB ~20, Fargate (1 api 0,5 vCPU + 1 worker 0,25 vCPU)
+  ~25, 6 interface endpoint ở 1 AZ ~45 (≈ 90 ở 2 AZ).
