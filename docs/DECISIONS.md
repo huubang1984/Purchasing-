@@ -6622,3 +6622,217 @@ chọn làm job neo lên ECS thay vì nới policy của bucket.
 - Chưa chạy thật: S3, KMS, STS đo trên client giả; đường tệp và lệnh `khoa-bien-nhan` đo trên tiến trình thật; image
   build và chạy được.
 - Xoay khoá ký mốc neo: khoá mới + mục mới ở stack 40, không gỡ mục cũ — vòng khoá kiểm của job gồm mọi mục ấy.
+
+---
+
+## ADR-073 — S3 mở vòng khi MVP1 chưa đóng, sau một công tắc MỘT CHIỀU theo tổ chức
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn trong lượt soi hình dạng S1.131) ·
+Liên quan: **ADR-043**, **ADR-058** ⑷, ADR-065, ADR-066, ADR-075 · Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.3 (a)
+
+**Bối cảnh.** Ba tài liệu nói S3 nên đợi: ADR-043 chỉ cho khoản rổ A mở vòng; ADR-058 ⑷ gọi việc dựng phép phát
+hiện lúc này là *đo trên tập rỗng*; V2.1 §39 đặt Governance sau pilot. Chủ dự án chọn làm ngay (spec §2.2 ⑶). Lượt soi
+S1.131 đo thêm một sự thật đổi hình dạng câu hỏi: `master` **đang là nguồn triển khai thật** — PR #132 (SES, ADR-065)
+và #133 (ECS, ADR-066) vào ngày 2026-09-26 — còn S3.1 (bậc bắt buộc, ước lượng bắt buộc, sàn một chữ ký) và S3.2 (mời ở
+DRAFT, gửi link lúc mở gói) đổi chính kịch bản mà pilot sẽ chạy.
+
+### Quyết định
+
+⑴ **Ngoại lệ HẸP đối với ADR-043.** Chỉ các hạng mục S3.x của spec S3 được mở vòng khi MVP1 chưa đóng. Đường này không
+mở khoản rổ B nào khác. Biên bản của mỗi vòng S3.x vẫn mở đầu bằng dòng trỏ mảnh mà ADR-043 ⒞ đòi — với S3.x, dòng ấy là
+*"không chạm mảnh nào của `PRODUCT.md` §11; chạy dưới công tắc ADR-073"*.
+
+⑵ **Công tắc một chiều theo tổ chức.** S3 BẬT cho một tổ chức khi tổ chức ấy có phiên bản chính sách CÓ BẬC đầu tiên đã
+đủ chữ ký thứ hai (ADR-075 ⑺). Trạng thái *đã bật* là **suy diễn từ dữ liệu**, không phải một cờ: một hàm SQL duy nhất
+hỏi *có tồn tại một phiên bản có bậc đã ký của tổ chức này không*. Phiên bản chính sách bất biến và không xoá được, nên
+công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ chối mọi phiên bản không bậc của tổ chức ấy.
+
+⑶ **Tổ chức chưa bật chạy đúng hành vi MVP1** — mời sau khi mở gói, ước lượng tuỳ chọn, sàn 0 chữ ký dưới ngưỡng kép.
+
+⑷ **Điều kiện dừng.** Một vòng S3.x nhường chỗ khi một khoản rổ A mở, hay khi lượt triển khai thật hoặc pilot cần một
+vòng: vòng ấy đi trước.
+
+### Cái giá, nói thẳng
+
+- **Hai luồng mời sống song song** chừng nào còn một tổ chức chưa bật. Mọi trigger của S3 rẽ nhánh theo đúng một hàm
+  *đã bật*, và cụm test phải đo cả hai chiều.
+- **Tổ chức chưa bật không an toàn hơn MVP1.** Hai lỗ đã đo của MVP1 ở lại nguyên cho nó: gói dưới ngưỡng mở được với 0
+  chữ ký (khoản **241**) và nhà cung cấp vỏ không bị chốt nào đếm.
+- Một cờ lưu trong bảng thì rẻ hơn, và bị loại vì đúng lý do ADR-017 loại `boolean` trần: một cờ lật được, còn *có một
+  phiên bản có bậc đã ký* thì không lật được.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói S3 xong trước pilot, không đóng mảnh 3 hay mảnh 4, và không đổi luật rổ của ADR-043 cho bất kỳ việc gì ngoài
+S3.x.
+
+---
+
+## ADR-074 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.131) · Liên quan: **ADR-013** §4, ADR-015,
+ADR-016, ADR-017, ADR-051, ADR-073, ADR-075 ⑹ · Spec S3 §2.3 (b), §4.8
+
+**Bối cảnh.** ADR-013 §4 đòi một ADR mới cho Level 2, và ADR ấy phải trả lời câu hỏi oracle MST. Chủ dự án đưa trọn
+Supplier Qualification vào S3, rồi ở lượt soi chọn **chỉ đếm nhà cung cấp đã thẩm định** vào ngưỡng K2 (ADR-075 ⑹iii) —
+trong khi `PRODUCT.md` §8 ⑴ cấm thêm ma sát cho nhà cung cấp TRƯỚC lần nộp đầu. Lượt soi đọc được hai sự thật chịu lực:
+mọi policy `_khach` hiện có chỉ hỏi đúng literal `app.guest_session_id` (`027`; hardening `KHACH_KHONG_PHIEN_LIT`), và
+`guest_sessions` cùng `invitation_otp_challenges` đều mang `invitation_id NOT NULL` (`010`) — gắn với MỘT lời mời, không gắn
+với một nhà cung cấp.
+
+### Quyết định
+
+⑴ **Hồ sơ theo tổ chức mua.** Mọi bảng Passport mang `org_id` của tổ chức mua và không có ràng buộc duy nhất xuyên tổ chức
+nào. Câu hỏi oracle của ADR-013 §4 vì vậy **không phát sinh**, chứ không được trả lời bằng một cơ chế che. MST của hồ sơ lệch
+MST của bản ghi nhà cung cấp thì thẩm định từ chối.
+
+⑵ **Hai cấp, và chỉ cấp sau đòi nhà cung cấp làm gì.**
+- **XÁC MINH** — nội bộ, không đòi nhà cung cấp làm gì. Một người giữ `supplier.qualify`, khác người tạo bản ghi nhà cung
+  cấp và không giữ `rfq.invite`, xác nhận MST, tên pháp lý và đích liên hệ. Đủ để được đếm vào K2/K3.
+- **THẨM ĐỊNH ĐẦY ĐỦ** — trên một phiên bản Passport do nhà cung cấp nộp. Đòi khi trao thầu ở bậc `tham_dinh_truoc_trao`,
+  và luôn trỏ tới phiên bản Passport **MỚI NHẤT**: nộp phiên bản mới thì thẩm định cũ thôi hiệu lực, khuôn C-1 của `011`.
+
+Cả hai cấp chỉ-ghi-thêm, có hạn hiệu lực, xếp theo một cột sequence và ghi dưới khoá tư vấn — không xếp theo `now()`, vì
+một `REVOKED` bắt đầu trước nhưng commit sau một `QUALIFIED` sẽ bị lờ.
+
+⑶ **Phiên Passport đặt CHÍNH `app.guest_session_id`**, nên mọi policy `_khach` đang có đóng với nó đúng như với phiên
+khách. Nó cộng một GUC dẫn xuất mới cho nhà cung cấp, dẫn xuất từ một hàng phiên Passport — khuôn `027` ⑴–⑶. Bảng phiên và
+bảng thách thức OTP của Passport là bảng RIÊNG. Policy cho phép trên bảng Passport khai ở `POLICY_RESTRICTIVE_KHAI`;
+`withTenant` học tên GUC mới; view hiệu suất mang vị từ khách ngay trong thân view. Phương án bị loại: một GUC Passport
+riêng không đặt `app.guest_session_id` — kết nối ấy đi qua mọi policy `_khach` cũ **như một kết nối người mua**.
+
+⑷ **Level 2 là suy diễn** (tồn tại một phiên bản Passport), không lưu vào `suppliers.level`: `011` đã
+`REVOKE UPDATE ON suppliers FROM app_api`, và một cột trạng thái lưu tay là kết luận trần (ADR-017).
+
+⑸ **Người thẩm định không đề xuất và không ký duyệt trao thầu** cho chính nhà cung cấp ấy trên cùng gói (ADR-051).
+
+### Cái giá, nói thẳng
+
+- Nhà cung cấp khai lại Passport cho mỗi tổ chức mua.
+- Mỗi nhà cung cấp mới cần **một người thứ hai bên mua** xác minh trước khi được đếm. Ma sát rơi vào bên mua, không rơi vào
+  nhà cung cấp — đó là cách duy nhất để ADR-075 ⑹iii và `PRODUCT.md` §8 ⑴ cùng đúng.
+
+### Điều ADR này KHÔNG nói
+
+Xác minh không có nghĩa là đáng tin. ADR này không chống được ba pháp nhân cùng một chủ (ADR-058). Tài liệu đính kèm
+(S3.7b) chờ một ADR riêng về tải tệp — spec §2.3 (c).
+
+---
+
+## ADR-075 — Lượt soi hình dạng spec S3: năm quyết định của chủ dự án, và những gì lượt soi chốt từ tiền lệ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.131 · Liên quan: ADR-017, ADR-020 [S1.70], ADR-023,
+ADR-043, ADR-050 (khuôn), **ADR-051**, ADR-054, **ADR-058**, ADR-060, ADR-073, ADR-074 · Biên bản:
+`evidence/security-reviews.md` §S1.131
+
+**Bối cảnh.** Lượt soi S1.131 chạy bốn góc độc lập trên bản nháp spec S3 — lời khai và mâu thuẫn nội tại, khả thi cưỡng chế
+ở CSDL, đối kháng phân tách nhiệm vụ, phạm vi, luồng và kiểm thử — cộng một lượt tự soi. Bốn góc trả 48 phát hiện thô;
+khử trùng còn **31, trong đó 9 CAO**. Ba lời khai được **đo** trên Postgres 16 thật chứ không chỉ đọc. Năm chỗ là lựa chọn
+sản phẩm nên được trình; phần còn lại điền được từ tiền lệ đo được trong kho, cùng khuôn ADR-050.
+
+### Năm quyết định của chủ dự án, ngày 2026-09-26
+
+⑸ **Sàn mọi gói**, trong tổ chức đã bật S3: ước lượng bắt buộc để rời DRAFT; mọi gói cần ít nhất một chữ ký của một người
+khác người tạo mới mở được. Đây là **trả nợ spec S0+S1 §4.3** (*"PENDING_APPROVAL → OPEN: Phê duyệt hợp lệ"*) — khoản
+**241** đo được rằng hôm nay gói dưới ngưỡng mở với 0 chữ ký.
+
+⑹ **Đếm nhà cung cấp cho K2/K3 — bốn luật cùng áp:**
+- (i) không đếm nhà cung cấp hay người liên hệ do người tạo gói hoặc người mời tạo ra;
+- (ii) chỉ đếm nhà cung cấp có MST; mỗi MST và mỗi đích liên hệ chỉ đếm một lần;
+- (iii) chỉ đếm nhà cung cấp có xác minh còn hiệu lực (ADR-074 ⑵);
+- (iv) **hậu kiểm lúc trao:** số báo giá hợp lệ nhận được dưới ngưỡng của bậc cao hơn thì trao thầu cần ngoại lệ
+  `LOW_ACTUAL_COMPETITION` có chữ ký độc lập.
+
+⑺ **Thước chính sách.** Một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC giữ `policy.manage` ký. Người tạo phiên
+bản không ký trao thầu, không xác minh hay thẩm định, không ghi nhận tín hiệu trên gói ghim phiên bản ấy. Nộp duyệt đòi
+phiên bản ghim là phiên bản đang hiệu lực. Lý do: `FINANCE` giữ `policy.manage` VÀ `po.approve`, nên câu *"luật 033 phủ luôn
+bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt thước cho chính việc FINANCE làm.
+
+⑻ **Công tắc một chiều theo tổ chức** — ADR-073.
+
+⑼ **Gửi link lúc mở gói.**
+- Phiên của người mở gói đúc N token trong giao dịch mở gói, rồi gửi at-most-once sau commit.
+- Gửi hỏng thì lời mời mang trạng thái *chưa gửi*, phản hồi nói rõ, và có lối *gửi lại* đúc token mới. **Không thu hồi** —
+  thu hồi sẽ thu hẹp một danh sách đã ký.
+- Quyết định này thay tiểu mục ADR-020 [S1.70] cho tổ chức đã bật S3; tổ chức chưa bật giữ [S1.70].
+- Phương án bị loại: job outbox tự đúc token. Nó cần một danh tính người phát mới (trigger `013` đòi một phiên người dùng
+  còn sống), và gửi hỏng không hiện ra trong phản hồi — đúng lý do [S1.70] đã bác nó.
+
+### Chốt từ tiền lệ — lượt soi tự chốt và ghi lý do
+
+⑽ **Bậc là `jsonb` trên hàng chính sách** (khuôn `056` `eval_components`), không phải bảng con. Bảng con chèn thêm được
+vào một phiên bản cũ — bất biến ở `014` chỉ đến từ việc không cấp UPDATE/DELETE — nên K1 sẽ sai hồi tố; `jsonb` trên hàng
+bất biến thì bất biến bằng cấu tạo. Bậc áp lưu bằng `tier_tu_so_tien` trên `rfq_budgets`, do trigger đặt, ngoài GRANT.
+- Hàm phân bậc và mọi hàm đếm theo bậc **NÉM** khi gặp NULL (`014`: NULL là *"chưa trả lời được"*).
+- Trao thầu rơi vào bậc đấu thầu chính thức bị **từ chối**.
+- Cả hai bậc (ước lượng, số tiền trao) tính trên `rfq_budgets.policy_id` (ADR-017).
+- Mọi chốt theo bậc dùng bậc **cao hơn**: K2, K5 và K8 được kiểm lại ở trao thầu nếu bậc số tiền trao cao hơn bậc ước
+  lượng; thiếu thì cần ngoại lệ có chữ ký độc lập.
+
+⑾ **Băm danh sách là một hàm RIÊNG**, cộng một cột do trigger đặt trên `rfq_approvals`.
+- `rfq_bam_noi_dung` giữ nguyên. Nếu định nghĩa lại nó để phủ danh sách, mọi UPDATE sau đó trên một gói cấp kép đang OPEN
+  sẽ gãy, vì khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy ở mọi lần UPDATE — khoản **240** đo đúng cơ chế ấy.
+- UNIQUE của `rfq_approvals` đổi thành (tổ chức, gói, người, băm): người đã ký ký lại được trên nội dung mới. Theo `011`
+  C-1, chữ ký cũ vô hiệu bằng băm, không bằng xoá. Đổi này chạm D2 của MVP1 và tên ràng buộc mà
+  `apps/api/src/buyer.int.test.ts` đọc.
+- S3.2 thêm hàm, route và mã quyền cho cạnh `PENDING_APPROVAL→DRAFT` — hôm nay cạnh ấy chưa có đường ứng dụng nào.
+- Thu hồi ở OPEN được giữ: có lý do, sinh tín hiệu; nếu còn dưới ngưỡng thì cần ngoại lệ có chữ ký độc lập.
+
+⑿ **Tập loại trừ của K5 theo hành vi** (ADR-051): người tạo; mọi `invited_by` và mọi `revoked_by` — đọc mọi hàng, kể cả
+đã thu hồi, vì mời lại sinh hàng mới; người đặt ngân sách; người nộp duyệt; người tạo bản ghi nhà cung cấp và người liên hệ
+trên danh sách; tác giả ngoại lệ.
+
+⒀ **K3** chỉ đếm gói có `opened_at`, xếp `opened_at DESC, id DESC`, loại chính gói đang xét, và tính lời mời không bị thu
+hồi trước `opened_at`. Cửa sổ theo người mời — đúng câu chữ ADR-058 ⑶(b).
+
+⒁ **K10 là MỘT điều kiện, fail-closed** (khuôn C-1).
+- Cạnh bị chặn khi tín hiệu hiện tại khác tín hiệu đã ghi nhận. Tầng gói tính lại tín hiệu trong một giao dịch riêng.
+- Cửa sổ neo vào `submitted_at` của chính gói; chỉ tính gói anh em đã rời DRAFT.
+- `category_id` khoá sau DRAFT. Tín hiệu chia nhỏ khoá theo (tổ chức, nhóm hàng), không theo người tạo.
+- Người ghi nhận giữ quyền của cạnh bị chặn, và nằm ngoài {người tạo, người gây ra tín hiệu}.
+- Thêm tín hiệu `EARLY_CLOSE` (đóng sớm khi đã có báo giá, vế mà `011` §(H-4) hoãn).
+- Bằng chứng của `ESTIMATE_UNDERSTATED` mang mốc bậc, **không mang số tiền** — nếu mang thì `governance_signals` thành
+  bảng thứ ba chứa giá dạng rõ, trái ADR-054. Tín hiệu ấy bắn cả khi số tiền trao vượt `dual_approval_threshold` mà ước
+  lượng thì không.
+
+⒂ **K12.** Mỗi chốt là một hàm vị từ SQL. Tầng gói gọi nó trước mọi tác dụng phụ — trước `issueRfqKeyPair`, khoản 31 — và
+ném từ chối theo `VAO_SO`; trigger là lớp chặn cuối. Lớp từ chối thứ ba (*vi phạm chốt kiểm soát*) có vào sổ hay không
+**CHƯA chốt**: nó mở rộng một luật chủ dự án đã chọn (ADR-060), nên chủ dự án chốt ở S3.0, cùng bảng mã quyền của các hành
+vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh).
+
+⒃ **Ghim hardening:** mọi hàm MỚI HOẶC BỊ SỬA, kể cả hàm trợ giúp mà trigger gọi. Ghim của `award_kiem_mot_award_song` —
+nơi hằng `CHU_KY_CAN` sống — sửa trong cùng commit với migration. Mọi trigger mới trên `rfq_packages` mang WHEN đúng cạnh,
+vì worker cập nhật `status` dưới vai `app_unseal`, vai không có quyền gì trên các bảng S3 (khuôn S1.108 §7b).
+
+⒄ **Bổ sung cho K7, K8, K9.**
+- K8 dùng bậc cao hơn.
+- Phép đếm chữ ký ở cạnh mở gói và ở trao thầu loại người có `CO_XUNG_DOT`; khai báo và chữ ký dùng chung một khoá tư vấn
+  (gói, người).
+- K9 thêm cổng ở xác minh và thẩm định, ở ghi nhận tín hiệu, và ở huỷ trao thầu.
+- `award_vai_khac_nhau` là cột bậc, mặc định KHÔNG — GIẢ ĐỊNH, để tổ chức nhỏ không cần thêm một người.
+
+⒅ **View hiệu suất:** phiên bản báo giá của vòng BAFO chỉ được tính khi vòng ấy đã đóng. View có phép đo TÍNH ĐÚNG theo
+khuôn J2, không chỉ phép đo bí mật.
+
+⒆ **Thứ tự §9:** xác minh nội bộ lên S3.3, vì K2 cần nó. Mỗi hàng K vào sổ đăng ký ở đúng hạng mục đo được nó; hàng nào
+chỉ đo được một nửa thì tách làm hai. Cổng trao thầu thành các trigger RIÊNG theo `014` §(4), không viết lại một thân
+bốn lần.
+
+⒇ **Nghiệm thu giao diện** bằng lượt đi thử có biên bản (S1.97) cho mỗi hạng mục có màn. T4 (Playwright) vẫn **chưa dựng** —
+câu *"bảy tầng phủ đủ"* của bản nháp là sai.
+
+### Ba phép đo, và ba khoản nợ
+
+- **240** — gói cần phê duyệt kép bị từ chối ở lần gia hạn THỨ HAI. Lỗi của MVP1 đang chạy trên `master`, không phải của S3.
+- **241** — gói dưới ngưỡng mở được với 0 chữ ký, trái spec S0+S1 §4.3.
+- **242** — hai lời khai sai nằm trong thân hàm đã ghim: đổi `CHU_KY_CAN` thành 2 thì trao thầu **không bao giờ** duyệt được;
+  và cạnh quay về DRAFT *"xoá mọi chữ ký"* là chú thích thiu ở năm chỗ, trái `011:245-251`.
+
+### Điều ADR này KHÔNG nói
+
+- Nó không viết một dòng mã S3 nào.
+- Nó không quyết khai báo xung đột theo từng nhà cung cấp ở lúc mời — người mời đã nằm trong tập loại trừ của K5, và một
+  lời khai ở đó vẫn là tự khai.
+- Nó không đụng tới ba hàm trợ giúp của MVP1 chưa được ghim (`rfq_bam_noi_dung`, `rfq_can_phe_duyet_kep`,
+  `unseal_so_phe_duyet_can`). Lượt soi đọc ra chúng nhưng **chưa đối chiếu** với danh mục ADR-028/036 xem đã là giới hạn
+  đã biết chưa; việc ấy nằm ngoài S3.
