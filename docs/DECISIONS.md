@@ -6817,3 +6817,34 @@ vẫn phán xử theo đồng hồ đã trôi; trên AWS hai máy khác nhau và
 là cùng hỏng nguồn — ⑷ là lời khai về nguồn ấy, không phải một phép đo. Nó **không** vá cửa sổ *giao
 dịch mở trước hạn, commit sau hạn* của C1 (INV-matrix §4). Và dòng log lúc chạy là một dòng log: chưa có
 kênh cảnh báo nào đọc nó.
+
+## ADR-075 — Header bảo mật (HSTS, X-Frame-Options, nosniff) do ALB đặt trên mọi phản hồi HTTPS
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-068, ADR-070, ADR-066
+
+### Bối cảnh
+
+Web tự đặt CSP, `nosniff`, `Referrer-Policy`; api đặt `nosniff`, `Referrer-Policy`, `no-store`. Không nơi nào đặt
+**HSTS**, nên lần truy cập đầu (hay một liên kết `http://`) vẫn đi qua kênh không mã hoá tới lúc ALB chuyển hướng —
+đủ để một kẻ đứng giữa hạ cấp. Api và public-keys không có header chống nhúng khung; phản hồi 502/503 do chính ALB sinh
+không mang header nào của app.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Listener HTTPS của ALB** (stack 90) đặt trên MỌI phản hồi, bằng thuộc tính sửa header của ALB:
+   - `Strict-Transport-Security: max-age=31536000; includeSubDomains` — **không preload**: `ten_mien` là subdomain
+     kiểu `app.<domain>`, preload chỉ áp cho tên miền gốc và gần như không rút lại được;
+   - `X-Content-Type-Options: nosniff` — trùng giá trị app đặt, phủ thêm phản hồi của ALB;
+   - `X-Frame-Options: DENY` — cùng ý `frame-ancestors 'none'` của CSP web, phủ api và public-keys;
+   - tắt header `Server`.
+2. **CSP không đặt ở ALB**: ALB ghi đè header cùng tên của target; CSP của web chi tiết và sống cạnh các trang nó
+   bảo vệ. CORS cũng không (api cố ý không trả header CORS — ADR-068 một origin).
+3. **`tests/architecture/hinh-dang-alb.test.ts`** ghim bốn giá trị, cấm CSP/CORS ở ALB, đòi web/api vẫn nói cùng điều,
+   và đòi listener HTTP chỉ chuyển hướng 301.
+
+### Hệ quả, nói thẳng
+
+- HSTS một năm + `includeSubDomains`: mọi subdomain CỦA `ten_mien` phải có HTTPS trong một năm kể từ lần trình duyệt
+  thấy header. Đổi `ten_mien` hay bỏ HTTPS không rút được lời hứa ấy khỏi trình duyệt đã ghé.
+- Không có HSTS cho lần ghé ĐẦU TIÊN (không preload) — người dùng gõ `http://` lần đầu vẫn qua một 301 không mã hoá.
+- Chưa chạy thật: thuộc tính listener qua `terraform validate`; kiểm bằng `curl -sI` sau apply (README bước 7).
