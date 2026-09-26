@@ -176,6 +176,8 @@ aws secretsmanager create-secret --profile tp-prod --name tp/api/database-url `
   --secret-string "postgres://app_api_login:<mat-khau-api>@<rds-host>:5432/trustprocure"
 aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url `
   --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
+aws secretsmanager create-secret --profile tp-prod --name tp/neo/database-url `
+  --secret-string "postgres://app_neo_login:<mat-khau-neo>@<rds-host>:5432/trustprocure"
 ```
 
 **2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:

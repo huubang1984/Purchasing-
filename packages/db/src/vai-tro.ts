@@ -27,8 +27,13 @@ import { viPhamLuocDoTuyetDoi } from "./luoc-do-an-toan.js";
  * Danh sách ĐÓNG các vai ứng dụng gắn được. Không nội suy chuỗi tuỳ ý vào `SET ROLE`: một tên
  * ngoài danh sách bị chặn ở lời gọi, trước khi chạm Postgres. Hai tên này là hai role NOLOGIN mà
  * 001 dựng và hardening canh; role ĐĂNG NHẬP (`app_api_login`) không bao giờ là đích của SET ROLE.
+ *
+ * [ADR-072 phần 1] Tên thứ ba `app_neo` — vai CHỈ-ĐỌC của job neo (hardening dựng và canh như hai
+ * tên kia, 064 cấp quyền). Thêm vào đây kéo theo hai lớp khác, cố ý: `khangDinhPhienDangNhapUngDung`
+ * từ chối một phiên api/worker là thành viên của `app_neo` (và ngược lại), và `migrate()` đếm hàng
+ * cấu hình mức vai của `app_neo`/`app_neo_login` như của hai cặp cũ.
  */
-export const VAI_UNG_DUNG = ["app_api", "app_unseal"] as const;
+export const VAI_UNG_DUNG = ["app_api", "app_unseal", "app_neo"] as const;
 export type VaiUngDung = (typeof VAI_UNG_DUNG)[number];
 
 export function laVaiUngDung(giaTri: string): giaTri is VaiUngDung {
