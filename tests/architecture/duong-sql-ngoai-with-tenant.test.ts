@@ -202,6 +202,12 @@ function thieuNhanhTP096(ma: string): boolean {
 
 /** Vế ⒝: số lệnh commit không có khối chặn được phép theo tệp, kèm lý do. */
 const COMMIT_TRAN_DA_KHAI: Record<string, { readonly so: number; readonly lyDo: string }> = {
+  "tools/chay-migrate/src/index.ts": {
+    so: 1,
+    lyDo:
+      "[ADR-066] giao dịch đảm bảo MỘT vai đăng nhập trên kết nối DEPLOY của task tp-migrate (vai master RDS), không phải pool " +
+      "ứng dụng; chạy SAU migrate() của cùng pool — mọi phép từ chối GUC vận hành của migrate() đã chạy trên cụm ấy",
+  },
   "packages/db/src/migrate.ts": {
     so: 2,
     lyDo:
@@ -217,6 +223,12 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
   "packages/db/src/pool.ts": {
     so: 1,
     lyDo: "chính createPool — nơi DUY NHẤT của mã sản xuất dựng pg.Pool, rồi giao cho ganVaiTroChoPool khi có vai",
+  },
+  "tools/chay-migrate/src/index.ts": {
+    so: 1,
+    lyDo:
+      "[ADR-066] task ECS tp-migrate: kết nối bằng vai MASTER của RDS để chạy migrate() và tạo hai vai đăng nhập — đúng thứ " +
+      "createPool (buộc `role` ứng dụng) không được làm. Không phục vụ yêu cầu nào; thoát sau một lượt",
   },
   "tools/gieo-demo/src/index.ts": {
     so: 1,
@@ -270,6 +282,13 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "phê duyệt RFQ — chạy trước khi tenant ấy TỒN TẠI, nên chúng không gắn được tenant theo định nghĩa: `withTenant` " +
       "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
       "withTenant, và đó là ranh giới thật giữa hai nửa của script",
+  },
+  "tools/chay-migrate/src/index.ts": {
+    lay: 1,
+    cau: 0,
+    lyDo:
+      "[ADR-066] một client của pool DEPLOY (vai master RDS) để đảm bảo hai vai đăng nhập sau migrate() — không tenant nào " +
+      "liên quan: câu lệnh là CREATE/ALTER ROLE và GRANT nhóm",
   },
   "apps/api/src/composition.ts": {
     lay: 1,
