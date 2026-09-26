@@ -48,14 +48,26 @@ function bang(cap: Partial<Record<keyof BangCap, ReadonlyArray<readonly [number,
 const BANG_A = bang({ vong: [[9101, 141]], adr: [[9201, 83], [9203, 85]], khoan: [[9401, 243]], migration: [[9501, 68]] });
 
 describe("thay số tạm", () => {
-  it("mọi dạng — có tiền tố, trong dải `…`, tên tệp, số trần trong đấu huyền", () => {
-    expect(thaySoTam("S1.9101 · ADR-9201…9203 · khoản 9401 · `9501_moi.sql` · `9501`:12", BANG_A)).toBe(
-      "S1.141 · ADR-083…085 · khoản 243 · `068_moi.sql` · `068`:12",
+  it("Markdown: mọi dạng — có tiền tố, trong dải `…`, tên tệp, số trần trong đấu huyền", () => {
+    expect(thaySoTam("S1.9101 · ADR-9201…9203 · khoản 9401 · `9501_moi.sql` · `9501`:12 · | 9401 |", BANG_A, true)).toBe(
+      "S1.141 · ADR-083…085 · khoản 243 · `068_moi.sql` · `068`:12 · | 243 |",
     );
   });
 
   it("số không có trong bảng đứng yên — kể cả số rơi vào dải tạm", () => {
-    expect(thaySoTam("chạy riêng 9412 ms, ADR-9202, 19201, 92010", BANG_A)).toBe("chạy riêng 9412 ms, ADR-9202, 19201, 92010");
+    expect(thaySoTam("chạy riêng 9412 ms, ADR-9202, 19201, 92010", BANG_A, true)).toBe("chạy riêng 9412 ms, ADR-9202, 19201, 92010");
+  });
+
+  it("[review #155 mục 1] ngoài Markdown chỉ dạng có tiền tố — cổng, hex, UUID, digest đứng yên", () => {
+    expect(
+      thaySoTam("const PORT = 9201; // [S1.9101 / ADR-9201…9203] `9501_moi.sql`; id 'ab9201cd', 1234-9101-5678, Xy9201Qz==", BANG_A, false),
+    ).toBe("const PORT = 9201; // [S1.141 / ADR-083…085] `068_moi.sql`; id 'ab9201cd', 1234-9101-5678, Xy9201Qz==");
+  });
+
+  it("[review #155 mục 1] trong Markdown, số trần dính chữ, số, `_` hay `-` đứng yên", () => {
+    expect(thaySoTam("uuid 1234-9101-5678, sha Xy9201Qz, ab9201cd, x_9401, `9501`", BANG_A, true)).toBe(
+      "uuid 1234-9101-5678, sha Xy9201Qz, ab9201cd, x_9401, `068`",
+    );
   });
 });
 
@@ -347,6 +359,9 @@ function dungKho(): string {
   git(goc, "config", "user.name", "cap-so");
   git(goc, "config", "core.autocrlf", "false");
   git(goc, "config", "merge.conflictStyle", "merge");
+  // [review #155 mục 4] Cấu hình đổi tiền tố diff của người chạy không được làm dòng nhánh vô hình.
+  // (`diff.noprefix` thì không cần: nó lấn `mnemonicPrefix`, và bộ đọc diff vốn chịu được đầu diff không tiền tố.)
+  git(goc, "config", "diff.mnemonicPrefix", "true");
   ghi(goc, "docs/DECISIONS.md", "# DECISIONS\n\n## ADR-001 — một\n\nThân.\n\n## ADR-002 — hai\n\nThân.\n");
   ghi(
     goc,
@@ -430,6 +445,43 @@ describe("kho thật — một nhánh cấp số lần đầu", () => {
     expect(capSo(goc, { base: "master" }).bang.adr.get(9201)).toBe(3);
   });
 
+  it("[review #155 mục 1] số trần ngoài Markdown đứng yên và được cảnh báo, dù trùng một số tạm đã khai", () => {
+    const goc = dungKho();
+    lamViec(goc, "a", 1);
+    ghi(goc, "apps/cong.ts", "// [ADR-9201] cổng thử\nexport const CONG = 9201;\n");
+    const kq = capSo(goc, { base: "master" });
+    expect(doc(goc, "apps/cong.ts")).toBe("// [ADR-003] cổng thử\nexport const CONG = 9201;\n");
+    expect(kq.bao.some((b) => b.startsWith("apps/cong.ts:2: để nguyên số trần 9201"))).toBe(true);
+  });
+
+  it("[review #155 mục 3] `origin/master` cục bộ cũ hơn remote: từ chối, không ghi gì", () => {
+    const xa = mkdtempSync(join(tmpdir(), "cap-so-xa-"));
+    khoDaDung.push(xa);
+    const goc = dungKho();
+    git(xa, "init", "-q", "--bare", "-b", "master");
+    git(goc, "remote", "add", "origin", xa);
+    git(goc, "push", "-q", "origin", "master");
+    git(goc, "fetch", "-q", "origin");
+    // Một bản sao khác đẩy master đi trước; `goc` không fetch.
+    const khac = mkdtempSync(join(tmpdir(), "cap-so-khac-"));
+    khoDaDung.push(khac);
+    git(khac, "clone", "-q", xa, ".");
+    git(khac, "config", "user.email", "khac@vidu.vn");
+    git(khac, "config", "user.name", "khac");
+    noi(khac, "docs/DECISIONS.md", "\n## ADR-003 — master đi trước\n\nThân.\n");
+    commit(khac, "master đi trước");
+    git(khac, "push", "-q", "origin", "master");
+
+    lamViec(goc, "a", 1);
+    git(goc, "merge", "-q", "origin/master");
+    expect(() => capSo(goc, { base: "origin/master" })).toThrow(/origin\/master cũ/);
+    expect(git(goc, "status", "--porcelain")).toBe("");
+
+    git(goc, "fetch", "-q", "origin");
+    expect(() => git(goc, "merge", "-q", "origin/master")).toThrow();
+    expect(capSo(goc, { base: "origin/master" }).bang.adr.get(9201)).toBe(4);
+  });
+
   it("nhánh chưa merge base thì từ chối, không ghi gì", () => {
     const goc = dungKho();
     lamViec(goc, "a", 1);
@@ -494,7 +546,8 @@ describe("kho thật — hai nhánh cùng cấp số, một nhánh merge trướ
     expect(kiem(goc)).toEqual([]);
   });
 
-  it("dòng sửa SAU lần cấp cũ vẫn được thu hồi theo token có tiền tố", () => {
+  /** `b` cấp số, sửa thêm một dòng nhắc ADR-003/S1.3, rồi thua cuộc đua: master (từ `a`) nay cũng có ADR-003/S1.3. */
+  function thuaVoiDongSuaSau(): string {
     const goc = dungKho();
     lamViec(goc, "a", 1);
     capVaCommit(goc, "a");
@@ -502,13 +555,34 @@ describe("kho thật — hai nhánh cùng cấp số, một nhánh merge trướ
     capVaCommit(goc, "b");
     noi(goc, "evidence/security-reviews.md", "\nThêm sau lần cấp: ADR-003 và S1.3.\n");
     commit(goc, "b: sửa thêm");
-
     git(goc, "checkout", "-q", "master");
     git(goc, "merge", "-q", "--ff-only", "a");
     git(goc, "checkout", "-q", "b");
     expect(() => git(goc, "merge", "-q", "master")).toThrow();
-    capSo(goc, { base: "master" });
+    return goc;
+  }
+
+  it("[review #155 mục 2] dòng sửa SAU lần cấp nhắc số master cũng đã lấy: từ chối, liệt kê, chưa cấp số nào", () => {
+    const goc = thuaVoiDongSuaSau();
+    expect(() => capSo(goc, { base: "master" })).toThrow(/evidence\/security-reviews\.md:\d+: S1\.3, ADR-003[\s\S]*--mo-ho/);
+    const bienBan = doc(goc, "evidence/security-reviews.md");
+    expect(bienBan).not.toContain("<<<<<<<");
+    expect(bienBan).not.toContain("S1.4");
+    expect(doc(goc, "docs/DECISIONS.md")).not.toContain("ADR-004");
+  });
+
+  it("[review #155 mục 2] `--mo-ho nhanh`: số mơ hồ là của nhánh — thu hồi và cấp lại", () => {
+    const goc = thuaVoiDongSuaSau();
+    capSo(goc, { base: "master", moHo: "nhanh" });
     expect(doc(goc, "evidence/security-reviews.md")).toContain("Thêm sau lần cấp: ADR-004 và S1.4.");
+  });
+
+  it("[review #155 mục 2] `--mo-ho master`: số mơ hồ là của master — để nguyên; phần còn lại của nhánh vẫn cấp lại", () => {
+    const goc = thuaVoiDongSuaSau();
+    capSo(goc, { base: "master", moHo: "master" });
+    const bienBan = doc(goc, "evidence/security-reviews.md");
+    expect(bienBan).toContain("Thêm sau lần cấp: ADR-003 và S1.3.");
+    expect(bienBan).toContain("# §S1.4 — b\n\nADR-004; khoản 4; migration `003` (`003_b.sql`).");
   });
 });
 
@@ -566,6 +640,12 @@ describe("--kiem", () => {
     expect(loi.some((l) => l.includes("ADR-9201"))).toBe(true);
     expect(loi.some((l) => l.includes("hàng sổ nợ khoản 9401"))).toBe(true);
     expect(loi.some((l) => l.includes("9501_a.sql"))).toBe(true);
+    // [review #155 mục 8] Dạng có tiền tố của khoản và tên tệp migration trong văn bản cũng bị bắt.
+    noi(goc, "Handoff.md", "\nChỉ nhắc khoản 9401.\n\nVà tệp `9501_a.sql`.\n");
+    commit(goc, "a: nhắc thêm");
+    const loiMoi = kiem(goc);
+    expect(loiMoi.some((l) => l.startsWith("còn số tạm: Handoff.md") && l.includes("Chỉ nhắc khoản 9401"))).toBe(true);
+    expect(loiMoi.some((l) => l.startsWith("còn số tạm: Handoff.md") && l.includes("Và tệp `9501_a.sql`"))).toBe(true);
 
     const sach = dungKho();
     ghi(sach, "db/migrations/001_hai.sql", "SELECT 2;\n");

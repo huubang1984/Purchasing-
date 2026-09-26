@@ -7362,17 +7362,26 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
 2. **`pnpm cap-so` cấp số lúc merge.** Lệnh chạy sau `git merge origin/master`. Nó thay số tạm bằng max(master)+1… CHỈ
    trên dòng nhánh thêm, đổi tên tệp migration, viết lại lời khai đếm. Kết quả được commit kèm dòng trailer `Cap-So:`
    mà lệnh in ra.
+   - Ngoài Markdown chỉ dạng CÓ TIỀN TỐ được thay (`S1.91NN`, `ADR-92NN`, `khoản 94NN`, `95NN_ten.sql`, kể cả phần nối
+     của một dải). Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
+     trong mã, một UUID hay một digest đứng yên. Số trần còn lại mà trùng một số tạm đã khai thì được cảnh báo.
+   - Base là `origin/master` thì phải bằng remote lúc chạy (`git ls-remote`); bản cục bộ cũ thì lệnh từ chối.
 3. **Thua cuộc đua thì chạy lại lệnh.** PR khác merge trước với cùng số thì: merge master, rồi `pnpm cap-so`. Lệnh tự
    gỡ các khối xung đột thuộc phần nó quản — lời khai đếm, dòng `CÒN MỞ`, hàng sổ nợ hai phía cùng thêm, mục nối cuối
    `docs/DECISIONS.md` và biên bản. Sau đó nó đọc trailer để trả từng dòng về đúng bản số tạm, rồi cấp lại. Dòng sửa
    sau lần cấp thì thu hồi theo token có tiền tố (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration), bằng bảng cấp MỚI
    NHẤT, và không đụng lời khai đếm. Bảng của lần cấp chưa commit nằm ở `.git/cap-so-cho-commit.json` (không vào
-   kho), nên chạy lại trước khi commit không thu hồi bằng bảng cũ.
+   kho), nên chạy lại trước khi commit không thu hồi bằng bảng cũ. Trên một dòng như thế, số cũ của nhánh mà master
+   nay CŨNG đã khai là mơ hồ (mục của nhánh hay mục của master?): lệnh từ chối và liệt kê dòng. Người chạy đổi số nói
+   về mục của nhánh sang số tạm rồi chạy lại với `--mo-ho master`, hoặc `--mo-ho nhanh` khi mọi dòng đều nói về mục
+   của nhánh.
 4. **Lời khai đếm do lệnh viết**, tại chỗ: số ADR ở `docs/STATE.md` và `Handoff.md`; số khoản và số migration ở
-   `Handoff.md`; dòng `CÒN MỞ` và đoạn đếm dưới nó. Lệnh không nối thêm chuỗi gạch; tiền tố vòng của lời khai đứng
-   yên. Khi nhánh còn số tạm, `pnpm cap-so --dem` viết lại chúng để `[INV-H20]` xanh.
-5. **CI chặn.** Job `t0` chạy `pnpm cap-so --kiem` trên commit merge của PR và trên master. Nó đỏ khi còn số tạm, hay
-   khi ADR, khoản, migration hoặc đầu mục biên bản trùng số.
+   `Handoff.md`; dòng `CÒN MỞ` và đoạn đếm dưới nó. Con số SỐNG được viết lại tại chỗ — kể cả khi lời khai nằm trên
+   dòng của master — và không gạch-rồi-nối: lời khai đếm ra khỏi quy ước "gạch bỏ tại chỗ, giữ nguyên văn". Tiền tố
+   vòng của lời khai đứng yên. Khi nhánh còn số tạm, `pnpm cap-so --dem` viết lại chúng để `[INV-H20]` xanh.
+5. **CI chặn.** Job `t0` chạy `pnpm cap-so --kiem` trên commit merge của PR và trên master. Nó đỏ khi còn số tạm ở chỗ
+   khai hay ở dạng có tiền tố (`S1.91NN`, `ADR-92NN`, `khoản 94NN`, `95NN_ten.sql`), hay khi ADR, khoản, migration
+   hoặc đầu mục biên bản trùng số. Số tạm TRẦN trong văn xuôi thì không cổng nào đọc ra được ý nghĩa.
 
 ### Hệ quả, nói thẳng
 
@@ -7381,11 +7390,13 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   branches to be up to date before merging** trên GitHub; khi ấy PR thứ hai phải merge master và chạy lại lệnh. Không
   bật thì `--kiem` trên master bắt được ADR, khoản hay migration trùng, nhưng không bắt được hai vòng cùng số, vì vòng
   không có một chỗ khai duy nhất.
-- Hai trường hợp lệnh không đổi số: dòng nhánh viết sau lần cấp mà trùng nguyên văn một dòng của master; và số trần
-  (`N` không tiền tố) trong dòng sửa sau lần cấp — lệnh chỉ thu hồi dạng có tiền tố.
+- Những trường hợp lệnh không đổi số: dòng nhánh viết sau lần cấp mà trùng nguyên văn một dòng của master; số trần
+  (`N` không tiền tố) trong dòng sửa sau lần cấp — lệnh chỉ thu hồi dạng có tiền tố; và số tạm trần ngoài Markdown
+  hay dính chữ, số, `_`, `-` (có cảnh báo).
 - Tài liệu mô tả dải số tạm phải viết `NN`, không viết chữ số, vì chính lệnh sẽ thay chữ số ấy.
   `tools/cap-so/` đứng ngoài mọi phép thay và phép quét.
 - Lượt soi ngang, mục nhật ký STATE, lời khai `gói + công cụ` và `Sổ đăng ký … bất biến` vẫn viết tay: chưa va lần
   nào, và nằm ngoài phạm vi chủ dự án chọn.
-- Chưa chạy trên một cuộc đua thật giữa hai PR. Đã đo trên kho git tạm (`tools/cap-so/src/cap-so.test.ts`): hai nhánh
-  cùng cấp số, một nhánh merge trước, nhánh kia merge master, lệnh gỡ xung đột và cấp lại.
+- Đã chạy trên hai cuộc đua thật của chính PR đưa quyết định này vào: #152 lấy ADR-083/S1.141, rồi #154 lấy
+  ADR-084/085/S1.142; cả hai lần, merge master rồi `pnpm cap-so` gỡ bốn khối xung đột và cấp lại. Các lỗi hai lần ấy
+  và một lượt review lộ ra đều có test trong `tools/cap-so/src/cap-so.test.ts`.

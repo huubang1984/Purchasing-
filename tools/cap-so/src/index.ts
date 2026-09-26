@@ -15,7 +15,10 @@
 //
 // NN = 01, 02, … theo thứ tự nhánh tạo ra chúng. Dải được chọn bằng phép đo: không số tự nhiên nào
 // của kho rơi vào 91xx, 92xx, 94xx, 95xx (90xx có `9000` ms, 93xx có thời gian đo, 99xx có `9999`).
-// Số tạm KHÔNG BAO GIỜ tới master — CI chạy `pnpm cap-so --kiem` trên commit merge của PR.
+// Số tạm DẠNG TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-`; ngoài
+// Markdown chỉ dạng có tiền tố — `PORT = 9201` trong mã là một cổng. CI chạy `pnpm cap-so --kiem` trên
+// commit merge của PR: nó chặn số tạm ở chỗ khai và ở dạng có tiền tố; số tạm trần trong văn xuôi thì
+// không cổng nào đọc ra được ý nghĩa.
 //
 // BA CHẾ ĐỘ
 //   pnpm cap-so           cấp số: gỡ xung đột ở lời khai đếm (nếu có), thu hồi lần cấp cũ của nhánh,
@@ -29,10 +32,15 @@
 // đọc lại commit đã mang trailer, lấy từng cặp dòng trước/sau của lần cấp ấy, và trả dòng về đúng
 // bản số tạm. Dòng nào đã bị sửa sau lần cấp thì mới rơi xuống thu hồi theo token có tiền tố
 // (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration), bằng bảng MỚI NHẤT. Lần cấp chưa commit để bảng của
-// nó ở `.git/cap-so-cho-commit.json`, nên chạy lại trước khi commit không đọc nhầm trailer cũ.
+// nó ở `.git/cap-so-cho-commit.json`, nên chạy lại trước khi commit không đọc nhầm trailer cũ. Số cũ
+// của nhánh mà master nay cũng đã khai, gặp trên một dòng như thế, là MƠ HỒ: lệnh từ chối và liệt kê;
+// người chạy nói nó là của ai bằng `--mo-ho master|nhanh`. Base là `origin/master` thì phải bằng
+// remote lúc chạy (`git ls-remote`) — một bản cục bộ cũ cho max cũ.
 //
 // RANH GIỚI NÓI RA
-//   - Chỉ những dòng NHÁNH thêm (so với base) bị viết lại; dòng của master không bao giờ bị đụng.
+//   - Số chỉ được thay trên dòng NHÁNH thêm (so với base). Lời khai đếm thì khác: lệnh viết lại con số
+//     SỐNG tại chỗ theo sổ, kể cả khi lời khai nằm trên dòng của master, và không gạch-rồi-nối — lời
+//     khai đếm ra khỏi quy ước "gạch bỏ tại chỗ" (ADR-086 ⑷).
 //   - Vòng không có chỗ khai duy nhất như đầu mục ADR hay hàng sổ nợ, nên `--kiem` không bắt được
 //     hai PR cùng dùng một số vòng thật. Chỉ bật "Require branches to be up to date" trên GitHub mới
 //     đóng hẳn cuộc đua giữa hai PR cùng cấp số trên một master.
@@ -42,7 +50,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { argv, cwd, exit, stderr, stdout } from "node:process";
+import { argv, cwd, env, exit, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
 // ---- Bốn dãy và dải số tạm ------------------------------------------------------------------
@@ -115,19 +123,48 @@ export function docTrailer(than: string): BangCap {
 
 // ---- Thay số -------------------------------------------------------------------------------
 
-const SO_TAM_TRAN = /(?<!\d)(9[1245]\d\d)(?!\d)/g;
+/**
+ * Số tạm CÓ TIỀN TỐ — hình dạng mà một số tự nhiên không có: `S1.91NN`, `ADR-92NN`, `khoản 94NN`,
+ * `95NN_ten.sql`, kể cả phần nối trong một dải (`ADR-9201…9203`, `S1.9101–S1.9103`).
+ */
+const RE_TAM_TIEN_TO: ReadonlyArray<readonly [Day, RegExp]> = [
+  ["vong", /(S1\.)(91\d\d)((?:\s*[…–/,]\s*(?:S1\.)?91\d\d)*)(?!\d)/g],
+  ["adr", /(ADR-)(92\d\d)((?:\s*[…–/,]\s*(?:ADR-)?92\d\d)*)(?!\d)/g],
+  ["khoan", /(khoản(?: nợ)?\s+)(94\d\d)((?:\s*[…–/,]\s*94\d\d)*)(?!\d)/g],
+];
+const RE_TAM_MIGRATION = /(?<![\p{L}\p{N}])(95\d\d)(?=_[A-Za-z0-9_]+\.sql)/gu;
+/**
+ * Số tạm TRẦN, chỉ trong Markdown, và không dính chữ, số, `_` hay `-`: một UUID (`…-9101-…`), một
+ * digest (`Xy9201Qz`) hay một chuỗi hex không khớp. Ngoài Markdown số trần KHÔNG bao giờ bị thay —
+ * `PORT = 9201` trong một tệp `.ts` là một cổng, không phải một ADR (review PR #155, mục 1).
+ */
+const RE_TAM_TRAN_MD = /(?<![\p{L}\p{N}_-])(9[1245]\d\d)(?![\p{L}\p{N}-])/gu;
+
+export function laMarkdown(p: string): boolean {
+  return p.toLowerCase().endsWith(".md");
+}
 
 /**
- * Thay mọi số tạm có trong bảng bằng số thật, trong MỘT lượt — không dây chuyền (083 → 084 rồi
- * 084 → 085 không xảy ra được). Số tạm dạng trần cũng được thay (`ADR-9201…9203`, `` `9501` ``),
- * và chỉ khi nó có trong bảng: một `9412 ms` không phải khoản đã khai thì đứng yên.
+ * Thay số tạm có trong bảng bằng số thật, trong MỘT lượt — không dây chuyền (083 → 084 rồi 084 →
+ * 085 không xảy ra được). Mọi tệp: dạng có tiền tố. Markdown thêm dạng trần (`` `9501` ``, `| 9401 |`)
+ * — và chỉ số có trong bảng: một `9412 ms` không phải khoản đã khai thì đứng yên.
  */
-export function thaySoTam(dong: string, bang: BangCap): string {
-  return dong.replace(SO_TAM_TRAN, (toan, so: string) => {
-    const n = Number(so);
-    const day = dayCuaSoTam(n);
-    const moi = day === null ? undefined : bang[day].get(n);
-    return day === null || moi === undefined ? toan : dinhDang(day, moi);
+export function thaySoTam(dong: string, bang: BangCap, markdown: boolean): string {
+  const thay =
+    (d: Day) =>
+    (so: string): string => {
+      const moi = bang[d].get(Number(so));
+      return moi === undefined ? so : dinhDang(d, moi);
+    };
+  let ra = dong;
+  for (const [d, re] of RE_TAM_TIEN_TO) {
+    ra = ra.replace(re, (_toan, dau: string, so: string, noi: string) => `${dau}${thay(d)(so)}${noi.replace(/9\d\d\d/g, thay(d))}`);
+  }
+  ra = ra.replace(RE_TAM_MIGRATION, thay("migration"));
+  if (!markdown) return ra;
+  return ra.replace(RE_TAM_TRAN_MD, (toan: string, so: string) => {
+    const d = dayCuaSoTam(Number(so));
+    return d === null ? toan : thay(d)(so);
   });
 }
 
@@ -148,12 +185,8 @@ export function thuHoiTheoToken(
   // Lời khai đếm (`**[S1.x] N ADR**`…) đứng ngoài phép thu hồi: tiền tố vòng của nó không do lệnh cấp,
   // và sau một cuộc đua thua nó thường mang ĐÚNG số vòng mà master vừa lấy của nhánh — đo được ở lần
   // merge #152: `**[S1.141] 84 ADR**` bị thu hồi nhầm thành `S1.9101` rồi cấp thành `S1.142`.
-  const vung: Array<readonly [number, number]> = [];
-  for (const re of [RE_KHAI_ADR, RE_KHAI_KHOAN, RE_KHAI_MIGRATION]) {
-    for (const m of dong.matchAll(re)) vung.push([m.index, m.index + m[0].length]);
-  }
+  const vung = vungLoiKhai(dong);
   if (vung.length > 0) {
-    vung.sort((a, b) => a[0] - b[0]);
     let ra = "";
     let tu = 0;
     for (const [a, b] of vung) {
@@ -164,6 +197,44 @@ export function thuHoiTheoToken(
     return ra + thuHoiDoan(dong.slice(tu), bang, duoiMigrationCuaNhanh, laSoNo && tu === 0);
   }
   return thuHoiDoan(dong, bang, duoiMigrationCuaNhanh, laSoNo);
+}
+
+function vungLoiKhai(dong: string): Array<readonly [number, number]> {
+  const vung: Array<readonly [number, number]> = [];
+  for (const re of [RE_KHAI_ADR, RE_KHAI_KHOAN, RE_KHAI_MIGRATION]) {
+    for (const m of dong.matchAll(re)) vung.push([m.index, m.index + m[0].length]);
+  }
+  return vung.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * Số THẬT của bảng `bang` mà base CŨNG đã khai, xuất hiện ở dạng có tiền tố trên dòng (ngoài lời khai
+ * đếm). Sau một cuộc đua thua, `ADR-084` trên một dòng sửa sau lần cấp có thể là mục của nhánh (số cũ)
+ * hay mục của master (số master vừa lấy) — lệnh không đoán (review PR #155, mục 2).
+ */
+export function soMoHo(
+  dong: string,
+  bang: BangCap,
+  daKhai: Readonly<Record<Day, ReadonlySet<number>>>,
+  laSoNo: boolean,
+): string[] {
+  let che = dong;
+  for (const [a, b] of vungLoiKhai(dong)) che = che.slice(0, a) + " ".repeat(b - a) + che.slice(b);
+  const trungSo = (d: Day, so: string): boolean => daKhai[d].has(Number(so)) && [...bang[d].values()].includes(Number(so));
+  const ra: string[] = [];
+  for (const m of che.matchAll(/S1\.(\d+)(?!\d)/g)) if (trungSo("vong", m[1]!)) ra.push(m[0]);
+  for (const m of che.matchAll(/ADR-(\d+)(?!\d)/g)) if (trungSo("adr", m[1]!)) ra.push(m[0]);
+  for (const m of che.matchAll(/khoản(?: nợ)?\s+(\d+)(?!\d)/g)) if (trungSo("khoan", m[1]!)) ra.push(m[0]);
+  const hang = laSoNo ? /^\|\s*(\d+)\s*\|/.exec(che) : null;
+  if (hang !== null && trungSo("khoan", hang[1]!)) ra.push(`| ${hang[1]!} |`);
+  return ra;
+}
+
+/** Bảng `bang` bỏ mọi số thật mà base đã khai — dùng khi người gỡ nói số mơ hồ là của master. */
+function boSoCuaBase(bang: BangCap, daKhai: Readonly<Record<Day, ReadonlySet<number>>>): BangCap {
+  const ra = bangRong();
+  for (const d of CAC_DAY) for (const [tam, that] of bang[d]) if (!daKhai[d].has(that)) ra[d].set(tam, that);
+  return ra;
 }
 
 function thuHoiDoan(
@@ -702,13 +773,47 @@ function git(goc: string, thamSo: readonly string[]): string {
   });
 }
 
-function gitThu(goc: string, thamSo: readonly string[]): { readonly ma: number; readonly ra: string } {
+function gitThu(goc: string, thamSo: readonly string[], hanMs?: number): { readonly ma: number; readonly ra: string } {
   const kq = spawnSync("git", ["-c", "core.quotepath=false", ...thamSo], {
     cwd: goc,
     encoding: "utf8",
     maxBuffer: 512 * 1024 * 1024,
+    env: { ...env, GIT_TERMINAL_PROMPT: "0" },
+    ...(hanMs === undefined ? {} : { timeout: hanMs }),
   });
   return { ma: kq.status ?? 1, ra: kq.stdout };
+}
+
+/**
+ * `git diff` với tiền tố `a/`/`b/` ÉP CỨNG: `diff.mnemonicPrefix` hay `diff.noprefix` trong cấu hình
+ * của người chạy đổi đầu diff thành `i/… w/…` hoặc bỏ hẳn, và khi ấy mọi dòng của nhánh vô hình với
+ * `docDiff` (review PR #155, mục 4).
+ */
+const DIFF = ["diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"] as const;
+
+/**
+ * Base là nhánh theo dõi (`origin/master`) thì nó phải BẰNG remote lúc này. Một `origin/master` cũ —
+ * quên fetch, hay bấm "Update branch" trên GitHub rồi kéo nhánh về — cho max cũ, và lệnh cấp đúng những
+ * số master đã lấy mà không báo gì (review PR #155, mục 3). Không hỏi được remote thì chỉ cảnh báo.
+ */
+function kiemBaseMoi(goc: string, base: string, bao: string[]): void {
+  const ten = gitThu(goc, ["rev-parse", "--symbolic-full-name", base]).ra.trim();
+  const m = /^refs\/remotes\/([^/]+)\/(.+)$/.exec(ten);
+  if (m === null) return;
+  const [remote, nhanh] = [m[1]!, m[2]!];
+  const xa = gitThu(goc, ["ls-remote", remote, `refs/heads/${nhanh}`], 30_000);
+  const shaXa = xa.ra.split(/\s/)[0] ?? "";
+  if (xa.ma !== 0 || !/^[0-9a-f]{40}$/.test(shaXa)) {
+    bao.push(`không hỏi được ${remote} để biết ${base} còn mới không — nếu chưa fetch, số cấp ra có thể trùng`);
+    return;
+  }
+  const shaGan = git(goc, ["rev-parse", base]).trim();
+  if (shaXa !== shaGan) {
+    throw new CapSoError(
+      `${base} cũ: ${remote} đang ở ${shaXa.slice(0, 7)}, bản cục bộ ở ${shaGan.slice(0, 7)}. ` +
+        `Chạy \`git fetch ${remote} ${nhanh} && git merge ${base}\` rồi chạy lại.`,
+    );
+  }
 }
 
 function laDuongCongCu(p: string): boolean {
@@ -761,35 +866,41 @@ class CayLamViec {
   }
 }
 
-/** Số lớn nhất của mỗi dãy trên base, bỏ qua dải số tạm. */
-function maxTrenBase(goc: string, base: string): Record<Day, number> {
-  const lonNhat = (so: Iterable<number>): number => {
-    let m = 0;
-    for (const n of so) if (n < MOC_SO_TAM && n > m) m = n;
-    return m;
-  };
+/** Mọi số THẬT mỗi dãy mà base đã khai, và số lớn nhất của mỗi dãy — bỏ qua dải số tạm. */
+function soTrenBase(goc: string, base: string): {
+  readonly max: Record<Day, number>;
+  readonly daKhai: Record<Day, ReadonlySet<number>>;
+} {
   const doc = (p: string): string => {
     const kq = gitThu(goc, ["show", `${base}:${p}`]);
     return kq.ma === 0 ? kq.ra : "";
   };
   const vong = gitThu(goc, ["grep", "-h", "-o", "-I", "-E", "S1\\.[0-9]+", base, "--", ".", LOAI_TRU]).ra;
   const tepMigration = gitThu(goc, ["ls-tree", "--name-only", `${base}:${THU_MUC_MIGRATION}`]).ra;
-  return {
-    vong: lonNhat([...vong.matchAll(/S1\.(\d+)/g)].map((m) => Number(m[1]))),
-    adr: lonNhat([...doc(TEP_QUYET_DINH).matchAll(/^## ADR-(\d+)/gm)].map((m) => Number(m[1]))),
-    khoan: lonNhat(cacHangSoNo(doc(TEP_STATE).replace(/\r\n/g, "\n").split("\n")).map((h) => h.so)),
-    migration: lonNhat(
+  const tap = (so: Iterable<number>): Set<number> => new Set([...so].filter((n) => n < MOC_SO_TAM));
+  const daKhai: Record<Day, ReadonlySet<number>> = {
+    vong: tap([...vong.matchAll(/S1\.(\d+)/g)].map((m) => Number(m[1]))),
+    adr: tap([...doc(TEP_QUYET_DINH).matchAll(/^## ADR-(\d+)/gm)].map((m) => Number(m[1]))),
+    khoan: tap(cacHangSoNo(doc(TEP_STATE).replace(/\r\n/g, "\n").split("\n")).map((h) => h.so)),
+    migration: tap(
       tepMigration
         .split("\n")
         .map((t) => RE_TEN_MIGRATION.exec(t.trim())?.[1])
-        .filter((s): s is string => s !== undefined)
+        .filter((x): x is string => x !== undefined)
         .map(Number),
     ),
+  };
+  const lonNhat = (so: ReadonlySet<number>): number => Math.max(0, ...so);
+  return {
+    daKhai,
+    max: { vong: lonNhat(daKhai.vong), adr: lonNhat(daKhai.adr), khoan: lonNhat(daKhai.khoan), migration: lonNhat(daKhai.migration) },
   };
 }
 
 interface LanCapCu {
   readonly bang: BangCap;
+  /** Bảng viết tay (`--cu`): người chạy đã nói mọi số trong bảng là của nhánh, nên không có số mơ hồ. */
+  readonly khaiTay?: boolean;
   /** Đường (bản sau của lần cấp) → (dòng lần cấp đã viết → bản số tạm của chính dòng ấy). */
   readonly banTam: ReadonlyMap<string, ReadonlyMap<string, string>>;
 }
@@ -806,7 +917,7 @@ function lichSuCap(goc: string, base: string, duoiNhanh: ReadonlySet<string>): L
   }
   return commit.map(({ sha, bang }, k) => {
     const cacBangCu = commit.slice(k + 1).map((c) => c.bang);
-    const diff = git(goc, ["diff", "--no-color", "--no-ext-diff", "-M", "-U0", `${sha}^1`, sha, "--", ".", LOAI_TRU]);
+    const diff = git(goc, [...DIFF, "-M", "-U0", `${sha}^1`, sha, "--", ".", LOAI_TRU]);
     const banTam = new Map<string, Map<string, string>>();
     for (const t of docDiff(diff)) {
       if (t.sau === null) continue;
@@ -887,7 +998,7 @@ export function laTepThuong(goc: string, p: string): boolean {
 /** Dòng NHÁNH thêm so với base: cây làm việc (kể cả tệp chưa theo dõi) so với base, không kể `tools/cap-so`. */
 function dongCuaNhanh(goc: string, base: string): Map<string, Set<number>> {
   const ra = new Map<string, Set<number>>();
-  const diff = git(goc, ["diff", "--no-color", "--no-ext-diff", "--no-renames", "-U0", base, "--", ".", LOAI_TRU]);
+  const diff = git(goc, [...DIFF, "--no-renames", "-U0", base, "--", ".", LOAI_TRU]);
   for (const t of docDiff(diff)) {
     if (t.sau === null || t.dongThem.length === 0) continue;
     ra.set(t.sau, new Set(t.dongThem));
@@ -938,7 +1049,9 @@ function kiemTrung(cay: CayLamViec, tenMigration: readonly string[]): readonly s
 export function kiem(goc: string): readonly string[] {
   const loi: string[] = [];
   const sot = gitThu(goc, [
-    "grep", "-n", "-I", "-E", "S1\\.91[0-9]{2}([^0-9]|$)|ADR-92[0-9]{2}([^0-9]|$)", "--", ".", LOAI_TRU,
+    "grep", "-n", "-I", "-E",
+    "S1\\.91[0-9]{2}([^0-9]|$)|ADR-92[0-9]{2}([^0-9]|$)|khoản( nợ)? 94[0-9]{2}([^0-9]|$)|(^|[^0-9A-Za-z])95[0-9]{2}_[A-Za-z0-9_]+\\.sql",
+    "--", ".", LOAI_TRU,
   ]).ra;
   for (const l of sot.split("\n").filter((x) => x !== "")) loi.push(`còn số tạm: ${l.slice(0, 160)}`);
   const cay = new CayLamViec(goc);
@@ -1032,6 +1145,11 @@ export interface TuyChonCapSo {
   readonly base: string;
   /** Bảng cấp viết tay (`vong 9101=141; adr 9201=083`) cho số thật mà nhánh tự đặt trước khi có lệnh này. */
   readonly cu?: string;
+  /**
+   * Số mơ hồ sau một cuộc đua thua (xem `soMoHo`) là của ai: `master` — để nguyên; `nhanh` — thu hồi và
+   * cấp lại. Không nói thì lệnh từ chối và liệt kê.
+   */
+  readonly moHo?: "master" | "nhanh";
 }
 
 export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
@@ -1040,6 +1158,7 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
     throw new CapSoError(`không thấy ${base} — chạy \`git fetch origin master\` trước`);
   }
   const bao: string[] = [];
+  kiemBaseMoi(goc, base, bao);
   giaiXungDot(goc, bao);
 
   const dangMerge = gitThu(goc, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]).ma === 0;
@@ -1052,7 +1171,7 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
     );
   }
 
-  const max = maxTrenBase(goc, base);
+  const { max, daKhai } = soTrenBase(goc, base);
   const dongNhanh = dongCuaNhanh(goc, base);
 
   // Migration của nhánh: tệp đánh số mà base không có.
@@ -1069,7 +1188,10 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
   const lich: LanCapCu[] = lichSuCap(goc, base, duoiNhanh);
   const choCommit = docChoCommit(goc);
   if (choCommit !== null) lich.unshift(choCommit);
-  if (tuyChon.cu !== undefined) lich.unshift({ bang: docTrailer(tuyChon.cu), banTam: new Map() });
+  if (tuyChon.cu !== undefined) lich.unshift({ bang: docTrailer(tuyChon.cu), banTam: new Map(), khaiTay: true });
+  const lanMoi = lich[0];
+  const bangKhongMoHo = lanMoi === undefined ? bangRong() : boSoCuaBase(lanMoi.bang, daKhai);
+  const moHo: string[] = [];
 
   // Bước 1 — thu hồi: trả mọi dòng của nhánh về bản số tạm.
   const cay = new CayLamViec(goc);
@@ -1082,8 +1204,24 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
       // mới nhất: thu hồi theo token có tiền tố, bằng bảng MỚI NHẤT — số trên dòng ấy là số của bảng ấy.
       const van = dong[i]!;
       const tam = lich.map((lan) => lan.banTam.get(p)?.get(van)).find((x) => x !== undefined);
-      dong[i] = tam ?? (lich[0] === undefined ? van : thuHoiTheoToken(van, lich[0].bang, duoiNhanh, p === TEP_STATE));
+      if (tam !== undefined || lanMoi === undefined) {
+        dong[i] = tam ?? van;
+        continue;
+      }
+      const mh = lanMoi.khaiTay === true ? [] : soMoHo(van, lanMoi.bang, daKhai, p === TEP_STATE);
+      if (mh.length > 0 && tuyChon.moHo === undefined) moHo.push(`${p}:${so}: ${mh.join(", ")}`);
+      const bangThuHoi = mh.length > 0 && tuyChon.moHo === "master" ? bangKhongMoHo : lanMoi.bang;
+      dong[i] = thuHoiTheoToken(van, bangThuHoi, duoiNhanh, p === TEP_STATE);
     }
+  }
+  if (moHo.length > 0) {
+    throw new CapSoError(
+      "chưa cấp số (xung đột lời khai nếu có thì đã gỡ): các dòng dưới đây sửa SAU lần cấp trước và nhắc một số vừa là " +
+        "số cũ của nhánh vừa là số master " +
+        `đã lấy:\n  - ${moHo.join("\n  - ")}\n` +
+        "Dòng nào nói về mục CỦA NHÁNH thì đổi số ấy sang số tạm (S1.91NN, ADR-92NN, khoản 94NN), rồi chạy lại với " +
+        "`--mo-ho master`; nếu mọi dòng đều nói về mục của nhánh thì chạy lại với `--mo-ho nhanh`.",
+    );
   }
   const tamCuaMigration = migrationNhanh.map((x) => {
     let so = x.so;
@@ -1139,7 +1277,7 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
       const i = so - 1;
       if (i < 0 || i >= dong.length) continue;
       const tam = dong[i]!;
-      const moi = thaySoTam(tam, bang);
+      const moi = thaySoTam(tam, bang, laMarkdown(p));
       dong[i] = moi;
       if (moi !== tam) daViet.set(p, [...(daViet.get(p) ?? []), [moi, tam]]);
       for (const m of moi.matchAll(/(?<!\d)(9[1245]\d\d)(?!\d)/g)) {
@@ -1150,6 +1288,9 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
           (d === "khoan" && /khoản(?: nợ)?\s+$/.test(moi.slice(0, m.index))) ||
           (d === "migration" && /^_[A-Za-z0-9_]+\.sql/.test(moi.slice(m.index + 4)));
         if (coTienTo) loi.push(`${p}:${so}: số tạm ${m[1]} không có chỗ khai (đầu mục ADR, hàng sổ nợ hay tệp migration)`);
+        else if (d !== null && bang[d].has(Number(m[1]))) {
+          bao.push(`${p}:${so}: để nguyên số trần ${m[1]} (trùng một số tạm đã khai) — sửa tay nếu nó là số tạm`);
+        }
       }
     }
   }
@@ -1194,7 +1335,8 @@ export function demLai(goc: string): { readonly tepDaGhi: readonly string[]; rea
 
 // ---- Dòng lệnh -----------------------------------------------------------------------------
 
-const HUONG_DAN = `pnpm cap-so [--base <ref>] [--cu "<bảng>"]   cấp số cho mọi số tạm của nhánh
+const HUONG_DAN = `pnpm cap-so [--base <ref>] [--cu "<bảng>"] [--mo-ho master|nhanh]
+                                            cấp số cho mọi số tạm của nhánh
 pnpm cap-so --dem                           chỉ viết lại lời khai đếm (còn số tạm)
 pnpm cap-so --kiem                          cho CI: đỏ nếu còn số tạm hay số trùng
 
@@ -1225,7 +1367,12 @@ export function main(thamSo: readonly string[], goc: string): number {
       stdout.write(kq.tepDaGhi.length === 0 ? "lời khai đếm đã khớp\n" : `đã viết lại: ${kq.tepDaGhi.join(", ")}\n`);
       return 0;
     }
-    const kq = capSo(goc, { base: giaTri("--base") ?? "origin/master", cu: giaTri("--cu") });
+    const moHo = giaTri("--mo-ho");
+    if (moHo !== undefined && moHo !== "master" && moHo !== "nhanh") {
+      stderr.write("cap-so: --mo-ho chỉ nhận `master` hoặc `nhanh`\n");
+      return 2;
+    }
+    const kq = capSo(goc, { base: giaTri("--base") ?? "origin/master", cu: giaTri("--cu"), moHo });
     for (const b of kq.bao) stdout.write(`${b}\n`);
     for (const d of CAC_DAY) {
       for (const [tam, that] of [...kq.bang[d]].sort((a, b) => a[0] - b[0])) stdout.write(`${d.padEnd(9)} ${tam} → ${dinhDang(d, that)}\n`);
