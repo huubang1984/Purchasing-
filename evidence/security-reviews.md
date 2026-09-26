@@ -12374,3 +12374,167 @@ Không cấp ADR hay migration nào.
   có chỗ ghim `[A-HJ]` mới. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**; CI 6/6 xanh.
 - Lần hợp thứ hai mang #160 và #155, cũng không xung đột. `pnpm cap-so` cấp số vòng từ số tạm; chạy lại không đổi byte
   nào, và `pnpm cap-so --kiem` sạch. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **107 tệp, 1434 đạt, 1 bỏ qua**.
+
+# §S1.9101 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 9401
+
+**Rổ và mảnh (ADR-043 ⒞): KHÔNG gỡ mảnh 4 (*khách hàng pilot*) của `docs/PRODUCT.md` §11 — vòng này dựng thứ để trình
+diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 9401 vào rổ B.** Không
+migration. Một ADR (ADR-9201). Nhánh `claude/pilot-simulation-plan-t2vak3` từ `master` `9b3cf8d`.
+
+## 1. Vòng này là gì
+
+Chủ dự án nêu: không đơn vị nào nhận pilot một dự án chưa hoàn thiện; cần một phương án pilot GIẢ LẬP để kiểm tính năng
+và có dữ liệu demo. Bốn lựa chọn chốt ngày 2026-09-26:
+- tài liệu + công cụ;
+- hai doanh nghiệp (Sản xuất + Xây dựng);
+- chế độ nhanh, có thêm chế độ chậm;
+- dữ liệu cho cả kiểm tính năng lẫn trình diễn.
+
+Sản phẩm của vòng:
+- `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`);
+- kế hoạch `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`;
+- ADR-9201.
+
+`docs/TIEN-DE-CHUA-DO.md` đặt ranh giới từ 2026-09-04 (*"Một pilot giả lập cho ra bằng chứng giả lập"*), và vòng này nhận
+ranh giới ấy làm luật: nhãn giả lập ở dòng đầu báo cáo, dữ liệu tự khai là bịa, không lùi ngày, không hiệu chỉnh tham số S3.
+
+## 2. Đo trước khi dựng
+
+- `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL thô. Gói ấy không có hàng `RFQ_CREATED`, `RFQ_SUBMITTED_FOR_APPROVAL`,
+  `RFQ_APPROVED`, `RFQ_OPENED`; tổ chức không có FINANCE, chính sách không khai trọng số, nên chấm, BAFO và trao thầu không
+  đi được. `hai-may.mjs` lấy ba token `/mo-thau` đầu tiên làm `[soan, duyet1, duyet2]`, nhưng từ S1.98 token thứ hai và ba
+  là của PM — nên nó nhiều khả năng đã thiu (đọc, chưa chạy lại).
+- Sổ kiểm toán ép `occurred_at := clock_timestamp()` (`004`), bảng chỉ-ghi-thêm. `verifyAuditChain` chỉ kiểm băm, liên kết,
+  số thứ tự và mốc neo, nên một hàng nghiệp vụ lùi ngày trái với sổ sẽ không bị nó bắt — đúng lớp *xanh giả*. Vì thế mọi
+  dữ liệu phải sinh theo thời gian thật.
+- API không có đường tạo tổ chức, người dùng hay gán vai (`app_api` không có INSERT; không vai nào giữ `role.grant`). Ba
+  việc ấy phải đi kết nối đặc quyền, cùng lý do ADR-044.
+- Trần theo người gọi đếm TOÀN CỤC (`042`) theo địa chỉ. `TRUSTPROCURE_TRUSTED_PROXIES=127.0.0.1` cộng `X-Forwarded-For`
+  là đường `auth.int.test.ts` đã đo, nên mỗi diễn viên mang một /64 riêng trong `2001:db8::/32`.
+
+## 3. Dựng
+
+`tools/pilot-gia-lap/src/`:
+
+| Tệp | Việc |
+|---|---|
+| `ho-so.ts` | Hai hồ sơ: bảy người mỗi tổ chức (BUYER, 3 PM, 2 DIRECTOR, FINANCE), sáu nhà cung cấp, danh mục hàng hoá có đơn giá thị trường ƯỚC LƯỢNG |
+| `kich-ban.ts` | Mười một kịch bản viết bằng DỮ LIỆU, kèm `kiemDanhMuc` kiểm TRƯỚC khi chạy |
+| `chay-kich-ban.ts` | Bộ chạy DUY NHẤT; ba loại bước LAM/CHAN/KIEM; lệch mong đợi thì dừng và mang dấu KHÔNG ĐẠT |
+| `cum.ts` | Dựng cụm bốn tiến trình với môi trường sạch; bí mật cụm sinh một lần, giữ ở `cum.json` 0600 |
+| `csdl.ts` | Kết nối đặc quyền, một chỗ gọi, năm việc: `migrate()`, hai vai đăng nhập, tổ chức, người dùng kèm vai, hai phép ĐẾM chỉ đọc |
+| `dien-vien.ts` | Người mua: link → TOTP (ghi danh thật); nhà cung cấp: link → OTP qua kênh khác → phiên khách |
+| `hop-thu.ts` | Đọc hộp thư dev: tin có sẵn lúc mở coi là cũ; mỗi tin chỉ nhận một lần |
+| `kiem-doc-lap.ts` | Biên nhận kiểm bằng khoá từ `apps/public-keys`; bộ bằng chứng kiểm bằng `pnpm bang-chung kiem` ở tiến trình không có CSDL |
+| `bao-cao.ts` | Báo cáo Markdown + JSON: dòng đầu là nhãn giả lập, không mang token |
+| `index.ts`, `tham-so.ts`, `trang-thai.ts` | Lệnh `chay`/`cum`/`dang-nhap`/`otp`/`lien-ket` |
+
+Chạm ngoài công cụ:
+- `package.json`: script `pilot:gia-lap`.
+- `pnpm-lock.yaml`: một khối importer. Chèn đúng khối pnpm sinh; phần còn lại mà pnpm 9 và 10 cục bộ viết lại là cách giải
+  peer `supports-color` theo môi trường, không thuộc vòng này. `pnpm@9 install --frozen-lockfile` chấp nhận tệp.
+- `.gitignore`: `.pilot-gia-lap/`.
+- `eslint.config.js`: bỏ qua `tools/pilot-gia-lap/*.mjs`, là bản sao từng byte của hook resolve.
+- `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`: khai `csdl.ts` ở vế ⒜ (một `new pg.Pool`) và vế ⒞ (một chỗ
+  `pool.query`), kèm lý do.
+
+## 4. Chạy thật, và ba khiếm khuyết của chính công cụ
+
+Postgres 16.13 cục bộ, bốn tiến trình thật. Ba lần công cụ gãy, mỗi lần một thứ nó chưa biết:
+1. **Worker không lên trên CSDL chưa có tổ chức.** `public.outbox_danh_sach_to_chuc()` trả 0 hàng nên worker từ chối khởi
+   động — cạnh ❷ của ADR-040, một hàng rào cố ý. Sửa: `Cum.batWorker()` tách khỏi `khoiDongCum` và chạy SAU khi gieo tổ
+   chức.
+2. **Tín hiệu dừng giữa lượt chạy để lại bốn tiến trình con mồ côi.** Bản đầu chỉ nghe SIGINT ở pha giữ cụm. Ctrl+C ở
+   terminal không lộ lỗi này, vì tín hiệu tới cả nhóm tiến trình; `kill <pid>` thì lộ. Sửa: `dungKhiCoTinHieu` gắn ngay
+   khi cụm lên. Đo lại: SIGTERM giữa SX-02 ⇒ mã thoát 143, 0 tiến trình con còn lại.
+3. **Thư mục trạng thái mới trên một CSDL cũ làm `api` chết lúc khởi động.** Đó là khoản 165: dấu kiểm vòng khoá lệch.
+   Sửa: trước khi sinh `cum.json`, công cụ đọc `public.master_key_check_values`; có dấu thì từ chối và nói cách sửa. Đo:
+   thông báo hiện ra, không tệp rác nào được ghi.
+
+Một lần gãy thứ tư không thuộc sản phẩm hay công cụ: harness đặt lại quyền của thư mục scratchpad và Postgres chết giữa
+lượt chạy chậm đầu tiên. Cụm Postgres được dựng lại ở `/var/lib/postgresql`, và lượt chậm chạy lại từ đầu.
+
+Lỗi của chính bộ giả lập ở lượt thứ hai: huỷ trao thầu trả **201** chứ không phải 200. Sản phẩm đúng (route tạo một hàng
+`CANCELLED`); mong đợi của công cụ sai.
+
+## 5. Kết quả chế độ nhanh
+
+Lượt ngày 2026-09-26 lúc 23:11 UTC, trên CSDL mới:
+- **10/10** kịch bản ĐẠT, trong 20 giây;
+- 417 bước qua API, cộng 47 bước chuẩn bị tổ chức;
+- **16/16** lần thử sai bị chặn; cô lập **2/2** (404 cả hai chiều);
+- biên nhận **35/35** kiểm bằng khoá công khai;
+- bộ bằng chứng **5/5** qua `pnpm bang-chung kiem` KHÔNG CSDL.
+
+Bốn gói dở đứng đúng trạng thái: `OPEN`, `CLOSED` với yêu cầu mở 1/2, `AWARDED` với đề xuất chờ duyệt, `PENDING_APPROVAL`
+1/2. Sổ kiểm toán: SX 207 hàng, XD 172 hàng.
+
+**Đi thử trên trình duyệt thật** (Chromium qua Playwright, khung 375×812, trên cụm giữ bởi lệnh `cum`):
+- Phía nhà cung cấp, gói SX-04: `lien-ket` cho link, mở lời mời, gửi OTP, `otp <số>` cho mã, nhập đơn giá, bấm **Niêm
+  phong và nộp**. Biên nhận hiện `alg=ECDSA_P256_SHA256 kid=k1 version=1`; phong bì X25519, 247 byte.
+- Phía người mua: `dang-nhap hung.nv@…` cho link và mã TOTP, đăng nhập ở `/mo-thau`, nạp gói SX-04. Màn hiện *"Số báo giá
+  đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"*.
+
+## 6. Đột biến
+
+**Trên mã sản phẩm** — mỗi mũi sửa đúng một dòng của `packages/unseal/src/comparison.ts`, chạy lượt giả lập, rồi khôi phục
+(`git diff` rỗng sau mỗi mũi):
+
+| Mũi | Kết quả |
+|---|---|
+| `countReceivedBids` bỏ lớp giấu số báo giá (`if (false && …)`) | chết — SX-01 KHÔNG ĐẠT ở phép kiểm *"trước khi đóng, SỐ báo giá bị giấu"* |
+| bảng so sánh làm tròn tổng tới nghìn đồng | **LẦN ĐẦU SỐNG** — xem dưới; sau khi sửa dữ liệu: chết, 6/10 KHÔNG ĐẠT |
+| bảng so sánh cắt hàng xu | chết — 2/10 KHÔNG ĐẠT (hai gói có tổng lẻ xu) |
+
+Mũi thứ hai sống ở lần đầu vì dữ liệu: đơn giá tròn 100 đồng và số lượng nguyên, nên MỌI tổng tròn nghìn, và phép so
+*"khớp từng chữ số"* không phân biệt được một bảng so sánh làm tròn. Sửa ở dữ liệu, không nới phép so:
+- đơn giá tròn 10 đồng;
+- mỗi gói có một dòng số lượng lẻ tới hai chữ số thập phân (kg, m, m³, lít).
+
+Tính chất ấy có test giữ (`kich-ban.test.ts`, *ĐỘ SẮC*): mọi gói có báo giá đều có tổng không tròn nghìn, và có tổng mang
+xu.
+
+**Trên bộ kiểm danh mục** (`kich-ban.test.ts`): mười mũi — người tạo tự duyệt, người điều phối đề xuất, người đề xuất tự
+duyệt, BUYER duyệt mở thầu, thiếu chữ ký trên ngưỡng, hai giá trùng, báo giá không được mời, hạn dưới sàn, người
+`khongXem` có quyền xem, người không tồn tại. Cả mười đều bị bắt.
+
+## 7. Phát hiện — khoản 9401
+
+Cột *Vào sổ* đếm hàng `audit_events` của tổ chức trước và sau mỗi lần thử sai. Kết quả: **9/16** lần từ chối vào sổ.
+
+Bảy lần KHÔNG vào sổ:
+- J3 ×3: người tạo gói, người điều phối, và người kiêm cả hai tự đề xuất trao thầu;
+- D2 ×1: người tạo tự duyệt gói;
+- nộp ngoài top-N của BAFO;
+- nộp bằng khoá cũ sau khi gói huỷ;
+- mở link đã thu hồi.
+
+`log/api.log` của lượt ấy cũng không có dòng nào cho các lần ấy.
+
+Đối chứng cùng lượt:
+- mọi lần từ chối quyền (403) vào sổ (`PERMISSION_DENIED`);
+- A4 vào sổ (`COMPARISON_DENIED`);
+- D2 của MỞ THẦU vào sổ (`UNSEAL_APPROVAL_DENIED`).
+
+Đọc mã: `deXuatTraoThau` ghi sổ từ chối TRẠNG THÁI qua `nemTuChoi` nhưng không tự kiểm J3; J3 chỉ sống ở trigger của
+`061`, và 422 của trigger huỷ giao dịch. `approveRfq` cùng hình dạng với trigger D2 của `011`. ADR-060 đã khai giới hạn
+*"từ chối do TRIGGER"*, nhưng gắn nó với ca tranh chấp; với J3 và D2, đường THUẬN cũng không có lớp gói nào bắt trước.
+
+`docs/PRODUCT.md` §5 (hàng S1.110) khai *"và mỗi lần từ chối để lại một dòng"*: sửa tại chỗ, gạch và giữ nguyên văn.
+Khoản **9401** vào **rổ B** — ba vế đọc ở chính hàng sổ. Ba lần còn lại ở phía NHÀ CUNG CẤP, ngoài mệnh đề của ADR-060;
+ghi ở đây, không mở khoản.
+
+Hai quan sát, không mở khoản:
+- ở lượt đầu, một nhà cung cấp CHƯA nộp vẫn mở được link và vào phiên khách của một gói đã huỷ; lớp chặn thật là khoá
+  công khai đã bị thu hồi (0 khoá ở `/guest/rfq`);
+- nộp bằng khoá đọc từ trước khi huỷ ⇒ 422.
+
+## 8. Ranh giới nói ra
+
+- Lượt giả lập **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chạy 31 test đơn vị của công cụ và các cổng
+  kiến trúc.
+- Tầng tích hợp (Testcontainers) không chạy cục bộ, vì container này không có Docker daemon. Mọi câu SQL mới của
+  `csdl.ts` đã CHẠY THẬT trên Postgres 16 ở lượt giả lập — mạnh hơn `PREPARE` của `qt3-cu-phap.int.test.ts`, nhưng không
+  phải chính phép đo ấy. Job T3 của CI là phép đo ấy.
+- gitleaks không cài cục bộ; job `t0c-bi-mat` của CI là phép đo.
+- Ngưỡng, số người, đơn giá của hai hồ sơ là của người viết. Không dòng nào của `TIEN-DE-CHUA-DO.md` đổi trạng thái.
