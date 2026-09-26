@@ -2716,6 +2716,9 @@ S0). Mốc chết: thêm một dòng `export ... from "./anchor-sign.js"` vào `
 ⑴ **LỊCH.** Bốn trong năm thứ mà `writer.ts` liệt kê nay đã có; thứ thứ năm là một tiến trình chạy đều
 ở một nơi đã triển khai, và dự án **chưa triển khai ở đâu**. Đây không phải một khoản nợ mã nguồn, và
 biến nó thành một cron trong kho sẽ là một lời khai rộng hơn sự thật.
+**[ADR-072] ĐÃ CÓ LỊCH:** EventBridge Scheduler chạy `tp-neo lich` mỗi ngày 02:15 giờ Việt Nam; `lich` TỰ liệt kê mọi
+tổ chức bằng vai `app_neo` (không còn danh sách do người vận hành gõ — xem ADR-072 vì sao đổi), xuất rồi kiểm; hỏng ⇒
+email từ tài khoản audit.
 
 ⑵ **TÍNH ĐỘC LẬP CỦA NƠI CẤT.** `createFileAnchorStore` ghi ra một thư mục trên đĩa. Ai xoá được thư
 mục ấy thì xoá được mốc neo, ~~và không dòng mã nào đổi được điều đó~~.
@@ -6624,3 +6627,39 @@ chọn làm job neo lên ECS thay vì nới policy của bucket.
 - Chưa chạy thật: S3, KMS, STS đo trên client giả; đường tệp và lệnh `khoa-bien-nhan` đo trên tiến trình thật; image
   build và chạy được.
 - Xoay khoá ký mốc neo: khoá mới + mục mới ở stack 40, không gỡ mục cũ — vòng khoá kiểm của job gồm mọi mục ấy.
+
+## ADR-072 — Lịch neo sổ kiểm toán hằng ngày, bằng một vai CSDL riêng liệt kê được mọi tổ chức
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-026** §5, **ADR-040**, ADR-028 §6, ADR-071
+
+### Bối cảnh
+
+ADR-026 §5⑴ để trống LỊCH của mốc neo, và §5 chọn danh sách tổ chức do người vận hành gõ vì vai của công cụ (`app_api`)
+không đọc được `organizations`. ADR-071 đưa job neo lên ECS; thiếu lịch thì mốc neo chỉ có khi ai đó nhớ chạy nó, và một
+tổ chức mới không ai khai thì không bao giờ được neo — `verifyAuditChain` của nó mãi `NOT_ANCHORED`.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Vai riêng `app_neo` / `app_neo_login`**, không nới quyền `app_api` (052 thu hồi đích danh hàm liệt kê khỏi `app_api`,
+   ADR-040). `app_neo` chỉ: EXECUTE hàm liệt kê `outbox_danh_sach_to_chuc()` (052), SELECT `audit_events`, SELECT
+   `(org_id, seq, hash)` của `audit_chain_anchors`, EXECUTE `app_current_org_id()` và `audit_compute_hash(...)`. RLS của hai
+   bảng sổ áp cho PUBLIC, FORCE, NOBYPASSRLS ⇒ vẫn cô lập theo tổ chức (migration 064). Hardening canh vai này với cùng
+   bất biến như hai vai ứng dụng kia, cộng kiểm `CAU_QUYEN_NEO_SAI` (ADR-028 §6): thừa hay thiếu quyền đều đỏ ở deploy.
+   Job neo bỏ URL của api, dùng secret `tp/neo/database-url`; task migrate tạo `app_neo_login` từ chính URL ấy.
+2. **Lệnh `pnpm neo lich`**: liệt kê MỌI tổ chức (cùng câu với worker), `xuat` rồi `kiem` cho tất cả; thoát 1 nếu bất kỳ
+   tổ chức nào xuất hỏng, bị từ chối vì chuỗi lùi, hay kiểm ra `ok=false`.
+3. **EventBridge Scheduler** mỗi ngày 02:15 (`Asia/Ho_Chi_Minh`), RunTask họ `tp-neo` (không kèm số bản ⇒ bản pipeline vừa
+   đăng ký), lệnh `lich`, **không thử lại**. Role của lịch chỉ `ecs:RunTask` đúng họ ấy trong đúng cluster và `iam:PassRole`
+   đúng `tp-anchor-job` + execution role.
+4. **Cảnh báo ⑶ của stack 60**: task `tp-neo` dừng với exit ≠ 0 hoặc `TaskFailedToStart` ⇒ chuyển sự kiện sang tài khoản
+   audit ⇒ SNS email có sẵn. Người có quyền ở prod gỡ được rule chuyển tiếp, nhưng không chạm được rule/SNS ở audit.
+
+### Hệ quả, nói thẳng
+
+- **ADR-026 §5 đổi hướng**: danh sách tổ chức không còn do người gõ — lý do cũ (vai không đọc được `organizations`) nay
+  được giải bằng một vai hẹp thay vì bằng tay người. `xuat/kiem --org …` vẫn dùng được cho lượt chạy tay.
+- Một vai liệt kê được mọi UUID tổ chức tồn tại thêm trong cụm; nó không đọc được bảng nghiệp vụ nào (đo 16 bảng).
+- **Lịch không chạy** (Scheduler hỏng, role sai) thì không có task nào dừng ⇒ không có cảnh báo. Chưa có cảnh báo "không
+  có mốc neo mới trong 36 giờ"; ghi thành việc kế.
+- Cửa sổ phát hiện cắt đuôi tối đa ~1 ngày. Mỗi tổ chức thêm ~365 đối tượng S3/năm (Object Lock 1 năm).
+- Chưa chạy thật: Scheduler gọi họ không kèm số bản và mẫu sự kiện ECS mới qua `terraform validate`.

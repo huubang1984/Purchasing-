@@ -81,6 +81,7 @@ const CACH_DUNG = `Cách dùng:
   pnpm neo kiem --org <uuid> [--org <uuid> ...]
   pnpm neo trich --org <uuid> --ra <thu-muc> [--seq <n>]
   pnpm neo khoa-bien-nhan
+  pnpm neo lich
 
 Biến môi trường:
   DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan") — đăng nhập bằng app_neo_login
@@ -99,7 +100,7 @@ Biến môi trường:
   "trich" tách một mốc neo thành ba tệp mà openssl(1) đọc thẳng. Nó KHÔNG cần DATABASE_URL.
 `;
 
-type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich" | "khoa-bien-nhan";
+type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich" | "khoa-bien-nhan" | "lich";
 
 function batBuoc(ten: string): string {
   const gt = env[ten];
@@ -636,7 +637,42 @@ async function trich(kho: AnchorStore, ts: ThamSoTrich): Promise<number> {
 }
 
 function laLenh(gt: string | undefined): gt is Lenh {
-  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich" || gt === "khoa-bien-nhan";
+  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich" || gt === "khoa-bien-nhan" || gt === "lich";
+}
+
+/**
+ * [ADR-072] Câu liệt kê — ĐÚNG câu của worker (`apps/unseal-worker/src/tien-trinh.ts`), qua hàm 052 mà vai
+ * `app_neo` được EXECUTE (064). Không đọc thẳng `organizations`: vai này không có SELECT ở đó.
+ */
+const CAU_LIET_KE_TO_CHUC =
+  "SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)";
+
+async function lietKeToChuc(): Promise<readonly string[]> {
+  const pool = createPool(batBuoc("DATABASE_URL"), 1, {
+    role: "app_neo",
+    onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
+  });
+  try {
+    const { rows } = await pool.query<{ id: string }>(CAU_LIET_KE_TO_CHUC);
+    return rows.map((r) => r.id);
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
+ * [ADR-072] Lệnh của LỊCH hằng ngày: liệt kê MỌI tổ chức, xuất mốc neo cho tất cả, rồi KIỂM tất cả. Thoát 1 nếu
+ * bất kỳ tổ chức nào xuất hỏng, bị từ chối vì chuỗi lùi, hay kiểm ra `ok=false` — mã ấy là tín hiệu duy nhất mà
+ * cảnh báo ⑶ của stack 60 bắt. Tổ chức mới tự vào lịch từ lượt sau khi nó tồn tại — không ai phải gõ `--org`.
+ */
+async function lich(kho: AnchorStore, aws: CauHinhAws | undefined): Promise<number> {
+  const org = await lietKeToChuc();
+  stdout.write(`lich: ${org.length} to chuc\n`);
+  if (org.length === 0) return 0;
+  const maXuat = await xuat(kho, org, aws);
+  const maKiem = await kiem(kho, org);
+  stdout.write(`lich: xuat=${maXuat === 0 ? "OK" : "HONG"} kiem=${maKiem === 0 ? "OK" : "HONG"}\n`);
+  return maXuat === 0 && maKiem === 0 ? 0 : 1;
 }
 
 /**
@@ -689,6 +725,10 @@ async function main(): Promise<number> {
         : createS3AnchorStore({ client: s3, bucket: aws.bucket });
     // `trich` KHÔNG mở pool và KHÔNG đọc DATABASE_URL — xem khối chú thích của nó, quyết định ⑵.
     if (lenh === "trich") return await trich(kho, docThamSoTrich(thamSo));
+    if (lenh === "lich") {
+      if (thamSo.length > 0) throw new Error("lich không nhận tham số — nó tự liệt kê mọi tổ chức.");
+      return await lich(kho, aws);
+    }
     const org = docDanhSachToChuc(thamSo);
     return lenh === "xuat" ? await xuat(kho, org, aws) : await kiem(kho, org);
   } finally {
