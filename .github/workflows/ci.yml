@@ -22,7 +22,7 @@ on:
   pull_request:
 
 # =============================================================================================
-# [S1.143 / khoan 115] BAI HOC KHOAN NO 67 AP CHO CI.YML: QUYEN TOI THIEU, KHONG GIU CREDENTIAL,
+# [S1.145 / khoan 115] BAI HOC KHOAN NO 67 AP CHO CI.YML: QUYEN TOI THIEU, KHONG GIU CREDENTIAL,
 # VA BI MAT KHONG NAM CUNG JOB VOI SCRIPT VONG DOI CUA PHU THUOC
 # =============================================================================================
 # Ban truoc khong khai `permissions`, nen quyen cua GITHUB_TOKEN lay theo THIET LAP KHO
@@ -74,7 +74,7 @@ jobs:
       - name: Ranh gioi kien truc
         run: pnpm depcruise
 
-  # [S1.143 / khoan 115] Quet bi mat tach khoi t0: day la buoc DUY NHAT cua ci.yml nhan
+  # [S1.145 / khoan 115] Quet bi mat tach khoi t0: day la buoc DUY NHAT cua ci.yml nhan
   # `secrets.GITHUB_TOKEN`, nen no khong duoc chay sau `pnpm install` trong cung job. Chi checkout
   # + gitleaks-action — khong setup-node, khong pnpm, khong khoi phuc cache, khong `run:`.
   t0c-bi-mat:
