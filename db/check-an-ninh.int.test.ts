@@ -50,7 +50,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   org_key_pairs_key_version_check: "DO_DAI",
   org_key_pairs_public_key_check: "DO_DAI",
   org_key_pairs_wrapped_private_key_check: "DO_DAI",
-  // [S1.154 / S3.1a] Phiên bản có bậc phải khai hai cột mức chính sách — nhất quán giữa các cột của MỘT
+  // [S1.155 / S3.1a] Phiên bản có bậc phải khai hai cột mức chính sách — nhất quán giữa các cột của MỘT
   // hàng, cùng khuôn `danh_gia_du_bo`. Bậc giá trị do trigger `chinh_sach_kiem_bac` phán xử, không ở đây.
   org_procurement_policies_bac_kem_muc_s3: "MOC",
   org_procurement_policies_bafo_top_n_khong_am: "SO",
@@ -61,7 +61,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   org_procurement_policies_eval_components_la_mang: "JSON",
   org_procurement_policies_hieu_luc_khong_lui: "MOC",
   org_procurement_policies_key_purge_grace_hours_check: "SO",
-  // [S1.154 / S3.1a] Hai cột mức chính sách: tất-cả-hoặc-không (khuôn `danh_gia_du_bo`), và dương.
+  // [S1.155 / S3.1a] Hai cột mức chính sách: tất-cả-hoặc-không (khuôn `danh_gia_du_bo`), và dương.
   org_procurement_policies_muc_s3_du_bo: "MOC",
   org_procurement_policies_muc_s3_duong: "SO",
   org_procurement_policies_version_check: "SO",
