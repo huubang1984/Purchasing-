@@ -68,7 +68,16 @@ const GOC = fileURLToPath(new URL("../../", import.meta.url));
 // `@aws-crypto/*`…) do bước audit T0b đo, không liệt kê ở đây: test này chỉ xét phụ thuộc TRỰC TIẾP.
 // [ADR-065] `@aws-sdk/client-sesv2`: bộ gửi thư thật của `api` và cảnh báo break-glass của worker —
 // cùng lý do với client-kms (SDK chính hãng ký SigV4; không tự viết).
-const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = ["@aws-sdk/client-kms", "@aws-sdk/client-sesv2", "pg", "pg-connection-string"];
+// [ADR-069] `@aws-sdk/client-pinpoint-sms-voice-v2`: kênh SMS của `api`. `@aws-sdk/client-secrets-manager`: kho token
+// Zalo ZNS của `api` — token xoay vòng nên phải ĐỌC VÀ GHI lúc chạy, không bơm một lần qua biến môi trường được.
+const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = [
+  "@aws-sdk/client-kms",
+  "@aws-sdk/client-pinpoint-sms-voice-v2",
+  "@aws-sdk/client-secrets-manager",
+  "@aws-sdk/client-sesv2",
+  "pg",
+  "pg-connection-string",
+];
 
 interface Manifest {
   readonly duongDan: string;
