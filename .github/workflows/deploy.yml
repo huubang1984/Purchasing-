@@ -3,7 +3,7 @@ name: Deploy — prod (bam tay)
 # =============================================================================================
 # [ADR-067] PIPELINE DEPLOY: BAM TAY, DUYET TAY, HAI ROLE TACH NHAU
 # =============================================================================================
-# Chi `workflow_dispatch` tren `master`. Ba job:
+# Chi `workflow_dispatch` tren `master`. Bon job:
 #
 #   build   KHONG co quyen AWS nao. Chay `docker build` (tuc `pnpm install` cua ca cay phu
 #           thuoc, script vong doi cua ben thu ba) va giao image duoi dang artifact. Token OIDC
@@ -14,9 +14,12 @@ name: Deploy — prod (bam tay)
 #           service `tp-api`, cho on dinh, kiem service chay DUNG ban vua dang ky; roi `tp-web`
 #           (ADR-068: chi tinh, khong task role) va `tp-public-keys` (ADR-070: chi nua cong khai); roi
 #           chay task `tp-neo` neo tai lieu khoa vao bucket audit (ADR-071).
+#   kiem    [ADR-078] KHONG quyen AWS, KHONG environment: goi HTTPS cong khai cua ten mien — ma 200, header
+#           ADR-075, CSP web, 301 tu http, khoa bien nhan dung kid va dau van tay. Hong ⇒ job do, KHONG rollback.
 #   worker  environment `prod-worker` (duyet RIENG), role `tp-deploy-worker`: day tp-unseal-worker,
 #           cap nhat service `tp-unseal-worker`. Role nay PassRole duoc role co kms:Decrypt tren
-#           tp-org-wrap (ADR-062), nen no chi chay khi nguoi bam chon worker.
+#           tp-org-wrap (ADR-062), nen no chi chay khi nguoi bam chon worker. [ADR-078] Roi kiem worker
+#           du task va log khong co loi khoi dong.
 #
 # Mot thanh phan, mot commit, mot the: the image = SHA commit; task definition ghim digest.
 # `concurrency` xep hang hai luot deploy — khong huy luot dang chay giua migrate va cap nhat.
@@ -135,6 +138,26 @@ jobs:
             echo "- neo: \`$td_neo\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  kiem:
+    name: Kiem sau deploy (khong quyen AWS)
+    needs: api
+    if: inputs.thanh_phan != 'worker'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # Bien cap REPOSITORY (khong phai environment — job nay khong co environment): du lieu cong khai.
+      - name: Kiem duong cong khai, header, khoa bien nhan
+        env:
+          TEN_MIEN: ${{ vars.TP_TEN_MIEN }}
+          RECEIPT_KID: ${{ vars.TP_RECEIPT_ACTIVE_KID }}
+          RECEIPT_FINGERPRINT: ${{ vars.TP_RECEIPT_FINGERPRINT }}
+        run: bash deploy/kiem-sau-deploy.sh cong-khai
+
   worker:
     name: Deploy unseal-worker (tp-deploy-worker)
     needs: [build, api]
@@ -172,9 +195,13 @@ jobs:
           THE: ${{ github.sha }}
         run: |
           set -euo pipefail
+          BAT_DAU_MS=$(date +%s%3N)
+          export BAT_DAU_MS
           anh_worker=$(bash deploy/trien-khai.sh day anh/worker.tar.gz tp-unseal-worker "$THE")
           td_worker=$(bash deploy/trien-khai.sh dang-ky tp-unseal-worker "$anh_worker" tp-unseal-worker)
           bash deploy/trien-khai.sh cap-nhat tp-unseal-worker "$td_worker"
+          # ADR-078: du task va khong co dong loi khoi dong trong log tu luc bat dau deploy.
+          bash deploy/kiem-sau-deploy.sh worker
           {
             echo "### Deploy worker"
             echo "- worker: \`$td_worker\`"

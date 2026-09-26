@@ -6,6 +6,8 @@
 #      (Scheduler bị tắt/xoá, role sai, image không kéo được mà không có task nào dừng).
 #   ⑸ [ADR-076] Một truy vấn DNS ngoài danh sách được phép trong VPC prod (DNS Firewall của stack 90 chặn/cảnh báo) —
 #      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
+#   ⑹ [ADR-077] Vận hành: mọi alarm prod mang tiền tố `tp-van-hanh-` (ALB, ECS, RDS — stack 90) vào ALARM hoặc trở về
+#      OK ⇒ chuyển sang audit ⇒ email.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -148,6 +150,18 @@ locals {
     }
   })
 
+  # ⑹ [ADR-077] Bắt THEO TIỀN TỐ — stack 90 thêm alarm vận hành mới mà không phải sửa stack này.
+  tien_to_van_hanh = "tp-van-hanh-"
+  mau_van_hanh = jsonencode({
+    source      = ["aws.cloudwatch"]
+    detail-type = ["CloudWatch Alarm State Change"]
+    account     = [local.prod]
+    detail = {
+      alarmName = [{ prefix = local.tien_to_van_hanh }]
+      state     = { value = ["ALARM", "OK"] }
+    }
+  })
+
   mau_neo_hong = jsonencode({
     source      = ["aws.ecs"]
     detail-type = ["ECS Task State Change"]
@@ -218,6 +232,7 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
               aws_cloudwatch_event_rule.task_worker_audit.arn,
               aws_cloudwatch_event_rule.neo_hong_audit.arn,
               aws_cloudwatch_event_rule.dns_bi_chan_audit.arn,
+              aws_cloudwatch_event_rule.van_hanh_audit.arn,
             ]
           }
         }
@@ -478,6 +493,50 @@ resource "aws_cloudwatch_event_rule" "dns_bi_chan_prod" {
 resource "aws_cloudwatch_event_target" "dns_bi_chan_prod" {
   provider = aws.prod
   rule     = aws_cloudwatch_event_rule.dns_bi_chan_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑹ [ADR-077] Vận hành — ALB, ECS, RDS của prod (alarm ở stack 90, tiền tố `tp-van-hanh-`)
+# ---------------------------------------------------------------------------------------------
+resource "aws_cloudwatch_event_rule" "van_hanh_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-van-hanh"
+  description   = "Alarm van hanh tp-van-hanh-* cua prod vao ALARM hoac tro ve OK (ADR-077)"
+  event_pattern = local.mau_van_hanh
+}
+
+resource "aws_cloudwatch_event_target" "van_hanh_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.van_hanh_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      ten   = "$.detail.alarmName"
+      moi   = "$.detail.state.value"
+      cu    = "$.detail.previousState.value"
+      luc   = "$.time"
+      ly_do = "$.detail.state.reason"
+      mo_ta = "$.detail.configuration.description"
+    }
+    input_template = "\"[TrustProcure] Van hanh prod: <ten> chuyen <cu> -> <moi> luc <luc>. <mo_ta> Chi tiet: <ly_do>\""
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "van_hanh_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-van-hanh"
+  description   = "Chuyen alarm van hanh tp-van-hanh-* sang audit (ADR-077)"
+  event_pattern = local.mau_van_hanh
+}
+
+resource "aws_cloudwatch_event_target" "van_hanh_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.van_hanh_prod.name
   arn      = local.bus_audit_arn
   role_arn = aws_iam_role.chuyen_canh_bao.arn
 

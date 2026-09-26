@@ -6885,6 +6885,76 @@ quyền có đường tuồn dữ liệu tới bất kỳ máy chủ HTTPS nào.
 - Chưa chạy thật: `terraform validate` stack 60 và 90; tên dịch vụ endpoint `sms-voice` và tên bucket lớp ECR cần kiểm lúc
   apply (README).
 
+## ADR-077 — Cảnh báo khi hệ thống ngừng phục vụ: ALB, ECS, RDS, thư qua audit
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-066, ADR-068, ADR-070, ADR-072, ADR-076
+
+### Bối cảnh
+
+Stack 60 báo sửa key policy, task mang role worker, job neo hỏng, thiếu mốc neo, truy vấn DNS lạ — nhưng không gì báo
+khi api, web, public-keys hay worker NGỪNG PHỤC VỤ, hay khi CSDL sắp đầy. Worker không đứng sau ALB: nó chết thì không
+yêu cầu nào lỗi, chỉ phong bì không được mở.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Alarm ở prod (stack 90), tiền tố `tp-van-hanh-`:**
+   - ALB, cho từng target group api/web/public-keys: có target không khoẻ 3 phút; KHÔNG còn target khoẻ 3 phút
+     (thiếu dữ liệu = vi phạm).
+   - ALB: (5xx do ALB sinh + 5xx của target) / số yêu cầu > 5% trong 5 phút, chỉ khi ≥ 20 yêu cầu.
+   - api: p95 `TargetResponseTime` > 2 giây trong 10 phút.
+   - ECS: `RunningTaskCount` < `so_ban_*` trong 5 phút (Container Insights, đã bật), cho mọi service có số bản > 0 —
+     cách duy nhất thấy worker chết. Thiếu dữ liệu = vi phạm.
+   - RDS: CPU > 80% trong 15 phút; `FreeStorageSpace` < 2 GB; > 150 kết nối (trần mặc định db.t4g.small ≈ 190).
+2. **Thư đi qua audit** như ⑶–⑸: stack 60 ⑹ bắt sự kiện `CloudWatch Alarm State Change` theo TIỀN TỐ tên alarm, cả
+   ALARM lẫn OK, chuyển sang audit ⇒ SNS email có sẵn. Thêm alarm vận hành mới chỉ cần giữ tiền tố.
+3. `tests/architecture/hinh-dang-van-hanh.test.ts` đòi mọi alarm của stack 90 (trừ DNS) mang tiền tố, tiền tố giống
+   nhau ở hai stack, mọi `aws_ecs_service` và `aws_lb_target_group` có alarm, và hai alarm "mất hẳn" coi thiếu dữ liệu
+   là vi phạm.
+
+### Hệ quả, nói thẳng
+
+- Cảnh báo vận hành và cảnh báo bảo mật chung MỘT hộp thư. Thư vận hành nhiều hơn (mỗi sự cố hai thư: vào và ra) —
+  tách topic khi đủ người trực.
+- Không có alarm cho lỗi nghiệp vụ (outbox kẹt, gửi SMS/Zalo thất bại): chúng không làm service ngừng; việc sau.
+- Ngưỡng là đoán ở quy mô chưa có tải thật; đo lại sau một tháng chạy.
+- Lần apply đầu có thư ALARM→OK dự kiến cho mỗi service trước khi task lên.
+- Chưa chạy thật: `terraform validate` stack 60 và 90.
+
+## ADR-078 — Kiểm tự động sau mỗi lần deploy, không quay lui tự động
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-067**, ADR-070, ADR-075, ADR-062
+
+### Bối cảnh
+
+Pipeline (ADR-067) chỉ biết service "ổn định" và chạy đúng bản task definition vừa đăng ký. Nó không biết trang có
+phục vụ qua tên miền thật không, header ADR-075 có còn không, service công bố khoá có phát đúng khoá đang ký không, hay
+worker — không đứng sau ALB — có sống sau khởi động không.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Job `kiem`** sau `api`, **không quyền AWS, không environment** (`contents: read`), chạy
+   `deploy/kiem-sau-deploy.sh cong-khai` trên `https://<TP_TEN_MIEN>`:
+   - `/api/health`, `/nop-thau`, `/.well-known/trustprocure-receipt-keys` trả 200 (thử lại tới ~2 phút);
+   - mọi phản hồi có HSTS `max-age=31536000; includeSubDomains`, `x-frame-options: DENY`, `nosniff`, không `server`;
+     `/nop-thau` có CSP; `http://` ⇒ 301 sang https;
+   - tài liệu khoá: `activeKeyId` = `TP_RECEIPT_ACTIVE_KID`; dấu vân tay của kid ấy = `TP_RECEIPT_FINGERPRINT` (con số
+     in vào hợp đồng, tính độc lập từ stack 50); dấu vân tay = SHA-256 của `spki` trong chính tài liệu.
+2. **Job `worker`** sau khi cập nhật service: chờ 2 phút, kiểm `runningCount = desiredCount` và log `/tp/unseal-worker`
+   không có dòng lỗi khởi động kể từ lúc bắt đầu deploy. `tp-deploy-worker` thêm đúng `logs:FilterLogEvents` trên nhóm log
+   ấy (stack 30).
+3. **Hỏng ⇒ job đỏ, không tự quay lui**: migrate đã chạy, image cũ trên lược đồ mới là rủi ro người vận hành phải cân
+   (README, "Quay lui").
+4. `hinh-dang-deploy.test.ts` ⑹ ghim: `kiem` không id-token/environment/role, chạy sau `api`; `worker` kiểm SAU cập nhật.
+
+### Hệ quả, nói thẳng
+
+- Ba biến cấp repository phải khớp stack 50/90; xoay khoá mà quên cập nhật thì deploy kế đỏ ở `kiem` — cố ý.
+- `kiem` thấy những gì Internet thấy, kể cả DNS ngoài AWS và chứng chỉ; nó không kiểm luồng nghiệp vụ (đăng nhập, niêm
+  phong) — cần một tài khoản thử trên prod, việc sau.
+- Kiểm worker chỉ thấy lỗi KHỞI ĐỘNG trong 2 phút đầu; lỗi sau đó là việc của alarm ADR-077.
+- Chưa chạy thật: script đo trên máy chủ giả cục bộ (đúng, sai dấu vân tay, thiếu CSP, biến sai) và `aws` giả (đủ/thiếu
+  task, có dòng lỗi).
+
 ---
 
 ## ADR-080 — S3 mở vòng khi MVP1 chưa đóng, sau một công tắc MỘT CHIỀU theo tổ chức

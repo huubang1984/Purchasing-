@@ -12174,3 +12174,7 @@ khôi phục trong `finally`. Nhờ vậy nó đo đúng thân mà `migrate()` +
 **Lúc mở PR — đổi số lần ba và hợp `master` `27d0f6d`** (PR #138 khoản 196, cùng các nhánh neo). Vòng này thành §S1.137,
 migration thành `067`; sổ nợ **242** khoản, mở **93** (= 91 của `master` + 241, 242); rổ A **1**, rổ B **69**, rổ C
 **23**; 1 + 69 + 23 = 93; **67** migration; ADR **77**.
+
+**Khi chờ merge — hợp #145, #146, #147, #149 và đổi số lần bốn** (§S1.139 mục 9). Vòng này thành §S1.140, ba ADR thành
+ADR-080…082; sổ nợ **242** khoản, mở **93** — bốn PR ấy không chạm sổ nợ; **67** migration; ADR **81** (78 của
+`master` + 3). ADR-079 vắng trên nhánh này: `…-endpoint-policy` giữ nó — khe số, không phải ADR bị xoá.
