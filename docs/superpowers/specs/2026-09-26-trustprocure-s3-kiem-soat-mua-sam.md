@@ -250,11 +250,11 @@ tạo một phiên bản chính sách mới trước gói thầu đầu tiên sa
   (§2.4 ⑺), và thông điệp từ chối nói người dùng lưu lại ngân sách.
 - **Chữ ký thứ hai (§2.4 ⑺):** một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC giữ `policy.manage` đã ký nó —
   một bảng chữ ký chỉ-ghi-thêm, khuôn `rfq_approvals`. Hàm *phiên bản đang hiệu lực* chỉ đọc phiên bản đã ký.
-  **[S1.9101]** Hàm ấy là `chinh_sach_hieu_luc(org, lúc)` (`9501_bac_va_chu_ky_chinh_sach`), và nó là chỗ DUY NHẤT chọn
+  **[S1.154]** Hàm ấy là `chinh_sach_hieu_luc(org, lúc)` (`069_bac_va_chu_ky_chinh_sach`), và nó là chỗ DUY NHẤT chọn
   phiên bản: đo lúc làm, bốn chỗ tự chọn theo ba luật (`getActiveProcurementPolicy`, `docChinhSach`, nhánh ⑵ của
   `rfq_che_do_nghiem`, hai hàm hạn xoá khoá của `026`), và chủ dự án chọn hợp nhất cả bốn. Để *đã bật ⇒ phiên bản hiệu
   lực có bậc* đúng bằng cấu tạo, chỉ ký được phiên bản MỚI NHẤT đã tới ngày hiệu lực, dưới một khoá tư vấn theo tổ chức
-  chung với lần chèn phiên bản (`evidence/security-reviews.md` §S1.9101 mục 4).
+  chung với lần chèn phiên bản (`evidence/security-reviews.md` §S1.154 mục 4).
 
 **Tiền tệ lệch → từ chối**, cùng câu của `rfq_can_phe_duyet_kep` (`014`): phân bậc không quy đổi tiền tệ; đa tiền
 tệ là Enterprise.
@@ -779,7 +779,7 @@ chữ ký chính sách — nên nếu có trôi thì trôi lên.
 | # | Thêm hoặc đổi |
 |---|---|
 | **S3.0** | ADR-080/081 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. **[S1.142]** Cả hai đã chốt ở ADR-084; S3.0 còn đúng phần nới dải nhãn dưới đây. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1. **[S1.153] S3.0 KHÉP.** Đo lúc làm vẫn đúng 10 chỗ; cả mười nay là `[A-HJK]`, mẫu của `parse.test.ts` có hàng K1, và năm mũi thu dải cùng hai mũi nới sai dải đều chết (`evidence/security-reviews.md` §S1.153) |
-| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.9101]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`9501_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.9101) |
+| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.154]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`069_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.154) |
 | **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; ~~sửa khoản 240 nếu nó chưa được sửa ở vòng riêng~~ **[S1.140]** khoản 240 đã sửa ở vòng riêng (`067`) |
 | **S3.3** | **Xác minh nội bộ lên đây** (K8a) — K2 cần nó; bốn luật đếm; ngoại lệ có hàng rút; K3 theo định nghĩa §5.1; tập loại trừ K5 mở rộng |
 | **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; ~~đóng khoản 242 ⑴~~ **[S1.142]** lời khai của khoản 242 ⑴ đã sửa ở `068`; S3.5 dựng chữ ký sống độc lập với hàng `APPROVED` và phải lật khối đo `[S1.142 / khoản 242 ⑴]` |

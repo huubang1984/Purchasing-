@@ -121,7 +121,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   "audit_chain_anchors",
   "audit_events",
   "bid_receipts",
-  // [S1.9101 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
+  // [S1.154 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
   // `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Vị từ suy ra đã thấy nó; dòng này
   // là lời khai bắt kịp. Một chữ ký sửa được thì công tắc ADR-080 không còn một chiều.
   "org_policy_signatures",
@@ -233,7 +233,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.award_kiem_mot_award_song",
   "public.award_kiem_nguoi_duyet",
   "public.bid_phai_co_bien_nhan",
-  // [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] BA hàm INSERT của bậc và chữ ký thứ hai: hình dạng `tiers`, *đã bật thì
+  // [S1.154 / S3.1a / `069_bac_va_chu_ky_chinh_sach`] BA hàm INSERT của bậc và chữ ký thứ hai: hình dạng `tiers`, *đã bật thì
   // phải có bậc* (ADR-080), phân tách nhiệm vụ của người ký (ADR-082 ⑺). Chỉ gắn INSERT ⇒ không thể là
   // hàm canh; một hàng HỢP LỆ đi qua cả ba — `dungKichBan()` chèn phiên bản 2 có bậc rồi ký nó.
   "public.chinh_sach_da_bat_thi_phai_co_bac",
@@ -270,7 +270,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.mfa_credentials_xoa_can_yeu_cau",
   "public.mfa_reset_kiem_chuyen_trang_thai",
   "public.mfa_reset_kiem_quyen",
-  // [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: từ chối CÓ ĐIỀU KIỆN — chỉ khi
+  // [S1.154 / S3.1a / `069_bac_va_chu_ky_chinh_sach`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: từ chối CÓ ĐIỀU KIỆN — chỉ khi
   // ngân sách ghim một phiên bản có bậc CHƯA KÝ. Câu chèn và câu sửa ngân sách của `dungKichBan()` ghim
   // phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
   "public.ngan_sach_khong_ghim_ban_chua_ky",
@@ -894,7 +894,7 @@ const TP_CHINH_SACH_KICH_BAN = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]'
 const TP_HANG_KICH_BAN = '[{"ma":"gia","tien":"100.00"}]';
 
 /**
- * [S1.9101 / S3.1a] Bậc của phiên bản 2 trong kịch bản: một bậc thường từ 0 — đủ mười khoá, trao thầu một chữ ký của
+ * [S1.154 / S3.1a] Bậc của phiên bản 2 trong kịch bản: một bậc thường từ 0 — đủ mười khoá, trao thầu một chữ ký của
  * DIRECTOR (vai giữ `po.approve`, điều `chinh_sach_kiem_bac` đòi) — và bậc đấu thầu chính thức ở cuối, chỉ hai khoá.
  */
 const BAC_KICH_BAN =
@@ -1656,7 +1656,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "rfq_awards",
   );
 
-  // ---- [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] Bậc và chữ ký thứ hai của phiên bản chính sách ------------------------
+  // ---- [S1.154 / S3.1a / `069_bac_va_chu_ky_chinh_sach`] Bậc và chữ ký thứ hai của phiên bản chính sách ------------------------
   // Hai bộ ba mới trên `org_policy_signatures`/INSERT: `chinh_sach_kiem_nguoi_ky` (hàm MỚI) và
   // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai hàm INSERT mới của `org_procurement_policies` và
   // `ngan_sach_khong_ghim_ban_chua_ky` trên `rfq_budgets` đã có nhân chứng ở các câu chính sách/ngân sách

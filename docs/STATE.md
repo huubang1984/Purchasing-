@@ -13,8 +13,8 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-26 / S1.9101] S3.1a — BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN
-CHỖ ĐỌC.** Phần đầu trong bốn phần của S3.1 (spec S3 §9). Migration `9501_bac_va_chu_ky_chinh_sach`: bậc là mảng `jsonb`
+**[2026-09-26 / S1.154] S3.1a — BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN
+CHỖ ĐỌC.** Phần đầu trong bốn phần của S3.1 (spec S3 §9). Migration `069_bac_va_chu_ky_chinh_sach`: bậc là mảng `jsonb`
 trên hàng chính sách, một trigger giữ hình dạng khi chèn, hai cột mức chính sách; bảng chữ ký chỉ-ghi-thêm
 `org_policy_signatures` — người ký khác người tạo, giữ `policy.manage`, ký bằng phiên của chính mình, chỉ phiên bản có bậc,
 mỗi phiên bản một chữ ký; `to_chuc_da_bat_s3(org)` là công tắc, và từ lúc bật CSDL từ chối phiên bản không bậc. Đo lúc làm:
@@ -24,7 +24,7 @@ hiệu lực có bậc* đúng bằng cấu tạo, chỉ ký được phiên b�
 — ba đột biến cho ra tổ chức đã bật mà phiên bản hiệu lực không bậc. Ngân sách không ghim được phiên bản có bậc chưa ký.
 `pnpm cap-so` nay nhận tên migration số tạm không đuôi. Chưa có route, màn hình, K1 hay ngân sách bắt buộc — đó là
 S3.1b–d; không thứ gì đọc bậc, nên mọi tổ chức vẫn chạy như MVP1. Không ADR mới, không khoản nợ mới. Biên bản:
-`evidence/security-reviews.md` §S1.9101.
+`evidence/security-reviews.md` §S1.154.
 
 **[2026-09-26 / S1.153] S3.0 KHÉP — DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI
 ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`.** Đo trên `master` `fa8d4ea`: đúng mười chỗ ghim dải là regex có hiệu lực —

@@ -12377,10 +12377,10 @@ Không cấp ADR hay migration nào.
 
 ---
 
-# §S1.9101 — S3.1a: BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN CHỖ ĐỌC
+# §S1.154 — S3.1a: BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN CHỖ ĐỌC
 
 **Rổ và mảnh (ADR-043 ⒞): không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080.** Không khoản nợ nào
-vào hay ra. Một migration (`9501_bac_va_chu_ky_chinh_sach`), không ADR mới. Nhánh khởi lại từ `master` `9b3cf8d` sau khi
+vào hay ra. Một migration (`069_bac_va_chu_ky_chinh_sach`), không ADR mới. Nhánh khởi lại từ `master` `9b3cf8d` sau khi
 #161 merge.
 
 ## 1. Vòng này là gì
@@ -12399,10 +12399,10 @@ trước S3.1b, nên tổ chức nào cũng chạy như MVP1 sau vòng này: c�
 - **Mục ghim thiu kéo hàm lùi.** Định nghĩa lại `rfq_key_material_bat_bien` mà không sửa mục ghim của `026` thì lượt sửa sau
   vòng migration dựng lại thân cũ: đo trên cụm cục bộ, thân sống sau `migrate()` là thân `026`. Mục ghim nay mang thân mới.
 - **`cap-so` bỏ sót tên migration không đuôi.** Hardening khai migration bằng tên KHÔNG `.sql` (`BANG_TENANT_KHAI`,
-  `CHECK_AN_NINH_KHAI` nối `mig || '.sql'`). Đo trên một worktree nháp: `'9501_thu_cap_so'` còn nguyên sau `cap-so`, và
+  `CHECK_AN_NINH_KHAI` nối `mig || '.sql'`). Đo trên một worktree nháp: `'069_thu_cap_so'` còn nguyên sau `cap-so`, và
   `cap-so --kiem` vẫn sạch — hardening sẽ mất dòng khai trong im lặng. Sửa trong commit riêng đầu PR (ADR-090 ② ghi chú).
 
-## 3. Lược đồ — `9501_bac_va_chu_ky_chinh_sach`
+## 3. Lược đồ — `069_bac_va_chu_ky_chinh_sach`
 
 - **Bậc** là mảng `jsonb` trên hàng chính sách, khuôn `eval_components` (`056`). `chinh_sach_kiem_bac` kiểm khi chèn: mảng
   không rỗng; mười khoá, không khoá lạ; `tu_so_tien` là số không âm vừa `numeric(18,2)`, bậc đầu từ 0, tăng ngặt; bậc đấu
@@ -12427,7 +12427,7 @@ vào `BANG_TENANT_KHAI`, ba trigger của nó vào hai mục ghim có sẵn (`ki
 
 ## 4. *Đã bật ⇒ phiên bản hiệu lực có bậc* — lỗ đọc ra khi viết test, đóng trong vòng
 
-ADR-080 nói công tắc bật khi có một phiên bản có bậc đã ký. Bản đầu của `9501` cài đúng chữ ấy, và nó để hở một trạng
+ADR-080 nói công tắc bật khi có một phiên bản có bậc đã ký. Bản đầu của `069` cài đúng chữ ấy, và nó để hở một trạng
 thái: v1 không bậc, v2 có bậc, v3 không bậc (chưa bật nên được), rồi ký v2 — tổ chức đã bật mà phiên bản hiệu lực là v3,
 không bậc. Mọi phần sau của S3 rẽ nhánh theo *đã bật* rồi đọc bậc của phiên bản hiệu lực. Cùng lớp: ký một phiên bản hẹn
 giờ trước ngày của nó, và một lần chèn v3 chạy đồng thời với lần ký v2.

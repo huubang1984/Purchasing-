@@ -3411,7 +3411,7 @@ $ham$;
          ('public', 'mfa_credentials', '006_sessions_and_mfa'),
          ('public', 'mfa_reset_requests', '040_dat_lai_totp_hai_nguoi'),
          ('public', 'org_key_pairs', '063_cap_khoa_to_chuc'),
-         ('public', 'org_policy_signatures', '9501_bac_va_chu_ky_chinh_sach'),
+         ('public', 'org_policy_signatures', '069_bac_va_chu_ky_chinh_sach'),
          ('public', 'org_procurement_policies', '014_procurement_policy'),
          ('public', 'organizations', '002_organizations_and_users'),
          ('public', 'otp_rate_limits', '010_invitations'),
@@ -6745,10 +6745,10 @@ $ham$;
       $q$quyền sở hữu hàm public.chinh_sach_phien_ban_tang_dan() và bảng public.org_procurement_policies (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.1a] Hinh dang cua bac gia tri. Mot than `RETURN NEW` cho qua mot bac 0 thieu, hai can duoi trung, hay mot vai ky trao thau khong giu po.approve — va K1 cua S3.1b se phan bac tren du lieu hong.
+    -- [S1.154 / S3.1a] Hinh dang cua bac gia tri. Mot than `RETURN NEW` cho qua mot bac 0 thieu, hai can duoi trung, hay mot vai ky trao thau khong giu po.approve — va K1 cua S3.1b se phan bac tren du lieu hong.
     ARRAY[
-      $q$hàm + trigger chinh_sach_kiem_bac (9501_bac_va_chu_ky_chinh_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_bac_va_chu_ky_chinh_sach.sql')$q$,
+      $q$hàm + trigger chinh_sach_kiem_bac (069_bac_va_chu_ky_chinh_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6935,10 +6935,10 @@ $ham$;
       $q$quyền sở hữu hàm public.chinh_sach_kiem_bac() và bảng public.org_procurement_policies (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / ADR-080] Cong tac mot chieu: to chuc da bat khong tao duoc phien ban khong bac. Than no-op lat nguoc cong tac ma khong ai thay.
+    -- [S1.154 / ADR-080] Cong tac mot chieu: to chuc da bat khong tao duoc phien ban khong bac. Than no-op lat nguoc cong tac ma khong ai thay.
     ARRAY[
-      $q$hàm + trigger chinh_sach_da_bat_thi_phai_co_bac (9501_bac_va_chu_ky_chinh_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_bac_va_chu_ky_chinh_sach.sql')$q$,
+      $q$hàm + trigger chinh_sach_da_bat_thi_phai_co_bac (069_bac_va_chu_ky_chinh_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7002,10 +7002,10 @@ $ham$;
       $q$quyền sở hữu hàm public.chinh_sach_da_bat_thi_phai_co_bac() và bảng public.org_procurement_policies (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / ADR-082 (7)] Chu ky thu hai cua phien ban chinh sach: khac nguoi tao, giu policy.manage, chi phien ban co bac. Than no-op cho mot nguoi tu ky — dung thu chu ky thu hai sinh ra de chan.
+    -- [S1.154 / ADR-082 (7)] Chu ky thu hai cua phien ban chinh sach: khac nguoi tao, giu policy.manage, chi phien ban co bac. Than no-op cho mot nguoi tu ky — dung thu chu ky thu hai sinh ra de chan.
     ARRAY[
-      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (9501_bac_va_chu_ky_chinh_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_bac_va_chu_ky_chinh_sach.sql')$q$,
+      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7103,10 +7103,10 @@ $ham$;
       $q$quyền sở hữu hàm public.chinh_sach_kiem_nguoi_ky() và bảng public.org_policy_signatures (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101] Ngan sach khong ghim duoc phien ban co bac CHUA KY — duong ghi thu nam de mot phien ban chua ky co hieu luc.
+    -- [S1.154] Ngan sach khong ghim duoc phien ban co bac CHUA KY — duong ghi thu nam de mot phien ban chua ky co hieu luc.
     ARRAY[
-      $q$hàm + trigger ngan_sach_khong_ghim_ban_chua_ky (9501_bac_va_chu_ky_chinh_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_bac_va_chu_ky_chinh_sach.sql')$q$,
+      $q$hàm + trigger ngan_sach_khong_ghim_ban_chua_ky (069_bac_va_chu_ky_chinh_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8092,8 +8092,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger rfq_key_material_bat_bien (026, thân từ 9501_bac_va_chu_ky_chinh_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_bac_va_chu_ky_chinh_sach.sql')$q$,
+      $q$hàm + trigger rfq_key_material_bat_bien (026, thân từ 069_bac_va_chu_ky_chinh_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
