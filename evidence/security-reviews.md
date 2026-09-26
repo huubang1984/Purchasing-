@@ -12369,4 +12369,8 @@ cấp ADR hay migration nào.
 - Tầng tích hợp KHÔNG chạy cục bộ: vòng này chỉ đổi hai dòng chú thích trong tệp tích hợp. Ma trận cũng không sinh lại cục
   bộ: vòng này không thêm ca mang nhãn nào và sổ chưa có hàng K, nên ma trận phải giữ nguyên từng byte. Job *Evidence pack*
   của CI chạy cả hai tầng và là phép đo điều ấy.
-- Sổ nợ không đổi: **242** khoản, **91** mở. **68** migration, **85** ADR.
+- Vòng này không thêm khoản nợ, migration hay ADR nào. Đo trên `fa8d4ea`: sổ nợ **242** khoản, **91** mở; **68** migration;
+  **85** ADR.
+- Sau khi mở PR, `master` nhận #153, #157, #158 và #159, tới S1.146 và ADR-089. Hợp vào nhánh không xung đột, và cây đã
+  hợp không có chỗ ghim `[A-HJ]` mới. Đo lại số trên mọi nhánh sống: không nhánh nào khác giữ S1.147. Cổng trên cây đã
+  hợp: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**.
