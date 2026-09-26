@@ -1,4 +1,4 @@
-// [ADR-087] Sinh `lambda/canh-dang-ky.mjs` = `src/canh-dang-ky.ts` gỡ kiểu (Node `module.stripTypeScriptTypes`, chế độ
+// [ADR-089] Sinh `lambda/canh-dang-ky.mjs` = `src/canh-dang-ky.ts` gỡ kiểu (Node `module.stripTypeScriptTypes`, chế độ
 // "strip": chỉ thay kiểu bằng khoảng trắng, giữ nguyên dòng — lỗi trên Lambda chỉ đúng dòng của tệp nguồn).
 // `pnpm canh-dang-ky:dong-goi-lambda`; `src/canh-dang-ky.test.ts` đòi tệp sinh ra trùng byte với nguồn hiện tại.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";

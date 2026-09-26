@@ -1,4 +1,4 @@
-// [ADR-084] Canh mốc neo theo từng tổ chức — logic đo trên một bucket giả, và tệp Lambda trùng byte với nguồn gỡ kiểu.
+// [ADR-086] Canh mốc neo theo từng tổ chức — logic đo trên một bucket giả, và tệp Lambda trùng byte với nguồn gỡ kiểu.
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import type { ListObjectsV2Command, ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
@@ -56,7 +56,7 @@ function bucketGia(ds: readonly DoiTuong[], trang = 1000): S3ChiDoc & { soLoiGoi
   return gia;
 }
 
-describe("[ADR-084] canh mốc neo theo từng tổ chức", () => {
+describe("[ADR-086] canh mốc neo theo từng tổ chức", () => {
   it("không tổ chức nào ⇒ rỗng, dòng tổng 0/0", async () => {
     const kq = await kiemMocNeo(bucketGia([]), BUCKET, BAY_GIO, 36);
     expect(kq).toEqual([]);

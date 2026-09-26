@@ -25,7 +25,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **Hai người** sẽ giữ KeyAdmin (nhóm `tp-key-admins`). Một người là điều kiện chặn dữ liệu thật (ADR-062).
 - [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin.
 - [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
-      khỏi hộp thư an ninh (ADR-086). Có thể trùng người, nhưng nên là hộp thư khác.
+      khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
 - [ ] Địa chỉ gửi của api và của cảnh báo (`<dia_chi_gui>@<domain>`, `<dia_chi_canh_bao>@<domain>`).
 
@@ -76,7 +76,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   Stack 60 không phụ thuộc stack 90: rule ⑸ ⑹ bắt alarm theo TÊN/TIỀN TỐ, nên alarm sinh ra sau vẫn có thư.
 - [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao` (topic `tp-canh-bao-khoa`) **và** tới từng địa chỉ
       `email_van_hanh` (topic `tp-canh-bao-van-hanh`). Địa chỉ chưa xác nhận = chưa nhận cảnh báo nào.
-      Đối chứng ⑻ (ADR-087), hai lần gọi tay Lambda đối chiếu đăng ký:
+      Đối chứng ⑻ (ADR-089), hai lần gọi tay Lambda đối chiếu đăng ký:
       `aws lambda invoke --profile tp-audit --function-name tp-canh-dang-ky out.json`, rồi đọc log
       `/aws/lambda/tp-canh-dang-ky`. **Trước** khi bấm xác nhận: mỗi địa chỉ một dòng `DANG KY HONG: cho xac nhan` (dòng ghi
       tên biến và vị trí, không ghi địa chỉ). **Sau**: dòng tổng `... 0 hong`. Alarm `tp-canh-bao-dang-ky-hong` về OK ở kỳ
@@ -153,6 +153,15 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.4 Phần còn lại
 
+- [ ] **Kiểm trước apply** (từ gốc kho; cần `terraform init` ở 6.2 và phiên SSO còn hạn):
+  ```powershell
+  pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars
+  ```
+  Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
+  `000…`; image nằm đúng kho ECR của prod và có thật; bốn secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
+  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
+  `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt.
+  Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
 - [ ] `terraform plan -var-file prod.tfvars -out plan.tfplan` — đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
       policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. `terraform apply plan.tfplan` (chờ ACM xác minh).
 - [ ] Dự kiến: vài thư ⑹ `…khong-con-target-khoe` cho `api` (0 task) — đúng, vì api chưa chạy; về OK ở 6.6.
@@ -166,7 +175,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.6 Bật api
 
-- [ ] `so_ban_api = 1` ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
+- [ ] `so_ban_api = 1` ⇒ `pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars` (hết `[VANG] so_ban_api`) ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
 - [ ] Thư ⑹ trở về OK cho `api`.
 
 ### 6.7 Neo khoá biên nhận và kiểm công khai
@@ -196,7 +205,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 8. Tổ chức đầu tiên và worker
 
 - [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm.
-- [ ] **8.2** `so_ban_worker = 1` ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
+- [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với `xuat=0 kiem=0`; alarm ⑷ trở về OK (có thư).
 

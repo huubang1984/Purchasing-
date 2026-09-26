@@ -1,0 +1,7 @@
+{
+  "name": "@trustprocure/kiem-truoc-apply",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "Kiem prod.tfvars cua stack 90 va tai khoan prod (chi doc) TRUOC terraform plan/apply: gia tri giu cho, secret, image, SES. Chay tay; thoat 1 khi co muc DO."
+}

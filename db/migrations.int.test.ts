@@ -1522,7 +1522,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
     { ham: "award_kiem_de_xuat", migration: "064_lich_su_dieu_phoi.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
-    { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
+    // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
+    // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
+    { ham: "award_kiem_mot_award_song", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "066_han_nop_mang_gio_phan_xu.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
@@ -1561,7 +1564,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.140 / khoản 240] `067` định nghĩa lại thân (khối "điều kiện để mở" chỉ chạy ở CẠNH vào
     // OPEN), nên con trỏ dời sang `067` theo cùng quy tắc *migration CUỐI CÙNG*. Thân `067` được
     // TRÍCH từ `061` bằng script rồi đổi đúng hai chỗ — bài học của chính khối chú thích ngay trên.
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "067_dem_chu_ky_o_canh_mo_goi.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    // [S1.142 / khoản 241] `068` định nghĩa lại thân lần nữa (phép đếm chữ ký ở cạnh vào OPEN chạy cho
+    // MỌI gói — sàn một chữ ký), nên con trỏ dời sang `068`. Thân `068` được TRÍCH từ `067` bằng script
+    // rồi đổi đúng một chỗ.
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
@@ -3202,6 +3208,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_san_mot_chu_ky.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7612,6 +7619,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_san_mot_chu_ky.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7899,6 +7907,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_san_mot_chu_ky.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

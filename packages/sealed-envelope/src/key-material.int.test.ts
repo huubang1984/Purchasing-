@@ -167,7 +167,30 @@ async function taoRfqNhap(orgId: string, userId: string, sessionId: string): Pro
   return rfqId;
 }
 
-/** ... và đưa nó sang PENDING_APPROVAL, tức đúng ngưỡng cửa mà C5 nói tới. */
+/**
+ * [S1.142 / khoản 241] Sàn một chữ ký (`068`): mọi gói cần một chữ ký của người KHÁC người tạo, trên
+ * nội dung hiện tại, trước khi mở. Mỗi tổ chức một người ký riêng, không vai trò:
+ * `rfq_kiem_nguoi_duyet` chỉ đòi người ký khác người tạo và phiên thuộc về chính họ.
+ */
+const NGUOI_KY = new Map<string, { readonly u: string; readonly s: string }>();
+async function kyMotChuKy(orgId: string, rfqId: string): Promise<void> {
+  let k = NGUOI_KY.get(orgId);
+  if (k === undefined) {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi ky') RETURNING id",
+      [orgId, `nguoi-ky-${orgId}@vidu.vn`],
+    );
+    const u = rows[0]?.id ?? "";
+    k = { u, s: await taoPhien(orgId, u) };
+    NGUOI_KY.set(orgId, k);
+  }
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [orgId, rfqId, k.u, k.s],
+  );
+}
+
+/** ... và đưa nó sang PENDING_APPROVAL, tức đúng ngưỡng cửa mà C5 nói tới — kèm chữ ký của sàn. */
 async function taoRfqChoDuyet(orgId: string, userId: string, sessionId: string): Promise<string> {
   const rfqId = await taoRfqNhap(orgId, userId, sessionId);
   await db.pool.query(
@@ -175,6 +198,7 @@ async function taoRfqChoDuyet(orgId: string, userId: string, sessionId: string):
       "submitted_by_session_id = $3 WHERE id = $1",
     [rfqId, userId, sessionId],
   );
+  await kyMotChuKy(orgId, rfqId);
   return rfqId;
 }
 

@@ -1,5 +1,5 @@
 // ==============================================================================================
-// tools/canh-dang-ky/src/canh-dang-ky.ts — [ADR-087] MỖI ĐỊA CHỈ NHẬN CẢNH BÁO PHẢI CÓ MỘT ĐĂNG KÝ ĐÃ XÁC NHẬN
+// tools/canh-dang-ky/src/canh-dang-ky.ts — [ADR-089] MỖI ĐỊA CHỈ NHẬN CẢNH BÁO PHẢI CÓ MỘT ĐĂNG KÝ ĐÃ XÁC NHẬN
 //
 // Lambda `tp-canh-dang-ky` (stack 60, tài khoản audit) chạy mỗi 6 giờ, CHỈ ĐỌC hai topic cảnh báo
 // (`tp-canh-bao-khoa`, `tp-canh-bao-van-hanh`) và đối chiếu với danh sách Terraform khai (`email_canh_bao`,

@@ -7,11 +7,11 @@
 #   ⑸ [ADR-076] Một truy vấn DNS ngoài danh sách được phép trong VPC prod (DNS Firewall của stack 90 chặn/cảnh báo) —
 #      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
 #   ⑹ [ADR-077] Vận hành: mọi alarm prod mang tiền tố `tp-van-hanh-` (ALB, ECS, RDS — stack 90) vào ALARM hoặc trở về
-#      OK ⇒ chuyển sang audit ⇒ email. [ADR-086] Đi topic RIÊNG `tp-canh-bao-van-hanh` tới `email_van_hanh`: thư vận hành
+#      OK ⇒ chuyển sang audit ⇒ email. [ADR-088] Đi topic RIÊNG `tp-canh-bao-van-hanh` tới `email_van_hanh`: thư vận hành
 #      nhiều và lặp (ALARM rồi OK), không được làm chìm thư khoá/neo của topic `tp-canh-bao-khoa`.
-#   ⑺ [ADR-084] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
+#   ⑺ [ADR-086] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
-#   ⑻ [ADR-087] Đường thư: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, báo địa chỉ trong `email_canh_bao`/`email_van_hanh`
+#   ⑻ [ADR-089] Đường thư: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, báo địa chỉ trong `email_canh_bao`/`email_van_hanh`
 #      chưa xác nhận hay mất đăng ký, và đăng ký lạ — gửi tới CẢ HAI topic.
 #
 # ⑴
@@ -42,14 +42,14 @@
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
 # (CloudTrail tổ chức phải bật: sự kiện "AWS API Call via CloudTrail" đi ra từ đó).
 #
-# Biến bắt buộc `email_canh_bao` (⑴–⑸, ⑺) và `email_van_hanh` (⑹, ADR-086) — KHÔNG commit giá trị; truyền bằng -var hay
+# Biến bắt buộc `email_canh_bao` (⑴–⑸, ⑺) và `email_van_hanh` (⑹, ADR-088) — KHÔNG commit giá trị; truyền bằng -var hay
 # tệp *.tfvars ngoài git. AWS gửi thư xác nhận tới từng địa chỉ; chưa bấm xác nhận thì địa chỉ ấy chưa nhận gì.
 
 terraform {
   required_version = ">= 1.10"
   required_providers {
     aws = { source = "hashicorp/aws", version = "~> 6.0" }
-    # [ADR-084] Đóng gói tệp Lambda ⑺ thành zip lúc plan.
+    # [ADR-086] Đóng gói tệp Lambda ⑺ thành zip lúc plan.
     archive = { source = "hashicorp/archive", version = "~> 2.7" }
   }
   backend "s3" {
@@ -74,7 +74,7 @@ variable "email_canh_bao" {
 }
 
 variable "email_van_hanh" {
-  description = "[ADR-086] Người nhận thư VẬN HÀNH ⑹ (alarm tp-van-hanh-* của prod, ALARM và OK) — tách khỏi email_canh_bao."
+  description = "[ADR-088] Người nhận thư VẬN HÀNH ⑹ (alarm tp-van-hanh-* của prod, ALARM và OK) — tách khỏi email_canh_bao."
   type        = list(string)
   validation {
     condition     = length(var.email_van_hanh) > 0 && alltrue([for e in var.email_van_hanh : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
@@ -532,7 +532,7 @@ resource "aws_cloudwatch_event_rule" "van_hanh_audit" {
   event_pattern = local.mau_van_hanh
 }
 
-# [ADR-086] Topic riêng cho ⑹. Cùng lý do không mã hoá bằng aws/sns như `tp-canh-bao-khoa`; chỉ rule ⑹ publish được.
+# [ADR-088] Topic riêng cho ⑹. Cùng lý do không mã hoá bằng aws/sns như `tp-canh-bao-khoa`; chỉ rule ⑹ publish được.
 resource "aws_sns_topic" "van_hanh" {
   provider = aws.audit
   name     = "tp-canh-bao-van-hanh"
@@ -553,7 +553,7 @@ resource "aws_sns_topic_policy" "van_hanh" {
         Condition = { ArnEquals = { "aws:SourceArn" = [aws_cloudwatch_event_rule.van_hanh_audit.arn] } }
       },
       {
-        # [ADR-087] Thư ⑻ (đăng ký hỏng) tới CẢ hai hộp — hộp vận hành cũng phải nhận khi hộp an ninh là hộp hỏng.
+        # [ADR-089] Thư ⑻ (đăng ký hỏng) tới CẢ hai hộp — hộp vận hành cũng phải nhận khi hộp an ninh là hộp hỏng.
         Sid       = "CloudWatchGuiCanhBaoDangKy"
         Effect    = "Allow"
         Principal = { Service = "cloudwatch.amazonaws.com" }
@@ -617,7 +617,7 @@ resource "aws_cloudwatch_event_target" "van_hanh_prod" {
 }
 
 # ---------------------------------------------------------------------------------------------
-# ⑺ [ADR-084] AUDIT — mốc neo theo từng tổ chức
+# ⑺ [ADR-086] AUDIT — mốc neo theo từng tổ chức
 # ---------------------------------------------------------------------------------------------
 # ⑷ đếm TỔNG: một tổ chức ngừng được neo trong khi các tổ chức khác vẫn được thì ⑷ im. Job `lich` thoát 1 khi một tổ
 # chức XUẤT hỏng (⑶), nhưng không khi tổ chức ấy vắng khỏi danh sách — hàm liệt kê ở prod bị sửa, hay một lỗi làm rơi
@@ -687,7 +687,7 @@ resource "aws_iam_role_policy" "canh_moc_neo" {
 resource "aws_lambda_function" "canh_moc_neo" {
   provider                       = aws.audit
   function_name                  = local.ten_canh_moc_neo
-  description                    = "ADR-084: to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc moi"
+  description                    = "ADR-086: to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc moi"
   role                           = aws_iam_role.canh_moc_neo.arn
   runtime                        = "nodejs22.x"
   handler                        = "canh-moc-neo.handler"
@@ -708,7 +708,7 @@ resource "aws_lambda_function" "canh_moc_neo" {
 resource "aws_cloudwatch_event_rule" "canh_moc_neo" {
   provider            = aws.audit
   name                = local.ten_canh_moc_neo
-  description         = "Chay Lambda canh moc neo theo to chuc moi 6 gio (ADR-084)"
+  description         = "Chay Lambda canh moc neo theo to chuc moi 6 gio (ADR-086)"
   schedule_expression = "rate(6 hours)"
 }
 
@@ -744,7 +744,7 @@ resource "aws_cloudwatch_log_metric_filter" "moc_neo_to_chuc" {
 resource "aws_cloudwatch_metric_alarm" "moc_neo_to_chuc" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-thieu-moc-neo-to-chuc"
-  alarm_description   = "[TrustProcure] (ADR-084) Co to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc neo moi. Doc log /aws/lambda/${local.ten_canh_moc_neo} (dong THIEU MOC NEO neu org), roi /tp/neo o prod: to chuc ay co trong danh sach cua lich khong? Vang mat ma job thoat 0 la dau hieu ham liet ke bi sua."
+  alarm_description   = "[TrustProcure] (ADR-086) Co to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc neo moi. Doc log /aws/lambda/${local.ten_canh_moc_neo} (dong THIEU MOC NEO neu org), roi /tp/neo o prod: to chuc ay co trong danh sach cua lich khong? Vang mat ma job thoat 0 la dau hieu ham liet ke bi sua."
   namespace           = "TrustProcure/Neo"
   metric_name         = "ToChucThieuMocNeo"
   statistic           = "Sum"
@@ -760,7 +760,7 @@ resource "aws_cloudwatch_metric_alarm" "moc_neo_to_chuc" {
 resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_loi" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-moc-neo-loi"
-  alarm_description   = "[TrustProcure] (ADR-084) Lambda ${local.ten_canh_moc_neo} LOI — phep canh moc neo theo to chuc dang cam. Doc /aws/lambda/${local.ten_canh_moc_neo}."
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} LOI — phep canh moc neo theo to chuc dang cam. Doc /aws/lambda/${local.ten_canh_moc_neo}."
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }
@@ -777,7 +777,7 @@ resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_loi" {
 resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_khong_chay" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-moc-neo-khong-chay"
-  alarm_description   = "[TrustProcure] (ADR-084) Lambda ${local.ten_canh_moc_neo} khong chay trong 12 gio — lich tp-canh-moc-neo bi tat hay go."
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} khong chay trong 12 gio — lich tp-canh-moc-neo bi tat hay go."
   namespace           = "AWS/Lambda"
   metric_name         = "Invocations"
   dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }
@@ -792,7 +792,7 @@ resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_khong_chay" {
 }
 
 # ---------------------------------------------------------------------------------------------
-# ⑻ [ADR-087] AUDIT — mỗi địa chỉ nhận cảnh báo có một đăng ký ĐÃ xác nhận
+# ⑻ [ADR-089] AUDIT — mỗi địa chỉ nhận cảnh báo có một đăng ký ĐÃ xác nhận
 # ---------------------------------------------------------------------------------------------
 # Cả đường thư ⑴–⑺ dừng ở một đăng ký email mà người nhận phải BẤM xác nhận; chưa bấm, SNS tự xoá khi quá hạn, hay người
 # nhận bấm "unsubscribe" — thư đi vào hư không mà apply vẫn xanh. Lambda này đọc đăng ký của hai topic và đối chiếu với
@@ -847,7 +847,7 @@ resource "aws_iam_role_policy" "canh_dang_ky" {
 resource "aws_lambda_function" "canh_dang_ky" {
   provider                       = aws.audit
   function_name                  = local.ten_canh_dang_ky
-  description                    = "ADR-087: moi dia chi nhan canh bao co dang ky SNS da xac nhan"
+  description                    = "ADR-089: moi dia chi nhan canh bao co dang ky SNS da xac nhan"
   role                           = aws_iam_role.canh_dang_ky.arn
   runtime                        = "nodejs22.x"
   handler                        = "canh-dang-ky.handler"
@@ -870,7 +870,7 @@ resource "aws_lambda_function" "canh_dang_ky" {
 resource "aws_cloudwatch_event_rule" "canh_dang_ky" {
   provider            = aws.audit
   name                = local.ten_canh_dang_ky
-  description         = "Chay Lambda canh dang ky SNS moi 6 gio (ADR-087)"
+  description         = "Chay Lambda canh dang ky SNS moi 6 gio (ADR-089)"
   schedule_expression = "rate(6 hours)"
 }
 
@@ -906,7 +906,7 @@ resource "aws_cloudwatch_log_metric_filter" "dang_ky_hong" {
 resource "aws_cloudwatch_metric_alarm" "dang_ky_hong" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-dang-ky-hong"
-  alarm_description   = "[TrustProcure] (ADR-087) Mot dia chi nhan canh bao chua xac nhan, mat dang ky, hoac co dang ky la tren topic canh bao. Doc /aws/lambda/${local.ten_canh_dang_ky} (dong DANG KY HONG: bien va vi tri), roi bam xac nhan trong thu AWS hoac apply lai stack 60 de tao lai dang ky."
+  alarm_description   = "[TrustProcure] (ADR-089) Mot dia chi nhan canh bao chua xac nhan, mat dang ky, hoac co dang ky la tren topic canh bao. Doc /aws/lambda/${local.ten_canh_dang_ky} (dong DANG KY HONG: bien va vi tri), roi bam xac nhan trong thu AWS hoac apply lai stack 60 de tao lai dang ky."
   namespace           = "TrustProcure/CanhBao"
   metric_name         = "DangKyHong"
   statistic           = "Sum"
@@ -922,7 +922,7 @@ resource "aws_cloudwatch_metric_alarm" "dang_ky_hong" {
 resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_loi" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-dang-ky-loi"
-  alarm_description   = "[TrustProcure] (ADR-087) Lambda ${local.ten_canh_dang_ky} LOI — phep canh dang ky SNS dang cam. Doc /aws/lambda/${local.ten_canh_dang_ky}."
+  alarm_description   = "[TrustProcure] (ADR-089) Lambda ${local.ten_canh_dang_ky} LOI — phep canh dang ky SNS dang cam. Doc /aws/lambda/${local.ten_canh_dang_ky}."
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.canh_dang_ky.function_name }
@@ -939,7 +939,7 @@ resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_loi" {
 resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_khong_chay" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-dang-ky-khong-chay"
-  alarm_description   = "[TrustProcure] (ADR-087) Lambda ${local.ten_canh_dang_ky} khong chay trong 12 gio — lich tp-canh-dang-ky bi tat hay go."
+  alarm_description   = "[TrustProcure] (ADR-089) Lambda ${local.ten_canh_dang_ky} khong chay trong 12 gio — lich tp-canh-dang-ky bi tat hay go."
   namespace           = "AWS/Lambda"
   metric_name         = "Invocations"
   dimensions          = { FunctionName = aws_lambda_function.canh_dang_ky.function_name }

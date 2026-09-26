@@ -1,4 +1,4 @@
-// [ADR-087] Canh đăng ký SNS — đối chiếu trên một SNS giả, và tệp Lambda trùng byte với nguồn gỡ kiểu.
+// [ADR-089] Canh đăng ký SNS — đối chiếu trên một SNS giả, và tệp Lambda trùng byte với nguồn gỡ kiểu.
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import type { ListSubscriptionsByTopicCommand, ListSubscriptionsByTopicCommandOutput } from "@aws-sdk/client-sns";
@@ -38,7 +38,7 @@ function snsGia(ds: readonly DangKyGia[], trang = 100): SnsChiDoc {
 
 const dk = (diem: string, daXacNhan = true, giaoThuc = "email"): DangKy => ({ giaoThuc, diem, daXacNhan });
 
-describe("[ADR-087] đối chiếu đăng ký với danh sách Terraform", () => {
+describe("[ADR-089] đối chiếu đăng ký với danh sách Terraform", () => {
   it("mọi địa chỉ đã xác nhận ⇒ không hỏng; so địa chỉ không phân biệt hoa thường", () => {
     const kq = doiChieu({ topic: KHOA, bien: "email_canh_bao", nhan: ["An@Thu-Mua.vn"] }, [dk("an@thu-mua.vn")]);
     expect(kq.hong).toEqual([]);

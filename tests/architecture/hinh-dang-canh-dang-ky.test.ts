@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [ADR-087] CANH ĐĂNG KÝ SNS — LAMBDA Ở AUDIT ĐỐI CHIẾU NGƯỜI NHẬN, BA ALARM TỚI CẢ HAI TOPIC
+// [ADR-089] CANH ĐĂNG KÝ SNS — LAMBDA Ở AUDIT ĐỐI CHIẾU NGƯỜI NHẬN, BA ALARM TỚI CẢ HAI TOPIC
 //
 // Phép canh này chỉ có giá trị khi:
 //   ⑴ Lambda chỉ LIỆT KÊ đăng ký, đúng trên hai topic cảnh báo — không Publish, không Subscribe/Unsubscribe;
@@ -26,7 +26,7 @@ function khoi(loai: string, ten: string): string {
 
 const ALARM = ["dang_ky_hong", "canh_dang_ky_loi", "canh_dang_ky_khong_chay"] as const;
 
-describe("[ADR-087] canh đăng ký SNS", () => {
+describe("[ADR-089] canh đăng ký SNS", () => {
   it("⑴ Lambda chỉ có sns:ListSubscriptionsByTopic trên hai topic cảnh báo, và ghi log của chính nó", () => {
     const cs = khoi("aws_iam_role_policy", "canh_dang_ky");
     const hanhDong = [...cs.matchAll(/Action += (\[[^\]]*\]|"[^"]+")/gu)].map((m) => m[1]);

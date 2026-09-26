@@ -22,7 +22,7 @@ import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
-import { addRfqItem, createRfq, extendRfqDeadline, openRfq, submitRfqForApproval } from "./rfq.js";
+import { addRfqItem, approveRfq, createRfq, extendRfqDeadline, openRfq, submitRfqForApproval } from "./rfq.js";
 
 const trangThai = vi.hoisted(() => ({
   dangDem: false,
@@ -64,6 +64,8 @@ let apiPool: pg.Pool;
 let orgA = "";
 let u1 = "";
 let s1 = "";
+// [S1.142 / khoản 241] Người ký của sàn một chữ ký (`068`) — khác người tạo gói.
+let s2 = "";
 
 beforeAll(async () => {
   db = await startPostgres();
@@ -75,6 +77,13 @@ beforeAll(async () => {
     await db.pool.query<{ id: string }>(
       "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
       [orgA, u1, randomBytes(32)],
+    )
+  ).rows[0]!.id;
+  const u2 = (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'duyet-k123@vidu.vn', 'Nguoi ky') RETURNING id", [orgA])).rows[0]!.id;
+  s2 = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgA, u2, randomBytes(32)],
     )
   ).rows[0]!.id;
   apiPool = db.poolAs("app_api");
@@ -94,6 +103,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 });
       await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });
@@ -164,6 +174,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 });
       await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });

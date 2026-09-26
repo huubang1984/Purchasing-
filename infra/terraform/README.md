@@ -17,7 +17,7 @@ bí mật, biến GitHub, các đối chứng dương và những thư cảnh b�
 | `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-086); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-084); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-087) (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-088); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-086); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-089) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
@@ -193,7 +193,7 @@ tồn đọng — alarm ấy im (thiếu dữ liệu = bình thường).
 khoẻ cho từng target group (api, web, public-keys), tỉ lệ 5xx của ALB > 5%, p95 của api > 2 giây, service chạy thiếu
 task (Container Insights; service `so_ban_* = 0` không có alarm), RDS CPU > 80%, dung lượng trống < 2 GB, > 150 kết nối.
 Stack 60 ⑹ chuyển mọi alarm mang tiền tố ấy — cả lúc vào ALARM lẫn lúc trở về OK — sang audit ⇒ email tới hộp thư VẬN HÀNH
-(`email_van_hanh`, topic riêng `tp-canh-bao-van-hanh` — ADR-086), không tới `email_canh_bao`. Stack 60 bắt theo TIỀN TỐ, không phụ
+(`email_van_hanh`, topic riêng `tp-canh-bao-van-hanh` — ADR-088), không tới `email_canh_bao`. Stack 60 bắt theo TIỀN TỐ, không phụ
 thuộc 90. Lần apply đầu, trước khi service có task: "không còn target khoẻ"/"thiếu task" vào ALARM rồi trở về OK — hai thư dự
 kiến mỗi service. Đổi `so_ban_worker` từ 0 lên 1 (ADR-040) tự thêm alarm thiếu task của worker.
 
@@ -227,6 +227,10 @@ terraform apply plan.tfplan                                             # chờ 
 và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys, neo }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
+
+**Trước mỗi plan bước B** (từ gốc kho): `pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars` — đọc biến
+hiệu lực qua `terraform console`, rồi hỏi tài khoản prod (chỉ đọc): giá trị giữ chỗ, image có trong ECR, secret có giá
+trị, domain SES đã xác minh. Có `[DO]` ⇒ thoát 1, không plan (ADR-087; `docs/APPLY-LAN-DAU.md` 6.4).
 
 **3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
 
@@ -292,7 +296,7 @@ ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `ne
   **[ADR-073]** Lịch không chạy thì không task nào dừng ⇒ ⑶ im; cảnh báo ⑷ của stack 60 báo khi **36 giờ** không có
   đối tượng mới nào dưới `so-kiem-toan/` (S3 request metrics + CloudWatch alarm, cùng ở audit). Lần apply đầu: alarm vào
   ALARM cho tới lượt ghi đầu tiên — một thư dự kiến.
-  **[ADR-084]** ⑷ đếm tổng; ⑺ đếm **từng tổ chức**: Lambda `tp-canh-moc-neo` ở audit (stack 60) chạy mỗi 6 giờ, chỉ
+  **[ADR-086]** ⑷ đếm tổng; ⑺ đếm **từng tổ chức**: Lambda `tp-canh-moc-neo` ở audit (stack 60) chạy mỗi 6 giờ, chỉ
   `s3:ListBucket` dưới `so-kiem-toan/`, báo tổ chức từng được neo mà 36 giờ không có mốc mới (theo `LastModified`, không theo
   tên khoá) — ca một tổ chức vắng khỏi danh sách của `lich` mà job vẫn thoát 0. Thêm hai alarm: Lambda lỗi, Lambda không chạy
   12 giờ. Mã: `tools/neo-so-kiem-toan/src/canh-moc-neo.ts`; tệp Lambda `lambda/canh-moc-neo.mjs` sinh bằng
@@ -371,7 +375,7 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
 3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
 
 
-## Đường thư cảnh báo tự canh — Lambda `tp-canh-dang-ky` (ADR-087)
+## Đường thư cảnh báo tự canh — Lambda `tp-canh-dang-ky` (ADR-089)
 
 Mọi cảnh báo dừng ở một đăng ký email mà người nhận phải bấm xác nhận. Chưa bấm, SNS tự xoá khi quá hạn, hay người nhận bấm
 "unsubscribe" ⇒ thư đi vào hư không mà `apply` vẫn xanh. Stack 60 ⑻: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, chỉ có
@@ -388,7 +392,7 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
   Không khoá KMS nào tránh được điều này; giảm nhẹ là cảnh báo EventBridge/CloudTrail trên
   `PutKeyPolicy` và có **người thứ hai** giữ KeyAdmin (ADR-062, điều kiện trước dữ liệu thật).
   Cảnh báo ấy là stack `60-canh-bao`: email tới `email_canh_bao` cho mọi `PutKeyPolicy`, thành
-  công hay bị từ chối. Truyền địa chỉ (cùng `email_van_hanh`, ADR-086) bằng tệp `canh-bao.tfvars` không commit (APPLY-LAN-DAU 3.1), rồi **bấm xác
+  công hay bị từ chối. Truyền địa chỉ (cùng `email_van_hanh`, ADR-088) bằng tệp `canh-bao.tfvars` không commit (APPLY-LAN-DAU 3.1), rồi **bấm xác
   nhận** thư AWS gửi tới — chưa xác nhận thì chưa có cảnh báo. Người nhận không nên chỉ là người giữ
   KeyAdmin. Kiểm sau apply (đối chứng dương, bắt buộc): bằng KeyAdmin, `aws kms get-key-policy`
   rồi `aws kms put-key-policy` lại ĐÚNG policy ấy trên một khoá của prod ⇒ phải có thư trong vài
