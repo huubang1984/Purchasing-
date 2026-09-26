@@ -15,13 +15,16 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
+import { verifyAuditChain } from "@trustprocure/audit";
 import { LOGIN_MAX_TOKENS_PER_WINDOW, MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU, counterForTime, deriveTotpCode, issueLoginToken } from "@trustprocure/identity";
 import { OTP_RATE_WINDOW_SECONDS } from "@trustprocure/invitation";
+import { createRfq } from "@trustprocure/rfq";
+import { createSupplier } from "@trustprocure/supplier";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
-import type { Route } from "./route-types.js";
+import { agentGoiDuoc, type Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER, LOGIN_TOTP_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
@@ -1455,5 +1458,224 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
 
     // ⑶ Và điều trần ấy tồn tại để bảo vệ vẫn đúng.
     expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+  });
+
+  // ===============================================================================================
+  // [S1.9101 / khoản 142 · 144 / ADR-9201] NHÁNH CHO QUA: MỖI LẦN ĐỌC CỦA AGENT LÀ MỘT HÀNG SỔ, CÙNG
+  // GIAO DỊCH VỚI CHÍNH LẦN ĐỌC — VÀ MỘT TRẦN THEO PHIÊN ĐỨNG TRƯỚC NÓ.
+  //
+  // Trước vòng này, bảy route ĐỌC mà `agentGoiDuoc` cho qua không để lại một dòng nào trong
+  // `audit_events` — đo trên mã cũ: vế ⒜ ra 0 hàng `AGENT_READ` ở mọi route. Bốn vế:
+  //   ⒜ mỗi route trong bảy: phiên agent ⇒ ĐÚNG MỘT hàng, mang MẪU route; phiên NGƯỜI ⇒ KHÔNG hàng
+  //      nào (lần đọc của người vẫn không ghi sổ, như trước);
+  //   ⒝ fail-closed: khoá ghi sổ của tổ chức bị giữ ⇒ lần ghi gãy 55P03 ở 2 s ⇒ 500 thân cố định,
+  //      KHÔNG một byte dữ liệu và không hàng nào;
+  //   ⒞ chuỗi sổ vẫn liền sau các lần đọc ấy (bộ kiểm chứng thật);
+  //   ⒟ vượt trần theo phiên ⇒ 429, không hàng sổ thêm; phiên agent KHÁC và phiên người không bị
+  //      ảnh hưởng.
+  // ===============================================================================================
+  describe("[S1.9101 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch", () => {
+    /** Bảy route ĐỌC mà phiên agent gọi được, dựng trên dữ liệu THẬT để handler trả 200. */
+    interface CanhDoc {
+      readonly a: { cookie: string; cookieNguoi: string };
+      readonly sessionAgent: string;
+      readonly duong: readonly { readonly mau: string; readonly that: string }[];
+      readonly tenNhaCungCap: string;
+    }
+
+    async function demAgentRead(): Promise<number> {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'AGENT_READ'",
+        [orgA],
+      );
+      return Number(rows[0]?.n ?? "-1");
+    }
+
+    async function dungCanh(email: string): Promise<CanhDoc> {
+      const a = await phienAgent(email);
+      const meNguoi = await goi("GET", "/me", { cookie: a.cookieNguoi });
+      expect(meNguoi.status, meNguoi.text).toBe(200);
+      const { userId, sessionId: sessionNguoi } = meNguoi.body as { userId: string; sessionId: string };
+      const meAgent = await goi("GET", "/me", { cookie: a.cookie });
+      const sessionAgent = (meAgent.body as { sessionId: string }).sessionId;
+      const tenNhaCungCap = `NCC bi mat ${randomBytes(4).toString("hex")}`;
+      const { ncc, rfq } = await withTenant(apiPool, orgA, async (c) => ({
+        ncc: await createSupplier(c, orgA, { legalName: tenNhaCungCap, actorSessionId: sessionNguoi }),
+        rfq: await createRfq(c, orgA, { title: "goi thau doc boi agent", createdBySessionId: sessionNguoi }),
+      }));
+      // Yêu cầu mở thầu đòi gói ĐÃ ĐÓNG (trigger `unseal_requests_kiem_rfq_da_dong`). Fixture tắt
+      // đúng trigger MÁY TRẠNG THÁI của `rfq_packages` trong MỘT giao dịch rồi trả nó về đúng chế
+      // độ cũ (`tgenabled`) — cùng khuôn `bidding.int.test.ts`; trigger đang được đo ở vòng này
+      // không nằm trên bảng ấy.
+      const g = await db.pool.connect();
+      let unsealId = "";
+      try {
+        await g.query("BEGIN");
+        const cheDo = (
+          await g.query<{ tgenabled: string }>(
+            "SELECT tgenabled FROM pg_trigger WHERE tgname = 'rfq_packages_kiem_chuyen_trang_thai' AND tgrelid = 'public.rfq_packages'::regclass",
+          )
+        ).rows[0]?.tgenabled;
+        await g.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+        await g.query(
+          "UPDATE rfq_packages SET status = 'CLOSED', opened_at = now(), deadline_at = now() + interval '1 day', " +
+            "closed_at = now(), early_close_reason = 'dong som de do', " +
+            "closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+          [rfq.id, userId, sessionNguoi],
+        );
+        await g.query(
+          `ALTER TABLE rfq_packages ENABLE ${cheDo === "A" ? "ALWAYS " : ""}TRIGGER rfq_packages_kiem_chuyen_trang_thai`,
+        );
+        unsealId =
+          (
+            await g.query<{ id: string }>(
+              "INSERT INTO unseal_requests (org_id, rfq_id, reason, requested_by, requested_by_session_id) " +
+                "VALUES ($1, $2, 'den gio mo thau', $3, $4) RETURNING id",
+              [orgA, rfq.id, userId, sessionNguoi],
+            )
+          ).rows[0]?.id ?? "";
+        await g.query("COMMIT");
+      } catch (e) {
+        await g.query("ROLLBACK").catch(() => undefined);
+        throw e;
+      } finally {
+        g.release();
+      }
+      return {
+        a,
+        sessionAgent,
+        tenNhaCungCap,
+        duong: [
+          { mau: "/me", that: "/me" },
+          { mau: "/suppliers", that: "/suppliers" },
+          { mau: "/suppliers/:supplierId", that: `/suppliers/${ncc.id}` },
+          { mau: "/policy", that: "/policy" },
+          { mau: "/rfqs/:rfqId", that: `/rfqs/${rfq.id}` },
+          { mau: "/rfqs/:rfqId/items", that: `/rfqs/${rfq.id}/items` },
+          { mau: "/unseal/:unsealRequestId", that: `/unseal/${unsealId}` },
+        ],
+      };
+    }
+
+    it("⒜ bảng đo phủ ĐÚNG tập route ĐỌC mà `agentGoiDuoc` cho qua — không thừa, không thiếu", () => {
+      // Không có vế này, một route đọc thứ tám được mở cho agent mà bảng ⒝ không biết tới.
+      const doc = ROUTES.filter((r) => r.audience === "BUYER" && !r.mutates && agentGoiDuoc(r))
+        .map((r) => r.path)
+        .sort();
+      expect(doc).toEqual(
+        ["/me", "/policy", "/rfqs/:rfqId", "/rfqs/:rfqId/items", "/suppliers", "/suppliers/:supplierId", "/unseal/:unsealRequestId"].sort(),
+      );
+    });
+
+    it("⒜ mỗi route trong bảy: phiên agent ⇒ ĐÚNG MỘT hàng `AGENT_READ` mang mẫu route; phiên người ⇒ KHÔNG hàng nào", async () => {
+      const canh = await dungCanh("agent-doc-ghi-so@vd.test");
+      for (const d of canh.duong) {
+        const truoc = await demAgentRead();
+        const r = await goi("GET", d.that, { cookie: canh.a.cookie });
+        expect(r.status, `${d.mau}: ${r.text}`).toBe(200);
+        expect(await demAgentRead(), `${d.mau}: phiên agent phải để lại ĐÚNG MỘT hàng`).toBe(truoc + 1);
+        const { rows } = await db.pool.query<{
+          actor_type: string;
+          resource_type: string;
+          resource_id: string;
+          payload: Record<string, unknown>;
+        }>(
+          `SELECT actor_type, resource_type, resource_id, payload FROM audit_events
+            WHERE org_id = $1 AND action = 'AGENT_READ' ORDER BY seq DESC LIMIT 1`,
+          [orgA],
+        );
+        const hang = rows[0];
+        // MẪU route, không phải đường dẫn đã gọi (không id nào của người gọi đi vào sổ).
+        expect(hang?.payload.routePath, d.mau).toBe(d.mau);
+        expect(hang?.payload.method, d.mau).toBe("GET");
+        expect(hang?.payload.status, d.mau).toBe(200);
+        expect(hang?.resource_type).toBe("SESSION");
+        expect(hang?.resource_id, "hàng sổ nêu PHIÊN agent đã đọc").toBe(canh.sessionAgent);
+        // Không một byte của thân phản hồi: đúng bốn khoá đã khai.
+        expect(Object.keys(hang?.payload ?? {}).sort()).toEqual(["method", "requestId", "routePath", "status"]);
+
+        // ĐỐI CHỨNG: cùng route, phiên NGƯỜI ⇒ 200 và KHÔNG hàng nào — lần đọc của người vẫn không ghi sổ.
+        const truocNguoi = await demAgentRead();
+        const rn = await goi("GET", d.that, { cookie: canh.a.cookieNguoi });
+        expect(rn.status, `${d.mau} (người): ${rn.text}`).toBe(200);
+        expect(await demAgentRead(), `${d.mau}: phiên người KHÔNG được ghi hàng AGENT_READ`).toBe(truocNguoi);
+      }
+    });
+
+    it("⒝ fail-closed: lần ghi sổ hỏng ⇒ 500 thân cố định, KHÔNG dữ liệu, KHÔNG hàng — không phải 200 kèm một sổ thiếu", async () => {
+      const canh = await dungCanh("agent-doc-hong@vd.test");
+      // Đối chứng dương: không giữ khoá thì cùng lời gọi ấy trả dữ liệu — nên 500 dưới đây là vì sổ.
+      const binhThuong = await goi("GET", "/suppliers", { cookie: canh.a.cookie });
+      expect(binhThuong.status).toBe(200);
+      expect(binhThuong.text).toContain(canh.tenNhaCungCap);
+
+      const truoc = await demAgentRead();
+      const mocLog = logLoi.length;
+      const giu = await apiPool.connect();
+      let r: PhanHoi | undefined;
+      try {
+        await giu.query("BEGIN");
+        await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        // Cùng khuôn vế ⑸: một hàng sổ chưa commit giữ khoá tư vấn nối tiếp của tổ chức.
+        await giu.query(
+          "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K142_GIU_KHOA', 'K142', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+          [orgA],
+        );
+        r = await goi("GET", "/suppliers", { cookie: canh.a.cookie });
+      } finally {
+        await giu.query("ROLLBACK").catch(() => undefined);
+        giu.release();
+      }
+      expect(r?.status, r?.text).toBe(500);
+      expect(r?.text).toBe(JSON.stringify({ error: "loi noi bo" }));
+      expect(r?.text).not.toContain(canh.tenNhaCungCap);
+      expect(await demAgentRead(), "lần đọc không có hàng sổ thì cũng không có hàng nào khác").toBe(truoc);
+      // MỘT dòng log, nêu MẪU route và lớp bọc — không id tổ chức, không tên nhà cung cấp.
+      const dong = logLoi.slice(mocLog).filter((l) => l.includes("AgentReadAuditFailedError"));
+      expect(dong, logLoi.slice(mocLog).join("\n")).toHaveLength(1);
+      expect(dong[0]).toContain("GET /suppliers");
+      expect(dong[0]).toContain("55P03");
+      expect(dong[0]).not.toContain(orgA);
+    });
+
+    it("⒞ chuỗi sổ của tổ chức vẫn liền sau các lần đọc của agent — bộ kiểm chứng thật", async () => {
+      const canh = await dungCanh("agent-doc-chuoi@vd.test");
+      for (const d of canh.duong) expect((await goi("GET", d.that, { cookie: canh.a.cookie })).status).toBe(200);
+      const kq = await withTenant(apiPool, orgA, (c) => verifyAuditChain(c, orgA, { externalAnchors: [] }));
+      expect(kq.checked).toBeGreaterThan(0);
+      // `NOT_ANCHORED` là của phép gọi không mốc neo ngoài, không phải của sổ.
+      expect(kq.problems.filter((p) => p.kind !== "NOT_ANCHORED")).toEqual([]);
+    });
+
+    it("⒟ vượt trần theo phiên ⇒ 429 TRƯỚC handler và KHÔNG hàng sổ; phiên agent khác và phiên người vẫn đọc được", async () => {
+      const TRAN = 3;
+      const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, tranDocAgent: TRAN }), {
+        remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+      });
+      await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+      const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+      try {
+        const a = await phienAgent("agent-doc-tran@vd.test");
+        const b = await phienAgent("agent-doc-tran-khac@vd.test");
+        const truoc = await demAgentRead();
+        for (let i = 0; i < TRAN; i += 1) {
+          expect((await goi("GET", "/suppliers", { cookie: a.cookie, goc: goc2 })).status, `lần ${i + 1}`).toBe(200);
+        }
+        expect(await demAgentRead()).toBe(truoc + TRAN);
+        for (let i = 0; i < 3; i += 1) {
+          const r = await goi("GET", "/suppliers", { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${TRAN + i + 1}: ${r.text}`).toBe(429);
+          expect(r.text).toBe(JSON.stringify({ error: "qua nhieu yeu cau" }));
+          expect(r.headers.get("retry-after")).toBe(String(OTP_RATE_WINDOW_SECONDS));
+        }
+        expect(await demAgentRead(), "429 KHÔNG được ghi hàng sổ").toBe(truoc + TRAN);
+        // Trần theo PHIÊN: một phiên agent khác và chính phiên người của `a` vẫn đi qua.
+        expect((await goi("GET", "/suppliers", { cookie: b.cookie, goc: goc2 })).status).toBe(200);
+        expect((await goi("GET", "/suppliers", { cookie: a.cookieNguoi, goc: goc2 })).status).toBe(200);
+        expect(await demAgentRead()).toBe(truoc + TRAN + 1);
+      } finally {
+        await new Promise<void>((xong) => s2.close(() => xong()));
+      }
+    });
   });
 });

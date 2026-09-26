@@ -437,6 +437,13 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     //      `apps/api/src/routes/buyer.ts` — ~~`:206`~~ [S1.79] số dòng ấy nay là `GET /rfqs/:rfqId/items`,
     //      một route ĐỌC KHÔNG có cổng, tức con trỏ cũ minh hoạ NGƯỢC câu nó đứng cạnh) đều nằm trong
     //      `ROUTE_DOC_KHONG_PHOI`, tức MCP cố ý không phơi. Khoảng trống pháp y ấy là khoản nợ 142.
+    //      **[S1.9101 / ADR-9201] Khoản 142 ĐÓNG — vế *"không công cụ nào để lại một dòng nào"* ở
+    //      trên nay SAI và để lại nguyên văn làm lịch sử.** Mỗi lần một phiên `AGENT_READONLY` đọc một
+    //      route mà `agentGoiDuoc` cho qua, `dispatch.ts` ghi ĐÚNG MỘT hàng `AGENT_READ` trên CHÍNH
+    //      `client` của giao dịch đọc — ghi hỏng thì 500, không dữ liệu. Phiên NGƯỜI đọc vẫn không
+    //      ghi sổ, và route đọc vẫn không gọi `requirePermission`: hàng sổ ấy là dấu vết của CHỨNG
+    //      CHỈ, không phải một cổng quyền. Đo ở `apps/api/src/auth.int.test.ts` (khối khoản 142);
+    //      hình dạng của lời gọi canh ở khối cuối tệp này.
     //
     // Tức lớp này quét mã THẬT của hai app, và cả hai đúng là không được phép mang cổng quyền. Vế
     // *"cổng quyền ở tầng ứng dụng"* của ADR-016 mục 1 vẫn CHƯA có một route nào để canh. Ngày
@@ -633,5 +640,30 @@ describe("[mảnh 1] `apps/` không gọi thẳng `dungBoBangChung`", () => {
   it("ĐỐI CHỨNG DƯƠNG: `xuatBoBangChung` có người gọi dưới `apps/` — phép quét không rỗng ruột", () => {
     const co = quetTepTs(THU_MUC_APPS).filter((t) => /\bxuatBoBangChung\b/u.test(readFileSync(t, "utf8")));
     expect(co.length).toBeGreaterThan(0);
+  });
+});
+
+// =============================================================================================
+// [S1.9101 / khoản 142 / ADR-9201] HÀNG `AGENT_READ` ĐI CÙNG GIAO DỊCH ĐỌC — HÌNH DẠNG CỦA LỜI GỌI
+//
+// Phép đo hành vi ở `apps/api/src/auth.int.test.ts` (500 khi sổ hỏng, đúng một hàng mỗi lần đọc).
+// Khối này canh HÌNH DẠNG mà phép đo ấy dựa vào, vì hình dạng sai vẫn có thể xanh ở một lượt chạy
+// may mắn: lần ghi phải chạy trên `client` của giao dịch đọc — không trên `auditPool`, không trong
+// một `withTenant` riêng — vì chỉ như thế hàng sổ và câu trả lời mới cùng sống hay cùng chết. Ghi
+// ở giao dịch độc lập rồi TRẢ VỀ là cái "cổng gác im lặng" mà `packages/identity/src/index.ts` cấm.
+//
+// PHÁT BIỂU ĐÚNG MỨC: đây là phép đọc văn bản trên MỘT tệp. Nó không chứng minh lời gọi nằm đúng
+// nhánh; vế ấy là việc của phép đo hành vi.
+// =============================================================================================
+describe("[S1.9101 / khoản 142] lần đọc của agent ghi sổ trên client của chính giao dịch đọc", () => {
+  const TEP_DISPATCH = join(GOC, "apps", "api", "src", "dispatch.ts");
+
+  it("`dispatch.ts` ghi `AGENT_READ` bằng `appendAuditEvent(client, …)` — không qua `auditPool`", () => {
+    const ma = readFileSync(TEP_DISPATCH, "utf8");
+    const khoi = /appendAuditEvent\(\s*([A-Za-z_.]+)\s*,[^;]*?action:\s*"AGENT_READ"/su.exec(ma);
+    expect(khoi, "không tìm thấy lời gọi `appendAuditEvent` mang `AGENT_READ` trong dispatch.ts").not.toBeNull();
+    expect(khoi?.[1], "hàng AGENT_READ phải đi trên `client` của giao dịch đọc").toBe("client");
+    // Và không có lần ghi `AGENT_READ` thứ hai nào qua `throwAuditedDenial`/`auditPool`.
+    expect(ma.match(/"AGENT_READ"/gu) ?? []).toHaveLength(1);
   });
 });
