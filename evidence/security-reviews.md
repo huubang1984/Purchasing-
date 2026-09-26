@@ -12374,3 +12374,73 @@ Không cấp ADR hay migration nào.
   có chỗ ghim `[A-HJ]` mới. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**; CI 6/6 xanh.
 - Lần hợp thứ hai mang #160 và #155, cũng không xung đột. `pnpm cap-so` cấp số vòng từ số tạm; chạy lại không đổi byte
   nào, và `pnpm cap-so --kiem` sạch. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **107 tệp, 1434 đạt, 1 bỏ qua**.
+
+# §S1.154 — KHOẢN 142 ĐÓNG: LẦN ĐỌC CỦA AGENT GHI SỔ CÙNG GIAO DỊCH ĐỌC; KHOẢN 144 THU HẸP BẰNG MỘT TRẦN THEO PHIÊN
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 142 rời rổ B vì ĐÓNG; khoản 144 ở lại rổ B, thu hẹp.** Không migration. Một ADR mới
+(ADR-091). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+ADR-039 (S1.76) đóng nhánh TỪ CHỐI của khoản 142 và để nhánh CHO QUA mở: một phiên `AGENT_READONLY` đọc bảy route mà
+`agentGoiDuoc` cho qua không để lại một dòng nào trong `audit_events`. ADR-039 §5 cũng từ chối cách vá dễ nhất — ghi một hàng ở
+giao dịch độc lập rồi TRẢ VỀ — vì đó là cái "cổng gác im lặng" mà `packages/identity/src/index.ts` cấm. Chủ dự án chọn phương
+án *"ghi sổ cùng giao dịch đọc"*.
+
+## 2. Đo trước khi sửa
+
+- Nhánh `BUYER` của `apps/api/src/dispatch.ts` đã chạy `resolveSessionByToken`, vế phạm vi, handler và COMMIT trong MỘT
+  `withTenant(deps.pool, …)`. Tức có sẵn một `client` ghi được trong đúng giao dịch của lần đọc: không cần dựng giao dịch mới.
+- `audit_events.action` không có CHECK tập giá trị nào (đọc `db/migrations/*.sql`), và `AGENT_SCOPE_DENIED` không đăng ký ở
+  đâu ngoài chính lời gọi. Hàng mới không cần migration.
+- Bộ đếm sẵn có: `tangBucketNguoiGoi` trên `caller_rate_limits` (042), cửa sổ 900 s cố định, khoá băm bằng pepper — bộ đếm của
+  `callerLimit` nhánh ANON. Nó nhận một `PoolClient`, nên đếm được trên chính `client` của giao dịch, tránh lỗi kết nối lồng mà
+  S1.78 đã đo.
+- RED trên mã cũ (chỉ `dispatch.ts` bị cất đi, tệp test giữ nguyên): vế ⒜ đỏ ở route đầu tiên, *"/me: phiên agent phải để lại
+  ĐÚNG MỘT hàng: expected +0 to be 1"*; vế ⒝ đỏ vì lời gọi trả 200 kèm danh sách nhà cung cấp dưới khoá sổ bị giữ; vế ⒟ đỏ ở
+  *"expected +0 to be 3"*. Vế ⒞ (chuỗi sổ liền) xanh trên cả hai bản — nó là phép canh không-hồi-quy, không phải phép đo lỗi.
+
+## 3. Thay đổi
+
+- `dispatch.ts`, nhánh `BUYER`, sau vế phạm vi: với phiên `AGENT_READONLY` trên route không `mutates`, đếm
+  `agent-doc|<sessionId>` trên `client`; vượt `AGENT_DOC_TRAN_MOI_CUA_SO` (900) ⇒ `return` 429, cùng thân và `retry-after` với
+  nhánh ANON — giao dịch COMMIT nên lần đếm ở lại; không handler, không hàng sổ.
+- Sau handler, trước khi callback trả về: `appendAuditEvent(client, orgId, { action: "AGENT_READ", actorType: "USER", actorId,
+  resourceType: "SESSION", resourceId: sessionId, payload: { method, routePath, requestId, status } })`. Lỗi được bọc thành
+  `AgentReadAuditFailedError`; lớp ấy không có trong bảng catch nào ⇒ `loiNoiBo` ⇒ 500 thân cố định, một dòng log nêu mẫu route
+  và SQLSTATE.
+- `createDispatcher` nhận `tranDocAgent` cho test, cùng khuôn `treQuaTranMs`.
+
+## 4. Đo sau khi sửa
+
+`apps/api/src/auth.int.test.ts`, khối *"[S1.154 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch"*, năm ca:
+- ⒜ tập route đo đúng bằng tập route ĐỌC mà `agentGoiDuoc` cho qua — không thừa, không thiếu;
+- ⒜ bảy route, dựng trên dữ liệu thật (nhà cung cấp, gói thầu, yêu cầu mở thầu) để handler trả 200: phiên agent ⇒ đúng một hàng
+  `AGENT_READ`, `routePath` là MẪU, payload đúng bốn khoá, `resource_id` là phiên agent; phiên người cùng route ⇒ 200 và 0 hàng;
+- ⒝ giữ khoá chuỗi sổ của tổ chức bằng một `audit_append` chưa commit ⇒ lời gọi ra 500 `{"error":"loi noi bo"}` sau 2 s, thân
+  không chứa tên nhà cung cấp, 0 hàng mới, đúng một dòng log `GET /suppliers … AgentReadAuditFailedError <- error 55P03` không
+  mang id tổ chức. Đối chứng dương cùng ca: không giữ khoá thì cùng lời gọi trả 200 kèm tên ấy;
+- ⒞ `verifyAuditChain` sau bảy lần đọc: không `SEQ_GAP`, `LINK_BROKEN`, `HASH_MISMATCH` (chỉ `NOT_ANCHORED` của phép gọi không
+  neo ngoài);
+- ⒟ trần 3 tiêm vào một bộ điều phối thứ hai: ba lần 200, ba lần 429 với `retry-after` 900 và không hàng thêm; một phiên agent
+  khác và phiên người của chính người ấy vẫn 200.
+
+`tests/architecture/cong-quyen-route.test.ts`: chú thích *"không công cụ nào để lại một dòng nào"* được gạch nghĩa bằng một
+ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất hiện đúng một lần trong `dispatch.ts`, trong một lời gọi
+`appendAuditEvent(client, …)`.
+
+## 5. Ranh giới, nói ra
+
+- Trần không phủ vế 403: lần đếm của một lần từ chối phạm vi rollback cùng giao dịch. Khoản 144 giữ vế ấy.
+- Cửa sổ nhảy: 900 lần có thể tới trong một phút đầu cửa sổ.
+- Lần đọc bị handler từ chối bằng lỗi ném (404) không để lại hàng nào — và cũng không dữ liệu nào đi ra.
+- Lần đọc của người vẫn không ghi sổ, và route đọc vẫn không gọi `requirePermission`.
+- Không gắn nhãn `[INV-…]` nào: không bất biến nào trong sổ đăng ký nói về dấu vết của lần đọc qua chứng chỉ agent.
+
+## 6. Số đo
+
+- `pnpm t0` sạch (396 module, 1551 phụ thuộc, không vi phạm); `pnpm test` **107 tệp, 1435 đạt, 1 bỏ qua**.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` (mọi tệp), `apps/mcp`, `qt3-cu-phap`, `qt3-ngu-phap` — **33 tệp,
+  374 ca đạt**; `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` và `db/check-an-ninh.int.test.ts` (hai tệp còn lại có
+  phiên agent) — **33 ca đạt**.
+- Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.

@@ -7549,3 +7549,58 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   xung đột nó quản, cấp lại, và chạy lại không đổi một byte. Lời khai viết tay (`gói + công cụ`) và
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.
+
+## ADR-091 — Ghi sổ lần đọc của agent cùng giao dịch đọc
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.154]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
+mở), 141 (đã đóng ở S1.76) · **Liên quan:** ADR-039 §5 (vế *"khoản 142 thu hẹp, chưa đóng"*), ADR-038 (bề mặt MCP chỉ đọc),
+ADR-015 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
+
+### Bối cảnh
+
+ADR-039 đóng nhánh TỪ CHỐI của khoản 142: mỗi lần 403 vì phạm vi để lại một hàng `AGENT_SCOPE_DENIED` ở giao dịch độc lập. Nhánh
+CHO QUA vẫn mở: một phiên `AGENT_READONLY` đọc bảy route mà `agentGoiDuoc` cho qua (`/me`, `/suppliers`, `/suppliers/:supplierId`,
+`/policy`, `/rfqs/:rfqId`, `/rfqs/:rfqId/items`, `/unseal/:unsealRequestId`) không để lại một dòng nào trong `audit_events`. Đo trên
+mã trước vòng này: 0 hàng ở cả bảy. ADR-039 §5 cũng nói vì sao không vá bằng một lần ghi ở giao dịch độc lập rồi **trả về**: đó là
+cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra cửa — sổ hỏng mà dữ liệu vẫn đi.
+
+### Quyết định (chủ dự án chọn phương án "ghi sổ cùng giao dịch đọc")
+
+1. **Một hàng `AGENT_READ` cho mỗi lần đọc của phiên agent, trên CHÍNH `client` của giao dịch đọc.** Nhánh `BUYER` của
+   `apps/api/src/dispatch.ts` đã chạy xác thực, handler và commit trong MỘT `withTenant`. Sau khi handler trả về và TRƯỚC khi callback
+   ấy trả phản hồi, bộ điều phối gọi `appendAuditEvent(client, …)`. Chỉ ghi khi `actor.kind = 'AGENT_READONLY'` và route không
+   `mutates`. Lần đọc của NGƯỜI vẫn không ghi sổ.
+2. **Hỏng thì hỏng cả lần đọc.** Lỗi của lần ghi được bọc thành `AgentReadAuditFailedError`, ném ra khỏi callback. `withTenant`
+   rollback, và lớp ấy không có trong bảng catch nào nên rơi xuống `loiNoiBo`: 500 thân cố định, một dòng log nêu MẪU route và
+   SQLSTATE. Phản hồi của handler nằm trong một biến cục bộ và không đi ra.
+3. **Ghi SAU handler, không trước.** `audit_append` giữ khoá tư vấn nối tiếp của tổ chức tới COMMIT. Ghi trước là giữ khoá suốt
+   thời gian handler đọc. Handler NÉM (404 của `getSupplier`, lỗi CSDL) thì giao dịch rollback: không hàng, và cũng không dữ liệu.
+   Handler TRẢ VỀ (kể cả một mã 4xx bằng `return`) thì có đúng một hàng, mang mã ấy.
+4. **Payload theo quy ước của `AGENT_SCOPE_DENIED`:** `actorType = USER`, `actorId` là người dùng, `resourceType = SESSION`,
+   `resourceId` là phiên agent; `payload = { method, routePath, requestId, status }`, với `routePath` là MẪU đã khai trong `ROUTES`.
+   Không tham số đường dẫn, không byte nào của thân phản hồi. Không migration: `audit_events.action` không có CHECK tập giá trị.
+5. **Trần theo phiên: 900 lần đọc mỗi cửa sổ 900 s** (`AGENT_DOC_TRAN_MOI_CUA_SO`, trung bình 60 lần mỗi phút). Bộ đếm là
+   `tangBucketNguoiGoi` trên `caller_rate_limits` (042) — cùng bộ đếm, cùng cửa sổ `OTP_RATE_WINDOW_SECONDS` của `callerLimit` ở nhánh
+   ANON — với khoá `agent-doc|<sessionId>` đã băm bằng pepper. Đếm trên CHÍNH `client` (một `withTenant` lồng lấy kết nối thứ hai của
+   pool, đúng lỗi S1.78 đã đo). Vượt trần thì `return` 429 — giao dịch COMMIT nên lần đếm ở lại — TRƯỚC handler và TRƯỚC hàng sổ,
+   cùng thân và `retry-after` của 429 nhánh ANON. `createDispatcher` nhận `tranDocAgent` để test tiêm số nhỏ, cùng khuôn `treQuaTranMs`.
+
+### Hệ quả, nói thẳng
+
+- **Mỗi lần đọc của agent nay lấy khoá chuỗi sổ của tổ chức**, dưới trần 2 s của 050. Khoá sống từ câu ghi tới COMMIT. Nếu một
+  người ghi khác giữ khoá quá 2 s, lần đọc của agent ra 500 (55P03). Đó là hướng đúng: không đọc được còn hơn đọc không có sổ.
+- **Trần 900/cửa sổ giới hạn tổng, không giới hạn một cơn dồn.** Cửa sổ là cửa sổ NHẢY làm tròn theo epoch, nên 900 lần có thể tới
+  trong một phút đầu cửa sổ. Một phiên agent sống tối đa một giờ (051), tức tối đa bốn cửa sổ. Người dùng phát được nhiều phiên agent
+  (mỗi phiên đòi một mã TOTP tươi), nên trần là theo PHIÊN, không theo người.
+- **Không trái ADR-015 §5** (*hạn mức theo ĐÍCH chỉ được làm chậm, không được khoá*). Khoá của bộ đếm là chính phiên đang gọi,
+  không phải một đích mà người khác gõ vào được: chỉ ai cầm cookie ấy mới tiêu được ngân sách ấy, nên 429 không khoá được ai
+  khác. Đây là trần theo NGƯỜI GỌI, cùng loại với `callerLimit`.
+- **Trần không phủ nhánh 403.** Lần từ chối vì phạm vi ném trong giao dịch, nên lần đếm của nó rollback cùng giao dịch. Vế *"mỗi lần
+  403 ghi một hàng `AGENT_SCOPE_DENIED` không trần"* của khoản 144 còn nguyên.
+- **Lần đọc bị handler từ chối bằng lỗi ném (404) không để lại hàng nào.** Muốn ghi cả lần ấy thì phải ghi ở giao dịch độc lập —
+  đúng thứ ADR này từ chối.
+- **Lần đọc của người vẫn không ghi sổ.** Khoản 142 hỏi về bề mặt agent; sổ kiểm toán cho mọi lần đọc là một quyết định khác.
+- **Hàng sổ không phải cổng quyền.** Route đọc vẫn không gọi `requirePermission`.
+- Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 142: bảy route (agent: đúng một hàng mang mẫu route; người: không hàng nào),
+  fail-closed (khoá sổ bị giữ ⇒ 500, không dữ liệu, không hàng), chuỗi sổ vẫn liền (`verifyAuditChain`), và trần (429, không hàng
+  thêm; phiên agent khác và phiên người không bị ảnh hưởng). Hình dạng lời gọi canh ở `tests/architecture/cong-quyen-route.test.ts`.
