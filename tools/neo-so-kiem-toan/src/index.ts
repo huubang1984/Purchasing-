@@ -17,6 +17,13 @@
 //
 // Nên danh sách là THAM SỐ, và nó là một sự thật vận hành phải viết ra ở đâu đó. Xem ADR-026 §5.
 //
+// [ADR-072 phần 1] Công cụ KHÔNG còn chạy dưới `app_api`. Nó đăng nhập bằng `app_neo_login` và
+// `SET ROLE app_neo` — vai riêng của job neo (064): gọi được `outbox_danh_sach_to_chuc()` (thứ
+// app_api cố ý không có), đổi lại chỉ ĐỌC được hai bảng sổ. Hai lệnh đọc CSDL ở đây (`xuat`, `kiem`)
+// chỉ cần đúng tập ấy — một bộ xuất mốc neo đi bằng vai GHI được sổ là một bộ xuất mà một lỗi của
+// nó sửa được chính thứ nó đang neo. DATABASE_URL trỏ vào role khác (vd. app_api_login) thì
+// `SET ROLE app_neo` ném 42501 ngay lần lấy client đầu — ồn, không chạy nhầm vai.
+//
 // ----------------------------------------------------------------------------------------------
 // KHOÁ KÝ ĐỌC TỪ MÔI TRƯỜNG, VÀ ĐÓ LÀ MỘT KHIẾM KHUYẾT ĐÃ BIẾT
 // ----------------------------------------------------------------------------------------------
@@ -76,7 +83,7 @@ const CACH_DUNG = `Cách dùng:
   pnpm neo khoa-bien-nhan
 
 Biến môi trường:
-  DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan")
+  DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan") — đăng nhập bằng app_neo_login
   TRUSTPROCURE_NEO_KHO             thư mục nơi cất — HOẶC bộ S3 dưới, không cả hai
   TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (local-dev, chỉ cần cho "xuat")
@@ -214,7 +221,8 @@ function mocNuocCao(neo: readonly ExternalAnchor[]): number {
 async function xuat(kho: AnchorStore, org: readonly string[], aws: CauHinhAws | undefined): Promise<number> {
   const { boKy, khoaCongKhai } = await docBoKyTheoCheDo(aws);
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
-    role: "app_api",
+    // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
+    role: "app_neo",
     // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
     // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
     // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
@@ -276,7 +284,8 @@ async function xuat(kho: AnchorStore, org: readonly string[], aws: CauHinhAws | 
 async function kiem(kho: AnchorStore, org: readonly string[]): Promise<number> {
   const khoaCongKhai = docKhoaCongKhai();
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
-    role: "app_api",
+    // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
+    role: "app_neo",
     // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
     // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
     // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
