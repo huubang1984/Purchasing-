@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [ADR-072 phần 1 / 064] VAI CỦA JOB NEO — `app_neo`: LIỆT KÊ được mọi tổ chức, chỉ ĐỌC được sổ.
+// [ADR-072 phần 1 / 065] VAI CỦA JOB NEO — `app_neo`: LIỆT KÊ được mọi tổ chức, chỉ ĐỌC được sổ.
 //
 // Đo trên CHÍNH đường sản xuất: role đăng nhập `app_neo_login` (như tools/chay-migrate dựng), pool
 // `createPool(…, { role: "app_neo" })` (như tools/neo-so-kiem-toan), `withTenant` + hai hàm đọc của
@@ -116,7 +116,7 @@ describe("[ADR-072 phần 1] ⑴ app_neo LÀM ĐƯỢC đúng việc của job n
     expect(kq.problems.map((p) => p.kind)).toEqual(["NOT_ANCHORED"]);
   });
 
-  it("policy của hai bảng sổ là PUBLIC-scoped (003) — nên cách ly tổ chức áp cho app_neo mà không cần dòng nào của 064", async () => {
+  it("policy của hai bảng sổ là PUBLIC-scoped (003) — nên cách ly tổ chức áp cho app_neo mà không cần dòng nào của 065", async () => {
     const { rows } = await db.pool.query<{ bang: string; vai: string[] }>(
       "SELECT c.relname AS bang, p.polroles::pg_catalog.regrole[]::text[] AS vai FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid " +
         "WHERE c.relname IN ('audit_events', 'audit_chain_anchors') AND c.relnamespace = 'public'::regnamespace ORDER BY 1, p.polname",
