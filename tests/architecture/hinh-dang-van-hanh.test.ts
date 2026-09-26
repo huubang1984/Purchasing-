@@ -11,6 +11,8 @@
 //   ⑶ mọi `aws_ecs_service` có mặt trong `service_van_hanh`, mọi `aws_lb_target_group` có mặt trong `tg_van_hanh`;
 //      Container Insights bật (alarm thiếu task đọc metric của nó);
 //   ⑷ "không còn target khoẻ" và "thiếu task" coi THIẾU DỮ LIỆU là vi phạm — service biến mất thì metric cũng mất.
+//   ⑸ [ADR-083] alarm nghiệp vụ đọc CHỮ của dòng log: mỗi mẫu phải có mặt trong mã sinh ra nó, và mẫu tồn đọng khớp đúng dạng
+//      dòng worker ghi — đổi câu log mà không đổi mẫu là mất cảnh báo trong im lặng.
 // ==============================================================================================
 
 import { readFileSync } from "node:fs";
@@ -72,5 +74,35 @@ describe("[ADR-077] cảnh báo vận hành", () => {
     for (const a of ["tg_het_target", "task_thieu"]) {
       expect(khoi(TF90, "aws_cloudwatch_metric_alarm", a), a).toMatch(/treat_missing_data += "breaching"/u);
     }
+  });
+
+  it("⑸ [ADR-083] mẫu log của alarm nghiệp vụ có mặt trong mã; mẫu tồn đọng khớp dòng worker ghi", () => {
+    const nguonApi = ["apps/api/src/composition.ts", "apps/api/src/adapters/kenh-so.ts", "apps/api/src/adapters/gui-zalo.ts"].map(doc).join("\n");
+    const nguonWorker = doc("apps/unseal-worker/src/tien-trinh.ts");
+    const tinHieu = khoiLocal("tin_hieu_nghiep_vu");
+    const mau = [...tinHieu.matchAll(/^ {4}([a-z-]+) += \{ mau = "((?:\\"|[^"])*)", nguon = \[([^\]]*)\]/gmu)].map((m) => ({
+      ten: m[1] ?? "",
+      tu: [...(m[2] ?? "").matchAll(/\\"([^\\]+)\\"/gu)].map((t) => t[1] ?? ""),
+      nguon: m[3] ?? "",
+    }));
+    expect(mau.map((m) => m.ten)).toEqual(["bo-cuoc", "kenh-loi", "token-zalo", "poll-loi", "bo-don"]);
+    for (const m of mau) {
+      expect(m.tu.length, m.ten).toBeGreaterThan(0);
+      for (const t of m.tu) {
+        expect(nguonApi, `${m.ten}: "${t}" không còn trong mã api`).toContain(t);
+        if (m.nguon.includes('"worker"')) expect(nguonWorker, `${m.ten}: "${t}" không còn trong mã worker`).toContain(t);
+      }
+    }
+    for (const a of ["nghiep_vu", "ton_dong"]) {
+      expect(khoi(TF90, "aws_cloudwatch_metric_alarm", a), a).toMatch(/alarm_name += "\$\{local\.tien_to_van_hanh\}nghiep-vu-/u);
+    }
+
+    // Tồn đọng: mẫu tách theo khoảng trắng — bốn trường đầu cố định, trường thứ năm là số giây.
+    const tonDong = doc("apps/unseal-worker/src/canh-ton-dong.ts");
+    expect(tonDong).toMatch(/`\[unseal-worker\] outbox ton dong: \$\{String\(t\.giay\)\} giay, /u);
+    expect(khoi(TF90, "aws_cloudwatch_log_metric_filter", "ton_dong")).toContain(
+      'pattern        = "[nguon=\\"[unseal-worker]\\", outbox=\\"outbox\\", ton=\\"ton\\", dong=\\"dong:\\", giay, ...]"',
+    );
+    expect(khoi(TF90, "aws_cloudwatch_log_metric_filter", "ton_dong")).toMatch(/value += "\$giay"/u);
   });
 });

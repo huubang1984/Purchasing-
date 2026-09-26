@@ -12199,6 +12199,10 @@ Chủ dự án chốt ngày 2026-09-26 bốn điểm, trên các phương án ph
 | ⑶ | Khoản 241 | Sàn một chữ ký cho MỌI tổ chức, ngay — không chờ công tắc S3 | ADR-085 |
 | ⑷ | Khoản 242 ⑴ | Sửa lời khai trong thân ghim và `duyetTraoThau`, kèm một test đo | mục 4 dưới |
 
+**Số của vòng.** Vòng này được viết với số S1.141 và ADR-083/084. Ngay trước commit, #152 (`…-canh-bao-nghiep-vu`) vào
+`master` với S1.141 và ADR-083, nên vòng này đổi thành **S1.142** và **ADR-084/085** theo luật S1.111. Migration `068`
+giữ số: không nhánh nào khác dùng nó.
+
 ## 2. Hai quyết định S3.0 — giấy, không mã
 
 Nguyên tắc của ADR-084 ⑴: một mã quyền mới chỉ khi hành vi cần TÁCH NGƯỜI. Hai mã qua được phép thử ấy. `supplier.qualify`

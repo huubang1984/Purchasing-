@@ -183,6 +183,12 @@ tuyến của api. Thêm một dịch vụ AWS ở tài khoản khác, hay một
 (`hinh-dang-endpoint.test.ts` ghim cả hai). Lỗi trông như `AccessDenied ... no VPC endpoint policy allows` là dấu hiệu
 thiếu mục.
 
+**[ADR-083] Cảnh báo lỗi nghiệp vụ.** Cùng tiền tố `tp-van-hanh-nghiep-vu-*` (thư qua ⑹): job outbox bỏ cuộc (≥ 1), SMS/Zalo
+từ chối (≥ 5 trong 15 phút), token Zalo mất (≥ 1), vòng quét outbox hỏng (≥ 3 trong 10 phút), bộ dọn bảng hạn mức hỏng hai lượt
+liền (≥ 1) — đếm từ log `/tp/api`, `/tp/unseal-worker`; và **tồn đọng**: worker ghi mỗi 5 phút tuổi job PENDING quá hạn lâu nhất
+của mọi tổ chức (`TRUSTPROCURE_OUTBOX_TON_DONG_MS`), > 15 phút hai kỳ liền ⇒ thư. Worker `so_ban_worker = 0` thì không có số
+tồn đọng — alarm ấy im (thiếu dữ liệu = bình thường).
+
 **[ADR-077] Cảnh báo vận hành.** Stack 90 đặt alarm tiền tố `tp-van-hanh-`: target không khoẻ / không còn target
 khoẻ cho từng target group (api, web, public-keys), tỉ lệ 5xx của ALB > 5%, p95 của api > 2 giây, service chạy thiếu
 task (Container Insights; service `so_ban_* = 0` không có alarm), RDS CPU > 80%, dung lượng trống < 2 GB, > 150 kết nối.
