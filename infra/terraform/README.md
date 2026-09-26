@@ -73,7 +73,7 @@ cd infra\terraform\70-do-kms
 terraform init
 terraform plan -out plan.tfplan
 terraform apply plan.tfplan
-.\chay-do-kms.ps1          # in bảng 9 bước; thoát 0 chỉ khi mọi bước ĐẠT
+.\chay-do-kms.ps1          # in bảng 18 bước; thoát 0 chỉ khi mọi bước ĐẠT
 terraform destroy          # đo xong thì dỡ — CloudTrail tổ chức giữ bằng chứng
 ```
 
@@ -88,6 +88,14 @@ terraform destroy          # đo xong thì dỡ — CloudTrail tổ chức giữ
 | 4b | `tp-unseal-worker` | `GenerateDataKeyPairWithoutPlaintext` | `AccessDeniedException` |
 | 5a | AdministratorAccess | `Decrypt` | `AccessDeniedException` |
 | 5b | KeyAdmin | `Decrypt` | `AccessDeniedException` |
+| 6 | `tp-api` | `Encrypt` trên `alias/tp-totp`, context `{org_id, key_version}` | **thành công** (ADR-063) |
+| 6a | `tp-api` | `Decrypt` bí mật TOTP, đúng context | **thành công** — api được mở TOTP, và chỉ TOTP |
+| 6b | `tp-api` | `Decrypt` TOTP **thiếu** `key_version` | `AccessDeniedException` |
+| 6c | `tp-api` | `Decrypt` TOTP với `org_id` khác | `InvalidCiphertextException` |
+| 6d | `tp-api` | `Encrypt` TOTP kèm một khoá context lạ | `AccessDeniedException` |
+| 6e | `tp-api` | `GenerateDataKey` trên `tp-totp` | `AccessDeniedException` |
+| 7 | `tp-unseal-worker` | `Decrypt` bí mật TOTP | `AccessDeniedException` |
+| 8a / 8b | AdministratorAccess / KeyAdmin | `Decrypt` bí mật TOTP | `AccessDeniedException` |
 
 Bước 3 là đối chứng âm cho bước 2: không có nó, bước 2 "xanh" cả khi khoá bị tắt. Một bước "bị từ
 chối" chỉ ĐẠT khi lỗi đúng TÊN trong bảng — lỗi mạng hay cấu hình sai không được đọc thành "đã
