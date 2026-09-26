@@ -32,7 +32,15 @@
 import { KMSClient } from "@aws-sdk/client-kms";
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createAwsKmsOrgUnwrapper, createLocalDevOrgUnwrapper, type OrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
-import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import {
+  canhLechDongHoDinhKy,
+  createPool,
+  doiChieuDauKiemVongKhoa,
+  khangDinhPhienDangNhapUngDung,
+  kiemLechDongHo,
+  moTaLech,
+  type DongHo,
+} from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
@@ -71,7 +79,14 @@ export interface TienTrinhWorker {
   dung(): Promise<void>;
 }
 
-export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
+/** Thứ composition root nhận ngoài cấu hình — hôm nay chỉ để đo. Cùng hình dạng với `apps/api`. */
+export interface PhuThuocTienTrinhWorker {
+  /** [khoản 196] Đồng hồ tiến trình mà phép canh lệch so với đồng hồ CSDL. Mặc định `Date.now`. */
+  readonly dongHo?: DongHo;
+}
+
+export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTienTrinhWorker = {}): TienTrinhWorker {
+  const dongHo = phuThuoc.dongHo ?? Date.now;
   // Hai pool RIÊNG: `createPool` gọi hai lần, nên hai đối tượng khác nhau — không có đường nào
   // truyền nhầm cùng một pool vào cả hai chỗ.
   // [S1.94 / khoản 103] Xem khối cùng nhãn trong `packages/db/src/pool.ts`. Tiến trình NÀY là
@@ -164,6 +179,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
   );
 
   let daDung = false;
+  let dungCanhDongHo: (() => void) | undefined;
 
   return {
     async batDau(): Promise<void> {
@@ -231,7 +247,24 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
         );
       }
 
+      // ⑶ [khoản 196 / ADR-067 phần 1] Đồng hồ CSDL phải khớp đồng hồ tiến trình trong ngưỡng TRƯỚC
+      //    vòng poll đầu tiên. Worker không phán xử hạn nộp, nhưng nó đóng dấu thời gian lên lượt mở
+      //    thầu và lên sổ; một tiến trình tin một đồng hồ đã trôi không được lên — cùng khuôn `apps/api`.
+      await kiemLechDongHo(pool, ch.lechDongHoToiDaMs, dongHo);
+
       runner.start();
+      dungCanhDongHo = canhLechDongHoDinhKy({
+        nguon: pool,
+        nguongMs: ch.lechDongHoToiDaMs,
+        chuKyMs: ch.chuKyCanhDongHoMs,
+        dongHo,
+        baoLech: (p) =>
+          console.error(
+            `[unseal-worker] canh bao LechDongHo: dong ho CSDL lech ${moTaLech(p.lechMs)} so voi tien trinh ` +
+              `(khu hoi ${Math.round(p.khuHoiMs)} ms, nguong ${ch.lechDongHoToiDaMs} ms)`,
+          ),
+        baoLoi: (e) => console.error(`[unseal-worker] canh LechDongHo khong do duoc ${moTaLoi(e)}`),
+      });
       console.error(
         `[unseal-worker] dang chay — khoa: ${ch.keyAdapter}, canh bao: ${ch.alertAdapter}, ` +
           `nhip poll: ${String(ch.pollIntervalMs)} ms, to chuc thay duoc: ${String(soToChuc)}`,
@@ -244,6 +277,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
       // `stop()` KHÔNG huỷ lượt đang chạy — `runner.ts` tự tài liệu điều đó. Job đang chạy giữ
       // hạn thuê của nó; runner khác nhặt lại sau khi hạn hết. Đó là tính chất của at-least-once.
       runner.stop();
+      dungCanhDongHo?.();
       await Promise.allSettled([pool.end(), auditPool.end()]);
       kmsClient?.destroy();
     },

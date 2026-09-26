@@ -33,6 +33,7 @@
 // ==============================================================================================
 
 import { isAbsolute } from "node:path";
+import { CHU_KY_CANH_DONG_HO_MS_MAC_DINH, LECH_DONG_HO_TOI_DA_MS_MAC_DINH } from "@trustprocure/db";
 
 export class CauHinhError extends Error {
   constructor(message: string) {
@@ -69,6 +70,10 @@ export interface CauHinhWorkerChung {
   readonly alertDir: string;
   /** Nhịp poll của runner, ms. */
   readonly pollIntervalMs: number;
+  /** [khoản 196 / ADR-067] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình, ms — cùng biến, cùng miền với `apps/api`. */
+  readonly lechDongHoToiDaMs: number;
+  /** [khoản 196] Nhịp đo lại lúc chạy, ms. */
+  readonly chuKyCanhDongHoMs: number;
 }
 
 export interface KhoaWorkerLocalDev {
@@ -221,5 +226,7 @@ export function docCauHinh(env: MoiTruong): CauHinhWorker {
     alertAdapter: docAdapter(env, "TRUSTPROCURE_ALERT_ADAPTER", ["dev-file"] as const, "cảnh báo"),
     alertDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_ALERT_DIR"),
     pollIntervalMs: docSoNguyen(env, "TRUSTPROCURE_OUTBOX_POLL_MS", 1000, 100, 60_000),
+    lechDongHoToiDaMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_MAX_MS", LECH_DONG_HO_TOI_DA_MS_MAC_DINH, 100, 60_000),
+    chuKyCanhDongHoMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_CHECK_MS", CHU_KY_CANH_DONG_HO_MS_MAC_DINH, 1000, 3_600_000),
   };
 }

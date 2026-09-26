@@ -1522,7 +1522,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
-    { ham: "bid_kiem_han_nop", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_han_nop", migration: "065_han_nop_mang_gio_phan_xu.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
     // [S1.108 / S2.5] Tên trigger được chọn để sắp SAU `vendor_bid_versions_kiem_han_nop` theo
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
@@ -3181,6 +3181,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "065_han_nop_mang_gio_phan_xu.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7587,6 +7588,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "065_han_nop_mang_gio_phan_xu.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7870,6 +7872,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "065_han_nop_mang_gio_phan_xu.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

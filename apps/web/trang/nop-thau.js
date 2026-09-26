@@ -8,6 +8,8 @@
 // Bốn điều tệp này CỐ Ý không làm:
 //   * không gửi giá dạng rõ đi đâu cả — `fetch` duy nhất mang giá là lần POST phong bì ĐÃ mã hoá;
 //   * không kiểm hạn nộp bằng đồng hồ máy này (ADR-005: phán quyết thuộc về `now()` của Postgres);
+//     [khoản 196] và cũng không ĐẾM ngược bằng đồng hồ máy này trần: nó đếm theo giờ máy chủ ước
+//     tính — giờ máy này cộng độ lệch đo được từ `gioMayChu` của `GET /guest/rfq`;
 //   * không tự đoán thuật toán — hỏi trình duyệt làm được gì, rồi giao cho
 //     `chooseKeyAgreementAlgorithm` của gói quyết (ADR-011 mục 1);
 //   * không giấu lỗi. Một trình duyệt không có `crypto.subtle` được nói thẳng, vì đó là rủi ro
@@ -16,6 +18,7 @@
 
 import { chooseKeyAgreementAlgorithm, describeEnvelope, sealBid } from "/lib/browser.js";
 import { cong, donGiaNguoiGo, thanhTien, tien } from "/lib/so-tien.js";
+import { conLaiMs, doLechMayChu, docDauThoiGian, moTaConLai, moTaLechMay } from "/lib/dong-ho-may-chu.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -145,8 +148,42 @@ $("nut-xac").addEventListener("click", async () => {
 // Bước 3 — gói thầu và bảng giá
 // ---------------------------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------------------------
+// [khoản 196 / ADR-067 phần 3] ĐẾM NGƯỢC THEO GIỜ MÁY CHỦ
+//
+// `lechMayChu` là giờ máy chủ trừ giờ máy này, đo MỘT lần ở lời gọi `GET /guest/rfq` (so với điểm
+// giữa khứ hồi — `doLechMayChu`). Mỗi giây trang tính lại *còn bao lâu* từ giờ máy này CỘNG độ lệch,
+// nên một máy chạy chậm mười phút không thấy "còn mười phút" lúc hệ thống đã đóng cửa. Không đo
+// được (trường hỏng) ⇒ không đếm, chỉ in hạn — không đoán. Nút nộp KHÔNG bị khoá theo phép đếm này:
+// phán quyết vẫn thuộc về CSDL.
+// ---------------------------------------------------------------------------------------------
+let lechMayChu = null;
+let henDemNguoc = null;
+
+function demNguoc(han) {
+  if (henDemNguoc !== null) window.clearInterval(henDemNguoc);
+  henDemNguoc = null;
+  const el = $("dem-nguoc");
+  if (lechMayChu === null || han === null) { bao(el, ""); return; }
+  const ve = () => {
+    const canhBao = moTaLechMay(lechMayChu);
+    el.textContent = `${moTaConLai(conLaiMs(han, lechMayChu, Date.now()))} (theo giờ hệ thống)` + (canhBao === "" ? "" : ` — ${canhBao}`);
+    hien(el, true);
+  };
+  ve();
+  henDemNguoc = window.setInterval(ve, 1000);
+}
+
+/** Giờ dạng chính tắc của máy chủ → chuỗi đọc được theo múi giờ của máy này (chỉ đổi MÚI, không đổi GIỜ). */
+function gioDoc(chuoi) {
+  const ms = docDauThoiGian(chuoi);
+  return ms === null ? String(chuoi) : new Date(ms).toLocaleString("vi-VN");
+}
+
 async function napGoiThau() {
+  const guiLuc = Date.now();
   const r = await goi("GET", "/guest/rfq");
+  const nhanLuc = Date.now();
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không đọc được gói thầu")); hien($("b3"), true); return; }
   phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null };
 
@@ -167,11 +204,14 @@ async function napGoiThau() {
   } else {
     dong.push(["Hạn nộp", han.toLocaleString("vi-VN")]);
   }
+  lechMayChu = doLechMayChu(r.body.gioMayChu, guiLuc, nhanLuc);
+  if (lechMayChu !== null) dong.push(["Giờ hệ thống lúc tải", gioDoc(r.body.gioMayChu)]);
   for (const [k, v] of dong) {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd"); dd.textContent = v;
     $("tt-rfq").append(dt, dd);
   }
+  demNguoc(Number.isFinite(han.getTime()) ? han.getTime() : null);
 
   const tbody = $("bang-hang").querySelector("tbody");
   tbody.replaceChildren();
@@ -264,7 +304,21 @@ $("nut-nop").addEventListener("click", async () => {
     });
 
     const r = await goi("POST", "/guest/bids", { envelope: sangB64(phongBi) });
-    if (r.status !== 201) { bao($("loi3"), loiCua(r, "Không nộp được")); $("nut-nop").disabled = false; return; }
+    if (r.status !== 201) {
+      // [khoản 196 / ADR-067 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
+      // in cả hai, để người bị chặn đối chiếu được với đồng hồ của mình và với hạn trên màn hình.
+      const b = r.body;
+      const viHan = r.status === 422 && b !== null && typeof b === "object" && typeof b.gioPhanXu === "string" && typeof b.hanNop === "string";
+      bao(
+        $("loi3"),
+        viHan
+          ? `${b.error} Giờ hệ thống lúc phán xử: ${gioDoc(b.gioPhanXu)} (${b.gioPhanXu}). Hạn nộp: ${gioDoc(b.hanNop)} (${b.hanNop}). ` +
+            "Hệ thống đã ghi lại lần nộp bị chặn này."
+          : loiCua(r, "Không nộp được"),
+      );
+      $("nut-nop").disabled = false;
+      return;
+    }
     veBienNhan(r.body.receipt, phongBi, thuatToan, khoa.keyVersion);
   } catch (e) {
     bao($("loi3"), e instanceof Error ? e.message : "Niêm phong thất bại");

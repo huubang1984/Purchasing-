@@ -62,7 +62,7 @@ interface LoiMoi {
   readonly token: string;
 }
 
-async function moi(ten: string): Promise<LoiMoi> {
+async function moi(ten: string, rfqId?: string): Promise<LoiMoi> {
   const duoi = randomBytes(4).toString("hex");
   const ncc = await db.pool.query<{ id: string }>(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -75,7 +75,7 @@ async function moi(ten: string): Promise<LoiMoi> {
   );
   return withTenant(apiPool, orgA, async (c) => {
     const loi = await createInvitation(c, orgA, {
-      rfqId: rfqA,
+      rfqId: rfqId ?? rfqA,
       supplierId: ncc.rows[0]?.id ?? "",
       contactId: lh.rows[0]?.id ?? "",
       linkChannel: "EMAIL",
@@ -389,6 +389,84 @@ describe("gói thầu và báo giá của khách", () => {
     expect((rc.body as { canonicalText: string }).canonicalText).toBe(bn.canonicalText);
 
     expect((await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: "khong-phai-base64!" } })).status).toBe(422);
+  });
+
+  // ============================================================================================
+  // [khoản 196 / ADR-067 phần 2 và 3] GIỜ MÁY CHỦ ĐI TỚI NHÀ CUNG CẤP — TRƯỚC khi nộp, và KHI bị chặn.
+  //
+  // ⑴ `GET /guest/rfq` mang `gioMayChu`: đồng hồ của CSDL — nguồn mà C1 phán xử — ở dạng chính tắc
+  //    của biên nhận. Trang nộp thầu đếm ngược theo độ lệch giữa giá trị này và đồng hồ máy người
+  //    dùng, không theo đồng hồ máy người dùng trần.
+  // ⑵ Lần nộp bị chặn VÌ HẠN ra 422 mang `gioPhanXu` (now() của giao dịch đã phán xử) và `hanNop`
+  //    (deadline_at đã so), và giao dịch ấy COMMIT: hàng `BID_DEADLINE_DENIED` nằm lại trong sổ.
+  // ============================================================================================
+  it("[khoản 196] GET /guest/rfq mang gioMayChu — đồng hồ CSDL ở dạng chính tắc, lệch đồng hồ CSDL không quá vài giây", async () => {
+    const lm = await moi("NCC gio may chu");
+    const ck = await moPhienKhach(lm);
+    const r = await goi("GET", "/guest/rfq", { cookie: ck });
+    expect(r.status, r.text).toBe(200);
+    const gio = (r.body as { gioMayChu?: unknown }).gioMayChu;
+    expect(typeof gio, "thiếu gioMayChu").toBe("string");
+    expect(gio).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u);
+    const { rows } = await db.pool.query<{ ms: number }>(
+      "SELECT abs(extract(epoch FROM (clock_timestamp() - $1::timestamptz)) * 1000)::float8 AS ms",
+      [gio],
+    );
+    expect(rows[0]?.ms).toBeLessThan(5000);
+  });
+
+  it("[khoản 196] nộp sau hạn qua HTTP ⇒ 422 mang gioPhanXu và hanNop; giao dịch commit nên hàng BID_DEADLINE_DENIED nằm lại", async () => {
+    // Cùng công thức RFQ OPEN của `beforeAll`, trên một gói RIÊNG — gói chung `rfqA` phải còn hạn cho các ca khác.
+    const rfqTre = (await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Goi tre', now() + interval '7 days', false, $2, $3) RETURNING id",
+      [orgA, uA, sA],
+    )).rows[0]?.id ?? "";
+    expect(rfqTre).not.toBe("");
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Thep tam SS400', '100.0000', 'tam', $3, $4)",
+      [orgA, rfqTre, uA, sA],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+        "SELECT $1, $2, $3, 'VND', id, $4, $5 FROM org_procurement_policies WHERE org_id = $1 AND version = 1",
+      [orgA, rfqTre, NGAN_SACH, uA, sA],
+    );
+    await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqTre, uA, sA]);
+    await withTenant(apiPool, orgA, async (c) => {
+      await issueRfqKeyPair(c, orgA, { rfqId: rfqTre, actorSessionId: sA, orgKeys: boBocTest });
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqTre, uA, sA]);
+    });
+    const lm = await moi("NCC tre", rfqTre);
+    const ck = await moPhienKhach(lm);
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    try {
+      await db.pool.query("UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1", [rfqTre]);
+    } finally {
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    }
+    const han = (await db.pool.query<{ t: string }>("SELECT public.bid_dau_thoi_gian_chinh_tac(deadline_at) AS t FROM rfq_packages WHERE id = $1", [rfqTre])).rows[0]?.t;
+    const khoa = await withTenant(apiPool, orgA, (c) => getRfqPublicKeys(c, orgA, rfqTre));
+    const p256 = khoa.find((k) => k.algorithm === "ECDH_P256")!;
+    const pb = Buffer.from(
+      await sealBid({ rfqId: rfqTre, algorithm: "ECDH_P256", recipientPublicKey: p256.publicKey, plaintext: new TextEncoder().encode("gia tre") }),
+    ).toString("base64");
+
+    const r = await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: pb } });
+    expect(r.status, r.text).toBe(422);
+    const b = r.body as { error?: unknown; gioPhanXu?: unknown; hanNop?: unknown };
+    expect(typeof b.error).toBe("string");
+    expect(b.hanNop, "deadline_at đã so").toBe(han);
+    expect(typeof b.gioPhanXu).toBe("string");
+    expect(String(b.gioPhanXu) >= String(han), "giờ phán xử không trước hạn").toBe(true);
+
+    const { rows } = await db.pool.query<{ payload: { gioCsdl?: string; hanNop?: string } }>(
+      "SELECT payload FROM audit_events WHERE action = 'BID_DEADLINE_DENIED' AND resource_id = $1",
+      [rfqTre],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.payload).toEqual({ gioCsdl: b.gioPhanXu, hanNop: han });
   });
 
   it("[INV-A5] khách B không thấy báo giá lẫn biên nhận của khách A — và 404 ấy trùng thân với 'không tồn tại'", async () => {

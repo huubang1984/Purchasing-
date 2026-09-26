@@ -63,6 +63,9 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(ch.allowedOrigins).toEqual([]);
     expect(ch.trustedProxies).toEqual([]);
     expect(ch.afterCommitTimeoutMs).toBeUndefined();
+    // [khoản 196 / ADR-067] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình và nhịp canh lúc chạy.
+    expect(ch.lechDongHoToiDaMs).toBe(2000);
+    expect(ch.chuKyCanhDongHoMs).toBe(60_000);
     if (ch.keyAdapter !== "local-dev") throw new Error("fixture khai local-dev");
     expect(ch.masterKeys.active).toBe("v2");
     expect(Object.keys(ch.masterKeys.keys).sort()).toEqual(["v1", "v2"]);
@@ -87,6 +90,14 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(ch.dbPoolMax).toBe(3);
     expect(ch.afterCommitTimeoutMs).toBe(250);
     expect(ch.publicBaseUrl).toBe("http://localhost:3000");
+  });
+
+  it("[khoản 196] ngưỡng lệch đồng hồ và nhịp canh đọc từ môi trường, ngoài miền thì NÉM nêu đúng tên", () => {
+    const ch = docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_MAX_MS: "500", TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "1000" }));
+    expect(ch.lechDongHoToiDaMs).toBe(500);
+    expect(ch.chuKyCanhDongHoMs).toBe(1000);
+    expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_MAX_MS: "0" }))).toThrow("TRUSTPROCURE_CLOCK_SKEW_MAX_MS");
+    expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "10" }))).toThrow("TRUSTPROCURE_CLOCK_SKEW_CHECK_MS");
   });
 });
 

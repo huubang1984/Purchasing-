@@ -108,6 +108,32 @@ chứng dương của cảnh báo ấy; không có thư thì cảnh báo ⑵ ch�
 Chi phí: vài phút Fargate 0,25 vCPU và hai IP công khai trong lúc task chạy — không NAT, không
 VPC endpoint.
 
+## Nguồn thời gian (ADR-067, khoản 196)
+
+Hạn nộp thầu được phán xử bằng `now()` của **CSDL** (trigger C1), nên đồng hồ của máy CSDL là một
+tham số pháp lý của sản phẩm, không phải một chi tiết vận hành. Lời khai của kho:
+
+| Thành phần | Nguồn thời gian | Cấu hình của ta |
+|---|---|---|
+| RDS PostgreSQL (stack chưa có) | Amazon Time Sync Service — dịch vụ quản lý, không có tham số chọn nguồn khác | **Không cấu hình gì.** Stack RDS sau này KHÔNG được thêm gì đổi múi giờ hay nguồn giờ của máy CSDL; `timezone` của parameter group để mặc định `UTC` |
+| ECS Fargate — `tp-api`, `tp-unseal-worker` (stack `90-ecs`, chưa có trên `master`) | Amazon Time Sync Service của host Fargate (`169.254.169.123` / `fd00:ec2::123`) | **Không cấu hình gì.** Task definition KHÔNG chạy chrony/ntpd riêng, KHÔNG ghi đè giờ hệ thống |
+| Stack đo một lần `70-do-kms` | như ECS Fargate | không liên quan tới hạn nộp |
+
+**Mọi dòng trong bảng trên là ĐỌC tài liệu AWS, chưa đo** — chưa có tài khoản prod dùng được (khoản 15)
+và chưa có stack RDS hay ECS dịch vụ nào. Lớp CƯỠNG CHẾ không nằm ở đây mà ở tiến trình: `apps/api` và
+`apps/unseal-worker` so `clock_timestamp()` của CSDL với đồng hồ của chính chúng lúc khởi động (lệch quá
+`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, mặc định 2 000 ms ⇒ **không lên**, lỗi `LechDongHoError`) và mỗi
+`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS` (mặc định 60 000 ms) lúc chạy (⇒ một dòng log `canh bao LechDongHo`).
+Tức nếu lời khai trên sai, tiến trình nói ra.
+
+Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, bắt buộc trước dữ liệu thật):
+
+1. Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒ trường `ClockDrift` có
+   `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
+2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
+   không có dòng `canh bao LechDongHo`.
+3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
+
 ## Rủi ro còn lại — nói thẳng
 
 - **KeyAdmin sửa được key policy**, nên về lý thuyết tự gỡ lệnh `Deny` rồi tự cấp `Decrypt`.

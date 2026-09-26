@@ -20,6 +20,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import {
+  BiddingError,
   ReceiptSigningKeyRing,
   createLocalDevReceiptSigner,
   getBidReceipt,
@@ -514,12 +515,20 @@ describe("[INV-C1] hạn nộp", () => {
       await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
     }
 
-    await tuChoiTuCsdl(
-      withTenant(apiPool, orgA, (c) =>
-        submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }),
-      ),
-      /Da qua han nop bao gia/u,
+    // [khoản 196] Lần chặn VÌ HẠN nay mang lớp riêng `NopQuaHanError` — con của `BiddingError`,
+    // nên vế "lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần" giữ nguyên nghĩa; hai dấu thời gian đo ở
+    // ca [khoản 196] ngay dưới.
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }),
+    ).then(
+      () => null,
+      (e: unknown) => e,
     );
+    expect(loi, "lần nộp này phải bị từ chối").toBeInstanceOf(BiddingError);
+    expect((loi as Error).name).toBe("NopQuaHanError");
+    const nguyenNhan = (loi as { cause?: unknown }).cause;
+    expect((nguyenNhan as { code?: unknown }).code, "check_violation của trigger").toBe("23514");
+    expect((nguyenNhan as Error).message).toMatch(/Da qua han nop bao gia/u);
 
     // ... và KHÔNG để lại gì: không phiên bản, không biên nhận.
     const { rows } = await db.pool.query<{ n: string }>(
@@ -547,6 +556,92 @@ describe("[INV-C1] hạn nộp", () => {
       ),
       /khong nhan bao gia khi dang o trang thai CLOSED/u,
     );
+  });
+
+  // ============================================================================================
+  // [khoản 196 / ADR-067 phần 2] NGƯỜI BỊ CHẶN PHẢI CÓ THỨ ĐỂ ĐỐI CHIẾU.
+  //
+  // Trước vòng này, lần nộp bị C1 chặn trả một `BiddingError` với câu *"kiểm lại trạng thái gói
+  // thầu, hạn nộp …"* — không một con số nào, và sổ kiểm toán không một hàng nào (giao dịch bị
+  // huỷ). Người bị loại không biết CSDL tin là mấy giờ lúc phán xử, và hệ thống không giữ dấu vết
+  // nào để họ khiếu nại. Ca này đòi ba thứ trong một lượt:
+  //   ⑴ lỗi mang TÊN riêng và mang HAI dấu thời gian — ĐÚNG `now()` của giao dịch đã phán xử và
+  //      ĐÚNG `deadline_at` mà trigger đã so, ở dạng chính tắc của biên nhận;
+  //   ⑵ giao dịch của người gọi CÒN LÀNH sau lỗi ấy (một câu SQL tiếp theo chạy được);
+  //   ⑶ commit giao dịch ấy để lại ĐÚNG MỘT hàng `BID_DEADLINE_DENIED` mang người đã xác thực,
+  //      và KHÔNG một phiên bản, KHÔNG một luồng báo giá nào.
+  // ============================================================================================
+  it("[khoản 196] quá hạn ⇒ NopQuaHanError mang giờ CSDL lúc phán xử cùng deadline_at; giao dịch còn lành; commit để lại đúng một hàng BID_DEADLINE_DENIED", async () => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    await db.pool.query("ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages DISABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    try {
+      await db.pool.query("UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1", [bc.rfqId]);
+    } finally {
+      await db.pool.query("ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai");
+    }
+    const hanThat = (
+      await db.pool.query<{ t: string }>("SELECT public.bid_dau_thoi_gian_chinh_tac(deadline_at) AS t FROM rfq_packages WHERE id = $1", [bc.rfqId])
+    ).rows[0]?.t;
+    const { rows: nguoi } = await db.pool.query<{ id: string }>(
+      "SELECT verified_contact_id AS id FROM guest_sessions WHERE id = $1",
+      [bc.guestSessionId],
+    );
+
+    let loi: unknown = null;
+    let gioGiaoDich = "";
+    let sauLoi = "";
+    await withTenant(apiPool, orgA, async (c) => {
+      gioGiaoDich = (await c.query<{ t: string }>("SELECT public.bid_dau_thoi_gian_chinh_tac(now()) AS t")).rows[0]?.t ?? "";
+      loi = await submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      // ⑵ Giao dịch còn lành: một câu bị huỷ sẽ ném 25P02 ở đây.
+      sauLoi = (await c.query<{ x: string }>("SELECT 'con lanh' AS x")).rows[0]?.x ?? "";
+    });
+
+    expect(loi, "lần nộp sau hạn phải bị từ chối").not.toBeNull();
+    const l = loi as { name?: unknown; gioCsdl?: unknown; hanNop?: unknown; cause?: { code?: unknown } };
+    expect(l.name, "lỗi mang TÊN riêng của lần chặn vì hạn").toBe("NopQuaHanError");
+    expect(l.hanNop, "deadline_at mà trigger đã so").toBe(hanThat);
+    expect(l.gioCsdl, "now() của CHÍNH giao dịch đã phán xử").toBe(gioGiaoDich);
+    expect(String(l.gioCsdl) >= String(l.hanNop), "giờ phán xử không trước hạn").toBe(true);
+    expect(l.cause?.code, "câu của CSDL còn ở cause").toBe("23514");
+    expect(sauLoi).toBe("con lanh");
+
+    // ⑶ Sổ: đúng một hàng, người đã xác thực, hai dấu thời gian — và không phiên bản, không luồng.
+    const { rows: so } = await db.pool.query<{ actor_type: string; actor_id: string; payload: { gioCsdl?: string; hanNop?: string } }>(
+      "SELECT actor_type, actor_id, payload FROM audit_events WHERE action = 'BID_DEADLINE_DENIED' AND resource_id = $1",
+      [bc.rfqId],
+    );
+    expect(so).toHaveLength(1);
+    expect(so[0]?.actor_type).toBe("SUPPLIER");
+    expect(so[0]?.actor_id).toBe(nguoi[0]?.id);
+    expect(so[0]?.payload).toEqual({ gioCsdl: gioGiaoDich, hanNop: hanThat });
+    const { rows: luong } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM vendor_bids b JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [bc.rfqId],
+    );
+    expect(luong[0]?.n, "luồng báo giá tạo trong lần nộp bị chặn phải rút theo").toBe("0");
+  });
+
+  it("[khoản 196] ĐỐI CHỨNG: RFQ CLOSED vẫn ra BiddingError chung — chỉ lần chặn VÌ HẠN mang hai dấu thời gian và vào sổ", async () => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som', closed_by = $2, " +
+          "closed_by_session_id = $3 WHERE id = $1",
+        [bc.rfqId, uA, sA],
+      ),
+    );
+    await tuChoiTuCsdl(
+      withTenant(apiPool, orgA, (c) => submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy })),
+      /khong nhan bao gia khi dang o trang thai CLOSED/u,
+    );
+    const { rows } = await db.pool.query("SELECT 1 FROM audit_events WHERE action = 'BID_DEADLINE_DENIED' AND resource_id = $1", [bc.rfqId]);
+    expect(rows).toHaveLength(0);
   });
 
   it("[INV-C1] ĐỘT BIẾN: gỡ trigger hạn nộp thì một báo giá TRỄ đi lọt", async () => {

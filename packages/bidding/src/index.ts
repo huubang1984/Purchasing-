@@ -53,6 +53,9 @@ export {
 } from "./ciphertext-audit.js";
 export {
   BiddingError,
+  // [khoản 196] Lần chặn VÌ HẠN mang giờ CSDL lúc phán xử và hạn đã so — route khách trả chúng cho
+  // nhà cung cấp. Xem hợp đồng "giao dịch còn lành" ở docstring của lớp.
+  NopQuaHanError,
   getBidReceipt,
   listBidVersions,
   submitBid,
