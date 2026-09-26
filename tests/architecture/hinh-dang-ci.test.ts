@@ -85,8 +85,128 @@ describe("[khoản nợ 20 + 27] hình dạng của ci.yml", () => {
     // Chống rỗng ruột cho khẳng định trên: "t0 không chứa pnpm audit" cũng đúng nếu ai đó xoá
     // sạch job t0.
     const t0 = thanJob("t0");
-    for (const buoc of ["pnpm typecheck", "pnpm lint", "pnpm depcruise", "gitleaks-action"]) {
+    // [S1.150 / khoản 115] gitleaks rời t0 sang job riêng `t0c-bi-mat` — khẳng định nó còn tồn tại
+    // nằm ở khối dưới, không ở đây.
+    for (const buoc of ["pnpm typecheck", "pnpm lint", "pnpm depcruise"]) {
       expect(t0, `cổng tĩnh "${buoc}" biến mất khỏi t0`).toContain(buoc);
     }
+  });
+});
+
+// ==============================================================================================
+// [S1.150 / khoản 115] QUYỀN CỦA `ci.yml` — BÀI HỌC KHOẢN NỢ 67 ÁP CHO WORKFLOW CHẠY TRÊN MỌI PR
+//
+//   ⑶ quyền mặc định của workflow là `contents: read` — khai TƯỜNG MINH, không lấy theo thiết lập
+//     kho (`default_workflow_permissions`), thứ đổi được mà không một dòng nào của tệp này đổi;
+//   ⑷ mọi `actions/checkout` mang `persist-credentials: false`;
+//   ⑸ một job có `run:` hay cài phụ thuộc thì KHÔNG chạm `secrets.` hay `github.token` — bí mật chỉ
+//     sống trong job không chạy mã của cây phụ thuộc;
+//   ⑹ job quét bí mật tồn tại, không cài đặt, không `run:`, và quyền chỉ đọc.
+// Cùng cách đọc regex như trên; dòng chú thích nguyên dòng bị bỏ trước khi đo để một câu giải
+// thích nhắc tên `secrets.GITHUB_TOKEN` không làm đỏ (hay làm xanh) phép đo.
+// ==============================================================================================
+
+/** Dòng có nghĩa: bỏ dòng trống và dòng chú thích nguyên dòng. */
+const coNghia = (van: string): string[] =>
+  van.split("\n").filter((d) => d.trim() !== "" && !d.trimStart().startsWith("#"));
+
+/** Tên mọi job dưới `jobs:` (mức thụt hai dấu cách). */
+function tenCacJob(): string[] {
+  const dong = coNghia(CI);
+  return dong
+    .slice(dong.indexOf("jobs:") + 1)
+    .filter((d) => /^ {2}[a-z0-9][a-z0-9-]*:$/u.test(d))
+    .map((d) => d.trim().slice(0, -1));
+}
+
+describe("[S1.150 / khoản 115] quyền và bí mật của ci.yml", () => {
+  const dong = coNghia(CI);
+
+  it("⑶ mức workflow khai đúng `permissions: contents: read`, trước `jobs:`", () => {
+    const i = dong.indexOf("permissions:");
+    expect(i, "ci.yml không khai `permissions` ở mức workflow").toBeGreaterThan(-1);
+    expect(i).toBeLessThan(dong.indexOf("jobs:"));
+    // Khối con: mọi dòng thụt sâu hơn ngay sau `permissions:`.
+    const khoi: string[] = [];
+    for (const d of dong.slice(i + 1)) {
+      if (!/^\s/u.test(d)) break;
+      khoi.push(d.trim());
+    }
+    expect(khoi, "quyền mức workflow phải đúng MỘT dòng `contents: read`").toEqual(["contents: read"]);
+  });
+
+  it("⑶ không job nào xin quyền GHI", () => {
+    const ghi = dong.filter((d) => /^\s+[a-z-]+:\s*write\s*$/u.test(d) || /write-all/u.test(d));
+    expect(ghi).toEqual([]);
+  });
+
+  it("⑷ mọi `actions/checkout` mang `persist-credentials: false`", () => {
+    let soCheckout = 0;
+    for (const ten of tenCacJob()) {
+      const than = coNghia(thanJob(ten));
+      than.forEach((d, i) => {
+        if (!/uses:\s*actions\/checkout@/u.test(d)) return;
+        soCheckout += 1;
+        const thut = d.search(/\S/u);
+        // Các dòng của CÙNG bước: thụt sâu hơn dấu `-` của bước.
+        const cuaBuoc: string[] = [];
+        for (const sau of than.slice(i + 1)) {
+          if (sau.search(/\S/u) <= thut) break;
+          cuaBuoc.push(sau.trim());
+        }
+        expect(cuaBuoc, `checkout trong job "${ten}" giữ credential`).toContain(
+          "persist-credentials: false",
+        );
+      });
+    }
+    // Chống rỗng ruột: sáu job, mỗi job một checkout.
+    expect(soCheckout).toBe(tenCacJob().length);
+  });
+
+  it("⑸ job có `run:` hoặc cài phụ thuộc không chạm `secrets.` / `github.token`", () => {
+    const coBiMat: string[] = [];
+    for (const ten of tenCacJob()) {
+      const than = coNghia(thanJob(ten)).join("\n");
+      const chayMa = /^\s+(?:- )?run:/mu.test(than) || /pnpm\/action-setup|actions\/setup-node/u.test(than);
+      const chamBiMat = /\bsecrets\.|\bgithub\.token\b/u.test(than);
+      if (chamBiMat) coBiMat.push(ten);
+      expect(
+        chayMa && chamBiMat,
+        `job "${ten}" vừa chạy mã (run:/cài phụ thuộc) vừa cầm bí mật — script vòng đời của cây ` +
+          "phụ thuộc chạy cùng máy, cùng tài khoản với bước nhận bí mật (khoản 115).",
+      ).toBe(false);
+    }
+    // Chống rỗng ruột: bí mật duy nhất hôm nay là token của gitleaks, và nó nằm đúng ở t0c-bi-mat.
+    expect(coBiMat).toEqual(["t0c-bi-mat"]);
+  });
+
+  it("⑹ job quét bí mật tồn tại, không cài đặt, không `run:`, quyền chỉ đọc", () => {
+    const than = thanJob("t0c-bi-mat");
+    expect(than).toMatch(/name: T0c — quet bi mat/u);
+    expect(than).toMatch(/uses: gitleaks\/gitleaks-action@v2/u);
+    expect(than).toMatch(/fetch-depth: 0/u);
+    const coNghiaThan = coNghia(than).join("\n");
+    expect(coNghiaThan).not.toMatch(/pnpm|setup-node|actions\/cache/u);
+    expect(coNghiaThan).not.toMatch(/^\s+(?:- )?run:/mu);
+    // Chỉ hai bước: checkout rồi gitleaks.
+    const buoc = coNghia(than).filter((d) => /^\s+- /u.test(d));
+    expect(buoc.map((d) => d.trim().replace(/@.*/u, ""))).toEqual([
+      "- uses: actions/checkout",
+      "- name: Quet bi mat",
+    ]);
+    const dongThan = coNghia(than);
+    const i = dongThan.findIndex((d) => d.trim() === "permissions:");
+    expect(i, "t0c-bi-mat phải khai quyền ở mức job").toBeGreaterThan(-1);
+    const thutQuyen = dongThan[i]?.search(/\S/u) ?? 0;
+    const quyen: string[] = [];
+    for (const d of dongThan.slice(i + 1)) {
+      if (d.search(/\S/u) <= thutQuyen) break;
+      quyen.push(d.trim());
+    }
+    expect(quyen).toEqual(["contents: read", "pull-requests: read"]);
+  });
+
+  it("tên job T0 không đổi — kiểm tra nhánh bám vào tên", () => {
+    expect(thanJob("t0")).toMatch(/name: T0 — cổng tĩnh\n/u);
   });
 });
