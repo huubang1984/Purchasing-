@@ -62,7 +62,11 @@ const GOC = fileURLToPath(new URL("../../", import.meta.url));
  * Đo một lần bằng `pnpm list -r --prod --depth 0`, và giữ đúng bằng test này. Thêm một dòng vào
  * đây là một quyết định kiến trúc, không phải một lần dọn dẹp.
  */
-const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = ["pg", "pg-connection-string"];
+// [ADR-062] `@aws-sdk/client-kms`: adapter aws-kms của cặp khoá tổ chức (`packages/crypto-keys`)
+// — ADR-009 chọn AWS KMS, và SDK chính hãng là thứ duy nhất ký SigV4 cho lời gọi ấy; tự viết một
+// bộ ký là thêm mã mật mã mà dự án phải tự canh. Cây phụ thuộc bắc cầu của nó (`@smithy/*`,
+// `@aws-crypto/*`…) do bước audit T0b đo, không liệt kê ở đây: test này chỉ xét phụ thuộc TRỰC TIẾP.
+const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = ["@aws-sdk/client-kms", "pg", "pg-connection-string"];
 
 interface Manifest {
   readonly duongDan: string;

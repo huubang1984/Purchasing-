@@ -1,16 +1,38 @@
-import { createPublicKey, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createPublicKey,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
+import {
+  DecryptCommand,
+  GenerateDataKeyPairWithoutPlaintextCommand,
+  KMSClient,
+  type DecryptCommandOutput,
+  type GenerateDataKeyPairWithoutPlaintextCommandOutput,
+} from "@aws-sdk/client-kms";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  createAwsKmsOrgKeyProvisioner,
   createLocalDevOrgKeyProvisioner,
   createLocalDevWrapper,
   KeyError,
   MasterKeyRing,
   wrapForOrg,
+  type KmsSinhCapKhoa,
   type ProvisionedOrgKey,
   type WrappedKey,
 } from "./index.js";
-import { createLocalDevOrgUnwrapper, createLocalDevUnwrapper, type OrgKeyHandle } from "./unwrap.js";
+import {
+  createAwsKmsOrgUnwrapper,
+  createLocalDevOrgUnwrapper,
+  createLocalDevUnwrapper,
+  type KmsMoKhoa,
+  type OrgKeyHandle,
+} from "./unwrap.js";
 
 function ring(): MasterKeyRing {
   return new MasterKeyRing("v2", {
@@ -373,6 +395,182 @@ describe("cặp khoá tổ chức (ADR-062)", () => {
   it("mở khoá riêng tổ chức bằng vòng khoá khác thì thất bại, không cho ra khoá rác", async () => {
     const k = await capKhoa(ring());
     await expect(moKhoa(ring(), k)).rejects.toThrow(KeyError);
+  });
+});
+
+// =============================================================================================
+// [ADR-062] ADAPTER aws-kms — ĐO TRÊN MỘT KMS GIẢ, VÀ ĐÓ LÀ GIỚI HẠN NÓI THẲNG
+//
+// KMS giả dưới đây làm đúng hai việc KMS thật làm với một CMK đối xứng: sinh cặp P-256 rồi bọc khoá
+// riêng bằng AES-GCM với AAD là encryption context, và `Decrypt` từ chối khi context hay KeyId lệch.
+// Nó đo ADAPTER — lệnh nào được gửi, với tham số nào, bao nhiêu lần, và phản hồi dị dạng bị từ chối
+// ra sao. Nó KHÔNG đo key policy, IAM hay định dạng blob thật của AWS: đó là phép đo ⒜ của ADR-062,
+// chạy trên tài khoản thật.
+// =============================================================================================
+class KmsGia implements KmsSinhCapKhoa, KmsMoKhoa {
+  readonly cmk = randomBytes(32);
+  readonly lenh: Array<{ ten: string; input: unknown }> = [];
+  constructor(readonly keyArn = "arn:aws:kms:ap-southeast-1:942091277863:key/gia") {}
+
+  send(lenh: GenerateDataKeyPairWithoutPlaintextCommand): Promise<GenerateDataKeyPairWithoutPlaintextCommandOutput>;
+  send(lenh: DecryptCommand): Promise<DecryptCommandOutput>;
+  send(
+    lenh: GenerateDataKeyPairWithoutPlaintextCommand | DecryptCommand,
+  ): Promise<GenerateDataKeyPairWithoutPlaintextCommandOutput | DecryptCommandOutput> {
+    // Ném trong executor thành một Promise bị từ chối — đúng hình lỗi của KMSClient thật.
+    return new Promise((resolve) => resolve(this.xuLy(lenh)));
+  }
+
+  private xuLy(
+    lenh: GenerateDataKeyPairWithoutPlaintextCommand | DecryptCommand,
+  ): GenerateDataKeyPairWithoutPlaintextCommandOutput | DecryptCommandOutput {
+    this.lenh.push({ ten: lenh.constructor.name, input: lenh.input });
+    const meta = { $metadata: {} };
+    if (lenh instanceof GenerateDataKeyPairWithoutPlaintextCommand) {
+      const cap = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      const pkcs8 = cap.privateKey.export({ format: "der", type: "pkcs8" });
+      return {
+        ...meta,
+        KeyId: this.keyArn,
+        KeyPairSpec: "ECC_NIST_P256",
+        PublicKey: cap.publicKey.export({ format: "der", type: "spki" }),
+        PrivateKeyCiphertextBlob: this.boc(pkcs8, lenh.input.EncryptionContext),
+      };
+    }
+    if (lenh.input.KeyId !== "alias/tp-org-wrap") throw new Error("IncorrectKeyException");
+    return { ...meta, KeyId: this.keyArn, Plaintext: this.mo(lenh.input.CiphertextBlob!, lenh.input.EncryptionContext) };
+  }
+
+  private boc(banRo: Uint8Array, ctx: Record<string, string> | undefined): Uint8Array {
+    const iv = randomBytes(12);
+    const c = createCipheriv("aes-256-gcm", this.cmk, iv);
+    c.setAAD(Buffer.from(JSON.stringify(ctx ?? {})));
+    const than = Buffer.concat([c.update(banRo), c.final()]);
+    return Buffer.concat([iv, c.getAuthTag(), than]);
+  }
+
+  private mo(blob: Uint8Array, ctx: Record<string, string> | undefined): Uint8Array {
+    const b = Buffer.from(blob);
+    const d = createDecipheriv("aes-256-gcm", this.cmk, b.subarray(0, 12));
+    d.setAAD(Buffer.from(JSON.stringify(ctx ?? {})));
+    d.setAuthTag(b.subarray(12, 28));
+    try {
+      return Buffer.concat([d.update(b.subarray(28)), d.final()]);
+    } catch {
+      throw new Error("InvalidCiphertextException");
+    }
+  }
+}
+
+describe("adapter aws-kms cho cặp khoá tổ chức (ADR-062)", () => {
+  const KEY_ID = "alias/tp-org-wrap";
+
+  it("KMSClient thật thoả hai mặt tối thiểu mà adapter đòi (phép kiểm kiểu, không gọi mạng)", () => {
+    const client = new KMSClient({ region: "ap-southeast-1" });
+    const sinh: KmsSinhCapKhoa = client;
+    const mo: KmsMoKhoa = client;
+    expect(sinh).toBe(mo);
+    client.destroy();
+  });
+
+  it("sinh bằng GenerateDataKeyPairWithoutPlaintext, bọc cục bộ, mở bằng ĐÚNG MỘT Decrypt cho nhiều khoá RFQ", async () => {
+    const kms = new KmsGia();
+    const orgId = randomUUID();
+    const k = await createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "kms-1" }).generate(orgId);
+    expect(k).toMatchObject({ orgId, keyVersion: "kms-1" });
+    expect(kms.lenh).toEqual([
+      {
+        ten: "GenerateDataKeyPairWithoutPlaintextCommand",
+        input: { KeyId: KEY_ID, KeyPairSpec: "ECC_NIST_P256", EncryptionContext: { org_id: orgId } },
+      },
+    ]);
+
+    const banRo = Array.from({ length: 5 }, () => randomBytes(138));
+    const daBoc = banRo.map((b) => wrapForOrg(k, b));
+    expect(kms.lenh).toHaveLength(1);
+
+    const h = await createAwsKmsOrgUnwrapper({ client: kms, keyId: KEY_ID }).openOrgKey(k);
+    try {
+      daBoc.forEach((d, i) => expect(Buffer.from(h.unwrap(d)).equals(banRo[i]!)).toBe(true));
+    } finally {
+      h.dispose();
+    }
+    expect(kms.lenh.map((l) => l.ten)).toEqual(["GenerateDataKeyPairWithoutPlaintextCommand", "DecryptCommand"]);
+    expect(kms.lenh[1]!.input).toEqual({
+      KeyId: KEY_ID,
+      CiphertextBlob: k.wrappedPrivateKey,
+      EncryptionContext: { org_id: orgId },
+      EncryptionAlgorithm: "SYMMETRIC_DEFAULT",
+    });
+    expect(() => h.unwrap(daBoc[0]!)).toThrow(/dispose/);
+  });
+
+  it("khoá riêng đã bọc của tổ chức A đem mở dưới org_id của B ⇒ KMS từ chối, lỗi là KeyError", async () => {
+    const kms = new KmsGia();
+    const k = await createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "kms-1" }).generate(
+      randomUUID(),
+    );
+    const mo = createAwsKmsOrgUnwrapper({ client: kms, keyId: KEY_ID });
+    await expect(mo.openOrgKey({ ...k, orgId: randomUUID() })).rejects.toThrow(KeyError);
+    // Đối chứng: cùng blob, đúng org_id thì mở được — lần từ chối trên là vì context, không vì blob hỏng.
+    (await mo.openOrgKey(k)).dispose();
+  });
+
+  it("lỗi KMS (sai CMK, từ chối quyền) thành KeyError, giữ nguyên lỗi gốc ở cause", async () => {
+    const kms = new KmsGia();
+    const k = await createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "kms-1" }).generate(
+      randomUUID(),
+    );
+    const loi = await createAwsKmsOrgUnwrapper({ client: kms, keyId: "alias/khac" })
+      .openOrgKey(k)
+      .catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(KeyError);
+    expect((loi as KeyError).cause).toBeInstanceOf(Error);
+
+    const tuChoi: KmsSinhCapKhoa = { send: () => Promise.reject(new Error("AccessDeniedException")) };
+    await expect(
+      createAwsKmsOrgKeyProvisioner({ client: tuChoi, keyId: KEY_ID, keyVersion: "kms-1" }).generate(randomUUID()),
+    ).rejects.toThrow(KeyError);
+  });
+
+  it("phản hồi dị dạng của KMS bị từ chối trước khi vào CSDL", async () => {
+    const x25519 = generateKeyPairSync("x25519").publicKey.export({ format: "der", type: "spki" });
+    const hopLe = await new KmsGia().send(new GenerateDataKeyPairWithoutPlaintextCommand({ KeyId: KEY_ID, KeyPairSpec: "ECC_NIST_P256" }));
+    const phanHoi: Array<Partial<GenerateDataKeyPairWithoutPlaintextCommandOutput>> = [
+      { ...hopLe, KeyPairSpec: "ECC_NIST_P384" },
+      { ...hopLe, PublicKey: undefined },
+      { ...hopLe, PrivateKeyCiphertextBlob: new Uint8Array(0) },
+      { ...hopLe, KeyPairSpec: undefined, PublicKey: x25519 },
+    ];
+    for (const ra of phanHoi) {
+      const client: KmsSinhCapKhoa = { send: () => Promise.resolve({ $metadata: {}, ...ra }) };
+      await expect(
+        createAwsKmsOrgKeyProvisioner({ client, keyId: KEY_ID, keyVersion: "kms-1" }).generate(randomUUID()),
+      ).rejects.toThrow(KeyError);
+    }
+    const rong: KmsMoKhoa = { send: () => Promise.resolve({ $metadata: {} }) };
+    const k = await createAwsKmsOrgKeyProvisioner({ client: new KmsGia(), keyId: KEY_ID, keyVersion: "kms-1" }).generate(
+      randomUUID(),
+    );
+    await expect(createAwsKmsOrgUnwrapper({ client: rong, keyId: KEY_ID }).openOrgKey(k)).rejects.toThrow(/bản rõ/);
+  });
+
+  it("cấu hình sai bị từ chối lúc dựng, không phải lúc gọi đầu tiên", () => {
+    const kms = new KmsGia();
+    expect(() => createAwsKmsOrgKeyProvisioner({ client: kms, keyId: " ", keyVersion: "kms-1" })).toThrow(KeyError);
+    expect(() => createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "" })).toThrow(KeyError);
+    expect(() => createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "v".repeat(65) })).toThrow(
+      KeyError,
+    );
+    expect(() => createAwsKmsOrgUnwrapper({ client: kms, keyId: "" })).toThrow(KeyError);
+  });
+
+  it("orgId không phải UUID bị từ chối trước khi gọi KMS", async () => {
+    const kms = new KmsGia();
+    await expect(
+      createAwsKmsOrgKeyProvisioner({ client: kms, keyId: KEY_ID, keyVersion: "kms-1" }).generate("khong-phai-uuid"),
+    ).rejects.toThrow(/UUID/);
+    expect(kms.lenh).toHaveLength(0);
   });
 });
 
