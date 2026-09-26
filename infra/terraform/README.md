@@ -17,7 +17,7 @@ bí mật, biến GitHub, các đối chứng dương và những thư cảnh b�
 | `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-086); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-084) (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-086); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-084); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-087) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
@@ -370,6 +370,17 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
    không có dòng `canh bao LechDongHo`.
 3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
 
+
+## Đường thư cảnh báo tự canh — Lambda `tp-canh-dang-ky` (ADR-087)
+
+Mọi cảnh báo dừng ở một đăng ký email mà người nhận phải bấm xác nhận. Chưa bấm, SNS tự xoá khi quá hạn, hay người nhận bấm
+"unsubscribe" ⇒ thư đi vào hư không mà `apply` vẫn xanh. Stack 60 ⑻: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, chỉ có
+`sns:ListSubscriptionsByTopic` trên `tp-canh-bao-khoa` và `tp-canh-bao-van-hanh`; đối chiếu với `email_canh_bao` và
+`email_van_hanh` (Terraform ghi vào biến môi trường `MONG_DOI`). Mỗi địa chỉ chưa xác nhận / không có đăng ký, và mỗi đăng
+ký lạ, là một dòng `DANG KY HONG` (tên biến và vị trí, không in địa chỉ) ⇒ alarm `tp-canh-bao-dang-ky-hong` gửi ALARM và OK
+tới **cả hai** topic. Thêm alarm Lambda lỗi và Lambda không chạy 12 giờ, cùng khuôn ⑺. Mã: `tools/canh-dang-ky/src/canh-dang-ky.ts`;
+tệp Lambda `lambda/canh-dang-ky.mjs` sinh bằng `pnpm canh-dang-ky:dong-goi-lambda` (test đòi trùng byte với nguồn).
+Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa, rồi bấm xác nhận.
 
 ## Rủi ro còn lại — nói thẳng
 

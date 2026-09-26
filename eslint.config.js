@@ -56,6 +56,10 @@ export default tseslint.config(
       // [ADR-084] Tệp Lambda SINH RA từ `src/canh-moc-neo.ts` (gỡ kiểu) — không viết tay; `canh-moc-neo.test.ts` đòi nó trùng
       // byte với nguồn, nên nguồn đã qua eslint là đủ. Đúng một thư mục.
       "tools/neo-so-kiem-toan/lambda/*.mjs",
+      // [ADR-087] Cùng khuôn cho Lambda canh đăng ký SNS: bộ sinh (`dong-goi-lambda.mjs`) và tệp sinh ra — nguồn là
+      // `tools/canh-dang-ky/src/canh-dang-ky.ts`, đã qua eslint; test đòi trùng byte. Từng thư mục, không gộp.
+      "tools/canh-dang-ky/*.mjs",
+      "tools/canh-dang-ky/lambda/*.mjs",
       // [ADR-038] `apps/mcp/*.mjs` — bản sao có chủ ý thứ NĂM của cùng hook resolve, cho điểm vào
       // của tiến trình MCP (`pnpm mcp:dev`). Lý do không dùng chung file với `apps/api` ghi ở đầu
       // `apps/mcp/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một thư mục, không gộp `apps/*/*.mjs`.
