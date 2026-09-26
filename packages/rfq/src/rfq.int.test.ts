@@ -617,11 +617,11 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
     ).rejects.toThrow(RfqError);
   });
 
-  // [S1.146 / khoản 127] Hai lần gia hạn ĐỒNG THỜI tới CÙNG một hạn. Bản trước so "hạn mới > hạn hiện tại" trên hàng `docRfq` đọc KHÔNG
+  // [S1.151 / khoản 127] Hai lần gia hạn ĐỒNG THỜI tới CÙNG một hạn. Bản trước so "hạn mới > hạn hiện tại" trên hàng `docRfq` đọc KHÔNG
   // khoá: lần sau đọc D0, qua phép so, chờ khoá hàng ở `UPDATE`, rồi — vì trigger 011 không chạy vế trạng thái khi hạn BẰNG nhau — ghi D1
   // lên D1 và ghi `RFQ_DEADLINE_EXTENDED` (`truoc` = D0) cho một lần gia hạn không đổi gì. Phép đo giữ lần đầu Ở GIỮA giao dịch (đã
   // `UPDATE`, chưa COMMIT), chạy lần sau cho tới khi nó CHỜ KHOÁ, rồi mới COMMIT lần đầu ⇒ đúng một bản ghi sổ, lần sau bị từ chối.
-  it("[INV-C4] [S1.146 / khoản 127] hai lần gia hạn đồng thời tới cùng một hạn: đúng MỘT bản ghi RFQ_DEADLINE_EXTENDED, lần sau bị từ chối", async () => {
+  it("[INV-C4] [S1.151 / khoản 127] hai lần gia hạn đồng thời tới cùng một hạn: đúng MỘT bản ghi RFQ_DEADLINE_EXTENDED, lần sau bị từ chối", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });

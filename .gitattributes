@@ -67,3 +67,5 @@ evidence/INV-matrix.md text eol=lf
 # tệp sinh ra làm phép so đỏ trên Windows (đo: run 36246222923) và làm mã băm gói Lambda phụ thuộc máy chạy apply.
 # Ghim hẹp đúng thư mục ấy.
 tools/neo-so-kiem-toan/lambda/*.mjs text eol=lf
+# [ADR-089] Cùng lý do cho Lambda canh đăng ký SNS.
+tools/canh-dang-ky/lambda/*.mjs text eol=lf

@@ -7418,3 +7418,72 @@ minh — chỉ lộ ra khi task chết lúc chạy hay thư không đi, tức sa
   Lớp tài khoản bắt được phần lớn ca ấy (SES chưa xác minh, image không có).
 - Tool là bước người vận hành phải nhớ chạy; không có gì chặn một `terraform apply` bỏ qua nó.
 - Chưa chạy trên tài khoản thật: đo bằng `terraform console` thật trên bản sao stack không backend và một `aws` giả.
+
+---
+
+## ADR-088 — Hộp thư vận hành tách khỏi hộp thư an ninh
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-077**, ADR-083, ADR-062
+
+### Bối cảnh
+
+Mọi cảnh báo của stack 60 — ⑴ sửa key policy, ⑵ task mang role worker, ⑶ ⑷ ⑺ mốc neo, ⑸ DNS lạ, ⑹ vận hành — đổ về
+một topic `tp-canh-bao-khoa`, một người nhận `email_canh_bao`. ⑹ (ADR-077, ADR-083) gửi thư cả khi vào ALARM lẫn khi về
+OK, cho CPU, p95, 5xx, thiếu task và lỗi nghiệp vụ: khi chạy thật nó là phần lớn số thư. Người nhận quen lướt qua thư, và
+một thư `PutKeyPolicy` — thứ duy nhất làm đường tấn công của KeyAdmin không im lặng (ADR-062) — chìm giữa chúng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. Chỉ ⑹ (`tp-van-hanh-*`) chuyển đi. ⑴–⑸ và ⑺ (kể cả hai alarm sức khoẻ của Lambda ⑺) ở lại hộp thư an ninh.
+2. Topic mới `tp-canh-bao-van-hanh` ở **audit**, cạnh topic cũ: đường chuyển prod ⇒ bus audit giữ nguyên, quyền admin prod
+   vẫn không tắt được thư. Chỉ rule `tp-canh-bao-van-hanh` publish được vào nó; rule ấy bị gỡ khỏi policy của topic khoá.
+3. Biến bắt buộc `email_van_hanh = list(string)` (≥ 1, không mặc định); mỗi địa chỉ một subscription. Hướng dẫn apply
+   chuyển hai biến của stack 60 sang tệp `canh-bao.tfvars` không commit (danh sách qua `-var` trong PowerShell dễ sai).
+4. `hinh-dang-van-hanh.test.ts` ⑵ đòi: target ⑹ là topic vận hành, policy của nó chỉ cho rule ⑹, subscription của nó đọc
+   `email_van_hanh`, và policy topic khoá không nhắc gì tới ⑹.
+
+### Hệ quả, nói thẳng
+
+- Thêm một lần bấm xác nhận cho mỗi địa chỉ vận hành; địa chỉ chưa xác nhận thì không nhận gì, và không alarm nào báo điều đó.
+- Apply lần kế trên một stack 60 đã chạy sẽ đòi `email_van_hanh` (biến bắt buộc) — cố ý, để không ai lỡ tay gửi thư vận
+  hành về đâu cũng được.
+- Dễ đặt cùng một địa chỉ cho cả hai biến; tool không cấm — khi ấy tách topic không giúp gì ngoài tiêu đề thư.
+- Chưa chạy trên AWS thật: `terraform validate` stack 60 đạt; test kiến trúc đo trên chữ của cấu hình.
+
+---
+
+## ADR-089 — Đường thư cảnh báo tự canh: mỗi địa chỉ nhận có một đăng ký đã xác nhận
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-088**, ADR-086, ADR-062
+
+### Bối cảnh
+
+Mọi cảnh báo ⑴–⑺ kết thúc ở một đăng ký SNS email. Đăng ký ấy chỉ nhận thư khi người nhận BẤM xác nhận; SNS tự xoá
+đăng ký không được xác nhận kịp hạn; người nhận bấm "unsubscribe" ở cuối một thư là mất đăng ký. Cả ba ca, `terraform apply`
+vẫn xanh và không alarm nào kêu — mọi phép canh khác của hệ thống câm theo. ADR-088 thêm hộp thư thứ hai, tức gấp đôi số
+chỗ có thể hỏng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Lambda riêng `tp-canh-dang-ky` ở audit** (stack 60 ⑻), mỗi 6 giờ, chỉ có `sns:ListSubscriptionsByTopic` trên hai topic
+   cảnh báo. Không ghép vào Lambda ⑺ — quyền và việc của hai phép canh tách nhau.
+2. **Đối chiếu với danh sách Terraform khai**, không chỉ đếm `PendingConfirmation`: Terraform ghi `email_canh_bao` và
+   `email_van_hanh` vào biến môi trường `MONG_DOI`; mỗi địa chỉ phải có một đăng ký email ĐÃ xác nhận (so không phân biệt hoa
+   thường). Hỏng: *chờ xác nhận*, *không có* (bị xoá, bị huỷ), và *lạ* — đăng ký không nằm trong danh sách.
+3. **Log không in địa chỉ**: dòng `DANG KY HONG` ghi tên biến và vị trí (`email_van_hanh[1]`); đăng ký lạ chỉ ghi giao thức.
+4. **Ba alarm** — có đăng ký hỏng, Lambda lỗi, Lambda không chạy 12 giờ (thiếu dữ liệu = vi phạm) — gửi ALARM và OK tới
+   **cả hai** topic: hộp nào hỏng thì hộp kia vẫn nhận. Policy của cả hai topic cho ba alarm ấy publish.
+5. Mã theo khuôn ⑺: nguồn `tools/canh-dang-ky/src/canh-dang-ky.ts`, tệp Lambda sinh ra trùng byte, ghim LF; thêm
+   `@aws-sdk/client-sns` vào danh sách phụ thuộc sản xuất được phép (runtime Lambda cung cấp, không đóng gói).
+6. `hinh-dang-canh-dang-ky.test.ts`: quyền chỉ liệt kê; `MONG_DOI` đọc đúng hai biến mà các subscription dùng, và stack có
+   đúng hai subscription email; handler, tệp sinh ra, mẫu log; ba alarm tới cả hai topic.
+
+### Hệ quả, nói thẳng
+
+- Nếu CẢ HAI hộp cùng hỏng, thư ⑻ không tới ai — phép canh này không có đường ra thứ ba.
+- Lần apply đầu, Lambda có thể chạy trước khi người nhận kịp bấm xác nhận: thư ALARM không tới ai, rồi thư OK sau khi xác
+  nhận. Hướng dẫn apply dùng chính ca ấy làm đối chứng dương (3.2).
+- Danh sách người nhận nằm trong biến môi trường của Lambda ở audit — cùng mức lộ với chính các đăng ký SNS.
+- Đăng ký lạ có thể là ý đồ (ai đó thêm hộp thư của mình để đọc cảnh báo) hay vụng về (thêm tay qua console); thư không phân
+  biệt — đọc CloudTrail `Subscribe`.
+- Chưa chạy trên AWS thật: `terraform validate` stack 60 đạt; logic đo trên SNS giả, mẫu log đo bằng test đối chiếu chuỗi.
