@@ -6634,14 +6634,14 @@ chọn làm job neo lên ECS thay vì nới policy của bucket.
 
 ---
 
-## ADR-073 — S3 mở vòng khi MVP1 chưa đóng, sau một công tắc MỘT CHIỀU theo tổ chức
+## ADR-076 — S3 mở vòng khi MVP1 chưa đóng, sau một công tắc MỘT CHIỀU theo tổ chức
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn trong lượt soi hình dạng S1.131) ·
-Liên quan: **ADR-043**, **ADR-058** ⑷, ADR-065, ADR-066, ADR-075 · Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.3 (a)
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn trong lượt soi hình dạng S1.135) ·
+Liên quan: **ADR-043**, **ADR-058** ⑷, ADR-065, ADR-066, ADR-078 · Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.3 (a)
 
 **Bối cảnh.** Ba tài liệu nói S3 nên đợi: ADR-043 chỉ cho khoản rổ A mở vòng; ADR-058 ⑷ gọi việc dựng phép phát
 hiện lúc này là *đo trên tập rỗng*; V2.1 §39 đặt Governance sau pilot. Chủ dự án chọn làm ngay (spec §2.2 ⑶). Lượt soi
-S1.131 đo thêm một sự thật đổi hình dạng câu hỏi: `master` **đang là nguồn triển khai thật** — PR #132 (SES, ADR-065)
+S1.135 đo thêm một sự thật đổi hình dạng câu hỏi: `master` **đang là nguồn triển khai thật** — PR #132 (SES, ADR-065)
 và #133 (ECS, ADR-066) vào ngày 2026-09-26 — còn S3.1 (bậc bắt buộc, ước lượng bắt buộc, sàn một chữ ký) và S3.2 (mời ở
 DRAFT, gửi link lúc mở gói) đổi chính kịch bản mà pilot sẽ chạy.
 
@@ -6649,10 +6649,10 @@ DRAFT, gửi link lúc mở gói) đổi chính kịch bản mà pilot sẽ ch�
 
 ⑴ **Ngoại lệ HẸP đối với ADR-043.** Chỉ các hạng mục S3.x của spec S3 được mở vòng khi MVP1 chưa đóng. Đường này không
 mở khoản rổ B nào khác. Biên bản của mỗi vòng S3.x vẫn mở đầu bằng dòng trỏ mảnh mà ADR-043 ⒞ đòi — với S3.x, dòng ấy là
-*"không chạm mảnh nào của `PRODUCT.md` §11; chạy dưới công tắc ADR-073"*.
+*"không chạm mảnh nào của `PRODUCT.md` §11; chạy dưới công tắc ADR-076"*.
 
 ⑵ **Công tắc một chiều theo tổ chức.** S3 BẬT cho một tổ chức khi tổ chức ấy có phiên bản chính sách CÓ BẬC đầu tiên đã
-đủ chữ ký thứ hai (ADR-075 ⑺). Trạng thái *đã bật* là **suy diễn từ dữ liệu**, không phải một cờ: một hàm SQL duy nhất
+đủ chữ ký thứ hai (ADR-078 ⑺). Trạng thái *đã bật* là **suy diễn từ dữ liệu**, không phải một cờ: một hàm SQL duy nhất
 hỏi *có tồn tại một phiên bản có bậc đã ký của tổ chức này không*. Phiên bản chính sách bất biến và không xoá được, nên
 công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ chối mọi phiên bản không bậc của tổ chức ấy.
 
@@ -6677,13 +6677,13 @@ S3.x.
 
 ---
 
-## ADR-074 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
+## ADR-077 — Supplier Passport Level 2 là hồ sơ THEO TỪNG TỔ CHỨC MUA; phiên Passport cô lập bằng CHÍNH GUC khách; thẩm định hai cấp
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.131) · Liên quan: **ADR-013** §4, ADR-015,
-ADR-016, ADR-017, ADR-051, ADR-073, ADR-075 ⑹ · Spec S3 §2.3 (b), §4.8
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi hình dạng S1.135) · Liên quan: **ADR-013** §4, ADR-015,
+ADR-016, ADR-017, ADR-051, ADR-076, ADR-078 ⑹ · Spec S3 §2.3 (b), §4.8
 
 **Bối cảnh.** ADR-013 §4 đòi một ADR mới cho Level 2, và ADR ấy phải trả lời câu hỏi oracle MST. Chủ dự án đưa trọn
-Supplier Qualification vào S3, rồi ở lượt soi chọn **chỉ đếm nhà cung cấp đã thẩm định** vào ngưỡng K2 (ADR-075 ⑹iii) —
+Supplier Qualification vào S3, rồi ở lượt soi chọn **chỉ đếm nhà cung cấp đã thẩm định** vào ngưỡng K2 (ADR-078 ⑹iii) —
 trong khi `PRODUCT.md` §8 ⑴ cấm thêm ma sát cho nhà cung cấp TRƯỚC lần nộp đầu. Lượt soi đọc được hai sự thật chịu lực:
 mọi policy `_khach` hiện có chỉ hỏi đúng literal `app.guest_session_id` (`027`; hardening `KHACH_KHONG_PHIEN_LIT`), và
 `guest_sessions` cùng `invitation_otp_challenges` đều mang `invitation_id NOT NULL` (`010`) — gắn với MỘT lời mời, không gắn
@@ -6719,7 +6719,7 @@ riêng không đặt `app.guest_session_id` — kết nối ấy đi qua mọi p
 
 - Nhà cung cấp khai lại Passport cho mỗi tổ chức mua.
 - Mỗi nhà cung cấp mới cần **một người thứ hai bên mua** xác minh trước khi được đếm. Ma sát rơi vào bên mua, không rơi vào
-  nhà cung cấp — đó là cách duy nhất để ADR-075 ⑹iii và `PRODUCT.md` §8 ⑴ cùng đúng.
+  nhà cung cấp — đó là cách duy nhất để ADR-078 ⑹iii và `PRODUCT.md` §8 ⑴ cùng đúng.
 
 ### Điều ADR này KHÔNG nói
 
@@ -6728,13 +6728,13 @@ Xác minh không có nghĩa là đáng tin. ADR này không chống được ba 
 
 ---
 
-## ADR-075 — Lượt soi hình dạng spec S3: năm quyết định của chủ dự án, và những gì lượt soi chốt từ tiền lệ
+## ADR-078 — Lượt soi hình dạng spec S3: năm quyết định của chủ dự án, và những gì lượt soi chốt từ tiền lệ
 
-**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.131 · Liên quan: ADR-017, ADR-020 [S1.70], ADR-023,
-ADR-043, ADR-050 (khuôn), **ADR-051**, ADR-054, **ADR-058**, ADR-060, ADR-073, ADR-074 · Biên bản:
-`evidence/security-reviews.md` §S1.131
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.135 · Liên quan: ADR-017, ADR-020 [S1.70], ADR-023,
+ADR-043, ADR-050 (khuôn), **ADR-051**, ADR-054, **ADR-058**, ADR-060, ADR-076, ADR-077 · Biên bản:
+`evidence/security-reviews.md` §S1.135
 
-**Bối cảnh.** Lượt soi S1.131 chạy bốn góc độc lập trên bản nháp spec S3 — lời khai và mâu thuẫn nội tại, khả thi cưỡng chế
+**Bối cảnh.** Lượt soi S1.135 chạy bốn góc độc lập trên bản nháp spec S3 — lời khai và mâu thuẫn nội tại, khả thi cưỡng chế
 ở CSDL, đối kháng phân tách nhiệm vụ, phạm vi, luồng và kiểm thử — cộng một lượt tự soi. Bốn góc trả 48 phát hiện thô;
 khử trùng còn **31, trong đó 9 CAO**. Ba lời khai được **đo** trên Postgres 16 thật chứ không chỉ đọc. Năm chỗ là lựa chọn
 sản phẩm nên được trình; phần còn lại điền được từ tiền lệ đo được trong kho, cùng khuôn ADR-050.
@@ -6748,7 +6748,7 @@ khác người tạo mới mở được. Đây là **trả nợ spec S0+S1 §4.
 ⑹ **Đếm nhà cung cấp cho K2/K3 — bốn luật cùng áp:**
 - (i) không đếm nhà cung cấp hay người liên hệ do người tạo gói hoặc người mời tạo ra;
 - (ii) chỉ đếm nhà cung cấp có MST; mỗi MST và mỗi đích liên hệ chỉ đếm một lần;
-- (iii) chỉ đếm nhà cung cấp có xác minh còn hiệu lực (ADR-074 ⑵);
+- (iii) chỉ đếm nhà cung cấp có xác minh còn hiệu lực (ADR-077 ⑵);
 - (iv) **hậu kiểm lúc trao:** số báo giá hợp lệ nhận được dưới ngưỡng của bậc cao hơn thì trao thầu cần ngoại lệ
   `LOW_ACTUAL_COMPETITION` có chữ ký độc lập.
 
@@ -6757,7 +6757,7 @@ bản không ký trao thầu, không xác minh hay thẩm định, không ghi nh
 phiên bản ghim là phiên bản đang hiệu lực. Lý do: `FINANCE` giữ `policy.manage` VÀ `po.approve`, nên câu *"luật 033 phủ luôn
 bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt thước cho chính việc FINANCE làm.
 
-⑻ **Công tắc một chiều theo tổ chức** — ADR-073.
+⑻ **Công tắc một chiều theo tổ chức** — ADR-076.
 
 ⑼ **Gửi link lúc mở gói.**
 - Phiên của người mở gói đúc N token trong giao dịch mở gói, rồi gửi at-most-once sau commit.
@@ -6781,7 +6781,7 @@ bất biến thì bất biến bằng cấu tạo. Bậc áp lưu bằng `tier_t
 ⑾ **Băm danh sách là một hàm RIÊNG**, cộng một cột do trigger đặt trên `rfq_approvals`.
 - `rfq_bam_noi_dung` giữ nguyên. Nếu định nghĩa lại nó để phủ danh sách, mọi UPDATE sau đó trên một gói cấp kép đang OPEN
   sẽ gãy, vì khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy ở mọi lần UPDATE — khoản **240** đo đúng cơ chế ấy.
-  **[S1.132]** Cơ chế ấy đã sửa (`066`: khối đếm chỉ chạy ở cạnh vào OPEN). Chốt giữ nguyên: đổi định dạng băm vẫn vô hiệu chữ
+  **[S1.136]** Cơ chế ấy đã sửa (`067`: khối đếm chỉ chạy ở cạnh vào OPEN). Chốt giữ nguyên: đổi định dạng băm vẫn vô hiệu chữ
   ký của gói đang PENDING_APPROVAL lúc deploy — đọc, chưa đo.
 - UNIQUE của `rfq_approvals` đổi thành (tổ chức, gói, người, băm): người đã ký ký lại được trên nội dung mới. Theo `011`
   C-1, chữ ký cũ vô hiệu bằng băm, không bằng xoá. Đổi này chạm D2 của MVP1 và tên ràng buộc mà
@@ -6835,7 +6835,7 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
 ### Ba phép đo, và ba khoản nợ
 
 - **240** — gói cần phê duyệt kép bị từ chối ở lần gia hạn THỨ HAI. Lỗi của MVP1 đang chạy trên `master`, không phải của S3.
-  **[S1.132] ĐÓNG** — `066`.
+  **[S1.136] ĐÓNG** — `067`.
 - **241** — gói dưới ngưỡng mở được với 0 chữ ký, trái spec S0+S1 §4.3.
 - **242** — hai lời khai sai nằm trong thân hàm đã ghim: đổi `CHU_KY_CAN` thành 2 thì trao thầu **không bao giờ** duyệt được;
   và cạnh quay về DRAFT *"xoá mọi chữ ký"* là chú thích thiu ở năm chỗ, trái `011:245-251`.

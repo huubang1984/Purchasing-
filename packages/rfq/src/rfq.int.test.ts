@@ -610,7 +610,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
 });
 
 // =============================================================================================
-// [S1.132 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
+// [S1.136 / khoản 240] CHỮ KÝ D2 CHỈ ĐƯỢC ĐẾM Ở CẠNH MỞ GÓI
 //
 // Tới `061`, khối đếm chữ ký của `rfq_kiem_chuyen_trang_thai` chạy mỗi khi `NEW.status = 'OPEN'`
 // mà không hỏi `OLD.status` — tức chạy lại ở MỌI câu UPDATE trên một gói đang OPEN. Băm nội dung
@@ -619,11 +619,11 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
 // Mọi ca gia hạn khác của kho dùng ước lượng dưới ngưỡng, nên không ca nào thấy.
 //
 // Spec S0+S1 §4.4 đặt bốn điều kiện cho gia hạn — đang OPEN, có lý do, có audit, có thông báo —
-// và không đòi ký lại. `066` đếm chữ ký ở ĐÚNG cạnh vào OPEN; ba ca dưới đo bản sửa, vế dương còn
+// và không đòi ký lại. `067` đếm chữ ký ở ĐÚNG cạnh vào OPEN; ba ca dưới đo bản sửa, vế dương còn
 // nguyên của D2, và đột biến trả về hình dạng cũ.
 // =============================================================================================
-describe("[INV-D2] [S1.132 / khoản 240] chữ ký D2 chỉ được đếm ở cạnh mở gói — gói cấp kép gia hạn được nhiều lần", () => {
-  // Vế cạnh của `066`, nguyên văn. Đột biến dưới thay đúng chuỗi này.
+describe("[INV-D2] [S1.136 / khoản 240] chữ ký D2 chỉ được đếm ở cạnh mở gói — gói cấp kép gia hạn được nhiều lần", () => {
+  // Vế cạnh của `067`, nguyên văn. Đột biến dưới thay đúng chuỗi này.
   const VE_CANH = "IF NEW.status = 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status THEN";
 
   const giaHan = (rfqId: string, ngay: number, lan: number): Promise<RfqRecord> =>
@@ -686,7 +686,7 @@ describe("[INV-D2] [S1.132 / khoản 240] chữ ký D2 chỉ được đếm ở
       "SELECT pg_get_functiondef('public.rfq_kiem_chuyen_trang_thai()'::regprocedure) AS d",
     );
     const goc = rows[0]?.d ?? "";
-    expect(goc.split(VE_CANH).length - 1, "tiền đề: thân đang chạy mang ĐÚNG MỘT vế cạnh của `066`").toBe(1);
+    expect(goc.split(VE_CANH).length - 1, "tiền đề: thân đang chạy mang ĐÚNG MỘT vế cạnh của `067`").toBe(1);
     await db.pool.query(goc.replace(VE_CANH, "IF NEW.status = 'OPEN' THEN"));
     try {
       const rfqId = await goiCapKepDaMo();
