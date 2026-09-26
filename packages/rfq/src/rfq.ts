@@ -605,7 +605,7 @@ export async function extendRfqDeadline(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const reason = batBuoc(input.reason, "reason", 2000);
 
-  // [S1.144 / khoản 127] `docRfq` còn ở đây chỉ để giữ lời từ chối "không tìm thấy RFQ" cho một RFQ không thấy được (RLS) — nó KHÔNG còn
+  // [S1.146 / khoản 127] `docRfq` còn ở đây chỉ để giữ lời từ chối "không tìm thấy RFQ" cho một RFQ không thấy được (RLS) — nó KHÔNG còn
   // là nguồn của phép so hạn, cũng không là nguồn của `truoc`.
   await docRfq(client, input.rfqId);
 
@@ -624,7 +624,7 @@ export async function extendRfqDeadline(
   // ~~[S1.72 / lượt soi ngang 66c-5] Phép kiểm này đọc hàng KHÔNG khoá: hai lần gia hạn ĐỒNG THỜI tới cùng một hạn cùng qua, lần sau chờ khoá
   // hàng ở câu UPDATE rồi ghi `RFQ_DEADLINE_EXTENDED` cho một lần gia hạn không đổi gì (đọc, lượt soi 65c-8) — khoản 127.~~
   //
-  // [S1.144 / khoản 127 — ĐÓNG] Phép so nay nằm TRONG CHÍNH câu ghi, không ở một phép đọc trước nó. Bản trước so trên hàng `docRfq` đọc
+  // [S1.146 / khoản 127 — ĐÓNG] Phép so nay nằm TRONG CHÍNH câu ghi, không ở một phép đọc trước nó. Bản trước so trên hàng `docRfq` đọc
   // KHÔNG khoá; hai lần gia hạn đồng thời tới cùng hạn D1 đều thấy D0, đều qua; lần sau chờ khoá hàng ở `UPDATE`, rồi ghi D1 lên D1 và ghi
   // `RFQ_DEADLINE_EXTENDED` với `truoc` = D0 cho một lần gia hạn không đổi gì. Nay:
   //   * vị từ `p.deadline_at IS NULL OR p.deadline_at < $2` tự tham chiếu HÀNG ĐÍCH, nên dưới READ COMMITTED lần sau chờ khoá hàng rồi

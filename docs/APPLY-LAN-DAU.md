@@ -72,7 +72,10 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
 - [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
       ⇒ lời gọi lỗi nhưng **có thư**.
-- [ ] **3.5** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
+- [ ] **3.5** Dự kiến: alarm ⑺ `tp-canh-bao-canh-moc-neo-khong-chay` có thể vào ALARM ở kỳ 12 giờ đầu nếu Lambda chưa
+      chạy lượt nào — gọi tay một lần để về OK:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
+- [ ] **3.6** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
       OK sau lượt `lich` đầu tiên có tổ chức (bước 13).
 
 ## 4. Phép đo ⒜ — bắt buộc trước dữ liệu thật
@@ -137,6 +140,15 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.4 Phần còn lại
 
+- [ ] **Kiểm trước apply** (từ gốc kho; cần `terraform init` ở 6.2 và phiên SSO còn hạn):
+  ```powershell
+  pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars
+  ```
+  Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
+  `000…`; image nằm đúng kho ECR của prod và có thật; bốn secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
+  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
+  `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt.
+  Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
 - [ ] `terraform plan -var-file prod.tfvars -out plan.tfplan` — đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
       policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. `terraform apply plan.tfplan` (chờ ACM xác minh).
 - [ ] Dự kiến: vài thư ⑹ `…khong-con-target-khoe` cho `api` (0 task) — đúng, vì api chưa chạy; về OK ở 6.6.
@@ -150,7 +162,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.6 Bật api
 
-- [ ] `so_ban_api = 1` ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
+- [ ] `so_ban_api = 1` ⇒ `pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars` (hết `[VANG] so_ban_api`) ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
 - [ ] Thư ⑹ trở về OK cho `api`.
 
 ### 6.7 Neo khoá biên nhận và kiểm công khai
@@ -180,7 +192,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 8. Tổ chức đầu tiên và worker
 
 - [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm.
-- [ ] **8.2** `so_ban_worker = 1` ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
+- [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với `xuat=0 kiem=0`; alarm ⑷ trở về OK (có thư).
 
