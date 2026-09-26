@@ -8,6 +8,8 @@
 #      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
 #   ⑹ [ADR-077] Vận hành: mọi alarm prod mang tiền tố `tp-van-hanh-` (ALB, ECS, RDS — stack 90) vào ALARM hoặc trở về
 #      OK ⇒ chuyển sang audit ⇒ email.
+#   ⑺ [ADR-086] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
+#      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -44,6 +46,8 @@ terraform {
   required_version = ">= 1.10"
   required_providers {
     aws = { source = "hashicorp/aws", version = "~> 6.0" }
+    # [ADR-086] Đóng gói tệp Lambda ⑺ thành zip lúc plan.
+    archive = { source = "hashicorp/archive", version = "~> 2.7" }
   }
   backend "s3" {
     bucket       = "tp-tfstate-243714547276"
@@ -215,7 +219,12 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
         Action    = "sns:Publish"
         Resource  = aws_sns_topic.canh_bao_khoa.arn
         Condition = {
-          ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_metric_alarm.thieu_moc_neo.arn }
+          ArnEquals = { "aws:SourceArn" = [
+            aws_cloudwatch_metric_alarm.thieu_moc_neo.arn,
+            aws_cloudwatch_metric_alarm.moc_neo_to_chuc.arn,
+            aws_cloudwatch_metric_alarm.canh_moc_neo_loi.arn,
+            aws_cloudwatch_metric_alarm.canh_moc_neo_khong_chay.arn,
+          ] }
           StringEquals = { "aws:SourceAccount" = local.audit }
         }
       },
@@ -541,4 +550,179 @@ resource "aws_cloudwatch_event_target" "van_hanh_prod" {
   role_arn = aws_iam_role.chuyen_canh_bao.arn
 
   depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑺ [ADR-086] AUDIT — mốc neo theo từng tổ chức
+# ---------------------------------------------------------------------------------------------
+# ⑷ đếm TỔNG: một tổ chức ngừng được neo trong khi các tổ chức khác vẫn được thì ⑷ im. Job `lich` thoát 1 khi một tổ
+# chức XUẤT hỏng (⑶), nhưng không khi tổ chức ấy vắng khỏi danh sách — hàm liệt kê ở prod bị sửa, hay một lỗi làm rơi
+# nó. Lambda này đứng ở AUDIT, chỉ có `s3:ListBucket` dưới `so-kiem-toan/`, đọc chính bucket neo (mã và lý do phán xử
+# bằng `LastModified`: `tools/neo-so-kiem-toan/src/canh-moc-neo.ts`). Ba alarm:
+#   • có tổ chức thiếu mốc (dòng `THIEU MOC NEO` trong log của Lambda);
+#   • Lambda LỖI (một phép canh ném là một phép canh câm nếu không ai đếm lỗi);
+#   • Lambda KHÔNG CHẠY 12 giờ (lịch bị gỡ) — thiếu dữ liệu = vi phạm.
+# Không biết tổ chức CHƯA TỪNG được neo — audit không có danh sách tổ chức; ca ấy lộ ở `verifyAuditChain` (NOT_ANCHORED).
+locals {
+  ten_canh_moc_neo = "tp-canh-moc-neo"
+  nguong_gio_neo   = 36
+}
+
+data "archive_file" "canh_moc_neo" {
+  type        = "zip"
+  source_file = "${path.module}/../../../tools/neo-so-kiem-toan/lambda/canh-moc-neo.mjs"
+  output_path = "${path.module}/.terraform/canh-moc-neo.zip"
+}
+
+data "aws_iam_policy_document" "lambda_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "canh_moc_neo" {
+  provider           = aws.audit
+  name               = local.ten_canh_moc_neo
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_cloudwatch_log_group" "canh_moc_neo" {
+  provider          = aws.audit
+  name              = "/aws/lambda/${local.ten_canh_moc_neo}"
+  retention_in_days = 90
+}
+
+resource "aws_iam_role_policy" "canh_moc_neo" {
+  provider = aws.audit
+  name     = "chi-liet-ke-so-kiem-toan"
+  role     = aws_iam_role.canh_moc_neo.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "LietKeSoKiemToan"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::${module.chung.bucket.anchor}"
+        Condition = { StringLike = { "s3:prefix" = ["so-kiem-toan/", "so-kiem-toan/*"] } }
+      },
+      {
+        Sid      = "GhiLog"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.canh_moc_neo.arn}:*"
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "canh_moc_neo" {
+  provider                       = aws.audit
+  function_name                  = local.ten_canh_moc_neo
+  description                    = "ADR-086: to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc moi"
+  role                           = aws_iam_role.canh_moc_neo.arn
+  runtime                        = "nodejs22.x"
+  handler                        = "canh-moc-neo.handler"
+  filename                       = data.archive_file.canh_moc_neo.output_path
+  source_code_hash               = data.archive_file.canh_moc_neo.output_base64sha256
+  timeout                        = 120
+  memory_size                    = 128
+  reserved_concurrent_executions = 1
+  environment {
+    variables = {
+      BUCKET_NEO = module.chung.bucket.anchor
+      NGUONG_GIO = tostring(local.nguong_gio_neo)
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.canh_moc_neo, aws_iam_role_policy.canh_moc_neo]
+}
+
+resource "aws_cloudwatch_event_rule" "canh_moc_neo" {
+  provider            = aws.audit
+  name                = local.ten_canh_moc_neo
+  description         = "Chay Lambda canh moc neo theo to chuc moi 6 gio (ADR-086)"
+  schedule_expression = "rate(6 hours)"
+}
+
+resource "aws_cloudwatch_event_target" "canh_moc_neo" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.canh_moc_neo.name
+  arn      = aws_lambda_function.canh_moc_neo.arn
+}
+
+resource "aws_lambda_permission" "canh_moc_neo" {
+  provider      = aws.audit
+  statement_id  = "EventBridgeLich"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.canh_moc_neo.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.canh_moc_neo.arn
+}
+
+# Hợp đồng với `dongLog` của Lambda — `hinh-dang-canh-moc-neo.test.ts` so hai phía.
+resource "aws_cloudwatch_log_metric_filter" "moc_neo_to_chuc" {
+  provider       = aws.audit
+  name           = "tp-thieu-moc-neo-to-chuc"
+  log_group_name = aws_cloudwatch_log_group.canh_moc_neo.name
+  pattern        = "\"THIEU MOC NEO\""
+  metric_transformation {
+    name          = "ToChucThieuMocNeo"
+    namespace     = "TrustProcure/Neo"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "moc_neo_to_chuc" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-thieu-moc-neo-to-chuc"
+  alarm_description   = "[TrustProcure] (ADR-086) Co to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc neo moi. Doc log /aws/lambda/${local.ten_canh_moc_neo} (dong THIEU MOC NEO neu org), roi /tp/neo o prod: to chuc ay co trong danh sach cua lich khong? Vang mat ma job thoat 0 la dau hieu ham liet ke bi sua."
+  namespace           = "TrustProcure/Neo"
+  metric_name         = "ToChucThieuMocNeo"
+  statistic           = "Sum"
+  period              = 21600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
+  ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_loi" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-canh-moc-neo-loi"
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} LOI — phep canh moc neo theo to chuc dang cam. Doc /aws/lambda/${local.ten_canh_moc_neo}."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }
+  statistic           = "Sum"
+  period              = 21600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
+  ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_khong_chay" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-canh-moc-neo-khong-chay"
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} khong chay trong 12 gio — lich tp-canh-moc-neo bi tat hay go."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Invocations"
+  dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }
+  statistic           = "Sum"
+  period              = 43200
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
+  ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
 }

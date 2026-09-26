@@ -99,6 +99,34 @@ function poolMotKetNoi(): pg.Pool {
   return p;
 }
 
+/**
+ * [S1.142 / khoản 241] Sàn một chữ ký (`068`): mọi gói cần một chữ ký của người KHÁC người tạo, trên
+ * nội dung hiện tại, trước khi mở. Mỗi tổ chức một người ký riêng, không vai trò:
+ * `rfq_kiem_nguoi_duyet` chỉ đòi người ký khác người tạo và phiên thuộc về chính họ.
+ */
+const NGUOI_KY = new Map<string, { readonly u: string; readonly s: string }>();
+async function kyMotChuKy(orgId: string, rfqId: string): Promise<void> {
+  let k = NGUOI_KY.get(orgId);
+  if (k === undefined) {
+    const { rows: nd } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi ky') RETURNING id",
+      [orgId, `nguoi-ky-${orgId}@vidu.vn`],
+    );
+    const u = nd[0]?.id ?? "";
+    const { rows: ph } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgId, u, randomBytes(32)],
+    );
+    k = { u, s: ph[0]?.id ?? "" };
+    NGUOI_KY.set(orgId, k);
+  }
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [orgId, rfqId, k.u, k.s],
+  );
+}
+
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
@@ -548,6 +576,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
       [orgA, rfqId, chinhSachK119, ...nguoiTao],
     );
     await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqId, ...nguoiTao]);
+    await kyMotChuKy(orgA, rfqId);
     const c = await db.pool.connect();
     try {
       await c.query("BEGIN");

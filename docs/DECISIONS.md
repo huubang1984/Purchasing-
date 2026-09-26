@@ -7098,7 +7098,8 @@ sản phẩm nên được trình; phần còn lại điền được từ tiề
 
 ⑸ **Sàn mọi gói**, trong tổ chức đã bật S3: ước lượng bắt buộc để rời DRAFT; mọi gói cần ít nhất một chữ ký của một người
 khác người tạo mới mở được. Đây là **trả nợ spec S0+S1 §4.3** (*"PENDING_APPROVAL → OPEN: Phê duyệt hợp lệ"*) — khoản
-**241** đo được rằng hôm nay gói dưới ngưỡng mở với 0 chữ ký.
+**241** đo được rằng hôm nay gói dưới ngưỡng mở với 0 chữ ký. **[S1.142 / ADR-085]** Vế chữ ký không còn chờ công tắc S3:
+sàn một chữ ký áp cho MỌI tổ chức từ `068`. Vế ước lượng bắt buộc vẫn ở S3.1, trong tổ chức đã bật S3.
 
 ⑹ **Đếm nhà cung cấp cho K2/K3 — bốn luật cùng áp:**
 - (i) không đếm nhà cung cấp hay người liên hệ do người tạo gói hoặc người mời tạo ra;
@@ -7191,9 +7192,10 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
 
 - **240** — gói cần phê duyệt kép bị từ chối ở lần gia hạn THỨ HAI. Lỗi của MVP1 đang chạy trên `master`, không phải của S3.
   **[S1.140] ĐÓNG** — `067`.
-- **241** — gói dưới ngưỡng mở được với 0 chữ ký, trái spec S0+S1 §4.3.
+- **241** — gói dưới ngưỡng mở được với 0 chữ ký, trái spec S0+S1 §4.3. **[S1.142] ĐÓNG** — `068`, ADR-085.
 - **242** — hai lời khai sai nằm trong thân hàm đã ghim: đổi `CHU_KY_CAN` thành 2 thì trao thầu **không bao giờ** duyệt được;
-  và cạnh quay về DRAFT *"xoá mọi chữ ký"* là chú thích thiu ở năm chỗ, trái `011:245-251`.
+  và cạnh quay về DRAFT *"xoá mọi chữ ký"* là chú thích thiu ở năm chỗ, trái `011:245-251`. **[S1.142] ĐÓNG** — vế ⑵ ở
+  `067`, vế ⑴ ở `068`.
 
 ### Điều ADR này KHÔNG nói
 
@@ -7240,3 +7242,179 @@ dòng ấy (`onJobFailure`, `onPollError`, bộ dọn) — không ai đọc. Và
   báo ngoài `bo-cuoc`/`poll-loi`.
 - Ngưỡng là đoán khi chưa có tải thật; `kenh-loi` đếm cả lần thử lại nên một nhà mạng chập chờn có thể gây thư ALARM→OK.
 - Chưa chạy thật: `terraform validate`; mẫu metric filter đo bằng test đối chiếu chuỗi, chưa trên CloudWatch.
+
+---
+
+## ADR-084 — S3.0: bảng mã quyền cho sáu hành vi mới, và lớp từ chối thứ ba của K12 là `CONTROL_DENIED`
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-26, vòng S1.142) · Liên quan: ADR-016,
+ADR-060, ADR-080, ADR-081, ADR-082 · Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §9 S3.0,
+§5 K12, §2.5 ⒂
+
+**Bối cảnh.** Lượt soi hình dạng S1.139 để lại hai việc cho chủ dự án ở S3.0 (spec §9): bảng mã quyền cho sáu hành vi mới
+của S3, và lớp từ chối thứ ba của K12 — *vi phạm chốt kiểm soát*. Cả hai chặn S3.1: mỗi chốt của S3.1 cần biết ai được
+làm, và lần từ chối nào vào sổ.
+
+### Quyết định
+
+⑴ **Nguyên tắc: chỉ thêm mã quyền khi hành vi cần TÁCH NGƯỜI** khỏi các vai đang có. Hành vi còn lại dùng lại mã cũ. Mỗi
+mã là một chỗ phải gán, phải giữ và phải canh bằng test; một mã không tách được ai chỉ thêm chỗ để trôi.
+
+⑵ **Bảng mã quyền:**
+
+| Hành vi | Mã | Vai mặc định | Vì sao |
+|---|---|---|---|
+| Xác minh và thẩm định nhà cung cấp (K8a, K8b) | `supplier.qualify` — **MỚI** | `FINANCE` | Spec §4.8 đã gọi tên: không đứng cùng `rfq.invite` — người chọn người dự thi không tự thẩm định người mình chọn |
+| Quản lý danh sách nhóm hàng | `category.manage` — **MỚI** | `FINANCE` | Nhóm hàng là khoá của tín hiệu chia nhỏ (K10, §4.6). Một vai tạo gói mà chỉnh được nhóm hàng thì chỉnh được chính tín hiệu soi mình. `FINANCE` không giữ `rfq.create` (`033`) |
+| Lập ngoại lệ danh sách (`SINGLE_SOURCE`, `LIMITED_COMPETITION`, `ROTATION`, `LIST_NARROWED_BELOW_MIN`) | `rfq.invite` | `BUYER`, `PROCUREMENT_MANAGER` | Ngoại lệ là một phần của danh sách mời, nằm trong băm và được ký (K5). Chốt là chữ ký độc lập, không phải quyền lập |
+| Lập ngoại lệ lúc trao (`LOW_ACTUAL_COMPETITION`) | `award.recommend` | `BUYER`, `PROCUREMENT_MANAGER`, `FINANCE`, `DIRECTOR` | Người đề xuất trao giải trình; chữ ký độc lập là chốt (§2.4 ⑹iv) |
+| Ghi nhận tín hiệu | Quyền của cạnh bị chặn: `rfq.approve` ở mở gói, `po.approve` ở trao thầu | `PROCUREMENT_MANAGER`; `FINANCE`, `DIRECTOR` | Đã ở spec §4.6, cùng luật người: ngoài {người tạo gói, người gây ra tín hiệu} |
+| Cạnh `PENDING_APPROVAL→DRAFT` | Người tạo gói (giữ `rfq.create`), hoặc người giữ `rfq.approve` | — | Người tạo rút về để sửa; người duyệt trả về thay vì không ký |
+| Gửi lại link cho lời mời *chưa gửi* (§2.4 ⑼) | `rfq.invite` | `BUYER`, `PROCUREMENT_MANAGER` | Cùng người đã mời; lần gửi lại đúc token mới |
+
+⑶ **Mã mới vào CSDL ở đúng hạng mục dựng hành vi của nó, không sớm hơn.** Một GRANT không có người dùng là thứ không ai
+gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
+
+⑷ **Lớp thứ ba của K12 là `CONTROL_DENIED`.** Mỗi lần một chốt kiểm soát của S3 từ chối người dùng — thiếu nhà cung cấp
+(K2), luân phiên (K3), người ký bị loại (K5), xung đột lợi ích (K9), tín hiệu chưa ghi nhận (K10) — để lại một hàng
+`CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
+(`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
+mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
+dịch được.
+
+⑸ **Ba lớp tách nhau, và bộ bằng chứng đếm từng lớp.** `PERMISSION_DENIED` — thiếu quyền. `RFQ_STATE_DENIED` — đi sai thứ
+tự. `CONTROL_DENIED` — đủ quyền, đúng thứ tự, nhưng một chốt kiểm soát chặn. Luật chọn lọc của ADR-060 giữ nguyên: lời từ
+chối nói *cấu hình chưa sẵn sàng* (chính sách không bậc) thì không vào sổ.
+
+### Cái giá, nói thẳng
+
+- **Mỗi hàng sổ làm mọi lượt `verifyAuditChain` về sau chậm hơn, vĩnh viễn** (ADR-060). `CONTROL_DENIED` thêm hàng ở đúng
+  chỗ người dùng hay vấp nhất — thiếu nhà cung cấp. Luật chọn lọc giảm số hàng, không triệt nó.
+- **Từ chối do TRIGGER vẫn không vào sổ được.** Lớp chặn cuối huỷ cả giao dịch; đó là giới hạn của J6 và ADR-060, giữ
+  nguyên. Lớp gói bắt trước ở đường thuận, nên sổ chỉ im khi có tranh chấp thật.
+- **`category.manage` chỉ ở `FINANCE`.** Tổ chức không có người tài chính thì không quản lý được nhóm hàng cho tới khi gán
+  vai ấy cho một người.
+- **Dùng lại `rfq.invite` cho ngoại lệ** nghĩa là tổ chức không tách được *người mời* khỏi *người lập ngoại lệ*. Nếu một
+  khách hàng pilot đòi tách, đó là một mã mới về sau, theo đúng nguyên tắc ⑴.
+
+### Điều ADR này KHÔNG nói
+
+- Nó không thêm mã nào vào CSDL, và không viết một dòng mã S3 nào.
+- Nó không nới dải nhãn `[A-HJ]`→`[A-HJK]` — phần còn lại của S3.0 theo spec §9, làm cùng K1 ở S3.1.
+- Nó không liệt kê trọn từ vựng mã chốt: mỗi hạng mục S3.x thêm mã của chốt nó dựng.
+
+---
+
+## ADR-085 — Sàn một chữ ký ở cạnh mở gói cho MỌI tổ chức, từ nay — sửa ADR-080 ⑶ đúng một vế
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-26, vòng S1.142) · Liên quan: **ADR-017**,
+**ADR-080** ⑶, **ADR-082** ⑸ · Spec S0+S1 §4.3 · Khoản nợ **241** · Migration `068`
+
+**Bối cảnh.** Khoản 241, đo ở S1.139: gói dưới ngưỡng phê duyệt kép mở được với **0 chữ ký** — một người tạo, nộp duyệt
+rồi tự mở. Spec S0+S1 §4.3 đặt điều kiện của `PENDING_APPROVAL→OPEN` là *"phê duyệt hợp lệ"*, và ADR-017 viết *"một phê
+duyệt là đủ"* cho gói dưới ngưỡng — tức phải CÓ một. ADR-082 ⑸ chốt sàn một chữ ký, nhưng ADR-080 ⑶ để tổ chức chưa bật S3
+giữ *"sàn 0 chữ ký dưới ngưỡng kép"*. Pilot MVP1 chạy trên tổ chức chưa bật S3, nên nó sẽ chạy đúng với lỗ này.
+
+### Quyết định
+
+⑴ **Mọi gói, mọi tổ chức:** cạnh `PENDING_APPROVAL→OPEN` cần ít nhất một chữ ký TRÊN NỘI DUNG HIỆN TẠI; gói cấp kép vẫn
+cần hai. Cưỡng chế ở `rfq_kiem_chuyen_trang_thai` (`068`), bằng chính phép đếm theo băm của C-1. Người tạo không tự ký
+được — `rfq_kiem_nguoi_duyet` đã chặn từ lúc chèn chữ ký.
+
+⑵ **ADR-080 ⑶ đổi đúng một vế.** Tổ chức chưa bật S3 chạy MVP1 *đúng spec*: mời sau khi mở gói, ước lượng tuỳ chọn, và
+sàn MỘT chữ ký. Hai vế đầu giữ nguyên. Trong *"Cái giá"* của ADR-080, vế khoản 241 hết; vế nhà cung cấp vỏ còn.
+
+⑶ **D2 trong sổ đăng ký bất biến mở rộng:** gói dưới ngưỡng cần một phê duyệt của người khác người tạo, trên nội dung
+hiện tại.
+
+⑷ **Sàn một chữ ký rời S3.1.** Nó đã có cho mọi tổ chức. S3.1 giữ vế còn lại của ADR-082 ⑸ — ước lượng bắt buộc để rời
+DRAFT.
+
+### Cái giá, nói thẳng
+
+- **Kịch bản §11 thêm một bước:** một người thứ hai giữ `rfq.approve` bấm duyệt trước khi mở gói. Hôm nay chỉ
+  `PROCUREMENT_MANAGER` giữ `rfq.approve` (spec S3 §8.8), nên một tổ chức mà người trưởng phòng duy nhất cũng là người tạo
+  gói thì không mở được gói nào — cần người thứ hai trong vai ấy. Nút duyệt đã có trên giao diện tạo gói.
+- **Chữ ký của gói dưới ngưỡng ràng vào băm nội dung**, như gói cấp kép: sửa hạng mục sau khi ký thì phải ký lại.
+- Mọi fixture test mở gói dưới ngưỡng phải có một chữ ký.
+
+### Điều ADR này KHÔNG nói
+
+Nó không thêm quyền, không đổi ai giữ `rfq.approve`, không đổi luồng mời, và không đụng gói cấp kép.
+
+---
+
+## ADR-086 — Cảnh báo mốc neo theo từng tổ chức, đo ở tài khoản audit
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-072**, **ADR-073**, ADR-071, ADR-026 §5
+
+### Bối cảnh
+
+Job `lich` (ADR-072) thoát 1 khi một tổ chức XUẤT hỏng (cảnh báo ⑶), và ⑷ (ADR-073) báo khi CẢ bucket neo im 36 giờ.
+Còn một ca cả hai không thấy: một tổ chức VẮNG khỏi danh sách mà `lich` đọc — hàm liệt kê ở prod bị sửa, hay một lỗi làm
+rơi nó — thì job vẫn thoát 0 và bucket vẫn có đối tượng mới của các tổ chức khác. Sổ của tổ chức ấy ngừng được neo trong
+im lặng, đúng thứ ADR-026 dựng mốc neo để ngăn.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Lambda `tp-canh-moc-neo` ở tài khoản audit** (stack 60, ⑺), mỗi 6 giờ: liệt kê mọi tổ chức từng được neo
+   (`so-kiem-toan/<org>/`), với mỗi tổ chức hỏi một lời `ListObjectsV2(StartAfter = mốc cắt)`. Phán xử bằng
+   `LastModified` (S3 đặt), không bằng tên khoá (người ghi đặt) — một đối tượng mang tên "tương lai" không che được tổ chức.
+   Thiếu mốc trong 36 giờ ⇒ dòng log `THIEU MOC NEO` ⇒ metric filter ⇒ alarm ⇒ SNS email có sẵn (ALARM và OK).
+2. **Chỉ đọc**: role của Lambda có đúng `s3:ListBucket` với `s3:prefix` dưới `so-kiem-toan/` và quyền ghi log của nó.
+3. **Canh người canh**: alarm Lambda LỖI (≥ 1 trong 6 giờ) và Lambda KHÔNG CHẠY 12 giờ (thiếu dữ liệu = vi phạm).
+4. **Mã TypeScript trong kho** (`tools/neo-so-kiem-toan/src/canh-moc-neo.ts`, qua t0 và test đơn vị); thứ chạy trên Lambda
+   (`lambda/canh-moc-neo.mjs`) là chính tệp ấy gỡ kiểu bằng `module.stripTypeScriptTypes` — test đòi trùng byte. Chỉ phụ
+   thuộc `@aws-sdk/client-s3` có sẵn trong runtime `nodejs22.x`; Terraform đóng zip bằng provider `archive`.
+5. `hinh-dang-canh-moc-neo.test.ts` ghim quyền chỉ-đọc, tệp đóng gói, handler, mẫu log và ba đường thư.
+
+### Hệ quả, nói thẳng
+
+- Không biết tổ chức CHƯA TỪNG được neo — audit không có danh sách tổ chức. Ca ấy lộ ở `verifyAuditChain` (NOT_ANCHORED).
+- Một tổ chức bị xoá thật sự vẫn bị báo mãi (thư mục mốc neo giữ 365 ngày, Object Lock) — tới khi có quy trình khai tổ chức
+  đã đóng; ghi thành việc sau.
+- Mỗi lượt: một lời liệt kê thư mục + một lời mỗi tổ chức — rẻ tới vài nghìn tổ chức.
+- Thư ⑺ nêu org UUID trong log của Lambda, không trong thư (thư chỉ có tên alarm) — đọc log để biết tổ chức nào.
+- Chưa chạy thật: `terraform validate`; logic đo trên bucket giả (phân trang, tên tương lai, rác trong bucket).
+
+---
+
+## ADR-087 — Kiểm trước apply stack 90: một lệnh chỉ đọc, thoát 1 khi còn giá trị giữ chỗ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-066, ADR-068, ADR-076, ADR-065, `docs/APPLY-LAN-DAU.md`
+
+### Bối cảnh
+
+`docs/APPLY-LAN-DAU.md` cố ý đưa giá trị TẠM vào `prod.tfvars` (digest `tam@sha256:000…` để qua validation ở 6.2,
+`<...>` ở mọi chỗ người vận hành phải điền), và checklist chỉ là đọc tay. Validation của Terraform không bắt được chúng:
+digest toàn số 0 đúng dạng, `<app.domain>`… sai dạng thì bắt nhưng `ses.nhan_canh_bao = ["<email>"]` thì không. Còn
+những thứ nằm ở tài khoản chứ không ở tệp — secret tạo mà chưa `put-secret-value`, image chưa đẩy, domain SES chưa xác
+minh — chỉ lộ ra khi task chết lúc chạy hay thư không đi, tức sau apply.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Tool trong kho** `tools/kiem-truoc-apply` (Node/TypeScript, `pnpm kiem-truoc-apply --var-file <tệp>`), chạy tay trước
+   mỗi plan stack 90 (APPLY-LAN-DAU 6.4, 6.6, 8.2; README stack 90). Lệnh riêng, không bọc `terraform apply`.
+2. **Biến đọc qua `terraform console`**, không tự phân tích HCL: Terraform là bộ đọc plan sẽ dùng — áp mặc định, chạy
+   validation. Cái giá: thư mục stack phải đã `init` và backend còn phiên.
+3. **Luật biến** (offline): mỗi image là `<prod>.dkr.ecr.<region>.amazonaws.com/<kho đúng>@sha256:<64 hex, không toàn 0>`;
+   `ten_mien`, địa chỉ SES, người nhận, brandname, template Zalo không mang `<>`, `...`, domain ví dụ RFC 2606.
+   `so_ban_api = 0`, `so_ban_worker = 0`, `che_do_dns = ALERT`, `ses_endpoint_service` rỗng là **VANG** — hợp lệ ở một bước
+   dựng cụ thể — không chặn.
+4. **Luật tài khoản** (AWS CLI, profile `tp-prod`, **chỉ đọc**): đúng tài khoản prod (sai ⇒ dừng, không hỏi gì thêm); bốn
+   secret `data` của stack 90 (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại, không chờ xoá, có phiên bản `AWSCURRENT` — không
+   đọc giá trị; mỗi digest có trong đúng kho ECR; miền của hai địa chỉ gửi đã xác minh ở SES. Tài khoản còn sandbox SES là VANG.
+5. **Mã thoát**: 1 khi có `[DO]`; 2 khi không đọc được biến hay không gọi được AWS (hết phiên SSO) — lỗi khác "không tồn
+   tại" không bao giờ bị coi là "thiếu", và tool không in dòng tổng khi chưa kiểm xong.
+6. `khop-stack-90.test.ts` đòi danh sách secret = mọi `data "aws_secretsmanager_secret"` của stack 90, kho ECR = `for_each`
+   của `aws_ecr_repository.tp`, tên image = khoá của `var.anh`, mọi `var.X` trong biểu thức console là biến có khai, và mẫu
+   `prod.tfvars` của hướng dẫn bị chính luật bắt.
+
+### Hệ quả, nói thẳng
+
+- Không thấy host TẠM trong secret `*/database-url` (không đọc giá trị là cố ý) — việc đó vẫn là 6.5 đọc tay.
+- Chỉ stack 90. Các stack khác nhận biến qua `-var` trên dòng lệnh; chưa có tệp nào để soát.
+- Luật "giữ chỗ" là một danh sách dấu hiệu, không phải phép chứng minh: một giá trị sai mà trông thật (domain gõ nhầm) lọt.
+  Lớp tài khoản bắt được phần lớn ca ấy (SES chưa xác minh, image không có).
+- Tool là bước người vận hành phải nhớ chạy; không có gì chặn một `terraform apply` bỏ qua nó.
+- Chưa chạy trên tài khoản thật: đo bằng `terraform console` thật trên bản sao stack không backend và một `aws` giả.
