@@ -80,3 +80,35 @@ resource "aws_kms_alias" "anchor_sign" {
 }
 
 output "anchor_sign_key_arn" { value = aws_kms_key.anchor_sign.arn }
+
+# [ADR-071] kid và nửa công khai của khoá ký mốc neo, cho job neo trên ECS (stack 90 đọc state này) và cho
+# kiểm toán viên. Cùng khuôn stack 50: kid sống cạnh khoá. Xoay: khoá mới + mục mới, không gỡ mục cũ.
+variable "neo_kid" {
+  description = "kid của khoá mà alias/tp-anchor-sign đang trỏ tới — đi vào văn bản mốc neo."
+  type        = string
+  default     = "kms-neo-2026-09"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{1,64}$", var.neo_kid))
+    error_message = "neo_kid: 1–64 ký tự [A-Za-z0-9._-] (an toàn cho tên tệp của `pnpm neo trich`)."
+  }
+}
+
+locals {
+  khoa_neo = {
+    (var.neo_kid) = aws_kms_key.anchor_sign.arn
+  }
+}
+
+data "aws_kms_public_key" "neo" {
+  for_each = local.khoa_neo
+  key_id   = each.value
+}
+
+output "neo" {
+  description = "kid đang ký, ARN alias để ký chéo tài khoản, và nửa công khai (SPKI DER base64) của MỌI khoá ký mốc neo."
+  value = {
+    kid_dang_dung  = var.neo_kid
+    alias_arn      = aws_kms_alias.anchor_sign.arn
+    khoa_cong_khai = { for kid, k in data.aws_kms_public_key.neo : kid => k.public_key }
+  }
+}

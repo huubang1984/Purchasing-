@@ -70,11 +70,15 @@ const GOC = fileURLToPath(new URL("../../", import.meta.url));
 // cùng lý do với client-kms (SDK chính hãng ký SigV4; không tự viết).
 // [ADR-069] `@aws-sdk/client-pinpoint-sms-voice-v2`: kênh SMS của `api`. `@aws-sdk/client-secrets-manager`: kho token
 // Zalo ZNS của `api` — token xoay vòng nên phải ĐỌC VÀ GHI lúc chạy, không bơm một lần qua biến môi trường được.
+// [ADR-071] `@aws-sdk/client-s3` + `@aws-sdk/client-sts`: job neo (`tools/neo-so-kiem-toan`) mượn tp-anchor-writer và ghi
+// bucket neo ở tài khoản audit.
 const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = [
   "@aws-sdk/client-kms",
   "@aws-sdk/client-pinpoint-sms-voice-v2",
+  "@aws-sdk/client-s3",
   "@aws-sdk/client-secrets-manager",
   "@aws-sdk/client-sesv2",
+  "@aws-sdk/client-sts",
   "pg",
   "pg-connection-string",
 ];

@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.7
 # ==============================================================================================
-# deploy/Dockerfile — MỘT tệp, NĂM đích: api, worker, migrate (ADR-066), web (ADR-068), public-keys (ADR-070)
+# deploy/Dockerfile — MỘT tệp, SÁU đích: api, worker, migrate (ADR-066), web (ADR-068), public-keys (ADR-070), neo (ADR-071)
 #
 #   docker build -f deploy/Dockerfile --target api     -t tp-api .
 #   docker build -f deploy/Dockerfile --target worker  -t tp-unseal-worker .
 #   docker build -f deploy/Dockerfile --target migrate -t tp-migrate .
 #   docker build -f deploy/Dockerfile --target web     -t tp-web .
 #   docker build -f deploy/Dockerfile --target public-keys -t tp-public-keys .
+#   docker build -f deploy/Dockerfile --target neo     -t tp-neo .
 #
 # Không có bước biên dịch: ứng dụng chạy thẳng mã TypeScript bằng `node --experimental-transform-types`
 # (cùng cách `pnpm api:dev`). Vì Node từ chối bóc kiểu cho tệp NẰM TRONG node_modules, image giữ đúng
@@ -28,6 +29,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages packages
 COPY apps apps
 COPY tools/chay-migrate tools/chay-migrate
+COPY tools/neo-so-kiem-toan tools/neo-so-kiem-toan
 COPY db db
 # Bó CA của RDS (toàn cầu). Đổi bó ⇒ đổi checksum ở đây, có chủ đích.
 ADD --chmod=0644 --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
@@ -41,6 +43,9 @@ RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/unseal-worker.
 
 FROM nguon AS cai-public-keys
 RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/public-keys..." && rm -rf /pnpm/store
+
+FROM nguon AS cai-neo
+RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/neo-so-kiem-toan..." && rm -rf /pnpm/store
 
 FROM nguon AS cai-migrate
 RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/chay-migrate..." && rm -rf /pnpm/store
@@ -88,3 +93,14 @@ COPY --from=cai-public-keys --chown=root:root /app /app
 USER node
 EXPOSE 8070
 CMD ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./apps/public-keys/register-ts-resolve.mjs", "apps/public-keys/src/main.ts"]
+
+# [ADR-071] `neo` — job một lần: đọc đầu chuỗi kiểm toán (CSDL qua TLS ⇒ bó CA của RDS), mượn tp-anchor-writer,
+# ký bằng KMS ở tài khoản audit, ghi bucket neo. ENTRYPOINT là công cụ; CMD mặc định neo tài liệu khoá biên nhận —
+# RunTask đổi lệnh (`xuat --org …`, `kiem --org …`) bằng containerOverrides.command.
+FROM ${NODE_IMAGE} AS neo
+ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
+WORKDIR /app
+COPY --from=cai-neo --chown=root:root /app /app
+USER node
+ENTRYPOINT ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/neo-so-kiem-toan/register-ts-resolve.mjs", "tools/neo-so-kiem-toan/src/index.ts"]
+CMD ["khoa-bien-nhan"]
