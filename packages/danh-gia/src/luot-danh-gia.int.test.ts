@@ -1468,7 +1468,7 @@ describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CS
 //
 // **[S1.115 / khoản 229] ĐÃ MỞ Ô, và HAI câu vừa gạch đều bị phép đo bác.** ⑴ Con số *TÁM chỗ* là
 // của hàng 229 và nó SAI: đo trên `master` ngày 2026-09-23 ra **MƯỜI**, nay đã nới cả mười sang
-// `[A-HJ]`. ⑵ Câu *"ba bất biến dưới đây ... có đột biến"* đúng cho J3 và SAI cho J5 và J7: quét mọi
+// `[A-HJ]` — **[S1.153]** nay là `[A-HJK]`, spec S3 §9. ⑵ Câu *"ba bất biến dưới đây ... có đột biến"* đúng cho J3 và SAI cho J5 và J7: quét mọi
 // `DISABLE TRIGGER`/`DROP TRIGGER` trong test, `rfq_awards_kiem_de_xuat` và
 // `rfq_awards_kiem_mot_award_song` KHÔNG bị gỡ ở một ca nào. Thứ hai bất biến ấy thật sự có là ca
 // `INSERT` THẲNG — nó chứng minh *trigger là lớp giữ*, khác hẳn *gỡ lớp ra thì thủng*. Hai đột biến

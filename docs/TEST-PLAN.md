@@ -519,7 +519,7 @@ năng giải mã báo giá cũ". Bộ sinh ma trận gom theo MÃ, nên chín d�
 hàng nghiệp vụ mà chúng không đo — và vì test G2/G3 đúng nghĩa VẪN tồn tại song song, va chạm
 đó là vô hình nếu không đọc tên. Đây là "mốc chết giả đã dịch chỗ: nó không còn ở TEST, nó ở
 NHÃN". Một quy tắc biên giới depcruise LÀ một hàng rào, đúng hạng với hai hook ở trên, nên nó
-thuộc nhóm H — và nhóm H đã khớp sẵn regex ~~`[A-H]\d+`~~ **[S1.115] `[A-HJ]\d+`** của bộ sinh, không cần đụng bộ sinh.
+thuộc nhóm H — và nhóm H đã khớp sẵn regex ~~`[A-H]\d+`~~ ~~**[S1.115] `[A-HJ]\d+`**~~ **[S1.153] `[A-HJK]\d+`** của bộ sinh, không cần đụng bộ sinh.
 Mười test `[INV-G1]` trong cùng file thì GIỮ NGUYÊN: quy tắc `g1-` cưỡng chế đúng bất biến G1
 ("private key RFQ không bao giờ ở dạng rõ ngoài `unseal-worker`"), tức ở đó nhãn khớp thứ được
 đo. Tên các quy tắc depcruise (`g1-`/`g2-`/`g3-`) không đổi — vấn đề nằm ở nhãn test.

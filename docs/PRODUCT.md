@@ -193,3 +193,15 @@ là rủi ro lớn nhất, lớn hơn mọi rủi ro kỹ thuật, từ ngày đ
 được cưỡng chế và đo bằng đột biến; đó là thứ khó nhất của sản phẩm và nó đã xong. Mục này chỉ
 nói rằng *đo bằng bất biến* và *đo bằng người mua* là hai trục khác nhau, và dự án tới hôm nay
 chỉ có trục thứ nhất.
+
+**[S1.153 / ADR-085] KỊCH BẢN CÓ THÊM MỘT BƯỚC, VÀ BƯỚC ẤY ĐẶT MỘT ĐIỀU KIỆN LÊN TỔ CHỨC PILOT.** Từ `068`, gói nào cũng
+cần một phê duyệt TRÊN NỘI DUNG HIỆN TẠI của một người khác người tạo, rồi mới mở được; trước đó gói dưới ngưỡng mở được với
+0 chữ ký (khoản 241). Đo trên `master` `fa8d4ea`, ba mã quyền của đoạn tạo → mở:
+- nộp duyệt cần `rfq.create`, do `REQUESTER`, `BUYER` và `PROCUREMENT_MANAGER` giữ (`005`);
+- phê duyệt cần `rfq.approve`, mở cần `rfq.open` — cả hai CHỈ `PROCUREMENT_MANAGER` giữ (`005`, `023`);
+- người duyệt không được là người tạo, và mỗi chữ ký một phiên riêng (D2).
+
+Nên tổ chức pilot cần ít nhất **hai người** cho gói dưới ngưỡng — một người tạo và một PM khác người ấy, PM ấy duyệt rồi
+mở — và **ba người** cho gói vượt ngưỡng: người tạo cộng hai PM khác người ấy. Một tổ chức chỉ có một PM, mà người ấy tự
+tạo gói, thì không mở được gói nào. `gieo:demo` đủ: ba PM, hai `DIRECTOR`. Số người tối thiểu cho TRỌN kịch bản — cả bước
+mở niêm phong (`rfq.unseal.approve` chỉ ở `DIRECTOR`) lẫn bước trao thầu — chưa đo ở vòng này.

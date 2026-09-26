@@ -109,12 +109,19 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
     expect(soCap).toBeGreaterThan(100);
   });
 
-  it("chủ thể của P1/P2 BẰNG chủ thể của độ phủ: nhãn có hậu tố vế và nhãn ngoài [A-H] không bị xét", () => {
+  it("chủ thể của P1/P2 BẰNG chủ thể của độ phủ: nhãn có hậu tố vế và nhãn ngoài [A-HJK] không bị xét", () => {
     // `collectCoverage` không đếm `[INV-E3(3)]` hay `[INV-M5]`; nếu H22 xét chúng thì nó đo một
     // tập RỘNG HƠN tập nuôi ma trận — sai đối tượng theo chiều ngược lại.
     const bc = baoCao([{ name: "apps/x/a.test.ts", tests: ["[INV-E3(3)] vế", "[INV-M5] lạ", "[INV-A1] a"] }]);
     expect([...collectCoverage(bc).keys()]).toEqual(["A1"]);
     expect(findMisplacedLabels(collectLabelUses(bc), { A1: ["apps/x/a.test.ts"] }, GOC).chuaKhai).toEqual([]);
+    // [S1.153 / S3.0] …và chiều kia: nhóm K đã ở TRONG dải thì H22 phải xét nó. Kho chưa có nhãn K
+    // nào, nên một mũi thu vế *nhãn chưa khai* của `findMisplacedLabels` về `[A-HJ]` chỉ chết ở đây.
+    const coK = baoCao([{ name: "apps/x/a.test.ts", tests: ["[INV-A1] a", "[INV-K1] bậc"] }]);
+    expect([...collectCoverage(coK).keys()]).toEqual(["A1", "K1"]);
+    expect(findMisplacedLabels(collectLabelUses(coK), { A1: ["apps/x/a.test.ts"] }, GOC).chuaKhai).toEqual([
+      "[INV-K1] xuất hiện trong tên test ở apps/x/a.test.ts — cặp này CHƯA CÓ trong sổ khai",
+    ]);
   });
 
   it("đường dẫn: tuyệt đối Windows/POSIX đều về tương đối trong kho; ngoài kho thì giữ nguyên", () => {
@@ -125,7 +132,7 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
 
   it("sổ khai đóng băng có HÌNH DẠNG hợp lệ: mã theo mẫu, tệp tương đối kiểu `/`, không trùng", () => {
     for (const [ma, ds] of Object.entries(SO_KHAI_NHAN)) {
-      expect(ma).toMatch(/^[A-HJ]\d+$/);
+      expect(ma).toMatch(/^[A-HJK]\d+$/);
       expect(new Set(ds).size).toBe(ds.length);
       for (const tep of ds) {
         expect(tep).toMatch(/^[a-z0-9./_-]+\.test\.ts$/i);

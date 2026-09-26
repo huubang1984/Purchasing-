@@ -38,6 +38,12 @@ const TEST_PLAN_MAU = [
   // trọn nhóm đánh giá — sống sót cả tệp này. Chữ `J` không liền sau `H` trong bảng chữ cái, nên
   // một dải viết nhầm thành `[A-I]` hay `[A-J]` cũng phải bị bắt: `[A-J]` nhận `I`, một chữ KHÔNG
   // có nhóm nào — và ca *nhãn ngoài dải* ở dưới là chỗ điều đó được đo.
+  //
+  // [S1.153 / S3.0] **Hàng nhóm K cũng vì đúng lập luận ấy — và nó có mặt TRƯỚC khi sổ thật có hàng
+  // K nào.** Dải nay là `[A-HJK]` (spec S3 §9, S3.0). `docs/TEST-PLAN.md` chưa có hàng K: K1 vào sổ
+  // ở S3.1, sau khi được đo. Nên trên sổ thật, một mũi thu ngược về `[A-HJ]` không đổi một ô nào của
+  // ma trận, và chỉ hàng mẫu dưới đây cho mũi ấy chỗ để chết. Không có nó, K1 sẽ gặp lại đúng
+  // chuyện của J4 ở khoản 229: đủ phép đo mà không có ô.
   "### Nhóm H — Hàng rào",
   "",
   "| ID | Bất biến | Cưỡng chế | Tầng test |",
@@ -49,6 +55,12 @@ const TEST_PLAN_MAU = [
   "| ID | Bất biến | Cưỡng chế | Tầng test |",
   "|---|---|---|---|",
   "| **J1** | Chỉ khoản đơn vị TIỀN đi vào `effective_cost` | Hàm thuần + trigger | T1, T3 |",
+  "",
+  "### Nhóm K — Kiểm soát mua sắm",
+  "",
+  "| ID | Bất biến | Cưỡng chế | Tầng test |",
+  "|---|---|---|---|",
+  "| **K1** | Gói rời `DRAFT` mang khoá ngoại tới đúng hàng bậc của ước lượng | Khoá ngoại hợp thành + trigger | T3 |",
 ].join("\n");
 
 function baoCao(
@@ -79,13 +91,13 @@ const BAO_CAO_MAU = JSON.stringify({
 describe("phân tích ma trận bất biến", () => {
   it("đọc được toàn bộ bất biến từ TEST-PLAN", () => {
     const invariants = parseInvariants(TEST_PLAN_MAU);
-    expect(invariants.map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
+    expect(invariants.map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
     expect(invariants[0]?.statement).toBe("Không endpoint nào trả về giá trước khi mở thầu");
     expect(invariants[2]?.enforcement).toBe("IAM + quyền cột DB");
     expect(invariants[2]?.testLayer, "cột tầng test cũng phải đi vào bằng chứng").toBe("**T0**, T3");
   });
 
-  it("dải [A-HJ] là RÀNG BUỘC: hàng nhóm H phải đọc được y như hàng nghiệp vụ", () => {
+  it("dải [A-HJK] là RÀNG BUỘC: hàng nhóm H phải đọc được y như hàng nghiệp vụ", () => {
     const invariants = parseInvariants(TEST_PLAN_MAU);
     const h1 = invariants.find((i) => i.id === "H1");
     expect(h1, "bộ đọc BỎ SÓT nhóm H — mười ba hàng rào biến mất khỏi ma trận").toBeDefined();
@@ -102,6 +114,27 @@ describe("phân tích ma trận bất biến", () => {
     expect(j1, "bộ đọc BỎ SÓT nhóm J — trọn lớp đánh giá biến mất khỏi ma trận").toBeDefined();
     expect(j1?.statement).toBe("Chỉ khoản đơn vị TIỀN đi vào `effective_cost`");
     expect(j1?.enforcement).toBe("Hàm thuần + trigger");
+  });
+
+  it("[S1.153 / S3.0] dải [A-HJK]: hàng nhóm K đọc được TRƯỚC khi K1 vào sổ — mũi giết một lần thu dải về [A-HJ]", () => {
+    // Ca này ĐỎ nếu ai đó thu dải về `[A-HJ]` ở bộ đọc chính. Thu ở bộ đếm độc lập thì hai con số
+    // lệch và `parseInvariants` NÉM — cũng đỏ, ở mọi ca dùng mẫu.
+    const invariants = parseInvariants(TEST_PLAN_MAU);
+    const k1 = invariants.find((i) => i.id === "K1");
+    expect(k1, "bộ đọc BỎ SÓT nhóm K — K1 sẽ vào sổ mà không có ô").toBeDefined();
+    expect(k1?.statement).toBe("Gói rời `DRAFT` mang khoá ngoại tới đúng hàng bậc của ước lượng");
+    expect(k1?.enforcement).toBe("Khoá ngoại hợp thành + trigger");
+    // Biên trên: không nhóm nào mang chữ `L`. Một dải nới quá tay thành `[A-HJ-L]` sẽ đọc một hàng
+    // `L1` bịa thành bất biến thật — cùng lớp với ca chữ `I` ngay dưới. Hàng `A1` giữ bộ đọc khỏi
+    // ném vì *sổ rỗng*, để ca xanh vì đúng lý do nó đo.
+    const md = [
+      "| ID | Bất biến | Cưỡng chế | Tầng test |",
+      "|---|---|---|---|",
+      "| **A1** | một bất biến THẬT | Kiến trúc | T1 |",
+      "| **L1** | một nhóm KHÔNG tồn tại | không có | T1 |",
+    ].join("\n");
+    expect(parseInvariants(md).map((i) => i.id), "dải nới quá tay: `L` đi lọt vào ma trận").toEqual(["A1"]);
+    expect(demHangUngVien(md), "phép đếm độc lập cũng KHÔNG được thấy `L1`").toEqual(["A1"]);
   });
 
   it("[S1.115 / khoản 229] chữ `I` KHÔNG có nhóm nào — một dải viết nhầm `[A-J]` phải bị bắt", () => {
@@ -185,6 +218,18 @@ describe("ranh giới của nhãn được tính là độ phủ", () => {
     expect(coverage.get("E3")).toHaveLength(1);
   });
 
+  it("[S1.153 / S3.0] nhãn TRẦN của nhóm J và K được TÍNH — mũi thu dải của bộ gom độ phủ phải chết", () => {
+    // Bộ đọc sổ và bộ gom độ phủ giữ HAI regex riêng. Nới một mà quên một thì K1 có hàng trong sổ
+    // mà test mang `[INV-K1]` không bao giờ đổ vào ô ấy. Sổ thật chưa có hàng K nên chỉ ca này thấy.
+    const coverage = collectCoverage(
+      baoCao([
+        { fullName: "trao thầu > [INV-J1] chỉ khoản TIỀN", status: "passed" },
+        { fullName: "bậc giá trị > [INV-K1] gói rời DRAFT mang đúng bậc", status: "passed" },
+      ]),
+    );
+    expect([...coverage.keys()].sort()).toEqual(["J1", "K1"]);
+  });
+
   it("nhãn quy ước ngoài họ INV không bao giờ đi vào độ phủ", () => {
     const coverage = collectCoverage(
       baoCao([
@@ -245,7 +290,7 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
 
   it("phép đếm độc lập vẫn thấy hàng mà bộ đọc chính bỏ sót", () => {
     const md = TEST_PLAN_MAU.replace("| **A4** |", "| A4 |");
-    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
+    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
   });
 
   it("bảng mẫu trong khối mã ``` KHÔNG bị đếm nhầm thành hàng sổ đăng ký", () => {
@@ -257,8 +302,8 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
       "| A4  | ... | Máy quét  | 1 test | PASS | a1b2c3 | ... |",
       "```",
     ].join("\n");
-    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
-    expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1"]);
+    expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
+    expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
   });
 
   it("sổ đăng ký rỗng NÉM chứ không trả về mảng rỗng", () => {
