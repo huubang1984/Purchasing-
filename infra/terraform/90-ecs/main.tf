@@ -480,11 +480,63 @@ resource "aws_vpc_security_group_ingress_rule" "endpoint_tu_task" {
 # ---------------------------------------------------------------------------------------------
 # VPC endpoint — đường DUY NHẤT ra AWS của task
 # ---------------------------------------------------------------------------------------------
+# [ADR-079] CHÍNH SÁCH ENDPOINT — không endpoint nào giữ FullAccess mặc định.
+#   Interface (kms, secretsmanager, sts, logs, ecr, email, sms-voice): VÀNH ĐAI THEO TÀI KHOẢN — người gọi thuộc prod hoặc
+#     audit (job neo gọi KMS/S3 bằng phiên MƯỢN `tp-anchor-writer` của audit — ADR-071), tài nguyên thuộc prod hoặc audit.
+#     `aws:ResourceAccount` dùng `IfExists`: vài lời gọi không có tài nguyên (ecr:GetAuthorizationToken) — với chúng chỉ
+#     còn vế người gọi. Chặn: credential của tài khoản lạ đi qua endpoint của ta, và gọi tới tài nguyên của tài khoản lạ
+#     (KMS/Secrets Manager/STS của kẻ tấn công) — đường tuồn dữ liệu mà DNS Firewall (ADR-076) không thấy vì tên hợp lệ.
+#   S3 gateway: LIỆT KÊ bucket — bucket lớp image ECR thuộc tài khoản của AWS, vành đai theo tài khoản sẽ chặn nó. Chỉ
+#     GetObject trên bucket lớp; Get/Put/List trên bucket neo. Bucket nào khác, kể cả của prod: bị từ chối.
+locals {
+  tai_khoan_duoc_phep = [local.prod, module.chung.account.audit]
+
+  chinh_sach_endpoint = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "VanhDaiTaiKhoan"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "*"
+      Resource  = "*"
+      Condition = {
+        StringEquals         = { "aws:PrincipalAccount" = local.tai_khoan_duoc_phep }
+        StringEqualsIfExists = { "aws:ResourceAccount" = local.tai_khoan_duoc_phep }
+      }
+    }]
+  })
+
+  bucket_lop_ecr = "prod-${local.region}-starport-layer-bucket"
+
+  chinh_sach_s3 = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "LopImageEcr"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "arn:aws:s3:::${local.bucket_lop_ecr}/*"
+      },
+      {
+        Sid       = "BucketNeo"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource  = ["arn:aws:s3:::${module.chung.bucket.anchor}", "arn:aws:s3:::${module.chung.bucket.anchor}/*"]
+        Condition = { StringEquals = { "aws:PrincipalAccount" = local.tai_khoan_duoc_phep } }
+      },
+    ]
+  })
+}
+
+# [ADR-079] Gắn cả bảng định tuyến của api: S3 của api (kéo lớp image) đi qua endpoint CÓ chính sách, không qua NAT.
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.tp.id
   service_name      = "com.amazonaws.${local.region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.rieng.id]
+  route_table_ids   = [aws_route_table.rieng.id, aws_route_table.api.id]
+  policy            = local.chinh_sach_s3
 }
 
 locals {
@@ -506,6 +558,7 @@ resource "aws_vpc_endpoint" "giao_dien" {
   subnet_ids          = local.subnet_endpoint
   security_group_ids  = [aws_security_group.endpoint.id]
   private_dns_enabled = true
+  policy              = local.chinh_sach_endpoint
 }
 
 # ---------------------------------------------------------------------------------------------
