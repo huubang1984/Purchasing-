@@ -13,7 +13,7 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-26 / S1.126] SPEC S3 (GOVERNANCE · MVP2) VÀO KHO — BẢN NHÁP, CHƯA QUA LƯỢT SOI HÌNH DẠNG.**
+**[2026-09-26 / S1.127] SPEC S3 (GOVERNANCE · MVP2) VÀO KHO — BẢN NHÁP, CHƯA QUA LƯỢT SOI HÌNH DẠNG.**
 `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`. Bốn quyết định của chủ dự án ngày 2026-09-26
 (spec §2.2): đủ bảy mục của V2.1 §32; mở rộng cổng duyệt sẵn có, không dựng engine duyệt tổng quát; chốt tham số mặc định
 và bắt đầu S3.0 ngay sau lượt soi — ngược ADR-043 và ADR-058 ⑷, nên ghi thành ADR ở lượt soi (spec §2.3). Chưa dòng mã,

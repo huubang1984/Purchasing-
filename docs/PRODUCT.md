@@ -97,7 +97,7 @@ Ba lát cắt thuộc MVP1: **S0** (nền móng, 2,5 tuần) + **S1** (sealed bi
 | S0 | Foundation & Control Plane | MVP1 | Đã có spec |
 | S1 | Sealed Bid Core | MVP1 | Đã có spec |
 | S2 | Evaluation & Award (gồm BAFO) | MVP1 | ~~Chưa có spec~~ **[S1.103] Đã có spec** (vào kho ở S1.101) |
-| S3 | Governance | MVP2 | ~~Chưa có spec~~ **[S1.126] Có spec BẢN NHÁP** — `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`, chưa qua lượt soi hình dạng |
+| S3 | Governance | MVP2 | ~~Chưa có spec~~ **[S1.127] Có spec BẢN NHÁP** — `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`, chưa qua lượt soi hình dạng |
 | S4 | Data Foundation & Intelligence | MVP3 | Chưa có spec |
 | S5 | ERP Integration & Enterprise | Enterprise | Chưa có spec |
 
