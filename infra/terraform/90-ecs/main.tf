@@ -571,6 +571,8 @@ resource "aws_ecr_lifecycle_policy" "tp" {
 data "aws_secretsmanager_secret" "api_db" { name = "tp/api/database-url" }
 data "aws_secretsmanager_secret" "api_pepper" { name = "tp/api/otp-peppers" }
 data "aws_secretsmanager_secret" "worker_db" { name = "tp/worker/database-url" }
+# [ADR-072 phần 1] Job neo đăng nhập bằng app_neo_login (vai chỉ-đọc sổ, liệt kê được tổ chức) — secret riêng.
+data "aws_secretsmanager_secret" "neo_db" { name = "tp/neo/database-url" }
 
 # Secret master do RDS tạo (tên `rds!db-…`) nằm NGOÀI nhánh `tp/*` mà stack 30 cấp cho execution role.
 resource "aws_iam_role_policy" "execution_rds_master" {
@@ -698,12 +700,14 @@ locals {
       { name = "TRUSTPROCURE_MIGRATE_DB_PASSWORD", valueFrom = "${aws_db_instance.tp.master_user_secret[0].secret_arn}:password::" },
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
+      { name = "TRUSTPROCURE_NEO_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
     ]
     web         = []
     public_keys = []
-    # Vai app_api — cùng URL với api; job neo chỉ ĐỌC đầu chuỗi (exportChainHead).
+    # [ADR-072 phần 1] ~~Vai app_api — cùng URL với api~~ Vai app_neo (065): chỉ ĐỌC hai bảng sổ, gọi được
+    # hàm liệt kê tổ chức mà app_api cố ý không có. URL của api ở đây thì SET ROLE app_neo ném 42501.
     neo = [
-      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
+      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
     ]
   }
   task = {
