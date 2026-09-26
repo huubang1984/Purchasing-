@@ -105,7 +105,8 @@ lượt soi hình dạng; góc D⑪ của biên bản §S1.9104.
 | **E10** | Một nhóm nhà cung cấp cùng dự ≥ 6 gói (F1) và ≥ 9 gói (F2b) trong 12 tháng | Spec S4b §4.1 F1, F2b | Yếu tố chuỗi mãi `CHUA_DU_LICH_SU`; S4b.1 nổ ở mọi lần trao, mãi mãi | *"Một nhóm nhà cung cấp quen của anh cùng dự bao nhiêu gói một năm?"* |
 | **E11** | *"Khoảng cách thắng–nhì ổn định nghĩa là thông đồng"* (ADR-058 ⑸) đúng ở thị trường này, và biên của cạnh tranh thật nằm ngoài ngưỡng tuyệt đối của F1 (1%, 0,5 điểm) | Spec S4b §2.5 ㊻; phép mô phỏng M2 dùng phân phối GIẢ ĐỊNH | F1 báo sai trên cạnh tranh thật, hoặc mù | *"Khi anh nhận ba báo giá thật cho cùng một hàng, giá thứ hai thường cao hơn giá thấp nhất bao nhiêu phần trăm?"* |
 | **E12** | Khách chịu ma sát S4b.1 ở MỌI lần trao suốt ít nhất sáu tháng đầu | Spec S4b §2.5 ㉚ — độ phủ tối đa 27% trước S4b.2 | Công tắc ADR-080 một chiều nên không tắt được; khách rời bỏ thay vì tắt | *"Nếu nửa năm đầu mỗi lần duyệt trao cần thêm một người ký xác nhận đã đọc cảnh báo, anh có chấp nhận không?"* |
-| **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
+| **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score. **[S1.9105]** Supplier Score hoãn tới S5 (ADR-9208): dòng này chờ spec S5 | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
+| **E14** **[S1.9105]** | Tổ chức có **một người kiểm toán** không mua, không duyệt, không xem giá, và đủ thời gian đọc sổ tín hiệu | Spec S4b §2.7 Q2 — vai `AUDITOR`; ADR-9208 | Không ai đọc sổ tín hiệu và phân tích người mua; hai màn ấy thành công cụ không người dùng — nhân lên từ B4 và E1 | *"Công ty anh có ai kiểm tra việc mua hàng mà không trực tiếp mua hay duyệt không — kiểm soát nội bộ, kiểm toán nội bộ?"* |
 
 ---
 

@@ -7746,7 +7746,7 @@ Mười bốn chốt ⑿–㉕, mỗi chốt kèm tiền lệ, ở bảng §2.5 
 ### Hai chỗ lượt soi CỐ Ý không chốt
 
 - **ADR (e) — cổng dữ liệu của S4b.** Con số chỉ hiệu chỉnh được trên dữ liệu thật; lượt soi chỉ chốt rằng sàn đo theo từng tổ
-  chức và loại ánh xạ `NULL` khỏi tỷ lệ.
+  chức và loại ánh xạ `NULL` khỏi tỷ lệ. **[S1.9105]** Chốt ở ADR-9208.
 - **Câu hỏi pháp lý về phân tích người mua** (spec S4 §8.7) — thuộc chủ dự án, ghi ở `docs/TIEN-DE-CHUA-DO.md`.
 
 ### Ba lỗ của MVP1 mà lượt soi đo ra
@@ -7797,7 +7797,7 @@ mọi tổ chức — ghim chính sách.
 
 Q1 trọng số Supplier Score · Q2 ai đọc phân tích người mua và sổ tín hiệu · Q3 ô bảo hành · Q4 nút *[REQUEST REVIEW]* · Q5 số
 của cổng (e) · Q7 North Star *"có risk assessment"* · Q8 dữ liệu gieo cho demo. Mỗi câu chặn đúng một hạng mục của spec §15.1;
-đề xuất của lượt soi ở spec §2.6, chưa phải quyết định.
+đề xuất của lượt soi ở spec §2.6, ~~chưa phải quyết định~~. **[S1.9105]** Chủ dự án chốt cả bảy theo đề xuất — ADR-9208.
 
 ---
 
@@ -7823,3 +7823,42 @@ Hai mươi mốt chốt ㉚–㊿, mỗi chốt kèm tiền lệ, ở bảng §2
 
 Không khoản nợ mới: lượt soi không đo ra lỗ nào của MVP1. `CHECK` dạng phủ định của `057:50-62` — hình dạng mà phép đo M5 thấy
 cho qua khoá thiếu — kèm vế `exists()` cho mọi khoá, nên không phải một lỗ.
+
+---
+
+## ADR-9208 — Bảy câu còn lại của lượt soi spec S4b, và cổng dữ liệu (e)
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.9105 · Liên quan: ADR-043, ADR-080, ADR-084 ⑴ ⑶,
+ADR-9201, ADR-9205, **ADR-9206**, ADR-9207 · Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`
+§2.6, §2.7 · Biên bản: `evidence/security-reviews.md` §S1.9104 mục 11
+
+**Bối cảnh.** Lượt soi S1.9104 để bảy câu cho chủ dự án, mỗi câu kèm đề xuất và cái giá (spec S4b §2.6). Chủ dự án chốt cả
+bảy ngày 2026-09-26, đều theo đề xuất. Q5 là ADR (e) mà spec S4 §2.3 và ADR-9205 để mở; nó chốt ở đây.
+
+**Q1 — Supplier Score hoãn tới S5.** 40% trọng số mặc định của V2.1 §13 — 45% nếu tính *Warranty* — không có nguồn tới S5, và
+lượt soi cho thấy mỗi thành phần có nguồn đều là một cần gạt hạ nhà cung cấp trung thực (spec S4b §2.5 ㊾). §7, L9 và hạng mục
+S4b.4 rời S4b; thiết kế nháp giữ làm đầu vào cho spec S5. **Sửa spec S4 §2.2 ⑴**, vốn xếp Supplier Score vào S4b.
+
+**Q2 — Vai mới `AUDITOR` giữ đúng một mã mới `analytics.review`**, đọc sổ tín hiệu, ghi nhận dòng sổ và đọc phân tích người mua.
+Vai và người giữ nó không giữ `rfq.create`, `rfq.invite`, `award.recommend`, `po.approve`, `bid.view`, `policy.manage`,
+`item.manage`. Mỗi người mua đọc được danh sách lượt đọc về chính mình. Lý do: `audit.read` chỉ ở `FINANCE`, `DIRECTOR` — chính
+người đề xuất và ký trao, tức cũng là người bị phân tích. Mã mới đúng tiêu chí của ADR-084 ⑴ — hành vi cần TÁCH NGƯỜI — và vào
+CSDL ở S4b.3 (ADR-084 ⑶). **Sửa spec S4 §4.9**, vốn đặt cổng đọc ở `audit.read`. Cái giá: một người nữa (tiền đề E14).
+
+**Q3 — Không thêm ô bảo hành** vào form nộp thầu (PRODUCT §8 ⑴). Thừa sau Q1.
+
+**Q4 — Bỏ nút *[REQUEST REVIEW]*** của màn Executive. Ghi nhận của S4b.1 đã là hành vi *"một người thứ hai xem xét"*.
+
+**Q5 — ADR (e), cổng dữ liệu của S4b:** ≥ 30 gói đã mở niêm phong, ≥ 60% HẠNG MỤC có ánh xạ hiệu lực (ánh xạ `NULL` không tính là
+hiệu lực), ≥ 6 tháng lịch sử. Là cổng của DỰ ÁN cho vòng mã từ S4b.2 — đạt khi ≥ 1 tổ chức thật đạt đủ ba sàn, đo riêng từng tổ
+chức. Không tính tổ chức mang dấu dữ liệu mẫu, không tính lịch sử mua ngoài hệ thống (ADR-9205 ⑽). Điều kiện kèm: S3.5–S3.7 có
+mã. Con số vẫn là GIẢ ĐỊNH theo nghĩa chưa hiệu chỉnh trên dữ liệu thật; lượt soi hình dạng lại ở S4b.0 được phép đề xuất sửa
+chúng, bằng một ADR mới.
+
+**Q7 — North Star:** *"có risk assessment"* chỉ tính gói có đánh giá rủi ro mức khác `KHONG_XAC_DINH`. Hệ quả nói thẳng: phần ấy
+của *Verified Competitive Spend* bằng 0 ở tổ chức chưa bật S3, và ở tổ chức đã bật S3 cho tới khi S4b.2 có mã và tổ chức vượt sàn.
+
+**Q8 — Dữ liệu gieo dùng được cho demo V2.1 §41**, mang nhãn *"dữ liệu mẫu"* trên mọi màn S4b, và không bao giờ tính cho cổng
+(e). Tổ chức do công cụ gieo dựng mang một dấu trên `organizations`, ngoài GRANT của `app_api`.
+
+Hai bất biến mới ở spec S4b §11.1: **L24** (dấu dữ liệu mẫu) và **L25** (vai `AUDITOR`). Không mã, không migration, không khoản nợ.

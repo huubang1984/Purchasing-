@@ -12673,7 +12673,8 @@ chốt cả bốn ngày 2026-09-26, đều theo đề xuất:
 - ㉘ ngưỡng của S4b.1 là hằng của phương pháp; trọng số cấu hình được, có sàn — ngoại lệ với PRODUCT §8 ⑸;
 - ㉙ S4b.1 theo công tắc ADR-080.
 
-**Bảy câu còn lại CHƯA được hỏi trong vòng này** (spec §2.6): Q1, Q2, Q3, Q4, Q5, Q7, Q8. Chúng ghi kèm đề xuất của lượt soi,
+**Bảy câu còn lại CHƯA được hỏi trong vòng này** (spec §2.6): Q1, Q2, Q3, Q4, Q5, Q7, Q8. **[S1.9105]** Hỏi ngay sau vòng
+này; chủ dự án chốt cả bảy theo đề xuất — mục 11. Chúng ghi kèm đề xuất của lượt soi,
 và mỗi câu chặn đúng một hạng mục — không câu nào chặn một vòng đang chạy. Lượt soi không tự chốt câu nào trong số ấy.
 
 Hai mươi mốt chốt từ tiền lệ (㉚–㊿) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-9207 và bảng §2.5 của spec.
@@ -12708,7 +12709,8 @@ vế `exists()` cho mọi khoá, nên không mang hình dạng M5.
 - **Sáu phép đo chạy trên bảng tối giản ở bộ dựng cục bộ, không trên lược đồ của kho, không trên CI.** Spec §13 ghi chúng thành
   test thường trực ở hạng mục tương ứng — M6, M7, M8 ở S4b.1.
 - **Trong 33 phát hiện, sáu có phép đo và hai có phép tính.** Phần còn lại là phép đọc trên tệp:dòng của bốn báo cáo.
-- **Bảy câu cho chủ dự án chưa được hỏi.** Spec §2.6 ghi đề xuất, không ghi quyết định.
+- ~~**Bảy câu cho chủ dự án chưa được hỏi.** Spec §2.6 ghi đề xuất, không ghi quyết định.~~ **[S1.9105]** Đã hỏi và đã chốt —
+  mục 11.
 - **Không chống được hai người bàn nhau**, và không chứng minh được người ghi nhận đã đọc bằng chứng (spec §12.2). S4b chỉ bắt
   mẫu đều đặn (spec §12.6).
 - **Không soi lại spec S3.** ㊲ đòi S3.6 dựng `governance_signals` theo khuôn `seq`/`ghi_luc`; vòng này ghi đòi hỏi ở spec S4b
@@ -12725,3 +12727,22 @@ vế `exists()` cho mọi khoá, nên không mang hình dạng M5.
   nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
 - `pnpm cap-so --dem` viết lại số đếm ở `docs/STATE.md` và `Handoff.md`. `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`,
   `ADR-92NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so` cấp số thật lúc merge.
+
+## 11. [S1.9105] Bảy câu còn lại — chủ dự án chốt cả bảy theo đề xuất
+
+Sau commit của vòng này, bảy câu của spec §2.6 được trình trong một lượt. Chủ dự án trả lời *"cả bảy câu theo đề xuất"*, ngày
+2026-09-26. Ghi ở **ADR-9208**; hệ quả ở spec S4b §2.7:
+- Q1 — Supplier Score hoãn tới S5; §7, L9 và S4b.4 rời S4b;
+- Q2 — vai mới `AUDITOR` giữ đúng một mã mới `analytics.review`; người bị phân tích đọc được lượt đọc về mình;
+- Q3 — không thêm ô bảo hành;
+- Q4 — bỏ nút *[REQUEST REVIEW]*;
+- Q5 — cổng (e): ≥ 30 gói, ≥ 60% hạng mục có ánh xạ hiệu lực, ≥ 6 tháng, ở ≥ 1 tổ chức thật; điều kiện kèm còn S3.5–S3.7;
+- Q7 — North Star chỉ tính gói có đánh giá mức khác `KHONG_XAC_DINH`;
+- Q8 — dữ liệu gieo dùng cho demo, mang nhãn, không tính cho cổng (e).
+
+Không phép đo mới: bảy câu là lựa chọn sản phẩm, không phải lời khai về mã. Hai bất biến mới trên giấy — L24, L25 —, tiền đề
+E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, §7.2, §9), PRODUCT (§7, §8 ⑸, §9) và ADR-9205, ADR-9206.
+
+- `pnpm t0` — **0 vi phạm**; `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`. `pnpm cap-so --dem` viết lại số đếm.
+- **97 → 98** ADR (9208, số tạm). Sổ nợ **245**, mở **92**, không đổi. **68** migration, không đổi.
+

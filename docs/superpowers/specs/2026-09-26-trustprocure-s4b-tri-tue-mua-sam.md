@@ -5,9 +5,10 @@
 > (`evidence/security-reviews.md` §S1.9104). Viết TRƯỚC cổng dữ liệu (e), theo lựa
 > chọn của chủ dự án ngày 2026-09-26: thiết kế đầy đủ bây giờ, không viết mã; mọi con số mang nhãn GIẢ ĐỊNH; cổng (e) vẫn
 > chặn mã của S4b.2 trở đi. ~~Sáu câu hỏi cho chủ dự án ở §2.3.~~ **[S1.9104]** Bốn quyết định của chủ dự án sau lượt soi ở
-> §2.4 (ADR-9206), hai mươi mốt chốt từ tiền lệ ở §2.5 (ADR-9207), bảy câu còn chờ chủ dự án ở §2.6 — không câu nào chặn một
-> vòng đang chạy. Chưa một dòng mã nào của S4b.
-> **[S1.9104] Đọc §2.4–§2.6, §4.1, §10.1, §11.1, §14.1 và §15.1 cùng phần gốc**: phần gốc giữ nguyên văn, chỗ sai gạch tại
+> §2.4 (ADR-9206), hai mươi mốt chốt từ tiền lệ ở §2.5 (ADR-9207), ~~bảy câu còn chờ chủ dự án ở §2.6 — không câu nào chặn một
+> vòng đang chạy.~~ **[S1.9105]** bảy câu của §2.6 chủ dự án chốt cả bảy theo đề xuất (ADR-9208), hệ quả ở §2.7 — trong đó
+> **Supplier Score hoãn tới S5** và **cổng (e) có con số**. Chưa một dòng mã nào của S4b.
+> **[S1.9104] Đọc §2.4–§2.6, §4.1, §10.1, §11.1, §14.1 và §15.1 cùng phần gốc** — **[S1.9105]** và §2.7,: phần gốc giữ nguyên văn, chỗ sai gạch tại
 > chỗ, mệnh đề chịu lực là bản đã sửa.
 > **Là nửa sau của:** `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` (spec S4, đã qua lượt soi
 > S1.9102). Tài liệu này thay §4.9 của spec ấy ở mức chi tiết; §4.9 chỉ giữ HÌNH DẠNG. Mọi quyết định của spec S4 — §2.2
@@ -146,10 +147,11 @@ Hai mươi mốt chỗ điền được từ tiền lệ đo được trong kho 
 | ㊾ | **Supplier Score là cần gạt hạ nhà cung cấp trung thực** (TRUNG 18, 21) | *Responsiveness* chỉ đếm lời mời trong nhóm hàng N khai ở Passport, và chỉ gói thoả vị từ *"giá đã lộ"* — không đọc từ `CLOSED`, vì so điểm trước và sau lúc X đóng là biết N đã nộp chưa, trước mở thầu. *Compliance* hiện người thẩm định hay thu hồi cùng lý do; nộp Passport mới không tính là thu hồi. *Risk* chỉ đếm mẫu mà N là thành viên; bằng chứng F5 ghi cặp nhà cung cấp. *Price Competitiveness* loại gói có < 3 báo giá đọc được | A5; spec S4 §2.5 ⒀ và góc C⑦ của S1.9102; ADR-081 |
 | ㊿ | **Sổ tín hiệu: người bị soi chọn khung, đọc không dấu, ghi nhận để khép** (TRUNG 20) | Chuỗi luôn tính trên 12 tháng tới cuối khung; khung chỉ lọc gói cuối. Mỗi lượt đọc một hàng sổ (㊹). Người ghi nhận một dòng nằm ngoài mọi người đã đề xuất, ký hay ghi nhận trao trong chuỗi. Ghi nhận không bao giờ ẩn dòng. Ai đọc: Q2 (§2.6) | ADR-051; ㊹ |
 
-### 2.6. [S1.9104] Bảy câu còn chờ chủ dự án
+### 2.6. [S1.9104] Bảy câu ~~còn chờ chủ dự án~~ [S1.9105] chủ dự án đã chốt
 
 Không câu nào chặn một vòng đang chạy: mọi hạng mục của S4b còn chờ S3.5, S4.5 hay cổng (e). Mỗi câu chặn đúng hạng mục ở cột
-cuối, và phải có câu trả lời trước khi hạng mục ấy mở. Cột giữa là đề xuất của lượt soi, CHƯA phải quyết định.
+cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~Cột giữa là đề xuất của lượt soi, CHƯA phải quyết định.~~
+**[S1.9105]** Chủ dự án chốt cả bảy ngày 2026-09-26, đều theo đề xuất — **ADR-9208**. Cột giữa nay là quyết định; hệ quả ở §2.7.
 
 | # | Câu hỏi | Lượt soi đề xuất | Chặn |
 |---|---|---|---|
@@ -160,6 +162,18 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. C�
 | **Q5** | Số của cổng (e) | ≥ 30 gói `UNSEALED`, ≥ 60% HẠNG MỤC có ánh xạ hiệu lực (loại `NULL`), ≥ 6 tháng. Cổng (e) là cổng DỰ ÁN cho vòng mã — đạt khi ≥ 1 tổ chức thật đạt; sàn lúc chạy theo từng tổ chức là sàn của từng yếu tố (§4.1), không phải cổng | S4b.0 |
 | **Q7** | North Star của PRODUCT §9 — *"có risk assessment"* đếm gói nào | Chỉ gói có đánh giá mức khác `KHONG_XAC_DINH`. Đếm mọi gói có hàng đánh giá thì North Star tầm thường ở mọi tổ chức đã bật S3 | S4b.2 |
 | **Q8** | Dữ liệu gieo có được dùng cho kịch bản demo V2.1 §41 trước pilot không | Được, mang nhãn *"dữ liệu mẫu"* trên mọi màn, và không bao giờ tính cho cổng (e) | S4b.6 |
+
+### 2.7. [S1.9105] Hệ quả của bảy quyết định
+
+| # | Quyết định | Đổi gì |
+|---|---|---|
+| **Q1** | **Supplier Score hoãn tới S5** | §7, L9 và hạng mục S4b.4 rời S4b. Không dựng cột bản chụp Supplier Score trên `rfq_risk_assessments`, không route `/nha-cung-cap/:id/diem`. ㊾ và các cần gạt của góc C⑧ ghi lại làm đầu vào cho spec S5, cùng lúc *Quality*, *Delivery* có nguồn. Spec S4 §2.2 ⑴ — *"S4b: Supplier Score, …"* — và kịch bản §7.2 của nó đổi theo |
+| **Q2** | **Vai mới `AUDITOR` giữ đúng một mã mới `analytics.review`** — đọc sổ tín hiệu, ghi nhận một dòng sổ, đọc phân tích người mua | Vai và người giữ vai ấy không giữ `rfq.create`, `rfq.invite`, `award.recommend`, `po.approve`, `bid.view`, `policy.manage`, `item.manage` — hai trigger khuôn `033`, như `DATA_STEWARD` (spec S4 L3). `FINANCE`, `DIRECTOR` vẫn giữ `audit.read` cho sổ kiểm toán, nhưng không đọc hai màn ấy. Mỗi người mua đọc được danh sách lượt đọc VỀ CHÍNH MÌNH — ai đọc, lúc nào, khung nào; không phải số liệu — qua một route tự thân. Mã mới đúng tiêu chí tách người của ADR-084 ⑴, vào CSDL ở S4b.3 (khuôn ADR-084 ⑶). Cái giá: tổ chức cần thêm một người — tiền đề E14 |
+| **Q3** | **Không thêm ô bảo hành** | Không đổi form nộp thầu. Thừa sau Q1 |
+| **Q4** | **Bỏ nút *[REQUEST REVIEW]*** | Màn Executive chỉ đọc, không một hành vi mới nào |
+| **Q5** | **Cổng (e): ≥ 30 gói đã mở niêm phong, ≥ 60% HẠNG MỤC có ánh xạ hiệu lực (ánh xạ `NULL` không tính là hiệu lực), ≥ 6 tháng lịch sử** | Cổng của DỰ ÁN cho vòng mã từ S4b.2: đạt khi ≥ 1 tổ chức THẬT đạt đủ ba sàn, đo riêng từng tổ chức, không cộng dồn. Không tính tổ chức mang dấu dữ liệu mẫu (Q8), không tính lịch sử mua ngoài hệ thống (spec S4 ⑽). Điều kiện kèm của spec S4 (e) còn S3.5–S3.7; S3.8 phục vụ Supplier Score nên rời theo Q1. Sàn lúc chạy theo tổ chức là sàn của từng yếu tố (§4.1), không phải cổng. S4b.0 còn chờ pilot để ĐO, không còn chờ con số |
+| **Q7** | **North Star: *"có risk assessment"* chỉ tính gói có đánh giá rủi ro mức khác `KHONG_XAC_DINH`** | Hệ quả nói thẳng: phần ấy của *Verified Competitive Spend* bằng 0 ở tổ chức chưa bật S3 — không có đánh giá —, và ở tổ chức đã bật S3 cho tới khi S4b.2 có mã và tổ chức vượt sàn (㉚). Chú ở PRODUCT §9 |
+| **Q8** | **Dữ liệu gieo dùng được cho demo V2.1 §41, mang nhãn *"dữ liệu mẫu"*, không bao giờ tính cho cổng (e)** | Tổ chức do công cụ gieo dựng mang một dấu trên `organizations`, đặt lúc gieo, ngoài GRANT của `app_api`. Mọi màn S4b của tổ chức ấy hiện nhãn; công cụ đo cổng (e) loại nó. Bất biến L24 (§11.1) |
 
 ---
 
@@ -204,7 +218,7 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. C�
 |---|---|---|
 | Đánh giá rủi ro của một đề xuất trao | Trong giao dịch ghi đề xuất trao (`PROPOSED`) | Có — bảng `rfq_risk_assessments` + yếu tố |
 | Kiểm lại lúc ký | Trong giao dịch ghi chữ ký trao | Không — tính lại từ đầu vào as-of đã lưu, so với bản lưu. **[S1.9104]** Tái lập chạy TRƯỚC câu INSERT chữ ký; luật nổ và người do trigger L11 tính lại ở mỗi chữ ký (§2.5 ㉝㊶) |
-| Supplier Score | Khi có người đọc; và chụp vào đánh giá rủi ro lúc đề xuất | Chỉ bản chụp lúc đề xuất |
+| Supplier Score | Khi có người đọc; và chụp vào đánh giá rủi ro lúc đề xuất | Chỉ bản chụp lúc đề xuất. **[S1.9105]** Hoãn tới S5 (Q1) |
 | Sổ tín hiệu (§6) | Khi có người đọc | Chỉ các hàng đã được ghi nhận |
 | Phân tích người mua (§8) | Khi có người đọc | Không; mỗi lần đọc một hàng sổ |
 
@@ -357,7 +371,7 @@ nằm trong bộ test của S3.5 ở tổ chức đã bật S3 — kê tên khi 
 yếu tố với đủ năm trường. Supplier Score của N chụp vào cùng bản ghi. Bộ bằng chứng (ADR-059) mang cả hai, cộng một đặc tả
 phép tính trong `DAC-TA.md` đủ để cài lại chín yếu tố và phép tổng hợp — khuôn S2.7.
 
-**[S1.9104]** Ba sửa. ⑴ Cột bản chụp Supplier Score có từ S4b.1 và là `NULL` tới S4b.4. ⑵ Lõi của lớp rủi ro trong bộ bằng
+**[S1.9104]** Ba sửa. ⑴ Cột bản chụp Supplier Score có từ S4b.1 và là `NULL` tới S4b.4. **[S1.9105]** Không dựng cột ấy ở S4b (Q1). ⑵ Lõi của lớp rủi ro trong bộ bằng
 chứng và mục `DAC-TA.md` cho các yếu tố đã có mã đi cùng S4b.1, không đợi S4b.7 — nếu không, từ S4b.1 tới S4b.7 không lớp nào
 bắt được một yếu tố bị hạ (góc A②, D②). ⑶ Lớp ấy mang định danh băm có muối và thống kê cấp chuỗi (㊴ ⑸).
 
@@ -394,6 +408,8 @@ Lý do không lưu trước: một bảng *"các nhà cung cấp bị gắn cờ
 ---
 
 ## 7. Supplier Score
+
+**[S1.9105] Cả mục này hoãn tới S5 (Q1, ADR-9208).** Giữ nguyên văn làm đầu vào cho spec S5, cùng các sửa của §2.5 ㊾.
 
 **Thành phần có nguồn trong S4** — tám thành phần của V2.1 §13 chia theo nguồn:
 
@@ -466,7 +482,7 @@ người bị phân tích ở ma trận *Duyệt*: Q2 (§2.6).
 | Price Benchmark | Nhãn tổng hợp của S4a cho báo giá được đề xuất | *"chưa đủ lịch sử"* |
 | [VIEW ANALYSIS] | Mở `/mo-thau` ở bước so sánh | — |
 | [UNSEAL] | Đường mở thầu hiện có | — |
-| [REQUEST REVIEW] | **Q4** | — |
+| [REQUEST REVIEW] | **Q4** — **[S1.9105]** bỏ | — |
 
 Màn là một trang mới trong bản đồ `TRANG`, dưới luật ADR-044, cho người giữ `bid.view`. Nó chỉ ĐỌC: không hành vi nào của nó
 là mới, trừ nút của Q4.
@@ -501,9 +517,10 @@ S3.8 dựng trước — đối chiếu lúc mở S4b.4. ⑶ Danh sách route:
 | POST `/rfqs/:id/award/:awardId/rui-ro/ghi-nhan` — ghi nhận một yếu tố | Ghi | `po.approve` | không khai |
 | POST `/rfqs/:id/award/:awardId/approve` — thêm giải trình vào thân yêu cầu hiện có | Ghi | `po.approve` | không khai |
 | GET `/tong-quan` — màn Executive | Đọc | `bid.view` | `false` |
-| POST `/so-tin-hieu/doc`, POST `/so-tin-hieu/ghi-nhan` | Ghi (đọc có sổ, ㊹) | Q2 | không khai |
-| POST `/phan-tich/doc` | Ghi (đọc có sổ, ㊹) | Q2 | không khai |
-| GET `/nha-cung-cap/:id/diem` | Đọc | `bid.view` | `false` |
+| POST `/so-tin-hieu/doc`, POST `/so-tin-hieu/ghi-nhan` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.9105]** `analytics.review` | không khai |
+| POST `/phan-tich/doc` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.9105]** `analytics.review` | không khai |
+| **[S1.9105]** GET `/toi/luot-doc` — lượt đọc về chính mình (Q2) | Đọc, tự thân | người dùng mua đã đăng nhập | `false` |
+| ~~GET `/nha-cung-cap/:id/diem`~~ **[S1.9105]** bỏ — Q1 | Đọc | `bid.view` | `false` |
 
 Đọc có tên nhân viên đi route `POST` có sổ, không GET (㊹). Trang `/mo-thau` ở bước duyệt nói rõ luồng *"đăng nhập lại để có MFA
 mới"* (㊺).
@@ -516,7 +533,7 @@ Mọi bảng theo tổ chức, chỉ-ghi-thêm, khuôn khoá tư vấn → `seq`
 
 | Bảng | Giữ gì |
 |---|---|
-| `rfq_risk_assessments` | ~~Một hàng cho mỗi lần tính trên một đề xuất trao~~ **[S1.9104]** Đúng một hàng cho một hàng `PROPOSED` (㉛): `award_id`, `bid_version_id`, `policy_id`, `phien_ban_phuong_phap`, `moc_mo_gia`, **[S1.9104]** `moc_de_xuat`, `diem`, `muc`, `do_phu`, **[S1.9104]** `co_no`, bản chụp Supplier Score (`NULL` tới S4b.4), tác giả + phiên |
+| `rfq_risk_assessments` | ~~Một hàng cho mỗi lần tính trên một đề xuất trao~~ **[S1.9104]** Đúng một hàng cho một hàng `PROPOSED` (㉛): `award_id`, `bid_version_id`, `policy_id`, `phien_ban_phuong_phap`, `moc_mo_gia`, **[S1.9104]** `moc_de_xuat`, `diem`, `muc`, `do_phu`, **[S1.9104]** `co_no`, ~~bản chụp Supplier Score (`NULL` tới S4b.4)~~ **[S1.9105]** không có bản chụp Supplier Score (Q1), tác giả + phiên |
 | `rfq_risk_factors` | Một hàng mỗi yếu tố: `ma`, `trang_thai`, `muc`, `trong_so`, `nguon`, `thoi_diem`, `bang_chung jsonb`, `do_tin_cay`, `giai_thich`, ~~`nguoi_gay_ra uuid[]`~~. `CHECK`: `bang_chung` không mang khoá nào trong tập tên trường tiền đã khai (`tien`, `gia`, `so_tien`, `amount`, `unitPrice`, `totalAmount`). **[S1.9104]** Người gây ra là bảng con (㉟); `CHECK` là lược đồ đóng theo mã cộng dây bẫy không phân biệt hoa thường (㊴); `giai_thich` là (mã mẫu, tham số) |
 | `rfq_risk_factor_inputs` | Bảng con khoá ngoại tới mọi gói và phiên bản báo giá mà yếu tố đã đọc — để tái lập (khuôn spec S4 §2.5 ⑿). **[S1.9104]** Đa hình theo nguồn, `num_nonnulls = 1` (㊳) |
 | **[S1.9104]** `rfq_risk_factor_causers` | Người gây ra: `(org_id, factor_id, user_id)`, khoá ngoại hợp thành tới `users`, trigger suy từ bảng đầu vào (㉟) |
@@ -530,7 +547,8 @@ sàn). Cả hai đi dưới luật thứ tự của spec S4 §2.5 ⒆: sau S3.1,
 
 **Quyền.** Không mã quyền mới — nguyên tắc ADR-084 ⑴. Đọc đánh giá rủi ro, Supplier Score, màn Executive: `bid.view`. Ghi
 nhận yếu tố: `po.approve`. Sổ tín hiệu: `audit.read`. Phân tích người mua: Q2. **[S1.9104]** Ở cổng `bid.view` không hiện tên
-người gây ra (㉖). Sổ tín hiệu: Q2 — lượt soi đề xuất một mã mới, đúng tiêu chí tách người của ADR-084 ⑴ (§2.6).
+người gây ra (㉖). Sổ tín hiệu: Q2 — lượt soi đề xuất một mã mới, đúng tiêu chí tách người của ADR-084 ⑴ (§2.6). **[S1.9105]** Chốt: một mã mới
+`analytics.review`, chỉ vai `AUDITOR` giữ, cho sổ tín hiệu và phân tích người mua (§2.7 Q2).
 
 ### 10.1. [S1.9104] Cưỡng chế ở CSDL
 
@@ -584,17 +602,19 @@ phiên bản mà không đánh dấu. Tách theo luật *"mỗi nửa một số
 
 | Mã | Mệnh đề | Cưỡng chế | Hạng mục |
 |---|---|---|---|
-| **L9** | Như bảng trên; phiên bản khai trọng số cho thành phần không có nguồn bị từ chối LÚC GHI phiên bản | `CHECK` dạng khẳng định trên phiên bản (㊵) + lõi thuần + test tái lập | S4b.4 |
+| **L9** | Như bảng trên; phiên bản khai trọng số cho thành phần không có nguồn bị từ chối LÚC GHI phiên bản | `CHECK` dạng khẳng định trên phiên bản (㊵) + lõi thuần + test tái lập | ~~S4b.4~~ **[S1.9105]** S5 (Q1) |
 | **L10** | Mỗi đánh giá có đủ hàng yếu tố của phiên bản phương pháp, mỗi hàng năm trường; `diem`, `do_phu`, `muc`, `co_no` do CSDL tính từ hàng yếu tố; độ phủ theo ㉚; tính lại từ bảng đầu vào ra đúng bản lưu cho mọi yếu tố KHÔNG phải chuỗi (F3, F5–F11) | Deferred trigger (㉜); lõi thuần; test tái lập khuôn J2; đột biến bỏ một hàng yếu tố | S4b.1 |
 | **L11** | Chữ ký trao ở đề xuất làm chốt nổ cần MFA mới, giải trình của người ký, và ghi nhận từng hàng `DO` — kể cả `DO_PHU` — bởi người giữ `po.approve` ngoài tập ㉞ tính tại lúc ký; đề xuất có đúng một đánh giá ghi cùng giao dịch; chỉ ở tổ chức đã bật S3 | Trigger trên `rfq_award_approvals` (㉝), deferred trên `rfq_awards` (㉛), vế MFA và tái lập ở tầng gói; đo cả ca song song của M8 | S4b.1 |
 | **L16** | Không hàng yếu tố, không bằng chứng, không bản chụp, không bộ bằng chứng nào của S4b mang một số tiền, hay đủ để suy ra giá của gói khác | Lược đồ đóng + dây bẫy (㊴); bước 14 kịch bản 41 quét các bảng S4b bằng kim đơn giá và kim tổng, chạy sau bước 12h — trên biến thể ở tổ chức ĐÃ BẬT S3, vì theo ㉙ tổ chức MVP1 không có đánh giá nào | S4b.1 |
 | **L17** | THƯỚC đọc as-of `moc_mo_gia`, SỰ KIỆN VỀ X đọc as-of `moc_de_xuat` (㊲); ghi dữ liệu sau mốc rồi tính lại ra đúng bản lưu; ĐỐI CHỨNG DƯƠNG: cùng dữ liệu ghi TRƯỚC mốc thì kết quả đổi | Test hai chiều | S4b.1 (F3, F6, F8), S4b.2 (chuỗi) |
 | **L18** | Như bảng trên, cộng: không đầu ra nào của S4b trước mở thầu ngoài bốn trường của ㊺; không tên người gây ra ở cổng `bid.view` | Vòng quét route khuôn A2/J4, có đối chứng dương | S4b.1 |
-| **L19** | Mọi đường trả dữ liệu mang tên nhân viên để đúng một hàng sổ mang người đọc, khung và đối tượng; ghi sổ hỏng thì không trả dữ liệu | Test đếm hàng sổ; đột biến gỡ lần ghi; ca *"ghi sổ hỏng"* | S4b.3 (đường đầu tiên), S4b.5 |
+| **L19** | Mọi đường trả dữ liệu mang tên nhân viên để đúng một hàng sổ mang người đọc, khung và đối tượng; ghi sổ hỏng thì không trả dữ liệu. **[S1.9105]** Đối tượng đọc được mọi hàng về chính mình qua route tự thân, và không đọc được hàng về người khác (Q2) | Test đếm hàng sổ; đột biến gỡ lần ghi; ca *"ghi sổ hỏng"*; **[S1.9105]** ca tự thân và ca người khác | S4b.3 (đường đầu tiên), S4b.5 |
 | **L20** | Mỗi bảng S4b chỉ có hàng từ đúng một đường: đánh giá, yếu tố, đầu vào, người gây ra — đường đề xuất trao, cùng giao dịch; ghi nhận — đường ghi nhận; giải trình — đường ký; `risk_register_acks` — đường ghi nhận sổ. Sổ tín hiệu không lưu dòng nào chưa có người ghi nhận | Trigger ㉛ ở CSDL cho vế *cùng giao dịch*; test kiến trúc cho phần còn lại | S4b.1 (vế CSDL), S4b.3 (sổ) |
 | **L21** | Như bảng trên | Như bảng trên | S4b.1 |
 | **L22** — mới, tách từ L10 | Yếu tố chuỗi (F1, F2b, F4) tính lại từ bảng đầu vào và ảnh chụp nền `rfq_risk_nen` ra đúng bản lưu; một đánh giá < 2 giây ở 5.000 gói, thời gian giữ khoá sổ của tổ chức trong lúc tính bằng 0 | Test tái lập; đo hiệu năng có biên bản | S4b.2 |
 | **L23** — mới | Ngưỡng độ phủ, ngưỡng mức, luật nổ và `KHONG_XAC_DINH` ≡ `CAO` là hằng của phiên bản phương pháp; `rui_ro` chỉ mang trọng số, mỗi trọng số ≥ sàn; `rui_ro` NULL ⇒ mặc định của phương pháp | Hàm SQL `IMMUTABLE` khai phương pháp; `CHECK` dạng khẳng định; test: phiên bản đặt trọng số dưới sàn bị từ chối, phiên bản không có `rui_ro` vẫn đề xuất được | S4b.1 |
+| **L24** — mới **[S1.9105]** | Tổ chức mang dấu dữ liệu mẫu không bao giờ vào phép đo cổng (e), và mọi màn S4b của nó hiện nhãn *"dữ liệu mẫu"*; `app_api` không đặt và không gỡ được dấu ấy (Q8) | Dấu ngoài GRANT; test của công cụ đo trên một tổ chức mang dấu; vòng quét màn | S4b.0 (công cụ đo), S4b.6 (màn) |
+| **L25** — mới **[S1.9105]** | `analytics.review` chỉ ở vai `AUDITOR`; vai và người giữ nó không giữ `rfq.create`, `rfq.invite`, `award.recommend`, `po.approve`, `bid.view`, `policy.manage`, `item.manage` (Q2) | Hai trigger khuôn `033`; vòng quét route | S4b.3 |
 
 ---
 
@@ -727,7 +747,8 @@ dương.
 
 **[S1.9104]** Ba sửa. ⑴ Theo ㊼, chuỗi 9 gói luân phiên ra `VANG`, không `DO`; câu nghiệm thu dùng chuỗi 12 gói. ⑵ Sản phẩm
 không có vai kiểm toán: *"người kiểm toán"* là vai mà Q2 chốt. ⑶ Dữ liệu *"của tổ chức đã vượt sàn"* là dữ liệu thật; demo V2.1
-§41 trên dữ liệu gieo theo Q8.
+§41 trên dữ liệu gieo theo Q8. **[S1.9105]** Người kiểm toán là người giữ vai `AUDITOR`; demo chạy trên tổ chức mang dấu dữ liệu
+mẫu, và mọi màn hiện nhãn ấy; kịch bản V2.1 §41 của spec S4 §7.2 bỏ Supplier Score (Q1).
 
 ### 14.1. [S1.9104] Cách đếm KPI của V2.1 §36
 
@@ -738,7 +759,7 @@ Bản nháp nhắc KPI và North Star ở đầu trang mà không nói cách đ�
 | *High-risk RFQ detected* | Đánh giá có ≥ 1 yếu tố `DO` thật — không tính `DO_PHU` | `KHONG_XAC_DINH` đếm RIÊNG; gộp vào thì chỉ số ở tổ chức mới ≈ 100% |
 | *Price anomaly* | Đánh giá có F3 hay F9 ở `DO` | Nhãn `LECH_CAO` từng dòng của S4a — đó là chỉ số của S4a |
 | *Supplier network alerts* | — | V2.1 §18, ngoài S4 (§16) |
-| North Star *"có risk assessment"* (PRODUCT §9) | **Q7** (§2.6) | — |
+| North Star *"có risk assessment"* (PRODUCT §9) | **Q7** (§2.6) — **[S1.9105]** gói có đánh giá rủi ro mức khác `KHONG_XAC_DINH` | Gói chỉ có đánh giá `KHONG_XAC_DINH`; gói ở tổ chức chưa bật S3 |
 
 ---
 
@@ -775,6 +796,11 @@ khi ADR-9201 ⑴ chỉ miễn cổng cho S4b.1.
 | **S4b.6** | Màn Executive | `/tong-quan` với trạng thái trước mở thầu; nút theo Q4; demo theo Q8 | S4b.2; Q4, Q8 |
 | **S4b.7** | Bằng chứng trọn | Lớp rủi ro trong bộ xuất ADR-059 cho mọi yếu tố chuỗi; `DAC-TA.md` trọn | S4b.2 |
 
+**[S1.9105] Sau ADR-9208**, mọi Q trong cột *Chờ* đã có câu trả lời. **S4b.4 rời S4b, sang S5** (Q1), và S3.8 rời điều kiện
+của cổng (e). S4b.3 dựng vai `AUDITOR`, mã `analytics.review` và route tự thân của Q2 (**L25**, L19 mở rộng); S4b.0 chờ pilot để
+ĐO, với con số của Q5, và dựng dấu dữ liệu mẫu cho công cụ đo (**L24**); S4b.6 không có nút *[REQUEST REVIEW]*, và hiện nhãn dữ
+liệu mẫu (**L24**); S4b.2 đếm North Star theo Q7.
+
 **Đọc lại khi lớp nền có mã.** Spec này viết trên bảng chưa tồn tại. Khi mỗi lớp nền vào `master`, hạng mục kế tiếp của S4b
 đọc lại đúng mục tương ứng trước khi viết mã, và ghi kết quả vào biên bản của vòng ấy:
 
@@ -786,7 +812,7 @@ khi ADR-9201 ⑴ chỉ miễn cổng cho S4b.1.
 | S4.5 — bảng kết quả benchmark | F3, F9 |
 | S4.7 — hai hạng giá/TCO | F1, *Price Competitiveness* |
 | S3.1 — `chinh_sach_tai` | §5.1, ㊵ |
-| S3.7, S3.8 — thẩm định, view hiệu suất | §7, ㊾ |
+| S3.7, S3.8 — thẩm định, view hiệu suất | §7, ㊾ — **[S1.9105]** S3.7 cho ㉞ (người thẩm định N); §7 và S3.8 sang S5 |
 
 **Về quy trình.** Quyết định *"viết spec S4b trước cổng"* đã ghi ở §2.2; nay có ADR-9206. Viết spec trước cổng không phạm
 ADR-043 hay ADR-9201, vì hai ADR ấy chặn vòng MÃ — tiền lệ S1.138, S1.9101. Số tạm ADR-9201…9207 và khoản 9401–9403 chỉ đúng
@@ -801,6 +827,7 @@ số tạm trỏ sai (góc D⑫, CHƯA ĐO).
   trùng tài khoản ngân hàng hay địa chỉ giữa các nhà cung cấp cùng được mời vào một gói.
 - **Specification anomaly** (V2.1 §20) — cần một sổ sửa hạng mục trước.
 - **Quality, Delivery, Claim rate, Contract compliance** (V2.1 §13) — S5.
+- **[S1.9105] Supplier Score trọn** — S5 (Q1, ADR-9208). §7 giữ làm đầu vào cho spec S5.
 - **Học máy, mô hình dự báo** — ADR-9202.
 - **Chia sẻ điểm hay sổ tín hiệu xuyên tổ chức** — ADR-013; một nhà cung cấp bị gắn cờ ở tổ chức A không được theo sang tổ chức B.
 - **Dùng điểm để tự động loại hay tự động trao** — V2.1 §20: *"AI chỉ đưa ra Risk / Recommendation; con người đưa ra
