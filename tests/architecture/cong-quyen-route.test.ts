@@ -201,6 +201,10 @@ const HAM_THUAN_TUY = [
   "lamTron",
   "tinhChiPhiHieuDung",
   "vietSo",
+  // [ADR-011] Bộ ký aws-kms và phép đọc khoá công khai: không `client` CSDL, không `orgId` —
+  // dựng ở composition root, như bản local-dev ngay dưới.
+  "createAwsKmsReceiptSigner",
+  "layKhoaCongKhaiBienNhanKms",
   "createLocalDevReceiptSigner",
   "derToRawSignature",
   "parseReceiptText",

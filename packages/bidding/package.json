@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1140.0",
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",

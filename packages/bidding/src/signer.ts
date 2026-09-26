@@ -28,6 +28,13 @@ export interface ReceiptKeyPair {
 
 const KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
 
+/** `kid` đi nguyên văn vào một dòng `kid=...` của văn bản được ký — dùng chung cho mọi adapter. */
+export function assertReceiptKid(kid: string): void {
+  if (!KID_PATTERN.test(kid)) {
+    throw new ReceiptError(`Định danh khoá "${kid}" không hợp lệ: nó đi vào một dòng "kid=..." của văn bản đã ký.`);
+  }
+}
+
 export class ReceiptSigningKeyRing {
   readonly #keys: ReadonlyMap<string, ReceiptKeyPair>;
 
@@ -40,11 +47,7 @@ export class ReceiptSigningKeyRing {
       throw new ReceiptError("Vòng khoá ký phải có ít nhất một khoá.");
     }
     for (const [kid, k] of cap) {
-      if (!KID_PATTERN.test(kid)) {
-        throw new ReceiptError(
-          `Định danh khoá "${kid}" không hợp lệ: nó đi vào một dòng "kid=..." của văn bản đã ký.`,
-        );
-      }
+      assertReceiptKid(kid);
       if (k.privateKey.length === 0 || k.publicKey.length === 0) {
         throw new ReceiptError(`Khoá "${kid}" thiếu một nửa.`);
       }

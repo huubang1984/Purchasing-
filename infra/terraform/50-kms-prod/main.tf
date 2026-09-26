@@ -1,9 +1,11 @@
-# Stack 50 — tài khoản PROD: hai khoá của ứng dụng.
+# Stack 50 — tài khoản PROD: ba khoá của ứng dụng.
 #   ⑴ alias/tp-org-wrap — CMK đối xứng bọc cặp khoá của từng tổ chức (ADR-062):
 #        tp-api           chỉ GenerateDataKeyPairWithoutPlaintext (sinh cặp khoá tổ chức)
 #        tp-unseal-worker chỉ Decrypt (mở khoá riêng tổ chức, 1 lần mỗi lượt mở thầu)
 #        mọi principal khác — kể cả KeyAdmin và AdministratorAccess — không giải mã được.
 #   ⑵ alias/tp-receipt-sign — khoá ký biên nhận (ADR-011), chỉ tp-api ký được.
+#   ⑶ alias/tp-totp — CMK đối xứng bọc bí mật TOTP (ADR-063): chỉ tp-api Encrypt/Decrypt, và chỉ
+#        với encryption context { org_id, key_version }. Không bắc cầu sang tp-org-wrap.
 # Chạy bằng KeyAdmin (xem stack 40). Tài khoản: prod. Profile: tp-prod-keyadmin.
 # Stack 20 và 30 phải apply trước: KMS từ chối key policy trỏ tới role chưa tồn tại.
 
@@ -206,5 +208,97 @@ resource "aws_kms_alias" "receipt_sign" {
   target_key_id = aws_kms_key.receipt_sign.key_id
 }
 
+# ---------------------------------------------------------------------------------------------
+# ⑶ tp-totp (ADR-063)
+# ---------------------------------------------------------------------------------------------
+data "aws_iam_policy_document" "totp" {
+  source_policy_documents = [module.quan_tri.json]
+
+  statement {
+    sid       = "ApiBocMoBiMatTotp"
+    actions   = ["kms:Encrypt", "kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = [local.api]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "kms:EncryptionContext:org_id"
+      values   = ["?*"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "kms:EncryptionContext:key_version"
+      values   = ["?*"]
+    }
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "kms:EncryptionContextKeys"
+      values   = ["org_id", "key_version"]
+    }
+  }
+
+  statement {
+    sid       = "ApiDocMoTaKhoa"
+    actions   = ["kms:DescribeKey"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = [local.api]
+    }
+  }
+
+  # Giải mã chỉ dành cho tp-api — worker, KeyAdmin, AdministratorAccess đều không.
+  statement {
+    sid       = "KhongGiaiMaNgoaiApi"
+    effect    = "Deny"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.api]
+    }
+  }
+
+  statement {
+    sid    = "KhongAiDungDuongKhac"
+    effect = "Deny"
+    actions = [
+      "kms:ReEncryptFrom",
+      "kms:ReEncryptTo",
+      "kms:GenerateDataKey",
+      "kms:GenerateDataKeyWithoutPlaintext",
+      "kms:GenerateDataKeyPair",
+      "kms:GenerateDataKeyPairWithoutPlaintext",
+    ]
+    resources = ["*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+  }
+}
+
+resource "aws_kms_key" "totp" {
+  description             = "TrustProcure - boc bi mat TOTP (ADR-063)"
+  key_usage               = "ENCRYPT_DECRYPT"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.totp.json
+  lifecycle { prevent_destroy = true }
+}
+
+resource "aws_kms_alias" "totp" {
+  name          = "alias/tp-totp"
+  target_key_id = aws_kms_key.totp.key_id
+}
+
 output "org_wrap_key_arn" { value = aws_kms_key.org_wrap.arn }
+output "totp_key_arn" { value = aws_kms_key.totp.arn }
 output "receipt_sign_key_arn" { value = aws_kms_key.receipt_sign.arn }

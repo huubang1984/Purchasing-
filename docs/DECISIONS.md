@@ -6253,3 +6253,53 @@ CHỨC, không phải khoảnh khắc sinh khoá RFQ. Nó **không** viết adap
 cho tới khi có CMK, role và phép đo ⒜ chạy trên tài khoản thật. Và nó **không** đổi nhà cung cấp:
 ba điều kiện mở lại ADR-009 giữ nguyên.
 
+
+---
+
+## ADR-063 — Bí mật TOTP được bọc bằng một CMK RIÊNG `alias/tp-totp`, và `api` được `Decrypt` trên ĐÚNG khoá ấy
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-006, ADR-009, **ADR-062**
+(phép kiểm ⒞), cổng `TotpSecretUnsealer` (T9-A, `packages/identity`)
+
+### Bối cảnh
+
+Kiểm một mã TOTP cần bí mật TOTP ở dạng rõ, và việc ấy xảy ra trong `api` ở mỗi lần đăng nhập.
+Hôm nay chỉ có adapter `local-dev` (HKDF từ một vòng master key riêng). Adapter thật phải chọn một
+khoá KMS — và ADR-062 vừa đặt quy tắc *"`api` không có quyền giải mã nào"* cùng phép kiểm tĩnh ⒞
+cấm `DecryptCommand` ngoài phía mở khoá thầu. Hai điều ấy nói về **khoá mở hồ sơ thầu**; TOTP là
+một đối tượng khác mà hệ thống vẫn phải giải mã trong `api`.
+
+### Phương án
+
+| # | Phương án | Vì sao loại / giữ |
+|---|---|---|
+| 1 | Bọc TOTP bằng `tp-org-wrap` | **Loại.** Phải trao `api` quyền `Decrypt` trên khoá mở mọi hồ sơ thầu — phá ADR-062 |
+| 2 | Envelope: mỗi tổ chức một data key bọc bởi CMK, `api` mở và GIỮ data key trong bộ nhớ | **Loại.** Ít lời gọi KMS hơn, nhưng một bí mật dài hạn dạng rõ sống trong `api`, và cần migration mới |
+| 3 | **CMK đối xứng riêng `alias/tp-totp`; `api` `Encrypt`/`Decrypt` thẳng trên bí mật 20 byte** | **Chọn.** Không bí mật dài hạn nào trong bộ nhớ `api`; mỗi lần kiểm mã TOTP một lời gọi KMS |
+
+### Quyết định
+
+1. **CMK đối xứng `alias/tp-totp`**, tự xoay hằng năm, chỉ dùng cho bí mật TOTP.
+2. `EncryptionContext = { org_id, key_version }` ở cả hai chiều — là AAD của blob KMS: bí mật bọc ở
+   tổ chức A không mở dưới `org_id` của B, và đổi `secret_key_version` trong hàng mà không đổi blob
+   thì KMS không mở. `key_version` là nhãn do cấu hình đặt (xoay CMK không đổi nhãn; đổi CMK thì
+   đổi nhãn).
+3. **Key policy:** `tp-api` được `kms:Encrypt` và `kms:Decrypt` với context có đúng hai khoá ấy;
+   `Deny` tường minh `Decrypt` cho mọi principal khác (kể cả worker, KeyAdmin, AdministratorAccess);
+   `Deny` `ReEncrypt*`, `GenerateDataKey*` cho mọi người.
+4. **Phép kiểm ⒞ của ADR-062 được mở rộng, không nới:** tệp được gọi `DecryptCommand` là phía mở
+   khoá thầu (như cũ) **hoặc** đích của một quy tắc depcruise họ `g18-totp-`. Họ ấy hôm nay có đúng
+   một quy tắc: chỉ `apps/api/src/composition.ts` (và test của chính adapter) import được
+   `apps/api/src/adapters/totp-aws-kms.ts`. Tập tệp được tha vẫn đọc từ `.dependency-cruiser.cjs`.
+
+### Hệ quả
+
+- **Cái giá:** một lời gọi KMS mỗi lần kiểm mã TOTP (đăng nhập, `/auth/agent-session`) — vài chục
+  mili-giây và chi phí theo lời gọi. Chấp nhận: TOTP là đường tương tác, không phải đường lô.
+- **Không bắc cầu sang hồ sơ thầu:** quyền `Decrypt` của `tp-api` chỉ có trên `tp-totp`; key policy
+  của `tp-org-wrap` vẫn `Deny` `Decrypt` với mọi principal ngoài worker.
+- **Rủi ro còn lại, nói thẳng:** ai chiếm được `tp-api` giải mã được bí mật TOTP của mọi người dùng
+  — tức vượt được yếu tố thứ hai, dù vẫn cần yếu tố thứ nhất. Đó là giới hạn của mọi thiết kế kiểm
+  TOTP phía máy chủ; ADR này không tuyên bố đóng nó.
+- Chưa nối vào composition: `hop-thu-dev` vẫn là adapter `local-dev`, nên `api` chưa khởi động
+  được với `TRUSTPROCURE_KEY_ADAPTER=aws-kms` (khoản 15).
