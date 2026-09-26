@@ -437,15 +437,23 @@ export function capNhatTongKet(state: string): string {
 
 // ---- Xung đột ở lời khai đếm ---------------------------------------------------------------
 
+/**
+ * Bản so sánh của một dòng khi gỡ xung đột: bỏ phần ĐÃ GẠCH, rồi xoá giá trị VÀ tiền tố vòng của mọi
+ * lời khai đếm. Hai phía chỉ khác nhau ở đó thì cùng một dòng — kể cả khi một phía còn viết theo lối
+ * cũ (gạch số cũ, nối `**[S1.y] N ADR**` mới), điều các nhánh mở trước quy ước này vẫn làm.
+ */
 function chuanHoaKhai(dong: string): string {
   return dong
-    .replace(RE_KHAI_ADR, "$1‹›$3")
-    .replace(RE_KHAI_KHOAN, "$1‹›$3‹›$5")
-    .replace(RE_KHAI_MIGRATION, "$1‹›$3")
+    .replace(/~~[^~]*?~~/g, "")
+    .replace(/\*\*(?:\[S[\d.]+\]\s*)?(?:[a-zà-ỹ ]+|\d+) ADR\*\*/giu, "**‹› ADR**")
+    .replace(/\*\*(?:\[S[\d.]+\]\s*)?\d+( khoản(?: nợ)?,\s*(?:trong đó\s*)?)\d+( còn mở\*\*)/g, "**‹›$1‹›$2")
+    .replace(/\*\*(?:\[S[\d.]+\]\s*)?\d+( migration đánh số\*\*)/g, "**‹›$1")
     .replace(/^(\*\*CÒN MỞ TÍNH TỚI HEAD:\*\*).*$/, "$1 ‹›")
     .replace(RE_TONG_DOAN_DEM, "**‹›**")
     .replace(RE_NGOAI_MA_DOAN_DEM, "**‹›**")
-    .replace(RE_CO_MA_DOAN_DEM, "**‹›**");
+    .replace(RE_CO_MA_DOAN_DEM, "**‹›**")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**

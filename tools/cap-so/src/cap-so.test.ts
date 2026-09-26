@@ -218,6 +218,23 @@ describe("gỡ xung đột", () => {
     );
   });
 
+  it("phía master còn viết lối cũ (gạch số cũ, nối số mới với tiền tố vòng khác): vẫn là khối chỉ khác ở lời khai", () => {
+    const van = [
+      "<<<<<<< HEAD",
+      "- Thiết kế, ~~**[S1.137] bảy mươi chín ADR**~~ **[S1.139] tám mươi ba ADR** (ADR-011).",
+      "=======",
+      "- Thiết kế, ~~**[S1.137] bảy mươi chín ADR**~~ ~~**[S1.139] tám mươi hai ADR**~~ **[S1.141] tám mươi ba ADR** (ADR-011).",
+      ">>>>>>> origin/master",
+    ].join("\n");
+    expect(giaiXungDotKhai(van, "khai")).toEqual({
+      van: "- Thiết kế, ~~**[S1.137] bảy mươi chín ADR**~~ ~~**[S1.139] tám mươi hai ADR**~~ **[S1.141] tám mươi ba ADR** (ADR-011).",
+      daGiai: 1,
+      conLai: 0,
+    });
+    // Chữ SỐNG khác nhau thì vẫn là việc của người gỡ.
+    expect(giaiXungDotKhai(van.replace("(ADR-011).\n=", "(ADR-012).\n="), "khai")).toMatchObject({ daGiai: 0, conLai: 1 });
+  });
+
   it("khác ở chỗ khác, hay cùng sửa MỘT khoản hai cách — để nguyên", () => {
     const khacChu = "<<<<<<< HEAD\nchữ của nhánh\n=======\nchữ của master\n>>>>>>> master";
     expect(giaiXungDotKhai(khacChu, "khai")).toMatchObject({ daGiai: 0, conLai: 1, van: khacChu });
