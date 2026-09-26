@@ -13,6 +13,13 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-26 / S1.126] SPEC S3 (GOVERNANCE · MVP2) VÀO KHO — BẢN NHÁP, CHƯA QUA LƯỢT SOI HÌNH DẠNG.**
+`docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`. Bốn quyết định của chủ dự án ngày 2026-09-26
+(spec §2.2): đủ bảy mục của V2.1 §32; mở rộng cổng duyệt sẵn có, không dựng engine duyệt tổng quát; chốt tham số mặc định
+và bắt đầu S3.0 ngay sau lượt soi — ngược ADR-043 và ADR-058 ⑷, nên ghi thành ADR ở lượt soi (spec §2.3). Chưa dòng mã,
+chưa migration, chưa ADR nào của S3. Vòng này không chạm mảnh nào của bảng bốn mảnh ở `docs/PRODUCT.md` §11; khoản
+**234** vẫn `[MỞ]` cho tới S3.3.
+
 **[2026-09-23 / S1.117] MẢNH 1 CỦA `docs/PRODUCT.md` §11 XONG — MÀN XUẤT BỘ BẰNG CHỨNG.** Bước 8 của `/mo-thau` gọi
 `GET /rfqs/:rfqId/evidence-bundle` (cổng `audit.read` + `bid.view`, `agent: false`) và tải đúng hai tệp mà `pnpm bang-chung
 xuat` ghi. Nửa XUẤT của S2.7 (`doc-tu-csdl.ts`, `dac-ta.ts`) chuyển từ `tools/bo-xuat-danh-gia` xuống `packages/danh-gia`
