@@ -26,6 +26,7 @@
     "gieo:demo": "node --experimental-transform-types --import ./tools/gieo-demo/register-ts-resolve.mjs tools/gieo-demo/src/index.ts",
     "worker:dev": "node --experimental-transform-types --import ./apps/unseal-worker/register-ts-resolve.mjs apps/unseal-worker/src/main.ts",
     "neo": "node --experimental-transform-types --import ./tools/neo-so-kiem-toan/register-ts-resolve.mjs tools/neo-so-kiem-toan/src/index.ts",
+    "kiem-truoc-apply": "node --experimental-transform-types --import ./tools/kiem-truoc-apply/register-ts-resolve.mjs tools/kiem-truoc-apply/src/index.ts",
     "bang-chung": "node --experimental-transform-types --import ./tools/bo-xuat-danh-gia/register-ts-resolve.mjs tools/bo-xuat-danh-gia/src/index.ts"
   },
   "devDependencies": {
