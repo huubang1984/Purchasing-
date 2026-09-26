@@ -616,6 +616,76 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
       ),
     ).rejects.toThrow(RfqError);
   });
+
+  // [S1.151 / khoản 127] Hai lần gia hạn ĐỒNG THỜI tới CÙNG một hạn. Bản trước so "hạn mới > hạn hiện tại" trên hàng `docRfq` đọc KHÔNG
+  // khoá: lần sau đọc D0, qua phép so, chờ khoá hàng ở `UPDATE`, rồi — vì trigger 011 không chạy vế trạng thái khi hạn BẰNG nhau — ghi D1
+  // lên D1 và ghi `RFQ_DEADLINE_EXTENDED` (`truoc` = D0) cho một lần gia hạn không đổi gì. Phép đo giữ lần đầu Ở GIỮA giao dịch (đã
+  // `UPDATE`, chưa COMMIT), chạy lần sau cho tới khi nó CHỜ KHOÁ, rồi mới COMMIT lần đầu ⇒ đúng một bản ghi sổ, lần sau bị từ chối.
+  it("[INV-C4] [S1.151 / khoản 127] hai lần gia hạn đồng thời tới cùng một hạn: đúng MỘT bản ghi RFQ_DEADLINE_EXTENDED, lần sau bị từ chối", async () => {
+    const rfqId = await rfqNhap();
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+      await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
+    });
+    const giaHan = (c: pg.PoolClient, reason: string): Promise<RfqRecord> =>
+      extendRfqDeadline(c, orgA, { rfqId, newDeadlineAt: MAI_SAU_XA, reason, actorSessionId: s1 });
+
+    let thaCommit: () => void = () => {};
+    const choCommit = new Promise<void>((xong) => {
+      thaCommit = xong;
+    });
+    let baoDaGhi: () => void = () => {};
+    const daGhi = new Promise<void>((xong) => {
+      baoDaGhi = xong;
+    });
+    let pidLanSau = -1;
+
+    // Lần đầu: gia hạn trong `withTenant`, rồi GIỮ giao dịch mở (khoá hàng còn đó) cho tới khi lần sau đã chờ khoá.
+    const lanDau = withTenant(apiPool, orgA, async (c) => {
+      const r = await giaHan(c, "lan dau");
+      baoDaGhi();
+      await choCommit;
+      return r;
+    });
+    let lanSau: Promise<unknown> | undefined;
+    try {
+      await daGhi;
+      lanSau = withTenant(apiPool, orgA, async (c) => {
+        pidLanSau = (await c.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+        return giaHan(c, "lan sau");
+      }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      const han = Date.now() + 10_000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ w: string | null }>(
+          "SELECT wait_event_type AS w FROM pg_catalog.pg_stat_activity WHERE pid = $1",
+          [pidLanSau],
+        );
+        if (rows[0]?.w === "Lock") break;
+        if (Date.now() > han) throw new Error("het 10000ms: lan gia han sau khong cho khoa hang");
+        await new Promise((xong) => setTimeout(xong, 10));
+      }
+    } finally {
+      thaCommit();
+    }
+    const ketQuaDau = await lanDau;
+    const loiSau = await lanSau;
+
+    expect(ketQuaDau.deadlineAt?.getTime()).toBe(MAI_SAU_XA.getTime());
+    expect(loiSau, "lần gia hạn sau phải bị từ chối bằng RfqError").toBeInstanceOf(RfqError);
+    expect((loiSau as Error).message).toMatch(/đẩy hạn nộp RA XA hơn/);
+    const { rows } = await db.pool.query<{ payload: { reason?: string; truoc?: string | null; sau?: string | null } }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_DEADLINE_EXTENDED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    expect(rows.length, "một lần gia hạn không đổi gì đã ghi sổ").toBe(1);
+    expect(rows[0]?.payload.reason).toBe("lan dau");
+    expect(rows[0]?.payload.truoc).toBe(MAI_SAU.toISOString());
+    expect(rows[0]?.payload.sau).toBe(MAI_SAU_XA.toISOString());
+  });
 });
 
 // =============================================================================================

@@ -605,7 +605,9 @@ export async function extendRfqDeadline(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   const reason = batBuoc(input.reason, "reason", 2000);
 
-  const truoc = await docRfq(client, input.rfqId);
+  // [S1.151 / khoản 127] `docRfq` còn ở đây chỉ để giữ lời từ chối "không tìm thấy RFQ" cho một RFQ không thấy được (RLS) — nó KHÔNG còn
+  // là nguồn của phép so hạn, cũng không là nguồn của `truoc`.
+  await docRfq(client, input.rfqId);
 
   // [REVIEW AN NINH S1.7 — MED-1] Hạn mới phải LỚN HƠN hạn cũ, không chỉ "không nhỏ hơn".
   //
@@ -619,22 +621,38 @@ export async function extendRfqDeadline(
   //
   // Đây là phép kiểm ở tầng ỨNG DỤNG cho một điều CSDL cố ý không nói: CSDL cấm LÙI, nó không
   // định nghĩa "gia hạn" là gì. Định nghĩa ấy là của hàm này.
-  // [S1.72 / lượt soi ngang 66c-5] Phép kiểm này đọc hàng KHÔNG khoá: hai lần gia hạn ĐỒNG THỜI tới cùng một hạn cùng qua, lần sau chờ khoá
-  // hàng ở câu UPDATE rồi ghi `RFQ_DEADLINE_EXTENDED` cho một lần gia hạn không đổi gì (đọc, lượt soi 65c-8) — khoản 127.
-  if (truoc.deadline_at !== null && input.newDeadlineAt.getTime() <= truoc.deadline_at.getTime()) {
-    throw new RfqError(
-      "gia hạn phải đẩy hạn nộp RA XA hơn hạn hiện tại; hạn bằng nhau không phải một lần gia hạn",
-    );
-  }
-
-  const { rows } = await client.query<HangRfq>(
-    `UPDATE public.rfq_packages SET deadline_at = $2 WHERE id OPERATOR(pg_catalog.=) $1 RETURNING ${COT_RFQ}`,
+  // ~~[S1.72 / lượt soi ngang 66c-5] Phép kiểm này đọc hàng KHÔNG khoá: hai lần gia hạn ĐỒNG THỜI tới cùng một hạn cùng qua, lần sau chờ khoá
+  // hàng ở câu UPDATE rồi ghi `RFQ_DEADLINE_EXTENDED` cho một lần gia hạn không đổi gì (đọc, lượt soi 65c-8) — khoản 127.~~
+  //
+  // [S1.151 / khoản 127 — ĐÓNG] Phép so nay nằm TRONG CHÍNH câu ghi, không ở một phép đọc trước nó. Bản trước so trên hàng `docRfq` đọc
+  // KHÔNG khoá; hai lần gia hạn đồng thời tới cùng hạn D1 đều thấy D0, đều qua; lần sau chờ khoá hàng ở `UPDATE`, rồi ghi D1 lên D1 và ghi
+  // `RFQ_DEADLINE_EXTENDED` với `truoc` = D0 cho một lần gia hạn không đổi gì. Nay:
+  //   * vị từ `p.deadline_at IS NULL OR p.deadline_at < $2` tự tham chiếu HÀNG ĐÍCH, nên dưới READ COMMITTED lần sau chờ khoá hàng rồi
+  //     EvalPlanQual đánh giá LẠI nó trên tuple ĐÃ cập nhật (D1 < D1 sai) ⇒ 0 hàng ⇒ `RfqError` cùng lời với ca tuần tự. Vế `IS NULL`
+  //     giữ nguyên hành vi cũ: `deadline_at` được NULL ở DRAFT/CANCELLED (CHECK của 009), và bản cũ cho gia hạn khi hạn cũ là NULL;
+  //   * `truoc` lấy từ CTE `cu` khoá hàng `FOR NO KEY UPDATE` (khuôn `taoLuotDanhGia`): khoá chờ lần kia COMMIT rồi trả phiên bản MỚI
+  //     NHẤT, và từ lúc CTE giữ khoá không ai đổi được hàng tới câu UPDATE — nên `cu.truoc` đúng là hạn ngay trước lần ghi này.
+  //     (`RETURNING` trần trả giá trị MỚI, không dùng được cho `truoc`.) KHÔNG đưa phép so vào CTE: CTE không được tính lại khi
+  //     EvalPlanQual chạy — cạm bẫy đã ghi ở khối chú thích trên `CAU_DAT_COC` của `packages/identity/src/mfa-credentials.ts`; vị từ ở `WHERE` trên `p` mới là thứ được tính lại.
+  //   * Lần từ chối này KHÔNG ghi sổ — y như lần từ chối tuần tự trước đây (ADR-060: `RfqError` của hàm này không thuộc bảy mã chuỗi, và
+  //     hàm không nhận `auditPool`); giao dịch của người gọi rollback, không để lại hạn, sổ hay job nào.
+  const { rows } = await client.query<HangRfq & { truoc: Date | null }>(
+    `WITH cu AS (
+       SELECT c.deadline_at AS truoc FROM public.rfq_packages c
+        WHERE c.id OPERATOR(pg_catalog.=) $1
+        FOR NO KEY UPDATE
+     )
+     UPDATE public.rfq_packages p SET deadline_at = $2
+       FROM cu
+      WHERE p.id OPERATOR(pg_catalog.=) $1
+        AND (p.deadline_at IS NULL OR p.deadline_at OPERATOR(pg_catalog.<) $2)
+     RETURNING ${COT_RFQ}, cu.truoc`,
     [input.rfqId, input.newDeadlineAt],
   );
   const hang = rows[0];
   if (hang === undefined) {
     throw new RfqError(
-      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+      "gia hạn phải đẩy hạn nộp RA XA hơn hạn hiện tại; hạn bằng nhau không phải một lần gia hạn",
     );
   }
 
@@ -675,7 +693,7 @@ export async function extendRfqDeadline(
     resourceId: hang.id,
     payload: {
       reason,
-      truoc: truoc.deadline_at?.toISOString() ?? null,
+      truoc: hang.truoc?.toISOString() ?? null,
       sau: hang.deadline_at?.toISOString() ?? null,
     },
   });

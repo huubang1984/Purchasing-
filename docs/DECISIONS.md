@@ -7543,8 +7543,8 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   `tools/cap-so/` đứng ngoài mọi phép thay và phép quét.
 - Lượt soi ngang, mục nhật ký STATE, lời khai `gói + công cụ` và `Sổ đăng ký … bất biến` vẫn viết tay: chưa va lần
   nào, và nằm ngoài phạm vi chủ dự án chọn.
-- Đã chạy trên ba cuộc đua thật của chính PR đưa quyết định này vào: #152 lấy ADR-083/S1.141; #154 lấy
-  ADR-084/085/S1.142; rồi #153, #157–#159 lấy tới ADR-089/S1.146. Mỗi lần: merge master, `pnpm cap-so` gỡ các khối
+- Đã chạy trên bốn cuộc đua thật của chính PR đưa quyết định này vào: #152 lấy ADR-083/S1.141; #154 lấy
+  ADR-084/085/S1.142; #153, #157–#159 lấy tới ADR-089/S1.146; rồi #160 lấy tới S1.151. Mỗi lần: merge master, `pnpm cap-so` gỡ các khối
   xung đột nó quản, cấp lại, và chạy lại không đổi một byte. Lời khai viết tay (`gói + công cụ`) và
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.

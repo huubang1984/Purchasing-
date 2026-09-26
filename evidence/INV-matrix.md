@@ -58,7 +58,7 @@ Hôm nay: **41/41** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | C1 | Sau `deadline_at` mọi lần nộp bị từ chối; phán quyết dựa trên `now()` của Postgres trong chính transaction ghi | Ràng buộc trong transaction | **T3**, T5 | 10 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C2 | Tính đúng đắn không phụ thuộc scheduler — job đóng RFQ chết không làm bid muộn được chấp nhận | Kiến trúc (ADR-005) | T3, T6 | 4 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C3 | Mở thầu chỉ hợp lệ khi RFQ đã CLOSED | Cổng chính sách trong `unseal-worker` | T1, T5 | 6 | ✅ ĐẠT |  |
-| C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 12 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 13 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 15 | ✅ ĐẠT |  |
 | D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 34 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
 | D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai. **[S1.142 / ADR-085]** RFQ dưới ngưỡng cần 1 phê duyệt của người khác người tạo; mọi phê duyệt đếm trên nội dung hiện tại | Cổng chính sách + ràng buộc DB | **T3**, T5 | 41 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
