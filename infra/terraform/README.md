@@ -190,6 +190,30 @@ chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
 **Chưa có:** triển khai `apps/web` (người dùng đi qua web, ADR-044). Endpoint SES API (`email`) chưa được
 kiểm ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
 
+## Deploy thường ngày — `.github/workflows/deploy.yml` (ADR-067)
+
+Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), mọi lần deploy đi qua pipeline bấm tay.
+
+**Chuẩn bị một lần trên GitHub** (Settings → Environments):
+
+| Environment | Required reviewers | Deployment branches | Biến |
+|---|---|---|---|
+| `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE` — lấy từ `terraform output bien_github` (stack 90) |
+| `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
+
+Tên environment phải đúng hai chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
+ghim `sub = repo:huubang1984/Purchasing-:environment:<tên>`. Không có secret nào — pipeline lấy quyền
+AWS bằng OIDC.
+
+**Chạy:** Actions → *Deploy — prod (bam tay)* → Run workflow trên `master`, chọn `api`, `worker` hoặc
+`ca-hai`. Job `build` dựng image không có quyền AWS; job `api` chờ duyệt ở `prod`, đẩy image, chạy
+migrate (dừng nếu exit ≠ 0), cập nhật `tp-api`; job `worker` chờ duyệt riêng ở `prod-worker`. Tóm tắt
+của run ghi ARN các bản task definition vừa đăng ký. Migrate hỏng ⇒ đọc `/tp/migrate` bằng tay (role
+deploy không đọc log).
+
+**Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
+tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.
+
 ## Rủi ro còn lại — nói thẳng
 
 - **KeyAdmin sửa được key policy**, nên về lý thuyết tự gỡ lệnh `Deny` rồi tự cấp `Decrypt`.

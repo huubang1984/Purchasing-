@@ -57,3 +57,7 @@ evidence/INV-matrix.md text eol=lf
 # có: tệp đầu tiên của một đuôi ấy sẽ đỏ tới khi dòng tương ứng được thêm ở đây.
 # VẪN KHÔNG `* text=auto`, và không ghim `.md`, `.json`, `.yml`: các bộ đọc của chúng tự chuẩn hoá xuống dòng.
 *.ts text eol=lf
+
+# [ADR-067] `deploy/*.sh` chạy bằng bash trên runner Linux; một checkout CRLF (Windows, `core.autocrlf=true`) rồi commit
+# lại sẽ đưa `\r` vào cuối mỗi lệnh. Ghim LF cho đúng đuôi ấy.
+*.sh text eol=lf

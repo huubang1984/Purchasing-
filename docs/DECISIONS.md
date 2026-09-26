@@ -6436,3 +6436,38 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   trỏ tới nơi web sẽ chạy. Đó là lát cắt kế.
 - Chi phí ước lượng khi chạy: RDS ~30 USD/tháng, ALB ~20, Fargate (1 api 0,5 vCPU + 1 worker 0,25 vCPU)
   ~25, 6 interface endpoint ở 1 AZ ~45 (≈ 90 ở 2 AZ).
+
+## ADR-067 — Pipeline deploy bấm tay: build không quyền AWS, migrate trước api, worker duyệt riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-026 §4, **ADR-062**, ADR-066
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
+   GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
+   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy.
+2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
+   ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
+   `api` (role `tp-deploy`) và `worker` (role `tp-deploy-worker`) chỉ chạy mã của kho ở cùng commit.
+3. **Thứ tự của `api`:** đẩy `tp-migrate` và `tp-api` (thẻ = SHA commit, ECR bất biến ⇒ chạy lại dùng lại
+   image đã có) → đăng ký bản task definition mới **chỉ đổi image, ghim digest** → chạy task migrate một lần,
+   chờ dừng, **exit 0 mới đi tiếp** → cập nhật service `tp-api`, chờ ổn định, và chỉ ĐẠT khi service chạy
+   đúng bản vừa đăng ký (circuit breaker rollback cũng "ổn định", nhưng trên bản cũ).
+4. **Worker:** job riêng, environment riêng, chỉ chạy khi người bấm chọn `worker` hoặc `ca-hai`; với
+   `ca-hai` nó chạy SAU `api` (migrate xong trước). Đăng ký trong CHÍNH họ `tp-unseal-worker` qua
+   `UpdateService` — không `RunTask`, nên không bắn cảnh báo ⑵ của stack 60; thay image trong họ worker là
+   rủi ro còn lại đã nêu ở stack 60, và đường ấy đi qua duyệt tay.
+5. **Kiểm hình dạng trước khi nhân bản:** bản task definition mới chép từ bản ACTIVE mới nhất của họ; nếu
+   bản ấy mang task role khác role mong đợi, hoặc không đúng một container cùng tên họ, pipeline dừng.
+   Mạng của task migrate (subnet, security group) là biến environment `TP_SUBNETS_UNG_DUNG`,
+   `TP_SG_MIGRATE` — output `bien_github` của stack 90; role deploy không có quyền EC2 để tự dò.
+
+### Hệ quả, nói thẳng
+
+- **Chưa chạy thật:** cần stack 30/90 đã apply và hai environment đã tạo trên GitHub. `deploy/trien-khai.sh`
+  được đo với `aws`/`docker` giả (12 ca: đẩy mới, dùng lại, thẻ sai, đăng ký, role sai, image ngoài
+  registry, migrate đạt/hỏng, subnet sai, cập nhật đạt, rollback, chờ quá hạn).
+- **Lần đầu vẫn tay:** stack 90 cần image có sẵn để tạo task definition đầu tiên (README, bước 4).
+- Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
+  người vận hành đọc `/tp/migrate` bằng tay.
+- `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
