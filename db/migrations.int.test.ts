@@ -1522,7 +1522,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
     { ham: "award_kiem_de_xuat", migration: "064_lich_su_dieu_phoi.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
-    { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    // [S1.141 / khoản 242 ⑴] `068` định nghĩa lại thân — chỉ một chú thích đổi (câu *"đổi
+    // `CHU_KY_CAN` là toàn bộ việc phải làm"* sai, đã đo) — nên con trỏ dời sang `068` theo quy tắc
+    // *migration CUỐI CÙNG*. Chú thích nằm trong `prosrc`, nên bản ghim đổi cùng commit.
+    { ham: "award_kiem_mot_award_song", migration: "068_loi_khai_chu_ky_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "066_han_nop_mang_gio_phan_xu.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
@@ -3202,6 +3205,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_loi_khai_chu_ky_trao_thau.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7612,6 +7616,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_loi_khai_chu_ky_trao_thau.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7899,6 +7904,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "065_vai_neo.sql",
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
+        "068_loi_khai_chu_ky_trao_thau.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

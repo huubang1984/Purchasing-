@@ -2097,6 +2097,86 @@ describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi 
     expect(id).not.toBe("");
   });
 
+  // [S1.141 / khoản 242 ⑴] KHOÁ MỘT PHÉP ĐO, KHÔNG KHOÁ MỘT Ý MUỐN. Thân `061` từng khai *"đổi
+  // `CHU_KY_CAN` là toàn bộ việc phải làm nếu ngày nào chủ dự án chọn hai"*, và JSDoc của
+  // `duyetTraoThau` khai *"lời gọi của người duyệt thứ hai đi qua"*. §S1.139 đo điều ngược lại:
+  // chữ ký và hàng `APPROVED` nằm trong CÙNG một giao dịch, không savepoint, nên lời từ chối của
+  // câu thứ hai cuộn luôn câu thứ nhất — không chữ ký nào tích luỹ được. `068` sửa lời khai; ca này
+  // giữ phép đo trong kho để S3.5 — vòng dựng cơ chế hai chữ ký thật — thấy nó ĐỔI MÀU khi cơ chế
+  // đổi, thay vì tin một câu chú thích. Khoản 242 VẪN MỞ; ca này KHÔNG phải điều kiện đóng.
+  it("[INV-J7] [S1.141 / khoản 242 ⑴] ĐỘT BIẾN `CHU_KY_CAN := 2` — không người duyệt nào đi qua, chữ ký cuộn lại về 0", async () => {
+    const HANG_THAT = "CHU_KY_CAN constant integer := 1;";
+    const { rows } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.award_kiem_mot_award_song()'::regprocedure) AS d",
+    );
+    const goc = rows[0]?.d ?? "";
+    expect(goc.split(HANG_THAT).length - 1, "tiền đề: thân đang chạy mang ĐÚNG MỘT dòng hằng").toBe(1);
+    expect(goc, "tiền đề: thân đang chạy là thân `068`, không phải lời khai cũ").toContain("[S1.141 / khoản 242 ⑴]");
+
+    // Người duyệt THỨ HAI: FINANCE giữ `po.approve`, và không phải người tạo, người điều phối
+    // hay người đề xuất của gói nào — tức J3 không có cớ chặn họ.
+    const uDuyetHai = await taoNguoi(`duyet-hai-${randomBytes(4).toString("hex")}@vidu.vn`, "FINANCE");
+    const sDuyetHai = await taoPhien(uDuyetHai);
+
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat can hai chu ky", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    const soChuKy = async (): Promise<string | undefined> => {
+      const { rows: n } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2",
+        [orgA, dx.awardId],
+      );
+      return n[0]?.n;
+    };
+
+    await db.pool.query(goc.replace(HANG_THAT, "CHU_KY_CAN constant integer := 2;"));
+    try {
+      const { rows: dot } = await db.pool.query<{ d: string }>(
+        "SELECT pg_get_functiondef('public.award_kiem_mot_award_song()'::regprocedure) AS d",
+      );
+      expect(dot[0]?.d, "đột biến phải THẬT SỰ được áp trước khi đọc kết quả").toContain(
+        "CHU_KY_CAN constant integer := 2;",
+      );
+
+      // (a) Người duyệt ĐẦU: bị từ chối — và chữ ký của chính họ cuộn lại cùng hàng `APPROVED`.
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+        ),
+      ).rejects.toThrow(/can 2 chu ky duyet; dang co 1/u);
+      expect(await soChuKy(), "chữ ký và hàng APPROVED cùng một giao dịch — chữ ký KHÔNG ở lại").toBe("0");
+
+      // (b) Người duyệt THỨ HAI: đúng lỗi ấy, vì phép đếm lại bắt đầu từ 0 — lời khai cũ nói họ đi qua.
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyetHai }, apiPool),
+        ),
+      ).rejects.toThrow(/can 2 chu ky duyet; dang co 1/u);
+      expect(await soChuKy(), "không lời gọi nào tích luỹ được chữ ký — trao thầu KHÔNG BAO GIỜ duyệt được").toBe("0");
+      expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+    } finally {
+      await db.pool.query(goc);
+    }
+
+    // ĐỐI CHỨNG DƯƠNG — thân thật (`:= 1`), CÙNG đề xuất, CÙNG người duyệt đầu: đi qua. Đây cũng là
+    // bằng chứng hai lời từ chối trên không để lại dấu gì chặn đường về sau.
+    const { rows: lai } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.award_kiem_mot_award_song()'::regprocedure) AS d",
+    );
+    expect(lai[0]?.d, "thân phải về đúng bản gốc").toBe(goc);
+    const duyet = await withTenant(apiPool, orgA, (c) =>
+      duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+    );
+    expect(duyet.status).toBe("APPROVED");
+    expect(await soChuKy()).toBe("1");
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+
   it("hàng APPROVED nói về một BÁO GIÁ KHÁC bị từ chối", async () => {
     const { rfqId, banRo, luotId } = await sanSangTraoThau();
     const dx = await withTenant(apiPool, orgA, (c) =>

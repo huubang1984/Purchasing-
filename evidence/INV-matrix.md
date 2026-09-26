@@ -84,7 +84,7 @@ Hôm nay: **41/41** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | J4 | Báo giá BAFO niêm phong đúng như vòng một: không route nào trả một mức giá BAFO trước khi vòng ấy được mở qua cổng bốn vế | Vòng quét MỌI route dưới một phiên có đủ quyền, khuôn A2 | T2, T3 | 3 | ✅ ĐẠT |  |
 | J5 | Award chỉ trỏ tới một báo giá còn hợp lệ của CHÍNH RFQ ấy, và báo giá ấy phải có `effective_cost` đọc được | Khoá ngoại hợp thành, cộng hai vế nội dung trong `award_kiem_de_xuat` (`061`) | T3 | 3 | ✅ ĐẠT |  |
 | J6 | Mọi lần đề xuất, duyệt, huỷ award để lại một hàng sổ; mọi lần từ chối QUYỀN để lại `PERMISSION_DENIED`; và mọi lần từ chối TRẠNG THÁI **nói rằng người dùng đi sai thứ tự chuỗi** để lại `RFQ_STATE_DENIED`. Từ chối nói CẤU HÌNH chưa sẵn sàng thì KHÔNG — **ADR-060** | Khuôn D5; `throwAuditedDenial` ở giao dịch ĐỘC LẬP, và bảng `VAO_SO` cưỡng chế từ vựng bằng KIỂU | T3 | 3 | ✅ ĐẠT |  |
-| J7 | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 | 3 | ✅ ĐẠT |  |
+| J7 | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`, thân từ `068`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 | 4 | ✅ ĐẠT |  |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
 | H3 | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 | 5 | ✅ ĐẠT |  |

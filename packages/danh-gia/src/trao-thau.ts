@@ -342,9 +342,17 @@ export async function deXuatTraoThau(
  * gọi theo `awardId` thì bị chặn ngay vì hàng ấy không còn `PROPOSED`.
  *
  * Số chữ ký cần sống ở **CSDL** (`CHU_KY_CAN` trong `award_kiem_mot_award_song`), chốt là MỘT
- * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`; nếu ngày nào con số ấy
- * thành hai, câu `INSERT` thứ hai từ chối với thông điệp gọi tên số chữ ký đang có, và lời gọi
- * của người duyệt thứ hai đi qua. Không có phép đếm nào ở lớp này — hai bản đếm là hai bản trôi.
+ * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`. Không có phép đếm nào ở
+ * lớp này — hai bản đếm là hai bản trôi.
+ *
+ * ~~Nếu ngày nào con số ấy thành hai, câu `INSERT` thứ hai từ chối với thông điệp gọi tên số chữ
+ * ký đang có, và lời gọi của người duyệt thứ hai đi qua.~~ **[S1.141 / khoản 242 ⑴] SAI — đã
+ * đo.** Hai câu `INSERT` nằm trong CÙNG một giao dịch của người gọi, không savepoint: với
+ * `CHU_KY_CAN := 2`, người duyệt đầu bị từ chối *"can 2 chu ky duyet; dang co 1"* và chữ ký của
+ * chính họ cuộn lại theo, nên số chữ ký còn 0; người duyệt thứ hai gặp đúng lỗi ấy — trao thầu
+ * KHÔNG BAO GIỜ duyệt được. Nâng hằng một mình không đủ: S3.5 phải đổi CƠ CHẾ — tách chữ ký khỏi
+ * hàng `APPROVED`, chỉ ghi hàng ấy khi đủ chữ ký. Ca T3 `[S1.141 / khoản 242 ⑴]` ở
+ * `luot-danh-gia.int.test.ts` khoá phép đo, nên nó đổi màu đúng lúc S3.5 đổi cơ chế.
  */
 export async function duyetTraoThau(
   client: pg.PoolClient,

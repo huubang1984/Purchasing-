@@ -6233,9 +6233,13 @@ $ham$;
     -- ghim la thu giu con so ay: mot lan ha no ve 0 bien phe duyet kep thanh mot lan bam.
     -- Khoa tu van `pg_advisory_xact_lock` cung nam trong than — go no ra thi hai giao dich
     -- cung doc *chua co award nao* roi cung chen, va J7 mat rang ma khong ai kieu.
+    -- [S1.141 / khoan 242 ⑴] Than tu `068`: chi mot chu thich doi — cau *"doi `CHU_KY_CAN` la
+    -- toan bo viec phai lam"* SAI (nang MOT MINH hang len 2 lam trao thau khong bao gio duyet
+    -- duoc, vi chu ky va hang `APPROVED` cung mot giao dich). Ban ghim doi CUNG commit voi `068`:
+    -- chu thich nam trong `prosrc`, nen ghim cu se lang le cai lai than `061`.
     ARRAY[
-      $q$hàm + trigger award_kiem_mot_award_song (061)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
+      $q$hàm + trigger award_kiem_mot_award_song (061, thân từ 068)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '068_loi_khai_chu_ky_trao_thau.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6296,8 +6300,14 @@ BEGIN
         truoc_status
         USING ERRCODE = 'check_violation';
     END IF;
-    -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. Đổi `CHU_KY_CAN` là toàn bộ việc phải làm nếu
-    -- ngày nào chủ dự án chọn hai.
+    -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. [S1.141 / khoản 242 ⑴] Nâng RIÊNG `CHU_KY_CAN`
+    -- lên hai KHÔNG phải một thay đổi đủ: nó làm trao thầu KHÔNG BAO GIỜ duyệt được.
+    -- `duyetTraoThau` ghi chữ ký rồi ghi hàng `APPROVED` trong CÙNG một giao dịch, không savepoint,
+    -- nên người duyệt đầu bị từ chối *"can 2 chu ky duyet; dang co 1"* và chữ ký của chính họ bị
+    -- cuộn lại theo — số chữ ký còn 0; người duyệt thứ hai gặp đúng lỗi ấy. Đã đo trên Postgres 16
+    -- (S1.139), và một ca T3 ở `luot-danh-gia.int.test.ts` khoá phép đo. Bản trước khai đổi hằng là
+    -- *"toàn bộ việc phải làm"* — sai. S3.5 phải TÁCH chữ ký khỏi hàng `APPROVED` (hàng ấy chỉ ghi
+    -- khi đủ chữ ký) trước khi con số này được nâng.
     SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky
       FROM public.rfq_award_approvals ap
      WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id
@@ -6333,7 +6343,7 @@ $ham$;
          END
          $fn57$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE CHU_KY_CAN constant integer := 1; truoc_status text; truoc_id uuid; truoc_eval uuid; truoc_bid uuid; so_chu_ky integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1)); SELECT a.status, a.id, a.evaluation_id, a.bid_version_id INTO truoc_status, truoc_id, truoc_eval, truoc_bid FROM public.rfq_awards a WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7. IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN RAISE EXCEPTION 'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó. IF truoc_status IS NULL THEN RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status USING ERRCODE = 'check_violation'; END IF; -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất. IF NEW.evaluation_id IS DISTINCT FROM truoc_eval OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN RAISE EXCEPTION 'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status USING ERRCODE = 'check_violation'; END IF; IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %', truoc_status USING ERRCODE = 'check_violation'; END IF; -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. Đổi `CHU_KY_CAN` là toàn bộ việc phải làm nếu -- ngày nào chủ dự án chọn hai. SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky < CHU_KY_CAN THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE CHU_KY_CAN constant integer := 1; truoc_status text; truoc_id uuid; truoc_eval uuid; truoc_bid uuid; so_chu_ky integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1)); SELECT a.status, a.id, a.evaluation_id, a.bid_version_id INTO truoc_status, truoc_id, truoc_eval, truoc_bid FROM public.rfq_awards a WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7. IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN RAISE EXCEPTION 'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó. IF truoc_status IS NULL THEN RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status USING ERRCODE = 'check_violation'; END IF; -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất. IF NEW.evaluation_id IS DISTINCT FROM truoc_eval OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN RAISE EXCEPTION 'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status USING ERRCODE = 'check_violation'; END IF; IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %', truoc_status USING ERRCODE = 'check_violation'; END IF; -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. [S1.141 / khoản 242 ⑴] Nâng RIÊNG `CHU_KY_CAN` -- lên hai KHÔNG phải một thay đổi đủ: nó làm trao thầu KHÔNG BAO GIỜ duyệt được. -- `duyetTraoThau` ghi chữ ký rồi ghi hàng `APPROVED` trong CÙNG một giao dịch, không savepoint, -- nên người duyệt đầu bị từ chối *"can 2 chu ky duyet; dang co 1"* và chữ ký của chính họ bị -- cuộn lại theo — số chữ ký còn 0; người duyệt thứ hai gặp đúng lỗi ấy. Đã đo trên Postgres 16 -- (S1.139), và một ca T3 ở `luot-danh-gia.int.test.ts` khoá phép đo. Bản trước khai đổi hằng là -- *"toàn bộ việc phải làm"* — sai. S3.5 phải TÁCH chữ ký khỏi hàng `APPROVED` (hàng ấy chỉ ghi -- khi đủ chữ ký) trước khi con số này được nâng. SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky < CHU_KY_CAN THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

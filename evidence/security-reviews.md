@@ -12181,3 +12181,52 @@ ADR-080…082; sổ nợ **242** khoản, mở **93** — bốn PR ấy không c
 
 **Sau khi hợp #150** (`…-endpoint-policy`, S1.137 và ADR-079): khe số được lấp, sổ quyết định liền từ ADR-001 tới
 ADR-082; ADR **82** (79 của `master` + 3). Sổ nợ và migration không đổi — #150 không chạm chúng.
+
+# §S1.141 — KHOẢN 242 VẾ ⑴: LỜI KHAI *"ĐỔI `CHU_KY_CAN` LÀ TOÀN BỘ VIỆC PHẢI LÀM"* ĐÃ SỬA — KHOẢN VẪN MỞ
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 242 ở lại rổ B, vẫn MỞ.** Không mảnh nào của bảng bốn mảnh ở `docs/PRODUCT.md` §11 đổi. Số
+khoản mở không đổi.
+
+## 1. Vòng này là gì
+
+§S1.139 đo vế ⑴ của khoản 242: thân `award_kiem_mot_award_song` (`061`, ghim ở `hardening.always.sql`) khai *"Đổi
+`CHU_KY_CAN` là toàn bộ việc phải làm nếu ngày nào chủ dự án chọn hai"*, và JSDoc của `duyetTraoThau` khai thêm *"lời gọi
+của người duyệt thứ hai đi qua"*. Đột biến `CHU_KY_CAN := 2`: người duyệt đầu bị từ chối *"De xuat trao thau can 2 chu ky
+duyet; dang co 1"*, chữ ký của họ cuộn lại (câu chèn chữ ký và câu chèn hàng `APPROVED` cùng một giao dịch, không
+savepoint), nên số chữ ký còn 0; người duyệt thứ hai gặp đúng lỗi ấy. Đối chứng `:= 1`: duyệt được.
+
+Chủ dự án chốt: sửa lời khai ngay, không đổi hành vi, giữ khoản mở. Điều kiện đóng vẫn là S3.5 — vòng dựng cơ chế hai chữ
+ký thật.
+
+## 2. Bản sửa
+
+- `068_loi_khai_chu_ky_trao_thau.sql` định nghĩa lại `award_kiem_mot_award_song`. Thân được TRÍCH nguyên văn từ `061` bằng
+  script rồi đổi đúng MỘT chỗ — chú thích trên phép đếm chữ ký ở nhánh `APPROVED`, gắn `[S1.141 / khoản 242 ⑴]`. `diff`
+  giữa hai thân ra đúng một hunk. Thuộc tính hàm giữ nguyên: `plpgsql`, `SET search_path = pg_catalog, public`, không
+  `SECURITY DEFINER`, `RETURNS trigger`. Trigger không dựng lại.
+- Bản ghim ở `hardening.always.sql` đổi cùng lượt: nhãn *"(061, thân từ 068)"*, điều kiện tiên quyết trỏ `068`, thân
+  trong khối DO, chuỗi thân chuẩn hoá (sinh bằng script từ thân `068` — chú thích nằm trong `prosrc`), và một dòng chú
+  thích trên mục. Không đổi cùng lúc thì hardening lặng lẽ cài lại thân `061`.
+- JSDoc của `duyetTraoThau` (`packages/danh-gia/src/trao-thau.ts`): câu sai được gạch và viết lại kèm phép đo.
+- Con trỏ *migration CUỐI CÙNG* ở bảng ghim của `db/migrations.int.test.ts` dời sang `068`; ba danh sách migration của cùng
+  tệp thêm `068`. Sổ đăng ký `docs/TEST-PLAN.md` và `evidence/INV-matrix.md`: ô lớp của J7 ghi *"(`061`, thân từ `068`)"*,
+  số khẳng định J7 **3 → 4**.
+- Spec S3 §S3.5: một ghi chú `[S1.141]` rằng hai câu trích nay chỉ còn trong `061`.
+
+`061` giữ câu cũ: đã áp, có checksum.
+
+## 3. Ca khoá phép đo
+
+`packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối J7: *"[INV-J7] [S1.141 / khoản 242 ⑴] ĐỘT BIẾN `CHU_KY_CAN := 2`
+— không người duyệt nào đi qua, chữ ký cuộn lại về 0"*. Ca đọc thân đang chạy bằng `pg_get_functiondef`, đòi dòng hằng
+xuất hiện ĐÚNG MỘT lần và thân mang nhãn `068`, đổi hằng thành 2, rồi đo: (a) người duyệt đầu bị từ chối, số chữ ký 0;
+(b) một người duyệt thứ hai (FINANCE, không dính J3) bị từ chối y hệt, số chữ ký vẫn 0, chỉ có hàng `PROPOSED`. Thân gốc
+khôi phục trong `finally`; đối chứng dương trên CÙNG đề xuất, CÙNG người duyệt đầu: duyệt được, một chữ ký.
+
+Ca này KHÔNG phải điều kiện đóng. Nó tồn tại để S3.5 thấy nó ĐỔI MÀU khi cơ chế đổi, thay vì tin một câu chú thích.
+
+## 4. Ranh giới nói ra
+
+- Không đổi hành vi: hằng vẫn là MỘT (§7, chốt 2026-09-22).
+- Vế ⑴ của khoản 242 nay đúng ở thân sống, bản ghim và JSDoc; `061` còn câu cũ như một chú thích lịch sử.
+- Đo trên bộ dựng cụm Postgres 16 cục bộ, không trên CI.

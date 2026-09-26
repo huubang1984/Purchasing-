@@ -405,7 +405,9 @@ số, rồi tách hai bước: hỏi một hàm SQL *đủ chữ ký chưa* thay
 thích ấy nói thế), hoặc bọc câu thứ hai trong savepoint. **[S1.139]** Đo bằng đột biến `CHU_KY_CAN := 2` trên Postgres 16:
 người duyệt đầu nhận *"can 2 chu ky duyet; dang co 1"*, số chữ ký còn lại **0**; người duyệt thứ hai (khác người, khác
 vai) nhận đúng lỗi ấy, số chữ ký vẫn 0. Đối chứng `CHU_KY_CAN := 1`: duyệt được. Thêm một lý do câu ở `061` sai: hardening
-ghim thân `award_kiem_mot_award_song` kèm đúng dòng hằng ấy, nên một migration chỉ đổi hằng bị ghim đặt lại (§2.5 ⒃).
+ghim thân `award_kiem_mot_award_song` kèm đúng dòng hằng ấy, nên một migration chỉ đổi hằng bị ghim đặt lại (§2.5 ⒃). **[S1.141]** Hai lời khai trích ở trên nay chỉ còn trong `061` (đã áp,
+có checksum): `068` sửa chú thích trong thân SỐNG và bản ghim, JSDoc của `duyetTraoThau` được viết lại, và một ca T3 ở
+`luot-danh-gia.int.test.ts` khoá phép đo này — S3.5 sẽ thấy nó đổi màu. Khoản 242 vẫn mở tới S3.5.
 
 Người ký phải giữ một vai thuộc `award_vai` của bậc ấy — đọc vai của người TẠI THỜI ĐIỂM KÝ từ `user_roles`. J3 giữ
 nguyên, kể cả phạm vi hẹp của nó (khoản **233**).
