@@ -83,8 +83,10 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * Vì sao có danh sách thứ hai thay vì nối vào `MODULE_TRINH_DUYET`: danh sách trên là ĐÓNG BẮC
  * CẦU của `browser.ts` và `cua-trinh-duyet.test.ts` đòi nó TRÙNG KHỚP cây import thật — thêm một
  * tên lạ vào đó làm cổng ấy đỏ, đúng như nó phải thế. Hai gốc khác nhau thì hai lời khai.
+ *
+ * [khoản 196 / ADR-074 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
  */
-export const MODULE_WEB = ["so-tien"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {

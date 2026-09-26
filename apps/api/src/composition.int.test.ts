@@ -219,6 +219,64 @@ describe("[S1.11] batDau() fail-closed trước khi mở cổng", () => {
     expect(loi?.message).not.toContain(nham);
     expect(loi?.message).not.toContain(KHOA_BOC);
   });
+
+  // ============================================================================================
+  // [khoản 196 / ADR-074 phần 1] ĐỒNG HỒ CSDL LỆCH ĐỒNG HỒ TIẾN TRÌNH.
+  //
+  // Đồng hồ của CSDL không vặn được từ một test, nên cảnh "trôi" được dựng ở phía tiến trình: một
+  // đồng hồ tiêm chạy lệch N ms so với `Date.now`. Lúc KHỞI ĐỘNG: vượt ngưỡng ⇒ `LechDongHoError`,
+  // không cổng nào nghe (đối chứng dương: cùng cấu hình, đồng hồ thật ⇒ lên). Lúc CHẠY: đồng hồ trôi
+  // SAU khi đã lên ⇒ một dòng log cảnh báo mang tên `LechDongHo` và ba con số, tiến trình VẪN phục vụ,
+  // và dòng ấy không mang giá trị nào của cấu hình (URL CSDL, mật khẩu).
+  // ============================================================================================
+  it("[khoản 196] đồng hồ tiến trình lệch 6 giờ 22 phút so với CSDL ⇒ batDau() ném LechDongHoError, không cổng nào nghe; ĐỐI CHỨNG: đồng hồ thật ⇒ lên", async () => {
+    const lech = 6 * 3600_000 + 22 * 60_000;
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong()), { dongHo: () => Date.now() + lech });
+    const loi = await tt.batDau().then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+    await tt.dung();
+    expect(loi?.name).toBe("LechDongHoError");
+    expect(loi?.message).toMatch(/lệch -229\d{5} ms/u);
+    expect(loi?.message).not.toContain(urlLogin);
+    const tot = taoTienTrinhApi(docCauHinh(moiTruong()));
+    try {
+      await expect(tot.batDau()).resolves.toMatchObject({ host: "127.0.0.1" });
+    } finally {
+      await tot.dung();
+    }
+  });
+
+  it("[khoản 196] đồng hồ trôi SAU khi đã lên ⇒ dòng log `canh bao LechDongHo` mang ba con số, không mang URL; tiến trình VẪN phục vụ /health", async () => {
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    let troi = 0;
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong({ TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "1000" })), {
+      dongHo: () => Date.now() + troi,
+    });
+    try {
+      const dc = await tt.batDau();
+      troi = -10_000;
+      const het = Date.now() + 8000;
+      let dong: string | undefined;
+      while (dong === undefined && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+        dong = log.find((d) => d.includes("canh bao LechDongHo"));
+      }
+      expect(dong, JSON.stringify(log)).toBeDefined();
+      expect(dong).toMatch(/lech \+\d{4,5} ms .*khu hoi \d+ ms, nguong 2000 ms/u);
+      expect(dong).not.toContain(urlLogin);
+      const r = await fetch(`http://${dc.host}:${dc.port}/health`);
+      expect(r.status).toBe(200);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+    }
+  });
 });
 
 describe("[S1.11] tiến trình dựng từ môi trường: người mua đi trọn đăng nhập trên adapter thật", () => {

@@ -37,6 +37,17 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
     // Hai mặc định, và chúng là mặc định CÓ CHỦ Ý — không phải bí mật.
     expect(ch.dbPoolMax).toBe(10);
     expect(ch.pollIntervalMs).toBe(1000);
+    // [khoản 196 / ADR-074] Ngưỡng lệch đồng hồ và nhịp canh — cùng mặc định với `apps/api`.
+    expect(ch.lechDongHoToiDaMs).toBe(2000);
+    expect(ch.chuKyCanhDongHoMs).toBe(60_000);
+  });
+
+  it("[khoản 196] ngưỡng lệch đồng hồ và nhịp canh đọc từ môi trường, ngoài miền thì NÉM nêu đúng tên", () => {
+    const ch = docCauHinh({ ...envDu(), TRUSTPROCURE_CLOCK_SKEW_MAX_MS: "500", TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "1000" });
+    expect(ch.lechDongHoToiDaMs).toBe(500);
+    expect(ch.chuKyCanhDongHoMs).toBe(1000);
+    expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_CLOCK_SKEW_MAX_MS: "0" })).toThrow("TRUSTPROCURE_CLOCK_SKEW_MAX_MS");
+    expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "10" })).toThrow("TRUSTPROCURE_CLOCK_SKEW_CHECK_MS");
   });
 
   it.each([
@@ -103,9 +114,11 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
     expect(Object.keys(ch).sort()).toEqual([
       "alertAdapter",
       "alertDir",
+      "chuKyCanhDongHoMs",
       "databaseUrl",
       "dbPoolMax",
       "keyAdapter",
+      "lechDongHoToiDaMs",
       "masterKeys",
       "pollIntervalMs",
     ]);
@@ -140,10 +153,12 @@ describe("[ADR-064] cấu hình worker với khoá aws-kms", () => {
     expect(Object.keys(ch).sort()).toEqual([
       "alertAdapter",
       "alertDir",
+      "chuKyCanhDongHoMs",
       "databaseUrl",
       "dbPoolMax",
       "keyAdapter",
       "kms",
+      "lechDongHoToiDaMs",
       "pollIntervalMs",
     ]);
   });

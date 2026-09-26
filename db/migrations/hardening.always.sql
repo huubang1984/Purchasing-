@@ -5614,8 +5614,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger bid_kiem_han_nop (059)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '059_vong_bafo.sql')$q$,
+      $q$hàm + trigger bid_kiem_han_nop (066)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '066_han_nop_mang_gio_phan_xu.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -5675,8 +5675,13 @@ BEGIN
   END IF;
 
   IF now() OPERATOR(pg_catalog.>=) han THEN
+    -- [066 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `066`.
     RAISE EXCEPTION 'Da qua han nop bao gia (C1)'
-      USING ERRCODE = 'check_violation';
+      USING ERRCODE = 'check_violation',
+            CONSTRAINT = 'c1_qua_han_nop',
+            DETAIL = pg_catalog.json_build_object(
+              'gio_csdl', public.bid_dau_thoi_gian_chinh_tac(now()),
+              'han_nop', public.bid_dau_thoi_gian_chinh_tac(han))::pg_catalog.text;
   END IF;
 
   RETURN NEW;
@@ -5697,7 +5702,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; han timestamptz; goi_thau uuid; vong uuid; BEGIN SELECT p.status, p.deadline_at, p.id INTO trang_thai, han, goi_thau FROM public.vendor_bids b JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id JOIN public.rfq_packages p ON p.id OPERATOR(pg_catalog.=) i.rfq_id AND p.org_id OPERATOR(pg_catalog.=) i.org_id WHERE b.id OPERATOR(pg_catalog.=) NEW.bid_id AND b.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR SHARE OF p; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay luong bao gia % trong to chuc %', NEW.bid_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('OPEN', 'BAFO_OPEN') THEN RAISE EXCEPTION 'RFQ khong nhan bao gia khi dang o trang thai % (C1)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF trang_thai OPERATOR(pg_catalog.=) 'BAFO_OPEN' THEN SELECT r.id, r.deadline_at INTO vong, han FROM public.rfq_bafo_rounds r WHERE r.rfq_id OPERATOR(pg_catalog.=) goi_thau AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.closed_at IS NULL; IF NOT FOUND THEN RAISE EXCEPTION 'RFQ dang BAFO_OPEN ma khong co vong BAFO nao dang mo — du lieu hong' USING ERRCODE = 'check_violation'; END IF; -- Dấu vòng là DẪN XUẤT: bên gọi không có `INSERT` trên cột này, nên nó không khai được sai. NEW.bafo_round_id := vong; ELSE NEW.bafo_round_id := NULL; END IF; IF han IS NULL THEN RAISE EXCEPTION 'RFQ dang OPEN ma khong co han nop — du lieu hong' USING ERRCODE = 'check_violation'; END IF; IF now() OPERATOR(pg_catalog.>=) han THEN RAISE EXCEPTION 'Da qua han nop bao gia (C1)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; han timestamptz; goi_thau uuid; vong uuid; BEGIN SELECT p.status, p.deadline_at, p.id INTO trang_thai, han, goi_thau FROM public.vendor_bids b JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id JOIN public.rfq_packages p ON p.id OPERATOR(pg_catalog.=) i.rfq_id AND p.org_id OPERATOR(pg_catalog.=) i.org_id WHERE b.id OPERATOR(pg_catalog.=) NEW.bid_id AND b.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR SHARE OF p; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay luong bao gia % trong to chuc %', NEW.bid_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('OPEN', 'BAFO_OPEN') THEN RAISE EXCEPTION 'RFQ khong nhan bao gia khi dang o trang thai % (C1)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF trang_thai OPERATOR(pg_catalog.=) 'BAFO_OPEN' THEN SELECT r.id, r.deadline_at INTO vong, han FROM public.rfq_bafo_rounds r WHERE r.rfq_id OPERATOR(pg_catalog.=) goi_thau AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.closed_at IS NULL; IF NOT FOUND THEN RAISE EXCEPTION 'RFQ dang BAFO_OPEN ma khong co vong BAFO nao dang mo — du lieu hong' USING ERRCODE = 'check_violation'; END IF; -- Dấu vòng là DẪN XUẤT: bên gọi không có `INSERT` trên cột này, nên nó không khai được sai. NEW.bafo_round_id := vong; ELSE NEW.bafo_round_id := NULL; END IF; IF han IS NULL THEN RAISE EXCEPTION 'RFQ dang OPEN ma khong co han nop — du lieu hong' USING ERRCODE = 'check_violation'; END IF; IF now() OPERATOR(pg_catalog.>=) han THEN -- [066 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `066`. RAISE EXCEPTION 'Da qua han nop bao gia (C1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'c1_qua_han_nop', DETAIL = pg_catalog.json_build_object( 'gio_csdl', public.bid_dau_thoi_gian_chinh_tac(now()), 'han_nop', public.bid_dau_thoi_gian_chinh_tac(han))::pg_catalog.text; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

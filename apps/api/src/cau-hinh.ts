@@ -29,6 +29,7 @@
 import { createPrivateKey, createPublicKey, timingSafeEqual } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { ReceiptKeyPair } from "@trustprocure/bidding";
+import { CHU_KY_CANH_DONG_HO_MS_MAC_DINH, LECH_DONG_HO_TOI_DA_MS_MAC_DINH } from "@trustprocure/db";
 import { DiaChiError, taoDanhSachTinCay } from "./dia-chi.js";
 
 export class CauHinhError extends Error {
@@ -73,6 +74,14 @@ export interface CauHinhApiChung {
    * một lần gửi link mời bị tính là hỏng — lời mời bị thu hồi, `502`. Xem docstring `afterCommitTimeoutMs` ở `dispatch.ts`.
    */
   readonly afterCommitTimeoutMs: number | undefined;
+  /**
+   * [khoản 196 / ADR-074] Ngưỡng lệch giữa đồng hồ CSDL và đồng hồ tiến trình, ms
+   * (`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, 100–60 000; mặc định 2 000). Vượt lúc khởi động ⇒ tiến trình không
+   * lên (`LechDongHoError`); vượt lúc chạy ⇒ một dòng log cảnh báo.
+   */
+  readonly lechDongHoToiDaMs: number;
+  /** [khoản 196] Nhịp đo lại lúc chạy, ms (`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS`, 1 000–3 600 000; mặc định 60 000). */
+  readonly chuKyCanhDongHoMs: number;
 }
 
 /** Khoá ở dạng local-dev: ba vòng bí mật trong tiến trình. */
@@ -532,5 +541,7 @@ export function docCauHinh(env: MoiTruong): CauHinhApi {
       tuyChon(env, "TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS") === undefined
         ? undefined
         : soNguyen(env, "TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS", 5000, 100, 60_000),
+    lechDongHoToiDaMs: soNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_MAX_MS", LECH_DONG_HO_TOI_DA_MS_MAC_DINH, 100, 60_000),
+    chuKyCanhDongHoMs: soNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_CHECK_MS", CHU_KY_CANH_DONG_HO_MS_MAC_DINH, 1000, 3_600_000),
   };
 }

@@ -6707,3 +6707,113 @@ khuôn H9-3 của ADR-026: một lớp bảo vệ hỏng im lặng hàng tháng.
 - Lần apply đầu: alarm vào ALARM cho tới lượt ghi đầu tiên (metric chưa có lịch sử) — một thư dự kiến.
 - S3 request metrics tính phí CloudWatch metric (~0,3 USD/tháng cho một bộ lọc) cộng một alarm.
 - Chưa chạy thật: metric, alarm và topic policy qua `terraform validate`.
+---
+
+## ADR-074 — Nguồn thời gian của hạn nộp là đồng hồ CSDL, và từ nay nó được KHAI, được CANH, và để lại dấu cho người bị chặn
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-005, ADR-060, ADR-062, khoản **196**, khoản 238.
+**ADR-065** đến **ADR-073** do phiên hạ tầng chốt (SES, ECS Fargate, pipeline deploy, …); ADR này là số kế tiếp.
+
+### Bối cảnh — một phép đo, và thứ nó cho thấy
+
+Hạn nộp thầu được phán xử bằng `now()` của CSDL: trigger C1 `bid_kiem_han_nop` (`018` → `059`), và
+các trigger đóng RFQ của `011`/`022`/`058`/`059`. ADR-005 chọn thế có lý do — `now()` cũng là giá trị
+`submitted_at` ghi xuống và đi vào biên nhận đã ký, nên một biên nhận không bao giờ mang dấu thời gian
+trước hạn cho một lần nộp bị từ chối vì trễ. Quyết định ấy **không đổi**.
+
+Ngày 2026-09-20 đồng hồ container Postgres chậm **6 giờ 22 phút** sau một đêm máy ngủ, rồi tự đồng bộ
+lại giữa hai lần kiểm; cổng C1 chặn một lần nộp mà mọi đồng hồ khác đều cho là còn hạn. Cổng chặn
+ĐÚNG theo đồng hồ nó tin. Thứ thiếu nằm ở ba chỗ khác: ⑴ không lớp nào so đồng hồ ấy với một đồng hồ
+nào khác — tiến trình lên và phục vụ như thường; ⑵ người bị chặn nhận một câu *"kiểm lại trạng thái
+gói thầu, hạn nộp…"* không một con số nào, và sổ kiểm toán không một hàng nào (giao dịch bị huỷ);
+⑶ trang nộp thầu in hạn và KHÔNG nói gì về giờ — máy người dùng đếm bằng đồng hồ của chính nó. Và ở
+tầng hạ tầng, không tài liệu nào nói máy CSDL lấy giờ từ đâu.
+
+### Quyết định — bốn phần, chủ dự án chọn làm cả bốn
+
+**⑴ Canh lệch đồng hồ ở hai tiến trình.** `packages/db/src/lech-dong-ho.ts`: đọc
+`clock_timestamp()` của CSDL giữa hai lần đọc đồng hồ tiến trình, so với **điểm giữa khứ hồi**, đo ba
+lần và giữ lần khứ hồi ngắn nhất (khuôn NTP). `apps/api` và `apps/unseal-worker` gọi nó:
+- lúc **khởi động**, sau các phép kiểm vai và trước khi mở cổng / chạy vòng poll — lệch quá ngưỡng ⇒
+  `LechDongHoError` (tên riêng; thông điệp chỉ mang lệch, khứ hồi, ngưỡng) ⇒ tiến trình **không lên**;
+- **định kỳ** lúc chạy — lệch quá ngưỡng ⇒ **một dòng log** `canh bao LechDongHo` mang ba con số ấy,
+  tiến trình VẪN phục vụ. Chặn mọi yêu cầu vì đồng hồ trôi giữa chừng là một quyết định vận hành, không
+  phải việc của một bộ hẹn giờ.
+
+Ngưỡng **2 giây** (`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, 100–60 000), nhịp **60 giây**
+(`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS`, 1 000–3 600 000) — cùng khuôn `soNguyen` của `cau-hinh.ts`, cùng
+tên biến ở hai tiến trình.
+
+**⑵ Dấu vết cho người bị chặn.** Migration `066` đổi đúng một câu của C1: nhánh VÌ HẠN nay `RAISE`
+kèm `CONSTRAINT = 'c1_qua_han_nop'` và `DETAIL` là JSON `{gio_csdl, han_nop}` — ĐÚNG `now()` vừa so và
+ĐÚNG hạn vừa so (hạn vòng BAFO khi đang `BAFO_OPEN`), ở dạng chính tắc của biên nhận. Mã lỗi vẫn là
+`check_violation`, thông điệp không đổi. `submitBid` đặt một savepoint trước luồng báo giá; lần chặn
+vì hạn lùi về đó, ghi `BID_DEADLINE_DENIED` (người đã xác thực, hai dấu thời gian) trong giao dịch còn
+lành, rồi ném `NopQuaHanError`. Route `POST /guest/bids` bắt lỗi ấy và trả **422** mang `gioPhanXu` và
+`hanNop` bằng đường TRẢ VỀ, nên giao dịch commit và hàng sổ nằm lại.
+
+**Vì sao GHI SỔ — ADR-060 được đọc đúng theo mệnh đề của nó.** ADR-060 không cho một danh sách; nó cho
+một phép chia: *ghi khi lời từ chối nói NGƯỜI DÙNG cố đi một bước của chuỗi không đúng thứ tự; không
+ghi khi nó nói CẤU HÌNH chưa sẵn sàng.* Nộp báo giá sau khi cửa sổ nộp đã đóng là một người dùng đi
+bước *nộp* SAU bước *hết hạn* — vế đầu. Nó không phải vế sau: không cấu hình nào sai, không ai phải
+sửa gì để lần thử kế tiếp đi qua. **Nói thẳng hai chỗ lập luận không chặt:** chuỗi mà ADR-060 kể tên
+(*tạo RFQ → chọn NCC → mở thầu → award → duyệt*) không có chữ *nộp*, và lý do GIÁ TRỊ mà ADR-060 nêu
+(nguyên tắc 1) không phải lý do ở đây — lý do ở đây là *quá hạn* là một sự kiện có hậu quả pháp lý và
+người bị loại cần một bản ghi mà họ không tự viết được. Hai điều ấy KHÔNG đổi câu trả lời của mệnh đề;
+chúng được ghi để người đọc sau không tưởng rằng ADR-060 đã nghĩ tới ca này.
+
+**Vì sao ghi TRONG giao dịch người gọi, không qua `auditPool`:** route khách cố ý không cầm pool nào
+(A5 §4, `route-types.ts`). Đường TRẢ VỀ có tiền lệ — `MFA_LOCKED` trong savepoint (khoản 139). Ghi
+hỏng ⇒ lỗi của lần ghi bay ra thay cho `NopQuaHanError` ⇒ 500: gãy ồn ào, đúng vế ⒞ của ADR-060.
+
+**⑶ Trang nộp đếm theo giờ máy chủ.** `GET /guest/rfq` trả `gioMayChu` — `clock_timestamp()` của CSDL ở
+dạng chính tắc. `apps/web/src/dong-ho-may-chu.ts` (tsc gác, vitest đo, phục vụ ở
+`/lib/dong-ho-may-chu.js`) đo độ lệch giữa giá trị ấy và giờ máy người dùng (điểm giữa khứ hồi), rồi
+trang đếm ngược theo *giờ máy người dùng + độ lệch*, và nói ra khi máy lệch quá 2 giây. Nút nộp
+**không** bị khoá theo phép đếm — phán quyết vẫn thuộc về CSDL. Lần chặn vì hạn in cả `gioPhanXu` lẫn
+`hanNop`.
+
+**⑷ Khai nguồn thời gian ở hạ tầng.** Trên AWS, máy CSDL (RDS) và tiến trình (ECS Fargate) đồng bộ
+qua **Amazon Time Sync Service** — dịch vụ NTP của AWS, chạy trên từng host, `169.254.169.123`
+(IPv4) / `fd00:ec2::123` (IPv6), có leap smear. RDS là dịch vụ quản lý: không có tham số nào để
+chọn nguồn thời gian khác. Fargate cũng thế, và từ platform 1.4 endpoint metadata v4 của task trả
+`ClockDrift` (`ClockErrorBound`, `ReferenceTimestamp`, `ClockSynchronizationStatus`). **Mọi câu trong
+đoạn này là ĐỌC tài liệu AWS, chưa đo trên tài khoản nào** — khoản 15 (rổ A) ghi rằng dự án chưa có tài
+khoản prod dùng được, và stack RDS và ECS dịch vụ (`90-ecs`, ADR-066) có mã nhưng chưa được apply. Nên phần này là một **lời khai** ở
+`infra/terraform/README.md` §*Nguồn thời gian*, kèm quy ước ràng buộc cho các stack chưa có (RDS, và
+`90-ecs` của PR đang mở), không phải một tài nguyên Terraform. Lớp CƯỠNG CHẾ là ⑴: nó bắt được đúng
+lúc lời khai sai.
+
+### Phương án bị loại
+
+| phương án | vì sao loại |
+|---|---|
+| Phán xử hạn bằng đồng hồ tiến trình `api`, truyền vào câu ghi | Đổi ADR-005: một giá trị do ứng dụng khai là một giá trị ứng dụng khai SAI được, và biên nhận mất tính chất "`submitted_at` là giờ phán xử". Không mua gì — đồng hồ tiến trình cũng trôi |
+| Khi lệch lúc chạy thì từ chối mọi lần nộp | Một đồng hồ tiến trình trôi (không phải của CSDL) sẽ chặn cả sàn trong khi phán quyết C1 vẫn đúng. Dòng log để người vận hành quyết |
+| Đọc lại `now()` và hạn SAU khi lỗi (savepoint rồi `SELECT`) thay vì để trigger nói | Hai con số đọc lần hai không phải hai con số đã so — hạn có thể vừa được gia hạn giữa hai lần đọc (khoá `FOR SHARE` nhả khi lùi savepoint). Trigger nói thì con số là con số đã so |
+| Mã lỗi riêng cho nhánh vì hạn | Đổi hợp đồng của `submitBid`, `dispatch.ts` và mọi phép đo C1 từ S1.5 để mua thứ mà `CONSTRAINT` + `DETAIL` đã mua |
+| Ghi `BID_DEADLINE_DENIED` qua `auditPool` | Route khách không được cầm pool (A5 §4) |
+| Khoá nút nộp theo phép đếm của trình duyệt | Phép đếm có sai số cỡ nửa khứ hồi; khoá nhầm một người còn hạn nặng hơn hiển thị lệch vài trăm ms |
+
+### Đo bằng gì
+
+⒜ `packages/db/src/lech-dong-ho.test.ts` — điểm giữa khứ hồi, lần khứ hồi ngắn nhất, trị tuyệt đối của
+ngưỡng, canh định kỳ gọi lại mà không ném. `lech-dong-ho.int.test.ts` — câu đọc chạy dưới `app_api` và
+`app_unseal`, lệch 6 giờ 22 phút đi qua thành đúng con số ấy.
+⒝ Tiến trình thật (`apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/tien-trinh.int.test.ts`):
+đồng hồ tiến trình tiêm lệch 6 giờ 22 phút ⇒ `batDau()` ném `LechDongHoError`; trôi sau khi lên ⇒ dòng
+`canh bao LechDongHo`, không mang URL. Đột biến bỏ lời gọi ⇒ cả bốn ca đỏ.
+⒞ `packages/bidding/src/bidding.int.test.ts` — lần chặn vì hạn mang ĐÚNG `now()` của giao dịch và ĐÚNG
+`deadline_at`, giao dịch còn lành, commit để lại đúng một hàng sổ và KHÔNG một `vendor_bids` rỗng;
+đối chứng: RFQ `CLOSED` vẫn ra lời từ chối chung, không hàng sổ. `apps/api/src/guest.int.test.ts` —
+422 mang hai trường qua HTTP, hàng sổ nằm lại; `GET /guest/rfq` mang `gioMayChu`.
+⒟ `apps/web/src/dong-ho-may-chu.test.ts` — máy chậm mười phút thấy còn ÍT hơn đúng mười phút.
+
+### Điều ADR này KHÔNG nói
+
+Nó **không** đo đồng hồ của máy CSDL với một nguồn NGOÀI — nó so hai đồng hồ với nhau. Hai đồng hồ
+cùng trôi một hướng (cùng một máy, như cụm dev chạy cả hai trên một laptop) thì phép canh im, và C1
+vẫn phán xử theo đồng hồ đã trôi; trên AWS hai máy khác nhau và cùng một nguồn Time Sync, nên cùng trôi
+là cùng hỏng nguồn — ⑷ là lời khai về nguồn ấy, không phải một phép đo. Nó **không** vá cửa sổ *giao
+dịch mở trước hạn, commit sau hạn* của C1 (INV-matrix §4). Và dòng log lúc chạy là một dòng log: chưa có
+kênh cảnh báo nào đọc nó.
