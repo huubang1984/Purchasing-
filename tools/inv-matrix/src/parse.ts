@@ -240,7 +240,7 @@ export function duongTuongDoi(file: string, goc: string): string {
 /**
  * [INV-H22, khoản nợ 12] MỌI CẶP (mã, tệp) ĐƯỢC TÍNH LÀ ĐỘ PHỦ PHẢI CÓ TRONG SỔ KHAI — VÀ NGƯỢC LẠI.
  *
- * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (~~`[A-H]\d+`~~ **[S1.147]** `[A-HJK]\d+`, không hậu tố vế) — không hơn,
+ * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (~~`[A-H]\d+`~~ **[S1.9101]** `[A-HJK]\d+`, không hậu tố vế) — không hơn,
  * không kém — lấy từ CHÍNH báo cáo này, nên không có cách viết test nào làm hai bộ đọc lệch
  * nhau. Chiều thứ hai (khai thiu) đồng thời là ĐỐI CHỨNG DƯƠNG: một báo cáo rỗng hay một sổ đọc
  * hỏng làm MỌI dòng khai hụt, tức đỏ ồn ào thay vì xanh im lặng.

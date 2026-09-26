@@ -39,7 +39,7 @@ const TEST_PLAN_MAU = [
   // một dải viết nhầm thành `[A-I]` hay `[A-J]` cũng phải bị bắt: `[A-J]` nhận `I`, một chữ KHÔNG
   // có nhóm nào — và ca *nhãn ngoài dải* ở dưới là chỗ điều đó được đo.
   //
-  // [S1.147 / S3.0] **Hàng nhóm K cũng vì đúng lập luận ấy — và nó có mặt TRƯỚC khi sổ thật có hàng
+  // [S1.9101 / S3.0] **Hàng nhóm K cũng vì đúng lập luận ấy — và nó có mặt TRƯỚC khi sổ thật có hàng
   // K nào.** Dải nay là `[A-HJK]` (spec S3 §9, S3.0). `docs/TEST-PLAN.md` chưa có hàng K: K1 vào sổ
   // ở S3.1, sau khi được đo. Nên trên sổ thật, một mũi thu ngược về `[A-HJ]` không đổi một ô nào của
   // ma trận, và chỉ hàng mẫu dưới đây cho mũi ấy chỗ để chết. Không có nó, K1 sẽ gặp lại đúng
@@ -116,7 +116,7 @@ describe("phân tích ma trận bất biến", () => {
     expect(j1?.enforcement).toBe("Hàm thuần + trigger");
   });
 
-  it("[S1.147 / S3.0] dải [A-HJK]: hàng nhóm K đọc được TRƯỚC khi K1 vào sổ — mũi giết một lần thu dải về [A-HJ]", () => {
+  it("[S1.9101 / S3.0] dải [A-HJK]: hàng nhóm K đọc được TRƯỚC khi K1 vào sổ — mũi giết một lần thu dải về [A-HJ]", () => {
     // Ca này ĐỎ nếu ai đó thu dải về `[A-HJ]` ở bộ đọc chính. Thu ở bộ đếm độc lập thì hai con số
     // lệch và `parseInvariants` NÉM — cũng đỏ, ở mọi ca dùng mẫu.
     const invariants = parseInvariants(TEST_PLAN_MAU);
@@ -218,7 +218,7 @@ describe("ranh giới của nhãn được tính là độ phủ", () => {
     expect(coverage.get("E3")).toHaveLength(1);
   });
 
-  it("[S1.147 / S3.0] nhãn TRẦN của nhóm J và K được TÍNH — mũi thu dải của bộ gom độ phủ phải chết", () => {
+  it("[S1.9101 / S3.0] nhãn TRẦN của nhóm J và K được TÍNH — mũi thu dải của bộ gom độ phủ phải chết", () => {
     // Bộ đọc sổ và bộ gom độ phủ giữ HAI regex riêng. Nới một mà quên một thì K1 có hàng trong sổ
     // mà test mang `[INV-K1]` không bao giờ đổ vào ô ấy. Sổ thật chưa có hàng K nên chỉ ca này thấy.
     const coverage = collectCoverage(

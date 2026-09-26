@@ -840,7 +840,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   // mà cả hai đoạn văn trên đều không nhắc tên. Cả mười nay là `[A-HJ]`, `J4` đã có ô, và ba ca
   // dưới mang nhãn `[INV-J4]`.
   //
-  // **[S1.147 / S3.0]** Cả mười nay là `[A-HJK]`: dải có chỗ cho nhóm K TRƯỚC khi K1 vào sổ (spec S3
+  // **[S1.9101 / S3.0]** Cả mười nay là `[A-HJK]`: dải có chỗ cho nhóm K TRƯỚC khi K1 vào sổ (spec S3
   // §9), để K1 không lặp lại chuyện của J4. Đo lại trên `master` `fa8d4ea` vẫn đúng mười chỗ.
   // ==============================================================================================
 

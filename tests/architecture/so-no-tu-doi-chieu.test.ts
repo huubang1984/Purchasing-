@@ -460,7 +460,7 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
  * ĐÚNG MỘT HÀNG BẢNG, và nó đang thiu ba đơn vị ở cả hai con số khi P5 được viết.
  *
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
- * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.147]** `J` và `K` cũng là nghiệp vụ.
+ * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.9101]** `J` và `K` cũng là nghiệp vụ.
  */
 export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
   const le = viPhamCapGach(van, nhan);
@@ -934,7 +934,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
     const soHangRao = (them.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang} (${soHang - soHangRao} + ${soHangRao})`);
-    // [S1.147 / S3.0] Một hàng NHÓM K cũng phải được đếm, vào vế nghiệp vụ. Sổ thật chưa có hàng K
+    // [S1.9101 / S3.0] Một hàng NHÓM K cũng phải được đếm, vào vế nghiệp vụ. Sổ thật chưa có hàng K
     // nào, nên mũi thu dải của `viPhamSoBatBien` về `[A-HJ]` chỉ chết ở đây.
     const themK = `${TEST_PLAN}\n| **K99** | một hàng kiểm soát không ai đếm | \`x.ts\` | **T3** |\n`;
     const loiK = viPhamSoBatBien(STATE, themK, "docs/STATE.md");

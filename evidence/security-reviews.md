@@ -12280,7 +12280,7 @@ chỗ. Khối đo ghi **sự thật hôm nay**, không ghi hành vi mong muốn:
 - Sổ nợ **242** khoản, mở **93 → 91**; rổ A **1** (241 và 242 vào rồi đóng), rổ B **69 → 67**, rổ C **23**:
   1 + 67 + 23 = 91. **68** migration; ADR **85** (83 của `master` + 2).
 
-# §S1.147 — S3.0 KHÉP: DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`
+# §S1.9101 — S3.0 KHÉP: DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`
 
 **Rổ và mảnh (ADR-043 ⒞): không khoản nợ nào vào hay ra, không chạm mảnh nào của `docs/PRODUCT.md` §11.** Không migration,
 không ADR. Nhánh khởi lại từ `master` `fa8d4ea` sau khi #154 merge.
@@ -12354,13 +12354,12 @@ người tối thiểu cho TRỌN kịch bản — mở niêm phong (`rfq.unseal
 
 ## 6. Số
 
-Đo hai lần trên mọi nhánh sống. Lần đầu, lúc bắt đầu vòng:
-- `…-neo-to-chuc` (#153) và `…-khoan-115` cùng giữ S1.143;
-- `…-kiem-truoc-apply` giữ S1.144 và ADR-087.
-
-Nên vòng này lấy S1.145. Lần đo thứ hai, ngay trước commit: `…-hop-thu-van-hanh` vừa lấy S1.145 và ADR-088,
-`…-canh-dang-ky` lấy S1.146 và ADR-089, và `…-khoan-127` giữ S1.144. Vòng này đổi sang **S1.147** trước commit đầu. Không
-cấp ADR hay migration nào.
+Vòng này bắt đầu dưới luật S1.111: đo max trên mọi nhánh sống rồi cộng một. Lần đo đầu cho S1.145. Lần đo thứ hai, ngay
+trước commit, thấy `…-hop-thu-van-hanh` vừa lấy S1.145 và `…-canh-dang-ky` lấy S1.146, nên commit đầu mang S1.147. Khi PR
+đã xanh và đang chờ merge, `master` nhận #160 (S1.150, S1.151) rồi #155 (S1.152). #155 đưa vào ADR-090: số cấp lúc
+merge, thay luật S1.111, và số đi theo thứ tự merge. S1.147 không trùng số nào trên `master`, nhưng giữ nó thì một vòng
+merge sau S1.152 lại mang số nhỏ hơn. Nên vòng này trả số về số tạm và để `pnpm cap-so` cấp số thật khi hợp `master`.
+Không cấp ADR hay migration nào.
 
 ## 7. Số đo
 
@@ -12371,6 +12370,5 @@ cấp ADR hay migration nào.
   của CI chạy cả hai tầng và là phép đo điều ấy.
 - Vòng này không thêm khoản nợ, migration hay ADR nào. Đo trên `fa8d4ea`: sổ nợ **242** khoản, **91** mở; **68** migration;
   **85** ADR.
-- Sau khi mở PR, `master` nhận #153, #157, #158 và #159, tới S1.146 và ADR-089. Hợp vào nhánh không xung đột, và cây đã
-  hợp không có chỗ ghim `[A-HJ]` mới. Đo lại số trên mọi nhánh sống: không nhánh nào khác giữ S1.147. Cổng trên cây đã
-  hợp: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**.
+- Sau khi mở PR, `master` nhận #153, #157, #158 và #159, tới ADR-089. Hợp vào nhánh không xung đột, và cây đã hợp không
+  có chỗ ghim `[A-HJ]` mới. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **106 tệp, 1372 đạt, 1 bỏ qua**; CI 6/6 xanh.
