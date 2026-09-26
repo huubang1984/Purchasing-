@@ -30,6 +30,9 @@ export {
 } from "./receipt.js";
 export {
   ReceiptSigningKeyRing,
+  // [S1.128 / khoản 15] Ra cửa để `apps/public-keys` kiểm `kid` của nguồn KMS bằng CHÍNH phép kiểm
+  // của bộ ký — một bản chép regex ở app là một bản sẽ trôi khỏi dòng `kid=` của văn bản đã ký.
+  assertReceiptKid,
   createLocalDevReceiptSigner,
   type ReceiptKeyPair,
   type ReceiptSigner,

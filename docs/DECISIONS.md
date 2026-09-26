@@ -6350,8 +6350,16 @@ worker dùng CHÍNH `assertLocalDevAllowed`, hàng rào ấy chặn mọi tiến
 - **Dưới `aws-kms` + `NODE_ENV=production` + `TRUSTPROCURE_ALLOW_DEV_SINKS=1`, token đăng nhập, OTP
   và cảnh báo break-glass nằm dạng rõ trên đĩa của task.** Đó là giá của lượt thử; cờ ấy phải được gỡ
   trước dữ liệu khách hàng thật, và việc gỡ nó là việc của lát cắt adapter gửi thật (phương án 1).
-- `apps/public-keys` chưa có composition nên chưa được nối: nó vẫn nhận `ReceiptSigningKeyRing`.
-  Nửa công khai của khoá KMS lấy bằng `layKhoaCongKhaiBienNhanKms` khi đường ấy được dựng.
+- ~~`apps/public-keys` chưa có composition nên chưa được nối: nó vẫn nhận `ReceiptSigningKeyRing`.
+  Nửa công khai của khoá KMS lấy bằng `layKhoaCongKhaiBienNhanKms` khi đường ấy được dựng.~~
+  **[S1.128]** Đã nối: `apps/public-keys` có cấu hình và điểm vào riêng (`pnpm public-keys:dev`), cùng
+  `TRUSTPROCURE_KEY_ADAPTER` và hai bộ biến loại trừ nhau. Tài liệu công bố nhận `NguonKhoaCongKhai`
+  (vòng khoá thoả nó nguyên trạng); dưới `aws-kms` nguồn là một ẢNH CHỤP TĨNH dựng bằng
+  `layKhoaCongKhaiBienNhanKms` cho TỪNG `kid` của `TRUSTPROCURE_KMS_RECEIPT_KEYS` lúc khởi động —
+  một `kid` hỏng thì tiến trình không lên, và client KMS được đóng ngay sau khi chụp. Tiến trình này
+  chỉ cần `kms:GetPublicKey`, không bao giờ `kms:Sign`. Giá nói ra: thêm `kid` khi xoay khoá cần khởi
+  động lại tiến trình. Phía hạ tầng (quyền `GetPublicKey`, đích Dockerfile, dịch vụ ECS, định tuyến
+  ALB) chưa có — ghi ở hàng 15 của `docs/STATE.md`.
 - Hai tiến trình không còn so chéo được cấu hình khoá của nhau dưới `aws-kms` (khoản 165 chỉ đo vòng
   local-dev); lệch CMK giữa `api` và worker lộ ra ở lượt mở thầu đầu tiên — ồn ào, không im lặng.
 

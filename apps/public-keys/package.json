@@ -7,8 +7,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "//": "[khoan no 30] App CHI DOC. Khong phu thuoc `pg`, khong cham CSDL, khong co duong ghi nao — mot dich vu cong bo khoa CONG KHAI khong can biet mot hang du lieu nao. Danh sach phu thuoc ngan la mot bao dam, khong phai mot su thieu sot.",
+  "//": "[khoan no 30] App CHI DOC. Khong phu thuoc `pg`, khong cham CSDL, khong co duong ghi nao — mot dich vu cong bo khoa CONG KHAI khong can biet mot hang du lieu nao. Danh sach phu thuoc ngan la mot bao dam, khong phai mot su thieu sot. [S1.128 / khoan 15] Them `@aws-sdk/client-kms` (CHI `GetPublicKey` luc khoi dong — tien trinh nay khong bao gio can `kms:Sign`) va `@trustprocure/crypto-keys` (CHI de goi hang rao `assertLocalDevAllowed` duoi adapter local-dev). Van khong `pg`, van khong CSDL.",
   "dependencies": {
-    "@trustprocure/bidding": "workspace:*"
+    "@aws-sdk/client-kms": "^3.1140.0",
+    "@trustprocure/bidding": "workspace:*",
+    "@trustprocure/crypto-keys": "workspace:*"
   }
 }

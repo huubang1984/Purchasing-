@@ -69,6 +69,9 @@ export default tseslint.config(
       // [ADR-066] `tools/chay-migrate/*.mjs` — bản sao có chủ ý thứ CHÍN, cho entry point của task ECS
       // `tp-migrate`. Vẫn liệt kê đúng một thư mục.
       "tools/chay-migrate/*.mjs",
+      // [S1.128 / khoản 15] `apps/public-keys/*.mjs` — bản sao có chủ ý thứ MƯỜI, cho `pnpm public-keys:dev`.
+      // Vẫn liệt kê đúng một thư mục.
+      "apps/public-keys/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

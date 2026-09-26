@@ -741,6 +741,9 @@ const DANH_SACH_TRANG_BIDDING = [
   "RECEIPT_SIGNING_ALGORITHM",
   "ReceiptError",
   "ReceiptSigningKeyRing",
+  // [S1.128 / khoản 15] Phép kiểm `kid` — thuần, không cho ai thêm khả năng nào; `apps/public-keys`
+  // dùng nó cho `kid` của nguồn KMS thay vì chép lại regex.
+  "assertReceiptKid",
   "buildReceiptText",
   // [ADR-011 / ADR-009] Bộ ký thật và phép đọc nửa công khai qua KMS: khoá riêng không rời KMS,
   // nên không symbol nào ở đây cho ai thêm một khả năng ngoài "ký" và "đọc khoá công khai".

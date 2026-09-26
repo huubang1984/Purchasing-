@@ -29,6 +29,17 @@
 // và entry point `tools/neo-so-kiem-toan`.
 //
 // ----------------------------------------------------------------------------------------------
+// [S1.128 / khoản 15] NGUỒN KHOÁ TÁCH KHỎI VÒNG KHOÁ
+// ----------------------------------------------------------------------------------------------
+// ~~Tài liệu dựng từ một `ReceiptSigningKeyRing`~~ — tức từ một vật CẦM CẢ KHOÁ RIÊNG, và dưới
+// `aws-kms` không có vòng nào như thế trong bất kỳ tiến trình nào (khoá riêng không rời KMS). Nay
+// tài liệu nhận một `NguonKhoaCongKhai`: đúng hai thứ nó cần — `kid` đang dùng và nửa công khai theo
+// `kid`. Vòng khoá thoả kiểu ấy nguyên trạng (cùng hình dạng `publicKeys()`); nguồn KMS
+// (`nguon-kms.ts`) là một ẢNH CHỤP chụp bằng `GetPublicKey` lúc khởi động. Vì kiểu là CẤU TRÚC, bất
+// biến mà constructor của vòng khoá vẫn giữ hộ ("khoá đang dùng có trong vòng") được kiểm lại ở
+// `buildReceiptKeyDocument`.
+//
+// ----------------------------------------------------------------------------------------------
 // KHÔNG PHỤ THUỘC HTTP FRAMEWORK NÀO
 // ----------------------------------------------------------------------------------------------
 // `node:http` trần. Thêm một framework vào đây là thêm một mục vào danh sách phụ thuộc sản xuất
@@ -39,10 +50,11 @@
 
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import {
-  RECEIPT_SIGNING_ALGORITHM,
-  type ReceiptSigningKeyRing,
-} from "@trustprocure/bidding";
+import { RECEIPT_SIGNING_ALGORITHM } from "@trustprocure/bidding";
+import { NguonKhoaError, type NguonKhoaCongKhai } from "./nguon.js";
+
+export { NguonKhoaError, type NguonKhoaCongKhai } from "./nguon.js";
+export { dungNguonKhoaKms, type CauHinhNguonKms, type KhoaKmsCongBo } from "./nguon-kms.js";
 
 /** Đường dẫn của tài liệu khoá. Cố định — một URL đổi được là một URL không neo được vào đâu. */
 export const RECEIPT_KEYS_PATH = "/.well-known/trustprocure-receipt-keys";
@@ -68,13 +80,22 @@ export interface ReceiptKeyDocument {
 }
 
 /**
- * Dựng tài liệu công bố từ một vòng khoá.
+ * Dựng tài liệu công bố từ một nguồn khoá công khai — ~~một vòng khoá~~ [S1.128] vòng khoá
+ * (`ReceiptSigningKeyRing`) thoả kiểu nguồn nguyên trạng; nguồn KMS là `dungNguonKhoaKms`.
  *
- * Hàm này KHÔNG chạm nửa riêng — `publicKeys()` của vòng khoá chỉ trả nửa công khai, và test của
- * gói này khẳng định điều đó bằng cách tìm chuỗi byte khoá riêng trong tài liệu đã tuần tự hoá.
+ * Hàm này KHÔNG chạm nửa riêng — `publicKeys()` chỉ trả nửa công khai, và test của gói này khẳng
+ * định điều đó bằng cách tìm chuỗi byte khoá riêng trong tài liệu đã tuần tự hoá.
+ *
+ * Fail-closed: nguồn rỗng, hay `activeKeyId` không có trong nguồn, là NÉM — một tài liệu công bố
+ * một `kid` đang dùng mà không tra được là một tài liệu mọi biên nhận mới đều không kiểm được.
  */
-export function buildReceiptKeyDocument(ring: ReceiptSigningKeyRing): ReceiptKeyDocument {
-  const keys = [...ring.publicKeys()]
+export function buildReceiptKeyDocument(nguon: NguonKhoaCongKhai): ReceiptKeyDocument {
+  const congKhai = nguon.publicKeys();
+  if (congKhai.size === 0) throw new NguonKhoaError("nguồn khoá không có khoá nào để công bố");
+  if (!congKhai.has(nguon.activeKeyId)) {
+    throw new NguonKhoaError("khoá đang dùng không có trong nguồn khoá — tài liệu sẽ công bố một kid không tra được");
+  }
+  const keys = [...congKhai]
     .map(([kid, spki]) => ({
       kid,
       alg: RECEIPT_SIGNING_ALGORITHM,
@@ -84,7 +105,7 @@ export function buildReceiptKeyDocument(ring: ReceiptSigningKeyRing): ReceiptKey
     // Thứ tự ổn định: tài liệu này được so byte ở tầng vận hành, và một thứ tự phụ thuộc thứ tự
     // chèn sẽ làm hai lần khởi động cho hai tài liệu khác nhau mà không có gì đổi.
     .sort((a, b) => (a.kid < b.kid ? -1 : a.kid > b.kid ? 1 : 0));
-  return { activeKeyId: ring.activeKeyId, keys };
+  return { activeKeyId: nguon.activeKeyId, keys };
 }
 
 function traLoi(res: ServerResponse, ma: number, than: unknown): void {
@@ -105,8 +126,8 @@ function traLoi(res: ServerResponse, ma: number, than: unknown): void {
  * Máy chủ công bố khoá — CHỈ ĐỌC, và sự chỉ-đọc ấy được cưỡng chế ở đây chứ không ở tầng triển
  * khai: mọi phương thức khác `GET`/`HEAD` bị từ chối trước khi chạm tới định tuyến.
  */
-export function createReceiptKeyServer(ring: ReceiptSigningKeyRing): Server {
-  const taiLieu = buildReceiptKeyDocument(ring);
+export function createReceiptKeyServer(nguon: NguonKhoaCongKhai): Server {
+  const taiLieu = buildReceiptKeyDocument(nguon);
   const theoKid = new Map(taiLieu.keys.map((k) => [k.kid, k]));
 
   return createServer((req: IncomingMessage, res: ServerResponse) => {

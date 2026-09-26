@@ -192,6 +192,8 @@ const HAM_DOC_CO_QUYEN = [
  * vào đây là phá chính bất biến ấy — `barrel-exports.test.ts` canh riêng điều đó.
  */
 const HAM_THUAN_TUY = [
+  // [S1.128] Phép kiểm hình dạng `kid` — không `client`, không `orgId`, không trạng thái.
+  "assertReceiptKid",
   "buildReceiptText",
   // [S1.110] Năm hàm thuần của `@trustprocure/danh-gia`: không `client`, không `orgId`, không
   // chạm CSDL. `tinhChiPhiHieuDung` là hàm mà **J2** đòi tái lập được, nên một tham số
