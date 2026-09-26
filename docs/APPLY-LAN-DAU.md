@@ -24,6 +24,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 - [ ] **Hai người** sẽ giữ KeyAdmin (nhóm `tp-key-admins`). Một người là điều kiện chặn dữ liệu thật (ADR-062).
 - [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin.
+- [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
+      khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
 - [ ] Địa chỉ gửi của api và của cảnh báo (`<dia_chi_gui>@<domain>`, `<dia_chi_canh_bao>@<domain>`).
 
@@ -62,12 +64,23 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 3. Cảnh báo — trước mọi thứ chạy thật, để lần đầu cũng có người nghe
 
 - [ ] **3.1 `60-canh-bao`** (`tp-audit` + `tp-prod`):
+  `infra\terraform\60-canh-bao\canh-bao.tfvars` (không commit — `*.tfvars` đã bị bỏ qua):
+  ```hcl
+  email_canh_bao = "<email an ninh>"
+  email_van_hanh = ["<email van hanh>"]
+  ```
   ```powershell
   cd infra\terraform\60-canh-bao; terraform init
-  terraform plan -var email_canh_bao=<email> -out plan.tfplan; terraform apply plan.tfplan; cd ..\..\..
+  terraform plan -var-file canh-bao.tfvars -out plan.tfplan; terraform apply plan.tfplan; cd ..\..\..
   ```
   Stack 60 không phụ thuộc stack 90: rule ⑸ ⑹ bắt alarm theo TÊN/TIỀN TỐ, nên alarm sinh ra sau vẫn có thư.
-- [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao`. Chưa xác nhận = chưa có cảnh báo nào.
+- [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao` (topic `tp-canh-bao-khoa`) **và** tới từng địa chỉ
+      `email_van_hanh` (topic `tp-canh-bao-van-hanh`). Địa chỉ chưa xác nhận = chưa nhận cảnh báo nào.
+      Đối chứng ⑻ (ADR-089), hai lần gọi tay Lambda đối chiếu đăng ký:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-dang-ky out.json`, rồi đọc log
+      `/aws/lambda/tp-canh-dang-ky`. **Trước** khi bấm xác nhận: mỗi địa chỉ một dòng `DANG KY HONG: cho xac nhan` (dòng ghi
+      tên biến và vị trí, không ghi địa chỉ). **Sau**: dòng tổng `... 0 hong`. Alarm `tp-canh-bao-dang-ky-hong` về OK ở kỳ
+      6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
 - [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
@@ -211,8 +224,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | Lúc | Thư | Vì sao |
 |---|---|---|
 | 3.1 | ⑷ thiếu mốc neo — ALARM | chưa có mốc neo nào; về OK ở 8.3 |
+| 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, 3.4, 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
+
+Thư ⑹ tới hộp thư **vận hành** (`email_van_hanh`); mọi thư còn lại tới hộp thư **an ninh** (`email_canh_bao`). Một thư ⑹
+lạc sang hộp an ninh, hay ngược lại, là cấu hình sai.
 
 Mọi thư khác trong lần dựng đầu: dừng lại và đọc.
