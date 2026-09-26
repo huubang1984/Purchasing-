@@ -85,7 +85,7 @@ describe("[khoản nợ 20 + 27] hình dạng của ci.yml", () => {
     // Chống rỗng ruột cho khẳng định trên: "t0 không chứa pnpm audit" cũng đúng nếu ai đó xoá
     // sạch job t0.
     const t0 = thanJob("t0");
-    // [S1.142 / khoản 115] gitleaks rời t0 sang job riêng `t0c-bi-mat` — khẳng định nó còn tồn tại
+    // [S1.143 / khoản 115] gitleaks rời t0 sang job riêng `t0c-bi-mat` — khẳng định nó còn tồn tại
     // nằm ở khối dưới, không ở đây.
     for (const buoc of ["pnpm typecheck", "pnpm lint", "pnpm depcruise"]) {
       expect(t0, `cổng tĩnh "${buoc}" biến mất khỏi t0`).toContain(buoc);
@@ -94,7 +94,7 @@ describe("[khoản nợ 20 + 27] hình dạng của ci.yml", () => {
 });
 
 // ==============================================================================================
-// [S1.142 / khoản 115] QUYỀN CỦA `ci.yml` — BÀI HỌC KHOẢN NỢ 67 ÁP CHO WORKFLOW CHẠY TRÊN MỌI PR
+// [S1.143 / khoản 115] QUYỀN CỦA `ci.yml` — BÀI HỌC KHOẢN NỢ 67 ÁP CHO WORKFLOW CHẠY TRÊN MỌI PR
 //
 //   ⑶ quyền mặc định của workflow là `contents: read` — khai TƯỜNG MINH, không lấy theo thiết lập
 //     kho (`default_workflow_permissions`), thứ đổi được mà không một dòng nào của tệp này đổi;
@@ -119,7 +119,7 @@ function tenCacJob(): string[] {
     .map((d) => d.trim().slice(0, -1));
 }
 
-describe("[S1.142 / khoản 115] quyền và bí mật của ci.yml", () => {
+describe("[S1.143 / khoản 115] quyền và bí mật của ci.yml", () => {
   const dong = coNghia(CI);
 
   it("⑶ mức workflow khai đúng `permissions: contents: read`, trước `jobs:`", () => {

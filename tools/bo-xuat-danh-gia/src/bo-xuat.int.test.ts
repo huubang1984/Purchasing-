@@ -125,6 +125,11 @@ async function taoRfqMo(policyId: string): Promise<string> {
     "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
     [id, uYc, sYc],
   );
+  // [S1.142 / khoản 241] Sàn một chữ ký (`068`): một chữ ký của người KHÁC người tạo trước khi mở.
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [org, id, uD1, sD1],
+  );
   const c = await db.pool.connect();
   try {
     await c.query("BEGIN");
