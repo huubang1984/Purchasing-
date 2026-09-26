@@ -41,7 +41,7 @@ locals {
   secret_arn = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
 
   # Image và ECS service do tp-deploy quản; worker tách hẳn sang tp-deploy-worker.
-  repo_app    = ["tp-api", "tp-web", "tp-mcp", "tp-migrate"]
+  repo_app    = ["tp-api", "tp-web", "tp-mcp", "tp-migrate", "tp-public-keys"]
   repo_worker = ["tp-unseal-worker"]
 }
 
@@ -160,7 +160,7 @@ locals {
     deploy = {
       environment = "prod"
       repos       = local.repo_app
-      services    = ["tp-api", "tp-web", "tp-mcp"]
+      services    = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
       pass_roles  = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job]
     }
     deploy_worker = {

@@ -73,6 +73,8 @@ describe("[ADR-067] hình dạng của deploy.yml", () => {
     expect(api).toMatch(/needs: build\n/u);
     // [ADR-068] web đi cùng job api và bị đòi KHÔNG mang task role.
     expect(api).toMatch(/trien-khai\.sh dang-ky tp-web "\$anh_web" -\)/u);
+    // [ADR-070] public-keys cũng không mang task role.
+    expect(api).toMatch(/trien-khai\.sh dang-ky tp-public-keys "\$anh_pk" -\)/u);
   });
 
   it("⑶ role ARN đúng tài khoản prod và tên role của infra/terraform/chung; api không cầm role worker và ngược lại", () => {

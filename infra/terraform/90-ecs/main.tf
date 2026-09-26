@@ -9,6 +9,8 @@
 #   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-web` — thẻ bất biến, quét lúc đẩy.
 #   Chạy     Cluster `tp-prod`; service `tp-api` sau ALB HTTPS; service `tp-unseal-worker` (họ task
 #            definition `tp-unseal-worker` — quy ước cảnh báo ⑵ của stack 60); task một lần `tp-migrate`.
+#   Khoá     [ADR-070] service `tp-public-keys` phục vụ `/.well-known/trustprocure-receipt-keys*` trên cùng ALB — chỉ nửa
+#            công khai (đọc từ state của stack 50), không task role, không KMS, không CSDL.
 #   Web      [ADR-068] MỘT tên miền: ALB chuyển `/api/*` THẲNG tới `tp-api` (bỏ tiền tố `/api`), mọi đường khác tới
 #            service `tp-web` — `apps/web` ở chế độ chỉ tĩnh, không thấy cookie phiên, không CSDL, không task role.
 #
@@ -35,6 +37,17 @@ terraform {
 
 module "chung" { source = "../chung" }
 
+# [ADR-070] kid đang ký và nửa công khai của mọi khoá ký biên nhận — một nguồn: stack 50 (chạy bằng KeyAdmin).
+data "terraform_remote_state" "kms" {
+  backend = "s3"
+  config = {
+    bucket  = "tp-tfstate-243714547276"
+    key     = "50-kms-prod/terraform.tfstate"
+    region  = "ap-southeast-1"
+    profile = "tp-mgmt"
+  }
+}
+
 provider "aws" {
   region              = module.chung.region
   profile             = "tp-prod"
@@ -55,8 +68,8 @@ variable "ten_mien" {
 }
 
 variable "anh" {
-  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web } = \"<ecr>/tp-api@sha256:…\"."
-  type        = object({ api = string, worker = string, migrate = string, web = string })
+  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys } = \"<ecr>/tp-api@sha256:…\"."
+  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string })
   validation {
     condition     = alltrue([for u in values(var.anh) : can(regex("@sha256:[0-9a-f]{64}$", u))])
     error_message = "Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."
@@ -73,6 +86,11 @@ variable "so_ban_web" {
   default = 1
 }
 
+variable "so_ban_public_keys" {
+  type    = number
+  default = 1
+}
+
 variable "so_ban_worker" {
   description = "0 tới khi CSDL có tổ chức đầu tiên: worker TỪ CHỐI khởi động khi nguồn tổ chức trả 0 hàng (ADR-040)."
   type        = number
@@ -84,9 +102,8 @@ variable "kms" {
   type = object({
     org_key_version  = string
     totp_key_version = string
-    receipt_kid      = string
   })
-  default = { org_key_version = "kms-1", totp_key_version = "kms-totp-1", receipt_kid = "kms-2026-09" }
+  default = { org_key_version = "kms-1", totp_key_version = "kms-totp-1" }
 }
 
 variable "ses" {
@@ -138,6 +155,8 @@ locals {
   cidr     = "10.20.0.0/16"
   az       = slice(data.aws_availability_zones.co.names, 0, 2)
   secret   = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
+  # [ADR-070] { kid_dang_dung, khoa_cong_khai = { kid = SPKI base64 } }
+  bien_nhan = data.terraform_remote_state.kms.outputs.bien_nhan
   # [ADR-068] Một origin cho cả trang và /api/*: không CORS, cookie phiên đi cùng origin.
   goc = "https://${var.ten_mien}"
 }
@@ -277,6 +296,12 @@ resource "aws_security_group" "web" {
   vpc_id      = aws_vpc.tp.id
 }
 
+resource "aws_security_group" "public_keys" {
+  name        = "tp-public-keys"
+  description = "Task public-keys (chi nua cong khai)"
+  vpc_id      = aws_vpc.tp.id
+}
+
 resource "aws_security_group" "migrate" {
   name        = "tp-migrate"
   description = "Task migrate"
@@ -303,7 +328,7 @@ locals {
     migrate = aws_security_group.migrate.id
   }
   # Nhóm cần đường ra AWS (kéo image ECR, đẩy log) — web có mặt ở đây, KHÔNG có mặt ở CSDL.
-  nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id })
+  nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id, public_keys = aws_security_group.public_keys.id })
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb" {
@@ -337,6 +362,22 @@ resource "aws_vpc_security_group_ingress_rule" "web_tu_alb" {
   ip_protocol                  = "tcp"
   from_port                    = 8090
   to_port                      = 8090
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_public_keys" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.public_keys.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8070
+  to_port                      = 8070
+}
+
+resource "aws_vpc_security_group_ingress_rule" "public_keys_tu_alb" {
+  security_group_id            = aws_security_group.public_keys.id
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8070
+  to_port                      = 8070
 }
 
 resource "aws_vpc_security_group_ingress_rule" "api_tu_alb" {
@@ -480,7 +521,7 @@ resource "aws_db_instance" "tp" {
 # ECR
 # ---------------------------------------------------------------------------------------------
 resource "aws_ecr_repository" "tp" {
-  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web"])
+  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -534,7 +575,7 @@ resource "aws_ecs_cluster" "tp" {
 }
 
 resource "aws_cloudwatch_log_group" "tp" {
-  for_each          = toset(["api", "unseal-worker", "migrate", "web"])
+  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys"])
   name              = "/tp/${each.key}"
   retention_in_days = 90
 }
@@ -572,7 +613,7 @@ locals {
       { name = "TRUSTPROCURE_KMS_TOTP_KEY_ID", value = "alias/tp-totp" },
       { name = "TRUSTPROCURE_KMS_TOTP_KEY_VERSION", value = var.kms.totp_key_version },
       { name = "TRUSTPROCURE_KMS_RECEIPT_KEY_ID", value = "alias/tp-receipt-sign" },
-      { name = "TRUSTPROCURE_KMS_RECEIPT_KID", value = var.kms.receipt_kid },
+      { name = "TRUSTPROCURE_KMS_RECEIPT_KID", value = local.bien_nhan.kid_dang_dung },
       { name = "TRUSTPROCURE_SENDER_ADAPTER", value = "ses" },
       { name = "TRUSTPROCURE_SES_REGION", value = local.region },
       { name = "TRUSTPROCURE_SES_FROM", value = var.ses.tu_api },
@@ -602,6 +643,13 @@ locals {
       { name = "TRUSTPROCURE_WEB_HOST", value = "0.0.0.0" },
       { name = "TRUSTPROCURE_WEB_PORT", value = "8090" },
     ]
+    public_keys = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_PUBLIC_KEYS_HOST", value = "0.0.0.0" },
+      { name = "TRUSTPROCURE_PUBLIC_KEYS_PORT", value = "8070" },
+      { name = "TRUSTPROCURE_RECEIPT_ACTIVE_KID", value = local.bien_nhan.kid_dang_dung },
+      { name = "TRUSTPROCURE_RECEIPT_PUBLIC_KEYS", value = jsonencode(local.bien_nhan.khoa_cong_khai) },
+    ]
   }
   bi_mat = {
     api = [
@@ -617,7 +665,8 @@ locals {
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
     ]
-    web = []
+    web         = []
+    public_keys = []
   }
   task = {
     api     = { ho = "tp-api", role = local.role_arn.api, cpu = 512, mem = 1024, log = "api", cong = [8080] }
@@ -625,6 +674,8 @@ locals {
     migrate = { ho = "tp-migrate", role = local.role_arn.migrate, cpu = 256, mem = 512, log = "migrate", cong = [] }
     # Web không gọi AWS nào: KHÔNG task role (chỉ execution role để kéo image, đẩy log).
     web = { ho = "tp-web", role = null, cpu = 256, mem = 512, log = "web", cong = [8090] }
+    # [ADR-070] Chỉ nửa công khai trong biến môi trường: không task role.
+    public_keys = { ho = "tp-public-keys", role = null, cpu = 256, mem = 512, log = "public-keys", cong = [8070] }
   }
 }
 
@@ -729,6 +780,35 @@ resource "aws_lb_listener" "https" {
   }
 }
 
+resource "aws_lb_target_group" "public_keys" {
+  name        = "tp-public-keys"
+  port        = 8070
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.tp.id
+  health_check {
+    path                = "/.well-known/trustprocure-receipt-keys"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 15
+  }
+  deregistration_delay = 30
+}
+
+# [ADR-070] Đường công bố khoá — không viết lại đường: service phục vụ đúng đường dẫn cố định ấy.
+resource "aws_lb_listener_rule" "public_keys" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+  condition {
+    path_pattern { values = ["/.well-known/trustprocure-receipt-keys", "/.well-known/trustprocure-receipt-keys/*"] }
+  }
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.public_keys.arn
+  }
+}
+
 # Trang gọi `fetch("/api<đường>")` còn api phục vụ `<đường>` (bộ chuyển tiếp demo của ADR-044 cũng bỏ tiền tố):
 # ALB viết lại đường trước khi chuyển. `/api` trơn không khớp mẫu này ⇒ rơi về web ⇒ 404.
 resource "aws_lb_listener_rule" "api" {
@@ -791,6 +871,30 @@ resource "aws_ecs_service" "api" {
   }
   depends_on = [aws_lb_listener_rule.api]
   # Pipeline `tp-deploy` đăng ký bản mới và cập nhật service — Terraform không giật lùi nó.
+  lifecycle { ignore_changes = [task_definition] }
+}
+
+resource "aws_ecs_service" "public_keys" {
+  name            = "tp-public-keys"
+  cluster         = aws_ecs_cluster.tp.id
+  task_definition = aws_ecs_task_definition.tp["public_keys"].arn
+  desired_count   = var.so_ban_public_keys
+  launch_type     = "FARGATE"
+  network_configuration {
+    subnets          = aws_subnet.ung_dung[*].id
+    security_groups  = [aws_security_group.public_keys.id]
+    assign_public_ip = false
+  }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.public_keys.arn
+    container_name   = "tp-public-keys"
+    container_port   = 8070
+  }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  depends_on = [aws_lb_listener_rule.public_keys]
   lifecycle { ignore_changes = [task_definition] }
 }
 
