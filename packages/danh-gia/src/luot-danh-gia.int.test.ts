@@ -1474,7 +1474,7 @@ describe("[S1.109 / S2.5 / 060] vòng BAFO trỏ vào lượt chấm CŨ bị CS
 // **J3** có BA vế và chúng không cùng độ chắc: vế *người tạo RFQ* và vế *người duyệt ≠ người đề
 // xuất* đọc dữ liệu đủ để phán xử; ~~vế *người điều phối* đọc `unseal_requests.dispatched_by`, cột
 // mang người của lần điều phối ĐANG CHẠY — nên sau một lần điều phối lại nó không thấy người đầu
-// (khoản **233**). Ca dưới đo đúng thứ vế ấy CÓ, không đo thứ nó không có.~~ **[S1.122 / khoản 233
+// (khoản **233**). Ca dưới đo đúng thứ vế ấy CÓ, không đo thứ nó không có.~~ **[S1.124 / khoản 233
 // ĐÓNG]** vế *người điều phối* nay đọc `unseal_dispatch_history` (`064`), và ba ca mới đo nó qua một
 // lần điều phối lại: chặn, đối chứng dương, đột biến gỡ lớp ghi.
 //
@@ -1734,7 +1734,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
     expect(dx.actedBy).toBe(uDuyet);
   });
 
-  // [S1.122 / khoản 233] Kịch bản mà hàng 233 viết ra: A điều phối → worker chết → B điều phối lại
+  // [S1.124 / khoản 233] Kịch bản mà hàng 233 viết ra: A điều phối → worker chết → B điều phối lại
   // → A đề xuất. Trước `064` vế 3 đọc `dispatched_by` (nay là B) nên A ĐI QUA; từ `064` nó đọc
   // `unseal_dispatch_history`, nơi trigger đã ghi CẢ HAI lần.
   async function dieuPhoiTay(rfqId: string, nguoi: string, phien: string): Promise<void> {
