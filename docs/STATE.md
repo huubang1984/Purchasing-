@@ -13,6 +13,14 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-26 / S1.9103] SPEC CHI TIẾT S4b (TRÍ TUỆ MUA SẮM) VÀO KHO — BẢN NHÁP, CHƯA QUA LƯỢT SOI HÌNH DẠNG, VIẾT TRƯỚC
+CỔNG DỮ LIỆU.** `docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`. Chủ dự án chọn thiết kế đầy đủ bây
+giờ, không viết mã; cổng (e) vẫn chặn mã từ S4b.2, và S4b.1 vẫn chờ S3.5 và S4.5. Nội dung: chín yếu tố rủi ro theo thứ tự
+ADR-058 ⑸ — yếu tố mạnh nhất là độ ỔN ĐỊNH của khoảng cách thắng–nhì qua chuỗi gói, không phải một khoảng cách —, phép tổng
+hợp Risk Score kèm độ phủ, chốt S4b.1, sổ tín hiệu không lưu tự động, Supplier Score trên năm thành phần có nguồn, phân tích
+người mua mà mỗi lần đọc có sổ, màn Executive. Bất biến L9–L11 viết chi tiết, L16–L21 mới. Sáu câu hỏi cho chủ dự án (spec
+§2.3). Không mã, không migration, không ADR mới. Vòng này không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
 **[2026-09-26 / S1.9102] LƯỢT SOI HÌNH DẠNG SPEC S4 — 32 PHÁT HIỆN, 10 CAO, BA LỜI KHAI ĐO TRÊN POSTGRES 16 THẬT. SPEC SỬA
 TẠI CHỖ, CHƯA MỘT DÒNG MÃ.** Bốn góc độc lập trả 48 phát hiện thô, khử trùng còn 32 (`evidence/security-reviews.md`
 §S1.9102). Bảy quyết định của chủ dự án (spec §2.4), cả bảy theo đề xuất:

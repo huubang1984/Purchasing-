@@ -659,7 +659,9 @@ giữ nguyên mệnh đề. Chỉ bảng ca và hàm đọc đổi.
 ### 4.9. S4b — Supplier Score, Risk Score, phân tích người mua
 
 Phần này ở mức HÌNH DẠNG. Chi tiết chốt ở một lượt soi riêng khi cổng (e) đạt, vì các con số của nó chỉ hiệu chỉnh được trên
-dữ liệu thật.
+dữ liệu thật. **[S1.9103]** Chủ dự án chọn viết thiết kế chi tiết TRƯỚC cổng, không viết mã:
+`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`. Tài liệu ấy thay mục này ở mức chi tiết; cổng (e)
+vẫn chặn mã từ S4b.2.
 
 **Supplier Score (V2.1 §13).** Trọng số là khoá `diem_ncc jsonb` trên phiên bản chính sách. Tám thành phần của V2.1 §13 chia
 theo nguồn:
