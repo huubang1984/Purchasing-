@@ -24,6 +24,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 - [ ] **Hai người** sẽ giữ KeyAdmin (nhóm `tp-key-admins`). Một người là điều kiện chặn dữ liệu thật (ADR-062).
 - [ ] Địa chỉ nhận **cảnh báo** (`email_canh_bao`) — không nên chỉ là người giữ KeyAdmin.
+- [ ] Hộp thư **vận hành** (`email_van_hanh`, một hay nhiều địa chỉ) — người trực hệ thống; thư ⑹ nhiều và lặp nên tách
+      khỏi hộp thư an ninh (ADR-088). Có thể trùng người, nhưng nên là hộp thư khác.
 - [ ] Tên miền công khai `ten_mien` (vd `app.<domain>`) và domain gửi thư (vd `thu.<domain>`); bạn sửa được DNS của chúng.
 - [ ] Địa chỉ gửi của api và của cảnh báo (`<dia_chi_gui>@<domain>`, `<dia_chi_canh_bao>@<domain>`).
 
@@ -62,17 +64,31 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 3. Cảnh báo — trước mọi thứ chạy thật, để lần đầu cũng có người nghe
 
 - [ ] **3.1 `60-canh-bao`** (`tp-audit` + `tp-prod`):
+  `infra\terraform\60-canh-bao\canh-bao.tfvars` (không commit — `*.tfvars` đã bị bỏ qua):
+  ```hcl
+  email_canh_bao = "<email an ninh>"
+  email_van_hanh = ["<email van hanh>"]
+  ```
   ```powershell
   cd infra\terraform\60-canh-bao; terraform init
-  terraform plan -var email_canh_bao=<email> -out plan.tfplan; terraform apply plan.tfplan; cd ..\..\..
+  terraform plan -var-file canh-bao.tfvars -out plan.tfplan; terraform apply plan.tfplan; cd ..\..\..
   ```
   Stack 60 không phụ thuộc stack 90: rule ⑸ ⑹ bắt alarm theo TÊN/TIỀN TỐ, nên alarm sinh ra sau vẫn có thư.
-- [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao`. Chưa xác nhận = chưa có cảnh báo nào.
+- [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao` (topic `tp-canh-bao-khoa`) **và** tới từng địa chỉ
+      `email_van_hanh` (topic `tp-canh-bao-van-hanh`). Địa chỉ chưa xác nhận = chưa nhận cảnh báo nào.
+      Đối chứng ⑻ (ADR-089), hai lần gọi tay Lambda đối chiếu đăng ký:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-dang-ky out.json`, rồi đọc log
+      `/aws/lambda/tp-canh-dang-ky`. **Trước** khi bấm xác nhận: mỗi địa chỉ một dòng `DANG KY HONG: cho xac nhan` (dòng ghi
+      tên biến và vị trí, không ghi địa chỉ). **Sau**: dòng tổng `... 0 hong`. Alarm `tp-canh-bao-dang-ky-hong` về OK ở kỳ
+      6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
 - [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
       ⇒ lời gọi lỗi nhưng **có thư**.
-- [ ] **3.5** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
+- [ ] **3.5** Dự kiến: alarm ⑺ `tp-canh-bao-canh-moc-neo-khong-chay` có thể vào ALARM ở kỳ 12 giờ đầu nếu Lambda chưa
+      chạy lượt nào — gọi tay một lần để về OK:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
+- [ ] **3.6** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
       OK sau lượt `lich` đầu tiên có tổ chức (bước 13).
 
 ## 4. Phép đo ⒜ — bắt buộc trước dữ liệu thật
@@ -137,6 +153,15 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.4 Phần còn lại
 
+- [ ] **Kiểm trước apply** (từ gốc kho; cần `terraform init` ở 6.2 và phiên SSO còn hạn):
+  ```powershell
+  pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars
+  ```
+  Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
+  `000…`; image nằm đúng kho ECR của prod và có thật; bốn secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
+  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
+  `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt.
+  Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
 - [ ] `terraform plan -var-file prod.tfvars -out plan.tfplan` — đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
       policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. `terraform apply plan.tfplan` (chờ ACM xác minh).
 - [ ] Dự kiến: vài thư ⑹ `…khong-con-target-khoe` cho `api` (0 task) — đúng, vì api chưa chạy; về OK ở 6.6.
@@ -150,7 +175,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.6 Bật api
 
-- [ ] `so_ban_api = 1` ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
+- [ ] `so_ban_api = 1` ⇒ `pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars` (hết `[VANG] so_ban_api`) ⇒ plan + apply. Log `/tp/api`: `khoa: aws-kms, bo gui: ses`, không `LechDongHoError`.
 - [ ] Thư ⑹ trở về OK cho `api`.
 
 ### 6.7 Neo khoá biên nhận và kiểm công khai
@@ -180,7 +205,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 8. Tổ chức đầu tiên và worker
 
 - [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm.
-- [ ] **8.2** `so_ban_worker = 1` ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
+- [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với `xuat=0 kiem=0`; alarm ⑷ trở về OK (có thư).
 
@@ -199,8 +224,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | Lúc | Thư | Vì sao |
 |---|---|---|
 | 3.1 | ⑷ thiếu mốc neo — ALARM | chưa có mốc neo nào; về OK ở 8.3 |
+| 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, 3.4, 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
+
+Thư ⑹ tới hộp thư **vận hành** (`email_van_hanh`); mọi thư còn lại tới hộp thư **an ninh** (`email_canh_bao`). Một thư ⑹
+lạc sang hộp an ninh, hay ngược lại, là cấu hình sai.
 
 Mọi thư khác trong lần dựng đầu: dừng lại và đọc.
