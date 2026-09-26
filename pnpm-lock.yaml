@@ -389,6 +389,8 @@ importers:
 
   tools/inv-matrix: {}
 
+  tools/kiem-truoc-apply: {}
+
   tools/neo-so-kiem-toan:
     dependencies:
       '@aws-sdk/client-kms':

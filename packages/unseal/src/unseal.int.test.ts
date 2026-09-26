@@ -100,18 +100,20 @@ async function taoRfqDaDong(capKep = false): Promise<string> {
       "submitted_by_session_id = $3 WHERE id = $1",
     [rfqId, uYc, sYc],
   );
-  if (capKep) {
-    // Hai phê duyệt RFQ (khác với phê duyệt MỞ THẦU) để cạnh PENDING_APPROVAL -> OPEN đi được.
-    for (const [u, s] of [
-      [uD1, sD1],
-      [uD2, sD2],
-    ] as const) {
-      await db.pool.query(
-        "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) " +
-          "VALUES ($1, $2, $3, $4)",
-        [orgA, rfqId, u, s],
-      );
-    }
+  // Hai phê duyệt RFQ (khác với phê duyệt MỞ THẦU) để cạnh PENDING_APPROVAL -> OPEN đi được.
+  // [S1.142 / khoản 241] Gói dưới ngưỡng cũng cần MỘT — sàn một chữ ký của `068`.
+  const nguoiKy: readonly (readonly [string, string])[] = capKep
+    ? [
+        [uD1, sD1],
+        [uD2, sD2],
+      ]
+    : [[uD1, sD1]];
+  for (const [u, s] of nguoiKy) {
+    await db.pool.query(
+      "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) " +
+        "VALUES ($1, $2, $3, $4)",
+      [orgA, rfqId, u, s],
+    );
   }
   // Vật liệu khoá — 017 đòi nó tồn tại lúc mở, và đòi nó sinh TRONG giao dịch mở.
   const c = await db.pool.connect();

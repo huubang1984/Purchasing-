@@ -8,7 +8,7 @@
 // Nên ghim:
 //   ⑴ mọi `aws_cloudwatch_metric_alarm` của stack 90 (trừ alarm DNS của ADR-076, có đường riêng ⑸) mang tiền tố;
 //   ⑵ tiền tố là MỘT chuỗi ở hai stack; mẫu ⑹ bắt cả ALARM lẫn OK; topic cho rule ⑹ publish; prod chuyển sang audit;
-//      [ADR-086] ⑹ đi topic VẬN HÀNH riêng, tới người nhận riêng — và topic khoá không nhận thư ⑹ nào;
+//      [ADR-088] ⑹ đi topic VẬN HÀNH riêng, tới người nhận riêng — và topic khoá không nhận thư ⑹ nào;
 //   ⑶ mọi `aws_ecs_service` có mặt trong `service_van_hanh`, mọi `aws_lb_target_group` có mặt trong `tg_van_hanh`;
 //      Container Insights bật (alarm thiếu task đọc metric của nó);
 //   ⑷ "không còn target khoẻ" và "thiếu task" coi THIẾU DỮ LIỆU là vi phạm — service biến mất thì metric cũng mất.
@@ -61,7 +61,7 @@ describe("[ADR-077] cảnh báo vận hành", () => {
     expect(khoi(TF60, "aws_sns_topic_policy", "van_hanh")).toMatch(/"aws:SourceArn" = \[aws_cloudwatch_event_rule\.van_hanh_audit\.arn\]/u);
     expect(khoi(TF60, "aws_cloudwatch_event_target", "van_hanh_prod")).toMatch(/arn += local\.bus_audit_arn/u);
     expect(khoi(TF60, "aws_cloudwatch_event_target", "van_hanh_audit")).toMatch(/arn += aws_sns_topic\.van_hanh\.arn/u);
-    // [ADR-086] Tách hai chiều: topic khoá không cho rule ⑹ publish, và topic vận hành chỉ gửi tới email_van_hanh.
+    // [ADR-088] Tách hai chiều: topic khoá không cho rule ⑹ publish, và topic vận hành chỉ gửi tới email_van_hanh.
     expect(khoi(TF60, "aws_sns_topic_policy", "canh_bao_khoa")).not.toMatch(/van_hanh/u);
     const dangKy = khoi(TF60, "aws_sns_topic_subscription", "van_hanh");
     expect(dangKy).toMatch(/for_each += toset\(var\.email_van_hanh\)/u);

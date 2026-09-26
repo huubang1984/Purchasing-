@@ -76,7 +76,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | ID | Bất biến | Cưỡng chế | Tầng test |
 |---|---|---|---|
 | **D1** | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 |
-| **D2** | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai | Cổng chính sách + ràng buộc DB | **T3**, T5 |
+| **D2** | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai. **[S1.142 / ADR-085]** RFQ dưới ngưỡng cần 1 phê duyệt của người khác người tạo; mọi phê duyệt đếm trên nội dung hiện tại | Cổng chính sách + ràng buộc DB | **T3**, T5 |
 | **D3** | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 |
 | **D4** | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 |
 | **D5** | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 |

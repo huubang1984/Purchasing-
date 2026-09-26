@@ -4,13 +4,15 @@
 > SOI HÌNH DẠNG — 31 phát hiện, 9 CAO, ba lời khai ĐO trên Postgres 16 thật** (`evidence/security-reviews.md` §S1.139).
 > Năm quyết định của chủ dự án (§2.4) và các quyết định chốt từ tiền lệ (§2.5) ở **ADR-082**; ADR (a) và (b) của §2.3
 > chốt thành **ADR-080** và **ADR-081**. Chưa một dòng mã nào của S3 được viết.
+> **[S1.142]** Hai việc của chủ dự án ở S3.0 — bảng mã quyền và lớp từ chối thứ ba của K12 — đã chốt ở **ADR-084**.
 > ~~Chưa ADR nào của S3 được chốt; ba ADR phải chốt ở lượt soi, trước dòng mã đầu (§2.3).~~
 > **Nguồn:** `TrustProcure_V2_Procurement_Control_Intelligence.md` (V2.1) — §32 *MVP 2 — Procurement Control*,
 > §12 *Procurement Governance*, §10 *Progressive Onboarding*, §13, §24–§26, §39. Bản nguồn KHÔNG nằm trong kho,
 > cùng tình trạng từ spec S0+S1.
 > **Đóng:** khoản **234** (ba chốt khâu mời của ADR-058) · nợ spec S0+S1 §4.3 (*số nhà cung cấp được mời
 > đạt ngưỡng chính sách*) · lỗ *khai thấp ước lượng* mà `014` §(4) gọi tên — ở cổng award, KHÔNG ở cổng mở gói
-> và mở thầu (§8.4) · **[S1.139]** khoản **241** (gói dưới ngưỡng mở với 0 chữ ký) cho tổ chức đã bật S3 (ADR-080).
+> và mở thầu (§8.4) · ~~**[S1.139]** khoản **241** (gói dưới ngưỡng mở với 0 chữ ký) cho tổ chức đã bật S3 (ADR-080).~~
+> **[S1.142]** Khoản 241 đóng TRƯỚC S3, cho mọi tổ chức — `068`, ADR-085.
 > **Không đóng:** Risk Score, phát hiện bất thường bằng thống kê, đồ thị quan hệ nhà cung cấp (S4); dữ liệu
 > giao hàng và chất lượng từ ERP (S5).
 
@@ -90,7 +92,7 @@ Lượt soi S1.139 tìm ra năm chỗ là lựa chọn sản phẩm, không đi�
 
 | # | Phát hiện | Quyết định |
 |---|---|---|
-| ⑸ | Gói không có ngân sách thì không có bậc, nên thoát mọi chốt của S3. Và gói dưới ngưỡng mở được với 0 chữ ký — **đã đo**, khoản **241** | **Sàn mọi gói:** ước lượng bắt buộc để rời DRAFT; mọi gói cần ≥ 1 chữ ký của người khác người tạo mới mở được — trả nợ spec S0+S1 §4.3 |
+| ⑸ | Gói không có ngân sách thì không có bậc, nên thoát mọi chốt của S3. Và gói dưới ngưỡng mở được với 0 chữ ký — **đã đo**, khoản **241** | **Sàn mọi gói:** ước lượng bắt buộc để rời DRAFT; mọi gói cần ≥ 1 chữ ký của người khác người tạo mới mở được — trả nợ spec S0+S1 §4.3. **[S1.142 / ADR-085]** Vế chữ ký áp cho MỌI tổ chức từ `068`; vế ước lượng vẫn ở S3.1 |
 | ⑹ | K2/K3 đếm bản ghi nhà cung cấp, mà vai mời tự tạo được: `tax_code` cho phép NULL, một email liên hệ dùng được cho mọi công ty. Nên đủ ngưỡng bằng nhà cung cấp vỏ không tốn gì | **Bốn luật cùng áp:** (i) không đếm nhà cung cấp/người liên hệ do người tạo gói hay người mời tạo; (ii) chỉ đếm nhà cung cấp có MST, mỗi MST và mỗi đích liên hệ đếm một lần; (iii) chỉ đếm nhà cung cấp có xác minh còn hiệu lực (ADR-081 ⑵); (iv) **hậu kiểm lúc trao** — số báo giá hợp lệ nhận được dưới ngưỡng của bậc cao hơn thì trao thầu cần ngoại lệ `LOW_ACTUAL_COMPETITION` có chữ ký độc lập |
 | ⑺ | `FINANCE` vừa đặt thước (`policy.manage`) vừa cầm thứ bị đo (`po.approve`); một gói ở DRAFT giữ mãi phiên bản chính sách đã ghim | **Chữ ký thứ hai + luật hành vi:** phiên bản có bậc chỉ hiệu lực khi một người KHÁC giữ `policy.manage` ký; người tạo phiên bản không ký trao thầu, không xác minh hay thẩm định, không ghi nhận tín hiệu trên gói ghim phiên bản ấy; nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực |
 | ⑻ | `master` đang là nguồn triển khai thật, còn S3.1/S3.2 đổi kịch bản pilot | **Công tắc một chiều theo tổ chức** — ADR-080: S3 bật khi tổ chức có phiên bản có bậc đầu tiên đã ký, và không tắt lại được; tổ chức chưa bật chạy như MVP1 |
@@ -107,7 +109,7 @@ Khuôn ADR-050: chỗ nào tiền lệ trong kho trả lời được thì lư�
 | ⑿ | K5 thiếu đúng người bỏ tên khỏi danh sách | Loại thêm mọi `revoked_by` (đọc mọi hàng), người đặt ngân sách, người nộp duyệt, người tạo bản ghi nhà cung cấp và người liên hệ | ADR-051 |
 | ⒀ | K3 "rửa" được bằng gói nháp | Chỉ đếm gói đã `opened_at`; loại gói đang xét; theo người mời | ADR-058 ⑶(b); K6 |
 | ⒁ | §4.6 và K10 là hai điều kiện khác nhau; người gây ra tín hiệu tự ghi nhận được | Một điều kiện, fail-closed; tính lại ở tầng gói; neo `submitted_at`; khoá `category_id` sau DRAFT; khoá theo (tổ chức, nhóm hàng); người ghi nhận ngoài {người tạo, người gây ra}; thêm `EARLY_CLOSE`; bằng chứng không mang số tiền | `011` C-1; ADR-051; ADR-054 |
-| ⒂ | K12 dựa vào lớp gói kiểm trước, mà bản nháp bỏ lớp ấy | Mỗi chốt một hàm vị từ SQL, tầng gói gọi trước mọi tác dụng phụ. Lớp từ chối thứ ba: **chưa chốt** — chủ dự án chốt ở S3.0 | ADR-060; khoản 31 |
+| ⒂ | K12 dựa vào lớp gói kiểm trước, mà bản nháp bỏ lớp ấy | Mỗi chốt một hàm vị từ SQL, tầng gói gọi trước mọi tác dụng phụ. ~~Lớp từ chối thứ ba: **chưa chốt** — chủ dự án chốt ở S3.0~~ **[S1.142]** Lớp thứ ba là `CONTROL_DENIED` (ADR-084 ⑷) | ADR-060; khoản 31 |
 | ⒃ | Ba hàm S3 sửa đều bị ghim nguyên văn; trigger mới trên `rfq_packages` gặp `app_unseal` | Ghim mọi hàm mới hoặc bị sửa, kể cả hàm trợ giúp; mọi trigger mới mang WHEN đúng cạnh | S1.96; S1.108 §7b |
 | ⒄ | K7/K8/K9 hở ở người thẩm định và ở khai báo sau khi ký | Người thẩm định ngoài người đề xuất/ký trao; phép đếm chữ ký loại `CO_XUNG_DOT`; K9 thêm cổng ở xác minh, ghi nhận, huỷ trao; `award_vai_khac_nhau` mặc định KHÔNG | ADR-051 |
 | ⒅ | View hiệu suất rò hoạt động của vòng BAFO đang mở | Phiên bản BAFO chỉ tính khi vòng đã đóng; thêm phép đo tính đúng | A6; J4; J2 |
@@ -302,7 +304,8 @@ chia nhỏ phải gộp MỌI gói của một người trong cửa sổ, và m�
 
 **[S1.139]** `category_id` khoá sau DRAFT. Khối *"chỉ sửa ở DRAFT"* của thân ghim `061` chỉ phủ `title` và
 `requires_dual_approval`, nên phải có trigger RIÊNG cho cột này. Không có nó, đổi nhóm hàng sau khi nộp duyệt là một lối
-né tín hiệu chia nhỏ (§4.6). Mã quyền quản lý danh sách nhóm hàng chốt ở S3.0.
+né tín hiệu chia nhỏ (§4.6). ~~Mã quyền quản lý danh sách nhóm hàng chốt ở S3.0.~~ **[S1.142]** Mã
+`category.manage`, mặc định `FINANCE` — không vai nào tạo gói giữ nó (ADR-084 ⑵).
 
 ### 4.4. Ngoại lệ cạnh tranh
 
@@ -521,7 +524,7 @@ tạo được, K5 bỏ sót người bỏ tên khỏi danh sách, và cả hai 
 | **K9** | Thêm cổng ở xác minh và thẩm định, ở ghi nhận tín hiệu, ở huỷ trao thầu. Phép đếm chữ ký loại người có `CO_XUNG_DOT`. Khai báo và chữ ký dùng chung khoá tư vấn (gói, người) | §2.5 ⒄ |
 | **K10** | Một điều kiện, fail-closed; tính lại ở tầng gói; cửa sổ neo `submitted_at`; khoá (tổ chức, nhóm hàng); người ghi nhận ngoài {người tạo, người gây ra} và giữ quyền của cạnh bị chặn; thêm `EARLY_CLOSE` | §2.5 ⒁ |
 | **K11** | Phiên bản BAFO chỉ tính khi vòng đã đóng; đối chứng dương T2 chạy CẢ lúc `BAFO_OPEN`. Phiên Passport đặt `app.guest_session_id` (ADR-081 ⑶). View mang vị từ khách trong thân | §2.5 ⒅; ADR-081 |
-| **K12** | Mỗi chốt một hàm vị từ SQL, tầng gói gọi TRƯỚC mọi tác dụng phụ và ném theo `VAO_SO`. Lớp từ chối thứ ba (*vi phạm chốt kiểm soát*): chủ dự án chốt ở S3.0. Đo theo từng hạng mục từ S3.1, không dồn về S3.9 | §2.5 ⒂ |
+| **K12** | Mỗi chốt một hàm vị từ SQL, tầng gói gọi TRƯỚC mọi tác dụng phụ và ném theo `VAO_SO`. ~~Lớp từ chối thứ ba (*vi phạm chốt kiểm soát*): chủ dự án chốt ở S3.0.~~ **[S1.142]** Lớp thứ ba là `CONTROL_DENIED`: payload chỉ mang mã chốt, ghi ở giao dịch độc lập (ADR-084 ⑷). Đo theo từng hạng mục từ S3.1, không dồn về S3.9 | §2.5 ⒂ |
 
 **[S1.139] Hàng K vào sổ đăng ký của TEST-PLAN ở đúng hạng mục đo được nó.** Hàng nào chỉ đo được một nửa ở hạng mục đầu
 thì tách làm hai (K2/K2b, K4a/K4b, K8a/K8b) — một ô mở cho một bất biến cưỡng chế nửa là đúng thứ khoản 239 đã đo.
@@ -554,9 +557,9 @@ Một phép đo phải có mà dễ quên: **K4 đo bằng thay đổi danh sác
 
 **[S1.139] Thêm các phép đo phải có:**
 - **Ba ca đã đo ở lượt soi thành test T3 thường trực:**
-  - đột biến `CHU_KY_CAN := 2` — khoản 242, S3.5;
+  - đột biến `CHU_KY_CAN := 2` — khoản 242, S3.5; **[S1.142]** đã vào kho cùng bản sửa lời khai (`068`, khối `[INV-J3] [S1.142 / khoản 242 ⑴]` của `packages/danh-gia/src/luot-danh-gia.int.test.ts`) — S3.5 phải lật nó;
   - gia hạn hai lần một gói cấp kép — khoản 240; **[S1.140]** đã vào kho cùng bản sửa (`067`, khối `[INV-D2] [S1.140 / khoản 240]` của `packages/rfq/src/rfq.int.test.ts`);
-  - mở gói dưới ngưỡng với 0 chữ ký — khoản 241, S3.1.
+  - mở gói dưới ngưỡng với 0 chữ ký — khoản 241, S3.1. **[S1.142]** đã vào kho cùng bản sửa (`068`, ADR-085, khối `[INV-D2] [S1.142 / khoản 241]` của `packages/rfq/src/rfq.int.test.ts`).
   
   Cả ba đã chạy trên Postgres 16 bằng một bộ dựng cụm cục bộ thay testcontainers (biên bản §S1.139); đưa vào kho là việc
   của hạng mục tương ứng.
@@ -695,6 +698,9 @@ K5 vì thế buộc một điều về tổ chức: ở bậc bật `ky_danh_sac
 hoặc `BUYER` mời và một PM ký, hoặc hai PM. Một tổ chức chỉ có một PM tự mời thì không mở được gói ở bậc ấy. Đó là
 đúng thứ ADR-058 ⑶(c) muốn, nhưng pilot nhỏ sẽ gặp nó ở gói đầu tiên, nên màn khai chính sách phải nói ra trước.
 
+**[S1.142 / ADR-085]** Sàn một chữ ký làm điều ấy lan xuống MỌI gói, kể cả ở MVP1: người ký phải khác người tạo, và chỉ
+PM giữ `rfq.approve`. Một tổ chức mà PM duy nhất cũng là người tạo gói thì không mở được gói nào.
+
 ### 8.9. Phạm vi và các nhánh song song
 
 Bảy mục cộng khâu mời dựng lại cộng Passport có tệp là nhiều hơn 4–6 tuần của §32 (§9). ~~Và ngày viết tài liệu này, bốn
@@ -767,11 +773,11 @@ chữ ký chính sách — nên nếu có trôi thì trôi lên.
 
 | # | Thêm hoặc đổi |
 |---|---|
-| **S3.0** | ADR-080/081 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1 |
-| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; sàn một chữ ký; K1; gieo lại `gieo:demo` theo bảng vai của §7 |
+| **S3.0** | ADR-080/081 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. **[S1.142]** Cả hai đã chốt ở ADR-084; S3.0 còn đúng phần nới dải nhãn dưới đây. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1 |
+| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7 |
 | **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; ~~sửa khoản 240 nếu nó chưa được sửa ở vòng riêng~~ **[S1.140]** khoản 240 đã sửa ở vòng riêng (`067`) |
 | **S3.3** | **Xác minh nội bộ lên đây** (K8a) — K2 cần nó; bốn luật đếm; ngoại lệ có hàng rút; K3 theo định nghĩa §5.1; tập loại trừ K5 mở rộng |
-| **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; đóng khoản 242 ⑴ |
+| **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; ~~đóng khoản 242 ⑴~~ **[S1.142]** lời khai của khoản 242 ⑴ đã sửa ở `068`; S3.5 dựng chữ ký sống độc lập với hàng `APPROVED` và phải lật khối đo `[S1.142 / khoản 242 ⑴]` |
 | **S3.6** | Một điều kiện fail-closed; `EARLY_CLOSE`; khoá `category_id` sau DRAFT |
 | **S3.7** | Thẩm định đầy đủ (K8b) trên phiên bản Passport mới nhất; phiên Passport theo ADR-081 ⑶ — cả khối GUC, policy khai, `withTenant` |
 | **S3.8** | Phiên bản BAFO chỉ tính khi vòng đã đóng; phép đo tính đúng |
@@ -800,8 +806,9 @@ rằng migration một mình là no-op.
 - **Purchase Request / Demand, phòng ban** (V2.1 §4, §26) — không thuộc §32.
 - **Cạnh trạng thái khi huỷ gói sau `CLOSED`** — khoản **225** giữ nguyên; S3 không thêm cạnh (§3.1).
 - **[S1.139] Khai báo xung đột theo từng nhà cung cấp lúc mời** — không chốt (§4.5).
-- **[S1.139] Lớp từ chối thứ ba của K12** — chờ chủ dự án ở S3.0.
+- ~~**[S1.139] Lớp từ chối thứ ba của K12** — chờ chủ dự án ở S3.0.~~ **[S1.142]** Đã chốt: `CONTROL_DENIED` (ADR-084 ⑷).
 - **[S1.139] Ba hàm trợ giúp của MVP1 chưa được ghim** (`rfq_bam_noi_dung`, `rfq_can_phe_duyet_kep`,
   `unseal_so_phe_duyet_can`) — ngoài S3. Lượt soi đọc ra chúng nhưng chưa đối chiếu với danh mục ADR-028/036 xem đã là
   giới hạn đã biết chưa.
-- **[S1.139] Tổ chức chưa bật S3** — giữ nguyên hành vi và các lỗ đã đo của MVP1 (khoản 241, nhà cung cấp vỏ); ADR-080 ⑶.
+- **[S1.139] Tổ chức chưa bật S3** — giữ nguyên hành vi và các lỗ đã đo của MVP1 (~~khoản 241,~~ nhà cung cấp vỏ); ADR-080 ⑶.
+  **[S1.142]** Khoản 241 đóng cho mọi tổ chức (ADR-085).

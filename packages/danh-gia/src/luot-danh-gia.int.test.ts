@@ -136,6 +136,12 @@ async function taoRfqMo(policyId: string): Promise<string> {
     "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
     [rfqId, uYc, sYc],
   );
+  // [S1.142 / khoản 241] Sàn một chữ ký (`068`): gói dưới ngưỡng cũng cần một chữ ký của người KHÁC
+  // người tạo, trên nội dung hiện tại, trước khi mở.
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [orgA, rfqId, uD1, sD1],
+  );
   const c = await db.pool.connect();
   try {
     await c.query("BEGIN");
@@ -2365,6 +2371,65 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
 // luật CHỌN LỌC — ghi khi lời từ chối nói NGƯỜI DÙNG đi sai thứ tự chuỗi, không ghi khi nó nói CẤU
 // HÌNH chưa sẵn sàng — và ba ca dưới đây đo đúng ba vế mà một ô trong ma trận đòi.
 // ================================================================================================
+
+// =============================================================================================
+// [S1.142 / khoản 242 ⑴] ĐỔI `CHU_KY_CAN` KHÔNG ĐỦ CHO HAI CHỮ KÝ — ĐO SỰ THẬT HÔM NAY
+//
+// `061` và `duyetTraoThau` từng khai: đổi hằng `CHU_KY_CAN` thành 2 là toàn bộ việc phải làm, và
+// lời gọi của người duyệt thứ hai đi qua. Sai: `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong
+// CÙNG một giao dịch, nên lần duyệt đầu bị từ chối và chữ ký của nó rơi theo giao dịch. `068` sửa
+// lời khai; khối này ghi hành vi thật. Khi S3.5 dựng chữ ký sống độc lập với hàng `APPROVED`, khối
+// này PHẢI lật — lật nó là việc có chủ ý của S3.5, không phải một test đỏ để xoá.
+// =============================================================================================
+describe("[INV-J3] [S1.142 / khoản 242 ⑴] đổi CHU_KY_CAN thành 2 thì trao thầu KHÔNG BAO GIỜ duyệt được — đo, để S3.5 phải lật", { timeout: 300000 }, () => {
+  // Khai báo hằng trong thân `award_kiem_mot_award_song`, nguyên văn. Đột biến dưới đổi đúng chuỗi này.
+  const HANG_MOT = "CHU_KY_CAN constant integer := 1;";
+
+  it("hằng là 2: người duyệt đầu bị từ chối và chữ ký rơi, người thứ hai gặp đúng lỗi ấy; trả hằng về 1 thì duyệt được", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(
+        c, orgA,
+        { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat },
+        apiPool,
+      ),
+    );
+    // Người duyệt thứ hai: giữ `po.approve`, không đề xuất, không tạo gói.
+    const uDuyet2 = await taoNguoi("duyet-2-khoan-242@vidu.vn", "FINANCE");
+    const sDuyet2 = await taoPhien(uDuyet2);
+    const duyet = (phien: string): Promise<unknown> =>
+      withTenant(apiPool, orgA, (c) =>
+        duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: phien }, apiPool),
+      );
+    const soChuKy = async (): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2",
+        [orgA, dx.awardId],
+      );
+      return Number(rows[0]?.n ?? -1);
+    };
+
+    const { rows } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.award_kiem_mot_award_song()'::regprocedure) AS d",
+    );
+    const goc = rows[0]?.d ?? "";
+    expect(goc.split(HANG_MOT).length - 1, "tiền đề: thân đang chạy khai hằng là 1").toBe(1);
+    await db.pool.query(goc.replace(HANG_MOT, "CHU_KY_CAN constant integer := 2;"));
+    try {
+      await expect(duyet(sDuyet)).rejects.toThrow(/can 2 chu ky duyet; dang co 1 \(J3\)/);
+      expect(await soChuKy(), "chữ ký của lần duyệt đầu rơi theo giao dịch").toBe(0);
+      await expect(duyet(sDuyet2)).rejects.toThrow(/can 2 chu ky duyet; dang co 1 \(J3\)/);
+      expect(await soChuKy(), "người thứ hai cũng không để lại chữ ký nào").toBe(0);
+    } finally {
+      await db.pool.query(goc);
+    }
+
+    // ĐỐI CHỨNG: hằng là 1 thì CÙNG đề xuất ấy duyệt được — hai lần đỏ ở trên không đỏ vì một lý do khác.
+    await duyet(sDuyet);
+    expect(await soChuKy()).toBe(1);
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+  });
+});
 
 describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có chọn lọc", { timeout: 300000 }, () => {
   /** Đếm hàng `RFQ_STATE_DENIED` của một gói thầu. `resource_id`, KHÔNG phải `payload->>'rfqId'`. */
