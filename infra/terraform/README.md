@@ -190,7 +190,7 @@ terraform apply plan.tfplan                                             # chờ 
 ```
 
 `prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
-và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys, neo }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
 
@@ -200,8 +200,8 @@ mới apply phần còn lại.
 
 ```powershell
 aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
-foreach ($t in "api","worker","migrate","web","public-keys") {
-  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys" }[$t]
+foreach ($t in "api","worker","migrate","web","public-keys","neo") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys"; neo = "tp-neo" }[$t]
   docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
   docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
 }
@@ -238,6 +238,27 @@ $der = [Convert]::FromBase64String($b64)
 `alias/tp-receipt-sign` sang khoá mới, đặt `receipt_kid` mới; apply 50, rồi 90, rồi deploy. **Không gỡ mục cũ** — biên
 nhận cũ phải kiểm được mãi (ADR-011 mục 3). Khoá cũ giữ quyền `GetPublicKey`, không còn ai `Sign` qua alias.
 
+## Job neo — task `tp-neo` (ADR-071)
+
+Task một lần, role `tp-anchor-job`: mượn `tp-anchor-writer` ở tài khoản audit (đúng danh tính duy nhất ghi được bucket neo và
+ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `neo = { kid_dang_dung, alias_arn, khoa_cong_khai }`, stack 90
+đọc state ấy. **Thứ tự: 40 và 50 trước 90.**
+
+- **Neo khoá biên nhận** — lệnh mặc định của image, pipeline chạy nó sau MỖI lần deploy `tp-public-keys`
+  (`terraform output lenh_chay_neo` để chạy tay). Ghi `khoa-bien-nhan/<kid>.json` — **đúng byte** của
+  `GET https://<ten_mien>/.well-known/trustprocure-receipt-keys/<kid>`. Chạy lại cùng khoá là không làm gì; một kid bị đổi
+  khoá làm job thoát mã 1.
+- **Mốc neo sổ kiểm toán** — `lenh_chay_neo.xuat`, thay `<uuid>` (lặp `--org` cho nhiều tổ chức). Ghi
+  `so-kiem-toan/<org>/<thời điểm>-<băm>.json`, ký bằng KMS. Chưa có **lịch** (ADR-026 §5⑴): người vận hành chạy nó.
+
+Kiểm độc lập — bằng tài khoản audit, không qua prod:
+
+```powershell
+aws s3 cp --profile tp-audit s3://tp-neo-528657840905/khoa-bien-nhan/kms-2026-09.json neo.json
+curl.exe -s https://<ten_mien>/.well-known/trustprocure-receipt-keys/kms-2026-09 -o endpoint.json
+(Get-FileHash neo.json).Hash -eq (Get-FileHash endpoint.json).Hash    # phải True
+```
+
 **Chưa kiểm:** endpoint SES API (`email`) ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
 
 ## Deploy thường ngày — `.github/workflows/deploy.yml` (ADR-067)
@@ -248,7 +269,7 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 
 | Environment | Required reviewers | Deployment branches | Biến |
 |---|---|---|---|
-| `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE` — lấy từ `terraform output bien_github` (stack 90) |
+| `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE`, `TP_SG_NEO` — lấy từ `terraform output bien_github` (stack 90) |
 | `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
 
 Tên environment phải đúng hai chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)

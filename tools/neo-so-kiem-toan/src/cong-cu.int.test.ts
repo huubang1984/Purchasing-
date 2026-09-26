@@ -149,6 +149,32 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
     expect(kq.loi).toContain("pnpm neo xuat");
   });
 
+  it("[ADR-071] khoa-bien-nhan qua tiến trình thật: neo lần đầu, chạy lại TRÙNG BYTE, đổi khoá cùng kid ⇒ mã 1", async () => {
+    const spki = (): string =>
+      Buffer.from(generateKeyPairSync("ec", { namedCurve: "P-256" }).publicKey.export({ type: "spki", format: "der" })).toString("base64");
+    const k1 = spki();
+    const dat = (khoa: string): void => {
+      bienMoiTruong.TRUSTPROCURE_RECEIPT_PUBLIC_KEYS = JSON.stringify({ "kms-2026-09": khoa });
+    };
+    try {
+      dat(k1);
+      const lan1 = chay("khoa-bien-nhan");
+      expect(lan1.ma, lan1.loi).toBe(0);
+      expect(lan1.ra).toContain("khoa-bien-nhan/kms-2026-09.json\tDA NEO");
+      const lan2 = chay("khoa-bien-nhan");
+      expect(lan2.ma, lan2.loi).toBe(0);
+      expect(lan2.ra).toContain("DA CO, TRUNG BYTE");
+      dat(spki());
+      const doi = chay("khoa-bien-nhan");
+      expect(doi.ma).toBe(1);
+      expect(doi.loi).toMatch(/nội dung KHÁC/u);
+      const daNeo = JSON.parse(await readFile(join(thuMuc, "khoa-bien-nhan", "kms-2026-09.json"), "utf8")) as { spki: string };
+      expect(daNeo.spki).toBe(k1);
+    } finally {
+      delete bienMoiTruong.TRUSTPROCURE_RECEIPT_PUBLIC_KEYS;
+    }
+  });
+
   it("[INV-B3] xuat TỪ CHỐI một mốc neo LÙI — cắt đuôi chết ồn ào ở thời điểm xuất", async () => {
     // ==========================================================================================
     // [review lượt 9 — H9-1 ⑵] `audit_events.seq` chỉ đi lên, nên một đầu chuỗi THẤP HƠN mốc neo
