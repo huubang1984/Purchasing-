@@ -677,3 +677,11 @@ output "lenh_chay_migrate" {
     "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", aws_subnet.ung_dung[*].id)}],securityGroups=[${aws_security_group.migrate.id}],assignPublicIp=DISABLED}'",
   ])
 }
+
+output "bien_github" {
+  description = "Biến của environment GitHub `prod` cho pipeline deploy (ADR-067) — role deploy không dò được mạng."
+  value = {
+    TP_SUBNETS_UNG_DUNG = join(",", aws_subnet.ung_dung[*].id)
+    TP_SG_MIGRATE       = aws_security_group.migrate.id
+  }
+}
