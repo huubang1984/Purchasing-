@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Bảy stack, chạy đúng thứ tự
+## Tám stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
@@ -15,6 +15,7 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -64,17 +65,48 @@ terraform providers lock -platform=windows_amd64 -platform=linux_amd64
 
 ## Kiểm chứng sau khi apply 50 — phép đo ⒜ của ADR-062 (bắt buộc, trước dữ liệu thật)
 
-Chạy trên prod bằng một phiên mang role `tp-api`, rồi `tp-unseal-worker`. Hai role này chỉ
-ECS đảm nhận được, nên cách dễ nhất là một task ECS dùng một lần. Kịch bản:
+Hai role `tp-api` và `tp-unseal-worker` chỉ ECS đảm nhận được, nên phép đo chạy bằng hai task
+Fargate dùng một lần — stack `70-do-kms`:
 
-1. `tp-api`: `GenerateDataKeyPairWithoutPlaintext` với `EncryptionContext org_id=thu` ⇒
-   **thành công**, nhận `PrivateKeyCiphertextBlob`.
-2. `tp-api`: `Decrypt` blob ấy ⇒ **`AccessDeniedException`**.
-3. `tp-unseal-worker`: `Decrypt` blob ấy với cùng context ⇒ **thành công**.
-4. `tp-unseal-worker`: `Decrypt` **thiếu** context ⇒ **thất bại**.
-5. AdministratorAccess và KeyAdmin: `Decrypt` ⇒ **`AccessDeniedException`**.
+```powershell
+cd infra\terraform\70-do-kms
+terraform init
+terraform plan -out plan.tfplan
+terraform apply plan.tfplan
+.\chay-do-kms.ps1          # in bảng 18 bước; thoát 0 chỉ khi mọi bước ĐẠT
+terraform destroy          # đo xong thì dỡ — CloudTrail tổ chức giữ bằng chứng
+```
 
-Bước 3 là đối chứng âm: không có nó, bước 2 "xanh" cả khi khoá bị tắt.
+| Bước | Vai | Lời gọi | Mong đợi |
+|---|---|---|---|
+| 1 | `tp-api` | `GenerateDataKeyPairWithoutPlaintext`, `org_id=do-kms-<giờ>` | **thành công** — đối chứng dương của task api |
+| 2 | `tp-api` | `Decrypt` blob ấy | `AccessDeniedException` |
+| 2b | `tp-api` | `GenerateDataKeyPair` (bản CÓ bản rõ) | `AccessDeniedException` |
+| 3 | `tp-unseal-worker` | `Decrypt`, đúng context | **thành công** — đối chứng dương của bước 2 |
+| 4 | `tp-unseal-worker` | `Decrypt` **thiếu** context | `AccessDeniedException` (key policy đòi `org_id`) |
+| 4a | `tp-unseal-worker` | `Decrypt` với `org_id` khác | `InvalidCiphertextException` (context là AAD) |
+| 4b | `tp-unseal-worker` | `GenerateDataKeyPairWithoutPlaintext` | `AccessDeniedException` |
+| 5a | AdministratorAccess | `Decrypt` | `AccessDeniedException` |
+| 5b | KeyAdmin | `Decrypt` | `AccessDeniedException` |
+| 6 | `tp-api` | `Encrypt` trên `alias/tp-totp`, context `{org_id, key_version}` | **thành công** (ADR-063) |
+| 6a | `tp-api` | `Decrypt` bí mật TOTP, đúng context | **thành công** — api được mở TOTP, và chỉ TOTP |
+| 6b | `tp-api` | `Decrypt` TOTP **thiếu** `key_version` | `AccessDeniedException` |
+| 6c | `tp-api` | `Decrypt` TOTP với `org_id` khác | `InvalidCiphertextException` |
+| 6d | `tp-api` | `Encrypt` TOTP kèm một khoá context lạ | `AccessDeniedException` |
+| 6e | `tp-api` | `GenerateDataKey` trên `tp-totp` | `AccessDeniedException` |
+| 7 | `tp-unseal-worker` | `Decrypt` bí mật TOTP | `AccessDeniedException` |
+| 8a / 8b | AdministratorAccess / KeyAdmin | `Decrypt` bí mật TOTP | `AccessDeniedException` |
+
+Bước 3 là đối chứng âm cho bước 2: không có nó, bước 2 "xanh" cả khi khoá bị tắt. Một bước "bị từ
+chối" chỉ ĐẠT khi lỗi đúng TÊN trong bảng — lỗi mạng hay cấu hình sai không được đọc thành "đã
+chặn". Không bước nào in bản rõ: mọi `Decrypt` chạy với `--query KeyId`.
+
+Chép nguyên bảng kết quả vào `docs/STATE.md` khoản 15. Nếu stack 60 đã apply, lần apply stack 70
+bắn cảnh báo ⑵ (`RegisterTaskDefinition` gắn role worker vào họ `tp-do-kms-worker`) — đó là đối
+chứng dương của cảnh báo ấy; không có thư thì cảnh báo ⑵ chưa chạy.
+
+Chi phí: vài phút Fargate 0,25 vCPU và hai IP công khai trong lúc task chạy — không NAT, không
+VPC endpoint.
 
 ## Rủi ro còn lại — nói thẳng
 
