@@ -12,7 +12,7 @@ export {
 } from "./vai-tro.js";
 // [khoản 165] Dấu kiểm vòng khoá bọc — `apps/api` và `apps/unseal-worker` đối chiếu lúc khởi động (`062`).
 export { DauKiemVongKhoaLechError, doiChieuDauKiemVongKhoa, tinhDauKiemKhoa } from "./dau-kiem-vong-khoa.js";
-// [khoản 196 / ADR-069] Canh lệch giữa đồng hồ CSDL — nguồn phán xử hạn nộp — và đồng hồ tiến trình: `apps/api` và
+// [khoản 196 / ADR-072] Canh lệch giữa đồng hồ CSDL — nguồn phán xử hạn nộp — và đồng hồ tiến trình: `apps/api` và
 // `apps/unseal-worker` đo lúc khởi động (lệch ⇒ không lên) và định kỳ (lệch ⇒ một dòng log cảnh báo).
 export {
   CHU_KY_CANH_DONG_HO_MS_MAC_DINH,

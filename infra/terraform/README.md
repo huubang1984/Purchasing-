@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Mười stack, chạy đúng thứ tự
+## Mười một stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
@@ -17,7 +17,8 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
-| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng không NAT + VPC endpoint, RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
+| `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -136,6 +137,34 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 
 **Chưa có:** SMS và Zalo ZNS. Liên hệ khai kênh ấy thì bộ gửi SES NÉM, việc outbox thất bại.
 
+## Kênh SMS và Zalo ZNS — stack `85-sms-zalo` (ADR-069)
+
+**SMS.** Việt Nam chỉ nhận SMS từ **brandname đã đăng ký**, kèm **mẫu nội dung** đã đăng ký với nhà mạng.
+1. Console AWS End User Messaging SMS → *Registrations*: tạo hồ sơ sender ID cho Việt Nam (giấy tờ doanh nghiệp,
+   brandname, ba mẫu nội dung — chép NGUYÊN VĂN ba câu trong `apps/api/src/adapters/gui-sms.ts`, phần biến là mã,
+   đường dẫn, mốc giờ). Chờ duyệt — tính bằng tuần, không phải phút.
+2. `terraform apply -var sender_id=<BRANDNAME>` (thư mục `85-sms-zalo`). Nếu AWS từ chối vì chưa đăng ký xong,
+   quay lại bước 1. Output `sms.registered` phải là `true` trước khi bật kênh.
+3. Tài khoản mới ở *sandbox* SMS và có trần chi tiêu tháng: xin ra khỏi sandbox và đặt trần trong console.
+4. Stack 90: `sms = { danh_tinh_gui = "<BRANDNAME>", configuration_set = "tp-sms" }` trong `prod.tfvars`.
+
+**Zalo ZNS.** Cần Official Account đã xác thực, ứng dụng Zalo liên kết OA, số dư ZNS.
+1. Tạo ba template ZNS và chờ Zalo duyệt; tên tham số là hợp đồng với mã: OTP `otp`, lời mời `duong_dan`
+   (đường dẫn `https://<ten_mien>/i#…` — Zalo có thể đòi khai báo tên miền), gia hạn `han_nop`.
+2. Cấp quyền OA cho ứng dụng (OAuth v4 trên developers.zalo.me) để có **refresh token**.
+3. Nạp secret — tệp tạm, xoá ngay sau lệnh:
+   ```powershell
+   '{"app_id":"<id>","secret_key":"<khoá ứng dụng>","access_token":"","refresh_token":"<refresh token>","het_han_luc":0}' |
+     Set-Content -Encoding utf8 zalo.json
+   aws secretsmanager put-secret-value --profile tp-prod --secret-id tp/api/zalo-oa --secret-string file://zalo.json
+   Remove-Item zalo.json
+   ```
+   Từ đó `api` tự làm mới token và ghi lại. Refresh token dùng MỘT lần: đừng thử nó bằng tay sau khi nạp.
+4. Stack 90: `zalo = { template_otp, template_invitation, template_deadline }` trong `prod.tfvars`.
+
+**Kiểm:** mời một nhà cung cấp khai kênh SMS/Zalo; log `/tp/api` không có `GuiKenhError`/`ZaloTokenMatError`.
+`ZaloTokenMatError` nghĩa là token đã xoay mà không ghi được vào secret — cấp lại refresh token (bước 2–3).
+
 ## Chạy thật — stack `90-ecs` (ADR-066)
 
 **1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên).
@@ -160,8 +189,8 @@ terraform plan -var-file prod.tfvars -out plan.tfplan                   # bướ
 terraform apply plan.tfplan                                             # chờ ACM xác minh rồi tạo ALB
 ```
 
-`prod.tfvars` (không commit): `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
-và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+`prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
+và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys, neo }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
 
@@ -171,8 +200,8 @@ mới apply phần còn lại.
 
 ```powershell
 aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
-foreach ($t in "api","worker","migrate","web") {
-  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web" }[$t]
+foreach ($t in "api","worker","migrate","web","public-keys","neo") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys"; neo = "tp-neo" }[$t]
   docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
   docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
 }
@@ -186,7 +215,49 @@ phải superuser); nếu `migrate()` từ chối, dừng lại và đọc thông
 chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
 
 **7. Kiểm:** `https://<ten_mien>/api/health` ⇒ 200 (ALB bỏ tiền tố `/api`); `https://<ten_mien>/nop-thau` ⇒ 200 kèm
-header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`, log `/tp/web` có `CHI TINH`.
+header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`, log `/tp/web` có `CHI TINH`;
+`https://<ten_mien>/.well-known/trustprocure-receipt-keys` ⇒ 200, và `sha256` in trong log `/tp/public-keys` TRÙNG dấu vân
+tay tính độc lập từ output của stack 50 (mục "Khoá công khai biên nhận" dưới).
+
+## Khoá công khai biên nhận — service `tp-public-keys` (ADR-070)
+
+Stack 50 (chạy bằng KeyAdmin, có `kms:GetPublicKey`) xuất `bien_nhan = { kid_dang_dung, khoa_cong_khai }`; stack 90 đọc state
+ấy, đặt `TRUSTPROCURE_KMS_RECEIPT_KID` cho api và chuyển nửa công khai vào service `tp-public-keys` — service không có task
+role, không KMS, không CSDL. **Thứ tự: apply 50 trước 90.**
+
+Tính dấu vân tay độc lập (không qua endpoint) — đây là con số in vào hợp đồng và đọc qua điện thoại cho nhà cung cấp:
+
+```powershell
+cd infra\terraform\50-kms-prod
+$b64 = (terraform output -json bien_nhan | ConvertFrom-Json).khoa_cong_khai.'kms-2026-09'
+$der = [Convert]::FromBase64String($b64)
+-join ([Security.Cryptography.SHA256]::Create().ComputeHash($der) | ForEach-Object { $_.ToString('x2') })
+```
+
+**Xoay khoá ký:** trong stack 50 thêm một `aws_kms_key` mới + một mục mới vào `local.khoa_bien_nhan`, trỏ
+`alias/tp-receipt-sign` sang khoá mới, đặt `receipt_kid` mới; apply 50, rồi 90, rồi deploy. **Không gỡ mục cũ** — biên
+nhận cũ phải kiểm được mãi (ADR-011 mục 3). Khoá cũ giữ quyền `GetPublicKey`, không còn ai `Sign` qua alias.
+
+## Job neo — task `tp-neo` (ADR-071)
+
+Task một lần, role `tp-anchor-job`: mượn `tp-anchor-writer` ở tài khoản audit (đúng danh tính duy nhất ghi được bucket neo và
+ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `neo = { kid_dang_dung, alias_arn, khoa_cong_khai }`, stack 90
+đọc state ấy. **Thứ tự: 40 và 50 trước 90.**
+
+- **Neo khoá biên nhận** — lệnh mặc định của image, pipeline chạy nó sau MỖI lần deploy `tp-public-keys`
+  (`terraform output lenh_chay_neo` để chạy tay). Ghi `khoa-bien-nhan/<kid>.json` — **đúng byte** của
+  `GET https://<ten_mien>/.well-known/trustprocure-receipt-keys/<kid>`. Chạy lại cùng khoá là không làm gì; một kid bị đổi
+  khoá làm job thoát mã 1.
+- **Mốc neo sổ kiểm toán** — `lenh_chay_neo.xuat`, thay `<uuid>` (lặp `--org` cho nhiều tổ chức). Ghi
+  `so-kiem-toan/<org>/<thời điểm>-<băm>.json`, ký bằng KMS. Chưa có **lịch** (ADR-026 §5⑴): người vận hành chạy nó.
+
+Kiểm độc lập — bằng tài khoản audit, không qua prod:
+
+```powershell
+aws s3 cp --profile tp-audit s3://tp-neo-528657840905/khoa-bien-nhan/kms-2026-09.json neo.json
+curl.exe -s https://<ten_mien>/.well-known/trustprocure-receipt-keys/kms-2026-09 -o endpoint.json
+(Get-FileHash neo.json).Hash -eq (Get-FileHash endpoint.json).Hash    # phải True
+```
 
 **Chưa kiểm:** endpoint SES API (`email`) ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
 
@@ -198,7 +269,7 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 
 | Environment | Required reviewers | Deployment branches | Biến |
 |---|---|---|---|
-| `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE` — lấy từ `terraform output bien_github` (stack 90) |
+| `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE`, `TP_SG_NEO` — lấy từ `terraform output bien_github` (stack 90) |
 | `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
 
 Tên environment phải đúng hai chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
@@ -214,7 +285,7 @@ deploy không đọc log).
 **Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
 tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.
 
-## Nguồn thời gian (ADR-069, khoản 196)
+## Nguồn thời gian (ADR-072, khoản 196)
 
 Hạn nộp thầu được phán xử bằng `now()` của **CSDL** (trigger C1), nên đồng hồ của máy CSDL là một
 tham số pháp lý của sản phẩm, không phải một chi tiết vận hành. Lời khai của kho:

@@ -73,6 +73,10 @@ describe("[ADR-067] hình dạng của deploy.yml", () => {
     expect(api).toMatch(/needs: build\n/u);
     // [ADR-068] web đi cùng job api và bị đòi KHÔNG mang task role.
     expect(api).toMatch(/trien-khai\.sh dang-ky tp-web "\$anh_web" -\)/u);
+    // [ADR-070] public-keys cũng không mang task role.
+    expect(api).toMatch(/trien-khai\.sh dang-ky tp-public-keys "\$anh_pk" -\)/u);
+    // [ADR-071] job neo mang ĐÚNG role tp-anchor-job — role duy nhất mượn được người ghi neo.
+    expect(api).toMatch(/trien-khai\.sh dang-ky tp-neo "\$anh_neo" tp-anchor-job\)/u);
   });
 
   it("⑶ role ARN đúng tài khoản prod và tên role của infra/terraform/chung; api không cầm role worker và ngược lại", () => {

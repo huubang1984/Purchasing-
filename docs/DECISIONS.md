@@ -5788,7 +5788,7 @@ mang người của lần điều phối ĐANG CHẠY, nên sau một lần đi�
 dự án chọn **NHẬN** lỗ ấy ngày 2026-09-22 sau khi ba hình dạng đóng được cân, và ô J3 khai phạm vi
 HẸP HƠN mệnh đề — khoản **233**.
 
-**[S1.126 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
+**[S1.129 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
 ADR-043, và ngày 2026-09-26 chủ dự án chọn hình dạng ⒝ trong ba hình dạng đã cân: một bảng LỊCH SỬ
 ĐIỀU PHỐI. `064` dựng `unseal_dispatch_history` — chỉ-ghi-thêm bằng quyền, ghi bởi một trigger
 `AFTER UPDATE` trên `unseal_requests` ở MỌI lần cặp người-phiên điều phối đổi — và thay thân
@@ -6516,12 +6516,127 @@ và nó không chuyển `X-Forwarded-For` nên mọi người dùng chung một 
 - Bộ chuyển tiếp của ADR-044 vẫn còn cho demo cục bộ (`pnpm web:dev`), và vẫn mang đúng những cái giá ADR ấy nêu.
 - Trang vẫn `cache-control: no-store` và nạp tệp một lần lúc khởi động — đổi trang = deploy lại, chấp nhận được khi deploy đã là
   một nút bấm.
+
+## ADR-069 — Kênh SMS qua AWS End User Messaging, Zalo ZNS với token trong Secrets Manager, và api ra internet qua NAT riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-015**, ADR-065, ADR-066
+
+### Bối cảnh
+
+ADR-015 chốt SMS là kênh OTP mặc định và Zalo ZNS là kênh thay thế; ADR-065 dựng bộ gửi thật chỉ cho EMAIL và để
+tin kênh SMS/ZALO_ZNS làm việc outbox thất bại. Hệ quả: nhà cung cấp chỉ khai số điện thoại không nhận được lời
+mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo chỉ có API công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Định tuyến theo kênh** (`adapters/kenh-so.ts`): `EMAIL` → SES; `SMS` → AWS End User Messaging SMS; `ZALO_ZNS` →
+   Zalo. Link đăng nhập và thông báo duyệt vẫn chỉ là thư. Kênh chưa bật vẫn **NÉM** — không rơi về kênh khác
+   (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
+2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
+   `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
+   **ASCII không dấu, ≤ 160 ký tự** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
+   đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
+3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
+   `otp`, `duong_dan`, `han_nop`). **Token trong Secrets Manager** (`tp/api/zalo-oa`): refresh token dùng một lần và
+   xoay mỗi lần làm mới, nên api **đọc và ghi** secret lúc chạy — IAM Get + Put trên đúng secret ấy. Làm mới sớm 10
+   phút trước hạn, single-flight trong tiến trình, đọc kho trước khi làm mới và sau khi làm mới thất bại (task khác
+   có thể đã xoay). Xoay xong mà không ghi được kho là lỗi có tên riêng `ZaloTokenMatError`.
+4. **Đường ra: NAT Gateway một AZ, CHỈ cho api.** Api dời sang subnet riêng (`tp-api-*`) mà bảng định tuyến có tuyến
+   ra NAT; security group api mở ra ngoài đúng cổng 443. Worker, migrate, web giữ nguyên: không có tuyến ra
+   internet.
+
+### Hệ quả, nói thẳng
+
+- **Api ra được MỌI máy chủ HTTPS**, không chỉ Zalo và AWS: security group không lọc theo tên miền. Một api bị chiếm
+  quyền có đường tuồn dữ liệu mà trước ADR này nó không có. Lọc theo tên miền (AWS Network Firewall, ~300 USD/tháng)
+  hoặc một egress proxy là việc khi có dữ liệu thật đủ giá — không làm ở lát này.
+- **Chưa gọi thật** Zalo lẫn End User Messaging: đường dẫn và hình dạng phản hồi của Zalo theo tài liệu công khai,
+  đo trên fetch giả. Đăng ký brandname, duyệt template ZNS, cấp quyền OA là việc tay dài ngày (README, stack 85).
+- **Hai task api làm mới token Zalo ĐÚNG cùng lúc vẫn có thể giẫm nhau** — Zalo không có phép so-và-đổi; kho đọc lại
+  sau thất bại chỉ cứu được khi task kia đã ghi xong. Với `so_ban_api = 1` rủi ro gần như không có; tăng số bản thì
+  phải có khoá phân tán (Postgres advisory lock) trước.
+- Token bị thu hồi trước hạn: lần gửi hỏng xoá token trong bộ nhớ, lần sau đọc lại kho — nhưng không tự làm mới
+  khi kho vẫn ghi "còn hạn"; tự hồi phục khi access token hết hạn (≤ 25 giờ) hoặc khi người vận hành nạp lại.
+- NAT là một điểm hỏng ở một AZ: NAT chết thì SMS/Zalo chết, email và phần còn lại không. Chi phí ~35 USD/tháng +
+  phí dữ liệu.
+- `SENT` trong outbox vẫn không phải bằng chứng đã tới tay (ADR-015) — cả hai kênh đều có báo cáo giao tin riêng
+  (event destination của End User Messaging, webhook ZNS) chưa được nối.
+
+## ADR-070 — Công bố khoá công khai biên nhận: service riêng chỉ cầm nửa công khai, neo vào bucket audit qua job neo
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-011** mục 3, ADR-026, ADR-062, ADR-066, ADR-068
+
+### Bối cảnh
+
+Khoản nợ 30 dựng `apps/public-keys` (tài liệu `/.well-known/trustprocure-receipt-keys`, dấu vân tay SHA-256 của SPKI) nhưng
+chưa có tiến trình chạy, và nó dựng tài liệu từ một `ReceiptSigningKeyRing` — thứ chỉ có dưới `local-dev`. Dưới `aws-kms`,
+khoá riêng không rời KMS, và chỉ `tp-api` (người ký) cùng KeyAdmin đọc được nửa công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Service riêng `tp-public-keys`** sau cùng ALB, luật đường `/.well-known/trustprocure-receipt-keys` và `…/*` (không viết
+   lại đường). Nó chỉ cầm **nửa công khai**, nhận qua biến môi trường (`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS` JSON `{kid: SPKI}`,
+   `TRUSTPROCURE_RECEIPT_ACTIVE_KID`): **không task role, không KMS, không CSDL, không bí mật**. Mỗi SPKI phải là EC P-256 —
+   sai loại thì từ chối khởi động. In dấu vân tay mọi khoá lúc khởi động.
+2. **Một nguồn cho kid và nửa công khai: stack 50** (KeyAdmin có `kms:Get*`) — output `bien_nhan`; stack 90 đọc state ấy cho
+   CẢ `TRUSTPROCURE_KMS_RECEIPT_KID` của api lẫn service công bố. kid không còn là biến của stack 90: đổi alias mà quên đổi
+   kid là ký bằng khoá này nhưng khai kid của khoá kia.
+3. Tài liệu dựng từ nửa công khai **trùng byte** tài liệu dựng từ vòng khoá (test đối chiếu) — hai đường, một định dạng.
+4. **Neo ngoài: tài liệu khoá vào bucket neo audit** (Object Lock COMPLIANCE) qua **đúng danh tính ghi duy nhất**
+   `tp-anchor-writer`, tức qua job neo chạy trên ECS với role `tp-anchor-job` — không nới policy của bucket (ADR-026 §4). Phần
+   này là lát kế (bộ ghi S3 của `AnchorStore`, ký mốc neo bằng KMS ở tài khoản audit, task `tp-anchor-job`).
+
+### Hệ quả, nói thẳng
+
+- Tới khi lát neo xong, tính độc lập của phép kiểm vẫn là **dấu vân tay in ra ngoài** (hợp đồng, điện thoại) — README hướng
+  dẫn tính nó từ output stack 50, không qua endpoint.
+- Một service thêm ~9 USD/tháng (Fargate 0,25 vCPU) để giữ tiến trình ký (api) khác tiến trình công bố.
+- Xoay khoá = sửa stack 50 (khoá mới + mục mới, không gỡ mục cũ) rồi apply 50 → 90 → deploy. Không có đường nào tự động
+  thêm kid vào danh sách công bố: một kid lạ trong biên nhận mà không có trong tài liệu là lỗi vận hành phải thấy được.
+
+## ADR-071 — Job neo lên ECS: nơi cất S3 ghi-một-lần, ký mốc neo bằng KMS ở audit, neo tài liệu khoá biên nhận
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-026**, ADR-066, ADR-067, **ADR-070**
+
+### Bối cảnh
+
+ADR-026 dựng mốc neo sổ kiểm toán với nơi cất TỆP và bộ ký local-dev; bucket neo (Object Lock COMPLIANCE) và khoá
+`alias/tp-anchor-sign` (stack 40) có sẵn, nhưng chưa tiến trình nào ghi vào đó — và bucket chỉ nhận ghi từ
+`tp-anchor-writer`, mà chỉ `tp-anchor-job` mượn được. ADR-070 cần chính đường ấy để neo tài liệu khoá biên nhận. Chủ dự án
+chọn làm job neo lên ECS thay vì nới policy của bucket.
+
+### Quyết định
+
+1. **Task một lần `tp-neo`** (role `tp-anchor-job`, image đích `neo`): `sts:AssumeRole` sang `tp-anchor-writer` một lần
+   mỗi lượt chạy; mọi lời gọi S3 và KMS đi bằng danh tính mượn ấy. Không nới policy nào của bucket (ADR-026 §4 giữ nguyên).
+   Mạng: subnet riêng không NAT, thêm VPC endpoint `sts`; KMS chéo tài khoản đi qua endpoint `kms` sẵn có, S3 qua gateway.
+2. **Nơi cất S3** (`createS3AnchorStore`): mỗi bản ghi một đối tượng `so-kiem-toan/<org>/<ms>-<băm>.json`, đọc theo thứ tự
+   tên; **mọi PutObject mang `IfNoneMatch: "*"`** — Object Lock chỉ giữ phiên bản, một phiên bản mới cùng khoá vẫn đổi
+   thứ `GetObject` trả về, nên ghi-một-lần phải được đòi ở lời gọi. Thân hỏng không bị bỏ qua: `loadVerifiedAnchors` từ chối.
+3. **Ký mốc neo bằng KMS** cùng định dạng local-dev (`buildAnchorText`, ECDSA P-256 SHA-256, DER base64) — `kiem`, `trich`,
+   `openssl` không đổi. Tự kiểm một lần lúc tạo bằng `GetPublicKey` (cùng lý do H9-3). kid, ARN alias và nửa công khai
+   một nguồn ở stack 40 (KeyAdmin audit), stack 90 đọc state. `AnchorSigner` của `packages/audit` giữ nguyên (đồng bộ);
+   công cụ có mặt ký bất đồng bộ riêng và bọc bộ ký local-dev về mặt ấy.
+4. **Neo tài liệu khoá biên nhận** (`pnpm neo khoa-bien-nhan`, lệnh mặc định của image): `khoa-bien-nhan/<kid>.json` là
+   **đúng byte** của `GET …/trustprocure-receipt-keys/<kid>`. Chạy lại cùng byte là không làm gì; byte khác cho cùng kid là
+   mã thoát 1. **Pipeline chạy nó sau mỗi lần deploy `tp-public-keys`.** Không ký tài liệu này: bucket ở tài khoản khác,
+   một danh tính ghi, Object Lock — chính nó là mốc neo.
+
+### Hệ quả, nói thẳng
+
+- **Vẫn chưa có LỊCH** cho mốc neo sổ kiểm toán (ADR-026 §5⑴): `xuat --org …` chạy bằng RunTask tay. Danh sách tổ chức
+  vẫn do người vận hành gõ (ADR-026 §5).
+- Job đọc đầu chuỗi bằng URL của `api` (vai `app_api`) — không có vai đăng nhập riêng cho job neo; nó chỉ ĐỌC.
+- Endpoint `sts` thêm ~7 USD/tháng mỗi AZ.
+- Chưa chạy thật: S3, KMS, STS đo trên client giả; đường tệp và lệnh `khoa-bien-nhan` đo trên tiến trình thật; image
+  build và chạy được.
+- Xoay khoá ký mốc neo: khoá mới + mục mới ở stack 40, không gỡ mục cũ — vòng khoá kiểm của job gồm mọi mục ấy.
 ---
 
-## ADR-069 — Nguồn thời gian của hạn nộp là đồng hồ CSDL, và từ nay nó được KHAI, được CANH, và để lại dấu cho người bị chặn
+## ADR-072 — Nguồn thời gian của hạn nộp là đồng hồ CSDL, và từ nay nó được KHAI, được CANH, và để lại dấu cho người bị chặn
 
 **Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-005, ADR-060, ADR-062, khoản **196**, khoản 238.
-**ADR-065** đến **ADR-068** do phiên hạ tầng chốt (SES, ECS Fargate, pipeline deploy, …); ADR này là số kế tiếp.
+**ADR-065** đến **ADR-071** do phiên hạ tầng chốt (SES, ECS Fargate, pipeline deploy, …); ADR này là số kế tiếp.
 
 ### Bối cảnh — một phép đo, và thứ nó cho thấy
 

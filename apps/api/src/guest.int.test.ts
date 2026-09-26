@@ -392,7 +392,7 @@ describe("gói thầu và báo giá của khách", () => {
   });
 
   // ============================================================================================
-  // [khoản 196 / ADR-069 phần 2 và 3] GIỜ MÁY CHỦ ĐI TỚI NHÀ CUNG CẤP — TRƯỚC khi nộp, và KHI bị chặn.
+  // [khoản 196 / ADR-072 phần 2 và 3] GIỜ MÁY CHỦ ĐI TỚI NHÀ CUNG CẤP — TRƯỚC khi nộp, và KHI bị chặn.
   //
   // ⑴ `GET /guest/rfq` mang `gioMayChu`: đồng hồ của CSDL — nguồn mà C1 phán xử — ở dạng chính tắc
   //    của biên nhận. Trang nộp thầu đếm ngược theo độ lệch giữa giá trị này và đồng hồ máy người

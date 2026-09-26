@@ -22,6 +22,8 @@
 
 import type { AddressInfo } from "node:net";
 import { KMSClient } from "@aws-sdk/client-kms";
+import { PinpointSMSVoiceV2Client } from "@aws-sdk/client-pinpoint-sms-voice-v2";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { createAwsKmsReceiptSigner, createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createAwsKmsOrgKeyProvisioner, createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
@@ -37,6 +39,10 @@ import {
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { taoBoGuiSes } from "./adapters/gui-ses.js";
+import { taoBoGuiSms } from "./adapters/gui-sms.js";
+import { taoBoGuiZalo } from "./adapters/gui-zalo.js";
+import { taoBoGuiTheoKenh } from "./adapters/kenh-so.js";
+import { taoKhoTokenZaloSecretsManager } from "./adapters/kho-token-zalo.js";
 import { taoHopThuDev, type HopThuDev } from "./adapters/hop-thu-dev.js";
 import { taoBoMaBiMatTotpAwsKms } from "./adapters/totp-aws-kms.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
@@ -165,17 +171,45 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
 
   const khoa = dungKhoa(ch);
   // [ADR-065] Bộ gửi theo TRUSTPROCURE_SENDER_ADAPTER: hộp thư dev (tệp) hay SES (chỉ kênh EMAIL).
+  // [ADR-069] Dưới `ses`, kênh SMS và Zalo ZNS là tuỳ chọn; kênh chưa bật thì tin của nó NÉM như trước.
   let sesClient: SESv2Client | undefined;
+  let smsClient: PinpointSMSVoiceV2Client | undefined;
+  let secretsClient: SecretsManagerClient | undefined;
   let hopThu: HopThuDev;
   if (ch.senderAdapter === "dev-mailbox") {
     hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
   } else {
     sesClient = new SESv2Client({ region: ch.ses.region });
-    hopThu = taoBoGuiSes({
+    const email = taoBoGuiSes({
       client: sesClient,
       tuDiaChi: ch.ses.tuDiaChi,
       baseUrl: ch.publicBaseUrl,
       ...(ch.ses.configurationSet === undefined ? {} : { configurationSet: ch.ses.configurationSet }),
+    });
+    const sms = ch.sms;
+    const zalo = ch.zalo;
+    if (sms !== undefined) smsClient = new PinpointSMSVoiceV2Client({ region: sms.region });
+    if (zalo !== undefined) secretsClient = new SecretsManagerClient({ region: zalo.region });
+    hopThu = taoBoGuiTheoKenh({
+      email,
+      baseUrl: ch.publicBaseUrl,
+      ...(sms === undefined || smsClient === undefined
+        ? {}
+        : {
+            sms: taoBoGuiSms({
+              client: smsClient,
+              danhTinhGui: sms.danhTinhGui,
+              ...(sms.configurationSet === undefined ? {} : { configurationSet: sms.configurationSet }),
+            }),
+          }),
+      ...(zalo === undefined || secretsClient === undefined
+        ? {}
+        : {
+            zalo: taoBoGuiZalo({
+              kho: taoKhoTokenZaloSecretsManager({ client: secretsClient, secretId: zalo.secretId }),
+              mau: zalo.mau,
+            }),
+          }),
     });
   }
   // [sổ nợ 38] ~~Hai~~ [ADR-064] Bốn adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS
@@ -276,7 +310,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
           c.release();
         }
       }
-      // [khoản 196 / ADR-069 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
+      // [khoản 196 / ADR-072 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
       // trình trong ngưỡng, TRƯỚC khi mở cổng. Lệch ⇒ `LechDongHoError` ⇒ không cổng nào nghe. Đo trên
       // `pool` sau vòng trên, tức trên đúng kết nối vai `app_api` đã được kiểm.
       await kiemLechDongHo(pool, ch.lechDongHoToiDaMs, dongHo);
@@ -288,7 +322,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
         });
       });
       runner.start();
-      // [khoản 196 / ADR-069 phần 1] Canh lại theo nhịp lúc chạy: vượt ngưỡng ⇒ MỘT dòng log cảnh báo
+      // [khoản 196 / ADR-072 phần 1] Canh lại theo nhịp lúc chạy: vượt ngưỡng ⇒ MỘT dòng log cảnh báo
       // mang tên `LechDongHo` và ba con số — không dừng tiến trình, không in giá trị nào của cấu hình.
       dungCanhDongHo = canhLechDongHoDinhKy({
         nguon: pool,
@@ -364,6 +398,8 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
       await Promise.allSettled([pool.end(), auditPool.end()]);
       khoa.dong();
       sesClient?.destroy();
+      smsClient?.destroy();
+      secretsClient?.destroy();
     },
   };
 }
