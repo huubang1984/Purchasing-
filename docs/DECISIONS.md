@@ -6354,3 +6354,43 @@ worker dùng CHÍNH `assertLocalDevAllowed`, hàng rào ấy chặn mọi tiến
   Nửa công khai của khoá KMS lấy bằng `layKhoaCongKhaiBienNhanKms` khi đường ấy được dựng.
 - Hai tiến trình không còn so chéo được cấu hình khoá của nhau dưới `aws-kms` (khoản 165 chỉ đo vòng
   local-dev); lệch CMK giữa `api` và worker lộ ra ở lượt mở thầu đầu tiên — ồn ào, không im lặng.
+
+---
+
+## ADR-065 — Bộ gửi thật là Amazon SES, CHỈ kênh EMAIL; mỗi tiến trình gửi từ đúng MỘT địa chỉ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-064**, ADR-010, sổ nợ 38
+
+### Bối cảnh
+
+ADR-064 nối khoá thật nhưng để hộp thư dev và thư mục cảnh báo dev chạy dưới cờ
+`TRUSTPROCURE_ALLOW_DEV_SINKS` — token, OTP và cảnh báo break-glass nằm dạng rõ trên đĩa task. Cờ ấy
+phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ gửi thật cho `api` (năm loại tin) và cho worker
+(cảnh báo break-glass). Liên hệ nhà cung cấp khai ba kênh: `EMAIL`, `SMS`, `ZALO_ZNS`.
+
+### Quyết định
+
+1. **Amazon SES (SESv2), cùng tài khoản prod và vùng `ap-southeast-1`.** Thư chữ thuần, tiêu đề hằng —
+   không byte đầu vào nào vào dòng tiêu đề, không thân HTML.
+2. **Chỉ kênh `EMAIL`.** Tin cho kênh `SMS`/`ZALO_ZNS` làm bộ gửi NÉM: việc outbox thất bại ồn ào,
+   không rơi về hộp thư dev, không đổi kênh. SMS và Zalo là lát cắt riêng.
+3. **Đích là MỘT địa chỉ đơn** — kiểm trước khi gọi SES: một đích mang dấu phẩy hay CR/LF là một lần
+   gửi token cho người thứ hai.
+4. **Mỗi tiến trình gửi từ đúng một địa chỉ**, cưỡng chế bằng IAM (`ses:FromAddress`, stack
+   `80-ses`): `tp-api` từ `noreply@…`, `tp-unseal-worker` từ `canh-bao@…`. Worker không gửi được một
+   "link đăng nhập" mang danh nghĩa `api`.
+5. **Cảnh báo break-glass** là một thư SES tới danh sách `TRUSTPROCURE_ALERT_EMAILS` (1–50);
+   `deliver` NÉM khi SES từ chối, nên job thất bại và được thử lại (hợp đồng của cổng).
+6. **Cấu hình:** `TRUSTPROCURE_SENDER_ADAPTER` nhận `dev-mailbox` hoặc `ses`, `TRUSTPROCURE_ALERT_ADAPTER`
+   nhận `dev-file` hoặc `ses`; mỗi cặp bộ biến LOẠI TRỪ nhau, cùng quy tắc ⑷ của ADR-064.
+
+### Hệ quả, nói thẳng
+
+- **SES sandbox**: tới khi AWS duyệt production access, mọi thư tới địa chỉ chưa xác minh bị từ chối.
+  Không lớp mã nào vượt được điều ấy; README ghi cách xin.
+- DNS nằm ngoài AWS: stack xuất bản ghi DKIM/MAIL FROM/DMARC để thêm bằng tay; domain chưa xác minh
+  thì SES từ chối gửi.
+- Nhà cung cấp chỉ khai SMS/Zalo KHÔNG nhận được lời mời tới khi có adapter kênh ấy — việc outbox của
+  họ thất bại và nằm trong log với tên lý do, không im lặng.
+- Thư đi qua hạ tầng SES: nội dung (link, mã) rời hệ thống ở dạng rõ trên kênh email — giới hạn của
+  mọi thiết kế magic link/OTP qua email, không riêng SES.
