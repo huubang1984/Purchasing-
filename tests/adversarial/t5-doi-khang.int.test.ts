@@ -83,6 +83,7 @@ async function taoRfqMo(han: Date = MAI_SAU): Promise<string> {
       "submitted_by_session_id = $3 WHERE id = $1",
     [rfqId, uA, sA],
   );
+  await kyMotChuKy(orgA, rfqId);
   const c = await db.pool.connect();
   try {
     await c.query("BEGIN");
@@ -214,6 +215,34 @@ async function dayHanVeQuaKhu(rfqId: string): Promise<void> {
       "ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_gia_han_khong_hoi_sinh; ALTER TABLE rfq_packages ENABLE TRIGGER rfq_packages_kiem_chuyen_trang_thai",
     );
   }
+}
+
+/**
+ * [S1.142 / khoản 241] Sàn một chữ ký (`068`): mọi gói cần một chữ ký của người KHÁC người tạo, trên
+ * nội dung hiện tại, trước khi mở. Mỗi tổ chức một người ký riêng, không vai trò:
+ * `rfq_kiem_nguoi_duyet` chỉ đòi người ký khác người tạo và phiên thuộc về chính họ.
+ */
+const NGUOI_KY = new Map<string, { readonly u: string; readonly s: string }>();
+async function kyMotChuKy(orgId: string, rfqId: string): Promise<void> {
+  let k = NGUOI_KY.get(orgId);
+  if (k === undefined) {
+    const { rows: nd } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi ky') RETURNING id",
+      [orgId, `nguoi-ky-${orgId}@vidu.vn`],
+    );
+    const u = nd[0]?.id ?? "";
+    const { rows: ph } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgId, u, randomBytes(32)],
+    );
+    k = { u, s: ph[0]?.id ?? "" };
+    NGUOI_KY.set(orgId, k);
+  }
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [orgId, rfqId, k.u, k.s],
+  );
 }
 
 beforeAll(async () => {

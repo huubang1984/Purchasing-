@@ -44,7 +44,7 @@ jobs:
       - name: Ranh gioi kien truc
         run: pnpm depcruise
       - name: So tam va so trung
-        # [ADR-084] Nhanh viet so tam (S1.91NN, ADR-92NN, khoan 94NN, migration 95NN_), `pnpm cap-so`
+        # [ADR-086] Nhanh viet so tam (S1.91NN, ADR-92NN, khoan 94NN, migration 95NN_), `pnpm cap-so`
         # cap so that sau khi merge master. Tren commit merge cua PR va tren master: con so tam, hay
         # ADR/khoan/migration/dau muc bien ban trung so, la do.
         run: pnpm cap-so --kiem
