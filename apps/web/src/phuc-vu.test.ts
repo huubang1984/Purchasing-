@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // ấy NẰM TRONG mục tiêu cruise (`packages apps tools tests db`). Khoá này là thứ giữ chúng không
 // giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
-import { voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
+import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -301,7 +301,7 @@ el.innerHTML = "<b>" + location.hash + "</b>";
         expect(ra).toContain("innerHTML");
       },
     );
-  }, 120_000);
+  }, TRAN_TEST_GIU_KHOA_MS);
 
   it("ĐỐI CHỨNG ÂM: cùng tệp ấy dựng DOM bằng `textContent` thì eslint XANH", async () => {
     // Không có vế này, vế trên xanh y hệt với một cấu hình làm đỏ MỌI tệp trong thư mục.
@@ -315,5 +315,5 @@ el.textContent = location.hash;
         expect((await chayEslint(duong)).trim(), "một tệp sạch mà eslint vẫn kêu — luật quá rộng").toBe("");
       },
     );
-  }, 120_000);
+  }, TRAN_TEST_GIU_KHOA_MS);
 });

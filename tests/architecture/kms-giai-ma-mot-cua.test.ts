@@ -59,6 +59,10 @@ const { ciPrefix } = require("../../dependency-cruiser-ci.cjs") as {
 };
 
 const HO_PHIA_MO_KHOA = /^(g1-khong-giai-ma-|g8-khong-mo-)/;
+// [ADR-063] Cửa THỨ HAI được gọi Decrypt: adapter TOTP trên CMK riêng `tp-totp`. Nó KHÔNG thuộc
+// phía mở khoá thầu (import được từ composition của api, không phải chỉ unseal-worker), nên nó có
+// họ quy tắc riêng — và tập tệp được tha vẫn ĐỌC từ depcruise, không chép.
+const HO_CUA_TOTP = /^g18-totp-/;
 const UNSEAL_WORKER = new RegExp(ciPrefix("apps/unseal-worker/"));
 
 const LENH = String.raw`(Decrypt|ReEncrypt|GenerateDataKey|GenerateDataKeyPair)`;
@@ -69,17 +73,26 @@ const GOI_KMS = "@aws-sdk/client-kms";
 
 const mang = (x: string | string[] | undefined): string[] => (x === undefined ? [] : [x].flat());
 
-/** Dựng vị từ "tệp này thuộc phía mở khoá" từ các quy tắc depcruise đã cho. */
-export function viTuPhiaMoKhoa(quyTac: readonly QuyTac[]): (duong: string) => boolean {
+/** Đích (`to.path` trừ `to.pathNot`) của các quy tắc có tên khớp `ho`. */
+function viTuDich(quyTac: readonly QuyTac[], ho: RegExp): (duong: string) => boolean {
   const dich = quyTac
-    .filter((q) => HO_PHIA_MO_KHOA.test(q.name ?? ""))
+    .filter((q) => ho.test(q.name ?? ""))
     .map((q) => ({
       co: mang(q.to?.path).map((p) => new RegExp(p)),
       tru: mang(q.to?.pathNot).map((p) => new RegExp(p)),
     }));
-  return (duong) =>
-    UNSEAL_WORKER.test(duong) ||
-    dich.some((d) => d.co.some((r) => r.test(duong)) && !d.tru.some((r) => r.test(duong)));
+  return (duong) => dich.some((d) => d.co.some((r) => r.test(duong)) && !d.tru.some((r) => r.test(duong)));
+}
+
+/** [ADR-063] Vị từ "tệp này là cửa TOTP" — đích của họ `g18-totp-`. */
+export function viTuCuaTotp(quyTac: readonly QuyTac[]): (duong: string) => boolean {
+  return viTuDich(quyTac, HO_CUA_TOTP);
+}
+
+/** Dựng vị từ "tệp này thuộc phía mở khoá" từ các quy tắc depcruise đã cho. */
+export function viTuPhiaMoKhoa(quyTac: readonly QuyTac[]): (duong: string) => boolean {
+  const laDich = viTuDich(quyTac, HO_PHIA_MO_KHOA);
+  return (duong) => UNSEAL_WORKER.test(duong) || laDich(duong);
 }
 
 /** Trả về các lời gọi giải mã tìm thấy trong một tệp, dạng `dòng:đoạn`. */
@@ -114,12 +127,30 @@ function tepMaKhongPhaiTest(): Array<{ duong: string; noiDung: string }> {
 }
 
 const laPhiaMoKhoa = viTuPhiaMoKhoa(cauHinh.forbidden);
+const laCuaTotp = viTuCuaTotp(cauHinh.forbidden);
+const duocGoiGiaiMa = (duong: string): boolean => laPhiaMoKhoa(duong) || laCuaTotp(duong);
 
 describe("[ADR-062 ⒞] lời gọi KMS trả bí mật dạng rõ chỉ nằm ở phía mở khoá", () => {
   it("kho hiện tại: không tệp mã nào ngoài phía mở khoá gọi Decrypt/ReEncrypt/GenerateDataKey*", () => {
     const tep = tepMaKhongPhaiTest();
     expect(tep.length, "git ls-files không trả về tệp mã nào — phép đo rỗng ruột").toBeGreaterThan(50);
-    expect(viPhamGiaiMaKms(tep, laPhiaMoKhoa)).toEqual([]);
+    expect(viPhamGiaiMaKms(tep, duocGoiGiaiMa)).toEqual([]);
+  });
+
+  it("[ADR-063] cửa TOTP đọc từ họ g18-totp-: đúng một tệp, không phải phía mở khoá thầu", () => {
+    expect(laCuaTotp("apps/api/src/adapters/totp-aws-kms.ts")).toBe(true);
+    expect(laPhiaMoKhoa("apps/api/src/adapters/totp-aws-kms.ts")).toBe(false);
+    for (const d of ["apps/api/src/composition.ts", "apps/api/src/adapters/totp-local-dev.ts", "apps/api/src/routes/auth.ts"]) {
+      expect(laCuaTotp(d), d).toBe(false);
+    }
+    // Đột biến: bỏ họ g18- thì tệp ấy thành vi phạm — tức lời tha đến TỪ quy tắc, không từ tên.
+    const khongHo = viTuCuaTotp(cauHinh.forbidden.filter((q) => !HO_CUA_TOTP.test(q.name ?? "")));
+    expect(khongHo("apps/api/src/adapters/totp-aws-kms.ts")).toBe(false);
+    const tep = [{ duong: "apps/api/src/adapters/totp-aws-kms.ts", noiDung: "new DecryptCommand({})" }];
+    expect(viPhamGiaiMaKms(tep, (d) => laPhiaMoKhoa(d) || khongHo(d))).toEqual([
+      "apps/api/src/adapters/totp-aws-kms.ts:1:DecryptCommand",
+    ]);
+    expect(viPhamGiaiMaKms(tep, duocGoiGiaiMa)).toEqual([]);
   });
 
   it("vị từ phía mở khoá đọc được từ depcruise, không rỗng, và không nuốt mặt bọc", () => {
