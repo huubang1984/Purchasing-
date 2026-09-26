@@ -1354,6 +1354,16 @@ output "bien_github" {
   }
 }
 
+# [ADR-078] Biến cấp REPOSITORY (job `kiem` không có environment) — dữ liệu công khai. `TP_RECEIPT_FINGERPRINT` KHÔNG ở
+# đây: Terraform không băm được chuỗi byte DER; tính độc lập từ output stack 50 (README, "Khoá công khai biên nhận").
+output "bien_github_repo" {
+  description = "Biến cấp repository GitHub cho job kiem sau deploy (ADR-078); thêm TP_RECEIPT_FINGERPRINT tính tay."
+  value = {
+    TP_TEN_MIEN           = var.ten_mien
+    TP_RECEIPT_ACTIVE_KID = local.bien_nhan.kid_dang_dung
+  }
+}
+
 output "lenh_chay_neo" {
   description = "[ADR-071] Task neo một lần: mặc định neo tài liệu khoá biên nhận; đổi lệnh để xuất/kiểm mốc neo sổ kiểm toán."
   value = {
