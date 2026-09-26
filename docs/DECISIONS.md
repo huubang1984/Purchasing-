@@ -7225,13 +7225,17 @@ dòng ấy (`onJobFailure`, `onPollError`, bộ dọn) — không ai đọc. Và
    - `bo-don` — bộ dọn bảng hạn mức hỏng hai lượt liền, ≥ 1.
 2. **Chỉ số tồn đọng**: worker (liệt kê được mọi tổ chức — ADR-040) đo mỗi 5 phút, trong `withTenant` từng tổ chức, tuổi
    job `PENDING` quá hạn lâu nhất và số job ấy, rồi ghi MỘT dòng `[unseal-worker] outbox ton dong: <giây> giay, …`. Metric
-   filter lấy trường giây; alarm khi > 15 phút hai kỳ liền.
+   filter lấy trường giây; alarm khi > 15 phút hai kỳ liền. Một tổ chức đo hỏng ⇒ một dòng `outbox ton dong khong do duoc`
+   rồi vẫn ghi dòng tổng (số tổ chức = số đo được); MỌI tổ chức hỏng hay liệt kê hỏng ⇒ KHÔNG ghi dòng tổng — `0 giay` khi
+   không đo được gì trông như khoẻ. Kỳ đo: `TRUSTPROCURE_OUTBOX_TON_DONG_MS` (mặc định 300 000; 1 000–3 600 000).
 3. Mọi alarm coi thiếu dữ liệu là bình thường; worker chết là việc của alarm thiếu task (ADR-077).
 4. `hinh-dang-van-hanh.test.ts` đòi mỗi mẫu log có mặt trong mã sinh ra nó, và mẫu tồn đọng khớp dòng worker ghi.
 
 ### Hệ quả, nói thẳng
 
 - Alarm dựa trên CHỮ của dòng log: đổi câu log là mất cảnh báo — test kiến trúc canh đúng điều đó.
+- Khi không đo được tổ chức nào, alarm tồn đọng IM (thiếu dữ liệu = bình thường, vì trước tổ chức đầu tiên worker chạy 0
+  bản). Ca ấy có `poll-loi` (cùng hàm liệt kê hỏng thì runner cũng hỏng) và alarm thiếu task che.
 - Tồn đọng chỉ đo khi worker chạy (`so_ban_worker > 0`, tức sau tổ chức đầu tiên); trước đó outbox của api kẹt thì không ai
   báo ngoài `bo-cuoc`/`poll-loi`.
 - Ngưỡng là đoán khi chưa có tải thật; `kenh-loi` đếm cả lần thử lại nên một nhà mạng chập chờn có thể gây thư ALARM→OK.

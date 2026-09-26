@@ -26,6 +26,10 @@ export { layDauXepViec } from "./enqueue.js";
 // nó vào `kindKhongNguoiNhan`, và cổng ở `apps/unseal-worker` đối chiếu nó với hợp hai bảng
 // handler. Một bản chép ở mỗi app là một bản sẽ trôi.
 export { KIND_KHONG_NGUOI_NHAN } from "./so-kind-mo-coi.js";
+// [ADR-083] Phép đo tồn đọng của hàng đợi. Ra cửa vì người dùng nó ở NGOÀI gói: `apps/unseal-worker`
+// — tiến trình duy nhất liệt kê được MỌI tổ chức — gọi nó trong `withTenant` cho từng tổ chức rồi
+// ghi một dòng log mà cảnh báo CloudWatch đọc. Câu SQL ở lại trong gói, cạnh các câu khác của bảng.
+export { doTonDong, type TonDong } from "./ton-dong.js";
 export {
   JobRunner,
   MAX_ATTEMPTS_LIMIT,

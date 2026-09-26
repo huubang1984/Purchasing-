@@ -359,6 +359,10 @@ const DANH_SACH_TRANG_OUTBOX = [
   "MAX_RETRY_DELAY_SECONDS",
   "MIN_POLL_INTERVAL_MS",
   "OutboxError",
+  // [ADR-083] Phép đo tồn đọng hàng đợi, chỉ ĐỌC và chỉ trả hai con số. Ở cửa vì người gọi là
+  // `apps/unseal-worker` — tiến trình duy nhất liệt kê được mọi tổ chức — còn câu SQL thì ở lại
+  // trong gói, cạnh mọi câu khác chạm `outbox_jobs`.
+  "doTonDong",
   "enqueueJob",
   // [S1.92 / khoản 156] Dấu "giao dịch này đã xếp việc", đọc-thì-xoá. Ở cửa vì nó là hợp đồng GIỮA
   // gói này và bộ điều phối `apps/api`: giữ trong gói thì mỗi chỗ xếp việc lại phải tự khai một lời
