@@ -21,6 +21,35 @@ on:
     branches: [master]
   pull_request:
 
+# =============================================================================================
+# [S1.142 / khoan 115] BAI HOC KHOAN NO 67 AP CHO CI.YML: QUYEN TOI THIEU, KHONG GIU CREDENTIAL,
+# VA BI MAT KHONG NAM CUNG JOB VOI SCRIPT VONG DOI CUA PHU THUOC
+# =============================================================================================
+# Ban truoc khong khai `permissions`, nen quyen cua GITHUB_TOKEN lay theo THIET LAP KHO
+# (`default_workflow_permissions`, do S1.66 = `read`) — doi thiet lap ay sang ghi la moi job o day
+# cam token ghi ma khong mot dong nao cua tep nay doi. Nay khai o muc WORKFLOW `contents: read`:
+# moi job o day chi can doc ma, KHONG job nao can ghi, va mot job moi them vao ve sau mac dinh cung
+# chi doc. Khac `do-lap.yml`/`deploy.yml` (mac dinh RONG, quyen khai o muc job): hai tep ay co job
+# can quyen GHI (`issues: write`, `id-token: write`) nen khong the de muc workflow mang gi; o day
+# khong co quyen ghi nao de tach. Job duy nhat can them quyen (`t0c-bi-mat`) khai o muc job — va
+# khai o muc job la THAY HAN khoi muc workflow, nen no khai lai `contents: read`.
+#
+# `persist-credentials: false` o MOI `actions/checkout`: khong buoc nao sau checkout can git co xac
+# thuc (`fetch-depth: 0` lay lich su ngay trong checkout; `git diff` o job evidence la lenh cuc bo).
+#
+# `pnpm install` chay script vong doi cua CA cay phu thuoc tren cung may, cung tai khoan voi moi
+# buoc sau no trong job. Nen buoc duy nhat nhan `secrets.GITHUB_TOKEN` — gitleaks — tach ra job
+# `t0c-bi-mat` KHONG setup-node, KHONG pnpm, KHONG `run:`. Hinh dang nay GHIM boi
+# `tests/architecture/hinh-dang-ci.test.ts`.
+#
+# GIOI HAN DUOC BIET (khong dong o khoan 115): cache pnpm ma job `lap` cua `do-lap.yml` ghi duoc
+# (qua token runtime cua runner, thu `permissions` khong dieu khien) thi `actions/setup-node`
+# `cache: pnpm` o cac job duoi day khoi phuc ma khong kiem toan ven. Job `t0c-bi-mat` khong khoi
+# phuc cache nao nen khong nam trong duong ay; cac job con lai van nam.
+# =============================================================================================
+permissions:
+  contents: read
+
 jobs:
   t0:
     name: T0 — cổng tĩnh
@@ -29,6 +58,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -43,10 +73,32 @@ jobs:
         run: pnpm lint
       - name: Ranh gioi kien truc
         run: pnpm depcruise
+
+  # [S1.142 / khoan 115] Quet bi mat tach khoi t0: day la buoc DUY NHAT cua ci.yml nhan
+  # `secrets.GITHUB_TOKEN`, nen no khong duoc chay sau `pnpm install` trong cung job. Chi checkout
+  # + gitleaks-action — khong setup-node, khong pnpm, khong khoi phuc cache, khong `run:`.
+  t0c-bi-mat:
+    name: T0c — quet bi mat
+    runs-on: ubuntu-latest
+    # Khai o muc job THAY HAN muc workflow, nen khai lai `contents: read`.
+    # `pull-requests: read`: tren su kien `pull_request`, gitleaks-action v2 goi API
+    # `GET /repos/{owner}/{repo}/pulls/{n}/commits` de lay dai commit can quet — can quyen doc PR.
+    # KHONG cap `pull-requests: write`: action muon binh luan len PR khi thay ro ri, va binh luan
+    # ay tat han bang `GITLEAKS_ENABLE_COMMENTS: false` ben duoi (ket qua van o log + job summary,
+    # va job van DO).
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Quet bi mat
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
 
   # ==============================================================================================
   # [khoan no 27] AUDIT TACH RA THANH MOT JOB RIENG — VI CONG NAY PHU THUOC MOT DICH VU NGOAI
@@ -68,6 +120,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -136,6 +190,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -151,6 +207,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -167,6 +225,8 @@ jobs:
     needs: [t1-t2, t3]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 9
