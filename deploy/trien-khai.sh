@@ -3,7 +3,7 @@
 # deploy/trien-khai.sh — CÁC BƯỚC AWS CỦA PIPELINE DEPLOY (`.github/workflows/deploy.yml`, ADR-067)
 #
 #   trien-khai.sh day      <tep-anh.tar.gz> <repo-ecr> <the>   ⇒ in `<registry>/<repo>@sha256:…`
-#   trien-khai.sh dang-ky  <ho-task-def> <anh> <role-task>     ⇒ in ARN bản task definition mới
+#   trien-khai.sh dang-ky  <ho-task-def> <anh> <role-task|->   ⇒ in ARN bản task definition mới (`-` = KHÔNG task role)
 #   trien-khai.sh migrate  <arn-task-def>                      ⇒ chạy một lần, thoát 0 chỉ khi exit code 0
 #   trien-khai.sh cap-nhat <service> <arn-task-def>            ⇒ cập nhật service, chờ ổn định
 #
@@ -52,8 +52,11 @@ dang_ky() {
   [[ $anh == "$REGISTRY/"*@sha256:* ]] || loi "image phải ghim digest trong registry của tài khoản prod"
   tam=$(mktemp -d)
   aws ecs describe-task-definition --task-definition "$ho" --query taskDefinition --output json >"$tam/cu.json"
-  jq -e --arg ho "$ho" --arg role "arn:aws:iam::${TAI_KHOAN}:role/$role" '
-      .family == $ho and .taskRoleArn == $role
+  local role_arn=""
+  [[ $role == - ]] || role_arn="arn:aws:iam::${TAI_KHOAN}:role/$role"
+  # `-`: họ ấy KHÔNG được mang task role (web, ADR-068) — một bản bị gắn role thì dừng, không nhân bản.
+  jq -e --arg ho "$ho" --arg role "$role_arn" '
+      .family == $ho and (.taskRoleArn // "") == $role
       and (.containerDefinitions | length) == 1 and .containerDefinitions[0].name == $ho' \
     "$tam/cu.json" >/dev/null || loi "bản mới nhất của họ $ho không đúng hình dạng (họ, task role $role, một container)"
   jq --arg anh "$anh" '

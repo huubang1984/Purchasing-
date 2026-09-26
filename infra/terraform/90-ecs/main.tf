@@ -5,9 +5,11 @@
 #            không có đường ra internet tuỳ ý.
 #   CSDL     RDS PostgreSQL 16, single-AZ, db.t4g.small, gp3 20 GB, mã hoá, force_ssl, backup 7 ngày,
 #            deletion protection. Mật khẩu master do RDS quản lý trong Secrets Manager.
-#   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate` — thẻ bất biến, quét lúc đẩy.
+#   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-web` — thẻ bất biến, quét lúc đẩy.
 #   Chạy     Cluster `tp-prod`; service `tp-api` sau ALB HTTPS; service `tp-unseal-worker` (họ task
 #            definition `tp-unseal-worker` — quy ước cảnh báo ⑵ của stack 60); task một lần `tp-migrate`.
+#   Web      [ADR-068] MỘT tên miền: ALB chuyển `/api/*` THẲNG tới `tp-api` (bỏ tiền tố `/api`), mọi đường khác tới
+#            service `tp-web` — `apps/web` ở chế độ chỉ tĩnh, không thấy cookie phiên, không CSDL, không task role.
 #
 # Bí mật KHÔNG tạo ở đây (giá trị sẽ vào state): tạo bằng CLI TRƯỚC khi apply — README, mục "Stack 90".
 # Pipeline deploy (`tp-deploy`, `tp-deploy-worker`) đăng ký bản task definition mới; stack này bỏ qua
@@ -42,25 +44,18 @@ provider "aws" {
 # ---------------------------------------------------------------------------------------------
 # Biến
 # ---------------------------------------------------------------------------------------------
-variable "ten_mien_api" {
-  description = "Tên miền của api trên ALB (vd api.<domain>). DNS ngoài AWS: CNAME tới ALB."
+variable "ten_mien" {
+  description = "[ADR-068] Tên miền công khai DUY NHẤT (web và /api/*) trên ALB, vd app.<domain>. DNS ngoài AWS: CNAME tới ALB."
   type        = string
-}
-
-variable "url_cong_khai" {
-  description = "TRUSTPROCURE_PUBLIC_BASE_URL — gốc của /login#… và /i#… (https://, không đường dẫn)."
-  type        = string
-}
-
-variable "origin_duoc_phep" {
-  description = "TRUSTPROCURE_ALLOWED_ORIGINS — origin trình duyệt được gửi yêu cầu không-GET kèm cookie."
-  type        = list(string)
-  default     = []
+  validation {
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", var.ten_mien))
+    error_message = "ten_mien phải là một domain chữ thường hợp lệ."
+  }
 }
 
 variable "anh" {
-  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate } = \"<ecr>/tp-api@sha256:…\"."
-  type        = object({ api = string, worker = string, migrate = string })
+  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web } = \"<ecr>/tp-api@sha256:…\"."
+  type        = object({ api = string, worker = string, migrate = string, web = string })
   validation {
     condition     = alltrue([for u in values(var.anh) : can(regex("@sha256:[0-9a-f]{64}$", u))])
     error_message = "Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."
@@ -68,6 +63,11 @@ variable "anh" {
 }
 
 variable "so_ban_api" {
+  type    = number
+  default = 1
+}
+
+variable "so_ban_web" {
   type    = number
   default = 1
 }
@@ -118,6 +118,8 @@ locals {
   cidr     = "10.20.0.0/16"
   az       = slice(data.aws_availability_zones.co.names, 0, 2)
   secret   = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
+  # [ADR-068] Một origin cho cả trang và /api/*: không CORS, cookie phiên đi cùng origin.
+  goc = "https://${var.ten_mien}"
 }
 
 data "aws_availability_zones" "co" { state = "available" }
@@ -212,6 +214,12 @@ resource "aws_security_group" "worker" {
   vpc_id      = aws_vpc.tp.id
 }
 
+resource "aws_security_group" "web" {
+  name        = "tp-web"
+  description = "Task web (chi tinh)"
+  vpc_id      = aws_vpc.tp.id
+}
+
 resource "aws_security_group" "migrate" {
   name        = "tp-migrate"
   description = "Task migrate"
@@ -231,11 +239,14 @@ resource "aws_security_group" "endpoint" {
 }
 
 locals {
+  # Nhóm được nói chuyện với CSDL.
   nhom_task = {
     api     = aws_security_group.api.id
     worker  = aws_security_group.worker.id
     migrate = aws_security_group.migrate.id
   }
+  # Nhóm cần đường ra AWS (kéo image ECR, đẩy log) — web có mặt ở đây, KHÔNG có mặt ở CSDL.
+  nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id })
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb" {
@@ -253,6 +264,22 @@ resource "aws_vpc_security_group_egress_rule" "alb_api" {
   ip_protocol                  = "tcp"
   from_port                    = 8080
   to_port                      = 8080
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_web" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.web.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8090
+  to_port                      = 8090
+}
+
+resource "aws_vpc_security_group_ingress_rule" "web_tu_alb" {
+  security_group_id            = aws_security_group.web.id
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8090
+  to_port                      = 8090
 }
 
 resource "aws_vpc_security_group_ingress_rule" "api_tu_alb" {
@@ -273,7 +300,7 @@ resource "aws_vpc_security_group_egress_rule" "task_csdl" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_endpoint" {
-  for_each                     = local.nhom_task
+  for_each                     = local.nhom_ra_aws
   security_group_id            = each.value
   referenced_security_group_id = aws_security_group.endpoint.id
   ip_protocol                  = "tcp"
@@ -282,7 +309,7 @@ resource "aws_vpc_security_group_egress_rule" "task_endpoint" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_s3" {
-  for_each          = local.nhom_task
+  for_each          = local.nhom_ra_aws
   security_group_id = each.value
   prefix_list_id    = aws_vpc_endpoint.s3.prefix_list_id
   ip_protocol       = "tcp"
@@ -300,7 +327,7 @@ resource "aws_vpc_security_group_ingress_rule" "csdl_tu_task" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "endpoint_tu_task" {
-  for_each                     = local.nhom_task
+  for_each                     = local.nhom_ra_aws
   security_group_id            = aws_security_group.endpoint.id
   referenced_security_group_id = each.value
   ip_protocol                  = "tcp"
@@ -387,7 +414,7 @@ resource "aws_db_instance" "tp" {
 # ECR
 # ---------------------------------------------------------------------------------------------
 resource "aws_ecr_repository" "tp" {
-  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate"])
+  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -441,7 +468,7 @@ resource "aws_ecs_cluster" "tp" {
 }
 
 resource "aws_cloudwatch_log_group" "tp" {
-  for_each          = toset(["api", "unseal-worker", "migrate"])
+  for_each          = toset(["api", "unseal-worker", "migrate", "web"])
   name              = "/tp/${each.key}"
   retention_in_days = 90
 }
@@ -452,8 +479,8 @@ locals {
       { name = "NODE_ENV", value = "production" },
       { name = "TRUSTPROCURE_LISTEN_HOST", value = "0.0.0.0" },
       { name = "TRUSTPROCURE_LISTEN_PORT", value = "8080" },
-      { name = "TRUSTPROCURE_PUBLIC_BASE_URL", value = var.url_cong_khai },
-      { name = "TRUSTPROCURE_ALLOWED_ORIGINS", value = join(",", var.origin_duoc_phep) },
+      { name = "TRUSTPROCURE_PUBLIC_BASE_URL", value = local.goc },
+      { name = "TRUSTPROCURE_ALLOWED_ORIGINS", value = local.goc },
       # ALB nằm trong hai subnet công khai: chỉ CIDR ấy được nói "khách là ai" (sổ nợ 41).
       { name = "TRUSTPROCURE_TRUSTED_PROXIES", value = join(",", aws_subnet.cong_khai[*].cidr_block) },
       { name = "TRUSTPROCURE_KEY_ADAPTER", value = "aws-kms" },
@@ -486,6 +513,13 @@ locals {
       { name = "TRUSTPROCURE_MIGRATE_DB_PORT", value = tostring(aws_db_instance.tp.port) },
       { name = "TRUSTPROCURE_MIGRATE_DB_NAME", value = aws_db_instance.tp.db_name },
     ]
+    # Image đã đặt ba biến này; khai lại ở đây để task definition tự nói nó chạy chế độ nào (ADR-068).
+    web = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_WEB_STATIC_ONLY", value = "1" },
+      { name = "TRUSTPROCURE_WEB_HOST", value = "0.0.0.0" },
+      { name = "TRUSTPROCURE_WEB_PORT", value = "8090" },
+    ]
   }
   bi_mat = {
     api = [
@@ -501,11 +535,14 @@ locals {
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
     ]
+    web = []
   }
   task = {
     api     = { ho = "tp-api", role = local.role_arn.api, cpu = 512, mem = 1024, log = "api", cong = [8080] }
     worker  = { ho = "tp-unseal-worker", role = local.role_arn.unseal_worker, cpu = 256, mem = 512, log = "unseal-worker", cong = [] }
     migrate = { ho = "tp-migrate", role = local.role_arn.migrate, cpu = 256, mem = 512, log = "migrate", cong = [] }
+    # Web không gọi AWS nào: KHÔNG task role (chỉ execution role để kéo image, đẩy log).
+    web = { ho = "tp-web", role = null, cpu = 256, mem = 512, log = "web", cong = [8090] }
   }
 }
 
@@ -545,7 +582,7 @@ resource "aws_ecs_task_definition" "tp" {
 # ALB + HTTPS
 # ---------------------------------------------------------------------------------------------
 resource "aws_acm_certificate" "api" {
-  domain_name       = var.ten_mien_api
+  domain_name       = var.ten_mien
   validation_method = "DNS"
   lifecycle { create_before_destroy = true }
 }
@@ -581,6 +618,23 @@ resource "aws_lb_target_group" "api" {
   deregistration_delay = 30
 }
 
+resource "aws_lb_target_group" "web" {
+  name        = "tp-web"
+  port        = 8090
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.tp.id
+  health_check {
+    path                = "/nop-thau"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 15
+  }
+  deregistration_delay = 30
+}
+
+# [ADR-068] Mặc định: trang tĩnh. `/api/*` đi THẲNG tới api — tiến trình web không bao giờ thấy yêu cầu ấy.
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.api.arn
   port              = 443
@@ -588,6 +642,29 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
   default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+# Trang gọi `fetch("/api<đường>")` còn api phục vụ `<đường>` (bộ chuyển tiếp demo của ADR-044 cũng bỏ tiền tố):
+# ALB viết lại đường trước khi chuyển. `/api` trơn không khớp mẫu này ⇒ rơi về web ⇒ 404.
+resource "aws_lb_listener_rule" "api" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+  condition {
+    path_pattern { values = ["/api/*"] }
+  }
+  transform {
+    type = "url-rewrite"
+    url_rewrite_config {
+      rewrite {
+        regex   = "^/api/(.*)$"
+        replace = "/$1"
+      }
+    }
+  }
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
   }
@@ -630,8 +707,32 @@ resource "aws_ecs_service" "api" {
     enable   = true
     rollback = true
   }
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener_rule.api]
   # Pipeline `tp-deploy` đăng ký bản mới và cập nhật service — Terraform không giật lùi nó.
+  lifecycle { ignore_changes = [task_definition] }
+}
+
+resource "aws_ecs_service" "web" {
+  name            = "tp-web"
+  cluster         = aws_ecs_cluster.tp.id
+  task_definition = aws_ecs_task_definition.tp["web"].arn
+  desired_count   = var.so_ban_web
+  launch_type     = "FARGATE"
+  network_configuration {
+    subnets          = aws_subnet.ung_dung[*].id
+    security_groups  = [aws_security_group.web.id]
+    assign_public_ip = false
+  }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.web.arn
+    container_name   = "tp-web"
+    container_port   = 8090
+  }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  depends_on = [aws_lb_listener.https]
   lifecycle { ignore_changes = [task_definition] }
 }
 
@@ -657,12 +758,12 @@ resource "aws_ecs_service" "worker" {
 # Đầu ra
 # ---------------------------------------------------------------------------------------------
 output "ban_ghi_dns" {
-  description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền api tới ALB (bước 2)."
+  description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền công khai tới ALB (bước 2)."
   value = {
     xac_minh_acm = [for o in aws_acm_certificate.api.domain_validation_options : {
       loai = o.resource_record_type, ten = o.resource_record_name, gia_tri = o.resource_record_value
     }]
-    api = { loai = "CNAME", ten = var.ten_mien_api, gia_tri = aws_lb.api.dns_name }
+    cong_khai = { loai = "CNAME", ten = var.ten_mien, gia_tri = aws_lb.api.dns_name }
   }
 }
 
