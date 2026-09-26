@@ -61,10 +61,14 @@ const DANH_SACH_TRANG_INDEX = [
   "MasterKeyRing",
   "assertLocalDevAllowed",
   "createLocalDevWrapper",
+  // [ADR-062] Hàm BỌC thuần bằng khoá công khai (không bí mật), và bộ sinh cặp khoá tổ chức trả
+  // khoá riêng ĐÃ BỌC — không symbol nào ở đây cho thêm một bậc tự do để MỞ.
+  "createLocalDevOrgKeyProvisioner",
+  "wrapForOrg",
 ];
 
 /** Danh sách trắng: export GIÁ TRỊ của cửa hạn chế, chỉ apps/unseal-worker được import. */
-const DANH_SACH_TRANG_UNWRAP = ["createLocalDevUnwrapper"];
+const DANH_SACH_TRANG_UNWRAP = ["createLocalDevOrgUnwrapper", "createLocalDevUnwrapper"];
 
 /** Tập subpath export hợp lệ của package — mỗi mục là MỘT cửa công khai. */
 const TAP_CUA_HOP_LE = [".", "./unwrap"];

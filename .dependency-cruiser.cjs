@@ -52,6 +52,9 @@ const UNWRAP_TS = ciFile("packages/crypto-keys/src/unwrap.ts");
 const LOCAL_DEV_WRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-wrapper.ts");
 const LOCAL_DEV_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-unwrapper.ts");
 const LOCAL_DEV_SHARED_TS = ciFile("packages/crypto-keys/src/local-dev-shared.ts");
+// [ADR-062] Hai cua mo khoa MOI: mo khoa rieng TO CHUC (local-dev) va mo phong bi v2 dung chung.
+const LOCAL_DEV_ORG_UNWRAPPER_TS = ciFile("packages/crypto-keys/src/local-dev-org-unwrapper.ts");
+const ORG_OPEN_TS = ciFile("packages/crypto-keys/src/org-open.ts");
 const ROUNDTRIP_TEST_TS = ciFile("packages/crypto-keys/src/roundtrip.test.ts");
 const BENCH_INDEX_TS = ciFile("tools/bench-keyprovider/src/index.ts");
 // [S1.17] Ho "g11-": kha nang KY moc neo ngoai. Xem khoi chu thich cua ba quy tac g11- ben duoi.
@@ -552,8 +555,32 @@ module.exports = {
         "day - neu no import file nay, do la mot cau noi bac cau khoi mat boc an toan sang kha " +
         "nang giai ma, phai bi chan (fix round 2, phat hien N2).",
       severity: "error",
-      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS] },
+      // [ADR-062] local-dev-org-unwrapper.ts mo khoa rieng to chuc bang chinh createLocalDevUnwrapper
+      // - va no la DICH HAN CHE cua quy tac rieng ngay duoi, nen mien tru nay khong mo cau noi.
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS, LOCAL_DEV_ORG_UNWRAPPER_TS] },
       to: { path: LOCAL_DEV_UNWRAPPER_TS },
+    },
+    {
+      name: "g1-khong-giai-ma-ngoai-unseal-worker-local-dev-org-unwrapper-ts",
+      comment:
+        "[ADR-062] Chi apps/unseal-worker va unwrap.ts (mat tien cong khai cua chinh no) duoc import " +
+        "local-dev-org-unwrapper.ts: no mo khoa rieng TO CHUC, tuc mo duoc moi khoa RFQ cua to chuc " +
+        "do. Cung khuon voi local-dev-unwrapper.ts.",
+      severity: "error",
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS] },
+      to: { path: LOCAL_DEV_ORG_UNWRAPPER_TS },
+    },
+    {
+      name: "g1-khong-giai-ma-ngoai-unseal-worker-org-open-ts",
+      comment:
+        "[ADR-062] org-open.ts mo phong bi v2 khi da co khoa rieng to chuc - dung chung cho moi " +
+        "adapter. Chi apps/unseal-worker, unwrap.ts va cac unwrapper to chuc cua chinh goi (hom nay: " +
+        "local-dev-org-unwrapper.ts) duoc import no. org-key.ts (mat BOC) KHONG duoc liet ke: no " +
+        "la phia cong khai, va chieu import di tu org-open.ts SANG org-key.ts, khong nguoc lai.",
+      severity: "error",
+      // unwrap.ts re-export KIEU OrgKeyHandle/WrappedOrgKey; no la dich han che cua g1-...-unwrap-ts.
+      from: { pathNot: [APPS_UNSEAL_WORKER_PREFIX, UNWRAP_TS, LOCAL_DEV_ORG_UNWRAPPER_TS] },
+      to: { path: ORG_OPEN_TS },
     },
     {
       name: "g1-khong-giai-ma-ngoai-unseal-worker-local-dev-shared-ts",

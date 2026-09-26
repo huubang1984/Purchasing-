@@ -1,8 +1,16 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { createLocalDevWrapper, KeyError, MasterKeyRing, type WrappedKey } from "./index.js";
-import { createLocalDevUnwrapper } from "./unwrap.js";
+import {
+  createLocalDevOrgKeyProvisioner,
+  createLocalDevWrapper,
+  KeyError,
+  MasterKeyRing,
+  wrapForOrg,
+  type ProvisionedOrgKey,
+  type WrappedKey,
+} from "./index.js";
+import { createLocalDevOrgUnwrapper, createLocalDevUnwrapper, type OrgKeyHandle } from "./unwrap.js";
 
 function ring(): MasterKeyRing {
   return new MasterKeyRing("v2", {
@@ -201,6 +209,173 @@ describe("vòng đời khóa", () => {
   });
 });
 
+// =============================================================================================
+// [ADR-062] CẶP KHOÁ CỦA TỔ CHỨC: bọc bằng khoá CÔNG KHAI, mở bằng khoá riêng mở MỘT lần mỗi lượt
+// =============================================================================================
+describe("cặp khoá tổ chức (ADR-062)", () => {
+  async function capKhoa(r: MasterKeyRing, orgId = randomUUID()): Promise<ProvisionedOrgKey> {
+    return createLocalDevOrgKeyProvisioner(r).generate(orgId);
+  }
+
+  async function moKhoa(r: MasterKeyRing, k: ProvisionedOrgKey): Promise<OrgKeyHandle> {
+    return createLocalDevOrgUnwrapper(r).openOrgKey(k);
+  }
+
+  function lat(b: Uint8Array, viTri: number): Uint8Array {
+    const c = new Uint8Array(b);
+    c[viTri] = (c[viTri] ?? 0) ^ 0x01;
+    return c;
+  }
+
+  it("bọc bằng khoá công khai rồi mở bằng handle trả lại đúng nguyên bản", async () => {
+    const r = ring();
+    const k = await capKhoa(r);
+    const banRo = randomBytes(138);
+    const daBoc = wrapForOrg(k, banRo);
+    const h = await moKhoa(r, k);
+    try {
+      expect(Buffer.from(h.unwrap(daBoc)).equals(banRo)).toBe(true);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("thuộc tính: mọi bản rõ 0–2048 byte đều khứ hồi nguyên vẹn", async () => {
+    const r = ring();
+    const k = await capKhoa(r);
+    const h = await moKhoa(r, k);
+    try {
+      fc.assert(
+        fc.property(fc.uint8Array({ minLength: 0, maxLength: 2048 }), (banRo) => {
+          expect(Buffer.from(h.unwrap(wrapForOrg(k, banRo))).equals(Buffer.from(banRo))).toBe(true);
+        }),
+        { numRuns: 50 },
+      );
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("bộ sinh trả SPKI P-256 và khoá riêng ĐÃ BỌC — không có PKCS#8 dạng rõ nào lọt ra", async () => {
+    const r = ring();
+    const k = await capKhoa(r);
+    expect(k.keyVersion).toBe("v2");
+    const congKhai = createPublicKey({ key: Buffer.from(k.publicKey), format: "der", type: "spki" });
+    expect(congKhai.asymmetricKeyDetails?.namedCurve).toBe("prime256v1");
+    // PKCS#8 của một khoá P-256 luôn mở đầu bằng cùng một tiền tố ASN.1; bản bọc v1 thì không.
+    const tienToPkcs8 = Buffer.from("308187020100301306072a8648ce3d020106082a8648ce3d030107", "hex");
+    expect(Buffer.from(k.wrappedPrivateKey).includes(tienToPkcs8)).toBe(false);
+    expect(k.wrappedPrivateKey[0]).toBe(1);
+  });
+
+  it("phong bì v2 đúng định dạng: 0x02 ‖ điểm 65 byte (0x04…) ‖ iv 12 ‖ tag 16 ‖ thân", async () => {
+    const k = await capKhoa(ring());
+    const daBoc = wrapForOrg(k, new Uint8Array(40));
+    expect(daBoc.keyVersion).toBe(k.keyVersion);
+    expect(daBoc.ciphertext[0]).toBe(2);
+    expect(daBoc.ciphertext[1]).toBe(4);
+    expect(daBoc.ciphertext.length).toBe(1 + 65 + 12 + 16 + 40);
+  });
+
+  it("hai lần bọc cùng bản rõ cho ra hai phong bì khác nhau (khoá tạm thời mới mỗi lần)", async () => {
+    const k = await capKhoa(ring());
+    const banRo = randomBytes(64);
+    const a = Buffer.from(wrapForOrg(k, banRo).ciphertext);
+    const b = Buffer.from(wrapForOrg(k, banRo).ciphertext);
+    expect(a.equals(b)).toBe(false);
+    expect(a.subarray(1, 66).equals(b.subarray(1, 66))).toBe(false);
+  });
+
+  it.each([
+    ["phiên bản định dạng", 0, /phiên bản định dạng/],
+    ["điểm tạm thời", 40, /không hợp lệ|toàn vẹn/],
+    ["iv", 70, /toàn vẹn/],
+    ["tag", 85, /toàn vẹn/],
+    ["thân", 100, /toàn vẹn/],
+  ])("lật một bit ở %s làm unwrap ném KeyError", async (_ten, viTri, thongDiep) => {
+    const r = ring();
+    const k = await capKhoa(r);
+    const daBoc = wrapForOrg(k, randomBytes(32));
+    const h = await moKhoa(r, k);
+    try {
+      expect(() => h.unwrap({ ...daBoc, ciphertext: lat(daBoc.ciphertext, viTri) })).toThrow(KeyError);
+      expect(() => h.unwrap({ ...daBoc, ciphertext: lat(daBoc.ciphertext, viTri) })).toThrow(thongDiep);
+      // Đối chứng: bản không lật vẫn mở được bằng CÙNG handle.
+      expect(h.unwrap(daBoc).length).toBe(32);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("[INV-F3] khoá của tổ chức khác không mở được khoá RFQ, kể cả khi chép nguyên phong bì", async () => {
+    const r = ring();
+    const a = await capKhoa(r);
+    const b = await capKhoa(r);
+    const daBoc = wrapForOrg(a, randomBytes(32));
+    const hB = await moKhoa(r, b);
+    try {
+      expect(() => hB.unwrap(daBoc)).toThrow(KeyError);
+    } finally {
+      hB.dispose();
+    }
+    // AAD ràng buộc orgId: khoá công khai của A dán dưới tên B không cho ra phong bì mà A mở được.
+    const hA = await moKhoa(r, a);
+    try {
+      const saiTen = wrapForOrg({ ...a, orgId: b.orgId }, randomBytes(32));
+      expect(() => hA.unwrap(saiTen)).toThrow(KeyError);
+    } finally {
+      hA.dispose();
+    }
+  });
+
+  it("khai sai phiên bản cặp khoá thì bị từ chối (AAD ràng buộc keyVersion)", async () => {
+    const r = ring();
+    const k = await capKhoa(r);
+    const daBoc = wrapForOrg(k, randomBytes(16));
+    const h = await moKhoa(r, k);
+    try {
+      expect(() => h.unwrap({ ...daBoc, keyVersion: "v1" })).toThrow(/phiên bản cặp khoá/);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("sau dispose(), handle không mở được gì nữa", async () => {
+    const r = ring();
+    const k = await capKhoa(r);
+    const daBoc = wrapForOrg(k, randomBytes(16));
+    const h = await moKhoa(r, k);
+    expect(h.unwrap(daBoc).length).toBe(16);
+    h.dispose();
+    expect(() => h.unwrap(daBoc)).toThrow(/dispose/);
+  });
+
+  it("[INV-G3] xoay master key: cặp khoá sinh dưới phiên bản cũ vẫn mở được", async () => {
+    const keys = { v1: randomBytes(32), v2: randomBytes(32) };
+    const cu = await capKhoa(new MasterKeyRing("v1", keys));
+    const daBoc = wrapForOrg(cu, randomBytes(24));
+    const h = await moKhoa(new MasterKeyRing("v2", keys), cu);
+    try {
+      expect(h.unwrap(daBoc).length).toBe(24);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it("wrapForOrg từ chối khoá công khai không phải P-256 và orgId không phải UUID", async () => {
+    const k = await capKhoa(ring());
+    const x25519 = generateKeyPairSync("x25519").publicKey.export({ format: "der", type: "spki" });
+    expect(() => wrapForOrg({ ...k, publicKey: x25519 }, randomBytes(8))).toThrow(/P-256/);
+    expect(() => wrapForOrg({ ...k, publicKey: randomBytes(91) }, randomBytes(8))).toThrow(KeyError);
+    expect(() => wrapForOrg({ ...k, orgId: "khong-phai-uuid" }, randomBytes(8))).toThrow(/UUID/);
+  });
+
+  it("mở khoá riêng tổ chức bằng vòng khoá khác thì thất bại, không cho ra khoá rác", async () => {
+    const k = await capKhoa(ring());
+    await expect(moKhoa(ring(), k)).rejects.toThrow(KeyError);
+  });
+});
+
 describe("rào chắn cho adapter local-dev (bất biến G1)", () => {
   // ==========================================================================================
   // [REVIEW AN NINH S1.4 — MED-1] KHỐI NÀY ĐƯỢC VIẾT LẠI, VÀ MỘT TEST CŨ ĐÃ ĐỔI DẤU
@@ -245,6 +420,9 @@ describe("rào chắn cho adapter local-dev (bất biến G1)", () => {
     try {
       expect(() => createLocalDevWrapper(ring())).toThrow(/không tiến trình nào khai báo/);
       expect(() => createLocalDevUnwrapper(ring())).toThrow(/không tiến trình nào khai báo/);
+      // [ADR-062] Hai factory của cặp khoá tổ chức dùng CHUNG hàng rào — không có cửa thứ hai.
+      expect(() => createLocalDevOrgKeyProvisioner(ring())).toThrow(/không tiến trình nào khai báo/);
+      expect(() => createLocalDevOrgUnwrapper(ring())).toThrow(/không tiến trình nào khai báo/);
     } finally {
       datLai();
     }
