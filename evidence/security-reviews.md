@@ -12266,3 +12266,16 @@ chỗ. Khối đo ghi **sự thật hôm nay**, không ghi hành vi mong muốn:
 - **Hai quyết định S3.0 là giấy.** Chưa mã nào vào CSDL, `CONTROL_DENIED` chưa có dòng mã, và việc nới dải nhãn
   `[A-HJ]`→`[A-HJK]` của S3.0 còn nguyên.
 - Các phép đo chạy trên bộ dựng Postgres 16 cục bộ thay testcontainers, vì container không có docker; CI chạy lại khi đẩy.
+
+## 6. Số đo
+
+- Cả kho trên bộ dựng Postgres 16 cục bộ, cây đã hợp `master` `f164da4` (#152): **160 tệp / 2587 ca — 2578 đạt, 1 bỏ qua,
+  8 đỏ**. Cả 8 ca đỏ là bộ tự kiểm `testcontainers` của `packages/test-support` — container không có docker, như mọi lượt
+  đo cục bộ trước.
+- Ma trận sinh lại từ báo cáo ấy: 63/63, *Cổng evidence: XANH*. So với `master` đổi đúng hai ô — D2 **37 → 41** (bốn ca
+  của khối khoản 241, kèm vế dưới ngưỡng mới của mệnh đề D2) và J3 **8 → 9** (khối đo khoản 242 ⑴). Lượt sinh đầu cho J3
+  **10**: ca mới mang nhãn ở cả tên khối lẫn tên ca, và bộ đếm tính mỗi lần xuất hiện. Nhãn ở tên ca được gỡ, tệp ấy chạy
+  lại, và kết quả của nó thay đúng phần của nó trong báo cáo.
+- `pnpm t0` sạch; `pnpm test` **1325 đạt, 1 bỏ qua**; sổ nợ tự đối chiếu 45/45.
+- Sổ nợ **242** khoản, mở **93 → 91**; rổ A **1** (241 và 242 vào rồi đóng), rổ B **69 → 67**, rổ C **23**:
+  1 + 67 + 23 = 91. **68** migration; ADR **85** (83 của `master` + 2).

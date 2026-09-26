@@ -2385,7 +2385,7 @@ describe("[INV-J3] [S1.142 / khoản 242 ⑴] đổi CHU_KY_CAN thành 2 thì tr
   // Khai báo hằng trong thân `award_kiem_mot_award_song`, nguyên văn. Đột biến dưới đổi đúng chuỗi này.
   const HANG_MOT = "CHU_KY_CAN constant integer := 1;";
 
-  it("[INV-J3] hằng là 2: người duyệt đầu bị từ chối và chữ ký rơi, người thứ hai gặp đúng lỗi ấy; trả hằng về 1 thì duyệt được", async () => {
+  it("hằng là 2: người duyệt đầu bị từ chối và chữ ký rơi, người thứ hai gặp đúng lỗi ấy; trả hằng về 1 thì duyệt được", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     const dx = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
