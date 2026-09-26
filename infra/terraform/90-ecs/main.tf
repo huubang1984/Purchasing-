@@ -812,12 +812,29 @@ resource "aws_lb_target_group" "web" {
 }
 
 # [ADR-068] Mặc định: trang tĩnh. `/api/*` đi THẲNG tới api — tiến trình web không bao giờ thấy yêu cầu ấy.
+#
+# [ADR-074] Header bảo mật do ALB đặt trên MỌI phản hồi của listener này — web, api, public-keys, và phản hồi
+# chính ALB sinh (502/503 khi target chết) mà không app nào chạm được:
+#   Strict-Transport-Security  1 năm + includeSubDomains, KHÔNG preload (ten_mien là một subdomain kiểu
+#                              app.<domain>; preload chỉ áp cho tên miền gốc và gần như không rút lại được);
+#   X-Content-Type-Options     nosniff — trùng giá trị api/web tự đặt, phủ thêm phản hồi của ALB;
+#   X-Frame-Options            DENY — cùng ý `frame-ancestors 'none'` trong CSP của web, phủ cả api và
+#                              public-keys (trình duyệt cũ không đọc CSP);
+#   Server                     tắt — không quảng cáo `awselb/2.0`.
+# CSP KHÔNG đặt ở đây: ALB ghi ĐÈ header cùng tên của target, và CSP của web là thứ chi tiết (script-src 'self'…)
+# mà một CSP chung sẽ phải chép lại và giữ đồng bộ. `hinh-dang-alb.test.ts` ghim bốn dòng này.
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.api.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
+
+  routing_http_response_strict_transport_security_header_value = "max-age=31536000; includeSubDomains"
+  routing_http_response_x_content_type_options_header_value    = "nosniff"
+  routing_http_response_x_frame_options_header_value           = "DENY"
+  routing_http_response_server_enabled                         = false
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.web.arn
