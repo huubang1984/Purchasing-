@@ -20,7 +20,7 @@
 //   BUYER   cookie `__Host-tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
 //           `requirePermission` → handler. Tất cả trong MỘT `withTenant` — [S1.70 / khoản 124, lượt soi 64a-4] trừ phần bù của một việc
 //           sau commit có bù, chạy trong một `withTenant` MỚI sau commit.
-//           [S1.9101 / khoản 142 / ADR-9201] Phiên `AGENT_READONLY` trên route ĐỌC: trần theo phiên (429) trước handler, và
+//           [S1.154 / khoản 142 / ADR-091] Phiên `AGENT_READONLY` trên route ĐỌC: trần theo phiên (429) trước handler, và
 //           MỘT hàng `AGENT_READ` sau handler — cả hai trên CHÍNH `client` của giao dịch ấy; ghi sổ hỏng ⇒ 500, không dữ liệu.
 //
 // ---------------------------------------------------------------------------------------------
@@ -119,7 +119,7 @@ export class AgentScopeDeniedError extends Error {
 }
 
 /**
- * [S1.9101 / khoản 142 / ADR-9201] Lần ghi hàng `AGENT_READ` hỏng — bọc lỗi của `appendAuditEvent` để bộ điều phối trả 500.
+ * [S1.154 / khoản 142 / ADR-091] Lần ghi hàng `AGENT_READ` hỏng — bọc lỗi của `appendAuditEvent` để bộ điều phối trả 500.
  *
  * Tên KHÔNG kết thúc bằng `DeniedError`, có chủ đích: đây không phải một lần TỪ CHỐI (cổng [INV-D5] của
  * `ghi-so-tu-choi-mot-duong.test.ts` nhận diện lớp từ chối bằng đuôi tên ấy), mà là một lần CHO QUA không ghi được sổ — và
@@ -134,7 +134,7 @@ export class AgentReadAuditFailedError extends Error {
 }
 
 /**
- * [S1.9101 / khoản 142 · 144 / ADR-9201] Trần số lần ĐỌC của MỘT phiên `AGENT_READONLY` trong một cửa sổ `OTP_RATE_WINDOW_SECONDS`
+ * [S1.154 / khoản 142 · 144 / ADR-091] Trần số lần ĐỌC của MỘT phiên `AGENT_READONLY` trong một cửa sổ `OTP_RATE_WINDOW_SECONDS`
  * (900 s) của bộ đếm `caller_rate_limits` (042) — tức trung bình 60 lần mỗi phút.
  *
  * Vì sao cần: từ vòng này mỗi lần đọc của agent là một hàng sổ, và mỗi hàng sổ đi qua khoá tư vấn nối tiếp TOÀN TỔ CHỨC của
@@ -194,7 +194,7 @@ export interface DispatcherDeps {
    */
   readonly outboxNudge?: (orgId: string) => void;
   /**
-   * [S1.9101 / khoản 144 / ADR-9201] Trần số lần đọc của một phiên agent mỗi cửa sổ — mặc định `AGENT_DOC_TRAN_MOI_CUA_SO`. Test
+   * [S1.154 / khoản 144 / ADR-091] Trần số lần đọc của một phiên agent mỗi cửa sổ — mặc định `AGENT_DOC_TRAN_MOI_CUA_SO`. Test
    * tiêm số nhỏ để đo 429 mà không phải gọi 900 lần; cùng khuôn `treQuaTranMs`.
    */
   readonly tranDocAgent?: number;
@@ -639,7 +639,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               );
             }
             // ==================================================================================
-            // [S1.9101 / khoản 142 · 144 / ADR-9201] LẦN ĐỌC CỦA AGENT: MỘT TRẦN, RỒI MỘT HÀNG SỔ.
+            // [S1.154 / khoản 142 · 144 / ADR-091] LẦN ĐỌC CỦA AGENT: MỘT TRẦN, RỒI MỘT HÀNG SỔ.
             //
             // Tới đây, một phiên `AGENT_READONLY` chỉ còn đi được route mà `agentGoiDuoc` cho qua
             // — bảy route ĐỌC và `POST /auth/logout`. Vế này chỉ nhận route ĐỌC (`mutates` sai).
@@ -726,7 +726,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               daXepViec = layDauXepViec(client);
             }
             // ==================================================================================
-            // [S1.9101 / khoản 142 / ADR-9201] GHI SỔ LẦN ĐỌC CỦA AGENT — CÙNG GIAO DỊCH ĐỌC.
+            // [S1.154 / khoản 142 / ADR-091] GHI SỔ LẦN ĐỌC CỦA AGENT — CÙNG GIAO DỊCH ĐỌC.
             //
             // VÌ SAO TRÊN `client` CHỨ KHÔNG QUA `auditPool`: hàng sổ và câu trả lời phải cùng
             // sống hay cùng chết. Ghi ở giao dịch độc lập rồi TRẢ VỀ là đúng cái "cổng gác im

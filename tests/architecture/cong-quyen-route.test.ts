@@ -437,7 +437,7 @@ describe("[ADR-016] cổng quyền của tầng ứng dụng", () => {
     //      `apps/api/src/routes/buyer.ts` — ~~`:206`~~ [S1.79] số dòng ấy nay là `GET /rfqs/:rfqId/items`,
     //      một route ĐỌC KHÔNG có cổng, tức con trỏ cũ minh hoạ NGƯỢC câu nó đứng cạnh) đều nằm trong
     //      `ROUTE_DOC_KHONG_PHOI`, tức MCP cố ý không phơi. Khoảng trống pháp y ấy là khoản nợ 142.
-    //      **[S1.9101 / ADR-9201] Khoản 142 ĐÓNG — vế *"không công cụ nào để lại một dòng nào"* ở
+    //      **[S1.154 / ADR-091] Khoản 142 ĐÓNG — vế *"không công cụ nào để lại một dòng nào"* ở
     //      trên nay SAI và để lại nguyên văn làm lịch sử.** Mỗi lần một phiên `AGENT_READONLY` đọc một
     //      route mà `agentGoiDuoc` cho qua, `dispatch.ts` ghi ĐÚNG MỘT hàng `AGENT_READ` trên CHÍNH
     //      `client` của giao dịch đọc — ghi hỏng thì 500, không dữ liệu. Phiên NGƯỜI đọc vẫn không
@@ -644,7 +644,7 @@ describe("[mảnh 1] `apps/` không gọi thẳng `dungBoBangChung`", () => {
 });
 
 // =============================================================================================
-// [S1.9101 / khoản 142 / ADR-9201] HÀNG `AGENT_READ` ĐI CÙNG GIAO DỊCH ĐỌC — HÌNH DẠNG CỦA LỜI GỌI
+// [S1.154 / khoản 142 / ADR-091] HÀNG `AGENT_READ` ĐI CÙNG GIAO DỊCH ĐỌC — HÌNH DẠNG CỦA LỜI GỌI
 //
 // Phép đo hành vi ở `apps/api/src/auth.int.test.ts` (500 khi sổ hỏng, đúng một hàng mỗi lần đọc).
 // Khối này canh HÌNH DẠNG mà phép đo ấy dựa vào, vì hình dạng sai vẫn có thể xanh ở một lượt chạy
@@ -655,7 +655,7 @@ describe("[mảnh 1] `apps/` không gọi thẳng `dungBoBangChung`", () => {
 // PHÁT BIỂU ĐÚNG MỨC: đây là phép đọc văn bản trên MỘT tệp. Nó không chứng minh lời gọi nằm đúng
 // nhánh; vế ấy là việc của phép đo hành vi.
 // =============================================================================================
-describe("[S1.9101 / khoản 142] lần đọc của agent ghi sổ trên client của chính giao dịch đọc", () => {
+describe("[S1.154 / khoản 142] lần đọc của agent ghi sổ trên client của chính giao dịch đọc", () => {
   const TEP_DISPATCH = join(GOC, "apps", "api", "src", "dispatch.ts");
 
   it("`dispatch.ts` ghi `AGENT_READ` bằng `appendAuditEvent(client, …)` — không qua `auditPool`", () => {

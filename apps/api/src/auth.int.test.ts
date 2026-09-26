@@ -1461,7 +1461,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   });
 
   // ===============================================================================================
-  // [S1.9101 / khoản 142 · 144 / ADR-9201] NHÁNH CHO QUA: MỖI LẦN ĐỌC CỦA AGENT LÀ MỘT HÀNG SỔ, CÙNG
+  // [S1.154 / khoản 142 · 144 / ADR-091] NHÁNH CHO QUA: MỖI LẦN ĐỌC CỦA AGENT LÀ MỘT HÀNG SỔ, CÙNG
   // GIAO DỊCH VỚI CHÍNH LẦN ĐỌC — VÀ MỘT TRẦN THEO PHIÊN ĐỨNG TRƯỚC NÓ.
   //
   // Trước vòng này, bảy route ĐỌC mà `agentGoiDuoc` cho qua không để lại một dòng nào trong
@@ -1474,7 +1474,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   //   ⒟ vượt trần theo phiên ⇒ 429, không hàng sổ thêm; phiên agent KHÁC và phiên người không bị
   //      ảnh hưởng.
   // ===============================================================================================
-  describe("[S1.9101 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch", () => {
+  describe("[S1.154 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch", () => {
     /** Bảy route ĐỌC mà phiên agent gọi được, dựng trên dữ liệu THẬT để handler trả 200. */
     interface CanhDoc {
       readonly a: { cookie: string; cookieNguoi: string };

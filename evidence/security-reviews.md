@@ -12375,10 +12375,10 @@ Không cấp ADR hay migration nào.
 - Lần hợp thứ hai mang #160 và #155, cũng không xung đột. `pnpm cap-so` cấp số vòng từ số tạm; chạy lại không đổi byte
   nào, và `pnpm cap-so --kiem` sạch. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **107 tệp, 1434 đạt, 1 bỏ qua**.
 
-# §S1.9101 — KHOẢN 142 ĐÓNG: LẦN ĐỌC CỦA AGENT GHI SỔ CÙNG GIAO DỊCH ĐỌC; KHOẢN 144 THU HẸP BẰNG MỘT TRẦN THEO PHIÊN
+# §S1.154 — KHOẢN 142 ĐÓNG: LẦN ĐỌC CỦA AGENT GHI SỔ CÙNG GIAO DỊCH ĐỌC; KHOẢN 144 THU HẸP BẰNG MỘT TRẦN THEO PHIÊN
 
 **Rổ và mảnh (ADR-043 ⒞): khoản 142 rời rổ B vì ĐÓNG; khoản 144 ở lại rổ B, thu hẹp.** Không migration. Một ADR mới
-(ADR-9201). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+(ADR-091). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
 
 ## 1. Vòng này là gì
 
@@ -12413,7 +12413,7 @@ giao dịch độc lập rồi TRẢ VỀ — vì đó là cái "cổng gác im 
 
 ## 4. Đo sau khi sửa
 
-`apps/api/src/auth.int.test.ts`, khối *"[S1.9101 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch"*, năm ca:
+`apps/api/src/auth.int.test.ts`, khối *"[S1.154 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch"*, năm ca:
 - ⒜ tập route đo đúng bằng tập route ĐỌC mà `agentGoiDuoc` cho qua — không thừa, không thiếu;
 - ⒜ bảy route, dựng trên dữ liệu thật (nhà cung cấp, gói thầu, yêu cầu mở thầu) để handler trả 200: phiên agent ⇒ đúng một hàng
   `AGENT_READ`, `routePath` là MẪU, payload đúng bốn khoá, `resource_id` là phiên agent; phiên người cùng route ⇒ 200 và 0 hàng;
@@ -12443,4 +12443,4 @@ ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất 
 - Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` (mọi tệp), `apps/mcp`, `qt3-cu-phap`, `qt3-ngu-phap` — **33 tệp,
   374 ca đạt**; `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` và `db/check-an-ninh.int.test.ts` (hai tệp còn lại có
   phiên agent) — **33 ca đạt**.
-- Số tạm `S1.9101`, `ADR-9201` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+- Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.

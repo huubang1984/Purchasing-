@@ -7550,9 +7550,9 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.
 
-## ADR-9201 — Ghi sổ lần đọc của agent cùng giao dịch đọc
+## ADR-091 — Ghi sổ lần đọc của agent cùng giao dịch đọc
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.9101]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.154]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
 mở), 141 (đã đóng ở S1.76) · **Liên quan:** ADR-039 §5 (vế *"khoản 142 thu hẹp, chưa đóng"*), ADR-038 (bề mặt MCP chỉ đọc),
 ADR-015 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
 
