@@ -6,6 +6,9 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
 ## Mười một stack, chạy đúng thứ tự
 
+**Dựng lần đầu từ tài khoản trống:** làm theo danh sách [`docs/APPLY-LAN-DAU.md`](../../docs/APPLY-LAN-DAU.md) — thứ tự,
+bí mật, biến GitHub, các đối chứng dương và những thư cảnh báo dự kiến. Các mục dưới là chi tiết của từng stack.
+
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
 | `00-bootstrap` | management | `tp-mgmt` | Bucket S3 lưu state (state local) | **ngay bây giờ** |
@@ -167,7 +170,7 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 
 **[ADR-076] Lọc tên miền.** SMS đi qua VPC endpoint `sms-voice` (tạo khi `sms` khác null); chỉ Zalo đi qua NAT. DNS Firewall
 của VPC chỉ phân giải `local.ten_duoc_phan_giai` ở stack 90 (endpoint AWS đang dùng, bucket lớp ECR, bucket neo, RDS, hai tên
-Zalo) — mọi tên khác NXDOMAIN, ghi `/tp/dns`, alarm `tp-dns-bi-chan` ⇒ email ⑸ của stack 60 (apply 60 sau 90).
+Zalo) — mọi tên khác NXDOMAIN, ghi `/tp/dns`, alarm `tp-dns-bi-chan` ⇒ email ⑸ của stack 60 (60 bắt theo TÊN — apply trước hay sau 90 đều được).
 - Thêm một đích ngoài mới: thêm tên vào danh sách (và URL hằng vào adapter — `hinh-dang-dns.test.ts` đòi hai bên khớp).
 - Không chắc danh sách đủ (lần apply đầu, một dịch vụ mới): `-var che_do_dns=ALERT` — chỉ ghi log; xem `/tp/dns` rồi đặt
   lại `BLOCK`. Lọc `{ $.firewall_rule_action = "ALERT" }` trong Logs Insights.
@@ -183,8 +186,8 @@ thiếu mục.
 **[ADR-077] Cảnh báo vận hành.** Stack 90 đặt alarm tiền tố `tp-van-hanh-`: target không khoẻ / không còn target
 khoẻ cho từng target group (api, web, public-keys), tỉ lệ 5xx của ALB > 5%, p95 của api > 2 giây, service chạy thiếu
 task (Container Insights; service `so_ban_* = 0` không có alarm), RDS CPU > 80%, dung lượng trống < 2 GB, > 150 kết nối.
-Stack 60 ⑹ chuyển mọi alarm mang tiền tố ấy — cả lúc vào ALARM lẫn lúc trở về OK — sang audit ⇒ email. **Apply 60 sau
-90.** Lần apply đầu, trước khi service có task: "không còn target khoẻ"/"thiếu task" vào ALARM rồi trở về OK — hai thư dự
+Stack 60 ⑹ chuyển mọi alarm mang tiền tố ấy — cả lúc vào ALARM lẫn lúc trở về OK — sang audit ⇒ email. Stack 60 bắt theo TIỀN TỐ, không phụ
+thuộc 90. Lần apply đầu, trước khi service có task: "không còn target khoẻ"/"thiếu task" vào ALARM rồi trở về OK — hai thư dự
 kiến mỗi service. Đổi `so_ban_worker` từ 0 lên 1 (ADR-040) tự thêm alarm thiếu task của worker.
 
 ## Chạy thật — stack `90-ecs` (ADR-066)
