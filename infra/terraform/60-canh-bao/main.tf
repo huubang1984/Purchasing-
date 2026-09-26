@@ -1,5 +1,8 @@
-# Stack 60 — cảnh báo khi KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod.
+# Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"):
+#   ⑴ KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod.
+#   ⑵ Một task mang role WORKER chạy ngoài service chính thức `tp-unseal-worker`.
 #
+# ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
 # vĩnh viễn), nên về lý thuyết KeyAdmin tự gỡ lệnh Deny rồi tự cấp Decrypt trên alias/tp-org-wrap.
 # Không lớp nào CHẶN được đường ấy; stack này làm cho nó KHÔNG IM LẶNG (README, "Rủi ro còn lại").
@@ -12,6 +15,17 @@
 # không sửa được cả hai phía.
 #
 # Bắt cả lần gọi THẤT BẠI (errorCode khác rỗng): một lần thử sửa policy bị từ chối cũng là tín hiệu.
+#
+# ⑵ Role `tp-unseal-worker` là role duy nhất có kms:Decrypt trên tp-org-wrap, và `tp-deploy-worker`
+# PassRole được nó ⇒ pipeline ấy (hay ai chiếm được nó) chạy được MỘT TASK BẤT KỲ mang quyền giải
+# mã. Đường chính thức DUY NHẤT là ECS service `tp-unseal-worker`, mà task của service do bộ lập
+# lịch ECS khởi — không phải một lời gọi RunTask/StartTask của ai. Nên bắt ba hình dạng:
+#   a. RunTask/StartTask với task definition họ `tp-unseal-worker` (họ của worker dùng lại tên role
+#      — QUY ƯỚC mà stack ECS sau này phải giữ; đổi họ thì sửa `ho_worker` ở đây);
+#   b. RunTask/StartTask ghi đè `taskRoleArn` thành role worker (với BẤT KỲ task definition nào);
+#   c. RegisterTaskDefinition gắn role worker vào một họ KHÁC `tp-unseal-worker`.
+# Cả ba bắt kể lần bị từ chối. KHÔNG bắt: CreateService/UpdateService một service khác dùng họ
+# worker — đường ấy đi qua `tp-deploy-worker` có duyệt tay; và thay image trong chính họ worker.
 #
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
 # (CloudTrail tổ chức phải bật: sự kiện "AWS API Call via CloudTrail" đi ra từ đó).
@@ -77,6 +91,42 @@ locals {
   })
 
   bus_audit_arn = "arn:aws:events:${local.region}:${local.audit}:event-bus/default"
+
+  ho_worker       = module.chung.role.unseal_worker
+  role_worker_arn = module.chung.role_arn_prod.unseal_worker
+
+  # ⑵ — chỉ sự kiện của prod (worker chỉ sống ở prod).
+  mau_task_worker = jsonencode({
+    source      = ["aws.ecs"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    account     = [local.prod]
+    detail = {
+      eventSource = ["ecs.amazonaws.com"]
+      "$or" = [
+        {
+          eventName = ["RunTask", "StartTask"]
+          requestParameters = {
+            taskDefinition = [
+              { prefix = "${local.ho_worker}:" },
+              { equals-ignore-case = local.ho_worker },
+              { wildcard = "arn:aws:ecs:*:task-definition/${local.ho_worker}:*" },
+            ]
+          }
+        },
+        {
+          eventName         = ["RunTask", "StartTask"]
+          requestParameters = { overrides = { taskRoleArn = [local.role_worker_arn] } }
+        },
+        {
+          eventName = ["RegisterTaskDefinition"]
+          requestParameters = {
+            taskRoleArn = [local.role_worker_arn]
+            family      = [{ anything-but = local.ho_worker }]
+          }
+        },
+      ]
+    }
+  })
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -115,7 +165,14 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
       Principal = { Service = "events.amazonaws.com" }
       Action    = "sns:Publish"
       Resource  = aws_sns_topic.canh_bao_khoa.arn
-      Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.put_key_policy_audit.arn } }
+      Condition = {
+        ArnEquals = {
+          "aws:SourceArn" = [
+            aws_cloudwatch_event_rule.put_key_policy_audit.arn,
+            aws_cloudwatch_event_rule.task_worker_audit.arn,
+          ]
+        }
+      }
     }]
   })
 }
@@ -152,8 +209,33 @@ resource "aws_cloudwatch_event_target" "put_key_policy_audit" {
   }
 }
 
+resource "aws_cloudwatch_event_rule" "task_worker_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-task-worker"
+  description   = "Task mang role tp-unseal-worker chay ngoai service chinh thuc (ADR-062)"
+  event_pattern = local.mau_task_worker
+}
+
+resource "aws_cloudwatch_event_target" "task_worker_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.task_worker_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc     = "$.time"
+      lenh    = "$.detail.eventName"
+      ai      = "$.detail.userIdentity.arn"
+      taskDef = "$.detail.requestParameters.taskDefinition"
+      ho      = "$.detail.requestParameters.family"
+      loi     = "$.detail.errorCode"
+    }
+    input_template = "\"[TrustProcure] <lenh> mang role tp-unseal-worker (co kms:Decrypt tren tp-org-wrap) NGOAI service chinh thuc. Luc <luc>, boi <ai>, task definition <taskDef>, ho <ho>, errorCode <loi> (rong = THANH CONG). Neu khong phai mot lan chay da duyet: dung task ngay (ecs stop-task) va kiem tra CloudTrail kms:Decrypt.\""
+  }
+}
+
 # ---------------------------------------------------------------------------------------------
-# PROD — chuyển PutKeyPolicy sang audit
+# PROD — chuyển PutKeyPolicy (⑴) và task mang role worker (⑵) sang audit
 # ---------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "events_assume" {
   statement {
@@ -200,6 +282,22 @@ resource "aws_cloudwatch_event_rule" "put_key_policy_prod" {
 resource "aws_cloudwatch_event_target" "put_key_policy_prod" {
   provider = aws.prod
   rule     = aws_cloudwatch_event_rule.put_key_policy_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
+
+resource "aws_cloudwatch_event_rule" "task_worker_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-task-worker"
+  description   = "Chuyen RunTask/StartTask/RegisterTaskDefinition mang role worker sang audit (ADR-062)"
+  event_pattern = local.mau_task_worker
+}
+
+resource "aws_cloudwatch_event_target" "task_worker_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.task_worker_prod.name
   arn      = local.bus_audit_arn
   role_arn = aws_iam_role.chuyen_canh_bao.arn
 
