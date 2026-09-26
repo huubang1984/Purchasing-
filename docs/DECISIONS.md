@@ -7300,7 +7300,8 @@ chối nói *cấu hình chưa sẵn sàng* (chính sách không bậc) thì kh�
 ### Điều ADR này KHÔNG nói
 
 - Nó không thêm mã nào vào CSDL, và không viết một dòng mã S3 nào.
-- Nó không nới dải nhãn `[A-HJ]`→`[A-HJK]` — phần còn lại của S3.0 theo spec §9, làm cùng K1 ở S3.1.
+- Nó không nới dải nhãn `[A-HJ]`→`[A-HJK]` — phần còn lại của S3.0 theo spec §9~~, làm cùng K1 ở S3.1~~. **[S1.147]** Vế vừa
+  gạch trái spec §9, vốn đặt việc nới dải TRƯỚC hạng mục đầu; chỉ phép kiểm `"ABCDEFGH"` chờ K1. Dải đã nới ở S1.147.
 - Nó không liệt kê trọn từ vựng mã chốt: mỗi hạng mục S3.x thêm mã của chốt nó dựng.
 
 ---

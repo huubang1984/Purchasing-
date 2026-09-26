@@ -460,12 +460,12 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
  * ĐÚNG MỘT HÀNG BẢNG, và nó đang thiu ba đơn vị ở cả hai con số khi P5 được viết.
  *
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
- * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ.
+ * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.147]** `J` và `K` cũng là nghiệp vụ.
  */
 export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
   const le = viPhamCapGach(van, nhan);
   if (le.length > 0) return le;
-  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-HJ])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
+  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-HJK])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
   const hangRao = ma.filter((n) => n === "H").length;
   const nghiepVu = ma.length - hangRao;
   const reBB = new RegExp(
@@ -931,9 +931,17 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     expect(loi).toHaveLength(1);
     // Con số phải SUY từ chính `them`, không chép tay: bản trước ghim "55 (34 + 21)" và nó ĐỎ ở
     // đúng vòng sau, khi sổ đăng ký lớn thêm một hàng — cùng lớp lỗi mà tệp này đi đóng.
-    const soHang = (them.match(/^\|\s*\*\*[A-HJ]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
     const soHangRao = (them.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang} (${soHang - soHangRao} + ${soHangRao})`);
+    // [S1.147 / S3.0] Một hàng NHÓM K cũng phải được đếm, vào vế nghiệp vụ. Sổ thật chưa có hàng K
+    // nào, nên mũi thu dải của `viPhamSoBatBien` về `[A-HJ]` chỉ chết ở đây.
+    const themK = `${TEST_PLAN}\n| **K99** | một hàng kiểm soát không ai đếm | \`x.ts\` | **T3** |\n`;
+    const loiK = viPhamSoBatBien(STATE, themK, "docs/STATE.md");
+    expect(loiK).toHaveLength(1);
+    const soHangK = (themK.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHangRaoK = (themK.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
+    expect(loiK[0]).toContain(`sổ đăng ký có ${soHangK} (${soHangK - soHangRaoK} + ${soHangRaoK})`);
   });
 
   it("P5 — bộ đọc số đếm tiếng Việt đọc đúng cả bốn dạng đã từng xuất hiện ở STATE", () => {
@@ -995,7 +1003,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
     const loi = viPhamSoBatBien(HANDOFF, them, "Handoff.md");
     expect(loi).toHaveLength(1);
-    const soHang = (them.match(/^\|\s*\*\*[A-HJ]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang}`);
   });
 

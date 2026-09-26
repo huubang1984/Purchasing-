@@ -13,6 +13,14 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-26 / S1.147] S3.0 KHÉP — DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI
+ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`.** Đo trên `master` `fa8d4ea`: đúng mười chỗ ghim dải là regex có hiệu lực —
+`parse.ts` bốn, `so-no-tu-doi-chieu.test.ts` ba, ba tệp khác mỗi tệp một — và cả mười nay là `[A-HJK]`. Sổ thật chưa có
+hàng K, nên bộ test cũ không phân biệt được hai dải. Mẫu của `parse.test.ts` nay có hàng K1, và năm mũi thu dải cùng hai
+mũi nới sai dải (`[A-HJ-L]`, `[A-K]`) đều chết. Ma trận phải giữ nguyên từng byte — vòng này không thêm ca mang nhãn nào —
+và job *Evidence pack* của CI là phép đo điều ấy. `docs/PRODUCT.md` §11 ghi bước ký mới của `068`: gói dưới ngưỡng cần ít nhất hai người, gói vượt ngưỡng ba, và một PM tự tạo gói thì một
+mình không mở được gói nào. Không migration, không ADR, không khoản nợ mới. Biên bản: `evidence/security-reviews.md` §S1.147.
+
 **[2026-09-26 / S1.142] S3.0 CHỐT HAI QUYẾT ĐỊNH; KHOẢN 241 VÀ 242 ĐÓNG — SÀN MỘT CHỮ KÝ CHO MỌI TỔ CHỨC.** Chủ dự án chốt
 bốn điểm. Bảng mã quyền S3.0: chỉ hai mã mới, `supplier.qualify` và `category.manage`, cả hai cho `FINANCE`; lớp từ chối
 thứ ba của K12 là `CONTROL_DENIED` (ADR-084). Khoản 241 lên rổ A rồi đóng: migration `068` cho phép đếm chữ ký ở cạnh mở gói

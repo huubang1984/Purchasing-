@@ -12279,3 +12279,94 @@ chỗ. Khối đo ghi **sự thật hôm nay**, không ghi hành vi mong muốn:
 - `pnpm t0` sạch; `pnpm test` **1325 đạt, 1 bỏ qua**; sổ nợ tự đối chiếu 45/45.
 - Sổ nợ **242** khoản, mở **93 → 91**; rổ A **1** (241 và 242 vào rồi đóng), rổ B **69 → 67**, rổ C **23**:
   1 + 67 + 23 = 91. **68** migration; ADR **85** (83 của `master` + 2).
+
+# §S1.147 — S3.0 KHÉP: DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`
+
+**Rổ và mảnh (ADR-043 ⒞): không khoản nợ nào vào hay ra, không chạm mảnh nào của `docs/PRODUCT.md` §11.** Không migration,
+không ADR. Nhánh khởi lại từ `master` `fa8d4ea` sau khi #154 merge.
+
+## 1. Vòng này là gì
+
+Spec S3 §9 đặt việc nới dải nhãn ở S3.0, TRƯỚC hạng mục đầu — bài học khoản 229, khi J4 có đủ phép đo mà không có ô vì
+dải bị ghim. ADR-084 đã chốt hai quyết định giấy của S3.0; đây là mảnh cuối. Chủ dự án chọn làm ngay, gộp với việc ghi
+điều kiện tổ chức tối thiểu sau `068` vào kịch bản pilot.
+
+## 2. Đo trước khi sửa
+
+`git grep` trên `master` `fa8d4ea` ra đúng **mười** chỗ ghim `[A-HJ]` là regex có hiệu lực — khớp con số spec §9 ghi:
+- `tools/inv-matrix/src/parse.ts` ×4: `HANG_BAT_BIEN`, `NHAN_PHU_DO_DUOC`, bộ đếm độc lập `demHangUngVien`, và vế *nhãn
+  chưa khai* của `findMisplacedLabels`;
+- `tests/architecture/so-no-tu-doi-chieu.test.ts` ×3: `viPhamSoBatBien` và phép đếm kỳ vọng của P6, P8;
+- mỗi tệp một chỗ: `tests/architecture/nhan-bat-bien-cho-dat.test.ts`, `tools/inv-matrix/src/danh-gia.test.ts`,
+  `packages/outbox/src/nhan-bat-bien.test.ts`.
+
+Grep các dạng viết khác của dải (`[A-K]`, `[A-J]`, `[A-H` theo sau một chữ khác `J`, chuỗi liệt kê chữ) chỉ ra bảng chữ
+base32 và chú thích lịch sử. Phép kiểm `"ABCDEFGH"` ở `danh-gia.test.ts` giữ nguyên, vì nó đòi mọi nhóm có HÀNG trong sổ
+thật; K vào đó khi K1 vào sổ, tức S3.1.
+
+## 3. Sửa
+
+Cả mười chỗ sang `[A-HJK]`. Sổ thật chưa có hàng K, nên trên sổ thật hai dải cho cùng một kết quả. Bộ test của `master`
+vì thế không phân biệt được chúng: chính `master` là mũi thu dải, và nó xanh. Ca giết đặt ở ba tệp:
+- `parse.test.ts`: mẫu sổ đăng ký thêm hàng K1. Ca mới đòi K1 đọc được, và một hàng `L1` bịa KHÔNG đọc được — biên trên,
+  cùng lớp với ca chữ `I` của S1.115. Một ca gom độ phủ mới đòi `[INV-J1]` và `[INV-K1]` đều được tính.
+- `nhan-bat-bien-cho-dat.test.ts`: ca *chủ thể của P1/P2* đòi thêm rằng `[INV-K1]` chưa khai phải đỏ.
+- `so-no-tu-doi-chieu.test.ts`: ca *P6 đột biến* đòi thêm rằng một hàng K99 được đếm, vào vế nghiệp vụ.
+
+Hai tệp sau nằm dưới nhãn `[INV-H22]` và `[INV-H20]`, nên chỉ THÂN của ca có sẵn được mở rộng, không thêm ca: bộ sinh đếm số
+ca theo nhãn, và một ca mới đổi ô của ma trận. Lượt chạy đầu của ca P6 mở rộng đỏ vì phép tính kỳ vọng của chính nó — số
+hàng rào lấy nhầm từ biến thể H99 thay vì biến thể K99; hàm được đo thì đúng (K99 vào vế nghiệp vụ, 42 + 22).
+
+Năm câu mà thay đổi này làm sai được ghi chú tại chỗ:
+- chủ thể của `findMisplacedLabels` ở `parse.ts`, còn ghi `[A-H]` từ trước S1.115;
+- `docs/TEST-PLAN.md` §5;
+- hai khối chú thích của S1.115 ở `kich-ban-41-http.int.test.ts` và `luot-danh-gia.int.test.ts`;
+- ADR-084, vốn ghi việc nới dải *"làm cùng K1 ở S3.1"* — trái spec §9.
+
+## 4. Đột biến
+
+Mỗi mũi sửa đúng một chỗ, chạy năm tệp bị đụng, rồi khôi phục:
+
+| Mũi | Kết quả |
+|---|---|
+| `HANG_BAT_BIEN` thu về `[A-HJ]` | chết — 6 ca đỏ |
+| `NHAN_PHU_DO_DUOC` thu về `[A-HJ]` | chết — 2 ca đỏ |
+| `demHangUngVien` thu về `[A-HJ]` | chết — 8 ca đỏ |
+| `findMisplacedLabels` thu về `[A-HJ]` | chết — 1 ca đỏ |
+| `viPhamSoBatBien` thu về `[A-HJ]` | chết — 1 ca đỏ |
+| bộ đọc và bộ đếm nới quá tay thành `[A-HJ-L]` | chết — 1 ca đỏ |
+| bộ đọc và bộ đếm viết nhầm thành `[A-K]` | chết — 1 ca đỏ |
+
+Đối chứng sau khôi phục: năm tệp, 124/124 xanh. Năm chỗ ghim còn lại ở phía TEST, và không chỗ nào để một bộ đọc bỏ sót K.
+Thu ba chỗ — hình dạng sổ khai, phép kiểm mã của `danh-gia.test.ts`, và phép đếm kỳ vọng của P6/P8 — thì test ĐỎ khi hàng
+K đầu tiên vào sổ: ồn ào, đúng hướng. Chỗ ở `packages/outbox/` là bộ quét ba mã cấm C2, D4, B3, nên dải của nó không đổi
+kết quả nào; nó được nới để câu *"cùng regex với bộ sinh"* ngay trên nó còn đúng.
+
+## 5. Kịch bản pilot — điều kiện tổ chức tối thiểu sau `068`
+
+Đo trên `master` `fa8d4ea`, qua route và `role_permissions`:
+- nộp duyệt cần `rfq.create`, do `REQUESTER`, `BUYER` và `PROCUREMENT_MANAGER` giữ (`005`);
+- phê duyệt cần `rfq.approve`, mở cần `rfq.open`, cả hai chỉ `PROCUREMENT_MANAGER` giữ (`005`, `023`);
+- người duyệt khác người tạo, và mỗi chữ ký một phiên (D2).
+
+Nên gói dưới ngưỡng cần ít nhất hai người, gói vượt ngưỡng ba. Điều đó ghi ở `docs/PRODUCT.md` §11, kèm một câu nói rõ: số
+người tối thiểu cho TRỌN kịch bản — mở niêm phong (`rfq.unseal.approve` chỉ ở `DIRECTOR`) và trao thầu — chưa đo.
+
+## 6. Số
+
+Đo hai lần trên mọi nhánh sống. Lần đầu, lúc bắt đầu vòng:
+- `…-neo-to-chuc` (#153) và `…-khoan-115` cùng giữ S1.143;
+- `…-kiem-truoc-apply` giữ S1.144 và ADR-087.
+
+Nên vòng này lấy S1.145. Lần đo thứ hai, ngay trước commit: `…-hop-thu-van-hanh` vừa lấy S1.145 và ADR-088,
+`…-canh-dang-ky` lấy S1.146 và ADR-089, và `…-khoan-127` giữ S1.144. Vòng này đổi sang **S1.147** trước commit đầu. Không
+cấp ADR hay migration nào.
+
+## 7. Số đo
+
+- Năm tệp bị đụng: 124/124 xanh, trước và sau bảng đột biến ở mục 4.
+- `pnpm t0` sạch; `pnpm test` **99 tệp, 1327 đạt, 1 bỏ qua** — hơn S1.142 đúng hai ca, là hai ca mới của `parse.test.ts`.
+- Tầng tích hợp KHÔNG chạy cục bộ: vòng này chỉ đổi hai dòng chú thích trong tệp tích hợp. Ma trận cũng không sinh lại cục
+  bộ: vòng này không thêm ca mang nhãn nào và sổ chưa có hàng K, nên ma trận phải giữ nguyên từng byte. Job *Evidence pack*
+  của CI chạy cả hai tầng và là phép đo điều ấy.
+- Sổ nợ không đổi: **242** khoản, **91** mở. **68** migration, **85** ADR.

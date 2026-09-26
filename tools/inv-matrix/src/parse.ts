@@ -56,10 +56,10 @@ export interface LabelUse {
   readonly file: string;
 }
 
-const HANG_BAT_BIEN = /^\|\s*\*\*([A-HJ]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
+const HANG_BAT_BIEN = /^\|\s*\*\*([A-HJK]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
 
 /** HẸP CÓ CHỦ Ý — xem quy ước (1) ở đầu file. Đừng nới. */
-const NHAN_PHU_DO_DUOC = /\[INV-([A-HJ]\d+)\]/g;
+const NHAN_PHU_DO_DUOC = /\[INV-([A-HJK]\d+)\]/g;
 
 /** RỘNG CÓ CHỦ Ý, và KHÔNG BAO GIỜ nuôi độ phủ — xem quy ước (2) ở đầu file. */
 const NHAN_BAT_KY = /\[INV-([^\]\s]+)\]/g;
@@ -96,7 +96,7 @@ export function demHangUngVien(markdown: string): string[] {
     // 4 ô nội dung => 6 phần tử: phần rỗng đầu, bốn ô, phần rỗng cuối.
     if (o.length < 6) continue;
     const dau = lamSach(o[1] ?? "");
-    if (/^[A-HJ]\d+$/.test(dau)) ma.push(dau);
+    if (/^[A-HJK]\d+$/.test(dau)) ma.push(dau);
   }
   return ma;
 }
@@ -240,7 +240,7 @@ export function duongTuongDoi(file: string, goc: string): string {
 /**
  * [INV-H22, khoản nợ 12] MỌI CẶP (mã, tệp) ĐƯỢC TÍNH LÀ ĐỘ PHỦ PHẢI CÓ TRONG SỔ KHAI — VÀ NGƯỢC LẠI.
  *
- * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (`[A-H]\d+`, không hậu tố vế) — không hơn,
+ * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (~~`[A-H]\d+`~~ **[S1.147]** `[A-HJK]\d+`, không hậu tố vế) — không hơn,
  * không kém — lấy từ CHÍNH báo cáo này, nên không có cách viết test nào làm hai bộ đọc lệch
  * nhau. Chiều thứ hai (khai thiu) đồng thời là ĐỐI CHỨNG DƯƠNG: một báo cáo rỗng hay một sổ đọc
  * hỏng làm MỌI dòng khai hụt, tức đỏ ồn ào thay vì xanh im lặng.
@@ -253,7 +253,7 @@ export function findMisplacedLabels(
   const thay = new Set<string>();
   const chuaKhai = new Set<string>();
   for (const u of uses) {
-    if (u.clause !== null || !/^[A-HJ]\d+$/.test(u.base)) continue;
+    if (u.clause !== null || !/^[A-HJK]\d+$/.test(u.base)) continue;
     const tep = duongTuongDoi(u.file, goc);
     thay.add(`${u.base}\u0000${tep}`);
     if (!(soKhai[u.base] ?? []).includes(tep)) {
