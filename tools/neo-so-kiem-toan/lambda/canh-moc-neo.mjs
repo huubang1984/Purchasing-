@@ -1,5 +1,5 @@
 // ==============================================================================================
-// tools/neo-so-kiem-toan/src/canh-moc-neo.ts — [ADR-084] CANH MỐC NEO THEO TỪNG TỔ CHỨC, CHẠY Ở TÀI KHOẢN AUDIT
+// tools/neo-so-kiem-toan/src/canh-moc-neo.ts — [ADR-086] CANH MỐC NEO THEO TỪNG TỔ CHỨC, CHẠY Ở TÀI KHOẢN AUDIT
 //
 // Lambda `tp-canh-moc-neo` (stack 60) chạy mỗi 6 giờ, CHỈ ĐỌC bucket neo: liệt kê mọi tổ chức từng được neo
 // (`so-kiem-toan/<org>/`), và với mỗi tổ chức hỏi "có đối tượng nào ghi trong 36 giờ qua không". Không có ⇒ một dòng log

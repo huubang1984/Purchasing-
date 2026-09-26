@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [ADR-084] CANH MỐC NEO THEO TỪNG TỔ CHỨC — LAMBDA Ở AUDIT, BA ALARM, VÀ HỢP ĐỒNG DÒNG LOG
+// [ADR-086] CANH MỐC NEO THEO TỪNG TỔ CHỨC — LAMBDA Ở AUDIT, BA ALARM, VÀ HỢP ĐỒNG DÒNG LOG
 //
 // Phép canh này đứng NGOÀI prod để prod không tắt được nó; nó chỉ còn giá trị khi:
 //   ⑴ Lambda chỉ ĐỌC — đúng `s3:ListBucket` dưới `so-kiem-toan/`, không Get/Put/Delete nào;
@@ -24,7 +24,7 @@ function khoi(loai: string, ten: string): string {
   return TF.slice(batDau, TF.indexOf("\n}\n", batDau) + 2);
 }
 
-describe("[ADR-084] canh mốc neo theo từng tổ chức", () => {
+describe("[ADR-086] canh mốc neo theo từng tổ chức", () => {
   it("⑴ Lambda chỉ có s3:ListBucket dưới so-kiem-toan/ và ghi log của chính nó", () => {
     const cs = khoi("aws_iam_role_policy", "canh_moc_neo");
     const hanhDong = [...cs.matchAll(/Action += (\[[^\]]*\]|"[^"]+")/gu)].map((m) => m[1]);

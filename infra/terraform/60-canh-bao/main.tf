@@ -8,7 +8,7 @@
 #      alarm `tp-dns-bi-chan` ở prod vào ALARM ⇒ chuyển sang audit ⇒ email.
 #   ⑹ [ADR-077] Vận hành: mọi alarm prod mang tiền tố `tp-van-hanh-` (ALB, ECS, RDS — stack 90) vào ALARM hoặc trở về
 #      OK ⇒ chuyển sang audit ⇒ email.
-#   ⑺ [ADR-084] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
+#   ⑺ [ADR-086] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
 #
 # ⑴
@@ -46,7 +46,7 @@ terraform {
   required_version = ">= 1.10"
   required_providers {
     aws = { source = "hashicorp/aws", version = "~> 6.0" }
-    # [ADR-084] Đóng gói tệp Lambda ⑺ thành zip lúc plan.
+    # [ADR-086] Đóng gói tệp Lambda ⑺ thành zip lúc plan.
     archive = { source = "hashicorp/archive", version = "~> 2.7" }
   }
   backend "s3" {
@@ -553,7 +553,7 @@ resource "aws_cloudwatch_event_target" "van_hanh_prod" {
 }
 
 # ---------------------------------------------------------------------------------------------
-# ⑺ [ADR-084] AUDIT — mốc neo theo từng tổ chức
+# ⑺ [ADR-086] AUDIT — mốc neo theo từng tổ chức
 # ---------------------------------------------------------------------------------------------
 # ⑷ đếm TỔNG: một tổ chức ngừng được neo trong khi các tổ chức khác vẫn được thì ⑷ im. Job `lich` thoát 1 khi một tổ
 # chức XUẤT hỏng (⑶), nhưng không khi tổ chức ấy vắng khỏi danh sách — hàm liệt kê ở prod bị sửa, hay một lỗi làm rơi
@@ -623,7 +623,7 @@ resource "aws_iam_role_policy" "canh_moc_neo" {
 resource "aws_lambda_function" "canh_moc_neo" {
   provider                       = aws.audit
   function_name                  = local.ten_canh_moc_neo
-  description                    = "ADR-084: to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc moi"
+  description                    = "ADR-086: to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc moi"
   role                           = aws_iam_role.canh_moc_neo.arn
   runtime                        = "nodejs22.x"
   handler                        = "canh-moc-neo.handler"
@@ -644,7 +644,7 @@ resource "aws_lambda_function" "canh_moc_neo" {
 resource "aws_cloudwatch_event_rule" "canh_moc_neo" {
   provider            = aws.audit
   name                = local.ten_canh_moc_neo
-  description         = "Chay Lambda canh moc neo theo to chuc moi 6 gio (ADR-084)"
+  description         = "Chay Lambda canh moc neo theo to chuc moi 6 gio (ADR-086)"
   schedule_expression = "rate(6 hours)"
 }
 
@@ -680,7 +680,7 @@ resource "aws_cloudwatch_log_metric_filter" "moc_neo_to_chuc" {
 resource "aws_cloudwatch_metric_alarm" "moc_neo_to_chuc" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-thieu-moc-neo-to-chuc"
-  alarm_description   = "[TrustProcure] (ADR-084) Co to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc neo moi. Doc log /aws/lambda/${local.ten_canh_moc_neo} (dong THIEU MOC NEO neu org), roi /tp/neo o prod: to chuc ay co trong danh sach cua lich khong? Vang mat ma job thoat 0 la dau hieu ham liet ke bi sua."
+  alarm_description   = "[TrustProcure] (ADR-086) Co to chuc tung duoc neo ma ${local.nguong_gio_neo} gio khong co moc neo moi. Doc log /aws/lambda/${local.ten_canh_moc_neo} (dong THIEU MOC NEO neu org), roi /tp/neo o prod: to chuc ay co trong danh sach cua lich khong? Vang mat ma job thoat 0 la dau hieu ham liet ke bi sua."
   namespace           = "TrustProcure/Neo"
   metric_name         = "ToChucThieuMocNeo"
   statistic           = "Sum"
@@ -696,7 +696,7 @@ resource "aws_cloudwatch_metric_alarm" "moc_neo_to_chuc" {
 resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_loi" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-moc-neo-loi"
-  alarm_description   = "[TrustProcure] (ADR-084) Lambda ${local.ten_canh_moc_neo} LOI — phep canh moc neo theo to chuc dang cam. Doc /aws/lambda/${local.ten_canh_moc_neo}."
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} LOI — phep canh moc neo theo to chuc dang cam. Doc /aws/lambda/${local.ten_canh_moc_neo}."
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }
@@ -713,7 +713,7 @@ resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_loi" {
 resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_khong_chay" {
   provider            = aws.audit
   alarm_name          = "tp-canh-bao-canh-moc-neo-khong-chay"
-  alarm_description   = "[TrustProcure] (ADR-084) Lambda ${local.ten_canh_moc_neo} khong chay trong 12 gio — lich tp-canh-moc-neo bi tat hay go."
+  alarm_description   = "[TrustProcure] (ADR-086) Lambda ${local.ten_canh_moc_neo} khong chay trong 12 gio — lich tp-canh-moc-neo bi tat hay go."
   namespace           = "AWS/Lambda"
   metric_name         = "Invocations"
   dimensions          = { FunctionName = aws_lambda_function.canh_moc_neo.function_name }

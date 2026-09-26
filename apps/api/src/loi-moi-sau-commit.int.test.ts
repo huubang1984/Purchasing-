@@ -338,6 +338,34 @@ function tuyenGia(): Route[] {
   ];
 }
 
+/**
+ * [S1.142 / khoản 241] Sàn một chữ ký (`068`): mọi gói cần một chữ ký của người KHÁC người tạo, trên
+ * nội dung hiện tại, trước khi mở. Mỗi tổ chức một người ký riêng, không vai trò:
+ * `rfq_kiem_nguoi_duyet` chỉ đòi người ký khác người tạo và phiên thuộc về chính họ.
+ */
+const NGUOI_KY = new Map<string, { readonly u: string; readonly s: string }>();
+async function kyMotChuKy(orgId: string, rfqId: string): Promise<void> {
+  let k = NGUOI_KY.get(orgId);
+  if (k === undefined) {
+    const { rows: nd } = await db.pool.query<{ id: string }>(
+      "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi ky') RETURNING id",
+      [orgId, `nguoi-ky-${orgId}@vidu.vn`],
+    );
+    const u = nd[0]?.id ?? "";
+    const { rows: ph } = await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+        "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgId, u, randomBytes(32)],
+    );
+    k = { u, s: ph[0]?.id ?? "" };
+    NGUOI_KY.set(orgId, k);
+  }
+  await db.pool.query(
+    "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+    [orgId, rfqId, k.u, k.s],
+  );
+}
+
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
@@ -375,6 +403,7 @@ beforeAll(async () => {
     pm.id,
     pm.sessionId,
   ]);
+  await kyMotChuKy(orgX, rfqX);
   await withTenant(apiPool, orgX, async (c) => {
     await issueRfqKeyPair(c, orgX, {
       rfqId: rfqX,
