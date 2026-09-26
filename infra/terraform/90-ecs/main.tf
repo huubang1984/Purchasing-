@@ -11,6 +11,8 @@
 #            definition `tp-unseal-worker` — quy ước cảnh báo ⑵ của stack 60); task một lần `tp-migrate`.
 #   Khoá     [ADR-070] service `tp-public-keys` phục vụ `/.well-known/trustprocure-receipt-keys*` trên cùng ALB — chỉ nửa
 #            công khai (đọc từ state của stack 50), không task role, không KMS, không CSDL.
+#   Neo      [ADR-071] task một lần `tp-neo` (role tp-anchor-job ⇒ mượn tp-anchor-writer ở audit): neo tài liệu khoá
+#            biên nhận và mốc neo sổ kiểm toán vào bucket neo, ký bằng alias/tp-anchor-sign (stack 40).
 #   Web      [ADR-068] MỘT tên miền: ALB chuyển `/api/*` THẲNG tới `tp-api` (bỏ tiền tố `/api`), mọi đường khác tới
 #            service `tp-web` — `apps/web` ở chế độ chỉ tĩnh, không thấy cookie phiên, không CSDL, không task role.
 #
@@ -38,6 +40,17 @@ terraform {
 module "chung" { source = "../chung" }
 
 # [ADR-070] kid đang ký và nửa công khai của mọi khoá ký biên nhận — một nguồn: stack 50 (chạy bằng KeyAdmin).
+# [ADR-071] kid, ARN alias và nửa công khai của khoá ký mốc neo — stack 40 (tài khoản audit, KeyAdmin).
+data "terraform_remote_state" "kms_audit" {
+  backend = "s3"
+  config = {
+    bucket  = "tp-tfstate-243714547276"
+    key     = "40-kms-audit/terraform.tfstate"
+    region  = "ap-southeast-1"
+    profile = "tp-mgmt"
+  }
+}
+
 data "terraform_remote_state" "kms" {
   backend = "s3"
   config = {
@@ -68,8 +81,8 @@ variable "ten_mien" {
 }
 
 variable "anh" {
-  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys } = \"<ecr>/tp-api@sha256:…\"."
-  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string })
+  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys, neo } = \"<ecr>/tp-api@sha256:…\"."
+  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string, neo = string })
   validation {
     condition     = alltrue([for u in values(var.anh) : can(regex("@sha256:[0-9a-f]{64}$", u))])
     error_message = "Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."
@@ -157,6 +170,8 @@ locals {
   secret   = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
   # [ADR-070] { kid_dang_dung, khoa_cong_khai = { kid = SPKI base64 } }
   bien_nhan = data.terraform_remote_state.kms.outputs.bien_nhan
+  # [ADR-071] { kid_dang_dung, alias_arn, khoa_cong_khai = { kid = SPKI base64 } }
+  neo = data.terraform_remote_state.kms_audit.outputs.neo
   # [ADR-068] Một origin cho cả trang và /api/*: không CORS, cookie phiên đi cùng origin.
   goc = "https://${var.ten_mien}"
 }
@@ -302,6 +317,12 @@ resource "aws_security_group" "public_keys" {
   vpc_id      = aws_vpc.tp.id
 }
 
+resource "aws_security_group" "neo" {
+  name        = "tp-neo"
+  description = "Task neo (CSDL, KMS/STS/S3 qua endpoint)"
+  vpc_id      = aws_vpc.tp.id
+}
+
 resource "aws_security_group" "migrate" {
   name        = "tp-migrate"
   description = "Task migrate"
@@ -326,6 +347,8 @@ locals {
     api     = aws_security_group.api.id
     worker  = aws_security_group.worker.id
     migrate = aws_security_group.migrate.id
+    # [ADR-071] job neo đọc đầu chuỗi kiểm toán (app_api) để ký mốc neo.
+    neo = aws_security_group.neo.id
   }
   # Nhóm cần đường ra AWS (kéo image ECR, đẩy log) — web có mặt ở đây, KHÔNG có mặt ở CSDL.
   nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id, public_keys = aws_security_group.public_keys.id })
@@ -454,7 +477,8 @@ resource "aws_vpc_endpoint" "s3" {
 
 locals {
   dich_vu_endpoint = concat(
-    ["kms", "ecr.api", "ecr.dkr", "logs", "secretsmanager"],
+    # [ADR-071] `sts`: job neo mượn tp-anchor-writer bằng sts:AssumeRole — task không có đường ra internet.
+    ["kms", "ecr.api", "ecr.dkr", "logs", "secretsmanager", "sts"],
     var.ses_endpoint_service == "" ? [] : [var.ses_endpoint_service],
   )
   subnet_endpoint = var.endpoint_mot_az ? [aws_subnet.ung_dung[0].id] : aws_subnet.ung_dung[*].id
@@ -521,7 +545,7 @@ resource "aws_db_instance" "tp" {
 # ECR
 # ---------------------------------------------------------------------------------------------
 resource "aws_ecr_repository" "tp" {
-  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys"])
+  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys", "tp-neo"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -575,7 +599,7 @@ resource "aws_ecs_cluster" "tp" {
 }
 
 resource "aws_cloudwatch_log_group" "tp" {
-  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys"])
+  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys", "neo"])
   name              = "/tp/${each.key}"
   retention_in_days = 90
 }
@@ -650,6 +674,16 @@ locals {
       { name = "TRUSTPROCURE_RECEIPT_ACTIVE_KID", value = local.bien_nhan.kid_dang_dung },
       { name = "TRUSTPROCURE_RECEIPT_PUBLIC_KEYS", value = jsonencode(local.bien_nhan.khoa_cong_khai) },
     ]
+    neo = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_NEO_S3_BUCKET", value = module.chung.bucket.anchor },
+      { name = "TRUSTPROCURE_NEO_ROLE_ARN", value = module.chung.anchor_writer_role_arn },
+      { name = "TRUSTPROCURE_NEO_REGION", value = local.region },
+      { name = "TRUSTPROCURE_NEO_KMS_KEY_ID", value = local.neo.alias_arn },
+      { name = "TRUSTPROCURE_NEO_KID", value = local.neo.kid_dang_dung },
+      { name = "TRUSTPROCURE_NEO_KHOA_CONG_KHAI", value = join(",", [for kid, k in local.neo.khoa_cong_khai : "${kid}=${k}"]) },
+      { name = "TRUSTPROCURE_RECEIPT_PUBLIC_KEYS", value = jsonencode(local.bien_nhan.khoa_cong_khai) },
+    ]
   }
   bi_mat = {
     api = [
@@ -667,6 +701,10 @@ locals {
     ]
     web         = []
     public_keys = []
+    # Vai app_api — cùng URL với api; job neo chỉ ĐỌC đầu chuỗi (exportChainHead).
+    neo = [
+      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
+    ]
   }
   task = {
     api     = { ho = "tp-api", role = local.role_arn.api, cpu = 512, mem = 1024, log = "api", cong = [8080] }
@@ -676,6 +714,8 @@ locals {
     web = { ho = "tp-web", role = null, cpu = 256, mem = 512, log = "web", cong = [8090] }
     # [ADR-070] Chỉ nửa công khai trong biến môi trường: không task role.
     public_keys = { ho = "tp-public-keys", role = null, cpu = 256, mem = 512, log = "public-keys", cong = [8070] }
+    # [ADR-071] Task một lần — không service. Role duy nhất có sts:AssumeRole sang tp-anchor-writer.
+    neo = { ho = "tp-neo", role = local.role_arn.anchor_job, cpu = 256, mem = 512, log = "neo", cong = [] }
   }
 }
 
@@ -970,5 +1010,21 @@ output "bien_github" {
   value = {
     TP_SUBNETS_UNG_DUNG = join(",", aws_subnet.ung_dung[*].id)
     TP_SG_MIGRATE       = aws_security_group.migrate.id
+    TP_SG_NEO           = aws_security_group.neo.id
+  }
+}
+
+output "lenh_chay_neo" {
+  description = "[ADR-071] Task neo một lần: mặc định neo tài liệu khoá biên nhận; đổi lệnh để xuất/kiểm mốc neo sổ kiểm toán."
+  value = {
+    khoa_bien_nhan = join(" ", [
+      "aws ecs run-task --profile tp-prod --cluster ${local.cluster} --launch-type FARGATE --task-definition tp-neo",
+      "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", aws_subnet.ung_dung[*].id)}],securityGroups=[${aws_security_group.neo.id}],assignPublicIp=DISABLED}'",
+    ])
+    xuat = join(" ", [
+      "aws ecs run-task --profile tp-prod --cluster ${local.cluster} --launch-type FARGATE --task-definition tp-neo",
+      "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", aws_subnet.ung_dung[*].id)}],securityGroups=[${aws_security_group.neo.id}],assignPublicIp=DISABLED}'",
+      "--overrides '{\"containerOverrides\":[{\"name\":\"tp-neo\",\"command\":[\"xuat\",\"--org\",\"<uuid>\"]}]}'",
+    ])
   }
 }

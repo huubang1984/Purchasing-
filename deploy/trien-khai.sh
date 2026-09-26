@@ -5,9 +5,11 @@
 #   trien-khai.sh day      <tep-anh.tar.gz> <repo-ecr> <the>   ⇒ in `<registry>/<repo>@sha256:…`
 #   trien-khai.sh dang-ky  <ho-task-def> <anh> <role-task|->   ⇒ in ARN bản task definition mới (`-` = KHÔNG task role)
 #   trien-khai.sh migrate  <arn-task-def>                      ⇒ chạy một lần, thoát 0 chỉ khi exit code 0
+#   trien-khai.sh neo      <arn-task-def>                      ⇒ [ADR-071] job neo (lệnh mặc định: neo khoá biên nhận)
 #   trien-khai.sh cap-nhat <service> <arn-task-def>            ⇒ cập nhật service, chờ ổn định
 #
-# Biến bắt buộc: AWS_REGION, TAI_KHOAN, CLUSTER; `migrate` cần thêm SUBNETS (phẩy ngăn cách) và SG_MIGRATE.
+# Biến bắt buộc: AWS_REGION, TAI_KHOAN, CLUSTER; `migrate` cần thêm SUBNETS (phẩy ngăn cách) và SG_MIGRATE; `neo` cần
+# SUBNETS và SG_NEO.
 #
 # Nguyên tắc:
 #   • Image trong task definition ghim theo DIGEST, không theo thẻ — thẻ chỉ để người đọc ECR.
@@ -78,25 +80,35 @@ cho() { # cho <waiter> <tham số…> — lặp waiter tới SO_LAN_CHO lần
   return 1
 }
 
-migrate() {
-  local arn=$1 ra task ma ly_do
-  : "${SUBNETS:?}" "${SG_MIGRATE:?}"
+chay_mot_lan() { # chay_mot_lan <arn> <security-group> <nhãn>
+  local arn=$1 sg=$2 nhan=$3 ra task ma ly_do
+  : "${SUBNETS:?}"
   [[ $SUBNETS =~ ^subnet-[0-9a-f]+(,subnet-[0-9a-f]+)*$ ]] || loi "SUBNETS không đúng dạng"
-  [[ $SG_MIGRATE =~ ^sg-[0-9a-f]+$ ]] || loi "SG_MIGRATE không đúng dạng"
+  [[ $sg =~ ^sg-[0-9a-f]+$ ]] || loi "security group của $nhan không đúng dạng"
   ra=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$arn" \
     --started-by "gh-deploy-${GITHUB_RUN_ID:-tay}" \
-    --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG_MIGRATE],assignPublicIp=DISABLED}" \
+    --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$sg],assignPublicIp=DISABLED}" \
     --query '{task: tasks[0].taskArn, loi: length(failures)}' --output json)
-  [[ $(jq -r .loi <<<"$ra") == 0 ]] || loi "run-task migrate trả failures"
+  [[ $(jq -r .loi <<<"$ra") == 0 ]] || loi "run-task $nhan trả failures"
   task=$(jq -r .task <<<"$ra")
-  echo "migrate: $task" >&2
-  cho tasks-stopped --cluster "$CLUSTER" --tasks "$task" || loi "task migrate chưa dừng"
+  echo "$nhan: $task" >&2
+  cho tasks-stopped --cluster "$CLUSTER" --tasks "$task" || loi "task $nhan chưa dừng"
   ra=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
     --query '{ma: tasks[0].containers[0].exitCode, ly_do: tasks[0].stoppedReason}' --output json)
   ma=$(jq -r .ma <<<"$ra")
   ly_do=$(jq -r .ly_do <<<"$ra")
-  [[ $ma == 0 ]] || loi "migrate thoát mã $ma ($ly_do) — đọc log /tp/migrate; service KHÔNG được cập nhật"
-  echo "migrate: xong (exit 0)" >&2
+  [[ $ma == 0 ]] || loi "$nhan thoát mã $ma ($ly_do) — đọc log /tp/$nhan"
+  echo "$nhan: xong (exit 0)" >&2
+}
+
+migrate() {
+  : "${SG_MIGRATE:?}"
+  chay_mot_lan "$1" "$SG_MIGRATE" migrate
+}
+
+neo() {
+  : "${SG_NEO:?}"
+  chay_mot_lan "$1" "$SG_NEO" neo
 }
 
 cap_nhat() {
@@ -115,6 +127,7 @@ case "${1:-}" in
   day) shift; [[ $# -eq 3 ]] || loi "day <tep> <repo> <the>"; day "$@" ;;
   dang-ky) shift; [[ $# -eq 3 ]] || loi "dang-ky <ho> <anh> <role>"; dang_ky "$@" ;;
   migrate) shift; [[ $# -eq 1 ]] || loi "migrate <arn>"; migrate "$@" ;;
+  neo) shift; [[ $# -eq 1 ]] || loi "neo <arn>"; neo "$@" ;;
   cap-nhat) shift; [[ $# -eq 2 ]] || loi "cap-nhat <service> <arn>"; cap_nhat "$@" ;;
-  *) loi "lệnh: day | dang-ky | migrate | cap-nhat" ;;
+  *) loi "lệnh: day | dang-ky | migrate | neo | cap-nhat" ;;
 esac

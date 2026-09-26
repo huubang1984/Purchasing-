@@ -12,7 +12,8 @@ name: Deploy — prod (bam tay)
 #   api     environment `prod` (Required reviewers), role `tp-deploy`: day image tp-api va
 #           tp-migrate (ghim digest), chay task migrate MOT LAN va chi khi exit 0 moi cap nhat
 #           service `tp-api`, cho on dinh, kiem service chay DUNG ban vua dang ky; roi `tp-web`
-#           (ADR-068: chi tinh, khong task role) va `tp-public-keys` (ADR-070: chi nua cong khai).
+#           (ADR-068: chi tinh, khong task role) va `tp-public-keys` (ADR-070: chi nua cong khai); roi
+#           chay task `tp-neo` neo tai lieu khoa vao bucket audit (ADR-071).
 #   worker  environment `prod-worker` (duyet RIENG), role `tp-deploy-worker`: day tp-unseal-worker,
 #           cap nhat service `tp-unseal-worker`. Role nay PassRole duoc role co kms:Decrypt tren
 #           tp-org-wrap (ADR-062), nen no chi chay khi nguoi bam chon worker.
@@ -60,7 +61,7 @@ jobs:
             docker build -f deploy/Dockerfile --target "$1" -t "tp-$1:ci" .
             docker save "tp-$1:ci" | gzip -1 > "anh/$1.tar.gz"
           }
-          if [ "$THANH_PHAN" != "worker" ]; then build api; build migrate; build web; build public-keys; fi
+          if [ "$THANH_PHAN" != "worker" ]; then build api; build migrate; build web; build public-keys; build neo; fi
           if [ "$THANH_PHAN" != "api" ]; then build worker; fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -70,7 +71,7 @@ jobs:
           if-no-files-found: error
 
   api:
-    name: Deploy api + migrate + web + public-keys (tp-deploy)
+    name: Deploy api + migrate + web + public-keys + neo khoa (tp-deploy)
     needs: build
     if: inputs.thanh_phan != 'worker'
     runs-on: ubuntu-latest
@@ -102,6 +103,7 @@ jobs:
         env:
           SUBNETS: ${{ vars.TP_SUBNETS_UNG_DUNG }}
           SG_MIGRATE: ${{ vars.TP_SG_MIGRATE }}
+          SG_NEO: ${{ vars.TP_SG_NEO }}
           THE: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -109,6 +111,7 @@ jobs:
           anh_api=$(bash deploy/trien-khai.sh day anh/api.tar.gz tp-api "$THE")
           anh_web=$(bash deploy/trien-khai.sh day anh/web.tar.gz tp-web "$THE")
           anh_pk=$(bash deploy/trien-khai.sh day anh/public-keys.tar.gz tp-public-keys "$THE")
+          anh_neo=$(bash deploy/trien-khai.sh day anh/neo.tar.gz tp-neo "$THE")
           td_migrate=$(bash deploy/trien-khai.sh dang-ky tp-migrate "$anh_migrate" tp-migrate)
           bash deploy/trien-khai.sh migrate "$td_migrate"
           td_api=$(bash deploy/trien-khai.sh dang-ky tp-api "$anh_api" tp-api)
@@ -119,12 +122,17 @@ jobs:
           # ADR-070: không task role, như web.
           td_pk=$(bash deploy/trien-khai.sh dang-ky tp-public-keys "$anh_pk" -)
           bash deploy/trien-khai.sh cap-nhat tp-public-keys "$td_pk"
+          # ADR-071: neo tài liệu khoá biên nhận vào bucket audit sau MỖI lần công bố — chạy lại là không làm gì,
+          # một kid bị đổi khoá là job đỏ.
+          td_neo=$(bash deploy/trien-khai.sh dang-ky tp-neo "$anh_neo" tp-anchor-job)
+          bash deploy/trien-khai.sh neo "$td_neo"
           {
             echo "### Deploy api"
             echo "- migrate: \`$td_migrate\`"
             echo "- api: \`$td_api\`"
             echo "- web: \`$td_web\`"
             echo "- public-keys: \`$td_pk\`"
+            echo "- neo: \`$td_neo\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   worker:

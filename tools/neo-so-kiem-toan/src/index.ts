@@ -47,8 +47,22 @@ import {
   createLocalDevAnchorSigner,
   type AnchorSigner,
 } from "@trustprocure/audit/anchor-sign";
+import { KMSClient } from "@aws-sdk/client-kms";
+import { S3Client } from "@aws-sdk/client-s3";
+import { STSClient } from "@aws-sdk/client-sts";
 import { createPool } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
+import {
+  createS3AnchorStore,
+  muonNguoiGhiNeo,
+  neoKhoaBienNhan,
+  taoBoKyNeoAwsKms,
+  taoNoiNeoTaiLieuS3,
+  taoNoiNeoTaiLieuTep,
+  type BoKyNeo,
+  type NoiNeoTaiLieu,
+  type ThongTinDangNhap,
+} from "./aws.js";
 
 // [review lượt 9 — H9-8] In ĐÚNG dòng lệnh chạy được, không in một tên lệnh không tồn tại. Bản
 // đầu in `neo-so-kiem-toan xuat ...` — một lệnh không có `bin`, không có script workspace, tức
@@ -59,18 +73,26 @@ const CACH_DUNG = `Cách dùng:
   pnpm neo xuat --org <uuid> [--org <uuid> ...]
   pnpm neo kiem --org <uuid> [--org <uuid> ...]
   pnpm neo trich --org <uuid> --ra <thu-muc> [--seq <n>]
+  pnpm neo khoa-bien-nhan
 
 Biến môi trường:
-  DATABASE_URL                     bắt buộc
-  TRUSTPROCURE_NEO_KHO             thư mục nơi cất (bắt buộc)
+  DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan")
+  TRUSTPROCURE_NEO_KHO             thư mục nơi cất — HOẶC bộ S3 dưới, không cả hai
   TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
-  TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (chỉ cần cho "xuat")
+  TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (local-dev, chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_CONG_KHAI  SPKI DER, base64 — "<kid>=<base64>", lặp lại bằng dấu phẩy
+
+  [ADR-071] Job neo trên ECS — bucket neo audit, danh tính mượn tp-anchor-writer, ký bằng KMS:
+  TRUSTPROCURE_NEO_S3_BUCKET       bucket neo (thay TRUSTPROCURE_NEO_KHO)
+  TRUSTPROCURE_NEO_ROLE_ARN        role mượn (tp-anchor-writer)
+  TRUSTPROCURE_NEO_REGION          vùng của bucket và khoá
+  TRUSTPROCURE_NEO_KMS_KEY_ID      ARN alias/khoá ký mốc neo (thay TRUSTPROCURE_NEO_KHOA_RIENG)
+  "khoa-bien-nhan" neo tài liệu khoá biên nhận từ TRUSTPROCURE_RECEIPT_PUBLIC_KEYS (JSON { kid: SPKI }).
 
   "trich" tách một mốc neo thành ba tệp mà openssl(1) đọc thẳng. Nó KHÔNG cần DATABASE_URL.
 `;
 
-type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich";
+type Lenh = "khoi-tao" | "xuat" | "kiem" | "trich" | "khoa-bien-nhan";
 
 function batBuoc(ten: string): string {
   const gt = env[ten];
@@ -92,6 +114,59 @@ function docKhoaCongKhai(): ReadonlyMap<string, Uint8Array> {
     m.set(muc.slice(0, moc).trim(), Buffer.from(muc.slice(moc + 1).trim(), "base64"));
   }
   return m;
+}
+
+function tuyChon(ten: string): string | undefined {
+  const gt = env[ten];
+  return gt === undefined || gt.trim() === "" ? undefined : gt.trim();
+}
+
+/** [ADR-071] Cấu hình AWS của job neo — `undefined` ở chế độ tệp. Hai chế độ LOẠI TRỪ nhau. */
+interface CauHinhAws {
+  readonly bucket: string;
+  readonly region: string;
+  readonly dangNhap: ThongTinDangNhap;
+}
+
+async function docAws(): Promise<CauHinhAws | undefined> {
+  const bucket = tuyChon("TRUSTPROCURE_NEO_S3_BUCKET");
+  if (bucket === undefined) return undefined;
+  if (tuyChon("TRUSTPROCURE_NEO_KHO") !== undefined) {
+    throw new Error("TRUSTPROCURE_NEO_KHO và TRUSTPROCURE_NEO_S3_BUCKET loại trừ nhau — một nơi cất, không hai.");
+  }
+  const region = batBuoc("TRUSTPROCURE_NEO_REGION");
+  const sts = new STSClient({ region });
+  try {
+    return { bucket, region, dangNhap: await muonNguoiGhiNeo(sts, batBuoc("TRUSTPROCURE_NEO_ROLE_ARN")) };
+  } finally {
+    sts.destroy();
+  }
+}
+
+/**
+ * [ADR-071] Bộ ký của `xuat`: KMS khi có `TRUSTPROCURE_NEO_KMS_KEY_ID` (và khi ấy nửa công khai của khoá đang ký
+ * được thêm vào vòng khoá kiểm), local-dev khi không. Khai cả hai là lỗi.
+ */
+async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: BoKyNeo; khoaCongKhai: ReadonlyMap<string, Uint8Array> }> {
+  const keyId = tuyChon("TRUSTPROCURE_NEO_KMS_KEY_ID");
+  if (keyId === undefined) {
+    const boKy = docBoKy();
+    return { boKy: { activeKeyId: boKy.activeKeyId, ky: (f) => Promise.resolve(boKy.sign(f)) }, khoaCongKhai: docKhoaCongKhai() };
+  }
+  if (tuyChon("TRUSTPROCURE_NEO_KHOA_RIENG") !== undefined) {
+    throw new Error("TRUSTPROCURE_NEO_KMS_KEY_ID và TRUSTPROCURE_NEO_KHOA_RIENG loại trừ nhau.");
+  }
+  if (aws === undefined) throw new Error("Ký bằng KMS cần bộ biến S3/role của job neo (TRUSTPROCURE_NEO_S3_BUCKET…).");
+  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  const kms = new KMSClient({ region: aws.region, credentials: aws.dangNhap });
+  const { boKy, khoaCongKhai } = await taoBoKyNeoAwsKms({ client: kms, keyId, kid });
+  const vong = new Map(tuyChon("TRUSTPROCURE_NEO_KHOA_CONG_KHAI") === undefined ? [] : docKhoaCongKhai());
+  const daKhai = vong.get(kid);
+  if (daKhai !== undefined && !Buffer.from(daKhai).equals(Buffer.from(khoaCongKhai))) {
+    throw new Error(`TRUSTPROCURE_NEO_KHOA_CONG_KHAI khai cho "${kid}" một khoá KHÁC khoá KMS đang ký.`);
+  }
+  vong.set(kid, khoaCongKhai);
+  return { boKy, khoaCongKhai: vong };
 }
 
 function docBoKy(): AnchorSigner {
@@ -136,9 +211,8 @@ function mocNuocCao(neo: readonly ExternalAnchor[]): number {
   return neo.reduce((cao, n) => (n.seq > cao ? n.seq : cao), 0);
 }
 
-async function xuat(kho: AnchorStore, org: readonly string[]): Promise<number> {
-  const boKy = docBoKy();
-  const khoaCongKhai = docKhoaCongKhai();
+async function xuat(kho: AnchorStore, org: readonly string[], aws: CauHinhAws | undefined): Promise<number> {
+  const { boKy, khoaCongKhai } = await docBoKyTheoCheDo(aws);
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
     role: "app_api",
     // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
@@ -186,7 +260,7 @@ async function xuat(kho: AnchorStore, org: readonly string[]): Promise<number> {
           continue;
         }
 
-        await kho.append(id, boKy.sign(dau));
+        await kho.append(id, await boKy.ky(dau));
         stdout.write(`${id}\tseq=${dau.seq}\thash=${dau.hashHex}\n`);
       } catch (loi) {
         soHong += 1;
@@ -553,7 +627,33 @@ async function trich(kho: AnchorStore, ts: ThamSoTrich): Promise<number> {
 }
 
 function laLenh(gt: string | undefined): gt is Lenh {
-  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich";
+  return gt === "khoi-tao" || gt === "xuat" || gt === "kiem" || gt === "trich" || gt === "khoa-bien-nhan";
+}
+
+/**
+ * [ADR-071] Neo tài liệu khoá biên nhận — không CSDL, không bộ ký: bucket neo (Object Lock, một danh tính ghi) LÀ
+ * mốc neo. Chạy lại với cùng khoá là không làm gì; khoá khác cho cùng kid là mã thoát 1.
+ */
+async function khoaBienNhan(noi: NoiNeoTaiLieu): Promise<number> {
+  let tho: unknown;
+  try {
+    tho = JSON.parse(batBuoc("TRUSTPROCURE_RECEIPT_PUBLIC_KEYS"));
+  } catch (e) {
+    throw new Error(`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS không đọc được: ${e instanceof Error ? e.message : "lỗi lạ"}`);
+  }
+  if (typeof tho !== "object" || tho === null || Array.isArray(tho) || Object.keys(tho).length === 0) {
+    throw new Error("TRUSTPROCURE_RECEIPT_PUBLIC_KEYS phải là một đối tượng JSON { kid: SPKI } không rỗng.");
+  }
+  const khoa: Record<string, string> = {};
+  for (const [kid, gt] of Object.entries(tho as Record<string, unknown>)) {
+    if (typeof gt !== "string") throw new Error(`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS: khoá "${antoanChoBaoCao(kid)}" không phải chuỗi.`);
+    khoa[kid] = gt;
+  }
+  for (const [kid, kq] of await neoKhoaBienNhan(noi, khoa)) {
+    stdout.write(`khoa-bien-nhan/${kid}.json	${kq === "moi" ? "DA NEO" : "DA CO, TRUNG BYTE"}	${noi.moTa}
+`);
+  }
+  return 0;
 }
 
 async function main(): Promise<number> {
@@ -563,11 +663,28 @@ async function main(): Promise<number> {
     return 2;
   }
   if (lenh === "khoi-tao") return khoiTao();
-  const kho = createFileAnchorStore(batBuoc("TRUSTPROCURE_NEO_KHO"));
-  // `trich` KHÔNG mở pool và KHÔNG đọc DATABASE_URL — xem khối chú thích của nó, quyết định ⑵.
-  if (lenh === "trich") return trich(kho, docThamSoTrich(thamSo));
-  const org = docDanhSachToChuc(thamSo);
-  return lenh === "xuat" ? xuat(kho, org) : kiem(kho, org);
+  const aws = await docAws();
+  const s3 = aws === undefined ? undefined : new S3Client({ region: aws.region, credentials: aws.dangNhap });
+  try {
+    if (lenh === "khoa-bien-nhan") {
+      if (thamSo.length > 0) throw new Error("khoa-bien-nhan không nhận tham số.");
+      return await khoaBienNhan(
+        s3 === undefined || aws === undefined
+          ? taoNoiNeoTaiLieuTep(batBuoc("TRUSTPROCURE_NEO_KHO"))
+          : taoNoiNeoTaiLieuS3({ client: s3, bucket: aws.bucket }),
+      );
+    }
+    const kho =
+      s3 === undefined || aws === undefined
+        ? createFileAnchorStore(batBuoc("TRUSTPROCURE_NEO_KHO"))
+        : createS3AnchorStore({ client: s3, bucket: aws.bucket });
+    // `trich` KHÔNG mở pool và KHÔNG đọc DATABASE_URL — xem khối chú thích của nó, quyết định ⑵.
+    if (lenh === "trich") return await trich(kho, docThamSoTrich(thamSo));
+    const org = docDanhSachToChuc(thamSo);
+    return lenh === "xuat" ? await xuat(kho, org, aws) : await kiem(kho, org);
+  } finally {
+    s3?.destroy();
+  }
 }
 
 main().then(

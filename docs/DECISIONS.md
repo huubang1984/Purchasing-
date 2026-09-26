@@ -6584,3 +6584,41 @@ khoá riêng không rời KMS, và chỉ `tp-api` (người ký) cùng KeyAdmin 
 - Một service thêm ~9 USD/tháng (Fargate 0,25 vCPU) để giữ tiến trình ký (api) khác tiến trình công bố.
 - Xoay khoá = sửa stack 50 (khoá mới + mục mới, không gỡ mục cũ) rồi apply 50 → 90 → deploy. Không có đường nào tự động
   thêm kid vào danh sách công bố: một kid lạ trong biên nhận mà không có trong tài liệu là lỗi vận hành phải thấy được.
+
+## ADR-071 — Job neo lên ECS: nơi cất S3 ghi-một-lần, ký mốc neo bằng KMS ở audit, neo tài liệu khoá biên nhận
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-026**, ADR-066, ADR-067, **ADR-070**
+
+### Bối cảnh
+
+ADR-026 dựng mốc neo sổ kiểm toán với nơi cất TỆP và bộ ký local-dev; bucket neo (Object Lock COMPLIANCE) và khoá
+`alias/tp-anchor-sign` (stack 40) có sẵn, nhưng chưa tiến trình nào ghi vào đó — và bucket chỉ nhận ghi từ
+`tp-anchor-writer`, mà chỉ `tp-anchor-job` mượn được. ADR-070 cần chính đường ấy để neo tài liệu khoá biên nhận. Chủ dự án
+chọn làm job neo lên ECS thay vì nới policy của bucket.
+
+### Quyết định
+
+1. **Task một lần `tp-neo`** (role `tp-anchor-job`, image đích `neo`): `sts:AssumeRole` sang `tp-anchor-writer` một lần
+   mỗi lượt chạy; mọi lời gọi S3 và KMS đi bằng danh tính mượn ấy. Không nới policy nào của bucket (ADR-026 §4 giữ nguyên).
+   Mạng: subnet riêng không NAT, thêm VPC endpoint `sts`; KMS chéo tài khoản đi qua endpoint `kms` sẵn có, S3 qua gateway.
+2. **Nơi cất S3** (`createS3AnchorStore`): mỗi bản ghi một đối tượng `so-kiem-toan/<org>/<ms>-<băm>.json`, đọc theo thứ tự
+   tên; **mọi PutObject mang `IfNoneMatch: "*"`** — Object Lock chỉ giữ phiên bản, một phiên bản mới cùng khoá vẫn đổi
+   thứ `GetObject` trả về, nên ghi-một-lần phải được đòi ở lời gọi. Thân hỏng không bị bỏ qua: `loadVerifiedAnchors` từ chối.
+3. **Ký mốc neo bằng KMS** cùng định dạng local-dev (`buildAnchorText`, ECDSA P-256 SHA-256, DER base64) — `kiem`, `trich`,
+   `openssl` không đổi. Tự kiểm một lần lúc tạo bằng `GetPublicKey` (cùng lý do H9-3). kid, ARN alias và nửa công khai
+   một nguồn ở stack 40 (KeyAdmin audit), stack 90 đọc state. `AnchorSigner` của `packages/audit` giữ nguyên (đồng bộ);
+   công cụ có mặt ký bất đồng bộ riêng và bọc bộ ký local-dev về mặt ấy.
+4. **Neo tài liệu khoá biên nhận** (`pnpm neo khoa-bien-nhan`, lệnh mặc định của image): `khoa-bien-nhan/<kid>.json` là
+   **đúng byte** của `GET …/trustprocure-receipt-keys/<kid>`. Chạy lại cùng byte là không làm gì; byte khác cho cùng kid là
+   mã thoát 1. **Pipeline chạy nó sau mỗi lần deploy `tp-public-keys`.** Không ký tài liệu này: bucket ở tài khoản khác,
+   một danh tính ghi, Object Lock — chính nó là mốc neo.
+
+### Hệ quả, nói thẳng
+
+- **Vẫn chưa có LỊCH** cho mốc neo sổ kiểm toán (ADR-026 §5⑴): `xuat --org …` chạy bằng RunTask tay. Danh sách tổ chức
+  vẫn do người vận hành gõ (ADR-026 §5).
+- Job đọc đầu chuỗi bằng URL của `api` (vai `app_api`) — không có vai đăng nhập riêng cho job neo; nó chỉ ĐỌC.
+- Endpoint `sts` thêm ~7 USD/tháng mỗi AZ.
+- Chưa chạy thật: S3, KMS, STS đo trên client giả; đường tệp và lệnh `khoa-bien-nhan` đo trên tiến trình thật; image
+  build và chạy được.
+- Xoay khoá ký mốc neo: khoá mới + mục mới ở stack 40, không gỡ mục cũ — vòng khoá kiểm của job gồm mọi mục ấy.
