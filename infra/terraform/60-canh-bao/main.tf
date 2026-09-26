@@ -188,6 +188,7 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
           "aws:SourceArn" = [
             aws_cloudwatch_event_rule.put_key_policy_audit.arn,
             aws_cloudwatch_event_rule.task_worker_audit.arn,
+            aws_cloudwatch_event_rule.neo_hong_audit.arn,
           ]
         }
       }
