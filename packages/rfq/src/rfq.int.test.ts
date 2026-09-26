@@ -108,6 +108,9 @@ async function taoPhien(orgId: string, userId: string): Promise<string> {
 // duong DUY NHAT ha no xuong `false` la `setRfqBudget` — thu phai tro toi mot chinh sach co that
 // va de CSDL tinh phep so. Tham so cua helper nay vi vay DOI NGHIA: no khong con DAT mot co, no
 // chon mot SO TIEN nam duoi hay tren nguong. Nguong cua orgA la 100 trieu, dat o beforeAll.
+//
+// [S1.142 / khoản 241] Từ `068`, gói dưới ngưỡng cũng cần một chữ ký trước khi mở (sàn một chữ ký):
+// mọi luồng mở gói của tệp này ký bằng `u2` (`s2`) giữa nộp duyệt và mở.
 async function rfqNhap(orgId = orgA, requiresDualApproval = false): Promise<string> {
   return withTenant(apiPool, orgId, async (c) => {
     const r = await createRfq(c, orgId, {
@@ -196,6 +199,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
@@ -217,6 +221,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
@@ -275,6 +280,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
       // ~~Hai cạnh cuối chưa có hàm sản phẩm (S1.6 và S2), nên đo thẳng bằng SQL.~~
@@ -356,6 +362,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
@@ -556,6 +563,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await extendRfqDeadline(c, orgA, {
         rfqId,
@@ -578,6 +586,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
@@ -700,11 +709,82 @@ describe("[INV-D2] [S1.140 / khoản 240] chữ ký D2 chỉ được đếm ở
   });
 });
 
+// =============================================================================================
+// [S1.142 / khoản 241] SÀN MỘT CHỮ KÝ Ở CẠNH MỞ GÓI — MỌI GÓI, MỌI TỔ CHỨC (ADR-085)
+//
+// Tới `067`, phép đếm chữ ký ở cạnh vào OPEN chỉ chạy khi `requires_dual_approval`, nên gói dưới
+// ngưỡng mở được với 0 chữ ký — trái spec S0+S1 §4.3 (*"phê duyệt hợp lệ"*) và ADR-017 (*"một phê
+// duyệt là đủ"*). `068` đếm cho MỌI gói, cùng phép đếm TRÊN NỘI DUNG HIỆN TẠI của C-1: gói cấp kép
+// cần 2, gói còn lại cần 1. Bốn ca dưới đo: 0 chữ ký thì không mở, người tạo không tự ký được, một
+// chữ ký của người khác thì mở, và đột biến gỡ vế sàn thì gói 0 chữ ký lại mở được.
+// =============================================================================================
+describe("[INV-D2] [S1.142 / khoản 241] sàn một chữ ký — gói dưới ngưỡng cần một chữ ký của người khác người tạo", () => {
+  // Vế sàn của `068`, nguyên văn. Đột biến dưới gỡ đúng chuỗi này.
+  const VE_SAN =
+    "    ELSIF so_phe_duyet < 1 THEN\n" +
+    "      RAISE EXCEPTION 'RFQ nay can 1 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2, san mot chu ky)'\n" +
+    "        USING ERRCODE = 'check_violation';\n";
+
+  const moGoi = (rfqId: string): Promise<RfqRecord> =>
+    withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool));
+
+  /** Gói dưới ngưỡng, đã nộp duyệt, CHƯA có chữ ký nào. */
+  async function goiDuoiNguongChoDuyet(): Promise<string> {
+    const rfqId = await rfqNhap(orgA, false);
+    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }));
+    const goi = await withTenant(apiPool, orgA, (c) => getRfq(c, orgA, rfqId));
+    expect(goi?.requiresDualApproval, "tiền đề: gói này nằm DƯỚI ngưỡng phê duyệt kép").toBe(false);
+    return rfqId;
+  }
+
+  it("0 chữ ký — gói dưới ngưỡng KHÔNG mở được, và trigger nói đúng tên sàn", async () => {
+    const rfqId = await goiDuoiNguongChoDuyet();
+    await expect(moGoi(rfqId)).rejects.toThrow(
+      /can 1 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 \(D2, san mot chu ky\)/,
+    );
+    const sau = await withTenant(apiPool, orgA, (c) => getRfq(c, orgA, rfqId));
+    expect(sau?.status).toBe("PENDING_APPROVAL");
+  });
+
+  it("người TẠO gói không tự ký được, nên không tự mở được", async () => {
+    const rfqId = await goiDuoiNguongChoDuyet();
+    await expect(
+      withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: s1 })),
+    ).rejects.toThrow(/Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet/);
+    await expect(moGoi(rfqId)).rejects.toThrow(/moi co 0 \(D2, san mot chu ky\)/);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG — MỘT chữ ký của người khác người tạo thì gói mở", async () => {
+    const rfqId = await goiDuoiNguongChoDuyet();
+    await withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: s2 }));
+    const mo = await moGoi(rfqId);
+    expect(mo.status).toBe("OPEN");
+    expect(mo.openedAt).not.toBeNull();
+  });
+
+  it("ĐỘT BIẾN — gỡ vế sàn (trả thân về hình dạng `067`) thì gói 0 chữ ký MỞ ĐƯỢC: khối này giết đột biến ấy", async () => {
+    const { rows } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.rfq_kiem_chuyen_trang_thai()'::regprocedure) AS d",
+    );
+    const goc = rows[0]?.d ?? "";
+    expect(goc.split(VE_SAN).length - 1, "tiền đề: thân đang chạy mang ĐÚNG MỘT vế sàn của `068`").toBe(1);
+    await db.pool.query(goc.replace(VE_SAN, ""));
+    try {
+      const rfqId = await goiDuoiNguongChoDuyet();
+      const mo = await moGoi(rfqId);
+      expect(mo.status, "không có vế sàn thì lỗ khoản 241 mở lại").toBe("OPEN");
+    } finally {
+      await db.pool.query(goc);
+    }
+  });
+});
+
 describe("hạng mục chỉ sửa được khi RFQ còn soạn", () => {
   it("thêm/sửa/xoá hạng mục bị chặn sau khi RFQ đã OPEN", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
 
@@ -774,6 +854,7 @@ describe("huỷ RFQ", () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
     });
@@ -1010,6 +1091,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s2, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "du bao gia", actorSessionId: s3 });
     });
@@ -1046,9 +1128,12 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
 
   it("LỚP CÓ THẨM QUYỀN Ở CSDL: mở RFQ bằng SQL viết tay mà không ký tên bị TRIGGER chặn", async () => {
     const rfqId = await rfqDuoiMoiNguong();
-    await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
-    );
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
+      // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+    });
 
     // Một script vận hành "mở hàng loạt RFQ đã duyệt" sẽ đi đúng đường này.
     //
@@ -1069,9 +1154,12 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
 
   it("khai người mở LỆCH chủ phiên cũng bị chặn — không chỉ thiếu, mà cả sai", async () => {
     const rfqId = await rfqDuoiMoiNguong();
-    await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
-    );
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
+      // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+    });
 
     await expect(
       withTenant(apiPool, orgA, async (c) => {
@@ -1112,9 +1200,12 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
 
   it("ĐỘT BIẾN: gỡ trigger người-mở thì câu UPDATE không ký tên ĐI LỌT", async () => {
     const rfqId = await rfqDuoiMoiNguong();
-    await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
-    );
+    await withTenant(apiPool, orgA, async (c) => {
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
+      // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
+    });
 
     await db.pool.query("DROP TRIGGER rfq_packages_kiem_nguoi_mo ON rfq_packages");
     try {
@@ -1221,6 +1312,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     const sLa = await nguoiKhongVaiTro();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
 
@@ -1262,6 +1354,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     const rfqId = await rfqMoDuoc();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
     const huy = await withTenant(apiPool, orgA, (c) =>

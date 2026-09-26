@@ -12181,3 +12181,84 @@ ADR-080…082; sổ nợ **242** khoản, mở **93** — bốn PR ấy không c
 
 **Sau khi hợp #150** (`…-endpoint-policy`, S1.137 và ADR-079): khe số được lấp, sổ quyết định liền từ ADR-001 tới
 ADR-082; ADR **82** (79 của `master` + 3). Sổ nợ và migration không đổi — #150 không chạm chúng.
+
+# §S1.142 — S3.0 CHỐT HAI QUYẾT ĐỊNH CỦA CHỦ DỰ ÁN; KHOẢN 241 VÀ 242 ĐÓNG — SÀN MỘT CHỮ KÝ CHO MỌI TỔ CHỨC, LỜI KHAI `CHU_KY_CAN` ĐƯỢC SỬA
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 241 và 242 lên rổ A theo quyết định của chủ dự án, rồi đóng trong cùng vòng.** Phần
+S3.0 là giấy, không một dòng mã S3, và không chạm mảnh nào của `docs/PRODUCT.md` §11. Khoản 241 thêm MỘT bước vào kịch
+bản §11 — một người thứ hai ký trước khi mở gói — mà không đổi mảnh nào.
+
+## 1. Vòng này là gì
+
+Chủ dự án chốt ngày 2026-09-26 bốn điểm, trên các phương án phiên này trình kèm khuyến nghị:
+
+| # | Câu hỏi | Chốt | Ghi ở |
+|---|---|---|---|
+| ⑴ | Bảng mã quyền cho sáu hành vi mới của S3 | Chỉ hai mã mới — `supplier.qualify`, `category.manage`, cả hai cho `FINANCE`; bốn hành vi còn lại dùng mã cũ | ADR-084 ⑴–⑶ |
+| ⑵ | Lớp từ chối thứ ba của K12 | `CONTROL_DENIED`, payload chỉ mang mã chốt | ADR-084 ⑷ ⑸ |
+| ⑶ | Khoản 241 | Sàn một chữ ký cho MỌI tổ chức, ngay — không chờ công tắc S3 | ADR-085 |
+| ⑷ | Khoản 242 ⑴ | Sửa lời khai trong thân ghim và `duyetTraoThau`, kèm một test đo | mục 4 dưới |
+
+## 2. Hai quyết định S3.0 — giấy, không mã
+
+Nguyên tắc của ADR-084 ⑴: một mã quyền mới chỉ khi hành vi cần TÁCH NGƯỜI. Hai mã qua được phép thử ấy. `supplier.qualify`
+tách người thẩm định khỏi người mời (spec §4.8). `category.manage` tách người chỉnh nhóm hàng khỏi mọi vai tạo gói, vì
+nhóm hàng là khoá của tín hiệu chia nhỏ (K10). Bốn hành vi còn lại không tách được ai thêm: ngoại lệ đã được ký độc lập
+(K5), ghi nhận tín hiệu đã có luật người ở spec §4.6, cạnh về DRAFT và gửi lại link thuộc về chính người tạo gói, người
+duyệt hay người mời.
+
+Không mã nào vào CSDL ở vòng này (ADR-084 ⑶): một GRANT không người dùng là thứ không ai gỡ. `CONTROL_DENIED` cũng chưa có
+dòng mã — nó ra đời cùng chốt đầu tiên của S3.1.
+
+## 3. Khoản 241 — sàn một chữ ký
+
+**Tái lập.** S1.139 đo lỗ này trên Postgres 16: một PM tạo, nộp duyệt rồi tự mở, 0 hàng `rfq_approvals`. Vòng này đo lại
+bằng đột biến ngược: gỡ vế sàn khỏi thân `068` (tức trả về hình dạng `067`) thì gói dưới ngưỡng, 0 chữ ký, MỞ ĐƯỢC.
+
+**Sửa.** `068` định nghĩa lại `rfq_kiem_chuyen_trang_thai`. Thân TRÍCH nguyên văn từ `067` bằng script rồi đổi đúng một
+chỗ: phép đếm chữ ký TRÊN NỘI DUNG HIỆN TẠI ở cạnh vào OPEN chạy cho MỌI gói — cấp kép cần 2, còn lại cần 1. Bản ghim ở
+`hardening.always.sql` đổi trong cùng commit; bước kiểm của script khẳng định thân ghim cũ khớp từng byte thân `067` trước
+khi thay.
+
+**Sau khi sửa** — khối `[INV-D2] [S1.142 / khoản 241]` ở `packages/rfq/src/rfq.int.test.ts`, bốn ca:
+
+| Ca | Kết quả |
+|---|---|
+| 0 chữ ký | từ chối *"RFQ nay can 1 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2, san mot chu ky)"*; gói ở lại `PENDING_APPROVAL` |
+| người tạo tự ký | `rfq_kiem_nguoi_duyet` từ chối chữ ký; gói vẫn không mở |
+| một chữ ký của người khác | mở |
+| đột biến gỡ vế sàn | gói 0 chữ ký mở — khối giết được đột biến |
+
+**Cái giá, đo được.** Lượt chạy tích hợp đầu tiên sau `068`: 250 ca đỏ và 38 ca bỏ qua (vì `beforeAll` gãy), ở mười bốn
+tệp — đúng mười bốn fixture mở gói dưới ngưỡng mà không ai ký. Chúng được sửa theo ba hình dạng:
+- năm tệp đã có sẵn một người khác người tạo trong tổ chức (`luot-danh-gia`, `unseal`, `unseal-worker`, `comparison`,
+  `bo-xuat`) — chèn một hàng `rfq_approvals` của người ấy;
+- bảy tệp chỉ có một người (`key-material`, `t5-doi-khang`, `bidding`, `guest`, `loi-moi-sau-commit`, `loi-giao-thuc`,
+  `a5-co-lap-nha-cung-cap`) — một hàm `kyMotChuKy` dựng mỗi tổ chức một người ký không vai trò;
+- hai tệp mở qua đường sản phẩm (`rfq.int`, `gia-han-xep-job-truoc-ghi-so`) — `approveRfq` của một người thứ hai giữa
+  nộp duyệt và mở. Ở `rfq.int`, ba ca đo chữ ký NGƯỜI MỞ bằng SQL viết tay cũng phải ký trước: trigger cạnh chạy trước
+  trigger người mở theo thứ tự chữ cái, nên thiếu chữ ký thì ba ca ấy đỏ vì một lý do khác lý do chúng đo.
+
+`gieo:demo` không đổi: gói gieo là gói cấp kép và đã có hai chữ ký.
+
+## 4. Khoản 242 ⑴ — lời khai `CHU_KY_CAN`
+
+`061` và `duyetTraoThau` khai: đổi hằng `CHU_KY_CAN` thành 2 là đủ để có hai chữ ký. S1.139 đo điều ngược lại. Vòng này đưa
+phép đo ấy vào kho — khối `[INV-J3] [S1.142 / khoản 242 ⑴]` ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`: với hằng
+là 2, người duyệt đầu bị từ chối *"can 2 chu ky duyet; dang co 1 (J3)"* và 0 chữ ký còn lại; người thứ hai — một người
+`FINANCE` khác, không đề xuất, không tạo gói — gặp đúng lỗi ấy; trả hằng về 1 thì cùng đề xuất duyệt được.
+
+`068` định nghĩa lại `award_kiem_mot_award_song` chỉ để sửa chú thích: thân TRÍCH từ `061`, đổi đúng một chỗ, hành vi
+không đổi. `prosrc` giữ cả chú thích, nên thân mới vẫn phải đi qua migration và bản ghim. `duyetTraoThau` gạch vế sai tại
+chỗ. Khối đo ghi **sự thật hôm nay**, không ghi hành vi mong muốn: S3.5 dựng chữ ký sống độc lập với hàng `APPROVED`, và khi
+ấy khối này phải lật.
+
+## 5. Ranh giới nói ra
+
+- **Lần từ chối của sàn không vào sổ.** Nó là một lần từ chối do trigger: giao dịch huỷ, không lối nào ghi được — cùng
+  giới hạn của D2 và của J6 (ADR-060). `openRfq` đúc cặp khoá trước khi trigger phán, và giao dịch của người gọi dọn nó.
+- **Chỉ `PROCUREMENT_MANAGER` giữ `rfq.approve`.** Tổ chức mà PM duy nhất cũng là người tạo gói thì không mở được gói nào
+  (ADR-085, spec S3 §8.8).
+- **Hai quyết định S3.0 là giấy.** Chưa mã nào vào CSDL, `CONTROL_DENIED` chưa có dòng mã, và việc nới dải nhãn
+  `[A-HJ]`→`[A-HJK]` của S3.0 còn nguyên.
+- Các phép đo chạy trên bộ dựng Postgres 16 cục bộ thay testcontainers, vì container không có docker; CI chạy lại khi đẩy.

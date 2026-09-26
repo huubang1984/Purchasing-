@@ -342,9 +342,13 @@ export async function deXuatTraoThau(
  * gọi theo `awardId` thì bị chặn ngay vì hàng ấy không còn `PROPOSED`.
  *
  * Số chữ ký cần sống ở **CSDL** (`CHU_KY_CAN` trong `award_kiem_mot_award_song`), chốt là MỘT
- * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`; nếu ngày nào con số ấy
+ * (§7, 2026-09-22). Nên hàm này ghi chữ ký rồi ghi luôn hàng `APPROVED`~~; nếu ngày nào con số ấy
  * thành hai, câu `INSERT` thứ hai từ chối với thông điệp gọi tên số chữ ký đang có, và lời gọi
- * của người duyệt thứ hai đi qua. Không có phép đếm nào ở lớp này — hai bản đếm là hai bản trôi.
+ * của người duyệt thứ hai đi qua~~. **[S1.142 / khoản 242 ⑴] Vế vừa gạch SAI, và đã đo:** hai câu
+ * `INSERT` nằm trong CÙNG một giao dịch, nên với `CHU_KY_CAN := 2` lời gọi đầu bị từ chối và chữ ký
+ * của nó rơi theo giao dịch; người duyệt thứ hai gặp đúng lỗi ấy — trao thầu không bao giờ duyệt
+ * được. Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5). Không có phép đếm nào ở lớp
+ * này — hai bản đếm là hai bản trôi.
  */
 export async function duyetTraoThau(
   client: pg.PoolClient,
