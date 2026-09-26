@@ -115,7 +115,7 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
     const bc = baoCao([{ name: "apps/x/a.test.ts", tests: ["[INV-E3(3)] vế", "[INV-M5] lạ", "[INV-A1] a"] }]);
     expect([...collectCoverage(bc).keys()]).toEqual(["A1"]);
     expect(findMisplacedLabels(collectLabelUses(bc), { A1: ["apps/x/a.test.ts"] }, GOC).chuaKhai).toEqual([]);
-    // [S1.9101 / S3.0] …và chiều kia: nhóm K đã ở TRONG dải thì H22 phải xét nó. Kho chưa có nhãn K
+    // [S1.153 / S3.0] …và chiều kia: nhóm K đã ở TRONG dải thì H22 phải xét nó. Kho chưa có nhãn K
     // nào, nên một mũi thu vế *nhãn chưa khai* của `findMisplacedLabels` về `[A-HJ]` chỉ chết ở đây.
     const coK = baoCao([{ name: "apps/x/a.test.ts", tests: ["[INV-A1] a", "[INV-K1] bậc"] }]);
     expect([...collectCoverage(coK).keys()]).toEqual(["A1", "K1"]);

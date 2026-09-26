@@ -194,7 +194,7 @@ là rủi ro lớn nhất, lớn hơn mọi rủi ro kỹ thuật, từ ngày đ
 nói rằng *đo bằng bất biến* và *đo bằng người mua* là hai trục khác nhau, và dự án tới hôm nay
 chỉ có trục thứ nhất.
 
-**[S1.9101 / ADR-085] KỊCH BẢN CÓ THÊM MỘT BƯỚC, VÀ BƯỚC ẤY ĐẶT MỘT ĐIỀU KIỆN LÊN TỔ CHỨC PILOT.** Từ `068`, gói nào cũng
+**[S1.153 / ADR-085] KỊCH BẢN CÓ THÊM MỘT BƯỚC, VÀ BƯỚC ẤY ĐẶT MỘT ĐIỀU KIỆN LÊN TỔ CHỨC PILOT.** Từ `068`, gói nào cũng
 cần một phê duyệt TRÊN NỘI DUNG HIỆN TẠI của một người khác người tạo, rồi mới mở được; trước đó gói dưới ngưỡng mở được với
 0 chữ ký (khoản 241). Đo trên `master` `fa8d4ea`, ba mã quyền của đoạn tạo → mở:
 - nộp duyệt cần `rfq.create`, do `REQUESTER`, `BUYER` và `PROCUREMENT_MANAGER` giữ (`005`);

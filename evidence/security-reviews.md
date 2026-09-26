@@ -12280,7 +12280,7 @@ chỗ. Khối đo ghi **sự thật hôm nay**, không ghi hành vi mong muốn:
 - Sổ nợ **242** khoản, mở **93 → 91**; rổ A **1** (241 và 242 vào rồi đóng), rổ B **69 → 67**, rổ C **23**:
   1 + 67 + 23 = 91. **68** migration; ADR **85** (83 của `master` + 2).
 
-# §S1.9101 — S3.0 KHÉP: DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`
+# §S1.153 — S3.0 KHÉP: DẢI NHÃN BẤT BIẾN NỚI `[A-HJ]` → `[A-HJK]` TRƯỚC KHI K1 VÀO SỔ; KỊCH BẢN PILOT GHI ĐIỀU KIỆN TỔ CHỨC TỐI THIỂU SAU `068`
 
 **Rổ và mảnh (ADR-043 ⒞): không khoản nợ nào vào hay ra, không chạm mảnh nào của `docs/PRODUCT.md` §11.** Không migration,
 không ADR. Nhánh khởi lại từ `master` `fa8d4ea` sau khi #154 merge.
