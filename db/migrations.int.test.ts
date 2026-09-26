@@ -144,7 +144,7 @@ interface MembershipConLai {
 }
 
 /**
- * [CR2-T3] Mọi tư cách thành viên còn sót chạm tới BỐN role được canh — hai role ứng dụng và
+ * [CR2-T3] Mọi tư cách thành viên còn sót chạm tới BỐN role được canh ([ADR-072 phần 1] nay SÁU — thêm cặp app_neo/app_neo_login) — hai role ứng dụng và
  * hai role đăng nhập được đưa vào danh sách trắng. Đọc cả `admin_option` vì một membership
  * hợp lệ kèm ADMIN OPTION vẫn là bàn đạp: chủ thể đó tự cấp được app_api cho bất kỳ ai.
  */
@@ -153,8 +153,8 @@ const CAU_MEMBERSHIP_CON_LAI =
   "  FROM pg_auth_members am " +
   "  JOIN pg_roles nhom ON nhom.oid = am.roleid " +
   "  JOIN pg_roles thanh_vien ON thanh_vien.oid = am.member " +
-  " WHERE nhom.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login') " +
-  "    OR thanh_vien.rolname IN ('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login') " +
+  " WHERE nhom.rolname IN ('app_api', 'app_unseal', 'app_neo', 'app_api_login', 'app_unseal_login', 'app_neo_login') " +
+  "    OR thanh_vien.rolname IN ('app_api', 'app_unseal', 'app_neo', 'app_api_login', 'app_unseal_login', 'app_neo_login') " +
   " ORDER BY 1, 2";
 
 /**
@@ -193,9 +193,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   it("áp dụng sạch trên cơ sở dữ liệu trống", async () => {
     await withMigratedDatabase(async (db) => {
       const { rows } = await db.pool.query<{ rolname: string }>(
-        "SELECT rolname FROM pg_roles WHERE rolname IN ('app_api', 'app_unseal') ORDER BY rolname",
+        "SELECT rolname FROM pg_roles WHERE rolname IN ('app_api', 'app_unseal', 'app_neo') ORDER BY rolname",
       );
-      expect(rows.map((r) => r.rolname)).toEqual(["app_api", "app_unseal"]);
+      // [ADR-072 phần 1] `app_neo` do hardening BƯỚC 0 dựng — cùng chỗ, cùng lý do với hai vai kia.
+      expect(rows.map((r) => r.rolname)).toEqual(["app_api", "app_neo", "app_unseal"]);
     });
     // [S1.11] Ngân sách riêng: ca này dựng một container MỚI rồi chạy trọn ~~37~~ [S1.79] 51 migration + ba lượt
     // hardening. Đo được: ~5 s khi chạy ba file; ~21 s trong `test:int` đầy đủ; chạm trần 30 s khi
@@ -1524,7 +1525,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
-    { ham: "bid_kiem_han_nop", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_han_nop", migration: "066_han_nop_mang_gio_phan_xu.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
     { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
     // [S1.108 / S2.5] Tên trigger được chọn để sắp SAU `vendor_bid_versions_kiem_han_nop` theo
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
@@ -2337,9 +2338,16 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await db.pool.query("GRANT app_api_login TO ke_tan_cong");
       // (5) đúng cặp nhưng kèm ADMIN OPTION
       await db.pool.query("GRANT app_api TO app_api_login WITH ADMIN OPTION");
+      // [ADR-072 phần 1] Cặp thứ ba hợp lệ, và hai biến thể CHÉO của nó — đúng hai đường mà vai liệt kê tổ chức
+      // của job neo đi được sang tiến trình api (hay api sang quyền ghi của job neo):
+      //   (6) app_api_login vào app_neo — api gọi được outbox_danh_sach_to_chuc(), thứ 052 cố ý thu hồi (ADR-040);
+      //   (7) app_neo_login vào app_api — job neo chỉ-đọc được mọi quyền GHI của app_api.
+      await db.pool.query("CREATE ROLE app_neo_login LOGIN PASSWORD 'mk-neo' IN ROLE app_neo");
+      await db.pool.query("GRANT app_neo TO app_api_login");
+      await db.pool.query("GRANT app_api TO app_neo_login");
 
       const truoc = await db.pool.query<MembershipConLai>(CAU_MEMBERSHIP_CON_LAI);
-      expect(truoc.rows).toHaveLength(6); // 2 hợp lệ + 4 lạ (cặp (5) trùng cặp hợp lệ)
+      expect(truoc.rows).toHaveLength(9); // 3 hợp lệ + 4 lạ (cặp (5) trùng cặp hợp lệ) + 2 chéo
       expect(
         truoc.rows.find((r) => r.thanh_vien === "app_api_login" && r.nhom === "app_api")
           ?.admin_option,
@@ -2350,6 +2358,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       const sau = await db.pool.query<MembershipConLai>(CAU_MEMBERSHIP_CON_LAI);
       expect(sau.rows).toEqual([
         { nhom: "app_api", thanh_vien: "app_api_login", admin_option: false },
+        { nhom: "app_neo", thanh_vien: "app_neo_login", admin_option: false },
         { nhom: "app_unseal", thanh_vien: "app_unseal_login", admin_option: false },
       ]);
     } finally {
@@ -3190,6 +3199,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
         "064_lich_su_dieu_phoi.sql",
+        "065_vai_neo.sql",
+        "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
@@ -7598,6 +7609,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
         "064_lich_su_dieu_phoi.sql",
+        "065_vai_neo.sql",
+        "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
 
@@ -7883,6 +7896,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
         "064_lich_su_dieu_phoi.sql",
+        "065_vai_neo.sql",
+        "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
@@ -7955,7 +7970,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // (c) Tập vai theo USAGE/SET KHÔNG chứa vai deploy (membership chỉ-admin không phải kết nối ứng dụng); ⑵ rỗng.
         const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
         const tap = (await db.pool.query<{ rolname: string }>(docHangHardeningTu(HARDENING, "VAI_KET_NOI_UNG_DUNG"))).rows.map((r) => r.rolname).sort();
-        expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_unseal"]);
+        expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_neo", "app_unseal"]);
+        // [ADR-072 phần 1] 065 đi qua dưới vai deploy KHÔNG superuser: nó MƯỢN quyền chủ hàm liệt kê tổ chức để cấp cho
+        // app_neo (bản đầu — GRANT trần — ném "permission denied for function outbox_danh_sach_to_chuc" ở đúng hồ sơ này),
+        // và TRẢ LẠI: vai deploy không giữ membership kế thừa nào vào app_liet_ke_to_chuc.
+        const neo = (await db.pool.query<{ neo: boolean; ke_thua: boolean }>(
+          "SELECT has_function_privilege('app_neo', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE') AS neo, " +
+            "pg_has_role('trien_khai', 'app_liet_ke_to_chuc', 'USAGE') AS ke_thua",
+        )).rows[0]!;
+        expect(neo).toEqual({ neo: true, ke_thua: false });
         expect((await db.pool.query<{ mo_ta: string }>(docHangHardeningTu(HARDENING, "CAU_PHU_LENH_SAI"))).rows).toEqual([]);
         // (d) Deploy DỪNG ở lượt phán xét — mục nào cũng CÓ TÊN và CÓ LỐI RA, không phải lỗi thô ở 001.
         // [S1.86 / khoản 128] Từ vòng này là HAI mục, không phải một: mục thứ hai thu hồi EXECUTE của các hàm
@@ -7963,13 +7986,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // NOSUPERUSER không làm được. Đây là lời khai ĐẾM, nên nó thiu ngay khi thêm một mục cần superuser;
         // giữ con số ở đây có chủ đích để lần thêm sau phải nhìn thấy hồ sơ N3.
         expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 2 mục:/u);
-        expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
+        // [ADR-072 phần 1] Ba membership ngầm, không còn hai: BƯỚC 0 dựng thêm `app_neo` dưới cùng vai deploy.
+        expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal/app_neo và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai; app_neo -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
         expect(kq).toContain('- "quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng"');
         // (e) Lối ra đúng như thông báo, và nay nó gồm HAI việc của superuser — cả hai chạy MỘT LẦN:
         //     ⑴ gỡ hai membership ngầm; ⑵ thu hồi các hàm lấy khoá mức phiên khỏi PUBLIC (khoản 128).
         //     Vai deploy giữ được `pg_advisory_lock(bigint)` vì khuôn dựng ở trên đã cấp RIÊNG cho nó — một
         //     lần `GRANT` của superuser, đúng tiền điều kiện mà `TU_CHOI_KHOA_MIGRATE` nêu ra.
-        await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai");
+        await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai; REVOKE app_neo FROM trien_khai");
         for (const f of [
           "pg_advisory_lock(bigint)", "pg_advisory_lock(integer, integer)",
           "pg_advisory_lock_shared(bigint)", "pg_advisory_lock_shared(integer, integer)",

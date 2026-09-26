@@ -12162,3 +12162,7 @@ khôi phục trong `finally`. Nhờ vậy nó đo đúng thân mà `migrate()` +
 - **65** migration (`064` của `master` + `067`); ADR **74** không đổi;
 - cả kho trên bộ dựng cục bộ — **150 tệp / 2501 ca: 2492 đạt, 1 bỏ qua, 8 đỏ** (vẫn chỉ bộ tự kiểm `test-support`), 856 giây;
 - ma trận sinh lại từ báo cáo ấy KHỚP TỪNG BYTE bản gộp của git: 63/63, *XANH*; so với `master` chỉ đổi ô D2 (34 → 37).
+
+**Lúc mở PR — đổi số lần ba và hợp `master` `27d0f6d`** (PR #138 khoản 196, cùng các nhánh neo). Vòng này thành §S1.136,
+migration thành `067`; sổ nợ **242** khoản, mở **93** (= 91 của `master` + 241, 242); rổ A **1**, rổ B **69**, rổ C
+**23**; 1 + 69 + 23 = 93; **67** migration; ADR **77**.

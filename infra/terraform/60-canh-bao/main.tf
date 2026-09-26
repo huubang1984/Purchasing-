@@ -1,6 +1,9 @@
-# Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"):
+# Stack 60 — hai cảnh báo cho hai rủi ro còn lại của ADR-062 (README, "Rủi ro còn lại"), và hai cho job neo:
 #   ⑴ KEY POLICY bị sửa, trên mọi khoá KMS của audit và prod.
 #   ⑵ Một task mang role WORKER chạy ngoài service chính thức `tp-unseal-worker`.
+#   ⑶ [ADR-072] Job neo `tp-neo` (lịch hằng ngày) dừng mà không thành công.
+#   ⑷ [ADR-073] 36 giờ không có mốc neo sổ kiểm toán mới nào trong bucket neo — bắt đúng ca ⑶ mù: lịch KHÔNG chạy
+#      (Scheduler bị tắt/xoá, role sai, image không kéo được mà không có task nào dừng).
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -127,6 +130,23 @@ locals {
       ]
     }
   })
+
+  # ⑶ [ADR-072] Job neo (`tp-neo`, lịch hằng ngày) DỪNG mà không thành công: container thoát ≠ 0 (xuất hay kiểm
+  # hỏng ở ít nhất một tổ chức — `kiem` đỏ là dấu hiệu sổ bị sửa/cắt) hoặc task không khởi động được. Không có
+  # cảnh báo này thì một lịch hỏng im lặng hàng tháng — đúng khuôn H9-3 của ADR-026.
+  mau_neo_hong = jsonencode({
+    source      = ["aws.ecs"]
+    detail-type = ["ECS Task State Change"]
+    account     = [local.prod]
+    detail = {
+      group      = ["family:tp-neo"]
+      lastStatus = ["STOPPED"]
+      "$or" = [
+        { containers = { exitCode = [{ anything-but = 0 }] } },
+        { stopCode = ["TaskFailedToStart"] },
+      ]
+    }
+  })
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -159,21 +179,35 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
   arn      = aws_sns_topic.canh_bao_khoa.arn
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "EventBridgeGuiCanhBao"
-      Effect    = "Allow"
-      Principal = { Service = "events.amazonaws.com" }
-      Action    = "sns:Publish"
-      Resource  = aws_sns_topic.canh_bao_khoa.arn
-      Condition = {
-        ArnEquals = {
-          "aws:SourceArn" = [
-            aws_cloudwatch_event_rule.put_key_policy_audit.arn,
-            aws_cloudwatch_event_rule.task_worker_audit.arn,
-          ]
+    Statement = [
+      {
+        Sid       = "CloudWatchGuiCanhBaoThieuMocNeo"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.canh_bao_khoa.arn
+        Condition = {
+          ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_metric_alarm.thieu_moc_neo.arn }
+          StringEquals = { "aws:SourceAccount" = local.audit }
         }
-      }
-    }]
+      },
+      {
+        Sid       = "EventBridgeGuiCanhBao"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.canh_bao_khoa.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = [
+              aws_cloudwatch_event_rule.put_key_policy_audit.arn,
+              aws_cloudwatch_event_rule.task_worker_audit.arn,
+              aws_cloudwatch_event_rule.neo_hong_audit.arn,
+            ]
+          }
+        }
+      },
+    ]
   })
 }
 
@@ -234,8 +268,32 @@ resource "aws_cloudwatch_event_target" "task_worker_audit" {
   }
 }
 
+resource "aws_cloudwatch_event_rule" "neo_hong_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-neo-hong"
+  description   = "Job neo tp-neo dung ma khong thanh cong (ADR-072)"
+  event_pattern = local.mau_neo_hong
+}
+
+resource "aws_cloudwatch_event_target" "neo_hong_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.neo_hong_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc     = "$.time"
+      task    = "$.detail.taskArn"
+      lyDo    = "$.detail.stoppedReason"
+      maDung  = "$.detail.stopCode"
+      maThoat = "$.detail.containers[0].exitCode"
+    }
+    input_template = "\"[TrustProcure] Job neo so kiem toan (tp-neo) KHONG thanh cong. Luc <luc>, task <task>, exitCode <maThoat>, stopCode <maDung>, ly do <lyDo>. Doc log /tp/neo: dong 'KHONG XUAT DUOC', 'TU CHOI NEO' hoac 'ok=false' la mot to chuc can dieu tra NGAY (so co the da bi sua hoac cat duoi).\""
+  }
+}
+
 # ---------------------------------------------------------------------------------------------
-# PROD — chuyển PutKeyPolicy (⑴) và task mang role worker (⑵) sang audit
+# PROD — chuyển PutKeyPolicy (⑴), task mang role worker (⑵) và job neo hỏng (⑶) sang audit
 # ---------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "events_assume" {
   statement {
@@ -305,3 +363,66 @@ resource "aws_cloudwatch_event_target" "task_worker_prod" {
 }
 
 output "sns_topic_arn" { value = aws_sns_topic.canh_bao_khoa.arn }
+
+resource "aws_cloudwatch_event_rule" "neo_hong_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-neo-hong"
+  description   = "Chuyen su kien job neo tp-neo dung khong thanh cong sang audit (ADR-072)"
+  event_pattern = local.mau_neo_hong
+}
+
+resource "aws_cloudwatch_event_target" "neo_hong_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.neo_hong_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑷ [ADR-073] AUDIT — 36 giờ không có mốc neo sổ kiểm toán mới
+# ---------------------------------------------------------------------------------------------
+# ⑶ chỉ nói khi một task `tp-neo` DỪNG hỏng. Lịch không chạy thì không có task nào dừng — im lặng. Thước đo ở đây
+# là chính thứ ADR-026 cần: đối tượng mới dưới `so-kiem-toan/` của bucket neo, đếm bằng S3 request metrics
+# (`PutRequests`) ở AUDIT. Người có quyền ở prod không tắt được metric, alarm hay SNS này.
+#
+# Cửa sổ: 36 kỳ một giờ, CẢ 36 phải "không có PUT" (thiếu dữ liệu = vi phạm — S3 không phát điểm nào cho giờ không có
+# yêu cầu). Lịch chạy mỗi ngày ⇒ khoảng trống bình thường ≤ 24 giờ; lỡ MỘT lượt ⇒ báo sau 36 giờ tính từ lần ghi cuối.
+# `ok_actions` gửi thư khi mốc neo quay lại.
+#
+# Giới hạn, nói thẳng:
+#   • Đếm TỔNG mọi tổ chức. Một tổ chức riêng lẻ không được neo mà các tổ chức khác vẫn được là việc của ⑶ (`xuat`
+#     thoát 1 khi một tổ chức hỏng) — không phải của ⑷.
+#   • `PutRequests` đếm cả PUT bị từ chối (403/412). Đường ghi DUY NHẤT là `tp-anchor-writer` với khoá chưa từng có,
+#     nên một PUT bị từ chối dưới tiền tố này tự nó đã bất thường; nó chỉ làm ⑷ trễ, không làm ⑷ sai hướng.
+#   • Ngay sau lần apply đầu, alarm vào ALARM cho tới lượt ghi đầu tiên (metric chưa có lịch sử) — một thư dự kiến.
+resource "aws_s3_bucket_metric" "moc_neo" {
+  provider = aws.audit
+  bucket   = module.chung.bucket.anchor
+  name     = "so-kiem-toan"
+  filter {
+    prefix = "so-kiem-toan/"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "thieu_moc_neo" {
+  provider          = aws.audit
+  alarm_name        = "tp-canh-bao-thieu-moc-neo"
+  alarm_description = "[TrustProcure] 36 gio khong co moc neo so kiem toan moi trong bucket neo (ADR-073). Kiem lich tp-neo-hang-ngay (EventBridge Scheduler, prod), log /tp/neo va lan chay gan nhat cua task tp-neo. Chay tay: terraform output lenh_chay_neo o stack 90."
+  namespace         = "AWS/S3"
+  metric_name       = "PutRequests"
+  dimensions = {
+    BucketName = module.chung.bucket.anchor
+    FilterId   = aws_s3_bucket_metric.moc_neo.name
+  }
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 36
+  datapoints_to_alarm = 36
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
+  ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
+}

@@ -27,7 +27,15 @@ import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { createAwsKmsReceiptSigner, createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
 import { createAwsKmsOrgKeyProvisioner, createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
-import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
+import {
+  canhLechDongHoDinhKy,
+  createPool,
+  doiChieuDauKiemVongKhoa,
+  khangDinhPhienDangNhapUngDung,
+  kiemLechDongHo,
+  moTaLech,
+  type DongHo,
+} from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { taoBoGuiSes } from "./adapters/gui-ses.js";
@@ -110,7 +118,17 @@ const DON_BUCKET_MS = 5 * 60 * 1000;
  */
 const DON_BUCKET_ON_AO = 1000;
 
-export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
+/** Thứ composition root nhận ngoài cấu hình — hôm nay chỉ để đo. */
+export interface PhuThuocTienTrinhApi {
+  /**
+   * [khoản 196] Đồng hồ tiến trình mà phép canh lệch so với đồng hồ CSDL. Mặc định `Date.now`; test
+   * tiêm một đồng hồ chạy lệch để dựng cảnh "đồng hồ trôi" mà không vặn được đồng hồ của CSDL.
+   */
+  readonly dongHo?: DongHo;
+}
+
+export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi = {}): TienTrinhApi {
+  const dongHo = phuThuoc.dongHo ?? Date.now;
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, {
     role: "app_api",
     // [S1.94 / khoản 103] Kết nối RẢNH chết (CSDL khởi động lại, máy ngủ dậy): trước vòng này sự
@@ -265,6 +283,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
 
   let daDung = false;
   let dongHoDon: NodeJS.Timeout | undefined;
+  let dungCanhDongHo: (() => void) | undefined;
 
   return {
     async batDau(): Promise<DiaChiNghe> {
@@ -291,6 +310,10 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
           c.release();
         }
       }
+      // [khoản 196 / ADR-074 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
+      // trình trong ngưỡng, TRƯỚC khi mở cổng. Lệch ⇒ `LechDongHoError` ⇒ không cổng nào nghe. Đo trên
+      // `pool` sau vòng trên, tức trên đúng kết nối vai `app_api` đã được kiểm.
+      await kiemLechDongHo(pool, ch.lechDongHoToiDaMs, dongHo);
       await new Promise<void>((xong, hong) => {
         server.once("error", hong);
         server.listen(ch.listenPort, ch.listenHost, () => {
@@ -299,6 +322,20 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         });
       });
       runner.start();
+      // [khoản 196 / ADR-074 phần 1] Canh lại theo nhịp lúc chạy: vượt ngưỡng ⇒ MỘT dòng log cảnh báo
+      // mang tên `LechDongHo` và ba con số — không dừng tiến trình, không in giá trị nào của cấu hình.
+      dungCanhDongHo = canhLechDongHoDinhKy({
+        nguon: pool,
+        nguongMs: ch.lechDongHoToiDaMs,
+        chuKyMs: ch.chuKyCanhDongHoMs,
+        dongHo,
+        baoLech: (p) =>
+          console.error(
+            `[api] canh bao LechDongHo: dong ho CSDL lech ${moTaLech(p.lechMs)} so voi tien trinh ` +
+              `(khu hoi ${Math.round(p.khuHoiMs)} ms, nguong ${ch.lechDongHoToiDaMs} ms) — han nop phan xu bang now() cua CSDL`,
+          ),
+        baoLoi: (e) => console.error(`[api] canh LechDongHo khong do duoc ${moTaLoiKhongGiaTri(e)}`),
+      });
       // [sổ nợ 55] Bộ dọn chạy NỀN: `unref` để nó không giữ tiến trình sống, và lỗi của nó ~~chỉ ghi
       // TÊN~~ [S1.67 / khoản 118, lượt soi 61b-8] ghi TÊN cùng mã cố định — một lần dọn hỏng không được làm đổ tiến trình `api` (cùng
       // khuôn `onPollError`).
@@ -348,6 +385,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
       daDung = true;
       runner.stop();
       if (dongHoDon !== undefined) clearInterval(dongHoDon);
+      dungCanhDongHo?.();
       await new Promise<void>((xong) => {
         if (!server.listening) {
           xong();

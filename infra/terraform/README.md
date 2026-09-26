@@ -14,7 +14,7 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
@@ -176,6 +176,8 @@ aws secretsmanager create-secret --profile tp-prod --name tp/api/database-url `
   --secret-string "postgres://app_api_login:<mat-khau-api>@<rds-host>:5432/trustprocure"
 aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url `
   --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
+aws secretsmanager create-secret --profile tp-prod --name tp/neo/database-url `
+  --secret-string "postgres://app_neo_login:<mat-khau-neo>@<rds-host>:5432/trustprocure"
 ```
 
 **2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:
@@ -249,7 +251,13 @@ ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `ne
   `GET https://<ten_mien>/.well-known/trustprocure-receipt-keys/<kid>`. Chạy lại cùng khoá là không làm gì; một kid bị đổi
   khoá làm job thoát mã 1.
 - **Mốc neo sổ kiểm toán** — `lenh_chay_neo.xuat`, thay `<uuid>` (lặp `--org` cho nhiều tổ chức). Ghi
-  `so-kiem-toan/<org>/<thời điểm>-<băm>.json`, ký bằng KMS. Chưa có **lịch** (ADR-026 §5⑴): người vận hành chạy nó.
+  `so-kiem-toan/<org>/<thời điểm>-<băm>.json`, ký bằng KMS. **[ADR-072] Có lịch:** EventBridge Scheduler
+  `tp-neo-hang-ngay` chạy `lich` lúc 02:15 giờ VN — tự liệt kê mọi tổ chức (vai `app_neo`), xuất rồi kiểm. Task thoát ≠ 0
+  ⇒ email cảnh báo ⑶ của stack 60 (từ tài khoản audit). Đọc log `/tp/neo`: `TU CHOI NEO`, `KHONG XUAT DUOC`, `ok=false` là
+  một tổ chức cần điều tra ngay.
+  **[ADR-073]** Lịch không chạy thì không task nào dừng ⇒ ⑶ im; cảnh báo ⑷ của stack 60 báo khi **36 giờ** không có
+  đối tượng mới nào dưới `so-kiem-toan/` (S3 request metrics + CloudWatch alarm, cùng ở audit). Lần apply đầu: alarm vào
+  ALARM cho tới lượt ghi đầu tiên — một thư dự kiến.
 
 Kiểm độc lập — bằng tài khoản audit, không qua prod:
 
@@ -284,6 +292,33 @@ deploy không đọc log).
 
 **Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
 tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.
+
+## Nguồn thời gian (ADR-074, khoản 196)
+
+Hạn nộp thầu được phán xử bằng `now()` của **CSDL** (trigger C1), nên đồng hồ của máy CSDL là một
+tham số pháp lý của sản phẩm, không phải một chi tiết vận hành. Lời khai của kho:
+
+| Thành phần | Nguồn thời gian | Cấu hình của ta |
+|---|---|---|
+| RDS PostgreSQL (stack `90-ecs`) | Amazon Time Sync Service — dịch vụ quản lý, không có tham số chọn nguồn khác | **Không cấu hình gì.** Stack RDS sau này KHÔNG được thêm gì đổi múi giờ hay nguồn giờ của máy CSDL; `timezone` của parameter group để mặc định `UTC` |
+| ECS Fargate — `tp-api`, `tp-unseal-worker` (stack `90-ecs`) | Amazon Time Sync Service của host Fargate (`169.254.169.123` / `fd00:ec2::123`) | **Không cấu hình gì.** Task definition KHÔNG chạy chrony/ntpd riêng, KHÔNG ghi đè giờ hệ thống |
+| Stack đo một lần `70-do-kms` | như ECS Fargate | không liên quan tới hạn nộp |
+
+**Mọi dòng trong bảng trên là ĐỌC tài liệu AWS, chưa đo** — chưa có tài khoản prod dùng được (khoản 15)
+và chưa có stack RDS hay ECS dịch vụ nào. Lớp CƯỠNG CHẾ không nằm ở đây mà ở tiến trình: `apps/api` và
+`apps/unseal-worker` so `clock_timestamp()` của CSDL với đồng hồ của chính chúng lúc khởi động (lệch quá
+`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, mặc định 2 000 ms ⇒ **không lên**, lỗi `LechDongHoError`) và mỗi
+`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS` (mặc định 60 000 ms) lúc chạy (⇒ một dòng log `canh bao LechDongHo`).
+Tức nếu lời khai trên sai, tiến trình nói ra.
+
+Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, bắt buộc trước dữ liệu thật):
+
+1. Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒ trường `ClockDrift` có
+   `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
+2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
+   không có dòng `canh bao LechDongHo`.
+3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
+
 
 ## Rủi ro còn lại — nói thẳng
 
