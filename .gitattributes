@@ -61,3 +61,11 @@ evidence/INV-matrix.md text eol=lf
 # [ADR-067] `deploy/*.sh` chạy bằng bash trên runner Linux; một checkout CRLF (Windows, `core.autocrlf=true`) rồi commit
 # lại sẽ đưa `\r` vào cuối mỗi lệnh. Ghim LF cho đúng đuôi ấy.
 *.sh text eol=lf
+
+# [ADR-086] `tools/neo-so-kiem-toan/lambda/*.mjs` là tệp SINH RA rồi SO BYTE với nguồn `.ts` gỡ kiểu
+# (`canh-moc-neo.test.ts`), và Terraform băm nó khi đóng gói Lambda. Nguồn `.ts` đã LF theo dòng trên; checkout CRLF của
+# tệp sinh ra làm phép so đỏ trên Windows (đo: run 36246222923) và làm mã băm gói Lambda phụ thuộc máy chạy apply.
+# Ghim hẹp đúng thư mục ấy.
+tools/neo-so-kiem-toan/lambda/*.mjs text eol=lf
+# [ADR-089] Cùng lý do cho Lambda canh đăng ký SNS.
+tools/canh-dang-ky/lambda/*.mjs text eol=lf

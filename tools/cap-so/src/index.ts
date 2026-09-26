@@ -1,5 +1,8 @@
 // ==============================================================================================
-// tools/cap-so — SỐ HIỆU CẤP LÚC MERGE, KHÔNG CẤP LÚC VIẾT (ADR-086)
+// tools/cap-so — SỐ HIỆU CẤP LÚC MERGE, KHÔNG CẤP LÚC VIẾT
+//
+// Quyết định: ADR "Số hiệu cấp lúc merge" trong `docs/DECISIONS.md`. Thư mục này không ghi SỐ của ADR ấy:
+// nó đứng ngoài phép thay, nên một số viết ở đây sẽ thiu ở mỗi lần nhánh đưa nó vào thua một cuộc đua.
 //
 // GỐC CỦA CHUYỆN TRÙNG SỐ. Bốn dãy số — vòng `S1.N`, `ADR-N`, khoản nợ, migration `NNN_` — từng
 // được cấp trên NHÁNH theo luật S1.111: "đo max trên mọi nhánh đang sống rồi +1". Luật ấy không có
@@ -40,7 +43,7 @@
 // RANH GIỚI NÓI RA
 //   - Số chỉ được thay trên dòng NHÁNH thêm (so với base). Lời khai đếm thì khác: lệnh viết lại con số
 //     SỐNG tại chỗ theo sổ, kể cả khi lời khai nằm trên dòng của master, và không gạch-rồi-nối — lời
-//     khai đếm ra khỏi quy ước "gạch bỏ tại chỗ" (ADR-086 ⑷).
+//     khai đếm ra khỏi quy ước "gạch bỏ tại chỗ" (ADR trên, quyết định ⑷).
 //   - Vòng không có chỗ khai duy nhất như đầu mục ADR hay hàng sổ nợ, nên `--kiem` không bắt được
 //     hai PR cùng dùng một số vòng thật. Chỉ bật "Require branches to be up to date" trên GitHub mới
 //     đóng hẳn cuộc đua giữa hai PR cùng cấp số trên một master.

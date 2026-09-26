@@ -7342,7 +7342,153 @@ DRAFT.
 
 Nó không thêm quyền, không đổi ai giữ `rfq.approve`, không đổi luồng mời, và không đụng gói cấp kép.
 
-## ADR-086 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
+---
+
+## ADR-086 — Cảnh báo mốc neo theo từng tổ chức, đo ở tài khoản audit
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-072**, **ADR-073**, ADR-071, ADR-026 §5
+
+### Bối cảnh
+
+Job `lich` (ADR-072) thoát 1 khi một tổ chức XUẤT hỏng (cảnh báo ⑶), và ⑷ (ADR-073) báo khi CẢ bucket neo im 36 giờ.
+Còn một ca cả hai không thấy: một tổ chức VẮNG khỏi danh sách mà `lich` đọc — hàm liệt kê ở prod bị sửa, hay một lỗi làm
+rơi nó — thì job vẫn thoát 0 và bucket vẫn có đối tượng mới của các tổ chức khác. Sổ của tổ chức ấy ngừng được neo trong
+im lặng, đúng thứ ADR-026 dựng mốc neo để ngăn.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Lambda `tp-canh-moc-neo` ở tài khoản audit** (stack 60, ⑺), mỗi 6 giờ: liệt kê mọi tổ chức từng được neo
+   (`so-kiem-toan/<org>/`), với mỗi tổ chức hỏi một lời `ListObjectsV2(StartAfter = mốc cắt)`. Phán xử bằng
+   `LastModified` (S3 đặt), không bằng tên khoá (người ghi đặt) — một đối tượng mang tên "tương lai" không che được tổ chức.
+   Thiếu mốc trong 36 giờ ⇒ dòng log `THIEU MOC NEO` ⇒ metric filter ⇒ alarm ⇒ SNS email có sẵn (ALARM và OK).
+2. **Chỉ đọc**: role của Lambda có đúng `s3:ListBucket` với `s3:prefix` dưới `so-kiem-toan/` và quyền ghi log của nó.
+3. **Canh người canh**: alarm Lambda LỖI (≥ 1 trong 6 giờ) và Lambda KHÔNG CHẠY 12 giờ (thiếu dữ liệu = vi phạm).
+4. **Mã TypeScript trong kho** (`tools/neo-so-kiem-toan/src/canh-moc-neo.ts`, qua t0 và test đơn vị); thứ chạy trên Lambda
+   (`lambda/canh-moc-neo.mjs`) là chính tệp ấy gỡ kiểu bằng `module.stripTypeScriptTypes` — test đòi trùng byte. Chỉ phụ
+   thuộc `@aws-sdk/client-s3` có sẵn trong runtime `nodejs22.x`; Terraform đóng zip bằng provider `archive`.
+5. `hinh-dang-canh-moc-neo.test.ts` ghim quyền chỉ-đọc, tệp đóng gói, handler, mẫu log và ba đường thư.
+
+### Hệ quả, nói thẳng
+
+- Không biết tổ chức CHƯA TỪNG được neo — audit không có danh sách tổ chức. Ca ấy lộ ở `verifyAuditChain` (NOT_ANCHORED).
+- Một tổ chức bị xoá thật sự vẫn bị báo mãi (thư mục mốc neo giữ 365 ngày, Object Lock) — tới khi có quy trình khai tổ chức
+  đã đóng; ghi thành việc sau.
+- Mỗi lượt: một lời liệt kê thư mục + một lời mỗi tổ chức — rẻ tới vài nghìn tổ chức.
+- Thư ⑺ nêu org UUID trong log của Lambda, không trong thư (thư chỉ có tên alarm) — đọc log để biết tổ chức nào.
+- Chưa chạy thật: `terraform validate`; logic đo trên bucket giả (phân trang, tên tương lai, rác trong bucket).
+
+---
+
+## ADR-087 — Kiểm trước apply stack 90: một lệnh chỉ đọc, thoát 1 khi còn giá trị giữ chỗ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-066, ADR-068, ADR-076, ADR-065, `docs/APPLY-LAN-DAU.md`
+
+### Bối cảnh
+
+`docs/APPLY-LAN-DAU.md` cố ý đưa giá trị TẠM vào `prod.tfvars` (digest `tam@sha256:000…` để qua validation ở 6.2,
+`<...>` ở mọi chỗ người vận hành phải điền), và checklist chỉ là đọc tay. Validation của Terraform không bắt được chúng:
+digest toàn số 0 đúng dạng, `<app.domain>`… sai dạng thì bắt nhưng `ses.nhan_canh_bao = ["<email>"]` thì không. Còn
+những thứ nằm ở tài khoản chứ không ở tệp — secret tạo mà chưa `put-secret-value`, image chưa đẩy, domain SES chưa xác
+minh — chỉ lộ ra khi task chết lúc chạy hay thư không đi, tức sau apply.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Tool trong kho** `tools/kiem-truoc-apply` (Node/TypeScript, `pnpm kiem-truoc-apply --var-file <tệp>`), chạy tay trước
+   mỗi plan stack 90 (APPLY-LAN-DAU 6.4, 6.6, 8.2; README stack 90). Lệnh riêng, không bọc `terraform apply`.
+2. **Biến đọc qua `terraform console`**, không tự phân tích HCL: Terraform là bộ đọc plan sẽ dùng — áp mặc định, chạy
+   validation. Cái giá: thư mục stack phải đã `init` và backend còn phiên.
+3. **Luật biến** (offline): mỗi image là `<prod>.dkr.ecr.<region>.amazonaws.com/<kho đúng>@sha256:<64 hex, không toàn 0>`;
+   `ten_mien`, địa chỉ SES, người nhận, brandname, template Zalo không mang `<>`, `...`, domain ví dụ RFC 2606.
+   `so_ban_api = 0`, `so_ban_worker = 0`, `che_do_dns = ALERT`, `ses_endpoint_service` rỗng là **VANG** — hợp lệ ở một bước
+   dựng cụ thể — không chặn.
+4. **Luật tài khoản** (AWS CLI, profile `tp-prod`, **chỉ đọc**): đúng tài khoản prod (sai ⇒ dừng, không hỏi gì thêm); bốn
+   secret `data` của stack 90 (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại, không chờ xoá, có phiên bản `AWSCURRENT` — không
+   đọc giá trị; mỗi digest có trong đúng kho ECR; miền của hai địa chỉ gửi đã xác minh ở SES. Tài khoản còn sandbox SES là VANG.
+5. **Mã thoát**: 1 khi có `[DO]`; 2 khi không đọc được biến hay không gọi được AWS (hết phiên SSO) — lỗi khác "không tồn
+   tại" không bao giờ bị coi là "thiếu", và tool không in dòng tổng khi chưa kiểm xong.
+6. `khop-stack-90.test.ts` đòi danh sách secret = mọi `data "aws_secretsmanager_secret"` của stack 90, kho ECR = `for_each`
+   của `aws_ecr_repository.tp`, tên image = khoá của `var.anh`, mọi `var.X` trong biểu thức console là biến có khai, và mẫu
+   `prod.tfvars` của hướng dẫn bị chính luật bắt.
+
+### Hệ quả, nói thẳng
+
+- Không thấy host TẠM trong secret `*/database-url` (không đọc giá trị là cố ý) — việc đó vẫn là 6.5 đọc tay.
+- Chỉ stack 90. Các stack khác nhận biến qua `-var` trên dòng lệnh; chưa có tệp nào để soát.
+- Luật "giữ chỗ" là một danh sách dấu hiệu, không phải phép chứng minh: một giá trị sai mà trông thật (domain gõ nhầm) lọt.
+  Lớp tài khoản bắt được phần lớn ca ấy (SES chưa xác minh, image không có).
+- Tool là bước người vận hành phải nhớ chạy; không có gì chặn một `terraform apply` bỏ qua nó.
+- Chưa chạy trên tài khoản thật: đo bằng `terraform console` thật trên bản sao stack không backend và một `aws` giả.
+
+---
+
+## ADR-088 — Hộp thư vận hành tách khỏi hộp thư an ninh
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-077**, ADR-083, ADR-062
+
+### Bối cảnh
+
+Mọi cảnh báo của stack 60 — ⑴ sửa key policy, ⑵ task mang role worker, ⑶ ⑷ ⑺ mốc neo, ⑸ DNS lạ, ⑹ vận hành — đổ về
+một topic `tp-canh-bao-khoa`, một người nhận `email_canh_bao`. ⑹ (ADR-077, ADR-083) gửi thư cả khi vào ALARM lẫn khi về
+OK, cho CPU, p95, 5xx, thiếu task và lỗi nghiệp vụ: khi chạy thật nó là phần lớn số thư. Người nhận quen lướt qua thư, và
+một thư `PutKeyPolicy` — thứ duy nhất làm đường tấn công của KeyAdmin không im lặng (ADR-062) — chìm giữa chúng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. Chỉ ⑹ (`tp-van-hanh-*`) chuyển đi. ⑴–⑸ và ⑺ (kể cả hai alarm sức khoẻ của Lambda ⑺) ở lại hộp thư an ninh.
+2. Topic mới `tp-canh-bao-van-hanh` ở **audit**, cạnh topic cũ: đường chuyển prod ⇒ bus audit giữ nguyên, quyền admin prod
+   vẫn không tắt được thư. Chỉ rule `tp-canh-bao-van-hanh` publish được vào nó; rule ấy bị gỡ khỏi policy của topic khoá.
+3. Biến bắt buộc `email_van_hanh = list(string)` (≥ 1, không mặc định); mỗi địa chỉ một subscription. Hướng dẫn apply
+   chuyển hai biến của stack 60 sang tệp `canh-bao.tfvars` không commit (danh sách qua `-var` trong PowerShell dễ sai).
+4. `hinh-dang-van-hanh.test.ts` ⑵ đòi: target ⑹ là topic vận hành, policy của nó chỉ cho rule ⑹, subscription của nó đọc
+   `email_van_hanh`, và policy topic khoá không nhắc gì tới ⑹.
+
+### Hệ quả, nói thẳng
+
+- Thêm một lần bấm xác nhận cho mỗi địa chỉ vận hành; địa chỉ chưa xác nhận thì không nhận gì, và không alarm nào báo điều đó.
+- Apply lần kế trên một stack 60 đã chạy sẽ đòi `email_van_hanh` (biến bắt buộc) — cố ý, để không ai lỡ tay gửi thư vận
+  hành về đâu cũng được.
+- Dễ đặt cùng một địa chỉ cho cả hai biến; tool không cấm — khi ấy tách topic không giúp gì ngoài tiêu đề thư.
+- Chưa chạy trên AWS thật: `terraform validate` stack 60 đạt; test kiến trúc đo trên chữ của cấu hình.
+
+---
+
+## ADR-089 — Đường thư cảnh báo tự canh: mỗi địa chỉ nhận có một đăng ký đã xác nhận
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-088**, ADR-086, ADR-062
+
+### Bối cảnh
+
+Mọi cảnh báo ⑴–⑺ kết thúc ở một đăng ký SNS email. Đăng ký ấy chỉ nhận thư khi người nhận BẤM xác nhận; SNS tự xoá
+đăng ký không được xác nhận kịp hạn; người nhận bấm "unsubscribe" ở cuối một thư là mất đăng ký. Cả ba ca, `terraform apply`
+vẫn xanh và không alarm nào kêu — mọi phép canh khác của hệ thống câm theo. ADR-088 thêm hộp thư thứ hai, tức gấp đôi số
+chỗ có thể hỏng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Lambda riêng `tp-canh-dang-ky` ở audit** (stack 60 ⑻), mỗi 6 giờ, chỉ có `sns:ListSubscriptionsByTopic` trên hai topic
+   cảnh báo. Không ghép vào Lambda ⑺ — quyền và việc của hai phép canh tách nhau.
+2. **Đối chiếu với danh sách Terraform khai**, không chỉ đếm `PendingConfirmation`: Terraform ghi `email_canh_bao` và
+   `email_van_hanh` vào biến môi trường `MONG_DOI`; mỗi địa chỉ phải có một đăng ký email ĐÃ xác nhận (so không phân biệt hoa
+   thường). Hỏng: *chờ xác nhận*, *không có* (bị xoá, bị huỷ), và *lạ* — đăng ký không nằm trong danh sách.
+3. **Log không in địa chỉ**: dòng `DANG KY HONG` ghi tên biến và vị trí (`email_van_hanh[1]`); đăng ký lạ chỉ ghi giao thức.
+4. **Ba alarm** — có đăng ký hỏng, Lambda lỗi, Lambda không chạy 12 giờ (thiếu dữ liệu = vi phạm) — gửi ALARM và OK tới
+   **cả hai** topic: hộp nào hỏng thì hộp kia vẫn nhận. Policy của cả hai topic cho ba alarm ấy publish.
+5. Mã theo khuôn ⑺: nguồn `tools/canh-dang-ky/src/canh-dang-ky.ts`, tệp Lambda sinh ra trùng byte, ghim LF; thêm
+   `@aws-sdk/client-sns` vào danh sách phụ thuộc sản xuất được phép (runtime Lambda cung cấp, không đóng gói).
+6. `hinh-dang-canh-dang-ky.test.ts`: quyền chỉ liệt kê; `MONG_DOI` đọc đúng hai biến mà các subscription dùng, và stack có
+   đúng hai subscription email; handler, tệp sinh ra, mẫu log; ba alarm tới cả hai topic.
+
+### Hệ quả, nói thẳng
+
+- Nếu CẢ HAI hộp cùng hỏng, thư ⑻ không tới ai — phép canh này không có đường ra thứ ba.
+- Lần apply đầu, Lambda có thể chạy trước khi người nhận kịp bấm xác nhận: thư ALARM không tới ai, rồi thư OK sau khi xác
+  nhận. Hướng dẫn apply dùng chính ca ấy làm đối chứng dương (3.2).
+- Danh sách người nhận nằm trong biến môi trường của Lambda ở audit — cùng mức lộ với chính các đăng ký SNS.
+- Đăng ký lạ có thể là ý đồ (ai đó thêm hộp thư của mình để đọc cảnh báo) hay vụng về (thêm tay qua console); thư không phân
+  biệt — đọc CloudTrail `Subscribe`.
+- Chưa chạy trên AWS thật: `terraform validate` stack 60 đạt; logic đo trên SNS giả, mẫu log đo bằng test đối chiếu chuỗi.
+
+## ADR-090 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
 
 **Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Thay luật đổi số của S1.111
 
@@ -7397,6 +7543,8 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   `tools/cap-so/` đứng ngoài mọi phép thay và phép quét.
 - Lượt soi ngang, mục nhật ký STATE, lời khai `gói + công cụ` và `Sổ đăng ký … bất biến` vẫn viết tay: chưa va lần
   nào, và nằm ngoài phạm vi chủ dự án chọn.
-- Đã chạy trên hai cuộc đua thật của chính PR đưa quyết định này vào: #152 lấy ADR-083/S1.141, rồi #154 lấy
-  ADR-084/085/S1.142; cả hai lần, merge master rồi `pnpm cap-so` gỡ bốn khối xung đột và cấp lại. Các lỗi hai lần ấy
-  và một lượt review lộ ra đều có test trong `tools/cap-so/src/cap-so.test.ts`.
+- Đã chạy trên ba cuộc đua thật của chính PR đưa quyết định này vào: #152 lấy ADR-083/S1.141; #154 lấy
+  ADR-084/085/S1.142; rồi #153, #157–#159 lấy tới ADR-089/S1.146. Mỗi lần: merge master, `pnpm cap-so` gỡ các khối
+  xung đột nó quản, cấp lại, và chạy lại không đổi một byte. Lời khai viết tay (`gói + công cụ`) và
+  `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
+  `tools/cap-so/src/cap-so.test.ts`.
