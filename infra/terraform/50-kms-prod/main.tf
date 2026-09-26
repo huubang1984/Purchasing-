@@ -208,6 +208,31 @@ resource "aws_kms_alias" "receipt_sign" {
   target_key_id = aws_kms_key.receipt_sign.key_id
 }
 
+# [ADR-070] kid và nửa công khai sống CÙNG chỗ với khoá: đổi alias sang khoá mới mà không đổi kid là một biên
+# nhận ký bằng khoá này nhưng khai kid của khoá kia. Stack 90 đọc cả hai từ state của stack này.
+variable "receipt_kid" {
+  description = "kid của khoá mà alias/tp-receipt-sign đang trỏ tới — đi vào văn bản biên nhận (ADR-011 mục 3)."
+  type        = string
+  default     = "kms-2026-09"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._:-]{1,64}$", var.receipt_kid))
+    error_message = "receipt_kid: 1–64 ký tự [A-Za-z0-9._:-]."
+  }
+}
+
+# KeyAdmin (profile của stack này) có kms:Get* qua module quan-tri-khoa. Xoay: thêm khoá mới + một mục mới vào
+# `khoa_bien_nhan`, trỏ alias sang nó, đổi receipt_kid — KHÔNG gỡ mục cũ (biên nhận cũ phải kiểm được).
+locals {
+  khoa_bien_nhan = {
+    (var.receipt_kid) = aws_kms_key.receipt_sign.arn
+  }
+}
+
+data "aws_kms_public_key" "bien_nhan" {
+  for_each = local.khoa_bien_nhan
+  key_id   = each.value
+}
+
 # ---------------------------------------------------------------------------------------------
 # ⑶ tp-totp (ADR-063)
 # ---------------------------------------------------------------------------------------------
@@ -302,3 +327,11 @@ resource "aws_kms_alias" "totp" {
 output "org_wrap_key_arn" { value = aws_kms_key.org_wrap.arn }
 output "totp_key_arn" { value = aws_kms_key.totp.arn }
 output "receipt_sign_key_arn" { value = aws_kms_key.receipt_sign.arn }
+
+output "bien_nhan" {
+  description = "[ADR-070] kid đang ký và nửa công khai (SPKI DER base64) của MỌI khoá ký biên nhận — cho service tp-public-keys và neo audit."
+  value = {
+    kid_dang_dung  = var.receipt_kid
+    khoa_cong_khai = { for kid, k in data.aws_kms_public_key.bien_nhan : kid => k.public_key }
+  }
+}
