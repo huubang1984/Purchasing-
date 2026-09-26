@@ -6669,6 +6669,41 @@ tổ chức mới không ai khai thì không bao giờ được neo — `verifyA
   được giải bằng một vai hẹp thay vì bằng tay người. `xuat/kiem --org …` vẫn dùng được cho lượt chạy tay.
 - Một vai liệt kê được mọi UUID tổ chức tồn tại thêm trong cụm; nó không đọc được bảng nghiệp vụ nào (đo 16 bảng).
 - **Lịch không chạy** (Scheduler hỏng, role sai) thì không có task nào dừng ⇒ không có cảnh báo. Chưa có cảnh báo "không
-  có mốc neo mới trong 36 giờ"; ghi thành việc kế.
+  có mốc neo mới trong 36 giờ"; ghi thành việc kế. **[ADR-073] ĐÃ CÓ:** cảnh báo ⑷ của stack 60.
 - Cửa sổ phát hiện cắt đuôi tối đa ~1 ngày. Mỗi tổ chức thêm ~365 đối tượng S3/năm (Object Lock 1 năm).
 - Chưa chạy thật: Scheduler gọi họ không kèm số bản và mẫu sự kiện ECS mới qua `terraform validate`.
+
+## ADR-073 — Cảnh báo 36 giờ không có mốc neo sổ kiểm toán mới, đo ở bucket neo
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-072**, ADR-071, ADR-026 §5⑴, ADR-062
+
+### Bối cảnh
+
+Cảnh báo ⑶ (ADR-072) chỉ nói khi một task `tp-neo` DỪNG hỏng. Lịch không chạy — Scheduler bị tắt hay xoá, role của lịch
+sai, RunTask bị từ chối trước khi có task — thì không có task nào dừng, và mốc neo ngừng mà không ai biết. Đó đúng là
+khuôn H9-3 của ADR-026: một lớp bảo vệ hỏng im lặng hàng tháng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Đo ở chính thứ cần có**: đối tượng mới dưới `so-kiem-toan/` của bucket neo (tài khoản audit), bằng S3 request metrics
+   (`aws_s3_bucket_metric`, lọc tiền tố) — không đo ở job hay ở prod. Tài liệu khoá biên nhận (`khoa-bien-nhan/`) không tính.
+2. **CloudWatch alarm ở audit** trên `PutRequests`: 36 kỳ một giờ, cả 36 phải có tổng < 1, thiếu dữ liệu = vi phạm. Lịch
+   hằng ngày ⇒ khoảng trống bình thường ≤ 24 giờ; lỡ một lượt ⇒ báo sau 36 giờ tính từ lần ghi cuối. `ok_actions` báo khi
+   mốc neo quay lại.
+3. **Gửi qua topic SNS email có sẵn** của stack 60 (`tp-canh-bao-khoa`); topic policy thêm một statement cho
+   `cloudwatch.amazonaws.com`, ghim `aws:SourceArn` đúng alarm này và `aws:SourceAccount` là audit.
+4. Cùng vòng: sửa topic policy để rule ⑶ (`tp-canh-bao-neo-hong`) được publish — thiếu ARN của nó trong điều kiện
+   `aws:SourceArn` thì ⑶ bị SNS từ chối và rơi im lặng.
+
+### Hệ quả, nói thẳng
+
+- Người có quyền ở prod không tắt được metric, alarm hay topic (cùng lập luận ADR-062). Người có quyền ở audit thì được —
+  và lời gọi ấy nằm trong CloudTrail tổ chức.
+- Đếm TỔNG mọi tổ chức: một tổ chức riêng lẻ không được neo trong khi các tổ chức khác vẫn được thì ⑷ không thấy; ca đó là
+  của ⑶ (`xuat` thoát 1 khi bất kỳ tổ chức nào hỏng). Không có tổ chức nào có sổ khác rỗng thì ⑷ luôn đỏ — đúng với prod
+  đã có khách; trước đó bỏ qua thư.
+- `PutRequests` đếm cả PUT bị từ chối. Đường ghi duy nhất là `tp-anchor-writer` với khoá chưa từng có, nên một PUT bị từ
+  chối dưới tiền tố này đã là bất thường; nó chỉ làm ⑷ trễ, không làm nó báo sai.
+- Lần apply đầu: alarm vào ALARM cho tới lượt ghi đầu tiên (metric chưa có lịch sử) — một thư dự kiến.
+- S3 request metrics tính phí CloudWatch metric (~0,3 USD/tháng cho một bộ lọc) cộng một alarm.
+- Chưa chạy thật: metric, alarm và topic policy qua `terraform validate`.

@@ -14,7 +14,7 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072) (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
@@ -255,6 +255,9 @@ ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `ne
   `tp-neo-hang-ngay` chạy `lich` lúc 02:15 giờ VN — tự liệt kê mọi tổ chức (vai `app_neo`), xuất rồi kiểm. Task thoát ≠ 0
   ⇒ email cảnh báo ⑶ của stack 60 (từ tài khoản audit). Đọc log `/tp/neo`: `TU CHOI NEO`, `KHONG XUAT DUOC`, `ok=false` là
   một tổ chức cần điều tra ngay.
+  **[ADR-073]** Lịch không chạy thì không task nào dừng ⇒ ⑶ im; cảnh báo ⑷ của stack 60 báo khi **36 giờ** không có
+  đối tượng mới nào dưới `so-kiem-toan/` (S3 request metrics + CloudWatch alarm, cùng ở audit). Lần apply đầu: alarm vào
+  ALARM cho tới lượt ghi đầu tiên — một thư dự kiến.
 
 Kiểm độc lập — bằng tài khoản audit, không qua prod:
 
