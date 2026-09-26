@@ -704,7 +704,7 @@ locals {
     ]
     web         = []
     public_keys = []
-    # [ADR-072 phần 1] ~~Vai app_api — cùng URL với api~~ Vai app_neo (064): chỉ ĐỌC hai bảng sổ, gọi được
+    # [ADR-072 phần 1] ~~Vai app_api — cùng URL với api~~ Vai app_neo (065): chỉ ĐỌC hai bảng sổ, gọi được
     # hàm liệt kê tổ chức mà app_api cố ý không có. URL của api ở đây thì SET ROLE app_neo ném 42501.
     neo = [
       { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },

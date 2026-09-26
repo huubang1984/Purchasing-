@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 064 — [ADR-072 phần 1] VAI CỦA JOB NEO: liệt kê được MỌI tổ chức, chỉ ĐỌC được sổ kiểm toán
+-- 065 — [ADR-072 phần 1] VAI CỦA JOB NEO: liệt kê được MỌI tổ chức, chỉ ĐỌC được sổ kiểm toán
 -- =============================================================================================
 -- Job neo (`tools/neo-so-kiem-toan`, task ECS `tp-neo`) phải chạy theo lịch trên MỌI tổ chức. Tới
 -- nay nó đăng nhập bằng URL của api và `SET ROLE app_api` — mà `app_api` KHÔNG liệt kê được tổ chức:
@@ -24,7 +24,7 @@
 -- =============================================================================================
 
 -- USAGE trên schema là điều kiện cần để phân giải `public.*`; tự nó không mở đối tượng nào. Hardening
--- cấp lại ở MỌI lượt (role DROP rồi dựng lại tự lành), dòng này để 064 đứng được một mình.
+-- cấp lại ở MỌI lượt (role DROP rồi dựng lại tự lành), dòng này để 065 đứng được một mình.
 GRANT USAGE ON SCHEMA public TO app_neo;
 
 -- Policy RLS của 003 gọi hàm này, và `assertTenantBound` (packages/audit/src/tenant-guard.ts) gọi thẳng
@@ -54,7 +54,7 @@ GRANT EXECUTE ON FUNCTION public.audit_compute_hash(bytea, uuid, uuid, bigint, t
 -- VÌ SAO MỘT KHỐI DO chứ không một câu GRANT trần: 052 cấp cho `app_unseal` TRƯỚC khi đổi chủ hàm, lúc vai
 -- deploy còn là chủ. Từ đó chủ là `app_liet_ke_to_chuc`, và một vai deploy KHÔNG superuser (hồ sơ N3 —
 -- CREATEROLE + chủ database, đúng hình dạng tài khoản master của RDS) không có quyền cấp tiếp: đo, câu trần
--- ném "permission denied for function outbox_danh_sach_to_chuc" và migrate() dừng ở 064. Nên vai deploy
+-- ném "permission denied for function outbox_danh_sach_to_chuc" và migrate() dừng ở 065. Nên vai deploy
 -- MƯỢN quyền chủ hàm trong đúng giao dịch này — membership INHERIT TRUE, SET FALSE (không đổi vai được, không
 -- câu đổi vai nào trong tệp — khoản 100), vai ấy tự cấp được vì CREATEROLE đã dựng `app_liet_ke_to_chuc` ở
 -- BƯỚC 0 — rồi TRẢ LẠI ngay. PostgreSQL ghi người cấp là CHỦ HÀM (quyền đến qua kế thừa), nên thu hồi
