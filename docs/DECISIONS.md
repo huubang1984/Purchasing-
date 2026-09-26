@@ -6652,7 +6652,7 @@ tổ chức mới không ai khai thì không bao giờ được neo — `verifyA
 1. **Vai riêng `app_neo` / `app_neo_login`**, không nới quyền `app_api` (052 thu hồi đích danh hàm liệt kê khỏi `app_api`,
    ADR-040). `app_neo` chỉ: EXECUTE hàm liệt kê `outbox_danh_sach_to_chuc()` (052), SELECT `audit_events`, SELECT
    `(org_id, seq, hash)` của `audit_chain_anchors`, EXECUTE `app_current_org_id()` và `audit_compute_hash(...)`. RLS của hai
-   bảng sổ áp cho PUBLIC, FORCE, NOBYPASSRLS ⇒ vẫn cô lập theo tổ chức (migration 064). Hardening canh vai này với cùng
+   bảng sổ áp cho PUBLIC, FORCE, NOBYPASSRLS ⇒ vẫn cô lập theo tổ chức (migration 065). Hardening canh vai này với cùng
    bất biến như hai vai ứng dụng kia, cộng kiểm `CAU_QUYEN_NEO_SAI` (ADR-028 §6): thừa hay thiếu quyền đều đỏ ở deploy.
    Job neo bỏ URL của api, dùng secret `tp/neo/database-url`; task migrate tạo `app_neo_login` từ chính URL ấy.
 2. **Lệnh `pnpm neo lich`**: liệt kê MỌI tổ chức (cùng câu với worker), `xuat` rồi `kiem` cho tất cả; thoát 1 nếu bất kỳ

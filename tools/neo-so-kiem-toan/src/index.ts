@@ -642,7 +642,7 @@ function laLenh(gt: string | undefined): gt is Lenh {
 
 /**
  * [ADR-072] Câu liệt kê — ĐÚNG câu của worker (`apps/unseal-worker/src/tien-trinh.ts`), qua hàm 052 mà vai
- * `app_neo` được EXECUTE (064). Không đọc thẳng `organizations`: vai này không có SELECT ở đó.
+ * `app_neo` được EXECUTE (065). Không đọc thẳng `organizations`: vai này không có SELECT ở đó.
  */
 const CAU_LIET_KE_TO_CHUC =
   "SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)";
