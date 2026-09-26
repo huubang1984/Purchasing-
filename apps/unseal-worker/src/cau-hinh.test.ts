@@ -50,6 +50,18 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
     expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "10" })).toThrow("TRUSTPROCURE_CLOCK_SKEW_CHECK_MS");
   });
 
+  it("[ADR-083] nhịp dòng tồn đọng outbox: mặc định 5 phút, đọc từ môi trường, ngoài miền hay sai hình dạng thì NÉM nêu đúng tên", () => {
+    expect(docCauHinh(envDu()).chuKyTonDongMs).toBe(300_000);
+    expect(docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: "60000" }).chuKyTonDongMs).toBe(60_000);
+    expect(docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: " " }).chuKyTonDongMs).toBe(300_000);
+    expect(docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: "1000" }).chuKyTonDongMs).toBe(1000);
+    expect(docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: "3600000" }).chuKyTonDongMs).toBe(3_600_000);
+    for (const sai of ["999", "3600001", "0", "-1", "5m", "1e5", "300000.5"]) {
+      expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: sai }), sai).toThrow(CauHinhError);
+      expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_OUTBOX_TON_DONG_MS: sai }), sai).toThrow("TRUSTPROCURE_OUTBOX_TON_DONG_MS");
+    }
+  });
+
   it.each([
     "TRUSTPROCURE_DATABASE_URL",
     "TRUSTPROCURE_KEY_ADAPTER",
@@ -115,6 +127,7 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
       "alertAdapter",
       "alertDir",
       "chuKyCanhDongHoMs",
+      "chuKyTonDongMs",
       "databaseUrl",
       "dbPoolMax",
       "keyAdapter",
@@ -154,6 +167,7 @@ describe("[ADR-064] cấu hình worker với khoá aws-kms", () => {
       "alertAdapter",
       "alertDir",
       "chuKyCanhDongHoMs",
+      "chuKyTonDongMs",
       "databaseUrl",
       "dbPoolMax",
       "keyAdapter",

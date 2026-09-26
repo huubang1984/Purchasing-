@@ -380,4 +380,65 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       ),
     ).toThrow(/KHÁC NHAU/u);
   });
+
+  // [ADR-083] Dòng tồn đọng outbox trên ĐƯỜNG SẼ CHẠY: pool `app_unseal` thật, danh sách tổ chức của
+  // hàm `052`, `withTenant` cho từng tổ chức. Hai tổ chức mới mang job quá hạn của một `kind` không
+  // runner nào nhận (nên chúng nằm yên đúng như khi không ai rút hàng đợi); dòng tổng phải thấy
+  // tuổi của job GIÀ NHẤT (MAX qua tổ chức) và đếm job của CẢ HAI (TỔNG).
+  it("[ADR-083] dòng `outbox ton dong` ghi tuổi MAX và số job TỔNG qua mọi tổ chức, đúng hình dạng metric filter đọc", async () => {
+    const moi: string[] = [];
+    for (const s of ["D", "E"]) {
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+        [`Cong ty ${s}`, `cong-ty-${s.toLowerCase()}-adr083`],
+      );
+      moi.push(rows[0]!.id);
+    }
+    const gieo = (org: string, lechGiay: number): Promise<unknown> =>
+      db.pool.query(
+        "INSERT INTO outbox_jobs (org_id, kind, run_after) VALUES ($1::uuid, 'THU_TON_DONG', now() + make_interval(secs => $2::float8))",
+        [org, lechGiay],
+      );
+    await gieo(moi[0]!, -100);
+    await gieo(moi[1]!, -5000);
+    await gieo(moi[1]!, -10);
+    // Chưa tới hạn ⇒ không đếm.
+    await gieo(moi[1]!, 3600);
+    const { rows: dem } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM organizations");
+    const soToChuc = Number(dem[0]!.n);
+
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_OUTBOX_TON_DONG_MS: "1000" })));
+    try {
+      await tt.batDau();
+      const het = Date.now() + 10_000;
+      let dong: string | undefined;
+      while (dong === undefined && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+        dong = log.find((d) => d.startsWith("[unseal-worker] outbox ton dong:"));
+      }
+      expect(dong, JSON.stringify(log)).toBeDefined();
+      const m = /^\[unseal-worker\] outbox ton dong: (\d+) giay, (\d+) job qua han, (\d+) to chuc$/u.exec(dong!);
+      expect(m, dong).not.toBeNull();
+      // Tuổi: job -5000 s của tổ chức E là già nhất cụm (job còn sót của các ca trên mới vài giây).
+      expect(Number(m![1])).toBeGreaterThanOrEqual(5000);
+      expect(Number(m![1])).toBeLessThan(5000 + 120);
+      // Số job: ba job quá hạn của D và E, cộng những job PENDING mà ca ⑸ để lại cho `api`.
+      expect(Number(m![2])).toBeGreaterThanOrEqual(3);
+      expect(Number(m![3])).toBe(soToChuc);
+      expect(log.filter((d) => d.includes("outbox ton dong khong do duoc")), JSON.stringify(log)).toEqual([]);
+      await tt.dung();
+      // Sau `dung()` không còn dòng tồn đọng nào: hẹn giờ đã huỷ (nhịp 1 s, chờ 1,5 s).
+      const truoc = log.filter((d) => d.includes("outbox ton dong")).length;
+      await new Promise((x) => setTimeout(x, 1500));
+      expect(log.filter((d) => d.includes("outbox ton dong")).length).toBe(truoc);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+    }
+  }, 60_000);
 });
