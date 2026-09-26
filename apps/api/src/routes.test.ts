@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 // [khoản nợ 59] Cây nguồn là tài nguyên DÙNG CHUNG: probe bên dưới có thật trên đĩa, và
 // `tests/architecture/boundaries.test.ts` quét TOÀN kho ở một tiến trình khác. Khoá này là
 // thứ giữ hai lượt quét không giẫm lên nhau — xem khối lý do đầy đủ trong chính tệp khoá.
-import { voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
+import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import { MIEN_TRAN_NGUOI_GOI, agentGoiDuoc, timViPhamBangRoute, type Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 
@@ -271,7 +271,7 @@ describe("[g9-] handler không chạm tầng vận chuyển hay tầng CSDL", ()
         rmSync(probe, { force: true });
       }
     });
-  }, 120000);
+  }, TRAN_TEST_GIU_KHOA_MS);
 });
 // ==============================================================================================
 // [S1.90 / khoản 190] MỘT ĐƯỜNG *TÌM ĐƯỢC* KHÁC MỘT ĐƯỜNG *ĐỌC ĐƯỢC*
