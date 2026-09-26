@@ -12483,3 +12483,22 @@ Tổng điều tra của `[INV-H19]` bắt kịp: `org_policy_signatures` vào `
   khác nhau khi `effective_from` không đơn điệu theo phiên bản.
 - **Chưa có route, màn hình, K1, ngân sách bắt buộc hay lớp `CONTROL_DENIED`** — S3.1b và S3.1c. Chưa ai ký được phiên bản
   qua ứng dụng, nên công tắc chỉ bật được bằng SQL.
+
+## 7. Số đo
+
+- `packages/rfq/src/bac-chinh-sach.int.test.ts` **26/26**; `tests/architecture/doc-chinh-sach-mot-ham.test.ts` **2/2**; bốn ca
+  mới của `tools/cap-so` (dạng không đuôi) đỏ khi gỡ bản sửa, xanh khi có.
+- `pnpm cap-so` cấp vòng S1.154 và migration `069`, kể cả tên không đuôi trong hai danh sách khai của hardening;
+  `pnpm cap-so --kiem` sạch. `master` vẫn ở `9b3cf8d` nên không có lần hợp nào.
+- Trên cây đã cấp số: `pnpm t0` sạch; `pnpm test` **108 tệp, 1439 đạt, 1 bỏ qua**.
+- Tầng tích hợp chạy cục bộ trên cụm Postgres 16 dựng bằng `initdb` (container này không có docker), cây đã cấp số:
+  **172 tệp, 2730 ca — 2720 đạt, 1 bỏ qua, 9 đỏ ngoài vòng này**: 8 ca của `packages/test-support/src/postgres.int.test.ts`
+  cần docker; 1 ca của `qt3-cu-phap.int.test.ts` gãy ở `pg_ctl start` của cụm cục bộ và xanh khi chạy lại riêng. Lượt ấy
+  còn một lỗi chưa bắt khi harness dừng một cụm lúc pool của `packages/db/src/vai-tro.int.test.ts` còn kết nối rảnh; tệp
+  ấy xanh khi chạy lại riêng (18/18).
+- Trên cây số tạm, hai ca đỏ vì bộ đọc chỉ nhận tên migration ba chữ số (`rls-coverage` — `BANG_TENANT_KHAI`;
+  `migrations.int` — *migration CUỐI CÙNG định nghĩa hàm*); cấp số xong thì xanh. Lượt ấy `tests/architecture/boundaries.test.ts`
+  đỏ một lần (depcruise thoát mã 1), rồi xanh khi chạy riêng và ở lượt sau; nguyên nhân chưa rõ.
+- Ma trận không sinh lại cục bộ: vòng này không thêm ca mang nhãn INV nào, nên ma trận phải giữ nguyên từng byte; job
+  *Evidence pack* của CI đo điều ấy.
+- Không khoản nợ mới, không ADR mới. **69** migration, **90** ADR.
