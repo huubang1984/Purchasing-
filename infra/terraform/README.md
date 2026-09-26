@@ -18,7 +18,7 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
-| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-074), service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-075), service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -219,7 +219,7 @@ chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
 **7. Kiểm:** `https://<ten_mien>/api/health` ⇒ 200 (ALB bỏ tiền tố `/api`); `https://<ten_mien>/nop-thau` ⇒ 200 kèm
 header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`, log `/tp/web` có `CHI TINH`;
 `https://<ten_mien>/.well-known/trustprocure-receipt-keys` ⇒ 200, và `sha256` in trong log `/tp/public-keys` TRÙNG dấu vân
-tay tính độc lập từ output của stack 50 (mục "Khoá công khai biên nhận" dưới). **[ADR-074]** Mọi phản hồi HTTPS mang
+tay tính độc lập từ output của stack 50 (mục "Khoá công khai biên nhận" dưới). **[ADR-075]** Mọi phản hồi HTTPS mang
 `strict-transport-security: max-age=31536000; includeSubDomains`, `x-frame-options: DENY`, `x-content-type-options: nosniff`,
 không có header `server` (`curl -sI https://<ten_mien>/api/health`); `http://<ten_mien>/` ⇒ 301 sang HTTPS.
 
@@ -294,6 +294,33 @@ deploy không đọc log).
 
 **Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
 tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.
+
+## Nguồn thời gian (ADR-074, khoản 196)
+
+Hạn nộp thầu được phán xử bằng `now()` của **CSDL** (trigger C1), nên đồng hồ của máy CSDL là một
+tham số pháp lý của sản phẩm, không phải một chi tiết vận hành. Lời khai của kho:
+
+| Thành phần | Nguồn thời gian | Cấu hình của ta |
+|---|---|---|
+| RDS PostgreSQL (stack `90-ecs`) | Amazon Time Sync Service — dịch vụ quản lý, không có tham số chọn nguồn khác | **Không cấu hình gì.** Stack RDS sau này KHÔNG được thêm gì đổi múi giờ hay nguồn giờ của máy CSDL; `timezone` của parameter group để mặc định `UTC` |
+| ECS Fargate — `tp-api`, `tp-unseal-worker` (stack `90-ecs`) | Amazon Time Sync Service của host Fargate (`169.254.169.123` / `fd00:ec2::123`) | **Không cấu hình gì.** Task definition KHÔNG chạy chrony/ntpd riêng, KHÔNG ghi đè giờ hệ thống |
+| Stack đo một lần `70-do-kms` | như ECS Fargate | không liên quan tới hạn nộp |
+
+**Mọi dòng trong bảng trên là ĐỌC tài liệu AWS, chưa đo** — chưa có tài khoản prod dùng được (khoản 15)
+và chưa có stack RDS hay ECS dịch vụ nào. Lớp CƯỠNG CHẾ không nằm ở đây mà ở tiến trình: `apps/api` và
+`apps/unseal-worker` so `clock_timestamp()` của CSDL với đồng hồ của chính chúng lúc khởi động (lệch quá
+`TRUSTPROCURE_CLOCK_SKEW_MAX_MS`, mặc định 2 000 ms ⇒ **không lên**, lỗi `LechDongHoError`) và mỗi
+`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS` (mặc định 60 000 ms) lúc chạy (⇒ một dòng log `canh bao LechDongHo`).
+Tức nếu lời khai trên sai, tiến trình nói ra.
+
+Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, bắt buộc trước dữ liệu thật):
+
+1. Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒ trường `ClockDrift` có
+   `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
+2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
+   không có dòng `canh bao LechDongHo`.
+3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
+
 
 ## Rủi ro còn lại — nói thẳng
 

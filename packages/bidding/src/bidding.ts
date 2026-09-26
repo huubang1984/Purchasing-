@@ -39,6 +39,64 @@ export class BiddingError extends Error {
   }
 }
 
+/** [066 / khoản 196] Tên mà C1 đặt vào trường `constraint` của lần chặn VÌ HẠN — không đọc chuỗi thông điệp. */
+const RANG_BUOC_QUA_HAN = "c1_qua_han_nop";
+
+/** Dạng chính tắc của `bid_dau_thoi_gian_chinh_tac` — dạng duy nhất hai trường dưới được phép mang. */
+const DAU_THOI_GIAN_CHINH_TAC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
+
+/**
+ * [khoản 196 / ADR-074 phần 2] Lần nộp bị C1 chặn VÌ HẠN — và thứ người bị chặn cần để đối chiếu.
+ *
+ * `gioCsdl` là `now()` của CHÍNH giao dịch đã phán xử, `hanNop` là hạn mà trigger đã so (hạn vòng
+ * BAFO khi gói thầu ở `BAFO_OPEN`). Cả hai do trigger `066` đặt vào trường `DETAIL` — không phải
+ * một lần đọc đồng hồ thứ hai ở đây — và cả hai ở dạng chính tắc của biên nhận.
+ *
+ * HỢP ĐỒNG KHÁC MỌI `BiddingError` KHÁC, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN
+ * LÀNH** — `submitBid` đã lùi về savepoint của chính nó — và nó đã MANG một hàng sổ
+ * `BID_DEADLINE_DENIED`. Người gọi muốn hàng ấy sống thì COMMIT (route `POST /guest/bids` bắt lỗi
+ * này và trả 422 bằng đường TRẢ VỀ, không ném); người gọi để nó bay tiếp thì giao dịch rollback và
+ * hàng sổ đi theo — đúng như mọi lỗi khác.
+ */
+export class NopQuaHanError extends BiddingError {
+  constructor(
+    readonly gioCsdl: string,
+    readonly hanNop: string,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      "Đã quá hạn nộp báo giá theo giờ của hệ thống — giờ hệ thống lúc phán xử và hạn nộp đã so đi kèm lời từ chối này.",
+      options,
+    );
+    this.name = "NopQuaHanError";
+  }
+}
+
+/**
+ * Đọc hai dấu thời gian của lần chặn VÌ HẠN từ lỗi `pg`. Không phải nhánh ấy (trường `constraint`
+ * khác, `DETAIL` hỏng hình dạng) ⇒ `null`, và người gọi rơi về `BiddingError` chung — fail về phía
+ * lời từ chối KHÔNG số, không bao giờ về phía một con số đoán.
+ */
+function docLanChanViHan(loi: unknown): { gioCsdl: string; hanNop: string } | null {
+  const l = loi as { constraint?: unknown; detail?: unknown };
+  if (l.constraint !== RANG_BUOC_QUA_HAN || typeof l.detail !== "string") return null;
+  let d: unknown;
+  try {
+    d = JSON.parse(l.detail);
+  } catch {
+    return null;
+  }
+  const o = d as { gio_csdl?: unknown; han_nop?: unknown } | null;
+  if (o === null || typeof o !== "object") return null;
+  const { gio_csdl: gio, han_nop: han } = o;
+  if (typeof gio !== "string" || typeof han !== "string") return null;
+  if (!DAU_THOI_GIAN_CHINH_TAC.test(gio) || !DAU_THOI_GIAN_CHINH_TAC.test(han)) return null;
+  return { gioCsdl: gio, hanNop: han };
+}
+
+/** Savepoint riêng của `submitBid` — tên cố định, không nội suy gì. */
+const SAVEPOINT_NOP = "tp_nop_bao_gia";
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function batBuocUuid(gia: string, ten: string): void {
@@ -127,6 +185,10 @@ export async function submitBid(
     );
   }
 
+  // [khoản 196] Savepoint ĐẶT TRƯỚC luồng báo giá: lần chặn vì hạn lùi về đây, nên một nhà cung
+  // cấp nộp trễ lần đầu KHÔNG để lại một `vendor_bids` rỗng, và giao dịch của người gọi còn lành để
+  // mang hàng sổ `BID_DEADLINE_DENIED`.
+  await client.query(`SAVEPOINT ${SAVEPOINT_NOP}`);
   const bidId = await layHoacTaoLuong(client, orgId, p.invitation_id);
 
   // [S1.109 / S2.5] Câu này đi qua BA trigger `BEFORE INSERT` biết từ chối: `bid_kiem_han_nop`
@@ -146,6 +208,10 @@ export async function submitBid(
   // ERRCODE riêng cho mỗi trigger, không phải một lượt đọc chuỗi lỗi; ghi thành khoản nợ. Ba lý
   // do đều đọc được từ màn hình: trạng thái gói thầu và hạn của vòng đang mở đã nằm trong
   // `GET /guest/rfq`.
+  //
+  // [khoản 196 / 066] Nhánh VÌ HẠN nay được phân biệt — không bằng chuỗi lỗi mà bằng trường
+  // `constraint` (`c1_qua_han_nop`) cùng `DETAIL` có cấu trúc mà trigger đặt, đúng hướng câu trên
+  // nêu. Hai nhánh kia vẫn chung một thông điệp.
   let ban: { id: string; version: number; submitted_at_text: string }[];
   try {
     const kq = await client.query<{
@@ -164,6 +230,27 @@ export async function submitBid(
     ban = kq.rows;
   } catch (loi) {
     if (loi instanceof Error && (loi as { code?: unknown }).code === MA_CHECK_VIOLATION) {
+      // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn
+      // lành, rồi ném lỗi mang hai dấu thời gian. Vì sao GHI SỔ — ADR-060 chia lời từ chối bằng một
+      // mệnh đề: *người dùng cố đi một bước của chuỗi không đúng thứ tự* thì vào sổ, *cấu hình chưa
+      // sẵn sàng* thì không. Nộp sau khi cửa sổ nộp đã đóng là vế đầu (ADR-074 ghi lập luận). Vì sao
+      // ghi TRONG giao dịch người gọi chứ không qua `auditPool`: route khách cố ý không cầm pool nào
+      // (A5 §4) — đường TRẢ VỀ, cùng khuôn `MFA_LOCKED` trong savepoint (khoản 139). Ghi hỏng ⇒ lỗi
+      // của lần ghi bay ra thay cho `NopQuaHanError`: gãy ồn ào, đúng vế ⒞ của ADR-060.
+      const viHan = docLanChanViHan(loi);
+      if (viHan !== null) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NOP}`);
+        await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
+        await appendAuditEvent(client, orgId, {
+          actorType: "SUPPLIER",
+          actorId: p.verified_contact_id,
+          action: "BID_DEADLINE_DENIED",
+          resourceType: "rfq_package",
+          resourceId: p.rfq_id,
+          payload: { gioCsdl: viHan.gioCsdl, hanNop: viHan.hanNop },
+        });
+        throw new NopQuaHanError(viHan.gioCsdl, viHan.hanNop, { cause: loi });
+      }
       throw new BiddingError(
         "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
           "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
@@ -172,6 +259,7 @@ export async function submitBid(
     }
     throw loi;
   }
+  await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
   const b = ban[0];
   if (b === undefined) {
     throw new BiddingError("Không ghi được phiên bản báo giá.");

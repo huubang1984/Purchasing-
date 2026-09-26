@@ -4,12 +4,14 @@
 // có cách nào nới điều đó: nó không có pool, không có `withTenant`, không có `node:http`.
 //
 //   GET  /guest/session                       phiên đang cầm là gì (route đo khung của S1.10.2)
-//   GET  /guest/rfq                           gói thầu được mời: hạng mục + khoá CÔNG KHAI, KHÔNG ngân sách
-//   POST /guest/bids   {envelope: base64}     nộp một phong bì; nhận biên nhận đã ký (B1/B2)
+//   GET  /guest/rfq                           gói thầu được mời: hạng mục + khoá CÔNG KHAI, KHÔNG ngân sách;
+//                                             [khoản 196] kèm `gioMayChu` — đồng hồ CSDL, nguồn phán xử hạn
+//   POST /guest/bids   {envelope: base64}     nộp một phong bì; nhận biên nhận đã ký (B1/B2);
+//                                             [khoản 196] quá hạn ⇒ 422 kèm `gioPhanXu` + `hanNop`, có hàng sổ
 //   GET  /guest/bids                          các phiên bản đã nộp của CHÍNH MÌNH — không phong bì
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
 // ==============================================================================================
-import { getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
+import { NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
 import { docVongBafoKhach } from "@trustprocure/danh-gia";
 import { getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
@@ -67,6 +69,13 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       const items = await listRfqItems(ctx.client, ctx.orgId, ctx.rfqId);
       const khoa = await getRfqPublicKeys(ctx.client, ctx.orgId, ctx.rfqId);
       const vongBafo = await docVongBafoKhach(ctx.client, ctx.orgId, ctx.rfqId);
+      // [khoản 196 / ADR-074 phần 3] Giờ MÁY CHỦ — đồng hồ của CSDL, tức đúng nguồn mà C1 phán xử hạn
+      // nộp — ở dạng chính tắc của biên nhận. `clock_timestamp()` chứ không `now()`: trang nộp thầu
+      // đo độ lệch bằng điểm giữa khứ hồi, nên nó cần giờ LÚC CÂU CHẠY, không giờ lúc giao dịch mở.
+      // Trang đếm ngược theo độ lệch ấy — không theo đồng hồ máy người dùng trần.
+      const { rows: gio } = await ctx.client.query<{ gio: string }>(
+        "SELECT public.bid_dau_thoi_gian_chinh_tac(pg_catalog.clock_timestamp()) AS gio",
+      );
       // Danh sách trường là DANH SÁCH TRẮNG, không phải `...rfq`: `createdBy` là một người mua,
       // `requiresDualApproval` là nội bộ, và ngân sách thì KHÔNG CÓ Ở ĐÂY — `rfq_budgets` đóng với
       // phiên khách (027) và handler này cũng không hỏi. Test đo cả hai vế.
@@ -82,6 +91,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         status: 200,
         body: {
           rfq: { id: rfq.id, title: rfq.title, status: rfq.status, deadlineAt: rfq.deadlineAt },
+          gioMayChu: gio[0]?.gio ?? null,
           bafoRound: vongBafo,
           items: items.map((i) => ({
             lineNo: i.lineNo,
@@ -109,11 +119,23 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       const envelope = new Uint8Array(Buffer.from(v, "base64"));
       // `submitBid` KHÔNG nhận bidId/invitationId/rfqId — cả ba dẫn xuất từ phiên (ADR-016). Thứ
       // duy nhất client gửi là phong bì, và api không đọc được bên trong nó (A2).
-      const bn = await submitBid(ctx.client, ctx.orgId, {
-        guestSessionId: ctx.guestSessionId,
-        envelope,
-        signer: ctx.services.receiptSigner,
-      });
+      let bn;
+      try {
+        bn = await submitBid(ctx.client, ctx.orgId, {
+          guestSessionId: ctx.guestSessionId,
+          envelope,
+          signer: ctx.services.receiptSigner,
+        });
+      } catch (loi) {
+        // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN đi đường TRẢ VỀ, không ném: giao dịch còn lành
+        // và đang mang hàng sổ `BID_DEADLINE_DENIED` (xem `NopQuaHanError`), nên bộ điều phối COMMIT nó.
+        // Ném ở đây thì giao dịch rollback và hàng sổ đi theo — đúng thứ khoản 196 đo được là thiếu.
+        // Hai dấu thời gian là thứ người bị chặn đối chiếu với đồng hồ của mình; không mang gì khác.
+        if (loi instanceof NopQuaHanError) {
+          return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
+        }
+        throw loi;
+      }
       return {
         status: 201,
         body: {

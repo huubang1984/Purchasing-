@@ -1,9 +1,9 @@
 // ==============================================================================================
-// [ADR-074] HEADER BẢO MẬT Ở ALB — BỐN DÒNG TRONG MỘT TỆP TERRAFORM, KHÔNG CÓ LỚP NÀO KHÁC ĐO CHÚNG
+// [ADR-075] HEADER BẢO MẬT Ở ALB — BỐN DÒNG TRONG MỘT TỆP TERRAFORM, KHÔNG CÓ LỚP NÀO KHÁC ĐO CHÚNG
 //
 // HSTS chỉ ALB đặt được cho MỌI phản hồi (kể cả 502/503 do chính ALB sinh). Một lần "dọn" listener làm rơi dòng ấy
 // thì không test ứng dụng nào đỏ — nên ghim ở đây:
-//   ⑴ listener HTTPS mang đủ bốn thuộc tính với đúng giá trị ADR-074 chọn;
+//   ⑴ listener HTTPS mang đủ bốn thuộc tính với đúng giá trị ADR-075 chọn;
 //   ⑵ KHÔNG có CSP ở ALB (ALB ghi đè header cùng tên của target — CSP chi tiết của web sẽ mất);
 //   ⑶ X-Frame-Options DENY nói cùng một điều với `frame-ancestors 'none'` của web; nosniff trùng giá trị app đặt;
 //   ⑷ listener HTTP chỉ chuyển hướng 301 sang HTTPS — không phục vụ gì qua kênh không có HSTS.
@@ -26,7 +26,7 @@ function khoi(loai: string, ten: string): string {
   return TF.slice(batDau, ketThuc + 2);
 }
 
-describe("[ADR-074] header bảo mật ở ALB", () => {
+describe("[ADR-075] header bảo mật ở ALB", () => {
   const https = khoi("aws_lb_listener", "https");
 
   it("⑴ listener HTTPS đặt HSTS 1 năm + includeSubDomains (không preload), nosniff, DENY, tắt Server", () => {

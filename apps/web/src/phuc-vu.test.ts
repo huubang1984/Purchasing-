@@ -134,6 +134,22 @@ describe("bề mặt tệp", () => {
     expect(r.text).not.toMatch(/from\s+["']node:/u);
   });
 
+  it("[khoản 196] phép tính giờ máy chủ ra JavaScript, còn nguyên phép đo lệch và phép đếm", async () => {
+    const r = await goi("/lib/dong-ho-may-chu.js");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("text/javascript");
+    expect(r.text).toContain("export function doLechMayChu");
+    expect(r.text).toContain("export function conLaiMs");
+    expect(r.text).not.toMatch(/from\s+["']node:/u);
+  });
+
+  it("[khoản 196] trang nộp thầu đếm theo giờ máy chủ: nó import phép tính ấy và đọc `gioMayChu`, không tự tính giờ", () => {
+    const js = readFileSync(new URL("../trang/nop-thau.js", import.meta.url), "utf8");
+    expect(js).toMatch(/from "\/lib\/dong-ho-may-chu\.js"/u);
+    expect(js).toContain("gioMayChu");
+    expect(js).toContain("gioPhanXu");
+  });
+
   it("trang nộp thầu ra HTML kèm CSP không có unsafe-inline", async () => {
     const r = await goi("/nop-thau");
     expect(r.status).toBe(200);

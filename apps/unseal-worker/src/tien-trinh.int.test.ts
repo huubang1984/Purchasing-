@@ -107,6 +107,46 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     }
   }, 60_000);
 
+  // [khoản 196 / ADR-074 phần 1] Cùng hai vế với `apps/api/src/composition.int.test.ts`: lúc KHỞI
+  // ĐỘNG lệch quá ngưỡng ⇒ không lên; lúc CHẠY đồng hồ trôi ⇒ một dòng log cảnh báo có tên, không dừng.
+  // Đồng hồ trôi được dựng ở phía TIẾN TRÌNH (đồng hồ tiêm) — đồng hồ CSDL không vặn được từ test.
+  it("⑴ [khoản 196] đồng hồ tiến trình lệch 6 giờ 22 phút so với CSDL ⇒ `batDau()` NÉM LechDongHoError, tiến trình không lên", async () => {
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong()), { dongHo: () => Date.now() + (6 * 3600_000 + 22 * 60_000) });
+    try {
+      await expect(tt.batDau()).rejects.toMatchObject({ name: "LechDongHoError" });
+    } finally {
+      await tt.dung();
+    }
+  }, 60_000);
+
+  it("⑴ [khoản 196] đồng hồ trôi SAU khi đã lên ⇒ dòng log `canh bao LechDongHo` mang ba con số, không mang URL", async () => {
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    let troi = 0;
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "1000" })), {
+      dongHo: () => Date.now() + troi,
+    });
+    try {
+      await tt.batDau();
+      troi = 10_000;
+      const het = Date.now() + 8000;
+      let dong: string | undefined;
+      while (dong === undefined && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+        dong = log.find((d) => d.includes("canh bao LechDongHo"));
+      }
+      expect(dong, JSON.stringify(log)).toBeDefined();
+      expect(dong).toMatch(/lech -\d{4,5} ms .*khu hoi \d+ ms, nguong 2000 ms/u);
+      expect(dong).not.toContain(urlLogin);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+    }
+  }, 60_000);
+
   it("⑴ URL superuser bị chặn ở CẤU HÌNH (theo TÊN), trước khi chạm CSDL", () => {
     expect(() => docCauHinh(moiTruong({ TRUSTPROCURE_DATABASE_URL: db.connectionString }))).toThrow(
       /app_unseal_login/u,

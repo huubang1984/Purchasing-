@@ -813,7 +813,7 @@ resource "aws_lb_target_group" "web" {
 
 # [ADR-068] Mặc định: trang tĩnh. `/api/*` đi THẲNG tới api — tiến trình web không bao giờ thấy yêu cầu ấy.
 #
-# [ADR-074] Header bảo mật do ALB đặt trên MỌI phản hồi của listener này — web, api, public-keys, và phản hồi
+# [ADR-075] Header bảo mật do ALB đặt trên MỌI phản hồi của listener này — web, api, public-keys, và phản hồi
 # chính ALB sinh (502/503 khi target chết) mà không app nào chạm được:
 #   Strict-Transport-Security  1 năm + includeSubDomains, KHÔNG preload (ten_mien là một subdomain kiểu
 #                              app.<domain>; preload chỉ áp cho tên miền gốc và gần như không rút lại được);
