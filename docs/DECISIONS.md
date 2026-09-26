@@ -6554,7 +6554,8 @@ mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo ch�
 
 - **Api ra được MỌI máy chủ HTTPS**, không chỉ Zalo và AWS: security group không lọc theo tên miền. Một api bị chiếm
   quyền có đường tuồn dữ liệu mà trước ADR này nó không có. Lọc theo tên miền (AWS Network Firewall, ~300 USD/tháng)
-  hoặc một egress proxy là việc khi có dữ liệu thật đủ giá — không làm ở lát này.
+  hoặc một egress proxy là việc khi có dữ liệu thật đủ giá — không làm ở lát này. **[ADR-076]** Đã có lọc ở tầng DNS
+  (Route 53 DNS Firewall, danh sách tên đóng) và SMS chuyển sang VPC endpoint; kết nối thẳng bằng IP vẫn mở — xem ADR-076.
 - **Chưa gọi thật** Zalo lẫn End User Messaging: đường dẫn và hình dạng phản hồi của Zalo theo tài liệu công khai,
   đo trên fetch giả. Đăng ký brandname, duyệt template ZNS, cấp quyền OA là việc tay dài ngày (README, stack 85).
 - **Hai task api làm mới token Zalo ĐÚNG cùng lúc vẫn có thể giẫm nhau** — Zalo không có phép so-và-đổi; kho đọc lại
@@ -6848,3 +6849,38 @@ không mang header nào của app.
   thấy header. Đổi `ten_mien` hay bỏ HTTPS không rút được lời hứa ấy khỏi trình duyệt đã ghé.
 - Không có HSTS cho lần ghé ĐẦU TIÊN (không preload) — người dùng gõ `http://` lần đầu vẫn qua một 301 không mã hoá.
 - Chưa chạy thật: thuộc tính listener qua `terraform validate`; kiểm bằng `curl -sI` sau apply (README bước 7).
+
+## ADR-076 — Lọc tên miền ra ngoài bằng Route 53 DNS Firewall; SMS qua VPC endpoint
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-069**, ADR-066, ADR-071, ADR-062
+
+### Bối cảnh
+
+ADR-069 cho `api` ra internet qua NAT, cổng 443, tới MỌI đích — security group không lọc được theo tên. Một api bị chiếm
+quyền có đường tuồn dữ liệu tới bất kỳ máy chủ HTTPS nào. Mã chỉ cần ba đích ngoài: hai tên Zalo và endpoint SMS.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Route 53 Resolver DNS Firewall gắn vào VPC prod** (stack 90): quy tắc ALLOW (ưu tiên 100) cho một danh sách tên
+   ĐÓNG, quy tắc chặn (200) cho `*` trả NXDOMAIN. Danh sách: endpoint AWS đang dùng (kms, ecr api/dkr của tài khoản prod,
+   logs, secretsmanager, sts, email, sms-voice), bucket lớp image ECR của region, bucket neo, địa chỉ RDS, hai tên Zalo.
+   **Không wildcard `*.amazonaws.com`** — nó cho phân giải bucket S3/API Gateway của bất kỳ ai. Chuỗi CNAME của tên được
+   phép được tin (`TRUST_REDIRECTION_DOMAIN`). Fail-closed, `mutation_protection` bật.
+2. **SMS qua VPC endpoint `sms-voice`** thay vì NAT — đích ngoài AWS còn đúng hai tên Zalo.
+3. **Log mọi truy vấn** vào `/tp/dns`; metric filter trên dòng BLOCK/ALERT ⇒ alarm `tp-dns-bi-chan` (một truy vấn là đủ)
+   ⇒ stack 60 ⑸ chuyển sự kiện alarm sang audit ⇒ SNS email có sẵn.
+4. Biến `che_do_dns` (`BLOCK` mặc định, `ALERT` chỉ ghi log) để thêm đích mới mà không làm hỏng prod.
+5. `tests/architecture/hinh-dang-dns.test.ts` ghim danh sách, thứ tự quy tắc, fail-closed, tên alarm hai stack, và đòi mọi
+   host `https://…` hằng trong adapter của api có mặt trong danh sách.
+
+### Hệ quả, nói thẳng
+
+- **DNS Firewall chặn phân giải, không chặn kết nối.** Mã độc trong api nối thẳng bằng IP vẫn đi qua NAT cổng 443. Đóng
+  đường ấy cần AWS Network Firewall (lọc SNI, ~300 USD/tháng/AZ + phí dữ liệu) — chưa đáng ở quy mô này; truy vấn DNS lạ
+  vẫn là dấu hiệu sớm nhất của một api bị chiếm, và nó được báo.
+- Áp cho MỌI task của VPC. Một tên thiếu (dịch vụ AWS mới, đổi tên bucket lớp ECR) làm task không kéo được image hay không
+  gọi được dịch vụ — cảnh báo ⑸ nói ngay tên nào. Lần apply đầu nên chạy `ALERT` một chu kỳ deploy.
+- Tin chuỗi CNAME: một tên trong danh sách bị trỏ (ở phía Zalo) sang đâu thì đi theo đó.
+- Thêm ~7 USD/tháng/AZ cho endpoint `sms-voice`; DNS Firewall và query log vài USD/tháng.
+- Chưa chạy thật: `terraform validate` stack 60 và 90; tên dịch vụ endpoint `sms-voice` và tên bucket lớp ECR cần kiểm lúc
+  apply (README).
