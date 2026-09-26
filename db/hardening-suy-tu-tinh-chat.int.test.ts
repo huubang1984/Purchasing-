@@ -121,6 +121,10 @@ const BANG_CHI_GHI_THEM_THAT = [
   "audit_chain_anchors",
   "audit_events",
   "bid_receipts",
+  // [S1.9101 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
+  // `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Vị từ suy ra đã thấy nó; dòng này
+  // là lời khai bắt kịp. Một chữ ký sửa được thì công tắc ADR-080 không còn một chiều.
+  "org_policy_signatures",
   // [S1.110 / S2.6 / 061] Hai bảng trao thầu. Chúng vào đây vì vị từ SUY TỪ TÍNH CHẤT đã
   // thấy chúng — `061` cho mỗi bảng một trigger `bid_chi_ghi_them` ở `UPDATE OR DELETE`
   // CỘNG một chốt `TRUNCATE` cấp câu lệnh, cả hai `ENABLE ALWAYS`. Dòng này chỉ là lời
@@ -229,6 +233,12 @@ const HAM_KHONG_PHAI_CANH = [
   "public.award_kiem_mot_award_song",
   "public.award_kiem_nguoi_duyet",
   "public.bid_phai_co_bien_nhan",
+  // [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] BA hàm INSERT của bậc và chữ ký thứ hai: hình dạng `tiers`, *đã bật thì
+  // phải có bậc* (ADR-080), phân tách nhiệm vụ của người ký (ADR-082 ⑺). Chỉ gắn INSERT ⇒ không thể là
+  // hàm canh; một hàng HỢP LỆ đi qua cả ba — `dungKichBan()` chèn phiên bản 2 có bậc rồi ký nó.
+  "public.chinh_sach_da_bat_thi_phai_co_bac",
+  "public.chinh_sach_kiem_bac",
+  "public.chinh_sach_kiem_nguoi_ky",
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
   "public.guest_session_kiem_danh_tinh",
@@ -260,6 +270,10 @@ const HAM_KHONG_PHAI_CANH = [
   "public.mfa_credentials_xoa_can_yeu_cau",
   "public.mfa_reset_kiem_chuyen_trang_thai",
   "public.mfa_reset_kiem_quyen",
+  // [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: từ chối CÓ ĐIỀU KIỆN — chỉ khi
+  // ngân sách ghim một phiên bản có bậc CHƯA KÝ. Câu chèn và câu sửa ngân sách của `dungKichBan()` ghim
+  // phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
+  "public.ngan_sach_khong_ghim_ban_chua_ky",
   "public.otp_go_khoa_khong_xoa_dau_vet",
   "public.outbox_jobs_xoa_payload_dang_nhap",
   // [S1.108 / 059] Ba nhánh trong một hàm: INSERT (một vòng hợp lệ), UPDATE (chỉ `closed_at`, chỉ
@@ -878,6 +892,15 @@ async function loiCua(
  */
 const TP_CHINH_SACH_KICH_BAN = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
 const TP_HANG_KICH_BAN = '[{"ma":"gia","tien":"100.00"}]';
+
+/**
+ * [S1.9101 / S3.1a] Bậc của phiên bản 2 trong kịch bản: một bậc thường từ 0 — đủ mười khoá, trao thầu một chữ ký của
+ * DIRECTOR (vai giữ `po.approve`, điều `chinh_sach_kiem_bac` đòi) — và bậc đấu thầu chính thức ở cuối, chỉ hai khoá.
+ */
+const BAC_KICH_BAN =
+  '[{"tu_so_tien":0,"so_ncc_toi_thieu":1,"award_vai_khac_nhau":false,"ky_danh_sach_moi":false,"xoay_vong_n":0,' +
+  '"award_so_chu_ky":1,"award_vai":["DIRECTOR"],"tham_dinh_truoc_trao":false,"khai_xung_dot":false,"dau_thau_chinh_thuc":false},' +
+  '{"tu_so_tien":10000000000,"dau_thau_chinh_thuc":true}]';
 
 /**
  * Kịch bản nhân chứng: một đời RFQ (soạn → nộp → một phê duyệt → mở → gia hạn → mời → khách xác
@@ -1631,6 +1654,44 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_awards",
+  );
+
+  // ---- [S1.9101 / S3.1a / `9501_bac_va_chu_ky_chinh_sach`] Bậc và chữ ký thứ hai của phiên bản chính sách ------------------------
+  // Hai bộ ba mới trên `org_policy_signatures`/INSERT: `chinh_sach_kiem_nguoi_ky` (hàm MỚI) và
+  // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai hàm INSERT mới của `org_procurement_policies` và
+  // `ngan_sach_khong_ghim_ban_chua_ky` trên `rfq_budgets` đã có nhân chứng ở các câu chính sách/ngân sách
+  // phía trên — phiên bản 1 không bậc đi qua cả ba; câu chèn phiên bản 2 dưới đây là nhân chứng thứ hai
+  // của hai hàm chính sách, ở nhánh CÓ bậc.
+  // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
+  // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
+  // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
+  const tc = await nguoi("FINANCE");
+  const cs2 = await chenNC(
+    "public.org_procurement_policies",
+    api(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+        "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $4::jsonb, 30, 12, $2, $3) " +
+        "RETURNING id, org_id, version, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, created_by, created_by_session_id",
+      [org, pm.u, pm.s, BAC_KICH_BAN],
+      {
+        org_id: org, version: 2, tiers: JSON.parse(BAC_KICH_BAN), chia_nho_cua_so_ngay: 30, tham_dinh_hieu_luc_thang: 12,
+        created_by: pm.u, created_by_session_id: pm.s,
+      },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.org_policy_signatures",
+      "INSERT",
+      api(
+        "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4) " +
+          "RETURNING org_id, policy_id, signed_by, signed_by_session_id",
+        [org, cs2, tc.u, tc.s],
+        { org_id: org, policy_id: cs2, signed_by: tc.u, signed_by_session_id: tc.s },
+      ),
+    ),
+    1,
+    "org_policy_signatures",
   );
 
   return { orgId: org };

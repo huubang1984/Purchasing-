@@ -202,7 +202,9 @@ export async function createProcurementPolicy(
 }
 
 /**
- * Chính sách đang có hiệu lực: phiên bản CAO NHẤT đã tới ngày hiệu lực.
+ * Chính sách đang có hiệu lực: phiên bản CAO NHẤT đã tới ngày hiệu lực. ~~(đọc thẳng bảng)~~
+ * **[S1.9101]** Đọc qua `chinh_sach_hieu_luc` — hàm DUY NHẤT trả lời câu ấy, nên một phiên bản có bậc
+ * chưa có chữ ký thứ hai không có hiệu lực ở đây cũng như ở ba chỗ đọc còn lại (ADR-082 ⑺).
  *
  * Trả `null` khi tổ chức chưa đặt chính sách nào — và người gọi PHẢI xử lý ca đó chứ không được
  * coi là "ngưỡng bằng 0". Ở `setRfqBudget` bên dưới, ca ấy là một lần NÉM.
@@ -215,8 +217,8 @@ export async function getActiveProcurementPolicy(
 
   const { rows } = await client.query<HangChinhSach>(
     `SELECT ${COT_CHINH_SACH} FROM public.org_procurement_policies
-      WHERE effective_from OPERATOR(pg_catalog.<=) pg_catalog.now()
-      ORDER BY version DESC LIMIT 1`,
+      WHERE id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now())`,
+    [orgId],
   );
   const hang = rows[0];
   return hang === undefined ? null : doiChinhSach(hang);
