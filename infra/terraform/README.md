@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Chín stack, chạy đúng thứ tự
+## Mười stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
