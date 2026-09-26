@@ -16,7 +16,7 @@
 import type { webcrypto } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import type { KeyWrapper } from "@trustprocure/crypto-keys";
+import { wrapForOrg, type OrgKeyProvisioner, type OrgPublicKey } from "@trustprocure/crypto-keys";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import {
   assertAlgorithm,
@@ -47,7 +47,11 @@ export interface IssueRfqKeyPairInput {
   readonly rfqId: string;
   /** [ADR-016] Phiên của chính người mở RFQ. Danh tính là DẪN XUẤT, không phải tham số. */
   readonly actorSessionId: string;
-  readonly wrapper: KeyWrapper;
+  /**
+   * [ADR-062] Bộ sinh cặp khoá TỔ CHỨC. Chỉ được gọi ở lần mở RFQ đầu tiên của tổ chức; từ đó
+   * khoá riêng RFQ được bọc bằng khoá CÔNG KHAI của tổ chức, cục bộ, không lời gọi KMS nào.
+   */
+  readonly orgKeys: OrgKeyProvisioner;
   /**
    * Thuật toán cần sinh. Mặc định là CẢ HAI — ADR-011 mục 3: `X25519` không được làm điều kiện
    * để nộp thầu, nên `ECDH_P256` luôn phải có mặt; và mục 1: `X25519` là đường nâng cấp cơ hội,
@@ -86,8 +90,7 @@ function thamSoSinh(
  * đường nào để lỡ tay ghi khoá riêng xuống đâu cả.
  */
 async function sinhVaBoc(
-  wrapper: KeyWrapper,
-  orgId: string,
+  khoaToChuc: OrgPublicKey,
   algorithm: KeyAgreementAlgorithm,
 ): Promise<{ publicKey: Uint8Array; wrapped: Uint8Array; keyVersion: string }> {
   const s = subtle();
@@ -95,17 +98,59 @@ async function sinhVaBoc(
   const publicKey = new Uint8Array(await s.exportKey("spki", cap.publicKey));
   const pkcs8 = new Uint8Array(await s.exportKey("pkcs8", cap.privateKey));
   try {
-    const daBoc = await wrapper.wrap(orgId, pkcs8);
+    const daBoc = wrapForOrg(khoaToChuc, pkcs8);
     return {
       publicKey,
       wrapped: new Uint8Array(daBoc.ciphertext),
       keyVersion: daBoc.keyVersion,
     };
   } finally {
-    // Trong `finally` chứ không sau lời gọi: một lần ném từ `wrap()` không được để lại bản rõ
-    // nguyên vẹn trong heap. Cùng khuôn `orgKey.fill(0)` ở `crypto-keys/src/local-dev-wrapper.ts`.
     pkcs8.fill(0);
   }
+}
+
+interface HangKhoaToChuc {
+  readonly key_version: string;
+  readonly public_key: Buffer;
+}
+
+/**
+ * [ADR-062] Cặp khoá tổ chức mới nhất — sinh nếu chưa có.
+ *
+ * Lời gọi sinh (`GenerateDataKeyPairWithoutPlaintext` với aws-kms) chạy TRƯỚC mọi lần ghi sổ của
+ * giao dịch: `openRfq` chưa ghi sổ gì trước khi gọi `issueRfqKeyPair`, nên khoá tư vấn ghi sổ của tổ
+ * chức CHƯA bị giữ (khoản 123). Hai lần mở đua nhau: khoá chính `(org_id, key_version)` làm bên sau
+ * chờ bên trước COMMIT rồi `DO NOTHING`, và câu SELECT kế tiếp — ảnh chụp MỚI dưới READ COMMITTED —
+ * đọc được hàng của bên thắng. Cặp khoá của bên thua bị bỏ; khoá riêng của nó chưa từng ở dạng rõ.
+ */
+async function khoaToChucHienHanh(
+  client: pg.PoolClient,
+  orgId: string,
+  orgKeys: OrgKeyProvisioner,
+): Promise<OrgPublicKey> {
+  const doc = async (): Promise<OrgPublicKey | null> => {
+    const { rows } = await client.query<HangKhoaToChuc>(
+      `SELECT key_version, public_key FROM public.org_key_pairs
+        WHERE org_id OPERATOR(pg_catalog.=) $1
+        ORDER BY created_at DESC, key_version DESC LIMIT 1`,
+      [orgId],
+    );
+    const h = rows[0];
+    return h === undefined ? null : { orgId, keyVersion: h.key_version, publicKey: new Uint8Array(h.public_key) };
+  };
+  const coSan = await doc();
+  if (coSan !== null) return coSan;
+
+  const moi = await orgKeys.generate(orgId);
+  await client.query(
+    `INSERT INTO public.org_key_pairs (org_id, key_version, public_key, wrapped_private_key)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (org_id, key_version) DO NOTHING`,
+    [orgId, moi.keyVersion, Buffer.from(moi.publicKey), Buffer.from(moi.wrappedPrivateKey)],
+  );
+  const sauGhi = await doc();
+  if (sauGhi === null) throw new SealedEnvelopeError("Không ghi được cặp khoá của tổ chức.");
+  return sauGhi;
 }
 
 /**
@@ -136,6 +181,8 @@ export async function issueRfqKeyPair(
     );
   }
 
+  // [ADR-062] Từ ADR-062 lần BỌC là cục bộ; lời gọi KMS còn lại là lần SINH cặp khoá tổ chức ở `khoaToChucHienHanh` ngay dưới —
+  // và lý do của khối này áp NGUYÊN cho nó.
   // [S1.71 / khoản 123] BỌC MỌI cặp khoá TRƯỚC lần INSERT và lần ghi sổ đầu tiên. Lần bọc là lời gọi KMS (ADR-009); lần ghi sổ đầu của giao
   // dịch lấy khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`) và giữ nó tới COMMIT. Bản trước bọc X25519 SAU lần ghi sổ của
   // ECDH_P256, nên trong lúc gọi KMS lần hai mọi lần ghi sổ khác của tổ chức — hợp lệ lẫn từ chối — chờ theo nó, và mỗi yêu cầu chờ giữ một
@@ -143,9 +190,12 @@ export async function issueRfqKeyPair(
   // của tổ chức gửi lúc lần bọc thứ hai đang chạy 2 842–2 852 ms ⇒ 66–69 ms; `/me` của tổ chức khác 2 012–2 027 ms ⇒ 6–9 ms. Hỏng ở lần
   // bọc nào thì giao dịch chưa có hàng hay bản ghi nào của lần sinh khoá. Khoá riêng dạng rõ vẫn bị xoá ngay trong `sinhVaBoc`; giữa hai
   // vòng dưới đây chỉ còn bản đã bọc và khoá công khai.
+  // [ADR-062] Lời gọi KMS DUY NHẤT của đường này (và chỉ ở lần mở đầu tiên của tổ chức) nằm ở đây,
+  // trước mọi lần ghi sổ. Từ đó việc bọc là cục bộ: `wrapForOrg` không gọi KMS.
+  const khoaToChuc = await khoaToChucHienHanh(client, orgId, input.orgKeys);
   const daBoc: { algorithm: KeyAgreementAlgorithm; publicKey: Uint8Array; wrapped: Uint8Array; keyVersion: string }[] = [];
   for (const algorithm of thuatToan) {
-    daBoc.push({ algorithm, ...(await sinhVaBoc(input.wrapper, orgId, algorithm)) });
+    daBoc.push({ algorithm, ...(await sinhVaBoc(khoaToChuc, algorithm)) });
   }
 
   const ra: RfqPublicKeyRecord[] = [];

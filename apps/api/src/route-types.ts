@@ -18,7 +18,7 @@
 
 import type pg from "pg";
 import type { ReceiptSigner } from "@trustprocure/bidding";
-import type { KeyWrapper } from "@trustprocure/crypto-keys";
+import type { OrgKeyProvisioner } from "@trustprocure/crypto-keys";
 import type { Permission, SessionActor, TotpSecretUnsealer, WrappedTotpSecret } from "@trustprocure/identity";
 import type { Channel, PepperRing } from "@trustprocure/invitation";
 import type { ApiRequest, ApiResponse, HttpMethod } from "./http.js";
@@ -99,8 +99,11 @@ export interface InvitationLinkSender {
 
 /** Những thứ có KHOÁ hoặc có TÁC DỤNG PHỤ mà handler cần và không được tự tạo. */
 export interface ApiServices {
-  /** Bọc khoá riêng RFQ lúc `openRfq` (ADR-019) — cửa BỌC của crypto-keys; cửa MỞ thì apps/api không có. */
-  readonly rfqKeyWrapper: KeyWrapper;
+  /**
+   * [ADR-062] Sinh cặp khoá TỔ CHỨC ở lần `openRfq` đầu tiên của tổ chức; khoá riêng RFQ được bọc
+   * bằng khoá công khai tổ chức, cục bộ. Cửa BỌC của crypto-keys; cửa MỞ thì apps/api không có.
+   */
+  readonly orgKeyProvisioner: OrgKeyProvisioner;
   readonly invitationLinkSender: InvitationLinkSender;
   readonly pepper: PepperRing;
   readonly otpSender: OtpSender;

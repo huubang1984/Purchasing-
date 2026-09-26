@@ -17,7 +17,7 @@
 // người ấy là `apps/unseal-worker` (S1.6).
 // =============================================================================================
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createDecipheriv, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, type KeyObject } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -38,30 +38,71 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.me
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
 // ---------------------------------------------------------------------------------------------
-// BỘ BỌC ĐỐI XỨNG CỦA RIÊNG TEST — có nghịch đảo, nên chuỗi đo được trọn vẹn.
-// Đây KHÔNG phải adapter sản phẩm: khoá nằm trong biến cục bộ của file test. Adapter thật là
-// `createLocalDevWrapper` (dev) và KMS (ADR-009), cả hai có phép đo riêng ở `packages/crypto-keys`.
+// [ADR-062] BỘ SINH CẶP KHOÁ TỔ CHỨC CỦA RIÊNG TEST — "KMS" là một Map trong bộ nhớ của file này.
+// Đây KHÔNG phải adapter sản phẩm. Adapter thật là `createLocalDevOrgKeyProvisioner` (dev) và KMS
+// (ADR-062), cả hai có phép đo riêng ở `packages/crypto-keys`.
+//
+// `moBocTest` là một bản mở phong bì v2 VIẾT LẠI ĐỘC LẬP theo đặc tả ở đầu `crypto-keys/src/org-key.ts`
+// — không import `./unwrap` (test này nằm ngoài hàng rào `g1-`), và vì viết lại nên nó cũng là phép
+// đối chiếu chéo: nếu định dạng trôi khỏi đặc tả, bản này mở hỏng.
 // ---------------------------------------------------------------------------------------------
-const KHOA_TEST = randomBytes(32);
+interface KhoaToChucTest {
+  readonly orgId: string;
+  readonly keyVersion: string;
+  readonly rieng: KeyObject;
+  readonly diem: Buffer;
+}
+const KMS_TEST: KhoaToChucTest[] = [];
 
-const boBocTest = {
-  name: "doi-xung-cua-test",
-  wrap: (_orgId: string, plaintext: Uint8Array) => {
-    const iv = randomBytes(12);
-    const c = createCipheriv("aes-256-gcm", KHOA_TEST, iv);
-    const than = Buffer.concat([c.update(plaintext), c.final()]);
-    return Promise.resolve({
-      ciphertext: new Uint8Array(Buffer.concat([iv, c.getAuthTag(), than])),
-      keyVersion: "test-v1",
-    });
-  },
-};
+function diemCua(k: KeyObject): Buffer {
+  const jwk = k.export({ format: "jwk" });
+  return Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x ?? "", "base64url"), Buffer.from(jwk.y ?? "", "base64url")]);
+}
+
+function taoBoSinh(name: string, keyVersion = "test-v1") {
+  return {
+    name,
+    generate: (orgId: string) => {
+      const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      KMS_TEST.push({ orgId, keyVersion, rieng: k.privateKey, diem: diemCua(k.publicKey) });
+      return Promise.resolve({
+        orgId,
+        keyVersion,
+        publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+        wrappedPrivateKey: randomBytes(48),
+      });
+    },
+  };
+}
+
+const boBocTest = taoBoSinh("doi-xung-cua-test");
+
+function moV2(k: KhoaToChucTest, b: Buffer): Uint8Array {
+  if (b[0] !== 2) throw new Error("khong phai phong bi v2");
+  const diemTam = b.subarray(1, 66);
+  const congKhaiTam = createPublicKey({
+    key: { kty: "EC", crv: "P-256", x: diemTam.subarray(1, 33).toString("base64url"), y: diemTam.subarray(33, 65).toString("base64url") },
+    format: "jwk",
+  });
+  const bimat = diffieHellman({ privateKey: k.rieng, publicKey: congKhaiTam });
+  const khoa = Buffer.from(hkdfSync("sha256", bimat, Buffer.concat([diemTam, k.diem]), "trustprocure/org-wrap/v2", 32));
+  const kv = Buffer.from(k.keyVersion, "utf8");
+  const d = createDecipheriv("aes-256-gcm", khoa, b.subarray(66, 78));
+  d.setAAD(Buffer.concat([Buffer.from([2, kv.length]), kv, Buffer.from(k.orgId, "utf8")]));
+  d.setAuthTag(b.subarray(78, 94));
+  return new Uint8Array(Buffer.concat([d.update(b.subarray(94)), d.final()]));
+}
 
 function moBocTest(daBoc: Uint8Array): Uint8Array {
   const b = Buffer.from(daBoc);
-  const d = createDecipheriv("aes-256-gcm", KHOA_TEST, b.subarray(0, 12));
-  d.setAuthTag(b.subarray(12, 28));
-  return new Uint8Array(Buffer.concat([d.update(b.subarray(28)), d.final()]));
+  for (const k of KMS_TEST) {
+    try {
+      return moV2(k, b);
+    } catch {
+      // thử cặp khoá kế tiếp — AAD và tag chỉ khớp đúng tổ chức, đúng phiên bản
+    }
+  }
+  throw new Error("khong cap khoa to chuc nao mo duoc phong bi");
 }
 
 let db: TestDatabase;
@@ -140,7 +181,7 @@ async function taoRfqChoDuyet(orgId: string, userId: string, sessionId: string):
 /** Mở RFQ theo đúng thứ tự mà 017 cưỡng chế: sinh khoá, rồi chuyển trạng thái, cùng giao dịch. */
 async function moRfq(orgId: string, rfqId: string, userId: string, sessionId: string): Promise<void> {
   await withTenant(apiPool, orgId, async (c) => {
-    await issueRfqKeyPair(c, orgId, { rfqId, actorSessionId: sessionId, wrapper: boBocTest });
+    await issueRfqKeyPair(c, orgId, { rfqId, actorSessionId: sessionId, orgKeys: boBocTest });
     await c.query(
       "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, " +
         "opened_by_session_id = $3 WHERE id = $1",
@@ -224,7 +265,7 @@ describe("[INV-C5] khoá RFQ chỉ sinh đúng lúc chuyển sang OPEN", () => {
     const rfqId = await taoRfqNhap(orgA, uA, sA);
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest }),
+        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest }),
       ),
     ).rejects.toThrow(/chi sinh duoc luc chuyen sang OPEN/);
   });
@@ -234,7 +275,7 @@ describe("[INV-C5] khoá RFQ chỉ sinh đúng lúc chuyển sang OPEN", () => {
     await moRfq(orgA, rfqId, uA, sA);
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest }),
+        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest }),
       ),
     ).rejects.toThrow(/chi sinh duoc luc chuyen sang OPEN/);
   });
@@ -246,7 +287,7 @@ describe("[INV-C5] khoá RFQ chỉ sinh đúng lúc chuyển sang OPEN", () => {
     const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest }),
+        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest }),
       ),
     ).rejects.toThrow(/khong mo no trong cung giao dich/);
 
@@ -282,7 +323,7 @@ describe("[INV-C5] khoá RFQ chỉ sinh đúng lúc chuyển sang OPEN", () => {
         issueRfqKeyPair(c, orgA, {
           rfqId,
           actorSessionId: sA,
-          wrapper: boBocTest,
+          orgKeys: boBocTest,
           algorithms: ["X25519"],
         }),
       ),
@@ -632,7 +673,7 @@ describe("đột biến — chứng minh từng lớp là thứ ĐANG chặn, kh
     );
     try {
       await withTenant(apiPool, orgA, (c) =>
-        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocTest }),
+        issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocTest }),
       );
       const { rows } = await db.pool.query<{ n: string; status: string }>(
         "SELECT (SELECT count(*)::text FROM rfq_key_material WHERE rfq_id = p.id) AS n, " +
@@ -947,8 +988,11 @@ describe("[S1.71 / khoản 123] sinh khoá không giữ khoá ghi sổ của t�
     "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
     "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid";
 
-  it("bọc MỌI cặp khoá TRƯỚC lần ghi sổ đầu tiên: trong lúc bọc, giao dịch chưa giữ khoá ghi sổ của tổ chức và chưa ghi hàng vật liệu khoá nào", async () => {
+  it("[ADR-062] lời gọi KMS (sinh cặp khoá tổ chức) chạy TRƯỚC lần ghi sổ đầu tiên: trong lúc gọi, giao dịch chưa giữ khoá ghi sổ của tổ chức và chưa ghi hàng vật liệu khoá nào", async () => {
     const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    // Lời gọi KMS chỉ xảy ra ở lần mở ĐẦU TIÊN của tổ chức ⇒ dọn cặp khoá có sẵn (vai chủ, có chủ đích)
+    // để lượt này phải sinh. Phiên bản riêng để không đè cặp khoá mà các RFQ trước đã dùng.
+    await db.pool.query("DELETE FROM org_key_pairs WHERE org_id = $1", [orgA]);
     const khoaKhiBoc: number[] = [];
     // [lượt soi 65a-8 ⑴] Khoá ghi sổ chỉ nói lần GHI SỔ chưa chạy; vế này nói lần INSERT cũng chưa chạy: một câu INSERT vào
     // `rfq_key_material` để lại RowExclusiveLock trên bảng tới hết giao dịch, đếm theo pid của chính giao dịch.
@@ -959,19 +1003,20 @@ describe("[S1.71 / khoản 123] sinh khoá không giữ khoá ghi sổ của t�
       "AND relation = 'public.rfq_key_material'::regclass AND mode = 'RowExclusiveLock' AND granted";
     let khoaSauSinhKhoa = -1;
     let hangSauSinhKhoa = -1;
+    const sinhThat = taoBoSinh("dem-khoa", "dem-v1");
     const boBocDemKhoa = {
       name: "doi-xung-dem-khoa",
-      wrap: async (orgId: string, plaintext: Uint8Array) => {
+      generate: async (orgId: string) => {
         const { rows } = await db.pool.query<{ n: number }>(CAU_KHOA_GHI_SO_DA_CAP, [orgA]);
         khoaKhiBoc.push(rows[0]?.n ?? -1);
         const { rows: hang } = await db.pool.query<{ n: number }>(CAU_HANG_VAT_LIEU_DA_CAP, [pidGiaoDich]);
         hangKhiBoc.push(hang[0]?.n ?? -1);
-        return boBocTest.wrap(orgId, plaintext);
+        return sinhThat.generate(orgId);
       },
     };
     await withTenant(apiPool, orgA, async (c) => {
       pidGiaoDich = (await c.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
-      await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocDemKhoa });
+      await issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boBocDemKhoa });
       // [lượt soi 65c-3] Đối chứng dương của hai phép dò: sau lần sinh khoá, chính giao dịch này giữ khoá ghi sổ và RowExclusiveLock trên
       // bảng vật liệu khoá — hai phép dò phải thấy chúng. Không vế này thì một phép dò hỏng (luôn ra 0) làm test xanh rỗng.
       khoaSauSinhKhoa = (await db.pool.query<{ n: number }>(CAU_KHOA_GHI_SO_DA_CAP, [orgA])).rows[0]?.n ?? -1;
@@ -983,9 +1028,9 @@ describe("[S1.71 / khoản 123] sinh khoá không giữ khoá ghi sổ của t�
     });
     expect(khoaSauSinhKhoa, "đối chứng dương: phép dò không thấy khoá ghi sổ mà lần sinh khoá vừa lấy").toBe(1);
     expect(hangSauSinhKhoa, "đối chứng dương: phép dò không thấy RowExclusiveLock mà lần INSERT vật liệu khoá vừa lấy").toBe(1);
-    expect(khoaKhiBoc, "khoá ghi sổ của tổ chức đã bị giữ trong lúc bọc khoá").toEqual([0, 0]);
+    expect(khoaKhiBoc, "khoá ghi sổ của tổ chức đã bị giữ trong lúc gọi KMS").toEqual([0]);
     expect(pidGiaoDich).toBeGreaterThan(0);
-    expect(hangKhiBoc, "giao dịch đã INSERT vật liệu khoá trong lúc còn bọc").toEqual([0, 0]);
+    expect(hangKhiBoc, "giao dịch đã INSERT vật liệu khoá trong lúc còn gọi KMS").toEqual([0]);
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_KEY_MATERIAL_ISSUED' AND resource_id = $2",
       [orgA, rfqId],
@@ -993,22 +1038,23 @@ describe("[S1.71 / khoản 123] sinh khoá không giữ khoá ghi sổ của t�
     expect(rows[0]?.n).toBe("2");
   });
 
-  it("lần bọc thứ hai hỏng ⇒ không vật liệu khoá, không bản ghi sổ nào của RFQ, RFQ vẫn chờ duyệt", async () => {
+  it("[ADR-062] lời gọi KMS sinh cặp khoá tổ chức hỏng ⇒ không cặp khoá, không vật liệu khoá, không bản ghi sổ nào của RFQ, RFQ vẫn chờ duyệt", async () => {
     const rfqId = await taoRfqChoDuyet(orgA, uA, sA);
+    await db.pool.query("DELETE FROM org_key_pairs WHERE org_id = $1", [orgA]);
     let lan = 0;
-    const boBocHongLanHai = {
-      name: "doi-xung-hong-lan-hai",
-      wrap: (orgId: string, plaintext: Uint8Array) => {
+    const boSinhHong = {
+      name: "kms-hong",
+      generate: () => {
         lan += 1;
-        return lan === 2
-          ? Promise.reject(Object.assign(new Error("kms gia lap hong"), { name: "KmsGiaLapHong" }))
-          : boBocTest.wrap(orgId, plaintext);
+        return Promise.reject(Object.assign(new Error("kms gia lap hong"), { name: "KmsGiaLapHong" }));
       },
     };
     await expect(
-      withTenant(apiPool, orgA, (c) => issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, wrapper: boBocHongLanHai })),
+      withTenant(apiPool, orgA, (c) => issueRfqKeyPair(c, orgA, { rfqId, actorSessionId: sA, orgKeys: boSinhHong })),
     ).rejects.toThrow("kms gia lap hong");
-    expect(lan).toBe(2);
+    expect(lan).toBe(1);
+    const cap = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM org_key_pairs WHERE org_id = $1", [orgA]);
+    expect(cap.rows[0]?.n).toBe("0");
     const khoa = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM rfq_key_material WHERE rfq_id = $1", [rfqId]);
     expect(khoa.rows[0]?.n).toBe("0");
     const so = await db.pool.query<{ n: string }>(

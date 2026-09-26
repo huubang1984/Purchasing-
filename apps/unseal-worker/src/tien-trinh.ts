@@ -30,7 +30,7 @@
 // ==============================================================================================
 
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
-import { createLocalDevUnwrapper } from "@trustprocure/crypto-keys/unwrap";
+import { createLocalDevOrgUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
@@ -121,7 +121,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
   auditPool.on("release", ghiKetNoiHuy("auditPool"));
   ngheLoiKetNoiToiMuon(auditPool, ghiLoiToiMuon("auditPool"));
 
-  const unwrapper = createLocalDevUnwrapper(
+  const unwrapper = createLocalDevOrgUnwrapper(
     new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys),
   );
   const alertSink = taoCanhBaoDev(ch.alertDir);

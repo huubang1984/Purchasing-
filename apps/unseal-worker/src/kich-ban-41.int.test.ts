@@ -23,7 +23,7 @@
 //    hàng rào có việc để làm sẽ không thấy trước những chỗ hàng rào chạm tới.
 // =============================================================================================
 
-import { createCipheriv, createDecipheriv, createPublicKey, randomBytes } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -67,33 +67,30 @@ import {
   requestUnseal,
 } from "@trustprocure/unseal";
 import { executeUnsealRequest } from "./index.js";
+import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const HAN_NOP = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
-/** Bộ bọc/mở bọc đối xứng của riêng test — cùng khuôn `unseal-worker.int.test.ts`. */
-const KHOA_TEST = randomBytes(32);
+/** Bộ sinh/mở cặp khoá tổ chức của riêng test — cùng khuôn `unseal-worker.int.test.ts`. */
 const boBoc = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "doi-xung-cua-test",
-  wrap: (_orgId: string, plaintext: Uint8Array) => {
-    const iv = randomBytes(12);
-    const c = createCipheriv("aes-256-gcm", KHOA_TEST, iv);
-    const than = Buffer.concat([c.update(plaintext), c.final()]);
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     return Promise.resolve({
-      ciphertext: new Uint8Array(Buffer.concat([iv, c.getAuthTag(), than])),
+      orgId,
       keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
     });
   },
 };
-const boMoBoc = {
+// [ADR-062] Mở cặp khoá tổ chức mà bộ sinh của test "bọc" bằng xor 0xff.
+const boMoBoc = createOrgKeyUnwrapper({
   name: "doi-xung-cua-test",
-  unwrap: (_orgId: string, wrapped: { ciphertext: Uint8Array }) => {
-    const b = Buffer.from(wrapped.ciphertext);
-    const d = createDecipheriv("aes-256-gcm", KHOA_TEST, b.subarray(0, 12));
-    d.setAuthTag(b.subarray(12, 28));
-    return Promise.resolve(new Uint8Array(Buffer.concat([d.update(b.subarray(28)), d.final()])));
-  },
-};
+  moKhoaRieng: (k) => Promise.resolve(new Uint8Array(k.wrappedPrivateKey).map((b) => b ^ 0xff)),
+});
 
 /**
  * NĂM nhà cung cấp, năm mức giá, đơn vị VND. Con số 1 tỷ của kịch bản là NGÂN SÁCH DỰ TÍNH của
@@ -246,7 +243,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       const mo = await openRfq(c, orgA, {
         rfqId: trangThai.rfqId,
         actorSessionId: sMua,
-        keyWrapper: boBoc,
+        orgKeys: boBoc,
       }, apiPool);
       expect(mo.status).toBe("OPEN");
     });

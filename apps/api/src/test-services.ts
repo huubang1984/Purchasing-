@@ -142,11 +142,20 @@ export function dichVuTest(): DichVuTest {
     hanMoiDaGui,
     khoaKy,
     services: {
-      // Bộ bọc khoá RFQ của test — đối xứng, cùng fixture với bidding.int.test.ts. Không phải KMS.
-      rfqKeyWrapper: {
+      // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 THẬT (để `wrapForOrg` bọc được), khoá
+      // riêng "bọc" bằng xor 0xff — worker của test mở cặp bằng `createOrgKeyUnwrapper` với cùng xor.
+      // Không phải KMS.
+      orgKeyProvisioner: {
         name: "doi-xung-cua-test",
-        wrap: (_orgId: string, plaintext: Uint8Array) =>
-          Promise.resolve({ ciphertext: plaintext.map((b) => b ^ 0xff), keyVersion: "test-v1" }),
+        generate: (orgId: string) => {
+          const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+          return Promise.resolve({
+            orgId,
+            keyVersion: "test-v1",
+            publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+            wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+          });
+        },
       },
       invitationLinkSender: {
         name: "ghi-lai-cua-test",

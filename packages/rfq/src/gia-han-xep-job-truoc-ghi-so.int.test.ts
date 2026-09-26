@@ -14,7 +14,7 @@
 // `vi.mock` bọc `enqueueJob` của `@trustprocure/outbox` — bản bọc gọi bản thật, chỉ đếm khi test bật cờ. Không nhãn INV.
 // =============================================================================================
 
-import { randomBytes } from "node:crypto";
+import {generateKeyPairSync, randomBytes} from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
@@ -46,8 +46,17 @@ const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 const MAI_SAU_XA = new Date(Date.now() + 14 * 24 * 3600 * 1000);
 const SO_LOI_MOI = 3;
 const boBocGia = {
+  // [ADR-062] Bộ sinh cặp khoá tổ chức của test: cặp P-256 thật, khoá riêng "bọc" bằng xor 0xff.
   name: "gia-cho-test-gia-han",
-  wrap: (_orgId: string, plaintext: Uint8Array) => Promise.resolve({ ciphertext: plaintext.map((x) => x ^ 0xff), keyVersion: "gia-v1" }),
+  generate: (orgId: string) => {
+    const k = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    return Promise.resolve({
+      orgId,
+      keyVersion: "test-v1",
+      publicKey: k.publicKey.export({ format: "der", type: "spki" }),
+      wrappedPrivateKey: new Uint8Array(k.privateKey.export({ format: "der", type: "pkcs8" })).map((b) => b ^ 0xff),
+    });
+  },
 };
 
 let db: TestDatabase;
@@ -85,7 +94,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, keyWrapper: boBocGia }, apiPool);
+      await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });
     for (let i = 0; i < SO_LOI_MOI; i++) {
@@ -155,7 +164,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 });
-      await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, keyWrapper: boBocGia }, apiPool);
+      await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });
     const nhaCungCap = async (): Promise<{ ncc: string; lh: string }> => {

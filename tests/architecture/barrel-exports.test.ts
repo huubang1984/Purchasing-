@@ -68,7 +68,7 @@ const DANH_SACH_TRANG_INDEX = [
 ];
 
 /** Danh sách trắng: export GIÁ TRỊ của cửa hạn chế, chỉ apps/unseal-worker được import. */
-const DANH_SACH_TRANG_UNWRAP = ["createLocalDevOrgUnwrapper", "createLocalDevUnwrapper"];
+const DANH_SACH_TRANG_UNWRAP = ["createLocalDevOrgUnwrapper", "createLocalDevUnwrapper", "createOrgKeyUnwrapper"];
 
 /** Tập subpath export hợp lệ của package — mỗi mục là MỘT cửa công khai. */
 const TAP_CUA_HOP_LE = [".", "./unwrap"];
