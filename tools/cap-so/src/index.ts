@@ -28,7 +28,8 @@
 // LẠI. Số thật trong văn bản thì mơ hồ — `083` trần có thể là bất cứ gì — nên lệnh không đoán: nó
 // đọc lại commit đã mang trailer, lấy từng cặp dòng trước/sau của lần cấp ấy, và trả dòng về đúng
 // bản số tạm. Dòng nào đã bị sửa sau lần cấp thì mới rơi xuống thu hồi theo token có tiền tố
-// (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration).
+// (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration), bằng bảng MỚI NHẤT. Lần cấp chưa commit để bảng của
+// nó ở `.git/cap-so-cho-commit.json`, nên chạy lại trước khi commit không đọc nhầm trailer cũ.
 //
 // RANH GIỚI NÓI RA
 //   - Chỉ những dòng NHÁNH thêm (so với base) bị viết lại; dòng của master không bao giờ bị đụng.
@@ -39,8 +40,8 @@
 // ==============================================================================================
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { argv, cwd, exit, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -64,7 +65,7 @@ export function dayCuaSoTam(n: number): Day | null {
   return null;
 }
 
-/** ADR và migration viết ba chữ số (`ADR-083`, `068_…`); vòng và khoản viết trần. */
+/** ADR và migration viết ba chữ số (`ADR-007`, `007_…`); vòng và khoản viết trần. */
 export function dinhDang(day: Day, n: number): string {
   return day === "adr" || day === "migration" ? String(n).padStart(3, "0") : String(n);
 }
@@ -144,6 +145,33 @@ export function thuHoiTheoToken(
   duoiMigrationCuaNhanh: ReadonlySet<string>,
   laSoNo: boolean,
 ): string {
+  // Lời khai đếm (`**[S1.x] N ADR**`…) đứng ngoài phép thu hồi: tiền tố vòng của nó không do lệnh cấp,
+  // và sau một cuộc đua thua nó thường mang ĐÚNG số vòng mà master vừa lấy của nhánh — đo được ở lần
+  // merge #152: `**[S1.141] 84 ADR**` bị thu hồi nhầm thành `S1.9101` rồi cấp thành `S1.142`.
+  const vung: Array<readonly [number, number]> = [];
+  for (const re of [RE_KHAI_ADR, RE_KHAI_KHOAN, RE_KHAI_MIGRATION]) {
+    for (const m of dong.matchAll(re)) vung.push([m.index, m.index + m[0].length]);
+  }
+  if (vung.length > 0) {
+    vung.sort((a, b) => a[0] - b[0]);
+    let ra = "";
+    let tu = 0;
+    for (const [a, b] of vung) {
+      if (a < tu) continue;
+      ra += thuHoiDoan(dong.slice(tu, a), bang, duoiMigrationCuaNhanh, laSoNo && tu === 0) + dong.slice(a, b);
+      tu = b;
+    }
+    return ra + thuHoiDoan(dong.slice(tu), bang, duoiMigrationCuaNhanh, laSoNo && tu === 0);
+  }
+  return thuHoiDoan(dong, bang, duoiMigrationCuaNhanh, laSoNo);
+}
+
+function thuHoiDoan(
+  dong: string,
+  bang: BangCap,
+  duoiMigrationCuaNhanh: ReadonlySet<string>,
+  laSoNo: boolean,
+): string {
   const vong = dao(bang.vong);
   const adr = dao(bang.adr);
   const khoan = dao(bang.khoan);
@@ -173,36 +201,55 @@ export function thuHoiTheoToken(
   });
 }
 
+function dayTheoNguCanh(truoc: string, sau: string): Day | null {
+  if (truoc.endsWith("S1.")) return "vong";
+  if (truoc.endsWith("ADR-")) return "adr";
+  if (/khoản(?: nợ)?\s+$/.test(truoc) || /^\s*\|\s*$/.test(truoc)) return "khoan";
+  if (/^_[A-Za-z0-9_]+\.sql/.test(sau)) return "migration";
+  return null;
+}
+
 /**
- * `truoc` → `sau` có phải MỘT CẶP THAY SỐ của lần cấp `bang` không: hai dòng chỉ khác nhau ở các
- * chuỗi chữ số, và mỗi chỗ khác là một số `bang` cấp — từ số tạm của nó, hoặc từ số thật mà một lần
- * cấp CŨ hơn đã cấp cho cùng số tạm ấy. Một lời khai đếm đổi `82 → 83` không qua được phép này, và
- * không cần qua: lời khai được tính lại từ sổ.
+ * Nếu `truoc` → `sau` là MỘT CẶP THAY SỐ của lần cấp `bang` — hai dòng chỉ khác nhau ở các chuỗi chữ
+ * số, và mỗi chỗ khác là một số `bang` cấp, từ số tạm của nó hoặc từ số thật mà một lần cấp CŨ hơn đã
+ * cấp cho cùng số tạm ấy — thì trả `sau` với ĐÚNG những chỗ ấy đổi về số tạm; không thì `null`. Chỉ
+ * đụng vị trí lệnh đã thay: số khác trên dòng (của master, hay lời khai đếm) đứng nguyên. Một lời
+ * khai đếm đổi `82 → 83` không phải cặp, và không cần là: lời khai được tính lại từ sổ.
  */
-export function laCapThaySo(truoc: string, sau: string, bang: BangCap, cacBangCu: readonly BangCap[]): boolean {
-  if (truoc === sau) return false;
+export function banSoTam(truoc: string, sau: string, bang: BangCap, cacBangCu: readonly BangCap[]): string | null {
+  if (truoc === sau) return null;
   const a = truoc.split(/(\d+)/);
   const b = sau.split(/(\d+)/);
-  if (a.length !== b.length) return false;
-  const nguon = new Map<string, Set<string>>();
+  if (a.length !== b.length) return null;
+  const nguon = new Map<string, Array<{ readonly day: Day; readonly tam: number }>>();
   for (const d of CAC_DAY) {
     for (const [tam, that] of bang[d]) {
-      const dich = dinhDang(d, that);
-      const tap = nguon.get(dich) ?? new Set<string>();
-      tap.add(String(tam));
+      const tu = new Set([String(tam)]);
       for (const cu of cacBangCu) {
         const thatCu = cu[d].get(tam);
-        if (thatCu !== undefined) tap.add(dinhDang(d, thatCu));
+        if (thatCu !== undefined) tu.add(dinhDang(d, thatCu));
       }
-      nguon.set(dich, tap);
+      for (const n of tu) {
+        const khoa = `${dinhDang(d, that)}|${n}`;
+        nguon.set(khoa, [...(nguon.get(khoa) ?? []), { day: d, tam }]);
+      }
     }
   }
+  const ra = [...b];
   for (let i = 0; i < a.length; i += 1) {
     if (a[i] === b[i]) continue;
-    if (i % 2 === 0) return false;
-    if (!(nguon.get(b[i]!)?.has(a[i]!) ?? false)) return false;
+    if (i % 2 === 0) return null;
+    const ungVien = nguon.get(`${b[i]!}|${a[i]!}`) ?? [];
+    const d = ungVien.length > 1 ? dayTheoNguCanh(b.slice(0, i).join(""), b.slice(i + 1).join("")) : null;
+    const chon = ungVien.length === 1 ? ungVien : ungVien.filter((u) => u.day === d);
+    if (chon.length !== 1) return null;
+    ra[i] = String(chon[0]!.tam);
   }
-  return true;
+  return ra.join("");
+}
+
+export function laCapThaySo(truoc: string, sau: string, bang: BangCap, cacBangCu: readonly BangCap[]): boolean {
+  return banSoTam(truoc, sau, bang, cacBangCu) !== null;
 }
 
 // ---- Sổ nợ (`docs/STATE.md`) ---------------------------------------------------------------
@@ -743,14 +790,12 @@ function maxTrenBase(goc: string, base: string): Record<Day, number> {
 
 interface LanCapCu {
   readonly bang: BangCap;
-  /** Đường sau → (dòng sau → dòng trước), chỉ những cặp đã qua `laCapThaySo`. */
-  readonly capDong: ReadonlyMap<string, ReadonlyMap<string, string>>;
-  /** Đường sau → đường trước, cho tệp bị đổi tên trong lần cấp ấy. */
-  readonly doiTen: ReadonlyMap<string, string>;
+  /** Đường (bản sau của lần cấp) → (dòng lần cấp đã viết → bản số tạm của chính dòng ấy). */
+  readonly banTam: ReadonlyMap<string, ReadonlyMap<string, string>>;
 }
 
-/** Các lần cấp cũ của nhánh, MỚI NHẤT trước: mọi commit trong `base..HEAD` mang trailer `Cap-So:`. */
-function lichSuCap(goc: string, base: string): readonly LanCapCu[] {
+/** Các lần cấp đã commit của nhánh, MỚI NHẤT trước: mọi commit trong `base..HEAD` mang trailer `Cap-So:`. */
+function lichSuCap(goc: string, base: string, duoiNhanh: ReadonlySet<string>): LanCapCu[] {
   const log = git(goc, ["log", "--format=%H%x1f%B%x1e", `${base}..HEAD`]);
   const commit: Array<{ sha: string; bang: BangCap }> = [];
   for (const banGhi of log.split("\x1e")) {
@@ -762,20 +807,63 @@ function lichSuCap(goc: string, base: string): readonly LanCapCu[] {
   return commit.map(({ sha, bang }, k) => {
     const cacBangCu = commit.slice(k + 1).map((c) => c.bang);
     const diff = git(goc, ["diff", "--no-color", "--no-ext-diff", "-M", "-U0", `${sha}^1`, sha, "--", ".", LOAI_TRU]);
-    const capDong = new Map<string, Map<string, string>>();
-    const doiTen = new Map<string, string>();
+    const banTam = new Map<string, Map<string, string>>();
     for (const t of docDiff(diff)) {
       if (t.sau === null) continue;
-      if (t.truoc !== null && t.truoc !== t.sau) doiTen.set(t.sau, t.truoc);
       for (const [truoc, sau] of t.capDong) {
-        if (!laCapThaySo(truoc, sau, bang, cacBangCu)) continue;
-        const theoTep = capDong.get(t.sau) ?? new Map<string, string>();
-        theoTep.set(sau, truoc);
-        capDong.set(t.sau, theoTep);
+        const tam = banSoTam(truoc, sau, bang, cacBangCu);
+        if (tam === null) continue;
+        const theoTep = banTam.get(t.sau) ?? new Map<string, string>();
+        // Số của lần cấp này ở chỗ KHÔNG đổi trong cặp (một ADR giữ số khi chỉ vòng đổi) cũng là của nhánh.
+        theoTep.set(sau, thuHoiTheoToken(tam, bang, duoiNhanh, t.sau === TEP_STATE));
+        banTam.set(t.sau, theoTep);
       }
     }
-    return { bang, capDong, doiTen };
+    return { bang, banTam };
   });
+}
+
+/**
+ * LẦN CẤP CHƯA COMMIT. Giữa lúc lệnh ghi số và lúc commit mang trailer, bảng cấp mới nhất chỉ nằm trên
+ * đĩa. Chạy lại lệnh trong khoảng ấy mà đọc trailer cũ là thu hồi bằng bảng CŨ — đúng lỗi đo được ở
+ * lần merge #152. Nên mỗi lần cấp ghi bảng và từng dòng nó viết vào `.git/` (không vào kho); lần sau
+ * dùng nó khi HEAD lúc ghi còn là tổ tiên của HEAD hiện tại và chưa có commit mang trailer nào sau đó.
+ */
+const TEP_CHO_COMMIT = "cap-so-cho-commit.json";
+
+interface ChoCommit {
+  readonly head: string;
+  readonly trailer: string;
+  readonly dong: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>>;
+}
+
+function duongChoCommit(goc: string): string {
+  return resolve(goc, git(goc, ["rev-parse", "--git-path", TEP_CHO_COMMIT]).trim());
+}
+
+function docChoCommit(goc: string): LanCapCu | null {
+  const p = duongChoCommit(goc);
+  if (!existsSync(p)) return null;
+  const cho = JSON.parse(readFileSync(p, "utf8")) as ChoCommit;
+  if (gitThu(goc, ["merge-base", "--is-ancestor", cho.head, "HEAD"]).ma !== 0) return null;
+  if (/^Cap-So:/m.test(git(goc, ["log", "--format=%B", `${cho.head}..HEAD`]))) return null;
+  const banTam = new Map<string, Map<string, string>>();
+  for (const [duong, cap] of Object.entries(cho.dong)) banTam.set(duong, new Map(cap.map(([sau, tam]) => [sau, tam])));
+  return { bang: docTrailer(cho.trailer.slice(KHOA_TRAILER.length)), banTam };
+}
+
+function ghiChoCommit(goc: string, bang: BangCap, dong: ReadonlyMap<string, ReadonlyArray<readonly [string, string]>>): void {
+  const p = duongChoCommit(goc);
+  if (bangTrong(bang)) {
+    rmSync(p, { force: true });
+    return;
+  }
+  const cho: ChoCommit = {
+    head: git(goc, ["rev-parse", "HEAD"]).trim(),
+    trailer: vietTrailer(bang),
+    dong: Object.fromEntries(dong),
+  };
+  writeFileSync(p, `${JSON.stringify(cho)}\n`, "utf8");
 }
 
 function laTepThuong(goc: string, p: string): boolean {
@@ -956,8 +1044,6 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
 
   const max = maxTrenBase(goc, base);
   const dongNhanh = dongCuaNhanh(goc, base);
-  const lich: LanCapCu[] = [...lichSuCap(goc, base)];
-  if (tuyChon.cu !== undefined) lich.unshift({ bang: docTrailer(tuyChon.cu), capDong: new Map(), doiTen: new Map() });
 
   // Migration của nhánh: tệp đánh số mà base không có.
   const tenTrenBase = new Set(
@@ -970,6 +1056,10 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
       return { ten: t, so: Number(m[1]), duoi: m[2]! };
     });
   const duoiNhanh = new Set(migrationNhanh.map((x) => x.duoi));
+  const lich: LanCapCu[] = lichSuCap(goc, base, duoiNhanh);
+  const choCommit = docChoCommit(goc);
+  if (choCommit !== null) lich.unshift(choCommit);
+  if (tuyChon.cu !== undefined) lich.unshift({ bang: docTrailer(tuyChon.cu), banTam: new Map() });
 
   // Bước 1 — thu hồi: trả mọi dòng của nhánh về bản số tạm.
   const cay = new CayLamViec(goc);
@@ -978,19 +1068,11 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
     for (const so of cacDong) {
       const i = so - 1;
       if (i < 0 || i >= dong.length) continue;
-      let van = dong[i]!;
-      let duong = p;
-      for (const lan of lich) {
-        const truoc = lan.capDong.get(duong)?.get(van);
-        if (truoc !== undefined) {
-          van = truoc;
-          duong = lan.doiTen.get(duong) ?? duong;
-          continue;
-        }
-        van = thuHoiTheoToken(van, lan.bang, duoiNhanh, p === TEP_STATE);
-        break;
-      }
-      dong[i] = van;
+      // Dòng một lần cấp đã viết và chưa ai sửa: trả về đúng bản số tạm của nó. Dòng sửa sau lần cấp
+      // mới nhất: thu hồi theo token có tiền tố, bằng bảng MỚI NHẤT — số trên dòng ấy là số của bảng ấy.
+      const van = dong[i]!;
+      const tam = lich.map((lan) => lan.banTam.get(p)?.get(van)).find((x) => x !== undefined);
+      dong[i] = tam ?? (lich[0] === undefined ? van : thuHoiTheoToken(van, lich[0].bang, duoiNhanh, p === TEP_STATE));
     }
   }
   const tamCuaMigration = migrationNhanh.map((x) => {
@@ -1040,13 +1122,16 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
   const bang = bangRong();
   for (const d of CAC_DAY) [...khai[d]].sort((a, b) => a - b).forEach((tam, k) => bang[d].set(tam, max[d] + k + 1));
 
+  const daViet = new Map<string, Array<readonly [string, string]>>();
   for (const [p, cacDong] of dongNhanh) {
     const dong = cay.dong(p);
     for (const so of cacDong) {
       const i = so - 1;
       if (i < 0 || i >= dong.length) continue;
-      const moi = thaySoTam(dong[i]!, bang);
+      const tam = dong[i]!;
+      const moi = thaySoTam(tam, bang);
       dong[i] = moi;
+      if (moi !== tam) daViet.set(p, [...(daViet.get(p) ?? []), [moi, tam]]);
       for (const m of moi.matchAll(/(?<!\d)(9[1245]\d\d)(?!\d)/g)) {
         const d = dayCuaSoTam(Number(m[1]));
         const coTienTo =
@@ -1078,7 +1163,13 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
   for (const [cu, moi] of doiTen) {
     if (gitThu(goc, ["ls-files", "--error-unmatch", "--", cu]).ma === 0) git(goc, ["mv", "--", cu, moi]);
     else renameSync(join(goc, cu), join(goc, moi));
+    const cap = daViet.get(cu);
+    if (cap !== undefined) {
+      daViet.delete(cu);
+      daViet.set(moi, cap);
+    }
   }
+  ghiChoCommit(goc, bang, daViet);
   return { bang, doiTen, tepDaGhi, bao, trailer: bangTrong(bang) ? null : vietTrailer(bang) };
 }
 

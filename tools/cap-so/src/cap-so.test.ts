@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   bangRong,
+  banSoTam,
   capNhatKhai,
   capNhatTongKet,
   capSo,
@@ -83,6 +84,14 @@ describe("cặp dòng của một lần cấp cũ", () => {
     expect(laCapThaySo("ADR-083 và ADR-001", "ADR-084 và ADR-001", moi, [cu])).toBe(true);
   });
 
+  it("bản số tạm chỉ đổi ĐÚNG những vị trí lần cấp đã thay — số của master trên cùng dòng đứng nguyên", () => {
+    const cu = bang({ vong: [[9101, 3]], adr: [[9201, 3]] });
+    const moi = bang({ vong: [[9101, 4]], adr: [[9201, 4]] });
+    expect(banSoTam("ADR-003, S1.3; lời khai **[S1.3] ba ADR**", "ADR-004, S1.4; lời khai **[S1.3] ba ADR**", moi, [cu])).toBe(
+      "ADR-9201, S1.9101; lời khai **[S1.3] ba ADR**",
+    );
+  });
+
   it("lời khai đếm đổi, chữ đổi, hay số không do bảng cấp — không phải cặp", () => {
     expect(laCapThaySo("**82 ADR**", "**83 ADR**", BANG_A, [])).toBe(false);
     expect(laCapThaySo("## ADR-9201 — x", "## ADR-083 — y", BANG_A, [])).toBe(false);
@@ -95,6 +104,12 @@ describe("thu hồi theo token", () => {
     const duoi = new Set(["_moi.sql"]);
     expect(thuHoiTheoToken("S1.141, ADR-083, khoản nợ 243, `068_moi.sql`, `068_khac.sql`, `068`", BANG_A, duoi, false)).toBe(
       "S1.9101, ADR-9201, khoản nợ 9401, `9501_moi.sql`, `068_khac.sql`, `068`",
+    );
+  });
+
+  it("tiền tố vòng của lời khai đếm đứng ngoài phép thu hồi", () => {
+    expect(thuHoiTheoToken("S1.141 · **[S1.141] 84 ADR** · **[S1.141] 243 khoản, trong đó 94 còn mở**", BANG_A, new Set(), false)).toBe(
+      "S1.9101 · **[S1.141] 84 ADR** · **[S1.141] 243 khoản, trong đó 94 còn mở**",
     );
   });
 
@@ -485,6 +500,51 @@ describe("kho thật — hai nhánh cùng cấp số, một nhánh merge trướ
     expect(() => git(goc, "merge", "-q", "master")).toThrow();
     capSo(goc, { base: "master" });
     expect(doc(goc, "evidence/security-reviews.md")).toContain("Thêm sau lần cấp: ADR-004 và S1.4.");
+  });
+});
+
+describe("kho thật — master còn viết lời khai lối cũ, mang số vòng nhánh từng giữ", () => {
+  /** `a` cấp số rồi sửa lời khai ADR theo lối cũ: gạch số cũ, nối số mới với tiền tố vòng của `a`. */
+  function aLoiCu(goc: string): void {
+    lamViec(goc, "a", 1);
+    capVaCommit(goc, "a");
+    ghi(goc, "docs/STATE.md", doc(goc, "docs/STATE.md").replace("**[S1.2] ba ADR**", "~~**[S1.2] hai ADR**~~ **[S1.3] ba ADR**"));
+    commit(goc, "a: lời khai lối cũ");
+    lamViec(goc, "b", 1);
+    capVaCommit(goc, "b");
+    git(goc, "checkout", "-q", "master");
+    git(goc, "merge", "-q", "--ff-only", "a");
+    git(goc, "checkout", "-q", "b");
+    expect(() => git(goc, "merge", "-q", "master")).toThrow();
+  }
+
+  it("chạy lại khi chưa commit: không đổi một byte, tiền tố [S1.3] của master đứng nguyên", () => {
+    const goc = dungKho();
+    aLoiCu(goc);
+    expect(vietTrailer(capSo(goc, { base: "master" }).bang)).toBe("Cap-So: vong 9101=4; adr 9201=004; khoan 9401=4; migration 9501=003");
+    const state = doc(goc, "docs/STATE.md");
+    expect(state).toContain("~~**[S1.2] hai ADR**~~ **[S1.3] bốn ADR**");
+    expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
+    expect(doc(goc, "docs/STATE.md")).toBe(state);
+  });
+
+  it("dòng viết SAU lần cấp chưa commit, nhắc số master vừa lấy (S1.3, ADR-003): lần chạy sau không đụng", () => {
+    const goc = dungKho();
+    aLoiCu(goc);
+    capSo(goc, { base: "master" });
+    noi(goc, "evidence/security-reviews.md", "\nSau khi a vào master (S1.3, ADR-003) — nhánh này là S1.4, ADR-004.\n");
+    capSo(goc, { base: "master" });
+    expect(doc(goc, "evidence/security-reviews.md")).toContain("Sau khi a vào master (S1.3, ADR-003) — nhánh này là S1.4, ADR-004.");
+  });
+
+  it("commit mà quên trailer, rồi chạy lại: vẫn không đổi một byte", () => {
+    const goc = dungKho();
+    aLoiCu(goc);
+    capSo(goc, { base: "master" });
+    commit(goc, "b: merge master, quên trailer");
+    const state = doc(goc, "docs/STATE.md");
+    expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
+    expect(doc(goc, "docs/STATE.md")).toBe(state);
   });
 });
 

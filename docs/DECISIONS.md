@@ -7227,7 +7227,9 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
 3. **Thua cuộc đua thì chạy lại lệnh.** PR khác merge trước với cùng số thì: merge master, rồi `pnpm cap-so`. Lệnh tự
    gỡ các khối xung đột thuộc phần nó quản — lời khai đếm, dòng `CÒN MỞ`, hàng sổ nợ hai phía cùng thêm, mục nối cuối
    `docs/DECISIONS.md` và biên bản. Sau đó nó đọc trailer để trả từng dòng về đúng bản số tạm, rồi cấp lại. Dòng sửa
-   sau lần cấp thì thu hồi theo token có tiền tố (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration).
+   sau lần cấp thì thu hồi theo token có tiền tố (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration), bằng bảng cấp MỚI
+   NHẤT, và không đụng lời khai đếm. Bảng của lần cấp chưa commit nằm ở `.git/cap-so-cho-commit.json` (không vào
+   kho), nên chạy lại trước khi commit không thu hồi bằng bảng cũ.
 4. **Lời khai đếm do lệnh viết**, tại chỗ: số ADR ở `docs/STATE.md` và `Handoff.md`; số khoản và số migration ở
    `Handoff.md`; dòng `CÒN MỞ` và đoạn đếm dưới nó. Lệnh không nối thêm chuỗi gạch; tiền tố vòng của lời khai đứng
    yên. Khi nhánh còn số tạm, `pnpm cap-so --dem` viết lại chúng để `[INV-H20]` xanh.
