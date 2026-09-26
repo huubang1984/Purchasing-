@@ -12,9 +12,12 @@
 //      chính là đúng thứ hàng rào `assertLocalDevAllowed` (crypto-keys, MED-1) tồn tại để chặn.
 //   ⑵ Thông điệp lỗi chỉ nêu TÊN biến, không bao giờ nêu GIÁ TRỊ — lỗi khởi động đi thẳng ra log.
 //   ⑶ Adapter phải được KHAI TÊN (`TRUSTPROCURE_KEY_ADAPTER`, `TRUSTPROCURE_SENDER_ADAPTER`), và hôm
-//      nay mỗi biến chỉ có ĐÚNG MỘT giá trị hợp lệ (`local-dev`, `dev-mailbox`). Một giá trị khác
-//      ("kms", "ses") là lời khai về một adapter CHƯA TỒN TẠI — ném với đúng câu ấy, thay vì im
-//      lặng rơi về bản dev. Đó là phần chênh của S1.11 và nó được nói ra ở chỗ nó sẽ nổ.
+//      nay ~~mỗi biến chỉ có ĐÚNG MỘT giá trị hợp lệ (`local-dev`, `dev-mailbox`)~~ [ADR-064] khoá có
+//      HAI giá trị (`local-dev`, `aws-kms`), bộ gửi có một (`dev-mailbox`). Một giá trị khác ("ses")
+//      là lời khai về một adapter CHƯA TỒN TẠI — ném với đúng câu ấy, thay vì im lặng rơi về bản dev.
+//   ⑷ [ADR-064] Hai bộ biến khoá LOẠI TRỪ nhau: dưới `aws-kms`, một biến vòng khoá local-dev còn sót
+//      là lỗi khởi động, và ngược lại — một cấu hình không được mang hai câu trả lời cho câu "khoá ở
+//      đâu". Dưới `aws-kms`, CMK của TOTP phải khác CMK bọc cặp khoá tổ chức (ADR-063).
 //
 // VÌ SAO BA VÒNG BÍ MẬT PHẢI ĐÔI MỘT KHÁC NHAU: `TotpSecretUnsealer` (identity) ghi hợp đồng "không
 // được dùng chung vòng khoá chính với bộ mở phong bì thầu" (G1/ADR-006); pepper OTP (ADR-018) là
@@ -45,7 +48,7 @@ export interface VongKhoaKy {
   readonly keys: Readonly<Record<string, ReceiptKeyPair>>;
 }
 
-export interface CauHinhApi {
+export interface CauHinhApiChung {
   /** `postgres://app_api_login:...@host/db` — role ĐĂNG NHẬP thành viên của `app_api`; pool tự `SET ROLE`. */
   readonly databaseUrl: string;
   readonly dbPoolMax: number;
@@ -61,14 +64,8 @@ export interface CauHinhApi {
    * lúc khởi động (`dia-chi.ts`).
    */
   readonly trustedProxies: readonly string[];
-  readonly keyAdapter: "local-dev";
-  /** Vòng khoá chính bọc khoá riêng RFQ (ADR-019). */
-  readonly masterKeys: VongBiMat;
-  /** Vòng khoá chính bọc bí mật TOTP — CMK RIÊNG, không được trùng vòng trên. */
-  readonly totpMasterKeys: VongBiMat;
-  /** Pepper HMAC cho băm đích/bộ đếm OTP (ADR-018). */
+  /** Pepper HMAC cho băm đích/bộ đếm OTP (ADR-018) — giữ ngoài KMS ở cả hai adapter khoá. */
   readonly otpPeppers: VongBiMat;
-  readonly receiptSigningKeys: VongKhoaKy;
   readonly senderAdapter: "dev-mailbox";
   readonly devMailboxDir: string;
   /**
@@ -78,6 +75,37 @@ export interface CauHinhApi {
    */
   readonly afterCommitTimeoutMs: number | undefined;
 }
+
+/** Khoá ở dạng local-dev: ba vòng bí mật trong tiến trình. */
+export interface KhoaLocalDev {
+  readonly keyAdapter: "local-dev";
+  /** Vòng khoá chính bọc khoá riêng tổ chức (ADR-062). */
+  readonly masterKeys: VongBiMat;
+  /** Vòng khoá chính bọc bí mật TOTP — CMK RIÊNG, không được trùng vòng trên. */
+  readonly totpMasterKeys: VongBiMat;
+  readonly receiptSigningKeys: VongKhoaKy;
+}
+
+/** [ADR-064] Khoá ở AWS KMS: không bí mật nào trong tiến trình, chỉ định danh CMK và nhãn phiên bản. */
+export interface CauHinhKms {
+  readonly region: string;
+  /** `alias/tp-org-wrap` (ADR-062) và nhãn phiên bản cặp khoá tổ chức. */
+  readonly orgWrapKeyId: string;
+  readonly orgKeyVersion: string;
+  /** `alias/tp-totp` (ADR-063) và nhãn phiên bản đi vào encryption context. */
+  readonly totpKeyId: string;
+  readonly totpKeyVersion: string;
+  /** `alias/tp-receipt-sign` (ADR-011) và `kid` của nó. */
+  readonly receiptKeyId: string;
+  readonly receiptKid: string;
+}
+
+export interface KhoaAwsKms {
+  readonly keyAdapter: "aws-kms";
+  readonly kms: CauHinhKms;
+}
+
+export type CauHinhApi = CauHinhApiChung & (KhoaLocalDev | KhoaAwsKms);
 
 export type MoiTruong = Readonly<Record<string, string | undefined>>;
 
@@ -274,19 +302,108 @@ function docThuMucTuyetDoi(env: MoiTruong, ten: string): string {
   return v;
 }
 
+/** Biến khoá của từng adapter — dùng để từ chối một cấu hình mang cả hai bộ (quy tắc ⑷). */
+const BIEN_KHOA_LOCAL_DEV = [
+  "TRUSTPROCURE_MASTER_KEYS",
+  "TRUSTPROCURE_MASTER_KEY_ACTIVE",
+  "TRUSTPROCURE_TOTP_MASTER_KEYS",
+  "TRUSTPROCURE_TOTP_MASTER_KEY_ACTIVE",
+  "TRUSTPROCURE_RECEIPT_SIGNING_KEYS",
+  "TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE",
+] as const;
+const BIEN_KHOA_KMS = [
+  "TRUSTPROCURE_AWS_REGION",
+  "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID",
+  "TRUSTPROCURE_KMS_ORG_KEY_VERSION",
+  "TRUSTPROCURE_KMS_TOTP_KEY_ID",
+  "TRUSTPROCURE_KMS_TOTP_KEY_VERSION",
+  "TRUSTPROCURE_KMS_RECEIPT_KEY_ID",
+  "TRUSTPROCURE_KMS_RECEIPT_KID",
+] as const;
+
+function tuChoiBienCuaAdapterKhac(env: MoiTruong, adapter: string, bienKhac: readonly string[]): void {
+  const sot = bienKhac.filter((b) => tuyChon(env, b) !== undefined);
+  if (sot.length > 0) {
+    throw new CauHinhError(
+      `TRUSTPROCURE_KEY_ADAPTER="${adapter}" nhưng còn khai ${sot.join(", ")} của adapter khoá kia — ` +
+        "một cấu hình không được mang hai câu trả lời cho câu \"khoá ở đâu\" (ADR-064)",
+    );
+  }
+}
+
+const NHAN_KMS = /^[A-Za-z0-9._:-]{1,64}$/u;
+const VUNG_AWS = /^[a-z]{2}(?:-[a-z]+)+-\d$/u;
+
+function docNhanKms(env: MoiTruong, ten: string): string {
+  const v = bat(env, ten);
+  if (!NHAN_KMS.test(v)) throw new CauHinhError(`${ten} phải dài 1–64 ký tự [A-Za-z0-9._:-]`);
+  return v;
+}
+
+function docKeyIdKms(env: MoiTruong, ten: string): string {
+  const v = bat(env, ten);
+  // alias/…, key id (UUID, mrk-…) hay ARN — không khoảng trắng, không quá dài; KMS kiểm phần còn lại.
+  if (!/^[A-Za-z0-9/:_.-]{1,2048}$/u.test(v)) throw new CauHinhError(`${ten} không phải một định danh CMK hợp lệ`);
+  return v;
+}
+
+function docKhoaKms(env: MoiTruong): CauHinhKms {
+  const region = bat(env, "TRUSTPROCURE_AWS_REGION");
+  if (!VUNG_AWS.test(region)) throw new CauHinhError("TRUSTPROCURE_AWS_REGION không phải một vùng AWS hợp lệ");
+  const kms: CauHinhKms = {
+    region,
+    orgWrapKeyId: docKeyIdKms(env, "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID"),
+    orgKeyVersion: docNhanKms(env, "TRUSTPROCURE_KMS_ORG_KEY_VERSION"),
+    totpKeyId: docKeyIdKms(env, "TRUSTPROCURE_KMS_TOTP_KEY_ID"),
+    totpKeyVersion: docNhanKms(env, "TRUSTPROCURE_KMS_TOTP_KEY_VERSION"),
+    receiptKeyId: docKeyIdKms(env, "TRUSTPROCURE_KMS_RECEIPT_KEY_ID"),
+    receiptKid: docNhanKms(env, "TRUSTPROCURE_KMS_RECEIPT_KID"),
+  };
+  // ADR-063: bí mật TOTP KHÔNG được bọc bằng khoá mở hồ sơ thầu. So theo chuỗi khai — hai cách viết
+  // khác nhau của cùng một CMK (alias và ARN) lọt qua đây; key policy của tp-org-wrap (chỉ worker
+  // Decrypt) là lớp chặn thật, phép so này chỉ bắt lỗi dán-chép.
+  const ba: ReadonlyArray<readonly [string, string]> = [
+    ["TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID", kms.orgWrapKeyId],
+    ["TRUSTPROCURE_KMS_TOTP_KEY_ID", kms.totpKeyId],
+    ["TRUSTPROCURE_KMS_RECEIPT_KEY_ID", kms.receiptKeyId],
+  ];
+  for (let i = 0; i < ba.length; i += 1) {
+    for (let j = i + 1; j < ba.length; j += 1) {
+      if (ba[i]![1] === ba[j]![1]) {
+        throw new CauHinhError(`${ba[i]![0]} và ${ba[j]![0]} trỏ CÙNG một CMK — ba khoá phải độc lập (ADR-062, ADR-063, ADR-011)`);
+      }
+    }
+  }
+  return kms;
+}
+
 export function docCauHinh(env: MoiTruong): CauHinhApi {
   const databaseUrl = docDatabaseUrl(env, "TRUSTPROCURE_DATABASE_URL");
-  const keyAdapter = docAdapter(env, "TRUSTPROCURE_KEY_ADAPTER", ["local-dev"] as const, "khoá");
+  const keyAdapter = docAdapter(env, "TRUSTPROCURE_KEY_ADAPTER", ["local-dev", "aws-kms"] as const, "khoá");
   const senderAdapter = docAdapter(env, "TRUSTPROCURE_SENDER_ADAPTER", ["dev-mailbox"] as const, "gửi");
-  const masterKeys = docVong(env, "TRUSTPROCURE_MASTER_KEYS", "TRUSTPROCURE_MASTER_KEY_ACTIVE", 32);
-  const totpMasterKeys = docVong(env, "TRUSTPROCURE_TOTP_MASTER_KEYS", "TRUSTPROCURE_TOTP_MASTER_KEY_ACTIVE", 32);
   const otpPeppers = docVong(env, "TRUSTPROCURE_OTP_PEPPERS", "TRUSTPROCURE_OTP_PEPPER_ACTIVE", 32);
-  kiemKhongTrung([
-    ["TRUSTPROCURE_MASTER_KEYS", masterKeys],
-    ["TRUSTPROCURE_TOTP_MASTER_KEYS", totpMasterKeys],
-    ["TRUSTPROCURE_OTP_PEPPERS", otpPeppers],
-  ]);
+  let khoa: KhoaLocalDev | KhoaAwsKms;
+  if (keyAdapter === "local-dev") {
+    tuChoiBienCuaAdapterKhac(env, keyAdapter, BIEN_KHOA_KMS);
+    const masterKeys = docVong(env, "TRUSTPROCURE_MASTER_KEYS", "TRUSTPROCURE_MASTER_KEY_ACTIVE", 32);
+    const totpMasterKeys = docVong(env, "TRUSTPROCURE_TOTP_MASTER_KEYS", "TRUSTPROCURE_TOTP_MASTER_KEY_ACTIVE", 32);
+    kiemKhongTrung([
+      ["TRUSTPROCURE_MASTER_KEYS", masterKeys],
+      ["TRUSTPROCURE_TOTP_MASTER_KEYS", totpMasterKeys],
+      ["TRUSTPROCURE_OTP_PEPPERS", otpPeppers],
+    ]);
+    khoa = {
+      keyAdapter,
+      masterKeys,
+      totpMasterKeys,
+      receiptSigningKeys: docVongKhoaKy(env, "TRUSTPROCURE_RECEIPT_SIGNING_KEYS", "TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE"),
+    };
+  } else {
+    tuChoiBienCuaAdapterKhac(env, keyAdapter, BIEN_KHOA_LOCAL_DEV);
+    khoa = { keyAdapter, kms: docKhoaKms(env) };
+  }
   return {
+    ...khoa,
     databaseUrl,
     dbPoolMax: soNguyen(env, "TRUSTPROCURE_DB_POOL_MAX", 10, 1, 100),
     listenHost: tuyChon(env, "TRUSTPROCURE_LISTEN_HOST") ?? "127.0.0.1",
@@ -294,11 +411,7 @@ export function docCauHinh(env: MoiTruong): CauHinhApi {
     publicBaseUrl: docBaseUrl(env, "TRUSTPROCURE_PUBLIC_BASE_URL"),
     allowedOrigins: docOrigins(env, "TRUSTPROCURE_ALLOWED_ORIGINS"),
     trustedProxies: docProxyTinCay(env, "TRUSTPROCURE_TRUSTED_PROXIES"),
-    keyAdapter,
-    masterKeys,
-    totpMasterKeys,
     otpPeppers,
-    receiptSigningKeys: docVongKhoaKy(env, "TRUSTPROCURE_RECEIPT_SIGNING_KEYS", "TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE"),
     senderAdapter,
     devMailboxDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_DEV_MAILBOX_DIR"),
     afterCommitTimeoutMs:

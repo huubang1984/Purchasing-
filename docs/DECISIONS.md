@@ -6303,3 +6303,54 @@ một đối tượng khác mà hệ thống vẫn phải giải mã trong `api`
   TOTP phía máy chủ; ADR này không tuyên bố đóng nó.
 - Chưa nối vào composition: `hop-thu-dev` vẫn là adapter `local-dev`, nên `api` chưa khởi động
   được với `TRUSTPROCURE_KEY_ADAPTER=aws-kms` (khoản 15).
+
+---
+
+## ADR-064 — Nối adapter `aws-kms` vào `api` và worker; TÁCH hàng rào của adapter gửi/cảnh báo dev khỏi hàng rào khoá
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-006, ADR-011, ADR-021,
+**ADR-062**, **ADR-063**, S1.11 (review H3-2)
+
+### Bối cảnh
+
+Adapter `aws-kms` cho cả bốn khoá của `api` (cặp khoá tổ chức, TOTP, ký biên nhận) và khoá của worker
+đã có mã. Nối chúng vào composition gặp một chặn: hộp thư dev của `api` và thư mục cảnh báo dev của
+worker dùng CHÍNH `assertLocalDevAllowed`, hàng rào ấy chặn mọi tiến trình khai
+`TRUSTPROCURE_KEY_ADAPTER` khác `local-dev` — và chưa có adapter gửi thật nào. Tức với khoá thật,
+`api` và worker không khởi động được, kể cả cho lượt thử trước khi có dữ liệu khách hàng.
+
+### Phương án
+
+| # | Phương án | Vì sao loại / giữ |
+|---|---|---|
+| 1 | Viết adapter gửi thật (SES, SNS) trước khi nối | **Hoãn.** Đúng hướng sản xuất, nhưng kéo theo xác minh domain, kênh SMS, Terraform SES — một lát cắt riêng |
+| 2 | Nối cấu hình, giữ nguyên hàng rào | **Loại.** Mã nối có mà không tiến trình nào chạy được — không đo được gì trên tài khoản thật |
+| 3 | **Tách hàng rào: adapter gửi/cảnh báo dev có hàng rào riêng `assertDevSinkAllowed`** | **Chọn.** |
+
+### Quyết định
+
+1. **`assertDevSinkAllowed()`** (`crypto-keys/moi-truong.ts`, cùng tệp — không bản chép):
+   - khoá KHÔNG phải `aws-kms` ⇒ đúng `assertLocalDevAllowed()` như trước — **không nới gì** cho
+     đường local-dev;
+   - khoá `aws-kms` ⇒ cho qua, trừ khi `NODE_ENV` là production — khi ấy cần cờ **riêng**
+     `TRUSTPROCURE_ALLOW_DEV_SINKS=1`. Cờ này không mở adapter khoá local-dev; cờ của khoá
+     (`TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS`) không mở hộp thư dev dưới `aws-kms`. Hai quyết định, hai cờ.
+2. **Cấu hình:** `TRUSTPROCURE_KEY_ADAPTER` nhận `local-dev` hoặc `aws-kms`. Hai bộ biến **loại trừ
+   nhau** — một biến của adapter kia còn sót là lỗi khởi động. Dưới `aws-kms`, `api` đọc vùng, ba định
+   danh CMK và ba nhãn (phiên bản cặp khoá tổ chức, phiên bản TOTP, `kid`), từ chối hai CMK trùng
+   chuỗi (ADR-063); worker đọc vùng và **đúng một** CMK (`tp-org-wrap`). Pepper OTP vẫn là vòng trong
+   tiến trình ở cả hai adapter.
+3. **Composition:** một `KMSClient` mỗi tiến trình (quyền nằm ở key policy từng CMK, không ở client);
+   `boiTranKms` bọc thêm lời gọi thứ tư — `kms:Sign` biên nhận — bằng trần thời gian, vì nó chạy trong
+   giao dịch nộp thầu. Dấu kiểm vòng khoá (khoản 165) chỉ chạy dưới `local-dev`: dưới `aws-kms` không
+   có vòng nào trong tiến trình để so, và worker cấu hình sai CMK hỏng ồn ào ở `Decrypt` đầu tiên.
+
+### Hệ quả, nói thẳng
+
+- **Dưới `aws-kms` + `NODE_ENV=production` + `TRUSTPROCURE_ALLOW_DEV_SINKS=1`, token đăng nhập, OTP
+  và cảnh báo break-glass nằm dạng rõ trên đĩa của task.** Đó là giá của lượt thử; cờ ấy phải được gỡ
+  trước dữ liệu khách hàng thật, và việc gỡ nó là việc của lát cắt adapter gửi thật (phương án 1).
+- `apps/public-keys` chưa có composition nên chưa được nối: nó vẫn nhận `ReceiptSigningKeyRing`.
+  Nửa công khai của khoá KMS lấy bằng `layKhoaCongKhaiBienNhanKms` khi đường ấy được dựng.
+- Hai tiến trình không còn so chéo được cấu hình khoá của nhau dưới `aws-kms` (khoản 165 chỉ đo vòng
+  local-dev); lệch CMK giữa `api` và worker lộ ra ở lượt mở thầu đầu tiên — ồn ào, không im lặng.

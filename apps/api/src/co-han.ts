@@ -9,6 +9,7 @@
 // Chúng vẫn chạy trong giao dịch — đó là phần chênh còn lại, nói ra ở ADR-022 §1.
 // ==============================================================================================
 
+import type { ReceiptSigner } from "@trustprocure/bidding";
 import type { OrgKeyProvisioner } from "@trustprocure/crypto-keys";
 import type { TotpSecretUnsealer } from "@trustprocure/identity";
 import type { ApiServices, TotpSecretWrapper } from "./route-types.js";
@@ -38,11 +39,13 @@ export function coHan<T>(viec: () => Promise<T>, ms: number, tenLoi: string): Pr
 export const KMS_TIMEOUT_MS_MAC_DINH = 5000;
 
 /**
- * Bọc ~~hai~~ BA adapter KMS của `services` bằng trần thời gian; các trường khác giữ nguyên tham chiếu.
+ * Bọc ~~hai~~ ~~BA~~ [ADR-064] BỐN adapter KMS của `services` bằng trần thời gian; các trường khác giữ nguyên tham chiếu.
  * [review H4-8] ~~`rfqKeyWrapper.wrap`~~ [ADR-062] `orgKeyProvisioner.generate` (openRfq, lần đầu của tổ chức) cũng là một
  * lời gọi KMS TRONG giao dịch — cái thứ ba. Từ ADR-062 lần BỌC khoá RFQ là cục bộ, không cần trần.
  */
-export function boiTranKms<S extends Pick<ApiServices, "totpSecretWrapper" | "totpSecretUnsealer" | "orgKeyProvisioner">>(services: S, ms: number): S {
+export function boiTranKms<
+  S extends Pick<ApiServices, "totpSecretWrapper" | "totpSecretUnsealer" | "orgKeyProvisioner" | "receiptSigner">,
+>(services: S, ms: number): S {
   const rfq: OrgKeyProvisioner = {
     name: services.orgKeyProvisioner.name,
     generate: (orgId) => coHan(() => services.orgKeyProvisioner.generate(orgId), ms, "KmsQuaHan"),
@@ -56,5 +59,12 @@ export function boiTranKms<S extends Pick<ApiServices, "totpSecretWrapper" | "to
     name: services.totpSecretUnsealer.name,
     openTotpSecret: (orgId, wrapped) => coHan(() => services.totpSecretUnsealer.openTotpSecret(orgId, wrapped), ms, "KmsQuaHan"),
   };
-  return { ...services, orgKeyProvisioner: rfq, totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer };
+  // [ADR-064] Lời gọi KMS thứ TƯ: `kms:Sign` biên nhận chạy trong giao dịch nộp thầu. Với bản local-dev
+  // nó là WebCrypto cục bộ và trần không bao giờ chạm; với `aws-kms` nó là một chuyến mạng.
+  const receiptSigner: ReceiptSigner = {
+    name: services.receiptSigner.name,
+    activeKeyId: services.receiptSigner.activeKeyId,
+    sign: (text) => coHan(() => services.receiptSigner.sign(text), ms, "KmsQuaHan"),
+  };
+  return { ...services, orgKeyProvisioner: rfq, totpSecretWrapper: wrapper, totpSecretUnsealer: unsealer, receiptSigner };
 }

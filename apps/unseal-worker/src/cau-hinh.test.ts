@@ -31,6 +31,7 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
     const ch = docCauHinh(envDu());
     expect(ch.keyAdapter).toBe("local-dev");
     expect(ch.alertAdapter).toBe("dev-file");
+    if (ch.keyAdapter !== "local-dev") throw new Error("fixture khai local-dev");
     expect(ch.masterKeys.active).toBe("v1");
     expect(ch.masterKeys.keys["v1"]?.length).toBe(32);
     // Hai mặc định, và chúng là mặc định CÓ CHỦ Ý — không phải bí mật.
@@ -108,5 +109,60 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
       "masterKeys",
       "pollIntervalMs",
     ]);
+  });
+});
+
+// ==============================================================================================
+// [ADR-064] Worker dưới `aws-kms`: đúng MỘT CMK (tp-org-wrap), không vòng khoá nào trong tiến trình.
+// ==============================================================================================
+function envKms(): Record<string, string> {
+  const env: Record<string, string> = {
+    ...envDu(),
+    TRUSTPROCURE_KEY_ADAPTER: "aws-kms",
+    TRUSTPROCURE_AWS_REGION: "ap-southeast-1",
+    TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp-org-wrap",
+  };
+  delete env["TRUSTPROCURE_MASTER_KEYS"];
+  delete env["TRUSTPROCURE_MASTER_KEY_ACTIVE"];
+  return env;
+}
+
+describe("[ADR-064] cấu hình worker với khoá aws-kms", () => {
+  it("đọc vùng và CMK bọc khoá tổ chức; KHÔNG đọc CMK của TOTP hay khoá ký dù chúng có mặt", () => {
+    const ch = docCauHinh({
+      ...envKms(),
+      TRUSTPROCURE_KMS_TOTP_KEY_ID: "alias/tp-totp",
+      TRUSTPROCURE_KMS_RECEIPT_KEY_ID: "alias/tp-receipt-sign",
+    });
+    expect(ch.keyAdapter).toBe("aws-kms");
+    if (ch.keyAdapter !== "aws-kms") throw new Error("không tới");
+    expect(ch.kms).toEqual({ region: "ap-southeast-1", orgWrapKeyId: "alias/tp-org-wrap" });
+    expect(Object.keys(ch).sort()).toEqual([
+      "alertAdapter",
+      "alertDir",
+      "databaseUrl",
+      "dbPoolMax",
+      "keyAdapter",
+      "kms",
+      "pollIntervalMs",
+    ]);
+  });
+
+  it.each(["TRUSTPROCURE_AWS_REGION", "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID"])("thiếu %s thì NÉM, nêu đúng tên", (ten) => {
+    const env = envKms();
+    delete env[ten];
+    expect(() => docCauHinh(env)).toThrow(ten);
+  });
+
+  it("hai bộ biến khoá loại trừ nhau: aws-kms kèm vòng master key còn sót, hay local-dev kèm CMK ⇒ NÉM", () => {
+    expect(() => docCauHinh({ ...envKms(), TRUSTPROCURE_MASTER_KEYS: `v1=${KHOA_32}` })).toThrow(/TRUSTPROCURE_MASTER_KEYS.*ADR-064/u);
+    expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp-org-wrap" })).toThrow(
+      /TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID.*ADR-064/u,
+    );
+  });
+
+  it("vùng hay định danh CMK sai hình dạng ⇒ NÉM", () => {
+    expect(() => docCauHinh({ ...envKms(), TRUSTPROCURE_AWS_REGION: "singapore" })).toThrow(CauHinhError);
+    expect(() => docCauHinh({ ...envKms(), TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp org" })).toThrow(CauHinhError);
   });
 });

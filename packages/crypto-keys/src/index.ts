@@ -3,7 +3,7 @@
 export { KeyError, type WrappedKey } from "./types.js";
 // [S1.5] Một PHÉP KIỂM, không một khả năng nào — xem khối đầu `moi-truong.ts` để biết vì sao nó
 // được mở ra cửa công khai trong khi `local-dev-shared.ts` thì không.
-export { assertLocalDevAllowed } from "./moi-truong.js";
+export { assertDevSinkAllowed, assertLocalDevAllowed } from "./moi-truong.js";
 export { MasterKeyRing } from "./master-keys.js";
 export { createLocalDevWrapper, type KeyWrapper } from "./local-dev-wrapper.js";
 // [ADR-062] Bọc khoá RFQ bằng khoá CÔNG KHAI của tổ chức (hàm thuần, không bí mật), và sinh cặp

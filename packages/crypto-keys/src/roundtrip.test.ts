@@ -16,6 +16,8 @@ import {
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  assertDevSinkAllowed,
+  assertLocalDevAllowed,
   createAwsKmsOrgKeyProvisioner,
   createLocalDevOrgKeyProvisioner,
   createLocalDevWrapper,
@@ -712,5 +714,64 @@ describe("rào chắn cho adapter local-dev (bất biến G1)", () => {
     } finally {
       datLai();
     }
+  });
+});
+
+describe("[ADR-064] hàng rào của adapter gửi/cảnh báo dev — tách khỏi hàng rào khoá", () => {
+  const BIEN = ["NODE_ENV", "TRUSTPROCURE_KEY_ADAPTER", "TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS", "TRUSTPROCURE_ALLOW_DEV_SINKS"] as const;
+  const GOC = Object.fromEntries(BIEN.map((b) => [b, process.env[b]]));
+
+  function chay(env: Partial<Record<(typeof BIEN)[number], string>>, fn: () => void): void {
+    for (const b of BIEN) {
+      const v = env[b];
+      if (v === undefined) delete process.env[b];
+      else process.env[b] = v;
+    }
+    try {
+      fn();
+    } finally {
+      for (const b of BIEN) {
+        const g = GOC[b];
+        if (g === undefined) delete process.env[b];
+        else process.env[b] = g;
+      }
+    }
+  }
+
+  it("khoá KHÔNG phải aws-kms ⇒ CHÍNH LÀ assertLocalDevAllowed (không nới gì)", () => {
+    chay({}, () => expect(() => assertDevSinkAllowed()).toThrow(KeyError));
+    chay({ NODE_ENV: "production", TRUSTPROCURE_KEY_ADAPTER: "local-dev" }, () =>
+      expect(() => assertDevSinkAllowed()).toThrow(/mâu thuẫn/),
+    );
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "local-dev" }, () => expect(() => assertDevSinkAllowed()).not.toThrow());
+    // Một adapter khoá lạ vẫn bị chặn như trước.
+    chay({ NODE_ENV: "development", TRUSTPROCURE_KEY_ADAPTER: "vault" }, () =>
+      expect(() => assertDevSinkAllowed()).toThrow(/"vault"/),
+    );
+  });
+
+  it("khoá aws-kms ⇒ cho qua ngoài production; production cần ĐÚNG cờ riêng của nó", () => {
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms" }, () => expect(() => assertDevSinkAllowed()).not.toThrow());
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms", NODE_ENV: "staging" }, () => expect(() => assertDevSinkAllowed()).not.toThrow());
+    for (const nodeEnv of ["production", "PROD", " Production "]) {
+      chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms", NODE_ENV: nodeEnv }, () =>
+        expect(() => assertDevSinkAllowed()).toThrow(/TRUSTPROCURE_ALLOW_DEV_SINKS/),
+      );
+    }
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms", NODE_ENV: "production", TRUSTPROCURE_ALLOW_DEV_SINKS: "1" }, () =>
+      expect(() => assertDevSinkAllowed()).not.toThrow(),
+    );
+    // Cờ của KHOÁ không mở hộp thư dev dưới aws-kms: hai quyết định, hai cờ.
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms", NODE_ENV: "production", TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS: "1" }, () =>
+      expect(() => assertDevSinkAllowed()).toThrow(/TRUSTPROCURE_ALLOW_DEV_SINKS/),
+    );
+  });
+
+  it("cờ của hộp thư dev KHÔNG mở adapter khoá local-dev dưới aws-kms", () => {
+    chay({ TRUSTPROCURE_KEY_ADAPTER: "aws-kms", NODE_ENV: "development", TRUSTPROCURE_ALLOW_DEV_SINKS: "1" }, () => {
+      expect(() => assertDevSinkAllowed()).not.toThrow();
+      expect(() => assertLocalDevAllowed()).toThrow(/đang là "aws-kms"/);
+      expect(() => createLocalDevWrapper(ring())).toThrow(/đang là "aws-kms"/);
+    });
   });
 });

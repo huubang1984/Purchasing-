@@ -21,12 +21,14 @@
 // ==============================================================================================
 
 import type { AddressInfo } from "node:net";
-import { createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
-import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
+import { KMSClient } from "@aws-sdk/client-kms";
+import { createAwsKmsReceiptSigner, createLocalDevReceiptSigner, ReceiptSigningKeyRing } from "@trustprocure/bidding";
+import { createAwsKmsOrgKeyProvisioner, createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
 import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { taoHopThuDev } from "./adapters/hop-thu-dev.js";
+import { taoBoMaBiMatTotpAwsKms } from "./adapters/totp-aws-kms.js";
 import { taoBoMaBiMatTotp } from "./adapters/totp-local-dev.js";
 import type { CauHinhApi } from "./cau-hinh.js";
 import { KMS_TIMEOUT_MS_MAC_DINH, boiTranKms } from "./co-han.js";
@@ -36,6 +38,42 @@ import { ghiLogKetNoiHuy, ghiLogLoiKetNoiToiMuon, moTaLoiKhongGiaTri } from "./m
 import { buildApiOutboxHandlers } from "./outbox-api.js";
 import type { ApiServices } from "./route-types.js";
 import { createApiServer } from "./server.js";
+
+type KhoaDichVu = Pick<ApiServices, "orgKeyProvisioner" | "totpSecretWrapper" | "totpSecretUnsealer" | "receiptSigner"> & {
+  /** Giải phóng tài nguyên của adapter (kết nối KMS) khi tiến trình dừng. */
+  readonly dong: () => void;
+};
+
+/**
+ * [ADR-064] Bốn adapter khoá theo `TRUSTPROCURE_KEY_ADAPTER`. Hai nhánh LOẠI TRỪ nhau từ cấu hình
+ * (`cau-hinh.ts` ⑷): dưới `aws-kms` không có vòng khoá nào trong tiến trình, dưới `local-dev` không có
+ * `KMSClient` nào được dựng. Một `KMSClient` dùng chung cho cả ba CMK — quyền nằm ở key policy của
+ * từng CMK, không ở client.
+ */
+export function dungKhoa(ch: CauHinhApi): KhoaDichVu {
+  if (ch.keyAdapter === "local-dev") {
+    const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
+    return {
+      orgKeyProvisioner: createLocalDevOrgKeyProvisioner(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
+      totpSecretWrapper: totp.wrapper,
+      totpSecretUnsealer: totp.unsealer,
+      receiptSigner: createLocalDevReceiptSigner(
+        new ReceiptSigningKeyRing(ch.receiptSigningKeys.active, ch.receiptSigningKeys.keys),
+      ),
+      dong: () => undefined,
+    };
+  }
+  const k = ch.kms;
+  const client = new KMSClient({ region: k.region });
+  const totp = taoBoMaBiMatTotpAwsKms({ client, keyId: k.totpKeyId, keyVersion: k.totpKeyVersion });
+  return {
+    orgKeyProvisioner: createAwsKmsOrgKeyProvisioner({ client, keyId: k.orgWrapKeyId, keyVersion: k.orgKeyVersion }),
+    totpSecretWrapper: totp.wrapper,
+    totpSecretUnsealer: totp.unsealer,
+    receiptSigner: createAwsKmsReceiptSigner({ client, keyId: k.receiptKeyId, kid: k.receiptKid }),
+    dong: () => client.destroy(),
+  };
+}
 
 export interface DiaChiNghe {
   readonly host: string;
@@ -105,18 +143,16 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
   ghiLogLoiKetNoiToiMuon(pool, "pool");
   ghiLogLoiKetNoiToiMuon(auditPool, "auditPool");
 
-  const totp = taoBoMaBiMatTotp(new MasterKeyRing(ch.totpMasterKeys.active, ch.totpMasterKeys.keys));
+  const khoa = dungKhoa(ch);
   const hopThu = taoHopThuDev({ thuMuc: ch.devMailboxDir, baseUrl: ch.publicBaseUrl });
-  // [sổ nợ 38] Hai adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS treo không
-  // được giữ kết nối tới idle_in_transaction_session_timeout.
+  // [sổ nợ 38] ~~Hai~~ [ADR-064] Bốn adapter KMS có TRẦN thời gian — chúng chạy trong giao dịch, và một KMS
+  // treo không được giữ kết nối tới idle_in_transaction_session_timeout.
   const services: ApiServices = boiTranKms({
-    orgKeyProvisioner: createLocalDevOrgKeyProvisioner(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys)),
-    totpSecretWrapper: totp.wrapper,
-    totpSecretUnsealer: totp.unsealer,
+    orgKeyProvisioner: khoa.orgKeyProvisioner,
+    totpSecretWrapper: khoa.totpSecretWrapper,
+    totpSecretUnsealer: khoa.totpSecretUnsealer,
     pepper: new PepperRing(ch.otpPeppers.active, ch.otpPeppers.keys),
-    receiptSigner: createLocalDevReceiptSigner(
-      new ReceiptSigningKeyRing(ch.receiptSigningKeys.active, ch.receiptSigningKeys.keys),
-    ),
+    receiptSigner: khoa.receiptSigner,
     loginLinkSender: hopThu.loginLinkSender,
     approvalNoticeSender: hopThu.approvalNoticeSender,
     deadlineNoticeSender: hopThu.deadlineNoticeSender,
@@ -196,7 +232,11 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
           await khangDinhPhienDangNhapUngDung(c, "app_api");
           // [khoản 165] Dấu kiểm vòng khoá bọc: bên khởi động trước (api hay worker) ghi, bên sau so.
           // Lệch ⇒ ném ⇒ KHÔNG có cổng nào mở — thay vì hỏng giữa một lượt mở thầu. Một lần cho tiến trình.
-          if (p === pool) await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
+          // [ADR-064] Dưới `aws-kms` không có vòng khoá nào trong tiến trình để so: khoá nằm ở KMS, và một
+          // worker cấu hình sai CMK hỏng ỒN ÀO ở lời gọi Decrypt đầu tiên, không lệch trong im lặng.
+          if (p === pool && ch.keyAdapter === "local-dev") {
+            await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
+          }
         } finally {
           c.off("error", boQuaLoiKetNoi);
           c.release();
@@ -269,6 +309,7 @@ export function taoTienTrinhApi(ch: CauHinhApi): TienTrinhApi {
         server.closeIdleConnections();
       });
       await Promise.allSettled([pool.end(), auditPool.end()]);
+      khoa.dong();
     },
   };
 }

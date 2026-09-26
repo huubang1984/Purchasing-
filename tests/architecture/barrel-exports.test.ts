@@ -59,6 +59,8 @@ import { cacGoiWorkspace } from "./goi-workspace.js";
 const DANH_SACH_TRANG_INDEX = [
   "KeyError",
   "MasterKeyRing",
+  // [ADR-064] Cùng tiêu chí với `assertLocalDevAllowed`: một phép kiểm, không một khả năng nào.
+  "assertDevSinkAllowed",
   "assertLocalDevAllowed",
   "createLocalDevWrapper",
   // [ADR-062] Hàm BỌC thuần bằng khoá công khai (không bí mật), và bộ sinh cặp khoá tổ chức trả

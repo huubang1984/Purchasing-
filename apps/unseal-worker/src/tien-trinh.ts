@@ -29,8 +29,9 @@
 // thế. `withTenant` gắn một tổ chức; danh sách tổ chức là câu hỏi ĐỨNG TRƯỚC câu hỏi ấy.
 // ==============================================================================================
 
+import { KMSClient } from "@aws-sdk/client-kms";
 import { MasterKeyRing } from "@trustprocure/crypto-keys";
-import { createLocalDevOrgUnwrapper } from "@trustprocure/crypto-keys/unwrap";
+import { createAwsKmsOrgUnwrapper, createLocalDevOrgUnwrapper, type OrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 import { createPool, doiChieuDauKiemVongKhoa, khangDinhPhienDangNhapUngDung } from "@trustprocure/db";
 import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
@@ -121,9 +122,16 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
   auditPool.on("release", ghiKetNoiHuy("auditPool"));
   ngheLoiKetNoiToiMuon(auditPool, ghiLoiToiMuon("auditPool"));
 
-  const unwrapper = createLocalDevOrgUnwrapper(
-    new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys),
-  );
+  // [ADR-064] Adapter mở khoá riêng tổ chức theo TRUSTPROCURE_KEY_ADAPTER: local-dev mở bằng vòng master
+  // key; aws-kms gọi `kms:Decrypt` trên `alias/tp-org-wrap` MỘT lần mỗi lượt (ADR-062 mục 3).
+  let kmsClient: KMSClient | undefined;
+  let unwrapper: OrgKeyUnwrapper;
+  if (ch.keyAdapter === "local-dev") {
+    unwrapper = createLocalDevOrgUnwrapper(new MasterKeyRing(ch.masterKeys.active, ch.masterKeys.keys));
+  } else {
+    kmsClient = new KMSClient({ region: ch.kms.region });
+    unwrapper = createAwsKmsOrgUnwrapper({ client: kmsClient, keyId: ch.kms.orgWrapKeyId });
+  }
   const alertSink = taoCanhBaoDev(ch.alertDir);
 
   const lietKeToChuc = async (): Promise<readonly string[]> => {
@@ -174,7 +182,10 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
           // [khoản 165] Tiến trình này giữ MỘT vòng nên không tự so chéo được (ADR-006). Nó so với
           // dấu kiểm mà `apps/api` đã ghi — hay ghi trước để `api` so. Lệch ⇒ tiến trình KHÔNG lên,
           // thay vì hỏng lúc mở phong bì thật. Không giải mã gì: xem khối đầu `062`.
-          if (p === pool) await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
+          // [ADR-064] Dưới `aws-kms` tiến trình không giữ vòng nào để so — xem cùng chỗ ở `apps/api`.
+          if (p === pool && ch.keyAdapter === "local-dev") {
+            await doiChieuDauKiemVongKhoa(c, "TRUSTPROCURE_MASTER_KEYS", ch.masterKeys.keys);
+          }
         } finally {
           c.off("error", boQuaLoiKetNoi);
           c.release();
@@ -234,6 +245,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker): TienTrinhWorker {
       // hạn thuê của nó; runner khác nhặt lại sau khi hạn hết. Đó là tính chất của at-least-once.
       runner.stop();
       await Promise.allSettled([pool.end(), auditPool.end()]);
+      kmsClient?.destroy();
     },
   };
 }
