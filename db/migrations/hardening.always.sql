@@ -3432,6 +3432,7 @@ $ham$;
          ('public', 'supplier_contacts', '008_suppliers'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
+         ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
          ('public', 'unseal_requests', '019_unseal'),
          ('public', 'user_login_tokens', '029_dang_nhap_nguoi_mua'),
          ('public', 'user_roles', '005_identity'),
@@ -3814,7 +3815,7 @@ $ham$;
                      WHERE pn.nspname = 'public' AND p.relname = c.relname
                        AND p.relkind IN ('r', 'p', 'v', 'm', 'f'))$q$;
 
-  -- [ADR-072 phần 1 / 064] QUYỀN QUAN HỆ CỦA `app_neo` — ĐÚNG danh sách của 064, theo quyền HIỆU DỤNG.
+  -- [ADR-072 phần 1 / 065] QUYỀN QUAN HỆ CỦA `app_neo` — ĐÚNG danh sách của 065, theo quyền HIỆU DỤNG.
   -- Hai chiều trong một câu. THỪA: mọi quyền ghi (INSERT/UPDATE/REFERENCES theo cột, DELETE/TRUNCATE/TRIGGER)
   -- trên MỌI quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, SELECT trên cột `audit_chain_anchors` ngoài
   -- (org_id, seq, hash), và mọi quyền trên sequence. THIẾU: SELECT trên `audit_events`, SELECT trên ba cột neo,
@@ -3837,7 +3838,7 @@ $ham$;
                    ELSE pg_catalog.has_table_privilege('app_neo', c.oid, q.quyen) END
           AND NOT (q.quyen = 'SELECT' AND n.nspname = 'public' AND c.relname IN ('audit_events', 'audit_chain_anchors'))
        UNION ALL
-       SELECT 'public.audit_chain_anchors.' || a.attname || ': THỪA SELECT (064 chỉ cấp org_id, seq, hash)'
+       SELECT 'public.audit_chain_anchors.' || a.attname || ': THỪA SELECT (065 chỉ cấp org_id, seq, hash)'
          FROM pg_attribute a
         WHERE a.attrelid = to_regclass('public.audit_chain_anchors') AND a.attnum > 0 AND NOT a.attisdropped
           AND a.attname NOT IN ('org_id', 'seq', 'hash')
@@ -3999,7 +4000,7 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
     -- Tự chữa CẢ HAI chiều: GRANT cho hai vai được phép cũng nằm ở câu sửa, nên "REVOKE … FROM app_neo"
     -- sau deploy (job neo rớt về 0 tổ chức ở lần chạy kế) được dựng lại ở deploy sau.
     ARRAY[
-      $q$EXECUTE trên outbox_danh_sach_to_chuc(): app_unseal có, app_neo có, app_api không, PUBLIC không (052, 064)$q$,
+      $q$EXECUTE trên outbox_danh_sach_to_chuc(): app_unseal có, app_neo có, app_api không, PUBLIC không (052, 065)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
       $q$REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM PUBLIC;
         REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM app_api;
@@ -6029,11 +6030,11 @@ $ham$;
     -- ---- [S1.110 / S2.6] J3 ve 2+3 va J5 ve NOI DUNG — nguoi de xuat trao thau (061) ----
     -- Ghim vi day la lop cuong che theo HANH VI DA XAY RA, khong theo quyen duoc cap: mot
     -- `CREATE OR REPLACE` thay than nay bang `RETURN NEW` mo lai dung bo ba ma J3 cam, va
-    -- khong mot cong nao khac cua kho thay dieu do. Ve *nguoi dieu phoi* chi thay lan dieu
-    -- phoi DANG CHAY (khoan 233) — ban ghim giu dung pham vi ay, khong rong hon.
+    -- khong mot cong nao khac cua kho thay dieu do. [S1.129 / khoan 233] Tu `064` ve *nguoi
+    -- dieu phoi* doc `unseal_dispatch_history` — moi nguoi TUNG dieu phoi, khong chi lan dang chay.
     ARRAY[
-      $q$hàm + trigger award_kiem_de_xuat (061)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '061_trao_thau.sql')$q$,
+      $q$hàm + trigger award_kiem_de_xuat (061, thân từ 064)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '064_lich_su_dieu_phoi.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6045,7 +6046,6 @@ $ham$;
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
   nguoi_tao uuid;
-  nguoi_dieu_phoi uuid;
   gia numeric;
 BEGIN
   -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử.
@@ -6069,16 +6069,12 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  -- [J3 vế 3] ...và người ĐIỀU PHỐI mở thầu cũng không. Xem khối phạm vi ở trên: cột này mang
-  -- người của lần điều phối ĐANG CHẠY, nên vế này không phủ đường điều phối lại (khoản 233).
-  SELECT r.dispatched_by INTO nguoi_dieu_phoi
-    FROM public.unseal_requests r
-   WHERE r.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
-     AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id
-     AND r.dispatched_by IS NOT NULL
-   ORDER BY r.requested_at DESC
-   LIMIT 1;
-  IF nguoi_dieu_phoi IS NOT NULL AND nguoi_dieu_phoi OPERATOR(pg_catalog.=) NEW.acted_by THEN
+  -- [J3 vế 3] ...và người TỪNG ĐIỀU PHỐI mở thầu cũng không — mọi lần, kể cả lần đã bị điều phối
+  -- lại đè lên (khoản 233, `064`). Đọc bảng lịch sử, không đọc `unseal_requests.dispatched_by`.
+  IF EXISTS (SELECT 1 FROM public.unseal_dispatch_history h
+              WHERE h.org_id OPERATOR(pg_catalog.=) NEW.org_id
+                AND h.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
+                AND h.dispatched_by OPERATOR(pg_catalog.=) NEW.acted_by) THEN
     RAISE EXCEPTION
       'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)'
       USING ERRCODE = 'check_violation';
@@ -6128,7 +6124,7 @@ $ham$;
          END
          $fn57$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE nguoi_tao uuid; nguoi_dieu_phoi uuid; gia numeric; BEGIN -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử. IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN RETURN NEW; END IF; SELECT p.created_by INTO nguoi_tao FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy. IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J3 vế 3] ...và người ĐIỀU PHỐI mở thầu cũng không. Xem khối phạm vi ở trên: cột này mang -- người của lần điều phối ĐANG CHẠY, nên vế này không phủ đường điều phối lại (khoản 233). SELECT r.dispatched_by INTO nguoi_dieu_phoi FROM public.unseal_requests r WHERE r.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.dispatched_by IS NOT NULL ORDER BY r.requested_at DESC LIMIT 1; IF nguoi_dieu_phoi IS NOT NULL AND nguoi_dieu_phoi OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có. SELECT l.effective_cost INTO gia FROM public.rfq_evaluation_lines l WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id; IF gia IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id USING ERRCODE = 'check_violation'; END IF; -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO. IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN RAISE EXCEPTION 'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE nguoi_tao uuid; gia numeric; BEGIN -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử. IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN RETURN NEW; END IF; SELECT p.created_by INTO nguoi_tao FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy. IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J3 vế 3] ...và người TỪNG ĐIỀU PHỐI mở thầu cũng không — mọi lần, kể cả lần đã bị điều phối -- lại đè lên (khoản 233, `064`). Đọc bảng lịch sử, không đọc `unseal_requests.dispatched_by`. IF EXISTS (SELECT 1 FROM public.unseal_dispatch_history h WHERE h.org_id OPERATOR(pg_catalog.=) NEW.org_id AND h.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND h.dispatched_by OPERATOR(pg_catalog.=) NEW.acted_by) THEN RAISE EXCEPTION 'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation'; END IF; -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có. SELECT l.effective_cost INTO gia FROM public.rfq_evaluation_lines l WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id; IF gia IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id USING ERRCODE = 'check_violation'; END IF; -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO. IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN RAISE EXCEPTION 'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -6155,6 +6151,76 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.award_kiem_de_xuat()')),
                   'hàm public.award_kiem_de_xuat() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.award_kiem_de_xuat() và bảng public.rfq_awards (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.129 / khoan 233] Lop GHI lich su dieu phoi — nguon du lieu cua J3 ve 3 (064) ----
+    -- Ghim vi J3 ve 3 chi manh bang lop ghi cua no: mot `CREATE OR REPLACE` thay than nay bang
+    -- `RETURN NULL`, hay mot trigger bi tat, lam bang lich su ngung lon va nguoi dieu phoi lan
+    -- dau lai de xuat trao thau duoc — dung lo cua khoan 233, va J3 van XANH vi no chi doc bang.
+    ARRAY[
+      $q$hàm + trigger unseal_ghi_lich_su_dieu_phoi (064)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '064_lich_su_dieu_phoi.sql')$q$,
+      $q$DO $fn64$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.unseal_ghi_lich_su_dieu_phoi()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.unseal_ghi_lich_su_dieu_phoi();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.unseal_ghi_lich_su_dieu_phoi() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  IF NEW.dispatched_by IS NOT NULL
+     AND (OLD.dispatched_by IS DISTINCT FROM NEW.dispatched_by
+          OR OLD.dispatched_by_session_id IS DISTINCT FROM NEW.dispatched_by_session_id) THEN
+    INSERT INTO public.unseal_dispatch_history
+      (org_id, unseal_request_id, rfq_id, dispatched_by, dispatched_by_session_id)
+    VALUES (NEW.org_id, NEW.id, NEW.rfq_id, NEW.dispatched_by, NEW.dispatched_by_session_id);
+  END IF;
+  RETURN NULL;
+END
+$ham$;
+           IF to_regclass('public.unseal_requests') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                                 AND t.tgname = 'unseal_requests_ghi_lich_su_dieu_phoi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_ghi_lich_su_dieu_phoi AFTER UPDATE ON public.unseal_requests FOR EACH ROW EXECUTE FUNCTION unseal_ghi_lich_su_dieu_phoi()$def$) THEN
+             DROP TRIGGER IF EXISTS unseal_requests_ghi_lich_su_dieu_phoi ON public.unseal_requests;
+             CREATE TRIGGER unseal_requests_ghi_lich_su_dieu_phoi AFTER UPDATE ON unseal_requests FOR EACH ROW EXECUTE FUNCTION public.unseal_ghi_lich_su_dieu_phoi();
+             ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_ghi_lich_su_dieu_phoi;
+           END IF;
+         END
+         $fn64$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF NEW.dispatched_by IS NOT NULL AND (OLD.dispatched_by IS DISTINCT FROM NEW.dispatched_by OR OLD.dispatched_by_session_id IS DISTINCT FROM NEW.dispatched_by_session_id) THEN INSERT INTO public.unseal_dispatch_history (org_id, unseal_request_id, rfq_id, dispatched_by, dispatched_by_session_id) VALUES (NEW.org_id, NEW.id, NEW.rfq_id, NEW.dispatched_by, NEW.dispatched_by_session_id); END IF; RETURN NULL; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.unseal_requests')
+                           AND t.tgname = 'unseal_requests_ghi_lich_su_dieu_phoi'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = p.oid
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_ghi_lich_su_dieu_phoi AFTER UPDATE ON public.unseal_requests FOR EACH ROW EXECUTE FUNCTION unseal_ghi_lich_su_dieu_phoi()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.unseal_ghi_lich_su_dieu_phoi()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.unseal_ghi_lich_su_dieu_phoi()')),
+                  'hàm public.unseal_ghi_lich_su_dieu_phoi() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.unseal_ghi_lich_su_dieu_phoi() và bảng public.unseal_requests (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.110 / S2.6] J7 — toi da MOT award con song, chuoi mot chieu (061) ----------
@@ -10084,7 +10150,7 @@ $ham$;
     -- USAGE trên public là điều kiện cần để hai role dùng được bất cứ thứ gì trong đó. Cấp
     -- lại ở MỌI lần chạy để kịch bản "role bị DROP rồi tạo lại" tự phục hồi.
     -- [ADR-072 phần 1] Và cho `app_neo`: USAGE trên schema tự nó không mở bảng hay hàm nào — mỗi thứ
-    -- vai ấy chạm tới vẫn cần GRANT riêng (064), nên cấp lại ở đây không nới quyền nào ngoài tên đã liệt kê.
+    -- vai ấy chạm tới vẫn cần GRANT riêng (065), nên cấp lại ở đây không nới quyền nào ngoài tên đã liệt kê.
     ARRAY[
       $q$quyền USAGE trên schema public$q$,
       $q$true$q$,
@@ -10156,14 +10222,14 @@ $ham$;
       $q$quyền sở hữu hàm app_current_org_id() hoặc SUPERUSER$q$
     ],
 
-    -- [ADR-072 phần 1 / 064] Quyền quan hệ của `app_neo`: xem CAU_QUYEN_NEO_SAI. TỰ CHỮA phần cấp ĐÍCH DANH cho
-    -- vai (thu hồi thừa, cấp lại thiếu — cả hai là thứ 064 sở hữu theo TÊN); phần đến qua PUBLIC chỉ phán xét.
-    -- Tiền điều kiện theo MIGRATION NGUỒN như mục 052: trước khi 064 áp, "thiếu" là trạng thái đúng.
+    -- [ADR-072 phần 1 / 065] Quyền quan hệ của `app_neo`: xem CAU_QUYEN_NEO_SAI. TỰ CHỮA phần cấp ĐÍCH DANH cho
+    -- vai (thu hồi thừa, cấp lại thiếu — cả hai là thứ 065 sở hữu theo TÊN); phần đến qua PUBLIC chỉ phán xét.
+    -- Tiền điều kiện theo MIGRATION NGUỒN như mục 052: trước khi 065 áp, "thiếu" là trạng thái đúng.
     -- `REVOKE ALL ON TABLE` kéo theo mọi quyền CỘT của cùng bảng (đo, PostgreSQL 16) — nên một vòng trên ACL
     -- bảng HAY ACL cột là đủ, không cần câu REVOKE theo từng cột.
     ARRAY[
-      $q$quyền quan hệ của app_neo: chỉ SELECT audit_events, SELECT (org_id, seq, hash) audit_chain_anchors, EXECUTE audit_compute_hash (064)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '064_vai_neo.sql')$q$,
+      $q$quyền quan hệ của app_neo: chỉ SELECT audit_events, SELECT (org_id, seq, hash) audit_chain_anchors, EXECUTE audit_compute_hash (065)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '065_vai_neo.sql')$q$,
       $q$DO $neo$
          DECLARE r record;
          BEGIN
@@ -10196,7 +10262,7 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUYEN_NEO_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ' ORDER BY mo_ta) FROM ($q$ || CAU_QUYEN_NEO_SAI || $q$) t)
         || ' (quyền HIỆU DỤNG: cấp đích danh — mục này tự thu hồi; qua PUBLIC — REVOKE … FROM PUBLIC bằng chủ quan hệ)'$q$,
-      $q$chủ các quan hệ ấy hoặc SUPERUSER (REVOKE … FROM app_neo / FROM PUBLIC; GRANT như 064)$q$
+      $q$chủ các quan hệ ấy hoặc SUPERUSER (REVOKE … FROM app_neo / FROM PUBLIC; GRANT như 065)$q$
     ],
 
     -- ---- (A) Cờ RLS trên mọi bảng tenant — tự chữa, tổng quát ---------------------------
@@ -11489,7 +11555,7 @@ BEGIN
   -- `app_neo_login` (tools/chay-migrate dựng, mật khẩu từ secret) rồi `SET ROLE app_neo` (createPool).
   -- VÌ SAO một vai RIÊNG thay vì app_api: job neo phải liệt kê MỌI tổ chức (`outbox_danh_sach_to_chuc()`),
   -- và 052 cố ý thu hồi đúng năng lực ấy khỏi app_api (ADR-040). Vai này đổi lại KHÔNG ghi được gì:
-  -- 064 chỉ cấp SELECT trên hai bảng sổ và EXECUTE trên đúng hàm mà verifyAuditChain gọi.
+  -- 065 chỉ cấp SELECT trên hai bảng sổ và EXECUTE trên đúng hàm mà verifyAuditChain gọi.
   -- Cùng lập luận "role là đối tượng của CỤM" như app_liet_ke_to_chuc bên dưới: ở tệp chạy MỌI lượt.
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_neo') THEN
     BEGIN

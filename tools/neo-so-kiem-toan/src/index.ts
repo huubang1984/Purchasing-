@@ -18,7 +18,7 @@
 // Nên danh sách là THAM SỐ, và nó là một sự thật vận hành phải viết ra ở đâu đó. Xem ADR-026 §5.
 //
 // [ADR-072 phần 1] Công cụ KHÔNG còn chạy dưới `app_api`. Nó đăng nhập bằng `app_neo_login` và
-// `SET ROLE app_neo` — vai riêng của job neo (064): gọi được `outbox_danh_sach_to_chuc()` (thứ
+// `SET ROLE app_neo` — vai riêng của job neo (065): gọi được `outbox_danh_sach_to_chuc()` (thứ
 // app_api cố ý không có), đổi lại chỉ ĐỌC được hai bảng sổ. Hai lệnh đọc CSDL ở đây (`xuat`, `kiem`)
 // chỉ cần đúng tập ấy — một bộ xuất mốc neo đi bằng vai GHI được sổ là một bộ xuất mà một lỗi của
 // nó sửa được chính thứ nó đang neo. DATABASE_URL trỏ vào role khác (vd. app_api_login) thì
