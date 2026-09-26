@@ -72,7 +72,10 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
 - [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
       ⇒ lời gọi lỗi nhưng **có thư**.
-- [ ] **3.5** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
+- [ ] **3.5** Dự kiến: alarm ⑺ `tp-canh-bao-canh-moc-neo-khong-chay` có thể vào ALARM ở kỳ 12 giờ đầu nếu Lambda chưa
+      chạy lượt nào — gọi tay một lần để về OK:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
+- [ ] **3.6** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
       OK sau lượt `lich` đầu tiên có tổ chức (bước 13).
 
 ## 4. Phép đo ⒜ — bắt buộc trước dữ liệu thật

@@ -53,6 +53,9 @@ export default tseslint.config(
       // [S1.17] `tools/neo-so-kiem-toan/*.mjs` — bản sao có chủ ý thứ tư của cùng hook resolve,
       // cho entry point xuất/kiểm mốc neo ngoài. Vẫn liệt kê đúng một thư mục.
       "tools/neo-so-kiem-toan/*.mjs",
+      // [ADR-084] Tệp Lambda SINH RA từ `src/canh-moc-neo.ts` (gỡ kiểu) — không viết tay; `canh-moc-neo.test.ts` đòi nó trùng
+      // byte với nguồn, nên nguồn đã qua eslint là đủ. Đúng một thư mục.
+      "tools/neo-so-kiem-toan/lambda/*.mjs",
       // [ADR-038] `apps/mcp/*.mjs` — bản sao có chủ ý thứ NĂM của cùng hook resolve, cho điểm vào
       // của tiến trình MCP (`pnpm mcp:dev`). Lý do không dùng chung file với `apps/api` ghi ở đầu
       // `apps/mcp/ts-resolve-hook.mjs`. Vẫn liệt kê đúng một thư mục, không gộp `apps/*/*.mjs`.

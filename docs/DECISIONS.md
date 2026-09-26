@@ -7240,3 +7240,36 @@ dòng ấy (`onJobFailure`, `onPollError`, bộ dọn) — không ai đọc. Và
   báo ngoài `bo-cuoc`/`poll-loi`.
 - Ngưỡng là đoán khi chưa có tải thật; `kenh-loi` đếm cả lần thử lại nên một nhà mạng chập chờn có thể gây thư ALARM→OK.
 - Chưa chạy thật: `terraform validate`; mẫu metric filter đo bằng test đối chiếu chuỗi, chưa trên CloudWatch.
+
+## ADR-084 — Cảnh báo mốc neo theo từng tổ chức, đo ở tài khoản audit
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-072**, **ADR-073**, ADR-071, ADR-026 §5
+
+### Bối cảnh
+
+Job `lich` (ADR-072) thoát 1 khi một tổ chức XUẤT hỏng (cảnh báo ⑶), và ⑷ (ADR-073) báo khi CẢ bucket neo im 36 giờ.
+Còn một ca cả hai không thấy: một tổ chức VẮNG khỏi danh sách mà `lich` đọc — hàm liệt kê ở prod bị sửa, hay một lỗi làm
+rơi nó — thì job vẫn thoát 0 và bucket vẫn có đối tượng mới của các tổ chức khác. Sổ của tổ chức ấy ngừng được neo trong
+im lặng, đúng thứ ADR-026 dựng mốc neo để ngăn.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Lambda `tp-canh-moc-neo` ở tài khoản audit** (stack 60, ⑺), mỗi 6 giờ: liệt kê mọi tổ chức từng được neo
+   (`so-kiem-toan/<org>/`), với mỗi tổ chức hỏi một lời `ListObjectsV2(StartAfter = mốc cắt)`. Phán xử bằng
+   `LastModified` (S3 đặt), không bằng tên khoá (người ghi đặt) — một đối tượng mang tên "tương lai" không che được tổ chức.
+   Thiếu mốc trong 36 giờ ⇒ dòng log `THIEU MOC NEO` ⇒ metric filter ⇒ alarm ⇒ SNS email có sẵn (ALARM và OK).
+2. **Chỉ đọc**: role của Lambda có đúng `s3:ListBucket` với `s3:prefix` dưới `so-kiem-toan/` và quyền ghi log của nó.
+3. **Canh người canh**: alarm Lambda LỖI (≥ 1 trong 6 giờ) và Lambda KHÔNG CHẠY 12 giờ (thiếu dữ liệu = vi phạm).
+4. **Mã TypeScript trong kho** (`tools/neo-so-kiem-toan/src/canh-moc-neo.ts`, qua t0 và test đơn vị); thứ chạy trên Lambda
+   (`lambda/canh-moc-neo.mjs`) là chính tệp ấy gỡ kiểu bằng `module.stripTypeScriptTypes` — test đòi trùng byte. Chỉ phụ
+   thuộc `@aws-sdk/client-s3` có sẵn trong runtime `nodejs22.x`; Terraform đóng zip bằng provider `archive`.
+5. `hinh-dang-canh-moc-neo.test.ts` ghim quyền chỉ-đọc, tệp đóng gói, handler, mẫu log và ba đường thư.
+
+### Hệ quả, nói thẳng
+
+- Không biết tổ chức CHƯA TỪNG được neo — audit không có danh sách tổ chức. Ca ấy lộ ở `verifyAuditChain` (NOT_ANCHORED).
+- Một tổ chức bị xoá thật sự vẫn bị báo mãi (thư mục mốc neo giữ 365 ngày, Object Lock) — tới khi có quy trình khai tổ chức
+  đã đóng; ghi thành việc sau.
+- Mỗi lượt: một lời liệt kê thư mục + một lời mỗi tổ chức — rẻ tới vài nghìn tổ chức.
+- Thư ⑺ nêu org UUID trong log của Lambda, không trong thư (thư chỉ có tên alarm) — đọc log để biết tổ chức nào.
+- Chưa chạy thật: `terraform validate`; logic đo trên bucket giả (phân trang, tên tương lai, rác trong bucket).
