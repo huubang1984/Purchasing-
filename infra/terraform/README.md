@@ -174,6 +174,12 @@ Zalo) — mọi tên khác NXDOMAIN, ghi `/tp/dns`, alarm `tp-dns-bi-chan` ⇒ e
 - Trước khi apply: kiểm `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.ap-southeast-1.sms-voice`
   có dịch vụ ở region; không có thì bỏ `sms-voice` khỏi `dich_vu_endpoint` và giữ tên SMS trong danh sách (đi qua NAT).
 
+**[ADR-079] Chính sách VPC endpoint.** Endpoint giao diện chỉ nhận người gọi thuộc prod/audit gọi tới tài nguyên thuộc
+prod/audit; S3 gateway chỉ cho bucket lớp image ECR (GetObject) và bucket neo (Get/Put/List), và nay gắn cả bảng định
+tuyến của api. Thêm một dịch vụ AWS ở tài khoản khác, hay một bucket S3 mới cho task: sửa `local.chinh_sach_*` ở stack 90
+(`hinh-dang-endpoint.test.ts` ghim cả hai). Lỗi trông như `AccessDenied ... no VPC endpoint policy allows` là dấu hiệu
+thiếu mục.
+
 **[ADR-077] Cảnh báo vận hành.** Stack 90 đặt alarm tiền tố `tp-van-hanh-`: target không khoẻ / không còn target
 khoẻ cho từng target group (api, web, public-keys), tỉ lệ 5xx của ALB > 5%, p95 của api > 2 giây, service chạy thiếu
 task (Container Insights; service `so_ban_* = 0` không có alarm), RDS CPU > 80%, dung lượng trống < 2 GB, > 150 kết nối.

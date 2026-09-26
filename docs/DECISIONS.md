@@ -6955,6 +6955,38 @@ worker — không đứng sau ALB — có sống sau khởi động không.
 - Chưa chạy thật: script đo trên máy chủ giả cục bộ (đúng, sai dấu vân tay, thiếu CSP, biến sai) và `aws` giả (đủ/thiếu
   task, có dòng lỗi).
 
+## ADR-079 — Chính sách VPC endpoint: vành đai theo tài khoản, S3 liệt kê bucket
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-076**, ADR-066, ADR-071
+
+### Bối cảnh
+
+Mọi VPC endpoint của stack 90 giữ chính sách mặc định (FullAccess). Một task bị chiếm dùng được chúng với credential của
+tài khoản khác, hoặc gọi tới tài nguyên của tài khoản khác (KMS, Secrets Manager, STS, bucket S3 của kẻ tấn công) — qua
+những tên mà DNS Firewall (ADR-076) phải cho phép vì dịch vụ ấy hợp lệ.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Endpoint giao diện** (kms, secretsmanager, sts, logs, ecr.api, ecr.dkr, email, sms-voice): một chính sách vành
+   đai — `aws:PrincipalAccount` ∈ {prod, audit} VÀ `aws:ResourceAccount` ∈ {prod, audit} (`IfExists`, vì
+   `ecr:GetAuthorizationToken` và vài lời gọi khác không có tài nguyên). Audit có mặt vì job neo mượn `tp-anchor-writer`
+   rồi gọi KMS và S3 bằng phiên của audit (ADR-071).
+2. **S3 gateway liệt kê bucket**: `s3:GetObject` trên bucket lớp image ECR của region (thuộc tài khoản AWS — vành đai
+   theo tài khoản sẽ chặn nó); `GetObject/PutObject/ListBucket` trên bucket neo, người gọi thuộc prod/audit. Không bucket
+   nào khác, kể cả của prod.
+3. **Gắn S3 gateway vào cả bảng định tuyến của api**: S3 của api (kéo lớp image) đi qua endpoint có chính sách thay vì NAT.
+4. `tests/architecture/hinh-dang-endpoint.test.ts` đòi mọi `aws_vpc_endpoint` mang `policy`, đúng điều kiện tài khoản, đúng
+   danh sách bucket và bảng định tuyến.
+
+### Hệ quả, nói thẳng
+
+- Chính sách endpoint là lớp THÊM, không thay IAM: nó chỉ hẹp lại những gì IAM đã cho.
+- Vành đai theo tài khoản không phân biệt tài nguyên TRONG prod/audit — một task đọc được secret nào theo IAM thì vẫn đọc
+  được qua endpoint. Chặt hơn (liệt kê ARN) bị bác vì mỗi tài nguyên mới là một lần sửa và một lần có thể làm hỏng prod.
+- Tên bucket lớp ECR là quy ước của AWS (`prod-<region>-starport-layer-bucket`); AWS đổi thì task không kéo được image —
+  đối chiếu tài liệu ECR lúc apply.
+- Chưa chạy thật: `terraform validate`.
+
 ---
 
 ## ADR-080 — S3 mở vòng khi MVP1 chưa đóng, sau một công tắc MỘT CHIỀU theo tổ chức

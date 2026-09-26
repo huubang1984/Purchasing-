@@ -12178,3 +12178,6 @@ migration thành `067`; sổ nợ **242** khoản, mở **93** (= 91 của `mast
 **Khi chờ merge — hợp #145, #146, #147, #149 và đổi số lần bốn** (§S1.139 mục 9). Vòng này thành §S1.140, ba ADR thành
 ADR-080…082; sổ nợ **242** khoản, mở **93** — bốn PR ấy không chạm sổ nợ; **67** migration; ADR **81** (78 của
 `master` + 3). ADR-079 vắng trên nhánh này: `…-endpoint-policy` giữ nó — khe số, không phải ADR bị xoá.
+
+**Sau khi hợp #150** (`…-endpoint-policy`, S1.137 và ADR-079): khe số được lấp, sổ quyết định liền từ ADR-001 tới
+ADR-082; ADR **82** (79 của `master` + 3). Sổ nợ và migration không đổi — #150 không chạm chúng.
