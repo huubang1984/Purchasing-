@@ -11,6 +11,8 @@
 #      nhiều và lặp (ALARM rồi OK), không được làm chìm thư khoá/neo của topic `tp-canh-bao-khoa`.
 #   ⑺ [ADR-086] Mốc neo THEO TỪNG TỔ CHỨC: Lambda `tp-canh-moc-neo` ở audit, mỗi 6 giờ, báo tổ chức từng được neo mà
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
+#   ⑻ [ADR-089] Đường thư: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, báo địa chỉ trong `email_canh_bao`/`email_van_hanh`
+#      chưa xác nhận hay mất đăng ký, và đăng ký lạ — gửi tới CẢ HAI topic.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -234,6 +236,9 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
             aws_cloudwatch_metric_alarm.moc_neo_to_chuc.arn,
             aws_cloudwatch_metric_alarm.canh_moc_neo_loi.arn,
             aws_cloudwatch_metric_alarm.canh_moc_neo_khong_chay.arn,
+            aws_cloudwatch_metric_alarm.dang_ky_hong.arn,
+            aws_cloudwatch_metric_alarm.canh_dang_ky_loi.arn,
+            aws_cloudwatch_metric_alarm.canh_dang_ky_khong_chay.arn,
           ] }
           StringEquals = { "aws:SourceAccount" = local.audit }
         }
@@ -538,14 +543,32 @@ resource "aws_sns_topic_policy" "van_hanh" {
   arn      = aws_sns_topic.van_hanh.arn
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "EventBridgeGuiVanHanh"
-      Effect    = "Allow"
-      Principal = { Service = "events.amazonaws.com" }
-      Action    = "sns:Publish"
-      Resource  = aws_sns_topic.van_hanh.arn
-      Condition = { ArnEquals = { "aws:SourceArn" = [aws_cloudwatch_event_rule.van_hanh_audit.arn] } }
-    }]
+    Statement = [
+      {
+        Sid       = "EventBridgeGuiVanHanh"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.van_hanh.arn
+        Condition = { ArnEquals = { "aws:SourceArn" = [aws_cloudwatch_event_rule.van_hanh_audit.arn] } }
+      },
+      {
+        # [ADR-089] Thư ⑻ (đăng ký hỏng) tới CẢ hai hộp — hộp vận hành cũng phải nhận khi hộp an ninh là hộp hỏng.
+        Sid       = "CloudWatchGuiCanhBaoDangKy"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.van_hanh.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = [
+            aws_cloudwatch_metric_alarm.dang_ky_hong.arn,
+            aws_cloudwatch_metric_alarm.canh_dang_ky_loi.arn,
+            aws_cloudwatch_metric_alarm.canh_dang_ky_khong_chay.arn,
+          ] }
+          StringEquals = { "aws:SourceAccount" = local.audit }
+        }
+      },
+    ]
   })
 }
 
@@ -766,4 +789,166 @@ resource "aws_cloudwatch_metric_alarm" "canh_moc_neo_khong_chay" {
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.canh_bao_khoa.arn]
   ok_actions          = [aws_sns_topic.canh_bao_khoa.arn]
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑻ [ADR-089] AUDIT — mỗi địa chỉ nhận cảnh báo có một đăng ký ĐÃ xác nhận
+# ---------------------------------------------------------------------------------------------
+# Cả đường thư ⑴–⑺ dừng ở một đăng ký email mà người nhận phải BẤM xác nhận; chưa bấm, SNS tự xoá khi quá hạn, hay người
+# nhận bấm "unsubscribe" — thư đi vào hư không mà apply vẫn xanh. Lambda này đọc đăng ký của hai topic và đối chiếu với
+# `email_canh_bao` / `email_van_hanh` (mã: `tools/canh-dang-ky/src/canh-dang-ky.ts`), chỉ có quyền liệt kê đăng ký. Ba
+# alarm, cùng khuôn ⑺, gửi tới CẢ HAI topic: hộp nào hỏng thì hộp kia vẫn nhận.
+locals {
+  ten_canh_dang_ky = "tp-canh-dang-ky"
+  topic_canh_bao   = [aws_sns_topic.canh_bao_khoa.arn, aws_sns_topic.van_hanh.arn]
+}
+
+data "archive_file" "canh_dang_ky" {
+  type        = "zip"
+  source_file = "${path.module}/../../../tools/canh-dang-ky/lambda/canh-dang-ky.mjs"
+  output_path = "${path.module}/.terraform/canh-dang-ky.zip"
+}
+
+resource "aws_iam_role" "canh_dang_ky" {
+  provider           = aws.audit
+  name               = local.ten_canh_dang_ky
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_cloudwatch_log_group" "canh_dang_ky" {
+  provider          = aws.audit
+  name              = "/aws/lambda/${local.ten_canh_dang_ky}"
+  retention_in_days = 90
+}
+
+resource "aws_iam_role_policy" "canh_dang_ky" {
+  provider = aws.audit
+  name     = "chi-liet-ke-dang-ky"
+  role     = aws_iam_role.canh_dang_ky.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "LietKeDangKy"
+        Effect   = "Allow"
+        Action   = "sns:ListSubscriptionsByTopic"
+        Resource = local.topic_canh_bao
+      },
+      {
+        Sid      = "GhiLog"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.canh_dang_ky.arn}:*"
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "canh_dang_ky" {
+  provider                       = aws.audit
+  function_name                  = local.ten_canh_dang_ky
+  description                    = "ADR-089: moi dia chi nhan canh bao co dang ky SNS da xac nhan"
+  role                           = aws_iam_role.canh_dang_ky.arn
+  runtime                        = "nodejs22.x"
+  handler                        = "canh-dang-ky.handler"
+  filename                       = data.archive_file.canh_dang_ky.output_path
+  source_code_hash               = data.archive_file.canh_dang_ky.output_base64sha256
+  timeout                        = 60
+  memory_size                    = 128
+  reserved_concurrent_executions = 1
+  environment {
+    variables = {
+      MONG_DOI = jsonencode([
+        { topic = aws_sns_topic.canh_bao_khoa.arn, bien = "email_canh_bao", nhan = [var.email_canh_bao] },
+        { topic = aws_sns_topic.van_hanh.arn, bien = "email_van_hanh", nhan = var.email_van_hanh },
+      ])
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.canh_dang_ky, aws_iam_role_policy.canh_dang_ky]
+}
+
+resource "aws_cloudwatch_event_rule" "canh_dang_ky" {
+  provider            = aws.audit
+  name                = local.ten_canh_dang_ky
+  description         = "Chay Lambda canh dang ky SNS moi 6 gio (ADR-089)"
+  schedule_expression = "rate(6 hours)"
+}
+
+resource "aws_cloudwatch_event_target" "canh_dang_ky" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.canh_dang_ky.name
+  arn      = aws_lambda_function.canh_dang_ky.arn
+}
+
+resource "aws_lambda_permission" "canh_dang_ky" {
+  provider      = aws.audit
+  statement_id  = "EventBridgeLich"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.canh_dang_ky.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.canh_dang_ky.arn
+}
+
+# Hợp đồng với `dongLog` của Lambda — `hinh-dang-canh-dang-ky.test.ts` so hai phía.
+resource "aws_cloudwatch_log_metric_filter" "dang_ky_hong" {
+  provider       = aws.audit
+  name           = "tp-dang-ky-hong"
+  log_group_name = aws_cloudwatch_log_group.canh_dang_ky.name
+  pattern        = "\"DANG KY HONG\""
+  metric_transformation {
+    name          = "DangKyHong"
+    namespace     = "TrustProcure/CanhBao"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dang_ky_hong" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-dang-ky-hong"
+  alarm_description   = "[TrustProcure] (ADR-089) Mot dia chi nhan canh bao chua xac nhan, mat dang ky, hoac co dang ky la tren topic canh bao. Doc /aws/lambda/${local.ten_canh_dang_ky} (dong DANG KY HONG: bien va vi tri), roi bam xac nhan trong thu AWS hoac apply lai stack 60 de tao lai dang ky."
+  namespace           = "TrustProcure/CanhBao"
+  metric_name         = "DangKyHong"
+  statistic           = "Sum"
+  period              = 21600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.topic_canh_bao
+  ok_actions          = local.topic_canh_bao
+}
+
+resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_loi" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-canh-dang-ky-loi"
+  alarm_description   = "[TrustProcure] (ADR-089) Lambda ${local.ten_canh_dang_ky} LOI — phep canh dang ky SNS dang cam. Doc /aws/lambda/${local.ten_canh_dang_ky}."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.canh_dang_ky.function_name }
+  statistic           = "Sum"
+  period              = 21600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.topic_canh_bao
+  ok_actions          = local.topic_canh_bao
+}
+
+resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_khong_chay" {
+  provider            = aws.audit
+  alarm_name          = "tp-canh-bao-canh-dang-ky-khong-chay"
+  alarm_description   = "[TrustProcure] (ADR-089) Lambda ${local.ten_canh_dang_ky} khong chay trong 12 gio — lich tp-canh-dang-ky bi tat hay go."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Invocations"
+  dimensions          = { FunctionName = aws_lambda_function.canh_dang_ky.function_name }
+  statistic           = "Sum"
+  period              = 43200
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = local.topic_canh_bao
+  ok_actions          = local.topic_canh_bao
 }

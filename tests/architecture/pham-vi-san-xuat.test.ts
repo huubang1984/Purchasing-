@@ -72,12 +72,15 @@ const GOC = fileURLToPath(new URL("../../", import.meta.url));
 // Zalo ZNS của `api` — token xoay vòng nên phải ĐỌC VÀ GHI lúc chạy, không bơm một lần qua biến môi trường được.
 // [ADR-071] `@aws-sdk/client-s3` + `@aws-sdk/client-sts`: job neo (`tools/neo-so-kiem-toan`) mượn tp-anchor-writer và ghi
 // bucket neo ở tài khoản audit.
+// [ADR-089] `@aws-sdk/client-sns`: Lambda `tp-canh-dang-ky` (`tools/canh-dang-ky`, stack 60) liệt kê đăng ký của hai topic
+// cảnh báo ở audit. Runtime Lambda cung cấp SDK — không đóng gói; phụ thuộc ở đây là cho kiểu và test.
 const NGOAI_DUOC_PHEP_O_SAN_XUAT: readonly string[] = [
   "@aws-sdk/client-kms",
   "@aws-sdk/client-pinpoint-sms-voice-v2",
   "@aws-sdk/client-s3",
   "@aws-sdk/client-secrets-manager",
   "@aws-sdk/client-sesv2",
+  "@aws-sdk/client-sns",
   "@aws-sdk/client-sts",
   "pg",
   "pg-connection-string",

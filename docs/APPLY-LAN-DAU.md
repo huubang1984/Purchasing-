@@ -76,6 +76,11 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   Stack 60 không phụ thuộc stack 90: rule ⑸ ⑹ bắt alarm theo TÊN/TIỀN TỐ, nên alarm sinh ra sau vẫn có thư.
 - [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao` (topic `tp-canh-bao-khoa`) **và** tới từng địa chỉ
       `email_van_hanh` (topic `tp-canh-bao-van-hanh`). Địa chỉ chưa xác nhận = chưa nhận cảnh báo nào.
+      Đối chứng ⑻ (ADR-089), hai lần gọi tay Lambda đối chiếu đăng ký:
+      `aws lambda invoke --profile tp-audit --function-name tp-canh-dang-ky out.json`, rồi đọc log
+      `/aws/lambda/tp-canh-dang-ky`. **Trước** khi bấm xác nhận: mỗi địa chỉ một dòng `DANG KY HONG: cho xac nhan` (dòng ghi
+      tên biến và vị trí, không ghi địa chỉ). **Sau**: dòng tổng `... 0 hong`. Alarm `tp-canh-bao-dang-ky-hong` về OK ở kỳ
+      6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
 - [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
@@ -219,6 +224,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | Lúc | Thư | Vì sao |
 |---|---|---|
 | 3.1 | ⑷ thiếu mốc neo — ALARM | chưa có mốc neo nào; về OK ở 8.3 |
+| 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, 3.4, 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
