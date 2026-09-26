@@ -7203,3 +7203,49 @@ câu *"bảy tầng phủ đủ"* của bản nháp là sai.
 - Nó không đụng tới ba hàm trợ giúp của MVP1 chưa được ghim (`rfq_bam_noi_dung`, `rfq_can_phe_duyet_kep`,
   `unseal_so_phe_duyet_can`). Lượt soi đọc ra chúng nhưng **chưa đối chiếu** với danh mục ADR-028/036 xem đã là giới hạn
   đã biết chưa; việc ấy nằm ngoài S3.
+
+## ADR-9201 — Số hiệu cấp lúc merge: số tạm trên nhánh, `pnpm cap-so` cấp số thật
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Thay luật đổi số của S1.111
+
+### Bối cảnh
+
+Bốn dãy số — vòng `S1.N`, ADR, khoản nợ, migration — được cấp trên NHÁNH theo luật S1.111: đo max trên mọi nhánh đang
+sống rồi +1. Luật ấy không có khoá. Các nhánh song song đo cùng lúc thì ra cùng số, nhánh merge trước giữ số, nhánh sau
+đổi tay. Tới S1.140 đã sáu lần (`fe43f53`, `e424676`, `880ddbe`, `fa1887b`, `07851a8`, `ba73667`), mỗi lần ~12 tệp và
+~200 dòng, và lần sau còn phải sửa dải số lệch của lần trước. Ngoài ra, lời khai đếm viết tay (`**[S1.x] N ADR**`, chuỗi
+gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, kể cả khi số không trùng.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Nhánh không cấp số thật.** Mục mới mang số tạm: vòng `S1.91NN`, `ADR-92NN`, khoản `94NN`, migration
+   `95NN_ten.sql` (NN = 01, 02, … theo thứ tự tạo trong nhánh). Không số tự nhiên nào của kho rơi vào bốn dải này
+   (đo trên toàn kho: 90xx có `9000` ms, 93xx có thời gian đo, 99xx có `9999`, nên ba dải ấy bị loại).
+2. **`pnpm cap-so` cấp số lúc merge.** Lệnh chạy sau `git merge origin/master`. Nó thay số tạm bằng max(master)+1… CHỈ
+   trên dòng nhánh thêm, đổi tên tệp migration, viết lại lời khai đếm. Kết quả được commit kèm dòng trailer `Cap-So:`
+   mà lệnh in ra.
+3. **Thua cuộc đua thì chạy lại lệnh.** PR khác merge trước với cùng số thì: merge master, rồi `pnpm cap-so`. Lệnh tự
+   gỡ các khối xung đột thuộc phần nó quản — lời khai đếm, dòng `CÒN MỞ`, hàng sổ nợ hai phía cùng thêm, mục nối cuối
+   `docs/DECISIONS.md` và biên bản. Sau đó nó đọc trailer để trả từng dòng về đúng bản số tạm, rồi cấp lại. Dòng sửa
+   sau lần cấp thì thu hồi theo token có tiền tố (`ADR-N`, `S1.N`, `khoản N`, tên tệp migration).
+4. **Lời khai đếm do lệnh viết**, tại chỗ: số ADR ở `docs/STATE.md` và `Handoff.md`; số khoản và số migration ở
+   `Handoff.md`; dòng `CÒN MỞ` và đoạn đếm dưới nó. Lệnh không nối thêm chuỗi gạch; tiền tố vòng của lời khai đứng
+   yên. Khi nhánh còn số tạm, `pnpm cap-so --dem` viết lại chúng để `[INV-H20]` xanh.
+5. **CI chặn.** Job `t0` chạy `pnpm cap-so --kiem` trên commit merge của PR và trên master. Nó đỏ khi còn số tạm, hay
+   khi ADR, khoản, migration hoặc đầu mục biên bản trùng số.
+
+### Hệ quả, nói thẳng
+
+- Số vẫn đi theo thứ tự merge và không có lỗ, như trước.
+- Hai PR cùng chạy lệnh trên một master rồi được merge liền nhau vẫn va nhau. Muốn chặn, chủ repo bật **Require
+  branches to be up to date before merging** trên GitHub; khi ấy PR thứ hai phải merge master và chạy lại lệnh. Không
+  bật thì `--kiem` trên master bắt được ADR, khoản hay migration trùng, nhưng không bắt được hai vòng cùng số, vì vòng
+  không có một chỗ khai duy nhất.
+- Hai trường hợp lệnh không đổi số: dòng nhánh viết sau lần cấp mà trùng nguyên văn một dòng của master; và số trần
+  (`N` không tiền tố) trong dòng sửa sau lần cấp — lệnh chỉ thu hồi dạng có tiền tố.
+- Tài liệu mô tả dải số tạm phải viết `NN`, không viết chữ số, vì chính lệnh sẽ thay chữ số ấy.
+  `tools/cap-so/` đứng ngoài mọi phép thay và phép quét.
+- Lượt soi ngang, mục nhật ký STATE, lời khai `gói + công cụ` và `Sổ đăng ký … bất biến` vẫn viết tay: chưa va lần
+  nào, và nằm ngoài phạm vi chủ dự án chọn.
+- Chưa chạy trên một cuộc đua thật giữa hai PR. Đã đo trên kho git tạm (`tools/cap-so/src/cap-so.test.ts`): hai nhánh
+  cùng cấp số, một nhánh merge trước, nhánh kia merge master, lệnh gỡ xung đột và cấp lại.

@@ -90,3 +90,16 @@ describe("[khoản nợ 20 + 27] hình dạng của ci.yml", () => {
     }
   });
 });
+
+describe("[ADR-9201] cổng số tạm trong ci.yml", () => {
+  it("t0 chạy `pnpm cap-so --kiem`, và bước ấy không đeo continue-on-error", () => {
+    // Số tạm chỉ không tới được master khi có một cổng CHẶN trên commit merge của PR. Gỡ bước này
+    // là quay về chỗ một PR quên `pnpm cap-so` vẫn merge được với `ADR-92NN` trong sổ.
+    const t0 = thanJob("t0");
+    const dong = t0.split("\n");
+    const i = dong.findIndex((d) => /^\s*run: pnpm cap-so --kiem\s*$/u.test(d));
+    expect(i, "t0 không còn bước `pnpm cap-so --kiem`").toBeGreaterThan(-1);
+    const buoc = dong.slice(Math.max(0, i - 5), i + 2).join("\n");
+    expect(buoc, "cổng số tạm không được đeo continue-on-error").not.toMatch(/continue-on-error:\s*true/u);
+  });
+});
