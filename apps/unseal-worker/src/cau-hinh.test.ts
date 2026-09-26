@@ -181,3 +181,46 @@ describe("[ADR-064] cấu hình worker với khoá aws-kms", () => {
     expect(() => docCauHinh({ ...envKms(), TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp org" })).toThrow(CauHinhError);
   });
 });
+
+// ==============================================================================================
+// [ADR-065] Cảnh báo `ses`: vùng, địa chỉ gửi, danh sách người nhận; loại trừ thư mục dev.
+// ==============================================================================================
+function envSes(): Record<string, string> {
+  const env: Record<string, string> = {
+    ...envDu(),
+    TRUSTPROCURE_ALERT_ADAPTER: "ses",
+    TRUSTPROCURE_SES_REGION: "ap-southeast-1",
+    TRUSTPROCURE_SES_FROM: "canh-bao@thu.vidu.vn",
+    TRUSTPROCURE_ALERT_EMAILS: "a@vidu.vn, b@vidu.vn",
+  };
+  delete env["TRUSTPROCURE_ALERT_DIR"];
+  return env;
+}
+
+describe("[ADR-065] cấu hình cảnh báo worker qua SES", () => {
+  it("đọc vùng, địa chỉ gửi, danh sách người nhận (cắt khoảng trắng); không còn alertDir", () => {
+    const ch = docCauHinh(envSes());
+    if (ch.alertAdapter !== "ses") throw new Error("fixture khai ses");
+    expect(ch.ses).toEqual({
+      region: "ap-southeast-1",
+      tuDiaChi: "canh-bao@thu.vidu.vn",
+      denDiaChi: ["a@vidu.vn", "b@vidu.vn"],
+      configurationSet: undefined,
+    });
+    expect(Object.keys(ch)).not.toContain("alertDir");
+  });
+
+  it.each(["TRUSTPROCURE_SES_REGION", "TRUSTPROCURE_SES_FROM", "TRUSTPROCURE_ALERT_EMAILS"])("thiếu %s thì NÉM, nêu đúng tên", (ten) => {
+    const env = envSes();
+    delete env[ten];
+    expect(() => docCauHinh(env)).toThrow(ten);
+  });
+
+  it("danh sách sai (mục không phải email, trùng, rỗng) và hai bộ biến lẫn nhau ⇒ NÉM", () => {
+    expect(() => docCauHinh({ ...envSes(), TRUSTPROCURE_ALERT_EMAILS: "a@vidu.vn, khong-email" })).toThrow(CauHinhError);
+    expect(() => docCauHinh({ ...envSes(), TRUSTPROCURE_ALERT_EMAILS: "a@vidu.vn,a@vidu.vn" })).toThrow(/trùng/u);
+    expect(() => docCauHinh({ ...envSes(), TRUSTPROCURE_ALERT_EMAILS: " , " })).toThrow(CauHinhError);
+    expect(() => docCauHinh({ ...envSes(), TRUSTPROCURE_ALERT_DIR: "/tmp/x" })).toThrow(/TRUSTPROCURE_ALERT_DIR.*ADR-065/u);
+    expect(() => docCauHinh({ ...envDu(), TRUSTPROCURE_ALERT_EMAILS: "a@vidu.vn" })).toThrow(/TRUSTPROCURE_ALERT_EMAILS.*ADR-065/u);
+  });
+});

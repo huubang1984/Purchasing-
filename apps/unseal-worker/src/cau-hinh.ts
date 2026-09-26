@@ -65,9 +65,6 @@ export interface CauHinhWorkerChung {
    * chỉ có một kết nối thì mỗi lần TỪ CHỐI lúc giải mã chờ hết trần rồi ra `DenialAuditFailedError`.
    */
   readonly dbPoolMax: number;
-  readonly alertAdapter: "dev-file";
-  /** Thư mục nhận cảnh báo break-glass. TUYỆT ĐỐI, và nên nằm NGOÀI cây repo. */
-  readonly alertDir: string;
   /** Nhịp poll của runner, ms. */
   readonly pollIntervalMs: number;
   /** [khoản 196 / ADR-067] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình, ms — cùng biến, cùng miền với `apps/api`. */
@@ -92,7 +89,25 @@ export interface KhoaWorkerAwsKms {
   readonly kms: { readonly region: string; readonly orgWrapKeyId: string };
 }
 
-export type CauHinhWorker = CauHinhWorkerChung & (KhoaWorkerLocalDev | KhoaWorkerAwsKms);
+export interface CanhBaoDevFile {
+  readonly alertAdapter: "dev-file";
+  /** Thư mục nhận cảnh báo break-glass. TUYỆT ĐỐI, và nên nằm NGOÀI cây repo. */
+  readonly alertDir: string;
+}
+
+/** [ADR-065] Cảnh báo break-glass qua Amazon SES tới một danh sách người nhận. */
+export interface CanhBaoSes {
+  readonly alertAdapter: "ses";
+  readonly ses: {
+    readonly region: string;
+    /** Địa chỉ gửi; IAM của `tp-unseal-worker` chỉ cho `ses:FromAddress` này. */
+    readonly tuDiaChi: string;
+    readonly denDiaChi: readonly string[];
+    readonly configurationSet: string | undefined;
+  };
+}
+
+export type CauHinhWorker = CauHinhWorkerChung & (KhoaWorkerLocalDev | KhoaWorkerAwsKms) & (CanhBaoDevFile | CanhBaoSes);
 
 type MoiTruong = Readonly<Record<string, string | undefined>>;
 
@@ -218,13 +233,49 @@ function docKhoa(env: MoiTruong): KhoaWorkerLocalDev | KhoaWorkerAwsKms {
   return { keyAdapter, kms: { region, orgWrapKeyId } };
 }
 
+const EMAIL_DON = /^[^\s@,;<>"]{1,64}@[^\s@,;<>"]{1,253}\.[^\s@,;<>"]{2,63}$/u;
+const BIEN_CANH_BAO_DEV = ["TRUSTPROCURE_ALERT_DIR"] as const;
+const BIEN_CANH_BAO_SES = [
+  "TRUSTPROCURE_SES_REGION",
+  "TRUSTPROCURE_SES_FROM",
+  "TRUSTPROCURE_ALERT_EMAILS",
+  "TRUSTPROCURE_SES_CONFIGURATION_SET",
+] as const;
+
+/** [ADR-065] Hai bộ biến cảnh báo LOẠI TRỪ nhau — cùng quy tắc với bộ biến khoá. */
+function docCanhBao(env: MoiTruong): CanhBaoDevFile | CanhBaoSes {
+  const alertAdapter = docAdapter(env, "TRUSTPROCURE_ALERT_ADAPTER", ["dev-file", "ses"] as const, "cảnh báo");
+  const bienKhac = alertAdapter === "ses" ? BIEN_CANH_BAO_DEV : BIEN_CANH_BAO_SES;
+  const sot = bienKhac.filter((b) => (env[b]?.trim() ?? "") !== "");
+  if (sot.length > 0) {
+    throw new CauHinhError(`TRUSTPROCURE_ALERT_ADAPTER="${alertAdapter}" nhưng còn khai ${sot.join(", ")} của adapter kia (ADR-065)`);
+  }
+  if (alertAdapter === "dev-file") return { alertAdapter, alertDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_ALERT_DIR") };
+  const region = bat(env, "TRUSTPROCURE_SES_REGION");
+  if (!/^[a-z]{2}(?:-[a-z]+)+-\d$/u.test(region)) throw new CauHinhError("TRUSTPROCURE_SES_REGION không phải một vùng AWS hợp lệ");
+  const tuDiaChi = bat(env, "TRUSTPROCURE_SES_FROM");
+  if (!EMAIL_DON.test(tuDiaChi)) throw new CauHinhError("TRUSTPROCURE_SES_FROM không phải một địa chỉ email đơn");
+  const denDiaChi = bat(env, "TRUSTPROCURE_ALERT_EMAILS")
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => d !== "");
+  if (denDiaChi.length === 0 || denDiaChi.length > 50) throw new CauHinhError("TRUSTPROCURE_ALERT_EMAILS cần 1–50 địa chỉ");
+  if (denDiaChi.some((d) => !EMAIL_DON.test(d))) throw new CauHinhError("TRUSTPROCURE_ALERT_EMAILS có một mục không phải email đơn");
+  if (new Set(denDiaChi).size !== denDiaChi.length) throw new CauHinhError("TRUSTPROCURE_ALERT_EMAILS khai trùng một địa chỉ");
+  const cs = env["TRUSTPROCURE_SES_CONFIGURATION_SET"]?.trim();
+  const configurationSet = cs === undefined || cs === "" ? undefined : cs;
+  if (configurationSet !== undefined && !/^[A-Za-z0-9_-]{1,64}$/u.test(configurationSet)) {
+    throw new CauHinhError("TRUSTPROCURE_SES_CONFIGURATION_SET phải dài 1–64 ký tự [A-Za-z0-9_-]");
+  }
+  return { alertAdapter, ses: { region, tuDiaChi, denDiaChi, configurationSet } };
+}
+
 export function docCauHinh(env: MoiTruong): CauHinhWorker {
   return {
     databaseUrl: docDatabaseUrl(env, "TRUSTPROCURE_DATABASE_URL"),
     dbPoolMax: docSoNguyen(env, "TRUSTPROCURE_DB_POOL_MAX", 10, 1, 100),
     ...docKhoa(env),
-    alertAdapter: docAdapter(env, "TRUSTPROCURE_ALERT_ADAPTER", ["dev-file"] as const, "cảnh báo"),
-    alertDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_ALERT_DIR"),
+    ...docCanhBao(env),
     pollIntervalMs: docSoNguyen(env, "TRUSTPROCURE_OUTBOX_POLL_MS", 1000, 100, 60_000),
     lechDongHoToiDaMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_MAX_MS", LECH_DONG_HO_TOI_DA_MS_MAC_DINH, 100, 60_000),
     chuKyCanhDongHoMs: docSoNguyen(env, "TRUSTPROCURE_CLOCK_SKEW_CHECK_MS", CHU_KY_CANH_DONG_HO_MS_MAC_DINH, 1000, 3_600_000),

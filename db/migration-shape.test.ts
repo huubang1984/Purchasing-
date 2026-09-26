@@ -493,7 +493,7 @@ describe("hình dạng file migration", () => {
       "supplier_contacts",
       "suppliers",
       "unseal_approvals",
-      // [S1.122 / khoản 233 / 064] Lịch sử điều phối mở thầu — chỉ-ghi-thêm bằng quyền, khoá
+      // [S1.124 / khoản 233 / 064] Lịch sử điều phối mở thầu — chỉ-ghi-thêm bằng quyền, khoá
       // ngoại hợp thành tới `unseal_requests` và `rfq_packages`, policy khách ĐÓNG HẲN.
       "unseal_dispatch_history",
       "unseal_requests",

@@ -66,6 +66,9 @@ export default tseslint.config(
       // [S1.114 / S2.7] `tools/bo-xuat-danh-gia/*.mjs` — bản sao có chủ ý thứ TÁM của cùng hook
       // resolve, cho `pnpm bang-chung`. Vẫn liệt kê đúng một thư mục, không gộp `tools/*/*.mjs`.
       "tools/bo-xuat-danh-gia/*.mjs",
+      // [ADR-066] `tools/chay-migrate/*.mjs` — bản sao có chủ ý thứ CHÍN, cho entry point của task ECS
+      // `tp-migrate`. Vẫn liệt kê đúng một thư mục.
+      "tools/chay-migrate/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",

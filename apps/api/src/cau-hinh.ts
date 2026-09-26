@@ -13,7 +13,8 @@
 //   ⑵ Thông điệp lỗi chỉ nêu TÊN biến, không bao giờ nêu GIÁ TRỊ — lỗi khởi động đi thẳng ra log.
 //   ⑶ Adapter phải được KHAI TÊN (`TRUSTPROCURE_KEY_ADAPTER`, `TRUSTPROCURE_SENDER_ADAPTER`), và hôm
 //      nay ~~mỗi biến chỉ có ĐÚNG MỘT giá trị hợp lệ (`local-dev`, `dev-mailbox`)~~ [ADR-064] khoá có
-//      HAI giá trị (`local-dev`, `aws-kms`), bộ gửi có một (`dev-mailbox`). Một giá trị khác ("ses")
+//      HAI giá trị (`local-dev`, `aws-kms`), bộ gửi ~~có một (`dev-mailbox`)~~ [ADR-065] cũng hai
+//      (`dev-mailbox`, `ses`), và hai bộ biến gửi cũng loại trừ nhau. Một giá trị khác ("sns")
 //      là lời khai về một adapter CHƯA TỒN TẠI — ném với đúng câu ấy, thay vì im lặng rơi về bản dev.
 //   ⑷ [ADR-064] Hai bộ biến khoá LOẠI TRỪ nhau: dưới `aws-kms`, một biến vòng khoá local-dev còn sót
 //      là lỗi khởi động, và ngược lại — một cấu hình không được mang hai câu trả lời cho câu "khoá ở
@@ -67,8 +68,6 @@ export interface CauHinhApiChung {
   readonly trustedProxies: readonly string[];
   /** Pepper HMAC cho băm đích/bộ đếm OTP (ADR-018) — giữ ngoài KMS ở cả hai adapter khoá. */
   readonly otpPeppers: VongBiMat;
-  readonly senderAdapter: "dev-mailbox";
-  readonly devMailboxDir: string;
   /**
    * Trần cho mỗi việc sau commit, ms (`TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS`, 100–60 000; không khai ⇒ 5 000 của bộ điều phối).
    * [S1.70 / khoản 124, lượt soi 64a-6] Một trần, hai hợp đồng: cận oracle thời gian của đường vô danh (OTP, H2-7), và ngưỡng mà quá nó
@@ -114,7 +113,26 @@ export interface KhoaAwsKms {
   readonly kms: CauHinhKms;
 }
 
-export type CauHinhApi = CauHinhApiChung & (KhoaLocalDev | KhoaAwsKms);
+/** Bộ gửi dev: mỗi tin một tệp JSON trong thư mục (token và OTP dạng rõ — chỉ cho máy phát triển). */
+export interface GuiDevMailbox {
+  readonly senderAdapter: "dev-mailbox";
+  readonly devMailboxDir: string;
+}
+
+/** [ADR-065] Bộ gửi thật qua Amazon SES — chỉ kênh EMAIL. */
+export interface CauHinhSes {
+  readonly region: string;
+  /** Địa chỉ gửi đã xác minh; IAM của `tp-api` chỉ cho `ses:FromAddress` này. */
+  readonly tuDiaChi: string;
+  readonly configurationSet: string | undefined;
+}
+
+export interface GuiSes {
+  readonly senderAdapter: "ses";
+  readonly ses: CauHinhSes;
+}
+
+export type CauHinhApi = CauHinhApiChung & (KhoaLocalDev | KhoaAwsKms) & (GuiDevMailbox | GuiSes);
 
 export type MoiTruong = Readonly<Record<string, string | undefined>>;
 
@@ -386,10 +404,37 @@ function docKhoaKms(env: MoiTruong): CauHinhKms {
   return kms;
 }
 
+const BIEN_GUI_DEV = ["TRUSTPROCURE_DEV_MAILBOX_DIR"] as const;
+const BIEN_GUI_SES = ["TRUSTPROCURE_SES_REGION", "TRUSTPROCURE_SES_FROM", "TRUSTPROCURE_SES_CONFIGURATION_SET"] as const;
+
+/** Địa chỉ email đơn — cùng hình dạng `gui-ses.ts` kiểm lại lúc gửi. */
+const EMAIL_DON = /^[^\s@,;<>"]{1,64}@[^\s@,;<>"]{1,253}\.[^\s@,;<>"]{2,63}$/u;
+
+/** [ADR-065] Hai bộ biến gửi LOẠI TRỪ nhau — cùng quy tắc ⑷ của bộ biến khoá. */
+function docBoGui(env: MoiTruong, senderAdapter: "dev-mailbox" | "ses"): GuiDevMailbox | GuiSes {
+  const bienKhac = senderAdapter === "ses" ? BIEN_GUI_DEV : BIEN_GUI_SES;
+  const sot = bienKhac.filter((b) => tuyChon(env, b) !== undefined);
+  if (sot.length > 0) {
+    throw new CauHinhError(`TRUSTPROCURE_SENDER_ADAPTER="${senderAdapter}" nhưng còn khai ${sot.join(", ")} của bộ gửi kia (ADR-065)`);
+  }
+  if (senderAdapter === "dev-mailbox") {
+    return { senderAdapter, devMailboxDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_DEV_MAILBOX_DIR") };
+  }
+  const region = bat(env, "TRUSTPROCURE_SES_REGION");
+  if (!VUNG_AWS.test(region)) throw new CauHinhError("TRUSTPROCURE_SES_REGION không phải một vùng AWS hợp lệ");
+  const tuDiaChi = bat(env, "TRUSTPROCURE_SES_FROM");
+  if (!EMAIL_DON.test(tuDiaChi)) throw new CauHinhError("TRUSTPROCURE_SES_FROM không phải một địa chỉ email đơn");
+  const configurationSet = tuyChon(env, "TRUSTPROCURE_SES_CONFIGURATION_SET");
+  if (configurationSet !== undefined && !/^[A-Za-z0-9_-]{1,64}$/u.test(configurationSet)) {
+    throw new CauHinhError("TRUSTPROCURE_SES_CONFIGURATION_SET phải dài 1–64 ký tự [A-Za-z0-9_-]");
+  }
+  return { senderAdapter, ses: { region, tuDiaChi, configurationSet } };
+}
+
 export function docCauHinh(env: MoiTruong): CauHinhApi {
   const databaseUrl = docDatabaseUrl(env, "TRUSTPROCURE_DATABASE_URL");
   const keyAdapter = docAdapter(env, "TRUSTPROCURE_KEY_ADAPTER", ["local-dev", "aws-kms"] as const, "khoá");
-  const senderAdapter = docAdapter(env, "TRUSTPROCURE_SENDER_ADAPTER", ["dev-mailbox"] as const, "gửi");
+  const senderAdapter = docAdapter(env, "TRUSTPROCURE_SENDER_ADAPTER", ["dev-mailbox", "ses"] as const, "gửi");
   const otpPeppers = docVong(env, "TRUSTPROCURE_OTP_PEPPERS", "TRUSTPROCURE_OTP_PEPPER_ACTIVE", 32);
   let khoa: KhoaLocalDev | KhoaAwsKms;
   if (keyAdapter === "local-dev") {
@@ -421,8 +466,7 @@ export function docCauHinh(env: MoiTruong): CauHinhApi {
     allowedOrigins: docOrigins(env, "TRUSTPROCURE_ALLOWED_ORIGINS"),
     trustedProxies: docProxyTinCay(env, "TRUSTPROCURE_TRUSTED_PROXIES"),
     otpPeppers,
-    senderAdapter,
-    devMailboxDir: docThuMucTuyetDoi(env, "TRUSTPROCURE_DEV_MAILBOX_DIR"),
+    ...docBoGui(env, senderAdapter),
     afterCommitTimeoutMs:
       tuyChon(env, "TRUSTPROCURE_AFTER_COMMIT_TIMEOUT_MS") === undefined
         ? undefined

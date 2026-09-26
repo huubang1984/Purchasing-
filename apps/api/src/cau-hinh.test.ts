@@ -123,7 +123,8 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
 
   it("adapter chưa có trong kho (kms, ses) ⇒ ném NÓI RÕ là chưa có, không rơi về bản dev", () => {
     nemVeBien(envHopLe({ TRUSTPROCURE_KEY_ADAPTER: "kms" }), "TRUSTPROCURE_KEY_ADAPTER", /CHƯA CÓ/u);
-    nemVeBien(envHopLe({ TRUSTPROCURE_SENDER_ADAPTER: "ses" }), "TRUSTPROCURE_SENDER_ADAPTER", /CHƯA CÓ/u);
+    // ~~"ses"~~ [ADR-065] "ses" nay CÓ; một bộ gửi chưa có là "sns".
+    nemVeBien(envHopLe({ TRUSTPROCURE_SENDER_ADAPTER: "sns" }), "TRUSTPROCURE_SENDER_ADAPTER", /CHƯA CÓ/u);
     // Không nới theo hoa/thường: "Local-Dev" là một chuỗi khác.
     nemVeBien(envHopLe({ TRUSTPROCURE_KEY_ADAPTER: "Local-Dev" }), "TRUSTPROCURE_KEY_ADAPTER");
   });
@@ -276,5 +277,39 @@ describe("[ADR-064] docCauHinh — adapter khoá aws-kms", () => {
     nemVeBien(envKms({ TRUSTPROCURE_KMS_ORG_KEY_VERSION: "co khoang trang" }), "TRUSTPROCURE_KMS_ORG_KEY_VERSION");
     nemVeBien(envKms({ TRUSTPROCURE_KMS_RECEIPT_KID: "kid\nalg=HMAC" }), "TRUSTPROCURE_KMS_RECEIPT_KID");
     nemVeBien(envKms({ TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp org" }), "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID");
+  });
+});
+
+// ==============================================================================================
+// [ADR-065] Bộ gửi `ses`: vùng, địa chỉ gửi, configuration set tuỳ chọn; loại trừ bộ biến hộp thư dev.
+// ==============================================================================================
+describe("[ADR-065] docCauHinh — bộ gửi ses", () => {
+  const envSes = (ghiDe: Record<string, string | undefined> = {}): MoiTruong =>
+    envHopLe({
+      TRUSTPROCURE_SENDER_ADAPTER: "ses",
+      TRUSTPROCURE_DEV_MAILBOX_DIR: undefined,
+      TRUSTPROCURE_SES_REGION: "ap-southeast-1",
+      TRUSTPROCURE_SES_FROM: "noreply@thu.vidu.vn",
+      ...ghiDe,
+    });
+
+  it("đọc vùng và địa chỉ gửi; configuration set tuỳ chọn; không còn trường hộp thư dev", () => {
+    const ch = docCauHinh(envSes({ TRUSTPROCURE_SES_CONFIGURATION_SET: "tp-thu" }));
+    if (ch.senderAdapter !== "ses") throw new Error("fixture khai ses");
+    expect(ch.ses).toEqual({ region: "ap-southeast-1", tuDiaChi: "noreply@thu.vidu.vn", configurationSet: "tp-thu" });
+    expect(Object.keys(ch)).not.toContain("devMailboxDir");
+    const khongCs = docCauHinh(envSes());
+    if (khongCs.senderAdapter !== "ses") throw new Error("không tới");
+    expect(khongCs.ses.configurationSet).toBeUndefined();
+  });
+
+  it("thiếu biến, sai hình dạng ⇒ ném nêu tên; hai bộ biến gửi loại trừ nhau", () => {
+    nemVeBien(envSes({ TRUSTPROCURE_SES_REGION: undefined }), "TRUSTPROCURE_SES_REGION");
+    nemVeBien(envSes({ TRUSTPROCURE_SES_FROM: undefined }), "TRUSTPROCURE_SES_FROM");
+    nemVeBien(envSes({ TRUSTPROCURE_SES_FROM: "a@vidu.vn,b@vidu.vn" }), "TRUSTPROCURE_SES_FROM");
+    nemVeBien(envSes({ TRUSTPROCURE_SES_CONFIGURATION_SET: "co khoang" }), "TRUSTPROCURE_SES_CONFIGURATION_SET");
+    nemVeBien(envSes({ TRUSTPROCURE_DEV_MAILBOX_DIR: "/tmp/x" }), "TRUSTPROCURE_DEV_MAILBOX_DIR", /ADR-065/u);
+    nemVeBien(envHopLe({ TRUSTPROCURE_SES_FROM: "noreply@thu.vidu.vn" }), "TRUSTPROCURE_SES_FROM", /ADR-065/u);
+    nemVeBien(envHopLe({ TRUSTPROCURE_SENDER_ADAPTER: "sns" }), "TRUSTPROCURE_SENDER_ADAPTER", /CHƯA CÓ/u);
   });
 });

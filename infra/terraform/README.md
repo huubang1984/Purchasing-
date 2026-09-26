@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Tám stack, chạy đúng thứ tự
+## Mười stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
@@ -16,6 +16,8 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
+| `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng không NAT + VPC endpoint, RDS PostgreSQL 16, ECR, cluster `tp-prod`, service `tp-api` sau ALB HTTPS, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -108,6 +110,86 @@ chứng dương của cảnh báo ấy; không có thư thì cảnh báo ⑵ ch�
 Chi phí: vài phút Fargate 0,25 vCPU và hai IP công khai trong lúc task chạy — không NAT, không
 VPC endpoint.
 
+## Gửi thư thật — stack `80-ses` (ADR-065)
+
+```powershell
+cd infra\terraform\80-ses
+terraform init
+terraform plan -var ten_mien=<domain> -out plan.tfplan
+terraform apply plan.tfplan
+terraform output ban_ghi_dns        # thêm từng bản ghi ở nhà cung cấp DNS
+terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và worker
+```
+
+1. Thêm ba CNAME DKIM, MX + SPF của `thu.<domain>`, và DMARC (`p=none` lúc đầu). SES xác minh domain
+   khi thấy đủ ba CNAME — xem trạng thái ở console SES hay `aws sesv2 get-email-identity`.
+2. **Ra khỏi sandbox**: tài khoản SES mới chỉ gửi tới địa chỉ đã xác minh. Gửi yêu cầu *production
+   access* ở console SES (mô tả loại thư: giao dịch — link đăng nhập, lời mời báo giá, OTP; cơ chế
+   xử lý bounce: suppression list của configuration set). Chưa được duyệt thì mọi thư tới nhà cung cấp
+   thật bị SES từ chối — và job outbox thất bại ỒN ÀO, đúng thiết kế.
+3. Đặt biến cho api: `TRUSTPROCURE_SENDER_ADAPTER=ses`, `TRUSTPROCURE_SES_REGION`,
+   `TRUSTPROCURE_SES_FROM=<dia_chi_gui>@<domain>`, `TRUSTPROCURE_SES_CONFIGURATION_SET=tp-thu`; cho
+   worker: `TRUSTPROCURE_ALERT_ADAPTER=ses`, cùng vùng, `TRUSTPROCURE_SES_FROM=<dia_chi_canh_bao>@<domain>`,
+   `TRUSTPROCURE_ALERT_EMAILS`. Khi CẢ HAI tiến trình đã dùng SES thì gỡ `TRUSTPROCURE_ALLOW_DEV_SINKS`.
+4. Kiểm (đối chứng dương): một lần `/auth/link` tới hộp thư của chính mình ⇒ phải nhận thư; đổi
+   `TRUSTPROCURE_SES_FROM` của api thành địa chỉ cảnh báo ⇒ `AccessDenied` (IAM theo địa chỉ gửi).
+
+**Chưa có:** SMS và Zalo ZNS. Liên hệ khai kênh ấy thì bộ gửi SES NÉM, việc outbox thất bại.
+
+## Chạy thật — stack `90-ecs` (ADR-066)
+
+**1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên).
+Host RDS chưa có ở lần đầu: tạo secret với host tạm rồi `put-secret-value` lại sau bước 3.
+
+```powershell
+aws secretsmanager create-secret --profile tp-prod --name tp/api/otp-peppers --secret-string "p1=<base64 32 byte>"
+aws secretsmanager create-secret --profile tp-prod --name tp/api/database-url `
+  --secret-string "postgres://app_api_login:<mat-khau-api>@<rds-host>:5432/trustprocure"
+aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url `
+  --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
+```
+
+**2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:
+
+```powershell
+cd infra\terraform\90-ecs
+terraform init
+terraform apply -var-file prod.tfvars -target aws_acm_certificate.api   # bước A: chỉ chứng chỉ
+terraform output ban_ghi_dns                                            # thêm CNAME xac_minh_acm ở DNS
+terraform plan -var-file prod.tfvars -out plan.tfplan                   # bước B: phần còn lại
+terraform apply plan.tfplan                                             # chờ ACM xác minh rồi tạo ALB
+```
+
+`prod.tfvars` (không commit): `ten_mien_api`, `url_cong_khai`, `origin_duoc_phep`, `anh = { api, worker,
+migrate }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
+mới apply phần còn lại.
+
+**3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `api` → ALB.
+
+**4. Build và đẩy image** (từ gốc kho):
+
+```powershell
+aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
+foreach ($t in "api","worker","migrate") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate" }[$t]
+  docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
+  docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
+}
+```
+
+**5. Migrate** — `terraform output lenh_chay_migrate`, chạy, đọc `/tp/migrate` trong CloudWatch: phải thấy
+`da ap N migration` và hai dòng `vai …`. **Đây cũng là phép đo ADR-061 trên RDS** (vai master RDS không
+phải superuser); nếu `migrate()` từ chối, dừng lại và đọc thông điệp — không sửa bằng tay trong CSDL.
+
+**6. Worker:** để `so_ban_worker = 0` tới khi có tổ chức đầu tiên (worker từ chối khởi động khi nguồn tổ
+chức trả 0 hàng — ADR-040), rồi đặt 1 và apply.
+
+**7. Kiểm:** `https://<ten_mien_api>/health` ⇒ 200; log `/tp/api` có dòng `khoa: aws-kms, bo gui: ses`.
+
+**Chưa có:** triển khai `apps/web` (người dùng đi qua web, ADR-044). Endpoint SES API (`email`) chưa được
+kiểm ở vùng này — nếu `plan` báo không có dịch vụ ấy, đổi `ses_endpoint_service`.
+
 ## Nguồn thời gian (ADR-067, khoản 196)
 
 Hạn nộp thầu được phán xử bằng `now()` của **CSDL** (trigger C1), nên đồng hồ của máy CSDL là một
@@ -115,8 +197,8 @@ tham số pháp lý của sản phẩm, không phải một chi tiết vận hà
 
 | Thành phần | Nguồn thời gian | Cấu hình của ta |
 |---|---|---|
-| RDS PostgreSQL (stack chưa có) | Amazon Time Sync Service — dịch vụ quản lý, không có tham số chọn nguồn khác | **Không cấu hình gì.** Stack RDS sau này KHÔNG được thêm gì đổi múi giờ hay nguồn giờ của máy CSDL; `timezone` của parameter group để mặc định `UTC` |
-| ECS Fargate — `tp-api`, `tp-unseal-worker` (stack `90-ecs`, chưa có trên `master`) | Amazon Time Sync Service của host Fargate (`169.254.169.123` / `fd00:ec2::123`) | **Không cấu hình gì.** Task definition KHÔNG chạy chrony/ntpd riêng, KHÔNG ghi đè giờ hệ thống |
+| RDS PostgreSQL (stack `90-ecs`) | Amazon Time Sync Service — dịch vụ quản lý, không có tham số chọn nguồn khác | **Không cấu hình gì.** Stack RDS sau này KHÔNG được thêm gì đổi múi giờ hay nguồn giờ của máy CSDL; `timezone` của parameter group để mặc định `UTC` |
+| ECS Fargate — `tp-api`, `tp-unseal-worker` (stack `90-ecs`) | Amazon Time Sync Service của host Fargate (`169.254.169.123` / `fd00:ec2::123`) | **Không cấu hình gì.** Task definition KHÔNG chạy chrony/ntpd riêng, KHÔNG ghi đè giờ hệ thống |
 | Stack đo một lần `70-do-kms` | như ECS Fargate | không liên quan tới hạn nộp |
 
 **Mọi dòng trong bảng trên là ĐỌC tài liệu AWS, chưa đo** — chưa có tài khoản prod dùng được (khoản 15)
@@ -133,6 +215,7 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
 2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
    không có dòng `canh bao LechDongHo`.
 3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
+
 
 ## Rủi ro còn lại — nói thẳng
 
