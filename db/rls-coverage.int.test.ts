@@ -844,7 +844,7 @@ describe("phủ RLS", () => {
       // co SELECT cho app_api nhung KHONG co INSERT: `api` khong giai ma duoc nen no khong co gi
       // de ghi, va mot GRANT INSERT o day se cho phep no BIA mot ban ro.
       { grantee: "app_api", bang: "unseal_approvals", quyen: "SELECT" },
-      // [S1.126 / khoản 233 / 064] Trigger J3 đọc lịch sử điều phối dưới quyền người đề xuất.
+      // [S1.129 / khoản 233 / 064] Trigger J3 đọc lịch sử điều phối dưới quyền người đề xuất.
       { grantee: "app_api", bang: "unseal_dispatch_history", quyen: "SELECT" },
       { grantee: "app_api", bang: "unseal_requests", quyen: "SELECT" },
       // [S1.10.4 / 029] token đăng nhập người mua: SELECT mức bảng; INSERT/UPDATE theo cột (xem dưới).
@@ -1419,7 +1419,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "unseal_approvals", cot: "approver_user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "unseal_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "unseal_approvals", cot: "unseal_request_id", quyen: "INSERT" },
-      // [S1.126 / khoản 233 / 064] Lịch sử điều phối: trigger ghi chạy dưới quyền người điều phối nên
+      // [S1.129 / khoản 233 / 064] Lịch sử điều phối: trigger ghi chạy dưới quyền người điều phối nên
       // `app_api` cần INSERT; `recorded_at` do CSDL đặt, và KHÔNG có UPDATE hay DELETE — chỉ-ghi-thêm
       // bằng quyền. Một hàng giả chỉ làm J3 chặt hơn, không nới được.
       { grantee: "app_api", bang: "unseal_dispatch_history", cot: "dispatched_by", quyen: "INSERT" },
@@ -1903,7 +1903,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals",
-      // [S1.126 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.
+      // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.
       "unseal_dispatch_history", "unseal_requests",
       "user_login_tokens", "user_roles", "users",
     ].map(chiKhach),

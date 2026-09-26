@@ -5788,7 +5788,7 @@ mang người của lần điều phối ĐANG CHẠY, nên sau một lần đi�
 dự án chọn **NHẬN** lỗ ấy ngày 2026-09-22 sau khi ba hình dạng đóng được cân, và ô J3 khai phạm vi
 HẸP HƠN mệnh đề — khoản **233**.
 
-**[S1.126 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
+**[S1.129 / khoản 233 ĐÓNG] Đoạn vừa rồi hết đúng.** S1.113 đưa khoản 233 lên rổ A theo vế ⒝ của
 ADR-043, và ngày 2026-09-26 chủ dự án chọn hình dạng ⒝ trong ba hình dạng đã cân: một bảng LỊCH SỬ
 ĐIỀU PHỐI. `064` dựng `unseal_dispatch_history` — chỉ-ghi-thêm bằng quyền, ghi bởi một trigger
 `AFTER UPDATE` trên `unseal_requests` ở MỌI lần cặp người-phiên điều phối đổi — và thay thân
