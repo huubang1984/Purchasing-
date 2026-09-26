@@ -227,6 +227,10 @@ và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, wor
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
 
+**Trước mỗi plan bước B** (từ gốc kho): `pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars` — đọc biến
+hiệu lực qua `terraform console`, rồi hỏi tài khoản prod (chỉ đọc): giá trị giữ chỗ, image có trong ECR, secret có giá
+trị, domain SES đã xác minh. Có `[DO]` ⇒ thoát 1, không plan (ADR-087; `docs/APPLY-LAN-DAU.md` 6.4).
+
 **3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
 
 **4. Build và đẩy image** (từ gốc kho):

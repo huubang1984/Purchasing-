@@ -75,6 +75,9 @@ export default tseslint.config(
       // [ADR-070] `apps/public-keys/*.mjs` — bản sao có chủ ý thứ MƯỜI, cho entry point của service
       // `tp-public-keys`. Vẫn liệt kê đúng một thư mục.
       "apps/public-keys/*.mjs",
+      // `tools/kiem-truoc-apply/*.mjs` — bản sao có chủ ý thứ MƯỜI MỘT, cho `pnpm kiem-truoc-apply` (kiểm trước apply stack 90).
+      // Vẫn liệt kê đúng một thư mục.
+      "tools/kiem-truoc-apply/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",
