@@ -7510,7 +7510,10 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
    trên dòng nhánh thêm, đổi tên tệp migration, viết lại lời khai đếm. Kết quả được commit kèm dòng trailer `Cap-So:`
    mà lệnh in ra.
    - Ngoài Markdown chỉ dạng CÓ TIỀN TỐ được thay (`S1.91NN`, `ADR-92NN`, `khoản 94NN`, `95NN_ten.sql`, kể cả phần nối
-     của một dải). Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
+     của một dải). **[S1.9101]** Cộng dạng `95NN_ten` KHÔNG đuôi — dạng các danh sách khai của
+     `db/migrations/hardening.always.sql` dùng (`mig || '.sql'` so với `schema_migrations`). Thiếu nó, tệp đổi tên mà
+     dòng khai đứng nguyên, `--kiem` vẫn sạch, và phép kiểm của dòng ấy im lặng không bao giờ chạy — đo ở PR đầu tiên
+     thêm migration dưới ADR này. Thu hồi và `--kiem` nhận cùng dạng ấy. Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
      trong mã, một UUID hay một digest đứng yên. Số trần còn lại mà trùng một số tạm đã khai thì được cảnh báo.
    - Base là `origin/master` thì phải bằng remote lúc chạy (`git ls-remote`); bản cục bộ cũ thì lệnh từ chối.
 3. **Thua cuộc đua thì chạy lại lệnh.** PR khác merge trước với cùng số thì: merge master, rồi `pnpm cap-so`. Lệnh tự
