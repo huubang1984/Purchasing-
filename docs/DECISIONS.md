@@ -6884,3 +6884,38 @@ quyền có đường tuồn dữ liệu tới bất kỳ máy chủ HTTPS nào.
 - Thêm ~7 USD/tháng/AZ cho endpoint `sms-voice`; DNS Firewall và query log vài USD/tháng.
 - Chưa chạy thật: `terraform validate` stack 60 và 90; tên dịch vụ endpoint `sms-voice` và tên bucket lớp ECR cần kiểm lúc
   apply (README).
+
+## ADR-077 — Cảnh báo khi hệ thống ngừng phục vụ: ALB, ECS, RDS, thư qua audit
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-066, ADR-068, ADR-070, ADR-072, ADR-076
+
+### Bối cảnh
+
+Stack 60 báo sửa key policy, task mang role worker, job neo hỏng, thiếu mốc neo, truy vấn DNS lạ — nhưng không gì báo
+khi api, web, public-keys hay worker NGỪNG PHỤC VỤ, hay khi CSDL sắp đầy. Worker không đứng sau ALB: nó chết thì không
+yêu cầu nào lỗi, chỉ phong bì không được mở.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Alarm ở prod (stack 90), tiền tố `tp-van-hanh-`:**
+   - ALB, cho từng target group api/web/public-keys: có target không khoẻ 3 phút; KHÔNG còn target khoẻ 3 phút
+     (thiếu dữ liệu = vi phạm).
+   - ALB: (5xx do ALB sinh + 5xx của target) / số yêu cầu > 5% trong 5 phút, chỉ khi ≥ 20 yêu cầu.
+   - api: p95 `TargetResponseTime` > 2 giây trong 10 phút.
+   - ECS: `RunningTaskCount` < `so_ban_*` trong 5 phút (Container Insights, đã bật), cho mọi service có số bản > 0 —
+     cách duy nhất thấy worker chết. Thiếu dữ liệu = vi phạm.
+   - RDS: CPU > 80% trong 15 phút; `FreeStorageSpace` < 2 GB; > 150 kết nối (trần mặc định db.t4g.small ≈ 190).
+2. **Thư đi qua audit** như ⑶–⑸: stack 60 ⑹ bắt sự kiện `CloudWatch Alarm State Change` theo TIỀN TỐ tên alarm, cả
+   ALARM lẫn OK, chuyển sang audit ⇒ SNS email có sẵn. Thêm alarm vận hành mới chỉ cần giữ tiền tố.
+3. `tests/architecture/hinh-dang-van-hanh.test.ts` đòi mọi alarm của stack 90 (trừ DNS) mang tiền tố, tiền tố giống
+   nhau ở hai stack, mọi `aws_ecs_service` và `aws_lb_target_group` có alarm, và hai alarm "mất hẳn" coi thiếu dữ liệu
+   là vi phạm.
+
+### Hệ quả, nói thẳng
+
+- Cảnh báo vận hành và cảnh báo bảo mật chung MỘT hộp thư. Thư vận hành nhiều hơn (mỗi sự cố hai thư: vào và ra) —
+  tách topic khi đủ người trực.
+- Không có alarm cho lỗi nghiệp vụ (outbox kẹt, gửi SMS/Zalo thất bại): chúng không làm service ngừng; việc sau.
+- Ngưỡng là đoán ở quy mô chưa có tải thật; đo lại sau một tháng chạy.
+- Lần apply đầu có thư ALARM→OK dự kiến cho mỗi service trước khi task lên.
+- Chưa chạy thật: `terraform validate` stack 60 và 90.

@@ -1145,6 +1145,184 @@ resource "aws_ecs_service" "worker" {
 # ---------------------------------------------------------------------------------------------
 # Đầu ra
 # ---------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------
+# [ADR-077] CẢNH BÁO VẬN HÀNH — HỆ THỐNG NGỪNG PHỤC VỤ
+# ---------------------------------------------------------------------------------------------
+# Mọi alarm ở đây mang tiền tố `tp-van-hanh-`: stack 60 ⑹ bắt THEO TIỀN TỐ sự kiện đổi trạng thái (ALARM và OK) và
+# chuyển sang audit ⇒ email — không SNS ở prod. Thêm alarm mới giữ tiền tố ấy là đủ để nó có thư.
+#   ALB   target không khoẻ (≥1) và KHÔNG còn target khoẻ nào, cho từng target group; tỉ lệ 5xx (ALB tự sinh + target)
+#         > 5% trong 5 phút khi có ≥ 20 yêu cầu; p95 thời gian phản hồi của api > 2 giây trong 10 phút.
+#   ECS   số task đang chạy < số mong muốn trong 5 phút (Container Insights) — cách DUY NHẤT thấy worker chết, vì nó
+#         không đứng sau ALB. Service có `so_ban_* = 0` không có alarm (worker trước tổ chức đầu tiên — ADR-040).
+#   RDS   CPU > 80% trong 15 phút; dung lượng trống < 2 GB; > 150 kết nối (trần mặc định của db.t4g.small ≈ 190).
+# Thiếu dữ liệu: "không còn target khoẻ" và "task thiếu" coi thiếu là VI PHẠM (service biến mất thì metric cũng biến
+# mất); các alarm tỉ lệ/độ trễ coi thiếu là bình thường (không có khách thì không có yêu cầu).
+locals {
+  tien_to_van_hanh = "tp-van-hanh-"
+
+  tg_van_hanh = {
+    api         = aws_lb_target_group.api
+    web         = aws_lb_target_group.web
+    public-keys = aws_lb_target_group.public_keys
+  }
+
+  service_van_hanh = {
+    for k, v in {
+      api         = { ten = aws_ecs_service.api.name, so_ban = var.so_ban_api }
+      web         = { ten = aws_ecs_service.web.name, so_ban = var.so_ban_web }
+      public-keys = { ten = aws_ecs_service.public_keys.name, so_ban = var.so_ban_public_keys }
+      worker      = { ten = aws_ecs_service.worker.name, so_ban = var.so_ban_worker }
+    } : k => v if v.so_ban > 0
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "tg_khong_khoe" {
+  for_each            = local.tg_van_hanh
+  alarm_name          = "${local.tien_to_van_hanh}${each.key}-target-khong-khoe"
+  alarm_description   = "[ADR-077] Target group tp-${each.key} co target khong khoe trong 3 phut."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "UnHealthyHostCount"
+  dimensions          = { TargetGroup = each.value.arn_suffix, LoadBalancer = aws_lb.api.arn_suffix }
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 3
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "tg_het_target" {
+  for_each            = local.tg_van_hanh
+  alarm_name          = "${local.tien_to_van_hanh}${each.key}-khong-con-target-khoe"
+  alarm_description   = "[ADR-077] Target group tp-${each.key} KHONG con target khoe nao trong 3 phut — duong ${each.key} dang tra 503."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HealthyHostCount"
+  dimensions          = { TargetGroup = each.value.arn_suffix, LoadBalancer = aws_lb.api.arn_suffix }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 3
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  alarm_name          = "${local.tien_to_van_hanh}alb-5xx"
+  alarm_description   = "[ADR-077] Hon 5% yeu cau tren ALB tra 5xx (ALB tu sinh + target) trong 5 phut, khi co it nhat 20 yeu cau."
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  metric_query {
+    id          = "ti_le"
+    expression  = "IF(yc >= 20, 100 * (FILL(elb, 0) + FILL(tg, 0)) / yc, 0)"
+    label       = "Ti le 5xx (%)"
+    return_data = true
+  }
+  metric_query {
+    id = "yc"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "RequestCount"
+      dimensions  = { LoadBalancer = aws_lb.api.arn_suffix }
+      stat        = "Sum"
+      period      = 300
+    }
+  }
+  metric_query {
+    id = "elb"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "HTTPCode_ELB_5XX_Count"
+      dimensions  = { LoadBalancer = aws_lb.api.arn_suffix }
+      stat        = "Sum"
+      period      = 300
+    }
+  }
+  metric_query {
+    id = "tg"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "HTTPCode_Target_5XX_Count"
+      dimensions  = { LoadBalancer = aws_lb.api.arn_suffix }
+      stat        = "Sum"
+      period      = 300
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_cham" {
+  alarm_name          = "${local.tien_to_van_hanh}api-p95-cham"
+  alarm_description   = "[ADR-077] p95 thoi gian phan hoi cua tp-api > 2 giay trong 10 phut."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "TargetResponseTime"
+  dimensions          = { TargetGroup = aws_lb_target_group.api.arn_suffix, LoadBalancer = aws_lb.api.arn_suffix }
+  extended_statistic  = "p95"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 2
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "task_thieu" {
+  for_each            = local.service_van_hanh
+  alarm_name          = "${local.tien_to_van_hanh}${each.key}-thieu-task"
+  alarm_description   = "[ADR-077] Service ${each.value.ten} chay it hon ${each.value.so_ban} task trong 5 phut. Doc su kien service (ecs describe-services) va log /tp/${each.key == "worker" ? "unseal-worker" : each.key}."
+  namespace           = "ECS/ContainerInsights"
+  metric_name         = "RunningTaskCount"
+  dimensions          = { ClusterName = aws_ecs_cluster.tp.name, ServiceName = each.value.ten }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 5
+  threshold           = each.value.so_ban
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
+  alarm_name          = "${local.tien_to_van_hanh}rds-cpu"
+  alarm_description   = "[ADR-077] CPU cua RDS tp-prod > 80% trong 15 phut (db.t4g.small co the dang tieu credit burst)."
+  namespace           = "AWS/RDS"
+  metric_name         = "CPUUtilization"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.tp.identifier }
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 80
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_dia" {
+  alarm_name          = "${local.tien_to_van_hanh}rds-dung-luong"
+  alarm_description   = "[ADR-077] Dung luong trong cua RDS tp-prod < 2 GB. Het dia la CSDL chuyen sang chi doc."
+  namespace           = "AWS/RDS"
+  metric_name         = "FreeStorageSpace"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.tp.identifier }
+  statistic           = "Minimum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 2 * 1024 * 1024 * 1024
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_ket_noi" {
+  alarm_name          = "${local.tien_to_van_hanh}rds-ket-noi"
+  alarm_description   = "[ADR-077] RDS tp-prod co hon 150 ket noi (tran mac dinh cua db.t4g.small xap xi 190) trong 10 phut."
+  namespace           = "AWS/RDS"
+  metric_name         = "DatabaseConnections"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.tp.identifier }
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 150
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
 output "ban_ghi_dns" {
   description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền công khai tới ALB (bước 2)."
   value = {
