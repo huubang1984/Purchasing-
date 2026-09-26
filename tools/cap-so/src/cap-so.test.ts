@@ -29,6 +29,7 @@ import {
   HO_KHAI_STATE,
   kiem,
   laCapThaySo,
+  laTepThuong,
   thaySoTam,
   thuHoiTheoToken,
   vietSoTiengViet,
@@ -414,10 +415,18 @@ describe("kho thật — một nhánh cấp số lần đầu", () => {
     expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
   });
 
-  it("symlink chưa theo dõi (như `node_modules` trỏ đi nơi khác) không bị đọc như văn bản", () => {
+  it("symlink chưa theo dõi (như `node_modules` trỏ đi nơi khác) không bị đọc như văn bản — kể cả tệp PHÍA SAU nó", () => {
     const goc = dungKho();
     lamViec(goc, "a", 1);
-    symlinkSync(tmpdir(), join(goc, "lien-ket"), "junction");
+    // Tệp phía sau liên kết mang một số tạm không có chỗ khai: đọc nó là lệnh từ chối. Trên Linux git
+    // chỉ liệt kê chính liên kết; trên Windows git đi xuyên junction và liệt kê `lien-ket/tep.md`.
+    const dich = mkdtempSync(join(tmpdir(), "cap-so-dich-"));
+    khoDaDung.push(dich);
+    writeFileSync(join(dich, "tep.md"), "Xem ADR-9202.\n", "utf8");
+    symlinkSync(dich, join(goc, "lien-ket"), "junction");
+    expect(laTepThuong(goc, "lien-ket")).toBe(false);
+    expect(laTepThuong(goc, "lien-ket/tep.md")).toBe(false);
+    expect(laTepThuong(goc, "docs/STATE.md")).toBe(true);
     expect(capSo(goc, { base: "master" }).bang.adr.get(9201)).toBe(3);
   });
 

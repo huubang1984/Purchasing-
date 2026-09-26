@@ -866,9 +866,19 @@ function ghiChoCommit(goc: string, bang: BangCap, dong: ReadonlyMap<string, Read
   writeFileSync(p, `${JSON.stringify(cho)}\n`, "utf8");
 }
 
-function laTepThuong(goc: string, p: string): boolean {
+/**
+ * Tệp thường của cây làm việc, và KHÔNG nằm sau một symlink hay junction nào. Trên Windows, git đi
+ * XUYÊN junction và liệt kê từng tệp phía sau nó (đo ở CI windows-latest của PR #155: một junction trỏ
+ * vào thư mục tạm cho ra đường dẫn lồng vòng qua chính kho) — nên hỏi thành phần cuối là chưa đủ.
+ */
+export function laTepThuong(goc: string, p: string): boolean {
   try {
-    return lstatSync(join(goc, p)).isFile();
+    if (!lstatSync(join(goc, p)).isFile()) return false;
+    const phan = p.split("/");
+    for (let k = 1; k < phan.length; k += 1) {
+      if (lstatSync(join(goc, ...phan.slice(0, k))).isSymbolicLink()) return false;
+    }
+    return true;
   } catch {
     return false;
   }
