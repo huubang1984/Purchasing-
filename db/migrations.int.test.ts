@@ -1518,7 +1518,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // (sổ nợ 54) và danh sách loại trừ nay RỖNG có chủ đích: một `CREATE OR REPLACE` thay ba
     // thân này bằng `RETURN NEW` mở lại đúng bộ ba mà J3 cấm, hạ `CHU_KY_CAN` về 0, và tháo
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
-    { ham: "award_kiem_de_xuat", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
+    // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
+    { ham: "award_kiem_de_xuat", migration: "064_lich_su_dieu_phoi.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     { ham: "award_kiem_mot_award_song", migration: "061_trao_thau.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
@@ -1528,6 +1530,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
     { ham: "bid_kiem_vong_bafo", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
+    // [S1.129 / khoản 233] Lớp GHI của lịch sử điều phối — nguồn dữ liệu duy nhất của J3 vế 3. Một
+    // thân `RETURN NULL` làm bảng ngừng lớn và người điều phối lần đầu lại đề xuất được.
+    { ham: "unseal_ghi_lich_su_dieu_phoi", migration: "064_lich_su_dieu_phoi.sql", trigger: ["unseal_requests_ghi_lich_su_dieu_phoi"] },
     { ham: "chinh_sach_phien_ban_tang_dan", migration: "035_phien_ban_chinh_sach_lien_tuc.sql", trigger: ["org_procurement_policies_phien_ban_tang_dan"] },
     { ham: "guest_session_kiem_danh_tinh", migration: "012_invitation_hardening.sql", trigger: ["guest_sessions_kiem_danh_tinh"] },
     { ham: "kiem_thanh_phan_theo_chinh_sach", migration: "057_luot_danh_gia.sql", trigger: ["rfq_evaluation_lines_kiem_thanh_phan"] },
@@ -3184,6 +3189,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "064_lich_su_dieu_phoi.sql",
         "066_dem_chu_ky_o_canh_mo_goi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
@@ -7591,6 +7597,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "064_lich_su_dieu_phoi.sql",
         "066_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
 
@@ -7875,6 +7882,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "061_trao_thau.sql",
         "062_dau_kiem_vong_khoa.sql",
         "063_cap_khoa_to_chuc.sql",
+        "064_lich_su_dieu_phoi.sql",
         "066_dem_chu_ky_o_canh_mo_goi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);

@@ -12151,3 +12151,9 @@ khôi phục trong `finally`. Nhờ vậy nó đo đúng thân mà `migrate()` +
 - Sổ nợ **242** khoản, mở **96 → 95**: đóng 240. Rổ A **3** không đổi (240 vào rồi đóng), rổ B **70 → 69**, rổ C **23**;
   ba rổ cộng đúng: 3 + 69 + 23 = 95.
 - Migration **63 → 64** tệp (`066`). ADR **74** không đổi. Sổ đăng ký bất biến **63** không đổi.
+
+**Sau khi hợp `master` `c595403`** (PR #137 — khoản 233 đóng, migration `064`), các số trên đổi như sau. Cây được đo lại:
+- sổ nợ **242** khoản, mở **94** (= 92 của `master` + 241, 242); rổ A **2**, rổ B **69**, rổ C **23**; 2 + 69 + 23 = 94;
+- **65** migration (`064` của `master` + `066`); ADR **74** không đổi;
+- cả kho trên bộ dựng cục bộ — **150 tệp / 2501 ca: 2492 đạt, 1 bỏ qua, 8 đỏ** (vẫn chỉ bộ tự kiểm `test-support`), 856 giây;
+- ma trận sinh lại từ báo cáo ấy KHỚP TỪNG BYTE bản gộp của git: 63/63, *XANH*; so với `master` chỉ đổi ô D2 (34 → 37).

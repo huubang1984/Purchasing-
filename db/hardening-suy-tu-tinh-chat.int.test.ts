@@ -278,6 +278,9 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
   "public.unseal_dieu_phoi_mot_lan",
+  // [S1.129 / khoản 233 / 064] AFTER-ROW UPDATE, không bao giờ từ chối: nó GHI THÊM một hàng lịch
+  // sử khi cặp người-phiên điều phối đổi. Câu điều phối của `dungKichBan()` là nhân chứng hành vi.
+  "public.unseal_ghi_lich_su_dieu_phoi",
   "public.unseal_kiem_chuyen_trang_thai",
   "public.unseal_kiem_du_phe_duyet",
   "public.users_thu_hoi_phien_khi_dinh_chi",
