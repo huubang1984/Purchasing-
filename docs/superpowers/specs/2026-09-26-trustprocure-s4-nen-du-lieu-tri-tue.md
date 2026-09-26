@@ -662,6 +662,10 @@ Phần này ở mức HÌNH DẠNG. Chi tiết chốt ở một lượt soi riê
 dữ liệu thật. **[S1.9103]** Chủ dự án chọn viết thiết kế chi tiết TRƯỚC cổng, không viết mã:
 `docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`. Tài liệu ấy thay mục này ở mức chi tiết; cổng (e)
 vẫn chặn mã từ S4b.2.
+**[S1.9104]** Lượt soi hình dạng S1.9104 của tài liệu ấy đổi ba chỗ của ⑼: S4b.1 nổ khi có ≥ 1 yếu tố đỏ hoặc mức
+`KHONG_XAC_DINH`, điểm chỉ để hiển thị (spec S4b §2.4 ㉗); S4b.1 chỉ áp cho tổ chức đã bật S3 (㉙); tập người ghi nhận đọc theo
+hành vi thật (§2.5 ㉞). Ngưỡng của S4b.1 là hằng của phương pháp, không phải khoá chính sách — ngoại lệ với ràng buộc 10 ở trên
+(㉘). Bốn chỗ ấy là ADR-9206.
 
 **Supplier Score (V2.1 §13).** Trọng số là khoá `diem_ncc jsonb` trên phiên bản chính sách. Tám thành phần của V2.1 §13 chia
 theo nguồn:
@@ -774,6 +778,11 @@ Hàng tách ra mang SỐ MỚI, không hậu tố: bộ đọc sổ bỏ qua hà
 | **L15** — mới | Lịch sử mua ngoài hệ thống do `DATA_STEWARD` nhập, chịu L1; dải và nhãn của nó tách khỏi dải nội bộ; không một phép đếm nào của cổng (e) đọc nó | S4.6 | §2.4 ⑽ |
 
 L9 không đổi.
+
+**[S1.9104]** Hai hàng L10, L11 ở trên trôi khỏi thiết kế chi tiết. Bảng chịu lực của L9–L11 và L16–L23 là spec S4b §11.1: L10
+tách — phần tái lập các yếu tố không phải chuỗi ở S4b.1, phần chuỗi thành **L22** ở S4b.2; L11 đặt trên `rfq_award_approvals`,
+nổ khi có yếu tố đỏ hoặc `KHONG_XAC_DINH`, chỉ ở tổ chức đã bật S3; thêm **L23** (ngưỡng là hằng của phương pháp). L9 đặt ở
+S4b.4 như bảng gốc — không phải S4b.3.
 
 ---
 
@@ -1074,6 +1083,11 @@ migration một mình là no-op.
 | **S4b.2–4** | Risk Score, Supplier Score, phân tích người mua | Như bảng gốc; phân tích người mua chỉ sau câu trả lời pháp lý §8.7 | Cổng (e) |
 
 Ước lượng S4a 4–6 tuần của bảng gốc không tính việc chờ S3.1, S3.2, S3.5 — nếu có trôi thì trôi lên.
+
+**[S1.9104]** Các hàng S4b của cả hai bảng trên đã trôi khỏi thiết kế chi tiết, và bảng chịu lực là spec S4b §15.1:
+S4b.3 là sổ tín hiệu — không phải Supplier Score —, S4b.4 là Supplier Score, S4b.5 là phân tích người mua cùng F2a, S4b.6 màn
+Executive, S4b.7 bằng chứng. S4b.1 không chỉ có *"độ lệch benchmark, độ phủ"*: nó mang F3, F5–F11 và hàng `DO_PHU`, chờ S3.5,
+S3.6, S4.3, S4.5, và mang theo lớp tái lập mà bảng dưới cùng để ở sau cổng. S4b.4 và S4b.5 cũng chờ cổng (e).
 
 ---
 

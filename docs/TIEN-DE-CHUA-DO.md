@@ -93,7 +93,19 @@ dòng mã nào của S4, nên *"nằm ở đâu"* trỏ vào mục spec mà mã 
 | **E4** | Cùng một mặt hàng **được mua lại** ≥ 3 gói, từ ≥ 3 nhà cung cấp, trong 12 tháng | Spec S4 §4.6, §2.4 ⑾ | Mọi dòng hiện *"chưa đủ lịch sử"*; benchmark nội bộ không bao giờ ra nhãn | *"Trong một năm anh mua lại cùng một mặt hàng bao nhiêu lần, từ bao nhiêu nơi?"* |
 | **E5** | Giá **từng dòng** nhà cung cấp khai là giá thật của dòng ấy — không dồn giá | Spec S4 §8.4 | Lịch sử theo dòng méo; tổng vẫn đúng nên không ai thấy | *"Nhà cung cấp có hay dồn giá vào vài dòng để tổng không đổi không?"* |
 | **E6** | Bên mua có **mốc giá ngoài** và **lịch sử PO xuất được** — Excel hay ERP — trích dẫn được nguồn | Spec S4 §4.7, §2.4 ⑽; ADR-9204 | S4a không có phép so nào từ ngày đầu | *"Anh có bảng giá tham khảo, hay lịch sử đơn mua xuất ra Excel được không?"* |
-| **E7** | Phân tích tỷ lệ chọn nhà cung cấp của **từng nhân viên** là hợp pháp và được người lao động biết | Spec S4 §8.7, §4.9 — chủ: chủ dự án | S4b.4 không làm được, hoặc làm được mà vi phạm | *"Nhân viên mua hàng của anh có biết và đồng ý việc phân tích tỷ lệ chọn nhà cung cấp của từng người không?"* |
+| **E7** | Phân tích tỷ lệ chọn nhà cung cấp của **từng nhân viên** là hợp pháp và được người lao động biết | Spec S4 §8.7, §4.9 — chủ: chủ dự án. **[S1.9104]** Spec S4b §2.4 ㉖: cả F2a | ~~S4b.4~~ **[S1.9104]** S4b.5 — phân tích người mua và F2a — không làm được, hoặc làm được mà vi phạm | *"Nhân viên mua hàng của anh có biết và đồng ý việc phân tích tỷ lệ chọn nhà cung cấp của từng người không?"* |
+
+**[S1.9104]** Sáu dòng dưới suy từ spec S4b (`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`) sau
+lượt soi hình dạng; góc D⑪ của biên bản §S1.9104.
+
+| # | Tiền đề | Nằm ở đâu | Sai thì mất gì | Câu hỏi |
+|---|---|---|---|---|
+| **E8** | Tổ chức có ≥ (số chữ ký của bậc + 1) người giữ quyền duyệt trao ngoài người đề xuất — ba ở bậc 2 — và họ chịu đăng nhập lại cho mỗi lần trao có yếu tố đỏ | Spec S4b §5.2, §2.5 ㉞ | Tổ chức đã bật S3 không trao được gói bậc 2; nhân lên từ B4 | *"Ở công ty anh, bao nhiêu người được duyệt trao thầu, và họ có chịu đăng nhập lại mỗi lần duyệt không?"* |
+| **E9** | Nhà cung cấp trung thực không nộp dồn sát hạn | Spec S4b F5 — không sàn lịch sử; `docs/TEST-PLAN.md:245` lại coi 200 nhà cung cấp nộp trong 60 giây cuối là tải bình thường | F5 báo sai trên mọi gói, và chốt thành thủ tục | *"Nhà cung cấp của anh thường nộp báo giá lúc nào — sát hạn hay sớm?"* |
+| **E10** | Một nhóm nhà cung cấp cùng dự ≥ 6 gói (F1) và ≥ 9 gói (F2b) trong 12 tháng | Spec S4b §4.1 F1, F2b | Yếu tố chuỗi mãi `CHUA_DU_LICH_SU`; S4b.1 nổ ở mọi lần trao, mãi mãi | *"Một nhóm nhà cung cấp quen của anh cùng dự bao nhiêu gói một năm?"* |
+| **E11** | *"Khoảng cách thắng–nhì ổn định nghĩa là thông đồng"* (ADR-058 ⑸) đúng ở thị trường này, và biên của cạnh tranh thật nằm ngoài ngưỡng tuyệt đối của F1 (1%, 0,5 điểm) | Spec S4b §2.5 ㊻; phép mô phỏng M2 dùng phân phối GIẢ ĐỊNH | F1 báo sai trên cạnh tranh thật, hoặc mù | *"Khi anh nhận ba báo giá thật cho cùng một hàng, giá thứ hai thường cao hơn giá thấp nhất bao nhiêu phần trăm?"* |
+| **E12** | Khách chịu ma sát S4b.1 ở MỌI lần trao suốt ít nhất sáu tháng đầu | Spec S4b §2.5 ㉚ — độ phủ tối đa 27% trước S4b.2 | Công tắc ADR-080 một chiều nên không tắt được; khách rời bỏ thay vì tắt | *"Nếu nửa năm đầu mỗi lần duyệt trao cần thêm một người ký xác nhận đã đọc cảnh báo, anh có chấp nhận không?"* |
+| **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
 
 ---
 

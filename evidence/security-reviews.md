@@ -12547,3 +12547,181 @@ Hai chỗ lượt soi CỐ Ý không chốt:
 - Spec: **737 → 1100 dòng**. Trạng thái đổi từ *"bản nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
 - `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`, `ADR-92NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so`
   cấp số thật lúc merge.
+
+# §S1.9104 — LƯỢT SOI HÌNH DẠNG SPEC S4b, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 33 PHÁT HIỆN, TÁM CAO, SÁU LỜI KHAI ĐO TRÊN POSTGRES THẬT — VÀ KHÔNG LỖ NÀO CỦA MVP1
+
+**Mảnh của `docs/PRODUCT.md` §11 mà vòng này chạm (ADR-043 ⒞): không mảnh nào.** Vòng này soi một spec. Quyết định ㉙ của vòng
+này giữ đúng điều ấy khi S4b.1 có mã: S4b.1 chỉ áp cho tổ chức đã bật S3, nên kịch bản pilot không đổi.
+
+## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
+
+Chủ dự án chọn viết spec chi tiết S4b TRƯỚC cổng dữ liệu (e), rồi cho qua lượt soi hình dạng
+(`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`, vào kho ở vòng S1.9103). Khuôn là S1.139 và
+S1.9102: soi trước dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản phẩm, tự chốt phần tiền lệ trả lời được, rồi sửa
+spec tại chỗ.
+
+Bản nháp là của chính vòng S1.9103, nên phần lớn chỗ sai là chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn
+`[S1.9104]`, không viết lại.
+
+Thứ vòng này để lại:
+- spec S4b sửa tại chỗ — §2.4 (bốn quyết định), §2.5 (hai mươi mốt chốt), §2.6 (bảy câu còn mở), §4.1, §10.1, §11.1, §12.6,
+  §14.1, §15.1;
+- hai ADR — 9206, 9207 — và một dòng sửa tại chỗ ở ADR-9205 ⑼;
+- ba chỗ trôi số ở spec S4 (§4.9, §5.1, §9) và ở tiền đề E7, đánh dấu tại chỗ;
+- tiền đề E8–E13 ở `docs/TIEN-DE-CHUA-DO.md`.
+
+## 2. Bốn góc độc lập, 48 phát hiện thô, 33 sau khử trùng
+
+| Góc | Câu hỏi | Thô | CAO | TRUNG | THẤP |
+|---|---|---|---|---|---|
+| A | Lời khai của spec đối chiếu mã, và mâu thuẫn nội tại | 12 | 2 | 8 | 2 |
+| B | Khả thi cưỡng chế ở tầng CSDL | 12 | 2 | 9 | 1 |
+| C | Đối kháng: lách chốt, người đặt thước, báo sai gắn tên, rò giá | 12 | 6 | 6 | — |
+| D | Phạm vi, thứ tự, luồng, kiểm thử, quy trình | 12 | 3 | 8 | 1 |
+| **Cộng** | | **48** | **13** | **31** | **4** |
+
+Mỗi góc chỉ ĐỌC, có tệp:dòng; không góc nào chạy Postgres. Lượt gộp gộp các phát hiện trùng và đọc lại những lời khai đổi
+hình dạng thiết kế trên mã trước khi nhận — ví dụ thu hồi lời mời là `UPDATE (status, revoked_at)` tại chỗ (`010`), và
+`CHECK` phủ định của `057:50-62` có vế `exists()` cho mọi khoá. Kết quả: **33 — 8 CAO, 21 TRUNG, 4 THẤP**. Chỗ nào góc soi ghi
+*"CHƯA CHẮC"* mà đo được thì đã đo (§5).
+
+Hội tụ đáng đọc:
+- CAO ① — ba góc (A①, C④, D③);
+- CAO ⑤ — ba góc (D②, A②③, B③);
+- CAO ⑥ — ba góc (B①, C⑤, A⑩);
+- CAO ⑧ — hai góc (C⑩, B⑨).
+
+## 3. Tám CAO
+
+| # | Phát hiện | Góc | Đọc / đo | Chốt |
+|---|---|---|---|---|
+| ① | **F2a đi vòng qua câu hỏi pháp lý E7.** F2a tính tỷ lệ chọn nhà cung cấp theo từng người mời — đúng câu E7 hỏi —, chạy từ S4b.2, lưu tên tự động vào `nguoi_gay_ra`, đọc bằng `bid.view` mà PM giữ cùng `rfq.invite` (`005:298-301`). Sổ tín hiệu tính F2a không để dấu. F8 gắn tên và ra `DO` từ một dòng | A① · C④ · D③ | đọc | ㉖ (chủ dự án) · ㊹ |
+| ② | **S4b.1 nổ quá hẹp, và độ phủ mua được.** F1 + F2b + F3 cùng `DO` = 50 = `VUA` → một chạm. `KHONG_AP_DUNG` rút khỏi mẫu số, nên gói một báo giá đọc được ra 61,5% độ phủ và `THAP`; F5, F7, F8 không sàn mua độ phủ | C① · C② | đọc | ㉗ (chủ dự án) · ㉚ · ㊽ |
+| ③ | **Người đặt ngưỡng là người ký trao.** `rui_ro` do người giữ `policy.manage` ghi — `FINANCE`, cũng giữ `po.approve`; ngưỡng độ phủ 0% đặt một lần trước mọi gói là tắt chốt. `rui_ro` không có `CHECK`, `NULL` chưa định nghĩa | C③ · B⑩ | đọc · đo (M5) | ㉘ (chủ dự án) · ㊵ |
+| ④ | **Phạm vi S4b.1 không nói; số người đếm thiếu.** Áp mọi tổ chức thì mọi lần trao của pilot thêm ba bước suốt ≥ 6 tháng, lật bước 12i của kịch bản 41 và năm chỗ khác; *"HAI người đủ"* sai ở bậc 2 của S3, nơi cần ba | D① · A④ | đọc | ㉙ (chủ dự án) · ㉞ |
+| ⑤ | **S4b.1 không đạt được câu nghiệm thu của chính nó.** Bộ bằng chứng ở S4b.7, bảng đầu vào và L10 ở S4b.2 — cả hai sau cổng; *"hàng độ phủ"* không có chỗ trong `rfq_risk_acks`; F6 cần S3.6 mà cột *Chờ* không ghi | D② · A② · A③ · B③ | đọc | ㊱ · §15.1 |
+| ⑥ | **"Bản MỚI NHẤT" không có nghĩa; đề xuất không có đánh giá thì một chạm.** `rfq_awards` chỉ-ghi-thêm; một INSERT thêm hàng `THAP` lật cổng; không gì buộc đề xuất có đánh giá | B① · C⑤ · A⑩ | đọc · đo (M6, M7) | ㉛ · ㉜ |
+| ⑦ | **Trigger L11 đặt sai chỗ, không khoá.** Ghi nhận ở giao dịch khác, trước chữ ký; *"người duyệt"* chưa biết lúc ghi nhận; READ COMMITTED làm hai bên không thấy nhau | B② | đọc · đo (M8) | ㉝ · ㉞ |
+| ⑧ | **As-of loại đúng những đầu vào sinh sau mốc; vòng đề xuất–huỷ để dò.** Báo giá BAFO được trao và tín hiệu S3 sinh lúc đề xuất đều sau mốc, nên nhánh `DO` của F6 không bao giờ bắn. `FINANCE` một mình đề xuất, đọc mức, huỷ, đề xuất lại | C⑩ · B⑨ | đọc | ㊲ · ㊷ · ㊽ |
+
+**Hai CAO là chỗ bản nháp nói sai, không phải lỗ thiết kế:** ⑤ (bảng hạng mục tự mâu thuẫn với câu nghiệm thu) và một phần
+của ① (§6 tự ghi F2a *"chờ câu hỏi pháp lý"* trong khi §15 cho nó chạy ở S4b.2).
+
+**Ba CAO có chung một hình dạng: một chốt mà người bị chốt đi vòng được bằng cách làm yếu tố VẮNG thay vì ĐỎ** — rút khỏi mẫu
+số (②), đặt ngưỡng (③), hay không ghi đánh giá (⑥).
+
+## 4. Hai mươi mốt TRUNG và bốn THẤP
+
+| # | TRUNG | Góc | Chốt |
+|---|---|---|---|
+| 1 | Cổng (e) và cột *Chờ* mâu thuẫn; thiếu điều kiện đọc lại; không có lượt soi lại ở cổng | D④ | §15.1 |
+| 2 | Đánh số hạng mục trôi giữa spec S4 §9, §5.1, E7 và spec S4b §15 | D⑤ · A⑧ | đánh dấu tại chỗ |
+| 3 | Lịch vào sổ của hàng L đặt sai hạng mục | D⑥ | §11.1 |
+| 4 | Dữ liệu tổng hợp tự chứng minh; thiếu đối chứng dương, đột biến, `fast-check`, 375×812 | D⑦ | §13 |
+| 5 | §2.3 thiếu câu hỏi; Q5 trích sai *"giá trị dòng"*; Q6 đã được trả lời | D⑧ · A⑨ | §2.3 · §2.6 · ㊷ |
+| 6 | KPI và North Star chưa có cách đếm | D⑨ | §14.1 · Q7 |
+| 7 | Route và màn: `agent` trên route ghi, GET ghi sổ, không có step-up MFA, Executive không đường dẫn, ADR-044 | D⑩ · B⑪ | ㊹ · ㊺ |
+| 8 | Sáu tiền đề mới mà S4b cư xử như thật | D⑪ | E8–E13 |
+| 9 | F6 thiếu `ROTATION`, `LIST_NARROWED_BELOW_MIN`; một tín hiệu ghi nhận hai lần | A⑤ | ㊸ |
+| 10 | F1: đồng hạng, EC NULL, nhiều lượt chấm, hai hạng sau S4.7 | A⑥ · D⑫ | ㊻ |
+| 11 | Bảng đầu vào sai hạt và quá lớn; người thắng đọc thẳng cột | A⑦ · B⑦ | ㊳ |
+| 12 | Mâu thuẫn nội tại: L20 với giải trình, L9 dời chỗ cưỡng chế, *"mỗi chốt là một hàm vị từ SQL"* | A⑩ | §11.1 · §3.2 |
+| 13 | Phép tổng hợp tính được ở CSDL mà bị đẩy sang TypeScript — **đo** làm tròn (M3) | B④ | ㉜ |
+| 14 | `nguoi_gay_ra uuid[]` do ứng dụng khai; tập loại trừ thực chất chỉ còn hai vai | B⑤ · C⑥ · D⑫ | ㉞ · ㉟ |
+| 15 | `CHECK` tiền: danh sách đen phân biệt hoa thường, lệch với sổ — **đo** (M4) | B⑥ · C⑫ · A⑩ | ㊴ |
+| 16 | Thứ tự khoá và trần thời gian | B⑧ | ㊶ |
+| 17 | F1, F2b, F5 chỉ bắt cartel ngây thơ; tài liệu hứa *"đóng"* — **tính** (M1, M2) | C⑦ | ㊻ · ㊼ · §12.6 |
+| 18 | Supplier Score là cần gạt hạ nhà cung cấp trung thực | C⑧ | ㊾ · Q1 |
+| 19 | F3 né bằng phân bổ giá; yếu tố *unbalanced bid* mà spec S4 hứa đã rơi | C⑨ | ㊽ (F9) |
+| 20 | Sổ tín hiệu: người bị soi chọn khung, đọc không dấu, ghi nhận để khép | C⑪ | ㊿ · Q2 |
+| 21 | Rò qua bộ bằng chứng (định danh rõ, g suy ra giá nhì) và qua *Responsiveness* đọc từ `CLOSED` | C⑫ | ㊴ ⑸ · ㊾ |
+
+| # | THẤP | Góc | Chốt |
+|---|---|---|---|
+| 1 | Trích sai: C⑥ *"đã đo"*, ADR-052 thay ADR-050 ⑴, ADR-005, F2a gán cho ADR-058 ⑸, *"chỉ F2a và F8 gắn người"*, *"phủ bốn"*, 40% thay 45% | A⑪ | sửa chữ tại chỗ |
+| 2 | Nguồn của màn Executive: `rfq_budgets`, *Technical qualified*, nhãn benchmark tổng hợp, hồ sơ nhà cung cấp, `award.recommend` | A⑫ | §9.1 · §9.2 |
+| 3 | Các cổng sẽ đỏ mà spec chưa kê | B⑫ | §10.1 |
+| 4 | V2.1 §22 trích mà không làm; số tạm trỏ sai nếu tách PR (chưa đo) | D⑫ | §16 · §15.1 |
+
+## 5. Sáu phép đo trên Postgres 16 thật, hai con số tính
+
+**Bộ dựng cụm cục bộ.** Container không có docker daemon. Một cụm Postgres 16.13 dựng bằng `initdb` dưới user hệ thống
+`postgres`, ở một thư mục tạm, đã xoá sau khi đo. Bảng đo là bảng tối giản mô phỏng hình dạng, không phải lược đồ của kho. Tệp
+đo không vào commit.
+
+| # | Lời khai | Cách đo | Kết quả | Chốt |
+|---|---|---|---|---|
+| M1 | Góc C, D: F2b báo sai trên cạnh tranh thật | Đếm vét cạn chuỗi thắng dưới mô hình rỗng — k nhà cung cấp ngang sức, người thắng độc lập —, luật *"lệch khỏi đều ≤ 1 và không ai thắng hai gói liền"* | k = 3: 4,115% ở 6 gói, 0,884% ở 9, 0,205% ở 12. k = 4: 12,305%, 2,573%, 0,246%. Góc D ghi 12,3% và 3,3% cho k = 3 — gán nhầm ca | ㊼ |
+| M2 | Góc C: hệ số MAD/trung vị của F1 đảo chiều | Mô phỏng 20.000 chuỗi 9 gói, seed 7: bọc lót sát g ~ U(0; 0,3%), cạnh tranh thật g ~ U(1%; 15%) — phân phối GIẢ ĐỊNH | Hệ số trung vị 0,415 (bọc lót) và 0,363 (cạnh tranh); 7,2% chuỗi bọc lót dưới P10 của cạnh tranh. Theo MAD tuyệt đối và theo trung vị g: 100% | ㊻ |
+| M3 | Góc B: `round` của `numeric` làm tròn nửa-ra-xa-0 | `round(2.5::numeric)`, `round(-2.5::numeric)`, `round(0.125::numeric, 2)`, `round(2.5::float8)` | 3, −3, 0,13, **2** — `float8` làm tròn về chẵn | ㉜ |
+| M4 | Góc B: jsonpath bắt khoá không phân biệt hoa thường, lồng trong mảng, không ném | `$.** ? (@.type()=="object").keyvalue() ? (@.key like_regex "^gia$" flag "i")` (bản đo dùng một tập hai khoá) trên `{"a":[1,{"Gia":5}]}` và trên `[1,2,"s",null]` | `t` và `f`, không lỗi | ㊴ |
+| M5 | Góc B: `CHECK` jsonpath dạng phủ định cho qua khoá thiếu | `CHECK (NOT jsonb_path_exists(j, '$ ? (@.F1.double() + @.F2.double() != 100)'))` và dạng khẳng định `== 100`, chèn `{"F1":"60"}` rồi `{"F1":"60","F2":"40"}` | Phủ định: nhận hàng thiếu khoá. Khẳng định: từ chối hàng thiếu khoá (23514), nhận hàng đủ, từ chối tổng 101 | ㊵ |
+| M6 | Góc B, *"CHƯA CHẮC"*: phân biệt *"cùng giao dịch với đề xuất"* | Trigger BEFORE INSERT trên bảng đánh giá, hai cách: `xmin = pg_current_xact_id()::xid`, và `acted_at = transaction_timestamp()` với `acted_at DEFAULT now()` | `xmin`: nhận cùng giao dịch, từ chối giao dịch sau, nhưng **từ chối nhầm** khi đề xuất nằm trong một `SAVEPOINT`. `acted_at`: nhận cả hai ca cùng giao dịch, từ chối giao dịch sau | ㉛ |
+| M7 | Góc B: constraint trigger hoãn đòi mọi đề xuất có đánh giá | `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED` AFTER INSERT trên bảng award; chèn một đề xuất không đánh giá rồi COMMIT | COMMIT ném, hàng không còn | ㉛ |
+| M8 | Góc B, *"CHƯA CHẮC"*: *"D1 ghi nhận"* và *"D1 ký"* song song dưới READ COMMITTED | Hai phiên psql: phiên một chèn ghi nhận rồi ngủ 2 giây trước COMMIT; phiên hai chèn chữ ký sau 0,5 giây. Mỗi trigger kiểm hàng của bảng kia; chạy không khoá và có `pg_advisory_xact_lock(hashtextextended(rfq,1))` ở cả hai trigger | Không khoá: cả hai COMMIT, một người vừa ghi nhận vừa ký. Có khoá: phiên hai chờ, thấy hàng đã commit, bị từ chối | ㉝ |
+
+M1 và M2 là phép tính, không phải phép đo trên CSDL; M2 đứng trên phân phối giả định, nên nó chứng minh HÌNH DẠNG của nghịch lý,
+không chứng minh ngưỡng.
+
+## 6. Bốn quyết định của chủ dự án, bảy câu còn mở, và phần lượt soi tự chốt
+
+Mười một chỗ là lựa chọn sản phẩm. Bốn chỗ nặng nhất được trình trong một lượt hỏi, mỗi câu kèm đề xuất và cái giá. Chủ dự án
+chốt cả bốn ngày 2026-09-26, đều theo đề xuất:
+- ㉖ F2a rời Risk Score và sổ tín hiệu, sang S4b.5; F8 không hiện tên, có sàn; mọi đường trả dữ liệu mang tên nhân viên để
+  một hàng sổ;
+- ㉗ S4b.1 nổ khi có ≥ 1 yếu tố đỏ hoặc `KHONG_XAC_DINH`; điểm chỉ để hiển thị; thêm yếu tố cạnh tranh thực tế;
+- ㉘ ngưỡng của S4b.1 là hằng của phương pháp; trọng số cấu hình được, có sàn — ngoại lệ với PRODUCT §8 ⑸;
+- ㉙ S4b.1 theo công tắc ADR-080.
+
+**Bảy câu còn lại CHƯA được hỏi trong vòng này** (spec §2.6): Q1, Q2, Q3, Q4, Q5, Q7, Q8. Chúng ghi kèm đề xuất của lượt soi,
+và mỗi câu chặn đúng một hạng mục — không câu nào chặn một vòng đang chạy. Lượt soi không tự chốt câu nào trong số ấy.
+
+Hai mươi mốt chốt từ tiền lệ (㉚–㊿) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-9207 và bảng §2.5 của spec.
+
+## 7. Lời khai của bản nháp mà lượt soi XÁC NHẬN
+
+- **Cột nguồn** — `invited_by` (`013:122`), `submitted_at`/`version` (`018:91,95`), `rank`/`effective_cost` (`057:152-154`),
+  `rfq_awards` với `bid_version_id`, `status`, `acted_by` (`061:281-292`), `rfq_award_approvals` (`061:361-370`),
+  `unseal_requests` `EXECUTED` (`019:46`) (A, B, D).
+- **MFA** — `assertFreshMfa` ở `mfa.ts:174`; 15 phút = `UNSEAL_MFA_MAX_AGE_SECONDS` (`gate.ts:84`); `app_api` có
+  `UPDATE (mfa_verified_at, revoked_at)` (`006:301`), nên kiểm MFA ở trigger chỉ mạnh ngang ứng dụng (A, B).
+- **Ma trận quyền** — `po.approve`, `audit.read` chỉ ở `FINANCE`, `DIRECTOR`; `bid.view` ở PM, `FINANCE`, `DIRECTOR`;
+  `award.recommend` ở cả bốn vai mua (`005:290-317`) (A, D).
+- **Hạ tầng dựng được** — `$.**` lax bắt khoá lồng (`003:215-217`); trigger đọc vai dưới `app_api` (`040:101-118`); deferred
+  constraint trigger có tiền lệ (`017:195`, `018:379`); khuôn khoá tư vấn → `seq` (`018:262-279`) (B).
+- **Số đếm** — chín yếu tố tám mã, trọng số cộng 100; năm trên tám thành phần V2.1 §13 có nguồn; `gieo:demo` 3 PM và 2
+  `DIRECTOR`; `apps/web` ba trang; T4 chưa dựng (A, D).
+- **Đứng vững trước góc đối kháng** (C): tạo phiên bản chính sách sau khi thấy giá để chỉnh CHÍNH gói; đề xuất lại cùng nhà cung
+  cấp để có điểm khác; thêm dữ liệu sau mốc; người đề xuất hay người duyệt tự ghi nhận; `BUYER` và `DATA_STEWARD` đọc đầu ra;
+  nhà cung cấp đọc điểm của mình; điểm đổi `effective_cost`; job nền; cờ sang tổ chức khác; rải người mời làm F1, F2b, F4 mù;
+  F5 đọc từ `CLOSED`; F7 do đối thủ gây ra; tự gán `po.approve`; chữ *gian lận*.
+
+## 8. Không lỗ nào của MVP1
+
+Không phát hiện nào là lỗ của mã đang chạy, nên vòng này không mở khoản nợ. Hai lời khai kiểm thêm để chắc: thu hồi lời mời là
+UPDATE tại chỗ nhưng `revoked_at` còn giữ, nên *"lời mời còn sống tại mốc"* vẫn đọc được; `CHECK` phủ định của `057:50-62` có
+vế `exists()` cho mọi khoá, nên không mang hình dạng M5.
+
+## 9. Ranh giới nói ra
+
+- **Chưa một dòng mã S4b nào, và không migration.** Sổ đăng ký bất biến không đổi.
+- **Sáu phép đo chạy trên bảng tối giản ở bộ dựng cục bộ, không trên lược đồ của kho, không trên CI.** Spec §13 ghi chúng thành
+  test thường trực ở hạng mục tương ứng — M6, M7, M8 ở S4b.1.
+- **Trong 33 phát hiện, sáu có phép đo và hai có phép tính.** Phần còn lại là phép đọc trên tệp:dòng của bốn báo cáo.
+- **Bảy câu cho chủ dự án chưa được hỏi.** Spec §2.6 ghi đề xuất, không ghi quyết định.
+- **Không chống được hai người bàn nhau**, và không chứng minh được người ghi nhận đã đọc bằng chứng (spec §12.2). S4b chỉ bắt
+  mẫu đều đặn (spec §12.6).
+- **Không soi lại spec S3.** ㊲ đòi S3.6 dựng `governance_signals` theo khuôn `seq`/`ghi_luc`; vòng này ghi đòi hỏi ở spec S4b
+  §15.1, không sửa spec S3.
+
+## 10. Số đo
+
+- `pnpm t0` — **0 vi phạm**, 396 module / 1547 phụ thuộc; typecheck và `eslint` sạch.
+- `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`.
+- Tầng tích hợp KHÔNG chạy ở vòng này: vòng này không đổi một dòng mã, migration hay test nào.
+- Sổ nợ **245** khoản, mở **92**, không đổi; rổ A 2, rổ B 66, rổ C 24.
+- **95 → 97** ADR (9206, 9207, số tạm theo ADR-090). **68** migration, không đổi. Sổ đăng ký bất biến **63**, không đổi.
+- Spec S4b: **472 → 813 dòng**. Spec S4: **1100 → 1116 dòng** (ba chỗ đánh dấu trôi số). Trạng thái spec S4b đổi từ *"bản
+  nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
+- `pnpm cap-so --dem` viết lại số đếm ở `docs/STATE.md` và `Handoff.md`. `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`,
+  `ADR-92NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so` cấp số thật lúc merge.
