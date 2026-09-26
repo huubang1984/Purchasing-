@@ -2029,8 +2029,12 @@ $ham$;
   -- vùng canh sang hai role đăng nhập thì "GRANT nhom_bat_ky TO app_api_login" và
   -- "GRANT app_api_login TO ke_tan_cong" đều lọt, mà cả hai đều dẫn quyền của app_api ra
   -- ngoài bắc cầu.
+  -- [ADR-072 phần 1] Sáu tên, không còn bốn: cặp (app_neo, app_neo_login) của job neo vào CÙNG vùng canh, cùng lý do (a).
+  -- `app_neo` gọi được hàm liệt kê tổ chức (052) — năng lực mà `app_api` cố ý KHÔNG có (ADR-040). Một
+  -- "GRANT app_neo TO app_api_login" lọt khỏi vùng canh là đúng đường vòng biến cả api thành người liệt kê
+  -- tổ chức; một "GRANT nhom_bat_ky TO app_neo_login" là đường cấp thêm quyền GHI cho một vai chỉ-đọc.
   ROLE_CANH constant text :=
-    $q$('app_api', 'app_unseal', 'app_api_login', 'app_unseal_login')$q$;
+    $q$('app_api', 'app_unseal', 'app_neo', 'app_api_login', 'app_unseal_login', 'app_neo_login')$q$;
 
   -- [S1.34 / khoản nợ 78] Tập vai mà một KẾT NỐI ỨNG DỤNG có thể mang làm current_user — theo TÍNH
   -- CHẤT: thành viên BẮC CẦU của app_api/app_unseal (`pg_has_role(r, g, 'MEMBER')` là bắc cầu, và một
@@ -2045,10 +2049,13 @@ $ham$;
   -- ấy ⇒ với 'MEMBER' vai deploy lọt tập ⇒ mục "quyền CREATE/TEMP trên database của vai ứng dụng và mọi thành viên"
   -- THU HỒI CREATE của chính chủ database ⇒ 001 gãy "permission denied for database". Tiền tồn từ S1.34, S1.44 chỉ
   -- làm nó lộ ra khi ⑵ dùng chung tập.
+  -- [ADR-072 phần 1] Cây thứ ba: `app_neo`. Kết nối của job neo mang `app_neo` làm current_user y như kết nối api mang
+  -- app_api, nên mọi mục dùng tập này (TEMP/CREATE trên database, schema trùng tên vai, khoá tư vấn mức phiên, GUC gắn
+  -- sẵn, quyền trên tham số, phủ lệnh ⑵) áp cho nó mà không cần một dòng riêng.
   VAI_KET_NOI_UNG_DUNG constant text :=
     $q$SELECT r.rolname FROM pg_roles r
         WHERE NOT r.rolsuper
-          AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal')
+          AND EXISTS (SELECT 1 FROM pg_roles g WHERE g.rolname IN ('app_api', 'app_unseal', 'app_neo')
                          AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET')))$q$;
 
   -- [S1.86 / khoản 128] Vai ỨNG DỤNG nào còn gọi được một hàm LẤY khoá tư vấn MỨC PHIÊN.
@@ -3808,6 +3815,56 @@ $ham$;
                      WHERE pn.nspname = 'public' AND p.relname = c.relname
                        AND p.relkind IN ('r', 'p', 'v', 'm', 'f'))$q$;
 
+  -- [ADR-072 phần 1 / 065] QUYỀN QUAN HỆ CỦA `app_neo` — ĐÚNG danh sách của 065, theo quyền HIỆU DỤNG.
+  -- Hai chiều trong một câu. THỪA: mọi quyền ghi (INSERT/UPDATE/REFERENCES theo cột, DELETE/TRUNCATE/TRIGGER)
+  -- trên MỌI quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, SELECT trên cột `audit_chain_anchors` ngoài
+  -- (org_id, seq, hash), và mọi quyền trên sequence. THIẾU: SELECT trên `audit_events`, SELECT trên ba cột neo,
+  -- EXECUTE trên `audit_compute_hash` — thiếu thì job neo ném 42501 ở mọi tổ chức (ồn, nhưng là một lượt neo mất).
+  -- Vì sao theo quyền HIỆU DỤNG (has_*_privilege) chứ không đọc ACL: quyền đến qua PUBLIC hay qua một nhóm cũng là
+  -- quyền của vai. Mục membership (BƯỚC 1) gỡ nhóm lạ; quyền cấp cho PUBLIC thì mục này KHÔNG tự thu hồi (nó chạm
+  -- mọi vai của cụm) — nó phán xét, và dòng mô tả nói đường tới quyền là "hiệu dụng".
+  -- Vì sao một mục RIÊNG cho vai này mà không cho app_api: tập quyền của app_api là hàng trăm cột, canh bằng
+  -- census ở db/rls-coverage.int.test.ts; tập của app_neo đủ nhỏ để viết thẳng ra ở đây, và vai này ĐỊNH NGHĨA
+  -- bằng việc không ghi được gì — một "GRANT INSERT … TO app_neo" sau deploy phải đỏ ở deploy kế, không đợi test.
+  CAU_QUYEN_NEO_SAI constant text :=
+    $q$SELECT n.nspname || '.' || c.relname || ': THỪA ' || q.quyen AS mo_ta
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS q(quyen)
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND CASE WHEN q.quyen IN ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES')
+                   THEN pg_catalog.has_any_column_privilege('app_neo', c.oid, q.quyen)
+                   ELSE pg_catalog.has_table_privilege('app_neo', c.oid, q.quyen) END
+          AND NOT (q.quyen = 'SELECT' AND n.nspname = 'public' AND c.relname IN ('audit_events', 'audit_chain_anchors'))
+       UNION ALL
+       SELECT 'public.audit_chain_anchors.' || a.attname || ': THỪA SELECT (065 chỉ cấp org_id, seq, hash)'
+         FROM pg_attribute a
+        WHERE a.attrelid = to_regclass('public.audit_chain_anchors') AND a.attnum > 0 AND NOT a.attisdropped
+          AND a.attname NOT IN ('org_id', 'seq', 'hash')
+          AND pg_catalog.has_column_privilege('app_neo', a.attrelid, a.attnum, 'SELECT')
+       UNION ALL
+       SELECT n.nspname || '.' || c.relname || ' (sequence): THỪA ' || q.quyen
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS q(quyen)
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+          AND c.relkind = 'S'
+          AND pg_catalog.has_sequence_privilege('app_neo', c.oid, q.quyen)
+       UNION ALL
+       SELECT 'public.audit_events: THIẾU SELECT'
+        WHERE to_regclass('public.audit_events') IS NOT NULL
+          AND NOT pg_catalog.has_table_privilege('app_neo', 'public.audit_events', 'SELECT')
+       UNION ALL
+       SELECT 'public.audit_chain_anchors.' || x.cot || ': THIẾU SELECT'
+         FROM (VALUES ('org_id'), ('seq'), ('hash')) AS x(cot)
+        WHERE to_regclass('public.audit_chain_anchors') IS NOT NULL
+          AND NOT pg_catalog.has_column_privilege('app_neo', 'public.audit_chain_anchors', x.cot, 'SELECT')
+       UNION ALL
+       SELECT 'public.audit_compute_hash(…): THIẾU EXECUTE'
+        WHERE to_regprocedure('public.audit_compute_hash(bytea, uuid, uuid, bigint, timestamptz, text, uuid, text, text, uuid, jsonb, uuid, inet, text)') IS NOT NULL
+          AND NOT pg_catalog.has_function_privilege('app_neo', to_regprocedure('public.audit_compute_hash(bytea, uuid, uuid, bigint, timestamptz, text, uuid, text, text, uuid, jsonb, uuid, inet, text)'), 'EXECUTE')$q$;
+
   bang text[][] := ARRAY[
 
     -- ---- Đối tượng phải TỒN TẠI (R3/R4: phục hồi được, không chỉ phát hiện) -------------
@@ -3936,15 +3993,23 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
     -- PostgreSQL cấp EXECUTE cho PUBLIC trên MỌI hàm mới. Một `GRANT EXECUTE ... TO PUBLIC` sau
     -- deploy mở danh sách tổ chức cho mọi vai trong cụm; hàng này lật lại ở MỌI lần migrate().
     -- `app_api` bị nêu ĐÍCH DANH vì nó là vai duy nhất khác có mặt trên cùng cụm.
+    -- [ADR-072 phần 1] Người gọi thứ HAI là `app_neo`: job neo phải neo MỌI tổ chức, và một danh sách
+    -- do người vận hành gõ tay im lặng bỏ sót đúng tổ chức ít hoạt động nhất (ADR-026 §5). Vì sao không
+    -- mở cho `app_api` thay vào: api là tiến trình hướng internet — một lỗi ở một handler đọc được danh
+    -- sách mọi khách hàng của nền tảng (ADR-040). `app_neo` không có route nào, và chỉ ĐỌC được sổ.
+    -- Tự chữa CẢ HAI chiều: GRANT cho hai vai được phép cũng nằm ở câu sửa, nên "REVOKE … FROM app_neo"
+    -- sau deploy (job neo rớt về 0 tổ chức ở lần chạy kế) được dựng lại ở deploy sau.
     ARRAY[
-      $q$EXECUTE trên outbox_danh_sach_to_chuc(): PUBLIC không, app_api không, app_unseal có (052)$q$,
+      $q$EXECUTE trên outbox_danh_sach_to_chuc(): app_unseal có, app_neo có, app_api không, PUBLIC không (052, 065)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
       $q$REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM PUBLIC;
         REVOKE ALL ON FUNCTION public.outbox_danh_sach_to_chuc() FROM app_api;
-        GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal$q$,
+        GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal;
+        GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_neo$q$,
       $q$(SELECT NOT has_function_privilege('public', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE')
                 AND NOT has_function_privilege('app_api', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE')
-                AND has_function_privilege('app_unseal', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE'))$q$,
+                AND has_function_privilege('app_unseal', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE')
+                AND has_function_privilege('app_neo', 'public.outbox_danh_sach_to_chuc()', 'EXECUTE'))$q$,
       $q$'ACL cua outbox_danh_sach_to_chuc() sai — proacl hien tai: '
         || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
                       WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()')), '(null)')$q$,
@@ -5549,8 +5614,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger bid_kiem_han_nop (065)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '065_han_nop_mang_gio_phan_xu.sql')$q$,
+      $q$hàm + trigger bid_kiem_han_nop (066)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '066_han_nop_mang_gio_phan_xu.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -5610,7 +5675,7 @@ BEGIN
   END IF;
 
   IF now() OPERATOR(pg_catalog.>=) han THEN
-    -- [065 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `065`.
+    -- [066 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `066`.
     RAISE EXCEPTION 'Da qua han nop bao gia (C1)'
       USING ERRCODE = 'check_violation',
             CONSTRAINT = 'c1_qua_han_nop',
@@ -5637,7 +5702,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; han timestamptz; goi_thau uuid; vong uuid; BEGIN SELECT p.status, p.deadline_at, p.id INTO trang_thai, han, goi_thau FROM public.vendor_bids b JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id JOIN public.rfq_packages p ON p.id OPERATOR(pg_catalog.=) i.rfq_id AND p.org_id OPERATOR(pg_catalog.=) i.org_id WHERE b.id OPERATOR(pg_catalog.=) NEW.bid_id AND b.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR SHARE OF p; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay luong bao gia % trong to chuc %', NEW.bid_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('OPEN', 'BAFO_OPEN') THEN RAISE EXCEPTION 'RFQ khong nhan bao gia khi dang o trang thai % (C1)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF trang_thai OPERATOR(pg_catalog.=) 'BAFO_OPEN' THEN SELECT r.id, r.deadline_at INTO vong, han FROM public.rfq_bafo_rounds r WHERE r.rfq_id OPERATOR(pg_catalog.=) goi_thau AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.closed_at IS NULL; IF NOT FOUND THEN RAISE EXCEPTION 'RFQ dang BAFO_OPEN ma khong co vong BAFO nao dang mo — du lieu hong' USING ERRCODE = 'check_violation'; END IF; -- Dấu vòng là DẪN XUẤT: bên gọi không có `INSERT` trên cột này, nên nó không khai được sai. NEW.bafo_round_id := vong; ELSE NEW.bafo_round_id := NULL; END IF; IF han IS NULL THEN RAISE EXCEPTION 'RFQ dang OPEN ma khong co han nop — du lieu hong' USING ERRCODE = 'check_violation'; END IF; IF now() OPERATOR(pg_catalog.>=) han THEN -- [065 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `065`. RAISE EXCEPTION 'Da qua han nop bao gia (C1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'c1_qua_han_nop', DETAIL = pg_catalog.json_build_object( 'gio_csdl', public.bid_dau_thoi_gian_chinh_tac(now()), 'han_nop', public.bid_dau_thoi_gian_chinh_tac(han))::pg_catalog.text; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; han timestamptz; goi_thau uuid; vong uuid; BEGIN SELECT p.status, p.deadline_at, p.id INTO trang_thai, han, goi_thau FROM public.vendor_bids b JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id JOIN public.rfq_packages p ON p.id OPERATOR(pg_catalog.=) i.rfq_id AND p.org_id OPERATOR(pg_catalog.=) i.org_id WHERE b.id OPERATOR(pg_catalog.=) NEW.bid_id AND b.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR SHARE OF p; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay luong bao gia % trong to chuc %', NEW.bid_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('OPEN', 'BAFO_OPEN') THEN RAISE EXCEPTION 'RFQ khong nhan bao gia khi dang o trang thai % (C1)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF trang_thai OPERATOR(pg_catalog.=) 'BAFO_OPEN' THEN SELECT r.id, r.deadline_at INTO vong, han FROM public.rfq_bafo_rounds r WHERE r.rfq_id OPERATOR(pg_catalog.=) goi_thau AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id AND r.closed_at IS NULL; IF NOT FOUND THEN RAISE EXCEPTION 'RFQ dang BAFO_OPEN ma khong co vong BAFO nao dang mo — du lieu hong' USING ERRCODE = 'check_violation'; END IF; -- Dấu vòng là DẪN XUẤT: bên gọi không có `INSERT` trên cột này, nên nó không khai được sai. NEW.bafo_round_id := vong; ELSE NEW.bafo_round_id := NULL; END IF; IF han IS NULL THEN RAISE EXCEPTION 'RFQ dang OPEN ma khong co han nop — du lieu hong' USING ERRCODE = 'check_violation'; END IF; IF now() OPERATOR(pg_catalog.>=) han THEN -- [066 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `066`. RAISE EXCEPTION 'Da qua han nop bao gia (C1)' USING ERRCODE = 'check_violation', CONSTRAINT = 'c1_qua_han_nop', DETAIL = pg_catalog.json_build_object( 'gio_csdl', public.bid_dau_thoi_gian_chinh_tac(now()), 'han_nop', public.bid_dau_thoi_gian_chinh_tac(han))::pg_catalog.text; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -9589,6 +9654,27 @@ $ham$;
           FROM pg_roles WHERE rolname = 'app_unseal'), 'role app_unseal không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
     ],
+    -- [ADR-072 phần 1] Vai của job neo: cùng hàng rào S1. `app_neo` BYPASSRLS là đọc được sổ kiểm toán của MỌI
+    -- tổ chức trong một phiên — chính thứ mà withTenant + assertTenantBound của exportChainHead tồn tại để chặn.
+    ARRAY[
+      $q$thuộc tính role app_neo$q$,
+      $q$true$q$,
+      $q$ALTER ROLE app_neo NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN INHERIT$q$,
+      $q$(SELECT rolsuper IS FALSE AND rolcreatedb IS FALSE AND rolcreaterole IS FALSE
+            AND rolbypassrls IS FALSE AND rolreplication IS FALSE AND rolcanlogin IS FALSE
+            AND rolinherit IS TRUE
+          FROM pg_roles WHERE rolname = 'app_neo')$q$,
+      $q$coalesce((SELECT nullif(concat_ws(', ',
+            CASE WHEN rolsuper THEN 'SUPERUSER' END,
+            CASE WHEN rolcreatedb THEN 'CREATEDB' END,
+            CASE WHEN rolcreaterole THEN 'CREATEROLE' END,
+            CASE WHEN rolbypassrls THEN 'BYPASSRLS' END,
+            CASE WHEN rolreplication THEN 'REPLICATION' END,
+            CASE WHEN rolcanlogin THEN 'LOGIN' END,
+            CASE WHEN NOT rolinherit THEN 'NOINHERIT' END), '')
+          FROM pg_roles WHERE rolname = 'app_neo'), 'role app_neo không tồn tại')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo$q$
+    ],
 
     -- [CR2-T3] Hai role ĐĂNG NHẬP được danh sách trắng cho phép làm thành viên của app_api/
     -- app_unseal. Chúng là chủ thể tin cậy nên phải bị canh y hệt — nhưng KHÁC một điểm quan
@@ -9630,6 +9716,23 @@ $ham$;
           FROM pg_roles WHERE rolname = 'app_unseal_login'), 'role app_unseal_login không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
     ],
+    ARRAY[
+      $q$thuộc tính role đăng nhập app_neo_login$q$,
+      $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_neo_login')$q$,
+      $q$ALTER ROLE app_neo_login NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION INHERIT$q$,
+      $q$(SELECT rolsuper IS FALSE AND rolcreatedb IS FALSE AND rolcreaterole IS FALSE
+            AND rolbypassrls IS FALSE AND rolreplication IS FALSE AND rolinherit IS TRUE
+          FROM pg_roles WHERE rolname = 'app_neo_login')$q$,
+      $q$coalesce((SELECT nullif(concat_ws(', ',
+            CASE WHEN rolsuper THEN 'SUPERUSER' END,
+            CASE WHEN rolcreatedb THEN 'CREATEDB' END,
+            CASE WHEN rolcreaterole THEN 'CREATEROLE' END,
+            CASE WHEN rolbypassrls THEN 'BYPASSRLS' END,
+            CASE WHEN rolreplication THEN 'REPLICATION' END,
+            CASE WHEN NOT rolinherit THEN 'NOINHERIT' END), '')
+          FROM pg_roles WHERE rolname = 'app_neo_login'), 'role app_neo_login không tồn tại')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo_login$q$
+    ],
 
     -- ---- Cấu hình phiên gắn sẵn vào role / vào database ---------------------------------
     -- rolconfig áp dụng cho MỌI database (pg_db_role_setting với setdatabase = 0).
@@ -9660,6 +9763,20 @@ $ham$;
                           pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_unseal'),
                   'role app_unseal không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
+    ],
+    ARRAY[
+      $q$rolconfig toàn cụm của app_neo$q$,
+      $q$true$q$,
+      $q$ALTER ROLE app_neo RESET ALL$q$,
+      $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_neo')$q$,
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_neo'),
+                  'role app_neo không tồn tại')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo$q$
     ],
 
     -- [fix I5] "ALTER ROLE ... RESET ALL" ở trên chỉ xoá cấu hình áp dụng CHO MỌI DATABASE.
@@ -9710,6 +9827,23 @@ $ham$;
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal$q$
     ],
+    ARRAY[
+      $q$cấu hình IN DATABASE của app_neo$q$,
+      $q$true$q$,
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_neo', pg_catalog.current_database()),
+      $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+                     WHERE r.rolname = 'app_neo'
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
+                   WHERE r.rolname = 'app_neo'
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo$q$
+    ],
 
     -- [CR2-T3] Cùng hai lớp cấu hình phiên đó, trên hai role đăng nhập.
     ARRAY[
@@ -9739,6 +9873,20 @@ $ham$;
                           pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_unseal_login'),
                   'role app_unseal_login không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
+    ],
+    ARRAY[
+      $q$rolconfig toàn cụm của app_neo_login$q$,
+      $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_neo_login')$q$,
+      $q$ALTER ROLE app_neo_login RESET ALL$q$,
+      $q$(SELECT rolconfig IS NULL FROM pg_roles WHERE rolname = 'app_neo_login')$q$,
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_roles rr,
+                          pg_catalog.unnest(rr.rolconfig) c WHERE rr.rolname = 'app_neo_login'),
+                  'role app_neo_login không tồn tại')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo_login$q$
     ],
     ARRAY[
       $q$cấu hình IN DATABASE của app_api_login$q$,
@@ -9773,6 +9921,23 @@ $ham$;
                    WHERE r.rolname = 'app_unseal_login'
                      AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_unseal_login$q$
+    ],
+    ARRAY[
+      $q$cấu hình IN DATABASE của app_neo_login$q$,
+      $q$EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_neo_login')$q$,
+      pg_catalog.format('ALTER ROLE %I IN DATABASE %I RESET ALL', 'app_neo_login', pg_catalog.current_database()),
+      $q$NOT EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+                     WHERE r.rolname = 'app_neo_login'
+                       AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database()))$q$,
+      -- [S1.51 / lượt soi 44 NHẸ-3] Chỉ TÊN, không giá trị — cùng chuẩn đã áp cho ba mục mức database và cho mục 92.
+      -- Đây là mức VAI, nơi một GUC tenant có xác suất xuất hiện CAO NHẤT (`ALTER ROLE app_api SET app.org_id = <uuid>`
+      -- là đúng ca mà khoản 87 tồn tại để bắt), và thông điệp lỗi deploy đi thẳng vào log CI — nơi lưu lâu hơn và đọc
+      -- được bởi nhiều người hơn chính CSDL.
+      $q$coalesce((SELECT string_agg(pg_catalog.split_part(c, '=', 1), ', ') FROM pg_db_role_setting s
+                    JOIN pg_roles r ON r.oid = s.setrole, pg_catalog.unnest(s.setconfig) c
+                   WHERE r.rolname = 'app_neo_login'
+                     AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = pg_catalog.current_database())), '?')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_neo_login$q$
     ],
 
     -- ---- [S1.34 / khoản nợ 78] CHE TÊN qua search_path: bảng tạm, schema, và đường tìm tên ----------
@@ -9977,24 +10142,30 @@ $ham$;
     ARRAY[
       $q$quyền CREATE trên schema public$q$,
       $q$true$q$,
-      $q$REVOKE CREATE ON SCHEMA public FROM PUBLIC, app_api, app_unseal$q$,
+      $q$REVOKE CREATE ON SCHEMA public FROM PUBLIC, app_api, app_unseal, app_neo$q$,
       $q$NOT has_schema_privilege('app_api', 'public', 'CREATE')
-        AND NOT has_schema_privilege('app_unseal', 'public', 'CREATE')$q$,
+        AND NOT has_schema_privilege('app_unseal', 'public', 'CREATE')
+        AND NOT has_schema_privilege('app_neo', 'public', 'CREATE')$q$,
       $q$'app_api CREATE=' || has_schema_privilege('app_api', 'public', 'CREATE')::text ||
-        ', app_unseal CREATE=' || has_schema_privilege('app_unseal', 'public', 'CREATE')::text$q$,
+        ', app_unseal CREATE=' || has_schema_privilege('app_unseal', 'public', 'CREATE')::text ||
+        ', app_neo CREATE=' || has_schema_privilege('app_neo', 'public', 'CREATE')::text$q$,
       $q$quyền sở hữu schema public (thường là chủ sở hữu database) hoặc SUPERUSER$q$
     ],
 
     -- USAGE trên public là điều kiện cần để hai role dùng được bất cứ thứ gì trong đó. Cấp
     -- lại ở MỌI lần chạy để kịch bản "role bị DROP rồi tạo lại" tự phục hồi.
+    -- [ADR-072 phần 1] Và cho `app_neo`: USAGE trên schema tự nó không mở bảng hay hàm nào — mỗi thứ
+    -- vai ấy chạm tới vẫn cần GRANT riêng (065), nên cấp lại ở đây không nới quyền nào ngoài tên đã liệt kê.
     ARRAY[
       $q$quyền USAGE trên schema public$q$,
       $q$true$q$,
-      $q$GRANT USAGE ON SCHEMA public TO app_api, app_unseal$q$,
+      $q$GRANT USAGE ON SCHEMA public TO app_api, app_unseal, app_neo$q$,
       $q$has_schema_privilege('app_api', 'public', 'USAGE')
-        AND has_schema_privilege('app_unseal', 'public', 'USAGE')$q$,
+        AND has_schema_privilege('app_unseal', 'public', 'USAGE')
+        AND has_schema_privilege('app_neo', 'public', 'USAGE')$q$,
       $q$'app_api USAGE=' || has_schema_privilege('app_api', 'public', 'USAGE')::text ||
-        ', app_unseal USAGE=' || has_schema_privilege('app_unseal', 'public', 'USAGE')::text$q$,
+        ', app_unseal USAGE=' || has_schema_privilege('app_unseal', 'public', 'USAGE')::text ||
+        ', app_neo USAGE=' || has_schema_privilege('app_neo', 'public', 'USAGE')::text$q$,
       $q$quyền sở hữu schema public (thường là chủ sở hữu database) hoặc SUPERUSER$q$
     ],
 
@@ -10004,17 +10175,21 @@ $ham$;
     -- ở trên thất bại — khi đó chính dòng đó đã gom lỗi rồi, không cần gãy thêm ở đây với
     -- một lỗi "schema does not exist" khó đọc.
     ARRAY[
-      $q$quyền của app_api/app_unseal trên schema app_private$q$,
+      $q$quyền của app_api/app_unseal/app_neo trên schema app_private$q$,
       $q$EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app_private')$q$,
-      $q$REVOKE ALL ON SCHEMA app_private FROM PUBLIC, app_api, app_unseal$q$,
+      $q$REVOKE ALL ON SCHEMA app_private FROM PUBLIC, app_api, app_unseal, app_neo$q$,
       $q$NOT has_schema_privilege('app_api', 'app_private', 'USAGE')
         AND NOT has_schema_privilege('app_api', 'app_private', 'CREATE')
         AND NOT has_schema_privilege('app_unseal', 'app_private', 'USAGE')
-        AND NOT has_schema_privilege('app_unseal', 'app_private', 'CREATE')$q$,
+        AND NOT has_schema_privilege('app_unseal', 'app_private', 'CREATE')
+        AND NOT has_schema_privilege('app_neo', 'app_private', 'USAGE')
+        AND NOT has_schema_privilege('app_neo', 'app_private', 'CREATE')$q$,
       $q$'app_api USAGE=' || has_schema_privilege('app_api', 'app_private', 'USAGE')::text ||
         ' CREATE=' || has_schema_privilege('app_api', 'app_private', 'CREATE')::text ||
         ', app_unseal USAGE=' || has_schema_privilege('app_unseal', 'app_private', 'USAGE')::text ||
-        ' CREATE=' || has_schema_privilege('app_unseal', 'app_private', 'CREATE')::text$q$,
+        ' CREATE=' || has_schema_privilege('app_unseal', 'app_private', 'CREATE')::text ||
+        ', app_neo USAGE=' || has_schema_privilege('app_neo', 'app_private', 'USAGE')::text ||
+        ' CREATE=' || has_schema_privilege('app_neo', 'app_private', 'CREATE')::text$q$,
       $q$quyền sở hữu schema app_private hoặc SUPERUSER$q$
     ],
 
@@ -10036,15 +10211,63 @@ $ham$;
 
     -- Mặt kia của cùng bản vá S2: sau khi thu hồi khỏi PUBLIC, hai role thật sự cần hàm này
     -- (nó nằm trong vị từ USING của mọi policy RLS) phải còn EXECUTE.
+    -- [ADR-072 phần 1] Ba role: `app_neo` đọc `audit_events`/`audit_chain_anchors` qua đúng policy
+    -- `org_id = app_current_org_id()` của 003, và `assertTenantBound` gọi thẳng hàm ấy. Thiếu EXECUTE
+    -- thì job neo ném 42501 ở mọi tổ chức — ồn, nhưng là một lượt neo mất trắng cho mọi tổ chức.
     ARRAY[
-      $q$EXECUTE của app_api/app_unseal trên app_current_org_id()$q$,
+      $q$EXECUTE của app_api/app_unseal/app_neo trên app_current_org_id()$q$,
       $q$to_regprocedure('public.app_current_org_id()') IS NOT NULL$q$,
-      $q$GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO app_api, app_unseal$q$,
+      $q$GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO app_api, app_unseal, app_neo$q$,
       $q$has_function_privilege('app_api', 'public.app_current_org_id()', 'EXECUTE')
-        AND has_function_privilege('app_unseal', 'public.app_current_org_id()', 'EXECUTE')$q$,
+        AND has_function_privilege('app_unseal', 'public.app_current_org_id()', 'EXECUTE')
+        AND has_function_privilege('app_neo', 'public.app_current_org_id()', 'EXECUTE')$q$,
       $q$'app_api EXECUTE=' || has_function_privilege('app_api', 'public.app_current_org_id()', 'EXECUTE')::text ||
-        ', app_unseal EXECUTE=' || has_function_privilege('app_unseal', 'public.app_current_org_id()', 'EXECUTE')::text$q$,
+        ', app_unseal EXECUTE=' || has_function_privilege('app_unseal', 'public.app_current_org_id()', 'EXECUTE')::text ||
+        ', app_neo EXECUTE=' || has_function_privilege('app_neo', 'public.app_current_org_id()', 'EXECUTE')::text$q$,
       $q$quyền sở hữu hàm app_current_org_id() hoặc SUPERUSER$q$
+    ],
+
+    -- [ADR-072 phần 1 / 065] Quyền quan hệ của `app_neo`: xem CAU_QUYEN_NEO_SAI. TỰ CHỮA phần cấp ĐÍCH DANH cho
+    -- vai (thu hồi thừa, cấp lại thiếu — cả hai là thứ 065 sở hữu theo TÊN); phần đến qua PUBLIC chỉ phán xét.
+    -- Tiền điều kiện theo MIGRATION NGUỒN như mục 052: trước khi 065 áp, "thiếu" là trạng thái đúng.
+    -- `REVOKE ALL ON TABLE` kéo theo mọi quyền CỘT của cùng bảng (đo, PostgreSQL 16) — nên một vòng trên ACL
+    -- bảng HAY ACL cột là đủ, không cần câu REVOKE theo từng cột.
+    ARRAY[
+      $q$quyền quan hệ của app_neo: chỉ SELECT audit_events, SELECT (org_id, seq, hash) audit_chain_anchors, EXECUTE audit_compute_hash (065)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '065_vai_neo.sql')$q$,
+      $q$DO $neo$
+         DECLARE r record;
+         BEGIN
+           FOR r IN
+             SELECT c.oid::regclass AS ten, c.relkind
+               FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+                AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+                AND c.oid NOT IN (coalesce(to_regclass('public.audit_events')::oid, 0),
+                                  coalesce(to_regclass('public.audit_chain_anchors')::oid, 0))
+                AND (EXISTS (SELECT 1 FROM pg_catalog.aclexplode(c.relacl) a WHERE a.grantee = to_regrole('app_neo')::oid)
+                     OR EXISTS (SELECT 1 FROM pg_attribute at CROSS JOIN LATERAL pg_catalog.aclexplode(at.attacl) a
+                                 WHERE at.attrelid = c.oid AND a.grantee = to_regrole('app_neo')::oid))
+           LOOP
+             EXECUTE pg_catalog.format(CASE WHEN r.relkind = 'S' THEN 'REVOKE ALL ON SEQUENCE %s FROM app_neo'
+                                            ELSE 'REVOKE ALL ON TABLE %s FROM app_neo' END, r.ten);
+           END LOOP;
+           REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+             ON TABLE public.audit_events, public.audit_chain_anchors FROM app_neo;
+           IF EXISTS (SELECT 1 FROM pg_attribute a
+                       WHERE a.attrelid = 'public.audit_chain_anchors'::regclass AND a.attnum > 0 AND NOT a.attisdropped
+                         AND a.attname NOT IN ('org_id', 'seq', 'hash')
+                         AND pg_catalog.has_column_privilege('app_neo', a.attrelid, a.attnum, 'SELECT')) THEN
+             REVOKE SELECT ON TABLE public.audit_chain_anchors FROM app_neo;
+           END IF;
+           GRANT SELECT ON TABLE public.audit_events TO app_neo;
+           GRANT SELECT (org_id, seq, hash) ON TABLE public.audit_chain_anchors TO app_neo;
+           GRANT EXECUTE ON FUNCTION public.audit_compute_hash(bytea, uuid, uuid, bigint, timestamptz, text, uuid, text, text, uuid, jsonb, uuid, inet, text) TO app_neo;
+         END $neo$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_QUYEN_NEO_SAI || $q$) t)$q$,
+      $q$(SELECT string_agg(mo_ta, '; ' ORDER BY mo_ta) FROM ($q$ || CAU_QUYEN_NEO_SAI || $q$) t)
+        || ' (quyền HIỆU DỤNG: cấp đích danh — mục này tự thu hồi; qua PUBLIC — REVOKE … FROM PUBLIC bằng chủ quan hệ)'$q$,
+      $q$chủ các quan hệ ấy hoặc SUPERUSER (REVOKE … FROM app_neo / FROM PUBLIC; GRANT như 065)$q$
     ],
 
     -- ---- (A) Cờ RLS trên mọi bảng tenant — tự chữa, tổng quát ---------------------------
@@ -11119,8 +11342,11 @@ $ham$;
   -- TRƯỚC hằng dùng nó): CAU_PHU_LENH_SAI nay hợp bốn tên đã ghim vào tập theo tính chất.
 
   -- Danh sách trắng CẶP (nhóm, thành viên). Đóng, viết tay, không suy ra từ tên.
+  -- [ADR-072 phần 1] Ba cặp: (app_neo, app_neo_login) là role đăng nhập của job neo. Cặp chéo
+  -- (app_api_login vào app_neo, app_neo_login vào app_api) KHÔNG có ở đây nên bị gỡ như mọi membership lạ —
+  -- đó chính là hàng rào giữ năng lực liệt kê tổ chức ở ngoài tầm tiến trình api.
   CAP_HOP_LE constant text :=
-    $q$(VALUES ('app_api', 'app_api_login'), ('app_unseal', 'app_unseal_login'))$q$;
+    $q$(VALUES ('app_api', 'app_api_login'), ('app_unseal', 'app_unseal_login'), ('app_neo', 'app_neo_login'))$q$;
 
   -- Truy vấn membership hai chiều, dùng lại ở bước 1 (gỡ) và bước 3 (kiểm).
   --   (a) role được canh là THÀNH VIÊN của nhóm khác — kế thừa quyền của nhóm đó.
@@ -11330,6 +11556,21 @@ BEGIN
                       SQLERRM, SQLSTATE;
     END;
   END IF;
+  -- [ADR-072 phần 1] Vai của JOB NEO. NOLOGIN như app_api/app_unseal — tiến trình đăng nhập bằng
+  -- `app_neo_login` (tools/chay-migrate dựng, mật khẩu từ secret) rồi `SET ROLE app_neo` (createPool).
+  -- VÌ SAO một vai RIÊNG thay vì app_api: job neo phải liệt kê MỌI tổ chức (`outbox_danh_sach_to_chuc()`),
+  -- và 052 cố ý thu hồi đúng năng lực ấy khỏi app_api (ADR-040). Vai này đổi lại KHÔNG ghi được gì:
+  -- 065 chỉ cấp SELECT trên hai bảng sổ và EXECUTE trên đúng hàm mà verifyAuditChain gọi.
+  -- Cùng lập luận "role là đối tượng của CỤM" như app_liet_ke_to_chuc bên dưới: ở tệp chạy MỌI lượt.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_neo') THEN
+    BEGIN
+      CREATE ROLE app_neo NOLOGIN;
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+      WHEN OTHERS THEN
+        RAISE WARNING 'Hardening: không tạo được role app_neo: % (%). BƯỚC 3 sẽ phán xét.',
+                      SQLERRM, SQLSTATE;
+    END;
+  END IF;
   -- [S1.82 / khoản 116] Vai thứ BA, và nó KHÔNG phải một vai ứng dụng: không tiến trình nào đăng
   -- nhập bằng nó và không tiến trình nào `SET ROLE` sang nó. Nó chỉ tồn tại để SỞ HỮU đúng một
   -- hàm `SECURITY DEFINER` (`public.outbox_danh_sach_to_chuc()`, 052) và để mang đúng một policy
@@ -11470,12 +11711,12 @@ BEGIN
       INTO con_sot;
     IF con_sot IS NOT NULL THEN
       loi_gom := loi_gom || format(
-        '- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": còn sót '
+        '- "tư cách thành viên LẠ của app_api/app_unseal/app_neo và role đăng nhập của chúng": còn sót '
         '(%s). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.', con_sot);
     END IF;
   EXCEPTION WHEN OTHERS THEN
     loi_gom := loi_gom || format(
-      '- "tư cách thành viên LẠ của app_api/app_unseal và role đăng nhập của chúng": KHÔNG ĐÁNH GIÁ ĐƯỢC — câu kiểm ném %s (%s).',
+      '- "tư cách thành viên LẠ của app_api/app_unseal/app_neo và role đăng nhập của chúng": KHÔNG ĐÁNH GIÁ ĐƯỢC — câu kiểm ném %s (%s).',
       SQLSTATE, SQLERRM);
   END;
 
@@ -11486,7 +11727,7 @@ BEGIN
     IF con_sot IS NOT NULL THEN
       loi_gom := loi_gom || format(
         '- "ADMIN OPTION trên tư cách thành viên hợp lệ": còn sót (%s) — chủ thể đó tự cấp được '
-        'app_api/app_unseal cho bất kỳ ai. Cần quyền: ADMIN OPTION trên các role đó hoặc '
+        'app_api/app_unseal/app_neo cho bất kỳ ai. Cần quyền: ADMIN OPTION trên các role đó hoặc '
         'SUPERUSER.', con_sot);
     END IF;
   EXCEPTION WHEN OTHERS THEN

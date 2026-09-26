@@ -1,4 +1,4 @@
-// [khoản 196 / ADR-072 phần 1] Phép đo lệch đồng hồ — thuần, không CSDL: nguồn truy vấn và đồng hồ
+// [khoản 196 / ADR-074 phần 1] Phép đo lệch đồng hồ — thuần, không CSDL: nguồn truy vấn và đồng hồ
 // tiến trình đều tiêm, nên từng vế của phép đo (điểm giữa khứ hồi, lần khứ hồi ngắn nhất, trị tuyệt
 // đối của ngưỡng) đo được bằng những con số viết tay.
 import { afterEach, describe, expect, it, vi } from "vitest";

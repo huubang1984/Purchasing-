@@ -4,11 +4,12 @@ import { createPool } from "./pool.js";
 import { VAI_UNG_DUNG, ganVaiTroChoPool, laVaiUngDung } from "./vai-tro.js";
 
 describe("[S1.11] vai ứng dụng gắn được vào pool là một danh sách ĐÓNG", () => {
-  it("chỉ hai role NOLOGIN của 001; role đăng nhập và superuser không nằm trong danh sách", () => {
-    expect([...VAI_UNG_DUNG]).toEqual(["app_api", "app_unseal"]);
+  it("chỉ ba role NOLOGIN (hai của 001, app_neo của ADR-072); role đăng nhập và superuser không nằm trong danh sách", () => {
+    expect([...VAI_UNG_DUNG]).toEqual(["app_api", "app_unseal", "app_neo"]);
     expect(laVaiUngDung("app_api")).toBe(true);
     expect(laVaiUngDung("app_unseal")).toBe(true);
-    for (const x of ["app_api_login", "postgres", "APP_API", "app_api; DROP ROLE app_api", ""]) {
+    expect(laVaiUngDung("app_neo")).toBe(true);
+    for (const x of ["app_api_login", "app_neo_login", "postgres", "APP_API", "app_api; DROP ROLE app_api", ""]) {
       expect(laVaiUngDung(x), x).toBe(false);
     }
   });

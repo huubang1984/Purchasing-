@@ -262,7 +262,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
         );
       }
 
-      // ⑶ [khoản 196 / ADR-072 phần 1] Đồng hồ CSDL phải khớp đồng hồ tiến trình trong ngưỡng TRƯỚC
+      // ⑶ [khoản 196 / ADR-074 phần 1] Đồng hồ CSDL phải khớp đồng hồ tiến trình trong ngưỡng TRƯỚC
       //    vòng poll đầu tiên. Worker không phán xử hạn nộp, nhưng nó đóng dấu thời gian lên lượt mở
       //    thầu và lên sổ; một tiến trình tin một đồng hồ đã trôi không được lên — cùng khuôn `apps/api`.
       await kiemLechDongHo(pool, ch.lechDongHoToiDaMs, dongHo);

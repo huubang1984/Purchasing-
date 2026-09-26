@@ -283,6 +283,13 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
       "withTenant, và đó là ranh giới thật giữa hai nửa của script",
   },
+  "tools/neo-so-kiem-toan/src/index.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[ADR-072] `lich` gọi `public.outbox_danh_sach_to_chuc()` bằng vai app_neo — cùng câu, cùng lý do với worker: câu " +
+      "hỏi 'những tổ chức nào' đứng TRƯỚC câu hỏi 'tổ chức nào'. Mọi câu đọc sổ sau đó đều chạy trong withTenant",
+  },
   "tools/chay-migrate/src/index.ts": {
     lay: 1,
     cau: 0,

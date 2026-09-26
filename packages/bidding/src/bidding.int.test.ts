@@ -559,7 +559,7 @@ describe("[INV-C1] hạn nộp", () => {
   });
 
   // ============================================================================================
-  // [khoản 196 / ADR-072 phần 2] NGƯỜI BỊ CHẶN PHẢI CÓ THỨ ĐỂ ĐỐI CHIẾU.
+  // [khoản 196 / ADR-074 phần 2] NGƯỜI BỊ CHẶN PHẢI CÓ THỨ ĐỂ ĐỐI CHIẾU.
   //
   // Trước vòng này, lần nộp bị C1 chặn trả một `BiddingError` với câu *"kiểm lại trạng thái gói
   // thầu, hạn nộp …"* — không một con số nào, và sổ kiểm toán không một hàng nào (giao dịch bị

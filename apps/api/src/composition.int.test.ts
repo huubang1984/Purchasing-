@@ -221,7 +221,7 @@ describe("[S1.11] batDau() fail-closed trước khi mở cổng", () => {
   });
 
   // ============================================================================================
-  // [khoản 196 / ADR-072 phần 1] ĐỒNG HỒ CSDL LỆCH ĐỒNG HỒ TIẾN TRÌNH.
+  // [khoản 196 / ADR-074 phần 1] ĐỒNG HỒ CSDL LỆCH ĐỒNG HỒ TIẾN TRÌNH.
   //
   // Đồng hồ của CSDL không vặn được từ một test, nên cảnh "trôi" được dựng ở phía tiến trình: một
   // đồng hồ tiêm chạy lệch N ms so với `Date.now`. Lúc KHỞI ĐỘNG: vượt ngưỡng ⇒ `LechDongHoError`,

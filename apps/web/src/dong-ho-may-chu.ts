@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [khoản 196 / ADR-072 phần 3] TRANG NỘP ĐẾM THEO GIỜ MÁY CHỦ, KHÔNG THEO GIỜ MÁY NGƯỜI DÙNG TRẦN
+// [khoản 196 / ADR-074 phần 3] TRANG NỘP ĐẾM THEO GIỜ MÁY CHỦ, KHÔNG THEO GIỜ MÁY NGƯỜI DÙNG TRẦN
 //
 // Hạn nộp được phán xử bằng `now()` của CSDL (C1). Trang nộp thầu trước vòng này in hạn bằng
 // `toLocaleString` và KHÔNG nói gì về đồng hồ: một máy người dùng chạy chậm mười phút thấy "còn

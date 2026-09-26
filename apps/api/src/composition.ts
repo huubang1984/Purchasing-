@@ -310,7 +310,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
           c.release();
         }
       }
-      // [khoản 196 / ADR-072 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
+      // [khoản 196 / ADR-074 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
       // trình trong ngưỡng, TRƯỚC khi mở cổng. Lệch ⇒ `LechDongHoError` ⇒ không cổng nào nghe. Đo trên
       // `pool` sau vòng trên, tức trên đúng kết nối vai `app_api` đã được kiểm.
       await kiemLechDongHo(pool, ch.lechDongHoToiDaMs, dongHo);
@@ -322,7 +322,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
         });
       });
       runner.start();
-      // [khoản 196 / ADR-072 phần 1] Canh lại theo nhịp lúc chạy: vượt ngưỡng ⇒ MỘT dòng log cảnh báo
+      // [khoản 196 / ADR-074 phần 1] Canh lại theo nhịp lúc chạy: vượt ngưỡng ⇒ MỘT dòng log cảnh báo
       // mang tên `LechDongHo` và ba con số — không dừng tiến trình, không in giá trị nào của cấu hình.
       dungCanhDongHo = canhLechDongHoDinhKy({
         nguon: pool,

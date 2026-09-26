@@ -1,4 +1,4 @@
-// [khoản 196 / ADR-072 phần 3] Phép tính giờ máy chủ của trang nộp thầu — thuần, không trình duyệt.
+// [khoản 196 / ADR-074 phần 3] Phép tính giờ máy chủ của trang nộp thầu — thuần, không trình duyệt.
 import { describe, expect, it } from "vitest";
 import {
   conLaiMs,

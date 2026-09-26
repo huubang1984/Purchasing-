@@ -37,7 +37,7 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
     // Hai mặc định, và chúng là mặc định CÓ CHỦ Ý — không phải bí mật.
     expect(ch.dbPoolMax).toBe(10);
     expect(ch.pollIntervalMs).toBe(1000);
-    // [khoản 196 / ADR-072] Ngưỡng lệch đồng hồ và nhịp canh — cùng mặc định với `apps/api`.
+    // [khoản 196 / ADR-074] Ngưỡng lệch đồng hồ và nhịp canh — cùng mặc định với `apps/api`.
     expect(ch.lechDongHoToiDaMs).toBe(2000);
     expect(ch.chuKyCanhDongHoMs).toBe(60_000);
   });

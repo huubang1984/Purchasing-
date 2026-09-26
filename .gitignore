@@ -68,3 +68,6 @@ override.tf.json
 *_override.tf.json
 # Biến Terraform mang tên miền, email, digest image — không commit (ADR-066)
 *.tfvars
+
+# Worktree tạm của agent Claude Code — không phải mã nguồn.
+.claude/worktrees/

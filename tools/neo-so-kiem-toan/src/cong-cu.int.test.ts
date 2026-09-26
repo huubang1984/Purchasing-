@@ -38,6 +38,18 @@ let thuMuc: string;
 let org: string;
 let bienMoiTruong: Record<string, string>;
 
+/**
+ * [ADR-072 phần 1] Chuỗi kết nối của một role ĐĂNG NHẬP thật, không phải superuser của container. Superuser
+ * `SET ROLE` sang vai nào cũng được, nên một DATABASE_URL superuser đo đúng không gì về việc công cụ chạy
+ * được dưới vai của job neo — đúng thứ vòng này đổi.
+ */
+function urlDangNhap(ten: string, matKhau: string): string {
+  const u = new URL(db.connectionString);
+  u.username = ten;
+  u.password = matKhau;
+  return u.toString();
+}
+
 function chay(...thamSo: string[]): { ma: number; ra: string; loi: string } {
   const kq = spawnSync(
     execPath,
@@ -50,6 +62,9 @@ function chay(...thamSo: string[]): { ma: number; ra: string; loi: string } {
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS);
+  // Như `tools/chay-migrate` dựng trên cụm thật: role đăng nhập LOGIN, thành viên ĐÚNG app_neo.
+  await db.pool.query("CREATE ROLE app_neo_login LOGIN PASSWORD 'mk-neo-cli' IN ROLE app_neo");
+  await db.pool.query("CREATE ROLE app_api_login LOGIN PASSWORD 'mk-api-cli' IN ROLE app_api");
   thuMuc = await mkdtemp(join(tmpdir(), "tp-neo-cli-"));
 
   const { privateKey, publicKey } = generateKeyPairSync("ec", {
@@ -58,7 +73,7 @@ beforeAll(async () => {
     publicKeyEncoding: { type: "spki", format: "der" },
   });
   bienMoiTruong = {
-    DATABASE_URL: db.connectionString,
+    DATABASE_URL: urlDangNhap("app_neo_login", "mk-neo-cli"),
     TRUSTPROCURE_NEO_KHO: thuMuc,
     TRUSTPROCURE_NEO_KID: "neo-cli",
     TRUSTPROCURE_NEO_KHOA_RIENG: Buffer.from(privateKey).toString("base64"),
@@ -106,6 +121,23 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
     expect(kiem.ra).toContain("checked=3");
     expect(kiem.ra).toContain("neo=1");
   });
+
+  it("[ADR-072 phần 1] DATABASE_URL của api (app_api_login) ⇒ xuat và kiem ĐỎ: công cụ không chạy nhầm vai", () => {
+    // Trước vòng này công cụ `SET ROLE app_api`; nay `app_neo`. Một secret cũ trỏ vào URL của api (bước chuyển trên
+    // ECS quên đổi) phải ồn ngay ở lần lấy client đầu — 42501 của SET ROLE — không phải lặng lẽ chạy dưới vai GHI được sổ.
+    const cu = bienMoiTruong["DATABASE_URL"]!;
+    bienMoiTruong["DATABASE_URL"] = urlDangNhap("app_api_login", "mk-api-cli");
+    try {
+      const xuat = chay("xuat", "--org", org);
+      expect(xuat.ma).toBe(1);
+      expect(xuat.loi).toMatch(/KHONG XUAT DUOC\t.*app_neo/u);
+      const kiem = chay("kiem", "--org", org);
+      expect(kiem.ma).not.toBe(0);
+      expect(kiem.ra).toMatch(/KHONG KIEM DUOC\t.*app_neo/u);
+    } finally {
+      bienMoiTruong["DATABASE_URL"] = cu;
+    }
+  }, 60_000);
 
   it("[INV-B3] chưa xuất lần nào thì kiem KHÔNG xanh — nó là NOT_ANCHORED, không phải im lặng", async () => {
     const { rows } = await db.pool.query<{ id: string }>(
@@ -173,6 +205,18 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
     } finally {
       delete bienMoiTruong.TRUSTPROCURE_RECEIPT_PUBLIC_KEYS;
     }
+  });
+
+  it("[ADR-072] lich: tự liệt kê MỌI tổ chức bằng vai app_neo, xuất rồi kiểm — mã 0 khi mọi sổ xanh; nhận tham số ⇒ mã 1", () => {
+    const kq = chay("lich");
+    expect(kq.ma, kq.loi).toBe(0);
+    expect(kq.ra).toMatch(/^lich: [1-9]\d* to chuc$/mu);
+    expect(kq.ra).toContain(`${org}\tseq=`);
+    expect(kq.ra).toMatch(new RegExp(`^${org}\tok=true`, "mu"));
+    expect(kq.ra).toContain("lich: xuat=OK kiem=OK");
+    const thua = chay("lich", "--org", org);
+    expect(thua.ma).toBe(1);
+    expect(thua.loi).toMatch(/không nhận tham số/u);
   });
 
   it("[INV-B3] xuat TỪ CHỐI một mốc neo LÙI — cắt đuôi chết ồn ào ở thời điểm xuất", async () => {

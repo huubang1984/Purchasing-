@@ -63,7 +63,7 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(ch.allowedOrigins).toEqual([]);
     expect(ch.trustedProxies).toEqual([]);
     expect(ch.afterCommitTimeoutMs).toBeUndefined();
-    // [khoản 196 / ADR-072] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình và nhịp canh lúc chạy.
+    // [khoản 196 / ADR-074] Ngưỡng lệch đồng hồ CSDL ↔ tiến trình và nhịp canh lúc chạy.
     expect(ch.lechDongHoToiDaMs).toBe(2000);
     expect(ch.chuKyCanhDongHoMs).toBe(60_000);
     if (ch.keyAdapter !== "local-dev") throw new Error("fixture khai local-dev");

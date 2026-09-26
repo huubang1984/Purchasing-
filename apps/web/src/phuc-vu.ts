@@ -84,7 +84,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * CẦU của `browser.ts` và `cua-trinh-duyet.test.ts` đòi nó TRÙNG KHỚP cây import thật — thêm một
  * tên lạ vào đó làm cổng ấy đỏ, đúng như nó phải thế. Hai gốc khác nhau thì hai lời khai.
  *
- * [khoản 196 / ADR-072 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
+ * [khoản 196 / ADR-074 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
  */
 export const MODULE_WEB = ["so-tien", "dong-ho-may-chu"] as const;
 

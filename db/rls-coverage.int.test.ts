@@ -2323,7 +2323,8 @@ describe("[S1.38 / khoản nợ 83 — nửa RLS] ba tổng điều tra RLS có 
         "ALTER TABLE zz_rong ENABLE ROW LEVEL SECURITY; ALTER TABLE zz_rong FORCE ROW LEVEL SECURITY; " +
         "GRANT SELECT ON zz_rong TO app_api; GRANT UPDATE ON zz_rong TO PUBLIC");
       expect((await client.query<{ mo_ta: string }>(phu)).rows.map((r) => r.mo_ta.split(":")[0]).sort()).toEqual([
-        "public.zz_rong/app_api/SELECT", "public.zz_rong/app_api/UPDATE", "public.zz_rong/app_unseal/UPDATE",
+        // [ADR-072 phần 1] `app_neo` vào tập vai kết nối ứng dụng, nên quyền qua PUBLIC cũng là quyền của nó.
+        "public.zz_rong/app_api/SELECT", "public.zz_rong/app_api/UPDATE", "public.zz_rong/app_neo/UPDATE", "public.zz_rong/app_unseal/UPDATE",
       ]);
       // ⑶ cùng fixture với tổng điều tra NGOÀI TENANT ở trên.
       await client.query("CREATE TABLE zz_ngoai (id int PRIMARY KEY); ALTER TABLE zz_ngoai ENABLE ROW LEVEL SECURITY");

@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 065 — [khoản 196 / ADR-072 phần 2] LẦN NỘP BỊ CHẶN VÌ HẠN MANG GIỜ CSDL LÚC PHÁN XỬ CÙNG HẠN
+-- 066 — [khoản 196 / ADR-074 phần 2] LẦN NỘP BỊ CHẶN VÌ HẠN MANG GIỜ CSDL LÚC PHÁN XỬ CÙNG HẠN
 -- =============================================================================================
 -- C1 (`bid_kiem_han_nop`, 018 → 059) phán xử hạn nộp bằng `now()` của CHÍNH giao dịch ghi — và đó
 -- vẫn là quyết định đúng (ADR-005): `now()` cũng là giá trị `submitted_at` ghi xuống và đi vào
@@ -85,7 +85,7 @@ BEGIN
   END IF;
 
   IF now() OPERATOR(pg_catalog.>=) han THEN
-    -- [065 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `065`.
+    -- [066 / khoản 196] Hai dấu thời gian là ĐÚNG hai giá trị vừa so — xem khối đầu `066`.
     RAISE EXCEPTION 'Da qua han nop bao gia (C1)'
       USING ERRCODE = 'check_violation',
             CONSTRAINT = 'c1_qua_han_nop',

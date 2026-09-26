@@ -39,17 +39,17 @@ export class BiddingError extends Error {
   }
 }
 
-/** [065 / khoản 196] Tên mà C1 đặt vào trường `constraint` của lần chặn VÌ HẠN — không đọc chuỗi thông điệp. */
+/** [066 / khoản 196] Tên mà C1 đặt vào trường `constraint` của lần chặn VÌ HẠN — không đọc chuỗi thông điệp. */
 const RANG_BUOC_QUA_HAN = "c1_qua_han_nop";
 
 /** Dạng chính tắc của `bid_dau_thoi_gian_chinh_tac` — dạng duy nhất hai trường dưới được phép mang. */
 const DAU_THOI_GIAN_CHINH_TAC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
 
 /**
- * [khoản 196 / ADR-072 phần 2] Lần nộp bị C1 chặn VÌ HẠN — và thứ người bị chặn cần để đối chiếu.
+ * [khoản 196 / ADR-074 phần 2] Lần nộp bị C1 chặn VÌ HẠN — và thứ người bị chặn cần để đối chiếu.
  *
  * `gioCsdl` là `now()` của CHÍNH giao dịch đã phán xử, `hanNop` là hạn mà trigger đã so (hạn vòng
- * BAFO khi gói thầu ở `BAFO_OPEN`). Cả hai do trigger `065` đặt vào trường `DETAIL` — không phải
+ * BAFO khi gói thầu ở `BAFO_OPEN`). Cả hai do trigger `066` đặt vào trường `DETAIL` — không phải
  * một lần đọc đồng hồ thứ hai ở đây — và cả hai ở dạng chính tắc của biên nhận.
  *
  * HỢP ĐỒNG KHÁC MỌI `BiddingError` KHÁC, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN
@@ -209,7 +209,7 @@ export async function submitBid(
   // do đều đọc được từ màn hình: trạng thái gói thầu và hạn của vòng đang mở đã nằm trong
   // `GET /guest/rfq`.
   //
-  // [khoản 196 / 065] Nhánh VÌ HẠN nay được phân biệt — không bằng chuỗi lỗi mà bằng trường
+  // [khoản 196 / 066] Nhánh VÌ HẠN nay được phân biệt — không bằng chuỗi lỗi mà bằng trường
   // `constraint` (`c1_qua_han_nop`) cùng `DETAIL` có cấu trúc mà trigger đặt, đúng hướng câu trên
   // nêu. Hai nhánh kia vẫn chung một thông điệp.
   let ban: { id: string; version: number; submitted_at_text: string }[];
@@ -230,10 +230,10 @@ export async function submitBid(
     ban = kq.rows;
   } catch (loi) {
     if (loi instanceof Error && (loi as { code?: unknown }).code === MA_CHECK_VIOLATION) {
-      // [khoản 196 / ADR-072 phần 2] Lần chặn VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn
+      // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn
       // lành, rồi ném lỗi mang hai dấu thời gian. Vì sao GHI SỔ — ADR-060 chia lời từ chối bằng một
       // mệnh đề: *người dùng cố đi một bước của chuỗi không đúng thứ tự* thì vào sổ, *cấu hình chưa
-      // sẵn sàng* thì không. Nộp sau khi cửa sổ nộp đã đóng là vế đầu (ADR-072 ghi lập luận). Vì sao
+      // sẵn sàng* thì không. Nộp sau khi cửa sổ nộp đã đóng là vế đầu (ADR-074 ghi lập luận). Vì sao
       // ghi TRONG giao dịch người gọi chứ không qua `auditPool`: route khách cố ý không cầm pool nào
       // (A5 §4) — đường TRẢ VỀ, cùng khuôn `MFA_LOCKED` trong savepoint (khoản 139). Ghi hỏng ⇒ lỗi
       // của lần ghi bay ra thay cho `NopQuaHanError`: gãy ồn ào, đúng vế ⒞ của ADR-060.

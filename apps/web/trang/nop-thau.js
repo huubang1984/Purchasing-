@@ -149,7 +149,7 @@ $("nut-xac").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------------------------
-// [khoản 196 / ADR-072 phần 3] ĐẾM NGƯỢC THEO GIỜ MÁY CHỦ
+// [khoản 196 / ADR-074 phần 3] ĐẾM NGƯỢC THEO GIỜ MÁY CHỦ
 //
 // `lechMayChu` là giờ máy chủ trừ giờ máy này, đo MỘT lần ở lời gọi `GET /guest/rfq` (so với điểm
 // giữa khứ hồi — `doLechMayChu`). Mỗi giây trang tính lại *còn bao lâu* từ giờ máy này CỘNG độ lệch,
@@ -305,7 +305,7 @@ $("nut-nop").addEventListener("click", async () => {
 
     const r = await goi("POST", "/guest/bids", { envelope: sangB64(phongBi) });
     if (r.status !== 201) {
-      // [khoản 196 / ADR-072 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
+      // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
       // in cả hai, để người bị chặn đối chiếu được với đồng hồ của mình và với hạn trên màn hình.
       const b = r.body;
       const viHan = r.status === 422 && b !== null && typeof b === "object" && typeof b.gioPhanXu === "string" && typeof b.hanNop === "string";
